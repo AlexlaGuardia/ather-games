@@ -249,6 +249,15 @@ export interface CastSpec {
   landSecs: number
   /** projectile: one press looses this many bolts, each HUNTING its own foe within `chainRange` (Flame Barrage) */
   volley: number
+  // ── MOVE-JOBS PASS 2, STEP 11 (09-29): containment + the topple ──────────────────────────────────────────
+  /** terrain: the shape rises AROUND the foe nearest the aim, and `statuses` land on that one foe (Pillar Tomb) */
+  entomb: boolean
+  /** field: every foe inside when it lands is held inside for its life, and no shot crosses the wall either way */
+  cage: boolean
+  /** terrain: pressing the key again while it stands topples it this far down the aim; what it lands on staggers */
+  topple: number
+  /** set by the dispatcher on that second press, never on a registry spec */
+  toppling?: boolean
   // ── impulse (SYSTEM 4) — the cast moves the CASTER ─────────────────────────
   /**
    * How the keeper is moved.
@@ -324,6 +333,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   shove: 0, shoveDir: 'away', lane: 0, grapple: false, markSecs: 0,
   ampPierce: 0, ampCover: false, ampShield: false, ampShots: 0, ampArc: 0, ampZone: false,
   hides: false, decoySecs: 0, decoyOffset: 0, trapKeep: false, landStatuses: [], landSecs: 0, volley: 0,
+  entomb: false, cage: false, topple: 0,
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
   senseRadius: 0,
   cloakBurn: 0, cloakRebuild: 0,
@@ -702,12 +712,16 @@ const BUILDS: Record<string, Build> = {
   // stop rounds; whoever crosses it is set Burning for 3s. It divides a room by making one side cost something.
   'firestorm': { archetype: 'status', manaCost: 44, cooldownMs: 24000, castRange: 9, areaSize: 17, areaSecs: 12,
                   statuses: ['burning'], linger: true, line: true, splashSecs: 3 },
-  // "Shredding within, UNREACHABLE FROM WITHOUT" — the only damaging field that also eats shots, which
-  // is what makes it containment rather than a bigger Firestorm.
-  'cyclone-cage': { archetype: 'field', manaCost: 42, cooldownMs: 24000, castRange: 10, areaSize: 5, areaSecs: 9, fieldDps: 9, fieldStopsShots: true },
+  // "Shredding within, UNREACHABLE FROM WITHOUT" — it eats shots, which is what makes it containment rather than a
+  // bigger Firestorm. MOVE-JOBS PASS 2 (Alex ✓): no damage now. Whoever is inside when it lands cannot leave for 5s,
+  // and no round crosses the wall, out or in.
+  'cyclone-cage': { archetype: 'field', manaCost: 42, cooldownMs: 24000, castRange: 10, areaSize: 5, areaSecs: 5, fieldStopsShots: true, cage: true },
   // "Sealed on all six faces" — a solid block, deliberately. This one BURIES where Cordon contains,
   // and it is Stone's own ultimate, needing no second rune.
-  'pillar-tomb': { archetype: 'terrain', manaCost: 38, cooldownMs: 20000, castRange: 9, areaSize: 3, areaSecs: 12, shape: 'block', shapeHeight: 4 },
+  // MOVE-JOBS PASS 2 (Alex ✓): ONE foe, the one nearest your aim, sealed in stone for 4s: out of the fight, and nothing
+  // reaches it either. Strike empty ground and the pillar still rises (a column you can hide behind).
+  'pillar-tomb': { archetype: 'terrain', manaCost: 38, cooldownMs: 20000, castRange: 9, areaSize: 1, areaSecs: 4, shape: 'block', shapeHeight: 4,
+                   entomb: true, statuses: ['sealed', 'rooted', 'disarmed'] },
   // "Not a shield, A BUILDING... the answer to 'protect everyone'" — so a RING, not a block: walls with
   // an inside, because a solid lump protects nobody. The longest-lived cast in the book.
   'living-fortress': { archetype: 'terrain', manaCost: 48, cooldownMs: 30000, castRange: 7, areaSize: 5, areaSecs: 60, shape: 'ring', shapeHeight: 4 },
@@ -725,7 +739,9 @@ const BUILDS: Record<string, Build> = {
   'wind-shear': { archetype: 'status', manaCost: 11, cooldownMs: 7000, lane: 12, areaSize: 1.6, statuses: ['staggered'], areaSecs: 0.8, shove: 4, shoveDir: 'aside' },
   // MOVE-JOBS PASS 2 (Alex ✓): "a tight rope of water that lands and then pulls, dragging its target off its footing".
   'riptide': { archetype: 'projectile', manaCost: 11, cooldownMs: 6000, damage: 0, projSpeed: 62, projLife: 1.3, shove: 6, shoveDir: 'toward', statuses: ['staggered'], areaSecs: 1 },
-  'monolith': { archetype: 'terrain', manaCost: 40, cooldownMs: 22000, castRange: 9, areaSize: 3, areaSecs: 30, shape: 'block', shapeHeight: 5 },
+  // MOVE-JOBS PASS 2 (Alex ✓, canon "it walls, or it falls"): a towering slab. Press again while it stands and it falls
+  // away from you: whatever it lands on, 6 tiles down your aim, is staggered and knocked back. The fall is free.
+  'monolith': { archetype: 'terrain', manaCost: 40, cooldownMs: 22000, castRange: 9, areaSize: 3, areaSecs: 30, shape: 'block', shapeHeight: 5, topple: 6 },
   // MOVE-JOBS 09-29 (Alex ✓): "standing on it is fine; being struck on it is not" — the ground turns foes Vulnerable.
   'shatterfield': { archetype: 'status', manaCost: 42, cooldownMs: 24000, castRange: 10, areaSize: 6, areaSecs: 9, statuses: ['vulnerable'], linger: true },
   // MOVE-JOBS PASS 2 (Magii ruled 09-28, "nobody inside can see"): one-way fog. Foes inside are blind and show to you

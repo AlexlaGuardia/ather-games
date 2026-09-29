@@ -2684,6 +2684,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // step 10: Heat Mirage's false keeper, as an offset from the real one; foes aim at it while it stands
   const decoyRef = useRef({ until: 0, ox: 0, oz: 0 })
   const decoyMeshRef = useRef<THREE.Mesh>(null)
+  // step 11: Cyclone Cage holds whoever was inside when it landed, by id, for its life
+  const cagesRef = useRef<{ x: number; z: number; r: number; until: number; ids: string[] }[]>([])
   const aimPt = useMemo(() => new THREE.Vector3(), [])
   // ── PASS 2, STEP 8: foes being moved by a cast (engine/shove.ts) ──
   const shovesRef = useRef<Shove[]>([])
@@ -2880,6 +2882,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     }
     // ── ONE DAMAGE PATH PER FOE (pass 2): Burning, cast bolts and their chains all pay through each foe's own death rule
     function hurtFoe(id: string, dd: number) {
+      if (statusRef.current[id] && hasStatus(statusRef.current, id, 'sealed', nowFrame)) return   // in the tomb: out of reach
       const [kind, key] = id.split(':')
       if (kind === 'board') { const t = targets[+key]; t.hp -= dd; if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN } }
       else if (id === 'hunter') { const h1 = hunter.current; h1.hp -= dd; if (h1.hp <= 0) { h1.alive = false; h1.respawn = HUNTER_RESPAWN; statusRef.current = clearTarget(statusRef.current, 'hunter') } }
@@ -2927,6 +2930,10 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         for (const zn of statusZones.current) if (zn.hides && zn.until > nowFrame && inZone(zn, pl.x, pl.z)) hideAreas.push((x, z) => inZone(zn, x, z))
         for (const f of fieldsRef.current) if (castForMove(f.moveId).hides && contains(f, pl.x, pl.z)) hideAreas.push((x, z) => contains(f, x, z))
       } }
+    const tombAt = (x: number, z: number) => {
+      const cx = Math.round(x), cz = Math.round(z)
+      return conjuredRef.current.some((c) => c.until > nowFrame && castForMove(c.moveId).entomb && c.cells.some((q) => q.x === cx && q.z === cz))
+    }
     const lostTrack = (x: number, z: number) => hideAreas.length > 0 && !hideAreas.some((inside) => inside(x, z))
     const floodMods = (id: number, bag: StatusBag) => {
       const m = bag[`flood:${id}`] ? foeMods(bag, `flood:${id}`, nowFrame) : null
@@ -3170,6 +3177,40 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
             // so these change nothing here — they are recorded truthfully rather than faked.
             y: posRef.current?.y ?? 0, height: FIELD_HEIGHT,
           }, nowMs)
+          // CYCLONE CAGE (step 11): whoever is inside as it lands is held inside it
+          if (pending.cage) {
+            const ids: string[] = [], r2 = pending.areaSize * pending.areaSize
+            forEachFoe((id, x, z) => { if ((x - ax) ** 2 + (z - az) ** 2 <= r2) ids.push(id) })
+            cagesRef.current = [...cagesRef.current.filter((c) => c.until > nowMs), { x: ax, z: az, r: pending.areaSize, until: nowMs + pending.areaSecs * 1000, ids }]
+          }
+        } else if (pending.archetype === 'terrain' && pending.toppling) {
+          // MONOLITH FALLS (step 11): the standing slab goes over, away from you down the aim. Everything it lands on
+          // (a strip `topple` long, the slab's width) is staggered and knocked on; the slab is gone.
+          const slab = conjuredRef.current.find((c) => c.moveId === pending!.moveId && c.until > nowMs)
+          if (slab) {
+            const sx = slab.cells.reduce((a, c) => a + c.x, 0) / slab.cells.length, sz = slab.cells.reduce((a, c) => a + c.z, 0) / slab.cells.length
+            const ux = flatX / flatLen, uz = flatZ / flatLen, w = pending.areaSize / 2 + 0.8
+            let bag = statusRef.current
+            forEachFoe((id, x, z) => {
+              const along = (x - sx) * ux + (z - sz) * uz, perp = (x - sx) * uz - (z - sz) * ux
+              if (along < -0.5 || along > pending!.topple || Math.abs(perp) > w) return
+              bag = applyStatuses(bag, id, ['staggered'], 1.5, nowMs)
+              shoveFoe(id, 'away', 1.5, x, z, x - ux, z - uz, ux, uz)
+            })
+            statusRef.current = bag
+            conjuredRef.current = conjuredRef.current.filter((c) => c !== slab)
+            const half = pending.topple / 2
+            statusZones.current = [...statusZones.current.filter((z) => z.until > nowMs), { x: sx + ux * half, z: sz + uz * half, r: w, until: nowMs + 450, kinds: [], color: STATUS_TABLE.staggered.color, line: { ux, uz, half }, applySecs: 0, stops: false }]
+            tone(90, 420, { type: 'sawtooth', gain: 0.09, slideTo: 40 })
+          }
+        } else if (pending.archetype === 'terrain' && pending.entomb) {
+          // PILLAR TOMB (step 11): stone rises around the ONE foe nearest the aim; with nobody near, around the aim point
+          let best: string | null = null, bx = ax, bz = az, bd = (pending.areaSize + 2.5) ** 2
+          forEachFoe((id, x, z) => { const d = (x - ax) ** 2 + (z - az) ** 2; if (d < bd) { bd = d; best = id; bx = x; bz = z } })
+          const cells = shapeCells(pending.shape, bx, bz, flatX / flatLen, flatZ / flatLen, pending.areaSize)
+          conjuredRef.current = conjure(conjuredRef.current, pending.moveId, cells, pending.areaSecs, pending.shapeHeight, nowMs)
+          if (best) statusRef.current = applyStatuses(statusRef.current, best, pending.statuses, pending.areaSecs, nowMs)
+          tone(140, 300, { type: 'square', gain: 0.07, slideTo: 60 })
         } else if (pending.archetype === 'terrain') {
           const cells = shapeCells(pending.shape, ax, az, flatX / flatLen, flatZ / flatLen, pending.areaSize)
           conjuredRef.current = conjure(conjuredRef.current, pending.moveId, cells, pending.areaSecs, pending.shapeHeight, nowMs)
@@ -3192,7 +3233,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           const half = pending.lane / 2
           statusZones.current = [...statusZones.current.filter((z) => z.until > nowMs), { x: px + ux * half, z: pz + uz * half, r: w, until: nowMs + 350, kinds: [], color: STATUS_TABLE.staggered.color, line: { ux, uz, half }, applySecs: 0, stops: false }]
           tone(700, 260, { type: 'sawtooth', gain: 0.04, slideTo: 180 })
-        } else if (pending.statuses.length > 0) {
+        } else if (pending.statuses.length > 0 && !pending.entomb) {
           if (pending.trap) {
             // SET, not applied: this move's oldest trap lifts when one more than `trapMax` would stand
             const mine = trapsRef.current.filter((t) => t.spec.moveId === pending!.moveId && t.until > nowMs)
@@ -3310,7 +3351,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       // A Firewall eats what crosses it, which is the "cover" half of its canon line.
       if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }
       // thin cover (a conjured wall, a field's shell) stops a round unless an amp pierces it (Pressure Lance, Keenshard)
-      if (!p.cover && conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
+      // ...but a TOMB is not thin cover: nothing reaches a sealed foe (Pillar Tomb, step 11)
+      if ((!p.cover || tombAt(p.pos.x, p.pos.z)) && conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
       // the hold's walls are the mortal block (103), which this predicate cannot see — the hold says
       // what stops a round there: a wall or a shut gate, never a window (you shoot out of them)
       if (hs && roundBlocked(hs, p.pos.x, p.pos.z, p.pos.y / STEP)) { p.life = 0; continue }
@@ -3807,6 +3849,18 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         if (step.pay) {
           const rinv = loadRuneInventory()
           onTrial(clearTrial('puppet-guards', rinv.owned, rinv.birth).say)
+        }
+      }
+      // CYCLONE CAGE (step 11): a held foe that has stepped past the wall this frame is set back inside it
+      if (cagesRef.current.length) {
+        cagesRef.current = cagesRef.current.filter((c) => c.until > nowFrame)
+        for (const c of cagesRef.current) {
+          const lim = Math.max(0.5, c.r - 0.6)
+          forEachFoe((id, x, z) => {
+            if (!c.ids.includes(id)) return
+            const dx = x - c.x, dz = z - c.z, d = Math.hypot(dx, dz)
+            if (d > lim) moveFoe(id, (dx / d) * (lim - d), (dz / d) * (lim - d))
+          })
         }
       }
       for (const o of orbs) {
@@ -7795,7 +7849,13 @@ export default function Shimmer3D() {
       setHarvestToast(`${spec.label} — let go`)
       return
     }
-    // CHARGES (step 4): a move with more than one stores presses; each refills in `cooldownMs`, one at a time
+    // MONOLITH (step 11): pressing its key while the slab stands topples it, free and at once, like letting go of a Gate
+    if (spec.topple > 0 && conjuredRef.current.some((c) => c.moveId === moveId && c.until > now)) {
+      pendingCastRef.current = { ...spec, toppling: true }
+      setHarvestToast(`${spec.label} — falls`)
+      return
+    }
+        // CHARGES (step 4): a move with more than one stores presses; each refills in `cooldownMs`, one at a time
     let charge: { n: number; at: number } | null = null
     if (spec.charges > 1) {
       charge = chargeRef.current[slot] ?? { n: spec.charges, at: 0 }

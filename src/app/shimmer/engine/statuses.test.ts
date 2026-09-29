@@ -14,7 +14,7 @@ const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
 // A. the table is the registry: every status any move names is in it, and every row is whole
 for (const m of KEEPER_MOVES) for (const k of castForMove(m.id).statuses) ok(k in STATUS_TABLE, `★ ${m.name} names '${k}', which the table has`)
 for (const k of STATUS_KINDS) { const d = STATUS_TABLE[k]; ok(!!d.label && !!d.effect && typeof d.hard === 'boolean' && d.color > 0, `${k} has a label, an effect, a hard flag and a colour`) }
-ok(STATUS_KINDS.length === 10, 'ten statuses (update this when the table grows, on purpose)')
+ok(STATUS_KINDS.length === 11, 'eleven statuses (update this when the table grows, on purpose): Sealed joined 09-29 with Pillar Tomb')
 ok(['rooted', 'disarmed', 'blinded', 'silenced'].every(k => STATUS_TABLE[k as keyof typeof STATUS_TABLE].hard) && ['slowed', 'staggered', 'revealed', 'burning', 'vulnerable', 'shieldBroken'].every(k => !STATUS_TABLE[k as keyof typeof STATUS_TABLE].hard), 'hard = takes an option away outright; the rest are soft')
 
 // B. no stacking: a re-apply extends to the later expiry
@@ -135,7 +135,7 @@ ok(eg.archetype === 'status' && eg.linger && eg.ampZone && eg.statuses[0] === 'b
 ok(fp.archetype === 'status' && !fp.linger && fp.statuses.includes('burning') && fp.statuses.includes('revealed') && fp.areaSecs === 3 && fp.fieldDps === 0, 'Flashpoint: the spot ignites at once, burning + revealed 3s')
 ok(p3.includes('if (zn.amp || !inZone(zn, x, z)) return'), 'an amp zone never touches the foes inside it')
 ok(p3.includes('if (!p.amp) for (const zn of statusZones.current) if (zn.amp'), 'a round picks up the burn in flight')
-ok(p3.includes('if (!p.cover && conjuredBlockedAt(') && p3.includes('if (!p.cover) { const ab = absorbShotAt('), 'thin cover stops a round unless it pierces')
+ok(p3.includes('if ((!p.cover || tombAt(p.pos.x, p.pos.z)) && conjuredBlockedAt(') && p3.includes('if (!p.cover) { const ab = absorbShotAt('), 'thin cover stops a round unless it pierces')
 ok(p3.includes('if (++p.hits >= tier.pierce + p.xp) p.life = 0'), 'a pierce amp adds to the device tier in the Breach')
 ok(p3.includes('if (live && inf.shots) { inf.shots--; if (inf.shots <= 0) inf.until = 0 }'), '★ Keenshard\'s window closes on its third round, not its clock')
 ok(p3.includes('rangeCfgRef.current.tune, p.shield)'), 'a guard-piercing round reaches damageGuard')
@@ -160,6 +160,17 @@ ok((p3.match(/o\.vel\.copy\(aimPt\)/g) || []).length === 3 && p3.includes('hc.ta
 ok(p3.includes("if (fresh) tone(1250, 140"), 'a waymark pings when something new touches it')
 ok(p3.includes("cp.homing = prey.length ? prey[k % prey.length] : ''") && p3.includes('lerp(seg, Math.min(1, dt * 3.5))'), 'the birds are loosed at separate prey and turn toward it')
 ok(p3.includes("case 'veil': {"), 'the dispatcher places a veil like any other aimed cast')
+
+// O. PASS 2, STEP 11 (09-29): containment + the topple
+const pt = castForMove('pillar-tomb'), cc = castForMove('cyclone-cage'), mo = castForMove('monolith')
+ok(STATUS_TABLE.sealed?.hard === true, 'Sealed is a hard status (it takes every option)')
+ok(pt.entomb && pt.statuses.includes('sealed') && pt.statuses.includes('rooted') && pt.statuses.includes('disarmed') && pt.areaSecs === 4, '★ Pillar Tomb seals ONE foe 4s: out of the fight, out of reach')
+ok(cc.cage && cc.fieldStopsShots && cc.fieldDps === 0 && cc.areaSecs === 5, 'Cyclone Cage: 5s, holds whoever it lands on, no shot crosses, no damage')
+ok(mo.topple > 0 && mo.archetype === 'terrain', 'Monolith can be toppled')
+ok(p3.includes("if (statusRef.current[id] && hasStatus(statusRef.current, id, 'sealed', nowFrame)) return"), 'a sealed foe takes nothing through the one damage path')
+ok(p3.includes('if ((!p.cover || tombAt(p.pos.x, p.pos.z)) && conjuredBlockedAt('), '★ a tomb is not thin cover: even a piercing round stops at it')
+ok(p3.includes('if (!c.ids.includes(id)) return') && p3.includes('if (d > lim) moveFoe(id,'), 'a caged foe is set back inside the wall')
+ok(p3.includes("pendingCastRef.current = { ...spec, toppling: true }") && p3.includes("pending.archetype === 'terrain' && pending.toppling"), '★ the second press topples the standing slab, free')
 
 console.log(`statuses: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log('  ✗ ' + f); process.exit(1) }

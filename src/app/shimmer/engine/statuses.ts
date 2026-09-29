@@ -58,6 +58,7 @@ export type StatusKind =
   | 'burning'      // damage over time, from Amp shots only (Flame Infusion, Flashpoint, Emberglass)
   | 'vulnerable'   // takes more gun damage (Grindstone, Shatterfield)
   | 'shieldBroken' // shield gone and not regenerating (Crystal Barrage, Volcano Spike)
+  | 'sealed'       // walled in stone: out of the fight AND out of reach (Pillar Tomb, pass 2)
 
 export interface StatusDef {
   label: string
@@ -80,6 +81,7 @@ export const STATUS_TABLE: Record<StatusKind, StatusDef> = {
   burning:      { label: 'Burning',       hard: false, color: 0xe8894a, effect: 'Takes damage over time.' },
   vulnerable:   { label: 'Vulnerable',    hard: false, color: 0xd9695b, effect: 'Takes more gun damage.' },
   shieldBroken: { label: 'Shield broken', hard: false, color: 0x7fc2ff, effect: 'Shield gone, not regenerating.' },
+  sealed:       { label: 'Sealed',        hard: true,  color: 0xa89a86, effect: 'Walled in stone: cannot act, cannot be hit.' },
 }
 
 export const STATUS_KINDS: readonly StatusKind[] = Object.keys(STATUS_TABLE) as StatusKind[]
