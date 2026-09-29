@@ -17,7 +17,8 @@
 //
 // Renders and calls back. The lobby socket (`lib/party-lobby.ts`) owns the shared state; the host owns every warp.
 import { useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { H, HearthButton, hearthBody, hearthDisplay } from '../ui/hearth'
 import { keeperColor } from './RemotePlayers'
@@ -43,8 +44,32 @@ import { lobbySeats, launchBlock, type Seat } from './lobby-seats'
 export { lobbySeats, launchBlock, whereLabel, STATION_ZONE } from './lobby-seats'
 
 // ── the stage ───────────────────────────────────────────────────────────────────────────────────────────────
-const SLOT_X = [0, -1.35, 1.35]
-function Keeper({ seat, slot }: { seat: Seat; slot: number }) {
+// ★ A CHORD OF THREE FITS ANY SCREEN (Alex 09-29: "a bit close up… scale it down so a team of three fits comfortably…
+// it converts better on the phone"). The slots sit closer, and the camera (below) pulls back until the whole pad fits
+// the WIDTH, so a portrait phone sees all three instead of the middle one.
+const SLOT_X = [0, -1.15, 1.15]
+/** what must be in frame: the three keepers and their names, with a margin (world units, half-extents) */
+const FIT_HALF_W = 2.0, FIT_HALF_H = 1.45
+function CameraFit() {
+  const { camera, size } = useThree()
+  const last = useRef('')
+  useFrame(() => {
+    const aspect = size.width / Math.max(1, size.height), key = `${size.width}x${size.height}`
+    if (key === last.current) return
+    last.current = key
+    const cam = camera as THREE.PerspectiveCamera
+    const vHalf = Math.tan((cam.fov * Math.PI) / 360), hHalf = vHalf * aspect
+    const d = Math.max(FIT_HALF_W / hHalf, FIT_HALF_H / vHalf, 4.4)
+    // on a narrow screen the plates cover the top and the bottom, so the chord sits a little high in the free middle
+    const lookY = aspect < 1 ? -0.05 : 0.15
+    cam.position.set(0, lookY + d * 0.22, d)
+    cam.lookAt(0, lookY, 0)
+    cam.updateProjectionMatrix()
+  })
+  return null
+}
+const nameplate: React.CSSProperties = { ...hearthBody, width: 96, textAlign: 'center', pointerEvents: 'none', textShadow }
+function Keeper({ seat, slot, partied }: { seat: Seat; slot: number; partied: boolean }) {
   const g = useRef<THREE.Group>(null)
   const color = useMemo(() => keeperColor(seat.look), [seat.look])
   useFrame((st) => {
@@ -76,25 +101,47 @@ function Keeper({ seat, slot }: { seat: Seat; slot: number }) {
         <ringGeometry args={[0.42, 0.52, 40]} />
         <meshBasicMaterial color={seat.ready ? L.ready : H.inkSoft} transparent opacity={seat.ready ? 0.95 : 0.5} />
       </mesh>
+      {/* the name rides UNDER the keeper, in the scene, so it stays with them at any size */}
+      <Html position={[0, -0.12, 0.5]} center zIndexRange={[5, 0]}>
+        <div style={nameplate} data-seat={seat.name}>
+          <div className="text-[13px] font-extrabold truncate" style={{ color: H.paperHi }}>{seat.leader && partied ? '♛ ' : ''}{seat.name}</div>
+          <div className="text-[10px]" style={{ color: L.sub }}>{seat.you ? 'you' : !seat.here ? seat.where : seat.ready ? 'ready' : 'not ready'}</div>
+        </div>
+      </Html>
     </group>
   )
 }
-function Stage({ seats }: { seats: Seat[] }) {
+/** an empty place in the chord: a faint ring and the words, so three reads as three even alone */
+function OpenSeat({ slot }: { slot: number }) {
   return (
-    <Canvas dpr={[1, 1.5]} camera={{ position: [0, 1.35, 4.2], fov: 38 }} gl={{ antialias: true, alpha: true }} style={{ background: 'transparent' }}>
+    <group position={[SLOT_X[slot] ?? 0, 0, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
+        <ringGeometry args={[0.42, 0.5, 40]} />
+        <meshBasicMaterial color={H.inkSoft} transparent opacity={0.35} />
+      </mesh>
+      <Html position={[0, -0.12, 0.5]} center zIndexRange={[5, 0]}>
+        <div style={nameplate} data-seat="open" className="text-[11px] italic"><span style={{ color: L.faint }}>open seat</span></div>
+      </Html>
+    </group>
+  )
+}
+function Stage({ seats, partied }: { seats: Seat[]; partied: boolean }) {
+  return (
+    <Canvas dpr={[1, 1.5]} camera={{ position: [0, 1.35, 4.8], fov: 38 }} gl={{ antialias: true, alpha: true }} style={{ background: 'transparent' }}>
+      <CameraFit />
       <ambientLight intensity={0.55} />
       <directionalLight position={[2.5, 4, 3]} intensity={1.1} />
       <pointLight position={[0, 2.2, 1.6]} intensity={0.8} color={L.lamp} />
       <group position={[0, -0.75, 0]}>
         <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[2.6, 48]} />
+          <circleGeometry args={[2.1, 48]} />
           <meshStandardMaterial color={L.pad} roughness={0.9} />
         </mesh>
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
-          <ringGeometry args={[2.5, 2.6, 64]} />
+          <ringGeometry args={[2.02, 2.1, 64]} />
           <meshBasicMaterial color={H.ember} />
         </mesh>
-        {seats.slice(0, 3).map((s, i) => <Keeper key={s.id} seat={s} slot={i} />)}
+        {[0, 1, 2].map((i) => seats[i] ? <Keeper key={seats[i].id} seat={seats[i]} slot={i} partied={partied} /> : <OpenSeat key={`open-${i}`} slot={i} />)}
       </group>
     </Canvas>
   )
@@ -164,22 +211,7 @@ export function DeployLobby({ you, lobby, isLeader, partyCode, missions, localPi
   return (
     <div className="fixed inset-0 z-[60] select-none" style={{ ...hearthBody, background: L.backdrop, color: H.paper }} data-panel="departures">
       {/* the stage fills the screen; the plates sit over it */}
-      <div className="absolute inset-0"><Stage seats={seats} /></div>
-
-      {/* names under the pad, in the same slots as the stage */}
-      <div className="absolute left-1/2 -translate-x-1/2 bottom-[18%] flex gap-6 sm:gap-14 pointer-events-none">
-        {[1, 0, 2].map((slot) => {
-          const s = seats[slot]
-          return (
-            <div key={slot} className="w-[92px] text-center" data-seat={s ? s.name : 'open'}>
-              {s ? <>
-                <div className="text-[13px] font-extrabold truncate" style={{ textShadow, color: H.paperHi }}>{s.leader && partied ? '♛ ' : ''}{s.name}</div>
-                <div className="text-[10px]" style={{ textShadow, color: L.sub }}>{s.you ? 'you' : !s.here ? s.where : s.ready ? 'ready' : 'not ready'}</div>
-              </> : <div className="text-[11px] italic" style={{ color: L.faint }}>open seat</div>}
-            </div>
-          )
-        })}
-      </div>
+      <div className="absolute inset-0"><Stage seats={seats} partied={partied} /></div>
 
       {/* top left: the title and the party */}
       <div className="absolute top-4 left-4 right-4 sm:right-auto sm:w-[300px] px-4 py-3" style={plate}>

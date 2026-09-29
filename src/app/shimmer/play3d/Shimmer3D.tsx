@@ -53,7 +53,7 @@ import { FloraTree, FloraDressing } from '../world/flora'
 import { StationProp, GhostProp } from '../world/prop-models'
 import { RemotePlayers, useRoster } from './RemotePlayers'
 import { useMultiplayer, storedName, storeName, selfPlayerId, type RemotePlayer } from './multiplayer'
-import { usePartyLobby, type LobbyLaunch, type Mission } from '@/lib/party-lobby'
+import { usePartyLobby, type LobbyLaunch, type LobbyState, type Mission } from '@/lib/party-lobby'
 import { DeployLobby, type MissionCard } from './deploy-lobby'
 import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/party'
 import { BreachLink, BreachQueue, SlackLink, coop, driftMirror, driftSlack, type CoopPartyMember } from './breach-link'
@@ -6183,6 +6183,8 @@ export default function Shimmer3D() {
   const [finding, setFinding] = useState<Finding | null>(null)    // waiting in the Find others line
   const queueRef = useRef<BreachQueue | null>(null)
   const [soloMission, setSoloMission] = useState<Mission>('survival')   // the pick when there is no party lobby
+  // OWNER ONLY: a stand-in chord of three for judging the lobby's look headless (`__lobbyPreview`), never a real party
+  const [lobbyPreview, setLobbyPreview] = useState<LobbyState | null>(null)
   const [mpTab, setMpTab] = useState<'party' | 'friends'>('party')
   const [mpOpen, setMpOpen] = useState(false)         // 👥 — play together (party / invite)
   const [gfxOpen, setGfxOpen] = useState(false)       // ⚙ — graphics quality + frame readout
@@ -9004,6 +9006,17 @@ export default function Shimmer3D() {
     }
     return () => { delete w.__cast; delete w.__foes; delete wc.__conj; delete wc.__at }
   }, [isOwner, castSlot])
+  // …and stand a chord of three in the lobby (you, a ready mate, one away) to judge its look at any screen size. OWNER ONLY.
+  useEffect(() => {
+    if (!isOwner) return
+    const w = window as unknown as { __lobbyPreview?: (on: boolean) => void }
+    w.__lobbyPreview = (on: boolean) => setLobbyPreview(on ? { code: 'PREVW', leader: lobbyRef.current.you ?? 'you', mission: 'survival', launch_gen: 0, members: [
+      { id: lobbyRef.current.you ?? 'you', name: 'You', zone: 'play3d:travelers-station', ready: false, trusted: true, look: selfPlayerId() },
+      { id: 'u_prev_a', name: 'Fern', zone: 'play3d:travelers-station', ready: true, trusted: true, look: 'p_fern' },
+      { id: 'u_prev_b', name: 'Moss', zone: 'play3d:rune-hold', ready: false, trusted: true, look: 'p_moss' },
+    ] } : null)
+    return () => { delete w.__lobbyPreview }
+  }, [isOwner])
 
   const save = useCallback(async () => {
     setSaveMsg('saving…')
@@ -10150,11 +10163,11 @@ export default function Shimmer3D() {
       )}
       {/* ★ DEPARTURES (09-29): the lobby, full screen, Apex-style: your chord on the pad, the mission bottom right */}
       {departuresOpen && (() => {
-        const partied = !!lobby.state && lobby.state.members.length > 1
+        const partied = !!(lobbyPreview ?? lobby.state) && (lobbyPreview ?? lobby.state)!.members.length > 1
         return (
           <DeployLobby
             you={{ id: lobby.you ?? 'you', name: mpName, look: mpReady ? selfPlayerId() : 'you' }}
-            lobby={lobby.state} isLeader={lobby.isLeader} partyCode={mpParty}
+            lobby={lobbyPreview ?? lobby.state} isLeader={lobbyPreview ? true : lobby.isLeader} partyCode={lobbyPreview?.code ?? mpParty}
             missions={missionCards()} localPick={soloMission} onLocalPick={setSoloMission}
             onPick={lobby.pick} onReady={lobby.ready}
             // a party's launch goes through the lobby, so every mate (the leader too) takes the same path in
