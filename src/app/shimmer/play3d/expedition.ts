@@ -109,6 +109,8 @@ export function generateExpedition(seed: number): ExpLayout {
   for (let tries = 0; rooms.length < 3 && tries < 200; tries++) {
     const cx = 1 + Math.floor(r() * (MAZE - 2)), cz = 1 + Math.floor(r() * (MAZE - 2))
     const cells = [[cx, cz], [cx + 1, cz], [cx, cz + 1], [cx + 1, cz + 1]]
+    // never beside the start: an elite's room there meant a fight the moment you landed (seen on prod, 09-29)
+    if (cx + cz < 5) continue
     if (cells.some(([x, z]) => x >= MAZE || z >= MAZE || usedCells.has(`${x},${z}`))) continue
     for (let z = cz * CELL + 1; z < (cz + 2) * CELL; z++) for (let x = cx * CELL + 1; x < (cx + 2) * CELL; x++) open(x, z)
     join(cx, cz, cx + 1, cz); join(cx, cz, cx, cz + 1); join(cx + 1, cz, cx + 1, cz + 1); join(cx, cz + 1, cx + 1, cz + 1)
@@ -144,7 +146,7 @@ export function generateExpedition(seed: number): ExpLayout {
   for (const { c } of deadEnds.slice(0, 2)) caches.push({ id: `cache:${c[0]},${c[1]}`, x: centre(c[0]), z: centre(c[1]), y: 0, puzzle: false })
   // 7. elites: one in each room (off the terrace), and one guarding the exit's approach
   const elites = rooms.map(([rx, rz]) => ({ x: (rx + 1) * CELL + 1.5, z: (rz + 1) * CELL + 1.5 }))
-  const nearExit = [...dist.entries()].filter(([, d]) => d === Math.max(1, (dist.get(`${far[0]},${far[1]}`) ?? 1) - 2))[0]
+  const nearExit = [...dist.entries()].filter(([k, d]) => { const [x, z] = k.split(',').map(Number); return d === Math.max(1, (dist.get(`${far[0]},${far[1]}`) ?? 1) - 2) && x + z >= 5 })[0]
   if (nearExit) { const [ex, ez] = nearExit[0].split(',').map(Number); elites.push({ x: centre(ex) + 0.5, z: centre(ez) + 0.5 }) }
   // 8. the exit: a warp tile in the far cell
   const exit = { x: centre(far[0]), z: centre(far[1]) }

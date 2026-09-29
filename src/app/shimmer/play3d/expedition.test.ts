@@ -2,6 +2,7 @@
  * THE EXPEDITION (2026-09-29): the generated floor is a place you can always finish, the puzzle is a shortcut and never
  * a lock, and the loot odds hold. Run: `npx tsx src/app/shimmer/play3d/expedition.test.ts`
  */
+import { ELITE_AGGRO } from './expedition-run'
 import { generateExpedition, rollCache, lootRng, EXP_FLOOR, EXP_WALL, EXP_WARP, EXP_SIZE, TERRACE_TIERS, HELD_CHANCE, ELITE_HUNTER } from './expedition'
 import { RANGE_HUNTER } from '../engine/hunter-ai'
 import { readFileSync } from 'node:fs'
@@ -47,8 +48,9 @@ for (const seed of [1, 7, 42, 1337, 90210, 424242, 5, 99]) {
   for (let seed = 1000; seed < 1400; seed++) {
     const L = generateExpedition(seed), w = reach(L)
     if (!w.has(`${L.exit.x},${L.exit.z}`) || !L.caches.every((c) => w.has(`${c.x},${c.z}`)) || !L.caches.some((c) => c.puzzle)) bad++
+    if (L.elites.some((e) => Math.hypot(e.x - L.start.x, e.z - L.start.z) < ELITE_AGGRO + 2)) bad++
   }
-  ok(bad === 0, `★★ 400 floors: every exit and every cache reachable without a cast, each with a puzzle cache (${bad} bad)`)
+  ok(bad === 0, `★★ 400 floors: every exit and every cache reachable without a cast, each with a puzzle cache, no elite within reach of where you land (${bad} bad)`)
 }
 ok(JSON.stringify(generateExpedition(42)) === JSON.stringify(generateExpedition(42)), 'the same seed is the same floor (a party would agree)')
 ok(JSON.stringify(generateExpedition(42).grid) !== JSON.stringify(generateExpedition(43).grid), 'a new seed is a new floor')
