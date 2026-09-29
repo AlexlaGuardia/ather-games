@@ -51,7 +51,7 @@ ok(statusesOn(applyStatuses(emptyBag(), 'f', ['slowed', 'rooted'], 2, 0), 'f', 1
 const p3 = readFileSync('src/app/shimmer/play3d/Shimmer3D.tsx', 'utf8')
 for (const id of ['`board:${i}`', "'hunter'", '`guard:${st.id}`', '`fleet:${mm.index}`', '`flood:${b.id}`']) ok(p3.includes(`fn(${id}`), `★ forEachFoe walks ${id}`)
 ok(p3.includes('stepHold(hs, dt, posRef.current.x, posRef.current.z, posRef.current.y / STEP, undefined, (id) =>'), 'the Breach flooded read their statuses')
-ok(p3.includes('stepFleet(fleet, bodies, bc, dt, RANGE_HUNTER, (i) => foeMods('), 'the Crucible fleet reads theirs')
+ok(p3.includes('stepFleet(fleet, bodies, bc, dt, inExp ? ELITE_HUNTER : RANGE_HUNTER, (i) => foeMods('), 'the Crucible fleet (and the expedition elites) read theirs')
 ok(p3.includes("applyStatuses(bag, id, zn.kinds, zn.applySecs, nowFrame, { zone: true })"), 'a cloud re-applies with the zone flag')
 for (const id of ['fog-bank', 'hush', 'sandstorm-veil', 'dust-lung', 'pressure-drop', 'squall']) ok(castForMove(id).linger && castForMove(id).archetype === 'status', `${id} is a lingering cloud`)
 ok(castForMove('ice-dart').statuses.includes('slowed') && castForMove('ice-dart').areaSecs > 0, 'Ice Dart slows what it hits')

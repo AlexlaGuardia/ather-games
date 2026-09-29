@@ -101,6 +101,8 @@ export interface Zone {
   gates?: Gate[]
   warps: Warp[]
   playerStart?: { tileX: number; tileY: number } // default spawn point for this zone
+  /** a GENERATED zone's own tiers (the expedition's terrace); authored zones read `heightmaps.ts` instead */
+  heights?: number[][]
   element?: ZoneElement // cultivation element (undefined = dev/throwaway zone, no affinity)
   // Which side of the Ather this zone sits on. 'ather' (default) = spirit world: spirits/turn-based
   // battles work, weapons are holstered. 'outside' = the physical world (the Crucible battle-royale
@@ -177,6 +179,7 @@ import { parseLanding } from '../play3d/hold'
 import { EDGE_ZONE, EDGE_START, EDGE_EXIT, edgeGrid } from '../play3d/stillwind'
 import { PASSAGE } from '../play3d/passage-hall'
 import { STATION, holdShip } from '../play3d/station-field'
+import { EXP_ZONE, generateExpedition, type ExpLayout } from '../play3d/expedition'
 import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, CRUCIBLE, RUNE_HOLD, VETCH_HOLD, BRACK_HOLD, TEST_SANDBOX,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN, crucibleArrival, crucibleExit,} from './tilemap'
 import { LANDING, LANDING_ARRIVAL, LANDING_LABEL } from './landing'
@@ -844,3 +847,21 @@ for (const z of ZONES) {
 }
 
 export const START_ZONE = 'garden'
+
+
+// ── THE EXPEDITION (2026-09-29): a GENERATED zone, rerolled per run ───────────────────────────────────────────
+// No tilemap literal (like the Passage, the Station and the Hold): the floor is `generateExpedition(seed)`, written onto
+// this one Zone object before the keeper warps in, so the page's per-zone clone picks it up on entry. Warps are data,
+// so the exit is rewritten with it. The name stays neutral until canon says what these places are (CANON_GAPS).
+const EXP_ZONE_DEF: Zone = { id: EXP_ZONE, name: 'Expedition', grid: [[0]], warps: [], realm: 'outside' }
+ZONES.push(EXP_ZONE_DEF)
+export function rerollExpedition(seed: number): ExpLayout {
+  const L = generateExpedition(seed)
+  const home = holdShip()!.arrival
+  EXP_ZONE_DEF.grid = L.grid
+  EXP_ZONE_DEF.heights = L.heights
+  EXP_ZONE_DEF.playerStart = { tileX: L.start.x, tileY: L.start.z }
+  EXP_ZONE_DEF.warps = [{ fromX: L.exit.x, fromY: L.exit.z, toZone: 'travelers-station', toX: home.x, toY: home.z, direction: 'down' }]
+  return L
+}
+rerollExpedition(1)

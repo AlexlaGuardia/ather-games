@@ -11,7 +11,7 @@ import * as THREE from 'three'
 import { walkable } from '../engine/player'
 import { resolveStand, canStandAt, surfacesAt, EMPTY_SEGS, type CollisionCtx } from '../engine/segs-collision'
 import { SOLID } from '../world/tiles'
-import { getZone, checkWarp, gateFootprint, HOLD_MAP, type Zone, type Warp, type Gate } from '../world/zones'
+import { getZone, checkWarp, gateFootprint, HOLD_MAP, rerollExpedition, type Zone, type Warp, type Gate } from '../world/zones'
 import { CHUNK, DEFAULT_RADIUS, chunkOf, sameChunk, chunkVisible, viewFar, fogNear, type ChunkCoord } from '../world/chunk-stream'
 import { ALL_ZONES } from '../world/all-zones'
 // The far end of the Ather crossing. `engine/crossing.ts` holds the contract and the reasoning;
@@ -60,6 +60,9 @@ import { BreachLink, BreachQueue, coop, driftMirror, type CoopPartyMember } from
 import { usePresence, type UsePresence } from '@/lib/presence'
 import { FriendsTab, InvitePrompt, useFriends } from './play-together'
 import { type Finding } from './departures'
+import { EXP_ZONE, ELITE_HUNTER, ELITE_WRACK, TERRACE_TIERS, rollCache, lootRng } from './expedition'
+import { expRun, resetExpRun, ELITE_AGGRO, PICKUP_REACH, CACHE_REACH } from './expedition-run'
+import { bankWrack, takeWrackForRun, recordFind } from './expedition-bank'
 import { holdShip, BERTH_COUNT } from './station-field'
 import { HearthTabs } from '../ui/hearth'
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
@@ -2688,6 +2691,9 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // step 10: Heat Mirage's false keeper, as an offset from the real one; foes aim at it while it stands
   const decoyRef = useRef({ until: 0, ox: 0, oz: 0 })
   const decoyMeshRef = useRef<THREE.Mesh>(null)
+  // the expedition's caches and the wrack its elites drop (09-29)
+  const expCacheMeshRef = useRef<THREE.InstancedMesh>(null)
+  const expDropMeshRef = useRef<THREE.InstancedMesh>(null)
   // step 11: Cyclone Cage holds whoever was inside when it landed, by id, for its life
   const cagesRef = useRef<{ x: number; z: number; r: number; until: number; ids: string[] }[]>([])
   const aimPt = useMemo(() => new THREE.Vector3(), [])
@@ -2780,6 +2786,9 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // has three floors, and a body climbing the face is at neither.
   const inHold = zoneId === HOLD_ZONE
   const inEdge = zoneId === EDGE_ZONE
+  const inExp = zoneId === EXP_ZONE
+  /** a fleet member's body height: the Crucible is flat under the keeper; an expedition's elites stand on the floor */
+  const fleetY = () => (inExp ? 0 : (posRef.current?.y ?? 0)) + 0.95
   // ── ★ THE MATCH ────────────────────────────────────────────────────────────────────────────
   // One number: when the glyph lit. Everything else — which floor is open, what is sealing, when
   // the Vault opens — is `crucibleAt(elapsed)`, derived fresh every frame from that alone, so the
@@ -2881,7 +2890,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       const h0 = hunter.current
       if (h0.alive) fn('hunter', h0.pos.x, h0.pos.z, h0.pos.y)
       if (guardSim.current.spawned) guardBodies.forEach((b, gi) => { const st = guardSim.current.enc.guards[gi]; if (st?.alive) fn(`guard:${st.id}`, b.pos.x, b.pos.z, b.pos.y) })
-      if (fleetRef.current) { const fy = (posRef.current?.y ?? 0) + 0.95; for (const mm of fleetRef.current.members) if (mm.state.alive) fn(`fleet:${mm.index}`, mm.state.x, mm.state.z, fy) }
+      if (fleetRef.current) { const fy = fleetY(); for (const mm of fleetRef.current.members) if (mm.state.alive) fn(`fleet:${mm.index}`, mm.state.x, mm.state.z, fy) }
       if (hs?.running) for (const b of hs.flood) if (b.alive && b.phase === 'inside') fn(`flood:${b.id}`, b.x, b.z, b.y * STEP + 0.5)
     }
     // ── ONE DAMAGE PATH PER FOE (pass 2): Burning, cast bolts and their chains all pay through each foe's own death rule
@@ -3393,7 +3402,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       // 2D test plus a height band: the fleet carries only x/z, and a round passing well over a
       // challenger's head should miss.
       if (p.life > 0 && fleetRef.current) {
-        const botY = (posRef.current.y ?? 0) + 0.95
+        const botY = fleetY()
         if (Math.abs(p.pos.y - botY) < 1.2) {
           for (const m of fleetRef.current.members) {
             if (!m.state.alive || p.lastId === `fleet:${m.index}`) continue
@@ -3554,7 +3563,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     }
     // ── THE STILLWIND steps here (`stillwind.ts`). Its strikes go through `hurtPlayer` like the flooded's; the edge's
     // own burn/frost is a steady drain, so it skips the hit flash and takes the shield first itself; the line mends.
-    if (inEdge) for (const t of targets) { t.alive = false; t.down = 1 }
+    if (inEdge || inExp) for (const t of targets) { t.alive = false; t.down = 1 }
     const er = edgeRef.current
     if (inEdge && er.sim && posRef.current) {
       const k = edgeToSim(posRef.current.x, posRef.current.z)
@@ -3641,7 +3650,15 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       // 59 challengers on the same brain the range runs. This block is the HOST, exactly as the
       // hunter's is: it answers what is solid, supplies the bodies, and owns orbs and death. The
       // fleet decides who fights whom; `stepHunter` decides how.
-      if (cfg?.bots && zoneId === 'crucible') {
+      if ((cfg?.bots && zoneId === 'crucible') || (inExp && expRun.layout)) {
+        // ★ THE EXPEDITION'S ELITES (09-29): the Crucible's brain with an elite's body, one squad, placed by the floor
+        if (!fleetRef.current && inExp && expRun.layout) {
+          const L = expRun.layout
+          const roster = { squads: [], humans: 0, bots: L.elites.length, ready: true,
+            challengers: L.elites.map((_, i) => ({ id: `elite:${i}`, name: 'Elite', bot: true, squad: 0 })) } as unknown as Parameters<typeof createFleet>[0]
+          fleetRef.current = createFleet(roster, L.seed, ELITE_HUNTER)
+          fleetRef.current.members.forEach((m, i) => { m.state.x = L.elites[i].x; m.state.z = L.elites[i].z; m.state.alive = true; m.state.hp = ELITE_HUNTER.hp })
+        }
         if (!fleetRef.current) {
           fleetRef.current = createFleet(fillRoster([{ id: 'you', name: 'You' }], CRUCIBLE_SEED), CRUCIBLE_SEED)
           // ── ★★★ WARP THE SIXTY TO THEIR ENTRANCES — canon's *"all 60 warped to starting
@@ -3679,8 +3696,23 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         bc.rooted = false; bc.disarmed = false
         bc.fallbackX = targets[0].ax; bc.fallbackZ = targets[0].az
         const fbag = statusRef.current
-        const results = stepFleet(fleet, bodies, bc, dt, RANGE_HUNTER, (i) => foeMods(fbag, `fleet:${i}`, nowFrame))
+        // an elite holds its room until the keeper comes near or hurts it (without this the whole floor walks at you
+        // through the walls: the brain steers, it does not path)
+        const held = inExp ? fleet.members.filter((m) => {
+          if (!m.state.alive || expRun.aggro.has(m.index)) return false
+          if (Math.hypot(m.state.x - pEye.x, m.state.z - pEye.z) < ELITE_AGGRO || m.state.hp < ELITE_HUNTER.hp) { expRun.aggro.add(m.index); return false }
+          return true
+        }).map((m) => ({ m, x: m.state.x, z: m.state.z })) : []
+        const results = stepFleet(fleet, bodies, bc, dt, inExp ? ELITE_HUNTER : RANGE_HUNTER, (i) => foeMods(fbag, `fleet:${i}`, nowFrame))
+        for (const h of held) { h.m.state.x = h.x; h.m.state.z = h.z }
+        const heldIdx = new Set(held.map((h) => h.m.index))
+        // an elite that fell leaves its wrack where it fell
+        if (inExp) for (const m of fleet.members) if (!m.state.alive && !expRun.dead.has(m.index)) {
+          expRun.dead.add(m.index); expRun.kills++
+          expRun.drops.push({ id: expRun.nextId++, x: m.state.x, z: m.state.z, n: ELITE_WRACK })
+        }
         for (const r of results) {
+          if (heldIdx.has(r.member.index)) continue   // an elite holding its room neither shoots nor casts
           // ── ★★★ A CHALLENGER'S CAST (row 294) — the first rune-tagged damage in the game ──────
           // This is the whole point of the row: a bot casts from its PREMADE LOADOUT, the move is a
           // real registered keeper move, and the hit carries the move's runes. That is what makes
@@ -3710,7 +3742,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           if (r.target.index !== -1) continue
           const o = orbs.find((or) => or.life <= 0)
           if (!o) continue
-          o.pos.set(r.member.state.x, (posRef.current.y ?? 0) + 0.95, r.member.state.z)
+          o.pos.set(r.member.state.x, fleetY(), r.member.state.z)
           o.vel.copy(aimPt).sub(o.pos).normalize()
           // blinded: it still shoots, it just does not know where you are (the hunter's rule)
           if (hasStatus(fbag, `fleet:${r.member.index}`, 'blinded', nowFrame) || lostTrack(r.member.state.x, r.member.state.z)) { o.vel.x += Math.sin(r.member.state.strafe * 7.3) * 0.85; o.vel.z += Math.cos(r.member.state.strafe * 5.1) * 0.85; o.vel.normalize() }
@@ -3723,7 +3755,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         const bm = botMeshRef.current
         if (bm) {
           let n = 0
-          const by = (posRef.current.y ?? 0) + 0.95
+          const by = fleetY()
           for (const m of fleet.members) {
             if (!m.state.alive) continue
             botMat.current.makeTranslation(m.state.x, by, m.state.z)
@@ -3735,6 +3767,53 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       } else if (fleetRef.current) {
         fleetRef.current = null   // left the zone or flipped the toggle — the match is over
         if (botMeshRef.current) botMeshRef.current.count = 0
+      }
+
+      // ── THE EXPEDITION (09-29): wrack is picked up by walking over it (and banks at once, so a fall never loses
+      // it), the E prompt knows the nearest unopened cache, and both are drawn ─────────────────────────────────
+      if (inExp && expRun.layout) {
+        const px = posRef.current.x, pz = posRef.current.z, py = posRef.current.y
+        if (expRun.drops.length) {
+          const keep = expRun.drops.filter((d) => {
+            if (Math.hypot(d.x - px, d.z - pz) > PICKUP_REACH || py > 1.2) return true
+            bankWrack(d.n); expRun.wrack += d.n
+            tone(880, 120, { type: 'triangle', gain: 0.05, slideTo: 1320 })
+            return false
+          })
+          expRun.drops = keep
+        }
+        let near: string | null = null, nd = CACHE_REACH
+        for (const c of expRun.layout.caches) {
+          if (expRun.opened.has(c.id) || Math.abs(py - c.y * STEP) > 0.9) continue
+          const d = Math.hypot(c.x - px, c.z - pz)
+          if (d < nd) { nd = d; near = c.id }
+        }
+        expRun.near = near
+        const cm = expCacheMeshRef.current
+        if (cm) {
+          expRun.layout.caches.forEach((c, i) => {
+            const shut = !expRun.opened.has(c.id)
+            m.compose(seg.set(c.x, c.y * STEP + (shut ? 0.32 : 0.12), c.z), q.identity(), shut ? one : scl.set(1, 0.35, 1))
+            cm.setMatrixAt(i, m)
+            cm.setColorAt(i, markCol.setHex(!shut ? 0x4a3a2a : c.puzzle ? 0xe8c46a : 0xb08a5a))
+          })
+          cm.count = expRun.layout.caches.length
+          cm.instanceMatrix.needsUpdate = true
+          if (cm.instanceColor) cm.instanceColor.needsUpdate = true
+        }
+        const dm = expDropMeshRef.current
+        if (dm) {
+          const t = state.clock.elapsedTime
+          expRun.drops.slice(0, 16).forEach((d, i) => {
+            m.compose(seg.set(d.x, 0.45 + Math.sin(t * 3 + d.id) * 0.08, d.z), q.setFromAxisAngle(AXIS_Y, t * 2 + d.id), one)
+            dm.setMatrixAt(i, m)
+          })
+          dm.count = Math.min(16, expRun.drops.length)
+          dm.instanceMatrix.needsUpdate = true
+        }
+      } else {
+        if (expCacheMeshRef.current) expCacheMeshRef.current.count = 0
+        if (expDropMeshRef.current) expDropMeshRef.current.count = 0
       }
 
       // ── the Three Puppet Guards ────────────────────────────────────────────────────────────
@@ -4123,6 +4202,14 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       <instancedMesh ref={lineMeshRef} args={[undefined, undefined, ZONE_MAX]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial transparent opacity={0.4} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={expCacheMeshRef} args={[undefined, undefined, 6]} frustumCulled={false} castShadow>
+        <boxGeometry args={[0.7, 0.55, 0.5]} />
+        <meshStandardMaterial roughness={0.7} />
+      </instancedMesh>
+      <instancedMesh ref={expDropMeshRef} args={[undefined, undefined, 16]} frustumCulled={false}>
+        <octahedronGeometry args={[0.16, 0]} />
+        <meshBasicMaterial color={STATUS_TABLE.revealed.color} toneMapped={false} />
       </instancedMesh>
       <mesh ref={decoyMeshRef} visible={false}>
         <capsuleGeometry args={[0.32, 1.0, 4, 10]} />
@@ -4895,7 +4982,7 @@ const Scene = memo(function Scene(props: {
       <GuideTrail posRef={props.posRef} heightsRef={props.heightsRef} targetRef={props.guideTargetRef} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} edgeRef={props.edgeRef} statusRef={props.statusRef} bodyCastRef={props.bodyCastRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && props.zone.id !== HOLD_ZONE && props.zone.id !== EDGE_ZONE && <GunBenches />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && props.zone.id !== HOLD_ZONE && props.zone.id !== EDGE_ZONE && props.zone.id !== EXP_ZONE && <GunBenches />}
       {props.zone.realm === 'outside' && props.zone.id !== HOLD_ZONE && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
           Ather has doors worth naming too. ExitMarkers stays outside-only — it is a fallback for
@@ -5298,6 +5385,7 @@ export default function Shimmer3D() {
     gridRef.current = cloneSparseGrid(zone.grid)
     heightsRef.current = zone.id === WORLD_ZONE_ID
       ? getGardenWorld().heights.map((row) => [...row]) // composed terrain — per-zone sculpts already blitted in
+      : zone.heights ? zone.heights.map((row) => [...row])   // a generated zone brings its own tiers (the expedition)
       : getHeightGrid(zone.id, zone.grid.length, zone.grid[0].length)
     // TEMP mantle/climb test scaffold — six wall blocks of rising height (1..6 tiers), 2 wide x 2 deep at
     // rows 10-11, spaced across the open grass. Approach each from row 9. Heights 1-3 mantle off a jump,
@@ -7415,6 +7503,7 @@ export default function Shimmer3D() {
     const el = vignetteRef.current
     if (el) { el.style.animation = 'none'; void el.offsetHeight; el.style.animation = 'dmgFlash 0.45s ease-out' }
   }, [])
+  const expFell = useRef(false)
   const onPlayerDown = useCallback(() => {
     const el = vignetteRef.current
     if (el) { el.style.animation = 'none'; void el.offsetHeight; el.style.animation = 'downFlash 1s ease-out' }
@@ -7423,6 +7512,8 @@ export default function Shimmer3D() {
       edgeRef.current.sim = startStillwind(); edgeRef.current.flash = 'The Stillwind stands'
       posRef.current?.set(EDGE_START.x, posRef.current.y, EDGE_START.z)
     }
+    // an expedition ends where you fall: what you banked is kept, and the page takes you home (the E effect below)
+    if (zoneIdRef.current === EXP_ZONE) { expFell.current = true; return }
     // in the hold a fall ENDS the run (the range just resets you). The record is the round reached.
     const hs = holdRef.current
     // ★ CO-OP: a fall does not end the run, it takes YOU out of it; the run ends when the last keeper falls
@@ -8142,7 +8233,10 @@ export default function Shimmer3D() {
     equipWeapon(0, rep); equipWeapon(1, rep)
     hpRef.current = hpMaxRef.current; shieldRef.current = shieldMaxRef.current
     manaRef.current.current = manaMax(); setManaFrac(1)
-    setHoldFlash('Round 1')
+    // ★ BANKED WRACK (09-29): a solo run carries some in from expeditions (co-op: the server owns wrack, not yet)
+    const carried = coopParty ? 0 : takeWrackForRun()
+    if (carried) holdRef.current.wrack += carried
+    setHoldFlash(carried ? `Round 1 · you carried in ${carried} wrack` : 'Round 1')
   }, [equipWeapon])
   useEffect(() => {
     if (zoneId === HOLD_ZONE) { beginHold(); return }
@@ -8254,6 +8348,51 @@ export default function Shimmer3D() {
     window.addEventListener('keyup', onUp)
     return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp) }
   }, [zoneId, holdAct, holdSurge])
+  // ── THE EXPEDITION, page side (09-29): E opens the cache you stand at, the HUD line, and the way home ─────────────
+  const [expHud, setExpHud] = useState<{ near: boolean; wrack: number; marks: number; kills: number; elites: number } | null>(null)
+  const openExpCache = useCallback(() => {
+    const id = expRun.near, L = expRun.layout
+    if (!id || !L) return
+    const i = L.caches.findIndex((c) => c.id === id), c = L.caches[i]
+    expRun.opened.add(id); expRun.near = null
+    const loot = rollCache(lootRng((L.seed * 31 + i * 7919) >>> 0), c.puzzle)
+    if (loot.wrack) { bankWrack(loot.wrack); expRun.wrack += loot.wrack }
+    if (loot.marks) { addMarks(loot.marks); expRun.marks += loot.marks }
+    const got = `+${loot.wrack} wrack, +${loot.marks} Marks`
+    if (loot.held) { recordFind({ kind: 'held-cache', at: Date.now(), seed: L.seed }); tone(660, 600, { type: 'sine', gain: 0.07, slideTo: 1320 }) }
+    setHarvestToast(loot.held ? `The cache held together! Kept for your garden · ${got}` : `The cache breaks open · ${got}`)
+  }, [])
+  const cameFromExp = useRef<string | null>(null)
+  const expWarpRef = useRef<(w: Warp) => void>(() => {})   // onWarp is declared further down; the way home reaches it here
+  useEffect(() => {
+    if (zoneId !== EXP_ZONE) return
+    expFell.current = false
+    const t = setInterval(() => {
+      const L = expRun.layout
+      setExpHud((h) => {
+        const n = { near: !!expRun.near, wrack: expRun.wrack, marks: expRun.marks, kills: expRun.kills, elites: L?.elites.length ?? 0 }
+        return h && h.near === n.near && h.wrack === n.wrack && h.marks === n.marks && h.kills === n.kills && h.elites === n.elites ? h : n
+      })
+      if (expFell.current) {
+        expFell.current = false
+        const home = holdShip()!.arrival
+        expWarpRef.current({ fromX: 0, fromY: 0, toZone: 'travelers-station', toX: home.x, toY: home.z, direction: 'down' })
+      }
+    }, 200)
+    const onDown = (e: KeyboardEvent) => {
+      if (e.repeat || editRef.current || dialogueRef.current) return
+      if (e.key.toLowerCase() === 'e' && expRun.near) openExpCache()
+    }
+    window.addEventListener('keydown', onDown)
+    return () => {
+      clearInterval(t); window.removeEventListener('keydown', onDown); setExpHud(null)
+      // leaving (the exit, or a fall): the Station, the lobby open, and what this run brought home
+      cameFromExp.current = `Expedition over · ${expRun.kills}/${expRun.layout?.elites.length ?? 0} elites · +${expRun.wrack} wrack banked · +${expRun.marks} Marks`
+      reopenLobby.current = true
+      resetExpRun(null)
+    }
+  }, [zoneId, openExpCache])
+  useEffect(() => { if (zoneId === 'travelers-station' && cameFromExp.current) { setHarvestToast(cameFromExp.current); cameFromExp.current = null } }, [zoneId])
   const toggleHolster = useCallback(() => {
     if (!weaponDrawnRef.current) return
     const h = !holsteredRef.current
@@ -8641,7 +8780,9 @@ export default function Shimmer3D() {
     return [
       { id: 'survival', kind: 'Survival', name: 'The Breach', world: 'Lenna', blurb: 'Hold the building against the flood, round after round.', locked: null, coop: true },
       { id: 'boss', kind: 'Boss', name: 'The Slack', world: 'Lenna', blurb: 'The Stillwind, the season\u2019s colossus.', locked: road ? null : 'Read the Stillwind\u2019s Road in the Breach\u2019s lab first', coop: false },
-      { id: 'expedition', kind: 'Expedition', name: 'Nothing seated', world: 'no berth', blurb: '', locked: 'No expedition sails from a berth yet', coop: true },
+      // the first slice (09-29): a generated maze floor, solo while its elites are stepped on the page. Named neutrally until
+      // canon rules what these places are (CANON_GAPS › Expeditions)
+      { id: 'expedition', kind: 'Expedition', name: 'A maze floor', world: 'a new floor each time', blurb: 'Find the caches. Elites drop wrack that keeps for the Breach.', locked: null, coop: false },
     ]
   }, [])
   const closeDepartures = useCallback(() => {
@@ -8655,8 +8796,14 @@ export default function Shimmer3D() {
     const ship = holdShip()!
     if (card.id === 'survival') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right' })
     else if (card.id === 'boss') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'up' })
+    else if (card.id === 'expedition') {
+      const L = rerollExpedition(((Date.now() & 0xffffff) ^ 0x5eed) || 1)
+      resetExpRun(L)
+      onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EXP_ZONE, toX: L.start.x, toY: L.start.z, direction: 'down' })
+    }
   }, [closeDepartures, onWarp])
   const lobbyRef = useRef(lobby); lobbyRef.current = lobby
+  expWarpRef.current = onWarp
   useEffect(() => {   // Esc backs out of the lobby: you are standing in the Station again
     if (!departuresOpen) return
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); closeDepartures() } }
@@ -9100,6 +9247,12 @@ export default function Shimmer3D() {
 
       {/* talk prompt when standing by an NPC */}
       {nearNpc && !dialogue && !battle && !editMode && <Prompt text={`${isTouch ? 'tap ✦' : 'E'} — ${nearNpc.verb ?? 'talk to'} ${nearNpc.name}`} />}
+      {expHud?.near && !nearNpc && !dialogue && !battle && <Prompt text="E — open the cache" />}
+      {expHud && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none" data-expedition-hud>
+          <HearthPillSoft face={HUD_FACE}>Expedition · elites {expHud.kills}/{expHud.elites} · +{expHud.wrack} wrack banked · +{expHud.marks} Marks</HearthPillSoft>
+        </div>
+      )}
 
       {/* rinning prompt — locked at the pool: watch, then strike when the `!` pops (early/late slips) */}
       {fish && !editMode && (
