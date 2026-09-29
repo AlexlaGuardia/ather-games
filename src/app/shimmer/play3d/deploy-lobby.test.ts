@@ -43,5 +43,7 @@ ok(p3.includes("toZone: 'travelers-station', toX: ship.arrival.x, toY: ship.arri
 const zones = readFileSync(new URL('../world/zones.ts', import.meta.url), 'utf8')
 ok(!zones.includes("toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', label: 'THE BREACH'"), '★ no gangway walks you straight into the Breach: the clerk is the way aboard')
 
+ok(!/ownerOnly: true \}\)\n    else if \(card\.id === 'boss'\)/.test(p3) && !p3.includes("locked: owner ? null : 'Not open yet'"), '★ the Breach and the Slack are open to every keeper (09-29), no owner gate on the way aboard')
+
 console.log(`deploy-lobby: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log('  ✗ ' + f); process.exit(1) }

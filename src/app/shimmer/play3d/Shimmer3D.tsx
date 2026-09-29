@@ -8635,10 +8635,12 @@ export default function Shimmer3D() {
   // Alex's three kinds. Survival is the Breach; Boss is the Slack (the Stillwind, the season's colossus); nothing is
   // seated as an Expedition yet, so its card says so rather than pretending.
   const missionCards = useCallback((): MissionCard[] => {
-    const owner = isOwnerRef.current, road = roadOpen(loadRoad())
+    // ★ OPEN TO EVERY KEEPER since 2026-09-29 (Alex: "start rolling this out so its not owner only"). Co-op still
+    // needs a signed-in keeper: breach-server reads the session, and says so when it refuses.
+    const road = roadOpen(loadRoad())
     return [
-      { id: 'survival', kind: 'Survival', name: 'The Breach', world: 'Lenna', blurb: 'Hold the building against the flood, round after round.', locked: owner ? null : 'Not open yet', coop: true },
-      { id: 'boss', kind: 'Boss', name: 'The Slack', world: 'Lenna', blurb: 'The Stillwind, the season\u2019s colossus.', locked: !owner ? 'Not open yet' : road ? null : 'Read the Stillwind\u2019s Road in the Breach\u2019s lab first', coop: false },
+      { id: 'survival', kind: 'Survival', name: 'The Breach', world: 'Lenna', blurb: 'Hold the building against the flood, round after round.', locked: null, coop: true },
+      { id: 'boss', kind: 'Boss', name: 'The Slack', world: 'Lenna', blurb: 'The Stillwind, the season\u2019s colossus.', locked: road ? null : 'Read the Stillwind\u2019s Road in the Breach\u2019s lab first', coop: false },
       { id: 'expedition', kind: 'Expedition', name: 'Nothing seated', world: 'no berth', blurb: '', locked: 'No expedition sails from a berth yet', coop: true },
     ]
   }, [])
@@ -8651,8 +8653,8 @@ export default function Shimmer3D() {
     closeDepartures()
     coop.wantParty = party
     const ship = holdShip()!
-    if (card.id === 'survival') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', ownerOnly: true })
-    else if (card.id === 'boss') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'up', ownerOnly: true })
+    if (card.id === 'survival') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right' })
+    else if (card.id === 'boss') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'up' })
   }, [closeDepartures, onWarp])
   const lobbyRef = useRef(lobby); lobbyRef.current = lobby
   useEffect(() => {   // Esc backs out of the lobby: you are standing in the Station again
