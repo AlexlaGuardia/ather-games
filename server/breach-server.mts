@@ -19,6 +19,13 @@
  * ── Trust ───────────────────────────────────────────────────────────────────────────────────────────────────────
  * Friends-grade, like the rest of multiplayer: the client says what it hit. The server clamps damage to what a
  * weapon can do, and never trusts a client with the round, the flood or anyone else's wallet.
+ *
+ * ── THE SLACK TOGETHER (09-29) ──────────────────────────────────────────────────────────────────────────────────
+ * `?mode=slack` joins the party's Stillwind raid instead (`play3d/stillwind.ts`, `stepStillwindParty`), a room of
+ * its own (`slack:CODE`). The server steps the colossus; each page keeps its own edge burn, frost and line mend
+ * (those are what the ground does to YOUR keeper, like resist and shield). A keeper who falls is back at the near
+ * end after `SLACK_DOWN_SEC`; if every keeper is down at once the Stillwind stands again, whole. A felling is
+ * every keeper's deed.
  */
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { IncomingMessage } from 'node:http'
@@ -27,6 +34,7 @@ import {
   studyNode, chestTick, releaseSurge, fieldStrike, endHold, type HoldState, type HoldKeeper, type LabNodeId,
 } from '../src/app/shimmer/play3d/hold'
 import { readSessionToken, SESSION_COOKIE } from '../src/lib/accounts/session'
+import { startStillwind, stepStillwindParty, hitStillwind, edgeToSim, EDGE_START, type StillwindState } from '../src/app/shimmer/play3d/stillwind'
 
 // ★ READ .env ITSELF, AT START (PATTERNS: pm2 --update-env re-injects the value pm2 saw FIRST, so a secret rotated in
 // .env would never reach a pm2-started process). Only fills what the environment does not already set.
@@ -44,6 +52,9 @@ const TICK_HZ = 30, SNAP_HZ = 10
 export const MAX_KEEPERS = 3
 /** the most one hit may claim (a re-keyed Bolt Snipe is well under it); a client asking for more is clamped */
 export const MAX_HIT = 400
+/** the Slack: seconds a fallen keeper waits before they are back at the near end */
+export const SLACK_DOWN_SEC = 12
+export type RoomMode = 'breach' | 'slack'
 
 const MAP = parseLanding()
 
@@ -61,8 +72,12 @@ interface Keeper {
   gloveOwed: boolean
   /** fallen in this run: out of the flood's reach until the run ends (co-op: the run ends when EVERY keeper is down) */
   down: boolean
+  /** the Slack: when this keeper fell (ms), for the way back */
+  downAt: number
 }
-interface Room { code: string; s: HoldState; keepers: Keeper[]; startedAt: number; lastSnap: number; emptySince: number | null }
+/** `s` is the Breach; a Slack room also carries `sw`, the colossus (its `s` is an idle Breach nobody steps) */
+interface Room { code: string; mode: RoomMode; s: HoldState; sw: StillwindState | null; keepers: Keeper[]; startedAt: number; lastSnap: number; emptySince: number | null }
+const roomKey = (code: string, mode: RoomMode) => (mode === 'slack' ? 'slack:' + code : code)
 const ROOMS = new Map<string, Room>()
 
 const freshWallet = (s: HoldState): Wallet => ({ salvage: s.salvage, surge: 0, tuned: {}, rackBought: false, kills: 0, wrack: 0 })
@@ -78,9 +93,64 @@ export function asKeeper<T>(r: Room, k: Keeper, fn: () => T): T {
   }
 }
 
-export function newRoom(code: string, seed = (Date.now() & 0xffff) || 1): Room {
+export function newRoom(code: string, seed = (Date.now() & 0xffff) || 1, mode: RoomMode = 'breach'): Room {
   const s = startHold(MAP, seed)
-  return { code, s, keepers: [], startedAt: Date.now(), lastSnap: 0, emptySince: null }
+  return { code, mode, s, sw: mode === 'slack' ? startStillwind() : null, keepers: [], startedAt: Date.now(), lastSnap: 0, emptySince: null }
+}
+const roomOver = (r: Room) => (r.mode === 'slack' ? !!r.sw?.felled : r.s.over)
+
+// ── THE SLACK ───────────────────────────────────────────────────────────────────────────────────────────────────
+/** Every connected keeper back on their feet, and a whole Stillwind: what a party that fell together comes back to. */
+function standAgain(r: Room, why: 'all-down'): void {
+  r.sw = startStillwind()
+  for (const k of r.keepers) { k.down = false; k.struck = 0; k.events.push({ t: 'reset', why }) }
+  console.log(`[slack] ${r.code}: the Stillwind stands again (${why})`)
+}
+
+export function tickSlack(r: Room, dt: number, now = Date.now()): void {
+  const sw = r.sw
+  if (!sw) return
+  for (const k of r.keepers) if (k.down && k.ws && now - k.downAt >= SLACK_DOWN_SEC * 1000) { k.down = false; k.events.push({ t: 'up' }) }
+  const here = r.keepers.filter(k => k.ws !== null && !k.down)
+  const o = stepStillwindParty(sw, dt, here.map(k => edgeToSim(k.pos.x, k.pos.z)))
+  here.forEach((k, i) => { k.struck += o.strikes[i] ?? 0 })
+  const flash = o.stalled ? 'stalled' : o.ran ? 'ran' : o.opened ? 'opened' : o.froze ? 'froze' : null
+  if (flash) for (const k of r.keepers) k.events.push({ t: 'wind', what: flash })
+}
+
+export function snapshotSlack(r: Room, k: Keeper) {
+  const w = r.sw!
+  return {
+    t: 'snap', mode: 'slack',
+    sw: { hp: w.hp, x: +w.x.toFixed(2), z: +w.z.toFixed(2), heat: +w.heat.toFixed(3), cold: +w.cold.toFixed(3), mood: w.mood, moodT: +w.moodT.toFixed(2), wind: w.wind, windT: +w.windT.toFixed(2), runDir: w.runDir, felled: w.felled, elapsed: +w.elapsed.toFixed(1) },
+    you: { struck: takeStruck(k), down: k.down },
+    party: r.keepers.map(o => ({ id: o.id, name: o.name, down: o.down, x: +o.pos.x.toFixed(2), z: +o.pos.z.toFixed(2), y: +o.pos.y.toFixed(2), yaw: +o.yaw.toFixed(2), here: o.ws !== null })),
+    events: k.events.splice(0),
+  }
+}
+
+export function handleSlack(r: Room, k: Keeper, m: Msg, now = Date.now()): unknown | null {
+  const sw = r.sw
+  if (!sw) return null
+  switch (m.t) {
+    case 'pos': k.pos = { x: num(m.x, -1, 400), y: num(m.y, -50, 200), z: num(m.z, -1, 400) }; k.yaw = num(m.yaw, -100, 100); return null
+    case 'hit': {
+      // the blow that fells it is a keeper's, so the deed is told HERE (the tick never sees it change)
+      if (!k.down && hitStillwind(sw, num(m.dmg, 0, MAX_HIT)).felled) {
+        for (const o of r.keepers) o.events.push({ t: 'felled', secs: Math.round(sw.elapsed), by: k.name })
+        console.log(`[slack] ${r.code}: the Stillwind is felled by ${k.name} (${Math.round(sw.elapsed)}s)`)
+      }
+      return null
+    }
+    case 'down': {
+      if (k.down || sw.felled) return null
+      k.down = true; k.downAt = now
+      console.log(`[slack] ${k.name} down in ${r.code}`)
+      if (r.keepers.filter(x => x.ws !== null).every(x => x.down)) standAgain(r, 'all-down')
+      return null
+    }
+  }
+  return null
 }
 
 /** One tick of a room: step the shared fight with every present keeper, then route what it produced. */
@@ -107,7 +177,7 @@ export function tickRoom(r: Room, dt: number): void {
   r.s.loot.length = 0
 }
 
-const takeStruck = (k: Keeper): number => { const n = k.struck; k.struck = 0; return n }
+function takeStruck(k: Keeper): number { const n = k.struck; k.struck = 0; return n }
 
 /** What one keeper sees: the shared fight, and their own wallet. Small enough to send ten times a second. */
 export function snapshotFor(r: Room, k: Keeper) {
@@ -140,6 +210,7 @@ const num = (v: unknown, lo: number, hi: number, d = 0): number => (typeof v ===
 
 /** Apply one message from a keeper. Returns a reply for that keeper, or null. */
 export function handle(r: Room, k: Keeper, m: Msg): unknown | null {
+  if (r.mode === 'slack') return handleSlack(r, k, m)
   const s = r.s
   switch (m.t) {
     case 'pos': k.pos = { x: num(m.x, -1, 400), y: num(m.y, -50, 200), z: num(m.z, -1, 400) }; k.yaw = num(m.yaw, -100, 100); return null
@@ -255,18 +326,21 @@ export function startServer(port = PORT) {
     const code = partyCode(url.searchParams.get('party'))
     if (claims?.user_id && url.searchParams.get('queue') === 'breach') { joinQueue(ws, claims.user_id, claims.username ?? 'Keeper'); return }
     if (!claims?.user_id || !code) { ws.send(JSON.stringify({ t: 'refused', why: !claims ? 'sign in to play together' : 'no party' })); ws.close(); return }
-    let r = ROOMS.get(code)
-    if (!r || r.s.over) { console.log(`[breach] new room ${code} (${!r ? 'none' : 'previous run over'})`); r = newRoom(code); ROOMS.set(code, r) }
+    const mode: RoomMode = url.searchParams.get('mode') === 'slack' ? 'slack' : 'breach'
+    const key = roomKey(code, mode)
+    let r = ROOMS.get(key)
+    if (!r || roomOver(r)) { console.log(`[${mode}] new room ${code} (${!r ? 'none' : 'previous run over'})`); r = newRoom(code, undefined, mode); ROOMS.set(key, r) }
     let k = r.keepers.find(x => x.id === claims.user_id)
     if (!k) {
       if (r.keepers.length >= MAX_KEEPERS) { ws.send(JSON.stringify({ t: 'refused', why: 'three to a door: this party\'s Breach is full' })); ws.close(); return }
-      k = { id: claims.user_id, name: claims.username ?? 'Keeper', ws: null, pos: { x: MAP.start.x, z: MAP.start.z, y: MAP.start.h }, wallet: freshWallet(r.s), struck: 0, events: [], goneAt: null, down: false, yaw: 0, gloveOwed: false }
+      const at = mode === 'slack' ? { x: EDGE_START.x, z: EDGE_START.z, y: 0 } : { x: MAP.start.x, z: MAP.start.z, y: MAP.start.h }
+      k = { id: claims.user_id, name: claims.username ?? 'Keeper', ws: null, pos: at, wallet: freshWallet(r.s), struck: 0, events: [], goneAt: null, down: false, downAt: 0, yaw: 0, gloveOwed: false }
       r.keepers.push(k)
     }
     k.ws = ws; k.goneAt = null; r.emptySince = null
     if (url.searchParams.get('glove') === '1') k.gloveOwed = true
     const room = r, me = k
-    ws.send(JSON.stringify({ t: 'welcome', you: me.id, code, start: { x: MAP.start.x, z: MAP.start.z, y: MAP.start.h } }))
+    ws.send(JSON.stringify({ t: 'welcome', you: me.id, code, mode, start: mode === 'slack' ? { x: EDGE_START.x, z: EDGE_START.z, y: 0 } : { x: MAP.start.x, z: MAP.start.z, y: MAP.start.h } }))
     console.log(`[breach+] ${me.name} → ${code} (${room.keepers.filter(x => x.ws).length}/${MAX_KEEPERS})`)
     ws.on('message', (data) => {
       let m: Msg
@@ -289,10 +363,10 @@ export function startServer(port = PORT) {
       // for a reconnect. A room with nobody connected for 60s is torn down.
       const present = r.keepers.filter(k => k.ws !== null)
       if (!present.length) { r.emptySince ??= now; if (now - r.emptySince > 60_000) { endHold(r.s); ROOMS.delete(code) } ; continue }
-      tickRoom(r, DT)
+      if (r.mode === 'slack') tickSlack(r, DT, now); else tickRoom(r, DT)
       if (now - r.lastSnap >= 1000 / SNAP_HZ) {
         r.lastSnap = now
-        for (const k of present) k.ws!.send(JSON.stringify(snapshotFor(r, k)))
+        for (const k of present) k.ws!.send(JSON.stringify(r.mode === 'slack' ? snapshotSlack(r, k) : snapshotFor(r, k)))
       }
     }
   }, 1000 * DT)

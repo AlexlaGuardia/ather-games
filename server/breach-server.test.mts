@@ -6,7 +6,8 @@
  *   set -a; . ./.env; set +a; npx tsx server/breach-server.test.mts
  */
 import WebSocket from 'ws'
-import { startServer, MAX_KEEPERS, QUEUE_OPTS, newRoom, tickRoom, handle } from './breach-server.mts'
+import { startServer, MAX_KEEPERS, QUEUE_OPTS, MAX_HIT, SLACK_DOWN_SEC, newRoom, tickRoom, tickSlack, handle } from './breach-server.mts'
+import { STILLWIND_TUNING, simToEdge } from '../src/app/shimmer/play3d/stillwind'
 import { HOLD_TUNING, rollChests } from '../src/app/shimmer/play3d/hold'
 import { mintSession, SESSION_COOKIE } from '../src/lib/accounts/session'
 
@@ -18,10 +19,10 @@ const PORT = 18410 + Math.floor(Math.random() * 500)
 const wss = startServer(PORT)
 
 interface Client { ws: WebSocket; msgs: any[]; last: () => any; snaps: () => any[] }
-function connect(user: string, name: string, party = 'COOP1', session = true): Promise<Client> {
+function connect(user: string, name: string, party = 'COOP1', session = true, mode = ''): Promise<Client> {
   return new Promise((res) => {
     const headers: Record<string, string> = session ? { cookie: `${SESSION_COOKIE}=${mintSession(user, name)}` } : {}
-    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/?party=${party}`, { headers })
+    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/?party=${party}${mode ? '&mode=' + mode : ''}`, { headers })
     const msgs: any[] = []
     ws.on('message', (d) => msgs.push(JSON.parse(String(d))))
     const c: Client = { ws, msgs, last: () => msgs[msgs.length - 1], snaps: () => msgs.filter(m => m.t === 'snap') }
@@ -146,6 +147,52 @@ try {
     none.s.round = HOLD_TUNING.gloveRound
     tickRoom(none, 1 / 30); rollChests(none.s, HOLD_TUNING, 1)
     ok(!none.s.chests.some(c => c?.stones), 'a party with nobody owed never sees a stones cache')
+  }
+
+  // ── THE SLACK TOGETHER (09-29): the party's Stillwind, a room of its own ──────────────────────────────────────────
+  {
+    const sa = await connect('u_a', 'Alpha', 'COOP1', true, 'slack'), sb = await connect('u_b', 'Bravo', 'COOP1', true, 'slack')
+    await sleep(400)
+    ok(sa.msgs[0]?.t === 'welcome' && sa.msgs[0].mode === 'slack' && sb.msgs[0]?.mode === 'slack', 'slack: both keepers welcomed into the party\'s Slack')
+    const edge = simToEdge(0, 20)
+    send(sa, { t: 'pos', x: edge.x, y: 0, z: edge.z }); send(sb, { t: 'pos', x: edge.x + 1, y: 0, z: edge.z })
+    await sleep(500)
+    const s1 = lastSnap(sa), s2 = lastSnap(sb)
+    ok(s1?.mode === 'slack' && s1.sw && s2?.sw && s1.sw.hp === STILLWIND_TUNING.hp, 'slack: both see a whole Stillwind')
+    ok(!('flood' in (s1 ?? {})), 'slack: a Slack snapshot carries no Breach')
+    send(sa, { t: 'hit', id: 0, dmg: 100 }); send(sb, { t: 'hit', id: 0, dmg: 100 })
+    await sleep(400)
+    const hpA = lastSnap(sa)?.sw.hp, hpB = lastSnap(sb)?.sw.hp
+    ok(hpA === hpB && hpA < STILLWIND_TUNING.hp && hpA >= STILLWIND_TUNING.hp - 200 * STILLWIND_TUNING.openDmg, `slack: both hits land on ONE Stillwind (${hpA})`)
+    ok(lastSnap(a)?.flood !== undefined, 'slack: the party\'s Breach room is untouched by it')
+    sa.ws.close(); sb.ws.close()
+  }
+  // the rules, stepped directly (no clock to wait on)
+  {
+    const r = newRoom('SLACK9', 7, 'slack')
+    const fakeWs = { send() {}, close() {} } as any
+    const mk = (id: string) => ({ id, name: id, ws: fakeWs, pos: { ...simToEdge(0, 20), y: 0 }, wallet: { salvage: 0, surge: 0, tuned: {}, rackBought: false, kills: 0, wrack: 0 }, struck: 0, events: [] as any[], goneAt: null, down: false, downAt: 0, yaw: 0, gloveOwed: false })
+    const ka = mk('a'), kb = mk('b'); r.keepers.push(ka as any, kb as any)
+    handle(r, ka as any, { t: 'hit', id: 0, dmg: 1e9 } as any)
+    ok(r.sw!.hp === STILLWIND_TUNING.hp - MAX_HIT * STILLWIND_TUNING.lineDmg, 'slack: a hit is clamped to MAX_HIT')
+    // the Stillwind walks up to both and swings: only the one it is after is struck
+    r.sw!.z = 22; r.sw!.x = 0; r.sw!.strikeT = 0; r.sw!.windT = 99
+    kb.pos = { ...simToEdge(0, 40), y: 0 }
+    tickSlack(r, 0.05, 0)
+    ok(ka.struck === STILLWIND_TUNING.strikeDmg && kb.struck === 0, `slack: a swing strikes the keeper it reached (${ka.struck}/${kb.struck})`)
+    handle(r, ka as any, { t: 'down' } as any)
+    ok(ka.down && !kb.down && r.sw!.hp < STILLWIND_TUNING.hp, 'slack: one keeper down, the fight goes on')
+    ka.downAt = 0   // the handler stamps the real clock; the ticks below run on a fake one
+    tickSlack(r, 0.05, (SLACK_DOWN_SEC - 1) * 1000)
+    ok(ka.down, 'slack: still down before the wait is up')
+    tickSlack(r, 0.05, SLACK_DOWN_SEC * 1000 + 50)
+    ok(!ka.down && ka.events.some(e => e.t === 'up'), 'slack: back on their feet after SLACK_DOWN_SEC')
+    const hpBefore = r.sw!.hp
+    handle(r, ka as any, { t: 'down' } as any, ); handle(r, kb as any, { t: 'down' } as any)
+    ok(!ka.down && !kb.down && r.sw!.hp === STILLWIND_TUNING.hp && hpBefore < STILLWIND_TUNING.hp && kb.events.some(e => e.t === 'reset'), 'slack: everyone down at once → the Stillwind stands again, whole')
+    r.sw!.hp = 1; r.sw!.mood = 'open'
+    handle(r, ka as any, { t: 'hit', id: 0, dmg: 10 } as any)
+    ok(ka.events.some(e => e.t === 'felled') && kb.events.some(e => e.t === 'felled'), 'slack: a felling is every keeper\'s deed')
   }
 } finally {
   wss.close()
