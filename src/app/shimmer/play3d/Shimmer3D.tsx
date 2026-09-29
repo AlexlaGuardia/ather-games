@@ -10001,7 +10001,8 @@ export default function Shimmer3D() {
         />
       )}
 
-      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && (<>
+      {/* ★ not while the Departures lobby is open (09-29): a lobby is a screen of its own, and the bar drew over it */}
+      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && !departuresOpen && (<>
         {/* The bar + the corner: `shimmer/hud/`, the Ather's own. `onSelect` because the mortal side has
             touch play; the name over the bar is the registry's label for what is selected. */}
         {/* `activeTool` is the Ather's "which family is mining right now" — here it is the channel's
@@ -10023,7 +10024,7 @@ export default function Shimmer3D() {
       )}
 
       {/* ── Mobile controls: joystick (move) bottom-left · A interact / B cancel bottom-right ── */}
-      {isTouch && !battle && !editMode && !placing && (
+      {isTouch && !battle && !editMode && !placing && !departuresOpen && (
         <>
           {/* ★ ON THE BAR'S CLEARANCE, not a fixed 96: the hearth bar (with its lip on a phone) reaches
               ~125px, and 96 put the joystick and the A/B buttons ON it. Measured in `hearth-hud-layer`. */}

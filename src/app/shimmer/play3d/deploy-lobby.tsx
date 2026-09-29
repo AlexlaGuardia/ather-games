@@ -102,7 +102,7 @@ function Keeper({ seat, slot, partied }: { seat: Seat; slot: number; partied: bo
         <meshBasicMaterial color={seat.ready ? L.ready : H.inkSoft} transparent opacity={seat.ready ? 0.95 : 0.5} />
       </mesh>
       {/* the name rides UNDER the keeper, in the scene, so it stays with them at any size */}
-      <Html position={[0, -0.12, 0.5]} center zIndexRange={[5, 0]}>
+      <Html position={[0, -0.12, 0.5]} center zIndexRange={[20, 10]}>
         <div style={nameplate} data-seat={seat.name}>
           <div className="text-[13px] font-extrabold truncate" style={{ color: H.paperHi }}>{seat.leader && partied ? '♛ ' : ''}{seat.name}</div>
           <div className="text-[10px]" style={{ color: L.sub }}>{seat.you ? 'you' : !seat.here ? seat.where : seat.ready ? 'ready' : 'not ready'}</div>
@@ -119,7 +119,7 @@ function OpenSeat({ slot }: { slot: number }) {
         <ringGeometry args={[0.42, 0.5, 40]} />
         <meshBasicMaterial color={H.inkSoft} transparent opacity={0.35} />
       </mesh>
-      <Html position={[0, -0.12, 0.5]} center zIndexRange={[5, 0]}>
+      <Html position={[0, -0.12, 0.5]} center zIndexRange={[20, 10]}>
         <div style={nameplate} data-seat="open" className="text-[11px] italic"><span style={{ color: L.faint }}>open seat</span></div>
       </Html>
     </group>
