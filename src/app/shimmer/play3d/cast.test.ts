@@ -90,7 +90,9 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
   const wrong: string[] = []
   for (const m of KEEPER_MOVES) {
     const s = castForMove(m.id)
-    if (s.archetype === 'projectile' && !(s.damage > 0 && s.projSpeed > 0 && s.projLife > 0)) wrong.push(m.id)
+    // ★ PASS 2 (09-29): a bolt no longer has to HURT, it has to DO something. Guns carry the damage; a cast bolt may
+    // land a status, a mark, a shove, or pull its caster (Tidal Arms). One with none of those is the silent no-op.
+    if (s.archetype === 'projectile' && !(s.projSpeed > 0 && s.projLife > 0 && (s.damage > 0 || s.statuses.length > 0 || s.markSecs > 0 || s.shove > 0 || s.grapple))) wrong.push(m.id)
     if (s.archetype === 'restore' && !(s.heal > 0)) wrong.push(m.id)
     if (s.archetype === 'surge' && !(s.surgeSecs > 0 && s.surgeMult > 1)) wrong.push(m.id)
     // ── ★ RE-SCOPED 2026-08-26 (the SECOND ruling): the cost is per-MOVE, not per-tier ───────────
@@ -130,7 +132,8 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     const isWard = s.wardFlaw > 0 && s.fieldHp > 0 && s.wardMend > 0 && s.wardMend < 1
     if (s.archetype === 'field' && !(s.areaSize > 0 && s.areaSecs > 0 && (s.castRange > 0 || isWard) && (s.fieldDps > 0 || s.fieldHps > 0 || s.fieldStopsShots || isWard))) wrong2.push(m.id)
     if (s.archetype === 'terrain' && !(s.areaSize > 0 && s.areaSecs > 0 && s.castRange > 0)) wrong2.push(m.id)
-    if (s.archetype === 'status' && !(s.areaSize > 0 && s.areaSecs > 0 && s.castRange > 0 && s.statuses.length > 0)) wrong2.push(m.id)
+    // a LANE (Wind Shear, pass 2) starts at the caster, so it carries a length where a disc carries a range
+    if (s.archetype === 'status' && !(s.areaSize > 0 && s.areaSecs > 0 && (s.castRange > 0 || s.lane > 0) && s.statuses.length > 0)) wrong2.push(m.id)
     if (s.archetype === 'infusion' && !(s.surgeSecs > 0 && s.surgeMult > 1)) wrong2.push(m.id)
   }
   chk('placed casts carry range + size + duration', wrong2.length === 0, wrong2.join())

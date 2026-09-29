@@ -92,7 +92,7 @@ const fw = castForMove('firewall'), fs = castForMove('firestorm')
 ok(fw.line && fw.linger && fw.fieldStopsShots && fw.statuses.includes('slowed') && fw.statuses.includes('revealed') && fw.fieldDps === 0, '★ Firewall: a line that stops rounds both ways; crossing it slows + reveals; no damage')
 ok(fs.line && !fs.fieldStopsShots && fs.statuses[0] === 'burning' && fs.areaSize > fw.areaSize, 'Firestorm: a longer line; crossing it sets you Burning')
 ok(p3.includes('const line = pending.line ? { ux: -flatZ / flatLen, uz: flatX / flatLen'), 'a line runs ACROSS the aim')
-ok((p3.match(/if \(lineStops\(/g) || []).length >= 3, '★ a shot-stopping line stops gun rounds, enemy orbs and cast rounds')
+ok((p3.match(/lineStops\((p|o)\.pos/g) || []).length >= 3, '★ a shot-stopping line stops gun rounds, enemy orbs and cast rounds')
 
 // J. STEP 6 (09-29): the air-jump
 const qf = castForMove('quickform'), ud = castForMove('updraft')
@@ -105,6 +105,26 @@ ok(p3.includes("if (charge) { charge.n--; if (charge.at === 0) charge.at = now +
 // K. STEP 7 (09-29): shield recovery over an area
 for (const id of ['healing-grove', 'exhale']) ok(castForMove(id).fieldShps > 0 && castForMove(id).archetype === 'field', `${id} restores shield to a keeper inside`)
 ok(p3.includes('const shps = castForMove(f.moveId).fieldShps'), 'the shield refill rides the field\'s own tick')
+
+// L. PASS 2, STEP 8 (09-29): displacement. Casts move foes; none of these hurts.
+for (const id of ['gale-cutter', 'riptide', 'tidal-arms', 'forked-bolt', 'drowning-grasp', 'wind-shear', 'pyroclast']) ok(castForMove(id).damage === 0 && castForMove(id).fieldDps === 0, `${id} does no damage (the guns carry it)`)
+const gc = castForMove('gale-cutter'), rp = castForMove('riptide'), ta = castForMove('tidal-arms')
+ok(gc.archetype === 'projectile' && gc.shove > 0 && gc.shoveDir === 'away', 'Gale Cutter throws what it strikes back along its flight')
+ok(rp.shove > 0 && rp.shoveDir === 'toward' && rp.statuses.includes('staggered'), 'Riptide drags its target toward you, off its footing')
+ok(ta.shoveDir === 'toward' && ta.grapple && ta.projSpeed * ta.projLife < 20, '★ Tidal Arms yanks a foe, or pulls YOU to the wall it caught (short reach)')
+const fb = castForMove('forked-bolt')
+ok(fb.chain === 2 && fb.statuses.join() === 'disarmed' && fb.areaSecs === 1 && fb.markSecs === 4, 'Forked Bolt: the two nearest, jammed 1s, marked 4s')
+const dg = castForMove('drowning-grasp')
+ok(dg.archetype === 'projectile' && dg.projSpeed * dg.projLife <= 7 && dg.statuses.includes('silenced') && dg.statuses.includes('slowed') && dg.areaSecs === 2, '★ Drowning Grasp: ~6 tiles, one foe, no breath (silenced + slowed 2s)')
+const ws = castForMove('wind-shear')
+ok(ws.lane > 0 && ws.shoveDir === 'aside' && ws.statuses.includes('staggered'), 'Wind Shear: a lane from you; everyone on it thrown aside')
+const pc = castForMove('pyroclast')
+ok(pc.linger && pc.statuses.includes('blinded') && pc.shoveDir === 'out' && pc.shove > 0, 'Pyroclast: an ash cloud that blinds and walks you out of it')
+ok(p3.includes("if (zn.push) shoveFoe(id, 'out', zn.push"), 'the cloud pushes on its own tick')
+ok(p3.includes('shovesRef.current = stepShoves(shovesRef.current, dt, moveFoe)'), '★ play3d: every shove steps through the one foe mover')
+ok(p3.includes("if (!hs || coop.link) return false"), 'a co-op Breach refuses a shove on server-owned flooded rather than faking one')
+ok(p3.includes('landCast(p, hitId, sx, sz, 1)') && !p3.includes('t.hp -= dmg; p.life = 0; hit = true'), '★ one hit test for every foe: cast bolts reach the Puppet Guards now')
+ok(p3.includes("!hasStatus(fbag, `fleet:${r.member.index}`, 'silenced', nowFrame)"), 'a silenced challenger cannot cast')
 
 console.log(`statuses: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log('  ✗ ' + f); process.exit(1) }

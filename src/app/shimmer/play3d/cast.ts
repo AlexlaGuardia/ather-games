@@ -51,6 +51,7 @@ import { hasLearned, type Book } from './scroll-market'
 import { seatGemWords } from './greg-pair'
 import type { ConjureShape } from '../engine/conjured-terrain'
 import type { StatusKind } from '../engine/statuses'
+import type { ShoveDir } from '../engine/shove'
 
 /** The archetypes the sim can actually run today, plus the honest 'unbuilt' tag. */
 export type CastArchetype =
@@ -208,6 +209,17 @@ export interface CastSpec {
   /** a lingering status zone laid as a LINE across the aim (length `areaSize`), not a disc. Crossing it applies
    *  `statuses` for `splashSecs` (or 1s); `fieldStopsShots` makes it stop every round, both ways. */
   line: boolean
+  // ── MOVE-JOBS PASS 2, STEP 8 (09-29): displacement (engine/shove.ts) ───────────────────────────────────
+  /** world units a foe is moved: on a bolt's hit, in a `lane`, or per zone tick for a `linger` cloud. 0 = none */
+  shove: number
+  /** which way: `away` from the caster/bolt, `toward` the caster, `aside` off the lane, `out` from a cloud's centre */
+  shoveDir: ShoveDir
+  /** status: the cast strikes a LANE from the caster down the aim, this long (width = `areaSize`), not a disc at range */
+  lane: number
+  /** projectile: a bolt that strikes no foe pulls the CASTER to where it stopped (Tidal Arms' grapple) */
+  grapple: boolean
+  /** projectile: also Revealed this long on whatever it strikes, beside `statuses` (Forked Bolt jams 1s, marks 4s) */
+  markSecs: number
   // ── impulse (SYSTEM 4) — the cast moves the CASTER ─────────────────────────
   /**
    * How the keeper is moved.
@@ -280,6 +292,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   windupMs: 0, facingOnly: false, revealRadius: 0, revealSecs: 0,
   trap: false, trapRadius: 0.9, trapMax: 1, trapSecs: 45, splashStatuses: [], splashSecs: 0, charges: 1, line: false,
   keepMomentum: false, airJumps: 0, airJumpSecs: 0, fieldShps: 0,
+  shove: 0, shoveDir: 'away', lane: 0, grapple: false, markSecs: 0,
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
   senseRadius: 0,
   cloakBurn: 0, cloakRebuild: 0,
@@ -399,7 +412,9 @@ const BUILDS: Record<string, Build> = {
   // Each one is classified off the VERB in its canon line, not off its element: "a cutting stream" is
   // a projectile, "fill a space with blinding white" is a status, "terrain that did not exist a second
   // ago" is terrain. Where the verb has no hook in the sim it is unbuilt and says which hook.
-  'tidal-arms': { archetype: 'projectile', manaCost: 8, cooldownMs: 900, damage: 16, projSpeed: 40, projLife: 0.9 },
+  // MOVE-JOBS PASS 2 (Alex ✓, 09-29): "ribbons of water… grab like hands". A water grapple, no damage: strike a foe and
+  // it is yanked toward you; strike nothing and the ribbon pulls YOU to where it caught.
+  'tidal-arms': { archetype: 'projectile', manaCost: 8, cooldownMs: 3500, damage: 0, projSpeed: 48, projLife: 0.3, shove: 5, shoveDir: 'toward', grapple: true },
   // MOVE-JOBS 09-29 (Alex's revision, "another trap candidate"): a pool of water set on the ground. When a foe steps
   // in it freezes: that foe rooted 1.5s, everyone within 3 tiles Slowed 3s. 2 charges, at most 2 set.
   'flash-freeze': { archetype: 'status', manaCost: 15, cooldownMs: 9000, castRange: 6, areaSize: 3, areaSecs: 1.5, statuses: ['rooted'],
@@ -411,7 +426,9 @@ const BUILDS: Record<string, Build> = {
   'fog-bank': { archetype: 'status', manaCost: 18, cooldownMs: 12000, castRange: 10, areaSize: 8, areaSecs: 8, statuses: ['blinded'], linger: true },
   // "No visible flood, just a thin film and no breath." Canon aims it at ONE face; the sim's smallest
   // radius is the closest honest reading, so it is a tight, nasty area rather than a true single target.
-  'drowning-grasp': { archetype: 'field', manaCost: 16, cooldownMs: 9000, castRange: 9, areaSize: 2, areaSecs: 4, fieldDps: 8.5 },
+  // MOVE-JOBS PASS 2 (Magii ruled 09-28, "no breath"): about 6 tiles, the one foe you are looking at: it cannot cast or
+  // sprint and is Slowed for 2s. A very short bolt is the honest single target. On the Ather side never a kill (Rule 3).
+  'drowning-grasp': { archetype: 'projectile', manaCost: 16, cooldownMs: 9000, damage: 0, projSpeed: 60, projLife: 0.1, statuses: ['silenced', 'slowed'], areaSecs: 2 },
   // "Fused to bedrock" — the one conjured wall that LASTS, because canon anchors it. ⚠ The bridges and
   // ramps half is not here: conjured collision is binary, so this raises a wall you cannot walk on.
   'glacial-path': { archetype: 'terrain', manaCost: 14, cooldownMs: 6500, castRange: 9, areaSize: 6, areaSecs: 20, shape: 'wall', shapeHeight: 2 },
@@ -467,7 +484,9 @@ const BUILDS: Record<string, Build> = {
                   impulseFwd: 17, impulseUp: 4.2 },
   // Breeze's one solo keeper move, so it is a Breeze-born keeper's whole opening kit: cheapest cast
   // in the book, near-instant, invisible.
-  'gale-cutter': { archetype: 'projectile', manaCost: 6, cooldownMs: 600, damage: 17, projSpeed: 78, projLife: 1.1 },
+  // MOVE-JOBS PASS 2 (Magii ruled 09-28, "cleave stone" → shove): an invisible blade that throws what it strikes back
+  // along its flight. The shield-cut half waits for foes that carry shields (no foe in play3d has one yet).
+  'gale-cutter': { archetype: 'projectile', manaCost: 6, cooldownMs: 2500, damage: 0, projSpeed: 78, projLife: 1.1, shove: 4.5, shoveDir: 'away', statuses: ['staggered'], areaSecs: 0.4 },
   // ★ UPDRAFT IS VERTICAL AND BARELY MOVES YOU SIDEWAYS. Canon: *"wind against earth to launch
   // debris, allies or yourself… masters build vertical highways — HIGH GROUND ON DEMAND."* So the
   // forward component is a nudge, not a leap: the whole point is that it answers a wall rather than
@@ -517,7 +536,9 @@ const BUILDS: Record<string, Build> = {
   // "Splitting ONCE when it finds a second… the floor Chain Lightning is the ceiling of." So it is
   // literally the ultimate with `chain` turned down to one and the price turned down with it: a
   // tactical you throw constantly, against an ultimate you spend a pool on.
-  'forked-bolt': { archetype: 'projectile', manaCost: 12, cooldownMs: 900, damage: 19, projSpeed: 72, projLife: 1.2, chain: 1, chainRange: 6 },
+  // MOVE-JOBS PASS 2 (Magii ruled 09-28, "splitting once"): it jumps to the two nearest, jams every weapon it touches
+  // for 1s and marks them 4s. No damage.
+  'forked-bolt': { archetype: 'projectile', manaCost: 12, cooldownMs: 4000, damage: 0, projSpeed: 72, projLife: 1.2, chain: 2, chainRange: 6, statuses: ['disarmed'], areaSecs: 1, markSecs: 4 },
   // "It does not aim, which is the point: you spoil a space rather than strike into it. Feeds on the
   // caster's temper and BURNS MANA FAST." So: the widest field in the game, the lowest damage in it,
   // and the highest cost of any tactical. A Squall that hurt would be a worse Firewall.
@@ -646,15 +667,20 @@ const BUILDS: Record<string, Build> = {
   // ── the birth-first pass (09-28): numbers are Jin's, each off its nearest cousin ──
   'emberglass': { archetype: 'projectile', manaCost: 13, cooldownMs: 1500, damage: 30, projSpeed: 44, projLife: 1.6 },
   'mending-thread': { archetype: 'restore', manaCost: 14, cooldownMs: 10000, heal: 28 },
-  'wind-shear': { archetype: 'projectile', manaCost: 11, cooldownMs: 1200, damage: 26, projSpeed: 92, projLife: 1.3 },
-  'riptide': { archetype: 'projectile', manaCost: 11, cooldownMs: 1100, damage: 24, projSpeed: 62, projLife: 1.3 },
+  // MOVE-JOBS PASS 2 (Magii ruled 09-28, "thrown"): a squall down one line from you. Everyone on it is thrown aside
+  // and loses footing. A lane from the caster, not a disc at range.
+  'wind-shear': { archetype: 'status', manaCost: 11, cooldownMs: 7000, lane: 12, areaSize: 1.6, statuses: ['staggered'], areaSecs: 0.8, shove: 4, shoveDir: 'aside' },
+  // MOVE-JOBS PASS 2 (Alex ✓): "a tight rope of water that lands and then pulls, dragging its target off its footing".
+  'riptide': { archetype: 'projectile', manaCost: 11, cooldownMs: 6000, damage: 0, projSpeed: 62, projLife: 1.3, shove: 6, shoveDir: 'toward', statuses: ['staggered'], areaSecs: 1 },
   'monolith': { archetype: 'terrain', manaCost: 40, cooldownMs: 22000, castRange: 9, areaSize: 3, areaSecs: 30, shape: 'block', shapeHeight: 5 },
   // MOVE-JOBS 09-29 (Alex ✓): "standing on it is fine; being struck on it is not" — the ground turns foes Vulnerable.
   'shatterfield': { archetype: 'status', manaCost: 42, cooldownMs: 24000, castRange: 10, areaSize: 6, areaSecs: 9, statuses: ['vulnerable'], linger: true },
   'stormbank': { archetype: 'field', manaCost: 42, cooldownMs: 24000, castRange: 11, areaSize: 6, areaSecs: 8, fieldDps: 10, fieldStopsShots: false },
   // MOVE-JOBS 09-29 (Alex ✓): one breath out: a short, strong shield refill around you (the speed half comes later).
   'exhale': { archetype: 'field', manaCost: 40, cooldownMs: 22000, castRange: 2, areaSize: 6, areaSecs: 6, fieldHps: 6, fieldShps: 20, fieldStopsShots: false },
-  'pyroclast': { archetype: 'field', manaCost: 46, cooldownMs: 26000, castRange: 12, areaSize: 7, areaSecs: 11, fieldDps: 7, fieldStopsShots: false },
+  // MOVE-JOBS PASS 2 (Magii ruled 09-28, "a choking cloud they have to walk out of"): a slow ash storm that blinds
+  // whoever is inside and pushes them out of it, a little every quarter second. It takes ground; it does not kill.
+  'pyroclast': { archetype: 'status', manaCost: 46, cooldownMs: 26000, castRange: 12, areaSize: 7, areaSecs: 11, statuses: ['blinded'], linger: true, shove: 0.7, shoveDir: 'out' },
 
   // ── Combos — never solo-castable. Canon requires a second mage in sync. ──────────────────────
   counterpoint: { archetype: 'unbuilt', why: 'needs a second same-frequency mage running Barrier' },

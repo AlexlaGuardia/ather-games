@@ -79,6 +79,7 @@ import { createFleet, stepFleet, aliveCount, type Fleet, type FleetTarget } from
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
 import { spawnField, tickFields, fieldsAt, absorbShotAt, absorbWardAt, contains, FIELD_HEIGHT, type Field } from '../engine/field-effects'
 import { conjure, shapeCells, blockedAt as conjuredBlockedAt, expireConjured, liveCells, type Conjured } from '../engine/conjured-terrain'
+import { addShove, stepShoves, shoveVector, type Shove, type ShoveDir } from '../engine/shove'
 import { emptyBag, applyStatus, applyStatuses, hasStatus, pruneStatuses, clearTarget, foeMods, statusesOn, STATUS_TABLE, VULNERABLE_MULT, BURN_DPS, type StatusBag, type StatusKind } from '../engine/statuses'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
@@ -150,7 +151,7 @@ import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPane
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning, type GuardId } from './puppet-guards'
 import { K as HB, STOREY as STOREY_H, BLOCK_H } from './hold-building'
-import { HOLD_TUNING, BODY_SIZE, DROP_NAME, type HoldDropKind, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, LAB_NODES, studyNode, labBlock, holdManaDrip, type LabNodeId, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
+import { HOLD_TUNING, BODY_SIZE, DROP_NAME, type HoldDropKind, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, LAB_NODES, studyNode, labBlock, holdManaDrip, type LabNodeId, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, keeperBlocked, floorAt, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 import { addPiece, pieceLine, loadDry, saveDry } from './vessel-pieces'
 import { loadRoad, saveRoad, roadOpen, ROAD_LINE, loadDeed, saveDeed } from './stillwind-road'
 import { EDGE_ZONE, EDGE_START, DEED_TITLE, STILLWIND_TUNING, startStillwind, stepStillwind, hitStillwind, edgeHazard, lineMend, edgeToSim, simToEdge, stillwindPhase } from './stillwind'
@@ -2597,7 +2598,7 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
   )
 }
 
-function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, senseRadiusRef, tremorRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, holdRef, edgeRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown, onTrial, onMatch }: {
+function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, senseRadiusRef, tremorRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, holdRef, edgeRef, statusRef, bodyCastRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown, onTrial, onMatch }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
@@ -2627,6 +2628,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   resistRef: React.RefObject<number>     // held-stance fraction of incoming damage absorbed (Barrier/Iron Skin)
   birthRuneRef: React.RefObject<string | null>  // what the keeper IS — for attunement resistance (canon v3)
   infusionRef: React.RefObject<Infusion>  // Flame Infusion — a WEAPON window: a multiplier, or (play3d, 09-29) an on-hit status
+  /** pass 2: Tidal Arms' grapple pulls the keeper, and only the walker may move the keeper */
+  bodyCastRef?: React.MutableRefObject<BodyCast | null>
   fieldsRef: React.MutableRefObject<Field[]>       // SYSTEM 1 — area entities (this sim ticks them)
   conjuredRef: React.MutableRefObject<Conjured[]>  // SYSTEM 2 — runtime terrain (blocks everything)
   /** THE HOLD's run, owned by the parent (the HUD and E/G read it); this sim steps it and lands rounds on it */
@@ -2660,13 +2663,19 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   const castPool = useMemo(() => Array.from({ length: CMAX }, () => ({
     pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, dmg: 0, chain: 0, chainRange: 0,
     sts: [] as readonly StatusKind[], stSecs: 0,   // statuses the round lays on whatever it hits (Ice Dart: slowed)
+    // pass 2: what the bolt does to WHERE a foe stands, its mark, and whether a miss pulls the caster (Tidal Arms)
+    shove: 0, shoveDir: 'away' as ShoveDir, mark: 0, grapple: false, label: '',
   })), [])
   // ── LINGERING STATUS CLOUDS (09-28): a status cast with `linger` (Fog Bank, Hush, Sandstorm Veil…) stays where
   // it lands and keeps applying to whoever is inside, so a foe that walks INTO the fog is blinded too. Before
   // this, every status cast applied once at the moment it landed and drew nothing: Fog Bank read as mana spent.
   const statusZones = useRef<{ x: number; z: number; r: number; until: number; kinds: readonly StatusKind[]; color: number
     /** step 5: a LINE zone's unit axis + half length (r is then its half-thickness); applySecs = how long a crossing lasts */
-    line?: { ux: number; uz: number; half: number }; applySecs: number; stops: boolean }[]>([])
+    line?: { ux: number; uz: number; half: number }; applySecs: number; stops: boolean
+    /** pass 2: pushes whoever is inside out of it, this far per tick (Pyroclast's ash) */
+    push?: number }[]>([])
+  // ── PASS 2, STEP 8: foes being moved by a cast (engine/shove.ts) ──
+  const shovesRef = useRef<Shove[]>([])
   const lineMeshRef = useRef<THREE.InstancedMesh>(null)
   const zoneTickAt = useRef(0)
   const burnTickAt = useRef(0)
@@ -2679,6 +2688,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   const windupRef = useRef<{ spec: CastSpec; at: number } | null>(null)  // a cast charging (Enlighten's 0.8s tell)
   const targets = useMemo(() => RANGE_TARGETS.map(([x, y, z], i) => ({
     pos: new THREE.Vector3(x, y, z), ax: x, az: z,  // anchor — drift mode oscillates around it
+    hx: x, hz: z,  // home: a shoved board eases back to it
     phase: i * 1.7, spd: 0.55 + (i % 3) * 0.25,     // varied phase/speed so the wall doesn't move in lockstep
     alive: true, down: 0, hp: TARGET_HP,
   })), [])
@@ -2857,19 +2867,54 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       if (fleetRef.current) { const fy = (posRef.current?.y ?? 0) + 0.95; for (const mm of fleetRef.current.members) if (mm.state.alive) fn(`fleet:${mm.index}`, mm.state.x, mm.state.z, fy) }
       if (hs?.running) for (const b of hs.flood) if (b.alive && b.phase === 'inside') fn(`flood:${b.id}`, b.x, b.z, b.y * STEP + 0.5)
     }
+    // ── ONE DAMAGE PATH PER FOE (pass 2): Burning, cast bolts and their chains all pay through each foe's own death rule
+    function hurtFoe(id: string, dd: number) {
+      const [kind, key] = id.split(':')
+      if (kind === 'board') { const t = targets[+key]; t.hp -= dd; if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN } }
+      else if (id === 'hunter') { const h1 = hunter.current; h1.hp -= dd; if (h1.hp <= 0) { h1.alive = false; h1.respawn = HUNTER_RESPAWN; statusRef.current = clearTarget(statusRef.current, 'hunter') } }
+      else if (kind === 'guard') guardSim.current.enc = damageGuard(guardSim.current.enc, key as GuardId, dd, rangeCfgRef.current.tune).state
+      else if (kind === 'fleet') { const mm = fleetRef.current?.members.find((f) => f.index === +key); if (mm) { mm.state.hp -= dd; if (mm.state.hp <= 0) { mm.state.alive = false; mm.state.respawn = Number.POSITIVE_INFINITY } } }
+      else if (kind === 'flood' && hs) { hitBody(hs, +key, dd, false); coop.link?.hit(+key, dd, false) }
+    }
+    // ── ONE MOVER PER FOE (pass 2, SYSTEM 9): a shove steps a foe through here and a wall stops it. A co-op Breach's
+    // flooded are the server's, so a shove there is refused rather than drawn and snapped back.
+    const solidAt = (x: number, z: number) => {
+      const c = gridRef.current?.[Math.round(z)]?.[Math.round(x)]
+      return c === undefined || (c & 0xFF) === WALL_ID || conjuredBlockedAt(conjuredRef.current, x, z, nowFrame)
+    }
+    function moveFoe(id: string, dx: number, dz: number): boolean {
+      const [kind, key] = id.split(':')
+      if (kind === 'board') { const t = targets[+key]; if (!t?.alive || solidAt(t.ax + dx, t.pos.z + dz)) return false; t.ax += dx; t.pos.x += dx; t.pos.z += dz; return true }
+      if (id === 'hunter') { const h1 = hunter.current; if (!h1.alive || solidAt(h1.x + dx, h1.z + dz)) return false; h1.x += dx; h1.z += dz; h1.pos.x = h1.x; h1.pos.z = h1.z; return true }
+      if (kind === 'guard') {
+        const gi = guardSim.current.enc.guards.findIndex((g) => g.id === key), b = guardBodies[gi]
+        if (!b || !guardSim.current.enc.guards[gi]?.alive || solidAt(b.pos.x + dx, b.pos.z + dz)) return false
+        b.pos.x += dx; b.pos.z += dz; return true
+      }
+      if (kind === 'fleet') { const mm = fleetRef.current?.members.find((f) => f.index === +key); if (!mm?.state.alive || solidAt(mm.state.x + dx, mm.state.z + dz)) return false; mm.state.x += dx; mm.state.z += dz; return true }
+      if (kind === 'flood') {
+        if (!hs || coop.link) return false
+        const b = hs.flood.find((f) => f.id === +key)
+        if (!b?.alive || keeperBlocked(hs, b.x + dx, b.z + dz, b.y)) return false
+        b.x += dx; b.z += dz; b.y = floorAt(hs, b.x, b.z, b.y); return true
+      }
+      return false
+    }
+    const shoveFoe = (id: string, dir: ShoveDir, dist: number, fx: number, fz: number, sx: number, sz: number, ax: number, az: number) => {
+      let d = dist
+      // a pull stops a step short of the caster rather than dragging the foe through them
+      if (dir === 'toward') d = Math.min(dist, Math.max(0, Math.hypot(fx - sx, fz - sz) - 1.6))
+      if (d <= 0.05) return
+      const v = shoveVector(dir, fx, fz, sx, sz, ax, az)
+      shovesRef.current = addShove(shovesRef.current, id, v.x, v.z, d)
+    }
     // BURNING (step 3): a half-second tick, paid through each foe's own damage path so death and loot rules hold
     if (nowFrame >= burnTickAt.current) {
       burnTickAt.current = nowFrame + 500
       const bag = statusRef.current, d = BURN_DPS * 0.5
       forEachFoe((id) => {
         if (!bag[id] || !hasStatus(bag, id, 'burning', nowFrame)) return
-        const dd = d * (hasStatus(bag, id, 'vulnerable', nowFrame) ? VULNERABLE_MULT : 1)
-        const [kind, key] = id.split(':')
-        if (kind === 'board') { const t = targets[+key]; t.hp -= dd; if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN } }
-        else if (id === 'hunter') { const h1 = hunter.current; h1.hp -= dd; if (h1.hp <= 0) { h1.alive = false; h1.respawn = HUNTER_RESPAWN; statusRef.current = clearTarget(statusRef.current, 'hunter') } }
-        else if (kind === 'guard') guardSim.current.enc = damageGuard(guardSim.current.enc, key as GuardId, dd, rangeCfgRef.current.tune).state
-        else if (kind === 'fleet') { const mm = fleetRef.current?.members.find((f) => f.index === +key); if (mm) { mm.state.hp -= dd; if (mm.state.hp <= 0) { mm.state.alive = false; mm.state.respawn = Number.POSITIVE_INFINITY } } }
-        else if (kind === 'flood' && hs) { hitBody(hs, +key, dd, false); coop.link?.hit(+key, dd, false) }
+        hurtFoe(id, d * (hasStatus(bag, id, 'vulnerable', nowFrame) ? VULNERABLE_MULT : 1))
       })
     }
     // TRAPS (step 4): the first foe inside a trap's radius sets it off; its splash reaches everyone near
@@ -2902,7 +2947,11 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       zoneTickAt.current = nowFrame + 250
       statusZones.current = statusZones.current.filter((z) => z.until > nowFrame)
       let bag = statusRef.current
-      for (const zn of statusZones.current) forEachFoe((id, x, z) => { if (inZone(zn, x, z)) bag = applyStatuses(bag, id, zn.kinds, zn.applySecs, nowFrame, { zone: true }) })
+      for (const zn of statusZones.current) forEachFoe((id, x, z) => {
+        if (!inZone(zn, x, z)) return
+        bag = applyStatuses(bag, id, zn.kinds, zn.applySecs, nowFrame, { zone: true })
+        if (zn.push) shoveFoe(id, 'out', zn.push, x, z, zn.x, zn.z, 1, 0)   // Pyroclast: the ash walks you out
+      })
       statusRef.current = bag
     }
 
@@ -3029,6 +3078,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           cp.life = pending.projLife
           cp.dmg = pending.damage; cp.chain = pending.chain; cp.chainRange = pending.chainRange
           cp.sts = pending.statuses; cp.stSecs = pending.areaSecs
+          cp.shove = pending.shove; cp.shoveDir = pending.shoveDir; cp.mark = pending.markSecs; cp.grapple = pending.grapple; cp.label = pending.label
           recoilRef.current.p += 0.008  // a little heft on release
           onShot()
         }
@@ -3055,7 +3105,23 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         }
         // A terrain cast that ALSO carries statuses applies them (Cordon: stone rises AND all metal
         // locks). That is why this is not an `else if` — canon writes both halves in one sentence.
-        if (pending.statuses.length > 0) {
+        if (pending.lane > 0) {
+          // A LANE (Wind Shear, pass 2): from the caster down the flat aim, `lane` long and `areaSize` either side.
+          // Everyone on it takes the statuses and is thrown aside, off the line.
+          const ux = flatX / flatLen, uz = flatZ / flatLen, w = pending.areaSize
+          let bag = statusRef.current
+          forEachFoe((id, x, z) => {
+            const along = (x - px) * ux + (z - pz) * uz, perp = (x - px) * uz - (z - pz) * ux
+            if (along < 0 || along > pending!.lane || Math.abs(perp) > w) return
+            if (pending!.statuses.length) bag = applyStatuses(bag, id, pending!.statuses, pending!.areaSecs, nowMs)
+            if (pending!.shove > 0) shoveFoe(id, pending!.shoveDir, pending!.shove, x, z, px, pz, ux, uz)
+          })
+          statusRef.current = bag
+          // seen: the lane flashes for a beat (a line zone with nothing to apply), heard: a gust
+          const half = pending.lane / 2
+          statusZones.current = [...statusZones.current.filter((z) => z.until > nowMs), { x: px + ux * half, z: pz + uz * half, r: w, until: nowMs + 350, kinds: [], color: STATUS_TABLE.staggered.color, line: { ux, uz, half }, applySecs: 0, stops: false }]
+          tone(700, 260, { type: 'sawtooth', gain: 0.04, slideTo: 180 })
+        } else if (pending.statuses.length > 0) {
           if (pending.trap) {
             // SET, not applied: this move's oldest trap lifts when one more than `trapMax` would stand
             const mine = trapsRef.current.filter((t) => t.spec.moveId === pending!.moveId && t.until > nowMs)
@@ -3067,7 +3133,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
             const color = STATUS_TABLE[pending.statuses[0]].color
             // a LINE runs ACROSS the aim (perpendicular to the flat forward), centred on the aim point
             const line = pending.line ? { ux: -flatZ / flatLen, uz: flatX / flatLen, half: pending.areaSize / 2 } : undefined
-            statusZones.current = [...statusZones.current.filter((z) => z.until > nowMs), { x: ax, z: az, r: pending.line ? 0.9 : pending.areaSize, until: nowMs + pending.areaSecs * 1000, kinds: pending.statuses, color, line, applySecs: pending.splashSecs || 1, stops: pending.line && pending.fieldStopsShots }]
+            statusZones.current = [...statusZones.current.filter((z) => z.until > nowMs), { x: ax, z: az, r: pending.line ? 0.9 : pending.areaSize, until: nowMs + pending.areaSecs * 1000, kinds: pending.statuses, color, line, applySecs: pending.splashSecs || 1, stops: pending.line && pending.fieldStopsShots, push: pending.shoveDir === 'out' ? pending.shove : 0 }]
             zoneTickAt.current = 0
           } else {
             let bag = statusRef.current
@@ -3244,78 +3310,68 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         }
       }
     }
-    // cast bolts: same collide as the weapon rounds (wall / target / hunter), but damage comes off the
-    // BOLT (the move that fired it), and a chaining move jumps to nearby targets on impact.
+    // cast bolts: same collide as the weapon rounds, but what lands comes off the BOLT (the move that fired it).
+    // ── ★ PASS 2 (09-29): ONE HIT TEST FOR EVERY FOE. This was four hand-written blocks (flooded, boards, hunter,
+    // fleet), and the Puppet Guards were in none of them: a cast bolt flew straight through Seren. Now a bolt asks
+    // `forEachFoe` who it met and `landCast` does the rest, so a new foe type is hit the day it joins the walk.
+    const landCast = (p: (typeof castPool)[number], id: string, x: number, z: number, share: number) => {
+      const d = p.dmg * castMultRef.current * share   // a held stance (Flame Manipulation) shapes what you throw
+      if (d > 0) hurtFoe(id, d)
+      if (p.sts.length) statusRef.current = applyStatuses(statusRef.current, id, p.sts, p.stSecs, nowFrame)
+      if (p.mark > 0) statusRef.current = applyStatuses(statusRef.current, id, ['revealed'], p.mark, nowFrame)
+      if (p.shove > 0) {
+        const plx = posRef.current?.x ?? x, plz = posRef.current?.z ?? z
+        // away = along the bolt's flight; toward = to the caster where they stand NOW (a rope pulls to the hand)
+        if (p.shoveDir === 'toward') shoveFoe(id, 'toward', p.shove, x, z, plx, plz, p.vel.x, p.vel.z)
+        else shoveFoe(id, p.shoveDir, p.shove, x, z, x - p.vel.x, z - p.vel.z, p.vel.x, p.vel.z)
+      }
+    }
+    // Tidal Arms: a ribbon that caught a WALL pulls its caster there (the walker applies it; only it moves the keeper)
+    const grappleTo = (p: (typeof castPool)[number]) => {
+      if (!bodyCastRef || !posRef.current) return
+      const dist = Math.hypot(p.pos.x - posRef.current.x, p.pos.z - posRef.current.z)
+      if (dist < 2.5) return
+      bodyCastRef.current = { kind: 'launch', label: `${p.label} — pulled`, fwd: Math.min(22, 4 + dist * 1.3), up: 4.5 }
+    }
     for (const p of castPool) {
       if (p.life <= 0) continue
       p.life -= dt
       p.pos.addScaledVector(p.vel, dt)
       const cx = Math.round(p.pos.x), cz = Math.round(p.pos.z)
       const cell = gridRef.current?.[cz]?.[cx]
-      if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }
-      if (conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
-      if (lineStops(p.pos.x, p.pos.z)) { p.life = 0; continue }
-      const dmg = p.dmg * castMultRef.current  // a held stance (Flame Manipulation) shapes what you throw
-      let hit = false
-      if (hs) {
-        if (roundBlocked(hs, p.pos.x, p.pos.z, p.pos.y / STEP)) { p.life = 0; continue }
-        let struck = false
-        if (hs.running) for (const b of hs.flood) {
-          if (!b.alive || Math.abs(p.pos.y - (b.y * STEP + 0.5)) >= 1.1) continue
-          const bdx = p.pos.x - b.x, bdz = p.pos.z - b.z, br = b.kind === 'bulk' ? 0.8 : 0.6
-          if (bdx * bdx + bdz * bdz >= br * br) continue
-          hitBody(hs, b.id, dmg, false); coop.link?.hit(b.id, dmg, false); struck = true
-          if (p.sts.length) statusRef.current = applyStatuses(statusRef.current, `flood:${b.id}`, p.sts, p.stSecs, nowFrame)
-          break
-        }
-        if (struck) { p.life = 0; onHit(true); continue }
+      if (cell === undefined || (cell & 0xFF) === WALL_ID || conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)
+        || lineStops(p.pos.x, p.pos.z) || (hs && roundBlocked(hs, p.pos.x, p.pos.z, p.pos.y / STEP))) {
+        if (p.grapple && cell !== undefined) grappleTo(p)
+        p.life = 0; continue
       }
-      for (const t of targets) {
-        if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
-          t.hp -= dmg; p.life = 0; hit = true; onHit(true)  // gold hitmarker — a cast reads as a heavy hit
-          if (p.sts.length) statusRef.current = applyStatuses(statusRef.current, `board:${targets.indexOf(t)}`, p.sts, p.stSecs, nowFrame)
-          if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN }
-          // Chain Lightning: arc to the nearest live targets in range, half damage per jump. Canon's
-          // "arcs between every target and conductor in range" — bounded so an ultimate stays an ultimate.
-          if (p.chain > 0) {
-            const r2 = p.chainRange * p.chainRange
-            const struck = t
-            const near = targets
-              .filter((o) => o !== struck && o.alive && o.pos.distanceToSquared(struck.pos) < r2)
-              .sort((a, b) => a.pos.distanceToSquared(struck.pos) - b.pos.distanceToSquared(struck.pos))
-              .slice(0, p.chain)
-            for (const o of near) {
-              o.hp -= dmg * 0.5
-              if (o.hp <= 0) { o.alive = false; o.down = TARGET_RESPAWN }
-            }
-          }
-          break
-        }
-      }
-      if (!hit && p.life > 0) {
-        const h = hunter.current
-        if (h.alive && p.pos.distanceToSquared(h.pos) < HUNTER_HIT_R2) {
-          h.hp -= dmg; p.life = 0; onHit(true)
-          if (p.sts.length) statusRef.current = applyStatuses(statusRef.current, 'hunter', p.sts, p.stSecs, nowFrame)
-          if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN; statusRef.current = clearTarget(statusRef.current, 'hunter') }
-        }
-        // ── the fleet takes cast damage too (#302). Same death rule: a challenger stays down.
-        if (p.life > 0 && fleetRef.current) {
-          const botY2 = (posRef.current.y ?? 0) + 0.95
-          if (Math.abs(p.pos.y - botY2) < 1.2) {
-            for (const m of fleetRef.current.members) {
-              if (!m.state.alive) continue
-              const bdx = p.pos.x - m.state.x, bdz = p.pos.z - m.state.z
-              if (bdx * bdx + bdz * bdz >= HUNTER_HIT_R2) continue
-              m.state.hp -= dmg; p.life = 0; hit = true; onHit(true)
-              if (p.sts.length) statusRef.current = applyStatuses(statusRef.current, `fleet:${m.index}`, p.sts, p.stSecs, nowFrame)
-              if (m.state.hp <= 0) { m.state.alive = false; m.state.respawn = Number.POSITIVE_INFINITY }
-              break
-            }
-          }
-        }
+      let struck: string | null = null, sx = 0, sz = 0
+      forEachFoe((id, x, z, y) => {
+        if (struck) return
+        const board = id.startsWith('board:'), r = board ? 0.72 : id.startsWith('flood:') ? 0.7 : 0.8
+        const dx = p.pos.x - x, dz = p.pos.z - z
+        if (dx * dx + dz * dz < r * r && Math.abs(p.pos.y - y) < (board ? 0.72 : 1.2)) { struck = id; sx = x; sz = z }
+      })
+      if (!struck) continue
+      const hitId: string = struck
+      p.life = 0; onHit(true)   // gold hitmarker — a cast reads as a heavy hit
+      landCast(p, hitId, sx, sz, 1)
+      // CHAIN (Chain Lightning, Forked Bolt): to the nearest live foes within range of the one struck, half the
+      // damage and the full statuses per jump. Bounded by `chain` so an ultimate stays an ultimate.
+      if (p.chain > 0) {
+        const near: { id: string; x: number; z: number; d: number }[] = []
+        const r2 = p.chainRange * p.chainRange
+        forEachFoe((id, x, z) => { const d = (x - sx) ** 2 + (z - sz) ** 2; if (id !== hitId && d < r2) near.push({ id, x, z, d }) })
+        near.sort((a, b) => a.d - b.d)
+        for (const o of near.slice(0, p.chain)) landCast(p, o.id, o.x, o.z, 0.5)
       }
     }
+    // SYSTEM 9: every shove slides one step (a wall ends it), then a board no longer being pushed eases home
+    shovesRef.current = stepShoves(shovesRef.current, dt, moveFoe)
+    targets.forEach((t, i) => {
+      if (shovesRef.current.some((sv) => sv.id === `board:${i}`)) return
+      const k = Math.min(1, dt * 1.2)
+      t.ax += (t.hx - t.ax) * k; t.pos.z += (t.hz - t.pos.z) * k
+    })
     for (const t of targets) {
       if (!t.alive) { t.down -= dt; if (t.down <= 0) { t.alive = true; t.hp = TARGET_HP } }
     }
@@ -3472,7 +3528,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           // ⚠ ONLY CASTS AIMED AT THE PLAYER LAND, for exactly the reason the orb budget note below
           // gives: bot-on-bot casting resolves as nothing so sixty challengers cannot spend the
           // frame on each other.
-          if (r.intent.castBand !== null && r.target.index === -1) {
+          // SILENCED (Drowning Grasp, pass 2): no breath, no cast. The only foe in play3d that casts is a challenger
+          if (r.intent.castBand !== null && r.target.index === -1 && !hasStatus(fbag, `fleet:${r.member.index}`, 'silenced', nowFrame)) {
             const moveId = r.member.loadout[r.intent.castBand]
             const cs = moveId ? castForMove(moveId) : null
             const mv = moveId ? moveById(moveId) : undefined
@@ -4656,7 +4713,7 @@ const Scene = memo(function Scene(props: {
       {props.zone.id === RUNE_HOLD_ZONE && props.gridRef.current && <RuneHoldScene grid={props.gridRef.current} heights={props.heights} version={props.version} />}
       <GuideTrail posRef={props.posRef} heightsRef={props.heightsRef} targetRef={props.guideTargetRef} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} edgeRef={props.edgeRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} edgeRef={props.edgeRef} statusRef={props.statusRef} bodyCastRef={props.bodyCastRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && props.zone.id !== HOLD_ZONE && props.zone.id !== EDGE_ZONE && <GunBenches />}
       {props.zone.realm === 'outside' && props.zone.id !== HOLD_ZONE && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
