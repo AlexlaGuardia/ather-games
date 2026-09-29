@@ -29,7 +29,8 @@ try {
     for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i)!; if (/mp:party/.test(k)) localStorage.removeItem(k) }
   }, WHO.id)
   await p.goto(`${ORIGIN}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 60_000 })
-  await p.goto(`${ORIGIN}/shimmer/play3d`, { waitUntil: 'domcontentloaded', timeout: 90_000 })
+  // EXP_HOUR pins the day clock (`?hour=`): the expedition must look the same at 2am as at noon (its steady light)
+  await p.goto(`${ORIGIN}/shimmer/play3d${process.env.EXP_HOUR ? `?hour=${process.env.EXP_HOUR}` : ''}`, { waitUntil: 'domcontentloaded', timeout: 90_000 })
   for (let t = 0; t < 60 && !(await p.evaluate(() => typeof (window as any).__goZone === 'function')); t++) await sleep(500)
   await p.evaluate(() => (window as any).__goZone('travelers-station'))
   await sleep(6000)
