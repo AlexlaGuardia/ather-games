@@ -30,7 +30,7 @@ ok(moss.arrowRad === null && moss.where === 'at the Station', 'a mate not in you
 ok(whereLabel('voxel:plot') === 'in their garden' && whereLabel('voxel:glade') === 'at Moonwell' && whereLabel('voxel:wilds') === 'in the Ather', 'places in the Ather read as places')
 
 const vw = readFileSync(new URL('./VoxelWorld.tsx', import.meta.url), 'utf8')
-ok(vw.includes("enabled: mpPartyReady && !!mpParty && spaceNow !== 'plot', zoneId: 'voxel:' + spaceNow"), '★ presence in the Ather is party-only and never on the plot (a garden is personal)')
+ok(vw.includes("enabled: mpPartyReady && !!mpParty && spaceNow !== 'plot' && mpPlaced, zoneId: 'voxel:' + spaceNow"), '★ presence in the Ather is party-only, never on the plot, and opens only once the keeper is placed')
 ok(vw.includes('if (!settling) {') && (vw.match(/onPos\(p, 0, true\)/g) || []).length === 2 && vw.includes('mp.y = p.y - PARTY_EYE') && vw.includes('useRef<{ x: number; y: number; z: number } | null>(null)'), 'presence sends feet, and nothing until the walker has reported (never the origin)')
 ok(vw.includes('<RemotePlayers peers={mpPeers} />'), 'mates are drawn in the scene')
 const mp = readFileSync(new URL('../play3d/multiplayer.ts', import.meta.url), 'utf8')

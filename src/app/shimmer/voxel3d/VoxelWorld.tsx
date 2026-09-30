@@ -1288,10 +1288,13 @@ export default function VoxelWorld() {
   // null until the walker has reported once: presence must never announce a keeper standing at the world's origin
   const mpPose = useRef<{ x: number; y: number; z: number } | null>(null)
   const mpYaw = useRef(0)
+  // ★ the presence socket opens only once there is a real, settled place to announce: joining earlier registers the keeper at
+  // the server's default spot, and a mate reads that as where they stand (ather-flow, 09-30, the third source of 657m)
+  const [mpPlaced, setMpPlaced] = useState(false)
   const [spaceNow, setSpaceNow] = useState<Space>('glade')
   useEffect(() => { const t = setInterval(() => setSpaceNow(space.current), 1000); return () => clearInterval(t) }, [])
   const { peers: mpPeers } = useMultiplayer({
-    enabled: mpPartyReady && !!mpParty && spaceNow !== 'plot', zoneId: 'voxel:' + spaceNow,
+    enabled: mpPartyReady && !!mpParty && spaceNow !== 'plot' && mpPlaced, zoneId: 'voxel:' + spaceNow,
     posRef: mpPose, yawRef: mpYaw, party: mpParty, playerName: mpName,
   })
   const lobby = usePartyLobby({
@@ -2469,6 +2472,7 @@ export default function VoxelWorld() {
             // spot, ~657m from the glade. Announcing it put a mate 657m off (ather-flow, twice). Guessing at coordinates
             // (the first try was "not (0, 0)") cannot tell; the world knows it is settling, so it says so.
             if (!settling) {
+              if (!mpPose.current) setMpPlaced(true)
               const mp = mpPose.current ?? (mpPose.current = { x: 0, y: 0, z: 0 })
               mp.x = p.x; mp.y = p.y - PARTY_EYE; mp.z = p.z
             }
