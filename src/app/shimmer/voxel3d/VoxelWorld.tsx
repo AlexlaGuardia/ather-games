@@ -2461,13 +2461,14 @@ export default function VoxelWorld() {
           onAmmo={setAmmoUi}
           onStats={setStats} onPerf={setPerf} onProfile={setProf} onSay={say} onContextLost={setCtxLost} runeTick={runeTick}
           onVesselFound={() => setRuneTick(t => t + 1)}
-          onPos={(p, yaw) => {
+          onPos={(p, yaw, settling) => {
             mapPos.current = { x: p.x, z: p.z }
             mapHeading.current = yaw
             // presence sends FEET and a camera yaw whose forward is (-sin, -cos); the map heading is atan2(aimZ, aimX)
-            // ⚠ while the world is still settling, onPos reports the camera BEFORE the keeper is placed, and that is the world
-            // origin: announcing it put a mate 657m off (ather-flow, 09-30, a second time). Nobody stands at exactly (0, 0).
-            if (p.x !== 0 || p.z !== 0) {
+            // ⚠ while the world is still settling, onPos reports the camera BEFORE the keeper is placed: the renderer's default
+            // spot, ~657m from the glade. Announcing it put a mate 657m off (ather-flow, twice). Guessing at coordinates
+            // (the first try was "not (0, 0)") cannot tell; the world knows it is settling, so it says so.
+            if (!settling) {
               const mp = mpPose.current ?? (mpPose.current = { x: 0, y: 0, z: 0 })
               mp.x = p.x; mp.y = p.y - PARTY_EYE; mp.z = p.z
             }
@@ -3231,7 +3232,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   /** a vessel was taken off the ground into the satchel — the panel re-reads the stowed list */
   onVesselFound: () => void
   /** `yaw` is a map-marker CANVAS ROTATION (`screenHeading`), not a world yaw. */
-  onPos: (p: THREE.Vector3, yaw: number) => void
+  /** `settling`: the world is still streaming in and the keeper is not placed yet (the camera sits at its default) */
+  onPos: (p: THREE.Vector3, yaw: number, settling?: boolean) => void
   onLook: (l: { name: string; progress: number; refused: boolean; channel: boolean } | null) => void
   onInvChange: () => void
   worker: React.RefObject<Worker | null>
@@ -9203,10 +9205,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
               ? 'there is no ground inside your own fold — you are back at the glade'
               : 'nothing generated where you landed — you are back at the glade')
           }
-          onPos(p, 0)
+          onPos(p, 0, true)
           return
         }
-        onPos(p, 0)
+        onPos(p, 0, true)
         // ── ★ AND THE HUD STOPS ASSERTING A CAUSE IT NEVER CHECKED ─────────────────────────────
         // `N columns · generating…` printed identically for a slow generator and for a destination
         // that cannot generate. It has now misnamed its own cause twice in two days — a day lost to
