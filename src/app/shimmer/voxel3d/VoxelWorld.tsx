@@ -2465,8 +2465,12 @@ export default function VoxelWorld() {
             mapPos.current = { x: p.x, z: p.z }
             mapHeading.current = yaw
             // presence sends FEET and a camera yaw whose forward is (-sin, -cos); the map heading is atan2(aimZ, aimX)
-            const mp = mpPose.current ?? (mpPose.current = { x: 0, y: 0, z: 0 })
-            mp.x = p.x; mp.y = p.y - PARTY_EYE; mp.z = p.z
+            // ⚠ while the world is still settling, onPos reports the camera BEFORE the keeper is placed, and that is the world
+            // origin: announcing it put a mate 657m off (ather-flow, 09-30, a second time). Nobody stands at exactly (0, 0).
+            if (p.x !== 0 || p.z !== 0) {
+              const mp = mpPose.current ?? (mpPose.current = { x: 0, y: 0, z: 0 })
+              mp.x = p.x; mp.y = p.y - PARTY_EYE; mp.z = p.z
+            }
             mpYaw.current = Math.atan2(-Math.cos(yaw), -Math.sin(yaw))
             setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)
           }}
