@@ -85,8 +85,9 @@ try {
   await sleep(400)
   const boss = await lead.evaluate(() => { const b = document.querySelector('[data-mission=boss]') as HTMLButtonElement | null; if (b && !b.disabled) { b.click(); return true } return false })
   ok(picked && boss, 'the leader picks the Boss card (the Slack)')
-  await sleep(1200)
-  const cur = await lead.evaluate(() => document.querySelector('[data-mission-current]')?.getAttribute('data-mission-current'))
+  // the pick round-trips the lobby server: poll, never sample once (a fixed 1.2s wait failed 1 in 2 on 09-30)
+  let cur: string | null | undefined = null
+  for (let t = 0; t < 20 && cur !== 'boss'; t++) { await sleep(250); cur = await lead.evaluate(() => document.querySelector('[data-mission-current]')?.getAttribute('data-mission-current')) }
   ok(cur === 'boss', `the lobby's mission is the Slack (${cur})`)
   const readied = await mate.evaluate(() => { const b = [...document.querySelectorAll('[data-panel=departures] button')].find(x => /^Ready$/.test(x.textContent ?? '')) as HTMLButtonElement | undefined; b?.click(); return !!b })
   ok(readied, 'the mate readies')
