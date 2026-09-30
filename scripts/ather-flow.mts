@@ -44,7 +44,8 @@ try {
   let sa = '', sb = ''
   for (let t = 0; t < 120; t++) {
     sa = await strip(pa); sb = await strip(pb)
-    if (/\d+m/.test(sa) && /\d+m/.test(sb)) break
+    // two agreeing readings in a row, a second apart: a single sample can land on a mate's first instant
+    if (/\d+m/.test(sa) && /\d+m/.test(sb)) { await sleep(1000); sa = await strip(pa); sb = await strip(pb); if (/\d+m/.test(sa) && /\d+m/.test(sb)) break }
     await sleep(500)
   }
   console.log(`  A's strip: "${sa}"\n  B's strip: "${sb}"`)

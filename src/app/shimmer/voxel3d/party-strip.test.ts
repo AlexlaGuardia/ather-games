@@ -25,6 +25,8 @@ const fern = rows.find((r) => r.name === 'Fern')!
 ok(fern.dist === 10 && near(fern.arrowRad!, Math.PI / 2), '★ a mate due east while you face north: 10m, arrow turned a quarter clockwise (right)')
 const ahead = stripRows(lobby, 'u_me', [peer('Fern', 0, -5)], { x: 0, z: 0 }, north).find((r) => r.name === 'Fern')!
 ok(near(ahead.arrowRad!, 0), 'a mate straight ahead: the arrow points up')
+const fresh = stripRows(lobby, 'u_me', [peer('Fern', 0, 0)], { x: -149.5, z: -639.5 }, north).find((r) => r.name === 'Fern')!
+ok(fresh.dist === null && fresh.where === 'in the Ather', '★ a mate still at the server\'s default spot is not placed yet: no false 657m')
 const moss = rows.find((r) => r.name === 'Moss')!
 ok(moss.arrowRad === null && moss.where === 'at the Station', 'a mate not in your part of the Ather reads where they are')
 ok(whereLabel('voxel:plot') === 'in their garden' && whereLabel('voxel:glade') === 'at Moonwell' && whereLabel('voxel:wilds') === 'in the Ather', 'places in the Ather read as places')

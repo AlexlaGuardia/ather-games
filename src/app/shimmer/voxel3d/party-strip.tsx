@@ -18,7 +18,9 @@ export interface StripRow { name: string; arrowRad: number | null; dist: number 
 export function stripRows(lobby: LobbyState | null, you: string | null, peers: readonly RemotePlayer[], me: { x: number; z: number } | null, heading: number): StripRow[] {
   if (!lobby) return []
   return lobby.members.filter((m) => m.id !== you).map((m) => {
-    const p = peers.find((q) => q.name === m.name)
+    // ⚠ a mate the server has only just announced sits at ITS default spot (0, 0) until their first move lands, a
+    // fraction of a second later. Read as a place, that is ~657m off (ather-flow's probe, 09-30). Not placed yet.
+    const p = peers.find((q) => q.name === m.name && (q.tx !== 0 || q.tz !== 0))
     if (p && me) {
       // the latest REPORTED spot (tx/tz), not the drawn one: the drawing eases toward it only while frames run
       const dx = p.tx - me.x, dz = p.tz - me.z
