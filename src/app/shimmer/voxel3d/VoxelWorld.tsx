@@ -1297,6 +1297,14 @@ export default function VoxelWorld() {
     enabled: mpPartyReady && !!mpParty && spaceNow !== 'plot' && mpPlaced, zoneId: 'voxel:' + spaceNow,
     posRef: mpPose, yawRef: mpYaw, party: mpParty, playerName: mpName,
   })
+  // a read-only probe for the headless party check (`scripts/ather-flow.mts`): where this page thinks it is, what it
+  // announces, and where it draws its mates. Positions a player can already see on screen; nothing else.
+  useEffect(() => {
+    const w = window as unknown as { __atherParty?: () => unknown }
+    w.__atherParty = () => ({ me: mapPos.current, announced: mpPose.current, placed: mpPlaced, space: space.current,
+      mates: [...(mpPeers.current?.values() ?? [])].map((q) => ({ name: q.name, tx: q.tx, tz: q.tz })) })
+    return () => { delete w.__atherParty }
+  }, [mpPlaced, mpPeers])
   const lobby = usePartyLobby({
     code: mpParty, userId: account.session?.user_id ?? (mpPartyReady ? selfPlayerId() : null), name: mpName,
     zone: 'voxel:' + spaceNow, look: mpPartyReady ? selfPlayerId() : '',

@@ -48,6 +48,7 @@ try {
     await sleep(500)
   }
   console.log(`  A's strip: "${sa}"\n  B's strip: "${sb}"`)
+  for (const [n, pg] of [['A', pa], ['B', pb]] as const) console.log(`  ${n} probe:`, JSON.stringify(await pg.evaluate(() => (window as any).__atherParty?.())))
   ok(sa.includes(B.name) && sb.includes(A.name), `★ each keeper's strip names the other (party ${PARTY})`)
   const same = /\d+m/.test(sa) && /\d+m/.test(sb)
   ok(same || /garden|Moonwell|Ather/.test(sa), same ? '★★ in the same part of the Ather, each sees the other with a distance (presence both ways)' : 'in different parts of the Ather, each reads where the other is')
