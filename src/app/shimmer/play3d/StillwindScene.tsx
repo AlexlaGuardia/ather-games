@@ -12,7 +12,7 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { STILLWIND_TUNING as T, simToEdge, type StillwindState } from './stillwind'
+import { STILLWIND_TUNING as T, simToEdge, LEE_STONES, LEE_HALF, type StillwindState } from './stillwind'
 import { slack as SL } from './scene-palette'
 
 export interface EdgeRun { sim: StillwindState | null; slow: number; since: number; flash: string | null }
@@ -117,6 +117,16 @@ export function StillwindScene({ edgeRef }: { edgeRef: React.RefObject<EdgeRun> 
       <mesh ref={sweep} material={sweepMat} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
         <planeGeometry args={[T.safeHalf * 2 + 0.4, T.sweepHalfZ * 2]} />
       </mesh>
+      {/* ★ the lee stones (09-29): wind-cut rock shelves standing one tier up out of the edge */}
+      {LEE_STONES.map((st, i) => {
+        const at = simToEdge(st.x, st.z)
+        return (
+          <group key={`lee-${i}`} position={[at.x, 0, at.z]}>
+            <mesh position={[0, 0.55, 0]} castShadow receiveShadow><boxGeometry args={[LEE_HALF * 2 + 0.1, 1.1, LEE_HALF * 2 + 0.1]} /><meshStandardMaterial color={SL.stone} roughness={0.9} /></mesh>
+            <mesh position={[0, 1.11, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[LEE_HALF * 2, LEE_HALF * 2]} /><meshStandardMaterial color={SL.stoneTop} roughness={0.85} /></mesh>
+          </group>
+        )
+      })}
       <instancedMesh ref={wind} args={[undefined, undefined, WIND_MAX]} frustumCulled={false}>
         <boxGeometry args={[1.6, 0.03, 0.03]} />
         <meshBasicMaterial color={SL.wind} transparent opacity={0.35} depthWrite={false} />

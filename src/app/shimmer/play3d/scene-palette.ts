@@ -235,6 +235,8 @@ export const slack = {
   ground: '#2a1d1f', line: '#15100f', glare: '#ff5a2a', rime: '#bfe0ff',
   ooze: '#050507', oozeSheen: '#2b1a12', core: '#ffb347', coreDeep: '#c2410c', frost: '#dfefff',
   wind: '#f3d9c4',
+  /** the lee stones (09-29): dark wind-cut rock standing up out of the edge */
+  stone: '#3a2f2c', stoneTop: '#4a3d38',
 }
 
 /**

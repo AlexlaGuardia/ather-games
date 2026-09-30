@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 // stillwind.test.ts — the Stillwind on the edge: canon's rules, then a scripted keeper who draws it off its line.
 import {
   STILLWIND_TUNING as T, startStillwind, stepStillwind, stepStillwindParty, stillwindTarget, hitStillwind, stillwindTakes, edgeHazard, stillwindPhase, lineMend,
@@ -172,6 +173,25 @@ const until = (s: StillwindState, secs: number, px: number, pz: () => number, do
   ok(swept && got[0] === T.sweepDmg && got[1] === 0, '★ the sweep strikes the band once and spares the shoulder: a choice, every time')
   const s4 = startStillwind(); s4.sweepIn = 0.01; s4.windT = 99
   ok(!stepStillwindParty(s4, 0.05, [{ x: 0, z: 40 }]).sweepMarked, 'phase 1 has no sweep')
+}
+
+// ── ★ SECOND PASS (Alex 09-29): a wider band, the lee stones, a body you cannot run through, and the way home ──
+{
+  const { LEE_STONES, onLeeStone, edgeHazardAt, stillwindBlock, edgeHeights, EDGE_ROWS, EDGE_COLS, simToEdge } = require('./stillwind') as typeof import('./stillwind')
+  ok(T.safeHalf >= 4.5, 'the band is wide enough to move in (±4.5)')
+  ok(LEE_STONES.length >= 16 && LEE_STONES.some((s) => s.x > 0) && LEE_STONES.some((s) => s.x < 0), `lee stones down both sides of the band (${LEE_STONES.length})`)
+  const st = LEE_STONES.find((s) => s.x > 0)!
+  ok(onLeeStone(st.x, st.z) && !onLeeStone(st.x + 3, st.z), 'a stone is its own 3x3 of ground')
+  ok(edgeHazardAt(st.x, st.z).dps === T.shoulderBurn && edgeHazard(st.x).dps > T.shoulderBurn * 2, '★ on a stone the Glare only nips; beside it, it burns (a stone is cheaper, never free)')
+  const h = edgeHeights()
+  const cell = simToEdge(st.x, st.z)
+  ok(h.length === EDGE_ROWS && h[0].length === EDGE_COLS && h[cell.z][cell.x] === 1 && h[cell.z][cell.x + 3] === 0, 'the stones stand one tier up (a walker steps onto them)')
+  const s = startStillwind(); s.x = 0; s.z = 50
+  const pushed = stillwindBlock(s, 0.3, 50.5)
+  ok(!!pushed && Math.hypot(pushed.x - s.x, pushed.z - s.z) >= T.radius, '★ it has a body: a keeper inside it is set back out to its edge')
+  ok(stillwindBlock(s, 0, 50 + T.radius + 1) === null, 'a keeper outside its reach of body is left alone')
+  const zones = readFileSync(new URL('../world/zones.ts', import.meta.url), 'utf8')
+  ok(zones.includes("{ fromX: EDGE_EXIT.x, fromY: EDGE_EXIT.z, toZone: 'travelers-station'"), '★ the way out goes home to the Station, not the Breach')
 }
 
 console.log(`stillwind: ${pass} passed, ${fails.length} failed`); for (const f of fails) console.log('  FAIL', f)

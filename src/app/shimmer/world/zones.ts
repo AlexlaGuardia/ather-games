@@ -176,7 +176,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
 import { parseLanding } from '../play3d/hold'
-import { EDGE_ZONE, EDGE_START, EDGE_EXIT, edgeGrid } from '../play3d/stillwind'
+import { EDGE_ZONE, EDGE_START, EDGE_EXIT, edgeGrid, edgeHeights } from '../play3d/stillwind'
 import { PASSAGE } from '../play3d/passage-hall'
 import { STATION, holdShip } from '../play3d/station-field'
 import { EXP_ZONE, generateExpedition, type ExpLayout } from '../play3d/expedition'
@@ -703,10 +703,13 @@ export const ZONES: Zone[] = [
     id: EDGE_ZONE,
     name: 'The Slack (proof)',
     grid: edgeGrid(),
+    heights: edgeHeights(),   // the lee stones stand one tier up (09-29)
     realm: 'outside',
     playerStart: { tileX: EDGE_START.x, tileY: EDGE_START.z },
     warps: [
-      { fromX: EDGE_EXIT.x, fromY: EDGE_EXIT.z, toZone: 'the-hold', toX: EDGE_DOOR.x, toY: EDGE_DOOR.z + 1, direction: 'down' },
+      // ★ HOME TO THE STATION (Alex 09-29: "when i tried to exit it sent me to the breach"). It pointed back up the Breach's
+      // roof door from when that was the only way in; the Slack is a mission from the Station's lobby now, like the rest.
+      { fromX: EDGE_EXIT.x, fromY: EDGE_EXIT.z, toZone: 'travelers-station', toX: holdShip()!.arrival.x, toY: holdShip()!.arrival.z, direction: 'down' },
     ],
   },
   {

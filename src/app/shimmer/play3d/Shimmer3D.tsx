@@ -159,7 +159,7 @@ import { K as HB, STOREY as STOREY_H, BLOCK_H } from './hold-building'
 import { HOLD_TUNING, BODY_SIZE, DROP_NAME, type HoldDropKind, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, LAB_NODES, studyNode, labBlock, holdManaDrip, type LabNodeId, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, keeperBlocked, floorAt, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 import { addPiece, pieceLine, loadDry, saveDry } from './vessel-pieces'
 import { loadRoad, saveRoad, roadOpen, ROAD_LINE, loadDeed, saveDeed } from './stillwind-road'
-import { EDGE_ZONE, EDGE_START, DEED_TITLE, STILLWIND_TUNING, startStillwind, stepStillwind, hitStillwind, edgeHazard, lineMend, edgeToSim, simToEdge, stillwindPhase } from './stillwind'
+import { EDGE_ZONE, EDGE_START, DEED_TITLE, STILLWIND_TUNING, startStillwind, stepStillwind, hitStillwind, edgeHazard, edgeHazardAt, stillwindBlock, lineMend, edgeToSim, simToEdge, stillwindPhase } from './stillwind'
 import { StillwindScene, type EdgeRun } from './StillwindScene'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
@@ -276,6 +276,8 @@ const EXP_LOOK = { floor: S.terrain.expFloor, building: S.terrain.expWall, build
 /** an expedition keeps ONE steady light, a clear mid-morning (Alex 09-29: at night its stone walls went near-black).
  *  0.42 on the day clock: full daylight, the sun low enough that a corridor still has a shaded side. */
 const EXP_STEADY_HOUR = 0.42
+/** the Slack's ground under its own scene: its raised lee stones must not stand up out of it as green columns */
+const EDGE_LOOK = { floor: S.slack.ground, building: S.terrain.building, buildingTop: S.terrain.buildingTop }
 /** The Passage draws its own rock and fixtures (`PassageScene`) and has its own light. */
 const PASSAGE_ZONE = 'the-passage'
 /** Rune Hold draws its own stone, streets and landing plaza (`RuneHoldScene`) over the town's grid. */
@@ -3611,7 +3613,11 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, heights
         else if (o.opened) er.flash = 'It boils open'
         else if (o.froze) er.flash = 'It stiffens'
       }
-      const hz = coop.down ? { dps: 0, slow: 0 } : edgeHazard(k.x)   // down in a co-op Slack: watching, not burning
+      // ★ IT HAS A BODY (09-29): a keeper inside its radius is set back to its edge (no running through it)
+      const blocked = coop.down ? null : stillwindBlock(er.sim, k.x, k.z)
+      if (blocked) { const at = simToEdge(blocked.x, blocked.z); posRef.current.x = at.x; posRef.current.z = at.z }
+      // the edge where the keeper stands: a lee stone only nips (09-29)
+      const hz = coop.down ? { dps: 0, slow: 0 } : edgeHazardAt(k.x, k.z)   // down in a co-op Slack: watching, not burning
       er.slow = hz.slow
       if (hz.dps > 0) {
         er.since = 0
@@ -5014,7 +5020,7 @@ const Scene = memo(function Scene(props: {
     <>
       <GardenAtmosphere zoneId={props.atmosZone} steady={props.zone.id === EXP_ZONE ? EXP_STEADY_HOUR : undefined} />
       <SkyLight shadowMap={props.shadowMap} under={props.zone.id === PASSAGE_ZONE} steady={props.zone.id === EXP_ZONE ? EXP_STEADY_HOUR : undefined} />
-      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE || props.zone.id === STATION_ZONE} ownWarps={props.zone.id === HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? RUNE_HOLD_DOOR_KEYS : undefined} ownGround={props.zone.id === RUNE_HOLD_ZONE ? SMOOTH_TILES : undefined} look={props.zone.id === EXP_ZONE ? EXP_LOOK : undefined} />
+      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE || props.zone.id === STATION_ZONE} ownWarps={props.zone.id === HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? RUNE_HOLD_DOOR_KEYS : undefined} ownGround={props.zone.id === RUNE_HOLD_ZONE ? SMOOTH_TILES : undefined} look={props.zone.id === EXP_ZONE ? EXP_LOOK : props.zone.id === EDGE_ZONE ? EDGE_LOOK : undefined} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && n.kind !== 'stall' && n.kind !== 'cabinet' && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.zone.id === PASSAGE_ZONE && <PassageScene isOwner={props.isOwner} />}
       {props.zone.id === STATION_ZONE && <StationScene />}
@@ -8260,7 +8266,7 @@ export default function Shimmer3D() {
       if (e.flash) { setEdgeFlash(e.flash); e.flash = null }
       if (sw.felled && !recorded) { recorded = true; saveDeed(Math.round(sw.elapsed)); setEdgeFlash('The Stillwind is felled') }
       if (!sw.felled) recorded = false
-      const hz = edgeHazard(edgeToSim(p.x, p.z).x)
+      const ks = edgeToSim(p.x, p.z), hz = edgeHazardAt(ks.x, ks.z)
       const d = loadDeed()
       const next = { hp: Math.round(sw.hp), phase: stillwindPhase(sw), mood: sw.mood, wind: sw.wind, side: hz.side, felled: sw.felled, deed: d ? { secs: d.secs } : null }
       const key = JSON.stringify(next)
@@ -8268,6 +8274,7 @@ export default function Shimmer3D() {
     }, 100)
     return () => {
       clearInterval(id); edgeRef.current.sim = null; edgeRef.current.slow = 0
+      reopenLobby.current = true   // the Slack is a mission: leaving it lands you at the Station with the lobby open (09-29)
       if (coop.slack) { coop.slack.close(); coop.slack = null; coop.struck = 0; coop.down = false; setCoopDown(false); coopPeersSync.current([], null) }
     }
   }, [zoneId])

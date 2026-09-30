@@ -26,8 +26,8 @@ export const STILLWIND_TUNING = {
   // The band was ±1.6 of a 48-wide strip, the burn climbed 3/s per tile at once, and it swung with no tell: there was
   // nowhere to stand but in front of it. Now: a band you can sidestep in, a SHOULDER that costs a little (the choice),
   // then the steep edge; a swing you see coming; a sweep in phase 2 that makes you pick a side; and a shorter fight.
-  safeHalf: 3.2,         // the keeper's safe band either side of the line (was 1.6)
-  shoulder: 7,           // past the band and inside this, the edge only nips: room to dodge, at a small price
+  safeHalf: 4.5,         // the keeper's safe band either side of the line (was 1.6, then 3.2: Alex 09-29 "still too small")
+  shoulder: 8,           // past the band and inside this, the edge only nips: room to dodge, at a small price
   shoulderBurn: 3,       // hp/s on the Glare shoulder
   shoulderFrost: 2,      // hp/s on the Rime shoulder (and a small slow)
   shoulderSlow: 0.1,
@@ -154,6 +154,40 @@ export function stepStillwind(s: StillwindState, dt: number, px: number, pz: num
 // can lure it off the line while the others keep between and shoot (the Lenn's ethic, played by a party). A run
 // strikes every keeper on the line where it passes, once each; a swing strikes the keeper it is after. No hp
 // scaling by party size (GBOARD 09-24): three keepers fell it faster, and that is the reward for bringing friends.
+// ── ★ THE LEE STONES (Alex 09-29, second playtest: "add a bit of terrain and give the player lots of ways to move
+// around and avoid the boss"). Low rock shelves standing up out of the edge, both sides, down the whole band. A keeper
+// on one is in its lee: the edge only NIPS there (the shoulder's rate), never the full burn or frost. So a keeper can
+// hop out, flank, and come back, and a lure paid from a stone is cheaper but still paid (a stone is never free: a
+// keeper standing somewhere costless while it chases them would make luring it off its line cost nothing). One tier
+// high, so a walker steps up. Terrain is Jin's (the ruling: *the Slack's terrain*); these are only rock.
+export const LEE_HALF = 1.5    // a stone is 3x3 tiles
+export const LEE_STONES: readonly { x: number; z: number }[] = (() => {
+  const out: { x: number; z: number }[] = []
+  let side = 1
+  for (let z = 14; z <= STILLWIND_TUNING.length - 10; z += 13) {
+    out.push({ x: side * 11, z })                 // an inner stone, just past the shoulder
+    out.push({ x: -side * 17, z: z + 6 })         // an outer one on the far side, offset along the band
+    side = -side
+  }
+  return out
+})()
+export const onLeeStone = (x: number, z: number): boolean => LEE_STONES.some((s) => Math.abs(x - s.x) <= LEE_HALF && Math.abs(z - s.z) <= LEE_HALF)
+/** The edge where a keeper actually stands: on a lee stone it only nips, otherwise `edgeHazard`. */
+export function edgeHazardAt(x: number, z: number, tune: StillwindTuning = STILLWIND_TUNING): { dps: number; slow: number; side: 'line' | 'glare' | 'rime' } {
+  if (!onLeeStone(x, z)) return edgeHazard(x, tune)
+  return x > 0 ? { dps: tune.shoulderBurn, slow: 0, side: 'glare' } : { dps: tune.shoulderFrost, slow: tune.shoulderSlow, side: 'rime' }
+}
+
+// ── ★ IT HAS A BODY (Alex 09-29: "i just take advantage of the fact i can just run right through him"). A keeper
+// inside its radius is set back out to its edge, the way it came: no dashing through and turning round.
+export function stillwindBlock(s: StillwindState, x: number, z: number, tune: StillwindTuning = STILLWIND_TUNING): { x: number; z: number } | null {
+  if (s.felled) return null
+  const r = tune.radius + 0.4, dx = x - s.x, dz = z - s.z, d = Math.hypot(dx, dz)
+  if (d >= r) return null
+  const ux = d > 1e-3 ? dx / d : 0, uz = d > 1e-3 ? dz / d : -1
+  return { x: s.x + ux * r, z: s.z + uz * r }
+}
+
 export interface StillwindPartyOut extends Omit<StillwindStepOut, 'strike'> {
   /** damage to each keeper this step, in the order given */
   strikes: number[]
@@ -292,6 +326,17 @@ export const simToEdge = (x: number, z: number) => ({ x: x + STILLWIND_TUNING.ha
 /** where a keeper arrives (on the line, near end) and the way back out (the line, the very end) */
 export const EDGE_START = simToEdge(0, 6)
 export const EDGE_EXIT = simToEdge(0, 0)
+/** The strip's tiers: the lee stones stand one tier up (a walker steps onto them). */
+export function edgeHeights(): number[][] {
+  const h: number[][] = Array.from({ length: EDGE_ROWS }, () => Array(EDGE_COLS).fill(0))
+  for (const s of LEE_STONES) {
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const t = simToEdge(s.x + dx, s.z + dz)
+      if (h[t.z]?.[t.x] !== undefined) h[t.z][t.x] = 1
+    }
+  }
+  return h
+}
 export function edgeGrid(): number[][] {
   const grid: number[][] = []
   for (let r = 0; r < EDGE_ROWS; r++) {
