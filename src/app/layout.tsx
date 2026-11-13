@@ -38,25 +38,25 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   // default brand title + a template so per-page titles get the brand suffix
   title: {
-    default: "ather.games — the Athernyx arcade",
+    default: "Ather: an open world in the Athernyx universe",
     template: "%s · ather.games",
   },
-  description: "Playable corners of the Athernyx world — an arcade of original games.",
+  description: "An open-world sandbox in the Athernyx universe. Walk it, build on it, play it with friends, free in your browser.",
   applicationName: "ather.games",
   metadataBase: new URL("https://ather.games"),
   // icons auto-wired from app/icon.svg, app/apple-icon.png, app/favicon.ico
   openGraph: {
     type: "website",
     siteName: "ather.games",
-    title: "ather.games — the Athernyx arcade",
-    description: "Playable corners of the Athernyx world — an arcade of original games.",
+    title: "Ather: an open world in the Athernyx universe",
+    description: "An open-world sandbox in the Athernyx universe. Walk it, build on it, play it with friends, free in your browser.",
     url: "https://ather.games",
     images: [{ url: "/og.png", width: 1200, height: 630, alt: "ather.games" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "ather.games — the Athernyx arcade",
-    description: "Playable corners of the Athernyx world — an arcade of original games.",
+    title: "Ather: an open world in the Athernyx universe",
+    description: "An open-world sandbox in the Athernyx universe. Walk it, build on it, play it with friends, free in your browser.",
     images: ["/og.png"],
   },
   // Public games site — indexable.

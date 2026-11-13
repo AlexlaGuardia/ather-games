@@ -6,8 +6,8 @@ import Image from "next/image";
 // in); Eyuun's Bookstore keeps a fixed icon so readers are one tap away from any scroll position.
 // The Room (/room) is still reachable, it just isn't the front door any more.
 //
-// ⚠ GAME_TITLE is a placeholder: the game's name is Alex's call (with Magii). Change it here only.
-const GAME_TITLE = "Athernyx";
+// GAME_TITLE: "Ather", Alex 2026-11-13 (the name and the domain are the same word on purpose).
+const GAME_TITLE = "Ather";
 const PLAY_HREF = "/shimmer/open";
 const GOLD = "#d4a843";
 
@@ -94,11 +94,11 @@ export default function Home() {
 
       {/* ── hero ── */}
       <section className="relative flex min-h-[88svh] items-end overflow-hidden">
-        <Image src="/room/shimmer-beyond.webp" alt="" fill priority sizes="100vw" className="object-cover object-[50%_70%]" />
+        <Image src="/room/shimmer-beyond.webp" alt="" fill priority sizes="100vw" className="-scale-x-100 object-cover object-[45%_70%] sm:object-[25%_70%]" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#05060e] via-[#05060e]/45 to-[#05060e]/30" />
         <div className="relative mx-auto w-full max-w-6xl px-4 pb-16 sm:pb-24">
           <p className="font-[family-name:var(--font-game)] text-xs font-semibold tracking-[0.3em] uppercase" style={{ color: GOLD }}>
-            An open world in the Ather
+            An open-world sandbox
           </p>
           <h1 className="font-display mt-3 text-6xl leading-none font-semibold sm:text-8xl">{GAME_TITLE}</h1>
           <p className="mt-5 max-w-xl text-lg text-text/80 sm:text-xl">
