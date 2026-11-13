@@ -13,10 +13,10 @@ the Arcade frame.
 
 
 
-## 🌍 OPEN WORLD — **THE PIVOT: VOXEL WAS THE TEST RUN; THE GAME IS AN OPEN-WORLD ATHERNYX SANDBOX** (2026-11-13, hub `1f621d28`) · *Last touched 2026-11-13 — P0 step 1 committed (`f9d310ed`), nothing deployed.*
+## 🌍 OPEN WORLD — **THE PIVOT: VOXEL WAS THE TEST RUN; THE GAME IS AN OPEN-WORLD ATHERNYX SANDBOX** (2026-11-13, hub `1f621d28`) · *Last touched 2026-11-13 — P0 steps 1–3 committed (`f9d310ed` `4d85cbec` `6ae9c1ab`), **NOT pushed, NOT deployed**: the gh token is invalid (`gh auth login`), and `coord build` refuses unpushed work. Push, then build.*
 - **Plan of record:** `OPEN_WORLD_PLAN.md` (boxes, salvage map, stack, phases). Four boxes: FPS · movement (ours, kept) · adventure · home-plot building (snap pieces).
-- **Left off:** the walker now asks a `LocoWorld` (six questions) instead of a cell grid; voxel answers via `cellWorld`; locomotion oracle 202/0 unchanged, metrics 73 · hollows 167 · hands-pose 50 green.
-- **Next:** P0 step 2 `TerrainWorld` (heightfield + primitives, pure TS) under the same oracle → step 3 `/shimmer/open` slice (terrain, sky/fog/toon, FP camera) → Alex runs it.
+- **Left off:** the walker asks a `LocoWorld`; `open/terrain-world.ts` (heightfield + boxes, slope limit 46°) passes the whole voxel feel oracle 202/0 via `LOCO_WORLD=terrain` + land oracle 14/0; `/shimmer/open` slice = 160m hillside (spawn pad, pond W, 3m cliff E, 6m bluff N with a ledge, rocks, forest), mesh and collision from the same triangles (land 8/0), shipped Core sky, HUD shows the verb + speed. All new guards mutation-checked.
+- **Next:** push + `coord build` → LOOK at it (screenshot) → Alex runs `/shimmer/open` and calls the feel on land. Known feel questions: standing on a steep slope doesn't slide you off; downhill past 46° still snaps (walks down cliffs). Then the mood layer (toon ramp, grass with wind) and P1 the gun.
 - **Decisions:** no Rapier (fights the state machine, 1.2MB); pure-TS collision shared with `breach-server`; WebGL2 not WebGPU until benchmarked on the UHD 630; no structural integrity in building. The voxel Ather stays live and untouched until the new world replaces it.
 
 ## 🌬️ Shimmer — **THE SLACK, BALANCE PASS: ROOM TO STAND, A SWING YOU SEE COMING, PHASES** (2026-09-29, hub `99e9653a`, Alex's playtest) · *Last touched 2026-09-29 — ✅ **PROD from `6237303e`** (pass `a8391ec8`), pushed, breach-server restarted. **slack-flow 13/0 on prod** · breach-server.test 44/0 · stillwind 37/0 · LOOKED at the arena on prod.*
