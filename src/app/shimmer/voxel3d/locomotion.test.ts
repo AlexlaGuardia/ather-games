@@ -5,7 +5,7 @@
 // a synthetic grid where the answer is knowable.
 
 import {
-  createLoco, tickLocomotion, bodyFree, floorProbe,
+  createLoco, tickLocomotion as rawTick, bodyFree, floorProbe,
   RUN_SPEED, WALK_SPEED, SPRINT_RAMP, SLIDE_MIN_SPEED, SLIDE_BOOST, SPEED_CAP,
   WALL_CATCH_TIME, WALL_CATCH_MIN, WALL_CATCH_SPEED, WALL_CATCH_SLIDE, WALLJUMP_UP, WALLJUMP_STEER,
   HANG_MIN, MANTLE_VAULT_WINDOW,
@@ -20,6 +20,14 @@ import { codeOnly, blockAt } from '../testing/guard'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { HELD } from '@/lib/input/actions'
+import { terrainWorld, gridShape } from '../open/terrain-world'
+
+// ── PARITY MODE (2026-11-13, the open-world pivot): `LOCO_WORLD=terrain` routes every tick through
+// the open world's queries (`terrainWorld` over the same cells as boxes), so these asserts judge
+// the terrain backend by the feel Alex tuned. Default = the voxel walker, unchanged.
+const PARITY = process.env.LOCO_WORLD === 'terrain'
+const tickLocomotion: typeof rawTick = (s, i, w) =>
+  rawTick(s, i, PARITY && typeof w === 'function' ? terrainWorld(gridShape(w)) : w)
 
 let pass = 0
 const fails: string[] = []

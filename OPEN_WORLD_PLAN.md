@@ -49,7 +49,7 @@
 - **P0 Feel slice** — one small hillside: slopes, a cliff, a ledge, a pond. The walker on `TerrainWorld`
   passing the same feel oracle, plus sky/fog/toon. *Exit: Alex runs, slides, climbs and says "that's mine."*
   - [x] step 1: walker asks a `LocoWorld` (`f9d310ed`, oracle 202/0 unchanged)
-  - [ ] step 2: `TerrainWorld` + the oracle run against it
+  - [x] step 2: `TerrainWorld` (`open/terrain-world.ts`) — voxel oracle 202/0 through it (`LOCO_WORLD=terrain`), land oracle 14/0, both mutation-checked
   - [ ] step 3: `/shimmer/open` dev route — terrain mesh, mood layer, first-person camera, the walker
 - **P1 The gun** — one weapon with weight on the slice, targets, hit feedback.
 - **P2 Home plot** — 8 pieces (foundation, floor, wall, door wall, window wall, roof flat+slope, stairs,
