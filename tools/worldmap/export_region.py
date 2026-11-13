@@ -79,13 +79,13 @@ if cen:
     d, idx = tree.query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=9 / 2 + SHOULDER)
     d = d.reshape(h.shape); idx = idx.reshape(h.shape)
     ok = np.isfinite(d)
-    half = np.where(ok, Wc[np.minimum(idx, len(Wc) - 1)] / 2 + 1, 0)
+    half = np.where(ok, Wc[np.minimum(idx, len(Wc) - 1)] / 2 + 2.5, 0)   # flat a little past the paint: a riverbank shoulder sagged into the drive line at +1
     bed = ok & (d <= half + CELL)                                     # the road surface (+ one cell so it is never 1 px)
     # the field: land smoothed hard, causeway over water
     road = np.maximum(nd.gaussian_filter(h, 25 / CELL), 0.8)
     # GRADE LIMIT, exactly: the highest and the lowest surfaces that obey the limit along the bed (min-plus / max-minus
     # propagation to a fixed point), averaged. Each envelope changes by at most g per metre between bed neighbours, so
-    # their average does too. (The first version clamped locally, one cell per pass, and stopped long before
+    # any blend of them does too. (The first version clamped locally, one cell per pass, and stopped long before
     # Ashfeld's 70 m drop had propagated: 59% on a road meant to cap at 12%.)
     G = 0.12
     nbrs = [(0, 1, CELL), (0, -1, CELL), (1, 0, CELL), (-1, 0, CELL),
@@ -98,7 +98,9 @@ if cen:
             U = np.minimum(U, np.where(bed, np.roll(np.roll(U0, dz, 0), dx, 1) + G * dist, BIG))
             L = np.maximum(L, np.where(bed, np.roll(np.roll(L0, dz, 0), dx, 1) - G * dist, -BIG))
         if max(np.abs(U - U0)[bed].max(), np.abs(L - L0)[bed].max()) < 1e-3: break
-    road = np.where(bed, (U + L) / 2, road)
+    # ANY blend of the two envelopes obeys the limit; lean on U (cut into the hill) over L (raise a dam). The 50/50
+    # version built a 44 m embankment across a valley and the autopilot drove off its edge.
+    road = np.where(bed, 0.8 * U + 0.2 * L, road)
     print(f'grade envelope converged in {it} iterations')
     t = np.clip((d - half) / SHOULDER, 0, 1)
     blend = np.where(ok, 1 - t * t * (3 - 2 * t), 0)
