@@ -36,6 +36,9 @@ export interface CourserTune {
   hbYawBoost: number   // handbrake multiplies the target yaw rate (the tail steps out)
   hbDecel: number      // m/s², the handbrake also scrubs speed
   latMax: number       // m/s², the most sideways pull the tyres give: caps the turn rate at speed
+  suspVy: number       // m/s, the most UPWARD speed riding the ground can give the body (the suspension soaks the rest)
+  steep: number        // rise/run past which a face costs speed instead of being climbed
+  steepScrub: number   // 1/s per unit of slope past `steep`
   gravity: number
 }
 
@@ -44,6 +47,7 @@ export const DARTER: CourserTune = {
   roll: 1.2, air: 0.0009,
   wheelbase: 2.5, maxSteer: 0.6, steerFall: 12, steerRate: 7,
   grip: 9, gripHb: 0.9, yawFollow: 10, yawFollowHb: 4.5, hbYawBoost: 2.2, hbDecel: 3.5, latMax: 14,
+  suspVy: 5, steep: 0.6, steepScrub: 18,
   gravity: 22,          // heavier than 9.8 on purpose: arcade jumps that come down with authority
 }
 
@@ -132,9 +136,22 @@ export function tickCourser(c: Courser, inp: CourserInput, ground: Ground, t: Co
     c.vx = fx * vF + rx * vL
     c.vz = fz * vF + rz * vL
     const hOld = ground(c.x, c.z)
+    // a STEEP face costs speed instead of being climbed (Alex 11-13: off the course into a bump "sends you flying";
+    // a 45° face at 30 m/s was a 24 m ramp). Look one step ahead along the travel.
+    const step = Math.hypot(c.vx, c.vz) * dt
+    if (step > 1e-4) {
+      const hAhead = ground(c.x + c.vx * dt, c.z + c.vz * dt)
+      const slope = (hAhead - hOld) / step
+      if (Number.isFinite(slope) && slope > t.steep) {
+        const keep = Math.exp(-dt * t.steepScrub * (slope - t.steep))
+        c.vx *= keep; c.vz *= keep
+      }
+    }
     c.x += c.vx * dt; c.z += c.vz * dt
     const hNew = ground(c.x, c.z)
-    const rideVy = (hNew - hOld) / dt
+    // the SUSPENSION: riding the ground can only lift the body so fast; above that the springs take it, so a bump
+    // at speed is a jolt, not a launch (it gave the body the ground's full rate: 48 m in the air off a 1.2 m bump)
+    const rideVy = Math.min((hNew - hOld) / dt, t.suspVy)
     // the lip: the ground drops away faster than gravity can pull the car down onto it → fly
     if (Number.isFinite(hNew) && rideVy < c.vy - t.gravity * dt - 0.5) {
       c.airborne = true; c.airT = 0

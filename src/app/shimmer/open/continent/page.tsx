@@ -223,8 +223,8 @@ function Towns({ R }: { R: Region }) {
   }, [houses])
   return (
     <>
-      <instancedMesh ref={walls} args={[undefined, undefined, Math.max(1, houses.length)]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
-      <instancedMesh ref={roofs} args={[undefined, undefined, Math.max(1, houses.length)]}><coneGeometry args={[0.75, 1, 4]} /><meshLambertMaterial flatShading /></instancedMesh>
+      <instancedMesh frustumCulled={false} ref={walls} args={[undefined, undefined, Math.max(1, houses.length)]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
+      <instancedMesh frustumCulled={false} ref={roofs} args={[undefined, undefined, Math.max(1, houses.length)]}><coneGeometry args={[0.75, 1, 4]} /><meshLambertMaterial flatShading /></instancedMesh>
       {R.meta.places.filter(p => p.name).map(p => (
         <mesh key={p.id} position={[p.x, R.heightAt(p.x, p.z) + 45, p.z]}>
           <cylinderGeometry args={[0.6, 1.4, 90, 8, 1, true]} />
@@ -267,8 +267,8 @@ function Trees({ R }: { R: Region }) {
   }, [pts])
   return (
     <>
-      <instancedMesh ref={trunk} args={[undefined, undefined, Math.max(1, pts.length)]}><cylinderGeometry args={[0.2, 0.3, 1, 5]} /><meshLambertMaterial color="#5e4630" flatShading /></instancedMesh>
-      <instancedMesh ref={crown} args={[undefined, undefined, Math.max(1, pts.length)]}><coneGeometry args={[1.9, 1, 6]} /><meshLambertMaterial flatShading /></instancedMesh>
+      <instancedMesh frustumCulled={false} ref={trunk} args={[undefined, undefined, Math.max(1, pts.length)]}><cylinderGeometry args={[0.2, 0.3, 1, 5]} /><meshLambertMaterial color="#5e4630" flatShading /></instancedMesh>
+      <instancedMesh frustumCulled={false} ref={crown} args={[undefined, undefined, Math.max(1, pts.length)]}><coneGeometry args={[1.9, 1, 6]} /><meshLambertMaterial flatShading /></instancedMesh>
     </>
   )
 }

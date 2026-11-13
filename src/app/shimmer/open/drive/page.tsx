@@ -115,7 +115,7 @@ function Cones({ bodies }: { bodies: React.MutableRefObject<ConeBody[]> }) {
     im.instanceMatrix.needsUpdate = true
   })
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, bodies.current.length]}>
+    <instancedMesh frustumCulled={false} ref={ref} args={[undefined, undefined, bodies.current.length]}>
       <coneGeometry args={[0.32, 0.8, 8]} />
       <meshLambertMaterial color="#ee7a2a" />
     </instancedMesh>

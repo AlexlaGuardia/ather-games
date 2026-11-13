@@ -140,6 +140,28 @@ const run = (c: ReturnType<typeof createCourser>, secs: number, o: Partial<Cours
   ok(p.x < 194, `parked on the slope it should roll back (x ${p.x.toFixed(1)})`)
 }
 
+// ── off-road bumps do not launch: a sharp 1.2 m rise hit at 40 m/s (Alex, 11-13: "drive off the course and then into
+// a bump it sends you flying"). The grounded car took the ground's full vertical rate as its own, so a steep face at
+// speed became a ramp. A real car's suspension soaks most of it and a steep face costs speed instead.
+{
+  const bump: Ground = (x) => (x > 0 && x < 3 ? 1.2 * Math.sin((x / 3) * Math.PI) : 0)      // 1.2 m tall, 3 m long
+  const c = createCourser(-30, 0, -Math.PI / 2, bump)                                       // faces +x
+  c.vx = 40
+  let apex = 0, airT = 0
+  for (let i = 0; i < 3 * 120; i++) {
+    tickCourser(c, inp({ throttle: 1 }), bump)
+    apex = Math.max(apex, c.y - 1.2)          // the HOP above the bump's own crest (being 1.2 m up at its top is the bump, not a launch)
+    if (c.airborne) airT += DT
+  }
+  ok(apex < 0.8, `a 1.2 m bump at 40 m/s: the car hopped ${apex.toFixed(2)} m above its crest (want < 0.8; it was 47 m)`)
+  ok(airT < 0.8, `a 1.2 m bump at 40 m/s kept the car airborne ${airT.toFixed(2)} s (want < 0.8)`)
+  // a steep face costs speed: driving into a 1:1 slope at 30 m/s does not carry you up it at full speed
+  const wall: Ground = (x) => Math.max(0, x)                                                // 45°
+  const w = createCourser(-20, 0, -Math.PI / 2, wall); w.vx = 30
+  for (let i = 0; i < 1.5 * 120; i++) tickCourser(w, inp({ throttle: 1 }), wall)
+  ok(w.y < 12, `a 45° face at 30 m/s: the car climbed ${w.y.toFixed(1)} m (a wall should stop it, not be a ramp)`)
+}
+
 console.log(`courser: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  ✗', f)
 process.exit(fails.length ? 1 : 0)

@@ -69,6 +69,10 @@ function Land() {
   )
 }
 
+// ⚠ Every InstancedMesh here sets frustumCulled={false}. three.js culls an instanced mesh by its BASE geometry's
+// bounds, a unit box at the world origin, not by where the instances stand, so the whole batch of rocks or trees
+// vanished whenever the origin left the view (Alex 11-13: "all the trees and stuff disappear if not looking north
+// or south"). Same fix in open/drive and open/continent.
 function Props() {
   const rocks = PROPS.filter(p => p.kind !== 'trunk'), trunks = PROPS.filter(p => p.kind === 'trunk')
   const rockRef = useRef<THREE.InstancedMesh>(null), trunkRef = useRef<THREE.InstancedMesh>(null), crownRef = useRef<THREE.InstancedMesh>(null)
@@ -96,15 +100,15 @@ function Props() {
   }, [rocks, trunks])
   return (
     <>
-      <instancedMesh ref={rockRef} args={[undefined, undefined, rocks.length]}>
+      <instancedMesh frustumCulled={false} ref={rockRef} args={[undefined, undefined, rocks.length]}>
         <boxGeometry />
         <meshLambertMaterial flatShading />
       </instancedMesh>
-      <instancedMesh ref={trunkRef} args={[undefined, undefined, trunks.length]}>
+      <instancedMesh frustumCulled={false} ref={trunkRef} args={[undefined, undefined, trunks.length]}>
         <cylinderGeometry args={[0.22, 0.3, 1, 6]} />
         <meshLambertMaterial color="#6b4f36" flatShading />
       </instancedMesh>
-      <instancedMesh ref={crownRef} args={[undefined, undefined, trunks.length]}>
+      <instancedMesh frustumCulled={false} ref={crownRef} args={[undefined, undefined, trunks.length]}>
         <coneGeometry args={[1.9, 1, 7]} />
         <meshLambertMaterial flatShading />
       </instancedMesh>
