@@ -18,13 +18,15 @@
 export type Ground = (x: number, z: number) => number
 
 export interface CourserTune {
-  top: number          // m/s, flat-ground top speed under full throttle
-  engine: number       // m/s², launch acceleration (falls off toward top)
+  top: number          // m/s, flat-ground top speed under full throttle (where power meets air drag)
+  power: number        // m²/s³: a constant-POWER engine, accel = power / speed (a real car's curve: it pulls
+                       // hard low down and tapers toward top speed; the old linear falloff ran out of breath early)
+  traction: number     // m/s², the most the tyres put down off the line (caps power at low speed)
   brake: number        // m/s²
   reverseTop: number
   reverse: number
   roll: number         // m/s², rolling resistance when coasting
-  air: number          // quadratic drag coefficient
+  air: number          // quadratic drag coefficient (spec-derived: power / top³, so top speed is exact)
   wheelbase: number    // m
   maxSteer: number     // rad at standstill
   steerFall: number    // m/s at which max steer has halved (less twitch at speed)
@@ -53,15 +55,60 @@ export interface CourserTune {
   gravity: number
 }
 
-export const DARTER: CourserTune = {
-  top: 44, engine: 11, brake: 22, reverseTop: 9, reverse: 6,
-  roll: 1.2, air: 0.0009,
+/** The handling half of a tune; the speed half (top, power, traction, air, brake) comes from a SPEC sheet. */
+const HANDLING = {
+  reverseTop: 9, reverse: 6, roll: 1.2,
   wheelbase: 2.5, maxSteer: 0.6, steerFall: 12, steerRate: 7,
   grip: 9, gripHb: 0.9, yawFollow: 10, yawFollowHb: 4.5, hbYawBoost: 2.2, hbDecel: 3.5, latMax: 14,
   suspVy: 5, steep: 0.6, steepScrub: 18,
   driftMin: 14, driftAngle: 0.52, driftRange: 0.23, driftLat: 1.5, driftYawK: 6, driftDrag: 0.8, driftCoast: 3, gripReturn: 0.35,
   gravity: 22,          // heavier than 9.8 on purpose: arcade jumps that come down with authority
 }
+
+// ── SPEC SHEETS: a courser described the way a person describes a car. Upgrades change the sheet; the physics is
+// solved from it (Alex 11-13: "collect and customize these as well as performance… base 0-60 in 5-6 s like a stock
+// average car"). Units are the ones on a sticker: seconds, mph, feet. ──
+export interface CourserSpec {
+  zeroTo60: number      // s, 0-60 mph on flat ground, full throttle
+  topMph: number        // flat-ground top speed
+  brake60ft: number     // 60-0 mph stopping distance, feet
+  traction: number      // m/s², launch grip (a stock car ~7; slicks more)
+  grip: number          // × the base cornering grip (tyres)
+  handling: number      // × steering response (the Driver's Rune)
+}
+export const DARTER_STOCK: CourserSpec = { zeroTo60: 5.5, topMph: 112, brake60ft: 100, traction: 7, grip: 1, handling: 1 }
+
+const MPH = 0.44704, FT = 0.3048
+/** Time to 60 mph for a power figure (same sim, same step the game runs). */
+function timeTo60(power: number, top: number, traction: number): number {
+  const air = power / (top * top * top)
+  let v = 0, t = 0
+  while (v < 60 * MPH && t < 30) { v += (Math.min(traction, power / Math.max(v, 1)) - air * v * v) / 120; t += 1 / 120 }
+  return t
+}
+/** Solve a tune from a spec sheet: power by bisection to hit the 0-60, air drag so top speed lands exactly. */
+export function tuneFromSpec(spec: CourserSpec): CourserTune {
+  const top = spec.topMph * MPH
+  // ⚠ 0-60 is NOT monotonic in power: drag is set from power (so top speed lands exactly) while traction caps the
+  // launch, so past a point more power only adds drag and the car gets SLOWER off the line. A plain bisection over
+  // [10, 5000] walked off the wrong side and solved a car that topped out at 30 mph. Find the fastest achievable
+  // 0-60 first, then bisect on the low-power side of it (the honest branch: a quicker sticker needs more power).
+  let best = 10, bestT = Infinity
+  for (let p = 10; p <= 5000; p *= 1.05) { const tt = timeTo60(p, top, spec.traction); if (tt < bestT) { bestT = tt; best = p } }
+  let lo = 10, hi = best
+  if (spec.zeroTo60 <= bestT) lo = hi = best          // quicker than this traction + top can do: the best it CAN do
+  for (let k = 0; k < 60; k++) { const mid = (lo + hi) / 2; if (timeTo60(mid, top, spec.traction) > spec.zeroTo60) lo = mid; else hi = mid }
+  const power = (lo + hi) / 2
+  const v60 = 60 * MPH
+  return {
+    ...HANDLING,
+    top, power, traction: spec.traction, air: power / (top * top * top),
+    brake: (v60 * v60) / (2 * spec.brake60ft * FT),
+    latMax: HANDLING.latMax * spec.grip, grip: HANDLING.grip * spec.grip,
+    steerRate: HANDLING.steerRate * spec.handling, yawFollow: HANDLING.yawFollow * spec.handling,
+  }
+}
+export const DARTER: CourserTune = tuneFromSpec(DARTER_STOCK)
 
 export interface Courser {
   x: number; y: number; z: number
@@ -142,7 +189,7 @@ export function tickCourser(c: Courser, inp: CourserInput, ground: Ground, t: Co
     // speed: throttle holds it, lifting costs it, braking ends the drift (below)
     const hA = ground(c.x - Math.sin(path), c.z - Math.cos(path)), hB = ground(c.x + Math.sin(path), c.z + Math.cos(path))
     const slopeA = Number.isFinite(hA) && Number.isFinite(hB) ? -t.gravity * ((hA - hB) / 2) * 0.55 : 0
-    let a = throttle > 0 ? t.engine * throttle * Math.max(0, 1 - sp / t.top) * 0.85 : -t.driftCoast
+    let a = throttle > 0 ? throttle * Math.min(t.traction, t.power / Math.max(sp, 1)) * 0.85 : -t.driftCoast
     a += slopeA - t.driftDrag - t.air * sp * sp
     sp = Math.max(0, sp + a * dt)
     c.vx = -Math.sin(path) * sp; c.vz = -Math.cos(path) * sp
@@ -162,7 +209,7 @@ export function tickCourser(c: Courser, inp: CourserInput, ground: Ground, t: Co
   } else if (!c.airborne) {
     // ── engine, brake, reverse ──
     let aF = 0
-    if (throttle > 0) aF = vF < -0.5 ? t.brake * throttle : t.engine * throttle * Math.max(0, 1 - vF / t.top)
+    if (throttle > 0) aF = vF < -0.5 ? t.brake * throttle : throttle * Math.min(t.traction, t.power / Math.max(vF, 1))
     else if (throttle < 0) aF = vF > 0.5 ? t.brake * throttle : t.reverse * throttle * Math.max(0, 1 + vF / t.reverseTop)
     // ── slope: gravity along the nose ──
     const hA = ground(c.x + fx, c.z + fz), hB = ground(c.x - fx, c.z - fz)

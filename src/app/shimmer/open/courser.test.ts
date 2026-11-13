@@ -1,6 +1,6 @@
 // The Darter's handling, proved in numbers before anyone looks at it. Run: npx tsx src/app/shimmer/open/courser.test.ts
 
-import { createCourser, tickCourser, bodySpeeds, slipAngle, DARTER, type CourserInput, type Ground } from './courser'
+import { createCourser, tickCourser, bodySpeeds, slipAngle, DARTER, DARTER_STOCK, tuneFromSpec, type CourserInput, type Ground } from './courser'
 import { trackHeight, JUMP, WHOOPS } from './track'
 
 let pass = 0
@@ -20,35 +20,38 @@ const run = (c: ReturnType<typeof createCourser>, secs: number, o: Partial<Cours
   ok(Math.hypot(c.x, c.z) < 1e-6 && c.yaw === 0, `idle creep: moved to ${c.x.toFixed(4)},${c.z.toFixed(4)} yaw ${c.yaw}`)
 }
 
-// ── launch: 0→100 km/h (27.8 m/s) in a brisk 3–6 s, top speed near the table's ──
-{
+// ── SPEED comes from the SPEC SHEET: the stock Darter matches its sticker, and so does an upgraded sheet ──
+// (Alex 11-13: "base 0-60 in like 5-6 seconds like a stock average car"; upgrades will change the sheet)
+const measure = (tune = DARTER) => {
   const c = createCourser(0, 0, 0, flat)
-  let t100 = -1
-  for (let i = 0; i < 20 * 120; i++) {
-    tickCourser(c, inp({ throttle: 1 }), flat)
-    if (t100 < 0 && bodySpeeds(c).fwd >= 27.8) t100 = i * DT
+  let t60 = -1, t = 0
+  for (let i = 0; i < 90 * 120; i++) {
+    tickCourser(c, inp({ throttle: 1 }), flat, tune); t += DT
+    if (t60 < 0 && bodySpeeds(c).fwd >= 26.8224) t60 = t
   }
-  ok(t100 > 3 && t100 < 6, `0-100 km/h took ${t100.toFixed(2)}s (want 3-6)`)
-  const v = bodySpeeds(c).fwd
-  ok(v > DARTER.top * 0.85 && v <= DARTER.top, `top speed ${v.toFixed(1)} vs table ${DARTER.top}`)
-  ok(c.z < -100 && Math.abs(c.x) < 1e-6, `straight line drifted: x=${c.x.toFixed(4)}`)
-}
-
-// ── brakes: from 100 km/h to a stop inside 25 m, and they never reverse the car ──
-{
-  const c = createCourser(0, 0, 0, flat)
-  c.vz = -27.8
-  const z0 = c.z
-  run(c, 4, { throttle: -1 })
-  // after stopping, holding S engages reverse, so measure the stopping point as the furthest point reached
+  // 60-0 mph stopping distance
+  const b = createCourser(0, 0, 0, flat); b.vz = -26.8224
   let far = 0
-  const c2 = createCourser(0, 0, 0, flat); c2.vz = -27.8
-  for (let i = 0; i < 4 * 120; i++) { tickCourser(c2, inp({ throttle: -1 }), flat); far = Math.max(far, -(c2.z - z0)) }
-  ok(far < 25 && far > 12, `100→0 braking distance ${far.toFixed(1)}m (want 12-25)`)
-  ok(bodySpeeds(c).fwd < 0, `holding brake after the stop should become reverse (fwd ${bodySpeeds(c).fwd.toFixed(2)})`)
+  for (let i = 0; i < 6 * 120; i++) { tickCourser(b, inp({ throttle: -1 }), flat, tune); far = Math.max(far, -b.z) }
+  return { t60, topMph: bodySpeeds(c).fwd / 0.44704, stopFt: far / 0.3048, straight: Math.abs(c.x) }
+}
+{
+  const m = measure()
+  ok(Math.abs(m.t60 - DARTER_STOCK.zeroTo60) < 0.15, `stock Darter 0-60 mph in ${m.t60.toFixed(2)} s (sticker ${DARTER_STOCK.zeroTo60})`)
+  ok(Math.abs(m.topMph - DARTER_STOCK.topMph) < DARTER_STOCK.topMph * 0.02, `stock top speed ${m.topMph.toFixed(1)} mph (sticker ${DARTER_STOCK.topMph})`)
+  ok(Math.abs(m.stopFt - DARTER_STOCK.brake60ft) < DARTER_STOCK.brake60ft * 0.1, `60-0 in ${m.stopFt.toFixed(0)} ft (sticker ${DARTER_STOCK.brake60ft})`)
+  ok(m.straight < 1e-6, `a straight launch drifted sideways ${m.straight}`)
+  const up = { ...DARTER_STOCK, zeroTo60: 4.2, topMph: 128, brake60ft: 88 }
+  const u = measure(tuneFromSpec(up))
+  ok(Math.abs(u.t60 - 4.2) < 0.15 && Math.abs(u.topMph - 128) < 2.6 && Math.abs(u.stopFt - 88) < 9,
+    `an upgraded sheet (4.2 s / 128 mph / 88 ft) measured ${u.t60.toFixed(2)} s / ${u.topMph.toFixed(1)} mph / ${u.stopFt.toFixed(0)} ft`)
   const c3 = createCourser(0, 0, 0, flat); c3.vz = -10
   run(c3, 10, {})
   ok(Math.abs(bodySpeeds(c3).fwd) < 1e-9, `coasting must stop dead, not creep (fwd ${bodySpeeds(c3).fwd})`)
+  // holding the brake after a stop becomes reverse
+  const r = createCourser(0, 0, 0, flat); r.vz = -27
+  run(r, 5, { throttle: -1 })
+  ok(bodySpeeds(r).fwd < 0, `holding brake after the stop should become reverse (fwd ${bodySpeeds(r).fwd.toFixed(2)})`)
 }
 
 // ── steering: a held turn at 15 m/s goes round a circle with tyres biting (little slip) ──
@@ -108,7 +111,8 @@ const run = (c: ReturnType<typeof createCourser>, secs: number, o: Partial<Cours
   let off = 0, down = 0
   for (let i = 0; i < 6 * 120; i++) {
     const was = s.airborne
-    tickCourser(s, inp({ throttle: 0.15 }), trackHeight)
+    // 0.25: a stock car at 15% throttle cannot climb the 16% ramp at a crawl (it rolled back before the lip)
+    tickCourser(s, inp({ throttle: 0.25 }), trackHeight)
     if (!was && s.airborne && !off) off = s.x
     if (was && !s.airborne && !down) down = s.x
   }
