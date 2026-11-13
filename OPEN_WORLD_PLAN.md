@@ -58,7 +58,14 @@
 - **P3 One adventure** — one landmark worth walking to, one thing to find, one danger.
 - **P4 The open world** — chunk streaming, regions with their own fog/weather/music, tool-gated return
   trips, co-op on `breach-server`.
+- **P5 Getting around** (Alex 11-13: *"make the map drivable… manalic vehicles modeled after real life
+  cars, covering all the favs but in a mana/tech style"*). Order: a ridden beast first (canon's **Strider**:
+  extends the walker, the first thing that beats walking) → driven manalic cars (a separate handling/feel job,
+  charge as the fuel loop) → long-haul air (canon's **skyships**, sky-ports) as the map-opener. Needs P4's
+  km-scale world; a car on a 160m hill is a toy. Archetypes of car (coupe, pickup, off-roader, bike...),
+  never a real make's design. ⛔ Parked on CANON_GAPS `[OPEN]` *the open world's MAP*: which world the map
+  is (Ather vs Athernyx), whether a car roster is lawful in the keeper's era, and the names.
 
 ## Open — Alex's call
-- Region names and the map of the open world → via Magii when P3/P4 need them.
+- Region names and the map of the open world → via Magii when P3/P4 need them. **Which world the map is (Ather or Athernyx) is now asked** (CANON_GAPS, 11-13).
 - The story layer: Alex's, steered as the journey takes shape.
