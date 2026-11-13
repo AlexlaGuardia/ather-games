@@ -102,7 +102,7 @@ export default function Home() {
           </p>
           <h1 className="font-display mt-3 text-6xl leading-none font-semibold sm:text-8xl">{GAME_TITLE}</h1>
           <p className="mt-5 max-w-xl text-lg text-text/80 sm:text-xl">
-            Walk it. Build on it. Find out what is out there. Free in your browser, with friends or alone.
+            The world is just beginning. Come see it first.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
@@ -121,7 +121,7 @@ export default function Home() {
             </Link>
           </div>
           <p className="mt-6 text-sm text-text/50">
-            Early build: the world is small and growing. <span style={{ color: GOLD }}>{DEVLOG[0].title}.</span>
+            Latest: <span style={{ color: GOLD }}>{DEVLOG[0].title}.</span>
           </p>
         </div>
       </section>
