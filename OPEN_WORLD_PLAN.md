@@ -63,8 +63,10 @@
   extends the walker, the first thing that beats walking) → driven manalic cars (a separate handling/feel job,
   charge as the fuel loop) → long-haul air (canon's **skyships**, sky-ports) as the map-opener. Needs P4's
   km-scale world; a car on a 160m hill is a toy. Archetypes of car (coupe, pickup, off-roader, bike...),
-  never a real make's design. ⛔ Parked on CANON_GAPS `[OPEN]` *the open world's MAP*: which world the map
-  is (Ather vs Athernyx), whether a car roster is lawful in the keeper's era, and the names.
+  never a real make's design. ✅ **RULED 11-13 (Magii + Alex):** the drivable map is the **waking continent,
+  Athernyx** (year 1672); the **Ather** stays a gated, walk-only sanctuary (no vehicles past the gate, like the gun).
+  The family is **COURSERS**, kinds named by function: **Hauler** (pickup), **Darter** (coupe), **Scrambler**
+  (off-roader), **Skitter** (bike); roster open-ended, start small. Common folk own them in 1672.
 
 ## Open — Alex's call
 - Region names and the map of the open world → via Magii when P3/P4 need them. **Which world the map is (Ather or Athernyx) is now asked** (CANON_GAPS, 11-13).
