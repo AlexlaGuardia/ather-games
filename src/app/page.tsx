@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import OnlineCount from "./_components/OnlineCount";
 
 // The front door of ather.games (2026-11-13). The open-world game is the hero; the Arcade and
 // the Kindled Mug are places INSIDE it (their cards link to where they live today until they move
@@ -119,6 +120,7 @@ export default function Home() {
             >
               What&apos;s new
             </Link>
+            <OnlineCount color={GOLD} />
           </div>
           <p className="mt-6 text-sm text-text/50">
             Latest: <span style={{ color: GOLD }}>{DEVLOG[0].title}.</span>
