@@ -40,6 +40,15 @@ try {
   }, tp, cam)
   await new Promise(r => setTimeout(r, 1500))
   if (input) await page.evaluate((i: string) => (window as unknown as { __drive: { input: (v: unknown) => void } }).__drive.input(JSON.parse(i)), input)
+  // --tap 80: hold the handbrake that long, then release it with the rest of --input still held (a drift is a TAP)
+  const tapMs = Number(flag('--tap', '0'))
+  if (input && tapMs > 0) {
+    await new Promise(r => setTimeout(r, tapMs))
+    // ⚠ release only once the SIM has seen the press: on software GL a frame can take longer than the tap, and a press
+    // no frame saw is no tap at all (the second drift shot came back straight, at 5° slip)
+    await page.waitForFunction('window.__drive.state().hbPrev === true', { timeout: 10000, polling: 16 }).catch(() => console.error('⚠ the sim never saw the tap'))
+    await page.evaluate((i: string) => (window as unknown as { __drive: { input: (v: unknown) => void } }).__drive.input({ ...JSON.parse(i), handbrake: false }), input)
+  }
   await new Promise(r => setTimeout(r, Math.max(300, driveMs)))
   // --until 'st.airborne && st.airT > 0.3': hold the input until the car's state says so (frame timing on
   // software GL is too uneven to catch a jump by a fixed delay). Gives up after 20 s and shoots anyway.

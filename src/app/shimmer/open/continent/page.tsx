@@ -14,7 +14,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { VoxelDayNight } from '../../voxel3d/day-night'
 import { createCourser, tickCourser, bodySpeeds, slipAngle, type Courser, type CourserInput } from '../courser'
-import { DarterModel } from '../darter-view'
+import { DarterModel, DriftFx } from '../darter-view'
 import { loadRegion, nearestRoad, type Region, type RegionRoad } from '../region'
 
 const STEP = 1 / 120
@@ -353,9 +353,12 @@ function Driver({ R, onHud, focus }: { R: Region; onHud: (h: RideHud) => void; f
 
     acc.current = Math.min(acc.current + frameDt, 0.1)
     let c = car.current
+    // the surface, read off the map: paved Citadel stone grips best, the frontier's packed dirt less, grass least
+    const under = nearestRoad(R, c.x, c.z)
+    const surface = under.road && under.d < under.road.width / 2 + 1 ? SURFACE[under.road.kind] : SURFACE.off
     while (acc.current >= STEP) {
       acc.current -= STEP
-      tickCourser(c, { throttle, steer, handbrake, dt: STEP }, R.heightAt)
+      tickCourser(c, { throttle, steer, handbrake, dt: STEP, surface }, R.heightAt)
       const lx = R.meta.sizeX / 2 - 3, lz = R.meta.sizeZ / 2 - 3
       if (Math.abs(c.x) > lx) { c.x = Math.sign(c.x) * lx; c.vx *= -0.3 }
       if (Math.abs(c.z) > lz) { c.z = Math.sign(c.z) * lz; c.vz *= -0.3 }
@@ -417,13 +420,21 @@ function Driver({ R, onHud, focus }: { R: Region; onHud: (h: RideHud) => void; f
       let near: string | null = null, nd = 260
       for (const p of R.meta.places) { const d = Math.hypot(p.x - c.x, p.z - c.z); if (p.name && d < nd) { nd = d; near = p.name } }
       const nr = nearestRoad(R, c.x, c.z)
-      onHud({ kmh: Math.hypot(fwd, lat) * 3.6, drift: slipAngle(c) > 0.26 && !c.airborne, air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
+      onHud({ kmh: Math.hypot(fwd, lat) * 3.6, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
         place: near, road: nr.d < (nr.road?.width ?? 7) / 2 + 1 ? nr.road!.kind : null })
     }
   })
 
-  return <DarterModel car={model} steer={steerVis} />
+  return (
+    <>
+      <DarterModel car={model} steer={steerVis} />
+      <DriftFx car={car} ground={R.heightAt} slip={() => slipAngle(car.current)} />
+    </>
+  )
 }
+
+// grip by surface (1 = paved). Build numbers, Alex tunes them; the tiers themselves are canon (transportation.md).
+const SURFACE: Record<RegionRoad['kind'] | 'off', number> = { paved: 1, road: 0.93, pass: 0.88, trail: 0.84, off: 0.75 }
 
 const ROAD_LABEL: Record<string, string> = { paved: 'Paved road', road: 'Road', trail: 'Trail', pass: 'Mountain pass' }
 

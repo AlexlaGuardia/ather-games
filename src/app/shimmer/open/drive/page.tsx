@@ -13,7 +13,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { VoxelDayNight } from '../../voxel3d/day-night'
 import { createCourser, tickCourser, bodySpeeds, slipAngle, type Courser, type CourserInput } from '../courser'
-import { DarterModel } from '../darter-view'
+import { DarterModel, DriftFx } from '../darter-view'
 import { TRACK_SIZE, HALF, ROAD_W, SPAWN, JUMP, WHOOPS, baseHeight, jumpHeight, whoopsHeight, trackHeight, ovalOffset, cones } from '../track'
 
 const STEP = 1 / 120
@@ -181,9 +181,14 @@ function Driver({ onHud }: { onHud: (h: DriveHud) => void }) {
     // fixed-step sim: the same 1/120 the tests run
     acc.current = Math.min(acc.current + frameDt, 0.1)
     const c = car.current
+    // the surface: tarmac (the oval + kerbs, the skidpad, the slalom lane, the jump, the whoops) grips; grass is looser
+    const off = Math.abs(ovalOffset(c.x, c.z))
+    const tarmac = off < ROAD_W / 2 + 1.2 || Math.hypot(c.x + 95, c.z - 20) < 24 || (Math.abs(c.z + 6) < 6 && Math.abs(c.x) < 72)
+      || jumpHeight(c.x, c.z) > 0 || whoopsHeight(c.x, c.z) > 0
+    const surface = tarmac ? 1 : 0.78
     while (acc.current >= STEP) {
       acc.current -= STEP
-      tickCourser(c, { throttle, steer, handbrake, dt: STEP }, trackHeight)
+      tickCourser(c, { throttle, steer, handbrake, dt: STEP, surface }, trackHeight)
       // the fence: bounce off the slab's edge instead of driving into the void
       const lim = HALF - 2.5
       if (Math.abs(c.x) > lim) { c.x = Math.sign(c.x) * lim; c.vx *= -0.35 }
@@ -252,13 +257,14 @@ function Driver({ onHud }: { onHud: (h: DriveHud) => void }) {
     hudT.current -= frameDt
     if (hudT.current <= 0) {
       hudT.current = 0.08
-      onHud({ kmh: Math.hypot(fwd, lat) * 3.6, drift: slipAngle(c) > 0.26 && !c.airborne, air: c.airborne ? c.airT : 0, gearR: fwd < -0.5 })
+      onHud({ kmh: Math.hypot(fwd, lat) * 3.6, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5 })
     }
   })
 
   return (
     <>
       <DarterModel car={model} steer={steerVis} />
+      <DriftFx car={car} ground={trackHeight} slip={() => slipAngle(car.current)} />
       <Cones bodies={coneBodies} />
     </>
   )
