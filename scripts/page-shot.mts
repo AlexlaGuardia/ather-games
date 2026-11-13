@@ -53,6 +53,6 @@ if (!res || res.status() !== 200) {
   await browser.close(); process.exit(1)
 }
 await new Promise(r => setTimeout(r, wait))
-await page.screenshot({ path: out })
+await page.screenshot({ path: out, fullPage: args.includes('--full') })
 console.log(`shot ${path} → ${out}`)
 await browser.close()
