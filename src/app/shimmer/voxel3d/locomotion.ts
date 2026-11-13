@@ -469,6 +469,49 @@ function lipAt(solid: Solid, bx: number, bz: number, feetY: number): number | nu
 }
 
 /**
+ * ── ★ THE WORLD THE WALKER ASKS (2026-11-13, the open-world pivot) ─────────────────────────────
+ * Every question the tick puts to the world, and nothing else. The state machine above never reads
+ * a cell again: it asks these six, so the same verbs (and the same 202 feel asserts) can stand on
+ * the voxel grid today and on terrain + primitives tomorrow. `cellWorld` is the voxel answer and
+ * must stay byte-for-byte the old behaviour — the oracle is the proof.
+ * Directions are CARDINAL here (−1/0/1 per axis) because the state still stores walls that way;
+ * a terrain world answers for the nearest face along that direction.
+ */
+export interface LocoWorld {
+  /** The body's box (BODY_R, BODY_H) at these feet is clear. */
+  bodyFree(x: number, z: number, feetY: number): boolean
+  /** Highest supporting surface at/below feet + capture, or null. */
+  floorAt(x: number, z: number, feetY: number, capture: number): number | null
+  waterAt(x: number, y: number, z: number): boolean
+  /** A face at least waist-to-head tall right beside the body along (dx, dz): climb country. */
+  tallFace(px: number, pz: number, feetY: number, dx: number, dz: number): boolean
+  /** A one-step rise ahead to vault onto; the landing, or null. */
+  vaultTarget(px: number, pz: number, feetY: number, dx: number, dz: number): { x: number; y: number; z: number } | null
+  /** A standable lip within grab reach on the wall along (dx, dz): where the hands go, or null. */
+  lipAt(px: number, pz: number, feetY: number, dx: number, dz: number): { x: number; y: number; z: number } | null
+}
+
+/** The voxel grid as a LocoWorld — the walker's original queries, unchanged. */
+export function cellWorld(probe: CellProbe): LocoWorld {
+  const solid: Solid = (x, y, z) => { const v = probe(x, y, z); return v === true || v === CELL_SOLID || v === CELL_HALF }
+  return {
+    bodyFree: (x, z, feetY) => bodyFree(probe, x, z, feetY),
+    floorAt: (x, z, feetY, capture) => floorProbe(probe, x, z, feetY, capture),
+    waterAt: (x, y, z) => probe(Math.floor(x), Math.floor(y), Math.floor(z)) === CELL_WATER,
+    tallFace: (px, pz, feetY, dx, dz) => {
+      const bx = Math.floor(px) + dx, bz = Math.floor(pz) + dz
+      return solid(bx, Math.floor(feetY + 0.5), bz) && solid(bx, Math.floor(feetY + 1.3), bz)
+    },
+    vaultTarget: (px, pz, feetY, dx, dz) => vaultTarget(solid, px, pz, feetY, dx, dz),
+    lipAt: (px, pz, feetY, dx, dz) => {
+      const bx = Math.floor(px) + dx, bz = Math.floor(pz) + dz
+      const y = lipAt(solid, bx, bz, feetY)
+      return y === null ? null : { x: bx + 0.5, y, z: bz + 0.5 }
+    },
+  }
+}
+
+/**
  * ── ★ SYSTEM 4: A CAST MOVES THE KEEPER — THE LAUNCH (2026-08-15) ───────────────────────────────
  * Overcharge and Updraft. Canon calls both a LAUNCH ("the body as the projectile", "high ground on
  * demand"), so this hands the walker velocity and lets the existing ballistics finish the sentence.
@@ -563,7 +606,8 @@ export function blinkKeeper(
   return 0
 }
 
-export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe): void {
+export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe | LocoWorld): void {
+  const w = typeof world === 'function' ? cellWorld(world) : world
   const dt = Math.min(input.dt, 0.05)          // a stutter frame must not launch a huge step
   const { mvX, mvZ, crouchKey, jumpKey } = input
   const hasInput = (mvX !== 0 || mvZ !== 0)
@@ -571,17 +615,14 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
 
   // Normalise at the boundary: booleans stay valid (every feel test, unchanged), codes add water.
   // CELL_HALF collides as full until the half-slab pass teaches ground height fractions.
-  const solid: Solid = (x, y, z) => { const v = probe(x, y, z); return v === true || v === CELL_SOLID || v === CELL_HALF }
-  const waterAt = (x: number, y: number, z: number) => probe(x, y, z) === CELL_WATER
 
   // ── swimming ────────────────────────────────────────────────────────────────────────────────
   // Submerged = chest AND feet in water: the swim physics own the whole tick, and every ground/
   // wall/ledge verb stands down (you cannot slide, vault or bhop through a pond). Feet-only =
   // TREADING: normal physics with two amendments below — the water caps a fall, and it counts as
   // perpetual coyote ground, which is what makes "swim to the bank and hop out" a plain jump.
-  const fx = Math.floor(s.px), fz = Math.floor(s.pz)
-  const chestIn = waterAt(fx, Math.floor(s.py + 1.0), fz)
-  const feetIn = waterAt(fx, Math.floor(s.py + 0.2), fz)
+  const chestIn = w.waterAt(s.px, s.py + 1.0, s.pz)
+  const feetIn = w.waterAt(s.px, s.py + 0.2, s.pz)
   s.swimming = chestIn && feetIn
   if (s.swimming) {
     s.sliding = false; s.crouching = false; s.climbing = false; s.onWall = false
@@ -593,11 +634,11 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     const vTarget = jumpKey ? SWIM_UP : crouchKey ? -SWIM_SINK : -SWIM_IDLE_SINK
     s.vy += (vTarget - s.vy) * Math.min(1, dt * SWIM_DRAG)
     const nx = s.px + s.hvx * dt
-    if (bodyFree(probe, nx, s.pz, s.py)) s.px = nx; else s.hvx = 0
+    if (w.bodyFree(nx, s.pz, s.py)) s.px = nx; else s.hvx = 0
     const nz = s.pz + s.hvz * dt
-    if (bodyFree(probe, s.px, nz, s.py)) s.pz = nz; else s.hvz = 0
+    if (w.bodyFree(s.px, nz, s.py)) s.pz = nz; else s.hvz = 0
     const ny = s.py + s.vy * dt
-    if (bodyFree(probe, s.px, s.pz, ny)) s.py = ny; else s.vy = 0
+    if (w.bodyFree(s.px, s.pz, ny)) s.py = ny; else s.vy = 0
     s.jumpHeld = jumpKey; s.landGrace = 0; s.coyoteT = 0
     s.kickArmed = true
     s.eye += (EYE_STAND - s.eye) * 0.25
@@ -671,10 +712,8 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   if (s.wallLock > 0) s.wallLock -= dt
   s.onWall = false
   if (hasInput && s.wallLock <= 0) {
-    const bx = Math.floor(s.px), bz = Math.floor(s.pz)
     const sx = Math.sign(mvX), sz = Math.sign(mvZ)
-    const face = (dx: number, dz: number) =>
-      solid(bx + dx, Math.floor(s.py + 0.5), bz + dz) && solid(bx + dx, Math.floor(s.py + 1.3), bz + dz)
+    const face = (dx: number, dz: number) => w.tallFace(s.px, s.pz, s.py, dx, dz)
     const xWall = sx !== 0 && face(sx, 0)
     const zWall = sz !== 0 && face(0, sz)
     let cx = 0, cz = 0
@@ -765,9 +804,9 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   // so the vault ruling cannot be re-armed from here.
   const stepped = (tx: number, tz: number): boolean => {
     if (s.airborne) return false
-    const ft = floorProbe(probe, tx, tz, s.py, STEP_CAPTURE)
+    const ft = w.floorAt(tx, tz, s.py, STEP_CAPTURE)
     if (ft === null || ft <= s.py || ft - s.py > 0.5 + 1e-6) return false
-    if (!bodyFree(probe, tx, tz, ft)) return false
+    if (!w.bodyFree(tx, tz, ft)) return false
     // The feet snap (see STEP_SMOOTH_HALF_LIFE) and the eye owes the difference.
     stepDebt(s, ft - s.py)
     s.py = ft
@@ -778,9 +817,9 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   let blockedX = 0, blockedZ = 0
   if ((s.hvx !== 0 || s.hvz !== 0) && s.mantleT <= 0 && !s.hanging) {
     const nx = s.px + s.hvx * dt
-    if (bodyFree(probe, nx, s.pz, s.py) || stepped(nx, s.pz)) s.px = nx; else { blockedX = Math.sign(s.hvx); s.hvx = 0 }
+    if (w.bodyFree(nx, s.pz, s.py) || stepped(nx, s.pz)) s.px = nx; else { blockedX = Math.sign(s.hvx); s.hvx = 0 }
     const nz = s.pz + s.hvz * dt
-    if (bodyFree(probe, s.px, nz, s.py) || stepped(s.px, nz)) s.pz = nz; else { blockedZ = Math.sign(s.hvz); s.hvz = 0 }
+    if (w.bodyFree(s.px, nz, s.py) || stepped(s.px, nz)) s.pz = nz; else { blockedZ = Math.sign(s.hvz); s.hvz = 0 }
   }
 
   // ── ★★★ WALL-CATCH ENTRY — THE COLLISION IS THE TRIGGER, NOT YOUR INPUT DIRECTION ───────────
@@ -796,8 +835,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     // ⚠ A REAL WALL ONLY. The same 2-high test the climb uses: a 1-block rise belongs to the vault
     // ("going up a block is always a deliberate press", 07-08-07) and a half-slab is a STEP. If the
     // catch took those it would eat both verbs at exactly the speed they are most used.
-    const bx = Math.floor(s.px), bz = Math.floor(s.pz)
-    const tall = solid(bx + cx, Math.floor(s.py + 0.5), bz + cz) && solid(bx + cx, Math.floor(s.py + 1.3), bz + cz)
+    const tall = w.tallFace(s.px, s.pz, s.py, cx, cz)
     if (tall) {
       s.wallCatchT = WALL_CATCH_TIME
       s.catchSpeed = preSpeed
@@ -809,7 +847,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   // ── vertical ────────────────────────────────────────────────────────────────────────────────
   const jumpEdge = jumpKey && !s.jumpHeld
   // Grounded widens the capture so half-surfaces are steps; airborne keeps it tiny (no lip-pop).
-  const floorTop = floorProbe(probe, s.px, s.pz, s.py, s.airborne ? FLOOR_CAPTURE : STEP_CAPTURE)
+  const floorTop = w.floorAt(s.px, s.pz, s.py, s.airborne ? FLOOR_CAPTURE : STEP_CAPTURE)
 
   // Mantle target: over the wall's own cardinal when we have one, else the dominant input axis.
   const useWallCard = (s.onWall || s.wallStick > 0) && (s.wallCX !== 0 || s.wallCZ !== 0)
@@ -829,8 +867,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     const hasCard = (s.onWall || s.wallStick > 0) && (s.wallCX !== 0 || s.wallCZ !== 0)
     const faced = hasCard && (input.fwdX * s.wallCX + input.fwdZ * s.wallCZ) > WALL_FACING
     if (faced) {
-      const bx = Math.floor(s.px) + s.wallCX, bz = Math.floor(s.pz) + s.wallCZ
-      const lip = lipAt(solid, bx, bz, s.py)
+      const lip = w.lipAt(s.px, s.pz, s.py, s.wallCX, s.wallCZ)
       if (lip !== null) {
         s.hanging = true; s.hangT = 0
         // What the keeper brought to the ledge. `airSpeed` is the airborne momentum the walker
@@ -838,7 +875,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
         // here would bank a 0 for every grab that follows a contact, which is most of them.
         s.grabSpeed = Math.max(s.airSpeed, Math.hypot(s.hvx, s.hvz))
         s.vaultArmed = false
-        s.hangLipX = bx + 0.5; s.hangLipY = lip; s.hangLipZ = bz + 0.5
+        s.hangLipX = lip.x; s.hangLipY = lip.y; s.hangLipZ = lip.z
         s.hangCX = s.wallCX; s.hangCZ = s.wallCZ
         s.climbRise = 0
       }
@@ -922,7 +959,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
         // per block. Tap still climbs exactly one; releasing the key ends the chain wherever it
         // is. Terminates by construction — every link needs its own 1-block step to exist.
         if (jumpKey && hasInput && (input.fwdX * cardX + input.fwdZ * cardZ) > VAULT_FACING) {
-          const next = vaultTarget(solid, s.px, s.pz, s.py, cardX, cardZ)
+          const next = w.vaultTarget(s.px, s.pz, s.py, cardX, cardZ)
           if (next) {
             s.mFromX = s.px; s.mFromY = s.py; s.mFromZ = s.pz
             s.mToX = next.x; s.mToY = next.y; s.mToZ = next.z
@@ -1012,7 +1049,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     else {
       s.vy -= GRAVITY * dt
       const ny = s.py + s.vy * dt
-      if (s.vy > 0 && !bodyFree(probe, s.px, s.pz, ny)) s.vy = 0   // head into a ceiling
+      if (s.vy > 0 && !w.bodyFree(s.px, s.pz, ny)) s.vy = 0   // head into a ceiling
       else s.py = ny
     }
     if (s.vy <= 0 && floorTop !== null && s.py <= floorTop) {
@@ -1025,7 +1062,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     // ladders and a slope of steps is a rhythm, not a pogo. No step in reach (or moving away from
     // it, or sliding — a slide-hop must stay a hop) = the ballistic jump, unchanged.
     const facing = input.fwdX * cardX + input.fwdZ * cardZ > VAULT_FACING
-    const vt = !s.sliding && hasInput && facing ? vaultTarget(solid, s.px, s.pz, s.py, cardX, cardZ) : null
+    const vt = !s.sliding && hasInput && facing ? w.vaultTarget(s.px, s.pz, s.py, cardX, cardZ) : null
     if (vt) {
       s.mFromX = s.px; s.mFromY = s.py; s.mFromZ = s.pz
       s.mToX = vt.x; s.mToY = vt.y; s.mToZ = vt.z
