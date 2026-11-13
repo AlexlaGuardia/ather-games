@@ -79,3 +79,4 @@ tools/render/out/
 
 # lane scratch: one-off probe scripts (.mts) written during a session, never shipped
 /scripts/.scratch/
+tools/worldmap/out/
