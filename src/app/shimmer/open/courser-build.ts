@@ -4,8 +4,11 @@
 //
 // SLOTS follow canon's own anatomy of a manalic vehicle (world/transportation.md › Mana-Carriage): the MANA CORE
 // (the power), the CHANNEL TRIM (the rune-frame that carries it to the wheels: top speed), the DRIVER'S RUNE (how
-// the driver commands it: handling). The labels below are canon's words. Any NEW name for a tier or a part is
-// Magii's to rule (CANON_GAPS › courser parts); `PART_LABEL` is the one place to swap them in.
+// the driver commands it: handling). Tier names + the dial's poles RULED by Magii + Alex 2026-11-13
+// (world/transportation.md › Coursers › Parts, tiers & the balance dial): Core Cell→Lattice→Prism, Trim
+// Etched→Inlaid→Gilded, Rune Cut→Bound→Living, dial Poise ↔ Surge. ⛔ never "Flow" (a rune-State) for the speed
+// pole; the Driver's Rune is a RUNE, never a sigil. Buy at Rune Hold / town craft-shops, find as salvage of archaic
+// Citadel / Mana-Carriage stock, earn by deeds (placement + costs are build).
 //
 // The rules, each pinned by courser-build.test.ts:
 //   · every tier of every part IMPROVES its stat and touches nothing else
@@ -16,15 +19,18 @@ import type { CourserSpec } from './courser'
 
 export type Slot = 'core' | 'trim' | 'rune'
 export type Tier = 0 | 1 | 2 | 3
-export interface CourserBuild { core: Tier; trim: Tier; rune: Tier; balance: number }   // balance −1 (handling) … +1 (speed)
+export interface CourserBuild { core: Tier; trim: Tier; rune: Tier; balance: number }   // balance −1 (Poise) … +1 (Surge)
 export const STOCK_BUILD: CourserBuild = { core: 0, trim: 0, rune: 0, balance: 0 }
 
-export const PART_LABEL: Record<Slot, { name: string; does: string }> = {
-  core: { name: 'Mana Core', does: 'acceleration' },
-  trim: { name: 'Channel Trim', does: 'top speed' },
-  rune: { name: "Driver's Rune", does: 'handling + grip' },
+export const PART_LABEL: Record<Slot, { name: string; does: string; tiers: [string, string, string] }> = {
+  core: { name: 'Mana Core', does: 'acceleration', tiers: ['Cell', 'Lattice', 'Prism'] },
+  trim: { name: 'Channel Trim', does: 'top speed', tiers: ['Etched', 'Inlaid', 'Gilded'] },
+  rune: { name: "Driver's Rune", does: 'handling + grip', tiers: ['Cut', 'Bound', 'Living'] },
 }
-export const tierLabel = (t: Tier) => (t === 0 ? 'Stock' : ['I', 'II', 'III'][t - 1])
+/** The canon tier name for a slot ("Lattice", "Gilded"…); Stock is the courser as it left the shop. */
+export const tierLabel = (slot: Slot, t: Tier) => (t === 0 ? 'Stock' : PART_LABEL[slot].tiers[t - 1])
+/** The balance dial's poles (canon): Poise = handling, Surge = speed. */
+export const DIAL = { handling: 'Poise', speed: 'Surge' } as const
 
 // per tier, what each part does to the sheet
 const CORE_0TO60 = -0.38, CORE_TRACTION = 0.5        // s, m/s²

@@ -7,8 +7,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DARTER_STOCK, tuneFromSpec, type CourserTune } from './courser'
-import { buildSpec, statBars, PART_LABEL, tierLabel, STOCK_BUILD, type CourserBuild, type Slot, type Tier } from './courser-build'
+import { buildSpec, statBars, PART_LABEL, tierLabel, DIAL, STOCK_BUILD, type CourserBuild, type Slot, type Tier } from './courser-build'
 
+// tier names + dial poles are canon (Magii 11-13); see courser-build.ts
 const KEY = 'ather:courser:darter:build'
 const GOLD = '#d4a843'
 
@@ -67,7 +68,7 @@ export function GaragePanel({ open, onClose, build, setBuild }: { open: boolean;
                 <button key={t} onClick={() => setBuild({ ...build, [slot]: t })}
                   style={{ padding: '5px 0', borderRadius: 6, cursor: 'pointer', font: '600 11px var(--font-game), system-ui', letterSpacing: '0.12em',
                     border: `1px solid ${on ? GOLD : 'rgba(255,255,255,0.14)'}`, background: on ? `${GOLD}26` : 'transparent', color: on ? GOLD : '#efeadc' }}>
-                  {tierLabel(t)}
+                  {tierLabel(slot, t)}
                 </button>
               )
             })}
@@ -77,11 +78,11 @@ export function GaragePanel({ open, onClose, build, setBuild }: { open: boolean;
 
       <div style={{ margin: '14px 0 12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 4 }}>
-          <span style={{ opacity: build.balance < -0.05 ? 1 : 0.5 }}>Handling</span>
-          <span style={{ opacity: 0.5, letterSpacing: '0.1em' }}>balance</span>
-          <span style={{ opacity: build.balance > 0.05 ? 1 : 0.5 }}>Speed</span>
+          <span style={{ opacity: build.balance < -0.05 ? 1 : 0.5 }} title="handling">{DIAL.handling}</span>
+          <span style={{ opacity: 0.5, letterSpacing: '0.1em' }}>handling · speed</span>
+          <span style={{ opacity: build.balance > 0.05 ? 1 : 0.5 }} title="speed">{DIAL.speed}</span>
         </div>
-        <input type="range" min={-1} max={1} step={0.05} value={build.balance} aria-label="Balance between handling and speed"
+        <input type="range" min={-1} max={1} step={0.05} value={build.balance} aria-label="Balance: Poise (handling) to Surge (speed)"
           onChange={e => setBuild({ ...build, balance: Number(e.target.value) })} style={{ width: '100%', accentColor: GOLD }} />
       </div>
 
