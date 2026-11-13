@@ -162,6 +162,83 @@ const run = (c: ReturnType<typeof createCourser>, secs: number, o: Partial<Cours
   ok(w.y < 12, `a 45° face at 30 m/s: the car climbed ${w.y.toFixed(1)} m (a wall should stop it, not be a ramp)`)
 }
 
+// ── THE DRIFT STATE (Alex 11-13: tap the handbrake at speed for "that slippy slidy feel around corners") ──
+const travel = (c: ReturnType<typeof createCourser>) => Math.atan2(-c.vx, -c.vz)
+const wrapA = (a: number) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a }
+const tapDrift = (speed: number, steer: number, secs: number, throttle = 0.7) => {
+  const c = createCourser(0, 0, 0, flat); c.vz = -speed
+  const log: { slip: number; sp: number; drift: boolean }[] = []
+  const h0 = travel(c)
+  for (let i = 0; i < Math.round(secs / DT); i++) {
+    tickCourser(c, inp({ throttle, steer, handbrake: i < 6 }), flat)         // a 50 ms TAP, then Space is free
+    log.push({ slip: slipAngle(c), sp: Math.hypot(c.vx, c.vz), drift: c.drift })
+  }
+  return { c, log, turned: Math.abs(wrapA(travel(c) - h0)) + 0, h0 }
+}
+{
+  // a tap at 30 m/s with left held: it drifts, settles near 30°, rounds a real corner, keeps its speed, never spins
+  const { c, log } = tapDrift(30, -1, 2.0)
+  const settled = log.slice(Math.round(0.5 / DT))
+  const inDrift = settled.filter(l => l.drift).length / settled.length
+  ok(inDrift > 0.95, `a tap at 30 m/s with steer held should stay drifting (${(inDrift * 100).toFixed(0)}% of the time)`)
+  const slips = settled.map(l => l.slip)
+  ok(Math.min(...slips) > 0.3 && Math.max(...slips) < 0.95, `drift angle should hold ~30-45° (ranged ${(Math.min(...slips) * 57.3).toFixed(0)}-${(Math.max(...slips) * 57.3).toFixed(0)}°)`)
+  ok(log[log.length - 1].sp > 22, `a held drift keeps its speed (30 → ${log[log.length - 1].sp.toFixed(1)} m/s)`)
+  // it must make a corner: travel heading turned a good way (left = heading increases)
+  let turned = 0, prev = 0
+  { const d = createCourser(0, 0, 0, flat); d.vz = -30; prev = travel(d)
+    for (let i = 0; i < 2 * 120; i++) { tickCourser(d, inp({ throttle: 0.7, steer: -1, handbrake: i < 6 }), flat); const h = travel(d); turned += wrapA(h - prev); prev = h } }
+  ok(turned > 1.2 && turned < 4, `a 2 s drift should round a corner (travel turned ${(turned * 57.3).toFixed(0)}°, want 70-230°)`)
+  ok(c.drift, 'still drifting at the end with throttle + steer held')
+}
+{
+  // steering INTO the turn opens the angle, steering AGAINST it closes it (the stick sets the angle)
+  const mean = (steer: number) => {
+    const d = createCourser(0, 0, 0, flat); d.vz = -30
+    for (let i = 0; i < 6; i++) tickCourser(d, inp({ throttle: 0.7, steer: -1, handbrake: true }), flat)   // enter left
+    let sum = 0, n = 0
+    for (let i = 0; i < 1.2 * 120; i++) { tickCourser(d, inp({ throttle: 0.7, steer, handbrake: false }), flat); if (i > 60) { sum += slipAngle(d); n++ } }
+    return sum / n
+  }
+  const into = mean(-1), against = mean(0.6)
+  ok(into > against + 0.15, `into-the-turn angle ${(into * 57.3).toFixed(0)}° should be well above against-it ${(against * 57.3).toFixed(0)}°`)
+}
+{
+  // leaving: let go of the stick → it straightens; lift off → it ends; brake → it ends at once
+  const end = (o: Partial<CourserInput>) => {
+    const d = createCourser(0, 0, 0, flat); d.vz = -30
+    for (let i = 0; i < 0.6 * 120; i++) tickCourser(d, inp({ throttle: 0.7, steer: -1, handbrake: i < 6 }), flat)
+    let t = 0
+    while (d.drift && t < 3) { tickCourser(d, inp({ throttle: 0.7, steer: 0, ...o }), flat); t += DT }
+    for (let i = 0; i < 1.5 * 120; i++) tickCourser(d, inp({ throttle: 0.5, steer: 0 }), flat)
+    return { t, slip: slipAngle(d) }
+  }
+  const a = end({}), b = end({ throttle: 0, steer: -1 }), c2 = end({ throttle: -1, steer: -1 })
+  ok(a.t < 0.5, `centring the stick should end the drift quickly (${a.t.toFixed(2)} s)`)
+  ok(b.t < 0.6, `lifting off should end the drift (${b.t.toFixed(2)} s)`)
+  ok(c2.t < 0.05, `braking ends the drift at once (${c2.t.toFixed(2)} s)`)
+  ok(a.slip < 0.1 && b.slip < 0.1, `after the drift the car straightens (slip ${(a.slip * 57.3).toFixed(1)}°, ${(b.slip * 57.3).toFixed(1)}°)`)
+}
+{
+  // a tap that should NOT drift: too slow, or no direction held (it is just the brake)
+  const slow = createCourser(0, 0, 0, flat); slow.vz = -10
+  for (let i = 0; i < 60; i++) tickCourser(slow, inp({ throttle: 0.7, steer: -1, handbrake: i < 6 }), flat)
+  ok(!slow.drift && slipAngle(slow) < 0.2, `a tap at 10 m/s must not drift (drift ${slow.drift}, slip ${(slipAngle(slow) * 57.3).toFixed(0)}°)`)
+  const straight = createCourser(0, 0, 0, flat); straight.vz = -30
+  for (let i = 0; i < 60; i++) tickCourser(straight, inp({ throttle: 0.7, steer: 0, handbrake: i < 6 }), flat)
+  ok(!straight.drift && slipAngle(straight) < 0.05, 'a tap with no direction held must not drift')
+}
+{
+  // looser ground: the same drift on grass (surface 0.75) makes a WIDER corner than on paving
+  const turn = (surface: number) => {
+    const d = createCourser(0, 0, 0, flat); d.vz = -30
+    let tot = 0, prev = travel(d)
+    for (let i = 0; i < 1.5 * 120; i++) { tickCourser(d, inp({ throttle: 0.7, steer: -1, handbrake: i < 6, surface }), flat); const h = travel(d); tot += wrapA(h - prev); prev = h }
+    return tot
+  }
+  ok(turn(0.75) < turn(1) * 0.9, `grass should make a wider drift than paving (${(turn(0.75) * 57.3).toFixed(0)}° vs ${(turn(1) * 57.3).toFixed(0)}°)`)
+}
+
 console.log(`courser: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  ✗', f)
 process.exit(fails.length ? 1 : 0)
