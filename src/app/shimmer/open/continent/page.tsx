@@ -13,7 +13,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { VoxelDayNight } from '../../voxel3d/day-night'
-import { createCourser, tickCourser, bodySpeeds, slipAngle, DARTER, type Courser, type CourserInput } from '../courser'
+import { createCourser, tickCourser, bodySpeeds, slipAngle, type Courser, type CourserInput, type CourserTune } from '../courser'
+import { GaragePanel, useCourserBuild } from '../garage'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
 import { loadRegion, nearestRoad, type Region, type RegionRoad } from '../region'
 
@@ -322,7 +323,7 @@ function FogRig() {
 
 export interface RideHud { mph: number; frac: number; drift: boolean; air: number; gearR: boolean; place: string | null; road: string | null }
 
-function Driver({ R, onHud, focus }: { R: Region; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3> }) {
+function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune> }) {
   const { camera, gl } = useThree()
   const spawn = useMemo(() => {
     const road = R.meta.roads.find(r => r.from === 'ashfeld' && r.to === 'millbrook') ?? R.meta.roads[0]
@@ -390,7 +391,7 @@ function Driver({ R, onHud, focus }: { R: Region; onHud: (h: RideHud) => void; f
     const surface = under.road && under.d < under.road.width / 2 + 1 ? SURFACE[under.road.kind] : SURFACE.off
     while (acc.current >= STEP) {
       acc.current -= STEP
-      tickCourser(c, { throttle, steer, handbrake, dt: STEP, surface }, R.heightAt)
+      tickCourser(c, { throttle, steer, handbrake, dt: STEP, surface }, R.heightAt, tuneRef.current)
       const lx = R.meta.sizeX / 2 - 3, lz = R.meta.sizeZ / 2 - 3
       if (Math.abs(c.x) > lx) { c.x = Math.sign(c.x) * lx; c.vx *= -0.3 }
       if (Math.abs(c.z) > lz) { c.z = Math.sign(c.z) * lz; c.vz *= -0.3 }
@@ -430,13 +431,13 @@ function Driver({ R, onHud, focus }: { R: Region; onHud: (h: RideHud) => void; f
       const sp = Math.hypot(c.vx, c.vz)
       const tx = sp > 3 ? c.vx / sp : fx, tz = sp > 3 ? c.vz / sp : fz
       const bx = fx * 0.65 + tx * 0.35, bz = fz * 0.65 + tz * 0.35, bl = Math.hypot(bx, bz) || 1
-      const shape = chaseShape(Math.abs(fwd) / DARTER.top)
+      const shape = chaseShape(Math.abs(fwd) / tuneRef.current.top)
       const back = shape.back
       const want = new THREE.Vector3(c.x - (bx / bl) * back, c.y + shape.height, c.z - (bz / bl) * back)
       want.y = Math.max(want.y, R.heightAt(want.x, want.z) + 1.4)
       camPos.lerp(want, 1 - Math.exp(-frameDt * 7))
       camPos.y = Math.max(camPos.y, R.heightAt(camPos.x, camPos.z) + 1.0)
-      const [rx2, ry2] = speedRumble(Math.abs(fwd) / DARTER.top, performance.now() / 1000)
+      const [rx2, ry2] = speedRumble(Math.abs(fwd) / tuneRef.current.top, performance.now() / 1000)
       cam.position.set(camPos.x + (Math.random() - 0.5) * sk + rx2, camPos.y + (Math.random() - 0.5) * sk + ry2, camPos.z)
       look.set(c.x + fx * 4, c.y + 1.0, c.z + fz * 4)
       cam.lookAt(look)
@@ -445,7 +446,7 @@ function Driver({ R, onHud, focus }: { R: Region; onHud: (h: RideHud) => void; f
       look.set(c.x + fx * 20, c.y + 1.0, c.z + fz * 20)
       cam.lookAt(look)
     }
-    const fov = chaseShape(Math.abs(fwd) / DARTER.top).fov
+    const fov = chaseShape(Math.abs(fwd) / tuneRef.current.top).fov
     if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, frameDt * 5); cam.updateProjectionMatrix() }
 
     hudT.current -= frameDt
@@ -454,7 +455,7 @@ function Driver({ R, onHud, focus }: { R: Region; onHud: (h: RideHud) => void; f
       let near: string | null = null, nd = 260
       for (const p of R.meta.places) { const d = Math.hypot(p.x - c.x, p.z - c.z); if (p.name && d < nd) { nd = d; near = p.name } }
       const nr = nearestRoad(R, c.x, c.z)
-      onHud({ mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / DARTER.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
+      onHud({ mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / tuneRef.current.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
         place: near, road: nr.d < (nr.road?.width ?? 7) / 2 + 1 ? nr.road!.kind : null })
     }
   })
@@ -473,6 +474,15 @@ const SURFACE: Record<RegionRoad['kind'] | 'off', number> = { paved: 1, road: 0.
 const ROAD_LABEL: Record<string, string> = { paved: 'Paved road', road: 'Road', trail: 'Trail', pass: 'Mountain pass' }
 
 export default function ContinentRide() {
+  const { build, setBuild, tune } = useCourserBuild()
+  const tuneRef = useRef<CourserTune>(tune)
+  tuneRef.current = tune
+  const [garage, setGarage] = useState(false)
+  useEffect(() => {
+    const g = (e: KeyboardEvent) => { if (e.code === 'KeyG') setGarage(v => !v) }
+    window.addEventListener('keydown', g)
+    return () => window.removeEventListener('keydown', g)
+  }, [])
   const [R, setR] = useState<Region | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [hud, setHud] = useState<RideHud>({ mph: 0, frac: 0, drift: false, air: 0, gearR: false, place: null, road: null })
@@ -497,10 +507,11 @@ export default function ContinentRide() {
           <Towns R={R} />
           <Posts R={R} />
           <Trees R={R} />
-          <Driver R={R} onHud={setHud} focus={focus} />
+          <Driver R={R} onHud={setHud} focus={focus} tuneRef={tuneRef} />
         </Canvas>
       )}
       <SpeedStreaks frac={hud.frac} />
+      <GaragePanel open={garage} onClose={() => setGarage(false)} build={build} setBuild={setBuild} />
       {!R && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#1d2a33', font: '600 14px system-ui' }}>{err ?? 'Loading the continent…'}</div>}
 
       {hud.place && (
@@ -527,7 +538,7 @@ export default function ContinentRide() {
           <div style={{ padding: '18px 24px', borderRadius: 10, background: 'rgba(12,16,20,0.72)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.65, textAlign: 'center', maxWidth: 460 }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>The Darter · Ashfeld</div>
             You start on the road out of Ashfeld. It runs down to Millbrook on the river; the trunk south ends at Rune Hold under the Spine.
-            <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road</div>
+            <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road · G garage</div>
             <div style={{ marginTop: 8, fontWeight: 600 }}>Press any key to drive</div>
           </div>
         </div>

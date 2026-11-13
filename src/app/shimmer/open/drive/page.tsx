@@ -12,7 +12,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { VoxelDayNight } from '../../voxel3d/day-night'
-import { createCourser, tickCourser, bodySpeeds, slipAngle, DARTER, type Courser, type CourserInput } from '../courser'
+import { createCourser, tickCourser, bodySpeeds, slipAngle, type Courser, type CourserInput, type CourserTune } from '../courser'
+import { GaragePanel, useCourserBuild } from '../garage'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
 import { TRACK_SIZE, HALF, ROAD_W, SPAWN, JUMP, WHOOPS, baseHeight, jumpHeight, whoopsHeight, trackHeight, ovalOffset, cones } from '../track'
 
@@ -140,7 +141,7 @@ function Cones({ bodies }: { bodies: React.MutableRefObject<ConeBody[]> }) {
 
 export interface DriveHud { mph: number; frac: number; drift: boolean; air: number; gearR: boolean }
 
-function Driver({ onHud }: { onHud: (h: DriveHud) => void }) {
+function Driver({ onHud, tuneRef }: { onHud: (h: DriveHud) => void; tuneRef: React.MutableRefObject<CourserTune> }) {
   const { camera, gl } = useThree()
   const car = useRef<Courser>(createCourser(SPAWN.x, SPAWN.z, SPAWN.yaw, trackHeight))
   const model = useRef<THREE.Group | null>(null)
@@ -204,7 +205,7 @@ function Driver({ onHud }: { onHud: (h: DriveHud) => void }) {
     const surface = tarmac ? 1 : 0.78
     while (acc.current >= STEP) {
       acc.current -= STEP
-      tickCourser(c, { throttle, steer, handbrake, dt: STEP, surface }, trackHeight)
+      tickCourser(c, { throttle, steer, handbrake, dt: STEP, surface }, trackHeight, tuneRef.current)
       // the fence: bounce off the slab's edge instead of driving into the void
       const lim = HALF - 2.5
       if (Math.abs(c.x) > lim) { c.x = Math.sign(c.x) * lim; c.vx *= -0.35 }
@@ -255,12 +256,12 @@ function Driver({ onHud }: { onHud: (h: DriveHud) => void }) {
       const sp = Math.hypot(c.vx, c.vz)
       const tx = sp > 3 ? c.vx / sp : fx, tz = sp > 3 ? c.vz / sp : fz
       const bx = fx * 0.65 + tx * 0.35, bz = fz * 0.65 + tz * 0.35, bl = Math.hypot(bx, bz) || 1
-      const shape = chaseShape(Math.abs(fwd) / DARTER.top)
+      const shape = chaseShape(Math.abs(fwd) / tuneRef.current.top)
       const back = shape.back
       const want = new THREE.Vector3(c.x - (bx / bl) * back, c.y + shape.height, c.z - (bz / bl) * back)
       want.y = Math.max(want.y, trackHeight(want.x, want.z) + 1.2)
       camPos.lerp(want, 1 - Math.exp(-frameDt * 7))
-      const [rx2, ry2] = speedRumble(Math.abs(fwd) / DARTER.top, performance.now() / 1000)
+      const [rx2, ry2] = speedRumble(Math.abs(fwd) / tuneRef.current.top, performance.now() / 1000)
       cam.position.set(camPos.x + (Math.random() - 0.5) * sk + rx2, camPos.y + (Math.random() - 0.5) * sk + ry2, camPos.z)
       look.set(c.x + fx * 4, c.y + 1.0, c.z + fz * 4)
       cam.lookAt(look)
@@ -269,13 +270,13 @@ function Driver({ onHud }: { onHud: (h: DriveHud) => void }) {
       look.set(c.x + fx * 20, c.y + 1.0, c.z + fz * 20)
       cam.lookAt(look)
     }
-    const fov = chaseShape(Math.abs(fwd) / DARTER.top).fov
+    const fov = chaseShape(Math.abs(fwd) / tuneRef.current.top).fov
     if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, frameDt * 5); cam.updateProjectionMatrix() }
 
     hudT.current -= frameDt
     if (hudT.current <= 0) {
       hudT.current = 0.08
-      onHud({ mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / DARTER.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5 })
+      onHud({ mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / tuneRef.current.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5 })
     }
   })
 
@@ -290,6 +291,15 @@ function Driver({ onHud }: { onHud: (h: DriveHud) => void }) {
 }
 
 export default function DriveSlice() {
+  const { build, setBuild, tune } = useCourserBuild()
+  const tuneRef = useRef<CourserTune>(tune)
+  tuneRef.current = tune
+  const [garage, setGarage] = useState(false)
+  useEffect(() => {
+    const g = (e: KeyboardEvent) => { if (e.code === 'KeyG') setGarage(v => !v) }
+    window.addEventListener('keydown', g)
+    return () => window.removeEventListener('keydown', g)
+  }, [])
   const [hud, setHud] = useState<DriveHud>({ mph: 0, frac: 0, drift: false, air: 0, gearR: false })
   const [started, setStarted] = useState(false)
   useEffect(() => {
@@ -302,9 +312,10 @@ export default function DriveSlice() {
       <Canvas camera={{ fov: FOV, near: 0.1, far: 900, position: [SPAWN.x, 4, SPAWN.z + 8] }} gl={{ antialias: true, powerPreference: 'high-performance' }}>
         <VoxelDayNight />
         <Track />
-        <Driver onHud={setHud} />
+        <Driver onHud={setHud} tuneRef={tuneRef} />
       </Canvas>
       <SpeedStreaks frac={hud.frac} />
+      <GaragePanel open={garage} onClose={() => setGarage(false)} build={build} setBuild={setBuild} />
 
       {/* speedo */}
       <div style={{ position: 'absolute', right: 20, bottom: 18, textAlign: 'right', color: '#f4efe2', pointerEvents: 'none', textShadow: '0 2px 8px rgba(0,0,0,0.55)' }}>
@@ -324,7 +335,7 @@ export default function DriveSlice() {
           <div style={{ padding: '18px 24px', borderRadius: 10, background: 'rgba(12,16,20,0.72)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.65, textAlign: 'center' }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>The Darter · test track</div>
             W / ↑ throttle · S / ↓ brake, reverse · A D / ← → steer<br />
-            Space handbrake (drift) · C camera · R reset
+            Space handbrake (drift) · C camera · R reset · G garage
             <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>Ahead: the jump. South straight: the whoops. Infield: slalom + skidpad. East: the hill.</div>
             <div style={{ marginTop: 8, fontWeight: 600 }}>Press any key to drive</div>
           </div>

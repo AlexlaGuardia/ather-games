@@ -26,6 +26,9 @@ const browser = await puppeteer.launch({
 try {
   const page = await browser.newPage()
   await page.setViewport({ width: Number(flag('--width', '1280')), height: Number(flag('--height', '760')) })
+  // --build '{"core":3,...}': seed the garage's remembered build before the page loads
+  const seedBuild = flag('--build', '')
+  if (seedBuild) await page.evaluateOnNewDocument((b: string) => { try { localStorage.setItem('ather:courser:darter:build', b) } catch { /* */ } }, seedBuild)
   const hour = flag('--hour', '')
   const route = flag('--path', '/shimmer/open/drive')
   const res = await page.goto(`http://localhost:${port}${route}${hour ? `${route.includes('?') ? '&' : '?'}hour=${hour}` : ''}`, { waitUntil: 'load', timeout: 120000 })
@@ -58,6 +61,9 @@ try {
       .catch(() => console.error(`⚠ --until never held: ${until}`))
   }
   const st = await page.evaluate(() => (window as unknown as { __drive: { state: () => Record<string, number | boolean> } }).__drive.state())
+  // --press KeyG: one key at the shutter (e.g. open the garage)
+  const press = flag('--press', '')
+  if (press) { await page.keyboard.press(press as never); await new Promise(r => setTimeout(r, 700)) }
   await page.screenshot({ path: out })
   const n = (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v)
   console.log(`shot → ${out}  ·  x ${n(st.x)} y ${n(st.y)} z ${n(st.z)} · fwd ${n(st.fwd)} lat ${n(st.lat)} · slip ${n((st.slip as number) * 57.3)}° · air ${n(st.airborne)}`)
