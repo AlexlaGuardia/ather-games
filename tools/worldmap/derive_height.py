@@ -89,6 +89,7 @@ tint = np.where(t < 0.35, lowc + (midc - lowc) * (t / 0.35), midc + (hic - midc)
 seac = np.array([0.18, 0.42, 0.55]) + np.clip(height, -60, 0)[..., None] / 60 * 0.12
 rgb = np.where(land[..., None], tint * (0.35 + 0.75 * shade[..., None]), seac)
 rel = Image.fromarray((np.clip(rgb, 0, 1) * 255).astype(np.uint8))
+rel.save(f'{OUT}/relief.png')                                    # the terrain alone, source-sized (the atlas layer)
 src = Image.open(SRC).convert('RGB')
 both = Image.new('RGB', (W * 2 + 20, H + 40), (14, 16, 22))
 both.paste(src, (0, 40)); both.paste(rel, (W + 20, 40))
