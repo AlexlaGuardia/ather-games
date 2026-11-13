@@ -13,6 +13,12 @@ the Arcade frame.
 
 
 
+## 🌍 OPEN WORLD — **THE PIVOT: VOXEL WAS THE TEST RUN; THE GAME IS AN OPEN-WORLD ATHERNYX SANDBOX** (2026-11-13, hub `1f621d28`) · *Last touched 2026-11-13 — P0 step 1 committed (`f9d310ed`), nothing deployed.*
+- **Plan of record:** `OPEN_WORLD_PLAN.md` (boxes, salvage map, stack, phases). Four boxes: FPS · movement (ours, kept) · adventure · home-plot building (snap pieces).
+- **Left off:** the walker now asks a `LocoWorld` (six questions) instead of a cell grid; voxel answers via `cellWorld`; locomotion oracle 202/0 unchanged, metrics 73 · hollows 167 · hands-pose 50 green.
+- **Next:** P0 step 2 `TerrainWorld` (heightfield + primitives, pure TS) under the same oracle → step 3 `/shimmer/open` slice (terrain, sky/fog/toon, FP camera) → Alex runs it.
+- **Decisions:** no Rapier (fights the state machine, 1.2MB); pure-TS collision shared with `breach-server`; WebGL2 not WebGPU until benchmarked on the UHD 630; no structural integrity in building. The voxel Ather stays live and untouched until the new world replaces it.
+
 ## 🌬️ Shimmer — **THE SLACK, BALANCE PASS: ROOM TO STAND, A SWING YOU SEE COMING, PHASES** (2026-09-29, hub `99e9653a`, Alex's playtest) · *Last touched 2026-09-29 — ✅ **PROD from `6237303e`** (pass `a8391ec8`), pushed, breach-server restarted. **slack-flow 13/0 on prod** · breach-server.test 44/0 · stillwind 37/0 · LOOKED at the arena on prod.*
 - **Alex:** *"the middle is the only walkable ground… the boss walking right at you, theres no choice but to take damage from or step off the middle… a long one… give the boss phases."* The numbers agreed: a ±1.6 band on a 48-wide strip, the burn climbing 3/s per tile at once, a 32-dmg swing every 2.4s with no tell, 8000 hp at ×0.1 on its line.
 - **Now:** a **±3.2 band**, a **shoulder to ±7 that only nips** (3 burn / 2 frost + a small slow), then the steep edge. **The swing draws back 0.75s** (the core flares, it leans back) and **misses a keeper who stepped out of reach**. **Phase 2 adds the SWEEP:** where it hunts, a stretch of the band is marked on the ground and struck 1.4s later: stay and take it, step onto a shoulder (burn or frost, your pick), or run clear. **Phase 3** swings faster (1.6s) and sweeps every 7s. **hp 8000 → 5200**, on-the-line hits ×0.1 → ×0.15 (~3 min solo instead of ~5+). You arrive **facing down the band** at the Stillwind (it faced the exit wall).
