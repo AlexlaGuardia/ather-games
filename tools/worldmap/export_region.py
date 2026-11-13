@@ -76,7 +76,7 @@ for r in atlas['roads']:
         roads_out.append({'id': f"{r['id']}#{k}", 'kind': r['kind'], 'from': r['from'], 'to': r['to'], 'width': w, 'xz': simp})
 if cen:
     tree = cKDTree(np.array(cen)); Wc = np.array(cen_w)
-    d, idx = tree.query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=9 / 2 + SHOULDER)
+    d, idx = tree.query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=9 / 2 + 2.5 + 160)   # wide: a deep cut's shoulder reaches far
     d = d.reshape(h.shape); idx = idx.reshape(h.shape)
     ok = np.isfinite(d)
     half = np.where(ok, Wc[np.minimum(idx, len(Wc) - 1)] / 2 + 2.5, 0)   # flat a little past the paint: a riverbank shoulder sagged into the drive line at +1
@@ -102,7 +102,11 @@ if cen:
     # version built a 44 m embankment across a valley and the autopilot drove off its edge.
     road = np.where(bed, 0.8 * U + 0.2 * L, road)
     print(f'grade envelope converged in {it} iterations')
-    t = np.clip((d - half) / SHOULDER, 0, 1)
+    # the shoulder WIDENS with the cut or fill it has to make up (~1:1.6), so a deep cut is a valley with sloping
+    # sides, not a slot canyon (the road out of Ashfeld ran between 40 m vertical walls at a fixed 12 m shoulder)
+    near0 = nd.distance_transform_edt(~bed, return_distances=False, return_indices=True)
+    depth = np.abs(h - road[near0[0], near0[1]])
+    t = np.clip((d - half) / np.maximum(SHOULDER, depth * 1.6), 0, 1)
     blend = np.where(ok, 1 - t * t * (3 - 2 * t), 0)
     # the shoulder blends to the NEAREST bed height (spread outward), so a cut has walls, not a cliff into the road
     near = nd.distance_transform_edt(~bed, return_distances=False, return_indices=True)

@@ -1,5 +1,5 @@
 // ── Screenshot the Darter on its test track, mid-manoeuvre ─────────────────────────────────────────
-// Run: npx tsx scripts/drive-shot.mts <out.png> [--port 3204] [--tp "x,z,yaw,speed"] [--input '{"throttle":1}']
+// Run: npx tsx scripts/drive-shot.mts <out.png> [--port 3204] [--path /shimmer/open/continent] [--tp "x,z,yaw,speed" | "ashfeld,20"] [--input '{"throttle":1}']
 //                                    [--drive 1500] [--until 'st.airborne && st.airT > 0.3'] [--cam chase|hood] [--hour 13]
 //
 // Places the car with the page's `__drive.tp`, holds a scripted input for --drive ms, then shoots. Software
@@ -27,13 +27,15 @@ try {
   const page = await browser.newPage()
   await page.setViewport({ width: Number(flag('--width', '1280')), height: Number(flag('--height', '760')) })
   const hour = flag('--hour', '')
-  const res = await page.goto(`http://localhost:${port}/shimmer/open/drive${hour ? `?hour=${hour}` : ''}`, { waitUntil: 'load', timeout: 120000 })
+  const route = flag('--path', '/shimmer/open/drive')
+  const res = await page.goto(`http://localhost:${port}${route}${hour ? `${route.includes('?') ? '&' : '?'}hour=${hour}` : ''}`, { waitUntil: 'load', timeout: 120000 })
   if (!res || res.status() !== 200) { console.error(`✗ answered ${res?.status()}`); process.exit(1) }
   await page.waitForFunction('!!window.__drive', { timeout: 60000 })
   await page.keyboard.press('ShiftLeft')   // dismiss the start card (any key)
   await page.evaluate((tp: string, cam: string) => {
     const d = (window as unknown as { __drive: { tp: (...a: number[]) => void; cam: (m: string) => void } }).__drive
-    if (tp) d.tp(...tp.split(',').map(Number))
+    if (tp && /^[a-z]/.test(tp)) (d as unknown as { place: (id: string, v: number) => void }).place(tp.split(',')[0], Number(tp.split(',')[1] ?? 0))
+    else if (tp) d.tp(...tp.split(',').map(Number))
     d.cam(cam)
   }, tp, cam)
   await new Promise(r => setTimeout(r, 1500))
