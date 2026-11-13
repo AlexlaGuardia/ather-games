@@ -13,12 +13,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { VoxelDayNight } from '../../voxel3d/day-night'
-import { createCourser, tickCourser, bodySpeeds, slipAngle, type Courser, type CourserInput } from '../courser'
-import { DarterModel, DriftFx } from '../darter-view'
+import { createCourser, tickCourser, bodySpeeds, slipAngle, DARTER, type Courser, type CourserInput } from '../courser'
+import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
 import { loadRegion, nearestRoad, type Region, type RegionRoad } from '../region'
 
 const STEP = 1 / 120
-const FOV = 68, FOV_KICK = 14
+const FOV = 64
 const CHUNK = 40                         // cells per chunk side (200 m)
 const FOG_NEAR = 380, FOG_FAR = 1300
 
@@ -188,6 +188,38 @@ function Roads({ R }: { R: Region }) {
   )
 }
 
+// ── roadside posts every 25 m on both edges of every road (one row where trunks share; none in water) ──
+function Posts({ R }: { R: Region }) {
+  const posts = useMemo(() => {
+    const out: [number, number][] = []
+    const taken = new Set<string>()
+    const key = (x: number, z: number) => `${Math.round(x / 8)},${Math.round(z / 8)}`
+    for (const r of [...R.meta.roads].sort((a, b) => b.width - a.width)) {
+      let acc = 0
+      for (let k = 0; k < r.pts.length - 1; k++) {
+        const [ax, az] = r.pts[k], [bx, bz] = r.pts[k + 1]
+        const L = Math.hypot(bx - ax, bz - az); if (L < 1e-3) continue
+        const nx = -(bz - az) / L, nz = (bx - ax) / L
+        for (let s = 0; s < L; s += 2.5) {
+          acc += 2.5
+          if (acc < 25) continue
+          acc = 0
+          const x = ax + (bx - ax) * s / L, z = az + (bz - az) * s / L
+          for (const side of [1, -1]) {
+            const px = x + nx * side * (r.width / 2 + 1.8), pz = z + nz * side * (r.width / 2 + 1.8)
+            const y = R.heightAt(px, pz), kk = key(px, pz)
+            if (!Number.isFinite(y) || y < 0.6 || taken.has(kk)) continue
+            if (nearestRoad(R, px, pz).d < r.width / 2 + 0.5) continue     // inside another road's surface
+            taken.add(kk); out.push([px, pz])
+          }
+        }
+      }
+    }
+    return out
+  }, [R])
+  return <RoadPosts posts={posts} ground={R.heightAt} />
+}
+
 // ── towns: a beacon of light at each named place + a scatter of houses that keeps off the road ──
 function Towns({ R }: { R: Region }) {
   const houses = useMemo(() => {
@@ -288,7 +320,7 @@ function FogRig() {
   return null
 }
 
-export interface RideHud { kmh: number; drift: boolean; air: number; gearR: boolean; place: string | null; road: string | null }
+export interface RideHud { mph: number; frac: number; drift: boolean; air: number; gearR: boolean; place: string | null; road: string | null }
 
 function Driver({ R, onHud, focus }: { R: Region; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3> }) {
   const { camera, gl } = useThree()
@@ -398,12 +430,14 @@ function Driver({ R, onHud, focus }: { R: Region; onHud: (h: RideHud) => void; f
       const sp = Math.hypot(c.vx, c.vz)
       const tx = sp > 3 ? c.vx / sp : fx, tz = sp > 3 ? c.vz / sp : fz
       const bx = fx * 0.65 + tx * 0.35, bz = fz * 0.65 + tz * 0.35, bl = Math.hypot(bx, bz) || 1
-      const back = 6.8 + Math.min(2.2, sp * 0.05)
-      const want = new THREE.Vector3(c.x - (bx / bl) * back, c.y + 2.4, c.z - (bz / bl) * back)
+      const shape = chaseShape(Math.abs(fwd) / DARTER.top)
+      const back = shape.back
+      const want = new THREE.Vector3(c.x - (bx / bl) * back, c.y + shape.height, c.z - (bz / bl) * back)
       want.y = Math.max(want.y, R.heightAt(want.x, want.z) + 1.4)
       camPos.lerp(want, 1 - Math.exp(-frameDt * 7))
       camPos.y = Math.max(camPos.y, R.heightAt(camPos.x, camPos.z) + 1.0)
-      cam.position.set(camPos.x + (Math.random() - 0.5) * sk, camPos.y + (Math.random() - 0.5) * sk, camPos.z)
+      const [rx2, ry2] = speedRumble(Math.abs(fwd) / DARTER.top, performance.now() / 1000)
+      cam.position.set(camPos.x + (Math.random() - 0.5) * sk + rx2, camPos.y + (Math.random() - 0.5) * sk + ry2, camPos.z)
       look.set(c.x + fx * 4, c.y + 1.0, c.z + fz * 4)
       cam.lookAt(look)
     } else {
@@ -411,7 +445,7 @@ function Driver({ R, onHud, focus }: { R: Region; onHud: (h: RideHud) => void; f
       look.set(c.x + fx * 20, c.y + 1.0, c.z + fz * 20)
       cam.lookAt(look)
     }
-    const fov = FOV + FOV_KICK * Math.min(1, Math.max(0, (Math.abs(fwd) - 12) / 30))
+    const fov = chaseShape(Math.abs(fwd) / DARTER.top).fov
     if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, frameDt * 5); cam.updateProjectionMatrix() }
 
     hudT.current -= frameDt
@@ -420,7 +454,7 @@ function Driver({ R, onHud, focus }: { R: Region; onHud: (h: RideHud) => void; f
       let near: string | null = null, nd = 260
       for (const p of R.meta.places) { const d = Math.hypot(p.x - c.x, p.z - c.z); if (p.name && d < nd) { nd = d; near = p.name } }
       const nr = nearestRoad(R, c.x, c.z)
-      onHud({ kmh: Math.hypot(fwd, lat) * 3.6, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
+      onHud({ mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / DARTER.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
         place: near, road: nr.d < (nr.road?.width ?? 7) / 2 + 1 ? nr.road!.kind : null })
     }
   })
@@ -441,7 +475,7 @@ const ROAD_LABEL: Record<string, string> = { paved: 'Paved road', road: 'Road', 
 export default function ContinentRide() {
   const [R, setR] = useState<Region | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [hud, setHud] = useState<RideHud>({ kmh: 0, drift: false, air: 0, gearR: false, place: null, road: null })
+  const [hud, setHud] = useState<RideHud>({ mph: 0, frac: 0, drift: false, air: 0, gearR: false, place: null, road: null })
   const [started, setStarted] = useState(false)
   const focus = useRef(new THREE.Vector3())
   useEffect(() => {
@@ -461,10 +495,12 @@ export default function ContinentRide() {
           <Roads R={R} />
           <Water R={R} />
           <Towns R={R} />
+          <Posts R={R} />
           <Trees R={R} />
           <Driver R={R} onHud={setHud} focus={focus} />
         </Canvas>
       )}
+      <SpeedStreaks frac={hud.frac} />
       {!R && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#1d2a33', font: '600 14px system-ui' }}>{err ?? 'Loading the continent…'}</div>}
 
       {hud.place && (
@@ -474,8 +510,8 @@ export default function ContinentRide() {
         </div>
       )}
       <div style={{ position: 'absolute', right: 20, bottom: 18, textAlign: 'right', color: '#f4efe2', pointerEvents: 'none', textShadow: '0 2px 8px rgba(0,0,0,0.55)' }}>
-        <div style={{ font: '700 54px var(--font-game), system-ui', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{Math.round(hud.kmh)}</div>
-        <div style={{ font: '600 11px var(--font-game), system-ui', letterSpacing: '0.25em', opacity: 0.75 }}>KM/H {hud.gearR ? '· R' : ''}</div>
+        <div style={{ font: '700 54px var(--font-game), system-ui', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{Math.round(hud.mph)}</div>
+        <div style={{ font: '600 11px var(--font-game), system-ui', letterSpacing: '0.25em', opacity: 0.75 }}>MPH {hud.gearR ? '· R' : ''}</div>
         <div style={{ font: '600 10px var(--font-game), system-ui', letterSpacing: '0.25em', opacity: 0.65, marginTop: 4 }}>{hud.road ? ROAD_LABEL[hud.road].toUpperCase() : 'OFF ROAD'}</div>
       </div>
       {(hud.drift || hud.air > 0.25) && (

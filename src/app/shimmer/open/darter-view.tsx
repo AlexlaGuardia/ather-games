@@ -159,3 +159,58 @@ export function DriftFx({ car, ground, slip }: { car: React.MutableRefObject<Car
     </>
   )
 }
+
+// ── SPEED FEEL (Alex 11-13: "next is the speed feel"). Shared by both drive pages so they cannot drift apart. ──
+// `frac` is speed as a fraction of the car's own top speed, so an upgraded car FEELS faster at its top end too.
+
+/** The chase camera's shape at a given speed: the view widens, the camera pulls back and drops a little. */
+export function chaseShape(frac: number): { fov: number; back: number; height: number } {
+  const f = Math.max(0, Math.min(1, frac))
+  const e = f * f * (3 - 2 * f)
+  return { fov: 64 + 24 * e, back: 6.6 + 2.2 * e, height: 2.4 - 0.5 * e }
+}
+
+/** A low road-rumble for the camera at speed: smooth (layered sines), not per-frame random jitter. */
+export function speedRumble(frac: number, time: number): [number, number] {
+  const a = 0.045 * Math.max(0, frac - 0.35) ** 2 * 2.4
+  return [a * (Math.sin(time * 37) + 0.5 * Math.sin(time * 61 + 1.3)), a * (Math.sin(time * 43 + 0.7) + 0.5 * Math.sin(time * 71))]
+}
+
+/** Streaks at the screen's edge near top speed: DOM over the canvas, clear in the middle where you look. */
+export function SpeedStreaks({ frac }: { frac: number }) {
+  const o = Math.max(0, Math.min(1, (frac - 0.66) / 0.3)) * 0.32   // felt more than seen (0.5 crowded the sky)
+  if (o <= 0.01) return null
+  return (
+    <div aria-hidden style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none', opacity: o,
+      background: 'repeating-conic-gradient(from 0deg at 50% 46%, rgba(255,255,255,0.0) 0deg 2.2deg, rgba(255,255,255,0.55) 2.4deg 2.6deg, rgba(255,255,255,0) 2.8deg 7deg)',
+      WebkitMaskImage: 'radial-gradient(ellipse 62% 58% at 50% 46%, transparent 55%, black 100%)',
+      maskImage: 'radial-gradient(ellipse 62% 58% at 50% 46%, transparent 55%, black 100%)',
+      animation: 'atherStreak 0.18s steps(3) infinite',
+    }}>
+      <style>{'@keyframes atherStreak { 0% { transform: rotate(0deg) scale(1) } 50% { transform: rotate(1.3deg) scale(1.02) } 100% { transform: rotate(-0.8deg) scale(1.01) } }'}</style>
+    </div>
+  )
+}
+
+/** Roadside posts: what whips past is the strongest speed cue there is, and open grass gives the eye nothing.
+ *  `posts` are [x, z] pairs; one instanced batch (never culled, see DriftFx). */
+export function RoadPosts({ posts, ground }: { posts: [number, number][]; ground: (x: number, z: number) => number }) {
+  const pole = useRef<THREE.InstancedMesh>(null), cap = useRef<THREE.InstancedMesh>(null)
+  useEffect(() => {
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3()
+    posts.forEach(([x, z], k) => {
+      const y = ground(x, z)
+      p.set(x, y + 0.5, z); s.set(0.14, 1, 0.14); pole.current!.setMatrixAt(k, m.compose(p, q, s))
+      p.set(x, y + 0.86, z); s.set(0.16, 0.16, 0.16); cap.current!.setMatrixAt(k, m.compose(p, q, s))
+    })
+    pole.current!.instanceMatrix.needsUpdate = true; cap.current!.instanceMatrix.needsUpdate = true
+  }, [posts, ground])
+  const n = Math.max(1, posts.length)
+  return (
+    <>
+      <instancedMesh frustumCulled={false} ref={pole} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial color="#efeae0" /></instancedMesh>
+      <instancedMesh frustumCulled={false} ref={cap} args={[undefined, undefined, n]}><boxGeometry /><meshStandardMaterial color="#d4a843" emissive="#d4a843" emissiveIntensity={0.9} /></instancedMesh>
+    </>
+  )
+}

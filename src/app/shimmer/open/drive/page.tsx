@@ -12,12 +12,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { VoxelDayNight } from '../../voxel3d/day-night'
-import { createCourser, tickCourser, bodySpeeds, slipAngle, type Courser, type CourserInput } from '../courser'
-import { DarterModel, DriftFx } from '../darter-view'
+import { createCourser, tickCourser, bodySpeeds, slipAngle, DARTER, type Courser, type CourserInput } from '../courser'
+import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
 import { TRACK_SIZE, HALF, ROAD_W, SPAWN, JUMP, WHOOPS, baseHeight, jumpHeight, whoopsHeight, trackHeight, ovalOffset, cones } from '../track'
 
 const STEP = 1 / 120
-const FOV = 68, FOV_KICK = 14
+const FOV = 64
 
 const C = {
   grass: new THREE.Color('#6f9e45'), grass2: new THREE.Color('#86b04f'), road: new THREE.Color('#3b3f47'),
@@ -82,6 +82,22 @@ function featureGeometry(): THREE.BufferGeometry {
   return g
 }
 
+// posts round the oval's outer kerb every 20 m (the speed cue; see RoadPosts)
+const OVAL_POSTS: [number, number][] = (() => {
+  const out: [number, number][] = []
+  let acc = 0, prev: [number, number] | null = null
+  for (let k = 0; k <= 4000; k++) {
+    const t = (k / 4000) * Math.PI * 2
+    const x = 150 * Math.cos(t), z = 90 * Math.sin(t)
+    const nx = x / (150 * 150), nz = z / (90 * 90), nl = Math.hypot(nx, nz)
+    const px = x + (nx / nl) * (ROAD_W / 2 + 2.6), pz = z + (nz / nl) * (ROAD_W / 2 + 2.6)
+    if (prev) acc += Math.hypot(px - prev[0], pz - prev[1])
+    prev = [px, pz]
+    if (acc >= 20) { acc = 0; if (jumpHeight(px, pz) === 0 && whoopsHeight(px, pz) === 0) out.push([px, pz]) }
+  }
+  return out
+})()
+
 function Track() {
   const ground = useMemo(groundGeometry, [])
   const feat = useMemo(featureGeometry, [])
@@ -122,7 +138,7 @@ function Cones({ bodies }: { bodies: React.MutableRefObject<ConeBody[]> }) {
   )
 }
 
-export interface DriveHud { kmh: number; drift: boolean; air: number; gearR: boolean }
+export interface DriveHud { mph: number; frac: number; drift: boolean; air: number; gearR: boolean }
 
 function Driver({ onHud }: { onHud: (h: DriveHud) => void }) {
   const { camera, gl } = useThree()
@@ -239,11 +255,13 @@ function Driver({ onHud }: { onHud: (h: DriveHud) => void }) {
       const sp = Math.hypot(c.vx, c.vz)
       const tx = sp > 3 ? c.vx / sp : fx, tz = sp > 3 ? c.vz / sp : fz
       const bx = fx * 0.65 + tx * 0.35, bz = fz * 0.65 + tz * 0.35, bl = Math.hypot(bx, bz) || 1
-      const back = 6.8 + Math.min(2.2, sp * 0.05)
-      const want = new THREE.Vector3(c.x - (bx / bl) * back, c.y + 2.3, c.z - (bz / bl) * back)
+      const shape = chaseShape(Math.abs(fwd) / DARTER.top)
+      const back = shape.back
+      const want = new THREE.Vector3(c.x - (bx / bl) * back, c.y + shape.height, c.z - (bz / bl) * back)
       want.y = Math.max(want.y, trackHeight(want.x, want.z) + 1.2)
       camPos.lerp(want, 1 - Math.exp(-frameDt * 7))
-      cam.position.set(camPos.x + (Math.random() - 0.5) * sk, camPos.y + (Math.random() - 0.5) * sk, camPos.z)
+      const [rx2, ry2] = speedRumble(Math.abs(fwd) / DARTER.top, performance.now() / 1000)
+      cam.position.set(camPos.x + (Math.random() - 0.5) * sk + rx2, camPos.y + (Math.random() - 0.5) * sk + ry2, camPos.z)
       look.set(c.x + fx * 4, c.y + 1.0, c.z + fz * 4)
       cam.lookAt(look)
     } else {
@@ -251,13 +269,13 @@ function Driver({ onHud }: { onHud: (h: DriveHud) => void }) {
       look.set(c.x + fx * 20, c.y + 1.0, c.z + fz * 20)
       cam.lookAt(look)
     }
-    const fov = FOV + FOV_KICK * Math.min(1, Math.max(0, (Math.abs(fwd) - 12) / 30))
+    const fov = chaseShape(Math.abs(fwd) / DARTER.top).fov
     if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, frameDt * 5); cam.updateProjectionMatrix() }
 
     hudT.current -= frameDt
     if (hudT.current <= 0) {
       hudT.current = 0.08
-      onHud({ kmh: Math.hypot(fwd, lat) * 3.6, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5 })
+      onHud({ mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / DARTER.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5 })
     }
   })
 
@@ -265,13 +283,14 @@ function Driver({ onHud }: { onHud: (h: DriveHud) => void }) {
     <>
       <DarterModel car={model} steer={steerVis} />
       <DriftFx car={car} ground={trackHeight} slip={() => slipAngle(car.current)} />
+      <RoadPosts posts={OVAL_POSTS} ground={trackHeight} />
       <Cones bodies={coneBodies} />
     </>
   )
 }
 
 export default function DriveSlice() {
-  const [hud, setHud] = useState<DriveHud>({ kmh: 0, drift: false, air: 0, gearR: false })
+  const [hud, setHud] = useState<DriveHud>({ mph: 0, frac: 0, drift: false, air: 0, gearR: false })
   const [started, setStarted] = useState(false)
   useEffect(() => {
     const go = () => setStarted(true)
@@ -285,11 +304,12 @@ export default function DriveSlice() {
         <Track />
         <Driver onHud={setHud} />
       </Canvas>
+      <SpeedStreaks frac={hud.frac} />
 
       {/* speedo */}
       <div style={{ position: 'absolute', right: 20, bottom: 18, textAlign: 'right', color: '#f4efe2', pointerEvents: 'none', textShadow: '0 2px 8px rgba(0,0,0,0.55)' }}>
-        <div style={{ font: '700 54px var(--font-game), system-ui', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{Math.round(hud.kmh)}</div>
-        <div style={{ font: '600 11px var(--font-game), system-ui', letterSpacing: '0.25em', opacity: 0.75 }}>KM/H {hud.gearR ? '· R' : ''}</div>
+        <div style={{ font: '700 54px var(--font-game), system-ui', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{Math.round(hud.mph)}</div>
+        <div style={{ font: '600 11px var(--font-game), system-ui', letterSpacing: '0.25em', opacity: 0.75 }}>MPH {hud.gearR ? '· R' : ''}</div>
       </div>
       {(hud.drift || hud.air > 0.25) && (
         <div style={{ position: 'absolute', left: '50%', top: '18%', transform: 'translateX(-50%)', font: '700 15px var(--font-game), system-ui', letterSpacing: '0.35em', color: '#d4a843', textShadow: '0 2px 10px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>
