@@ -271,7 +271,11 @@ function nearestTownVia(region: Region, start: string, first: RegionEdge, offset
   }
   return null
 }
-const placeName = (region: Region, id: string) => region.meta.places.find(p => p.id === id)?.name ?? id
+// an unnamed Atlas place reads as its kind ("a village"), never its id: names are Magii's to give, not ours to leak
+const placeName = (region: Region, id: string) => {
+  const p = region.meta.places.find(q => q.id === id)
+  return p?.name ?? (p ? `the ${p.kind}` : id)
+}
 const km = (m: number) => Math.round(m / 100) / 10
 
 export function roadside(region: Region): { waystones: Waystone[]; fingerposts: Fingerpost[] } {
