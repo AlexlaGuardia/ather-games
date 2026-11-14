@@ -61,14 +61,19 @@ const WORKERS = [
 ]
 
 // The hashes the DEPLOYED bundle asks for — read once, for every worker.
+// ★ BOTH PRODUCTION SLOTS (2026-11-14): coord build alternates `.next` / `.next_b` and `.next-active` names the live
+// one. Keep what EITHER asks for: the live slot is what is being served right now, and the other is what a rollback
+// would bring back. Reading only `.next` would, on a `.next_b`-live day, prune the worker the live site requests.
 const deployed = new Set()
-try {
-  for (const f of readdirSync('.next/static/chunks')) {
-    if (!f.endsWith('.js')) continue
-    const m = readFileSync(`.next/static/chunks/${f}`, 'utf8').match(/(?:voxel-gen|tile-paint)\.worker\.[0-9a-f]{10}\.js/g)
-    for (const hit of m ?? []) deployed.add(hit)
-  }
-} catch { /* no .next yet — nothing is deployed, so nothing needs keeping */ }
+for (const slot of ['.next', '.next_b']) {
+  try {
+    for (const f of readdirSync(`${slot}/static/chunks`)) {
+      if (!f.endsWith('.js')) continue
+      const m = readFileSync(`${slot}/static/chunks/${f}`, 'utf8').match(/(?:voxel-gen|tile-paint)\.worker\.[0-9a-f]{10}\.js/g)
+      for (const hit of m ?? []) deployed.add(hit)
+    }
+  } catch { /* that slot was never built — nothing there needs keeping */ }
+}
 if (deployed.size) console.log(`   deployed bundle asks for: ${[...deployed].join(', ')} — keeping`)
 
 const urlLines = []

@@ -423,36 +423,61 @@ cmd_build() {
   echo ">> building sha $sha — if that is not the sha your sweep covered, STOP and re-sweep"
   signal "$WIN building: $msg (sha $sha)"
   cd "$REPO"
-  # A satellite's dev server sets NEXT_DIST_DIR. If one ever leaks into this shell the
-  # deploy would build somewhere else and pm2 would restart onto a stale `.next`, with
-  # every log line still saying it succeeded. The production build dir is not negotiable.
+  # A satellite's dev server sets NEXT_DIST_DIR. If one ever leaks into this shell the deploy would build into the
+  # lane's dir. Cleared here, then set EXPLICITLY to the slot this build owns.
   unset NEXT_DIST_DIR
-  if npm run build && pm2 restart ather-games >/dev/null; then
+  # ── ★★★ TWO SLOTS: THE SITE STAYS UP WHILE THIS BUILDS (2026-11-14, hub) ─────────────────────────────────
+  # This used to `npm run build` straight into the `.next` the live server reads, so EVERY deploy took the whole
+  # site to 500 for its length ("client reference manifest does not exist", "middleware-manifest.json not found",
+  # hit twice in one evening), and a FAILED build left prod on a half-written artifact. Now:
+  #   build into the slot that is NOT live  →  check it is whole  →  point `.next-active` at it  →  restart  →
+  #   probe  →  roll back to the old slot if the new one does not answer.
+  # next.config.ts reads `.next-active` at startup, so any restart by anyone comes up on the live slot.
+  # ⚠ The slots are never renamed: a Next build bakes its dist dir's name into every route module and resolves its
+  # manifests from it at runtime, so a build cannot be moved into place after the fact.
+  local live target
+  live=$(tr -d '[:space:]' < "$REPO/.next-active" 2>/dev/null || true)
+  case "$live" in .next|.next_b) ;; *) live=.next ;; esac
+  if [ "$live" = ".next" ]; then target=".next_b"; else target=".next"; fi
+  # Both slots' generated route types are in tsconfig `include`, so this build's typecheck would also read the LIVE
+  # slot's last validator.ts, which names routes that may since be gone (the 08-13 failure class). `types/` is
+  # build-time only — the running server never reads it — so it is safe to clear from under the live slot.
+  rm -rf "$REPO/$live/types" "$REPO/$live/dev/types"
+  echo ">> live slot $live keeps serving; building into $target"
+  if NEXT_DIST_DIR="$target" npm run build; then
     # ── ★★★ THE ARTIFACT HAS TO BE WHOLE, AND `npm run build` EXITING 0 DOES NOT PROVE IT ──────
-    # 2026-08-27: a build was KILLED MID-WRITE by a harness timeout (the caller passed
-    # `timeout 900`; the tool's own 2-minute ceiling won). The trap released the lock cleanly, so
-    # the board read FREE, and **prod kept answering 200 for forty minutes** — because the running
-    # pm2 process had started from the PREVIOUS good build and was serving what it already had.
-    # `.next` had no BUILD_ID. The next restart, from anyone — another window, the mem-watcher,
-    # a reboot — would have brought the site up against a half-written artifact.
-    #
-    # ⚠⚠ SO `prod answers 200` IS NOT EVIDENCE `.next` IS COMPLETE, and neither is a clean lock.
-    # The one cheap question that IS evidence: does the build id exist, and are there chunks under
-    # it. Asked here, on the success path, because a build that dies must not be able to leave the
-    # board saying "free" and the tree saying "fine".
-    if [ ! -f "$REPO/.next/BUILD_ID" ]; then
-      echo ">> ⚠⚠ INCOMPLETE ARTIFACT — .next has no BUILD_ID after a build that reported success."
-      echo ">>   prod may still answer 200 from the OLD build the running process started with."
-      echo ">>   DO NOT restart ather-games. Re-run this build to completion first."
+    # 2026-08-27: a build was KILLED MID-WRITE by a harness timeout; the lock released cleanly and the board
+    # read FREE while the dir had no BUILD_ID. Checked BEFORE anything switches now (the old order restarted
+    # first and checked after), so an incomplete build never becomes the live slot.
+    if [ ! -f "$REPO/$target/BUILD_ID" ]; then
+      echo ">> ⚠⚠ INCOMPLETE ARTIFACT — $target has no BUILD_ID after a build that reported success."
+      echo ">>   Nothing switched: prod is still on $live. Re-run this build."
       exit 1
     fi
-    _chunks=$(ls "$REPO"/.next/static/chunks/*.js 2>/dev/null | wc -l)
+    _chunks=$(ls "$REPO/$target"/static/chunks/*.js 2>/dev/null | wc -l)
     if [ "$_chunks" -lt 20 ]; then
-      echo ">> ⚠⚠ INCOMPLETE ARTIFACT — BUILD_ID exists but only $_chunks chunk(s) under .next/static."
-      echo ">>   Re-run this build to completion before anything restarts."
+      echo ">> ⚠⚠ INCOMPLETE ARTIFACT — BUILD_ID exists but only $_chunks chunk(s) under $target/static."
+      echo ">>   Nothing switched: prod is still on $live. Re-run this build."
       exit 1
     fi
-    echo ">> artifact OK — BUILD_ID $(cat "$REPO/.next/BUILD_ID"), $_chunks chunks"
+    echo ">> artifact OK — BUILD_ID $(cat "$REPO/$target/BUILD_ID"), $_chunks chunks"
+    echo "$target" > "$REPO/.next-active.tmp" && mv -f "$REPO/.next-active.tmp" "$REPO/.next-active"
+    pm2 restart ather-games >/dev/null
+    # ── the switch is only real once the new slot ANSWERS. A restart that comes up broken rolls back. ──
+    _up=""
+    for _i in $(seq 1 30); do
+      sleep 2
+      _code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:3200/shimmer || true)
+      if [ "$_code" = "200" ]; then _up=1; break; fi
+    done
+    if [ -z "$_up" ]; then
+      echo ">> ⚠⚠ $target DID NOT ANSWER 200 within 60s of the restart (last: ${_code:-none}). ROLLING BACK to $live."
+      echo "$live" > "$REPO/.next-active.tmp" && mv -f "$REPO/.next-active.tmp" "$REPO/.next-active"
+      pm2 restart ather-games >/dev/null
+      signal "$WIN DEPLOY ROLLED BACK: $msg ($target did not answer)"
+      exit 1
+    fi
+    echo ">> live slot is now $target (answered 200 after ${_i}x2s)"
     echo ">> build + restart OK"
     # Breadcrumb for the health monitor. The lock dies on the next line, but the
     # process we just restarted needs ~5min to look stable — without a marker that
@@ -495,7 +520,7 @@ cmd_build() {
       echo ">>   git push origin master   (pull --rebase first if a satellite has landed work)"
     fi
   else
-    echo ">> BUILD FAILED — nothing deployed"
+    echo ">> BUILD FAILED — nothing deployed; prod is still serving $live"
     signal "$WIN BUILD FAILED: $msg"
     release_lock; trap - EXIT
     exit 1

@@ -80,3 +80,7 @@ tools/render/out/
 # lane scratch: one-off probe scripts (.mts) written during a session, never shipped
 /scripts/.scratch/
 tools/worldmap/out/
+
+# the second production slot (coord build alternates .next / .next_b; .next-active names the live one)
+.next_b
+.next-active

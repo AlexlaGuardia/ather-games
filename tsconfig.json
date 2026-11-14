@@ -41,7 +41,9 @@
     ".next-play/types/**/*.ts",
     ".next-play/dev/types/**/*.ts",
     ".next-assets/types/**/*.ts",
-    ".next-assets/dev/types/**/*.ts"
+    ".next-assets/dev/types/**/*.ts",
+    ".next_b/types/**/*.ts",
+    ".next_b/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

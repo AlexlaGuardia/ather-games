@@ -562,9 +562,11 @@ async function checkWorld(add: Add) {
 async function checkStaleness(add: Add) {
   let buildTime: number | null = null
   try {
-    buildTime = (await fs.stat(path.join(process.cwd(), '.next/BUILD_ID'))).mtimeMs
+    // the live production slot (coord build alternates .next / .next_b; .next-active names it)
+    const slot = (await fs.readFile(path.join(process.cwd(), '.next-active'), 'utf8').catch(() => '.next')).trim() || '.next'
+    buildTime = (await fs.stat(path.join(process.cwd(), slot, 'BUILD_ID'))).mtimeMs
   } catch {
-    add({ severity: 'info', domain: 'deploy', check: 'build-id', message: 'No .next/BUILD_ID found — cannot determine deploy staleness.' })
+    add({ severity: 'info', domain: 'deploy', check: 'build-id', message: 'No BUILD_ID in the live slot — cannot determine deploy staleness.' })
     return
   }
   const stale: string[] = []
