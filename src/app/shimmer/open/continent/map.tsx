@@ -14,13 +14,15 @@
 // ★ THE CROSSING IS MARKED, AND NOT HIDDEN BY THE FOG. Rune Hold's square is the gate-landing to the Ather
 // (world/gates.md). It wears the door ring and, when it is off the minimap, the ring sits on the rim and points —
 // the same rule as the keeper's fold door: the way to the other side is never something you must stumble on.
-// The other side's tab is shown and closed: you SEE that the Ather is there, you cross at Rune Hold.
+// The other side's tab is a VIEW, not a door: the same land in blocks, opened where you have walked the Wilds
+// (the world lane's fog, one grid in world coords). Looking is free; going is still Rune Hold's gate.
 
 import { useEffect, useRef, useState } from 'react'
 import type { Region } from '../region'
 import { WATER_Y } from '../on-foot'
 import { emptySeen, isSeen, see, loadSeen, saveSeen, CELL, type Seen } from '../../voxel3d/discovery'
-import { drawCloud, drawDoor, drawDoorPinned, drawKeeper, PARCHMENT } from '../../ui/map-kit'
+import { drawCloud, drawDoor, drawDoorPinned, drawKeeper, PARCHMENT, ATHER_CLOUD } from '../../ui/map-kit'
+import { loadFog, FOG_CELL, type Fog } from '../ather/explored'
 import { screenHeading } from '../../voxel3d/map-heading'
 import { HearthMapFrame, MINIMAP_BOX, MINIMAP_BOX_PHONE, type MapBox } from '../../ui/hearth-hud'
 
@@ -108,6 +110,46 @@ function buildPlate(R: Region): { plate: HTMLCanvasElement; coast: HTMLCanvasEle
   return { plate: cv, coast }
 }
 
+// ── THE ATHER FACE: the same land in the Ather's matter ─────────────────────────────────────────────────────────
+// Same land, two states (world/ather.md); the Ather is QUANTIZED (shimmer-geography.md), so the plate is cut into
+// 60 m blocks and banded, in the palette of the Atlas's Ather face (athernyx/assets/maps/atlas/gen_ather_relief.py)
+// so the cockpit and the game draw one picture. No roads, no towns: settlements converge, they are never mirrored,
+// and the garden pockets (home plot, Moonwell, Gloview) are off the land map by canon.
+const ATHER_BANDS: [number, [number, number, number]][] = [
+  [0.5, [92, 112, 178]], [30, [126, 196, 132]], [90, [170, 206, 120]], [180, [214, 196, 128]], [280, [176, 150, 196]], [1e9, [236, 228, 250]],
+]
+const BLOCK = 6   // plate px per block (60 m)
+function buildAtherPlate(R: Region, w: number, hgt: number): HTMLCanvasElement {
+  const { nx, nz, cell } = R.meta
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = hgt
+  const ctx = cv.getContext('2d')!
+  const H = (x: number, z: number) => R.h[Math.min(nz - 1, Math.max(0, Math.round(z / cell))) * nx + Math.min(nx - 1, Math.max(0, Math.round(x / cell)))]
+  const bm = BLOCK * P
+  for (let by = 0; by * BLOCK < hgt; by++) for (let bx = 0; bx * BLOCK < w; bx++) {
+    const x = (bx + 0.5) * bm, z = (by + 0.5) * bm
+    const h = (H(x, z) + H(x - bm / 3, z) + H(x + bm / 3, z) + H(x, z - bm / 3) + H(x, z + bm / 3)) / 5
+    const col = ATHER_BANDS.find(b => h < b[0])![1]
+    let k = 1
+    if (h >= 0.5) {   // light from the northwest, banded to quarter steps: quantized all the way down
+      const d = (H(x + bm, z) - H(x - bm, z) + H(x, z + bm) - H(x, z - bm)) / (2 * bm)
+      k = Math.round(Math.max(0.65, Math.min(1.2, 1 - d * 2.2)) * 4) / 4
+    }
+    ctx.fillStyle = `rgb(${col[0] * k | 0},${col[1] * k | 0},${col[2] * k | 0})`
+    ctx.fillRect(bx * BLOCK, by * BLOCK, BLOCK, BLOCK)
+  }
+  return cv
+}
+/** The Ather tab's picture: the block plate under the cloud, opened where the keeper has WALKED the Wilds
+ *  (open/ather/explored.ts, one 16 m grid in continent world coords, origin at the centre like toPx). */
+function composeAther(m: ContinentMapState, fog: Fog): HTMLCanvasElement {
+  m.atherPlate ??= buildAtherPlate(m.R, m.plate.width, m.plate.height)
+  const cv = document.createElement('canvas'); cv.width = m.plate.width; cv.height = m.plate.height
+  const ctx = cv.getContext('2d')!
+  ctx.drawImage(m.atherPlate, 0, 0)
+  drawCloud(ctx, fog, FOG_CELL / P, 0, 0, ATHER_CLOUD)
+  return cv
+}
+
 // ── the region's map state: plate, fog, and the composed (plate + unknown) image both views draw from ──────────
 export interface ContinentMapState {
   R: Region
@@ -119,6 +161,8 @@ export interface ContinentMapState {
   toPx: (x: number, z: number) => [number, number]
   /** plate px per fog cell */
   cellPx: number
+  /** the Ather face, built the first time its tab opens */
+  atherPlate?: HTMLCanvasElement
 }
 
 export function makeMapState(R: Region): ContinentMapState {
@@ -207,6 +251,7 @@ export function ContinentMiniMap({ map, track, onExpand }: { map: ContinentMapSt
 export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; track: React.RefObject<Track>; onClose: () => void }) {
   const base = useRef<HTMLCanvasElement>(null), marks = useRef<HTMLCanvasElement>(null)
   const [pct, setPct] = useState(0)
+  const [side, setSide] = useState<'nyx' | 'ather'>('nyx')
   // ★ DRAWN AT THE SIZE IT IS SHOWN. A fixed 2× plate was scaled down to fit the screen and its 12px labels came
   // out at 4px; so the canvas takes the displayed size × devicePixelRatio and every label is sized in real px.
   const [S, setS] = useState(1), [dpr, setDpr] = useState(1)
@@ -223,6 +268,16 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
     compose(map)
     c.width = Math.round(map.plate.width * S); c.height = Math.round(map.plate.height * S)
     const ctx = c.getContext('2d')!
+    if (side === 'ather') {
+      // the other state of this land: you are not there, so no marker; only what you have walked, opened
+      const fog = loadFog()
+      ctx.imageSmoothingEnabled = false
+      ctx.drawImage(composeAther(map, fog), 0, 0, c.width, c.height)
+      let on = 0
+      for (let i = 0; i < fog.bits.length; i++) { let b = fog.bits[i]; while (b) { on += b & 1; b >>= 1 } }
+      setPct((on / (fog.cw * fog.ch)) * 100)
+      return
+    }
     ctx.imageSmoothingEnabled = true
     ctx.drawImage(map.comp, 0, 0, c.width, c.height)
     // names only where you have been: a label over parchment would tell you what the fog is for not telling
@@ -243,7 +298,7 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
     let on = 0
     for (let y = 0; y < map.seen.ch; y++) for (let x = 0; x < map.seen.cw; x++) if (isSeen(map.seen, x, y)) on++
     setPct((on / (map.seen.cw * map.seen.ch)) * 100)
-  }, [map, S, dpr])
+  }, [map, S, dpr, side])
   useEffect(() => {
     const c = marks.current, b = base.current; if (!c || !b) return
     let id = 0
@@ -251,13 +306,13 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
       id = requestAnimationFrame(tick)
       if (c.width !== b.width || c.height !== b.height) { c.width = b.width; c.height = b.height }
       const ctx = c.getContext('2d')!; ctx.clearRect(0, 0, c.width, c.height)
-      const t = track.current; if (!t) return
+      const t = track.current; if (!t || side === 'ather') return
       const [x, y] = map.toPx(t.x, t.z)
       drawKeeper(ctx, x * S, y * S, trackHeading(t), 5 * dpr)
     }
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)
-  }, [map, track, S, dpr])
+  }, [map, track, S, dpr, side])
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.code === 'Escape' || e.code === 'KeyM') { e.stopPropagation(); onClose() } }
     window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true)
@@ -268,8 +323,9 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(14,10,6,0.86)', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, maxWidth: '96vw' }}>
         <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
-          <span style={tab(true)}>Athernyx</span>
-          <span style={tab(false)} title="The other state of this same land. You cross at Rune Hold's gate.">The Ather · cross at Rune Hold</span>
+          <button type="button" style={{ ...tab(side === 'nyx'), cursor: 'pointer' }} onClick={() => setSide('nyx')}>Athernyx</button>
+          <button type="button" style={{ ...tab(side === 'ather'), cursor: 'pointer' }} onClick={() => setSide('ather')}
+            title="The other state of this same land: what you have walked in the Wilds. You cross at Rune Hold's gate.">The Ather</button>
         </div>
         <div style={{ position: 'relative' }}>
           <canvas ref={base} data-map="base" style={{ maxWidth: '94vw', maxHeight: '78vh', width: 'auto', height: 'auto', display: 'block', borderRadius: 8,
@@ -277,8 +333,8 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
           <canvas ref={marks} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', borderRadius: 8 }} />
         </div>
         <div style={{ color: 'rgba(240,228,200,0.6)', font: '12px system-ui', textAlign: 'center' }}>
-          <span style={{ color: '#f4e6c0', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{pct.toFixed(1)}%</span> of the continent inked ·
-          ink where you have driven · <span style={{ letterSpacing: '0.18em', textTransform: 'uppercase', fontSize: 10 }}>M / Esc close</span>
+          <span style={{ color: '#f4e6c0', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{pct.toFixed(side === 'ather' ? 2 : 1)}%</span>{' '}
+          {side === 'ather' ? <>of the Ather walked · the same land, the other state · cross at Rune Hold · </> : <>of the continent inked · ink where you have driven · </>}<span style={{ letterSpacing: '0.18em', textTransform: 'uppercase', fontSize: 10 }}>M / Esc close</span>
         </div>
       </div>
     </div>
