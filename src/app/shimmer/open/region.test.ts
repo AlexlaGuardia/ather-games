@@ -27,6 +27,38 @@ const { cell, nx, nz, sizeX, sizeZ } = meta
 const place = (id: string) => meta.places.find(p => p.id === id)
 for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place ${id} missing from the export`)
 
+// ★ a missed turn is recoverable (Alex 11-14: roads sat high on dykes; one slip fell into a valley too steep to climb
+// back out of). Step off every road, both sides, 30 m out: the bank must stay under the courser's climb limit (0.6)
+// and the ground must not fall away below the road.
+{
+  let steep = 0, drops = 0, n = 0, worstDrop = 0
+  for (const r of meta.roads) {
+    for (let k = 0; k < r.pts.length - 1; k++) {
+      const [ax, az] = r.pts[k], [bx, bz] = r.pts[k + 1]
+      const L = Math.hypot(bx - ax, bz - az); if (L < 1) continue
+      const nxp = -(bz - az) / L, nzp = (bx - ax) / L, mx = (ax + bx) / 2, mz = (az + bz) / 2
+      const y0 = R.heightAt(mx, mz); if (y0 < 1) continue        // causeway over water: no bank to recover onto yet
+      for (const side of [-1, 1]) {
+        let prev = R.heightAt(mx + nxp * side * r.width / 2, mz + nzp * side * r.width / 2), bad = false
+        for (let o = r.width / 2 + 2.5; o <= r.width / 2 + 30; o += 2.5) {
+          const x = mx + nxp * side * o, z = mz + nzp * side * o
+          if (nearestRoad(R, x, z).d < 6) break                     // ran onto another road
+          const y = R.heightAt(x, z); if (!Number.isFinite(y)) break
+          if (Math.abs(y - prev) / 2.5 > 0.6) bad = true
+          prev = y
+        }
+        const yOut = R.heightAt(mx + nxp * side * (r.width / 2 + 30), mz + nzp * side * (r.width / 2 + 30))
+        if (Number.isFinite(yOut)) { const drop = y0 - yOut; worstDrop = Math.max(worstDrop, drop); if (drop > 6) drops++ }
+        if (bad) steep++
+        n++
+      }
+    }
+  }
+  ok(steep / n < 0.03, `${(100 * steep / n).toFixed(1)}% of road banks are steeper than the climb limit within 30 m`)
+  ok(drops / n < 0.03, `${(100 * drops / n).toFixed(1)}% of road edges fall >6 m within 30 m (worst ${worstDrop.toFixed(1)} m): the road is a dyke`)
+  console.log(`  banks: ${n} probes, ${(100 * steep / n).toFixed(1)}% steep, ${(100 * drops / n).toFixed(1)}% fall >6 m (worst ${worstDrop.toFixed(1)} m)`)
+}
+
 // ★ roads are drivable: along every road's centre line the grade stays near the 12% cap
 {
   let worst = 0, where = ''

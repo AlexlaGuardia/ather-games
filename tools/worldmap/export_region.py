@@ -20,8 +20,8 @@ X0, Y0, X1, Y1 = map(int, sys.argv[3:7])
 ATLAS = '/root/athernyx/assets/maps/atlas/atlas.json'
 M_PX, UP = 10.0, 2                       # source metres per px; upsample factor → 5 m cells
 CELL = M_PX / UP
-WIDTH = {'paved': 9.0, 'road': 7.0, 'trail': 4.5, 'pass': 5.0}     # metres, the drivable surface
-SHOULDER = 12.0
+WIDTH = {'paved': 14.0, 'road': 12.0, 'trail': 9.0, 'pass': 10.0}  # metres, the drivable surface (Alex 11-14: 7 m was too tight)
+SHOULDER = 18.0
 MAX_GRADE = {'paved': 0.10, 'road': 0.12, 'trail': 0.18, 'pass': 0.18}   # rise/run; where land is steeper the road cuts/fills
 
 src = np.load(H_SRC)
@@ -76,13 +76,16 @@ for r in atlas['roads']:
         roads_out.append({'id': f"{r['id']}#{k}", 'kind': r['kind'], 'from': r['from'], 'to': r['to'], 'width': w, 'xz': simp})
 if cen:
     tree = cKDTree(np.array(cen)); Wc = np.array(cen_w)
-    d, idx = tree.query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=9 / 2 + 2.5 + 160)   # wide: a deep cut's shoulder reaches far
+    d, idx = tree.query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=14 / 2 + 4.0 + 220)   # wide: a deep cut's shoulder reaches far
     d = d.reshape(h.shape); idx = idx.reshape(h.shape)
     ok = np.isfinite(d)
-    half = np.where(ok, Wc[np.minimum(idx, len(Wc) - 1)] / 2 + 2.5, 0)   # flat a little past the paint: a riverbank shoulder sagged into the drive line at +1
+    half = np.where(ok, Wc[np.minimum(idx, len(Wc) - 1)] / 2 + 4.0, 0)   # flat a little past the paint: a riverbank shoulder sagged into the drive line at +1
     bed = ok & (d <= half + CELL)                                     # the road surface (+ one cell so it is never 1 px)
     # the field: land smoothed hard, causeway over water
-    road = np.maximum(nd.gaussian_filter(h, 25 / CELL), 0.8)
+    # the baseline is the land UNDER THE BED only (normalised convolution): smoothing the whole grid let a hill beside
+    # a valley road pull the road up toward it
+    bf = bed.astype(np.float64)
+    road = np.maximum(nd.gaussian_filter(h * bf, 12 / CELL) / np.maximum(nd.gaussian_filter(bf, 12 / CELL), 1e-6), 0.8)
     # GRADE LIMIT, exactly: the highest and the lowest surfaces that obey the limit along the bed (min-plus / max-minus
     # propagation to a fixed point), averaged. Each envelope changes by at most g per metre between bed neighbours, so
     # any blend of them does too. (The first version clamped locally, one cell per pass, and stopped long before
@@ -98,15 +101,18 @@ if cen:
             U = np.minimum(U, np.where(bed, np.roll(np.roll(U0, dz, 0), dx, 1) + G * dist, BIG))
             L = np.maximum(L, np.where(bed, np.roll(np.roll(L0, dz, 0), dx, 1) - G * dist, -BIG))
         if max(np.abs(U - U0)[bed].max(), np.abs(L - L0)[bed].max()) < 1e-3: break
-    # ANY blend of the two envelopes obeys the limit; lean on U (cut into the hill) over L (raise a dam). The 50/50
-    # version built a 44 m embankment across a valley and the autopilot drove off its edge.
-    road = np.where(bed, 0.8 * U + 0.2 * L, road)
+    # PURE CUT: U is the highest grade-legal surface that never rises above the land, so a road is never a dyke.
+    # Any share of L lifts the road wherever a peak is within (peak height / G) of it: the 80/20 blend put 23% of the
+    # corridor's road 8+ m above the land and a missed turn fell into a valley it could not climb out of (Alex 11-14).
+    # 50/50 before that built a 44 m embankment. Cuts deep enough to matter (>20 m) are ~5% of the bed, and their
+    # banks widen with the depth below, so a deep cut is a valley, not a slot.
+    road = np.where(bed, U, road)
     print(f'grade envelope converged in {it} iterations')
-    # the shoulder WIDENS with the cut or fill it has to make up (~1:1.6), so a deep cut is a valley with sloping
+    # the shoulder WIDENS with the cut or fill it has to make up (~1:3; at 1:1.6 13% of the bank was past the courser's climb limit), so a deep cut is a valley with sloping
     # sides, not a slot canyon (the road out of Ashfeld ran between 40 m vertical walls at a fixed 12 m shoulder)
     near0 = nd.distance_transform_edt(~bed, return_distances=False, return_indices=True)
     depth = np.abs(h - road[near0[0], near0[1]])
-    t = np.clip((d - half) / np.maximum(SHOULDER, depth * 1.6), 0, 1)
+    t = np.clip((d - half) / np.maximum(SHOULDER, depth * 3.0), 0, 1)
     blend = np.where(ok, 1 - t * t * (3 - 2 * t), 0)
     # the shoulder blends to the NEAREST bed height (spread outward), so a cut has walls, not a cliff into the road
     near = nd.distance_transform_edt(~bed, return_distances=False, return_indices=True)
