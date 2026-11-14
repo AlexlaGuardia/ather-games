@@ -19,6 +19,8 @@ import { BoardPanel, TradeHud, useLedger } from '../trade-ui'
 import { postBoard, accept, arrive, abandon, buy, GOODS, CAPACITY, type Contract, type Supply } from '../trade'
 import { DARTER_STOCK, tuneFromSpec } from '../courser'
 import { buildSpec, type Slot, type Tier } from '../courser-build'
+import { footWorld, tickFoot, exitSpot, canEnter, stepOut, EXIT_MAX_SPEED } from '../on-foot'
+import { eyeY, WALK_SPEED, SPEED_CAP, type LocoState } from '../../voxel3d/locomotion'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
 import { TUNNEL_H, TUNNEL_WALK, boreAt, tunnelWall, bridgeRail, drivable, ferryLanding, guardrails, loadRegion, roadRail, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
 
@@ -656,7 +658,11 @@ function FogRig() {
   return null
 }
 
-export interface RideHud { x: number; z: number; yaw: number; mph: number; frac: number; drift: boolean; air: number; gearR: boolean; place: string | null; road: string | null; sign: string | null }
+export interface RideHud { x: number; z: number; yaw: number; mph: number; frac: number; drift: boolean; air: number; gearR: boolean; place: string | null; road: string | null; sign: string | null
+  /** On foot (the courser parked); prompt = the F verb on offer right now, if any. */
+  foot?: boolean; prompt?: string | null }
+// on foot: the walker's own feel numbers (open/page.tsx), and the get-in/get-out glide
+const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
 function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<{ tp?: (x: number, z: number, yaw: number) => void }> }) {
   const { camera, gl } = useThree()
@@ -677,6 +683,39 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
   const signs = useMemo(() => roadside(R), [R])
   const look = useMemo(() => new THREE.Vector3(), [])
   const shake = useRef(0)
+  // ── ON FOOT (Alex 11-14): F steps out of the courser and back in, the camera GLIDING between the chase pose and the
+  // eye in SEAT_GLIDE seconds (never a cut), the courser parked on its handbrake where you left it ──
+  const fw = useMemo(() => footWorld(R), [R])
+  const mode = useRef<'drive' | 'foot'>('drive')
+  const loco = useRef<LocoState | null>(null)
+  const view = useRef({ yaw: 0, pitch: -0.08 })
+  const glide = useRef<{ t: number; pos: THREE.Vector3; quat: THREE.Quaternion } | null>(null)
+  const tmpQ = useMemo(() => new THREE.Quaternion(), [])
+  const lock = () => { try { const r = gl.domElement.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* needs a gesture: a click relocks */ } }
+  const startGlide = () => { glide.current = { t: 0, pos: camera.position.clone(), quat: camera.quaternion.clone() } }
+  const seat = () => {
+    const c = car.current
+    if (mode.current === 'drive') {
+      if (Math.hypot(c.vx, c.vz) > EXIT_MAX_SPEED || c.airborne) return
+      const spot = exitSpot(fw, R, c)
+      if (!spot) return
+      startGlide()
+      loco.current = stepOut(spot, c)
+      view.current = { yaw: c.yaw, pitch: -0.08 }
+      mode.current = 'foot'
+      lock()
+    } else {
+      const s = loco.current
+      if (!s || !canEnter(s, c)) return
+      startGlide()
+      // the chase camera picks up from right behind the car, not from wherever it was left
+      const fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw)
+      camPos.set(c.x - fx * 6, c.y + 2.6, c.z - fz * 6)
+      mode.current = 'drive'
+      loco.current = null
+      if (document.pointerLockElement === gl.domElement) document.exitPointerLock()
+    }
+  }
 
   ctl.current.tp = (x: number, z: number, yaw: number) => place(x, z, yaw)
   const place = (x: number, z: number, yaw: number, speed = 0) => {
@@ -687,13 +726,21 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       keys.current.add(e.code)
-      if (e.code === 'KeyR') place(safe.current.x, safe.current.z, safe.current.yaw)
-      if (e.code === 'KeyC') camMode.current = camMode.current === 'chase' ? 'hood' : 'chase'
+      if (e.code === 'KeyF' && !e.repeat) seat()
+      if (e.code === 'KeyR') { mode.current = 'drive'; loco.current = null; place(safe.current.x, safe.current.z, safe.current.yaw) }
+      if (e.code === 'KeyC' && mode.current === 'drive') camMode.current = camMode.current === 'chase' ? 'hood' : 'chase'
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault()
     }
     const up = (e: KeyboardEvent) => keys.current.delete(e.code)
     const blur = () => keys.current.clear()
+    const move = (e: MouseEvent) => {
+      if (mode.current !== 'foot' || document.pointerLockElement !== gl.domElement) return
+      view.current.yaw -= e.movementX * SENS
+      view.current.pitch = Math.max(-1.5, Math.min(1.5, view.current.pitch - e.movementY * SENS))
+    }
+    const click = () => { if (mode.current === 'foot' && document.pointerLockElement !== gl.domElement) lock() }
     window.addEventListener('keydown', down); window.addEventListener('keyup', up); window.addEventListener('blur', blur)
+    window.addEventListener('mousemove', move); gl.domElement.addEventListener('click', click)
     ;(window as unknown as { __drive: unknown }).__drive = {
       state: () => ({ ...car.current, ...bodySpeeds(car.current), slip: slipAngle(car.current), road: nearestRoad(R, car.current.x, car.current.z).d }),
       tp: (x: number, z: number, yaw = 0, speed = 0) => place(x, z, yaw, speed),
@@ -707,8 +754,14 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
       },
       input: (i: Partial<CourserInput> | null) => { scripted.current = i },
       cam: (m: 'chase' | 'hood') => { camMode.current = m },
+      seat: () => seat(),
+      foot: () => (loco.current ? { mode: mode.current, ...loco.current } : { mode: mode.current }),
+      look: (yaw: number, pitch = -0.08) => { view.current = { yaw, pitch } },
     }
-    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur) }
+    return () => {
+      window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur)
+      window.removeEventListener('mousemove', move); gl.domElement.removeEventListener('click', click)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [R])
 
@@ -716,10 +769,11 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
   useEffect(() => { gl.setPixelRatio(Math.min(window.devicePixelRatio, 1.25)) }, [gl])
 
   useFrame((_, frameDt) => {
-    const k = keys.current, sc = scripted.current
-    const throttle = sc?.throttle ?? ((k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0))
-    const steer = sc?.steer ?? ((k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0))
-    const handbrake = sc?.handbrake ?? k.has('Space')
+    const k = keys.current, sc = scripted.current, onFoot = mode.current === 'foot'
+    // on foot the keys are the walker's: the parked courser gets no throttle and its handbrake on
+    const throttle = onFoot ? 0 : sc?.throttle ?? ((k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0))
+    const steer = onFoot ? 0 : sc?.steer ?? ((k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0))
+    const handbrake = onFoot ? true : sc?.handbrake ?? k.has('Space')
 
     acc.current = Math.min(acc.current + frameDt, 0.1)
     let c = car.current
@@ -737,13 +791,28 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
       if (Math.abs(c.z) > lz) { c.z = Math.sign(c.z) * lz; c.vz *= -0.3 }
     }
     // into the water: no boats yet, so back to the last place you were safely on a road
-    if (c.y < -0.6) { place(safe.current.x, safe.current.z, safe.current.yaw); c = car.current }
+    if (c.y < -0.6 && !onFoot) { place(safe.current.x, safe.current.z, safe.current.yaw); c = car.current }
+    // the walker: same tick as /shimmer/open, on the region's ground at the walker's own height
+    const lc = loco.current
+    if (onFoot && lc) {
+      const { yaw } = view.current
+      const fwx = -Math.sin(yaw), fwz = -Math.cos(yaw), rtx = Math.cos(yaw), rtz = -Math.sin(yaw)
+      const f = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0)
+      const r = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0)
+      let mx = fwx * f + rtx * r, mz = fwz * f + rtz * r
+      const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml }
+      tickFoot(fw, R, lc, { mvX: mx, mvZ: mz, fwdX: fwx, fwdZ: fwz, rightX: rtx, rightZ: rtz,
+        jumpKey: k.has('Space'), crouchKey: k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyC'), dt: Math.min(frameDt, 0.05) })
+      // fell off the world (or into it): back beside the courser
+      if (lc.py < -40) { const sp = exitSpot(fw, R, c); if (sp) loco.current = stepOut(sp, { vx: 0, vz: 0 }) }
+    }
     safeT.current -= frameDt
     if (safeT.current <= 0) {
       safeT.current = 0.5
       if (!c.airborne && nearestRoad(R, c.x, c.z).d < 3 && Math.hypot(c.vx, c.vz) > 2) safe.current = { x: c.x, z: c.z, yaw: c.yaw }
     }
-    focus.current.set(c.x, c.y, c.z)
+    if (onFoot && loco.current) focus.current.set(loco.current.px, loco.current.py, loco.current.pz)
+    else focus.current.set(c.x, c.y, c.z)
 
     const g = model.current
     const { fwd, lat } = bodySpeeds(c)
@@ -768,7 +837,11 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
     const fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw)
     shake.current = Math.max(shake.current * Math.exp(-frameDt * 9), Math.min(1, c.landed / 12))
     const sk = shake.current * 0.18
-    if (camMode.current === 'chase') {
+    if (onFoot && loco.current) {
+      const s = loco.current, { yaw, pitch } = view.current
+      cam.position.set(s.px, eyeY(s), s.pz)
+      cam.rotation.set(pitch, yaw, 0, 'YXZ')
+    } else if (camMode.current === 'chase') {
       const sp = Math.hypot(c.vx, c.vz)
       const tx = sp > 3 ? c.vx / sp : fx, tz = sp > 3 ? c.vz / sp : fz
       const bx = fx * 0.65 + tx * 0.35, bz = fz * 0.65 + tz * 0.35, bl = Math.hypot(bx, bz) || 1
@@ -800,7 +873,21 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
       look.set(c.x + fx * 20, c.y + 1.0, c.z + fz * 20)
       cam.lookAt(look)
     }
-    const fov = chaseShape(Math.abs(fwd) / tuneRef.current.top).fov
+    // ★ THE GLIDE: whichever pose the camera just computed is where it is GOING; for SEAT_GLIDE seconds it travels
+    // there from where it was when you pressed F (eased both ends). A step out swoops from behind the car down to the
+    // eye at the door; a step in rises back to the chase. No cut, no fade.
+    const gd = glide.current
+    if (gd) {
+      gd.t += frameDt
+      const u = Math.min(1, gd.t / SEAT_GLIDE), e = u * u * (3 - 2 * u)
+      tmpQ.copy(cam.quaternion)
+      cam.position.lerpVectors(gd.pos, cam.position, e)
+      cam.quaternion.slerpQuaternions(gd.quat, tmpQ, e)
+      if (u >= 1) glide.current = null
+    }
+    const footSpeed = onFoot && loco.current ? Math.hypot(loco.current.hvx, loco.current.hvz) : 0
+    const fov = onFoot ? FOOT_FOV + FOOT_FOV_KICK * Math.min(1, Math.max(0, (footSpeed - WALK_SPEED) / (SPEED_CAP - WALK_SPEED)))
+      : chaseShape(Math.abs(fwd) / tuneRef.current.top).fov
     if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, frameDt * 5); cam.updateProjectionMatrix() }
 
     hudT.current -= frameDt
@@ -813,7 +900,9 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
       let sign: string | null = null
       for (const w of signs.waystones) if (Math.hypot(w.x - c.x, w.z - c.z) < 18) sign = 'Waystone · ' + w.faces.map(f => `${f.name} ${f.km} km`).join(' · ')
       for (const f of signs.fingerposts) if (Math.hypot(f.x - c.x, f.z - c.z) < 26) sign = f.arms.map(a => `${a.name} ${a.km} km`).join(' · ')
-      onHud({ x: c.x, z: c.z, yaw: c.yaw, mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / tuneRef.current.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
+      const reach = loco.current && canEnter(loco.current, c)
+      const prompt = onFoot ? (reach ? 'F · Get in' : null) : Math.hypot(c.vx, c.vz) < 1.5 && !c.airborne ? 'F · Get out' : null
+      onHud({ foot: onFoot, prompt, x: c.x, z: c.z, yaw: c.yaw, mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / tuneRef.current.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
         sign, place: near, road: nr.junction && JUNCTION_LABEL[nr.junction.kind] ? `j:${nr.junction.kind}` : nr.d < (nr.road?.width ?? 7) / 2 + 1 ? nr.road!.kind : null })
     }
   })
@@ -923,7 +1012,7 @@ export default function ContinentRide() {
   }, [ferrying])
   useEffect(() => {
     const e = (ev: KeyboardEvent) => {
-      if (ev.code !== 'KeyE') return
+      if (ev.code !== 'KeyE' || footRef.current) return
       if (ferryRef.current) { takeFerry(); return }
       setBoard(b => (b ? null : atTownRef.current && SUPPLY.some(s => s.place === atTownRef.current) ? atTownRef.current : null))
       setBoardMsg(null)
@@ -931,6 +1020,8 @@ export default function ContinentRide() {
     window.addEventListener('keydown', e); return () => window.removeEventListener('keydown', e)
   }, [takeFerry])
   const atTownRef = useRef<string | null>(null)
+  const footRef = useRef(false)
+  footRef.current = !!hud.foot
   atTownRef.current = atTown
   // the board stays open until you actually drive away (> 60 m), not on the first nudge of the throttle
   useEffect(() => {
@@ -940,7 +1031,7 @@ export default function ContinentRide() {
   }, [board, R, hud.x, hud.z])
   const [garage, setGarage] = useState(false)
   useEffect(() => {
-    const g = (e: KeyboardEvent) => { if (e.code === 'KeyG') setGarage(v => !v) }
+    const g = (e: KeyboardEvent) => { if (e.code === 'KeyG' && !footRef.current) setGarage(v => !v) }
     window.addEventListener('keydown', g)
     return () => window.removeEventListener('keydown', g)
   }, [])
@@ -995,7 +1086,15 @@ export default function ContinentRide() {
           <div style={{ font: '600 34px var(--font-display), Georgia, serif', letterSpacing: '0.06em' }}>{hud.place}</div>
         </div>
       )}
-      <div style={{ position: 'absolute', right: 20, bottom: 18, textAlign: 'right', color: '#f4efe2', pointerEvents: 'none', textShadow: '0 2px 8px rgba(0,0,0,0.55)' }}>
+      {hud.foot && (
+        <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
+      )}
+      {hud.prompt && (
+        <div style={{ position: 'absolute', left: '50%', top: '62%', transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', pointerEvents: 'none' }}>
+          {hud.prompt}
+        </div>
+      )}
+      <div hidden={!!hud.foot} style={{ position: 'absolute', right: 20, bottom: 18, textAlign: 'right', color: '#f4efe2', pointerEvents: 'none', textShadow: '0 2px 8px rgba(0,0,0,0.55)' }}>
         <div style={{ font: '700 54px var(--font-game), system-ui', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{Math.round(hud.mph)}</div>
         <div style={{ font: '600 11px var(--font-game), system-ui', letterSpacing: '0.25em', opacity: 0.75 }}>MPH {hud.gearR ? '· R' : ''}</div>
         <div style={{ font: '600 10px var(--font-game), system-ui', letterSpacing: '0.25em', opacity: 0.65, marginTop: 4 }}>{hud.road ? ROAD_LABEL[hud.road].toUpperCase() : 'OFF ROAD'}</div>
@@ -1030,7 +1129,7 @@ export default function ContinentRide() {
           <div style={{ padding: '18px 24px', borderRadius: 10, background: 'rgba(12,16,20,0.72)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.65, textAlign: 'center', maxWidth: 460 }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>The Darter · Ashfeld</div>
             You start on the road out of Ashfeld. It runs down to Millbrook on the river; the trunk south ends at Rune Hold under the Spine.
-            <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road · G garage · E board (stopped at a town)</div>
+            <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road · G garage · E board (stopped at a town) · F get out / in (on foot: mouse look, Space jump, Shift slide)</div>
             <div style={{ marginTop: 8, fontWeight: 600 }}>Press any key to drive</div>
           </div>
         </div>
