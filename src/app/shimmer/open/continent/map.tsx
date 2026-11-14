@@ -321,7 +321,11 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
     for (const d of allPitstops(map.R.meta.places)) {
       if (d.id === FIRST_PITSTOP) continue
       const [x, y] = map.toPx(d.x, d.z), open = visited.has(d.id)
-      ctx.save(); ctx.globalAlpha = open ? 1 : 0.35; gateRing(ctx, x * S, y * S, 3.4 * dpr); ctx.restore()
+      if (open) gateRing(ctx, x * S, y * S, 3.4 * dpr)
+      else {   // a door to earn: an inked dashed ring, readable on parchment (the pale door ring vanished there)
+        ctx.save(); ctx.strokeStyle = 'rgba(91,61,138,0.75)'; ctx.lineWidth = 1.6 * dpr; ctx.setLineDash([3 * dpr, 2.5 * dpr])
+        ctx.beginPath(); ctx.arc(x * S, y * S, 6 * dpr, 0, Math.PI * 2); ctx.stroke(); ctx.restore()
+      }
       if (open) {
         const gx = x * S + 10 * dpr, gy = y * S + 15 * dpr
         ctx.font = `italic 600 ${11 * dpr}px Georgia, serif`; ctx.lineWidth = 3 * dpr; ctx.strokeStyle = 'rgba(236,226,198,0.9)'
