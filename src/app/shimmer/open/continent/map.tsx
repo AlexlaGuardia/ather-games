@@ -46,7 +46,7 @@ function landColor(h: number): [number, number, number] {
   return STOPS[STOPS.length - 1][1]
 }
 
-function buildPlate(R: Region): HTMLCanvasElement {
+function buildPlate(R: Region): { plate: HTMLCanvasElement; coast: HTMLCanvasElement } {
   const { nx, nz, cell } = R.meta
   const step = Math.max(1, Math.round(P / cell))
   const w = Math.floor((nx - 1) / step), hgt = Math.floor((nz - 1) / step)
@@ -76,6 +76,16 @@ function buildPlate(R: Region): HTMLCanvasElement {
     img.data[k] = r * grain; img.data[k + 1] = g * grain; img.data[k + 2] = b * grain; img.data[k + 3] = 255
   }
   ctx.putImageData(img, 0, 0)
+  // ★ THE COAST IS KNOWN BEFORE YOU DRIVE IT. Athernyx has been charted for centuries (the Atlas is a painting of
+  // it), so the unknown is the inland detail, not the shape of the land: a faint sepia coastline sits over the
+  // parchment from the first minute, and the drive fills in hills, roads and names.
+  const coast = document.createElement('canvas'); coast.width = w; coast.height = hgt
+  const cctx = coast.getContext('2d')!, cimg = cctx.createImageData(w, hgt)
+  for (let j = 1; j < hgt - 1; j++) for (let i = 1; i < w - 1; i++) {
+    const wet = H(i, j) < WATER_Y
+    if (wet !== (H(i + 1, j) < WATER_Y) || wet !== (H(i, j + 1) < WATER_Y)) { const k = (j * w + i) * 4; cimg.data[k] = 92; cimg.data[k + 1] = 64; cimg.data[k + 2] = 36; cimg.data[k + 3] = 255 }
+  }
+  cctx.putImageData(cimg, 0, 0)
   // roads, inked: the network if there is one, else the routes
   const roads = R.meta.network?.edges ?? R.meta.roads
   const toPx = (x: number, z: number): [number, number] => [(x + R.meta.sizeX / 2) / P, (z + R.meta.sizeZ / 2) / P]
@@ -95,13 +105,14 @@ function buildPlate(R: Region): HTMLCanvasElement {
     const [x, y] = toPx(p.x, p.z), rr = p.kind === 'city' ? 3.4 : p.kind === 'settlement' ? 2.6 : 1.9
     ctx.fillStyle = '#3a2412'; ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fill()
   }
-  return cv
+  return { plate: cv, coast }
 }
 
 // ── the region's map state: plate, fog, and the composed (plate + unknown) image both views draw from ──────────
 export interface ContinentMapState {
   R: Region
   plate: HTMLCanvasElement
+  coast: HTMLCanvasElement
   comp: HTMLCanvasElement
   seen: Seen
   compRev: number
@@ -111,12 +122,12 @@ export interface ContinentMapState {
 }
 
 export function makeMapState(R: Region): ContinentMapState {
-  const plate = buildPlate(R)
+  const { plate, coast } = buildPlate(R)
   const comp = document.createElement('canvas'); comp.width = plate.width; comp.height = plate.height
   let seen: Seen
   try { seen = loadSeen(`open-${R.meta.name}`, R.meta.nx, R.meta.nz) } catch { seen = emptySeen(R.meta.nx, R.meta.nz) }
   const cellPx = (CELL * R.meta.cell) / P
-  return { R, plate, comp, seen, compRev: -1, cellPx, toPx: (x, z) => [(x + R.meta.sizeX / 2) / P, (z + R.meta.sizeZ / 2) / P] }
+  return { R, plate, coast, comp, seen, compRev: -1, cellPx, toPx: (x, z) => [(x + R.meta.sizeX / 2) / P, (z + R.meta.sizeZ / 2) / P] }
 }
 
 /** Open ground around a position (metres). Returns true when anything new was inked. */
@@ -132,6 +143,7 @@ function compose(m: ContinentMapState) {
   ctx.clearRect(0, 0, m.comp.width, m.comp.height)
   ctx.drawImage(m.plate, 0, 0)
   drawCloud(ctx, m.seen, m.cellPx, 0, 0, PARCHMENT)
+  ctx.globalAlpha = 0.45; ctx.drawImage(m.coast, 0, 0); ctx.globalAlpha = 1
   m.compRev = m.seen.rev
 }
 
@@ -195,11 +207,21 @@ export function ContinentMiniMap({ map, track, onExpand }: { map: ContinentMapSt
 export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; track: React.RefObject<Track>; onClose: () => void }) {
   const base = useRef<HTMLCanvasElement>(null), marks = useRef<HTMLCanvasElement>(null)
   const [pct, setPct] = useState(0)
-  const S = 2   // drawn at twice the plate so labels and the ring stay crisp
+  // ★ DRAWN AT THE SIZE IT IS SHOWN. A fixed 2× plate was scaled down to fit the screen and its 12px labels came
+  // out at 4px; so the canvas takes the displayed size × devicePixelRatio and every label is sized in real px.
+  const [S, setS] = useState(1), [dpr, setDpr] = useState(1)
+  useEffect(() => {
+    const fit = () => {
+      const d = window.devicePixelRatio || 1, pw = map.plate.width, ph = map.plate.height
+      const shown = Math.min(window.innerWidth * 0.94, (window.innerHeight * 0.78) * pw / ph)
+      setDpr(d); setS((shown * d) / pw)
+    }
+    fit(); window.addEventListener('resize', fit); return () => window.removeEventListener('resize', fit)
+  }, [map])
   useEffect(() => {
     const c = base.current; if (!c) return
     compose(map)
-    c.width = map.plate.width * S; c.height = map.plate.height * S
+    c.width = Math.round(map.plate.width * S); c.height = Math.round(map.plate.height * S)
     const ctx = c.getContext('2d')!
     ctx.imageSmoothingEnabled = true
     ctx.drawImage(map.comp, 0, 0, c.width, c.height)
@@ -208,20 +230,20 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
     for (const p of map.R.meta.places) {
       if (!p.name || !placeSeen(map, p.x, p.z)) continue
       const [x, y] = map.toPx(p.x, p.z)
-      ctx.font = `${p.kind === 'city' ? 700 : 600} ${p.kind === 'city' ? 17 : 13}px Georgia, serif`
-      ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(236,226,198,0.9)'; ctx.strokeText(p.name, x * S + 7, y * S)
-      ctx.fillStyle = '#2c1a0c'; ctx.fillText(p.name, x * S + 7, y * S)
+      ctx.font = `${p.kind === 'city' ? 700 : 600} ${(p.kind === 'city' ? 16 : 13) * dpr}px Georgia, serif`
+      ctx.lineWidth = 3.5 * dpr; ctx.strokeStyle = 'rgba(236,226,198,0.9)'; ctx.strokeText(p.name, x * S + 7 * dpr, y * S)
+      ctx.fillStyle = '#2c1a0c'; ctx.fillText(p.name, x * S + 7 * dpr, y * S)
     }
     const g = gateOf(map)
     if (g) {
-      const [x, y] = map.toPx(g.x, g.z); gateRing(ctx, x * S, y * S, 4.4)
-      ctx.font = 'italic 600 12px Georgia, serif'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(236,226,198,0.9)'
-      ctx.strokeText('gate to the Ather', x * S + 10, y * S + 16); ctx.fillStyle = '#5b3d8a'; ctx.fillText('gate to the Ather', x * S + 10, y * S + 16)
+      const [x, y] = map.toPx(g.x, g.z), gx = x * S + 12 * dpr, gy = y * S + 17 * dpr; gateRing(ctx, x * S, y * S, 4 * dpr)
+      ctx.font = `italic 600 ${12 * dpr}px Georgia, serif`; ctx.lineWidth = 3 * dpr; ctx.strokeStyle = 'rgba(236,226,198,0.9)'
+      ctx.strokeText('gate to the Ather', gx, gy); ctx.fillStyle = '#5b3d8a'; ctx.fillText('gate to the Ather', gx, gy)
     }
     let on = 0
     for (let y = 0; y < map.seen.ch; y++) for (let x = 0; x < map.seen.cw; x++) if (isSeen(map.seen, x, y)) on++
     setPct((on / (map.seen.cw * map.seen.ch)) * 100)
-  }, [map])
+  }, [map, S, dpr])
   useEffect(() => {
     const c = marks.current, b = base.current; if (!c || !b) return
     let id = 0
@@ -231,11 +253,11 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
       const ctx = c.getContext('2d')!; ctx.clearRect(0, 0, c.width, c.height)
       const t = track.current; if (!t) return
       const [x, y] = map.toPx(t.x, t.z)
-      drawKeeper(ctx, x * S, y * S, trackHeading(t), 6)
+      drawKeeper(ctx, x * S, y * S, trackHeading(t), 5 * dpr)
     }
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)
-  }, [map, track])
+  }, [map, track, S, dpr])
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.code === 'Escape' || e.code === 'KeyM') { e.stopPropagation(); onClose() } }
     window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true)
