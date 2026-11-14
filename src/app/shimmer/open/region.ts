@@ -29,6 +29,7 @@ export interface RegionJunction {
 export interface RegionPlace { id: string; name: string | null; kind: string; x: number; z: number; y: number }
 export interface RegionMeta {
   name: string; cell: number; nx: number; nz: number; sizeX: number; sizeZ: number; scale: number
+  binGz?: boolean           // the height grid ships as <name>.bin.gz (big regions)
   roads: RegionRoad[]; places: RegionPlace[]
   network?: { edges: RegionEdge[]; junctions: RegionJunction[]; bridges?: RegionBridge[]; ferries?: RegionFerry[] }
 }
@@ -100,10 +101,10 @@ export function makeRegion(meta: RegionMeta, raw: Int16Array): Region {
 
 /** Browser: fetch the pair from /open/<name>.{json,bin}. */
 export async function loadRegion(name: string): Promise<Region> {
-  const [meta, bin] = await Promise.all([
-    fetch(`/open/${name}.json`).then(r => r.json() as Promise<RegionMeta>),
-    fetch(`/open/${name}.bin`).then(r => r.arrayBuffer()),
-  ])
+  const meta = await fetch(`/open/${name}.json`).then(r => r.json() as Promise<RegionMeta>)
+  const res = await fetch(`/open/${name}.bin${meta.binGz ? '.gz' : ''}`)
+  // a .gz is served as plain bytes (no Content-Encoding), so inflate it here
+  const bin = meta.binGz ? await new Response(res.body!.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer() : await res.arrayBuffer()
   return makeRegion(meta, new Int16Array(bin))
 }
 

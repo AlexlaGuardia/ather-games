@@ -1,6 +1,7 @@
 // The exported corridor, driven by numbers before anyone looks at it. Run: npx tsx src/app/shimmer/open/region.test.ts
 
 import { readFileSync } from 'node:fs'
+import { gunzipSync } from 'node:zlib'
 import { bridgeRail, drivable, ferryLanding, guardrails, makeRegion, onFerryWater, roadRail, nearestRoad, roadside, routeBetween, type RegionMeta } from './region'
 import { createCourser, tickCourser, bodySpeeds } from './courser'
 
@@ -10,7 +11,7 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 // REGION=continent npx tsx … runs the same law against the full map
 const NAME = process.env.REGION ?? 'corridor'
 const meta = JSON.parse(readFileSync(`public/open/${NAME}.json`, 'utf8')) as RegionMeta
-const raw = readFileSync(`public/open/${NAME}.bin`)
+const raw = meta.binGz ? gunzipSync(readFileSync(`public/open/${NAME}.bin.gz`)) : readFileSync(`public/open/${NAME}.bin`)
 const R = makeRegion(meta, new Int16Array(raw.buffer, raw.byteOffset, raw.byteLength / 2))
 const { cell, nx, nz, sizeX, sizeZ } = meta
 

@@ -260,8 +260,16 @@ for p in atlas['places']:
         places_out.append({'id': p['id'], 'name': p['name'], 'kind': p['kind'], 'x': round(x, 1), 'z': round(z, 1), 'y': round(float(sample(x, z)[0]), 2)})
 
 q = np.clip(np.round(h * 10), -32768, 32767).astype('<i2')
-open(f'public/open/{NAME}.bin', 'wb').write(q.tobytes())
-meta = {'name': NAME, 'cell': CELL, 'nx': nx, 'nz': nz, 'sizeX': sizeX, 'sizeZ': sizeZ, 'scale': 0.1,
+# a big region ships gzipped (Cloudflare does not compress octet-stream; the continent is 7.3 MB raw, 2.6 MB gz):
+# the loader inflates it with DecompressionStream. Small regions stay raw.
+import gzip
+GZ = q.nbytes > 2_000_000
+if GZ:
+    open(f'public/open/{NAME}.bin.gz', 'wb').write(gzip.compress(q.tobytes(), 9, mtime=0))
+    if os.path.exists(f'public/open/{NAME}.bin'): os.remove(f'public/open/{NAME}.bin')
+else:
+    open(f'public/open/{NAME}.bin', 'wb').write(q.tobytes())
+meta = {'name': NAME, 'binGz': GZ, 'cell': CELL, 'nx': nx, 'nz': nz, 'sizeX': sizeX, 'sizeZ': sizeZ, 'scale': 0.1,
         'sourcePx': [X0, Y0, X1, Y1], 'mPerSourcePx': M_PX, 'atlasSavedAt': atlas.get('savedAt'),
         'roads': roads_out, 'network': net_out, 'places': places_out}
 json.dump(meta, open(f'public/open/{NAME}.json', 'w'))
