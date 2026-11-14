@@ -118,6 +118,52 @@ for ei, e in enumerate(net['edges']):
                 spans.append((ei, k - 1, k1 + 1, 'ferry'))
             # else: a trail fords it (the bed is carved through the shallows)
         k = k1 + 1
+# ── TUNNELS: where the Atlas marks one (tunnels.json, Alex 11-14: "the passage is supposed to be a tunnel through the
+# mountain"), the road goes THROUGH the ridge instead of cutting a canyon over it. The floor is a straight line between
+# the low ground on each side of the crest; the portals are where the hill stands COVER metres over that line. Between
+# the portals there is no bed: the mountain stays whole, and the game drives the floor (region.ts tunnelAt). Outside
+# them the approach is cut down to the floor line, so the road meets the portal level. ──
+COVER, T_REACH, T_GRADE = 9.0, 240, 0.08    # metres of hill over the floor at a portal · pts searched each side (600 m) · max floor grade
+TF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tunnels.json')
+tunnel_marks = [(o.get('name'), toW(*o['px'])) for o in json.load(open(TF))['tunnels']] if os.path.exists(TF) else []
+tunnels = []                                # (edge index, p0, p1, a, b, floor line over a..b)
+for tname, (mx_, mz_) in tunnel_marks:
+    cand = [(float(np.hypot(e['xz'][:, 0] - mx_, e['xz'][:, 1] - mz_).min()), ei) for ei, e in enumerate(net['edges'])]
+    if not cand or min(cand)[0] > 150: continue
+    ei = min(cand)[1]; e = net['edges'][ei]; P = e['xz']; n = len(P)
+    hs = sample(P[:, 0], P[:, 1])
+    m0 = int(np.argmin(np.hypot(P[:, 0] - mx_, P[:, 1] - mz_)))
+    lo_, hi_ = max(0, m0 - 60), min(n, m0 + 61)
+    m = lo_ + int(np.argmax(hs[lo_:hi_]))                      # the crest nearest the mark
+    a = max(0, m - T_REACH) + int(np.argmin(hs[max(0, m - T_REACH): m + 1]))
+    b = m + int(np.argmin(hs[m: min(n, m + T_REACH + 1)]))
+    s_ = np.concatenate([[0], np.cumsum(np.hypot(*np.diff(P, axis=0).T))])
+    ya, yb = float(max(hs[a], 0.8)), float(max(hs[b], 0.8))
+    L = s_[b] - s_[a]
+    if L <= 0: continue
+    if abs(yb - ya) / L > T_GRADE:                             # too steep end to end: raise the low end
+        if ya < yb: ya = yb - T_GRADE * L
+        else:       yb = ya - T_GRADE * L
+    line = ya + (yb - ya) * (s_[a:b + 1] - s_[a]) / L
+    cover = hs[a:b + 1] - line
+    deep = np.where(cover >= COVER)[0]
+    if len(deep) < 8: print(f'tunnel {tname}: hill never stands {COVER} m over the floor; left as a road'); continue
+    p0, p1 = a + int(deep[0]), a + int(deep[-1])
+    tunnels.append((ei, p0, p1, a, b, line))
+    print(f"tunnel {tname} on {e['id']} ({e['kind']}): {s_[p1] - s_[p0]:.0f} m bore, floor {line[p0 - a]:.1f}->{line[p1 - a]:.1f} m, "
+          f"crest {hs[m]:.0f} m ({hs[m] - line[m - a]:.0f} m of mountain over the road), approaches {s_[p0] - s_[a]:.0f} + {s_[b] - s_[p1]:.0f} m")
+# the approaches are cut to the floor line before the field is built, so the grade envelope carries the road down to
+# each portal (it never lifts a road above the land, so the line is a ceiling it settles under)
+for ei, p0, p1, a, b, line in tunnels:
+    e = net['edges'][ei]; hw = WIDTH[e['kind']] / 2 + 4.0 + 20.0   # the whole bed + the field's smoothing reach
+    idx_ap = np.r_[a:p0 + 1, p1:b + 1]
+    tr = cKDTree(e['xz'][idx_ap]); yl = line[idx_ap - a]
+    dd, kk = tr.query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=hw)
+    dd = dd.reshape(h.shape); kk = kk.reshape(h.shape)
+    bore_pts = e['xz'][p0 + 1: p1]
+    dB0, _ = cKDTree(bore_pts).query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=hw + 40)
+    hit = np.isfinite(dd) & (dd < dB0.reshape(h.shape))          # never lower the hill over the bore itself
+    h = np.where(hit, np.minimum(h, yl[np.minimum(kk, len(yl) - 1)]), h)
 cen, cen_w = [], []
 for ei, e in enumerate(net['edges']):
     keep = np.ones(len(e['xz']), bool)
@@ -125,6 +171,8 @@ for ei, e in enumerate(net['edges']):
         if ej != ei: continue
         if kind == 'bridge': keep[i0 + ABUT: i1 - ABUT + 1] = False     # no bed (no causeway) under the water span
         else:                keep[i0 + 1: i1] = False                   # a ferry: the road ends at each bank
+    for (ej, p0, p1, *_r) in tunnels:
+        if ej == ei: keep[p0 + 1: p1] = False                          # a bore: no bed, the mountain stays
     cen += e['xz'][keep].tolist(); cen_w += [WIDTH[e['kind']]] * int(keep.sum())
 if cen:
     tree = cKDTree(np.array(cen)); Wc = np.array(cen_w)
@@ -203,12 +251,58 @@ if cen:
         wpts = np.concatenate([net['edges'][ej]['xz'][i0:i1 + 1] for ej, i0, i1, _ in spans])
         dW, _ = cKDTree(wpts).query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=60)
         blend = np.where((dW.reshape(h.shape) < 60) & (land0 < 0.5) & ~bed, 0, blend)   # never un-carve the road itself
+    # over a bore the mountain keeps its shape: a cell nearer the bore than any kept road point is never pulled down
+    # toward the road (else the portal's shoulder digs a crater into the hill above the tunnel mouth)
+    if tunnels:
+        bore = np.concatenate([net['edges'][ej]['xz'][p0 + 1: p1] for ej, p0, p1, *_r in tunnels])
+        dB, _ = cKDTree(bore).query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=80)
+        blend = np.where((dB.reshape(h.shape) < d_keep) & ~bed, 0, blend)
     h = h * (1 - blend) + road_out * blend
     # ROUNDABOUT ISLANDS: a kerb and a low planted mound, so the ring is driven around (or bounced over, at a cost)
     for j in net['junctions']:
         if 'island' not in j: continue
         rr = np.hypot(gx - j['x'], gz - j['z']) / j['island']
         h = np.where(rr < 1, h + 0.3 + 1.2 * (1 - rr * rr), h)
+
+# ── the BORES' floors, read off the carved grid, then the MOUTHS cut down to them ──
+TUNNEL_H, TUNNEL_WALK = 7.5, 1.2             # region.ts: floor to crown · walkway each side past the carriageway
+tun_out, tun_floor = [], {}                  # edge index -> (p0, p1, floor y over p0..p1)
+for ti, (ei, p0, p1, a, b, line) in enumerate(tunnels):
+    e = net['edges'][ei]; P = e['xz'][p0:p1 + 1]
+    # ONE GRADE, junction to junction: the floor is a straight line between the CARVED road at the approach ends
+    # (a, b: the low ground each side, usually the junction pads), and the approaches and mouths are cut to the same
+    # line. (v1 ran the floor between the portals and let the field make the approaches: the west approach settled
+    # 3 m high, a crest at the mouth that threw the car on the way out. v0 eased a land-minima line onto the final
+    # ground over 15 m: a 57% ramp at Rune Hold's mouth.)
+    Q = e['xz'][a:b + 1]
+    sq = np.concatenate([[0], np.cumsum(np.hypot(*np.diff(Q, axis=0).T))]); LQ = sq[-1]
+    ga, gb = float(sample(*Q[0])[0]), float(sample(*Q[-1])[0])
+    lq = ga + (gb - ga) * sq / max(LQ, 1e-6)
+    hq = sample(Q[:, 0], Q[:, 1]) - lq
+    ii = np.arange(a, b + 1)
+    roofk = (ii > p0) & (ii < p1) & (hq >= TUNNEL_H + 1.0)        # where the hill is a roof: never carved
+    cut = ~roofk
+    hw = WIDTH[e['kind']] / 2 + TUNNEL_WALK + CELL
+    pts2 = np.stack([gx.ravel(), gz.ravel()], 1)
+    dC, kC = cKDTree(Q[cut]).query(pts2, distance_upper_bound=hw + SHOULDER)
+    dC = dC.reshape(h.shape); kC = np.minimum(kC.reshape(h.shape), int(cut.sum()) - 1)
+    dR = cKDTree(Q[roofk]).query(pts2, distance_upper_bound=hw + SHOULDER + 10)[0].reshape(h.shape) if roofk.any() else np.full(h.shape, np.inf)
+    mine = np.isfinite(dC) & (dC < dR)
+    yC = lq[cut][kC]
+    tt = np.clip((dC - hw) / SHOULDER, 0, 1); wC = np.where(mine, 1 - tt * tt * (3 - 2 * tt), 0)
+    # the carriageway takes the line exactly; its shoulder only ever CUTS toward it (never fills a valley up)
+    h = np.where(mine & (dC <= hw), yC, np.where(mine & (h > yC), h * (1 - wC) + yC * wC, h))
+    y = lq[p0 - a: p1 - a + 1]
+    s_ = sq[p0 - a: p1 - a + 1] - sq[p0 - a]; L = s_[-1]
+    g0, g1 = float(y[0]), float(y[-1])
+    hill = sample(P[:, 0], P[:, 1]) - y
+    roof = np.where(hill >= TUNNEL_H)[0]
+    tun_floor[ei] = (p0, p1, y)
+    tun_out.append({'id': f't{ti}', 'name': tunnel_marks[ti][0] if ti < len(tunnel_marks) else None,
+                    'edge': e['id'], 'kind': e['kind'], 'width': WIDTH[e['kind']],
+                    'pts': [[round(float(x), 2), round(float(z), 2), round(float(yy), 2)] for (x, z), yy in zip(P, y)]})
+    print(f"  bore {tunnel_marks[ti][0]}: floor {g0:.1f}->{g1:.1f} m ({abs(g1 - g0) / max(L, 1) * 100:.1f}%), "
+          f"roofed {s_[roof[0]]:.0f}..{s_[roof[-1]]:.0f} of {L:.0f} m, mouth cuttings {s_[roof[0]]:.0f} + {L - s_[roof[-1]]:.0f} m")
 
 # ⚠ heights are read from the FINAL grid: a later road re-cuts an earlier one's bed where they cross, so a height
 # sampled right after a road's own cut goes stale (pass 1 reported a 168% "grade" that was exactly that)
@@ -244,10 +338,16 @@ for bi, (ei, i0, i1, _) in enumerate([sp for sp in spans if sp[3] == 'bridge']):
     net_out['bridges'].append({'id': f'b{bi}', 'edge': e['id'], 'kind': e['kind'], 'width': WIDTH[e['kind']],
                                'pts': [[round(float(x), 2), round(float(z), 2), round(float(yy), 2)] for (x, z), yy in zip(P, y)]})
     print(f"bridge b{bi} on {e['id']} ({e['kind']}): {L:.0f} m, deck {y.min():.1f}..{y.max():.1f} m, water clearance {float((y - np.minimum(under, 0)).max()):.1f} m")
-for e in net['edges']:
+net_out['tunnels'] = tun_out
+for ei_, e in enumerate(net['edges']):
     P = e['xz'][::2] if len(e['xz']) > 3 else e['xz']
     if len(e['xz']) > 3 and not np.allclose(P[-1], e['xz'][-1]): P = np.vstack([P, e['xz'][-1:]])
     ys = sample(P[:, 0], P[:, 1])
+    if ei_ in tun_floor:
+        p0, p1, ty = tun_floor[ei_]
+        ix = np.arange(0, len(e['xz']), 2)[:len(P)] if len(e['xz']) > 3 else np.arange(len(P))
+        for k, i in enumerate(ix):
+            if p0 <= i <= p1: ys[k] = ty[i - p0]
     net_out['edges'].append({'id': e['id'], 'kind': e['kind'], 'width': WIDTH[e['kind']], 'a': e['a'], 'b': e['b'],
                              'pts': [[round(float(x), 1), round(float(z), 1), round(float(y), 2)] for (x, z), y in zip(P, ys)]})
 for j in net['junctions']:
@@ -291,6 +391,10 @@ def drive_y(x, z):
     if on_ferry(x, z): return None         # the crossing between two landings is the ferry's, not a road's
     if any(math.hypot(x - f[k][0], z - f[k][1]) < 9 for f in net_out['ferries'] for k in ('a', 'b')): return None   # a quay
     """What the car rides at x, z: the deck if one is there, the ground otherwise; None over open water."""
+    for t in net_out['tunnels']:
+        tp = np.array(t['pts'])
+        k = int(np.argmin(np.hypot(tp[:, 0] - x, tp[:, 1] - z)))
+        if math.hypot(tp[k, 0] - x, tp[k, 1] - z) < 1.5: return float(tp[k, 2])
     if len(deckpts):
         k = int(np.argmin(np.hypot(deckpts[:, 0] - x, deckpts[:, 1] - z)))
         if math.hypot(deckpts[k, 0] - x, deckpts[k, 1] - z) < 1.5: return float(deckpts[k, 2])

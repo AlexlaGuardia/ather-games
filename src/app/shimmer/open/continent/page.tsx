@@ -20,7 +20,7 @@ import { postBoard, accept, arrive, abandon, buy, GOODS, CAPACITY, type Contract
 import { DARTER_STOCK, tuneFromSpec } from '../courser'
 import { buildSpec, type Slot, type Tier } from '../courser-build'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
-import { bridgeRail, drivable, ferryLanding, guardrails, loadRegion, roadRail, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
+import { TUNNEL_H, TUNNEL_WALK, tunnelWall, bridgeRail, drivable, ferryLanding, guardrails, loadRegion, roadRail, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
 
 const STEP = 1 / 120
 const FOV = 64
@@ -68,8 +68,19 @@ function chunkGeometry(R: Region, ci: number, cj: number, step: number): THREE.B
   }
   for (let b = 0; b < H; b++) for (let a = 0; a < W; a++) put(b * W + a, is[a], js[b], 0)
   const idx: number[] = []
+  // a bore's mouth: the face of the hill crosses the portal opening, so the quads whose corners straddle floor..crown
+  // inside the bore's footprint are left out (the portal's stone face covers the ragged edge)
+  const bored = (R.meta.network?.tunnels?.length ?? 0) > 0
+  const hole = (a: number, b: number) => {
+    const x = (is[a] + is[a + 1]) / 2 * cell - sizeX / 2, z = (js[b] + js[b + 1]) / 2 * cell - sizeZ / 2
+    const t = R.tunnelAt(x, z)
+    if (!t) return false
+    const ys = [R.vertex(is[a], js[b]), R.vertex(is[a + 1], js[b]), R.vertex(is[a], js[b + 1]), R.vertex(is[a + 1], js[b + 1])]
+    return Math.max(...ys) > t.y + 0.4 && Math.min(...ys) < t.y + TUNNEL_H + 1.5
+  }
   for (let b = 0; b < H - 1; b++) for (let a = 0; a < W - 1; a++) {
     const p00 = b * W + a, p10 = p00 + 1, p01 = p00 + W, p11 = p01 + 1
+    if (bored && hole(a, b)) continue
     // ★ the same diagonal heightAt interpolates (00→11), wound to face up
     idx.push(p00, p11, p10, p00, p01, p11)
   }
@@ -147,6 +158,7 @@ function Roads({ R }: { R: Region }) {
     // junction pads paint themselves (Junctions): stop each ribbon at the pad's edge, and never across an island
     const pads = (R.meta.network?.junctions ?? []).filter(j => j.r > 0)
     const onPad = (x: number, z: number) => pads.some(j => Math.hypot(x - j.x, z - j.z) < j.r - 1.5)
+    const surf = (x: number, z: number) => { const t = R.tunnelAt(x, z); return t && t.cover > 0.3 ? t.y : R.groundAt(x, z) }
     const widest = [...drivable(R)].sort((a, b) => b.width - a.width)
     for (const r of widest) {
       const out = byKind.get(r.kind) ?? { pos: [] }; byKind.set(r.kind, out)
@@ -168,7 +180,8 @@ function Roads({ R }: { R: Region }) {
         const [x, z] = line[k]
         const lx = x + nx * hw, lz = z + nz * hw, rx = x - nx * hw, rz = z - nz * hw
         // the highest surface: on a bridge that is the deck, not the river under it
-        const Lp = [lx, R.groundAt(lx, lz) + 0.07, lz], Rp = [rx, R.groundAt(rx, rz) + 0.07, rz]
+        // ...and in a bore, its floor, not the mountain over it
+        const Lp = [lx, surf(lx, lz) + 0.07, lz], Rp = [rx, surf(rx, rz) + 0.07, rz]
         // off the region's edge there is no ground (−∞): never let such a point into a quad, or the whole mesh's
         // bounds go NaN and three.js culls every road of that kind
         if (!Number.isFinite(Lp[1]) || !Number.isFinite(Rp[1])) { prevL = prevR = null; continue }
@@ -288,6 +301,87 @@ function Bridges({ R }: { R: Region }) {
     <>
       <mesh geometry={geos[0]}><meshLambertMaterial color={STONE_COL} side={THREE.DoubleSide} /></mesh>
       <mesh geometry={geos[1]}><meshLambertMaterial color={PARAPET_COL} side={THREE.DoubleSide} /></mesh>
+    </>
+  )
+}
+
+// ── tunnels: the bore's lining (walls springing into a round crown, dark worked stone), a mana lamp every 16 m
+// alternating sides, and a stone PORTAL face at each mouth where the hill first stands a bore's height over the
+// floor. The road ribbon is painted on the floor by Roads. ──
+const BORE_COL = '#5b554b', PORTAL_COL = '#9a9282', LAMP_COL = '#9fe8d4'
+function boreProfile(hw: number): [number, number][] {
+  // (offset, height) round the lining, left wall foot → crown → right wall foot
+  const spring = 4.2, rise = TUNNEL_H - spring, out: [number, number][] = [[-hw, -0.2], [-hw, spring]]
+  for (let k = 1; k < 8; k++) { const a = Math.PI * k / 8; out.push([-Math.cos(a) * hw, spring + Math.sin(a) * rise]) }
+  out.push([hw, spring], [hw, -0.2])
+  return out
+}
+function Tunnels({ R }: { R: Region }) {
+  const built = useMemo(() => {
+    const lining: number[] = [], lamps: number[] = []
+    const portals: { x: number; y: number; z: number; yaw: number; hw: number; top: number }[] = []
+    const quad = (out: number[], a: number[], b: number[], c: number[], d: number[]) => out.push(...a, ...b, ...c, ...a, ...c, ...d)
+    for (const t of R.meta.network?.tunnels ?? []) {
+      const hw = t.width / 2 + TUNNEL_WALK, prof = boreProfile(hw)
+      // densify to 2.5 m and read the cover at each station: the lining runs only where the hill is a roof
+      const st: { x: number; z: number; y: number; ux: number; uz: number; cover: number }[] = []
+      for (let k = 0; k < t.pts.length - 1; k++) {
+        const [ax, az, ay] = t.pts[k], [bx, bz, by] = t.pts[k + 1]
+        const L = Math.hypot(bx - ax, bz - az) || 1, n = Math.max(1, Math.round(L / 2.5))
+        for (let i = 0; i < n; i++) {
+          const f = i / n, x = ax + (bx - ax) * f, z = az + (bz - az) * f, y = ay + (by - ay) * f
+          st.push({ x, z, y, ux: (bx - ax) / L, uz: (bz - az) / L, cover: R.heightAt(x, z) - y })
+        }
+      }
+      let i0 = st.findIndex(q => q.cover >= TUNNEL_H), i1 = st.length - 1
+      while (i1 > 0 && st[i1].cover < TUNNEL_H) i1--
+      if (i0 < 0 || i1 <= i0) continue
+      i0 = Math.max(0, i0 - 1); i1 = Math.min(st.length - 1, i1 + 1)       // tuck the lining a station into each face
+      // offset o is measured to the LEFT of travel (−x of the direction's right hand): (uz, −ux) is the right normal
+      const at = (q: typeof st[0], o: number, hgt: number) => [q.x + q.uz * o, q.y + hgt, q.z - q.ux * o]
+      let lampAcc = 0, side = 1
+      for (let k = i0; k < i1; k++) {
+        const A = st[k], B = st[k + 1]
+        for (let m = 0; m < prof.length - 1; m++) {
+          const [o0, h0] = prof[m], [o1, h1] = prof[m + 1]
+          quad(lining, at(A, o0, h0), at(B, o0, h0), at(B, o1, h1), at(A, o1, h1))
+        }
+        lampAcc += 2.5
+        if (lampAcc >= 16) {
+          lampAcc = 0; side = -side
+          const o = side * (hw - 0.05), y0 = 3.4, y1 = 3.9
+          const p = (dl: number, hh: number) => [A.x + A.ux * dl + A.uz * o, A.y + hh, A.z + A.uz * dl - A.ux * o]
+          quad(lamps, p(-0.6, y0), p(0.6, y0), p(0.6, y1), p(-0.6, y1))
+        }
+      }
+      for (const [q, dir] of [[st[i0], 1], [st[i1], -1]] as const) {
+        // the face stands to whatever the hill does around it, capped so it never towers over the slope
+        const top = Math.min(TUNNEL_H + 6, Math.max(TUNNEL_H + 2.5, q.cover))
+        portals.push({ x: q.x, y: q.y, z: q.z, yaw: Math.atan2(-q.ux * dir, -q.uz * dir), hw, top })
+      }
+    }
+    const mk = (pos: number[]) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return g }
+    // a portal: a stone slab with the bore's profile cut out of it, extruded 1.6 m back into the hill (local −z)
+    const portalGeo = (hw: number, top: number) => {
+      const wide = hw + 5, prof = boreProfile(hw)
+      const sh = new THREE.Shape([new THREE.Vector2(-wide, -1.5), new THREE.Vector2(wide, -1.5), new THREE.Vector2(wide, top), new THREE.Vector2(-wide, top)])
+      sh.holes.push(new THREE.Path(prof.map(([o, hh]) => new THREE.Vector2(o, hh))))
+      const g = new THREE.ExtrudeGeometry(sh, { depth: 1.6, bevelEnabled: false })
+      g.translate(0, 0, -1.6)
+      return g
+    }
+    return { lining: mk(lining), lamps: mk(lamps), portals: portals.map(p => ({ ...p, geo: portalGeo(p.hw, p.top) })) }
+  }, [R])
+  useEffect(() => () => { built.lining.dispose(); built.lamps.dispose(); for (const p of built.portals) p.geo.dispose() }, [built])
+  return (
+    <>
+      <mesh geometry={built.lining}><meshLambertMaterial color={BORE_COL} side={THREE.DoubleSide} /></mesh>
+      <mesh geometry={built.lamps}><meshBasicMaterial color={LAMP_COL} side={THREE.DoubleSide} /></mesh>
+      {built.portals.map((p, i) => (
+        <mesh key={i} geometry={p.geo} position={[p.x, p.y, p.z]} rotation={[0, p.yaw, 0]}>
+          <meshLambertMaterial color={PORTAL_COL} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
     </>
   )
 }
@@ -455,7 +549,7 @@ function treeBlock(R: Region, bi: number, bj: number) {
     const x = gx + (hash(j, i) - 0.5) * 12, z = gz + (hash(i + 3, j) - 0.5) * 12, y = R.heightAt(x, z)
     if (!Number.isFinite(y) || y < 2 || y > 230) continue
     if (Math.abs(R.heightAt(x + 4, z) - R.heightAt(x - 4, z)) > 5) continue
-    if (nearestRoad(R, x, z).d < 9 || nearPad(R, x, z, 5)) continue
+    if ((nearestRoad(R, x, z).d < 9 && !((R.tunnelAt(x, z)?.cover ?? 0) > TUNNEL_H + 4)) || nearPad(R, x, z, 5)) continue
     if (R.meta.places.some(p => Math.hypot(p.x - x, p.z - z) < 40)) continue
     out.push({ x, y, z, s: 0.8 + hash(i, j + 9) * 0.7 })
   }
@@ -606,8 +700,10 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
     const surface = under.road && under.d < under.road.width / 2 + 1 ? SURFACE[under.road.kind] : SURFACE.off
     while (acc.current >= STEP) {
       acc.current -= STEP
-      tickCourser(c, { throttle, steer, handbrake, dt: STEP, surface }, R.groundAt, tuneRef.current)
-      bridgeRail(R, c) || roadRail(R, c)
+      // the ground the car is ON: told its own height, so under a hill it drives the bore's floor, not the summit
+      const cc = c
+      tickCourser(c, { throttle, steer, handbrake, dt: STEP, surface }, (x, z) => R.groundAt(x, z, cc.y), tuneRef.current)
+      tunnelWall(R, c) || bridgeRail(R, c) || roadRail(R, c)
       const lx = R.meta.sizeX / 2 - 3, lz = R.meta.sizeZ / 2 - 3
       if (Math.abs(c.x) > lx) { c.x = Math.sign(c.x) * lx; c.vx *= -0.3 }
       if (Math.abs(c.z) > lz) { c.z = Math.sign(c.z) * lz; c.vz *= -0.3 }
@@ -651,9 +747,14 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
       const shape = chaseShape(Math.abs(fwd) / tuneRef.current.top)
       const back = shape.back
       const want = new THREE.Vector3(c.x - (bx / bl) * back, c.y + shape.height, c.z - (bz / bl) * back)
-      want.y = Math.max(want.y, R.groundAt(want.x, want.z) + 1.4)
-      camPos.lerp(want, 1 - Math.exp(-frameDt * 7))
-      camPos.y = Math.max(camPos.y, R.groundAt(camPos.x, camPos.z) + 1.0)
+      // in a bore the camera stays under the crown (above it is the inside of the mountain) and reads the floor
+      const tb = R.tunnelAt(c.x, c.z), bored = !!tb && tb.cover > TUNNEL_H * 0.6 && c.y < tb.y + TUNNEL_H
+      if (bored) want.y = Math.min(want.y, tb!.y + TUNNEL_H - 2.2)
+      want.y = Math.max(want.y, R.groundAt(want.x, want.z, c.y) + 1.4)
+      camPos.lerp(want, 1 - Math.exp(-frameDt * (bored ? 12 : 7)))
+      const tc = R.tunnelAt(camPos.x, camPos.z)
+      if (tc && tc.cover > 2 && Math.abs(c.y - tc.y) < TUNNEL_H) camPos.y = Math.min(camPos.y, tc.y + TUNNEL_H - 1.6)
+      camPos.y = Math.max(camPos.y, R.groundAt(camPos.x, camPos.z, c.y) + 1.0)
       const [rx2, ry2] = speedRumble(Math.abs(fwd) / tuneRef.current.top, performance.now() / 1000)
       cam.position.set(camPos.x + (Math.random() - 0.5) * sk + rx2, camPos.y + (Math.random() - 0.5) * sk + ry2, camPos.z)
       look.set(c.x + fx * 4, c.y + 1.0, c.z + fz * 4)
@@ -810,7 +911,7 @@ export default function ContinentRide() {
   const [started, setStarted] = useState(false)
   const focus = useRef(new THREE.Vector3())
   useEffect(() => {
-    const name = new URLSearchParams(window.location.search).get('region') ?? 'corridor'
+    const name = new URLSearchParams(window.location.search).get('region') ?? 'continent'
     loadRegion(name).then(setR).catch(e => setErr(String(e)))
     const go = () => setStarted(true)
     window.addEventListener('keydown', go, { once: true })
@@ -826,6 +927,7 @@ export default function ContinentRide() {
           <Roads R={R} />
           <Junctions R={R} />
           <Bridges R={R} />
+          <Tunnels R={R} />
           <Guardrails R={R} />
           <Water R={R} />
           <Towns R={R} />

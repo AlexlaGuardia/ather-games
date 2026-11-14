@@ -18,6 +18,11 @@ export type JunctionKind = 'square' | 'roundabout' | 'cross' | 'stop4' | 'tee' |
 export interface RegionFerry { id: string; edge: string; kind: RoadKind; length: number; a: [number, number, number]; b: [number, number, number] }
 /** A deck carrying an edge over water: centre line with the DECK height (not the ground's). */
 export interface RegionBridge { id: string; edge: string; kind: RoadKind; width: number; pts: [number, number, number][] }
+/** A BORE through a ridge (tunnels.json, Alex 11-14: the Passage): centre line with the FLOOR height. The hill over
+ *  it stays whole in the height grid; the floor is what a car under it drives. */
+export interface RegionTunnel { id: string; name?: string | null; edge: string; kind: RoadKind; width: number; pts: [number, number, number][] }
+/** Inside height of a bore (floor to crown), and the half-width of its walls past the carriageway. */
+export const TUNNEL_H = 7.5, TUNNEL_WALK = 1.2, MOUTH_BLEND = 12
 export interface RegionJunction {
   id: string; kind: JunctionKind; x: number; z: number; y: number
   r: number                 // pad radius (0 = no pad of its own)
@@ -31,7 +36,7 @@ export interface RegionMeta {
   name: string; cell: number; nx: number; nz: number; sizeX: number; sizeZ: number; scale: number
   binGz?: boolean           // the height grid ships as <name>.bin.gz (big regions)
   roads: RegionRoad[]; places: RegionPlace[]
-  network?: { edges: RegionEdge[]; junctions: RegionJunction[]; bridges?: RegionBridge[]; ferries?: RegionFerry[] }
+  network?: { edges: RegionEdge[]; junctions: RegionJunction[]; bridges?: RegionBridge[]; ferries?: RegionFerry[]; tunnels?: RegionTunnel[] }
 }
 export interface Region {
   meta: RegionMeta
@@ -41,9 +46,13 @@ export interface Region {
   groundAt: (x: number, z: number, y?: number) => number
   /** The deck under x, z (any height), for placement, labels and tests. */
   deckAt: (x: number, z: number) => { y: number; bridge: RegionBridge } | null
+  /** The bore under x, z: floor height, signed distance off its centre line, along-bore distance and the hill's
+   *  height over the floor there (cover; ≤ a few metres = the open cut at a mouth). Null outside every bore. */
+  tunnelAt: (x: number, z: number) => TunnelHit | null
   vertex: (i: number, j: number) => number
 }
 
+export interface TunnelHit { y: number; tunnel: RegionTunnel; off: number; s: number; len: number; cover: number }
 export function makeRegion(meta: RegionMeta, raw: Int16Array): Region {
   const { nx, nz, cell, sizeX, sizeZ, scale } = meta
   if (raw.length !== nx * nz) throw new Error(`region ${meta.name}: ${raw.length} samples, expected ${nx * nz}`)
@@ -162,15 +171,60 @@ export function makeRegion(meta: RegionMeta, raw: Int16Array): Region {
     }
     return best
   }
+  // bores: the nearest segment within the walls, cut square at both mouths (like a deck's ends)
+  const tunnels = meta.network?.tunnels ?? []
+  const tcum = tunnels.map(t => { const c = [0]; for (let k = 1; k < t.pts.length; k++) c.push(c[k - 1] + Math.hypot(t.pts[k][0] - t.pts[k - 1][0], t.pts[k][1] - t.pts[k - 1][1])); return c })
+  const tboxes = tunnels.map(t => {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity
+    for (const p of t.pts) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]) }
+    const m = t.width / 2 + TUNNEL_WALK + 1
+    return [x0 - m, x1 + m, z0 - m, z1 + m]
+  })
+  const tunnelAt = (x: number, z: number): TunnelHit | null => {
+    let best: TunnelHit | null = null, bestD = Infinity
+    for (let ti = 0; ti < tunnels.length; ti++) {
+      const bx = tboxes[ti]
+      if (x < bx[0] || x > bx[1] || z < bx[2] || z > bx[3]) continue
+      const t = tunnels[ti], p = t.pts, hw = t.width / 2 + TUNNEL_WALK + 0.5, c = tcum[ti], len = c[c.length - 1]
+      for (let k = 0; k < p.length - 1; k++) {
+        const ax = p[k][0], az = p[k][1], abx = p[k + 1][0] - ax, abz = p[k + 1][1] - az, L2 = abx * abx + abz * abz || 1
+        const u = ((x - ax) * abx + (z - az) * abz) / L2
+        if ((k === 0 && u < 0) || (k === p.length - 2 && u > 1)) continue        // square mouths
+        const tt = Math.max(0, Math.min(1, u)), qx = ax + abx * tt, qz = az + abz * tt
+        const d = Math.hypot(x - qx, z - qz)
+        if (d > hw || d >= bestD) continue
+        const y = p[k][2] + (p[k + 1][2] - p[k][2]) * tt, L = Math.sqrt(L2)
+        const off = ((x - ax) * abz - (z - az) * abx) / L
+        bestD = d; best = { y, tunnel: t, off, s: c[k] + L * tt, len, cover: heightAt(x, z) - y }
+      }
+    }
+    return best
+  }
   const STEP = 1.5
   const groundAt = (x: number, z: number, y?: number) => {
     const g = heightAt(x, z)
+    // under a hill, a car at bore height drives the FLOOR (the hill is a roof); with no height hint the top wins,
+    // which is what placement wants (a tree on the mountain, not in the tunnel)
+    if (tunnels.length && y !== undefined) {
+      const t = tunnelAt(x, z)
+      // the floor rules the whole footprint, mouth cuttings included: the cut ground there is the floor give or take
+      // a bilinear blend with the uncut face beside it, and flipping between the two at 'cover > 0.5' was a 1 m drop
+      // At each mouth the floor (level across) eases in from the road surface (which leans with its camber) over
+      // MOUTH_BLEND metres, so no lane meets a kerb into the bore or a drop out of it (the 0.5 m lip a lane off centre
+      // hit at both mouths), like a deck's END_BLEND.
+      if (t && g > t.y - 0.5 && y < t.y + TUNNEL_H - 1 && y > t.y - 3) {
+        const e = Math.min(t.s, t.len - t.s) / MOUTH_BLEND
+        if (e >= 1) return t.y
+        const w = e * e * (3 - 2 * e)
+        return Math.min(g, t.y + 0.6) * (1 - w) + t.y * w
+      }
+    }
     if (!bridges.length) return g
     const d = deckAt(x, z)
     if (!d || d.y < g) return g
     return y === undefined || d.y <= y + STEP ? d.y : g
   }
-  return { meta, h, heightAt, groundAt, deckAt, vertex }
+  return { meta, h, heightAt, groundAt, deckAt, tunnelAt, vertex }
 }
 
 /** Browser: fetch the pair from /open/<name>.{json,bin}. */
@@ -351,6 +405,26 @@ export function bridgeRail(region: Region, c: { x: number; y: number; z: number;
   return false
 }
 
+/** THE BORE'S WALLS: a car inside a tunnel that drifts past the wall line is put back and loses its outward speed,
+ *  like a parapet. Only under the hill (cover over the roof), never in the open cut at a mouth. */
+export function tunnelWall(region: Region, c: { x: number; y: number; z: number; vx: number; vz: number }): boolean {
+  const t = region.tunnelAt(c.x, c.z)
+  if (!t || t.cover < TUNNEL_H || c.y > t.y + TUNNEL_H - 1 || c.y < t.y - 3) return false
+  const wall = t.tunnel.width / 2 + TUNNEL_WALK - 0.9
+  if (Math.abs(t.off) <= wall) return false
+  // the direction across the bore at this point: from the nearest segment's run
+  const p = t.tunnel.pts
+  let k = 0, acc = 0
+  for (; k < p.length - 2; k++) { const L = Math.hypot(p[k + 1][0] - p[k][0], p[k + 1][1] - p[k][1]); if (acc + L >= t.s) break; acc += L }
+  const dx = p[k + 1][0] - p[k][0], dz = p[k + 1][1] - p[k][1], L = Math.hypot(dx, dz) || 1
+  const nx = dz / L, nz = -dx / L                          // +off side (matches tunnelAt's cross product)
+  const sg = Math.sign(t.off), push = Math.abs(t.off) - wall
+  c.x -= nx * sg * push; c.z -= nz * sg * push
+  const out = (c.vx * nx + c.vz * nz) * sg
+  if (out > 0) { c.vx -= nx * sg * out * 1.2; c.vz -= nz * sg * out * 1.2; c.vx *= 0.97; c.vz *= 0.97 }
+  return true
+}
+
 // ── ROADSIDE: waystones and fingerposts (canon 11-14, world/transportation.md › The roads in Year 1672) ──
 // A rune-cut WAYSTONE stands every kilometre (canon measures in km), carved with the distance to the next town each
 // way. A carved FINGERPOST stands at every junction, one arm per road, naming the nearest town down it; its runes
@@ -433,7 +507,7 @@ export function roadside(region: Region): { waystones: Waystone[]; fingerposts: 
         const y = region.groundAt(sx, sz)
         const crowded = waystones.some(w => Math.hypot(w.x - sx, w.z - sz) < 80) ||
           net.junctions.some(j => j.kind !== 'bend' && Math.hypot(j.x - sx, j.z - sz) < j.r + 18)
-        if (Number.isFinite(y) && y > 0.6 && !region.deckAt(x, z) && !crowded) {
+        if (Number.isFinite(y) && y > 0.6 && !region.deckAt(x, z) && !region.tunnelAt(x, z) && !crowded) {
           const fwd = nearestTownVia(region, e.a, e, sAt), back = nearestTownVia(region, e.b, e, L - sAt)
           const faces: Signpost[] = []
           if (fwd) faces.push({ town: fwd.town, name: placeName(region, fwd.town), km: km(fwd.m), ang: Math.atan2(uz, ux) })
@@ -486,7 +560,7 @@ export function guardrails(region: Region): Guardrail[] {
         const a = p[Math.max(0, k - 1)], b = p[Math.min(p.length - 1, k + 1)]
         const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / L * side, nz = (b[0] - a[0]) / L * side
         const [x, z] = p[k], y = region.groundAt(x, z)
-        const open = region.deckAt(x, z) || (net?.junctions ?? []).some(j => j.kind !== 'bend' && j.kind !== 'end' && Math.hypot(j.x - x, j.z - z) < Math.max(j.r, 8) + 8)
+        const open = region.deckAt(x, z) || region.tunnelAt(x, z) || (net?.junctions ?? []).some(j => j.kind !== 'bend' && j.kind !== 'end' && Math.hypot(j.x - x, j.z - z) < Math.max(j.r, 8) + 8)
         const at = (o: number) => region.heightAt(x + nx * o, z + nz * o)
         // walk out 30 m: a DOWNHILL step past the climb limit, or a fall of 7 m overall, wants a rail (a cut's wall
         // going UP does not: you stop against it, you do not fall off it)

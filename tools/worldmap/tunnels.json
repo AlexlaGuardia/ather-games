@@ -1,0 +1,6 @@
+{
+  "note": "Tunnels the road bores through a ridge instead of cutting over it, at source px (1 px = 10 m). The nearest network edge within 150 m takes the bore; its portals are found from the land (export_region.py). Placement is the engineer's call; that a tunnel EXISTS is a world fact.",
+  "tunnels": [
+    { "name": "The Passage", "px": [584, 398], "why": "Alex 11-14: the Passage is a tunnel through the spine, between Passage and Rune Hold" }
+  ]
+}

@@ -2,7 +2,7 @@
 
 import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
-import { bridgeRail, drivable, ferryLanding, guardrails, makeRegion, onFerryWater, roadRail, nearestRoad, roadside, routeBetween, type RegionMeta } from './region'
+import { TUNNEL_H, tunnelWall, bridgeRail, drivable, ferryLanding, guardrails, makeRegion, onFerryWater, roadRail, nearestRoad, roadside, routeBetween, type RegionMeta } from './region'
 import { createCourser, tickCourser, bodySpeeds } from './courser'
 
 let pass = 0
@@ -14,6 +14,8 @@ const meta = JSON.parse(readFileSync(`public/open/${NAME}.json`, 'utf8')) as Reg
 const raw = meta.binGz ? gunzipSync(readFileSync(`public/open/${NAME}.bin.gz`)) : readFileSync(`public/open/${NAME}.bin`)
 const R = makeRegion(meta, new Int16Array(raw.buffer, raw.byteOffset, raw.byteLength / 2))
 const { cell, nx, nz, sizeX, sizeZ } = meta
+// what a car on the road drives: in a bore that is the floor (told the floor's height), elsewhere the top surface
+const drv = (x: number, z: number) => { const t = R.tunnelAt(x, z); return t ? R.groundAt(x, z, t.y) : R.groundAt(x, z) }
 
 // ★ what you see is what you drive on: heightAt at every vertex IS the vertex, and a mid-face sample lies on the plane
 {
@@ -81,7 +83,7 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
         if (ferryLanding(R, x0, z0, 9) || ferryLanding(R, x1, z1, 9)) continue  // the quay: a stop-and-board pad at the water's edge, not a road grade
         const inIsland = (x: number, z: number) => (meta.network?.junctions ?? []).some(j => j.island && Math.hypot(x - j.x, z - j.z) < j.island + 1)
         if (inIsland(x0, z0) || inIsland(x1, z1)) continue                    // an edge runs to a roundabout's centre; nobody drives the island
-        const g = Math.abs(R.groundAt(x1, z1) - R.groundAt(x0, z0)) / Math.hypot(x1 - x0, z1 - z0)
+        const g = Math.abs(drv(x1, z1) - drv(x0, z0)) / Math.hypot(x1 - x0, z1 - z0)
         if (g > worst) { worst = g; where = r.id }
       }
     }
@@ -191,6 +193,41 @@ for (const b of meta.network?.bridges ?? []) for (const dir of [1, -1]) for (con
     if (R.heightAt(c.x, c.z) < 0.3 && c.y < 0.5) swam = true
   }
   ok(air < 0.05 && !swam, `bridge ${b.id} dir ${dir} lane ${off}: ${air.toFixed(2)} s airborne${swam ? ', IN THE RIVER' : ''}`)
+}
+
+// ★★ THE PASSAGE IS A TUNNEL (Alex 11-14: "supposed to be a tunnel through the mountain"). The bore has a roof the
+// whole way between its mouths, the mouths are cut down to the floor (never a car driving under open ground), and
+// every lane drives it both ways at speed: no air, never up on the mountain, out the far end.
+for (const t of meta.network?.tunnels ?? []) {
+  // buried = under a little open ground: the mouth cutting missed it. The one station where the cut meets the face
+  // reads a bilinear blend of the two (5 m cells), so a station within 6 m of a roofed one is the face, not a miss.
+  const cov = t.pts.map(([x, z, y]) => R.heightAt(x, z) - y)
+  const n = cov.length, roofed = cov.filter(c => c >= TUNNEL_H).length
+  const along = (a: number, b: number) => Math.hypot(t.pts[a][0] - t.pts[b][0], t.pts[a][1] - t.pts[b][1])
+  const buried = cov.filter((c, k) => c > 0.5 && c < TUNNEL_H && !cov.some((c2, k2) => c2 >= TUNNEL_H && along(k, k2) < 6)).length
+  ok(roofed / n > 0.7, `tunnel ${t.id}: only ${roofed}/${n} stations have a roof`)
+  ok(buried === 0, `tunnel ${t.id}: ${buried} stations drive under open ground (cover 0.5..${TUNNEL_H} m)`)
+  for (const dir of [1, -1]) for (const off of [-3, 0, 3]) {
+    const p = dir > 0 ? t.pts : [...t.pts].reverse()
+    const [ax, az] = p[0], [bx, bz] = p[1], L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L
+    const c = createCourser(ax - ux * 30 - uz * off, az - uz * 30 + ux * off, Math.atan2(-ux, -uz), (x, z) => R.groundAt(x, z))
+    const ground = (x: number, z: number) => R.groundAt(x, z, c.y)
+    let air = 0, high = 0, out = false
+    for (let tt = 0; tt < 40; tt += 1 / 120) {
+      let bk = 0, bd = Infinity
+      for (let k = 0; k < p.length; k++) { const d = Math.hypot(p[k][0] - c.x, p[k][1] - c.z); if (d < bd) { bd = d; bk = k } }
+      if (bk === p.length - 1 && bd > 20) { out = true; break }
+      const q0 = p[Math.min(p.length - 2, bk + 3)], q = p[Math.min(p.length - 1, bk + 4)], qL = Math.hypot(q[0] - q0[0], q[1] - q0[1]) || 1
+      const tx = q[0] - (q[1] - q0[1]) / qL * off, tz = q[1] + (q[0] - q0[0]) / qL * off
+      let err = Math.atan2(-(tx - c.x), -(tz - c.z)) - c.yaw; while (err > Math.PI) err -= 2 * Math.PI; while (err < -Math.PI) err += 2 * Math.PI
+      tickCourser(c, { throttle: bodySpeeds(c).fwd < 22 ? 1 : 0, steer: Math.max(-1, Math.min(1, -err * 2.5)), handbrake: false, dt: 1 / 120 }, ground)
+      tunnelWall(R, c) || roadRail(R, c)
+      const th = R.tunnelAt(c.x, c.z)
+      if (c.airborne && th) air += 1 / 120
+      if (th && th.cover > TUNNEL_H && c.y > th.y + 2) high++
+    }
+    ok(air < 0.05 && high === 0 && out, `tunnel ${t.id} dir ${dir} lane ${off}: ${air.toFixed(2)} s airborne, ${high} ticks up in the mountain${out ? '' : ', NEVER CAME OUT'}`)
+  }
 }
 
 // ★ FERRIES: every ferry has two landings on dry land, each ON its road, and a landing finds its far side
