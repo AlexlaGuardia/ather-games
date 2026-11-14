@@ -20,7 +20,7 @@ import { postBoard, accept, arrive, abandon, buy, GOODS, CAPACITY, type Contract
 import { DARTER_STOCK, tuneFromSpec } from '../courser'
 import { buildSpec, type Slot, type Tier } from '../courser-build'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
-import { bridgeRail, drivable, loadRegion, nearPad, nearestRoad, roadside, type Region, type RegionJunction, type RegionRoad } from '../region'
+import { bridgeRail, drivable, loadRegion, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
 
 const STEP = 1 / 120
 const FOV = 64
@@ -615,8 +615,8 @@ const SURFACE: Record<RegionRoad['kind'] | 'off', number> = { paved: 1, road: 0.
 
 // ── trade v1 in the corridor (ECONOMY.md). Placement is build: Rune Hold's square is the gate-landing, so the
 // Ather's goods (and the Spine's ore and gold) are had there; Millbrook on the water has timber and sea Rinn;
-// Ashfeld's fields have grain. Contract pay uses straight distance × ROAD_FACTOR (roads wander) until the
-// road graph is wired. ──
+// Ashfeld's fields have grain. Contract pay is by ROAD distance through the network (routeBetween); straight
+// distance × ROAD_FACTOR is only the fallback when two towns are not connected. ──
 const SUPPLY: Supply[] = [
   { place: 'rune-hold', goods: ['crystal', 'sap', 'cord', 'ore', 'gold'] },
   { place: 'millbrook', goods: ['timber', 'searinn'] },
@@ -652,9 +652,17 @@ export default function ContinentRide() {
     return best?.id ?? null
   }, [R, hud.x, hud.z, hud.mph])
   const placeName = (id: string) => R?.meta.places.find(p => p.id === id)?.name ?? id
-  const kmBetween = useCallback((a: string, b: string) => {
-    const pa = R?.meta.places.find(p => p.id === a), pb = R?.meta.places.find(p => p.id === b)
-    return pa && pb ? Math.hypot(pa.x - pb.x, pa.z - pb.z) * ROAD_FACTOR / 1000 : Infinity
+  const kmBetween = useMemo(() => {
+    const cache = new Map<string, number>()
+    return (a: string, b: string) => {
+      const key = a < b ? `${a}|${b}` : `${b}|${a}`
+      if (!cache.has(key)) {
+        const pa = R?.meta.places.find(p => p.id === a), pb = R?.meta.places.find(p => p.id === b)
+        const road = R ? routeBetween(R, a, b) : null
+        cache.set(key, road ? road.length / 1000 : pa && pb ? Math.hypot(pa.x - pb.x, pa.z - pb.z) * ROAD_FACTOR / 1000 : Infinity)
+      }
+      return cache.get(key)!
+    }
   }, [R])
   const contracts: Contract[] = useMemo(() => (board ? postBoard(board, SUPPLY, TOWNS.filter(t => R?.meta.places.some(p => p.id === t)), kmBetween, ledger.deeds + 1, CAPACITY.darter) : []), [board, R, kmBetween, ledger.deeds])
   // arriving: stopped at the contract's pickup loads it, at its drop pays it
