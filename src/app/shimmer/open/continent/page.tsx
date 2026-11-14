@@ -20,7 +20,7 @@ import { postBoard, accept, arrive, abandon, buy, GOODS, CAPACITY, type Contract
 import { DARTER_STOCK, tuneFromSpec } from '../courser'
 import { buildSpec, type Slot, type Tier } from '../courser-build'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
-import { drivable, loadRegion, nearPad, nearestRoad, type Region, type RegionJunction, type RegionRoad } from '../region'
+import { bridgeRail, drivable, loadRegion, nearPad, nearestRoad, type Region, type RegionJunction, type RegionRoad } from '../region'
 
 const STEP = 1 / 120
 const FOV = 64
@@ -167,7 +167,8 @@ function Roads({ R }: { R: Region }) {
         const nx = -dz / L, nz = dx / L
         const [x, z] = line[k]
         const lx = x + nx * hw, lz = z + nz * hw, rx = x - nx * hw, rz = z - nz * hw
-        const Lp = [lx, R.heightAt(lx, lz) + 0.07, lz], Rp = [rx, R.heightAt(rx, rz) + 0.07, rz]
+        // the highest surface: on a bridge that is the deck, not the river under it
+        const Lp = [lx, R.groundAt(lx, lz) + 0.07, lz], Rp = [rx, R.groundAt(rx, rz) + 0.07, rz]
         // off the region's edge there is no ground (−∞): never let such a point into a quad, or the whole mesh's
         // bounds go NaN and three.js culls every road of that kind
         if (!Number.isFinite(Lp[1]) || !Number.isFinite(Rp[1])) { prevL = prevR = null; continue }
@@ -239,6 +240,54 @@ function Junctions({ R }: { R: Region }) {
           <meshLambertMaterial color={col} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
         </mesh>
       ))}
+    </>
+  )
+}
+
+// ── bridges: the deck's stone body (the road ribbon is painted on top by Roads), parapets on both edges, and piers
+// down to the riverbed every ~16 m where the deck stands clear of the ground ──
+const STONE_COL = '#a39c8d', PARAPET_COL = '#c2baa8'
+function Bridges({ R }: { R: Region }) {
+  const geos = useMemo(() => {
+    const body: number[] = [], para: number[] = []
+    const quad = (out: number[], a: number[], b: number[], c: number[], d: number[]) => out.push(...a, ...b, ...c, ...a, ...c, ...d)
+    const box = (out: number[], cx: number, cz: number, ux: number, uz: number, hl: number, hw: number, y0: number, y1: number) => {
+      const vx = -uz, vz = ux
+      const C = (sl: number, sw: number, y: number) => [cx + ux * hl * sl + vx * hw * sw, y, cz + uz * hl * sl + vz * hw * sw]
+      const s = [[-1, -1], [1, -1], [1, 1], [-1, 1]]
+      for (let i = 0; i < 4; i++) { const [a, b] = [s[i], s[(i + 1) % 4]]; quad(out, C(a[0], a[1], y0), C(b[0], b[1], y0), C(b[0], b[1], y1), C(a[0], a[1], y1)) }
+      quad(out, C(-1, -1, y1), C(1, -1, y1), C(1, 1, y1), C(-1, 1, y1))
+    }
+    for (const b of R.meta.network?.bridges ?? []) {
+      const p = b.pts, hw = b.width / 2
+      let acc = 0
+      for (let k = 0; k < p.length - 1; k++) {
+        const [ax, az, ay] = p[k], [bx, bz, by] = p[k + 1]
+        const L = Math.hypot(bx - ax, bz - az) || 1, ux = (bx - ax) / L, uz = (bz - az) / L, nx = -uz, nz = ux
+        for (const side of [1, -1]) {
+          const o = hw * side, o2 = (hw + 0.45) * side
+          // the deck's face, 1.1 m deep, from the rail's outer edge down
+          quad(body, [ax + nx * o2, ay + 0.05, az + nz * o2], [bx + nx * o2, by + 0.05, bz + nz * o2], [bx + nx * o2, by - 1.1, bz + nz * o2], [ax + nx * o2, ay - 1.1, az + nz * o2])
+          // the parapet: inner face, top, outer face
+          quad(para, [ax + nx * o, ay, az + nz * o], [bx + nx * o, by, bz + nz * o], [bx + nx * o, by + 0.75, bz + nz * o], [ax + nx * o, ay + 0.75, az + nz * o])
+          quad(para, [ax + nx * o, ay + 0.75, az + nz * o], [bx + nx * o, by + 0.75, bz + nz * o], [bx + nx * o2, by + 0.75, bz + nz * o2], [ax + nx * o2, ay + 0.75, az + nz * o2])
+          quad(para, [ax + nx * o2, ay + 0.75, az + nz * o2], [bx + nx * o2, by + 0.75, bz + nz * o2], [bx + nx * o2, by, bz + nz * o2], [ax + nx * o2, ay, az + nz * o2])
+        }
+        // the underside
+        quad(body, [ax + nx * (hw + 0.45), ay - 1.1, az + nz * (hw + 0.45)], [bx + nx * (hw + 0.45), by - 1.1, bz + nz * (hw + 0.45)], [bx - nx * (hw + 0.45), by - 1.1, bz - nz * (hw + 0.45)], [ax - nx * (hw + 0.45), ay - 1.1, az - nz * (hw + 0.45)])
+        acc += L
+        if (acc >= 16 && k > 0 && k < p.length - 2) {
+          const g = R.heightAt(ax, az)
+          if (ay - g > 2.2) { box(body, ax, az, ux, uz, 1.2, hw * 0.8, Math.min(g, 0) - 2, ay - 1.1); acc = 0 }
+        }
+      }
+    }
+    return [body, para].map(pos => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return g })
+  }, [R])
+  return (
+    <>
+      <mesh geometry={geos[0]}><meshLambertMaterial color={STONE_COL} side={THREE.DoubleSide} /></mesh>
+      <mesh geometry={geos[1]}><meshLambertMaterial color={PARAPET_COL} side={THREE.DoubleSide} /></mesh>
     </>
   )
 }
@@ -385,7 +434,7 @@ function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) =
     const [ax, az] = road.pts[1], [bx, bz] = road.pts[3]
     return { x: ax, z: az, yaw: Math.atan2(-(bx - ax), -(bz - az)) }
   }, [R])
-  const car = useRef<Courser>(createCourser(spawn.x, spawn.z, spawn.yaw, R.heightAt))
+  const car = useRef<Courser>(createCourser(spawn.x, spawn.z, spawn.yaw, R.groundAt))
   const model = useRef<THREE.Group | null>(null)
   const steerVis = useRef(0)
   const keys = useRef(new Set<string>())
@@ -398,8 +447,8 @@ function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) =
   const shake = useRef(0)
 
   const place = (x: number, z: number, yaw: number, speed = 0) => {
-    const c = createCourser(x, z, yaw, R.heightAt); c.vx = -Math.sin(yaw) * speed; c.vz = -Math.cos(yaw) * speed
-    car.current = c; camPos.set(x + Math.sin(yaw) * 8, R.heightAt(x, z) + 3, z + Math.cos(yaw) * 8)
+    const c = createCourser(x, z, yaw, R.groundAt); c.vx = -Math.sin(yaw) * speed; c.vz = -Math.cos(yaw) * speed
+    car.current = c; camPos.set(x + Math.sin(yaw) * 8, R.groundAt(x, z) + 3, z + Math.cos(yaw) * 8)
   }
 
   useEffect(() => {
@@ -446,7 +495,8 @@ function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) =
     const surface = under.road && under.d < under.road.width / 2 + 1 ? SURFACE[under.road.kind] : SURFACE.off
     while (acc.current >= STEP) {
       acc.current -= STEP
-      tickCourser(c, { throttle, steer, handbrake, dt: STEP, surface }, R.heightAt, tuneRef.current)
+      tickCourser(c, { throttle, steer, handbrake, dt: STEP, surface }, R.groundAt, tuneRef.current)
+      bridgeRail(R, c)
       const lx = R.meta.sizeX / 2 - 3, lz = R.meta.sizeZ / 2 - 3
       if (Math.abs(c.x) > lx) { c.x = Math.sign(c.x) * lx; c.vx *= -0.3 }
       if (Math.abs(c.z) > lz) { c.z = Math.sign(c.z) * lz; c.vz *= -0.3 }
@@ -466,8 +516,9 @@ function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) =
       const fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw), rx = Math.cos(c.yaw), rz = -Math.sin(c.yaw)
       let pitch = 0, roll = 0
       if (!c.airborne) {
-        pitch = Math.atan2(R.heightAt(c.x + fx * 1.3, c.z + fz * 1.3) - R.heightAt(c.x - fx * 1.3, c.z - fz * 1.3), 2.6)
-        roll = Math.atan2(R.heightAt(c.x + rx * 0.9, c.z + rz * 0.9) - R.heightAt(c.x - rx * 0.9, c.z - rz * 0.9), 1.8)
+        const g = (x: number, z: number) => R.groundAt(x, z, c.y)     // the surface the car is ON (a deck, not the river)
+        pitch = Math.atan2(g(c.x + fx * 1.3, c.z + fz * 1.3) - g(c.x - fx * 1.3, c.z - fz * 1.3), 2.6)
+        roll = Math.atan2(g(c.x + rx * 0.9, c.z + rz * 0.9) - g(c.x - rx * 0.9, c.z - rz * 0.9), 1.8)
       } else pitch = Math.atan2(c.vy, Math.max(4, Math.hypot(c.vx, c.vz))) * 0.6
       const lean = Math.max(-0.07, Math.min(0.07, c.yawRate * fwd * 0.006))
       g.position.set(c.x, c.y, c.z)
@@ -489,9 +540,9 @@ function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) =
       const shape = chaseShape(Math.abs(fwd) / tuneRef.current.top)
       const back = shape.back
       const want = new THREE.Vector3(c.x - (bx / bl) * back, c.y + shape.height, c.z - (bz / bl) * back)
-      want.y = Math.max(want.y, R.heightAt(want.x, want.z) + 1.4)
+      want.y = Math.max(want.y, R.groundAt(want.x, want.z) + 1.4)
       camPos.lerp(want, 1 - Math.exp(-frameDt * 7))
-      camPos.y = Math.max(camPos.y, R.heightAt(camPos.x, camPos.z) + 1.0)
+      camPos.y = Math.max(camPos.y, R.groundAt(camPos.x, camPos.z) + 1.0)
       const [rx2, ry2] = speedRumble(Math.abs(fwd) / tuneRef.current.top, performance.now() / 1000)
       cam.position.set(camPos.x + (Math.random() - 0.5) * sk + rx2, camPos.y + (Math.random() - 0.5) * sk + ry2, camPos.z)
       look.set(c.x + fx * 4, c.y + 1.0, c.z + fz * 4)
@@ -518,7 +569,7 @@ function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) =
   return (
     <>
       <DarterModel car={model} steer={steerVis} />
-      <DriftFx car={car} ground={R.heightAt} slip={() => slipAngle(car.current)} />
+      <DriftFx car={car} ground={(x, z) => R.groundAt(x, z, car.current.y)} slip={() => slipAngle(car.current)} />
     </>
   )
 }
@@ -628,6 +679,7 @@ export default function ContinentRide() {
           <Terrain R={R} focus={focus} />
           <Roads R={R} />
           <Junctions R={R} />
+          <Bridges R={R} />
           <Water R={R} />
           <Towns R={R} />
           <Posts R={R} />

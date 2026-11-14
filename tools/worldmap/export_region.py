@@ -85,9 +85,29 @@ overrides = [{'kind': o['kind'], 'x': toW(*o['px'])[0], 'z': toW(*o['px'])[1]} f
 net = road_network.build(routes, (-sizeX / 2, -sizeZ / 2, sizeX / 2, sizeZ / 2), net_places, overrides) if routes else {'edges': [], 'junctions': []}
 from collections import Counter
 print('network:', len(net['edges']), 'edges,', dict(Counter(j['kind'] for j in net['junctions'])))
+# ── BRIDGES: where a paved road or a road crosses water, the river stays a river and a deck carries the road over it
+# (canon 11-14: bridges lawful and common in the heartland). A TRAIL keeps its ford (the frontier stays the frontier;
+# a Shellback ferry is the canon crossing there, not built yet). The span runs bank to bank plus ABUT each side. ──
+ABUT, CLEAR, DECK_G = 4, 4.0, 0.06          # pts (2.5 m) onto land each side · metres over the water · deck ramp grade
+spans = []                                  # (edge index, i0, i1) into e['xz']
+land0 = h.copy()
+for ei, e in enumerate(net['edges']):
+    if e['kind'] not in ('paved', 'road'): continue
+    wet = sample(e['xz'][:, 0], e['xz'][:, 1]) < 0.5
+    k = 0
+    while k < len(wet):
+        if not wet[k]: k += 1; continue
+        k1 = k
+        while k1 + 1 < len(wet) and wet[k1 + 1]: k1 += 1
+        if k1 - k + 1 >= 3:                 # ≥ 7.5 m of water: a bridge, not a puddle in the export
+            spans.append((ei, max(0, k - ABUT), min(len(wet) - 1, k1 + ABUT)))
+        k = k1 + 1
 cen, cen_w = [], []
-for e in net['edges']:
-    cen += e['xz'].tolist(); cen_w += [WIDTH[e['kind']]] * len(e['xz'])
+for ei, e in enumerate(net['edges']):
+    keep = np.ones(len(e['xz']), bool)
+    for (ej, i0, i1) in spans:
+        if ej == ei: keep[i0 + ABUT: i1 - ABUT + 1] = False      # no bed (no causeway) under the water span
+    cen += e['xz'][keep].tolist(); cen_w += [WIDTH[e['kind']]] * int(keep.sum())
 if cen:
     tree = cKDTree(np.array(cen)); Wc = np.array(cen_w)
     d, idx = tree.query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=14 / 2 + 4.0 + 220)   # wide: a deep cut's shoulder reaches far
@@ -146,6 +166,11 @@ if cen:
     # the shoulder blends to the NEAREST bed height (spread outward), so a cut has walls, not a cliff into the road
     near = nd.distance_transform_edt(~bed, return_distances=False, return_indices=True)
     road_out = road[near[0], near[1]]
+    # under and beside a bridge the river keeps its bed: no shoulder may pull the water up to the bank
+    if spans:
+        wpts = np.concatenate([net['edges'][ej]['xz'][i0:i1 + 1] for ej, i0, i1 in spans])
+        dW, _ = cKDTree(wpts).query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=60)
+        blend = np.where((dW.reshape(h.shape) < 60) & (land0 < 0.5), 0, blend)
     h = h * (1 - blend) + road_out * blend
     # ROUNDABOUT ISLANDS: a kerb and a low planted mound, so the ring is driven around (or bounced over, at a cost)
     for j in net['junctions']:
@@ -159,7 +184,27 @@ for r in roads_out:
     xz = np.array(r.pop('xz'))
     r['pts'] = [[round(x, 1), round(z, 1), round(float(y), 2)] for (x, z), y in zip(xz, sample(xz[:, 0], xz[:, 1]))]
 
-net_out = {'edges': [], 'junctions': []}
+net_out = {'edges': [], 'junctions': [], 'bridges': []}
+# the deck, read off the FINAL ground: it starts and ends on the carved road (no step at the abutment), arches to
+# CLEAR over the water where its ramps allow, and never dips below the ground under it
+for bi, (ei, i0, i1) in enumerate(spans):
+    e = net['edges'][ei]; P = e['xz'][i0:i1 + 1]
+    s_ = np.concatenate([[0], np.cumsum(np.hypot(*np.diff(P, axis=0).T))]); L = s_[-1]
+    under = sample(P[:, 0], P[:, 1]); ya, yb = float(under[0]), float(under[-1])
+    target = np.maximum(ya + (yb - ya) * s_ / max(L, 1e-6), CLEAR)
+    y = np.minimum(target, np.minimum(ya + DECK_G * s_, yb + DECK_G * (L - s_)))
+    # VERTICAL CURVES: a ramp meeting the crest is a kink, and a kink at 20 m/s throws the car (a road engineer's
+    # crest curve). Smooth over ~30 m with the ends pinned, then never below the ground.
+    w = 13
+    if len(y) > w:
+        ypad = np.concatenate([np.full(w // 2, y[0]), y, np.full(w // 2, y[-1])])
+        ys = np.convolve(ypad, np.ones(w) / w, 'valid')
+        tt = np.clip(np.minimum(np.arange(len(y)), np.arange(len(y))[::-1]) / (w / 2), 0, 1)
+        y = y * (1 - tt) + ys * tt
+    y = np.maximum(y, under + 0.05)
+    net_out['bridges'].append({'id': f'b{bi}', 'edge': e['id'], 'kind': e['kind'], 'width': WIDTH[e['kind']],
+                               'pts': [[round(float(x), 2), round(float(z), 2), round(float(yy), 2)] for (x, z), yy in zip(P, y)]})
+    print(f"bridge b{bi} on {e['id']} ({e['kind']}): {L:.0f} m, deck {y.min():.1f}..{y.max():.1f} m, water clearance {float((y - np.minimum(under, 0)).max()):.1f} m")
 for e in net['edges']:
     P = e['xz'][::2] if len(e['xz']) > 3 else e['xz']
     if len(e['xz']) > 3 and not np.allclose(P[-1], e['xz'][-1]): P = np.vstack([P, e['xz'][-1:]])

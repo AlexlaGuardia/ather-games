@@ -13,6 +13,8 @@ export interface RegionRoad extends RoadLike { from: string; to: string }
 /** A NETWORK edge (tools/worldmap/road_network.py): junction to junction, no overlaps. */
 export interface RegionEdge extends RoadLike { a: string; b: string }
 export type JunctionKind = 'square' | 'roundabout' | 'cross' | 'stop4' | 'tee' | 'merge' | 'end' | 'bend' | 'in-square'
+/** A deck carrying an edge over water: centre line with the DECK height (not the ground's). */
+export interface RegionBridge { id: string; edge: string; kind: RoadKind; width: number; pts: [number, number, number][] }
 export interface RegionJunction {
   id: string; kind: JunctionKind; x: number; z: number; y: number
   r: number                 // pad radius (0 = no pad of its own)
@@ -25,12 +27,16 @@ export interface RegionPlace { id: string; name: string | null; kind: string; x:
 export interface RegionMeta {
   name: string; cell: number; nx: number; nz: number; sizeX: number; sizeZ: number; scale: number
   roads: RegionRoad[]; places: RegionPlace[]
-  network?: { edges: RegionEdge[]; junctions: RegionJunction[] }
+  network?: { edges: RegionEdge[]; junctions: RegionJunction[]; bridges?: RegionBridge[] }
 }
 export interface Region {
   meta: RegionMeta
   h: Float32Array                     // metres, row-major (z rows of nx)
-  heightAt: (x: number, z: number) => number
+  heightAt: (x: number, z: number) => number          // the TERRAIN (what the mesh draws)
+  /** What a car drives on: the terrain, or a bridge deck where one is at/below the hint `y` (+ a step). */
+  groundAt: (x: number, z: number, y?: number) => number
+  /** The deck under x, z (any height), for placement, labels and tests. */
+  deckAt: (x: number, z: number) => { y: number; bridge: RegionBridge } | null
   vertex: (i: number, j: number) => number
 }
 
@@ -51,7 +57,42 @@ export function makeRegion(meta: RegionMeta, raw: Int16Array): Region {
       ? h00 + (h10 - h00) * fx + (h11 - h10) * fz
       : h00 + (h11 - h01) * fx + (h01 - h00) * fz
   }
-  return { meta, h, heightAt, vertex }
+  // decks: for each bridge segment, a footprint test (within half the width of the centre line, inside the segment)
+  const bridges = meta.network?.bridges ?? []
+  const boxes = bridges.map(b => {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity
+    for (const p of b.pts) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]) }
+    const m = b.width / 2 + 1
+    return [x0 - m, x1 + m, z0 - m, z1 + m]
+  })
+  const deckAt = (x: number, z: number) => {
+    let best: { y: number; bridge: RegionBridge } | null = null
+    for (let bi = 0; bi < bridges.length; bi++) {
+      const bx = boxes[bi]
+      if (x < bx[0] || x > bx[1] || z < bx[2] || z > bx[3]) continue
+      const b = bridges[bi], p = b.pts, hw = b.width / 2 + 0.45     // to the parapet's outer face: the ribbon's edge never misses
+      for (let k = 0; k < p.length - 1; k++) {
+        const ax = p[k][0], az = p[k][1], abx = p[k + 1][0] - ax, abz = p[k + 1][1] - az, L = abx * abx + abz * abz || 1
+        const t = ((x - ax) * abx + (z - az) * abz) / L
+        // inside the segment; the ends overlap their neighbours by a hair so a seam has no gap
+        if (t < -0.02 || t > 1.02 || (k === 0 && t < 0) || (k === p.length - 2 && t > 1)) continue
+        const tc = Math.max(0, Math.min(1, t))
+        if (Math.hypot(ax + abx * tc - x, az + abz * tc - z) > hw) continue
+        const y = p[k][2] + (p[k + 1][2] - p[k][2]) * tc
+        if (!best || y > best.y) best = { y, bridge: b }
+      }
+    }
+    return best
+  }
+  const STEP = 1.5
+  const groundAt = (x: number, z: number, y?: number) => {
+    const g = heightAt(x, z)
+    if (!bridges.length) return g
+    const d = deckAt(x, z)
+    if (!d || d.y < g) return g
+    return y === undefined || d.y <= y + STEP ? d.y : g
+  }
+  return { meta, h, heightAt, groundAt, deckAt, vertex }
 }
 
 /** Browser: fetch the pair from /open/<name>.{json,bin}. */
@@ -171,3 +212,28 @@ export function routeBetween(region: Region, fromPlace: string, toPlace: string)
   for (let k = 1; k < pts.length; k++) L += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1])
   return { pts, length: L }
 }
+
+/** THE PARAPETS: a car on a deck that drifts past the rail line is put back on it and loses its outward speed
+ *  (a glancing scrape, not a wall that stops you dead). Returns true if it touched. Mutates x/z/vx/vz. */
+export function bridgeRail(region: Region, c: { x: number; y: number; z: number; vx: number; vz: number }): boolean {
+  for (const b of region.meta.network?.bridges ?? []) {
+    const p = b.pts, rail = b.width / 2 - 0.9
+    let best = Infinity, bx = 0, bz = 0, by = 0, nx = 0, nz = 0, k0 = -1
+    for (let k = 0; k < p.length - 1; k++) {
+      const ax = p[k][0], az = p[k][1], abx = p[k + 1][0] - ax, abz = p[k + 1][1] - az, L = abx * abx + abz * abz || 1
+      const t = Math.max(0, Math.min(1, ((c.x - ax) * abx + (c.z - az) * abz) / L))
+      const qx = ax + abx * t, qz = az + abz * t, d = Math.hypot(c.x - qx, c.z - qz)
+      if (d < best) { best = d; bx = qx; bz = qz; by = p[k][2] + (p[k + 1][2] - p[k][2]) * t; k0 = k }
+    }
+    // only mid-span, only when the car is up on the deck (not under it, not on the approach where the land is level)
+    if (k0 < 2 || k0 > p.length - 4 || best > rail + 3 || best <= rail || Math.abs(c.y - by) > 1.2) continue
+    if (region.heightAt(c.x, c.z) > by - 0.8) continue
+    nx = (c.x - bx) / best; nz = (c.z - bz) / best
+    c.x = bx + nx * rail; c.z = bz + nz * rail
+    const out = c.vx * nx + c.vz * nz
+    if (out > 0) { c.vx -= nx * out * 1.2; c.vz -= nz * out * 1.2; c.vx *= 0.97; c.vz *= 0.97 }
+    return true
+  }
+  return false
+}
+

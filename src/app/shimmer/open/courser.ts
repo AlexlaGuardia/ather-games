@@ -15,7 +15,10 @@
 //
 // Numbers are a first pass for Alex to judge, not tuned truth. They live in one table on purpose.
 
-export type Ground = (x: number, z: number) => number
+/** The surface under x, z. `y` is a HINT (the car's height): with more than one surface at a spot (a bridge deck
+ *  over water, a span over a road) the ground answers the highest one the car can be on (at or a step below y). A
+ *  plain heightmap ignores it. Called without y: the highest surface (spawn, placement). */
+export type Ground = (x: number, z: number, y?: number) => number
 
 export interface CourserTune {
   top: number          // m/s, flat-ground top speed under full throttle (where power meets air drag)
@@ -157,7 +160,10 @@ export function slipAngle(c: Courser): number {
   return Math.hypot(fwd, lat) < 2 ? 0 : Math.atan2(Math.abs(lat), Math.abs(fwd))
 }
 
-export function tickCourser(c: Courser, inp: CourserInput, ground: Ground, t: CourserTune = DARTER): void {
+export function tickCourser(c: Courser, inp: CourserInput, groundAt: Ground, t: CourserTune = DARTER): void {
+  // every probe this tick asks for the surface the car is ON (its height as the hint), so a deck carries it and the
+  // water below never pulls it through
+  const ground: Ground = (x, z) => groundAt(x, z, c.y)
   const dt = inp.dt
   const throttle = clamp(inp.throttle, -1, 1), steerIn = clamp(inp.steer, -1, 1)
   const surf = clamp(inp.surface ?? 1, 0.3, 1.2)
@@ -257,7 +263,11 @@ export function tickCourser(c: Courser, inp: CourserInput, ground: Ground, t: Co
     const h = ground(c.x, c.z)
     if (Number.isFinite(h) && c.y <= h) {
       c.landed = Math.max(0, -c.vy)
-      c.y = h; c.vy = 0; c.airborne = false
+      // land MOVING WITH THE GROUND: its vertical rate along the travel, not 0. With vy = 0 on a downhill the very
+      // next tick read the slope as a lip and launched again: a chain of hops down every hill past ~5% (11-14,
+      // found when the autopilot hopped 3 s straight down to the Rune Hold bridge).
+      const hA = ground(c.x + c.vx * dt, c.z + c.vz * dt)
+      c.y = h; c.vy = Number.isFinite(hA) ? Math.min((hA - h) / dt, t.suspVy) : 0; c.airborne = false
       // a hard landing scrubs a little speed; a clean one barely
       const keep = 1 - Math.min(0.25, c.landed * 0.012)
       c.vx *= keep; c.vz *= keep

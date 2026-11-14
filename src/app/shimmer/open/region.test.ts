@@ -1,7 +1,7 @@
 // The exported corridor, driven by numbers before anyone looks at it. Run: npx tsx src/app/shimmer/open/region.test.ts
 
 import { readFileSync } from 'node:fs'
-import { drivable, makeRegion, nearestRoad, routeBetween, type RegionMeta } from './region'
+import { bridgeRail, drivable, makeRegion, nearestRoad, routeBetween, type RegionMeta } from './region'
 import { createCourser, tickCourser, bodySpeeds } from './courser'
 
 let pass = 0
@@ -37,7 +37,8 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
       const [ax, az] = r.pts[k], [bx, bz] = r.pts[k + 1]
       const L = Math.hypot(bx - ax, bz - az); if (L < 1) continue
       const nxp = -(bz - az) / L, nzp = (bx - ax) / L, mx = (ax + bx) / 2, mz = (az + bz) / 2
-      const y0 = R.heightAt(mx, mz); if (y0 < 1) continue        // causeway over water: no bank to recover onto yet
+      if (R.deckAt(mx, mz)) continue                               // on a bridge: the parapets are the bank
+      const y0 = R.heightAt(mx, mz); if (y0 < 1) continue        // a ford over water: no bank to recover onto
       for (const side of [-1, 1]) {
         let prev = R.heightAt(mx + nxp * side * r.width / 2, mz + nzp * side * r.width / 2), bad = false
         for (let o = r.width / 2 + 2.5; o <= r.width / 2 + 30; o += 2.5) {
@@ -69,7 +70,7 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
       const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 2))
       for (let s = 0; s < n; s++) {
         const x0 = ax + (bx - ax) * s / n, z0 = az + (bz - az) * s / n, x1 = ax + (bx - ax) * (s + 1) / n, z1 = az + (bz - az) * (s + 1) / n
-        const g = Math.abs(R.heightAt(x1, z1) - R.heightAt(x0, z0)) / Math.hypot(x1 - x0, z1 - z0)
+        const g = Math.abs(R.groundAt(x1, z1) - R.groundAt(x0, z0)) / Math.hypot(x1 - x0, z1 - z0)
         if (g > worst) { worst = g; where = r.id }
       }
     }
@@ -101,6 +102,28 @@ if (net) {
   ok(worstPad < 0.06, `junction pad ${wp} tilts ${(worstPad * 100).toFixed(1)}% across (pads hold 3%)`)
 }
 
+// ★ BRIDGES: decks over water where a paved road or a road crosses it. No step at either abutment, a gentle deck,
+// clearance over the river, and the river still a river under it (no causeway).
+{
+  const bridges = meta.network?.bridges ?? []
+  ok(bridges.length >= 2, `${bridges.length} bridges in the corridor (expected the paved one and the Rune Hold one)`)
+  for (const b of bridges) {
+    const p = b.pts, a = p[0], z = p[p.length - 1]
+    const step = Math.max(Math.abs(a[2] - R.heightAt(a[0], a[1])), Math.abs(z[2] - R.heightAt(z[0], z[1])))
+    ok(step < 0.35, `bridge ${b.id}: ${step.toFixed(2)} m step at an abutment`)
+    let g = 0, clear = 0, wet = 0
+    for (let k = 1; k < p.length; k++) g = Math.max(g, Math.abs(p[k][2] - p[k - 1][2]) / Math.max(0.1, Math.hypot(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1])))
+    for (const q of p) { const under = R.heightAt(q[0], q[1]); if (under < 0.3) { wet++; clear = Math.max(clear, q[2] - Math.max(under, 0)) } }
+    ok(g < 0.075, `bridge ${b.id}: deck grade ${(g * 100).toFixed(1)}% (ramps hold 6%)`)
+    ok(wet >= 3, `bridge ${b.id}: only ${wet} deck points over water: the river was filled in under it`)
+    ok(clear >= 3, `bridge ${b.id}: ${clear.toFixed(1)} m over the water (wants ≥ 3)`)
+    // groundAt: the car on the deck reads the deck; a probe from under it reads the river
+    const mid = p[Math.floor(p.length / 2)]
+    ok(Math.abs(R.groundAt(mid[0], mid[1], mid[2]) - mid[2]) < 0.05, `bridge ${b.id}: groundAt on the deck misses it`)
+    ok(R.groundAt(mid[0], mid[1], -0.5) < mid[2] - 2, `bridge ${b.id}: a boat under the deck would be lifted onto it`)
+  }
+}
+
 // ★★ THE AUTOPILOT: a pure-pursuit driver follows a ROUTE THROUGH THE NETWORK (routeBetween, around roundabouts).
 // If the road is drivable the Darter gets there on it. If it stalls on a grade, flies off a lip, leaves the road or
 // climbs a roundabout's island, this fails.
@@ -110,9 +133,9 @@ function drive(from: string, to: string) {
   if (!route) return
   const pts = route.pts
   const [sx, sz] = pts[1], [tx, tz] = pts[3]
-  const c = createCourser(sx, sz, Math.atan2(-(tx - sx), -(tz - sz)), R.heightAt)
+  const c = createCourser(sx, sz, Math.atan2(-(tx - sx), -(tz - sz)), R.groundAt)
   const end = pts[pts.length - 1]
-  let k = 1, offRoad = 0, t = 0, maxOff = 0, airT = 0, island = 0
+  let k = 1, offRoad = 0, t = 0, maxOff = 0, airT = 0, island = 0, swam = 0, decked = false
   const DT = 1 / 120
   while (t < 300) {
     // aim at the first centre-line point 12 m ahead
@@ -130,7 +153,10 @@ function drive(from: string, to: string) {
     if (turn > Math.PI) turn = 2 * Math.PI - turn
     const target = Math.max(8, 24 - turn * 18)
     const throttle = v < target - 1 ? 1 : v > target + 1 ? -0.6 : 0
-    tickCourser(c, { throttle, steer, handbrake: false, dt: DT }, R.heightAt)
+    tickCourser(c, { throttle, steer, handbrake: false, dt: DT }, R.groundAt)
+    bridgeRail(R, c)
+    if (R.heightAt(c.x, c.z) < 0.3 && c.y < 0.5) swam += DT
+    if (R.deckAt(c.x, c.z) && R.heightAt(c.x, c.z) < 0.3) decked = true
     t += DT
     if (c.airborne) airT += DT
     const u = nearestRoad(R, c.x, c.z)
@@ -145,10 +171,13 @@ function drive(from: string, to: string) {
   ok(offRoad < 3, `autopilot ${from} → ${to} spent ${offRoad.toFixed(1)} s off the road (max ${maxOff.toFixed(1)} m out)`)
   ok(airT < 1.5, `${from} → ${to}: the road threw the car into the air for ${airT.toFixed(2)} s in total`)
   ok(island === 0, `${from} → ${to}: drove over a roundabout island for ${island.toFixed(1)} s`)
+  ok(swam === 0, `${from} → ${to}: in the river for ${swam.toFixed(1)} s (a deck let the car through?)`)
   console.log(`  autopilot: ${from} → ${to} (${(route.length / 1000).toFixed(2)} km by road) in ${t.toFixed(1)} s, max ${maxOff.toFixed(1)} m off, ${airT.toFixed(2)} s airborne`)
+  return { decked }
 }
 drive('ashfeld', 'millbrook')
-drive('millbrook', 'rune-hold')     // through the roundabout
+const mr = drive('millbrook', 'rune-hold')     // through the roundabout and over the bridge into Rune Hold
+ok(!!mr?.decked, 'millbrook → rune-hold never crossed a bridge deck over water')
 drive('rune-hold', 'ashfeld')
 
 console.log(`region: ${pass} pass, ${fails.length} fail`)
