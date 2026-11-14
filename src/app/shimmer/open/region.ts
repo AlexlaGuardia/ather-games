@@ -66,25 +66,99 @@ export function makeRegion(meta: RegionMeta, raw: Int16Array): Region {
   const boxes = bridges.map(b => {
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity
     for (const p of b.pts) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]) }
-    const m = b.width / 2 + 1
+    const m = b.width / 2 + 2.5          // room for the deck grid's margin past the rim
     return [x0 - m, x1 + m, z0 - m, z1 + m]
+  })
+  // along-deck distance of each point, so a deck can MEET the road at its ends across its whole width (the road
+  // tilts sideways up to ~8%, the deck is level: over the last END_BLEND metres the deck eases onto whatever the
+  // ground is under that lane, so no lane meets a kerb onto the deck or a drop off it. Alex 11-14: "a missing chunk")
+  const cum = bridges.map(b => { const c = [0]; for (let k = 1; k < b.pts.length; k++) c.push(c[k - 1] + Math.hypot(b.pts[k][0] - b.pts[k - 1][0], b.pts[k][1] - b.pts[k - 1][1])); return c })
+  const END_BLEND = 10
+  const deckRaw = (x: number, z: number, margin = 0) => {
+    let best: { y: number; bridge: RegionBridge; sEnd: number } | null = null
+    for (let bi = 0; bi < bridges.length; bi++) {
+      const bx = boxes[bi]
+      if (x < bx[0] || x > bx[1] || z < bx[2] || z > bx[3]) continue
+      const b = bridges[bi], p = b.pts, hw = b.width / 2 + 0.45 + margin     // to the parapet's outer face: the ribbon's edge never misses
+      // the deck is cut SQUARE at its two end lines: no capsule may reach past an abutment (one reached 2 m: a kerb)
+      const n = p.length - 1
+      const s0x = p[1][0] - p[0][0], s0z = p[1][1] - p[0][1], snx = p[n][0] - p[n - 1][0], snz = p[n][1] - p[n - 1][1]
+      if ((x - p[0][0]) * s0x + (z - p[0][1]) * s0z < 0 || (x - p[n][0]) * snx + (z - p[n][1]) * snz > 0) continue
+      let mine: { y: number; d: number; sEnd: number } | null = null              // THIS bridge: the NEAREST segment's height, never the max of overlaps
+      for (let k = 0; k < p.length - 1; k++) {
+        const ax = p[k][0], az = p[k][1], abx = p[k + 1][0] - ax, abz = p[k + 1][1] - az, L = abx * abx + abz * abz || 1
+        const t = ((x - ax) * abx + (z - az) * abz) / L
+        // interior segments are CAPSULES (t clamped): at a bend the outside of each joint is a wedge no strict segment
+        // covers, and the car dropped through it for a tick, every 2.5 m, off-centre (11-14, "a missing chunk").
+        // Only the deck's two ENDS are cut square, so it never pokes past an abutment.
+        if ((k === 0 && t < 0) || (k === p.length - 2 && t > 1)) continue
+        const tc = Math.max(0, Math.min(1, t))
+        const dist = Math.hypot(ax + abx * tc - x, az + abz * tc - z)
+        if (dist > hw || (mine && dist >= mine.d)) continue
+        let y = p[k][2] + (p[k + 1][2] - p[k][2]) * tc
+        const sAlong = cum[bi][k] + (cum[bi][k + 1] - cum[bi][k]) * tc, sEnd = Math.min(sAlong, cum[bi][cum[bi].length - 1] - sAlong)
+        if (sEnd < END_BLEND) {
+          // ease toward the ground where THIS LANE meets the land (on the end line, same side offset), not the ground
+          // under the car: over the riverbank that falls away, and following it made an 8-14% dip-and-climb
+          const atStart = sAlong < cum[bi][cum[bi].length - 1] - sAlong
+          const e0 = atStart ? p[0] : p[n], e1 = atStart ? p[1] : p[n - 1]
+          const ex = e1[0] - e0[0], ez = e1[1] - e0[1], eL = Math.hypot(ex, ez) || 1
+          const side = ((x - ax) * abz - (z - az) * abx) / Math.sqrt(L) // signed lateral offset from this segment
+          const nxl = ez / eL * (atStart ? 1 : -1), nzl = -ex / eL * (atStart ? 1 : -1)
+          const g = heightAt(e0[0] + nxl * side, e0[1] + nzl * side)
+          if (Number.isFinite(g) && Math.abs(y - g) < 1.5) y = g + (y - g) * (sEnd / END_BLEND)
+        }
+        mine = { y, d: dist, sEnd }
+      }
+      if (mine && (!best || mine.y > best.y)) best = { y: mine.y, bridge: b, sEnd: mine.sEnd }      // stacked decks: the highest
+    }
+    return best
+  }
+  // ★ THE DECK IS A GRID, like the land: each bridge rasterised at 1 m from deckRaw, then smoothed. Read off the
+  // segments directly, the height jumped ~1 cm where one segment handed over to the next on a curve, and at 20 m/s a
+  // 1 cm step in one tick reads as a lip: the car hopped every 2.5 m in the outer lanes (11-14). A bilinear grid is
+  // continuous by construction.
+  const DC = 1
+  const grids = bridges.map((b, bi) => {
+    const [x0, x1, z0, z1] = boxes[bi]
+    const nxg = Math.ceil((x1 - x0) / DC) + 1, nzg = Math.ceil((z1 - z0) / DC) + 1
+    const y = new Float32Array(nxg * nzg).fill(NaN), se = new Float32Array(nxg * nzg).fill(NaN)
+    for (let j = 0; j < nzg; j++) for (let i = 0; i < nxg; i++) {
+      const d = deckRaw(x0 + i * DC, z0 + j * DC, 1.5)      // a margin past the rim: bilinear never runs out of cells inside it
+      if (d && d.bridge === b) { y[j * nxg + i] = d.y; se[j * nxg + i] = d.sEnd }
+    }
+    // two passes of a 3x3 average over deck cells only (edges keep their own values)
+    for (let pass = 0; pass < 2; pass++) {
+      const src = y.slice()
+      for (let j = 0; j < nzg; j++) for (let i = 0; i < nxg; i++) {
+        if (Number.isNaN(src[j * nxg + i])) continue
+        if (se[j * nxg + i] < 4) continue            // the ends stay raw: raw meets the ground exactly, smoothed left a 0.1 m lip
+        let sum = 0, n = 0
+        for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+          const ii = i + di, jj = j + dj
+          if (ii < 0 || jj < 0 || ii >= nxg || jj >= nzg) continue
+          const v = src[jj * nxg + ii]; if (!Number.isNaN(v)) { sum += v; n++ }
+        }
+        y[j * nxg + i] = sum / n
+      }
+    }
+    return { x0, z0, nxg, nzg, y, se }
   })
   const deckAt = (x: number, z: number) => {
     let best: { y: number; bridge: RegionBridge } | null = null
     for (let bi = 0; bi < bridges.length; bi++) {
-      const bx = boxes[bi]
-      if (x < bx[0] || x > bx[1] || z < bx[2] || z > bx[3]) continue
-      const b = bridges[bi], p = b.pts, hw = b.width / 2 + 0.45     // to the parapet's outer face: the ribbon's edge never misses
-      for (let k = 0; k < p.length - 1; k++) {
-        const ax = p[k][0], az = p[k][1], abx = p[k + 1][0] - ax, abz = p[k + 1][1] - az, L = abx * abx + abz * abz || 1
-        const t = ((x - ax) * abx + (z - az) * abz) / L
-        // inside the segment; the ends overlap their neighbours by a hair so a seam has no gap
-        if (t < -0.02 || t > 1.02 || (k === 0 && t < 0) || (k === p.length - 2 && t > 1)) continue
-        const tc = Math.max(0, Math.min(1, t))
-        if (Math.hypot(ax + abx * tc - x, az + abz * tc - z) > hw) continue
-        const y = p[k][2] + (p[k + 1][2] - p[k][2]) * tc
-        if (!best || y > best.y) best = { y, bridge: b }
-      }
+      const g = grids[bi], fx = (x - g.x0) / DC, fz = (z - g.z0) / DC
+      if (fx < 0 || fz < 0 || fx > g.nxg - 1 || fz > g.nzg - 1) continue
+      const i = Math.min(g.nxg - 2, Math.floor(fx)), j = Math.min(g.nzg - 2, Math.floor(fz)), tx = fx - i, tz = fz - j
+      const a = g.y[j * g.nxg + i], b2 = g.y[j * g.nxg + i + 1], c = g.y[(j + 1) * g.nxg + i], d = g.y[(j + 1) * g.nxg + i + 1]
+      const cs = [a, b2, c, d]
+      if (cs.every(v => Number.isNaN(v))) continue
+      const raw = deckRaw(x, z)                       // the exact footprint decides what is deck; the grid gives the height
+      if (!raw || raw.bridge !== bridges[bi]) continue
+      let y: number
+      if (cs.some(v => Number.isNaN(v))) { const ok = cs.filter(v => !Number.isNaN(v)); y = ok.reduce((p, q) => p + q, 0) / ok.length }
+      else y = (a * (1 - tx) + b2 * tx) * (1 - tz) + (c * (1 - tx) + d * tx) * tz
+      if (!best || y > best.y) best = { y, bridge: bridges[bi] }
     }
     return best
   }
@@ -189,9 +263,8 @@ export function nearestRoad(region: Region, x: number, z: number): { d: number; 
   return { d: best, road, junction: null }
 }
 
-/** Which way the ring runs. ⚠ Which side of the road Athernyx drives on is CANON (asked of Magii 11-14); until it is
- *  ruled, the ring runs as right-hand traffic does: counter-clockwise seen from above. In x-east / z-south that is
- *  DEcreasing atan2(z, x). */
+/** Which way the ring runs. Athernyx drives on the RIGHT (Alex 11-14), so a roundabout runs counter-clockwise seen
+ *  from above. In x-east / z-south that is DEcreasing atan2(z, x). */
 export const RING_DIR = -1
 
 /** A drivable line from one place to another along the network (Dijkstra by length), going AROUND roundabouts.
@@ -265,8 +338,9 @@ export function bridgeRail(region: Region, c: { x: number; y: number; z: number;
       const qx = ax + abx * t, qz = az + abz * t, d = Math.hypot(c.x - qx, c.z - qz)
       if (d < best) { best = d; bx = qx; bz = qz; by = p[k][2] + (p[k + 1][2] - p[k][2]) * t; k0 = k }
     }
-    // only mid-span, only when the car is up on the deck (not under it, not on the approach where the land is level)
-    if (k0 < 2 || k0 > p.length - 4 || best > rail + 3 || best <= rail || Math.abs(c.y - by) > 1.2) continue
+    // only when the car is up on the deck and the ground beside it has fallen away (not on an approach where the land
+    // is level with the deck: there the road simply continues). No mid-span-only rule: the ends hold too.
+    if (best > rail + 3 || best <= rail || c.y < by - 1.2 || c.y > by + 3) continue      // a little hop over the deck still meets the parapet
     if (region.heightAt(c.x, c.z) > by - 0.8) continue
     nx = (c.x - bx) / best; nz = (c.z - bz) / best
     c.x = bx + nx * rail; c.z = bz + nz * rail

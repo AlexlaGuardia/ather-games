@@ -298,9 +298,24 @@ function rideGround(c: Courser, dt: number, ground: Ground, t: CourserTune) {
   const hNew = ground(c.x, c.z)
   // the SUSPENSION: riding the ground can only lift the body so fast; above that the springs take it, so a bump
   // at speed is a jolt, not a launch (it gave the body the ground's full rate: 48 m in the air off a 1.2 m bump)
-  const rideVy = Math.min((hNew - hOld) / dt, t.suspVy)
-  // the lip: the ground drops away faster than gravity can pull the car down onto it → fly
-  if (Number.isFinite(hNew) && rideVy < c.vy - t.gravity * dt - 0.5) {
+  // LIFT is read over the last 1.2 m the tyre has crossed, not one tick: a 2 cm seam at 18 m/s was 2.4 m/s of lift
+  // in a single tick and popped the car off a bridge deck's end (11-14). Only lift is damped (min), and only from
+  // ground already crossed, so a ramp still throws you and a lip still drops away exactly as before.
+  const sp = Math.hypot(c.vx, c.vz)
+  let rideVy = Math.min((hNew - hOld) / dt, t.suspVy)
+  if (sp > 1) {
+    const hb = ground(c.x - (c.vx / sp) * 1.2, c.z - (c.vz / sp) * 1.2)
+    if (Number.isFinite(hb) && Number.isFinite(hNew)) rideVy = Math.min(rideVy, ((hNew - hb) / 1.2) * sp)
+  }
+  // the lip: the ground drops away faster than gravity can pull the car down onto it → fly. Judged over the next
+  // LIP_LOOK seconds, not one tick: a road's ordinary grade breaks (a deck meeting the land, a 5 m terrain facet) are
+  // corners of a few %, and a one-tick test read every one of them at speed as a launch (micro-hops, steering dead
+  // for a tick: "the car bugs out on the bridge", 11-14). A real lip still drops away beyond the ballistic arc.
+  const LIP_LOOK = 0.1
+  const hLook = ground(c.x + c.vx * LIP_LOOK, c.z + c.vz * LIP_LOOK)
+  const arc = c.y + c.vy * LIP_LOOK - 0.5 * t.gravity * LIP_LOOK * LIP_LOOK      // where the car's own arc would be (from where it IS)
+  const lip = Number.isFinite(hNew) && rideVy < c.vy - t.gravity * dt - 0.5 && Number.isFinite(hLook) && hLook < arc - 0.05
+  if (lip) {
     c.airborne = true; c.airT = 0
     c.y += c.vy * dt
   } else {

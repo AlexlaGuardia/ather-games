@@ -169,6 +169,30 @@ if (net) {
   ok(waystones.length >= 1 && waystones.every(w => w.faces.length > 0 && w.y > 0.6), 'waystones missing, faceless, or in the water')
 }
 
+// ★★ EVERY LANE CROSSES EVERY BRIDGE CLEAN (Alex 11-14: "a missing chunk that makes the car bug out"). Five lane
+// offsets, both directions, at speed: no tick airborne on or near the deck, no fall into the river. The chunk was
+// four things at once: a wedge at each curved joint no segment covered, a capsule poking 2 m past an end, deck ends
+// eased toward a falling riverbank, and a 2 cm seam read as a one-tick launch.
+for (const b of meta.network?.bridges ?? []) for (const dir of [1, -1]) for (const off of [-5, -3, 0, 3, 5]) {
+  const p = dir > 0 ? b.pts : [...b.pts].reverse()
+  const [ax, az] = p[0], [bx, bz] = p[1], L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L
+  const c = createCourser(ax - ux * 25 - uz * off, az - uz * 25 + ux * off, Math.atan2(-ux, -uz), R.groundAt)
+  let air = 0, swam = false
+  for (let t = 0; t < 9; t += 1 / 120) {
+    let bk = 0, bd = Infinity
+    for (let k = 0; k < p.length; k++) { const d = Math.hypot(p[k][0] - c.x, p[k][1] - c.z); if (d < bd) { bd = d; bk = k } }
+    if (bk === p.length - 1 && bd > 20) break
+    const q0 = p[Math.min(p.length - 2, bk + 3)], q = p[Math.min(p.length - 1, bk + 4)], qL = Math.hypot(q[0] - q0[0], q[1] - q0[1]) || 1
+    const tx = q[0] - (q[1] - q0[1]) / qL * off, tz = q[1] + (q[0] - q0[0]) / qL * off
+    let err = Math.atan2(-(tx - c.x), -(tz - c.z)) - c.yaw; while (err > Math.PI) err -= 2 * Math.PI; while (err < -Math.PI) err += 2 * Math.PI
+    tickCourser(c, { throttle: bodySpeeds(c).fwd < 22 ? 1 : 0, steer: Math.max(-1, Math.min(1, -err * 2.5)), handbrake: false, dt: 1 / 120 }, R.groundAt)
+    bridgeRail(R, c) || roadRail(R, c)
+    if (c.airborne && (R.deckAt(c.x, c.z) || bd < 15)) air += 1 / 120
+    if (R.heightAt(c.x, c.z) < 0.3 && c.y < 0.5) swam = true
+  }
+  ok(air < 0.05 && !swam, `bridge ${b.id} dir ${dir} lane ${off}: ${air.toFixed(2)} s airborne${swam ? ', IN THE RIVER' : ''}`)
+}
+
 // ★ FERRIES: every ferry has two landings on dry land, each ON its road, and a landing finds its far side
 {
   for (const f of meta.network?.ferries ?? []) {

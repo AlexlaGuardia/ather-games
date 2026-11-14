@@ -153,7 +153,10 @@ if cen:
     wet_pts = [w for w in wet_pts if len(w)]
     if wet_pts:
         dw, _ = cKDTree(np.concatenate(wet_pts)).query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=40)
-        bed &= ~((dw.reshape(h.shape) < d_keep) & (land0 < 0.5))
+        # only OPEN water (below the water plane) is given back to the river: the bank beside a bridge's end stays
+        # road, carved across the full width (11-14: the bank under the outer lanes was left 0.3-0.4 m low, a kerb
+        # onto the deck and a drop off it, worst in the right-hand lane)
+        bed &= ~((dw.reshape(h.shape) < d_keep) & (land0 < -0.15))
     # the field: land smoothed hard, causeway over water
     # the baseline is the land UNDER THE BED only (normalised convolution): smoothing the whole grid let a hill beside
     # a valley road pull the road up toward it
