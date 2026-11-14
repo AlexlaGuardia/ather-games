@@ -1,0 +1,128 @@
+'use client'
+
+// The home plot's scene: the full-size island, the garden grid, fold-mist over ground you do not hold, the one
+// gate, Gregory, and the threshold. Rules live in plot.ts; this only draws them.
+
+import { useMemo } from 'react'
+import * as THREE from 'three'
+import {
+  PLOT_N, PLOT_CELL, PLOT_HALF, PLOT_R, GRID, SQ, GRID_HALF, THRESHOLD, GATE, GREG,
+  plotHeightAt, plotVertexHeight, plotCellIsLand, sqId, ringOf, canBuy,
+} from './plot'
+import { P } from './palette'
+
+function plotGeometry(): THREE.BufferGeometry {
+  const pos: number[] = [], col: number[] = []
+  const v = (i: number, j: number) => [i * PLOT_CELL - PLOT_HALF, plotVertexHeight(i, j), j * PLOT_CELL - PLOT_HALF] as const
+  const c = new THREE.Color()
+  for (let j = 0; j < PLOT_N; j++) for (let i = 0; i < PLOT_N; i++) {
+    if (!plotCellIsLand(i, j)) continue
+    const p00 = v(i, j), p10 = v(i + 1, j), p01 = v(i, j + 1), p11 = v(i + 1, j + 1)
+    for (const tri of [[p00, p11, p10], [p00, p01, p11]] as const) {
+      const cx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3, cz = (tri[0][2] + tri[1][2] + tri[2][2]) / 3
+      const r = Math.hypot(cx, cz) / PLOT_R
+      c.copy(P.grass).lerp(P.grassHi, Math.max(0, 0.5 - r) * 0.7).lerp(P.gold, (((cx * 0.37 + cz * 0.23) % 1) + 1) % 1 * 0.14)
+      for (const p of tri) { pos.push(p[0], p[1], p[2]); col.push(c.r, c.g, c.b) }
+    }
+    const drop = -3
+    const edges: [number, number, readonly [number, number, number], readonly [number, number, number]][] = [
+      [0, -1, p00, p10], [1, 0, p10, p11], [0, 1, p11, p01], [-1, 0, p01, p00],
+    ]
+    for (const [di, dj, a, b] of edges) {
+      if (plotCellIsLand(i + di, j + dj)) continue
+      const sc = new THREE.Color(P.under)
+      const quad = [a, b, [b[0], drop, b[2]], a, [b[0], drop, b[2]], [a[0], drop, a[2]]] as const
+      for (const p of quad) { pos.push(p[0], p[1], p[2]); col.push(sc.r, sc.g, sc.b) }
+    }
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
+  g.computeVertexNormals()
+  return g
+}
+
+/** Faint lines along the grid, laid on the ground, so the squares read as squares. */
+function gridLines(): THREE.BufferGeometry {
+  const pts: number[] = []
+  const step = 2
+  for (let k = 0; k <= GRID; k++) {
+    const a = k * SQ - GRID_HALF
+    for (let t = -GRID_HALF; t < GRID_HALF; t += step) {
+      pts.push(a, plotHeightAt(a, t) + 0.06, t, a, plotHeightAt(a, t + step) + 0.06, t + step)
+      pts.push(t, plotHeightAt(t, a) + 0.06, a, t + step, plotHeightAt(t + step, a) + 0.06, a)
+    }
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts.map(p => (Number.isFinite(p) ? p : 0)), 3))
+  return g
+}
+
+function Gate() {
+  const y = plotHeightAt(GATE.x, GATE.z) - 0.4
+  return (
+    <group position={[GATE.x, y, GATE.z]}>
+      <mesh position-y={0.375}><cylinderGeometry args={[1.6, 1.8, 0.75, 12]} /><meshLambertMaterial color="#b9ab90" flatShading /></mesh>
+      <mesh position-y={3.4}><torusGeometry args={[2.3, 0.22, 6, 24]} /><meshLambertMaterial color="#e7c766" emissive="#c79a2e" emissiveIntensity={0.6} flatShading /></mesh>
+      <mesh position-y={3.4}><circleGeometry args={[2.1, 24]} /><meshBasicMaterial color="#f4e3b0" transparent opacity={0.35} side={THREE.DoubleSide} /></mesh>
+      <pointLight position-y={3.4} color="#f2d88a" intensity={6} distance={18} />
+    </group>
+  )
+}
+
+/** Gregory, a placeholder figure until the model lands: robe, head, a wide hat. */
+function Gregory() {
+  const y = plotHeightAt(GREG.x, GREG.z)
+  return (
+    <group position={[GREG.x, y, GREG.z]} rotation-y={-0.6}>
+      <mesh position-y={0.75}><coneGeometry args={[0.5, 1.5, 8]} /><meshLambertMaterial color="#6f5a8a" flatShading /></mesh>
+      <mesh position-y={1.62}><icosahedronGeometry args={[0.26, 0]} /><meshLambertMaterial color="#e8d2b4" flatShading /></mesh>
+      <mesh position-y={1.86}><cylinderGeometry args={[0.55, 0.55, 0.06, 10]} /><meshLambertMaterial color="#4a3b5c" flatShading /></mesh>
+      <mesh position-y={2.15}><coneGeometry args={[0.28, 0.6, 8]} /><meshLambertMaterial color="#4a3b5c" flatShading /></mesh>
+    </group>
+  )
+}
+
+/** Fold-mist over every square you do not hold. Squares Greg would sell you now glow gold under the mist. */
+function Mist({ owned, pages }: { owned: ReadonlySet<string>; pages: number }) {
+  const out: React.ReactNode[] = []
+  for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) {
+    if (owned.has(sqId(i, j))) continue
+    const x = (i + 0.5) * SQ - GRID_HALF, z = (j + 0.5) * SQ - GRID_HALF
+    const v = canBuy(owned, i, j, pages, Number.MAX_SAFE_INTEGER)   // "for sale" ignores what you can afford
+    const forSale = v.ok, ring = ringOf(i, j)
+    const h = plotHeightAt(x, z)
+    const top = Number.isFinite(h) ? h : 1
+    out.push(
+      <mesh key={`${i},${j}`} position={[x, top + 3, z]}>
+        <boxGeometry args={[SQ - 0.1, 7, SQ - 0.1]} />
+        <meshLambertMaterial color={forSale ? '#f3e2a8' : '#eef0f2'} transparent opacity={forSale ? 0.42 : 0.62 + ring * 0.08} depthWrite={false} />
+      </mesh>,
+    )
+  }
+  return <>{out}</>
+}
+
+export function PlotScene({ owned, pages }: { owned: ReadonlySet<string>; pages: number }) {
+  const geo = useMemo(plotGeometry, [])
+  const lines = useMemo(gridLines, [])
+  const puffs = useMemo(() => Array.from({ length: 34 }, (_, k) => {
+    const a = k * 2.399, r = 130 + (k * 37 % 140)
+    return { x: Math.cos(a) * r, y: -40 + (k * 13 % 16), z: Math.sin(a) * r, s: 9 + (k * 7 % 12) }
+  }), [])
+  return (
+    <>
+      <mesh geometry={geo}><meshLambertMaterial vertexColors flatShading /></mesh>
+      <lineSegments geometry={lines}><lineBasicMaterial color="#7f9a55" transparent opacity={0.45} /></lineSegments>
+      <mesh position-y={-20} rotation-x={Math.PI}><coneGeometry args={[PLOT_R * 1.05, 34, 12, 2]} /><meshLambertMaterial color={P.under} flatShading /></mesh>
+      <mesh position-y={-56} rotation-x={-Math.PI / 2}><planeGeometry args={[3000, 3000]} /><meshLambertMaterial color="#f3efe6" /></mesh>
+      {puffs.map((p, k) => <mesh key={k} position={[p.x, p.y, p.z]} scale={p.s}><icosahedronGeometry args={[1, 0]} /><meshLambertMaterial color="#fbf8f1" flatShading /></mesh>)}
+      <mesh position={[THRESHOLD.x, plotHeightAt(THRESHOLD.x, THRESHOLD.z) + 0.03, THRESHOLD.z]} rotation-x={-Math.PI / 2}>
+        <ringGeometry args={[1.1, 1.45, 18]} /><meshBasicMaterial color="#efe0a8" />
+      </mesh>
+      <Gate />
+      <Gregory />
+      <Mist owned={owned} pages={pages} />
+    </>
+  )
+}

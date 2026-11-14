@@ -10,31 +10,29 @@
 //   · Planted only where you STAND, on ground (never in water, never mid-air): reach = where you have been.
 //   · Capped PER BIOME, not in total, so the cap pushes the keeper outward to new country rather than stacking.
 //   · A minimum spacing, so two waymarks are two places.
-//   · Total is bounded by the station's left arc (plot.ts WILDS_SOCKETS): one socket lights per waymark.
+//   · A total cap "within reason" (Alex 11-14). Each waymark is a stop on the gate's fold map; there are no sockets.
 // Each planted waymark adds its biome to the fold network; later, garden Moglins gather from that biome
 // (world/gates.md, RULED 11-14: help, never labour, pacing is Jin's).
 //
 // ★ PURE. The page persists the list (localStorage trial ledger); these functions decide.
 
 import { BIOME, BIOME_NAME, type BiomeId } from './wilds'
-import { WILDS_SOCKETS } from './plot'
 
 export interface Waymark { id: string; tile: string; x: number; y: number; z: number; biome: BiomeId; made: number }
 
-export const PER_BIOME = 2
+export const PER_BIOME = 4
 export const MIN_SPACING = 60          // metres between two waymarks on one tile
-/** Socket 0 of the left arc is GREGORY'S waymark: a place he walked to and bound, given so a new keeper has
- *  somewhere to step through to (canon lets Greg sell waymarks; the first one free is pricing, Jin's call).
- *  It does not count against the keeper's caps. The keeper's own fill sockets 1..N. */
+/** GREGORY'S waymark: a place he walked to and bound, given so a new keeper has somewhere to step through to.
+ *  It does not count against the keeper's caps. */
 export const GREG_WAYMARK: Waymark = { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: BIOME.meadow, made: 0 }
-export const MAX_WAYMARKS = WILDS_SOCKETS - 1
+export const MAX_WAYMARKS = 12
 
 export type PlantVerdict = { ok: true } | { ok: false; why: string }
 
 export function canPlant(list: readonly Waymark[], at: { tile: string; x: number; z: number; biome: BiomeId; grounded: boolean; swimming: boolean }): PlantVerdict {
   if (!at.grounded || at.swimming) return { ok: false, why: 'A waymark binds ground. Stand on it.' }
   if (at.biome === BIOME.water) return { ok: false, why: 'Water will not hold a binding.' }
-  if (list.length >= MAX_WAYMARKS) return { ok: false, why: `Your station holds ${MAX_WAYMARKS} passages. Lift one first.` }
+  if (list.length >= MAX_WAYMARKS) return { ok: false, why: `You hold ${MAX_WAYMARKS} waymarks, as many as the fold will carry. Lift one first.` }
   const same = list.filter(w => w.biome === at.biome)
   if (same.length >= PER_BIOME) return { ok: false, why: `You already hold ${PER_BIOME} waymarks in the ${BIOME_NAME[at.biome]}. Find other country.` }
   const near = [GREG_WAYMARK, ...list].find(w => w.tile === at.tile && Math.hypot(w.x - at.x, w.z - at.z) < MIN_SPACING)
@@ -55,8 +53,6 @@ export function reachedBiomes(list: readonly Waymark[]): BiomeId[] {
   return [...new Set(list.map(w => w.biome))].sort()
 }
 
-/** Socket k of the left arc: 0 is Greg's, then the keeper's in planting order. */
-export const waymarkForSocket = (list: readonly Waymark[], k: number): Waymark | null => k === 0 ? GREG_WAYMARK : list[k - 1] ?? null
 
 // ── the trial ledger (per browser; NOT the account save) ──────────────────────────────────────────────────────
 const KEY = 'ather.waymarks.v1'

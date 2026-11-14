@@ -1,32 +1,77 @@
-// THE HOME PLOT in 3D — a keeper's fold, a cloud-walled floating island whose edge is a fall
+// THE HOME PLOT in 3D — a keeper's fold, a floating island whose edge is a fall
 // (game/shimmer-geography.md › THE HOME PLOT IS A FLOATING ISLAND, RULED 2026-08-15). Walking off the edge is
 // "falling through your own fold, which returns you to your threshold" — so the fall is the way home, not a death.
 //
-// ★ THE GATE STATION (shimmer-geography.md › THE GATE STATION, RULED 2026-08-24): Gregory pre-places a LOW
-// HALF-CIRCLE OF SOCKETS on the plot, FACING THE THRESHOLD. The station grants nothing; it displays reach the keeper
-// has already earned.
-//   centre      = the one GATE (crosses out of the Ather; home-cost; Greg's gift). Rendered unlike its neighbours.
-//   left arc    = PASSAGES to the Wilds, one per keeper-planted WAYMARK.
-//   right arc   = the Chord plot · Lingston (a landing the place keeps) · fold-settlements kept — dark until earned.
-// Vocabulary that may ship: waymark · passage · fold · threshold · chord · gate (centre ONLY). Never a bought rune.
+// ★ THE GARDEN GRID (Alex 2026-11-14, the Ather revamp; logged [OPEN] in CANON_GAPS for Magii to author):
+// the island is full size from day one and cut into a 9×9 grid of garden squares. The middle 3×3 is yours when
+// Greg hands you the plot; the rest stands under fold-mist. Squares are bought from Greg with GREY MATTER (what the
+// Hollows in the Wilds drop), but the grimoire decides which squares Greg will sell at all:
+//   ring 1 (the 5×5 band)  — once 10 grimoire pages are filled
+//   ring 2 (the 7×7 band)  — at 15
+//   ring 3 (the 9×9 band)  — at 25: the garden is fully expandable
+// A square must touch ground you already hold. Mist is a wall, not a fall: you cannot walk onto ground you do not hold.
 //
-// ★ PURE. The island's land is a grid of triangles like land.ts: what you see is what you stand on, and the edge
-// is a stair of whole cells, which is the Ather's quantized ground showing at the one place you can see its edge.
+// ★ ONE GATE (Alex 11-14): the half-circle station is gone. The plot carries a single gate; its face is the fold map
+// (the Wilds you have walked + your waymarks; Tab to Athernyx). Greg stands by the threshold and sells ground.
+//
+// ★ PURE. The island's land is a grid of triangles: what you see is what you stand on.
 
 import type { Box, Shape } from '../terrain-world'
 
-export const PLOT_CELL = 1.5
-export const PLOT_R = 30                       // metres; the radius wobbles ±3 around it
-const N = Math.ceil((PLOT_R + 4) * 2 / PLOT_CELL)
+// ── the garden grid ───────────────────────────────────────────────────────────────────────────────────────────
+export const SQ = 16                         // metres per garden square
+export const GRID = 9                        // squares per side
+export const GRID_HALF = (GRID * SQ) / 2     // 72
+const MID = (GRID - 1) / 2                   // 4
+
+export type SquareId = `${number},${number}`
+export const sqId = (i: number, j: number): SquareId => `${i},${j}`
+export const parseSq = (id: string) => { const [i, j] = id.split(',').map(Number); return { i, j } }
+/** 0 = the starting 3×3, 1..3 = the rings outward. */
+export const ringOf = (i: number, j: number) => Math.max(0, Math.max(Math.abs(i - MID), Math.abs(j - MID)) - 1)
+export const squareAt = (x: number, z: number) => {
+  const i = Math.floor((x + GRID_HALF) / SQ), j = Math.floor((z + GRID_HALF) / SQ)
+  return i >= 0 && j >= 0 && i < GRID && j < GRID ? { i, j } : null
+}
+export const squareCentre = (i: number, j: number) => ({ x: (i + 0.5) * SQ - GRID_HALF, z: (j + 0.5) * SQ - GRID_HALF })
+export const STARTING_SQUARES: SquareId[] = []
+for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) if (ringOf(i, j) === 0) STARTING_SQUARES.push(sqId(i, j))
+
+/** Grimoire pages filled before Greg will sell a ring (Alex 11-14). */
+export const RING_PAGES = [0, 10, 15, 25] as const
+/** Grey matter per square, by ring. Build pacing (Jin); tune with play. */
+export const RING_COST = [0, 20, 35, 55] as const
+/** The grimoire's capacity at each stage: 10 empty pages from Greg, then 15, then 25. */
+export const GRIMOIRE_SIZE = (pages: number) => pages < 10 ? 10 : pages < 15 ? 15 : 25
+
+export type BuyVerdict = { ok: true; cost: number } | { ok: false; why: string; cost?: number }
+export function canBuy(owned: ReadonlySet<string>, i: number, j: number, pages: number, grey: number): BuyVerdict {
+  if (i < 0 || j < 0 || i >= GRID || j >= GRID) return { ok: false, why: 'There is no ground there.' }
+  if (owned.has(sqId(i, j))) return { ok: false, why: 'That ground is already yours.' }
+  const ring = ringOf(i, j), cost = RING_COST[ring]
+  if (pages < RING_PAGES[ring]) return { ok: false, why: `Fill ${RING_PAGES[ring]} grimoire pages first (${pages} so far).`, cost }
+  const touches = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([di, dj]) => owned.has(sqId(i + di, j + dj)))
+  if (!touches) return { ok: false, why: 'It has to touch ground you already hold.', cost }
+  if (grey < cost) return { ok: false, why: `It costs ${cost} grey matter. You have ${grey}.`, cost }
+  return { ok: true, cost }
+}
+
+// ── the island ────────────────────────────────────────────────────────────────────────────────────────────────
+export const PLOT_CELL = 2
+export const PLOT_R = GRID_HALF + 12                 // the island reaches past the outer ring, then falls
+const N = Math.ceil((PLOT_R + 6) * 2 / PLOT_CELL)
 const HALF = (N * PLOT_CELL) / 2
 export const PLOT_N = N
 export const PLOT_HALF = HALF
 
-/** Where the keeper stands on arriving home. Canon: one threshold, folded by Greg, the least arbitrary point. */
-export const THRESHOLD = { x: 0, z: 16, yaw: 0 }      // yaw 0 faces −z: straight at the station
-/** The station's centre: the half-circle stands north of the threshold and opens toward it. */
-export const STATION = { x: 0, z: -2 }
-export const FALL_Y = -30                              // below this the fold returns you to the threshold
+/** Where the keeper stands on arriving home: south of the gate, facing it. Yaw 0 faces −z. */
+export const THRESHOLD = { x: 0, z: 10, yaw: 0 }
+/** The one gate, at the north of the starting ground. */
+export const GATE = { x: 0, z: -14 }
+/** Gregory, beside the threshold: he sells ground. */
+export const GREG = { x: 7, z: 6 }
+export const FALL_Y = -30
+export const REACH = 2.4
 
 const hash = (a: number, b: number) => {
   let h = (a * 374761393 + b * 668265263) ^ 0x5bd1e995
@@ -34,29 +79,29 @@ const hash = (a: number, b: number) => {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295
 }
 
-/** Edge radius at an angle — a soft, lumpy shore, not a disc. */
-export function edgeR(a: number): number {
-  return PLOT_R + Math.sin(a * 3 + 0.7) * 1.8 + Math.sin(a * 5 - 1.3) * 1.1 + Math.sin(a * 11) * 0.4
+/** A rounded square with a lumpy shore: wide enough that every garden square is whole land. */
+export function insideIsland(x: number, z: number): boolean {
+  const a = Math.atan2(z, x)
+  const wob = Math.sin(a * 3 + 0.7) * 2.2 + Math.sin(a * 7 - 1.3) * 1.3 + Math.sin(a * 13) * 0.6
+  const R = PLOT_R + wob, p = 8
+  return (Math.abs(x) / R) ** p + (Math.abs(z) / R) ** p < 1
 }
-const insideIsland = (x: number, z: number) => Math.hypot(x, z) < edgeR(Math.atan2(z, x))
 
-/** Vertex height: a low dome with knolls, flattened where the station and threshold stand. */
 function rawHeight(x: number, z: number): number {
   const r = Math.hypot(x, z)
-  let y = 1.4 * (1 - (r / PLOT_R) ** 2)
-  y += (hash(Math.round(x * 2), Math.round(z * 2)) - 0.5) * 0.12
-  y += Math.sin(x * 0.31 + 1) * Math.cos(z * 0.27) * 0.35
-  // the station's terrace and the threshold pad sit level
-  const pad = (cx: number, cz: number, R: number) => Math.max(0, Math.min(1, (Math.hypot(x - cx, z - cz) - R) / 3))
-  const kStation = pad(STATION.x, STATION.z - 4, 12), kThresh = pad(THRESHOLD.x, THRESHOLD.z, 3)
-  y = y * kStation + 1.0 * (1 - kStation)
-  y = y * kThresh + 0.9 * (1 - kThresh)
+  let y = 2.2 * (1 - Math.min(1, (r / (PLOT_R * 1.2)) ** 2))
+  y += (hash(Math.round(x), Math.round(z)) - 0.5) * 0.14
+  y += Math.sin(x * 0.11 + 1) * Math.cos(z * 0.09) * 0.7 + Math.sin(x * 0.27 - z * 0.21) * 0.25
+  // level pads where the gate, Greg and the threshold stand
+  const pad = (cx: number, cz: number, R: number, h: number) => {
+    const k = Math.max(0, Math.min(1, (Math.hypot(x - cx, z - cz) - R) / 4)); y = y * k + h * (1 - k)
+  }
+  pad(GATE.x, GATE.z, 5, 2.0); pad(THRESHOLD.x, THRESHOLD.z, 3, 2.0); pad(GREG.x, GREG.z, 2.5, 2.0)
   return y
 }
 
 const VH = new Float32Array((N + 1) * (N + 1))
 for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) VH[j * (N + 1) + i] = rawHeight(i * PLOT_CELL - HALF, j * PLOT_CELL - HALF)
-/** A cell is land when all four corners are inside the shore. */
 const CELLS = new Uint8Array(N * N)
 for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
   const x0 = i * PLOT_CELL - HALF, z0 = j * PLOT_CELL - HALF, x1 = x0 + PLOT_CELL, z1 = z0 + PLOT_CELL
@@ -74,42 +119,52 @@ export function plotHeightAt(x: number, z: number): number {
   return u >= v ? h00 + (h10 - h00) * u + (h11 - h10) * v : h00 + (h11 - h01) * u + (h01 - h00) * v
 }
 
-// ── the gate station ──────────────────────────────────────────────────────────────────────────────────────────
-export const SOCKET_ARC_R = 10
-export const SOCKET_REACH = 1.6            // stand this close to a socket to use it
-export type SocketClass = 'gate' | 'wilds' | 'chord' | 'landing'
-export interface SocketSlot { id: string; cls: SocketClass; x: number; z: number; label: string }
-
-/** Left arc slots for Wilds passages. Canon puts no number on passages ("as many as the build wants"); the build
- *  shows this many and the waymark rules (waymarks.ts) keep the keeper inside them. */
-export const WILDS_SOCKETS = 6
-
-/** The half-circle opens toward the threshold (+z). Seen from the threshold, LEFT is −x. */
-export function stationSockets(): SocketSlot[] {
-  const out: SocketSlot[] = []
-  const at = (t: number) => {   // t: −1 far left … 0 centre … +1 far right, as seen from the threshold
-    const a = t * (Math.PI / 2) * 0.92
-    return { x: STATION.x + Math.sin(a) * SOCKET_ARC_R, z: STATION.z - Math.cos(a) * SOCKET_ARC_R }
+// ── solids: the gate's plinth, Greg, and the mist walls round the ground you hold ─────────────────────────────
+const MIST_T = 0.3, MIST_H = 40
+/** Every edge between a held square and one you do not hold (inside the grid) is a wall. The grid's outer edge is
+ *  not: past the outer ring the island simply ends, and the fall takes you home. */
+export function mistWalls(owned: ReadonlySet<string>): Box[] {
+  const out: Box[] = []
+  for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) {
+    if (!owned.has(sqId(i, j))) continue
+    const x0 = i * SQ - GRID_HALF, z0 = j * SQ - GRID_HALF, x1 = x0 + SQ, z1 = z0 + SQ
+    const wall = (ni: number, nj: number) => ni >= 0 && nj >= 0 && ni < GRID && nj < GRID && !owned.has(sqId(ni, nj))
+    if (wall(i, j - 1)) out.push({ x0, x1, z0: z0 - MIST_T, z1: z0 + MIST_T, y0: -20, y1: MIST_H })
+    if (wall(i, j + 1)) out.push({ x0, x1, z0: z1 - MIST_T, z1: z1 + MIST_T, y0: -20, y1: MIST_H })
+    if (wall(i - 1, j)) out.push({ x0: x0 - MIST_T, x1: x0 + MIST_T, z0, z1, y0: -20, y1: MIST_H })
+    if (wall(i + 1, j)) out.push({ x0: x1 - MIST_T, x1: x1 + MIST_T, z0, z1, y0: -20, y1: MIST_H })
   }
-  out.push({ id: 'gate', cls: 'gate', ...at(0), label: 'The gate · home in Athernyx' })
-  for (let k = 0; k < WILDS_SOCKETS; k++) {
-    const t = -1 + (k / WILDS_SOCKETS) * 0.86
-    out.push({ id: `wilds-${k}`, cls: 'wilds', ...at(t), label: 'Passage · the Wilds' })
-  }
-  out.push({ id: 'chord', cls: 'chord', ...at(0.32), label: 'The Chord · not yet' })
-  out.push({ id: 'lingston', cls: 'landing', ...at(0.58), label: 'Lingston · not yet' })
-  out.push({ id: 'settle-0', cls: 'landing', ...at(0.84), label: 'A kept settlement · not yet' })
   return out
 }
 
-/** Pedestals are solid: the walker steps up onto a socket's low plinth (a 0.35 rise is under the 0.5 step rule). */
-const SOCKET_BOXES: Box[] = stationSockets().map(s => {
-  const r = s.cls === 'gate' ? 1.0 : 0.75, y0 = plotHeightAt(s.x, s.z) - 0.4
-  return { x0: s.x - r, x1: s.x + r, z0: s.z - r, z1: s.z + r, y0, y1: y0 + 0.75 }
-})
+const FIXED: Box[] = [
+  (() => { const y0 = plotHeightAt(GATE.x, GATE.z) - 0.4; return { x0: GATE.x - 1.6, x1: GATE.x + 1.6, z0: GATE.z - 1.6, z1: GATE.z + 1.6, y0, y1: y0 + 0.75 } })(),
+  (() => { const y0 = plotHeightAt(GREG.x, GREG.z); return { x0: GREG.x - 0.4, x1: GREG.x + 0.4, z0: GREG.z - 0.4, z1: GREG.z + 0.4, y0, y1: y0 + 1.8 } })(),
+]
 
-export const PLOT_SHAPE: Shape = {
-  ground: plotHeightAt,
-  solids: (x0, _y0, z0, x1, _y1, z1) => SOCKET_BOXES.filter(b => b.x0 <= x1 && b.x1 >= x0 && b.z0 <= z1 && b.z1 >= z0),
-  water: () => [],
+export function plotShape(owned: ReadonlySet<string>): Shape {
+  const boxes = [...FIXED, ...mistWalls(owned)]
+  return {
+    ground: plotHeightAt,
+    solids: (x0, _y0, z0, x1, _y1, z1) => boxes.filter(b => b.x0 <= x1 && b.x1 >= x0 && b.z0 <= z1 && b.z1 >= z0),
+    water: () => [],
+  }
+}
+
+// ── the keeper's garden ledger (per browser, the trial save; NOT the account) ────────────────────────────────
+const KEY = 'ather.garden.v1'
+export interface Garden { owned: string[]; grey: number; pages: number }
+export const freshGarden = (): Garden => ({ owned: [...STARTING_SQUARES], grey: 0, pages: 0 })
+export function loadGarden(): Garden {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) ?? 'null')
+    if (v && Array.isArray(v.owned) && typeof v.grey === 'number') {
+      const owned = [...new Set([...STARTING_SQUARES, ...v.owned.filter((s: unknown) => typeof s === 'string')])]
+      return { owned, grey: Math.max(0, v.grey), pages: Math.max(0, Number(v.pages) || 0) }
+    }
+  } catch { /* fall through */ }
+  return freshGarden()
+}
+export function saveGarden(g: Garden): void {
+  try { localStorage.setItem(KEY, JSON.stringify(g)) } catch { /* private window: the session keeps it */ }
 }

@@ -1,14 +1,16 @@
-// The Ather side: the home plot, the station, the Wilds tile, waymarks. Run: npx tsx src/app/shimmer/open/ather/ather.test.ts
+// The Ather side: the home plot and its garden grid, the Wilds tile, waymarks. Run: npx tsx src/app/shimmer/open/ather/ather.test.ts
 
 import { readFileSync } from 'fs'
 import { createLoco, tickLocomotion, type LocoInput } from '../../voxel3d/locomotion'
 import { terrainWorld } from '../terrain-world'
 import { parseWilds, BIOME, type WildsMeta } from './wilds'
 import {
-  PLOT_SHAPE, PLOT_N, PLOT_CELL, PLOT_HALF, THRESHOLD, FALL_Y, STATION, SOCKET_REACH, SOCKET_ARC_R, WILDS_SOCKETS,
-  plotHeightAt, plotVertexHeight, plotCellIsLand, stationSockets, edgeR,
+  plotShape, PLOT_N, PLOT_CELL, PLOT_HALF, THRESHOLD, FALL_Y, GATE, GREG, REACH, GRID, SQ, GRID_HALF,
+  STARTING_SQUARES, RING_PAGES, RING_COST, GRIMOIRE_SIZE, plotHeightAt, plotVertexHeight, plotCellIsLand,
+  squareAt, squareCentre, ringOf, sqId, canBuy, mistWalls,
 } from './plot'
-import { canPlant, plant, lift, reachedBiomes, waymarkForSocket, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
+import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
+import { canPlant, plant, lift, reachedBiomes, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
 
 let pass = 0
 const fails: string[] = []
@@ -80,61 +82,92 @@ const hx = meta.sizeX / 2, hz = meta.sizeZ / 2
 }
 
 // ── the plot ──────────────────────────────────────────────────────────────────────────────────────────────────
+const START = new Set<string>(STARTING_SQUARES)
 {
-  let worst = 0, land = 0
+  let worst = 0
   for (let j = 0; j < PLOT_N; j++) for (let i = 0; i < PLOT_N; i++) {
     if (!plotCellIsLand(i, j)) continue
-    land++
     const x = i * PLOT_CELL - PLOT_HALF, z = j * PLOT_CELL - PLOT_HALF
     worst = Math.max(worst, Math.abs(plotHeightAt(x + 1e-4, z + 1e-4) - plotVertexHeight(i, j)))
   }
   ok(worst < 0.01, `plot: heightAt off a vertex by ${worst.toFixed(4)}`)
-  const area = land * PLOT_CELL * PLOT_CELL
-  ok(area > 2200 && area < 3600, `plot: ${area.toFixed(0)} m² of land (want ~2800, a 30 m island)`)
 }
-ok(plotHeightAt(0, 0) > 0 && plotHeightAt(THRESHOLD.x, THRESHOLD.z) > 0, 'plot: no land at the centre or the threshold')
-ok(plotHeightAt(0, -(edgeR(-Math.PI / 2) + 2)) === -Infinity, 'plot: land past the north shore')
-// the edge is a FALL, and the fall goes below FALL_Y (where the page returns you home)
+// every garden square is whole land (the island reaches past the outer ring), and land ends not far past it
 {
-  const world = terrainWorld(PLOT_SHAPE)
-  const lc = createLoco(THRESHOLD.x, plotHeightAt(THRESHOLD.x, THRESHOLD.z), THRESHOLD.z)
+  let holes = 0
+  for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++)
+    for (let a = 0; a <= 4; a++) for (let b = 0; b <= 4; b++) {
+      const x = i * SQ - GRID_HALF + a * (SQ / 4) * 0.999 + 0.01, z = j * SQ - GRID_HALF + b * (SQ / 4) * 0.999 + 0.01
+      if (!Number.isFinite(plotHeightAt(x, z))) holes++
+    }
+  ok(holes === 0, `plot: ${holes} points of the garden grid are not land`)
+  ok(plotHeightAt(0, -(GRID_HALF + 30)) === -Infinity && plotHeightAt(GRID_HALF + 30, 0) === -Infinity, 'plot: land runs far past the grid')
+}
+ok(STARTING_SQUARES.length === 9 && STARTING_SQUARES.every(id => { const [i, j] = id.split(',').map(Number); return ringOf(i, j) === 0 }), 'grid: the start is not the middle 3×3')
+{
+  const counts = [0, 0, 0, 0]
+  for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) counts[ringOf(i, j)]++
+  ok(counts.join() === '9,16,24,32', `grid: ring sizes ${counts}`)
+}
+// the gate, Greg and the threshold all stand on the starting ground
+for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] as const) {
+  const s = squareAt(p.x, p.z)
+  ok(!!s && START.has(sqId(s.i, s.j)), `plot: the ${n} is not on the starting ground`)
+  ok(Math.abs(plotHeightAt(p.x, p.z) - 2) < 0.05, `plot: the ${n}'s pad is not level`)
+}
+// buying ground: the grimoire seals rings, adjacency, cost
+{
+  const [ci, cj] = [4, 4]
+  ok(!canBuy(START, ci, cj - 2, 9, 999).ok, 'buy: ring 1 sold before 10 pages')
+  const v = canBuy(START, ci, cj - 2, 10, 999)
+  ok(v.ok && v.cost === RING_COST[1], 'buy: ring 1 refused at 10 pages')
+  ok(!canBuy(START, ci, cj - 2, 10, RING_COST[1] - 1).ok, 'buy: sold without enough grey matter')
+  ok(!canBuy(START, ci, cj - 3, 99, 999).ok, 'buy: sold a square touching nothing you hold')
+  const more = new Set([...START, sqId(ci, cj - 2)])
+  ok(!canBuy(more, ci, cj - 3, 14, 999).ok, 'buy: ring 2 sold before 15 pages')
+  ok(canBuy(more, ci, cj - 3, 15, 999).ok, 'buy: ring 2 refused at 15 pages')
+  ok(RING_PAGES.join() === '0,10,15,25', 'buy: the grimoire tiers moved')
+  ok(GRIMOIRE_SIZE(0) === 10 && GRIMOIRE_SIZE(10) === 15 && GRIMOIRE_SIZE(15) === 25 && GRIMOIRE_SIZE(30) === 25, 'grimoire: capacity 10 → 15 → 25')
+}
+// mist is a wall: from the threshold, walking north past the starting ground stops at the mist
+{
+  const world = terrainWorld(plotShape(START))
+  const lc = createLoco(THRESHOLD.x + 4, plotHeightAt(THRESHOLD.x + 4, THRESHOLD.z), THRESHOLD.z)
+  for (let t = 0; t < 60 * 12; t++) tickLocomotion(lc, input({ mvX: 0, mvZ: -1, fwdX: 0, fwdZ: -1 }), world)
+  const edge = -1.5 * SQ
+  ok(lc.pz > edge - 0.5 && lc.pz < edge + 2, `mist: walker ended at z ${lc.pz.toFixed(1)} (mist at ${edge})`)
+  ok(mistWalls(START).length === 12, `mist: ${mistWalls(START).length} wall segments round the 3×3 (want 12)`)
+}
+// owning the whole grid, walking off the edge is a FALL below FALL_Y (the fold takes you home)
+{
+  const all = new Set<string>(); for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) all.add(sqId(i, j))
+  ok(mistWalls(all).length === 0, 'mist: walls left when the whole grid is held')
+  const world = terrainWorld(plotShape(all))
+  const c = squareCentre(4, 8)
+  const lc = createLoco(c.x, plotHeightAt(c.x, c.z), c.z)
   let fell = false
-  for (let t = 0; t < 60 * 12 && !fell; t++) {
-    tickLocomotion(lc, input({ mvX: 0, mvZ: 1, fwdX: 0, fwdZ: 1 }), world)
-    if (lc.py < FALL_Y) fell = true
-  }
-  ok(fell, `plot: walking south off the threshold never fell (at z ${lc.pz.toFixed(1)}, y ${lc.py.toFixed(1)})`)
+  for (let t = 0; t < 60 * 15 && !fell; t++) { tickLocomotion(lc, input({ mvX: 0, mvZ: 1, fwdX: 0, fwdZ: 1 }), world); if (lc.py < FALL_Y) fell = true }
+  ok(fell, `plot: walking south off the full garden never fell (z ${lc.pz.toFixed(1)}, y ${lc.py.toFixed(1)})`)
 }
-// the station: a half-circle facing the threshold, one gate in the centre, sockets reachable on foot
+// the gate and Greg are in reach from the threshold
 {
-  const s = stationSockets()
-  const gates = s.filter(x => x.cls === 'gate')
-  ok(gates.length === 1, `station: ${gates.length} gates (canon: exactly one)`)
-  ok(s.filter(x => x.cls === 'wilds').length === WILDS_SOCKETS, 'station: wrong number of Wilds sockets')
-  ok(s.every(x => x.z <= gates[0].z + 0.01 || x.cls !== 'gate') && s.every(x => x.z >= STATION.z - SOCKET_ARC_R - 0.01 && Math.hypot(x.x - STATION.x, x.z - STATION.z) < SOCKET_ARC_R + 0.01), 'station: sockets off the arc')
-  // every socket is closer to the threshold-facing side than the station's back: the arc OPENS toward the threshold
-  ok(s.every(x => x.cls === 'gate' || x.z > gates[0].z), 'station: arc opens away from the threshold')
-  // left arc (Wilds) is −x as seen from the threshold, right arc +x
-  ok(s.filter(x => x.cls === 'wilds').every(x => x.x < 0), 'station: a Wilds passage on the right arc')
-  ok(s.filter(x => x.cls === 'chord' || x.cls === 'landing').every(x => x.x > 0), 'station: a chord/landing on the left arc')
-  // no two sockets so close that standing at one reaches another
-  let minD = Infinity
-  for (const a of s) for (const b of s) if (a !== b) minD = Math.min(minD, Math.hypot(a.x - b.x, a.z - b.z))
-  ok(minD > SOCKET_REACH, `station: two sockets ${minD.toFixed(2)} m apart (reach ${SOCKET_REACH})`)
-  // each socket sits on land, and a walker can reach it from the threshold (walk straight at it)
-  const world = terrainWorld(PLOT_SHAPE)
-  for (const k of s) {
-    ok(plotHeightAt(k.x, k.z) > -1, `station: socket ${k.id} off the island`)
+  const world = terrainWorld(plotShape(START))
+  for (const [n, p, r] of [['gate', GATE, REACH + 1.2], ['greg', GREG, REACH]] as const) {
     const lc = createLoco(THRESHOLD.x, plotHeightAt(THRESHOLD.x, THRESHOLD.z), THRESHOLD.z)
     let best = Infinity
     for (let t = 0; t < 60 * 10; t++) {
-      const dx = k.x - lc.px, dz = k.z - lc.pz, d = Math.hypot(dx, dz)
-      best = Math.min(best, d)
+      const dx = p.x - lc.px, dz = p.z - lc.pz, d = Math.hypot(dx, dz); best = Math.min(best, d)
       if (d < 0.6) break
       tickLocomotion(lc, input({ mvX: dx / d, mvZ: dz / d, fwdX: dx / d, fwdZ: dz / d }), world)
     }
-    ok(best < SOCKET_REACH, `station: walker could not reach socket ${k.id} (closest ${best.toFixed(2)} m)`)
+    ok(best < r, `plot: walker could not reach the ${n} (closest ${best.toFixed(2)} m)`)
   }
+}
+// the fog: walking reveals a disc, not the tile
+{
+  const f = newFog('t', 1000)
+  ok(reveal(f, 0, 0) && !reveal(f, 0, 0), 'fog: reveal reports change once')
+  ok(isRevealed(f, 0, 0) && isRevealed(f, REVEAL_R - 15, 0) && !isRevealed(f, REVEAL_R + 30, 0), 'fog: reveal radius wrong')
 }
 
 // ── waymarks ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -158,9 +191,7 @@ ok(plotHeightAt(0, -(edgeR(-Math.PI / 2) + 2)) === -Infinity, 'plot: land past t
   // fill to the station's limit with distinct biomes/tiles
   let t = 0
   while (list.length < MAX_WAYMARKS) list = plant(list, { tile: `t${t}`, x: 0, y: 1, z: 0, biome: [BIOME.meadow, BIOME.shore, BIOME.rock][t++ % 3] })
-  ok(!canPlant(list, at(0, 0, BIOME.rock, { tile: 'zzz' })).ok, 'waymark: station limit not enforced')
-  ok(waymarkForSocket(list, 0) === GREG_WAYMARK && waymarkForSocket(list, 1) === list[0], 'waymark: socket order')
-  ok(waymarkForSocket(list, WILDS_SOCKETS) === null, 'waymark: a socket past the arc')
+  ok(!canPlant(list, at(0, 0, BIOME.rock, { tile: 'zzz' })).ok, 'waymark: total cap not enforced')
   ok(lift(list, list[0].id).length === list.length - 1, 'waymark: lift')
 }
 
