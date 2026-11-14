@@ -719,8 +719,11 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
 
   ctl.current.tp = (x: number, z: number, yaw: number) => place(x, z, yaw)
   const place = (x: number, z: number, yaw: number, speed = 0) => {
-    const c = createCourser(x, z, yaw, R.groundAt); c.vx = -Math.sin(yaw) * speed; c.vz = -Math.cos(yaw) * speed
-    car.current = c; camPos.set(x + Math.sin(yaw) * 8, R.groundAt(x, z) + 3, z + Math.cos(yaw) * 8)
+    // a spot inside a bore is ON ITS FLOOR (a teleport or an R-respawn there put the car on the summit above it)
+    const bore = R.tunnelAt(x, z), hint = bore && bore.cover > 2 ? bore.y : undefined
+    const gnd = (gx: number, gz: number) => R.groundAt(gx, gz, hint)
+    const c = createCourser(x, z, yaw, gnd); c.vx = -Math.sin(yaw) * speed; c.vz = -Math.cos(yaw) * speed
+    car.current = c; camPos.set(x + Math.sin(yaw) * 8, gnd(x, z) + 3, z + Math.cos(yaw) * 8)
   }
 
   useEffect(() => {
