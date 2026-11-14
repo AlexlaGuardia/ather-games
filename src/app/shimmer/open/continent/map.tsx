@@ -23,6 +23,7 @@ import { WATER_Y } from '../on-foot'
 import { emptySeen, isSeen, see, loadSeen, saveSeen, CELL, type Seen } from '../../voxel3d/discovery'
 import { drawCloud, drawDoor, drawDoorPinned, drawKeeper, PARCHMENT, ATHER_CLOUD } from '../../ui/map-kit'
 import { loadFog, FOG_CELL, type Fog } from '../ather/explored'
+import { waymarksInWorld } from '../ather/waymarks'
 import { screenHeading } from '../../voxel3d/map-heading'
 import { HearthMapFrame, MINIMAP_BOX, MINIMAP_BOX_PHONE, type MapBox } from '../../ui/hearth-hud'
 
@@ -281,6 +282,19 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
       let on = 0
       for (let i = 0; i < fog.bits.length; i++) { let b = fog.bits[i]; while (b) { on += b & 1; b >>= 1 } }
       setPct((on / (fog.cw * fog.ch)) * 100)
+      // waymarks: passages the keeper planted (and Gregory's, given), a lit waystone each. Where fast travel will start.
+      ctx.textBaseline = 'middle'
+      for (const w of waymarksInWorld()) {
+        const [px, py] = map.toPx(w.x, w.z), x = px * S, y = py * S, r = (w.greg ? 6 : 5) * dpr
+        ctx.save(); ctx.shadowColor = '#cdbcff'; ctx.shadowBlur = 10 * dpr
+        ctx.fillStyle = w.greg ? '#f0d58a' : '#e4dcff'; ctx.strokeStyle = 'rgba(20,14,40,0.85)'; ctx.lineWidth = 1.5 * dpr
+        ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r * 0.7, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r * 0.7, y); ctx.closePath()
+        ctx.fill(); ctx.restore(); ctx.stroke()
+        if (w.greg) {
+          ctx.font = `italic 600 ${12 * dpr}px Georgia, serif`; ctx.lineWidth = 3 * dpr; ctx.strokeStyle = 'rgba(14,10,30,0.9)'
+          ctx.strokeText("Gregory's waymark", x + 9 * dpr, y); ctx.fillStyle = '#f0d58a'; ctx.fillText("Gregory's waymark", x + 9 * dpr, y)
+        }
+      }
       return
     }
     ctx.imageSmoothingEnabled = true
