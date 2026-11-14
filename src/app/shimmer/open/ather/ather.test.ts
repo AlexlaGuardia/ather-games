@@ -10,7 +10,7 @@ import {
   squareAt, squareCentre, ringOf, sqId, canBuy, mistWalls,
 } from './plot'
 import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
-import { canPlant, plant, lift, reachedBiomes, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
+import { canPlant, plant, lift, reachedBiomes, waymarksInWorld, TILE_CENTRE, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
 
 let pass = 0
 const fails: string[] = []
@@ -197,6 +197,10 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   while (list.length < MAX_WAYMARKS) list = plant(list, { tile: `t${t}`, x: 0, y: 1, z: 0, biome: [BIOME.meadow, BIOME.shore, BIOME.rock][t++ % 3] })
   ok(!canPlant(list, at(0, 0, BIOME.rock, { tile: 'zzz' })).ok, 'waymark: total cap not enforced')
   ok(lift(list, list[0].id).length === list.length - 1, 'waymark: lift')
+  const tc = tileCentreWorld(meta), table = TILE_CENTRE['first-wilds']
+  ok(table.x === tc.x && table.z === tc.z, `waymark: TILE_CENTRE drifted from tileCentreWorld (${table.x},${table.z} vs ${tc.x},${tc.z})`)
+  const ww = waymarksInWorld([{ id: 'a', tile: 'first-wilds', x: 10, y: 0, z: -20, biome: BIOME.woods, made: 0 }, { id: 'b', tile: 'nowhere', x: 0, y: 0, z: 0, biome: BIOME.woods, made: 0 }])
+  ok(ww.length === 2 && ww[0].greg && ww[1].x === tc.x + 10 && ww[1].z === tc.z - 20, 'waymark: world coords wrong or unknown tile not dropped')
 }
 
 if (fails.length) { console.error(`ather: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

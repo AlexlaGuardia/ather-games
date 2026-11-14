@@ -66,3 +66,20 @@ export function loadWaymarks(): Waymark[] {
 export function saveWaymarks(list: readonly Waymark[]): void {
   try { localStorage.setItem(KEY, JSON.stringify(list)) } catch { /* private window: the session keeps them */ }
 }
+
+// ── world coordinates (for the continent map's Ather tab; hub reads these read-only) ──────────────────────────
+/** Each streamed Wilds tile's centre in continent world coords (= wilds.ts tileCentreWorld(meta); the test keeps
+ *  them equal). A static table so a reader need not fetch tile metadata to place a waymark. */
+export const TILE_CENTRE: Record<string, { x: number; z: number }> = { 'first-wilds': { x: 2365, z: 785 } }
+
+export interface WorldWaymark { id: string; x: number; z: number; biome: BiomeId; greg: boolean }
+/** Gregory's waymark plus the keeper's (from the trial ledger by default), in continent world coords. Waymarks on a
+ *  tile with no known centre are left out rather than drawn in the wrong place. */
+export function waymarksInWorld(list: readonly Waymark[] = loadWaymarks()): WorldWaymark[] {
+  const out: WorldWaymark[] = []
+  for (const w of [GREG_WAYMARK, ...list]) {
+    const c = TILE_CENTRE[w.tile]; if (!c) continue
+    out.push({ id: w.id, x: w.x + c.x, z: w.z + c.z, biome: w.biome, greg: w.id === GREG_WAYMARK.id })
+  }
+  return out
+}
