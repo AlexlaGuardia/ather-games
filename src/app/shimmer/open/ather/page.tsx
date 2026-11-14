@@ -122,6 +122,20 @@ export default function AtherSlice() {
     setTimeout(() => { window.location.href = `/shimmer/open/continent?at=${LANDING.id}` }, 380)
   }, [W, arrive, goHome])
 
+  // THE HALLWAY (gates.md, ruled 11-14): any door to any door. Arriving from the continent map with ?waymark=<id>
+  // sets the keeper down at that bound waymark. An id the keeper has not bound is refused (the threshold instead).
+  const landed = useRef(false)
+  useEffect(() => {
+    if (landed.current || !W) return
+    const id = new URLSearchParams(window.location.search).get('waymark')
+    if (!id) return
+    landed.current = true
+    const url = new URL(window.location.href); url.searchParams.delete('waymark'); window.history.replaceState(null, '', url)
+    const w = id === GREG_WAYMARK.id ? GREG_WAYMARK : loadWaymarks().find(k => k.id === id)
+    if (!w) { setToast('That door is not bound to anything you have walked to. You are home.'); return }
+    travel({ kind: 'waymark', w })
+  }, [W, travel])
+
   const world = useMemo(() => zone.kind === 'plot' ? plotWorld : W ? terrainWorld(W.shape) : null, [zone, W, plotWorld])
   const ground = useMemo(() => zone.kind === 'plot' ? plotHeightAt : W ? W.heightAt : () => 0, [zone, W])
 

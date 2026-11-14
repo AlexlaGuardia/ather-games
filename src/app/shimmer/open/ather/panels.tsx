@@ -97,7 +97,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
                 style={{ ...pin('#f2d88a', 13), left: `${((LANDING.x + 5835) / 11670) * 100}%`, top: `${((LANDING.z + 3915) / 7830) * 100}%` }} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 200px', gap: 14, marginTop: 10, alignItems: 'start' }}>
-              <div style={{ opacity: 0.75, fontSize: 12 }}>The same ground in its other state. The gate lets out at one crossing: the public gate-landing in {LANDING.name}&apos;s square.</div>
+              <div style={{ opacity: 0.75, fontSize: 12 }}>The same ground in its other state. Each city keeps a door off the hall; visit a city and its door opens to you. {LANDING.name}&apos;s is open from the start.</div>
               {stop(`Athernyx · ${LANDING.name}`, 'the gate-landing', { kind: 'landing' }, '#f2d88a')}
             </div>
           </div>
