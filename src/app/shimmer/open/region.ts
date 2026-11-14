@@ -237,3 +237,115 @@ export function bridgeRail(region: Region, c: { x: number; y: number; z: number;
   return false
 }
 
+// ── ROADSIDE: waystones and fingerposts (canon 11-14, world/transportation.md › The roads in Year 1672) ──
+// A rune-cut WAYSTONE stands every kilometre (canon measures in km), carved with the distance to the next town each
+// way. A carved FINGERPOST stands at every junction, one arm per road, naming the nearest town down it; its runes
+// glow faintly after dark. Distances are ROAD distances through the network, not straight lines.
+
+export interface Signpost { town: string; name: string; km: number; ang: number }
+export interface Waystone { x: number; z: number; y: number; yaw: number; faces: Signpost[] }
+export interface Fingerpost { x: number; z: number; y: number; junction: string; arms: Signpost[] }
+
+const edgeLen = (e: RegionEdge) => { let L = 0; for (let k = 1; k < e.pts.length; k++) L += Math.hypot(e.pts[k][0] - e.pts[k - 1][0], e.pts[k][1] - e.pts[k - 1][1]); return L }
+
+/** From junction `start`, leaving by edge `first`, the nearest town square by road. */
+function nearestTownVia(region: Region, start: string, first: RegionEdge, offset: number): { town: string; m: number } | null {
+  const net = region.meta.network!
+  const J = new Map(net.junctions.map(j => [j.id, j]))
+  const firstEnd = first.a === start ? first.b : first.a
+  const dist = new Map<string, number>([[firstEnd, edgeLen(first) - offset]])
+  const open = new Set([firstEnd]), done = new Set([start])
+  while (open.size) {
+    let u = '', du = Infinity
+    for (const q of open) { const d = dist.get(q)!; if (d < du) { du = d; u = q } }
+    open.delete(u); done.add(u)
+    const ju = J.get(u)
+    if (ju?.kind === 'square' && ju.place) return { town: ju.place, m: du }
+    for (const e of net.edges) {
+      if (e.a !== u && e.b !== u) continue
+      const v = e.a === u ? e.b : e.a
+      if (done.has(v)) continue
+      const nd = du + edgeLen(e)
+      if (nd < (dist.get(v) ?? Infinity)) { dist.set(v, nd); open.add(v) }
+    }
+  }
+  return null
+}
+const placeName = (region: Region, id: string) => region.meta.places.find(p => p.id === id)?.name ?? id
+const km = (m: number) => Math.round(m / 100) / 10
+
+export function roadside(region: Region): { waystones: Waystone[]; fingerposts: Fingerpost[] } {
+  const net = region.meta.network
+  const waystones: Waystone[] = [], fingerposts: Fingerpost[] = []
+  if (!net) return { waystones, fingerposts }
+  // a stone wherever the road distance to the NEAREST town crosses a whole kilometre: d(s) = min(da + s, db + L − s)
+  const townDist = (start: string) => {
+    const dist = new Map<string, number>([[start, 0]]), open = new Set([start]), done = new Set<string>()
+    const J = new Map(net.junctions.map(j => [j.id, j]))
+    while (open.size) {
+      let u = '', du = Infinity
+      for (const q of open) { const d = dist.get(q)!; if (d < du) { du = d; u = q } }
+      open.delete(u); done.add(u)
+      if (J.get(u)?.kind === 'square') return du
+      for (const e of net.edges) {
+        if (e.a !== u && e.b !== u) continue
+        const v = e.a === u ? e.b : e.a
+        if (done.has(v)) continue
+        const nd = du + edgeLen(e)
+        if (nd < (dist.get(v) ?? Infinity)) { dist.set(v, nd); open.add(v) }
+      }
+    }
+    return Infinity
+  }
+  for (const e of net.edges) {
+    const L = edgeLen(e), da = townDist(e.a), db = townDist(e.b)
+    if (!Number.isFinite(da) && !Number.isFinite(db)) continue
+    const d = (s: number) => Math.min(da + s, db + L - s)
+    let acc = 0
+    for (let k = 1; k < e.pts.length; k++) {
+      const [ax, az] = e.pts[k - 1], [bx, bz] = e.pts[k], seg = Math.hypot(bx - ax, bz - az)
+      if (seg < 1e-3) continue
+      const d0 = d(acc), d1 = d(acc + seg)
+      const km0 = Math.floor(d0 / 1000), km1 = Math.floor(d1 / 1000)
+      if (km0 !== km1 && Math.max(km0, km1) >= 1) {
+        const mark = Math.max(km0, km1) * 1000, t = (mark - d0) / (d1 - d0)
+        const x = ax + (bx - ax) * t, z = az + (bz - az) * t, sAt = acc + seg * t
+        const ux = (bx - ax) / seg, uz = (bz - az) / seg
+        const sx = x - uz * (e.width / 2 + 2.2), sz = z + ux * (e.width / 2 + 2.2)
+        const y = region.groundAt(sx, sz)
+        const crowded = waystones.some(w => Math.hypot(w.x - sx, w.z - sz) < 80) ||
+          net.junctions.some(j => j.kind !== 'bend' && Math.hypot(j.x - sx, j.z - sz) < j.r + 18)
+        if (Number.isFinite(y) && y > 0.6 && !region.deckAt(x, z) && !crowded) {
+          const fwd = nearestTownVia(region, e.a, e, sAt), back = nearestTownVia(region, e.b, e, L - sAt)
+          const faces: Signpost[] = []
+          if (fwd) faces.push({ town: fwd.town, name: placeName(region, fwd.town), km: km(fwd.m), ang: Math.atan2(uz, ux) })
+          if (back) faces.push({ town: back.town, name: placeName(region, back.town), km: km(back.m), ang: Math.atan2(-uz, -ux) })
+          if (faces.length) waystones.push({ x: sx, z: sz, y, yaw: Math.atan2(ux, uz), faces })
+        }
+      }
+      acc += seg
+    }
+  }
+  for (const j of net.junctions) {
+    if (!['tee', 'merge', 'cross', 'stop4', 'roundabout'].includes(j.kind)) continue
+    const arms: Signpost[] = []
+    for (const a of j.arms) {
+      const e = net.edges.find(q => q.id === a.edge); if (!e) continue
+      const t = nearestTownVia(region, j.id, e, 0)
+      if (t) arms.push({ town: t.town, name: placeName(region, t.town), km: km(t.m), ang: a.ang })
+    }
+    if (!arms.length) continue
+    // the post stands on the corner between the two widest-apart arms, just off the pad
+    const angs = j.arms.map(a => a.ang).sort((p, q) => p - q)
+    let gap = -1, mid = 0
+    for (let k = 0; k < angs.length; k++) {
+      const a0 = angs[k], a1 = k + 1 < angs.length ? angs[k + 1] : angs[0] + 2 * Math.PI
+      if (a1 - a0 > gap) { gap = a1 - a0; mid = (a0 + a1) / 2 }
+    }
+    const r = (j.r || 8) + 2.5
+    const x = j.x + Math.cos(mid) * r, z = j.z + Math.sin(mid) * r, y = region.groundAt(x, z)
+    if (Number.isFinite(y)) fingerposts.push({ x, z, y, junction: j.id, arms })
+  }
+  return { waystones, fingerposts }
+}
+

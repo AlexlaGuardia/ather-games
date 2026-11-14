@@ -1,7 +1,7 @@
 // The exported corridor, driven by numbers before anyone looks at it. Run: npx tsx src/app/shimmer/open/region.test.ts
 
 import { readFileSync } from 'node:fs'
-import { bridgeRail, drivable, makeRegion, nearestRoad, routeBetween, type RegionMeta } from './region'
+import { bridgeRail, drivable, makeRegion, nearestRoad, roadside, routeBetween, type RegionMeta } from './region'
 import { createCourser, tickCourser, bodySpeeds } from './courser'
 
 let pass = 0
@@ -122,6 +122,21 @@ if (net) {
     ok(Math.abs(R.groundAt(mid[0], mid[1], mid[2]) - mid[2]) < 0.05, `bridge ${b.id}: groundAt on the deck misses it`)
     ok(R.groundAt(mid[0], mid[1], -0.5) < mid[2] - 2, `bridge ${b.id}: a boat under the deck would be lifted onto it`)
   }
+}
+
+// ★ ROADSIDE (canon 11-14): a fingerpost at every junction, each arm naming a real town down that road at a sane
+// road distance; a waystone carved per km. Distances are by road: an arm's km can never beat the straight line.
+{
+  const { waystones, fingerposts } = roadside(R)
+  const junc = (meta.network?.junctions ?? []).filter(j => ['tee', 'merge', 'cross', 'stop4', 'roundabout'].includes(j.kind))
+  ok(fingerposts.length === junc.length, `${fingerposts.length} fingerposts for ${junc.length} junctions`)
+  let bad = 0
+  for (const f of fingerposts) for (const a of f.arms) {
+    const p = meta.places.find(q => q.id === a.town)
+    if (!p || !(a.km > 0) || a.km * 1000 < Math.hypot(p.x - f.x, p.z - f.z) - 120) bad++
+  }
+  ok(bad === 0, `${bad} fingerpost arms name a town nearer than the road could take you, or none`)
+  ok(waystones.length >= 1 && waystones.every(w => w.faces.length > 0 && w.y > 0.6), 'waystones missing, faceless, or in the water')
 }
 
 // ★★ THE AUTOPILOT: a pure-pursuit driver follows a ROUTE THROUGH THE NETWORK (routeBetween, around roundabouts).

@@ -20,7 +20,7 @@ import { postBoard, accept, arrive, abandon, buy, GOODS, CAPACITY, type Contract
 import { DARTER_STOCK, tuneFromSpec } from '../courser'
 import { buildSpec, type Slot, type Tier } from '../courser-build'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
-import { bridgeRail, drivable, loadRegion, nearPad, nearestRoad, type Region, type RegionJunction, type RegionRoad } from '../region'
+import { bridgeRail, drivable, loadRegion, nearPad, nearestRoad, roadside, type Region, type RegionJunction, type RegionRoad } from '../region'
 
 const STEP = 1 / 120
 const FOV = 64
@@ -292,6 +292,37 @@ function Bridges({ R }: { R: Region }) {
   )
 }
 
+// ── waystones (rune-cut, one per km) and fingerposts (carved arms, runes that glow faintly after dark) ──
+const WAYSTONE_COL = '#8f8a80', POST_COL = '#6b4f33', RUNE_COL = '#9fe8d4'
+function Roadside({ R }: { R: Region }) {
+  const { waystones, fingerposts } = useMemo(() => roadside(R), [R])
+  return (
+    <>
+      {waystones.map((w, i) => (
+        <group key={`w${i}`} position={[w.x, w.y, w.z]} rotation={[0, w.yaw, 0]}>
+          <mesh position={[0, 0.7, 0]}><boxGeometry args={[0.32, 1.4, 0.55]} /><meshLambertMaterial color={WAYSTONE_COL} /></mesh>
+          <mesh position={[0, 1.42, 0]}><boxGeometry args={[0.36, 0.08, 0.6]} /><meshLambertMaterial color={WAYSTONE_COL} /></mesh>
+          {[1, -1].map(sd => (
+            <mesh key={sd} position={[0.17 * sd, 1.0, 0]}><boxGeometry args={[0.02, 0.32, 0.22]} /><meshBasicMaterial color={RUNE_COL} transparent opacity={0.85} /></mesh>
+          ))}
+        </group>
+      ))}
+      {fingerposts.map(f => (
+        <group key={f.junction} position={[f.x, f.y, f.z]}>
+          <mesh position={[0, 1.4, 0]}><boxGeometry args={[0.16, 2.8, 0.16]} /><meshLambertMaterial color={POST_COL} /></mesh>
+          {f.arms.map((a, k) => (
+            // an arm points down its road: world angle atan2(z, x) → a y-rotation of −ang
+            <group key={k} position={[0, 2.5 - k * 0.24, 0]} rotation={[0, -a.ang, 0]}>
+              <mesh position={[0.55, 0, 0]}><boxGeometry args={[1.0, 0.18, 0.05]} /><meshLambertMaterial color={POST_COL} /></mesh>
+              <mesh position={[0.95, 0, 0]}><boxGeometry args={[0.1, 0.1, 0.07]} /><meshBasicMaterial color={RUNE_COL} transparent opacity={0.8} /></mesh>
+            </group>
+          ))}
+        </group>
+      ))}
+    </>
+  )
+}
+
 // ── roadside posts every 25 m on both edges of every road (one row where trunks share; none in water) ──
 function Posts({ R }: { R: Region }) {
   const posts = useMemo(() => {
@@ -425,7 +456,7 @@ function FogRig() {
   return null
 }
 
-export interface RideHud { x: number; z: number; yaw: number; mph: number; frac: number; drift: boolean; air: number; gearR: boolean; place: string | null; road: string | null }
+export interface RideHud { x: number; z: number; yaw: number; mph: number; frac: number; drift: boolean; air: number; gearR: boolean; place: string | null; road: string | null; sign: string | null }
 
 function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune> }) {
   const { camera, gl } = useThree()
@@ -443,6 +474,7 @@ function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) =
   const safe = useRef({ ...spawn })
   const camMode = useRef<'chase' | 'hood'>('chase')
   const camPos = useMemo(() => new THREE.Vector3(spawn.x, R.heightAt(spawn.x, spawn.z) + 4, spawn.z + 8), [R, spawn])
+  const signs = useMemo(() => roadside(R), [R])
   const look = useMemo(() => new THREE.Vector3(), [])
   const shake = useRef(0)
 
@@ -561,8 +593,12 @@ function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) =
       let near: string | null = null, nd = 260
       for (const p of R.meta.places) { const d = Math.hypot(p.x - c.x, p.z - c.z); if (p.name && d < nd) { nd = d; near = p.name } }
       const nr = nearestRoad(R, c.x, c.z)
+      // a carving in reach reads out: the waystone's two faces, or the fingerpost's arms
+      let sign: string | null = null
+      for (const w of signs.waystones) if (Math.hypot(w.x - c.x, w.z - c.z) < 18) sign = 'Waystone · ' + w.faces.map(f => `${f.name} ${f.km} km`).join(' · ')
+      for (const f of signs.fingerposts) if (Math.hypot(f.x - c.x, f.z - c.z) < 26) sign = f.arms.map(a => `${a.name} ${a.km} km`).join(' · ')
       onHud({ x: c.x, z: c.z, yaw: c.yaw, mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / tuneRef.current.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
-        place: near, road: nr.junction && JUNCTION_LABEL[nr.junction.kind] ? `j:${nr.junction.kind}` : nr.d < (nr.road?.width ?? 7) / 2 + 1 ? nr.road!.kind : null })
+        sign, place: near, road: nr.junction && JUNCTION_LABEL[nr.junction.kind] ? `j:${nr.junction.kind}` : nr.d < (nr.road?.width ?? 7) / 2 + 1 ? nr.road!.kind : null })
     }
   })
 
@@ -596,7 +632,7 @@ const ROAD_LABEL: Record<string, string> = { paved: 'Paved road', road: 'Road', 
 export default function ContinentRide() {
   const [R, setR] = useState<Region | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [hud, setHud] = useState<RideHud>({ x: 0, z: 0, yaw: 0, mph: 0, frac: 0, drift: false, air: 0, gearR: false, place: null, road: null })
+  const [hud, setHud] = useState<RideHud>({ x: 0, z: 0, yaw: 0, mph: 0, frac: 0, drift: false, air: 0, gearR: false, place: null, road: null, sign: null })
   const { build, setBuild } = useCourserBuild()
   const [ledger, setLedger] = useLedger()
   // the continent's garage is REAL: a part you have not bought does not fit, whatever the test track remembers
@@ -683,6 +719,7 @@ export default function ContinentRide() {
           <Water R={R} />
           <Towns R={R} />
           <Posts R={R} />
+          <Roadside R={R} />
           <Trees R={R} />
           <Driver R={R} onHud={setHud} focus={focus} tuneRef={tuneRef} />
         </Canvas>
@@ -714,6 +751,13 @@ export default function ContinentRide() {
         <div style={{ font: '600 11px var(--font-game), system-ui', letterSpacing: '0.25em', opacity: 0.75 }}>MPH {hud.gearR ? '· R' : ''}</div>
         <div style={{ font: '600 10px var(--font-game), system-ui', letterSpacing: '0.25em', opacity: 0.65, marginTop: 4 }}>{hud.road ? ROAD_LABEL[hud.road].toUpperCase() : 'OFF ROAD'}</div>
       </div>
+      {hud.sign && (
+        <div style={{ position: 'absolute', left: '50%', bottom: 22, transform: 'translateX(-50%)', maxWidth: 'calc(100% - 200px)', padding: '7px 14px', borderRadius: 6,
+          background: 'rgba(28,24,18,0.62)', border: '1px solid rgba(160,230,210,0.35)', color: '#e9f6ef', pointerEvents: 'none',
+          font: '600 11px var(--font-game), system-ui', letterSpacing: '0.14em', textAlign: 'center', textTransform: 'uppercase', textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}>
+          {hud.sign}
+        </div>
+      )}
       {(hud.drift || hud.air > 0.25) && (
         <div style={{ position: 'absolute', left: '50%', top: '24%', transform: 'translateX(-50%)', font: '700 15px var(--font-game), system-ui', letterSpacing: '0.35em', color: '#d4a843', textShadow: '0 2px 10px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>
           {hud.air > 0.25 ? `AIR ${hud.air.toFixed(1)}s` : 'DRIFT'}
