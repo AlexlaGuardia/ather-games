@@ -130,3 +130,10 @@ export async function loadWilds(name: string, base = '/open/wilds'): Promise<Wil
   ])
   return parseWilds(meta, new Int16Array(bin), new Uint8Array(bio))
 }
+
+/** The tile's centre in CONTINENT world coordinates (continent.json: origin at the centre, 10 m per source px).
+ *  Tile-local (0,0) is this point, so world = local + tileCentre. Shared by the fog and the continent map. */
+export function tileCentreWorld(meta: WildsMeta): { x: number; z: number } {
+  const s = meta.source, m = s.mPerPx ?? 10
+  return { x: ((s.x0 + s.x1) / 2) * m - 11670 / 2, z: ((s.y0 + s.y1) / 2) * m - 7830 / 2 }
+}

@@ -24,8 +24,8 @@ import {
 } from './plot'
 import { PlotScene } from './plot-scene'
 import { WildsScene } from './wilds-scene'
-import { FoldMap, GregPanel, type Dest, type Place } from './panels'
-import { loadWilds, BIOME_NAME, type Wilds } from './wilds'
+import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
+import { loadWilds, tileCentreWorld, BIOME_NAME, type Wilds } from './wilds'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 
@@ -46,7 +46,6 @@ export default function AtherSlice() {
   const [fog, setFog] = useState<Fog | null>(null)
   const [waymarks, setWaymarks] = useState<Waymark[]>([])
   const [garden, setGarden] = useState<Garden>(freshGarden)
-  const [places, setPlaces] = useState<Place[]>([])
   const [panel, setPanel] = useState<Panel>(null)
   const [prompt, setPrompt] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -56,13 +55,9 @@ export default function AtherSlice() {
   const near = useRef<Near>(null)
   const hudT = useRef(0), fogT = useRef(0), fogDirty = useRef(false)
 
-  useEffect(() => { setWaymarks(loadWaymarks()); setGarden(loadGarden()) }, [])
-  useEffect(() => {
-    loadWilds(TILE).then(w => { setW(w); setFog(loadFog(TILE, w.meta.sizeX)) }).catch(e => setToast(`The Wilds would not load: ${e.message}`))
-    fetch('/open/continent.json').then(r => r.json()).then(m => setPlaces(
-      (m.places as { id: string; name?: string; x: number; z: number }[]).filter(p => p.name).map(p => ({ id: p.id, name: p.name!, x: p.x, z: p.z })),
-    )).catch(() => { /* the Athernyx side just shows no stops */ })
-  }, [])
+  useEffect(() => { setWaymarks(loadWaymarks()); setGarden(loadGarden()); setFog(loadFog()) }, [])
+  useEffect(() => { loadWilds(TILE).then(setW).catch(e => setToast(`The Wilds would not load: ${e.message}`)) }, [])
+  const tileOff = useMemo(() => W ? tileCentreWorld(W.meta) : { x: 0, z: 0 }, [W])
   useEffect(() => {
     const ch = () => { locked.current = !!document.pointerLockElement; setLocked(locked.current) }
     document.addEventListener('pointerlockchange', ch)
@@ -99,9 +94,9 @@ export default function AtherSlice() {
       arrive({ kind: 'wilds', tile: d.w.tile }, { x: d.w.x + 2.2, z: d.w.z + 2.2, yaw: Math.PI * 0.75 })
       return
     }
-    // Athernyx: the gate steps you out onto the continent. `?at=` asks the continent page to set you down there.
+    // Athernyx: the gate lets out at its one crossing, Rune Hold's gate-landing (hub's ?at= sets you down there).
     setPanel(null); setFade(1)
-    setTimeout(() => { window.location.href = `/shimmer/open/continent?at=${encodeURIComponent(d.id)}` }, 380)
+    setTimeout(() => { window.location.href = `/shimmer/open/continent?at=${LANDING.id}` }, 380)
   }, [W, arrive, goHome])
 
   const world = useMemo(() => zone.kind === 'plot' ? plotWorld : W ? terrainWorld(W.shape) : null, [zone, W, plotWorld])
@@ -117,7 +112,7 @@ export default function AtherSlice() {
       const all = [{ w: GREG_WAYMARK, own: false }, ...waymarks.map(w => ({ w, own: true }))]
       for (const { w, own } of all) if (w.tile === zone.tile && Math.hypot(w.x - lc.px, w.z - lc.pz) < 2.6) n = { kind: 'waymark', w, own }
       fogT.current -= dt
-      if (fog && fogT.current <= 0) { fogT.current = 0.25; if (reveal(fog, lc.px, lc.pz)) fogDirty.current = true }
+      if (fog && fogT.current <= 0) { fogT.current = 0.25; if (reveal(fog, lc.px + tileOff.x, lc.pz + tileOff.z)) fogDirty.current = true }
     }
     near.current = n
     hudT.current -= dt
@@ -132,7 +127,7 @@ export default function AtherSlice() {
       else { const s = squareAt(lc.px, lc.pz); if (!s) where = 'the edge' }
       setHud({ verb: verbOf(lc), where })
     }
-  }, [zone, waymarks, W, fog])
+  }, [zone, waymarks, W, fog, tileOff])
 
   const buy = useCallback((i: number, j: number) => {
     const v = canBuy(owned, i, j, garden.pages, garden.grey)
@@ -221,7 +216,7 @@ export default function AtherSlice() {
       )}
       {panel?.kind === 'map' && (
         <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} here={pos.current}
-          inWilds={zone.kind === 'wilds'} places={places} onTravel={travel} tile={TILE} />
+          inWilds={zone.kind === 'wilds'} onTravel={travel} tile={TILE} />
       )}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
       <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />
@@ -232,7 +227,7 @@ export default function AtherSlice() {
             Click to play<br />
             WASD move · Space jump / climb · Shift slide · E use · M map · Esc release
             <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>
-              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out to Athernyx. Gregory, by the threshold, sells the ground under the mist. In the Wilds, F plants a waymark and H walks home.
+              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out to Rune Hold in Athernyx. Gregory, by the threshold, sells the ground under the mist. In the Wilds, F plants a waymark and H walks home.
             </div>
           </div>
         </div>

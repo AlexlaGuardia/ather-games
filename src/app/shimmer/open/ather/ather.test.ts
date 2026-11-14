@@ -3,7 +3,7 @@
 import { readFileSync } from 'fs'
 import { createLoco, tickLocomotion, type LocoInput } from '../../voxel3d/locomotion'
 import { terrainWorld } from '../terrain-world'
-import { parseWilds, BIOME, type WildsMeta } from './wilds'
+import { parseWilds, tileCentreWorld, BIOME, type WildsMeta } from './wilds'
 import {
   plotShape, PLOT_N, PLOT_CELL, PLOT_HALF, THRESHOLD, FALL_Y, GATE, GREG, REACH, GRID, SQ, GRID_HALF,
   STARTING_SQUARES, RING_PAGES, RING_COST, GRIMOIRE_SIZE, plotHeightAt, plotVertexHeight, plotCellIsLand,
@@ -165,9 +165,13 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
 }
 // the fog: walking reveals a disc, not the tile
 {
-  const f = newFog('t', 1000)
-  ok(reveal(f, 0, 0) && !reveal(f, 0, 0), 'fog: reveal reports change once')
-  ok(isRevealed(f, 0, 0) && isRevealed(f, REVEAL_R - 15, 0) && !isRevealed(f, REVEAL_R + 30, 0), 'fog: reveal radius wrong')
+  const f = newFog()
+  ok(f.cw === 730 && f.ch === 490, `fog: grid ${f.cw}x${f.ch} (hub's continent map expects 730x490 at 16 m)`)
+  ok(reveal(f, 100, -40) && !reveal(f, 100, -40) && f.rev === 1, 'fog: reveal reports change once')
+  ok(isRevealed(f, 100, -40) && isRevealed(f, 100 + REVEAL_R - 20, -40) && !isRevealed(f, 100 + REVEAL_R + 30, -40), 'fog: reveal radius wrong')
+  ok(!isRevealed(f, -100, 40), 'fog: reveal leaked')
+  const c = tileCentreWorld(meta)
+  ok(Math.abs(c.x - (820 * 10 - 5835)) < 1e-6 && Math.abs(c.z - (470 * 10 - 3915)) < 1e-6, `fog: tile centre ${c.x},${c.z}`)
 }
 
 // ── waymarks ──────────────────────────────────────────────────────────────────────────────────────────────────
