@@ -1,0 +1,24 @@
+{
+ "name": "first-wilds",
+ "cell": 4.0,
+ "nx": 251,
+ "nz": 251,
+ "sizeX": 1000.0,
+ "sizeZ": 1000.0,
+ "waterY": 0.0,
+ "source": {
+  "x0": 770,
+  "y0": 420,
+  "x1": 870,
+  "y1": 520,
+  "mPerPx": 10.0
+ },
+ "biomes": {
+  "water": 2213,
+  "shore": 537,
+  "meadow": 21607,
+  "woods": 38134,
+  "rock": 9
+ },
+ "note": "Ather state of the continent tile; no roads, no places (world/ather.md 09-07)."
+}
