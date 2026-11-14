@@ -16,7 +16,7 @@ const EYE = 1.62   // locomotion eye height over the feet (approx; damage only n
  *  it borrows the world's light. A sag and sway carries the shamble; the lunge leans in. */
 function HollowBody({ c, id }: { c: React.MutableRefObject<Combat>; id: number }) {
   const g = useRef<THREE.Group>(null), body = useRef<THREE.Mesh>(null), head = useRef<THREE.Mesh>(null)
-  const mat = useMemo(() => new THREE.MeshPhongMaterial({ color: '#7d7f82', specular: '#d8e0e6', shininess: 70, flatShading: true }), [])
+  const mat = useMemo(() => new THREE.MeshPhongMaterial({ color: '#26272a', emissive: '#6d6f73', specular: '#eef3f6', shininess: 80, flatShading: true }), [])
   useFrame(({ clock }) => {
     const h = c.current.hollows.find(k => k.id === id); if (!h || !g.current) return
     const t = clock.elapsedTime + id * 1.3
@@ -26,7 +26,7 @@ function HollowBody({ c, id }: { c: React.MutableRefObject<Combat>; id: number }
     g.current.rotation.x = THREE.MathUtils.lerp(g.current.rotation.x, lean, 0.25)
     g.current.rotation.z = Math.sin(t * (h.state === 'chase' ? 3.4 : 1.6)) * 0.12
     if (body.current) body.current.scale.set(1 + Math.sin(t * 2.1) * 0.05, 1 - Math.sin(t * 2.1) * 0.04, 1)
-    mat.emissive.setRGB(h.hitFlash * 5, h.hitFlash * 5, h.hitFlash * 5)
+    mat.emissive.setRGB(0.43 + h.hitFlash * 5, 0.435 + h.hitFlash * 5, 0.45 + h.hitFlash * 5)
     if (head.current) head.current.position.y = HEAD_Y + Math.sin(t * 1.7) * 0.04
   })
   return (
