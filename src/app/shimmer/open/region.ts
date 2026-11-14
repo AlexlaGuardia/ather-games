@@ -405,6 +405,21 @@ export function bridgeRail(region: Region, c: { x: number; y: number; z: number;
   return false
 }
 
+/** A point on a bore's centre line at along-distance s (clamped): position, floor height and unit direction. */
+export function boreAt(t: RegionTunnel, s: number): { x: number; z: number; y: number; ux: number; uz: number } {
+  const p = t.pts
+  let acc = 0
+  for (let k = 0; k < p.length - 1; k++) {
+    const dx = p[k + 1][0] - p[k][0], dz = p[k + 1][1] - p[k][1], L = Math.hypot(dx, dz) || 1
+    if (acc + L >= s || k === p.length - 2) {
+      const f = Math.max(0, Math.min(1, (s - acc) / L))
+      return { x: p[k][0] + dx * f, z: p[k][1] + dz * f, y: p[k][2] + (p[k + 1][2] - p[k][2]) * f, ux: dx / L, uz: dz / L }
+    }
+    acc += L
+  }
+  return { x: p[0][0], z: p[0][1], y: p[0][2], ux: 1, uz: 0 }
+}
+
 /** THE BORE'S WALLS: a car inside a tunnel that drifts past the wall line is put back and loses its outward speed,
  *  like a parapet. Only under the hill (cover over the roof), never in the open cut at a mouth. */
 export function tunnelWall(region: Region, c: { x: number; y: number; z: number; vx: number; vz: number }): boolean {

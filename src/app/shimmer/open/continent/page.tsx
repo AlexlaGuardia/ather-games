@@ -20,7 +20,7 @@ import { postBoard, accept, arrive, abandon, buy, GOODS, CAPACITY, type Contract
 import { DARTER_STOCK, tuneFromSpec } from '../courser'
 import { buildSpec, type Slot, type Tier } from '../courser-build'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
-import { TUNNEL_H, TUNNEL_WALK, tunnelWall, bridgeRail, drivable, ferryLanding, guardrails, loadRegion, roadRail, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
+import { TUNNEL_H, TUNNEL_WALK, boreAt, tunnelWall, bridgeRail, drivable, ferryLanding, guardrails, loadRegion, roadRail, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
 
 const STEP = 1 / 120
 const FOV = 64
@@ -48,6 +48,17 @@ function tint(out: THREE.Color, y: number, slope: number, x: number, z: number) 
   return out
 }
 
+/** A terrain quad (grid corners ia..ib, ja..jb) left out at a bore's mouth: its centre is in the bore's footprint and
+ *  its corners straddle floor..crown, i.e. the hill's face crosses the portal opening. The Tunnels' portal faces are
+ *  sized from exactly these quads (5 m ones), so the stone always covers the hole. */
+function boreHole(R: Region, ia: number, ja: number, ib: number, jb: number) {
+  const { cell, sizeX, sizeZ } = R.meta
+  const t = R.tunnelAt((ia + ib) / 2 * cell - sizeX / 2, (ja + jb) / 2 * cell - sizeZ / 2)
+  if (!t) return null
+  const ys = [R.vertex(ia, ja), R.vertex(ib, ja), R.vertex(ia, jb), R.vertex(ib, jb)]
+  const hi = Math.max(...ys)
+  return hi > t.y + 0.4 && Math.min(...ys) < t.y + TUNNEL_H + 1.5 ? { s: t.s, len: t.len, top: hi - t.y, tunnel: t.tunnel } : null
+}
 function chunkGeometry(R: Region, ci: number, cj: number, step: number): THREE.BufferGeometry {
   const { nx, nz, cell, sizeX, sizeZ } = R.meta
   const i0 = ci * CHUNK, j0 = cj * CHUNK
@@ -68,16 +79,11 @@ function chunkGeometry(R: Region, ci: number, cj: number, step: number): THREE.B
   }
   for (let b = 0; b < H; b++) for (let a = 0; a < W; a++) put(b * W + a, is[a], js[b], 0)
   const idx: number[] = []
-  // a bore's mouth: the face of the hill crosses the portal opening, so the quads whose corners straddle floor..crown
-  // inside the bore's footprint are left out (the portal's stone face covers the ragged edge)
-  const bored = (R.meta.network?.tunnels?.length ?? 0) > 0
-  const hole = (a: number, b: number) => {
-    const x = (is[a] + is[a + 1]) / 2 * cell - sizeX / 2, z = (js[b] + js[b + 1]) / 2 * cell - sizeZ / 2
-    const t = R.tunnelAt(x, z)
-    if (!t) return false
-    const ys = [R.vertex(is[a], js[b]), R.vertex(is[a + 1], js[b]), R.vertex(is[a], js[b + 1]), R.vertex(is[a + 1], js[b + 1])]
-    return Math.max(...ys) > t.y + 0.4 && Math.min(...ys) < t.y + TUNNEL_H + 1.5
-  }
+  // a bore's mouth: the quads where the hill's face crosses the portal opening are left out, at FULL detail only. A
+  // coarse quad is 10-20 m: holing one opened a gap far bigger than the portal (Alex 11-14: "huge gaps above the
+  // entrance"); from that far off the face simply stays shut and the portal stands in front of it.
+  const bored = step === 1 && (R.meta.network?.tunnels?.length ?? 0) > 0
+  const hole = (a: number, b: number) => !!boreHole(R, is[a], js[b], is[a + 1], js[b + 1])
   for (let b = 0; b < H - 1; b++) for (let a = 0; a < W - 1; a++) {
     const p00 = b * W + a, p10 = p00 + 1, p01 = p00 + W, p11 = p01 + 1
     if (bored && hole(a, b)) continue
@@ -333,10 +339,30 @@ function Tunnels({ R }: { R: Region }) {
           st.push({ x, z, y, ux: (bx - ax) / L, uz: (bz - az) / L, cover: R.heightAt(x, z) - y })
         }
       }
-      let i0 = st.findIndex(q => q.cover >= TUNNEL_H), i1 = st.length - 1
-      while (i1 > 0 && st[i1].cover < TUNNEL_H) i1--
-      if (i0 < 0 || i1 <= i0) continue
-      i0 = Math.max(0, i0 - 1); i1 = Math.min(st.length - 1, i1 + 1)       // tuck the lining a station into each face
+      // the holes the terrain leaves at each mouth (boreHole, 5 m quads): the portal stands at the OUTERMOST one and
+      // rises past the tallest, so the stone covers every gap (v1 sized the face from the cover at one station and
+      // the hill's quads stood open above and beside it)
+      const { cell, sizeX, sizeZ, nx, nz } = R.meta
+      let xa = Infinity, xb = -Infinity, za = Infinity, zb = -Infinity
+      for (const p of t.pts) { xa = Math.min(xa, p[0]); xb = Math.max(xb, p[0]); za = Math.min(za, p[1]); zb = Math.max(zb, p[1]) }
+      const m = hw + 6
+      const ia0 = Math.max(0, Math.floor((xa - m + sizeX / 2) / cell)), ia1 = Math.min(nx - 2, Math.ceil((xb + m + sizeX / 2) / cell))
+      const ja0 = Math.max(0, Math.floor((za - m + sizeZ / 2) / cell)), ja1 = Math.min(nz - 2, Math.ceil((zb + m + sizeZ / 2) / cell))
+      const mouth = [{ s: Infinity, top: 0 }, { s: -Infinity, top: 0 }]
+      for (let j = ja0; j <= ja1; j++) for (let i = ia0; i <= ia1; i++) {
+        const hq = boreHole(R, i, j, i + 1, j + 1)
+        if (!hq || hq.tunnel !== t) continue
+        const w = hq.s < hq.len / 2 ? 0 : 1, half = cell * 0.75          // the quad reaches ~half a cell past its centre
+        if (w === 0) mouth[0].s = Math.min(mouth[0].s, hq.s - half); else mouth[1].s = Math.max(mouth[1].s, hq.s + half)
+        mouth[w].top = Math.max(mouth[w].top, hq.top)
+      }
+      const roofA = st.findIndex(q => q.cover >= TUNNEL_H)
+      let roofB = st.length - 1
+      while (roofB > 0 && st[roofB].cover < TUNNEL_H) roofB--
+      if (roofA < 0 || roofB <= roofA) continue
+      const station = (sAlong: number) => Math.max(0, Math.min(st.length - 1, Math.round(sAlong / 2.5)))
+      const i0 = Number.isFinite(mouth[0].s) ? Math.min(roofA, station(mouth[0].s)) : Math.max(0, roofA - 1)
+      const i1 = Number.isFinite(mouth[1].s) ? Math.max(roofB, station(mouth[1].s)) : Math.min(st.length - 1, roofB + 1)
       // offset o is measured to the LEFT of travel (−x of the direction's right hand): (uz, −ux) is the right normal
       const at = (q: typeof st[0], o: number, hgt: number) => [q.x + q.uz * o, q.y + hgt, q.z - q.ux * o]
       let lampAcc = 0, side = 1
@@ -346,6 +372,9 @@ function Tunnels({ R }: { R: Region }) {
           const [o0, h0] = prof[m], [o1, h1] = prof[m + 1]
           quad(lining, at(A, o0, h0), at(B, o0, h0), at(B, o1, h1), at(A, o1, h1))
         }
+        // the floor, wall to wall: the road ribbon is only the carriageway, and the walkways either side had nothing
+        // under them (Alex 11-14: "where the road meets the wall i can see right through")
+        quad(lining, at(A, -hw, 0.03), at(B, -hw, 0.03), at(B, hw, 0.03), at(A, hw, 0.03))
         lampAcc += 2.5
         if (lampAcc >= 16) {
           lampAcc = 0; side = -side
@@ -354,16 +383,15 @@ function Tunnels({ R }: { R: Region }) {
           quad(lamps, p(-0.6, y0), p(0.6, y0), p(0.6, y1), p(-0.6, y1))
         }
       }
-      for (const [q, dir] of [[st[i0], 1], [st[i1], -1]] as const) {
-        // the face stands to whatever the hill does around it, capped so it never towers over the slope
-        const top = Math.min(TUNNEL_H + 6, Math.max(TUNNEL_H + 2.5, q.cover))
+      for (const [q, dir, mo] of [[st[i0], 1, mouth[0]], [st[i1], -1, mouth[1]]] as const) {
+        const top = Math.min(48, Math.max(TUNNEL_H + 2.5, mo.top + 1))
         portals.push({ x: q.x, y: q.y, z: q.z, yaw: Math.atan2(-q.ux * dir, -q.uz * dir), hw, top })
       }
     }
     const mk = (pos: number[]) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return g }
     // a portal: a stone slab with the bore's profile cut out of it, extruded 1.6 m back into the hill (local −z)
     const portalGeo = (hw: number, top: number) => {
-      const wide = hw + 5, prof = boreProfile(hw)
+      const wide = hw + 6.5, prof = boreProfile(hw)
       const sh = new THREE.Shape([new THREE.Vector2(-wide, -1.5), new THREE.Vector2(wide, -1.5), new THREE.Vector2(wide, top), new THREE.Vector2(-wide, top)])
       sh.holes.push(new THREE.Path(prof.map(([o, hh]) => new THREE.Vector2(o, hh))))
       const g = new THREE.ExtrudeGeometry(sh, { depth: 1.6, bevelEnabled: false })
@@ -747,14 +775,22 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
       const shape = chaseShape(Math.abs(fwd) / tuneRef.current.top)
       const back = shape.back
       const want = new THREE.Vector3(c.x - (bx / bl) * back, c.y + shape.height, c.z - (bz / bl) * back)
-      // in a bore the camera stays under the crown (above it is the inside of the mountain) and reads the floor
-      const tb = R.tunnelAt(c.x, c.z), bored = !!tb && tb.cover > TUNNEL_H * 0.6 && c.y < tb.y + TUNNEL_H
-      if (bored) want.y = Math.min(want.y, tb!.y + TUNNEL_H - 2.2)
-      want.y = Math.max(want.y, R.groundAt(want.x, want.z, c.y) + 1.4)
-      camPos.lerp(want, 1 - Math.exp(-frameDt * (bored ? 12 : 7)))
-      const tc = R.tunnelAt(camPos.x, camPos.z)
-      if (tc && tc.cover > 2 && Math.abs(c.y - tc.y) < TUNNEL_H) camPos.y = Math.min(camPos.y, tc.y + TUNNEL_H - 1.6)
-      camPos.y = Math.max(camPos.y, R.groundAt(camPos.x, camPos.z, c.y) + 1.0)
+      // ★ TIGHT SPACES LOCK THE CAMERA (Alex 11-14: "the camera glitched into the wall"). In a bore, or its mouth
+      // cutting, the free chase is replaced by a rail: on the bore's centre line, a fixed distance behind the car along
+      // the bore (not along the car's heading, which swings it into a wall), under the crown, and only a little of the
+      // car's lane offset. Nothing the car does can put it inside the stone.
+      const tb = R.tunnelAt(c.x, c.z), bored = !!tb && c.y < tb.y + TUNNEL_H
+      if (bored) {
+        const t = tb!.tunnel, here = boreAt(t, tb!.s), sg = fx * here.ux + fz * here.uz >= 0 ? 1 : -1
+        const rail = boreAt(t, tb!.s - sg * 6.5), wall = t.width / 2 + TUNNEL_WALK - 1.4
+        const lat = Math.max(-wall, Math.min(wall, tb!.off * 0.5))
+        want.set(rail.x + rail.uz * lat, rail.y + 2.9, rail.z - rail.ux * lat)
+        camPos.lerp(want, 1 - Math.exp(-frameDt * 14))
+      } else {
+        want.y = Math.max(want.y, R.groundAt(want.x, want.z, c.y) + 1.4)
+        camPos.lerp(want, 1 - Math.exp(-frameDt * 7))
+        camPos.y = Math.max(camPos.y, R.groundAt(camPos.x, camPos.z, c.y) + 1.0)
+      }
       const [rx2, ry2] = speedRumble(Math.abs(fwd) / tuneRef.current.top, performance.now() / 1000)
       cam.position.set(camPos.x + (Math.random() - 0.5) * sk + rx2, camPos.y + (Math.random() - 0.5) * sk + ry2, camPos.z)
       look.set(c.x + fx * 4, c.y + 1.0, c.z + fz * 4)
