@@ -11,7 +11,9 @@ import AccountWidget from "./_components/AccountWidget";
 //
 // GAME_TITLE: "Ather", Alex 2026-11-13 (the name and the domain are the same word on purpose).
 const GAME_TITLE = "Ather";
-const PLAY_HREF = "/shimmer/open";
+// Play lands at HOME: the Ather plot, whose one gate (the Hallway) opens the Wilds and the city doors on the
+// continent (2026-11-14). /shimmer/open redirects there too; the old P0 hillside lives at /shimmer/open/hillside.
+const PLAY_HREF = "/shimmer/open/ather";
 const GOLD = "#d4a843";
 
 const NAV = [
@@ -38,14 +40,16 @@ const PLACES = [
   {
     name: "Your Plot",
     kind: "Home",
-    blurb: "A piece of land that is yours. Build on it, piece by piece.",
+    blurb: "A floating garden in the Ather that is yours. Grow it square by square.",
     img: null,
-    href: null,
+    href: PLAY_HREF,
   },
 ];
 
 // Newest first. Plain data on purpose: add a line, ship.
 const DEVLOG = [
+  { date: "2026-11-14", tag: "World", title: "Your plot in the Ather, and one gate to everywhere you have been" },
+  { date: "2026-11-14", tag: "World", title: "Drive the whole continent: roads, bridges, ferries, and a tunnel through the spine" },
   { date: "2026-11-13", tag: "World", title: "The open world begins: a first hillside to walk" },
   { date: "2026-09-30", tag: "Boss", title: "The Slack, rebalanced: lee stones and a Stillwind with a body" },
   { date: "2026-09-29", tag: "Co-op", title: "Raid the Slack together with your party" },
@@ -143,7 +147,7 @@ export default function Home() {
                     <Image src={p.img} alt="" fill sizes="(min-width:640px) 33vw, 100vw" className="object-cover transition duration-500 group-hover:scale-105" />
                   ) : (
                     <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_50%_60%,#1b2140,#05060e)]">
-                      <span className="font-[family-name:var(--font-game)] text-xs tracking-[0.3em] text-text/40 uppercase">Coming to the world</span>
+                      <span className="font-[family-name:var(--font-game)] text-xs tracking-[0.3em] text-text/40 uppercase">{p.href ? "Open now" : "Coming to the world"}</span>
                     </div>
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-[#05060e] via-transparent" />

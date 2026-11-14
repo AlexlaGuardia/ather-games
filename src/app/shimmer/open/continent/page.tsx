@@ -679,7 +679,7 @@ function FogRig() {
 export interface RideHud { x: number; z: number; yaw: number; mph: number; frac: number; drift: boolean; air: number; gearR: boolean; place: string | null; road: string | null; sign: string | null
   /** On foot (the courser parked); prompt = the F verb on offer right now, if any. */
   foot?: boolean; prompt?: string | null }
-// on foot: the walker's own feel numbers (open/page.tsx), and the get-in/get-out glide
+// on foot: the walker's own feel numbers (open/hillside/page.tsx), and the get-in/get-out glide
 /** Where the Hallway lets you out when the asked-for door is not yours yet: the 08-12 public landing (gates.md). */
 const LANDING = 'rune-hold'
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38

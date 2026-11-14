@@ -54,7 +54,7 @@ function Trees({ W }: { W: Wilds }) {
     trunk.current!.instanceMatrix.needsUpdate = true; crown.current!.instanceMatrix.needsUpdate = true
     if (crown.current!.instanceColor) crown.current!.instanceColor.needsUpdate = true
   }, [W])
-  // frustumCulled off: an InstancedMesh is culled by its base geometry's bounds at the origin (see open/page.tsx)
+  // frustumCulled off: an InstancedMesh is culled by its base geometry's bounds at the origin (see open/hillside/page.tsx)
   return (
     <>
       <instancedMesh frustumCulled={false} ref={trunk} args={[undefined, undefined, W.trees.length]}>
