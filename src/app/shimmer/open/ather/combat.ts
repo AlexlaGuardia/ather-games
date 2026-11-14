@@ -21,8 +21,8 @@ export interface Terrain {
   walkable: (x: number, z: number) => boolean
 }
 
-export type HollowKind = 'shambler'
-export type HollowState = 'wander' | 'chase' | 'windup' | 'lunge' | 'recover' | 'stagger'
+export type HollowKind = 'shambler' | 'floater'
+export type HollowState = 'wander' | 'chase' | 'windup' | 'lunge' | 'recover' | 'stagger' | 'charge'
 export interface Hollow {
   id: number; kind: HollowKind
   x: number; y: number; z: number; yaw: number
@@ -33,6 +33,8 @@ export interface Hollow {
   hitFlash: number
   hitThisLunge: boolean
 }
+/** A floater's spit: slow enough to see coming and side-step. */
+export interface Spit { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number }
 export interface Round { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg: number; crit: number }
 export interface Drop { id: number; x: number; y: number; z: number; amount: number; age: number }
 
@@ -49,13 +51,19 @@ export const SHAMBLER = {
   lungeRange: 2.6, windup: 0.45, lungeSpeed: 6.5, lungeTime: 0.32, recover: 1.1,
   hitReach: 1.15, damage: 14, stagger: 0.28, radius: 0.42, height: 1.75,
 }
+/** The floater: the one Hollow that floats (design-briefs/hollows.md), the ranged form. Keeps its distance and spits. */
+export const FLOATER = {
+  hp: 20, hover: 2.2, keepNear: 9, keepFar: 16, notice: 30, forget: 44, speed: 2.1,
+  charge: 0.75, recover: 2.2, spitSpeed: 11, spitLife: 3, spitR: 0.35, damage: 10, share: 0.25,
+}
 export const HEAD_Y = 1.55, HEAD_R = 0.26, BODY_Y = 0.85, BODY_R = 0.44
 export const PICKUP_R = 1.4, MAGNET_R = 4.5
 
 export interface Combat {
-  hollows: Hollow[]; rounds: Round[]; drops: Drop[]
+  hollows: Hollow[]; rounds: Round[]; drops: Drop[]; spits: Spit[]
   keeper: Keeper; gun: WeaponDef
   nextId: number; seed: number
+  clock?: number
   /** Events this step, for the scene (sounds, flashes) and the page (grey matter, death). */
   events: CombatEvent[]
 }
@@ -69,7 +77,7 @@ export type CombatEvent =
 export function newCombat(seed = 1, gunId = 'repeater'): Combat {
   const gun = weaponDef(gunId)!
   return {
-    hollows: [], rounds: [], drops: [], gun, nextId: 1, seed, events: [],
+    hollows: [], rounds: [], drops: [], spits: [], gun, nextId: 1, seed, events: [],
     keeper: { hp: KEEPER_HP, maxHp: KEEPER_HP, sinceHurt: 99, ammo: gun.clip, reloading: 0, sinceShot: 99, bloom: 0 },
   }
 }
@@ -78,8 +86,8 @@ const rnd = (c: Combat) => { c.seed = (c.seed * 1664525 + 1013904223) >>> 0; ret
 
 export function spawnHollow(c: Combat, T: Terrain, x: number, z: number, kind: HollowKind = 'shambler'): Hollow {
   const h: Hollow = {
-    id: c.nextId++, kind, x, y: T.heightAt(x, z), z, yaw: rnd(c) * Math.PI * 2,
-    hp: SHAMBLER.hp, maxHp: SHAMBLER.hp, state: 'wander', t: 0, wx: x, wz: z, lx: 0, lz: 0, hitFlash: 0, hitThisLunge: false,
+    id: c.nextId++, kind, x, y: T.heightAt(x, z) + (kind === 'floater' ? FLOATER.hover : 0), z, yaw: rnd(c) * Math.PI * 2,
+    hp: kind === 'floater' ? FLOATER.hp : SHAMBLER.hp, maxHp: kind === 'floater' ? FLOATER.hp : SHAMBLER.hp, state: 'wander', t: 0, wx: x, wz: z, lx: 0, lz: 0, hitFlash: 0, hitThisLunge: false,
   }
   c.hollows.push(h)
   return h
@@ -93,7 +101,7 @@ export function populate(c: Combat, T: Terrain, kx: number, kz: number, target: 
     const x = kx + Math.cos(a) * r, z = kz + Math.sin(a) * r
     if (!T.walkable(x, z) || !Number.isFinite(T.heightAt(x, z))) continue
     if (safe && Math.hypot(x - safe.x, z - safe.z) < safe.r) continue
-    spawnHollow(c, T, x, z)
+    spawnHollow(c, T, x, z, rnd(c) < FLOATER.share ? 'floater' : 'shambler')
   }
 }
 
@@ -140,6 +148,7 @@ function segDist2(ax: number, ay: number, az: number, bx: number, by: number, bz
 /** One step. `feet` is the keeper's feet position. */
 export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; z: number }, dt: number) {
   c.events = []
+  c.clock = (c.clock ?? 0) + dt
   const k = c.keeper
   k.sinceShot += dt; k.sinceHurt += dt
   k.bloom = bloomAfterRest(c.gun, k.bloom, dt)
@@ -154,16 +163,20 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     let best: { h: Hollow; head: boolean } | null = null
     for (const h of c.hollows) {
       if (h.hp <= 0 || Math.hypot(h.x - r.x, h.z - r.z) > 6) continue
+      if (h.kind === 'floater') {
+        if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y, h.z) < 0.5 * 0.5) { best = { h, head: false }; break }
+        continue
+      }
       if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + HEAD_Y, h.z) < HEAD_R * HEAD_R) { best = { h, head: true }; break }
       if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + BODY_Y, h.z) < BODY_R * BODY_R * 1.6) best = { h, head: false }
     }
     if (best) {
       const h = best.h
       h.hp -= best.head ? r.crit : r.dmg; h.hitFlash = 0.12; r.life = 0
-      if (h.state !== 'lunge') { h.state = 'stagger'; h.t = SHAMBLER.stagger }
+      if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = SHAMBLER.stagger }
       const killed = h.hp <= 0
       c.events.push({ kind: 'hit', id: h.id, head: best.head, killed })
-      if (killed) c.drops.push({ id: c.nextId++, x: h.x, y: h.y, z: h.z, amount: 1 + Math.floor(rnd(c) * 3), age: 0 })
+      if (killed) c.drops.push({ id: c.nextId++, x: h.x, y: T.heightAt(h.x, h.z), z: h.z, amount: (h.kind === 'floater' ? 2 : 1) + Math.floor(rnd(c) * 3), age: 0 })
     }
   }
   c.rounds = c.rounds.filter(r => r.life > 0)
@@ -173,6 +186,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   for (const h of c.hollows) {
     h.hitFlash = Math.max(0, h.hitFlash - dt); h.t -= dt
     const dx = feet.x - h.x, dz = feet.z - h.z, d = Math.hypot(dx, dz)
+    if (h.kind === 'floater') { stepFloater(c, T, h, feet, d, dx, dz, dt); continue }
     let speed = 0, mx = 0, mz = 0
     switch (h.state) {
       case 'wander':
@@ -222,6 +236,19 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     if (d > 0.001 && d < min) { const p = (min - d) / 2 / d; A.x -= dx * p; A.z -= dz * p; B.x += dx * p; B.z += dz * p }
   }
 
+  // spits
+  for (const p of c.spits) {
+    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= 2.5 * dt; p.life -= dt
+    if (p.y < T.heightAt(p.x, p.z)) { p.life = 0; continue }
+    const bx = p.x - feet.x, bz = p.z - feet.z, by = p.y - (feet.y + 0.9)
+    if (k.hp > 0 && bx * bx + bz * bz < (FLOATER.spitR + 0.35) ** 2 && Math.abs(by) < 1.0) {
+      p.life = 0; k.hp = Math.max(0, k.hp - FLOATER.damage); k.sinceHurt = 0
+      c.events.push({ kind: 'hurt', amount: FLOATER.damage })
+      if (k.hp <= 0) c.events.push({ kind: 'down' })
+    }
+  }
+  c.spits = c.spits.filter(p => p.life > 0)
+
   // drops: drift to the keeper inside the magnet, collect inside the pickup radius
   for (const p of c.drops) {
     p.age += dt
@@ -232,8 +259,49 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   c.drops = c.drops.filter(p => p.amount > 0 && p.age < 300)
 }
 
+function stepFloater(c: Combat, T: Terrain, h: Hollow, feet: { x: number; y: number; z: number }, d: number, dx: number, dz: number, dt: number) {
+  const k = c.keeper
+  let mx = 0, mz = 0, speed = 0
+  switch (h.state) {
+    case 'wander':
+      if (d < FLOATER.notice && k.hp > 0) { h.state = 'chase'; h.t = 1 + rnd(c) * 1.5; break }
+      if (h.t <= 0) { h.wx = h.x + (rnd(c) - 0.5) * 20; h.wz = h.z + (rnd(c) - 0.5) * 20; h.t = 4 + rnd(c) * 4 }
+      mx = h.wx - h.x; mz = h.wz - h.z; speed = FLOATER.speed * 0.4
+      break
+    case 'chase':   // hold a band of distance, circling a little; spit when the timer runs out
+      if (d > FLOATER.forget || k.hp <= 0) { h.state = 'wander'; h.t = 0; break }
+      if (d > FLOATER.keepFar) { mx = dx; mz = dz } else if (d < FLOATER.keepNear) { mx = -dx; mz = -dz } else { mx = -dz; mz = dx }
+      speed = FLOATER.speed
+      h.yaw = Math.atan2(dx, dz)
+      if (h.t <= 0 && d < FLOATER.keepFar + 4) { h.state = 'charge'; h.t = FLOATER.charge }
+      break
+    case 'charge':
+      h.yaw = Math.atan2(dx, dz)
+      if (h.t <= 0) {
+        // aim at where the keeper is, from the floater's body; a slow arc
+        const ty = feet.y + 0.9, sy = h.y, l = Math.hypot(dx, dz) || 1, flight = l / FLOATER.spitSpeed
+        c.spits.push({ x: h.x, y: sy, z: h.z, vx: (dx / l) * FLOATER.spitSpeed, vz: (dz / l) * FLOATER.spitSpeed, vy: (ty - sy) / flight + 1.25 * flight, life: FLOATER.spitLife })
+        h.state = 'recover'; h.t = FLOATER.recover
+      }
+      break
+    case 'recover': case 'stagger':
+      mx = -dz; mz = dx; speed = FLOATER.speed * 0.5
+      if (h.t <= 0) { h.state = d < FLOATER.notice ? 'chase' : 'wander'; h.t = 0.5 + rnd(c) }
+      break
+  }
+  if (speed > 0) {
+    const l = Math.hypot(mx, mz) || 1
+    const nx = h.x + (mx / l) * speed * dt, nz = h.z + (mz / l) * speed * dt
+    if (Number.isFinite(T.heightAt(nx, nz))) { h.x = nx; h.z = nz }
+  }
+  const want = T.heightAt(h.x, h.z) + FLOATER.hover + Math.sin(h.id + performanceSafeNow(c) * 1.3) * 0.25
+  h.y += (want - h.y) * Math.min(1, dt * 3)
+}
+/** A clock that lives in the sim (tests step time), for the floater's bob. */
+const performanceSafeNow = (c: Combat) => (c.clock = (c.clock ?? 0))
+
 /** After the fold returns a downed keeper home: full health, a full clip, the Wilds' crowd forgets them. */
 export function revive(c: Combat) {
   c.keeper.hp = c.keeper.maxHp; c.keeper.sinceHurt = 99; c.keeper.ammo = c.gun.clip; c.keeper.reloading = 0
-  c.hollows = []; c.rounds = []
+  c.hollows = []; c.rounds = []; c.spits = []
 }

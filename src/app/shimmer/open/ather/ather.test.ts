@@ -243,6 +243,17 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
     stepCombat(d, T, f2, 1 / 60); got += d.events.filter(e => e.kind === 'pickup').reduce((a, e) => a + (e.kind === 'pickup' ? e.amount : 0), 0)
   }
   ok(got >= 1 && d.drops.length === 0, 'combat: grey matter could not be picked up')
+  // a floater keeps its distance and spits; standing still, a spit lands within ~10 s
+  const f = newCombat(5)
+  spawnHollow(f, T, g.x + 14, g.z, 'floater')
+  let spit = 0, minD = Infinity
+  for (let t2 = 0; t2 < 10 && !spit; t2 += 1 / 60) {
+    stepCombat(f, T, feet, 1 / 60); spit += f.events.filter(e2 => e2.kind === 'hurt').length
+    const fl = f.hollows[0]; minD = Math.min(minD, Math.hypot(fl.x - feet.x, fl.z - feet.z))
+  }
+  ok(spit > 0, 'combat: a floater never landed a spit on a keeper standing still')
+  ok(minD > 6, `combat: a floater came to ${minD.toFixed(1)} m (it should keep its distance)`)
+  ok(f.hollows[0].y > W.heightAt(f.hollows[0].x, f.hollows[0].z) + 1.2, 'combat: the floater is not floating')
   // populate keeps strays out of the safe ring and out of the water
   const e = newCombat(11)
   populate(e, T, g.x, g.z, 7, { x: g.x, z: g.z, r: 30 })
