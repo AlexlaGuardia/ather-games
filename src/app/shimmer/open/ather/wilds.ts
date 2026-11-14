@@ -137,3 +137,11 @@ export function tileCentreWorld(meta: WildsMeta): { x: number; z: number } {
   const s = meta.source, m = s.mPerPx ?? 10
   return { x: ((s.x0 + s.x1) / 2) * m - 11670 / 2, z: ((s.y0 + s.y1) / 2) * m - 7830 / 2 }
 }
+
+/** May a body of radius r stand at (x, z): dry land inside the tile, no trunk. `shape.solids` hands back a whole
+ *  16 m bucket of trunks, so this filters to the ones that actually overlap. */
+export function walkableIn(W: Wilds, x: number, z: number, r = 0.3): boolean {
+  if (Math.abs(x) > W.meta.sizeX / 2 - 3 || Math.abs(z) > W.meta.sizeZ / 2 - 3) return false
+  if (!Number.isFinite(W.heightAt(x, z)) || W.biomeAt(x, z) === BIOME.water) return false
+  return !W.shape.solids(x - r, -1e3, z - r, x + r, 1e3, z + r).some(b => b.x0 <= x + r && b.x1 >= x - r && b.z0 <= z + r && b.z1 >= z - r)
+}

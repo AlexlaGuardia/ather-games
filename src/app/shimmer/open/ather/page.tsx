@@ -25,9 +25,11 @@ import {
 import { PlotScene } from './plot-scene'
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
-import { loadWilds, tileCentreWorld, BIOME_NAME, type Wilds } from './wilds'
+import { loadWilds, tileCentreWorld, walkableIn, BIOME_NAME, type Wilds } from './wilds'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
+import { CombatLayer, type CombatHud } from './combat-layer'
+import type { CombatEvent, Terrain } from './combat'
 
 const TILE = 'first-wilds'
 
@@ -54,6 +56,8 @@ export default function AtherSlice() {
   const pos = useRef({ x: THRESHOLD.x, z: THRESHOLD.z, grounded: true, swimming: false })
   const near = useRef<Near>(null)
   const hudT = useRef(0), fogT = useRef(0), fogDirty = useRef(false)
+  const [chud, setChud] = useState<CombatHud | null>(null)
+  const [reviveKey, setReviveKey] = useState(0)
 
   useEffect(() => { setWaymarks(loadWaymarks()); setGarden(loadGarden()); setFog(loadFog()) }, [])
   useEffect(() => { loadWilds(TILE).then(setW).catch(e => setToast(`The Wilds would not load: ${e.message}`)) }, [])
@@ -86,6 +90,25 @@ export default function AtherSlice() {
     setTimeout(() => { setZone(z); setSpawn(s); setEpoch(e => e + 1); setFade(0); fading.current = false }, 380)
   }, [])
   const goHome = useCallback(() => arrive({ kind: 'plot' }, THRESHOLD), [arrive])
+
+  // ── combat in the Wilds ──
+  const terrain = useMemo<Terrain | null>(() => W ? {
+    heightAt: W.heightAt,
+    walkable: (x, z) => walkableIn(W, x, z),
+  } : null, [W])
+  const gardenRef = useRef(garden); gardenRef.current = garden
+  const onCombat = useCallback((evs: CombatEvent[]) => {
+    let got = 0
+    for (const e of evs) {
+      if (e.kind === 'pickup') got += e.amount
+      if (e.kind === 'down') {
+        setToast('The Hollows dragged you under. The fold caught you and set you down at home.')
+        setTimeout(() => setReviveKey(k => k + 1), 400)
+        arrive({ kind: 'plot' }, THRESHOLD)
+      }
+    }
+    if (got) { const g = { ...gardenRef.current, grey: gardenRef.current.grey + got }; setGarden(g); saveGarden(g) }
+  }, [arrive])
 
   const travel = useCallback((d: Dest) => {
     if (d.kind === 'home') { goHome(); return }
@@ -189,6 +212,10 @@ export default function AtherSlice() {
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && W ? (x, z) => W.canopyAt(x, z) * 0.7 : undefined} />
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} />}
         {zone.kind === 'wilds' && W && <WildsScene W={W} waymarks={waymarks} />}
+        {terrain && (
+          <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
+            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={setChud} reviveKey={reviveKey} />
+        )}
         {world && (
           <Walker
             key={epoch} world={world} ground={ground} spawn={spawn} locked={locked} frozen={frozen}
@@ -208,6 +235,23 @@ export default function AtherSlice() {
         GRIMOIRE <span style={{ fontVariantNumeric: 'tabular-nums' }}>{garden.pages}</span> · WAYMARKS <span style={{ fontVariantNumeric: 'tabular-nums' }}>{waymarks.length}/{MAX_WAYMARKS}</span><br />
         <span style={{ opacity: 0.65 }}>M map{zone.kind === 'wilds' ? ' · F plant · H home' : ''}</span>
       </div>
+      {zone.kind === 'wilds' && chud && (() => {
+        const now = performance.now() / 1000, hurt = Math.max(0, 1 - (now - chud.hurtAt) / 0.6), hit = now - chud.hitAt < 0.12
+        return (
+          <>
+            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', boxShadow: `inset 0 0 ${120 + hurt * 80}px rgba(70,74,80,${(hurt * 0.75 + (1 - chud.hp / chud.maxHp) * 0.35).toFixed(3)})` }} />
+            {hit && <div style={{ position: 'absolute', left: '50%', top: '50%', width: 18, height: 18, margin: -9, border: '2px solid rgba(255,255,255,0.9)', transform: 'rotate(45deg)', borderRadius: 2, pointerEvents: 'none' }} />}
+            <div style={{ position: 'absolute', left: 12, bottom: 14, width: 220, pointerEvents: 'none', color: '#eef3f6', font: '11px system-ui', letterSpacing: '0.1em' }}>
+              <div style={{ height: 8, borderRadius: 4, background: 'rgba(12,16,20,0.6)', overflow: 'hidden' }}>
+                <div style={{ width: `${(chud.hp / chud.maxHp) * 100}%`, height: '100%', background: chud.hp < 35 ? '#e08a6a' : '#9fd27a', transition: 'width 0.15s' }} />
+              </div>
+            </div>
+            <div style={{ position: 'absolute', right: 14, bottom: 14, pointerEvents: 'none', color: '#eef3f6', font: '600 12px system-ui', letterSpacing: '0.14em', textAlign: 'right', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
+              {chud.gun}<br /><span style={{ fontSize: 18, fontVariantNumeric: 'tabular-nums' }}>{chud.reloading ? '· · ·' : `${chud.ammo} / ${chud.clip}`}</span><br /><span style={{ opacity: 0.6, fontWeight: 400, fontSize: 10 }}>CLICK FIRE · R RELOAD</span>
+            </div>
+          </>
+        )
+      })()}
       {prompt && !panel && (
         <div style={{ position: 'absolute', left: '50%', top: '58%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none' }}>{prompt}</div>
       )}
@@ -227,7 +271,7 @@ export default function AtherSlice() {
             Click to play<br />
             WASD move · Space jump / climb · Shift slide · E use · M map · Esc release
             <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>
-              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out to Rune Hold in Athernyx. Gregory, by the threshold, sells the ground under the mist. In the Wilds, F plants a waymark and H walks home.
+              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out to Rune Hold in Athernyx. Gregory, by the threshold, sells the ground under the mist. In the Wilds the Hollows wander: click to shoot, R to reload, walk over grey matter to take it. F plants a waymark, H walks home.
             </div>
           </div>
         </div>

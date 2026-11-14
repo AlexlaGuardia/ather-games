@@ -3,12 +3,13 @@
 import { readFileSync } from 'fs'
 import { createLoco, tickLocomotion, type LocoInput } from '../../voxel3d/locomotion'
 import { terrainWorld } from '../terrain-world'
-import { parseWilds, tileCentreWorld, BIOME, type WildsMeta } from './wilds'
+import { parseWilds, tileCentreWorld, walkableIn, BIOME, type WildsMeta } from './wilds'
 import {
   plotShape, PLOT_N, PLOT_CELL, PLOT_HALF, THRESHOLD, FALL_Y, GATE, GREG, REACH, GRID, SQ, GRID_HALF,
   STARTING_SQUARES, RING_PAGES, RING_COST, GRIMOIRE_SIZE, plotHeightAt, plotVertexHeight, plotCellIsLand,
   squareAt, squareCentre, ringOf, sqId, canBuy, mistWalls,
 } from './plot'
+import { newCombat, stepCombat, spawnHollow, fire, populate, KEEPER_HP, SHAMBLER, BODY_Y } from './combat'
 import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
 import { canPlant, plant, lift, reachedBiomes, waymarksInWorld, TILE_CENTRE, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
 
@@ -201,6 +202,52 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   ok(table.x === tc.x && table.z === tc.z, `waymark: TILE_CENTRE drifted from tileCentreWorld (${table.x},${table.z} vs ${tc.x},${tc.z})`)
   const ww = waymarksInWorld([{ id: 'a', tile: 'first-wilds', x: 10, y: 0, z: -20, biome: BIOME.woods, made: 0 }, { id: 'b', tile: 'nowhere', x: 0, y: 0, z: 0, biome: BIOME.woods, made: 0 }])
   ok(ww.length === 2 && ww[0].greg && ww[1].x === tc.x + 10 && ww[1].z === tc.z - 20, 'waymark: world coords wrong or unknown tile not dropped')
+}
+
+// ── combat ────────────────────────────────────────────────────────────────────────────────────────────────────
+{
+  const T = {
+    heightAt: W.heightAt,
+    walkable: (x: number, z: number) => walkableIn(W, x, z),
+  }
+  const g = GREG_WAYMARK, feet = { x: g.x, y: W.heightAt(g.x, g.z), z: g.z }
+  // a shambler 12 m off notices, closes and lands a lunge inside ~15 s; standing still costs health
+  const c = newCombat(7)
+  spawnHollow(c, T, g.x + 12, g.z)
+  let hurt = 0, t = 0
+  for (; t < 15 && !hurt; t += 1 / 60) { stepCombat(c, T, feet, 1 / 60); hurt += c.events.filter(e => e.kind === 'hurt').length }
+  ok(hurt > 0, 'combat: a shambler never reached a keeper standing still')
+  ok(t > 4, `combat: a shambler reached you in ${t.toFixed(1)} s from 12 m (too fast for a shambler)`)
+  ok(c.keeper.hp === KEEPER_HP - SHAMBLER.damage, `combat: keeper hp ${c.keeper.hp}`)
+  // three Repeater body shots put one down, and it drops grey matter that walks into your pocket
+  const d = newCombat(3)
+  const h = spawnHollow(d, T, g.x, g.z - 8)
+  let kills = 0, shots = 0
+  for (let k = 0; k < 600 && !kills; k++) {
+    const hb = d.hollows[0]
+    if (hb && k % 14 === 0) {
+      const eye = { x: feet.x, y: feet.y + 1.62, z: feet.z }, tgt = { x: hb.x, y: hb.y + BODY_Y, z: hb.z }
+      const dx = tgt.x - eye.x, dy = tgt.y - eye.y, dz = tgt.z - eye.z, l = Math.hypot(dx, dy, dz)
+      if (fire(d, eye, { x: dx / l, y: dy / l, z: dz / l })) shots++
+    }
+    stepCombat(d, T, feet, 1 / 60)
+    kills += d.events.filter(e => e.kind === 'hit' && e.killed).length
+  }
+  ok(kills === 1 && h.hp <= 0, 'combat: a Repeater could not put a shambler down')
+  ok(shots >= 2 && shots <= 6, `combat: ${shots} shots to kill (want ~3 body)`)
+  ok(d.drops.length === 1 && d.drops[0].amount >= 1, 'combat: no grey matter dropped')
+  let got = 0
+  for (let k = 0; k < 600 && !got; k++) {
+    const p = d.drops[0]; if (!p) break
+    const f2 = { x: p.x + 0.5, y: p.y, z: p.z }
+    stepCombat(d, T, f2, 1 / 60); got += d.events.filter(e => e.kind === 'pickup').reduce((a, e) => a + (e.kind === 'pickup' ? e.amount : 0), 0)
+  }
+  ok(got >= 1 && d.drops.length === 0, 'combat: grey matter could not be picked up')
+  // populate keeps strays out of the safe ring and out of the water
+  const e = newCombat(11)
+  populate(e, T, g.x, g.z, 7, { x: g.x, z: g.z, r: 30 })
+  ok(e.hollows.length >= 5, `combat: populate made ${e.hollows.length} strays`)
+  ok(e.hollows.every(h2 => Math.hypot(h2.x - g.x, h2.z - g.z) >= 30 && W.biomeAt(h2.x, h2.z) !== BIOME.water), 'combat: a stray spawned in the safe ring or the water')
 }
 
 if (fails.length) { console.error(`ather: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
