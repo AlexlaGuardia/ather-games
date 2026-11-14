@@ -345,6 +345,12 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
           <button type="button" style={{ ...tab(side === 'nyx'), cursor: 'pointer' }} onClick={() => setSide('nyx')}>Athernyx</button>
           <button type="button" style={{ ...tab(side === 'ather'), cursor: 'pointer' }} onClick={() => setSide('ather')}
             title="The other state of this same land: what you have walked in the Wilds. You cross at Rune Hold's gate.">The Ather</button>
+          {side === 'ather' && (
+            // the gate-rune's one return from anywhere: the near end is you, the far end is your own plot's threshold
+            // (gates.md 08-12 + 08-15). Waymarks stay display: a waymark as the far end is a keeper-chosen destination, unruled.
+            <button type="button" style={{ ...tab(true), cursor: 'pointer', marginLeft: 10, borderColor: 'rgba(185,168,255,0.7)', background: 'rgba(185,168,255,0.16)', color: '#e4dcff' }}
+              onClick={() => { window.location.href = '/shimmer/open/ather' }} title="Drop a gate-rune where you stand and step through to your plot's threshold.">Step home · your plot</button>
+          )}
         </div>
         <div style={{ position: 'relative' }}>
           <canvas ref={base} data-map="base" style={{ maxWidth: '94vw', maxHeight: '78vh', width: 'auto', height: 'auto', display: 'block', borderRadius: 8,
