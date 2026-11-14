@@ -917,12 +917,14 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl }: { R: Region; cave: Cave
     if (hudT.current <= 0) {
       hudT.current = 0.12
       let near: string | null = null, nd = 260
-      for (const p of R.meta.places) { const d = Math.hypot(p.x - c.x, p.z - c.z); if (p.name && d < nd) { nd = d; near = p.name } }
-      const nr = nearestRoad(R, c.x, c.z)
+      // the HUD reads where YOU are: the walker on foot, the courser when driving (v1 kept reading the parked car)
+      const me = onFoot && loco.current ? { x: loco.current.px, z: loco.current.pz } : { x: c.x, z: c.z }
+      for (const p of R.meta.places) { const d = Math.hypot(p.x - me.x, p.z - me.z); if (p.name && d < nd) { nd = d; near = p.name } }
+      const nr = nearestRoad(R, me.x, me.z)
       // a carving in reach reads out: the waystone's two faces, or the fingerpost's arms
       let sign: string | null = null
-      for (const w of signs.waystones) if (Math.hypot(w.x - c.x, w.z - c.z) < 18) sign = 'Waystone · ' + w.faces.map(f => `${f.name} ${f.km} km`).join(' · ')
-      for (const f of signs.fingerposts) if (Math.hypot(f.x - c.x, f.z - c.z) < 26) sign = f.arms.map(a => `${a.name} ${a.km} km`).join(' · ')
+      for (const w of signs.waystones) if (Math.hypot(w.x - me.x, w.z - me.z) < 18) sign = 'Waystone · ' + w.faces.map(f => `${f.name} ${f.km} km`).join(' · ')
+      for (const f of signs.fingerposts) if (Math.hypot(f.x - me.x, f.z - me.z) < 26) sign = f.arms.map(a => `${a.name} ${a.km} km`).join(' · ')
       // on foot in the Passage market: the room you are standing in reads out (a shelf, the teachers, Lowen's bay)
       if (onFoot && loco.current && cave && Math.abs(loco.current.py - cave.y) < 4) {
         const room = caveRoomAt(cave, loco.current.px, loco.current.pz)
@@ -980,7 +982,7 @@ export default function ContinentRide() {
   const flash = (t: string) => { setToast(t); setTimeout(() => setToast(v => (v === t ? null : v)), 3200) }
   // the town you are stopped at (within 45 m), if any
   const atTown = useMemo(() => {
-    if (!R || hud.mph > 4) return null
+    if (!R || hud.mph > 4 || hud.foot) return null
     let best: { id: string; d: number } | null = null
     for (const t of TOWNS) { const p = R.meta.places.find(q => q.id === t); if (!p) continue; const d = Math.hypot(p.x - hud.x, p.z - hud.z); if (d < 45 && (!best || d < best.d)) best = { id: t, d } }
     return best?.id ?? null
