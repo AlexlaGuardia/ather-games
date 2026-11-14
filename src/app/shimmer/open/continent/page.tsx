@@ -775,6 +775,11 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl }: { R: Region; cave: Cave
       seat: () => seat(),
       foot: () => (loco.current ? { mode: mode.current, ...loco.current } : { mode: mode.current }),
       look: (yaw: number, pitch = -0.08) => { view.current = { yaw, pitch } },
+      // scripted shots: stand a walker anywhere (on the Passage market's floor when the spot is in it)
+      footTp: (x: number, z: number, yaw = 0, pitch = -0.08) => {
+        const y = cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z)
+        loco.current = stepOut({ x, y: y + 0.05, z }, { vx: 0, vz: 0 }); view.current = { yaw, pitch }; mode.current = 'foot'
+      },
     }
     return () => {
       window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur)

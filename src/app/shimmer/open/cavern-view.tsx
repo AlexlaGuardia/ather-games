@@ -11,11 +11,14 @@ import { TUNNEL_WALK, type Region } from './region'
 const ROCK = new THREE.Color('#9a7f63'), FLOOR = new THREE.Color('#8a7356'), WARM = new THREE.Color('#ffcf8a')
 const GEM_COLS = ['#7fe3ff', '#ff8fb8', '#b3ff8a', '#ffd86b', '#c9a2ff']
 
-function lit(out: THREE.Color, base: THREE.Color, l: number) {
-  // warm light: the lit stone shifts toward lantern-gold as well as brightening
-  out.copy(base).multiplyScalar(0.35 + l * 0.75).lerp(WARM, Math.min(0.35, l * 0.22))
+function lit(out: THREE.Color, base: THREE.Color, l: number, shade = 1) {
+  // warm light: the lit stone shifts toward lantern-gold as well as brightening; `shade` is the face's own form (a
+  // fixed soft key from above-and-aside), so the dome and walls read as shapes even where the light is even
+  out.copy(base).multiplyScalar((0.22 + l * 0.7) * shade).lerp(WARM, Math.min(0.25, l * 0.16))
   return out
 }
+const KEY = new THREE.Vector3(0.35, 0.8, 0.45).normalize()
+const hash = (x: number, z: number) => { const v = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453; return v - Math.floor(v) }
 
 function caveGeometry(c: Cavern, inBore: (x: number, z: number) => boolean) {
   const pos: number[] = [], col: number[] = []
@@ -30,9 +33,12 @@ function caveGeometry(c: Cavern, inBore: (x: number, z: number) => boolean) {
     return n ? s / n : 4.2
   }
   const X = (i: number) => x0 + i * CAVE_CELL, Z = (j: number) => z0 + j * CAVE_CELL
-  const vert = (x: number, yy: number, z: number, base: THREE.Color) => { pos.push(x, yy, z); lit(cc, base, c.lightAt(x, yy, z)); col.push(cc.r, cc.g, cc.b) }
+  const n = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3()
+  const vert = (x: number, yy: number, z: number, base: THREE.Color, shade: number) => { pos.push(x, yy, z); lit(cc, base, c.lightAt(x, yy, z), shade); col.push(cc.r, cc.g, cc.b) }
   const quad = (a: number[], b: number[], d: number[], e: number[], base: THREE.Color) => {
-    for (const p of [a, b, d, a, d, e]) vert(p[0], p[1], p[2], base)
+    e1.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]); e2.set(d[0] - a[0], d[1] - a[1], d[2] - a[2]); n.crossVectors(e1, e2).normalize()
+    const shade = (0.62 + 0.38 * Math.abs(n.dot(KEY))) * (0.9 + 0.2 * hash(Math.round(a[0] * 2), Math.round(a[2] * 2)))
+    for (const p of [a, b, d, a, d, e]) vert(p[0], p[1], p[2], base, shade)
   }
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
     if (!m(i, j)) continue
@@ -128,7 +134,7 @@ export function CavernView({ cave, R }: { cave: Cavern; R: Region }) {
           const w = new THREE.Vector3(bp.getX(k), bp.getY(k), bp.getZ(k)).applyMatrix4(m)
           pos.push(w.x, w.y, w.z)
           if (part.glow) cc.copy(base).multiplyScalar(1.15)
-          else cc.copy(base).multiplyScalar(0.35 + cave.lightAt(w.x, w.y, w.z) * 0.8).lerp(WARM, 0.08)
+          else cc.copy(base).multiplyScalar(0.3 + cave.lightAt(w.x, w.y, w.z) * 0.75).lerp(WARM, 0.06)
           col.push(cc.r, cc.g, cc.b)
         }
       }

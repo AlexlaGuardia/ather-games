@@ -180,9 +180,10 @@ export function buildCavern(R: Region): Cavern | null {
   const y = b.y
   const lanterns = LANTERNS.map(([u, v, h]) => { const [x, z] = W(u, v); return [x, y + h, z] as [number, number, number] })
   const lightAt = (x: number, yy: number, z: number) => {
-    let l = 0.16
-    for (const [lx, ly, lz] of lanterns) { const q = (x - lx) ** 2 + ((yy - ly) * 1.4) ** 2 + (z - lz) ** 2; l += 0.9 / (1 + q / 40) }
-    return Math.min(1.35, l)
+    // a lantern lights a pool, not the room: v1 (0.9 / (1 + q/40), cap 1.35) saturated the side passage to one flat tan
+    let l = 0.1
+    for (const [lx, ly, lz] of lanterns) { const q = (x - lx) ** 2 + ((yy - ly) * 1.3) ** 2 + (z - lz) ** 2; l += 0.55 / (1 + q / 22) }
+    return Math.min(1.05, l)
   }
   // ── props, placed in the plan's frame ──
   const yawV = Math.atan2(-b.ux, -b.uz)                         // facing along +v
