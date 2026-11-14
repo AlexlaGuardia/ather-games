@@ -11,7 +11,9 @@ water is held above it (a causeway until bridges exist).
 Run: python3 tools/worldmap/export_region.py <height.npy> <name> x0 y0 x1 y1
 Writes: public/open/<name>.bin (int16 decimetres, row-major, z rows) + public/open/<name>.json (meta, roads, places).
 """
-import sys, json, math, numpy as np
+import sys, os, json, math, numpy as np
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import road_network
 from scipy import ndimage as nd
 from scipy.spatial import cKDTree
 
@@ -20,7 +22,7 @@ X0, Y0, X1, Y1 = map(int, sys.argv[3:7])
 ATLAS = '/root/athernyx/assets/maps/atlas/atlas.json'
 M_PX, UP = 10.0, 2                       # source metres per px; upsample factor → 5 m cells
 CELL = M_PX / UP
-WIDTH = {'paved': 14.0, 'road': 12.0, 'trail': 9.0, 'pass': 10.0}  # metres, the drivable surface (Alex 11-14: 7 m was too tight)
+WIDTH = road_network.WIDTH        # metres, the drivable surface (Alex 11-14: 7 m was too tight)
 SHOULDER = 18.0
 MAX_GRADE = {'paved': 0.10, 'road': 0.12, 'trail': 0.18, 'pass': 0.18}   # rise/run; where land is steeper the road cuts/fills
 
@@ -67,20 +69,42 @@ def dense_runs(r):
         elif cur: runs.append(cur); cur = []
     if cur: runs.append(cur)
     return [np.array(run) for run in runs if len(run) >= 8]
-roads_out, cen, cen_w = [], [], []
+roads_out, routes = [], []
 for r in atlas['roads']:
     w = WIDTH.get(r['kind'], 7.0)
     for k, arr in enumerate(dense_runs(r)):
-        cen += arr.tolist(); cen_w += [w] * len(arr)
+        routes.append({'id': r['id'], 'kind': r['kind'], 'xz': arr})
         simp = arr[::4].tolist() + [arr[-1].tolist()]
         roads_out.append({'id': f"{r['id']}#{k}", 'kind': r['kind'], 'from': r['from'], 'to': r['to'], 'width': w, 'xz': simp})
+# ── THE NETWORK (road_network.py): routes → one graph of edges + classified junctions. The bed is carved from the
+# network, not the routes, so a shared trunk is one road and every junction is a flat pad of its own kind. ──
+net_places = [{'id': p['id'], 'name': p['name'], 'kind': p['kind'], 'x': toW(p['x'], p['y'])[0], 'z': toW(p['x'], p['y'])[1]}
+              for p in atlas['places']]
+JF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'junctions.json')
+overrides = [{'kind': o['kind'], 'x': toW(*o['px'])[0], 'z': toW(*o['px'])[1]} for o in json.load(open(JF))['overrides']] if os.path.exists(JF) else []
+net = road_network.build(routes, (-sizeX / 2, -sizeZ / 2, sizeX / 2, sizeZ / 2), net_places, overrides) if routes else {'edges': [], 'junctions': []}
+from collections import Counter
+print('network:', len(net['edges']), 'edges,', dict(Counter(j['kind'] for j in net['junctions'])))
+cen, cen_w = [], []
+for e in net['edges']:
+    cen += e['xz'].tolist(); cen_w += [WIDTH[e['kind']]] * len(e['xz'])
 if cen:
     tree = cKDTree(np.array(cen)); Wc = np.array(cen_w)
     d, idx = tree.query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=14 / 2 + 4.0 + 220)   # wide: a deep cut's shoulder reaches far
     d = d.reshape(h.shape); idx = idx.reshape(h.shape)
-    ok = np.isfinite(d)
-    half = np.where(ok, Wc[np.minimum(idx, len(Wc) - 1)] / 2 + 4.0, 0)   # flat a little past the paint: a riverbank shoulder sagged into the drive line at +1
-    bed = ok & (d <= half + CELL)                                     # the road surface (+ one cell so it is never 1 px)
+    half = np.where(np.isfinite(d), Wc[np.minimum(idx, len(Wc) - 1)] / 2 + 4.0, 0)   # flat a little past the paint: a riverbank shoulder sagged into the drive line at +1
+    # EXCESS = metres outside the road surface (≤ 0 on it). A junction pad is a disc of its own radius; the cell
+    # takes whichever surface it is nearest to being on.
+    ex = np.where(np.isfinite(d), d - half, np.inf)
+    pad = np.zeros(h.shape, bool)
+    for j in net['junctions']:
+        if j['r'] <= 0: continue
+        dj = np.hypot(gx - j['x'], gz - j['z']) - (j['r'] + 2.0)
+        pad |= dj <= CELL
+        ex = np.minimum(ex, dj)
+    ok = np.isfinite(ex) & (ex < 230)
+    d, half = ex, 0.0                                                  # the shoulder code below reads (d - half)
+    bed = ok & (ex <= CELL)                                            # the road surface (+ one cell so it is never 1 px)
     # the field: land smoothed hard, causeway over water
     # the baseline is the land UNDER THE BED only (normalised convolution): smoothing the whole grid let a hill beside
     # a valley road pull the road up toward it
@@ -90,23 +114,28 @@ if cen:
     # propagation to a fixed point), averaged. Each envelope changes by at most g per metre between bed neighbours, so
     # any blend of them does too. (The first version clamped locally, one cell per pass, and stopped long before
     # Ashfeld's 70 m drop had propagated: 59% on a road meant to cap at 12%.)
-    G = 0.12
+    G = np.where(pad, 0.03, 0.12)       # a junction pad is near flat: you stop, turn and pull away on it
     nbrs = [(0, 1, CELL), (0, -1, CELL), (1, 0, CELL), (-1, 0, CELL),
             (1, 1, CELL * 1.4142), (1, -1, CELL * 1.4142), (-1, 1, CELL * 1.4142), (-1, -1, CELL * 1.4142)]
     BIG = 1e6
-    U = np.where(bed, road, BIG); L = np.where(bed, road, -BIG)
+    U = np.where(bed, road, BIG)
     for it in range(3000):
-        U0, L0 = U, L
+        U0 = U
         for dz, dx, dist in nbrs:
-            U = np.minimum(U, np.where(bed, np.roll(np.roll(U0, dz, 0), dx, 1) + G * dist, BIG))
-            L = np.maximum(L, np.where(bed, np.roll(np.roll(L0, dz, 0), dx, 1) - G * dist, -BIG))
-        if max(np.abs(U - U0)[bed].max(), np.abs(L - L0)[bed].max()) < 1e-3: break
+            Ge = np.minimum(G, np.roll(np.roll(G, dz, 0), dx, 1))
+            U = np.minimum(U, np.where(bed, np.roll(np.roll(U0, dz, 0), dx, 1) + Ge * dist, BIG))
+        if np.abs(U - U0)[bed].max() < 1e-3: break
     # PURE CUT: U is the highest grade-legal surface that never rises above the land, so a road is never a dyke.
     # Any share of L lifts the road wherever a peak is within (peak height / G) of it: the 80/20 blend put 23% of the
     # corridor's road 8+ m above the land and a missed turn fell into a valley it could not climb out of (Alex 11-14).
     # 50/50 before that built a 44 m embankment. Cuts deep enough to matter (>20 m) are ~5% of the bed, and their
     # banks widen with the depth below, so a deep cut is a valley, not a slot.
-    road = np.where(bed, U, road)
+    # ...then SMOOTH it along the bed (normalised convolution over bed cells only). The envelope is a min of cones, so
+    # it is creased wherever a constraint binds; a creased road at 17 m/s is 40 little hops per km (the network export,
+    # 11-14). An average of grade-legal surfaces stays (near) grade-legal, so this costs the limit nothing.
+    bw = nd.gaussian_filter(bed.astype(np.float64), 1.6)
+    Us = nd.gaussian_filter(np.where(bed, U, 0.0), 1.6) / np.maximum(bw, 1e-6)
+    road = np.where(bed, Us, road)
     print(f'grade envelope converged in {it} iterations')
     # the shoulder WIDENS with the cut or fill it has to make up (~1:3; at 1:1.6 13% of the bank was past the courser's climb limit), so a deep cut is a valley with sloping
     # sides, not a slot canyon (the road out of Ashfeld ran between 40 m vertical walls at a fixed 12 m shoulder)
@@ -118,12 +147,30 @@ if cen:
     near = nd.distance_transform_edt(~bed, return_distances=False, return_indices=True)
     road_out = road[near[0], near[1]]
     h = h * (1 - blend) + road_out * blend
+    # ROUNDABOUT ISLANDS: a kerb and a low planted mound, so the ring is driven around (or bounced over, at a cost)
+    for j in net['junctions']:
+        if 'island' not in j: continue
+        rr = np.hypot(gx - j['x'], gz - j['z']) / j['island']
+        h = np.where(rr < 1, h + 0.3 + 1.2 * (1 - rr * rr), h)
 
 # ⚠ heights are read from the FINAL grid: a later road re-cuts an earlier one's bed where they cross, so a height
 # sampled right after a road's own cut goes stale (pass 1 reported a 168% "grade" that was exactly that)
 for r in roads_out:
     xz = np.array(r.pop('xz'))
     r['pts'] = [[round(x, 1), round(z, 1), round(float(y), 2)] for (x, z), y in zip(xz, sample(xz[:, 0], xz[:, 1]))]
+
+net_out = {'edges': [], 'junctions': []}
+for e in net['edges']:
+    P = e['xz'][::2] if len(e['xz']) > 3 else e['xz']
+    if len(e['xz']) > 3 and not np.allclose(P[-1], e['xz'][-1]): P = np.vstack([P, e['xz'][-1:]])
+    ys = sample(P[:, 0], P[:, 1])
+    net_out['edges'].append({'id': e['id'], 'kind': e['kind'], 'width': WIDTH[e['kind']], 'a': e['a'], 'b': e['b'],
+                             'pts': [[round(float(x), 1), round(float(z), 1), round(float(y), 2)] for (x, z), y in zip(P, ys)]})
+for j in net['junctions']:
+    jo = {k: v for k, v in j.items() if k != 'arms'}
+    jo['arms'] = [{'edge': f"e{a['edge']}", 'kind': a['kind'], 'ang': round(a['ang'], 3)} for a in j['arms']]
+    jo['y'] = round(float(sample(j['x'], j['z'])[0]), 2)
+    net_out['junctions'].append(jo)
 
 places_out = []
 for p in atlas['places']:
@@ -135,11 +182,15 @@ q = np.clip(np.round(h * 10), -32768, 32767).astype('<i2')
 open(f'public/open/{NAME}.bin', 'wb').write(q.tobytes())
 meta = {'name': NAME, 'cell': CELL, 'nx': nx, 'nz': nz, 'sizeX': sizeX, 'sizeZ': sizeZ, 'scale': 0.1,
         'sourcePx': [X0, Y0, X1, Y1], 'mPerSourcePx': M_PX, 'atlasSavedAt': atlas.get('savedAt'),
-        'roads': roads_out, 'places': places_out}
+        'roads': roads_out, 'network': net_out, 'places': places_out}
 json.dump(meta, open(f'public/open/{NAME}.json', 'w'))
 worst = (0, '')
-for r in roads_out:
-    P = np.array(r['pts']); dl = np.hypot(*np.diff(P[:, :2], axis=0).T); g = np.abs(np.diff(P[:, 2])) / np.maximum(dl, 1e-3)
+isl = [(j['x'], j['z'], j['island'] + 1) for j in net['junctions'] if 'island' in j]
+for r in net_out['edges']:
+    P = np.array(r['pts'])
+    P = P[[all(math.hypot(x - jx, z - jz) > ri for jx, jz, ri in isl) for x, z, _ in P]]   # an edge runs to the island's centre; nobody drives that
+    if len(P) < 2: continue
+    dl = np.hypot(*np.diff(P[:, :2], axis=0).T); g = np.abs(np.diff(P[:, 2])) / np.maximum(dl, 1e-3)
     if g.size and g.max() > worst[0]: worst = (float(g.max()), r['id'])
 print(f'worst road grade {worst[0]*100:.1f}% on {worst[1]}')
 print(f'{NAME}: {nx}x{nz} @ {CELL} m = {sizeX/1000:.1f} x {sizeZ/1000:.1f} km, h {h.min():.0f}..{h.max():.0f} m, '

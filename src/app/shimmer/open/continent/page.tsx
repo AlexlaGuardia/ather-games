@@ -20,7 +20,7 @@ import { postBoard, accept, arrive, abandon, buy, GOODS, CAPACITY, type Contract
 import { DARTER_STOCK, tuneFromSpec } from '../courser'
 import { buildSpec, type Slot, type Tier } from '../courser-build'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
-import { loadRegion, nearestRoad, type Region, type RegionRoad } from '../region'
+import { drivable, loadRegion, nearestRoad, type Region, type RegionJunction, type RegionRoad } from '../region'
 
 const STEP = 1 / 120
 const FOV = 64
@@ -144,7 +144,10 @@ function Roads({ R }: { R: Region }) {
       for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (drawn.has(`${cx + dx},${cz + dz}`)) return true
       return false
     }
-    const widest = [...R.meta.roads].sort((a, b) => b.width - a.width)
+    // junction pads paint themselves (Junctions): stop each ribbon at the pad's edge, and never across an island
+    const pads = (R.meta.network?.junctions ?? []).filter(j => j.r > 0)
+    const onPad = (x: number, z: number) => pads.some(j => Math.hypot(x - j.x, z - j.z) < j.r - 1.5)
+    const widest = [...drivable(R)].sort((a, b) => b.width - a.width)
     for (const r of widest) {
       const out = byKind.get(r.kind) ?? { pos: [] }; byKind.set(r.kind, out)
       // densify the centre line to 2.5 m
@@ -168,6 +171,7 @@ function Roads({ R }: { R: Region }) {
         // off the region's edge there is no ground (−∞): never let such a point into a quad, or the whole mesh's
         // bounds go NaN and three.js culls every road of that kind
         if (!Number.isFinite(Lp[1]) || !Number.isFinite(Rp[1])) { prevL = prevR = null; continue }
+        if (onPad(x, z)) { prevL = prevR = null; continue }
         if (covered(x, z) && k > 0 && k < line.length - 1) { prevL = prevR = null; mine.push([x, z]); continue }
         mine.push([x, z])
         if (prevL && prevR) out.pos.push(...prevL, ...Lp, ...prevR, ...prevR, ...Lp, ...Rp)
@@ -193,13 +197,59 @@ function Roads({ R }: { R: Region }) {
   )
 }
 
+// ── junctions: each pad painted in its top road's colour; a roundabout is a ring around a planted island with a
+// kerb; a town square is pale paving. (Signs, paint and right of way are canon, asked of Magii 11-14: none yet.) ──
+const SQUARE_COL = '#cfc6b2', ISLAND_COL = '#5d7a43', KERB_COL = '#ddd6c6'
+function Junctions({ R }: { R: Region }) {
+  const parts = useMemo(() => {
+    const out: { key: string; g: THREE.BufferGeometry; col: string }[] = []
+    const ring = (j: RegionJunction, r0: number, r1: number, lift: number) => {
+      const seg = Math.max(24, Math.ceil(2 * Math.PI * r1 / 2)), rings = Math.max(1, Math.ceil((r1 - r0) / 2))
+      const pos: number[] = []
+      const P = (r: number, a: number) => { const x = j.x + Math.cos(a) * r, z = j.z + Math.sin(a) * r; return [x, R.heightAt(x, z) + lift, z] }
+      for (let i = 0; i < rings; i++) for (let k = 0; k < seg; k++) {
+        const ra = r0 + (r1 - r0) * i / rings, rb = r0 + (r1 - r0) * (i + 1) / rings
+        const a0 = 2 * Math.PI * k / seg, a1 = 2 * Math.PI * (k + 1) / seg
+        const A = P(ra, a0), B = P(rb, a0), C = P(rb, a1), D = P(ra, a1)
+        if (![A, B, C, D].every(v => Number.isFinite(v[1]))) continue
+        pos.push(...A, ...B, ...C, ...A, ...C, ...D)
+      }
+      const g = new THREE.BufferGeometry()
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+      g.computeVertexNormals()
+      return g
+    }
+    const roads = drivable(R)
+    for (const j of R.meta.network?.junctions ?? []) {
+      if (j.r <= 0) continue
+      const top = j.arms.map(a => roads.find(r => r.id === a.edge)).filter(Boolean).sort((a, b) => b!.width - a!.width)[0]
+      const col = j.kind === 'square' ? SQUARE_COL : ROAD_COL[top?.kind ?? 'road']
+      if (j.island) {
+        out.push({ key: `${j.id}-ring`, g: ring(j, j.island, j.r, 0.09), col })
+        out.push({ key: `${j.id}-kerb`, g: ring(j, j.island - 0.6, j.island, 0.12), col: KERB_COL })
+        out.push({ key: `${j.id}-island`, g: ring(j, 0, j.island - 0.6, 0.1), col: ISLAND_COL })
+      } else out.push({ key: j.id, g: ring(j, 0, j.r, 0.09), col })
+    }
+    return out
+  }, [R])
+  return (
+    <>
+      {parts.map(({ key, g, col }) => (
+        <mesh key={key} geometry={g}>
+          <meshLambertMaterial color={col} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
+        </mesh>
+      ))}
+    </>
+  )
+}
+
 // ── roadside posts every 25 m on both edges of every road (one row where trunks share; none in water) ──
 function Posts({ R }: { R: Region }) {
   const posts = useMemo(() => {
     const out: [number, number][] = []
     const taken = new Set<string>()
     const key = (x: number, z: number) => `${Math.round(x / 8)},${Math.round(z / 8)}`
-    for (const r of [...R.meta.roads].sort((a, b) => b.width - a.width)) {
+    for (const r of [...drivable(R)].sort((a, b) => b.width - a.width)) {
       let acc = 0
       for (let k = 0; k < r.pts.length - 1; k++) {
         const [ax, az] = r.pts[k], [bx, bz] = r.pts[k + 1]
@@ -214,7 +264,8 @@ function Posts({ R }: { R: Region }) {
             const px = x + nx * side * (r.width / 2 + 1.8), pz = z + nz * side * (r.width / 2 + 1.8)
             const y = R.heightAt(px, pz), kk = key(px, pz)
             if (!Number.isFinite(y) || y < 0.6 || taken.has(kk)) continue
-            if (nearestRoad(R, px, pz).d < r.width / 2 + 0.5) continue     // inside another road's surface
+            const under = nearestRoad(R, px, pz)
+            if (under.d < r.width / 2 + 0.5 || under.junction) continue     // inside another road's surface, or a junction
             taken.add(kk); out.push([px, pz])
           }
         }
@@ -460,7 +511,7 @@ function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) =
       for (const p of R.meta.places) { const d = Math.hypot(p.x - c.x, p.z - c.z); if (p.name && d < nd) { nd = d; near = p.name } }
       const nr = nearestRoad(R, c.x, c.z)
       onHud({ x: c.x, z: c.z, yaw: c.yaw, mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / tuneRef.current.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
-        place: near, road: nr.d < (nr.road?.width ?? 7) / 2 + 1 ? nr.road!.kind : null })
+        place: near, road: nr.junction && JUNCTION_LABEL[nr.junction.kind] ? `j:${nr.junction.kind}` : nr.d < (nr.road?.width ?? 7) / 2 + 1 ? nr.road!.kind : null })
     }
   })
 
@@ -487,7 +538,9 @@ const SUPPLY: Supply[] = [
 const TOWNS = ['ashfeld', 'millbrook', 'rune-hold', 'passage']
 const ROAD_FACTOR = 1.3
 
-const ROAD_LABEL: Record<string, string> = { paved: 'Paved road', road: 'Road', trail: 'Trail', pass: 'Mountain pass' }
+const JUNCTION_LABEL: Record<string, string> = { square: 'Town square', roundabout: 'Roundabout', cross: 'Crossroads', stop4: 'Four-way', tee: 'Junction', merge: 'Junction' }
+const ROAD_LABEL: Record<string, string> = { paved: 'Paved road', road: 'Road', trail: 'Trail', pass: 'Mountain pass',
+  ...Object.fromEntries(Object.entries(JUNCTION_LABEL).map(([k, v]) => [`j:${k}`, v])) }
 
 export default function ContinentRide() {
   const [R, setR] = useState<Region | null>(null)
@@ -574,6 +627,7 @@ export default function ContinentRide() {
           <FogRig />
           <Terrain R={R} focus={focus} />
           <Roads R={R} />
+          <Junctions R={R} />
           <Water R={R} />
           <Towns R={R} />
           <Posts R={R} />

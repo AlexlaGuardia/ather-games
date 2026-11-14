@@ -1,0 +1,6 @@
+{
+  "note": "Hand-picked junction kinds, at source px (1 px = 10 m). The nearest classified junction within 60 m takes the kind. Rules in road_network.py are the default; these are the engineer's call.",
+  "overrides": [
+    { "px": [613.5, 376.8], "kind": "roundabout", "why": "the trunk tee north of Rune Hold where the Millbrook road meets the trails: a roundabout to drive (Jin 11-14)" }
+  ]
+}

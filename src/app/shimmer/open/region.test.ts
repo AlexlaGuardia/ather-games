@@ -1,7 +1,7 @@
 // The exported corridor, driven by numbers before anyone looks at it. Run: npx tsx src/app/shimmer/open/region.test.ts
 
 import { readFileSync } from 'node:fs'
-import { makeRegion, nearestRoad, type RegionMeta } from './region'
+import { drivable, makeRegion, nearestRoad, routeBetween, type RegionMeta } from './region'
 import { createCourser, tickCourser, bodySpeeds } from './courser'
 
 let pass = 0
@@ -32,7 +32,7 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
 // and the ground must not fall away below the road.
 {
   let steep = 0, drops = 0, n = 0, worstDrop = 0
-  for (const r of meta.roads) {
+  for (const r of drivable(R)) {
     for (let k = 0; k < r.pts.length - 1; k++) {
       const [ax, az] = r.pts[k], [bx, bz] = r.pts[k + 1]
       const L = Math.hypot(bx - ax, bz - az); if (L < 1) continue
@@ -42,7 +42,8 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
         let prev = R.heightAt(mx + nxp * side * r.width / 2, mz + nzp * side * r.width / 2), bad = false
         for (let o = r.width / 2 + 2.5; o <= r.width / 2 + 30; o += 2.5) {
           const x = mx + nxp * side * o, z = mz + nzp * side * o
-          if (nearestRoad(R, x, z).d < 6) break                     // ran onto another road
+          const u = nearestRoad(R, x, z)
+          if (u.d < 6 || u.junction) break                          // ran onto another road or a junction
           const y = R.heightAt(x, z); if (!Number.isFinite(y)) break
           if (Math.abs(y - prev) / 2.5 > 0.6) bad = true
           prev = y
@@ -62,7 +63,7 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
 // ★ roads are drivable: along every road's centre line the grade stays near the 12% cap
 {
   let worst = 0, where = ''
-  for (const r of meta.roads) {
+  for (const r of drivable(R)) {
     for (let k = 0; k < r.pts.length - 1; k++) {
       const [ax, az] = r.pts[k], [bx, bz] = r.pts[k + 1]
       const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 2))
@@ -76,48 +77,79 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
   ok(worst < 0.2, `steepest road grade ${(worst * 100).toFixed(0)}% on ${where} (cap 12%, sampling slack to 20%)`)
 }
 
-// ★★ THE AUTOPILOT: a pure-pursuit driver follows the Ashfeld → Millbrook road. If the road is drivable, the Darter
-// gets there on it. If it stalls on a grade, flies off a lip, or the road leaves the ground, this fails.
-{
-  const road = meta.roads.find(r => r.from === 'ashfeld' && r.to === 'millbrook') ?? meta.roads.find(r => r.id.startsWith('ashfeld--millbrook'))
-  ok(!!road, 'no Ashfeld–Millbrook road in the export')
-  if (road) {
-    const pts = road.pts
-    const [sx, sz] = pts[1], [tx, tz] = pts[3]
-    const c = createCourser(sx, sz, Math.atan2(-(tx - sx), -(tz - sz)), R.heightAt)
-    const end = pts[pts.length - 1]
-    let k = 1, offRoad = 0, t = 0, maxOff = 0, airT = 0
-    const DT = 1 / 120
-    while (t < 240) {
-      // aim at the first centre-line point 14 m ahead
-      while (k < pts.length - 1 && Math.hypot(pts[k][0] - c.x, pts[k][1] - c.z) < 14) k++
-      const [ax, az] = pts[k]
-      const want = Math.atan2(-(ax - c.x), -(az - c.z))
-      let err = want - c.yaw
-      while (err > Math.PI) err -= 2 * Math.PI
-      while (err < -Math.PI) err += 2 * Math.PI
-      const v = bodySpeeds(c).fwd
-      const steer = Math.max(-1, Math.min(1, -err * 2.5))
-      // a careful driver: slow for the bend ahead (how far the road turns over the next ~40 m), brake when over
-      const k2 = Math.min(pts.length - 1, k + 4)
-      const turn = Math.abs(Math.atan2(pts[k2][0] - ax, pts[k2][1] - az) - Math.atan2(ax - c.x, az - c.z))
-      const target = Math.max(9, 24 - Math.min(Math.PI, turn) * 18)
-      const throttle = v < target - 1 ? 1 : v > target + 1 ? -0.6 : 0
-      tickCourser(c, { throttle, steer, handbrake: false, dt: DT }, R.heightAt)
-      t += DT
-      if (c.airborne) airT += DT
-      const off = nearestRoad(R, c.x, c.z).d
-      maxOff = Math.max(maxOff, off)
-      if (off > road.width) offRoad += DT
-      if (Math.hypot(end[0] - c.x, end[1] - c.z) < 15) break
+// ★ THE NETWORK (road_network.py): one graph, junctions classified by what meets, every town a square
+const net = meta.network
+ok(!!net, 'export has no road network')
+if (net) {
+  for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(net.junctions.some(j => j.kind === 'square' && j.place === id), `${id} has no town square`)
+  ok(net.junctions.some(j => j.kind === 'roundabout' && (j.island ?? 0) > 0), 'no roundabout in the corridor (junctions.json pins one north of Rune Hold)')
+  const ids = new Set(net.junctions.map(j => j.id))
+  ok(net.edges.every(e => ids.has(e.a) && ids.has(e.b)), 'an edge names a junction that does not exist')
+  // a pad is somewhere you stop, turn and pull away: near flat across its whole disc
+  let worstPad = 0, wp = ''
+  for (const j of net.junctions) {
+    if (j.r <= 0) continue
+    let lo = Infinity, hi = -Infinity
+    for (let a = 0; a < 24; a++) for (const f of [0.3, 0.6, 0.95]) {
+      const rr = j.r * f; if (j.island && rr < j.island + 0.5) continue
+      const y = R.heightAt(j.x + Math.cos(a / 24 * 2 * Math.PI) * rr, j.z + Math.sin(a / 24 * 2 * Math.PI) * rr)
+      if (Number.isFinite(y)) { lo = Math.min(lo, y); hi = Math.max(hi, y) }
     }
-    const arrived = Math.hypot(end[0] - c.x, end[1] - c.z) < 15
-    ok(arrived, `autopilot never reached Millbrook (stopped ${Math.hypot(end[0] - c.x, end[1] - c.z).toFixed(0)} m short after ${t.toFixed(0)} s)`)
-    ok(offRoad < 3, `autopilot spent ${offRoad.toFixed(1)} s off the road (max ${maxOff.toFixed(1)} m out)`)
-    ok(airT < 1.5, `the road threw the car into the air for ${airT.toFixed(2)} s in total`)
-    console.log(`  autopilot: Ashfeld → Millbrook in ${t.toFixed(1)} s, max ${maxOff.toFixed(1)} m off the centre line, ${airT.toFixed(2)} s airborne`)
+    const slope = (hi - lo) / (2 * j.r)
+    if (slope > worstPad) { worstPad = slope; wp = `${j.id} ${j.kind}` }
   }
+  ok(worstPad < 0.06, `junction pad ${wp} tilts ${(worstPad * 100).toFixed(1)}% across (pads hold 3%)`)
 }
+
+// ★★ THE AUTOPILOT: a pure-pursuit driver follows a ROUTE THROUGH THE NETWORK (routeBetween, around roundabouts).
+// If the road is drivable the Darter gets there on it. If it stalls on a grade, flies off a lip, leaves the road or
+// climbs a roundabout's island, this fails.
+function drive(from: string, to: string) {
+  const route = routeBetween(R, from, to)
+  ok(!!route, `no network route ${from} → ${to}`)
+  if (!route) return
+  const pts = route.pts
+  const [sx, sz] = pts[1], [tx, tz] = pts[3]
+  const c = createCourser(sx, sz, Math.atan2(-(tx - sx), -(tz - sz)), R.heightAt)
+  const end = pts[pts.length - 1]
+  let k = 1, offRoad = 0, t = 0, maxOff = 0, airT = 0, island = 0
+  const DT = 1 / 120
+  while (t < 300) {
+    // aim at the first centre-line point 12 m ahead
+    while (k < pts.length - 1 && Math.hypot(pts[k][0] - c.x, pts[k][1] - c.z) < 12) k++
+    const [ax, az] = pts[k]
+    const want = Math.atan2(-(ax - c.x), -(az - c.z))
+    let err = want - c.yaw
+    while (err > Math.PI) err -= 2 * Math.PI
+    while (err < -Math.PI) err += 2 * Math.PI
+    const v = bodySpeeds(c).fwd
+    const steer = Math.max(-1, Math.min(1, -err * 2.5))
+    // a careful driver: slow for the bend ahead (how far the road turns over the next ~40 m), brake when over
+    const k2 = Math.min(pts.length - 1, k + 8)
+    let turn = Math.abs(Math.atan2(pts[k2][0] - ax, pts[k2][1] - az) - Math.atan2(ax - c.x, az - c.z))
+    if (turn > Math.PI) turn = 2 * Math.PI - turn
+    const target = Math.max(8, 24 - turn * 18)
+    const throttle = v < target - 1 ? 1 : v > target + 1 ? -0.6 : 0
+    tickCourser(c, { throttle, steer, handbrake: false, dt: DT }, R.heightAt)
+    t += DT
+    if (c.airborne) airT += DT
+    const u = nearestRoad(R, c.x, c.z)
+    if (u.junction?.island && Math.hypot(c.x - u.junction.x, c.z - u.junction.z) < u.junction.island) island += DT
+    const off = u.junction ? 0 : u.d
+    maxOff = Math.max(maxOff, off)
+    if (off > (u.road?.width ?? 12) / 2 + 2) offRoad += DT
+    if (Math.hypot(end[0] - c.x, end[1] - c.z) < 15) break
+  }
+  const left = Math.hypot(end[0] - c.x, end[1] - c.z)
+  ok(left < 15, `autopilot ${from} → ${to} never arrived (stopped ${left.toFixed(0)} m short after ${t.toFixed(0)} s)`)
+  ok(offRoad < 3, `autopilot ${from} → ${to} spent ${offRoad.toFixed(1)} s off the road (max ${maxOff.toFixed(1)} m out)`)
+  ok(airT < 1.5, `${from} → ${to}: the road threw the car into the air for ${airT.toFixed(2)} s in total`)
+  ok(island === 0, `${from} → ${to}: drove over a roundabout island for ${island.toFixed(1)} s`)
+  console.log(`  autopilot: ${from} → ${to} (${(route.length / 1000).toFixed(2)} km by road) in ${t.toFixed(1)} s, max ${maxOff.toFixed(1)} m off, ${airT.toFixed(2)} s airborne`)
+}
+drive('ashfeld', 'millbrook')
+drive('millbrook', 'rune-hold')     // through the roundabout
+drive('rune-hold', 'ashfeld')
 
 console.log(`region: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  ✗', f)

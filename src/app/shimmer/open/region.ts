@@ -5,11 +5,27 @@
 // ★ As with land.ts: what you see is what you drive on. `heightAt` interpolates the SAME two triangles per cell the
 // mesh draws, split on the (i,j)→(i+1,j+1) diagonal.
 
-export interface RegionRoad { id: string; kind: 'paved' | 'road' | 'trail' | 'pass'; from: string; to: string; width: number; pts: [number, number, number][] }
+export type RoadKind = 'paved' | 'road' | 'trail' | 'pass'
+/** Anything drivable with a centre line: an Atlas route or a network edge. */
+export interface RoadLike { id: string; kind: RoadKind; width: number; pts: [number, number, number][] }
+/** An Atlas ROUTE, place to place. Routes overlap on shared trunks; drive the network, not these. */
+export interface RegionRoad extends RoadLike { from: string; to: string }
+/** A NETWORK edge (tools/worldmap/road_network.py): junction to junction, no overlaps. */
+export interface RegionEdge extends RoadLike { a: string; b: string }
+export type JunctionKind = 'square' | 'roundabout' | 'cross' | 'stop4' | 'tee' | 'merge' | 'end' | 'bend' | 'in-square'
+export interface RegionJunction {
+  id: string; kind: JunctionKind; x: number; z: number; y: number
+  r: number                 // pad radius (0 = no pad of its own)
+  island?: number           // roundabout: the planted centre's radius
+  place?: string            // square: the town it belongs to
+  override?: boolean        // kind pinned by hand (tools/worldmap/junctions.json)
+  arms: { edge: string; kind: RoadKind; ang: number }[]
+}
 export interface RegionPlace { id: string; name: string | null; kind: string; x: number; z: number; y: number }
 export interface RegionMeta {
   name: string; cell: number; nx: number; nz: number; sizeX: number; sizeZ: number; scale: number
   roads: RegionRoad[]; places: RegionPlace[]
+  network?: { edges: RegionEdge[]; junctions: RegionJunction[] }
 }
 export interface Region {
   meta: RegionMeta
@@ -47,10 +63,30 @@ export async function loadRegion(name: string): Promise<Region> {
   return makeRegion(meta, new Int16Array(bin))
 }
 
-/** The nearest point on any road's centre line: distance (m) and the road. For "on road?" and callouts. */
-export function nearestRoad(region: Region, x: number, z: number): { d: number; road: RegionRoad | null } {
-  let best = Infinity, road: RegionRoad | null = null
-  for (const r of region.meta.roads) {
+/** What you drive on: the network's edges when the export has one, else the raw routes (older exports). */
+export const drivable = (region: Region): RoadLike[] => region.meta.network?.edges ?? region.meta.roads
+
+/** The junction pad (r > 0) under x, z, if any. A roundabout's island is NOT on its pad. */
+export function junctionAt(region: Region, x: number, z: number): RegionJunction | null {
+  for (const j of region.meta.network?.junctions ?? []) {
+    if (j.r <= 0) continue
+    const d = Math.hypot(x - j.x, z - j.z)
+    if (d <= j.r && !(j.island && d < j.island)) return j
+  }
+  return null
+}
+
+/** The nearest point on any road's centre line: distance (m) and the road. For "on road?" and callouts.
+ *  On a junction pad d = 0 (the pad is road); on a roundabout's island you are off it. */
+export function nearestRoad(region: Region, x: number, z: number): { d: number; road: RoadLike | null; junction: RegionJunction | null } {
+  const roads = drivable(region)
+  for (const j of region.meta.network?.junctions ?? []) {
+    if (!j.island) continue
+    const d = Math.hypot(x - j.x, z - j.z)
+    if (d < j.island) return { d: j.island - d + 7, road: null, junction: j }
+  }
+  let best = Infinity, road: RoadLike | null = null
+  for (const r of roads) {
     const p = r.pts
     for (let k = 0; k < p.length - 1; k++) {
       const ax = p[k][0], az = p[k][1], bx = p[k + 1][0], bz = p[k + 1][1]
@@ -60,5 +96,74 @@ export function nearestRoad(region: Region, x: number, z: number): { d: number; 
       if (d < best) { best = d; road = r }
     }
   }
-  return { d: best, road }
+  const j = junctionAt(region, x, z)
+  if (j) {
+    const top = j.arms.map(a => roads.find(r => r.id === a.edge)).filter((r): r is RoadLike => !!r).sort((a, b) => b.width - a.width)[0]
+    return { d: 0, road: top ?? road, junction: j }
+  }
+  return { d: best, road, junction: null }
+}
+
+/** Which way the ring runs. ⚠ Which side of the road Athernyx drives on is CANON (asked of Magii 11-14); until it is
+ *  ruled, the ring runs as right-hand traffic does: counter-clockwise seen from above. In x-east / z-south that is
+ *  DEcreasing atan2(z, x). */
+export const RING_DIR = -1
+
+/** A drivable line from one place to another along the network (Dijkstra by length), going AROUND roundabouts.
+ *  Starts and ends at the junction nearest each place (a town's square). null if not connected. */
+export function routeBetween(region: Region, fromPlace: string, toPlace: string): { pts: [number, number][]; length: number } | null {
+  const net = region.meta.network
+  if (!net) return null
+  const J = new Map(net.junctions.map(j => [j.id, j]))
+  const nearJ = (id: string) => {
+    const p = region.meta.places.find(q => q.id === id); if (!p) return null
+    const sq = net.junctions.find(j => j.place === id)
+    if (sq) return sq.id
+    let best: string | null = null, bd = Infinity
+    for (const j of net.junctions) { const d = Math.hypot(j.x - p.x, j.z - p.z); if (d < bd && net.edges.some(e => e.a === j.id || e.b === j.id)) { bd = d; best = j.id } }
+    return best
+  }
+  const a = nearJ(fromPlace), b = nearJ(toPlace)
+  if (!a || !b) return null
+  const len = (e: RegionEdge) => { let L = 0; for (let k = 1; k < e.pts.length; k++) L += Math.hypot(e.pts[k][0] - e.pts[k - 1][0], e.pts[k][1] - e.pts[k - 1][1]); return L }
+  const dist = new Map<string, number>([[a, 0]]), prev = new Map<string, { e: RegionEdge; from: string }>()
+  const open = new Set([a])
+  while (open.size) {
+    let u = '', du = Infinity
+    for (const q of open) { const d = dist.get(q)!; if (d < du) { du = d; u = q } }
+    open.delete(u)
+    if (u === b) break
+    for (const e of net.edges) {
+      if (e.a !== u && e.b !== u) continue
+      const v = e.a === u ? e.b : e.a, nd = du + len(e)
+      if (nd < (dist.get(v) ?? Infinity)) { dist.set(v, nd); prev.set(v, { e, from: u }); open.add(v) }
+    }
+  }
+  if (!dist.has(b)) return null
+  const chain: { e: RegionEdge; fwd: boolean }[] = []
+  for (let v = b; v !== a;) { const p = prev.get(v)!; chain.unshift({ e: p.e, fwd: p.e.a === p.from }); v = p.from }
+  // stitch, then replace each pass THROUGH a roundabout with an arc around its ring
+  let pts: [number, number][] = []
+  for (const { e, fwd } of chain) {
+    const q = (fwd ? e.pts : [...e.pts].reverse()).map(p => [p[0], p[1]] as [number, number])
+    pts = pts.length ? pts.concat(q.slice(1)) : q
+  }
+  for (const j of net.junctions) {
+    if (!j.island) continue
+    const rr = (j.island + j.r) / 2
+    const inside = pts.map(p => Math.hypot(p[0] - j.x, p[1] - j.z) < j.r)
+    const i0 = inside.indexOf(true), i1 = inside.lastIndexOf(true)
+    if (i0 <= 0 || i1 >= pts.length - 1) continue
+    const ang = (p: [number, number]) => Math.atan2(p[1] - j.z, p[0] - j.x)
+    const a0 = ang(pts[i0 - 1]), a1 = ang(pts[i1 + 1])
+    let sweep = a1 - a0
+    if (RING_DIR < 0) { while (sweep >= 0) sweep -= 2 * Math.PI } else { while (sweep <= 0) sweep += 2 * Math.PI }
+    const n = Math.max(4, Math.ceil(Math.abs(sweep) * rr / 2.5))
+    const arc: [number, number][] = []
+    for (let k = 0; k <= n; k++) { const t = a0 + sweep * k / n; arc.push([j.x + Math.cos(t) * rr, j.z + Math.sin(t) * rr]) }
+    pts = [...pts.slice(0, i0), ...arc, ...pts.slice(i1 + 1)]
+  }
+  let L = 0
+  for (let k = 1; k < pts.length; k++) L += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1])
+  return { pts, length: L }
 }
