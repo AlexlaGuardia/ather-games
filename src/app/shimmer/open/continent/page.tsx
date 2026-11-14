@@ -168,7 +168,8 @@ function Roads({ R }: { R: Region }) {
     // junction pads paint themselves (Junctions): stop each ribbon at the pad's edge, and never across an island
     const pads = (R.meta.network?.junctions ?? []).filter(j => j.r > 0)
     const onPad = (x: number, z: number) => pads.some(j => Math.hypot(x - j.x, z - j.z) < j.r - 1.5)
-    const surf = (x: number, z: number) => { const t = R.tunnelAt(x, z); return t && t.cover > 0.3 ? t.y : R.groundAt(x, z) }
+    // only the bore's own road takes its floor; the pass crossing over the bore's roof rides the hill
+    const surf = (x: number, z: number, id: string) => { const t = R.tunnelAt(x, z); return t && t.cover > 0.3 && t.tunnel.edge === id ? t.y : R.groundAt(x, z) }
     const widest = [...drivable(R)].sort((a, b) => b.width - a.width)
     for (const r of widest) {
       const out = byKind.get(r.kind) ?? { pos: [] }; byKind.set(r.kind, out)
@@ -191,7 +192,7 @@ function Roads({ R }: { R: Region }) {
         const lx = x + nx * hw, lz = z + nz * hw, rx = x - nx * hw, rz = z - nz * hw
         // the highest surface: on a bridge that is the deck, not the river under it
         // ...and in a bore, its floor, not the mountain over it
-        const Lp = [lx, surf(lx, lz) + 0.07, lz], Rp = [rx, surf(rx, rz) + 0.07, rz]
+        const Lp = [lx, surf(lx, lz, r.id) + 0.07, lz], Rp = [rx, surf(rx, rz, r.id) + 0.07, rz]
         // off the region's edge there is no ground (−∞): never let such a point into a quad, or the whole mesh's
         // bounds go NaN and three.js culls every road of that kind
         if (!Number.isFinite(Lp[1]) || !Number.isFinite(Rp[1])) { prevL = prevR = null; continue }
@@ -801,7 +802,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl }: { R: Region; cave: Cave
     acc.current = Math.min(acc.current + frameDt, 0.1)
     let c = car.current
     // the surface, read off the map: paved Citadel stone grips best, the frontier's packed dirt less, grass least
-    const under = nearestRoad(R, c.x, c.z)
+    const under = nearestRoad(R, c.x, c.z, c.y)
     const surface = under.road && under.d < under.road.width / 2 + 1 ? SURFACE[under.road.kind] : SURFACE.off
     while (acc.current >= STEP) {
       acc.current -= STEP
@@ -918,9 +919,9 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl }: { R: Region; cave: Cave
       hudT.current = 0.12
       let near: string | null = null, nd = 260
       // the HUD reads where YOU are: the walker on foot, the courser when driving (v1 kept reading the parked car)
-      const me = onFoot && loco.current ? { x: loco.current.px, z: loco.current.pz } : { x: c.x, z: c.z }
+      const me = onFoot && loco.current ? { x: loco.current.px, y: loco.current.py, z: loco.current.pz } : { x: c.x, y: c.y, z: c.z }
       for (const p of R.meta.places) { const d = Math.hypot(p.x - me.x, p.z - me.z); if (p.name && d < nd) { nd = d; near = p.name } }
-      const nr = nearestRoad(R, me.x, me.z)
+      const nr = nearestRoad(R, me.x, me.z, me.y)
       // a carving in reach reads out: the waystone's two faces, or the fingerpost's arms
       let sign: string | null = null
       for (const w of signs.waystones) if (Math.hypot(w.x - me.x, w.z - me.z) < 18) sign = 'Waystone · ' + w.faces.map(f => `${f.name} ${f.km} km`).join(' · ')

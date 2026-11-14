@@ -82,7 +82,12 @@ net_places = [{'id': p['id'], 'name': p['name'], 'kind': p['kind'], 'x': toW(p['
               for p in atlas['places']]
 JF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'junctions.json')
 overrides = [{'kind': o['kind'], 'x': toW(*o['px'])[0], 'z': toW(*o['px'])[1]} for o in json.load(open(JF))['overrides']] if os.path.exists(JF) else []
-net = road_network.build(routes, (-sizeX / 2, -sizeZ / 2, sizeX / 2, sizeZ / 2), net_places, overrides) if routes else {'edges': [], 'junctions': []}
+# PASS ROADS over the bores (passes.json, propose_pass.py; canon Magii f34f33b): on their own grade, so the pass crosses
+# the tunnel's roof in plan without a junction, and joins the network only at its two ends.
+PF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'passes.json')
+over = [{'id': r['id'], 'kind': r['kind'], 'xz': arr} for r in (json.load(open(PF))['passes'] if os.path.exists(PF) else [])
+        for arr in dense_runs(r)]
+net = road_network.build(routes, (-sizeX / 2, -sizeZ / 2, sizeX / 2, sizeZ / 2), net_places, overrides, over) if routes else {'edges': [], 'junctions': []}
 from collections import Counter
 print('network:', len(net['edges']), 'edges,', dict(Counter(j['kind'] for j in net['junctions'])))
 # ── BRIDGES: where a paved road or a road crosses water, the river stays a river and a deck carries the road over it
@@ -128,7 +133,7 @@ TF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tunnels.json')
 tunnel_marks = [(o.get('name'), toW(*o['px'])) for o in json.load(open(TF))['tunnels']] if os.path.exists(TF) else []
 tunnels = []                                # (edge index, p0, p1, a, b, floor line over a..b)
 for tname, (mx_, mz_) in tunnel_marks:
-    cand = [(float(np.hypot(e['xz'][:, 0] - mx_, e['xz'][:, 1] - mz_).min()), ei) for ei, e in enumerate(net['edges'])]
+    cand = [(float(np.hypot(e['xz'][:, 0] - mx_, e['xz'][:, 1] - mz_).min()), ei) for ei, e in enumerate(net['edges']) if not e.get('over')]
     if not cand or min(cand)[0] > 150: continue
     ei = min(cand)[1]; e = net['edges'][ei]; P = e['xz']; n = len(P)
     hs = sample(P[:, 0], P[:, 1])
@@ -164,7 +169,7 @@ for ei, p0, p1, a, b, line in tunnels:
     dB0, _ = cKDTree(bore_pts).query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=hw + 40)
     hit = np.isfinite(dd) & (dd < dB0.reshape(h.shape))          # never lower the hill over the bore itself
     h = np.where(hit, np.minimum(h, yl[np.minimum(kk, len(yl) - 1)]), h)
-cen, cen_w = [], []
+cen, cen_w, cen_g = [], [], []
 for ei, e in enumerate(net['edges']):
     keep = np.ones(len(e['xz']), bool)
     for (ej, i0, i1, kind) in spans:
@@ -174,8 +179,9 @@ for ei, e in enumerate(net['edges']):
     for (ej, p0, p1, *_r) in tunnels:
         if ej == ei: keep[p0 + 1: p1] = False                          # a bore: no bed, the mountain stays
     cen += e['xz'][keep].tolist(); cen_w += [WIDTH[e['kind']]] * int(keep.sum())
+    cen_g += [MAX_GRADE['pass'] if e['kind'] == 'pass' else 0.12] * int(keep.sum())   # the pass climbs; the rest hold 12%
 if cen:
-    tree = cKDTree(np.array(cen)); Wc = np.array(cen_w)
+    tree = cKDTree(np.array(cen)); Wc = np.array(cen_w); Gc = np.array(cen_g)
     d, idx = tree.query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=14 / 2 + 4.0 + 220)   # wide: a deep cut's shoulder reaches far
     d = d.reshape(h.shape); idx = idx.reshape(h.shape)
     d_keep = d.copy()
@@ -214,7 +220,7 @@ if cen:
     # propagation to a fixed point), averaged. Each envelope changes by at most g per metre between bed neighbours, so
     # any blend of them does too. (The first version clamped locally, one cell per pass, and stopped long before
     # Ashfeld's 70 m drop had propagated: 59% on a road meant to cap at 12%.)
-    G = np.where(pad, 0.03, 0.12)       # a junction pad is near flat: you stop, turn and pull away on it
+    G = np.where(pad, 0.03, np.where(np.isfinite(d_keep), Gc[np.minimum(idx, len(Gc) - 1)], 0.12))   # a junction pad is near flat: you stop, turn and pull away on it
     nbrs = [(0, 1, CELL), (0, -1, CELL), (1, 0, CELL), (-1, 0, CELL),
             (1, 1, CELL * 1.4142), (1, -1, CELL * 1.4142), (-1, 1, CELL * 1.4142), (-1, -1, CELL * 1.4142)]
     BIG = 1e6
@@ -288,6 +294,9 @@ for ti, (ei, p0, p1, a, b, line) in enumerate(tunnels):
     dC = dC.reshape(h.shape); kC = np.minimum(kC.reshape(h.shape), int(cut.sum()) - 1)
     dR = cKDTree(Q[roofk]).query(pts2, distance_upper_bound=hw + SHOULDER + 10)[0].reshape(h.shape) if roofk.any() else np.full(h.shape, np.inf)
     mine = np.isfinite(dC) & (dC < dR)
+    # a pass road (an over-route) nearer than this line keeps its own graded bed: the shoulder never cuts across it
+    ovp = [q['xz'] for q in net['edges'] if q.get('over')]
+    if ovp: mine &= dC < cKDTree(np.concatenate(ovp)).query(pts2, distance_upper_bound=hw + SHOULDER)[0].reshape(h.shape)
     yC = lq[cut][kC]
     tt = np.clip((dC - hw) / SHOULDER, 0, 1); wC = np.where(mine, 1 - tt * tt * (3 - 2 * tt), 0)
     # the carriageway takes the line exactly; its shoulder only ever CUTS toward it (never fills a valley up)
@@ -349,7 +358,8 @@ for ei_, e in enumerate(net['edges']):
         for k, i in enumerate(ix):
             if p0 <= i <= p1: ys[k] = ty[i - p0]
     net_out['edges'].append({'id': e['id'], 'kind': e['kind'], 'width': WIDTH[e['kind']], 'a': e['a'], 'b': e['b'],
-                             'pts': [[round(float(x), 1), round(float(z), 1), round(float(y), 2)] for (x, z), y in zip(P, ys)]})
+                             'pts': [[round(float(x), 1), round(float(z), 1), round(float(y), 2)] for (x, z), y in zip(P, ys)],
+                             **({'over': True} if e.get('over') else {})})
 for j in net['junctions']:
     jo = {k: v for k, v in j.items() if k != 'arms'}
     jo['arms'] = [{'edge': f"e{a['edge']}", 'kind': a['kind'], 'ang': round(a['ang'], 3)} for a in j['arms']]
@@ -387,11 +397,11 @@ def on_ferry(x, z):
         L = math.sqrt(L2)
         if t * L > 1 and (1 - t) * L > 1 and math.hypot(ax + (bx - ax) * t - x, az + (bz - az) * t - z) < 10: return True
     return False
-def drive_y(x, z):
+def drive_y(x, z, over=False):
     if on_ferry(x, z): return None         # the crossing between two landings is the ferry's, not a road's
     if any(math.hypot(x - f[k][0], z - f[k][1]) < 9 for f in net_out['ferries'] for k in ('a', 'b')): return None   # a quay
     """What the car rides at x, z: the deck if one is there, the ground otherwise; None over open water."""
-    for t in net_out['tunnels']:
+    for t in ([] if over else net_out['tunnels']):          # a pass over the bore rides the hill, not the floor
         tp = np.array(t['pts'])
         k = int(np.argmin(np.hypot(tp[:, 0] - x, tp[:, 1] - z)))
         if math.hypot(tp[k, 0] - x, tp[k, 1] - z) < 1.5: return float(tp[k, 2])
@@ -402,7 +412,7 @@ def drive_y(x, z):
     return None if y < 0.5 else y          # wet (< 0.5) is a crossing's water: a ferry, or the river under a deck
 for r in net_out['edges']:
     P = [q for q in r['pts'] if all(math.hypot(q[0] - jx, q[1] - jz) > ri for jx, jz, ri in isl)]   # nobody drives an island
-    ys = [drive_y(q[0], q[1]) for q in P]
+    ys = [drive_y(q[0], q[1], r.get('over', False)) for q in P]
     g = np.array([abs(ys[k + 1] - ys[k]) / max(math.hypot(P[k + 1][0] - P[k][0], P[k + 1][1] - P[k][1]), 1e-3)
                   for k in range(len(P) - 1) if ys[k] is not None and ys[k + 1] is not None])   # a ferry's water is not a grade
     if g.size and g.max() > worst[0]: worst = (float(g.max()), r['id'])

@@ -11,7 +11,7 @@ export interface RoadLike { id: string; kind: RoadKind; width: number; pts: [num
 /** An Atlas ROUTE, place to place. Routes overlap on shared trunks; drive the network, not these. */
 export interface RegionRoad extends RoadLike { from: string; to: string }
 /** A NETWORK edge (tools/worldmap/road_network.py): junction to junction, no overlaps. */
-export interface RegionEdge extends RoadLike { a: string; b: string }
+export interface RegionEdge extends RoadLike { a: string; b: string; over?: boolean }   // over: its own grade (the pass over a bore)
 export type JunctionKind = 'square' | 'roundabout' | 'cross' | 'stop4' | 'tee' | 'merge' | 'end' | 'bend' | 'in-square'
 /** A Shellback FERRY: where a crossing is too long for a deck (or a trail meets marked water) the road stops at a
  *  landing on each bank and a ferry carries you over. */
@@ -280,7 +280,9 @@ function segIndex(region: Region): SegIndex {
 /** The nearest point on any road's centre line: distance (m) and the road. For "on road?" and callouts.
  *  On a junction pad d = 0 (the pad is road); on a roundabout's island you are off it. Searches out to ~400 m;
  *  farther than that from any road answers d = Infinity, road = null. */
-export function nearestRoad(region: Region, x: number, z: number): { d: number; road: RoadLike | null; junction: RegionJunction | null } {
+/** y (optional): the asker's height. Where roads stack in plan (the pass over the Passage's bore) only the layer within
+ *  6 m of it counts, so the tunnel never reads as the mountain pass and the pass never grips like the bore. */
+export function nearestRoad(region: Region, x: number, z: number, y?: number): { d: number; road: RoadLike | null; junction: RegionJunction | null } {
   const roads = drivable(region)
   for (const j of region.meta.network?.junctions ?? []) {
     if (!j.island) continue
@@ -302,6 +304,7 @@ export function nearestRoad(region: Region, x: number, z: number): { d: number; 
         const ax = p[k][0], az = p[k][1], bx = p[k + 1][0], bz = p[k + 1][1]
         const abx = bx - ax, abz = bz - az, L = abx * abx + abz * abz || 1
         const t = Math.max(0, Math.min(1, ((x - ax) * abx + (z - az) * abz) / L))
+        if (y !== undefined && Math.abs(p[k][2] + (p[k + 1][2] - p[k][2]) * t - y) > 6) continue
         const d = Math.hypot(ax + abx * t - x, az + abz * t - z)
         if (d < best) { best = d; road = r }
       }
@@ -579,10 +582,12 @@ export function guardrails(region: Region): Guardrail[] {
         const at = (o: number) => region.heightAt(x + nx * o, z + nz * o)
         // walk out 30 m: a DOWNHILL step past the climb limit, or a fall of 7 m overall, wants a rail (a cut's wall
         // going UP does not: you stop against it, you do not fall off it)
+        // the WILD PASS (canon: unpaved, the risky way over) has no parapet, only a rail where it hangs over a real drop
+        const wild = e.kind === 'pass', DROP = wild ? 15 : 7
         let falls = false, prev = y
         if (Number.isFinite(y) && y > 0.6) for (let o = hw + 2.5; o <= hw + 30; o += 2.5) {
           const yy = at(o); if (!Number.isFinite(yy)) break
-          if ((prev - yy) / 2.5 > 0.6 || y - yy > 7) { falls = true; break }
+          if ((!wild && (prev - yy) / 2.5 > 0.6) || y - yy > DROP) { falls = true; break }
           prev = yy
         }
         if (falls && !open) run.push([x + nx * (hw + 0.7), z + nz * (hw + 0.7), region.groundAt(x + nx * (hw + 0.7), z + nz * (hw + 0.7))])

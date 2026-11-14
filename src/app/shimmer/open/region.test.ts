@@ -38,16 +38,22 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
 {
   let steep = 0, drops = 0, n = 0, worstDrop = 0
   const rails = guardrails(R).flatMap(g => g.pts)
+  let wildN = 0, wildSteep = 0
   for (const r of drivable(R)) {
+    // the WILD PASS is exempt by design (Magii f34f33b: "bore = safe, pass = fast-and-pretty"; geography.md: "risk the
+    // pass"): a mountain road cut into a 40-58% flank has a cliff on one side. Counted apart and printed, not hidden.
+    const wild = r.kind === 'pass'
     for (let k = 0; k < r.pts.length - 1; k++) {
       const [ax, az] = r.pts[k], [bx, bz] = r.pts[k + 1]
       const L = Math.hypot(bx - ax, bz - az); if (L < 1) continue
       const nxp = -(bz - az) / L, nzp = (bx - ax) / L, mx = (ax + bx) / 2, mz = (az + bz) / 2
       if (R.deckAt(mx, mz)) continue                               // on a bridge: the parapets are the bank
+      const bore = R.tunnelAt(mx, mz)
+      if (!wild && bore && bore.tunnel.edge === r.id && bore.cover >= TUNNEL_H) continue   // in a bore: its walls are the bank (the hill above is not)
       const y0 = R.heightAt(mx, mz); if (y0 < 1) continue        // a ford over water: no bank to recover onto
       for (const side of [-1, 1]) {
         const rx = mx + nxp * side * (r.width / 2 + 0.7), rz = mz + nzp * side * (r.width / 2 + 0.7)
-        if (rails.some(q => Math.hypot(q[0] - rx, q[1] - rz) < 4)) { n++; continue }   // a guardrail holds this side
+        if (rails.some(q => Math.hypot(q[0] - rx, q[1] - rz) < 4)) { if (wild) wildN++; else n++; continue }   // a guardrail holds this side
         let prev = R.heightAt(mx + nxp * side * r.width / 2, mz + nzp * side * r.width / 2), bad = false
         for (let o = r.width / 2 + 2.5; o <= r.width / 2 + 30; o += 2.5) {
           const x = mx + nxp * side * o, z = mz + nzp * side * o
@@ -58,6 +64,7 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
           prev = y
         }
         const yOut = R.heightAt(mx + nxp * side * (r.width / 2 + 30), mz + nzp * side * (r.width / 2 + 30))
+        if (wild) { wildN++; if (bad) wildSteep++; continue }
         if (Number.isFinite(yOut)) { const drop = y0 - yOut; worstDrop = Math.max(worstDrop, drop); if (drop > 6) drops++ }
         if (bad) steep++
         n++
@@ -66,13 +73,16 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
   }
   ok(steep / n < 0.03, `${(100 * steep / n).toFixed(1)}% of road banks are steeper than the climb limit within 30 m`)
   ok(drops / n < 0.03, `${(100 * drops / n).toFixed(1)}% of road edges fall >6 m within 30 m (worst ${worstDrop.toFixed(1)} m): the road is a dyke`)
-  console.log(`  banks: ${n} probes, ${(100 * steep / n).toFixed(1)}% steep, ${(100 * drops / n).toFixed(1)}% fall >6 m (worst ${worstDrop.toFixed(1)} m)`)
+  console.log(`  banks: ${n} probes, ${(100 * steep / n).toFixed(1)}% steep, ${(100 * drops / n).toFixed(1)}% fall >6 m (worst ${worstDrop.toFixed(1)} m)` +
+    (wildN ? ` · wild pass apart: ${wildN} probes, ${(100 * wildSteep / wildN).toFixed(0)}% steep` : ''))
 }
 
 // ★ roads are drivable: along every road's centre line the grade stays near the 12% cap
 {
-  let worst = 0, where = ''
+  let worst = 0, where = '', worstPass = 0
   for (const r of drivable(R)) {
+    const over = 'over' in r && !!r.over          // the pass over the bore rides the hill, never the bore's floor
+    const dy = (x: number, z: number) => (over ? R.groundAt(x, z) : drv(x, z))
     for (let k = 0; k < r.pts.length - 1; k++) {
       const [ax, az] = r.pts[k], [bx, bz] = r.pts[k + 1]
       const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 2))
@@ -83,12 +93,14 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
         if (ferryLanding(R, x0, z0, 9) || ferryLanding(R, x1, z1, 9)) continue  // the quay: a stop-and-board pad at the water's edge, not a road grade
         const inIsland = (x: number, z: number) => (meta.network?.junctions ?? []).some(j => j.island && Math.hypot(x - j.x, z - j.z) < j.island + 1)
         if (inIsland(x0, z0) || inIsland(x1, z1)) continue                    // an edge runs to a roundabout's centre; nobody drives the island
-        const g = Math.abs(drv(x1, z1) - drv(x0, z0)) / Math.hypot(x1 - x0, z1 - z0)
-        if (g > worst) { worst = g; where = r.id }
+        const g = Math.abs(dy(x1, z1) - dy(x0, z0)) / Math.hypot(x1 - x0, z1 - z0)
+        if (r.kind === 'pass') worstPass = Math.max(worstPass, g)
+        else if (g > worst) { worst = g; where = r.id }
       }
     }
   }
   ok(worst < 0.2, `steepest road grade ${(worst * 100).toFixed(0)}% on ${where} (cap 12%, sampling slack to 20%)`)
+  ok(worstPass < 0.26, `steepest mountain-pass grade ${(worstPass * 100).toFixed(0)}% (cap 18%, sampling slack to 26%)`)
 }
 
 // ★ the road index answers exactly what a scan of every segment answers (out to its ~400 m reach)
@@ -227,6 +239,40 @@ for (const t of meta.network?.tunnels ?? []) {
       if (th && th.cover > TUNNEL_H && c.y > th.y + 2) high++
     }
     ok(air < 0.05 && high === 0 && out, `tunnel ${t.id} dir ${dir} lane ${off}: ${air.toFixed(2)} s airborne, ${high} ticks up in the mountain${out ? '' : ', NEVER CAME OUT'}`)
+  }
+}
+
+// ★★ THE PASS OVER THE TOP (Magii f34f33b: "a pass road over the top, wild and unpaved; bore = safe, pass =
+// fast-and-pretty"). It is shorter than the long way, climbs to the crest and crosses the bore's roof in plan with no
+// junction; a courser driving it both ways at a mountain pace stays on it, never drops into the tunnel under it, and
+// comes out the far end.
+for (const e of (meta.network?.edges ?? []).filter(q => q.over)) {
+  ok(e.kind === 'pass', `${e.id}: an over-route that is not a pass`)
+  const top = Math.max(...e.pts.map(q => q[2]))
+  const T = (meta.network?.tunnels ?? [])[0]
+  ok(!!T && top > Math.max(...T.pts.map(q => q[2])) + 40, `${e.id}: the pass tops out at ${top.toFixed(0)} m, not over the spine`)
+  const crosses = e.pts.some(([x, z]) => { const h = R.tunnelAt(x, z); return !!h && h.cover > TUNNEL_H })
+  ok(crosses, `${e.id}: never crosses over the bore (it should take the short way, over the top)`)
+  for (const dir of [1, -1]) {
+    const p = dir > 0 ? e.pts : [...e.pts].reverse()
+    const [ax, az] = p[2], [bx, bz] = p[3], L = Math.hypot(bx - ax, bz - az)
+    const c = createCourser(ax, az, Math.atan2(-(bx - ax) / L, -(bz - az) / L), (x, z) => R.groundAt(x, z))
+    const ground = (x: number, z: number) => R.groundAt(x, z, c.y)
+    let air = 0, fell = 0, off = 0, out = false, bk = 2
+    for (let tt = 0; tt < 160; tt += 1 / 120) {
+      let bd = Infinity
+      for (let k = Math.max(0, bk - 10); k < Math.min(p.length, bk + 30); k++) { const d = Math.hypot(p[k][0] - c.x, p[k][1] - c.z); if (d < bd) { bd = d; bk = k } }
+      if (bk >= p.length - 3) { out = true; break }
+      const q = p[Math.min(p.length - 1, bk + 3)]
+      let err = Math.atan2(-(q[0] - c.x), -(q[1] - c.z)) - c.yaw; while (err > Math.PI) err -= 2 * Math.PI; while (err < -Math.PI) err += 2 * Math.PI
+      tickCourser(c, { throttle: bodySpeeds(c).fwd < 12 ? 1 : 0, steer: Math.max(-1, Math.min(1, -err * 2.5)), handbrake: false, dt: 1 / 120 }, ground)
+      tunnelWall(R, c) || roadRail(R, c)
+      if (c.airborne) air += 1 / 120
+      if (Math.abs(c.y - p[bk][2]) > 4) fell++
+      if (bd > e.width / 2 + 2) off++
+    }
+    ok(out && fell === 0 && air < 0.5, `pass ${e.id} dir ${dir}: ${out ? 'over' : 'NEVER MADE IT OVER'}, ${fell} ticks off the road's height, ${air.toFixed(2)} s airborne`)
+    ok(off < 120, `pass ${e.id} dir ${dir}: ${off} ticks off the carriageway`)
   }
 }
 

@@ -62,9 +62,11 @@ def thin(img):
 N8 = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
 
 
-def build(routes, bounds, places=(), overrides=()):
+def build(routes, bounds, places=(), overrides=(), over=()):
     """routes: [{'id','kind','xz': (n,2) array of world metres, densely sampled}]; bounds: (xmin, zmin, xmax, zmax);
-    places: [{'id','name','kind','x','z'}]. Returns {'edges': [...], 'junctions': [...]} in world metres (no heights)."""
+    places: [{'id','name','kind','x','z'}]; over: routes at their OWN GRADE (a pass climbing over a bore): never stamped,
+    so they cross other roads without a junction, and joined to the graph only at the nodes nearest their two ends.
+    Returns {'edges': [...], 'junctions': [...]} in world metres (no heights)."""
     xmin, zmin, xmax, zmax = bounds
     W, H = int(math.ceil((xmax - xmin) / PX)) + 1, int(math.ceil((zmax - zmin) / PX)) + 1
     toPx = lambda x, z: ((z - zmin) / PX, (x - xmin) / PX)
@@ -261,6 +263,20 @@ def build(routes, bounds, places=(), overrides=()):
                                              {'a': nid, 'b': e['b'], 'xz': P[i:], 'rank': e['rank']}]
         squares[nid] = p
 
+    # ── OVER-ROUTES (the pass over the Passage, 11-14): a road on its own grade, so where it crosses another road in plan
+    # (over a bore's roof) nothing joins. It meets the graph only at its two ends, at the nearest live node. ──
+    live = {e['a'] for e in edges} | {e['b'] for e in edges}
+    for r in over:
+        P = np.asarray(r['xz'], float)
+        ends = []
+        for q in (P[0], P[-1]):
+            d, nid = min((math.hypot(nodes[k]['x'] - q[0], nodes[k]['z'] - q[1]), k) for k in live)
+            ends.append(nid if d < 40 else None)
+        if None in ends or ends[0] == ends[1]:
+            print(f"over-route {r['id']}: an end is not within 40 m of a junction, skipped"); continue
+        P = np.vstack([[[nodes[ends[0]]['x'], nodes[ends[0]]['z']]], P[1:-1], [[nodes[ends[1]]['x'], nodes[ends[1]]['z']]]])
+        edges.append({'a': ends[0], 'b': ends[1], 'xz': resample(P), 'rank': RANK.get(r['kind'], 2), 'over': True})
+
     # ── classify junctions ──
     degc = np.zeros(len(nodes), int)
     for e in edges: degc[e['a']] += 1; degc[e['b']] += 1
@@ -304,5 +320,6 @@ def build(routes, bounds, places=(), overrides=()):
         junctions.append(j)
     out_edges = []
     for k, e in enumerate(edges):
-        out_edges.append({'id': f'e{k}', 'kind': KIND[e['rank']], 'a': f'j{remap[e["a"]]}', 'b': f'j{remap[e["b"]]}', 'xz': e['xz']})
+        out_edges.append({'id': f'e{k}', 'kind': KIND[e['rank']], 'a': f'j{remap[e["a"]]}', 'b': f'j{remap[e["b"]]}', 'xz': e['xz'],
+                          **({'over': True} if e.get('over') else {})})
     return {'edges': out_edges, 'junctions': junctions}
