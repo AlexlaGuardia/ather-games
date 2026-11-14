@@ -1,14 +1,16 @@
 // The exported corridor, driven by numbers before anyone looks at it. Run: npx tsx src/app/shimmer/open/region.test.ts
 
 import { readFileSync } from 'node:fs'
-import { bridgeRail, drivable, makeRegion, nearestRoad, roadside, routeBetween, type RegionMeta } from './region'
+import { bridgeRail, drivable, ferryLanding, guardrails, makeRegion, onFerryWater, roadRail, nearestRoad, roadside, routeBetween, type RegionMeta } from './region'
 import { createCourser, tickCourser, bodySpeeds } from './courser'
 
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
-const meta = JSON.parse(readFileSync('public/open/corridor.json', 'utf8')) as RegionMeta
-const raw = readFileSync('public/open/corridor.bin')
+// REGION=continent npx tsx … runs the same law against the full map
+const NAME = process.env.REGION ?? 'corridor'
+const meta = JSON.parse(readFileSync(`public/open/${NAME}.json`, 'utf8')) as RegionMeta
+const raw = readFileSync(`public/open/${NAME}.bin`)
 const R = makeRegion(meta, new Int16Array(raw.buffer, raw.byteOffset, raw.byteLength / 2))
 const { cell, nx, nz, sizeX, sizeZ } = meta
 
@@ -32,6 +34,7 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
 // and the ground must not fall away below the road.
 {
   let steep = 0, drops = 0, n = 0, worstDrop = 0
+  const rails = guardrails(R).flatMap(g => g.pts)
   for (const r of drivable(R)) {
     for (let k = 0; k < r.pts.length - 1; k++) {
       const [ax, az] = r.pts[k], [bx, bz] = r.pts[k + 1]
@@ -40,6 +43,8 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
       if (R.deckAt(mx, mz)) continue                               // on a bridge: the parapets are the bank
       const y0 = R.heightAt(mx, mz); if (y0 < 1) continue        // a ford over water: no bank to recover onto
       for (const side of [-1, 1]) {
+        const rx = mx + nxp * side * (r.width / 2 + 0.7), rz = mz + nzp * side * (r.width / 2 + 0.7)
+        if (rails.some(q => Math.hypot(q[0] - rx, q[1] - rz) < 4)) { n++; continue }   // a guardrail holds this side
         let prev = R.heightAt(mx + nxp * side * r.width / 2, mz + nzp * side * r.width / 2), bad = false
         for (let o = r.width / 2 + 2.5; o <= r.width / 2 + 30; o += 2.5) {
           const x = mx + nxp * side * o, z = mz + nzp * side * o
@@ -70,12 +75,35 @@ for (const id of ['ashfeld', 'millbrook', 'rune-hold']) ok(!!place(id), `place $
       const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 2))
       for (let s = 0; s < n; s++) {
         const x0 = ax + (bx - ax) * s / n, z0 = az + (bz - az) * s / n, x1 = ax + (bx - ax) * (s + 1) / n, z1 = az + (bz - az) * (s + 1) / n
+        if ((R.heightAt(x0, z0) < 0.5 && !R.deckAt(x0, z0)) || (R.heightAt(x1, z1) < 0.5 && !R.deckAt(x1, z1))) continue   // a ferry's water (wet = < 0.5, as the export decides)
+        if (onFerryWater(R, x0, z0) || onFerryWater(R, x1, z1)) continue      // between two ferry landings
+        if (ferryLanding(R, x0, z0, 9) || ferryLanding(R, x1, z1, 9)) continue  // the quay: a stop-and-board pad at the water's edge, not a road grade
+        const inIsland = (x: number, z: number) => (meta.network?.junctions ?? []).some(j => j.island && Math.hypot(x - j.x, z - j.z) < j.island + 1)
+        if (inIsland(x0, z0) || inIsland(x1, z1)) continue                    // an edge runs to a roundabout's centre; nobody drives the island
         const g = Math.abs(R.groundAt(x1, z1) - R.groundAt(x0, z0)) / Math.hypot(x1 - x0, z1 - z0)
         if (g > worst) { worst = g; where = r.id }
       }
     }
   }
   ok(worst < 0.2, `steepest road grade ${(worst * 100).toFixed(0)}% on ${where} (cap 12%, sampling slack to 20%)`)
+}
+
+// ★ the road index answers exactly what a scan of every segment answers (out to its ~400 m reach)
+{
+  let bad = 0
+  for (let k = 0; k < 600; k++) {
+    const x = ((k * 7919) % 1000 / 1000 - 0.5) * sizeX, z = ((k * 104729) % 1000 / 1000 - 0.5) * sizeZ
+    let brute = Infinity
+    for (const r of drivable(R)) for (let i = 0; i < r.pts.length - 1; i++) {
+      const [ax, az] = r.pts[i], [bx, bz] = r.pts[i + 1], abx = bx - ax, abz = bz - az, L = abx * abx + abz * abz || 1
+      const t = Math.max(0, Math.min(1, ((x - ax) * abx + (z - az) * abz) / L))
+      brute = Math.min(brute, Math.hypot(ax + abx * t - x, az + abz * t - z))
+    }
+    const u = nearestRoad(R, x, z)
+    if (u.junction) continue
+    if (brute < 380 ? Math.abs(u.d - brute) > 1e-6 : u.d < brute - 1e-6) bad++
+  }
+  ok(bad === 0, `road index disagrees with a full scan at ${bad}/600 points`)
 }
 
 // ★ THE NETWORK (road_network.py): one graph, junctions classified by what meets, every town a square
@@ -114,7 +142,8 @@ if (net) {
     let g = 0, clear = 0, wet = 0
     for (let k = 1; k < p.length; k++) g = Math.max(g, Math.abs(p[k][2] - p[k - 1][2]) / Math.max(0.1, Math.hypot(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1])))
     for (const q of p) { const under = R.heightAt(q[0], q[1]); if (under < 0.3) { wet++; clear = Math.max(clear, q[2] - Math.max(under, 0)) } }
-    ok(g < 0.075, `bridge ${b.id}: deck grade ${(g * 100).toFixed(1)}% (ramps hold 6%)`)
+    // ramps hold 6% over the water; at an abutment the deck may follow a bank that rises faster (it is on land there)
+    ok(g < 0.09, `bridge ${b.id}: deck grade ${(g * 100).toFixed(1)}% (ramps hold 6%, abutments follow the bank)`)
     ok(wet >= 3, `bridge ${b.id}: only ${wet} deck points over water: the river was filled in under it`)
     ok(clear >= 3, `bridge ${b.id}: ${clear.toFixed(1)} m over the water (wants ≥ 3)`)
     // groundAt: the car on the deck reads the deck; a probe from under it reads the river
@@ -132,11 +161,21 @@ if (net) {
   ok(fingerposts.length === junc.length, `${fingerposts.length} fingerposts for ${junc.length} junctions`)
   let bad = 0
   for (const f of fingerposts) for (const a of f.arms) {
-    const p = meta.places.find(q => q.id === a.town)
-    if (!p || !(a.km > 0) || a.km * 1000 < Math.hypot(p.x - f.x, p.z - f.z) - 120) bad++
+    const p = meta.network?.junctions.find(q => q.place === a.town) ?? meta.places.find(q => q.id === a.town)
+    if (!p || !(a.km > 0) || a.km * 1000 < Math.hypot(p.x - f.x, p.z - f.z) - 60) bad++
   }
   ok(bad === 0, `${bad} fingerpost arms name a town nearer than the road could take you, or none`)
   ok(waystones.length >= 1 && waystones.every(w => w.faces.length > 0 && w.y > 0.6), 'waystones missing, faceless, or in the water')
+}
+
+// ★ FERRIES: every ferry has two landings on dry land, each ON its road, and a landing finds its far side
+{
+  for (const f of meta.network?.ferries ?? []) {
+    ok(f.a[2] >= 0.5 && f.b[2] >= 0.5, `ferry ${f.id}: a landing is in the water`)
+    const la = ferryLanding(R, f.a[0], f.a[1]), lb = ferryLanding(R, f.b[0], f.b[1])
+    ok(la?.ferry.id === f.id && lb?.ferry.id === f.id && la.to === f.b && lb.to === f.a, `ferry ${f.id}: a landing does not lead across`)
+    ok(nearestRoad(R, f.a[0], f.a[1]).d < 3 && nearestRoad(R, f.b[0], f.b[1]).d < 3, `ferry ${f.id}: a landing is off its road`)
+  }
 }
 
 // ★★ THE AUTOPILOT: a pure-pursuit driver follows a ROUTE THROUGH THE NETWORK (routeBetween, around roundabouts).
@@ -169,7 +208,7 @@ function drive(from: string, to: string) {
     const target = Math.max(8, 24 - turn * 18)
     const throttle = v < target - 1 ? 1 : v > target + 1 ? -0.6 : 0
     tickCourser(c, { throttle, steer, handbrake: false, dt: DT }, R.groundAt)
-    bridgeRail(R, c)
+    bridgeRail(R, c) || roadRail(R, c)
     if (R.heightAt(c.x, c.z) < 0.3 && c.y < 0.5) swam += DT
     if (R.deckAt(c.x, c.z) && R.heightAt(c.x, c.z) < 0.3) decked = true
     t += DT
@@ -195,6 +234,6 @@ const mr = drive('millbrook', 'rune-hold')     // through the roundabout and ove
 ok(!!mr?.decked, 'millbrook → rune-hold never crossed a bridge deck over water')
 drive('rune-hold', 'ashfeld')
 
-console.log(`region: ${pass} pass, ${fails.length} fail`)
+console.log(`region[${NAME}]: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  ✗', f)
 process.exit(fails.length ? 1 : 0)

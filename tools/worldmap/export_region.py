@@ -89,35 +89,56 @@ print('network:', len(net['edges']), 'edges,', dict(Counter(j['kind'] for j in n
 # (canon 11-14: bridges lawful and common in the heartland). A TRAIL keeps its ford (the frontier stays the frontier;
 # a Shellback ferry is the canon crossing there, not built yet). The span runs bank to bank plus ABUT each side. ──
 ABUT, CLEAR, DECK_G = 4, 4.0, 0.06          # pts (2.5 m) onto land each side · metres over the water · deck ramp grade
-spans = []                                  # (edge index, i0, i1) into e['xz']
+FERRY_M, FORD_M = 150.0, 40.0               # longer water than this is a ferry · a trail fords water shorter than this
+# The Atlas marks SHELLBACK FERRY crossings (canon: Shellbacks pull ferries across rivers). A crossing with a marker,
+# or too long for a stone deck, is a ferry: the road stops at a landing on each bank and the river is left alone.
+ferry_marks = [toW(c['x'], c['y']) for c in atlas.get('crossings', []) if c.get('kind') == 'ferry']
+spans = []                                  # (edge index, i0, i1, 'bridge' | 'ferry') into e['xz']
 land0 = h.copy()
 for ei, e in enumerate(net['edges']):
-    if e['kind'] not in ('paved', 'road'): continue
-    wet = sample(e['xz'][:, 0], e['xz'][:, 1]) < 0.5
+    hs = sample(e['xz'][:, 0], e['xz'][:, 1]); wet = hs < 0.5
     k = 0
     while k < len(wet):
         if not wet[k]: k += 1; continue
         k1 = k
         while k1 + 1 < len(wet) and wet[k1 + 1]: k1 += 1
-        if k1 - k + 1 >= 3:                 # ≥ 7.5 m of water: a bridge, not a puddle in the export
-            spans.append((ei, max(0, k - ABUT), min(len(wet) - 1, k1 + ABUT)))
+        n = k1 - k + 1; L = n * 2.5
+        # ≥ 7.5 m wet, of which some is OPEN water (below the water plane): low marsh alone is carved as road
+        if n >= 3 and (hs[k:k1 + 1] < -0.15).sum() >= 3:
+            W = e['xz'][k:k1 + 1]
+            marked = any(np.hypot(W[:, 0] - fx, W[:, 1] - fz).min() < 80 for fx, fz in ferry_marks)
+            # the markers come from the proposer's Year-600 rule ("bridge on paved, ferry otherwise"); the 1672
+            # ruling (bridges lawful and common in the heartland) upgrades every road and paved crossing short enough
+            # for a stone deck. Markers still decide for TRAILS (the frontier stays the frontier).
+            if L > FERRY_M or (marked and e['kind'] not in ('paved', 'road')):
+                if k > 0 and k1 < len(wet) - 1: spans.append((ei, k - 1, k1 + 1, 'ferry'))
+            elif e['kind'] in ('paved', 'road'):
+                spans.append((ei, max(0, k - ABUT), min(len(wet) - 1, k1 + ABUT), 'bridge'))
+            elif L > FORD_M and k > 0 and k1 < len(wet) - 1:
+                spans.append((ei, k - 1, k1 + 1, 'ferry'))
+            # else: a trail fords it (the bed is carved through the shallows)
         k = k1 + 1
 cen, cen_w = [], []
 for ei, e in enumerate(net['edges']):
     keep = np.ones(len(e['xz']), bool)
-    for (ej, i0, i1) in spans:
-        if ej == ei: keep[i0 + ABUT: i1 - ABUT + 1] = False      # no bed (no causeway) under the water span
+    for (ej, i0, i1, kind) in spans:
+        if ej != ei: continue
+        if kind == 'bridge': keep[i0 + ABUT: i1 - ABUT + 1] = False     # no bed (no causeway) under the water span
+        else:                keep[i0 + 1: i1] = False                   # a ferry: the road ends at each bank
     cen += e['xz'][keep].tolist(); cen_w += [WIDTH[e['kind']]] * int(keep.sum())
 if cen:
     tree = cKDTree(np.array(cen)); Wc = np.array(cen_w)
     d, idx = tree.query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=14 / 2 + 4.0 + 220)   # wide: a deep cut's shoulder reaches far
     d = d.reshape(h.shape); idx = idx.reshape(h.shape)
+    d_keep = d.copy()
     half = np.where(np.isfinite(d), Wc[np.minimum(idx, len(Wc) - 1)] / 2 + 4.0, 0)   # flat a little past the paint: a riverbank shoulder sagged into the drive line at +1
     # EXCESS = metres outside the road surface (≤ 0 on it). A junction pad is a disc of its own radius; the cell
     # takes whichever surface it is nearest to being on.
     ex = np.where(np.isfinite(d), d - half, np.inf)
     pad = np.zeros(h.shape, bool)
-    for j in net['junctions']:
+    # ferry landings are flat quays (a pad of their own, like a junction): you stop, wait, roll on
+    quays = [(*net['edges'][ej]['xz'][i], 7.0) for ej, i0, i1, kd in spans if kd == 'ferry' for i in (i0, i1)]
+    for j in list(net['junctions']) + [{'x': qx, 'z': qz, 'r': qr} for qx, qz, qr in quays]:
         if j['r'] <= 0: continue
         dj = np.hypot(gx - j['x'], gz - j['z']) - (j['r'] + 2.0)
         pad |= dj <= CELL
@@ -125,6 +146,14 @@ if cen:
     ok = np.isfinite(ex) & (ex < 230)
     d, half = ex, 0.0                                                  # the shoulder code below reads (d - half)
     bed = ok & (ex <= CELL)                                            # the road surface (+ one cell so it is never 1 px)
+    # a bridge's water belongs to the river: a cell nearer the span's WET centre line than any kept road point, over
+    # low ground, is never bed (else the abutments' bed discs fill a short river in from both banks)
+    wet_pts = [net['edges'][ej]['xz'][i0 + ABUT: i1 - ABUT + 1] for ej, i0, i1, kd in spans if kd == 'bridge']
+    wet_pts += [net['edges'][ej]['xz'][i0 + 1: i1] for ej, i0, i1, kd in spans if kd == 'ferry']
+    wet_pts = [w for w in wet_pts if len(w)]
+    if wet_pts:
+        dw, _ = cKDTree(np.concatenate(wet_pts)).query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=40)
+        bed &= ~((dw.reshape(h.shape) < d_keep) & (land0 < 0.5))
     # the field: land smoothed hard, causeway over water
     # the baseline is the land UNDER THE BED only (normalised convolution): smoothing the whole grid let a hill beside
     # a valley road pull the road up toward it
@@ -155,7 +184,7 @@ if cen:
     # 11-14). An average of grade-legal surfaces stays (near) grade-legal, so this costs the limit nothing.
     bw = nd.gaussian_filter(bed.astype(np.float64), 1.6)
     Us = nd.gaussian_filter(np.where(bed, U, 0.0), 1.6) / np.maximum(bw, 1e-6)
-    road = np.where(bed, Us, road)
+    road = np.where(bed & ~pad, Us, np.where(bed, U, road))      # pads keep their exact 3% (smoothing tilted one to 6%)
     print(f'grade envelope converged in {it} iterations')
     # the shoulder WIDENS with the cut or fill it has to make up (~1:3; at 1:1.6 13% of the bank was past the courser's climb limit), so a deep cut is a valley with sloping
     # sides, not a slot canyon (the road out of Ashfeld ran between 40 m vertical walls at a fixed 12 m shoulder)
@@ -168,9 +197,9 @@ if cen:
     road_out = road[near[0], near[1]]
     # under and beside a bridge the river keeps its bed: no shoulder may pull the water up to the bank
     if spans:
-        wpts = np.concatenate([net['edges'][ej]['xz'][i0:i1 + 1] for ej, i0, i1 in spans])
+        wpts = np.concatenate([net['edges'][ej]['xz'][i0:i1 + 1] for ej, i0, i1, _ in spans])
         dW, _ = cKDTree(wpts).query(np.stack([gx.ravel(), gz.ravel()], 1), distance_upper_bound=60)
-        blend = np.where((dW.reshape(h.shape) < 60) & (land0 < 0.5), 0, blend)
+        blend = np.where((dW.reshape(h.shape) < 60) & (land0 < 0.5) & ~bed, 0, blend)   # never un-carve the road itself
     h = h * (1 - blend) + road_out * blend
     # ROUNDABOUT ISLANDS: a kerb and a low planted mound, so the ring is driven around (or bounced over, at a cost)
     for j in net['junctions']:
@@ -184,10 +213,17 @@ for r in roads_out:
     xz = np.array(r.pop('xz'))
     r['pts'] = [[round(x, 1), round(z, 1), round(float(y), 2)] for (x, z), y in zip(xz, sample(xz[:, 0], xz[:, 1]))]
 
-net_out = {'edges': [], 'junctions': [], 'bridges': []}
+net_out = {'edges': [], 'junctions': [], 'bridges': [], 'ferries': []}
 # the deck, read off the FINAL ground: it starts and ends on the carved road (no step at the abutment), arches to
 # CLEAR over the water where its ramps allow, and never dips below the ground under it
-for bi, (ei, i0, i1) in enumerate(spans):
+for fi, (ei, i0, i1, _) in enumerate([sp for sp in spans if sp[3] == 'ferry']):
+    e = net['edges'][ei]; A, B = e['xz'][i0], e['xz'][i1]
+    L = float(np.hypot(*(B - A)))
+    net_out['ferries'].append({'id': f'f{fi}', 'edge': e['id'], 'kind': e['kind'], 'length': round(L, 1),
+                               'a': [round(float(A[0]), 1), round(float(A[1]), 1), round(float(sample(A[0], A[1])[0]), 2)],
+                               'b': [round(float(B[0]), 1), round(float(B[1]), 1), round(float(sample(B[0], B[1])[0]), 2)]})
+    print(f"ferry f{fi} on {e['id']} ({e['kind']}): {L:.0f} m of water")
+for bi, (ei, i0, i1, _) in enumerate([sp for sp in spans if sp[3] == 'bridge']):
     e = net['edges'][ei]; P = e['xz'][i0:i1 + 1]
     s_ = np.concatenate([[0], np.cumsum(np.hypot(*np.diff(P, axis=0).T))]); L = s_[-1]
     under = sample(P[:, 0], P[:, 1]); ya, yb = float(under[0]), float(under[-1])
@@ -231,11 +267,29 @@ meta = {'name': NAME, 'cell': CELL, 'nx': nx, 'nz': nz, 'sizeX': sizeX, 'sizeZ':
 json.dump(meta, open(f'public/open/{NAME}.json', 'w'))
 worst = (0, '')
 isl = [(j['x'], j['z'], j['island'] + 1) for j in net['junctions'] if 'island' in j]
+deckpts = np.array([q for b in net_out['bridges'] for q in b['pts']]) if net_out['bridges'] else np.zeros((0, 3))
+def on_ferry(x, z):
+    for f in net_out['ferries']:
+        ax, az, bx, bz = f['a'][0], f['a'][1], f['b'][0], f['b'][1]
+        L2 = (bx - ax) ** 2 + (bz - az) ** 2 or 1
+        t = ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / L2
+        L = math.sqrt(L2)
+        if t * L > 1 and (1 - t) * L > 1 and math.hypot(ax + (bx - ax) * t - x, az + (bz - az) * t - z) < 10: return True
+    return False
+def drive_y(x, z):
+    if on_ferry(x, z): return None         # the crossing between two landings is the ferry's, not a road's
+    if any(math.hypot(x - f[k][0], z - f[k][1]) < 9 for f in net_out['ferries'] for k in ('a', 'b')): return None   # a quay
+    """What the car rides at x, z: the deck if one is there, the ground otherwise; None over open water."""
+    if len(deckpts):
+        k = int(np.argmin(np.hypot(deckpts[:, 0] - x, deckpts[:, 1] - z)))
+        if math.hypot(deckpts[k, 0] - x, deckpts[k, 1] - z) < 1.5: return float(deckpts[k, 2])
+    y = float(sample(x, z)[0])
+    return None if y < 0.5 else y          # wet (< 0.5) is a crossing's water: a ferry, or the river under a deck
 for r in net_out['edges']:
-    P = np.array(r['pts'])
-    P = P[[all(math.hypot(x - jx, z - jz) > ri for jx, jz, ri in isl) for x, z, _ in P]]   # an edge runs to the island's centre; nobody drives that
-    if len(P) < 2: continue
-    dl = np.hypot(*np.diff(P[:, :2], axis=0).T); g = np.abs(np.diff(P[:, 2])) / np.maximum(dl, 1e-3)
+    P = [q for q in r['pts'] if all(math.hypot(q[0] - jx, q[1] - jz) > ri for jx, jz, ri in isl)]   # nobody drives an island
+    ys = [drive_y(q[0], q[1]) for q in P]
+    g = np.array([abs(ys[k + 1] - ys[k]) / max(math.hypot(P[k + 1][0] - P[k][0], P[k + 1][1] - P[k][1]), 1e-3)
+                  for k in range(len(P) - 1) if ys[k] is not None and ys[k + 1] is not None])   # a ferry's water is not a grade
     if g.size and g.max() > worst[0]: worst = (float(g.max()), r['id'])
 print(f'worst road grade {worst[0]*100:.1f}% on {worst[1]}')
 print(f'{NAME}: {nx}x{nz} @ {CELL} m = {sizeX/1000:.1f} x {sizeZ/1000:.1f} km, h {h.min():.0f}..{h.max():.0f} m, '

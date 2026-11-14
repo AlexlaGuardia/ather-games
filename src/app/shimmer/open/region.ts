@@ -13,6 +13,9 @@ export interface RegionRoad extends RoadLike { from: string; to: string }
 /** A NETWORK edge (tools/worldmap/road_network.py): junction to junction, no overlaps. */
 export interface RegionEdge extends RoadLike { a: string; b: string }
 export type JunctionKind = 'square' | 'roundabout' | 'cross' | 'stop4' | 'tee' | 'merge' | 'end' | 'bend' | 'in-square'
+/** A Shellback FERRY: where a crossing is too long for a deck (or a trail meets marked water) the road stops at a
+ *  landing on each bank and a ferry carries you over. */
+export interface RegionFerry { id: string; edge: string; kind: RoadKind; length: number; a: [number, number, number]; b: [number, number, number] }
 /** A deck carrying an edge over water: centre line with the DECK height (not the ground's). */
 export interface RegionBridge { id: string; edge: string; kind: RoadKind; width: number; pts: [number, number, number][] }
 export interface RegionJunction {
@@ -27,7 +30,7 @@ export interface RegionPlace { id: string; name: string | null; kind: string; x:
 export interface RegionMeta {
   name: string; cell: number; nx: number; nz: number; sizeX: number; sizeZ: number; scale: number
   roads: RegionRoad[]; places: RegionPlace[]
-  network?: { edges: RegionEdge[]; junctions: RegionJunction[]; bridges?: RegionBridge[] }
+  network?: { edges: RegionEdge[]; junctions: RegionJunction[]; bridges?: RegionBridge[]; ferries?: RegionFerry[] }
 }
 export interface Region {
   meta: RegionMeta
@@ -121,8 +124,33 @@ export function junctionAt(region: Region, x: number, z: number): RegionJunction
 export const nearPad = (region: Region, x: number, z: number, margin: number) =>
   (region.meta.network?.junctions ?? []).some(j => j.r > 0 && Math.hypot(x - j.x, z - j.z) < j.r + margin)
 
+// A grid of road segments (50 m buckets) so "nearest road" is a handful of segments, not every one on the continent:
+// the full map has ~25k and the tree scatter alone asks thousands of times.
+const BUCKET = 50
+type SegIndex = { cells: Map<string, number[]>; segs: { r: RoadLike; k: number }[] }
+const indexCache = new WeakMap<Region, SegIndex>()
+function segIndex(region: Region): SegIndex {
+  let ix = indexCache.get(region)
+  if (ix) return ix
+  ix = { cells: new Map(), segs: [] }
+  for (const r of drivable(region)) {
+    const p = r.pts
+    for (let k = 0; k < p.length - 1; k++) {
+      const id = ix.segs.length; ix.segs.push({ r, k })
+      const x0 = Math.floor(Math.min(p[k][0], p[k + 1][0]) / BUCKET), x1 = Math.floor(Math.max(p[k][0], p[k + 1][0]) / BUCKET)
+      const z0 = Math.floor(Math.min(p[k][1], p[k + 1][1]) / BUCKET), z1 = Math.floor(Math.max(p[k][1], p[k + 1][1]) / BUCKET)
+      for (let cz = z0; cz <= z1; cz++) for (let cx = x0; cx <= x1; cx++) {
+        const key = `${cx},${cz}`; const l = ix.cells.get(key); if (l) l.push(id); else ix.cells.set(key, [id])
+      }
+    }
+  }
+  indexCache.set(region, ix)
+  return ix
+}
+
 /** The nearest point on any road's centre line: distance (m) and the road. For "on road?" and callouts.
- *  On a junction pad d = 0 (the pad is road); on a roundabout's island you are off it. */
+ *  On a junction pad d = 0 (the pad is road); on a roundabout's island you are off it. Searches out to ~400 m;
+ *  farther than that from any road answers d = Infinity, road = null. */
 export function nearestRoad(region: Region, x: number, z: number): { d: number; road: RoadLike | null; junction: RegionJunction | null } {
   const roads = drivable(region)
   for (const j of region.meta.network?.junctions ?? []) {
@@ -130,16 +158,27 @@ export function nearestRoad(region: Region, x: number, z: number): { d: number; 
     const d = Math.hypot(x - j.x, z - j.z)
     if (d < j.island) return { d: j.island - d + 7, road: null, junction: j }
   }
+  const ix = segIndex(region)
   let best = Infinity, road: RoadLike | null = null
-  for (const r of roads) {
-    const p = r.pts
-    for (let k = 0; k < p.length - 1; k++) {
-      const ax = p[k][0], az = p[k][1], bx = p[k + 1][0], bz = p[k + 1][1]
-      const abx = bx - ax, abz = bz - az, L = abx * abx + abz * abz || 1
-      const t = Math.max(0, Math.min(1, ((x - ax) * abx + (z - az) * abz) / L))
-      const d = Math.hypot(ax + abx * t - x, az + abz * t - z)
-      if (d < best) { best = d; road = r }
+  const cx = Math.floor(x / BUCKET), cz = Math.floor(z / BUCKET)
+  const seen = new Set<number>()
+  for (let ring = 0; ring <= 8; ring++) {
+    for (let dz = -ring; dz <= ring; dz++) for (let dx = -ring; dx <= ring; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue
+      const l = ix.cells.get(`${cx + dx},${cz + dz}`); if (!l) continue
+      for (const id of l) {
+        if (seen.has(id)) continue
+        seen.add(id)
+        const { r, k } = ix.segs[id], p = r.pts
+        const ax = p[k][0], az = p[k][1], bx = p[k + 1][0], bz = p[k + 1][1]
+        const abx = bx - ax, abz = bz - az, L = abx * abx + abz * abz || 1
+        const t = Math.max(0, Math.min(1, ((x - ax) * abx + (z - az) * abz) / L))
+        const d = Math.hypot(ax + abx * t - x, az + abz * t - z)
+        if (d < best) { best = d; road = r }
+      }
     }
+    // a hit within this ring is final once the next ring can no longer be closer
+    if (best <= ring * BUCKET) break
   }
   const j = junctionAt(region, x, z)
   if (j) {
@@ -351,5 +390,90 @@ export function roadside(region: Region): { waystones: Waystone[]; fingerposts: 
     if (Number.isFinite(y)) fingerposts.push({ x, z, y, junction: j.id, arms })
   }
   return { waystones, fingerposts }
+}
+
+// ── GUARDRAILS: where the land falls away beside a road (a mountain road's valley side, a cut's lip), a rail runs
+// along the edge. Earth's answer to "one slip and you are in a valley you cannot climb out of" (Alex 11-14); on
+// the continent 35% of one mountain road's edge was steeper than a courser can climb. Bridges have parapets
+// instead; junctions stay open so you can turn in. ──
+export interface Guardrail { edge: string; side: 1 | -1; offset: number; pts: [number, number, number][] }
+const railCache = new WeakMap<Region, Guardrail[]>()
+export function guardrails(region: Region): Guardrail[] {
+  const hit = railCache.get(region); if (hit) return hit
+  const out: Guardrail[] = []
+  const net = region.meta.network
+  for (const e of net?.edges ?? []) {
+    const p = e.pts, hw = e.width / 2
+    for (const side of [1, -1] as const) {
+      let run: [number, number, number][] = []
+      const flush = () => { if (run.length >= 3) out.push({ edge: e.id, side, offset: hw + 0.7, pts: run }); run = [] }
+      for (let k = 0; k < p.length; k++) {
+        const a = p[Math.max(0, k - 1)], b = p[Math.min(p.length - 1, k + 1)]
+        const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / L * side, nz = (b[0] - a[0]) / L * side
+        const [x, z] = p[k], y = region.groundAt(x, z)
+        const open = region.deckAt(x, z) || (net?.junctions ?? []).some(j => j.kind !== 'bend' && j.kind !== 'end' && Math.hypot(j.x - x, j.z - z) < Math.max(j.r, 8) + 8)
+        const at = (o: number) => region.heightAt(x + nx * o, z + nz * o)
+        // walk out 30 m: a DOWNHILL step past the climb limit, or a fall of 7 m overall, wants a rail (a cut's wall
+        // going UP does not: you stop against it, you do not fall off it)
+        let falls = false, prev = y
+        if (Number.isFinite(y) && y > 0.6) for (let o = hw + 2.5; o <= hw + 30; o += 2.5) {
+          const yy = at(o); if (!Number.isFinite(yy)) break
+          if ((prev - yy) / 2.5 > 0.6 || y - yy > 7) { falls = true; break }
+          prev = yy
+        }
+        if (falls && !open) run.push([x + nx * (hw + 0.7), z + nz * (hw + 0.7), region.groundAt(x + nx * (hw + 0.7), z + nz * (hw + 0.7))])
+        else flush()
+      }
+      flush()
+    }
+  }
+  railCache.set(region, out)
+  return out
+}
+
+/** A car that drifts through a guardrail line from the road side is put back and loses its outward speed. */
+export function roadRail(region: Region, c: { x: number; y: number; z: number; vx: number; vz: number }): boolean {
+  for (const g of guardrails(region)) {
+    const p = g.pts
+    for (let k = 0; k < p.length - 1; k++) {
+      const ax = p[k][0], az = p[k][1], abx = p[k + 1][0] - ax, abz = p[k + 1][1] - az, L2 = abx * abx + abz * abz
+      if (L2 < 1e-6) continue
+      const t = ((c.x - ax) * abx + (c.z - az) * abz) / L2
+      if (t < 0 || t > 1) continue
+      const L = Math.sqrt(L2)
+      // outward normal: the rail's side of the road. cross > 0 = beyond the rail
+      const ox = -abz / L * g.side, oz = abx / L * g.side
+      const past = (c.x - ax) * ox + (c.z - az) * oz
+      if (past <= -0.6 || past > 3.5) continue
+      const ry = p[k][2] + (p[k + 1][2] - p[k][2]) * t
+      if (Math.abs(c.y - ry) > 2) continue
+      const push = past + 0.6
+      c.x -= ox * push; c.z -= oz * push
+      const out = c.vx * ox + c.vz * oz
+      if (out > 0) { c.vx -= ox * out * 1.2; c.vz -= oz * out * 1.2; c.vx *= 0.97; c.vz *= 0.97 }
+      return true
+    }
+  }
+  return false
+}
+
+/** On the water between a ferry's two landings (not a road surface)? */
+export function onFerryWater(region: Region, x: number, z: number): boolean {
+  for (const f of region.meta.network?.ferries ?? []) {
+    const [ax, az] = f.a, [bx, bz] = f.b, L2 = (bx - ax) ** 2 + (bz - az) ** 2 || 1
+    const t = ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / L2
+    const L = Math.sqrt(L2)
+    if (t * L > 1 && (1 - t) * L > 1 && Math.hypot(ax + (bx - ax) * t - x, az + (bz - az) * t - z) < 10) return true   // past the quay's edge
+  }
+  return false
+}
+
+/** The ferry landing within `reach` of x, z: which ferry, which end, and where it takes you. */
+export function ferryLanding(region: Region, x: number, z: number, reach = 14): { ferry: RegionFerry; from: [number, number, number]; to: [number, number, number] } | null {
+  for (const f of region.meta.network?.ferries ?? []) {
+    if (Math.hypot(f.a[0] - x, f.a[1] - z) < reach) return { ferry: f, from: f.a, to: f.b }
+    if (Math.hypot(f.b[0] - x, f.b[1] - z) < reach) return { ferry: f, from: f.b, to: f.a }
+  }
+  return null
 }
 
