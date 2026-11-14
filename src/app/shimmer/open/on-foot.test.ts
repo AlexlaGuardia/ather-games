@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
 import { makeRegion, TUNNEL_H, TUNNEL_WALK, type RegionMeta } from './region'
 import { footWorld, tickFoot, exitSpot, canEnter, stepOut, ENTER_REACH } from './on-foot'
-import type { LocoState } from '../voxel3d/locomotion'
+import type { LocoState } from './shared/locomotion'
 
 let pass = 0
 const fails: string[] = []

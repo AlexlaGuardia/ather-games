@@ -27,7 +27,7 @@ import {
   HOLLOW_LOOK, createHollowGeo, createHollowMat, applyHollowLook,
   type HollowLook, type HollowForm,
 } from '../../voxel3d/hollow-look'
-import { VoxelDayNight } from '../../voxel3d/day-night'
+import { VoxelDayNight } from '../../open/shared/day-night'
 import { setTimePin } from '../../engine/day-cycle'
 
 const FORMS: HollowForm[] = ['warden', 'stalker', 'caster']

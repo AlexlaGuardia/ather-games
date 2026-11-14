@@ -21,7 +21,7 @@ import { createSeamShimmer, wildsSeamAnchor, plotSeamAnchor } from '../../voxel3
 import { WILDS_BUBBLE } from '../../voxel/column'
 import { plotForTier, PLOT_TIERS } from '../../voxel/plot'
 import type { Space } from '../../voxel3d/save'
-import { EYE_STAND } from '../../voxel3d/locomotion'
+import { EYE_STAND } from '../../open/shared/locomotion'
 
 const SEED = 1337
 

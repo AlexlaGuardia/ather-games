@@ -15,7 +15,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { PassageScene } from '../../play3d/PassageScene'
 import { PASSAGE, passageAscii } from '../../play3d/passage-hall'
 import { GardenAtmosphere } from '../../world/atmosphere'
-import { EYE_STAND } from '../../voxel3d/locomotion'
+import { EYE_STAND } from '../../open/shared/locomotion'
 import * as S from '../../play3d/scene-palette'
 
 /** yaw 0 looks toward +x (east), 90 toward +z (south) */

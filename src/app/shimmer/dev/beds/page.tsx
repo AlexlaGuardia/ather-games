@@ -38,7 +38,7 @@ import { BED_CROP_IDS, bedVariant, type PlantedSpot, type PlantedStage } from '.
 import { BED_WOODS } from '../../voxel3d/garden'
 import { MAT } from '../../voxel/depth'
 import { CROP_DEFS } from '../../voxel/crops'
-import { BODY_H, BODY_R } from '../../voxel3d/locomotion'
+import { BODY_H, BODY_R } from '../../open/shared/locomotion'
 import { Rig, type ShelfView } from '../shelf-rig'
 
 const TILE = 32

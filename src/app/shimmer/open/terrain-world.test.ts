@@ -4,7 +4,7 @@
 // voxel3d/locomotion.test.ts) — but its worlds are cells, so they never touch the LAND. This file
 // is the land: slopes you walk, slopes that stop you, a rock you vault, a cliff you climb, a pond.
 
-import { createLoco, tickLocomotion, RUN_SPEED, type LocoInput } from '../voxel3d/locomotion'
+import { createLoco, tickLocomotion, RUN_SPEED, type LocoInput } from './shared/locomotion'
 import { terrainWorld, MAX_WALK_GRADIENT, type Box, type Shape } from './terrain-world'
 
 let pass = 0

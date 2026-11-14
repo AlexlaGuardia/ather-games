@@ -9,7 +9,7 @@
 
 import { SIZES, creatureHeight, BASE_FORM_MAX, UNSIZED_FALLBACK, PENDING_SIZES } from './creature-size'
 import { SPECIES_IDS } from './registry'
-import { EYE_STAND } from '../voxel3d/locomotion'
+import { EYE_STAND } from '../open/shared/locomotion'
 
 let pass = 0
 const fails: string[] = []

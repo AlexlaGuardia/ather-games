@@ -11,8 +11,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { VoxelDayNight } from '../voxel3d/day-night'
-import { createLoco, tickLocomotion, eyeY, WALK_SPEED, SPEED_CAP } from '../voxel3d/locomotion'
+import { VoxelDayNight } from './shared/day-night'
+import { createLoco, tickLocomotion, eyeY, WALK_SPEED, SPEED_CAP } from './shared/locomotion'
 import { terrainWorld } from './terrain-world'
 import { LAND_SHAPE, LAND_SIZE, CELL, GRID_N, WATER_Y, PROPS, vertexHeight, heightAt } from './land'
 

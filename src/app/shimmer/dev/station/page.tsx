@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { StationScene } from '../../play3d/StationScene'
 import { STATION } from '../../play3d/station-field'
 import { GardenAtmosphere } from '../../world/atmosphere'
-import { EYE_STAND } from '../../voxel3d/locomotion'
+import { EYE_STAND } from '../../open/shared/locomotion'
 import * as S from '../../play3d/scene-palette'
 
 /** yaw 0 looks toward +x (east), 90 toward +z (south), -90 north */

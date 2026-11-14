@@ -4,9 +4,9 @@
 import * as THREE from 'three'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { CORE_POSITION, CORE_DIR, CORE_RADIUS, coreBank, BREATH, TURN_S } from './core-sky'
-import { sunPosition, SILVER_POSITIONS } from './hour-light'
-import { SKY } from './sky-palette'
+import { CORE_POSITION, CORE_DIR, CORE_RADIUS, coreBank, BREATH, TURN_S } from '../open/shared/core-sky'
+import { sunPosition, SILVER_POSITIONS } from '../open/shared/hour-light'
+import { SKY } from '../open/shared/sky-palette'
 import { EMISSIVE, KINDLED_WALL } from './attrs'
 import { MAT } from '../voxel/depth'
 
@@ -48,7 +48,7 @@ ok(BREATH.periodS >= 6 && BREATH.depth <= 0.1, `§2 the breath is slow and shall
 ok(TURN_S >= 120, '§2 the turn is something you notice only by standing still')
 
 // ── the dome carries the ruling, not just the numbers ──────────────────────────────────────
-const dn = readFileSync(join(__dirname, 'day-night.tsx'), 'utf8')
+const dn = readFileSync(join(__dirname, '../open/shared/day-night.tsx'), 'utf8')
 const fragBody = dn.slice(dn.indexOf('const SKY_FRAG'))
 const glsl = fragBody.slice(0, fragBody.indexOf('\n`\n'))
 ok(glsl.includes('void main()'), 'the dome shader is still readable here — a guard that cannot find its subject is not green')

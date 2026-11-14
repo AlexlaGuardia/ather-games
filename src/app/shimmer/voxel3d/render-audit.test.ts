@@ -252,8 +252,12 @@ let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
-const files = walk(DIR).map(f => relative(DIR, f))
+// open/shared holds the sky and the walker since 11-14 (moved out of voxel3d). day-night.tsx builds GPU resources,
+// so it stays under this audit at its new address; paths there read as '../open/shared/…'.
+const SHARED = join(process.cwd(), 'src/app/shimmer/open/shared')
+const files = [...walk(DIR), ...walk(SHARED)].map(f => relative(DIR, f))
 ok(files.length > 0, 'found render-path files to audit')
+ok(files.includes('../open/shared/day-night.tsx'), 'the audit reaches the moved sky (open/shared/day-night.tsx)')
 ok(files.some(f => f.includes('tex')), 'the audit reaches the texture lane (it did not, at first)')
 
 for (const file of files) {

@@ -25,8 +25,8 @@ import { createPlotRing } from '../../voxel3d/plot-ring-pass'
 import { ringCap, DEFAULT_RING } from '../../voxel3d/plot-ring'
 import { plotForTier, withinCap, PLOT_TIERS } from '../../voxel/plot'
 import { SPECIES_IDS } from '../../sprites/registry'
-import { DAY } from '../../voxel3d/day-night'
-import { EYE_STAND } from '../../voxel3d/locomotion'
+import { DAY } from '../../open/shared/day-night'
+import { EYE_STAND } from '../../open/shared/locomotion'
 
 const SEED = 1337
 /** The ground plane the stand-in keeper and every resident stands on. */

@@ -1,7 +1,7 @@
 // The Ather side: the home plot and its garden grid, the Wilds tile, waymarks. Run: npx tsx src/app/shimmer/open/ather/ather.test.ts
 
 import { readFileSync } from 'fs'
-import { createLoco, tickLocomotion, type LocoInput } from '../../voxel3d/locomotion'
+import { createLoco, tickLocomotion, type LocoInput } from '../shared/locomotion'
 import { terrainWorld } from '../terrain-world'
 import { parseWilds, tileCentreWorld, walkableIn, BIOME, type WildsMeta } from './wilds'
 import {

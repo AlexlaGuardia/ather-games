@@ -10,7 +10,7 @@
 // floor; on the hill above it, the hill.
 
 import { terrainWorld, type Box } from './terrain-world'
-import { createLoco, tickLocomotion, type LocoState, type LocoInput, type LocoWorld } from '../voxel3d/locomotion'
+import { createLoco, tickLocomotion, type LocoState, type LocoInput, type LocoWorld } from './shared/locomotion'
 import { tunnelWall, type Region } from './region'
 import { caveContain, nearCave, type Cavern } from './cavern'
 

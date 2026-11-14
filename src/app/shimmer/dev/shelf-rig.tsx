@@ -5,7 +5,7 @@
 import { useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useEffect, useRef } from 'react'
-import { EYE_STAND } from '../voxel3d/locomotion'
+import { EYE_STAND } from '../open/shared/locomotion'
 
 export interface ShelfView { yaw: number; pitch: number; dist: number }
 

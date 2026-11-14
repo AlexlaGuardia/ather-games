@@ -85,7 +85,7 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(tag.includes('buffs={buffs}') && layer.includes('<HearthBuffChips face={face} buffs={buffs}'),
      '§3 the chips are mounted (world → HearthHudLayer → HearthBuffChips)')
   // The locomotion hook is a real multiplier on the walk/run target and nothing else.
-  const loco = codeOnly(readFileSync(new URL('./locomotion.ts', import.meta.url), 'utf8'))
+  const loco = codeOnly(readFileSync(new URL('../open/shared/locomotion.ts', import.meta.url), 'utf8'))
   ok(loco.includes('* s.speedMult'), '§3 locomotion scales the ramped target by speedMult')
   // The mist gate: the calm flag sits on the ONE list every presence read derives from.
   const mistSrc = codeOnly(readFileSync(new URL('./mist-pass.ts', import.meta.url), 'utf8'))

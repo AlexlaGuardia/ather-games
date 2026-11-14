@@ -46,9 +46,9 @@ import * as THREE from 'three'
 import { ALL_BLOCKS, blockDef, type BlockSkill } from '../../voxel/registry'
 import { MAT, isHalfMat } from '../../voxel/depth'
 import { buildTileArray, sliceLayer, layerOf, TOP, SIDE, BOTTOM } from '../../voxel3d/tex/tiles'
-import { VoxelDayNight, DAY } from '../../voxel3d/day-night'
+import { VoxelDayNight, DAY } from '../../open/shared/day-night'
 import { setTimePin } from '../../engine/day-cycle'
-import { BODY_H, BODY_R, EYE_STAND } from '../../voxel3d/locomotion'
+import { BODY_H, BODY_R, EYE_STAND } from '../../open/shared/locomotion'
 import {
   makeBlueprint, blueprintCells, boundsOf, normalizeCells, pieceFootprint, BLUEPRINT_MAX_SPAN,
   type BlueprintCell, type BlueprintDef, type BlueprintPiece,

@@ -20,7 +20,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import * as LOCO from '../voxel3d/locomotion'
+import * as LOCO from '../open/shared/locomotion'
 import {
   KIT, BODY, BODIES, coverTiersFor, widthTiersFor, metricsFor, bodyDiameter,
   AIRTIME, JUMP_APEX, gapAt, GAP_RUN, GAP_SLIDEHOP, GAP_CAP, SLIDE_RUN,

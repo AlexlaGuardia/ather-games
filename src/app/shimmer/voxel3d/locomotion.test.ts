@@ -14,7 +14,7 @@ import {
   CROUCH_SPEED, type LocoInput,
   CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF, SWIM_SPEED, SWIM_UP, SWIM_IDLE_SINK, TREAD_SINK_CAP,
   launchKeeper, blinkKeeper,
-} from './locomotion'
+} from '../open/shared/locomotion'
 import { hollowTouching, HOLLOW_SPEED, HOLLOW_HP, DRAIN_TIME, UNIMPAIRED } from './hollows'
 import { codeOnly, blockAt } from '../testing/guard'
 import { readFileSync } from 'node:fs'
@@ -907,7 +907,7 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
 // silently stops gating anything, and an un-gated slide looks EXACTLY like a working one. So this
 // one assert reads the declaration itself. Mutation: write the literal, it goes red.
 {
-  const src = readFileSync(join(__dirname, 'locomotion.ts'), 'utf8')
+  const src = readFileSync(join(__dirname, '../open/shared/locomotion.ts'), 'utf8')
   const code = codeOnly(src)
   const decl = code.match(/^export const SLIDE_MIN_SPEED\s*=\s*(.+)$/m)
   ok(!!decl, 'BLIND: could not find the SLIDE_MIN_SPEED declaration — this assert measures nothing')

@@ -11,8 +11,8 @@
 import * as THREE from 'three'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { HOUR_REF, hourLight, irradianceUp, luminance, sunPosition, SILVER_POSITIONS } from './hour-light'
-import { DAY, NIGHT } from './sky-palette'
+import { HOUR_REF, hourLight, irradianceUp, luminance, sunPosition, SILVER_POSITIONS } from '../open/shared/hour-light'
+import { DAY, NIGHT } from '../open/shared/sky-palette'
 import { LIGHT_DECL_GLSL, createLightUniforms } from './light-glsl'
 import { cartoonStackGlsl } from './cartoon-glsl'
 
@@ -64,7 +64,7 @@ ok(u.uToonHour.value === 0 && u.uHourLight.value.equals(new THREE.Vector3(1, 1, 
 
 // ── §5 the wiring exists ─────────────────────────────────────────────────────────────────────
 const here = (f: string) => readFileSync(join(__dirname, f), 'utf8')
-const dn = here('day-night.tsx'), vw = here('VoxelWorld.tsx'), st = here('settings.ts')
+const dn = readFileSync(join(__dirname, '../open/shared/day-night.tsx'), 'utf8'), vw = here('VoxelWorld.tsx'), st = here('settings.ts')
 ok(dn.includes('hourLight(hourLightOut, irradianceUp(') && dn.includes('hemi.color, hemi.intensity') && dn.includes('sun.color, sun.intensity, sun.position'),
   '§5 the rig writes the hour from the LIVE lights (gloom/mist/water already folded in), not from the palette')
 ok(dn.includes('sunPosition(sun.position, p)'), '§5 the rig places the sun by the same rule the reference is built from')

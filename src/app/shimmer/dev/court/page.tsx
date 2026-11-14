@@ -58,10 +58,10 @@ import {
   courtLevel, PLATFORM_MAT, TOWER_HEIGHT, TOWER_BACK, LANDMARK_ANGLE_DEG, LANDMARK_DIST,
   COURT_RADIUS, COURT_ARC,
 } from '../../voxel3d/crossings'
-import { BODY_H, BODY_R, EYE_STAND } from '../../voxel3d/locomotion'
+import { BODY_H, BODY_R, EYE_STAND } from '../../open/shared/locomotion'
 import { MAT } from '../../voxel/depth'
 import { buildTileArray, sliceLayer, layerOf, TOP, SIDE, BOTTOM } from '../../voxel3d/tex/tiles'
-import { VoxelDayNight, DAY } from '../../voxel3d/day-night'
+import { VoxelDayNight, DAY } from '../../open/shared/day-night'
 import { setTimePin } from '../../engine/day-cycle'
 
 const SEED = WORLD_SEED

@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { VoxelDayNight } from '../../voxel3d/day-night'
+import { VoxelDayNight } from '../shared/day-night'
 import { terrainWorld } from '../terrain-world'
 import { Walker, verbOf, type Loco } from './walker'
 import {

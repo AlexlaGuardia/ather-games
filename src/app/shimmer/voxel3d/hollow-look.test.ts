@@ -277,7 +277,7 @@ const FORMS = ['warden', 'stalker', 'caster'] as const
   //   (b) the horizon→zenith curve exponent is the same number in both.
   // ★ This is the difference between comparing VALUES and comparing DERIVATIONS (PATTERNS 08-22):
   // a value check goes green the moment both copies are wrong in the same way.
-  const domeSrc = readFileSync(new URL('day-night.tsx', import.meta.url), 'utf8')
+  const domeSrc = readFileSync(new URL('../open/shared/day-night.tsx', import.meta.url), 'utf8')
   // ⚠ `strip`, NOT `codeOnly`. `codeOnly` blanks STRING LITERALS as well as comments — correct for
   // "does this file DO x", wrong here, because a module specifier IS a string literal and the whole
   // claim is about which module. Comments still go, so documenting this line cannot satisfy it.

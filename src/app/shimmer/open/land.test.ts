@@ -1,6 +1,6 @@
 // The feel slice's land. Run: npx tsx src/app/shimmer/open/land.test.ts
 
-import { createLoco, tickLocomotion, type LocoInput } from '../voxel3d/locomotion'
+import { createLoco, tickLocomotion, type LocoInput } from './shared/locomotion'
 import { terrainWorld, MAX_WALK_GRADIENT } from './terrain-world'
 import { LAND_SHAPE, LAND_SIZE, CELL, GRID_N, vertexHeight, heightAt, PROPS } from './land'
 

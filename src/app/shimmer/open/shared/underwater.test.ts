@@ -1,4 +1,4 @@
-// Underwater-view oracle. Run: npx tsx src/app/shimmer/voxel3d/underwater.test.ts
+// Underwater-view oracle. Run: npx tsx src/app/shimmer/open/shared/underwater.test.ts
 //
 // Four things are held still here, and three of them are claims someone would "simplify" away:
 //

@@ -17,7 +17,7 @@ import type { Weekday } from '../../play3d/passage'
 import { RUNE_HOLD } from '../../world/tilemap'
 import { getHeightGrid } from '../../world/heightmaps'
 import { GardenAtmosphere } from '../../world/atmosphere'
-import { EYE_STAND } from '../../voxel3d/locomotion'
+import { EYE_STAND } from '../../open/shared/locomotion'
 import * as S from '../../play3d/scene-palette'
 
 /** yaw 0 looks toward +x (east), 90 toward +z (south), -90 north */

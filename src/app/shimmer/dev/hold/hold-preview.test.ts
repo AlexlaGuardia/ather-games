@@ -32,7 +32,7 @@ import { join } from 'node:path'
 import { greenProfileAt } from '../../voxel/green-terrain'
 import { holdRows, bowlCentre, DEFAULT_ROWS } from '../../voxel/hold-rows'
 import { DOWNBARROW_HEARTS } from '../../voxel/burrowtown'
-import { EYE_STAND } from '../../voxel3d/locomotion'
+import { EYE_STAND } from '../../open/shared/locomotion'
 import type { Box } from '../../voxel/jigsaw'
 
 let pass = 0

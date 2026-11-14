@@ -6,7 +6,7 @@ import { makeRegion, boreAt, tunnelWall, TUNNEL_WALK, type RegionMeta } from './
 import { buildCavern, caveRoomAt, CAVE_ROOF_MAX } from './cavern'
 import { footWorld, tickFoot, stepOut } from './on-foot'
 import { createCourser, tickCourser, bodySpeeds } from './courser'
-import type { LocoState } from '../voxel3d/locomotion'
+import type { LocoState } from './shared/locomotion'
 
 let pass = 0
 const fails: string[] = []

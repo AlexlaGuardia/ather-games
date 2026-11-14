@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { VoxelDayNight } from '../../voxel3d/day-night'
+import { VoxelDayNight } from '../shared/day-night'
 import { createCourser, tickCourser, bodySpeeds, slipAngle, type Courser, type CourserInput, type CourserTune } from '../courser'
 import { GaragePanel, useCourserBuild } from '../garage'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'

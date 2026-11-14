@@ -35,7 +35,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { MoglinDoll } from '../../play3d/MoglinDoll'
 import { STEP_FPS } from '../../play3d/moglin-pose'
-import { EYE_STAND } from '../../voxel3d/locomotion'
+import { EYE_STAND } from '../../open/shared/locomotion'
 
 /** The cadences under test. `0` means "do not step" — render smooth at the display rate. */
 const CADENCES: { fps: number; label: string; note: string }[] = [

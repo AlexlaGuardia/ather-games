@@ -41,8 +41,8 @@ import { HollowRig } from '../../voxel3d/HollowRig'
 import { HollowFused } from '../../voxel3d/HollowFused'
 import { HollowMesh } from '../../voxel3d/HollowMesh'
 import { HOLLOW_LOOK, type HollowForm } from '../../voxel3d/hollow-look'
-import { EYE_STAND } from '../../voxel3d/locomotion'
-import { DAY, NIGHT, VoxelDayNight } from '../../voxel3d/day-night'
+import { EYE_STAND } from '../../open/shared/locomotion'
+import { DAY, NIGHT, VoxelDayNight } from '../../open/shared/day-night'
 import { setTimePin } from '../../engine/day-cycle'
 
 const FORMS: HollowForm[] = ['warden', 'stalker', 'caster']

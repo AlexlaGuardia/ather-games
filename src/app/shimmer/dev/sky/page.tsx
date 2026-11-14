@@ -16,10 +16,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { VoxelDayNight } from '../../voxel3d/day-night'
+import { VoxelDayNight } from '../../open/shared/day-night'
 import { setTimePin } from '../../engine/day-cycle'
-import { coreBank, CORE_DIR } from '../../voxel3d/core-sky'
-import { EYE_STAND } from '../../voxel3d/locomotion'
+import { coreBank, CORE_DIR } from '../../open/shared/core-sky'
+import { EYE_STAND } from '../../open/shared/locomotion'
 
 const HOURS = [
   { label: 'Dawn', h: 6 }, { label: 'Day', h: 12 }, { label: 'Dusk', h: 18 }, { label: 'Night', h: 0 },

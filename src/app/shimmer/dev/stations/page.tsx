@@ -20,7 +20,7 @@ import { createLightUniforms } from '../../voxel3d/light-glsl'
 import { modelOf, STATION_MODELS } from '../../voxel3d/station-models'
 import { MODELLED_MATS } from '../../voxel/depth'
 import { blockDef } from '../../voxel/registry'
-import { BODY_H, BODY_R } from '../../voxel3d/locomotion'
+import { BODY_H, BODY_R } from '../../open/shared/locomotion'
 import { Rig } from '../shelf-rig'
 
 const TILE = 32

@@ -15,7 +15,7 @@
 import {
   BODY_R, BODY_H, VAULT_REACH, MANTLE_REACH,
   type LocoWorld, type CellProbe, CELL_SOLID, CELL_WATER, CELL_HALF,
-} from '../voxel3d/locomotion'
+} from './shared/locomotion'
 
 /** Half-open in every axis: a point is inside when x0 <= x < x1 (the voxel cell's own rule). */
 export interface Box { x0: number; y0: number; z0: number; x1: number; y1: number; z1: number }
