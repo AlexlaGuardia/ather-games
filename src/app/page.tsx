@@ -1,11 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
 import OnlineCount from "./_components/OnlineCount";
+import AccountWidget from "./_components/AccountWidget";
 
 // The front door of ather.games (2026-11-13). The open-world game is the hero; the Arcade and
 // the Kindled Mug are places INSIDE it (their cards link to where they live today until they move
 // in); Eyuun's Bookstore keeps a fixed icon so readers are one tap away from any scroll position.
-// The Room (/room) is still reachable, it just isn't the front door any more.
+// The Room (/room) is retired from the front door (Alex 2026-11-14): no nav or footer link.
+// Sign-in (Google, one door: first time through creates the account) lives in the top bar.
 //
 // GAME_TITLE: "Ather", Alex 2026-11-13 (the name and the domain are the same word on purpose).
 const GAME_TITLE = "Ather";
@@ -16,7 +18,6 @@ const NAV = [
   { label: "Play", href: PLAY_HREF },
   { label: "Devlog", href: "#devlog" },
   { label: "Places", href: "#places" },
-  { label: "The Room", href: "/room" },
 ];
 
 const PLACES = [
@@ -90,6 +91,7 @@ export default function Home() {
               </Link>
             ))}
           </div>
+          <AccountWidget className="ml-auto" />
         </nav>
       </header>
 
@@ -183,7 +185,6 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-8 pb-20 text-sm text-text/40 sm:pb-8">
           <span className="font-display" style={{ color: GOLD }}>{GAME_TITLE}</span>
           <Link href="/bookstore?from=home" className="hover:text-text/70">Eyuun&apos;s Bookstore</Link>
-          <Link href="/room" className="hover:text-text/70">The Room</Link>
           <Link href="/arcade" className="hover:text-text/70">All games</Link>
           <Link href="/privacy" className="hover:text-text/70">Privacy</Link>
         </div>
