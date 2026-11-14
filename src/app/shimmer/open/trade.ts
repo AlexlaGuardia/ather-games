@@ -32,7 +32,7 @@ export const GOODS: Record<GoodId, Good> = {
   timber: { id: 'timber', name: 'Timber', side: 'mortal', crate: 3, rate: 18 },
   grain: { id: 'grain', name: 'Grain', side: 'mortal', crate: 1, rate: 8 },
   searinn: { id: 'searinn', name: 'Sea Rinn', side: 'mortal', crate: 1, rate: 15, spoils: 150 },
-  gold: { id: 'gold', name: 'Raw gold', side: 'mortal', crate: 1, rate: 40 },
+  gold: { id: 'gold', name: 'Raw gold', side: 'mortal', crate: 1, rate: 26 },   // premium, not a skip: at 40 one run nearly bought a tier II
   // the two signature goods (authored by Magii 11-14, ALEX TO SIGN OR SWAP the names): not sourced in the corridor
   havensteel: { id: 'havensteel', name: 'Havensteel', side: 'mortal', crate: 1, rate: 34 },
   blackwood: { id: 'blackwood', name: 'Veradyn blackwood', side: 'mortal', crate: 3, rate: 30 },

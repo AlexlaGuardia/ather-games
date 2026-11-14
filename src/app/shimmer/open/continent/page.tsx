@@ -9,12 +9,16 @@
 // show sky. Houses and trees are placeholder geometry: towns read as towns, nothing more is claimed.
 // Desktop only for now (keys). ?region=<name> picks another exported region.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { VoxelDayNight } from '../../voxel3d/day-night'
 import { createCourser, tickCourser, bodySpeeds, slipAngle, type Courser, type CourserInput, type CourserTune } from '../courser'
 import { GaragePanel, useCourserBuild } from '../garage'
+import { BoardPanel, TradeHud, useLedger } from '../trade-ui'
+import { postBoard, accept, arrive, abandon, buy, GOODS, CAPACITY, type Contract, type Supply } from '../trade'
+import { DARTER_STOCK, tuneFromSpec } from '../courser'
+import { buildSpec, type Slot, type Tier } from '../courser-build'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
 import { loadRegion, nearestRoad, type Region, type RegionRoad } from '../region'
 
@@ -321,7 +325,7 @@ function FogRig() {
   return null
 }
 
-export interface RideHud { mph: number; frac: number; drift: boolean; air: number; gearR: boolean; place: string | null; road: string | null }
+export interface RideHud { x: number; z: number; yaw: number; mph: number; frac: number; drift: boolean; air: number; gearR: boolean; place: string | null; road: string | null }
 
 function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune> }) {
   const { camera, gl } = useThree()
@@ -455,7 +459,7 @@ function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) =
       let near: string | null = null, nd = 260
       for (const p of R.meta.places) { const d = Math.hypot(p.x - c.x, p.z - c.z); if (p.name && d < nd) { nd = d; near = p.name } }
       const nr = nearestRoad(R, c.x, c.z)
-      onHud({ mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / tuneRef.current.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
+      onHud({ x: c.x, z: c.z, yaw: c.yaw, mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / tuneRef.current.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
         place: near, road: nr.d < (nr.road?.width ?? 7) / 2 + 1 ? nr.road!.kind : null })
     }
   })
@@ -471,21 +475,88 @@ function Driver({ R, onHud, focus, tuneRef }: { R: Region; onHud: (h: RideHud) =
 // grip by surface (1 = paved). Build numbers, Alex tunes them; the tiers themselves are canon (transportation.md).
 const SURFACE: Record<RegionRoad['kind'] | 'off', number> = { paved: 1, road: 0.93, pass: 0.88, trail: 0.84, off: 0.75 }
 
+// ── trade v1 in the corridor (ECONOMY.md). Placement is build: Rune Hold's square is the gate-landing, so the
+// Ather's goods (and the Spine's ore and gold) are had there; Millbrook on the water has timber and sea Rinn;
+// Ashfeld's fields have grain. Contract pay uses straight distance × ROAD_FACTOR (roads wander) until the
+// road graph is wired. ──
+const SUPPLY: Supply[] = [
+  { place: 'rune-hold', goods: ['crystal', 'sap', 'cord', 'ore', 'gold'] },
+  { place: 'millbrook', goods: ['timber', 'searinn'] },
+  { place: 'ashfeld', goods: ['grain'] },
+]
+const TOWNS = ['ashfeld', 'millbrook', 'rune-hold', 'passage']
+const ROAD_FACTOR = 1.3
+
 const ROAD_LABEL: Record<string, string> = { paved: 'Paved road', road: 'Road', trail: 'Trail', pass: 'Mountain pass' }
 
 export default function ContinentRide() {
-  const { build, setBuild, tune } = useCourserBuild()
+  const [R, setR] = useState<Region | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [hud, setHud] = useState<RideHud>({ x: 0, z: 0, yaw: 0, mph: 0, frac: 0, drift: false, air: 0, gearR: false, place: null, road: null })
+  const { build, setBuild } = useCourserBuild()
+  const [ledger, setLedger] = useLedger()
+  // the continent's garage is REAL: a part you have not bought does not fit, whatever the test track remembers
+  const eff = useMemo(() => ({ ...build, core: Math.min(build.core, ledger.owned.core) as Tier, trim: Math.min(build.trim, ledger.owned.trim) as Tier, rune: Math.min(build.rune, ledger.owned.rune) as Tier }), [build, ledger.owned])
+  const tune = useMemo(() => tuneFromSpec(buildSpec(DARTER_STOCK, eff)), [eff])
   const tuneRef = useRef<CourserTune>(tune)
   tuneRef.current = tune
+  const [board, setBoard] = useState<string | null>(null)
+  const [boardMsg, setBoardMsg] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const flash = (t: string) => { setToast(t); setTimeout(() => setToast(v => (v === t ? null : v)), 3200) }
+  // the town you are stopped at (within 45 m), if any
+  const atTown = useMemo(() => {
+    if (!R || hud.mph > 4) return null
+    let best: { id: string; d: number } | null = null
+    for (const t of TOWNS) { const p = R.meta.places.find(q => q.id === t); if (!p) continue; const d = Math.hypot(p.x - hud.x, p.z - hud.z); if (d < 45 && (!best || d < best.d)) best = { id: t, d } }
+    return best?.id ?? null
+  }, [R, hud.x, hud.z, hud.mph])
+  const placeName = (id: string) => R?.meta.places.find(p => p.id === id)?.name ?? id
+  const kmBetween = useCallback((a: string, b: string) => {
+    const pa = R?.meta.places.find(p => p.id === a), pb = R?.meta.places.find(p => p.id === b)
+    return pa && pb ? Math.hypot(pa.x - pb.x, pa.z - pb.z) * ROAD_FACTOR / 1000 : Infinity
+  }, [R])
+  const contracts: Contract[] = useMemo(() => (board ? postBoard(board, SUPPLY, TOWNS.filter(t => R?.meta.places.some(p => p.id === t)), kmBetween, ledger.deeds + 1, CAPACITY.darter) : []), [board, R, kmBetween, ledger.deeds])
+  // arriving: stopped at the contract's pickup loads it, at its drop pays it
+  useEffect(() => {
+    if (!atTown || !ledger.active) return
+    const r = arrive(ledger, atTown, performance.now() / 1000)
+    if (!r.event) return
+    setLedger(r.ledger)
+    if (r.event.kind === 'loaded') flash(`Loaded ${ledger.active.qty} ${GOODS[ledger.active.good].name}`)
+    else flash(`Delivered · +${r.event.marks} Marks · +${r.event.deeds} deed${r.event.spoiled > 0.05 ? ` (${Math.round(r.event.spoiled * 100)}% spoiled)` : ''}`)
+  }, [atTown, ledger, setLedger])
+  const objective = useMemo(() => {
+    const a = ledger.active; if (!a || !R) return null
+    const target = R.meta.places.find(p => p.id === (a.loaded ? a.to : a.from)); if (!target) return null
+    const bearing = Math.atan2(-(target.x - hud.x), -(target.z - hud.z))
+    let d = bearing - hud.yaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI
+    return { text: a.loaded ? `Deliver ${a.qty} ${GOODS[a.good].name} to ${placeName(a.to)}` : `Load ${a.qty} ${GOODS[a.good].name} at ${placeName(a.from)}`,
+      km: Math.hypot(target.x - hud.x, target.z - hud.z) / 1000, turn: -d }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ledger.active, R, hud.x, hud.z, hud.yaw])
+  useEffect(() => {
+    const e = (ev: KeyboardEvent) => {
+      if (ev.code !== 'KeyE') return
+      setBoard(b => (b ? null : atTownRef.current && SUPPLY.some(s => s.place === atTownRef.current) ? atTownRef.current : null))
+      setBoardMsg(null)
+    }
+    window.addEventListener('keydown', e); return () => window.removeEventListener('keydown', e)
+  }, [])
+  const atTownRef = useRef<string | null>(null)
+  atTownRef.current = atTown
+  // the board stays open until you actually drive away (> 60 m), not on the first nudge of the throttle
+  useEffect(() => {
+    if (!board || !R) return
+    const p = R.meta.places.find(q => q.id === board)
+    if (!p || Math.hypot(p.x - hud.x, p.z - hud.z) > 60) setBoard(null)
+  }, [board, R, hud.x, hud.z])
   const [garage, setGarage] = useState(false)
   useEffect(() => {
     const g = (e: KeyboardEvent) => { if (e.code === 'KeyG') setGarage(v => !v) }
     window.addEventListener('keydown', g)
     return () => window.removeEventListener('keydown', g)
   }, [])
-  const [R, setR] = useState<Region | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [hud, setHud] = useState<RideHud>({ mph: 0, frac: 0, drift: false, air: 0, gearR: false, place: null, road: null })
   const [started, setStarted] = useState(false)
   const focus = useRef(new THREE.Vector3())
   useEffect(() => {
@@ -511,7 +582,19 @@ export default function ContinentRide() {
         </Canvas>
       )}
       <SpeedStreaks frac={hud.frac} />
-      <GaragePanel open={garage} onClose={() => setGarage(false)} build={build} setBuild={setBuild} />
+      <GaragePanel open={garage} onClose={() => setGarage(false)} build={eff} setBuild={setBuild}
+        shop={{ ledger, buy: (slot: Slot, t: Tier) => { const r = buy(ledger, slot, t); if (r.ok) setLedger(r.ledger); else flash(r.why ?? 'Not yet') } }} />
+      <TradeHud ledger={ledger} objective={objective} toast={toast} />
+      {atTown && !board && SUPPLY.some(s => s.place === atTown) && (
+        <div style={{ position: 'absolute', left: '50%', top: '40%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px system-ui', pointerEvents: 'none' }}>
+          E · Ather Trading Co. board
+        </div>
+      )}
+      {board && (
+        <BoardPanel town={placeName(board)} contracts={contracts} ledger={ledger} capacity={CAPACITY.darter} msg={boardMsg}
+          onAccept={c => { const r = accept(ledger, c, CAPACITY.darter); if (r.ok) { setLedger(r.ledger); setBoard(null); flash(`Contract taken · ${GOODS[c.good].name} to ${placeName(c.to)}`) } else setBoardMsg(r.why ?? null) }}
+          onAbandon={() => setLedger(abandon(ledger))} onClose={() => setBoard(null)} />
+      )}
       {!R && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#1d2a33', font: '600 14px system-ui' }}>{err ?? 'Loading the continent…'}</div>}
 
       {hud.place && (
@@ -538,7 +621,7 @@ export default function ContinentRide() {
           <div style={{ padding: '18px 24px', borderRadius: 10, background: 'rgba(12,16,20,0.72)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.65, textAlign: 'center', maxWidth: 460 }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>The Darter · Ashfeld</div>
             You start on the road out of Ashfeld. It runs down to Millbrook on the river; the trunk south ends at Rune Hold under the Spine.
-            <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road · G garage</div>
+            <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road · G garage · E board (stopped at a town)</div>
             <div style={{ marginTop: 8, fontWeight: 600 }}>Press any key to drive</div>
           </div>
         </div>

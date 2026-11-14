@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DARTER_STOCK, tuneFromSpec, type CourserTune } from './courser'
 import { buildSpec, statBars, PART_LABEL, tierLabel, DIAL, STOCK_BUILD, type CourserBuild, type Slot, type Tier } from './courser-build'
+import { canBuy, TIER_PRICE, type Ledger } from './trade'
 
 // tier names + dial poles are canon (Magii 11-13); see courser-build.ts
 const KEY = 'ather:courser:darter:build'
@@ -39,7 +40,10 @@ function Bar({ label, v, base }: { label: string; v: number; base: number }) {
   )
 }
 
-export function GaragePanel({ open, onClose, build, setBuild }: { open: boolean; onClose: () => void; build: CourserBuild; setBuild: (b: CourserBuild) => void }) {
+/** `shop` = the real garage (the continent): tiers are owned, bought with Marks, gated by deeds. Without it, a test
+ *  garage with every part unlocked (the test track). */
+export function GaragePanel({ open, onClose, build, setBuild, shop }: { open: boolean; onClose: () => void; build: CourserBuild; setBuild: (b: CourserBuild) => void
+  shop?: { ledger: Ledger; buy: (slot: Slot, t: Tier) => void } }) {
   if (!open) return null
   const spec = buildSpec(DARTER_STOCK, build), stock = DARTER_STOCK
   const bars = statBars(spec), base = statBars(stock)
@@ -64,11 +68,16 @@ export function GaragePanel({ open, onClose, build, setBuild }: { open: boolean;
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
             {([0, 1, 2, 3] as Tier[]).map(t => {
               const on = build[slot] === t
+              const owned = !shop || shop.ledger.owned[slot] >= t
+              const can = shop ? canBuy(shop.ledger, slot, t) : { ok: true }
+              const locked = !owned && !can.ok
               return (
-                <button key={t} onClick={() => setBuild({ ...build, [slot]: t })}
-                  style={{ padding: '5px 0', borderRadius: 6, cursor: 'pointer', font: '600 11px var(--font-game), system-ui', letterSpacing: '0.12em',
-                    border: `1px solid ${on ? GOLD : 'rgba(255,255,255,0.14)'}`, background: on ? `${GOLD}26` : 'transparent', color: on ? GOLD : '#efeadc' }}>
+                <button key={t} disabled={locked} title={locked ? can.why : undefined}
+                  onClick={() => { if (!owned && shop) shop.buy(slot, t); setBuild({ ...build, [slot]: t }) }}
+                  style={{ padding: '5px 0', borderRadius: 6, cursor: locked ? 'default' : 'pointer', font: '600 11px var(--font-game), system-ui', letterSpacing: '0.12em',
+                    border: `1px solid ${on ? GOLD : 'rgba(255,255,255,0.14)'}`, background: on ? `${GOLD}26` : 'transparent', color: on ? GOLD : '#efeadc', opacity: locked ? 0.35 : 1 }}>
                   {tierLabel(slot, t)}
+                  {!owned && <div style={{ fontSize: 9, opacity: 0.75, marginTop: 1 }}>{locked ? '🔒' : `${TIER_PRICE[t as 1 | 2 | 3]} M`}</div>}
                 </button>
               )
             })}
@@ -96,7 +105,7 @@ export function GaragePanel({ open, onClose, build, setBuild }: { open: boolean;
         0-60 {spec.zeroTo60.toFixed(1)} s · top {Math.round(spec.topMph)} mph · 60-0 {Math.round(spec.brake60ft)} ft
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 11 }}>
-        <span style={{ opacity: 0.45 }}>Test garage: every part unlocked</span>
+        <span style={{ opacity: 0.45 }}>{shop ? `${shop.ledger.marks} Marks · ${shop.ledger.deeds} deeds · buy at a shop, earn deeds on the board` : 'Test garage: every part unlocked'}</span>
         <button onClick={() => setBuild(STOCK_BUILD)} style={{ background: 'none', border: 'none', color: GOLD, cursor: 'pointer', fontSize: 11 }}>Reset to stock</button>
       </div>
     </div>
