@@ -147,6 +147,11 @@ function composeAther(m: ContinentMapState, fog: Fog): HTMLCanvasElement {
   const ctx = cv.getContext('2d')!
   ctx.drawImage(m.atherPlate, 0, 0)
   drawCloud(ctx, fog, FOG_CELL / P, 0, 0, ATHER_CLOUD)
+  // the land's outline, faint, over the cloud: it IS the same land, and a blank night tells a new keeper nothing
+  const ln = document.createElement('canvas'); ln.width = cv.width; ln.height = cv.height
+  const lctx = ln.getContext('2d')!
+  lctx.drawImage(m.coast, 0, 0); lctx.globalCompositeOperation = 'source-in'; lctx.fillStyle = '#b9a8ff'; lctx.fillRect(0, 0, ln.width, ln.height)
+  ctx.globalAlpha = 0.35; ctx.drawImage(ln, 0, 0); ctx.globalAlpha = 1
   return cv
 }
 
