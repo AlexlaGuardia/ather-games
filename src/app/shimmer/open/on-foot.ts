@@ -12,6 +12,7 @@
 import { terrainWorld, type Box } from './terrain-world'
 import { createLoco, tickLocomotion, type LocoState, type LocoInput, type LocoWorld } from '../voxel3d/locomotion'
 import { tunnelWall, type Region } from './region'
+import { caveContain, nearCave, type Cavern } from './cavern'
 
 /** Water plane the page draws (Water: y = -0.15). Land under it is a river or the sea: the walker swims. */
 export const WATER_Y = -0.15
@@ -21,27 +22,33 @@ export const ENTER_REACH = 3.4, ENTER_DY = 2.2
  *  throwing its driver onto the road is a later, deliberate verb (with a stumble), not a free exit. */
 export const EXIT_MAX_SPEED = 9
 
-export interface FootWorld { world: LocoWorld; hint: { y: number } }
+export interface FootWorld { world: LocoWorld; hint: { y: number }; cave: Cavern | null }
 
-export function footWorld(R: Region): FootWorld {
+export function footWorld(R: Region, cave: Cavern | null = null): FootWorld {
   const hint = { y: 0 }
   const world = terrainWorld({
-    ground: (x, z) => R.groundAt(x, z, hint.y + 0.6),
+    // the Passage market's floor where the walker is down in it, else the region's layered ground
+    ground: (x, z) => (cave && Math.abs(hint.y - cave.y) < 4 && cave.nearFloor(x, z) && !R.tunnelAt(x, z) ? cave.y : R.groundAt(x, z, hint.y + 0.6)),
     solids: () => [],
     water: (x0, _y0, z0, x1, _y1, z1): readonly Box[] => {
       const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2
       return R.heightAt(cx, cz) < WATER_Y ? [{ x0: x0 - 1, y0: -80, z0: z0 - 1, x1: x1 + 1, y1: WATER_Y, z1: z1 + 1 }] : []
     },
   })
-  return { world, hint }
+  return { world, hint, cave }
 }
 
 /** One walker tick on the region: ground hint from the feet, then the bore's walls, then the map's edge. */
 export function tickFoot(fw: FootWorld, R: Region, s: LocoState, input: LocoInput) {
   fw.hint.y = s.py
+  const ox = s.px, oz = s.pz, cave = fw.cave
   tickLocomotion(s, input, fw.world)
-  const b = { x: s.px, y: s.py, z: s.pz, vx: s.hvx, vz: s.hvz }
-  if (tunnelWall(R, b)) { s.px = b.x; s.pz = b.z; s.hvx = b.vx; s.hvz = b.vz }
+  // at the market's door the bore's wall lets a walker through, and from there the cave's own walls hold them
+  if (cave && Math.abs(s.py - cave.y) < 4 && (nearCave(cave, ox, oz) || nearCave(cave, s.px, s.pz))) caveContain(cave, R, s, ox, oz)
+  else {
+    const b = { x: s.px, y: s.py, z: s.pz, vx: s.hvx, vz: s.hvz }
+    if (tunnelWall(R, b)) { s.px = b.x; s.pz = b.z; s.hvx = b.vx; s.hvz = b.vz }
+  }
   const lx = R.meta.sizeX / 2 - 3, lz = R.meta.sizeZ / 2 - 3
   if (Math.abs(s.px) > lx) { s.px = Math.sign(s.px) * lx; s.hvx = 0 }
   if (Math.abs(s.pz) > lz) { s.pz = Math.sign(s.pz) * lz; s.hvz = 0 }

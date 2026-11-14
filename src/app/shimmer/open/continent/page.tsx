@@ -19,6 +19,8 @@ import { BoardPanel, TradeHud, useLedger } from '../trade-ui'
 import { postBoard, accept, arrive, abandon, buy, GOODS, CAPACITY, type Contract, type Supply } from '../trade'
 import { DARTER_STOCK, tuneFromSpec } from '../courser'
 import { buildSpec, type Slot, type Tier } from '../courser-build'
+import { buildCavern, caveRoomAt, type Cavern } from '../cavern'
+import { CavernView } from '../cavern-view'
 import { footWorld, tickFoot, exitSpot, canEnter, stepOut, EXIT_MAX_SPEED } from '../on-foot'
 import { eyeY, WALK_SPEED, SPEED_CAP, type LocoState } from '../../voxel3d/locomotion'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
@@ -324,7 +326,7 @@ function boreProfile(hw: number): [number, number][] {
   out.push([hw, spring], [hw, -0.2])
   return out
 }
-function Tunnels({ R }: { R: Region }) {
+function Tunnels({ R, cave }: { R: Region; cave: Cavern | null }) {
   const built = useMemo(() => {
     const lining: number[] = [], lamps: number[] = []
     const portals: { x: number; y: number; z: number; yaw: number; hw: number; top: number }[] = []
@@ -332,14 +334,16 @@ function Tunnels({ R }: { R: Region }) {
     for (const t of R.meta.network?.tunnels ?? []) {
       const hw = t.width / 2 + TUNNEL_WALK, prof = boreProfile(hw)
       // densify to 2.5 m and read the cover at each station: the lining runs only where the hill is a roof
-      const st: { x: number; z: number; y: number; ux: number; uz: number; cover: number }[] = []
+      const st: { x: number; z: number; y: number; ux: number; uz: number; cover: number; s: number }[] = []
+      let sAcc = 0
       for (let k = 0; k < t.pts.length - 1; k++) {
         const [ax, az, ay] = t.pts[k], [bx, bz, by] = t.pts[k + 1]
         const L = Math.hypot(bx - ax, bz - az) || 1, n = Math.max(1, Math.round(L / 2.5))
         for (let i = 0; i < n; i++) {
           const f = i / n, x = ax + (bx - ax) * f, z = az + (bz - az) * f, y = ay + (by - ay) * f
-          st.push({ x, z, y, ux: (bx - ax) / L, uz: (bz - az) / L, cover: R.heightAt(x, z) - y })
+          st.push({ x, z, y, ux: (bx - ax) / L, uz: (bz - az) / L, cover: R.heightAt(x, z) - y, s: sAcc + L * f })
         }
+        sAcc += L
       }
       // the holes the terrain leaves at each mouth (boreHole, 5 m quads): the portal stands at the OUTERMOST one and
       // rises past the tallest, so the stone covers every gap (v1 sized the face from the cover at one station and
@@ -370,8 +374,19 @@ function Tunnels({ R }: { R: Region }) {
       let lampAcc = 0, side = 1
       for (let k = i0; k < i1; k++) {
         const A = st[k], B = st[k + 1]
+        // the Passage market's side door: the wall on that side is cut away exactly across doorS (the arch above
+        // the springline stays), so the lining never stands in front of the walk-only passage
+        const door = cave && cave.tunnel === t ? cave.doorS : null
+        const doorM = cave ? (cave.side > 0 ? prof.length - 2 : 0) : -1
+        const lerpSt = (f: number) => ({ ...A, x: A.x + (B.x - A.x) * f, z: A.z + (B.z - A.z) * f, y: A.y + (B.y - A.y) * f })
         for (let m = 0; m < prof.length - 1; m++) {
           const [o0, h0] = prof[m], [o1, h1] = prof[m + 1]
+          if (door && m === doorM && B.s > door[0] && A.s < door[1]) {
+            const fa = (door[0] - A.s) / (B.s - A.s), fb = (door[1] - A.s) / (B.s - A.s)
+            if (fa > 0) { const P = lerpSt(fa); quad(lining, at(A, o0, h0), at(P, o0, h0), at(P, o1, h1), at(A, o1, h1)) }
+            if (fb < 1) { const P = lerpSt(fb); quad(lining, at(P, o0, h0), at(B, o0, h0), at(B, o1, h1), at(P, o1, h1)) }
+            continue
+          }
           quad(lining, at(A, o0, h0), at(B, o0, h0), at(B, o1, h1), at(A, o1, h1))
         }
         // the floor, wall to wall: the road ribbon is only the carriageway, and the walkways either side had nothing
@@ -401,7 +416,7 @@ function Tunnels({ R }: { R: Region }) {
       return g
     }
     return { lining: mk(lining), lamps: mk(lamps), portals: portals.map(p => ({ ...p, geo: portalGeo(p.hw, p.top) })) }
-  }, [R])
+  }, [R, cave])
   useEffect(() => () => { built.lining.dispose(); built.lamps.dispose(); for (const p of built.portals) p.geo.dispose() }, [built])
   return (
     <>
@@ -664,7 +679,7 @@ export interface RideHud { x: number; z: number; yaw: number; mph: number; frac:
 // on foot: the walker's own feel numbers (open/page.tsx), and the get-in/get-out glide
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
-function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<{ tp?: (x: number, z: number, yaw: number) => void }> }) {
+function Driver({ R, cave, onHud, focus, tuneRef, ctl }: { R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<{ tp?: (x: number, z: number, yaw: number) => void }> }) {
   const { camera, gl } = useThree()
   const spawn = useMemo(() => {
     const road = R.meta.roads.find(r => r.from === 'ashfeld' && r.to === 'millbrook') ?? R.meta.roads[0]
@@ -685,7 +700,7 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
   const shake = useRef(0)
   // ── ON FOOT (Alex 11-14): F steps out of the courser and back in, the camera GLIDING between the chase pose and the
   // eye in SEAT_GLIDE seconds (never a cut), the courser parked on its handbrake where you left it ──
-  const fw = useMemo(() => footWorld(R), [R])
+  const fw = useMemo(() => footWorld(R, cave), [R, cave])
   const mode = useRef<'drive' | 'foot'>('drive')
   const loco = useRef<LocoState | null>(null)
   const view = useRef({ yaw: 0, pitch: -0.08 })
@@ -903,6 +918,11 @@ function Driver({ R, onHud, focus, tuneRef, ctl }: { R: Region; onHud: (h: RideH
       let sign: string | null = null
       for (const w of signs.waystones) if (Math.hypot(w.x - c.x, w.z - c.z) < 18) sign = 'Waystone · ' + w.faces.map(f => `${f.name} ${f.km} km`).join(' · ')
       for (const f of signs.fingerposts) if (Math.hypot(f.x - c.x, f.z - c.z) < 26) sign = f.arms.map(a => `${a.name} ${a.km} km`).join(' · ')
+      // on foot in the Passage market: the room you are standing in reads out (a shelf, the teachers, Lowen's bay)
+      if (onFoot && loco.current && cave && Math.abs(loco.current.py - cave.y) < 4) {
+        const room = caveRoomAt(cave, loco.current.px, loco.current.pz)
+        sign = room ? `${room.label} · ${room.detail}` : sign
+      }
       const reach = loco.current && canEnter(loco.current, c)
       const prompt = onFoot ? (reach ? 'F · Get in' : null) : Math.hypot(c.vx, c.vz) < 1.5 && !c.airborne ? 'F · Get out' : null
       onHud({ foot: onFoot, prompt, x: c.x, z: c.z, yaw: c.yaw, mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / tuneRef.current.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
@@ -1039,6 +1059,7 @@ export default function ContinentRide() {
     return () => window.removeEventListener('keydown', g)
   }, [])
   const [started, setStarted] = useState(false)
+  const cave = useMemo(() => (R ? buildCavern(R) : null), [R])
   const focus = useRef(new THREE.Vector3())
   useEffect(() => {
     const name = new URLSearchParams(window.location.search).get('region') ?? 'continent'
@@ -1057,14 +1078,15 @@ export default function ContinentRide() {
           <Roads R={R} />
           <Junctions R={R} />
           <Bridges R={R} />
-          <Tunnels R={R} />
+          <Tunnels R={R} cave={cave} />
+          {cave && <CavernView cave={cave} R={R} />}
           <Guardrails R={R} />
           <Water R={R} />
           <Towns R={R} />
           <Posts R={R} />
           <Roadside R={R} />
           <Trees R={R} focus={focus} />
-          <Driver R={R} onHud={setHud} focus={focus} tuneRef={tuneRef} ctl={ctl} />
+          <Driver R={R} cave={cave} onHud={setHud} focus={focus} tuneRef={tuneRef} ctl={ctl} />
         </Canvas>
       )}
       <SpeedStreaks frac={hud.frac} />
