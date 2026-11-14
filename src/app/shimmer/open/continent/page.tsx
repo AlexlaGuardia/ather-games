@@ -10,6 +10,7 @@
 // Desktop only for now (keys). ?region=<name> picks another exported region.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Track } from './map'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { VoxelDayNight } from '../../voxel3d/day-night'
@@ -680,7 +681,7 @@ export interface RideHud { x: number; z: number; yaw: number; mph: number; frac:
 // on foot: the walker's own feel numbers (open/page.tsx), and the get-in/get-out glide
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
-function Driver({ R, cave, onHud, focus, tuneRef, ctl }: { R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<{ tp?: (x: number, z: number, yaw: number) => void }> }) {
+function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.MutableRefObject<Track>; R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<{ tp?: (x: number, z: number, yaw: number) => void }> }) {
   const { camera, gl } = useThree()
   const spawn = useMemo(() => {
     const road = R.meta.roads.find(r => r.from === 'ashfeld' && r.to === 'millbrook') ?? R.meta.roads[0]
@@ -914,6 +915,9 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl }: { R: Region; cave: Cave
       : chaseShape(Math.abs(fwd) / tuneRef.current.top).fov
     if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, frameDt * 5); cam.updateProjectionMatrix() }
 
+    // the map's "you": every frame, so the minimap turns with you rather than at the HUD's 8 Hz
+    if (onFoot && loco.current) { track.current.x = loco.current.px; track.current.z = loco.current.pz; track.current.yaw = view.current.yaw }
+    else { track.current.x = c.x; track.current.z = c.z; track.current.yaw = c.yaw }
     hudT.current -= frameDt
     if (hudT.current <= 0) {
       hudT.current = 0.12
@@ -1068,6 +1072,23 @@ export default function ContinentRide() {
   }, [])
   const [started, setStarted] = useState(false)
   const cave = useMemo(() => (R ? buildCavern(R) : null), [R])
+  // ── THE MAP (./map.tsx): ink in what you drive, minimap top-right, M opens it whole ──
+  const track = useRef<Track>({ x: 0, z: 0, yaw: 0 })
+  const mapState = useMemo(() => (R ? makeMapState(R) : null), [R])
+  const [showMap, setShowMap] = useState(false)
+  useEffect(() => {
+    if (!mapState) return
+    let dirty = false
+    const ink = setInterval(() => { if (started && reveal(mapState, track.current.x, track.current.z)) dirty = true }, 250)
+    const save = setInterval(() => { if (dirty) { persist(mapState); dirty = false } }, 3000)
+    const out = () => persist(mapState)
+    window.addEventListener('pagehide', out)
+    return () => { clearInterval(ink); clearInterval(save); window.removeEventListener('pagehide', out); out() }
+  }, [mapState, started])
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.code === 'KeyM' && !showMap) { setShowMap(true); document.exitPointerLock?.() } }
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
+  }, [showMap])
   const focus = useRef(new THREE.Vector3())
   useEffect(() => {
     const name = new URLSearchParams(window.location.search).get('region') ?? 'continent'
@@ -1094,10 +1115,12 @@ export default function ContinentRide() {
           <Posts R={R} />
           <Roadside R={R} />
           <Trees R={R} focus={focus} />
-          <Driver R={R} cave={cave} onHud={setHud} focus={focus} tuneRef={tuneRef} ctl={ctl} />
+          <Driver R={R} cave={cave} onHud={setHud} focus={focus} tuneRef={tuneRef} ctl={ctl} track={track} />
         </Canvas>
       )}
       <SpeedStreaks frac={hud.frac} />
+      {mapState && started && <ContinentMiniMap map={mapState} track={track} onExpand={() => setShowMap(true)} />}
+      {mapState && showMap && <ContinentMap map={mapState} track={track} onClose={() => setShowMap(false)} />}
       <GaragePanel open={garage} onClose={() => setGarage(false)} build={eff} setBuild={setBuild}
         shop={{ ledger, buy: (slot: Slot, t: Tier) => { const r = buy(ledger, slot, t); if (r.ok) setLedger(r.ledger); else flash(r.why ?? 'Not yet') } }} />
       <TradeHud ledger={ledger} objective={objective} toast={toast} />
@@ -1162,7 +1185,7 @@ export default function ContinentRide() {
           <div style={{ padding: '18px 24px', borderRadius: 10, background: 'rgba(12,16,20,0.72)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.65, textAlign: 'center', maxWidth: 460 }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>The Darter · Ashfeld</div>
             You start on the road out of Ashfeld. It runs down to Millbrook on the river; the trunk south ends at Rune Hold under the Spine.
-            <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road · G garage · E board (stopped at a town) · F get out / in (on foot: mouse look, Space jump, Shift slide)</div>
+            <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road · G garage · E board (stopped at a town) · F get out / in (on foot: mouse look, Space jump, Shift slide) · M map</div>
             <div style={{ marginTop: 8, fontWeight: 600 }}>Press any key to drive</div>
           </div>
         </div>

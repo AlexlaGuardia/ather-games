@@ -73,7 +73,7 @@ export function BoardPanel({ town, contracts, ledger, capacity, onAccept, onAban
 export function TradeHud({ ledger, objective, toast }: { ledger: Ledger; objective: { text: string; km: number; turn: number } | null; toast: string | null }) {
   return (
     <>
-      <div style={{ position: 'absolute', right: 16, top: 14, textAlign: 'right', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.12em', textShadow: '0 2px 8px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', right: 16, top: 172, /* under the minimap (continent/map.tsx, 148 + its frame) */ textAlign: 'right', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.12em', textShadow: '0 2px 8px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>
         <span style={{ color: GOLD }}>{ledger.marks}</span> MARKS · {ledger.deeds} {ledger.deeds === 1 ? 'DEED' : 'DEEDS'}
         <div style={{ fontSize: 9, opacity: 0.5, letterSpacing: '0.2em', marginTop: 2 }}>TRIAL LEDGER</div>
       </div>
