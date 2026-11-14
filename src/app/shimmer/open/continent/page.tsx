@@ -679,6 +679,8 @@ export interface RideHud { x: number; z: number; yaw: number; mph: number; frac:
   /** On foot (the courser parked); prompt = the F verb on offer right now, if any. */
   foot?: boolean; prompt?: string | null }
 // on foot: the walker's own feel numbers (open/page.tsx), and the get-in/get-out glide
+/** The one place a gate-rune lets out on this side (gates.md). */
+const LANDING = 'rune-hold'
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
 function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.MutableRefObject<Track>; R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<{ tp?: (x: number, z: number, yaw: number) => void }> }) {
@@ -782,6 +784,25 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
         const y = cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z)
         loco.current = stepOut({ x, y: y + 0.05, z }, { vx: 0, vz: 0 }); view.current = { yaw, pitch }; mode.current = 'foot'
       },
+    }
+    // ?at= : arriving from the Ather. A gate-rune lets out at ONE known crossing, the public gate-landing in Rune Hold's
+    // square (gates.md, ruled 08-12; "must NOT become a general teleport network"), so any ?at= lands there. The
+    // courser waits parked at the edge of town; you stand in the square on foot, facing it.
+    const at = new URLSearchParams(window.location.search).get('at')
+    if (at !== null) {
+      const p = R.meta.places.find(q => q.id === LANDING)
+      if (p) {
+        const r = R.meta.roads.find(q => q.from === LANDING || q.to === LANDING)
+        const pts = r ? (r.from === LANDING ? r.pts : [...r.pts].reverse()) : null
+        const [cx, cz] = pts ? pts[1] : [p.x + 8, p.z]
+        const [nx, nz] = pts ? pts[3] : [p.x + 20, p.z]
+        place(cx, cz, Math.atan2(-(nx - cx), -(nz - cz)))
+        safe.current = { x: cx, z: cz, yaw: Math.atan2(-(nx - cx), -(nz - cz)) }
+        const y = cave && cave.inside(p.x, p.z) ? cave.y : R.groundAt(p.x, p.z)
+        loco.current = stepOut({ x: p.x, y: y + 0.05, z: p.z }, { vx: 0, vz: 0 })
+        view.current = { yaw: Math.atan2(-(cx - p.x), -(cz - p.z)), pitch: -0.08 }; mode.current = 'foot'
+      }
+      const u = new URL(window.location.href); u.searchParams.delete('at'); window.history.replaceState(null, '', u)
     }
     return () => {
       window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur)
