@@ -885,7 +885,7 @@ export default function ContinentRide() {
         </div>
       )}
       <div style={{ position: 'absolute', left: 12, top: 12, padding: '5px 9px', borderRadius: 6, background: 'rgba(12,16,20,0.5)', color: '#e8eef2', font: '600 11px var(--font-game), system-ui', letterSpacing: '0.2em', pointerEvents: 'none' }}>
-        ATHERNYX · ASHFELD TO RUNE HOLD
+        ATHERNYX · {R?.meta.name === "continent" ? "THE CONTINENT, 1672" : "ASHFELD TO RUNE HOLD"}
       </div>
       {R && !started && (
         <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none' }}>
