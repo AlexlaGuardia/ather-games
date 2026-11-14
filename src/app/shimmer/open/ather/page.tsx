@@ -31,6 +31,7 @@ import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WA
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud } from './combat-layer'
 import type { CombatEvent, Terrain } from './combat'
+import { DesktopNotice } from '../shared/desktop-notice'
 
 const TILE = 'first-wilds'
 
@@ -225,6 +226,7 @@ export default function AtherSlice() {
   const zoneName = zone.kind === 'plot' ? 'Your plot' : 'The Wilds'
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#bcd6e6' }}>
+      <DesktopNotice />
       <Canvas
         camera={{ fov: 75, near: 0.05, far: 900, position: [THRESHOLD.x, 3, THRESHOLD.z] }}
         onClick={(e) => { if (!panel) (e.target as HTMLCanvasElement).requestPointerLock?.() }}

@@ -46,14 +46,12 @@ const PLACES = [
   },
 ];
 
-// Newest first. Plain data on purpose: add a line, ship.
+// Newest first. Plain data on purpose: add a line, ship. Only what Play reaches: the voxel-era lines (the Slack,
+// co-op raids, Expeditions) came off 2026-11-14 because the open world is the game now and none of it is in there yet.
 const DEVLOG = [
   { date: "2026-11-14", tag: "World", title: "Your plot in the Ather, and one gate to everywhere you have been" },
   { date: "2026-11-14", tag: "World", title: "Drive the whole continent: roads, bridges, ferries, and a tunnel through the spine" },
   { date: "2026-11-13", tag: "World", title: "The open world begins: a first hillside to walk" },
-  { date: "2026-09-30", tag: "Boss", title: "The Slack, rebalanced: lee stones and a Stillwind with a body" },
-  { date: "2026-09-29", tag: "Co-op", title: "Raid the Slack together with your party" },
-  { date: "2026-09-29", tag: "World", title: "Expeditions: generated mazes, elites, and caches to bring home" },
 ];
 
 function BookstoreIcon() {
@@ -95,7 +93,7 @@ export default function Home() {
               </Link>
             ))}
           </div>
-          <AccountWidget className="ml-auto" />
+          <AccountWidget className="ml-auto" tone="gold" />
         </nav>
       </header>
 
@@ -128,6 +126,7 @@ export default function Home() {
             </Link>
             <OnlineCount color={GOLD} />
           </div>
+          <p className="mt-4 text-xs text-text/45 sm:hidden">Plays with a keyboard and mouse for now. Phone controls are on the way.</p>
           <p className="mt-6 text-sm text-text/50">
             Latest: <span style={{ color: GOLD }}>{DEVLOG[0].title}.</span>
           </p>

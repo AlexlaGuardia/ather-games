@@ -27,6 +27,7 @@ import { footWorld, tickFoot, exitSpot, canEnter, stepOut, EXIT_MAX_SPEED } from
 import { eyeY, WALK_SPEED, SPEED_CAP, type LocoState } from '../shared/locomotion'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
 import { TUNNEL_H, TUNNEL_WALK, boreAt, tunnelWall, bridgeRail, drivable, ferryLanding, guardrails, loadRegion, roadRail, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
+import { DesktopNotice } from '../shared/desktop-notice'
 
 const STEP = 1 / 120
 const FOV = 64
@@ -1128,6 +1129,7 @@ export default function ContinentRide() {
   }, [])
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#a9c6d6' }}>
+      <DesktopNotice />
       {R && (
         <Canvas camera={{ fov: FOV, near: 0.1, far: 2500 }} gl={{ antialias: true, powerPreference: 'high-performance' }}>
           <VoxelDayNight />

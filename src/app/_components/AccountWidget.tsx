@@ -19,7 +19,9 @@ import { useParty } from '@/lib/party'
 //
 // Reusable on purpose: any page can drop <AccountWidget /> into its corner cluster.
 
-export default function AccountWidget({ className = '' }: { className?: string }) {
+// tone='gold': the signed-out pill wears the call-to-action gold (the landing page's top bar, where a dim pill
+// disappeared against the hero sky). Default stays quiet for in-game corners.
+export default function AccountWidget({ className = '', tone = 'quiet' }: { className?: string; tone?: 'quiet' | 'gold' }) {
   const { session, loading, signIn, signOut, claimName } = useAccount()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
@@ -84,7 +86,7 @@ export default function AccountWidget({ className = '' }: { className?: string }
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
         className={`${chrome} h-10 px-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] ${
-          needsName
+          needsName || (tone === 'gold' && !session)
             ? 'border-[#d4a843]/45 text-[#d4a843] hover:border-[#d4a843]/70'
             : 'border-white/10 text-[#8a879a] hover:text-[#d4a843] hover:border-[#d4a843]/40'
         }`}
