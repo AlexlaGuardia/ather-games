@@ -25,6 +25,7 @@ import {
 import { PlotScene } from './plot-scene'
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
+import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
 import { loadWilds, tileCentreWorld, walkableIn, BIOME_NAME, type Wilds } from './wilds'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
@@ -57,9 +58,15 @@ export default function AtherSlice() {
   const near = useRef<Near>(null)
   const hudT = useRef(0), fogT = useRef(0), fogDirty = useRef(false)
   const [chud, setChud] = useState<CombatHud | null>(null)
+  const [pitstops, setPitstops] = useState<Pitstop[]>([LANDING])
   const [reviveKey, setReviveKey] = useState(0)
 
   useEffect(() => { setWaymarks(loadWaymarks()); setGarden(loadGarden()); setFog(loadFog()) }, [])
+  // the Hallway's city doors: the ones the keeper has unlocked by visiting (hub's continent/pitstops.ts)
+  useEffect(() => {
+    fetch('/open/continent.json').then(r => r.json()).then(m => setPitstops(pitstopsUnlocked(m.places as PlaceLike[])))
+      .catch(() => { /* Rune Hold alone */ })
+  }, [])
   useEffect(() => { loadWilds(TILE).then(setW).catch(e => setToast(`The Wilds would not load: ${e.message}`)) }, [])
   const tileOff = useMemo(() => W ? tileCentreWorld(W.meta) : { x: 0, z: 0 }, [W])
   useEffect(() => {
@@ -117,9 +124,9 @@ export default function AtherSlice() {
       arrive({ kind: 'wilds', tile: d.w.tile }, { x: d.w.x + 2.2, z: d.w.z + 2.2, yaw: Math.PI * 0.75 })
       return
     }
-    // Athernyx: the gate lets out at its one crossing, Rune Hold's gate-landing (hub's ?at= sets you down there).
+    // Athernyx: out through a city's door off the hall (hub's ?at= sets you down at that pitstop).
     setPanel(null); setFade(1)
-    setTimeout(() => { window.location.href = `/shimmer/open/continent?at=${LANDING.id}` }, 380)
+    setTimeout(() => { window.location.href = `/shimmer/open/continent?at=${encodeURIComponent(d.id)}` }, 380)
   }, [W, arrive, goHome])
 
   // THE HALLWAY (gates.md, ruled 11-14): any door to any door. Arriving from the continent map with ?waymark=<id>
@@ -274,7 +281,7 @@ export default function AtherSlice() {
       )}
       {panel?.kind === 'map' && (
         <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} here={pos.current}
-          inWilds={zone.kind === 'wilds'} onTravel={travel} tile={TILE} />
+          inWilds={zone.kind === 'wilds'} onTravel={travel} tile={TILE} pitstops={pitstops} />
       )}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
       <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />
@@ -285,7 +292,7 @@ export default function AtherSlice() {
             Click to play<br />
             WASD move · Space jump / climb · Shift slide · E use · M map · Esc release
             <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>
-              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out to Rune Hold in Athernyx. Gregory, by the threshold, sells the ground under the mist. In the Wilds the Hollows wander: click to shoot, R to reload, walk over grey matter to take it. F plants a waymark, H walks home.
+              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out through a city's door in Athernyx. Gregory, by the threshold, sells the ground under the mist. In the Wilds the Hollows wander: click to shoot, R to reload, walk over grey matter to take it. F plants a waymark, H walks home.
             </div>
           </div>
         </div>

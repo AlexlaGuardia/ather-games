@@ -9,16 +9,17 @@ import { GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { BIOME_NAME } from './wilds'
 import { cellOrigin, FOG_CELL, walkedShare, type Fog } from './explored'
 import { drawCloud, ATHER_CLOUD } from '../../ui/map-kit'
+import type { Pitstop } from '../continent/pitstops'
 import { GRID, sqId, ringOf, canBuy, RING_PAGES, GRIMOIRE_SIZE, type Garden } from './plot'
 
 export type Dest =
   | { kind: 'home' }
   | { kind: 'waymark'; w: Waymark }
-  | { kind: 'landing' }
+  | { kind: 'landing'; id: string; name: string }
 
-/** The one Athernyx exit the gate works (world/gates.md, ruled 08-12): the public gate-landing in Rune Hold's
- *  square. "Must NOT become a general teleport network"; a second exit needs its own ruling. */
-export const LANDING = { id: 'rune-hold', name: 'Rune Hold', x: 255, z: 53 }
+/** Rune Hold's public gate-landing (gates.md 08-12): the first pitstop door, open from the start. THE HALLWAY
+ *  (gates.md 11-14) adds a door per city the keeper has visited; the list comes from continent/pitstops.ts. */
+export const LANDING: Pitstop = { id: 'rune-hold', name: 'Rune Hold', x: 255, z: 53 }
 
 const shell: React.CSSProperties = { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(12,16,20,0.55)' }
 const card: React.CSSProperties = { width: 'min(94vw, 760px)', maxHeight: '92vh', overflow: 'auto', padding: 16, borderRadius: 12, background: 'rgba(24,28,32,0.94)', color: '#eef3f6', font: '13px system-ui, sans-serif' }
@@ -44,9 +45,9 @@ function FogLayer({ fog, W }: { fog: Fog; W: Wilds }) {
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
 }
 
-export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile }: {
+export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops }: {
   view: 'ather' | 'athernyx'; travel: boolean; W: Wilds | null; fog: Fog | null; waymarks: Waymark[]
-  here: { x: number; z: number }; inWilds: boolean; onTravel: (d: Dest) => void; tile: string
+  here: { x: number; z: number }; inWilds: boolean; onTravel: (d: Dest) => void; tile: string; pitstops: Pitstop[]
 }) {
   const sx = W?.meta.sizeX ?? 1000, sz = W?.meta.sizeZ ?? 1000
   const pct = (x: number, z: number) => ({ left: `${((x + sx / 2) / sx) * 100}%`, top: `${((z + sz / 2) / sz) * 100}%` })
@@ -93,12 +94,17 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
             <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden' }}>
               <img src="/open/wilds/continent-relief.jpg" alt="" style={{ width: '100%', display: 'block' }} />
               <div title="Your Wilds stand here" style={{ position: 'absolute', left: `${(src.x0 / 1168) * 100}%`, top: `${(src.y0 / 784) * 100}%`, width: `${((src.x1 - src.x0) / 1168) * 100}%`, height: `${((src.y1 - src.y0) / 784) * 100}%`, border: '2px solid #6fd3c4', boxShadow: '0 0 0 2px rgba(0,0,0,0.5)', pointerEvents: 'none' }} />
-              <button title={`${LANDING.name} · the gate-landing`} onClick={() => go({ kind: 'landing' })}
-                style={{ ...pin('#f2d88a', 13), left: `${((LANDING.x + 5835) / 11670) * 100}%`, top: `${((LANDING.z + 3915) / 7830) * 100}%` }} />
+              {pitstops.map(p => (
+                <button key={p.id} title={`${p.name} · a door off the hall`} onClick={() => go({ kind: 'landing', id: p.id, name: p.name })}
+                  style={{ ...pin('#f2d88a', 13), left: `${((p.x + 5835) / 11670) * 100}%`, top: `${((p.z + 3915) / 7830) * 100}%` }} />
+              ))}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 200px', gap: 14, marginTop: 10, alignItems: 'start' }}>
               <div style={{ opacity: 0.75, fontSize: 12 }}>The same ground in its other state. Each city keeps a door off the hall; visit a city and its door opens to you. {LANDING.name}&apos;s is open from the start.</div>
-              {stop(`Athernyx · ${LANDING.name}`, 'the gate-landing', { kind: 'landing' }, '#f2d88a')}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={label}>Doors</div>
+                {pitstops.map(p => stop(p.name, p.id === LANDING.id ? 'the gate-landing' : 'city door', { kind: 'landing', id: p.id, name: p.name }, '#f2d88a'))}
+              </div>
             </div>
           </div>
         )}
