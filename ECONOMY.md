@@ -80,7 +80,7 @@ Then: the Hauler, Lingston's board, salvage finds, perishables, the GE.
 - ✅ **RULED 2026-11-14 (/magii + Alex)** — all four canon questions settled; see `athernyx/CANON/CANON_GAPS.md` › *the two-world trade* [RULED], authority in `world/gates.md` + `world/ather.md`:
   - **Benji himself** runs the Co. in 1672 (ageless by Ather-exposure); Lingston face = **Wend**, Benji the principal.
   - **Metal crosses** — honest 1672 import (the "never" rule was collar-era). Coin + tools that cut crystal. **ONE metal tool set both sides** (Alex 11-14, supersedes the old 08-13 grown-focus call). Home/garden architecture + plants still read grown; tools are metal. Gun + coursers still stay at the gate.
-  - **Mortal goods:** categories canon; named **Havensteel** (Gale Haven tool-metal) + **Veradyn blackwood** (Frontier hardwood) — Alex to sign/swap.
+  - **Mortal goods:** categories canon; named **Havensteel** (Gale Haven tool-metal) + **Veradyn blackwood** (Frontier hardwood) — **locked** (Alex signed 11-14).
   - **Gold prospectable** (Mint strikes coin, doesn't own the ore).
   - **BONUS:** home structure ruled — mortal shipyard **base** (furnish + launch pad + Ather gate), Ather fold stays the **grown home** (one garden, one threshold); settlement-with-Moglins per Moonwell. Home-gate's mortal end = your base, not Rune Hold square.
 - Prices, contract payouts, deed thresholds, carry numbers: Jin's, once v1 runs.
