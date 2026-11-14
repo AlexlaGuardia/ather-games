@@ -20,7 +20,7 @@ import { postBoard, accept, arrive, abandon, buy, GOODS, CAPACITY, type Contract
 import { DARTER_STOCK, tuneFromSpec } from '../courser'
 import { buildSpec, type Slot, type Tier } from '../courser-build'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
-import { drivable, loadRegion, nearestRoad, type Region, type RegionJunction, type RegionRoad } from '../region'
+import { drivable, loadRegion, nearPad, nearestRoad, type Region, type RegionJunction, type RegionRoad } from '../region'
 
 const STEP = 1 / 120
 const FOV = 64
@@ -286,7 +286,7 @@ function Towns({ R }: { R: Region }) {
         const a = hash(pi, tries) * Math.PI * 2, r = 10 + hash(tries, pi) * (n > 10 ? 90 : 45)
         const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, y = R.heightAt(x, z)
         if (!Number.isFinite(y) || y < 1.5) continue
-        if (nearestRoad(R, x, z).d < 9) continue
+        if (nearestRoad(R, x, z).d < 9 || nearPad(R, x, z, 5)) continue
         const sl = Math.abs(R.heightAt(x + 3, z) - R.heightAt(x - 3, z)) + Math.abs(R.heightAt(x, z + 3) - R.heightAt(x, z - 3))
         if (sl > 3) continue
         out.push({ x, y, z, rot: hash(k, pi + 7) * Math.PI, s: 0.8 + hash(pi, k + 3) * 0.6 }); k++
@@ -336,7 +336,7 @@ function Trees({ R }: { R: Region }) {
       const x = gx + (hash(j, i) - 0.5) * 12, z = gz + (hash(i + 3, j) - 0.5) * 12, y = R.heightAt(x, z)
       if (!Number.isFinite(y) || y < 2 || y > 230) continue
       if (Math.abs(R.heightAt(x + 4, z) - R.heightAt(x - 4, z)) > 5) continue
-      if (nearestRoad(R, x, z).d < 9) continue
+      if (nearestRoad(R, x, z).d < 9 || nearPad(R, x, z, 5)) continue
       if (R.meta.places.some(p => Math.hypot(p.x - x, p.z - z) < 40)) continue
       out.push({ x, y, z, s: 0.8 + hash(i, j + 9) * 0.7 })
       if (out.length >= 7000) return out

@@ -76,6 +76,10 @@ export function junctionAt(region: Region, x: number, z: number): RegionJunction
   return null
 }
 
+/** True when x, z is within `margin` of a junction pad's rim (or on it): keep trees and houses off the paving. */
+export const nearPad = (region: Region, x: number, z: number, margin: number) =>
+  (region.meta.network?.junctions ?? []).some(j => j.r > 0 && Math.hypot(x - j.x, z - j.z) < j.r + margin)
+
 /** The nearest point on any road's centre line: distance (m) and the road. For "on road?" and callouts.
  *  On a junction pad d = 0 (the pad is road); on a roundabout's island you are off it. */
 export function nearestRoad(region: Region, x: number, z: number): { d: number; road: RoadLike | null; junction: RegionJunction | null } {
