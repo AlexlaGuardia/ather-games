@@ -24,6 +24,7 @@ import { emptySeen, isSeen, see, loadSeen, saveSeen, CELL, type Seen } from '../
 import { drawCloud, drawDoor, drawDoorPinned, drawKeeper, PARCHMENT, ATHER_CLOUD } from '../../ui/map-kit'
 import { loadFog, FOG_CELL, type Fog } from '../ather/explored'
 import { waymarksInWorld } from '../ather/waymarks'
+import { allPitstops, loadVisited, FIRST_PITSTOP } from './pitstops'
 import { screenHeading } from '../../voxel3d/map-heading'
 import { HearthMapFrame, MINIMAP_BOX, MINIMAP_BOX_PHONE, type MapBox } from '../../ui/hearth-hud'
 
@@ -314,6 +315,19 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
       ctx.font = `italic 600 ${12 * dpr}px Georgia, serif`; ctx.lineWidth = 3 * dpr; ctx.strokeStyle = 'rgba(236,226,198,0.9)'
       ctx.strokeText('gate to the Ather', gx, gy); ctx.fillStyle = '#5b3d8a'; ctx.fillText('gate to the Ather', gx, gy)
     }
+    // PITSTOPS: each city's public door off the Hallway (gates.md 11-14). Visited = a lit ring you can tap; not yet =
+    // a faint ring, so you can see there is a door to earn. Rune Hold is already ringed above.
+    const visited = loadVisited()
+    for (const d of allPitstops(map.R.meta.places)) {
+      if (d.id === FIRST_PITSTOP) continue
+      const [x, y] = map.toPx(d.x, d.z), open = visited.has(d.id)
+      ctx.save(); ctx.globalAlpha = open ? 1 : 0.35; gateRing(ctx, x * S, y * S, 3.4 * dpr); ctx.restore()
+      if (open) {
+        const gx = x * S + 10 * dpr, gy = y * S + 15 * dpr
+        ctx.font = `italic 600 ${11 * dpr}px Georgia, serif`; ctx.lineWidth = 3 * dpr; ctx.strokeStyle = 'rgba(236,226,198,0.9)'
+        ctx.strokeText('pitstop', gx, gy); ctx.fillStyle = '#5b3d8a'; ctx.fillText('pitstop', gx, gy)
+      }
+    }
     let on = 0
     for (let y = 0; y < map.seen.ch; y++) for (let x = 0; x < map.seen.cw; x++) if (isSeen(map.seen, x, y)) on++
     setPct((on / (map.seen.cw * map.seen.ch)) * 100)
@@ -332,6 +346,22 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)
   }, [map, track, S, dpr, side])
+  // ★ TAP A DOOR, STEP THROUGH (gates.md › THE HALLWAY: any door to any door, one act). Athernyx tab: an unlocked
+  // pitstop (or Rune Hold) sets you down there. Ather tab: a waymark you bound sets you down at it in the Wilds
+  // (world lane's ?waymark=, which refuses an unbound id).
+  const tap = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const c = base.current; if (!c) return
+    const r = c.getBoundingClientRect(), px = (e.clientX - r.left) * (c.width / r.width), py = (e.clientY - r.top) * (c.height / r.height)
+    const near = (x: number, z: number) => { const [mx, my] = map.toPx(x, z); return Math.hypot(mx * S - px, my * S - py) < 16 * dpr }
+    let go: string | null = null
+    if (side === 'ather') { const w = waymarksInWorld().find(w => near(w.x, w.z)); if (w) go = `/shimmer/open/ather?waymark=${encodeURIComponent(w.id)}` }
+    else {
+      const visited = loadVisited()
+      const d = allPitstops(map.R.meta.places).find(d => (d.id === FIRST_PITSTOP || visited.has(d.id)) && near(d.x, d.z))
+      if (d) go = `/shimmer/open/continent?at=${encodeURIComponent(d.id)}`
+    }
+    if (go) { e.stopPropagation(); window.location.href = go }
+  }
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.code === 'Escape' || e.code === 'KeyM') { e.stopPropagation(); onClose() } }
     window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true)
@@ -353,13 +383,13 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
           )}
         </div>
         <div style={{ position: 'relative' }}>
-          <canvas ref={base} data-map="base" style={{ maxWidth: '94vw', maxHeight: '78vh', width: 'auto', height: 'auto', display: 'block', borderRadius: 8,
+          <canvas ref={base} data-map="base" onClick={tap} style={{ maxWidth: '94vw', maxHeight: '78vh', width: 'auto', height: 'auto', display: 'block', borderRadius: 8,
             border: '3px solid #5a3d22', boxShadow: '0 0 0 1px #c9a86a55, 0 18px 50px rgba(0,0,0,0.6)' }} />
           <canvas ref={marks} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', borderRadius: 8 }} />
         </div>
         <div style={{ color: 'rgba(240,228,200,0.6)', font: '12px system-ui', textAlign: 'center' }}>
           <span style={{ color: '#f4e6c0', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{pct.toFixed(side === 'ather' ? 2 : 1)}%</span>{' '}
-          {side === 'ather' ? <>of the Ather walked · the same land, the other state · cross at Rune Hold · </> : <>of the continent inked · ink where you have driven · </>}<span style={{ letterSpacing: '0.18em', textTransform: 'uppercase', fontSize: 10 }}>M / Esc close</span>
+          {side === 'ather' ? <>of the Ather walked · tap a waystone to step through · </> : <>of the continent inked · tap a lit door to step through · </>}<span style={{ letterSpacing: '0.18em', textTransform: 'uppercase', fontSize: 10 }}>M / Esc close</span>
         </div>
       </div>
     </div>

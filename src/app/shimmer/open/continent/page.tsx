@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Track } from './map'
+import { pitstopsUnlocked, visitNear } from './pitstops'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { VoxelDayNight } from '../shared/day-night'
@@ -679,7 +680,7 @@ export interface RideHud { x: number; z: number; yaw: number; mph: number; frac:
   /** On foot (the courser parked); prompt = the F verb on offer right now, if any. */
   foot?: boolean; prompt?: string | null }
 // on foot: the walker's own feel numbers (open/page.tsx), and the get-in/get-out glide
-/** The one place a gate-rune lets out on this side (gates.md). */
+/** Where the Hallway lets you out when the asked-for door is not yours yet: the 08-12 public landing (gates.md). */
 const LANDING = 'rune-hold'
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
@@ -785,15 +786,17 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
         loco.current = stepOut({ x, y: y + 0.05, z }, { vx: 0, vz: 0 }); view.current = { yaw, pitch }; mode.current = 'foot'
       },
     }
-    // ?at= : arriving from the Ather. A gate-rune lets out at ONE known crossing, the public gate-landing in Rune Hold's
-    // square (gates.md, ruled 08-12; "must NOT become a general teleport network"), so any ?at= lands there. The
-    // courser waits parked at the edge of town; you stand in the square on foot, facing it.
+    // ?at= : arriving through the Hallway (gates.md › THE HALLWAY, 11-14). You come out of a PITSTOP door: any city
+    // you have visited, or Rune Hold's square (the 08-12 landing, always open). An id that is not an unlocked
+    // pitstop lands at Rune Hold: a door onto an unbound place stays refused. The courser waits parked at the edge of
+    // town; you stand in the square on foot, facing it.
     const at = new URLSearchParams(window.location.search).get('at')
     if (at !== null) {
-      const p = R.meta.places.find(q => q.id === LANDING)
+      const dest = pitstopsUnlocked(R.meta.places).find(q => q.id === at)?.id ?? LANDING
+      const p = R.meta.places.find(q => q.id === dest)
       if (p) {
-        const r = R.meta.roads.find(q => q.from === LANDING || q.to === LANDING)
-        const pts = r ? (r.from === LANDING ? r.pts : [...r.pts].reverse()) : null
+        const r = R.meta.roads.find(q => q.from === dest || q.to === dest)
+        const pts = r ? (r.from === dest ? r.pts : [...r.pts].reverse()) : null
         const [cx, cz] = pts ? pts[1] : [p.x + 8, p.z]
         const [nx, nz] = pts ? pts[3] : [p.x + 20, p.z]
         place(cx, cz, Math.atan2(-(nx - cx), -(nz - cz)))
@@ -1100,7 +1103,12 @@ export default function ContinentRide() {
   useEffect(() => {
     if (!mapState) return
     let dirty = false
-    const ink = setInterval(() => { if (started && reveal(mapState, track.current.x, track.current.z)) dirty = true }, 250)
+    const ink = setInterval(() => {
+      if (!started) return
+      if (reveal(mapState, track.current.x, track.current.z)) dirty = true
+      const door = visitNear(mapState.R.meta.places, track.current.x, track.current.z)
+      if (door) flash(`Pitstop unlocked · ${door.name} (a door off your Hallway)`)
+    }, 250)
     const save = setInterval(() => { if (dirty) { persist(mapState); dirty = false } }, 3000)
     const out = () => persist(mapState)
     window.addEventListener('pagehide', out)
