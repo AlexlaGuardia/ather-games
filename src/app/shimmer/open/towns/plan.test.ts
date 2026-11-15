@@ -179,6 +179,12 @@ ok(isleB.length >= 20, `Veradyn's grown isles: ${isleB.length} buildings`)
 ok(!!ver.temple && ver.temple.y > 20, `the Barrier Temple on the highest isle (y ${ver.temple?.y.toFixed(0)})`)
 ok(!!ver.port?.piers.length, 'a ferry pier on the waterfront')
 
+// ── Ashfeld's Fallen Cap (locations.md): on the square, with clear ground round it for the cap and the lean-to
+const fcap = byId.get('ashfeld')!.buildings.find(b => b.front === 'fallen-cap')
+const asq = meta.network!.junctions.find(j => j.kind === 'square' && j.place === 'ashfeld')!
+ok(!!fcap && Math.hypot(fcap.x - asq.x, fcap.z - asq.z) < asq.r + 20, 'the Fallen Cap stands on Ashfeld square')
+ok(!!fcap && byId.get('ashfeld')!.buildings.every(b => b === fcap || Math.hypot(b.x - fcap.x, b.z - fcap.z) > 12), 'the Fallen Cap has clear ground round it')
+
 // ── deterministic: the same map plans the same towns
 const again = planTowns(R)
 ok(JSON.stringify(again.map(p => p.buildings.length)) === JSON.stringify(plans.map(p => p.buildings.length)), 'planning is deterministic')

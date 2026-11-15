@@ -12,6 +12,7 @@ import * as THREE from 'three'
 import type { Region } from '../region'
 import { townRadius, FLOOR_H, type TownPlan, type Building } from './plan'
 import { cachedPlan } from '../foot-solids'
+import { FallenCap } from './fallen-cap'
 import { veradynSites } from './veradyn'
 import { dayProgress, daylight } from '../../engine/day-cycle'
 import { FRONTS } from '../../play3d/rune-hold-look'
@@ -424,6 +425,11 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
       const rh = (b.kind === 'hall' ? 0.22 : 0.32) * b.d
       p.set(b.x, top + H, b.z); s.set(b.w + 0.6, rh, b.d + 0.8)
       roofs.current!.setMatrixAt(i, m.compose(p, q, s)); roofs.current!.setColorAt(i, c.set(st.roofs[Math.floor(b.v * 7.3) % st.roofs.length]))
+      if (b.front === 'fallen-cap') {
+        // Jin 2's FallenCap draws this one (hall, stem, cap, lean-to, its own board): the kit keeps only the plinth
+        walls.current!.setMatrixAt(i, hide); roofs.current!.setMatrixAt(i, hide); chimneys.current!.setMatrixAt(i, hide); caps.current!.setMatrixAt(i, hide)
+        return
+      }
       if (st.grown) {
         // a GROWN roof (Veradyn's living architecture): a broad cap like a fungus's, overhanging the walls, no gable
         roofs.current!.setMatrixAt(i, hide); chimneys.current!.setMatrixAt(i, hide)
@@ -455,7 +461,8 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
       <instancedMesh key={`c${n}`} frustumCulled={false} ref={chimneys} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
       <instancedMesh key={`g${n}`} frustumCulled={false} ref={caps} args={[undefined, undefined, n]}><sphereGeometry args={[1, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshLambertMaterial flatShading /></instancedMesh>
       {shown.filter(pl => pl.temple).map(pl => <BarrierTemple key={pl.place} t={pl.temple!} />)}
-      {parts.filter(q => q.b.front).map(q => <FrontSign key={`${q.b.front}`} b={q.b} />)}
+      {parts.filter(q => q.b.front && q.b.front !== 'fallen-cap').map(q => <FrontSign key={`${q.b.front}`} b={q.b} />)}
+      {parts.filter(q => q.b.front === 'fallen-cap').map(q => <FallenCap key="fallen-cap" x={q.b.x} z={q.b.z} y={q.b.y1 + 0.25} yaw={q.b.yaw} w={q.b.w} d={q.b.d} />)}
       {shown.flatMap(pl => (pl.boards ?? []).map((b, i) => <NameBoard key={`${pl.place}-${i}`} b={b} />))}
       {shown.filter(pl => pl.wall).map(pl => <HeritageWall key={pl.place} R={R} w={pl.wall!} lanes={pl.lanes} />)}
       {shown.filter(pl => pl.port).map(pl => <GalePort key={pl.place} port={pl.port!} />)}

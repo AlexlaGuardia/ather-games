@@ -203,6 +203,19 @@ export function planTown(R: Region, p: RegionPlace, pi: number, opts?: { r?: num
   // stands at the centre, on the square, across it from where the road comes in. The old walls stand as HERITAGE
   // round the old city and no longer control access: the city has grown past them, so streets run through the gaps.
   // The ring sits between the third and fourth back-street rings so it has its own band and cuts no building.
+  // ── ASHFELD's tavern, THE FALLEN CAP (locations.md: built under a living mushroom that is still growing; Alex 11-14),
+  // drawn by Jin 2's fallen-cap.tsx. It takes the square's best frontage, across from where the road comes in, with
+  // clear ground round it (the cap overhangs ~1.5x and a stable lean-to sits off its left wall). The building stays in
+  // the plan: the on-foot collision stands on its footprint.
+  if (p.id === 'ashfeld' && sq) {
+    const into = sq.arms.length ? sq.arms[0].ang : 0
+    for (const turn of [Math.PI, Math.PI * 0.75, Math.PI * 1.25, Math.PI / 2, Math.PI * 1.5]) {
+      const a = into + turn, w = 14, d = 13, off = sq.r + 5 + d / 2
+      const fc = { x: sq.x + Math.cos(a) * off, z: sq.z + Math.sin(a) * off, yaw: a + Math.PI, w, d }
+      const g = fits(fc, 5)
+      if (g) { keep({ ...fc, floors: 2, y0: g.y0, y1: g.y1, kind: 'hall', rim: 0, v: 0.3, core: true, front: 'fallen-cap' }); break }
+    }
+  }
   if (p.id === 'citadel' && sq) {
     const into = sq.arms.length ? sq.arms[0].ang : 0, a = into + Math.PI
     const w = 36, d = 26, off = sq.r + 3 + d / 2
