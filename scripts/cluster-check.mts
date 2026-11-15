@@ -8,7 +8,8 @@ const out = flag('--out', '/tmp'), url = flag('--url', 'https://ather.games')
 const b = await puppeteer.launch({ protocolTimeout: 120000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const res: Record<string, unknown> = {}
-const p = await b.newPage(); await p.setViewport({ width: 1200, height: 740 })
+const p = await b.newPage()
+await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))   // a fresh profile is born first (birth-gate.tsx); seed a rune so the ritual does not take the screen; await p.setViewport({ width: 1200, height: 740 })
 const load = async (q: string) => { await p.goto(`${url}/shimmer/open/ather?hour=13${q}`, { waitUntil: 'load', timeout: 120000 }); await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 120000 }); await sleep(2500) }
 const standAt = async (x: number, z: number) => {
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI * 0.75), x, z)

@@ -5,7 +5,8 @@ import puppeteer from 'puppeteer-core'
 const url = (() => { const i = process.argv.indexOf('--url'); return i > 0 ? process.argv[i + 1] : 'https://ather.games' })()
 const b = await puppeteer.launch({ protocolTimeout: 120000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-const p = await b.newPage(); await p.setViewport({ width: 1100, height: 680 })
+const p = await b.newPage()
+await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))   // a fresh profile is born first (birth-gate.tsx); seed a rune so the ritual does not take the screen; await p.setViewport({ width: 1100, height: 680 })
 const go = async () => {
   await p.goto(`${url}/shimmer/open/ather?tune=1&hour=13`, { waitUntil: 'load', timeout: 120000 })
   await p.waitForFunction(() => !!(window as any).__ather?.spread?.(), { timeout: 120000, polling: 500 })

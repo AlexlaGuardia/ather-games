@@ -41,6 +41,7 @@ import { advance, clearAt, loadSpread, saveSpread, loadSkew, saveSkew, type Spre
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey } from '../shared/touch'
 import { useMenuLock } from '../shared/menu-lock'
+import { BirthGate, useBirthGateUp } from '../birth-gate'
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
 import { useInv, setInv, getInv, hotbarEntries, heldItem } from '../shared/bag'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
@@ -123,8 +124,11 @@ export default function AtherSlice() {
     return () => document.removeEventListener('pointerlockchange', ch)
   }, [])
   const optionsOpen = useOptionsOpen()   // Options (options.tsx): O, Esc once the mouse is free, the pack's gear
-  useOptionsKeys(panel !== null)
-  useEffect(() => { frozen.current = panel !== null || optionsOpen }, [panel, optionsOpen])
+  // the birth gate (Jin 1's birth-gate.tsx): a keeper with no birth rune is born on first entry; Play lands here, so the
+  // ritual must be here too. Its screen drives on arrows/Enter/Space, so the walker freezes under it.
+  const birthUp = useBirthGateUp()
+  useOptionsKeys(panel !== null || birthUp)
+  useEffect(() => { frozen.current = panel !== null || optionsOpen || birthUp }, [panel, optionsOpen, birthUp])
   // panels are clicked, so they free the mouse; closing one takes the camera back (shared/menu-lock.ts)
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
   const getCanvas = useCallback(() => canvasEl.current, [])
@@ -495,6 +499,7 @@ export default function AtherSlice() {
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} />}
+      <BirthGate />
       {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={slot} isTouch={isTouch} />}
       <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />
       {isTouch && !panel && (

@@ -17,7 +17,8 @@ const parts = (p: any) => p.evaluate(() => ({
   tools: document.querySelectorAll('.w-14.h-14').length,
 }))
 // desktop
-const p = await b.newPage(); await p.setViewport({ width: 1280, height: 760 })
+const p = await b.newPage()
+await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))   // a fresh profile is born first (birth-gate.tsx); seed a rune so the ritual does not take the screen; await p.setViewport({ width: 1280, height: 760 })
 await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 120000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 120000 })
 await sleep(2500)
@@ -50,6 +51,7 @@ await p.screenshot({ path: `${out}/hud-3-continent.png` })
 await p.close()
 // phone
 const q = await b.newPage()
+await q.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))   // a fresh profile is born first (birth-gate.tsx); seed a rune so the ritual does not take the screen
 await q.emulate({ viewport: { width: 844, height: 390, deviceScaleFactor: 1, isMobile: true, hasTouch: true, isLandscape: true },
   userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' })
 await q.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 120000 })
