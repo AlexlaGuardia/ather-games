@@ -11,7 +11,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMenuLock } from '../shared/menu-lock'
-import { useInv, hotbarEntries } from '../shared/bag'
+import { useInv, hotbarEntries, getInv } from '../shared/bag'
+import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, heldOf, litSlot, settle, type Stance } from '../shared/stance'
+import { itemDef } from '../shared/inventory'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { VesselShop, VesselCounter } from '../vessel-shop'
@@ -735,7 +737,8 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
       keys.current.add(e.code)
       if (e.code === 'KeyF' && !e.repeat) seat()
       if (e.code === 'KeyK' && !e.repeat) cycleLook()   // the ground look (dev, desktop): tiles + toon / toon / flat
-      if (e.code === 'KeyR' && !rangeHolds()) { mode.current = 'drive'; loco.current = null; place(safe.current.x, safe.current.z, safe.current.yaw) }
+      // R at the WHEEL is back to the road (recovery); on foot R is the stance (the page's handler, shared/stance.ts)
+      if (e.code === 'KeyR' && mode.current === 'drive') place(safe.current.x, safe.current.z, safe.current.yaw)
       if (e.code === 'KeyC' && mode.current === 'drive') camMode.current = camMode.current === 'chase' ? 'hood' : 'chase'
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault()
     }
@@ -769,6 +772,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
       look: (yaw: number, pitch = -0.08) => { view.current = { yaw, pitch } },
       // scripted shots: stand a walker anywhere (on the Passage market's floor when the spot is in it)
       shot: (q: [number, number, number, number, number, number] | null) => { shotCam.current = q },
+      stance: () => continentStance.current, speedMult: () => loco.current?.speedMult ?? null,
       footTp: (x: number, z: number, yaw = 0, pitch = -0.08) => {
         const y = cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z)
         loco.current = stepOut({ x, y: y + 0.05, z }, { vx: 0, vz: 0 }); view.current = { yaw, pitch }; mode.current = 'foot'
@@ -846,6 +850,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
       const r = clamp1((k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) + touch.move.x)
       let mx = fwx * f + rtx * r, mz = fwz * f + rtz * r
       const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml }
+      lc.speedMult = continentStance.current.kind === 'stowed' ? STOWED_SPEED : 1   // hands free, a little quicker
       tickFoot(fw, R, lc, { mvX: mx, mvZ: mz, fwdX: fwx, fwdZ: fwz, rightX: rtx, rightZ: rtz,
         jumpKey: k.has('Space') || touch.held.has('Space'), crouchKey: k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyC') || touch.held.has('ShiftLeft'), dt: Math.min(frameDt, 0.05) })
       // fell off the world (or into it): back beside the courser
@@ -992,6 +997,8 @@ const SUPPLY: Supply[] = [
 ]
 const TOWNS = ['ashfeld', 'millbrook', 'rune-hold', 'passage']
 const ROAD_FACTOR = 1.3
+/** the page's stance, read by Driver's frame (stowed = quicker on foot) */
+const continentStance: { current: Stance } = { current: STOWED }
 const FERRY_FARE = 8
 // the Veradyn crossing is a RINNING BOAT (transportation.md: short coastal or island hops), ~2 km against a river's
 // width, so it costs more; everything else on the network is a Shellback ferry
@@ -999,7 +1006,7 @@ const ferryName = (id: string) => (id === 'veradyn-rinning' ? 'rinning boat to t
 const ferryFare = (id: string) => (id === 'veradyn-rinning' ? 14 : FERRY_FARE)
 
 /** The continent's keys for Options › Controls: the walk set plus the courser's. */
-const CONTINENT_KEYS: KeyRow[] = [...WALK_KEYS, ['↑ ↓ ← →', 'drive (alongside the bound keys)'], ['Left mouse', 'fire a held gun'], ['Right mouse', 'aim a held gun']]
+const CONTINENT_KEYS: KeyRow[] = [...WALK_KEYS, ['R (on foot)', 'tap: draw · swap · reload — hold: stow'], ['R (driving)', 'back to the road'], ['↑ ↓ ← →', 'drive (alongside the bound keys)'], ['Left mouse', 'fire a held gun'], ['Right mouse', 'aim a held gun']]
 
 const JUNCTION_LABEL: Record<string, string> = { square: 'Town square', roundabout: 'Roundabout', cross: 'Crossroads', stop4: 'Four-way', tee: 'Junction', merge: 'Junction' }
 const ROAD_LABEL: Record<string, string> = { paved: 'Paved road', road: 'Road', trail: 'Trail', pass: 'Mountain pass',
@@ -1117,7 +1124,8 @@ export default function ContinentRide() {
     { code: 'KeyO', key: 'O', label: 'options' },
     { code: 'KeyI', key: 'I', label: 'pack' },
     ...(!hud.foot ? [{ code: 'KeyC', key: 'C', label: 'camera' }, { code: 'KeyG', key: 'G', label: 'garage' }] : []),
-    { code: 'KeyR', key: 'R', label: 'road' },
+    ...(!hud.foot ? [{ code: 'KeyR', key: 'R', label: 'road' }]
+      : [{ code: 'KeyR', key: 'R', label: continentStance.current.kind === 'weapon' ? 'swap' : 'draw' }, ...(continentStance.current.kind !== 'stowed' ? [{ code: 'Stow', key: 'R', label: 'stow' }] : [])]),
   ]
   atTownRef.current = atTown
   // the board stays open until you actually drive away (> 60 m), not on the first nudge of the throttle
@@ -1139,7 +1147,6 @@ export default function ContinentRide() {
   // nothing casts, so health and mana stand full; the bar is dimmed at the wheel (hands are busy) ──
   const hudSize = useGameHudSize(isTouch)
   const gunHud = useGunHud()    // the gun shop's held gun → the template's hotbar + an ammo chip
-  const [slot, setSlot] = useState(0)
   // approaching a place speaks on the message line (was a banner)
   const lastPlace = useRef<string | null>(null)
   useEffect(() => { if (hud.place && hud.place !== lastPlace.current) hudSay(`Approaching ${hud.place}`, 'zone'); lastPlace.current = hud.place ?? null }, [hud.place])
@@ -1189,6 +1196,44 @@ export default function ContinentRide() {
   const optionsOpen = useOptionsOpen()   // Options (options.tsx): O, Esc once the mouse is free, the pack's gear
   useOptionsKeys(showMap || garage || !!board || bagOpen || vesselShop)
   useMenuLock(showMap || garage || !!board || bagOpen || vesselShop || optionsOpen, getCanvas)
+  // ★ THE STANCE on the continent (shared/stance.ts, Alex 11-15, the same rules as the Ather): on foot you are STOWED
+  // by default and a little quicker; R taps draw the primary / swap / reload, a hold stows; 1-8 and the wheel pick a
+  // hotbar item while no weapon is drawn. At the wheel the hands are busy: R is back to the road there. In the gun shop
+  // a rack gun is in hand (gun-range.tsx) and R reloads it, so the stance stands aside while you hold one.
+  const [stance, setStance] = useState<Stance>(STOWED)
+  continentStance.current = stance
+  useEffect(() => { setStance(st => settle(st, inv)) }, [inv])
+  const slot = litSlot(stance, inv)
+  const setSlot = (i: number) => setStance(st => selectSlot(st, i, getInv()))
+  // R on foot: a TAP draws / swaps / reloads, a HOLD (HOLD_MS) stows, timed off down → up like the Ather. Not at the
+  // wheel (Driver's R is the road there), not in a menu, not with a rack gun in hand (the shop's R reloads it)
+  const stanceBlocked = useRef(false)
+  stanceBlocked.current = !hud.foot || showMap || garage || !!board || bagOpen || vesselShop || optionsOpen
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | null = null, held = false
+    const down = (e: KeyboardEvent) => {
+      if (e.code === 'Stow') { setStance(st => holdR(st)); return }   // the phone's stow button
+      if (e.code !== 'KeyR' || e.repeat || stanceBlocked.current || rangeHolds() || getBirth() === null) return
+      held = false
+      t = setTimeout(() => { held = true; setStance(st => holdR(st)) }, HOLD_MS)
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyR' || !t) return
+      clearTimeout(t); t = null
+      if (held) return
+      const r = tapR(continentStance.current, getInv())
+      if (r.stance.kind === 'weapon' && continentStance.current.kind !== 'weapon') {
+        const id = heldOf(r.stance, getInv())
+        // nothing on the continent can be shot at yet (the Wilds and the shop's lane are where guns fire): say so once
+        if (id) hudSay(`${itemDef(id).name} drawn · nothing to aim at out here`, 'item')
+      }
+      setStance(r.stance)
+    }
+    window.addEventListener('keydown', down); window.addEventListener('keyup', up)
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); if (t) clearTimeout(t) }
+  }, [])
+  // stepping into the courser stows (hands on the wheel)
+  useEffect(() => { if (!hud.foot) setStance(STOWED) }, [hud.foot])
   const [ptrLocked, setPtrLocked] = useState(false)
   useEffect(() => {
     const ch = () => setPtrLocked(!!document.pointerLockElement)
@@ -1309,7 +1354,7 @@ export default function ContinentRide() {
           <div style={{ padding: '18px 24px', borderRadius: 10, background: 'rgba(12,16,20,0.72)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.65, textAlign: 'center', maxWidth: 460 }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>The Darter · Ashfeld</div>
             You start on the road out of Ashfeld. It runs down to Millbrook on the river; the trunk south ends at Rune Hold under the Spine.
-            {isTouch ? <div style={{ marginTop: 8 }}>Left thumb drives: push up for throttle, down to brake, sideways to steer. Hold drift for the handbrake. On foot, drag on the right to look.</div> : <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road · G garage · E board (stopped at a town) · F get out / in (on foot: mouse look, Space jump, Shift slide) · M map</div>}
+            {isTouch ? <div style={{ marginTop: 8 }}>Left thumb drives: push up for throttle, down to brake, sideways to steer. Hold drift for the handbrake. On foot, drag on the right to look.</div> : <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road · G garage · E board (stopped at a town) · F get out / in (on foot: mouse look, Space jump, Shift slide, R draw / swap, hold R to stow, 1-8 hold an item) · M map</div>}
             <div style={{ marginTop: 8, fontWeight: 600 }}>{isTouch ? 'Tap to drive' : 'Press any key to drive'}</div>
           </div>
         </div>
