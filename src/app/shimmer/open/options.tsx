@@ -90,7 +90,7 @@ export function OpenOptions({ onClose, keys = WALK_KEYS, extraGame }: { onClose:
  * (hub's caution, 11-15; headless-checked: lock → Esc does not open, Esc again does). `busy` = another panel is up
  * (its own Esc closes it; this stays out of the way).
  */
-const UNLOCK_GRACE = 200
+const UNLOCK_GRACE = 400
 // one open/closed flag for the whole open world, so the pack's gear, O, Esc and a phone tap all drive the same panel
 let optionsOpen = false
 const osubs = new Set<() => void>()
@@ -101,19 +101,30 @@ export const useOptionsOpen = () => useSyncExternalStore(osub, oget, oserver)
 
 export function useOptionsKeys(busy: boolean) {
   useEffect(() => {
-    let unlockedAt = 0
+    // ⚠ The Esc that FREES the mouse must not open Options, and the browser does not promise an order: the unlock event
+    // can land after the keydown (measured on the continent), and a sampling timer starves at low frame rates (it did
+    // in headless at 2 fps). So the decision waits a beat and asks one order-proof question: did an UNLOCK happen within
+    // UNLOCK_GRACE of this keypress, before it or after it? Then this Esc was the one that freed the mouse.
+    let unlockedAt = -1e9
     const change = () => { if (!document.pointerLockElement) unlockedAt = performance.now() }
+    let pending: ReturnType<typeof setTimeout> | null = null
     const key = (e: KeyboardEvent) => {
       if (e.repeat) return
       if (e.code === 'KeyO' && (!busy || optionsOpen)) { setOptionsOpen(!optionsOpen); return }
       if (e.code !== 'Escape') return
       if (optionsOpen) { setOptionsOpen(false); return }
-      if (busy || document.pointerLockElement || performance.now() - unlockedAt < UNLOCK_GRACE) return
-      setOptionsOpen(true)
+      if (busy || document.pointerLockElement) return
+      const t = performance.now()
+      if (pending) clearTimeout(pending)
+      pending = setTimeout(() => {
+        pending = null
+        if (document.pointerLockElement || Math.abs(unlockedAt - t) < UNLOCK_GRACE) return
+        setOptionsOpen(true)
+      }, 120)
     }
     document.addEventListener('pointerlockchange', change)
     window.addEventListener('keydown', key)
-    return () => { document.removeEventListener('pointerlockchange', change); window.removeEventListener('keydown', key) }
+    return () => { if (pending) clearTimeout(pending); document.removeEventListener('pointerlockchange', change); window.removeEventListener('keydown', key) }
   }, [busy])
   useEffect(() => () => setOptionsOpen(false), [])
 }
