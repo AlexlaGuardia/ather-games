@@ -51,13 +51,13 @@ export const metadata: Metadata = {
     title: "Ather: an open world in the Athernyx universe",
     description: "An open-world sandbox in the Athernyx universe. Walk it, build on it, play it with friends, free in your browser.",
     url: "https://ather.games",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "ather.games" }],
+    images: [{ url: "/og-ather.png", width: 1200, height: 630, alt: "Ather: a floating island garden in the sky" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Ather: an open world in the Athernyx universe",
     description: "An open-world sandbox in the Athernyx universe. Walk it, build on it, play it with friends, free in your browser.",
-    images: ["/og.png"],
+    images: ["/og-ather.png"],
   },
   // Public games site — indexable.
   robots: { index: true, follow: true },
