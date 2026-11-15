@@ -60,6 +60,7 @@ function meadowGeometry(m: Meadow): THREE.BufferGeometry {
 function MeadowTrees({ m }: { m: Meadow }) {
   const trunk = useRef<THREE.InstancedMesh>(null), crown = useRef<THREE.InstancedMesh>(null)
   useEffect(() => {
+    if (!trunk.current || !crown.current) return   // no trees → rendered null → no refs
     const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color()
     m.trees.forEach((t, k) => {
       p.set(t.x, t.y + 1.4, t.z); s.set(1, 2.8, 1); trunk.current!.setMatrixAt(k, mtx.compose(p, q, s))

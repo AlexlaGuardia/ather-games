@@ -58,6 +58,9 @@ function TreeKindMesh({ trees, kind }: { trees: Tree[]; kind: TreeKind }) {
   const frev = useSyncExternalStore(subscribeForestry, forestryRev, () => 0)
   const L = LOOK[kind]
   useEffect(() => {
+    // ⚠ a kind with no trees on this tile renders null, so its refs are null: the effect must not reach for them
+    // (shipped without this, every tile missing a kind crashed the page on entering the Wilds, 11-15)
+    if (!trunk.current || !crown.current) return
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color()
     const now = Date.now()
     trees.forEach((t, k) => {
