@@ -16,6 +16,15 @@ await p.waitForFunction(() => !!(window as any).__drive?.state, { timeout: 24000
 const sq = meta.network!.junctions.find(j=>j.kind==='square'&&j.place==='rune-hold')!
 await p.evaluate((x,z)=>(window as any).__drive.tp(x,z,0,0), sq.x, sq.z); await wait(15000)
 for (const id of process.argv.slice(2)) {
+  if (id.startsWith('board:')) {
+    // a town's name board from the road, as an arriving driver sees it: board:<place id>
+    const pid = id.slice(6), j = meta.places.findIndex(q => q.id === pid), tp = planTown(R, meta.places[j], j), bd = tp.boards?.[0]
+    if (!bd) { console.log('no board', pid); continue }
+    const cx = bd.x + Math.cos(bd.yaw) * 14 - Math.sin(bd.yaw) * 4, cz = bd.z + Math.sin(bd.yaw) * 14 + Math.cos(bd.yaw) * 4
+    await p.evaluate((x,z)=>(window as any).__drive.tp(x,z,0,0), bd.x, bd.z); await wait(12000)
+    await p.evaluate(q=>(window as any).__drive.shot(q), [cx, R.heightAt(cx, cz) + 2, cz, bd.x, bd.y + 2, bd.z]); await wait(5000)
+    await p.screenshot({ path: `/tmp/front-board-${pid}.png` }); console.log('shot board', pid); continue
+  }
   if (id === 'field' && pl.station) {
     // the Station's field from above its town end, looking out over the berths
     const s = pl.station, c = Math.cos(s.yaw), sn = Math.sin(s.yaw), at = (gx: number, gz: number) => [s.x + gx * c - gz * sn, s.z + gx * sn + gz * c]

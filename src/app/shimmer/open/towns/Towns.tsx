@@ -216,6 +216,18 @@ function StationField({ s }: { s: StationSite }) {
   )
 }
 
+// a town's name board at the roadside where you drive in: two posts and the painted board, facing you
+function NameBoard({ b }: { b: { x: number; z: number; y: number; yaw: number; name: string } }) {
+  const tex = useMemo(() => signTexture(b.name), [b.name])
+  useEffect(() => () => tex.dispose(), [tex])
+  return (
+    <group position={[b.x, b.y, b.z]} rotation={[0, Math.PI / 2 - b.yaw, 0]}>
+      {[-1.7, 1.7].map(x => <mesh key={x} position={[x, 1.3, 0]}><boxGeometry args={[0.18, 2.6, 0.18]} /><meshLambertMaterial color="#4a3322" /></mesh>)}
+      <mesh position={[0, 2.1, 0.1]}><planeGeometry args={[3.8, 0.95]} /><meshBasicMaterial map={tex} toneMapped={false} side={THREE.DoubleSide} /></mesh>
+    </group>
+  )
+}
+
 export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<THREE.Vector3> }) {
   const cache = useRef(new Map<number, TownPlan>())
   const [shown, setShown] = useState<TownPlan[]>([])
@@ -295,6 +307,7 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
       <instancedMesh key={`r${n}`} frustumCulled={false} ref={roofs} args={[undefined, undefined, n]} geometry={roof}><meshLambertMaterial flatShading side={THREE.DoubleSide} /></instancedMesh>
       <instancedMesh key={`c${n}`} frustumCulled={false} ref={chimneys} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
       {parts.filter(q => q.b.front).map(q => <FrontSign key={`${q.b.front}`} b={q.b} />)}
+      {shown.flatMap(pl => (pl.boards ?? []).map((b, i) => <NameBoard key={`${pl.place}-${i}`} b={b} />))}
       {shown.filter(pl => pl.station).map(pl => <StationField key={pl.place} s={pl.station!} />)}
       {R.meta.places.filter(p => p.name).map(p => (
         <mesh key={p.id} position={[p.x, R.heightAt(p.x, p.z) + 45, p.z]}>

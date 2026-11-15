@@ -46,7 +46,7 @@ export interface Building {
   /** the storefront it is, when it is one (play3d FRONTS ids) */
   front?: string
 }
-export interface TownPlan { place: string; r: number; lanes: Lane[]; buildings: Building[]; /** authored paving cells (1 m), with the bearing they are laid at */ paving?: { pts: [number, number][]; yaw: number }; /** Rune Hold's Travelers Station field (play3d's StationScene, placed) */ station?: StationSite; /** walks: paved paths drawn like lanes but not part of the street net (the way to the Station) */ walks?: Lane[] }
+export interface TownPlan { place: string; r: number; lanes: Lane[]; buildings: Building[]; /** authored paving cells (1 m), with the bearing they are laid at */ paving?: { pts: [number, number][]; yaw: number }; /** Rune Hold's Travelers Station field (play3d's StationScene, placed) */ station?: StationSite; /** walks: paved paths drawn like lanes but not part of the street net (the way to the Station) */ walks?: Lane[]; /** town-name boards where a road comes into town: at the roadside, facing the arriving traffic */ boards?: { x: number; z: number; y: number; yaw: number; name: string }[] }
 
 /** how far a town reaches, by its kind on the Atlas */
 export function townRadius(p: RegionPlace): number {
@@ -247,6 +247,25 @@ export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
     }
     if (pts.length) out.push(pts[pts.length - 1])
     return out
+  }
+
+  // ── a NAME BOARD on every road into a named town, where it crosses the town's edge, on the arriving driver's right
+  // (Athernyx drives on the right, region.ts RING_DIR), facing them
+  if (p.name) {
+    plan.boards = []
+    for (const st of streets) {
+      const pts = st.pts
+      for (let k = 1; k < pts.length; k++) for (const [inn, out] of [[k - 1, k], [k, k - 1]] as const) {
+        const [ix, iz] = pts[inn], [ox, oz] = pts[out]
+        if (!(Math.hypot(ix - p.x, iz - p.z) <= reach(ix, iz) && Math.hypot(ox - p.x, oz - p.z) > reach(ox, oz))) continue
+        // arriving = travelling from out to in; the driver's right of that heading
+        const ux = ix - ox, uz = iz - oz, L = Math.hypot(ux, uz) || 1, rx = -uz / L, rz = ux / L
+        const x = ix + rx * (st.width / 2 + 2), z = iz + rz * (st.width / 2 + 2)
+        const y = R.heightAt(x, z)
+        if (y < 1.5 || plan.boards.some(b => Math.hypot(b.x - x, b.z - z) < 40)) continue
+        plan.boards.push({ x, z, y, yaw: Math.atan2(-uz, -ux), name: p.name })
+      }
+    }
   }
 
   // 2. back streets: offset copies of each high street, and rings round the square. A point is kept only where the

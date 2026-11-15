@@ -126,6 +126,19 @@ for (const pl of plans) {
 }
 ok(loose === 0, `lanes not joined to the high street: ${loose}`)
 
+// ── names (Magii + Alex 11-15, world/locations.md): the 1672 villages carry their names, and every named town a road
+// enters has a name board, at the roadside (off the carriageway, on land)
+const nameOf = (id: string) => meta.places.find(q => q.id === id)?.name
+ok(nameOf('unnamed-village-17') === 'Copperlee' && nameOf('unnamed-village-0') === 'Kettlemoor' && nameOf('unnamed-school-30') === 'Redstair', 'the 1672 names are in the map data')
+let boards = 0, badBoard = 0
+for (const pl of plans) for (const b of pl.boards ?? []) {
+  boards++
+  const nr = nearestRoad(R, b.x, b.z)
+  if (b.y < 1.5 || (nr.road && nr.d < nr.road.width / 2 + 0.5)) badBoard++
+}
+ok(boards >= 30, `name boards on the roads into town: ${boards} (want >= 30)`)
+ok(badBoard === 0, `name boards on the road or in water: ${badBoard}`)
+
 // ── deterministic: the same map plans the same towns
 const again = planTowns(R)
 ok(JSON.stringify(again.map(p => p.buildings.length)) === JSON.stringify(plans.map(p => p.buildings.length)), 'planning is deterministic')
