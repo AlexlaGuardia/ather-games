@@ -131,7 +131,6 @@ export default function Home() {
             </Link>
             <OnlineCount color={GOLD} />
           </div>
-          <p className="mt-4 text-xs text-text/45 sm:hidden">Plays with a keyboard and mouse for now. Phone controls are on the way.</p>
           <p className="mt-6 text-sm text-text/50">
             Latest: <span style={{ color: GOLD }}>{DEVLOG[0].title}.</span>
           </p>

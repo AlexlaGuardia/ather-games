@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
-// The open world is keyboard + mouse for now (pointer lock). Play on the landing page is the front door, so a phone
+// Still mounted on the CONTINENT only (driving has no touch layer yet); the Ather plays on a phone since 11-15
+// (shared/touch-controls). The open world was keyboard + mouse (pointer lock). Play on the landing page is the front door, so a phone
 // that taps it lands in a game it cannot drive. Until the touch pass lands, say so plainly and offer the way back.
 // Shown only to devices with NO fine pointer at all (a tablet with a trackpad or a touch laptop still plays).
 // Dismissable: "Look around anyway" lets a curious phone see the place.

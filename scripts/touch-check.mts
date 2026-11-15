@@ -35,6 +35,18 @@ await p.touchscreen.touchEnd()
 await new Promise(r => setTimeout(r, 800))
 const s2 = await st()
 await p.screenshot({ path: `${out}/touch-3-look.png` })
+// in reach: stand at the gate, the big E pill must appear and open the map by touch
+await p.evaluate(() => (window as any).__ather.tp(0, -11.5, 0))
+await new Promise(r => setTimeout(r, 1500))
+await p.screenshot({ path: `${out}/touch-3b-gate.png` })
+const pillUse = await p.evaluateHandle(() => [...document.querySelectorAll('div')].find(d => d.textContent === 'Euse')!)
+const pu = await (pillUse as any).boundingBox()
+await p.touchscreen.tap(pu.x + pu.width / 2, pu.y + pu.height / 2)
+await new Promise(r => setTimeout(r, 800))
+const usedOpensMap = await p.$$eval('button', bs => bs.some(b => b.textContent?.trim() === 'Flip map'))
+console.log(JSON.stringify({ usedOpensMap }))
+await p.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' })))
+await new Promise(r => setTimeout(r, 500))
 // the gate's map, travelled by touch: open it the way E would, tap Gregory's pin, land in the Wilds
 await p.evaluate(() => (window as any).__ather.open('gate'))
 await new Promise(r => setTimeout(r, 1200))
@@ -57,7 +69,7 @@ await p.screenshot({ path: `${out}/touch-5-wilds-fire.png` })
 await p.touchscreen.touchEnd()
 const a1 = await ammo()
 console.log(JSON.stringify({ panelBtns, zone: 'wilds', ammo: [a0, a1] }))
-const shot = a1 < a0 && panelBtns.length === 2
+const shot = a1 < a0 && panelBtns.length === 2 && usedOpensMap
 const moved = Math.hypot(s1.x - s0.x, s1.z - s0.z), turned = s2.yaw - s1.yaw
 console.log(JSON.stringify({ moved: +moved.toFixed(2), turned: +turned.toFixed(3), stickMovedOnly: Math.abs(s1.yaw - s0.yaw) < 1e-6 }))
 const ok = moved > 0.5 && turned > 0.3 && shot
