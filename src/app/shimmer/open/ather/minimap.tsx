@@ -15,12 +15,12 @@ import { drawKeeper } from '../../ui/map-kit'
 import { screenHeading } from '../../voxel3d/map-heading'
 import type { Fog } from './explored'
 import type { Waymark } from './waymarks'
-import { GATE, GREG } from './plot'
+import { GATE, GREG, PLOT_R } from './plot'
 import { TILE_M, type WildsWorld } from './wilds-world'
 import { plotPlate, PLOT_MPP } from './plate'
 import { composeTilePicture } from './tile-picture'
 import type { CompassPose } from '../shared/game-hud'
-import type { Frame } from './cluster'
+import { D, type Frame } from './cluster'
 
 const REACH = 120          // Wilds: metres from centre to edge
 const PLOT_REACH = 92      // plot: the whole island fits
@@ -93,23 +93,28 @@ export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waym
         // LINKED (Alex 11-15: "my plot is still centered"): the map frames the whole cluster, centred on the shared
         // middle, so your plot sits in ITS corner with the bridges between; alone, it frames your island as before
         const f = clusterRef.current, linked = !!(f?.linked && f.middle)
-        const reach = linked ? f!.middle!.r + 2 * 117 + 10 : PLOT_REACH
+        const reach = linked ? D + PLOT_R + 10 : PLOT_REACH
         const cx = linked ? f!.middle!.x : p.x, cz = linked ? f!.middle!.z : p.z
         const k = S / (reach * 2), X = (x: number) => S / 2 + (x - cx) * k, Z = (z: number) => S / 2 + (z - cz) * k
         ctx.fillStyle = '#080614'; ctx.fillRect(0, 0, S, S)
         ctx.imageSmoothingEnabled = true
-        // every plot as its own plate (plate.ts): yours, and each mate's with THEIR squares
-        const plate = (ox: number, oz: number, o: ReadonlySet<string>) => {
+        // every plot as its own plate (plate.ts): yours, and each mate's with THEIR squares, turned as it stands (the
+        // canvas turns the opposite way to three's rotation.y, since its y runs down where three's z does)
+        const plate = (ox: number, oz: number, o: ReadonlySet<string>, rot = 0) => {
           const { canvas: pl, extent: E } = plotPlate(o)
-          ctx.drawImage(pl, X(ox - E), Z(oz - E), 2 * E * k, 2 * E * k)
+          ctx.save(); ctx.translate(X(ox), Z(oz)); ctx.rotate(-rot)
+          ctx.drawImage(pl, -E * k, -E * k, 2 * E * k, 2 * E * k); ctx.restore()
         }
         plate(0, 0, owned)
         if (linked) {
-          for (const m of f!.mates) plate(m.x, m.z, new Set(m.owned))
+          for (const m of f!.mates) plate(m.x, m.z, new Set(m.owned), m.rot)
+          ctx.fillStyle = '#d6c9a8'
+          for (const r of f!.streets) ctx.fillRect(X(r.x0), Z(r.z0), (r.x1 - r.x0) * k, (r.z1 - r.z0) * k)
           ctx.strokeStyle = '#d8ccae'; ctx.lineCap = 'round'
-          for (const b of [...f!.bridges, ...(f!.lane ? [f!.lane] : []), ...f!.mates.map(m => m.lane)]) { ctx.lineWidth = Math.max(2, b.w * k); ctx.beginPath(); ctx.moveTo(X(b.ax), Z(b.az)); ctx.lineTo(X(b.bx), Z(b.bz)); ctx.stroke() }
+          for (const b of f!.ramps) { ctx.lineWidth = Math.max(2, b.w * k); ctx.beginPath(); ctx.moveTo(X(b.ax), Z(b.az)); ctx.lineTo(X(b.bx), Z(b.bz)); ctx.stroke() }
+          const h = f!.middle!.half
           ctx.fillStyle = '#a9cf86'; ctx.strokeStyle = '#efe0a8'; ctx.lineWidth = 1.5
-          ctx.beginPath(); ctx.arc(X(f!.middle!.x), Z(f!.middle!.z), f!.middle!.r * k, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+          ctx.fillRect(X(f!.middle!.x - h), Z(f!.middle!.z - h), 2 * h * k, 2 * h * k); ctx.strokeRect(X(f!.middle!.x - h), Z(f!.middle!.z - h), 2 * h * k, 2 * h * k)
         }
         const dot = (x: number, z: number, col: string, r = 6) => { ctx.fillStyle = col; ctx.strokeStyle = '#1a1410'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X(x), Z(z), r, 0, Math.PI * 2); ctx.fill(); ctx.stroke() }
         dot(GATE.x, GATE.z, '#e7c766', linked ? 3.5 : 6); dot(GREG.x, GREG.z, '#c9a27a', linked ? 3.5 : 6)

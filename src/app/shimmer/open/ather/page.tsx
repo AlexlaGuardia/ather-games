@@ -2,7 +2,7 @@
 
 // /shimmer/open/ather — THE ATHER SIDE of the open world (Alex 11-14, Jin/world).
 //
-//   · THE HOME PLOT — a full-size floating island cut into a 9×9 garden grid. The middle 3×3 is yours; the rest is
+//   · THE HOME PLOT — a full-size floating island cut into a 9×9 garden grid. The corner 3×3 by the gate is yours; the rest is
 //     under fold-mist until you buy it from GREGORY with grey matter, ring by ring as the grimoire fills (plot.ts).
 //     ONE GATE: its face is the fold map. The Ather side shows the Wilds you have walked and your waymarks; Tab flips
 //     to Athernyx, where the gate steps you out to a place on the continent. Walk off the edge and the fold brings
@@ -20,13 +20,13 @@ import { VoxelDayNight } from '../shared/day-night'
 import { terrainWorld } from '../terrain-world'
 import { Walker, verbOf, type Loco } from './walker'
 import {
-  plotShape, plotHeightAt, THRESHOLD, GATE, GREG, FALL_Y, REACH, squareAt, sqId, canBuy,
+  plotShape, plotHeightAt, mistWalls, THRESHOLD, GATE, GREG, FALL_Y, REACH, squareAt, sqId, canBuy,
   loadGarden, saveGarden, freshGarden, type Garden,
 } from './plot'
 import { PlotScene } from './plot-scene'
 import { ClusterScene } from './cluster-scene'
 import { ClusterPanel, useCluster } from './cluster-panel'
-import { clusterGround, wallsWithLane, mateWalls, onSeg } from './cluster'
+import { clusterGround, mateWalls, mateAt, inMiddle, onRoad } from './cluster'
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
@@ -143,12 +143,12 @@ export default function AtherSlice() {
   }, [fog])
 
   const owned = useMemo(() => new Set(garden.owned), [garden.owned])
-  // GARDEN CLUSTERS (cluster.ts, Alex 11-15): alone, the plot as ever; linked, the lane cuts my mist, and the bridges,
-  // the shared ground and my mates' plots (fenced by their own mist) become ground
+  // GARDEN CLUSTERS (cluster.ts, Alex 11-15, his sketch): alone, the plot as ever; linked, the shared square, the #
+  // of streets, each gate's ramp and my mates' plots (turned to face the square, fenced by their own mist) become ground
   const cl = useCluster(garden.owned)
   const clusterRef = useRef(cl.frame); clusterRef.current = cl.frame
   const plotWorld = useMemo(() => terrainWorld(cl.frame.linked
-    ? plotShape(owned, [...wallsWithLane(owned, cl.frame), ...mateWalls(cl.frame)], (x, z) => clusterGround(cl.frame, x, z))
+    ? plotShape(owned, [...mistWalls(owned), ...mateWalls(cl.frame)], (x, z) => clusterGround(cl.frame, x, z))
     : plotShape(owned)), [owned, cl.frame])
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
@@ -297,12 +297,12 @@ export default function AtherSlice() {
       let where = 'your plot'
       if (zone.kind === 'wilds' && ww) { const g = groundRef.current(lc.px, lc.pz); where = BIOME_NAME[ww.biomeAt(lc.px, lc.pz)] + (g ? ` · ${g}` : '') }
       else if (!squareAt(lc.px, lc.pz)) {
-        // off your own grid: in a linked cluster that is somewhere real (a friend's plot, the shared ground, a bridge)
-        const f = clusterRef.current, onMate = f.linked ? f.mates.find(m => Number.isFinite(plotHeightAt(lc.px - m.x, lc.pz - m.z))) : undefined
-        where = onMate ? `${onMate.name}'s plot`
-          : f.middle && Math.hypot(lc.px - f.middle.x, lc.pz - f.middle.z) < f.middle.r ? 'the shared ground'
-          : f.linked && f.bridges.some(b => onSeg(b, lc.px, lc.pz)) ? 'a bridge'
-          : f.lane && onSeg(f.lane, lc.px, lc.pz) ? 'your lane' : 'the edge'
+        // off your own grid: in a linked cluster that is somewhere real (a friend's plot, the shared ground, a road)
+        const f = clusterRef.current, onMate = f.linked ? mateAt(f, lc.px, lc.pz) : undefined
+        where = Number.isFinite(plotHeightAt(lc.px, lc.pz)) ? 'your plot'
+          : onMate ? `${onMate.name}'s plot`
+          : inMiddle(f, lc.px, lc.pz) ? 'the shared ground'
+          : f.linked && onRoad(f, lc.px, lc.pz) ? 'the road' : 'the edge'
       }
       setHud({ verb: verbOf(lc), where })
     }

@@ -3,32 +3,42 @@
 // "falling through your own fold, which returns you to your threshold" — so the fall is the way home, not a death.
 //
 // ★ THE GARDEN GRID (Alex 2026-11-14, the Ather revamp; logged [OPEN] in CANON_GAPS for Magii to author):
-// the island is full size from day one and cut into a 9×9 grid of garden squares. The middle 3×3 is yours when
-// Greg hands you the plot; the rest stands under fold-mist. Squares are bought from Greg with GREY MATTER (what the
+// the island is full size from day one and cut into a 9×9 grid of garden squares. The CORNER 3×3 by the gate is
+// yours when Greg hands you the plot (Alex 11-15, the cluster sketch: "starting plot" in the corner beside the "main
+// gate", the rest hatched); the rest stands under fold-mist and you buy your way across the grid AWAY from the gate. Squares are bought from Greg with GREY MATTER (what the
 // Hollows in the Wilds drop), but the grimoire decides which squares Greg will sell at all:
-//   ring 1 (the 5×5 band)  — once 10 grimoire pages are filled
-//   ring 2 (the 7×7 band)  — at 15
-//   ring 3 (the 9×9 band)  — at 25: the garden is fully expandable
+//   ring 1 (the 5×5 band from the corner)  — once 10 grimoire pages are filled
+//   ring 2 (the 7×7 band)                  — at 15
+//   ring 3 (the 9×9 band)                  — at 25: the garden is fully expandable
+// (the bands are counted out from the start corner, not the middle: 9 / 16 / 24 / 32 squares, the same counts as the
+// old centred rings, so the pacing and the grimoire gates carry over unchanged)
 // A square must touch ground you already hold. Mist is a wall, not a fall: you cannot walk onto ground you do not hold.
 //
 // ★ ONE GATE (Alex 11-14): the half-circle station is gone. The plot carries a single gate; its face is the fold map
 // (the Wilds you have walked + your waymarks; Tab to Athernyx). Greg stands by the threshold and sells ground.
+// The gate stands at the island's SOUTH-WEST corner, in the start ground: in a cluster that corner faces the shared
+// square, so you step out of your gate onto the crossroads (ather/cluster.ts turns each garden so it does).
 //
 // ★ PURE. The island's land is a grid of triangles: what you see is what you stand on.
 
 import type { Box, Shape } from '../terrain-world'
+import { shiftLegacyOwned, LAYOUT } from './garden-snapshot'
 
 // ── the garden grid ───────────────────────────────────────────────────────────────────────────────────────────
 export const SQ = 16                         // metres per garden square
 export const GRID = 9                        // squares per side
 export const GRID_HALF = (GRID * SQ) / 2     // 72
-const MID = (GRID - 1) / 2                   // 4
+/** The start corner: south-west (low i, high j; north = −z). */
+const START_CORNER = { i: 0, j: GRID - 1 }
 
 export type SquareId = `${number},${number}`
 export const sqId = (i: number, j: number): SquareId => `${i},${j}`
 export const parseSq = (id: string) => { const [i, j] = id.split(',').map(Number); return { i, j } }
-/** 0 = the starting 3×3, 1..3 = the rings outward. */
-export const ringOf = (i: number, j: number) => Math.max(0, Math.max(Math.abs(i - MID), Math.abs(j - MID)) - 1)
+/** 0 = the starting 3×3 in the corner, 1..3 = the bands outward from it (each two squares deep). */
+export const ringOf = (i: number, j: number) => {
+  const c = Math.max(Math.abs(i - START_CORNER.i), Math.abs(j - START_CORNER.j))
+  return c <= 2 ? 0 : Math.ceil((c - 2) / 2)
+}
 export const squareAt = (x: number, z: number) => {
   const i = Math.floor((x + GRID_HALF) / SQ), j = Math.floor((z + GRID_HALF) / SQ)
   return i >= 0 && j >= 0 && i < GRID && j < GRID ? { i, j } : null
@@ -64,12 +74,15 @@ const HALF = (N * PLOT_CELL) / 2
 export const PLOT_N = N
 export const PLOT_HALF = HALF
 
-/** Where the keeper stands on arriving home: south of the gate, facing it. Yaw 0 faces −z. */
-export const THRESHOLD = { x: 0, z: 10, yaw: 0 }
-/** The one gate, at the north of the starting ground. */
-export const GATE = { x: 0, z: -14 }
+/** Where the keeper stands on arriving home: inside the start ground, facing the gate in its corner. Yaw 0 faces −z;
+ *  forward is (−sin yaw, −cos yaw), so 3π/4 faces south-west. */
+export const THRESHOLD = { x: -56, z: 56, yaw: (3 * Math.PI) / 4 }
+/** The one gate, in the start ground's outer corner (the island's south-west). */
+export const GATE = { x: -66, z: 66 }
 /** Gregory, beside the threshold: he sells ground. */
-export const GREG = { x: 7, z: 6 }
+export const GREG = { x: -48, z: 62 }
+/** The rise of the island is centred on the start ground (home is the high ground; the far corner runs low). */
+const DOME = { x: -40, z: 40 }
 export const FALL_Y = -30
 export const REACH = 2.4
 
@@ -88,8 +101,8 @@ export function insideIsland(x: number, z: number): boolean {
 }
 
 function rawHeight(x: number, z: number): number {
-  const r = Math.hypot(x, z)
-  let y = 2.2 * (1 - Math.min(1, (r / (PLOT_R * 1.2)) ** 2))
+  const r = Math.hypot(x - DOME.x, z - DOME.z)
+  let y = 2.2 * (1 - Math.min(1, (r / (PLOT_R * 1.5)) ** 2))
   y += (hash(Math.round(x), Math.round(z)) - 0.5) * 0.14
   y += Math.sin(x * 0.11 + 1) * Math.cos(z * 0.09) * 0.7 + Math.sin(x * 0.27 - z * 0.21) * 0.25
   // level pads where the gate, Greg and the threshold stand
@@ -97,6 +110,8 @@ function rawHeight(x: number, z: number): number {
     const k = Math.max(0, Math.min(1, (Math.hypot(x - cx, z - cz) - R) / 4)); y = y * k + h * (1 - k)
   }
   pad(GATE.x, GATE.z, 5, 2.0); pad(THRESHOLD.x, THRESHOLD.z, 3, 2.0); pad(GREG.x, GREG.z, 2.5, 2.0)
+  // the gate's apron: the corner past it runs level to the shore, where a cluster's ramp leaves for the crossroads
+  pad(GATE.x - 6, GATE.z + 6, 4, 2.0)
   return y
 }
 
@@ -157,16 +172,29 @@ export function plotShape(owned: ReadonlySet<string>, walls: Box[] = mistWalls(o
 const KEY = 'ather.garden.v1'
 export interface Garden { owned: string[]; grey: number; pages: number }
 export const freshGarden = (): Garden => ({ owned: [...STARTING_SQUARES], grey: 0, pages: 0 })
+
+/** A save from before the corner start (no `layout: 2`): the old centred 3×3 moves onto the corner and everything
+ *  bought moves with it; a square the move pushes off the grid is refunded at what it cost then. */
+export function migrateLegacy(owned: readonly string[], grey: number): { owned: string[]; grey: number } {
+  const { kept, dropped } = shiftLegacyOwned(owned)
+  const oldRing = (i: number, j: number) => Math.max(0, Math.max(Math.abs(i - 4), Math.abs(j - 4)) - 1)
+  const refund = dropped.reduce((a, id) => { const { i, j } = parseSq(id); return a + RING_COST[oldRing(i, j)] }, 0)
+  return { owned: kept, grey: grey + refund }
+}
+
 export function loadGarden(): Garden {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) ?? 'null')
     if (v && Array.isArray(v.owned) && typeof v.grey === 'number') {
-      const owned = [...new Set([...STARTING_SQUARES, ...v.owned.filter((s: unknown) => typeof s === 'string')])]
-      return { owned, grey: Math.max(0, v.grey), pages: Math.max(0, Number(v.pages) || 0) }
+      let owned: string[] = v.owned.filter((s: unknown): s is string => typeof s === 'string')
+      let grey = Math.max(0, v.grey)
+      if (v.layout !== LAYOUT) ({ owned, grey } = migrateLegacy(owned, grey))
+      owned = [...new Set([...STARTING_SQUARES, ...owned])]
+      return { owned, grey, pages: Math.max(0, Number(v.pages) || 0) }
     }
   } catch { /* fall through */ }
   return freshGarden()
 }
 export function saveGarden(g: Garden): void {
-  try { localStorage.setItem(KEY, JSON.stringify(g)) } catch { /* private window: the session keeps it */ }
+  try { localStorage.setItem(KEY, JSON.stringify({ ...g, layout: LAYOUT })) } catch { /* private window: the session keeps it */ }
 }

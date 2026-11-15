@@ -13,6 +13,7 @@ import { HearthFrame, HearthButton, HearthLabel, H } from '../../ui/hearth'
 import { clusterMenu, type Invite, type Friend } from '../../voxel3d/cluster-menu'
 import type { ClusterView, Quarter as Q } from '@/lib/accounts/clusters'
 import { clusterFrame, type Frame, type Mate, type Quarter } from './cluster'
+import { STARTING_SQUARES } from './plot'
 import { readGarden, gardenText } from './garden-snapshot'
 
 interface Remote { view: ClusterView | null; quarter: Q | null; invites: Invite[]; friends: Friend[]; gardens: Partial<Record<Q, { name: string | null; data: string }>>; signedIn: boolean }
@@ -46,11 +47,16 @@ export function useCluster(owned: readonly string[]) {
   const [preview, setPreview] = useState(false)
   useEffect(() => { setPreview(new URLSearchParams(location.search).get('cluster') === 'preview') }, [])
   const frame: Frame = useMemo(() => {
-    if (preview) return clusterFrame('ne', [{ quarter: 'ne', name: 'you', owned: [...owned] }, { quarter: 'sw', name: 'a friend (preview)', owned: ['3,3', '4,3', '5,3', '3,4', '4,4', '5,4', '3,5', '4,5', '5,5', '4,2'] }])
+    if (preview) return clusterFrame('ne', [
+      { quarter: 'ne', name: 'you', owned: [...owned] },
+      { quarter: 'nw', name: 'a friend (preview)', owned: [...STARTING_SQUARES, '3,6', '3,7', '3,8', '0,5', '1,5'] },
+      { quarter: 'sw', name: 'another friend (preview)', owned: [...STARTING_SQUARES] },
+      { quarter: 'se', name: 'a third friend (preview)', owned: [...STARTING_SQUARES, '3,8', '4,8', '3,7', '4,7', '0,5', '0,4', '1,5', '1,4', '2,5'] },
+    ])
     if (!rem.view || !rem.quarter) return clusterFrame(null, [])
     const mates: Mate[] = rem.view.members.map(m => {
       const g = rem.gardens[m.quarter], snap = g ? readGarden(g.data) : null   // somebody else's data: checked again here
-      return { quarter: m.quarter as Quarter, name: m.username ?? 'a keeper', owned: m.quarter === rem.quarter ? [...owned] : snap?.owned ?? [] }
+      return { quarter: m.quarter as Quarter, name: m.username ?? 'a keeper', owned: m.quarter === rem.quarter ? [...owned] : snap?.owned ?? [...STARTING_SQUARES] }
     })
     return clusterFrame(rem.quarter as Quarter, mates)
   }, [rem, key, preview]) // eslint-disable-line react-hooks/exhaustive-deps
