@@ -25,7 +25,9 @@ for (const pl of plans) for (const b of pl.buildings) {
     const y = R.heightAt(x, z), nr = nearestRoad(R, x, z)
     if (y < 1.5) wet++
     if ((nr.road && nr.d < nr.road.width / 2) || nearPad(R, x, z, 0)) onRoad++
-    if (y < b.y0 - 0.01 || y > b.y1 + 0.01) floating++
+    // an authored (core) building's floor is its FRONT's ground and a higher back is buried in the hill: only its
+    // lowest corner must be covered by the plinth
+    if (y < b.y0 - 0.01 || (!b.core && y > b.y1 + 0.01)) floating++
   }
 }
 ok(onRoad === 0, `building corners on a road or pad: ${onRoad}`)
@@ -45,6 +47,16 @@ ok(n('citadel') >= 180, `Citadel has ${n('citadel')} buildings (want >= 180)`)
 ok(n('gale-haven') >= 180, `Gale Haven has ${n('gale-haven')} (want >= 180)`)
 ok(n('ashfeld') >= 50, `Ashfeld has ${n('ashfeld')} (want >= 50)`)
 ok(n('rune-hold') >= 35, `Rune Hold has ${n('rune-hold')} (want >= 35)`)
+// ── Rune Hold's core is Alex's play3d layout: all 9 houses of the grid + the Station, every storefront present
+const rh = byId.get('rune-hold')!
+const fronts = new Set(rh.buildings.map(b => b.front).filter(Boolean))
+for (const f of ['kindled-mug', 'forgelight-inn', 'bookstore', 'smithy', 'spirit-corner', 'station']) ok(fronts.has(f), `Rune Hold's core has ${f}`)
+ok(rh.buildings.filter(b => b.core).length === 10, `Rune Hold's core places all 10 grid buildings: ${rh.buildings.filter(b => b.core).length}`)
+ok((rh.paving?.pts.length ?? 0) > 900, `Rune Hold's grid paving is laid: ${rh.paving?.pts.length ?? 0} cells`)
+// no generated building stands on the core's paving
+let onPaving = 0
+for (const b of rh.buildings) if (!b.core || (b as { moved?: boolean }).moved) for (const [x, z] of corners(b)) if (rh.paving!.pts.some(([px, pz]) => Math.abs(px - x) < 0.8 && Math.abs(pz - z) < 0.8)) onPaving++
+ok(onPaving === 0, `generated (or moved) buildings on Rune Hold's paving: ${onPaving}`)
 ok(n('millbrook') >= 15, `Millbrook has ${n('millbrook')} (want >= 15)`)
 ok(n('passage') === 0, `the Passage (underground) has no town on top: ${n('passage')}`)
 ok((byId.get('citadel')?.lanes.length ?? 0) >= 30, `Citadel has lanes`)

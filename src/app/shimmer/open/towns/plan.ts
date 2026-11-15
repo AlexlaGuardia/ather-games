@@ -23,6 +23,7 @@
 // Concept shots Alex judged 11-15 (tools/art/gen_towns.py): Rune Hold 2, Citadel 3, Ashfeld 3, village 1.
 
 import { nearestRoad, nearPad, drivable, type Region, type RegionPlace } from '../region'
+import { stampCore, inCore, CORE_YAW, type CoreTransform } from './rune-hold-core'
 
 export interface Lane { pts: [number, number, number][]; width: number }
 export type BuildingKind = 'house' | 'cottage' | 'hall'
@@ -40,8 +41,12 @@ export interface Building {
   rim: number
   /** stable per-building variation 0..1 (colour picks) */
   v: number
+  /** an AUTHORED building (Rune Hold's grid): its floor is the ground at its front, a higher back is buried in the hill */
+  core?: true
+  /** the storefront it is, when it is one (play3d FRONTS ids) */
+  front?: string
 }
-export interface TownPlan { place: string; r: number; lanes: Lane[]; buildings: Building[] }
+export interface TownPlan { place: string; r: number; lanes: Lane[]; buildings: Building[]; /** authored paving cells (1 m), with the bearing they are laid at */ paving?: { pts: [number, number][]; yaw: number } }
 
 /** how far a town reaches, by its kind on the Atlas */
 export function townRadius(p: RegionPlace): number {
@@ -144,6 +149,7 @@ export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
       y0 = Math.min(y0, y); y1 = Math.max(y1, y)
     }
     if (y1 - y0 > MAX_STEP) return no('steep'), null
+    if (pts.some(([x, z]) => coreAt(x, z))) return no('core'), null
     if (pts.some(([x, z]) => onRoad(x, z, 0.6) || (R.tunnelAt(x, z) && R.tunnelAt(x, z)!.cover < 12))) return no('road'), null
     if (pts.some(([x, z]) => nearLane(x, z, LANE_W / 2 + 1, skipLane))) return no('lane'), null
     const grown = footprint(b, gap)
@@ -157,6 +163,16 @@ export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
     const nr = nearestRoad(R, x, z)
     return (nr.road && nr.d < nr.road.width / 2 + m) || nearPad(R, x, z, m)
   }
+
+  // ── RUNE HOLD's core is AUTHORED (play3d's grid, Alex's layout: rune-hold-core.ts); the generator builds round it
+  let core: CoreTransform | null = null
+  if (p.id === 'rune-hold' && sq) {
+    core = { cx: sq.x, cz: sq.z, yaw: CORE_YAW }
+    const c = stampCore(R, core)
+    for (const b of c.buildings) keep(b)
+    plan.paving = { pts: c.paving, yaw: CORE_YAW }
+  }
+  const coreAt = (x: number, z: number) => !!core && inCore(core, x, z)
 
   // ── a spot (a hut, a shack) is one building on its own ground: try a few spots round the dot until one fits
   if (p.kind === 'spot') {
@@ -189,7 +205,7 @@ export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
     return d
   }
   const land = (x: number, z: number) => {
-    if (Math.hypot(x - p.x, z - p.z) > reach(x, z)) return null
+    if (Math.hypot(x - p.x, z - p.z) > reach(x, z) || coreAt(x, z)) return null
     const y = R.heightAt(x, z)
     if (!Number.isFinite(y) || y < 1.5) return null
     const t = R.tunnelAt(x, z); if (t && t.cover < 12) return null
@@ -274,7 +290,7 @@ export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
       acc -= seg
     }
   }
-  if (sq) {
+  if (sq && !core) {
     // few spokes: each one costs the square a frontage's width of buildings, and the road arms already serve it
     const spokes = big ? 6 : mid ? 4 : 3, a0 = hash(pi, 33) * Math.PI
     for (let i = 0; i < spokes; i++) {
@@ -310,7 +326,7 @@ export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
   for (const b of backs) if (joined.has(b)) lanes.push(b)
   // the square's rim is a frontage too: buildings stand round it, facing in
   const squareFront: Lane[] = []
-  if (sq) {
+  if (sq && !core) {
     const n = Math.max(12, Math.round(2 * Math.PI * sqR / 4)), ring: [number, number, number][] = []
     for (let i = 0; i <= n; i++) { const a = i / n * Math.PI * 2, x = sq.x + Math.cos(a) * (sqR - 1), z = sq.z + Math.sin(a) * (sqR - 1); ring.push([x, z, R.heightAt(x, z)]) }
     squareFront.push({ pts: ring, width: 2 })

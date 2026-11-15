@@ -23,6 +23,7 @@ await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRun
 await p.setViewport({ width: 1280, height: 720 })
 const errs: string[] = []
 p.on('pageerror', e => errs.push(String(e)))
+p.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errs.push(`console.${m.type()}: ${m.text().slice(0, 200)}`) })
 await p.goto(`${url}/shimmer/open/continent${hour ? `?hour=${hour}` : ''}`, { waitUntil: 'load', timeout: 240000 })
 await p.waitForFunction(() => !!(window as any).__drive?.state, { timeout: 240000 })
 await wait(3000)

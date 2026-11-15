@@ -106,6 +106,18 @@ function laneGeometry(R: Region, plans: TownPlan[]) {
       if (k) { const i = base + (k - 1) * 2; idx.push(i, i + 2, i + 1, i + 1, i + 2, i + 3) }
     }
   }
+  // authored paving (Rune Hold's grid): one 1 m cell per path tile, at the grid's bearing, draped on the ground
+  for (const pl of plans) if (pl.paving) {
+    const c = Math.cos(pl.paving.yaw), s = Math.sin(pl.paving.yaw), h = 0.52
+    for (const [x, z] of pl.paving.pts) {
+      const base = pos.length / 3
+      for (const [u, v] of [[-h, -h], [h, -h], [h, h], [-h, h]]) {
+        const px = x + u * c - v * s, pz = z + u * s + v * c
+        pos.push(px, R.heightAt(px, pz) + 0.12, pz)
+      }
+      idx.push(base, base + 2, base + 1, base, base + 3, base + 2)
+    }
+  }
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
   g.setIndex(idx); g.computeVertexNormals()
