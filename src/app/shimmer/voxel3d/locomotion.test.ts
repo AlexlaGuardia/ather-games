@@ -1249,6 +1249,51 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
     `★ the double jump turns you toward the stick (hv ${r.hvx.toFixed(2)}, ${r.hvz.toFixed(2)})`)
 }
 
+// ── ★ MOMENTUM CARRIES (2026-11-15, Alex: "slide and double jump into another slide i should keep momentum") ──
+{
+  const solid = world()
+  const run = () => { const s = createLoco(0.5, 10, 0.5); settle(s, solid); for (let i = 0; i < 120; i++) tickLocomotion(s, input({ mvX: 1 }), solid); return s }
+  const sp = (s: ReturnType<typeof createLoco>) => Math.hypot(s.hvx, s.hvz)
+  // 1. crouch HELD through a landing at speed slides — no fresh press needed
+  {
+    const s = run()
+    for (let i = 0; i < 4; i++) tickLocomotion(s, input({ mvX: 1, crouchKey: true }), solid)
+    tickLocomotion(s, input({ mvX: 1, crouchKey: true, jumpKey: true }), solid)
+    let landedSliding = false
+    for (let i = 0; i < 80; i++) {
+      const wasAir = s.airborne
+      tickLocomotion(s, input({ mvX: 1, crouchKey: true }), solid)
+      if (wasAir && !s.airborne) { tickLocomotion(s, input({ mvX: 1, crouchKey: true }), solid); landedSliding = s.sliding; break }
+    }
+    ok(landedSliding, '★ landing with crouch held at speed is a slide, not the crouch walk')
+  }
+  // 2. the burst recharges: a slide inside SLIDE_RECHARGE carries, one after it adds
+  {
+    const s = run()
+    tickLocomotion(s, input({ mvX: 1, crouchKey: true }), solid)
+    tickLocomotion(s, input({ mvX: 1 }), solid)
+    for (let i = 0; i < 20; i++) tickLocomotion(s, input({ mvX: 1 }), solid)   // slide still running, re-press below
+    const v0 = sp(s)
+    for (let i = 0; i < 30; i++) tickLocomotion(s, input({ mvX: 1 }), solid)   // slide over (0.6 s)
+    const vEarly = sp(s); tickLocomotion(s, input({ mvX: 1, crouchKey: true }), solid)
+    ok(s.sliding && sp(s) <= vEarly + 0.05, `a slide inside the recharge carries, adds nothing (${vEarly.toFixed(2)} → ${sp(s).toFixed(2)})`)
+    void v0
+    const t = run(); tickLocomotion(t, input({ mvX: 1, crouchKey: true }), solid)
+    for (let i = 0; i < 70; i++) tickLocomotion(t, input({ mvX: 1 }), solid)   // > SLIDE_RECHARGE later, back at run pace
+    const vLate = sp(t); tickLocomotion(t, input({ mvX: 1, crouchKey: true }), solid)
+    ok(t.sliding && sp(t) > vLate * 1.4, `★ after the recharge the slide bursts again (${vLate.toFixed(2)} → ${sp(t).toFixed(2)})`)
+  }
+  // 3. the skid: crouch held out of a slide glides (slippery), a plain crouch walk would drop to 2.6 in ~0.3 s
+  {
+    const s = run()
+    for (let i = 0; i < 37; i++) tickLocomotion(s, input({ mvX: 1, crouchKey: true }), solid)   // slide runs out at 0.6 s
+    for (let i = 0; i < 18; i++) tickLocomotion(s, input({ mvX: 1, crouchKey: true }), solid)   // 0.3 s of skid
+    ok(s.skidding && sp(s) > 5, `★ crouch held out of a slide skids on low friction (${sp(s).toFixed(2)} m/s after 0.3 s)`)
+    for (let i = 0; i < 300; i++) tickLocomotion(s, input({ mvX: 1, crouchKey: true }), solid)
+    ok(Math.abs(sp(s) - CROUCH_SPEED) < 0.15, `...and bleeds to crouch pace, never below (${sp(s).toFixed(2)})`)
+  }
+}
+
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)

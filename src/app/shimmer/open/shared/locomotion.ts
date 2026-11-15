@@ -104,6 +104,15 @@ export const SLIDE_MIN_SPEED = RUN_SPEED * 0.92
  *  instead of being clamped back down to 10. */
 export const SLIDE_BOOST = 1.55
 export const SLIDE_TIME = 0.6
+/** ★ MOMENTUM (Alex, 2026-11-15: "if i am running then slide and double jump into another slide i should keep
+ *  momentum and after a second be able to do it again"). The slide's BURST recharges on this clock; a slide taken
+ *  inside it still slides — it carries what you have, it just doesn't add. So chaining keeps speed, and spacing
+ *  the slides a second apart is how you build it, up to SPEED_CAP. */
+export const SLIDE_RECHARGE = 1.0
+/** The SKID: crouch held out of a slide (or landed into) keeps gliding on low friction instead of the crouch
+ *  walk's hard 0.14 s lag down to CROUCH_SPEED. m/s lost per second — "a little slippery". */
+export const SKID_DECEL = 2.6
+export const SKID_STEER = 0.04
 export const AIR_CONTROL = 0.4
 export const SLIDEHOP_BOOST = 1.12
 export const SPEED_CAP = 14
@@ -301,6 +310,8 @@ export interface LocoState {
   airborne: boolean
   coyoteT: number
   slideT: number; crouchHeld: boolean
+  /** Seconds until the slide burst recharges (SLIDE_RECHARGE). `skidding` = crouch-glide latched out of a slide. `wasAir` = last tick airborne. */
+  slideCD: number; skidding: boolean; wasAir: boolean
   /** Air speed a mid-air wall block took off `airSpeed`, kept so a wall-kick still pays the approach. Cleared on landing. */
   kickBank: number
   /** Seconds of sustained ground input banked toward the sprint, 0..SPRINT_RAMP. */
@@ -399,7 +410,7 @@ function kickOffWall(s: LocoState, cx: number, cz: number, carry: number, mvX: n
 export function createLoco(px: number, feetY: number, pz: number): LocoState {
   return {
     px, py: feetY, pz, hvx: 0, hvz: 0, vy: 0, eye: EYE_STAND,
-    airborne: true, coyoteT: 0, slideT: 0, crouchHeld: false, kickBank: 0, airJumps: 0, justAirJumped: false, sprintT: 0, airSpeed: 0, prevMvX: 0, prevMvZ: 0,
+    airborne: true, coyoteT: 0, slideT: 0, crouchHeld: false, slideCD: 0, skidding: false, wasAir: true, kickBank: 0, airJumps: 0, justAirJumped: false, sprintT: 0, airSpeed: 0, prevMvX: 0, prevMvZ: 0,
     landGrace: 0, landSpeed: 0, jumpHeld: false, spaceHeldT: 0, jumpGapT: 0, climbRise: 0,
     onWall: false, wallNX: 0, wallNZ: 0, wallCX: 0, wallCZ: 0, wallStick: 0, wallLock: 0,
     wallCatchT: 0, catchSpeed: 0, catchCX: 0, catchCZ: 0, catchLock: 0, catchClimb: false,
@@ -626,6 +637,10 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
   const { mvX, mvZ, crouchKey, jumpKey } = input
   const hasInput = (mvX !== 0 || mvZ !== 0)
   s.justWallJumped = false; s.justHopped = false; s.justLedgeVault = false; s.justAirJumped = false
+  // Landing resolves late in a tick (the vertical pass), after the crouch block has run — so "just landed"
+  // is read across tick STARTS: airborne when the last tick began, grounded now.
+  const landedLastTick = s.wasAir && !s.airborne
+  s.wasAir = s.airborne
 
   // Normalise at the boundary: booleans stay valid (every feel test, unchanged), codes add water.
   // CELL_HALF collides as full until the half-slab pass teaches ground height fractions.
@@ -679,17 +694,32 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
 
   // ── crouch / slide ──────────────────────────────────────────────────────────────────────────
   const curSpeed = Math.hypot(s.hvx, s.hvz)
-  if (crouchKey && !s.crouchHeld && !s.airborne && curSpeed > SLIDE_MIN_SPEED && s.slideT <= 0) {
+  if (s.slideCD > 0) s.slideCD -= dt
+  // ★ A LANDING WITH CROUCH HELD IS A SLIDE (2026-11-15). It used to need a fresh press, so crouch held
+  // through a jump landed into the crouch WALK, whose target is 2.6 — every chain died on touchdown.
+  const landedCrouched = crouchKey && landedLastTick
+  // A skid at speed re-pressed is a slide too: the gate is speed, not the edge, once you are gliding.
+  if (crouchKey && (!s.crouchHeld || landedCrouched) && !s.airborne && curSpeed > SLIDE_MIN_SPEED && s.slideT <= 0) {
     s.slideT = SLIDE_TIME
     // No floor under this. SPEED_CAP is the only ceiling, so a chained entry scales and a
     // barely-qualifying one is not handed the top of the curve. (The gate above is ~5.98, so
     // curSpeed cannot be near zero here; the guard is kept so lowering the gate cannot NaN.)
-    const burst = Math.min(SPEED_CAP, curSpeed * SLIDE_BOOST) / Math.max(1e-6, curSpeed)
-    s.hvx *= burst; s.hvz *= burst
+    // ★ Only a CHARGED slide bursts; inside SLIDE_RECHARGE it carries what you have (see the constant).
+    if (s.slideCD <= 0) {
+      const burst = Math.min(SPEED_CAP, curSpeed * SLIDE_BOOST) / Math.max(1e-6, curSpeed)
+      s.hvx *= burst; s.hvz *= burst
+      s.slideCD = SLIDE_RECHARGE
+    }
   }
   s.crouchHeld = crouchKey
+  const wasSliding = s.sliding
   s.sliding = s.slideT > 0 && !s.airborne
   if (s.sliding) s.slideT -= dt
+  // The skid latches as a slide runs out under a held crouch, and lets go on release, takeoff, or once
+  // it has bled down to crouch pace. Never latched from a plain run: the early "dead slide" press below
+  // the gate stays a crouch that wipes the ramp (that lesson is intact).
+  if (!crouchKey || s.airborne || curSpeed <= CROUCH_SPEED + 0.1) s.skidding = false
+  else if (wasSliding && !s.sliding) s.skidding = true
   s.crouching = crouchKey && !s.sliding && !s.airborne
 
   // ── ★ THE SPRINT RAMP ───────────────────────────────────────────────────────────────────────
@@ -711,7 +741,8 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
   // a bug, not a lesson; one that dumps you to a crouch and wipes the ramp reads as *too early*.
   const backpedal = hasInput && (mvX * input.fwdX + mvZ * input.fwdZ) < -0.2
   const sprinting = hasInput && !backpedal && !s.crouching
-  if (!s.airborne && !s.sliding) s.sprintT = sprinting ? Math.min(SPRINT_RAMP, s.sprintT + dt) : 0
+  // A skid holds the bank like a slide does: letting go of crouch at speed must not drop you to a walk.
+  if (!s.airborne && !s.sliding && !s.skidding) s.sprintT = sprinting ? Math.min(SPRINT_RAMP, s.sprintT + dt) : 0
   // Linear in the target; GROUND_ACCEL's first-order lag is what smooths it.
   const ramped = (WALK_SPEED + (RUN_SPEED - WALK_SPEED) * (s.sprintT / SPRINT_RAMP)) * s.speedMult
   // ── ★ THE HOLLOW'S DRAIN (2026-08-11) — a CAP, not a multiplier ─────────────────────────
@@ -807,6 +838,14 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
     } else if (cs > 1e-6) {
       const f = speed / cs; s.hvx *= f; s.hvz *= f
     }
+  } else if (s.skidding) {
+    // ★ THE SKID: low friction, a little steer. Bleeds at SKID_DECEL toward crouch pace, never below it.
+    const cs = Math.hypot(s.hvx, s.hvz)
+    const speed = Math.max(CROUCH_SPEED, cs - SKID_DECEL * dt)
+    let dx = cs > 1e-3 ? s.hvx / cs : mvX, dz = cs > 1e-3 ? s.hvz / cs : mvZ
+    if (hasInput) { dx += (mvX - dx) * SKID_STEER; dz += (mvZ - dz) * SKID_STEER }
+    const n = Math.hypot(dx, dz) || 1
+    s.hvx = (dx / n) * speed; s.hvz = (dz / n) * speed
   } else {
     const rate = Math.min(1, (hasInput ? GROUND_ACCEL : GROUND_FRICTION) * dt)
     s.hvx += ((hasInput ? mvX * groundTarget : 0) - s.hvx) * rate
