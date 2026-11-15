@@ -19,6 +19,7 @@ import { gunForSlate, holdGun, stepGun, reloadGun, hitscan, stepPlates, PLATE, t
 import { Tracers, type TracerShot } from './shared/tracers'
 import { hudSay } from './shared/game-hud'
 import { touch } from './shared/touch'
+import { postEntries } from './shared/journal'
 
 // ── the store the page's HUD reads ──────────────────────────────────────────────────────────────────────────────────
 type GunHud = { gun: RangeGun | null; ammo: number; reloading: boolean; inShop: boolean }
@@ -139,6 +140,22 @@ export function GunRange({ cave }: { cave: Cavern }) {
     gun.current = null; trigger.current = false; aimHeld.current = false; setHud({ gun: null })
   }
 
+  // the journal: the shop is a line until you have fired every rack's gun (the tried set persists per viewer)
+  const tried = useRef<Set<string>>(new Set())
+  const postShop = () => {
+    const n = tried.current.size, all = shop.racks.length
+    const cx = shop.racks.reduce((a, r) => a + r.x, 0) / all, cz = shop.racks.reduce((a, r) => a + r.z, 0) / all
+    postEntries('gun-shop', [{ id: 'gun-shop', hand: 'keeper', title: 'Try the guns at the Passage gun shop', struck: n >= all,
+      note: `Off the Passage market, through the hall: one rack per class, a test lane out back. Take a gun with E, fire it down the lane. ${n} of ${all} tried.`,
+      where: { zone: 'continent', x: cx, z: cz } }])
+  }
+  useEffect(() => {
+    try { tried.current = new Set(JSON.parse(localStorage.getItem('open.range.tried') ?? '[]') as string[]) } catch { /* private */ }
+    postShop()
+    return () => postEntries('gun-shop', [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shop])
+
   // the camera must be IN the scene for its children (the held gun) to render; R3F's default camera is not
   useEffect(() => {
     if (camera.parent) return
@@ -224,6 +241,10 @@ export function GunRange({ cave }: { cave: Cavern }) {
       }
       rounds.current.length = 0
       if (fired.length) { flashT.current = 0.05; flash.current?.rotation.set(0, 0, Math.random() * Math.PI) }
+      if (fired.length && !tried.current.has(g.gun.id)) {
+        tried.current.add(g.gun.id); postShop()
+        try { localStorage.setItem('open.range.tried', JSON.stringify([...tried.current])) } catch { /* private */ }
+      }
       for (let i = 0; i < fired.length; i++) {
         kick.current = Math.min(1, kick.current + 0.45 + g.gun.kickPitch * 12)
         tally.current.shots++

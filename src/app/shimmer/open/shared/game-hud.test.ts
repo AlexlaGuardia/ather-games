@@ -51,7 +51,7 @@ for (const k of Object.keys(EXEMPT)) ok(pages.some(p => p.endsWith(k)), `wiring:
 // "the menu look as well with a red close button as all menus should have". A new menu goes in this list.
 const MENUS: Record<string, string> = {
   'ather/panels.tsx': 'FoldMap + GregPanel', 'shared/bag.tsx': 'BagMenu', 'garage.tsx': 'GaragePanel',
-  'trade-ui.tsx': 'BoardPanel', 'continent/map.tsx': 'ContinentMap',
+  'trade-ui.tsx': 'BoardPanel', 'continent/map.tsx': 'ContinentMap', 'pack.tsx': 'PackMenu (journal / bag / character)',
 }
 for (const [f, what] of Object.entries(MENUS)) {
   const src = readFileSync(join(OPEN, f), 'utf8').replace(/^\s*\/\/.*$/gm, '')

@@ -11,7 +11,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMenuLock } from '../shared/menu-lock'
-import { BagMenu, useInv, hotbarEntries } from '../shared/bag'
+import { useInv, hotbarEntries } from '../shared/bag'
+import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
+import { QuestGuide } from '../quest-guide'
+import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { GameHud, useGameHudSize, openMapBox, hudSay, type CompassPose, type Mana } from '../shared/game-hud'
 import type { Vitals } from '../../engine/vitals'
 import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Track } from './map'
@@ -1060,6 +1063,18 @@ export default function ContinentRide() {
     if (r.event.kind === 'loaded') flash(`Loaded ${ledger.active.qty} ${GOODS[ledger.active.good].name}`)
     else flash(`Delivered · +${r.event.marks} Marks · +${r.event.deeds} deed${r.event.spoiled > 0.05 ? ` (${Math.round(r.event.spoiled * 100)}% spoiled)` : ''}`)
   }, [atTown, ledger, setLedger])
+  // the journal: a Co. contract in hand is the keeper's open line on the continent (pack.tsx › Journal)
+  useEffect(() => {
+    const a = ledger.active
+    const target = a && R ? R.meta.places.find(p => p.id === (a.loaded ? a.to : a.from)) : null
+    postEntries('continent-contract', a && target ? [{ id: `contract-${a.id}`, hand: 'keeper',
+      title: a.loaded ? `Deliver ${a.qty} ${GOODS[a.good].name} to ${placeName(a.to)}` : `Load ${a.qty} ${GOODS[a.good].name} at ${placeName(a.from)}`,
+      note: `A Co. contract from ${placeName(a.from)} to ${placeName(a.to)}, ${Math.round(a.km)} km by road. It pays ${a.pay} Marks and ${a.deeds} deed${a.deeds === 1 ? '' : 's'} on delivery; goods spoil the longer they ride.`,
+      where: { zone: 'continent', x: target.x, z: target.z } }] : [])
+  }, [ledger.active, R])
+  const journal = useJournal()
+  const questMarksRef = useRef<{ x: number; z: number; color: string; title?: string }[]>([])
+  questMarksRef.current = useMemo(() => questMarks('continent'), [journal])  // eslint-disable-line react-hooks/exhaustive-deps
   const objective = useMemo(() => {
     const a = ledger.active; if (!a || !R) return null
     const target = R.meta.places.find(p => p.id === (a.loaded ? a.to : a.from)); if (!target) return null
@@ -1110,7 +1125,7 @@ export default function ContinentRide() {
       : !hud.foot && canBoard ? [{ code: 'KeyE', key: 'E', label: 'board', near: true }] : []),
     ...(hud.prompt ? [{ code: 'KeyF', key: 'F', label: hud.foot ? 'get in' : 'get out', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
-    { code: 'KeyI', key: 'I', label: 'bag' },
+    { code: 'KeyI', key: 'I', label: 'pack' },
     ...(!hud.foot ? [{ code: 'KeyC', key: 'C', label: 'camera' }, { code: 'KeyG', key: 'G', label: 'garage' }] : []),
     { code: 'KeyR', key: 'R', label: 'road' },
   ]
@@ -1167,13 +1182,15 @@ export default function ContinentRide() {
   // menus free the mouse (on foot it is locked); closing one takes the camera back (shared/menu-lock.ts)
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
   const getCanvas = useCallback(() => canvasEl.current, [])
-  // the bag (I): the same bag as the Ather (shared/bag.tsx), one keeper
-  const [bagOpen, setBagOpen] = useState(false)
+  // the pack (pack.tsx): I bag · J journal · P character, the same bag as the Ather (shared/bag.tsx), one keeper
+  const [pack, setPack] = useState<PackTab | null>(null)
+  const bagOpen = pack !== null
   const inv = useInv()
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (e.code === 'KeyI' && !showMap && !garage && !board) setBagOpen(v => !v)
-      if (e.code === 'Escape') setBagOpen(false)
+      const t = PACK_KEYS[e.code]
+      if (t && !showMap && !garage && !board) setPack(p => (p === t ? null : t))
+      if (e.code === 'Escape') setPack(null)
     }
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
   }, [showMap, garage, board])
@@ -1203,6 +1220,7 @@ export default function ContinentRide() {
           <Tunnels R={R} cave={cave} />
           {cave && <CavernView cave={cave} R={R} />}
           {cave && <GunRange cave={cave} />}
+          {R && <QuestGuide zone="continent" ground={(x, z) => (cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z))} />}
           <Guardrails R={R} />
           <Water R={R} />
           <Towns R={R} />
@@ -1218,7 +1236,7 @@ export default function ContinentRide() {
           holds={hud.foot ? (gunHud.holding ? [{ code: AIM_CODE, label: 'aim' }, { code: 'ShiftLeft', label: 'slide' }, { code: 'Space', label: 'jump' }] : undefined) : [{ code: 'Space', label: 'drift' }]}
           stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hud.foot ? 48 : 148 }} />
       )}
-      {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} vitals={vitalsRef} mana={manaRef} entries={gunHud.holding ? gunHud.entries : hotbarEntries(inv)} sel={slot} onSelect={setSlot}
+      {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} marks={questMarksRef} vitals={vitalsRef} mana={manaRef} entries={gunHud.holding ? gunHud.entries : hotbarEntries(inv)} sel={slot} onSelect={setSlot}
         dimmed={!hud.foot} input={!!hud.foot && !showMap && !garage && !board && !bagOpen}
         minimap={mapState && <ContinentMiniMap map={mapState} track={track} onExpand={() => setShowMap(true)} box={openMapBox(hudSize)} />}
         status={[
@@ -1227,7 +1245,7 @@ export default function ContinentRide() {
           { label: ledger.deeds === 1 ? 'Deed' : 'Deeds', value: ledger.deeds },
           ...gunHud.status,
         ]} />}
-      {bagOpen && <BagMenu sel={slot} onClose={() => setBagOpen(false)} isTouch={isTouch} />}
+      {pack && <PackMenu tab={pack} onTab={setPack} onClose={() => setPack(null)} sel={slot} isTouch={isTouch} />}
       {mapState && showMap && <ContinentMap map={mapState} track={track} onClose={() => setShowMap(false)} />}
       <GaragePanel open={garage} onClose={() => setGarage(false)} build={eff} setBuild={setBuild}
         shop={{ ledger, buy: (slot: Slot, t: Tier) => { const r = buy(ledger, slot, t); if (r.ok) setLedger(r.ledger); else flash(r.why ?? 'Not yet') } }} />

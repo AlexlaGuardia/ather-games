@@ -59,7 +59,20 @@ function Slot({ i, at, sel, picked, onPick, onQuick, onSplit, onDrop }: {
   )
 }
 
+/** The bag's footer hint, shared by the standalone menu and the pack's Bag tab. */
+export const bagHint = (isTouch?: boolean) => isTouch ? 'Tap to pick up, tap again to place.' : 'Click to pick up, click to place · Shift-click: hotbar ↔ bag · Right-click: split'
+
 export function BagMenu({ sel, onClose, isTouch }: { sel: number; onClose: () => void; isTouch?: boolean }) {
+  return (
+    <HearthFrame title="Bag" maxWidth={560} onClose={onClose} fixed dataPanel="bag"
+      footer={<span className="text-[12px]">{bagHint(isTouch)} · I or Esc closes</span>}>
+      <BagBody sel={sel} />
+    </HearthFrame>
+  )
+}
+
+/** The bag's contents without a frame: the pack (shared/pack.tsx) shows it as its Bag tab. */
+export function BagBody({ sel }: { sel: number }) {
   const i = useInv()
   const [picked, setPicked] = useState<number | null>(null)
   const [look, setLook] = useState<number | null>(null)
@@ -71,8 +84,7 @@ export function BagMenu({ sel, onClose, isTouch }: { sel: number; onClose: () =>
   const shown = look !== null ? i.slots[look] : i.slots[sel]
   const d = shown ? itemDef(shown.id) : null
   return (
-    <HearthFrame title="Bag" maxWidth={560} onClose={onClose} fixed dataPanel="bag"
-      footer={<span className="text-[12px]">{isTouch ? 'Tap to pick up, tap again to place.' : 'Click to pick up, click to place · Shift-click: hotbar ↔ bag · Right-click: split · I or Esc closes'}</span>}>
+    <>
       <div className="px-4 pt-7 pb-3">
         <HearthLabel>Hotbar · 1–8</HearthLabel>
         <div className="grid grid-cols-8 gap-1.5 mt-1.5 justify-items-center">
@@ -94,6 +106,6 @@ export function BagMenu({ sel, onClose, isTouch }: { sel: number; onClose: () =>
           ) : <div className="text-[12.5px]" style={{ color: H.inkFaint }}>Nothing picked. Choose a slot to see what is in it.</div>}
         </div>
       </div>
-    </HearthFrame>
+    </>
   )
 }

@@ -37,7 +37,10 @@ import { advance, clearAt, loadSpread, saveSpread, loadSkew, saveSkew, type Spre
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey } from '../shared/touch'
 import { useMenuLock } from '../shared/menu-lock'
-import { BagMenu, useInv, setInv, getInv, hotbarEntries, heldItem } from '../shared/bag'
+import { useInv, setInv, getInv, hotbarEntries, heldItem } from '../shared/bag'
+import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
+import { QuestGuide } from '../quest-guide'
+import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take } from '../shared/inventory'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { AtherMiniMap } from './minimap'
@@ -47,7 +50,7 @@ const TILE = 'first-wilds'
 
 type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
 type Spawn = { x: number; z: number; yaw: number }
-type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'bag' }
+type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'pack'; tab: PackTab }
 type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'waymark'; w: Waymark; own: boolean }
 
 export default function AtherSlice() {
@@ -77,6 +80,7 @@ export default function AtherSlice() {
   const hudSize = useGameHudSize(isTouch)
   const poseRef = useRef<CompassPose>({ x: THRESHOLD.x, z: THRESHOLD.z, yaw: THRESHOLD.yaw })
   const marksRef = useRef<CompassMark[]>([])
+  const journal = useJournal()   // re-marks the compass when a journal waymark is toggled
   const vitalsRef = useRef<Vitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0 })
   const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 0 })   // no casting in the open world yet: shown full
   const [slot, setSlot] = useState(0)                               // 0 = the Repeater, 1 = a waymark to plant
@@ -294,7 +298,20 @@ export default function AtherSlice() {
           { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, color: '#e7c766', title: "Gregory's waymark" },
           ...waymarks.filter(w => zone.kind === 'wilds' && w.tile === zone.tile).map(w => ({ x: w.x, z: w.z, color: '#6fd3c4', title: 'your waymark' })),
         ]
-  }, [zone, nodes, waymarks])
+    marksRef.current = [...marksRef.current, ...questMarks(zone.kind === 'plot' ? 'ather' : 'wilds')]   // the journal's waymarks (pack.tsx)
+  }, [zone, nodes, waymarks, journal])
+  // the journal: the nearest infected node is the keeper's open line on this side (re-aimed as you move; unchanged posts are free)
+  useEffect(() => {
+    const post = () => {
+      if (!nodes.length) { postEntries('ather-nodes', []); return }
+      const p = poseRef.current
+      const n = nodes.reduce((a, b) => (Math.hypot(b.x - p.x, b.z - p.z) < Math.hypot(a.x - p.x, a.z - p.z) ? b : a))
+      postEntries('ather-nodes', [{ id: 'ather-node', hand: 'keeper', title: `Clear the infected ${BIOME_NAME[n.biome].toLowerCase()} ground`,
+        note: `Grey has welled up at a node in the ${BIOME_NAME[n.biome]}. Its champion rises when you come close: break all three bars and the ground goes quiet for a while. ${nodes.length} node${nodes.length === 1 ? '' : 's'} infected in the Wilds.`,
+        where: { zone: 'wilds', x: n.x, z: n.z } }])
+    }
+    post(); const id = setInterval(post, 3000); return () => clearInterval(id)
+  }, [nodes])
   // entering somewhere says so on the message line: the zone, and crossing a node border
   const zoneName0 = zone.kind === 'plot' ? 'Your plot' : 'The Wilds'
   useEffect(() => { hudSay(zoneName0, 'zone') }, [zoneName0])
@@ -313,7 +330,8 @@ export default function AtherSlice() {
         let st = spreadRef.current; for (const n of allNodes) st = clearAt(st, allNodes, n.id, clock()).s
         saveSpread(st); setSpread(st); hudSay(`Tune · every node cleared (${allNodes.length}). ] to let days pass.`, 'info', 5); return
       }
-      if (e.code === 'KeyI') { setPanel(p => p?.kind === 'bag' ? null : p ? p : { kind: 'bag' }); return }
+      const packTab = PACK_KEYS[e.code]   // I bag · J journal · P character: same key again closes; another switches tab
+      if (packTab) { setPanel(p => p?.kind === 'pack' ? (p.tab === packTab ? null : { kind: 'pack', tab: packTab }) : p ? p : { kind: 'pack', tab: packTab }); return }
       if (panel || fade) return
       const n = near.current
       if (e.code === 'KeyE' && n) {
@@ -340,7 +358,7 @@ export default function AtherSlice() {
     ...(prompt ? [{ code: 'KeyE', key: 'E', label: prompt.startsWith('E · Gregory') ? 'Gregory' : 'use', near: true }] : []),
     ...(prompt?.includes('L lift') ? [{ code: 'KeyL', key: 'L', label: 'lift', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
-    { code: 'KeyI', key: 'I', label: 'bag' },
+    { code: 'KeyI', key: 'I', label: 'pack' },
     ...(zone.kind === 'wilds' ? [
       { code: 'KeyF', key: 'F', label: 'waymark' },
       { code: 'KeyR', key: 'R', label: 'reload' },
@@ -362,6 +380,7 @@ export default function AtherSlice() {
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
             safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={held === 'repeater'} nodes={nodes} ownerOf={nodeOwner} />
         )}
+        <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
         {world && (
           <Walker
             key={epoch} world={world} ground={ground} spawn={spawn} locked={locked} frozen={frozen}
@@ -416,7 +435,7 @@ export default function AtherSlice() {
           onClose={() => setPanel(null)} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
-      {panel?.kind === 'bag' && <BagMenu sel={slot} onClose={() => setPanel(null)} isTouch={isTouch} />}
+      {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={slot} isTouch={isTouch} />}
       <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />
       {isTouch && !panel && (
         <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} />
