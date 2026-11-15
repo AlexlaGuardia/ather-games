@@ -10,9 +10,10 @@ import {
   plotHeightAt, plotVertexHeight, plotCellIsLand, sqId, ringOf, canBuy,
 } from './plot'
 import { P } from './palette'
+import { GROUND, pushLayer, useGroundMaterial } from './ground-look'
 
 function plotGeometry(): THREE.BufferGeometry {
-  const pos: number[] = [], col: number[] = []
+  const pos: number[] = [], col: number[] = [], lay: number[] = []
   const v = (i: number, j: number) => [i * PLOT_CELL - PLOT_HALF, plotVertexHeight(i, j), j * PLOT_CELL - PLOT_HALF] as const
   const c = new THREE.Color()
   for (let j = 0; j < PLOT_N; j++) for (let i = 0; i < PLOT_N; i++) {
@@ -23,6 +24,7 @@ function plotGeometry(): THREE.BufferGeometry {
       const r = Math.hypot(cx, cz) / PLOT_R
       c.copy(P.grass).lerp(P.grassHi, Math.max(0, 0.5 - r) * 0.7).lerp(P.gold, (((cx * 0.37 + cz * 0.23) % 1) + 1) % 1 * 0.14)
       for (const p of tri) { pos.push(p[0], p[1], p[2]); col.push(c.r, c.g, c.b) }
+      pushLayer(lay, GROUND.grass, 3)
     }
     const drop = -3
     const edges: [number, number, readonly [number, number, number], readonly [number, number, number]][] = [
@@ -33,11 +35,13 @@ function plotGeometry(): THREE.BufferGeometry {
       const sc = new THREE.Color(P.under)
       const quad = [a, b, [b[0], drop, b[2]], a, [b[0], drop, b[2]], [a[0], drop, a[2]]] as const
       for (const p of quad) { pos.push(p[0], p[1], p[2]); col.push(sc.r, sc.g, sc.b) }
+      pushLayer(lay, GROUND.soil, 6)
     }
   }
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
+  g.setAttribute('aLayer', new THREE.Float32BufferAttribute(lay, 1))
   g.computeVertexNormals()
   return g
 }
@@ -119,9 +123,10 @@ function MistGroup({ pts, sale, ring }: { pts: { x: number; y: number; z: number
 export function PlotIsland({ owned, pages }: { owned: ReadonlySet<string>; pages: number }) {
   const geo = useMemo(plotGeometry, [])
   const lines = useMemo(gridLines, [])
+  const ground = useGroundMaterial()
   return (
     <>
-      <mesh geometry={geo}><meshLambertMaterial vertexColors flatShading /></mesh>
+      <mesh geometry={geo} material={ground} />
       <lineSegments geometry={lines}><lineBasicMaterial color="#7f9a55" transparent opacity={0.45} /></lineSegments>
       <mesh position-y={-20} rotation-x={Math.PI}><coneGeometry args={[PLOT_R * 1.05, 34, 12, 2]} /><meshLambertMaterial color={P.under} flatShading /></mesh>
       <mesh position={[THRESHOLD.x, plotHeightAt(THRESHOLD.x, THRESHOLD.z) + 0.03, THRESHOLD.z]} rotation-x={-Math.PI / 2}>

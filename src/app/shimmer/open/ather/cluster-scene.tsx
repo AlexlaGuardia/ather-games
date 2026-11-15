@@ -12,11 +12,12 @@ import { PlotIsland } from './plot-scene'
 import { MIDDLE_Y, type Frame } from './cluster'
 import { MEADOW_CELL, type Meadow } from './meadow'
 import { P } from './palette'
+import { GROUND, pushLayer, useGroundMaterial } from './ground-look'
 
 const DIRT = new THREE.Color('#d9c79a'), DIRT_HI = new THREE.Color('#e6d6ad'), SQUARE = new THREE.Color('#b4d78c')
 
 function meadowGeometry(m: Meadow): THREE.BufferGeometry {
-  const pos: number[] = [], col: number[] = [], C = MEADOW_CELL, n = m.n, cn = n - 1
+  const pos: number[] = [], col: number[] = [], lay: number[] = [], C = MEADOW_CELL, n = m.n, cn = n - 1
   const c = new THREE.Color(), under = new THREE.Color(P.under)
   const v = (a: number, b: number) => [m.x0 + a * C, m.h[b * n + a], m.z0 + b * C] as const
   const isLand = (a: number, b: number) => a >= 0 && b >= 0 && a < cn && b < cn && m.land[b * cn + a] === 1
@@ -31,6 +32,10 @@ function meadowGeometry(m: Meadow): THREE.BufferGeometry {
       else if (m.kind[k] === 2) c.copy(SQUARE).lerp(P.grassHi, nse * 0.3)
       else c.copy(P.grass).lerp(P.grassHi, Math.min(1, Math.max(0, (y - 3) / 12)) * 0.8 + nse * 0.15).lerp(P.gold, ((a * 3 + b) % 17) / 17 * 0.14)
       for (const p of tri) { pos.push(p[0], p[1], p[2]); col.push(c.r, c.g, c.b) }
+      // the tile: the path's dirt, and stone where a hillside is too steep to hold turf
+      const e1x = tri[1][0] - tri[0][0], e1y = tri[1][1] - tri[0][1], e1z = tri[1][2] - tri[0][2], e2x = tri[2][0] - tri[0][0], e2y = tri[2][1] - tri[0][1], e2z = tri[2][2] - tri[0][2]
+      const nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x, up = Math.abs(ny) / (Math.hypot(nx, ny, nz) || 1)
+      pushLayer(lay, m.kind[k] === 1 ? GROUND.path : up < 0.8 ? GROUND.stone : GROUND.grass, 3)
     }
     // the cluster's own edge: a skirt down into the cloud (only where the meadow meets the void, not an island)
     const edges: [number, number, readonly [number, number, number], readonly [number, number, number]][] = [
@@ -41,11 +46,13 @@ function meadowGeometry(m: Meadow): THREE.BufferGeometry {
       if (isLand(na, nb) || (na >= 0 && nb >= 0 && na < cn && nb < cn && m.island[nb * cn + na])) continue
       const quad = [e0, e1, [e1[0], e1[1] - 5, e1[2]], e0, [e1[0], e1[1] - 5, e1[2]], [e0[0], e0[1] - 5, e0[2]]] as const
       for (const p of quad) { pos.push(p[0], p[1], p[2]); col.push(under.r, under.g, under.b) }
+      pushLayer(lay, GROUND.soil, 6)
     }
   }
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
+  g.setAttribute('aLayer', new THREE.Float32BufferAttribute(lay, 1))
   g.computeVertexNormals()
   return g
 }
@@ -80,12 +87,13 @@ function MeadowTrees({ m }: { m: Meadow }) {
 export function ClusterScene({ frame }: { frame: Frame }) {
   const m = frame.meadow
   const geo = useMemo(() => (m ? meadowGeometry(m) : null), [m])
+  const ground = useGroundMaterial()
   useEffect(() => () => geo?.dispose(), [geo])
   if (!frame.linked || !frame.middle || !m || !geo) return null
   const mid = frame.middle, span = (m.n - 1) * MEADOW_CELL
   return (
     <>
-      <mesh geometry={geo}><meshLambertMaterial vertexColors flatShading /></mesh>
+      <mesh geometry={geo} material={ground} />
       <MeadowTrees m={m} />
       {/* where the paths meet: a pale ring in the middle of the square */}
       <mesh position={[mid.x, MIDDLE_Y + 0.04, mid.z]} rotation-x={-Math.PI / 2}><ringGeometry args={[5, 6.2, 28]} /><meshBasicMaterial color="#efe0a8" /></mesh>

@@ -25,6 +25,7 @@ import {
 } from './plot'
 import { PlotScene } from './plot-scene'
 import { ClusterScene } from './cluster-scene'
+import { cycleLook, LookChip } from './ground-look'
 import { ClusterPanel, useCluster } from './cluster-panel'
 import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './cluster'
 import { WildsScene } from './wilds-scene'
@@ -393,6 +394,7 @@ export default function AtherSlice() {
       if (e.code === 'Escape' && panel) { setPanel(null); return }
       if (e.code === 'Tab' && panel?.kind === 'map') { e.preventDefault(); setPanel({ ...panel, view: panel.view === 'ather' ? 'athernyx' : 'ather' }); return }
       if (e.code === 'KeyM') { setPanel(p => p ? null : { kind: 'map', view: 'ather', travel: false }); return }
+      if (e.code === 'KeyK') { cycleLook(); return }   // the ground-look A/B (ground-look.tsx)
       if (e.code === 'KeyC' && zone.kind === 'plot') { setPanel(p => p?.kind === 'cluster' ? null : p ? p : { kind: 'cluster' }); return }
       if (e.code === 'BracketRight' && tune) { skipDays(e.shiftKey ? 5 : 1); return }
       if (e.code === 'BracketLeft' && tune && spreadRef.current) {   // tuning: wipe the map clean to watch it grow back
@@ -510,6 +512,7 @@ export default function AtherSlice() {
       )}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
+      <LookChip />
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} />}
       <BirthGate />
       {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={slot} isTouch={isTouch} />}

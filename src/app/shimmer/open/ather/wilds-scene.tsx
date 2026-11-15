@@ -7,11 +7,12 @@ import * as THREE from 'three'
 import { BIOME, type Wilds, type BiomeId } from './wilds'
 import { GREG_WAYMARK, type Waymark } from './waymarks'
 import { P } from './palette'
+import { GROUND, useGroundMaterial } from './ground-look'
 
 function wildsGeometry(W: Wilds): THREE.BufferGeometry {
   const { nx, nz, cell, sizeX, sizeZ } = W.meta
   const hx = sizeX / 2, hz = sizeZ / 2
-  const pos = new Float32Array((nx - 1) * (nz - 1) * 18), col = new Float32Array((nx - 1) * (nz - 1) * 18)
+  const pos = new Float32Array((nx - 1) * (nz - 1) * 18), col = new Float32Array((nx - 1) * (nz - 1) * 18), lay = new Float32Array((nx - 1) * (nz - 1) * 6)
   const c = new THREE.Color()
   let o = 0
   const vh = (i: number, j: number) => W.h[j * nx + i]
@@ -30,12 +31,15 @@ function wildsGeometry(W: Wilds): THREE.BufferGeometry {
       const tri = tris[t]
       for (let k = 0; k < 9; k++) pos[o + k] = tri[k]
       for (let k = 0; k < 3; k++) { col[o + k * 3] = c.r; col[o + k * 3 + 1] = c.g; col[o + k * 3 + 2] = c.b }
+      const L = b === BIOME.water || b === BIOME.shore ? GROUND.sand : b === BIOME.rock ? GROUND.stone : b === BIOME.woods ? GROUND.loam : GROUND.grass
+      lay[o / 3] = L; lay[o / 3 + 1] = L; lay[o / 3 + 2] = L
       o += 9
     }
   }
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
   g.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  g.setAttribute('aLayer', new THREE.BufferAttribute(lay, 1))
   g.computeVertexNormals()
   return g
 }
@@ -81,10 +85,11 @@ export function WaymarkStone({ w, greg }: { w: Waymark; greg?: boolean }) {
 
 export function WildsScene({ W, waymarks }: { W: Wilds; waymarks: Waymark[] }) {
   const geo = useMemo(() => wildsGeometry(W), [W])
+  const ground = useGroundMaterial()
   const greg = { ...GREG_WAYMARK, y: W.heightAt(GREG_WAYMARK.x, GREG_WAYMARK.z) }
   return (
     <>
-      <mesh geometry={geo}><meshLambertMaterial vertexColors flatShading /></mesh>
+      <mesh geometry={geo} material={ground} />
       <mesh rotation-x={-Math.PI / 2} position-y={W.meta.waterY - 0.15}>
         <planeGeometry args={[W.meta.sizeX, W.meta.sizeZ]} /><meshLambertMaterial color={P.water} transparent opacity={0.8} />
       </mesh>
