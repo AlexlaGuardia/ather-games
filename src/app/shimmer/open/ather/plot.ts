@@ -76,9 +76,13 @@ export const PLOT_HALF = HALF
 
 /** Where the keeper stands on arriving home: inside the start ground, facing the gate in its corner. Yaw 0 faces −z;
  *  forward is (−sin yaw, −cos yaw), so 3π/4 faces south-west. */
-export const THRESHOLD = { x: -56, z: 56, yaw: (3 * Math.PI) / 4 }
-/** The one gate, in the start ground's outer corner (the island's south-west). */
-export const GATE = { x: -66, z: 66 }
+/** The one gate, beside the start ground's outer corner (the island's south-west) and OFF the diagonal (Alex 11-15:
+ *  "the gate should sit off to the side of the bridge not blocking it"): a linked cluster's path leaves along the
+ *  diagonal and runs past it. */
+export const GATE = { x: -70, z: 54 }
+export const THRESHOLD = { x: -56, z: 56, yaw: Math.atan2(-(GATE.x + 56), -(GATE.z - 56)) }
+/** The gate's ring turns to face the threshold (rotation.y; the ring's face is +z unturned). */
+export const GATE_FACE = Math.atan2(THRESHOLD.x - GATE.x, THRESHOLD.z - GATE.z)
 /** Gregory, beside the threshold: he sells ground. */
 export const GREG = { x: -48, z: 62 }
 /** The rise of the island is centred on the start ground (home is the high ground; the far corner runs low). */
@@ -110,8 +114,8 @@ function rawHeight(x: number, z: number): number {
     const k = Math.max(0, Math.min(1, (Math.hypot(x - cx, z - cz) - R) / 4)); y = y * k + h * (1 - k)
   }
   pad(GATE.x, GATE.z, 5, 2.0); pad(THRESHOLD.x, THRESHOLD.z, 3, 2.0); pad(GREG.x, GREG.z, 2.5, 2.0)
-  // the gate's apron: the corner past it runs level to the shore, where a cluster's ramp leaves for the crossroads
-  pad(GATE.x - 6, GATE.z + 6, 4, 2.0)
+  // the corner's apron: level ground out to the shore along the diagonal, where a cluster's path leaves
+  pad(-66, 66, 4, 2.0); pad(-74, 74, 4, 2.0)
   return y
 }
 
@@ -124,6 +128,9 @@ for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
 }
 export const plotVertexHeight = (i: number, j: number) => VH[j * (N + 1) + i]
 export const plotCellIsLand = (i: number, j: number) => i >= 0 && j >= 0 && i < N && j < N && CELLS[j * N + i] === 1
+/** A vertex of the island's mesh: one that touches a land cell (the cluster meadow pins its edge to these). */
+export const plotVertexTouchesLand = (i: number, j: number) =>
+  plotCellIsLand(i, j) || plotCellIsLand(i - 1, j) || plotCellIsLand(i, j - 1) || plotCellIsLand(i - 1, j - 1)
 
 export function plotHeightAt(x: number, z: number): number {
   const fx = (x + HALF) / PLOT_CELL, fz = (z + HALF) / PLOT_CELL
@@ -136,14 +143,18 @@ export function plotHeightAt(x: number, z: number): number {
 
 // ── solids: the gate's plinth, Greg, and the mist walls round the ground you hold ─────────────────────────────
 const MIST_T = 0.3, MIST_H = 40
-/** Every edge between a held square and one you do not hold (inside the grid) is a wall. The grid's outer edge is
- *  not: past the outer ring the island simply ends, and the fall takes you home. */
+/** Every edge between a held square and one you do not hold is a wall, and so is the OUTER edge of every square you
+ *  do not hold on the grid's rim: the start is a corner now, so the island's shore band (past the outer ring) is
+ *  walkable from day one and would otherwise lead round the outside into the unbought squares. Past the band the
+ *  island simply ends, and the fall takes you home. */
 export function mistWalls(owned: ReadonlySet<string>): Box[] {
   const out: Box[] = []
+  const inGrid = (i: number, j: number) => i >= 0 && j >= 0 && i < GRID && j < GRID
   for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) {
-    if (!owned.has(sqId(i, j))) continue
+    const held = owned.has(sqId(i, j))
     const x0 = i * SQ - GRID_HALF, z0 = j * SQ - GRID_HALF, x1 = x0 + SQ, z1 = z0 + SQ
-    const wall = (ni: number, nj: number) => ni >= 0 && nj >= 0 && ni < GRID && nj < GRID && !owned.has(sqId(ni, nj))
+    // held: walls toward unheld neighbours; unheld: walls toward the outside of the grid
+    const wall = (ni: number, nj: number) => held ? inGrid(ni, nj) && !owned.has(sqId(ni, nj)) : !inGrid(ni, nj)
     if (wall(i, j - 1)) out.push({ x0, x1, z0: z0 - MIST_T, z1: z0 + MIST_T, y0: -20, y1: MIST_H })
     if (wall(i, j + 1)) out.push({ x0, x1, z0: z1 - MIST_T, z1: z1 + MIST_T, y0: -20, y1: MIST_H })
     if (wall(i - 1, j)) out.push({ x0: x0 - MIST_T, x1: x0 + MIST_T, z0, z1, y0: -20, y1: MIST_H })

@@ -115,7 +115,8 @@ export function atherPlate(W: Wilds): HTMLCanvasElement {
 export const PLOT_MPP = 0.5
 export const PLOT_EXTENT = PLOT_R + 14   // metres from the centre the plate covers (island + a margin of void)
 
-export function plotPlatePixels(owned: ReadonlySet<string>, mpp = PLOT_MPP): { w: number; h: number; px: Uint8ClampedArray; extent: number } {
+/** `clear`: the void left transparent (a linked cluster's meadow shows round the island, minimap.tsx). */
+export function plotPlatePixels(owned: ReadonlySet<string>, mpp = PLOT_MPP, clear = false): { w: number; h: number; px: Uint8ClampedArray; extent: number } {
   const E = PLOT_EXTENT, w = Math.round((E * 2) / mpp), h = w
   const px = new Uint8ClampedArray(w * h * 4)
   const X = (i: number) => -E + (i + 0.5) * mpp, Z = (j: number) => -E + (j + 0.5) * mpp
@@ -124,6 +125,7 @@ export function plotPlatePixels(owned: ReadonlySet<string>, mpp = PLOT_MPP): { w
     const x = X(i), z = Z(j), o = (j * w + i) * 4
     let r: number, g: number, b: number
     if (!insideIsland(x, z)) {
+      if (clear) { px[o + 3] = 0; continue }
       // the void: deep, with a few stars; a soft glow hugs the island's edge (the fold's light spilling over)
       const n = Math.sin(i * 12.9898 + j * 78.233) * 43758.5453, f = n - Math.floor(n)
       r = 8; g = 6; b = 20
@@ -159,14 +161,14 @@ export function plotPlatePixels(owned: ReadonlySet<string>, mpp = PLOT_MPP): { w
 }
 const plotCache = new Map<string, HTMLCanvasElement>()
 /** Browser: the home plate on a canvas, cached per set of owned squares. */
-export function plotPlate(owned: ReadonlySet<string>): { canvas: HTMLCanvasElement; extent: number } {
-  const key = [...owned].sort().join('|')
+export function plotPlate(owned: ReadonlySet<string>, clear = false): { canvas: HTMLCanvasElement; extent: number } {
+  const key = (clear ? 'c:' : '') + [...owned].sort().join('|')
   let c = plotCache.get(key)
   if (!c) {
-    const { w, h, px } = plotPlatePixels(owned)
+    const { w, h, px } = plotPlatePixels(owned, PLOT_MPP, clear)
     c = document.createElement('canvas'); c.width = w; c.height = h
     const ctx = c.getContext('2d')!, img = ctx.createImageData(w, h); img.data.set(px); ctx.putImageData(img, 0, 0)
-    plotCache.set(key, c); while (plotCache.size > 6) plotCache.delete(plotCache.keys().next().value!)   // a cluster draws four plots a frame
+    plotCache.set(key, c); while (plotCache.size > 10) plotCache.delete(plotCache.keys().next().value!)   // a cluster draws four plots a frame
   }
   return { canvas: c, extent: PLOT_EXTENT }
 }

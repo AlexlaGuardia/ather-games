@@ -21,12 +21,11 @@ await load('')
 res.soloOff = await standAt(-130, 130)   // where the square would be: alone, there is no ground (the fall takes you home)
 res.home = await standAt(-56, 56)        // the threshold: the start is the corner 3×3 now (Alex 11-15 sketch)
 await load('&cluster=preview')
-// Alex's sketch (D = 130): I am NE of the square, which is at (-130, 130). My gate is at (-66, 66) in the start corner;
-// its ramp runs to my crossroads at (-95, 95); the # streets hug the square (x -98..-92 / z 92..98 on my side).
-// The preview's three friends: nw (-260, 0), sw (-260, 260), se (0, 260), each turned so its gate faces the square.
-res.ramp = await standAt(-80, 80)
-res.crossroads = await standAt(-95, 95)
-res.street = await standAt(-95, 30)
+// Alex's sketch + the meadow (D = 130): I am NE of the square at (-130, 130). My path leaves my start corner along the
+// diagonal past the gate (now off to the side at (-70, 54)) and meets the others in the middle of the square. Hills
+// divide neighbours: (-130, 0) is the ridge between me and the preview's nw friend at (-260, 0).
+res.path = await standAt(-80, 80)
+res.hill = await standAt(-130, 0)
 res.middle = await standAt(-130, 130)
 try { await p.screenshot({ path: `${out}/cluster-1-middle.png` }) } catch { /* slow frame */ }
 res.friend = await standAt(-260, 260)
@@ -40,5 +39,5 @@ try { await p.screenshot({ path: `${out}/cluster-3-menu.png` }) } catch { /* slo
 console.log(JSON.stringify(res))
 const onPlot = (r: any) => r.zone === 'plot'
 const near = (r: any, x: number, z: number) => Math.hypot(r.x - x, r.z - z) < 6
-const pass = !near(res.soloOff, -130, 130) && near(res.home, -56, 56) && [['ramp', -80, 80], ['crossroads', -95, 95], ['street', -95, 30], ['middle', -130, 130], ['friend', -260, 260], ['friendNW', -260, 0]].every(([k, x, z]) => onPlot(res[k as string]) && near(res[k as string], x as number, z as number)) && res.menu === true
+const pass = !near(res.soloOff, -130, 130) && near(res.home, -56, 56) && (res.hill as any).y > 8 && [['path', -80, 80], ['hill', -130, 0], ['middle', -130, 130], ['friend', -260, 260], ['friendNW', -260, 0]].every(([k, x, z]) => onPlot(res[k as string]) && near(res[k as string], x as number, z as number)) && res.menu === true
 console.log(pass ? 'PASS' : 'FAIL'); await b.close(); process.exit(pass ? 0 : 1)

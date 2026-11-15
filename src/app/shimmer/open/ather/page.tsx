@@ -26,7 +26,7 @@ import {
 import { PlotScene } from './plot-scene'
 import { ClusterScene } from './cluster-scene'
 import { ClusterPanel, useCluster } from './cluster-panel'
-import { clusterGround, mateWalls, mateAt, inMiddle, onRoad } from './cluster'
+import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './cluster'
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
@@ -143,8 +143,9 @@ export default function AtherSlice() {
   }, [fog])
 
   const owned = useMemo(() => new Set(garden.owned), [garden.owned])
-  // GARDEN CLUSTERS (cluster.ts, Alex 11-15, his sketch): alone, the plot as ever; linked, the shared square, the #
-  // of streets, each gate's ramp and my mates' plots (turned to face the square, fenced by their own mist) become ground
+  // GARDEN CLUSTERS (cluster.ts + meadow.ts, Alex 11-15, his sketch): alone, the plot as ever; linked, the meadow
+  // round us all (the square, the paths, the hills) and my mates' plots (turned to face the square, fenced by their own
+  // mist) become ground
   const cl = useCluster(garden.owned)
   const clusterRef = useRef(cl.frame); clusterRef.current = cl.frame
   const plotWorld = useMemo(() => terrainWorld(cl.frame.linked
@@ -297,12 +298,14 @@ export default function AtherSlice() {
       let where = 'your plot'
       if (zone.kind === 'wilds' && ww) { const g = groundRef.current(lc.px, lc.pz); where = BIOME_NAME[ww.biomeAt(lc.px, lc.pz)] + (g ? ` · ${g}` : '') }
       else if (!squareAt(lc.px, lc.pz)) {
-        // off your own grid: in a linked cluster that is somewhere real (a friend's plot, the shared ground, a road)
+        // off your own grid: in a linked cluster that is somewhere real (a friend's plot, the Green, the valley, a path).
+        // Names RULED 2026-11-15 (CANON_GAPS › Garden clusters come BACK): the Green, the valley.
         const f = clusterRef.current, onMate = f.linked ? mateAt(f, lc.px, lc.pz) : undefined
         where = Number.isFinite(plotHeightAt(lc.px, lc.pz)) ? 'your plot'
           : onMate ? `${onMate.name}'s plot`
-          : inMiddle(f, lc.px, lc.pz) ? 'the shared ground'
-          : f.linked && onRoad(f, lc.px, lc.pz) ? 'the road' : 'the edge'
+          : inMiddle(f, lc.px, lc.pz) ? 'the Green'
+          : f.linked && onPath(f, lc.px, lc.pz) ? 'the path'
+          : f.linked && onMeadow(f, lc.px, lc.pz) ? 'the valley' : 'the edge'
       }
       setHud({ verb: verbOf(lc), where })
     }

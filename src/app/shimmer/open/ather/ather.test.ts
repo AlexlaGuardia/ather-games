@@ -14,7 +14,8 @@ import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVE
 import { placeNodes, nodeAdjacency, ownerOf, nodeRegions, polyArea, NODE_CLEAR_OF, GAME_DAY_MS, SUB } from './nodes'
 import { advance, clearAt, freshSpread, infectedIds, SPREAD } from './spread'
 import { readGarden, gardenText } from './garden-snapshot'
-import { clusterFrame, clusterGround, mateWalls, mateAt, inMiddle, onRoad, QV, D, MIDDLE_HALF, type Quarter } from './cluster'
+import { clusterFrame, clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow, D, MIDDLE_HALF, type Quarter } from './cluster'
+import { pathDist, PATH_W, meadowHeightAt } from './meadow'
 import { makeWorld, stream, tileOf, TILE_M, SEA_FLOOR, type TileIndex } from './wilds-world'
 import { atherPlatePixels, ATHER_HUE, plotPlatePixels, PLOT_MPP } from './plate'
 import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
@@ -145,8 +146,15 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   for (let t = 0; t < 60 * 12; t++) tickLocomotion(lc, input({ mvX: 0, mvZ: -1, fwdX: 0, fwdZ: -1 }), world)
   const edge = GRID_HALF - 3 * SQ
   ok(lc.pz > edge - 0.5 && lc.pz < edge + 2, `mist: walker ended at z ${lc.pz.toFixed(1)} (mist at ${edge})`)
-  // the corner 3×3 is walled only on its two inner sides; its outer sides open onto the island's shore
-  ok(mistWalls(START).length === 6, `mist: ${mistWalls(START).length} wall segments round the corner 3×3 (want 6)`)
+  // the corner 3×3 is walled on its two inner sides (6) and every unbought rim square on its outer side (30)
+  ok(mistWalls(START).length === 36, `mist: ${mistWalls(START).length} wall segments (want 6 inner + 30 rim)`)
+}
+// the shore band is open from the start corner, but it does not lead round into the unbought squares
+{
+  const world = terrainWorld(plotShape(START))
+  const lc = createLoco(-78, plotHeightAt(-78, 16), 16)
+  for (let t = 0; t < 60 * 8; t++) tickLocomotion(lc, input({ mvX: 1, mvZ: 0, fwdX: 1, fwdZ: 0 }), world)
+  ok(lc.px < -GRID_HALF + 0.5, `mist: walked off the shore band into an unbought square (x ${lc.px.toFixed(1)})`)
 }
 // owning the whole grid, walking off the edge is a FALL below FALL_Y (the fold takes you home)
 {
@@ -460,31 +468,28 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
 {
   const own = new Set(STARTING_SQUARES)
   const alone = clusterFrame('ne', [{ quarter: 'ne', name: 'me', owned: [...own] }])
-  ok(!alone.linked && !alone.middle && alone.ramps.length === 0 && alone.streets.length === 0, 'cluster: alone, something opened (the clouds should hide it all)')
+  ok(!alone.linked && !alone.middle && !alone.meadow && alone.paths.length === 0, 'cluster: alone, something opened (the clouds should hide it all)')
   ok(clusterGround(alone, -D, D) === -Infinity, 'cluster: alone, there is ground where the middle would be')
   const f = clusterFrame('ne', [{ quarter: 'ne', name: 'me', owned: [...own] }, { quarter: 'sw', name: 'pal', owned: [...own] }])
-  ok(f.linked && !!f.middle && f.mates.length === 1 && f.ramps.length === 2 && f.streets.length === 4, 'cluster: a friend joined and the frame did not link')
+  ok(f.linked && !!f.middle && !!f.meadow && f.mates.length === 1 && f.paths.length === 2, 'cluster: a friend joined and the frame did not link')
   ok(f.middle!.x === -D && f.middle!.z === D, 'cluster: the square is not south-west of me')
   ok(MIDDLE_HALF * 2 > 40, 'cluster: the square is too small to be a place')
   const pal = f.mates[0]
   ok(pal.x === -2 * D && pal.z === 2 * D, 'cluster: the opposite mate is not across the square')
-  ok(clusterGround(f, f.middle!.x, f.middle!.z) > 0, 'cluster: no ground in the middle once linked')
+  ok(Math.abs(clusterGround(f, f.middle!.x, f.middle!.z) - 2) < 0.01, 'cluster: the square is not level ground once linked')
   ok(Number.isFinite(clusterGround(f, pal.x, pal.z)) && mateAt(f, pal.x, pal.z) === pal, "cluster: no ground on the mate's island")
-  // every view, every mate: everyone sees themselves north-east, and every mate's gate corner faces the square
+  ok(clusterGround(f, -2 * D, 0) === -Infinity, 'cluster: an empty corner (nobody there) is ground; it should stay sky')
+  // every view, every mate: everyone sees themselves north-east, every start corner faces the square
   const QS: Quarter[] = ['ne', 'nw', 'sw', 'se']
+  const full = (mine: Quarter) => clusterFrame(mine, QS.map(q => ({ quarter: q, name: q, owned: [...own] })))
   for (const mine of QS) {
-    const ff = clusterFrame(mine, QS.map(q => ({ quarter: q, name: q, owned: [...own] })))
+    const ff = full(mine)
     ok(ff.mates.length === 3 && new Set(ff.mates.map(m => m.where)).size === 3 && !ff.mates.some(m => m.where === 'ne'), `cluster: from ${mine}, the mates do not fill the other three corners`)
     for (const m of ff.mates) {
-      const c = Math.cos(m.rot), sn = Math.sin(m.rot), gx = m.x + c * GATE.x + sn * GATE.z, gz = m.z - sn * GATE.x + c * GATE.z
+      const c = Math.cos(m.rot), sn = Math.sin(m.rot), gx = m.x + c * -62 + sn * 62, gz = m.z - sn * -62 + c * 62
       const dG = Math.hypot(gx - ff.middle!.x, gz - ff.middle!.z), dC = Math.hypot(m.x - ff.middle!.x, m.z - ff.middle!.z)
-      ok(dG < dC - 80, `cluster: from ${mine}, ${m.quarter}'s gate does not face the square (${dG.toFixed(0)} vs ${dC.toFixed(0)})`)
+      ok(dG < dC - 80, `cluster: from ${mine}, ${m.quarter}'s start corner does not face the square (${dG.toFixed(0)} vs ${dC.toFixed(0)})`)
     }
-    // the streets keep their gap: no shore, mine or a mate's, runs under a street
-    let under = 0
-    for (const r of ff.streets) for (let x = r.x0; x <= r.x1; x += 1.5) for (let z = r.z0; z <= r.z1; z += 1.5)
-      if (Number.isFinite(plotHeightAt(x, z)) || mateAt(ff, x, z)) under++
-    ok(under === 0, `cluster: from ${mine}, ${under} points of street over an island`)
   }
   // two views agree: if I see you one quarter-turn anticlockwise, you see me one quarter-turn clockwise
   {
@@ -492,13 +497,53 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
     const b = clusterFrame('nw', [{ quarter: 'ne', name: 'a', owned: [] }, { quarter: 'nw', name: 'b', owned: [] }]).mates[0].where
     ok(a === 'nw' && b === 'se', `cluster: the two views disagree (${a} / ${b})`)
   }
-  // walkable end to end: my threshold → my gate's ramp → the crossroads → across the square → their crossroads →
-  // their ramp → their start ground, with no hole and nothing the walker would stall on
+  // ── the meadow (Alex 11-15: "filled in the space inbetween the gardens.. hills dividing them") ──
+  {
+    const ff = full('ne'), m = ff.meadow!
+    const hAt = (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(ff, x, z))
+    // every shore meets the meadow with no hole and no step: walk out of every garden in 72 directions
+    let holes = 0, worstStep = 0
+    for (const g of [{ x: 0, z: 0 }, ...ff.mates]) for (let k = 0; k < 72; k++) {
+      const a = (k / 72) * Math.PI * 2, ux = Math.cos(a), uz = Math.sin(a)
+      let prev = NaN
+      for (let r = 70; r <= 98; r += 0.25) {
+        const h = hAt(g.x + ux * r, g.z + uz * r)
+        if (!Number.isFinite(h)) { holes++; break }
+        if (Number.isFinite(prev)) worstStep = Math.max(worstStep, Math.abs(h - prev))
+        prev = h
+      }
+    }
+    ok(holes === 0, `meadow: ${holes} shore crossings fall into a hole (four gardens: every shore should meet the meadow)`)
+    ok(worstStep < 0.2, `meadow: a ${worstStep.toFixed(2)} m step across a shore (the seam cracked)`)
+    // hills divide neighbours: the ground between me and the garden to my west rises well above the paths
+    const divide = meadowHeightAt(m, -D, 0)
+    ok(divide > 9, `meadow: the divide between neighbours is only ${divide.toFixed(1)} m (want hills)`)
+    // ... but nothing a walker meets is a wall: the open meadow's grades stay climbable almost everywhere
+    let n = 0, steep = 0
+    for (let z = m.z0 + 3; z < m.z0 + (m.n - 2) * 2; z += 3) for (let x = m.x0 + 3; x < m.x0 + (m.n - 2) * 2; x += 3) {
+      const h0 = meadowHeightAt(m, x, z), h1 = meadowHeightAt(m, x + 1, z), h2 = meadowHeightAt(m, x, z + 1)
+      if (!Number.isFinite(h0) || !Number.isFinite(h1) || !Number.isFinite(h2)) continue
+      n++; if (Math.hypot(h1 - h0, h2 - h0) > 0.6) steep++
+    }
+    ok(steep / n < 0.03, `meadow: ${(100 * steep / n).toFixed(1)}% of the meadow is steeper than the walker climbs`)
+    ok(m.trees.length > 40 && m.trees.every(t => ff.paths.every(p => pathDist(p, t.x, t.z) > PATH_W)), `meadow: ${m.trees.length} trees, or one stands on a path`)
+    ok(m.trees.every(t => !inMiddle(ff, t.x, t.z)), 'meadow: a tree stands in the square')
+  }
+  // the paths: every one leaves its own garden's corner and they all meet in the middle of the square
+  {
+    const ff = full('ne')
+    ok(ff.paths.length === 4 && ff.paths.every(p => Math.hypot(p.pts[p.pts.length - 1][0] - ff.middle!.x, p.pts[p.pts.length - 1][1] - ff.middle!.z) < 0.01), 'paths: they do not all meet in the middle of the square')
+    // the gate stands BESIDE my path, not on it (Alex 11-15: "the gate should sit off to the side ... not blocking it")
+    const gd = pathDist(ff.paths[0], GATE.x, GATE.z)
+    ok(gd > PATH_W / 2 + 2.5 && gd < 16, `paths: the gate is ${gd.toFixed(1)} m from my path (want beside it, clear of it)`)
+  }
+  // walkable end to end: my threshold → my path → the square → their path → their threshold, no hole, no stall
   const path: [number, number][] = []
-  const seg = (ax: number, az: number, bx: number, bz: number) => { for (let t = 0; t <= 1; t += 0.01) path.push([ax + (bx - ax) * t, az + (bz - az) * t]) }
-  const [r0, r1] = f.ramps, c = Math.cos(pal.rot), sn = Math.sin(pal.rot)
+  const seg = (ax: number, az: number, bx: number, bz: number) => { for (let t = 0; t <= 1; t += 0.02) path.push([ax + (bx - ax) * t, az + (bz - az) * t]) }
+  const poly = (pts: [number, number][]) => { for (let k = 1; k < pts.length; k++) seg(pts[k - 1][0], pts[k - 1][1], pts[k][0], pts[k][1]) }
+  const [p0, p1] = f.paths, c = Math.cos(pal.rot), sn = Math.sin(pal.rot)
   const palHome = { x: pal.x + c * THRESHOLD.x + sn * THRESHOLD.z, z: pal.z - sn * THRESHOLD.x + c * THRESHOLD.z }
-  seg(THRESHOLD.x, THRESHOLD.z, r0.ax, r0.az); seg(r0.ax, r0.az, r0.bx, r0.bz); seg(r0.bx, r0.bz, r1.bx, r1.bz); seg(r1.bx, r1.bz, r1.ax, r1.az); seg(r1.ax, r1.az, palHome.x, palHome.z)
+  seg(THRESHOLD.x, THRESHOLD.z, p0.pts[0][0], p0.pts[0][1]); poly(p0.pts); poly([...p1.pts].reverse()); seg(p1.pts[0][0], p1.pts[0][1], palHome.x, palHome.z)
   const hAt = (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(f, x, z))
   const holes = path.filter(([x, z]) => !Number.isFinite(hAt(x, z)))
   ok(holes.length === 0, `cluster: ${holes.length} holes on the walk from my plot to my friend's (first ${holes[0]?.map(v => v.toFixed(1))})`)
@@ -508,16 +553,17 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
     worst = Math.max(worst, g); if (g > 0.6) steep++
   }
   ok(steep === 0, `cluster: ${steep} spots on the walk steeper than 0.6 (worst ${worst.toFixed(2)}; the walker would stall)`)
-  ok(onRoad(f, r0.bx, r0.bz) && inMiddle(f, f.middle!.x + 10, f.middle!.z - 10), 'cluster: the crossroads or the square do not say where they are')
-  // my own way out needs no lane: the start corner's outer sides are open, only the two inner sides are mist
+  ok(onPath(f, p0.pts[12][0], p0.pts[12][1]) && onMeadow(f, p0.pts[12][0], p0.pts[12][1]) && inMiddle(f, f.middle!.x + 10, f.middle!.z - 10), 'cluster: the path, the meadow or the square do not say where they are')
+  // my own way out: no mist between my threshold and my path
   const walls = mistWalls(own), blocks = (x: number, z: number) => walls.some(w => x >= w.x0 && x <= w.x1 && z >= w.z0 && z <= w.z1)
-  ok(path.slice(0, 200).every(([x, z]) => !blocks(x, z)), 'cluster: mist stands between my threshold and my ramp')
-  // visiting: a mate's unbought squares are fenced off, turned with their island; their start ground is open
+  const outPts = path.filter(([x, z]) => Number.isFinite(plotHeightAt(x, z)))
+  ok(outPts.length > 10 && outPts.every(([x, z]) => !blocks(x, z)), 'cluster: mist stands between my threshold and my path')
+  // visiting: a mate's unbought squares are fenced off, turned with their island; their way in is open
   const mw = mateWalls(f)
   const mblocks = (x: number, z: number) => mw.some(w => x >= w.x0 && x <= w.x1 && z >= w.z0 && z <= w.z1)
-  ok(mw.length === 6, `cluster: a friend's corner start has ${mw.length} mist walls (want 6)`)
-  ok(path.slice(-200).every(([x, z]) => !mblocks(x, z)), "cluster: mist stands between a friend's ramp and their threshold")
-  ok(mw.every(w => mateAt(f, (w.x0 + w.x1) / 2, (w.z0 + w.z1) / 2) === pal), "cluster: a friend's mist stands off their island")
+  ok(mw.length === 36, `cluster: a friend's corner start has ${mw.length} mist walls (want 36)`)
+  ok(path.slice(-150).every(([x, z]) => !mblocks(x, z)), "cluster: mist stands between a friend's path and their threshold")
+  ok(mw.every(w => mateAt(f, (w.x0 + w.x1) / 2, (w.z0 + w.z1) / 2) === pal || Number.isFinite(clusterGround(f, (w.x0 + w.x1) / 2, (w.z0 + w.z1) / 2))), "cluster: a friend's mist stands off their island")
   // a mate's garden is somebody else's data: only well-formed square ids get through
   ok(readGarden(gardenText(['4,4', '3,3']))?.owned.join() === '3,3,4,4', 'garden: a good snapshot did not round-trip')
   ok(readGarden('{"v":1,"owned":["9,9"]}') === null && readGarden('{"v":1,"owned":["4,4","<b>"]}') === null, 'garden: a bad square id got through')

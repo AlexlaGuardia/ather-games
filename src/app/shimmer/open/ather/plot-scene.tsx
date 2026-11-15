@@ -6,7 +6,7 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
 import {
-  PLOT_N, PLOT_CELL, PLOT_HALF, PLOT_R, GRID, SQ, GRID_HALF, THRESHOLD, GATE, GREG,
+  PLOT_N, PLOT_CELL, PLOT_HALF, PLOT_R, GRID, SQ, GRID_HALF, THRESHOLD, GATE, GATE_FACE, GREG,
   plotHeightAt, plotVertexHeight, plotCellIsLand, sqId, ringOf, canBuy,
 } from './plot'
 import { P } from './palette'
@@ -61,7 +61,7 @@ function gridLines(): THREE.BufferGeometry {
 function Gate() {
   const y = plotHeightAt(GATE.x, GATE.z) - 0.4
   return (
-    <group position={[GATE.x, y, GATE.z]}>
+    <group position={[GATE.x, y, GATE.z]} rotation-y={GATE_FACE}>
       <mesh position-y={0.375}><cylinderGeometry args={[1.6, 1.8, 0.75, 12]} /><meshLambertMaterial color="#b9ab90" flatShading /></mesh>
       <mesh position-y={3.4}><torusGeometry args={[2.3, 0.22, 6, 24]} /><meshLambertMaterial color="#e7c766" emissive="#c79a2e" emissiveIntensity={0.6} flatShading /></mesh>
       <mesh position-y={3.4}><circleGeometry args={[2.1, 24]} /><meshBasicMaterial color="#f4e3b0" transparent opacity={0.35} side={THREE.DoubleSide} /></mesh>

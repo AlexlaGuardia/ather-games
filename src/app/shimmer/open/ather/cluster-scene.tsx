@@ -1,47 +1,96 @@
 'use client'
-// GARDEN CLUSTERS, DRAWN (Alex 11-15, his sketch). What cluster.ts says is ground, made visible: each mate's island at
-// their place, turned so its gate faces the square (their squares held, the rest under their mist; read-only), the
-// shared square in the middle, the # of streets round it, and a ramp from every gate corner to its crossroads. Nothing here is a canon look (CANON_GAPS: clusters [OPEN]); placeholder forms,
-// neutral, in the plot's own palette.
+// GARDEN CLUSTERS, DRAWN (Alex 11-15, his sketch + "modeled after the meadows biome with hills dividing them"). What
+// cluster.ts / meadow.ts say is ground, made visible: the meadow in the Wilds' meadow palette (flat-shaded, biome
+// tints, hills lighter toward their tops), dirt paths from every gate corner meeting in the shared square, a scatter
+// of trees thickest on the ridges, the cluster's underside, and each mate's island turned so its corner faces the
+// square (their squares held, the rest under their mist; read-only). Nothing here is a canon look (CANON_GAPS:
+// clusters [OPEN]); placeholder forms, neutral, in the Ather's own palette.
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { PlotIsland } from './plot-scene'
-import { MIDDLE_Y, ROAD_Y, type Frame, type Seg } from './cluster'
+import { MIDDLE_Y, type Frame } from './cluster'
+import { MEADOW_CELL, type Meadow } from './meadow'
+import { P } from './palette'
 
-function SegMesh({ s, color, thick = 0.5 }: { s: Seg; color: string; thick?: number }) {
-  const { pos, quat, len } = useMemo(() => {
-    const a = new THREE.Vector3(s.ax, s.ay, s.az), b = new THREE.Vector3(s.bx, s.by, s.bz)
-    const d = b.clone().sub(a), len = d.length()
-    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), d.clone().normalize())
-    return { pos: a.add(b).multiplyScalar(0.5), quat, len }
-  }, [s])
+const DIRT = new THREE.Color('#d9c79a'), DIRT_HI = new THREE.Color('#e6d6ad'), SQUARE = new THREE.Color('#b4d78c')
+
+function meadowGeometry(m: Meadow): THREE.BufferGeometry {
+  const pos: number[] = [], col: number[] = [], C = MEADOW_CELL, n = m.n, cn = n - 1
+  const c = new THREE.Color(), under = new THREE.Color(P.under)
+  const v = (a: number, b: number) => [m.x0 + a * C, m.h[b * n + a], m.z0 + b * C] as const
+  const isLand = (a: number, b: number) => a >= 0 && b >= 0 && a < cn && b < cn && m.land[b * cn + a] === 1
+  for (let b = 0; b < cn; b++) for (let a = 0; a < cn; a++) {
+    const k = b * cn + a
+    if (!m.land[k]) continue
+    const p00 = v(a, b), p10 = v(a + 1, b), p01 = v(a, b + 1), p11 = v(a + 1, b + 1)
+    const y = (p00[1] + p10[1] + p01[1] + p11[1]) / 4
+    for (const [t, tri] of ([[0, [p00, p11, p10]], [1, [p00, p01, p11]]] as const)) {
+      const nse = ((a * 7 + b * 13 + t * 5) % 11) / 11
+      if (m.kind[k] === 1) c.copy(DIRT).lerp(DIRT_HI, nse * 0.5)
+      else if (m.kind[k] === 2) c.copy(SQUARE).lerp(P.grassHi, nse * 0.3)
+      else c.copy(P.grass).lerp(P.grassHi, Math.min(1, Math.max(0, (y - 3) / 12)) * 0.8 + nse * 0.15).lerp(P.gold, ((a * 3 + b) % 17) / 17 * 0.14)
+      for (const p of tri) { pos.push(p[0], p[1], p[2]); col.push(c.r, c.g, c.b) }
+    }
+    // the cluster's own edge: a skirt down into the cloud (only where the meadow meets the void, not an island)
+    const edges: [number, number, readonly [number, number, number], readonly [number, number, number]][] = [
+      [0, -1, p00, p10], [1, 0, p10, p11], [0, 1, p11, p01], [-1, 0, p01, p00],
+    ]
+    for (const [da, db, e0, e1] of edges) {
+      const na = a + da, nb = b + db
+      if (isLand(na, nb) || (na >= 0 && nb >= 0 && na < cn && nb < cn && m.island[nb * cn + na])) continue
+      const quad = [e0, e1, [e1[0], e1[1] - 5, e1[2]], e0, [e1[0], e1[1] - 5, e1[2]], [e0[0], e0[1] - 5, e0[2]]] as const
+      for (const p of quad) { pos.push(p[0], p[1], p[2]); col.push(under.r, under.g, under.b) }
+    }
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
+  g.computeVertexNormals()
+  return g
+}
+
+function MeadowTrees({ m }: { m: Meadow }) {
+  const trunk = useRef<THREE.InstancedMesh>(null), crown = useRef<THREE.InstancedMesh>(null)
+  useEffect(() => {
+    const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color()
+    m.trees.forEach((t, k) => {
+      p.set(t.x, t.y + 1.4, t.z); s.set(1, 2.8, 1); trunk.current!.setMatrixAt(k, mtx.compose(p, q, s))
+      p.set(t.x, t.y + 2.4 + t.tall / 2, t.z); s.set(t.r, t.tall, t.r); crown.current!.setMatrixAt(k, mtx.compose(p, q, s))
+      c.set('#79ad5a').offsetHSL(((k * 0.07) % 0.05) - 0.025, 0, ((k * 0.11) % 0.1) - 0.05)
+      crown.current!.setColorAt(k, c)
+    })
+    trunk.current!.instanceMatrix.needsUpdate = true; crown.current!.instanceMatrix.needsUpdate = true
+    if (crown.current!.instanceColor) crown.current!.instanceColor.needsUpdate = true
+  }, [m])
+  if (m.trees.length === 0) return null
+  // frustumCulled off: an InstancedMesh is culled by its base geometry's bounds at the origin
   return (
-    <group position={pos} quaternion={quat}>
-      <mesh position-y={-thick / 2}><boxGeometry args={[s.w, thick, len]} /><meshLambertMaterial color={color} flatShading /></mesh>
-      {[-1, 1].map(k => <mesh key={k} position={[k * (s.w / 2 - 0.15), 0.45, 0]}><boxGeometry args={[0.18, 0.9, len]} /><meshLambertMaterial color="#d9cfb8" /></mesh>)}
-    </group>
+    <>
+      <instancedMesh key={`t${m.trees.length}`} frustumCulled={false} ref={trunk} args={[undefined, undefined, m.trees.length]}>
+        <cylinderGeometry args={[0.24, 0.32, 1, 6]} /><meshLambertMaterial color="#7a5c40" flatShading />
+      </instancedMesh>
+      <instancedMesh key={`c${m.trees.length}`} frustumCulled={false} ref={crown} args={[undefined, undefined, m.trees.length]}>
+        <coneGeometry args={[1, 1, 7]} /><meshLambertMaterial flatShading />
+      </instancedMesh>
+    </>
   )
 }
 
 export function ClusterScene({ frame }: { frame: Frame }) {
-  if (!frame.linked || !frame.middle) return null
-  const m = frame.middle, S = m.half * 2
+  const m = frame.meadow
+  const geo = useMemo(() => (m ? meadowGeometry(m) : null), [m])
+  useEffect(() => () => geo?.dispose(), [geo])
+  if (!frame.linked || !frame.middle || !m || !geo) return null
+  const mid = frame.middle, span = (m.n - 1) * MEADOW_CELL
   return (
     <>
-      {/* the shared ground: a square at the gate pads' height, its underside a cone like every plot's */}
-      <group position={[m.x, 0, m.z]}>
-        <mesh position-y={MIDDLE_Y - 0.6}><boxGeometry args={[S, 1.2, S]} /><meshLambertMaterial color="#a9cf86" flatShading /></mesh>
-        <mesh position-y={MIDDLE_Y - 14} rotation={[Math.PI, Math.PI / 4, 0]}><coneGeometry args={[m.half * 1.3, 26, 4, 2]} /><meshLambertMaterial color="#b9a58c" flatShading /></mesh>
-        <mesh position-y={MIDDLE_Y + 0.03} rotation-x={-Math.PI / 2}><ringGeometry args={[5, 6, 24]} /><meshBasicMaterial color="#efe0a8" /></mesh>
-      </group>
-      {/* the # of streets round it */}
-      {frame.streets.map((r, k) => (
-        <mesh key={`s${k}`} position={[(r.x0 + r.x1) / 2, ROAD_Y - 0.3, (r.z0 + r.z1) / 2]}>
-          <boxGeometry args={[r.x1 - r.x0, 0.6, r.z1 - r.z0]} /><meshLambertMaterial color="#d6c9a8" flatShading />
-        </mesh>
-      ))}
-      {frame.ramps.map((b, k) => <SegMesh key={`r${k}`} s={b} color="#cdbf9f" />)}
+      <mesh geometry={geo}><meshLambertMaterial vertexColors flatShading /></mesh>
+      <MeadowTrees m={m} />
+      {/* where the paths meet: a pale ring in the middle of the square */}
+      <mesh position={[mid.x, MIDDLE_Y + 0.04, mid.z]} rotation-x={-Math.PI / 2}><ringGeometry args={[5, 6.2, 28]} /><meshBasicMaterial color="#efe0a8" /></mesh>
+      {/* the cluster's underside: one stone root under the whole meadow, as each island has its own */}
+      <mesh position={[mid.x, -34, mid.z]} rotation={[Math.PI, Math.PI / 4, 0]}><coneGeometry args={[span * 0.62, 60, 8, 2]} /><meshLambertMaterial color={P.under} flatShading /></mesh>
       {frame.mates.map(mt => (
         <group key={mt.quarter} position={[mt.x, 0, mt.z]} rotation-y={mt.rot}>
           <PlotIsland owned={new Set(mt.owned)} pages={0} />
