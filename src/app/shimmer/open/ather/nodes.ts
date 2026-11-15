@@ -70,3 +70,28 @@ export function loadNodes(): NodeLedger {
   try { const v = JSON.parse(localStorage.getItem(KEY) ?? '{}'); return v && typeof v === 'object' ? v : {} } catch { return {} }
 }
 export function saveNodes(L: NodeLedger) { try { localStorage.setItem(KEY, JSON.stringify(L)) } catch { /* private window */ } }
+
+/** Each node's country as a polygon in tile-local metres: the tile square clipped by the half-planes "nearer this node
+ *  than that one" (an exact Voronoi cell, the same rule as ownerOf). For the fold map's borders. */
+export type Poly = { x: number; z: number }[]
+export function nodeRegions(nodes: WildsNode[], sizeX: number, sizeZ: number): { id: string; poly: Poly }[] {
+  const hx = sizeX / 2, hz = sizeZ / 2
+  return nodes.map(n => {
+    let poly: Poly = [{ x: -hx, z: -hz }, { x: hx, z: -hz }, { x: hx, z: hz }, { x: -hx, z: hz }]
+    for (const o of nodes) {
+      if (o === n) continue
+      // keep points p with (p - mid) · (o - n) <= 0
+      const mx = (n.x + o.x) / 2, mz = (n.z + o.z) / 2, dx = o.x - n.x, dz = o.z - n.z
+      const side = (p: { x: number; z: number }) => (p.x - mx) * dx + (p.z - mz) * dz
+      const out: Poly = []
+      for (let k = 0; k < poly.length; k++) {
+        const a = poly[k], b = poly[(k + 1) % poly.length], sa = side(a), sb = side(b)
+        if (sa <= 0) out.push(a)
+        if ((sa <= 0) !== (sb <= 0)) { const t = sa / (sa - sb); out.push({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t }) }
+      }
+      poly = out
+    }
+    return { id: n.id, poly }
+  })
+}
+export const polyArea = (p: Poly) => Math.abs(p.reduce((s, a, k) => { const b = p[(k + 1) % p.length]; return s + a.x * b.z - b.x * a.z }, 0)) / 2

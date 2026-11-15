@@ -11,7 +11,7 @@ import {
 } from './plot'
 import { newCombat, stepCombat, spawnHollow, fire, populate, KEEPER_HP, SHAMBLER, BODY_Y } from './combat'
 import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVES, PANIC_MIN_WINDUP } from './champion'
-import { placeNodes, isInfected, clearNode, ownerOf, GRACE_MS, NODE_CLEAR_OF } from './nodes'
+import { placeNodes, isInfected, clearNode, ownerOf, nodeRegions, polyArea, GRACE_MS, NODE_CLEAR_OF } from './nodes'
 import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
 import { canPlant, plant, lift, reachedBiomes, waymarksInWorld, TILE_CENTRE, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
 
@@ -293,6 +293,25 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
     const q2 = newCombat(31)
     for (let k = 0; k < 40; k++) populate(q2, T2, meadow.x, meadow.z, 7)
     ok(q2.hollows.some(h => Math.hypot(h.x - meadow.x, h.z - meadow.z) <= 150), 'nodes: the cleared-ground check is vacuous (no strays near it even while infected)')
+  }
+
+  // the map's borders (Alex 11-15: "show where it starts"): the regions tile the square and agree with ownerOf
+  {
+    const three = [...nodes, { id: 'x', tile: 't', biome: BIOME.rock, x: 300, z: 250 }]
+    for (const set of [nodes, three]) {
+      const R = nodeRegions(set, meta.sizeX, meta.sizeZ)
+      const total = R.reduce((a, r) => a + polyArea(r.poly), 0)
+      ok(Math.abs(total - meta.sizeX * meta.sizeZ) < 1, `regions: cover ${total.toFixed(0)} m², want ${meta.sizeX * meta.sizeZ}`)
+      let bad = 0
+      for (let k = 0; k < 400; k++) {
+        const x = ((k * 37) % 97) / 97 * meta.sizeX - hx, z = ((k * 61) % 89) / 89 * meta.sizeZ - hz
+        const own = ownerOf(set, x, z)!.id, r = R.find(r => r.id === own)!.poly
+        let inside = false   // even-odd
+        for (let i = 0, j = r.length - 1; i < r.length; j = i++) if ((r[i].z > z) !== (r[j].z > z) && x < (r[j].x - r[i].x) * (z - r[i].z) / (r[j].z - r[i].z) + r[i].x) inside = !inside
+        if (!inside) bad++
+      }
+      ok(bad === 0, `regions: ${bad}/400 points outside their owner's region`)
+    }
   }
 
   // the fight, on flat open ground so only the rules are under test

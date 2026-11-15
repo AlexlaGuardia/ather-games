@@ -45,11 +45,13 @@ function FogLayer({ fog, W }: { fog: Fog; W: Wilds }) {
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
 }
 
-export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops, nodes = [] }: {
+export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [] }: {
   view: 'ather' | 'athernyx'; travel: boolean; W: Wilds | null; fog: Fog | null; waymarks: Waymark[]
   here: { x: number; z: number }; inWilds: boolean; onTravel: (d: Dest) => void; tile: string; pitstops: Pitstop[]
   /** Infected nodes still welling on this tile: grey blots, not stops (you walk to a fight). */
   nodes?: { id: string; x: number; z: number }[]
+  /** Each node's country (tile metres) and whether it is still infected: the borders Alex asked for (11-15). */
+  regions?: { id: string; poly: { x: number; z: number }[]; infected: boolean }[]
 }) {
   const sx = W?.meta.sizeX ?? 1000, sz = W?.meta.sizeZ ?? 1000
   const pct = (x: number, z: number) => ({ left: `${((x + sx / 2) / sx) * 100}%`, top: `${((z + sz / 2) / sz) * 100}%` })
@@ -80,6 +82,15 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
               {waymarks.filter(w => w.tile === tile).map(w => (
                 <button key={w.id} title={`Your waymark · ${BIOME_NAME[w.biome]}`} onClick={() => go({ kind: 'waymark', w })} style={{ ...pin('#6fd3c4', 13), ...pct(w.x, w.z) }} />
               ))}
+              {regions.length > 1 && (
+                <svg viewBox={`${-sx / 2} ${-sz / 2} ${sx} ${sz}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+                  {regions.map(r => (
+                    <polygon key={r.id} points={r.poly.map(p => `${p.x},${p.z}`).join(' ')} vectorEffect="non-scaling-stroke"
+                      fill={r.infected ? 'rgba(70,72,78,0.42)' : 'rgba(159,210,122,0.10)'}
+                      stroke={r.infected ? 'rgba(225,228,232,0.85)' : 'rgba(159,210,122,0.75)'} strokeWidth={2} strokeDasharray={r.infected ? '7 5' : undefined} strokeLinejoin="round" />
+                  ))}
+                </svg>
+              )}
               {nodes.map(n => (
                 <div key={n.id} title="Infected ground" style={{ position: 'absolute', width: 22, height: 22, margin: -11, borderRadius: 22, background: 'radial-gradient(circle, rgba(70,72,76,0.95) 30%, rgba(70,72,76,0.35) 65%, transparent 72%)', boxShadow: '0 0 0 1px rgba(220,224,228,0.4)', pointerEvents: 'auto', ...pct(n.x, n.z) }} />
               ))}
@@ -89,6 +100,12 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
               <div style={label}>Stops</div>
               {stop('Your plot', 'home', { kind: 'home' }, '#f2d88a')}
               {stop("Gregory's waymark", 'the Wilds · meadow', { kind: 'waymark', w: GREG_WAYMARK }, '#e7c766')}
+              {regions.length > 1 && (
+                <div style={{ display: 'flex', gap: 10, fontSize: 11, opacity: 0.8, margin: '2px 0 4px' }}>
+                  <span><span style={{ display: 'inline-block', width: 10, height: 10, marginRight: 4, verticalAlign: -1, background: 'rgba(70,72,78,0.8)', outline: '1px dashed rgba(225,228,232,0.85)' }} />Infected</span>
+                  <span><span style={{ display: 'inline-block', width: 10, height: 10, marginRight: 4, verticalAlign: -1, background: 'rgba(159,210,122,0.2)', outline: '1px solid rgba(159,210,122,0.75)' }} />Cleared</span>
+                </div>
+              )}
               {waymarks.map((w, k) => stop(`Waymark ${k + 1}`, `the Wilds · ${BIOME_NAME[w.biome]}`, { kind: 'waymark', w }, '#6fd3c4'))}
               <div style={{ opacity: 0.6, fontSize: 11, marginTop: 6 }}>{waymarks.length} / {MAX_WAYMARKS} waymarks. Plant one with F where you stand in the Wilds.</div>
               {fog && W && (() => { const c = tileCentreWorld(W.meta); return <div style={{ opacity: 0.6, fontSize: 11 }}>Walked: {Math.round(walkedShare(fog, c.x - sx / 2, c.z - sz / 2, c.x + sx / 2, c.z + sz / 2) * 100)}% of this country</div> })()}

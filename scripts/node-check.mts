@@ -83,9 +83,16 @@ const ledger = await p.evaluate(() => JSON.parse(localStorage.getItem('ather.nod
 await p.waitForFunction((k: number) => (window as any).__ather.nodes().length < k, { timeout: 60000 }, nodes.length).catch(() => {})
 const left = await p.evaluate(() => (window as any).__ather.nodes().length)
 await shot(`${out}/node-5-clear.png`)
+// the borders: the cleared country reads green-edged, the other still grey and dashed (Alex 11-15); HUD names the ground
+const tag = await p.evaluate(() => [...document.querySelectorAll('div')].map(d => d.textContent ?? '').find(t => /· (cleared|infected) ground/.test(t)) ?? '')
+await p.evaluate(() => (window as any).__ather.open('gate'))
+await new Promise(r => setTimeout(r, 1500))
+const borders = await p.$$eval('polygon', ps => ps.map(p => p.getAttribute('stroke-dasharray') ? 'infected' : 'cleared'))
+await shot(`${out}/node-6-borders.png`)
+console.log(JSON.stringify({ tag: tag.slice(0, 60), borders }))
 const res = { quiet, blots, before, hudBars, tell, wave, cleared: Object.keys(ledger), nodesLeft: left, of: nodes.length }
 console.log(JSON.stringify(res))
-const pass = blots === nodes.length && !before && hudBars && !!tell && wave >= 4 && res.cleared.includes(n.id) && left === nodes.length - 1 && quiet <= 1
+const pass = blots === nodes.length && !before && hudBars && !!tell && wave >= 4 && res.cleared.includes(n.id) && left === nodes.length - 1 && quiet <= 1 && /cleared ground/.test(tag) && borders.filter(b => b === 'cleared').length === 1 && borders.length === nodes.length
 console.log(pass ? 'PASS' : 'FAIL')
 await b.close()
 process.exit(pass ? 0 : 1)

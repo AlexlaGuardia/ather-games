@@ -32,7 +32,7 @@ import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WA
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud } from './combat-layer'
 import type { CombatEvent, Terrain } from './combat'
-import { placeNodes, isInfected, clearNode, loadNodes, saveNodes, ownerOf, type NodeLedger } from './nodes'
+import { placeNodes, isInfected, clearNode, loadNodes, saveNodes, ownerOf, nodeRegions, type NodeLedger } from './nodes'
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey } from '../shared/touch'
 
@@ -115,6 +115,10 @@ export default function AtherSlice() {
   const allNodes = useMemo(() => W ? placeNodes(W, TILE, GREG_WAYMARK) : [], [W])
   const nodes = useMemo(() => { const now = Date.now(); return allNodes.filter(n => isInfected(n.id, nodeLedger, now)) }, [allNodes, nodeLedger])
   const nodeOwner = useMemo(() => W && allNodes.length ? (x: number, z: number) => ownerOf(allNodes, x, z)?.id : undefined, [W, allNodes])
+  // the countries on the fold map, and which one the keeper stands in (HUD), off the same nearest-node rule
+  const regions = useMemo(() => W ? nodeRegions(allNodes, W.meta.sizeX, W.meta.sizeZ).map(r => ({ ...r, infected: nodes.some(n => n.id === r.id) })) : [], [W, allNodes, nodes])
+  const groundRef = useRef<(x: number, z: number) => string | null>(() => null)
+  groundRef.current = (x, z) => { const id = nodeOwner?.(x, z); return id ? (nodes.some(n => n.id === id) ? 'infected ground' : 'cleared ground') : null }
   const gardenRef = useRef(garden); gardenRef.current = garden
   const onCombat = useCallback((evs: CombatEvent[]) => {
     let got = 0
@@ -185,7 +189,7 @@ export default function AtherSlice() {
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map') : null
       setPrompt(p)
       let where = 'your plot'
-      if (zone.kind === 'wilds' && W) where = BIOME_NAME[W.biomeAt(lc.px, lc.pz)]
+      if (zone.kind === 'wilds' && W) { const g = groundRef.current(lc.px, lc.pz); where = BIOME_NAME[W.biomeAt(lc.px, lc.pz)] + (g ? ` · ${g}` : '') }
       else { const s = squareAt(lc.px, lc.pz); if (!s) where = 'the edge' }
       setHud({ verb: verbOf(lc), where })
     }
@@ -325,7 +329,7 @@ export default function AtherSlice() {
       )}
       {panel?.kind === 'map' && (
         <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} here={pos.current}
-          inWilds={zone.kind === 'wilds'} onTravel={travel} tile={TILE} pitstops={pitstops} nodes={nodes} />
+          inWilds={zone.kind === 'wilds'} onTravel={travel} tile={TILE} pitstops={pitstops} nodes={nodes} regions={regions} />
       )}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
       <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />
