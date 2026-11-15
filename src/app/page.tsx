@@ -41,7 +41,7 @@ const PLACES = [
     name: "Your Plot",
     kind: "Home",
     blurb: "A floating garden in the Ather that is yours. Grow it square by square.",
-    img: null,
+    img: "/open/landing-plot.webp",
     href: PLAY_HREF,
   },
 ];
@@ -99,8 +99,11 @@ export default function Home() {
 
       {/* ── hero ── */}
       <section className="relative flex min-h-[88svh] items-end overflow-hidden">
-        <Image src="/room/shimmer-beyond.webp" alt="" fill priority sizes="100vw" className="-scale-x-100 object-cover object-[45%_70%] sm:object-[25%_70%]" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#05060e] via-[#05060e]/45 to-[#05060e]/30" />
+        {/* Key art: the home plot, a cloud-walled floating island under the Core (out of frame above; it pours down, it
+            is never a disc in the sky). tools/art/gen_landing.py, flux-1.1-pro-ultra (commercial), built to canon. */}
+        <Image src="/open/landing-hero.webp" alt="" fill priority sizes="100vw" className="object-cover object-[78%_40%] sm:object-[60%_40%]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#05060e] via-[#05060e]/55 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#05060e]/60 via-[#05060e]/15 to-transparent" />
         <div className="relative mx-auto w-full max-w-6xl px-4 pb-16 sm:pb-24">
           <p className="font-[family-name:var(--font-game)] text-xs font-semibold tracking-[0.3em] uppercase" style={{ color: GOLD }}>
             An open-world sandbox
