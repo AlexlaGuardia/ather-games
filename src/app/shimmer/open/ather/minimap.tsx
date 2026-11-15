@@ -7,7 +7,7 @@
 // The tile picture is composed ONCE per change (fog walked, a waymark planted, a node cleared) into an offscreen
 // canvas; a frame only crops it. Per frame cost = one drawImage + a dot.
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { HearthMapFrame } from '../../ui/hearth-hud'
 import { hudMapBox } from '../../ui/hearth-hud-layer'
 import type { HudSize } from '../../ui/hud-flag'
@@ -34,6 +34,13 @@ export function AtherMiniMap({ size, zone, W, fog, tileOff, pose, waymarks, regi
   const comp = useRef<HTMLCanvasElement | null>(null)
   const img = useRef<HTMLImageElement | null>(null)
   const ver = useRef(0)
+  // ★ THE IMAGE LOAD IS STATE, not a callback into one effect run: a re-run before the load (the fog's rev ticks as you
+  // walk) marked the waiting callback dead, and a keeper standing still then never saw the map (prod 11-15: all black).
+  const [imgReady, setImgReady] = useState(false)
+  useEffect(() => {
+    const im = new Image(); im.onload = () => { img.current = im; setImgReady(true) }; im.src = `/open/wilds/${W.meta.name}-map.png`
+    return () => { im.onload = null }
+  }, [W])
 
   // compose the tile picture (Wilds) whenever what it shows changes
   useEffect(() => {
@@ -67,11 +74,9 @@ export function AtherMiniMap({ size, zone, W, fog, tileOff, pose, waymarks, regi
       for (const w of waymarks) if (w.tile === GREG_WAYMARK.tile) pin(w.x, w.z, '#6fd3c4', 8)
       ver.current++
     }
-    if (!img.current) {
-      const im = new Image(); im.onload = draw; im.src = `/open/wilds/${W.meta.name}-map.png`; img.current = im
-    } else draw()
+    draw()
     return () => { dead = true }
-  }, [zone, W, fog, fog?.rev, tileOff, waymarks, regions])
+  }, [zone, W, fog, fog?.rev, tileOff, waymarks, regions, imgReady])
 
   // per frame: crop round the keeper (Wilds) or draw the garden (plot), then the keeper
   useEffect(() => {

@@ -11,7 +11,10 @@ const res: Record<string, unknown> = {}
 const parts = (p: any) => p.evaluate(() => ({
   compass: !!document.querySelector('[data-hud="compass"]'),
   minimap: !!document.querySelector('canvas[data-map="mini"]'),
-  hotbar: document.querySelectorAll('[aria-label^="slot "], .rounded-\\[11px\\]').length,
+  hotbar: document.querySelectorAll('[data-hud="hotbar"] .rounded-\\[11px\\]').length,
+  hotbarTopLeft: (() => { const h = document.querySelector('[data-hud="hotbar"]'); if (!h) return false; const r = h.getBoundingClientRect(); return r.top < 40 && r.left < 40 })(),
+  messages: [...document.querySelectorAll('[data-hud="messages"] > div')].map(d => d.textContent),
+  tools: document.querySelectorAll('.w-14.h-14').length,
 }))
 // desktop
 const p = await b.newPage(); await p.setViewport({ width: 1280, height: 760 })
@@ -35,7 +38,10 @@ await p.screenshot({ path: `${out}/hud-1-plot.png` })
 await p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))
 await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 90000 })
 await sleep(4000)
+await p.mouse.click(640, 380); await sleep(600)
+await p.mouse.wheel({ deltaY: 120 }); await sleep(500)
 res.wilds = await parts(p)
+await p.evaluate(() => document.exitPointerLock()); await sleep(300)
 await p.screenshot({ path: `${out}/hud-2-wilds.png` })
 await p.goto(`${url}/shimmer/open/continent?hour=13`, { waitUntil: 'load', timeout: 120000 })
 await sleep(6000); await p.keyboard.press('KeyW'); await sleep(5000)

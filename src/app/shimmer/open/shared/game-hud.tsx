@@ -164,7 +164,8 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
           objective={null} vitals={vitals} mana={mana} tools={T} skills={S} activeTool={null} glyph={glyph} mapFrame={false} />
         <HearthCompass face={FACE} pose={pose} marks={marks} size="phone" />
         {minimap}
-        <StatusChips items={status} top={statusTop} right={box.right} />
+        {/* a phone's right edge belongs to the thumbs below the map: the chips join into one line */}
+        <StatusChips items={status.length ? [{ label: status.map(x => x.value !== undefined ? `${x.label} ${x.value}` : x.label).join(' · ') }] : []} top={statusTop} right={box.right} />
         <Messages align="center" style={{ left: '50%', transform: 'translateX(-50%)', bottom: 118 }} />
       </div>
     )
