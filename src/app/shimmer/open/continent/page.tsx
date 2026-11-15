@@ -10,6 +10,7 @@
 // Desktop only for now (keys). ?region=<name> picks another exported region.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMenuLock } from '../shared/menu-lock'
 import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Track } from './map'
 import { pitstopsUnlocked, visitNear } from './pitstops'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
@@ -1137,10 +1138,19 @@ export default function ContinentRide() {
     return () => { clearInterval(ink); clearInterval(save); window.removeEventListener('pagehide', out); out() }
   }, [mapState, started])
   useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.code === 'KeyM' && !showMap) { setShowMap(true); document.exitPointerLock?.() } }
+    const k = (e: KeyboardEvent) => { if (e.code === 'KeyM' && !showMap) setShowMap(true) }   // useMenuLock frees the mouse
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
   }, [showMap])
   const focus = useRef(new THREE.Vector3())
+  // menus free the mouse (on foot it is locked); closing one takes the camera back (shared/menu-lock.ts)
+  const canvasEl = useRef<HTMLCanvasElement | null>(null)
+  const getCanvas = useCallback(() => canvasEl.current, [])
+  useMenuLock(showMap || garage || !!board, getCanvas)
+  const [ptrLocked, setPtrLocked] = useState(false)
+  useEffect(() => {
+    const ch = () => setPtrLocked(!!document.pointerLockElement)
+    document.addEventListener('pointerlockchange', ch); return () => document.removeEventListener('pointerlockchange', ch)
+  }, [])
   useEffect(() => {
     const name = new URLSearchParams(window.location.search).get('region') ?? 'continent'
     loadRegion(name).then(setR).catch(e => setErr(String(e)))
@@ -1151,7 +1161,7 @@ export default function ContinentRide() {
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#a9c6d6' }}>
       {R && (
-        <Canvas camera={{ fov: FOV, near: 0.1, far: 2500 }} gl={{ antialias: true, powerPreference: 'high-performance' }}>
+        <Canvas camera={{ fov: FOV, near: 0.1, far: 2500 }} gl={{ antialias: true, powerPreference: 'high-performance' }} onCreated={({ gl }) => { canvasEl.current = gl.domElement }}>
           <VoxelDayNight />
           <FogRig />
           <Terrain R={R} focus={focus} />
@@ -1200,6 +1210,9 @@ export default function ContinentRide() {
       )}
       {hud.foot && (
         <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
+      )}
+      {hud.foot && !ptrLocked && !isTouch && !showMap && !garage && !board && (
+        <div style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translateX(-50%)', padding: '7px 16px', borderRadius: 999, background: 'rgba(12,16,20,0.66)', color: '#f4efe2', font: '600 12px system-ui', letterSpacing: '0.16em', textTransform: 'uppercase', pointerEvents: 'none' }}>Click to resume</div>
       )}
       {hud.prompt && (
         <div style={{ position: 'absolute', left: '50%', top: '62%', transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', pointerEvents: 'none' }}>

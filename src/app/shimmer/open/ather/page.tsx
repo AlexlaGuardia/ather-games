@@ -35,6 +35,7 @@ import type { CombatEvent, Terrain } from './combat'
 import { placeNodes, isInfected, clearNode, loadNodes, saveNodes, ownerOf, nodeRegions, type NodeLedger } from './nodes'
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey } from '../shared/touch'
+import { useMenuLock } from '../shared/menu-lock'
 
 const TILE = 'first-wilds'
 
@@ -48,6 +49,7 @@ export default function AtherSlice() {
   const [isLocked, setLocked] = useState(false)
   const [isTouch, setIsTouch] = useState(false)
   const [introSeen, setIntroSeen] = useState(false)
+  const [played, setPlayed] = useState(false)   // locked once: after that an unlocked screen says 'click to resume', not the whole intro
   useEffect(() => setIsTouch(isTouchOnly()), [])
   const [zone, setZone] = useState<Zone>({ kind: 'plot' })
   const [spawn, setSpawn] = useState<Spawn>(THRESHOLD)
@@ -78,14 +80,15 @@ export default function AtherSlice() {
   useEffect(() => { loadWilds(TILE).then(setW).catch(e => setToast(`The Wilds would not load: ${e.message}`)) }, [])
   const tileOff = useMemo(() => W ? tileCentreWorld(W.meta) : { x: 0, z: 0 }, [W])
   useEffect(() => {
-    const ch = () => { locked.current = !!document.pointerLockElement; setLocked(locked.current) }
+    const ch = () => { locked.current = !!document.pointerLockElement; setLocked(locked.current); if (locked.current) setPlayed(true) }
     document.addEventListener('pointerlockchange', ch)
     return () => document.removeEventListener('pointerlockchange', ch)
   }, [])
-  useEffect(() => {
-    frozen.current = panel !== null
-    if (panel && document.pointerLockElement) document.exitPointerLock()   // panels are clicked, so free the mouse
-  }, [panel])
+  useEffect(() => { frozen.current = panel !== null }, [panel])
+  // panels are clicked, so they free the mouse; closing one takes the camera back (shared/menu-lock.ts)
+  const canvasEl = useRef<HTMLCanvasElement | null>(null)
+  const getCanvas = useCallback(() => canvasEl.current, [])
+  useMenuLock(panel !== null, getCanvas)
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3400); return () => clearTimeout(t) }, [toast])
   // persist the walked fog every few seconds and on the way out
   useEffect(() => {
@@ -262,6 +265,7 @@ export default function AtherSlice() {
         camera={{ fov: 75, near: 0.05, far: 900, position: [THRESHOLD.x, 3, THRESHOLD.z] }}
         onClick={(e) => { if (!panel && !isTouch) (e.target as HTMLCanvasElement).requestPointerLock?.() }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
+        onCreated={({ gl }) => { canvasEl.current = gl.domElement }}
       >
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && W ? (x, z) => W.canopyAt(x, z) * 0.7 : undefined} />
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} />}
@@ -354,7 +358,10 @@ export default function AtherSlice() {
           </div>
         </div>
       )}
-      {!isLocked && !panel && !isTouch && (
+      {!isLocked && !panel && !isTouch && played && (
+        <div style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translateX(-50%)', padding: '7px 16px', borderRadius: 999, background: 'rgba(12,16,20,0.66)', color: '#f4efe2', font: '600 12px system-ui', letterSpacing: '0.16em', textTransform: 'uppercase', pointerEvents: 'none' }}>Click to resume</div>
+      )}
+      {!isLocked && !panel && !isTouch && !played && (
         <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none' }}>
           <div style={{ padding: '18px 24px', borderRadius: 10, background: 'rgba(12,16,20,0.72)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.6, textAlign: 'center', maxWidth: 540 }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Ather · your plot and the Wilds</div>
