@@ -88,6 +88,7 @@ export function GroundCover({ cover, ground, skip, focus }: {
 
   useFrame(() => {
     const f = focus.current
+    if (refs.current.length < kinds.length || refs.current.some(r => !r)) return   // not mounted yet: lay next frame
     if (cover === last.current.cover && Math.hypot(f.x - last.current.x, f.z - last.current.z) < RELAY) return
     last.current = { x: f.x, z: f.z, cover }
     const lists: { x: number; y: number; z: number; r: number; s: number; c: THREE.Color }[][] = kinds.map(() => [])
@@ -143,9 +144,9 @@ export function GroundCover({ cover, ground, skip, focus }: {
   return (
     <>
       {kinds.map((k, i) => (
-        <instancedMesh key={k.key} ref={el => { refs.current[i] = el }} args={[k.geo, k.mat, MAX]} frustumCulled={false}>
-          <instancedBufferAttribute attach="instanceColor" args={[new Float32Array(MAX * 3), 3]} />
-        </instancedMesh>
+        // ⚠ no JSX instanceColor: setColorAt makes the attribute on first use, and a JSX one attached after it replaced
+        // it with zeros, so every blade drew BLACK (caught on the first preview shots, 11-15)
+        <instancedMesh key={k.key} ref={el => { refs.current[i] = el }} args={[k.geo, k.mat, MAX]} frustumCulled={false} />
       ))}
     </>
   )
