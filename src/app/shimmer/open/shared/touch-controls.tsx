@@ -90,14 +90,14 @@ export function TouchControls({ actions, showFire }: { actions: TouchAction[]; s
       )}
 
       {/* right cluster: fire big, jump + slide beside it */}
-      <div style={{ position: 'absolute', right: 'max(18px, env(safe-area-inset-right))', bottom: 'max(22px, env(safe-area-inset-bottom))', display: 'grid', gridTemplateColumns: 'auto auto', gap: 12, alignItems: 'end' }}>
+      <div style={{ position: 'absolute', right: 'max(18px, env(safe-area-inset-right))', bottom: 'max(22px, env(safe-area-inset-bottom))', display: 'flex', gap: 12, alignItems: 'flex-end' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={ring(56, down.ShiftLeft)} {...holdKey('ShiftLeft')}>slide</div>
           <div style={ring(56, down.Space)} {...holdKey('Space')}>jump</div>
         </div>
         {showFire
           ? <div style={ring(84, down.fire)} {...hold('fire', () => { touch.fire = true }, () => { touch.fire = false }, true)}>fire</div>
-          : <div style={{ width: 84 }} />}
+          : null}
       </div>
 
       {/* context taps, top right under the HUD: only what applies right now */}
