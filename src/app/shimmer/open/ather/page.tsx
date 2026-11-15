@@ -32,7 +32,7 @@ import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WA
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud } from './combat-layer'
 import type { CombatEvent, Terrain } from './combat'
-import { placeNodes, isInfected, clearNode, loadNodes, saveNodes, type NodeLedger } from './nodes'
+import { placeNodes, isInfected, clearNode, loadNodes, saveNodes, ownerOf, type NodeLedger } from './nodes'
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey } from '../shared/touch'
 
@@ -114,6 +114,7 @@ export default function AtherSlice() {
   // infected nodes on this tile: placed from the land, filtered by the ledger (a cleared node holds for its grace)
   const allNodes = useMemo(() => W ? placeNodes(W, TILE, GREG_WAYMARK) : [], [W])
   const nodes = useMemo(() => { const now = Date.now(); return allNodes.filter(n => isInfected(n.id, nodeLedger, now)) }, [allNodes, nodeLedger])
+  const nodeOwner = useMemo(() => W && allNodes.length ? (x: number, z: number) => ownerOf(allNodes, W.biomeAt, x, z)?.id : undefined, [W, allNodes])
   const gardenRef = useRef(garden); gardenRef.current = garden
   const onCombat = useCallback((evs: CombatEvent[]) => {
     let got = 0
@@ -263,7 +264,7 @@ export default function AtherSlice() {
         {zone.kind === 'wilds' && W && <WildsScene W={W} waymarks={waymarks} />}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
-            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={setChud} reviveKey={reviveKey} nodes={nodes} />
+            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={setChud} reviveKey={reviveKey} nodes={nodes} ownerOf={nodeOwner} />
         )}
         {world && (
           <Walker

@@ -171,7 +171,7 @@ function Tells({ c, heightAt }: { c: React.MutableRefObject<Combat>; heightAt: (
   )
 }
 
-export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [] }: {
+export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf }: {
   T: Terrain
   locked: React.MutableRefObject<boolean>
   frozen: React.MutableRefObject<boolean>
@@ -182,6 +182,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   reviveKey: number
   /** Infected nodes on this tile: each wakes a champion when the keeper comes close. */
   nodes?: WildsNode[]
+  /** Which node's ground a spot is (id), or undefined on a tile with no nodes: strays only well up where it is infected. */
+  ownerOf?: (x: number, z: number) => string | undefined
 }) {
   const { camera } = useThree()
   const c = useRef<Combat>(newCombat(Date.now() >>> 0))
@@ -194,6 +196,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const p = useMemo(() => new THREE.Vector3(), []), fwd = useMemo(() => new THREE.Vector3(0, 0, 1), [])
 
   const nodesRef = useRef(nodes); nodesRef.current = nodes
+  const ownerRef = useRef(ownerOf); ownerRef.current = ownerOf
   const spent = useRef(new Set<string>())   // cleared this visit: never re-woken before the page drops it
   useEffect(() => { revive(c.current); setIds([]) }, [reviveKey])
   useEffect(() => {
@@ -223,7 +226,9 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       popT.current = 1.5
       // strays thicken round an infected node; during a champion fight the waves are the only adds
       const near = nodesRef.current.some(n => !spent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < STRAY_R)
-      populate(C, T, feet.x, feet.z, C.champ ? 0 : near ? 11 : 7, safe)
+      const own = ownerRef.current
+      const infested = own ? (x: number, z: number) => { const id = own(x, z); return !id || (!spent.current.has(id) && nodesRef.current.some(n => n.id === id)) } : undefined
+      populate(C, T, feet.x, feet.z, C.champ ? 0 : near ? 11 : 7, safe, infested)
     }
     if ((trigger.current || touch.fire) && !frozen.current) {
       camera.getWorldDirection(aim)
@@ -235,7 +240,12 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       const now = performance.now() / 1000
       for (const e of C.events) {
         if (e.kind === 'hurt') hud.current.hurtAt = now; if (e.kind === 'hit') hud.current.hitAt = now
-        if (e.kind === 'champ-down') spent.current.add(e.nodeId)
+        if (e.kind === 'champ-down') {
+          spent.current.add(e.nodeId)
+          // its ground goes quiet at once: the Hollows standing on it melt back into nothing (no drops; the chunk is the pay)
+          const own = ownerRef.current
+          if (own) C.hollows = C.hollows.filter(h => own(h.x, h.z) !== e.nodeId)
+        }
       }
       onEvents(C.events)
     }

@@ -11,7 +11,7 @@ import {
 } from './plot'
 import { newCombat, stepCombat, spawnHollow, fire, populate, KEEPER_HP, SHAMBLER, BODY_Y } from './combat'
 import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVES, PANIC_MIN_WINDUP } from './champion'
-import { placeNodes, isInfected, clearNode, GRACE_MS, NODE_CLEAR_OF } from './nodes'
+import { placeNodes, isInfected, clearNode, ownerOf, GRACE_MS, NODE_CLEAR_OF } from './nodes'
 import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
 import { canPlant, plant, lift, reachedBiomes, waymarksInWorld, TILE_CENTRE, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
 
@@ -278,6 +278,21 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   L = clearNode(L, nodes[0].id, now)
   ok(!isInfected(nodes[0].id, L, now + GRACE_MS - 1), 'nodes: a cleared node wells up inside its grace')
   ok(isInfected(nodes[0].id, L, now + GRACE_MS + 1), 'nodes: a cleared node never wells up again')
+
+  // ★ Alex 11-15: "the hollows still kept spawning after I defeated the meadow champion". Cleared ground stays quiet.
+  {
+    const meadow = nodes.find(n => n.biome === BIOME.meadow)!
+    ok(!!meadow, 'nodes: no meadow node on first-wilds')
+    ok(ownerOf(nodes, W.biomeAt, meadow.x + 10, meadow.z)?.id === meadow.id, 'nodes: meadow ground is not owned by the meadow node')
+    const cleared = new Set([meadow.id])
+    const infested = (x: number, z: number) => !cleared.has(ownerOf(nodes, W.biomeAt, x, z)!.id)
+    const q = newCombat(31), T2 = { heightAt: W.heightAt, walkable: (x: number, z: number) => walkableIn(W, x, z) }
+    for (let k = 0; k < 40; k++) populate(q, T2, meadow.x, meadow.z, 7, undefined, infested)
+    ok(q.hollows.every(h => W.biomeAt(h.x, h.z) !== BIOME.meadow), `nodes: ${q.hollows.filter(h => W.biomeAt(h.x, h.z) === BIOME.meadow).length} strays welled up on cleared meadow`)
+    const q2 = newCombat(31)
+    for (let k = 0; k < 40; k++) populate(q2, T2, meadow.x, meadow.z, 7)
+    ok(q2.hollows.some(h => W.biomeAt(h.x, h.z) === BIOME.meadow), 'nodes: the cleared-ground check is vacuous (no meadow strays even while infected)')
+  }
 
   // the fight, on flat open ground so only the rules are under test
   const F: { heightAt: (x: number, z: number) => number; walkable: (x: number, z: number) => boolean } = { heightAt: () => 0, walkable: () => true }

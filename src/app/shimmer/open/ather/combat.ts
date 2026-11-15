@@ -100,13 +100,14 @@ export function spawnHollow(c: Combat, T: Terrain, x: number, z: number, kind: H
 }
 
 /** Keep a scatter of strays around the keeper: top up in a ring out of sight, cull the far ones. */
-export function populate(c: Combat, T: Terrain, kx: number, kz: number, target: number, safe?: { x: number; z: number; r: number }) {
+export function populate(c: Combat, T: Terrain, kx: number, kz: number, target: number, safe?: { x: number; z: number; r: number }, infested?: (x: number, z: number) => boolean) {
   c.hollows = c.hollows.filter(h => Math.hypot(h.x - kx, h.z - kz) < 130)
   for (let tries = 0; c.hollows.length < target && tries < 24; tries++) {
     const a = rnd(c) * Math.PI * 2, r = 55 + rnd(c) * 45
     const x = kx + Math.cos(a) * r, z = kz + Math.sin(a) * r
     if (!T.walkable(x, z) || !Number.isFinite(T.heightAt(x, z))) continue
     if (safe && Math.hypot(x - safe.x, z - safe.z) < safe.r) continue
+    if (infested && !infested(x, z)) continue   // cleared ground stays quiet (nodes.ts › ownerOf)
     spawnHollow(c, T, x, z, rnd(c) < FLOATER.share ? 'floater' : 'shambler')
   }
 }
