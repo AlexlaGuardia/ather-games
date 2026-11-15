@@ -14,6 +14,7 @@
 // lane); Marks buy them (the "buy" lane). Sea Rinn spoils: deliver it fast or it pays less.
 
 import type { Slot, Tier } from './courser-build'
+import { LADDER, STARTING_MARKS, PAY_SCALE, LEDGER_SCALE, OLD_TO_NEW } from './economy/prices'
 
 export type GoodId = 'crystal' | 'sap' | 'cord' | 'ore' | 'timber' | 'grain' | 'searinn' | 'gold' | 'havensteel' | 'blackwood'
 export interface Good {
@@ -47,16 +48,26 @@ export interface Contract {
 }
 export interface Ledger {
   marks: number; deeds: number
+  /** the price ladder's version (economy/prices.ts): absent = saved before it, scaled up once by migrateLedger */
+  scale?: number
   active: (Contract & { loaded: boolean; loadedAt: number }) | null
   owned: Record<Slot, Tier>           // highest tier owned per slot (owning III means II and I too)
 }
-export const NEW_LEDGER: Ledger = { marks: 60, deeds: 0, active: null, owned: { core: 0, trim: 0, rune: 0 } }
+export const NEW_LEDGER: Ledger = { marks: STARTING_MARKS, scale: LEDGER_SCALE, deeds: 0, active: null, owned: { core: 0, trim: 0, rune: 0 } }
+/** A saved ledger, read in: one from before the price ladder (Alex 11-15 raised every price) has its Marks multiplied up,
+ *  so nobody's purse shrinks against the new prices. Idempotent (the scale is stamped). */
+export function migrateLedger(saved: Partial<Ledger> | null): Ledger {
+  const l: Ledger = { ...NEW_LEDGER, ...(saved ?? {}) }
+  if (saved && (saved.scale ?? 1) < LEDGER_SCALE) { l.marks = Math.round((saved.marks ?? 0) * OLD_TO_NEW); l.scale = LEDGER_SCALE }
+  return l
+}
 
 /** What a courser can carry, in crates. The Hauler (later) carries far more: that is its reason to exist. */
 export const CAPACITY = { darter: 6 } as const
 
 // ── the garage's prices and the deeds each tier asks ──
-export const TIER_PRICE: Record<Exclude<Tier, 0>, number> = { 1: 150, 2: 420, 3: 950 }
+// ★ off THE PRICE LADDER (economy/prices.ts, Alex 11-15: "lower end 3 or 5k but the high end should raise up to 50k to 150k")
+export const TIER_PRICE: Record<Exclude<Tier, 0>, number> = { ...LADDER.coursePart }
 export const TIER_DEEDS: Record<Exclude<Tier, 0>, number> = { 1: 0, 2: 3, 3: 8 }
 
 /** Where each good is to be had in a region (v1 placement, build; follows the town, not canon). */
@@ -81,7 +92,7 @@ export function postBoard(at: string, supply: Supply[], towns: string[], km: (a:
     const d = km(at, to)
     const qty = Math.max(1, Math.floor(capacity / good.crate * (0.5 + r() * 0.5)))
     out.push({ id: `${at}>${to}:${good.id}:${seed}:${n}`, good: good.id, qty, from: at, to, km: +d.toFixed(2),
-      pay: Math.round(good.rate * qty * Math.max(0.5, d) + 10), deeds: 1 })
+      pay: Math.round((good.rate * qty * Math.max(0.5, d) + 10) * PAY_SCALE), deeds: 1 })   // ×PAY_SCALE: the price ladder
   }
   return out
 }

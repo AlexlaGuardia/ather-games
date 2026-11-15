@@ -5,7 +5,7 @@
 // Joining the real purse is a deliberate later step (it touches the live save), not a side effect of driving.
 
 import { useCallback, useEffect, useState } from 'react'
-import { GOODS, NEW_LEDGER, crates, type Contract, type Ledger } from './trade'
+import { GOODS, NEW_LEDGER, migrateLedger, crates, type Contract, type Ledger } from './trade'
 
 const KEY = 'ather:trade:trial-ledger'
 import { HearthFrame, H } from '../ui/hearth'
@@ -13,7 +13,7 @@ const GOLD = '#d4a843'
 
 export function useLedger(): [Ledger, (l: Ledger) => void] {
   const [l, setL] = useState<Ledger>(NEW_LEDGER)
-  useEffect(() => { try { const raw = localStorage.getItem(KEY); if (raw) setL({ ...NEW_LEDGER, ...JSON.parse(raw) }) } catch { /* fresh */ } }, [])
+  useEffect(() => { try { const raw = localStorage.getItem(KEY); if (raw) setL(migrateLedger(JSON.parse(raw)))   /* scales a pre-ladder purse up once (trade.ts) */ } catch { /* fresh */ } }, [])
   const set = useCallback((n: Ledger) => { setL(n); try { localStorage.setItem(KEY, JSON.stringify(n)) } catch { /* not remembered */ } }, [])
   return [l, set]
 }

@@ -1,5 +1,6 @@
 // The tycoon core (Alex 11-15). Run: npx tsx src/app/shimmer/open/economy/tycoon.test.ts
-import { BIZ, MAX_OWNED, MAX_CATCHUP_MIN, RESALE, newTycoon, buy, sell, canBuy, tick, rateOf, priceOf, type Owned, type BizKind } from './tycoon'
+import { LADDER } from './prices'
+import { BIZ, BIZ_KINDS, MAX_OWNED, MAX_CATCHUP_MIN, RESALE, newTycoon, buy, sell, canBuy, tick, rateOf, priceOf, type Owned, type BizKind } from './tycoon'
 
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -18,13 +19,17 @@ ok(rateOf(o('smithy')) < 0 && rateOf(o('kitchen')) < 0, 'trial and error: a turn
 ok(rateOf(o('mine')) > 0 && rateOf(o('farm')) > 0, 'a lone maker does not earn its trickle')
 // both chains need six buildings: the cap forces a choice
 ok(o('mine', 'smithy', 'manalic_shop', 'farm', 'kitchen', 'cafe').length > MAX_OWNED, 'cap: both chains fit under the cap (no choice to make)')
-// the scale: a chain must not swamp the trade (a courser part is 150 / 420 / 950 Marks)
-ok(chain < 20 && chain * MAX_CATCHUP_MIN < 6000, `scale: the ore chain pays ${chain.toFixed(1)}/min, ${Math.round(chain * MAX_CATCHUP_MIN)} over a catch-up`)
+// the scale (economy/prices.ts, Alex 11-15): a chain earns real money, a night of it nearly (not quite) buys a shipyard,
+// and the high-end courser still takes many nights + the trade
+ok(chain * 60 > 10_000 && chain * 60 < 60_000, `scale: the ore chain pays ${Math.round(chain * 60)} an hour`)
+ok(chain * MAX_CATCHUP_MIN < LADDER.shipyard.from && chain * MAX_CATCHUP_MIN > LADDER.shipyard.from * 0.5, `scale: a night of the ore chain is ${Math.round(chain * MAX_CATCHUP_MIN)} against a ${LADDER.shipyard.from} shipyard`)
+ok(LADDER.courser.high > chain * MAX_CATCHUP_MIN * 5, 'scale: a top courser is less than five nights of one chain')
+ok(BIZ_KINDS.every(k => priceOf(k, 0) >= LADDER.coursePart[1] * 5), 'scale: a business costs less than a few cheap parts')
 
 // buying and selling
-let t = newTycoon(0), marks = 5000
+let t = newTycoon(0), marks = 500_000
 const b1 = buy(t, 'ashfeld:3', 'mine', 0, marks)
-ok(b1.ok && b1.marks === 5000 - priceOf('mine', 0) && b1.t.owned.length === 1, 'buy: a mine did not cost its price')
+ok(b1.ok && b1.marks === 500_000 - priceOf('mine', 0) && b1.t.owned.length === 1, 'buy: a mine did not cost its price')
 if (b1.ok) { t = b1.t; marks = b1.marks }
 ok(!canBuy(t, 'ashfeld:3', 'farm', 0, marks).ok, 'buy: bought a lot already owned')
 ok(!canBuy(t, 'ashfeld:4', 'manalic_shop', 0, 100).ok, 'buy: bought without the Marks')

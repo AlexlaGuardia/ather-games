@@ -18,9 +18,11 @@
 // gates (that is how one keeper's mine feeds their smithy in another town). No Moglin works inside a business; WHO staffs
 // one is still open with Magii, so staffing stays abstract here. (2) keeper-owned trade and (3) the water world: still
 // [OPEN]. The kinds wear plain working names until ruled. Marks are canon (the one coin); ore + produce map onto canon's mortal goods (Spine ore, southern grain).
-// Numbers are Jin's balance, tuned to the trade's scale (a courser part is 150 / 420 / 950 Marks, trade.ts): a whole
-// chain nets ~11 Marks a minute (~660 an hour), a lone maker ~1, a lone turner LOSES its upkeep. ⚠ First cut paid ~25 a
-// minute: 12k Marks over one night offline, which would have made every contract run pointless.
+// Numbers are Jin's balance on THE PRICE LADDER (economy/prices.ts; Alex 11-15 raised everything: parts 4k-90k, coursers
+// 90k to millions, shipyards 250k+, ocean ships ~200k, sky ships 500k+): a whole ore chain nets ~480 Marks a minute
+// (~29k an hour; one night of it, ~230k, nearly buys a shipyard), a lone maker ~20-40, a lone turner LOSES its upkeep.
+// (An earlier cut at the old scale was trimmed to ~11/min for fear of swamping the trade; Alex: "i dont think thats
+// alot.. it doesnt sound bad at all", so the prices came up to meet the earnings instead.)
 //
 // ★ PURE. Time comes in as ms; the caller keeps the Marks (the trade ledger's wallet) and passes them in and out.
 
@@ -40,12 +42,12 @@ export interface BizDef {
 }
 
 export const BIZ: Record<BizKind, BizDef> = {
-  mine:         { kind: 'mine', name: 'Mine', blurb: 'Digs ore. Alone it sells the ore raw, cheap.', price: 600, upkeep: 1, makes: { ware: 'ore', per: 2 }, walkIn: 1 },
-  smithy:       { kind: 'smithy', name: 'Smithy', blurb: 'Works ore into fittings. Needs ore coming in.', price: 900, upkeep: 1, turns: { from: 'ore', take: 2, into: 'fittings' }, walkIn: 0 },
-  manalic_shop: { kind: 'manalic_shop', name: 'Manalic shop', blurb: 'Fills orders with fittings. Without stock it only gets walk-ins.', price: 1400, upkeep: 1, sells: { ware: 'fittings', price: 14 }, walkIn: 1 },
-  farm:         { kind: 'farm', name: 'Farm', blurb: 'Grows produce. Alone it sells the produce raw, cheap.', price: 500, upkeep: 1, makes: { ware: 'produce', per: 2 }, walkIn: 0.75 },
-  kitchen:      { kind: 'kitchen', name: 'Kitchen', blurb: 'Cooks produce into meals. Needs produce coming in.', price: 800, upkeep: 1, turns: { from: 'produce', take: 2, into: 'meals' }, walkIn: 0 },
-  cafe:         { kind: 'cafe', name: 'Café', blurb: 'Serves meals. Without stock it only gets walk-ins.', price: 1200, upkeep: 1, sells: { ware: 'meals', price: 12 }, walkIn: 1 },
+  mine:         { kind: 'mine', name: 'Mine', blurb: 'Digs ore. Alone it sells the ore raw, cheap.', price: 40_000, upkeep: 40, makes: { ware: 'ore', per: 2 }, walkIn: 40 },
+  smithy:       { kind: 'smithy', name: 'Smithy', blurb: 'Works ore into fittings. Needs ore coming in.', price: 60_000, upkeep: 40, turns: { from: 'ore', take: 2, into: 'fittings' }, walkIn: 0 },
+  manalic_shop: { kind: 'manalic_shop', name: 'Manalic shop', blurb: 'Fills orders with fittings. Without stock it only gets walk-ins.', price: 90_000, upkeep: 40, sells: { ware: 'fittings', price: 600 }, walkIn: 40 },
+  farm:         { kind: 'farm', name: 'Farm', blurb: 'Grows produce. Alone it sells the produce raw, cheap.', price: 35_000, upkeep: 40, makes: { ware: 'produce', per: 2 }, walkIn: 30 },
+  kitchen:      { kind: 'kitchen', name: 'Kitchen', blurb: 'Cooks produce into meals. Needs produce coming in.', price: 55_000, upkeep: 40, turns: { from: 'produce', take: 2, into: 'meals' }, walkIn: 0 },
+  cafe:         { kind: 'cafe', name: 'Café', blurb: 'Serves meals. Without stock it only gets walk-ins.', price: 80_000, upkeep: 40, sells: { ware: 'meals', price: 500 }, walkIn: 40 },
 }
 export const BIZ_KINDS = Object.keys(BIZ) as BizKind[]
 export const MAX_OWNED = 5
@@ -55,7 +57,7 @@ export const TIER_RATE = [1, 1.3, 1.7] as const
 /** Selling back returns this share of what you paid. */
 export const RESALE = 0.5
 /** Offline catch-up stops here: the shops do not run a fortune up while you are away for a week. */
-export const MAX_CATCHUP_MIN = 4 * 60
+export const MAX_CATCHUP_MIN = 8 * 60
 /** Raw goods sold off when the store holds more than this (a mine that cannot keep it sells it cheap). */
 export const STORE_CAP = 60
 

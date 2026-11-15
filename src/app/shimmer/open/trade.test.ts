@@ -1,6 +1,7 @@
 // The two-world trade v1, in numbers. Run: npx tsx src/app/shimmer/open/trade.test.ts
 
-import { GOODS, NEW_LEDGER, CAPACITY, TIER_PRICE, TIER_DEEDS, postBoard, accept, arrive, abandon, canBuy, buy, crates, type Supply, type Ledger } from './trade'
+import { GOODS, NEW_LEDGER, CAPACITY, TIER_PRICE, TIER_DEEDS, postBoard, accept, arrive, abandon, canBuy, buy, crates, migrateLedger, type Supply, type Ledger } from './trade'
+import { OLD_TO_NEW, STARTING_MARKS } from './economy/prices'
 
 let pass = 0
 const fails: string[] = []
@@ -63,9 +64,12 @@ const cap = CAPACITY.darter
   const poor: Ledger = { ...NEW_LEDGER, marks: 100 }
   ok(canBuy(poor, 'core', 0).ok, 'stock is always available')
   ok(!canBuy(poor, 'core', 1).ok, `tier I costs ${TIER_PRICE[1]} Marks`)
-  ok(!canBuy({ ...poor, marks: 5000 }, 'core', 2).ok, 'tier II before tier I is refused')
-  const rich: Ledger = { ...NEW_LEDGER, marks: 5000 }
-  const b1 = buy(rich, 'core', 1); ok(b1.ok && b1.ledger.owned.core === 1 && b1.ledger.marks === 5000 - TIER_PRICE[1], 'buying tier I spends its price')
+  // the price ladder (Alex 11-15): an old purse scales up once, a new one starts at the ladder's purse
+  ok(migrateLedger({ marks: 100, deeds: 2 }).marks === 100 * OLD_TO_NEW && migrateLedger(migrateLedger({ marks: 100 })).marks === 100 * OLD_TO_NEW, 'ladder: an old purse did not scale up exactly once')
+  ok(migrateLedger(null).marks === STARTING_MARKS && TIER_PRICE[1] >= 3000 && TIER_PRICE[3] >= 50_000, 'ladder: the new purse or the part prices are off the ladder')
+  ok(!canBuy({ ...poor, marks: 500_000 }, 'core', 2).ok, 'tier II before tier I is refused')
+  const rich: Ledger = { ...NEW_LEDGER, marks: 500_000 }   // the price ladder (economy/prices.ts): tier II is 20k
+  const b1 = buy(rich, 'core', 1); ok(b1.ok && b1.ledger.owned.core === 1 && b1.ledger.marks === 500_000 - TIER_PRICE[1], 'buying tier I spends its price')
   ok(!canBuy(b1.ledger, 'core', 2).ok, `tier II needs ${TIER_DEEDS[2]} deeds`)
   const deedy = { ...b1.ledger, deeds: TIER_DEEDS[2] }
   const b2 = buy(deedy, 'core', 2); ok(b2.ok && b2.ledger.owned.core === 2, 'with the deeds, tier II can be bought')
