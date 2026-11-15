@@ -194,6 +194,7 @@ export function takeBackCorner(user_id: string): Result {
   d.prepare('DELETE FROM cluster_members WHERE user_id = ?').run(user_id)
   // The picture of your garden leaves with you: nobody who stays can look at it any more.
   d.prepare('DELETE FROM cluster_plots WHERE user_id = ?').run(user_id)
+  d.prepare('DELETE FROM cluster_gardens WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM cluster_seen WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM cluster_consents WHERE cluster_id = ? AND member_id = ?').run(me.cluster_id, user_id)
   d.prepare('DELETE FROM cluster_offers WHERE cluster_id = ? AND proposed_by = ?').run(me.cluster_id, user_id)
@@ -228,6 +229,29 @@ export function putPlotSnapshot(user_id: string, data: string): Result {
     'ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at',
   ).run(user_id, data, Date.now())
   return { ok: true, value: true }
+}
+
+/** The open world (2026-11-15): YOUR Ather garden as your mates see it (the squares you hold). Members only. */
+export function putGarden(user_id: string, data: string): Result {
+  if (!memberRow(user_id)) return fail('You do not stand in a cluster')
+  accountsDb().prepare(
+    'INSERT INTO cluster_gardens (user_id, data, updated_at) VALUES (?, ?, ?) ' +
+    'ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at',
+  ).run(user_id, data, Date.now())
+  return { ok: true, value: true }
+}
+/** Every OTHER member's Ather garden, by quarter, with their name. Empty outside a cluster. */
+export function mateGardens(user_id: string): Partial<Record<Quarter, { name: string | null; data: string; updated_at: number }>> {
+  const me = memberRow(user_id)
+  if (!me) return {}
+  const rows = accountsDb().prepare(`
+    SELECT m.quarter, a.username AS name, g.data, g.updated_at FROM cluster_members m
+    JOIN cluster_gardens g ON g.user_id = m.user_id LEFT JOIN accounts a ON a.user_id = m.user_id
+    WHERE m.cluster_id = ? AND m.user_id != ?
+  `).all(me.cluster_id, user_id) as { quarter: Quarter; name: string | null; data: string; updated_at: number }[]
+  const out: Partial<Record<Quarter, { name: string | null; data: string; updated_at: number }>> = {}
+  for (const r of rows) out[r.quarter] = { name: r.name, data: r.data, updated_at: r.updated_at }
+  return out
 }
 
 /** Every OTHER member's snapshot, by quarter. Empty outside a cluster. */

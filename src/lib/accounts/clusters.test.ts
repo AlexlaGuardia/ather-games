@@ -55,6 +55,12 @@ check('the offer is gone, the members stand', (() => { const v = C.getCluster(al
 // corner touches only you.
 const verbs = Object.keys(C).filter(k => typeof (C as Record<string, unknown>)[k] === 'function')
 check('⛔ no export can remove another keeper', !verbs.some(v => /remove|kick|evict|expel|ban|transfer/i.test(v)), verbs.join(','))
+// the open world's gardens (2026-11-15): same rules as the voxel snapshots
+check('a member stores their Ather garden', C.putGarden(bo, '{"v":1,"owned":["4,4"]}').ok)
+check('a mate reads it, by quarter and name', Object.values(C.mateGardens(alex)).some(g => g!.data.includes('4,4')))
+check('nobody gets their own garden back as a mate', Object.keys(C.mateGardens(bo)).every(q => C.mateGardens(bo)[q as 'ne']!.data !== '{"v":1,"owned":["4,4"]}' || false))
+check('★★ a stranger reads no gardens', Object.keys(C.mateGardens(ed)).length === 0)
+check('a stranger cannot store one', !C.putGarden(ed, '{"v":1,"owned":[]}').ok)
 check('bo takes back their corner', C.takeBackCorner(bo).ok)
 check('★ only bo left — alex and cyn still stand', (() => { const v = C.getCluster(alex)!; return v.members.length === 2 && !v.members.some(m => m.user_id === bo) })())
 check('the reopened quarter is simply open', C.getCluster(alex)!.members.every(m => m.quarter !== 'sw'))
@@ -92,6 +98,7 @@ check('and a fresh fold is possible again', C.foldCluster(alex, 'se', true, 1, 0
   C.takeBackCorner(bo)
   check('★★ taking back your corner takes your garden with you', !C.matePlotSnapshots(alex).nw)
   check('and a former member reads nothing', Object.keys(C.matePlotSnapshots(bo)).length === 0)
+check('★ the garden left with the corner', !Object.values(C.mateGardens(alex)).some(g => g!.data.includes('4,4')))
   const rows = () => (accountsDb().prepare('SELECT COUNT(*) AS n FROM cluster_plots').get() as { n: number }).n
   check('bo\'s row is gone from the store', rows() === 1)
   deleteAccount(alex)

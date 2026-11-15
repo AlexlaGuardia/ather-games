@@ -13,6 +13,7 @@ import { newCombat, stepCombat, spawnHollow, fire, populate, KEEPER_HP, SHAMBLER
 import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVES, PANIC_MIN_WINDUP } from './champion'
 import { placeNodes, nodeAdjacency, ownerOf, nodeRegions, polyArea, NODE_CLEAR_OF, GAME_DAY_MS, SUB } from './nodes'
 import { advance, clearAt, freshSpread, infectedIds, SPREAD } from './spread'
+import { readGarden, gardenText } from './garden-snapshot'
 import { clusterFrame, clusterGround, wallsWithLane, onSeg, QV, D, MIDDLE_R } from './cluster'
 import { atherPlatePixels, ATHER_HUE, plotPlatePixels, PLOT_MPP } from './plate'
 import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
@@ -488,6 +489,10 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   let fenced = false; for (let o = 1.5; o < 4.5; o += 0.1) if (blocks(mid.x + (n.x / nl) * o, mid.z + (n.z / nl) * o)) fenced = true
   ok(fenced, 'cluster: you can step off the lane into the mist')
   ok(MIDDLE_R > 20, 'cluster: the middle is too small to be a place')
+  // a mate's garden is somebody else's data: only well-formed square ids get through
+  ok(readGarden(gardenText(['4,4', '3,3']))?.owned.join() === '3,3,4,4', 'garden: a good snapshot did not round-trip')
+  ok(readGarden('{"v":1,"owned":["9,9"]}') === null && readGarden('{"v":1,"owned":["4,4","<b>"]}') === null, 'garden: a bad square id got through')
+  ok(readGarden('nope') === null && readGarden(JSON.stringify({ v: 1, owned: Array(82).fill('1,1') })) === null, 'garden: junk or an oversized garden got through')
 }
 
 if (fails.length) { console.error(`ather: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

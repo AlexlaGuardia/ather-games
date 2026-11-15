@@ -137,6 +137,13 @@ const SCHEMA = `
       data       TEXT NOT NULL,
       updated_at INTEGER NOT NULL
     );
+    -- The open world's version (2026-11-15): a member's Ather plot as the squares they hold (ather/garden-snapshot.ts).
+    -- Same rules as cluster_plots: only a current member writes, only their mates read, it leaves with the corner.
+    CREATE TABLE IF NOT EXISTS cluster_gardens (
+      user_id    TEXT PRIMARY KEY,
+      data       TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
 `
 
 /** Our own stable id — deliberately NOT the google sub, so a provider can change later. */
@@ -335,6 +342,7 @@ export function deleteAccount(user_id: string): boolean {
   d.prepare('DELETE FROM cluster_offers WHERE invitee_id = ? OR proposed_by = ?').run(user_id, user_id)
   d.prepare('DELETE FROM cluster_consents WHERE member_id = ?').run(user_id)
   d.prepare('DELETE FROM cluster_plots WHERE user_id = ?').run(user_id)
+  d.prepare('DELETE FROM cluster_gardens WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM cluster_seen WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM saves WHERE user_id = ?').run(user_id)
   const res = d.prepare('DELETE FROM accounts WHERE user_id = ?').run(user_id)
