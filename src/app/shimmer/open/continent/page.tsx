@@ -23,6 +23,8 @@ import { GameHud, useGameHudSize, openMapBox, hudSay, type CompassPose, type Man
 import type { Vitals } from '../../engine/vitals'
 import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Track } from './map'
 import { pitstopsUnlocked, visitNear } from './pitstops'
+import { Towns } from '../towns/Towns'
+import { townDiscs } from '../towns/plan'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { VoxelDayNight } from '../shared/day-night'
@@ -546,58 +548,16 @@ function Posts({ R }: { R: Region }) {
   return <RoadPosts posts={posts} ground={R.heightAt} />
 }
 
-// ── towns: a beacon of light at each named place + a scatter of houses that keeps off the road ──
-function Towns({ R }: { R: Region }) {
-  const houses = useMemo(() => {
-    const out: { x: number; y: number; z: number; rot: number; s: number }[] = []
-    R.meta.places.forEach((p, pi) => {
-      const n = p.kind === 'city' ? 26 : p.kind === 'settlement' ? 16 : p.kind === 'village' ? 9 : p.kind === 'spot' ? 1 : 3
-      for (let k = 0, tries = 0; k < n && tries < n * 12; tries++) {
-        const a = hash(pi, tries) * Math.PI * 2, r = 10 + hash(tries, pi) * (n > 10 ? 90 : 45)
-        const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, y = R.heightAt(x, z)
-        if (!Number.isFinite(y) || y < 1.5) continue
-        if (nearestRoad(R, x, z).d < 9 || nearPad(R, x, z, 5)) continue
-        const sl = Math.abs(R.heightAt(x + 3, z) - R.heightAt(x - 3, z)) + Math.abs(R.heightAt(x, z + 3) - R.heightAt(x, z - 3))
-        if (sl > 3) continue
-        out.push({ x, y, z, rot: hash(k, pi + 7) * Math.PI, s: 0.8 + hash(pi, k + 3) * 0.6 }); k++
-      }
-    })
-    return out
-  }, [R])
-  const walls = useRef<THREE.InstancedMesh>(null), roofs = useRef<THREE.InstancedMesh>(null)
-  useEffect(() => {
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3()
-    houses.forEach((h, k) => {
-      e.set(0, h.rot, 0); q.setFromEuler(e)
-      p.set(h.x, h.y + 1.6 * h.s, h.z); s.set(6 * h.s, 3.6 * h.s, 5 * h.s)
-      walls.current!.setMatrixAt(k, m.compose(p, q, s))
-      walls.current!.setColorAt(k, new THREE.Color('#d8c9a8').offsetHSL(0, 0, (hash(k, 1) - 0.5) * 0.12))
-      e.set(0, h.rot + Math.PI / 4, 0); q.setFromEuler(e)
-      p.set(h.x, h.y + 4.6 * h.s, h.z); s.set(5.4 * h.s, 2.6 * h.s, 5.4 * h.s)
-      roofs.current!.setMatrixAt(k, m.compose(p, q, s))
-      roofs.current!.setColorAt(k, new THREE.Color(hash(k, 2) > 0.5 ? '#8c4a36' : '#5f4a3c'))
-    })
-    for (const r of [walls, roofs]) { r.current!.instanceMatrix.needsUpdate = true; if (r.current!.instanceColor) r.current!.instanceColor.needsUpdate = true }
-  }, [houses])
-  return (
-    <>
-      <instancedMesh frustumCulled={false} ref={walls} args={[undefined, undefined, Math.max(1, houses.length)]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
-      <instancedMesh frustumCulled={false} ref={roofs} args={[undefined, undefined, Math.max(1, houses.length)]}><coneGeometry args={[0.75, 1, 4]} /><meshLambertMaterial flatShading /></instancedMesh>
-      {R.meta.places.filter(p => p.name).map(p => (
-        <mesh key={p.id} position={[p.x, R.heightAt(p.x, p.z) + 45, p.z]}>
-          <cylinderGeometry args={[0.6, 1.4, 90, 8, 1, true]} />
-          <meshBasicMaterial color="#ffd77a" transparent opacity={0.28} depthWrite={false} fog={false} />
-        </mesh>
-      ))}
-    </>
-  )
-}
+// ── towns: open/towns (street plans + the building kit, Jin play lane 11-15) ──
 
 // ── trees: a seeded scatter over grass, off the roads, away from the towns' middles, STREAMED in 256 m blocks
 // around the car. (The corridor-era scan ran from the north-west corner and stopped at 7000: on the continent every
 // tree would have stood in the top rows.) A block is generated once, cached, and joins the instanced set while it is
 // within sight. Same seeded scatter as before, so the corridor's woods did not move. ──
 const TREE_BLOCK = 256, TREE_MAX = 14000
+// the woods keep out of the towns' streets (was: 40 m round each Atlas dot, when a town was 9 boxes)
+const discCache = new WeakMap<Region, ReturnType<typeof townDiscs>>()
+const townDiscsOf = (R: Region) => { let d = discCache.get(R); if (!d) { d = townDiscs(R); discCache.set(R, d) } return d }
 function treeBlock(R: Region, bi: number, bj: number) {
   const out: { x: number; y: number; z: number; s: number }[] = []
   const { sizeX, sizeZ } = R.meta
@@ -612,7 +572,7 @@ function treeBlock(R: Region, bi: number, bj: number) {
     if (!Number.isFinite(y) || y < 2 || y > 230) continue
     if (Math.abs(R.heightAt(x + 4, z) - R.heightAt(x - 4, z)) > 5) continue
     if ((nearestRoad(R, x, z).d < 9 && !((R.tunnelAt(x, z)?.cover ?? 0) > TUNNEL_H + 4)) || nearPad(R, x, z, 5)) continue
-    if (R.meta.places.some(p => Math.hypot(p.x - x, p.z - z) < 40)) continue
+    if (townDiscsOf(R).some(t => Math.hypot(t.x - x, t.z - z) < t.r)) continue
     out.push({ x, y, z, s: 0.8 + hash(i, j + 9) * 0.7 })
   }
   return out
@@ -726,6 +686,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
   const glide = useRef<{ t: number; pos: THREE.Vector3; quat: THREE.Quaternion } | null>(null)
   const tmpQ = useMemo(() => new THREE.Quaternion(), [])
   const lock = () => { try { const r = gl.domElement.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* needs a gesture: a click relocks */ } }
+  const shotCam = useRef<[number, number, number, number, number, number] | null>(null)
   const startGlide = () => { glide.current = { t: 0, pos: camera.position.clone(), quat: camera.quaternion.clone() } }
   const seat = () => {
     const c = car.current
@@ -798,6 +759,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
       foot: () => (loco.current ? { mode: mode.current, ...loco.current } : { mode: mode.current }),
       look: (yaw: number, pitch = -0.08) => { view.current = { yaw, pitch } },
       // scripted shots: stand a walker anywhere (on the Passage market's floor when the spot is in it)
+      shot: (q: [number, number, number, number, number, number] | null) => { shotCam.current = q },
       footTp: (x: number, z: number, yaw = 0, pitch = -0.08) => {
         const y = cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z)
         loco.current = stepOut({ x, y: y + 0.05, z }, { vx: 0, vz: 0 }); view.current = { yaw, pitch }; mode.current = 'foot'
@@ -960,6 +922,8 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
       cam.quaternion.slerpQuaternions(gd.quat, tmpQ, e)
       if (u >= 1) glide.current = null
     }
+    // harness only (scripts/town-tour.mts): a fixed establishing camera, set by __drive.shot, cleared by shot(null)
+    if (shotCam.current) { const q = shotCam.current; cam.position.set(q[0], q[1], q[2]); cam.lookAt(q[3], q[4], q[5]) }
     const footSpeed = onFoot && loco.current ? Math.hypot(loco.current.hvx, loco.current.hvz) : 0
     const stv = getSettings()   // Options › Video: the walk FOV and the speed kick
     const fov = onFoot ? stv.fov + (stv.speedFov ? FOOT_FOV_KICK : 0) * Math.min(1, Math.max(0, (footSpeed - WALK_SPEED) / (SPEED_CAP - WALK_SPEED)))
@@ -1240,7 +1204,7 @@ export default function ContinentRide() {
           {R && <QuestGuide zone="continent" ground={(x, z) => (cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z))} />}
           <Guardrails R={R} />
           <Water R={R} />
-          <Towns R={R} />
+          <Towns R={R} focus={focus} />
           <Posts R={R} />
           <Roadside R={R} />
           <Trees R={R} focus={focus} />

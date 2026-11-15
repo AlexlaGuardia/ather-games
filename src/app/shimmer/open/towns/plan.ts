@@ -1,0 +1,287 @@
+// TOWN PLANS for the continent: streets first, buildings on the streets (Jin play lane, 2026-11-15).
+//
+// ★ PURE. No three, no react. `planTown(R, place)` says where a town's lanes run and where every building stands,
+// how big it is and which way it faces; `Towns.tsx` draws it and `plan.test.ts` sweeps it.
+//
+// WHY: the first towns were N boxes at random angles within 90 m of a point (26 for a city, 9 for a village). No
+// streets, nothing faced anything, the centre was as sparse as the edge, so a city read as a scatter. Alex 11-15:
+// *"expand the map on the nyx side so they look and feel more like real cities and towns."* A town is a STREET
+// PLAN first; the houses follow the streets.
+//
+// THE RULES (all build calls, Jin's; the look per town is canon's and comes from STYLE):
+//   · The roads that run through a town are its main streets. LANES branch off them, and on a hillside a lane
+//     follows the CONTOUR (it tries a few headings each step and takes the flattest under LANE_GRADE), which is
+//     what makes hillside streets wind (canon, Rune Hold: "streets wind upward").
+//   · Buildings take LOTS along both sides of every street and lane, facing it, ridge parallel to the street.
+//   · Density falls from the core to the edge: a lot near the square is almost always built, the edge has gaps.
+//     Core buildings are taller and stand closer to the street.
+//   · On a slope a building stands on a stone PLINTH that reaches down to the lowest corner: that is the "stone
+//     stacked up a hillside" look, and it means no building ever floats or sinks.
+//   · Nothing on a road, a junction pad, water, another building, or a slope too steep to build on.
+//
+// Canon fixes: Roman bones (world/athernyx.md: columns, arches, pale stone, terracotta roofs, carved trim).
+// Concept shots Alex judged 11-15 (tools/art/gen_towns.py): Rune Hold 2, Citadel 3, Ashfeld 3, village 1.
+
+import { nearestRoad, nearPad, drivable, type Region, type RegionPlace } from '../region'
+
+export interface Lane { pts: [number, number, number][]; width: number }
+export type BuildingKind = 'house' | 'cottage' | 'hall'
+export interface Building {
+  x: number; z: number
+  /** the facade faces the street along this heading (rad, atan2 in x/z) */
+  yaw: number
+  /** along the street */ w: number
+  /** away from the street */ d: number
+  floors: number
+  /** lowest and highest ground under the footprint: the plinth fills the gap */
+  y0: number; y1: number
+  kind: BuildingKind
+  /** 0 at the core, 1 at the town's edge */
+  rim: number
+  /** stable per-building variation 0..1 (colour picks) */
+  v: number
+}
+export interface TownPlan { place: string; r: number; lanes: Lane[]; buildings: Building[] }
+
+/** how far a town reaches, by its kind on the Atlas */
+export function townRadius(p: RegionPlace): number {
+  switch (p.kind) {
+    case 'city': return 260
+    case 'settlement': return 150
+    case 'village': return p.name ? 95 : 70
+    case 'school': return 55
+    case 'spot': return 14
+    default: return 0              // 'site' (the Passage) is underground: no town on top
+  }
+}
+
+export const FLOOR_H = 3.1
+export const LANE_W = 5
+export const LANE_STEP = 6
+/** lanes keep this far apart: a lot (setback + depth) on each side of each, back to back */
+export const LANE_GAP = 24
+/** a lane is a steep cart's grade at most (town lanes climb harder than roads): steeper and it turns along the hill */
+export const LANE_GRADE = 0.25
+/** steeper than this not even a stair alley climbs it (the lane ends) */
+export const STAIR_GRADE = 0.6
+/** building ground may step this much across a footprint (the plinth shows it); steeper is not buildable */
+export const MAX_STEP = 9
+
+export const hash = (a: number, b: number, c = 0) => {
+  let h = (a * 374761393 + b * 668265263 + c * 1440662683) ^ 0x5bd1e995
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295
+}
+
+
+/** the four corners of a footprint, grown by `m` on every side */
+export function footprint(b: Pick<Building, 'x' | 'z' | 'yaw' | 'w' | 'd'>, m = 0): [number, number][] {
+  const fx = Math.cos(b.yaw), fz = Math.sin(b.yaw), ax = -fz, az = fx   // f: toward the street, a: along it
+  const W = b.w + 2 * m, D = b.d + 2 * m
+  return [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([u, v]) => [b.x + ax * u * W + fx * v * D, b.z + az * u * W + fz * v * D])
+}
+/** do two convex quads overlap (separating axis) */
+export function quadsOverlap(A: [number, number][], B: [number, number][]): boolean {
+  for (const P of [A, B]) for (let i = 0; i < 4; i++) {
+    const [x0, z0] = P[i], [x1, z1] = P[(i + 1) % 4], nx = z0 - z1, nz = x1 - x0
+    let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity
+    for (const [x, z] of A) { const t = x * nx + z * nz; a0 = Math.min(a0, t); a1 = Math.max(a1, t) }
+    for (const [x, z] of B) { const t = x * nx + z * nz; b0 = Math.min(b0, t); b1 = Math.max(b1, t) }
+    if (a1 <= b0 + 1e-6 || b1 <= a0 + 1e-6) return false
+  }
+  return true
+}
+
+/** distance from (x, z) to a polyline */
+function distToLine(pts: [number, number, number][], x: number, z: number): number {
+  let best = Infinity
+  for (let k = 0; k < pts.length - 1; k++) {
+    const ax = pts[k][0], az = pts[k][1], bx = pts[k + 1][0], bz = pts[k + 1][1]
+    const abx = bx - ax, abz = bz - az, L = abx * abx + abz * abz || 1
+    const t = Math.max(0, Math.min(1, ((x - ax) * abx + (z - az) * abz) / L))
+    best = Math.min(best, Math.hypot(ax + abx * t - x, az + abz * t - z))
+  }
+  return best
+}
+
+/** The roads that run through the town, clipped to its circle, as street polylines (bridges and bores left out). */
+function mainStreets(R: Region, p: RegionPlace, r: number): Lane[] {
+  const out: Lane[] = []
+  for (const e of drivable(R)) {
+    let run: [number, number, number][] = []
+    const flush = () => { if (run.length >= 2) out.push({ pts: run, width: e.width }); run = [] }
+    for (const q of e.pts) {
+      const inside = Math.hypot(q[0] - p.x, q[1] - p.z) < r && !R.tunnelAt(q[0], q[1]) && !R.deckAt(q[0], q[1])
+      if (inside) run.push([q[0], q[1], R.heightAt(q[0], q[1])]); else flush()
+    }
+    flush()
+  }
+  return out
+}
+
+export const WHY: Record<string, number> = {}
+let TAG = ''
+const no = (k: string) => { WHY[TAG + k] = (WHY[TAG + k] ?? 0) + 1 }
+export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
+  const r = townRadius(p)
+  // the town's heart is its square when the network gave it one (Ashfeld's Atlas dot sits 88 m off its square)
+  const sq = (R.meta.network?.junctions ?? []).find(j => j.kind === 'square' && j.place === p.id)
+  if (sq && p.kind !== 'spot') p = { ...p, x: sq.x, z: sq.z }
+  const plan: TownPlan = { place: p.id, r, lanes: [], buildings: [] }
+  if (r <= 0) return plan
+  const big = p.kind === 'city', mid = p.kind === 'settlement'
+
+  // every footprint passes the same test: on land, off roads/pads/shallow bores, not too steep, clear of the others.
+  // Answers the ground span under it (the plinth) or null.
+  const placed = new Map<string, Building[]>()
+  const bucket = (x: number, z: number) => `${Math.floor(x / 16)},${Math.floor(z / 16)}`
+  const fits = (b: Pick<Building, 'x' | 'z' | 'yaw' | 'w' | 'd'>, gap: number, skipLane?: Lane): { y0: number; y1: number } | null => {
+    const pts = footprint(b)
+    let y0 = Infinity, y1 = -Infinity
+    for (const [x, z] of [...pts, [b.x, b.z] as [number, number]]) {
+      const y = R.heightAt(x, z)
+      if (!Number.isFinite(y) || y < 1.5) return no('water'), null
+      y0 = Math.min(y0, y); y1 = Math.max(y1, y)
+    }
+    if (y1 - y0 > MAX_STEP) return no('steep'), null
+    if (pts.some(([x, z]) => onRoad(x, z, 0.6) || (R.tunnelAt(x, z) && R.tunnelAt(x, z)!.cover < 12))) return no('road'), null
+    if (pts.some(([x, z]) => plan.lanes.some(l => l !== skipLane && distToLine(l.pts, x, z) < LANE_W / 2 + 1))) return no('lane'), null
+    const grown = footprint(b, gap)
+    const bx = Math.floor(b.x / 16), bz = Math.floor(b.z / 16)
+    for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) for (const o of placed.get(`${bx + i},${bz + j}`) ?? []) if (quadsOverlap(grown, footprint(o))) return no('occ'), null
+    return { y0, y1 }
+  }
+  const keep = (b: Building) => { plan.buildings.push(b); const k = bucket(b.x, b.z); const l = placed.get(k); if (l) l.push(b); else placed.set(k, [b]) }
+  const onRoad = (x: number, z: number, m: number) => {
+    const nr = nearestRoad(R, x, z)
+    return (nr.road && nr.d < nr.road.width / 2 + m) || nearPad(R, x, z, m)
+  }
+
+  // ── a spot (a hut, a shack) is one building on its own ground: try a few spots round the dot until one fits
+  if (p.kind === 'spot') {
+    for (let k = 0; k < 24; k++) {
+      const a = hash(pi, k, 1) * Math.PI * 2, d = k === 0 ? 0 : 4 + k * 1.5
+      const c = { x: p.x + Math.cos(a) * d, z: p.z + Math.sin(a) * d, yaw: hash(pi, 1) * Math.PI * 2, w: 7, d: 6 }
+      const g = fits(c, 1)
+      if (g) { keep({ ...c, floors: 1, y0: g.y0, y1: g.y1, kind: 'cottage', rim: 0, v: hash(pi, 2) }); break }
+    }
+    return plan
+  }
+
+  // ── streets: the roads through town, then a LATTICE of lanes laid along the hill
+  // (v1 grew lanes one at a time off the streets and they starved each other: seeds born within reach of an earlier
+  // lane died at 12 m, and a 260 m city ended up with 57 buildings. A lattice covers the town by construction.)
+  const streets = mainStreets(R, p, r)
+  // which way the rows run: along the CONTOUR on a hillside (terraces stacked up the slope, canon's Rune Hold), else
+  // along the longest street through town, so the lanes sit square to it
+  let gx = 0, gz = 0
+  for (let k = 0; k < 24; k++) {
+    const a = k / 24 * Math.PI * 2, d = r * 0.45, x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d
+    gx += (R.heightAt(x + 6, z) - R.heightAt(x - 6, z)) / 12; gz += (R.heightAt(x, z + 6) - R.heightAt(x, z - 6)) / 12
+  }
+  gx /= 24; gz /= 24
+  let ang: number
+  if (Math.hypot(gx, gz) > 0.05) ang = Math.atan2(gz, gx) + Math.PI / 2
+  else {
+    const long = [...streets].sort((a, b) => b.pts.length - a.pts.length)[0]
+    ang = long ? Math.atan2(long.pts[long.pts.length - 1][1] - long.pts[0][1], long.pts[long.pts.length - 1][0] - long.pts[0][0]) : hash(pi, 5) * Math.PI
+  }
+  const ux = Math.cos(ang), uz = Math.sin(ang), vx = -uz, vz = ux
+  // the town's edge is ragged, not a circle: how far it reaches varies with the bearing
+  const ph0 = hash(pi, 21) * 6.28, ph1 = hash(pi, 22) * 6.28
+  const reach = (x: number, z: number) => { const a = Math.atan2(z - p.z, x - p.x); return r * (0.74 + 0.16 * Math.sin(a * 2 + ph0) + 0.1 * Math.sin(a * 5 + ph1)) }
+  const rowGap = big ? 30 : mid ? 32 : 36
+  const lanes: Lane[] = []
+  const okAt = (x: number, z: number) => {
+    if (Math.hypot(x - p.x, z - p.z) > reach(x, z)) return null
+    const y = R.heightAt(x, z)
+    if (!Number.isFinite(y) || y < 1.5 || onRoad(x, z, 3)) return null
+    const t = R.tunnelAt(x, z); if (t && t.cover < 12) return null
+    return y
+  }
+  // one lane = the valid runs along a line; a run breaks at a road (that IS the junction), water or the town's edge
+  const lay = (at: (s: number) => [number, number], s0: number, s1: number) => {
+    let run: [number, number, number][] = []
+    const flush = () => { if (run.length >= 4) lanes.push({ pts: run, width: LANE_W }); run = [] }
+    for (let s = s0; s <= s1; s += LANE_STEP) {
+      const [x, z] = at(s), y = okAt(x, z)
+      if (y === null || (run.length && Math.abs(y - run[run.length - 1][2]) / LANE_STEP > STAIR_GRADE)) { flush(); if (y === null) continue }
+      run.push([x, z, y])
+    }
+    flush()
+  }
+  const off = hash(pi, 6) * rowGap
+  for (let row = -r + off; row < r; row += rowGap) {
+    const ph = hash(pi, Math.round(row), 3) * 6
+    // a gentle wobble so rows wind instead of ruling straight lines
+    const at = (s: number): [number, number] => {
+      const w = Math.sin(s / 41 + ph) * 3.2 + Math.sin(s / 15 + ph * 2) * 1.1
+      return [p.x + ux * s + vx * (row + w), p.z + uz * s + vz * (row + w)]
+    }
+    lay(at, -r, r)
+    // cross alleys to the next row, staggered (stair alleys on a hillside)
+    const cross = big ? 96 : 110
+    for (let s = -r + hash(pi, Math.round(row), 4) * cross; s < r; s += cross * (0.8 + hash(pi, Math.round(s), Math.round(row)) * 0.5)) {
+      lay(t => { const [x, z] = at(s); return [x + vx * t, z + vz * t] }, 0, rowGap)
+    }
+  }
+  plan.lanes = lanes
+
+  // ── lots: walk every street and lane, both sides, a lot per step, facing the street
+  const frontages: Lane[] = [...streets, ...lanes]
+  let bi = 0
+  for (const f of frontages) {
+    TAG = streets.includes(f) ? 'street.' : 'lane.'
+    for (const sd of [1, -1]) {
+      let carry = 0
+      for (let k = 0; k < f.pts.length - 1; k++) {
+        const [ax, az] = f.pts[k], [bx, bz] = f.pts[k + 1]
+        const seg = Math.hypot(bx - ax, bz - az); if (seg < 0.01) continue
+        const ux = (bx - ax) / seg, uz = (bz - az) / seg, nx = -uz * sd, nz = ux * sd
+        let t = carry
+        while (t < seg) {
+          const h0 = hash(pi, bi++, 7)
+          const mx = ax + ux * t, mz = az + uz * t
+          const rim = Math.min(1, Math.hypot(mx - p.x, mz - p.z) / reach(mx, mz))
+          const core = 1 - rim
+          const w = core > 0.45 ? 9 + h0 * 6 : 7 + h0 * 4
+          // in the core the lots run back to back and fill the block (row houses); out at the edge they shrink
+          const d = core > 0.45 ? 7.5 + hash(pi, bi, 8) * 2.5 : 6 + hash(pi, bi, 8) * 4
+          const gap = core > 0.45 ? 0.15 : 1
+          t += w / 2
+          const fill = core > 0.45 ? 0.95 : (big ? 0.45 : 0.3) + core
+          const setback = core > 0.45 ? 0.8 + hash(pi, bi, 9) * 0.6 : 1.2 + rim * 3 + hash(pi, bi, 9) * 1.2
+          const cx = mx + ux * 0 + nx * (f.width / 2 + setback + d / 2), cz = mz + nz * (f.width / 2 + setback + d / 2)
+          const place = () => {
+            if (hash(pi, bi, 10) > fill) return no('fill')
+            if (Math.hypot(cx - p.x, cz - p.z) > reach(cx, cz) + 4) return no('radius')
+            const yaw = Math.atan2(-nz, -nx)
+            const g = fits({ x: cx, z: cz, yaw, w, d }, gap, f)
+            if (!g) return
+            const { y0, y1 } = g
+            const tall = big ? 1 + Math.round(core * 2.4 + hash(pi, bi, 11) * 1.2) : mid ? 1 + Math.round(core * 1.6 + hash(pi, bi, 11) * 0.8) : 1 + (hash(pi, bi, 11) > 0.7 ? 1 : 0)
+            const kind: BuildingKind = core > 0.75 && w > 12 && hash(pi, bi, 12) > 0.6 ? 'hall' : tall === 1 && w * d < 70 ? 'cottage' : 'house'
+            keep({ x: cx, z: cz, yaw, w, d, floors: kind === 'hall' ? Math.max(2, tall) : tall, y0, y1, kind, rim, v: hash(pi, bi, 13) })
+          }
+          place()
+          t += w / 2 + gap + (core > 0.45 ? 0 : hash(pi, bi, 14) * 2.5)
+        }
+        carry = t - seg
+      }
+    }
+  }
+  return plan
+}
+
+export function planTowns(R: Region): TownPlan[] {
+  return R.meta.places.map((p, pi) => planTown(R, p, pi))
+}
+
+/** where each town stands (its square when it has one) and how far it reaches: the tree scatter keeps out of it */
+export function townDiscs(R: Region): { id: string; x: number; z: number; r: number }[] {
+  const js = R.meta.network?.junctions ?? []
+  return R.meta.places.map(p => {
+    const sq = p.kind === 'spot' ? undefined : js.find(j => j.kind === 'square' && j.place === p.id)
+    return { id: p.id, x: sq?.x ?? p.x, z: sq?.z ?? p.z, r: Math.max(20, townRadius(p) * 0.9) }
+  })
+}
