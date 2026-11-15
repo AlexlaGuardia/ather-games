@@ -309,6 +309,10 @@ export default function AtherSlice() {
       if (e.code === 'Tab' && panel?.kind === 'map') { e.preventDefault(); setPanel({ ...panel, view: panel.view === 'ather' ? 'athernyx' : 'ather' }); return }
       if (e.code === 'KeyM') { setPanel(p => p ? null : { kind: 'map', view: 'ather', travel: false }); return }
       if (e.code === 'BracketRight' && tune) { skipDays(e.shiftKey ? 5 : 1); return }
+      if (e.code === 'BracketLeft' && tune && spreadRef.current) {   // tuning: wipe the map clean to watch it grow back
+        let st = spreadRef.current; for (const n of allNodes) st = clearAt(st, allNodes, n.id, clock()).s
+        saveSpread(st); setSpread(st); hudSay(`Tune · every node cleared (${allNodes.length}). ] to let days pass.`, 'info', 5); return
+      }
       if (e.code === 'KeyI') { setPanel(p => p?.kind === 'bag' ? null : p ? p : { kind: 'bag' }); return }
       if (panel || fade) return
       const n = near.current
@@ -328,7 +332,7 @@ export default function AtherSlice() {
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [panel, fade, zone, waymarks, W, goHome])
+  }, [panel, fade, zone, waymarks, W, goHome, tune, skipDays, allNodes, plantHere])
 
   const zoneName = zone.kind === 'plot' ? 'Your plot' : 'The Wilds'
   // Phone taps: only what applies here and now, each the key this page already handles.
@@ -377,7 +381,7 @@ export default function AtherSlice() {
           ...(zone.kind === 'wilds' && chud ? [{ label: 'Repeater', value: chud.reloading ? 'reloading' : `${chud.ammo} / ${chud.clip}` }] : []),
           { label: 'Grey matter', value: garden.grey, accent: true },
           { label: 'Grimoire', value: garden.pages },
-          ...(tune && spread ? [{ label: `Tune · day ${Math.floor((clock() - spread.epoch) / GAME_DAY_MS)}`, value: `${allNodes.length - spread.clean.length}/${allNodes.length} grey · ] +1d, ⇧] +5d`, accent: true }] : []),
+          ...(tune && spread ? [{ label: `Tune · day ${Math.floor((clock() - spread.epoch) / GAME_DAY_MS)}`, value: `${allNodes.length - spread.clean.length}/${allNodes.length} grey · [ clear all · ] +1d · ⇧] +5d`, accent: true }] : []),
         ]} />
       {zone.kind === 'wilds' && chud && (() => {
         const now = performance.now() / 1000, hurt = Math.max(0, 1 - (now - chud.hurtAt) / 0.6), hit = now - chud.hitAt < 0.12
