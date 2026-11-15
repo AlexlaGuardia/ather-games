@@ -32,7 +32,8 @@ import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WA
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud } from './combat-layer'
 import type { CombatEvent, Terrain } from './combat'
-import { placeNodes, isInfected, clearNode, loadNodes, saveNodes, ownerOf, nodeRegions, type NodeLedger } from './nodes'
+import { placeNodes, ownerOf, nodeRegions, GAME_DAY_MS } from './nodes'
+import { advance, clearAt, loadSpread, saveSpread, loadSkew, saveSkew, type SpreadState, type SpreadEvent } from './spread'
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey } from '../shared/touch'
 import { useMenuLock } from '../shared/menu-lock'
@@ -82,9 +83,14 @@ export default function AtherSlice() {
   const onCombatHud = useCallback((h: CombatHud) => { vitalsRef.current = { hp: h.hp, hpMax: h.maxHp, shield: 0, shieldMax: 0 }; setChud(h) }, [])
   const [pitstops, setPitstops] = useState<Pitstop[]>([LANDING])
   const [reviveKey, setReviveKey] = useState(0)
-  const [nodeLedger, setNodeLedger] = useState<NodeLedger>({})
+  const [spread, setSpread] = useState<SpreadState | null>(null)
+  const spreadRef = useRef<SpreadState | null>(null); spreadRef.current = spread
+  // tuning (Alex 11-15: feel the raw spread before any brakes): ?tune=1 → ] skips a game day; skew is kept so a reload stays put
+  const [tune, setTune] = useState(false)
+  const skew = useRef(0)
+  const clock = () => Date.now() + skew.current
 
-  useEffect(() => { setWaymarks(loadWaymarks()); setGarden(loadGarden()); setFog(loadFog()); setNodeLedger(loadNodes()) }, [])
+  useEffect(() => { setWaymarks(loadWaymarks()); setGarden(loadGarden()); setFog(loadFog()); skew.current = loadSkew(); setTune(new URLSearchParams(location.search).get('tune') === '1') }, [])
   // the Hallway's city doors: the ones the keeper has unlocked by visiting (hub's continent/pitstops.ts)
   useEffect(() => {
     fetch('/open/continent.json').then(r => r.json()).then(m => setPitstops(pitstopsUnlocked(m.places as PlaceLike[])))
@@ -128,9 +134,33 @@ export default function AtherSlice() {
     heightAt: W.heightAt,
     walkable: (x, z) => walkableIn(W, x, z),
   } : null, [W])
-  // infected nodes on this tile: placed from the land, filtered by the ledger (a cleared node holds for its grace)
+  // THE NODE MAP (nodes.ts: one node per land subsection) and THE SPREAD (spread.ts: Alex's raw numbers, no brakes).
+  // The world catches up on load (the clock ran while you were away), then ticks live every 20 s.
   const allNodes = useMemo(() => W ? placeNodes(W, TILE, GREG_WAYMARK) : [], [W])
-  const nodes = useMemo(() => { const now = Date.now(); return allNodes.filter(n => isInfected(n.id, nodeLedger, now)) }, [allNodes, nodeLedger])
+  const tell = useCallback((evs: SpreadEvent[], lead: string) => {
+    const sp = evs.filter(e => e.kind === 'spread').length, wl = evs.filter(e => e.kind === 'well').length
+    if (sp || wl) hudSay(`${lead}${[sp && `the grey spread to ${sp} place${sp === 1 ? '' : 's'}`, wl && `${wl} cleared place${wl === 1 ? '' : 's'} welled up again`].filter(Boolean).join(', ')}.`, 'info', 6)
+  }, [])
+  useEffect(() => {
+    if (!allNodes.length) return
+    const r = advance(loadSpread(clock()), allNodes, clock())
+    saveSpread(r.s); setSpread(r.s); tell(r.events, 'While you were away, ')
+    const id = setInterval(() => {
+      const cur = spreadRef.current; if (!cur) return
+      const n = advance(cur, allNodes, clock()); if (n.s.at === cur.at && !n.events.length) return
+      saveSpread(n.s); setSpread(n.s); tell(n.events, '')
+    }, 20000)
+    return () => clearInterval(id)
+  }, [allNodes, tell]) // eslint-disable-line react-hooks/exhaustive-deps
+  const skipDays = useCallback((d: number) => {
+    const cur = spreadRef.current; if (!cur) return
+    skew.current += d * GAME_DAY_MS; saveSkew(skew.current)
+    const n = advance(cur, allNodes, clock()); saveSpread(n.s); setSpread(n.s)
+    const day = Math.floor((clock() - n.s.epoch) / GAME_DAY_MS)
+    const sp = n.events.filter(e => e.kind === 'spread').length, wl = n.events.filter(e => e.kind === 'well').length
+    hudSay(`Day ${day} · ${allNodes.length - n.s.clean.length}/${allNodes.length} infected${sp ? ` · +${sp} spread` : ''}${wl ? ` · +${wl} welled` : ''}`, 'info', 5)
+  }, [allNodes]) // eslint-disable-line react-hooks/exhaustive-deps
+  const nodes = useMemo(() => spread ? allNodes.filter(n => !spread.clean.includes(n.id)) : [], [allNodes, spread])
   const nodeOwner = useMemo(() => W && allNodes.length ? (x: number, z: number) => ownerOf(allNodes, x, z)?.id : undefined, [W, allNodes])
   // the countries on the fold map, and which one the keeper stands in (HUD), off the same nearest-node rule
   const regions = useMemo(() => W ? nodeRegions(allNodes, W.meta.sizeX, W.meta.sizeZ).map(r => ({ ...r, infected: nodes.some(n => n.id === r.id) })) : [], [W, allNodes, nodes])
@@ -145,7 +175,8 @@ export default function AtherSlice() {
       if (e.kind === 'champ-break') setToast(e.bar === 0 ? 'It sinks into the ooze, and more come crawling out.' : 'It sinks again. When it rises it moves wrong, wild.')
       if (e.kind === 'champ-down') {
         setToast('The grey thins here. For now.')
-        setNodeLedger(L => { const n = clearNode(L, e.nodeId, Date.now()); saveNodes(n); return n })
+        const cur = spreadRef.current
+        if (cur) { const r = clearAt(cur, allNodes, e.nodeId, clock()); saveSpread(r.s); setSpread(r.s) }
       }
       if (e.kind === 'down') {
         setToast('The Hollows dragged you under. The fold caught you and set you down at home.')
@@ -154,7 +185,7 @@ export default function AtherSlice() {
       }
     }
     if (got) { const g = { ...gardenRef.current, grey: gardenRef.current.grey + got }; setGarden(g); saveGarden(g) }
-  }, [arrive])
+  }, [arrive, allNodes])
 
   const travel = useCallback((d: Dest) => {
     if (d.kind === 'home') { goHome(); return }
@@ -230,8 +261,9 @@ export default function AtherSlice() {
       travel: (d: Dest) => travel(d),
       grant: (grey = 0, pages = 0) => updateGarden({ ...garden, grey: garden.grey + grey, pages: garden.pages + pages }),
       resetGarden: () => updateGarden(freshGarden()),
+      spread: () => spreadRef.current, skipDays, ownerAt: (x: number, z: number) => nodeOwner?.(x, z),
     }
-  }, [zone, travel, garden, updateGarden])
+  }, [zone, travel, garden, updateGarden, skipDays, nodeOwner])
 
   const plantHere = useCallback(() => {
     if (zone.kind !== 'wilds' || !W) return
@@ -276,6 +308,7 @@ export default function AtherSlice() {
       if (e.code === 'Escape' && panel) { setPanel(null); return }
       if (e.code === 'Tab' && panel?.kind === 'map') { e.preventDefault(); setPanel({ ...panel, view: panel.view === 'ather' ? 'athernyx' : 'ather' }); return }
       if (e.code === 'KeyM') { setPanel(p => p ? null : { kind: 'map', view: 'ather', travel: false }); return }
+      if (e.code === 'BracketRight' && tune) { skipDays(e.shiftKey ? 5 : 1); return }
       if (e.code === 'KeyI') { setPanel(p => p?.kind === 'bag' ? null : p ? p : { kind: 'bag' }); return }
       if (panel || fade) return
       const n = near.current
@@ -344,6 +377,7 @@ export default function AtherSlice() {
           ...(zone.kind === 'wilds' && chud ? [{ label: 'Repeater', value: chud.reloading ? 'reloading' : `${chud.ammo} / ${chud.clip}` }] : []),
           { label: 'Grey matter', value: garden.grey, accent: true },
           { label: 'Grimoire', value: garden.pages },
+          ...(tune && spread ? [{ label: `Tune · day ${Math.floor((clock() - spread.epoch) / GAME_DAY_MS)}`, value: `${allNodes.length - spread.clean.length}/${allNodes.length} grey · ] +1d, ⇧] +5d`, accent: true }] : []),
         ]} />
       {zone.kind === 'wilds' && chud && (() => {
         const now = performance.now() / 1000, hurt = Math.max(0, 1 - (now - chud.hurtAt) / 0.6), hit = now - chud.hitAt < 0.12

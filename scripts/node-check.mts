@@ -14,7 +14,7 @@ const b = await puppeteer.launch({ protocolTimeout: 90000, executablePath: proce
 const p = await b.newPage()
 await p.setViewport({ width: 1100, height: 680 })
 await p.goto(`${flag('--url', 'https://ather.games')}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 120000 })
-await p.evaluate(() => localStorage.removeItem('ather.nodes.v1'))
+await p.evaluate(() => { localStorage.removeItem('ather.nodes.v2'); localStorage.removeItem('ather.nodes.skew') })
 await p.reload({ waitUntil: 'load', timeout: 120000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 120000 })
 await new Promise(r => setTimeout(r, 2000))
@@ -78,8 +78,8 @@ await new Promise(r => setTimeout(r, 2000))
 // ★ Alex 11-15: cleared ground must stay quiet. Give the stray top-up (every 1.5 s) a good while, standing on the node.
 await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 5, 0), n.x, n.z)
 await new Promise(r => setTimeout(r, 20000))
-const quiet = await p.evaluate(() => (window as any).__ather.combat().hollows.length)
-const ledger = await p.evaluate(() => JSON.parse(localStorage.getItem('ather.nodes.v1') ?? '{}'))
+const quiet = await p.evaluate((id: string) => { const A = (window as any).__ather; return A.combat().hollows.filter((h: any) => A.ownerAt(h.x, h.z) === id).length }, n.id)   // strays on ITS ground (neighbours stay infested)
+const ledger = await p.evaluate(() => JSON.parse(localStorage.getItem('ather.nodes.v2') ?? '{}'))
 await p.waitForFunction((k: number) => (window as any).__ather.nodes().length < k, { timeout: 60000 }, nodes.length).catch(() => {})
 const left = await p.evaluate(() => (window as any).__ather.nodes().length)
 await shot(`${out}/node-5-clear.png`)
@@ -90,7 +90,7 @@ await new Promise(r => setTimeout(r, 1500))
 const borders = await p.$$eval('polygon', ps => ps.map(p => p.getAttribute('stroke-dasharray') ? 'infected' : 'cleared'))
 await shot(`${out}/node-6-borders.png`)
 console.log(JSON.stringify({ tag: tag.slice(0, 60), borders }))
-const res = { quiet, blots, before, hudBars, tell, wave, cleared: Object.keys(ledger), nodesLeft: left, of: nodes.length }
+const res = { quiet, blots, before, hudBars, tell, wave, cleared: (ledger.clean ?? []) as string[], nodesLeft: left, of: nodes.length }
 console.log(JSON.stringify(res))
 const pass = blots === nodes.length && !before && hudBars && !!tell && wave >= 4 && res.cleared.includes(n.id) && left === nodes.length - 1 && quiet <= 1 && /cleared ground/.test(tag) && borders.filter(b => b === 'cleared').length === 1 && borders.length === nodes.length
 console.log(pass ? 'PASS' : 'FAIL')

@@ -201,6 +201,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const armedRef = useRef(armed); armedRef.current = armed
   const ownerRef = useRef(ownerOf); ownerRef.current = ownerOf
   const spent = useRef(new Set<string>())   // cleared this visit: never re-woken before the page drops it
+  // once the page's list has caught up (the cleared node dropped out, or the spread brought one back), forget the bridge
+  useEffect(() => { spent.current.clear() }, [nodes])
   useEffect(() => { revive(c.current); setIds([]) }, [reviveKey])
   useEffect(() => {
     const down = (e: MouseEvent) => { if (e.button === 0 && locked.current && !frozen.current) trigger.current = true }

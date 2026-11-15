@@ -11,7 +11,8 @@ import {
 } from './plot'
 import { newCombat, stepCombat, spawnHollow, fire, populate, KEEPER_HP, SHAMBLER, BODY_Y } from './combat'
 import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVES, PANIC_MIN_WINDUP } from './champion'
-import { placeNodes, isInfected, clearNode, ownerOf, nodeRegions, polyArea, GRACE_MS, NODE_CLEAR_OF } from './nodes'
+import { placeNodes, nodeAdjacency, ownerOf, nodeRegions, polyArea, NODE_CLEAR_OF, GAME_DAY_MS, SUB } from './nodes'
+import { advance, clearAt, freshSpread, infectedIds, SPREAD } from './spread'
 import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
 import { canPlant, plant, lift, reachedBiomes, waymarksInWorld, TILE_CENTRE, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
 
@@ -267,17 +268,45 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
 {
   const g = GREG_WAYMARK
   const nodes = placeNodes(W, 'first-wilds', g)
-  ok(nodes.length >= 2, `nodes: only ${nodes.length} placed on a three-country tile`)
-  ok(new Set(nodes.map(n => n.biome)).size === nodes.length, 'nodes: two nodes in one biome')
+  // THE NODE MAP: one node per land subsection of a SUB×SUB grid
+  ok(nodes.length >= 12 && nodes.length <= SUB * SUB, `nodes: ${nodes.length} placed (want most of the ${SUB * SUB} subsections)`)
+  ok(new Set(nodes.map(n => `${n.i},${n.j}`)).size === nodes.length, 'nodes: two nodes in one subsection')
+  ok(new Set(nodes.map(n => n.biome)).size >= 2, 'nodes: every node is one biome (the map has three countries)')
+  const cw = meta.sizeX / SUB
+  ok(nodes.every(n => n.x >= -meta.sizeX / 2 + n.i * cw && n.x < -meta.sizeX / 2 + (n.i + 1) * cw), 'nodes: a node sits outside its subsection')
+  const adj = nodeAdjacency(nodes)
+  ok([...adj.entries()].every(([id, ns]) => ns.every(m => { const a = nodes.find(n => n.id === id)!, b = nodes.find(n => n.id === m)!; return a.biome === b.biome && Math.abs(a.i - b.i) + Math.abs(a.j - b.j) === 1 })), 'nodes: a neighbour across a biome or more than one step away')
+  ok([...adj.values()].some(ns => ns.length > 0), 'nodes: no node has a neighbour (spread could never move)')
   ok(nodes.every(n => W.biomeAt(n.x, n.z) === n.biome && walkableIn(W, n.x, n.z, 1.2)), 'nodes: a node off its biome or on unwalkable ground')
   ok(nodes.every(n => Math.hypot(n.x - g.x, n.z - g.z) >= NODE_CLEAR_OF), 'nodes: a node inside the safe distance of Greg\'s waymark')
   ok(JSON.stringify(placeNodes(W, 'first-wilds', g)) === JSON.stringify(nodes), 'nodes: placement is not deterministic')
-  const now = 1_000_000_000_000
-  let L = {}
-  ok(isInfected(nodes[0].id, L, now), 'nodes: a fresh node is not infected')
-  L = clearNode(L, nodes[0].id, now)
-  ok(!isInfected(nodes[0].id, L, now + GRACE_MS - 1), 'nodes: a cleared node wells up inside its grace')
-  ok(isInfected(nodes[0].id, L, now + GRACE_MS + 1), 'nodes: a cleared node never wells up again')
+  // THE SPREAD (Alex's raw numbers, no brakes)
+  {
+    const t0 = 1_000_000_000_000, D = GAME_DAY_MS
+    const s0 = freshSpread(t0)
+    ok(infectedIds(s0, nodes).length === nodes.length, 'spread: the Wilds do not start fully infested')
+    // clear everything, wait: nothing spreads from nothing; wells come back at ~3% per 5 days
+    let all = s0; for (const n of nodes) all = clearAt(all, nodes, n.id, t0 + 1).s
+    ok(infectedIds(all, nodes).length === 0, 'spread: clearing every node left one infected')
+    const year = advance(all, nodes, t0 + 365 * D)
+    const wells = year.events.filter(e => e.kind === 'well').length
+    ok(wells > 0, 'spread: a clean world never welled up in a year')
+    // clear one node in the middle of its biome: within a week (2 spread ticks) it is at risk only from its neighbours
+    const mid = nodes.find(n => (adj.get(n.id) ?? []).length >= 2)!
+    const one = clearAt(s0, nodes, mid.id, t0 + 1).s
+    ok(advance(one, nodes, t0 + SPREAD.everyDays * D - 1).s.clean.includes(mid.id), 'spread: it spread before the first tick')
+    // over many seeds of time, a cleared node gets re-infected only by a neighbour in its biome
+    const ev = advance(one, nodes, t0 + 120 * D).events.filter(e => e.kind === 'spread')
+    ok(ev.every(e => (adj.get(e.from!) ?? []).includes(e.id)), 'spread: grey jumped to a non-neighbour')
+    ok(ev.some(e => e.id === mid.id), 'spread: in 120 game days the grey never crept back into the cleared node')
+    // replay is exact: one long advance == many short ones
+    let step = one; for (let d = 1; d <= 60; d++) step = advance(step, nodes, t0 + d * D).s
+    ok(JSON.stringify(step.clean) === JSON.stringify(advance(one, nodes, t0 + 60 * D).s.clean), 'spread: stepping day by day differs from one jump (the offline replay would disagree)')
+    // the dial: chance 0 means it never spreads
+    const keep = SPREAD.chance; SPREAD.chance = 0
+    ok(advance(one, nodes, t0 + 120 * D).events.every(e => e.kind !== 'spread'), 'spread: spread with the chance dial at 0')
+    SPREAD.chance = keep
+  }
 
   // ★ Alex 11-15: "the hollows still kept spawning after I defeated the meadow champion". Cleared ground stays quiet.
   {
@@ -289,15 +318,15 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
     const q = newCombat(31), T2 = { heightAt: W.heightAt, walkable: (x: number, z: number) => walkableIn(W, x, z) }
     for (let k = 0; k < 40; k++) populate(q, T2, meadow.x, meadow.z, 7, undefined, infested)
     // ANY ground near it, woods pockets included (the 11-15 strays were in woods 90 m off the meadow node)
-    ok(q.hollows.every(h => Math.hypot(h.x - meadow.x, h.z - meadow.z) > 150), `nodes: ${q.hollows.filter(h => Math.hypot(h.x - meadow.x, h.z - meadow.z) <= 150).length} strays welled up within 150 m of the cleared node`)
+    ok(q.hollows.every(h => ownerOf(nodes, h.x, h.z)!.id !== meadow.id), `nodes: ${q.hollows.filter(h => ownerOf(nodes, h.x, h.z)!.id === meadow.id).length} strays welled up on the cleared node's ground`)
     const q2 = newCombat(31)
     for (let k = 0; k < 40; k++) populate(q2, T2, meadow.x, meadow.z, 7)
-    ok(q2.hollows.some(h => Math.hypot(h.x - meadow.x, h.z - meadow.z) <= 150), 'nodes: the cleared-ground check is vacuous (no strays near it even while infected)')
+    ok(q2.hollows.some(h => ownerOf(nodes, h.x, h.z)!.id === meadow.id), 'nodes: the cleared-ground check is vacuous (no strays on its ground even while infected)')
   }
 
   // the map's borders (Alex 11-15: "show where it starts"): the regions tile the square and agree with ownerOf
   {
-    const three = [...nodes, { id: 'x', tile: 't', biome: BIOME.rock, x: 300, z: 250 }]
+    const three = [...nodes, { id: 'x', tile: 't', biome: BIOME.rock, x: 333, z: 251, i: 9, j: 9 }]
     for (const set of [nodes, three]) {
       const R = nodeRegions(set, meta.sizeX, meta.sizeZ)
       const total = R.reduce((a, r) => a + polyArea(r.poly), 0)
@@ -316,7 +345,7 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
 
   // the fight, on flat open ground so only the rules are under test
   const F: { heightAt: (x: number, z: number) => number; walkable: (x: number, z: number) => boolean } = { heightAt: () => 0, walkable: () => true }
-  const node = { id: 't:2', tile: 't', biome: BIOME.meadow, x: 0, z: 0 }
+  const node = { id: 't:2', tile: 't', biome: BIOME.meadow, x: 0, z: 0, i: 0, j: 0 }
   const step = (c: ReturnType<typeof newCombat>, feet: { x: number; y: number; z: number }, secs: number, stop?: () => boolean) => {
     const evs: string[] = []
     for (let t = 0; t < secs; t += 1 / 60) { stepCombat(c, F, feet, 1 / 60); for (const e of c.events) evs.push(e.kind); if (stop?.()) break }
