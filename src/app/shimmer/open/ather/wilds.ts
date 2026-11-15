@@ -6,6 +6,7 @@
 // ★ What you see is what you stand on: `heightAt` interpolates the SAME two triangles per cell the mesh draws,
 //   split on the (i,j)→(i+1,j+1) diagonal (land.ts / region.ts rule).
 
+import { treeFor, TRUNK, type Zone, type TreeKind } from './forestry'
 import type { Box, Shape } from '../terrain-world'
 
 /** Biome ids, matched to export_wilds.py. What a biome is FOR: what you gather there, what a waymark there sends
@@ -19,8 +20,9 @@ export interface WildsMeta {
   source: { x0: number; y0: number; x1: number; y1: number; mPerPx: number }
 }
 
-/** A tree: trunk centre + crown size. Deterministic from the tile, so the page draws and the walker bumps the same. */
-export interface Tree { x: number; z: number; y: number; tall: number; r: number }
+/** A tree: trunk centre + crown size + which of the Ather's four it is (forestry.ts). Deterministic from the tile, so
+ *  the page draws, the walker bumps and a prune finds the same one; `id` = tile:index is what a prune is saved under. */
+export interface Tree { x: number; z: number; y: number; tall: number; r: number; kind: TreeKind; id: string }
 
 export interface Wilds {
   meta: WildsMeta
@@ -44,7 +46,8 @@ const hash = (a: number, b: number, s = 0) => {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295
 }
 
-export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array): Wilds {
+/** `zoneAt(i, j)`: the zone of the tile's 200 m node (i, j) (tiles.json, zone_wilds.py); absent = every node meadows. */
+export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt: (i: number, j: number) => Zone = () => 'meadows'): Wilds {
   const { nx, nz, cell, sizeX, sizeZ } = meta
   if (dm.length !== nx * nz) throw new Error(`wilds ${meta.name}: ${dm.length} heights, want ${nx * nz}`)
   if (biomes.length !== (nx - 1) * (nz - 1)) throw new Error(`wilds ${meta.name}: ${biomes.length} biome cells, want ${(nx - 1) * (nz - 1)}`)
@@ -77,24 +80,30 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array):
   }
   const canopyAt = (x: number, z: number) => canopy[cellOf(x, z)]
 
-  // Trees: dense in woods, a scatter on meadow, none on shore/water/rock or on ground too steep to root.
+  // Trees: by ZONE (forestry.ts › treeFor: which of the four, and how thick), none on ground too steep to root or under
+  // the water line. Sizes by kind: a dawnwood is an old giant, a starwillow a slim weeping one.
   const trees: Tree[] = []
+  const NODE_M = 200
   for (let j = 0; j < ch; j++) for (let i = 0; i < cw; i++) {
     const b = biomes[j * cw + i]
-    const p = b === BIOME.woods ? 0.42 : b === BIOME.meadow ? 0.012 : 0
-    if (hash(i, j, 1) >= p) continue
+    const cx = -hx + (i + 0.5) * cell, cz = -hz + (j + 0.5) * cell
+    const zone = zoneAt(Math.min(4, Math.floor((cx + hx) / NODE_M)), Math.min(4, Math.floor((cz + hz) / NODE_M)))
+    const t = treeFor(zone, b, canopy[j * cw + i], hash(i, j, 6))
+    if (!t || hash(i, j, 1) >= t.p) continue
     const x = -hx + (i + 0.2 + hash(i, j, 2) * 0.6) * cell, z = -hz + (j + 0.2 + hash(i, j, 3) * 0.6) * cell
     const y = heightAt(x, z)
     const s = Math.hypot(heightAt(x + 1, z) - heightAt(x - 1, z), heightAt(x, z + 1) - heightAt(x, z - 1)) / 2
     if (s > 0.6 || y < meta.waterY + 1) continue
-    trees.push({ x, z, y, tall: 5 + hash(i, j, 4) * 5, r: 1.6 + hash(i, j, 5) * 1.2 })
+    const big = t.kind === 'dawnwood' ? 1.55 : t.kind === 'shimmeroak' ? 1.2 : t.kind === 'starwillow' ? 0.95 : 1
+    trees.push({ x, z, y, tall: (5 + hash(i, j, 4) * 5) * big, r: (1.6 + hash(i, j, 5) * 1.2) * big, kind: t.kind, id: `${meta.name}:${trees.length}` })
   }
 
   // Trunk boxes in a cell grid for `solids` (the walker asks a small box many times a frame).
   const G = 16, gw = Math.ceil(sizeX / G), gh = Math.ceil(sizeZ / G)
   const grid: Box[][] = Array.from({ length: gw * gh }, () => [])
   for (const t of trees) {
-    const b: Box = { x0: t.x - TRUNK_R, x1: t.x + TRUNK_R, z0: t.z - TRUNK_R, z1: t.z + TRUNK_R, y0: t.y - 1, y1: t.y + 3.2 }
+    const R = TRUNK[t.kind] ?? TRUNK_R
+    const b: Box = { x0: t.x - R, x1: t.x + R, z0: t.z - R, z1: t.z + R, y0: t.y - 1, y1: t.y + 3.2 }
     const gi = Math.min(gw - 1, Math.max(0, Math.floor((t.x + hx) / G))), gj = Math.min(gh - 1, Math.max(0, Math.floor((t.z + hz) / G)))
     grid[gj * gw + gi].push(b)
   }
@@ -122,13 +131,13 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array):
 }
 
 /** Browser loader: the three files export_wilds.py writes. */
-export async function loadWilds(name: string, base = '/open/wilds'): Promise<Wilds> {
+export async function loadWilds(name: string, base = '/open/wilds', zoneAt?: (i: number, j: number) => Zone): Promise<Wilds> {
   const [meta, bin, bio] = await Promise.all([
     fetch(`${base}/${name}.json`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.json ${r.status}`); return r.json() as Promise<WildsMeta> }),
     fetch(`${base}/${name}.bin`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.bin ${r.status}`); return r.arrayBuffer() }),
     fetch(`${base}/${name}.biome`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.biome ${r.status}`); return r.arrayBuffer() }),
   ])
-  return parseWilds(meta, new Int16Array(bin), new Uint8Array(bio))
+  return parseWilds(meta, new Int16Array(bin), new Uint8Array(bio), zoneAt)
 }
 
 /** The tile's centre in CONTINENT world coordinates (continent.json: origin at the centre, 10 m per source px).

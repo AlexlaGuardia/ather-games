@@ -32,7 +32,7 @@ import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
-import { tileCentreWorld, BIOME_NAME, type Wilds } from './wilds'
+import { tileCentreWorld, BIOME_NAME, type Wilds, type Tree } from './wilds'
 import { loadIndex, makeWorld, stream, tileOf, TILE_M, type WildsWorld } from './wilds-world'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
@@ -49,7 +49,8 @@ import { useInv, setInv, getInv, hotbarEntries, heldItem } from '../shared/bag'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
-import { give, take } from '../shared/inventory'
+import { give, take, itemDef } from '../shared/inventory'
+import { prune, pruneCheck, TREE_NAME, TRUNK } from './forestry'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { AtherMiniMap } from './minimap'
 import type { Vitals } from '../../engine/vitals'
@@ -58,7 +59,7 @@ import type { Vitals } from '../../engine/vitals'
 type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
 type Spawn = { x: number; z: number; yaw: number }
 type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' }
-type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'waymark'; w: Waymark; own: boolean }
+type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'tree'; t: Tree }
 
 export default function AtherSlice() {
   const locked = useRef(false), frozen = useRef(false)
@@ -286,6 +287,12 @@ export default function AtherSlice() {
     } else {
       const all = [{ w: GREG_WAYMARK, own: false }, ...waymarks.map(w => ({ w, own: true }))]
       for (const { w, own } of all) { const o = ww?.byName.has(w.tile) ? ww.offsetOf(w.tile) : null; if (o && Math.hypot(w.x + o.x - lc.px, w.z + o.z - lc.pz) < 2.6) n = { kind: 'waymark', w, own } }
+      // a tree in reach (forestry.ts): the nearest trunk you are standing at, if no waymark is closer to hand
+      if (!n && ww) {
+        let best: Tree | null = null, bd = Infinity
+        for (const t of ww.treesNear(lc.px, lc.pz, 4)) { const d = Math.hypot(t.x - lc.px, t.z - lc.pz) - TRUNK[t.kind]; if (d < REACH && d < bd) { bd = d; best = t } }
+        if (best) n = { kind: 'tree', t: best }
+      }
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
       const t = ww ? ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty) : undefined
       if (t && t.name !== hereRef.current) { hereRef.current = t.name; setHereTile(t.name); streamAt(lc.px, lc.pz) }
@@ -299,7 +306,8 @@ export default function AtherSlice() {
       hudT.current = 0.12
       const p = n?.kind === 'gate' ? 'E · the gate (fold map)'
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
-        : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map') : null
+        : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
+        : n?.kind === 'tree' ? (() => { const c = pruneCheck(n.t.kind, n.t.id); return c.ok ? `E · prune the ${TREE_NAME[n.t.kind]}` : c.why })() : null
       setPrompt(p)
       let where = 'your plot'
       if (zone.kind === 'wilds' && ww) { const g = groundRef.current(lc.px, lc.pz); where = BIOME_NAME[ww.biomeAt(lc.px, lc.pz)] + (g ? ` · ${g}` : '') }
@@ -410,6 +418,16 @@ export default function AtherSlice() {
       if (packTab) { setPanel(p => p?.kind === 'pack' ? (p.tab === packTab ? null : { kind: 'pack', tab: packTab }) : p ? p : { kind: 'pack', tab: packTab }); return }
       if (panel || fade) return
       const n = near.current
+      if (e.code === 'KeyE' && n?.kind === 'tree') {
+        const r = prune(n.t.kind, n.t.id)
+        if (!r.ok) { setToast(r.why); return }
+        const names: string[] = []
+        let inv = getInv()
+        for (const d of r.drops) { const g = give(inv, d.id, d.n); inv = g.inv; names.push(itemDef(d.id).name + (g.left ? ' (bag full)' : '')) }
+        setInv(inv)
+        setToast(`${names.join(' · ')} · +${r.xp} Forestry${r.levelUp ? `. Forestry ${r.levelUp}!` : ''}`)
+        return
+      }
       if (e.code === 'KeyE' && n) {
         if (n.kind === 'greg') setPanel({ kind: 'greg' })
         else setPanel({ kind: 'map', view: 'ather', travel: true })

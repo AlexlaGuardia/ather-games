@@ -14,6 +14,7 @@ import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVE
 import { placeNodes, nodeAdjacency, ownerOf, nodeRegions, polyArea, NODE_CLEAR_OF, GAME_DAY_MS, SUB } from './nodes'
 import { advance, clearAt, freshSpread, infectedIds, SPREAD } from './spread'
 import { readGarden, gardenText } from './garden-snapshot'
+import { treeFor, prune, forestryLevel, _resetForestry, type Zone } from './forestry'
 import { clusterFrame, clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow, D, MIDDLE_HALF, type Quarter } from './cluster'
 import { pathDist, PATH_W, meadowHeightAt } from './meadow'
 import { makeWorld, stream, tileOf, TILE_M, SEA_FLOOR, type TileIndex } from './wilds-world'
@@ -625,6 +626,46 @@ const worldDone = (async () => {
   const t0 = Date.now(); advance(freshSpread(0), all, 60 * GAME_DAY_MS); const ms = Date.now() - t0
   ok(ms < 1500, `world: 60 game days over ${all.length} nodes took ${ms} ms`)
 })()
+
+// ── forestry: the zones, the four trees, pruning (Alex 11-15: "tree nodes ... match them per biome", his zones) ────────
+{
+  const index = JSON.parse(readFileSync(DIR + 'tiles.json', 'utf8')) as TileIndex
+  const nodes = index.tiles.flatMap(t => t.nodes)
+  const ZS = ['meadows', 'thicket', 'springs', 'trails', 'arid', 'caverns']
+  ok(nodes.every(n => ZS.includes((n as { zone?: string }).zone ?? '')), 'zones: a node has no zone (re-run tools/worldmap/zone_wilds.py)')
+  const zc = Object.fromEntries(ZS.map(z => [z, nodes.filter(n => (n as { zone?: string }).zone === z).length]))
+  ok(ZS.every(z => zc[z] > 20), `zones: a zone is (nearly) missing: ${JSON.stringify(zc)}`)
+  // the rules: what grows where
+  ok(treeFor('arid', 3, 1, 0) === null && treeFor('caverns', 2, 0, 0) === null, 'forestry: a tree grows in the badlands or the caverns')
+  ok(treeFor('springs', 1, 0, 0)?.kind === 'starwillow' && treeFor('trails', 2, 0, 0)?.kind === 'dawnwood', 'forestry: springs are not willows or the trails not dawnwood')
+  ok(treeFor('thicket', 3, 0.8, 0)?.kind === 'shimmeroak' && treeFor('thicket', 3, 0.3, 0)?.kind === 'goldwood' && treeFor('meadows', 2, 0, 0)?.kind === 'goldwood', 'forestry: the thicket or the meadows grow the wrong tree')
+  // on real tiles: the start tile (the Deep Woods) carries shimmeroak; an all-badlands tile carries nothing
+  const zfor = (name: string) => { const m = new Map(index.tiles.find(t => t.name === name)!.nodes.map(n => [`${n.i},${n.j}`, (n as { zone?: Zone }).zone ?? 'meadows'])); return (i: number, j: number) => m.get(`${i},${j}`) ?? 'meadows' }
+  const tileOf = (name: string) => {
+    const m = JSON.parse(readFileSync(DIR + name + '.json', 'utf8')) as WildsMeta
+    const b = readFileSync(DIR + name + '.bin'), bio = readFileSync(DIR + name + '.biome')
+    return parseWilds(m, new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)), new Uint8Array(bio), zfor(name))
+  }
+  const start = tileOf('first-wilds'), kinds = new Set(start.trees.map(t => t.kind))
+  ok(kinds.has('shimmeroak') && kinds.has('goldwood'), `forestry: the start tile's woods grow ${[...kinds]}`)
+  ok(new Set(start.trees.map(t => t.id)).size === start.trees.length, 'forestry: two trees share an id (a prune would land on both)')
+  const aridTile = index.tiles.find(t => t.nodes.length >= 20 && t.nodes.every(n => (n as { zone?: string }).zone === 'arid'))
+  if (aridTile) ok(tileOf(aridTile.name).trees.length === 0, `forestry: trees in the badlands tile ${aridTile.name}`)
+  const trailsTile = index.tiles.map(t => ({ t, n: t.nodes.filter(n => (n as { zone?: string }).zone === 'trails').length })).sort((a, b) => b.n - a.n)[0].t
+  ok(tileOf(trailsTile.name).trees.some(t => t.kind === 'dawnwood'), `forestry: no dawnwood on the foothills tile ${trailsTile.name}`)
+  // pruning: the node table pays, Forestry gates the tiers, a pruned tree waits out its regrow
+  _resetForestry(1)
+  const now = 1_000_000
+  const g = prune('goldwood', 'test:g0', () => 0, now)
+  ok(g.ok && g.drops.some(d => d.id === 'goldwood_plank') && g.xp === 20, 'prune: a goldwood did not pay its plank + 20 xp')
+  ok(!prune('goldwood', 'test:g0', () => 0, now + 1000).ok, 'prune: a pruned goldwood pruned again before it regrew')
+  ok(prune('goldwood', 'test:g0', () => 0, now + 3 * 60_000).ok, 'prune: a goldwood never regrew')
+  const s0 = prune('shimmeroak', 'test:s0', () => 0, now)
+  ok(!s0.ok && /Forestry 4/.test(s0.why), 'prune: a shimmeroak gave to Forestry 1')
+  for (let k = 1; k < 14; k++) prune('goldwood', `test:g${k}`, () => 0, now)
+  ok(forestryLevel() === 4 && prune('shimmeroak', 'test:s0', () => 0, now).ok, `prune: 14 goldwood prunes did not open Shimmeroak (Forestry ${forestryLevel()})`)
+  _resetForestry(1)
+}
 
 worldDone.then(() => {
   if (fails.length) { console.error(`ather: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

@@ -2,9 +2,10 @@
 
 // The Wilds' scene: the biome-tinted tile, water, instanced trees and the waymark stones. Split out of page.tsx.
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import * as THREE from 'three'
-import { BIOME, type Wilds, type BiomeId } from './wilds'
+import { BIOME, type Wilds, type BiomeId, type Tree } from './wilds'
+import { TREE_KINDS, isPruned, subscribeForestry, forestryRev, type TreeKind } from './forestry'
 import { GREG_WAYMARK, type Waymark } from './waymarks'
 import { P } from './palette'
 import { GROUND, useGroundMaterial } from './ground-look'
@@ -44,31 +45,52 @@ function wildsGeometry(W: Wilds): THREE.BufferGeometry {
   return g
 }
 
-function Trees({ W }: { W: Wilds }) {
+// The Ather's four trees, each its own look (canon: game/shimmer-skilling.md › Tree Types). A pruned tree stands
+// thinned (a smaller, duller crown) until it regrows: forestry.ts keeps the timers, this only draws them.
+const LOOK: Record<TreeKind, { trunk: string; crown: string; emissive?: string; trunkW: number; shape: 'round' | 'dome' | 'weep' | 'giant' }> = {
+  goldwood:   { trunk: '#8a6a45', crown: '#c9c25e', trunkW: 1, shape: 'round' },     // warm golden bark, round canopy
+  shimmeroak: { trunk: '#5f4430', crown: '#6f9b4f', trunkW: 1.35, shape: 'dome' },   // larger, harder bark, rich grain
+  starwillow: { trunk: '#9a8160', crown: '#e7d78e', emissive: '#f2e3a0', trunkW: 0.8, shape: 'weep' },   // weeping, glowing tips
+  dawnwood:   { trunk: '#6e4a2c', crown: '#d79b45', trunkW: 2, shape: 'giant' },    // ancient thick trunk, amber-gold
+}
+function TreeKindMesh({ trees, kind }: { trees: Tree[]; kind: TreeKind }) {
   const trunk = useRef<THREE.InstancedMesh>(null), crown = useRef<THREE.InstancedMesh>(null)
+  const frev = useSyncExternalStore(subscribeForestry, forestryRev, () => 0)
+  const L = LOOK[kind]
   useEffect(() => {
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color()
-    W.trees.forEach((t, k) => {
-      p.set(t.x, t.y + 1.4, t.z); s.set(1, 2.8, 1); trunk.current!.setMatrixAt(k, m.compose(p, q, s))
-      p.set(t.x, t.y + 2.4 + t.tall / 2, t.z); s.set(t.r, t.tall, t.r); crown.current!.setMatrixAt(k, m.compose(p, q, s))
-      const inWoods = W.biomeAt(t.x, t.z) === BIOME.woods
-      c.set(inWoods ? '#4e8a52' : '#79ad5a').offsetHSL(((k * 0.07) % 0.05) - 0.025, 0, ((k * 0.11) % 0.1) - 0.05)
+    const now = Date.now()
+    trees.forEach((t, k) => {
+      const cut = isPruned(t.id, now), w = L.trunkW, h = L.shape === 'giant' ? 4.2 : 2.8
+      p.set(t.x, t.y + h / 2, t.z); s.set(w, h, w); trunk.current!.setMatrixAt(k, m.compose(p, q, s))
+      const f = cut ? 0.55 : 1
+      if (L.shape === 'weep') { p.set(t.x, t.y + 1.2 + t.tall * 0.42, t.z); s.set(t.r * 1.15 * f, t.tall * 0.9 * f, t.r * 1.15 * f) }
+      else if (L.shape === 'giant') { p.set(t.x, t.y + h + t.tall * 0.32, t.z); s.set(t.r * 1.1 * f, t.tall * 0.62 * f, t.r * 1.1 * f) }
+      else { p.set(t.x, t.y + 2.4 + t.tall * 0.3, t.z); s.set(t.r * f, t.tall * 0.55 * f, t.r * f) }
+      crown.current!.setMatrixAt(k, m.compose(p, q, s))
+      c.set(L.crown).offsetHSL(((k * 0.07) % 0.04) - 0.02, cut ? -0.15 : 0, (((k * 0.11) % 0.08) - 0.04) - (cut ? 0.06 : 0))
       crown.current!.setColorAt(k, c)
     })
     trunk.current!.instanceMatrix.needsUpdate = true; crown.current!.instanceMatrix.needsUpdate = true
     if (crown.current!.instanceColor) crown.current!.instanceColor.needsUpdate = true
-  }, [W])
+  }, [trees, frev, L])
+  if (trees.length === 0) return null
   // frustumCulled off: an InstancedMesh is culled by its base geometry's bounds at the origin (see open/hillside/page.tsx)
   return (
     <>
-      <instancedMesh frustumCulled={false} ref={trunk} args={[undefined, undefined, W.trees.length]}>
-        <cylinderGeometry args={[0.24, 0.32, 1, 6]} /><meshLambertMaterial color="#7a5c40" flatShading />
+      <instancedMesh frustumCulled={false} ref={trunk} args={[undefined, undefined, trees.length]}>
+        <cylinderGeometry args={[0.24, 0.32, 1, 6]} /><meshLambertMaterial color={L.trunk} flatShading />
       </instancedMesh>
-      <instancedMesh frustumCulled={false} ref={crown} args={[undefined, undefined, W.trees.length]}>
-        <coneGeometry args={[1, 1, 7]} /><meshLambertMaterial flatShading />
+      <instancedMesh frustumCulled={false} ref={crown} args={[undefined, undefined, trees.length]}>
+        {L.shape === 'weep' ? <coneGeometry args={[1, 1, 9, 1, true]} /> : L.shape === 'dome' ? <dodecahedronGeometry args={[1, 0]} /> : <icosahedronGeometry args={[1, 0]} />}
+        <meshLambertMaterial flatShading side={L.shape === 'weep' ? THREE.DoubleSide : THREE.FrontSide} emissive={L.emissive ?? '#000000'} emissiveIntensity={L.emissive ? 0.22 : 0} />
       </instancedMesh>
     </>
   )
+}
+function Trees({ W }: { W: Wilds }) {
+  const byKind = useMemo(() => TREE_KINDS.map(k => [k, W.trees.filter(t => t.kind === k)] as const), [W])
+  return <>{byKind.map(([k, ts]) => <TreeKindMesh key={k} kind={k} trees={ts} />)}</>
 }
 
 /** A waymark in the world: a standing stone with Enchant's binding ring hovering over it. */

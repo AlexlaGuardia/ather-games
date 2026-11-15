@@ -20,6 +20,19 @@ export const OPEN_ITEMS: Record<string, ItemDef> = {
   repeater: { name: 'Repeater', blurb: 'A sidearm. Twelve to a clip, R reloads. Only the Wilds give it work.', icon: '/open/icons/repeater.svg', stack: 1, kind: 'gun' },
   waymark: { name: 'Waymark', blurb: 'Plant it on open ground in the Wilds and the fold map can take you back. Lift it to carry it again.', icon: '/open/icons/waymark.svg', stack: 12, kind: 'placeable' },
 }
+// ── Forestry's yield (canon: game/shimmer-skilling.md › Forestry resources + design-briefs/shimmer-resources.md; the drop
+//    table is world/resources.ts › NODE_DEFS). No icon art yet: the bag draws its plain chip.
+const wood = (name: string, blurb: string): ItemDef => ({ name, blurb, icon: '', stack: 99, kind: 'material' })
+Object.assign(OPEN_ITEMS, {
+  goldwood_plank: wood('Goldwood Plank', 'Light, warm-toned wood. Easy to work with.'),
+  goldwood_bark: wood('Goldwood Bark', 'Papery golden bark, mildly aromatic.'),
+  shimmeroak_plank: wood('Shimmeroak Plank', 'Dense wood with a rippled grain that catches light.'),
+  amber_sap: wood('Amber Sap', 'Thick golden resin. Smells like warm honey.'),
+  starwillow_branch: wood('Starwillow Branch', 'Bends without breaking. Glows faintly at the tips.'),
+  starwillow_sap: wood('Starwillow Sap', 'Luminescent sap with mana properties.'),
+  dawnwood_plank: wood('Dawnwood Plank', 'Ancient wood that holds warmth. Building with it feels permanent.'),
+  crystallized_sap: wood('Crystallized Sap', "Sap so old it's hardened into amber crystal. Contains raw mana."),
+} satisfies Record<string, ItemDef>)
 export const itemDef = (id: string): ItemDef => OPEN_ITEMS[id] ?? { name: id.replace(/_/g, ' '), blurb: '', icon: '', stack: 99, kind: 'material' }
 
 export const HOTBAR = 8, BAG = 24, SLOTS = HOTBAR + BAG

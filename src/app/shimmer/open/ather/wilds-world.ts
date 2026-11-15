@@ -13,10 +13,11 @@
 
 import type { Box, Shape } from '../terrain-world'
 import { parseWilds, loadWilds, BIOME, type BiomeId, type Wilds, type Tree } from './wilds'
+import type { Zone } from './forestry'
 
 export const TILE_M = 1000
 export const SEA_FLOOR = -20
-export interface TileIndexEntry { name: string; tx: number; ty: number; land: number; nodes: { id: string; biome: BiomeId; x: number; z: number; i: number; j: number }[] }
+export interface TileIndexEntry { name: string; tx: number; ty: number; land: number; nodes: { id: string; biome: BiomeId; x: number; z: number; i: number; j: number; zone?: Zone }[] }
 export interface TileIndex { v: 1; tileM: number; tiles: TileIndexEntry[] }
 
 const key = (tx: number, ty: number) => `${tx},${ty}`
@@ -120,7 +121,14 @@ export function wanted(w: WildsWorld, x: number, z: number, ring = 1): string[] 
 }
 
 /** Stream: load what is wanted, drop what is two rings away. Returns true if anything changed. */
-export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n)): Promise<boolean> {
+/** A tile's zones off the index (zone_wilds.py stamped them): node (i, j) → zone; no node there = meadows. */
+export function zonesOf(w: WildsWorld, name: string): (i: number, j: number) => Zone {
+  const t = w.byName.get(name), m = new Map<string, Zone>()
+  for (const n of t?.nodes ?? []) if (n.zone) m.set(`${n.i},${n.j}`, n.zone)
+  return (i, j) => m.get(`${i},${j}`) ?? 'meadows'
+}
+
+export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n))): Promise<boolean> {
   const want = new Set(wanted(w, x, z)), keep = new Set(wanted(w, x, z, 2))
   let changed = false
   for (const name of [...w.loaded.keys()]) if (!keep.has(name)) { w.loaded.delete(name); changed = true }
