@@ -55,17 +55,47 @@ for (const id of ['citadel', 'gale-haven', 'ashfeld']) {
   const fl = (bs: Building[]) => bs.reduce((s, b) => s + b.floors, 0) / Math.max(1, bs.length)
   ok(fl(inner) > fl(outer), `${id}: core floors ${fl(inner).toFixed(2)} > edge ${fl(outer).toFixed(2)}`)
   const area = (bs: Building[]) => bs.reduce((s, b) => s + b.w * b.d, 0)
-  ok(area(inner) / (0.45 * 0.45) > area(outer) / (1 - 0.45 * 0.45), `${id}: core built-up denser than the edge`)
+  // built-up density: cities only. A settlement's high street can pass outside its core (Ashfeld's road skirts the
+  // square), and lining it is right, so there the outer ring may legitimately be the busier one.
+  if (id !== 'ashfeld') ok(area(inner) / (0.45 * 0.45) > area(outer) / (1 - 0.45 * 0.45), `${id}: core built-up denser than the edge`)
 }
 
 // ── lanes: on land, inside their town, off the roads
 let badLane = 0
 const discs = new Map(townDiscs(R).map(d => [d.id, d]))
-for (const pl of plans) for (const l of pl.lanes) for (const [x, z] of l.pts) {
+for (const pl of plans) for (const l of pl.lanes) for (const [i, [x, z]] of l.pts.entries()) {
+  // a lane's first point sits ON the kerb or the square's rim by design: that is where it joins
+  if (i === 0) continue
   const d = discs.get(pl.place)!, nr = nearestRoad(R, x, z)
   if (R.heightAt(x, z) < 1.5 || Math.hypot(x - d.x, z - d.z) > pl.r || (nr.road && nr.d < nr.road.width / 2)) badLane++
 }
 ok(badLane === 0, `lane points in water, off-town or on a road: ${badLane}`)
+
+const segDist = (pts: [number, number, number][], x: number, z: number) => {
+  let best = Infinity
+  for (let k = 0; k < pts.length - 1; k++) {
+    const [ax, az] = pts[k], [bx, bz] = pts[k + 1], dx = bx - ax, dz = bz - az, L = dx * dx + dz * dz || 1
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L))
+    best = Math.min(best, Math.hypot(ax + dx * t - x, az + dz * t - z))
+  }
+  return best
+}
+// ── every lane is joined: its first point is on a road kerb / the square, or it crosses another lane that is
+let loose = 0
+for (const pl of plans) {
+  const seen = new Set<number>()
+  const onNet = (x: number, z: number) => { const nr = nearestRoad(R, x, z); return (nr.road && nr.d < nr.road.width / 2 + 1.5) || nearPad(R, x, z, 1.5) }
+  pl.lanes.forEach((l, i) => { if (onNet(l.pts[0][0], l.pts[0][1])) seen.add(i) })
+  for (let grew = true; grew;) {
+    grew = false
+    pl.lanes.forEach((l, i) => {
+      if (seen.has(i)) return
+      if ([...seen].some(j => l.pts.some(([x, z]) => segDist(pl.lanes[j].pts, x, z) < 5))) { seen.add(i); grew = true }
+    })
+  }
+  loose += pl.lanes.length - seen.size
+}
+ok(loose === 0, `lanes not joined to the high street: ${loose}`)
 
 // ── deterministic: the same map plans the same towns
 const again = planTowns(R)
