@@ -18,10 +18,13 @@ import { caveRoomAt } from './cavern'
 import { gunForSlate, holdGun, stepGun, stepRounds, reloadGun, PLATE, type GunState, type Round, type Target, type RangeGun } from './shared/gunplay'
 import { Tracers, TracerFx } from './shared/tracers'
 import { hudSay } from './shared/game-hud'
+import { touch } from './shared/touch'
 
 // ── the store the page's HUD reads ──────────────────────────────────────────────────────────────────────────────────
 type GunHud = { gun: RangeGun | null; ammo: number; reloading: boolean; inShop: boolean }
 let hudState: GunHud = { gun: null, ammo: 0, reloading: false, inShop: false }
+/** 0..1, how far into the sights you are (eased, so the zoom glides rather than snaps). Read every frame by the page. */
+let adsT = 0, adsFov = 50
 const subs = new Set<() => void>()
 const setHud = (h: Partial<GunHud>) => {
   const next = { ...hudState, ...h }
@@ -37,6 +40,15 @@ export function useGunHud() {
 }
 /** True while a gun is in hand in the shop: R reloads instead of sending you back to the road. */
 export const rangeHolds = () => !!hudState.gun
+/** ★ AIM DOWN SIGHTS (Alex 11-15). Hold right-click (phone: the aim button). The page asks two things every frame:
+ *  the field of view to use (null = yours, not aiming), and how much to slow the look so the zoomed view does not
+ *  whip (scaled by the zoom, the standard "same feel at every zoom" trick). */
+export const rangeFov = (base: number) => (adsT > 0.001 ? base + (adsFov - base) * adsT : null)
+export const rangeLookScale = (base: number) => (adsT > 0.001 ? (base + (adsFov - base) * adsT) / base : 1)
+/** The phone's aim button code (a held touch key, same mechanism as jump/slide). */
+export const AIM_CODE = 'GunAim'
+/** Sights per class: how far each zooms. The Lance is the scope; the Roar barely zooms at all. */
+const ADS_FOV_OF: Record<string, number> = { SIDEARM: 58, SHORTBARREL: 55, LONGBARREL: 48, BREACHER: 62, REACHER: 28 }
 const cap = (s: string) => s[0] + s.slice(1).toLowerCase()
 
 // ── the models: boxes painted by class, one silhouette per Slate ────────────────────────────────────────────────────
@@ -96,6 +108,7 @@ export function GunRange({ cave }: { cave: Cavern }) {
   const fx = useMemo(() => new TracerFx(), [])
   const targets = useRef<Target[]>(shop.targets.map(t => ({ id: t.id, x: t.x, y: cave.y, z: t.z, yaw: t.yaw, swing: 0, swingV: 0, hits: 0, flash: 0, lastZone: null })))
   const trigger = useRef(false)
+  const aimHeld = useRef(false)
   const near = useRef<string | null>(null)
   const tally = useRef({ shots: 0, hits: 0, heads: 0, best: 0, quiet: 0 })
   const kick = useRef(0)
@@ -108,18 +121,23 @@ export function GunRange({ cave }: { cave: Cavern }) {
     const g = gunForSlate(slate); if (!g) return
     gun.current = holdGun(g); tally.current = { shots: 0, hits: 0, heads: 0, best: 0, quiet: 0 }
     setHud({ gun: g, ammo: g.clip, reloading: false })
-    hudSay(`${cap(g.name)} · ${g.slot.toLowerCase()} · ${g.burst > 1 ? `${g.burst}-round burst` : g.pellets > 1 ? `${g.pellets} pellets` : g.auto ? 'full auto' : 'semi-auto'} · click to fire, R reloads`, 'item')
+    hudSay(`${cap(g.name)} · ${g.slot.toLowerCase()} · ${g.burst > 1 ? `${g.burst}-round burst` : g.pellets > 1 ? `${g.pellets} pellets` : g.auto ? 'full auto' : 'semi-auto'} · hold to fire, right-click aims, R reloads`, 'item')
   }
   const putBack = (why: string) => {
     if (!gun.current) return
     hudSay(`${cap(gun.current.gun.name)} back on its rack · ${why}`, 'info')
-    gun.current = null; trigger.current = false; setHud({ gun: null })
+    gun.current = null; trigger.current = false; aimHeld.current = false; setHud({ gun: null })
   }
 
   useEffect(() => {
     const locked = () => document.pointerLockElement === gl.domElement
-    const down = (e: MouseEvent) => { if (e.button === 0 && gun.current && locked()) trigger.current = true }
-    const up = (e: MouseEvent) => { if (e.button === 0) trigger.current = false }
+    const down = (e: MouseEvent) => {
+      if (!gun.current || !locked()) return
+      if (e.button === 0) trigger.current = true
+      if (e.button === 2) aimHeld.current = true
+    }
+    const up = (e: MouseEvent) => { if (e.button === 0) trigger.current = false; if (e.button === 2) aimHeld.current = false }
+    const noMenu = (e: MouseEvent) => { if (gun.current) e.preventDefault() }
     const key = (e: KeyboardEvent) => {
       if (e.repeat) return
       if (e.code === 'KeyE' && near.current) {
@@ -128,13 +146,13 @@ export function GunRange({ cave }: { cave: Cavern }) {
       }
       if (e.code === 'KeyR' && gun.current) { reloadGun(gun.current); setHud({ reloading: gun.current.reloading > 0 }) }
     }
-    window.addEventListener('mousedown', down); window.addEventListener('mouseup', up); window.addEventListener('keydown', key)
+    window.addEventListener('mousedown', down); window.addEventListener('mouseup', up); window.addEventListener('keydown', key); window.addEventListener('contextmenu', noMenu)
     // probes for a scripted check on prod
     ;(window as unknown as { __range?: unknown }).__range = {
-      take, fire: (on: boolean) => { trigger.current = on }, state: () => ({ held: gun.current?.gun.id ?? null, ammo: gun.current?.ammo, rounds: rounds.current.length, hits: targets.current.map(t => t.hits) }),
+      take, fire: (on: boolean) => { trigger.current = on }, aim: (on: boolean) => { aimHeld.current = on }, ads: () => adsT, state: () => ({ held: gun.current?.gun.id ?? null, ammo: gun.current?.ammo, rounds: rounds.current.length, hits: targets.current.map(t => t.hits) }),
       shop: () => shop,
     }
-    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('keydown', key); setHud({ gun: null, inShop: false }) }
+    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('keydown', key); window.removeEventListener('contextmenu', noMenu); adsT = 0; setHud({ gun: null, inShop: false }) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gl])
 
@@ -160,11 +178,17 @@ export function GunRange({ cave }: { cave: Cavern }) {
     }
     // the gun
     const g = gun.current
+    if (!g) adsT = Math.max(0, adsT - dt / 0.11)
     if (g) {
-      const fired = stepGun(g, dt, trigger.current, eye, aim, rand, rounds.current)
+      // the sights: ease in over ~0.15 s, out a touch faster; reloading drops you out of them
+      const aiming = (aimHeld.current || touch.held.has(AIM_CODE)) && g.reloading <= 0
+      adsT = Math.max(0, Math.min(1, adsT + (aiming ? dt / 0.15 : -dt / 0.11)))
+      adsFov = ADS_FOV_OF[g.gun.slot] ?? 50
+      const fired = stepGun(g, dt, trigger.current || touch.fire, eye, aim, rand, rounds.current, adsT > 0.6)
       for (const f of fired) {
         // at the held gun's muzzle (the viewmodel: 0.16 right, 0.15 down, its barrel ~0.5 m + its length out)
-        const tip = new THREE.Vector3(0.16, -0.15, -0.5 - gunLen(g.gun) * 0.5).applyQuaternion(camera.quaternion).add(eye)
+        const a = adsT * adsT * (3 - 2 * adsT)
+        const tip = new THREE.Vector3(0.16 * (1 - a), -0.15 + a * 0.045, -0.42 - gunLen(g.gun) * 0.5).applyQuaternion(camera.quaternion).add(eye)
         fx.flashes.push({ x: tip.x, y: tip.y, z: tip.z, dx: f.dx, dy: f.dy, dz: f.dz })
         kick.current = Math.min(1, kick.current + 0.45 + g.gun.kickPitch * 12)
         tally.current.shots++
@@ -192,7 +216,9 @@ export function GunRange({ cave }: { cave: Cavern }) {
         const rel = g.reloading > 0 ? Math.sin(Math.min(1, 1 - g.reloading / g.gun.reloadTime) * Math.PI) : 0
         vm.current.position.copy(camera.position)
         vm.current.quaternion.copy(camera.quaternion)
-        vm.current.translateX(0.16); vm.current.translateY(-0.15 - rel * 0.12); vm.current.translateZ(-0.5 + kick.current * 0.05)
+        // hip: low right. Sights: centred and LOW, so you look along its top (centred on the eye it hid the target)
+        const a = adsT * adsT * (3 - 2 * adsT)
+        vm.current.translateX(0.16 * (1 - a)); vm.current.translateY(-0.15 + a * 0.045 - rel * 0.12); vm.current.translateZ(-0.5 + a * 0.08 + kick.current * (0.05 - a * 0.03))
         vm.current.rotateX(kick.current * 0.18 - rel * 0.6)
       }
     }

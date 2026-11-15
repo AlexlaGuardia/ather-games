@@ -40,6 +40,32 @@ for (const [i, slate] of ['SIDEARM', 'SHORTBARREL', 'LONGBARREL', 'BREACHER', 'R
   const msgs = await p.evaluate(() => [...document.querySelectorAll('[data-hud="messages"] > div')].map(d => d.textContent))
   res[slate] = { held: after.held, ammoUsed: before.ammo - after.ammo, flew: mid.rounds, hits: after.hits.reduce((a: number, h: number) => a + h, 0) - before.hits.reduce((a: number, h: number) => a + h, 0), hotbar: hot, msgs: msgs.slice(-2) }
 }
+// ★ held trigger re-fires a semi-auto; ADS zooms (Alex 11-15)
+await p.evaluate((x, z, y) => (window as any).__drive.footTp(x, z, y, -0.02), sx, sz, yaw); await sleep(1200)
+await p.evaluate(() => (window as any).__range.take('SIDEARM')); await sleep(300)
+const a0 = await p.evaluate(() => (window as any).__range.state().ammo)
+await p.evaluate(() => (window as any).__range.fire(true)); await sleep(2500); await p.evaluate(() => (window as any).__range.fire(false))
+const a1 = await p.evaluate(() => (window as any).__range.state().ammo)
+res.heldRepeater = { shotsFromOneHold: a0 - a1 }
+await p.evaluate(() => (window as any).__range.take('REACHER')); await sleep(300)
+const fovHip = await p.evaluate(() => (document.querySelector('canvas') as any) && (window as any).__range.ads())
+await p.evaluate(() => (window as any).__range.aim(true)); await sleep(2500)
+const adsIn = await p.evaluate(() => (window as any).__range.ads())
+await p.screenshot({ path: `${out}/gun-ads-lance.png` })
+await p.evaluate(() => (window as any).__range.aim(false)); await sleep(2000)
+res.ads = { hip: fovHip, aimed: adsIn, after: await p.evaluate(() => (window as any).__range.ads()) }
+// phone: the fire + aim buttons appear only while a gun is held
+const ph = await b.newPage(); await ph.emulate({ viewport: { width: 844, height: 390, isMobile: true, hasTouch: true, deviceScaleFactor: 1 }, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' })
+await ph.goto(`${url}/shimmer/open/continent?hour=13`, { waitUntil: 'load', timeout: 180000 })
+await ph.waitForFunction(() => !!(window as any).__drive && !!(window as any).__range, { timeout: 180000 })
+await sleep(3000); await ph.touchscreen.tap(422, 200); await sleep(2500)
+await ph.evaluate((x, z, y) => (window as any).__drive.footTp(x, z, y, -0.02), sx, sz, yaw); await sleep(2500)
+const btns = () => ph.evaluate(() => [...document.querySelectorAll('div')].filter(d => d.children.length === 0 && /^(fire|aim)$/.test(d.textContent ?? '')).map(d => d.textContent))
+const before = await btns()
+await ph.evaluate(() => (window as any).__range.take('LONGBARREL')); await sleep(2000)
+const holding = await btns()
+await ph.screenshot({ path: `${out}/gun-phone.png` })
+res.phone = { before, holding }
 res.errors = errs.slice(0, 5)
 console.log(JSON.stringify(res, null, 1))
 await b.close()

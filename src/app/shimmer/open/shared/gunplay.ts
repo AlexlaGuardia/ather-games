@@ -63,12 +63,12 @@ export function reloadGun(g: GunState) {
 
 export interface Muzzle { x: number; y: number; z: number; dx: number; dy: number; dz: number; gun: string }
 
-/** One tick of the trigger. `down` = trigger held. Pushes rounds into `out`; returns the muzzle flashes it fired
+/** One tick of the trigger. `down` = trigger held; `ads` = aiming down the sights (the tighter cone). Pushes rounds into `out`; returns the muzzle flashes it fired
  *  (one per round, not per pellet) so the host can flash, kick and play sound. */
 export function stepGun(
   g: GunState, dt: number, down: boolean,
   eye: { x: number; y: number; z: number }, aim: { x: number; y: number; z: number },
-  rand: () => number, out: Round[],
+  rand: () => number, out: Round[], ads = false,
 ): Muzzle[] {
   const w = g.gun, fired: Muzzle[] = []
   g.sinceShot += dt
@@ -77,7 +77,7 @@ export function stepGun(
   const pressed = down && !g.wasDown
   g.wasDown = down
   const shoot = () => {
-    const spread = spreadDeg(w, g.bloom, false)
+    const spread = spreadDeg(w, g.bloom, ads)
     for (let p = 0; p < w.pellets; p++) {
       const [dx, dy, dz] = coneDirection(aim.x, aim.y, aim.z, spread, rand(), rand())
       // rounds leave a hair below and right of the eye, where the viewmodel's muzzle is, so a tracer is SEEN leaving
@@ -96,7 +96,10 @@ export function stepGun(
     if (g.ammo <= 0) g.burstLeft = 0
     return fired
   }
-  const want = w.auto ? down : pressed
+  // ★ HOLDING THE TRIGGER FIRES ON EVERY GUN (Alex 11-15: "holding the trigger fires even if its only bursts at a
+  // time"). A semi-auto held re-fires at its own fireCd; a burst gun held fires burst after burst, fireCd apart.
+  // `pressed` still matters for one thing: a press on an empty clip starts the reload.
+  const want = down
   if (want && canFire(w, g.sinceShot, g.ammo, g.reloading)) {
     shoot()
     if (w.burst > 1) { g.burstLeft = w.burst - 1; g.burstT = w.burstGap }

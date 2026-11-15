@@ -116,7 +116,7 @@ const ROOMS: CaveRoom[] = [
   { id: 'arcade', label: 'The arcade room', detail: 'Marks are spent here · not open yet', u: 62, v: -15, r: 7 },
   { id: 'deep', label: '···', detail: 'If you know, you know.', u: 44, v: -37, r: 3 },
   { id: 'guns', label: 'The gun shop', detail: 'One rack per class · E takes a gun off the rack · the lane is out back', u: 24, v: -28, r: 7 },
-  { id: 'lane', label: 'The test lane', detail: 'Click to fire · R reloads · E at a rack swaps', u: 40, v: -43.5, r: 14 },
+  { id: 'lane', label: 'The test lane', detail: 'Hold to fire · right-click aims · R reloads · E at a rack swaps', u: 40, v: -43.5, r: 14 },
 ]
 // lanterns (u, v, height); the side-tunnel gets none on purpose
 const LANTERNS: [number, number, number][] = [

@@ -27,7 +27,7 @@ import { DARTER_STOCK, tuneFromSpec } from '../courser'
 import { buildSpec, type Slot, type Tier } from '../courser-build'
 import { buildCavern, caveRoomAt, type Cavern } from '../cavern'
 import { CavernView } from '../cavern-view'
-import { GunRange, useGunHud, rangeHolds } from '../gun-range'
+import { GunRange, useGunHud, rangeHolds, rangeFov, rangeLookScale, AIM_CODE } from '../gun-range'
 import { footWorld, tickFoot, exitSpot, canEnter, stepOut, EXIT_MAX_SPEED } from '../on-foot'
 import { eyeY, WALK_SPEED, SPEED_CAP, type LocoState } from '../shared/locomotion'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
@@ -765,8 +765,9 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
     const blur = () => keys.current.clear()
     const move = (e: MouseEvent) => {
       if (mode.current !== 'foot' || document.pointerLockElement !== gl.domElement) return
-      view.current.yaw -= e.movementX * SENS
-      view.current.pitch = Math.max(-1.5, Math.min(1.5, view.current.pitch - e.movementY * SENS))
+      const sens = SENS * rangeLookScale(FOOT_FOV)    // aiming down sights slows the look with the zoom (gun-range.tsx)
+      view.current.yaw -= e.movementX * sens
+      view.current.pitch = Math.max(-1.5, Math.min(1.5, view.current.pitch - e.movementY * sens))
     }
     const click = () => { if (mode.current === 'foot' && document.pointerLockElement !== gl.domElement) lock() }
     window.addEventListener('keydown', down); window.addEventListener('keyup', up); window.addEventListener('blur', blur)
@@ -854,8 +855,9 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
     const lc = loco.current
     if (onFoot && lc) {
       if (touch.look.dx || touch.look.dy) {
-        view.current.yaw -= touch.look.dx * TOUCH_LOOK_SENS
-        view.current.pitch = Math.max(-1.5, Math.min(1.5, view.current.pitch - touch.look.dy * TOUCH_LOOK_SENS))
+        const ts = TOUCH_LOOK_SENS * rangeLookScale(FOOT_FOV)
+        view.current.yaw -= touch.look.dx * ts
+        view.current.pitch = Math.max(-1.5, Math.min(1.5, view.current.pitch - touch.look.dy * ts))
       }
       const { yaw } = view.current
       const fwx = -Math.sin(yaw), fwz = -Math.cos(yaw), rtx = Math.cos(yaw), rtz = -Math.sin(yaw)
@@ -951,7 +953,11 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
     const footSpeed = onFoot && loco.current ? Math.hypot(loco.current.hvx, loco.current.hvz) : 0
     const fov = onFoot ? FOOT_FOV + FOOT_FOV_KICK * Math.min(1, Math.max(0, (footSpeed - WALK_SPEED) / (SPEED_CAP - WALK_SPEED)))
       : chaseShape(Math.abs(fwd) / tuneRef.current.top).fov
-    if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, frameDt * 5); cam.updateProjectionMatrix() }
+    // aiming down sights (gun-range.tsx) owns the zoom while it is in: its own ease, applied directly (the 5/s lag
+    // below would turn a 0.15 s ADS into half a second of mush)
+    const ads = onFoot ? rangeFov(FOOT_FOV) : null
+    if (ads !== null) { if (Math.abs(cam.fov - ads) > 0.01) { cam.fov = ads; cam.updateProjectionMatrix() } }
+    else if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, frameDt * 5); cam.updateProjectionMatrix() }
 
     // the map's "you": every frame, so the minimap turns with you rather than at the HUD's 8 Hz
     if (onFoot && loco.current) { track.current.x = loco.current.px; track.current.z = loco.current.pz; track.current.yaw = view.current.yaw }
@@ -1208,8 +1214,8 @@ export default function ContinentRide() {
       )}
       <SpeedStreaks frac={hud.frac} />
       {isTouch && started && !showMap && !garage && !board && !ferrying && (
-        <TouchControls showFire={false} actions={touchActions}
-          holds={hud.foot ? undefined : [{ code: 'Space', label: 'drift' }]}
+        <TouchControls showFire={!!hud.foot && gunHud.holding} actions={touchActions}
+          holds={hud.foot ? (gunHud.holding ? [{ code: AIM_CODE, label: 'aim' }, { code: 'ShiftLeft', label: 'slide' }, { code: 'Space', label: 'jump' }] : undefined) : [{ code: 'Space', label: 'drift' }]}
           stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hud.foot ? 48 : 148 }} />
       )}
       {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} vitals={vitalsRef} mana={manaRef} entries={gunHud.holding ? gunHud.entries : hotbarEntries(inv)} sel={slot} onSelect={setSlot}

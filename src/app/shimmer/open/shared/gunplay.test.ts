@@ -21,7 +21,23 @@ const run = (id: string, frames: number, down: (i: number) => boolean) => {
   return { g, out, shots }
 }
 // semi-auto: holding the trigger fires ONE round
-ok(run('repeater', 60, () => true).shots === 1, 'the Repeater fires more than once on one held press')
+// ★ holding the trigger fires on every gun (Alex 11-15): a semi-auto held re-fires at its fireCd
+const rp = run('repeater', 60, () => true)
+ok(rp.shots >= 5 && rp.shots <= 7, `the Repeater held for 1 s fires ${rp.shots} (expected ~6 at fireCd 0.16)`)
+// and a burst gun held fires burst after burst: 2 s of Backbone = bursts of 3, fireCd apart
+const bh = run('backbone', 120, () => true)
+ok(bh.shots % 3 === 0 && bh.shots >= 9, `the Backbone held for 2 s fires ${bh.shots} (whole bursts, several of them)`)
+// aiming down the sights tightens the cone: the same 200 rounds land closer to the aim line
+{
+  const spreadOf = (ads: boolean) => {
+    const g = holdGun(RANGE_GUNS.find(w => w.id === 'lance')!), out: Round[] = []
+    let sum = 0
+    for (let i = 0; i < 200; i++) { g.sinceShot = 99; g.ammo = 8; g.bloom = 0; out.length = 0; stepGun(g, DT, true, eye, aim, rand, out, ads); g.wasDown = false; sum += Math.hypot(out[0].vx, out[0].vy) / Math.abs(out[0].vz) }
+    return sum / 200
+  }
+  const hip = spreadOf(false), ads = spreadOf(true)
+  ok(ads < hip / 5, `ADS does not tighten the Lance's cone (hip ${hip.toFixed(4)}, ads ${ads.toFixed(4)})`)
+}
 // auto: holding fires many
 const sp = run('spitter', 60, () => true)
 ok(sp.shots >= 8, `the Spitter held for 1 s fires ${sp.shots} (auto)`)
