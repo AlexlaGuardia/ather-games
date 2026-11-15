@@ -13,6 +13,7 @@
 // ★ PURE: returns RGBA pixels, so it tests under node. ather/minimap.tsx and the fold map draw it onto canvases.
 
 import { BIOME, type BiomeId, type Wilds } from './wilds'
+import { SQ, GRID_HALF, PLOT_R, insideIsland, plotHeightAt, sqId, squareAt } from './plot'
 
 export const PLATE_MPP = 2          // metres per plate pixel (a 1 km tile = 500 px)
 export const CONTOUR = 4            // metres between contour lines
@@ -99,4 +100,70 @@ const cache = new Map<string, HTMLCanvasElement>()
 export function atherPlate(W: Wilds): HTMLCanvasElement {
   let c = cache.get(W.meta.name); if (!c) { c = atherPlateCanvas(W); cache.set(W.meta.name, c) }
   return c
+}
+
+// ── THE HOME PLOT'S PLATE (Alex 11-15: "next up maybe the homeplots map") ─────────────────────────────────────────
+// The same recipe on the island: the void around it (DEEP, star-flecked, map-kit's ATHER_CLOUD), a lit rim where the
+// island falls away, meadow in the Atlas hue with north-west light and 1 m contours, and the garden grid: your squares
+// in full colour, the rest under the fold-mist (the cloud colour) with faint seams so the 9×9 reads. Gate and Gregory
+// are drawn by the minimap on top (they are places, not ground).
+
+
+export const PLOT_MPP = 0.5
+export const PLOT_EXTENT = PLOT_R + 14   // metres from the centre the plate covers (island + a margin of void)
+
+export function plotPlatePixels(owned: ReadonlySet<string>, mpp = PLOT_MPP): { w: number; h: number; px: Uint8ClampedArray; extent: number } {
+  const E = PLOT_EXTENT, w = Math.round((E * 2) / mpp), h = w
+  const px = new Uint8ClampedArray(w * h * 4)
+  const X = (i: number) => -E + (i + 0.5) * mpp, Z = (j: number) => -E + (j + 0.5) * mpp
+  const S = 4
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const x = X(i), z = Z(j), o = (j * w + i) * 4
+    let r: number, g: number, b: number
+    if (!insideIsland(x, z)) {
+      // the void: deep, with a few stars; a soft glow hugs the island's edge (the fold's light spilling over)
+      const n = Math.sin(i * 12.9898 + j * 78.233) * 43758.5453, f = n - Math.floor(n)
+      r = 8; g = 6; b = 20
+      if (f > 0.9965) { r = g = 200; b = 230 }
+      let edge = 0; for (const [dx, dz] of [[2, 0], [-2, 0], [0, 2], [0, -2], [4, 0], [-4, 0], [0, 4], [0, -4]]) if (insideIsland(x + dx, z + dz)) edge = Math.max(edge, Math.abs(dx) === 2 || Math.abs(dz) === 2 ? 1 : 0.5)
+      r += edge * 60; g += edge * 62; b += edge * 80
+    } else {
+      const y = plotHeightAt(x, z)
+      ;[r, g, b] = ATHER_HUE[2]
+      const dx = plotHeightAt(x + S * mpp, z) - plotHeightAt(x - S * mpp, z), dz = plotHeightAt(x, z + S * mpp) - plotHeightAt(x, z - S * mpp)
+      const k = Math.round(Math.max(0.7, Math.min(1.25, 1 - (dx + dz) * 0.35)) * 8) / 8
+      r *= k; g *= k; b *= k
+      const band = Math.floor(y), bx = Math.floor(plotHeightAt(x + mpp, z)), bz = Math.floor(plotHeightAt(x, z + mpp))
+      if (bx !== band || bz !== band) { r *= 0.86; g *= 0.88; b *= 0.92 }
+      // the rim: the last metre before the fall, lit
+      let rim = false; for (const [ex, ez] of [[1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2]]) if (!insideIsland(x + ex, z + ez)) rim = true
+      if (rim) { r += 40; g += 42; b += 40 }
+      // the garden grid: yours in colour, the rest under the fold-mist
+      const sq = squareAt(x, z)
+      if (sq) {
+        const mine = owned.has(sqId(sq.i, sq.j))
+        if (!mine) { r += (233 - r) * 0.62; g += (237 - g) * 0.62; b += (248 - b) * 0.62 }
+        const lx = (x + GRID_HALF) % SQ, lz = (z + GRID_HALF) % SQ
+        if (lx < mpp * 1.2 || lz < mpp * 1.2) { const s = mine ? 0.86 : 0.93; r *= s; g *= s; b *= s }
+      }
+      r += (233 - r) * 0.1; g += (237 - g) * 0.1; b += (248 - b) * 0.1
+      const n = Math.sin(i * 12.9898 + j * 78.233) * 43758.5453, grain = 0.985 + (n - Math.floor(n)) * 0.025
+      r *= grain; g *= grain; b *= grain
+    }
+    px[o] = r; px[o + 1] = g; px[o + 2] = b; px[o + 3] = 255
+  }
+  return { w, h, px, extent: E }
+}
+const plotCache = new Map<string, HTMLCanvasElement>()
+/** Browser: the home plate on a canvas, cached per set of owned squares. */
+export function plotPlate(owned: ReadonlySet<string>): { canvas: HTMLCanvasElement; extent: number } {
+  const key = [...owned].sort().join('|')
+  let c = plotCache.get(key)
+  if (!c) {
+    const { w, h, px } = plotPlatePixels(owned)
+    c = document.createElement('canvas'); c.width = w; c.height = h
+    const ctx = c.getContext('2d')!, img = ctx.createImageData(w, h); img.data.set(px); ctx.putImageData(img, 0, 0)
+    plotCache.clear(); plotCache.set(key, c)
+  }
+  return { canvas: c, extent: PLOT_EXTENT }
 }

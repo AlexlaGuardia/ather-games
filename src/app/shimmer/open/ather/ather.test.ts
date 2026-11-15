@@ -13,7 +13,7 @@ import { newCombat, stepCombat, spawnHollow, fire, populate, KEEPER_HP, SHAMBLER
 import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVES, PANIC_MIN_WINDUP } from './champion'
 import { placeNodes, nodeAdjacency, ownerOf, nodeRegions, polyArea, NODE_CLEAR_OF, GAME_DAY_MS, SUB } from './nodes'
 import { advance, clearAt, freshSpread, infectedIds, SPREAD } from './spread'
-import { atherPlatePixels, ATHER_HUE } from './plate'
+import { atherPlatePixels, ATHER_HUE, plotPlatePixels, PLOT_MPP } from './plate'
 import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
 import { canPlant, plant, lift, reachedBiomes, waymarksInWorld, TILE_CENTRE, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
 
@@ -433,6 +433,21 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   ok(me[1] > me[2] && wo[1] - wo[0] > me[1] - me[0], 'plate: meadow and woods do not read as two greens (woods the cooler one)')
   ok(JSON.stringify(ATHER_HUE[2]) === '[170,206,120]', 'plate: meadow drifted off the Atlas hue (continent/map.tsx ATHER_BANDS)')
   ok(atherPlatePixels(W).px.every((v, k) => v === pl.px[k]), 'plate: not deterministic')
+}
+
+// the home plot's plate: your squares in colour, the rest under mist, the void outside the island
+{
+  const owned = new Set(STARTING_SQUARES)
+  const pp = plotPlatePixels(owned)
+  const at = (x: number, z: number) => { const i = Math.floor((x + pp.extent) / PLOT_MPP), j = Math.floor((z + pp.extent) / PLOT_MPP), o = (j * pp.w + i) * 4; return [pp.px[o], pp.px[o + 1], pp.px[o + 2]] }
+  const mine = squareCentre(4, 4), mist = squareCentre(0, 0), voidPt = [pp.extent - 2, pp.extent - 2]
+  const lum = (c: number[]) => c[0] + c[1] + c[2]
+  ok(at(mine.x + 3, mine.z + 3)[1] > at(mine.x + 3, mine.z + 3)[2] + 20, 'plot plate: a held square is not green')
+  const sat = (c: number[]) => Math.max(...c) - Math.min(...c)   // the mist is PALE (washed out), held ground is vivid; brightness alone depends on the slope's light
+  ok(sat(at(mist.x + 3, mist.z + 3)) < sat(at(mine.x + 3, mine.z + 3)) * 0.5, 'plot plate: an unbought square is not under the pale mist')
+  ok(lum(at(voidPt[0], voidPt[1])) < 120, 'plot plate: the corner past the island is not the void')
+  const more = plotPlatePixels(new Set([...owned, sqId(0, 0)]))
+  ok(more.px.some((v, k) => v !== pp.px[k]), 'plot plate: buying a square does not change the map')
 }
 
 if (fails.length) { console.error(`ather: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

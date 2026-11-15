@@ -15,9 +15,9 @@ import { ATHER_CLOUD, drawCloud, drawKeeper } from '../../ui/map-kit'
 import { screenHeading } from '../../voxel3d/map-heading'
 import { FOG_CELL, cellOrigin, type Fog } from './explored'
 import { GREG_WAYMARK, type Waymark } from './waymarks'
-import { GRID, SQ, GRID_HALF, GATE, GREG, sqId, PLOT_R } from './plot'
+import { GATE, GREG } from './plot'
 import type { Wilds } from './wilds'
-import { atherPlate } from './plate'
+import { atherPlate, plotPlate, PLOT_MPP } from './plate'
 import type { CompassPose } from '../shared/game-hud'
 
 const REACH = 120          // Wilds: metres from centre to edge
@@ -94,13 +94,11 @@ export function AtherMiniMap({ size, zone, W, fog, tileOff, pose, waymarks, regi
         }
       } else {
         const k = S / (PLOT_REACH * 2), X = (x: number) => S / 2 + (x - p.x) * k, Z = (z: number) => S / 2 + (z - p.z) * k
+        // the home plot's own plate (plate.ts): the island in the void, your squares in colour, the rest under mist
         ctx.fillStyle = '#080614'; ctx.fillRect(0, 0, S, S)
-        ctx.fillStyle = '#b9d3a0'; ctx.beginPath(); ctx.arc(X(0), Z(0), PLOT_R * k, 0, Math.PI * 2); ctx.fill()
-        for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) {
-          const held = owned.has(sqId(i, j)), x = i * SQ - GRID_HALF, z = j * SQ - GRID_HALF
-          ctx.fillStyle = held ? '#8fbf6a' : 'rgba(233,237,248,0.72)'
-          ctx.fillRect(X(x) + 0.5, Z(z) + 0.5, SQ * k - 1, SQ * k - 1)
-        }
+        const { canvas: pl, extent: E } = plotPlate(owned), span = (PLOT_REACH * 2) / PLOT_MPP
+        ctx.imageSmoothingEnabled = true
+        ctx.drawImage(pl, (p.x + E) / PLOT_MPP - span / 2, (p.z + E) / PLOT_MPP - span / 2, span, span, 0, 0, S, S)
         const dot = (x: number, z: number, col: string) => { ctx.fillStyle = col; ctx.strokeStyle = '#1a1410'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X(x), Z(z), 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke() }
         dot(GATE.x, GATE.z, '#e7c766'); dot(GREG.x, GREG.z, '#c9a27a')
       }
