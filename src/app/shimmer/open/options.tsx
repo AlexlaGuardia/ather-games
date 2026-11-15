@@ -12,6 +12,9 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { OptionsPanel, OptionRow, OptionSlider, OptionHead } from '../hud/options-panel'
 import { hearthDisplay } from '../ui/hearth'
 import { useSettings, setSettings, resetSettings, FOV_RANGE, RENDER_RANGE, SENS_RANGE } from './shared/settings'
+import { keeperKey } from '@/lib/keeper-local'
+import { BIRTH_KEY } from '../play3d/rune-inventory'
+import { refreshBirth } from './birth-gate'
 import { ACTIONS, RESERVED, useKeymap, keyFor, keyName, setBinding, resetKeymap, setCapturing, installKeymap } from './shared/keymap'
 
 function Toggle({ label, on, onFlip, sub, id }: { label: string; on: boolean; onFlip: () => void; sub?: string; id: string }) {
@@ -62,6 +65,19 @@ function Bindings() {
       <p className="text-[11.5px] italic leading-snug hk-faint" style={hearthDisplay}>A key already in use swaps over. Esc cancels. Esc, Tab, the arrows and the mouse stay where they are.</p>
       <OptionRow onClick={resetKeymap} label="Reset keys" tail="defaults" />
     </div>
+  )
+}
+
+/** Owner test lever (Alex 11-15: "clear my save for now to test that"): forget ONLY the birth rune, so the first-entry
+ *  ritual shows again. Two taps, and nothing else in the save is touched (bag, Marks, loadout, garden stay). */
+function ForgetBirth({ onDone }: { onDone: () => void }) {
+  const [armed, setArmed] = useState(false)
+  return (
+    <OptionRow onClick={() => {
+      if (!armed) { setArmed(true); return }
+      try { localStorage.removeItem(keeperKey(BIRTH_KEY)); localStorage.removeItem(BIRTH_KEY) } catch { /* private */ }
+      refreshBirth(); setArmed(false); onDone()
+    }} label={armed ? '⚠ Tap again: forget my birth rune' : '↺ Forget my birth rune'} tail={armed ? 'sure?' : 'see the ritual'} />
   )
 }
 
@@ -118,6 +134,7 @@ export function OpenOptions({ onClose, keys = WALK_KEYS, extraGame }: { onClose:
           <OptionRow href="/shimmer/open/continent" label="⛰ The continent" tail="drive" />
           <OptionRow href="/shimmer/dev" label="✧ Dev hub" tail="editors" />
           <OptionRow href="/shimmer/play3d/birth" label="✺ Choose a birth rune" tail="voxel" />
+          <ForgetBirth onDone={onClose} />
         </>}
       />
     </div>
