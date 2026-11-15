@@ -71,7 +71,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
         </div>
         {view === 'ather' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 200px', gap: 14 }}>
-            <div style={{ position: 'relative', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', background: '#334' }}>
+            <div style={{ position: 'relative', aspectRatio: '1', width: 'min(100%, calc(92vh - 120px))', justifySelf: 'center', borderRadius: 8, overflow: 'hidden', background: '#334' }}>
               <img src={`/open/wilds/${tile}-map.png`} alt="" style={{ width: '100%', height: '100%', imageRendering: 'pixelated', display: 'block' }} />
               {fog && W && <FogLayer fog={fog} W={W} />}
               <button title="Gregory's waymark" onClick={() => go({ kind: 'waymark', w: GREG_WAYMARK })} style={{ ...pin('#e7c766', 13), ...pct(GREG_WAYMARK.x, GREG_WAYMARK.z) }} />
