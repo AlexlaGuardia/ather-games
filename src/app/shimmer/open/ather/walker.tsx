@@ -10,9 +10,10 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { createLoco, tickLocomotion, eyeY, WALK_SPEED, SPEED_CAP, type LocoWorld } from '../shared/locomotion'
 import { touch, TOUCH_LOOK_SENS } from '../shared/touch'
+import { getSettings, useSettings, pixelRatioCap } from '../shared/settings'
 
 const SENS = 0.0022
-const FOV = 75, FOV_KICK = 8
+const FOV_KICK = 8   // the walk FOV itself is a setting now (shared/settings.ts › fov, default 75)
 
 export type Loco = ReturnType<typeof createLoco>
 export interface WalkerProps {
@@ -41,8 +42,10 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
     const up = (e: KeyboardEvent) => keys.current.delete(e.code)
     const move = (e: MouseEvent) => {
       if (!locked.current || frozen.current) return
-      look.current.yaw -= e.movementX * SENS
-      look.current.pitch = Math.max(-1.5, Math.min(1.5, look.current.pitch - e.movementY * SENS))
+      // sensitivity and invert are Options (shared/settings.ts), read live so a slider takes effect mid-walk
+      const st = getSettings(), k = SENS * st.mouseSens
+      look.current.yaw -= e.movementX * k
+      look.current.pitch = Math.max(-1.5, Math.min(1.5, look.current.pitch - e.movementY * k * (st.invertY ? -1 : 1)))
     }
     const blur = () => keys.current.clear()
     window.addEventListener('keydown', down); window.addEventListener('keyup', up)
@@ -61,7 +64,8 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
   }, [locked, frozen, ground])
 
   useEffect(() => { (camera as THREE.PerspectiveCamera).far = 900; camera.updateProjectionMatrix() }, [camera])
-  useEffect(() => { gl.setPixelRatio(Math.min(window.devicePixelRatio, 1.25)) }, [gl])
+  const { renderScale } = useSettings()
+  useEffect(() => { gl.setPixelRatio(pixelRatioCap()) }, [gl, renderScale])   // Options › Video › sharpness
 
   const fwd = useMemo(() => new THREE.Vector3(), []), right = useMemo(() => new THREE.Vector3(), [])
   const wish = useMemo(() => new THREE.Vector3(), [])
@@ -70,8 +74,9 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
     const k = frozen.current ? new Set<string>() : new Set([...keys.current, ...touch.held]), lc = loco.current
     // touch look: consume the dragged pixels every frame (dropped, not banked, while a panel has the screen)
     if (!frozen.current && (touch.look.dx || touch.look.dy)) {
-      look.current.yaw -= touch.look.dx * TOUCH_LOOK_SENS
-      look.current.pitch = Math.max(-1.5, Math.min(1.5, look.current.pitch - touch.look.dy * TOUCH_LOOK_SENS))
+      const st = getSettings(), k = TOUCH_LOOK_SENS * st.touchSens
+      look.current.yaw -= touch.look.dx * k
+      look.current.pitch = Math.max(-1.5, Math.min(1.5, look.current.pitch - touch.look.dy * k * (st.invertY ? -1 : 1)))
     }
     touch.look.dx = 0; touch.look.dy = 0
     const { yaw, pitch } = look.current
@@ -90,7 +95,8 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
     camera.position.set(lc.px, eyeY(lc), lc.pz)
     camera.rotation.set(pitch, yaw, 0, 'YXZ')
     const speed = Math.hypot(lc.hvx, lc.hvz), cam = camera as THREE.PerspectiveCamera
-    const fov = FOV + FOV_KICK * Math.min(1, Math.max(0, (speed - WALK_SPEED) / (SPEED_CAP - WALK_SPEED)))
+    const st = getSettings()
+    const fov = st.fov + (st.speedFov ? FOV_KICK : 0) * Math.min(1, Math.max(0, (speed - WALK_SPEED) / (SPEED_CAP - WALK_SPEED)))
     if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, dt * 8); cam.updateProjectionMatrix() }
     onTick(lc, yaw, dt)
   })

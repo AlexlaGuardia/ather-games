@@ -15,6 +15,8 @@ import { useInv, hotbarEntries } from '../shared/bag'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { VesselShop, VesselCounter } from '../vessel-shop'
+import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen, WALK_KEYS, type KeyRow } from '../options'
+import { getSettings, useSettings, pixelRatioCap } from '../shared/settings'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { GameHud, useGameHudSize, openMapBox, hudSay, type CompassPose, type Mana } from '../shared/game-hud'
 import type { Vitals } from '../../engine/vitals'
@@ -769,9 +771,10 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
     const blur = () => keys.current.clear()
     const move = (e: MouseEvent) => {
       if (mode.current !== 'foot' || document.pointerLockElement !== gl.domElement) return
-      const sens = SENS * rangeLookScale(FOOT_FOV)    // aiming down sights slows the look with the zoom (gun-range.tsx)
+      const st = getSettings()
+      const sens = SENS * st.mouseSens * rangeLookScale(st.fov)    // Options sensitivity; ADS slows the look with the zoom (gun-range.tsx)
       view.current.yaw -= e.movementX * sens
-      view.current.pitch = Math.max(-1.5, Math.min(1.5, view.current.pitch - e.movementY * sens))
+      view.current.pitch = Math.max(-1.5, Math.min(1.5, view.current.pitch - e.movementY * sens * (st.invertY ? -1 : 1)))
     }
     const click = () => { if (mode.current === 'foot' && document.pointerLockElement !== gl.domElement) lock() }
     window.addEventListener('keydown', down); window.addEventListener('keyup', up); window.addEventListener('blur', blur)
@@ -827,7 +830,8 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
   }, [R])
 
   useEffect(() => { (camera as THREE.PerspectiveCamera).far = 2500; camera.updateProjectionMatrix() }, [camera])
-  useEffect(() => { gl.setPixelRatio(Math.min(window.devicePixelRatio, 1.25)) }, [gl])
+  const { renderScale } = useSettings()
+  useEffect(() => { gl.setPixelRatio(pixelRatioCap()) }, [gl, renderScale])   // Options › Video › sharpness
 
   useFrame((_, frameDt) => {
     const k = keys.current, sc = scripted.current, onFoot = mode.current === 'foot'
@@ -859,9 +863,9 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
     const lc = loco.current
     if (onFoot && lc) {
       if (touch.look.dx || touch.look.dy) {
-        const ts = TOUCH_LOOK_SENS * rangeLookScale(FOOT_FOV)
+        const st = getSettings(), ts = TOUCH_LOOK_SENS * st.touchSens * rangeLookScale(st.fov)
         view.current.yaw -= touch.look.dx * ts
-        view.current.pitch = Math.max(-1.5, Math.min(1.5, view.current.pitch - touch.look.dy * ts))
+        view.current.pitch = Math.max(-1.5, Math.min(1.5, view.current.pitch - touch.look.dy * ts * (st.invertY ? -1 : 1)))
       }
       const { yaw } = view.current
       const fwx = -Math.sin(yaw), fwz = -Math.cos(yaw), rtx = Math.cos(yaw), rtz = -Math.sin(yaw)
@@ -955,11 +959,12 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
       if (u >= 1) glide.current = null
     }
     const footSpeed = onFoot && loco.current ? Math.hypot(loco.current.hvx, loco.current.hvz) : 0
-    const fov = onFoot ? FOOT_FOV + FOOT_FOV_KICK * Math.min(1, Math.max(0, (footSpeed - WALK_SPEED) / (SPEED_CAP - WALK_SPEED)))
+    const stv = getSettings()   // Options › Video: the walk FOV and the speed kick
+    const fov = onFoot ? stv.fov + (stv.speedFov ? FOOT_FOV_KICK : 0) * Math.min(1, Math.max(0, (footSpeed - WALK_SPEED) / (SPEED_CAP - WALK_SPEED)))
       : chaseShape(Math.abs(fwd) / tuneRef.current.top).fov
     // aiming down sights (gun-range.tsx) owns the zoom while it is in: its own ease, applied directly (the 5/s lag
     // below would turn a 0.15 s ADS into half a second of mush)
-    const ads = onFoot ? rangeFov(FOOT_FOV) : null
+    const ads = onFoot ? rangeFov(stv.fov) : null
     if (ads !== null) { if (Math.abs(cam.fov - ads) > 0.01) { cam.fov = ads; cam.updateProjectionMatrix() } }
     else if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, frameDt * 5); cam.updateProjectionMatrix() }
 
@@ -1013,6 +1018,9 @@ const SUPPLY: Supply[] = [
 const TOWNS = ['ashfeld', 'millbrook', 'rune-hold', 'passage']
 const ROAD_FACTOR = 1.3
 const FERRY_FARE = 8
+
+/** The continent's keys for Options › Controls: the walk set plus the courser's. */
+const CONTINENT_KEYS: KeyRow[] = [...WALK_KEYS, ['F', 'get in / out of the courser'], ['W S · A D', 'drive · steer'], ['Space', 'drift (driving)'], ['C', 'camera (driving)'], ['G', 'garage'], ['R', 'back to the road (on foot: reload a held gun)'], ['Right mouse', 'aim a held gun']]
 
 const JUNCTION_LABEL: Record<string, string> = { square: 'Town square', roundabout: 'Roundabout', cross: 'Crossroads', stop4: 'Four-way', tee: 'Junction', merge: 'Junction' }
 const ROAD_LABEL: Record<string, string> = { paved: 'Paved road', road: 'Road', trail: 'Trail', pass: 'Mountain pass',
@@ -1126,6 +1134,7 @@ export default function ContinentRide() {
       : !hud.foot && canBoard ? [{ code: 'KeyE', key: 'E', label: 'board', near: true }] : []),
     ...(hud.prompt ? [{ code: 'KeyF', key: 'F', label: hud.foot ? 'get in' : 'get out', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
+    { code: 'KeyO', key: 'O', label: 'options' },
     { code: 'KeyI', key: 'I', label: 'pack' },
     ...(!hud.foot ? [{ code: 'KeyC', key: 'C', label: 'camera' }, { code: 'KeyG', key: 'G', label: 'garage' }] : []),
     { code: 'KeyR', key: 'R', label: 'road' },
@@ -1197,7 +1206,9 @@ export default function ContinentRide() {
   }, [showMap, garage, board])
   const [vesselShop, setVesselShop] = useState(false)   // the Passage's vessel counter (vessel-shop.tsx)
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.code === 'Escape') setVesselShop(false) }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
-  useMenuLock(showMap || garage || !!board || bagOpen || vesselShop, getCanvas)
+  const optionsOpen = useOptionsOpen()   // Options (options.tsx): O, Esc once the mouse is free, the pack's gear
+  useOptionsKeys(showMap || garage || !!board || bagOpen || vesselShop)
+  useMenuLock(showMap || garage || !!board || bagOpen || vesselShop || optionsOpen, getCanvas)
   const [ptrLocked, setPtrLocked] = useState(false)
   useEffect(() => {
     const ch = () => setPtrLocked(!!document.pointerLockElement)
@@ -1241,7 +1252,7 @@ export default function ContinentRide() {
           stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hud.foot ? 48 : 148 }} />
       )}
       {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} marks={questMarksRef} vitals={vitalsRef} mana={manaRef} entries={gunHud.holding ? gunHud.entries : hotbarEntries(inv)} sel={slot} onSelect={setSlot}
-        dimmed={!hud.foot} input={!!hud.foot && !showMap && !garage && !board && !bagOpen && !vesselShop}
+        dimmed={!hud.foot} input={!!hud.foot && !showMap && !garage && !board && !bagOpen && !vesselShop && !optionsOpen}
         minimap={mapState && <ContinentMiniMap map={mapState} track={track} onExpand={() => setShowMap(true)} box={openMapBox(hudSize)} />}
         status={[
           { label: R?.meta.name === 'continent' ? 'Athernyx · 1672' : 'Ashfeld to Rune Hold' },
@@ -1249,6 +1260,7 @@ export default function ContinentRide() {
           { label: ledger.deeds === 1 ? 'Deed' : 'Deeds', value: ledger.deeds },
           ...gunHud.status,
         ]} />}
+      {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} keys={CONTINENT_KEYS} />}
       {vesselShop && <VesselShop ledger={ledger} setLedger={setLedger} onClose={() => setVesselShop(false)} isTouch={isTouch} />}
       {pack && <PackMenu tab={pack} onTab={setPack} onClose={() => setPack(null)} sel={slot} isTouch={isTouch} />}
       {mapState && showMap && <ContinentMap map={mapState} track={track} onClose={() => setShowMap(false)} />}
@@ -1270,7 +1282,7 @@ export default function ContinentRide() {
       {hud.foot && (
         <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
       )}
-      {hud.foot && !ptrLocked && !isTouch && !showMap && !garage && !board && !bagOpen && !vesselShop && (
+      {hud.foot && !ptrLocked && !isTouch && !showMap && !garage && !board && !bagOpen && !vesselShop && !optionsOpen && (
         <div style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translateX(-50%)', padding: '7px 16px', borderRadius: 999, background: 'rgba(12,16,20,0.66)', color: '#f4efe2', font: '600 12px system-ui', letterSpacing: '0.16em', textTransform: 'uppercase', pointerEvents: 'none' }}>Click to resume</div>
       )}
       {hud.prompt && (

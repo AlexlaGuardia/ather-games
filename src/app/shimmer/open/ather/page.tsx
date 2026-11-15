@@ -40,6 +40,7 @@ import { advance, clearAt, loadSpread, saveSpread, loadSkew, saveSkew, type Spre
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey } from '../shared/touch'
 import { useMenuLock } from '../shared/menu-lock'
+import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
 import { useInv, setInv, getInv, hotbarEntries, heldItem } from '../shared/bag'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
@@ -110,11 +111,13 @@ export default function AtherSlice() {
     document.addEventListener('pointerlockchange', ch)
     return () => document.removeEventListener('pointerlockchange', ch)
   }, [])
-  useEffect(() => { frozen.current = panel !== null }, [panel])
+  const optionsOpen = useOptionsOpen()   // Options (options.tsx): O, Esc once the mouse is free, the pack's gear
+  useOptionsKeys(panel !== null)
+  useEffect(() => { frozen.current = panel !== null || optionsOpen }, [panel, optionsOpen])
   // panels are clicked, so they free the mouse; closing one takes the camera back (shared/menu-lock.ts)
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
   const getCanvas = useCallback(() => canvasEl.current, [])
-  useMenuLock(panel !== null, getCanvas)
+  useMenuLock(panel !== null || optionsOpen, getCanvas)
   // toasts speak on the template's message line (under the hotbar), then clear
   useEffect(() => { if (!toast) return; hudSay(toast, 'info'); setToast(null) }, [toast])
   // persist the walked fog every few seconds and on the way out
@@ -367,6 +370,7 @@ export default function AtherSlice() {
     ...(prompt ? [{ code: 'KeyE', key: 'E', label: prompt.startsWith('E · Gregory') ? 'Gregory' : 'use', near: true }] : []),
     ...(prompt?.includes('L lift') ? [{ code: 'KeyL', key: 'L', label: 'lift', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
+    { code: 'KeyO', key: 'O', label: 'options' },
     ...(zone.kind === 'plot' ? [{ code: 'KeyC', key: 'C', label: 'friends' }] : []),
     { code: 'KeyI', key: 'I', label: 'pack' },
     ...(zone.kind === 'wilds' ? [
@@ -403,7 +407,7 @@ export default function AtherSlice() {
       </Canvas>
       <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
       <GameHud size={hudSize} pose={poseRef} marks={marksRef} vitals={vitalsRef} mana={manaRef} entries={hotbar} sel={slot} onSelect={setSlot}
-        dimmed={zone.kind !== 'wilds'} input={!panel && !fade}
+        dimmed={zone.kind !== 'wilds'} input={!panel && !fade && !optionsOpen}
         minimap={W && <AtherMiniMap size={hudSize} zone={zone.kind} W={W} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regions={regions} cluster={cl.frame}
           owned={owned} onExpand={() => setPanel({ kind: 'map', view: 'ather', travel: false })} />}
         status={[
@@ -447,6 +451,7 @@ export default function AtherSlice() {
       )}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
+      {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} />}
       {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={slot} isTouch={isTouch} />}
       <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />
       {isTouch && !panel && (
@@ -464,7 +469,7 @@ export default function AtherSlice() {
           </div>
         </div>
       )}
-      {!isLocked && !panel && !isTouch && played && (
+      {!isLocked && !panel && !optionsOpen && !isTouch && played && (
         <div style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translateX(-50%)', padding: '7px 16px', borderRadius: 999, background: 'rgba(12,16,20,0.66)', color: '#f4efe2', font: '600 12px system-ui', letterSpacing: '0.16em', textTransform: 'uppercase', pointerEvents: 'none' }}>Click to resume</div>
       )}
       {!isLocked && !panel && !isTouch && !played && (
