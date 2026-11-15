@@ -10,7 +10,12 @@
 
 import { BIOME, walkableIn, type BiomeId, type Wilds } from './wilds'
 
-export interface WildsNode { id: string; tile: string; biome: BiomeId; x: number; z: number; i: number; j: number }
+export interface WildsNode {
+  id: string; tile: string; biome: BiomeId; x: number; z: number; i: number; j: number
+  /** continent-wide subsection coords (tile·SUB + i/j). Set = neighbours ACROSS a tile seam count (the streamed Wilds);
+   *  unset = within the tile only. */
+  gi?: number; gj?: number
+}
 
 /** One game day = 64 real minutes (GBOARD › THE ATHER SIDE). The clock runs while you are away. */
 export const GAME_DAY_MS = 64 * 60 * 1000
@@ -57,9 +62,13 @@ export function placeNodes(W: Wilds, tile: string, safe: { x: number; z: number 
 
 /** Neighbours a node can spread to: the four grid neighbours that share its biome. */
 export function nodeAdjacency(nodes: WildsNode[]): Map<string, string[]> {
-  const at = new Map(nodes.map(n => [`${n.i},${n.j}`, n]))
+  // continent coords when every node has them (the grey crosses tile seams, Alex 11-15: one continent, not 67
+  // squares); else the tile's own grid
+  const global = nodes.length > 0 && nodes.every(n => n.gi !== undefined && n.gj !== undefined)
+  const I = (n: WildsNode) => (global ? n.gi! : n.i), J = (n: WildsNode) => (global ? n.gj! : n.j)
+  const at = new Map(nodes.map(n => [`${I(n)},${J(n)}`, n]))
   return new Map(nodes.map(n => [n.id, [[1, 0], [-1, 0], [0, 1], [0, -1]]
-    .map(([di, dj]) => at.get(`${n.i + di},${n.j + dj}`)).filter((m): m is WildsNode => !!m && m.biome === n.biome).map(m => m.id)]))
+    .map(([di, dj]) => at.get(`${I(n) + di},${J(n) + dj}`)).filter((m): m is WildsNode => !!m && m.biome === n.biome).map(m => m.id)]))
 }
 
 /** Which node's ground is this? The NEAREST node: a node owns the country round it, so clearing one quiets that whole

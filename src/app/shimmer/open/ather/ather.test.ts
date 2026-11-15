@@ -536,7 +536,13 @@ const worldDone = (async () => {
   ok(w.loaded.size <= 9 && ![...w.loaded.keys()].includes(pair.name), 'world: far tiles were not dropped')
   ok(tileOf(499, -499).tx === 0 && tileOf(501, 0).tx === 1, 'world: tileOf misplaces a tile edge')
   // the spread over the whole continent's nodes stays quick (it replays on every load)
-  const all = index.tiles.flatMap(t => t.nodes.map(n => ({ ...n, tile: t.name, x: n.x + t.tx * TILE_M, z: n.z + t.ty * TILE_M })))
+  const all = index.tiles.flatMap(t => t.nodes.map(n => ({ ...n, tile: t.name, x: n.x + t.tx * TILE_M, z: n.z + t.ty * TILE_M, gi: t.tx * SUB + n.i, gj: t.ty * SUB + n.j })))
+  // the grey crosses tile seams: some neighbours sit in another tile, and every neighbour is one subsection away
+  const gadj = nodeAdjacency(all), byId = new Map(all.map(n => [n.id, n]))
+  const across = [...gadj.entries()].flatMap(([id, ns]) => ns.map(m => [byId.get(id)!, byId.get(m)!])).filter(([a, b]) => a.tile !== b.tile)
+  ok(across.length > 50, `world: only ${across.length} neighbour links cross a tile seam`)
+  ok([...gadj.entries()].every(([id, ns]) => ns.every(m => { const a = byId.get(id)!, b = byId.get(m)!; return a.biome === b.biome && Math.abs(a.gi! - b.gi!) + Math.abs(a.gj! - b.gj!) === 1 })), 'world: a continent neighbour is across a biome or more than one subsection away')
+  ok(across.every(([a, b]) => Math.hypot(a.x - b.x, a.z - b.z) < 450), 'world: a seam neighbour is not actually next door')
   const t0 = Date.now(); advance(freshSpread(0), all, 60 * GAME_DAY_MS); const ms = Date.now() - t0
   ok(ms < 1500, `world: 60 game days over ${all.length} nodes took ${ms} ms`)
 })()

@@ -36,7 +36,7 @@ import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WA
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud } from './combat-layer'
 import type { CombatEvent, Terrain } from './combat'
-import { ownerOf, nodeRegions, GAME_DAY_MS, type WildsNode } from './nodes'
+import { ownerOf, nodeRegions, GAME_DAY_MS, SUB, type WildsNode } from './nodes'
 import { advance, clearAt, loadSpread, saveSpread, loadSkew, saveSkew, type SpreadState, type SpreadEvent } from './spread'
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey } from '../shared/touch'
@@ -165,7 +165,7 @@ export default function AtherSlice() {
   // The world catches up on load (the clock ran while you were away), then ticks live every 20 s.
   // every node on the continent, from the tile index (placed at export by the same placeNodes), in world coords: the
   // spread must know them all, loaded or not, or a streamed-out tile would forget what you cleared
-  const allNodes = useMemo<WildsNode[]>(() => ww ? ww.index.tiles.flatMap(t => t.nodes.map(n => ({ ...n, tile: t.name, x: n.x + t.tx * TILE_M, z: n.z + t.ty * TILE_M }))) : [], [ww])
+  const allNodes = useMemo<WildsNode[]>(() => ww ? ww.index.tiles.flatMap(t => t.nodes.map(n => ({ ...n, tile: t.name, x: n.x + t.tx * TILE_M, z: n.z + t.ty * TILE_M, gi: t.tx * SUB + n.i, gj: t.ty * SUB + n.j }))) : [], [ww])
   const nodesByTile = useMemo(() => { const m = new Map<string, WildsNode[]>(); for (const n of allNodes) { const a = m.get(n.tile) ?? []; a.push(n); m.set(n.tile, a) } return m }, [allNodes])
   const tell = useCallback((evs: SpreadEvent[], lead: string) => {
     const sp = evs.filter(e => e.kind === 'spread').length, wl = evs.filter(e => e.kind === 'well').length
