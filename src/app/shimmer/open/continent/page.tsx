@@ -27,7 +27,8 @@ import { footWorld, tickFoot, exitSpot, canEnter, stepOut, EXIT_MAX_SPEED } from
 import { eyeY, WALK_SPEED, SPEED_CAP, type LocoState } from '../shared/locomotion'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
 import { TUNNEL_H, TUNNEL_WALK, boreAt, tunnelWall, bridgeRail, drivable, ferryLanding, guardrails, loadRegion, roadRail, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
-import { DesktopNotice } from '../shared/desktop-notice'
+import { touch, TOUCH_LOOK_SENS, isTouchOnly } from '../shared/touch'
+import { TouchControls, type TouchAction } from '../shared/touch-controls'
 
 const STEP = 1 / 120
 const FOV = 64
@@ -821,9 +822,11 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
   useFrame((_, frameDt) => {
     const k = keys.current, sc = scripted.current, onFoot = mode.current === 'foot'
     // on foot the keys are the walker's: the parked courser gets no throttle and its handbrake on
-    const throttle = onFoot ? 0 : sc?.throttle ?? ((k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0))
-    const steer = onFoot ? 0 : sc?.steer ?? ((k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0))
-    const handbrake = onFoot ? true : sc?.handbrake ?? k.has('Space')
+    // a phone's left stick (shared/touch.ts) adds in: up = throttle, down = brake/reverse, sideways = steer, analog
+    const clamp1 = (v: number) => Math.max(-1, Math.min(1, v))
+    const throttle = onFoot ? 0 : sc?.throttle ?? clamp1((k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0) + touch.move.y)
+    const steer = onFoot ? 0 : sc?.steer ?? clamp1((k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) + touch.move.x)
+    const handbrake = onFoot ? true : sc?.handbrake ?? (k.has('Space') || touch.held.has('Space'))
 
     acc.current = Math.min(acc.current + frameDt, 0.1)
     let c = car.current
@@ -845,17 +848,22 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
     // the walker: same tick as /shimmer/open, on the region's ground at the walker's own height
     const lc = loco.current
     if (onFoot && lc) {
+      if (touch.look.dx || touch.look.dy) {
+        view.current.yaw -= touch.look.dx * TOUCH_LOOK_SENS
+        view.current.pitch = Math.max(-1.5, Math.min(1.5, view.current.pitch - touch.look.dy * TOUCH_LOOK_SENS))
+      }
       const { yaw } = view.current
       const fwx = -Math.sin(yaw), fwz = -Math.cos(yaw), rtx = Math.cos(yaw), rtz = -Math.sin(yaw)
-      const f = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0)
-      const r = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0)
+      const f = clamp1((k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0) + touch.move.y)
+      const r = clamp1((k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) + touch.move.x)
       let mx = fwx * f + rtx * r, mz = fwz * f + rtz * r
       const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml }
       tickFoot(fw, R, lc, { mvX: mx, mvZ: mz, fwdX: fwx, fwdZ: fwz, rightX: rtx, rightZ: rtz,
-        jumpKey: k.has('Space'), crouchKey: k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyC'), dt: Math.min(frameDt, 0.05) })
+        jumpKey: k.has('Space') || touch.held.has('Space'), crouchKey: k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyC') || touch.held.has('ShiftLeft'), dt: Math.min(frameDt, 0.05) })
       // fell off the world (or into it): back beside the courser
       if (lc.py < -40) { const sp = exitSpot(fw, R, c); if (sp) loco.current = stepOut(sp, { vx: 0, vz: 0 }) }
     }
+    touch.look.dx = 0; touch.look.dy = 0          // consumed (on foot) or dropped (driving: the chase camera steers itself)
     safeT.current -= frameDt
     if (safeT.current <= 0) {
       safeT.current = 0.5
@@ -1082,6 +1090,17 @@ export default function ContinentRide() {
   const atTownRef = useRef<string | null>(null)
   const footRef = useRef(false)
   footRef.current = !!hud.foot
+  // Phone (11-15): the same keys this page handles, as taps. In reach (big pill): E at a ferry or a Co. board, F to get
+  // out / in. Standing: map, back to the road, and while driving the camera and the garage.
+  const canBoard = !!atTown && !board && SUPPLY.some(s => s.place === atTown)
+  const touchActions: TouchAction[] = [
+    ...(!hud.foot && ferryAt && !ferrying ? [{ code: 'KeyE', key: 'E', label: 'ferry', near: true }]
+      : !hud.foot && canBoard ? [{ code: 'KeyE', key: 'E', label: 'board', near: true }] : []),
+    ...(hud.prompt ? [{ code: 'KeyF', key: 'F', label: hud.foot ? 'get in' : 'get out', near: true }] : []),
+    { code: 'KeyM', key: 'M', label: 'map' },
+    ...(!hud.foot ? [{ code: 'KeyC', key: 'C', label: 'camera' }, { code: 'KeyG', key: 'G', label: 'garage' }] : []),
+    { code: 'KeyR', key: 'R', label: 'road' },
+  ]
   atTownRef.current = atTown
   // the board stays open until you actually drive away (> 60 m), not on the first nudge of the throttle
   useEffect(() => {
@@ -1096,6 +1115,8 @@ export default function ContinentRide() {
     return () => window.removeEventListener('keydown', g)
   }, [])
   const [started, setStarted] = useState(false)
+  const [isTouch, setIsTouch] = useState(false)
+  useEffect(() => setIsTouch(isTouchOnly()), [])
   const cave = useMemo(() => (R ? buildCavern(R) : null), [R])
   // ── THE MAP (./map.tsx): ink in what you drive, minimap top-right, M opens it whole ──
   const track = useRef<Track>({ x: 0, z: 0, yaw: 0 })
@@ -1129,7 +1150,6 @@ export default function ContinentRide() {
   }, [])
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#a9c6d6' }}>
-      <DesktopNotice />
       {R && (
         <Canvas camera={{ fov: FOV, near: 0.1, far: 2500 }} gl={{ antialias: true, powerPreference: 'high-performance' }}>
           <VoxelDayNight />
@@ -1150,6 +1170,11 @@ export default function ContinentRide() {
         </Canvas>
       )}
       <SpeedStreaks frac={hud.frac} />
+      {isTouch && started && !showMap && !garage && !board && !ferrying && (
+        <TouchControls showFire={false} actions={touchActions}
+          holds={hud.foot ? undefined : [{ code: 'Space', label: 'drift' }]}
+          stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} />
+      )}
       {mapState && started && <ContinentMiniMap map={mapState} track={track} onExpand={() => setShowMap(true)} />}
       {mapState && showMap && <ContinentMap map={mapState} track={track} onClose={() => setShowMap(false)} />}
       <GaragePanel open={garage} onClose={() => setGarage(false)} build={eff} setBuild={setBuild}
@@ -1181,7 +1206,7 @@ export default function ContinentRide() {
           {hud.prompt}
         </div>
       )}
-      <div hidden={!!hud.foot} style={{ position: 'absolute', right: 20, bottom: 18, textAlign: 'right', color: '#f4efe2', pointerEvents: 'none', textShadow: '0 2px 8px rgba(0,0,0,0.55)' }}>
+      <div hidden={!!hud.foot} style={{ position: 'absolute', ...(isTouch ? { left: 14, top: 44, textAlign: 'left' as const } : { right: 20, bottom: 18, textAlign: 'right' as const }), color: '#f4efe2', pointerEvents: 'none', textShadow: '0 2px 8px rgba(0,0,0,0.55)' }}>
         <div style={{ font: '700 54px var(--font-game), system-ui', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{Math.round(hud.mph)}</div>
         <div style={{ font: '600 11px var(--font-game), system-ui', letterSpacing: '0.25em', opacity: 0.75 }}>MPH {hud.gearR ? '· R' : ''}</div>
         <div style={{ font: '600 10px var(--font-game), system-ui', letterSpacing: '0.25em', opacity: 0.65, marginTop: 4 }}>{hud.road ? ROAD_LABEL[hud.road].toUpperCase() : 'OFF ROAD'}</div>
@@ -1212,12 +1237,12 @@ export default function ContinentRide() {
         ATHERNYX · {R?.meta.name === "continent" ? "THE CONTINENT, 1672" : "ASHFELD TO RUNE HOLD"}
       </div>
       {R && !started && (
-        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none' }}>
+        <div onPointerDown={isTouch ? () => setStarted(true) : undefined} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: isTouch ? 'auto' : 'none', zIndex: 30 }}>
           <div style={{ padding: '18px 24px', borderRadius: 10, background: 'rgba(12,16,20,0.72)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.65, textAlign: 'center', maxWidth: 460 }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>The Darter · Ashfeld</div>
             You start on the road out of Ashfeld. It runs down to Millbrook on the river; the trunk south ends at Rune Hold under the Spine.
-            <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road · G garage · E board (stopped at a town) · F get out / in (on foot: mouse look, Space jump, Shift slide) · M map</div>
-            <div style={{ marginTop: 8, fontWeight: 600 }}>Press any key to drive</div>
+            {isTouch ? <div style={{ marginTop: 8 }}>Left thumb drives: push up for throttle, down to brake, sideways to steer. Hold drift for the handbrake. On foot, drag on the right to look.</div> : <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road · G garage · E board (stopped at a town) · F get out / in (on foot: mouse look, Space jump, Shift slide) · M map</div>}
+            <div style={{ marginTop: 8, fontWeight: 600 }}>{isTouch ? 'Tap to drive' : 'Press any key to drive'}</div>
           </div>
         </div>
       )}

@@ -24,12 +24,22 @@ const ring = (size: number, lit = false): React.CSSProperties => ({
   touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', backdropFilter: 'blur(2px)',
 })
 
-export function TouchControls({ actions, showFire }: { actions: TouchAction[]; showFire: boolean }) {
+export interface TouchHold { code: string; label: string }
+const WALK_HOLDS: TouchHold[] = [{ code: 'ShiftLeft', label: 'slide' }, { code: 'Space', label: 'jump' }]
+
+/** `holds`: the hold-buttons beside fire, top to bottom (default: the walker's slide + jump). The continent passes
+ *  its handbrake while driving. `stickHint`: the faint words where the left thumb goes. */
+export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint = 'thumb here to move' }: {
+  actions: TouchAction[]; showFire: boolean; holds?: TouchHold[]; stickHint?: string
+}) {
   const roles = useRef(new Map<number, { kind: 'stick' | 'look' | 'fire'; ox: number; oy: number; lx: number; ly: number }>())
   const [stick, setStick] = useState<null | { ox: number; oy: number; x: number; y: number }>(null)
   const [down, setDown] = useState<Record<string, boolean>>({})
 
   useEffect(() => () => resetTouch(), [])
+  // a hold set that changes under a held finger (driving → on foot) must not leave its key stuck down
+  const holdSig = holds.map(h => h.code).join()
+  useEffect(() => { touch.held.clear(); setDown({}) }, [holdSig])
 
   const start = (e: React.PointerEvent) => {
     if (roles.current.size >= 4) return
@@ -87,15 +97,14 @@ export function TouchControls({ actions, showFire }: { actions: TouchAction[]; s
       )}
       {!stick && (
         <div style={{ position: 'absolute', left: 28, bottom: 'max(28px, env(safe-area-inset-bottom))', color: 'rgba(244,239,226,0.55)', font: '600 10px system-ui', letterSpacing: '0.2em', textTransform: 'uppercase', pointerEvents: 'none' }}>
-          thumb here to move
+          {stickHint}
         </div>
       )}
 
       {/* right cluster: fire big, jump + slide beside it */}
       <div style={{ position: 'absolute', right: 'max(18px, env(safe-area-inset-right))', bottom: 'max(22px, env(safe-area-inset-bottom))', display: 'flex', gap: 12, alignItems: 'flex-end' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={ring(56, down.ShiftLeft)} {...holdKey('ShiftLeft')}>slide</div>
-          <div style={ring(56, down.Space)} {...holdKey('Space')}>jump</div>
+          {holds.map(h => <div key={h.code} style={ring(56, down[h.code])} {...holdKey(h.code)}>{h.label}</div>)}
         </div>
         {showFire
           ? <div style={ring(84, down.fire)} {...hold('fire', () => { touch.fire = true }, () => { touch.fire = false }, true)}>fire</div>
