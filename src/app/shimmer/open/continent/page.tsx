@@ -26,6 +26,7 @@ import { DARTER_STOCK, tuneFromSpec } from '../courser'
 import { buildSpec, type Slot, type Tier } from '../courser-build'
 import { buildCavern, caveRoomAt, type Cavern } from '../cavern'
 import { CavernView } from '../cavern-view'
+import { GunRange, useGunHud, rangeHolds } from '../gun-range'
 import { footWorld, tickFoot, exitSpot, canEnter, stepOut, EXIT_MAX_SPEED } from '../on-foot'
 import { eyeY, WALK_SPEED, SPEED_CAP, type LocoState } from '../shared/locomotion'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
@@ -755,7 +756,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
     const down = (e: KeyboardEvent) => {
       keys.current.add(e.code)
       if (e.code === 'KeyF' && !e.repeat) seat()
-      if (e.code === 'KeyR') { mode.current = 'drive'; loco.current = null; place(safe.current.x, safe.current.z, safe.current.yaw) }
+      if (e.code === 'KeyR' && !rangeHolds()) { mode.current = 'drive'; loco.current = null; place(safe.current.x, safe.current.z, safe.current.yaw) }
       if (e.code === 'KeyC' && mode.current === 'drive') camMode.current = camMode.current === 'chase' ? 'hood' : 'chase'
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault()
     }
@@ -1124,6 +1125,7 @@ export default function ContinentRide() {
   // ── THE HUD (shared/game-hud.tsx): the same hearth HUD as the Ather. Nothing on the continent can hurt you yet and
   // nothing casts, so health and mana stand full; the bar is dimmed at the wheel (hands are busy) ──
   const hudSize = useGameHudSize(isTouch)
+  const gunHud = useGunHud()    // the gun shop's held gun → the template's hotbar + an ammo chip
   const [slot, setSlot] = useState(0)
   // approaching a place speaks on the message line (was a banner)
   const lastPlace = useRef<string | null>(null)
@@ -1182,6 +1184,7 @@ export default function ContinentRide() {
           <Bridges R={R} />
           <Tunnels R={R} cave={cave} />
           {cave && <CavernView cave={cave} R={R} />}
+          {cave && <GunRange cave={cave} />}
           <Guardrails R={R} />
           <Water R={R} />
           <Towns R={R} />
@@ -1197,13 +1200,14 @@ export default function ContinentRide() {
           holds={hud.foot ? undefined : [{ code: 'Space', label: 'drift' }]}
           stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hud.foot ? 48 : 148 }} />
       )}
-      {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} vitals={vitalsRef} mana={manaRef} entries={[]} sel={slot} onSelect={setSlot}
+      {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} vitals={vitalsRef} mana={manaRef} entries={gunHud.entries} sel={slot} onSelect={setSlot}
         dimmed={!hud.foot} input={!!hud.foot && !showMap && !garage && !board}
         minimap={mapState && <ContinentMiniMap map={mapState} track={track} onExpand={() => setShowMap(true)} box={openMapBox(hudSize)} />}
         status={[
           { label: R?.meta.name === 'continent' ? 'Athernyx · 1672' : 'Ashfeld to Rune Hold' },
           { label: 'Marks', value: ledger.marks, accent: true },
           { label: ledger.deeds === 1 ? 'Deed' : 'Deeds', value: ledger.deeds },
+          ...gunHud.status,
         ]} />}
       {mapState && showMap && <ContinentMap map={mapState} track={track} onClose={() => setShowMap(false)} />}
       <GaragePanel open={garage} onClose={() => setGarage(false)} build={eff} setBuild={setBuild}

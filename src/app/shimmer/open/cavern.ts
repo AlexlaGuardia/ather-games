@@ -65,14 +65,20 @@ export interface Cavern {
 
 // ── THE PLAN, in the door's frame: u = metres away from the bore's centre line (into the hill), v = along the bore ──
 const DOOR_HALF = 2.2
-const GUN_LINE_V = -33.5, GUN_LANE_END = -63, GUN_LANE_HALF = 3.4
+// The lane runs out of the shop's back corner on a DIAGONAL, deeper into the hill. ⚠ Not straight down -v: the road
+// bore curves back under the shop's frame there (it crossed a straight lane 14-29 m out, and the walker stood inside
+// the tunnel lining in a black void). This is the one heading a search found that keeps clear of the bore, the old
+// side-tunnel and the hall with rock to spare, in both regions (cavern.test asserts it stays that way).
+const GUN_LANE_A: [number, number] = [28.2, -31.4], GUN_LANE_B: [number, number] = [49.5, -52.6], GUN_LANE_HALF = 3.2
+const GUN_LINE_AT = 2.5          // the firing line, metres down the lane from its mouth
 /** One rack per Slate, round the shop's walls (u, v, facing into the room). */
 const GUN_RACKS: [string, number, number][] = [
   ['SIDEARM', 18, -24.5], ['SHORTBARREL', 17, -28.2], ['LONGBARREL', 18, -31.8], ['BREACHER', 30, -24.5], ['REACHER', 31, -28.2],
 ]
 /** Targets down the lane: (u, metres past the line). */
-const GUN_TARGETS: [number, number][] = [[22.4, 8], [25.6, 14], [23.2, 20], [25, 27]]
-const PLAN: Shape[] = [
+/** Targets down the lane: (metres across the lane, + = right looking down it; metres past the line). */
+const GUN_TARGETS: [number, number][] = [[0, 7], [-1.4, 12], [1.5, 18], [-0.6, 25]]
+const MARKET: Shape[] = [
   // the side passage from the bore's wall, bending a little so the market is not seen from the road
   { kind: 'capsule', u0: 3, v0: 0, u1: 14, v1: 2, r: DOOR_HALF },
   { kind: 'capsule', u0: 14, v0: 2, u1: 20, v1: 0, r: 2.6 },
@@ -87,13 +93,19 @@ const PLAN: Shape[] = [
   { kind: 'ellipse', u: 62, v: -15, ru: 9, rv: 8 },
   // an old side-tunnel, deeper in: unlit, and it ends at a grate
   { kind: 'capsule', u0: 40, v0: -20, u1: 44, v1: -38, r: 1.5 },
+]
+// ★ THE GUN SHOP's shapes are carved but NEVER vote on where the door goes: chooseDoor reads MARKET only. A shop shape
+// that changed the door's ranking moved the whole market ~26 m down the bore and flipped its side (a lane is long, and
+// a long shape drags the minimum-cover score). The test checks the shop's own cover instead.
+const SHOP: Shape[] = [
   // ★ THE GUN SHOP (Alex 11-15): off the hall's -v side through a short doorway, racks round its walls, and the test
   // lane straight out the back. CANON: guns sell "from many shops" post-Liberation (manalic-weapons.md); the back-room
   // lane AMENDS rune-hold.md's "the range is at the Station" (Alex 11-15, flagged to Magii in CANON_GAPS).
   { kind: 'capsule', u0: 28, v0: -17, u1: 25, v1: -23, r: 2 },
   { kind: 'ellipse', u: 24, v: -28, ru: 7.5, rv: 6 },
-  { kind: 'capsule', u0: 24, v0: -32, u1: 24, v1: GUN_LANE_END, r: GUN_LANE_HALF },
+  { kind: 'capsule', u0: GUN_LANE_A[0], v0: GUN_LANE_A[1], u1: GUN_LANE_B[0], v1: GUN_LANE_B[1], r: GUN_LANE_HALF },
 ]
+const PLAN: Shape[] = [...MARKET, ...SHOP]
 const ROOMS: CaveRoom[] = [
   { id: 'hall', label: 'The Passage', detail: 'The market under the spine · rotating spots, no permanent claims', u: 36, v: 0, r: 14 },
   { id: 'gems', label: 'The merchants', detail: "Rune-gem tables · E'xday · not trading yet", u: 36, v: -6, r: 4.5 },
@@ -104,14 +116,14 @@ const ROOMS: CaveRoom[] = [
   { id: 'arcade', label: 'The arcade room', detail: 'Marks are spent here · not open yet', u: 62, v: -15, r: 7 },
   { id: 'deep', label: '···', detail: 'If you know, you know.', u: 44, v: -37, r: 3 },
   { id: 'guns', label: 'The gun shop', detail: 'One rack per class · E takes a gun off the rack · the lane is out back', u: 24, v: -28, r: 7 },
-  { id: 'lane', label: 'The test lane', detail: 'Click to fire · R reloads · E at a rack swaps', u: 24, v: -46, r: 14 },
+  { id: 'lane', label: 'The test lane', detail: 'Click to fire · R reloads · E at a rack swaps', u: 40, v: -43.5, r: 14 },
 ]
 // lanterns (u, v, height); the side-tunnel gets none on purpose
 const LANTERNS: [number, number, number][] = [
   [6, -1.6, 3.2], [12, 3.6, 3.2], [19, -1.8, 3.2],
   [26, 0, 5.5], [36, -12, 6], [36, 12, 6], [46, 0, 6], [36, 0, 8.5], [27, -10, 4],
   [30, 25, 4.5], [52, 17, 5], [58, 13, 3.5], [62, -15, 4.5], [52, -13, 3.2],
-  [24, -27, 4.5], [24, -40, 3.6], [24, -50, 3.6], [24, -60, 3.6],
+  [24, -27, 4.5], [33, -36.2, 3.6], [40, -43.2, 3.6], [47, -50.2, 3.6],
 ]
 
 const inShape = (s: Shape, u: number, v: number) => {
@@ -130,8 +142,8 @@ function chooseDoor(R: Region, t: RegionTunnel): { s: number; side: 1 | -1; minC
     const s = len * f, b = boreAt(t, s)
     const pux = b.uz * side, puz = -b.ux * side
     let minCover = Infinity
-    for (let u = 4; u <= 72; u += 4) for (let v = -68; v <= 32; v += 4) {
-      if (!PLAN.some(sh => inShape(sh, u, v))) continue
+    for (let u = 4; u <= 72; u += 4) for (let v = -40; v <= 32; v += 4) {
+      if (!MARKET.some(sh => inShape(sh, u, v))) continue
       const x = b.x + pux * u + b.ux * v, z = b.z + puz * u + b.uz * v
       minCover = Math.min(minCover, R.heightAt(x, z) - b.y - CAVE_ROOF_MAX)
     }
@@ -239,15 +251,22 @@ export function buildCavern(R: Region): Cavern | null {
     const [x, z] = W(u, v), yaw = Math.atan2(sx - x, sz - z)
     props.push({ kind: 'rack', x, z, yaw, tag: slate }); return { slate, x, z, yaw }
   })
-  put('counter', 24, GUN_LINE_V)
-  const [lx, lz] = W(24, GUN_LINE_V), [ex, ez] = W(24, GUN_LANE_END)
+  // the lane's axis in the plan, then in the world
+  const lu = GUN_LANE_B[0] - GUN_LANE_A[0], lv = GUN_LANE_B[1] - GUN_LANE_A[1], ll = Math.hypot(lu, lv)
+  const du = lu / ll, dv = lv / ll, ru = -dv, rv = du        // (ru, rv) = across the lane
+  const P = (m: number, across = 0) => [GUN_LANE_A[0] + du * m + ru * across, GUN_LANE_A[1] + dv * m + rv * across] as const
+  const [lx, lz] = W(...P(GUN_LINE_AT)), [ex, ez] = W(...P(ll))
   const laneLen = Math.hypot(ex - lx, ez - lz), down = { x: (ex - lx) / laneLen, z: (ez - lz) / laneLen }
-  const yawUp = Math.atan2(-down.x, -down.z)
-  const targets = GUN_TARGETS.map(([u, m], id) => {
-    const [x, z] = W(u, GUN_LINE_V - m)
+  const yawUp = Math.atan2(-down.x, -down.z), yawDown = Math.atan2(down.x, down.z)
+  put('counter', ...P(GUN_LINE_AT), yawDown)
+  // ⚠ the across sign: in the world, "right looking down the lane" depends on the door's side (the plan is mirrored
+  // when side = -1), so targets are placed across in the WORLD frame from `down`, not in the plan
+  const rx = -down.z, rz = down.x
+  const targets = GUN_TARGETS.map(([a, m], id) => {
+    const x = lx + down.x * m + rx * a, z = lz + down.z * m + rz * a
     props.push({ kind: 'target', x, z, yaw: yawUp, tag: String(id) }); return { id, x, z, yaw: yawUp, range: m }
   })
-  put('backstop', 24, GUN_LANE_END + 1.2)
+  put('backstop', ...P(ll - 0.6), yawUp)
   const gunShop: GunShop = { racks, line: { x: lx, z: lz }, down, laneLen, targets }
   const rooms = ROOMS.map(r => { const [x, z] = W(r.u, r.v); return { id: r.id, label: r.label, detail: r.detail, x, z, r: r.r } })
   return { tunnel: t, y, side, doorS: [door.s - DOOR_HALF, door.s + DOOR_HALF], x0, z0, nx, nz, mask, roof, rooms, props, gunShop, lanterns, inside, nearFloor, roofAt, lightAt }

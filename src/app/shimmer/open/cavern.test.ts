@@ -29,6 +29,21 @@ if (cave) {
     thin = Math.min(thin, R.heightAt(x, z) - cave.y - cave.roof[k])
   }
   ok(thin > 8, `the cave's roof comes within ${thin.toFixed(1)} m of daylight`)
+  // ★ THE GUN SHOP's lane (11-15): every metre of it is carved floor, and none of it touches the road bore. A straight
+  // lane down -v crossed the bore where it curves back; the walker stood in the lining, in a black void.
+  {
+    const g = cave.gunShop, bhw = cave.tunnel.width / 2 + TUNNEL_WALK
+    let carved = true, worst = Infinity
+    for (let m = -1; m <= g.laneLen - 1; m += 0.5) for (const a of [-2.4, 0, 2.4]) {
+      const x = g.line.x + g.down.x * m - g.down.z * a, z = g.line.z + g.down.z * m + g.down.x * a
+      if (!cave.inside(x, z)) carved = false
+      const tb = R.tunnelAt(x, z); if (tb) worst = Math.min(worst, Math.abs(tb.off) - bhw)
+    }
+    ok(carved, 'the test lane has a gap in its floor')
+    ok(worst > 3, `the test lane comes within ${worst.toFixed(1)} m of the road bore`)
+    ok(g.racks.length === 5 && g.targets.length >= 4 && g.laneLen > 25, 'the shop is missing racks, targets or lane length')
+    ok(g.targets.every(t => cave.inside(t.x, t.z)), 'a target stands outside the carved lane')
+  }
   ok(cave.rooms.length >= 7 && cave.props.some(p => p.kind === 'cabinet') && cave.props.some(p => p.kind === 'wagon'), 'rooms or props missing')
 
   const walk = (s: LocoState, yaw: number, secs: number, onTick?: (s: LocoState) => void) => {

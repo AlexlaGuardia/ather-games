@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- lance, side view, painted in its rack colour. Code-drawn filler (generic, not hero art). -->
+  <path d="M0 13h28l4 .7v1.6H20l-.6 4h-2.6l.6-4h-6l-1 1.2V20H3l-1.4-3L0 15.3zM12 9h8v2.6h-8z" fill="#a070d8" stroke="#1d1a17" stroke-width="1" stroke-linejoin="round"/>
+</svg>
