@@ -29,8 +29,10 @@ const WALK_HOLDS: TouchHold[] = [{ code: 'ShiftLeft', label: 'slide' }, { code: 
 
 /** `holds`: the hold-buttons beside fire, top to bottom (default: the walker's slide + jump). The continent passes
  *  its handbrake while driving. `stickHint`: the faint words where the left thumb goes. */
-export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint = 'thumb here to move' }: {
-  actions: TouchAction[]; showFire: boolean; holds?: TouchHold[]; stickHint?: string
+/** `row`: where the standing taps sit. Default under a top-right HUD (the Ather); the continent has its minimap
+ *  there, so it puts them top-left under the speedometer. */
+export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint = 'thumb here to move', row = { side: 'right', top: 70 } }: {
+  actions: TouchAction[]; showFire: boolean; holds?: TouchHold[]; stickHint?: string; row?: { side: 'left' | 'right'; top: number }
 }) {
   const roles = useRef(new Map<number, { kind: 'stick' | 'look' | 'fire'; ox: number; oy: number; lx: number; ly: number }>())
   const [stick, setStick] = useState<null | { ox: number; oy: number; x: number; y: number }>(null)
@@ -112,7 +114,7 @@ export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint
       </div>
 
       {/* standing taps: a compact row under the top-right HUD */}
-      <div style={{ position: 'absolute', right: 'max(12px, env(safe-area-inset-right))', top: 70, display: 'flex', gap: 8 }}>
+      <div style={{ position: 'absolute', ...(row.side === 'right' ? { right: 'max(12px, env(safe-area-inset-right))' } : { left: 'max(12px, env(safe-area-inset-left))' }), top: row.top, display: 'flex', gap: 8, flexWrap: 'wrap', maxWidth: '62vw' }}>
         {actions.filter(a => !a.near).map(a => (
           <div key={a.code} style={{ ...ring(40), width: 'auto', minWidth: 40, padding: '0 11px', borderRadius: 20, display: 'flex', alignItems: 'center', fontSize: 11 }}
             onPointerDown={e => { e.stopPropagation(); pressKey(a.code) }}>
