@@ -73,12 +73,12 @@ export function BoardPanel({ town, contracts, ledger, capacity, onAccept, onAban
 export function TradeHud({ ledger, objective, toast }: { ledger: Ledger; objective: { text: string; km: number; turn: number } | null; toast: string | null }) {
   return (
     <>
-      <div style={{ position: 'absolute', right: 16, top: 172, /* under the minimap (continent/map.tsx, 148 + its frame) */ textAlign: 'right', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.12em', textShadow: '0 2px 8px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', right: 16, top: 206, /* under the minimap + the hearth clock pill that hangs from it (open-hud) */ textAlign: 'right', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.12em', textShadow: '0 2px 8px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>
         <span style={{ color: GOLD }}>{ledger.marks}</span> MARKS · {ledger.deeds} {ledger.deeds === 1 ? 'DEED' : 'DEEDS'}
         <div style={{ fontSize: 9, opacity: 0.5, letterSpacing: '0.2em', marginTop: 2 }}>TRIAL LEDGER</div>
       </div>
       {objective && (
-        <div style={{ position: 'absolute', left: '50%', bottom: 22, transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px', borderRadius: 999,
+        <div style={{ position: 'absolute', left: '50%', bottom: 140, /* above the hearth hotbar (HUD_BAR_CLEAR) */ transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px', borderRadius: 999,
           background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px system-ui', pointerEvents: 'none' }}>
           <span style={{ display: 'inline-block', transform: `rotate(${objective.turn}rad)`, color: GOLD, fontSize: 16, lineHeight: 1 }}>▲</span>
           {objective.text} · {objective.km < 0.1 ? 'here' : `${objective.km.toFixed(1)} km`}

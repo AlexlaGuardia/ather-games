@@ -214,13 +214,16 @@ export const trackHeading = (t: Track) => screenHeading(-Math.sin(t.yaw), -Math.
 // ── the minimap: a crop around you, north up, the gate pinned to the rim when it is off the crop ──────────────
 const MINI_REACH = 700     // metres from centre to edge
 
-export function ContinentMiniMap({ map, track, onExpand }: { map: ContinentMapState; track: React.RefObject<Track>; onExpand: () => void }) {
+export function ContinentMiniMap({ map, track, onExpand, box: boxIn }: { map: ContinentMapState; track: React.RefObject<Track>; onExpand: () => void
+  /** The open HUD's box for this size (shared/open-hud.tsx), so the frame, the clock under it and this canvas agree. */
+  box?: MapBox }) {
   const cv = useRef<HTMLCanvasElement>(null)
-  const [box, setBox] = useState<MapBox>(MINIMAP_BOX)
+  const [fitBox, setBox] = useState<MapBox>(MINIMAP_BOX)
   useEffect(() => {
     const fit = () => setBox(window.innerWidth < 640 ? MINIMAP_BOX_PHONE : MINIMAP_BOX)
     fit(); window.addEventListener('resize', fit); return () => window.removeEventListener('resize', fit)
   }, [])
+  const box = boxIn ?? fitBox
   useEffect(() => {
     const c = cv.current; if (!c) return
     c.width = box.size * 2; c.height = box.size * 2

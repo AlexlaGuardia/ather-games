@@ -11,6 +11,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMenuLock } from '../shared/menu-lock'
+import { OpenHud, useOpenHudSize, openMapBox, type CompassPose, type Mana } from '../shared/open-hud'
+import { HudPlate } from '../../ui/hearth-hud'
+import { HEARTH_FONT_VARS } from '../../ui/hearth-fonts'
+import { hearthDisplay } from '../../ui/hearth'
+import type { Vitals } from '../../engine/vitals'
 import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Track } from './map'
 import { pitstopsUnlocked, visitNear } from './pitstops'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
@@ -1118,6 +1123,11 @@ export default function ContinentRide() {
   const [started, setStarted] = useState(false)
   const [isTouch, setIsTouch] = useState(false)
   useEffect(() => setIsTouch(isTouchOnly()), [])
+  // ── THE HUD (shared/open-hud.tsx): the same hearth HUD as the Ather. Nothing on the continent can hurt you yet and
+  // nothing casts, so health and mana stand full; the bar is dimmed at the wheel (hands are busy) ──
+  const hudSize = useOpenHudSize(isTouch)
+  const vitalsRef = useRef<Vitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0 })
+  const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 0 })
   const cave = useMemo(() => (R ? buildCavern(R) : null), [R])
   // ── THE MAP (./map.tsx): ink in what you drive, minimap top-right, M opens it whole ──
   const track = useRef<Track>({ x: 0, z: 0, yaw: 0 })
@@ -1185,7 +1195,8 @@ export default function ContinentRide() {
           holds={hud.foot ? undefined : [{ code: 'Space', label: 'drift' }]}
           stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hud.foot ? 48 : 148 }} />
       )}
-      {mapState && started && <ContinentMiniMap map={mapState} track={track} onExpand={() => setShowMap(true)} />}
+      {mapState && started && <ContinentMiniMap map={mapState} track={track} onExpand={() => setShowMap(true)} box={openMapBox(hudSize)} />}
+      {started && <OpenHud size={hudSize} pose={track as React.RefObject<CompassPose>} vitals={vitalsRef} mana={manaRef} entries={[]} sel={0} held={null} dimmed={!hud.foot} />}
       {mapState && showMap && <ContinentMap map={mapState} track={track} onClose={() => setShowMap(false)} />}
       <GaragePanel open={garage} onClose={() => setGarage(false)} build={eff} setBuild={setBuild}
         shop={{ ledger, buy: (slot: Slot, t: Tier) => { const r = buy(ledger, slot, t); if (r.ok) setLedger(r.ledger); else flash(r.why ?? 'Not yet') } }} />
@@ -1203,7 +1214,7 @@ export default function ContinentRide() {
       {!R && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#1d2a33', font: '600 14px system-ui' }}>{err ?? 'Loading the continent…'}</div>}
 
       {hud.place && (
-        <div style={{ position: 'absolute', left: '50%', top: '9%', transform: 'translateX(-50%)', textAlign: 'center', color: '#fff8e6', pointerEvents: 'none', textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}>
+        <div style={{ position: 'absolute', left: '50%', top: 'max(14%, 92px)', /* under the compass */ transform: 'translateX(-50%)', textAlign: 'center', color: '#fff8e6', pointerEvents: 'none', textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}>
           <div style={{ font: '600 11px var(--font-game), system-ui', letterSpacing: '0.4em', opacity: 0.8 }}>APPROACHING</div>
           <div style={{ font: '600 34px var(--font-display), Georgia, serif', letterSpacing: '0.06em' }}>{hud.place}</div>
         </div>
@@ -1219,7 +1230,7 @@ export default function ContinentRide() {
           {hud.prompt}
         </div>
       )}
-      <div hidden={!!hud.foot} style={{ position: 'absolute', ...(isTouch ? { left: 14, top: 44, textAlign: 'left' as const } : { right: 20, bottom: 18, textAlign: 'right' as const }), color: '#f4efe2', pointerEvents: 'none', textShadow: '0 2px 8px rgba(0,0,0,0.55)' }}>
+      <div hidden={!!hud.foot} style={{ position: 'absolute', ...(isTouch ? { left: 14, top: 64, textAlign: 'left' as const } : { right: 22, bottom: 196, /* over the hearth mana orb */ textAlign: 'right' as const }), color: '#f4efe2', pointerEvents: 'none', textShadow: '0 2px 8px rgba(0,0,0,0.55)' }}>
         <div style={{ font: '700 54px var(--font-game), system-ui', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{Math.round(hud.mph)}</div>
         <div style={{ font: '600 11px var(--font-game), system-ui', letterSpacing: '0.25em', opacity: 0.75 }}>MPH {hud.gearR ? '· R' : ''}</div>
         <div style={{ font: '600 10px var(--font-game), system-ui', letterSpacing: '0.25em', opacity: 0.65, marginTop: 4 }}>{hud.road ? ROAD_LABEL[hud.road].toUpperCase() : 'OFF ROAD'}</div>
@@ -1246,8 +1257,12 @@ export default function ContinentRide() {
           {hud.air > 0.25 ? `AIR ${hud.air.toFixed(1)}s` : 'DRIFT'}
         </div>
       )}
-      <div style={{ position: 'absolute', left: 12, top: 12, padding: '5px 9px', borderRadius: 6, background: 'rgba(12,16,20,0.5)', color: '#e8eef2', font: '600 11px var(--font-game), system-ui', letterSpacing: '0.2em', pointerEvents: 'none' }}>
-        ATHERNYX · {R?.meta.name === "continent" ? "THE CONTINENT, 1672" : "ASHFELD TO RUNE HOLD"}
+      <div className={HEARTH_FONT_VARS} style={{ position: 'absolute', left: 12, top: hudSize === 'phone' ? 8 : 12, pointerEvents: 'none', zIndex: 32 }}>
+        <HudPlate face="full" r={12}>
+          <div style={{ ...hearthDisplay, padding: '5px 11px', fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+            Athernyx · {R?.meta.name === "continent" ? "the continent, 1672" : "Ashfeld to Rune Hold"}
+          </div>
+        </HudPlate>
       </div>
       {R && !started && (
         <div onPointerDown={isTouch ? () => setStarted(true) : undefined} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: isTouch ? 'auto' : 'none', zIndex: 30 }}>

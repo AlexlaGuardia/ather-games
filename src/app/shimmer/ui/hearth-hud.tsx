@@ -124,7 +124,7 @@ export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect, size 
             }
             const body = (
               <>
-                {e && mounted && <ItemChip itemId={e.itemId} size={w.icon} />}
+                {e && mounted && (e.icon ? <img src={e.icon} alt="" width={w.icon} height={w.icon} draggable={false} /> : <ItemChip itemId={e.itemId} size={w.icon} />)}
                 {e && (
                   <span className="absolute bottom-0.5 right-1.5 text-[11px] font-extrabold tabular-nums"
                         style={{ ...hearthBody, color: t.count, textShadow: t.countShadow }}>{e.count}</span>
@@ -481,6 +481,81 @@ export function HearthToolPips({ face, pips }: { face: HudFace; pips: readonly T
           <span className="relative text-[9px] font-extrabold tabular-nums" style={{ ...hearthBody, color: t.count }}>{p.level}</span>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ── top-centre: the compass (2026-11-15, hub — Alex: "the same ui throughout the whole game; compass, minimap…") ──
+/** Heading convention, same as the walker and the courser (a YXZ camera looks along (−sin yaw, 0, −cos yaw)):
+ *  north = −Z, east = +X, so heading° = −yaw in degrees, and the bearing to a point is atan2(dx, −dz). */
+export const headingDeg = (yaw: number) => (((-yaw * 180) / Math.PI) % 360 + 360) % 360
+export const bearingDeg = (fromX: number, fromZ: number, toX: number, toZ: number) =>
+  ((Math.atan2(toX - fromX, -(toZ - fromZ)) * 180) / Math.PI + 360) % 360
+/** −180..180: how far right of the heading a bearing sits. */
+export const relDeg = (bearing: number, heading: number) => ((bearing - heading + 540) % 360) - 180
+
+export type CompassPose = { x: number; z: number; yaw: number }
+export type CompassMark = { x: number; z: number; color: string; title?: string }
+const CARD: Record<number, string> = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' }
+
+/** A strip that slides under a fixed notch: 120° of view, a tick every 15°, cardinals in the display face (N in the
+ *  accent). `marks` are places the host wants pointed at (a node, a waymark): a pip at their bearing, pinned to the
+ *  strip's edge (dimmed) when they are behind you. Polled from refs, never re-rendered (the hearth HUD rule). */
+export function HearthCompass({ face, pose, marks, size = 'wide', top }: {
+  face: HudFace; pose: React.RefObject<CompassPose | null>; marks?: React.RefObject<readonly CompassMark[]>
+  size?: HudSize; top?: number
+}) {
+  const t = HUD_FACES[face]
+  const W = size === 'phone' ? 190 : size === 'compact' ? 250 : 300, FIELD = 120, PPD = W / FIELD
+  const strip = useRef<HTMLDivElement>(null), pips = useRef<HTMLDivElement>(null), read = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    let id = 0
+    const tick = () => {
+      id = requestAnimationFrame(tick)
+      const p = pose.current; if (!p) return
+      const h = headingDeg(p.yaw)
+      if (strip.current) strip.current.style.transform = `translateX(${(W / 2 - (h + 360) * PPD).toFixed(1)}px)`
+      if (read.current) { const s = `${Math.round(h) % 360}°`; if (read.current.textContent !== s) read.current.textContent = s }
+      const box = pips.current, ms = marks?.current ?? []
+      if (box) {
+        while (box.children.length < ms.length) { const d = document.createElement('div'); d.style.cssText = 'position:absolute;top:50%;width:9px;height:9px;margin:-4.5px;border-radius:9px;transition:opacity .2s'; box.appendChild(d) }
+        for (let i = 0; i < box.children.length; i++) {
+          const el = box.children[i] as HTMLDivElement, m = ms[i]
+          if (!m) { el.style.display = 'none'; continue }
+          const r = relDeg(bearingDeg(p.x, p.z, m.x, m.z), h), lim = FIELD / 2 - 3, inView = Math.abs(r) <= lim
+          el.style.display = 'block'; el.style.background = m.color; el.title = m.title ?? ''
+          el.style.boxShadow = `0 0 0 1.5px ${face === 'full' ? '#3a2716' : 'rgba(0,0,0,.6)'}`
+          el.style.left = `${(W / 2 + Math.max(-lim, Math.min(lim, r)) * PPD).toFixed(1)}px`
+          el.style.opacity = inView ? '1' : '0.45'
+        }
+      }
+    }
+    id = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(id)
+  }, [pose, marks, W, PPD, face])
+  const ticks: React.ReactNode[] = []
+  for (let d = 285; d <= 795; d += 15) {   // the window is (h+360) ± 60, h in 0..360
+    const deg = d % 360, label = CARD[deg], major = deg % 90 === 0
+    ticks.push(
+      <div key={d} className="absolute top-0 flex flex-col items-center" style={{ left: d * PPD, transform: 'translateX(-50%)' }}>
+        <div style={{ width: label ? 2 : 1, height: label ? 7 : 4, background: label ? t.text : t.textDim, opacity: label ? 0.9 : 0.6 }} />
+        {label && <div className="leading-none mt-0.5" style={{ ...hearthDisplay, fontSize: major ? 13 : 10, fontWeight: 700, color: deg === 0 ? t.accent : major ? t.text : t.textDim }}>{label}</div>}
+      </div>,
+    )
+  }
+  return (
+    <div className="pointer-events-none" style={{ position: 'fixed', top: top ?? (size === 'phone' ? 8 : 12), left: '50%', transform: 'translateX(-50%)', zIndex: 34 }} data-hud="compass">
+      <HudPlate face={face} r={12}>
+        <div className="relative overflow-hidden" style={{ width: W, height: 28 }}>
+          <div ref={strip} className="absolute left-0 top-1" style={{ width: 800 * PPD, height: 22 }}>{ticks}</div>
+          <div ref={pips} className="absolute inset-x-0" style={{ top: 22, height: 0 }} />
+          {/* the notch: where you face */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2" style={{ width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: `6px solid ${t.accent}` }} />
+          <div className="absolute inset-y-0 left-0 w-8" style={{ background: `linear-gradient(90deg, ${face === 'full' ? 'rgba(233,215,180,.95)' : 'rgba(20,14,8,.8)'}, transparent)` }} />
+          <div className="absolute inset-y-0 right-0 w-8" style={{ background: `linear-gradient(270deg, ${face === 'full' ? 'rgba(233,215,180,.95)' : 'rgba(20,14,8,.8)'}, transparent)` }} />
+        </div>
+      </HudPlate>
+      <div className="text-center mt-0.5 text-[10px] font-bold tabular-nums" style={{ ...hearthBody, color: '#f4efe2', textShadow: '0 1px 3px rgba(0,0,0,.85)' }}><span ref={read} /></div>
     </div>
   )
 }

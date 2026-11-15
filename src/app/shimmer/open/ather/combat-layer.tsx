@@ -171,7 +171,7 @@ function Tells({ c, heightAt }: { c: React.MutableRefObject<Combat>; heightAt: (
   )
 }
 
-export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf }: {
+export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true }: {
   T: Terrain
   locked: React.MutableRefObject<boolean>
   frozen: React.MutableRefObject<boolean>
@@ -184,6 +184,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   nodes?: WildsNode[]
   /** Which node's ground a spot is (id), or undefined on a tile with no nodes: strays only well up where it is infected. */
   ownerOf?: (x: number, z: number) => string | undefined
+  /** The Repeater is the held slot (the hotbar): only then does a click fire. */
+  armed?: boolean
 }) {
   const { camera } = useThree()
   const c = useRef<Combat>(newCombat(Date.now() >>> 0))
@@ -196,6 +198,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const p = useMemo(() => new THREE.Vector3(), []), fwd = useMemo(() => new THREE.Vector3(0, 0, 1), [])
 
   const nodesRef = useRef(nodes); nodesRef.current = nodes
+  const armedRef = useRef(armed); armedRef.current = armed
   const ownerRef = useRef(ownerOf); ownerRef.current = ownerOf
   const spent = useRef(new Set<string>())   // cleared this visit: never re-woken before the page drops it
   useEffect(() => { revive(c.current); setIds([]) }, [reviveKey])
@@ -230,7 +233,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       const infested = own ? (x: number, z: number) => { const id = own(x, z); return !id || (!spent.current.has(id) && nodesRef.current.some(n => n.id === id)) } : undefined
       populate(C, T, feet.x, feet.z, C.champ ? 0 : near ? 11 : 7, safe, infested)
     }
-    if ((trigger.current || touch.fire) && !frozen.current) {
+    if ((trigger.current || touch.fire) && !frozen.current && armedRef.current) {
       camera.getWorldDirection(aim)
       fire(C, camera.position, aim)
       if (!C.gun.auto) { trigger.current = false; touch.fire = false }
