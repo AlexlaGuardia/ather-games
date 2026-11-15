@@ -95,6 +95,8 @@ const discs = new Map(townDiscs(R).map(d => [d.id, d]))
 for (const pl of plans) for (const l of pl.lanes) for (const [i, [x, z]] of l.pts.entries()) {
   // a lane's first point sits ON the kerb or the square's rim by design: that is where it joins
   if (i === 0) continue
+  // Veradyn is several towns in one plan (waterfront + isles); its lanes are checked on their own below
+  if (pl.place === 'veradyn') { if (R.heightAt(x, z) < 1.5) badLane++; continue }
   const d = discs.get(pl.place)!, nr = nearestRoad(R, x, z)
   if (R.heightAt(x, z) < 1.5 || Math.hypot(x - d.x, z - d.z) > pl.r || (nr.road && nr.d < nr.road.width / 2)) badLane++
 }
@@ -112,6 +114,8 @@ const segDist = (pts: [number, number, number][], x: number, z: number) => {
 // ── every lane is joined: its first point is on a road kerb / the square, or it crosses another lane that is
 let loose = 0
 for (const pl of plans) {
+  // Veradyn's isles have no road to join (a ferry crossing, canon): the guard covers the towns a road serves
+  if (pl.place === 'veradyn') continue
   const seen = new Set<number>()
   const onNet = (x: number, z: number) => { const nr = nearestRoad(R, x, z); return (nr.road && nr.d < nr.road.width / 2 + 1.5) || nearPad(R, x, z, 1.5) }
   pl.lanes.forEach((l, i) => { if (onNet(l.pts[0][0], l.pts[0][1])) seen.add(i) })
@@ -163,6 +167,17 @@ ok(!!port && port.towers.every(t => ghY(t) > houseMid), 'the towers stand above 
 let inPortGround = 0
 if (port) for (const b of gh.buildings) for (const [x, z] of corners(b)) if (port.keepOut.some(k => Math.hypot(k.x - x, k.z - z) < k.r - 0.5)) inPortGround++
 ok(inPortGround === 0, `houses on the port's ground: ${inPortGround}`)
+
+// ── Veradyn (geography.md › THE TOWNS IN 1672): the mainland face is a waterfront town on the coast, the isles across
+// the water carry the grown city, the Barrier Temple stands on the highest isle, a ferry pier points at them
+const ver = byId.get('veradyn')!
+const vdot = meta.places.find(q => q.id === 'veradyn')!
+const shoreB = ver.buildings.filter(b => Math.hypot(b.x - vdot.x, b.z - vdot.z) > 1600)
+const isleB = ver.buildings.filter(b => Math.hypot(b.x - vdot.x, b.z - vdot.z) < 1500)
+ok(shoreB.length >= 20, `Veradyn's waterfront on the mainland: ${shoreB.length} buildings`)
+ok(isleB.length >= 20, `Veradyn's grown isles: ${isleB.length} buildings`)
+ok(!!ver.temple && ver.temple.y > 20, `the Barrier Temple on the highest isle (y ${ver.temple?.y.toFixed(0)})`)
+ok(!!ver.port?.piers.length, 'a ferry pier on the waterfront')
 
 // ── deterministic: the same map plans the same towns
 const again = planTowns(R)

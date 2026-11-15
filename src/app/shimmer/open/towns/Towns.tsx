@@ -10,7 +10,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Region } from '../region'
-import { planTown, townRadius, FLOOR_H, type TownPlan, type Building } from './plan'
+import { townRadius, FLOOR_H, type TownPlan, type Building } from './plan'
+import { cachedPlan } from '../foot-solids'
+import { veradynSites } from './veradyn'
 import { dayProgress, daylight } from '../../engine/day-cycle'
 import { FRONTS } from '../../play3d/rune-hold-look'
 import { StationScene, ShipHull } from '../../play3d/StationScene'
@@ -21,7 +23,7 @@ import { nearestRoad } from '../region'
 
 // ── looks per town, from canon + the concept shots Alex judged 11-15 (tools/art/gen_towns.py). Roman bones
 // (world/athernyx.md): pale stone, terracotta. Unlisted towns take the country default. ──
-interface Style { walls: string[]; roofs: string[]; plinth: string }
+interface Style { walls: string[]; roofs: string[]; plinth: string; /** grown roofs: a living cap instead of a gable (Veradyn) */ grown?: boolean }
 const COUNTRY: Style = { walls: ['#e3d6bb', '#d9c7a4', '#eadfc8', '#cfbb98'], roofs: ['#a4553a', '#b8653f', '#8f4a34'], plinth: '#9b8f7c' }
 const STYLE: Record<string, Style> = {
   // stone stacked up a hillside, smithy town: warmer sandstone, darker fired roofs (pick: rune-hold-2)
@@ -30,6 +32,8 @@ const STYLE: Record<string, Style> = {
   citadel: { walls: ['#f1ebdd', '#e9e1cf', '#f6f1e6', '#e2d8c2'], roofs: ['#b5603c', '#c4703f', '#a85a3a'], plinth: '#c9bfa9' },
   // the white port city (pick: gale-haven-4)
   'gale-haven': { walls: ['#f3f0e8', '#ebe6da', '#f7f5ef', '#e4ddcc'], roofs: ['#b0583a', '#c26b45', '#9a5038'], plinth: '#b9b2a2' },
+  // living architecture, buildings grown from the Network, fungal forms and stone merged (locations.md; pick veradyn-1)
+  veradyn: { walls: ['#cfd2bf', '#c3c9b0', '#d8d6c2', '#b7bfa3'], roofs: ['#6f8f4f', '#7d9a52', '#5f7f46', '#8aa05a'], plinth: '#8f9481', grown: true },
   // where the green gives out into tan broken country (pick: ashfeld-3)
   ashfeld: { walls: ['#d8bf94', '#cbb085', '#e0caa3', '#c2a378'], roofs: ['#9c4f34', '#ad5a3a', '#874431'], plinth: '#8d7f69' },
 }
@@ -217,7 +221,7 @@ function StationField({ s }: { s: StationSite }) {
         <boxGeometry args={[STATION_COLS + 0.6, h, STATION_ROWS + 0.6]} />
         <meshLambertMaterial color="#8e8270" flatShading />
       </mesh>
-      <StationScene />
+      <StationScene townGap />
       {/* the stair up the terrace to the terminal's town door (the walk from the town arrives at its foot) */}
       {h > 0.6 && (() => {
         const L = h / 0.55, z = STATION.doors.town.z + STATION.doors.town.h / 2 - 0.5
@@ -343,6 +347,23 @@ function GalePort({ port }: { port: Port }) {
   )
 }
 
+// ── VERADYN'S BARRIER TEMPLE on the highest isle's crown (locations.md: "Barrier Temple | Veradyn | integrated into
+// living architecture"; veradyn-arc.md: "the Barrier Temple on the height"): grown stone rising in tiers under a broad
+// living cap. Its beacon ignores the fog, so from the mainland shore you can see where Veradyn lies (the isles stand
+// beyond the draw distance from the coast). The look is a blockout; a design brief would replace it.
+function BarrierTemple({ t }: { t: { x: number; z: number; y: number } }) {
+  return (
+    <group position={[t.x, t.y - 1, t.z]}>
+      {[[14, 10, 0], [10, 9, 10], [7, 9, 19]].map(([r, h, y], i) => (
+        <mesh key={i} position={[0, y + h / 2, 0]}><cylinderGeometry args={[r * 0.8, r, h, 10]} /><meshLambertMaterial color={['#c9ccb6', '#c2c7ad', '#d3d4bf'][i]} flatShading /></mesh>
+      ))}
+      <mesh position={[0, 30, 0]}><cylinderGeometry args={[2.2, 3.4, 10, 8]} /><meshLambertMaterial color="#b9bea4" flatShading /></mesh>
+      <mesh position={[0, 34, 0]}><sphereGeometry args={[11, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshLambertMaterial color="#6f8f4f" flatShading /></mesh>
+      <mesh position={[0, 46, 0]}><cylinderGeometry args={[0.8, 2.4, 90, 8, 1, true]} /><meshBasicMaterial color="#b6f0c0" transparent opacity={0.35} depthWrite={false} fog={false} /></mesh>
+    </group>
+  )
+}
+
 export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<THREE.Vector3> }) {
   const cache = useRef(new Map<number, TownPlan>())
   const [shown, setShown] = useState<TownPlan[]>([])
@@ -352,6 +373,8 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
   const facade = useMemo(facadeMaterial, [])
   useEffect(() => () => facade.m.dispose(), [facade])
   const centres = useMemo(() => R.meta.places.map(p => {
+    // Veradyn streams from its waterfront and reaches out over the isles (veradyn.ts)
+    if (p.id === 'veradyn') { const sh = veradynSites(R).shore; return { x: sh?.x ?? p.x, z: sh?.z ?? p.z, r: 2400 } }
     const sq = p.kind === 'spot' ? undefined : R.meta.network?.junctions.find(j => j.kind === 'square' && j.place === p.id)
     return { x: sq?.x ?? p.x, z: sq?.z ?? p.z, r: townRadius(p) }
   }), [R])
@@ -365,7 +388,8 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
     const f = focus.current
     const near = centres.map((c, i) => ({ i, d: Math.hypot(c.x - f.x, c.z - f.z) - c.r })).filter(o => centres[o.i].r > 0)
     const todo = near.filter(o => o.d < PLAN_REACH && !cache.current.has(o.i)).sort((a, b) => a.d - b.d)[0]
-    if (todo) cache.current.set(todo.i, planTown(R, R.meta.places[todo.i], todo.i))
+    // one plan per town, shared with the on-foot collision (foot-solids.ts, Jin 2): never planned twice
+    if (todo) cache.current.set(todo.i, cachedPlan(R, todo.i))
     const vis = near.filter(o => o.d < SHOW_REACH && cache.current.has(o.i)).map(o => o.i).sort((a, b) => a - b)
     const key = vis.join(',')
     if (key !== shownKey.current) { shownKey.current = key; setShown(vis.map(i => cache.current.get(i)!)) }
@@ -380,10 +404,10 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
   useEffect(() => () => lanes.dispose(), [lanes])
 
   const plinths = useRef<THREE.InstancedMesh>(null), walls = useRef<THREE.InstancedMesh>(null)
-  const roofs = useRef<THREE.InstancedMesh>(null), chimneys = useRef<THREE.InstancedMesh>(null)
+  const roofs = useRef<THREE.InstancedMesh>(null), chimneys = useRef<THREE.InstancedMesh>(null), caps = useRef<THREE.InstancedMesh>(null)
   const n = Math.max(1, parts.length)
   useEffect(() => {
-    if (!plinths.current || !walls.current || !roofs.current || !chimneys.current) return
+    if (!plinths.current || !walls.current || !roofs.current || !chimneys.current || !caps.current) return
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3(), c = new THREE.Color()
     const hide = new THREE.Matrix4().makeScale(0, 0, 0)
     parts.forEach(({ b, s: st }, i) => {
@@ -400,6 +424,14 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
       const rh = (b.kind === 'hall' ? 0.22 : 0.32) * b.d
       p.set(b.x, top + H, b.z); s.set(b.w + 0.6, rh, b.d + 0.8)
       roofs.current!.setMatrixAt(i, m.compose(p, q, s)); roofs.current!.setColorAt(i, c.set(st.roofs[Math.floor(b.v * 7.3) % st.roofs.length]))
+      if (st.grown) {
+        // a GROWN roof (Veradyn's living architecture): a broad cap like a fungus's, overhanging the walls, no gable
+        roofs.current!.setMatrixAt(i, hide); chimneys.current!.setMatrixAt(i, hide)
+        p.set(b.x, top + H - 0.3, b.z); s.set(b.w * 0.62, Math.min(b.w, b.d) * (0.35 + b.v * 0.25), b.d * 0.62)
+        caps.current!.setMatrixAt(i, m.compose(p, q, s)); caps.current!.setColorAt(i, c.set(st.roofs[Math.floor(b.v * 7.3) % st.roofs.length]))
+        return
+      }
+      caps.current!.setMatrixAt(i, hide)
       if (b.v > 0.3) {
         const off = (b.v - 0.65) * b.w * 0.8
         const lx = Math.cos(Math.PI / 2 - b.yaw) * off, lz = -Math.sin(Math.PI / 2 - b.yaw) * off
@@ -407,7 +439,7 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
         chimneys.current!.setMatrixAt(i, m.compose(p, q, s)); chimneys.current!.setColorAt(i, c.set(st.plinth))
       } else chimneys.current!.setMatrixAt(i, hide)
     })
-    for (const r of [plinths, walls, roofs, chimneys]) {
+    for (const r of [plinths, walls, roofs, chimneys, caps]) {
       r.current!.count = parts.length
       r.current!.instanceMatrix.needsUpdate = true
       if (r.current!.instanceColor) r.current!.instanceColor.needsUpdate = true
@@ -421,6 +453,8 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
       <instancedMesh key={`w${n}`} frustumCulled={false} ref={walls} args={[undefined, undefined, n]} material={facade.m}><boxGeometry /></instancedMesh>
       <instancedMesh key={`r${n}`} frustumCulled={false} ref={roofs} args={[undefined, undefined, n]} geometry={roof}><meshLambertMaterial flatShading side={THREE.DoubleSide} /></instancedMesh>
       <instancedMesh key={`c${n}`} frustumCulled={false} ref={chimneys} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
+      <instancedMesh key={`g${n}`} frustumCulled={false} ref={caps} args={[undefined, undefined, n]}><sphereGeometry args={[1, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshLambertMaterial flatShading /></instancedMesh>
+      {shown.filter(pl => pl.temple).map(pl => <BarrierTemple key={pl.place} t={pl.temple!} />)}
       {parts.filter(q => q.b.front).map(q => <FrontSign key={`${q.b.front}`} b={q.b} />)}
       {shown.flatMap(pl => (pl.boards ?? []).map((b, i) => <NameBoard key={`${pl.place}-${i}`} b={b} />))}
       {shown.filter(pl => pl.wall).map(pl => <HeritageWall key={pl.place} R={R} w={pl.wall!} lanes={pl.lanes} />)}

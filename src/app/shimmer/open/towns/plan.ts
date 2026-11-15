@@ -22,7 +22,8 @@
 // Canon fixes: Roman bones (world/athernyx.md: columns, arches, pale stone, terracotta roofs, carved trim).
 // Concept shots Alex judged 11-15 (tools/art/gen_towns.py): Rune Hold 2, Citadel 3, Ashfeld 3, village 1.
 
-import { nearestRoad, nearPad, drivable, type Region, type RegionPlace } from '../region'
+import { nearestRoad, nearPad, drivable, type Region, type RegionPlace, type RegionJunction } from '../region'
+import { veradynSites } from './veradyn'
 import { galeHavenPort, type Port } from './gale-haven'
 import { stampCore, inCore, CORE_YAW, runeHoldStation, inStation, stationToWorld, STATION_TOWN_DOOR, type CoreTransform, type StationSite } from './rune-hold-core'
 
@@ -47,7 +48,7 @@ export interface Building {
   /** the storefront it is, when it is one (play3d FRONTS ids) */
   front?: string
 }
-export interface TownPlan { place: string; r: number; lanes: Lane[]; buildings: Building[]; /** authored paving cells (1 m), with the bearing they are laid at */ paving?: { pts: [number, number][]; yaw: number }; /** Rune Hold's Travelers Station field (play3d's StationScene, placed) */ station?: StationSite; /** walks: paved paths drawn like lanes but not part of the street net (the way to the Station) */ walks?: Lane[]; /** Gale Haven's port: docks, cranes, the Wet Market, the Sky Port's mooring towers (gale-haven.ts) */ port?: Port; /** Citadel's heritage wall: a ring round the old city the capital has grown past (geography.md › THE TOWNS IN 1672) */ wall?: { x: number; z: number; r: number }; /** town-name boards where a road comes into town: at the roadside, facing the arriving traffic */ boards?: { x: number; z: number; y: number; yaw: number; name: string }[] }
+export interface TownPlan { place: string; r: number; lanes: Lane[]; buildings: Building[]; /** authored paving cells (1 m), with the bearing they are laid at */ paving?: { pts: [number, number][]; yaw: number }; /** Rune Hold's Travelers Station field (play3d's StationScene, placed) */ station?: StationSite; /** walks: paved paths drawn like lanes but not part of the street net (the way to the Station) */ walks?: Lane[]; /** Veradyn's Barrier Temple on the highest isle (veradyn.ts) */ temple?: { x: number; z: number; y: number }; /** Gale Haven's port: docks, cranes, the Wet Market, the Sky Port's mooring towers (gale-haven.ts) */ port?: Port; /** Citadel's heritage wall: a ring round the old city the capital has grown past (geography.md › THE TOWNS IN 1672) */ wall?: { x: number; z: number; r: number }; /** town-name boards where a road comes into town: at the roadside, facing the arriving traffic */ boards?: { x: number; z: number; y: number; yaw: number; name: string }[] }
 
 /** how far a town reaches, by its kind on the Atlas */
 export function townRadius(p: RegionPlace): number {
@@ -128,10 +129,14 @@ function mainStreets(R: Region, p: RegionPlace, r: number): Lane[] {
 export const WHY: Record<string, number> = {}
 let TAG = ''
 const no = (k: string) => { WHY[TAG + k] = (WHY[TAG + k] ?? 0) + 1 }
-export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
-  const r = townRadius(p)
+/** a stand-in square for a town the road network gave none (Veradyn's waterfront and isles): spokes and rings grow off it */
+type Square = Pick<RegionJunction, 'x' | 'z' | 'r' | 'arms'>
+export function planTown(R: Region, p: RegionPlace, pi: number, opts?: { r?: number; sq?: Square }): TownPlan {
+  // ── VERADYN: the mainland face + the grown isles across the water (veradyn.ts). Two plans, merged into one.
+  if (p.id === 'veradyn' && !opts) return planVeradyn(R, p, pi)
+  const r = opts?.r ?? townRadius(p)
   // the town's heart is its square when the network gave it one (Ashfeld's Atlas dot sits 88 m off its square)
-  const sq = (R.meta.network?.junctions ?? []).find(j => j.kind === 'square' && j.place === p.id)
+  const sq: Square | undefined = opts?.sq ?? (R.meta.network?.junctions ?? []).find(j => j.kind === 'square' && j.place === p.id)
   if (sq && p.kind !== 'spot') p = { ...p, x: sq.x, z: sq.z }
   const plan: TownPlan = { place: p.id, r, lanes: [], buildings: [] }
   if (r <= 0) return plan
@@ -449,6 +454,30 @@ export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
   return plan
 }
 
+/** Veradyn = a waterfront on the mainland coast nearest the archipelago (with a ferry pier toward the isles), and a
+ *  grown village on each of the isles round the Atlas dot; the Barrier Temple on the highest. Everything is one plan,
+ *  so it streams, styles and tests as one town. */
+function planVeradyn(R: Region, p: RegionPlace, pi: number): TownPlan {
+  const v = veradynSites(R)
+  const plan: TownPlan = { place: p.id, r: 0, lanes: [], buildings: [] }
+  if (v.shore) {
+    const s = v.shore
+    const shoreTown = planTown(R, { ...p, x: s.x, z: s.z }, pi, { r: 140, sq: { x: s.x, z: s.z, r: 12, arms: [] } })
+    plan.r = 140; plan.lanes.push(...shoreTown.lanes); plan.buildings.push(...shoreTown.buildings)
+    // the ferry pier (lawful, canon): from the coast straight out toward the isles
+    const len = 30
+    if (R.heightAt(s.x + Math.cos(s.toIsles) * len, s.z + Math.sin(s.toIsles) * len) < 1.5)
+      plan.port = { piers: [{ x: s.x, z: s.z, yaw: s.toIsles, len, y: 1.6 }], towers: [], cranes: [], stalls: [], keepOut: [] }
+  }
+  v.isles.slice(0, 6).forEach((isle, k) => {
+    const r = Math.min(110, Math.max(40, isle.r * 0.8))
+    const t = planTown(R, { ...p, id: `veradyn-isle-${k}`, kind: 'village', name: null, x: isle.x, z: isle.z }, pi * 100 + k, { r, sq: { x: isle.x, z: isle.z, r: k === 0 ? 16 : 8, arms: [] } })
+    plan.lanes.push(...t.lanes); plan.buildings.push(...t.buildings)
+  })
+  if (v.temple) plan.temple = v.temple
+  return plan
+}
+
 export function planTowns(R: Region): TownPlan[] {
   return R.meta.places.map((p, pi) => planTown(R, p, pi))
 }
@@ -461,6 +490,7 @@ export function townDiscs(R: Region): { id: string; x: number; z: number; r: num
   const extra = st ? [{ id: 'rune-hold-station', x: st.x + 40 * Math.cos(st.yaw) - 25 * Math.sin(st.yaw), z: st.z + 40 * Math.sin(st.yaw) + 25 * Math.cos(st.yaw), r: 52 }] : []
   return [...extra, ...R.meta.places.map(p => {
     const sq = p.kind === 'spot' ? undefined : js.find(j => j.kind === 'square' && j.place === p.id)
+    if (p.id === 'veradyn') { const sh = veradynSites(R).shore; return { id: p.id, x: sh?.x ?? p.x, z: sh?.z ?? p.z, r: 126 } }
     return { id: p.id, x: sq?.x ?? p.x, z: sq?.z ?? p.z, r: Math.max(20, townRadius(p) * 0.9) }
   })]
 }

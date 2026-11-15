@@ -30,7 +30,7 @@ const pick = <V,>(arr: readonly V[], x: number, z: number, k: number) => arr[Mat
 const WALL_H = 7
 
 /** The terminal's stone, its roof and lintels, and the ground everywhere. */
-function useStation() {
+function useStation(townGap = false) {
   return useMemo(() => {
     const g = STATION.grid, t = STATION.terminal
     const inHall = (x: number, z: number) => x > t.x0 && x < t.x1 && z > t.z0 && z < t.z1
@@ -50,6 +50,9 @@ function useStation() {
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const n = g[z + dz]?.[x + dx]; if (n !== undefined && n !== T.WALL) open = true }
       if (!open) continue
       const rim = x === 0 || z === 0 || x === g[0].length - 1 || z === g.length - 1
+      // the continent's Station is entered up a stair from OUTSIDE the town door (open/towns/Towns.tsx): the rim cells
+      // in front of that door are left open there (play3d enters through the door itself and keeps its parapet whole)
+      if (townGap && x === 0 && z >= STATION.doors.town.z - 1 && z <= STATION.doors.town.z + STATION.doors.town.h) continue
       const h = rim ? 1.4 : WALL_H          // the field's rim is a low parapet; the terminal stands tall
       const course = 0.55
       for (let k = 0; k < Math.round(h / course); k++) {
@@ -75,7 +78,7 @@ function useStation() {
       lamps.push({ x: l.x, y: 2.9, z: l.z, sx: 0.34, sy: 0.44, sz: 0.34, c: P.glass })
     }
     return { ground, stone, timber, pillars, lintels, lamps, posts }
-  }, [])
+  }, [townGap])
 }
 
 /** A pad: a dark disc, a gold ring painted round it, lights studding the ring, the berth's number. */
@@ -199,8 +202,8 @@ function Board() {
   )
 }
 
-export function StationScene() {
-  const s = useStation()
+export function StationScene({ townGap = false }: { townGap?: boolean } = {}) {
+  const s = useStation(townGap)
   const t = STATION.terminal
   return (
     <>
