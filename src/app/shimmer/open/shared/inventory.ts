@@ -21,9 +21,9 @@ export const OPEN_ITEMS: Record<string, ItemDef> = {
   waymark: { name: 'Waymark', blurb: 'Plant it on open ground in the Wilds and the fold map can take you back. Lift it to carry it again.', icon: '/open/icons/waymark.svg', stack: 12, kind: 'placeable' },
 }
 // ── Forestry's yield (canon: game/shimmer-skilling.md › Forestry resources + design-briefs/shimmer-resources.md; the drop
-//    table is world/resources.ts › NODE_DEFS). No icon art yet: the bag draws its plain chip.
+//    table is world/resources.ts › NODE_DEFS). Icons: public/open/icons/<id with dashes>.svg, drawn by tools/art/forestry_icons.py.
 const wood = (name: string, blurb: string): ItemDef => ({ name, blurb, icon: '', stack: 99, kind: 'material' })
-Object.assign(OPEN_ITEMS, {
+const FORESTRY = {
   goldwood_plank: wood('Goldwood Plank', 'Light, warm-toned wood. Easy to work with.'),
   goldwood_bark: wood('Goldwood Bark', 'Papery golden bark, mildly aromatic.'),
   shimmeroak_plank: wood('Shimmeroak Plank', 'Dense wood with a rippled grain that catches light.'),
@@ -41,7 +41,9 @@ Object.assign(OPEN_ITEMS, {
   shimmeroak_sapling: wood('Shimmeroak Sapling', 'A young shimmeroak, already stubborn. It will grow where you plant it.'),
   starwillow_sapling: wood('Starwillow Sapling', 'A young starwillow, tips faintly lit. It will grow where you plant it.'),
   dawnwood_sapling: wood('Dawnwood Sapling', 'A dawnwood seedling. Rare, and slow, and worth it.'),
-} satisfies Record<string, ItemDef>)
+} satisfies Record<string, ItemDef>
+for (const [id, def] of Object.entries(FORESTRY)) def.icon = `/open/icons/${id.replace(/_/g, '-')}.svg`
+Object.assign(OPEN_ITEMS, FORESTRY)
 export const itemDef = (id: string): ItemDef => OPEN_ITEMS[id] ?? { name: id.replace(/_/g, ' '), blurb: '', icon: '', stack: 99, kind: 'material' }
 
 export const HOTBAR = 8, BAG = 24, SLOTS = HOTBAR + BAG
