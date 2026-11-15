@@ -11,6 +11,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Region } from '../region'
 import { planTown, townRadius, FLOOR_H, type TownPlan, type Building } from './plan'
+import { dayProgress, daylight } from '../../engine/day-cycle'
 
 // ── looks per town, from canon + the concept shots Alex judged 11-15 (tools/art/gen_towns.py). Roman bones
 // (world/athernyx.md): pale stone, terracotta. Unlisted towns take the country default. ──
@@ -46,6 +47,51 @@ function roofGeometry() {
   return g
 }
 
+// ── the FACADE, drawn by the wall shader rather than modelled (one instanced box per building stays one box):
+// windows per floor, a door on the street face, a carved trim band at every floor line. Canon (world/athernyx.md):
+// the trim is mana channels, plain by day, and "the sun sets and the trim breathes soft light"; windows are lamplit.
+// Sizes are in metres off the instance's own scale, so a 15 m row house gets more windows than a 7 m cottage.
+function facadeMaterial() {
+  const m = new THREE.MeshLambertMaterial({ flatShading: true })
+  const uniforms = { uNight: { value: 0 } }
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uNight = uniforms.uNight
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vF; varying vec3 vNL; varying vec3 vS; varying float vId;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vS = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
+        vF = position * vS; vNL = normal; vId = float(gl_InstanceID);`)
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform float uNight; varying vec3 vF; varying vec3 vNL; varying vec3 vS; varying float vId;
+        float h3(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
+        vec3 facadeGlow = vec3(0.0);`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        if (abs(vNL.y) < 0.5) {
+          bool front = vNL.z > 0.5;
+          float faceW = abs(vNL.z) > 0.5 ? vS.x : vS.z;
+          float u = (abs(vNL.z) > 0.5 ? vF.x : vF.z) + faceW * 0.5;
+          float v = vF.y + vS.y * 0.5;
+          float fl = floor(v / ${FLOOR_H.toFixed(2)}), fv = v - fl * ${FLOOR_H.toFixed(2)};
+          float cols = max(1.0, floor(faceW / 2.7)), cw = faceW / cols;
+          float cell = floor(u / cw), lu = (fract(u / cw) - 0.5) * cw;
+          bool doorCell = front && fl < 0.5 && abs(cell - floor(cols * 0.5)) < 0.5;
+          if (doorCell && abs(lu) < 0.65 && fv < 2.3) {
+            diffuseColor.rgb = vec3(0.30, 0.19, 0.12);
+          } else if (!doorCell && abs(lu) < 0.45 && fv > 0.95 && fv < 2.35) {
+            float lit = step(h3(vec3(floor(vId + 0.5), fl, cell + (front ? 0.0 : 31.0))), 0.62);   // floor: the varying wobbles a hair per fragment, and sin() of a hash turns that into static
+            diffuseColor.rgb = mix(vec3(0.20, 0.17, 0.15), vec3(0.95, 0.72, 0.38), lit * uNight);
+            facadeGlow = vec3(1.0, 0.68, 0.32) * lit * uNight * 0.85;
+          } else if (fv < 0.22 && v > 0.5) {
+            diffuseColor.rgb *= 1.12;
+            facadeGlow = vec3(1.0, 0.82, 0.45) * uNight * 0.28;
+          }
+        }`)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += facadeGlow;')
+  }
+  return { m, uniforms }
+}
+
 function laneGeometry(R: Region, plans: TownPlan[]) {
   const pos: number[] = [], idx: number[] = []
   for (const pl of plans) for (const l of pl.lanes) {
@@ -72,6 +118,8 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
   const shownKey = useRef('')
   const t = useRef(0)
   const roof = useMemo(roofGeometry, [])
+  const facade = useMemo(facadeMaterial, [])
+  useEffect(() => () => facade.m.dispose(), [facade])
   const centres = useMemo(() => R.meta.places.map(p => {
     const sq = p.kind === 'spot' ? undefined : R.meta.network?.junctions.find(j => j.kind === 'square' && j.place === p.id)
     return { x: sq?.x ?? p.x, z: sq?.z ?? p.z, r: townRadius(p) }
@@ -79,6 +127,7 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
 
   // plan at most ONE town per tick (nearest first), so a stall is one town's worth, never the map's
   useFrame((_, dt) => {
+    facade.uniforms.uNight.value = 1 - daylight(dayProgress())
     t.current -= dt
     if (t.current > 0) return
     t.current = 0.4
@@ -138,7 +187,7 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
     <>
       <mesh geometry={lanes}><meshLambertMaterial color="#c9b892" side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-2} /></mesh>
       <instancedMesh key={`p${n}`} frustumCulled={false} ref={plinths} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
-      <instancedMesh key={`w${n}`} frustumCulled={false} ref={walls} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
+      <instancedMesh key={`w${n}`} frustumCulled={false} ref={walls} args={[undefined, undefined, n]} material={facade.m}><boxGeometry /></instancedMesh>
       <instancedMesh key={`r${n}`} frustumCulled={false} ref={roofs} args={[undefined, undefined, n]} geometry={roof}><meshLambertMaterial flatShading side={THREE.DoubleSide} /></instancedMesh>
       <instancedMesh key={`c${n}`} frustumCulled={false} ref={chimneys} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
       {R.meta.places.filter(p => p.name).map(p => (
