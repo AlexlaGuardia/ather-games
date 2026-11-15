@@ -71,3 +71,22 @@ export function veradynSites(R: Region): VeradynSites {
   cache.set(R, out)
   return out
 }
+
+/** The ferry to the isles (canon: "a ferry is lawful"; transportation.md gives short island hops to RINNING boats).
+ *  Same shape as the network's Shellback ferries (region.ts RegionFerry), so the page's ferry code takes it as is:
+ *  `a` is the waterfront quay at the pier's root, `b` the landing on the Barrier Temple's isle, its coast point nearest
+ *  the waterfront. Added to the region at load (continent/page.tsx), never written into the exported map. */
+export function veradynFerry(R: Region): { id: string; edge: string; kind: 'trail'; length: number; a: [number, number, number]; b: [number, number, number] } | null {
+  const v = veradynSites(R)
+  if (!v.shore || !v.isles.length) return null
+  const isle = v.isles[0], s = v.shore
+  // walk from the isle's crown toward the waterfront until the land runs out: that is the landing
+  const dx = s.x - isle.x, dz = s.z - isle.z, L = Math.hypot(dx, dz)
+  let bx = isle.x, bz = isle.z
+  for (let d = 0; d < L; d += 4) {
+    const x = isle.x + dx / L * d, z = isle.z + dz / L * d
+    if (R.heightAt(x, z) < 1.5) break
+    bx = x; bz = z
+  }
+  return { id: 'veradyn-rinning', edge: '', kind: 'trail', length: Math.round(Math.hypot(bx - s.x, bz - s.z)), a: [s.x, s.z, R.heightAt(s.x, s.z)], b: [bx, bz, R.heightAt(bx, bz)] }
+}

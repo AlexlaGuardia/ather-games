@@ -24,6 +24,7 @@ import type { Vitals } from '../../engine/vitals'
 import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Track } from './map'
 import { pitstopsUnlocked, visitNear } from './pitstops'
 import { Towns } from '../towns/Towns'
+import { veradynFerry } from '../towns/veradyn'
 import { townDiscs } from '../towns/plan'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -992,6 +993,10 @@ const SUPPLY: Supply[] = [
 const TOWNS = ['ashfeld', 'millbrook', 'rune-hold', 'passage']
 const ROAD_FACTOR = 1.3
 const FERRY_FARE = 8
+// the Veradyn crossing is a RINNING BOAT (transportation.md: short coastal or island hops), ~2 km against a river's
+// width, so it costs more; everything else on the network is a Shellback ferry
+const ferryName = (id: string) => (id === 'veradyn-rinning' ? 'rinning boat to the isles' : 'Shellback ferry')
+const ferryFare = (id: string) => (id === 'veradyn-rinning' ? 14 : FERRY_FARE)
 
 /** The continent's keys for Options › Controls: the walk set plus the courser's. */
 const CONTINENT_KEYS: KeyRow[] = [...WALK_KEYS, ['↑ ↓ ← →', 'drive (alongside the bound keys)'], ['Left mouse', 'fire a held gun'], ['Right mouse', 'aim a held gun']]
@@ -1076,8 +1081,9 @@ export default function ContinentRide() {
   const ledgerRef = useRef(ledger); ledgerRef.current = ledger
   const takeFerry = useCallback(() => {
     const f = ferryRef.current; if (!f || ferrying) return
-    if (ledgerRef.current.marks < FERRY_FARE) { flash(`The ferry is ${FERRY_FARE} Marks`); return }
-    setLedger({ ...ledgerRef.current, marks: ledgerRef.current.marks - FERRY_FARE })
+    const fare = ferryFare(f.ferry.id)
+    if (ledgerRef.current.marks < fare) { flash(`The ${ferryName(f.ferry.id)} is ${fare} Marks`); return }
+    setLedger({ ...ledgerRef.current, marks: ledgerRef.current.marks - fare })
     setFerrying(true)
     const dx = f.to[0] - f.from[0], dz = f.to[1] - f.from[1], L = Math.hypot(dx, dz) || 1
     setTimeout(() => {
@@ -1085,7 +1091,7 @@ export default function ContinentRide() {
       ctl.current.tp?.(f.to[0] + dx / L * 6, f.to[1] + dz / L * 6, Math.atan2(-dx, -dz))
       setTimeout(() => setFerrying(false), 500)
     }, 1300)
-    flash(`Shellback ferry · −${FERRY_FARE} Marks`)
+    flash(`${ferryName(f.ferry.id)[0].toUpperCase()}${ferryName(f.ferry.id).slice(1)} · −${fare} Marks`)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ferrying])
   useEffect(() => {
@@ -1190,7 +1196,12 @@ export default function ContinentRide() {
   }, [])
   useEffect(() => {
     const name = new URLSearchParams(window.location.search).get('region') ?? 'continent'
-    loadRegion(name).then(setR).catch(e => setErr(String(e)))
+    loadRegion(name).then(r => {
+      // the rinning boat to Veradyn's isles joins the network's ferries (towns/veradyn.ts); the exported map stays as is
+      const vf = veradynFerry(r)
+      if (vf && r.meta.network && !(r.meta.network.ferries ?? []).some(f => f.id === vf.id)) r.meta.network.ferries = [...(r.meta.network.ferries ?? []), vf]
+      setR(r)
+    }).catch(e => setErr(String(e)))
     const go = () => setStarted(true)
     window.addEventListener('keydown', go, { once: true })
     return () => window.removeEventListener('keydown', go)
@@ -1274,12 +1285,12 @@ export default function ContinentRide() {
       {ferryAt && !ferrying && (
         <div style={{ position: 'absolute', left: '50%', top: '30%', transform: 'translateX(-50%)', padding: '8px 16px', borderRadius: 6, background: 'rgba(28,24,18,0.66)',
           color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', pointerEvents: 'none' }}>
-          E · Shellback ferry across · {FERRY_FARE} Marks
+          E · {ferryName(ferryAt.ferry.id)}{ferryAt.ferry.id === 'veradyn-rinning' ? '' : ' across'} · {ferryFare(ferryAt.ferry.id)} Marks
         </div>
       )}
       <div style={{ position: 'absolute', inset: 0, background: '#0d0b08', opacity: ferrying ? 1 : 0, transition: 'opacity 0.5s', pointerEvents: 'none',
         display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e9e2d0', font: 'italic 500 18px var(--font-display), Georgia, serif' }}>
-        {ferrying ? 'The Shellback hauls you across…' : ''}
+        {ferrying ? (ferryRef.current?.ferry.id === 'veradyn-rinning' ? 'The rinning boat carries you out to the isles…' : 'The Shellback hauls you across…') : ''}
       </div>
       {hud.sign && (
         <div style={{ position: 'absolute', left: '50%', bottom: 22, transform: 'translateX(-50%)', maxWidth: 'calc(100% - 200px)', padding: '7px 14px', borderRadius: 6,

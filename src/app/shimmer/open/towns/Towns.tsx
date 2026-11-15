@@ -41,7 +41,11 @@ const STYLE: Record<string, Style> = {
 const styleOf = (id: string) => STYLE[id] ?? COUNTRY
 
 const PLAN_REACH = 1500          // plan a town once you are this close to its edge
-const SHOW_REACH = 1700          // draw it while within this of its edge
+// ── LOD (11-15): a town whose nearest edge is past the fog's far plane (page FOG_FAR 1300) cannot be seen, so it is not
+// drawn at all; the small dressing (storefront signs, name boards, the Wet Market, cranes) draws only within DETAIL of a
+// town. The landmarks (the Citadel wall, the Station, the mooring towers, the Barrier Temple) draw whenever the town does.
+const SHOW_REACH = 1350          // draw it while within this of its edge
+const DETAIL = 450               // signs, boards and small port pieces only this close
 
 function roofGeometry() {
   // a unit gable: ridge along x at y=1, eaves at y=0 on z=±0.5, x from -0.5 to 0.5 (gable ends closed)
@@ -300,7 +304,7 @@ function HeritageWall({ R, w, lanes }: { R: Region; w: { x: number; z: number; r
 // the Wet Market's striped stalls, and up on the high ground the Sky Port, a forest of stone mooring towers with a
 // skyship (play3d's blockout hull, no sails, lift-runes glowing under it) riding at the platform of every other one.
 const STALL = ['#b8452f', '#2f6f8a', '#d8a13a', '#3f7a3a']
-function GalePort({ port }: { port: Port }) {
+function GalePort({ port, detail = true }: { port: Port; detail?: boolean }) {
   return (
     <>
       {port.piers.map((p, i) => (
@@ -316,7 +320,7 @@ function GalePort({ port }: { port: Port }) {
           </group>
         </group>
       ))}
-      {port.cranes.map((c, i) => (
+      {detail && port.cranes.map((c, i) => (
         <group key={`c${i}`} position={[c.x, c.y, c.z]} rotation={[0, -c.yaw, 0]}>
           <mesh position={[0, 6, 0]}><boxGeometry args={[0.7, 12, 0.7]} /><meshLambertMaterial color="#5a4330" /></mesh>
           <mesh position={[4.5, 11.6, 0]}><boxGeometry args={[10, 0.5, 0.5]} /><meshLambertMaterial color="#5a4330" /></mesh>
@@ -324,7 +328,7 @@ function GalePort({ port }: { port: Port }) {
           <mesh position={[9, 5.2, 0]}><boxGeometry args={[1.6, 1.2, 1.6]} /><meshLambertMaterial color="#8a6a44" /></mesh>
         </group>
       ))}
-      {port.stalls.map((s, i) => (
+      {detail && port.stalls.map((s, i) => (
         <group key={`s${i}`} position={[s.x, s.y, s.z]} rotation={[0, -s.yaw, 0]}>
           {[[-1.3, -1.1], [1.3, -1.1], [-1.3, 1.1], [1.3, 1.1]].map(([x, z], k) => <mesh key={k} position={[x, 1.1, z]}><boxGeometry args={[0.12, 2.2, 0.12]} /><meshLambertMaterial color="#4a3322" /></mesh>)}
           <mesh position={[0, 2.35, 0]} rotation={[0.18, 0, 0]}><boxGeometry args={[3.0, 0.12, 2.6]} /><meshLambertMaterial color={STALL[s.c]} /></mesh>
@@ -368,6 +372,8 @@ function BarrierTemple({ t }: { t: { x: number; z: number; y: number } }) {
 export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<THREE.Vector3> }) {
   const cache = useRef(new Map<number, TownPlan>())
   const [shown, setShown] = useState<TownPlan[]>([])
+  const [close, setClose] = useState<Set<string>>(new Set())
+  const closeKey = useRef('')
   const shownKey = useRef('')
   const t = useRef(0)
   const roof = useMemo(roofGeometry, [])
@@ -394,11 +400,13 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
     const vis = near.filter(o => o.d < SHOW_REACH && cache.current.has(o.i)).map(o => o.i).sort((a, b) => a - b)
     const key = vis.join(',')
     if (key !== shownKey.current) { shownKey.current = key; setShown(vis.map(i => cache.current.get(i)!)) }
+    const cl = near.filter(o => o.d < DETAIL && cache.current.has(o.i)).map(o => cache.current.get(o.i)!.place).sort()
+    if (cl.join(',') !== closeKey.current) { closeKey.current = cl.join(','); setClose(new Set(cl)) }
   })
 
   const parts = useMemo(() => {
-    const all: { b: Building; s: Style; k: number }[] = []
-    shown.forEach(pl => { const s = styleOf(pl.place); pl.buildings.forEach((b, k) => all.push({ b, s, k })) })
+    const all: { b: Building; s: Style; k: number; place: string }[] = []
+    shown.forEach(pl => { const s = styleOf(pl.place); pl.buildings.forEach((b, k) => all.push({ b, s, k, place: pl.place })) })
     return all
   }, [shown])
   const lanes = useMemo(() => laneGeometry(R, shown), [R, shown])
@@ -461,11 +469,11 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
       <instancedMesh key={`c${n}`} frustumCulled={false} ref={chimneys} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
       <instancedMesh key={`g${n}`} frustumCulled={false} ref={caps} args={[undefined, undefined, n]}><sphereGeometry args={[1, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshLambertMaterial flatShading /></instancedMesh>
       {shown.filter(pl => pl.temple).map(pl => <BarrierTemple key={pl.place} t={pl.temple!} />)}
-      {parts.filter(q => q.b.front && q.b.front !== 'fallen-cap').map(q => <FrontSign key={`${q.b.front}`} b={q.b} />)}
+      {parts.filter(q => q.b.front && q.b.front !== 'fallen-cap' && close.has(q.place)).map(q => <FrontSign key={`${q.b.front}`} b={q.b} />)}
       {parts.filter(q => q.b.front === 'fallen-cap').map(q => <FallenCap key="fallen-cap" x={q.b.x} z={q.b.z} y={q.b.y1 + 0.25} yaw={q.b.yaw} w={q.b.w} d={q.b.d} />)}
-      {shown.flatMap(pl => (pl.boards ?? []).map((b, i) => <NameBoard key={`${pl.place}-${i}`} b={b} />))}
+      {shown.filter(pl => close.has(pl.place)).flatMap(pl => (pl.boards ?? []).map((b, i) => <NameBoard key={`${pl.place}-${i}`} b={b} />))}
       {shown.filter(pl => pl.wall).map(pl => <HeritageWall key={pl.place} R={R} w={pl.wall!} lanes={pl.lanes} />)}
-      {shown.filter(pl => pl.port).map(pl => <GalePort key={pl.place} port={pl.port!} />)}
+      {shown.filter(pl => pl.port).map(pl => <GalePort key={pl.place} port={pl.port!} detail={close.has(pl.place)} />)}
       {shown.filter(pl => pl.station).map(pl => <StationField key={pl.place} s={pl.station!} />)}
       {R.meta.places.filter(p => p.name).map(p => (
         <mesh key={p.id} position={[p.x, R.heightAt(p.x, p.z) + 45, p.z]}>
