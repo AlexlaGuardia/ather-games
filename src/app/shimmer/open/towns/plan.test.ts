@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
 import { makeRegion, nearestRoad, nearPad, type RegionMeta } from '../region'
 import { planTowns, townDiscs, type Building } from './plan'
+import { inStation, stationToWorld } from './rune-hold-core'
 
 let pass = 0
 const fails: string[] = []
@@ -57,6 +58,22 @@ ok((rh.paving?.pts.length ?? 0) > 900, `Rune Hold's grid paving is laid: ${rh.pa
 let onPaving = 0
 for (const b of rh.buildings) if (!b.core || (b as { moved?: boolean }).moved) for (const [x, z] of corners(b)) if (rh.paving!.pts.some(([px, pz]) => Math.abs(px - x) < 0.8 && Math.abs(pz - z) < 0.8)) onPaving++
 ok(onPaving === 0, `generated (or moved) buildings on Rune Hold's paving: ${onPaving}`)
+// ── the Travelers Station's field: placed, on clear dry ground, nothing generated inside it, reachable from the town
+const site = rh.station
+ok(!!site, "Rune Hold's Station field is placed")
+if (site) {
+  let wetOrRoad = 0
+  for (let gz = 0; gz <= 50; gz += 5) for (let gx = 0; gx <= 80; gx += 5) {
+    const [x, z] = stationToWorld(site, gx, gz), nr = nearestRoad(R, x, z)
+    if (R.heightAt(x, z) < 1.5 || (nr.road && nr.d < nr.road.width / 2) || nearPad(R, x, z, 0)) wetOrRoad++
+  }
+  ok(wetOrRoad === 0, `Station field over water or a road: ${wetOrRoad} samples`)
+  ok(site.level - site.base < 25, `Station terrace is ${(site.level - site.base).toFixed(1)} m (want < 25)`)
+  let inside = 0
+  for (const pl of plans) for (const b of pl.buildings) if (!b.core && corners(b).some(([x, z]) => inStation(site, x, z, 0))) inside++
+  ok(inside === 0, `buildings inside the Station field: ${inside}`)
+  ok((rh.walks?.[0]?.pts.length ?? 0) > 2, 'a paved walk runs from the Station building to the terminal')
+}
 ok(n('millbrook') >= 15, `Millbrook has ${n('millbrook')} (want >= 15)`)
 ok(n('passage') === 0, `the Passage (underground) has no town on top: ${n('passage')}`)
 ok((byId.get('citadel')?.lanes.length ?? 0) >= 30, `Citadel has lanes`)

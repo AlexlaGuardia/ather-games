@@ -13,6 +13,9 @@ import type { Region } from '../region'
 import { planTown, townRadius, FLOOR_H, type TownPlan, type Building } from './plan'
 import { dayProgress, daylight } from '../../engine/day-cycle'
 import { FRONTS } from '../../play3d/rune-hold-look'
+import { StationScene } from '../../play3d/StationScene'
+import { STATION_COLS, STATION_ROWS, STATION } from '../../play3d/station-field'
+import type { StationSite } from './rune-hold-core'
 
 // ── looks per town, from canon + the concept shots Alex judged 11-15 (tools/art/gen_towns.py). Roman bones
 // (world/athernyx.md): pale stone, terracotta. Unlisted towns take the country default. ──
@@ -95,7 +98,7 @@ function facadeMaterial() {
 
 function laneGeometry(R: Region, plans: TownPlan[]) {
   const pos: number[] = [], idx: number[] = []
-  for (const pl of plans) for (const l of pl.lanes) {
+  for (const pl of plans) for (const l of [...pl.lanes, ...(pl.walks ?? [])]) {
     const p = l.pts, base = pos.length / 3
     for (let k = 0; k < p.length; k++) {
       const a = p[Math.max(0, k - 1)], b = p[Math.min(p.length - 1, k + 1)]
@@ -192,6 +195,27 @@ function FrontSign({ b }: { b: Building }) {
   )
 }
 
+// ── RUNE HOLD'S TRAVELERS STATION: play3d's spaceport scene (terminal, six berths, the seated ship, the departures
+// board), set down on its continent site (rune-hold-core › placeStation) on a stone terrace built up to one level.
+// Station metres = continent metres; the scene's (0,0) is the field's north-west corner. ──
+function StationField({ s }: { s: StationSite }) {
+  const h = s.level - s.base
+  return (
+    <group position={[s.x, s.level, s.z]} rotation={[0, -s.yaw, 0]}>
+      <mesh position={[STATION_COLS / 2 - 0.5, -h / 2 - 0.02, STATION_ROWS / 2 - 0.5]}>
+        <boxGeometry args={[STATION_COLS + 0.6, h, STATION_ROWS + 0.6]} />
+        <meshLambertMaterial color="#8e8270" flatShading />
+      </mesh>
+      <StationScene />
+      {/* the stair up the terrace to the terminal's town door (the walk from the town arrives at its foot) */}
+      {h > 0.6 && (() => {
+        const L = h / 0.55, z = STATION.doors.town.z + STATION.doors.town.h / 2 - 0.5
+        return <mesh position={[-L / 2 - 0.5, -h / 2, z]} rotation={[0, 0, Math.atan2(h, L)]}><boxGeometry args={[Math.hypot(L, h), 0.4, 4]} /><meshLambertMaterial color="#a89a82" flatShading /></mesh>
+      })()}
+    </group>
+  )
+}
+
 export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<THREE.Vector3> }) {
   const cache = useRef(new Map<number, TownPlan>())
   const [shown, setShown] = useState<TownPlan[]>([])
@@ -271,6 +295,7 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
       <instancedMesh key={`r${n}`} frustumCulled={false} ref={roofs} args={[undefined, undefined, n]} geometry={roof}><meshLambertMaterial flatShading side={THREE.DoubleSide} /></instancedMesh>
       <instancedMesh key={`c${n}`} frustumCulled={false} ref={chimneys} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
       {parts.filter(q => q.b.front).map(q => <FrontSign key={`${q.b.front}`} b={q.b} />)}
+      {shown.filter(pl => pl.station).map(pl => <StationField key={pl.place} s={pl.station!} />)}
       {R.meta.places.filter(p => p.name).map(p => (
         <mesh key={p.id} position={[p.x, R.heightAt(p.x, p.z) + 45, p.z]}>
           <cylinderGeometry args={[0.6, 1.4, 90, 8, 1, true]} />

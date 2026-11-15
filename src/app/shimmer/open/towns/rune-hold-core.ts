@@ -181,3 +181,67 @@ export function bestYaw(R: Region, sq: RegionJunction): { yaw: number; score: nu
   for (let k = 0; k < 72; k++) { const yaw = k / 72 * Math.PI * 2; out.push({ yaw, score: fitScore(R, sq, yaw) }) }
   return out.sort((a, b) => a.score - b.score)
 }
+
+// ── THE TRAVELERS STATION'S FIELD (canon 09-26: "a spaceport, and it is big: several berths, a field, a terminal") ──
+// play3d already built it: `play3d/station-field.ts` (80 x 50 m: the stone terminal west with the town door in its west
+// wall, the range door north, the Crucible's south; a paved field east with six berths in two rows; a ship at every
+// seated berth) and `StationScene.tsx` draws it. The continent draws the SAME scene, placed beyond Rune Hold's
+// Station building: on the flattest clear ground near it, turned so the terminal's town door faces the town, on a
+// stone terrace built up to one level (a field has to be flat; a hillside is not).
+import { STATION_COLS, STATION_ROWS, STATION } from '../../play3d/station-field'
+
+export interface StationSite { x: number; z: number; yaw: number; level: number; base: number; score?: number; dist?: number; bad?: number }
+/** station-field metres → continent metres, (0,0) = the field's north-west corner */
+export function stationToWorld(s: StationSite, gx: number, gz: number): [number, number] {
+  const c = Math.cos(s.yaw), sn = Math.sin(s.yaw)
+  return [s.x + gx * c - gz * sn, s.z + gx * sn + gz * c]
+}
+export function inStation(s: StationSite, x: number, z: number, margin = 3): boolean {
+  const dx = x - s.x, dz = z - s.z, c = Math.cos(s.yaw), sn = Math.sin(s.yaw)
+  const gx = dx * c + dz * sn, gz = -dx * sn + dz * c
+  return gx > -margin && gx < STATION_COLS + margin && gz > -margin && gz < STATION_ROWS + margin
+}
+/** where the terminal's town door is, in station metres (the road from the town comes in here) */
+export const STATION_TOWN_DOOR: [number, number] = [STATION.doors.town.x, STATION.doors.town.z + STATION.doors.town.h / 2]
+
+export function placeStation(R: Region, core: Core): StationSite | null {
+  const st = core.buildings.find(b => b.front === 'station')
+  if (!st) return null
+  // the Station building's front door, in the world: the field's town door should be near it and face it
+  const fx = Math.cos(st.yaw), fz = Math.sin(st.yaw)
+  const door: [number, number] = [st.x + fx * (st.d / 2 + 4), st.z + fz * (st.d / 2 + 4)]
+  // the field lies BEYOND the building, away from the square
+  const away = Math.atan2(st.z - core.t.cz, st.x - core.t.cx)
+  let best: { s: StationSite; score: number } | null = null
+  for (let da = -1.4; da <= 1.4001; da += 0.175) for (let dist = 40; dist <= 200; dist += 20) {
+    // the town door's world position for this candidate, and the field turned so the door faces back to the town
+    const a = away + da, tx = st.x + Math.cos(a) * dist, tz = st.z + Math.sin(a) * dist
+    const yaw = a           // field +x points away from the town, so the terminal (west) stands toward it
+    const c = Math.cos(yaw), sn = Math.sin(yaw)
+    const ox = tx - (STATION_TOWN_DOOR[0] * c - STATION_TOWN_DOOR[1] * sn), oz = tz - (STATION_TOWN_DOOR[0] * sn + STATION_TOWN_DOOR[1] * c)
+    const s: StationSite = { x: ox, z: oz, yaw, level: 0, base: 0 }
+    let bad = 0, lo = Infinity, hi = -Infinity
+    for (let gz = 0; gz <= STATION_ROWS; gz += 10) for (let gx = 0; gx <= STATION_COLS; gx += 10) {
+      const [x, z] = stationToWorld(s, gx, gz), y = R.heightAt(x, z)
+      if (!Number.isFinite(y) || y < 1.5) { bad += 10; continue }
+      const nr = nearestRoad(R, x, z)
+      if ((nr.road && nr.d < nr.road.width / 2 + 2) || nearPad(R, x, z, 2)) bad += 10
+      if (inCore(core.t, x, z, 2)) bad += 10
+      if (R.tunnelAt(x, z) && R.tunnelAt(x, z)!.cover < 12) bad += 10
+      lo = Math.min(lo, y); hi = Math.max(hi, y)
+    }
+    const score = bad + (hi - lo) * 1.5 + dist * 0.05
+    if (!best || score < best.score) best = { s: { ...s, level: hi + 0.3, base: lo - 1, score, dist, bad } as StationSite, score }
+  }
+  return best && best.score < 400 ? best.s : null
+}
+
+/** Rune Hold's Station site, once per map (the planner and the tree scatter both ask; the search is not free) */
+const siteCache = new WeakMap<Region, StationSite | null>()
+export function runeHoldStation(R: Region): StationSite | null {
+  if (siteCache.has(R)) return siteCache.get(R)!
+  const sq = (R.meta.network?.junctions ?? []).find(j => j.kind === 'square' && j.place === 'rune-hold')
+  const s = sq ? placeStation(R, stampCore(R, { cx: sq.x, cz: sq.z, yaw: CORE_YAW })) : null
+  siteCache.set(R, s)
+  return s
+}

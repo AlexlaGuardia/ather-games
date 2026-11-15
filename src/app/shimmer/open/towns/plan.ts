@@ -23,7 +23,7 @@
 // Concept shots Alex judged 11-15 (tools/art/gen_towns.py): Rune Hold 2, Citadel 3, Ashfeld 3, village 1.
 
 import { nearestRoad, nearPad, drivable, type Region, type RegionPlace } from '../region'
-import { stampCore, inCore, CORE_YAW, type CoreTransform } from './rune-hold-core'
+import { stampCore, inCore, CORE_YAW, runeHoldStation, inStation, stationToWorld, STATION_TOWN_DOOR, type CoreTransform, type StationSite } from './rune-hold-core'
 
 export interface Lane { pts: [number, number, number][]; width: number }
 export type BuildingKind = 'house' | 'cottage' | 'hall'
@@ -46,7 +46,7 @@ export interface Building {
   /** the storefront it is, when it is one (play3d FRONTS ids) */
   front?: string
 }
-export interface TownPlan { place: string; r: number; lanes: Lane[]; buildings: Building[]; /** authored paving cells (1 m), with the bearing they are laid at */ paving?: { pts: [number, number][]; yaw: number } }
+export interface TownPlan { place: string; r: number; lanes: Lane[]; buildings: Building[]; /** authored paving cells (1 m), with the bearing they are laid at */ paving?: { pts: [number, number][]; yaw: number }; /** Rune Hold's Travelers Station field (play3d's StationScene, placed) */ station?: StationSite; /** walks: paved paths drawn like lanes but not part of the street net (the way to the Station) */ walks?: Lane[] }
 
 /** how far a town reaches, by its kind on the Atlas */
 export function townRadius(p: RegionPlace): number {
@@ -171,8 +171,21 @@ export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
     const c = stampCore(R, core)
     for (const b of c.buildings) keep(b)
     plan.paving = { pts: c.paving, yaw: CORE_YAW }
+    // the Travelers Station's field, beyond the Station building, and the paved way to its terminal's town door
+    const site = runeHoldStation(R)
+    const st = c.buildings.find(b => b.front === 'station')
+    if (site && st) {
+      plan.station = site
+      const fx = Math.cos(st.yaw), fz = Math.sin(st.yaw)
+      const [ax, az] = [st.x + fx * (st.d / 2 + 1), st.z + fz * (st.d / 2 + 1)]
+      // the walk ends at the FOOT of the terrace stair (Towns.tsx: a 0.55 grade up to the door)
+      const [bx, bz] = stationToWorld(site, STATION_TOWN_DOOR[0] - 1.5 - (site.level - site.base) / 0.55, STATION_TOWN_DOOR[1])
+      const n = Math.max(2, Math.ceil(Math.hypot(bx - ax, bz - az) / LANE_STEP)), pts: [number, number, number][] = []
+      for (let i = 0; i <= n; i++) { const x = ax + (bx - ax) * i / n, z = az + (bz - az) * i / n; pts.push([x, z, R.heightAt(x, z)]) }
+      plan.walks = [{ pts, width: 4 }]
+    }
   }
-  const coreAt = (x: number, z: number) => !!core && inCore(core, x, z)
+  const coreAt = (x: number, z: number) => !!core && (inCore(core, x, z) || (!!plan.station && inStation(plan.station, x, z)) || (!!plan.walks && plan.walks.some(w => distToLine(w.pts, x, z) < 4)))
 
   // ── a spot (a hut, a shack) is one building on its own ground: try a few spots round the dot until one fits
   if (p.kind === 'spot') {
@@ -403,8 +416,11 @@ export function planTowns(R: Region): TownPlan[] {
 /** where each town stands (its square when it has one) and how far it reaches: the tree scatter keeps out of it */
 export function townDiscs(R: Region): { id: string; x: number; z: number; r: number }[] {
   const js = R.meta.network?.junctions ?? []
-  return R.meta.places.map(p => {
+  // Rune Hold's Station field stands outside its town's reach: it gets a disc of its own (its centre, its half-diagonal)
+  const st = runeHoldStation(R)
+  const extra = st ? [{ id: 'rune-hold-station', x: st.x + 40 * Math.cos(st.yaw) - 25 * Math.sin(st.yaw), z: st.z + 40 * Math.sin(st.yaw) + 25 * Math.cos(st.yaw), r: 52 }] : []
+  return [...extra, ...R.meta.places.map(p => {
     const sq = p.kind === 'spot' ? undefined : js.find(j => j.kind === 'square' && j.place === p.id)
     return { id: p.id, x: sq?.x ?? p.x, z: sq?.z ?? p.z, r: Math.max(20, townRadius(p) * 0.9) }
-  })
+  })]
 }

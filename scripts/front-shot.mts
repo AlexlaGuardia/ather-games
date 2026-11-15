@@ -15,7 +15,17 @@ await p.goto(`${process.env.URL ?? 'http://localhost:3203'}/shimmer/open/contine
 await p.waitForFunction(() => !!(window as any).__drive?.state, { timeout: 240000 }); await wait(2000); await p.keyboard.press('KeyX')
 const sq = meta.network!.junctions.find(j=>j.kind==='square'&&j.place==='rune-hold')!
 await p.evaluate((x,z)=>(window as any).__drive.tp(x,z,0,0), sq.x, sq.z); await wait(15000)
-for (const id of process.argv.slice(2)) { const bb = pl.buildings.find(q=>q.front===id); if (!bb) { console.log('none', id); continue }
+for (const id of process.argv.slice(2)) {
+  if (id === 'field' && pl.station) {
+    // the Station's field from above its town end, looking out over the berths
+    const s = pl.station, c = Math.cos(s.yaw), sn = Math.sin(s.yaw), at = (gx: number, gz: number) => [s.x + gx * c - gz * sn, s.z + gx * sn + gz * c]
+    const side = process.env.SIDE === '1', ship = process.env.SHIP === '1'
+    const [cx, cz] = ship ? at(26, 30) : side ? at(-25, -20) : at(-30, 25), [lx, lz] = ship ? at(38, 12) : side ? at(5, 22) : at(45, 25)
+    await p.evaluate((x,z)=>(window as any).__drive.tp(x,z,0,0), lx, lz); await wait(12000)
+    await p.evaluate(q=>(window as any).__drive.shot(q), [cx, s.level + (ship ? 7 : side ? 8 : 28), cz, lx, s.level + (ship ? 2 : side ? -4 : 0), lz]); await wait(6000)
+    await p.screenshot({ path: '/tmp/front-field.png' }); console.log('shot field'); continue
+  }
+  const bb = pl.buildings.find(q=>q.front===id); if (!bb) { console.log('none', id); continue }
   const fx=Math.cos(bb.yaw), fz=Math.sin(bb.yaw), d = bb.d/2 + 14
   const cx = bb.x + fx*d, cz = bb.z + fz*d, cy = Math.max(R.heightAt(cx,cz), bb.y1) + 2.2
   await p.evaluate(q=>(window as any).__drive.shot(q), [cx, cy, cz, bb.x, bb.y1 + 3, bb.z]); await wait(5000)
