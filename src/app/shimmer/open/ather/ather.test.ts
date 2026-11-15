@@ -13,6 +13,7 @@ import { newCombat, stepCombat, spawnHollow, fire, populate, KEEPER_HP, SHAMBLER
 import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVES, PANIC_MIN_WINDUP } from './champion'
 import { placeNodes, nodeAdjacency, ownerOf, nodeRegions, polyArea, NODE_CLEAR_OF, GAME_DAY_MS, SUB } from './nodes'
 import { advance, clearAt, freshSpread, infectedIds, SPREAD } from './spread'
+import { clusterFrame, clusterGround, wallsWithLane, onSeg, QV, D, MIDDLE_R } from './cluster'
 import { atherPlatePixels, ATHER_HUE, plotPlatePixels, PLOT_MPP } from './plate'
 import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
 import { canPlant, plant, lift, reachedBiomes, waymarksInWorld, TILE_CENTRE, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
@@ -448,6 +449,45 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   ok(lum(at(voidPt[0], voidPt[1])) < 120, 'plot plate: the corner past the island is not the void')
   const more = plotPlatePixels(new Set([...owned, sqId(0, 0)]))
   ok(more.px.some((v, k) => v !== pp.px[k]), 'plot plate: buying a square does not change the map')
+}
+
+// ── garden clusters (Alex 11-15: "the clouds hide the expansion; once a friend joins, the communal space opens") ────
+{
+  const own = new Set(STARTING_SQUARES)
+  const alone = clusterFrame('ne', [{ quarter: 'ne', name: 'me', owned: [...own] }])
+  ok(!alone.linked && !alone.middle && alone.bridges.length === 0 && !alone.lane, 'cluster: alone, something opened (the clouds should hide it all)')
+  ok(clusterGround(alone, -D, D) === -Infinity, 'cluster: alone, there is ground where the middle would be')
+  const f = clusterFrame('ne', [{ quarter: 'ne', name: 'me', owned: [...own] }, { quarter: 'sw', name: 'pal', owned: [...own] }])
+  ok(f.linked && !!f.middle && f.mates.length === 1 && f.bridges.length === 2 && !!f.lane, 'cluster: a friend joined and the frame did not link')
+  ok(Math.abs(f.middle!.x + D * QV.ne.x) < 1e-9 && Math.abs(f.middle!.z + D * QV.ne.z) < 1e-9, 'cluster: the middle is not off my quarter')
+  const pal = f.mates[0]
+  ok(Math.abs(pal.x - (f.middle!.x + D * QV.sw.x)) < 1e-9, 'cluster: the mate is not in their quarter')
+  ok(clusterGround(f, f.middle!.x, f.middle!.z) > 0, 'cluster: no ground in the middle once linked')
+  ok(Number.isFinite(clusterGround(f, pal.x, pal.z)), "cluster: no ground on the mate's island")
+  // walkable end to end: lane → my bridge → the middle → their bridge → their island, with no gap on the way
+  const path: [number, number][] = []
+  const segPts = (s: { ax: number; az: number; bx: number; bz: number }) => { for (let t = 0; t <= 1; t += 0.02) path.push([s.ax + (s.bx - s.ax) * t, s.az + (s.bz - s.az) * t]) }
+  segPts(f.lane!); segPts(f.bridges[0]); segPts({ ax: f.bridges[0].bx, az: f.bridges[0].bz, bx: f.bridges[1].bx, bz: f.bridges[1].bz }); segPts({ ...f.bridges[1], ax: f.bridges[1].bx, az: f.bridges[1].bz, bx: f.bridges[1].ax, bz: f.bridges[1].az })
+  const holes = path.filter(([x, z]) => !Number.isFinite(Math.max(plotHeightAt(x, z), clusterGround(f, x, z))))
+  ok(holes.length === 0, `cluster: ${holes.length} holes on the walk from my plot to my friend's`)
+  // steps along the walk never exceed what the walker climbs (0.5 m per 0.25 m step is generous; check a 1 m grade)
+  let steep = 0
+  for (let k = 1; k < path.length; k++) {
+    const h0 = Math.max(plotHeightAt(...path[k - 1]), clusterGround(f, ...path[k - 1])), h1 = Math.max(plotHeightAt(...path[k]), clusterGround(f, ...path[k]))
+    const run = Math.hypot(path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1]) || 1
+    if (Math.abs(h1 - h0) / run > 0.6) steep++
+  }
+  ok(steep === 0, `cluster: ${steep} spots on the walk steeper than 0.6 (the walker would stall)`)
+  // the lane: the walls are cut where it crosses, and it is fenced where it runs over squares I do not hold
+  const walls = wallsWithLane(own, f), plain = wallsWithLane(own, alone)
+  const blocks = (x: number, z: number) => walls.some(w => x >= w.x0 && x <= w.x1 && z >= w.z0 && z <= w.z1)
+  const laneBlocked = path.slice(0, 50).filter(([x, z]) => onSeg(f.lane!, x, z) && blocks(x, z)).length
+  ok(laneBlocked === 0, `cluster: ${laneBlocked} wall pieces left standing in the lane`)
+  ok(walls.length > plain.length, 'cluster: the lane is not fenced through the unbought squares')
+  const mid = { x: (f.lane!.ax + f.lane!.bx) / 2, z: (f.lane!.az + f.lane!.bz) / 2 }, n = { x: -(f.lane!.bz - f.lane!.az), z: f.lane!.bx - f.lane!.ax }, nl = Math.hypot(n.x, n.z)
+  let fenced = false; for (let o = 1.5; o < 4.5; o += 0.1) if (blocks(mid.x + (n.x / nl) * o, mid.z + (n.z / nl) * o)) fenced = true
+  ok(fenced, 'cluster: you can step off the lane into the mist')
+  ok(MIDDLE_R > 20, 'cluster: the middle is too small to be a place')
 }
 
 if (fails.length) { console.error(`ather: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
