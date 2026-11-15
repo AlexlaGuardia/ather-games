@@ -4,7 +4,7 @@ Stamps a `zone` on every node in public/open/wilds/tiles.json. A node is one 200
 and its zone is read off the land it stands on: the tile's own biome grid (water / shore / meadow / woods / rock at
 4 m) and the painted continent it was cut from (map-draft-03.png, 10 m a pixel). First match wins:
 
-  arid     — the northern badlands (canon 11-14, off the painting): the painting's tan          → no trees
+  arid     — THE SCALD (RULED 11-15), the northern badlands: the painting's tan              → no trees
   caverns  — rock-dominated ground (the Spine and its spurs); cave mouths come later           → no trees
   springs  — INLAND water: lakes, rivers, marsh (water the sea cannot reach + its shores)        → Starwillow
   thicket  — woods-dominated ground (the Deep Woods round the start)                            → Shimmeroak + Goldwood

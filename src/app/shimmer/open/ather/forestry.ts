@@ -3,8 +3,8 @@
 // layer tools/worldmap/zone_wilds.py stamps on every 200 m node of the continent:
 //   meadows → Goldwood · thicket → Shimmeroak inside, Goldwood at the edges · springs → Starwillow by the water ·
 //   trails (the Spine's foothills) → Dawnwood, old giants spaced out · arid, caverns → no trees.
-// ⚠ Zone ids are BUILD words. Alex's names (Spirit Meadows, Twilight Thicket, Mana Springs, Wooded Trails, Arid Fields,
-// caverns + one Voranyx Caverns) are [OPEN] in CANON_GAPS and stay OFF SCREEN until Magii rules. Tree names are canon.
+// Zone ids are build words; their NAMES are RULED (11-15: ZONE_NAME below; the dry zone is the Scald; the layer is
+// PER-SEASON, this season's shape). Tree names are canon.
 //
 // A tree is a node (canon: "walk up to a tree → channel mana → resources drop. Trees don't die — they regrow").
 // ★ PRUNING FROM A DISTANCE (Alex 11-15: "click a tree from about 10 blocks out and use mana to prune a tree from a
@@ -23,6 +23,11 @@ import { NODE_DEFS } from '../../world/resources'
 import { createSkillSet, addSkillXP, skillSetToSave, skillSetFromSave, type SkillSet } from '../../engine/skills'
 
 export type Zone = 'meadows' | 'thicket' | 'springs' | 'trails' | 'arid' | 'caverns'
+/** This season's zone names (RULED 2026-11-15, game/shimmer-geography.md › THE WILDS' ZONES, THIS SEASON): they may
+ *  show. ⛔ The cave that holds the Silt door is NEVER "Voranyx" on screen until the door is understood (the earned name). */
+export const ZONE_NAME: Record<Zone, string> = {
+  meadows: 'Spirit Meadows', thicket: 'Twilight Thicket', springs: 'Mana Springs', trails: 'Wooded Trails', arid: 'the Scald', caverns: 'the caverns',
+}
 export type TreeKind = 'goldwood' | 'shimmeroak' | 'starwillow' | 'dawnwood'
 export const TREE_KINDS: TreeKind[] = ['goldwood', 'shimmeroak', 'starwillow', 'dawnwood']
 export const TREE_NAME: Record<TreeKind, string> = { goldwood: 'Goldwood', shimmeroak: 'Shimmeroak', starwillow: 'Starwillow', dawnwood: 'Dawnwood' }

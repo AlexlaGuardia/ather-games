@@ -33,7 +33,7 @@ import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
 import { tileCentreWorld, BIOME_NAME, type Wilds, type Tree } from './wilds'
-import { loadIndex, makeWorld, stream, tileOf, TILE_M, type WildsWorld } from './wilds-world'
+import { loadIndex, makeWorld, stream, tileOf, zonesOf, TILE_M, type WildsWorld } from './wilds-world'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud } from './combat-layer'
@@ -53,7 +53,7 @@ import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take, itemDef } from '../shared/inventory'
-import { prune, pruneCheck, startShake, openSkills, TREE_NAME, MANA_COST } from './forestry'
+import { prune, pruneCheck, startShake, openSkills, TREE_NAME, MANA_COST, ZONE_NAME } from './forestry'
 import { ForestryFX, type Aim, type ForestryFx } from './forestry-fx'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { AtherMiniMap } from './minimap'
@@ -317,7 +317,13 @@ export default function AtherSlice() {
         : treePrompt()
       setPrompt(p)
       let where = 'your plot'
-      if (zone.kind === 'wilds' && ww) { const g = groundRef.current(lc.px, lc.pz); where = BIOME_NAME[ww.biomeAt(lc.px, lc.pz)] + (g ? ` · ${g}` : '') }
+      if (zone.kind === 'wilds' && ww) {
+        // the zone you stand in (this season's, RULED 11-15), then the ground's state
+        const g = groundRef.current(lc.px, lc.pz), tt = ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty)
+        let zn: string = BIOME_NAME[ww.biomeAt(lc.px, lc.pz)]
+        if (tt) { const o = ww.offsetOf(tt.name); zn = ZONE_NAME[zonesOf(ww, tt.name)(Math.min(4, Math.floor((lc.px - o.x + 500) / 200)), Math.min(4, Math.floor((lc.pz - o.z + 500) / 200)))] }
+        where = zn + (g ? ` · ${g}` : '')
+      }
       else if (!squareAt(lc.px, lc.pz)) {
         // off your own grid: in a linked cluster that is somewhere real (a friend's plot, the Green, the valley, a path).
         // Names RULED 2026-11-15 (CANON_GAPS › Garden clusters come BACK): the Green, the valley.
