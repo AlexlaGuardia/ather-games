@@ -14,6 +14,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import BirthScreen from '../play3d/birth/BirthScreen'
 import { loadRuneInventory } from '../play3d/rune-inventory'
+import { saveOwnerResolved, SAVE_OWNER_EVENT } from '@/lib/save-slot'
 
 // ── the keeper's birth rune, as a store the open world can subscribe to ──────────────────────────────────────────
 let birth: string | null | undefined
@@ -39,7 +40,20 @@ export function BirthGate() {
   // a keeper born in another tab, or on the voxel side, closes the gate here too
   useEffect(() => { const s = (e: StorageEvent) => { if (e.key?.endsWith('birthRune')) refreshBirth() }; window.addEventListener('storage', s); return () => window.removeEventListener('storage', s) }, [])
   useEffect(() => { if (closing === null) return; const t = setTimeout(() => { refreshBirth(); setClosing(null) }, BORN_HOLD_MS); return () => clearTimeout(t) }, [closing])
-  if (!mounted || (b && closing === null)) return null
+  // ★ WAIT FOR WHO IS PLAYING (bug, Alex 11-15: after "Forget my birth rune" the ritual popped on every fast travel, and
+  // twice). The rune lives under the ACCOUNT's key, and on a fresh page load the account lands a few frames late
+  // (SaveOwnerBoot): until then keeperKey() answers the anonymous key. The gate read that, found it empty, and opened;
+  // a rune chosen in that window was written to the anonymous key, and when the account landed its own key was still
+  // empty, so the gate opened AGAIN. It had hidden for weeks because an old unscoped copy of the rune sat in the
+  // anonymous key; Forget cleared both. Now: nothing shows until the owner is known, and the owner landing re-reads.
+  const [owner, setOwner] = useState(false)
+  useEffect(() => {
+    const on = () => { refreshBirth(); setOwner(saveOwnerResolved()) }
+    on()
+    window.addEventListener(SAVE_OWNER_EVENT, on)
+    return () => window.removeEventListener(SAVE_OWNER_EVENT, on)
+  }, [])
+  if (!mounted || !owner || (b && closing === null)) return null
   return (
     <div data-panel="birth" onKeyDownCapture={e => e.stopPropagation()}>
       {/* the pointer is freed while you choose: a locked mouse cannot click a rune */}
