@@ -110,7 +110,7 @@ const ROOMS: CaveRoom[] = [
   { id: 'hall', label: 'The Passage', detail: 'The market under the spine · rotating spots, no permanent claims', u: 36, v: 0, r: 14 },
   { id: 'gems', label: 'The merchants', detail: "Rune-gem tables · E'xday · not trading yet", u: 36, v: -6, r: 4.5 },
   { id: 'scrolls', label: 'The scroll racks', detail: 'Knowledge Scrolls · not trading yet', u: 48, v: 2, r: 4 },
-  { id: 'vessels', label: 'Focuses and bracelets', detail: 'The vessels · not trading yet', u: 26, v: -10, r: 4 },
+  { id: 'vessels', label: 'Focuses and bracelets', detail: 'Bracelets and gloves · E at the counter to browse', u: 26, v: -10, r: 4 },
   { id: 'teachers', label: 'The teachers', detail: 'A master gives the word in person · Coomday', u: 30, v: 25, r: 6 },
   { id: 'lowen', label: "Lowen's caravan", detail: 'A keeper of strays · the animal chooses · on its own cadence', u: 52, v: 17, r: 7 },
   { id: 'arcade', label: 'The arcade room', detail: 'Marks are spent here · not open yet', u: 62, v: -15, r: 7 },

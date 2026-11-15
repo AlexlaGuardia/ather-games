@@ -17,7 +17,9 @@ import { RANGE_GUNS, type RangeGun } from './gunplay'
 
 export const OWN_ALL_RANGE_GUNS = true
 export type VesselKind = 'bracelet' | 'glove'
-export interface OwnedVessel { id: string; kind: VesselKind; label: string; word: string | null }
+export interface OwnedVessel { id: string; kind: VesselKind; label: string; word: string | null; tier?: number }
+/** canon (play3d/vessels.ts › MAX_PER_KIND): three of a kind is what a keeper can carry */
+export const MAX_PER_KIND = 3
 export interface Loadout {
   v: 1
   guns: string[]                 // owned gun ids
@@ -57,6 +59,13 @@ export function equip(l: Loadout, slot: 'primary' | 'secondary' | 'tactical' | '
   const v = l.vessels.find(x => x.id === id)
   if (!v || SLOT_OF_VESSEL[v.kind] !== slot) return l
   return { ...l, [slot]: id }
+}
+
+/** Add a bought vessel. Refuses past the carry cap; the new one is not worn until the keeper wears it. */
+export function addVessel(l: Loadout, v: Omit<OwnedVessel, 'id'>): { ok: boolean; loadout: Loadout } {
+  if (l.vessels.filter(x => x.kind === v.kind).length >= MAX_PER_KIND) return { ok: false, loadout: l }
+  const id = `${v.kind}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e4)}`
+  return { ok: true, loadout: { ...l, vessels: [...l.vessels, { ...v, id }] } }
 }
 
 // ── the store ──────────────────────────────────────────────────────────────────────────────────────────────────────

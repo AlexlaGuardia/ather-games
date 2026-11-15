@@ -6,11 +6,12 @@
 // (they wrap), and ← / → or Tab do the same from the keyboard. I opens the Bag, J the Journal, P the Character.
 // Carved Hearth frame (the red close), per the open world's menu rule (game-hud.test › MENUS).
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { HearthFrame, H, hearthDisplay } from '../ui/hearth'
 import { BagBody, bagHint } from './shared/bag'
 import { JournalBody } from './journal-panel'
 import { CharacterBody } from './character-panel'
+import { useSettings, setSettings } from './shared/settings'
 
 export type PackTab = 'journal' | 'bag' | 'character'
 export const PACK_TABS: PackTab[] = ['journal', 'bag', 'character']
@@ -41,10 +42,35 @@ export function TabIcon({ tab, size = 26 }: { tab: PackTab; size?: number }) {
   )
 }
 
+/** The open world's options, for now a sheet inside the pack (the gear by the tab icons). The voxel world's full Options
+ *  panel (hud/options-panel.tsx: game / video / sound / controls) is the port this grows into. */
+function OptionsBody() {
+  const s = useSettings()
+  const row = (label: string, sub: string, on: boolean, flip: () => void, id: string) => (
+    <button type="button" data-option-row={id} onClick={flip} className="w-full flex items-center justify-between gap-3 rounded-[10px] px-3 py-2.5 text-left"
+      style={{ background: 'rgba(255,250,238,.6)', boxShadow: '0 1px 3px rgba(58,39,22,.18)' }}>
+      <span><span className="block text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{label}</span><span className="block text-[12px]" style={{ color: H.inkSoft }}>{sub}</span></span>
+      <span className="relative w-11 h-6 rounded-full shrink-0 transition-colors" style={{ background: on ? H.ember : 'rgba(58,39,22,.25)' }}>
+        <span className="absolute top-0.5 w-5 h-5 rounded-full transition-all" style={{ left: on ? 22 : 2, background: H.paperHi, boxShadow: '0 1px 2px rgba(0,0,0,.3)' }} />
+      </span>
+    </button>
+  )
+  return (
+    <div className="px-4 pt-6 pb-4 grid gap-2">
+      {row('Tooltips', 'Explanations on hover, and a warning before you buy something that is not written for you', s.tooltips, () => setSettings({ tooltips: !s.tooltips }), 'tooltips')}
+    </div>
+  )
+}
+function Gear({ on }: { on: boolean }) {
+  return <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8 3.5-2.1-.6-.5-1.3 1-1.9-1.6-1.6-1.9 1-1.3-.5L13 4h-2l-.6 2.1-1.3.5-1.9-1-1.6 1.6 1 1.9-.5 1.3L4 11v2l2.1.6.5 1.3-1 1.9 1.6 1.6 1.9-1 1.3.5L11 20h2l.6-2.1 1.3-.5 1.9 1 1.6-1.6-1-1.9.5-1.3L20 13z" fill={on ? H.ember : 'none'} stroke={H.ink} strokeWidth="1.4" strokeLinejoin="round" /></svg>
+}
+
 export function PackMenu({ tab, onTab, onClose, sel, isTouch }: {
   tab: PackTab; onTab: (t: PackTab) => void; onClose: () => void; sel: number; isTouch?: boolean
 }) {
+  const [opts, setOpts] = useState(false)
   const at = PACK_TABS.indexOf(tab)
+  useEffect(() => { setOpts(false) }, [tab])
   const prev = PACK_TABS[(at + 2) % 3], next = PACK_TABS[(at + 1) % 3]
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -73,15 +99,17 @@ export function PackMenu({ tab, onTab, onClose, sel, isTouch }: {
             <TabIcon tab={t} size={t === tab ? 24 : 18} />
           </button>
         ))}
+        <button type="button" onClick={() => setOpts(o => !o)} aria-label="Options" data-pack-options className="ml-1 grid place-items-center rounded-full"
+          style={{ width: 28, height: 28, opacity: opts ? 1 : 0.6, boxShadow: opts ? `0 0 0 2px ${H.ember}` : undefined, background: opts ? H.paperHi : 'transparent' }}><Gear on={opts} /></button>
       </div>
       {side(next, 'right')}
     </div>
   )
   const hint = tab === 'bag' ? bagHint(isTouch) : tab === 'journal' ? (isTouch ? 'Tap a line to open it.' : 'Click a line to open it') : (isTouch ? 'Tap a slot to change it.' : 'Click a slot to change what you carry')
   return (
-    <HearthFrame title={NAME[tab]} maxWidth={tab === 'bag' ? 560 : 520} onClose={onClose} fixed dataPanel={`pack-${tab}`} head={head}
+    <HearthFrame title={opts ? 'Options' : NAME[tab]} maxWidth={tab === 'bag' && !opts ? 560 : 520} onClose={onClose} fixed dataPanel={opts ? 'pack-options' : `pack-${tab}`} head={head}
       footer={<span className="text-[12px]" style={hearthDisplay}>{hint}{isTouch ? '' : ' · ← → switch tabs · I J P'}</span>}>
-      {tab === 'bag' ? <BagBody sel={sel} /> : tab === 'journal' ? <JournalBody /> : <CharacterBody />}
+      {opts ? <OptionsBody /> : tab === 'bag' ? <BagBody sel={sel} /> : tab === 'journal' ? <JournalBody /> : <CharacterBody />}
     </HearthFrame>
   )
 }

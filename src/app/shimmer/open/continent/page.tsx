@@ -14,6 +14,7 @@ import { useMenuLock } from '../shared/menu-lock'
 import { useInv, hotbarEntries } from '../shared/bag'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
+import { VesselShop, VesselCounter } from '../vessel-shop'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { GameHud, useGameHudSize, openMapBox, hudSay, type CompassPose, type Mana } from '../shared/game-hud'
 import type { Vitals } from '../../engine/vitals'
@@ -1194,7 +1195,9 @@ export default function ContinentRide() {
     }
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
   }, [showMap, garage, board])
-  useMenuLock(showMap || garage || !!board || bagOpen, getCanvas)
+  const [vesselShop, setVesselShop] = useState(false)   // the Passage's vessel counter (vessel-shop.tsx)
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.code === 'Escape') setVesselShop(false) }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
+  useMenuLock(showMap || garage || !!board || bagOpen || vesselShop, getCanvas)
   const [ptrLocked, setPtrLocked] = useState(false)
   useEffect(() => {
     const ch = () => setPtrLocked(!!document.pointerLockElement)
@@ -1220,6 +1223,7 @@ export default function ContinentRide() {
           <Tunnels R={R} cave={cave} />
           {cave && <CavernView cave={cave} R={R} />}
           {cave && <GunRange cave={cave} />}
+          {cave && <VesselCounter cave={cave} enabled={!vesselShop && !bagOpen && !showMap} onOpen={() => setVesselShop(true)} />}
           {R && <QuestGuide zone="continent" ground={(x, z) => (cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z))} />}
           <Guardrails R={R} />
           <Water R={R} />
@@ -1237,7 +1241,7 @@ export default function ContinentRide() {
           stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hud.foot ? 48 : 148 }} />
       )}
       {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} marks={questMarksRef} vitals={vitalsRef} mana={manaRef} entries={gunHud.holding ? gunHud.entries : hotbarEntries(inv)} sel={slot} onSelect={setSlot}
-        dimmed={!hud.foot} input={!!hud.foot && !showMap && !garage && !board && !bagOpen}
+        dimmed={!hud.foot} input={!!hud.foot && !showMap && !garage && !board && !bagOpen && !vesselShop}
         minimap={mapState && <ContinentMiniMap map={mapState} track={track} onExpand={() => setShowMap(true)} box={openMapBox(hudSize)} />}
         status={[
           { label: R?.meta.name === 'continent' ? 'Athernyx · 1672' : 'Ashfeld to Rune Hold' },
@@ -1245,6 +1249,7 @@ export default function ContinentRide() {
           { label: ledger.deeds === 1 ? 'Deed' : 'Deeds', value: ledger.deeds },
           ...gunHud.status,
         ]} />}
+      {vesselShop && <VesselShop ledger={ledger} setLedger={setLedger} onClose={() => setVesselShop(false)} isTouch={isTouch} />}
       {pack && <PackMenu tab={pack} onTab={setPack} onClose={() => setPack(null)} sel={slot} isTouch={isTouch} />}
       {mapState && showMap && <ContinentMap map={mapState} track={track} onClose={() => setShowMap(false)} />}
       <GaragePanel open={garage} onClose={() => setGarage(false)} build={eff} setBuild={setBuild}
@@ -1265,7 +1270,7 @@ export default function ContinentRide() {
       {hud.foot && (
         <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
       )}
-      {hud.foot && !ptrLocked && !isTouch && !showMap && !garage && !board && (
+      {hud.foot && !ptrLocked && !isTouch && !showMap && !garage && !board && !bagOpen && !vesselShop && (
         <div style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translateX(-50%)', padding: '7px 16px', borderRadius: 999, background: 'rgba(12,16,20,0.66)', color: '#f4efe2', font: '600 12px system-ui', letterSpacing: '0.16em', textTransform: 'uppercase', pointerEvents: 'none' }}>Click to resume</div>
       )}
       {hud.prompt && (
