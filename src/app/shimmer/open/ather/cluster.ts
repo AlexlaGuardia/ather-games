@@ -33,9 +33,10 @@ const ORDER: Quarter[] = ['ne', 'nw', 'sw', 'se']   // each a quarter-turn from 
 
 /** Half the shared square's side (64 m across: the old r 40 disc's area). */
 export const MIDDLE_HALF = 32
-/** Garden centre to the square's centre, along each axis (even metres, so every grid lines up with the meadow's):
- *  shores ~30 m off the square's corner, neighbours ~90 m apart across the hill between them. */
-export const D = 130
+/** Garden centre to the Green's centre, along each axis (a multiple of 4 m, so every island grid lines up with the
+ *  valley's). 212 for the 300 m plot: start corners still ~30 m off the Green's corner (friends start beside each
+ *  other), neighbours' shores ~80 m apart across the hill between them, and everyone grows AWAY from the middle. */
+export const D = 212
 /** The square and the paths stand at the gate pad's height. */
 export const MIDDLE_Y = 2.0
 

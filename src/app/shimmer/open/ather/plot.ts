@@ -22,11 +22,13 @@
 // ★ PURE. The island's land is a grid of triangles: what you see is what you stand on.
 
 import type { Box, Shape } from '../terrain-world'
-import { shiftLegacyOwned, LAYOUT } from './garden-snapshot'
+import { shiftLegacyOwned, cornerTo15, LAYOUT } from './garden-snapshot'
 
 // ── the garden grid ───────────────────────────────────────────────────────────────────────────────────────────
-export const SQ = 16                         // metres per garden square
-export const GRID = 9                        // squares per side
+// ★ 300 × 300 m (CANON_GAPS 2026-11-15, RULED: "the home plot is a square on a grid, up to 300 × 300 m at full size",
+// growing outward from its inner corner). Square size is build: Alex 11-15 picked 15×15 squares of 20 m.
+export const SQ = 20                         // metres per garden square
+export const GRID = 15                       // squares per side
 export const GRID_HALF = (GRID * SQ) / 2     // 72
 /** The start corner: south-west (low i, high j; north = −z). */
 const START_CORNER = { i: 0, j: GRID - 1 }
@@ -34,10 +36,10 @@ const START_CORNER = { i: 0, j: GRID - 1 }
 export type SquareId = `${number},${number}`
 export const sqId = (i: number, j: number): SquareId => `${i},${j}`
 export const parseSq = (id: string) => { const [i, j] = id.split(',').map(Number); return { i, j } }
-/** 0 = the starting 3×3 in the corner, 1..3 = the bands outward from it (each two squares deep). */
+/** 0 = the starting 3×3 in the corner, 1..3 = the bands outward from it (each four squares deep: 40 / 72 / 104). */
 export const ringOf = (i: number, j: number) => {
   const c = Math.max(Math.abs(i - START_CORNER.i), Math.abs(j - START_CORNER.j))
-  return c <= 2 ? 0 : Math.ceil((c - 2) / 2)
+  return c <= 2 ? 0 : Math.ceil((c - 2) / 4)
 }
 export const squareAt = (x: number, z: number) => {
   const i = Math.floor((x + GRID_HALF) / SQ), j = Math.floor((z + GRID_HALF) / SQ)
@@ -50,7 +52,7 @@ for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) if (ringOf(i, j) =
 /** Grimoire pages filled before Greg will sell a ring (Alex 11-14). */
 export const RING_PAGES = [0, 10, 15, 25] as const
 /** Grey matter per square, by ring. Build pacing (Jin); tune with play. */
-export const RING_COST = [0, 20, 35, 55] as const
+export const RING_COST = [0, 12, 20, 30] as const   // 216 squares to buy (was 72): 480 + 1440 + 3120 grey for all
 /** The grimoire's capacity at each stage: 10 empty pages from Greg, then 15, then 25. */
 export const GRIMOIRE_SIZE = (pages: number) => pages < 10 ? 10 : pages < 15 ? 15 : 25
 
@@ -67,9 +69,12 @@ export function canBuy(owned: ReadonlySet<string>, i: number, j: number, pages: 
 }
 
 // ── the island ────────────────────────────────────────────────────────────────────────────────────────────────
-export const PLOT_CELL = 2
-export const PLOT_R = GRID_HALF + 12                 // the island reaches past the outer ring, then falls
-const N = Math.ceil((PLOT_R + 6) * 2 / PLOT_CELL)
+// 4 m cells (was 2): a 300 m plot at 2 m, four of them and the valley between, is more triangles than the UHD 630
+// should carry; the ground is a gentle rise, 4 m holds its shape. N is kept EVEN so the island's vertices land on
+// multiples of 4 m, which is what lets the cluster's valley (meadow.ts) share them exactly.
+export const PLOT_CELL = 4
+export const PLOT_R = GRID_HALF + 18                 // the island reaches past the outer ring (a shore band), then falls
+const N = 2 * Math.ceil((PLOT_R + 6) * 2 / PLOT_CELL / 2)
 const HALF = (N * PLOT_CELL) / 2
 export const PLOT_N = N
 export const PLOT_HALF = HALF
@@ -79,14 +84,17 @@ export const PLOT_HALF = HALF
 /** The one gate, beside the start ground's outer corner (the island's south-west) and OFF the diagonal (Alex 11-15:
  *  "the gate should sit off to the side of the bridge not blocking it"): a linked cluster's path leaves along the
  *  diagonal and runs past it. */
-export const GATE = { x: -70, z: 54 }
-export const THRESHOLD = { x: -56, z: 56, yaw: Math.atan2(-(GATE.x + 56), -(GATE.z - 56)) }
+export const GATE = { x: -GRID_HALF + 4, z: GRID_HALF - 22 }
+const TH = { x: -GRID_HALF + 22, z: GRID_HALF - 22 }
+export const THRESHOLD = { ...TH, yaw: Math.atan2(-(GATE.x - TH.x), -(GATE.z - TH.z)) }
+/** Where a linked cluster's path leaves the start ground: on the corner's diagonal, the gate off to its side. */
+export const PATH_START = { x: -GRID_HALF + 10, z: GRID_HALF - 10 }
 /** The gate's ring turns to face the threshold (rotation.y; the ring's face is +z unturned). */
 export const GATE_FACE = Math.atan2(THRESHOLD.x - GATE.x, THRESHOLD.z - GATE.z)
 /** Gregory, beside the threshold: he sells ground. */
-export const GREG = { x: -48, z: 62 }
+export const GREG = { x: -GRID_HALF + 32, z: GRID_HALF - 14 }
 /** The rise of the island is centred on the start ground (home is the high ground; the far corner runs low). */
-const DOME = { x: -40, z: 40 }
+const DOME = { x: -GRID_HALF + 40, z: GRID_HALF - 40 }
 export const FALL_Y = -30
 export const REACH = 2.4
 
@@ -100,7 +108,7 @@ const hash = (a: number, b: number) => {
 export function insideIsland(x: number, z: number): boolean {
   const a = Math.atan2(z, x)
   const wob = Math.sin(a * 3 + 0.7) * 2.2 + Math.sin(a * 7 - 1.3) * 1.3 + Math.sin(a * 13) * 0.6
-  const R = PLOT_R + wob, p = 8
+  const R = PLOT_R + wob, p = 12   // squarer than it was (8): the grid's corner square must be whole land
   return (Math.abs(x) / R) ** p + (Math.abs(z) / R) ** p < 1
 }
 
@@ -113,9 +121,9 @@ function rawHeight(x: number, z: number): number {
   const pad = (cx: number, cz: number, R: number, h: number) => {
     const k = Math.max(0, Math.min(1, (Math.hypot(x - cx, z - cz) - R) / 4)); y = y * k + h * (1 - k)
   }
-  pad(GATE.x, GATE.z, 5, 2.0); pad(THRESHOLD.x, THRESHOLD.z, 3, 2.0); pad(GREG.x, GREG.z, 2.5, 2.0)
+  pad(GATE.x, GATE.z, 5, 2.0); pad(THRESHOLD.x, THRESHOLD.z, 4, 2.0); pad(GREG.x, GREG.z, 4, 2.0)
   // the corner's apron: level ground out to the shore along the diagonal, where a cluster's path leaves
-  pad(-66, 66, 4, 2.0); pad(-74, 74, 4, 2.0)
+  for (let t = 0; t <= 22; t += 5.5) pad(PATH_START.x - t * Math.SQRT1_2, PATH_START.z + t * Math.SQRT1_2, 4, 2.0)
   return y
 }
 
@@ -184,13 +192,15 @@ const KEY = 'ather.garden.v1'
 export interface Garden { owned: string[]; grey: number; pages: number }
 export const freshGarden = (): Garden => ({ owned: [...STARTING_SQUARES], grey: 0, pages: 0 })
 
-/** A save from before the corner start (no `layout: 2`): the old centred 3×3 moves onto the corner and everything
- *  bought moves with it; a square the move pushes off the grid is refunded at what it cost then. */
+/** A save from before the corner start (no `layout`): the old centred 3×3 moves onto the corner and everything
+ *  bought moves with it; a square the move pushes off the grid is refunded at what it cost then (the 9×9's prices).
+ *  Then, like a layout-2 save, it is re-anchored onto the 15×15's corner. */
+const OLD_RING_COST = [0, 20, 35, 55]
 export function migrateLegacy(owned: readonly string[], grey: number): { owned: string[]; grey: number } {
   const { kept, dropped } = shiftLegacyOwned(owned)
   const oldRing = (i: number, j: number) => Math.max(0, Math.max(Math.abs(i - 4), Math.abs(j - 4)) - 1)
-  const refund = dropped.reduce((a, id) => { const { i, j } = parseSq(id); return a + RING_COST[oldRing(i, j)] }, 0)
-  return { owned: kept, grey: grey + refund }
+  const refund = dropped.reduce((a, id) => { const { i, j } = parseSq(id); return a + OLD_RING_COST[oldRing(i, j)] }, 0)
+  return { owned: cornerTo15(kept), grey: grey + refund }
 }
 
 export function loadGarden(): Garden {
@@ -199,7 +209,8 @@ export function loadGarden(): Garden {
     if (v && Array.isArray(v.owned) && typeof v.grey === 'number') {
       let owned: string[] = v.owned.filter((s: unknown): s is string => typeof s === 'string')
       let grey = Math.max(0, v.grey)
-      if (v.layout !== LAYOUT) ({ owned, grey } = migrateLegacy(owned, grey))
+      if (v.layout === 2) owned = cornerTo15(owned)
+      else if (v.layout !== LAYOUT) ({ owned, grey } = migrateLegacy(owned, grey))
       owned = [...new Set([...STARTING_SQUARES, ...owned])]
       return { owned, grey, pages: Math.max(0, Number(v.pages) || 0) }
     }

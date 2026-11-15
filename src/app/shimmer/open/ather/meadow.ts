@@ -7,18 +7,18 @@
 // divides between neighbours, a path from every garden's gate corner winding to the shared square where they all
 // meet. The whole cluster floats as one; its outer edge is the fall home, as a lone island's is.
 //
-// HOW THE GROUND IS MADE. One height field on a 2 m grid aligned with the islands' own (every garden centre and the
-// square sit on even metres and gardens turn by quarter-turns, so island vertices land exactly on meadow vertices).
+// HOW THE GROUND IS MADE. One height field on the islands' own grid (4 m; every garden centre and the Green sit on
+// multiples of 4 m and gardens turn by quarter-turns, so island vertices land exactly on meadow vertices).
 // ANCHORS: every island vertex (its own height: the seam cannot crack), the square, and the paths (pad height).
 // Everything else = its nearest anchor's height + a hill that grows with the distance from it, so the meadow meets
 // every shore, path and the square level and climbs only as it leaves them.
 //
 // ★ PURE. No React, no three.
 
-import { PLOT_R, PLOT_HALF, PLOT_CELL, plotCellIsLand, plotVertexHeight, plotVertexTouchesLand } from './plot'
+import { PLOT_R, PLOT_HALF, PLOT_CELL, PATH_START, plotCellIsLand, plotVertexHeight, plotVertexTouchesLand } from './plot'
 
-export const MEADOW_CELL = 2
-export const PATH_W = 5
+export const MEADOW_CELL = PLOT_CELL   // the islands' own cell, so their vertices are the valley's
+export const PATH_W = 6
 export const PATH_Y = 2.0
 
 export interface Placed { x: number; z: number; rot: number }
@@ -61,14 +61,14 @@ export function pathDist(p: Path, x: number, z: number): number {
   return best
 }
 
-/** A garden's path: from its start corner (native (−62, 62), on the diagonal) out past the shore, bending gently, to
- *  the middle of the square where every path meets. `bend` (±1) sets which way it curves. */
+/** A garden's path: from its start corner (PATH_START, on the diagonal) out past the shore, bending gently, to the
+ *  middle of the Green where every path meets. `bend` (±1) sets which way it curves. */
 export function gardenPath(g: Placed, mx: number, mz: number, bend: number): Path {
-  const s = toWorld(g.x, g.z, g.rot, -62, 62), e = { x: mx, z: mz }
+  const s = toWorld(g.x, g.z, g.rot, PATH_START.x, PATH_START.z), e = { x: mx, z: mz }
   const dx = e.x - s.x, dz = e.z - s.z, L = Math.hypot(dx, dz), nx = -dz / L, nz = dx / L
   const pts: [number, number][] = []
   for (let k = 0; k <= 24; k++) {
-    const t = k / 24, off = Math.sin(t * Math.PI) * 9 * bend * smooth(0.15, 0.4, t)   // straight off the corner, then a bend
+    const t = k / 24, off = Math.sin(t * Math.PI) * 12 * bend * smooth(0.15, 0.4, t)   // straight off the corner, then a bend
     pts.push([s.x + dx * t + nx * off, s.z + dz * t + nz * off])
   }
   return { pts, w: PATH_W }
@@ -107,14 +107,15 @@ function inOutline(gs: Placed[], mx: number, mz: number, half: number, x: number
  *  square's middle, beyond it), rolling ground everywhere. Metres above the anchor. */
 function hillAt(mx: number, mz: number, x: number, z: number): number {
   const u = x - mx, v = z - mz
-  const ridge = Math.exp(-((Math.min(Math.abs(u), Math.abs(v)) / 40) ** 2)) * smooth(45, 110, Math.max(Math.abs(u), Math.abs(v)))
-  const roll = 0.5 + 0.5 * Math.sin(x * 0.041 + 1.3) * Math.cos(z * 0.037 - 0.7)
+  const ridge = Math.exp(-((Math.min(Math.abs(u), Math.abs(v)) / 55) ** 2)) * smooth(45, 160, Math.max(Math.abs(u), Math.abs(v)))
+  const roll = 0.5 + 0.5 * Math.sin(x * 0.031 + 1.3) * Math.cos(z * 0.027 - 0.7)
   return 2 + 12 * ridge + 4 * roll + 1.2 * Math.sin(x * 0.12 - z * 0.05) * Math.cos(z * 0.1 + x * 0.03)
 }
 
 export function buildMeadow(gardens: Placed[], mx: number, mz: number, half: number, paths: Path[]): Meadow {
-  const HX = Math.ceil((Math.max(...gardens.map(g => Math.max(Math.abs(g.x - mx), Math.abs(g.z - mz))), half) + MEADOW_R + 10) / 2) * 2
-  const x0 = mx - HX, z0 = mz - HX, n = HX + 1, C = MEADOW_CELL
+  const C = MEADOW_CELL   // HX a whole number of cells, so x0 shares the islands' lattice (multiples of C)
+  const HX = Math.ceil((Math.max(...gardens.map(g => Math.max(Math.abs(g.x - mx), Math.abs(g.z - mz))), half) + MEADOW_R + 10) / C) * C
+  const x0 = mx - HX, z0 = mz - HX, n = (2 * HX) / C + 1
   const N = n * n, dist = new Float32Array(N).fill(Infinity), ha = new Float32Array(N), h = new Float32Array(N)
   // anchors: islands (their own vertex heights), the square, the paths
   for (let b = 0; b < n; b++) for (let a = 0; a < n; a++) {
@@ -147,16 +148,16 @@ export function buildMeadow(gardens: Placed[], mx: number, mz: number, half: num
     if (islandCell(gardens, cx, cz)) { island[k] = 1; continue }
     if (!(inOutline(gardens, mx, mz, half, x, z) && inOutline(gardens, mx, mz, half, x + C, z) && inOutline(gardens, mx, mz, half, x, z + C) && inOutline(gardens, mx, mz, half, x + C, z + C))) continue
     land[k] = 1
-    kind[k] = paths.some(p => pathDist(p, cx, cz) <= p.w / 2) ? 1 : Math.max(Math.abs(cx - mx), Math.abs(cz - mz)) < half ? 2 : 0
+    kind[k] = paths.some(p => pathDist(p, cx, cz) <= p.w / 2 + 0.5) ? 1 : Math.max(Math.abs(cx - mx), Math.abs(cz - mz)) < half ? 2 : 0
   }
   // trees: a scatter on the open meadow, thicker along the ridges; never on a path, the square, or near either
   const trees: Tree[] = []
-  for (let b = 2; b < cn - 2; b += 3) for (let a = 2; a < cn - 2; a += 3) {
-    const ja = a + Math.floor(hash(a, b) * 3) - 1, jb = b + Math.floor(hash(b, a) * 3) - 1
+  for (let b = 2; b < cn - 2; b += 2) for (let a = 2; a < cn - 2; a += 2) {
+    const ja = a + Math.floor(hash(a, b) * 2), jb = b + Math.floor(hash(b, a) * 2)
     const k = jb * cn + ja, vk = jb * n + ja
     if (!land[k] || kind[k] !== 0 || dist[vk] < 12) continue
-    const x = x0 + ja * C + 1, z = z0 + jb * C + 1, u = x - mx, v = z - mz
-    const ridge = Math.exp(-((Math.min(Math.abs(u), Math.abs(v)) / 40) ** 2))
+    const x = x0 + ja * C + C / 2, z = z0 + jb * C + C / 2, u = x - mx, v = z - mz
+    const ridge = Math.exp(-((Math.min(Math.abs(u), Math.abs(v)) / 55) ** 2))
     if (hash(ja * 7, jb * 13) > 0.05 + 0.3 * ridge) continue
     trees.push({ x, y: h[vk], z, r: 1.3 + hash(ja, jb * 3) * 1.1, tall: 2.6 + hash(ja * 5, jb) * 2.4 })
   }

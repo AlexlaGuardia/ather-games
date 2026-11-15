@@ -7,7 +7,7 @@ import { parseWilds, tileCentreWorld, walkableIn, BIOME, type WildsMeta } from '
 import {
   plotShape, PLOT_N, PLOT_CELL, PLOT_HALF, THRESHOLD, FALL_Y, GATE, GREG, REACH, GRID, SQ, GRID_HALF,
   STARTING_SQUARES, RING_PAGES, RING_COST, GRIMOIRE_SIZE, plotHeightAt, plotVertexHeight, plotCellIsLand,
-  squareAt, squareCentre, ringOf, sqId, canBuy, mistWalls, migrateLegacy,
+  squareAt, squareCentre, ringOf, sqId, canBuy, mistWalls, migrateLegacy, PLOT_R, PATH_START,
 } from './plot'
 import { newCombat, stepCombat, spawnHollow, fire, populate, KEEPER_HP, SHAMBLER, BODY_Y } from './combat'
 import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVES, PANIC_MIN_WINDUP } from './champion'
@@ -116,7 +116,7 @@ ok(STARTING_SQUARES.length === 9 && STARTING_SQUARES.every(id => { const [i, j] 
 {
   const counts = [0, 0, 0, 0]
   for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) counts[ringOf(i, j)]++
-  ok(counts.join() === '9,16,24,32', `grid: ring sizes ${counts}`)
+  ok(counts.join() === '9,40,72,104', `grid: ring sizes ${counts}`)
 }
 // the gate, Greg and the threshold all stand on the starting ground
 for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] as const) {
@@ -126,16 +126,18 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
 }
 // buying ground: the grimoire seals rings, adjacency, cost
 {
-  // the bands run out from the start corner: (3,8) is ring 1, (4,8) still ring 1, (5,8) ring 2
-  ok(ringOf(3, 8) === 1 && ringOf(4, 8) === 1 && ringOf(5, 8) === 2 && ringOf(8, 0) === 3, 'grid: the bands are not counted from the corner')
-  ok(!canBuy(START, 3, 8, 9, 999).ok, 'buy: ring 1 sold before 10 pages')
-  const v = canBuy(START, 3, 8, 10, 999)
+  // the bands run out from the start corner, four squares deep: (3..6, 14) ring 1, (7, 14) ring 2, the far corner ring 3
+  const B = GRID - 1
+  ok(ringOf(3, B) === 1 && ringOf(6, B) === 1 && ringOf(7, B) === 2 && ringOf(10, B) === 2 && ringOf(11, B) === 3 && ringOf(B, 0) === 3, 'grid: the bands are not counted from the corner')
+  ok(!canBuy(START, 3, B, 9, 999).ok, 'buy: ring 1 sold before 10 pages')
+  const v = canBuy(START, 3, B, 10, 999)
   ok(v.ok && v.cost === RING_COST[1], 'buy: ring 1 refused at 10 pages')
-  ok(!canBuy(START, 3, 8, 10, RING_COST[1] - 1).ok, 'buy: sold without enough grey matter')
-  ok(!canBuy(START, 4, 8, 99, 999).ok, 'buy: sold a square touching nothing you hold')
-  const more = new Set([...START, sqId(3, 8), sqId(4, 8)])
-  ok(!canBuy(more, 5, 8, 14, 999).ok, 'buy: ring 2 sold before 15 pages')
-  ok(canBuy(more, 5, 8, 15, 999).ok, 'buy: ring 2 refused at 15 pages')
+  ok(!canBuy(START, 3, B, 10, RING_COST[1] - 1).ok, 'buy: sold without enough grey matter')
+  ok(!canBuy(START, 4, B, 99, 999).ok, 'buy: sold a square touching nothing you hold')
+  const more = new Set([...START, sqId(3, B), sqId(4, B), sqId(5, B), sqId(6, B)])
+  ok(!canBuy(more, 7, B, 14, 999).ok, 'buy: ring 2 sold before 15 pages')
+  ok(canBuy(more, 7, B, 15, 999).ok, 'buy: ring 2 refused at 15 pages')
+  ok(GRID * SQ === 300, 'grid: the plot is not 300 m across (RULED 11-15)')
   ok(RING_PAGES.join() === '0,10,15,25', 'buy: the grimoire tiers moved')
   ok(GRIMOIRE_SIZE(0) === 10 && GRIMOIRE_SIZE(10) === 15 && GRIMOIRE_SIZE(15) === 25 && GRIMOIRE_SIZE(30) === 25, 'grimoire: capacity 10 → 15 → 25')
 }
@@ -146,13 +148,13 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   for (let t = 0; t < 60 * 12; t++) tickLocomotion(lc, input({ mvX: 0, mvZ: -1, fwdX: 0, fwdZ: -1 }), world)
   const edge = GRID_HALF - 3 * SQ
   ok(lc.pz > edge - 0.5 && lc.pz < edge + 2, `mist: walker ended at z ${lc.pz.toFixed(1)} (mist at ${edge})`)
-  // the corner 3×3 is walled on its two inner sides (6) and every unbought rim square on its outer side (30)
-  ok(mistWalls(START).length === 36, `mist: ${mistWalls(START).length} wall segments (want 6 inner + 30 rim)`)
+  // the corner 3×3 is walled on its two inner sides (6) and every unbought rim square on its outer side (60 − 6)
+  ok(mistWalls(START).length === 60, `mist: ${mistWalls(START).length} wall segments (want 6 inner + 54 rim)`)
 }
 // the shore band is open from the start corner, but it does not lead round into the unbought squares
 {
   const world = terrainWorld(plotShape(START))
-  const lc = createLoco(-78, plotHeightAt(-78, 16), 16)
+  const lc = createLoco(-GRID_HALF - 6, plotHeightAt(-GRID_HALF - 6, 0), 0)
   for (let t = 0; t < 60 * 8; t++) tickLocomotion(lc, input({ mvX: 1, mvZ: 0, fwdX: 1, fwdZ: 0 }), world)
   ok(lc.px < -GRID_HALF + 0.5, `mist: walked off the shore band into an unbought square (x ${lc.px.toFixed(1)})`)
 }
@@ -161,7 +163,7 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   const all = new Set<string>(); for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) all.add(sqId(i, j))
   ok(mistWalls(all).length === 0, 'mist: walls left when the whole grid is held')
   const world = terrainWorld(plotShape(all))
-  const c = squareCentre(4, 8)
+  const c = squareCentre(7, GRID - 1)
   const lc = createLoco(c.x, plotHeightAt(c.x, c.z), c.z)
   let fell = false
   for (let t = 0; t < 60 * 15 && !fell; t++) { tickLocomotion(lc, input({ mvX: 0, mvZ: 1, fwdX: 0, fwdZ: 1 }), world); if (lc.py < FALL_Y) fell = true }
@@ -453,13 +455,13 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   const owned = new Set(STARTING_SQUARES)
   const pp = plotPlatePixels(owned)
   const at = (x: number, z: number) => { const i = Math.floor((x + pp.extent) / PLOT_MPP), j = Math.floor((z + pp.extent) / PLOT_MPP), o = (j * pp.w + i) * 4; return [pp.px[o], pp.px[o + 1], pp.px[o + 2]] }
-  const mine = squareCentre(1, 7), mist = squareCentre(8, 0), voidPt = [pp.extent - 2, pp.extent - 2]
+  const mine = squareCentre(1, GRID - 2), mist = squareCentre(GRID - 1, 0), voidPt = [pp.extent - 2, pp.extent - 2]
   const lum = (c: number[]) => c[0] + c[1] + c[2]
   ok(at(mine.x + 3, mine.z + 3)[1] > at(mine.x + 3, mine.z + 3)[2] + 20, 'plot plate: a held square is not green')
   const sat = (c: number[]) => Math.max(...c) - Math.min(...c)   // the mist is PALE (washed out), held ground is vivid; brightness alone depends on the slope's light
   ok(sat(at(mist.x + 3, mist.z + 3)) < sat(at(mine.x + 3, mine.z + 3)) * 0.5, 'plot plate: an unbought square is not under the pale mist')
   ok(lum(at(voidPt[0], voidPt[1])) < 120, 'plot plate: the corner past the island is not the void')
-  const more = plotPlatePixels(new Set([...owned, sqId(3, 8)]))
+  const more = plotPlatePixels(new Set([...owned, sqId(3, GRID - 1)]))
   ok(more.px.some((v, k) => v !== pp.px[k]), 'plot plate: buying a square does not change the map')
 }
 
@@ -486,9 +488,9 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
     const ff = full(mine)
     ok(ff.mates.length === 3 && new Set(ff.mates.map(m => m.where)).size === 3 && !ff.mates.some(m => m.where === 'ne'), `cluster: from ${mine}, the mates do not fill the other three corners`)
     for (const m of ff.mates) {
-      const c = Math.cos(m.rot), sn = Math.sin(m.rot), gx = m.x + c * -62 + sn * 62, gz = m.z - sn * -62 + c * 62
+      const c = Math.cos(m.rot), sn = Math.sin(m.rot), gx = m.x + c * PATH_START.x + sn * PATH_START.z, gz = m.z - sn * PATH_START.x + c * PATH_START.z
       const dG = Math.hypot(gx - ff.middle!.x, gz - ff.middle!.z), dC = Math.hypot(m.x - ff.middle!.x, m.z - ff.middle!.z)
-      ok(dG < dC - 80, `cluster: from ${mine}, ${m.quarter}'s start corner does not face the square (${dG.toFixed(0)} vs ${dC.toFixed(0)})`)
+      ok(dG < dC - 150, `cluster: from ${mine}, ${m.quarter}'s start corner does not face the square (${dG.toFixed(0)} vs ${dC.toFixed(0)})`)
     }
   }
   // two views agree: if I see you one quarter-turn anticlockwise, you see me one quarter-turn clockwise
@@ -506,7 +508,7 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
     for (const g of [{ x: 0, z: 0 }, ...ff.mates]) for (let k = 0; k < 72; k++) {
       const a = (k / 72) * Math.PI * 2, ux = Math.cos(a), uz = Math.sin(a)
       let prev = NaN
-      for (let r = 70; r <= 98; r += 0.25) {
+      for (let r = PLOT_R - 30; r <= PLOT_R + 14; r += 0.25) {
         const h = hAt(g.x + ux * r, g.z + uz * r)
         if (!Number.isFinite(h)) { holes++; break }
         if (Number.isFinite(prev)) worstStep = Math.max(worstStep, Math.abs(h - prev))
@@ -561,7 +563,7 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   // visiting: a mate's unbought squares are fenced off, turned with their island; their way in is open
   const mw = mateWalls(f)
   const mblocks = (x: number, z: number) => mw.some(w => x >= w.x0 && x <= w.x1 && z >= w.z0 && z <= w.z1)
-  ok(mw.length === 36, `cluster: a friend's corner start has ${mw.length} mist walls (want 36)`)
+  ok(mw.length === 60, `cluster: a friend's corner start has ${mw.length} mist walls (want 60)`)
   ok(path.slice(-150).every(([x, z]) => !mblocks(x, z)), "cluster: mist stands between a friend's path and their threshold")
   ok(mw.every(w => mateAt(f, (w.x0 + w.x1) / 2, (w.z0 + w.z1) / 2) === pal || Number.isFinite(clusterGround(f, (w.x0 + w.x1) / 2, (w.z0 + w.z1) / 2))), "cluster: a friend's mist stands off their island")
   // a mate's garden is somebody else's data: only well-formed square ids get through
@@ -569,12 +571,15 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   ok(readGarden('{"v":1,"owned":["9,9"]}') === null && readGarden('{"v":1,"owned":["4,4","<b>"]}') === null, 'garden: a bad square id got through')
   ok(readGarden('nope') === null && readGarden(JSON.stringify({ v: 1, owned: Array(82).fill('1,1') })) === null, 'garden: junk or an oversized garden got through')
   // a snapshot from the centred layout reads in the corner frame (the old middle 3×3 lands on the start corner)
-  ok(readGarden('{"v":1,"owned":["3,3","4,4","5,5","2,4"]}')?.owned.join(' ') === '0,6 1,7 2,8', 'garden: a v1 snapshot did not shift to the corner')
+  ok(readGarden('{"v":1,"owned":["3,3","4,4","5,5","2,4"]}')?.owned.join(' ') === '0,12 1,13 2,14', 'garden: a v1 snapshot did not shift to the corner')
+  ok(readGarden('{"v":2,"owned":["0,8","2,6","3,8"]}')?.owned.join(' ') === '0,14 2,12 3,14', 'garden: a v2 (9×9 corner) snapshot did not re-anchor on the 15×15 corner')
+  ok(readGarden(gardenText(['14,0', '0,14']))?.owned.join(' ') === '0,14 14,0', 'garden: a v3 snapshot with the far squares did not round-trip')
+  ok(readGarden('{"v":3,"owned":["15,0"]}') === null, 'garden: a square past the 15×15 got through')
   // a local save from the centred layout: same shift, and a square pushed off the grid is refunded at its old price
   const OLD_START = ['3,3', '4,3', '5,3', '3,4', '4,4', '5,4', '3,5', '4,5', '5,5']
   const mig = migrateLegacy([...OLD_START, '4,2', '2,4'], 5)
-  ok(STARTING_SQUARES.every(id => mig.owned.includes(id)) && mig.owned.includes('1,5') && mig.owned.length === 10, `garden: the old start did not land on the corner (${mig.owned})`)
-  ok(mig.grey === 5 + RING_COST[1], `garden: the square pushed off the grid was not refunded (grey ${mig.grey})`)
+  ok(STARTING_SQUARES.every(id => mig.owned.includes(id)) && mig.owned.includes('1,11') && mig.owned.length === 10, `garden: the old start did not land on the corner (${mig.owned})`)
+  ok(mig.grey === 5 + 20, `garden: the square pushed off the grid was not refunded at its old price (grey ${mig.grey})`)
 }
 
 // ── the Wilds, streamed (Alex 11-15) ───────────────────────────────────────────────────────────────────────────

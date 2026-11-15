@@ -42,7 +42,7 @@ function meadowPicture(m: Meadow): HTMLCanvasElement {
 }
 
 const REACH = 120          // Wilds: metres from centre to edge
-const PLOT_REACH = 92      // plot: the whole island fits
+const PLOT_REACH = 120     // plot: the keeper's neighbourhood (the 300 m island no longer fits whole at minimap scale)
 const COMP = 1000          // composed tile picture, px
 
 export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waymarks, regionsByTile, owned, onExpand, cluster }: {

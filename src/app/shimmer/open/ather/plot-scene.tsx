@@ -3,7 +3,7 @@
 // The home plot's scene: the full-size island, the garden grid, fold-mist over ground you do not hold, the one
 // gate, Gregory, and the threshold. Rules live in plot.ts; this only draws them.
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import {
   PLOT_N, PLOT_CELL, PLOT_HALF, PLOT_R, GRID, SQ, GRID_HALF, THRESHOLD, GATE, GATE_FACE, GREG,
@@ -83,24 +83,35 @@ function Gregory() {
   )
 }
 
-/** Fold-mist over every square you do not hold. Squares Greg would sell you now glow gold under the mist. */
+/** Fold-mist over every square you do not hold. Squares Greg would sell you now glow gold under the mist. Instanced, one
+ *  mesh per look (for sale, or sealed by ring): a 15×15 garden has up to 216 mist squares, four gardens in a cluster. */
 function Mist({ owned, pages }: { owned: ReadonlySet<string>; pages: number }) {
-  const out: React.ReactNode[] = []
-  for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) {
-    if (owned.has(sqId(i, j))) continue
-    const x = (i + 0.5) * SQ - GRID_HALF, z = (j + 0.5) * SQ - GRID_HALF
-    const v = canBuy(owned, i, j, pages, Number.MAX_SAFE_INTEGER)   // "for sale" ignores what you can afford
-    const forSale = v.ok, ring = ringOf(i, j)
-    const h = plotHeightAt(x, z)
-    const top = Number.isFinite(h) ? h : 1
-    out.push(
-      <mesh key={`${i},${j}`} position={[x, top + 3, z]}>
-        <boxGeometry args={[SQ - 0.1, 7, SQ - 0.1]} />
-        <meshLambertMaterial color={forSale ? '#f3e2a8' : '#eef0f2'} transparent opacity={forSale ? 0.42 : 0.62 + ring * 0.08} depthWrite={false} />
-      </mesh>,
-    )
-  }
-  return <>{out}</>
+  const groups = useMemo(() => {
+    const g = new Map<string, { x: number; y: number; z: number }[]>()
+    for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) {
+      if (owned.has(sqId(i, j))) continue
+      const x = (i + 0.5) * SQ - GRID_HALF, z = (j + 0.5) * SQ - GRID_HALF, h = plotHeightAt(x, z)
+      const key = canBuy(owned, i, j, pages, Number.MAX_SAFE_INTEGER).ok ? 'sale' : `r${ringOf(i, j)}`   // "for sale" ignores what you can afford
+      if (!g.has(key)) g.set(key, [])
+      g.get(key)!.push({ x, y: (Number.isFinite(h) ? h : 1) + 3, z })
+    }
+    return [...g.entries()]
+  }, [owned, pages])
+  return <>{groups.map(([key, pts]) => <MistGroup key={`${key}:${pts.length}`} pts={pts} sale={key === 'sale'} ring={key === 'sale' ? 0 : Number(key.slice(1))} />)}</>
+}
+function MistGroup({ pts, sale, ring }: { pts: { x: number; y: number; z: number }[]; sale: boolean; ring: number }) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  useEffect(() => {
+    const m = new THREE.Matrix4()
+    pts.forEach((p, k) => ref.current!.setMatrixAt(k, m.makeTranslation(p.x, p.y, p.z)))
+    ref.current!.instanceMatrix.needsUpdate = true
+  }, [pts])
+  return (
+    <instancedMesh ref={ref} frustumCulled={false} args={[undefined, undefined, pts.length]}>
+      <boxGeometry args={[SQ - 0.1, 7, SQ - 0.1]} />
+      <meshLambertMaterial color={sale ? '#f3e2a8' : '#eef0f2'} transparent opacity={sale ? 0.42 : 0.62 + ring * 0.08} depthWrite={false} />
+    </instancedMesh>
+  )
 }
 
 /** The island alone (ground, grid, underside, threshold, gate, Gregory, mist): your plot, or a cluster-mate's set at
