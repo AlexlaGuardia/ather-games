@@ -98,7 +98,10 @@ export function atherPlateCanvas(W: Wilds): HTMLCanvasElement {
 }
 const cache = new Map<string, HTMLCanvasElement>()
 export function atherPlate(W: Wilds): HTMLCanvasElement {
-  let c = cache.get(W.meta.name); if (!c) { c = atherPlateCanvas(W); cache.set(W.meta.name, c) }
+  let c = cache.get(W.meta.name)
+  if (c) { cache.delete(W.meta.name); cache.set(W.meta.name, c); return c }   // most recent last
+  c = atherPlateCanvas(W); cache.set(W.meta.name, c)
+  while (cache.size > 12) cache.delete(cache.keys().next().value!)   // a roaming keeper keeps ~12 MB of plates, not 67
   return c
 }
 

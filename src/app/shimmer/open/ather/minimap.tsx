@@ -17,6 +17,7 @@ import { FOG_CELL, cellOrigin, type Fog } from './explored'
 import { GREG_WAYMARK, type Waymark } from './waymarks'
 import { GATE, GREG } from './plot'
 import type { Wilds } from './wilds'
+import { TILE_M, type WildsWorld } from './wilds-world'
 import { atherPlate, plotPlate, PLOT_MPP } from './plate'
 import type { CompassPose } from '../shared/game-hud'
 import type { Frame } from './cluster'
@@ -25,34 +26,46 @@ const REACH = 120          // Wilds: metres from centre to edge
 const PLOT_REACH = 92      // plot: the whole island fits
 const COMP = 1000          // composed tile picture, px
 
-export function AtherMiniMap({ size, zone, W, fog, tileOff, pose, waymarks, regions, owned, onExpand, cluster }: {
-  size: HudSize; zone: 'plot' | 'wilds'; W: Wilds; fog: Fog | null; tileOff: { x: number; z: number }
+export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waymarks, regionsByTile, owned, onExpand, cluster }: {
+  size: HudSize; zone: 'plot' | 'wilds'
+  /** the streamed Wilds (wilds-world.ts): every loaded tile composes its own picture; a frame draws the ones in view */
+  world: WildsWorld; wrev: number
+  fog: Fog | null; tileOff: { x: number; z: number }
   pose: React.RefObject<CompassPose | null>; waymarks: Waymark[]
-  regions: { id: string; poly: { x: number; z: number }[]; infected: boolean }[]
+  /** each loaded tile's node borders, in that tile's LOCAL coords */
+  regionsByTile: Map<string, { id: string; poly: { x: number; z: number }[]; infected: boolean }[]>
   owned: ReadonlySet<string>; onExpand: () => void
   /** linked plots (cluster.ts): sketched round the island, the shared ground and the bridges */
   cluster?: Frame
 }) {
   const box = hudMapBox(size)
   const cv = useRef<HTMLCanvasElement>(null)
-  const comp = useRef<HTMLCanvasElement | null>(null)
+  const comps = useRef(new Map<string, HTMLCanvasElement>())
+  const sigs = useRef(new Map<string, string>())
   const ver = useRef(0)
   const clusterRef = useRef(cluster); clusterRef.current = cluster
 
-  // compose the tile picture (Wilds) whenever what it shows changes
+  // compose each loaded tile's picture whenever what it shows changes: its plate, its node borders, the fog over it
+  // (the fog is one continent grid; `tileOff` is the anchor tile's centre in continent coords), its waymarks
   useEffect(() => {
     if (zone !== 'wilds') return
-    let dead = false
-    const draw = () => {
-      if (dead) return
-      const c = comp.current ?? (comp.current = document.createElement('canvas'))
+    const keep = new Set<string>()
+    const here = pose.current ? world.tileAtPoint(pose.current.x, pose.current.z)?.W.meta.name : undefined
+    for (const [name, W] of world.loaded) {
+      keep.add(name)
+      // the fog moves only where you walk: only YOUR tile recomposes on a fog change; the rest when their borders,
+      // pins or the loaded set change (a full redraw of nine tiles every quarter-second would stutter)
+      const sig = `${wrev}|${regionsByTile.get(name)?.map(r => r.infected ? 1 : 0).join('') ?? ''}|${waymarks.length}${name === here ? `|${fog?.rev ?? 0}` : ''}`
+      if (sigs.current.get(name) === sig && comps.current.has(name)) continue
+      sigs.current.set(name, sig)
+      const c = comps.current.get(name) ?? document.createElement('canvas'); comps.current.set(name, c)
       c.width = COMP; c.height = COMP
+      const t = world.byName.get(name)!, ox = t.tx * TILE_M, oz = t.ty * TILE_M
       const ctx = c.getContext('2d')!, sx = W.meta.sizeX, sz = W.meta.sizeZ, k = COMP / sx
       ctx.imageSmoothingEnabled = true
-      // the Ather's own relief plate (plate.ts, Alex 11-15: the Nyx map's look, in the Ather's palette), not the flat export
       ctx.drawImage(atherPlate(W), 0, 0, COMP, COMP)
       const P = (x: number, z: number): [number, number] => [(x + sx / 2) * k, (z + sz / 2) * (COMP / sz)]
-      // node borders, the same look as the fold map
+      const regions = regionsByTile.get(name) ?? []
       if (regions.length > 1) for (const r of regions) {
         ctx.beginPath(); r.poly.forEach((p, i) => { const [x, y] = P(p.x, p.z); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y) }); ctx.closePath()
         ctx.fillStyle = r.infected ? 'rgba(70,72,78,0.32)' : 'rgba(159,210,122,0.12)'; ctx.fill()
@@ -61,20 +74,19 @@ export function AtherMiniMap({ size, zone, W, fog, tileOff, pose, waymarks, regi
       }
       ctx.setLineDash([])
       if (fog) {
-        const x0 = tileOff.x - sx / 2, z0 = tileOff.z - sz / 2, cellPx = COMP / (sx / FOG_CELL)
+        const x0 = tileOff.x + ox - sx / 2, z0 = tileOff.z + oz - sz / 2, cellPx = COMP / (sx / FOG_CELL)
         drawCloud(ctx, fog, cellPx, -((x0 - cellOrigin.x) / FOG_CELL) * cellPx, -((z0 - cellOrigin.z) / FOG_CELL) * cellPx, ATHER_CLOUD)
       }
       const pin = (x: number, z: number, col: string, r: number) => {
         const [px, py] = P(x, z); ctx.fillStyle = col; ctx.strokeStyle = '#1a1410'; ctx.lineWidth = 2.5
         ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
       }
-      pin(GREG_WAYMARK.x, GREG_WAYMARK.z, '#e7c766', 9)
-      for (const w of waymarks) if (w.tile === GREG_WAYMARK.tile) pin(w.x, w.z, '#6fd3c4', 8)
-      ver.current++
+      if (name === GREG_WAYMARK.tile) pin(GREG_WAYMARK.x, GREG_WAYMARK.z, '#e7c766', 9)
+      for (const w of waymarks) if (w.tile === name) pin(w.x, w.z, '#6fd3c4', 8)
     }
-    draw()
-    return () => { dead = true }
-  }, [zone, W, fog, fog?.rev, tileOff, waymarks, regions])
+    for (const n of [...comps.current.keys()]) if (!keep.has(n)) { comps.current.delete(n); sigs.current.delete(n) }
+    ver.current++
+  }, [zone, world, wrev, fog, fog?.rev, tileOff, waymarks, regionsByTile, pose])
 
   // per frame: crop round the keeper (Wilds) or draw the garden (plot), then the keeper
   useEffect(() => {
@@ -89,12 +101,15 @@ export function AtherMiniMap({ size, zone, W, fog, tileOff, pose, waymarks, regi
       last = key
       const ctx = c.getContext('2d')!, S = c.width
       if (zone === 'wilds') {
-        const m = comp.current
+        // every tile in view, placed by its centre (tiles meet exactly, so the picture is seamless)
         ctx.fillStyle = '#080614'; ctx.fillRect(0, 0, S, S)
-        if (m) {
-          const k = COMP / W.meta.sizeX, span = REACH * 2 * k
-          const cx = (p.x + W.meta.sizeX / 2) * k, cy = (p.z + W.meta.sizeZ / 2) * k
-          ctx.drawImage(m, cx - span / 2, cy - span / 2, span, span, 0, 0, S, S)
+        const kpx = S / (REACH * 2)
+        ctx.imageSmoothingEnabled = true
+        for (const [name, m] of comps.current) {
+          const t = world.byName.get(name)!, left = t.tx * TILE_M - TILE_M / 2, top = t.ty * TILE_M - TILE_M / 2
+          const dx = S / 2 + (left - p.x) * kpx, dy = S / 2 + (top - p.z) * kpx, ds = TILE_M * kpx
+          if (dx > S || dy > S || dx + ds < 0 || dy + ds < 0) continue
+          ctx.drawImage(m, dx, dy, ds, ds)
         }
       } else {
         const k = S / (PLOT_REACH * 2), X = (x: number) => S / 2 + (x - p.x) * k, Z = (z: number) => S / 2 + (z - p.z) * k
@@ -118,7 +133,7 @@ export function AtherMiniMap({ size, zone, W, fog, tileOff, pose, waymarks, regi
     }
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)
-  }, [box.size, zone, W, pose, owned])
+  }, [box.size, zone, world, pose, owned])
 
   return (
     <>

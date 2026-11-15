@@ -89,7 +89,7 @@ export function WildsScene({ W, waymarks }: { W: Wilds; waymarks: Waymark[] }) {
         <planeGeometry args={[W.meta.sizeX, W.meta.sizeZ]} /><meshLambertMaterial color={P.water} transparent opacity={0.8} />
       </mesh>
       <Trees W={W} />
-      <WaymarkStone w={greg} greg />
+      {W.meta.name === GREG_WAYMARK.tile && <WaymarkStone w={greg} greg />}
       {waymarks.filter(w => w.tile === W.meta.name).map(w => <WaymarkStone key={w.id} w={w} />)}
     </>
   )

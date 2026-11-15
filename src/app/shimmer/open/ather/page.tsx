@@ -30,12 +30,13 @@ import { clusterGround, wallsWithLane, mateWalls } from './cluster'
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
-import { loadWilds, tileCentreWorld, walkableIn, BIOME_NAME, type Wilds } from './wilds'
+import { tileCentreWorld, BIOME_NAME, type Wilds } from './wilds'
+import { loadIndex, makeWorld, stream, tileOf, TILE_M, type WildsWorld } from './wilds-world'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud } from './combat-layer'
 import type { CombatEvent, Terrain } from './combat'
-import { placeNodes, ownerOf, nodeRegions, GAME_DAY_MS } from './nodes'
+import { ownerOf, nodeRegions, GAME_DAY_MS, type WildsNode } from './nodes'
 import { advance, clearAt, loadSpread, saveSpread, loadSkew, saveSkew, type SpreadState, type SpreadEvent } from './spread'
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey } from '../shared/touch'
@@ -50,7 +51,6 @@ import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, ty
 import { AtherMiniMap } from './minimap'
 import type { Vitals } from '../../engine/vitals'
 
-const TILE = 'first-wilds'
 
 type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
 type Spawn = { x: number; z: number; yaw: number }
@@ -67,7 +67,13 @@ export default function AtherSlice() {
   const [zone, setZone] = useState<Zone>({ kind: 'plot' })
   const [spawn, setSpawn] = useState<Spawn>(THRESHOLD)
   const [epoch, setEpoch] = useState(0)
-  const [W, setW] = useState<Wilds | null>(null)
+  // THE WILDS, STREAMED (wilds-world.ts, Alex 11-15): `ww` is the whole continent's Wilds as one ground, its tiles
+  // loading round you; `W` is the tile you stand in (the fold map, its borders). One space: first-wilds local = world.
+  const [ww, setWw] = useState<WildsWorld | null>(null)
+  const [wrev, setWrev] = useState(0)
+  const [hereTile, setHereTile] = useState('first-wilds')
+  const W: Wilds | null = ww?.loaded.get(hereTile) ?? null
+  const streamAt = useCallback(async (x: number, z: number) => { if (ww && await stream(ww, x, z)) setWrev(ww.rev) }, [ww])
   const [fog, setFog] = useState<Fog | null>(null)
   const [waymarks, setWaymarks] = useState<Waymark[]>([])
   const [garden, setGarden] = useState<Garden>(freshGarden)
@@ -78,6 +84,7 @@ export default function AtherSlice() {
   const [hud, setHud] = useState({ verb: 'idle', where: 'your plot' })
   const pos = useRef({ x: THRESHOLD.x, z: THRESHOLD.z, grounded: true, swimming: false })
   const near = useRef<Near>(null)
+  const hereRef = useRef('first-wilds'), nearRef = useRef('')
   const hudT = useRef(0), fogT = useRef(0), fogDirty = useRef(false)
   const [chud, setChud] = useState<CombatHud | null>(null)
   // ── THE HUD (shared/game-hud.tsx): the same hearth HUD as every open-world page ──
@@ -104,8 +111,12 @@ export default function AtherSlice() {
     fetch('/open/continent.json').then(r => r.json()).then(m => setPitstops(pitstopsUnlocked(m.places as PlaceLike[])))
       .catch(() => { /* Rune Hold alone */ })
   }, [])
-  useEffect(() => { loadWilds(TILE).then(setW).catch(e => setToast(`The Wilds would not load: ${e.message}`)) }, [])
-  const tileOff = useMemo(() => W ? tileCentreWorld(W.meta) : { x: 0, z: 0 }, [W])
+  useEffect(() => {
+    loadIndex().then(async idx => { const w = makeWorld(idx); await stream(w, GREG_WAYMARK.x, GREG_WAYMARK.z); setWw(w); setWrev(w.rev) })
+      .catch(e => setToast(`The Wilds would not load: ${e.message}`))
+  }, [])
+  // the anchor tile's centre in continent coords (the fog grid and the continent map add it to world coords)
+  const tileOff = useMemo(() => tileCentreWorld({ source: { x0: 770, y0: 420, x1: 870, y1: 520, mPerPx: 10 } } as Wilds['meta']), [])
   useEffect(() => {
     const ch = () => { locked.current = !!document.pointerLockElement; setLocked(locked.current); if (locked.current) setPlayed(true) }
     document.addEventListener('pointerlockchange', ch)
@@ -145,13 +156,13 @@ export default function AtherSlice() {
   const goHome = useCallback(() => arrive({ kind: 'plot' }, THRESHOLD), [arrive])
 
   // ── combat in the Wilds ──
-  const terrain = useMemo<Terrain | null>(() => W ? {
-    heightAt: W.heightAt,
-    walkable: (x, z) => walkableIn(W, x, z),
-  } : null, [W])
+  const terrain = useMemo<Terrain | null>(() => ww ? { heightAt: ww.heightAt, walkable: (x, z) => ww.walkable(x, z) } : null, [ww])
   // THE NODE MAP (nodes.ts: one node per land subsection) and THE SPREAD (spread.ts: Alex's raw numbers, no brakes).
   // The world catches up on load (the clock ran while you were away), then ticks live every 20 s.
-  const allNodes = useMemo(() => W ? placeNodes(W, TILE, GREG_WAYMARK) : [], [W])
+  // every node on the continent, from the tile index (placed at export by the same placeNodes), in world coords: the
+  // spread must know them all, loaded or not, or a streamed-out tile would forget what you cleared
+  const allNodes = useMemo<WildsNode[]>(() => ww ? ww.index.tiles.flatMap(t => t.nodes.map(n => ({ ...n, tile: t.name, x: n.x + t.tx * TILE_M, z: n.z + t.ty * TILE_M }))) : [], [ww])
+  const nodesByTile = useMemo(() => { const m = new Map<string, WildsNode[]>(); for (const n of allNodes) { const a = m.get(n.tile) ?? []; a.push(n); m.set(n.tile, a) } return m }, [allNodes])
   const tell = useCallback((evs: SpreadEvent[], lead: string) => {
     const sp = evs.filter(e => e.kind === 'spread').length, wl = evs.filter(e => e.kind === 'well').length
     if (sp || wl) hudSay(`${lead}${[sp && `the grey spread to ${sp} place${sp === 1 ? '' : 's'}`, wl && `${wl} cleared place${wl === 1 ? '' : 's'} welled up again`].filter(Boolean).join(', ')}.`, 'info', 6)
@@ -176,9 +187,29 @@ export default function AtherSlice() {
     hudSay(`Day ${day} · ${allNodes.length - n.s.clean.length}/${allNodes.length} infected${sp ? ` · +${sp} spread` : ''}${wl ? ` · +${wl} welled` : ''}`, 'info', 5)
   }, [allNodes]) // eslint-disable-line react-hooks/exhaustive-deps
   const nodes = useMemo(() => spread ? allNodes.filter(n => !spread.clean.includes(n.id)) : [], [allNodes, spread])
-  const nodeOwner = useMemo(() => W && allNodes.length ? (x: number, z: number) => ownerOf(allNodes, x, z)?.id : undefined, [W, allNodes])
+  // ownership is per tile (a node owns the nearest ground in ITS tile), the same rule the tile's borders are drawn with
+  const nodeOwner = useMemo(() => ww && allNodes.length ? (x: number, z: number) => {
+    const { tx, ty } = tileOf(x, z), t = ww.at(tx, ty); if (!t) return undefined
+    return ownerOf(nodesByTile.get(t.name) ?? [], x, z)?.id
+  } : undefined, [ww, allNodes, nodesByTile])
+  // what the fight and the plumes need: the infected nodes near you (963 mounds would sink the frame rate)
+  const [nearKey, setNearKey] = useState('')
+  const nearNodes = useMemo(() => { const p = pos.current; return nodes.filter(n => Math.abs(n.x - p.x) < 450 && Math.abs(n.z - p.z) < 450) }, [nodes, nearKey]) // eslint-disable-line react-hooks/exhaustive-deps
   // the countries on the fold map, and which one the keeper stands in (HUD), off the same nearest-node rule
-  const regions = useMemo(() => W ? nodeRegions(allNodes, W.meta.sizeX, W.meta.sizeZ).map(r => ({ ...r, infected: nodes.some(n => n.id === r.id) })) : [], [W, allNodes, nodes])
+  const infectedSet = useMemo(() => new Set(nodes.map(n => n.id)), [nodes])
+  // each loaded tile's borders in its LOCAL coords (the minimap composes per tile; the fold map shows the tile you are in)
+  const regionsByTile = useMemo(() => {
+    const m = new Map<string, { id: string; poly: { x: number; z: number }[]; infected: boolean }[]>()
+    if (!ww) return m
+    for (const name of ww.loaded.keys()) {
+      const t = ww.byName.get(name)!, ox = t.tx * TILE_M, oz = t.ty * TILE_M
+      const local = (nodesByTile.get(name) ?? []).map(n => ({ ...n, x: n.x - ox, z: n.z - oz }))
+      m.set(name, nodeRegions(local, TILE_M, TILE_M).map(r => ({ ...r, infected: infectedSet.has(r.id) })))
+    }
+    return m
+  }, [ww, wrev, nodesByTile, infectedSet]) // eslint-disable-line react-hooks/exhaustive-deps
+  const regions = regionsByTile.get(hereTile) ?? []
+  const hereOff = useMemo(() => { const t = ww?.byName.get(hereTile); return t ? { x: t.tx * TILE_M, z: t.ty * TILE_M } : { x: 0, z: 0 } }, [ww, hereTile])
   const groundRef = useRef<(x: number, z: number) => string | null>(() => null)
   groundRef.current = (x, z) => { const id = nodeOwner?.(x, z); return id ? (nodes.some(n => n.id === id) ? 'infected ground' : 'cleared ground') : null }
   const gardenRef = useRef(garden); gardenRef.current = garden
@@ -205,20 +236,22 @@ export default function AtherSlice() {
   const travel = useCallback((d: Dest) => {
     if (d.kind === 'home') { goHome(); return }
     if (d.kind === 'waymark') {
-      if (!W) { setToast('The Wilds are still loading.'); return }
-      arrive({ kind: 'wilds', tile: d.w.tile }, { x: d.w.x + 2.2, z: d.w.z + 2.2, yaw: Math.PI * 0.75 })
+      if (!ww) { setToast('The Wilds are still loading.'); return }
+      // a waymark is saved in its tile's own coords; the world is one space, so place it, load round it, then arrive
+      const o = ww.offsetOf(d.w.tile), x = d.w.x + o.x + 2.2, z = d.w.z + o.z + 2.2
+      stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(d.w.tile); arrive({ kind: 'wilds', tile: d.w.tile }, { x, z, yaw: Math.PI * 0.75 }) })
       return
     }
     // Athernyx: out through a city's door off the hall (hub's ?at= sets you down at that pitstop).
     setPanel(null); setFade(1)
     setTimeout(() => { window.location.href = `/shimmer/open/continent?at=${encodeURIComponent(d.id)}` }, 380)
-  }, [W, arrive, goHome])
+  }, [ww, arrive, goHome])
 
   // THE HALLWAY (gates.md, ruled 11-14): any door to any door. Arriving from the continent map with ?waymark=<id>
   // sets the keeper down at that bound waymark. An id the keeper has not bound is refused (the threshold instead).
   const landed = useRef(false)
   useEffect(() => {
-    if (landed.current || !W) return
+    if (landed.current || !ww) return
     const id = new URLSearchParams(window.location.search).get('waymark')
     if (!id) return
     landed.current = true
@@ -226,10 +259,10 @@ export default function AtherSlice() {
     const w = id === GREG_WAYMARK.id ? GREG_WAYMARK : loadWaymarks().find(k => k.id === id)
     if (!w) { setToast('That door is not bound to anything you have walked to. You are home.'); return }
     travel({ kind: 'waymark', w })
-  }, [W, travel])
+  }, [ww, travel])
 
-  const world = useMemo(() => zone.kind === 'plot' ? plotWorld : W ? terrainWorld(W.shape) : null, [zone, W, plotWorld])
-  const ground = useMemo(() => zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : W ? W.heightAt : () => 0, [zone, W, cl.frame])
+  const world = useMemo(() => zone.kind === 'plot' ? plotWorld : ww ? terrainWorld(ww.shape) : null, [zone, ww, plotWorld])   // ww.shape reads the live tiles
+  const ground = useMemo(() => zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : ww ? ww.heightAt : () => 0, [zone, ww, cl.frame])
 
   const onTick = useCallback((lc: Loco, _yaw: number, dt: number) => {
     pos.current = { x: lc.px, z: lc.pz, grounded: !lc.airborne, swimming: lc.swimming }
@@ -240,7 +273,11 @@ export default function AtherSlice() {
       else if (Math.hypot(GREG.x - lc.px, GREG.z - lc.pz) < REACH) n = { kind: 'greg' }
     } else {
       const all = [{ w: GREG_WAYMARK, own: false }, ...waymarks.map(w => ({ w, own: true }))]
-      for (const { w, own } of all) if (w.tile === zone.tile && Math.hypot(w.x - lc.px, w.z - lc.pz) < 2.6) n = { kind: 'waymark', w, own }
+      for (const { w, own } of all) { const o = ww?.byName.has(w.tile) ? ww.offsetOf(w.tile) : null; if (o && Math.hypot(w.x + o.x - lc.px, w.z + o.z - lc.pz) < 2.6) n = { kind: 'waymark', w, own } }
+      // streaming: crossing into another tile loads round you and re-aims everything that is per tile
+      const t = ww ? ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty) : undefined
+      if (t && t.name !== hereRef.current) { hereRef.current = t.name; setHereTile(t.name); streamAt(lc.px, lc.pz) }
+      const nk = `${Math.round(lc.px / 150)},${Math.round(lc.pz / 150)}`; if (nk !== nearRef.current) { nearRef.current = nk; setNearKey(nk) }
       fogT.current -= dt
       if (fog && fogT.current <= 0) { fogT.current = 0.25; if (reveal(fog, lc.px + tileOff.x, lc.pz + tileOff.z)) fogDirty.current = true }
     }
@@ -253,11 +290,11 @@ export default function AtherSlice() {
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map') : null
       setPrompt(p)
       let where = 'your plot'
-      if (zone.kind === 'wilds' && W) { const g = groundRef.current(lc.px, lc.pz); where = BIOME_NAME[W.biomeAt(lc.px, lc.pz)] + (g ? ` · ${g}` : '') }
+      if (zone.kind === 'wilds' && ww) { const g = groundRef.current(lc.px, lc.pz); where = BIOME_NAME[ww.biomeAt(lc.px, lc.pz)] + (g ? ` · ${g}` : '') }
       else { const s = squareAt(lc.px, lc.pz); if (!s) where = 'the edge' }
       setHud({ verb: verbOf(lc), where })
     }
-  }, [zone, waymarks, W, fog, tileOff])
+  }, [zone, waymarks, ww, fog, tileOff, streamAt])
 
   const buy = useCallback((i: number, j: number) => {
     const v = canBuy(owned, i, j, garden.pages, garden.grey)
@@ -281,17 +318,20 @@ export default function AtherSlice() {
   }, [zone, travel, garden, updateGarden, skipDays, nodeOwner])
 
   const plantHere = useCallback(() => {
-    if (zone.kind !== 'wilds' || !W) return
-    const p = pos.current, biome = W.biomeAt(p.x, p.z)
-    const v = canPlant(waymarks, { tile: zone.tile, x: p.x, z: p.z, biome, grounded: p.grounded, swimming: p.swimming })
+    if (zone.kind !== 'wilds' || !ww) return
+    // a waymark belongs to the tile it stands in, in that tile's own coords (the fold map, the spacing rules, saves)
+    const p = pos.current, biome = ww.biomeAt(p.x, p.z), t = ww.at(tileOf(p.x, p.z).tx, tileOf(p.x, p.z).ty)
+    if (!t) return
+    const lx = p.x - t.tx * TILE_M, lz = p.z - t.ty * TILE_M
+    const v = canPlant(waymarks, { tile: t.name, x: lx, z: lz, biome, grounded: p.grounded, swimming: p.swimming })
     if (!v.ok) { setToast(v.why); return }
     const spent = take(getInv(), 'waymark', 1)          // a waymark is a thing in the bag now: planting spends one
     if (!spent) { setToast('No waymarks in your bag. Lift one you planted to carry it again.'); return }
     setInv(spent)
-    const next = plant(waymarks, { tile: zone.tile, x: p.x, y: W.heightAt(p.x, p.z), z: p.z, biome })
+    const next = plant(waymarks, { tile: t.name, x: lx, y: ww.heightAt(p.x, p.z), z: lz, biome })
     setWaymarks(next); saveWaymarks(next)
     setToast(`Waymark bound in the ${BIOME_NAME[biome]}. It is a stop on the fold map now.`)
-  }, [zone, W, waymarks])
+  }, [zone, ww, waymarks])
   // what you hold is what sits in the selected hotbar slot (the bag, shared/bag.tsx): a waymark plants on click,
   // the Repeater fires (combat-layer only fires while armed)
   const inv = useInv()
@@ -305,12 +345,14 @@ export default function AtherSlice() {
     marksRef.current = zone.kind === 'plot'
       ? [{ x: GATE.x, z: GATE.z, color: '#e7c766', title: 'the gate' }, { x: GREG.x, z: GREG.z, color: '#c9a27a', title: 'Gregory' }]
       : [
-          ...nodes.map(n => ({ x: n.x, z: n.z, color: '#5f6165', title: 'infected ground' })),
+          // the six nearest infected nodes (the continent holds hundreds), Greg's waymark, your waymarks, all in world coords
+          ...[...nearNodes].sort((a, b) => Math.hypot(a.x - pos.current.x, a.z - pos.current.z) - Math.hypot(b.x - pos.current.x, b.z - pos.current.z)).slice(0, 6)
+            .map(n => ({ x: n.x, z: n.z, color: '#5f6165', title: 'infected ground' })),
           { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, color: '#e7c766', title: "Gregory's waymark" },
-          ...waymarks.filter(w => zone.kind === 'wilds' && w.tile === zone.tile).map(w => ({ x: w.x, z: w.z, color: '#6fd3c4', title: 'your waymark' })),
+          ...waymarks.filter(w => ww?.byName.has(w.tile)).map(w => { const o = ww!.offsetOf(w.tile); return { x: w.x + o.x, z: w.z + o.z, color: '#6fd3c4', title: 'your waymark' } }),
         ]
     marksRef.current = [...marksRef.current, ...questMarks(zone.kind === 'plot' ? 'ather' : 'wilds')]   // the journal's waymarks (pack.tsx)
-  }, [zone, nodes, waymarks, journal])
+  }, [zone, nearNodes, waymarks, journal, ww])
   // the journal: the nearest infected node is the keeper's open line on this side (re-aimed as you move; unchanged posts are free)
   useEffect(() => {
     const post = () => {
@@ -362,7 +404,7 @@ export default function AtherSlice() {
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [panel, fade, zone, waymarks, W, goHome, tune, skipDays, allNodes, plantHere])
+  }, [panel, fade, zone, waymarks, ww, goHome, tune, skipDays, allNodes, plantHere])
 
   const zoneName = zone.kind === 'plot' ? 'Your plot' : 'The Wilds'
   // Phone taps: only what applies here and now, each the key this page already handles.
@@ -387,13 +429,13 @@ export default function AtherSlice() {
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => { canvasEl.current = gl.domElement }}
       >
-        <VoxelDayNight gloomAt={zone.kind === 'wilds' && W ? (x, z) => W.canopyAt(x, z) * 0.7 : undefined} />
+        <VoxelDayNight gloomAt={zone.kind === 'wilds' && ww ? (x, z) => ww.canopyAt(x, z) * 0.7 : undefined} />
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
-        {zone.kind === 'wilds' && W && <WildsScene W={W} waymarks={waymarks} />}
+        {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} /></group> })}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
-            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={held === 'repeater'} nodes={nodes} ownerOf={nodeOwner} />
+            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={held === 'repeater'} nodes={nearNodes} ownerOf={nodeOwner} />
         )}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
         {world && (
@@ -408,7 +450,7 @@ export default function AtherSlice() {
       <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
       <GameHud size={hudSize} pose={poseRef} marks={marksRef} vitals={vitalsRef} mana={manaRef} entries={hotbar} sel={slot} onSelect={setSlot}
         dimmed={zone.kind !== 'wilds'} input={!panel && !fade && !optionsOpen}
-        minimap={W && <AtherMiniMap size={hudSize} zone={zone.kind} W={W} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regions={regions} cluster={cl.frame}
+        minimap={ww && <AtherMiniMap size={hudSize} zone={zone.kind} world={ww} wrev={wrev} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regionsByTile={regionsByTile} cluster={cl.frame}
           owned={owned} onExpand={() => setPanel({ kind: 'map', view: 'ather', travel: false })} />}
         status={[
           { label: hud.where },
@@ -445,8 +487,9 @@ export default function AtherSlice() {
         <div style={{ position: 'absolute', left: '50%', top: '58%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none' }}>{prompt}</div>
       )}
       {panel?.kind === 'map' && (
-        <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} here={pos.current}
-          inWilds={zone.kind === 'wilds'} onTravel={travel} tile={TILE} pitstops={pitstops} nodes={nodes} regions={regions}
+        <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} here={{ x: pos.current.x - hereOff.x, z: pos.current.z - hereOff.z }}
+          inWilds={zone.kind === 'wilds'} onTravel={travel} tile={hereTile} pitstops={pitstops}
+          nodes={(nodesByTile.get(hereTile) ?? []).filter(n => infectedSet.has(n.id)).map(n => ({ ...n, x: n.x - hereOff.x, z: n.z - hereOff.z }))} regions={regions}
           onClose={() => setPanel(null)} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
