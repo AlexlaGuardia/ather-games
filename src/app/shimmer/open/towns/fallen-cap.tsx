@@ -17,7 +17,7 @@ import * as THREE from 'three'
 import { dayProgress, daylight } from '../../engine/day-cycle'
 
 const WALL = '#d3b98d', WALL_DARK = '#b99d72', TIMBER = '#5a3d26', TIMBER_OLD = '#6b5038', STONE = '#8d7f69'
-const STEM = '#d8ccb2', STEM_DARK = '#bfae8e', CAP = '#8a6748', CAP_RIM = '#9c7a57', GILL = '#2b2622', SOOT = '#1b1816'
+const STEM = '#ddd1b8', STEM_DARK = '#c4b394', CAP = '#93704e', CAP_RIM = '#a8865f', GILL = '#5a4c40', SOOT = '#262019'
 const WALL_H = 3.6, SIDES = 10
 
 function signTexture(text: string) {
@@ -46,11 +46,13 @@ export function FallenCap({ x, z, y, yaw, w = 14, d = 12 }: { x: number; z: numb
   const ry = Math.PI / 2 - yaw
   // the hall: a ten-sided round of wall inside the footprint, the stem at its heart (a little toward the back)
   const r = Math.min(w, d) / 2 - 0.3
-  const stemR = Math.max(0.9, r * 0.2), stemZ = -r * 0.12
-  const capY = WALL_H + 2.2, capR = Math.min(r * 1.55, Math.max(w, d) * 0.72), capH = capR * 0.42
+  // the mushroom stands well clear of the hall: a stretch of bare stem shows above the boards, so it reads as a
+  // mushroom with a tavern at its foot, not a hat on a hut
+  const stemR = Math.max(1.1, r * 0.24), stemZ = -r * 0.12
+  const capY = WALL_H + 4.6, capR = Math.min(r * 1.5, Math.max(w, d) * 0.7), capH = capR * 0.55
   const sign = useMemo(() => signTexture('THE FALLEN CAP'), [])
   useEffect(() => () => sign.dispose(), [sign])
-  const gill = useMemo(() => gillGeometry(stemR * 1.05, capR * 0.97, 0.9), [stemR, capR])
+  const gill = useMemo(() => gillGeometry(stemR * 1.7, capR * 0.97, 0.7), [stemR, capR])
   useEffect(() => () => gill.dispose(), [gill])
   // one glass for every window, so the night glow is one colour change
   const glass = useMemo(() => new THREE.MeshBasicMaterial({ color: '#6b4a2a', toneMapped: false }), [])
@@ -116,9 +118,9 @@ export function FallenCap({ x, z, y, yaw, w = 14, d = 12 }: { x: number; z: numb
       <group position={[0, capY, stemZ]} rotation={[0.05, 0, -0.035]}>
         <mesh scale={[1, capH / capR, 1]}><sphereGeometry args={[capR, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshLambertMaterial color={CAP} /></mesh>
         <mesh position={[0, -0.12, 0]} rotation={[Math.PI / 2, 0, 0]}><torusGeometry args={[capR * 0.985, 0.32, 6, 40]} /><meshLambertMaterial color={CAP_RIM} /></mesh>
-        <mesh position={[0, -0.02, 0]} rotation={[Math.PI / 2, 0, 0]}><ringGeometry args={[stemR, capR, 40]} /><meshLambertMaterial color={GILL} side={THREE.DoubleSide} /></mesh>
+        <mesh position={[0, -0.02, 0]} rotation={[Math.PI / 2, 0, 0]}><ringGeometry args={[stemR, capR, 40]} /><meshLambertMaterial color={SOOT} side={THREE.DoubleSide} /></mesh>
         {Array.from({ length: 72 }, (_, i) => (
-          <mesh key={i} geometry={gill} rotation={[0, (i / 72) * Math.PI * 2, 0]}><meshLambertMaterial color={i % 5 === 0 ? SOOT : GILL} side={THREE.DoubleSide} /></mesh>
+          <mesh key={i} geometry={gill} rotation={[0, (i / 72) * Math.PI * 2, 0]}><meshLambertMaterial color={i % 4 === 0 || Math.abs(i - 54) < 7 ? SOOT : GILL} side={THREE.DoubleSide} /></mesh>
         ))}
       </group>
 
