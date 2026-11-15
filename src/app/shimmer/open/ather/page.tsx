@@ -36,11 +36,8 @@ import { placeNodes, isInfected, clearNode, loadNodes, saveNodes, ownerOf, nodeR
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey } from '../shared/touch'
 import { useMenuLock } from '../shared/menu-lock'
-import { OpenHud, useOpenHudSize, type CompassMark, type CompassPose, type Mana } from '../shared/open-hud'
+import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { AtherMiniMap } from './minimap'
-import { HudPlate } from '../../ui/hearth-hud'
-import { HEARTH_FONT_VARS } from '../../ui/hearth-fonts'
-import { hearthDisplay, hearthBody } from '../../ui/hearth'
 import type { Vitals } from '../../engine/vitals'
 
 const TILE = 'first-wilds'
@@ -73,8 +70,8 @@ export default function AtherSlice() {
   const near = useRef<Near>(null)
   const hudT = useRef(0), fogT = useRef(0), fogDirty = useRef(false)
   const [chud, setChud] = useState<CombatHud | null>(null)
-  // ── THE HUD (shared/open-hud.tsx): the same hearth HUD as every open-world page ──
-  const hudSize = useOpenHudSize(isTouch)
+  // ── THE HUD (shared/game-hud.tsx): the same hearth HUD as every open-world page ──
+  const hudSize = useGameHudSize(isTouch)
   const poseRef = useRef<CompassPose>({ x: THRESHOLD.x, z: THRESHOLD.z, yaw: THRESHOLD.yaw })
   const marksRef = useRef<CompassMark[]>([])
   const vitalsRef = useRef<Vitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0 })
@@ -103,7 +100,8 @@ export default function AtherSlice() {
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
   const getCanvas = useCallback(() => canvasEl.current, [])
   useMenuLock(panel !== null, getCanvas)
-  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3400); return () => clearTimeout(t) }, [toast])
+  // toasts speak on the template's message line (under the hotbar), then clear
+  useEffect(() => { if (!toast) return; hudSay(toast, 'info'); setToast(null) }, [toast])
   // persist the walked fog every few seconds and on the way out
   useEffect(() => {
     const flush = () => { if (fog && fogDirty.current) { saveFog(fog); fogDirty.current = false } }
@@ -257,13 +255,16 @@ export default function AtherSlice() {
           ...waymarks.filter(w => zone.kind === 'wilds' && w.tile === zone.tile).map(w => ({ x: w.x, z: w.z, color: '#6fd3c4', title: 'your waymark' })),
         ]
   }, [zone, nodes, waymarks])
+  // entering somewhere says so on the message line: the zone, and crossing a node border
+  const zoneName0 = zone.kind === 'plot' ? 'Your plot' : 'The Wilds'
+  useEffect(() => { hudSay(zoneName0, 'zone') }, [zoneName0])
+  const groundKind = hud.where.includes('infected') ? 'Infected ground' : hud.where.includes('cleared') ? 'Cleared ground' : null
+  const lastGround = useRef<string | null>(null)
+  useEffect(() => { if (groundKind && lastGround.current && groundKind !== lastGround.current) hudSay(groundKind, 'zone'); lastGround.current = groundKind }, [groundKind])
   const hotbar = useMemo(() => [
-    { itemId: 'repeater', count: chud?.ammo ?? 12, icon: '/open/icons/repeater.svg' },
-    { itemId: 'waymark', count: MAX_WAYMARKS - waymarks.length, icon: '/open/icons/waymark.svg' },
-  ], [chud?.ammo, waymarks.length])
-  const held = zone.kind !== 'wilds' ? null
-    : slot === 0 ? { text: chud?.reloading ? 'Repeater · reloading' : `Repeater · ${chud?.ammo ?? 12} / ${chud?.clip ?? 12}`, out: false }
-    : { text: `Waymark · ${isTouch ? 'F' : 'click or F'} to plant`, out: false }
+    { itemId: 'repeater', count: chud?.ammo ?? 12, icon: '/open/icons/repeater.svg', name: zone.kind === 'wilds' ? 'Repeater' : 'Repeater · the Wilds only' },
+    { itemId: 'waymark', count: MAX_WAYMARKS - waymarks.length, icon: '/open/icons/waymark.svg', name: `Waymark · ${isTouch ? 'F' : 'click or F'} to plant` },
+  ], [chud?.ammo, waymarks.length, zone.kind, isTouch])
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -278,8 +279,7 @@ export default function AtherSlice() {
         return
       }
       if (e.code === 'KeyF') plantHere()
-      if (e.code === 'Digit1') setSlot(0)
-      if (e.code === 'Digit2') setSlot(1)
+
       if (e.code === 'KeyL' && n?.kind === 'waymark' && n.own) {
         const next = lift(waymarks, n.w.id); setWaymarks(next); saveWaymarks(next); setToast('Waymark lifted.')
       }
@@ -326,22 +326,16 @@ export default function AtherSlice() {
         )}
       </Canvas>
       <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
-      <div className={HEARTH_FONT_VARS} style={{ position: 'absolute', left: 12, top: hudSize === 'phone' ? 8 : 12, pointerEvents: 'none', zIndex: 32 }}>
-        <HudPlate face="full" r={12}>
-          <div style={{ padding: '5px 11px 6px', lineHeight: 1.35 }}>
-            <div style={{ ...hearthDisplay, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{zoneName}</div>
-            <div style={{ ...hearthBody, fontSize: 11, opacity: 0.8, fontVariantNumeric: 'tabular-nums' }}>{hud.where} · {hud.verb}</div>
-            <div style={{ ...hearthBody, fontSize: 11, fontWeight: 700, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-              Grey matter {garden.grey} · Grimoire {garden.pages}
-            </div>
-            {!isTouch && <div style={{ ...hearthBody, fontSize: 10, opacity: 0.6 }}>M map{zone.kind === 'wilds' ? ' · F plant · H home · R reload' : ''}</div>}
-          </div>
-        </HudPlate>
-      </div>
-      <OpenHud size={hudSize} pose={poseRef} marks={marksRef} vitals={vitalsRef} mana={manaRef} entries={hotbar} sel={slot}
-        held={held} dimmed={zone.kind !== 'wilds'} onSelect={isTouch ? setSlot : undefined} />
-      {W && <AtherMiniMap size={hudSize} zone={zone.kind} W={W} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regions={regions}
-        owned={owned} onExpand={() => setPanel({ kind: 'map', view: 'ather', travel: false })} />}
+      <GameHud size={hudSize} pose={poseRef} marks={marksRef} vitals={vitalsRef} mana={manaRef} entries={hotbar} sel={slot} onSelect={setSlot}
+        dimmed={zone.kind !== 'wilds'} input={!panel && !fade}
+        minimap={W && <AtherMiniMap size={hudSize} zone={zone.kind} W={W} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regions={regions}
+          owned={owned} onExpand={() => setPanel({ kind: 'map', view: 'ather', travel: false })} />}
+        status={[
+          { label: hud.where },
+          ...(zone.kind === 'wilds' && chud ? [{ label: 'Repeater', value: chud.reloading ? 'reloading' : `${chud.ammo} / ${chud.clip}` }] : []),
+          { label: 'Grey matter', value: garden.grey, accent: true },
+          { label: 'Grimoire', value: garden.pages },
+        ]} />
       {zone.kind === 'wilds' && chud && (() => {
         const now = performance.now() / 1000, hurt = Math.max(0, 1 - (now - chud.hurtAt) / 0.6), hit = now - chud.hitAt < 0.12
         return (
@@ -368,9 +362,6 @@ export default function AtherSlice() {
       })()}
       {prompt && !panel && (
         <div style={{ position: 'absolute', left: '50%', top: '58%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none' }}>{prompt}</div>
-      )}
-      {toast && (
-        <div style={{ position: 'absolute', left: '50%', bottom: isTouch ? 92 : 28, transform: 'translateX(-50%)', padding: '8px 14px', borderRadius: 8, background: 'rgba(24,28,32,0.85)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none', maxWidth: '80vw', textAlign: 'center' }}>{toast}</div>
       )}
       {panel?.kind === 'map' && (
         <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} here={pos.current}

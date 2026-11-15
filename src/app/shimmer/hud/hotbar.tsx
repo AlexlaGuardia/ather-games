@@ -21,7 +21,7 @@ import { ItemChip } from './satchel'
 
 /** `icon` (optional): a picture URL that stands in for the item's derived icon — the open world's gun and waymark have
  *  no block/item art behind them (code-drawn SVGs in public/open/icons). Omitted = the derived icon, as before. */
-export type HotbarEntry = { itemId: string; count: number; icon?: string }
+export type HotbarEntry = { itemId: string; count: number; icon?: string; /** what the template says when it is selected */ name?: string }
 
 export const HOTBAR_SLOTS = 8
 

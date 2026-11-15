@@ -95,7 +95,8 @@ function Socket({ face, r, glyph }: { face: HudFace; r: ReturnType<typeof toolRe
 
 /** The bottom-right corner: vessel + rim + arch. hud-corner's geometry (152px gauge, arc radius
  *  clamp(108px,16vw,122px), bearings 180/137/93/50). Compact shrinks the whole corner to ~96px. */
-function Corner({ face, size, mana, readouts, glyph }: {
+/** The mana orb with the tool sockets fanned round it (bottom-right). Exported for the open world's template. */
+export function Corner({ face, size, mana, readouts, glyph }: {
   face: HudFace; size: HudSize
   mana: React.RefObject<{ cur: number; max: number; regen: number } | null>
   readouts: ReturnType<typeof toolReadout>[]

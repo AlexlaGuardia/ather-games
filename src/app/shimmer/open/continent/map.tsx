@@ -215,7 +215,7 @@ export const trackHeading = (t: Track) => screenHeading(-Math.sin(t.yaw), -Math.
 const MINI_REACH = 700     // metres from centre to edge
 
 export function ContinentMiniMap({ map, track, onExpand, box: boxIn }: { map: ContinentMapState; track: React.RefObject<Track>; onExpand: () => void
-  /** The open HUD's box for this size (shared/open-hud.tsx), so the frame, the clock under it and this canvas agree. */
+  /** The open HUD's box for this size (shared/game-hud.tsx), so the frame, the clock under it and this canvas agree. */
   box?: MapBox }) {
   const cv = useRef<HTMLCanvasElement>(null)
   const [fitBox, setBox] = useState<MapBox>(MINIMAP_BOX)

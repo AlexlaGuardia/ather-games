@@ -17,7 +17,7 @@ import { FOG_CELL, cellOrigin, type Fog } from './explored'
 import { GREG_WAYMARK, type Waymark } from './waymarks'
 import { GRID, SQ, GRID_HALF, GATE, GREG, sqId, PLOT_R } from './plot'
 import type { Wilds } from './wilds'
-import type { CompassPose } from '../shared/open-hud'
+import type { CompassPose } from '../shared/game-hud'
 
 const REACH = 120          // Wilds: metres from centre to edge
 const PLOT_REACH = 92      // plot: the whole island fits

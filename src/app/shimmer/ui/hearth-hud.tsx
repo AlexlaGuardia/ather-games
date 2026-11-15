@@ -76,7 +76,7 @@ export function HudPlate({ face, r = 14, children, style, className = '' }: {
 // ── bottom-centre: the hotbar ────────────────────────────────────────────────────────────────
 /** Drop-in for `hud/hotbar.tsx` `Hotbar` — its contract, unchanged: 8 FIXED slots, items only,
  *  empty slots still drawn, `dimmed` fades rather than hides, `onSelect` makes slots buttons. */
-export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect, size = 'wide', lip, slots = true }: {
+export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect, size = 'wide', lip, slots = true, anchor = 'bottom' }: {
   face: HudFace
   /** Chosen by the host (`useHudSize`), not by a media query — see hud-flag.ts. */
   size?: HudSize
@@ -84,6 +84,9 @@ export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect, size 
   lip?: React.ReactNode
   /** false = no quick-slots, only the lip (Alex 09-28: no hotbar in a fight — towns keep it; a phone's mana rides the lip) */
   slots?: boolean
+  /** 'top-left' (Alex 11-15, the open world's template): the tray sits in the top-left corner and the held label is
+   *  NOT drawn (the template's message line under the tray says the name). Default 'bottom' = the voxel world's bar. */
+  anchor?: 'bottom' | 'top-left'
   entries: readonly (HotbarEntry | null)[]
   sel: number
   held: { text: string; out: boolean } | null
@@ -104,10 +107,12 @@ export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect, size 
       <div style={{ background: t.rim, borderRadius: size === 'phone' ? 14 : 18, padding: trayPad, boxShadow: t.plateShadow }}>{lip}</div>
     </div>
   )
+  const top = anchor === 'top-left'
   return (
-    <div className={`absolute ${size === 'phone' ? 'bottom-2' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center ${onSelect ? '' : 'pointer-events-none'} transition-opacity ${dimmed ? 'opacity-35' : 'opacity-100'}`}>
+    <div className={`${top ? 'fixed top-3 left-3 items-start' : `absolute ${size === 'phone' ? 'bottom-2' : 'bottom-4'} left-1/2 -translate-x-1/2 items-center`} flex flex-col ${onSelect ? '' : 'pointer-events-none'} transition-opacity ${dimmed ? 'opacity-35' : 'opacity-100'}`}
+         style={top ? { zIndex: 33 } : undefined} data-hud="hotbar">
       {/* Always mounted, opacity only — the row must never shift when the name fades. */}
-      <div className={`mb-1.5 h-5 text-center text-[14px] font-semibold transition-opacity duration-500 ${held && !held.out ? 'opacity-100' : 'opacity-0'}`}
+      <div className={`${top ? 'hidden' : ''} mb-1.5 h-5 text-center text-[14px] font-semibold transition-opacity duration-500 ${held && !held.out ? 'opacity-100' : 'opacity-0'}`}
            style={{ ...hearthDisplay, color: t.heldColor, textShadow: '0 1px 3px rgba(0,0,0,.9)' }}>
         {held?.text ?? ''}
       </div>
@@ -501,9 +506,11 @@ const CARD: Record<number, string> = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180
 /** A strip that slides under a fixed notch: 120° of view, a tick every 15°, cardinals in the display face (N in the
  *  accent). `marks` are places the host wants pointed at (a node, a waymark): a pip at their bearing, pinned to the
  *  strip's edge (dimmed) when they are behind you. Polled from refs, never re-rendered (the hearth HUD rule). */
-export function HearthCompass({ face, pose, marks, size = 'wide', top }: {
+export function HearthCompass({ face, pose, marks, size = 'wide', top, centerX }: {
   face: HudFace; pose: React.RefObject<CompassPose | null>; marks?: React.RefObject<readonly CompassMark[]>
   size?: HudSize; top?: number
+  /** px from the left edge to the compass's centre; omitted = the screen's centre */
+  centerX?: number
 }) {
   const t = HUD_FACES[face]
   const W = size === 'phone' ? 190 : size === 'compact' ? 250 : 300, FIELD = 120, PPD = W / FIELD
@@ -544,7 +551,7 @@ export function HearthCompass({ face, pose, marks, size = 'wide', top }: {
     )
   }
   return (
-    <div className="pointer-events-none" style={{ position: 'fixed', top: top ?? (size === 'phone' ? 8 : 12), left: '50%', transform: 'translateX(-50%)', zIndex: 34 }} data-hud="compass">
+    <div className="pointer-events-none" style={{ position: 'fixed', top: top ?? (size === 'phone' ? 8 : 12), left: centerX ?? '50%', transform: 'translateX(-50%)', zIndex: 34 }} data-hud="compass">
       <HudPlate face={face} r={12}>
         <div className="relative overflow-hidden" style={{ width: W, height: 28 }}>
           <div ref={strip} className="absolute left-0 top-1" style={{ width: 800 * PPD, height: 22 }}>{ticks}</div>
