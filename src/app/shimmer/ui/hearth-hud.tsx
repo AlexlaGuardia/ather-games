@@ -500,6 +500,8 @@ export const bearingDeg = (fromX: number, fromZ: number, toX: number, toZ: numbe
 export const relDeg = (bearing: number, heading: number) => ((bearing - heading + 540) % 360) - 180
 
 export type CompassPose = { x: number; z: number; yaw: number }
+/** The compass strip's width per size (its plate adds the rim on each side). */
+export const compassWidth = (size: HudSize) => (size === 'phone' ? 190 : size === 'compact' ? 240 : 260)   // 260: centred on the screen at 1280 beside the top-left bar
 export type CompassMark = { x: number; z: number; color: string; title?: string }
 const CARD: Record<number, string> = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' }
 
@@ -513,7 +515,7 @@ export function HearthCompass({ face, pose, marks, size = 'wide', top, centerX }
   centerX?: number
 }) {
   const t = HUD_FACES[face]
-  const W = size === 'phone' ? 190 : size === 'compact' ? 250 : 300, FIELD = 120, PPD = W / FIELD
+  const W = compassWidth(size), FIELD = 120, PPD = W / FIELD
   const strip = useRef<HTMLDivElement>(null), pips = useRef<HTMLDivElement>(null), read = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     let id = 0

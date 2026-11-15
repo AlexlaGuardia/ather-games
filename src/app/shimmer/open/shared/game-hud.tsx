@@ -29,7 +29,7 @@
 
 import React, { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import { HearthHudLayer, hudMapBox, Corner, toolReadout, type ToolFamily } from '../../ui/hearth-hud-layer'
-import { HearthCompass, HearthHotbar, HearthVitals, HearthClock, HudPlate, WELL, useHudSize, type CompassMark, type CompassPose } from '../../ui/hearth-hud'
+import { HearthCompass, compassWidth, HearthHotbar, HearthVitals, HearthClock, HudPlate, WELL, useHudSize, type CompassMark, type CompassPose } from '../../ui/hearth-hud'
 import { HUD_FACES } from '../../ui/hud-face'
 import { HEARTH_FONT_VARS } from '../../ui/hearth-fonts'
 import { hearthDisplay, hearthBody } from '../../ui/hearth'
@@ -170,13 +170,15 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
       </div>
     )
   }
-  // the compass: centred in the gap between the bar and the minimap
-  const gapL = 12 + tray.w, gapR = vw - box.right - box.size - 6
+  // the compass: on the SCREEN's centre (Alex 11-15: gap-centred read "a little off center" — 166 px at 1920), nudged
+  // sideways only as far as it must to clear the bar or the minimap on a narrow window
+  const gapL = 12 + tray.w, gapR = vw - box.right - box.size - 6, half = compassWidth(size) / 2 + 6 + 10
+  const compassX = Math.min(Math.max(vw / 2, gapL + half), gapR - half)
   return (
     <div className={`contents ${HEARTH_FONT_VARS}`}>
       <HearthHotbar face={FACE} size={size} entries={entries} sel={sel} held={null} dimmed={dimmed} onSelect={onSelect} anchor="top-left" />
       <Messages align="left" style={{ left: 16, top: 12 + tray.h + 10 }} />
-      <HearthCompass face={FACE} pose={pose} marks={marks} size={size} centerX={(gapL + gapR) / 2} />
+      <HearthCompass face={FACE} pose={pose} marks={marks} size={size} centerX={compassX} />
       {minimap}
       <HearthClock face={FACE} box={box} />
       <StatusChips items={status} top={statusTop} right={box.right} />
