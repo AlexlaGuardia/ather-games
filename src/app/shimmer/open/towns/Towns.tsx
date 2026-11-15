@@ -12,6 +12,7 @@ import * as THREE from 'three'
 import type { Region } from '../region'
 import { planTown, townRadius, FLOOR_H, type TownPlan, type Building } from './plan'
 import { dayProgress, daylight } from '../../engine/day-cycle'
+import { FRONTS } from '../../play3d/rune-hold-look'
 
 // ── looks per town, from canon + the concept shots Alex judged 11-15 (tools/art/gen_towns.py). Roman bones
 // (world/athernyx.md): pale stone, terracotta. Unlisted towns take the country default. ──
@@ -124,6 +125,73 @@ function laneGeometry(R: Region, plans: TownPlan[]) {
   return g
 }
 
+// ── storefront SIGNS (Rune Hold's fronts, named by canon in play3d's FRONTS): a hanging board over the door with the
+// name painted on, and a lantern beside it. Canon's feel line asks for "shops you remember by name". ──
+function signTexture(name: string) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128
+  const g = c.getContext('2d')!
+  g.fillStyle = '#3b2617'; g.fillRect(0, 0, 512, 128)
+  g.strokeStyle = '#c99a4b'; g.lineWidth = 6; g.strokeRect(8, 8, 496, 112)
+  g.fillStyle = '#f1d08a'; g.textAlign = 'center'; g.textBaseline = 'middle'
+  let px = 54
+  do { g.font = `700 ${px}px Georgia, 'Times New Roman', serif`; px -= 2 } while (g.measureText(name.toUpperCase()).width > 460 && px > 20)
+  g.fillText(name.toUpperCase(), 256, 68)
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4
+  return t
+}
+// what each KIND of front adds to the plain kit, so the square reads as named places rather than one house seven times.
+// The kinds are play3d's (FrontKind); the dressing is build (Jin's), from canon's own lines where it has them:
+// the Station is the Roman-bones building of the set (world/athernyx.md: columns, arches) and the smithy town's forge
+// glow and chimney (world/rune-hold.md: "steam rising from smithies", "forge-warmed walls").
+const AWNING: Partial<Record<string, string>> = { tavern: '#8a2f22', cafe: '#2f6f6a', books: '#2f4f2a', inn: '#6a3f1f' }
+function FrontSign({ b }: { b: Building }) {
+  const f = FRONTS.find(q => q.id === b.front)
+  const tex = useMemo(() => (f ? signTexture(f.name) : null), [f])
+  useEffect(() => () => tex?.dispose(), [tex])
+  if (!f || !tex) return null
+  // the street face is local +z (plan.ts yaw → rotation.y = π/2 − yaw); everything here hangs off that face
+  const ry = Math.PI / 2 - b.yaw, floor = b.y1 + 0.25, H = b.floors * FLOOR_H
+  const awning = AWNING[f.kind]
+  const cols = f.kind === 'station' ? Math.max(4, Math.round(b.w / 3)) : 0
+  return (
+    <group position={[b.x, floor, b.z]} rotation={[0, ry, 0]}>
+      {/* the board hangs above an awning or a porch lintel, never behind it */}
+      <group position={[0, awning || f.kind === 'inn' ? 3.55 : 2.75, b.d / 2 + (cols ? 3.2 : 0.1)]}>
+        <mesh position={[0, 0, 0.06]}><planeGeometry args={[3.6, 0.9]} /><meshBasicMaterial map={tex} toneMapped={false} /></mesh>
+        <mesh position={[2.2, -0.5, 0.25]}><boxGeometry args={[0.28, 0.42, 0.28]} /><meshBasicMaterial color="#ffcf7a" toneMapped={false} /></mesh>
+      </group>
+      {awning && (
+        // a cloth awning over the door, sloping out to the street
+        <mesh position={[0, 2.35, b.d / 2 + 0.9]} rotation={[0.35, 0, 0]}><boxGeometry args={[Math.min(b.w * 0.55, 7), 0.08, 1.9]} /><meshLambertMaterial color={awning} /></mesh>
+      )}
+      {f.kind === 'inn' && (
+        // a lamplit porch: two posts and a lintel
+        <group position={[0, 0, b.d / 2 + 1.2]}>
+          {[-1.4, 1.4].map(x => <mesh key={x} position={[x, 1.3, 0]}><boxGeometry args={[0.3, 2.6, 0.3]} /><meshLambertMaterial color="#5a3d26" /></mesh>)}
+          <mesh position={[0, 2.7, 0]}><boxGeometry args={[3.3, 0.25, 0.4]} /><meshLambertMaterial color="#5a3d26" /></mesh>
+        </group>
+      )}
+      {f.kind === 'smithy' && (
+        <>
+          {/* the forge mouth glowing through the open door, and a tall stone stack */}
+          <mesh position={[0, 1.1, b.d / 2 + 0.03]}><planeGeometry args={[1.8, 2.0]} /><meshBasicMaterial color="#ff8a3a" toneMapped={false} /></mesh>
+          <mesh position={[b.w * 0.3, H + 3.2, -b.d * 0.2]}><boxGeometry args={[1.4, 6.5, 1.4]} /><meshLambertMaterial color="#6f655a" flatShading /></mesh>
+        </>
+      )}
+      {cols > 0 && (
+        // the Station's portico: a colonnade along the front under a plain entablature (Roman bones)
+        <group position={[0, 0, b.d / 2 + 2.6]}>
+          {Array.from({ length: cols }, (_, i) => -b.w / 2 + 1 + i * (b.w - 2) / (cols - 1)).map(x => (
+            <mesh key={x} position={[x, FLOOR_H * 0.9, 0]}><cylinderGeometry args={[0.38, 0.45, FLOOR_H * 1.8, 10]} /><meshLambertMaterial color="#e6dcc6" /></mesh>
+          ))}
+          <mesh position={[0, FLOOR_H * 1.8 + 0.35, -0.6]}><boxGeometry args={[b.w + 0.6, 0.7, 2.4]} /><meshLambertMaterial color="#d9cdb3" /></mesh>
+          <mesh position={[0, 0.15, -0.6]}><boxGeometry args={[b.w + 1, 0.3, 3]} /><meshLambertMaterial color="#b9ad95" /></mesh>
+        </group>
+      )}
+    </group>
+  )
+}
+
 export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<THREE.Vector3> }) {
   const cache = useRef(new Map<number, TownPlan>())
   const [shown, setShown] = useState<TownPlan[]>([])
@@ -202,6 +270,7 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
       <instancedMesh key={`w${n}`} frustumCulled={false} ref={walls} args={[undefined, undefined, n]} material={facade.m}><boxGeometry /></instancedMesh>
       <instancedMesh key={`r${n}`} frustumCulled={false} ref={roofs} args={[undefined, undefined, n]} geometry={roof}><meshLambertMaterial flatShading side={THREE.DoubleSide} /></instancedMesh>
       <instancedMesh key={`c${n}`} frustumCulled={false} ref={chimneys} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
+      {parts.filter(q => q.b.front).map(q => <FrontSign key={`${q.b.front}`} b={q.b} />)}
       {R.meta.places.filter(p => p.name).map(p => (
         <mesh key={p.id} position={[p.x, R.heightAt(p.x, p.z) + 45, p.z]}>
           <cylinderGeometry args={[0.6, 1.4, 90, 8, 1, true]} />
