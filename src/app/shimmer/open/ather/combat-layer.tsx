@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { newCombat, stepCombat, fire, reload, populate, revive, spawnHollow, HEAD_Y, type Combat, type Terrain, type CombatEvent } from './combat'
+import { touch } from '../shared/touch'
 
 export interface CombatHud { hp: number; maxHp: number; ammo: number; clip: number; reloading: boolean; hurtAt: number; hitAt: number; gun: string }
 
@@ -106,10 +107,10 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     const feet = { x: camera.position.x, y: camera.position.y - EYE, z: camera.position.z }
     popT.current -= dt
     if (popT.current <= 0) { popT.current = 1.5; populate(C, T, feet.x, feet.z, 7, safe) }
-    if (trigger.current && !frozen.current) {
+    if ((trigger.current || touch.fire) && !frozen.current) {
       camera.getWorldDirection(aim)
       fire(C, camera.position, aim)
-      if (!C.gun.auto) trigger.current = false
+      if (!C.gun.auto) { trigger.current = false; touch.fire = false }
     }
     stepCombat(C, T, feet, dt)
     if (C.events.length) {

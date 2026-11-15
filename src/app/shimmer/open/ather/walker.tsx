@@ -3,11 +3,13 @@
 // The walker for the Ather side: the same voxel3d/locomotion body Alex tuned (via open/terrain-world), first person,
 // handed whichever zone's world it stands in. The page owns WHERE (spawn, fall, zone); this owns HOW you move.
 // Same controls as /shimmer/open: WASD · Space jump/climb · Shift slide · mouse look under pointer lock.
+// A phone feeds the same step through shared/touch.ts (stick, drag-look, held jump/slide), merged below.
 
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { createLoco, tickLocomotion, eyeY, WALK_SPEED, SPEED_CAP, type LocoWorld } from '../shared/locomotion'
+import { touch, TOUCH_LOOK_SENS } from '../shared/touch'
 
 const SENS = 0.0022
 const FOV = 75, FOV_KICK = 8
@@ -65,9 +67,18 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
   const wish = useMemo(() => new THREE.Vector3(), [])
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 1 / 20)
-    const k = frozen.current ? new Set<string>() : keys.current, lc = loco.current, { yaw, pitch } = look.current
+    const k = frozen.current ? new Set<string>() : new Set([...keys.current, ...touch.held]), lc = loco.current
+    // touch look: consume the dragged pixels every frame (dropped, not banked, while a panel has the screen)
+    if (!frozen.current && (touch.look.dx || touch.look.dy)) {
+      look.current.yaw -= touch.look.dx * TOUCH_LOOK_SENS
+      look.current.pitch = Math.max(-1.5, Math.min(1.5, look.current.pitch - touch.look.dy * TOUCH_LOOK_SENS))
+    }
+    touch.look.dx = 0; touch.look.dy = 0
+    const { yaw, pitch } = look.current
     fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw)); right.set(Math.cos(yaw), 0, -Math.sin(yaw))
-    const f = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0), r = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0)
+    const tm = frozen.current ? { x: 0, y: 0 } : touch.move
+    const f = Math.max(-1, Math.min(1, (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0) + tm.y))
+    const r = Math.max(-1, Math.min(1, (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0) + tm.x))
     wish.set(0, 0, 0).addScaledVector(fwd, f).addScaledVector(right, r)
     if (wish.lengthSq() > 1) wish.normalize()
     tickLocomotion(lc, {

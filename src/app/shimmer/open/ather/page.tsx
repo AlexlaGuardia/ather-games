@@ -11,7 +11,8 @@
 //     height map the coursers drive. F plants a waymark where you stand; standing at one, E opens the fold map too.
 //
 // The Ather revamp (no holds, Hollows + grey matter, the grimoire's tiers) is Alex's direction, logged [OPEN] in
-// CANON_GAPS for Magii; UI copy stays plain until it is authored. Desktop only (pointer lock + keys).
+// CANON_GAPS for Magii; UI copy stays plain until it is authored. Desktop: pointer lock + keys. Phone (11-15): shared/
+// touch-controls (stick, drag-look, jump/slide/fire, context taps that press the same keys this page handles).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
@@ -31,7 +32,8 @@ import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WA
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud } from './combat-layer'
 import type { CombatEvent, Terrain } from './combat'
-import { DesktopNotice } from '../shared/desktop-notice'
+import { TouchControls, type TouchAction } from '../shared/touch-controls'
+import { isTouchOnly, pressKey } from '../shared/touch'
 
 const TILE = 'first-wilds'
 
@@ -43,6 +45,9 @@ type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'waymark'; w: W
 export default function AtherSlice() {
   const locked = useRef(false), frozen = useRef(false)
   const [isLocked, setLocked] = useState(false)
+  const [isTouch, setIsTouch] = useState(false)
+  const [introSeen, setIntroSeen] = useState(false)
+  useEffect(() => setIsTouch(isTouchOnly()), [])
   const [zone, setZone] = useState<Zone>({ kind: 'plot' })
   const [spawn, setSpawn] = useState<Spawn>(THRESHOLD)
   const [epoch, setEpoch] = useState(0)
@@ -224,12 +229,22 @@ export default function AtherSlice() {
   }, [panel, fade, zone, waymarks, W, goHome])
 
   const zoneName = zone.kind === 'plot' ? 'Your plot' : 'The Wilds'
+  // Phone taps: only what applies here and now, each the key this page already handles.
+  const touchActions: TouchAction[] = [
+    ...(prompt ? [{ code: 'KeyE', key: 'E', label: prompt.startsWith('E · Gregory') ? 'Gregory' : 'use' }] : []),
+    ...(prompt?.includes('L lift') ? [{ code: 'KeyL', key: 'L', label: 'lift' }] : []),
+    { code: 'KeyM', key: 'M', label: 'map' },
+    ...(zone.kind === 'wilds' ? [
+      { code: 'KeyF', key: 'F', label: 'waymark' },
+      { code: 'KeyR', key: 'R', label: 'reload' },
+      { code: 'KeyH', key: 'H', label: 'home' },
+    ] : []),
+  ]
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#bcd6e6' }}>
-      <DesktopNotice />
       <Canvas
         camera={{ fov: 75, near: 0.05, far: 900, position: [THRESHOLD.x, 3, THRESHOLD.z] }}
-        onClick={(e) => { if (!panel) (e.target as HTMLCanvasElement).requestPointerLock?.() }}
+        onClick={(e) => { if (!panel && !isTouch) (e.target as HTMLCanvasElement).requestPointerLock?.() }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
       >
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && W ? (x, z) => W.canopyAt(x, z) * 0.7 : undefined} />
@@ -256,7 +271,7 @@ export default function AtherSlice() {
       <div style={{ position: 'absolute', right: 12, top: 12, padding: '6px 10px', borderRadius: 6, background: 'rgba(12,16,20,0.55)', color: '#eef3f6', font: '11px system-ui', letterSpacing: '0.08em', pointerEvents: 'none', textAlign: 'right', lineHeight: 1.5 }}>
         GREY MATTER <span style={{ fontVariantNumeric: 'tabular-nums' }}>{garden.grey}</span><br />
         GRIMOIRE <span style={{ fontVariantNumeric: 'tabular-nums' }}>{garden.pages}</span> · WAYMARKS <span style={{ fontVariantNumeric: 'tabular-nums' }}>{waymarks.length}/{MAX_WAYMARKS}</span><br />
-        <span style={{ opacity: 0.65 }}>M map{zone.kind === 'wilds' ? ' · F plant · H home' : ''}</span>
+        {!isTouch && <span style={{ opacity: 0.65 }}>M map{zone.kind === 'wilds' ? ' · F plant · H home' : ''}</span>}
       </div>
       {zone.kind === 'wilds' && chud && (() => {
         const now = performance.now() / 1000, hurt = Math.max(0, 1 - (now - chud.hurtAt) / 0.6), hit = now - chud.hitAt < 0.12
@@ -264,13 +279,13 @@ export default function AtherSlice() {
           <>
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', boxShadow: `inset 0 0 ${120 + hurt * 80}px rgba(70,74,80,${(hurt * 0.75 + (1 - chud.hp / chud.maxHp) * 0.35).toFixed(3)})` }} />
             {hit && <div style={{ position: 'absolute', left: '50%', top: '50%', width: 18, height: 18, margin: -9, border: '2px solid rgba(255,255,255,0.9)', transform: 'rotate(45deg)', borderRadius: 2, pointerEvents: 'none' }} />}
-            <div style={{ position: 'absolute', left: 12, bottom: 14, width: 220, pointerEvents: 'none', color: '#eef3f6', font: '11px system-ui', letterSpacing: '0.1em' }}>
+            <div style={{ position: 'absolute', left: 12, ...(isTouch ? { top: 62, width: 160 } : { bottom: 14, width: 220 }), pointerEvents: 'none', color: '#eef3f6', font: '11px system-ui', letterSpacing: '0.1em' }}>
               <div style={{ height: 8, borderRadius: 4, background: 'rgba(12,16,20,0.6)', overflow: 'hidden' }}>
                 <div style={{ width: `${(chud.hp / chud.maxHp) * 100}%`, height: '100%', background: chud.hp < 35 ? '#e08a6a' : '#9fd27a', transition: 'width 0.15s' }} />
               </div>
             </div>
-            <div style={{ position: 'absolute', right: 14, bottom: 14, pointerEvents: 'none', color: '#eef3f6', font: '600 12px system-ui', letterSpacing: '0.14em', textAlign: 'right', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
-              {chud.gun}<br /><span style={{ fontSize: 18, fontVariantNumeric: 'tabular-nums' }}>{chud.reloading ? '· · ·' : `${chud.ammo} / ${chud.clip}`}</span><br /><span style={{ opacity: 0.6, fontWeight: 400, fontSize: 10 }}>CLICK FIRE · R RELOAD</span>
+            <div style={{ position: 'absolute', ...(isTouch ? { left: '50%', transform: 'translateX(-50%)', bottom: 18, textAlign: 'center' as const } : { right: 14, bottom: 14, textAlign: 'right' as const }), pointerEvents: 'none', color: '#eef3f6', font: '600 12px system-ui', letterSpacing: '0.14em', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
+              {chud.gun}<br /><span style={{ fontSize: 18, fontVariantNumeric: 'tabular-nums' }}>{chud.reloading ? '· · ·' : `${chud.ammo} / ${chud.clip}`}</span><br />{!isTouch && <span style={{ opacity: 0.6, fontWeight: 400, fontSize: 10 }}>CLICK FIRE · R RELOAD</span>}
             </div>
           </>
         )
@@ -279,7 +294,7 @@ export default function AtherSlice() {
         <div style={{ position: 'absolute', left: '50%', top: '58%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none' }}>{prompt}</div>
       )}
       {toast && (
-        <div style={{ position: 'absolute', left: '50%', bottom: 28, transform: 'translateX(-50%)', padding: '8px 14px', borderRadius: 8, background: 'rgba(24,28,32,0.85)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none', maxWidth: '80vw', textAlign: 'center' }}>{toast}</div>
+        <div style={{ position: 'absolute', left: '50%', bottom: isTouch ? 92 : 28, transform: 'translateX(-50%)', padding: '8px 14px', borderRadius: 8, background: 'rgba(24,28,32,0.85)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none', maxWidth: '80vw', textAlign: 'center' }}>{toast}</div>
       )}
       {panel?.kind === 'map' && (
         <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} here={pos.current}
@@ -287,7 +302,28 @@ export default function AtherSlice() {
       )}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
       <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />
-      {!isLocked && !panel && (
+      {isTouch && !panel && (
+        <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} />
+      )}
+      {isTouch && panel && (
+        <div style={{ position: 'absolute', left: '50%', bottom: 'max(18px, env(safe-area-inset-bottom))', transform: 'translateX(-50%)', display: 'flex', gap: 10, zIndex: 20 }}>
+          {panel.kind === 'map' && <button onClick={() => pressKey('Tab')} style={panelBtn}>Flip map</button>}
+          <button onClick={() => pressKey('Escape')} style={panelBtn}>Close</button>
+        </div>
+      )}
+      {isTouch && !introSeen && !panel && (
+        <div onPointerDown={() => setIntroSeen(true)} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: 16, zIndex: 30, background: 'rgba(5,6,14,0.35)' }}>
+          <div style={{ padding: '18px 20px', borderRadius: 10, background: 'rgba(12,16,20,0.82)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.6, textAlign: 'center', maxWidth: 420 }}>
+            <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Ather · your plot and the Wilds</div>
+            Left thumb moves. Drag on the right to look.<br />Buttons for jump, slide, and whatever is in reach.
+            <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>
+              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out through a city's door. Gregory, by the threshold, sells the ground under the mist. In the Wilds the Hollows wander: hold fire to shoot.
+            </div>
+            <div style={{ marginTop: 12, color: '#d4a843', font: '600 12px system-ui', letterSpacing: '0.2em', textTransform: 'uppercase' }}>Tap to start</div>
+          </div>
+        </div>
+      )}
+      {!isLocked && !panel && !isTouch && (
         <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none' }}>
           <div style={{ padding: '18px 24px', borderRadius: 10, background: 'rgba(12,16,20,0.72)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.6, textAlign: 'center', maxWidth: 540 }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Ather · your plot and the Wilds</div>
@@ -302,3 +338,5 @@ export default function AtherSlice() {
     </div>
   )
 }
+
+const panelBtn: React.CSSProperties = { padding: '12px 20px', borderRadius: 8, border: '1px solid rgba(244,239,226,0.4)', background: 'rgba(12,16,20,0.8)', color: '#f4efe2', font: '600 13px system-ui', letterSpacing: '0.12em', textTransform: 'uppercase', touchAction: 'manipulation' }
