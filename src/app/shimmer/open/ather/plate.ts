@@ -166,7 +166,7 @@ export function plotPlate(owned: ReadonlySet<string>): { canvas: HTMLCanvasEleme
     const { w, h, px } = plotPlatePixels(owned)
     c = document.createElement('canvas'); c.width = w; c.height = h
     const ctx = c.getContext('2d')!, img = ctx.createImageData(w, h); img.data.set(px); ctx.putImageData(img, 0, 0)
-    plotCache.clear(); plotCache.set(key, c)
+    plotCache.set(key, c); while (plotCache.size > 6) plotCache.delete(plotCache.keys().next().value!)   // a cluster draws four plots a frame
   }
   return { canvas: c, extent: PLOT_EXTENT }
 }

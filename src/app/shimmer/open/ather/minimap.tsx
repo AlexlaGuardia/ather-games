@@ -90,22 +90,31 @@ export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waym
           ctx.drawImage(m, dx, dy, ds, ds)
         }
       } else {
-        const k = S / (PLOT_REACH * 2), X = (x: number) => S / 2 + (x - p.x) * k, Z = (z: number) => S / 2 + (z - p.z) * k
-        // the home plot's own plate (plate.ts): the island in the void, your squares in colour, the rest under mist
+        // LINKED (Alex 11-15: "my plot is still centered"): the map frames the whole cluster, centred on the shared
+        // middle, so your plot sits in ITS corner with the bridges between; alone, it frames your island as before
+        const f = clusterRef.current, linked = !!(f?.linked && f.middle)
+        const reach = linked ? f!.middle!.r + 2 * 117 + 10 : PLOT_REACH
+        const cx = linked ? f!.middle!.x : p.x, cz = linked ? f!.middle!.z : p.z
+        const k = S / (reach * 2), X = (x: number) => S / 2 + (x - cx) * k, Z = (z: number) => S / 2 + (z - cz) * k
         ctx.fillStyle = '#080614'; ctx.fillRect(0, 0, S, S)
-        const { canvas: pl, extent: E } = plotPlate(owned), span = (PLOT_REACH * 2) / PLOT_MPP
         ctx.imageSmoothingEnabled = true
-        ctx.drawImage(pl, (p.x + E) / PLOT_MPP - span / 2, (p.z + E) / PLOT_MPP - span / 2, span, span, 0, 0, S, S)
-        // linked plots: the shared ground, the bridges, my lane and each mate's island, sketched in the plate's palette
-        const f = clusterRef.current
-        if (f?.linked && f.middle) {
-          ctx.strokeStyle = '#cdbf9f'; ctx.lineCap = 'round'
-          for (const b of [...f.bridges, ...(f.lane ? [f.lane] : []), ...f.mates.map(m => m.lane)]) { ctx.lineWidth = Math.max(2, b.w * k); ctx.beginPath(); ctx.moveTo(X(b.ax), Z(b.az)); ctx.lineTo(X(b.bx), Z(b.bz)); ctx.stroke() }
-          ctx.fillStyle = '#a9cf86'; ctx.beginPath(); ctx.arc(X(f.middle.x), Z(f.middle.z), f.middle.r * k, 0, Math.PI * 2); ctx.fill()
-          for (const m of f.mates) { ctx.fillStyle = 'rgba(170,206,120,0.85)'; ctx.beginPath(); ctx.arc(X(m.x), Z(m.z), 80 * k, 0, Math.PI * 2); ctx.fill() }
+        // every plot as its own plate (plate.ts): yours, and each mate's with THEIR squares
+        const plate = (ox: number, oz: number, o: ReadonlySet<string>) => {
+          const { canvas: pl, extent: E } = plotPlate(o)
+          ctx.drawImage(pl, X(ox - E), Z(oz - E), 2 * E * k, 2 * E * k)
         }
-        const dot = (x: number, z: number, col: string) => { ctx.fillStyle = col; ctx.strokeStyle = '#1a1410'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X(x), Z(z), 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke() }
-        dot(GATE.x, GATE.z, '#e7c766'); dot(GREG.x, GREG.z, '#c9a27a')
+        plate(0, 0, owned)
+        if (linked) {
+          for (const m of f!.mates) plate(m.x, m.z, new Set(m.owned))
+          ctx.strokeStyle = '#d8ccae'; ctx.lineCap = 'round'
+          for (const b of [...f!.bridges, ...(f!.lane ? [f!.lane] : []), ...f!.mates.map(m => m.lane)]) { ctx.lineWidth = Math.max(2, b.w * k); ctx.beginPath(); ctx.moveTo(X(b.ax), Z(b.az)); ctx.lineTo(X(b.bx), Z(b.bz)); ctx.stroke() }
+          ctx.fillStyle = '#a9cf86'; ctx.strokeStyle = '#efe0a8'; ctx.lineWidth = 1.5
+          ctx.beginPath(); ctx.arc(X(f!.middle!.x), Z(f!.middle!.z), f!.middle!.r * k, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+        }
+        const dot = (x: number, z: number, col: string, r = 6) => { ctx.fillStyle = col; ctx.strokeStyle = '#1a1410'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X(x), Z(z), r, 0, Math.PI * 2); ctx.fill(); ctx.stroke() }
+        dot(GATE.x, GATE.z, '#e7c766', linked ? 3.5 : 6); dot(GREG.x, GREG.z, '#c9a27a', linked ? 3.5 : 6)
+        // the keeper where they stand (the map no longer follows you while it frames the cluster)
+        if (linked) { drawKeeper(ctx, X(p.x), Z(p.z), screenHeading(-Math.sin(p.yaw), -Math.cos(p.yaw)), 5); return }
       }
       drawKeeper(ctx, S / 2, S / 2, screenHeading(-Math.sin(p.yaw), -Math.cos(p.yaw)), 6)
     }
