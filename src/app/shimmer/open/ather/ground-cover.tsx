@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { bladeAtlasPixels, bladePixels, tallBladePixels, headPixels, BLADE_GREEN, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES, GRASS_VARIANTS, BLADE_TILE, TALL_TILE_H } from '../../voxel3d/tex/flora-tex'
+import { bladeAtlasPixels, bladePixels, tallBladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES, GRASS_VARIANTS, BLADE_TILE, TALL_TILE_H } from '../../voxel3d/tex/flora-tex'
 import { P } from './palette'
 
 export type Cover = 'none' | 'tufts' | 'meadow' | 'lush'
@@ -36,6 +36,21 @@ const hash = (a: number, b: number, s: number) => {
 const patch = (x: number, z: number, f: number, s: number) =>   // soft blobs, 0..1, for clustering stands and flowers
   0.5 + 0.25 * Math.sin(x * f + s) * Math.cos(z * f * 1.13 - s * 0.7) + 0.25 * Math.sin((x + z) * f * 0.61 + s * 1.9)
 
+/** The blade tile as BRIGHTNESS only, its linear mean at 0.5: the instance colour is then the grass colour itself.
+ *  (Tinting the green tile by ground / BLADE_GREEN, flora-mesh's rule, multiplies R by ~3.5 and G by ~1.6 on the
+ *  Ather's pale green, which skews every darker blade brown: the first preview's blades read olive.) */
+function lumOnly(data: Uint8Array): Uint8Array {
+  const out = new Uint8Array(data.length), lin = (v: number) => toLin(v)
+  let sum = 0, n = 0
+  for (let o = 0; o < data.length; o += 4) if (data[o + 3] > 0) { sum += 0.2126 * lin(data[o]) + 0.7152 * lin(data[o + 1]) + 0.0722 * lin(data[o + 2]); n++ }
+  const k = n ? 0.5 / (sum / n) : 1
+  for (let o = 0; o < data.length; o += 4) {
+    const L = Math.min(1, (0.2126 * lin(data[o]) + 0.7152 * lin(data[o + 1]) + 0.0722 * lin(data[o + 2])) * k)
+    const g = Math.round(255 * (L <= 0.0031308 ? L * 12.92 : 1.055 * L ** (1 / 2.4) - 0.055))
+    out[o] = out[o + 1] = out[o + 2] = g; out[o + 3] = data[o + 3]
+  }
+  return out
+}
 function tex(data: Uint8Array, w: number, h: number) {
   const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat)
   t.colorSpace = THREE.SRGBColorSpace
@@ -59,7 +74,6 @@ function crossed(w: number, h: number, col: number, n: number, y0 = 0): THREE.Bu
 }
 
 const toLin = (v: number) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 }
-const BLADE_LIN = new THREE.Color(toLin(BLADE_GREEN[0]), toLin(BLADE_GREEN[1]), toLin(BLADE_GREEN[2]))
 
 interface Kind { geo: THREE.BufferGeometry; mat: THREE.Material; key: string }
 
@@ -71,15 +85,15 @@ export function GroundCover({ cover, ground, skip, focus }: {
   focus: React.MutableRefObject<{ x: number; z: number }>
 }) {
   const kinds = useMemo(() => {
-    const tuftT = tex(bladeAtlasPixels(TUFT_SEED, GRASS_VARIANTS, BLADE_TILE, BLADE_TILE, s => bladePixels(s, TUFT_BLADES)), BLADE_TILE * GRASS_VARIANTS, BLADE_TILE)
-    const tallT = tex(bladeAtlasPixels(TALL_SEED, GRASS_VARIANTS, BLADE_TILE, TALL_TILE_H, s => tallBladePixels(s, TALL_BLADES)), BLADE_TILE * GRASS_VARIANTS, TALL_TILE_H)
+    const tuftT = tex(lumOnly(bladeAtlasPixels(TUFT_SEED, GRASS_VARIANTS, BLADE_TILE, BLADE_TILE, s => bladePixels(s, TUFT_BLADES))), BLADE_TILE * GRASS_VARIANTS, BLADE_TILE)
+    const tallT = tex(lumOnly(bladeAtlasPixels(TALL_SEED, GRASS_VARIANTS, BLADE_TILE, TALL_TILE_H, s => tallBladePixels(s, TALL_BLADES))), BLADE_TILE * GRASS_VARIANTS, TALL_TILE_H)
     const headT = tex(headPixels(8), 8, 8)
     const mk = (map: THREE.Texture) => new THREE.MeshLambertMaterial({ map, alphaTest: 0.45, side: THREE.DoubleSide })
     const tuftM = mk(tuftT), tallM = mk(tallT), headM = mk(headT)
     const out: Kind[] = []
-    for (let v = 0; v < GRASS_VARIANTS; v++) out.push({ geo: crossed(0.75, 0.62, v, GRASS_VARIANTS), mat: tuftM, key: `tuft${v}` })
-    for (let v = 0; v < GRASS_VARIANTS; v++) out.push({ geo: crossed(0.85, 1.35, v, GRASS_VARIANTS), mat: tallM, key: `tall${v}` })
-    out.push({ geo: crossed(0.26, 0.26, 0, 1, 0.42), mat: headM, key: 'head' })
+    for (let v = 0; v < GRASS_VARIANTS; v++) out.push({ geo: crossed(0.7, 0.5, v, GRASS_VARIANTS), mat: tuftM, key: `tuft${v}` })
+    for (let v = 0; v < GRASS_VARIANTS; v++) out.push({ geo: crossed(0.6, 0.9, v, GRASS_VARIANTS), mat: tallM, key: `tall${v}` })   // knee-high, not head-high
+    out.push({ geo: crossed(0.28, 0.28, 0, 1, 0.36), mat: headM, key: 'head' })
     return out
   }, [])
   useEffect(() => () => { for (const k of kinds) k.geo.dispose() }, [kinds])
@@ -112,9 +126,9 @@ export function GroundCover({ cover, ground, skip, focus }: {
           else kind = bloom > 0.7 && roll < 0.55 ? 'flower' : stand > 0.55 && roll < 0.85 ? 'tall' : roll < 0.6 ? 'tuft' : null
           if (!kind) continue
           const r = hash(ia, ib, n * 11 + 9) * Math.PI * 2, s = 0.8 + hash(ia, ib, n * 13 + 3) * 0.5
-          // the Ather's grass, a little varied, over the blade green (flora-mesh.ts's rule)
-          c0.copy(P.grass).lerp(P.grassHi, hash(ia, ib, n * 17 + 7) * 0.6)
-          const tint = new THREE.Color(c0.r / BLADE_LIN.r, c0.g / BLADE_LIN.g, c0.b / BLADE_LIN.b).multiplyScalar(0.92)
+          // the Ather's grass, a little varied and a shade deeper than the turf so a tuft reads against it (tile mean 0.5)
+          c0.copy(P.grass).lerp(P.grassHi, hash(ia, ib, n * 17 + 7) * 0.7).lerp(P.gold, hash(ia, ib, n * 23 + 2) * 0.15)
+          const tint = c0.clone().multiplyScalar(2 * 0.82)
           const v = Math.floor(hash(ia, ib, n * 19 + 1) * GRASS_VARIANTS)
           if (kind === 'tuft') lists[v].push({ x, y, z, r, s, c: tint })
           else if (kind === 'tall') lists[GRASS_VARIANTS + v].push({ x, y, z, r, s: s * 1.05, c: tint })
