@@ -26,6 +26,8 @@ let hudState: GunHud = { gun: null, ammo: 0, reloading: false, inShop: false }
 /** 0..1, how far into the sights you are (eased, so the zoom glides rather than snaps). Read every frame by the page. */
 let adsT = 0, adsFov = 50
 const subs = new Set<() => void>()
+const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }   // hoisted: a fresh one per render resubscribes every render
+const getHud = () => hudState, getHeld = () => hudState.gun, noHeld = () => null
 const setHud = (h: Partial<GunHud>) => {
   const next = { ...hudState, ...h }
   if (next.gun === hudState.gun && next.ammo === hudState.ammo && next.reloading === hudState.reloading && next.inShop === hudState.inShop) return
@@ -33,7 +35,7 @@ const setHud = (h: Partial<GunHud>) => {
 }
 /** The held gun for the template: a hotbar entry and the ammo chip. */
 export function useGunHud() {
-  const h = useSyncExternalStore(f => { subs.add(f); return () => subs.delete(f) }, () => hudState, () => hudState)
+  const h = useSyncExternalStore(subscribe, getHud, getHud)
   const entries = h.gun ? [{ itemId: h.gun.id, count: h.ammo, icon: `/open/icons/gun-${h.gun.id}.svg`, name: `${cap(h.gun.name)} · ${h.gun.slot.toLowerCase()}` }] : []
   const status = h.gun ? [{ label: cap(h.gun.name), value: h.reloading ? 'reloading' : `${h.ammo}/${h.gun.clip}`, accent: h.reloading }] : []
   return { entries, status, holding: !!h.gun }
@@ -224,7 +226,7 @@ export function GunRange({ cave }: { cave: Cavern }) {
     }
   })
 
-  const held = useSyncExternalStore(f => { subs.add(f); return () => subs.delete(f) }, () => hudState.gun, () => null)
+  const held = useSyncExternalStore(subscribe, getHeld, noHeld)
   return (
     <>
       {/* the guns on the racks: two of each, painted by class */}
