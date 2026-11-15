@@ -12,9 +12,12 @@
 // a finished chain earns several times its parts, and EVERY building costs upkeep, so a bad mix (a smithy with no ore,
 // a café with no kitchen) loses money. Trial and error is the game; Marks spent well are the reward.
 //
-// ⚖ CANON: [OPEN] in CANON_GAPS ("the Nyx-side tycoon loop"): whether garden Moglins staff these, whether a keeper may own
-// trade in Athernyx's towns. Until ruled, staffing is ABSTRACT (no names, no Moglin lines) and the kinds wear plain
-// working names. Marks are canon (the one coin); ore + produce map onto canon's mortal goods (Spine ore, southern grain).
+// ⚖ CANON (CANON_GAPS › "the Nyx-side tycoon loop"): ★ ALEX ANSWERED (1) 11-15, verbatim: *"no the mogling dont work in
+// the business, if the player buys a business it gets a gate that the moglin can drop off or recieve goods"*. So EVERY
+// owned place has a GATE, and the shared store below IS that gate network: the garden's Moglins carry goods through the
+// gates (that is how one keeper's mine feeds their smithy in another town). No Moglin works inside a business; WHO staffs
+// one is still open with Magii, so staffing stays abstract here. (2) keeper-owned trade and (3) the water world: still
+// [OPEN]. The kinds wear plain working names until ruled. Marks are canon (the one coin); ore + produce map onto canon's mortal goods (Spine ore, southern grain).
 // Numbers are Jin's balance, tuned to the trade's scale (a courser part is 150 / 420 / 950 Marks, trade.ts): a whole
 // chain nets ~11 Marks a minute (~660 an hour), a lone maker ~1, a lone turner LOSES its upkeep. ⚠ First cut paid ~25 a
 // minute: 12k Marks over one night offline, which would have made every contract run pointless.
