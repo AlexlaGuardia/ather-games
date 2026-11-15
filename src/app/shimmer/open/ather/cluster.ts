@@ -23,8 +23,11 @@ import { PLOT_R, insideIsland, plotHeightAt, mistWalls, GRID_HALF, SQ, GRID as G
 export type Quarter = 'ne' | 'nw' | 'sw' | 'se'
 export const QV: Record<Quarter, { x: number; z: number }> = { ne: { x: 1, z: -1 }, nw: { x: -1, z: -1 }, sw: { x: -1, z: 1 }, se: { x: 1, z: 1 } }
 
-/** Plot-centre to middle offset along each axis (so plots stand 2D apart; a plot is ~2·PLOT_R across). */
-export const D = 150
+/** Plot-centre to middle offset along each axis (so plots stand 2D apart; a plot is ~2·PLOT_R across).
+ *  117 (was 150; Alex 11-15, linked for real: "my plot is still centered" — at 150 every neighbour stood past the 200 m
+ *  day fog, so a linked plot LOOKED alone): neighbours' shores ~65 m off yours, a ~20 m bridge from your corner to the
+ *  middle, the whole cluster inside the fog's reach. */
+export const D = 117
 export const MIDDLE_R = 40          // the shared ground's radius
 export const BRIDGE_W = 4, LANE_W = 4
 export const MIDDLE_Y = 2.0         // the shared ground stands at the plots' pad height
@@ -59,7 +62,7 @@ export function clusterFrame(mine: Quarter | null, mates: Mate[]): Frame {
   const u = { x: toMid.x / Math.SQRT2, z: toMid.z / Math.SQRT2 }
   const rim = rimAlong(toMid) - 1.5
   const corner = Math.hypot(GRID_HALF - 2 * SQ, GRID_HALF - 2 * SQ) - 2   // just inside the starting 3×3's corner
-  const midEdge = (cx: number, cz: number) => { const dx = mx - cx, dz = mz - cz, d = Math.hypot(dx, dz); return { x: mx - (dx / d) * (MIDDLE_R - 2), z: mz - (dz / d) * (MIDDLE_R - 2) } }
+  const midEdge = (cx: number, cz: number) => { const dx = mx - cx, dz = mz - cz, d = Math.hypot(dx, dz); return { x: mx - (dx / d) * (MIDDLE_R - 0.5), z: mz - (dz / d) * (MIDDLE_R - 0.5) } }   // the ramp tops out AT the middle's rim (2 m inside left a 0.28 m lip where the disc took over)
   const bridge = (cx: number, cz: number, qq: { x: number; z: number }): Seg => {
     const uu = { x: -qq.x / Math.SQRT2, z: -qq.z / Math.SQRT2 }, r = rimAlong({ x: -qq.x, z: -qq.z }) - 1.5
     const a = { x: cx + uu.x * r, z: cz + uu.z * r }, e = midEdge(cx, cz)

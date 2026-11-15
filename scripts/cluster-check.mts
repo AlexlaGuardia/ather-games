@@ -17,14 +17,14 @@ const standAt = async (x: number, z: number) => {
   return p.evaluate(() => { const s = (window as any).__ather.state(); return { zone: (window as any).__ather.zone(), x: Math.round(s.px), z: Math.round(s.pz), y: +s.py.toFixed(2) } })
 }
 await load('')
-res.soloOff = await standAt(-150, 150)   // where the middle would be: alone, there is no ground (the fall takes you home)
+res.soloOff = await standAt(-117, 117)   // where the middle would be: alone, there is no ground (the fall takes you home)
 await load('&cluster=preview')
-// ne quarter: the middle is at (-150, 150); my lane runs from about (-38, 38) to (-78, 78); a friend's plot at (-300, 300)
-res.lane = await standAt(-60, 60)
-res.bridge = await standAt(-100, 100)
-res.middle = await standAt(-150, 150)
+// ne quarter (D = 117): the middle is at (-117, 117); my lane runs from about (-38, 38) to (-77, 77); the bridge to (-89, 89); a friend's plot at (-234, 234)
+res.lane = await standAt(-58, 58)
+res.bridge = await standAt(-83, 83)
+res.middle = await standAt(-117, 117)
 try { await p.screenshot({ path: `${out}/cluster-1-middle.png` }) } catch { /* slow frame */ }
-res.friend = await standAt(-300, 300)
+res.friend = await standAt(-234, 234)
 await standAt(-48, 48)
 await p.evaluate(() => (window as any).__ather.tp(-48, 48, Math.PI * 0.75)); await sleep(1500)
 try { await p.screenshot({ path: `${out}/cluster-2-lane.png` }) } catch { /* slow frame */ }
@@ -35,5 +35,5 @@ try { await p.screenshot({ path: `${out}/cluster-3-menu.png` }) } catch { /* slo
 console.log(JSON.stringify(res))
 const onPlot = (r: any) => r.zone === 'plot'
 const near = (r: any, x: number, z: number) => Math.hypot(r.x - x, r.z - z) < 6
-const pass = !near(res.soloOff, -150, 150) && [['lane', -60, 60], ['bridge', -100, 100], ['middle', -150, 150], ['friend', -300, 300]].every(([k, x, z]) => onPlot(res[k as string]) && near(res[k as string], x as number, z as number)) && res.menu === true
+const pass = !near(res.soloOff, -117, 117) && [['lane', -58, 58], ['bridge', -83, 83], ['middle', -117, 117], ['friend', -234, 234]].every(([k, x, z]) => onPlot(res[k as string]) && near(res[k as string], x as number, z as number)) && res.menu === true
 console.log(pass ? 'PASS' : 'FAIL'); await b.close(); process.exit(pass ? 0 : 1)
