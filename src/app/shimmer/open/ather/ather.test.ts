@@ -283,15 +283,16 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   {
     const meadow = nodes.find(n => n.biome === BIOME.meadow)!
     ok(!!meadow, 'nodes: no meadow node on first-wilds')
-    ok(ownerOf(nodes, W.biomeAt, meadow.x + 10, meadow.z)?.id === meadow.id, 'nodes: meadow ground is not owned by the meadow node')
+    ok(ownerOf(nodes, meadow.x + 10, meadow.z)?.id === meadow.id, 'nodes: ground beside the meadow node is not its own')
     const cleared = new Set([meadow.id])
-    const infested = (x: number, z: number) => !cleared.has(ownerOf(nodes, W.biomeAt, x, z)!.id)
+    const infested = (x: number, z: number) => !cleared.has(ownerOf(nodes, x, z)!.id)
     const q = newCombat(31), T2 = { heightAt: W.heightAt, walkable: (x: number, z: number) => walkableIn(W, x, z) }
     for (let k = 0; k < 40; k++) populate(q, T2, meadow.x, meadow.z, 7, undefined, infested)
-    ok(q.hollows.every(h => W.biomeAt(h.x, h.z) !== BIOME.meadow), `nodes: ${q.hollows.filter(h => W.biomeAt(h.x, h.z) === BIOME.meadow).length} strays welled up on cleared meadow`)
+    // ANY ground near it, woods pockets included (the 11-15 strays were in woods 90 m off the meadow node)
+    ok(q.hollows.every(h => Math.hypot(h.x - meadow.x, h.z - meadow.z) > 150), `nodes: ${q.hollows.filter(h => Math.hypot(h.x - meadow.x, h.z - meadow.z) <= 150).length} strays welled up within 150 m of the cleared node`)
     const q2 = newCombat(31)
     for (let k = 0; k < 40; k++) populate(q2, T2, meadow.x, meadow.z, 7)
-    ok(q2.hollows.some(h => W.biomeAt(h.x, h.z) === BIOME.meadow), 'nodes: the cleared-ground check is vacuous (no meadow strays even while infected)')
+    ok(q2.hollows.some(h => Math.hypot(h.x - meadow.x, h.z - meadow.z) <= 150), 'nodes: the cleared-ground check is vacuous (no strays near it even while infected)')
   }
 
   // the fight, on flat open ground so only the rules are under test

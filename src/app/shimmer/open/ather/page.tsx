@@ -114,7 +114,7 @@ export default function AtherSlice() {
   // infected nodes on this tile: placed from the land, filtered by the ledger (a cleared node holds for its grace)
   const allNodes = useMemo(() => W ? placeNodes(W, TILE, GREG_WAYMARK) : [], [W])
   const nodes = useMemo(() => { const now = Date.now(); return allNodes.filter(n => isInfected(n.id, nodeLedger, now)) }, [allNodes, nodeLedger])
-  const nodeOwner = useMemo(() => W && allNodes.length ? (x: number, z: number) => ownerOf(allNodes, W.biomeAt, x, z)?.id : undefined, [W, allNodes])
+  const nodeOwner = useMemo(() => W && allNodes.length ? (x: number, z: number) => ownerOf(allNodes, x, z)?.id : undefined, [W, allNodes])
   const gardenRef = useRef(garden); gardenRef.current = garden
   const onCombat = useCallback((evs: CombatEvent[]) => {
     let got = 0

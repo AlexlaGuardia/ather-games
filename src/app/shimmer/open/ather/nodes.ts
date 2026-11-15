@@ -46,11 +46,11 @@ export function placeNodes(W: Wilds, tile: string, safe: { x: number; z: number 
   return out
 }
 
-/** Which node's ground is this? The node of the spot's own biome; a biome with no node of its own follows the nearest
- *  node. Strays only well up on ground whose node is infected, so clearing a node quiets its whole biome on the tile. */
-export function ownerOf(nodes: WildsNode[], biomeAt: (x: number, z: number) => BiomeId, x: number, z: number): WildsNode | undefined {
-  const b = biomeAt(x, z), own = nodes.find(n => n.biome === b)
-  if (own) return own
+/** Which node's ground is this? The NEAREST node: a node owns the country round it, so clearing one quiets that whole
+ *  stretch. (First cut keyed on biome, and Alex 11-15 still met Hollows "in the meadows" after the meadow kill: they
+ *  were in woods pockets 90 m off the meadow node, owned by the woods node 340 m away. An area is what a player means.)
+ *  When the section/subsection tiers land, more nodes make these areas finer. */
+export function ownerOf(nodes: WildsNode[], x: number, z: number): WildsNode | undefined {
   let best: WildsNode | undefined, bd = Infinity
   for (const n of nodes) { const d = Math.hypot(n.x - x, n.z - z); if (d < bd) { bd = d; best = n } }
   return best
