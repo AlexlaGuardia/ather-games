@@ -19,11 +19,16 @@ const get = (): Inv => {
   if (!inv) inv = typeof window === 'undefined' ? loadInvServer() : loadInv(Math.max(0, 12 - loadWaymarks().length))
   return inv
 }
-const loadInvServer = (): Inv => ({ v: 1, slots: Array(SLOTS).fill(null) })
+// ★ ONE object, not a builder: useSyncExternalStore requires getServerSnapshot to return the SAME value every call,
+// or React logs "should be cached to avoid an infinite loop" (caught by Jin 1 on prod, 11-15).
+const SERVER_INV: Inv = { v: 1, slots: Array(SLOTS).fill(null) }
+const loadInvServer = (): Inv => SERVER_INV
 export function setInv(next: Inv) { inv = next; saveInv(next); subs.forEach(f => f()) }
 export const getInv = get
+/** Stable across renders, so React does not resubscribe every frame. */
+const subscribeInv = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export function useInv(): Inv {
-  return useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f) } }, get, loadInvServer)
+  return useSyncExternalStore(subscribeInv, get, loadInvServer)
 }
 
 /** The template's hotbar row from the bag's first eight slots. `count` overrides per item (the gun's clip). */
