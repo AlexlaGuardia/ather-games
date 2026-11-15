@@ -81,6 +81,15 @@ export const GROUND_ACCEL = 7
 export const GROUND_FRICTION = 13
 export const GRAVITY = 22
 export const JUMP_V0 = 7.4          // apex ≈ 1.24 blocks — clears a 1-block step with a tap
+/** ★ THE DOUBLE JUMP (Alex, 2026-11-15). One mid-air jump per airtime, refilled by landing, a wall-kick or a
+ *  ledge grab. A FLOOR on vy, never additive: pressed at the apex it is a second full-ish hop, pressed while
+ *  falling it cancels the fall — and pressed while still rising fast it can never stack into the skybox.
+ *  0.9 of the ground jump so the first jump still matters (apex ≈ 1.0 block on top of wherever you are). */
+export const AIR_JUMPS = 1
+export const AIR_JUMP_V = JUMP_V0 * 0.9
+/** How hard the double jump turns you toward the stick. 1 = snap fully to input (keeping your speed);
+ *  0.6 lets a hard 90° re-aim most of the way while a straight run keeps its line exactly. */
+export const AIR_JUMP_STEER = 0.6
 export const SLIDE_SPEED = 10       // the nominal peak slide — the BLEED rate is still sized off it
 /** ★ DERIVED, NEVER A LITERAL. The slide is the ramp's payout, so its gate has to move when the top
  *  of the ramp moves. A hand-written 5.98 here is a mirror of RUN_SPEED, and it would go stale the
@@ -292,6 +301,8 @@ export interface LocoState {
   airborne: boolean
   coyoteT: number
   slideT: number; crouchHeld: boolean
+  /** Air speed a mid-air wall block took off `airSpeed`, kept so a wall-kick still pays the approach. Cleared on landing. */
+  kickBank: number
   /** Seconds of sustained ground input banked toward the sprint, 0..SPRINT_RAMP. */
   sprintT: number
   airSpeed: number; prevMvX: number; prevMvZ: number
@@ -323,6 +334,8 @@ export interface LocoState {
   vaulting: boolean; carryVX: number; carryVZ: number
   /** Set for one tick when a verb fires — the host reads these for HUD/FX and they self-clear. */
   justWallJumped: boolean; justHopped: boolean
+  /** Mid-air jumps spent this airtime (see AIR_JUMPS); `justAirJumped` is the one-tick edge for FX. */
+  airJumps: number; justAirJumped: boolean
   sliding: boolean; crouching: boolean; climbing: boolean
   /** Body submerged — the swim physics own this tick. The host reads it for HUD/FX. */
   swimming: boolean
@@ -380,12 +393,13 @@ function kickOffWall(s: LocoState, cx: number, cz: number, carry: number, mvX: n
   s.wallStick = 0; s.wallLock = WALLJUMP_LOCK
   s.wallCatchT = 0; s.catchLock = WALL_CATCH_LOCK
   s.justWallJumped = true
+  s.airJumps = 0                                           // a kick refills the double jump
 }
 
 export function createLoco(px: number, feetY: number, pz: number): LocoState {
   return {
     px, py: feetY, pz, hvx: 0, hvz: 0, vy: 0, eye: EYE_STAND,
-    airborne: true, coyoteT: 0, slideT: 0, crouchHeld: false, sprintT: 0, airSpeed: 0, prevMvX: 0, prevMvZ: 0,
+    airborne: true, coyoteT: 0, slideT: 0, crouchHeld: false, kickBank: 0, airJumps: 0, justAirJumped: false, sprintT: 0, airSpeed: 0, prevMvX: 0, prevMvZ: 0,
     landGrace: 0, landSpeed: 0, jumpHeld: false, spaceHeldT: 0, jumpGapT: 0, climbRise: 0,
     onWall: false, wallNX: 0, wallNZ: 0, wallCX: 0, wallCZ: 0, wallStick: 0, wallLock: 0,
     wallCatchT: 0, catchSpeed: 0, catchCX: 0, catchCZ: 0, catchLock: 0, catchClimb: false,
@@ -611,7 +625,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
   const dt = Math.min(input.dt, 0.05)          // a stutter frame must not launch a huge step
   const { mvX, mvZ, crouchKey, jumpKey } = input
   const hasInput = (mvX !== 0 || mvZ !== 0)
-  s.justWallJumped = false; s.justHopped = false; s.justLedgeVault = false
+  s.justWallJumped = false; s.justHopped = false; s.justLedgeVault = false; s.justAirJumped = false
 
   // Normalise at the boundary: booleans stay valid (every feel test, unchanged), codes add water.
   // CELL_HALF collides as full until the half-slab pass teaches ground height fractions.
@@ -628,6 +642,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
     s.sliding = false; s.crouching = false; s.climbing = false; s.onWall = false
     s.hanging = false; s.mantleT = 0; s.vaulting = false; s.slideT = 0; s.sprintT = 0
     s.airborne = true                      // leaving the water without a jump is a fall, correctly
+    s.airJumps = 0
     const k = Math.min(1, dt * SWIM_ACCEL)
     s.hvx += (mvX * SWIM_SPEED - s.hvx) * k
     s.hvz += (mvZ * SWIM_SPEED - s.hvz) * k
@@ -820,6 +835,18 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
     if (w.bodyFree(nx, s.pz, s.py) || stepped(nx, s.pz)) s.px = nx; else { blockedX = Math.sign(s.hvx); s.hvx = 0 }
     const nz = s.pz + s.hvz * dt
     if (w.bodyFree(s.px, nz, s.py) || stepped(s.px, nz)) s.pz = nz; else { blockedZ = Math.sign(s.hvz); s.hvz = 0 }
+    // ── ★ A WALL EATS THE AIR SPEED IT STOPPED (2026-11-15, Alex: "the slide jump glitches to the left") ──
+    // The air branch steers by NORMALISING hvel and rescaling it to `airSpeed`. When a collision zeroes
+    // one axis mid-air, what is left is the OTHER axis's sliver — and the next tick blew that sliver back
+    // up to the full bank. Slide-hop at 11 m/s into rising ground: hvz blocked to 0, hvx 0.35 left over,
+    // next frame hvx = 11.13 — a 3 m sideways throw, left or right by which side of the grid line you
+    // ran. Measured on the Wilds: 1077 of 2216 slide-jumps jolted. The bank now keeps only what moved.
+    // ⚠ The wall-kick still pays out the APPROACH speed: kickOffWall reads `kickBank`, set here from
+    // preSpeed, so hitting a wall at speed and kicking off it is exactly as strong as before.
+    if (s.airborne && (blockedX !== 0 || blockedZ !== 0)) {
+      s.kickBank = Math.max(s.kickBank, s.airSpeed)
+      s.airSpeed = Math.min(s.airSpeed, Math.hypot(s.hvx, s.hvz))
+    }
   }
 
   // ── ★★★ WALL-CATCH ENTRY — THE COLLISION IS THE TRIGGER, NOT YOUR INPUT DIRECTION ───────────
@@ -869,11 +896,11 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
     if (faced) {
       const lip = w.lipAt(s.px, s.pz, s.py, s.wallCX, s.wallCZ)
       if (lip !== null) {
-        s.hanging = true; s.hangT = 0
+        s.hanging = true; s.hangT = 0; s.airJumps = 0
         // What the keeper brought to the ledge. `airSpeed` is the airborne momentum the walker
         // actually renormalises to, so it survives the frame the wall zeroed hvel — reading hvel
         // here would bank a 0 for every grab that follows a contact, which is most of them.
-        s.grabSpeed = Math.max(s.airSpeed, Math.hypot(s.hvx, s.hvz))
+        s.grabSpeed = Math.max(s.airSpeed, s.kickBank, Math.hypot(s.hvx, s.hvz))
         s.vaultArmed = false
         s.hangLipX = lip.x; s.hangLipY = lip.y; s.hangLipZ = lip.z
         s.hangCX = s.wallCX; s.hangCZ = s.wallCZ
@@ -913,7 +940,8 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
     // ★ THROUGH THE SAME KICK AS THE CATCH, and carrying `airSpeed` rather than discarding it.
     // This line used to be three assignments that pinned the launch at exactly WALLJUMP_PUSH from
     // any approach; two call sites with two momentum rules is the drift this file keeps re-learning.
-    kickOffWall(s, s.wallCX, s.wallCZ, Math.max(s.airSpeed, Math.hypot(s.hvx, s.hvz)), mvX, mvZ)
+    kickOffWall(s, s.wallCX, s.wallCZ, Math.max(s.airSpeed, s.kickBank, Math.hypot(s.hvx, s.hvz)), mvX, mvZ)
+    s.kickBank = 0
   } else if (s.airborne && jumpEdge && s.coyoteT > 0 && !s.hanging && s.mantleT <= 0 && !s.climbing) {
     // Coyote jump: the ground JUST left (a downhill micro-fall, a ledge a frame ago) — honour the
     // press as the ground jump it was meant to be. The wall jump wins when both are live.
@@ -924,6 +952,26 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
     // whatever you actually earned; it may not mint the top of the ramp for free.
     s.airSpeed = Math.max(Math.hypot(s.hvx, s.hvz), hasInput ? WALK_SPEED : 0)
     s.coyoteT = 0
+  } else if (s.airborne && jumpEdge && s.airJumps < AIR_JUMPS && !s.hanging && s.mantleT <= 0 && !s.climbing
+             && !s.onWall && s.wallCatchT <= 0 && !s.swimming) {
+    // ★ THE DOUBLE JUMP. Last in the chain on purpose: a wall in reach kicks, a ground you JUST left
+    // jumps from the ground, and only a press with neither live spends the air jump. ⚠ `!s.onWall`:
+    // pressed INTO a face the press belongs to the climb (hold) — spending the air jump there would
+    // eat the very input the climb is about to read.
+    s.airJumps++
+    s.justAirJumped = true
+    s.vy = Math.max(s.vy, AIR_JUMP_V)
+    const sp = Math.max(s.airSpeed, Math.hypot(s.hvx, s.hvz))
+    if (hasInput) {
+      const len = Math.hypot(s.hvx, s.hvz)
+      let dx = len > 1e-3 ? s.hvx / len : mvX, dz = len > 1e-3 ? s.hvz / len : mvZ
+      dx += (mvX - dx) * AIR_JUMP_STEER; dz += (mvZ - dz) * AIR_JUMP_STEER
+      const n = Math.hypot(dx, dz) || 1
+      const out = Math.max(sp, WALK_SPEED)
+      s.hvx = (dx / n) * out; s.hvz = (dz / n) * out
+      s.airSpeed = out
+    }
+    s.prevMvX = mvX; s.prevMvZ = mvZ                        // the re-aim is the turn; no lurch tax on top
   }
   if (s.coyoteT > 0) s.coyoteT -= dt
 
@@ -950,7 +998,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
     s.vy = 0
     if (s.mantleT <= 0) {
       s.px = s.mToX; s.py = s.mToY; s.pz = s.mToZ
-      s.airborne = false; s.climbRise = 0
+      s.airborne = false; s.climbRise = 0; s.airJumps = 0
       if (s.vaulting) {
         // A vault is part of the RUN — the speed you brought to the step leaves with you.
         s.hvx = s.carryVX; s.hvz = s.carryVZ; s.vaulting = false
@@ -1054,7 +1102,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
     }
     if (s.vy <= 0 && floorTop !== null && s.py <= floorTop) {
       s.py = floorTop; s.vy = 0; s.airborne = false; s.climbRise = 0; s.catchClimb = false
-      s.landGrace = BHOP_WINDOW; s.landSpeed = Math.hypot(s.hvx, s.hvz)
+      s.landGrace = BHOP_WINDOW; s.landSpeed = Math.hypot(s.hvx, s.hvz); s.kickBank = 0; s.airJumps = 0
     }
   } else if (jumpEdge) {
     // ★ THE VAULT COMES FIRST (Alex, playtest 2026-08-07: "if you have a 1 block, the jump does a
@@ -1093,7 +1141,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
     // the mirror of the climb: py snaps, stepSmooth goes NEGATIVE (eye above the body) and drains
     // through the same half-life.
     if (floorTop !== s.py) { stepDebt(s, floorTop - s.py); s.py = floorTop }
-    s.climbRise = 0
+    s.climbRise = 0; s.airJumps = 0
   }
   s.jumpHeld = jumpKey
 

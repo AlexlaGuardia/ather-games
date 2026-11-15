@@ -359,7 +359,7 @@ export default function AtherSlice() {
           <div style={{ padding: '18px 24px', borderRadius: 10, background: 'rgba(12,16,20,0.72)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.6, textAlign: 'center', maxWidth: 540 }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Ather · your plot and the Wilds</div>
             Click to play<br />
-            WASD move · Space jump / climb · Shift slide · E use · M map · Esc release
+            WASD move · Space jump (again in the air) / climb · Shift slide · E use · M map · Esc release
             <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>
               The gate ahead is the fold map: travel to the Wilds, your waymarks, or out through a city's door in Athernyx. Gregory, by the threshold, sells the ground under the mist. In the Wilds the Hollows wander: click to shoot, R to reload, walk over grey matter to take it. F plants a waymark, H walks home.
             </div>

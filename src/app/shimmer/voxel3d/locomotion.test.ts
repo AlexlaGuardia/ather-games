@@ -9,7 +9,7 @@ import {
   RUN_SPEED, WALK_SPEED, SPRINT_RAMP, SLIDE_MIN_SPEED, SLIDE_BOOST, SPEED_CAP,
   WALL_CATCH_TIME, WALL_CATCH_MIN, WALL_CATCH_SPEED, WALL_CATCH_SLIDE, WALLJUMP_UP, WALLJUMP_STEER,
   HANG_MIN, MANTLE_VAULT_WINDOW,
-  JUMP_V0, SLIDE_SPEED, SLIDEHOP_BOOST, WALLJUMP_PUSH,
+  JUMP_V0, AIR_JUMP_V, SLIDE_SPEED, SLIDEHOP_BOOST, WALLJUMP_PUSH,
   CLIMB_HOLD_MIN, CLIMB_MAX_RISE, EYE_STAND, EYE_SLIDE, eyeY, STEP_SMOOTH_MAX, DRAINED_SPEED,
   CROUCH_SPEED, type LocoInput,
   CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF, SWIM_SPEED, SWIM_UP, SWIM_IDLE_SINK, TREAD_SINK_CAP,
@@ -140,9 +140,16 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   for (let i = 0; i < 60 && !s2.airborne; i++) tickLocomotion(s2, input({ mvX: 1 }), deep)
   for (let i = 0; i < 20; i++) tickLocomotion(s2, input({ mvX: 1 }), deep)  // 0.33s of falling
   ok(s2.airborne, 'still falling past the grace window')
+  // ★ REVISED 2026-11-15 (Alex asked for a double jump): past the grace the press is no longer dead — it is
+  // the AIR jump, which is a different verb from the coyote and must read as one. Smaller than a ground
+  // jump, flagged as an air jump, and ONE per airtime: the second press past grace is still dead.
+  tickLocomotion(s2, input({ mvX: 1, jumpKey: true }), deep)
+  ok(s2.justAirJumped && Math.abs(s2.vy - AIR_JUMP_V) < 0.5 && AIR_JUMP_V < JUMP_V0,
+    `past the grace the press is the double jump, not a coyote ground jump (vy ${s2.vy.toFixed(2)})`)
+  tickLocomotion(s2, input({ mvX: 1 }), deep)
   const vyBefore = s2.vy
   tickLocomotion(s2, input({ mvX: 1, jumpKey: true }), deep)
-  ok(s2.vy < vyBefore + 1, 'past the grace window the air press does nothing — no double jump')
+  ok(!s2.justAirJumped && s2.vy < vyBefore + 1, 'a second air press does nothing — one double jump per airtime')
 }
 
 // ── a 2-high face never vaults — that is climb country ───────────────────────────────────────
@@ -1197,6 +1204,49 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   const d = createLoco(0.5, 10, 0.5); settle(d, solid); d.speedMult = 1.12
   for (let i = 0; i < 300; i++) { tickLocomotion(c, input({ mvX: 1, crouchKey: true }), solid); tickLocomotion(d, input({ mvX: 1, crouchKey: true }), solid) }
   ok(Math.abs(Math.hypot(c.hvx, c.hvz) - Math.hypot(d.hvx, d.hvz)) < 0.01, 'a crouch is not sped up by a drink')
+}
+
+// ── ★ A MID-AIR AXIS BLOCK DOES NOT BECOME A SIDEWAYS THROW (2026-11-15, Alex: slide-jump "glitches left") ──
+{
+  // Airborne at slide-hop speed into a 1-high rise (not tall: no catch, no grab). The block zeroes hvx and
+  // leaves the 0.3 m/s sliver on z; the air steer used to rescale that sliver to the whole bank.
+  const rise = world((x, y) => x >= 3 && y < 11)
+  const s = createLoco(2.5, 10.3, 0.5)
+  s.airborne = true; s.vy = 1; s.hvx = 10; s.hvz = 0.3; s.airSpeed = 10.5
+  let worst = 0
+  for (let i = 0; i < 15; i++) { tickLocomotion(s, input({ mvX: 1 }), rise); worst = Math.max(worst, Math.abs(s.hvz)) }
+  ok(worst < 1, `★ a blocked axis does not rescale the leftover axis to full air speed (worst sideways ${worst.toFixed(2)} m/s)`)
+}
+
+// ── ★ THE DOUBLE JUMP (2026-11-15) ────────────────────────────────────────────────────────────
+{
+  const solid = world()
+  const peak = (presses: number[], hold = 3) => {
+    const s = createLoco(0.5, 10, 0.5); settle(s, solid); let top = 0, n = 0
+    for (let i = 0; i < 160; i++) {
+      tickLocomotion(s, input({ jumpKey: presses.some((p) => i >= p && i < p + hold) }), solid)
+      top = Math.max(top, s.py - 10); if (s.justAirJumped) n++
+    }
+    return { top, n, s }
+  }
+  const one = peak([2]), two = peak([2, 22]), three = peak([2, 22, 42])
+  ok(two.n === 1 && two.top > one.top + 0.7, `★ a second press in the air jumps again (${one.top.toFixed(2)} → ${two.top.toFixed(2)})`)
+  ok(three.n === 1 && Math.abs(three.top - two.top) < 1e-6, 'only ONE double jump per airtime')
+  ok(peak([2], 60).n === 0, 'a HELD Space never double jumps — it needs a fresh press')
+  // refilled by landing: two full jump+double cycles in one run
+  const again = peak([2, 22, 70, 90])
+  ok(again.n === 2, `landing refills it (${again.n} air jumps over two airtimes)`)
+  // a floor, not additive: pressed while still rising fast it cannot out-jump a fresh one
+  const early = peak([2, 4], 1)
+  ok(early.top < AIR_JUMP_V ** 2 / (2 * 22) + JUMP_V0 ** 2 / (2 * 22), 'pressed on the rise it floors vy — no skybox stacking')
+  // it re-aims toward the stick, keeping the speed
+  const r = createLoco(0.5, 10, 0.5); settle(r, solid)
+  for (let i = 0; i < 90; i++) tickLocomotion(r, input({ mvX: 1 }), solid)
+  for (let i = 0; i < 15; i++) tickLocomotion(r, input({ mvX: 1, jumpKey: i < 2 }), solid)
+  const before = Math.hypot(r.hvx, r.hvz)
+  tickLocomotion(r, input({ mvZ: 1, jumpKey: true }), solid)
+  ok(r.justAirJumped && r.hvz > before * 0.5 && Math.abs(Math.hypot(r.hvx, r.hvz) - before) < 0.6,
+    `★ the double jump turns you toward the stick (hv ${r.hvx.toFixed(2)}, ${r.hvz.toFixed(2)})`)
 }
 
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)
