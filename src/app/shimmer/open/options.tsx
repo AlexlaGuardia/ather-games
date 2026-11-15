@@ -12,6 +12,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { OptionsPanel, OptionRow, OptionSlider, OptionHead } from '../hud/options-panel'
 import { hearthDisplay } from '../ui/hearth'
 import { useSettings, setSettings, resetSettings, FOV_RANGE, RENDER_RANGE, SENS_RANGE } from './shared/settings'
+import { ACTIONS, RESERVED, useKeymap, keyFor, keyName, setBinding, resetKeymap, setCapturing, installKeymap } from './shared/keymap'
 
 function Toggle({ label, on, onFlip, sub, id }: { label: string; on: boolean; onFlip: () => void; sub?: string; id: string }) {
   return (
@@ -26,11 +27,49 @@ function Toggle({ label, on, onFlip, sub, id }: { label: string; on: boolean; on
   )
 }
 
+/** ★ REBINDING: click an action, press a key. A key already driving another action swaps with it. Esc cancels. */
+function Bindings() {
+  const k = useKeymap()
+  const [listen, setListen] = useState<string | null>(null)
+  useEffect(() => {
+    if (!listen) return
+    setCapturing(true)
+    const grab = (e: KeyboardEvent) => {
+      e.preventDefault(); e.stopImmediatePropagation()
+      if (e.code === 'Escape') { setListen(null); return }
+      if (RESERVED.has(e.code)) return
+      setBinding(listen, e.code); setListen(null)
+    }
+    window.addEventListener('keydown', grab, true)
+    return () => { window.removeEventListener('keydown', grab, true); setCapturing(false) }
+  }, [listen])
+  return (
+    <div className="grid gap-1" data-bindings>
+      {ACTIONS.map(a => {
+        const on = listen === a.code, moved = keyFor(k, a.code) !== a.code
+        return (
+          <button key={a.code} type="button" data-bind={a.code} onClick={() => setListen(on ? null : a.code)}
+            className="flex items-center justify-between gap-3 rounded-[9px] px-2.5 py-1.5 text-left text-[12.5px] transition-all"
+            style={{ background: on ? 'rgba(200,100,42,.16)' : 'rgba(255,250,238,.55)', boxShadow: on ? 'inset 0 0 0 1.5px #c8642a' : '0 1px 2px rgba(58,39,22,.14)' }}>
+            <span className="hk-soft">{a.label}</span>
+            <span className="min-w-[64px] text-center rounded-[6px] px-2 py-0.5 font-bold tabular-nums"
+              style={{ background: on ? '#c8642a' : 'rgba(58,39,22,.10)', color: on ? '#fbf4e4' : moved ? '#8d4119' : '#3a2716' }}>
+              {on ? 'press a key' : keyName(keyFor(k, a.code))}
+            </span>
+          </button>
+        )
+      })}
+      <p className="text-[11.5px] italic leading-snug hk-faint" style={hearthDisplay}>A key already in use swaps over. Esc cancels. Esc, Tab, the arrows and the mouse stay where they are.</p>
+      <OptionRow onClick={resetKeymap} label="Reset keys" tail="defaults" />
+    </div>
+  )
+}
+
 /** The keys this page answers, for the Controls tab. Each page passes its own. */
 export type KeyRow = [keys: string, what: string]
+/** What stays fixed (the rebindable keys are listed by Bindings). */
 export const WALK_KEYS: KeyRow[] = [
-  ['W A S D', 'move'], ['Mouse', 'look'], ['Space', 'jump · again in the air · hold to climb'], ['Shift', 'slide (hold out of it to skid)'],
-  ['E', 'use · talk · take'], ['I · J · P', 'bag · journal · character'], ['M', 'map'], ['O · Esc', 'options'],
+  ['Mouse', 'look'], ['Esc', 'free the mouse · options · close'], ['Tab · ← →', 'switch tabs in the pack'], ['1–8 · wheel', 'hotbar'],
 ]
 
 export function OpenOptions({ onClose, keys = WALK_KEYS, extraGame }: { onClose: () => void; keys?: KeyRow[]; extraGame?: React.ReactNode }) {
@@ -61,7 +100,10 @@ export function OpenOptions({ onClose, keys = WALK_KEYS, extraGame }: { onClose:
           <OptionSlider label="mouse" min={SENS_RANGE[0]} max={SENS_RANGE[1]} step={0.05} value={s.mouseSens} onChange={v => setSettings({ mouseSens: v })} format={v => `${v.toFixed(2)}×`} />
           <OptionSlider label="touch" min={SENS_RANGE[0]} max={SENS_RANGE[1]} step={0.05} value={s.touchSens} onChange={v => setSettings({ touchSens: v })} format={v => `${v.toFixed(2)}×`} />
           <Toggle id="invertY" label="Invert look up / down" on={s.invertY} onFlip={() => setSettings({ invertY: !s.invertY })} />
+          <OptionRow onClick={resetSettings} label="Reset look settings" tail="defaults" />
           <OptionHead>Keys</OptionHead>
+          <Bindings />
+          <OptionHead>Fixed</OptionHead>
           <div className="grid gap-1" data-keys>
             {keys.map(([k, what]) => (
               <div key={k} className="flex items-baseline justify-between gap-3 text-[12.5px]">
@@ -69,7 +111,6 @@ export function OpenOptions({ onClose, keys = WALK_KEYS, extraGame }: { onClose:
               </div>
             ))}
           </div>
-          <OptionRow onClick={resetSettings} label="Reset view and controls" tail="defaults" />
         </>}
         dev={<>
           <OptionHead tone="hk-ember">Keeper of the realm</OptionHead>
@@ -127,4 +168,6 @@ export function useOptionsKeys(busy: boolean) {
     return () => { if (pending) clearTimeout(pending); document.removeEventListener('pointerlockchange', change); window.removeEventListener('keydown', key) }
   }, [busy])
   useEffect(() => () => setOptionsOpen(false), [])
+  // the key rebinding layer (shared/keymap.ts) rides this hook, so every page that has Options has rebinding
+  useEffect(() => installKeymap(), [])
 }

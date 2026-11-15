@@ -1020,7 +1020,7 @@ const ROAD_FACTOR = 1.3
 const FERRY_FARE = 8
 
 /** The continent's keys for Options › Controls: the walk set plus the courser's. */
-const CONTINENT_KEYS: KeyRow[] = [...WALK_KEYS, ['F', 'get in / out of the courser'], ['W S · A D', 'drive · steer'], ['Space', 'drift (driving)'], ['C', 'camera (driving)'], ['G', 'garage'], ['R', 'back to the road (on foot: reload a held gun)'], ['Right mouse', 'aim a held gun']]
+const CONTINENT_KEYS: KeyRow[] = [...WALK_KEYS, ['↑ ↓ ← →', 'drive (alongside the bound keys)'], ['Left mouse', 'fire a held gun'], ['Right mouse', 'aim a held gun']]
 
 const JUNCTION_LABEL: Record<string, string> = { square: 'Town square', roundabout: 'Roundabout', cross: 'Crossroads', stop4: 'Four-way', tee: 'Junction', merge: 'Junction' }
 const ROAD_LABEL: Record<string, string> = { paved: 'Paved road', road: 'Road', trail: 'Trail', pass: 'Mountain pass',
