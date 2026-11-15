@@ -145,12 +145,13 @@ export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
     }
     if (y1 - y0 > MAX_STEP) return no('steep'), null
     if (pts.some(([x, z]) => onRoad(x, z, 0.6) || (R.tunnelAt(x, z) && R.tunnelAt(x, z)!.cover < 12))) return no('road'), null
-    if (pts.some(([x, z]) => plan.lanes.some(l => l !== skipLane && distToLine(l.pts, x, z) < LANE_W / 2 + 1))) return no('lane'), null
+    if (pts.some(([x, z]) => nearLane(x, z, LANE_W / 2 + 1, skipLane))) return no('lane'), null
     const grown = footprint(b, gap)
     const bx = Math.floor(b.x / 16), bz = Math.floor(b.z / 16)
     for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) for (const o of placed.get(`${bx + i},${bz + j}`) ?? []) if (quadsOverlap(grown, footprint(o))) return no('occ'), null
     return { y0, y1 }
   }
+  let nearLane = (_x: number, _z: number, _m: number, _skip?: Lane): boolean => false
   const keep = (b: Building) => { plan.buildings.push(b); const k = bucket(b.x, b.z); const l = placed.get(k); if (l) l.push(b); else placed.set(k, [b]) }
   const onRoad = (x: number, z: number, m: number) => {
     const nr = nearestRoad(R, x, z)
@@ -226,6 +227,20 @@ export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
     }
   }
   plan.lanes = lanes
+  // lane segments bucketed (16 m), so a footprint asks only the lanes beside it, not every lane in a city
+  const laneGrid = new Map<string, [Lane, number][]>()
+  for (const l of lanes) for (let k = 0; k < l.pts.length - 1; k++) {
+    const key = `${Math.floor((l.pts[k][0] + l.pts[k + 1][0]) / 32)},${Math.floor((l.pts[k][1] + l.pts[k + 1][1]) / 32)}`
+    const e = laneGrid.get(key); if (e) e.push([l, k]); else laneGrid.set(key, [[l, k]])
+  }
+  nearLane = (x, z, m, skip) => {
+    const cx = Math.floor(x / 16), cz = Math.floor(z / 16)
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const [l, k] of laneGrid.get(`${cx + i},${cz + j}`) ?? []) {
+      if (l === skip) continue
+      if (distToLine([l.pts[k], l.pts[k + 1]], x, z) < m) return true
+    }
+    return false
+  }
 
   // ── lots: walk every street and lane, both sides, a lot per step, facing the street
   const frontages: Lane[] = [...streets, ...lanes]
