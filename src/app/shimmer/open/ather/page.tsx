@@ -351,6 +351,7 @@ export default function AtherSlice() {
       resetGarden: () => updateGarden(freshGarden()),
       spread: () => spreadRef.current, skipDays, ownerAt: (x: number, z: number) => nodeOwner?.(x, z),
       prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mana: () => manaRef.current.cur,
+      stance: () => stanceRef.current, speedMult: () => (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1),
     }
   }, [zone, travel, garden, updateGarden, skipDays, nodeOwner])
 
