@@ -44,22 +44,33 @@ PROMPTS = {
         "bottom, smithy chimneys venting steam, lanterns along the streets. Beside the town on flat ground, a wide "
         "open spaceport field with a long stone terminal and several berths where a few elegant sky-ships stand. "
         "Jagged mountains rise behind."),
-    "gale-haven": STYLE + DAY + (" Wide establishing view of a bustling port city built on tiers up a sea cliff on "
-        "a peninsula: low docks and merchant ships at the waterline, a middle tier of warehouses cut into the cliff "
-        "face with cargo cranes, and at the top a forest of tall slender mooring towers with sky-ships tethered to "
-        "them. Stairs and lifts connect the tiers. A crowded colourful market of awnings on the lowest tier."),
+    "gale-haven": STYLE + DAY + (" Side-on establishing view from the sea of a port city climbing a tall sheer sea "
+        "cliff on a rocky peninsula, in three distinct stacked tiers. BOTTOM tier at the waterline: wooden docks, "
+        "piers, merchant ships and a crowded market of coloured awnings. MIDDLE tier halfway up the cliff: a long "
+        "ledge of warehouses carved INTO the rock face with big arched openings and timber cargo cranes swinging "
+        "crates. TOP tier on the cliff's crown: a forest of tall slender stone mooring towers with sky-ships tethered "
+        "to them. Zig-zag stairways and cable lifts climb the bare rock between the tiers. The cliff is the hero."),
     "veradyn": STYLE + DAY + (" Wide establishing view of a tropical island city of living architecture: buildings "
         "grown rather than built, giant fungal forms and roots fused with carved stone arches and columns, an organic "
         "maze of terraces tumbling down to turquoise water, a temple on the highest point, a small dormant volcano "
         "woven into the city, lush jungle, smaller islands across a strait."),
-    "citadel": STYLE + DAY + (" Wide establishing view of a grand walled capital city on a warm Mediterranean "
-        "coast: a high pale wall ringing the city, a single long stone bridge leading to a great gatehouse that is "
-        "the only way in, inside the walls marble and gold buildings, colonnades, domes, a broad central plaza with "
-        "a great exchange hall, cultivated olive fields and vineyards outside the walls."),
-    "ashfeld": STYLE + DUSK + (" Wide establishing view of a small frontier village where green farmland gives out "
-        "into dry tan broken country: a cluster of modest stone cottages along one main street and a few lanes, "
-        "and at its heart a tavern built underneath an enormous living mushroom whose cap spreads over the roof, "
-        "its gills sooty from the chimney."),
+    "citadel": STYLE + DAY + (" Establishing view of a grand walled capital standing on an island of rock in a "
+        "wide river mouth on a warm Mediterranean coast. A massive unbroken pale stone wall with towers rings the "
+        "entire city right down to the water. ONE long arched stone bridge crosses the water to a single huge "
+        "gatehouse, clearly the only way in, with a road leading onto the bridge in the foreground. Inside the wall, "
+        "marble and gold buildings rise toward a domed exchange hall and colonnades. Olive groves and vineyards on "
+        "the near shore."),
+    "ashfeld": STYLE + DUSK + (" Establishing view at street level of a small frontier village where green "
+        "farmland gives out into dry tan broken country: modest stone cottages along one dusty main street. At the "
+        "street's end stands a two-storey stone tavern built underneath a living mushroom: the mushroom's thick "
+        "stalk rises out of the tavern and its broad cap spreads just over the roof like an umbrella, only a little "
+        "wider than the building itself, chimney smoke curling up past the sooty gills. The mushroom is big for a "
+        "mushroom but small for a building, a village landmark, not a mountain."),
+    "rune-hold-station": STYLE + DUSK + (" Establishing view of a mountain town of stacked stone buildings climbing "
+        "a hillside, and in the foreground on wide flat ground at the foot of the town, a large SPACEPORT field: a "
+        "long colonnaded stone terminal hall with lantern-lit arches, a paved landing field marked into several "
+        "circular berths, and in four of the berths elegant streamlined sky-ships of carved stone, brass and sail-like "
+        "fins standing ready to leave the planet, one lifting off on a column of soft light. Jagged mountains behind."),
     "village": STYLE + DAY + (" Wide establishing view of a small farming village on gentle coastal plains: a "
         "dozen stone and timber cottages along a road that widens into a little square with a well, lanes "
         "branching to farmhouses, hedges and fields, a road leading off toward distant hills."),
@@ -83,8 +94,9 @@ def one(town, i):
 
 if __name__ == "__main__":
     os.makedirs(HERE, exist_ok=True)
-    towns = list(PROMPTS) if sys.argv[1] == "all" else [sys.argv[1]]
+    towns = list(PROMPTS) if sys.argv[1] == "all" else sys.argv[1].split(",")
     n = int(sys.argv[2]) if len(sys.argv) > 2 else 2
+    start = int(sys.argv[3]) if len(sys.argv) > 3 else 1   # rerolls keep earlier picks: start at 3
     with ThreadPoolExecutor(1) as ex:
-        for p in ex.map(lambda a: one(*a), [(t, i) for t in towns for i in range(1, n + 1)]):
+        for p in ex.map(lambda a: one(*a), [(t, i) for t in towns for i in range(start, start + n)]):
             print(p)
