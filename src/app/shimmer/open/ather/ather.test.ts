@@ -13,6 +13,7 @@ import { newCombat, stepCombat, spawnHollow, fire, populate, KEEPER_HP, SHAMBLER
 import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVES, PANIC_MIN_WINDUP } from './champion'
 import { placeNodes, nodeAdjacency, ownerOf, nodeRegions, polyArea, NODE_CLEAR_OF, GAME_DAY_MS, SUB } from './nodes'
 import { advance, clearAt, freshSpread, infectedIds, SPREAD } from './spread'
+import { atherPlatePixels, ATHER_HUE } from './plate'
 import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
 import { canPlant, plant, lift, reachedBiomes, waymarksInWorld, TILE_CENTRE, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
 
@@ -417,6 +418,21 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   step(dc, { x: 0, y: 0, z: CHAMP.leash + 30 }, 12)
   ok(!dc.champ && dc.dormant?.[node.id] === 1, 'champ: a champion home with nobody near never went back under (or forgot its bar)')
   ok(wakeChampion(dc, F, node).bar === 1, 'champ: woken again, it did not resume on the bar it had reached')
+}
+
+// ── the Ather's map plate (Alex 11-15: the Nyx map's look, for the Ather) ────────────────────────────────────────
+{
+  const pl = atherPlatePixels(W)
+  ok(pl.w === meta.sizeX / 2 && pl.h === meta.sizeZ / 2 && pl.px.length === pl.w * pl.h * 4, 'plate: wrong size')
+  let opaque = true; for (let k = 3; k < pl.px.length; k += 4) if (pl.px[k] !== 255) { opaque = false; break }
+  ok(opaque, 'plate: a transparent pixel')
+  // water reads blue, meadow reads green-gold, woods reads greener than meadow (the Atlas hues by biome)
+  const avg = (b: number) => { let r = 0, g = 0, bl = 0, n = 0; for (let j = 0; j < pl.h; j += 3) for (let i = 0; i < pl.w; i += 3) if (W.biomeAt(-meta.sizeX / 2 + (i + 0.5) * 2, -meta.sizeZ / 2 + (j + 0.5) * 2) === b) { const o = (j * pl.w + i) * 4; r += pl.px[o]; g += pl.px[o + 1]; bl += pl.px[o + 2]; n++ } return [r / n, g / n, bl / n] }
+  const wa = avg(BIOME.water), me = avg(BIOME.meadow), wo = avg(BIOME.woods)
+  ok(wa[2] > wa[0] && wa[2] > wa[1], 'plate: water is not blue')
+  ok(me[1] > me[2] && wo[1] - wo[0] > me[1] - me[0], 'plate: meadow and woods do not read as two greens (woods the cooler one)')
+  ok(JSON.stringify(ATHER_HUE[2]) === '[170,206,120]', 'plate: meadow drifted off the Atlas hue (continent/map.tsx ATHER_BANDS)')
+  ok(atherPlatePixels(W).px.every((v, k) => v === pl.px[k]), 'plate: not deterministic')
 }
 
 if (fails.length) { console.error(`ather: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

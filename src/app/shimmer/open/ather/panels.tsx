@@ -5,6 +5,7 @@
 
 import { useEffect, useRef } from 'react'
 import { tileCentreWorld, type Wilds } from './wilds'
+import { atherPlate } from './plate'
 import { GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { BIOME_NAME } from './wilds'
 import { cellOrigin, FOG_CELL, walkedShare, type Fog } from './explored'
@@ -29,6 +30,13 @@ const pin = (bg: string, size: number): React.CSSProperties => ({
   position: 'absolute', width: size, height: size, margin: -size / 2, borderRadius: size, background: bg,
   boxShadow: '0 0 0 2px rgba(20,24,28,0.75)', border: 0, padding: 0, cursor: 'pointer',
 })
+
+/** The Ather's relief plate (plate.ts), the same picture the minimap draws. */
+function PlateView({ W }: { W: Wilds }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => { const c = ref.current; if (!c) return; const p = atherPlate(W); c.width = p.width; c.height = p.height; c.getContext('2d')!.drawImage(p, 0, 0) }, [W])
+  return <canvas ref={ref} style={{ width: '100%', height: '100%', display: 'block' }} />
+}
 
 /** The fog of war over the tile image, painted by the shared map kit (same cloud as the continent map). The fog
  *  is one continent-wide grid in world coords; this crops it to the tile. */
@@ -77,7 +85,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
         {view === 'ather' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 200px', gap: 14 }}>
             <div style={{ position: 'relative', aspectRatio: '1', width: 'min(100%, calc(92vh - 120px))', justifySelf: 'center', borderRadius: 8, overflow: 'hidden', background: '#334' }}>
-              <img src={`/open/wilds/${tile}-map.png`} alt="" style={{ width: '100%', height: '100%', imageRendering: 'pixelated', display: 'block' }} />
+              {W ? <PlateView W={W} /> : <img src={`/open/wilds/${tile}-map.png`} alt="" style={{ width: '100%', height: '100%', imageRendering: 'pixelated', display: 'block' }} />}
               {fog && W && <FogLayer fog={fog} W={W} />}
               <button title="Gregory's waymark" onClick={() => go({ kind: 'waymark', w: GREG_WAYMARK })} style={{ ...pin('#e7c766', 13), ...pct(GREG_WAYMARK.x, GREG_WAYMARK.z) }} />
               {waymarks.filter(w => w.tile === tile).map(w => (

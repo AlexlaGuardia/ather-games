@@ -7,7 +7,7 @@
 // The tile picture is composed ONCE per change (fog walked, a waymark planted, a node cleared) into an offscreen
 // canvas; a frame only crops it. Per frame cost = one drawImage + a dot.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { HearthMapFrame } from '../../ui/hearth-hud'
 import { hudMapBox } from '../../ui/hearth-hud-layer'
 import type { HudSize } from '../../ui/hud-flag'
@@ -17,6 +17,7 @@ import { FOG_CELL, cellOrigin, type Fog } from './explored'
 import { GREG_WAYMARK, type Waymark } from './waymarks'
 import { GRID, SQ, GRID_HALF, GATE, GREG, sqId, PLOT_R } from './plot'
 import type { Wilds } from './wilds'
+import { atherPlate } from './plate'
 import type { CompassPose } from '../shared/game-hud'
 
 const REACH = 120          // Wilds: metres from centre to edge
@@ -32,27 +33,20 @@ export function AtherMiniMap({ size, zone, W, fog, tileOff, pose, waymarks, regi
   const box = hudMapBox(size)
   const cv = useRef<HTMLCanvasElement>(null)
   const comp = useRef<HTMLCanvasElement | null>(null)
-  const img = useRef<HTMLImageElement | null>(null)
   const ver = useRef(0)
-  // ★ THE IMAGE LOAD IS STATE, not a callback into one effect run: a re-run before the load (the fog's rev ticks as you
-  // walk) marked the waiting callback dead, and a keeper standing still then never saw the map (prod 11-15: all black).
-  const [imgReady, setImgReady] = useState(false)
-  useEffect(() => {
-    const im = new Image(); im.onload = () => { img.current = im; setImgReady(true) }; im.src = `/open/wilds/${W.meta.name}-map.png`
-    return () => { im.onload = null }
-  }, [W])
 
   // compose the tile picture (Wilds) whenever what it shows changes
   useEffect(() => {
     if (zone !== 'wilds') return
     let dead = false
     const draw = () => {
-      if (dead || !img.current?.complete) return
+      if (dead) return
       const c = comp.current ?? (comp.current = document.createElement('canvas'))
       c.width = COMP; c.height = COMP
       const ctx = c.getContext('2d')!, sx = W.meta.sizeX, sz = W.meta.sizeZ, k = COMP / sx
       ctx.imageSmoothingEnabled = true
-      ctx.drawImage(img.current, 0, 0, COMP, COMP)
+      // the Ather's own relief plate (plate.ts, Alex 11-15: the Nyx map's look, in the Ather's palette), not the flat export
+      ctx.drawImage(atherPlate(W), 0, 0, COMP, COMP)
       const P = (x: number, z: number): [number, number] => [(x + sx / 2) * k, (z + sz / 2) * (COMP / sz)]
       // node borders, the same look as the fold map
       if (regions.length > 1) for (const r of regions) {
@@ -76,7 +70,7 @@ export function AtherMiniMap({ size, zone, W, fog, tileOff, pose, waymarks, regi
     }
     draw()
     return () => { dead = true }
-  }, [zone, W, fog, fog?.rev, tileOff, waymarks, regions, imgReady])
+  }, [zone, W, fog, fog?.rev, tileOff, waymarks, regions])
 
   // per frame: crop round the keeper (Wilds) or draw the garden (plot), then the keeper
   useEffect(() => {
