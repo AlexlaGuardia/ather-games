@@ -12,8 +12,10 @@ const D = 'public/open/wilds/', idx = JSON.parse(readFileSync(D + 'tiles.json', 
 const zm = new Map<string, Zone>(idx.tiles.find((t: { name: string }) => t.name === 'first-wilds').nodes.map((n: { i: number; j: number; zone: Zone }) => [`${n.i},${n.j}`, n.zone]))
 const b = readFileSync(D + 'first-wilds.bin'), bio = readFileSync(D + 'first-wilds.biome')
 const W = parseWilds(JSON.parse(readFileSync(D + 'first-wilds.json', 'utf8')) as WildsMeta, new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)), new Uint8Array(bio), (i, j) => zm.get(`${i},${j}`) ?? 'meadows')
-// a tree with open ground beside it (no other trunk within 3 m), so the walker can stand at it
-const lone = (k: string) => W.trees.find(t => t.kind === k && !W.trees.some(o => o !== t && Math.hypot(o.x - t.x, o.z - t.z) < 3) && Math.abs(t.x) < 400 && Math.abs(t.z) < 400)!
+// a tree with a CLEAR LINE on its east side (no trunk within 15 m east and 3 m either side, none within 3 m), so the
+// walker can stand 6 or 14 m east of it and the crosshair meets it first. ⚠ The first cut only checked 3 m round the
+// tree and stood the camera inside a neighbouring shimmeroak's trunk (11-15).
+const lone = (k: string) => W.trees.find(t => t.kind === k && !W.trees.some(o => o !== t && (Math.hypot(o.x - t.x, o.z - t.z) < 3 || (o.x > t.x && o.x < t.x + 15 && Math.abs(o.z - t.z) < 3))) && Math.abs(t.x) < 400 && Math.abs(t.z) < 400)!
 const gold = lone('goldwood'), oak = lone('shimmeroak')
 const res: Record<string, unknown> = { gold: gold?.id, oak: oak?.id }
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -25,7 +27,10 @@ await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 12000
 await p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))
 await sleep(9000)
 // stand `d` metres east of a tree, facing it (yaw π/2 looks west), so the crosshair sits on the trunk
-const aimFrom = async (t: { x: number; z: number }, d: number) => { await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), t.x + d, t.z); await sleep(3500) }
+// ⚠ headless renders a frame only when asked (a screenshot forces one): the aim is computed IN the frame loop, so read it
+// after a forced frame or it is the PREVIOUS spot's answer (the first runs read every aim one view late, 11-15)
+const frame = async () => { try { await p.screenshot({ path: `${out}/_frame.png` }) } catch { /* slow frame */ } }
+const aimFrom = async (t: { x: number; z: number }, d: number) => { await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), t.x + d, t.z); await sleep(3000); await frame(); await frame() }
 await p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
 // FROM A DISTANCE (Alex 11-15: "click a tree from about 10 blocks out"): 6 m off, aim, prune (the click's own path)
 await aimFrom(gold, 6)
