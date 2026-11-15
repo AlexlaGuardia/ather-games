@@ -1173,7 +1173,7 @@ export default function ContinentRide() {
       {isTouch && started && !showMap && !garage && !board && !ferrying && (
         <TouchControls showFire={false} actions={touchActions}
           holds={hud.foot ? undefined : [{ code: 'Space', label: 'drift' }]}
-          stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hud.foot ? 48 : 138 }} />
+          stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hud.foot ? 48 : 148 }} />
       )}
       {mapState && started && <ContinentMiniMap map={mapState} track={track} onExpand={() => setShowMap(true)} />}
       {mapState && showMap && <ContinentMap map={mapState} track={track} onClose={() => setShowMap(false)} />}
