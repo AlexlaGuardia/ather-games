@@ -77,7 +77,7 @@ export default function Home() {
       <BookstoreIcon />
 
       {/* ── top bar ── */}
-      <header className="absolute inset-x-0 top-0 z-40">
+      <header className="absolute inset-x-0 top-0 z-40 bg-gradient-to-b from-[#05060e]/70 to-transparent">
         <nav className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-4 sm:pr-40">
           <Link href="/" className="font-display text-2xl font-semibold tracking-wide" style={{ color: GOLD }}>
             {GAME_TITLE}
@@ -87,7 +87,7 @@ export default function Home() {
               <Link
                 key={n.label}
                 href={n.href}
-                className="font-[family-name:var(--font-game)] text-xs font-semibold tracking-[0.2em] text-text/60 uppercase transition hover:text-text"
+                className="font-[family-name:var(--font-game)] text-xs font-semibold tracking-[0.2em] text-text/80 uppercase transition hover:text-text"
               >
                 {n.label}
               </Link>
@@ -105,7 +105,7 @@ export default function Home() {
         {/* Keep the sky a DAY sky: darkening it whole turned the blue to navy and the motes into stars, which canon's
             Ather day never shows. Fade only the bottom into the page; the text carries its own shadow. */}
         <div className="absolute inset-0 bg-gradient-to-t from-[#05060e] from-0% via-[#05060e]/45 via-25% to-transparent to-55%" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#05060e]/30 to-transparent to-50%" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#05060e]/55 via-[#05060e]/20 via-30% to-transparent to-55%" />
         <div className="relative mx-auto w-full max-w-6xl px-4 pb-16 [text-shadow:0_2px_14px_rgba(5,6,14,0.55)] sm:pb-24">
           <p className="font-[family-name:var(--font-game)] text-xs font-semibold tracking-[0.3em] uppercase" style={{ color: GOLD }}>
             An open-world sandbox
