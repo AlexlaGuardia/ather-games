@@ -8,6 +8,9 @@ import { useState } from 'react'
 import { H, hearthDisplay, Well, HearthLabel } from '../ui/hearth'
 import { RANGE_GUNS } from './shared/gunplay'
 import { useLoadout, setLoadout, equip, gunsFor, vesselsFor, type OwnedVessel } from './shared/loadout'
+import { useBirth } from './birth-gate'
+import { RUNES, ELEMENTS } from '../play3d/birth/runes.data'
+import { RuneMark } from '../play3d/birth/RuneMark'
 
 type SlotId = 'primary' | 'secondary' | 'tactical' | 'signature'
 const SLOT_LABEL: Record<SlotId, string> = { primary: 'Primary', secondary: 'Secondary', tactical: 'Tactical', signature: 'Signature' }
@@ -75,11 +78,30 @@ function Slot({ id, open, onOpen }: { id: SlotId; open: boolean; onOpen: () => v
 }
 const cap = (s: string) => s[0] + s.slice(1).toLowerCase()
 
+/** Who the keeper is: their birth rune (canon: "your birth rune is you"), at the head of the sheet. */
+function BornOf() {
+  const b = useBirth()
+  const r = b ? RUNES.find(x => x.id === b) : null
+  const el = r ? ELEMENTS.find(e => e.id === r.element) : null
+  return (
+    <div data-born={b ?? ''} className="mb-4 flex items-center gap-3 rounded-[12px] px-3 py-2.5"
+      style={{ background: r ? `linear-gradient(90deg, ${el?.bg ?? '#222'} 0%, ${el?.bg ?? '#222'}cc 55%, transparent 100%)` : 'rgba(255,250,235,.5)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+      {r ? <RuneMark rune={r} size={44} /> : <span className="w-11 h-11 rounded-full grid place-items-center text-[20px]" style={{ color: H.inkFaint, boxShadow: `inset 0 0 0 1.5px ${H.rule}` }}>?</span>}
+      <div className="min-w-0">
+        <div className="text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: r ? 'rgba(255,255,255,.65)' : H.inkFaint }}>Birth rune</div>
+        <div className="text-[18px] font-semibold" style={{ ...hearthDisplay, color: r ? '#fff' : H.ink }}>{r ? `Born of ${r.name}` : 'Not yet born'}</div>
+        {r && <div className="text-[12px]" style={{ color: 'rgba(255,255,255,.75)' }}>{el?.name} · {r.state}</div>}
+      </div>
+    </div>
+  )
+}
+
 export function CharacterBody() {
   const [open, setOpen] = useState<SlotId | null>(null)
   const tap = (id: SlotId) => () => setOpen(o => (o === id ? null : id))
   return (
     <div className="px-4 pt-7 pb-4">
+      <BornOf />
       <HearthLabel>Weapons</HearthLabel>
       <div className="grid gap-2 mt-1.5 sm:grid-cols-2">
         <Slot id="primary" open={open === 'primary'} onOpen={tap('primary')} />

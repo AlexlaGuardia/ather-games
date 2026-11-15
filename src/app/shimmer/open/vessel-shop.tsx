@@ -19,7 +19,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { HearthFrame, H, hearthDisplay, Well, HearthButton } from '../ui/hearth'
 import { baselineShelf, fitOf, type ShelfItem, type Fit } from './shared/vessel-shelf'
 import { RUNES } from '../play3d/birth/runes.data'
-import { loadRuneInventory } from '../play3d/rune-inventory'
+import { useBirth } from './birth-gate'
 import type { Cavern } from './cavern'
 import { caveRoomAt } from './cavern'
 import { useLoadout, setLoadout, addVessel, MAX_PER_KIND } from './shared/loadout'
@@ -44,8 +44,7 @@ export function VesselShop({ ledger, setLedger, onClose, isTouch }: { ledger: Le
   const shelf = useMemo(baselineShelf, [])
   const loadout = useLoadout()
   const { tooltips } = useSettings()
-  const [birth, setBirth] = useState<string | null>(null)
-  useEffect(() => { setBirth(loadRuneInventory().birth ?? null) }, [])
+  const birth = useBirth()   // the keeper's birth rune, live (birth-gate.tsx)
   const [warn, setWarn] = useState<ShelfItem | null>(null)
   const [tip, setTip] = useState<string | null>(null)
   const [flash, setFlash] = useState<{ key: string; t: number } | null>(null)

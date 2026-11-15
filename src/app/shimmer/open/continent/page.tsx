@@ -15,6 +15,7 @@ import { useInv, hotbarEntries } from '../shared/bag'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { VesselShop, VesselCounter } from '../vessel-shop'
+import { BirthGate, getBirth } from '../birth-gate'
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen, WALK_KEYS, type KeyRow } from '../options'
 import { getSettings, useSettings, pixelRatioCap } from '../shared/settings'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
@@ -761,6 +762,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (getBirth() === null) return   // the birth ritual has the keys (its arrows must not roll the courser)
       keys.current.add(e.code)
       if (e.code === 'KeyF' && !e.repeat) seat()
       if (e.code === 'KeyR' && !rangeHolds()) { mode.current = 'drive'; loco.current = null; place(safe.current.x, safe.current.z, safe.current.yaw) }
@@ -1261,13 +1263,14 @@ export default function ContinentRide() {
           ...gunHud.status,
         ]} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} keys={CONTINENT_KEYS} />}
+      <BirthGate />
       {vesselShop && <VesselShop ledger={ledger} setLedger={setLedger} onClose={() => setVesselShop(false)} isTouch={isTouch} />}
       {pack && <PackMenu tab={pack} onTab={setPack} onClose={() => setPack(null)} sel={slot} isTouch={isTouch} />}
       {mapState && showMap && <ContinentMap map={mapState} track={track} onClose={() => setShowMap(false)} />}
       <GaragePanel open={garage} onClose={() => setGarage(false)} build={eff} setBuild={setBuild}
         shop={{ ledger, buy: (slot: Slot, t: Tier) => { const r = buy(ledger, slot, t); if (r.ok) setLedger(r.ledger); else flash(r.why ?? 'Not yet') } }} />
       <TradeHud ledger={ledger} objective={objective} toast={null} purse={false} />
-      {atTown && !board && SUPPLY.some(s => s.place === atTown) && (
+      {atTown && !board && !bagOpen && !vesselShop && !optionsOpen && SUPPLY.some(s => s.place === atTown) && (
         <div style={{ position: 'absolute', left: '50%', top: '40%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px system-ui', pointerEvents: 'none' }}>
           E · Ather Trading Co. board
         </div>
@@ -1285,7 +1288,7 @@ export default function ContinentRide() {
       {hud.foot && !ptrLocked && !isTouch && !showMap && !garage && !board && !bagOpen && !vesselShop && !optionsOpen && (
         <div style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translateX(-50%)', padding: '7px 16px', borderRadius: 999, background: 'rgba(12,16,20,0.66)', color: '#f4efe2', font: '600 12px system-ui', letterSpacing: '0.16em', textTransform: 'uppercase', pointerEvents: 'none' }}>Click to resume</div>
       )}
-      {hud.prompt && (
+      {hud.prompt && !bagOpen && !vesselShop && !optionsOpen && (   // world prompts stay out from over a menu
         <div style={{ position: 'absolute', left: '50%', top: '62%', transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', pointerEvents: 'none' }}>
           {hud.prompt}
         </div>
