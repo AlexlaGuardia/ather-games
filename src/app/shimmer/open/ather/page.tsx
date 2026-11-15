@@ -231,8 +231,8 @@ export default function AtherSlice() {
   const zoneName = zone.kind === 'plot' ? 'Your plot' : 'The Wilds'
   // Phone taps: only what applies here and now, each the key this page already handles.
   const touchActions: TouchAction[] = [
-    ...(prompt ? [{ code: 'KeyE', key: 'E', label: prompt.startsWith('E · Gregory') ? 'Gregory' : 'use' }] : []),
-    ...(prompt?.includes('L lift') ? [{ code: 'KeyL', key: 'L', label: 'lift' }] : []),
+    ...(prompt ? [{ code: 'KeyE', key: 'E', label: prompt.startsWith('E · Gregory') ? 'Gregory' : 'use', near: true }] : []),
+    ...(prompt?.includes('L lift') ? [{ code: 'KeyL', key: 'L', label: 'lift', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
     ...(zone.kind === 'wilds' ? [
       { code: 'KeyF', key: 'F', label: 'waymark' },
@@ -284,7 +284,7 @@ export default function AtherSlice() {
                 <div style={{ width: `${(chud.hp / chud.maxHp) * 100}%`, height: '100%', background: chud.hp < 35 ? '#e08a6a' : '#9fd27a', transition: 'width 0.15s' }} />
               </div>
             </div>
-            <div style={{ position: 'absolute', ...(isTouch ? { left: '50%', transform: 'translateX(-50%)', bottom: 18, textAlign: 'center' as const } : { right: 14, bottom: 14, textAlign: 'right' as const }), pointerEvents: 'none', color: '#eef3f6', font: '600 12px system-ui', letterSpacing: '0.14em', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
+            <div style={{ position: 'absolute', ...(isTouch ? { left: '50%', transform: 'translateX(-50%)', top: 12, textAlign: 'center' as const } : { right: 14, bottom: 14, textAlign: 'right' as const }), pointerEvents: 'none', color: '#eef3f6', font: '600 12px system-ui', letterSpacing: '0.14em', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
               {chud.gun}<br /><span style={{ fontSize: 18, fontVariantNumeric: 'tabular-nums' }}>{chud.reloading ? '· · ·' : `${chud.ammo} / ${chud.clip}`}</span><br />{!isTouch && <span style={{ opacity: 0.6, fontWeight: 400, fontSize: 10 }}>CLICK FIRE · R RELOAD</span>}
             </div>
           </>

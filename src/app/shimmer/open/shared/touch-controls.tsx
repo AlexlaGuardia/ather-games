@@ -12,7 +12,9 @@ import { touch, pressKey, resetTouch } from './touch'
 //               sent as real key presses so the page's own handler runs.
 // Multi-touch by pointerId: each finger owns exactly one role from touchdown to lift.
 
-export interface TouchAction { code: string; label: string; key: string }
+/** `near`: a contextual action (E use, L lift) shown as a big pill by the thumb cluster; the rest sit in a compact
+ *  row under the top-right HUD. Two places because a short phone screen cannot stack all of them in one column. */
+export interface TouchAction { code: string; label: string; key: string; near?: boolean }
 
 const THROW = 56
 const ring = (size: number, lit = false): React.CSSProperties => ({
@@ -100,12 +102,21 @@ export function TouchControls({ actions, showFire }: { actions: TouchAction[]; s
           : null}
       </div>
 
-      {/* context taps, top right under the HUD: only what applies right now */}
-      <div style={{ position: 'absolute', right: 'max(14px, env(safe-area-inset-right))', top: 84, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
-        {actions.map(a => (
-          <div key={a.code} style={{ ...ring(52), width: 'auto', minWidth: 52, padding: '0 14px', borderRadius: 26, gap: 0, display: 'flex', alignItems: 'center' }}
+      {/* standing taps: a compact row under the top-right HUD */}
+      <div style={{ position: 'absolute', right: 'max(12px, env(safe-area-inset-right))', top: 70, display: 'flex', gap: 8 }}>
+        {actions.filter(a => !a.near).map(a => (
+          <div key={a.code} style={{ ...ring(40), width: 'auto', minWidth: 40, padding: '0 11px', borderRadius: 20, display: 'flex', alignItems: 'center', fontSize: 11 }}
             onPointerDown={e => { e.stopPropagation(); pressKey(a.code) }}>
-            <span style={{ fontSize: 15, marginRight: 8, color: '#d4a843' }}>{a.key}</span>{a.label}
+            <span style={{ fontSize: 13, marginRight: 6, color: '#d4a843' }}>{a.key}</span>{a.label}
+          </div>
+        ))}
+      </div>
+      {/* what is in reach right now: big, beside the thumb cluster */}
+      <div style={{ position: 'absolute', right: `calc(max(18px, env(safe-area-inset-right)) + ${showFire ? 84 + 12 : 0}px + 56px + 16px)`, bottom: 'max(22px, env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
+        {actions.filter(a => a.near).map(a => (
+          <div key={a.code} style={{ ...ring(60, true), width: 'auto', minWidth: 60, padding: '0 18px', borderRadius: 30, display: 'flex', alignItems: 'center', fontSize: 13 }}
+            onPointerDown={e => { e.stopPropagation(); pressKey(a.code) }}>
+            <span style={{ fontSize: 17, marginRight: 8, color: '#f4efe2' }}>{a.key}</span>{a.label}
           </div>
         ))}
       </div>
