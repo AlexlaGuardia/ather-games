@@ -37,7 +37,9 @@ export const grain = (fx: number, fy: number, oct: number, alpha: number) =>
     `<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='${fx} ${fy}' numOctaves='${oct}' seed='7'/><feColorMatrix values='0 0 0 0 0.16  0 0 0 0 0.09  0 0 0 0 0.04  0 0 0 ${alpha} 0'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>`)}")`
 export const WOOD = `${grain(0.006, 0.35, 4, 0.9)}, ${grain(0.02, 0.6, 2, 0.35)}, linear-gradient(180deg, #8a5a32 0%, #6a4222 45%, #50311a 100%)`
 export const PAPER = `${grain(0.9, 0.9, 2, 0.10)}, radial-gradient(120% 90% at 50% 0%, #f7eedb 0%, #efe1c3 70%, #e6d3ae 100%)`
-const KNOB = `${grain(0.02, 0.3, 3, 0.5)}, radial-gradient(circle at 35% 30%, #8a5b33, #4a2d18)`
+// ★ RED (Alex 11-15: "a red close button as all menus should have"). Still carved (the grain stays), still the same
+// corner on every panel; only the lacquer changed, so every HearthFrame in both worlds turned red in this one line.
+const KNOB = `${grain(0.02, 0.3, 3, 0.45)}, radial-gradient(circle at 35% 30%, #e0604f, #b8372a 55%, #7c1f17)`
 const PLAQUE = `${grain(0.015, 0.3, 3, 0.5)}, linear-gradient(180deg, #8c5d34, #5a371d)`
 
 // ── the frame ──────────────────────────────────────────────────────────────────────────────────
@@ -46,9 +48,9 @@ export function HearthX({ onClick }: { onClick: () => void }) {
   return (
     <button type="button" onClick={(e) => { e.stopPropagation(); onClick() }} aria-label="close" title="close (esc)"
             className="absolute -top-3 -right-3 z-30 w-9 h-9 rounded-full grid place-items-center transition-transform hover:scale-105 active:scale-95"
-            style={{ background: KNOB, boxShadow: '0 3px 6px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,220,170,.35), inset 0 -2px 3px rgba(0,0,0,.4)' }}>
+            style={{ background: KNOB, boxShadow: '0 3px 6px rgba(0,0,0,.45), 0 0 0 2px #5a371d, inset 0 1px 0 rgba(255,200,180,.45), inset 0 -2px 3px rgba(0,0,0,.4)' }}>
       <svg width="12" height="12" viewBox="0 0 10 10" aria-hidden="true">
-        <path d="M1.8 1.8 L8.2 8.2 M8.2 1.8 L1.8 8.2" stroke="#f1dfbf" strokeWidth="1.7" strokeLinecap="round" fill="none" />
+        <path d="M1.8 1.8 L8.2 8.2 M8.2 1.8 L1.8 8.2" stroke="#fff4e6" strokeWidth="1.9" strokeLinecap="round" fill="none" />
       </svg>
     </button>
   )

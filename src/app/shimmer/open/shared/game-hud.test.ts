@@ -47,6 +47,22 @@ for (const k of Object.keys(EXEMPT)) ok(pages.some(p => p.endsWith(k)), `wiring:
   ok(/<Messages\b/.test(t), 'template: no message line under the bar')
 }
 
+// ── 1b. menus: every open-world menu wears the Carved Hearth frame (the red close), Alex 11-15 ─────────────────────
+// "the menu look as well with a red close button as all menus should have". A new menu goes in this list.
+const MENUS: Record<string, string> = {
+  'ather/panels.tsx': 'FoldMap + GregPanel', 'shared/bag.tsx': 'BagMenu', 'garage.tsx': 'GaragePanel',
+  'trade-ui.tsx': 'BoardPanel', 'continent/map.tsx': 'ContinentMap',
+}
+for (const [f, what] of Object.entries(MENUS)) {
+  const src = readFileSync(join(OPEN, f), 'utf8').replace(/^\s*\/\/.*$/gm, '')
+  ok(/<HearthFrame\b/.test(src), `menus: ${f} (${what}) is not in the hearth frame`)
+  ok(!/>\s*(Close|[A-Z]\s*·\s*close|Esc closes)\s*</.test(src), `menus: ${f} (${what}) draws its own text close button: the frame's red X is the close`)
+}
+{
+  const h = readFileSync(join(OPEN, '../ui/hearth.tsx'), 'utf8')
+  ok(/const KNOB = [^\n]*#e0604f/.test(h), 'menus: the hearth close knob is no longer red')
+}
+
 // ── 2. the message line ──────────────────────────────────────────────────────────────────────────────────────
 _resetSay()
 hudSay('Repeater', 'item', undefined, 0); hudSay('Waymark', 'item', undefined, 0.2)

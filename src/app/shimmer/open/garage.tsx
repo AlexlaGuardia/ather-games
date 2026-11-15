@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DARTER_STOCK, tuneFromSpec, type CourserTune } from './courser'
 import { buildSpec, statBars, PART_LABEL, tierLabel, DIAL, STOCK_BUILD, type CourserBuild, type Slot, type Tier } from './courser-build'
 import { canBuy, TIER_PRICE, type Ledger } from './trade'
+import { HearthFrame, H } from '../ui/hearth'
 
 // tier names + dial poles are canon (Magii 11-13); see courser-build.ts
 const KEY = 'ather:courser:darter:build'
@@ -31,9 +32,9 @@ function Bar({ label, v, base }: { label: string; v: number; base: number }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '84px 1fr 30px', alignItems: 'center', gap: 8, fontSize: 11 }}>
       <span style={{ letterSpacing: '0.18em', textTransform: 'uppercase', opacity: 0.7 }}>{label}</span>
-      <div style={{ position: 'relative', height: 7, borderRadius: 4, background: 'rgba(255,255,255,0.08)' }}>
-        <div style={{ position: 'absolute', inset: 0, width: `${base * 10}%`, borderRadius: 4, background: 'rgba(255,255,255,0.22)' }} />
-        <div style={{ position: 'absolute', inset: 0, width: `${v * 10}%`, borderRadius: 4, background: v >= base ? GOLD : '#c96b4f', opacity: 0.9, transition: 'width 0.2s' }} />
+      <div style={{ position: 'relative', height: 7, borderRadius: 4, background: 'rgba(58,39,22,0.12)' }}>
+        <div style={{ position: 'absolute', inset: 0, width: `${base * 10}%`, borderRadius: 4, background: 'rgba(58,39,22,0.22)' }} />
+        <div style={{ position: 'absolute', inset: 0, width: `${v * 10}%`, borderRadius: 4, background: v >= base ? H.moss : H.rust, opacity: 0.9, transition: 'width 0.2s' }} />
       </div>
       <span style={{ fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{v.toFixed(1)}</span>
     </div>
@@ -49,15 +50,11 @@ export function GaragePanel({ open, onClose, build, setBuild, shop }: { open: bo
   const bars = statBars(spec), base = statBars(stock)
   const slots: Slot[] = ['core', 'trim', 'rune']
   return (
-    <div style={{ position: 'absolute', right: 16, top: 56, width: 340, maxWidth: 'calc(100vw - 32px)', padding: '16px 18px', borderRadius: 12,
-      background: 'rgba(10,12,18,0.86)', border: `1px solid ${GOLD}44`, color: '#efeadc', font: '13px system-ui, sans-serif', backdropFilter: 'blur(6px)' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div>
-          <div style={{ font: '600 11px var(--font-game), system-ui', letterSpacing: '0.3em', color: GOLD }}>GARAGE</div>
-          <div style={{ font: '600 20px var(--font-display), Georgia, serif' }}>The Darter</div>
-        </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#efeadc', opacity: 0.6, cursor: 'pointer', fontSize: 12 }}>G · close</button>
-      </div>
+    // ★ The Carved Hearth card with the red close (Alex 11-15: every menu). A side panel, not a modal: no backdrop,
+    // pinned right, so the stats move while you tune.
+    <div style={{ position: 'absolute', right: 16, top: 70, zIndex: 40 }}>
+    <HearthFrame title="Garage · the Darter" maxWidth={360} onClose={onClose} backdrop={false} dataPanel="garage">
+    <div style={{ padding: '26px 16px 14px', fontSize: 13 }}>
 
       {slots.map(slot => (
         <div key={slot} style={{ marginBottom: 10 }}>
@@ -75,7 +72,7 @@ export function GaragePanel({ open, onClose, build, setBuild, shop }: { open: bo
                 <button key={t} disabled={locked} title={locked ? can.why : undefined}
                   onClick={() => { if (!owned && shop) shop.buy(slot, t); setBuild({ ...build, [slot]: t }) }}
                   style={{ padding: '5px 0', borderRadius: 6, cursor: locked ? 'default' : 'pointer', font: '600 11px var(--font-game), system-ui', letterSpacing: '0.12em',
-                    border: `1px solid ${on ? GOLD : 'rgba(255,255,255,0.14)'}`, background: on ? `${GOLD}26` : 'transparent', color: on ? GOLD : '#efeadc', opacity: locked ? 0.35 : 1 }}>
+                    border: `1px solid ${on ? H.ember : H.rule}`, background: on ? 'rgba(200,100,42,0.14)' : 'rgba(255,250,235,0.5)', color: on ? H.emberLo : H.ink, opacity: locked ? 0.35 : 1 }}>
                   {tierLabel(slot, t)}
                   {!owned && <div style={{ fontSize: 9, opacity: 0.75, marginTop: 1 }}>{locked ? '🔒' : `${TIER_PRICE[t as 1 | 2 | 3]} M`}</div>}
                 </button>
@@ -92,7 +89,7 @@ export function GaragePanel({ open, onClose, build, setBuild, shop }: { open: bo
           <span style={{ opacity: build.balance > 0.05 ? 1 : 0.5 }} title="speed">{DIAL.speed}</span>
         </div>
         <input type="range" min={-1} max={1} step={0.05} value={build.balance} aria-label="Balance: Poise (handling) to Surge (speed)"
-          onChange={e => setBuild({ ...build, balance: Number(e.target.value) })} style={{ width: '100%', accentColor: GOLD }} />
+          onChange={e => setBuild({ ...build, balance: Number(e.target.value) })} style={{ width: '100%', accentColor: H.ember }} />
       </div>
 
       <div style={{ display: 'grid', gap: 6 }}>
@@ -106,8 +103,10 @@ export function GaragePanel({ open, onClose, build, setBuild, shop }: { open: bo
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 11 }}>
         <span style={{ opacity: 0.45 }}>{shop ? `${shop.ledger.marks} Marks · ${shop.ledger.deeds} deeds · buy at a shop, earn deeds on the board` : 'Test garage: every part unlocked'}</span>
-        <button onClick={() => setBuild(STOCK_BUILD)} style={{ background: 'none', border: 'none', color: GOLD, cursor: 'pointer', fontSize: 11 }}>Reset to stock</button>
+        <button onClick={() => setBuild(STOCK_BUILD)} style={{ background: 'none', border: 'none', color: H.ember, fontWeight: 700, cursor: 'pointer', fontSize: 11 }}>Reset to stock</button>
       </div>
+    </div>
+    </HearthFrame>
     </div>
   )
 }

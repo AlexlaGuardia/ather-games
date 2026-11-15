@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMenuLock } from '../shared/menu-lock'
+import { BagMenu, useInv, hotbarEntries } from '../shared/bag'
 import { GameHud, useGameHudSize, openMapBox, hudSay, type CompassPose, type Mana } from '../shared/game-hud'
 import type { Vitals } from '../../engine/vitals'
 import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Track } from './map'
@@ -1103,6 +1104,7 @@ export default function ContinentRide() {
       : !hud.foot && canBoard ? [{ code: 'KeyE', key: 'E', label: 'board', near: true }] : []),
     ...(hud.prompt ? [{ code: 'KeyF', key: 'F', label: hud.foot ? 'get in' : 'get out', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
+    { code: 'KeyI', key: 'I', label: 'bag' },
     ...(!hud.foot ? [{ code: 'KeyC', key: 'C', label: 'camera' }, { code: 'KeyG', key: 'G', label: 'garage' }] : []),
     { code: 'KeyR', key: 'R', label: 'road' },
   ]
@@ -1159,7 +1161,17 @@ export default function ContinentRide() {
   // menus free the mouse (on foot it is locked); closing one takes the camera back (shared/menu-lock.ts)
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
   const getCanvas = useCallback(() => canvasEl.current, [])
-  useMenuLock(showMap || garage || !!board, getCanvas)
+  // the bag (I): the same bag as the Ather (shared/bag.tsx), one keeper
+  const [bagOpen, setBagOpen] = useState(false)
+  const inv = useInv()
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.code === 'KeyI' && !showMap && !garage && !board) setBagOpen(v => !v)
+      if (e.code === 'Escape') setBagOpen(false)
+    }
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
+  }, [showMap, garage, board])
+  useMenuLock(showMap || garage || !!board || bagOpen, getCanvas)
   const [ptrLocked, setPtrLocked] = useState(false)
   useEffect(() => {
     const ch = () => setPtrLocked(!!document.pointerLockElement)
@@ -1200,8 +1212,8 @@ export default function ContinentRide() {
           holds={hud.foot ? undefined : [{ code: 'Space', label: 'drift' }]}
           stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hud.foot ? 48 : 148 }} />
       )}
-      {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} vitals={vitalsRef} mana={manaRef} entries={gunHud.entries} sel={slot} onSelect={setSlot}
-        dimmed={!hud.foot} input={!!hud.foot && !showMap && !garage && !board}
+      {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} vitals={vitalsRef} mana={manaRef} entries={gunHud.holding ? gunHud.entries : hotbarEntries(inv)} sel={slot} onSelect={setSlot}
+        dimmed={!hud.foot} input={!!hud.foot && !showMap && !garage && !board && !bagOpen}
         minimap={mapState && <ContinentMiniMap map={mapState} track={track} onExpand={() => setShowMap(true)} box={openMapBox(hudSize)} />}
         status={[
           { label: R?.meta.name === 'continent' ? 'Athernyx · 1672' : 'Ashfeld to Rune Hold' },
@@ -1209,6 +1221,7 @@ export default function ContinentRide() {
           { label: ledger.deeds === 1 ? 'Deed' : 'Deeds', value: ledger.deeds },
           ...gunHud.status,
         ]} />}
+      {bagOpen && <BagMenu sel={slot} onClose={() => setBagOpen(false)} isTouch={isTouch} />}
       {mapState && showMap && <ContinentMap map={mapState} track={track} onClose={() => setShowMap(false)} />}
       <GaragePanel open={garage} onClose={() => setGarage(false)} build={eff} setBuild={setBuild}
         shop={{ ledger, buy: (slot: Slot, t: Tier) => { const r = buy(ledger, slot, t); if (r.ok) setLedger(r.ledger); else flash(r.why ?? 'Not yet') } }} />

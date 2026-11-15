@@ -36,6 +36,8 @@ import { placeNodes, isInfected, clearNode, loadNodes, saveNodes, ownerOf, nodeR
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey } from '../shared/touch'
 import { useMenuLock } from '../shared/menu-lock'
+import { BagMenu, useInv, setInv, getInv, hotbarEntries, heldItem } from '../shared/bag'
+import { give, take } from '../shared/inventory'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { AtherMiniMap } from './minimap'
 import type { Vitals } from '../../engine/vitals'
@@ -44,7 +46,7 @@ const TILE = 'first-wilds'
 
 type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
 type Spawn = { x: number; z: number; yaw: number }
-type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' }
+type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'bag' }
 type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'waymark'; w: Waymark; own: boolean }
 
 export default function AtherSlice() {
@@ -236,15 +238,21 @@ export default function AtherSlice() {
     const p = pos.current, biome = W.biomeAt(p.x, p.z)
     const v = canPlant(waymarks, { tile: zone.tile, x: p.x, z: p.z, biome, grounded: p.grounded, swimming: p.swimming })
     if (!v.ok) { setToast(v.why); return }
+    const spent = take(getInv(), 'waymark', 1)          // a waymark is a thing in the bag now: planting spends one
+    if (!spent) { setToast('No waymarks in your bag. Lift one you planted to carry it again.'); return }
+    setInv(spent)
     const next = plant(waymarks, { tile: zone.tile, x: p.x, y: W.heightAt(p.x, p.z), z: p.z, biome })
     setWaymarks(next); saveWaymarks(next)
     setToast(`Waymark bound in the ${BIOME_NAME[biome]}. It is a stop on the fold map now.`)
   }, [zone, W, waymarks])
-  // slot 2 held: a click plants (the Repeater is slot 1 and fires; combat-layer only fires while armed)
+  // what you hold is what sits in the selected hotbar slot (the bag, shared/bag.tsx): a waymark plants on click,
+  // the Repeater fires (combat-layer only fires while armed)
+  const inv = useInv()
+  const held = heldItem(inv, slot)
   useEffect(() => {
-    const down = (e: MouseEvent) => { if (e.button === 0 && slot === 1 && locked.current && !frozen.current) plantHere() }
+    const down = (e: MouseEvent) => { if (e.button === 0 && held === 'waymark' && locked.current && !frozen.current) plantHere() }
     window.addEventListener('mousedown', down); return () => window.removeEventListener('mousedown', down)
-  }, [slot, plantHere])
+  }, [held, plantHere])
   // compass marks: what the keeper might be heading for, by zone
   useEffect(() => {
     marksRef.current = zone.kind === 'plot'
@@ -261,16 +269,14 @@ export default function AtherSlice() {
   const groundKind = hud.where.includes('infected') ? 'Infected ground' : hud.where.includes('cleared') ? 'Cleared ground' : null
   const lastGround = useRef<string | null>(null)
   useEffect(() => { if (groundKind && lastGround.current && groundKind !== lastGround.current) hudSay(groundKind, 'zone'); lastGround.current = groundKind }, [groundKind])
-  const hotbar = useMemo(() => [
-    { itemId: 'repeater', count: chud?.ammo ?? 12, icon: '/open/icons/repeater.svg', name: zone.kind === 'wilds' ? 'Repeater' : 'Repeater · the Wilds only' },
-    { itemId: 'waymark', count: MAX_WAYMARKS - waymarks.length, icon: '/open/icons/waymark.svg', name: `Waymark · ${isTouch ? 'F' : 'click or F'} to plant` },
-  ], [chud?.ammo, waymarks.length, zone.kind, isTouch])
+  const hotbar = useMemo(() => hotbarEntries(inv, { repeater: chud?.ammo ?? 12 }), [inv, chud?.ammo])
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.code === 'Escape' && panel) { setPanel(null); return }
       if (e.code === 'Tab' && panel?.kind === 'map') { e.preventDefault(); setPanel({ ...panel, view: panel.view === 'ather' ? 'athernyx' : 'ather' }); return }
       if (e.code === 'KeyM') { setPanel(p => p ? null : { kind: 'map', view: 'ather', travel: false }); return }
+      if (e.code === 'KeyI') { setPanel(p => p?.kind === 'bag' ? null : p ? p : { kind: 'bag' }); return }
       if (panel || fade) return
       const n = near.current
       if (e.code === 'KeyE' && n) {
@@ -281,7 +287,9 @@ export default function AtherSlice() {
       if (e.code === 'KeyF') plantHere()
 
       if (e.code === 'KeyL' && n?.kind === 'waymark' && n.own) {
-        const next = lift(waymarks, n.w.id); setWaymarks(next); saveWaymarks(next); setToast('Waymark lifted.')
+        const next = lift(waymarks, n.w.id); setWaymarks(next); saveWaymarks(next)
+        const back = give(getInv(), 'waymark', 1); setInv(back.inv)
+        setToast(back.left ? 'Waymark lifted, but your bag is full: it went back to the fold.' : 'Waymark lifted. It is back in your bag.')
       }
       if (e.code === 'KeyH' && zone.kind === 'wilds') goHome()
     }
@@ -295,6 +303,7 @@ export default function AtherSlice() {
     ...(prompt ? [{ code: 'KeyE', key: 'E', label: prompt.startsWith('E · Gregory') ? 'Gregory' : 'use', near: true }] : []),
     ...(prompt?.includes('L lift') ? [{ code: 'KeyL', key: 'L', label: 'lift', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
+    { code: 'KeyI', key: 'I', label: 'bag' },
     ...(zone.kind === 'wilds' ? [
       { code: 'KeyF', key: 'F', label: 'waymark' },
       { code: 'KeyR', key: 'R', label: 'reload' },
@@ -314,7 +323,7 @@ export default function AtherSlice() {
         {zone.kind === 'wilds' && W && <WildsScene W={W} waymarks={waymarks} />}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
-            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={slot === 0 || isTouch} nodes={nodes} ownerOf={nodeOwner} />
+            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={held === 'repeater'} nodes={nodes} ownerOf={nodeOwner} />
         )}
         {world && (
           <Walker
@@ -365,18 +374,14 @@ export default function AtherSlice() {
       )}
       {panel?.kind === 'map' && (
         <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} here={pos.current}
-          inWilds={zone.kind === 'wilds'} onTravel={travel} tile={TILE} pitstops={pitstops} nodes={nodes} regions={regions} />
+          inWilds={zone.kind === 'wilds'} onTravel={travel} tile={TILE} pitstops={pitstops} nodes={nodes} regions={regions}
+          onClose={() => setPanel(null)} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
+      {panel?.kind === 'bag' && <BagMenu sel={slot} onClose={() => setPanel(null)} isTouch={isTouch} />}
       <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />
       {isTouch && !panel && (
         <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} />
-      )}
-      {isTouch && panel && (
-        <div style={{ position: 'absolute', left: '50%', bottom: 'max(18px, env(safe-area-inset-bottom))', transform: 'translateX(-50%)', display: 'flex', gap: 10, zIndex: 20 }}>
-          {panel.kind === 'map' && <button onClick={() => pressKey('Tab')} style={panelBtn}>Flip map</button>}
-          <button onClick={() => pressKey('Escape')} style={panelBtn}>Close</button>
-        </div>
       )}
       {isTouch && !introSeen && !panel && (
         <div onPointerDown={() => setIntroSeen(true)} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: 16, zIndex: 30, background: 'rgba(5,6,14,0.35)' }}>
@@ -400,7 +405,7 @@ export default function AtherSlice() {
             Click to play<br />
             WASD move · Space jump (again in the air) / climb · Shift slide · E use · M map · Esc release
             <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>
-              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out through a city's door in Athernyx. Gregory, by the threshold, sells the ground under the mist. In the Wilds the Hollows wander: click to shoot, R to reload, walk over grey matter to take it. F plants a waymark, H walks home.
+              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out through a city's door in Athernyx. Gregory, by the threshold, sells the ground under the mist. In the Wilds the Hollows wander: click to shoot, R to reload, walk over grey matter to take it. F plants a waymark, H walks home, I opens your bag.
             </div>
           </div>
         </div>

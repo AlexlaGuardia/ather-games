@@ -26,6 +26,7 @@ import { loadFog, FOG_CELL, type Fog } from '../ather/explored'
 import { waymarksInWorld } from '../ather/waymarks'
 import { allPitstops, loadVisited, FIRST_PITSTOP } from './pitstops'
 import { screenHeading } from '../../voxel3d/map-heading'
+import { HearthFrame, H } from '../../ui/hearth'
 import { HearthMapFrame, MINIMAP_BOX, MINIMAP_BOX_PHONE, type MapBox } from '../../ui/hearth-hud'
 
 /** Metres per plate pixel. The source painting's own scale, so the plate is the Atlas's size (1168 × 784). */
@@ -268,7 +269,7 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
   useEffect(() => {
     const fit = () => {
       const d = window.devicePixelRatio || 1, pw = map.plate.width, ph = map.plate.height
-      const shown = Math.min(window.innerWidth * 0.94, (window.innerHeight * 0.78) * pw / ph)
+      const shown = Math.min(window.innerWidth * 0.86, (window.innerHeight * 0.68) * pw / ph)   // inside the hearth frame's wood + margin
       setDpr(d); setS((shown * d) / pw)
     }
     fit(); window.addEventListener('resize', fit); return () => window.removeEventListener('resize', fit)
@@ -374,10 +375,11 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
     window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true)
   }, [onClose])
   const tab = (on: boolean): React.CSSProperties => ({ padding: '6px 14px', font: '600 11px var(--font-game), system-ui', letterSpacing: '0.2em', textTransform: 'uppercase',
-    borderRadius: 6, border: on ? '1px solid rgba(212,168,67,0.7)' : '1px solid rgba(255,255,255,0.12)', background: on ? 'rgba(212,168,67,0.18)' : 'transparent', color: on ? '#f0d58a' : 'rgba(228,220,255,0.4)' })
+    borderRadius: 999, border: `1px solid ${on ? H.ember : H.rule}`, background: on ? 'rgba(200,100,42,0.16)' : 'rgba(255,250,235,0.5)', color: on ? H.emberLo : H.inkSoft })
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(14,10,6,0.86)', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, maxWidth: '96vw' }}>
+    // ★ The Carved Hearth frame with the red close (Alex 11-15: every menu), around the same parchment map
+    <HearthFrame title="The map" maxWidth={1400} onClose={onClose} fixed dataPanel="continent-map" backdropClass="z-[120]">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '24px 12px 12px' }}>
         <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
           <button type="button" style={{ ...tab(side === 'nyx'), cursor: 'pointer' }} onClick={() => setSide('nyx')}>Athernyx</button>
           <button type="button" style={{ ...tab(side === 'ather'), cursor: 'pointer' }} onClick={() => setSide('ather')}
@@ -385,20 +387,20 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
           {side === 'ather' && (
             // the gate-rune's one return from anywhere: the near end is you, the far end is your own plot's threshold
             // (gates.md 08-12 + 08-15). Waymarks stay display: a waymark as the far end is a keeper-chosen destination, unruled.
-            <button type="button" style={{ ...tab(true), cursor: 'pointer', marginLeft: 10, borderColor: 'rgba(185,168,255,0.7)', background: 'rgba(185,168,255,0.16)', color: '#e4dcff' }}
+            <button type="button" style={{ ...tab(true), cursor: 'pointer', marginLeft: 10, borderColor: H.sky, background: 'rgba(79,118,144,0.14)', color: H.sky }}
               onClick={() => { window.location.href = '/shimmer/open/ather' }} title="Drop a gate-rune where you stand and step through to your plot's threshold.">Step home · your plot</button>
           )}
         </div>
         <div style={{ position: 'relative' }}>
-          <canvas ref={base} data-map="base" onClick={tap} style={{ maxWidth: '94vw', maxHeight: '78vh', width: 'auto', height: 'auto', display: 'block', borderRadius: 8,
+          <canvas ref={base} data-map="base" onClick={tap} style={{ maxWidth: '86vw', maxHeight: '68vh', width: 'auto', height: 'auto', display: 'block', borderRadius: 8,
             border: '3px solid #5a3d22', boxShadow: '0 0 0 1px #c9a86a55, 0 18px 50px rgba(0,0,0,0.6)' }} />
           <canvas ref={marks} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', borderRadius: 8 }} />
         </div>
-        <div style={{ color: 'rgba(240,228,200,0.6)', font: '12px system-ui', textAlign: 'center' }}>
-          <span style={{ color: '#f4e6c0', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{pct.toFixed(side === 'ather' ? 2 : 1)}%</span>{' '}
+        <div style={{ color: H.inkSoft, fontSize: 12, textAlign: 'center' }}>
+          <span style={{ color: H.ink, fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{pct.toFixed(side === 'ather' ? 2 : 1)}%</span>{' '}
           {side === 'ather' ? <>of the Ather walked · tap a waystone to step through · </> : <>of the continent inked · tap a lit door to step through · </>}<span style={{ letterSpacing: '0.18em', textTransform: 'uppercase', fontSize: 10 }}>M / Esc close</span>
         </div>
       </div>
-    </div>
+    </HearthFrame>
   )
 }

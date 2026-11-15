@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { GOODS, NEW_LEDGER, crates, type Contract, type Ledger } from './trade'
 
 const KEY = 'ather:trade:trial-ledger'
+import { HearthFrame, H } from '../ui/hearth'
 const GOLD = '#d4a843'
 
 export function useLedger(): [Ledger, (l: Ledger) => void] {
@@ -17,10 +18,6 @@ export function useLedger(): [Ledger, (l: Ledger) => void] {
   return [l, set]
 }
 
-const panel: React.CSSProperties = {
-  position: 'absolute', left: 16, top: 56, width: 360, maxWidth: 'calc(100vw - 32px)', padding: '16px 18px', borderRadius: 12,
-  background: 'rgba(10,12,18,0.88)', border: `1px solid ${GOLD}44`, color: '#efeadc', font: '13px system-ui, sans-serif', backdropFilter: 'blur(6px)',
-}
 
 export function BoardPanel({ town, contracts, ledger, capacity, onAccept, onAbandon, onClose, msg }: {
   town: string; contracts: Contract[]; ledger: Ledger; capacity: number
@@ -28,16 +25,12 @@ export function BoardPanel({ town, contracts, ledger, capacity, onAccept, onAban
   }) {
   const name = (id: string) => id.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
   return (
-    <div style={panel}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <div>
-          <div style={{ font: '600 11px var(--font-game), system-ui', letterSpacing: '0.3em', color: GOLD }}>ATHER TRADING CO.</div>
-          <div style={{ font: '600 20px var(--font-display), Georgia, serif' }}>{town} board</div>
-        </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#efeadc', opacity: 0.6, cursor: 'pointer', fontSize: 12 }}>E · close</button>
-      </div>
+    // ★ The Carved Hearth frame with the red close (Alex 11-15: every menu)
+    <HearthFrame title={`${town} board`} maxWidth={420} onClose={onClose} fixed dataPanel="trade-board">
+      <div style={{ padding: '26px 16px 14px', fontSize: 13 }}>
+      <div style={{ font: '700 11px system-ui', letterSpacing: '0.24em', color: H.ember }}>ATHER TRADING CO.</div>
       {ledger.active && (
-        <div style={{ margin: '10px 0', padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', fontSize: 12 }}>
+        <div style={{ margin: '10px 0', padding: '8px 10px', borderRadius: 8, background: 'rgba(58,39,22,0.07)', fontSize: 12 }}>
           Holding: {ledger.active.qty} {GOODS[ledger.active.good].name} → {name(ledger.active.to)} ({ledger.active.loaded ? 'loaded' : 'not loaded yet'})
           <button onClick={onAbandon} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#c96b4f', cursor: 'pointer', fontSize: 11 }}>drop it</button>
         </div>
@@ -47,7 +40,7 @@ export function BoardPanel({ town, contracts, ledger, capacity, onAccept, onAban
         {contracts.map(c => {
           const g = GOODS[c.good], fits = crates(c) <= capacity
           return (
-            <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center', padding: '8px 10px', borderRadius: 8, border: `1px solid ${H.rule}`, background: 'rgba(255,250,235,0.5)' }}>
               <div>
                 <div style={{ fontWeight: 600 }}>{c.qty} {g.name} <span style={{ opacity: 0.55, fontWeight: 400 }}>→ {name(c.to)}</span></div>
                 <div style={{ fontSize: 11, opacity: 0.65, marginTop: 2 }}>
@@ -56,16 +49,17 @@ export function BoardPanel({ town, contracts, ledger, capacity, onAccept, onAban
               </div>
               <button disabled={!!ledger.active || !fits} onClick={() => onAccept(c)}
                 style={{ padding: '6px 10px', borderRadius: 6, cursor: ledger.active || !fits ? 'default' : 'pointer', font: '600 11px var(--font-game), system-ui', letterSpacing: '0.1em',
-                  border: `1px solid ${GOLD}`, background: ledger.active || !fits ? 'transparent' : `${GOLD}26`, color: GOLD, opacity: ledger.active || !fits ? 0.4 : 1 }}>
+                  border: `1px solid ${H.ember}`, background: ledger.active || !fits ? 'transparent' : 'rgba(200,100,42,0.14)', color: H.emberLo, opacity: ledger.active || !fits ? 0.4 : 1 }}>
                 {c.pay} M
               </button>
             </div>
           )
         })}
       </div>
-      {msg && <div style={{ marginTop: 8, fontSize: 11, color: '#e7b98a' }}>{msg}</div>}
-      <div style={{ marginTop: 10, fontSize: 11, opacity: 0.5 }}>Load at the pickup and deliver at the drop by stopping there. One contract at a time.</div>
-    </div>
+      {msg && <div style={{ marginTop: 8, fontSize: 11, color: H.rust, fontWeight: 600 }}>{msg}</div>}
+      <div style={{ marginTop: 10, fontSize: 11, opacity: 0.6 }}>Load at the pickup and deliver at the drop by stopping there. One contract at a time.</div>
+      </div>
+    </HearthFrame>
   )
 }
 

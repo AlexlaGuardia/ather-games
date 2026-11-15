@@ -10,6 +10,7 @@ import { BIOME_NAME } from './wilds'
 import { cellOrigin, FOG_CELL, walkedShare, type Fog } from './explored'
 import { drawCloud, ATHER_CLOUD } from '../../ui/map-kit'
 import type { Pitstop } from '../continent/pitstops'
+import { HearthFrame, HearthButton, H } from '../../ui/hearth'
 import { GRID, sqId, ringOf, canBuy, RING_PAGES, GRIMOIRE_SIZE, type Garden } from './plot'
 
 export type Dest =
@@ -21,10 +22,9 @@ export type Dest =
  *  (gates.md 11-14) adds a door per city the keeper has visited; the list comes from continent/pitstops.ts. */
 export const LANDING: Pitstop = { id: 'rune-hold', name: 'Rune Hold', x: 255, z: 53 }
 
-const shell: React.CSSProperties = { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(12,16,20,0.55)' }
-const card: React.CSSProperties = { width: 'min(94vw, 760px)', maxHeight: '92vh', overflow: 'auto', padding: 16, borderRadius: 12, background: 'rgba(24,28,32,0.94)', color: '#eef3f6', font: '13px system-ui, sans-serif' }
-const label: React.CSSProperties = { opacity: 0.55, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase' }
-const title: React.CSSProperties = { font: '600 12px system-ui', letterSpacing: '0.2em', textTransform: 'uppercase' }
+// ★ Both panels wear the Carved Hearth frame with the red close (Alex 11-15: "the menu look as well with a red close
+// button as all menus should have"). Body text is the frame's ink on parchment; the maps stay pictures.
+const label: React.CSSProperties = { color: H.inkSoft, fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase' }
 const pin = (bg: string, size: number): React.CSSProperties => ({
   position: 'absolute', width: size, height: size, margin: -size / 2, borderRadius: size, background: bg,
   boxShadow: '0 0 0 2px rgba(20,24,28,0.75)', border: 0, padding: 0, cursor: 'pointer',
@@ -45,8 +45,9 @@ function FogLayer({ fog, W }: { fog: Fog; W: Wilds }) {
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
 }
 
-export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [] }: {
+export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [], onClose, onFlip }: {
   view: 'ather' | 'athernyx'; travel: boolean; W: Wilds | null; fog: Fog | null; waymarks: Waymark[]
+  onClose: () => void; onFlip: () => void
   here: { x: number; z: number }; inWilds: boolean; onTravel: (d: Dest) => void; tile: string; pitstops: Pitstop[]
   /** Infected nodes still welling on this tile: grey blots, not stops (you walk to a fight). */
   nodes?: { id: string; x: number; z: number }[]
@@ -60,18 +61,18 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
   const stop = (name: string, sub: string, d: Dest, colour: string) => (
     <button key={name} disabled={!travel} onClick={() => go(d)} style={{
       display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 6,
-      border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', color: 'inherit', font: 'inherit', cursor: travel ? 'pointer' : 'default',
+      border: `1px solid ${H.rule}`, background: 'rgba(255,250,235,0.55)', color: H.ink, font: 'inherit', fontWeight: 600, cursor: travel ? 'pointer' : 'default',
     }}>
       <span style={{ width: 9, height: 9, borderRadius: 9, background: colour, flex: 'none' }} />
       <span style={{ flex: 1 }}>{name}<br /><span style={{ opacity: 0.55, fontSize: 11 }}>{sub}</span></span>
     </button>
   )
   return (
-    <div style={shell}>
-      <div style={card}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-          <div style={title}>{view === 'ather' ? 'The fold map · the Ather' : 'The fold map · Athernyx'}</div>
-          <div style={{ ...label, opacity: 0.6 }}>{travel ? 'Click to travel · ' : ''}Tab flips · Esc closes</div>
+    <HearthFrame title={view === 'ather' ? 'The fold map · the Ather' : 'The fold map · Athernyx'} maxWidth={820} onClose={onClose} fixed dataPanel="fold-map">
+      <div style={{ padding: '26px 16px 14px', fontSize: 13 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 10 }}>
+          <div style={label}>{travel ? 'Click a stop to travel · ' : ''}Tab flips · Esc closes</div>
+          <HearthButton small onClick={onFlip}>Flip map</HearthButton>
         </div>
         {view === 'ather' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 200px', gap: 14 }}>
@@ -131,7 +132,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
           </div>
         )}
       </div>
-    </div>
+    </HearthFrame>
   )
 }
 
@@ -140,12 +141,8 @@ export function GregPanel({ garden, onBuy, onClose }: { garden: Garden; onBuy: (
   const size = GRIMOIRE_SIZE(garden.pages)
   const nextRing = RING_PAGES.findIndex(p => garden.pages < p)
   return (
-    <div style={shell}>
-      <div style={{ ...card, width: 'min(94vw, 560px)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-          <div style={title}>Gregory · your ground</div>
-          <button onClick={onClose} style={{ background: 'none', border: 0, color: 'inherit', opacity: 0.6, cursor: 'pointer', font: 'inherit' }}>Esc closes</button>
-        </div>
+    <HearthFrame title="Gregory · your ground" maxWidth={560} onClose={onClose} fixed dataPanel="greg">
+      <div style={{ padding: '26px 16px 14px', fontSize: 13 }}>
         <div style={{ display: 'flex', gap: 18, marginBottom: 12 }}>
           <div><div style={label}>Grey matter</div><span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 16 }}>{garden.grey}</span></div>
           <div><div style={label}>Grimoire</div><span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 16 }}>{garden.pages} / {size}</span> pages</div>
@@ -174,6 +171,6 @@ export function GregPanel({ garden, onBuy, onClose }: { garden: Garden; onBuy: (
           Gold squares are for sale now (number = grey matter). Squares marked with <b>p</b> need that many pages. Hollows in the Wilds drop grey matter.
         </div>
       </div>
-    </div>
+    </HearthFrame>
   )
 }
