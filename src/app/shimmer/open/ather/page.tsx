@@ -271,7 +271,7 @@ export default function AtherSlice() {
 
   const world = useMemo(() => zone.kind === 'plot' ? plotWorld : ww ? terrainWorld(ww.shape) : null, [zone, ww, plotWorld])   // ww.shape reads the live tiles
   // ground cover preview (ground-cover.tsx, ?cover=): nothing on a path, the gate's pad or at Greg's feet
-  const [cover, setCover] = useState<'none' | 'tufts' | 'meadow' | 'lush'>('none')
+  const [cover, setCover] = useState<'none' | 'tufts' | 'meadow' | 'lush'>('meadow')
   useEffect(() => setCover(coverFromUrl()), [])
   const coverSkip = useCallback((x: number, z: number) => (cl.frame.linked && onPath(cl.frame, x, z)) || Math.hypot(x - GATE.x, z - GATE.z) < 5 || Math.hypot(x - GREG.x, z - GREG.z) < 2.5 || Math.hypot(x - THRESHOLD.x, z - THRESHOLD.z) < 2, [cl.frame])
   const ground = useMemo(() => zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : ww ? ww.heightAt : () => 0, [zone, ww, cl.frame])

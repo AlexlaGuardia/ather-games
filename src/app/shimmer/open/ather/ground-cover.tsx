@@ -20,10 +20,12 @@ import { P } from './palette'
 
 export type Cover = 'none' | 'tufts' | 'meadow' | 'lush'
 export const COVERS: Cover[] = ['none', 'tufts', 'meadow', 'lush']
+/** ★ Alex 11-15, shown the four: "that looks pretty good" (on the meadow recommendation) → meadow ships by default;
+ *  ?cover= stays as a dev override (none / tufts / meadow / lush). */
 export function coverFromUrl(): Cover {
-  if (typeof window === 'undefined') return 'none'
+  if (typeof window === 'undefined') return 'meadow'
   const q = new URLSearchParams(location.search).get('cover') as Cover | null
-  return q && COVERS.includes(q) ? q : 'none'
+  return q && COVERS.includes(q) ? q : 'meadow'
 }
 export const COVER_R = 46
 const CELL = 3, MAX = 4200, RELAY = 5
