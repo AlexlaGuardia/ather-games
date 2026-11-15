@@ -1,0 +1,26 @@
+{
+ "name": "w-1_-4",
+ "cell": 4.0,
+ "nx": 251,
+ "nz": 251,
+ "sizeX": 1000.0,
+ "sizeZ": 1000.0,
+ "waterY": 0.0,
+ "source": {
+  "x0": 670,
+  "y0": 20,
+  "x1": 770,
+  "y1": 120,
+  "mPerPx": 10.0
+ },
+ "biomes": {
+  "water": 57880,
+  "shore": 199,
+  "meadow": 4303,
+  "woods": 0,
+  "rock": 118
+ },
+ "tx": -1,
+ "ty": -4,
+ "note": "Ather state of the continent, cut from one continent-wide pass (export_wilds_all.py); tiles meet."
+}

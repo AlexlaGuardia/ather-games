@@ -14,11 +14,13 @@
   "mPerPx": 10.0
  },
  "biomes": {
-  "water": 2213,
-  "shore": 537,
-  "meadow": 21607,
-  "woods": 38134,
-  "rock": 9
+  "water": 2172,
+  "shore": 478,
+  "meadow": 21711,
+  "woods": 38139,
+  "rock": 0
  },
- "note": "Ather state of the continent tile; no roads, no places (world/ather.md 09-07)."
+ "tx": 0,
+ "ty": 0,
+ "note": "Ather state of the continent, cut from one continent-wide pass (export_wilds_all.py); tiles meet."
 }

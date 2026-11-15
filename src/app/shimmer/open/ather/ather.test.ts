@@ -15,6 +15,7 @@ import { placeNodes, nodeAdjacency, ownerOf, nodeRegions, polyArea, NODE_CLEAR_O
 import { advance, clearAt, freshSpread, infectedIds, SPREAD } from './spread'
 import { readGarden, gardenText } from './garden-snapshot'
 import { clusterFrame, clusterGround, wallsWithLane, mateWalls, onSeg, QV, D, MIDDLE_R } from './cluster'
+import { makeWorld, stream, tileOf, TILE_M, SEA_FLOOR, type TileIndex } from './wilds-world'
 import { atherPlatePixels, ATHER_HUE, plotPlatePixels, PLOT_MPP } from './plate'
 import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
 import { canPlant, plant, lift, reachedBiomes, waymarksInWorld, TILE_CENTRE, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
@@ -502,5 +503,45 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   ok(readGarden('nope') === null && readGarden(JSON.stringify({ v: 1, owned: Array(82).fill('1,1') })) === null, 'garden: junk or an oversized garden got through')
 }
 
-if (fails.length) { console.error(`ather: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
-console.log(`ather: ${pass}/0`)
+// ── the Wilds, streamed (Alex 11-15) ───────────────────────────────────────────────────────────────────────────
+const worldDone = (async () => {
+  const index = JSON.parse(readFileSync(DIR + 'tiles.json', 'utf8')) as TileIndex
+  const loadFs = async (name: string) => {
+    const m = JSON.parse(readFileSync(DIR + name + '.json', 'utf8')) as WildsMeta
+    const b = readFileSync(DIR + name + '.bin'), bio = readFileSync(DIR + name + '.biome')
+    return parseWilds(m, new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)), new Uint8Array(bio))
+  }
+  ok(index.tiles.length > 40 && index.tiles.some(t => t.name === 'first-wilds' && t.tx === 0 && t.ty === 0), 'world: the index lost the anchor tile or most of the continent')
+  // the index's nodes for the anchor tile are exactly what placeNodes says on the live tile
+  const anchor = index.tiles.find(t => t.name === 'first-wilds')!
+  ok(JSON.stringify(anchor.nodes.map(n => n.id)) === JSON.stringify(placeNodes(W, 'first-wilds', GREG_WAYMARK).map(n => n.id)), 'world: the node index disagrees with placeNodes on the anchor tile')
+  const w = makeWorld(index)
+  // pick a pair of neighbouring land tiles to walk across
+  const pair = index.tiles.find(t => index.tiles.some(u => u.tx === t.tx + 1 && u.ty === t.ty) && t.land > 0.5)!
+  const cx = pair.tx * TILE_M + TILE_M / 2, cz = pair.ty * TILE_M   // on the seam between pair and its east neighbour
+  // before streaming: in the index but not loaded = fenced, never a hole you can step into
+  ok(w.heightAt(cx - 5, cz) === -Infinity && w.shape.solids(cx - 6, -1, cz - 1, cx - 4, 1, cz + 1).length > 0, 'world: an unloaded tile is not fenced')
+  ok(w.heightAt(1e6, 1e6) === SEA_FLOOR, 'world: off the index is not sea')
+  await stream(w, cx, cz, loadFs)
+  ok(w.loaded.size >= 2 && w.rev > 0, 'world: streaming loaded nothing')
+  // across the seam the ground is continuous (the tiles share their edge vertices)
+  let jump = 0
+  for (let d = -30; d <= 30; d++) { const z = cz + d * 9; jump = Math.max(jump, Math.abs(w.heightAt(cx - 0.01, z) - w.heightAt(cx + 0.01, z))) }
+  ok(jump < 0.05, `world: the ground steps ${jump.toFixed(2)} m at a tile seam`)
+  // no tile-edge wall stands on an interior seam
+  const seamWalls = w.shape.solids(cx - 1, -10, cz - 50, cx + 1, 50, cz + 50).filter(b => b.y1 - b.y0 > 700)
+  ok(seamWalls.length === 0, 'world: a tile border wall stands on an interior seam')
+  // streaming away drops far tiles and keeps memory bounded
+  await stream(w, cx + 5 * TILE_M, cz, loadFs)
+  ok(w.loaded.size <= 9 && ![...w.loaded.keys()].includes(pair.name), 'world: far tiles were not dropped')
+  ok(tileOf(499, -499).tx === 0 && tileOf(501, 0).tx === 1, 'world: tileOf misplaces a tile edge')
+  // the spread over the whole continent's nodes stays quick (it replays on every load)
+  const all = index.tiles.flatMap(t => t.nodes.map(n => ({ ...n, tile: t.name, x: n.x + t.tx * TILE_M, z: n.z + t.ty * TILE_M })))
+  const t0 = Date.now(); advance(freshSpread(0), all, 60 * GAME_DAY_MS); const ms = Date.now() - t0
+  ok(ms < 1500, `world: 60 game days over ${all.length} nodes took ${ms} ms`)
+})()
+
+worldDone.then(() => {
+  if (fails.length) { console.error(`ather: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
+  console.log(`ather: ${pass}/0`)
+})
