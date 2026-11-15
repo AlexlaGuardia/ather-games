@@ -6,6 +6,8 @@
 import { useEffect, useRef } from 'react'
 import { tileCentreWorld, type Wilds } from './wilds'
 import { atherPlate } from './plate'
+import { composeTilePicture, type Region } from './tile-picture'
+import { TILE_M, type WildsWorld } from './wilds-world'
 import { GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { BIOME_NAME } from './wilds'
 import { cellOrigin, FOG_CELL, walkedShare, type Fog } from './explored'
@@ -31,6 +33,27 @@ const pin = (bg: string, size: number): React.CSSProperties => ({
   boxShadow: '0 0 0 2px rgba(20,24,28,0.75)', border: 0, padding: 0, cursor: 'pointer',
 })
 
+/** The streamed Wilds round you (your tile and its neighbours, 3 km), each tile composed exactly as the minimap does. */
+function AreaView({ world, regionsByTile, cx, cz, fog, tileOff, waymarks }: {
+  world: WildsWorld; regionsByTile: Map<string, Region[]>; cx: number; cz: number; fog: Fog | null; tileOff: { x: number; z: number }; waymarks: Waymark[]
+}) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const c = ref.current; if (!c) return
+    const PER = 500; c.width = PER * 3; c.height = PER * 3
+    const ctx = c.getContext('2d')!
+    ctx.fillStyle = '#5c70b2'; ctx.fillRect(0, 0, c.width, c.height)   // sea where no tile stands (the Atlas Ather water)
+    const tmp = document.createElement('canvas'), tx0 = Math.round(cx / TILE_M), ty0 = Math.round(cz / TILE_M)
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const t = world.at(tx0 + dx, ty0 + dy), W = t && world.loaded.get(t.name)
+      if (!t || !W) continue
+      composeTilePicture(tmp, W, { px: PER, regions: regionsByTile.get(t.name) ?? [], fog, tileOff, ox: t.tx * TILE_M, oz: t.ty * TILE_M, waymarks })
+      ctx.drawImage(tmp, (dx + 1) * PER, (dy + 1) * PER)
+    }
+  }, [world, regionsByTile, cx, cz, fog, fog?.rev, tileOff, waymarks])
+  return <canvas ref={ref} style={{ width: '100%', height: '100%', display: 'block' }} />
+}
+
 /** The Ather's relief plate (plate.ts), the same picture the minimap draws. */
 function PlateView({ W }: { W: Wilds }) {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -53,7 +76,7 @@ function FogLayer({ fog, W }: { fog: Fog; W: Wilds }) {
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
 }
 
-export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [], onClose, onFlip }: {
+export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [], onClose, onFlip, area }: {
   view: 'ather' | 'athernyx'; travel: boolean; W: Wilds | null; fog: Fog | null; waymarks: Waymark[]
   onClose: () => void; onFlip: () => void
   here: { x: number; z: number }; inWilds: boolean; onTravel: (d: Dest) => void; tile: string; pitstops: Pitstop[]
@@ -61,6 +84,10 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
   nodes?: { id: string; x: number; z: number }[]
   /** Each node's country (tile metres) and whether it is still infected: the borders Alex asked for (11-15). */
   regions?: { id: string; poly: { x: number; z: number }[]; infected: boolean }[]
+  /** THE STREAMED WILDS (Alex 11-15): show your tile and its neighbours (3 km round the centre of your tile) instead
+   *  of the one tile. Positions in WORLD coords; the single-tile props above are then unused for the picture. */
+  area?: { world: WildsWorld; regionsByTile: Map<string, Region[]>; cx: number; cz: number; tileOff: { x: number; z: number }
+    nodes: { id: string; x: number; z: number }[]; here: { x: number; z: number } }
 }) {
   const sx = W?.meta.sizeX ?? 1000, sz = W?.meta.sizeZ ?? 1000
   const pct = (x: number, z: number) => ({ left: `${((x + sx / 2) / sx) * 100}%`, top: `${((z + sz / 2) / sz) * 100}%` })
@@ -85,6 +112,25 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
         {view === 'ather' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 200px', gap: 14 }}>
             <div style={{ position: 'relative', aspectRatio: '1', width: 'min(100%, calc(92vh - 120px))', justifySelf: 'center', borderRadius: 8, overflow: 'hidden', background: '#334' }}>
+              {area ? (() => {
+                // 3 km round your tile's centre: every pin in world coords
+                const span = 3 * TILE_M, ap = (x: number, z: number) => ({ left: `${((x - area.cx + span / 2) / span) * 100}%`, top: `${((z - area.cz + span / 2) / span) * 100}%` })
+                const inA = (x: number, z: number) => Math.abs(x - area.cx) < span / 2 && Math.abs(z - area.cz) < span / 2
+                const offOf = (t: string) => area.world.byName.has(t) ? area.world.offsetOf(t) : null
+                return (
+                  <>
+                    <AreaView world={area.world} regionsByTile={area.regionsByTile} cx={area.cx} cz={area.cz} fog={fog} tileOff={area.tileOff} waymarks={waymarks} />
+                    {[{ w: GREG_WAYMARK, col: '#e7c766', t: "Gregory's waymark" }, ...waymarks.map(w => ({ w, col: '#6fd3c4', t: `Your waymark · ${BIOME_NAME[w.biome]}` }))].map(({ w, col, t }) => {
+                      const o = offOf(w.tile); if (!o || !inA(w.x + o.x, w.z + o.z)) return null
+                      return <button key={w.id} title={t} onClick={() => go({ kind: 'waymark', w })} style={{ ...pin(col, 12), ...ap(w.x + o.x, w.z + o.z) }} />
+                    })}
+                    {area.nodes.filter(n => inA(n.x, n.z)).map(n => (
+                      <div key={n.id} title="Infected ground" style={{ position: 'absolute', width: 12, height: 12, margin: -6, borderRadius: 12, background: 'radial-gradient(circle, rgba(70,72,76,0.95) 30%, rgba(70,72,76,0.35) 65%, transparent 72%)', boxShadow: '0 0 0 1px rgba(220,224,228,0.4)', ...ap(n.x, n.z) }} />
+                    ))}
+                    {inWilds && <div style={{ ...pin('#ffffff', 8), cursor: 'default', ...ap(area.here.x, area.here.z) }} />}
+                  </>
+                )
+              })() : (<>
               {W ? <PlateView W={W} /> : <img src={`/open/wilds/${tile}-map.png`} alt="" style={{ width: '100%', height: '100%', imageRendering: 'pixelated', display: 'block' }} />}
               {fog && W && <FogLayer fog={fog} W={W} />}
               <button title="Gregory's waymark" onClick={() => go({ kind: 'waymark', w: GREG_WAYMARK })} style={{ ...pin('#e7c766', 13), ...pct(GREG_WAYMARK.x, GREG_WAYMARK.z) }} />
@@ -104,6 +150,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
                 <div key={n.id} title="Infected ground" style={{ position: 'absolute', width: 22, height: 22, margin: -11, borderRadius: 22, background: 'radial-gradient(circle, rgba(70,72,76,0.95) 30%, rgba(70,72,76,0.35) 65%, transparent 72%)', boxShadow: '0 0 0 1px rgba(220,224,228,0.4)', pointerEvents: 'auto', ...pct(n.x, n.z) }} />
               ))}
               {inWilds && <div style={{ ...pin('#ffffff', 8), cursor: 'default', ...pct(here.x, here.z) }} />}
+              </>)}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={label}>Stops</div>

@@ -11,14 +11,14 @@ import { useEffect, useRef } from 'react'
 import { HearthMapFrame } from '../../ui/hearth-hud'
 import { hudMapBox } from '../../ui/hearth-hud-layer'
 import type { HudSize } from '../../ui/hud-flag'
-import { ATHER_CLOUD, drawCloud, drawKeeper } from '../../ui/map-kit'
+import { drawKeeper } from '../../ui/map-kit'
 import { screenHeading } from '../../voxel3d/map-heading'
-import { FOG_CELL, cellOrigin, type Fog } from './explored'
-import { GREG_WAYMARK, type Waymark } from './waymarks'
+import type { Fog } from './explored'
+import type { Waymark } from './waymarks'
 import { GATE, GREG } from './plot'
-import type { Wilds } from './wilds'
 import { TILE_M, type WildsWorld } from './wilds-world'
-import { atherPlate, plotPlate, PLOT_MPP } from './plate'
+import { plotPlate, PLOT_MPP } from './plate'
+import { composeTilePicture } from './tile-picture'
 import type { CompassPose } from '../shared/game-hud'
 import type { Frame } from './cluster'
 
@@ -59,30 +59,8 @@ export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waym
       if (sigs.current.get(name) === sig && comps.current.has(name)) continue
       sigs.current.set(name, sig)
       const c = comps.current.get(name) ?? document.createElement('canvas'); comps.current.set(name, c)
-      c.width = COMP; c.height = COMP
-      const t = world.byName.get(name)!, ox = t.tx * TILE_M, oz = t.ty * TILE_M
-      const ctx = c.getContext('2d')!, sx = W.meta.sizeX, sz = W.meta.sizeZ, k = COMP / sx
-      ctx.imageSmoothingEnabled = true
-      ctx.drawImage(atherPlate(W), 0, 0, COMP, COMP)
-      const P = (x: number, z: number): [number, number] => [(x + sx / 2) * k, (z + sz / 2) * (COMP / sz)]
-      const regions = regionsByTile.get(name) ?? []
-      if (regions.length > 1) for (const r of regions) {
-        ctx.beginPath(); r.poly.forEach((p, i) => { const [x, y] = P(p.x, p.z); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y) }); ctx.closePath()
-        ctx.fillStyle = r.infected ? 'rgba(70,72,78,0.32)' : 'rgba(159,210,122,0.12)'; ctx.fill()
-        ctx.setLineDash(r.infected ? [10, 7] : []); ctx.lineWidth = 3
-        ctx.strokeStyle = r.infected ? 'rgba(235,238,242,0.9)' : 'rgba(159,210,122,0.85)'; ctx.stroke()
-      }
-      ctx.setLineDash([])
-      if (fog) {
-        const x0 = tileOff.x + ox - sx / 2, z0 = tileOff.z + oz - sz / 2, cellPx = COMP / (sx / FOG_CELL)
-        drawCloud(ctx, fog, cellPx, -((x0 - cellOrigin.x) / FOG_CELL) * cellPx, -((z0 - cellOrigin.z) / FOG_CELL) * cellPx, ATHER_CLOUD)
-      }
-      const pin = (x: number, z: number, col: string, r: number) => {
-        const [px, py] = P(x, z); ctx.fillStyle = col; ctx.strokeStyle = '#1a1410'; ctx.lineWidth = 2.5
-        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-      }
-      if (name === GREG_WAYMARK.tile) pin(GREG_WAYMARK.x, GREG_WAYMARK.z, '#e7c766', 9)
-      for (const w of waymarks) if (w.tile === name) pin(w.x, w.z, '#6fd3c4', 8)
+      const t = world.byName.get(name)!
+      composeTilePicture(c, W, { px: COMP, regions: regionsByTile.get(name) ?? [], fog, tileOff, ox: t.tx * TILE_M, oz: t.ty * TILE_M, waymarks })
     }
     for (const n of [...comps.current.keys()]) if (!keep.has(n)) { comps.current.delete(n); sigs.current.delete(n) }
     ver.current++
