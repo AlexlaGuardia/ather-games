@@ -51,9 +51,10 @@ export const WAVES: [number, number][] = [[4, 0], [4, 2]]
 const rnd = (c: Combat) => { c.seed = (c.seed * 1664525 + 1013904223) >>> 0; return c.seed / 4294967296 }
 
 export function wakeChampion(c: Combat, T: Terrain, n: WildsNode): Champion {
+  const bar = (c.dormant?.[n.id] ?? 0) as 0 | 1 | 2   // a champion that went back under resumes on the bar it reached
   const ch: Champion = {
     nodeId: n.id, nx: n.x, nz: n.z, x: n.x, y: T.heightAt(n.x, n.z), z: n.z, yaw: 0,
-    bar: 0, hp: CHAMP.barHp, state: 'rise', t: CHAMP.rise, attack: null, queue: [], ax: 0, az: 1, hitDone: false, hitFlash: 0, sink: 1,
+    bar, hp: CHAMP.barHp, state: 'rise', t: CHAMP.rise, attack: null, queue: [], ax: 0, az: 1, hitDone: false, hitFlash: 0, sink: 1,
   }
   c.champ = ch
   c.events.push({ kind: 'champ-wake', nodeId: n.id })
@@ -145,6 +146,9 @@ export function stepChampion(c: Combat, T: Terrain, feet: { x: number; y: number
       if (hd > 0.5) { ch.x += (hx / hd) * CHAMP.walk * 2 * dt; ch.z += (hz / hd) * CHAMP.walk * 2 * dt; ch.yaw = Math.atan2(hx, hz) }
       ch.hp = Math.min(CHAMP.barHp, ch.hp + 40 * dt)
       if (hd <= 0.5 && fromNode < CHAMP.leash - 10 && c.keeper.hp > 0) { ch.state = 'idle'; ch.t = 0.5 }
+      // home with nobody near: it sinks back under (prod 11-15: one stuck at home blocked every other node from waking,
+      // since only one champion is up at a time). It remembers the bar it reached; broken bars stay broken.
+      else if (hd <= 0.5 && fromNode > CHAMP.leash) { (c.dormant ??= {})[ch.nodeId] = ch.bar; c.champ = undefined; return }
       break
     }
     case 'idle': {

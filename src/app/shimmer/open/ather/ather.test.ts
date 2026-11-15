@@ -409,9 +409,14 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   shoot(wc, eye); step(wc, far, 0.6)
   ok(wc.hollows.length >= 3 && wc.hollows.length === WAVES[0][0] + WAVES[0][1] && wc.champ!.bar === 1 && wc.champ!.state === 'submerge', 'champ: the first break did not summon its wave and sink')
   // leash: walk away and it goes home, healing the bar it is on
-  const hc = newCombat(19); const hh = wakeChampion(hc, F, node); hh.state = 'idle'; hh.sink = 0; hh.hp = 40; hh.bar = 1
-  step(hc, { x: 0, y: 0, z: CHAMP.leash + 20 }, 6)
+  const hc = newCombat(19); const hh = wakeChampion(hc, F, node); hh.state = 'idle'; hh.sink = 0; hh.hp = 40; hh.bar = 1; hh.x = 8   // off its node, so it is still walking home when we look
+  step(hc, { x: 0, y: 0, z: CHAMP.leash + 20 }, 1.5)
   ok(hc.champ!.state === 'home' && hc.champ!.hp > 40 && hc.champ!.bar === 1, 'champ: the leash did not send it home or heal its bar')
+  // home with nobody near: it goes back under (prod 11-15: one stuck at home blocked every other node), remembering its bar
+  const dc = newCombat(23); const dh = wakeChampion(dc, F, node); dh.state = 'idle'; dh.sink = 0; dh.bar = 1; dh.x = 3; dh.z = 0
+  step(dc, { x: 0, y: 0, z: CHAMP.leash + 30 }, 12)
+  ok(!dc.champ && dc.dormant?.[node.id] === 1, 'champ: a champion home with nobody near never went back under (or forgot its bar)')
+  ok(wakeChampion(dc, F, node).bar === 1, 'champ: woken again, it did not resume on the bar it had reached')
 }
 
 if (fails.length) { console.error(`ather: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

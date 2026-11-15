@@ -67,6 +67,8 @@ export interface Combat {
   clock?: number
   /** The node's champion, when one is up (champion.ts). */
   champ?: Champion
+  /** Champions that went back under, by node: the bar each had reached. */
+  dormant?: Record<string, number>
   /** Events this step, for the scene (sounds, flashes) and the page (grey matter, death). */
   events: CombatEvent[]
 }

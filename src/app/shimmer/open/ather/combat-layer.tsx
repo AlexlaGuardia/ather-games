@@ -17,6 +17,8 @@ export interface CombatHud {
   champ: { bar: number; hp: number; barHp: number; bars: number; open: boolean } | null
 }
 
+/** Seconds after the layer goes active before a champion may wake (the camera catches up to the walker). */
+const SETTLE = 1.5
 const EYE = 1.62   // locomotion eye height over the feet (approx; damage only needs the feet)
 
 /** One Hollow: goop with no colour of its own (design-briefs/hollows.md): diffuse dead flat grey, specular high so
@@ -198,6 +200,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const p = useMemo(() => new THREE.Vector3(), []), fwd = useMemo(() => new THREE.Vector3(0, 0, 1), [])
 
   const nodesRef = useRef(nodes); nodesRef.current = nodes
+  const settled = useRef(0)
+  useEffect(() => { if (!active) settled.current = 0 }, [active])
   const armedRef = useRef(armed); armedRef.current = armed
   const ownerRef = useRef(ownerOf); ownerRef.current = ownerOf
   const spent = useRef(new Set<string>())   // cleared this visit: never re-woken before the page drops it
@@ -223,8 +227,11 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     const dt = Math.min(rawDt, 1 / 20), C = c.current
     const feet = { x: camera.position.x, y: camera.position.y - EYE, z: camera.position.z }
     popT.current -= dt
-    // a champion rises out of an infected node when the keeper comes close
-    if (!C.champ && C.keeper.hp > 0) for (const n of nodesRef.current) {
+    // a champion rises out of an infected node when the keeper comes close, once they have SETTLED: for the first
+    // frames after an arrival the camera still holds the last zone's spot (prod 11-15: the plot's threshold (0,10) sits
+    // 22 m from the Wilds' centre node, and every arrival woke it from 600 m away)
+    settled.current += dt
+    if (!C.champ && C.keeper.hp > 0 && settled.current > SETTLE) for (const n of nodesRef.current) {
       if (!spent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < WAKE_R) { wakeChampion(C, T, n); break }
     }
     if (popT.current <= 0) {
