@@ -111,6 +111,25 @@ const PARTS: Record<CaveProp['kind'], Part[]> = {
     { o: [0, 2.2, 0], s: [2.2, 0.12, 0.12], col: '#3a3a3a' }, { o: [0, 0.8, 0], s: [2.2, 0.12, 0.12], col: '#3a3a3a' },
   ],
   bollard: [{ o: [0, 0.5, 0], s: [0.35, 1.0, 0.35], col: '#8f8a80' }, { o: [0, 1.02, 0], s: [0.4, 0.06, 0.4], col: '#ffcf8a', glow: true }],
+  // THE GUN SHOP: the rack is its frame (the guns on it, painted by class, are gun-range.tsx's, so one can be taken);
+  // the counter is the firing line; a target is its post (the plate swings, so gun-range draws it); the backstop is
+  // a wall of sandbags and timber where the lane ends.
+  rack: [
+    { o: [0, 1.1, -0.15], s: [1.5, 2.2, 0.12], col: '#5d4128' },
+    { o: [0, 0.08, 0], s: [1.5, 0.16, 0.5], col: '#4a3422' },
+    { o: [-0.68, 1.1, 0], s: [0.1, 2.2, 0.36], col: '#4a3422' }, { o: [0.68, 1.1, 0], s: [0.1, 2.2, 0.36], col: '#4a3422' },
+    { o: [0, 0.72, 0.02], s: [1.3, 0.06, 0.3], col: '#7a5636' }, { o: [0, 1.32, 0.02], s: [1.3, 0.06, 0.3], col: '#7a5636' },
+    { o: [0, 1.92, 0.02], s: [1.3, 0.06, 0.3], col: '#7a5636' },
+  ],
+  counter: [
+    { o: [0, 0.5, 0], s: [6.2, 1.0, 0.7], col: '#6b4a30' }, { o: [0, 1.02, 0], s: [6.4, 0.06, 0.8], col: '#8a6a48' },
+    { o: [-3.0, 1.7, 0], s: [0.12, 1.4, 0.12], col: '#4a3422' }, { o: [3.0, 1.7, 0], s: [0.12, 1.4, 0.12], col: '#4a3422' },
+  ],
+  target: [{ o: [0, 0.4, -0.12], s: [0.12, 0.8, 0.12], col: '#4a3422' }, { o: [0, 0.04, -0.12], s: [0.7, 0.08, 0.5], col: '#3a2a1c' }],
+  backstop: [
+    { o: [0, 0.45, 0], s: [6.8, 0.9, 1.2], col: '#8c7a56' }, { o: [0, 1.3, 0.1], s: [6.6, 0.8, 1.0], col: '#7f6e4c' },
+    { o: [0, 2.6, -0.4], s: [7.0, 1.8, 0.3], col: '#4a3422' },
+  ],
 }
 
 export function CavernView({ cave, R }: { cave: Cavern; R: Region }) {
