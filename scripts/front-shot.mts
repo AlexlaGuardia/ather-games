@@ -17,6 +17,13 @@ await p.waitForFunction(() => !!(window as any).__drive?.state, { timeout: 24000
 const sq = meta.network!.junctions.find(j=>j.kind==='square'&&j.place===TOWN)!
 await p.evaluate((x,z)=>(window as any).__drive.tp(x,z,0,0), sq.x, sq.z); await wait(15000)
 for (const id of process.argv.slice(2)) {
+  if (id === 'docks' && pl.port?.piers.length) {
+    // Gale Haven's Low Docks from out on the water, looking back at the piers and the town above them
+    const pr = pl.port.piers[0], cx = pr.x + Math.cos(pr.yaw) * 60 + Math.sin(pr.yaw) * 18, cz = pr.z + Math.sin(pr.yaw) * 60 - Math.cos(pr.yaw) * 18
+    await p.evaluate((x,z)=>(window as any).__drive.tp(x,z,0,0), pr.x - Math.cos(pr.yaw) * 20, pr.z - Math.sin(pr.yaw) * 20); await wait(12000)
+    await p.evaluate(q=>(window as any).__drive.shot(q), [cx, 9, cz, pr.x, 6, pr.z]); await wait(5000)
+    await p.screenshot({ path: '/tmp/front-docks.png' }); console.log('shot docks'); continue
+  }
   if (id.startsWith('board:')) {
     // a town's name board from the road, as an arriving driver sees it: board:<place id>
     const pid = id.slice(6), j = meta.places.findIndex(q => q.id === pid), tp = planTown(R, meta.places[j], j), bd = tp.boards?.[0]

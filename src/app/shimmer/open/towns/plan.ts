@@ -23,6 +23,7 @@
 // Concept shots Alex judged 11-15 (tools/art/gen_towns.py): Rune Hold 2, Citadel 3, Ashfeld 3, village 1.
 
 import { nearestRoad, nearPad, drivable, type Region, type RegionPlace } from '../region'
+import { galeHavenPort, type Port } from './gale-haven'
 import { stampCore, inCore, CORE_YAW, runeHoldStation, inStation, stationToWorld, STATION_TOWN_DOOR, type CoreTransform, type StationSite } from './rune-hold-core'
 
 export interface Lane { pts: [number, number, number][]; width: number }
@@ -46,7 +47,7 @@ export interface Building {
   /** the storefront it is, when it is one (play3d FRONTS ids) */
   front?: string
 }
-export interface TownPlan { place: string; r: number; lanes: Lane[]; buildings: Building[]; /** authored paving cells (1 m), with the bearing they are laid at */ paving?: { pts: [number, number][]; yaw: number }; /** Rune Hold's Travelers Station field (play3d's StationScene, placed) */ station?: StationSite; /** walks: paved paths drawn like lanes but not part of the street net (the way to the Station) */ walks?: Lane[]; /** Citadel's heritage wall: a ring round the old city the capital has grown past (geography.md › THE TOWNS IN 1672) */ wall?: { x: number; z: number; r: number }; /** town-name boards where a road comes into town: at the roadside, facing the arriving traffic */ boards?: { x: number; z: number; y: number; yaw: number; name: string }[] }
+export interface TownPlan { place: string; r: number; lanes: Lane[]; buildings: Building[]; /** authored paving cells (1 m), with the bearing they are laid at */ paving?: { pts: [number, number][]; yaw: number }; /** Rune Hold's Travelers Station field (play3d's StationScene, placed) */ station?: StationSite; /** walks: paved paths drawn like lanes but not part of the street net (the way to the Station) */ walks?: Lane[]; /** Gale Haven's port: docks, cranes, the Wet Market, the Sky Port's mooring towers (gale-haven.ts) */ port?: Port; /** Citadel's heritage wall: a ring round the old city the capital has grown past (geography.md › THE TOWNS IN 1672) */ wall?: { x: number; z: number; r: number }; /** town-name boards where a road comes into town: at the roadside, facing the arriving traffic */ boards?: { x: number; z: number; y: number; yaw: number; name: string }[] }
 
 /** how far a town reaches, by its kind on the Atlas */
 export function townRadius(p: RegionPlace): number {
@@ -186,9 +187,12 @@ export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
     }
   }
   let wallR = 0
+  // Gale Haven's port claims its ground before the houses do (the towers, the cranes, the market stalls)
+  if (p.id === 'gale-haven') plan.port = galeHavenPort(R, p.x, p.z, r)
+  const inPort = (x: number, z: number) => !!plan.port && plan.port.keepOut.some(k => Math.hypot(k.x - x, k.z - z) < k.r)
   const onWall = (x: number, z: number) => wallR > 0 && Math.abs(Math.hypot(x - p.x, z - p.z) - wallR) < 4.5
   // lanes cross the wall (its gaps are where they pass); only buildings keep off its band
-  const coreAt = (x: number, z: number, wallToo = true) => (wallToo && onWall(x, z)) || !!core && (inCore(core, x, z) || (!!plan.station && inStation(plan.station, x, z)) || (!!plan.walks && plan.walks.some(w => distToLine(w.pts, x, z) < 4)))
+  const coreAt = (x: number, z: number, wallToo = true) => (wallToo && (onWall(x, z) || inPort(x, z))) || !!core && (inCore(core, x, z) || (!!plan.station && inStation(plan.station, x, z)) || (!!plan.walks && plan.walks.some(w => distToLine(w.pts, x, z) < 4)))
 
   // ── CITADEL (Magii + Alex 11-15, world/geography.md › THE TOWNS IN 1672): restored and OPEN. The GRAND EXCHANGE
   // stands at the centre, on the square, across it from where the road comes in. The old walls stand as HERITAGE

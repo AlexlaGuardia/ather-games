@@ -151,6 +151,19 @@ if (cit.wall) for (const b of cit.buildings) for (const [x, z] of corners(b)) if
 ok(straddle === 0, `buildings in the heritage wall's band: ${straddle}`)
 ok(cit.buildings.some(b => cit.wall && Math.hypot(b.x - cit.wall.x, b.z - cit.wall.z) > cit.wall.r + 10), 'the city has grown past its wall')
 
+// ── Gale Haven (geography.md › THE TOWNS IN 1672): the Low Docks run out into the water, the Sky Port is a forest of
+// mooring towers on the high ground, and no house stands on the port's ground
+const gh = byId.get('gale-haven')!, port = gh.port
+ok(!!port && port.piers.length >= 3, `Gale Haven has piers: ${port?.piers.length}`)
+ok(!!port && port.piers.every(pr => R.heightAt(pr.x + Math.cos(pr.yaw) * pr.len, pr.z + Math.sin(pr.yaw) * pr.len) < 1.5), 'every pier ends in the water')
+ok(!!port && port.towers.length >= 8, `the Sky Port's mooring-tower forest: ${port?.towers.length} towers`)
+const ghY = (q: { y: number }) => q.y
+const houseMid = gh.buildings.map(b => b.y1).sort((a, b) => a - b)[Math.floor(gh.buildings.length / 2)]
+ok(!!port && port.towers.every(t => ghY(t) > houseMid), 'the towers stand above the town (the highest tier)')
+let inPortGround = 0
+if (port) for (const b of gh.buildings) for (const [x, z] of corners(b)) if (port.keepOut.some(k => Math.hypot(k.x - x, k.z - z) < k.r - 0.5)) inPortGround++
+ok(inPortGround === 0, `houses on the port's ground: ${inPortGround}`)
+
 // ── deterministic: the same map plans the same towns
 const again = planTowns(R)
 ok(JSON.stringify(again.map(p => p.buildings.length)) === JSON.stringify(plans.map(p => p.buildings.length)), 'planning is deterministic')

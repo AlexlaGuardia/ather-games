@@ -13,7 +13,8 @@ import type { Region } from '../region'
 import { planTown, townRadius, FLOOR_H, type TownPlan, type Building } from './plan'
 import { dayProgress, daylight } from '../../engine/day-cycle'
 import { FRONTS } from '../../play3d/rune-hold-look'
-import { StationScene } from '../../play3d/StationScene'
+import { StationScene, ShipHull } from '../../play3d/StationScene'
+import type { Port } from './gale-haven'
 import { STATION_COLS, STATION_ROWS, STATION } from '../../play3d/station-field'
 import type { StationSite } from './rune-hold-core'
 import { nearestRoad } from '../region'
@@ -290,6 +291,58 @@ function HeritageWall({ R, w, lanes }: { R: Region; w: { x: number; z: number; r
   )
 }
 
+// ── GALE HAVEN'S PORT (gale-haven.ts): timber piers out into the sea with a moored hull each, cargo cranes on the quay,
+// the Wet Market's striped stalls, and up on the high ground the Sky Port, a forest of stone mooring towers with a
+// skyship (play3d's blockout hull, no sails, lift-runes glowing under it) riding at the platform of every other one.
+const STALL = ['#b8452f', '#2f6f8a', '#d8a13a', '#3f7a3a']
+function GalePort({ port }: { port: Port }) {
+  return (
+    <>
+      {port.piers.map((p, i) => (
+        <group key={`p${i}`} position={[p.x, 0, p.z]} rotation={[0, -p.yaw, 0]}>
+          <mesh position={[p.len / 2, p.y, 0]}><boxGeometry args={[p.len, 0.4, 4]} /><meshLambertMaterial color="#7a5a3a" /></mesh>
+          {Array.from({ length: Math.floor(p.len / 4) }, (_, k) => [-1.8, 1.8].map(sd => (
+            <mesh key={`${k}${sd}`} position={[2 + k * 4, p.y / 2 - 1.5, sd]}><boxGeometry args={[0.35, p.y + 3, 0.35]} /><meshLambertMaterial color="#4f3a26" /></mesh>
+          )))}
+          {/* a merchant hull moored along the pier's flank */}
+          <group position={[p.len * 0.6, 0.3, 4.6]}>
+            <mesh><boxGeometry args={[14, 2.2, 4]} /><meshLambertMaterial color="#5b3f2a" flatShading /></mesh>
+            <mesh position={[-2, 1.8, 0]}><boxGeometry args={[4, 1.6, 3]} /><meshLambertMaterial color="#cdb894" flatShading /></mesh>
+          </group>
+        </group>
+      ))}
+      {port.cranes.map((c, i) => (
+        <group key={`c${i}`} position={[c.x, c.y, c.z]} rotation={[0, -c.yaw, 0]}>
+          <mesh position={[0, 6, 0]}><boxGeometry args={[0.7, 12, 0.7]} /><meshLambertMaterial color="#5a4330" /></mesh>
+          <mesh position={[4.5, 11.6, 0]}><boxGeometry args={[10, 0.5, 0.5]} /><meshLambertMaterial color="#5a4330" /></mesh>
+          <mesh position={[9, 8.5, 0]}><boxGeometry args={[0.06, 6, 0.06]} /><meshBasicMaterial color="#222" /></mesh>
+          <mesh position={[9, 5.2, 0]}><boxGeometry args={[1.6, 1.2, 1.6]} /><meshLambertMaterial color="#8a6a44" /></mesh>
+        </group>
+      ))}
+      {port.stalls.map((s, i) => (
+        <group key={`s${i}`} position={[s.x, s.y, s.z]} rotation={[0, -s.yaw, 0]}>
+          {[[-1.3, -1.1], [1.3, -1.1], [-1.3, 1.1], [1.3, 1.1]].map(([x, z], k) => <mesh key={k} position={[x, 1.1, z]}><boxGeometry args={[0.12, 2.2, 0.12]} /><meshLambertMaterial color="#4a3322" /></mesh>)}
+          <mesh position={[0, 2.35, 0]} rotation={[0.18, 0, 0]}><boxGeometry args={[3.0, 0.12, 2.6]} /><meshLambertMaterial color={STALL[s.c]} /></mesh>
+          <mesh position={[0, 0.85, 0.6]}><boxGeometry args={[2.4, 0.15, 1.0]} /><meshLambertMaterial color="#8a6a44" /></mesh>
+        </group>
+      ))}
+      {port.towers.map((t, i) => (
+        <group key={`t${i}`} position={[t.x, t.y, t.z]}>
+          <mesh position={[0, t.h / 2, 0]}><cylinderGeometry args={[1.6, 2.6, t.h, 6]} /><meshLambertMaterial color="#e2dccd" flatShading /></mesh>
+          <mesh position={[0, t.h + 0.4, 0]}><cylinderGeometry args={[5, 5, 0.8, 12]} /><meshLambertMaterial color="#cfc6b2" flatShading /></mesh>
+          <mesh position={[0, t.h + 2.2, 0]}><cylinderGeometry args={[0.4, 0.4, 3.6, 8]} /><meshLambertMaterial color="#b9ad95" /></mesh>
+          <mesh position={[0, t.h + 4.3, 0]}><sphereGeometry args={[0.6, 10, 8]} /><meshBasicMaterial color="#ffd77a" toneMapped={false} /></mesh>
+          {t.ship && (
+            <group position={[Math.cos(t.shipYaw) * 10, t.h - 1.5, Math.sin(t.shipYaw) * 10]} rotation={[0, -t.shipYaw, 0]}>
+              <ShipHull cx={0} cz={0} w={6} len={15} lift={0} struts={false} />
+            </group>
+          )}
+        </group>
+      ))}
+    </>
+  )
+}
+
 export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<THREE.Vector3> }) {
   const cache = useRef(new Map<number, TownPlan>())
   const [shown, setShown] = useState<TownPlan[]>([])
@@ -371,6 +424,7 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
       {parts.filter(q => q.b.front).map(q => <FrontSign key={`${q.b.front}`} b={q.b} />)}
       {shown.flatMap(pl => (pl.boards ?? []).map((b, i) => <NameBoard key={`${pl.place}-${i}`} b={b} />))}
       {shown.filter(pl => pl.wall).map(pl => <HeritageWall key={pl.place} R={R} w={pl.wall!} lanes={pl.lanes} />)}
+      {shown.filter(pl => pl.port).map(pl => <GalePort key={pl.place} port={pl.port!} />)}
       {shown.filter(pl => pl.station).map(pl => <StationField key={pl.place} s={pl.station!} />)}
       {R.meta.places.filter(p => p.name).map(p => (
         <mesh key={p.id} position={[p.x, R.heightAt(p.x, p.z) + 45, p.z]}>
