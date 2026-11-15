@@ -26,7 +26,7 @@ import {
 import { PlotScene } from './plot-scene'
 import { ClusterScene } from './cluster-scene'
 import { ClusterPanel, useCluster } from './cluster-panel'
-import { clusterGround, wallsWithLane, mateWalls } from './cluster'
+import { clusterGround, wallsWithLane, mateWalls, onSeg } from './cluster'
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
@@ -146,6 +146,7 @@ export default function AtherSlice() {
   // GARDEN CLUSTERS (cluster.ts, Alex 11-15): alone, the plot as ever; linked, the lane cuts my mist, and the bridges,
   // the shared ground and my mates' plots (fenced by their own mist) become ground
   const cl = useCluster(garden.owned)
+  const clusterRef = useRef(cl.frame); clusterRef.current = cl.frame
   const plotWorld = useMemo(() => terrainWorld(cl.frame.linked
     ? plotShape(owned, [...wallsWithLane(owned, cl.frame), ...mateWalls(cl.frame)], (x, z) => clusterGround(cl.frame, x, z))
     : plotShape(owned)), [owned, cl.frame])
@@ -295,7 +296,14 @@ export default function AtherSlice() {
       setPrompt(p)
       let where = 'your plot'
       if (zone.kind === 'wilds' && ww) { const g = groundRef.current(lc.px, lc.pz); where = BIOME_NAME[ww.biomeAt(lc.px, lc.pz)] + (g ? ` · ${g}` : '') }
-      else { const s = squareAt(lc.px, lc.pz); if (!s) where = 'the edge' }
+      else if (!squareAt(lc.px, lc.pz)) {
+        // off your own grid: in a linked cluster that is somewhere real (a friend's plot, the shared ground, a bridge)
+        const f = clusterRef.current, onMate = f.linked ? f.mates.find(m => Number.isFinite(plotHeightAt(lc.px - m.x, lc.pz - m.z))) : undefined
+        where = onMate ? `${onMate.name}'s plot`
+          : f.middle && Math.hypot(lc.px - f.middle.x, lc.pz - f.middle.z) < f.middle.r ? 'the shared ground'
+          : f.linked && f.bridges.some(b => onSeg(b, lc.px, lc.pz)) ? 'a bridge'
+          : f.lane && onSeg(f.lane, lc.px, lc.pz) ? 'your lane' : 'the edge'
+      }
       setHud({ verb: verbOf(lc), where })
     }
   }, [zone, waymarks, ww, fog, tileOff, streamAt])
