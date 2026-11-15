@@ -14,6 +14,7 @@
 // ★ PURE. No react, no three. The scene layer feeds it the keeper's eye and aim, and draws what it returns.
 
 import { canFire, spreadDeg, bloomAfterShot, bloomAfterRest, weaponDef, type WeaponDef } from '../../engine/weapons'
+import { stepChampion, hitChampion, CHAMP, type Champion } from './champion'
 
 export interface Terrain {
   heightAt: (x: number, z: number) => number
@@ -34,7 +35,7 @@ export interface Hollow {
   hitThisLunge: boolean
 }
 /** A floater's spit: slow enough to see coming and side-step. */
-export interface Spit { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number }
+export interface Spit { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg?: number }
 export interface Round { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg: number; crit: number }
 export interface Drop { id: number; x: number; y: number; z: number; amount: number; age: number }
 
@@ -64,6 +65,8 @@ export interface Combat {
   keeper: Keeper; gun: WeaponDef
   nextId: number; seed: number
   clock?: number
+  /** The node's champion, when one is up (champion.ts). */
+  champ?: Champion
   /** Events this step, for the scene (sounds, flashes) and the page (grey matter, death). */
   events: CombatEvent[]
 }
@@ -73,6 +76,9 @@ export type CombatEvent =
   | { kind: 'pickup'; amount: number }
   | { kind: 'fired' }
   | { kind: 'down' }
+  | { kind: 'champ-wake'; nodeId: string }
+  | { kind: 'champ-break'; nodeId: string; bar: number }
+  | { kind: 'champ-down'; nodeId: string }
 
 export function newCombat(seed = 1, gunId = 'repeater'): Combat {
   const gun = weaponDef(gunId)!
@@ -160,6 +166,13 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     const ox = r.x, oy = r.y, oz = r.z
     r.x += r.vx * dt; r.y += r.vy * dt; r.z += r.vz * dt; r.life -= dt
     if (r.y < T.heightAt(r.x, r.z)) { r.life = 0; continue }
+    const ch = c.champ
+    if (ch && Math.hypot(ch.x - r.x, ch.z - r.z) < 4) {
+      const head = segDist2(ox, oy, oz, r.x, r.y, r.z, ch.x, ch.y + CHAMP.headY, ch.z) < CHAMP.headR * CHAMP.headR
+      if (head || segDist2(ox, oy, oz, r.x, r.y, r.z, ch.x, ch.y + CHAMP.bodyY, ch.z) < CHAMP.bodyR * CHAMP.bodyR * 1.6) {
+        r.life = 0; hitChampion(c, T, ch, head, r.dmg, r.crit); continue
+      }
+    }
     let best: { h: Hollow; head: boolean } | null = null
     for (const h of c.hollows) {
       if (h.hp <= 0 || Math.hypot(h.x - r.x, h.z - r.z) > 6) continue
@@ -236,14 +249,17 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     if (d > 0.001 && d < min) { const p = (min - d) / 2 / d; A.x -= dx * p; A.z -= dz * p; B.x += dx * p; B.z += dz * p }
   }
 
+  stepChampion(c, T, feet, dt)
+
   // spits
   for (const p of c.spits) {
     p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= 2.5 * dt; p.life -= dt
     if (p.y < T.heightAt(p.x, p.z)) { p.life = 0; continue }
     const bx = p.x - feet.x, bz = p.z - feet.z, by = p.y - (feet.y + 0.9)
     if (k.hp > 0 && bx * bx + bz * bz < (FLOATER.spitR + 0.35) ** 2 && Math.abs(by) < 1.0) {
-      p.life = 0; k.hp = Math.max(0, k.hp - FLOATER.damage); k.sinceHurt = 0
-      c.events.push({ kind: 'hurt', amount: FLOATER.damage })
+      const dmg = p.dmg ?? FLOATER.damage
+      p.life = 0; k.hp = Math.max(0, k.hp - dmg); k.sinceHurt = 0
+      c.events.push({ kind: 'hurt', amount: dmg })
       if (k.hp <= 0) c.events.push({ kind: 'down' })
     }
   }
@@ -303,5 +319,5 @@ const performanceSafeNow = (c: Combat) => (c.clock = (c.clock ?? 0))
 /** After the fold returns a downed keeper home: full health, a full clip, the Wilds' crowd forgets them. */
 export function revive(c: Combat) {
   c.keeper.hp = c.keeper.maxHp; c.keeper.sinceHurt = 99; c.keeper.ammo = c.gun.clip; c.keeper.reloading = 0
-  c.hollows = []; c.rounds = []; c.spits = []
+  c.hollows = []; c.rounds = []; c.spits = []; c.champ = undefined
 }

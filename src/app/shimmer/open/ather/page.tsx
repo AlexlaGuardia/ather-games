@@ -32,6 +32,7 @@ import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WA
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud } from './combat-layer'
 import type { CombatEvent, Terrain } from './combat'
+import { placeNodes, isInfected, clearNode, loadNodes, saveNodes, type NodeLedger } from './nodes'
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey } from '../shared/touch'
 
@@ -66,8 +67,9 @@ export default function AtherSlice() {
   const [chud, setChud] = useState<CombatHud | null>(null)
   const [pitstops, setPitstops] = useState<Pitstop[]>([LANDING])
   const [reviveKey, setReviveKey] = useState(0)
+  const [nodeLedger, setNodeLedger] = useState<NodeLedger>({})
 
-  useEffect(() => { setWaymarks(loadWaymarks()); setGarden(loadGarden()); setFog(loadFog()) }, [])
+  useEffect(() => { setWaymarks(loadWaymarks()); setGarden(loadGarden()); setFog(loadFog()); setNodeLedger(loadNodes()) }, [])
   // the Hallway's city doors: the ones the keeper has unlocked by visiting (hub's continent/pitstops.ts)
   useEffect(() => {
     fetch('/open/continent.json').then(r => r.json()).then(m => setPitstops(pitstopsUnlocked(m.places as PlaceLike[])))
@@ -109,11 +111,20 @@ export default function AtherSlice() {
     heightAt: W.heightAt,
     walkable: (x, z) => walkableIn(W, x, z),
   } : null, [W])
+  // infected nodes on this tile: placed from the land, filtered by the ledger (a cleared node holds for its grace)
+  const allNodes = useMemo(() => W ? placeNodes(W, TILE, GREG_WAYMARK) : [], [W])
+  const nodes = useMemo(() => { const now = Date.now(); return allNodes.filter(n => isInfected(n.id, nodeLedger, now)) }, [allNodes, nodeLedger])
   const gardenRef = useRef(garden); gardenRef.current = garden
   const onCombat = useCallback((evs: CombatEvent[]) => {
     let got = 0
     for (const e of evs) {
       if (e.kind === 'pickup') got += e.amount
+      if (e.kind === 'champ-wake') setToast('Something heaves up out of the grey.')
+      if (e.kind === 'champ-break') setToast(e.bar === 0 ? 'It sinks into the ooze, and more come crawling out.' : 'It sinks again. When it rises it moves wrong, wild.')
+      if (e.kind === 'champ-down') {
+        setToast('The grey thins here. For now.')
+        setNodeLedger(L => { const n = clearNode(L, e.nodeId, Date.now()); saveNodes(n); return n })
+      }
       if (e.kind === 'down') {
         setToast('The Hollows dragged you under. The fold caught you and set you down at home.')
         setTimeout(() => setReviveKey(k => k + 1), 400)
@@ -252,7 +263,7 @@ export default function AtherSlice() {
         {zone.kind === 'wilds' && W && <WildsScene W={W} waymarks={waymarks} />}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
-            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={setChud} reviveKey={reviveKey} />
+            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={setChud} reviveKey={reviveKey} nodes={nodes} />
         )}
         {world && (
           <Walker
@@ -278,6 +289,21 @@ export default function AtherSlice() {
         return (
           <>
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', boxShadow: `inset 0 0 ${120 + hurt * 80}px rgba(70,74,80,${(hurt * 0.75 + (1 - chud.hp / chud.maxHp) * 0.35).toFixed(3)})` }} />
+            {chud.champ && (
+              <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: isTouch ? 64 : 16, width: 'min(420px, 62vw)', pointerEvents: 'none', color: '#eef3f6', textAlign: 'center', font: '600 11px system-ui', letterSpacing: '0.24em', textShadow: '0 1px 2px rgba(0,0,0,0.7)' }}>
+                HOLLOW
+                <div style={{ display: 'flex', gap: 4, marginTop: 4, opacity: chud.champ.open ? 1 : 0.45 }}>
+                  {Array.from({ length: chud.champ.bars }, (_, k) => {
+                    const ch = chud.champ!, f = k < ch.bar ? 0 : k > ch.bar ? 1 : Math.max(0, ch.hp / ch.barHp)
+                    return (
+                      <div key={k} style={{ flex: 1, height: 9, borderRadius: 3, background: 'rgba(12,16,20,0.65)', outline: '1px solid rgba(238,243,246,0.35)', overflow: 'hidden' }}>
+                        <div style={{ width: `${f * 100}%`, height: '100%', background: '#d9dcdf', transition: 'width 0.12s' }} />
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
             {hit && <div style={{ position: 'absolute', left: '50%', top: '50%', width: 18, height: 18, margin: -9, border: '2px solid rgba(255,255,255,0.9)', transform: 'rotate(45deg)', borderRadius: 2, pointerEvents: 'none' }} />}
             <div style={{ position: 'absolute', left: 12, ...(isTouch ? { top: 62, width: 160 } : { bottom: 14, width: 220 }), pointerEvents: 'none', color: '#eef3f6', font: '11px system-ui', letterSpacing: '0.1em' }}>
               <div style={{ height: 8, borderRadius: 4, background: 'rgba(12,16,20,0.6)', overflow: 'hidden' }}>
@@ -298,7 +324,7 @@ export default function AtherSlice() {
       )}
       {panel?.kind === 'map' && (
         <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} here={pos.current}
-          inWilds={zone.kind === 'wilds'} onTravel={travel} tile={TILE} pitstops={pitstops} />
+          inWilds={zone.kind === 'wilds'} onTravel={travel} tile={TILE} pitstops={pitstops} nodes={nodes} />
       )}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
       <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />

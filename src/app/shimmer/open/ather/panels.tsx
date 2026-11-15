@@ -45,9 +45,11 @@ function FogLayer({ fog, W }: { fog: Fog; W: Wilds }) {
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
 }
 
-export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops }: {
+export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops, nodes = [] }: {
   view: 'ather' | 'athernyx'; travel: boolean; W: Wilds | null; fog: Fog | null; waymarks: Waymark[]
   here: { x: number; z: number }; inWilds: boolean; onTravel: (d: Dest) => void; tile: string; pitstops: Pitstop[]
+  /** Infected nodes still welling on this tile: grey blots, not stops (you walk to a fight). */
+  nodes?: { id: string; x: number; z: number }[]
 }) {
   const sx = W?.meta.sizeX ?? 1000, sz = W?.meta.sizeZ ?? 1000
   const pct = (x: number, z: number) => ({ left: `${((x + sx / 2) / sx) * 100}%`, top: `${((z + sz / 2) / sz) * 100}%` })
@@ -77,6 +79,9 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
               <button title="Gregory's waymark" onClick={() => go({ kind: 'waymark', w: GREG_WAYMARK })} style={{ ...pin('#e7c766', 13), ...pct(GREG_WAYMARK.x, GREG_WAYMARK.z) }} />
               {waymarks.filter(w => w.tile === tile).map(w => (
                 <button key={w.id} title={`Your waymark · ${BIOME_NAME[w.biome]}`} onClick={() => go({ kind: 'waymark', w })} style={{ ...pin('#6fd3c4', 13), ...pct(w.x, w.z) }} />
+              ))}
+              {nodes.map(n => (
+                <div key={n.id} title="Infected ground" style={{ position: 'absolute', width: 22, height: 22, margin: -11, borderRadius: 22, background: 'radial-gradient(circle, rgba(70,72,76,0.95) 30%, rgba(70,72,76,0.35) 65%, transparent 72%)', boxShadow: '0 0 0 1px rgba(220,224,228,0.4)', pointerEvents: 'auto', ...pct(n.x, n.z) }} />
               ))}
               {inWilds && <div style={{ ...pin('#ffffff', 8), cursor: 'default', ...pct(here.x, here.z) }} />}
             </div>

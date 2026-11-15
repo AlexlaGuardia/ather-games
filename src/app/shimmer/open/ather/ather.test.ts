@@ -10,6 +10,8 @@ import {
   squareAt, squareCentre, ringOf, sqId, canBuy, mistWalls,
 } from './plot'
 import { newCombat, stepCombat, spawnHollow, fire, populate, KEEPER_HP, SHAMBLER, BODY_Y } from './combat'
+import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVES, PANIC_MIN_WINDUP } from './champion'
+import { placeNodes, isInfected, clearNode, GRACE_MS, NODE_CLEAR_OF } from './nodes'
 import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
 import { canPlant, plant, lift, reachedBiomes, waymarksInWorld, TILE_CENTRE, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
 
@@ -259,6 +261,93 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   populate(e, T, g.x, g.z, 7, { x: g.x, z: g.z, r: 30 })
   ok(e.hollows.length >= 5, `combat: populate made ${e.hollows.length} strays`)
   ok(e.hollows.every(h2 => Math.hypot(h2.x - g.x, h2.z - g.z) >= 30 && W.biomeAt(h2.x, h2.z) !== BIOME.water), 'combat: a stray spawned in the safe ring or the water')
+}
+
+// ── infected nodes + the champion ─────────────────────────────────────────────────────────────────────────────
+{
+  const g = GREG_WAYMARK
+  const nodes = placeNodes(W, 'first-wilds', g)
+  ok(nodes.length >= 2, `nodes: only ${nodes.length} placed on a three-country tile`)
+  ok(new Set(nodes.map(n => n.biome)).size === nodes.length, 'nodes: two nodes in one biome')
+  ok(nodes.every(n => W.biomeAt(n.x, n.z) === n.biome && walkableIn(W, n.x, n.z, 1.2)), 'nodes: a node off its biome or on unwalkable ground')
+  ok(nodes.every(n => Math.hypot(n.x - g.x, n.z - g.z) >= NODE_CLEAR_OF), 'nodes: a node inside the safe distance of Greg\'s waymark')
+  ok(JSON.stringify(placeNodes(W, 'first-wilds', g)) === JSON.stringify(nodes), 'nodes: placement is not deterministic')
+  const now = 1_000_000_000_000
+  let L = {}
+  ok(isInfected(nodes[0].id, L, now), 'nodes: a fresh node is not infected')
+  L = clearNode(L, nodes[0].id, now)
+  ok(!isInfected(nodes[0].id, L, now + GRACE_MS - 1), 'nodes: a cleared node wells up inside its grace')
+  ok(isInfected(nodes[0].id, L, now + GRACE_MS + 1), 'nodes: a cleared node never wells up again')
+
+  // the fight, on flat open ground so only the rules are under test
+  const F: { heightAt: (x: number, z: number) => number; walkable: (x: number, z: number) => boolean } = { heightAt: () => 0, walkable: () => true }
+  const node = { id: 't:2', tile: 't', biome: BIOME.meadow, x: 0, z: 0 }
+  const step = (c: ReturnType<typeof newCombat>, feet: { x: number; y: number; z: number }, secs: number, stop?: () => boolean) => {
+    const evs: string[] = []
+    for (let t = 0; t < secs; t += 1 / 60) { stepCombat(c, F, feet, 1 / 60); for (const e of c.events) evs.push(e.kind); if (stop?.()) break }
+    return evs
+  }
+  const shoot = (c: ReturnType<typeof newCombat>, eye: { x: number; y: number; z: number }) => {
+    const ch = c.champ!; const tx = ch.x - eye.x, ty = ch.y + CHAMP.bodyY - eye.y, tz = ch.z - eye.z, l = Math.hypot(tx, ty, tz)
+    c.keeper.sinceShot = 99; c.keeper.ammo = 12; c.keeper.reloading = 0; c.keeper.bloom = 0
+    fire(c, eye, { x: tx / l, y: ty / l, z: tz / l })
+  }
+  const c = newCombat(21)
+  const ch = wakeChampion(c, F, node)
+  ok(ch.state === 'rise' && !champVulnerable(ch), 'champ: it should rise invulnerable')
+  // shots while it rises do nothing
+  const far = { x: 0, y: 0, z: 14 }, eye = { x: 0, y: 1.62, z: 14 }
+  shoot(c, eye); step(c, far, 0.5)
+  ok(ch.hp === CHAMP.barHp, 'champ: a round hurt it while it was rising')
+  step(c, far, CHAMP.rise)
+  ok(champVulnerable(ch), 'champ: never finished rising')
+  // the tell comes BEFORE the hit: a lunge at a keeper who never moves
+  const lc = newCombat(3); wakeChampion(lc, F, node); lc.champ!.state = 'idle'; lc.champ!.t = 0
+  const at = { x: 0, y: 0, z: 9 }
+  let toldFirst = false, hurtAt = -1, tellSeen = false
+  for (let t = 0; t < 4 && hurtAt < 0; t += 1 / 60) {
+    stepCombat(lc, F, at, 1 / 60)
+    if (tellOf(lc.champ)) tellSeen = true
+    if (lc.events.some(e => e.kind === 'hurt')) { hurtAt = t; toldFirst = tellSeen }
+  }
+  ok(hurtAt > 0 && toldFirst, 'champ: it hit a keeper without a tell first')
+  // a slam misses a keeper outside its ring
+  const sc = newCombat(4); wakeChampion(sc, F, node); Object.assign(sc.champ!, { state: 'windup', attack: 'slam', t: 0.01, sink: 0 })
+  const out = { x: 0, y: 0, z: 6.5 }   // literal: a constant-relative distance moves with the constant
+  ok(!step(sc, out, 0.2).includes('hurt'), 'champ: a slam hit a keeper standing outside the ring')
+  const sc2 = newCombat(4); wakeChampion(sc2, F, node); Object.assign(sc2.champ!, { state: 'windup', attack: 'slam', t: 0.01, sink: 0 })
+  ok(step(sc2, { x: 0, y: 0, z: 2 }, 0.2).includes('hurt'), 'champ: a slam missed a keeper inside the ring')
+  // combos by bar
+  const pc = newCombat(9); const p0 = wakeChampion(pc, F, node)
+  ok(planCombo(pc, p0, 10).length === 1, 'champ: bar 1 should be one attack at a time')
+  p0.bar = 1; ok([...Array(20)].every(() => planCombo(pc, p0, 10).length === 2), 'champ: bar 2 should be two-attack combos')
+  p0.bar = 2
+  const panic = [...Array(60)].map(() => planCombo(pc, p0, 10))
+  ok(new Set(panic.map(q => q.join())).size >= 6, 'champ: panic is not random enough')
+  ok((['slam', 'lunge', 'volley'] as const).every(a => windupOf(p0, a) >= PANIC_MIN_WINDUP && windupOf(p0, a) < CHAMP[a].windup), 'champ: a panic windup is untelegraphed or not faster')
+  // three bars, a wave per break, a chunk at the end (the keeper is out of reach so it cannot fight back; a test of the bars)
+  const bc = newCombat(13); const b = wakeChampion(bc, F, node); b.state = 'idle'; b.sink = 0
+  const evs: string[] = []
+  let guard = 0
+  while (bc.champ && guard++ < 4000) {
+    const cur = bc.champ
+    if (!champVulnerable(cur)) { evs.push(...step(bc, far, 0.25)); bc.hollows = []; continue }
+    cur.state = 'recover'; cur.t = 9; cur.x = 0; cur.z = 0
+    shoot(bc, eye); evs.push(...step(bc, far, 0.5)); bc.hollows = bc.hollows.filter(h => h.state === 'wander' && false)
+  }
+  ok(evs.filter(e => e === 'champ-break').length === 2, `champ: ${evs.filter(e => e === 'champ-break').length} breaks (want 2)`)
+  ok(evs.includes('champ-down') && !bc.champ, 'champ: three bars never put it down')
+  ok(bc.drops.some(d => d.amount === CHAMP.chunk), 'champ: no grey-matter chunk on the kill')
+  const shots = guard
+  ok(shots > 30 && shots < 200, `champ: ${shots} loop steps to kill (sanity)`)
+  // a break summons the wave it promises
+  const wc = newCombat(17); const wv = wakeChampion(wc, F, node); wv.state = 'recover'; wv.t = 9; wv.sink = 0; wv.hp = 1
+  shoot(wc, eye); step(wc, far, 0.6)
+  ok(wc.hollows.length >= 3 && wc.hollows.length === WAVES[0][0] + WAVES[0][1] && wc.champ!.bar === 1 && wc.champ!.state === 'submerge', 'champ: the first break did not summon its wave and sink')
+  // leash: walk away and it goes home, healing the bar it is on
+  const hc = newCombat(19); const hh = wakeChampion(hc, F, node); hh.state = 'idle'; hh.sink = 0; hh.hp = 40; hh.bar = 1
+  step(hc, { x: 0, y: 0, z: CHAMP.leash + 20 }, 6)
+  ok(hc.champ!.state === 'home' && hc.champ!.hp > 40 && hc.champ!.bar === 1, 'champ: the leash did not send it home or heal its bar')
 }
 
 if (fails.length) { console.error(`ather: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
