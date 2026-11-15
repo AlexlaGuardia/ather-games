@@ -103,26 +103,36 @@ function Mist({ owned, pages }: { owned: ReadonlySet<string>; pages: number }) {
   return <>{out}</>
 }
 
-export function PlotScene({ owned, pages }: { owned: ReadonlySet<string>; pages: number }) {
+/** The island alone (ground, grid, underside, threshold, gate, Gregory, mist): your plot, or a cluster-mate's set at
+ *  their place (ather/cluster-scene.tsx). The sky round it is PlotScene's, drawn once. */
+export function PlotIsland({ owned, pages }: { owned: ReadonlySet<string>; pages: number }) {
   const geo = useMemo(plotGeometry, [])
   const lines = useMemo(gridLines, [])
-  const puffs = useMemo(() => Array.from({ length: 34 }, (_, k) => {
-    const a = k * 2.399, r = 130 + (k * 37 % 140)
-    return { x: Math.cos(a) * r, y: -40 + (k * 13 % 16), z: Math.sin(a) * r, s: 9 + (k * 7 % 12) }
-  }), [])
   return (
     <>
       <mesh geometry={geo}><meshLambertMaterial vertexColors flatShading /></mesh>
       <lineSegments geometry={lines}><lineBasicMaterial color="#7f9a55" transparent opacity={0.45} /></lineSegments>
       <mesh position-y={-20} rotation-x={Math.PI}><coneGeometry args={[PLOT_R * 1.05, 34, 12, 2]} /><meshLambertMaterial color={P.under} flatShading /></mesh>
-      <mesh position-y={-56} rotation-x={-Math.PI / 2}><planeGeometry args={[3000, 3000]} /><meshLambertMaterial color="#f3efe6" /></mesh>
-      {puffs.map((p, k) => <mesh key={k} position={[p.x, p.y, p.z]} scale={p.s}><icosahedronGeometry args={[1, 0]} /><meshLambertMaterial color="#fbf8f1" flatShading /></mesh>)}
       <mesh position={[THRESHOLD.x, plotHeightAt(THRESHOLD.x, THRESHOLD.z) + 0.03, THRESHOLD.z]} rotation-x={-Math.PI / 2}>
         <ringGeometry args={[1.1, 1.45, 18]} /><meshBasicMaterial color="#efe0a8" />
       </mesh>
       <Gate />
       <Gregory />
       <Mist owned={owned} pages={pages} />
+    </>
+  )
+}
+
+export function PlotScene({ owned, pages }: { owned: ReadonlySet<string>; pages: number }) {
+  const puffs = useMemo(() => Array.from({ length: 34 }, (_, k) => {
+    const a = k * 2.399, r = 130 + (k * 37 % 140)
+    return { x: Math.cos(a) * r, y: -40 + (k * 13 % 16), z: Math.sin(a) * r, s: 9 + (k * 7 % 12) }
+  }), [])
+  return (
+    <>
+      <PlotIsland owned={owned} pages={pages} />
+      <mesh position-y={-56} rotation-x={-Math.PI / 2}><planeGeometry args={[3000, 3000]} /><meshLambertMaterial color="#f3efe6" /></mesh>
+      {puffs.map((p, k) => <mesh key={k} position={[p.x, p.y, p.z]} scale={p.s}><icosahedronGeometry args={[1, 0]} /><meshLambertMaterial color="#fbf8f1" flatShading /></mesh>)}
     </>
   )
 }
