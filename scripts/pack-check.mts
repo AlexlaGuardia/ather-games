@@ -9,6 +9,8 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const res: Record<string, unknown> = {}
 const p = await b.newPage(); await p.setViewport({ width: 1280, height: 760 })
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e)))
+// a born keeper: an unborn one meets the birth ritual first (birth-gate.tsx), which rightly takes the screen and the keys
+await p.evaluateOnNewDocument(() => { try { if (!localStorage.getItem('ather:shimmer:birthRune')) localStorage.setItem('ather:shimmer:birthRune', 'star') } catch {} })
 await p.goto(`${url}/shimmer/open/continent?hour=13`, { waitUntil: 'load', timeout: 180000 })
 await p.waitForFunction('!!window.__drive && !!window.__range', { timeout: 180000 })
 await sleep(3000); await p.keyboard.press('KeyW'); await sleep(2000)

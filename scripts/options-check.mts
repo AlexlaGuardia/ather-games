@@ -9,6 +9,8 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const res: Record<string, unknown> = {}
 const p = await b.newPage(); await p.setViewport({ width: 1280, height: 760 })
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e)))
+// a born keeper: an unborn one meets the birth ritual first (birth-gate.tsx), which rightly takes the screen and the keys
+await p.evaluateOnNewDocument(() => { try { if (!localStorage.getItem('ather:shimmer:birthRune')) localStorage.setItem('ather:shimmer:birthRune', 'star') } catch {} })
 // ⚠ swiftshader runs these pages at 2-3 fps: POLL for each state, never trust a fixed sleep (they flaked both halves)
 const until = async (f: () => Promise<boolean>, ms = 6000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await f()) return true; await sleep(150) } return false }
 const isOpen = () => p.evaluate(() => !!document.querySelector('[data-panel="options"]'))
