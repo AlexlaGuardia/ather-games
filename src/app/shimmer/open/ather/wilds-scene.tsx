@@ -67,9 +67,10 @@ function TreeKindMesh({ trees, kind }: { trees: Tree[]; kind: TreeKind }) {
       const cut = isPruned(t.id, now), w = L.trunkW, h = L.shape === 'giant' ? 4.2 : 2.8
       p.set(t.x, t.y + h / 2, t.z); s.set(w, h, w); trunk.current!.setMatrixAt(k, m.compose(p, q, s))
       const f = cut ? 0.55 : 1
-      if (L.shape === 'weep') { p.set(t.x, t.y + 1.2 + t.tall * 0.42, t.z); s.set(t.r * 1.15 * f, t.tall * 0.9 * f, t.r * 1.15 * f) }
-      else if (L.shape === 'giant') { p.set(t.x, t.y + h + t.tall * 0.32, t.z); s.set(t.r * 1.1 * f, t.tall * 0.62 * f, t.r * 1.1 * f) }
-      else { p.set(t.x, t.y + 2.4 + t.tall * 0.3, t.z); s.set(t.r * f, t.tall * 0.55 * f, t.r * f) }
+      // a crown's BOTTOM sits at its base height, above the keeper's eye (1.6 m): centre = base + half its height. The
+      // first cut centred round crowns low and their lower half hung to the knee (the camera stood inside a shimmeroak)
+      if (L.shape === 'weep') { const hh = t.tall * 0.45 * f; p.set(t.x, t.y + 1.3 + hh, t.z); s.set(t.r * 1.15 * f, hh * 2, t.r * 1.15 * f) }   // the skirt hangs low on purpose
+      else { const hh = t.tall * (L.shape === 'giant' ? 0.34 : 0.3) * f, base = L.shape === 'giant' ? h - 0.4 : 2.4; p.set(t.x, t.y + base + hh, t.z); s.set(t.r * (L.shape === 'giant' ? 1.1 : 1) * f, hh, t.r * (L.shape === 'giant' ? 1.1 : 1) * f) }
       crown.current!.setMatrixAt(k, m.compose(p, q, s))
       c.set(L.crown).offsetHSL(((k * 0.07) % 0.04) - 0.02, cut ? -0.15 : 0, (((k * 0.11) % 0.08) - 0.04) - (cut ? 0.06 : 0))
       crown.current!.setColorAt(k, c)
