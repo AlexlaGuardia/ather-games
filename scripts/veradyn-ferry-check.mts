@@ -25,9 +25,10 @@ for (const [from, to, label] of [[f.a, f.b, 'out to the isle'], [f.b, f.a, 'back
   // wait for the prompt (the HUD reads the car at < 4 mph near a quay), then press E and poll for the landing
   let prompt = false
   for (let i = 0; i < 40 && !prompt; i++) { prompt = await p.evaluate(() => document.body.innerText.includes('RINNING BOAT') || document.body.innerText.toLowerCase().includes('rinning boat')); if (!prompt) await wait(500) }
-  await p.keyboard.press('KeyE')
+  // swiftshader runs the page at a few fps: a press can land before the prompt's state has settled, so press again
+  // every 8 s until the boat goes (a real player just presses again too)
   let landed = false
-  for (let i = 0; i < 40 && !landed; i++) { const c = await car(); landed = Math.hypot(c.x - to[0], c.z - to[1]) < 25; if (!landed) await wait(500) }
+  for (let i = 0; i < 60 && !landed; i++) { if (i % 16 === 0) await p.keyboard.press('KeyE'); const c = await car(); landed = Math.hypot(c.x - to[0], c.z - to[1]) < 25; if (!landed) await wait(500) }
   const ok = prompt && landed
   if (!ok) fails++
   console.log(`${ok ? 'PASS' : 'FAIL'} ${label}: prompt ${prompt ? 'shown' : 'missing'}, ${landed ? 'landed' : 'did not land'}`)
