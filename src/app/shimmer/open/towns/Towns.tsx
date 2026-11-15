@@ -16,6 +16,7 @@ import { FRONTS } from '../../play3d/rune-hold-look'
 import { StationScene } from '../../play3d/StationScene'
 import { STATION_COLS, STATION_ROWS, STATION } from '../../play3d/station-field'
 import type { StationSite } from './rune-hold-core'
+import { nearestRoad } from '../region'
 
 // ── looks per town, from canon + the concept shots Alex judged 11-15 (tools/art/gen_towns.py). Roman bones
 // (world/athernyx.md): pale stone, terracotta. Unlisted towns take the country default. ──
@@ -146,16 +147,18 @@ function signTexture(name: string) {
 // The kinds are play3d's (FrontKind); the dressing is build (Jin's), from canon's own lines where it has them:
 // the Station is the Roman-bones building of the set (world/athernyx.md: columns, arches) and the smithy town's forge
 // glow and chimney (world/rune-hold.md: "steam rising from smithies", "forge-warmed walls").
+/** fronts that are not Rune Hold's (play3d's FRONTS): the Citadel's Grand Exchange (geography.md › THE TOWNS IN 1672) */
+const OTHER_FRONTS: { id: string; name: string; kind: string }[] = [{ id: 'grand-exchange', name: 'The Grand Exchange', kind: 'exchange' }]
 const AWNING: Partial<Record<string, string>> = { tavern: '#8a2f22', cafe: '#2f6f6a', books: '#2f4f2a', inn: '#6a3f1f' }
 function FrontSign({ b }: { b: Building }) {
-  const f = FRONTS.find(q => q.id === b.front)
+  const f = FRONTS.find(q => q.id === b.front) ?? OTHER_FRONTS.find(q => q.id === b.front)
   const tex = useMemo(() => (f ? signTexture(f.name) : null), [f])
   useEffect(() => () => tex?.dispose(), [tex])
   if (!f || !tex) return null
   // the street face is local +z (plan.ts yaw → rotation.y = π/2 − yaw); everything here hangs off that face
   const ry = Math.PI / 2 - b.yaw, floor = b.y1 + 0.25, H = b.floors * FLOOR_H
   const awning = AWNING[f.kind]
-  const cols = f.kind === 'station' ? Math.max(4, Math.round(b.w / 3)) : 0
+  const cols = f.kind === 'station' || f.kind === 'exchange' ? Math.max(4, Math.round(b.w / 3)) : 0
   return (
     <group position={[b.x, floor, b.z]} rotation={[0, ry, 0]}>
       {/* the board hangs above an awning or a porch lintel, never behind it */}
@@ -180,6 +183,13 @@ function FrontSign({ b }: { b: Building }) {
           <mesh position={[0, 1.1, b.d / 2 + 0.03]}><planeGeometry args={[1.8, 2.0]} /><meshBasicMaterial color="#ff8a3a" toneMapped={false} /></mesh>
           <mesh position={[b.w * 0.3, H + 3.2, -b.d * 0.2]}><boxGeometry args={[1.4, 6.5, 1.4]} /><meshLambertMaterial color="#6f655a" flatShading /></mesh>
         </>
+      )}
+      {f.kind === 'exchange' && (
+        // the Exchange's dome over the hall: gold, the capital's marble and gold (world/geography.md)
+        <group position={[0, H, 0]}>
+          <mesh position={[0, 1.6, 0]}><cylinderGeometry args={[b.d * 0.32, b.d * 0.34, 3.2, 20]} /><meshLambertMaterial color="#e9e0cc" /></mesh>
+          <mesh position={[0, 3.2, 0]}><sphereGeometry args={[b.d * 0.32, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshLambertMaterial color="#d9a83f" /></mesh>
+        </group>
       )}
       {cols > 0 && (
         // the Station's portico: a colonnade along the front under a plain entablature (Roman bones)
@@ -225,6 +235,58 @@ function NameBoard({ b }: { b: { x: number; z: number; y: number; yaw: number; n
       {[-1.7, 1.7].map(x => <mesh key={x} position={[x, 1.3, 0]}><boxGeometry args={[0.18, 2.6, 0.18]} /><meshLambertMaterial color="#4a3322" /></mesh>)}
       <mesh position={[0, 2.1, 0.1]}><planeGeometry args={[3.8, 0.95]} /><meshBasicMaterial map={tex} toneMapped={false} side={THREE.DoubleSide} /></mesh>
     </group>
+  )
+}
+
+// ── CITADEL'S HERITAGE WALL: a ring of pale stone round the old city, broken wherever a street or a lane passes (the
+// city has grown past it; it controls nothing now), towers along it, and a gatehouse arch where the road comes in.
+function HeritageWall({ R, w, lanes }: { R: Region; w: { x: number; z: number; r: number }; lanes: TownPlan['lanes'] }) {
+  const { segs, towers, gates } = useMemo(() => {
+    const segs: { x: number; z: number; y: number; h: number; a: number; len: number }[] = []
+    const towers: { x: number; z: number; y: number }[] = [], gates: { x: number; z: number; y: number; a: number; span: number }[] = []
+    const n = Math.round(2 * Math.PI * w.r / 3), step = 2 * Math.PI / n
+    const near = (x: number, z: number) => {
+      const nr = nearestRoad(R, x, z)
+      if (nr.road && nr.d < nr.road.width / 2 + 2) return 'road'
+      for (const l of lanes) for (const [lx, lz] of l.pts) if (Math.hypot(lx - x, lz - z) < l.width / 2 + 2.5) return 'lane'
+      return R.heightAt(x, z) < 1.5 ? 'water' : null
+    }
+    let lastTower = -99, inRoad = false
+    for (let i = 0; i < n; i++) {
+      const a = i * step, x = w.x + Math.cos(a) * w.r, z = w.z + Math.sin(a) * w.r, hit = near(x, z)
+      if (hit === 'road' && !inRoad) {
+        // a gatehouse: find the road's span along the ring and stand two towers either side with an arch over it
+        let k = i; while (k < i + 12 && near(w.x + Math.cos(k * step) * w.r, w.z + Math.sin(k * step) * w.r) === 'road') k++
+        const am = (i + k - 1) / 2 * step, span = (k - i + 1) * 3
+        gates.push({ x: w.x + Math.cos(am) * w.r, z: w.z + Math.sin(am) * w.r, y: R.heightAt(w.x + Math.cos(am) * w.r, w.z + Math.sin(am) * w.r), a: am, span })
+      }
+      inRoad = hit === 'road'
+      if (hit) continue
+      const y = Math.min(R.heightAt(x, z), R.heightAt(w.x + Math.cos(a + step) * w.r, w.z + Math.sin(a + step) * w.r))
+      segs.push({ x, z, y, h: 9, a, len: 3.15 })
+      if (i - lastTower >= 14) { towers.push({ x, z, y }); lastTower = i }
+    }
+    return { segs, towers, gates }
+  }, [R, w, lanes])
+  const segRef = useRef<THREE.InstancedMesh>(null), towRef = useRef<THREE.InstancedMesh>(null)
+  useEffect(() => {
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3()
+    segs.forEach((g, i) => { e.set(0, -g.a, 0); q.setFromEuler(e); segRef.current!.setMatrixAt(i, m.compose(p.set(g.x, g.y + g.h / 2 - 1, g.z), q, sc.set(3, g.h + 2, g.len))) })
+    towers.forEach((t, i) => towRef.current!.setMatrixAt(i, m.compose(p.set(t.x, t.y + 6, t.z), q.identity(), sc.set(6, 14, 6))))
+    segRef.current!.instanceMatrix.needsUpdate = true; towRef.current!.instanceMatrix.needsUpdate = true
+  }, [segs, towers])
+  return (
+    <>
+      <instancedMesh key={`ws${segs.length}`} ref={segRef} args={[undefined, undefined, Math.max(1, segs.length)]} frustumCulled={false}><boxGeometry /><meshLambertMaterial color="#e2d7bf" flatShading /></instancedMesh>
+      <instancedMesh key={`wt${towers.length}`} ref={towRef} args={[undefined, undefined, Math.max(1, towers.length)]} frustumCulled={false}><cylinderGeometry args={[0.5, 0.55, 1, 10]} /><meshLambertMaterial color="#ddd1b6" flatShading /></instancedMesh>
+      {gates.map((g, i) => (
+        <group key={i} position={[g.x, g.y, g.z]} rotation={[0, -g.a, 0]}>
+          {[-1, 1].map(sd => <mesh key={sd} position={[0, 7, sd * (g.span / 2 + 3)]}><boxGeometry args={[7, 16, 6]} /><meshLambertMaterial color="#e6dcc6" flatShading /></mesh>)}
+          <mesh position={[0, 13, 0]}><boxGeometry args={[6, 4, g.span + 1]} /><meshLambertMaterial color="#e6dcc6" flatShading /></mesh>
+          <mesh position={[3.05, 15.2, 0]} rotation={[0, Math.PI / 2, 0]}><planeGeometry args={[g.span * 0.7, 0.5]} /><meshBasicMaterial color="#d9a83f" /></mesh>
+        </group>
+      ))}
+    </>
   )
 }
 
@@ -308,6 +370,7 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
       <instancedMesh key={`c${n}`} frustumCulled={false} ref={chimneys} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
       {parts.filter(q => q.b.front).map(q => <FrontSign key={`${q.b.front}`} b={q.b} />)}
       {shown.flatMap(pl => (pl.boards ?? []).map((b, i) => <NameBoard key={`${pl.place}-${i}`} b={b} />))}
+      {shown.filter(pl => pl.wall).map(pl => <HeritageWall key={pl.place} R={R} w={pl.wall!} lanes={pl.lanes} />)}
       {shown.filter(pl => pl.station).map(pl => <StationField key={pl.place} s={pl.station!} />)}
       {R.meta.places.filter(p => p.name).map(p => (
         <mesh key={p.id} position={[p.x, R.heightAt(p.x, p.z) + 45, p.z]}>

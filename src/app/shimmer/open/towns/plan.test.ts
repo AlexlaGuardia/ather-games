@@ -139,6 +139,18 @@ for (const pl of plans) for (const b of pl.boards ?? []) {
 ok(boards >= 30, `name boards on the roads into town: ${boards} (want >= 30)`)
 ok(badBoard === 0, `name boards on the road or in water: ${badBoard}`)
 
+// ── Citadel (geography.md › THE TOWNS IN 1672): the Grand Exchange stands on the square, the heritage wall rings the
+// old city, and no building stands in the wall's band (streets pass through its gaps; buildings never straddle it)
+const cit = byId.get('citadel')!
+const exch = cit.buildings.find(b => b.front === 'grand-exchange')
+const csq = meta.network!.junctions.find(j => j.kind === 'square' && j.place === 'citadel')!
+ok(!!exch && Math.hypot(exch.x - csq.x, exch.z - csq.z) < csq.r + 30, 'the Grand Exchange stands on the Citadel square')
+ok(!!cit.wall && cit.wall.r > 100, `Citadel's heritage wall rings the old city (r ${cit.wall?.r})`)
+let straddle = 0
+if (cit.wall) for (const b of cit.buildings) for (const [x, z] of corners(b)) if (Math.abs(Math.hypot(x - cit.wall.x, z - cit.wall.z) - cit.wall.r) < 3) straddle++
+ok(straddle === 0, `buildings in the heritage wall's band: ${straddle}`)
+ok(cit.buildings.some(b => cit.wall && Math.hypot(b.x - cit.wall.x, b.z - cit.wall.z) > cit.wall.r + 10), 'the city has grown past its wall')
+
 // ── deterministic: the same map plans the same towns
 const again = planTowns(R)
 ok(JSON.stringify(again.map(p => p.buildings.length)) === JSON.stringify(plans.map(p => p.buildings.length)), 'planning is deterministic')

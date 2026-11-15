@@ -7,13 +7,14 @@ import { planTown } from '../src/app/shimmer/open/towns/plan'
 const meta = JSON.parse(readFileSync('public/open/continent.json','utf8')) as RegionMeta
 const raw = gunzipSync(readFileSync('public/open/continent.bin.gz'))
 const R = makeRegion(meta, new Int16Array(raw.buffer, raw.byteOffset, raw.byteLength/2))
-const i = meta.places.findIndex(p=>p.id==='rune-hold'); const pl = planTown(R, meta.places[i], i)
+const TOWN = process.env.TOWN ?? 'rune-hold'
+const i = meta.places.findIndex(p=>p.id===TOWN); const pl = planTown(R, meta.places[i], i)
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 const b = await puppeteer.launch({ executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox','--disable-dev-shm-usage','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] })
 const p = await b.newPage(); await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune','star')); await p.setViewport({width:1280,height:720})
 await p.goto(`${process.env.URL ?? 'http://localhost:3203'}/shimmer/open/continent?hour=${process.env.HOUR ?? 18}`, { waitUntil:'load', timeout:240000 })
 await p.waitForFunction(() => !!(window as any).__drive?.state, { timeout: 240000 }); await wait(2000); await p.keyboard.press('KeyX')
-const sq = meta.network!.junctions.find(j=>j.kind==='square'&&j.place==='rune-hold')!
+const sq = meta.network!.junctions.find(j=>j.kind==='square'&&j.place===TOWN)!
 await p.evaluate((x,z)=>(window as any).__drive.tp(x,z,0,0), sq.x, sq.z); await wait(15000)
 for (const id of process.argv.slice(2)) {
   if (id.startsWith('board:')) {

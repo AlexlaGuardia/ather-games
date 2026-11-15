@@ -46,7 +46,7 @@ export interface Building {
   /** the storefront it is, when it is one (play3d FRONTS ids) */
   front?: string
 }
-export interface TownPlan { place: string; r: number; lanes: Lane[]; buildings: Building[]; /** authored paving cells (1 m), with the bearing they are laid at */ paving?: { pts: [number, number][]; yaw: number }; /** Rune Hold's Travelers Station field (play3d's StationScene, placed) */ station?: StationSite; /** walks: paved paths drawn like lanes but not part of the street net (the way to the Station) */ walks?: Lane[]; /** town-name boards where a road comes into town: at the roadside, facing the arriving traffic */ boards?: { x: number; z: number; y: number; yaw: number; name: string }[] }
+export interface TownPlan { place: string; r: number; lanes: Lane[]; buildings: Building[]; /** authored paving cells (1 m), with the bearing they are laid at */ paving?: { pts: [number, number][]; yaw: number }; /** Rune Hold's Travelers Station field (play3d's StationScene, placed) */ station?: StationSite; /** walks: paved paths drawn like lanes but not part of the street net (the way to the Station) */ walks?: Lane[]; /** Citadel's heritage wall: a ring round the old city the capital has grown past (geography.md › THE TOWNS IN 1672) */ wall?: { x: number; z: number; r: number }; /** town-name boards where a road comes into town: at the roadside, facing the arriving traffic */ boards?: { x: number; z: number; y: number; yaw: number; name: string }[] }
 
 /** how far a town reaches, by its kind on the Atlas */
 export function townRadius(p: RegionPlace): number {
@@ -185,7 +185,24 @@ export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
       plan.walks = [{ pts, width: 4 }]
     }
   }
-  const coreAt = (x: number, z: number) => !!core && (inCore(core, x, z) || (!!plan.station && inStation(plan.station, x, z)) || (!!plan.walks && plan.walks.some(w => distToLine(w.pts, x, z) < 4)))
+  let wallR = 0
+  const onWall = (x: number, z: number) => wallR > 0 && Math.abs(Math.hypot(x - p.x, z - p.z) - wallR) < 4.5
+  // lanes cross the wall (its gaps are where they pass); only buildings keep off its band
+  const coreAt = (x: number, z: number, wallToo = true) => (wallToo && onWall(x, z)) || !!core && (inCore(core, x, z) || (!!plan.station && inStation(plan.station, x, z)) || (!!plan.walks && plan.walks.some(w => distToLine(w.pts, x, z) < 4)))
+
+  // ── CITADEL (Magii + Alex 11-15, world/geography.md › THE TOWNS IN 1672): restored and OPEN. The GRAND EXCHANGE
+  // stands at the centre, on the square, across it from where the road comes in. The old walls stand as HERITAGE
+  // round the old city and no longer control access: the city has grown past them, so streets run through the gaps.
+  // The ring sits between the third and fourth back-street rings so it has its own band and cuts no building.
+  if (p.id === 'citadel' && sq) {
+    const into = sq.arms.length ? sq.arms[0].ang : 0, a = into + Math.PI
+    const w = 36, d = 26, off = sq.r + 3 + d / 2
+    const ex = { x: sq.x + Math.cos(a) * off, z: sq.z + Math.sin(a) * off, yaw: into, w, d }
+    const g = fits(ex, 1)
+    if (g) keep({ ...ex, floors: 3, y0: g.y0, y1: g.y1, kind: 'hall', rim: 0, v: 0.5, core: true, front: 'grand-exchange' })
+    wallR = sq.r + 3.5 * (big ? 30 : 32)
+    plan.wall = { x: sq.x, z: sq.z, r: wallR }
+  }
 
   // ── a spot (a hut, a shack) is one building on its own ground: try a few spots round the dot until one fits
   if (p.kind === 'spot') {
@@ -218,7 +235,7 @@ export function planTown(R: Region, p: RegionPlace, pi: number): TownPlan {
     return d
   }
   const land = (x: number, z: number) => {
-    if (Math.hypot(x - p.x, z - p.z) > reach(x, z) || coreAt(x, z)) return null
+    if (Math.hypot(x - p.x, z - p.z) > reach(x, z) || coreAt(x, z, false)) return null
     const y = R.heightAt(x, z)
     if (!Number.isFinite(y) || y < 1.5) return null
     const t = R.tunnelAt(x, z); if (t && t.cover < 12) return null
