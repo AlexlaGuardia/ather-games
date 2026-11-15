@@ -26,6 +26,7 @@ import {
 import { PlotScene } from './plot-scene'
 import { ClusterScene } from './cluster-scene'
 import { cycleLook, LookChip } from './ground-look'
+import { GroundCover, coverFromUrl } from './ground-cover'
 import { ClusterPanel, useCluster } from './cluster-panel'
 import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './cluster'
 import { WildsScene } from './wilds-scene'
@@ -269,6 +270,10 @@ export default function AtherSlice() {
   }, [ww, travel])
 
   const world = useMemo(() => zone.kind === 'plot' ? plotWorld : ww ? terrainWorld(ww.shape) : null, [zone, ww, plotWorld])   // ww.shape reads the live tiles
+  // ground cover preview (ground-cover.tsx, ?cover=): nothing on a path, the gate's pad or at Greg's feet
+  const [cover, setCover] = useState<'none' | 'tufts' | 'meadow' | 'lush'>('none')
+  useEffect(() => setCover(coverFromUrl()), [])
+  const coverSkip = useCallback((x: number, z: number) => (cl.frame.linked && onPath(cl.frame, x, z)) || Math.hypot(x - GATE.x, z - GATE.z) < 5 || Math.hypot(x - GREG.x, z - GREG.z) < 2.5 || Math.hypot(x - THRESHOLD.x, z - THRESHOLD.z) < 2, [cl.frame])
   const ground = useMemo(() => zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : ww ? ww.heightAt : () => 0, [zone, ww, cl.frame])
 
   const onTick = useCallback((lc: Loco, _yaw: number, dt: number) => {
@@ -449,6 +454,7 @@ export default function AtherSlice() {
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && ww ? (x, z) => ww.canopyAt(x, z) * 0.7 : undefined} />
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
+        {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} /></group> })}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
