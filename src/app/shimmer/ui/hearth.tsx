@@ -106,7 +106,8 @@ export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, childre
   )
   if (!backdrop) return card
   return (
-    <div className={`${fixed ? 'fixed' : 'absolute'} inset-0 grid place-items-center bg-black/25 backdrop-blur-[3px] pointer-events-auto ${backdropClass}`}
+    // a pinned frame is a modal over the whole screen: it stands above the always-on HUD (z ≤ 34), never under it
+    <div className={`${fixed ? 'fixed' : 'absolute'} ${fixed && !/(^|\s)z-/.test(backdropClass) ? 'z-[60]' : ''} inset-0 grid place-items-center bg-black/25 backdrop-blur-[3px] pointer-events-auto ${backdropClass}`}
          onClick={onClose} onContextMenu={e => e.preventDefault()}>
       {card}
     </div>

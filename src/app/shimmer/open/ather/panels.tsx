@@ -10,7 +10,7 @@ import { composeTilePicture, type Region } from './tile-picture'
 import { TILE_M, type WildsWorld } from './wilds-world'
 import { GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { BIOME_NAME } from './wilds'
-import { cellOrigin, FOG_CELL, walkedShare, type Fog } from './explored'
+import { cellOrigin, FOG_CELL, walkedShare, isRevealed, type Fog } from './explored'
 import { drawCloud, ATHER_CLOUD } from '../../ui/map-kit'
 import type { Pitstop } from '../continent/pitstops'
 import { HearthFrame, HearthButton, H } from '../../ui/hearth'
@@ -124,7 +124,8 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
                       const o = offOf(w.tile); if (!o || !inA(w.x + o.x, w.z + o.z)) return null
                       return <button key={w.id} title={t} onClick={() => go({ kind: 'waymark', w })} style={{ ...pin(col, 12), ...ap(w.x + o.x, w.z + o.z) }} />
                     })}
-                    {area.nodes.filter(n => inA(n.x, n.z)).map(n => (
+                    {/* blots where you have walked, and on the tile you stand in: across 3 km of fresh fog, 200 blots are noise */}
+                    {area.nodes.filter(n => inA(n.x, n.z) && ((fog && isRevealed(fog, n.x + area.tileOff.x, n.z + area.tileOff.z)) || (Math.abs(n.x - area.cx) < TILE_M / 2 && Math.abs(n.z - area.cz) < TILE_M / 2))).map(n => (
                       <div key={n.id} title="Infected ground" style={{ position: 'absolute', width: 12, height: 12, margin: -6, borderRadius: 12, background: 'radial-gradient(circle, rgba(70,72,76,0.95) 30%, rgba(70,72,76,0.35) 65%, transparent 72%)', boxShadow: '0 0 0 1px rgba(220,224,228,0.4)', ...ap(n.x, n.z) }} />
                     ))}
                     {inWilds && <div style={{ ...pin('#ffffff', 8), cursor: 'default', ...ap(area.here.x, area.here.z) }} />}
