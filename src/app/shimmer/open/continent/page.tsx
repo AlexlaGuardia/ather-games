@@ -36,6 +36,7 @@ import { DARTER_STOCK, tuneFromSpec } from '../courser'
 import { buildSpec, type Slot, type Tier } from '../courser-build'
 import { buildCavern, caveRoomAt, type Cavern } from '../cavern'
 import { CavernView } from '../cavern-view'
+import { GROUND, useGroundMaterial, cycleLook, LookChip } from '../ather/ground-look'
 import { GunRange, useGunHud, rangeHolds, rangeFov, rangeLookScale, AIM_CODE } from '../gun-range'
 import { footWorld, tickFoot, exitSpot, canEnter, stepOut, EXIT_MAX_SPEED } from '../on-foot'
 import { eyeY, WALK_SPEED, SPEED_CAP, type LocoState } from '../shared/locomotion'
@@ -60,6 +61,9 @@ const COL = {
   sand: new THREE.Color('#cdb98a'), grass: new THREE.Color('#6f9a45'), grass2: new THREE.Color('#82ab4e'),
   dark: new THREE.Color('#4e7a38'), rock: new THREE.Color('#8b7f70'), high: new THREE.Color('#a9a69a'), bed: new THREE.Color('#5d7f78'),
 }
+/** The ground tile (ather/ground-look.tsx, Alex 11-15: "the tiles + toon is the best of the three"), off the same
+ *  reading as tint: sand by the water, stone where tint paints rock, grass the rest. */
+const groundLayer = (y: number, slope: number) => y < 1.6 ? GROUND.sand : slope > 0.75 ? GROUND.stone : GROUND.grass
 function tint(out: THREE.Color, y: number, slope: number, x: number, z: number) {
   if (y < -0.3) return out.copy(COL.bed)
   if (y < 1.6) return out.copy(COL.sand)
@@ -89,7 +93,7 @@ function chunkGeometry(R: Region, ci: number, cj: number, step: number): THREE.B
   for (let i = i0; i < i1; i += step) is.push(i); is.push(i1)
   for (let j = j0; j < j1; j += step) js.push(j); js.push(j1)
   const W = is.length, H = js.length
-  const pos = new Float32Array((W * H + 2 * (W + H)) * 3), col = new Float32Array(pos.length)
+  const pos = new Float32Array((W * H + 2 * (W + H)) * 3), col = new Float32Array(pos.length), lay = new Float32Array(pos.length / 3)
   const c = new THREE.Color()
   const put = (k: number, i: number, j: number, drop: number) => {
     const x = i * cell - sizeX / 2, z = j * cell - sizeZ / 2, y = R.vertex(i, j)
@@ -98,6 +102,7 @@ function chunkGeometry(R: Region, ci: number, cj: number, step: number): THREE.B
     pos[k * 3] = x; pos[k * 3 + 1] = y - drop; pos[k * 3 + 2] = z
     tint(c, y, Math.hypot(sx, sz), x, z)
     col[k * 3] = c.r; col[k * 3 + 1] = c.g; col[k * 3 + 2] = c.b
+    lay[k] = drop > 0 ? GROUND.soil : groundLayer(y, Math.hypot(sx, sz))
   }
   for (let b = 0; b < H; b++) for (let a = 0; a < W; a++) put(b * W + a, is[a], js[b], 0)
   const idx: number[] = []
@@ -126,6 +131,7 @@ function chunkGeometry(R: Region, ci: number, cj: number, step: number): THREE.B
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.BufferAttribute(pos.subarray(0, k * 3), 3))
   g.setAttribute('color', new THREE.BufferAttribute(col.subarray(0, k * 3), 3))
+  g.setAttribute('aLayer', new THREE.BufferAttribute(lay.subarray(0, k), 1))
   g.setIndex(idx)
   g.computeVertexNormals()
   g.computeBoundingSphere()
@@ -135,12 +141,13 @@ function chunkGeometry(R: Region, ci: number, cj: number, step: number): THREE.B
 /** Streams the land: every 0.4 s each chunk picks a detail from its distance; at most 3 rebuilds a frame. */
 function Terrain({ R, focus }: { R: Region; focus: React.MutableRefObject<THREE.Vector3> }) {
   const group = useRef<THREE.Group>(null)
-  const mat = useMemo(() => new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), [])
+  const mat = useGroundMaterial()   // the shared ground look (tiles + toon by default; K flips it on desktop)
   const chunks = useRef(new Map<string, { mesh: THREE.Mesh; step: number }>())
   const queue = useRef<{ key: string; ci: number; cj: number; step: number; d: number }[]>([])
   const t = useRef(0)
   const nci = Math.ceil((R.meta.nx - 1) / CHUNK), ncj = Math.ceil((R.meta.nz - 1) / CHUNK)
   useEffect(() => () => { for (const c of chunks.current.values()) c.mesh.geometry.dispose() }, [])
+  useEffect(() => { for (const c of chunks.current.values()) c.mesh.material = mat }, [mat])   // a look flip re-dresses built chunks
   useFrame((_, dt) => {
     const g = group.current; if (!g) return
     t.current -= dt
@@ -726,6 +733,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
       if (getBirth() === null) return   // the birth ritual has the keys (its arrows must not roll the courser)
       keys.current.add(e.code)
       if (e.code === 'KeyF' && !e.repeat) seat()
+      if (e.code === 'KeyK' && !e.repeat) cycleLook()   // the ground look (dev, desktop): tiles + toon / toon / flat
       if (e.code === 'KeyR' && !rangeHolds()) { mode.current = 'drive'; loco.current = null; place(safe.current.x, safe.current.z, safe.current.yaw) }
       if (e.code === 'KeyC' && mode.current === 'drive') camMode.current = camMode.current === 'chase' ? 'hood' : 'chase'
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault()
@@ -1211,6 +1219,7 @@ export default function ContinentRide() {
           <Driver R={R} cave={cave} onHud={setHud} focus={focus} tuneRef={tuneRef} ctl={ctl} track={track} />
         </Canvas>
       )}
+      <LookChip />
       <SpeedStreaks frac={hud.frac} />
       {isTouch && started && !showMap && !garage && !board && !ferrying && (
         <TouchControls showFire={!!hud.foot && gunHud.holding} actions={touchActions}

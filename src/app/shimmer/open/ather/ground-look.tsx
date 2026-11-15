@@ -10,7 +10,9 @@
 //           repeat, and TINTED toward the ground's own vertex colour so the Ather keeps its soft palette and the
 //           tile carries texture, not hue.
 // One material per look, shared by every ground mesh (plot, valley, Wilds): a look change is a material swap,
-// never a geometry rebuild. Each ground geometry carries `aLayer` (which tile) per triangle; the flat look ignores it.
+// never a geometry rebuild. Each ground geometry carries `aLayer` (which tile); it is a FLAT varying, so a mesh that
+// shares vertices (the continent's chunks) takes one tile per triangle instead of blending through the indices between.
+// The flat look ignores it.
 
 import { useSyncExternalStore } from 'react'
 import * as THREE from 'three'
@@ -25,15 +27,17 @@ const LAYER_MATS = [MAT.TOPSOIL, MAT.FOREST_LOAM, MAT.PATH, MAT.STONE, MAT.SAND,
 const TILE_PX = 32
 export const TILE_M = 2
 
-// ── the look, as a tiny store (URL ?look= wins, then the last pick on this browser, then flat) ─────────────────
-const KEY = 'ather.look'
-let look: Look = 'flat', shownAt = 0
+// ── the look, as a tiny store (URL ?look= wins, then the last pick on this browser, then TILES) ────────────────
+// ★ Alex 11-15, walking all three: "the tiles + toon is the best of the three" → tiles is the default. K and ?look=
+// stay as a desktop dev toggle (Alex: "the dev options i only use on desktop anyway").
+const KEY = 'ather.look2'   // a new key: a pick saved during the A/B (flat by default then) must not pin anyone to flat
+let look: Look = 'tiles', shownAt = 0
 const subs = new Set<() => void>()
 if (typeof window !== 'undefined') {
   try {
     const q = new URLSearchParams(location.search).get('look') as Look | null
     const saved = localStorage.getItem(KEY) as Look | null
-    look = q && LOOKS.includes(q) ? q : saved && LOOKS.includes(saved) ? saved : 'flat'
+    look = q && LOOKS.includes(q) ? q : saved && LOOKS.includes(saved) ? saved : 'tiles'
   } catch { /* private window */ }
 }
 export function cycleLook(): Look {
@@ -44,7 +48,7 @@ export function cycleLook(): Look {
   return look
 }
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
-export const useLook = () => useSyncExternalStore(subscribe, () => look, () => 'flat' as Look)
+export const useLook = () => useSyncExternalStore(subscribe, () => look, () => 'tiles' as Look)
 const useShownAt = () => useSyncExternalStore(subscribe, () => shownAt, () => 0)
 
 // ── the tiles ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -69,9 +73,9 @@ function groundTiles() {
 
 // ── the material ─────────────────────────────────────────────────────────────────────────────────────────────
 // ⚠ No backticks inside the GLSL (a stray one ships a program that fails to link and draws nothing, light-glsl.ts).
-const V_DECL = '#include <common>\nattribute float aLayer;\nvarying float vLayer;\nvarying vec3 vWPos;\n'
+const V_DECL = '#include <common>\nattribute float aLayer;\nflat varying float vLayer;\nvarying vec3 vWPos;\n'
 const V_BODY = '#include <project_vertex>\nvLayer = aLayer;\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n'
-const F_DECL = '#include <common>\nuniform highp sampler2DArray uTiles;\nuniform float uUseTiles;\nuniform float uToon;\nuniform float uTileM;\nuniform float uTint;\nuniform vec3 uMean[6];\nvarying float vLayer;\nvarying vec3 vWPos;\n'
+const F_DECL = '#include <common>\nuniform highp sampler2DArray uTiles;\nuniform float uUseTiles;\nuniform float uToon;\nuniform float uTileM;\nuniform float uTint;\nuniform vec3 uMean[6];\nflat varying float vLayer;\nvarying vec3 vWPos;\n'
 const F_TILE = [
   '#include <color_fragment>',
   'if (uUseTiles > 0.5) {',
@@ -142,7 +146,7 @@ export const pushLayer = (out: number[], layer: number, verts: number) => { for 
 export function LookChip() {
   const l = useLook(), at = useShownAt()
   if (!at || Date.now() - at > 2400) return null
-  const name = l === 'flat' ? 'flat colour (now)' : l === 'toon' ? 'toon light' : 'tiles + toon light'
+  const name = l === 'flat' ? 'flat colour (old)' : l === 'toon' ? 'toon light' : 'tiles + toon light (default)'
   return (
     <div style={{ position: 'fixed', top: 110, left: '50%', transform: 'translateX(-50%)', zIndex: 70, padding: '8px 16px', borderRadius: 8, background: 'rgba(12,16,20,0.78)', color: '#f4ecd2', font: '600 14px system-ui, sans-serif', letterSpacing: '0.08em', textTransform: 'uppercase', pointerEvents: 'none' }}>
       ground · {name} <span style={{ opacity: 0.6, fontWeight: 400 }}>(K)</span>
