@@ -8,8 +8,9 @@
 //
 // A tree is a node (canon: "walk up to a tree → channel mana → resources drop. Trees don't die — they regrow").
 // ★ PRUNING FROM A DISTANCE (Alex 11-15: "click a tree from about 10 blocks out and use mana to prune a tree from a
-// distance and then the tree could drop a few logs and a small chance for a sapling"): hold the Worn Blade (canon: Greg's
-// tier-0 Forestry focus, "you prune; the light cuts"), click a tree within PRUNE_RANGE, MANA_COST mana channels down the
+// distance and then the tree could drop a few logs and a small chance for a sapling"): with the weapon STOWED
+// (shared/stance.ts) click a tree within PRUNE_RANGE and the Forestry socket's tool works it (engine/tools.ts: Greg's
+// Worn Blade, canon's tier-0 focus, "you prune; the light cuts"), MANA_COST mana channels down the
 // stream (forestry-fx.tsx draws it), and the tree drops 2–4 LOGS and, rarely, a SAPLING. Logs, not planks: the voxel
 // world's 08-13 ruling (tree-node.ts) made a log's whole job to be refined into planks / bark / sap, so the tree pays the
 // raw wood. Sapling odds are SMALL on purpose: tree-node's 35 % is for FELLING (the tree is gone); a pruned tree regrows
@@ -69,6 +70,8 @@ const save = (now = Date.now()) => {
   try { localStorage.setItem(PRUNE_KEY, JSON.stringify(pruned)) } catch { /* private window */ }
 }
 export const forestryLevel = () => skills.forestry.level
+/** The open world's skill set (the HUD's tool sockets read it; addSkillXP mutates it in place, so a ref to it stays live). */
+export const openSkills = () => skills
 /** ms until this tree has regrown, or 0. */
 export const regrowIn = (id: string, now = Date.now()) => Math.max(0, (pruned[id] ?? 0) - now)
 export const isPruned = (id: string, now = Date.now()) => regrowIn(id, now) > 0

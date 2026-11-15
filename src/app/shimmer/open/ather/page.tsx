@@ -45,12 +45,15 @@ import { isTouchOnly, pressKey } from '../shared/touch'
 import { useMenuLock } from '../shared/menu-lock'
 import { BirthGate, useBirthGateUp } from '../birth-gate'
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
-import { useInv, setInv, getInv, hotbarEntries, heldItem } from '../shared/bag'
+import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
+import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, heldOf, litSlot, settle, type Stance } from '../shared/stance'
+import { ensureBasicTools, type EquippedTools } from '../../engine/tools'
+import type { SkillSet } from '../../engine/skills'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take, itemDef } from '../shared/inventory'
-import { prune, pruneCheck, startShake, TREE_NAME, MANA_COST } from './forestry'
+import { prune, pruneCheck, startShake, openSkills, TREE_NAME, MANA_COST } from './forestry'
 import { ForestryFX, type Aim, type ForestryFx } from './forestry-fx'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { AtherMiniMap } from './minimap'
@@ -101,7 +104,12 @@ export default function AtherSlice() {
   // ★ mana is real now: pruning from a distance spends it (forestry.ts › MANA_COST), it refills slowly (build: 1.5/s)
   const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 1.5 })
   const aimRef = useRef<Aim>({ tree: null, dist: Infinity }), fxRef = useRef<ForestryFx | null>(null)
-  const [slot, setSlot] = useState(0)                               // 0 = the Repeater, 1 = a waymark to plant
+  // ★ THE STANCE (shared/stance.ts, Alex 11-15): stowed by default; R draws / swaps / (held) stows; 1-8 / the wheel pick
+  // a hotbar item while not holding a weapon; stowed, a node is worked with the socket's tool
+  const [stance, setStance] = useState<Stance>(STOWED)
+  const stanceRef = useRef(stance); stanceRef.current = stance
+  const [reloadTick, setReloadTick] = useState(0)
+  const toolsRef = useRef<EquippedTools>(ensureBasicTools({})), skillsRef = useRef<SkillSet>(openSkills())
   const onCombatHud = useCallback((h: CombatHud) => { vitalsRef.current = { hp: h.hp, hpMax: h.maxHp, shield: 0, shieldMax: 0 }; setChud(h) }, [])
   const [pitstops, setPitstops] = useState<Pitstop[]>([LANDING])
   const [reviveKey, setReviveKey] = useState(0)
@@ -283,6 +291,7 @@ export default function AtherSlice() {
   const onTick = useCallback((lc: Loco, _yaw: number, dt: number) => {
     pos.current = { x: lc.px, z: lc.pz, grounded: !lc.airborne, swimming: lc.swimming }
     { const m = manaRef.current; if (m.cur < m.max) m.cur = Math.min(m.max, m.cur + m.regen * dt) }   // mana refills (forestry spends it)
+    lc.speedMult = stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1   // hands free, a little quicker on foot
     poseRef.current = { x: lc.px, z: lc.pz, yaw: _yaw }
     let n: Near = null
     if (zone.kind === 'plot') {
@@ -360,15 +369,19 @@ export default function AtherSlice() {
     setWaymarks(next); saveWaymarks(next)
     setToast(`Waymark bound in the ${BIOME_NAME[biome]}. It is a stop on the fold map now.`)
   }, [zone, ww, waymarks])
-  // what you hold is what sits in the selected hotbar slot (the bag, shared/bag.tsx): a waymark plants on click,
-  // the Repeater fires (combat-layer only fires while armed)
+  // what you hold is what the stance says (a drawn gun, a picked hotbar item, or nothing): a waymark plants on click,
+  // the Repeater fires (combat-layer only fires while armed), stowed hands work a node
   const inv = useInv()
-  const held = heldItem(inv, slot)
+  const held = heldOf(stance, inv)
+  useEffect(() => { setStance(st => settle(st, inv)) }, [inv])   // the last waymark planted empties the hand
   const heldRef = useRef(held); heldRef.current = held
-  // ── forestry from a distance (forestry.ts + forestry-fx.tsx): hold the Worn Blade, click a tree within 10 m
+  // ── forestry from a distance (forestry.ts + forestry-fx.tsx): stowed, click (or E) a tree within 10 m; the Forestry
+  //    socket's tool does the work
   const pruneAimed = useCallback(() => {
     const t = aimRef.current.tree
     if (!t || zone.kind !== 'wilds') return
+    if (stanceRef.current.kind !== 'stowed') { setToast('Stow first (hold R): stowed hands use the right tool.'); return }
+    if (!toolsRef.current.forestry) { setToast('You have no Forestry focus.'); return }
     const c = pruneCheck(t.kind, t.id); if (!c.ok) { setToast(c.why); return }
     if (fxRef.current?.busy()) return
     if (manaRef.current.cur < MANA_COST) { setToast(`Not enough mana (${MANA_COST} to prune). It comes back on its own.`); return }
@@ -387,18 +400,40 @@ export default function AtherSlice() {
   const treePrompt = () => {
     const t = aimRef.current.tree
     if (!t || zone.kind !== 'wilds') return null
-    if (heldRef.current !== 'worn_blade') return `${TREE_NAME[t.kind]} · hold the Worn Blade to prune it`
+    if (stanceRef.current.kind !== 'stowed') return `${TREE_NAME[t.kind]} · hold R to stow, then click to prune`
     const c = pruneCheck(t.kind, t.id)
-    return c.ok ? `Click · prune the ${TREE_NAME[t.kind]} (${MANA_COST} mana)` : c.why
+    return c.ok ? `Click or E · prune the ${TREE_NAME[t.kind]} (${MANA_COST} mana)` : c.why
   }
   useEffect(() => {
     const down = (e: MouseEvent) => {
       if (e.button !== 0 || !locked.current || frozen.current) return
       if (held === 'waymark') plantHere()
-      else if (held === 'worn_blade') pruneAimed()
+      else if (stanceRef.current.kind === 'stowed') pruneAimed()   // stowed: the click works the node in front of you
     }
     window.addEventListener('mousedown', down); return () => window.removeEventListener('mousedown', down)
   }, [held, plantHere, pruneAimed])
+  // R: a TAP draws the primary / swaps / reloads, a HOLD (HOLD_MS) stows (shared/stance.ts). Timed off down → up so a
+  // hold stows the moment it qualifies, without waiting for the release.
+  const panelRef = useRef(panel); panelRef.current = panel
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | null = null, held = false
+    const down = (e: KeyboardEvent) => {
+      if (e.code === 'Stow') { setStance(st => holdR(st)); return }   // the phone's stow button (pressKey('Stow'))
+      if (e.code !== 'KeyR' || e.repeat || panelRef.current || frozen.current) return
+      held = false
+      t = setTimeout(() => { held = true; setStance(st => holdR(st)) }, HOLD_MS)
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyR' || !t) return
+      clearTimeout(t); t = null
+      if (held) return
+      const r = tapR(stanceRef.current, getInv())
+      setStance(r.stance)
+      if (r.reload) setReloadTick(n => n + 1)
+    }
+    window.addEventListener('keydown', down); window.addEventListener('keyup', up)
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); if (t) clearTimeout(t) }
+  }, [])
   // compass marks: what the keeper might be heading for, by zone
   useEffect(() => {
     marksRef.current = zone.kind === 'plot'
@@ -448,6 +483,7 @@ export default function AtherSlice() {
       if (packTab) { setPanel(p => p?.kind === 'pack' ? (p.tab === packTab ? null : { kind: 'pack', tab: packTab }) : p ? p : { kind: 'pack', tab: packTab }); return }
       if (panel || fade) return
       const n = near.current
+      if (e.code === 'KeyE' && !n && aimRef.current.tree && stanceRef.current.kind === 'stowed') { pruneAimed(); return }
       if (e.code === 'KeyE' && n) {
         if (n.kind === 'greg') setPanel({ kind: 'greg' })
         else setPanel({ kind: 'map', view: 'ather', travel: true })
@@ -475,9 +511,11 @@ export default function AtherSlice() {
     { code: 'KeyO', key: 'O', label: 'options' },
     ...(zone.kind === 'plot' ? [{ code: 'KeyC', key: 'C', label: 'friends' }] : []),
     { code: 'KeyI', key: 'I', label: 'pack' },
+    // a phone button sends down + up at once, so it cannot HOLD R: stowing gets its own button while something is in hand
+    ...(stance.kind !== 'stowed' ? [{ code: 'Stow', key: 'R', label: 'stow' }] : []),
     ...(zone.kind === 'wilds' ? [
       { code: 'KeyF', key: 'F', label: 'waymark' },
-      { code: 'KeyR', key: 'R', label: 'reload' },
+      { code: 'KeyR', key: 'R', label: stance.kind === 'weapon' ? 'swap · reload' : 'draw' },
       { code: 'KeyH', key: 'H', label: 'home' },
     ] : []),
   ]
@@ -497,7 +535,7 @@ export default function AtherSlice() {
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} /></group> })}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
-            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={held === 'repeater'} nodes={nearNodes} ownerOf={nodeOwner} />
+            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={held === 'repeater'} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} />
         )}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
         {world && (
@@ -510,7 +548,7 @@ export default function AtherSlice() {
         )}
       </Canvas>
       <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
-      <GameHud size={hudSize} pose={poseRef} marks={marksRef} vitals={vitalsRef} mana={manaRef} entries={hotbar} sel={slot} onSelect={setSlot}
+      <GameHud size={hudSize} pose={poseRef} marks={marksRef} vitals={vitalsRef} mana={manaRef} entries={hotbar} sel={litSlot(stance, inv)} onSelect={i => setStance(st => selectSlot(st, i, getInv()))} tools={toolsRef} skills={skillsRef}
         dimmed={zone.kind !== 'wilds'} input={!panel && !fade && !optionsOpen}
         minimap={ww && <AtherMiniMap size={hudSize} zone={zone.kind} world={ww} wrev={wrev} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regionsByTile={regionsByTile} cluster={cl.frame}
           owned={owned} onExpand={() => setPanel({ kind: 'map', view: 'ather', travel: false })} />}
@@ -560,7 +598,7 @@ export default function AtherSlice() {
       <LookChip />
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} />}
       <BirthGate />
-      {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={slot} isTouch={isTouch} />}
+      {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={litSlot(stance, inv)} isTouch={isTouch} />}
       <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />
       {isTouch && !panel && (
         <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} />
@@ -587,7 +625,7 @@ export default function AtherSlice() {
             Click to play<br />
             WASD move · Space jump (again in the air) / climb · Shift slide · E use · M map · Esc release
             <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>
-              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out through a city's door in Athernyx. Gregory, by the threshold, sells the ground under the mist. In the Wilds the Hollows wander: click to shoot, R to reload, walk over grey matter to take it. F plants a waymark, H walks home, I opens your bag.
+              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out through a city's door in Athernyx. Gregory, by the threshold, sells the ground under the mist. In the Wilds the Hollows wander: R draws the Repeater (tap again to reload, hold R to put it away), click to shoot, walk over grey matter to take it. Hands free, click a tree to prune it. F plants a waymark, H walks home, I opens your bag.
             </div>
           </div>
         </div>

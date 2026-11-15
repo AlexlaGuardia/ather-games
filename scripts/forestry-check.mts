@@ -55,6 +55,6 @@ res.afterOak = await p.evaluate(() => Object.keys(JSON.parse(localStorage.getIte
 console.log(JSON.stringify(res))
 const a = res.afterGold as { pruned: string[]; inv: string[] }
 // the mana check allows for the refill over the ~4 s between the two readings
-const pass = res.aimGold === gold.id && a.pruned.includes(gold.id) && a.inv.some(x => x.startsWith('goldwood_log')) && a.inv.some(x => x.startsWith('worn_blade'))
+const pass = res.aimGold === gold.id && a.pruned.includes(gold.id) && a.inv.some(x => x.startsWith('goldwood_log')) && !a.inv.some(x => x.startsWith('worn_blade'))   /* tools live in the sockets now (stance, 11-15), never the bag */
   && (res.manaSpent as number) > -2 && res.aimFar === null && res.aimOak === oak.id && !(res.afterOak as string[]).includes(oak.id)
 console.log(pass ? 'PASS' : 'FAIL'); await br.close(); process.exit(pass ? 0 : 1)

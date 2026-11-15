@@ -41,8 +41,6 @@ Object.assign(OPEN_ITEMS, {
   shimmeroak_sapling: wood('Shimmeroak Sapling', 'A young shimmeroak, already stubborn. It will grow where you plant it.'),
   starwillow_sapling: wood('Starwillow Sapling', 'A young starwillow, tips faintly lit. It will grow where you plant it.'),
   dawnwood_sapling: wood('Dawnwood Sapling', 'A dawnwood seedling. Rare, and slow, and worth it.'),
-  // Greg's tier-0 Forestry focus (canon: design-briefs/shimmer-gathering-focuses.md › The Worn set): hold it, click a tree
-  worn_blade: { name: 'Worn Blade', blurb: "Greg's old Forestry focus. Hold it and click a tree to prune it from a distance with mana.", icon: '', stack: 1, kind: 'tool' },
 } satisfies Record<string, ItemDef>)
 export const itemDef = (id: string): ItemDef => OPEN_ITEMS[id] ?? { name: id.replace(/_/g, ' '), blurb: '', icon: '', stack: 99, kind: 'material' }
 
@@ -54,7 +52,6 @@ export function newInv(waymarks = 12): Inv {
   const slots: (Stack | null)[] = Array(SLOTS).fill(null)
   slots[0] = { id: 'repeater', n: 1 }
   if (waymarks > 0) slots[1] = { id: 'waymark', n: waymarks }
-  slots[2] = { id: 'worn_blade', n: 1 }   // Greg hands you one per gathering skill (canon); Forestry's is the Worn Blade
   return { v: 1, slots }
 }
 const clone = (inv: Inv): Inv => ({ v: 1, slots: inv.slots.map(s => (s ? { ...s } : null)) })
@@ -118,8 +115,10 @@ export function loadInv(waymarksLeft = 12): Inv {
   try {
     const v = JSON.parse(localStorage.getItem(INV_KEY) ?? 'null')
     if (v?.v === 1 && Array.isArray(v.slots) && v.slots.length === SLOTS) {
-      // a bag saved before Greg's Worn Blade existed (11-15) gets one: it never breaks and is never sold, so missing = never had
-      if (!v.slots.some((x: Stack | null) => x?.id === 'worn_blade')) return give(v, 'worn_blade', 1).inv
+      // ★ tools are not bag items (Alex 11-15, the stance: "interacting with a node should just automatically use the right
+      // tool"): they sit in the sockets round the mana orb (engine/tools.ts). A Worn Blade a bag got for an hour on 11-15
+      // is taken back out here.
+      if (v.slots.some((x: Stack | null) => x?.id === 'worn_blade')) return { ...v, slots: v.slots.map((x: Stack | null) => (x?.id === 'worn_blade' ? null : x)) }
       return v
     }
   } catch { /* private window */ }

@@ -173,7 +173,7 @@ function Tells({ c, heightAt }: { c: React.MutableRefObject<Combat>; heightAt: (
   )
 }
 
-export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true }: {
+export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, reloadTick = 0 }: {
   T: Terrain
   locked: React.MutableRefObject<boolean>
   frozen: React.MutableRefObject<boolean>
@@ -188,6 +188,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   ownerOf?: (x: number, z: number) => string | undefined
   /** The Repeater is the held slot (the hotbar): only then does a click fire. */
   armed?: boolean
+  /** bumped by the page when R is tapped with a single gun drawn: reload */
+  reloadTick?: number
 }) {
   const { camera } = useThree()
   const c = useRef<Combat>(newCombat(Date.now() >>> 0))
@@ -208,18 +210,19 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   // once the page's list has caught up (the cleared node dropped out, or the spread brought one back), forget the bridge
   useEffect(() => { spent.current.clear() }, [nodes])
   useEffect(() => { revive(c.current); setIds([]) }, [reviveKey])
+  useEffect(() => { if (reloadTick) reload(c.current) }, [reloadTick])
   useEffect(() => {
     const down = (e: MouseEvent) => { if (e.button === 0 && locked.current && !frozen.current) trigger.current = true }
     const up = (e: MouseEvent) => { if (e.button === 0) trigger.current = false }
-    const key = (e: KeyboardEvent) => { if (e.code === 'KeyR' && !frozen.current) reload(c.current) }
-    window.addEventListener('mousedown', down); window.addEventListener('mouseup', up); window.addEventListener('keydown', key)
+    // R is the STANCE's now (shared/stance.ts: draw / swap / hold to stow); a tap with one gun drawn reloads via reloadTick
+    window.addEventListener('mousedown', down); window.addEventListener('mouseup', up)
     // probes for tests and scripted shots
     const g = window as unknown as { __ather?: Record<string, unknown> }
     g.__ather = { ...(g.__ather ?? {}), combat: () => c.current, spawn: (dx = 0, dz = -10, kind: 'shambler' | 'floater' = 'shambler') => {
       const f = camera.getWorldDirection(new THREE.Vector3()); const x = camera.position.x + f.x * -dz + dx, z = camera.position.z + f.z * -dz
       spawnHollow(c.current, T, x, z, kind)
     }, nodes: () => nodesRef.current, wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
-    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('keydown', key) }
+    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up) }
   }, [locked, frozen, camera, T])
 
   useFrame((_, rawDt) => {
