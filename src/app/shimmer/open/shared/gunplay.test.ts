@@ -1,5 +1,5 @@
 // The test lane's guns, by numbers. Run: npx tsx src/app/shimmer/open/shared/gunplay.test.ts
-import { RANGE_GUNS, gunForSlate, holdGun, stepGun, stepRounds, reloadGun, PLATE, type Round, type Target } from './gunplay'
+import { RANGE_GUNS, gunForSlate, holdGun, stepGun, stepRounds, reloadGun, hitscan, stepPlates, PLATE, type Round, type Target } from './gunplay'
 
 let pass = 0
 const fails: string[] = []
@@ -90,6 +90,24 @@ ok(!!body && Math.abs(body.range - 10) < 0.5, `the hit read ${body?.range.toFixe
   let peak = 0
   for (let i = 0; i < 180; i++) { stepRounds([], DT, [t], () => false, { x: 0, z: 0 }); peak = Math.max(peak, t.swing) }
   ok(peak > 0.02 && Math.abs(t.swing) < 0.01, `the plate did not swing and settle (peak ${peak.toFixed(3)}, now ${t.swing.toFixed(3)})`)
+}
+
+// ★ hit-scan: the shot lands the instant it is cast, nearest plate first, never through a wall
+{
+  const shot = { dmg: 10, crit: 16, shove: 0.1 }, none = () => false
+  const near = plate(-8), far = plate(-20)
+  const r = hitscan({ x: 0, y: PLATE.cy, z: 0 }, { x: 0, y: 0, z: -1 }, [far, near], none, shot, { x: 0, z: 0 })
+  ok(r.hit?.target === near.id && near.hits === 1 && far.hits === 0 && Math.abs(r.dist - 8) < 0.01, 'hitscan did not stop at the NEAREST plate the instant it fired')
+  const h = hitscan({ x: 0, y: PLATE.headY, z: 0 }, { x: 0, y: 0, z: -1 }, [plate(-15)], none, shot, { x: 0, z: 0 })
+  ok(h.hit?.zone === 'head' && h.hit.dmg === 16, 'hitscan head shot did not pay the crit')
+  const walled = plate(-15)
+  const w = hitscan({ x: 0, y: PLATE.cy, z: 0 }, { x: 0, y: 0, z: -1 }, [walled], (_x, _y, z) => z < -10, shot, { x: 0, z: 0 })
+  ok(!w.hit && walled.hits === 0 && Math.abs(w.dist - 10) < 0.05, `hitscan went through a wall (dist ${w.dist.toFixed(2)})`)
+  const back = plate(8)   // behind the shooter
+  ok(!hitscan({ x: 0, y: PLATE.cy, z: 0 }, { x: 0, y: 0, z: -1 }, [back], none, shot, { x: 0, z: 0 }).hit, 'hitscan hit a plate behind the shooter')
+  const sw = plate(-8); hitscan({ x: 0, y: PLATE.cy, z: 0 }, { x: 0, y: 0, z: -1 }, [sw], none, shot, { x: 0, z: 0 })
+  let pk = 0; for (let i = 0; i < 180; i++) { stepPlates([sw], DT); pk = Math.max(pk, sw.swing) }
+  ok(pk > 0.02 && Math.abs(sw.swing) < 0.01, 'a hitscan hit does not swing the plate and let it settle')
 }
 
 console.log(`gunplay: ${pass} passed, ${fails.length} failed`)

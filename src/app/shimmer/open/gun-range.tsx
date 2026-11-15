@@ -11,12 +11,12 @@
 // is a reload right now, not "back to the road".
 
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
-import { useFrame, useThree } from '@react-three/fiber'
+import { useFrame, useThree, createPortal } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Cavern } from './cavern'
 import { caveRoomAt } from './cavern'
-import { gunForSlate, holdGun, stepGun, stepRounds, reloadGun, PLATE, type GunState, type Round, type Target, type RangeGun } from './shared/gunplay'
-import { Tracers, TracerFx } from './shared/tracers'
+import { gunForSlate, holdGun, stepGun, reloadGun, hitscan, stepPlates, PLATE, type GunState, type Round, type Target, type RangeGun } from './shared/gunplay'
+import { Tracers, type TracerShot } from './shared/tracers'
 import { hudSay } from './shared/game-hud'
 import { touch } from './shared/touch'
 
@@ -99,6 +99,12 @@ function Plate({ t, y }: { t: Target; y: number }) {
 // the plate's head disc is a cylinder lying along y; stand it up facing the lane
 const HEAD_FIX = Math.PI / 2
 
+// ★ THE HELD GUN (Alex 11-15: "something about the height and size of the weapon"). It is a CHILD OF THE CAMERA now, so
+// it renders with the camera's final pose for the frame. v1 copied the camera's position in this component's useFrame,
+// which runs BEFORE the page moves the camera: the gun drew one frame behind, and strafing made it judder off the view.
+// Placed like a first-person gun: small, close, low right; sights pull it centre and low so you look along its top.
+const VM_SCALE = 0.3
+const VM_HIP = new THREE.Vector3(0.15, -0.14, -0.44), VM_ADS = new THREE.Vector3(0, -0.075, -0.36)
 const REACH = 1.9            // metres from a rack to take its gun
 const TALLY_QUIET = 1.4      // seconds of no fire before the lane reads the string out
 
@@ -106,8 +112,10 @@ export function GunRange({ cave }: { cave: Cavern }) {
   const { camera, gl } = useThree()
   const shop = cave.gunShop
   const gun = useRef<GunState | null>(null)
-  const rounds = useRef<Round[]>([])
-  const fx = useMemo(() => new TracerFx(), [])
+  const rounds = useRef<Round[]>([])          // the sim's rounds: only their DIRECTIONS are read (hit-scan)
+  const shots = useMemo<TracerShot[]>(() => [], [])
+  const flash = useRef<THREE.Group>(null), flashT = useRef(0)
+  const { scene } = useThree()
   const targets = useRef<Target[]>(shop.targets.map(t => ({ id: t.id, x: t.x, y: cave.y, z: t.z, yaw: t.yaw, swing: 0, swingV: 0, hits: 0, flash: 0, lastZone: null })))
   const trigger = useRef(false)
   const aimHeld = useRef(false)
@@ -131,6 +139,13 @@ export function GunRange({ cave }: { cave: Cavern }) {
     gun.current = null; trigger.current = false; aimHeld.current = false; setHud({ gun: null })
   }
 
+  // the camera must be IN the scene for its children (the held gun) to render; R3F's default camera is not
+  useEffect(() => {
+    if (camera.parent) return
+    scene.add(camera)
+    return () => { scene.remove(camera) }
+  }, [camera, scene])
+
   useEffect(() => {
     const locked = () => document.pointerLockElement === gl.domElement
     const down = (e: MouseEvent) => {
@@ -151,13 +166,23 @@ export function GunRange({ cave }: { cave: Cavern }) {
     window.addEventListener('mousedown', down); window.addEventListener('mouseup', up); window.addEventListener('keydown', key); window.addEventListener('contextmenu', noMenu)
     // probes for a scripted check on prod
     ;(window as unknown as { __range?: unknown }).__range = {
-      take, fire: (on: boolean) => { trigger.current = on }, aim: (on: boolean) => { aimHeld.current = on }, ads: () => adsT, state: () => ({ held: gun.current?.gun.id ?? null, ammo: gun.current?.ammo, rounds: rounds.current.length, hits: targets.current.map(t => t.hits) }),
+      take, fire: (on: boolean) => { trigger.current = on }, aim: (on: boolean) => { aimHeld.current = on }, ads: () => adsT, state: () => ({ held: gun.current?.gun.id ?? null, ammo: gun.current?.ammo, rounds: shots.length, hits: targets.current.map(t => t.hits) }),
       shop: () => shop,
     }
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('keydown', key); window.removeEventListener('contextmenu', noMenu); adsT = 0; setHud({ gun: null, inShop: false }) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gl])
 
+  const adsEase = () => adsT * adsT * (3 - 2 * adsT)
+  const vmPose = (gun: RangeGun, rel = 0) => {
+    const a = adsEase()
+    return new THREE.Vector3().lerpVectors(VM_HIP, VM_ADS, a).add(new THREE.Vector3(0, -rel * 0.1, kick.current * 0.04 * (1 - a * 0.5)))
+  }
+  /** The held gun's muzzle in the world, from the camera's last rendered pose (what the player saw when they fired). */
+  const muzzleWorld = (gun: RangeGun) => {
+    const local = vmPose(gun).add(new THREE.Vector3(0, 0.004, -gunLen(gun) * VM_SCALE))
+    return local.applyMatrix4(camera.matrixWorld)
+  }
   const solid = (x: number, y: number, z: number) => !cave.inside(x, z) || y < cave.y || y > cave.y + cave.roofAt(x, z)
   const eye = useMemo(() => new THREE.Vector3(), []), aim = useMemo(() => new THREE.Vector3(), [])
 
@@ -186,21 +211,27 @@ export function GunRange({ cave }: { cave: Cavern }) {
       const aiming = (aimHeld.current || touch.held.has(AIM_CODE)) && g.reloading <= 0
       adsT = Math.max(0, Math.min(1, adsT + (aiming ? dt / 0.15 : -dt / 0.11)))
       adsFov = ADS_FOV_OF[g.gun.slot] ?? 50
+      const before = rounds.current.length
       const fired = stepGun(g, dt, trigger.current || touch.fire, eye, aim, rand, rounds.current, adsT > 0.6)
-      for (const f of fired) {
-        // at the held gun's muzzle (the viewmodel: 0.16 right, 0.15 down, its barrel ~0.5 m + its length out)
-        const a = adsT * adsT * (3 - 2 * adsT)
-        const tip = new THREE.Vector3(0.16 * (1 - a), -0.15 + a * 0.045, -0.42 - gunLen(g.gun) * 0.5).applyQuaternion(camera.quaternion).add(eye)
-        fx.flashes.push({ x: tip.x, y: tip.y, z: tip.z, dx: f.dx, dy: f.dy, dz: f.dz })
+      // ★ HIT-SCAN: every round (each pellet) lands NOW along its own cone direction; the tracer is its light, drawn
+      // from the barrel (where the held gun's muzzle is this frame) to the point it already hit
+      const muzzle = muzzleWorld(g.gun)
+      for (let i = before; i < rounds.current.length; i++) {
+        const r = rounds.current[i], l = Math.hypot(r.vx, r.vy, r.vz) || 1
+        const res = hitscan(eye, { x: r.vx / l, y: r.vy / l, z: r.vz / l }, targets.current, solid, r, shop.line)
+        if (res.hit) { tally.current.hits++; if (res.hit.zone === 'head') tally.current.heads++; tally.current.best = Math.max(tally.current.best, res.hit.range) }
+        shots.push({ sx: muzzle.x, sy: muzzle.y, sz: muzzle.z, tx: res.x, ty: res.y, tz: res.z, nx: res.nx, ny: res.ny, nz: res.nz, target: !!res.hit, age: 0 })
+      }
+      rounds.current.length = 0
+      if (fired.length) { flashT.current = 0.05; flash.current?.rotation.set(0, 0, Math.random() * Math.PI) }
+      for (let i = 0; i < fired.length; i++) {
         kick.current = Math.min(1, kick.current + 0.45 + g.gun.kickPitch * 12)
         tally.current.shots++
       }
       if (fired.length) tally.current.quiet = 0
       setHud({ ammo: g.ammo, reloading: g.reloading > 0 })
     }
-    const { hits, impacts } = stepRounds(rounds.current, dt, targets.current, solid, shop.line)
-    for (const im of impacts) fx.impacts.push(im)
-    for (const h of hits) { tally.current.hits++; if (h.zone === 'head') tally.current.heads++; tally.current.best = Math.max(tally.current.best, h.range) }
+    stepPlates(targets.current, dt)
     // the lane reads your string out once you stop shooting
     const T = tally.current
     if (T.shots > 0) {
@@ -210,18 +241,17 @@ export function GunRange({ cave }: { cave: Cavern }) {
         tally.current = { shots: 0, hits: 0, heads: 0, best: 0, quiet: 0 }
       }
     }
-    // the viewmodel: held lower right, kicks back and up on each round, dips while reloading
+    // the held gun, in CAMERA space (it is the camera's child): kicks back and up per round, dips while reloading
     kick.current = Math.max(0, kick.current - dt * 7)
+    flashT.current = Math.max(0, flashT.current - dt)
+    if (flash.current) flash.current.visible = flashT.current > 0
     if (vm.current) {
       vm.current.visible = !!g
       if (g) {
         const rel = g.reloading > 0 ? Math.sin(Math.min(1, 1 - g.reloading / g.gun.reloadTime) * Math.PI) : 0
-        vm.current.position.copy(camera.position)
-        vm.current.quaternion.copy(camera.quaternion)
-        // hip: low right. Sights: centred and LOW, so you look along its top (centred on the eye it hid the target)
-        const a = adsT * adsT * (3 - 2 * adsT)
-        vm.current.translateX(0.16 * (1 - a)); vm.current.translateY(-0.15 + a * 0.045 - rel * 0.12); vm.current.translateZ(-0.5 + a * 0.08 + kick.current * (0.05 - a * 0.03))
-        vm.current.rotateX(kick.current * 0.18 - rel * 0.6)
+        vm.current.position.copy(vmPose(g.gun, rel))
+        vm.current.rotation.set(kick.current * 0.16 * (1 - adsEase() * 0.6) - rel * 0.6, 0, 0)
+        if (flash.current) flash.current.position.set(0, 0.004, -gunLen(g.gun) * VM_SCALE)
       }
     }
   })
@@ -243,8 +273,22 @@ export function GunRange({ cave }: { cave: Cavern }) {
         )
       })}
       {targets.current.map(t => <Plate key={t.id} t={t} y={cave.y} />)}
-      <group ref={vm} visible={false}>{held && <GunModel gun={held} scale={0.5} />}</group>
-      <Tracers rounds={() => rounds.current} fx={fx} />
+      {createPortal(
+        <group ref={vm} visible={false}>
+          {held && <GunModel gun={held} scale={VM_SCALE} />}
+          {/* the muzzle flash, welded to the barrel: a small crossed star, 50 ms a shot */}
+          <group ref={flash} visible={false} scale={VM_SCALE}>
+            {[0, 1, 2].map(k => (
+              <mesh key={k} rotation-z={(k / 3) * Math.PI} position-z={-0.09} renderOrder={12}>
+                <planeGeometry args={[0.07, 0.2]} />
+                <meshBasicMaterial color="#ffe2a8" transparent opacity={0.95} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
+              </mesh>
+            ))}
+          </group>
+        </group>,
+        camera,
+      )}
+      <Tracers shots={shots} />
     </>
   )
 }

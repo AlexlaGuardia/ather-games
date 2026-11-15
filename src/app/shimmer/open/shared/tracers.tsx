@@ -1,105 +1,93 @@
 'use client'
 
-// TRACER ROUNDS, drawn. Any host that keeps a list of rounds (x/y/z + velocity + age) hands it here and gets the look
-// Alex asked for 11-15: "tracer rounds and epic gunfights". Three layers, all additive so they BLOOM over the scene
-// instead of sitting on it like paint:
-//   · the streak: a white-hot core inside a coloured glow, stretched along the velocity, growing out of the muzzle
-//     over its first frames (a tracer that pops in at full length reads as a laser, not a round)
-//   · the muzzle flash: a crossed star at the barrel for ~60 ms
-//   · the impact: a spray of sparks that kick off the surface, fall, and fade; a plate hit sprays hotter and wider
-// CANON (manalic-weapons.md): "the shot trails the wielder's colour; the gun itself has none". So the COLOUR is the
-// shooter's, passed in; the guns' class colours live on their models and racks, never on the round.
+// TRACER ROUNDS for HIT-SCAN guns (Alex 11-15: "tracer rounds and epic gunfights" ... "it should feel like hit scan").
+// The shot has already landed when it is drawn; what you see is the round's light getting there:
+//   · the streak: a white-hot core inside a coloured glow, racing from the barrel to the point already hit at
+//     TRACER_SPEED, drawn as a fixed line between those two points (so it never slides off the barrel's line)
+//   · the wake: a thin, faint line of the whole path that hangs for a beat after the head arrives, so a burst leaves
+//     a readable fan, which is most of what "epic" means at a range
+//   · the impact: sparks kick off the surface when the head ARRIVES (a plate hit sprays hotter and wider)
+// The muzzle flash lives on the held gun itself (gun-range.tsx), so it is welded to the barrel.
+// CANON (manalic-weapons.md): "the shot trails the wielder's colour; the gun itself has none", so the COLOUR is the
+// shooter's, passed in.
 
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-export interface TracerRound { x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number }
-export interface TracerImpact { x: number; y: number; z: number; nx: number; ny: number; nz: number; target: boolean }
-export interface TracerFlash { x: number; y: number; z: number; dx: number; dy: number; dz: number }
-
-/** A queue the host pushes into from its sim; the renderer drains it each frame. */
-export class TracerFx {
-  impacts: TracerImpact[] = []
-  flashes: TracerFlash[] = []
+export interface TracerShot {
+  sx: number; sy: number; sz: number          // the muzzle when it fired
+  tx: number; ty: number; tz: number          // where the shot landed
+  nx: number; ny: number; nz: number          // the surface normal there (sparks kick off it)
+  target: boolean                             // a plate (hotter sparks) or the world
+  age: number
 }
-
-const MAX_ROUNDS = 96, MAX_SPARKS = 320, MAX_FLASH = 8
-const STREAK_LEN = 3.2          // metres of trail at full growth
-const STREAK_GROW = 0.05        // seconds to grow from the muzzle to full length
-const SPARK_LIFE = 0.38, FLASH_LIFE = 0.06
+export const TRACER_SPEED = 420                // m/s: 25 m in ~60 ms, fast enough to read as instant, slow enough to SEE
+const STREAK_LEN = 4.5, WAKE_HOLD = 0.12, WAKE_FADE = 0.18
+const MAX_SHOTS = 96, MAX_SPARKS = 360, SPARK_LIFE = 0.38
 
 interface Spark { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; max: number; hot: boolean }
-interface Flash { x: number; y: number; z: number; q: THREE.Quaternion; life: number }
 
-export function Tracers({ rounds, fx, color = '#ffb84a' }: { rounds: () => readonly TracerRound[]; fx: TracerFx; color?: string }) {
-  const core = useRef<THREE.InstancedMesh>(null), glow = useRef<THREE.InstancedMesh>(null)
-  const sparksM = useRef<THREE.InstancedMesh>(null), flashM = useRef<THREE.InstancedMesh>(null)
-  const sparks = useRef<Spark[]>([]), flashes = useRef<Flash[]>([])
+export function Tracers({ shots, color = '#ffb84a' }: { shots: TracerShot[]; color?: string }) {
+  const core = useRef<THREE.InstancedMesh>(null), glow = useRef<THREE.InstancedMesh>(null), wake = useRef<THREE.InstancedMesh>(null)
+  const sparksM = useRef<THREE.InstancedMesh>(null)
+  const sparks = useRef<Spark[]>([])
+  const arrived = useRef(new WeakSet<TracerShot>())
   const tmp = useMemo(() => ({ m: new THREE.Matrix4(), q: new THREE.Quaternion(), p: new THREE.Vector3(), s: new THREE.Vector3(), d: new THREE.Vector3(), z: new THREE.Vector3(0, 0, 1) }), [])
   const mats = useMemo(() => {
     const add = { transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }
-    const c = new THREE.Color(color)
     return {
       core: new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff8e6'), ...add }),
-      glow: new THREE.MeshBasicMaterial({ color: c, opacity: 0.55, ...add }),
+      glow: new THREE.MeshBasicMaterial({ color: new THREE.Color(color), opacity: 0.6, ...add }),
+      wake: new THREE.MeshBasicMaterial({ color: new THREE.Color(color), opacity: 0.22, ...add }),
       spark: new THREE.MeshBasicMaterial({ color: new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.45), ...add }),
-      flash: new THREE.MeshBasicMaterial({ color: new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.6), opacity: 0.9, side: THREE.DoubleSide, ...add }),
     }
   }, [color])
-  // a streak is a unit box along +z with its TAIL at the origin (so scaling z grows it backward from the head)
-  const streakGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1).translate(0, 0, -0.5), [])
-  const flashGeo = useMemo(() => {
-    // three crossed quads along the barrel axis = a star from any angle
-    const g = new THREE.BufferGeometry(), pos: number[] = []
-    for (let k = 0; k < 3; k++) {
-      const a = (k / 3) * Math.PI, cx = Math.cos(a), cy = Math.sin(a)
-      const L = 0.55, W = 0.22
-      const P = (u: number, v: number) => [cx * u, cy * u, v]
-      pos.push(...P(-W, 0), ...P(W, 0), ...P(W * 0.3, L), ...P(-W, 0), ...P(W * 0.3, L), ...P(-W * 0.3, L))
-    }
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-    return g
-  }, [])
+  // a unit box along +z with its HEAD at the origin (scaling z grows it backward from the head)
+  const geo = useMemo(() => new THREE.BoxGeometry(1, 1, 1).translate(0, 0, -0.5), [])
 
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 1 / 20), { m, q, p, s, d, z } = tmp
-    // drain the host's queue
-    for (const im of fx.impacts.splice(0)) {
-      const n = im.target ? 14 : 9
-      for (let k = 0; k < n && sparks.current.length < MAX_SPARKS; k++) {
-        // a cone off the surface normal, biased up a touch so sparks arc
-        const rx = Math.random() * 2 - 1, ry = Math.random() * 2 - 1, rz = Math.random() * 2 - 1
-        const sp = (im.target ? 5 : 3.5) + Math.random() * 4
-        const vx = im.nx * 0.7 + rx * 0.6, vy = im.ny * 0.7 + ry * 0.6 + 0.5, vz = im.nz * 0.7 + rz * 0.6
-        const l = Math.hypot(vx, vy, vz) || 1
-        const life = SPARK_LIFE * (0.5 + Math.random() * 0.7)
-        sparks.current.push({ x: im.x, y: im.y, z: im.z, vx: (vx / l) * sp, vy: (vy / l) * sp, vz: (vz / l) * sp, life, max: life, hot: im.target })
+    let nc = 0, nw = 0
+    for (let i = shots.length - 1; i >= 0; i--) {
+      const k = shots[i]
+      k.age += dt
+      const dx = k.tx - k.sx, dy = k.ty - k.sy, dz = k.tz - k.sz, dist = Math.hypot(dx, dy, dz) || 1e-3
+      const head = Math.min(dist, k.age * TRACER_SPEED)
+      if (head >= dist && !arrived.current.has(k)) {
+        arrived.current.add(k)
+        const n = k.target ? 14 : 9
+        for (let j = 0; j < n && sparks.current.length < MAX_SPARKS; j++) {
+          const rx = Math.random() * 2 - 1, ry = Math.random() * 2 - 1, rz = Math.random() * 2 - 1
+          const sp = (k.target ? 5 : 3.5) + Math.random() * 4
+          const vx = k.nx * 0.7 + rx * 0.6, vy = k.ny * 0.7 + ry * 0.6 + 0.5, vz = k.nz * 0.7 + rz * 0.6
+          const l = Math.hypot(vx, vy, vz) || 1, life = SPARK_LIFE * (0.5 + Math.random() * 0.7)
+          sparks.current.push({ x: k.tx, y: k.ty, z: k.tz, vx: (vx / l) * sp, vy: (vy / l) * sp, vz: (vz / l) * sp, life, max: life, hot: k.target })
+        }
+      }
+      const after = k.age - dist / TRACER_SPEED                // seconds since the head arrived (<0 = in flight)
+      if (after > WAKE_HOLD + WAKE_FADE) { shots.splice(i, 1); continue }
+      q.setFromUnitVectors(z, d.set(dx / dist, dy / dist, dz / dist))
+      p.set(k.sx + (dx / dist) * head, k.sy + (dy / dist) * head, k.sz + (dz / dist) * head)
+      // the head + its streak (only while in flight)
+      if (after < 0 && nc < MAX_SHOTS) {
+        const len = Math.min(STREAK_LEN, head)
+        // the glow fades in over the first metres: at the barrel it sits ~0.4 m from the eye and would fill the screen
+        const gw = 0.05 * Math.max(0.15, Math.min(1, (head - 0.6) / 5))
+        m.compose(p, q, s.set(0.016, 0.016, len)); core.current?.setMatrixAt(nc, m)
+        m.compose(p, q, s.set(gw, gw, len * 1.05)); glow.current?.setMatrixAt(nc, m)
+        nc++
+      }
+      // the wake: the travelled path, thin, thinning out once the head has landed
+      if (nw < MAX_SHOTS && head > 1) {
+        const f = after < WAKE_HOLD ? 1 : 1 - (after - WAKE_HOLD) / WAKE_FADE
+        const w = 0.012 * Math.max(0, f)
+        m.compose(p, q, s.set(w, w, Math.max(0.01, head - 0.8))); wake.current?.setMatrixAt(nw, m)
+        nw++
       }
     }
-    for (const f of fx.flashes.splice(0)) {
-      if (flashes.current.length >= MAX_FLASH) flashes.current.shift()
-      const fq = new THREE.Quaternion().setFromUnitVectors(z, d.set(f.dx, f.dy, f.dz).normalize())
-      fq.multiply(new THREE.Quaternion().setFromAxisAngle(z, Math.random() * Math.PI))
-      flashes.current.push({ x: f.x, y: f.y, z: f.z, q: fq, life: FLASH_LIFE })
-    }
-    // streaks
-    const rs = rounds(), n = Math.min(rs.length, MAX_ROUNDS)
-    for (let i = 0; i < n; i++) {
-      const r = rs[i], speed = Math.hypot(r.vx, r.vy, r.vz) || 1
-      const len = Math.min(STREAK_LEN, speed * Math.max(r.age, 0.004), STREAK_LEN * Math.min(1, (r.age + 0.008) / STREAK_GROW))
-      p.set(r.x, r.y, r.z); q.setFromUnitVectors(z, d.set(r.vx / speed, r.vy / speed, r.vz / speed))
-      // thin: a tracer is a LINE of light. v1 (0.035 core / 0.13 glow) read as glowing cards up close, where a
-      // breacher's pellets live. The glow widens a touch with distance travelled so a far round still reads.
-      // ...and the glow fades IN over the first metres: right at the barrel it sits ~0.5 m from the eye, where a
-      // 5 cm glow fills a fist of screen (it read as a yellow slab off the muzzle)
-      const flown = speed * r.age
-      const gw = (0.045 + Math.min(0.04, r.age * 0.08)) * Math.max(0.12, Math.min(1, (flown - 0.6) / 5))
-      m.compose(p, q, s.set(0.016, 0.016, len)); core.current?.setMatrixAt(i, m)
-      m.compose(p, q, s.set(gw, gw, len * 1.06)); glow.current?.setMatrixAt(i, m)
-    }
-    for (const mesh of [core.current, glow.current]) if (mesh) { mesh.count = n; mesh.instanceMatrix.needsUpdate = true }
-    // sparks: fly, fall, fade (by shrinking — additive has no cheaper fade per instance)
+    for (const [mesh, n] of [[core.current, nc], [glow.current, nc], [wake.current, nw]] as const) if (mesh) { mesh.count = n; mesh.instanceMatrix.needsUpdate = true }
+    // sparks: fly, fall, shrink out
     const ss = sparks.current
     for (let i = ss.length - 1; i >= 0; i--) {
       const k = ss[i]; k.life -= dt
@@ -117,23 +105,14 @@ export function Tracers({ rounds, fx, color = '#ffb84a' }: { rounds: () => reado
       }
       sm.count = ss.length; sm.instanceMatrix.needsUpdate = true
     }
-    const fl = flashes.current, fm = flashM.current
-    for (let i = fl.length - 1; i >= 0; i--) { fl[i].life -= dt; if (fl[i].life <= 0) fl.splice(i, 1) }
-    if (fm) {
-      for (let i = 0; i < fl.length; i++) {
-        const f = fl[i], g = 0.22 + (f.life / FLASH_LIFE) * 0.2
-        m.compose(p.set(f.x, f.y, f.z), f.q, s.set(g, g, g)); fm.setMatrixAt(i, m)
-      }
-      fm.count = fl.length; fm.instanceMatrix.needsUpdate = true
-    }
   })
 
   return (
     <>
-      <instancedMesh ref={glow} args={[streakGeo, mats.glow, MAX_ROUNDS]} frustumCulled={false} renderOrder={10} />
-      <instancedMesh ref={core} args={[streakGeo, mats.core, MAX_ROUNDS]} frustumCulled={false} renderOrder={11} />
-      <instancedMesh ref={sparksM} args={[streakGeo, mats.spark, MAX_SPARKS]} frustumCulled={false} renderOrder={11} />
-      <instancedMesh ref={flashM} args={[flashGeo, mats.flash, MAX_FLASH]} frustumCulled={false} renderOrder={12} />
+      <instancedMesh ref={wake} args={[geo, mats.wake, MAX_SHOTS]} frustumCulled={false} renderOrder={9} />
+      <instancedMesh ref={glow} args={[geo, mats.glow, MAX_SHOTS]} frustumCulled={false} renderOrder={10} />
+      <instancedMesh ref={core} args={[geo, mats.core, MAX_SHOTS]} frustumCulled={false} renderOrder={11} />
+      <instancedMesh ref={sparksM} args={[geo, mats.spark, MAX_SPARKS]} frustumCulled={false} renderOrder={11} />
     </>
   )
 }

@@ -160,3 +160,60 @@ export function stepRounds(
   }
   return { hits, impacts }
 }
+
+// ── ★ HIT-SCAN (Alex 11-15: "it should feel like hit scan") ──────────────────────────────────────────────────────────
+// The shot lands the instant the trigger breaks, along the aim (inside the gun's cone). The round the player SEES is a
+// visual only, a fast streak from the barrel to the point already hit (tracers.tsx). v1 flew real projectiles at
+// 34-54 m/s: at 25 m the hit came half a second after the shot, and a strafing shooter watched rounds slide off the
+// line they were fired along. projSpeed/projLife are now only the streak's look and the gun's reach.
+export const HITSCAN_RANGE = 120
+export interface ScanResult { x: number; y: number; z: number; nx: number; ny: number; nz: number; dist: number; hit: Hit | null }
+
+/** Cast one shot from `eye` along unit `dir`: the nearest plate (front face, body or head) or the world. Applies the
+ *  hit to the plate (flash, shove, count) and returns where the shot ended. */
+export function hitscan(
+  eye: { x: number; y: number; z: number }, dir: { x: number; y: number; z: number },
+  targets: Target[], solid: (x: number, y: number, z: number) => boolean,
+  shot: { dmg: number; crit: number; shove: number }, from: { x: number; z: number }, range = HITSCAN_RANGE,
+): ScanResult {
+  // the world first: march to the first solid sample, then bisect for a clean surface point
+  let wall = range
+  const STEP = 0.25
+  for (let d = STEP; d <= range; d += STEP) {
+    if (solid(eye.x + dir.x * d, eye.y + dir.y * d, eye.z + dir.z * d)) {
+      let a = d - STEP, b = d
+      for (let k = 0; k < 8; k++) { const m = (a + b) / 2; if (solid(eye.x + dir.x * m, eye.y + dir.y * m, eye.z + dir.z * m)) b = m; else a = m }
+      wall = a; break
+    }
+  }
+  // then every plate in front of that wall: the nearest one the ray crosses inside its silhouette
+  let best: { t: Target; d: number; zone: 'head' | 'body'; x: number; y: number; z: number } | null = null
+  for (const t of targets) {
+    const nx = Math.sin(t.yaw), nz = Math.cos(t.yaw)
+    const denom = dir.x * nx + dir.z * nz
+    if (denom >= -1e-6) continue                              // only the face, from in front
+    const d = -((eye.x - t.x) * nx + (eye.z - t.z) * nz) / denom
+    if (d <= 0 || d >= wall || (best && d >= best.d)) continue
+    const hx = eye.x + dir.x * d, hy = eye.y + dir.y * d, hz = eye.z + dir.z * d
+    const side = (hx - t.x) * nz - (hz - t.z) * nx, up = hy - t.y
+    const head = Math.hypot(side, up - PLATE.headY) <= PLATE.headR
+    const body = Math.abs(side) <= PLATE.w / 2 && Math.abs(up - PLATE.cy) <= PLATE.h / 2
+    if (head || body) best = { t, d, zone: head ? 'head' : 'body', x: hx, y: hy, z: hz }
+  }
+  if (best) {
+    const t = best.t, nx = Math.sin(t.yaw), nz = Math.cos(t.yaw)
+    t.hits++; t.flash = 1; t.lastZone = best.zone; t.swingV += shot.shove * 9
+    const hit: Hit = { target: t.id, zone: best.zone, dmg: best.zone === 'head' ? shot.crit : shot.dmg, x: best.x, y: best.y, z: best.z, range: Math.hypot(best.x - from.x, best.z - from.z) }
+    return { x: best.x, y: best.y, z: best.z, nx, ny: 0, nz, dist: best.d, hit }
+  }
+  return { x: eye.x + dir.x * wall, y: eye.y + dir.y * wall, z: eye.z + dir.z * wall, nx: -dir.x, ny: -dir.y, nz: -dir.z, dist: wall, hit: null }
+}
+
+/** The plates' springs, stepped on their own now that nothing flies (stepRounds still does this for projectiles). */
+export function stepPlates(targets: Target[], dt: number) {
+  for (const t of targets) {
+    t.swingV += (-t.swing * 60 - t.swingV * 7) * dt
+    t.swing = Math.max(-0.2, Math.min(1.1, t.swing + t.swingV * dt))
+    t.flash = Math.max(0, t.flash - dt * 4)
+  }
+}
