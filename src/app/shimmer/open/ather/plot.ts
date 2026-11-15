@@ -142,10 +142,12 @@ const FIXED: Box[] = [
   (() => { const y0 = plotHeightAt(GREG.x, GREG.z); return { x0: GREG.x - 0.4, x1: GREG.x + 0.4, z0: GREG.z - 0.4, z1: GREG.z + 0.4, y0, y1: y0 + 1.8 } })(),
 ]
 
-export function plotShape(owned: ReadonlySet<string>): Shape {
-  const boxes = [...FIXED, ...mistWalls(owned)]
+/** `walls` replaces the mist walls (a linked plot's lane cuts them, ather/cluster.ts); `extra` adds ground beyond the
+ *  island (the cluster's bridges, the shared ground, a mate's plot). Both default to the plot alone. */
+export function plotShape(owned: ReadonlySet<string>, walls: Box[] = mistWalls(owned), extra?: (x: number, z: number) => number): Shape {
+  const boxes = [...FIXED, ...walls]
   return {
-    ground: plotHeightAt,
+    ground: extra ? (x, z) => Math.max(plotHeightAt(x, z), extra(x, z)) : plotHeightAt,
     solids: (x0, _y0, z0, x1, _y1, z1) => boxes.filter(b => b.x0 <= x1 && b.x1 >= x0 && b.z0 <= z1 && b.z1 >= z0),
     water: () => [],
   }

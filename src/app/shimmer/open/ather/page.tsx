@@ -24,6 +24,9 @@ import {
   loadGarden, saveGarden, freshGarden, type Garden,
 } from './plot'
 import { PlotScene } from './plot-scene'
+import { ClusterScene } from './cluster-scene'
+import { ClusterPanel, useCluster } from './cluster-panel'
+import { clusterGround, wallsWithLane, mateWalls } from './cluster'
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
@@ -50,7 +53,7 @@ const TILE = 'first-wilds'
 
 type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
 type Spawn = { x: number; z: number; yaw: number }
-type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'pack'; tab: PackTab }
+type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' }
 type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'waymark'; w: Waymark; own: boolean }
 
 export default function AtherSlice() {
@@ -122,7 +125,12 @@ export default function AtherSlice() {
   }, [fog])
 
   const owned = useMemo(() => new Set(garden.owned), [garden.owned])
-  const plotWorld = useMemo(() => terrainWorld(plotShape(owned)), [owned])
+  // GARDEN CLUSTERS (cluster.ts, Alex 11-15): alone, the plot as ever; linked, the lane cuts my mist, and the bridges,
+  // the shared ground and my mates' plots (fenced by their own mist) become ground
+  const cl = useCluster(garden.owned)
+  const plotWorld = useMemo(() => terrainWorld(cl.frame.linked
+    ? plotShape(owned, [...wallsWithLane(owned, cl.frame), ...mateWalls(cl.frame)], (x, z) => clusterGround(cl.frame, x, z))
+    : plotShape(owned)), [owned, cl.frame])
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
   const fading = useRef(false)
@@ -218,7 +226,7 @@ export default function AtherSlice() {
   }, [W, travel])
 
   const world = useMemo(() => zone.kind === 'plot' ? plotWorld : W ? terrainWorld(W.shape) : null, [zone, W, plotWorld])
-  const ground = useMemo(() => zone.kind === 'plot' ? plotHeightAt : W ? W.heightAt : () => 0, [zone, W])
+  const ground = useMemo(() => zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : W ? W.heightAt : () => 0, [zone, W, cl.frame])
 
   const onTick = useCallback((lc: Loco, _yaw: number, dt: number) => {
     pos.current = { x: lc.px, z: lc.pz, grounded: !lc.airborne, swimming: lc.swimming }
@@ -325,6 +333,7 @@ export default function AtherSlice() {
       if (e.code === 'Escape' && panel) { setPanel(null); return }
       if (e.code === 'Tab' && panel?.kind === 'map') { e.preventDefault(); setPanel({ ...panel, view: panel.view === 'ather' ? 'athernyx' : 'ather' }); return }
       if (e.code === 'KeyM') { setPanel(p => p ? null : { kind: 'map', view: 'ather', travel: false }); return }
+      if (e.code === 'KeyC' && zone.kind === 'plot') { setPanel(p => p?.kind === 'cluster' ? null : p ? p : { kind: 'cluster' }); return }
       if (e.code === 'BracketRight' && tune) { skipDays(e.shiftKey ? 5 : 1); return }
       if (e.code === 'BracketLeft' && tune && spreadRef.current) {   // tuning: wipe the map clean to watch it grow back
         let st = spreadRef.current; for (const n of allNodes) st = clearAt(st, allNodes, n.id, clock()).s
@@ -358,6 +367,7 @@ export default function AtherSlice() {
     ...(prompt ? [{ code: 'KeyE', key: 'E', label: prompt.startsWith('E · Gregory') ? 'Gregory' : 'use', near: true }] : []),
     ...(prompt?.includes('L lift') ? [{ code: 'KeyL', key: 'L', label: 'lift', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
+    ...(zone.kind === 'plot' ? [{ code: 'KeyC', key: 'C', label: 'friends' }] : []),
     { code: 'KeyI', key: 'I', label: 'pack' },
     ...(zone.kind === 'wilds' ? [
       { code: 'KeyF', key: 'F', label: 'waymark' },
@@ -375,6 +385,7 @@ export default function AtherSlice() {
       >
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && W ? (x, z) => W.canopyAt(x, z) * 0.7 : undefined} />
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} />}
+        {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
         {zone.kind === 'wilds' && W && <WildsScene W={W} waymarks={waymarks} />}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
@@ -393,7 +404,7 @@ export default function AtherSlice() {
       <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
       <GameHud size={hudSize} pose={poseRef} marks={marksRef} vitals={vitalsRef} mana={manaRef} entries={hotbar} sel={slot} onSelect={setSlot}
         dimmed={zone.kind !== 'wilds'} input={!panel && !fade}
-        minimap={W && <AtherMiniMap size={hudSize} zone={zone.kind} W={W} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regions={regions}
+        minimap={W && <AtherMiniMap size={hudSize} zone={zone.kind} W={W} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regions={regions} cluster={cl.frame}
           owned={owned} onExpand={() => setPanel({ kind: 'map', view: 'ather', travel: false })} />}
         status={[
           { label: hud.where },
@@ -435,6 +446,7 @@ export default function AtherSlice() {
           onClose={() => setPanel(null)} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
+      {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={slot} isTouch={isTouch} />}
       <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />
       {isTouch && !panel && (

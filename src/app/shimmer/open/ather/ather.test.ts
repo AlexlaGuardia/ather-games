@@ -14,7 +14,7 @@ import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVE
 import { placeNodes, nodeAdjacency, ownerOf, nodeRegions, polyArea, NODE_CLEAR_OF, GAME_DAY_MS, SUB } from './nodes'
 import { advance, clearAt, freshSpread, infectedIds, SPREAD } from './spread'
 import { readGarden, gardenText } from './garden-snapshot'
-import { clusterFrame, clusterGround, wallsWithLane, onSeg, QV, D, MIDDLE_R } from './cluster'
+import { clusterFrame, clusterGround, wallsWithLane, mateWalls, onSeg, QV, D, MIDDLE_R } from './cluster'
 import { atherPlatePixels, ATHER_HUE, plotPlatePixels, PLOT_MPP } from './plate'
 import { reveal, newFog, isRevealed, REVEAL_R } from './explored'
 import { canPlant, plant, lift, reachedBiomes, waymarksInWorld, TILE_CENTRE, GREG_WAYMARK, PER_BIOME, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
@@ -489,6 +489,13 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   let fenced = false; for (let o = 1.5; o < 4.5; o += 0.1) if (blocks(mid.x + (n.x / nl) * o, mid.z + (n.z / nl) * o)) fenced = true
   ok(fenced, 'cluster: you can step off the lane into the mist')
   ok(MIDDLE_R > 20, 'cluster: the middle is too small to be a place')
+  // visiting: their bridge lands on their lane, their lane is open, and their unbought squares are fenced off
+  const mw = mateWalls(f), pl = f.mates[0]
+  const mblocks = (x: number, z: number) => mw.some(w => x >= w.x0 && x <= w.x1 && z >= w.z0 && z <= w.z1)
+  const lanePts: [number, number][] = []; for (let t = 0; t <= 1; t += 0.05) lanePts.push([pl.lane.ax + (pl.lane.bx - pl.lane.ax) * t, pl.lane.az + (pl.lane.bz - pl.lane.az) * t])
+  ok(lanePts.every(([x, z]) => !mblocks(x, z) && Number.isFinite(clusterGround(f, x, z))), "cluster: a friend's lane is walled or has a hole")
+  ok(Math.hypot(pl.lane.bx - f.bridges[1].ax, pl.lane.bz - f.bridges[1].az) < 1, "cluster: a friend's bridge does not land on their lane")
+  ok(mw.length > 20, "cluster: a friend's unbought squares are not fenced")
   // a mate's garden is somebody else's data: only well-formed square ids get through
   ok(readGarden(gardenText(['4,4', '3,3']))?.owned.join() === '3,3,4,4', 'garden: a good snapshot did not round-trip')
   ok(readGarden('{"v":1,"owned":["9,9"]}') === null && readGarden('{"v":1,"owned":["4,4","<b>"]}') === null, 'garden: a bad square id got through')

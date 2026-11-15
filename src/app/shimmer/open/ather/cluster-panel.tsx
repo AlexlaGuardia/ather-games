@@ -41,14 +41,19 @@ export function useCluster(owned: readonly string[]) {
     const t = setTimeout(() => { fetch('/api/cluster/garden', { method: 'POST', body: gardenText(owned) }).catch(() => {}) }, 1500)
     return () => clearTimeout(t)
   }, [key, rem.quarter]) // eslint-disable-line react-hooks/exhaustive-deps
+  // ?cluster=preview: a stand-in friend in the opposite quarter, so the linked world can be walked (and checked)
+  // without a second account. Nothing is sent anywhere; it is a picture of what linking opens.
+  const [preview, setPreview] = useState(false)
+  useEffect(() => { setPreview(new URLSearchParams(location.search).get('cluster') === 'preview') }, [])
   const frame: Frame = useMemo(() => {
+    if (preview) return clusterFrame('ne', [{ quarter: 'ne', name: 'you', owned: [...owned] }, { quarter: 'sw', name: 'a friend (preview)', owned: ['3,3', '4,3', '5,3', '3,4', '4,4', '5,4', '3,5', '4,5', '5,5', '4,2'] }])
     if (!rem.view || !rem.quarter) return clusterFrame(null, [])
     const mates: Mate[] = rem.view.members.map(m => {
       const g = rem.gardens[m.quarter], snap = g ? readGarden(g.data) : null   // somebody else's data: checked again here
       return { quarter: m.quarter as Quarter, name: m.username ?? 'a keeper', owned: m.quarter === rem.quarter ? [...owned] : snap?.owned ?? [] }
     })
     return clusterFrame(rem.quarter as Quarter, mates)
-  }, [rem, key]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rem, key, preview]) // eslint-disable-line react-hooks/exhaustive-deps
   const act = useCallback(async (action: string, body: Record<string, unknown> = {}) => {
     setBusy(action)
     try {

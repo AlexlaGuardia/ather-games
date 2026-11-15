@@ -35,7 +35,7 @@ export interface Frame {
   mine: Quarter | null
   linked: boolean
   middle: { x: number; z: number; r: number } | null
-  mates: (Mate & { x: number; z: number })[]
+  mates: (Mate & { x: number; z: number; lane: Seg })[]
   /** my lane (on my plot, through the mist) */
   lane: Seg | null
   /** bridges, rim to middle: mine and each mate's */
@@ -65,12 +65,17 @@ export function clusterFrame(mine: Quarter | null, mates: Mate[]): Frame {
     const a = { x: cx + uu.x * r, z: cz + uu.z * r }, e = midEdge(cx, cz)
     return { ax: a.x, az: a.z, ay: plotHeightAt(uu.x * r, uu.z * r), bx: e.x, bz: e.z, by: MIDDLE_Y, w: BRIDGE_W }
   }
-  const placed = others.map(m => ({ ...m, x: mx + D * QV[m.quarter].x, z: mz + D * QV[m.quarter].z }))
+  // each plot's lane, in ITS OWN frame (from the corner of its starting ground toward the middle), placed at (cx, cz)
+  const laneFor = (cx: number, cz: number, qq: { x: number; z: number }): Seg => {
+    const uu = { x: -qq.x / Math.SQRT2, z: -qq.z / Math.SQRT2 }, r = rimAlong({ x: -qq.x, z: -qq.z }) - 1.5
+    return { ax: cx + uu.x * corner, az: cz + uu.z * corner, ay: plotHeightAt(uu.x * corner, uu.z * corner), bx: cx + uu.x * r, bz: cz + uu.z * r, by: plotHeightAt(uu.x * r, uu.z * r), w: LANE_W }
+  }
+  const placed = others.map(m => { const x = mx + D * QV[m.quarter].x, z = mz + D * QV[m.quarter].z; return { ...m, x, z, lane: laneFor(x, z, QV[m.quarter]) } })
   return {
     mine, linked: true,
     middle: { x: mx, z: mz, r: MIDDLE_R },
     mates: placed,
-    lane: { ax: u.x * corner, az: u.z * corner, ay: plotHeightAt(u.x * corner, u.z * corner), bx: u.x * rim, bz: u.z * rim, by: plotHeightAt(u.x * rim, u.z * rim), w: LANE_W },
+    lane: laneFor(0, 0, q),
     bridges: [bridge(0, 0, q), ...placed.map(m => bridge(m.x, m.z, QV[m.quarter]))],
   }
 }
@@ -95,10 +100,13 @@ export function clusterGround(f: Frame, x: number, z: number): number {
 }
 
 /** My plot's mist walls with the lane cut through them (walls are cut to 1 m pieces where the lane crosses). */
-export function wallsWithLane(owned: ReadonlySet<string>, f: Frame): Box[] {
-  const walls = mistWalls(owned)
-  if (!f.lane) return walls
-  const lane = f.lane, out: Box[] = []
+export function wallsWithLane(owned: ReadonlySet<string>, f: Frame): Box[] { return laneWalls(owned, f.lane, 0, 0) }
+
+/** A plot's mist walls, placed at (ox, oz), with its lane cut through and fenced. */
+function laneWalls(owned: ReadonlySet<string>, laneW: Seg | null, ox: number, oz: number): Box[] {
+  const walls = mistWalls(owned).map(w => ({ ...w, x0: w.x0 + ox, x1: w.x1 + ox, z0: w.z0 + oz, z1: w.z1 + oz }))
+  if (!laneW) return walls
+  const lane = laneW, out: Box[] = []
   for (const w of walls) {
     const cx = (w.x0 + w.x1) / 2, cz = (w.z0 + w.z1) / 2
     if (along(lane, cx, cz).d > SQ) { out.push(w); continue }            // nowhere near: keep whole
@@ -114,11 +122,17 @@ export function wallsWithLane(owned: ReadonlySet<string>, f: Frame): Box[] {
   const dx = lane.bx - lane.ax, dz = lane.bz - lane.az, L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L, nx = -uz, nz = ux
   for (let t = 0; t <= L; t += 0.7) for (const side of [-1, 1]) {
     const x = lane.ax + ux * t + nx * side * (lane.w / 2 + 0.35), z = lane.az + uz * t + nz * side * (lane.w / 2 + 0.35)
-    const i = Math.floor((x + GRID_HALF) / SQ), j = Math.floor((z + GRID_HALF) / SQ)
+    const i = Math.floor((x - ox + GRID_HALF) / SQ), j = Math.floor((z - oz + GRID_HALF) / SQ)
     const inGrid = i >= 0 && j >= 0 && i < GRID_N && j < GRID_N
     if (inGrid && owned.has(`${i},${j}`)) continue
-    if (!insideIsland(x, z)) continue
+    if (!insideIsland(x - ox, z - oz)) continue
     out.push({ x0: x - 0.4, x1: x + 0.4, z0: z - 0.4, z1: z + 0.4, y0: -20, y1: 40 })
   }
   return out
+}
+
+/** Every wall the cluster adds beyond my own plot: each mate's mist (their unbought squares stay theirs to open) with
+ *  their lane cut through it, so a visitor walks their bridge, their lane, and the ground they hold, and nothing else. */
+export function mateWalls(f: Frame): Box[] {
+  return f.mates.flatMap(m => laneWalls(new Set(m.owned), m.lane, m.x, m.z))
 }

@@ -19,21 +19,25 @@ import { GATE, GREG } from './plot'
 import type { Wilds } from './wilds'
 import { atherPlate, plotPlate, PLOT_MPP } from './plate'
 import type { CompassPose } from '../shared/game-hud'
+import type { Frame } from './cluster'
 
 const REACH = 120          // Wilds: metres from centre to edge
 const PLOT_REACH = 92      // plot: the whole island fits
 const COMP = 1000          // composed tile picture, px
 
-export function AtherMiniMap({ size, zone, W, fog, tileOff, pose, waymarks, regions, owned, onExpand }: {
+export function AtherMiniMap({ size, zone, W, fog, tileOff, pose, waymarks, regions, owned, onExpand, cluster }: {
   size: HudSize; zone: 'plot' | 'wilds'; W: Wilds; fog: Fog | null; tileOff: { x: number; z: number }
   pose: React.RefObject<CompassPose | null>; waymarks: Waymark[]
   regions: { id: string; poly: { x: number; z: number }[]; infected: boolean }[]
   owned: ReadonlySet<string>; onExpand: () => void
+  /** linked plots (cluster.ts): sketched round the island, the shared ground and the bridges */
+  cluster?: Frame
 }) {
   const box = hudMapBox(size)
   const cv = useRef<HTMLCanvasElement>(null)
   const comp = useRef<HTMLCanvasElement | null>(null)
   const ver = useRef(0)
+  const clusterRef = useRef(cluster); clusterRef.current = cluster
 
   // compose the tile picture (Wilds) whenever what it shows changes
   useEffect(() => {
@@ -80,7 +84,7 @@ export function AtherMiniMap({ size, zone, W, fog, tileOff, pose, waymarks, regi
     const tick = () => {
       id = requestAnimationFrame(tick)
       const p = pose.current; if (!p) return
-      const key = `${zone},${Math.round(p.x * 2)},${Math.round(p.z * 2)},${Math.round(p.yaw * 30)},${ver.current},${owned.size}`
+      const key = `${zone},${Math.round(p.x * 2)},${Math.round(p.z * 2)},${Math.round(p.yaw * 30)},${ver.current},${owned.size},${clusterRef.current?.mates.length ?? 0}`
       if (key === last) return
       last = key
       const ctx = c.getContext('2d')!, S = c.width
@@ -99,6 +103,14 @@ export function AtherMiniMap({ size, zone, W, fog, tileOff, pose, waymarks, regi
         const { canvas: pl, extent: E } = plotPlate(owned), span = (PLOT_REACH * 2) / PLOT_MPP
         ctx.imageSmoothingEnabled = true
         ctx.drawImage(pl, (p.x + E) / PLOT_MPP - span / 2, (p.z + E) / PLOT_MPP - span / 2, span, span, 0, 0, S, S)
+        // linked plots: the shared ground, the bridges, my lane and each mate's island, sketched in the plate's palette
+        const f = clusterRef.current
+        if (f?.linked && f.middle) {
+          ctx.strokeStyle = '#cdbf9f'; ctx.lineCap = 'round'
+          for (const b of [...f.bridges, ...(f.lane ? [f.lane] : []), ...f.mates.map(m => m.lane)]) { ctx.lineWidth = Math.max(2, b.w * k); ctx.beginPath(); ctx.moveTo(X(b.ax), Z(b.az)); ctx.lineTo(X(b.bx), Z(b.bz)); ctx.stroke() }
+          ctx.fillStyle = '#a9cf86'; ctx.beginPath(); ctx.arc(X(f.middle.x), Z(f.middle.z), f.middle.r * k, 0, Math.PI * 2); ctx.fill()
+          for (const m of f.mates) { ctx.fillStyle = 'rgba(170,206,120,0.85)'; ctx.beginPath(); ctx.arc(X(m.x), Z(m.z), 80 * k, 0, Math.PI * 2); ctx.fill() }
+        }
         const dot = (x: number, z: number, col: string) => { ctx.fillStyle = col; ctx.strokeStyle = '#1a1410'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X(x), Z(z), 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke() }
         dot(GATE.x, GATE.z, '#e7c766'); dot(GREG.x, GREG.z, '#c9a27a')
       }
