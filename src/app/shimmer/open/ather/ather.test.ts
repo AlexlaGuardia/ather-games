@@ -14,7 +14,7 @@ import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVE
 import { placeNodes, nodeAdjacency, ownerOf, nodeRegions, polyArea, NODE_CLEAR_OF, GAME_DAY_MS, SUB } from './nodes'
 import { advance, clearAt, freshSpread, infectedIds, SPREAD } from './spread'
 import { readGarden, gardenText } from './garden-snapshot'
-import { treeFor, prune, forestryLevel, _resetForestry, type Zone } from './forestry'
+import { treeFor, prune, forestryLevel, _resetForestry, SAPLING_CHANCE, PRUNE_RANGE, MANA_COST, type Zone } from './forestry'
 import { clusterFrame, clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow, D, MIDDLE_HALF, type Quarter } from './cluster'
 import { pathDist, PATH_W, meadowHeightAt } from './meadow'
 import { makeWorld, stream, tileOf, TILE_M, SEA_FLOOR, type TileIndex } from './wilds-world'
@@ -657,12 +657,18 @@ const worldDone = (async () => {
   _resetForestry(1)
   const now = 1_000_000
   const g = prune('goldwood', 'test:g0', () => 0, now)
-  ok(g.ok && g.drops.some(d => d.id === 'goldwood_plank') && g.xp === 20, 'prune: a goldwood did not pay its plank + 20 xp')
+  ok(g.ok && g.drops.some(d => d.id === 'goldwood_log' && d.n === 2) && g.xp === 20, 'prune: a goldwood did not pay its logs + 20 xp')
+  // Alex 11-15: "a few logs and a small chance for a sapling": 2–4 logs, a sapling only under the (small) chance
+  ok(g.ok && g.drops.some(d => d.id === 'goldwood_sapling'), 'prune: a roll of 0 is under the sapling chance and paid none')
+  const hi = prune('goldwood', 'test:hi', () => 0.99, now)
+  ok(hi.ok && hi.drops.length === 1 && hi.drops[0].id === 'goldwood_log' && hi.drops[0].n === 4, 'prune: a high roll paid a sapling or not 4 logs')
+  ok(Object.values(SAPLING_CHANCE).every(c => c > 0 && c <= 0.1), 'prune: a sapling chance is not SMALL (a pruned tree regrows in minutes)')
+  ok(PRUNE_RANGE === 10 && MANA_COST > 0, 'prune: the reach is not 10 m or pruning is free')
   ok(!prune('goldwood', 'test:g0', () => 0, now + 1000).ok, 'prune: a pruned goldwood pruned again before it regrew')
   ok(prune('goldwood', 'test:g0', () => 0, now + 3 * 60_000).ok, 'prune: a goldwood never regrew')
   const s0 = prune('shimmeroak', 'test:s0', () => 0, now)
   ok(!s0.ok && /Forestry 4/.test(s0.why), 'prune: a shimmeroak gave to Forestry 1')
-  for (let k = 1; k < 14; k++) prune('goldwood', `test:g${k}`, () => 0, now)
+  for (let k = 1; k < 13; k++) prune('goldwood', `test:g${k}`, () => 0, now)   // + test:g0 twice + test:hi = 14 prunes
   ok(forestryLevel() === 4 && prune('shimmeroak', 'test:s0', () => 0, now).ok, `prune: 14 goldwood prunes did not open Shimmeroak (Forestry ${forestryLevel()})`)
   _resetForestry(1)
 }

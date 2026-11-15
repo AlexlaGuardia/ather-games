@@ -1,7 +1,7 @@
 // ── Prod check for Wilds forestry (2026-11-15, world): zones grow the Ather's four trees and E prunes one ───────────
-// Picks a real goldwood + shimmeroak off the start tile (the same parser the page runs), walks up to each on prod,
-// presses E: the goldwood must land a plank in the bag and a timer in open.pruned.v1; the shimmeroak must refuse at
-// Forestry 1. Screenshots to --out.   npx tsx scripts/forestry-check.mts [--out dir]
+// Picks a real goldwood + shimmeroak off the start tile (the same parser the page runs). From 6 m it aims at the goldwood
+// and prunes through the click's own path (__ather.prune): logs land in the bag, a timer in open.pruned.v1, mana is spent.
+// From 14 m nothing is aimed. A shimmeroak refuses at Forestry 1. Screenshots to --out.   npx tsx scripts/forestry-check.mts [--out dir]
 import puppeteer from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { parseWilds, type WildsMeta } from '../src/app/shimmer/open/ather/wilds'
@@ -24,21 +24,32 @@ await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 120000 }); await sleep(2000)
 await p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))
 await sleep(9000)
-const standBy = async (t: { x: number; z: number; kind: string }) => {
-  const d = TRUNK[t.kind as keyof typeof TRUNK] + 1.1
-  await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), t.x + d, t.z); await sleep(3500)
-}
+// stand `d` metres east of a tree, facing it (yaw π/2 looks west), so the crosshair sits on the trunk
+const aimFrom = async (t: { x: number; z: number }, d: number) => { await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), t.x + d, t.z); await sleep(3500) }
 await p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
-await standBy(gold)
-try { await p.screenshot({ path: `${out}/forestry-1-goldwood.png` }) } catch { /* slow frame */ }
-await p.keyboard.press('KeyE'); await sleep(1500)
-res.afterGold = await p.evaluate(() => ({ pruned: Object.keys(JSON.parse(localStorage.getItem('open.pruned.v1') ?? '{}')), inv: (JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots as ({ id: string; n: number } | null)[]).filter(Boolean).map(s => s!.id) }))
-try { await p.screenshot({ path: `${out}/forestry-2-pruned.png` }) } catch { /* slow frame */ }
-await standBy(oak)
-await p.keyboard.press('KeyE'); await sleep(1500)
+// FROM A DISTANCE (Alex 11-15: "click a tree from about 10 blocks out"): 6 m off, aim, prune (the click's own path)
+await aimFrom(gold, 6)
+res.aimGold = await p.evaluate(() => (window as any).__ather.aim())
+try { await p.screenshot({ path: `${out}/forestry-1-aim.png` }) } catch { /* slow frame */ }
+const mana0 = await p.evaluate(() => (window as any).__ather.mana())
+await p.evaluate(() => (window as any).__ather.prune()); await sleep(450)
+try { await p.screenshot({ path: `${out}/forestry-2-channel.png` }) } catch { /* slow frame */ }
+await sleep(1100)
+try { await p.screenshot({ path: `${out}/forestry-3-drops.png` }) } catch { /* slow frame */ }
+await sleep(2500)
+res.manaSpent = +(mana0 - (await p.evaluate(() => (window as any).__ather.mana()))).toFixed(1)
+res.afterGold = await p.evaluate(() => ({ pruned: Object.keys(JSON.parse(localStorage.getItem('open.pruned.v1') ?? '{}')), inv: (JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots as ({ id: string; n: number } | null)[]).filter(Boolean).map(s => `${s!.id}x${s!.n}`) }))
+// out of reach: 14 m off, nothing is aimed
+await aimFrom(gold, 14)
+res.aimFar = await p.evaluate(() => (window as any).__ather.aim())
+// the gate: a shimmeroak at Forestry 1 refuses
+await aimFrom(oak, 5)
+res.aimOak = await p.evaluate(() => (window as any).__ather.aim())
+await p.evaluate(() => (window as any).__ather.prune()); await sleep(2000)
 res.afterOak = await p.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('open.pruned.v1') ?? '{}')))
-try { await p.screenshot({ path: `${out}/forestry-3-shimmeroak.png` }) } catch { /* slow frame */ }
 console.log(JSON.stringify(res))
 const a = res.afterGold as { pruned: string[]; inv: string[] }
-const pass = a.pruned.includes(gold.id) && a.inv.includes('goldwood_plank') && !(res.afterOak as string[]).includes(oak.id)
+// the mana check allows for the refill over the ~4 s between the two readings
+const pass = res.aimGold === gold.id && a.pruned.includes(gold.id) && a.inv.some(x => x.startsWith('goldwood_log')) && a.inv.some(x => x.startsWith('worn_blade'))
+  && (res.manaSpent as number) > -2 && res.aimFar === null && res.aimOak === oak.id && !(res.afterOak as string[]).includes(oak.id)
 console.log(pass ? 'PASS' : 'FAIL'); await br.close(); process.exit(pass ? 0 : 1)

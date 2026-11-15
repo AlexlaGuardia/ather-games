@@ -5,7 +5,8 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import * as THREE from 'three'
 import { BIOME, type Wilds, type BiomeId, type Tree } from './wilds'
-import { TREE_KINDS, isPruned, subscribeForestry, forestryRev, type TreeKind } from './forestry'
+import { TREE_KINDS, isPruned, subscribeForestry, forestryRev, crownOf, shakeOf, type TreeKind } from './forestry'
+import { useFrame } from '@react-three/fiber'
 import { GREG_WAYMARK, type Waymark } from './waymarks'
 import { P } from './palette'
 import { GROUND, useGroundMaterial } from './ground-look'
@@ -57,6 +58,23 @@ function TreeKindMesh({ trees, kind }: { trees: Tree[]; kind: TreeKind }) {
   const trunk = useRef<THREE.InstancedMesh>(null), crown = useRef<THREE.InstancedMesh>(null)
   const frev = useSyncExternalStore(subscribeForestry, forestryRev, () => 0)
   const L = LOOK[kind]
+  // each crown's resting placement, so the one the light is cutting can sway about its base and settle back
+  const base = useRef<{ x: number; y: number; z: number; sx: number; sy: number; id: string; bottom: number }[]>([])
+  const swaying = useRef(-1)
+  useFrame(() => {
+    const cm = crown.current; if (!cm) return
+    const now = Date.now()
+    let k = swaying.current
+    if (k < 0) { k = base.current.findIndex(b => shakeOf(b.id, now) >= 0); if (k < 0) return; swaying.current = k }
+    const b = base.current[k], u = shakeOf(b.id, now), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler()
+    if (u < 0) { cm.setMatrixAt(k, m.compose(new THREE.Vector3(b.x, b.y, b.z), q, new THREE.Vector3(b.sx, b.sy, b.sx))); cm.instanceMatrix.needsUpdate = true; swaying.current = -1; return }
+    // a quick shiver that dies away: tilt about the crown's base, so the top moves and the bottom stays on the trunk
+    const amp = 0.16 * (1 - u), a1 = Math.sin(u * 38) * amp, a2 = Math.cos(u * 31) * amp * 0.7
+    q.setFromEuler(e.set(a1, 0, a2))
+    const off = new THREE.Vector3(0, b.y - b.bottom, 0).applyQuaternion(q)
+    cm.setMatrixAt(k, m.compose(new THREE.Vector3(b.x, b.bottom, b.z).add(off), q, new THREE.Vector3(b.sx * (1 + 0.04 * Math.sin(u * 50)), b.sy, b.sx)))
+    cm.instanceMatrix.needsUpdate = true
+  })
   useEffect(() => {
     // ⚠ a kind with no trees on this tile renders null, so its refs are null: the effect must not reach for them
     // (shipped without this, every tile missing a kind crashed the page on entering the Wilds, 11-15)
@@ -64,13 +82,11 @@ function TreeKindMesh({ trees, kind }: { trees: Tree[]; kind: TreeKind }) {
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color()
     const now = Date.now()
     trees.forEach((t, k) => {
-      const cut = isPruned(t.id, now), w = L.trunkW, h = L.shape === 'giant' ? 4.2 : 2.8
+      const cut = isPruned(t.id, now), w = L.trunkW, cr = crownOf(t, cut ? 0.55 : 1), h = cr.trunkH
       p.set(t.x, t.y + h / 2, t.z); s.set(w, h, w); trunk.current!.setMatrixAt(k, m.compose(p, q, s))
-      const f = cut ? 0.55 : 1
-      // a crown's BOTTOM sits at its base height, above the keeper's eye (1.6 m): centre = base + half its height. The
-      // first cut centred round crowns low and their lower half hung to the knee (the camera stood inside a shimmeroak)
-      if (L.shape === 'weep') { const hh = t.tall * 0.45 * f; p.set(t.x, t.y + 1.3 + hh, t.z); s.set(t.r * 1.15 * f, hh * 2, t.r * 1.15 * f) }   // the skirt hangs low on purpose
-      else { const hh = t.tall * (L.shape === 'giant' ? 0.34 : 0.3) * f, base = L.shape === 'giant' ? h - 0.4 : 2.4; p.set(t.x, t.y + base + hh, t.z); s.set(t.r * (L.shape === 'giant' ? 1.1 : 1) * f, hh, t.r * (L.shape === 'giant' ? 1.1 : 1) * f) }
+      // a crown's BOTTOM sits above the keeper's eye (crownOf; the willow's skirt hangs low on purpose)
+      p.set(t.x, cr.cy, t.z); s.set(cr.r, L.shape === 'weep' ? cr.hh * 2 : cr.hh, cr.r)
+      base.current[k] = { x: t.x, y: cr.cy, z: t.z, sx: cr.r, sy: L.shape === 'weep' ? cr.hh * 2 : cr.hh, id: t.id, bottom: cr.cy - cr.hh }
       crown.current!.setMatrixAt(k, m.compose(p, q, s))
       c.set(L.crown).offsetHSL(((k * 0.07) % 0.04) - 0.02, cut ? -0.15 : 0, (((k * 0.11) % 0.08) - 0.04) - (cut ? 0.06 : 0))
       crown.current!.setColorAt(k, c)

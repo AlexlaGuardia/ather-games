@@ -50,7 +50,8 @@ import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take, itemDef } from '../shared/inventory'
-import { prune, pruneCheck, TREE_NAME, TRUNK } from './forestry'
+import { prune, pruneCheck, startShake, TREE_NAME, MANA_COST } from './forestry'
+import { ForestryFX, type Aim, type ForestryFx } from './forestry-fx'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { AtherMiniMap } from './minimap'
 import type { Vitals } from '../../engine/vitals'
@@ -59,7 +60,7 @@ import type { Vitals } from '../../engine/vitals'
 type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
 type Spawn = { x: number; z: number; yaw: number }
 type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' }
-type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'tree'; t: Tree }
+type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'waymark'; w: Waymark; own: boolean }
 
 export default function AtherSlice() {
   const locked = useRef(false), frozen = useRef(false)
@@ -97,7 +98,9 @@ export default function AtherSlice() {
   const marksRef = useRef<CompassMark[]>([])
   const journal = useJournal()   // re-marks the compass when a journal waymark is toggled
   const vitalsRef = useRef<Vitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0 })
-  const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 0 })   // no casting in the open world yet: shown full
+  // ★ mana is real now: pruning from a distance spends it (forestry.ts › MANA_COST), it refills slowly (build: 1.5/s)
+  const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 1.5 })
+  const aimRef = useRef<Aim>({ tree: null, dist: Infinity }), fxRef = useRef<ForestryFx | null>(null)
   const [slot, setSlot] = useState(0)                               // 0 = the Repeater, 1 = a waymark to plant
   const onCombatHud = useCallback((h: CombatHud) => { vitalsRef.current = { hp: h.hp, hpMax: h.maxHp, shield: 0, shieldMax: 0 }; setChud(h) }, [])
   const [pitstops, setPitstops] = useState<Pitstop[]>([LANDING])
@@ -279,6 +282,7 @@ export default function AtherSlice() {
 
   const onTick = useCallback((lc: Loco, _yaw: number, dt: number) => {
     pos.current = { x: lc.px, z: lc.pz, grounded: !lc.airborne, swimming: lc.swimming }
+    { const m = manaRef.current; if (m.cur < m.max) m.cur = Math.min(m.max, m.cur + m.regen * dt) }   // mana refills (forestry spends it)
     poseRef.current = { x: lc.px, z: lc.pz, yaw: _yaw }
     let n: Near = null
     if (zone.kind === 'plot') {
@@ -287,12 +291,6 @@ export default function AtherSlice() {
     } else {
       const all = [{ w: GREG_WAYMARK, own: false }, ...waymarks.map(w => ({ w, own: true }))]
       for (const { w, own } of all) { const o = ww?.byName.has(w.tile) ? ww.offsetOf(w.tile) : null; if (o && Math.hypot(w.x + o.x - lc.px, w.z + o.z - lc.pz) < 2.6) n = { kind: 'waymark', w, own } }
-      // a tree in reach (forestry.ts): the nearest trunk you are standing at, if no waymark is closer to hand
-      if (!n && ww) {
-        let best: Tree | null = null, bd = Infinity
-        for (const t of ww.treesNear(lc.px, lc.pz, 4)) { const d = Math.hypot(t.x - lc.px, t.z - lc.pz) - TRUNK[t.kind]; if (d < REACH && d < bd) { bd = d; best = t } }
-        if (best) n = { kind: 'tree', t: best }
-      }
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
       const t = ww ? ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty) : undefined
       if (t && t.name !== hereRef.current) { hereRef.current = t.name; setHereTile(t.name); streamAt(lc.px, lc.pz) }
@@ -307,7 +305,7 @@ export default function AtherSlice() {
       const p = n?.kind === 'gate' ? 'E · the gate (fold map)'
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
-        : n?.kind === 'tree' ? (() => { const c = pruneCheck(n.t.kind, n.t.id); return c.ok ? `E · prune the ${TREE_NAME[n.t.kind]}` : c.why })() : null
+        : treePrompt()
       setPrompt(p)
       let where = 'your plot'
       if (zone.kind === 'wilds' && ww) { const g = groundRef.current(lc.px, lc.pz); where = BIOME_NAME[ww.biomeAt(lc.px, lc.pz)] + (g ? ` · ${g}` : '') }
@@ -343,6 +341,7 @@ export default function AtherSlice() {
       grant: (grey = 0, pages = 0) => updateGarden({ ...garden, grey: garden.grey + grey, pages: garden.pages + pages }),
       resetGarden: () => updateGarden(freshGarden()),
       spread: () => spreadRef.current, skipDays, ownerAt: (x: number, z: number) => nodeOwner?.(x, z),
+      prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mana: () => manaRef.current.cur,
     }
   }, [zone, travel, garden, updateGarden, skipDays, nodeOwner])
 
@@ -365,10 +364,41 @@ export default function AtherSlice() {
   // the Repeater fires (combat-layer only fires while armed)
   const inv = useInv()
   const held = heldItem(inv, slot)
+  const heldRef = useRef(held); heldRef.current = held
+  // ── forestry from a distance (forestry.ts + forestry-fx.tsx): hold the Worn Blade, click a tree within 10 m
+  const pruneAimed = useCallback(() => {
+    const t = aimRef.current.tree
+    if (!t || zone.kind !== 'wilds') return
+    const c = pruneCheck(t.kind, t.id); if (!c.ok) { setToast(c.why); return }
+    if (fxRef.current?.busy()) return
+    if (manaRef.current.cur < MANA_COST) { setToast(`Not enough mana (${MANA_COST} to prune). It comes back on its own.`); return }
+    let text = ''
+    const ok = fxRef.current?.start(t, () => {
+      const r = prune(t.kind, t.id)
+      if (!r.ok) { text = r.why; return [] }
+      let inv = getInv(); const names: string[] = []
+      for (const d of r.drops) { const g = give(inv, d.id, d.n); inv = g.inv; names.push(`${d.n > 1 ? d.n + ' × ' : ''}${itemDef(d.id).name}${g.left ? ' (bag full)' : ''}`) }
+      setInv(inv)
+      text = `${names.join(' · ')} · +${r.xp} Forestry${r.levelUp ? `. Forestry ${r.levelUp}!` : ''}`
+      return r.drops
+    }, () => { if (text) setToast(text) })
+    if (ok) { manaRef.current.cur -= MANA_COST; startShake(t.id) }
+  }, [zone.kind])
+  const treePrompt = () => {
+    const t = aimRef.current.tree
+    if (!t || zone.kind !== 'wilds') return null
+    if (heldRef.current !== 'worn_blade') return `${TREE_NAME[t.kind]} · hold the Worn Blade to prune it`
+    const c = pruneCheck(t.kind, t.id)
+    return c.ok ? `Click · prune the ${TREE_NAME[t.kind]} (${MANA_COST} mana)` : c.why
+  }
   useEffect(() => {
-    const down = (e: MouseEvent) => { if (e.button === 0 && held === 'waymark' && locked.current && !frozen.current) plantHere() }
+    const down = (e: MouseEvent) => {
+      if (e.button !== 0 || !locked.current || frozen.current) return
+      if (held === 'waymark') plantHere()
+      else if (held === 'worn_blade') pruneAimed()
+    }
     window.addEventListener('mousedown', down); return () => window.removeEventListener('mousedown', down)
-  }, [held, plantHere])
+  }, [held, plantHere, pruneAimed])
   // compass marks: what the keeper might be heading for, by zone
   useEffect(() => {
     marksRef.current = zone.kind === 'plot'
@@ -418,16 +448,6 @@ export default function AtherSlice() {
       if (packTab) { setPanel(p => p?.kind === 'pack' ? (p.tab === packTab ? null : { kind: 'pack', tab: packTab }) : p ? p : { kind: 'pack', tab: packTab }); return }
       if (panel || fade) return
       const n = near.current
-      if (e.code === 'KeyE' && n?.kind === 'tree') {
-        const r = prune(n.t.kind, n.t.id)
-        if (!r.ok) { setToast(r.why); return }
-        const names: string[] = []
-        let inv = getInv()
-        for (const d of r.drops) { const g = give(inv, d.id, d.n); inv = g.inv; names.push(itemDef(d.id).name + (g.left ? ' (bag full)' : '')) }
-        setInv(inv)
-        setToast(`${names.join(' · ')} · +${r.xp} Forestry${r.levelUp ? `. Forestry ${r.levelUp}!` : ''}`)
-        return
-      }
       if (e.code === 'KeyE' && n) {
         if (n.kind === 'greg') setPanel({ kind: 'greg' })
         else setPanel({ kind: 'map', view: 'ather', travel: true })
@@ -473,6 +493,7 @@ export default function AtherSlice() {
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
+        {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} /></group> })}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}

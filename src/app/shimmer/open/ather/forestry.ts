@@ -6,9 +6,15 @@
 // ⚠ Zone ids are BUILD words. Alex's names (Spirit Meadows, Twilight Thicket, Mana Springs, Wooded Trails, Arid Fields,
 // caverns + one Voranyx Caverns) are [OPEN] in CANON_GAPS and stay OFF SCREEN until Magii rules. Tree names are canon.
 //
-// A tree is a node (canon: "walk up to a tree → channel mana → resources drop. Trees don't die — they regrow"): E
-// prunes it, the shared node table (world/resources.ts › NODE_DEFS: level 1/4/7/10, drops, XP, regrow) pays out, and the
-// tree stands thinned until it regrows. Forestry XP rides the game's own skill engine (engine/skills.ts, canon's curve).
+// A tree is a node (canon: "walk up to a tree → channel mana → resources drop. Trees don't die — they regrow").
+// ★ PRUNING FROM A DISTANCE (Alex 11-15: "click a tree from about 10 blocks out and use mana to prune a tree from a
+// distance and then the tree could drop a few logs and a small chance for a sapling"): hold the Worn Blade (canon: Greg's
+// tier-0 Forestry focus, "you prune; the light cuts"), click a tree within PRUNE_RANGE, MANA_COST mana channels down the
+// stream (forestry-fx.tsx draws it), and the tree drops 2–4 LOGS and, rarely, a SAPLING. Logs, not planks: the voxel
+// world's 08-13 ruling (tree-node.ts) made a log's whole job to be refined into planks / bark / sap, so the tree pays the
+// raw wood. Sapling odds are SMALL on purpose: tree-node's 35 % is for FELLING (the tree is gone); a pruned tree regrows
+// in minutes, so a 35 % sapling would be a sapling farm. The node table (world/resources.ts › NODE_DEFS) still sets the
+// level gate (1/4/7/10), the XP and the regrow; Forestry XP rides engine/skills.ts (canon's curve).
 //
 // ★ PURE but for the guarded localStorage load/save and a tiny subscribe store.
 
@@ -67,9 +73,31 @@ export const forestryLevel = () => skills.forestry.level
 export const regrowIn = (id: string, now = Date.now()) => Math.max(0, (pruned[id] ?? 0) - now)
 export const isPruned = (id: string, now = Date.now()) => regrowIn(id, now) > 0
 
+export const PRUNE_RANGE = 10
+export const MANA_COST = NODE_DEFS.goldwood.manaCost   // 5: the node table's forestry cost (every tier the same)
+/** Sapling odds per prune (build; tree-node.ts's felling odds are 0.35 / 0.28 / … and a pruned tree comes back). */
+export const SAPLING_CHANCE: Record<TreeKind, number> = { goldwood: 0.08, shimmeroak: 0.06, starwillow: 0.05, dawnwood: 0.04 }
+export const logItem = (k: TreeKind) => `${k}_log`
+export const saplingItem = (k: TreeKind) => `${k}_sapling`
+
 export type PruneVerdict =
   | { ok: true; drops: { id: string; n: number }[]; xp: number; levelUp: number | null }
   | { ok: false; why: string }
+
+/** Where a tree's crown stands (world y of its centre, half its height, its radius) and how tall the trunk is: ONE
+ *  answer for the scene that draws it, the aim ray that picks it and the stream that hits it. `f` shrinks a pruned crown. */
+export function crownOf(t: { y: number; tall: number; r: number; kind: TreeKind }, f = 1): { cy: number; hh: number; r: number; trunkH: number } {
+  if (t.kind === 'starwillow') { const hh = t.tall * 0.45 * f; return { cy: t.y + 1.3 + hh, hh, r: t.r * 1.15 * f, trunkH: 2.8 } }   // the weeping skirt hangs low
+  if (t.kind === 'dawnwood') { const hh = t.tall * 0.34 * f; return { cy: t.y + 3.8 + hh, hh, r: t.r * 1.1 * f, trunkH: 4.2 } }
+  const hh = t.tall * 0.3 * f
+  return { cy: t.y + 2.4 + hh, hh, r: t.r * f, trunkH: 2.8 }
+}
+
+// ── the shake: which tree the light is cutting right now (the tree meshes sway that one crown) ─────────────────
+let shaking: { id: string; t0: number } | null = null
+export const SHAKE_MS = 1100
+export function startShake(id: string, now = Date.now()) { shaking = { id, t0: now } }
+export const shakeOf = (id: string, now = Date.now()) => (shaking && shaking.id === id && now - shaking.t0 < SHAKE_MS ? (now - shaking.t0) / SHAKE_MS : -1)
 
 /** What pruning would say, without doing it (the prompt reads this). */
 export function pruneCheck(kind: TreeKind, id: string, level = forestryLevel(), now = Date.now()): { ok: true } | { ok: false; why: string } {
@@ -85,7 +113,8 @@ export function prune(kind: TreeKind, id: string, rand: () => number = Math.rand
   const c = pruneCheck(kind, id, forestryLevel(), now)
   if (!c.ok) return c
   const def = NODE_DEFS[kind]
-  const drops = def.drops.filter(d => rand() < d.chance).map(d => ({ id: d.itemId, n: 1 }))
+  const drops = [{ id: logItem(kind), n: 2 + Math.floor(rand() * 3) }]
+  if (rand() < SAPLING_CHANCE[kind]) drops.push({ id: saplingItem(kind), n: 1 })
   const r = addSkillXP(skills.forestry, def.xp)   // mutates the skill in place (engine/skills.ts)
   pruned[id] = now + def.respawnMs
   save(now); bump()
