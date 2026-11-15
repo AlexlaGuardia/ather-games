@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Fittings: smithed pieces (a barrel band, a bracket, a hinge), cord-bound. Code-drawn filler. -->
+  <ellipse cx="16" cy="27.5" rx="10" ry="2.2" fill="#000" opacity=".25"/>
+  <ellipse cx="11" cy="18.4" rx="6" ry="6" fill="none" stroke="#3b3631" stroke-width="3.6"/><ellipse cx="11" cy="18.4" rx="6" ry="6" fill="none" stroke="#8d8a84" stroke-width="2.2"/><path d="M7.4 14.6 A5 5 0 0 1 14 13.6" fill="none" stroke="#c9c6be" stroke-width=".8"/><path d="M17 25 L17 15 L25.6 15" fill="none" stroke="#3b3631" stroke-width="3.6" stroke-linejoin="round"/><path d="M17 25 L17 15 L25.6 15" fill="none" stroke="#9a968e" stroke-width="2.2" stroke-linejoin="round"/><circle cx="17" cy="21" r=".7" fill="#3b3631"/><circle cx="22" cy="15" r=".7" fill="#3b3631"/><path d="M19.6 7.4 L27 7.4 L27 11 L19.6 11 Z" fill="#7e7a73" stroke="#3b3631" stroke-width=".9"/><path d="M23.3 7 L23.3 11.4" stroke="#3b3631" stroke-width="1.2"/><circle cx="21.4" cy="9.2" r=".6" fill="#3b3631"/><circle cx="25.2" cy="9.2" r=".6" fill="#3b3631"/><path d="M12 23.6 Q18 27 24 22.6" fill="none" stroke="#7a6446" stroke-width="1.1"/>
+</svg>

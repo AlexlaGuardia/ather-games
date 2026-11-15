@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Produce: a slatted crate of the farm's take. Code-drawn filler. -->
+  <ellipse cx="16" cy="27.5" rx="10" ry="2.2" fill="#000" opacity=".25"/>
+  <path d="M5 15 L27 15 L25.6 26 L6.4 26 Z" fill="#a07c4c" stroke="#5a3d26" stroke-width=".9" stroke-linejoin="round"/><path d="M5.6 19 L26.4 19 M6 22.6 L26 22.6" stroke="#5a3d26" stroke-width=".8"/><circle cx="11.6" cy="13.6" r="4.4" fill="#8fb35a" stroke="#4f6e2c" stroke-width=".9"/><path d="M9 12.4 q2.6 -2 5.2 0 M9.6 15 q2 1.2 4 0" fill="none" stroke="#c3dc8c" stroke-width=".7"/><path d="M16.4 15.4 L19 8 L21.4 15.4 Z" fill="#d9813a" stroke="#8a4a1c" stroke-width=".8" stroke-linejoin="round"/><path d="M19 8 l-1.4 -3 M19 8 l.4 -3.4 M19 8 l1.8 -2.6" stroke="#6f9b4f" stroke-width="1" stroke-linecap="round"/><ellipse cx="23.6" cy="13.8" rx="3" ry="2.4" fill="#c8a85a" stroke="#7a5f2a" stroke-width=".8"/><path d="M23.6 11.4 l.6 -2" stroke="#6f9b4f" stroke-width="1" stroke-linecap="round"/>
+</svg>
