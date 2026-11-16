@@ -52,14 +52,20 @@ walks, PACK opens the bag. The birth screen hides its keyboard hint on phones. T
 backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the continent page. And
 "TAP TO START" eating the first touch was judged FINE (it says tap, and a tap is what it takes). Birth-wheel ghost names = 🔒 Alex.
 
-## How the hive works this list (AFK mode)
+## How the hive works this list (AFK mode, agreed with Alex 11-16)
 
-- **Hub (Opus, `/loop` ~25 min):** owns this file. Takes the top ⬜ row, hands it to a satellite, reviews the diff, deploys via
-  `coord build`, runs that row's check on prod, flips the status. Pings Alex's phone ONLY for: a row closed, a 🔒 row ready for
-  him, prod broken.
-- **Satellites (1, at most 2, Sonnet):** one row each. Build, prove the row's check passes on its devwin, hand back to the hub.
-- **Magii (standby):** a watcher sleeps until a lane asks her a canon question. A gap she cannot rule goes to Alex's queue.
-- **Alex's queue:** the 🔒 rows plus any look/feel call, with a screenshot each, on one phone page. He clears it at lunch.
-  **The hive never waits on him:** a 🔒 row is parked and the next ⬜ row is taken.
-- **Rules:** only rows on this list. No new systems, no new lore. Canon gate + tests green before every build. Nothing
-  public or outbound. Opus hub + Sonnet satellites, never four Opus windows on a shift.
+**Start of day: Alex types `/loop /hive` in ONE fresh window.** The playbook is `~/.claude/skills/hive/SKILL.md`.
+- **Hub (Opus, self-paced loop):** owns this file. Each tick: checkpoint due? → messages → review a returned worker
+  (diff, its check, then `coord build` and the row's check ON PROD, flip the row) → else dispatch the next row.
+- **Workers (Sonnet subagents, one at a time):** a FRESH one per row, so nothing ever needs clearing. Builds on devwin
+  `world` (:3201), proves the row's check, commits by pathspec, reports, ends. Never deploys.
+- **Checkpoints 11:00 / 13:30 ET:** the hub wraps (rows true, SHIMMER_SESSION, cortex), pushes "ready to clear", stops.
+  Alex: `/clear`, then `/loop /hive`. It boots from files and loses nothing. **18:00:** final wrap + the day's summary.
+- **Magii:** her own window if Alex opens one. Canon gaps go to CANON_GAPS.md + dbr + the queue below; the row parks.
+- **Never waits on Alex:** a 🔒 row goes to the queue and the next row is taken. A row that fails twice is ⛔ blocked.
+- **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
+
+## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+
+- **M1 birth wheel:** on a phone the neighbour runes' names ghost through the centre (Manalic / Life / Enchant behind
+  Star). The wheel's design, so untouched. Keep, or fade the neighbours further on phones? (`scripts/beta-audit.mts` shot 13)
