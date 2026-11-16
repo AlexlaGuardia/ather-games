@@ -40,11 +40,9 @@ export function useNyxRinning(R: Region | null, held: string | null, active: boo
   const onGone = useCallback((rn: Rinn) => hudSay(`It got away. ${rn.name}, by the way it moved.`, 'info'), [])
 
   // left mouse: cast at the aimed water, or answer the take; held = taking line during the reel
-  useEffect(() => {
-    const down = (e: MouseEvent) => {
-      if (e.button !== 0) return
-      holding.current = true
-      if (!outRef.current || !document.pointerLockElement) return
+  // the click itself, shared by the mouse and a scripted check (headless gets no pointer lock)
+  const act = useCallback(() => {
+      if (!outRef.current) return
       const r = api.current; if (!r) return
       const v = r.view()
       if (v.phase === 'waiting' || v.phase === 'rising' || v.phase === 'taking') { r.answer(); return }   // a click off the take costs nothing
@@ -53,11 +51,17 @@ export function useNyxRinning(R: Region | null, held: string | null, active: boo
       const spent = take(getInv(), BAIT, 1)
       if (!spent) { hudSay('No bait left.', 'info'); return }
       if (r.cast()) setInv(spent)
+  }, [])
+  useEffect(() => {
+    const down = (e: MouseEvent) => {
+      if (e.button !== 0) return
+      holding.current = true
+      if (document.pointerLockElement) act()
     }
     const up = (e: MouseEvent) => { if (e.button === 0) holding.current = false }
     window.addEventListener('mousedown', down); window.addEventListener('mouseup', up)
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up) }
-  }, [])
+  }, [act])
 
   const prompt = useCallback((): string | null => {
     if (!outRef.current) return null
@@ -75,5 +79,5 @@ export function useNyxRinning(R: Region | null, held: string | null, active: boo
   const bar = out ? <ReelBar api={api} /> : null
   /** for a scripted check: true / false, or 'track' (a stand-in keeper that follows the zone) */
   const hold = useCallback((h: boolean | 'track') => { holding.current = h === 'track' ? (r: Reel) => (r.zone - r.bob) * 6 + (r.zoneV - r.bobV) * 1.6 > 0 : h }, [])
-  return { fx, bar, prompt, api, hold }
+  return { fx, bar, prompt, api, hold, act }
 }

@@ -29,6 +29,7 @@ import { Towns } from '../towns/Towns'
 import { MarketView, DeedCard } from '../business/market-view'
 import { useTycoon } from '../business/use-tycoon'
 import { ShopPanel } from '../business/shop-panel'
+import { useNyxRinning } from './nyx-rinning'
 import { veradynFerry } from '../towns/veradyn'
 import { townDiscs } from '../towns/plan'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
@@ -1223,6 +1224,9 @@ export default function ContinentRide() {
   // wheel (Driver's R is the road there), not in a menu, not with a rack gun in hand (the shop's R reloads it)
   const stanceBlocked = useRef(false)
   stanceBlocked.current = !hud.foot || showMap || garage || !!board || bagOpen || vesselShop || !!deed || optionsOpen
+  // RINNING on the waking continent (Jin 2's continent/nyx-rinning.tsx): bait in hand, left mouse casts at aimed water
+  const rin = useNyxRinning(R, heldOf(stance, inv), !stanceBlocked.current)
+  useEffect(() => { (window as unknown as { __rin?: unknown }).__rin = { hold: rin.hold, act: rin.act, view: () => rin.api.current?.view() ?? null } })
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | null = null, held = false
     const down = (e: KeyboardEvent) => {
@@ -1282,6 +1286,7 @@ export default function ContinentRide() {
           {R && <QuestGuide zone="continent" ground={(x, z) => (cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z))} />}
           <Guardrails R={R} />
           <Water R={R} />
+          {rin.fx}
           <Towns R={R} focus={focus} />
           <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={setDeed} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} />
           <Posts R={R} />
@@ -1291,6 +1296,7 @@ export default function ContinentRide() {
         </Canvas>
       )}
       <LookChip />
+      {rin.bar}
       <SpeedStreaks frac={hud.frac} />
       {isTouch && started && !showMap && !garage && !board && !ferrying && (
         <TouchControls showFire={!!hud.foot && gunHud.holding} actions={touchActions}
