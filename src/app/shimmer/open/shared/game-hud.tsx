@@ -41,6 +41,8 @@ import { ensureBasicTools, type EquippedTools } from '../../engine/tools'
 import { createSkillSet, type SkillSet } from '../../engine/skills'
 import type { Vitals } from '../../engine/vitals'
 import { hudSay, linesAt, subscribe, type Line } from './hud-say'
+/** how long the wheel's cursor stays lit without a roll */
+const BROWSE_MS = 2500
 
 export type { CompassMark, CompassPose }
 export { hudSay }
@@ -108,7 +110,7 @@ function StatusChips({ items, top, right }: { items: readonly Status[]; top: num
   )
 }
 
-export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entries, sel, onSelect, dimmed, input, minimap, status = [] }: {
+export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entries, sel, onSelect, onEquip, dimmed, input, minimap, status = [] }: {
   size: HudSize
   pose: React.RefObject<CompassPose | null>
   marks?: React.RefObject<readonly CompassMark[]>
@@ -119,6 +121,9 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
   entries: readonly (HotbarEntry | null)[]
   sel: number
   onSelect: (i: number) => void
+  /** the wheel CLICK: equip the lit slot. Given, the wheel's roll only lights a cursor (Alex 11-16); without it the
+   *  roll selects at once, as before */
+  onEquip?: (i: number) => void
   /** fades the bar (hands busy: at the wheel, at home with nothing to fight) */
   dimmed: boolean
   /** keys 1-8 and the wheel drive the bar only while true (not in a menu, not at the wheel) */
@@ -138,29 +143,48 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
   // the bar's keys and wheel, once, for every page
   const selRef = useRef(sel); selRef.current = sel
   const inputRef = useRef(input); inputRef.current = input
+  const equipRef = useRef(onEquip); equipRef.current = onEquip
   const n = Math.max(1, Math.min(HOTBAR_SLOTS, HOTBAR_SLOTS))
+  // ★ THE BROWSE CURSOR (Alex 11-16): rolling the wheel lights a slot and says its name; nothing is in hand until the
+  // wheel is CLICKED. It lets go after BROWSE_MS without a roll, and the bar shows what is held again.
+  const [cursor, setCursor] = React.useState<number | null>(null)
+  const cursorRef = useRef(cursor); cursorRef.current = cursor
+  const idle = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (!inputRef.current) return
-      const m = /^Digit([1-8])$/.exec(e.code); if (m) onSelect(Number(m[1]) - 1)
+      const m = /^Digit([1-8])$/.exec(e.code); if (m) { setCursor(null); onSelect(Number(m[1]) - 1) }
     }
     const wheel = (e: WheelEvent) => {
       if (!inputRef.current || !document.pointerLockElement) return
-      onSelect((selRef.current + (e.deltaY > 0 ? 1 : -1) + n) % n)
+      if (!equipRef.current) { onSelect((selRef.current + (e.deltaY > 0 ? 1 : -1) + n) % n); return }
+      const from = cursorRef.current ?? Math.max(0, selRef.current)
+      const next = (from + (e.deltaY > 0 ? 1 : -1) + n) % n
+      setCursor(next)
+      if (idle.current) clearTimeout(idle.current)
+      idle.current = setTimeout(() => setCursor(null), BROWSE_MS)
     }
-    addEventListener('keydown', key); addEventListener('wheel', wheel, { passive: true })
-    return () => { removeEventListener('keydown', key); removeEventListener('wheel', wheel) }
+    const click = (e: MouseEvent) => {
+      if (e.button !== 1 || !inputRef.current || !equipRef.current) return
+      e.preventDefault()   // no autoscroll
+      const c = cursorRef.current; if (c === null) return
+      if (idle.current) clearTimeout(idle.current)
+      setCursor(null); equipRef.current(c)
+    }
+    addEventListener('keydown', key); addEventListener('wheel', wheel, { passive: true }); addEventListener('mousedown', click)
+    return () => { removeEventListener('keydown', key); removeEventListener('wheel', wheel); removeEventListener('mousedown', click); if (idle.current) clearTimeout(idle.current) }
   }, [onSelect, n])
-  // say the selected slot's name (an empty slot says nothing), never on mount
+  const shown = cursor ?? sel
+  // say the lit slot's name (an empty slot says nothing), never on mount
   const first = useRef(true)
-  const selName = useMemo(() => { const e = entries[sel]; return e ? e.name ?? e.itemId : null }, [entries, sel])
-  useEffect(() => { if (first.current) { first.current = false; return } if (selName) hudSay(selName, 'item') }, [sel]) // eslint-disable-line react-hooks/exhaustive-deps
+  const selName = useMemo(() => { const e = entries[shown]; return e ? e.name ?? e.itemId : null }, [entries, shown])
+  useEffect(() => { if (first.current) { first.current = false; return } if (selName) hudSay(cursor !== null ? `${selName} · click the wheel to hold` : selName, 'item') }, [shown]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const statusTop = box.top + box.size + 40
   if (size === 'phone') {
     return (
       <div className={`contents ${HEARTH_FONT_VARS}`}>
-        <HearthHudLayer face={FACE} size="phone" entries={entries} sel={sel} held={null} dimmed={dimmed} onSelect={onSelect}
+        <HearthHudLayer face={FACE} size="phone" entries={entries} sel={shown} held={null} dimmed={dimmed} onSelect={onSelect}
           objective={null} vitals={vitals} mana={mana} tools={T} skills={S} activeTool={null} glyph={glyph} mapFrame={false} />
         <HearthCompass face={FACE} pose={pose} marks={marks} size="phone" />
         {minimap}
@@ -176,7 +200,7 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
   const compassX = Math.min(Math.max(vw / 2, gapL + half), gapR - half)
   return (
     <div className={`contents ${HEARTH_FONT_VARS}`}>
-      <HearthHotbar face={FACE} size={size} entries={entries} sel={sel} held={null} dimmed={dimmed} onSelect={onSelect} anchor="top-left" />
+      <HearthHotbar face={FACE} size={size} entries={entries} sel={shown} held={null} dimmed={dimmed} onSelect={onSelect} anchor="top-left" />
       <Messages align="left" style={{ left: 16, top: 12 + tray.h + 10 }} />
       <HearthCompass face={FACE} pose={pose} marks={marks} size={size} centerX={compassX} />
       {minimap}

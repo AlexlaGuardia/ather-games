@@ -10,7 +10,10 @@
 //
 //   R tap   : stowed / item → the primary · weapon → the other weapon, or a RELOAD when there is no second gun
 //   R hold  : anything → stowed
-//   1-8 / wheel : stowed / item → that slot (a gun in it draws as the weapon; an empty slot stows) · weapon → ignored
+//   1-8         : stowed / item → that slot (a gun in it draws as the weapon; an empty slot stows) · weapon → ignored
+//   wheel roll  : lights a CURSOR on the bar, equips nothing (Alex 11-16: "with a roll of the scrollwheel the hotbar
+//                 lights up and the player can select an item and click the scroll wheel to equip it")
+//   wheel click : equips the lit slot from ANY stance, a drawn gun included (equipSlot)
 //
 // ★ PURE. The page owns the state; this decides every transition so the rules have one home and a test.
 
@@ -47,6 +50,11 @@ export function selectSlot(st: Stance, slot: number, inv: Inv): Stance {
   if (!s) return STOWED
   if (itemDef(s.id).kind === 'gun') { const i = weapons(inv).indexOf(s.id); return { kind: 'weapon', which: (i === 1 ? 1 : 0) } }
   return { kind: 'item', slot }
+}
+
+/** The wheel click: put the lit slot in hand whatever is held now (a drawn gun goes away for it). */
+export function equipSlot(st: Stance, slot: number, inv: Inv): Stance {
+  return selectSlot(st.kind === 'weapon' ? STOWED : st, slot, inv)
 }
 
 /** What is in hand (an item id), or null when stowed. */

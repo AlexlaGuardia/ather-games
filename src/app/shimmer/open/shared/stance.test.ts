@@ -1,7 +1,7 @@
 // The stance (Alex 11-15): stowed by default; R tap draws / swaps / reloads, R hold stows; 1-8 / the wheel pick a
 // hotbar item while no weapon is drawn. Run: npx tsx src/app/shimmer/open/shared/stance.test.ts
 import { newInv, OPEN_ITEMS, give, SLOTS, type Inv } from './inventory'
-import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, heldOf, litSlot, settle, weapons } from './stance'
+import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, equipSlot, heldOf, litSlot, settle, weapons } from './stance'
 
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -27,6 +27,8 @@ ok(tapR(STOWED, noGun).stance.kind === 'stowed', 'R: drew a weapon from a bag wi
 // R hold
 ok(holdR({ kind: 'weapon', which: 1 }).kind === 'stowed' && holdR({ kind: 'item', slot: 1 }).kind === 'stowed', 'R: a hold did not stow')
 // 1-8 / the wheel
+ok(equipSlot({ kind: 'weapon', which: 0 }, 1, one).kind === 'item' && heldOf(equipSlot({ kind: 'weapon', which: 0 }, 1, one), one) === 'waymark', 'wheel click: a drawn gun did not give way to the lit item')
+ok(equipSlot(STOWED, 1, one).kind === 'item', 'wheel click: stowed did not take the lit item')
 ok(selectSlot(STOWED, 1, one).kind === 'item' && heldOf(selectSlot(STOWED, 1, one), one) === 'waymark', 'select: stowed, slot 2 did not hold the waymark')
 ok(selectSlot({ kind: 'weapon', which: 0 }, 1, one).kind === 'weapon', 'select: a slot key changed hands while a weapon was drawn')
 ok(selectSlot(STOWED, 5, one).kind === 'stowed', 'select: an empty slot did not leave the hands empty')
