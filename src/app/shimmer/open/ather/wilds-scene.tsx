@@ -11,6 +11,7 @@ import { GREG_WAYMARK, type Waymark } from './waymarks'
 import { Crystals } from './crystal-nodes'
 import { P } from './palette'
 import { GROUND, useGroundMaterial } from './ground-look'
+import { DAY } from '../shared/sky-palette'
 
 function wildsGeometry(W: Wilds): THREE.BufferGeometry {
   const { nx, nz, cell, sizeX, sizeZ } = W.meta
@@ -55,14 +56,49 @@ const LOOK: Record<TreeKind, { trunk: string; crown: string; emissive?: string; 
   starwillow: { trunk: '#9a8160', crown: '#e7d78e', emissive: '#f2e3a0', trunkW: 0.8, shape: 'weep' },   // weeping, glowing tips
   dawnwood:   { trunk: '#6e4a2c', crown: '#d79b45', trunkW: 2, shape: 'giant' },    // ancient thick trunk, amber-gold
 }
-function TreeKindMesh({ trees, kind }: { trees: Tree[]; kind: TreeKind }) {
+/** Trees past the fog are not drawn (Alex 11-16: "the lag hits pretty hard here"). The day fog ends at DAY.fogFar
+ *  and the night and the gloom only pull it closer, so a crown past this ring is painted fog colour anyway. Before
+ *  this every tree on the four loaded 1 km tiles drew every frame: ~38k trees, 9.1M vertices a frame (wilds-perf.mts). */
+export const TREE_DRAW_R = DAY.fogFar + 30
+const RELAY_M = 12   // re-lay the near set once the keeper has walked this far
+type Focus = React.MutableRefObject<{ x: number; z: number }>
+
+function TreeKindMesh({ trees, kind, focus, off }: { trees: Tree[]; kind: TreeKind; focus: Focus; off: { x: number; z: number } }) {
   const trunk = useRef<THREE.InstancedMesh>(null), crown = useRef<THREE.InstancedMesh>(null)
   const frev = useSyncExternalStore(subscribeForestry, forestryRev, () => 0)
   const L = LOOK[kind]
-  // each crown's resting placement, so the one the light is cutting can sway about its base and settle back
+  // each DRAWN crown's resting placement, so the one the light is cutting can sway about its base and settle back
   const base = useRef<{ x: number; y: number; z: number; sx: number; sy: number; id: string; bottom: number }[]>([])
   const swaying = useRef(-1)
+  const laidAt = useRef<{ x: number; z: number } | null>(null)
+  const lay = (fx: number, fz: number) => {
+    const tm = trunk.current, cm = crown.current; if (!tm || !cm) return
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color()
+    const now = Date.now(), R2 = TREE_DRAW_R * TREE_DRAW_R, lx = fx - off.x, lz = fz - off.z
+    let j = 0
+    base.current = []
+    trees.forEach((t, k) => {
+      const dx = t.x - lx, dz = t.z - lz; if (dx * dx + dz * dz > R2) return
+      const cut = isPruned(t.id, now), w = L.trunkW, cr = crownOf(t, cut ? 0.55 : 1), h = cr.trunkH
+      p.set(t.x, t.y + h / 2, t.z); s.set(w, h, w); tm.setMatrixAt(j, m.compose(p, q, s))
+      // a crown's BOTTOM sits above the keeper's eye (crownOf; the willow's skirt hangs low on purpose)
+      const sy = L.shape === 'weep' ? cr.hh * 2 : cr.hh
+      p.set(t.x, cr.cy, t.z); s.set(cr.r, sy, cr.r)
+      base.current[j] = { x: t.x, y: cr.cy, z: t.z, sx: cr.r, sy, id: t.id, bottom: cr.cy - cr.hh }
+      cm.setMatrixAt(j, m.compose(p, q, s))
+      c.set(L.crown).offsetHSL(((k * 0.07) % 0.04) - 0.02, cut ? -0.15 : 0, (((k * 0.11) % 0.08) - 0.04) - (cut ? 0.06 : 0))   // by k: a tree keeps its shade
+      cm.setColorAt(j, c)
+      j++
+    })
+    tm.count = j; cm.count = j
+    tm.instanceMatrix.needsUpdate = true; cm.instanceMatrix.needsUpdate = true
+    if (cm.instanceColor) cm.instanceColor.needsUpdate = true
+    swaying.current = -1
+    laidAt.current = { x: fx, z: fz }
+  }
   useFrame(() => {
+    const f = focus.current, la = laidAt.current
+    if (!la || Math.hypot(f.x - la.x, f.z - la.z) > RELAY_M) lay(f.x, f.z)
     const cm = crown.current; if (!cm) return
     const now = Date.now()
     let k = swaying.current
@@ -72,29 +108,14 @@ function TreeKindMesh({ trees, kind }: { trees: Tree[]; kind: TreeKind }) {
     // a quick shiver that dies away: tilt about the crown's base, so the top moves and the bottom stays on the trunk
     const amp = 0.16 * (1 - u), a1 = Math.sin(u * 38) * amp, a2 = Math.cos(u * 31) * amp * 0.7
     q.setFromEuler(e.set(a1, 0, a2))
-    const off = new THREE.Vector3(0, b.y - b.bottom, 0).applyQuaternion(q)
-    cm.setMatrixAt(k, m.compose(new THREE.Vector3(b.x, b.bottom, b.z).add(off), q, new THREE.Vector3(b.sx * (1 + 0.04 * Math.sin(u * 50)), b.sy, b.sx)))
+    const offv = new THREE.Vector3(0, b.y - b.bottom, 0).applyQuaternion(q)
+    cm.setMatrixAt(k, m.compose(new THREE.Vector3(b.x, b.bottom, b.z).add(offv), q, new THREE.Vector3(b.sx * (1 + 0.04 * Math.sin(u * 50)), b.sy, b.sx)))
     cm.instanceMatrix.needsUpdate = true
   })
-  useEffect(() => {
-    // ⚠ a kind with no trees on this tile renders null, so its refs are null: the effect must not reach for them
-    // (shipped without this, every tile missing a kind crashed the page on entering the Wilds, 11-15)
-    if (!trunk.current || !crown.current) return
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color()
-    const now = Date.now()
-    trees.forEach((t, k) => {
-      const cut = isPruned(t.id, now), w = L.trunkW, cr = crownOf(t, cut ? 0.55 : 1), h = cr.trunkH
-      p.set(t.x, t.y + h / 2, t.z); s.set(w, h, w); trunk.current!.setMatrixAt(k, m.compose(p, q, s))
-      // a crown's BOTTOM sits above the keeper's eye (crownOf; the willow's skirt hangs low on purpose)
-      p.set(t.x, cr.cy, t.z); s.set(cr.r, L.shape === 'weep' ? cr.hh * 2 : cr.hh, cr.r)
-      base.current[k] = { x: t.x, y: cr.cy, z: t.z, sx: cr.r, sy: L.shape === 'weep' ? cr.hh * 2 : cr.hh, id: t.id, bottom: cr.cy - cr.hh }
-      crown.current!.setMatrixAt(k, m.compose(p, q, s))
-      c.set(L.crown).offsetHSL(((k * 0.07) % 0.04) - 0.02, cut ? -0.15 : 0, (((k * 0.11) % 0.08) - 0.04) - (cut ? 0.06 : 0))
-      crown.current!.setColorAt(k, c)
-    })
-    trunk.current!.instanceMatrix.needsUpdate = true; crown.current!.instanceMatrix.needsUpdate = true
-    if (crown.current!.instanceColor) crown.current!.instanceColor.needsUpdate = true
-  }, [trees, frev, L])
+  // ⚠ a kind with no trees on this tile renders null, so its refs are null: lay() checks them
+  // (shipped without that guard, every tile missing a kind crashed the page on entering the Wilds, 11-15).
+  // A prune (frev) or a new tile re-lays at once; walking re-lays from useFrame.
+  useEffect(() => { laidAt.current = null }, [trees, frev, L])
   if (trees.length === 0) return null
   // frustumCulled off: an InstancedMesh is culled by its base geometry's bounds at the origin (see open/hillside/page.tsx)
   return (
@@ -109,9 +130,9 @@ function TreeKindMesh({ trees, kind }: { trees: Tree[]; kind: TreeKind }) {
     </>
   )
 }
-function Trees({ W }: { W: Wilds }) {
+function Trees({ W, focus, off }: { W: Wilds; focus: Focus; off: { x: number; z: number } }) {
   const byKind = useMemo(() => TREE_KINDS.map(k => [k, W.trees.filter(t => t.kind === k)] as const), [W])
-  return <>{byKind.map(([k, ts]) => <TreeKindMesh key={k} kind={k} trees={ts} />)}</>
+  return <>{byKind.map(([k, ts]) => <TreeKindMesh key={k} kind={k} trees={ts} focus={focus} off={off} />)}</>
 }
 
 /** A waymark in the world: a standing stone with Enchant's binding ring hovering over it. */
@@ -126,7 +147,8 @@ export function WaymarkStone({ w, greg }: { w: Waymark; greg?: boolean }) {
   )
 }
 
-export function WildsScene({ W, waymarks }: { W: Wilds; waymarks: Waymark[] }) {
+/** `off` = this tile's world offset (the group it sits in); `focus` = the keeper, in world coords. */
+export function WildsScene({ W, waymarks, focus, off }: { W: Wilds; waymarks: Waymark[]; focus: Focus; off: { x: number; z: number } }) {
   const geo = useMemo(() => wildsGeometry(W), [W])
   const ground = useGroundMaterial()
   const greg = { ...GREG_WAYMARK, y: W.heightAt(GREG_WAYMARK.x, GREG_WAYMARK.z) }
@@ -136,7 +158,7 @@ export function WildsScene({ W, waymarks }: { W: Wilds; waymarks: Waymark[] }) {
       <mesh rotation-x={-Math.PI / 2} position-y={W.meta.waterY - 0.15}>
         <planeGeometry args={[W.meta.sizeX, W.meta.sizeZ]} /><meshLambertMaterial color={P.water} transparent opacity={0.8} />
       </mesh>
-      <Trees W={W} />
+      <Trees W={W} focus={focus} off={off} />
       <Crystals W={W} />
       {W.meta.name === GREG_WAYMARK.tile && <WaymarkStone w={greg} greg />}
       {waymarks.filter(w => w.tile === W.meta.name).map(w => <WaymarkStone key={w.id} w={w} />)}
