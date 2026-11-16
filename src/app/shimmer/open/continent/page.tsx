@@ -16,6 +16,8 @@ import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, heldOf, litSlot
 import { itemDef } from '../shared/inventory'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
+import { CompanionFollower } from '../shared/companion-follower'
+import { subscribeCompanion, takeJoined, perkLabel } from '../shared/companion'
 import { VesselShop, VesselCounter } from '../vessel-shop'
 import { BirthGate, getBirth, useBirth } from '../birth-gate'
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen, WALK_KEYS, type KeyRow } from '../options'
@@ -1174,6 +1176,11 @@ export default function ContinentRide() {
   const [started, setStarted] = useState(false)
   const [isTouch, setIsTouch] = useState(false)
   useEffect(() => setIsTouch(isTouchOnly()), [])
+  // a Mana'mal companion joins at a skill's 15 / 100 (shared/companion.ts): say so (rinning here can bring Embermole)
+  useEffect(() => {
+    const say = () => { for (const c of takeJoined()) hudSay(`${c.name} has joined you (${perkLabel(c)}). Character tab to call it out.`, 'chat') }
+    say(); return subscribeCompanion(say)
+  }, [])
   // ── THE HUD (shared/game-hud.tsx): the same hearth HUD as the Ather. Nothing on the continent can hurt you yet and
   // nothing casts, so health and mana stand full; the bar is dimmed at the wheel (hands are busy) ──
   const hudSize = useGameHudSize(isTouch)
@@ -1300,6 +1307,9 @@ export default function ContinentRide() {
           {cave && <GunRange cave={cave} />}
           {cave && <VesselCounter cave={cave} enabled={!vesselShop && !bagOpen && !showMap} onOpen={() => setVesselShop(true)} />}
           {R && <QuestGuide zone="continent" ground={(x, z) => (cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z))} />}
+          {/* the Mana'mal companion walks with you on foot; in a vessel it rides along and steps out beside you after.
+              The ground hint is the keeper's own height, so on a deck or a bridge it walks the deck, not the river */}
+          {R && hud.foot && <CompanionFollower pose={track} ground={(x, z) => (cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z, focus.current.y))} />}
           <Guardrails R={R} />
           <Water R={R} />
           {rin.fx}
