@@ -1,5 +1,6 @@
-// Rinning (Alex 11-15: bait, the rinstick, cast, a give-and-take reel, recast). Run: npx tsx src/app/shimmer/open/ather/rinning.test.ts
-import { RINN, rollRinn, newReel, stepReel, landed, CAST_RANGE, BAIT, type Reel } from './rinning'
+// Rinning in the Wilds: the catch table (Alex 11-15: bait, the rinstick, cast, recast). Run: npx tsx src/app/shimmer/open/ather/rinning.test.ts
+import { RINN, rollRinn, CAST_RANGE, BAIT } from './rinning'
+import { PATTERNS } from '../shared/reel'
 
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -18,23 +19,9 @@ ok(l10[4] > 0 && l10[1] > l10[2] && l10[2] > l10[3] && l10[3] > l10[4], `catch: 
 const sp = roll(10, 'springs')
 ok((sp[3] ?? 0) + (sp[4] ?? 0) > (l10[3] ?? 0) + (l10[4] ?? 0), 'catch: the Mana Springs do not tip the table toward rarer rinn')
 
-// ★ the reel cannot be lost (canon: "you are asking a rinn, not tricking one")
-const run = (tier: number, play: (r: Reel) => boolean, maxS = 600) => {
-  let r = newReel(tier, rng), t = 0, min = 1
-  while (!landed(r) && t < maxS) { r = stepReel(r, 0.05, play(r), rng); t += 0.05; min = Math.min(min, r.progress) }
-  return { r, t, min }
-}
-for (const tier of [1, 2, 3, 4]) {
-  const good = run(tier, r => r.mood === 'rest')            // take when it rests, give when it pulls
-  const greedy = run(tier, () => true)                      // reel the whole time
-  ok(landed(good.r) && good.t < 60, `reel: a well-played tier ${tier} took ${good.t.toFixed(1)} s`)
-  ok(landed(greedy.r), `reel: reeling the whole time never landed a tier ${tier} (a clumsy reel must only be slower)`)
-  ok(greedy.t > good.t, `reel: reeling against the pulls was not slower at tier ${tier}`)
-  ok(greedy.r.slips > 0 && good.min > 0, `reel: no slips when pulling against it, or progress fell to nothing (tier ${tier})`)
-}
-const idle = run(2, () => false, 120)
-ok(!landed(idle.r) && idle.r.progress > 0, 'reel: doing nothing landed it, or lost it (it should only wait)')
-ok(run(4, r => r.mood === 'rest').t > run(1, r => r.mood === 'rest').t, 'reel: a crystal rinn is not a longer reel than a shimmerscale')
+// every rinn has a habit the reel can run (the reel itself: shared/reel.test.ts)
+ok(RINN.every(r => PATTERNS.includes(r.pattern)), 'catch: a rinn without a reel pattern')
+ok(new Set(RINN.map(r => r.pattern)).size >= 5, 'catch: the Ather rinn share too few habits to tell apart')
 
 if (fails.length) { console.error(`rinning: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`rinning: ${pass}/0`)

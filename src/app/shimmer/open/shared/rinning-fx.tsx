@@ -3,17 +3,17 @@
 // is held: the crosshair finds open water within CAST_RANGE (a ray onto the water plane, real water only), a click casts
 // the float out on an arc, the wait is WATCHED (a luminous rise closes on the float), the float dips for the take, a click
 // answers, and the reel runs while the page reports whether the keeper is holding the button. Landed: the rinn flies home.
+// Gone (11-16: the rinn can get away): the line goes slack, the float bobs free, and the keeper can cast again.
+// ★ BOTH WORLDS: the page hands it what water IS here and what bites where (the Wilds: ather/page.tsx; the waking
+//   continent: continent/rinning-nyx.ts), so the rod, the wait and the reel are one thing on both sides.
 
 import { useRef, type MutableRefObject } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import type { WildsWorld } from './wilds-world'
-import { BIOME } from './wilds'
-import { CAST_RANGE, newReel, stepReel, landed, rollRinn, type Reel, type Rinn } from './rinning'
+import { newReel, stepReel, landed, gone, CAST_RANGE, type Reel, type Rinn } from './reel'
 import { newCast, phaseAt, passed, answer as answerCast, riseProgress, type RinCast } from '../../engine/rin-cast'
-import type { Zone } from './forestry'
 
-export type RinPhase = 'idle' | 'casting' | 'waiting' | 'rising' | 'taking' | 'reeling' | 'landed'
+export type RinPhase = 'idle' | 'casting' | 'waiting' | 'rising' | 'taking' | 'reeling' | 'landed' | 'gone'
 export interface RinView { phase: RinPhase; reel: Reel | null; rinn: Rinn | null; aim: { x: number; y: number; z: number } | null }
 export interface RinningApi {
   /** Cast at the aimed water. False when there is none in reach or a cast is already out. */
@@ -23,41 +23,59 @@ export interface RinningApi {
   cancel(): void
   view(): RinView
 }
-const WATER_Y = 0.02, CAST_S = 0.7
+const CAST_S = 0.7
+/** the phases a new cast may start from */
+const READY = (p: RinPhase) => p === 'idle' || p === 'landed' || p === 'gone'
+/** an unanswered take has gone by: the rinn circles and comes again. Read off the CLOCK, not off a frame having seen the
+ *  take: a tab that draws few frames (backgrounded, or headless) could miss the 1.6 s window and leave the cast waiting
+ *  forever (it did, in the 11-16 check run). */
+const caughtUp = (c: RinCast, now: number) => { let k = c; while (phaseAt(k, now) === 'waiting' && now - k.startMs > k.riseAt) k = passed(k, now, Math.random); return k }
 
-export function RinningFX({ ww, api, holding, out, level, zoneAt, onCatch }: {
-  ww: WildsWorld
+export function RinningFX({ waterY, isWater, roll, rarer, ease, api, holding, out, onCatch, onGone }: {
+  /** the water's surface height here, and whether x, z is real water deep enough to cast into */
+  waterY: number
+  isWater: (x: number, z: number) => boolean
+  /** what bites at x, z (the page's catch table, its level, its zones) */
+  roll: (x: number, z: number) => Rinn
+  /** does x, z draw rarer rinn sooner (the Mana Springs)? */
+  rarer?: (x: number, z: number) => boolean
+  /** the rinstick's ease: widens the zone (1 = the default rinstick) */
+  ease?: number
   api: MutableRefObject<RinningApi | null>
-  /** the keeper is holding the button (the page owns the mouse) */
-  holding: MutableRefObject<boolean>
+  /** the keeper is holding the button (the page owns the mouse). A function (a scripted check's stand-in keeper) is
+   *  asked every reel step instead. */
+  holding: MutableRefObject<boolean | ((r: Reel) => boolean)>
   /** bait is in hand: the rod is out and the crosshair looks for water */
   out: boolean
-  level: () => number
-  zoneAt: (x: number, z: number) => Zone
   onCatch: (r: Rinn) => void
+  /** it got away (the bait is spent; nothing else is lost) */
+  onGone?: (r: Rinn) => void
 }) {
+  const WATER_Y = waterY
   const { camera } = useThree()
   const rod = useRef<THREE.Mesh>(null), float = useRef<THREE.Mesh>(null), rise = useRef<THREE.Mesh>(null), splash = useRef<THREE.Mesh>(null), aimRing = useRef<THREE.Mesh>(null)
   const lineGeo = useRef(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]))
   const lineObj = useRef<THREE.Line | null>(null)
   if (!lineObj.current) lineObj.current = new THREE.Line(lineGeo.current, new THREE.LineBasicMaterial({ color: '#f4efe0' }))
-  const s = useRef<{ phase: RinPhase; t0: number; target: THREE.Vector3; cast: RinCast | null; reel: Reel | null; rinn: Rinn | null; aim: THREE.Vector3 | null; wasTaking: boolean; splashT: number }>(
-    { phase: 'idle', t0: 0, target: new THREE.Vector3(), cast: null, reel: null, rinn: null, aim: null, wasTaking: false, splashT: -9 })
+  const s = useRef<{ phase: RinPhase; t0: number; target: THREE.Vector3; goneAt: THREE.Vector3; cast: RinCast | null; reel: Reel | null; rinn: Rinn | null; aim: THREE.Vector3 | null; wasTaking: boolean; splashT: number }>(
+    { phase: 'idle', t0: 0, target: new THREE.Vector3(), goneAt: new THREE.Vector3(), cast: null, reel: null, rinn: null, aim: null, wasTaking: false, splashT: -9 })
   const lastReel = useRef(0)
   const tmp = useRef({ o: new THREE.Vector3(), d: new THREE.Vector3(), tip: new THREE.Vector3(), hand: new THREE.Vector3() })
 
   api.current = {
     cast() {
       const st = s.current
-      if (!out || !st.aim || (st.phase !== 'idle' && st.phase !== 'landed')) return false
+      if (!out || !st.aim || !READY(st.phase)) return false
       st.phase = 'casting'; st.t0 = performance.now(); st.target.copy(st.aim); st.reel = null; st.rinn = null
       return true
     },
     answer() {
       const st = s.current
-      if (!st.cast || !answerCast(st.cast, Date.now())) return false
-      st.rinn = rollRinn(level(), zoneAt(st.target.x, st.target.z), Math.random)
-      st.reel = newReel(st.rinn.tier, Math.random); st.phase = 'reeling'; st.splashT = performance.now(); lastReel.current = performance.now()
+      if (!st.cast) return false
+      st.cast = caughtUp(st.cast, Date.now())
+      if (!answerCast(st.cast, Date.now())) return false
+      st.rinn = roll(st.target.x, st.target.z)
+      st.reel = newReel(st.rinn.pattern, st.rinn.tier, Math.random, ease ?? 1); st.phase = 'reeling'; st.splashT = performance.now(); lastReel.current = performance.now()
       return true
     },
     cancel() { const st = s.current; st.phase = 'idle'; st.cast = null; st.reel = null },
@@ -73,7 +91,7 @@ export function RinningFX({ ww, api, holding, out, level, zoneAt, onCatch }: {
       const t = (WATER_Y - T.o.y) / T.d.y
       if (t > 0) {
         const p = T.o.clone().addScaledVector(T.d, t)
-        if (Math.hypot(p.x - T.o.x, p.z - T.o.z) <= CAST_RANGE && ww.biomeAt(p.x, p.z) === BIOME.water && ww.heightAt(p.x, p.z) < WATER_Y - 0.1) st.aim = p
+        if (Math.hypot(p.x - T.o.x, p.z - T.o.z) <= CAST_RANGE && isWater(p.x, p.z)) st.aim = p
       }
     }
     // the rod: from the hand (low right of the eye) out and up, the line from its tip to the float
@@ -86,7 +104,7 @@ export function RinningFX({ ww, api, holding, out, level, zoneAt, onCatch }: {
       rod.current.visible = out
       if (out) { const mid = T.hand.clone().lerp(T.tip, 0.5), len = T.hand.distanceTo(T.tip); rod.current.position.copy(mid); rod.current.scale.set(1, len, 1); rod.current.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), T.tip.clone().sub(T.hand).normalize()) }
     }
-    if (aimRing.current) { aimRing.current.visible = !!st.aim && (st.phase === 'idle' || st.phase === 'landed'); if (st.aim) aimRing.current.position.set(st.aim.x, WATER_Y + 0.03, st.aim.z) }
+    if (aimRing.current) { aimRing.current.visible = !!st.aim && READY(st.phase); if (st.aim) aimRing.current.position.set(st.aim.x, WATER_Y + 0.03, st.aim.z) }
     if (!out && st.phase !== 'idle') { st.phase = 'idle'; st.cast = null; st.reel = null }   // stowed: the line comes in
 
     // ── the cast arc, the watched wait, the take, the reel
@@ -94,22 +112,28 @@ export function RinningFX({ ww, api, holding, out, level, zoneAt, onCatch }: {
     if (st.phase === 'casting') {
       const u = Math.min(1, (now - st.t0) / 1000 / CAST_S)
       fp = T.tip.clone().lerp(st.target, u); fp.y += Math.sin(u * Math.PI) * 2.2
-      if (u >= 1) { st.phase = 'waiting'; st.cast = newCast(Date.now(), Math.random, zoneAt(st.target.x, st.target.z) === 'springs'); st.splashT = now; st.wasTaking = false }
+      if (u >= 1) { st.phase = 'waiting'; st.cast = newCast(Date.now(), Math.random, !!rarer?.(st.target.x, st.target.z)); st.splashT = now; st.wasTaking = false }
     } else if (st.phase === 'waiting' || st.phase === 'rising' || st.phase === 'taking') {
-      const c = st.cast!, ph = phaseAt(c, Date.now())
-      if (st.wasTaking && ph === 'waiting') st.cast = passed(c, Date.now(), Math.random)   // unanswered: it circles and comes again
+      st.cast = caughtUp(st.cast!, Date.now())   // unanswered: it circles and comes again
+      const ph = phaseAt(st.cast, Date.now())
       st.wasTaking = ph === 'taking'; st.phase = ph === 'held' ? 'taking' : ph
       fp = st.target.clone(); fp.y = WATER_Y + Math.sin(now / 420) * 0.03 - (ph === 'taking' ? 0.16 + Math.sin(now / 60) * 0.04 : 0)
     } else if (st.phase === 'reeling' && st.reel) {
       // the reel runs on REAL time in small steps, so a slow frame rate (a heavy scene on a laptop GPU, or a headless
       // check that draws a frame only when asked) reels at the same pace, not slower
       const el = Math.min(1, (now - (lastReel.current || now)) / 1000); lastReel.current = now
-      for (let k = 0, n = Math.ceil(el / 0.05); k < n && !landed(st.reel); k++) st.reel = stepReel(st.reel, el / n, holding.current, Math.random)
+      for (let k = 0, n = Math.ceil(el / 0.05); k < n && st.reel.state === 'on'; k++) { const h = holding.current; st.reel = stepReel(st.reel, el / n, typeof h === 'function' ? h(st.reel) : h, Math.random) }
       const shore = new THREE.Vector3(T.o.x, WATER_Y, T.o.z).lerp(st.target, 0.12)
+      const fighting = st.reel.zoneV < -0.02
       fp = st.target.clone().lerp(shore, st.reel.progress)
-      fp.y = WATER_Y - (st.reel.mood === 'pull' ? 0.12 + Math.abs(Math.sin(now / 70)) * 0.08 : 0)
-      if (st.reel.mood === 'pull') { fp.x += Math.sin(now / 90) * 0.15; fp.z += Math.cos(now / 110) * 0.15 }
+      fp.y = WATER_Y - (fighting ? 0.12 + Math.abs(Math.sin(now / 70)) * 0.08 : 0.03)
+      if (fighting) { fp.x += Math.sin(now / 90) * 0.15; fp.z += Math.cos(now / 110) * 0.15 }
       if (landed(st.reel)) { st.phase = 'landed'; st.t0 = now; if (st.rinn) onCatch(st.rinn) }
+      else if (gone(st.reel)) { st.phase = 'gone'; st.t0 = now; st.goneAt.copy(fp); st.splashT = now; if (st.rinn) onGone?.(st.rinn) }
+    } else if (st.phase === 'gone') {
+      // the line goes slack: the float rocks where the rinn left it, then drifts back in
+      const u = Math.min(1, (now - st.t0) / 900)
+      if (u < 1) { fp = st.goneAt.clone().lerp(new THREE.Vector3(T.o.x, WATER_Y, T.o.z), u * 0.5); fp.y = WATER_Y + Math.sin(now / 160) * 0.05 * (1 - u) }
     } else if (st.phase === 'landed') {
       const u = Math.min(1, (now - st.t0) / 450)
       if (u < 1) { fp = st.target.clone().lerp(T.o, u); fp.y += Math.sin(u * Math.PI) * 1.2 }
@@ -118,7 +142,7 @@ export function RinningFX({ ww, api, holding, out, level, zoneAt, onCatch }: {
     if (lineObj.current) {
       lineObj.current.visible = !!fp && out
       if (fp) {
-        const mid = T.tip.clone().lerp(fp, 0.5); mid.y -= st.phase === 'reeling' && st.reel && st.reel.mood === 'pull' ? 0.05 : 0.5
+        const mid = T.tip.clone().lerp(fp, 0.5); mid.y -= st.phase === 'reeling' && st.reel && st.reel.zoneV < -0.02 ? 0.05 : st.phase === 'gone' ? 0.9 : 0.5
         const pos = lineGeo.current.attributes.position as THREE.BufferAttribute
         pos.setXYZ(0, T.tip.x, T.tip.y, T.tip.z); pos.setXYZ(1, mid.x, mid.y, mid.z); pos.setXYZ(2, fp.x, fp.y, fp.z); pos.needsUpdate = true
       }

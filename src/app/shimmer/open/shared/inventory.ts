@@ -6,6 +6,7 @@
 //
 // Item names here are build vocabulary for things canon already has (the Repeater: engine/weapons.ts; waymarks:
 // gates.md). A new item is one row in OPEN_ITEMS.
+import { NYX_RINN } from '../continent/rinning-nyx'
 
 export interface ItemDef {
   name: string
@@ -59,6 +60,10 @@ const RINNING: Record<string, ItemDef> = {
 }
 for (const [id, def] of Object.entries(RINNING)) def.icon = `/open/icons/${id.replace(/_/g, '-')}.svg`
 Object.assign(OPEN_ITEMS, RINNING)
+// ── Rinning on the waking continent (continent/rinning-nyx.ts): canon's mortal rinn (world/rinn.md), bag rows made from
+//    the catch table so a name or a line lives in one place. Clickclaw is already a row (the Ather's): one row, two shores.
+//    Icons: tools/art/nyx_rinn_icons.py.
+for (const n of NYX_RINN) if (!OPEN_ITEMS[n.id]) OPEN_ITEMS[n.id] = { name: n.name, blurb: n.blurb, icon: `/open/icons/${n.id.replace(/_/g, '-')}.svg`, stack: 99, kind: 'material' }
 /** Bait a new keeper starts with (and an older bag is handed once). Where more comes from is open (Alex, 11-15). */
 export const STARTING_BAIT = 10
 export const itemDef = (id: string): ItemDef => OPEN_ITEMS[id] ?? { name: id.replace(/_/g, ' '), blurb: '', icon: '', stack: 99, kind: 'material' }

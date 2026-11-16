@@ -32,7 +32,7 @@ import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
-import { tileCentreWorld, BIOME_NAME, type Wilds, type Tree } from './wilds'
+import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree } from './wilds'
 import { loadIndex, makeWorld, stream, tileOf, zonesOf, TILE_M, type WildsWorld } from './wilds-world'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
@@ -53,9 +53,12 @@ import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take, itemDef, countOf } from '../shared/inventory'
-import { BAIT, type Rinn } from './rinning'
-import { RinningFX, type RinningApi } from './rinning-fx'
-import { ReelBar } from './reel-bar'
+import { BAIT, rollRinn, type Rinn } from './rinning'
+import { RinningFX, type RinningApi } from '../shared/rinning-fx'
+import type { Reel } from '../shared/reel'
+import { ReelBar } from '../shared/reel-bar'
+/** the Wilds' water surface (the rinning float rides it) */
+const WILDS_WATER_Y = 0.02
 import { prune, pruneCheck, startShake, openSkills, openLevel, addOpenXp, TREE_NAME, MANA_COST, ZONE_NAME, type Zone as WildsZone } from './forestry'
 import { ForestryFX, type Aim, type ForestryFx } from './forestry-fx'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
@@ -361,7 +364,7 @@ export default function AtherSlice() {
       spread: () => spreadRef.current, skipDays, ownerAt: (x: number, z: number) => nodeOwner?.(x, z),
       prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mana: () => manaRef.current.cur,
       stance: () => stanceRef.current, speedMult: () => (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1),
-      rin: () => rinApi.current?.view() ?? null, cast: () => castOrAnswer(), hold: (h: boolean) => { reelHold.current = h },
+      rin: () => rinApi.current?.view() ?? null, cast: () => castOrAnswer(), hold: (h: boolean | 'track') => { reelHold.current = h === 'track' ? (r: Reel) => (r.zone - r.bob) * 6 + (r.zoneV - r.bobV) * 1.6 > 0 : h },
     }
   }, [zone, travel, garden, updateGarden, skipDays, nodeOwner])
 
@@ -410,7 +413,7 @@ export default function AtherSlice() {
   }, [zone.kind])
   // ── rinning (rinning.ts + rinning-fx.tsx): bait in hand → the rinstick is out; click the water to cast (one bait),
   //    click the take to answer, hold to reel while the rinn rests, let go while it pulls
-  const rinApi = useRef<RinningApi | null>(null), reelHold = useRef(false)
+  const rinApi = useRef<RinningApi | null>(null), reelHold = useRef<boolean | ((r: Reel) => boolean)>(false)
   const zoneAtWorld = useCallback((x: number, z: number): WildsZone => {
     if (!ww) return 'meadows'
     const tt = ww.at(tileOf(x, z).tx, tileOf(x, z).ty); if (!tt) return 'meadows'
@@ -421,7 +424,7 @@ export default function AtherSlice() {
     const r = rinApi.current; if (!r || zone.kind !== 'wilds') return
     const v = r.view()
     if (v.phase === 'waiting' || v.phase === 'rising' || v.phase === 'taking') { r.answer(); return }   // a click off the take costs nothing
-    if (v.phase !== 'idle' && v.phase !== 'landed') return
+    if (v.phase !== 'idle' && v.phase !== 'landed' && v.phase !== 'gone') return
     if (!toolsRef.current.rinning) { setToast('You have no rinstick.'); return }
     if (!v.aim) { setToast('Aim at open water to cast.'); return }
     const spent = take(getInv(), BAIT, 1)
@@ -433,11 +436,16 @@ export default function AtherSlice() {
     const up = addOpenXp('rinning', rn.xp)
     setToast(`${rn.name}${g.left ? ' (bag full)' : ''} · +${rn.xp} Rinning${up ? `. Rinning ${up}!` : ''}`)
   }, [])
+  // 11-16: the rinn can get away. The bait is spent; nothing else is lost.
+  const onGone = useCallback((rn: Rinn) => setToast(`It got away. A ${rn.name.toLowerCase()}, by the way it moved.`), [])
+  const rinWaterAt = useCallback((x: number, z: number) => !!ww && ww.biomeAt(x, z) === BIOME.water && ww.heightAt(x, z) < WILDS_WATER_Y - 0.1, [ww])
+  const rinRoll = useCallback((x: number, z: number) => rollRinn(openLevel('rinning'), zoneAtWorld(x, z), Math.random), [zoneAtWorld])
+  const rinRarer = useCallback((x: number, z: number) => zoneAtWorld(x, z) === 'springs', [zoneAtWorld])
   const rinPrompt = () => {
     if (heldRef.current !== BAIT || zone.kind !== 'wilds') return null
     const v = rinApi.current?.view(); if (!v) return null
     const left = countOf(getInv(), BAIT)
-    if (v.phase === 'idle' || v.phase === 'landed') return v.aim ? `Click · cast (${left} bait left)` : 'Aim at open water to cast'
+    if (v.phase === 'idle' || v.phase === 'landed' || v.phase === 'gone') return v.aim ? `Click · cast (${left} bait left)` : 'Aim at open water to cast'
     if (v.phase === 'casting' || v.phase === 'waiting') return 'Watch the water…'
     if (v.phase === 'rising') return 'Something is coming…'
     if (v.phase === 'taking') return 'Click to answer it'
@@ -583,7 +591,7 @@ export default function AtherSlice() {
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
         {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
-        {zone.kind === 'wilds' && ww && <RinningFX ww={ww} api={rinApi} holding={reelHold} out={held === BAIT} level={() => openLevel('rinning')} zoneAt={zoneAtWorld} onCatch={onCatch} />}
+        {zone.kind === 'wilds' && ww && <RinningFX waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT} onCatch={onCatch} onGone={onGone} />}
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} /></group> })}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}

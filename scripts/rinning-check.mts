@@ -1,7 +1,8 @@
 // ── Prod check for Wilds rinning (2026-11-15, world; Alex: "selecting bait on the hotbar ... cast, do a little give and
 // take game to reel in a rinn and then recast"). Finds real shore on the start tile (the page's own parser), aims down at
-// the water, picks the bait (key 3), casts, answers the take, reels the CLUMSY way (holding the whole time: it must still
-// land, canon's "asking, not tricking"), then reads the bag. ⚠ Headless draws a frame only when asked: the script forces
+// the water, picks the bait (key 3), casts, answers the take, then reels twice (★ RE-RULED 11-16: the rinn can get away):
+// first the CLUMSY way (holding the whole time) which must LOSE it (bait spent, nothing in the bag), then with a stand-in
+// keeper that follows the zone (`hold('track')`, asked every reel step), which must LAND one. Then reads the bag. ⚠ Headless draws a frame only when asked: the script forces
 // frames with screenshots; the take is answered by polling (the take is judged on real time, not on frames).
 //   npx tsx scripts/rinning-check.mts [--out dir]
 import puppeteer from 'puppeteer-core'
@@ -41,22 +42,40 @@ const res: Record<string, unknown> = { spot, stance: await p.evaluate(() => (win
 await p.evaluate(() => (window as any).__ather.cast()); await frame(); await frame('rinning-2-cast')
 res.afterCast = await p.evaluate(() => (window as any).__ather.rin()?.phase)
 // the wait: poll the answer (judged on real time) until the take is caught
-let answered = false
-for (let k = 0; k < 200 && !answered; k++) {
-  await p.evaluate(() => (window as any).__ather.cast()); await sleep(250)
-  if (k % 8 === 0) await frame()
-  answered = (await p.evaluate(() => (window as any).__ather.rin()?.phase)) === 'reeling'
+const answerTake = async () => {
+  for (let k = 0; k < 200; k++) {
+    await p.evaluate(() => (window as any).__ather.cast()); await sleep(250)
+    if (k % 8 === 0) await frame()
+    if ((await p.evaluate(() => (window as any).__ather.rin()?.phase)) === 'reeling') return true
+  }
+  return false
 }
-res.answered = answered
-await p.evaluate(() => (window as any).__ather.hold(true))   // the clumsy way: reel through every pull
-await frame('rinning-3-reel')
-let phase = ''
-for (let k = 0; k < 120 && phase !== 'landed' && phase !== 'idle'; k++) { await frame(); phase = await p.evaluate(() => (window as any).__ather.rin()?.phase) }
+const reelOut = async (shot: string) => {
+  await frame(shot)
+  let ph = ''
+  for (let k = 0; k < 160 && ph !== 'landed' && ph !== 'gone' && ph !== 'idle'; k++) { await frame(); ph = await p.evaluate(() => (window as any).__ather.rin()?.phase) }
+  return ph
+}
+const readBag = () => p.evaluate(() => (JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots as ({ id: string; n: number } | null)[]).filter(Boolean).map(s => `${s!.id}x${s!.n}`))
+const RINN = ['shimmerscale', 'clickclaw', 'glowfin', 'ribboneel', 'moonkoi', 'pearlshell', 'crystal_rinn']
+// 1 · clumsy: taking against every fight must lose it
+const answered = await answerTake(); res.answered = answered
+await p.evaluate(() => (window as any).__ather.hold(true))
+const phase = await reelOut('rinning-3-clumsy'); res.clumsy = phase
 await p.evaluate(() => (window as any).__ather.hold(false))
-res.phase = phase
+await sleep(1200)
+const bag1 = await readBag(); res.bagAfterClumsy = bag1
+// 2 · a keeper who follows the zone lands it
+await p.evaluate((s) => (window as any).__ather.look(s.yaw, s.pitch), spot); await frame()
+await p.evaluate(() => (window as any).__ather.cast()); await frame()
+const answered2 = await answerTake(); res.answered2 = answered2
+await p.evaluate(() => (window as any).__ather.hold('track'))
+const phase2 = await reelOut('rinning-4-track'); res.tracked = phase2
+await p.evaluate(() => (window as any).__ather.hold(false))
 await sleep(1500)
-res.bag = await p.evaluate(() => (JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots as ({ id: string; n: number } | null)[]).filter(Boolean).map(s => `${s!.id}x${s!.n}`))
+res.bag = await readBag()
 console.log(JSON.stringify(res))
-const bag = res.bag as string[], RINN = ['shimmerscale', 'clickclaw', 'glowfin', 'ribboneel', 'moonkoi', 'pearlshell', 'crystal_rinn']
-const pass = res.aimed === true && answered && phase === 'landed' && bag.includes('baitx9') && bag.some(x => RINN.some(r => x.startsWith(r + 'x')))
+const bag = res.bag as string[]
+const pass = res.aimed === true && answered && phase === 'gone' && bag1.includes('baitx9') && !bag1.some(x => RINN.some(r => x.startsWith(r + 'x')))
+  && answered2 && phase2 === 'landed' && bag.includes('baitx8') && bag.some(x => RINN.some(r => x.startsWith(r + 'x')))
 console.log(pass ? 'PASS' : 'FAIL'); await br.close(); process.exit(pass ? 0 : 1)
