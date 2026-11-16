@@ -135,6 +135,8 @@ export function prune(kind: TreeKind, id: string, rand: () => number = Math.rand
   return { ok: true, drops, xp: def.xp, levelUp: r.leveled ? r.newLevel : null }
 }
 
+/** Test hook: set any open-world skill's level (prospecting.test, rinning checks). */
+export function _setOpenLevel(id: SkillId, level: number) { skills = { ...skills, [id]: { ...skills[id], level } }; bump() }
 /** Test hook: a clean slate (no storage). */
 export function _resetForestry(level = 1) {
   skills = createSkillSet()

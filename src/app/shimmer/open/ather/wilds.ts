@@ -7,6 +7,7 @@
 //   split on the (i,j)→(i+1,j+1) diagonal (land.ts / region.ts rule).
 
 import { treeFor, TRUNK, type Zone, type TreeKind } from './forestry'
+import { crystalFor, type CrystalKind } from './prospecting'
 import type { Box, Shape } from '../terrain-world'
 
 /** Biome ids, matched to export_wilds.py. What a biome is FOR: what you gather there, what a waymark there sends
@@ -23,6 +24,9 @@ export interface WildsMeta {
 /** A tree: trunk centre + crown size + which of the Ather's four it is (forestry.ts). Deterministic from the tile, so
  *  the page draws, the walker bumps and a prune finds the same one; `id` = tile:index is what a prune is saved under. */
 export interface Tree { x: number; z: number; y: number; tall: number; r: number; kind: TreeKind; id: string }
+/** A crystal node on the rock (prospecting.ts): where, which, how big, its turn. `id` = tile:c<index> is what a fracture
+ *  is saved under. Deterministic from the tile, like a tree. */
+export interface Crystal { x: number; z: number; y: number; kind: CrystalKind; s: number; rot: number; id: string }
 
 export interface Wilds {
   meta: WildsMeta
@@ -33,6 +37,7 @@ export interface Wilds {
   /** Woods fraction 0..1 around a point: the canopy, for the sky rig's gloom. */
   canopyAt(x: number, z: number): number
   trees: Tree[]
+  crystals: Crystal[]
   shape: Shape
 }
 
@@ -98,6 +103,23 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
     trees.push({ x, z, y, tall: (5 + hash(i, j, 4) * 5) * big, r: (1.6 + hash(i, j, 5) * 1.2) * big, kind: t.kind, id: `${meta.name}:${trees.length}` })
   }
 
+  // Crystals: by ZONE on the crag (prospecting.ts › crystalFor), never under the water line or on a cliff face, never
+  // inside a trunk. Their own hash salts, so adding them moved no tree.
+  const crystals: Crystal[] = []
+  for (let j = 0; j < ch; j++) for (let i = 0; i < cw; i++) {
+    const b = biomes[j * cw + i]
+    const cx = -hx + (i + 0.5) * cell, cz = -hz + (j + 0.5) * cell
+    const zone = zoneAt(Math.min(4, Math.floor((cx + hx) / NODE_M)), Math.min(4, Math.floor((cz + hz) / NODE_M)))
+    const c = crystalFor(zone, b, hash(i, j, 9))
+    if (!c || hash(i, j, 7) >= c.p) continue
+    const x = -hx + (i + 0.25 + hash(i, j, 8) * 0.5) * cell, z = -hz + (j + 0.25 + hash(i, j, 10) * 0.5) * cell
+    const y = heightAt(x, z)
+    const s = Math.hypot(heightAt(x + 1, z) - heightAt(x - 1, z), heightAt(x, z + 1) - heightAt(x, z - 1)) / 2
+    if (s > 0.9 || y < meta.waterY + 0.4) continue
+    if (trees.some(t => Math.abs(t.x - x) < 2.5 && Math.abs(t.z - z) < 2.5)) continue
+    crystals.push({ x, z, y, kind: c.kind, s: 0.8 + hash(i, j, 11) * 0.5, rot: hash(i, j, 12) * Math.PI * 2, id: `${meta.name}:c${crystals.length}` })
+  }
+
   // Trunk boxes in a cell grid for `solids` (the walker asks a small box many times a frame).
   const G = 16, gw = Math.ceil(sizeX / G), gh = Math.ceil(sizeZ / G)
   const grid: Box[][] = Array.from({ length: gw * gh }, () => [])
@@ -127,7 +149,7 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
     },
     water: () => water,
   }
-  return { meta, h, biomes, heightAt, biomeAt, canopyAt, trees, shape }
+  return { meta, h, biomes, heightAt, biomeAt, canopyAt, trees, crystals, shape }
 }
 
 /** Browser loader: the three files export_wilds.py writes. */

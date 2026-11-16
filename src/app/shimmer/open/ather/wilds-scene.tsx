@@ -8,6 +8,7 @@ import { BIOME, type Wilds, type BiomeId, type Tree } from './wilds'
 import { TREE_KINDS, isPruned, subscribeForestry, forestryRev, crownOf, shakeOf, type TreeKind } from './forestry'
 import { useFrame } from '@react-three/fiber'
 import { GREG_WAYMARK, type Waymark } from './waymarks'
+import { Crystals } from './crystal-nodes'
 import { P } from './palette'
 import { GROUND, useGroundMaterial } from './ground-look'
 
@@ -136,6 +137,7 @@ export function WildsScene({ W, waymarks }: { W: Wilds; waymarks: Waymark[] }) {
         <planeGeometry args={[W.meta.sizeX, W.meta.sizeZ]} /><meshLambertMaterial color={P.water} transparent opacity={0.8} />
       </mesh>
       <Trees W={W} />
+      <Crystals W={W} />
       {W.meta.name === GREG_WAYMARK.tile && <WaymarkStone w={greg} greg />}
       {waymarks.filter(w => w.tile === W.meta.name).map(w => <WaymarkStone key={w.id} w={w} />)}
     </>

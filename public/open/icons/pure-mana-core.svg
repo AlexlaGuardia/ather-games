@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Pure Mana Core: clear, bright, perfectly formed; it rings like a bell. Code-drawn filler. -->
+  <defs><linearGradient id="pg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d4e4f6"/></linearGradient></defs><ellipse cx="16" cy="27.5" rx="10" ry="2.2" fill="#000" opacity=".25"/>
+  <circle cx="16" cy="15" r="11" fill="#ffffff" opacity=".22"/><path d="M16 3.6 L23 11 L16 26 L9 11 Z" fill="url(#pg)" stroke="#8aa0c0" stroke-width=".8" stroke-linejoin="round"/><path d="M9 11 L23 11 M16 3.6 L13 11 L16 26 M16 3.6 L19 11 L16 26" fill="none" stroke="#a8bcd8" stroke-width=".6"/><path d="M5 9 q-1.6 3 0 6 M27 9 q1.6 3 0 6 M3 7.6 q-2.4 4.4 0 8.8 M29 7.6 q2.4 4.4 0 8.8" fill="none" stroke="#ffffff" stroke-width=".7" opacity=".7"/><circle cx="14.4" cy="9.4" r="1.2" fill="#ffffff"/>
+</svg>

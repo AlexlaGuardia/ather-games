@@ -60,6 +60,22 @@ const RINNING: Record<string, ItemDef> = {
 }
 for (const [id, def] of Object.entries(RINNING)) def.icon = `/open/icons/${id.replace(/_/g, '-')}.svg`
 Object.assign(OPEN_ITEMS, RINNING)
+// ── Prospecting in the Wilds (ather/prospecting.ts): canon's crystal ladder (game/shimmer-skilling.md › Skill 3; the
+//    lines are canon's Description column) and the base stone a letter is cut from (RULED 11-16: "a specific stone and not
+//    a hard to get one"; its name is Jin's). Grade is worth and look, never power. Icons: tools/art/crystal_icons.py.
+const stone = (name: string, blurb: string): ItemDef => ({ name, blurb, icon: '', stack: 99, kind: 'material' })
+const PROSPECTING: Record<string, ItemDef> = {
+  blankstone: stone('Blankstone', 'Plain, even-grained stone. Every letter a runesmith cuts begins as one.'),
+  raw_mana_shard: stone('Raw Mana Shard', 'Common, unrefined. The foundation of every potion.'),
+  violet_crystal: stone('Violet Crystal', 'Hums at a frequency you feel in your teeth.'),
+  storm_crystal: stone('Storm Crystal', 'Static jumps between your fingers when you hold it.'),
+  earth_crystal: stone('Earth Crystal', 'Feels like it weighs twice what it should. Warm.'),
+  water_crystal: stone('Water Crystal', 'Surface is always slightly damp. Flows like liquid when struck.'),
+  pure_mana_core: stone('Pure Mana Core', 'Refined crystal that rings like a bell when tapped.'),
+  ather_crystal: stone('Ather Crystal', 'Pure dream-stuff crystallized. Looking into it feels like looking into distance.'),
+}
+for (const [id, def] of Object.entries(PROSPECTING)) def.icon = `/open/icons/${id.replace(/_/g, '-')}.svg`
+Object.assign(OPEN_ITEMS, PROSPECTING)
 // ── Rinning on the waking continent (continent/rinning-nyx.ts): canon's mortal rinn (world/rinn.md), bag rows made from
 //    the catch table so a name or a line lives in one place. Clickclaw is already a row (the Ather's): one row, two shores.
 //    Icons: tools/art/nyx_rinn_icons.py.
@@ -79,7 +95,9 @@ export function newInv(waymarks = 12): Inv {
   slots[2] = { id: 'bait', n: STARTING_BAIT }   // rinning (ather/rinning.ts): hold it, click the water
   return { v: 1, slots, gifts: ['bait1'] }
 }
-const clone = (inv: Inv): Inv => ({ v: 1, slots: inv.slots.map(s => (s ? { ...s } : null)) })
+// ⚠ keeps `gifts`: dropping it (11-16) re-armed the one-off bait gift, so every reload after any bag change handed out
+// 10 more bait
+const clone = (inv: Inv): Inv => ({ v: 1, slots: inv.slots.map(s => (s ? { ...s } : null)), ...(inv.gifts ? { gifts: [...inv.gifts] } : {}) })
 
 export const countOf = (inv: Inv, id: string) => inv.slots.reduce((a, s) => a + (s?.id === id ? s.n : 0), 0)
 

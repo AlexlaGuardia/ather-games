@@ -40,6 +40,9 @@ const q = quickMove(a, 0)
 ok(q.slots[0] === null && q.slots.findIndex(x => x?.id === 'repeater') >= HOTBAR, 'quickMove: hotbar → bag failed')
 ok(quickMove(q, q.slots.findIndex(x => x?.id === 'repeater')).slots.findIndex(x => x?.id === 'repeater') < HOTBAR, 'quickMove: bag → hotbar failed')
 
+// gifts survive every bag op (a lost `gifts` re-armed the bait gift: +10 bait on every reload, found 11-16)
+{ const g0 = newInv(12); const ops = [give(g0, 'waymark', 1).inv, take(g0, 'bait', 1)!, move(g0, 2, 9), split(g0, 1), quickMove(g0, 2)]
+  ok(ops.every(x => (x.gifts ?? []).includes('bait1')), 'gifts: a bag op dropped the gift record (the bait gift would repeat on reload)') }
 // icons: every icon an item names is a real file in public/ (a wrong path draws a broken image, not the plain chip),
 // and every rinning item has one (they shipped blank 11-15)
 for (const [id, d] of Object.entries(OPEN_ITEMS)) if (d.icon) ok(existsSync(join(process.cwd(), 'public', d.icon)), `icon: ${id} names ${d.icon}, which is not in public/`)

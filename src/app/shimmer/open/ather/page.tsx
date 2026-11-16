@@ -61,6 +61,8 @@ import { ReelBar } from '../shared/reel-bar'
 const WILDS_WATER_Y = 0.02
 import { prune, pruneCheck, startShake, openSkills, openLevel, addOpenXp, TREE_NAME, MANA_COST, ZONE_NAME, type Zone as WildsZone } from './forestry'
 import { ForestryFX, type Aim, type ForestryFx } from './forestry-fx'
+import { ProspectingFX, type CrystalAim, type ProspectFx } from './prospecting-fx'
+import { mine, mineCheck, CRYSTAL_NAME, CRYSTAL_ITEM, MANA_COST as MINE_COST } from './prospecting'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { AtherMiniMap } from './minimap'
 import type { Vitals } from '../../engine/vitals'
@@ -110,6 +112,7 @@ export default function AtherSlice() {
   // ★ mana is real now: pruning from a distance spends it (forestry.ts › MANA_COST), it refills slowly (build: 1.5/s)
   const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 1.5 })
   const aimRef = useRef<Aim>({ tree: null, dist: Infinity }), fxRef = useRef<ForestryFx | null>(null)
+  const cAimRef = useRef<CrystalAim>({ crystal: null, dist: Infinity }), cFxRef = useRef<ProspectFx | null>(null)
   // ★ THE STANCE (shared/stance.ts, Alex 11-15): stowed by default; R draws / swaps / (held) stows; 1-8 / the wheel pick
   // a hotbar item while not holding a weapon; stowed, a node is worked with the socket's tool
   const [stance, setStance] = useState<Stance>(STOWED)
@@ -320,7 +323,7 @@ export default function AtherSlice() {
       const p = n?.kind === 'gate' ? 'E · the gate (fold map)'
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
-        : rinPrompt() ?? treePrompt()
+        : rinPrompt() ?? (cAimRef.current.crystal && cAimRef.current.dist < aimRef.current.dist ? crystalPrompt() : treePrompt())
       setPrompt(p)
       let where = 'your plot'
       if (zone.kind === 'wilds' && ww) {
@@ -362,7 +365,7 @@ export default function AtherSlice() {
       grant: (grey = 0, pages = 0) => updateGarden({ ...garden, grey: garden.grey + grey, pages: garden.pages + pages }),
       resetGarden: () => updateGarden(freshGarden()),
       spread: () => spreadRef.current, skipDays, ownerAt: (x: number, z: number) => nodeOwner?.(x, z),
-      prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mana: () => manaRef.current.cur,
+      prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mine: () => mineAimed(), crystal: () => { const c = cAimRef.current.crystal; return c ? { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z } : null }, mana: () => manaRef.current.cur,
       stance: () => stanceRef.current, speedMult: () => (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1),
       rin: () => rinApi.current?.view() ?? null, cast: () => castOrAnswer(), hold: (h: boolean | 'track') => { reelHold.current = h === 'track' ? (r: Reel) => (r.zone - r.bob) * 6 + (r.zoneV - r.bobV) * 1.6 > 0 : h },
     }
@@ -411,6 +414,39 @@ export default function AtherSlice() {
     }, () => { if (text) setToast(text) })
     if (ok) { manaRef.current.cur -= MANA_COST; startShake(t.id) }
   }, [zone.kind])
+  // ── prospecting (prospecting.ts + prospecting-fx.tsx): the same hand as forestry. Stowed, click (or E) a crystal
+  //    within 10 m; the Prospecting focus (the Worn Spike) channels and the node fractures
+  const mineAimed = useCallback(() => {
+    const c = cAimRef.current.crystal
+    if (!c || zone.kind !== 'wilds') return
+    if (stanceRef.current.kind !== 'stowed') { setToast('Stow first (hold R): stowed hands use the right tool.'); return }
+    if (!toolsRef.current.prospecting) { setToast('You have no Prospecting focus.'); return }
+    const v = mineCheck(c.kind, c.id); if (!v.ok) { setToast(v.why); return }
+    if (cFxRef.current?.busy() || fxRef.current?.busy()) return
+    if (manaRef.current.cur < MINE_COST) { setToast(`Not enough mana (${MINE_COST} to prospect). It comes back on its own.`); return }
+    let text = ''
+    const ok = cFxRef.current?.start(c, () => {
+      const r = mine(c.kind, c.id)
+      if (!r.ok) { text = r.why; return null }
+      let inv = getInv(); const names: string[] = []
+      for (const d of r.drops) { const g = give(inv, d.id, d.n); inv = g.inv; names.push(`${d.n > 1 ? d.n + ' × ' : ''}${itemDef(d.id).name}${g.left ? ' (bag full)' : ''}`) }
+      setInv(inv)
+      text = `${c.kind === 'egg' ? `It was ${CRYSTAL_NAME[r.found].toLowerCase().replace(' crystal', '')}! ` : ''}${names.join(' · ')} · +${r.xp} Prospecting${r.levelUp ? `. Prospecting ${r.levelUp}!` : ''}`
+      return { found: r.found, n: r.drops.find(d => d.id === CRYSTAL_ITEM[r.found])?.n ?? 1 }
+    }, () => { if (text) setToast(text) })
+    if (ok) manaRef.current.cur -= MINE_COST
+  }, [zone.kind])
+  /** stowed hands work whichever node is nearer under the crosshair: a tree or a crystal */
+  const workAimed = useCallback(() => {
+    if (cAimRef.current.crystal && cAimRef.current.dist < aimRef.current.dist) mineAimed(); else pruneAimed()
+  }, [mineAimed, pruneAimed])
+  const crystalPrompt = () => {
+    const c = cAimRef.current.crystal
+    if (!c || zone.kind !== 'wilds') return null
+    if (stanceRef.current.kind !== 'stowed') return `${CRYSTAL_NAME[c.kind]} · hold R to stow, then click to prospect`
+    const v = mineCheck(c.kind, c.id)
+    return v.ok ? `Click or E · prospect the ${CRYSTAL_NAME[c.kind]} (${MINE_COST} mana)` : v.why
+  }
   // ── rinning (rinning.ts + rinning-fx.tsx): bait in hand → the rinstick is out; click the water to cast (one bait),
   //    click the take to answer, hold to reel while the rinn rests, let go while it pulls
   const rinApi = useRef<RinningApi | null>(null), reelHold = useRef<boolean | ((r: Reel) => boolean)>(false)
@@ -465,12 +501,12 @@ export default function AtherSlice() {
       if (!locked.current || frozen.current) return
       if (held === 'waymark') plantHere()
       else if (held === BAIT) castOrAnswer()
-      else if (stanceRef.current.kind === 'stowed') pruneAimed()   // stowed: the click works the node in front of you
+      else if (stanceRef.current.kind === 'stowed') workAimed()   // stowed: the click works the node in front of you
     }
     const up = (e: MouseEvent) => { if (e.button === 0) reelHold.current = false }
     window.addEventListener('mousedown', down); window.addEventListener('mouseup', up)
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up) }
-  }, [held, plantHere, pruneAimed, castOrAnswer])
+  }, [held, plantHere, workAimed, castOrAnswer])
   // R: a TAP draws the primary / swaps / reloads, a HOLD (HOLD_MS) stows (shared/stance.ts). Timed off down → up so a
   // hold stows the moment it qualifies, without waiting for the release.
   const panelRef = useRef(panel); panelRef.current = panel
@@ -542,7 +578,7 @@ export default function AtherSlice() {
       if (packTab) { setPanel(p => p?.kind === 'pack' ? (p.tab === packTab ? null : { kind: 'pack', tab: packTab }) : p ? p : { kind: 'pack', tab: packTab }); return }
       if (panel || fade) return
       const n = near.current
-      if (e.code === 'KeyE' && !n && aimRef.current.tree && stanceRef.current.kind === 'stowed') { pruneAimed(); return }
+      if (e.code === 'KeyE' && !n && (aimRef.current.tree || cAimRef.current.crystal) && stanceRef.current.kind === 'stowed') { workAimed(); return }
       if (e.code === 'KeyE' && n) {
         if (n.kind === 'greg') setPanel({ kind: 'greg' })
         else setPanel({ kind: 'map', view: 'ather', travel: true })
@@ -591,6 +627,7 @@ export default function AtherSlice() {
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
         {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
+        {zone.kind === 'wilds' && ww && <ProspectingFX ww={ww} aim={cAimRef} fx={cFxRef} ground={ground} mineable={c => mineCheck(c.kind, c.id).ok} />}
         {zone.kind === 'wilds' && ww && <RinningFX waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT} onCatch={onCatch} onGone={onGone} />}
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} /></group> })}
         {terrain && (

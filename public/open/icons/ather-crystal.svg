@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Ather Crystal: golden, translucent, pulsing with the Ather inside. Code-drawn filler. -->
+  <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff4b0"/><stop offset="1" stop-color="#e0a830"/></linearGradient></defs><ellipse cx="16" cy="27.5" rx="10" ry="2.2" fill="#000" opacity=".25"/>
+  <circle cx="16" cy="15" r="12.6" fill="#ffd860" opacity=".22"/><circle cx="16" cy="15" r="8.4" fill="#fff0a8" opacity=".3"/><path d="M16 3 L22.4 9 L21 21 L16 26 L11 21 L9.6 9 Z" fill="url(#ag)" stroke="#a87a1a" stroke-width=".8" stroke-linejoin="round" opacity=".92"/><path d="M16 3 L16 26 M9.6 9 L16 12 L22.4 9 M11 21 L16 18 L21 21" fill="none" stroke="#c8962a" stroke-width=".55" opacity=".8"/><circle cx="16" cy="15" r="2.4" fill="#fffbe0"/><circle cx="16" cy="15" r="4" fill="#fff0a0" opacity=".45"/>
+</svg>

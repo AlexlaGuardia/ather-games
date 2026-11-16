@@ -12,7 +12,7 @@
 // ★ PURE apart from `load` (fetch). Tiles are the existing `Wilds` objects, parsed the same way.
 
 import type { Box, Shape } from '../terrain-world'
-import { parseWilds, loadWilds, BIOME, type BiomeId, type Wilds, type Tree } from './wilds'
+import { parseWilds, loadWilds, BIOME, type BiomeId, type Wilds, type Tree, type Crystal } from './wilds'
 import type { Zone } from './forestry'
 
 export const TILE_M = 1000
@@ -37,6 +37,8 @@ export interface WildsWorld {
   walkable(x: number, z: number, r?: number): boolean
   /** trees of the loaded tiles, in world coords (for the scene; physics reads `shape`) */
   treesNear(x: number, z: number, r: number): Tree[]
+  /** crystal nodes within a square of half-side r, in world coordinates */
+  crystalsNear(x: number, z: number, r: number): Crystal[]
   shape: Shape
   /** the tile under a point, if loaded */
   tileAtPoint(x: number, z: number): { W: Wilds; ox: number; oz: number } | null
@@ -110,7 +112,15 @@ export function makeWorld(index: TileIndex): WildsWorld {
     }
     return out
   }
-  return { index, byName, loaded, at, offsetOf, heightAt, biomeAt, canopyAt, walkable, treesNear, shape, tileAtPoint, rev: 0 }
+  const crystalsNear = (x: number, z: number, r: number) => {
+    const out: Crystal[] = []
+    for (const { tx, ty } of tilesIn(x - r, z - r, x + r, z + r)) {
+      const t = at(tx, ty), W = t && loaded.get(t.name); if (!W) continue
+      for (const tr of W.crystals) { const wx = tr.x + tx * TILE_M, wz = tr.z + ty * TILE_M; if (Math.abs(wx - x) < r && Math.abs(wz - z) < r) out.push({ ...tr, x: wx, z: wz }) }
+    }
+    return out
+  }
+  return { index, byName, loaded, at, offsetOf, heightAt, biomeAt, canopyAt, walkable, treesNear, crystalsNear, shape, tileAtPoint, rev: 0 }
 }
 
 /** Which tiles should be loaded for a keeper at (x, z): their tile and its eight neighbours that exist. */
