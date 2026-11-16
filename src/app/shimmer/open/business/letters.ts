@@ -30,7 +30,7 @@ export const SEATS: Record<Seat, { name: string; place: string | null; where: st
   barrier: { name: 'Barrier Temple', place: 'veradyn', where: 'Veradyn', short: 'Veradyn' },
   life: { name: 'Life Temple', place: 'verdant-ruins', where: 'the Verdant Ruins', short: 'Verdant Ruins' },
   enchant: { name: 'Enchant Temple', place: 'citadel', where: 'the Citadel', short: 'Citadel' },
-  star: { name: 'Star Temple', place: null, where: "the Spine's highest peak", short: 'Star Temple' },
+  star: { name: 'Star Temple', place: 'star-temple', where: "the Star Temple, on the Spine's highest peak", short: 'Star Temple' },
 }
 /** which seats cut each rune's letter (world/schools.md › THE EIGHT RUNESMITH SEATS) */
 export const RUNE_SEATS: Record<string, Seat[]> = {

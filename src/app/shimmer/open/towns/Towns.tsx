@@ -369,6 +369,20 @@ function BarrierTemple({ t }: { t: { x: number; z: number; y: number } }) {
   )
 }
 
+/** THE STAR TEMPLE's marker (world/schools.md: "Highest peak of the Spine — remote, mystical, closest to the sky"):
+ *  a thin star-light beam over the hall that ignores the fog, so the pilgrimage reads from the road below. A BLOCKOUT
+ *  marker only: the temple's look is unruled (no design brief), Alex's call. */
+function StarBeacon({ b }: { b: Building }) {
+  const top = b.y1 + 0.25 + b.floors * FLOOR_H
+  return (
+    <group position={[b.x, top, b.z]}>
+      <mesh position={[0, 2.2, 0]}><octahedronGeometry args={[1.1, 0]} /><meshBasicMaterial color="#fff3c4" toneMapped={false} fog={false} /></mesh>
+      <mesh position={[0, 2.2, 0]}><sphereGeometry args={[2.6, 12, 8]} /><meshBasicMaterial color="#ffe9a8" transparent opacity={0.22} depthWrite={false} fog={false} /></mesh>
+      <mesh position={[0, 48, 0]}><cylinderGeometry args={[0.35, 1.2, 90, 8, 1, true]} /><meshBasicMaterial color="#ffe9a8" transparent opacity={0.3} depthWrite={false} fog={false} /></mesh>
+    </group>
+  )
+}
+
 export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<THREE.Vector3> }) {
   const cache = useRef(new Map<number, TownPlan>())
   const [shown, setShown] = useState<TownPlan[]>([])
@@ -469,6 +483,7 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
       <instancedMesh key={`c${n}`} frustumCulled={false} ref={chimneys} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
       <instancedMesh key={`g${n}`} frustumCulled={false} ref={caps} args={[undefined, undefined, n]}><sphereGeometry args={[1, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshLambertMaterial flatShading /></instancedMesh>
       {shown.filter(pl => pl.temple).map(pl => <BarrierTemple key={pl.place} t={pl.temple!} />)}
+      {shown.filter(pl => pl.place === 'star-temple' && pl.buildings[0]).map(pl => <StarBeacon key={`star-${pl.place}`} b={pl.buildings[0]} />)}
       {parts.filter(q => q.b.front && q.b.front !== 'fallen-cap' && close.has(q.place)).map(q => <FrontSign key={`${q.b.front}`} b={q.b} />)}
       {parts.filter(q => q.b.front === 'fallen-cap').map(q => <FallenCap key="fallen-cap" x={q.b.x} z={q.b.z} y={q.b.y1 + 0.25} yaw={q.b.yaw} w={q.b.w} d={q.b.d} />)}
       {shown.filter(pl => close.has(pl.place)).flatMap(pl => (pl.boards ?? []).map((b, i) => <NameBoard key={`${pl.place}-${i}`} b={b} />))}

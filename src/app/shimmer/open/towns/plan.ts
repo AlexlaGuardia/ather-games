@@ -268,9 +268,13 @@ export function planTown(R: Region, p: RegionPlace, pi: number, opts?: { r?: num
   if (p.kind === 'spot') {
     for (let k = 0; k < 24; k++) {
       const a = hash(pi, k, 1) * Math.PI * 2, d = k === 0 ? 0 : 4 + k * 1.5
-      const c = { x: p.x + Math.cos(a) * d, z: p.z + Math.sin(a) * d, yaw: hash(pi, 1) * Math.PI * 2, w: 7, d: 6 }
+      // the Star Temple (world/schools.md: the Spine's highest peak; tools/worldmap/add_places.py) is a hall, not a hut,
+      // its door turned down the mountain toward Ashfeld, the way a pilgrim comes up
+      const temple = p.id === 'star-temple', ash = temple ? R.meta.places.find(q => q.id === 'ashfeld') : undefined
+      const yaw = ash ? Math.atan2(ash.z - p.z, ash.x - p.x) : hash(pi, 1) * Math.PI * 2
+      const c = { x: p.x + Math.cos(a) * d, z: p.z + Math.sin(a) * d, yaw, w: temple ? 12 : 7, d: temple ? 10 : 6 }
       const g = fits(c, 1, undefined, true)
-      if (g) { keep({ ...c, floors: 1, y0: g.y0, y1: g.y1, kind: 'cottage', rim: 0, v: hash(pi, 2) }); break }
+      if (g) { keep({ ...c, floors: temple ? 2 : 1, y0: g.y0, y1: g.y1, kind: temple ? 'hall' : 'cottage', rim: 0, v: hash(pi, 2) }); break }
     }
     return plan
   }

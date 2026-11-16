@@ -13,7 +13,7 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.lo
 ok(RUNES.every(r => (RUNE_SEATS[r.id] ?? []).length > 0), 'every rune has a runesmith seat (schools.md: "Every rune now has a seat")')
 ok(['magma', 'tempest', 'star'].every(r => RUNE_SEATS[r].length === 2), 'the three overlap runes cut at either seat')
 ok(RUNE_SEATS.illuminate.join() === 'wind' && RUNE_SEATS.manalic.join() === 'enchant', 'Illuminate at Galecrest, Manalic at the Citadel')
-ok(SEATS.star.place === null && SEATS.earth.place === 'the-moldy-boulder', 'Star has no place yet; Earth is the Cairn behind the Moldy Boulder')
+ok(SEATS.star.place === 'star-temple' && SEATS.earth.place === 'the-moldy-boulder', 'Star = the Star Temple on the peak; Earth is the Cairn behind the Moldy Boulder')
 ok(lettersAt('fire').join() === 'star,tempest,magma', `Redstair cuts ${lettersAt('fire').join()}`)
 const stock = (inv: Inv, rune: string, k = 1) => { let o = inv; for (const x of recipeOf(rune)) o = give(o, x.id, x.n * k).inv; return o }
 ok(recipeOf('magma').map(x => x.id).join() === [BLANKSTONE, CRYSTAL_ITEM.raw, CRYSTAL_ITEM.earth].join(), 'a Magma letter: Blankstone + raw shards + an earth crystal')
