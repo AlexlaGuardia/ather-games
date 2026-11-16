@@ -95,6 +95,11 @@ export const GATE_FACE = Math.atan2(THRESHOLD.x - GATE.x, THRESHOLD.z - GATE.z)
 export const GREG = { x: -GRID_HALF + 32, z: GRID_HALF - 14 }
 /** The rise of the island is centred on the start ground (home is the high ground; the far corner runs low). */
 const DOME = { x: -GRID_HALF + 40, z: GRID_HALF - 40 }
+/** The building grid's one floor height (the old pad height, so the gate, Greg and the threshold do not move). */
+export const GROUND_Y = 2.0
+const GRID_EASE = 10
+/** flat one mesh cell past the grid edge: the edge falls mid-cell (the mesh's vertices sit at 4 m off its own origin) */
+const FLAT_HALF = GRID_HALF + PLOT_CELL
 export const FALL_Y = -30
 export const REACH = 2.4
 
@@ -117,6 +122,10 @@ function rawHeight(x: number, z: number): number {
   let y = 2.2 * (1 - Math.min(1, (r / (PLOT_R * 1.5)) ** 2))
   y += (hash(Math.round(x), Math.round(z)) - 0.5) * 0.14
   y += Math.sin(x * 0.11 + 1) * Math.cos(z * 0.09) * 0.7 + Math.sin(x * 0.27 - z * 0.21) * 0.25
+  // ★ THE BUILDING GRID IS FLAT (Alex 11-16: "the building grid should be a flat space"). Every garden square stands
+  // at GROUND_Y; the rise and roll live only in the shore band past the grid, easing in over GRID_EASE metres.
+  const out = Math.max(Math.abs(x) - FLAT_HALF, Math.abs(z) - FLAT_HALF, 0)
+  const kf = Math.min(1, out / GRID_EASE); y = y * kf + GROUND_Y * (1 - kf)
   // level pads where the gate, Greg and the threshold stand
   const pad = (cx: number, cz: number, R: number, h: number) => {
     const k = Math.max(0, Math.min(1, (Math.hypot(x - cx, z - cz) - R) / 4)); y = y * k + h * (1 - k)

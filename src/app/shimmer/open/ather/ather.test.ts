@@ -125,6 +125,14 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   ok(!!s && START.has(sqId(s.i, s.j)), `plot: the ${n} is not on the starting ground`)
   ok(Math.abs(plotHeightAt(p.x, p.z) - 2) < 0.05, `plot: the ${n}'s pad is not level`)
 }
+// the building grid is one flat floor (Alex 11-16), corner to corner, every 2 m
+{
+  let worst = 0
+  for (let z = -GRID_HALF; z <= GRID_HALF; z += 2) for (let x = -GRID_HALF; x <= GRID_HALF; x += 2) {
+    const h = plotHeightAt(x, z); if (Number.isFinite(h)) worst = Math.max(worst, Math.abs(h - 2))
+  }
+  ok(worst < 1e-6, `plot: the building grid is not flat (off by ${worst.toFixed(3)} m)`)
+}
 // buying ground: the grimoire seals rings, adjacency, cost
 {
   // the bands run out from the start corner, four squares deep: (3..6, 14) ring 1, (7, 14) ring 2, the far corner ring 3
