@@ -22,6 +22,8 @@ const ABOVE_BAR = `max(${HUD_BAR_CLEAR.phone + 8}px, env(safe-area-inset-bottom)
 //   RIGHT half  drag anywhere to look. Fire is a button you can DRAG to aim while it is held (thumb never lifts).
 //   Buttons     hold: jump, slide, fire. Tap: whatever the page passes in `actions` (E use, M map, F plant...),
 //               sent as real key presses so the page's own handler runs.
+// Taps fire on CLICK, not pointerdown (BETA M3, 11-16): a panel opened on pointerdown is under the finger when the same
+// tap's click lands, and a Hearth panel's backdrop closes on click. MAP and FRIENDS opened and shut in one tap.
 // Multi-touch by pointerId: each finger owns exactly one role from touchdown to lift.
 
 /** `near`: a contextual action (E use, L lift) shown as a big pill by the thumb cluster; the rest sit in a compact
@@ -129,7 +131,7 @@ export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint
       <div style={{ position: 'absolute', ...(row.side === 'right' ? { right: 'max(12px, env(safe-area-inset-right))' } : { left: 'max(12px, env(safe-area-inset-left))' }), top: row.top, display: 'flex', gap: 8, flexWrap: 'wrap', maxWidth: '62vw' }}>
         {actions.filter(a => !a.near).map(a => (
           <div key={a.code} data-touch={a.label} style={{ ...ring(40), width: 'auto', minWidth: 40, padding: '0 11px', borderRadius: 20, display: 'flex', alignItems: 'center', fontSize: 11 }}
-            onPointerDown={e => { e.stopPropagation(); pressKey(a.code) }}>
+            onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); pressKey(a.code) }}>
             <span style={{ fontSize: 13, marginRight: 6, color: '#d4a843' }}>{a.key}</span>{a.label}
           </div>
         ))}
@@ -138,7 +140,7 @@ export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint
       <div style={{ position: 'absolute', right: `calc(max(18px, env(safe-area-inset-right)) + ${showFire ? 84 + 12 : 0}px + 56px + 16px)`, bottom: ABOVE_BAR, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
         {actions.filter(a => a.near).map(a => (
           <div key={a.code} data-touch={a.label} style={{ ...ring(60, true), width: 'auto', minWidth: 60, padding: '0 18px', borderRadius: 30, display: 'flex', alignItems: 'center', fontSize: 13 }}
-            onPointerDown={e => { e.stopPropagation(); pressKey(a.code) }}>
+            onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); pressKey(a.code) }}>
             <span style={{ fontSize: 17, marginRight: 8, color: '#f4efe2' }}>{a.key}</span>{a.label}
           </div>
         ))}

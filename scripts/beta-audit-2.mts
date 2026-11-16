@@ -14,7 +14,8 @@ const b = await puppeteer.launch({ protocolTimeout: 240000, executablePath: proc
 const ctx = await b.createBrowserContext()
 const p = await ctx.newPage()
 await p.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1')
-await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 })
+const W = Number(flag('--w', '390')), H = Number(flag('--h', '844'))
+await p.setViewport({ width: W, height: H, isMobile: true, hasTouch: true, deviceScaleFactor: 2 })
 const log: { t: number; kind: string; msg: string }[] = []
 const t0 = Date.now(); const T = () => Math.round((Date.now() - t0) / 100) / 10
 p.on('pageerror', e => log.push({ t: T(), kind: 'pageerror', msg: String(e).slice(0, 300) }))
@@ -67,20 +68,21 @@ await beat('m3-reach', { buttons: reach.length, covered })
 console.log(covered.length ? `  FAIL M3 covered: ${JSON.stringify(covered)}` : `  ok   M3 all ${reach.length} touch buttons reachable`)
 // the left thumb, forward for 4 s
 const before = await st()
-await drag(90, 640, 0, -70, 4000); await sleep(500)
+await drag(90, H - 200, 0, -70, 4000); await sleep(500)
 await beat('thumb-forward', { from: before })
-await drag(90, 640, 70, 0, 2500); await sleep(500)
+await drag(90, H - 200, 70, 0, 2500); await sleep(500)
 await beat('thumb-right')
 // look: drag on the right half
 await drag(300, 500, -80, 0, 1200); await beat('look-drag')
 for (const [name, re] of [['pack', /PACK$/], ['map', /MAP$/], ['options', /OPTIONS$/], ['friends', /FRIENDS$/], ['journal', /JOURNAL$/]] as const) {
   const tapped = await tapText(re); await sleep(2500); await beat(`hud-${name}`, { tapped })
   // a phone has no Escape: does a close/× exist?
-  const closeTapped = await tapText(/^(×|✕|close|back|done)$/); await sleep(800)
+  const x = await p.$('[aria-label="close"]')
+  const closeTapped = x ? (await x.tap().then(() => true, () => false)) : await tapText(/^(×|✕|close|back|done)$/); await sleep(800)
   if (closeTapped) await beat(`hud-${name}-closed`, { closeTapped })
 }
 // a long walk forward: does a stranger reach anything?
-for (let i = 1; i <= 3; i++) { await drag(90, 640, 0, -70, 8000); await beat(`walk-${i}`) }
+for (let i = 1; i <= 3; i++) { await drag(90, H - 200, 0, -70, 8000); await beat(`walk-${i}`) }
 writeFileSync(`${out}/audit2.json`, JSON.stringify({ url, beats, log }, null, 1))
 console.log('errors:', JSON.stringify(log.slice(0, 15), null, 1))
 await b.close()
