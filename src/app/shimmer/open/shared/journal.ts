@@ -23,7 +23,16 @@ export interface JournalEntry {
   hand: 'kael' | 'keeper'
   struck?: boolean
 }
-export interface JournalPrefs { v: 1; active: string | null; marker: Record<string, boolean>; trail: Record<string, boolean> }
+export interface JournalPrefs { v: 1; active: string | null; marker: Record<string, boolean>; trail: Record<string, boolean>
+  /** true once the player has picked (or cleared) an active entry themselves; until then the game picks for them */
+  chosen?: boolean }
+/** THE NEXT STEP IS TOLD (BETA M4, 11-16). A new keeper has never opened the journal, so nothing was active and the world
+ *  pointed nowhere. Until the player chooses, the open first errand IS the active line (beacon + trail on, Greg first). */
+export const DEFAULT_ACTIVE = 'errand'
+export function withDefault(p: JournalPrefs, entries: JournalEntry[]): JournalPrefs {
+  if (p.chosen || p.active) return p
+  return entries.some(e => e.id === DEFAULT_ACTIVE && !e.struck) ? { ...p, active: DEFAULT_ACTIVE } : p
+}
 
 const bySource = new Map<string, JournalEntry[]>()
 let prefs: JournalPrefs | null = null
@@ -38,7 +47,8 @@ function loadPrefs(): JournalPrefs {
 }
 function emit() {
   if (!prefs) prefs = typeof window === 'undefined' ? SERVER.prefs : loadPrefs()
-  snap = { entries: [...bySource.values()].flat(), prefs }
+  const entries = [...bySource.values()].flat()
+  snap = { entries, prefs: withDefault(prefs, entries) }
   subs.forEach(f => f())
 }
 const same = (a: JournalEntry[], b: JournalEntry[]) =>
@@ -58,9 +68,10 @@ export function setPrefs(fn: (p: JournalPrefs) => JournalPrefs) {
   emit()
 }
 /** Make an entry the active one (or clear it). The active entry's waymark and trail default ON. */
-export const setActive = (id: string | null) => setPrefs(p => ({ ...p, active: id }))
-export const toggleMarker = (id: string) => setPrefs(p => ({ ...p, marker: { ...p.marker, [id]: !markerOn(p, id) } }))
-export const toggleTrail = (id: string) => setPrefs(p => ({ ...p, trail: { ...p.trail, [id]: !trailOn(p, id) } }))
+export const setActive = (id: string | null) => setPrefs(p => ({ ...p, active: id, chosen: true }))
+// a toggle flips what the player SEES, which includes the default-active errand
+export const toggleMarker = (id: string) => setPrefs(p => ({ ...p, marker: { ...p.marker, [id]: !markerOn(withDefault(p, snap.entries), id) } }))
+export const toggleTrail = (id: string) => setPrefs(p => ({ ...p, trail: { ...p.trail, [id]: !trailOn(withDefault(p, snap.entries), id) } }))
 /** Defaults: the active entry shows both; any other shows neither until toggled. */
 export const markerOn = (p: JournalPrefs, id: string) => p.marker[id] ?? p.active === id
 export const trailOn = (p: JournalPrefs, id: string) => p.trail[id] ?? p.active === id
