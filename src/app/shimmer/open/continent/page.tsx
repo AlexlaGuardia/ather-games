@@ -26,6 +26,8 @@ import type { Vitals } from '../../engine/vitals'
 import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Track } from './map'
 import { pitstopsUnlocked, visitNear } from './pitstops'
 import { Towns } from '../towns/Towns'
+import { MarketView, DeedCard } from '../business/market-view'
+import { useTycoon } from '../business/use-tycoon'
 import { veradynFerry } from '../towns/veradyn'
 import { townDiscs } from '../towns/plan'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
@@ -1018,6 +1020,16 @@ export default function ContinentRide() {
   const [hud, setHud] = useState<RideHud>({ x: 0, z: 0, yaw: 0, mph: 0, frac: 0, drift: false, air: 0, gearR: false, place: null, road: null, sign: null })
   const { build, setBuild } = useCourserBuild()
   const [ledger, setLedger] = useLedger()
+  // THE BUSINESSES (business/*): the keeper's places, run on the clock; deed = the lot whose card is open
+  const tycoon = useTycoon(ledger, setLedger)
+  const [deed, setDeed] = useState<string | null>(null)
+  const [deedReach, setDeedReach] = useState<string | null>(null)
+  // ?tune=1: ] gives 100k Marks, to try the businesses without grinding contracts (the Ather's ?tune=1 convention)
+  useEffect(() => {
+    if (!new URLSearchParams(location.search).has('tune')) return
+    const k = (e: KeyboardEvent) => { if (e.code === 'BracketRight') { setLedger({ ...ledgerRef.current, marks: ledgerRef.current.marks + 100_000 }); hudSay('tune · +100,000 Marks', 'info') } }
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
+  }, [setLedger])
   // the continent's garage is REAL: a part you have not bought does not fit, whatever the test track remembers
   const eff = useMemo(() => ({ ...build, core: Math.min(build.core, ledger.owned.core) as Tier, trim: Math.min(build.trim, ledger.owned.trim) as Tier, rune: Math.min(build.rune, ledger.owned.rune) as Tier }), [build, ledger.owned])
   const tune = useMemo(() => tuneFromSpec(buildSpec(DARTER_STOCK, eff)), [eff])
@@ -1119,6 +1131,7 @@ export default function ContinentRide() {
   const touchActions: TouchAction[] = [
     ...(!hud.foot && ferryAt && !ferrying ? [{ code: 'KeyE', key: 'E', label: 'ferry', near: true }]
       : !hud.foot && canBoard ? [{ code: 'KeyE', key: 'E', label: 'board', near: true }] : []),
+    ...(hud.foot && deedReach && !deed ? [{ code: 'KeyE', key: 'E', label: 'deed', near: true }] : []),
     ...(hud.prompt ? [{ code: 'KeyF', key: 'F', label: hud.foot ? 'get in' : 'get out', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
     { code: 'KeyO', key: 'O', label: 'options' },
@@ -1194,8 +1207,8 @@ export default function ContinentRide() {
   const [vesselShop, setVesselShop] = useState(false)   // the Passage's vessel counter (vessel-shop.tsx)
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.code === 'Escape') setVesselShop(false) }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
   const optionsOpen = useOptionsOpen()   // Options (options.tsx): O, Esc once the mouse is free, the pack's gear
-  useOptionsKeys(showMap || garage || !!board || bagOpen || vesselShop)
-  useMenuLock(showMap || garage || !!board || bagOpen || vesselShop || optionsOpen, getCanvas)
+  useOptionsKeys(showMap || garage || !!board || bagOpen || vesselShop || !!deed)
+  useMenuLock(showMap || garage || !!board || bagOpen || vesselShop || !!deed || optionsOpen, getCanvas)
   // ★ THE STANCE on the continent (shared/stance.ts, Alex 11-15, the same rules as the Ather): on foot you are STOWED
   // by default and a little quicker; R taps draw the primary / swap / reload, a hold stows; 1-8 and the wheel pick a
   // hotbar item while no weapon is drawn. At the wheel the hands are busy: R is back to the road there. In the gun shop
@@ -1208,7 +1221,7 @@ export default function ContinentRide() {
   // R on foot: a TAP draws / swaps / reloads, a HOLD (HOLD_MS) stows, timed off down → up like the Ather. Not at the
   // wheel (Driver's R is the road there), not in a menu, not with a rack gun in hand (the shop's R reloads it)
   const stanceBlocked = useRef(false)
-  stanceBlocked.current = !hud.foot || showMap || garage || !!board || bagOpen || vesselShop || optionsOpen
+  stanceBlocked.current = !hud.foot || showMap || garage || !!board || bagOpen || vesselShop || !!deed || optionsOpen
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | null = null, held = false
     const down = (e: KeyboardEvent) => {
@@ -1269,6 +1282,7 @@ export default function ContinentRide() {
           <Guardrails R={R} />
           <Water R={R} />
           <Towns R={R} focus={focus} />
+          <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={setDeed} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} />
           <Posts R={R} />
           <Roadside R={R} />
           <Trees R={R} focus={focus} />
@@ -1283,7 +1297,7 @@ export default function ContinentRide() {
           stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hud.foot ? 48 : 148 }} />
       )}
       {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} marks={questMarksRef} vitals={vitalsRef} mana={manaRef} entries={gunHud.holding ? gunHud.entries : hotbarEntries(inv)} sel={slot} onSelect={setSlot}
-        dimmed={!hud.foot} input={!!hud.foot && !showMap && !garage && !board && !bagOpen && !vesselShop && !optionsOpen}
+        dimmed={!hud.foot} input={!!hud.foot && !showMap && !garage && !board && !bagOpen && !vesselShop && !deed && !optionsOpen}
         minimap={mapState && <ContinentMiniMap map={mapState} track={track} onExpand={() => setShowMap(true)} box={openMapBox(hudSize)} />}
         status={[
           { label: R?.meta.name === 'continent' ? 'Athernyx · 1672' : 'Ashfeld to Rune Hold' },
@@ -1293,13 +1307,18 @@ export default function ContinentRide() {
         ]} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} keys={CONTINENT_KEYS} />}
       <BirthGate />
+      {deed && R && tycoon.t && (
+        <DeedCard R={R} lotId={deed} t={tycoon.t} marks={ledger.marks} onClose={() => setDeed(null)}
+          onBuy={o => { const r = tycoon.buy(o.lot.id, o.kind, o.lot.tier); if (r.ok) hudSay(`${o.name} is yours · −${o.price.toLocaleString()} Marks`, 'item'); return r }}
+          onSell={o => { const r = tycoon.sell(o.lot.id); if (r.ok) { hudSay(`${o.name} sold · +${(r.refund ?? 0).toLocaleString()} Marks`, 'item'); setDeed(null) } return r }} />
+      )}
       {vesselShop && <VesselShop ledger={ledger} setLedger={setLedger} onClose={() => setVesselShop(false)} isTouch={isTouch} />}
       {pack && <PackMenu tab={pack} onTab={setPack} onClose={() => setPack(null)} sel={slot} isTouch={isTouch} />}
       {mapState && showMap && <ContinentMap map={mapState} track={track} onClose={() => setShowMap(false)} />}
       <GaragePanel open={garage} onClose={() => setGarage(false)} build={eff} setBuild={setBuild}
         shop={{ ledger, buy: (slot: Slot, t: Tier) => { const r = buy(ledger, slot, t); if (r.ok) setLedger(r.ledger); else flash(r.why ?? 'Not yet') } }} />
       <TradeHud ledger={ledger} objective={objective} toast={null} purse={false} />
-      {atTown && !board && !bagOpen && !vesselShop && !optionsOpen && SUPPLY.some(s => s.place === atTown) && (
+      {atTown && !board && !bagOpen && !vesselShop && !deed && !optionsOpen && SUPPLY.some(s => s.place === atTown) && (
         <div style={{ position: 'absolute', left: '50%', top: '40%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px system-ui', pointerEvents: 'none' }}>
           E · Ather Trading Co. board
         </div>
@@ -1314,10 +1333,10 @@ export default function ContinentRide() {
       {hud.foot && (
         <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
       )}
-      {hud.foot && !ptrLocked && !isTouch && !showMap && !garage && !board && !bagOpen && !vesselShop && !optionsOpen && (
+      {hud.foot && !ptrLocked && !isTouch && !showMap && !garage && !board && !bagOpen && !vesselShop && !deed && !optionsOpen && (
         <div style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translateX(-50%)', padding: '7px 16px', borderRadius: 999, background: 'rgba(12,16,20,0.66)', color: '#f4efe2', font: '600 12px system-ui', letterSpacing: '0.16em', textTransform: 'uppercase', pointerEvents: 'none' }}>Click to resume</div>
       )}
-      {hud.prompt && !bagOpen && !vesselShop && !optionsOpen && (   // world prompts stay out from over a menu
+      {hud.prompt && !bagOpen && !vesselShop && !deed && !optionsOpen && (   // world prompts stay out from over a menu
         <div style={{ position: 'absolute', left: '50%', top: '62%', transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', pointerEvents: 'none' }}>
           {hud.prompt}
         </div>

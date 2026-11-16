@@ -11,6 +11,12 @@ const KEY = 'ather:trade:trial-ledger'
 import { HearthFrame, H } from '../ui/hearth'
 const GOLD = '#d4a843'
 
+/** The ledger as saved right now (for a caller that runs before useLedger's load effect lands: the tycoon's catch-up). */
+export function readSavedLedger(): Ledger {
+  try { const raw = localStorage.getItem(KEY); if (raw) return migrateLedger(JSON.parse(raw)) } catch { /* fresh */ }
+  return NEW_LEDGER
+}
+
 export function useLedger(): [Ledger, (l: Ledger) => void] {
   const [l, setL] = useState<Ledger>(NEW_LEDGER)
   useEffect(() => { try { const raw = localStorage.getItem(KEY); if (raw) setL(migrateLedger(JSON.parse(raw)))   /* scales a pre-ladder purse up once (trade.ts) */ } catch { /* fresh */ } }, [])
