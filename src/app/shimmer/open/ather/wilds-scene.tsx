@@ -13,39 +13,67 @@ import { P } from './palette'
 import { GROUND, useGroundMaterial } from './ground-look'
 import { DAY } from '../shared/sky-palette'
 
-function wildsGeometry(W: Wilds): THREE.BufferGeometry {
+/** The tile's ground, cut into CHUNKS×CHUNKS pieces so the renderer can skip what the camera cannot see and what the
+ *  fog has swallowed (Alex 11-16 lag: one 375k-vertex mesh per tile drew whole, four tiles a frame). Flat-shaded,
+ *  colour per triangle, so a piece is still its own unindexed triangles. */
+const CHUNKS = 8
+type GroundChunk = { geo: THREE.BufferGeometry; cx: number; cz: number; r: number }
+function wildsGeometry(W: Wilds): GroundChunk[] {
   const { nx, nz, cell, sizeX, sizeZ } = W.meta
   const hx = sizeX / 2, hz = sizeZ / 2
-  const pos = new Float32Array((nx - 1) * (nz - 1) * 18), col = new Float32Array((nx - 1) * (nz - 1) * 18), lay = new Float32Array((nx - 1) * (nz - 1) * 6)
   const c = new THREE.Color()
-  let o = 0
   const vh = (i: number, j: number) => W.h[j * nx + i]
-  for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
-    const b = W.biomes[j * (nx - 1) + i] as BiomeId
-    const x0 = i * cell - hx, z0 = j * cell - hz, x1 = x0 + cell, z1 = z0 + cell
-    const y00 = vh(i, j), y10 = vh(i + 1, j), y01 = vh(i, j + 1), y11 = vh(i + 1, j + 1)
-    const tris = [[x0, y00, z0, x1, y11, z1, x1, y10, z0], [x0, y00, z0, x0, y01, z1, x1, y11, z1]]
-    for (let t = 0; t < 2; t++) {
-      const n = ((i * 7 + j * 13 + t * 5) % 11) / 11
-      if (b === BIOME.water) c.copy(P.bed)
-      else if (b === BIOME.shore) c.copy(P.shore)
-      else if (b === BIOME.rock) c.copy(P.rock)
-      else if (b === BIOME.woods) c.copy(P.woods).lerp(P.woodsHi, n * 0.5)
-      else c.copy(P.grass).lerp(P.grassHi, n * 0.45).lerp(P.gold, ((i * 3 + j) % 17) / 17 * 0.15)
-      const tri = tris[t]
-      for (let k = 0; k < 9; k++) pos[o + k] = tri[k]
-      for (let k = 0; k < 3; k++) { col[o + k * 3] = c.r; col[o + k * 3 + 1] = c.g; col[o + k * 3 + 2] = c.b }
-      const L = b === BIOME.water || b === BIOME.shore ? GROUND.sand : b === BIOME.rock ? GROUND.stone : b === BIOME.woods ? GROUND.loam : GROUND.grass
-      lay[o / 3] = L; lay[o / 3 + 1] = L; lay[o / 3 + 2] = L
-      o += 9
+  const out: GroundChunk[] = []
+  const ci = Math.ceil((nx - 1) / CHUNKS), cj = Math.ceil((nz - 1) / CHUNKS)
+  for (let J = 0; J < CHUNKS; J++) for (let I = 0; I < CHUNKS; I++) {
+    const i0 = I * ci, i1 = Math.min(nx - 1, i0 + ci), j0 = J * cj, j1 = Math.min(nz - 1, j0 + cj)
+    if (i1 <= i0 || j1 <= j0) continue
+    const cells = (i1 - i0) * (j1 - j0)
+    const pos = new Float32Array(cells * 18), col = new Float32Array(cells * 18), lay = new Float32Array(cells * 6)
+    let o = 0
+    for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) {
+      const b = W.biomes[j * (nx - 1) + i] as BiomeId
+      const x0 = i * cell - hx, z0 = j * cell - hz, x1 = x0 + cell, z1 = z0 + cell
+      const y00 = vh(i, j), y10 = vh(i + 1, j), y01 = vh(i, j + 1), y11 = vh(i + 1, j + 1)
+      const tris = [[x0, y00, z0, x1, y11, z1, x1, y10, z0], [x0, y00, z0, x0, y01, z1, x1, y11, z1]]
+      for (let t = 0; t < 2; t++) {
+        const n = ((i * 7 + j * 13 + t * 5) % 11) / 11
+        if (b === BIOME.water) c.copy(P.bed)
+        else if (b === BIOME.shore) c.copy(P.shore)
+        else if (b === BIOME.rock) c.copy(P.rock)
+        else if (b === BIOME.woods) c.copy(P.woods).lerp(P.woodsHi, n * 0.5)
+        else c.copy(P.grass).lerp(P.grassHi, n * 0.45).lerp(P.gold, ((i * 3 + j) % 17) / 17 * 0.15)
+        const tri = tris[t]
+        for (let k = 0; k < 9; k++) pos[o + k] = tri[k]
+        for (let k = 0; k < 3; k++) { col[o + k * 3] = c.r; col[o + k * 3 + 1] = c.g; col[o + k * 3 + 2] = c.b }
+        const L = b === BIOME.water || b === BIOME.shore ? GROUND.sand : b === BIOME.rock ? GROUND.stone : b === BIOME.woods ? GROUND.loam : GROUND.grass
+        lay[o / 3] = L; lay[o / 3 + 1] = L; lay[o / 3 + 2] = L
+        o += 9
+      }
     }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3))
+    g.setAttribute('aLayer', new THREE.BufferAttribute(lay, 1))
+    g.computeVertexNormals()
+    g.computeBoundingSphere()
+    const xa = i0 * cell - hx, xb = i1 * cell - hx, za = j0 * cell - hz, zb = j1 * cell - hz
+    out.push({ geo: g, cx: (xa + xb) / 2, cz: (za + zb) / 2, r: Math.hypot(xb - xa, zb - za) / 2 })
   }
-  const g = new THREE.BufferGeometry()
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3))
-  g.setAttribute('aLayer', new THREE.BufferAttribute(lay, 1))
-  g.computeVertexNormals()
-  return g
+  return out
+}
+
+/** The ground pieces: frustum-culled by three, and hidden past the fog by distance from the keeper. */
+function Ground({ W, focus, off }: { W: Wilds; focus: Focus; off: { x: number; z: number } }) {
+  const chunks = useMemo(() => wildsGeometry(W), [W])
+  useEffect(() => () => chunks.forEach(k => k.geo.dispose()), [chunks])
+  const mat = useGroundMaterial()
+  const refs = useRef<(THREE.Mesh | null)[]>([])
+  useFrame(() => {
+    const f = focus.current, lx = f.x - off.x, lz = f.z - off.z
+    chunks.forEach((k, i) => { const m = refs.current[i]; if (m) m.visible = Math.hypot(k.cx - lx, k.cz - lz) - k.r < TREE_DRAW_R })
+  })
+  return <>{chunks.map((k, i) => <mesh key={i} ref={el => { refs.current[i] = el }} geometry={k.geo} material={mat} />)}</>
 }
 
 // The Ather's four trees, each its own look (canon: game/shimmer-skilling.md › Tree Types). A pruned tree stands
@@ -149,12 +177,10 @@ export function WaymarkStone({ w, greg }: { w: Waymark; greg?: boolean }) {
 
 /** `off` = this tile's world offset (the group it sits in); `focus` = the keeper, in world coords. */
 export function WildsScene({ W, waymarks, focus, off }: { W: Wilds; waymarks: Waymark[]; focus: Focus; off: { x: number; z: number } }) {
-  const geo = useMemo(() => wildsGeometry(W), [W])
-  const ground = useGroundMaterial()
   const greg = { ...GREG_WAYMARK, y: W.heightAt(GREG_WAYMARK.x, GREG_WAYMARK.z) }
   return (
     <>
-      <mesh geometry={geo} material={ground} />
+      <Ground W={W} focus={focus} off={off} />
       <mesh rotation-x={-Math.PI / 2} position-y={W.meta.waterY - 0.15}>
         <planeGeometry args={[W.meta.sizeX, W.meta.sizeZ]} /><meshLambertMaterial color={P.water} transparent opacity={0.8} />
       </mesh>
