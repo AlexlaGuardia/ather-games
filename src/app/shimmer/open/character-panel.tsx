@@ -11,6 +11,7 @@ import { useLoadout, setLoadout, equip, gunsFor, vesselsFor, type OwnedVessel } 
 import { useBirth } from './birth-gate'
 import { RUNES, ELEMENTS } from '../play3d/birth/runes.data'
 import { RuneMark } from '../play3d/birth/RuneMark'
+import { CompanionSlot } from './companion-slot'
 
 type SlotId = 'primary' | 'secondary' | 'tactical' | 'signature'
 const SLOT_LABEL: Record<SlotId, string> = { primary: 'Primary', secondary: 'Secondary', tactical: 'Tactical', signature: 'Signature' }
@@ -112,6 +113,8 @@ export function CharacterBody() {
         <Slot id="tactical" open={open === 'tactical'} onOpen={tap('tactical')} />
         <Slot id="signature" open={open === 'signature'} onOpen={tap('signature')} />
       </div>
+      <div className="mt-4"><HearthLabel>Companion</HearthLabel></div>
+      <div className="mt-1.5"><CompanionSlot /></div>
     </div>
   )
 }

@@ -66,6 +66,8 @@ const WILDS_WATER_Y = 0.02
 import { prune, pruneCheck, startShake, openSkills, openLevel, addOpenXp, TREE_NAME, MANA_COST, ZONE_NAME, type Zone as WildsZone } from './forestry'
 import { ForestryFX, type Aim, type ForestryFx } from './forestry-fx'
 import { ProspectingFX, type CrystalAim, type ProspectFx } from './prospecting-fx'
+import { CompanionFollower } from '../shared/companion-follower'
+import { subscribeCompanion, takeJoined, perkLabel } from '../shared/companion'
 import { mine, mineCheck, CRYSTAL_NAME, CRYSTAL_ITEM, MANA_COST as MINE_COST } from './prospecting'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { AtherMiniMap } from './minimap'
@@ -100,6 +102,12 @@ export default function AtherSlice() {
   const [panel, setPanel] = useState<Panel>(null)
   const [prompt, setPrompt] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  // a Mana'mal companion joins at a skill's 15 / 100 (shared/companion.ts): say so, including any met before this page loaded.
+  //   hudSay straight, not the toast state: a join lands mid-mine, and the mine's own toast would replace it
+  useEffect(() => {
+    const say = () => { const j = takeJoined(); for (const c of j) hudSay(`${c.name} has joined you (${perkLabel(c)}). Character tab to call it out.`, 'chat') }
+    say(); return subscribeCompanion(say)
+  }, [])
   const [fade, setFade] = useState(0)
   const [hud, setHud] = useState({ verb: 'idle', where: 'your plot' })
   const pos = useRef({ x: THRESHOLD.x, z: THRESHOLD.z, grounded: true, swimming: false })
@@ -435,7 +443,7 @@ export default function AtherSlice() {
       let inv = getInv(); const names: string[] = []
       for (const d of r.drops) { const g = give(inv, d.id, d.n); inv = g.inv; names.push(`${d.n > 1 ? d.n + ' × ' : ''}${itemDef(d.id).name}${g.left ? ' (bag full)' : ''}`) }
       setInv(inv)
-      text = `${c.kind === 'egg' ? `It was ${CRYSTAL_NAME[r.found].toLowerCase().replace(' crystal', '')}! ` : ''}${names.join(' · ')} · +${r.xp} Prospecting${r.levelUp ? `. Prospecting ${r.levelUp}!` : ''}`
+      text = `${c.kind === 'egg' ? `It was ${CRYSTAL_NAME[r.found].toLowerCase().replace(' crystal', '')}! ` : ''}${r.perk ? `${r.perk}! ` : ''}${names.join(' · ')} · +${r.xp} Prospecting${r.levelUp ? `. Prospecting ${r.levelUp}!` : ''}`
       return { found: r.found, n: r.drops.find(d => d.id === CRYSTAL_ITEM[r.found])?.n ?? 1 }
     }, () => { if (text) setToast(text) })
     if (ok) manaRef.current.cur -= MINE_COST
@@ -657,6 +665,7 @@ export default function AtherSlice() {
             safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={held === 'repeater'} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} />
         )}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
+        {world && fade === 0 && <CompanionFollower pose={poseRef} ground={ground} />}
         {world && (
           <Walker
             key={epoch} world={world} ground={ground} spawn={spawn} locked={locked} frozen={frozen}

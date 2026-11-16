@@ -1,0 +1,195 @@
+'use client'
+
+// THE COMPANION, IN THE WORLD (shared/companion.ts picks who; this draws them walking with you).
+// It trails the keeper a pace behind and to the right, catches up when you run, and jumps to your side if you
+// travel. Each companion gets a code-built BLOCKOUT body (canon look from world/manamals.md; the final look is Alex's
+// to judge, per the 09-04 art rule: generated filler never blocks, Alex calls the feel):
+//   · Glowmite (firefly): flies, and its light pulses in short/long runs, "patterns seem almost like language".
+//     A living thing, so it stays live glow (the art-medium law).
+//   · Gemdigger (prairie dog): scurries on the ground in hops; when you stand still it sits up on its haunches, the
+//     sentinel pose, and its belly pouch glints with stones.
+//   · everyone else: a soft wisp in the companion's colour, a placeholder until their body is built.
+//
+// Props: the page's pose ref (where the keeper stands each frame) and its ground(x, z).
+
+import { useMemo, useRef, useSyncExternalStore } from 'react'
+import { useFrame } from '@react-three/fiber'
+import * as THREE from 'three'
+import { activeCompanion, subscribeCompanion, companionRev, type CompanionId } from './companion'
+
+export interface FollowPose { x: number; z: number; yaw: number }
+
+/** where it likes to be: behind and to the right of the keeper (m) */
+const BEHIND = 1.5, SIDE = 0.9, TELEPORT = 22
+const WISP_TINT: Partial<Record<CompanionId, string>> = {
+  dustwhisker: '#d9cbe8', tuskroot: '#e0a24a', drifthorn: '#bfe8d0', rootback: '#9bbd6a',
+  embermole: '#ff9a5c', prismstrike: '#a6e6ff', sporeling: '#d6b2ff', sporehound: '#c7a86e',
+}
+
+export function CompanionFollower({ pose, ground }: { pose: React.MutableRefObject<FollowPose>; ground: (x: number, z: number) => number }) {
+  useSyncExternalStore(subscribeCompanion, companionRev, () => 0)
+  const c = activeCompanion()
+  if (!c) return null
+  return <Follower key={c.id} id={c.id} pose={pose} ground={ground} />
+}
+
+export function Follower({ id, pose, ground }: { id: CompanionId; pose: React.MutableRefObject<FollowPose>; ground: (x: number, z: number) => number }) {
+  const g = useRef<THREE.Group>(null)
+  const s = useRef({ x: NaN, z: NaN, yaw: 0, speed: 0, still: 0, t: 0 })
+  useFrame((_, dtRaw) => {
+    const dt = Math.min(0.05, dtRaw), p = pose.current, m = s.current, grp = g.current
+    if (!grp) return
+    m.t += dt
+    // the spot it wants: behind-right of where the keeper faces (yaw 0 looks down -z, as the walker's camera)
+    const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw), rx = -fz, rz = fx
+    const tx = p.x - fx * BEHIND + rx * SIDE, tz = p.z - fz * BEHIND + rz * SIDE
+    if (!Number.isFinite(m.x) || Math.hypot(tx - m.x, tz - m.z) > TELEPORT) { m.x = tx; m.z = tz; m.yaw = p.yaw }
+    const dx = tx - m.x, dz = tz - m.z, d = Math.hypot(dx, dz)
+    // walk when a little off, hurry when far behind, settle inside the spot
+    const want = d < 0.25 ? 0 : Math.min(9, 1.2 + d * 2.2)
+    m.speed += (want - m.speed) * Math.min(1, dt * 6)
+    if (d > 1e-4) { const step = Math.min(d, m.speed * dt); m.x += (dx / d) * step; m.z += (dz / d) * step }
+    // face where it goes; at rest, face the way the keeper looks
+    const faceTo = m.speed > 0.3 && d > 0.05 ? Math.atan2(-dx, -dz) : p.yaw
+    let dy = faceTo - m.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); m.yaw += dy * Math.min(1, dt * 5)
+    m.still = m.speed < 0.15 ? m.still + dt : 0
+    const gy = ground(m.x, m.z)
+    const y = Number.isFinite(gy) ? gy : 0
+    grp.position.set(m.x, y, m.z)
+    grp.rotation.y = m.yaw
+    grp.userData.speed = m.speed; grp.userData.still = m.still; grp.userData.t = m.t
+  })
+  return (
+    <group ref={g}>
+      {id === 'glowmite' ? <Glowmite /> : id === 'gemdigger' ? <Gemdigger /> : <Wisp tint={WISP_TINT[id] ?? '#ffffff'} />}
+    </group>
+  )
+}
+
+// ── Glowmite: a firefly at shoulder height, its light speaking in runs ─────────────────────────────────────────
+// the pulse pattern: on/off durations (s), short and long like a sentence; it loops with a pause
+const SPEECH = [0.18, 0.12, 0.18, 0.12, 0.55, 0.25, 0.18, 0.5, 0.55, 0.12, 0.18, 1.4]
+const SPEECH_LEN = SPEECH.reduce((a, b) => a + b, 0)
+function speechAt(t: number): number {
+  let u = t % SPEECH_LEN
+  for (let i = 0; i < SPEECH.length; i++) { if (u < SPEECH[i]) { if (i % 2) return 0; const e = Math.min(u, SPEECH[i] - u); return Math.min(1, e / 0.05) } u -= SPEECH[i] }
+  return 0
+}
+function Glowmite() {
+  const root = useRef<THREE.Group>(null), wl = useRef<THREE.Mesh>(null), wr = useRef<THREE.Mesh>(null)
+  const glow = useRef<THREE.MeshStandardMaterial>(null), light = useRef<THREE.PointLight>(null), halo = useRef<THREE.Mesh>(null)
+  useFrame(() => {
+    const r = root.current; if (!r?.parent) return
+    const t = (r.parent.userData.t as number) ?? 0, sp = (r.parent.userData.speed as number) ?? 0
+    // drifts in a slow loose figure-eight round its spot; leans into flight
+    r.position.set(Math.sin(t * 0.9) * 0.28, 1.55 + Math.sin(t * 1.7) * 0.12, Math.sin(t * 1.8) * 0.16)
+    r.rotation.x = -Math.min(0.5, sp * 0.08)
+    const flap = Math.sin(t * 60) * 0.7
+    if (wl.current) wl.current.rotation.z = 0.35 + flap
+    if (wr.current) wr.current.rotation.z = -0.35 - flap
+    const k = 0.18 + 0.82 * speechAt(t)
+    if (glow.current) glow.current.emissiveIntensity = 0.6 + 3.4 * k
+    if (light.current) light.current.intensity = 0.15 + 1.3 * k
+    if (halo.current) { halo.current.scale.setScalar(0.7 + 0.5 * k); (halo.current.material as THREE.MeshBasicMaterial).opacity = 0.08 + 0.22 * k }
+  })
+  return (
+    <group ref={root} scale={1.6}>
+      {/* head + thorax: dark */}
+      <mesh position={[0, 0, -0.05]}><sphereGeometry args={[0.035, 10, 8]} /><meshStandardMaterial color="#2a2230" roughness={0.6} /></mesh>
+      <mesh position={[0, 0.005, 0.0]} scale={[1, 0.85, 1.3]}><sphereGeometry args={[0.04, 10, 8]} /><meshStandardMaterial color="#3a2a26" roughness={0.6} /></mesh>
+      {/* the lantern: abdomen */}
+      <mesh position={[0, -0.01, 0.075]} scale={[0.9, 0.85, 1.35]}>
+        <sphereGeometry args={[0.045, 12, 10]} />
+        <meshStandardMaterial ref={glow} color="#e8ff9a" emissive="#c8ff5a" emissiveIntensity={2} roughness={0.4} toneMapped={false} />
+      </mesh>
+      <mesh ref={halo} position={[0, -0.01, 0.075]}>
+        <sphereGeometry args={[0.16, 14, 10]} />
+        <meshBasicMaterial color="#d6ff7a" transparent opacity={0.2} depthWrite={false} blending={THREE.AdditiveBlending} />
+      </mesh>
+      {/* wings: two thin panes, a blur of flapping */}
+      <mesh ref={wl} position={[-0.03, 0.035, 0]}><planeGeometry args={[0.1, 0.05]} /><meshBasicMaterial color="#dfe9ff" transparent opacity={0.35} side={THREE.DoubleSide} depthWrite={false} /></mesh>
+      <mesh ref={wr} position={[0.03, 0.035, 0]}><planeGeometry args={[0.1, 0.05]} /><meshBasicMaterial color="#dfe9ff" transparent opacity={0.35} side={THREE.DoubleSide} depthWrite={false} /></mesh>
+      <pointLight ref={light} color="#d6ff7a" distance={6} decay={2} intensity={1} />
+    </group>
+  )
+}
+
+// ── Gemdigger: a prairie dog. Hops after you; stands sentinel when you stop; the pouch glints ─────────────────
+const FUR = '#b98c58', BELLY = '#e4c999', DARK = '#3b2a1c'
+const GEMS: { p: [number, number, number]; c: string }[] = [
+  { p: [-0.035, 0.0, 0.0], c: '#8fe3ff' }, { p: [0.03, 0.012, 0.01], c: '#c49bff' }, { p: [0.0, -0.025, 0.015], c: '#9dffb8' },
+]
+function Gemdigger() {
+  const body = useRef<THREE.Group>(null), tail = useRef<THREE.Mesh>(null), head = useRef<THREE.Group>(null)
+  const gems = useRef<(THREE.MeshStandardMaterial | null)[]>([])
+  const sit = useRef(0)
+  useFrame((_, dt) => {
+    const b = body.current; if (!b?.parent) return
+    const ud = b.parent.userData, t = (ud.t as number) ?? 0, sp = (ud.speed as number) ?? 0, still = (ud.still as number) ?? 0
+    // sit up after a moment of stillness (the sentinel), drop to all fours to move
+    const wantSit = still > 0.8 ? 1 : 0
+    sit.current += (wantSit - sit.current) * Math.min(1, Math.min(0.05, dt) * (wantSit ? 3 : 10))
+    const hop = sp > 0.3 ? Math.abs(Math.sin(t * (8 + sp * 1.6))) * Math.min(0.12, 0.03 + sp * 0.02) : 0
+    b.position.y = hop
+    b.rotation.x = -sit.current * 1.15 + (sp > 0.3 ? Math.sin(t * (8 + sp * 1.6) * 2) * 0.08 : 0)
+    if (head.current) { head.current.rotation.x = sit.current * 1.0; head.current.rotation.y = sit.current * Math.sin(t * 0.7) * 0.6 }
+    if (tail.current) tail.current.rotation.x = 0.6 + Math.sin(t * 9) * (sp > 0.3 ? 0.3 : 0.08)
+    gems.current.forEach((m, i) => { if (m) m.emissiveIntensity = 0.3 + Math.max(0, Math.sin(t * 2.3 + i * 2.1)) ** 8 * 3.5 })
+  })
+  return (
+    // pivot at the haunches so sitting up rotates about the hips
+    <group ref={body} scale={1.15}>
+      <group position={[0, 0.11, 0]}>
+        {/* torso, nose toward -z */}
+        <mesh position={[0, 0.02, -0.1]} rotation={[Math.PI / 2, 0, 0]}><capsuleGeometry args={[0.095, 0.17, 6, 12]} /><meshStandardMaterial color={FUR} roughness={0.85} /></mesh>
+        {/* belly + the pouch */}
+        <mesh position={[0, -0.025, -0.1]} rotation={[Math.PI / 2, 0, 0]} scale={[0.85, 1, 0.7]}><capsuleGeometry args={[0.09, 0.14, 6, 12]} /><meshStandardMaterial color={BELLY} roughness={0.9} /></mesh>
+        <group position={[0, -0.075, -0.12]}>
+          <mesh scale={[1.1, 0.7, 1]}><sphereGeometry args={[0.055, 12, 8]} /><meshStandardMaterial color="#cfae7a" roughness={0.9} /></mesh>
+          {GEMS.map((gm, i) => (
+            <mesh key={i} position={[gm.p[0], gm.p[1] - 0.02, gm.p[2] - 0.035]} rotation={[i, i * 0.7, 0]}>
+              <octahedronGeometry args={[0.017, 0]} />
+              <meshStandardMaterial ref={el => { gems.current[i] = el }} color={gm.c} emissive={gm.c} emissiveIntensity={0.5} roughness={0.2} metalness={0.1} toneMapped={false} />
+            </mesh>
+          ))}
+        </group>
+        {/* head */}
+        <group ref={head} position={[0, 0.06, -0.29]}>
+          <mesh scale={[1, 0.9, 1.1]}><sphereGeometry args={[0.075, 14, 10]} /><meshStandardMaterial color={FUR} roughness={0.85} /></mesh>
+          <mesh position={[0, -0.018, -0.07]} scale={[1, 0.75, 1]}><sphereGeometry args={[0.035, 10, 8]} /><meshStandardMaterial color={BELLY} roughness={0.9} /></mesh>
+          <mesh position={[0, -0.005, -0.1]}><sphereGeometry args={[0.012, 8, 6]} /><meshStandardMaterial color={DARK} /></mesh>
+          {[-1, 1].map(sx => (
+            <group key={sx}>
+              <mesh position={[sx * 0.04, 0.018, -0.055]}><sphereGeometry args={[0.012, 8, 6]} /><meshStandardMaterial color="#120c08" roughness={0.2} /></mesh>
+              <mesh position={[sx * 0.05, 0.06, -0.005]} scale={[1, 0.8, 0.5]}><sphereGeometry args={[0.018, 8, 6]} /><meshStandardMaterial color="#a27646" roughness={0.9} /></mesh>
+            </group>
+          ))}
+        </group>
+        {/* legs: four stubs */}
+        {[[-0.06, -0.2], [0.06, -0.2], [-0.065, 0.0], [0.065, 0.0]].map(([x, z], i) => (
+          <mesh key={i} position={[x, -0.085, z]}><capsuleGeometry args={[0.022, 0.05, 4, 8]} /><meshStandardMaterial color="#a27646" roughness={0.9} /></mesh>
+        ))}
+        {/* tail: short, dark-tipped */}
+        <mesh ref={tail} position={[0, 0.0, 0.07]}><capsuleGeometry args={[0.018, 0.07, 4, 8]} /><meshStandardMaterial color={DARK} roughness={0.9} /></mesh>
+      </group>
+    </group>
+  )
+}
+
+// ── everyone else, until their body is built: a soft wisp in their colour ─────────────────────────────────────
+function Wisp({ tint }: { tint: string }) {
+  const r = useRef<THREE.Group>(null)
+  const col = useMemo(() => new THREE.Color(tint), [tint])
+  useFrame(() => {
+    const g = r.current; if (!g?.parent) return
+    const t = (g.parent.userData.t as number) ?? 0
+    g.position.set(0, 1.2 + Math.sin(t * 1.4) * 0.1, 0)
+  })
+  return (
+    <group ref={r}>
+      <mesh><sphereGeometry args={[0.12, 14, 10]} /><meshStandardMaterial color={col} emissive={col} emissiveIntensity={1.4} toneMapped={false} /></mesh>
+      <mesh><sphereGeometry args={[0.28, 14, 10]} /><meshBasicMaterial color={col} transparent opacity={0.15} depthWrite={false} blending={THREE.AdditiveBlending} /></mesh>
+      <pointLight color={col} distance={4} decay={2} intensity={0.6} />
+    </group>
+  )
+}

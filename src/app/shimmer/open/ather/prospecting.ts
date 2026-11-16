@@ -25,6 +25,7 @@
 
 import { NODE_DEFS } from '../../world/resources'
 import { addOpenXp, openLevel, type Zone } from './forestry'
+import { perkFires, activeCompanion, perkLabel, GEM_DROP_CHANCE, GEM_ITEM } from '../shared/companion'
 
 /** what stands on the rock. `egg` = a Wooded Trails element node: which element is only known when it shatters. */
 export type CrystalKind = 'raw' | 'violet' | 'storm' | 'earth' | 'water' | 'egg' | 'pure' | 'ather'
@@ -100,7 +101,9 @@ export function mineCheck(kind: CrystalKind, id: string, level = openLevel('pros
 }
 
 export type MineVerdict =
-  | { ok: true; drops: { id: string; n: number }[]; xp: number; levelUp: number | null; found: Exclude<CrystalKind, 'egg'> }
+  | { ok: true; drops: { id: string; n: number }[]; xp: number; levelUp: number | null; found: Exclude<CrystalKind, 'egg'>
+      /** the companion's perk fired (shared/companion.ts): its label, for the toast */
+      perk?: string }
   | { ok: false; why: string }
 
 /** Fracture a node: blankstone always (1–2), its crystal (raw: 1–3 shards), the egg reveals its element. */
@@ -110,10 +113,17 @@ export function mine(kind: CrystalKind, id: string, rand: () => number = Math.ra
   const found: Exclude<CrystalKind, 'egg'> = kind === 'egg' ? ELEMENTS[Math.min(3, Math.floor(rand() * 4))] : kind
   const tier = TIER[kind]
   const drops = [{ id: BLANKSTONE, n: 1 + (rand() < 0.5 ? 1 : 0) }, { id: CRYSTAL_ITEM[found], n: found === 'raw' ? 1 + Math.floor(rand() * 3) : 1 }]
+  // Gemsense (Glowmite @15, Gemdigger @100): a bonus shard of what broke; Gemdigger's pouch now and then a gem too
+  let perk: string | undefined
+  if (perkFires('prospecting', rand)) {
+    const c = activeCompanion()!
+    drops[1].n += 1; perk = perkLabel(c)
+    if (c.id === 'gemdigger' && rand() < GEM_DROP_CHANCE) drops.push({ id: GEM_ITEM, n: 1 })
+  }
   const levelUp = addOpenXp('prospecting', XP[tier])
   mined[id] = now + RESPAWN_MS[tier]
   save(now); bump()
-  return { ok: true, drops, xp: XP[tier], levelUp, found }
+  return { ok: true, drops, xp: XP[tier], levelUp, found, perk }
 }
 
 /** Test hook: a clean slate of mined nodes (skills live in forestry.ts › _resetForestry). */
