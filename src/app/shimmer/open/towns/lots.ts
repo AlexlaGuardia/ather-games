@@ -13,7 +13,7 @@ import type { Region } from '../region'
 import { cachedPlan } from '../foot-solids'
 import type { Building } from './plan'
 
-export const LOTS_VERSION = 3   // 11-16: the street-floor rule skips the steepest lots; the Enchant Temple takes Rune Hold ground
+export const LOTS_VERSION = 4   // 11-16: street-floor rule; the Enchant Temple moved Rune Hold -> the Citadel square
 
 export interface Lot {
   /** `${townId}:${x}:${z}` (the footprint's centre, metres): stable for as long as the building stands where it does */

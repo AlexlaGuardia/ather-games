@@ -252,23 +252,15 @@ export function planTown(R: Region, p: RegionPlace, pi: number, opts?: { r?: num
     if (g) keep({ ...ex, floors: 3, y0: g.y0, y1: g.y1, kind: 'hall', rim: 0, v: 0.5, core: true, front: 'grand-exchange' })
     wallR = sq.r + 3.5 * (big ? 30 : 32)
     plan.wall = { x: sq.x, z: sq.z, r: wallR }
-  }
-
-  // ── RUNE HOLD's ENCHANT TEMPLE (world/rune-hold.md: "Adjacent to the town proper"; belief.md: the eastern frontier).
-  // Not in Alex's play3d grid, so it stands just OUTSIDE the authored core, beside a road, on the east side first.
-  // Placement is Jin's per the canon line (Idony's entry: "Look, placement, pacing = Jin's"); Alex can move it here.
-  // TODO(enchant-temple-placement): Alex.
-  if (p.id === 'rune-hold' && sq && core) {
-    const dirs = Array.from({ length: 24 }, (_, k) => k * Math.PI / 12).sort((a, b) => Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) - Math.abs(Math.atan2(Math.sin(b), Math.cos(b))))
-    const roadD = (x: number, z: number) => nearestRoad(R, x, z).d
-    temple: for (const rr of [r * 0.55, r * 0.7, r * 0.85, r]) for (const a of dirs) {
-      const x = sq.x + Math.cos(a) * rr, z = sq.z + Math.sin(a) * rr, nr = nearestRoad(R, x, z)
-      if (!nr.road || nr.d < 10 || nr.d > 18) continue
-      // face the road: down the slope of the distance-to-road field
-      const gx = roadD(x + 1, z) - roadD(x - 1, z), gz = roadD(x, z + 1) - roadD(x, z - 1)
-      const t = { x, z, yaw: Math.atan2(-gz, -gx), w: 16, d: 13 }
-      const g = fits(t, 3, undefined, true)
-      if (g) { keep({ ...t, floors: 2, y0: g.y0, y1: g.y1, kind: 'hall', rim: 0.6, v: 0.7, core: true, front: 'enchant-temple' }); break temple }
+    // ── THE ENCHANT TEMPLE (Magii + Alex 11-16, world/schools.md › Enchant Temple: "In Year 1672 the Enchant Temple stands
+    // in the Citadel"; it began beside Rune Hold). On the square with the Grand Exchange, inside the heritage wall: the
+    // first frontage round the square that fits, starting beside the Exchange. Twin imbuers inside (Idony: vessels; her
+    // twin: weapons and sigils). Placement is Jin's; Alex can turn it here.
+    for (const turn of [Math.PI / 2, -Math.PI / 2, Math.PI * 0.75, -Math.PI * 0.75, Math.PI / 4, -Math.PI / 4]) {
+      const ta = a + turn, tw = 18, td = 14, toff = sq.r + 3 + td / 2
+      const t = { x: sq.x + Math.cos(ta) * toff, z: sq.z + Math.sin(ta) * toff, yaw: ta + Math.PI, w: tw, d: td }
+      const tg = fits(t, 2, undefined, true)
+      if (tg) { keep({ ...t, floors: 2, y0: tg.y0, y1: tg.y1, kind: 'hall', rim: 0, v: 0.7, core: true, front: 'enchant-temple' }); break }
     }
   }
 

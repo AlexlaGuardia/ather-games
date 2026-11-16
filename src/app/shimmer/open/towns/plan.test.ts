@@ -66,14 +66,12 @@ ok(n('rune-hold') >= 35, `Rune Hold has ${n('rune-hold')} (want >= 35)`)
 const rh = byId.get('rune-hold')!
 const fronts = new Set(rh.buildings.map(b => b.front).filter(Boolean))
 for (const f of ['kindled-mug', 'forgelight-inn', 'bookstore', 'smithy', 'spirit-corner', 'station']) ok(fronts.has(f), `Rune Hold's core has ${f}`)
-const grid = rh.buildings.filter(b => b.core && b.front !== 'enchant-temple')
-ok(grid.length === 10, `Rune Hold's core places all 10 grid buildings: ${grid.length}`)
-// the Enchant Temple (rune-hold.md: "adjacent to the town proper") stands OUTSIDE Alex's grid, beside a road
-const temple = rh.buildings.find(b => b.front === 'enchant-temple')
-const sqC = { x: grid.reduce((a, b) => a + b.x, 0) / grid.length, z: grid.reduce((a, b) => a + b.z, 0) / grid.length }
-const gridR = Math.max(...grid.map(b => Math.hypot(b.x - sqC.x, b.z - sqC.z)))
-ok(!!temple && Math.hypot(temple.x - sqC.x, temple.z - sqC.z) > gridR, `the Enchant Temple stands outside the grid (${temple ? Math.hypot(temple.x - sqC.x, temple.z - sqC.z).toFixed(0) : '-'} m > ${gridR.toFixed(0)} m)`)
-ok(!!temple && nearestRoad(R, temple.x, temple.z).d < 22, 'the Enchant Temple stands beside a road')
+ok(rh.buildings.filter(b => b.core).length === 10, `Rune Hold's core places all 10 grid buildings: ${rh.buildings.filter(b => b.core).length}`)
+// the Enchant Temple stands in the CITADEL in 1672 (Magii + Alex 11-16), on the square by the Grand Exchange, not in Rune Hold
+const citT = byId.get('citadel')!, temple = citT.buildings.find(b => b.front === 'enchant-temple'), exchT = citT.buildings.find(b => b.front === 'grand-exchange')
+ok(!!temple && !!exchT && Math.hypot(temple.x - exchT.x, temple.z - exchT.z) < 90, `the Enchant Temple stands on the Citadel square by the Exchange (${temple && exchT ? Math.hypot(temple.x - exchT.x, temple.z - exchT.z).toFixed(0) : '-'} m)`)
+ok(!!temple && !!citT.wall && Math.hypot(temple.x - citT.wall.x, temple.z - citT.wall.z) < citT.wall.r - 5, 'the Enchant Temple stands inside the heritage wall')
+ok(!rh.buildings.some(b => b.front === 'enchant-temple'), 'Rune Hold no longer holds the Enchant Temple')
 ok((rh.paving?.pts.length ?? 0) > 900, `Rune Hold's grid paving is laid: ${rh.paving?.pts.length ?? 0} cells`)
 // no generated building stands on the core's paving
 let onPaving = 0

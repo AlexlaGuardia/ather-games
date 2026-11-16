@@ -23,7 +23,7 @@ export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: 
   'spirit-corner': { name: 'The Spirit Corner', kind: 'cafe' },
   bookstore: { name: "Eyuun's Bookstore", kind: 'books', line: "The house of tales. The world's stories, read and heard." },
   station: { name: 'Travelers Station', kind: 'station' },
-  'enchant-temple': { name: 'Enchant Temple', kind: 'temple', line: 'Permanent imbuing. Smiths and enchanters trade knowledge here.' },
+  'enchant-temple': { name: 'Enchant Temple', kind: 'temple', line: 'Permanent imbuing, by twin hands.' },
   'grand-exchange': { name: 'The Grand Exchange', kind: 'exchange', line: 'The trade at the centre of the capital.' },
 }
 /** a ticket to the Starforge (an emergency-fund sized price, Alex 11-16). TODO(world): move onto economy/prices.ts LADDER */
@@ -35,6 +35,24 @@ export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
   const shop = FRONT_SHOPS[id]
   if (!shop) return null
   if (shop.kind === 'station') return <StationPanel ledger={ledger} setLedger={setLedger} onClose={onClose} isTouch={isTouch} />
+  if (shop.kind === 'temple') return (
+    // ★ THE TWINS (Magii + Alex 11-16, world/schools.md): Idony inscribes vessels, her twin (unnamed) works weapons and
+    // sigils. Idony's counter opens once letters exist (runesmiths, one per school, 3932d39); lines are @lark's.
+    <HearthFrame title={shop.name} maxWidth={520} onClose={onClose} fixed dataPanel="shop-panel">
+      <div className="px-4 pt-4 pb-4 text-[14px] leading-snug" style={{ color: H.ink }} data-shop={id} data-closed>
+        <p style={{ ...hearthDisplay, color: H.inkSoft }}>{shop.line}</p>
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          {[['Idony', 'Vessels inscribed'], ['Her twin', 'Weapons and sigils']].map(([who, what]) => (
+            <div key={who} className="rounded-[12px] px-3 py-3" data-counter={who} style={{ background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+              <div className="text-[16px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{who}</div>
+              <div className="text-[12px]" style={{ color: H.inkSoft }}>{what}</div>
+              <div className="text-[12px] mt-2 font-semibold" style={hearthDisplay}>Closed for now.</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </HearthFrame>
+  )
   if (shop.kind === 'books') return (
     <HearthFrame title={shop.name} maxWidth={420} onClose={onClose} fixed dataPanel="shop-panel">
       <div className="px-4 pt-4 pb-4 text-[14px] leading-snug" style={{ color: H.ink }} data-shop={id}>
