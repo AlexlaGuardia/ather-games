@@ -5,10 +5,12 @@ import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
 import { makeRegion, type RegionMeta } from '../src/app/shimmer/open/region'
 import { marketFor } from '../src/app/shimmer/open/business/market'
+import { shopDoorPoint } from '../src/app/shimmer/open/towns/shop-door'
 const meta = JSON.parse(readFileSync('public/open/continent.json', 'utf8')) as RegionMeta
 const raw = gunzipSync(readFileSync('public/open/continent.bin.gz'))
 const R = makeRegion(meta, new Int16Array(raw.buffer, raw.byteOffset, raw.byteLength / 2))
 const o = marketFor(R, 'rune-hold').find(x => x.kind === 'mine')!
+const at = shopDoorPoint(o.b)   // the step stone at the door: where E reaches
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 const URL = process.env.URL ?? 'https://ather.games'
 const br = await puppeteer.launch({ executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -25,7 +27,7 @@ const stand = async () => {
   // back off the door 6 m and face the house: the whole front, board and all, in view
   await p.evaluate((x, z, y) => (window as any).__drive.footTp(x, z, y, -0.12), o.lot.door.x + fx * 4, o.lot.door.z + fz * 4, yaw); await wait(5000)
   await p.screenshot({ path: `/tmp/market-${++shot}.png` })
-  await p.evaluate((x, z, y) => (window as any).__drive.footTp(x, z, y, -0.08), o.lot.door.x, o.lot.door.z, yaw)
+  await p.evaluate((x, z, y) => (window as any).__drive.footTp(x, z, y, -0.08), at.x + fx * 0.8, at.z + fz * 0.8, yaw)
 }
 console.log(`target: ${o.name} (${o.lot.id}) ${o.price} Marks`)
 await p.goto(`${URL}/shimmer/open/continent?hour=12&tune=1`, { waitUntil: 'load', timeout: 240000 })

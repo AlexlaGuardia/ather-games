@@ -16,7 +16,8 @@ const R = makeRegion(meta, new Int16Array(raw.buffer, raw.byteOffset, raw.byteLe
 const plans = planTowns(R)
 const byId = new Map(plans.map(p => [p.place, p]))
 
-import { footprint, quadsOverlap, BURY } from './plan'
+import { footprint, quadsOverlap, BURY, streetAtDoor, doorAlong } from './plan'
+import { doorU } from './shop-door'
 const corners = (b: Building) => footprint(b)
 // ── every building: on land, off the roads and pads, its plinth spanning the ground under it
 let onRoad = 0, wet = 0, floating = 0, total = 0
@@ -37,14 +38,16 @@ ok(wet === 0, `building corners in water: ${wet}`)
 ok(floating === 0, `corners outside their plinth span (float or sink): ${floating}`)
 // ── every generated house's door is at the street (Alex 11-16: doors stood a floor up the wall on slopes)
 let doorUp = 0, worstDoor = 0
+// every building, the authored core (Rune Hold's fronts, the Grand Exchange, the Fallen Cap) included, measured AT the
+// painted door (streetAtDoor), not the front's middle
 for (const pl of plans) for (const b of pl.buildings) {
-  if (b.core) continue
-  const fx = Math.cos(b.yaw), fz = Math.sin(b.yaw)
-  const g = R.heightAt(b.x + fx * (b.d / 2 + 1), b.z + fz * (b.d / 2 + 1)), gap = b.y1 + 0.25 - g
+  const g = streetAtDoor(R, b), gap = b.y1 + 0.25 - g
   worstDoor = Math.max(worstDoor, Math.abs(gap))
   if (gap < 0.05 || gap > 0.3) doorUp++
 }
 ok(doorUp === 0, `doors more than a step off the street: ${doorUp} (worst ${worstDoor.toFixed(2)} m)`)
+// the floor is measured where the shader paints the door: plan.ts' copy of the formula must be shop-door.tsx's
+ok([3, 5.4, 6, 8.1, 9, 11, 13.5, 16, 21].every(w => Math.abs(doorAlong(w) - doorU(w)) < 1e-9), 'plan doorAlong == shop-door doorU')
 ok(total > 900, `towns hold ${total} buildings (want > 900)`)
 
 // ── no two buildings of a town overlap (separating-axis on the footprints)

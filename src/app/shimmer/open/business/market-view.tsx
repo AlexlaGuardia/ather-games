@@ -3,7 +3,8 @@
 //
 // <MarketView> dresses every offered lot in the towns near you (business/market.ts picks them): a For Sale board on the
 // ones you can buy, the trade's dressing + name board + the goods gate on the ones you own. On foot within reach of a
-// lot's door (towns/lots.ts `door`, 2 m out on the street) the message line offers it, and E opens <DeedCard>.
+// lot's door the message line offers it, and E opens <DeedCard>. The canon storefronts (business/shop-panel.tsx
+// FRONT_SHOPS) share the same doors: Jin 2's door kit (towns/shop-door.tsx) on each, reach at its step stone, E → panel.
 // <DeedCard> is the buy / sell counter: what the place does, its price, and what your Marks a minute become.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
@@ -11,42 +12,74 @@ import * as THREE from 'three'
 import type { Region } from '../region'
 import { BusinessDress } from './business-dress'
 import { marketFor, offerById, type Offer } from './market'
+import { FRONT_SHOPS } from './shop-panel'
+import { ShopDoor, shopDoorPoint } from '../towns/shop-door'
+import { cachedPlan } from '../foot-solids'
+import type { Building } from '../towns/plan'
 import { BIZ, MAX_OWNED, RESALE, rateOf, canBuy, type Owned, type Tycoon } from '../economy/tycoon'
 import { hudSay } from '../shared/game-hud'
 import { HearthFrame, H, hearthDisplay, HearthButton } from '../../ui/hearth'
 
-/** dress a town's market while you are within this of its centre (the town kit's DETAIL is 450 from the edge) */
+/** dress a town's doors while you are within this of its centre (the town kit's DETAIL is 450 from the edge) */
 const DRESS_REACH = 700
-/** reach of a lot's door, on foot */
-const REACH = 3.2
+/** reach of a door's step stone (towns/shop-door.tsx shopDoorPoint), on foot */
+const REACH = 2.4
 const WALK_OFF = 8
+
+/** a door you can E: a market lot (key = lot id → the deed card) or a canon storefront (key = `front:<id>` → its panel) */
+interface Door { key: string; b: Building; name: string; at: { x: number; y: number; z: number }; offer?: Offer }
+
+/** every door in a town: its market's lots + the storefronts the town kit stands (not the Fallen Cap: its own hall) */
+function doorsOf(R: Region, townId: string): Door[] {
+  const i = R.meta.places.findIndex(p => p.id === townId)
+  const out: Door[] = marketFor(R, townId).map(o => ({ key: o.lot.id, b: o.b, name: o.name, at: shopDoorPoint(o.b), offer: o }))
+  if (i >= 0) for (const b of cachedPlan(R, i).buildings) if (b.front && FRONT_SHOPS[b.front]) out.push({ key: `front:${b.front}`, b, name: FRONT_SHOPS[b.front].name, at: shopDoorPoint(b) })
+  return out
+}
+const doorCache = new WeakMap<Region, Map<string, Door[]>>()
+function doorsCached(R: Region, townId: string): Door[] {
+  let m = doorCache.get(R); if (!m) doorCache.set(R, m = new Map())
+  let d = m.get(townId); if (!d) m.set(townId, d = doorsOf(R, townId))
+  return d
+}
+export function doorByKey(R: Region, key: string): Door | undefined {
+  const town = key.startsWith('front:') ? undefined : key.split(':')[0]
+  if (town) return doorsCached(R, town).find(d => d.key === key)
+  for (const p of R.meta.places) { const d = doorsCached(R, p.id).find(x => x.key === key); if (d) return d }
+  return undefined
+}
 
 export function MarketView({ R, focus, owned, enabled, onOpen, onReach, open, onWalkOff }: {
   R: Region; focus: React.MutableRefObject<THREE.Vector3>; owned: Owned[]
   /** on foot and no menu over the world */
   enabled: boolean
-  onOpen: (lotId: string) => void
-  /** the lot in reach changed (the page's touch pill) */
-  onReach?: (lotId: string | null) => void
-  /** the deed open right now: it closes when you walk off (> WALK_OFF from its door, or into the courser) */
+  /** a lot id (the deed card) or `front:<id>` (that shop's panel) */
+  onOpen: (key: string) => void
+  /** the door in reach changed (the page's touch pill) */
+  onReach?: (key: string | null) => void
+  /** the card/panel open right now: it closes when you walk off (> WALK_OFF from its door) */
   open?: string | null
   onWalkOff?: () => void
 }) {
   const { camera } = useThree()
   const [near, setNear] = useState<string[]>([])
-  const towns = useMemo(() => R.meta.places.filter(p => marketFor(R, p.id).length), [R])
-  const reach = useRef<Offer | null>(null)
+  const towns = useMemo(() => R.meta.places.filter(p => doorsCached(R, p.id).length), [R])
+  const reach = useRef<Door | null>(null)
   const acc = useRef(0)
   const enabledRef = useRef(enabled); enabledRef.current = enabled
   const ownedIds = useMemo(() => new Set(owned.map(o => o.lotId)), [owned])
-  const offers = useMemo(() => near.flatMap(id => marketFor(R, id)), [R, near])
+  const doors = useMemo(() => near.flatMap(id => doorsCached(R, id)), [R, near])
 
   useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.code === 'KeyE' && !e.repeat && enabledRef.current && reach.current) onOpen(reach.current.lot.id) }
+    const k = (e: KeyboardEvent) => { if (e.code === 'KeyE' && !e.repeat && enabledRef.current && reach.current) onOpen(reach.current.key) }
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
   }, [onOpen])
-  // probe for scripted checks: the offers dressed right now, and the one in reach
-  useEffect(() => { (window as unknown as { __market?: unknown }).__market = { offers: () => offers.map(o => ({ id: o.lot.id, kind: o.kind, name: o.name, price: o.price, door: o.lot.door })), reach: () => reach.current?.lot.id ?? null } }, [offers])
+  // probe for scripted checks: the doors dressed right now, and the one in reach
+  useEffect(() => { (window as unknown as { __market?: unknown }).__market = {
+    offers: () => doors.filter(d => d.offer).map(d => ({ id: d.key, kind: d.offer!.kind, name: d.name, price: d.offer!.price, door: d.at })),
+    doors: () => doors.map(d => ({ key: d.key, name: d.name, at: d.at, yaw: d.b.yaw })),
+    reach: () => reach.current?.key ?? null,
+  } }, [doors])
 
   useFrame((_, dt) => {
     acc.current += dt
@@ -56,23 +89,24 @@ export function MarketView({ R, focus, owned, enabled, onOpen, onReach, open, on
       const ids = towns.filter(p => Math.hypot(p.x - f.x, p.z - f.z) < DRESS_REACH).map(p => p.id)
       if (ids.join() !== near.join()) setNear(ids)
     }
-    // an open deed closes when you walk off (the camera is the keeper on foot; hud.x is the parked courser)
-    if (open) { const d = offerById(R, open); const p = camera.position; if (d && Math.hypot(p.x - d.lot.door.x, p.z - d.lot.door.z) > WALK_OFF) onWalkOff?.() }
-    // in reach: the camera stands at eye height over the street in front of the door
     const p = camera.position
-    let hit: Offer | null = null
-    if (enabledRef.current) for (const o of offers) if (Math.hypot(p.x - o.lot.door.x, p.z - o.lot.door.z) < REACH && Math.abs(p.y - 1.6 - o.b.y1) < 3) { hit = o; break }
+    // an open card closes when you walk off (the camera is the keeper on foot; hud.x is the parked courser)
+    if (open) { const d = doorByKey(R, open); if (d && Math.hypot(p.x - d.at.x, p.z - d.at.z) > WALK_OFF) onWalkOff?.() }
+    // in reach: the camera stands at eye height over the step stone
+    let hit: Door | null = null
+    if (enabledRef.current) for (const d of doors) if (Math.hypot(p.x - d.at.x, p.z - d.at.z) < REACH && Math.abs(p.y - 1.6 - d.at.y) < 2) { hit = d; break }
     if (hit !== reach.current) {
       reach.current = hit
-      onReach?.(hit?.lot.id ?? null)
-      if (hit) hudSay(ownedIds.has(hit.lot.id) ? `${hit.name} · yours · E for the deed` : `${hit.name} · for sale · E to look`, 'item')
+      onReach?.(hit?.key ?? null)
+      if (hit) hudSay(hit.offer ? (ownedIds.has(hit.key) ? `${hit.name} · yours · E for the deed` : `${hit.name} · for sale · E to look`) : `${hit.name} · E to go in`, 'item')
     }
   })
 
   return (
     <group>
-      {offers.map(o => (
-        <BusinessDress key={o.lot.id} b={o.b} kind={o.kind} name={o.name} owned={ownedIds.has(o.lot.id)} forSale={!ownedIds.has(o.lot.id)} price={o.price} />
+      {doors.map(d => <ShopDoor key={`door-${d.key}`} b={d.b} lit />)}
+      {doors.filter(d => d.offer).map(({ offer: o }) => (
+        <BusinessDress key={o!.lot.id} b={o!.b} kind={o!.kind} name={o!.name} owned={ownedIds.has(o!.lot.id)} forSale={!ownedIds.has(o!.lot.id)} price={o!.price} />
       ))}
     </group>
   )

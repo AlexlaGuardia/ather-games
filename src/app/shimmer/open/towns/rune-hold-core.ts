@@ -24,7 +24,7 @@
 import { RUNE_HOLD } from '../../world/tilemap'
 import { blocksOf, FRONTS, HOMES } from '../../play3d/rune-hold-look'
 import { nearestRoad, nearPad, type Region, type RegionJunction } from '../region'
-import { type Building } from './plan'
+import { type Building, streetAtDoor, DOOR_STEP } from './plan'
 
 const GRID = RUNE_HOLD as number[][]
 const PATH = 3
@@ -113,10 +113,12 @@ export function stampCore(R: Region, t: CoreTransform): Core {
       // ★ CARVED INTO THE HILLSIDE (canon): the floor line is the ground at the FRONT, the side facing the square,
       // and a back that stands higher is simply buried in the hill. On the spine's foot a block can sit across a 25 m
       // rise; the old rule (floor at the highest corner) stood the Mug on a 25 m tower of plinth.
-      const g = groundSpan(R, best), fx = Math.cos(best.yaw), fz = Math.sin(best.yaw), ax = -fz, az = fx
-      let front = -Infinity
-      for (const u of [-0.5, 0, 0.5]) front = Math.max(front, R.heightAt(best.x + ax * u * best.w + fx * 0.5 * best.d, best.z + az * u * best.w + fz * 0.5 * best.d))
-      placed.push({ ...best, y0: g[0], y1: Math.min(g[1], front) })
+      // ★ 11-16 (Alex: "no way to reach the entrances"): the front's HIGHEST point still stood a door up the wall where
+      // the square slopes along a frontage (the Bookstore's step was 3 m over the street). The floor is the street AT
+      // THE DOOR now (plan.ts streetAtDoor + one step), the same rule as every generated house.
+      const g = groundSpan(R, best)
+      const floor = streetAtDoor(R, best) + DOOR_STEP
+      placed.push({ ...best, y0: Math.min(g[0], floor - 0.25), y1: floor - 0.25 })
     }
   }
   out.length = 0; out.push(...placed)

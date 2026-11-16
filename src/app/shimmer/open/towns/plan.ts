@@ -76,6 +76,18 @@ export const STAIR_GRADE = 0.6
 export const MAX_STEP = 9
 /** the floor: the ground this far out from the front wall (the street at the door), plus one low step */
 export const DOOR_OUT = 1, DOOR_STEP = 0.15
+/** where the facade shader paints the door along the front (local x from the centre): the middle column of
+ *  floor(w / 2.7), so it sits OFF-centre when the column count is even. towns/shop-door.tsx `doorU` is the same
+ *  formula (plan.test pins the two together); the floor is measured HERE, at the door, not at the front's middle. */
+export function doorAlong(w: number) {
+  const cols = Math.max(1, Math.floor(w / 2.7)), cw = w / cols
+  return (Math.floor(cols / 2) + 0.5) * cw - w / 2
+}
+/** the street's ground at a building's door: DOOR_OUT out from the front wall, at the painted door */
+export function streetAtDoor(R: Pick<Region, 'heightAt'>, b: Pick<Building, 'x' | 'z' | 'yaw' | 'w' | 'd'>) {
+  const fx = Math.cos(b.yaw), fz = Math.sin(b.yaw), ax = -fz, az = fx, u = doorAlong(b.w)
+  return R.heightAt(b.x + fx * (b.d / 2 + DOOR_OUT) + ax * u, b.z + fz * (b.d / 2 + DOOR_OUT) + az * u)
+}
 /** how far a higher back may sink into the hill, and how far a lower back may stand up on its plinth */
 export const BURY = 3.1, DROP = 6.2   // one floor into the hill, two storeys of plinth: keeps 82% of the lots (swept 11-16)
 
@@ -165,8 +177,7 @@ export function planTown(R: Region, p: RegionPlace, pi: number, opts?: { r?: num
     // (median 1.27 m, 311 houses a full floor up, worst 8.4 m). Now the floor is the ground just outside the door plus one
     // low step, the way Rune Hold's authored grid already sits: a higher back is buried in the hill (up to BURY), a lower
     // back stands on its plinth (up to DROP). Past either the lot is skipped rather than drawn as a cliff house.
-    const fx = Math.cos(b.yaw), fz = Math.sin(b.yaw)
-    const street = R.heightAt(b.x + fx * (b.d / 2 + DOOR_OUT), b.z + fz * (b.d / 2 + DOOR_OUT))
+    const street = streetAtDoor(R, b)
     if (!Number.isFinite(street) || street < 1.5) return no('water'), null
     const floor = street + DOOR_STEP
     // an authored canon place (the Fallen Cap, the Grand Exchange, the square's cottages) is never skipped for its slope
