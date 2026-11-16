@@ -254,6 +254,24 @@ export function planTown(R: Region, p: RegionPlace, pi: number, opts?: { r?: num
     plan.wall = { x: sq.x, z: sq.z, r: wallR }
   }
 
+  // ── RUNE HOLD's ENCHANT TEMPLE (world/rune-hold.md: "Adjacent to the town proper"; belief.md: the eastern frontier).
+  // Not in Alex's play3d grid, so it stands just OUTSIDE the authored core, beside a road, on the east side first.
+  // Placement is Jin's per the canon line (Idony's entry: "Look, placement, pacing = Jin's"); Alex can move it here.
+  // TODO(enchant-temple-placement): Alex.
+  if (p.id === 'rune-hold' && sq && core) {
+    const dirs = Array.from({ length: 24 }, (_, k) => k * Math.PI / 12).sort((a, b) => Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) - Math.abs(Math.atan2(Math.sin(b), Math.cos(b))))
+    const roadD = (x: number, z: number) => nearestRoad(R, x, z).d
+    temple: for (const rr of [r * 0.55, r * 0.7, r * 0.85, r]) for (const a of dirs) {
+      const x = sq.x + Math.cos(a) * rr, z = sq.z + Math.sin(a) * rr, nr = nearestRoad(R, x, z)
+      if (!nr.road || nr.d < 10 || nr.d > 18) continue
+      // face the road: down the slope of the distance-to-road field
+      const gx = roadD(x + 1, z) - roadD(x - 1, z), gz = roadD(x, z + 1) - roadD(x, z - 1)
+      const t = { x, z, yaw: Math.atan2(-gz, -gx), w: 16, d: 13 }
+      const g = fits(t, 3, undefined, true)
+      if (g) { keep({ ...t, floors: 2, y0: g.y0, y1: g.y1, kind: 'hall', rim: 0.6, v: 0.7, core: true, front: 'enchant-temple' }); break temple }
+    }
+  }
+
   // ── a spot (a hut, a shack) is one building on its own ground: try a few spots round the dot until one fits
   if (p.kind === 'spot') {
     for (let k = 0; k < 24; k++) {

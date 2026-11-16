@@ -15,7 +15,7 @@ import { HearthFrame, H, hearthDisplay, HearthButton } from '../../ui/hearth'
 import { hudSay } from '../shared/game-hud'
 import type { Ledger } from '../trade'
 
-export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange'
+export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple'
 export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: string }> = {
   'kindled-mug': { name: 'The Kindled Mug', kind: 'tavern', line: 'A tavern on the square.' },
   'forgelight-inn': { name: 'The Forgelight Inn', kind: 'inn', line: 'Iron fixtures and forge-warmed walls.' },
@@ -23,6 +23,7 @@ export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: 
   'spirit-corner': { name: 'The Spirit Corner', kind: 'cafe' },
   bookstore: { name: "Eyuun's Bookstore", kind: 'books', line: "The house of tales. The world's stories, read and heard." },
   station: { name: 'Travelers Station', kind: 'station' },
+  'enchant-temple': { name: 'Enchant Temple', kind: 'temple', line: 'Permanent imbuing. Smiths and enchanters trade knowledge here.' },
   'grand-exchange': { name: 'The Grand Exchange', kind: 'exchange', line: 'The trade at the centre of the capital.' },
 }
 /** a ticket to the Starforge (an emergency-fund sized price, Alex 11-16). TODO(world): move onto economy/prices.ts LADDER */

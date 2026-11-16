@@ -158,7 +158,7 @@ function signTexture(name: string) {
 // the Station is the Roman-bones building of the set (world/athernyx.md: columns, arches) and the smithy town's forge
 // glow and chimney (world/rune-hold.md: "steam rising from smithies", "forge-warmed walls").
 /** fronts that are not Rune Hold's (play3d's FRONTS): the Citadel's Grand Exchange (geography.md › THE TOWNS IN 1672) */
-const OTHER_FRONTS: { id: string; name: string; kind: string }[] = [{ id: 'grand-exchange', name: 'The Grand Exchange', kind: 'exchange' }]
+const OTHER_FRONTS: { id: string; name: string; kind: string }[] = [{ id: 'grand-exchange', name: 'The Grand Exchange', kind: 'exchange' }, { id: 'enchant-temple', name: 'Enchant Temple', kind: 'temple' }]
 const AWNING: Partial<Record<string, string>> = { tavern: '#8a2f22', cafe: '#2f6f6a', books: '#2f4f2a', inn: '#6a3f1f' }
 function FrontSign({ b }: { b: Building }) {
   const f = FRONTS.find(q => q.id === b.front) ?? OTHER_FRONTS.find(q => q.id === b.front)
