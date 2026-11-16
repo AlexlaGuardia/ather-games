@@ -78,8 +78,10 @@ export function RinningFX({ ww, api, holding, out, level, zoneAt, onCatch }: {
     }
     // the rod: from the hand (low right of the eye) out and up, the line from its tip to the float
     const right = new THREE.Vector3().crossVectors(T.d, camera.up).normalize()
-    T.hand.copy(T.o).addScaledVector(T.d, 0.45).addScaledVector(right, 0.3).add(new THREE.Vector3(0, -0.42, 0))
-    T.tip.copy(T.o).addScaledVector(T.d, 1.5).addScaledVector(right, 0.45).add(new THREE.Vector3(0, 0.35, 0))
+    // a held rinstick, low in the lower right of the view (the first cut reached 1.5 m ahead and stood up the middle
+    // of the screen like a fence post)
+    T.hand.copy(T.o).addScaledVector(T.d, 0.32).addScaledVector(right, 0.26).add(new THREE.Vector3(0, -0.3, 0))
+    T.tip.copy(T.o).addScaledVector(T.d, 0.95).addScaledVector(right, 0.42).add(new THREE.Vector3(0, -0.02, 0))
     if (rod.current) {
       rod.current.visible = out
       if (out) { const mid = T.hand.clone().lerp(T.tip, 0.5), len = T.hand.distanceTo(T.tip); rod.current.position.copy(mid); rod.current.scale.set(1, len, 1); rod.current.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), T.tip.clone().sub(T.hand).normalize()) }
@@ -140,7 +142,7 @@ export function RinningFX({ ww, api, holding, out, level, zoneAt, onCatch }: {
 
   return (
     <>
-      <mesh ref={rod} visible={false}><cylinderGeometry args={[0.012, 0.02, 1, 5]} /><meshLambertMaterial color="#9a8160" /></mesh>
+      <mesh ref={rod} visible={false}><cylinderGeometry args={[0.005, 0.011, 1, 5]} /><meshLambertMaterial color="#9a8160" /></mesh>
       <primitive object={lineObj.current} />
       <mesh ref={float} visible={false}><sphereGeometry args={[0.07, 10, 8]} /><meshLambertMaterial color="#e8f0ff" emissive="#9fd4ff" emissiveIntensity={0.35} /></mesh>
       <mesh ref={rise} visible={false} rotation-x={-Math.PI / 2}><circleGeometry args={[0.45, 18]} /><meshBasicMaterial color="#bfeeff" transparent opacity={0.55} depthWrite={false} /></mesh>
