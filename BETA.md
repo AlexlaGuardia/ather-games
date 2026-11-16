@@ -21,7 +21,7 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 | M1 | **Front door.** Home → Play → rune → born, on a phone, live in under 20 s, zero page errors | `scripts/beta-audit.mts` | 🟨 |
 | M2 | **Phone HUD legible.** No two HUD elements overlap at 390×844 or at 360×780 | `beta-audit-2` m3-reach (touch buttons); 360×780 + non-touch HUD pieces still unchecked | 🟨 |
 | M3 | **Touch controls.** The first touch moves you; the thumb zone does not sit on the hotbar; every HUD button opens its panel; every panel closes by tap | `scripts/beta-audit-2.mts` + asserts | 🟨 |
-| M4 | **The next step is told.** Right after birth, the keeper sees what to do (Greg's errand in the journal, the trail lit) | new | ⬜ |
+| M4 | **The next step is told.** Right after birth, the keeper sees what to do (Greg's errand in the journal, the trail lit) | `shared/journal.test.ts` + `scripts/beta-m4-look.mts` (beacon + trail on Greg, prod 11-16, `92537123`) | ✅ |
 | M5 | **First errand, PLAYED.** Greg → runesmith → Enchant Temple → bracelet, reached on foot / courser, not by teleport hooks | `errand-check` + `runesmith-check` exist (hook-driven); new played version | 🟨 |
 | M6 | **Core loops reachable in the first hour**: rinning, prospecting, a Wilds fight, buying a business. Each one found without a guide | one check per loop | ⬜ |
 | M7 | **Saves survive.** Reload, close tab, come back next day; anonymous → signed-in keeps everything | new | ⬜ |
