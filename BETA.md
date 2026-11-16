@@ -19,8 +19,8 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 | # | Milestone | Check (passes on prod = done) | Status |
 |---|---|---|---|
 | M1 | **Front door.** Home → Play → rune → born, on a phone, live in under 20 s, zero page errors | `scripts/beta-audit.mts` | 🟨 |
-| M2 | **Phone HUD legible.** No two HUD elements overlap at 390×844 or at 360×780 | new: box-overlap check | ⬜ |
-| M3 | **Touch controls.** The first touch moves you; the thumb zone does not sit on the hotbar; every HUD button opens its panel; every panel closes by tap | `scripts/beta-audit-2.mts` + asserts | ⬜ |
+| M2 | **Phone HUD legible.** No two HUD elements overlap at 390×844 or at 360×780 | `beta-audit-2` m3-reach (touch buttons); 360×780 + non-touch HUD pieces still unchecked | 🟨 |
+| M3 | **Touch controls.** The first touch moves you; the thumb zone does not sit on the hotbar; every HUD button opens its panel; every panel closes by tap | `scripts/beta-audit-2.mts` + asserts | 🟨 |
 | M4 | **The next step is told.** Right after birth, the keeper sees what to do (Greg's errand in the journal, the trail lit) | new | ⬜ |
 | M5 | **First errand, PLAYED.** Greg → runesmith → Enchant Temple → bracelet, reached on foot / courser, not by teleport hooks | `errand-check` + `runesmith-check` exist (hook-driven); new played version | 🟨 |
 | M6 | **Core loops reachable in the first hour**: rinning, prospecting, a Wilds fight, buying a business. Each one found without a guide | one check per loop | ⬜ |
@@ -45,6 +45,11 @@ on BE BORN works · the welcome card explains controls + the gate + Gregory · z
 - **M1: the birth gate on a phone** shows the neighbour runes' names ghosting through the centre (Manalic / Life / Enchant
   readable behind Star) and a keyboard hint ("↑↓ RUNE · ←→ ELEMENT · ENTER") a phone cannot use.
 - **M4: unmeasured yet.** The welcome card names Gregory, but nothing yet checks that a stranger is pointed at him.
+
+**Fixed 11-16 (`a4d738de`, live, verified on prod by `beta-audit-2`):** the tap row now starts under the status chip and
+the stick hint, jump/slide/fire and near pills stand above the bar: 6/6 touch buttons topmost under their centre, the thumb
+walks, PACK opens the bag. The birth screen hides its keyboard hint on phones. Still open in M2/M3: 360×780, MAP by tap, and
+"TAP TO START" eating the first touch was judged FINE (it says tap, and a tap is what it takes). Birth-wheel ghost names = 🔒 Alex.
 
 ## How the hive works this list (AFK mode)
 
