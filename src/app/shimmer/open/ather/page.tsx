@@ -52,8 +52,11 @@ import type { SkillSet } from '../../engine/skills'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
-import { give, take, itemDef } from '../shared/inventory'
-import { prune, pruneCheck, startShake, openSkills, TREE_NAME, MANA_COST, ZONE_NAME } from './forestry'
+import { give, take, itemDef, countOf } from '../shared/inventory'
+import { BAIT, type Rinn } from './rinning'
+import { RinningFX, type RinningApi } from './rinning-fx'
+import { ReelBar } from './reel-bar'
+import { prune, pruneCheck, startShake, openSkills, openLevel, addOpenXp, TREE_NAME, MANA_COST, ZONE_NAME, type Zone as WildsZone } from './forestry'
 import { ForestryFX, type Aim, type ForestryFx } from './forestry-fx'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { AtherMiniMap } from './minimap'
@@ -314,7 +317,7 @@ export default function AtherSlice() {
       const p = n?.kind === 'gate' ? 'E · the gate (fold map)'
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
-        : treePrompt()
+        : rinPrompt() ?? treePrompt()
       setPrompt(p)
       let where = 'your plot'
       if (zone.kind === 'wilds' && ww) {
@@ -358,6 +361,7 @@ export default function AtherSlice() {
       spread: () => spreadRef.current, skipDays, ownerAt: (x: number, z: number) => nodeOwner?.(x, z),
       prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mana: () => manaRef.current.cur,
       stance: () => stanceRef.current, speedMult: () => (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1),
+      rin: () => rinApi.current?.view() ?? null, cast: () => castOrAnswer(), hold: (h: boolean) => { reelHold.current = h },
     }
   }, [zone, travel, garden, updateGarden, skipDays, nodeOwner])
 
@@ -404,6 +408,41 @@ export default function AtherSlice() {
     }, () => { if (text) setToast(text) })
     if (ok) { manaRef.current.cur -= MANA_COST; startShake(t.id) }
   }, [zone.kind])
+  // ── rinning (rinning.ts + rinning-fx.tsx): bait in hand → the rinstick is out; click the water to cast (one bait),
+  //    click the take to answer, hold to reel while the rinn rests, let go while it pulls
+  const rinApi = useRef<RinningApi | null>(null), reelHold = useRef(false)
+  const zoneAtWorld = useCallback((x: number, z: number): WildsZone => {
+    if (!ww) return 'meadows'
+    const tt = ww.at(tileOf(x, z).tx, tileOf(x, z).ty); if (!tt) return 'meadows'
+    const o = ww.offsetOf(tt.name)
+    return zonesOf(ww, tt.name)(Math.min(4, Math.floor((x - o.x + 500) / 200)), Math.min(4, Math.floor((z - o.z + 500) / 200)))
+  }, [ww])
+  const castOrAnswer = useCallback(() => {
+    const r = rinApi.current; if (!r || zone.kind !== 'wilds') return
+    const v = r.view()
+    if (v.phase === 'waiting' || v.phase === 'rising' || v.phase === 'taking') { r.answer(); return }   // a click off the take costs nothing
+    if (v.phase !== 'idle' && v.phase !== 'landed') return
+    if (!toolsRef.current.rinning) { setToast('You have no rinstick.'); return }
+    if (!v.aim) { setToast('Aim at open water to cast.'); return }
+    const spent = take(getInv(), BAIT, 1)
+    if (!spent) { setToast('No bait left.'); return }
+    if (r.cast()) setInv(spent)
+  }, [zone.kind])
+  const onCatch = useCallback((rn: Rinn) => {
+    const g = give(getInv(), rn.id, 1); setInv(g.inv)
+    const up = addOpenXp('rinning', rn.xp)
+    setToast(`${rn.name}${g.left ? ' (bag full)' : ''} · +${rn.xp} Rinning${up ? `. Rinning ${up}!` : ''}`)
+  }, [])
+  const rinPrompt = () => {
+    if (heldRef.current !== BAIT || zone.kind !== 'wilds') return null
+    const v = rinApi.current?.view(); if (!v) return null
+    const left = countOf(getInv(), BAIT)
+    if (v.phase === 'idle' || v.phase === 'landed') return v.aim ? `Click · cast (${left} bait left)` : 'Aim at open water to cast'
+    if (v.phase === 'casting' || v.phase === 'waiting') return 'Watch the water…'
+    if (v.phase === 'rising') return 'Something is coming…'
+    if (v.phase === 'taking') return 'Click to answer it'
+    return null   // reeling: the reel bar speaks
+  }
   const treePrompt = () => {
     const t = aimRef.current.tree
     if (!t || zone.kind !== 'wilds') return null
@@ -413,12 +452,17 @@ export default function AtherSlice() {
   }
   useEffect(() => {
     const down = (e: MouseEvent) => {
-      if (e.button !== 0 || !locked.current || frozen.current) return
+      if (e.button !== 0) return
+      reelHold.current = true
+      if (!locked.current || frozen.current) return
       if (held === 'waymark') plantHere()
+      else if (held === BAIT) castOrAnswer()
       else if (stanceRef.current.kind === 'stowed') pruneAimed()   // stowed: the click works the node in front of you
     }
-    window.addEventListener('mousedown', down); return () => window.removeEventListener('mousedown', down)
-  }, [held, plantHere, pruneAimed])
+    const up = (e: MouseEvent) => { if (e.button === 0) reelHold.current = false }
+    window.addEventListener('mousedown', down); window.addEventListener('mouseup', up)
+    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up) }
+  }, [held, plantHere, pruneAimed, castOrAnswer])
   // R: a TAP draws the primary / swaps / reloads, a HOLD (HOLD_MS) stows (shared/stance.ts). Timed off down → up so a
   // hold stows the moment it qualifies, without waiting for the release.
   const panelRef = useRef(panel); panelRef.current = panel
@@ -539,6 +583,7 @@ export default function AtherSlice() {
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
         {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
+        {zone.kind === 'wilds' && ww && <RinningFX ww={ww} api={rinApi} holding={reelHold} out={held === BAIT} level={() => openLevel('rinning')} zoneAt={zoneAtWorld} onCatch={onCatch} />}
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} /></group> })}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
@@ -603,6 +648,7 @@ export default function AtherSlice() {
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       <LookChip />
+      {zone.kind === 'wilds' && held === BAIT && <ReelBar api={rinApi} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} />}
       <BirthGate />
       {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={litSlot(stance, inv)} isTouch={isTouch} />}

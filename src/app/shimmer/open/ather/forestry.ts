@@ -20,7 +20,7 @@
 // ★ PURE but for the guarded localStorage load/save and a tiny subscribe store.
 
 import { NODE_DEFS } from '../../world/resources'
-import { createSkillSet, addSkillXP, skillSetToSave, skillSetFromSave, type SkillSet } from '../../engine/skills'
+import { createSkillSet, addSkillXP, skillSetToSave, skillSetFromSave, type SkillSet, type SkillId } from '../../engine/skills'
 
 export type Zone = 'meadows' | 'thicket' | 'springs' | 'trails' | 'arid' | 'caverns'
 /** This season's zone names (RULED 2026-11-15, game/shimmer-geography.md › THE WILDS' ZONES, THIS SEASON): they may
@@ -75,6 +75,12 @@ const save = (now = Date.now()) => {
   try { localStorage.setItem(PRUNE_KEY, JSON.stringify(pruned)) } catch { /* private window */ }
 }
 export const forestryLevel = () => skills.forestry.level
+/** Any open-world skill's level, and XP granted to it (saved with Forestry's: one open-world skill set). Rinning uses it. */
+export const openLevel = (id: SkillId) => skills[id].level
+export function addOpenXp(id: SkillId, xp: number): number | null {
+  const r = addSkillXP(skills[id], xp); save(); bump()
+  return r.leveled ? r.newLevel : null
+}
 /** The open world's skill set (the HUD's tool sockets read it; addSkillXP mutates it in place, so a ref to it stays live). */
 export const openSkills = () => skills
 /** ms until this tree has regrown, or 0. */

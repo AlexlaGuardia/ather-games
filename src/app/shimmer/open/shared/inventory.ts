@@ -44,17 +44,33 @@ const FORESTRY = {
 } satisfies Record<string, ItemDef>
 for (const [id, def] of Object.entries(FORESTRY)) def.icon = `/open/icons/${id.replace(/_/g, '-')}.svg`
 Object.assign(OPEN_ITEMS, FORESTRY)
+// ── Rinning (ather/rinning.ts): bait to cast with, and canon's rinn (game/shimmer-skilling.md › Skill 4: names + lines).
+//    No icon art yet (the bag draws its plain chip).
+const catchOf = (name: string, blurb: string): ItemDef => ({ name, blurb, icon: '', stack: 99, kind: 'material' })
+Object.assign(OPEN_ITEMS, {
+  bait: { name: 'Bait', blurb: 'Hold it and click the water to cast. One bait a cast.', icon: '', stack: 99, kind: 'material' },
+  shimmerscale: catchOf('Shimmerscale', 'Tiny, warm-scaled. Schools of them catch the light.'),
+  clickclaw: catchOf('Clickclaw', 'Small crustacean. Clicks when annoyed. Surprisingly tasty.'),
+  glowfin: catchOf('Glowfin', 'Soft bioluminescent scales. Nutritious. Spirits love it raw.'),
+  ribboneel: catchOf('Ribboneel', 'Long, slippery, iridescent. Prized for potion-making.'),
+  moonkoi: catchOf('Moonkoi', 'Beautiful silver-gold. Slow, patient catch. Worth the wait.'),
+  pearlshell: catchOf('Pearlshell', 'Occasionally contains a small Ather pearl.'),
+  crystal_rinn: catchOf('Crystal Rinn', 'A Rinn made partly of crystallized mana. Catching one feels like holding a wish.'),
+} satisfies Record<string, ItemDef>)
+/** Bait a new keeper starts with (and an older bag is handed once). Where more comes from is open (Alex, 11-15). */
+export const STARTING_BAIT = 10
 export const itemDef = (id: string): ItemDef => OPEN_ITEMS[id] ?? { name: id.replace(/_/g, ' '), blurb: '', icon: '', stack: 99, kind: 'material' }
 
 export const HOTBAR = 8, BAG = 24, SLOTS = HOTBAR + BAG
 export type Stack = { id: string; n: number }
-export interface Inv { v: 1; slots: (Stack | null)[] }
+export interface Inv { v: 1; slots: (Stack | null)[]; /** one-off gifts already handed over (an older bag gets each once) */ gifts?: string[] }
 
 export function newInv(waymarks = 12): Inv {
   const slots: (Stack | null)[] = Array(SLOTS).fill(null)
   slots[0] = { id: 'repeater', n: 1 }
   if (waymarks > 0) slots[1] = { id: 'waymark', n: waymarks }
-  return { v: 1, slots }
+  slots[2] = { id: 'bait', n: STARTING_BAIT }   // rinning (ather/rinning.ts): hold it, click the water
+  return { v: 1, slots, gifts: ['bait1'] }
 }
 const clone = (inv: Inv): Inv => ({ v: 1, slots: inv.slots.map(s => (s ? { ...s } : null)) })
 
@@ -120,8 +136,10 @@ export function loadInv(waymarksLeft = 12): Inv {
       // ★ tools are not bag items (Alex 11-15, the stance: "interacting with a node should just automatically use the right
       // tool"): they sit in the sockets round the mana orb (engine/tools.ts). A Worn Blade a bag got for an hour on 11-15
       // is taken back out here.
-      if (v.slots.some((x: Stack | null) => x?.id === 'worn_blade')) return { ...v, slots: v.slots.map((x: Stack | null) => (x?.id === 'worn_blade' ? null : x)) }
-      return v
+      let out: Inv = v.slots.some((x: Stack | null) => x?.id === 'worn_blade') ? { ...v, slots: v.slots.map((x: Stack | null) => (x?.id === 'worn_blade' ? null : x)) } : v
+      // rinning arrived (11-15): an older bag is handed the starting bait once
+      if (!(out.gifts ?? []).includes('bait1')) out = { ...give(out, 'bait', STARTING_BAIT).inv, gifts: [...(out.gifts ?? []), 'bait1'] }
+      return out
     }
   } catch { /* private window */ }
   return newInv(waymarksLeft)
