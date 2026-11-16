@@ -55,11 +55,21 @@ await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 18000
 await sleep(4000); await beat('birth-gate')
 await beat('tap-born', { tapped: await tapText(/^BE BORN/) })
 for (let i = 1; i <= 4; i++) { await sleep(3000); await beat(`after-born-${i * 3}s`) }
+await beat('tap-to-start', { tapped: await tapText(/^Tap to start$/) }); await sleep(800)
+// M2/M3: every touch button must be the TOPMOST thing under its own centre (else a tap lands on whatever covers it)
+const reach = await p.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-touch]')].map(e => {
+  const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2
+  const top = document.elementFromPoint(x, y)
+  return { b: e.dataset.touch, ok: !!top && e.contains(top), on: top && !e.contains(top) ? (top.textContent ?? top.tagName).trim().slice(0, 30) : undefined }
+}))
+const covered = reach.filter(r => !r.ok)
+await beat('m3-reach', { buttons: reach.length, covered })
+console.log(covered.length ? `  FAIL M3 covered: ${JSON.stringify(covered)}` : `  ok   M3 all ${reach.length} touch buttons reachable`)
 // the left thumb, forward for 4 s
 const before = await st()
-await drag(90, 700, 0, -70, 4000); await sleep(500)
+await drag(90, 640, 0, -70, 4000); await sleep(500)
 await beat('thumb-forward', { from: before })
-await drag(90, 700, 70, 0, 2500); await sleep(500)
+await drag(90, 640, 70, 0, 2500); await sleep(500)
 await beat('thumb-right')
 // look: drag on the right half
 await drag(300, 500, -80, 0, 1200); await beat('look-drag')
@@ -70,7 +80,7 @@ for (const [name, re] of [['pack', /PACK$/], ['map', /MAP$/], ['options', /OPTIO
   if (closeTapped) await beat(`hud-${name}-closed`, { closeTapped })
 }
 // a long walk forward: does a stranger reach anything?
-for (let i = 1; i <= 3; i++) { await drag(90, 700, 0, -70, 8000); await beat(`walk-${i}`) }
+for (let i = 1; i <= 3; i++) { await drag(90, 640, 0, -70, 8000); await beat(`walk-${i}`) }
 writeFileSync(`${out}/audit2.json`, JSON.stringify({ url, beats, log }, null, 1))
 console.log('errors:', JSON.stringify(log.slice(0, 15), null, 1))
 await b.close()

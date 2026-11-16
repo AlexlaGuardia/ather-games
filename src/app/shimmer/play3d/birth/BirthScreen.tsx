@@ -203,7 +203,8 @@ export default function BirthScreen({
             Be born {rune?.name}
           </button>
 
-          <div style={{
+          {/* keys only where there are keys: a phone has no arrows or Enter (BETA M1, fresh-phone audit 11-16) */}
+          <div className="birth-keys" style={{
             position: 'absolute', bottom: 14, fontSize: 10, letterSpacing: '.14em',
             color: '#4a525e', textTransform: 'uppercase',
           }}>
@@ -213,6 +214,7 @@ export default function BirthScreen({
       )}
 
       <style>{`
+        @media (hover: none) and (pointer: coarse) { .birth-keys { display: none } }
         @keyframes birthFade { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
         @keyframes bornIn { from { opacity: 0; transform: scale(.9) } to { opacity: 1; transform: none } }
         @keyframes pulseGlow { 0%,100% { opacity: .85 } 50% { opacity: 1 } }

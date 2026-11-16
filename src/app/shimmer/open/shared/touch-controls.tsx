@@ -2,6 +2,18 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { touch, pressKey, resetTouch } from './touch'
+import { hudMapBox, HUD_BAR_CLEAR } from '../../ui/hearth-hud-layer'
+
+// ── WHERE THE PHONE LAYER SITS, against the HUD template (BETA M2/M3, 2026-11-16) ──────────────────────────────
+// The fresh-phone audit (scripts/beta-audit-2.mts, 390x844) found the tap row UNDER the top-right HUD (the minimap
+// covered OPTIONS, the clock covered PACK, the status pill covered FRIENDS) and the stick hint + jump/slide ON the
+// hotbar (the bar draws above this layer, so a thumb put where the hint said picked a slot). Both now derive from
+// the template's own numbers, so a HUD change moves them with it:
+//   the tap row starts under the status chip (map top + size + 40 = the chip's top, + one chip + air)
+//   everything bottom-anchored stands on the bar's measured clear (HUD_BAR_CLEAR.phone) instead of the screen edge
+const PHONE_MAP = hudMapBox('phone')
+export const PHONE_ROW_TOP = PHONE_MAP.top + PHONE_MAP.size + 40 + 34
+const ABOVE_BAR = `max(${HUD_BAR_CLEAR.phone + 8}px, env(safe-area-inset-bottom))`
 
 // The phone layer for the open world (2026-11-15, hub). Writes `touch` (shared/touch.ts); never touches game state.
 //
@@ -31,7 +43,7 @@ const WALK_HOLDS: TouchHold[] = [{ code: 'ShiftLeft', label: 'slide' }, { code: 
  *  its handbrake while driving. `stickHint`: the faint words where the left thumb goes. */
 /** `row`: where the standing taps sit. Default under a top-right HUD (the Ather); the continent has its minimap
  *  there, so it puts them top-left under the speedometer. */
-export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint = 'thumb here to move', row = { side: 'right', top: 70 } }: {
+export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint = 'thumb here to move', row = { side: 'right', top: PHONE_ROW_TOP } }: {
   actions: TouchAction[]; showFire: boolean; holds?: TouchHold[]; stickHint?: string; row?: { side: 'left' | 'right'; top: number }
 }) {
   const roles = useRef(new Map<number, { kind: 'stick' | 'look' | 'fire'; ox: number; oy: number; lx: number; ly: number }>())
@@ -98,34 +110,34 @@ export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint
         </div>
       )}
       {!stick && (
-        <div style={{ position: 'absolute', left: 28, bottom: 'max(28px, env(safe-area-inset-bottom))', color: 'rgba(244,239,226,0.55)', font: '600 10px system-ui', letterSpacing: '0.2em', textTransform: 'uppercase', pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', left: 28, bottom: ABOVE_BAR, color: 'rgba(244,239,226,0.55)', font: '600 10px system-ui', letterSpacing: '0.2em', textTransform: 'uppercase', pointerEvents: 'none' }}>
           {stickHint}
         </div>
       )}
 
       {/* right cluster: fire big, jump + slide beside it */}
-      <div style={{ position: 'absolute', right: 'max(18px, env(safe-area-inset-right))', bottom: 'max(22px, env(safe-area-inset-bottom))', display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+      <div style={{ position: 'absolute', right: 'max(18px, env(safe-area-inset-right))', bottom: ABOVE_BAR, display: 'flex', gap: 12, alignItems: 'flex-end' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {holds.map(h => <div key={h.code} style={ring(56, down[h.code])} {...holdKey(h.code)}>{h.label}</div>)}
+          {holds.map(h => <div key={h.code} data-touch={h.label} style={ring(56, down[h.code])} {...holdKey(h.code)}>{h.label}</div>)}
         </div>
         {showFire
-          ? <div style={ring(84, down.fire)} {...hold('fire', () => { touch.fire = true }, () => { touch.fire = false }, true)}>fire</div>
+          ? <div data-touch="fire" style={ring(84, down.fire)} {...hold('fire', () => { touch.fire = true }, () => { touch.fire = false }, true)}>fire</div>
           : null}
       </div>
 
       {/* standing taps: a compact row under the top-right HUD */}
       <div style={{ position: 'absolute', ...(row.side === 'right' ? { right: 'max(12px, env(safe-area-inset-right))' } : { left: 'max(12px, env(safe-area-inset-left))' }), top: row.top, display: 'flex', gap: 8, flexWrap: 'wrap', maxWidth: '62vw' }}>
         {actions.filter(a => !a.near).map(a => (
-          <div key={a.code} style={{ ...ring(40), width: 'auto', minWidth: 40, padding: '0 11px', borderRadius: 20, display: 'flex', alignItems: 'center', fontSize: 11 }}
+          <div key={a.code} data-touch={a.label} style={{ ...ring(40), width: 'auto', minWidth: 40, padding: '0 11px', borderRadius: 20, display: 'flex', alignItems: 'center', fontSize: 11 }}
             onPointerDown={e => { e.stopPropagation(); pressKey(a.code) }}>
             <span style={{ fontSize: 13, marginRight: 6, color: '#d4a843' }}>{a.key}</span>{a.label}
           </div>
         ))}
       </div>
       {/* what is in reach right now: big, beside the thumb cluster */}
-      <div style={{ position: 'absolute', right: `calc(max(18px, env(safe-area-inset-right)) + ${showFire ? 84 + 12 : 0}px + 56px + 16px)`, bottom: 'max(22px, env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
+      <div style={{ position: 'absolute', right: `calc(max(18px, env(safe-area-inset-right)) + ${showFire ? 84 + 12 : 0}px + 56px + 16px)`, bottom: ABOVE_BAR, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
         {actions.filter(a => a.near).map(a => (
-          <div key={a.code} style={{ ...ring(60, true), width: 'auto', minWidth: 60, padding: '0 18px', borderRadius: 30, display: 'flex', alignItems: 'center', fontSize: 13 }}
+          <div key={a.code} data-touch={a.label} style={{ ...ring(60, true), width: 'auto', minWidth: 60, padding: '0 18px', borderRadius: 30, display: 'flex', alignItems: 'center', fontSize: 13 }}
             onPointerDown={e => { e.stopPropagation(); pressKey(a.code) }}>
             <span style={{ fontSize: 17, marginRight: 8, color: '#f4efe2' }}>{a.key}</span>{a.label}
           </div>
