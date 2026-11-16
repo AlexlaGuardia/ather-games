@@ -67,7 +67,7 @@ import { prune, pruneCheck, startShake, openSkills, openLevel, addOpenXp, TREE_N
 import { ForestryFX, type Aim, type ForestryFx } from './forestry-fx'
 import { ProspectingFX, type CrystalAim, type ProspectFx } from './prospecting-fx'
 import { CompanionFollower } from '../shared/companion-follower'
-import { subscribeCompanion, takeJoined, perkLabel } from '../shared/companion'
+import { subscribeCompanion, takeJoined, perkLabel, perkBonus } from '../shared/companion'
 import { mine, mineCheck, CRYSTAL_NAME, CRYSTAL_ITEM, MANA_COST as MINE_COST } from './prospecting'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { AtherMiniMap } from './minimap'
@@ -418,10 +418,11 @@ export default function AtherSlice() {
     const ok = fxRef.current?.start(t, () => {
       const r = prune(t.kind, t.id)
       if (!r.ok) { text = r.why; return [] }
+      const perk = perkBonus('forestry'); if (perk) r.drops[0].n += 1   // Grovekin (Drifthorn / Rootback): an extra log
       let inv = getInv(); const names: string[] = []
       for (const d of r.drops) { const g = give(inv, d.id, d.n); inv = g.inv; names.push(`${d.n > 1 ? d.n + ' × ' : ''}${itemDef(d.id).name}${g.left ? ' (bag full)' : ''}`) }
       setInv(inv)
-      text = `${names.join(' · ')} · +${r.xp} Forestry${r.levelUp ? `. Forestry ${r.levelUp}!` : ''}`
+      text = `${perk ? `${perk}! ` : ''}${names.join(' · ')} · +${r.xp} Forestry${r.levelUp ? `. Forestry ${r.levelUp}!` : ''}`
       return r.drops
     }, () => { if (text) setToast(text) })
     if (ok) { manaRef.current.cur -= MANA_COST; startShake(t.id) }
@@ -480,9 +481,10 @@ export default function AtherSlice() {
     if (r.cast()) setInv(spent)
   }, [zone.kind])
   const onCatch = useCallback((rn: Rinn) => {
-    const g = give(getInv(), rn.id, 1); setInv(g.inv)
+    const perk = perkBonus('rinning')   // Truesight (Embermole / Prismstrike): a second of the same rinn
+    const g = give(getInv(), rn.id, perk ? 2 : 1); setInv(g.inv)
     const up = addOpenXp('rinning', rn.xp)
-    setToast(`${rn.name}${g.left ? ' (bag full)' : ''} · +${rn.xp} Rinning${up ? `. Rinning ${up}!` : ''}`)
+    setToast(`${perk ? `${perk}! 2 × ` : ''}${rn.name}${g.left ? ' (bag full)' : ''} · +${rn.xp} Rinning${up ? `. Rinning ${up}!` : ''}`)
   }, [])
   // 11-16: the rinn can get away. The bait is spent; nothing else is lost.
   const onGone = useCallback((rn: Rinn) => setToast(`It got away. A ${rn.name.toLowerCase()}, by the way it moved.`), [])

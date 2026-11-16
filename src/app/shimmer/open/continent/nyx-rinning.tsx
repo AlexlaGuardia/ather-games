@@ -22,6 +22,7 @@ import { give, take, countOf } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
 import { addOpenXp, openLevel } from '../ather/forestry'
 import { BAIT } from '../ather/rinning'
+import { perkBonus } from '../shared/companion'
 import { NYX_WATER_Y, nyxIsWater, nyxWaterAt, rollNyxRinn } from './rinning-nyx'
 
 export function useNyxRinning(R: Region | null, held: string | null, active: boolean) {
@@ -33,9 +34,10 @@ export function useNyxRinning(R: Region | null, held: string | null, active: boo
   const roll = useCallback((x: number, z: number) => rollNyxRinn(openLevel('rinning'), R ? nyxWaterAt(R, x, z) : 'coast', Math.random), [R])
   const rarer = useCallback((x: number, z: number) => !!R && nyxWaterAt(R, x, z) === 'open', [R])
   const onCatch = useCallback((rn: Rinn) => {
-    const g = give(getInv(), rn.id, 1); setInv(g.inv)
+    const perk = perkBonus('rinning')   // Truesight (Embermole / Prismstrike): a second of the same rinn
+    const g = give(getInv(), rn.id, perk ? 2 : 1); setInv(g.inv)
     const up = addOpenXp('rinning', rn.xp)
-    hudSay(`${rn.name}${g.left ? ' (bag full)' : ''} · +${rn.xp} Rinning${up ? `. Rinning ${up}!` : ''}`, 'item')
+    hudSay(`${perk ? `${perk}! 2 × ` : ''}${rn.name}${g.left ? ' (bag full)' : ''} · +${rn.xp} Rinning${up ? `. Rinning ${up}!` : ''}`, 'item')
   }, [])
   const onGone = useCallback((rn: Rinn) => hudSay(`It got away. ${rn.name}, by the way it moved.`, 'info'), [])
 

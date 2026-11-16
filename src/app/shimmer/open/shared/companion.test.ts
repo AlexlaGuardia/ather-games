@@ -1,5 +1,5 @@
 // The open world's Mana'mal companion (companion.ts) + Gemsense in prospecting. Run: npx tsx src/app/shimmer/open/shared/companion.test.ts
-import { COMPANIONS, checkJoins, takeJoined, activeCompanion, setCompanion, perkFires, perkChance, unlockedBy, _resetCompanion, companionDef } from './companion'
+import { perkBonus, COMPANIONS, checkJoins, takeJoined, activeCompanion, setCompanion, perkFires, perkChance, unlockedBy, _resetCompanion, companionDef } from './companion'
 import { mine, _resetProspecting, CRYSTAL_ITEM } from '../ather/prospecting'
 import { _resetForestry, _setOpenLevel } from '../ather/forestry'
 import type { SkillId } from '../../engine/skills'
@@ -56,6 +56,11 @@ ok(r.ok && !r.perk && r.drops.length === 2, 'a perk fired at roll 0.99')
 setCompanion(null)
 r = mine('raw', 't:4', () => 0)
 ok(r.ok && !r.perk, 'mine rolled a perk with nobody out')
+
+// Grovekin / Truesight at the call sites: perkBonus names the perk only on its own skill
+_resetCompanion(); _setOpenLevel('forestry', 15); _setOpenLevel('rinning', 15); checkJoins()
+setCompanion('drifthorn'); ok(perkBonus('forestry', () => 0) === 'Grovekin' && perkBonus('rinning', () => 0) === null, 'Grovekin misfires')
+setCompanion('embermole'); ok(perkBonus('rinning', () => 0) === 'Truesight' && perkBonus('rinning', () => 0.99) === null, 'Truesight misfires')
 
 console.log(`companion: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { fails.forEach(f => console.log('  ✗ ' + f)); process.exit(1) }

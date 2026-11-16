@@ -120,6 +120,12 @@ export function perkFires(skill: SkillId, rand: () => number = Math.random): boo
   return !!c && c.skill === skill && rand() < perkChance(c)
 }
 
+/** perkFires, named: the perk's label when it fires (for the toast), else null. Grovekin (prune) and Truesight (a
+ *  landed rinn) are rolled at the call site this way: forestry.ts cannot import this file (it imports forestry). */
+export function perkBonus(skill: SkillId, rand: () => number = Math.random): string | null {
+  return perkFires(skill, rand) ? perkLabel(activeCompanion()!) : null
+}
+
 if (typeof window !== 'undefined') {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null')
