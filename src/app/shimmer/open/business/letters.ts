@@ -22,15 +22,15 @@ import type { Loadout, OwnedVessel } from '../shared/loadout'
 
 export type Seat = 'fire' | 'wind' | 'water' | 'earth' | 'barrier' | 'life' | 'enchant' | 'star'
 /** where each runesmith works: the Atlas place id (null = no place on the continent yet) */
-export const SEATS: Record<Seat, { name: string; place: string | null; where: string }> = {
-  fire: { name: 'Fire School', place: 'unnamed-school-30', where: 'Redstair' },
-  wind: { name: 'Wind School', place: 'unnamed-school-10', where: 'Galecrest' },
-  water: { name: 'Water School', place: 'rincrest', where: 'Rincrest' },
-  earth: { name: 'Earth School', place: 'the-moldy-boulder', where: 'the Cairn, behind the Moldy Boulder' },
-  barrier: { name: 'Barrier Temple', place: 'veradyn', where: 'Veradyn' },
-  life: { name: 'Life Temple', place: 'verdant-ruins', where: 'the Verdant Ruins' },
-  enchant: { name: 'Enchant Temple', place: 'citadel', where: 'the Citadel' },
-  star: { name: 'Star Temple', place: null, where: "the Spine's highest peak" },
+export const SEATS: Record<Seat, { name: string; place: string | null; where: string; short: string }> = {
+  fire: { name: 'Fire School', place: 'unnamed-school-30', where: 'Redstair', short: 'Redstair' },
+  wind: { name: 'Wind School', place: 'unnamed-school-10', where: 'Galecrest', short: 'Galecrest' },
+  water: { name: 'Water School', place: 'rincrest', where: 'Rincrest', short: 'Rincrest' },
+  earth: { name: 'Earth School', place: 'the-moldy-boulder', where: 'the Cairn, behind the Moldy Boulder', short: 'Cairn' },
+  barrier: { name: 'Barrier Temple', place: 'veradyn', where: 'Veradyn', short: 'Veradyn' },
+  life: { name: 'Life Temple', place: 'verdant-ruins', where: 'the Verdant Ruins', short: 'Verdant Ruins' },
+  enchant: { name: 'Enchant Temple', place: 'citadel', where: 'the Citadel', short: 'Citadel' },
+  star: { name: 'Star Temple', place: null, where: "the Spine's highest peak", short: 'Star Temple' },
 }
 /** which seats cut each rune's letter (world/schools.md › THE EIGHT RUNESMITH SEATS) */
 export const RUNE_SEATS: Record<string, Seat[]> = {
@@ -54,8 +54,9 @@ export const letterItem = (rune: string) => `letter_${rune}`
 const runeName = (rune: string) => RUNES.find(r => r.id === rune)?.name ?? rune
 const ELEMENT_INK: Record<string, string> = { mana: CRYSTAL_ITEM.violet, storm: CRYSTAL_ITEM.storm, earth: CRYSTAL_ITEM.earth, water: CRYSTAL_ITEM.water }
 
-// the letters are bag items (one row per rune)
-for (const r of RUNES) if (!OPEN_ITEMS[letterItem(r.id)]) OPEN_ITEMS[letterItem(r.id)] = { name: `${r.name} letter`, blurb: `A ${r.name} letter, cut and inked. The Enchant Temple sets it in a vessel.`, icon: '', stack: 99, kind: 'material' }
+// the letters are bag items (one row per rune). Icons: the rune's glyph (design-briefs/letter-glyphs.md: element frame +
+// state mark, circuitry in gem ink on Blankstone), drawn by tools/art/letter_glyphs.py
+for (const r of RUNES) if (!OPEN_ITEMS[letterItem(r.id)]) OPEN_ITEMS[letterItem(r.id)] = { name: `${r.name} letter`, blurb: `A ${r.name} letter, cut and inked. The Enchant Temple sets it in a vessel.`, icon: `/open/icons/letter-${r.id}.svg`, stack: 99, kind: 'material' }
 
 /** what one letter costs in material: one Blankstone, two raw shards, and its element's crystal as the ink */
 export function recipeOf(rune: string): { id: string; n: number }[] {

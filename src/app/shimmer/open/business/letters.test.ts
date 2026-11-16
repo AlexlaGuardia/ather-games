@@ -2,7 +2,8 @@
 // Idony inscribes blank vessels (never Greg's glove), the word's letters come out of the bag.
 import { RUNES } from '../../play3d/birth/runes.data'
 import { RUNE_SEATS, SEATS, SCATTER, lettersAt, recipeOf, cut, canCut, letterItem, imbuable, wordsFor, imbue, CUT_FEE, IMBUE_FEE, lightsFor } from './letters'
-import { newInv, give, countOf, type Inv } from '../shared/inventory'
+import { newInv, give, countOf, itemDef, type Inv } from '../shared/inventory'
+import { existsSync } from 'node:fs'
 import { newLoadout } from '../shared/loadout'
 import { BLANKSTONE, CRYSTAL_ITEM } from '../ather/prospecting'
 
@@ -38,5 +39,7 @@ ok(!imbue(l, withLetter, 1500, 'starter-glove', w.id).ok, "Greg's glove refused"
 ok(CUT_FEE + IMBUE_FEE <= 1500, 'a new keeper can afford their birth word out of the emergency fund')
 ok(lightsFor([w.letters[0]], w.letters[0]) && !lightsFor(['freeze'], 'magma'), 'lights on the birth rune; off-lane stays dark')
 ok(wordsFor('glove').length === 0 && wordsFor('bracelet').length > 20, `a glove takes no cut word (signature words are earned); bracelets take ${wordsFor('bracelet').length} tactical words`)
+// every rune's letter has its glyph icon on disk (design-briefs/letter-glyphs.md; tools/art/letter_glyphs.py)
+for (const r of RUNES) { const d = itemDef(letterItem(r.id)); ok(!!d.icon && existsSync('public' + d.icon), `icon: the ${r.name} letter has no glyph icon`) }
 console.log(`letters: ${pass} pass, ${fail} fail`)
 if (fail) process.exit(1)
