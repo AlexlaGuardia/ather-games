@@ -11,21 +11,13 @@
 //     their name and "closed for now" until each gets stock. Keepers, their names and every line are Magii's / @lark's.
 // ★ Copy stays plain and neutral: no keeper speaks here until lark writes them.
 import { useEffect, useState } from 'react'
+import { IdonyPanel, RunesmithPanel } from './smith-panel'
+import { FRONT_SHOPS } from './doors'
+export { FRONT_SHOPS } from './doors'
 import { HearthFrame, H, hearthDisplay, HearthButton } from '../../ui/hearth'
 import { hudSay } from '../shared/game-hud'
 import type { Ledger } from '../trade'
 
-export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple'
-export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: string }> = {
-  'kindled-mug': { name: 'The Kindled Mug', kind: 'tavern', line: 'A tavern on the square.' },
-  'forgelight-inn': { name: 'The Forgelight Inn', kind: 'inn', line: 'Iron fixtures and forge-warmed walls.' },
-  smithy: { name: 'The Smithy', kind: 'smithy', line: 'Steam and the smell of hot metal.' },
-  'spirit-corner': { name: 'The Spirit Corner', kind: 'cafe' },
-  bookstore: { name: "Eyuun's Bookstore", kind: 'books', line: "The house of tales. The world's stories, read and heard." },
-  station: { name: 'Travelers Station', kind: 'station' },
-  'enchant-temple': { name: 'Enchant Temple', kind: 'temple', line: 'Permanent imbuing, by twin hands.' },
-  'grand-exchange': { name: 'The Grand Exchange', kind: 'exchange', line: 'The trade at the centre of the capital.' },
-}
 /** a ticket to the Starforge (an emergency-fund sized price, Alex 11-16). TODO(world): move onto economy/prices.ts LADDER */
 export const STARFORGE_TICKET = 250
 
@@ -35,24 +27,7 @@ export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
   const shop = FRONT_SHOPS[id]
   if (!shop) return null
   if (shop.kind === 'station') return <StationPanel ledger={ledger} setLedger={setLedger} onClose={onClose} isTouch={isTouch} />
-  if (shop.kind === 'temple') return (
-    // ★ THE TWINS (Magii + Alex 11-16, world/schools.md): Idony inscribes vessels, her twin (unnamed) works weapons and
-    // sigils. Idony's counter opens once letters exist (runesmiths, one per school, 3932d39); lines are @lark's.
-    <HearthFrame title={shop.name} maxWidth={520} onClose={onClose} fixed dataPanel="shop-panel">
-      <div className="px-4 pt-4 pb-4 text-[14px] leading-snug" style={{ color: H.ink }} data-shop={id} data-closed>
-        <p style={{ ...hearthDisplay, color: H.inkSoft }}>{shop.line}</p>
-        <div className="grid grid-cols-2 gap-3 mt-3">
-          {[['Idony', 'Vessels inscribed'], ['Her twin', 'Weapons and sigils']].map(([who, what]) => (
-            <div key={who} className="rounded-[12px] px-3 py-3" data-counter={who} style={{ background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
-              <div className="text-[16px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{who}</div>
-              <div className="text-[12px]" style={{ color: H.inkSoft }}>{what}</div>
-              <div className="text-[12px] mt-2 font-semibold" style={hearthDisplay}>Closed for now.</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </HearthFrame>
-  )
+  if (shop.kind === 'temple') return <TemplePanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (shop.kind === 'books') return (
     <HearthFrame title={shop.name} maxWidth={420} onClose={onClose} fixed dataPanel="shop-panel">
       <div className="px-4 pt-4 pb-4 text-[14px] leading-snug" style={{ color: H.ink }} data-shop={id}>
@@ -117,6 +92,36 @@ function StationPanel({ ledger, setLedger, onClose, isTouch }: { ledger: Ledger;
           </div>
         </div>
         {isTouch ? <div className="grid grid-cols-2 gap-3"><Soon /><Soon /></div> : <Soon />}
+      </div>
+    </HearthFrame>
+  )
+}
+
+/** THE ENCHANT TEMPLE (the Citadel, Magii + Alex 11-16): Idony inscribes vessels, her twin works weapons and sigils,
+ *  and the Enchant seat's runesmith cuts the Enchant and Manalic letters (world/schools.md › THE EIGHT RUNESMITH SEATS). */
+function TemplePanel({ ledger, setLedger, onClose }: { ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void }) {
+  const [at, setAt] = useState<'hall' | 'idony' | 'smith'>('hall')
+  if (at === 'idony') return <IdonyPanel ledger={ledger} setLedger={setLedger} onClose={onClose} onBack={() => setAt('hall')} />
+  if (at === 'smith') return <RunesmithPanel seat="enchant" ledger={ledger} setLedger={setLedger} onClose={onClose} onBack={() => setAt('hall')} />
+  const counters: { who: string; what: string; go?: () => void }[] = [
+    { who: 'Idony', what: 'Vessels inscribed', go: () => setAt('idony') },
+    { who: 'The runesmith', what: 'Enchant and Manalic letters', go: () => setAt('smith') },
+    { who: 'Her twin', what: 'Weapons and sigils' },
+  ]
+  return (
+    <HearthFrame title="Enchant Temple" maxWidth={600} onClose={onClose} fixed dataPanel="shop-panel">
+      <div className="px-4 pt-4 pb-4 text-[14px] leading-snug" style={{ color: H.ink }} data-shop="enchant-temple">
+        <p style={{ ...hearthDisplay, color: H.inkSoft }}>{FRONT_SHOPS['enchant-temple'].line}</p>
+        <div className="grid grid-cols-3 gap-3 mt-3">
+          {counters.map(c => (
+            <button key={c.who} type="button" disabled={!c.go} onClick={c.go} data-counter={c.who} className="rounded-[12px] px-3 py-3 text-left transition-all enabled:hover:-translate-y-px"
+              style={{ background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${c.go ? H.ember : H.rule}`, opacity: c.go ? 1 : 0.6 }}>
+              <div className="text-[16px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{c.who}</div>
+              <div className="text-[12px]" style={{ color: H.inkSoft }}>{c.what}</div>
+              {!c.go && <div className="text-[12px] mt-2 font-semibold" style={hearthDisplay} data-closed>Closed for now.</div>}
+            </button>
+          ))}
+        </div>
       </div>
     </HearthFrame>
   )

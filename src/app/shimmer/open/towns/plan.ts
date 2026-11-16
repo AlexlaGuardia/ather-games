@@ -502,6 +502,17 @@ export function planTown(R: Region, p: RegionPlace, pi: number, opts?: { r?: num
       }
     }
   }
+  // ── A SCHOOL WITH NOTHING ON LAND (Rincrest: "floating platforms anchored offshore", world/schools.md): its dot is in
+  // the water, so nothing above fits. It keeps ONE hall on the nearest dry shore, facing the water, which is where its
+  // runesmith works (business/doors.ts, one runesmith per school, 11-16). The platforms themselves are a later build.
+  if (p.kind === 'school' && plan.buildings.length === 0) {
+    shore: for (let rr = 0; rr <= 160; rr += 8) for (let k = 0; k < 24; k++) {
+      const a = k * Math.PI / 12, x = p.x + Math.cos(a) * rr, z = p.z + Math.sin(a) * rr
+      const c = { x, z, yaw: Math.atan2(p.z - z, p.x - x), w: 10, d: 8 }   // face back toward the dot (the water)
+      const g = fits(c, 1, undefined, true)
+      if (g) { keep({ ...c, floors: 1, y0: g.y0, y1: g.y1, kind: 'hall', rim: 0, v: hash(pi, 3) }); break shore }
+    }
+  }
   return plan
 }
 

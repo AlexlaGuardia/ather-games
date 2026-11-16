@@ -29,6 +29,8 @@ import { Towns } from '../towns/Towns'
 import { MarketView, DeedCard } from '../business/market-view'
 import { useTycoon } from '../business/use-tycoon'
 import { ShopPanel } from '../business/shop-panel'
+import { RunesmithPanel } from '../business/smith-panel'
+import type { Seat } from '../business/letters'
 import { useNyxRinning } from './nyx-rinning'
 import { veradynFerry } from '../towns/veradyn'
 import { townDiscs } from '../towns/plan'
@@ -1133,7 +1135,7 @@ export default function ContinentRide() {
   const touchActions: TouchAction[] = [
     ...(!hud.foot && ferryAt && !ferrying ? [{ code: 'KeyE', key: 'E', label: 'ferry', near: true }]
       : !hud.foot && canBoard ? [{ code: 'KeyE', key: 'E', label: 'board', near: true }] : []),
-    ...(hud.foot && deedReach && !deed ? [{ code: 'KeyE', key: 'E', label: deedReach.startsWith('front:') ? 'go in' : 'deed', near: true }] : []),
+    ...(hud.foot && deedReach && !deed ? [{ code: 'KeyE', key: 'E', label: deedReach.startsWith('front:') || deedReach.startsWith('smith:') ? 'go in' : 'deed', near: true }] : []),
     ...(hud.prompt ? [{ code: 'KeyF', key: 'F', label: hud.foot ? 'get in' : 'get out', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
     { code: 'KeyO', key: 'O', label: 'options' },
@@ -1314,8 +1316,9 @@ export default function ContinentRide() {
         ]} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} keys={CONTINENT_KEYS} />}
       <BirthGate />
+      {deed?.startsWith('smith:') && <RunesmithPanel seat={deed.slice(6) as Seat} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} />}
       {deed?.startsWith('front:') && <ShopPanel id={deed.slice(6)} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} isTouch={isTouch} />}
-      {deed && !deed.startsWith('front:') && R && tycoon.t && (
+      {deed && !deed.startsWith('front:') && !deed.startsWith('smith:') && R && tycoon.t && (
         <DeedCard R={R} lotId={deed} t={tycoon.t} marks={ledger.marks} onClose={() => setDeed(null)}
           onBuy={o => { const r = tycoon.buy(o.lot.id, o.kind, o.lot.tier); if (r.ok) hudSay(`${o.name} is yours · −${o.price.toLocaleString()} Marks`, 'item'); return r }}
           onSell={o => { const r = tycoon.sell(o.lot.id); if (r.ok) { hudSay(`${o.name} sold · +${(r.refund ?? 0).toLocaleString()} Marks`, 'item'); setDeed(null) } return r }} />

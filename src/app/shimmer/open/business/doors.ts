@@ -1,0 +1,56 @@
+// THE DOORS YOU CAN E on the waking continent (play lane, 2026-11-16). PURE (node-safe): which buildings carry a lit
+// door and what is behind each. MarketView (market-view.tsx) draws them and handles reach; the page routes the key:
+//   · a market lot (key = its lot id) → the deed card
+//   · a canon storefront (key `front:<id>`) → its panel (shop-panel.tsx)
+//   · a school seat's runesmith (key `smith:<seat>`) → the runesmith's counter (smith-panel.tsx)
+import type { Region } from '../region'
+import { cachedPlan } from '../foot-solids'
+import type { Building } from '../towns/plan'
+import { shopDoorPoint } from '../towns/shop-door'
+import { marketFor, type Offer } from './market'
+import { SEATS, type Seat } from './letters'
+
+export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple'
+export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: string }> = {
+  'kindled-mug': { name: 'The Kindled Mug', kind: 'tavern', line: 'A tavern on the square.' },
+  'forgelight-inn': { name: 'The Forgelight Inn', kind: 'inn', line: 'Iron fixtures and forge-warmed walls.' },
+  smithy: { name: 'The Smithy', kind: 'smithy', line: 'Steam and the smell of hot metal.' },
+  'spirit-corner': { name: 'The Spirit Corner', kind: 'cafe' },
+  bookstore: { name: "Eyuun's Bookstore", kind: 'books', line: "The house of tales. The world's stories, read and heard." },
+  station: { name: 'Travelers Station', kind: 'station' },
+  'enchant-temple': { name: 'Enchant Temple', kind: 'temple', line: 'Permanent imbuing, by twin hands.' },
+  'grand-exchange': { name: 'The Grand Exchange', kind: 'exchange', line: 'The trade at the centre of the capital.' },
+}
+
+/** a door you can E: a market lot (key = lot id → the deed card) or a canon storefront (key = `front:<id>` → its panel) */
+export interface Door { key: string; b: Building; name: string; at: { x: number; y: number; z: number }; offer?: Offer }
+
+/** every door in a town: its market's lots + the storefronts the town kit stands (not the Fallen Cap: its own hall) */
+function doorsOf(R: Region, townId: string): Door[] {
+  const i = R.meta.places.findIndex(p => p.id === townId)
+  const out: Door[] = marketFor(R, townId).map(o => ({ key: o.lot.id, b: o.b, name: o.name, at: shopDoorPoint(o.b), offer: o }))
+  if (i >= 0) for (const b of cachedPlan(R, i).buildings) if (b.front && FRONT_SHOPS[b.front]) out.push({ key: `front:${b.front}`, b, name: FRONT_SHOPS[b.front].name, at: shopDoorPoint(b) })
+  // a RUNESMITH at a school's seat (business/letters.ts SEATS): the town's building nearest its heart that is not already
+  // a storefront or a market lot (Veradyn: nearest the Barrier Temple's isle). Jin's placement; Alex can pick another.
+  const seat = (Object.keys(SEATS) as Seat[]).find(k => k !== 'enchant' && SEATS[k].place === townId)
+  if (seat && i >= 0) {
+    const plan = cachedPlan(R, i), taken = new Set(out.map(d => d.b))
+    const at = plan.temple ?? { x: plan.buildings.length ? plan.buildings.reduce((a, b) => a + b.x, 0) / plan.buildings.length : R.meta.places[i].x, z: plan.buildings.length ? plan.buildings.reduce((a, b) => a + b.z, 0) / plan.buildings.length : R.meta.places[i].z }
+    const b = plan.buildings.filter(x => !x.front && !taken.has(x)).sort((p, q) => Math.hypot(p.x - at.x, p.z - at.z) - Math.hypot(q.x - at.x, q.z - at.z))[0]
+    if (b) out.push({ key: `smith:${seat}`, b, name: `${SEATS[seat].name} runesmith`, at: shopDoorPoint(b) })
+  }
+  return out
+}
+const doorCache = new WeakMap<Region, Map<string, Door[]>>()
+export function doorsCached(R: Region, townId: string): Door[] {
+  let m = doorCache.get(R); if (!m) doorCache.set(R, m = new Map())
+  let d = m.get(townId); if (!d) m.set(townId, d = doorsOf(R, townId))
+  return d
+}
+export function doorByKey(R: Region, key: string): Door | undefined {
+  const town = key.startsWith('front:') || key.startsWith('smith:') ? undefined : key.split(':')[0]
+  if (town) return doorsCached(R, town).find(d => d.key === key)
+  for (const p of R.meta.places) { const d = doorsCached(R, p.id).find(x => x.key === key); if (d) return d }
+  return undefined
+}
+

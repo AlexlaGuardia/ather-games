@@ -12,10 +12,8 @@ import * as THREE from 'three'
 import type { Region } from '../region'
 import { BusinessDress } from './business-dress'
 import { marketFor, offerById, type Offer } from './market'
-import { FRONT_SHOPS } from './shop-panel'
-import { ShopDoor, shopDoorPoint } from '../towns/shop-door'
-import { cachedPlan } from '../foot-solids'
-import type { Building } from '../towns/plan'
+import { doorsCached, doorByKey, type Door } from './doors'
+import { ShopDoor } from '../towns/shop-door'
 import { BIZ, MAX_OWNED, RESALE, rateOf, canBuy, type Owned, type Tycoon } from '../economy/tycoon'
 import { hudSay } from '../shared/game-hud'
 import { HearthFrame, H, hearthDisplay, HearthButton } from '../../ui/hearth'
@@ -25,29 +23,6 @@ const DRESS_REACH = 700
 /** reach of a door's step stone (towns/shop-door.tsx shopDoorPoint), on foot */
 const REACH = 2.4
 const WALK_OFF = 8
-
-/** a door you can E: a market lot (key = lot id → the deed card) or a canon storefront (key = `front:<id>` → its panel) */
-interface Door { key: string; b: Building; name: string; at: { x: number; y: number; z: number }; offer?: Offer }
-
-/** every door in a town: its market's lots + the storefronts the town kit stands (not the Fallen Cap: its own hall) */
-function doorsOf(R: Region, townId: string): Door[] {
-  const i = R.meta.places.findIndex(p => p.id === townId)
-  const out: Door[] = marketFor(R, townId).map(o => ({ key: o.lot.id, b: o.b, name: o.name, at: shopDoorPoint(o.b), offer: o }))
-  if (i >= 0) for (const b of cachedPlan(R, i).buildings) if (b.front && FRONT_SHOPS[b.front]) out.push({ key: `front:${b.front}`, b, name: FRONT_SHOPS[b.front].name, at: shopDoorPoint(b) })
-  return out
-}
-const doorCache = new WeakMap<Region, Map<string, Door[]>>()
-function doorsCached(R: Region, townId: string): Door[] {
-  let m = doorCache.get(R); if (!m) doorCache.set(R, m = new Map())
-  let d = m.get(townId); if (!d) m.set(townId, d = doorsOf(R, townId))
-  return d
-}
-export function doorByKey(R: Region, key: string): Door | undefined {
-  const town = key.startsWith('front:') ? undefined : key.split(':')[0]
-  if (town) return doorsCached(R, town).find(d => d.key === key)
-  for (const p of R.meta.places) { const d = doorsCached(R, p.id).find(x => x.key === key); if (d) return d }
-  return undefined
-}
 
 export function MarketView({ R, focus, owned, enabled, onOpen, onReach, open, onWalkOff }: {
   R: Region; focus: React.MutableRefObject<THREE.Vector3>; owned: Owned[]
