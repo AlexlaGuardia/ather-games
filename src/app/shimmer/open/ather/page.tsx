@@ -555,7 +555,7 @@ export default function AtherSlice() {
   useEffect(() => { postEntries('errand', errandEntries(errandStage, birth, { greg: { x: GREG.x, z: GREG.z } })) }, [errandStage, birth])
   const seat = birthSeat(birth)
   const gregErrand = {
-    stage: errandStage, seatName: seat ? SEATS[seat].name : '', where: seat ? SEATS[seat].where : '',
+    stage: errandStage, seatName: seat ? SEATS[seat].name : '', where: seat ? SEATS[seat].where : '', citadel: seat === 'enchant',
     onTake: () => {
       if (!birth || gemsGiven()) return
       const g = gregsGems(getInv(), birth)

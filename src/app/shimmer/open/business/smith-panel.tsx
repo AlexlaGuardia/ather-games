@@ -10,6 +10,7 @@ import { countOf, itemDef } from '../shared/inventory'
 import { useBirth } from '../birth-gate'
 import { RUNES } from '../../play3d/birth/runes.data'
 import type { Ledger } from '../trade'
+import { RUNESMITH_CUT, idonyBeat, IDONY_AFTER, type Beat } from './errand-lines'
 import { SEATS, lettersAt, recipeOf, canCut, cut, hasBlueprint, letterItem, CUT_FEE, IMBUE_FEE, imbuable, wordsFor, missingLetters, lightsFor, imbue, type Seat } from './letters'
 
 const runeName = (id: string) => RUNES.find(r => r.id === id)?.name ?? id
@@ -25,6 +26,7 @@ export function RunesmithPanel({ seat, ledger, setLedger, onClose, onBack }: {
     const r = cut(inv, ledger.marks, seat, rune)
     if (!r.ok) { setMsg(r.why); return }
     setInv(r.inv); setLedger({ ...ledger, marks: r.marks }); setMsg(null)
+    hudSay(`Runesmith: ${RUNESMITH_CUT}`, 'chat')
     hudSay(`${runeName(rune)} letter cut · −${CUT_FEE} Marks`, 'item')
   }
   return (
@@ -68,13 +70,29 @@ export function IdonyPanel({ ledger, setLedger, onClose, onBack }: { ledger: Led
   // the words this keeper could have now first (letters in the bag), then the rest; lit words first within each
   const words = v ? wordsFor(v.kind).map(w => ({ ...w, miss: missingLetters(inv, w.letters), lit: lightsFor(w.letters, birth) }))
     .sort((a, b) => (a.miss.length - b.miss.length) || (Number(b.lit) - Number(a.lit)) || a.name.localeCompare(b.name)) : []
-  const doImbue = (wordId: string) => {
+  // the imbue is a scene (lark, signed 11-16): she works in silence, stops at the last seat, and the keeper SAYS the word
+  // before the cord closes. The vessel lights on the word, so the imbue lands on the keeper's line, not on the button.
+  const [beat, setBeat] = useState<{ wordId: string; steps: Beat[]; at: number } | null>(null)
+  const commit = (wordId: string) => {
     if (!v) return
     const r = imbue(loadout, inv, ledger.marks, v.id, wordId)
-    if (!r.ok) { setMsg(r.why); return }
+    if (!r.ok) { setMsg(r.why); setBeat(null); return }
     setLoadout(r.loadout); setInv(r.inv); setLedger({ ...ledger, marks: r.marks }); setMsg(null)
     hudSay(`${r.name} imbued · −${IMBUE_FEE} Marks · wear it from the Character tab (P)`, 'item')
   }
+  const doImbue = (wordId: string) => {
+    if (!v) return
+    const w = words.find(x => x.id === wordId); if (!w || w.miss.length) return
+    setBeat({ wordId, steps: idonyBeat(w.name, v.id === 'starter-bracelet'), at: 0 })
+  }
+  const step = () => {
+    if (!beat) return
+    const cur = beat.steps[beat.at]
+    if (cur.keeper) commit(beat.wordId)                       // the keeper says it: the last stone closes
+    if (beat.at + 1 >= beat.steps.length) { setBeat(null); return }
+    setBeat({ ...beat, at: beat.at + 1 })
+  }
+  const done = !loadout.vessels.some(x => x.id === 'starter-bracelet' && x.word === null)
   return (
     <HearthFrame title="Idony · vessels inscribed" maxWidth={540} onClose={onClose} fixed dataPanel="idony-panel"
       head={
@@ -84,7 +102,22 @@ export function IdonyPanel({ ledger, setLedger, onClose, onBack }: { ledger: Led
         </div>
       }
       footer={<span className="text-[12px]" style={hearthDisplay}>A glove&apos;s word is earned, not cut. A word off your lane stays dark for you.</span>}>
-      <div className="px-4 pt-3 pb-4">
+      <div className="px-4 pt-3 pb-4 relative">
+        {beat && (() => {
+          const cur = beat.steps[beat.at]
+          return (
+            <div className="absolute inset-0 z-20 grid place-items-center px-4" style={{ background: 'rgba(40,24,12,.30)' }} data-beat={beat.at}>
+              <div className="rounded-[14px] px-4 py-4 max-w-[420px] w-full" style={{ background: H.paperHi, boxShadow: '0 10px 24px rgba(0,0,0,.4)' }}>
+                {cur.scene && <p className="text-[13px] italic" style={{ ...hearthDisplay, color: H.inkSoft }}>{cur.scene}</p>}
+                {cur.idony && <p className="text-[16px] mt-2" style={{ ...hearthDisplay, color: H.ink }}><b>Idony:</b> {cur.idony}</p>}
+                <div className="flex justify-end mt-3">
+                  <HearthButton small primary onClick={step}>{cur.keeper ? `Say it: “${cur.keeper}”` : beat.at + 1 >= beat.steps.length ? 'Take the bracelet' : '…'}</HearthButton>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+        {done && !beat && <p className="text-[13px] italic mb-2" style={{ ...hearthDisplay, color: H.inkSoft }} data-idony-after><b>Idony:</b> {IDONY_AFTER}</p>}
         {!vessels.length ? <p className="text-[14px]" style={{ ...hearthDisplay, color: H.inkSoft }} data-idony-empty>No blank bracelet to inscribe.</p> : (
           <>
             <div className="flex gap-2 flex-wrap mb-3">

@@ -1085,8 +1085,9 @@ export default function ContinentRide() {
     const seat = birthSeat(errBirth)
     const smith = seat === 'enchant' ? doorByKey(R, 'front:enchant-temple') : seat ? doorByKey(R, `smith:${seat}`) : undefined
     const temple = doorByKey(R, 'front:enchant-temple')
-    postEntries('errand', errandEntries(errStage, errBirth, { smith: smith ? { x: smith.at.x, z: smith.at.z } : null, temple: temple ? { x: temple.at.x, z: temple.at.z } : null }))
-  }, [R, errStage, errBirth])
+    const word = errLoadout.vessels.find(v => v.id === 'starter-bracelet')?.label.replace(/ bracelet$/, '') ?? null
+    postEntries('errand', errandEntries(errStage, errBirth, { smith: smith ? { x: smith.at.x, z: smith.at.z } : null, temple: temple ? { x: temple.at.x, z: temple.at.z } : null }, word))
+  }, [R, errStage, errBirth, errLoadout])
   // the journal: a Co. contract in hand is the keeper's open line on the continent (pack.tsx › Journal)
   useEffect(() => {
     const a = ledger.active

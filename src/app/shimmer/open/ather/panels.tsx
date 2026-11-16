@@ -3,6 +3,7 @@
 // The two panels the plot opens: the GATE's fold map (fast travel through the fold network) and GREGORY's ground
 // (buy garden squares with grey matter, once the grimoire allows the ring). Flat DOM over the canvas.
 
+import { gregSendOff, gregRepeat } from '../business/errand-lines'
 import { useEffect, useRef } from 'react'
 import { tileCentreWorld, type Wilds } from './wilds'
 import { atherPlate } from './plate'
@@ -194,7 +195,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
 
 /** the first errand at Greg's (business/errand.ts): he hands the gems for the birth letter, then points the way.
  *  Neutral copy until lark's lines land (CANON/game/first-errand-citadel-script.md, a DRAFT for Alex). */
-export interface GregErrand { stage: 'none' | 'greg' | 'smith' | 'temple' | 'done'; seatName: string; where: string; onTake: () => void }
+export interface GregErrand { stage: 'none' | 'greg' | 'smith' | 'temple' | 'done'; seatName: string; where: string; citadel: boolean; onTake: () => void }
 export function GregPanel({ garden, onBuy, onClose, errand }: { garden: Garden; onBuy: (i: number, j: number) => void; onClose: () => void; errand?: GregErrand }) {
   const owned = new Set(garden.owned)
   const size = GRIMOIRE_SIZE(garden.pages)
@@ -206,12 +207,17 @@ export function GregPanel({ garden, onBuy, onClose, errand }: { garden: Garden; 
           <div data-errand={errand.stage} style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 10, background: 'rgba(224,130,63,.12)', boxShadow: 'inset 0 0 0 1.5px rgba(224,130,63,.55)' }}>
             <div style={{ ...label, marginBottom: 4 }}>Your first letter</div>
             {errand.stage === 'greg' ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
-                <span style={{ lineHeight: 1.5 }}>Gregory has the gems for your birth letter: a Blankstone, two raw shards and your element&apos;s crystal.</span>
-                <button type="button" data-errand-take onClick={errand.onTake} style={{ border: 0, borderRadius: 999, padding: '6px 14px', background: '#e0823f', color: '#fff', font: '700 12px system-ui', cursor: 'pointer', whiteSpace: 'nowrap' }}>Take them</button>
+              <div style={{ display: 'grid', gap: 8 }}>
+                <div style={{ fontStyle: 'italic', opacity: 0.75 }}>Greg sets a plain stone and a small handful of gems in your palm and closes your fingers over them.</div>
+                {gregSendOff(errand.seatName, errand.where, errand.citadel).map((l, k) => <div key={k} data-greg-line style={{ lineHeight: 1.5 }}><b>Greg:</b> {l}</div>)}
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button type="button" data-errand-take onClick={errand.onTake} style={{ border: 0, borderRadius: 999, padding: '6px 14px', background: '#e0823f', color: '#fff', font: '700 12px system-ui', cursor: 'pointer', whiteSpace: 'nowrap' }}>Take them</button>
+                </div>
               </div>
+            ) : errand.stage === 'smith' ? (
+              <span style={{ lineHeight: 1.5 }} data-greg-line><b>Greg:</b> {gregRepeat(errand.where)}</span>
             ) : (
-              <span style={{ lineHeight: 1.5 }}>{errand.stage === 'smith' ? <>Have the letter cut by the <b>{errand.seatName} runesmith</b> in {errand.where}, then take it to the <b>Enchant Temple</b> in the Citadel.</> : <>Take your letter to the <b>Enchant Temple</b> in the Citadel.</>}</span>
+              <span style={{ lineHeight: 1.5 }}>Take your letter to the <b>Enchant Temple</b> in the Citadel.</span>
             )}
           </div>
         )}

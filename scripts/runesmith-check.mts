@@ -52,6 +52,15 @@ await p.click('[data-counter="Idony"]'); await wait(800)
 ok(await poll(async () => !!(await p.$(`[data-panel="idony-panel"] [data-word="${word.id}"][data-ready]`)), 15000), `Idony: ${word.name} is ready (its letter is in the bag)`)
 await p.screenshot({ path: `/tmp/smith-${++shot}.png` })
 await p.evaluate((id) => [...document.querySelectorAll<HTMLButtonElement>(`[data-word="${id}"] button`)].find(b => /Imbue/.test(b.textContent ?? ''))?.click(), word.id); await wait(1200)
+// Idony's beat (lark, signed 11-16): she works, stops at the last seat, the keeper SAYS the word, the cord closes
+const lines: string[] = []
+let said = false
+for (let k = 0; k < 12 && (await p.$('[data-beat]')); k++) {
+  const t = await p.evaluate(() => document.querySelector('[data-beat]')?.textContent ?? ''); lines.push(t)
+  if (/Say it/.test(t)) { said = true; await p.screenshot({ path: `/tmp/smith-${++shot}.png` }) }
+  await p.evaluate(() => document.querySelector<HTMLButtonElement>('[data-beat] button')?.click()); await wait(600)
+}
+ok(said && lines.some(l => /On the bench\. Say nothing yet\./.test(l)) && lines.some(l => /That first letter is yours/.test(l)) && lines.some(l => /It was only ever waiting on you/.test(l)), `Idony's beat plays, and the keeper says the word (${lines.length} steps)`)
 const lo = await p.evaluate(() => JSON.parse(localStorage.getItem('open.loadout.v1') ?? '{}'))
 ok(lo.vessels?.find((v: any) => v.id === 'starter-bracelet')?.word === word.id, `Greg's bracelet carries ${word.name}`)
 ok((await bagHas(letterItem('star'))) === 0 && (await marks()) === 1500 - CUT_FEE - IMBUE_FEE, `the letter + imbue fee spent (${await marks()} Marks left)`)

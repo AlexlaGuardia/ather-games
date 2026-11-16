@@ -6,12 +6,13 @@
 //   → in the Citadel, Idony sets it in Greg's bracelet and teaches the word (09-28 unchanged; the Temple moved 11-16).
 // ★ THE STAGE IS READ OFF FACTS, never stored as a counter that can drift: the gems-given flag, the letter in the bag,
 //   the bracelet's word. A keeper who already has a word on Greg's bracelet is done, however they got there.
-// ★ LINES: every spoken line is @lark's (CANON/game/first-errand-citadel-script.md, a DRAFT for Alex). The journal titles
-//   below are neutral system lines until those land.
+// ★ LINES: every spoken line is @lark's, SIGNED by Alex 11-16 (business/errand-lines.ts, verbatim from
+//   CANON/game/first-errand-citadel-script.md).
 import { give, countOf, type Inv } from '../shared/inventory'
 import type { Loadout } from '../shared/loadout'
 import type { JournalEntry } from '../shared/journal'
 import { RUNE_SEATS, SEATS, recipeOf, letterItem, type Seat } from './letters'
+import { journalSmith, JOURNAL_TEMPLE, journalDone } from './errand-lines'
 
 export const ERRAND_KEY = 'open.errand.v1'
 export function gemsGiven(): boolean { try { return !!JSON.parse(localStorage.getItem(ERRAND_KEY) ?? '{}').given } catch { return false } }
@@ -40,13 +41,14 @@ export function gregsGems(inv: Inv, birth: string): { inv: Inv; left: number } {
 }
 
 type At = { x: number; z: number } | null
-/** the errand's journal line for this stage. `greg` is Ather ground; `smith` / `temple` are continent doors (null where
- *  the page posting it cannot see the continent: the line still shows, the waymark waits for the continent page). */
-export function errandEntries(stage: Stage, birth: string | null, at: { greg?: At; smith?: At; temple?: At }): JournalEntry[] {
-  const seat = birthSeat(birth)
-  const where = SEATS[seat ?? 'enchant'].where
+/** the errand's journal line for this stage (lark's, signed 11-16; the 'greg' line before it is a neutral system line).
+ *  `greg` is Ather ground; `smith` / `temple` are continent doors (null where the posting page cannot see the continent:
+ *  the line still shows, the waymark waits for the continent page). `word` = the bracelet's word name once done. */
+export function errandEntries(stage: Stage, birth: string | null, at: { greg?: At; smith?: At; temple?: At }, word?: string | null): JournalEntry[] {
+  const seat = birthSeat(birth), S = SEATS[seat ?? 'enchant']
   if (stage === 'greg') return [{ id: 'errand', hand: 'keeper', title: 'See Gregory about your first letter', note: 'Gregory has the gems for your birth letter. He stands by the threshold on your plot.', where: at.greg ? { zone: 'ather', ...at.greg } : null }]
-  if (stage === 'smith') return [{ id: 'errand', hand: 'keeper', title: `Have your letter cut in ${where}`, note: `Take Gregory's gems to the ${SEATS[seat ?? 'enchant'].name} runesmith in ${where}. The letter is cut there.`, where: at.smith ? { zone: 'continent', ...at.smith } : null }]
-  if (stage === 'temple') return [{ id: 'errand', hand: 'keeper', title: 'Take your letter to the Enchant Temple', note: 'Idony, in the Enchant Temple on the Citadel square, sets the letter in Gregory\'s bracelet.', where: at.temple ? { zone: 'continent', ...at.temple } : null }]
+  if (stage === 'smith') return [{ id: 'errand', hand: 'keeper', ...journalSmith(S.short, S.name, S.where), where: at.smith ? { zone: 'continent', ...at.smith } : null }]
+  if (stage === 'temple') return [{ id: 'errand', hand: 'keeper', ...JOURNAL_TEMPLE, where: at.temple ? { zone: 'continent', ...at.temple } : null }]
+  if (stage === 'done' && word) return [{ id: 'errand', hand: 'keeper', ...journalDone(word), where: null, struck: true }]
   return []
 }
