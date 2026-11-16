@@ -27,7 +27,12 @@ for (const n of NYX_RINN) ok(itemDef(n.id).name === n.name || n.id === 'clickcla
 
 // what a level hooks, per water
 const roll = (level: number, w: NyxWater, k = 3000) => { const c: Record<string, number> = {}; for (let i = 0; i < k; i++) { const x = rollNyxRinn(level, w, rng); c[x.id] = (c[x.id] ?? 0) + 1 } return c }
-ok(Object.keys(roll(10, 'river')).join() === 'bluescale', 'river: something other than Bluescale bites in a river (canon has no other freshwater rinn yet)')
+const river10 = roll(10, 'river')
+ok(['pebblefin', 'reedperch', 'mudwhisker', 'longjaw', 'fallsleaper', 'oldplate', 'bluescale'].every(id => river10[id] > 0), `river: not every freshwater rinn bites at level 10 (${Object.keys(river10)})`)
+ok(!Object.keys(river10).some(id => ['silvergill', 'ironside', 'sea_shimmerscale'].includes(id)), 'river: a sea rinn bites in a river')
+// the cousin law: the mortal Shimmerscale / Ribboneel have their own ids and rows, the Ather's are untouched
+ok(itemDef('sea_shimmerscale').name === 'Shimmerscale' && itemDef('shimmerscale').name === 'Shimmerscale' && itemDef('sea_shimmerscale').icon !== itemDef('shimmerscale').icon, 'cousins: the two Shimmerscales share a row or an icon')
+ok(itemDef('sea_ribboneel').icon !== itemDef('ribboneel').icon, 'cousins: the two Ribboneels share an icon')
 ok(Object.keys(roll(1, 'coast')).every(id => NYX_RINN.find(n => n.id === id)!.tier === 1), 'level 1: hooked above tier 1')
 const open10 = roll(10, 'open'), coast10 = roll(10, 'coast')
 const rare = (c: Record<string, number>) => Object.entries(c).filter(([id]) => NYX_RINN.find(n => n.id === id)!.tier >= 3).reduce((a, [, v]) => a + v, 0)

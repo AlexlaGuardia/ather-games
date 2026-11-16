@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Ribboneel (the sea one): a plain slate-olive eel, a loose coil, no shimmer. Code-drawn filler. -->
+  <ellipse cx="16" cy="27.5" rx="10" ry="2.2" fill="#000" opacity=".25"/>
+  <path d="M7 11 Q3.4 16 7 20.6 Q11.6 25.6 19 23.8 Q26.4 22 25.6 15.8 Q24.8 10.6 18.6 11.4 Q13.6 12.2 14.4 16.4 Q15 19.2 18.4 18.6" fill="none" stroke="#1e2a20" stroke-width="4.6" stroke-linecap="round"/><path d="M7 11 Q3.4 16 7 20.6 Q11.6 25.6 19 23.8 Q26.4 22 25.6 15.8 Q24.8 10.6 18.6 11.4 Q13.6 12.2 14.4 16.4 Q15 19.2 18.4 18.6" fill="none" stroke="#5a6a4a" stroke-width="3.2" stroke-linecap="round"/><path d="M7 11 Q3.4 16 7 20.6 Q11.6 25.6 19 23.8 Q26.4 22 25.6 15.8 Q24.8 10.6 18.6 11.4 Q13.6 12.2 14.4 16.4 Q15 19.2 18.4 18.6" fill="none" stroke="#c8ccb0" stroke-width=".7" opacity=".45" transform="translate(.4 .9)"/><ellipse cx="7.6" cy="10.4" rx="2.6" ry="1.9" fill="#5a6a4a" stroke="#1e2a20" stroke-width=".8" transform="rotate(-30 7.6 10.4)"/><circle cx="7" cy="10" r="0.7" fill="#f6f2e6"/><circle cx="6.86" cy="10" r="0.385" fill="#1c1a18"/>
+</svg>

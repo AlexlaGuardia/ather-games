@@ -5,15 +5,14 @@
 //
 // ★ THE CATCH IS CANON'S, NOT INVENTED. Every name below is in world/rinn.md (The Shallows, Coastal Eels, Open Blue),
 //   with its line from canon's Notes column. Left out on purpose:
-//   · Shimmerscale (canon's tuna) and Ribboneel: the Ather already has bag items by those ids, drawn as their gentler
-//     dreaming cousins; one id cannot be two looks. ⚖ Magii could rule whether the dreaming cousin and the mortal one
-//     share a bag row.
+//   · ★ Shimmerscale (canon's tuna) and Ribboneel ARE here, as `sea_shimmerscale` / `sea_ribboneel` (RULED 11-16,
+//     rinn.md › Shared names across the gate: two creatures, one name each, the Ather's are the dreaming cousins). The
+//     bag tells them apart by look and line, under canon's one name; the ids keep the Ather's rows as they were.
 //   · Wavebacks ("never eaten") and Shellmound ("protected, bad luck to harm"): canon forbids taking them.
 //   · Inkpots, Sandburrowers, Spireshells: gathered off rocks and dug at low tide, not rinned.
 //   · The hunters, giants, Sky-Swimmers and the Deep: not from a shore with a rinstick.
-//   ⚖ RIVERS: canon's rinn.md is the SEA. Its one river rinn is Bluescale ("where rivers meet sea"), so river water bites
-//     only Bluescale until Magii rules freshwater rinn (logged in CANON_GAPS). Alex asked for "a few more ... for
-//     variety": that is the ask, and it is the seat's to answer, not a name to make up here.
+//   ★ RIVERS (RULED 11-16, rinn.md › Rivers & Lakes, Alex's "a few more for variety"): Pebblefin, Reedperch,
+//     Mudwhisker, Longjaw, Fallsleaper, Oldplate. Bluescale stays the river-mouth rinn (rivers and coast both).
 //
 // WATER: the continent's sea is one plane at y −0.15 (continent/page.tsx › Water); rivers are carved below it. Which
 // water a cast lands in is read from how much water lies round it: narrow water is a RIVER, wide is the COAST, and
@@ -55,6 +54,16 @@ export const NYX_RINN: NyxRinn[] = [
   r('stormrunner', 'Stormrunner', 4, 'roller', ['open'], 'Follows ships. Bright colors fade after death.'),
   r('razormouth', 'Razormouth', 4, 'darter', ['open'], 'Lightning fast. Attacks shiny objects.'),
   r('ironside', 'Ironside', 4, 'zigzag', ['open'], 'Solitary hunter. Dense flesh. Trophy catch.'),
+  // the mortal cousins of two Ather names (the same canon name; the bag's look and line tell them apart)
+  r('sea_ribboneel', 'Ribboneel', 2, 'zigzag', ['coast'], 'The sea eel, 1-2 metres. Common. Slippery, fast. Smoked eel is a delicacy.'),
+  r('sea_shimmerscale', 'Shimmerscale', 3, 'darter', ['open'], 'The ocean shimmerscale. Migratory schools. Fast, powerful. Premium meat.'),
+  // rivers and lakes (rinn.md › Rivers & Lakes)
+  r('pebblefin', 'Pebblefin', 1, 'darter', ['river'], 'Schools in shallow streams over gravel. Fried by the handful. Every river child\'s first catch.'),
+  r('reedperch', 'Reedperch', 1, 'steady', ['river'], 'Striped, bold, lives in the slow reedy bends. The everyday river supper.'),
+  r('mudwhisker', 'Mudwhisker', 2, 'sulker', ['river'], 'Whiskered bottom-feeder of slow brown water. Bites best at dusk. Ugly, sweet meat.'),
+  r('longjaw', 'Longjaw', 3, 'zigzag', ['river'], 'Ambush hunter in the weedbeds, all teeth. Fights hard. Anglers measure it with their arms.'),
+  r('fallsleaper', 'Fallsleaper', 3, 'darter', ['river'], 'Runs upriver every autumn and leaps the falls, red at the end of the run. Smoked for winter.'),
+  r('oldplate', 'Oldplate', 4, 'roller', ['river'], 'Armoured in bony plates, lives a hundred years in the deepest river pools. Rare. Its roe is a Citadel luxury.'),
 ]
 
 const TIER_WEIGHT = [0, 10, 4, 1.6, 0.35]   // as the Wilds': the table leans common

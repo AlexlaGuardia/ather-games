@@ -165,6 +165,53 @@ ICONS['ironside'] = ('Ironside: a swordfish, dark steel-blue, its long bill out 
            extra='<path d="M14 11.6 L16.4 6.4 L19 11.4 Z" fill="#3a5070" stroke="#1a2a3a" stroke-width=".6"/>'),
     grad('is', '#2a4460', '#d0dae4', '#5a7a9a'))
 
+# ── the mortal cousins of two Ather names (rinn.md › Shared names across the gate): the TUNA and the plain sea eel ──
+FINLETS = ''.join(f'<path d="M{x} 12.4 l.8 -1.2 l.6 1.2 M{x} 19.6 l.8 1.2 l.6 -1.2" fill="#f0c830" stroke="#8a6a10" stroke-width=".3"/>' for x in (19.4, 21, 22.6))
+ICONS['sea-shimmerscale'] = ('Shimmerscale (the ocean one): a tuna, dark blue back, silver flank, yellow finlets.',
+    fish(15, 16, 1.1, '#2a4a8a', '#0e1e40', '#e6eef6', '#2a3a70', H=4.6, tail='lunate', dorsal='fin', gid='tu', extra=FINLETS),
+    grad('tu', '#1a3070', '#e8eef4', '#7a98c0'))
+SEEL = 'M7 11 Q3.4 16 7 20.6 Q11.6 25.6 19 23.8 Q26.4 22 25.6 15.8 Q24.8 10.6 18.6 11.4 Q13.6 12.2 14.4 16.4 Q15 19.2 18.4 18.6'
+ICONS['sea-ribboneel'] = ('Ribboneel (the sea one): a plain slate-olive eel, a loose coil, no shimmer.',
+    f'<path d="{SEEL}" fill="none" stroke="#1e2a20" stroke-width="4.6" stroke-linecap="round"/>'
+    f'<path d="{SEEL}" fill="none" stroke="#5a6a4a" stroke-width="3.2" stroke-linecap="round"/>'
+    f'<path d="{SEEL}" fill="none" stroke="#c8ccb0" stroke-width=".7" opacity=".45" transform="translate(.4 .9)"/>'
+    '<ellipse cx="7.6" cy="10.4" rx="2.6" ry="1.9" fill="#5a6a4a" stroke="#1e2a20" stroke-width=".8" transform="rotate(-30 7.6 10.4)"/>' + eye(7, 10, 0.7), '')
+
+# ── rivers and lakes (rinn.md › Rivers & Lakes, RULED 11-16) ──────────────────────────────────────────────────
+PB = dict(body='#a8a888', dark='#40442a', belly='#eeeede', fin='#8a8a6a')
+ICONS['pebblefin'] = ('Pebblefin: a handful of little stream minnows over gravel.',
+    fish(11.4, 11.6, 0.5, **PB, H=4) + fish(20.2, 15, 0.55, **PB, H=4) + fish(11, 20.4, 0.55, **PB, H=4)
+    + '<g fill="#8a8274" opacity=".6"><circle cx="8" cy="25" r=".9"/><circle cx="14" cy="25.6" r=".7"/><circle cx="22" cy="25" r="1"/></g>', '')
+PSTRIPE = ''.join(f'<path d="M{x} 11.6 L{x-0.8} 20" stroke="#2a3a1a" stroke-width="1.1" opacity=".75"/>' for x in (10.6, 13.6, 16.6, 19.6))
+ICONS['reedperch'] = ('Reedperch: a bold striped perch, red-tipped fins.',
+    fish(15, 16, 1.0, '#a8b04a', '#3a4018', '#f4ecc0', '#d0603a', H=5.6, tail='fork', dorsal='spines', gid='rp', extra=PSTRIPE),
+    grad('rp', '#7a8a2a', '#f0e8b0', '#b8c058'))
+ICONS['mudwhisker'] = ('Mudwhisker: a whiskered brown catfish, broad flat head.',
+    fish(16, 17, 1.05, '#7a6448', '#2e2416', '#c8b490', '#5e4a32', H=4.6, tail='round', dorsal='fin', gid='mw',
+         extra='<path d="M5.4 16 Q1.6 14.4 1 11 M5.4 17 Q1.6 18.4 1.2 22 M6 15.4 Q3.6 12.4 4 9.6 M6 17.6 Q3.6 20.6 4.2 23.4" fill="none" stroke="#2e2416" stroke-width=".7" stroke-linecap="round"/>', eye_r=0.7),
+    grad('mw', '#5a4630', '#c8b490', '#7a6448'))
+PSPOTS = ''.join(f'<ellipse cx="{x}" cy="{y}" rx="1" ry=".6" fill="#e8e0a0" opacity=".85"/>' for x, y in [(10, 15), (13, 14), (16, 15.4), (19, 14.4), (22, 15.6), (12, 17.6), (17.6, 17.6)])
+ICONS['longjaw'] = ('Longjaw: a long green pike, pale spots, a duckbill jaw full of teeth.',
+    '<path d="M1.6 15.4 L6.6 15 L6.6 17 L1.8 16.6 Z" fill="#4a6a2a" stroke="#1a2a10" stroke-width=".6"/>'
+    + fish(16.6, 16, 1.2, '#5a7a32', '#1a2a10', '#e8ecc8', '#4a6a2a', H=2.8, tail='fork', dorsal='none', gid='lp',
+           extra=PSPOTS + '<path d="M22.4 13.8 Q24.4 12 25.4 13.6 L24 15 Z" fill="#4a6a2a" stroke="#1a2a10" stroke-width=".5"/>'
+                 '<path d="M2.4 16 l.4 .5 l.4 -.5 l.4 .5 l.4 -.5 l.4 .5 l.4 -.5" stroke="#fff" stroke-width=".35" fill="none"/>', eye_r=0.85),
+    grad('lp', '#3a5a1e', '#e0e6b8', '#7a9a48'))
+ICONS['fallsleaper'] = ('Fallsleaper: a salmon at the end of its run, red flank, hooked jaw, mid-leap.',
+    '<g transform="rotate(-18 16 16)">'
+    + fish(15.6, 16, 1.05, '#c84a3a', '#4a1a14', '#f0d8c8', '#8a5a4a', H=4.8, tail='fork', dorsal='fin', gid='sl',
+           extra='<path d="M5.2 15.6 Q4.4 13.4 6.4 12.6" fill="none" stroke="#4a1a14" stroke-width=".9"/>'
+                 + ''.join(f'<circle cx="{x}" cy="{y}" r=".55" fill="#3a1a14"/>' for x, y in [(12, 13), (15, 12.6), (18, 13.4), (21, 14)]))
+    + '</g><g fill="#bfe6ff" opacity=".8"><circle cx="24" cy="23" r=".9"/><circle cx="26.6" cy="21" r=".6"/><circle cx="21.4" cy="24.6" r=".6"/></g>',
+    grad('sl', '#7a8a96', '#f0d8c8', '#c84a3a'))
+PLATES = ''.join(f'<path d="M{x} 12.6 l1.1 -1.4 l1.1 1.4 Z" fill="#d8d4c4" stroke="#3a3830" stroke-width=".45"/>' for x in (8.4, 11, 13.6, 16.2, 18.8, 21.4)) + \
+         ''.join(f'<path d="M{x} 16.4 l.9 -.9 l.9 .9 l-.9 .9 Z" fill="#c8c4b4" stroke="#3a3830" stroke-width=".4"/>' for x in (10, 13, 16, 19, 22))
+ICONS['oldplate'] = ('Oldplate: a sturgeon, old and armoured, rows of bony plates, a long snout.',
+    '<path d="M1.2 15.6 L6 15 L6 17.2 Z" fill="#6a6a62" stroke="#2a2a24" stroke-width=".6"/>'
+    + fish(16.4, 16.2, 1.18, '#6a6a62', '#2a2a24', '#c8c4b4', '#5a5a52', H=3.6, tail='lunate', dorsal='none', gid='op',
+           extra=PLATES + '<path d="M5.6 18.2 l-.6 1.6 M6.6 18.4 l-.2 1.7" stroke="#2a2a24" stroke-width=".5"/>', eye_r=0.65),
+    grad('op', '#4a4a44', '#c8c4b4', '#7a7a70'))
+
 if __name__ == '__main__':
     for name, (note, body, defs) in ICONS.items():
         (OUT / f'{name}.svg').write_text(svg(note, body, defs))
