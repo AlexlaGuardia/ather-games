@@ -31,6 +31,10 @@ import { ClusterPanel, useCluster } from './cluster-panel'
 import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './cluster'
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
+import { gemsGiven, markGemsGiven, stageOf, gregsGems, errandEntries, birthSeat } from '../business/errand'
+import { SEATS } from '../business/letters'
+import { useBirth } from '../birth-gate'
+import { useLoadout } from '../shared/loadout'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree } from './wilds'
 import { loadIndex, makeWorld, stream, tileOf, zonesOf, TILE_M, type WildsWorld } from './wilds-world'
@@ -542,6 +546,24 @@ export default function AtherSlice() {
         ]
     marksRef.current = [...marksRef.current, ...questMarks(zone.kind === 'plot' ? 'ather' : 'wilds')]   // the journal's waymarks (pack.tsx)
   }, [zone, nearNodes, waymarks, journal, ww])
+  // THE FIRST ERRAND (business/errand.ts, Magii + Alex 11-16): Greg hands the birth letter's gems; the journal points to
+  // the school's runesmith, then the Enchant Temple in the Citadel (those waymarks light on the continent page)
+  const birth = useBirth(), loadoutNow = useLoadout()
+  const [given, setGiven] = useState(false)
+  useEffect(() => setGiven(gemsGiven()), [])
+  const errandStage = stageOf(birth, inv, loadoutNow, given)
+  useEffect(() => { postEntries('errand', errandEntries(errandStage, birth, { greg: { x: GREG.x, z: GREG.z } })) }, [errandStage, birth])
+  const seat = birthSeat(birth)
+  const gregErrand = {
+    stage: errandStage, seatName: seat ? SEATS[seat].name : '', where: seat ? SEATS[seat].where : '',
+    onTake: () => {
+      if (!birth || gemsGiven()) return
+      const g = gregsGems(getInv(), birth)
+      if (g.left) { hudSay('Your bag is full. Make room for the gems.', 'info'); return }
+      setInv(g.inv); markGemsGiven(); setGiven(true)
+      hudSay(`Gregory's gems · cut your letter at the ${seat ? SEATS[seat].name : ''} runesmith`, 'item')
+    },
+  }
   // the journal: the nearest infected node is the keeper's open line on this side (re-aimed as you move; unchanged posts are free)
   useEffect(() => {
     const post = () => {
@@ -690,7 +712,7 @@ export default function AtherSlice() {
           area={ww ? { world: ww, regionsByTile, cx: hereOff.x, cz: hereOff.z, tileOff, nodes: nodes.filter(n => Math.abs(n.x - hereOff.x) < 1600 && Math.abs(n.z - hereOff.z) < 1600), here: { x: pos.current.x, z: pos.current.z } } : undefined}
           onClose={() => setPanel(null)} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
-      {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
+      {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} errand={gregErrand} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       <LookChip />
       {zone.kind === 'wilds' && held === BAIT && <ReelBar api={rinApi} />}

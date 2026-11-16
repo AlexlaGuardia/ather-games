@@ -192,13 +192,29 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
   )
 }
 
-export function GregPanel({ garden, onBuy, onClose }: { garden: Garden; onBuy: (i: number, j: number) => void; onClose: () => void }) {
+/** the first errand at Greg's (business/errand.ts): he hands the gems for the birth letter, then points the way.
+ *  Neutral copy until lark's lines land (CANON/game/first-errand-citadel-script.md, a DRAFT for Alex). */
+export interface GregErrand { stage: 'none' | 'greg' | 'smith' | 'temple' | 'done'; seatName: string; where: string; onTake: () => void }
+export function GregPanel({ garden, onBuy, onClose, errand }: { garden: Garden; onBuy: (i: number, j: number) => void; onClose: () => void; errand?: GregErrand }) {
   const owned = new Set(garden.owned)
   const size = GRIMOIRE_SIZE(garden.pages)
   const nextRing = RING_PAGES.findIndex(p => garden.pages < p)
   return (
     <HearthFrame title="Gregory · your ground" maxWidth={560} onClose={onClose} fixed dataPanel="greg">
       <div style={{ padding: '26px 16px 14px', fontSize: 13 }}>
+        {errand && (errand.stage === 'greg' || errand.stage === 'smith' || errand.stage === 'temple') && (
+          <div data-errand={errand.stage} style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 10, background: 'rgba(224,130,63,.12)', boxShadow: 'inset 0 0 0 1.5px rgba(224,130,63,.55)' }}>
+            <div style={{ ...label, marginBottom: 4 }}>Your first letter</div>
+            {errand.stage === 'greg' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
+                <span style={{ lineHeight: 1.5 }}>Gregory has the gems for your birth letter: a Blankstone, two raw shards and your element&apos;s crystal.</span>
+                <button type="button" data-errand-take onClick={errand.onTake} style={{ border: 0, borderRadius: 999, padding: '6px 14px', background: '#e0823f', color: '#fff', font: '700 12px system-ui', cursor: 'pointer', whiteSpace: 'nowrap' }}>Take them</button>
+              </div>
+            ) : (
+              <span style={{ lineHeight: 1.5 }}>{errand.stage === 'smith' ? <>Have the letter cut by the <b>{errand.seatName} runesmith</b> in {errand.where}, then take it to the <b>Enchant Temple</b> in the Citadel.</> : <>Take your letter to the <b>Enchant Temple</b> in the Citadel.</>}</span>
+            )}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 18, marginBottom: 12 }}>
           <div><div style={label}>Grey matter</div><span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 16 }}>{garden.grey}</span></div>
           <div><div style={label}>Grimoire</div><span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 16 }}>{garden.pages} / {size}</span> pages</div>

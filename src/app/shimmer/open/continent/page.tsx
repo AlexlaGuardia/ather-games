@@ -17,7 +17,7 @@ import { itemDef } from '../shared/inventory'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { VesselShop, VesselCounter } from '../vessel-shop'
-import { BirthGate, getBirth } from '../birth-gate'
+import { BirthGate, getBirth, useBirth } from '../birth-gate'
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen, WALK_KEYS, type KeyRow } from '../options'
 import { getSettings, useSettings, pixelRatioCap } from '../shared/settings'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
@@ -31,6 +31,9 @@ import { useTycoon } from '../business/use-tycoon'
 import { ShopPanel } from '../business/shop-panel'
 import { RunesmithPanel } from '../business/smith-panel'
 import type { Seat } from '../business/letters'
+import { stageOf, errandEntries, birthSeat, gemsGiven } from '../business/errand'
+import { doorByKey } from '../business/doors'
+import { useLoadout } from '../shared/loadout'
 import { useNyxRinning } from './nyx-rinning'
 import { veradynFerry } from '../towns/veradyn'
 import { townDiscs } from '../towns/plan'
@@ -1074,6 +1077,16 @@ export default function ContinentRide() {
     if (r.event.kind === 'loaded') flash(`Loaded ${ledger.active.qty} ${GOODS[ledger.active.good].name}`)
     else flash(`Delivered · +${r.event.marks} Marks · +${r.event.deeds} deed${r.event.spoiled > 0.05 ? ` (${Math.round(r.event.spoiled * 100)}% spoiled)` : ''}`)
   }, [atTown, ledger, setLedger])
+  // THE FIRST ERRAND (business/errand.ts): the same journal line as the Ather, with the continent doors as its waymarks
+  const errBirth = useBirth(), errLoadout = useLoadout(), errInv = useInv()
+  const errStage = stageOf(errBirth, errInv, errLoadout, typeof window !== 'undefined' && gemsGiven())
+  useEffect(() => {
+    if (!R) return
+    const seat = birthSeat(errBirth)
+    const smith = seat === 'enchant' ? doorByKey(R, 'front:enchant-temple') : seat ? doorByKey(R, `smith:${seat}`) : undefined
+    const temple = doorByKey(R, 'front:enchant-temple')
+    postEntries('errand', errandEntries(errStage, errBirth, { smith: smith ? { x: smith.at.x, z: smith.at.z } : null, temple: temple ? { x: temple.at.x, z: temple.at.z } : null }))
+  }, [R, errStage, errBirth])
   // the journal: a Co. contract in hand is the keeper's open line on the continent (pack.tsx › Journal)
   useEffect(() => {
     const a = ledger.active
