@@ -19,7 +19,7 @@ function Keeper({ id, x, still }: { id: CompanionId; x: number; still: boolean }
   const mark = useRef<THREE.Mesh>(null)
   useFrame(({ clock }) => {
     const t = clock.elapsedTime * 0.45
-    pose.current = still ? { x, z: 0, yaw: 0.6 } : { x: x + Math.sin(t) * 2.2, z: Math.cos(t) * 2.2, yaw: -t - Math.PI / 2 }
+    pose.current = still ? { x, z: 0, yaw: Math.PI + 0.6 } : { x: x + Math.sin(t) * 2.2, z: Math.cos(t) * 2.2, yaw: -t - Math.PI / 2 }
     mark.current?.position.set(pose.current.x, 0.9, pose.current.z)
   })
   return (

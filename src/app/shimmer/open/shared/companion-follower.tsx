@@ -75,9 +75,19 @@ function speechAt(t: number): number {
   for (let i = 0; i < SPEECH.length; i++) { if (u < SPEECH[i]) { if (i % 2) return 0; const e = Math.min(u, SPEECH[i] - u); return Math.min(1, e / 0.05) } u -= SPEECH[i] }
   return 0
 }
+/** a soft round falloff, drawn once: the glow round the lantern (a hard-edged sphere read as a grey disc) */
+let dot: THREE.Texture | null = null
+function softDot(): THREE.Texture {
+  if (dot) return dot
+  const c = document.createElement('canvas'); c.width = c.height = 64
+  const g = c.getContext('2d')!, r = g.createRadialGradient(32, 32, 0, 32, 32, 32)
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.25, 'rgba(255,255,255,.45)'); r.addColorStop(1, 'rgba(255,255,255,0)')
+  g.fillStyle = r; g.fillRect(0, 0, 64, 64)
+  dot = new THREE.CanvasTexture(c); return dot
+}
 function Glowmite() {
   const root = useRef<THREE.Group>(null), wl = useRef<THREE.Mesh>(null), wr = useRef<THREE.Mesh>(null)
-  const glow = useRef<THREE.MeshStandardMaterial>(null), light = useRef<THREE.PointLight>(null), halo = useRef<THREE.Mesh>(null)
+  const glow = useRef<THREE.MeshStandardMaterial>(null), light = useRef<THREE.PointLight>(null), halo = useRef<THREE.Sprite>(null)
   useFrame(() => {
     const r = root.current; if (!r?.parent) return
     const t = (r.parent.userData.t as number) ?? 0, sp = (r.parent.userData.speed as number) ?? 0
@@ -90,7 +100,7 @@ function Glowmite() {
     const k = 0.18 + 0.82 * speechAt(t)
     if (glow.current) glow.current.emissiveIntensity = 0.6 + 3.4 * k
     if (light.current) light.current.intensity = 0.15 + 1.3 * k
-    if (halo.current) { halo.current.scale.setScalar(0.7 + 0.5 * k); (halo.current.material as THREE.MeshBasicMaterial).opacity = 0.08 + 0.22 * k }
+    if (halo.current) { halo.current.scale.setScalar(0.25 + 0.4 * k); halo.current.material.opacity = 0.15 + 0.75 * k }
   })
   return (
     <group ref={root} scale={1.6}>
@@ -102,10 +112,9 @@ function Glowmite() {
         <sphereGeometry args={[0.045, 12, 10]} />
         <meshStandardMaterial ref={glow} color="#e8ff9a" emissive="#c8ff5a" emissiveIntensity={2} roughness={0.4} toneMapped={false} />
       </mesh>
-      <mesh ref={halo} position={[0, -0.01, 0.075]}>
-        <sphereGeometry args={[0.16, 14, 10]} />
-        <meshBasicMaterial color="#d6ff7a" transparent opacity={0.2} depthWrite={false} blending={THREE.AdditiveBlending} />
-      </mesh>
+      <sprite ref={halo} position={[0, -0.01, 0.075]} scale={0.5}>
+        <spriteMaterial map={softDot()} color="#d6ff7a" transparent opacity={0.6} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+      </sprite>
       {/* wings: two thin panes, a blur of flapping */}
       <mesh ref={wl} position={[-0.03, 0.035, 0]}><planeGeometry args={[0.1, 0.05]} /><meshBasicMaterial color="#dfe9ff" transparent opacity={0.35} side={THREE.DoubleSide} depthWrite={false} /></mesh>
       <mesh ref={wr} position={[0.03, 0.035, 0]}><planeGeometry args={[0.1, 0.05]} /><meshBasicMaterial color="#dfe9ff" transparent opacity={0.35} side={THREE.DoubleSide} depthWrite={false} /></mesh>
@@ -131,8 +140,8 @@ function Gemdigger() {
     sit.current += (wantSit - sit.current) * Math.min(1, Math.min(0.05, dt) * (wantSit ? 3 : 10))
     const hop = sp > 0.3 ? Math.abs(Math.sin(t * (8 + sp * 1.6))) * Math.min(0.12, 0.03 + sp * 0.02) : 0
     b.position.y = hop
-    b.rotation.x = -sit.current * 1.15 + (sp > 0.3 ? Math.sin(t * (8 + sp * 1.6) * 2) * 0.08 : 0)
-    if (head.current) { head.current.rotation.x = sit.current * 1.0; head.current.rotation.y = sit.current * Math.sin(t * 0.7) * 0.6 }
+    b.rotation.x = sit.current * 1.15 + (sp > 0.3 ? Math.sin(t * (8 + sp * 1.6) * 2) * 0.08 : 0)
+    if (head.current) { head.current.rotation.x = -sit.current * 1.0; head.current.rotation.y = sit.current * Math.sin(t * 0.7) * 0.6 }
     if (tail.current) tail.current.rotation.x = 0.6 + Math.sin(t * 9) * (sp > 0.3 ? 0.3 : 0.08)
     gems.current.forEach((m, i) => { if (m) m.emissiveIntensity = 0.3 + Math.max(0, Math.sin(t * 2.3 + i * 2.1)) ** 8 * 3.5 })
   })
