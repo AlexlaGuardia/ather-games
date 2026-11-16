@@ -12,7 +12,19 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { Wilds, Crystal } from './wilds'
-import { CRYSTAL_KINDS, isMined, subscribeProspecting, prospectingRev, type CrystalKind } from './prospecting'
+import { CRYSTAL_KINDS, isMined, subscribeProspecting, prospectingRev, TIER, type CrystalKind } from './prospecting'
+import { dayProgress, daylight } from '../../engine/day-cycle'
+
+/** one soft round falloff for every node's glow (made once) */
+let SOFT: THREE.CanvasTexture | null = null
+function soft() {
+  if (SOFT || typeof document === 'undefined') return SOFT
+  const c = document.createElement('canvas'); c.width = c.height = 64
+  const g = c.getContext('2d')!, r = g.createRadialGradient(32, 32, 0, 32, 32, 32)
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.3, 'rgba(255,255,255,.4)'); r.addColorStop(1, 'rgba(255,255,255,0)')
+  g.fillStyle = r; g.fillRect(0, 0, 64, 64)
+  return (SOFT = new THREE.CanvasTexture(c))
+}
 
 export const CRYSTAL_LOOK: Record<CrystalKind, { color: string; glow: string; k: number; clear?: boolean }> = {
   raw:    { color: '#e8eaf2', glow: '#c8d2ff', k: 0.3 },
@@ -51,6 +63,7 @@ function chipsGeometry() {
 
 function KindMesh({ nodes, kind, cluster, chips }: { nodes: Crystal[]; kind: CrystalKind; cluster: THREE.BufferGeometry; chips: THREE.BufferGeometry }) {
   const live = useRef<THREE.InstancedMesh>(null), dead = useRef<THREE.InstancedMesh>(null), mat = useRef<THREE.MeshLambertMaterial>(null)
+  const glow = useRef<THREE.PointsMaterial>(null), next = useRef(0), night = useRef(0)
   const rev = useSyncExternalStore(subscribeProspecting, prospectingRev, () => 0)
   const L = CRYSTAL_LOOK[kind]
   useEffect(() => {
@@ -65,10 +78,20 @@ function KindMesh({ nodes, kind, cluster, chips }: { nodes: Crystal[]; kind: Cry
     })
     live.current.instanceMatrix.needsUpdate = true; dead.current.instanceMatrix.needsUpdate = true
   }, [nodes, rev, kind])
+  // the light inside: a soft glow at each LIVE node's heart, faint by day, full after dusk (worked nodes give none)
+  const glowGeo = useMemo(() => {
+    const now = Date.now(), pts = nodes.filter(c => !isMined(c.id, now))
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flatMap(c => [c.x, c.y + 0.55 * c.s, c.z]), 3))
+    return g
+  }, [nodes, rev])
+  useEffect(() => () => glowGeo.dispose(), [glowGeo])
   // the Ather Crystal pulses; the hidden one drifts through the four elements' light
   useFrame(({ clock }) => {
     const mt = mat.current; if (!mt) return
     const t = clock.elapsedTime
+    if (t > next.current) { next.current = t + 1; night.current = 1 - daylight(dayProgress()) }
+    if (glow.current) glow.current.opacity = (0.18 + 0.55 * night.current) * (kind === 'ather' ? 0.8 + 0.3 * Math.sin(t * 2.2) : 1)
     if (kind === 'ather') mt.emissiveIntensity = L.k * (0.75 + 0.35 * Math.sin(t * 2.2))
     else if (kind === 'egg') { const u = (t * 0.25) % 4, i = Math.floor(u); mt.emissive.copy(EGG_HUES[i]).lerp(EGG_HUES[(i + 1) % 4], u - i) }
   })
@@ -78,6 +101,9 @@ function KindMesh({ nodes, kind, cluster, chips }: { nodes: Crystal[]; kind: Cry
       <instancedMesh frustumCulled={false} ref={live} args={[cluster, undefined, nodes.length]}>
         <meshLambertMaterial ref={mat} color={L.color} emissive={L.glow} emissiveIntensity={L.k} flatShading transparent={!!L.clear} opacity={L.clear ? 0.88 : 1} />
       </instancedMesh>
+      <points geometry={glowGeo} frustumCulled={false}>
+        <pointsMaterial ref={glow} map={soft()} color={L.glow} size={1.2 + 0.45 * TIER[kind]} sizeAttenuation transparent opacity={0.3} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+      </points>
       <instancedMesh frustumCulled={false} ref={dead} args={[chips, undefined, nodes.length]}>
         <meshLambertMaterial color="#8a857e" flatShading />
       </instancedMesh>
