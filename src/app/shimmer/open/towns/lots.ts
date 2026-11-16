@@ -13,7 +13,7 @@ import type { Region } from '../region'
 import { cachedPlan } from '../foot-solids'
 import type { Building } from './plan'
 
-export const LOTS_VERSION = 1
+export const LOTS_VERSION = 2   // 11-16: the street-floor rule skips the steepest lots
 
 export interface Lot {
   /** `${townId}:${x}:${z}` (the footprint's centre, metres): stable for as long as the building stands where it does */

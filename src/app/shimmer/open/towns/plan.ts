@@ -36,7 +36,8 @@ export interface Building {
   /** along the street */ w: number
   /** away from the street */ d: number
   floors: number
-  /** lowest and highest ground under the footprint: the plinth fills the gap */
+  /** y0 = the lowest ground under the footprint (the plinth's foot); the FLOOR stands at y1 + 0.25. For generated houses
+   *  that floor is the street at the door + one step (ground under the back may rise above it by up to BURY) */
   y0: number; y1: number
   kind: BuildingKind
   /** 0 at the core, 1 at the town's edge */
@@ -73,6 +74,10 @@ export const LANE_GRADE = 0.25
 export const STAIR_GRADE = 0.6
 /** building ground may step this much across a footprint (the plinth shows it); steeper is not buildable */
 export const MAX_STEP = 9
+/** the floor: the ground this far out from the front wall (the street at the door), plus one low step */
+export const DOOR_OUT = 1, DOOR_STEP = 0.15
+/** how far a higher back may sink into the hill, and how far a lower back may stand up on its plinth */
+export const BURY = 3.1, DROP = 6.2   // one floor into the hill, two storeys of plinth: keeps 82% of the lots (swept 11-16)
 
 export const hash = (a: number, b: number, c = 0) => {
   let h = (a * 374761393 + b * 668265263 + c * 1440662683) ^ 0x5bd1e995
@@ -146,7 +151,7 @@ export function planTown(R: Region, p: RegionPlace, pi: number, opts?: { r?: num
   // Answers the ground span under it (the plinth) or null.
   const placed = new Map<string, Building[]>()
   const bucket = (x: number, z: number) => `${Math.floor(x / 16)},${Math.floor(z / 16)}`
-  const fits = (b: Pick<Building, 'x' | 'z' | 'yaw' | 'w' | 'd'>, gap: number, skipLane?: Lane): { y0: number; y1: number } | null => {
+  const fits = (b: Pick<Building, 'x' | 'z' | 'yaw' | 'w' | 'd'>, gap: number, skipLane?: Lane, authored = false): { y0: number; y1: number } | null => {
     const pts = footprint(b)
     let y0 = Infinity, y1 = -Infinity
     for (const [x, z] of [...pts, [b.x, b.z] as [number, number]]) {
@@ -155,13 +160,25 @@ export function planTown(R: Region, p: RegionPlace, pi: number, opts?: { r?: num
       y0 = Math.min(y0, y); y1 = Math.max(y1, y)
     }
     if (y1 - y0 > MAX_STEP) return no('steep'), null
+    // ★ THE FLOOR IS THE STREET'S (Alex 11-16: "no way to reach the entrances.. most of them have what looks like a door
+    // on the 2nd floor"). It used to be the HIGHEST ground under the footprint, so on a slope the door stood up the wall
+    // (median 1.27 m, 311 houses a full floor up, worst 8.4 m). Now the floor is the ground just outside the door plus one
+    // low step, the way Rune Hold's authored grid already sits: a higher back is buried in the hill (up to BURY), a lower
+    // back stands on its plinth (up to DROP). Past either the lot is skipped rather than drawn as a cliff house.
+    const fx = Math.cos(b.yaw), fz = Math.sin(b.yaw)
+    const street = R.heightAt(b.x + fx * (b.d / 2 + DOOR_OUT), b.z + fz * (b.d / 2 + DOOR_OUT))
+    if (!Number.isFinite(street) || street < 1.5) return no('water'), null
+    const floor = street + DOOR_STEP
+    // an authored canon place (the Fallen Cap, the Grand Exchange, the square's cottages) is never skipped for its slope
+    if (!authored && y1 - floor > BURY) return no('buried'), null
+    if (!authored && floor - y0 > DROP) return no('stilts'), null
     if (pts.some(([x, z]) => coreAt(x, z))) return no('core'), null
     if (pts.some(([x, z]) => onRoad(x, z, 0.6) || (R.tunnelAt(x, z) && R.tunnelAt(x, z)!.cover < 12))) return no('road'), null
     if (pts.some(([x, z]) => nearLane(x, z, LANE_W / 2 + 1, skipLane))) return no('lane'), null
     const grown = footprint(b, gap)
     const bx = Math.floor(b.x / 16), bz = Math.floor(b.z / 16)
     for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) for (const o of placed.get(`${bx + i},${bz + j}`) ?? []) if (quadsOverlap(grown, footprint(o))) return no('occ'), null
-    return { y0, y1 }
+    return { y0, y1: floor - 0.25 }   // renderers stand the floor at y1 + 0.25
   }
   let nearLane = (_x: number, _z: number, _m: number, _skip?: Lane): boolean => false
   const keep = (b: Building) => { plan.buildings.push(b); const k = bucket(b.x, b.z); const l = placed.get(k); if (l) l.push(b); else placed.set(k, [b]) }
@@ -212,7 +229,7 @@ export function planTown(R: Region, p: RegionPlace, pi: number, opts?: { r?: num
     for (const turn of [Math.PI, Math.PI * 0.75, Math.PI * 1.25, Math.PI / 2, Math.PI * 1.5]) {
       const a = into + turn, w = 14, d = 13, off = sq.r + 5 + d / 2
       const fc = { x: sq.x + Math.cos(a) * off, z: sq.z + Math.sin(a) * off, yaw: a + Math.PI, w, d }
-      const g = fits(fc, 5)
+      const g = fits(fc, 5, undefined, true)
       if (g) { keep({ ...fc, floors: 2, y0: g.y0, y1: g.y1, kind: 'hall', rim: 0, v: 0.3, core: true, front: 'fallen-cap' }); break }
     }
   }
@@ -220,7 +237,7 @@ export function planTown(R: Region, p: RegionPlace, pi: number, opts?: { r?: num
     const into = sq.arms.length ? sq.arms[0].ang : 0, a = into + Math.PI
     const w = 36, d = 26, off = sq.r + 3 + d / 2
     const ex = { x: sq.x + Math.cos(a) * off, z: sq.z + Math.sin(a) * off, yaw: into, w, d }
-    const g = fits(ex, 1)
+    const g = fits(ex, 1, undefined, true)
     if (g) keep({ ...ex, floors: 3, y0: g.y0, y1: g.y1, kind: 'hall', rim: 0, v: 0.5, core: true, front: 'grand-exchange' })
     wallR = sq.r + 3.5 * (big ? 30 : 32)
     plan.wall = { x: sq.x, z: sq.z, r: wallR }
@@ -231,7 +248,7 @@ export function planTown(R: Region, p: RegionPlace, pi: number, opts?: { r?: num
     for (let k = 0; k < 24; k++) {
       const a = hash(pi, k, 1) * Math.PI * 2, d = k === 0 ? 0 : 4 + k * 1.5
       const c = { x: p.x + Math.cos(a) * d, z: p.z + Math.sin(a) * d, yaw: hash(pi, 1) * Math.PI * 2, w: 7, d: 6 }
-      const g = fits(c, 1)
+      const g = fits(c, 1, undefined, true)
       if (g) { keep({ ...c, floors: 1, y0: g.y0, y1: g.y1, kind: 'cottage', rim: 0, v: hash(pi, 2) }); break }
     }
     return plan

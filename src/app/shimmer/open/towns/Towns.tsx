@@ -424,8 +424,8 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
       e.set(0, Math.PI / 2 - b.yaw, 0); q.setFromEuler(e)
       const H = b.floors * FLOOR_H, top = b.y1 + 0.25
       // plinth: from a little under the lowest corner up to the floor line
-      const ph = top - (b.y0 - 0.6)
-      p.set(b.x, b.y0 - 0.6 + ph / 2, b.z); s.set(b.w + 0.3, ph, b.d + 0.3)
+      const foot = Math.min(b.y0, top) - 0.6, ph = top - foot   // a street lower than the lot: the floor can sit under y0
+      p.set(b.x, foot + ph / 2, b.z); s.set(b.w + 0.3, ph, b.d + 0.3)
       plinths.current!.setMatrixAt(i, m.compose(p, q, s)); plinths.current!.setColorAt(i, c.set(st.plinth))
       p.set(b.x, top + H / 2, b.z); s.set(b.w, H, b.d)
       walls.current!.setMatrixAt(i, m.compose(p, q, s)); walls.current!.setColorAt(i, c.set(st.walls[Math.floor(b.v * st.walls.length) % st.walls.length]))

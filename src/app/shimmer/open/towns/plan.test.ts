@@ -16,7 +16,7 @@ const R = makeRegion(meta, new Int16Array(raw.buffer, raw.byteOffset, raw.byteLe
 const plans = planTowns(R)
 const byId = new Map(plans.map(p => [p.place, p]))
 
-import { footprint, quadsOverlap } from './plan'
+import { footprint, quadsOverlap, BURY } from './plan'
 const corners = (b: Building) => footprint(b)
 // ── every building: on land, off the roads and pads, its plinth spanning the ground under it
 let onRoad = 0, wet = 0, floating = 0, total = 0
@@ -28,12 +28,23 @@ for (const pl of plans) for (const b of pl.buildings) {
     if ((nr.road && nr.d < nr.road.width / 2) || nearPad(R, x, z, 0)) onRoad++
     // an authored (core) building's floor is its FRONT's ground and a higher back is buried in the hill: only its
     // lowest corner must be covered by the plinth
-    if (y < b.y0 - 0.01 || (!b.core && y > b.y1 + 0.01)) floating++
+    // a generated house's floor is the STREET's (+ one step): a higher back may be buried up to BURY
+    if (y < b.y0 - 0.01 || (!b.core && y > b.y1 + 0.25 + BURY + 0.01)) floating++
   }
 }
 ok(onRoad === 0, `building corners on a road or pad: ${onRoad}`)
 ok(wet === 0, `building corners in water: ${wet}`)
 ok(floating === 0, `corners outside their plinth span (float or sink): ${floating}`)
+// ── every generated house's door is at the street (Alex 11-16: doors stood a floor up the wall on slopes)
+let doorUp = 0, worstDoor = 0
+for (const pl of plans) for (const b of pl.buildings) {
+  if (b.core) continue
+  const fx = Math.cos(b.yaw), fz = Math.sin(b.yaw)
+  const g = R.heightAt(b.x + fx * (b.d / 2 + 1), b.z + fz * (b.d / 2 + 1)), gap = b.y1 + 0.25 - g
+  worstDoor = Math.max(worstDoor, Math.abs(gap))
+  if (gap < 0.05 || gap > 0.3) doorUp++
+}
+ok(doorUp === 0, `doors more than a step off the street: ${doorUp} (worst ${worstDoor.toFixed(2)} m)`)
 ok(total > 900, `towns hold ${total} buildings (want > 900)`)
 
 // ── no two buildings of a town overlap (separating-axis on the footprints)
@@ -44,7 +55,7 @@ ok(clash === 0, `overlapping buildings: ${clash}`)
 
 // ── the towns are towns
 const n = (id: string) => byId.get(id)?.buildings.length ?? 0
-ok(n('citadel') >= 180, `Citadel has ${n('citadel')} buildings (want >= 180)`)
+ok(n('citadel') >= 160, `Citadel has ${n('citadel')} buildings (want >= 160; 11-16 the street-floor rule skips its steepest lots, 235 -> 170)`)
 ok(n('gale-haven') >= 180, `Gale Haven has ${n('gale-haven')} (want >= 180)`)
 ok(n('ashfeld') >= 50, `Ashfeld has ${n('ashfeld')} (want >= 50)`)
 ok(n('rune-hold') >= 35, `Rune Hold has ${n('rune-hold')} (want >= 35)`)
