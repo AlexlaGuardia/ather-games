@@ -45,9 +45,9 @@ const FORESTRY = {
 for (const [id, def] of Object.entries(FORESTRY)) def.icon = `/open/icons/${id.replace(/_/g, '-')}.svg`
 Object.assign(OPEN_ITEMS, FORESTRY)
 // ── Rinning (ather/rinning.ts): bait to cast with, and canon's rinn (game/shimmer-skilling.md › Skill 4: names + lines).
-//    No icon art yet (the bag draws its plain chip).
+//    Icons: public/open/icons/<id with dashes>.svg, drawn by tools/art/rinn_icons.py (asleep, never dead: shimmer-resources.md).
 const catchOf = (name: string, blurb: string): ItemDef => ({ name, blurb, icon: '', stack: 99, kind: 'material' })
-Object.assign(OPEN_ITEMS, {
+const RINNING: Record<string, ItemDef> = {
   bait: { name: 'Bait', blurb: 'Hold it and click the water to cast. One bait a cast.', icon: '', stack: 99, kind: 'material' },
   shimmerscale: catchOf('Shimmerscale', 'Tiny, warm-scaled. Schools of them catch the light.'),
   clickclaw: catchOf('Clickclaw', 'Small crustacean. Clicks when annoyed. Surprisingly tasty.'),
@@ -56,7 +56,9 @@ Object.assign(OPEN_ITEMS, {
   moonkoi: catchOf('Moonkoi', 'Beautiful silver-gold. Slow, patient catch. Worth the wait.'),
   pearlshell: catchOf('Pearlshell', 'Occasionally contains a small Ather pearl.'),
   crystal_rinn: catchOf('Crystal Rinn', 'A Rinn made partly of crystallized mana. Catching one feels like holding a wish.'),
-} satisfies Record<string, ItemDef>)
+}
+for (const [id, def] of Object.entries(RINNING)) def.icon = `/open/icons/${id.replace(/_/g, '-')}.svg`
+Object.assign(OPEN_ITEMS, RINNING)
 /** Bait a new keeper starts with (and an older bag is handed once). Where more comes from is open (Alex, 11-15). */
 export const STARTING_BAIT = 10
 export const itemDef = (id: string): ItemDef => OPEN_ITEMS[id] ?? { name: id.replace(/_/g, ' '), blurb: '', icon: '', stack: 99, kind: 'material' }

@@ -1,5 +1,7 @@
 // The open world's bag (inventory.ts). Run: npx tsx src/app/shimmer/open/shared/inventory.test.ts
-import { newInv, give, take, move, split, quickMove, countOf, HOTBAR, SLOTS, itemDef } from './inventory'
+import { newInv, give, take, move, split, quickMove, countOf, HOTBAR, SLOTS, itemDef, OPEN_ITEMS } from './inventory'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -37,6 +39,11 @@ ok(s.slots.findIndex((x, i) => i !== 1 && x?.id === 'waymark') < HOTBAR, 'split:
 const q = quickMove(a, 0)
 ok(q.slots[0] === null && q.slots.findIndex(x => x?.id === 'repeater') >= HOTBAR, 'quickMove: hotbar → bag failed')
 ok(quickMove(q, q.slots.findIndex(x => x?.id === 'repeater')).slots.findIndex(x => x?.id === 'repeater') < HOTBAR, 'quickMove: bag → hotbar failed')
+
+// icons: every icon an item names is a real file in public/ (a wrong path draws a broken image, not the plain chip),
+// and every rinning item has one (they shipped blank 11-15)
+for (const [id, d] of Object.entries(OPEN_ITEMS)) if (d.icon) ok(existsSync(join(process.cwd(), 'public', d.icon)), `icon: ${id} names ${d.icon}, which is not in public/`)
+for (const id of ['bait', 'shimmerscale', 'clickclaw', 'glowfin', 'ribboneel', 'moonkoi', 'pearlshell', 'crystal_rinn']) ok(!!itemDef(id).icon, `icon: ${id} has no icon (the bag draws a blank chip)`)
 
 if (fails.length) { console.error(`inventory: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`inventory: ${pass}/0`)
