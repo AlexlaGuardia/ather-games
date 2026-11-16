@@ -84,3 +84,4 @@ tools/worldmap/out/
 # the second production slot (coord build alternates .next / .next_b; .next-active names the live one)
 .next_b
 .next-active
+.hive-state.json
