@@ -38,7 +38,7 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 | M8 | **Clean console.** Zero page errors / console errors / 4xx-5xx across every beta check | rolled into each check | 🟨 |
 | M9 | **Phone performance.** Holds frame rate on a mid phone; heap stays bounded over 30 min | new + 🔒 Alex's phone | ⬜ |
 | M10 | **Alex's sign-off pass.** He plays the first hour on his phone and calls it | 🔒 | ⬜ |
-| M11 | **One menu button on the phone HUD** (Alex 11-17: too much clutter). On a phone, MAP / PACK / OPTIONS / CAMERA / GARAGE / ROAD / FRIENDS / JOURNAL fold into ONE menu chip; tap it, the row opens; tap again or pick one, it folds. Desktop unchanged | `beta-audit-2` + `beta-audit-continent` still PASS at 390 + 360 (each panel reached via the menu chip) | ⬜ |
+| M11 | **One menu button on the phone HUD** (Alex 11-17: too much clutter). On a phone the tap row folds into ONE MENU chip; tap to open, tap again or pick one to fold. Desktop unchanged | `beta-audit-2` + `beta-audit-continent` (menu rest/open/fold asserted): PASS on prod at 390 + 360, drive + foot, 11-17 (`46ed03f3`) | ✅ |
 | M12 | **The keeper roster** (Alex 11-17, spec below). One garden file per account; several keepers in it, swapped like loadouts | per-step checks in the spec; `beta-m7-saves` stays green | ⬜ |
 
 ## M12 spec: the keeper roster (Alex 11-17, from the M7 save-loss finding)
