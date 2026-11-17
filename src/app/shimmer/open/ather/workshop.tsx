@@ -20,6 +20,7 @@ import { GROUND_Y } from './plot'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
   WALL_H, type Works, type Room, type RoomKind, type WorkNear,
+  craftAt, jobRuns, pieceRect, pieceBoxes, canPlacePiece, placePiece, pickUpPiece, turnPiece, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
@@ -27,17 +28,18 @@ import {
   MAX_CHESTS, CHEST_SLOTS, bankCap, bankUsed, bankView, BANK_TABS, deposit, depositBag, withdraw, loadBank, saveBank, freshBank,
   type Bank, type BankTab,
 } from './garden-bank'
+import { FURNITURE, FURNITURE_ORDER, REFINE, PIECE_JOBS, MAX_PIECES, type Job } from './furniture'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
 let works: Works | null = null
-const SERVER: Works = { v: 1, rooms: [], chests: [] }
+const SERVER: Works = { v: 1, rooms: [], chests: [], pieces: [] }
 const subs = new Set<() => void>()
 const getW = (): Works => { if (!works) works = typeof window === 'undefined' ? SERVER : loadWorks(); return works }
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export function setWorks(w: Works) { works = w; saveWorks(w); subs.forEach(f => f()) }
 export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER)
 /** Every room's walls and every Keepstone, for the walker's plotShape. */
-export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox)]
+export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox), ...pieceBoxes(w)]
 
 // the garden bank's store (garden-bank.ts): one pool, every chest a door into it
 let bank: Bank | null = null
@@ -48,7 +50,7 @@ export function setBank(b: Bank) { bank = b; saveBank(b); bsubs.forEach(f => f()
 export const useBank = () => useSyncExternalStore(f => { bsubs.add(f); return () => { bsubs.delete(f) } }, getB, () => SERVER_BANK)
 
 // placing: which room, its turn, and where the ghost stands now (set by the scene each frame)
-type Placing = { kind: RoomKind | 'chest'; q: number } | null
+type Placing = { kind: RoomKind | 'chest'; q: number } | { kind: 'piece'; item: string; q: number } | null
 let placing: Placing = null
 const ghost = { x: 0, z: 0 }
 const psubs = new Set<() => void>()
@@ -59,6 +61,15 @@ export const isPlacing = () => placing !== null
 /** Confirm the ghost where it stands. */
 function confirmPlace(owned: ReadonlySet<string>) {
   if (!placing) return
+  if (placing.kind === 'piece') {
+    const item = placing.item, c = placePiece(getW(), owned, getInv(), item, ghost.x, ghost.z, placing.q)
+    if (!c) { const v = canPlacePiece(getW(), owned, item, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot set it there.' : v.why, 'info'); return }
+    setInv(c.inv); setWorks(c.works)
+    // keep placing while more of the same are in the bag (a row of stools is one job, not five trips to the table)
+    if (countOf(c.inv, item) > 0) hudSay(`${FURNITURE[item].name} set · ${countOf(c.inv, item)} more in the bag · Esc stops`, 'item', 4)
+    else { setPlacing(null); hudSay(`${FURNITURE[item].name} set.`, 'item', 3) }
+    return
+  }
   if (placing.kind === 'chest') {
     const c = placeChest(getW(), owned, getInv(), ghost.x, ghost.z, placing.q)
     if (!c) { const v = canPlaceChest(getW(), owned, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot set a Keepstone there.' : v.why, 'info'); return }
@@ -107,7 +118,8 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
       <PlanningTable />
       {w.rooms.map(r => (raised(r) ? <RoomMesh key={r.id} r={r} /> : <Scaffold key={r.id} r={r} />))}
       {allChests(w).map(c => <Keepstone key={c.id} c={c} pose={pose} />)}
-      {p && (p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
+      {w.pieces.map(pc => <PieceMesh key={pc.id} p={pc} />)}
+      {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
     </>
   )
 }
@@ -153,6 +165,14 @@ function Bench({ r, x, z }: { r: Room; x: number; z: number }) {
           {/* a rinstick on its rack and a crate of the day's catch */}
           <mesh position={[-0.7, 1.35, 0.25]} rotation-z={0.5}><cylinderGeometry args={[0.03, 0.04, 1.6, 6]} /><meshLambertMaterial color="#6b4a2a" /></mesh>
           <mesh position={[0.6, 1.15, 0]}><boxGeometry args={[0.7, 0.3, 0.5]} /><meshLambertMaterial color="#6fbfb5" /></mesh>
+        </>
+      )}
+      {r.kind === 'carpentry' && (
+        <>
+          {/* a log on the bench, a saw on the wall-side, a stack of planks */}
+          <mesh position={[-0.55, 1.15, 0]} rotation-z={Math.PI / 2}><cylinderGeometry args={[0.15, 0.15, 0.9, 8]} /><meshLambertMaterial color="#b58a4e" /></mesh>
+          <mesh position={[0.15, 1.3, 0.3]} rotation-z={0.3}><boxGeometry args={[0.55, 0.16, 0.02]} /><meshLambertMaterial color="#c9ccd1" /></mesh>
+          {[0, 1, 2].map(k => <mesh key={k} position={[0.75, 1.04 + k * 0.06, 0]}><boxGeometry args={[0.7, 0.05, 0.22]} /><meshLambertMaterial color={k % 2 ? '#e2b56a' : '#d8a85c'} /></mesh>)}
         </>
       )}
     </group>
@@ -269,10 +289,48 @@ function ChestGhost({ pose, owned, q }: { pose: React.MutableRefObject<Pose>; ow
   )
 }
 
+const WOODS: Record<string, string> = { goldwood: '#d9a957', shimmeroak: '#a77a52', starwillow: '#c8d2e8', dawnwood: '#c9774a' }
+const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, number]; c: string }) => <mesh position={p}><boxGeometry args={s} /><meshLambertMaterial color={c} /></mesh>
+/** One piece, built from boxes in its wood's colour. Blockout look like the rooms. */
+function PieceBody({ item }: { item: string }) {
+  const f = FURNITURE[item], c = WOODS[f.wood], dk = '#6b4a2a'
+  const legs = (w: number, d: number, h: number, t = 0.07) => [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b], k) => <Bx key={k} p={[a * (w / 2 - t), h / 2, b * (d / 2 - t)]} s={[t, h, t]} c={c} />)
+  switch (item) {
+    case 'goldwood_stool': return <><Bx p={[0, 0.45, 0]} s={[0.46, 0.07, 0.46]} c={c} />{legs(0.4, 0.4, 0.42)}</>
+    case 'goldwood_bench': return <><Bx p={[0, 0.45, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d, 0.42, 0.09)}</>
+    case 'goldwood_table': return <><Bx p={[0, 0.76, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.72, 0.09)}</>
+    case 'planter_box': return <><Bx p={[0, 0.25, 0]} s={[f.w, 0.5, f.d]} c={c} /><Bx p={[0, 0.48, 0]} s={[f.w - 0.12, 0.06, f.d - 0.12]} c="#5a3d25" /><Bx p={[0, 0.27, 0]} s={[f.w + 0.02, 0.12, f.d + 0.02]} c="#8a6a3a" /></>
+    case 'shimmeroak_shelf': return <><Bx p={[-f.w / 2 + 0.04, f.h / 2, 0]} s={[0.07, f.h, f.d]} c={c} /><Bx p={[f.w / 2 - 0.04, f.h / 2, 0]} s={[0.07, f.h, f.d]} c={c} />{[0.1, 0.6, 1.1, 1.56].map(y => <Bx key={y} p={[0, y, 0]} s={[f.w, 0.05, f.d]} c={c} />)}<Bx p={[0, f.h / 2, -f.d / 2 + 0.02]} s={[f.w, f.h, 0.03]} c={dk} /></>
+    case 'starwillow_arch': return <><Bx p={[-f.w / 2 + 0.08, f.h / 2, 0]} s={[0.12, f.h, 0.12]} c={c} /><Bx p={[f.w / 2 - 0.08, f.h / 2, 0]} s={[0.12, f.h, 0.12]} c={c} /><Bx p={[0, f.h - 0.06, 0]} s={[f.w, 0.12, 0.14]} c={c} />{[-0.7, 0, 0.7].map(x => <mesh key={x} position={[x, f.h + 0.04, 0]}><sphereGeometry args={[0.07, 8, 6]} /><meshBasicMaterial color="#eaf2ff" /></mesh>)}</>
+    case 'dawnwood_chair': return <><Bx p={[0, 0.45, 0]} s={[0.52, 0.07, 0.52]} c={c} />{legs(0.48, 0.48, 0.42)}<Bx p={[0, 0.75, -0.23]} s={[0.52, 0.6, 0.06]} c={c} /></>
+    default: return <Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={c} />
+  }
+}
+function PieceMesh({ p }: { p: Piece }) {
+  return <group position={[p.x, GROUND_Y, p.z]} rotation-y={-p.q * Math.PI / 2}><PieceBody item={p.item} /></group>
+}
+/** The piece's ghost: the real piece, tinted, snapped to the quarter metre in front of the keeper. */
+function PieceGhost({ pose, owned, item, q }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; item: string; q: number }) {
+  const f = FURNITURE[item], g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
+  useFrame(() => {
+    const p = pose.current, ahead = Math.max(f.w, f.d) / 2 + 1.2
+    ghost.x = Math.round((p.x - Math.sin(p.yaw) * ahead) * 4) / 4; ghost.z = Math.round((p.z - Math.cos(p.yaw) * ahead) * 4) / 4
+    g.current?.position.set(ghost.x, GROUND_Y, ghost.z)
+    mat.current?.color.set(canPlacePiece(getW(), owned, item, ghost.x, ghost.z, q, getInv()).ok ? GHOST_OK : GHOST_BAD)
+  })
+  return (
+    <group ref={g} rotation-y={-q * Math.PI / 2}>
+      <PieceBody item={item} />
+      <mesh position-y={f.h / 2}><boxGeometry args={[f.w + 0.06, f.h + 0.06, f.d + 0.06]} /><meshBasicMaterial ref={mat} color={GHOST_OK} transparent opacity={0.3} depthWrite={false} /></mesh>
+    </group>
+  )
+}
+
 // ── prompts + panels ──────────────────────────────────────────────────────────────────────────────────────────
 export function workPrompt(n: WorkNear): string {
   if (n.kind === 'table') return 'E · the planning table'
   if (n.kind === 'chest') return 'E · the Keepstone'
+  if (n.kind === 'piece') { const pc = getW().pieces.find(x => x.id === n.id); return `E · ${pc ? FURNITURE[pc.item].name : 'furniture'}` }
   if (n.kind === 'raising') return `${ROOMS[n.room.kind].name} · going up (${Math.round(progress(n.room) * 100)}%)`
   return `E · the ${ROOMS[n.room.kind].name}`
 }
@@ -283,6 +341,7 @@ export function WorkshopPanel({ near, owned, onClose }: { near: WorkNear; owned:
   if (near.kind === 'table') return <TablePanel owned={owned} onClose={onClose} />
   if (near.kind === 'bench') return <BenchPanel room={near.room} onClose={onClose} />
   if (near.kind === 'chest') return <BankPanel id={near.id} onClose={onClose} />
+  if (near.kind === 'piece') return <PiecePanel id={near.id} owned={owned} onClose={onClose} />
   return null
 }
 
@@ -327,6 +386,23 @@ function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: (
             </div>
           )
         })}
+        {(() => {
+          const have = FURNITURE_ORDER.filter(id => countOf(inv, id) > 0)
+          if (!have.length) return null
+          return (
+            <div data-furnish style={{ padding: '10px 12px', borderRadius: 12, background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+              <div style={lab}>Furnish · {w.pieces.length} of {MAX_PIECES} set</div>
+              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
+                {have.map(id => (
+                  <div key={id} data-piece={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ flex: 1, fontSize: 13.5, color: H.ink }}>{FURNITURE[id].name} <span style={{ color: H.inkSoft }}>× {countOf(inv, id)}</span></span>
+                    <HearthButton small onClick={() => { setPlacing({ kind: 'piece', item: id, q: 0 }); onClose(); hudSay(`Setting the ${FURNITURE[id].name} · R turns it · E sets it · Esc stops`, 'info', 8) }}>Set</HearthButton>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
         {(() => { const short = ROOMS.rinnshop.cost.find(c => countOf(inv, c.id) < c.n); return short && !w.rooms.some(r => r.kind === 'rinnshop') ? <div style={{ fontSize: 12.5, color: H.inkSoft }}>Prune goldwood in the Wilds for logs.</div> : null })()}
       </div>
     </HearthFrame>
@@ -365,6 +441,13 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
             </div>
           </>
         )}
+        {r.kind === 'carpentry' && (
+          <>
+            <JobList title="Refine" note="A log two ways. From the room's store first, then your bag." jobs={REFINE.filter(j => benchCount(r, inv, j.in[0].id) > 0)} r={r} inv={inv}
+              empty="No logs to work. Prune trees in the Wilds; better woods come with Forestry." refine />
+            <JobList title="Furniture" note="Made pieces go to your bag. Set them from the planning table." jobs={PIECE_JOBS} r={r} inv={inv} />
+          </>
+        )}
         <div data-room-store={r.kind}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ ...lab, flex: 1 }}>The store · {store.stacks.length} / {ROOM_STORE_SLOTS} · keeps {ROOM_KEEPS[r.kind]}</div>
@@ -383,6 +466,49 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
               </div>
             </>
           )}
+        </div>
+      </div>
+    </HearthFrame>
+  )
+}
+
+/** A bench's job list: each row shows what goes in (with how many you can reach) and a Make button. */
+function JobList({ title, note, jobs, r, inv, empty, refine }: { title: string; note: string; jobs: readonly Job[]; r: Room; inv: ReturnType<typeof useInv>; empty?: string; refine?: boolean }) {
+  return (
+    <div>
+      <div style={lab}>{title}</div>
+      <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>{note}</div>
+      {jobs.length ? (
+        <div style={{ display: 'grid', gap: 6 }}>
+          {jobs.map(j => {
+            const can = jobRuns(r, inv, j) > 0
+            return (
+              <div key={j.id} data-job={j.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: H.ink }}>
+                  {j.out.n > 1 ? `${j.out.n} ` : ''}{itemDef(j.out.id).name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· {j.in.map(c => `${c.n} ${itemDef(c.id).name} (${benchCount(r, inv, c.id)})`).join(' + ')}</span>
+                </span>
+                <HearthButton small disabled={!can} onClick={() => { const m = craftAt(getW(), r.id, getInv(), j); if (m) { setWorks(m.works); setInv(m.inv) } else hudSay('No room in the bag.', 'info') }}>{refine ? j.label : 'Make'}</HearthButton>
+              </div>
+            )
+          })}
+        </div>
+      ) : <div style={{ fontSize: 13, color: H.inkSoft }}>{empty}</div>}
+    </div>
+  )
+}
+
+/** E at a piece of furniture: turn it, or pick it back up into the bag. */
+function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<string>; onClose: () => void }) {
+  const w = useWorks(), p = w.pieces.find(x => x.id === id)
+  if (!p) return null
+  const f = FURNITURE[p.item]
+  return (
+    <HearthFrame title={f.name} maxWidth={420} onClose={onClose} fixed dataPanel="piece">
+      <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
+        <div style={{ fontSize: 13, color: H.inkSoft }}>{f.blurb}</div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <span data-act="turn-piece"><HearthButton onClick={() => { const t = turnPiece(getW(), owned, id); if (t) setWorks(t); else hudSay('No room to turn it here.', 'info') }}>Turn</HearthButton></span>
+          <span data-act="pickup-piece"><HearthButton primary onClick={() => { const r = pickUpPiece(getW(), id, getInv()); if (r) { setWorks(r.works); setInv(r.inv); onClose(); hudSay(`${f.name} · back in your bag.`, 'item', 3) } else hudSay('No room in the bag for it.', 'info') }}>Pick up</HearthButton></span>
         </div>
       </div>
     </HearthFrame>

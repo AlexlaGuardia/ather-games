@@ -1,6 +1,7 @@
 // The workshop rooms core (rooms.ts). Run: npx tsx src/app/shimmer/open/ather/rooms.test.ts
-import { ROOM_STORE_SLOTS, ROOM_ACCEPTS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, loadWorks, saveWorks, ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, pickUpChest, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, type Works } from './rooms'
+import { craftAt, jobRuns, canPlacePiece, placePiece, pickUpPiece, turnPiece, pieceBoxes, pieceRect, ROOM_STORE_SLOTS, ROOM_ACCEPTS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, loadWorks, saveWorks, ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, pickUpChest, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, type Works } from './rooms'
 import { STARTING_SQUARES, squareAt, sqId, GATE, GREG, GROUND_Y } from './plot'
+import { REFINE, PIECE_JOBS, FURNITURE } from './furniture'
 import { newInv, give, countOf, HOTBAR, SLOTS, ITEM_GROUP, OPEN_ITEMS, type Inv } from '../shared/inventory'
 let pass = 0
 const fails: string[] = []
@@ -145,6 +146,61 @@ ok(!canPlaceChest(pc.works, owned, C.x + 1, C.z, 0, ks).ok, 'keepstone: set onto
   saveWorks(dirty)
   const back = loadWorks()
   ok(JSON.stringify(roomStore(back.rooms[0]).stacks) === JSON.stringify(roomStore(all.works.rooms[0]).stacks), 'save: the room store did not round-trip clean')
+}
+
+// ── the carpentry room: refine logs, make furniture, set it, turn it, pick it up ──
+{
+  ok(ROOMS.carpentry.open, 'carpentry: not buildable')
+  const cr = place(freshWorks(), owned, give(newInv(12), 'goldwood_log', 40).inv, 'carpentry', -100, 110, 0, 1000)!
+  ok(!!cr, 'carpentry: could not be placed')
+  let w = cr.works, inv = cr.inv
+  const cid = w.rooms[0].id
+  // stock 10 logs into the room, keep the rest in the bag; sawing uses the store first
+  inv = { ...inv, slots: inv.slots.map(x => x) }
+  const logsIn = countOf(inv, 'goldwood_log')
+  const at = inv.slots.findIndex(x => x?.id === 'goldwood_log')
+  const st = stockRoom(w, cid, inv, at); w = st.works; inv = st.inv
+  const inStore = roomStore(w.rooms[0]).stacks.reduce((a, x) => a + x.n, 0)
+  ok(inStore > 0 && inStore + countOf(inv, 'goldwood_log') === logsIn, 'carpentry: stocking logs lost some')
+  const saw = REFINE.find(j => j.id === 'goldwood-plank')!
+  const c1 = craftAt(w, cid, inv, saw)!
+  ok(!!c1 && countOf(c1.inv, 'goldwood_plank') === 2 && countOf(c1.inv, 'goldwood_log') === countOf(inv, 'goldwood_log') && roomStore(c1.works.rooms[0]).stacks.reduce((a, x) => a + x.n, 0) === inStore - 1, 'carpentry: saw did not take from the store first')
+  // a recipe that spans store + bag: put 1 plank in the store, 3 in the bag, a bench needs 4
+  const benchJob = PIECE_JOBS.find(j => j.id === 'goldwood_bench')!
+  const w2: Works = { ...w, rooms: w.rooms.map(r => ({ ...r, store: [{ id: 'goldwood_plank', n: 1 }] })) }
+  const bag3 = give(newInv(12), 'goldwood_plank', 3).inv
+  ok(jobRuns(w2.rooms[0], bag3, benchJob) === 1, 'carpentry: jobRuns does not count store + bag')
+  const mb = craftAt(w2, cid, bag3, benchJob)!
+  ok(!!mb && countOf(mb.inv, 'goldwood_bench') === 1 && countOf(mb.inv, 'goldwood_plank') === 0 && roomStore(mb.works.rooms[0]).stacks.length === 0, 'carpentry: a recipe across store + bag went wrong')
+  ok(craftAt(w2, cid, give(newInv(12), 'goldwood_plank', 2).inv, benchJob) === null, 'carpentry: made a bench from three planks')
+  ok(PIECE_JOBS.every(j => j.in.every(c => c.id in Object.fromEntries(REFINE.map(r => [r.out.id, 1])))), 'carpentry: a piece needs something the bench cannot refine')
+  ok(Object.values(FURNITURE).some(f => f.recipe.every(c => c.id.startsWith('goldwood'))), 'carpentry: no piece a new keeper (goldwood only) can make')
+  // set it, turn it, pick it up
+  const P2 = { x: -130, z: 100 }
+  const withBench = mb.inv
+  ok(canPlacePiece(freshWorks(), owned, 'goldwood_bench', P2.x, P2.z, 0, withBench).ok, 'piece: a clear spot was refused')
+  ok(!canPlacePiece(freshWorks(), owned, 'goldwood_bench', P2.x, P2.z, 0, newInv(12)).ok, 'piece: set without one in the bag')
+  ok(!canPlacePiece(freshWorks(), owned, 'goldwood_bench', -60, 60, 0, withBench).ok, 'piece: set off held ground')
+  ok(!canPlacePiece(freshWorks(), owned, 'goldwood_bench', STARTER_CHEST.x, STARTER_CHEST.z + 0.6, 0, withBench).ok, 'piece: set on the Keepstone')
+  const pp = placePiece(freshWorks(), owned, withBench, 'goldwood_bench', P2.x, P2.z, 0, 7)!
+  ok(!!pp && pp.works.pieces.length === 1 && countOf(pp.inv, 'goldwood_bench') === 0, 'piece: setting it did not take it from the bag')
+  ok(!canPlacePiece(pp.works, owned, 'goldwood_stool', P2.x + 0.5, P2.z, 0, give(newInv(12), 'goldwood_stool', 1).inv).ok, 'piece: two pieces in one spot')
+  ok(pieceBoxes(pp.works).length === 1, 'piece: a solid bench has no box')
+  const stoolW = placePiece(pp.works, owned, give(newInv(12), 'goldwood_stool', 1).inv, 'goldwood_stool', P2.x, P2.z + 2, 0, 8)!
+  ok(!!stoolW && pieceBoxes(stoolW.works).length === 1, 'piece: a stool blocks the walker')
+  const near = nearWork(pp.works, P2.x, P2.z + 0.9)
+  ok(near?.kind === 'piece', 'piece: E does not find it')
+  const t = turnPiece(pp.works, owned, pp.piece.id)!
+  const rr = pieceRect('goldwood_bench', P2.x, P2.z, 1)
+  ok(!!t && t.pieces[0].q === 1 && Math.abs(rr.x1 - rr.x0 - FURNITURE.goldwood_bench.d) < 1e-9, 'piece: turn did not swap the footprint')
+  const up = pickUpPiece(pp.works, pp.piece.id, pp.inv)!
+  ok(!!up && up.works.pieces.length === 0 && countOf(up.inv, 'goldwood_bench') === 1, 'piece: pick up did not return it')
+  const packed = { v: 1 as const, slots: Array(32).fill(null).map(() => ({ id: 'blankstone', n: 99 })) }
+  ok(pickUpPiece(pp.works, pp.piece.id, packed) === null, 'piece: picked up into a full bag (it would vanish)')
+  // save: pieces round-trip; a piece whose item no longer exists is dropped
+  saveWorks({ ...pp.works, pieces: [...pp.works.pieces, { id: 'ghost', item: 'no_such_thing', x: 0, z: 0, q: 0, placedAt: 0 }] })
+  const back = loadWorks()
+  ok(back.pieces.length === 1 && back.pieces[0].item === 'goldwood_bench', 'save: pieces did not round-trip clean')
 }
 
 if (fails.length) { console.error(`rooms: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A dawnwood chair. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <rect x="10" y="3" width="13" height="13" rx="1.4" fill="#c9774a" stroke="#6e3a1e" stroke-width=".8"/><rect x="9" y="15" width="15" height="3.4" rx="1.2" fill="#e39a6a" stroke="#6e3a1e" stroke-width=".8"/><rect x="10" y="18.4" width="2.6" height="8.6" rx="0.6" fill="#c9774a" stroke="#6e3a1e" stroke-width=".8"/><rect x="20.4" y="18.4" width="2.6" height="8.6" rx="0.6" fill="#c9774a" stroke="#6e3a1e" stroke-width=".8"/><rect x="12.5" y="5.5" width="8" height="1.4" rx="0.4" fill="#e39a6a" stroke="#6e3a1e" stroke-width=".8"/>
+</svg>

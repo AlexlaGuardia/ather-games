@@ -68,7 +68,7 @@ ok(CHEST_SLOTS === 48 && MAX_CHESTS === 10 && bankCap(1) === 48 && bankCap(10) =
 {
   const b: Bank = { v: 1, stacks: [{ id: 'moonkoi', n: 1 }, { id: 'goldwood_log', n: 9 }, { id: 'waymark', n: 2 }, { id: 'blankstone', n: 4 }, { id: 'mast', n: 1 }] }
   ok(bankView(b, 'all').length === 5, 'tabs: All does not show everything')
-  const tabs = ['forestry', 'rinning', 'prospecting', 'gear'] as const
+  const tabs = ['forestry', 'rinning', 'prospecting', 'decor', 'gear'] as const
   ok(b.stacks.every((_, i) => tabs.filter(t => bankView(b, t).includes(i)).length === 1), 'tabs: a stack is under no tab, or under two')
   ok(bankGroup('goldwood_log') === 'forestry' && bankGroup('mast') === 'forestry' && bankGroup('moonkoi') === 'rinning' && bankGroup('blankstone') === 'prospecting' && bankGroup('waymark') === 'gear', 'tabs: wrong skill')
   ok(JSON.stringify(bankView(b, 'all').map(i => b.stacks[i].id).slice(0, 2)) === '["goldwood_log","mast"]', 'tabs: All is not sorted by skill then name')

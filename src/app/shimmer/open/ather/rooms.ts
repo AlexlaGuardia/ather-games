@@ -16,6 +16,7 @@ import { squareAt, sqId, GATE, GREG, THRESHOLD, PATH_START, GROUND_Y } from './p
 import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, BAIT_FROM, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, type Bank } from './garden-bank'
+import { FURNITURE, MAX_PIECES, type Job } from './furniture'
 
 export type RoomKind = 'rinnshop' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
 export interface RoomDef {
@@ -37,7 +38,7 @@ export const ROOMS: Readonly<Record<RoomKind, RoomDef>> = {
   cooking:    { name: 'Cooking room', blurb: 'The hearth: roast rinn and more. Drawn up, not ready to build yet.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: false },
   alchemy:    { name: 'Alchemy room', blurb: 'Drawn up, not ready to build yet.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 120_000, open: false },
   smith:      { name: 'Smithy',     blurb: 'Works imported metal. Drawn up, not ready to build yet.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: false },
-  carpentry:  { name: 'Carpentry room', blurb: 'Drawn up, not ready to build yet.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: false },
+  carpentry:  { name: 'Carpentry room', blurb: 'Saw logs into planks and bark, and make furniture for your plot.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: true },
   stonemason: { name: 'Stonery',    blurb: 'Rubble in, stone and low gems out. Drawn up, not ready to build yet.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: false },
 }
 export const ROOM_ORDER: readonly RoomKind[] = ['rinnshop', 'cooking', 'alchemy', 'smith', 'carpentry', 'stonemason']
@@ -64,8 +65,10 @@ export interface Room {
  *  the save keep the word `chest` (the save field shipped as `chests` an hour before the ruling). `crystal` = the item
  *  set inside: the basic one is a raw mana shard; found uniques set higher crystals, look only, never more space. */
 export interface Chest { id: string; x: number; z: number; q: number; placedAt: number; crystal?: string }
-export interface Works { v: 1; rooms: Room[]; chests: Chest[] }
-export const freshWorks = (): Works => ({ v: 1, rooms: [], chests: [] })
+/** A piece of furniture or decor standing on the plot (furniture.ts). Picked up, it is the bag item `item` again. */
+export interface Piece { id: string; item: string; x: number; z: number; q: number; placedAt: number }
+export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[] }
+export const freshWorks = (): Works => ({ v: 1, rooms: [], chests: [], pieces: [] })
 
 const turned = (def: RoomDef, q: number) => (q % 2 === 0 ? { hw: def.w / 2, hd: def.d / 2 } : { hw: def.d / 2, hd: def.w / 2 })
 /** The room's ground rectangle (axis-aligned: quarter turns only). */
@@ -135,12 +138,16 @@ export function wallsOf(r: Room): Box[] {
 }
 
 /** The nearest thing the keeper can use with E, or null: the table, or a raised room's bench. */
-export type WorkNear = { kind: 'table' } | { kind: 'bench'; room: Room } | { kind: 'raising'; room: Room } | { kind: 'chest'; id: string }
+export type WorkNear = { kind: 'table' } | { kind: 'bench'; room: Room } | { kind: 'raising'; room: Room } | { kind: 'chest'; id: string } | { kind: 'piece'; id: string }
 export function nearWork(works: Works, x: number, z: number, now = Date.now()): WorkNear | null {
   if (Math.hypot(TABLE.x - x, TABLE.z - z) < TABLE_REACH) return { kind: 'table' }
   // a Keepstone and a bench can share a room: the nearer one answers E
   let best: WorkNear | null = null, bestD = Infinity
   for (const c of allChests(works)) { const d = Math.hypot(c.x - x, c.z - z); if (d < CHEST_REACH && d < bestD) { best = { kind: 'chest', id: c.id }; bestD = d } }
+  for (const p of works.pieces) {
+    const f = FURNITURE[p.item], d = Math.hypot(p.x - x, p.z - z)
+    if (f && d < Math.max(f.w, f.d) / 2 + 1 && d < bestD) { best = { kind: 'piece', id: p.id }; bestD = d }
+  }
   for (const r of works.rooms) {
     if (!raised(r, now)) { const d = doorOf(r); if (Math.hypot(d.x - x, d.z - z) < 3 && !best) return { kind: 'raising', room: r }; continue }
     const b = benchOf(r), d = Math.hypot(b.x - x, b.z - z); if (d < BENCH_REACH && d < bestD) { best = { kind: 'bench', room: r }; bestD = d }
@@ -280,6 +287,84 @@ export function makeBaitAt(w: Works, roomId: string, inv: Inv, id: string): { wo
   return left > 0 ? null : { works: setStore(w, roomId, store), inv: g.inv, made }
 }
 
+/** Work a carpentry job (or any bench job): the inputs come from the room's store first, then the bag; what is made goes
+ *  to the bag, or, if the bag is full and the room keeps it, to the store. Null when short or with nowhere to put it. */
+export function craftAt(w: Works, roomId: string, inv: Inv, job: Job): { works: Works; inv: Inv } | null {
+  const r = w.rooms.find(x => x.id === roomId)
+  if (!r) return null
+  let store = roomStore(r), bag: Inv | null = inv
+  for (const c of job.in) {
+    const inStore = store.stacks.reduce((a, s) => a + (s.id === c.id ? s.n : 0), 0)
+    if (inStore + countOf(inv, c.id) < c.n) return null
+    let need = c.n
+    const stacks = store.stacks.map(s => ({ ...s }))
+    for (const s of stacks) if (need > 0 && s.id === c.id) { const t = Math.min(need, s.n); s.n -= t; need -= t }
+    store = { v: 1, stacks: stacks.filter(s => s.n > 0) }
+    if (need > 0) { bag = bag && take(bag, c.id, need); if (!bag) return null }
+  }
+  const g = give(bag!, job.out.id, job.out.n)
+  let left = g.left
+  if (left > 0 && roomAccepts(r.kind, job.out.id)) { const p = putIn(store, ROOM_STORE_SLOTS, job.out.id, left); store = p.bank; left = p.left }
+  return left > 0 ? null : { works: setStore(w, roomId, store), inv: g.inv }
+}
+/** How many times a job could run now from the room's store and the bag together. */
+export const jobRuns = (r: Room, inv: Inv, job: Job) => Math.min(...job.in.map(c => Math.floor(benchCount(r, inv, c.id) / c.n)))
+
+// ── FURNITURE ON THE PLOT: set from the bag, picked back up (furniture.ts holds what each piece is) ────────────────
+export function pieceRect(item: string, x: number, z: number, q: number) {
+  const f = FURNITURE[item], [hw, hd] = q % 2 ? [f.d / 2, f.w / 2] : [f.w / 2, f.d / 2]
+  return { x0: x - hw, x1: x + hw, z0: z - hd, z1: z + hd }
+}
+/** The walker's boxes: solid pieces only (you walk through a stool or under an arch). */
+export const pieceBoxes = (w: Works): Box[] => w.pieces.filter(p => FURNITURE[p.item]?.solid).map(p => {
+  const k = pieceRect(p.item, p.x, p.z, p.q)
+  return { ...k, y0: GROUND_Y - 0.5, y1: GROUND_Y + FURNITURE[p.item].h }
+})
+export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: string, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
+  const f = FURNITURE[item]
+  if (!f) return { ok: false, why: 'That is not furniture.' }
+  if (works.pieces.length >= MAX_PIECES) return { ok: false, why: `${MAX_PIECES} pieces already stand on the plot.` }
+  const k = pieceRect(item, x, z, q)
+  for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
+    const s = squareAt(cx, cz); if (!s || !owned.has(sqId(s.i, s.j))) return { ok: false, why: 'Set it on ground you hold.' }
+  }
+  for (const c of KEEP_CLEAR) {
+    const px = Math.max(k.x0, Math.min(c.x, k.x1)), pz = Math.max(k.z0, Math.min(c.z, k.z1))
+    if (Math.hypot(px - c.x, pz - c.z) < c.r) return { ok: false, why: 'Too close to the gate, Gregory or the table.' }
+  }
+  const pad = 0.15, hit = (b: { x0: number; x1: number; z0: number; z1: number }) => k.x0 - pad < b.x1 && k.x1 + pad > b.x0 && k.z0 - pad < b.z1 && k.z1 + pad > b.z0
+  for (const r of works.rooms) {
+    if (wallsOf(r).some(hit)) return { ok: false, why: `In the wall of your ${ROOMS[r.kind].name}.` }
+    const d = doorOf(r), b = benchOf(r)
+    if (Math.hypot(d.x - x, d.z - z) < 1.6) return { ok: false, why: 'That blocks the doorway.' }
+    if (Math.hypot(b.x - x, b.z - z) < 1.6) return { ok: false, why: 'That crowds the bench.' }
+  }
+  if (allChests(works).map(chestBox).some(hit)) return { ok: false, why: 'Too close to a Keepstone.' }
+  if (works.pieces.some(p => hit(pieceRect(p.item, p.x, p.z, p.q)))) return { ok: false, why: 'Something already stands there.' }
+  if (inv && countOf(inv, item) < 1) return { ok: false, why: `No ${f.name} in the bag.` }
+  return { ok: true }
+}
+export function placePiece(works: Works, owned: ReadonlySet<string>, inv: Inv, item: string, x: number, z: number, q: number, now = Date.now()): { works: Works; inv: Inv; piece: Piece } | null {
+  if (!canPlacePiece(works, owned, item, x, z, q, inv).ok) return null
+  const out = take(inv, item, 1); if (!out) return null
+  const piece: Piece = { id: `piece-${now.toString(36)}-${works.pieces.length}`, item, x, z, q: ((q % 4) + 4) % 4, placedAt: now }
+  return { works: { ...works, pieces: [...works.pieces, piece] }, inv: out, piece }
+}
+export function pickUpPiece(works: Works, id: string, inv: Inv): { works: Works; inv: Inv } | null {
+  const p = works.pieces.find(x => x.id === id)
+  if (!p) return null
+  const r = give(inv, p.item, 1)
+  return r.left > 0 ? null : { works: { ...works, pieces: works.pieces.filter(x => x.id !== id) }, inv: r.inv }
+}
+/** Turn a standing piece a quarter, if it still fits where it stands. */
+export function turnPiece(works: Works, owned: ReadonlySet<string>, id: string): Works | null {
+  const p = works.pieces.find(x => x.id === id)
+  if (!p) return null
+  const rest = { ...works, pieces: works.pieces.filter(x => x.id !== id) }, q = (p.q + 1) % 4
+  if (!canPlacePiece(rest, owned, p.item, p.x, p.z, q).ok) return null
+  return { ...works, pieces: works.pieces.map(x => (x.id === id ? { ...x, q } : x)) }
+}
+
 // ── save: garden-tied (the garden is shared across a roster; Alex 11-17), registered in GARDEN_KEY_SPECS ─────────────
 export const WORKS_KEY = 'open.works.v1'
 export function loadWorks(): Works {
@@ -290,6 +375,8 @@ export function loadWorks(): Works {
         .map((r: Room) => (r.store ? { ...r, store: adoptBank({ v: 1, stacks: r.store }).stacks } : r)),
       // chests arrived after rooms (11-17): an older save has none
       chests: Array.isArray(v.chests) ? v.chests.filter((c: Chest) => c && typeof c.id === 'string' && Number.isFinite(c.x) && Number.isFinite(c.z)) : [],
+      // furniture arrived after Keepstones (11-17): an older save has none; a piece whose item is gone is dropped
+      pieces: Array.isArray(v.pieces) ? v.pieces.filter((p: Piece) => p && typeof p.id === 'string' && p.item in FURNITURE && Number.isFinite(p.x) && Number.isFinite(p.z)) : [],
     }
   } catch { /* private window */ }
   return freshWorks()

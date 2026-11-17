@@ -8,6 +8,7 @@
 // gates.md). A new item is one row in OPEN_ITEMS.
 import { NYX_RINN } from '../continent/rinning-nyx'
 import { keeperKey } from '@/lib/keeper-local'
+import { FURNITURE } from '../ather/furniture'
 
 export interface ItemDef {
   name: string
@@ -24,7 +25,7 @@ export const OPEN_ITEMS: Record<string, ItemDef> = {
 }
 /** Which skill an item comes from: the garden bank's tabs (ather/garden-bank.ts). Filled beside each table below, so a
  *  new row lands in its tab with no second list to keep. Not in here = 'gear' (guns, waymarks). */
-export type ItemGroup = 'forestry' | 'rinning' | 'prospecting'
+export type ItemGroup = 'forestry' | 'rinning' | 'prospecting' | 'decor'
 export const ITEM_GROUP: Record<string, ItemGroup> = {}
 // ── Forestry's yield (canon: game/shimmer-skilling.md › Forestry resources + design-briefs/shimmer-resources.md; the drop
 //    table is world/resources.ts › NODE_DEFS). Icons: public/open/icons/<id with dashes>.svg, drawn by tools/art/forestry_icons.py.
@@ -103,6 +104,9 @@ ITEM_GROUP.mast = 'forestry'
 // THE KEEPSTONE (RULED 11-17, athernyx 5a20b8f; glossary Keepstone): the plot's storage, an item made at the planning table and
 //    set on the plot (ather/rooms.ts). Never "chest" to a player.
 OPEN_ITEMS.keepstone = { name: 'Keepstone', blurb: 'A Blankstone pedestal with a mana shard set inside. Set it on your plot and it opens on the garden bank.', icon: '/open/icons/keepstone.svg', stack: 10, kind: 'placeable' }
+// FURNITURE + DECOR (Alex 11-17): items made in the carpentry room, set on the plot (ather/furniture.ts holds the recipes,
+//    sizes and blurbs; the blurbs await @lark). Icons: public/open/icons/<id with dashes>.svg (tools/art/furniture_icons.py).
+for (const [id, f] of Object.entries(FURNITURE)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 10, kind: 'placeable' }; ITEM_GROUP[id] = 'decor' }
 export const BAIT_FROM: Readonly<Record<string, number>> = { mast: 2, shimmerscale: 3, clickclaw: 3, glowfin: 3 }
 /** What the HUD says when the last bait is gone: where more comes from, so it is never a dead end. */
 export const NO_BAIT_LINE = 'No bait left. Make more in the bag from a small catch, or mast off a pruned tree.'

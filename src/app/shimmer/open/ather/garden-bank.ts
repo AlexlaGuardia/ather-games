@@ -74,9 +74,9 @@ export function withdraw(b: Bank, k: number, inv: Inv): { inv: Inv; bank: Bank; 
 export type BankTab = 'all' | ItemGroup | 'gear'
 export const BANK_TABS: readonly { id: BankTab; label: string }[] = [
   { id: 'all', label: 'All' }, { id: 'forestry', label: 'Forestry' }, { id: 'rinning', label: 'Rinning' },
-  { id: 'prospecting', label: 'Prospecting' }, { id: 'gear', label: 'Gear' },
+  { id: 'prospecting', label: 'Prospecting' }, { id: 'decor', label: 'Decor' }, { id: 'gear', label: 'Gear' },
 ]
-const RANK: Record<Exclude<BankTab, 'all'>, number> = { forestry: 0, rinning: 1, prospecting: 2, gear: 3 }
+const RANK: Record<Exclude<BankTab, 'all'>, number> = { forestry: 0, rinning: 1, prospecting: 2, decor: 3, gear: 4 }
 export const bankGroup = (id: string): Exclude<BankTab, 'all'> => ITEM_GROUP[id] ?? 'gear'
 
 /** Every query word must appear in the item's name or id (voxel bank's search rule). A live query ignores the tab. */
