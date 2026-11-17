@@ -33,7 +33,7 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 | M6a | **Rinning, found and played.** A keeper finds bait + the rinstick and lands a rinn without a guide | `scripts/beta-m6a-rinning.mts [--phone]`: PASS on prod desktop + phone 11-17 (`424f86f1`: phone hotbar above the touch layer, FIRE casts/answers/reels). Gaps → queue: nothing points a stranger at rinning; 10 starting bait, no refill | ✅ |
 | M6b | **Prospecting, found and played.** A keeper finds a node and cuts a gem without a guide | `prospect-check` + `scripts/beta-m6b-prospect.mts` (real BE BORN, gate fold-map tap, real click cut): both PASS on prod 11-17 (`b140ba7d`, `33c3c32c`). Gap → queue: nothing points a stranger at prospecting until they stand at a node | ✅ |
 | M6c | **A fight in the Wilds.** A keeper reaches the Wilds and wins (or survives) a fight without a guide | new | ⬜ |
-| M6d | **Buying a business.** A keeper finds a deed on the continent and buys it without a guide; it survives a reload | `market-check` (exists: Rune Hold mine, buy, reload) + a played version | ⬜ |
+| M6d | **Buying a business.** A keeper finds a deed on the continent and buys it without a guide; it survives a reload | `market-check` PASS on prod (seeded Marks). Played `scripts/beta-m6d-business.mts` (`d962506f`, seeds nothing): FAIL UNAFFORDABLE on prod 11-17, cheapest deed 35,000 (Kettlemoor small farm) vs fresh purse 1,500; only first-hour earn = courser contracts (~3 long runs). Nothing points at deeds. Pacing = Alex (queue) | 🔒 |
 | M7 | **Saves survive.** Reload, close tab, come back next day; anonymous → signed-in keeps everything | `scripts/beta-m7-saves.mts`: PASS on prod 11-17 after `d8b72da4` (open world stamps the epoch; keeper adoption site-wide). Account with a keeper already + an anonymous one = the roster (Alex's direction, queue) | ✅ |
 | M8 | **Clean console.** Zero page errors / console errors / 4xx-5xx across every beta check | rolled into each check | 🟨 |
 | M9 | **Phone performance.** Holds frame rate on a mid phone; heap stays bounded over 30 min | new + 🔒 Alex's phone | ⬜ |
@@ -103,6 +103,8 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+
+- **M6d pacing (11-17):** a fresh keeper has 1,500 Marks; the cheapest of 47 deeds is 35,000 (a lone farm nets +20/min, ~29 h payback). Only first-hour earning = Co. courser contracts (~4-12k per 15 km run). So 'buy a business in the first hour' fails as priced (you raised prices 11-15). Pick: (a) a starter lot ~3-5k, (b) richer first contracts, or (c) the first deed is a mid-game goal and M6d leaves beta. Plus a journal line pointing at deeds either way.
 
 - **✅ LIVE 11-17 (`5b3edbad`, Alex approved lark's lines): 'Rin at the water' + 'Prospect a mana crystal' in the journal, struck once used. Was:** **Discovery pointers (11-17, M6a + M6b):** neither rinning nor prospecting is told anywhere (welcome card, journal, bag) before you stumble on it; prospecting's only pointer is the HUD prompt AT a node. Proposal: @lark drafts one journal line each (the game register), you sign off, hub wires them. Yes / or your own wording?
 
