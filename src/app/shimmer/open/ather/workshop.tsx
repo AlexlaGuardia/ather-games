@@ -74,13 +74,13 @@ function confirmPlace(owned: ReadonlySet<string>) {
     const c = placeChest(getW(), owned, getInv(), ghost.x, ghost.z, placing.q, Date.now(), placing.item)
     if (!c) { const v = canPlaceChest(getW(), owned, ghost.x, ghost.z, placing.q, getInv(), placing.item); hudSay(v.ok ? 'Cannot set a Keepstone there.' : v.why, 'info'); return }
     setInv(c.inv); setWorks(c.works); setPlacing(null)
-    hudSay(`The Keepstone opens on the bank · it holds ${bankCap(chestsStanding(c.works))} stacks now.`, 'item', 5)
+    hudSay(`Keepstone set · the bank holds ${bankCap(chestsStanding(c.works))} stacks now.`, 'item', 5)
     return
   }
   const r = place(getW(), owned, getInv(), placing.kind, ghost.x, ghost.z, placing.q)
   if (!r) { const v = canPlace(getW(), owned, placing.kind, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot build there.' : v.why, 'info'); return }
   setInv(r.inv); setWorks(r.works); setPlacing(null)
-  hudSay(`${ROOMS[r.room.kind].name} · the scaffolding is up. It stands in ${Math.round(ROOMS[r.room.kind].raiseMs / 1000)} s.`, 'item', 5)
+  hudSay(`${ROOMS[r.room.kind].name} · the scaffolding is up. Ready in ${Math.round(ROOMS[r.room.kind].raiseMs / 1000)} s.`, 'item', 5)
 }
 
 /** While placing: R turns, E / Enter sets, Esc cancels. Capture phase, so the page's own E never sees these keys. */
@@ -448,13 +448,13 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
           <>
             <div>
               <div style={lab}>Bait · {countOf(inv, 'bait')} in the bag</div>
-              <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>An offering the rinn come to. One a cast. Cut from the room's store first, then your bag.</div>
+              <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>An offering the rinn come to, one per cast. Cut from the room's store first, then your bag.</div>
               {foods.length ? (
                 <div style={{ display: 'grid', gap: 6 }}>
                   {foods.map(id => (
                     <div key={id} data-bait-from={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ flex: 1, fontSize: 13.5, color: H.ink }}>{itemDef(id).name} <span style={{ color: H.inkSoft }}>× {benchCount(r, inv, id)}</span></span>
-                      <HearthButton small onClick={() => { const m = makeBaitAt(getW(), r.id, getInv(), id); if (m) { setWorks(m.works); setInv(m.inv) } else hudSay('No room for the bait.', 'info') }}>Make bait +{BAIT_FROM[id]}</HearthButton>
+                      <HearthButton small onClick={() => { const m = makeBaitAt(getW(), r.id, getInv(), id); if (m) { setWorks(m.works); setInv(m.inv) } else hudSay('No room for the bait. Clear a slot in your bag.', 'info') }}>Make bait +{BAIT_FROM[id]}</HearthButton>
                     </div>
                   ))}
                 </div>
@@ -462,14 +462,14 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
             </div>
             <div style={{ opacity: 0.6 }}>
               <div style={lab}>Rinsticks · soon</div>
-              <div style={{ fontSize: 12.5, color: H.inkSoft, marginTop: 4 }}>Built from rinn: kin calls to kin. The rack is up; the work is not ready yet.</div>
+              <div style={{ fontSize: 12.5, color: H.inkSoft, marginTop: 4 }}>Built from rinn, since kin calls to kin. The rack is up. The work comes soon.</div>
             </div>
           </>
         )}
         {r.kind === 'carpentry' && (
           <>
-            <JobList title="Refine" note="A log two ways. From the room's store first, then your bag." jobs={REFINE.filter(j => benchCount(r, inv, j.in[0].id) > 0)} r={r} inv={inv}
-              empty="No logs to work. Prune trees in the Wilds; better woods come with Forestry." refine />
+            <JobList title="Refine" note="Each log works two ways. The bench takes from the room's store first, then your bag." jobs={REFINE.filter(j => benchCount(r, inv, j.in[0].id) > 0)} r={r} inv={inv}
+              empty="No logs to work. Prune trees in the Wilds. Better woods come as your Forestry grows." refine />
             <JobList title="Furniture" note="Made pieces go to your bag. Set them from the planning table." jobs={PIECE_JOBS} r={r} inv={inv} />
           </>
         )}
@@ -562,14 +562,14 @@ function BankPanel({ id, onClose }: { id: string; onClose: () => void }) {
   const takeOut = (k: number) => { const r = withdraw(getB(), k, getInv()); if (r.moved) { setInv(r.inv); setBank(r.bank) } else hudSay('No room in the bag.', 'info') }
   const putAll = () => { const r = depositBag(getInv(), getB(), cap); if (r.moved) { setInv(r.inv); setBank(r.bank) } else hudSay(used >= cap ? 'The bank is full. Make another Keepstone at the planning table.' : 'The bag is already empty.', 'info') }
   return (
-    <HearthFrame title="The bank" maxWidth={560} onClose={onClose} fixed dataPanel="bank"
+    <HearthFrame title="The garden bank" maxWidth={560} onClose={onClose} fixed dataPanel="bank"
       footer={<span className="text-[12px]">Click a stack to move it across · shared by every keeper in your garden</span>}>
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ ...lab, flex: 1 }} data-bank-used={used} data-bank-cap={cap}>
             <span style={{ color: used > cap ? '#b5452c' : undefined }}>{used}</span> / {cap} slots · {chestsStanding(w)} of {MAX_CHESTS} Keepstones
           </div>
-          {id !== 'starter' && <span data-act="pickup-keepstone"><HearthButton small onClick={() => { const r = pickUpChest(getW(), id, getInv()); if (r) { setInv(r.inv); setWorks(r.works); onClose(); hudSay('The Keepstone is back in your bag. The bank keeps everything in it.', 'item', 4) } else hudSay('No room in the bag for it.', 'info') }}>Pick up</HearthButton></span>}
+          {id !== 'starter' && <span data-act="pickup-keepstone"><HearthButton small onClick={() => { const r = pickUpChest(getW(), id, getInv()); if (r) { setInv(r.inv); setWorks(r.works); onClose(); hudSay('Keepstone back in your bag. Nothing in the bank has moved.', 'item', 4) } else hudSay('No room in the bag for it.', 'info') }}>Pick up</HearthButton></span>}
           <span data-act="deposit-bag"><HearthButton small onClick={putAll}>Put the bag away</HearthButton></span>
         </div>
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>

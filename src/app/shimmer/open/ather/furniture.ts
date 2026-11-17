@@ -56,12 +56,12 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   //    Spine ore + stone, ruin salvage, station mana cells), so each says where it came from. Rune Hold's Smithy is the
   //    first shop a keeper reaches; the Citadel's Grand Exchange is the capital's dearer stock. Prices on the ladder's
   //    scale (economy/prices.ts: a contract run pays ~2-8k): a lantern is a run, a mana-cell lamp is a week.
-  iron_lantern: { name: 'Iron Lantern', blurb: 'Smith-wrought, on its own post. A small fire that never needs feeding.', recipe: [], sold: { at: 'smithy', price: 1_200 }, w: 0.4, d: 0.4, h: 1.9, solid: false, wood: 'iron', glow: '#ffcf7a' },
+  iron_lantern: { name: 'Iron Lantern', blurb: 'Smith-wrought iron on its own post. It throws a warm light across the plot.', recipe: [], sold: { at: 'smithy', price: 1_200 }, w: 0.4, d: 0.4, h: 1.9, solid: false, wood: 'iron', glow: '#ffcf7a' },
   iron_brazier: { name: 'Brazier', blurb: 'A bowl of hammered iron on three legs, warm to stand by.', recipe: [], sold: { at: 'smithy', price: 2_500 }, w: 0.8, d: 0.8, h: 1.0, solid: true, wood: 'iron', glow: '#ff9a4a' },
   weathervane: { name: 'Weathervane', blurb: 'An iron arrow on a tall pole. It points at the wind, wherever that is.', recipe: [], sold: { at: 'smithy', price: 4_000 }, w: 0.4, d: 0.4, h: 3.2, solid: false, wood: 'iron' },
-  spinestone_birdbath: { name: 'Spinestone Birdbath', blurb: 'Grey stone from the Spine, cut into a shallow bowl.', recipe: [], sold: { at: 'grand-exchange', price: 6_000 }, w: 0.8, d: 0.8, h: 0.9, solid: true, wood: 'stone' },
+  spinestone_birdbath: { name: 'Spinestone Bowl', blurb: 'Pale Spine stone, cut into a shallow bowl and set on a short pillar.', recipe: [], sold: { at: 'grand-exchange', price: 6_000 }, w: 0.8, d: 0.8, h: 0.9, solid: true, wood: 'stone' },
   ruin_column: { name: 'Salvaged Column', blurb: 'A carved column out of an old ruin. Nobody remembers what it held up.', recipe: [], sold: { at: 'grand-exchange', price: 9_000 }, w: 0.7, d: 0.7, h: 2.6, solid: true, wood: 'stone' },
-  mana_cell_lamp: { name: 'Mana-cell Lamp', blurb: 'A station mana cell in a brass cage. It hums very quietly.', recipe: [], sold: { at: 'grand-exchange', price: 15_000 }, w: 0.5, d: 0.5, h: 1.6, solid: false, wood: 'iron', glow: '#8fe3ff' },
+  mana_cell_lamp: { name: 'Mana-cell Lamp', blurb: 'A charged mana cell in a brass cage. It hums, very quietly.', recipe: [], sold: { at: 'grand-exchange', price: 15_000 }, w: 0.5, d: 0.5, h: 1.6, solid: false, wood: 'iron', glow: '#8fe3ff' },
 }
 export const FURNITURE_ORDER = Object.keys(FURNITURE)
 export const isPiece = (id: string) => id in FURNITURE
@@ -77,9 +77,9 @@ export const MAX_PIECES = 60
 //    more space (grade is worth and look, never power). Where they are found is Jin's: dug out of a crystal node while
 //    prospecting (ather/prospecting.ts › mine), the rarer the crystal the rarer the find. Blurbs await @lark.
 export interface KeepstoneDef { name: string; blurb: string; crystal: string }
-const found = (crystal: string, name: string, what: string): KeepstoneDef => ({ name, crystal, blurb: `An old Keepstone dug out of the rock, ${what} still set in its bowl. It opens on the same bank as any other.` })
+const found = (crystal: string, name: string, what: string): KeepstoneDef => ({ name, crystal, blurb: `Dug out of the rock with ${what} still set inside. Its light is its own. The bank is the same.` })
 export const KEEPSTONES: Readonly<Record<string, KeepstoneDef>> = {
-  keepstone: { name: 'Keepstone', crystal: 'raw_mana_shard', blurb: 'A Blankstone pedestal with a mana shard set inside. Set it on your plot and it opens on the garden bank.' },
+  keepstone: { name: 'Keepstone', crystal: 'raw_mana_shard', blurb: 'A Blankstone pedestal with a mana shard inside. Lift the top and the garden bank is there.' },
   keepstone_violet: found('violet_crystal', 'Violet Keepstone', 'a violet crystal'),
   keepstone_storm: found('storm_crystal', 'Storm Keepstone', 'a storm crystal'),
   keepstone_earth: found('earth_crystal', 'Earth Keepstone', 'an earth crystal'),

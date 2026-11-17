@@ -34,12 +34,12 @@ export interface RoomDef {
 // Costs are goldwood logs only on purpose: it is the one material a new keeper can gather (Forestry 1), and a room
 // that asks for something you cannot reach yet is a locked door, not a choice. Tune with play.
 export const ROOMS: Readonly<Record<RoomKind, RoomDef>> = {
-  rinnshop:   { name: 'Rinnshop',   blurb: 'Make bait and, soon, rinsticks. Catches are readied here for the hearth.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 16 }], raiseMs: 90_000, open: true },
-  cooking:    { name: 'Cooking room', blurb: 'The hearth: roast rinn and more. Drawn up, not ready to build yet.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: false },
-  alchemy:    { name: 'Alchemy room', blurb: 'Drawn up, not ready to build yet.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 120_000, open: false },
-  smith:      { name: 'Smithy',     blurb: 'Works imported metal. Drawn up, not ready to build yet.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: false },
-  carpentry:  { name: 'Carpentry room', blurb: 'Saw logs into planks and bark, and make furniture for your plot.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: true },
-  stonemason: { name: 'Stonery',    blurb: 'Rubble in, stone and low gems out. Drawn up, not ready to build yet.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: false },
+  rinnshop:   { name: 'Rinnshop',   blurb: 'Bait is cut here and catches readied for the hearth. Rinsticks soon.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 16 }], raiseMs: 90_000, open: true },
+  cooking:    { name: 'Cooking room', blurb: 'A hearth for cooking the catch. Drawn up, not ready to build yet.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: false },
+  alchemy:    { name: 'Alchemy room', blurb: 'Crystals, shards and saps go in here. Drawn up, not ready to build yet.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 120_000, open: false },
+  smith:      { name: 'Smithy',     blurb: 'Works metal brought over from the continent. Drawn up, not ready to build yet.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: false },
+  carpentry:  { name: 'Carpentry room', blurb: 'Saw logs, strip bark, tap sap, and make furniture for your plot.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: true },
+  stonemason: { name: 'Stonery',    blurb: 'Rubble in, stone and the lesser gems out. Drawn up, not ready to build yet.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: false },
 }
 export const ROOM_ORDER: readonly RoomKind[] = ['rinnshop', 'cooking', 'alchemy', 'smith', 'carpentry', 'stonemason']
 
@@ -90,7 +90,7 @@ export const doorOf = (r: Room) => toWorld(r, 0, -ROOMS[r.kind].d / 2)
 export type PlaceVerdict = { ok: true } | { ok: false; why: string }
 export function canPlace(works: Works, owned: ReadonlySet<string>, kind: RoomKind, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
   const def = ROOMS[kind]
-  if (!def.open) return { ok: false, why: `${def.name}: not ready to build yet.` }
+  if (!def.open) return { ok: false, why: `The ${def.name} is not ready to build yet.` }
   if (works.rooms.some(r => r.kind === kind)) return { ok: false, why: `You already have a ${def.name}.` }
   const f = footprint(kind, x, z, q)
   for (let sx = f.x0; sx <= f.x1 + 1e-6; sx += Math.min(2, f.x1 - f.x0)) for (let sz = f.z0; sz <= f.z1 + 1e-6; sz += Math.min(2, f.z1 - f.z0)) {
@@ -99,11 +99,11 @@ export function canPlace(works: Works, owned: ReadonlySet<string>, kind: RoomKin
   }
   for (const k of KEEP_CLEAR) {
     const cx = Math.max(f.x0, Math.min(k.x, f.x1)), cz = Math.max(f.z0, Math.min(k.z, f.z1))
-    if (Math.hypot(cx - k.x, cz - k.z) < k.r) return { ok: false, why: 'Too close to the gate, Gregory or the table.' }
+    if (Math.hypot(cx - k.x, cz - k.z) < k.r) return { ok: false, why: 'Leave room around the gate, Gregory and the table.' }
   }
   for (const o of works.rooms) {
     const g = footprint(o.kind, o.x, o.z, o.q)
-    if (f.x0 < g.x1 + 1 && f.x1 > g.x0 - 1 && f.z0 < g.z1 + 1 && f.z1 > g.z0 - 1) return { ok: false, why: `Overlaps your ${ROOMS[o.kind].name}.` }
+    if (f.x0 < g.x1 + 1 && f.x1 > g.x0 - 1 && f.z0 < g.z1 + 1 && f.z1 > g.z0 - 1) return { ok: false, why: `Too close to your ${ROOMS[o.kind].name}.` }
   }
   if (inv) { const short = def.cost.find(c => countOf(inv, c.id) < c.n); if (short) return { ok: false, why: `Needs ${short.n} ${short.id.replace(/_/g, ' ')} (you have ${countOf(inv, short.id)}).` } }
   return { ok: true }
@@ -178,14 +178,14 @@ export function chestBox(c: Pick<Chest, 'x' | 'z' | 'q'>): Box {
   return { x0: c.x - hw, x1: c.x + hw, y0: GROUND_Y - 0.5, y1: GROUND_Y + CHEST_H, z0: c.z - hd, z1: c.z + hd }
 }
 export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: number, z: number, q: number, inv?: Inv, item = KEEPSTONE): PlaceVerdict {
-  if (chestsStanding(works) >= MAX_CHESTS) return { ok: false, why: `${MAX_CHESTS} Keepstones already stand on the plot.` }
+  if (chestsStanding(works) >= MAX_CHESTS) return { ok: false, why: `${MAX_CHESTS} Keepstones already stand. That is all a plot holds.` }
   const k = chestBox({ x, z, q })
   for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
     const s = squareAt(cx, cz); if (!s || !owned.has(sqId(s.i, s.j))) return { ok: false, why: 'Build on ground you hold.' }
   }
   for (const c of KEEP_CLEAR) {
     const px = Math.max(k.x0, Math.min(c.x, k.x1)), pz = Math.max(k.z0, Math.min(c.z, k.z1))
-    if (Math.hypot(px - c.x, pz - c.z) < c.r) return { ok: false, why: 'Too close to the gate, Gregory or the table.' }
+    if (Math.hypot(px - c.x, pz - c.z) < c.r) return { ok: false, why: 'Leave room around the gate, Gregory and the table.' }
   }
   // inside a room is fine (a storeroom), but never in a wall, the doorway or at the bench
   const pad = 0.3
@@ -237,7 +237,7 @@ export const ROOM_ACCEPTS: Readonly<Record<RoomKind, (id: string) => boolean>> =
 /** Said when the room refuses something: what it does keep. */
 export const ROOM_KEEPS: Readonly<Record<RoomKind, string>> = {
   rinnshop: 'catches, bait and mast', cooking: 'catches and mast for the hearth', alchemy: 'crystals, shards and saps',
-  smith: 'deadfall and charcoal', carpentry: 'wood', stonemason: 'stone and crystal',
+  smith: 'deadfall and charcoal', carpentry: 'wood, bark and sap', stonemason: 'stone and crystal',
 }
 export const roomAccepts = (kind: RoomKind, id: string) => ROOM_ACCEPTS[kind](id)
 export const roomStore = (r: Room): Bank => ({ v: 1, stacks: r.store ?? [] })
@@ -248,9 +248,9 @@ export type StoreMove = { works: Works; inv: Inv; moved: number } | { works: Wor
 export function stockRoom(w: Works, roomId: string, inv: Inv, at: number): StoreMove {
   const r = w.rooms.find(x => x.id === roomId), s = inv.slots[at]
   if (!r || !s) return { works: w, inv, moved: 0, why: '' }
-  if (!roomAccepts(r.kind, s.id)) return { works: w, inv, moved: 0, why: `The ${ROOMS[r.kind].name} keeps ${ROOM_KEEPS[r.kind]}.` }
+  if (!roomAccepts(r.kind, s.id)) return { works: w, inv, moved: 0, why: `The ${ROOMS[r.kind].name} only keeps ${ROOM_KEEPS[r.kind]}.` }
   const p = putIn(roomStore(r), ROOM_STORE_SLOTS, s.id, s.n), moved = s.n - p.left
-  if (!moved) return { works: w, inv, moved: 0, why: `The ${ROOMS[r.kind].name}'s store is full.` }
+  if (!moved) return { works: w, inv, moved: 0, why: `The ${ROOMS[r.kind].name}'s store is full. Take something out first.` }
   const slots = inv.slots.map((x, i) => (i !== at ? x : p.left > 0 ? { id: s.id, n: p.left } : null))
   return { works: setStore(w, roomId, p.bank), inv: { ...inv, slots }, moved }
 }
@@ -324,14 +324,14 @@ export const pieceBoxes = (w: Works): Box[] => w.pieces.filter(p => FURNITURE[p.
 export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: string, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
   const f = FURNITURE[item]
   if (!f) return { ok: false, why: 'That is not furniture.' }
-  if (works.pieces.length >= MAX_PIECES) return { ok: false, why: `${MAX_PIECES} pieces already stand on the plot.` }
+  if (works.pieces.length >= MAX_PIECES) return { ok: false, why: `${MAX_PIECES} pieces already stand. Pick one up to make room.` }
   const k = pieceRect(item, x, z, q)
   for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
     const s = squareAt(cx, cz); if (!s || !owned.has(sqId(s.i, s.j))) return { ok: false, why: 'Set it on ground you hold.' }
   }
   for (const c of KEEP_CLEAR) {
     const px = Math.max(k.x0, Math.min(c.x, k.x1)), pz = Math.max(k.z0, Math.min(c.z, k.z1))
-    if (Math.hypot(px - c.x, pz - c.z) < c.r) return { ok: false, why: 'Too close to the gate, Gregory or the table.' }
+    if (Math.hypot(px - c.x, pz - c.z) < c.r) return { ok: false, why: 'Leave room around the gate, Gregory and the table.' }
   }
   const pad = 0.15, hit = (b: { x0: number; x1: number; z0: number; z1: number }) => k.x0 - pad < b.x1 && k.x1 + pad > b.x0 && k.z0 - pad < b.z1 && k.z1 + pad > b.z0
   for (const r of works.rooms) {
