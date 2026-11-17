@@ -1,5 +1,5 @@
 // Check: the canon storefronts' doors on the continent. Walk to each step stone, E, and see that shop's panel:
-// the Bookstore (go in), a closed shop (the Kindled Mug), the Travelers Station (the Starforge ticket boards you).
+// the Bookstore (go in), a closed shop (the Kindled Mug), the Enchant Temple's counters, the Travelers Station (the Starforge ticket boards you).
 // npx tsx scripts/shop-doors-check.mts   (URL= to point elsewhere). Writes /tmp/shop-<n>.png
 import puppeteer from 'puppeteer-core'
 import { readFileSync } from 'node:fs'
@@ -41,7 +41,11 @@ await visit('rune-hold', 'kindled-mug')
 ok(!!(await p.$('[data-shop="kindled-mug"][data-closed]')), 'the Kindled Mug says closed for now')
 await p.evaluate(() => document.querySelector<HTMLElement>('[data-panel="shop-panel"] button[aria-label]')?.click()); await wait(800)
 await visit('citadel', 'enchant-temple')
-ok(!!(await p.$('[data-shop="enchant-temple"][data-closed]')) && (await p.$$('[data-counter]')).length === 2, 'the Enchant Temple (Citadel): the twins\' two counters, closed for now')
+// live since 204e8fab (11-16): Idony + the runesmith serve; the twin's counter waits on its letters
+const counters = await p.$$eval('[data-shop="enchant-temple"] [data-counter]', bs => bs.map(b => [b.getAttribute('data-counter'), (b as HTMLButtonElement).disabled, !!b.querySelector('[data-closed]')]))
+const ctr = (w: string) => counters.find(c => c[0] === w)
+ok(counters.length === 3 && ctr('Idony')?.[1] === false && ctr('The runesmith')?.[1] === false && ctr('Her twin')?.[1] === true && ctr('Her twin')?.[2] === true,
+  `the Enchant Temple (Citadel): Idony + the runesmith open, the twin closed for now (${JSON.stringify(counters)})`)
 await p.evaluate(() => document.querySelector<HTMLElement>('[data-panel="shop-panel"] button[aria-label]')?.click()); await wait(800)
 await visit('rune-hold', 'station')
 ok((await p.$$('[data-soon]')).length === 2 && !!(await p.$('[data-hero="starforge"]')) && !!(await p.$('[data-card="season-crucible"]')) && !!(await p.$('[data-card="expedition"]')), 'the Station: Alex\'s ship menu, the Starforge + Season Crucible + Season Expedition over Expedition')
