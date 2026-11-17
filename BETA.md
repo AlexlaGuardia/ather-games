@@ -34,7 +34,7 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 | M6b | **Prospecting, found and played.** A keeper finds a node and cuts a gem without a guide | `prospect-check` (exists) + a played version | ⬜ |
 | M6c | **A fight in the Wilds.** A keeper reaches the Wilds and wins (or survives) a fight without a guide | new | ⬜ |
 | M6d | **Buying a business.** A keeper finds a deed on the continent and buys it without a guide; it survives a reload | `market-check` (exists: Rune Hold mine, buy, reload) + a played version | ⬜ |
-| M7 | **Saves survive.** Reload, close tab, come back next day; anonymous → signed-in keeps everything | new | ⬜ |
+| M7 | **Saves survive.** Reload, close tab, come back next day; anonymous → signed-in keeps everything | `scripts/beta-m7-saves.mts` (814ac3d9): reload / new page / relaunch / +26 h all PASS on prod; **4 FAIL = a live save loss** (see the queue): visiting `/shimmer` wipes an open-world keeper's rune, and signing in re-opens the birth gate. 🔒 fix touches the epoch/adoption logic | 🟨 |
 | M8 | **Clean console.** Zero page errors / console errors / 4xx-5xx across every beta check | rolled into each check | 🟨 |
 | M9 | **Phone performance.** Holds frame rate on a mid phone; heap stays bounded over 30 min | new + 🔒 Alex's phone | ⬜ |
 | M10 | **Alex's sign-off pass.** He plays the first hour on his phone and calls it | 🔒 | ⬜ |
@@ -78,6 +78,17 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+
+- **⚠ M7 SAVE LOSS, LIVE (11-17, `beta-m7-saves.mts` on prod).** (1) Born in the open world, then visit `/shimmer` → the
+  birth rune is DELETED and the gate reopens. The open world never writes `ather:epoch`, so `resetIfStale`
+  (`lib/ather-epoch.ts:97`, run by /shimmer, play3d, voxel3d) reads it as a pre-epoch character. Reachable: sign-in returns to
+  `/shimmer` by default (`lib/accounts/oauth.ts:32`), the games list and /room link there. (2) Anonymous → signed in on the
+  open world → birth gate again: `adoptAnonKeeperState` only runs on those three old pages, never site-wide.
+  Garden / pack / journal / deeds survive (unscoped keys); open-world progress never reaches the server.
+  **Jin's fix (needs your yes, it is a save migration):** the open world stamps the current epoch when a keeper is born there
+  (and on boot if a keeper exists and no epoch does), so those keepers count as current; and `SaveOwnerBoot` runs
+  `adoptAnonKeeperState` site-wide on sign-in, before the gate reads. Never call `resetIfStale` in the open world: that
+  would wipe every live keeper. Then `beta-m7-saves.mts` must PASS on prod.
 
 - **Alex 11-17, on his phone: too much on-screen clutter** from the MAP / PACK / OPTIONS / etc. buttons. Noted, not yet acted on
   (he said continue). Proposal when he's back: one menu chip that opens the row, the rest hidden until tapped. Needs his yes on the shape.
