@@ -50,7 +50,7 @@ import type { CombatEvent, Terrain } from './combat'
 import { ownerOf, nodeRegions, GAME_DAY_MS, SUB, type WildsNode } from './nodes'
 import { advance, clearAt, loadSpread, saveSpread, loadSkew, saveSkew, type SpreadState, type SpreadEvent } from './spread'
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
-import { isTouchOnly, pressKey } from '../shared/touch'
+import { isTouchOnly, pressKey, touch } from '../shared/touch'
 import { useMenuLock } from '../shared/menu-lock'
 import { BirthGate, useBirthGateUp } from '../birth-gate'
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
@@ -529,10 +529,10 @@ export default function AtherSlice() {
     if (heldRef.current !== BAIT || zone.kind !== 'wilds') return null
     const v = rinApi.current?.view(); if (!v) return null
     const left = countOf(getInv(), BAIT)
-    if (v.phase === 'idle' || v.phase === 'landed' || v.phase === 'gone') return v.aim ? `Click · cast (${left} bait left)` : 'Aim at open water to cast'
+    if (v.phase === 'idle' || v.phase === 'landed' || v.phase === 'gone') return v.aim ? `${isTouch ? 'Fire' : 'Click'} · cast (${left} bait left)` : 'Aim at open water to cast'
     if (v.phase === 'casting' || v.phase === 'waiting') return 'Watch the water…'
     if (v.phase === 'rising') return 'Something is coming…'
-    if (v.phase === 'taking') return 'Click to answer it'
+    if (v.phase === 'taking') return `${isTouch ? 'Fire' : 'Click'} to answer it`
     return null   // reeling: the reel bar speaks
   }
   const treePrompt = () => {
@@ -555,6 +555,18 @@ export default function AtherSlice() {
     window.addEventListener('mousedown', down); window.addEventListener('mouseup', up)
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up) }
   }, [held, plantHere, workAimed, castOrAnswer])
+  // PHONE (BETA M6a, 11-17): the FIRE button is the click. With bait in hand it casts, answers the take, and is the reel's
+  // hold, the same three jobs the mouse has above. (Polled on a timer, not rAF: a tap shorter than a frame still counts.)
+  useEffect(() => {
+    if (!isTouch || held !== BAIT) return
+    let was = touch.fire
+    const id = setInterval(() => {
+      const f = touch.fire; if (f === was) return
+      was = f; reelHold.current = f
+      if (f && !frozen.current) castOrAnswer()
+    }, 30)
+    return () => { clearInterval(id); reelHold.current = false }
+  }, [isTouch, held, castOrAnswer])
   // R: a TAP draws the primary / swaps / reloads, a HOLD (HOLD_MS) stows (shared/stance.ts). Timed off down → up so a
   // hold stows the moment it qualifies, without waiting for the release.
   const panelRef = useRef(panel); panelRef.current = panel

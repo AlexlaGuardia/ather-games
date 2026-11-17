@@ -110,7 +110,7 @@ export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect, size 
   const top = anchor === 'top-left'
   return (
     <div className={`${top ? 'fixed top-3 left-3 items-start' : `absolute ${size === 'phone' ? 'bottom-2' : 'bottom-4'} left-1/2 -translate-x-1/2 items-center`} flex flex-col ${onSelect ? '' : 'pointer-events-none'} transition-opacity ${dimmed ? 'opacity-35' : 'opacity-100'}`}
-         style={top ? { zIndex: 33 } : undefined} data-hud="hotbar">
+         style={top || onSelect ? { zIndex: 33 } : undefined} data-hud="hotbar">   {/* BETA M6a (11-17): a bottom bar that takes taps must sit ABOVE the phone's touch layer (z 5) or the thumb lands on the stick and slots 2-8 cannot be picked */}
       {/* Always mounted, opacity only — the row must never shift when the name fades. */}
       <div className={`${top ? 'hidden' : ''} mb-1.5 h-5 text-center text-[14px] font-semibold transition-opacity duration-500 ${held && !held.out ? 'opacity-100' : 'opacity-0'}`}
            style={{ ...hearthDisplay, color: t.heldColor, textShadow: '0 1px 3px rgba(0,0,0,.9)' }}>
