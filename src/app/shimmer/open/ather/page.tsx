@@ -69,13 +69,14 @@ import { QuestGuide } from '../quest-guide'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take, itemDef, countOf, NO_BAIT_LINE } from '../shared/inventory'
 import { isDish, healOf } from './cooking'
+import { isPotion, drink, buffOn, loadBuffs, saveBuffs, BUFF_NAME, STARLIGHT_XP, OPEN_FLOW_MULT, type Buffs, type BuffId } from './alchemy'
 import { BAIT, rollRinn, type Rinn } from './rinning'
 import { RinningFX, type RinningApi } from '../shared/rinning-fx'
 import type { Reel } from '../shared/reel'
 import { ReelBar } from '../shared/reel-bar'
 /** the Wilds' water surface (the rinning float rides it) */
 const WILDS_WATER_Y = 0.02
-import { prune, pruneCheck, startShake, openSkills, openLevel, addOpenXp, TREE_NAME, MANA_COST, ZONE_NAME, type Zone as WildsZone } from './forestry'
+import { prune, pruneCheck, startShake, openSkills, openLevel, addOpenXp, setOpenXpMult, TREE_NAME, MANA_COST, ZONE_NAME, type Zone as WildsZone } from './forestry'
 import { ForestryFX, type Aim, type ForestryFx } from './forestry-fx'
 import { ProspectingFX, type CrystalAim, type ProspectFx } from './prospecting-fx'
 import { CompanionFollower } from '../shared/companion-follower'
@@ -140,6 +141,8 @@ export default function AtherSlice() {
   // timed (a new word worn starts fresh), the fight's queue, and the two that move the keeper themselves
   const castClocks = useRef<Record<CastSlot, { move: string | null; clock: CastClock }>>({ tactical: { move: null, clock: freshClock(castForMove(null)) }, signature: { move: null, clock: freshClock(castForMove(null)) } })
   const castQueue = useRef<CastSpec[]>([])
+  const buffsRef = useRef<Buffs>({})   // potion buffs (ather/alchemy.ts), loaded per keeper on mount
+  useEffect(() => { buffsRef.current = loadBuffs() }, [])
   const eatQueue = useRef<number[]>([])   // meals spent, healed on the combat layer's next frame (ather/cooking.ts)
   const [net, setNet] = useState<Network | null>(null), netRef = useRef<Network | null>(null), placeRef = useRef<string | null>(null)
   const atFairDoor = (x: number, z: number) => { const f = netRef.current?.fair; if (!f || zoneRef0.current !== 'wilds') return false; const d = fairDoor(f); return Math.hypot(d.x - x, d.z - z) < FAIR_DOOR_R }
@@ -356,7 +359,11 @@ export default function AtherSlice() {
       d.action = a.action; d.rate = a.rate; d.x = lc.px; d.y = lc.py; d.z = lc.pz; d.yaw = yaw + Math.PI; d.visible = third
       if (third && camRef.current) pullBack(camRef.current, heightRef.current, lc.py)
     }
-    { const m = manaRef.current; if (m.cur < m.max) m.cur = Math.min(m.max, m.cur + m.regen * dt) }   // mana refills (forestry spends it)
+    { const m = manaRef.current, flow = buffOn(buffsRef.current, 'ather_flow') ? OPEN_FLOW_MULT : 1
+      if (m.cur < m.max) m.cur = Math.min(m.max, m.cur + m.regen * flow * dt) }   // mana refills (forestry spends it); Ather Flow lifts it
+    { const b = buffsRef.current, t = Date.now()   // a potion buff that has run out says so, once, and leaves the save
+      setOpenXpMult(buffOn(b, 'starlight', t) ? STARLIGHT_XP : 1)
+      for (const k of Object.keys(b) as BuffId[]) if (!buffOn(b, k, t)) { const nb = { ...b }; delete nb[k]; buffsRef.current = nb; saveBuffs(nb); hudSay(`${BUFF_NAME[k]} fades.`, 'info') } }
     lc.speedMult = (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1)   // hands free, a little quicker on foot
       * (performance.now() < surge.current.until ? surge.current.mult : 1)      // a surge cast (Static Burst)
     if (impulse.current) {   // an impulse cast (Quickform): up, keeping the run
@@ -442,7 +449,7 @@ export default function AtherSlice() {
       spread: () => spreadRef.current, skipDays, ownerAt: (x: number, z: number) => nodeOwner?.(x, z),
       prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mine: () => mineAimed(), crystal: () => { const c = cAimRef.current.crystal; return c ? { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z } : null }, mana: () => manaRef.current.cur,
       stance: () => stanceRef.current, speedMult: () => (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1),
-      eat: () => eatHeld(), hp: () => vitalsRef.current.hp,
+      eat: () => eatHeld(), hp: () => vitalsRef.current.hp, drink: () => drinkHeld(), buffs: () => buffsRef.current, setMana: (n: number) => { manaRef.current.cur = n },
       rin: () => rinApi.current?.view() ?? null, cast: () => castOrAnswer(), hold: (h: boolean | 'track') => { reelHold.current = h === 'track' ? (r: Reel) => (r.zone - r.bob) * 6 + (r.zoneV - r.bobV) * 1.6 > 0 : h },
     }
   }, [zone, travel, garden, updateGarden, skipDays, nodeOwner])
@@ -545,6 +552,19 @@ export default function AtherSlice() {
     const out = take(getInv(), id, 1); if (!out) return
     setInv(out); eatQueue.current.push(healOf(id)); hudSay(`${itemDef(id).name} · +${healOf(id)}`, 'item')
   }, [])
+  // DRINK (the alchemy room, 11-17): a held potion, clicked, anywhere: a tonic refills mana (refused at a full bar), a buff
+  // potion starts or refreshes its clock (ather/alchemy.ts).
+  const drinkHeld = useCallback(() => {
+    const id = heldRef.current
+    if (!isPotion(id)) return
+    const d = drink(id, manaRef.current, buffsRef.current)
+    if (!d.ok) { if (d.why) hudSay(d.why, 'info'); return }
+    const out = take(getInv(), id, 1); if (!out) return
+    setInv(out)
+    if (d.mana !== undefined) manaRef.current.cur = d.mana
+    if (d.buffs !== buffsRef.current) { buffsRef.current = d.buffs; saveBuffs(d.buffs) }
+    hudSay(d.line, 'item')
+  }, [])
   const castOrAnswer = useCallback(() => {
     const r = rinApi.current; if (!r || zone.kind !== 'wilds') return
     const v = r.view()
@@ -592,12 +612,13 @@ export default function AtherSlice() {
       if (held === 'waymark') plantHere()
       else if (held === BAIT) castOrAnswer()
       else if (isDish(held)) eatHeld()
+      else if (isPotion(held)) drinkHeld()
       else if (stanceRef.current.kind === 'stowed') workAimed()   // stowed: the click works the node in front of you
     }
     const up = (e: MouseEvent) => { if (e.button === 0) reelHold.current = false }
     window.addEventListener('mousedown', down); window.addEventListener('mouseup', up)
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up) }
-  }, [held, plantHere, workAimed, castOrAnswer, eatHeld])
+  }, [held, plantHere, workAimed, castOrAnswer, eatHeld, drinkHeld])
   // PHONE (BETA M6a, 11-17): the FIRE button is the click. With bait in hand it casts, answers the take, and is the reel's
   // hold, the same three jobs the mouse has above. (Polled on a timer, not rAF: a tap shorter than a frame still counts.)
   useEffect(() => {
@@ -610,13 +631,13 @@ export default function AtherSlice() {
     }, 30)
     return () => { clearInterval(id); reelHold.current = false }
   }, [isTouch, held, castOrAnswer])
-  // PHONE: with a roast in hand, the FIRE button eats it (one meal per press).
+  // PHONE: with a roast or a potion in hand, the FIRE button eats / drinks it (one per press).
   useEffect(() => {
-    if (!isTouch || !isDish(held)) return
+    if (!isTouch || !(isDish(held) || isPotion(held))) return
     let was = touch.fire
-    const id = setInterval(() => { const f = touch.fire; if (f === was) return; was = f; if (f && !frozen.current) eatHeld() }, 30)
+    const id = setInterval(() => { const f = touch.fire; if (f === was) return; was = f; if (f && !frozen.current) (isDish(held) ? eatHeld : drinkHeld)() }, 30)
     return () => clearInterval(id)
-  }, [isTouch, held, eatHeld])
+  }, [isTouch, held, eatHeld, drinkHeld])
   // R: a TAP draws the primary / swaps / reloads, a HOLD (HOLD_MS) stows (shared/stance.ts). Timed off down → up so a
   // hold stows the moment it qualifies, without waiting for the release.
   const panelRef = useRef(panel); panelRef.current = panel

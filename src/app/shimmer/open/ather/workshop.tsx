@@ -30,6 +30,7 @@ import {
 } from './garden-bank'
 import { FURNITURE, FURNITURE_ORDER, REFINE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, type Job } from './furniture'
 import { ROAST } from './cooking'
+import { BREW } from './alchemy'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
 let works: Works | null = null
@@ -171,6 +172,17 @@ function Bench({ r, x, z }: { r: Room; x: number; z: number }) {
           {[-0.85, 0.85].map(x => <mesh key={x} position={[x, 0.85, 0]}><cylinderGeometry args={[0.04, 0.05, 0.9, 6]} /><meshLambertMaterial color="#6b4a2a" /></mesh>)}
           <mesh position={[0, 1.22, 0]} rotation-z={Math.PI / 2}><cylinderGeometry args={[0.025, 0.025, 1.9, 6]} /><meshLambertMaterial color="#8a6a45" /></mesh>
           <mesh position={[0, 1.13, 0]} scale={[1, 0.45, 0.45]}><sphereGeometry args={[0.24, 10, 8]} /><meshLambertMaterial color="#d9a75c" /></mesh>
+        </>
+      )}
+      {r.kind === 'alchemy' && (
+        <>
+          {/* THE CAULDRON (canon: the cauldron boils; homely words, no foundry): a round clay pot on three stones over a
+              small bed of coals, the brew lit from within; stoppered bottles at the bench's end */}
+          {[-0.32, 0.32, 0].map((x, k) => <mesh key={k} position={[x, 1.1, k === 2 ? 0.28 : -0.14]}><dodecahedronGeometry args={[0.14, 0]} /><meshLambertMaterial color="#9a9286" /></mesh>)}
+          <mesh position={[0, 1.08, 0]}><boxGeometry args={[0.6, 0.04, 0.5]} /><meshBasicMaterial color="#ff8a3a" /></mesh>
+          <mesh position={[0, 1.42, 0]}><sphereGeometry args={[0.36, 14, 10, 0, Math.PI * 2, Math.PI * 0.18, Math.PI * 0.82]} /><meshLambertMaterial color="#7a5a44" side={2} /></mesh>
+          <mesh position={[0, 1.66, 0]} rotation-x={-Math.PI / 2}><circleGeometry args={[0.3, 16]} /><meshBasicMaterial color="#8fe3ff" /></mesh>
+          {[0, 1, 2].map(k => <mesh key={k} position={[0.85, 1.12, -0.2 + k * 0.2]}><cylinderGeometry args={[0.06, 0.07, 0.22, 8]} /><meshBasicMaterial color={['#8fe3ff', '#c8b8ff', '#4aa3e6'][k]} /></mesh>)}
         </>
       )}
       {r.kind === 'rinnshop' && (
@@ -488,6 +500,9 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
         )}
         {r.kind === 'cooking' && (
           <JobList title="The hearth" note="Roasts go to your bag. Hold one in the Wilds and click to eat it mid-fight. Meat comes from the Smokehouse in the continent's towns." jobs={ROAST} r={r} inv={inv} refine />
+        )}
+        {r.kind === 'alchemy' && (
+          <JobList title="The cauldron" note="Potions go to your bag. Hold one and click to drink it. The cauldron takes from the room's store first, then your bag." jobs={BREW} r={r} inv={inv} refine />
         )}
         <div data-room-store={r.kind}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

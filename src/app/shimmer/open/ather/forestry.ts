@@ -78,8 +78,12 @@ const save = (now = Date.now()) => {
 export const forestryLevel = () => skills.forestry.level
 /** Any open-world skill's level, and XP granted to it (saved with Forestry's: one open-world skill set). Rinning uses it. */
 export const openLevel = (id: SkillId) => skills[id].level
+/** Gathering XP multiplier: a Starlight Tincture lifts it (ather/alchemy.ts; the page sets it while the buff runs). */
+let xpMult = 1
+export const setOpenXpMult = (m: number) => { xpMult = m > 0 ? m : 1 }
+const scaled = (xp: number) => Math.round(xp * xpMult)
 export function addOpenXp(id: SkillId, xp: number): number | null {
-  const r = addSkillXP(skills[id], xp); save(); bump()
+  const r = addSkillXP(skills[id], scaled(xp)); save(); bump()
   return r.leveled ? r.newLevel : null
 }
 /** The open world's skill set (the HUD's tool sockets read it; addSkillXP mutates it in place, so a ref to it stays live). */
@@ -133,7 +137,7 @@ export function prune(kind: TreeKind, id: string, rand: () => number = Math.rand
   const drops = [{ id: logItem(kind), n: 2 + Math.floor(rand() * 3) }]
   if (rand() < SAPLING_CHANCE[kind]) drops.push({ id: saplingItem(kind), n: 1 })
   if (rand() < MAST_CHANCE) drops.push({ id: 'mast', n: 1 })   // bait's floor (inventory.ts › BAIT_FROM)
-  const r =addSkillXP(skills.forestry, def.xp)   // mutates the skill in place (engine/skills.ts)
+  const r =addSkillXP(skills.forestry, scaled(def.xp))   // mutates the skill in place (engine/skills.ts)
   pruned[id] = now + def.respawnMs
   save(now); bump()
   return { ok: true, drops, xp: def.xp, levelUp: r.leveled ? r.newLevel : null }
