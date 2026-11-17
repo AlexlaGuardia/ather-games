@@ -17,7 +17,7 @@ A dead end is a step the game points you at that cannot be done. Do not build a 
 
 ## Milestones
 
-> **Order for 11-17 (Alex away, check-ins ~2 h):** M2/M3 continent → M7 saves → M6a → M6b → M6d → M5 played → the
+> **Order for 11-17 (Alex away, check-ins ~2 h):** ~~M2/M3~~ ✅ → ~~M7~~ ✅ → M6a → **M11 menu chip** → **M12 step 1** → M6b → M6d → M5 played → the
 > check-suite chore between rows. M6c: the hub checks a strangers' Wilds fight EXISTS before dispatching; if it needs
 > building, it is an ask, not a row. M1's remainder is 🔒 (birth wheel), so skip it.
 
@@ -25,7 +25,7 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 
 | # | Milestone | Check (passes on prod = done) | Status |
 |---|---|---|---|
-| M1 | **Front door.** Home → Play → rune → born, on a phone, live in under 20 s, zero page errors | `scripts/beta-audit.mts` | 🟨 |
+| M1 | **Front door.** Home → Play → rune → born, on a phone, live in under 20 s, zero page errors | `scripts/beta-audit.mts`: PASS on prod 11-17 (live 19.2 s, tight; 0 page errors, one three.js Clock deprecation warn). Birth wheel ghost names: Alex 11-17 "good as is for now", he'll playtest | ✅ |
 | M2 | **Phone HUD legible.** No two HUD elements overlap at 390×844 or at 360×780 | `beta-audit-2 [--w 360 --h 780]` (Ather plot) + `beta-audit-continent [--w --h --phase drive|foot]`: both pages PASS on prod 11-17 (`90e4226d`). Covers `data-hud`/`data-touch` boxes only; the hotbar clips ~2px each side at 360 (🔒 look) | ✅ |
 | M3 | **Touch controls.** The first touch moves you; the thumb zone does not sit on the hotbar; every HUD button opens its panel; every panel closes by tap | `beta-audit-2` (Ather plot) + `beta-audit-continent` (drive + foot): PASS on prod at 390 and 360, 11-17 (`90e4226d`) | ✅ |
 | M4 | **The next step is told.** Right after birth, the keeper sees what to do (Greg's errand in the journal, the trail lit) | `shared/journal.test.ts` + `scripts/beta-m4-look.mts` (beacon + trail on Greg, prod 11-16, `92537123`) | ✅ |
@@ -38,6 +38,29 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 | M8 | **Clean console.** Zero page errors / console errors / 4xx-5xx across every beta check | rolled into each check | 🟨 |
 | M9 | **Phone performance.** Holds frame rate on a mid phone; heap stays bounded over 30 min | new + 🔒 Alex's phone | ⬜ |
 | M10 | **Alex's sign-off pass.** He plays the first hour on his phone and calls it | 🔒 | ⬜ |
+| M11 | **One menu button on the phone HUD** (Alex 11-17: too much clutter). On a phone, MAP / PACK / OPTIONS / CAMERA / GARAGE / ROAD / FRIENDS / JOURNAL fold into ONE menu chip; tap it, the row opens; tap again or pick one, it folds. Desktop unchanged | `beta-audit-2` + `beta-audit-continent` still PASS at 390 + 360 (each panel reached via the menu chip) | ⬜ |
+| M12 | **The keeper roster** (Alex 11-17, spec below). One garden file per account; several keepers in it, swapped like loadouts | per-step checks in the spec; `beta-m7-saves` stays green | ⬜ |
+
+## M12 spec: the keeper roster (Alex 11-17, from the M7 save-loss finding)
+
+**Belongs to the KEEPER** (swaps with the character): birth rune, learned runes + skills, worn gear, the hotbar AND the whole
+inventory/pack. **Belongs to the GARDEN** (the cluster; one per account, shared by every keeper on it): the plot, Moglins,
+storage, Marks, deeds/businesses, journal progress, explored map, forestry/prospecting world state.
+Canon: CANON_GAPS [OPEN] "More than one keeper in one garden" (athernyx f79b4da); build the plumbing, no lore words until ruled.
+
+Steps (one worker each, in order; each keeps `beta-m7-saves` green):
+1. **Scope the keys.** Today the open world's pack / hotbar / loadout live in UNSCOPED `open.*` keys (keeper-local.test's
+   "unclassified key" red lists them all). Move keeper things to keeper-scoped keys and garden things to account-scoped keys,
+   with a one-time migration that MOVES (copy then delete, never delete first) today's data into keeper #1. keeper-local.test green.
+2. **Roster storage.** An account holds keepers `[k1, k2, …]` + `active`. Today's keeper = k1. Swapping = change `active`
+   and re-read; garden untouched.
+3. **The sign-in prompt.** Anonymous keeper + an account that already has keepers → a panel: "Add this keeper to your
+   roster?" Yes = it becomes a new roster entry; No = it stays on this browser, untouched (never deleted). Account with no
+   keeper → adopt silently (live since d8b72da4).
+4. **Swap UI.** A keeper list (character panel or options) to switch, and "new keeper" opens the birth ritual. Character
+   creator rework = later (Alex).
+5. **Cloud save.** The open world never syncs to the server today (only Shimmer3D pushes). The garden file + roster go to
+   `/api/saves` for signed-in accounts so a second device gets them. ⚠ save format + server API = Alex reviews the shape first.
 
 ## Audit 2026-11-16 (pass 1 + 2, fresh profile, 390×844 touch, prod)
 
@@ -96,7 +119,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
   /shimmer should delete a keeper); (b) the roster replaces the plain site-wide adoption; it is a new system, so it gets its
   own GBOARD block + rows once Alex confirms what belongs to a keeper vs the garden.
 
-- **Alex 11-17, on his phone: too much on-screen clutter** from the MAP / PACK / OPTIONS / etc. buttons. Noted, not yet acted on
+- **✅ ANSWERED 11-17 → M11.** Alex, on his phone: too much on-screen clutter from the MAP / PACK / OPTIONS / etc. buttons. Noted, not yet acted on
   (he said continue). Proposal when he's back: one menu chip that opens the row, the rest hidden until tapped. Needs his yes on the shape.
 
 - **M2/M3 continent (11-17, `90e4226d`, live):** the phone tap row (MAP/OPTIONS/PACK/CAMERA/GARAGE/ROAD) moved down to
