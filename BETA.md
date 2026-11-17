@@ -31,7 +31,7 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 | M4 | **The next step is told.** Right after birth, the keeper sees what to do (Greg's errand in the journal, the trail lit) | `shared/journal.test.ts` + `scripts/beta-m4-look.mts` (beacon + trail on Greg, prod 11-16, `92537123`) | ✅ |
 | M5 | **First errand, PLAYED.** Greg → runesmith → Enchant Temple → bracelet, reached on foot / courser, not by teleport hooks | `errand-check` + `runesmith-check` exist (hook-driven); new played version | 🟨 |
 | M6a | **Rinning, found and played.** A keeper finds bait + the rinstick and lands a rinn without a guide | `scripts/beta-m6a-rinning.mts [--phone]`: PASS on prod desktop + phone 11-17 (`424f86f1`: phone hotbar above the touch layer, FIRE casts/answers/reels). Gaps → queue: nothing points a stranger at rinning; 10 starting bait, no refill | ✅ |
-| M6b | **Prospecting, found and played.** A keeper finds a node and cuts a gem without a guide | `prospect-check`: PASS on prod 11-17 (`b140ba7d`: the check raced the Wilds stream-in; game was fine). Played version (`beta-m6b-prospect.mts`, real inputs like M6a) next | 🟨 |
+| M6b | **Prospecting, found and played.** A keeper finds a node and cuts a gem without a guide | `prospect-check` + `scripts/beta-m6b-prospect.mts` (real BE BORN, gate fold-map tap, real click cut): both PASS on prod 11-17 (`b140ba7d`, `33c3c32c`). Gap → queue: nothing points a stranger at prospecting until they stand at a node | ✅ |
 | M6c | **A fight in the Wilds.** A keeper reaches the Wilds and wins (or survives) a fight without a guide | new | ⬜ |
 | M6d | **Buying a business.** A keeper finds a deed on the continent and buys it without a guide; it survives a reload | `market-check` (exists: Rune Hold mine, buy, reload) + a played version | ⬜ |
 | M7 | **Saves survive.** Reload, close tab, come back next day; anonymous → signed-in keeps everything | `scripts/beta-m7-saves.mts`: PASS on prod 11-17 after `d8b72da4` (open world stamps the epoch; keeper adoption site-wide). Account with a keeper already + an anonymous one = the roster (Alex's direction, queue) | ✅ |
@@ -103,6 +103,8 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+
+- **Discovery pointers (11-17, M6a + M6b):** neither rinning nor prospecting is told anywhere (welcome card, journal, bag) before you stumble on it; prospecting's only pointer is the HUD prompt AT a node. Proposal: @lark drafts one journal line each (the game register), you sign off, hub wires them. Yes / or your own wording?
 
 - **Alex 11-17: a RINNING ROOM** (craft rinsticks, make bait, prepare catches for the cooking room). Canon mostly settled
   (rinsticks built from rinn; roast rinn at the hearth; workshop rooms + Moglin trade). Magii asked (CANON_GAPS 4a9a621): 6th room
