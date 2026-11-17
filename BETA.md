@@ -40,7 +40,7 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 | M10 | **Alex's sign-off pass.** He plays the first hour on his phone and calls it | 🔒 | ⬜ |
 | M11 | **One menu button on the phone HUD** (Alex 11-17: too much clutter). On a phone the tap row folds into ONE MENU chip; tap to open, tap again or pick one to fold. Desktop unchanged | `beta-audit-2` + `beta-audit-continent` (menu rest/open/fold asserted): PASS on prod at 390 + 360, drive + foot, 11-17 (`46ed03f3`) | ✅ |
 | M6e | **Bait refills.** A keeper who runs out of bait can make more without a guide (Magii 65d4c21: bait = craftable food offering) | `scripts/beta-m6e-bait.mts`: PASS on prod 11-17 (Jin 2 `5fb891d4`, live in `5b3edbad`: out of bait → prune → forage → Make bait). 'Forage' = placeholder name (CANON_GAPS 2c6e25b) | ✅ |
-| M12 | **The keeper roster** (Alex 11-17, spec below). One garden file per account; several keepers in it, swapped like loadouts | per-step checks in the spec; `beta-m7-saves` stays green | ⬜ |
+| M12 | **The keeper roster** (Alex 11-17, spec below). One garden file per account; several keepers in it, swapped like loadouts | per-step checks in the spec; `beta-m7-saves` stays green. All 5 steps live 11-17; cloud save proven on Alex's desktop + phone. Remaining 🔒 Alex: the LOOK of the roster prompt + Keepers list; no restore-from-backup button yet | ✅ |
 
 ## M12 spec: the keeper roster (Alex 11-17, from the M7 save-loss finding)
 
@@ -60,7 +60,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
    keeper → adopt silently (live since d8b72da4).
 4. ✅ **11-17 `578abec9`, live: beta-m12-swap PASS on prod (new keeper → birth → swap back, rune + pack byte-identical, garden unchanged, 0 errors). Look 🔒 Alex.** **Swap UI.** A keeper list (character panel or options) to switch, and "new keeper" opens the birth ritual. Character
    creator rework = later (Alex).
-5. 🟨 **11-17 LIVE in `3e270e49` (client `fc45f29d` + `be3455ba`, hub a9c92710): `beta-m12-cloud` PASS on prod (anon = off, no call; faked session = lease 401, nothing adopted), `beta-m7-saves` PASS, open-cloud-core.test 29/0 (two fake devices + CAS). Remains: the REAL two-device run (Google sign-in can't be scripted): Alex opens his main device first, then a second; hub reads the `saves` row (game 'open'). No restore-from-backup button yet (hub restores by hand).** **Cloud save.** Design `docs/M12-cloud-save.md` (serb, 74c8c713), **APPROVED by Alex 11-17 with all four defaults**
+5. ✅ **11-17 REAL TWO-DEVICE RUN PASSED (Alex): desktop pushed rev 1 → phone took the lease and reloaded once with his keeper → back on desktop via 'Playing on another device. Continue here?' (Alex: likes the message), lease home, rev 10.** LIVE in `3e270e49` (client `fc45f29d` + `be3455ba`, hub a9c92710): `beta-m12-cloud` PASS on prod (anon = off, no call; faked session = lease 401, nothing adopted), `beta-m7-saves` PASS, open-cloud-core.test 29/0 (two fake devices + CAS). Remains: the REAL two-device run (Google sign-in can't be scripted): Alex opens his main device first, then a second; hub reads the `saves` row (game 'open'). No restore-from-backup button yet (hub restores by hand).** **Cloud save.** Design `docs/M12-cloud-save.md` (serb, 74c8c713), **APPROVED by Alex 11-17 with all four defaults**
    (server wins + local backup, cap 8, Marks in wallet, settings per device). Server side = serb (db + /api/saves/open),
    client side (cloud-sync open path) = Jin. Builds after steps 1-4.
 
