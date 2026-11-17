@@ -60,7 +60,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
    keeper → adopt silently (live since d8b72da4).
 4. ✅ **11-17 `578abec9`, live: beta-m12-swap PASS on prod (new keeper → birth → swap back, rune + pack byte-identical, garden unchanged, 0 errors). Look 🔒 Alex.** **Swap UI.** A keeper list (character panel or options) to switch, and "new keeper" opens the birth ritual. Character
    creator rework = later (Alex).
-5. **Cloud save.** Design `docs/M12-cloud-save.md` (serb, 74c8c713), **APPROVED by Alex 11-17 with all four defaults**
+5. 🟨 **11-17 LIVE in `3e270e49` (client `fc45f29d` + `be3455ba`, hub a9c92710): `beta-m12-cloud` PASS on prod (anon = off, no call; faked session = lease 401, nothing adopted), `beta-m7-saves` PASS, open-cloud-core.test 29/0 (two fake devices + CAS). Remains: the REAL two-device run (Google sign-in can't be scripted): Alex opens his main device first, then a second; hub reads the `saves` row (game 'open'). No restore-from-backup button yet (hub restores by hand).** **Cloud save.** Design `docs/M12-cloud-save.md` (serb, 74c8c713), **APPROVED by Alex 11-17 with all four defaults**
    (server wins + local backup, cap 8, Marks in wallet, settings per device). Server side = serb (db + /api/saves/open),
    client side (cloud-sync open path) = Jin. Builds after steps 1-4.
 
