@@ -41,6 +41,8 @@ import { useLoadout } from '../shared/loadout'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree } from './wilds'
 import { loadIndex, makeWorld, stream, tileOf, zonesOf, TILE_M, type WildsWorld } from './wilds-world'
+import { loadNetwork, clearing, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network } from './network'
+import { TilePaths, Settlements, BigTop } from './network-scene'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud } from './combat-layer'
@@ -130,6 +132,9 @@ export default function AtherSlice() {
   // timed (a new word worn starts fresh), the fight's queue, and the two that move the keeper themselves
   const castClocks = useRef<Record<CastSlot, { move: string | null; clock: CastClock }>>({ tactical: { move: null, clock: freshClock(castForMove(null)) }, signature: { move: null, clock: freshClock(castForMove(null)) } })
   const castQueue = useRef<CastSpec[]>([])
+  const [net, setNet] = useState<Network | null>(null), netRef = useRef<Network | null>(null), placeRef = useRef<string | null>(null)
+  const atFairDoor = (x: number, z: number) => { const f = netRef.current?.fair; if (!f || zoneRef0.current !== 'wilds') return false; const d = fairDoor(f); return Math.hypot(d.x - x, d.z - z) < FAIR_DOOR_R }
+  const zoneRef0 = useRef<string>('plot')
   const surge = useRef<{ until: number; mult: number }>({ until: 0, mult: 1 })
   const impulse = useRef<CastSpec | null>(null)
   const aimRef = useRef<Aim>({ tree: null, dist: Infinity }), fxRef = useRef<ForestryFx | null>(null)
@@ -157,7 +162,11 @@ export default function AtherSlice() {
       .catch(() => { /* Rune Hold alone */ })
   }, [])
   useEffect(() => {
-    loadIndex().then(async idx => { const w = makeWorld(idx); await stream(w, GREG_WAYMARK.x, GREG_WAYMARK.z); setWw(w); setWrev(w.rev) })
+    // the season's path network first (network.ts): no tree may stand on a path, so it must be known before a tile parses
+    Promise.all([loadIndex(), loadNetwork()]).then(async ([idx, nw]) => {
+      const w = makeWorld(idx); if (nw) { w.clear = clearing(nw); setNet(nw); netRef.current = nw }
+      await stream(w, GREG_WAYMARK.x, GREG_WAYMARK.z); setWw(w); setWrev(w.rev)
+    })
       .catch(e => setToast(`The Wilds would not load: ${e.message}`))
   }, [])
   // the anchor tile's centre in continent coords (the fog grid and the continent map add it to world coords)
@@ -350,6 +359,7 @@ export default function AtherSlice() {
       const p = n?.kind === 'gate' ? 'E · the gate (fold map)'
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
+        : atFairDoor(lc.px, lc.pz) ? 'E · the Thistledown Fair'
         : rinPrompt() ?? (cAimRef.current.crystal && cAimRef.current.dist < aimRef.current.dist ? crystalPrompt() : treePrompt())
       setPrompt(p)
       let where = 'your plot'
@@ -359,6 +369,15 @@ export default function AtherSlice() {
         let zn: string = BIOME_NAME[ww.biomeAt(lc.px, lc.pz)]
         if (tt) { const o = ww.offsetOf(tt.name); zn = ZONE_NAME[zonesOf(ww, tt.name)(Math.min(4, Math.floor((lc.px - o.x + 500) / 200)), Math.min(4, Math.floor((lc.pz - o.z + 500) / 200)))] }
         where = zn + (g ? ` · ${g}` : '')
+        // the path network: a settlement or the fair names itself on the message line as you walk in
+        const nw = netRef.current
+        if (nw) {
+          const st = settlementAt(nw, lc.px, lc.pz), fr = nearFair(nw, lc.px, lc.pz)
+          const place = st ? st.name : fr ? FAIR_NAME : null
+          if (place && place !== placeRef.current) hudSay(st ? `${st.name} · a free Moglin settlement` : `${FAIR_NAME} · this season's pitch`, 'zone')
+          placeRef.current = place
+          if (place) where = st ? `${st.name} · free Moglins` : FAIR_NAME
+        }
       }
       else if (!squareAt(lc.px, lc.pz)) {
         // off your own grid: in a linked cluster that is somewhere real (a friend's plot, the Green, the valley, a path).
@@ -567,16 +586,19 @@ export default function AtherSlice() {
           ...[...nearNodes].sort((a, b) => Math.hypot(a.x - pos.current.x, a.z - pos.current.z) - Math.hypot(b.x - pos.current.x, b.z - pos.current.z)).slice(0, 6)
             .map(n => ({ x: n.x, z: n.z, color: '#5f6165', title: 'infected ground' })),
           { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, color: '#e7c766', title: "Gregory's waymark" },
+          ...(net ? [...net.settlements].sort((a, b) => Math.hypot(a.x - pos.current.x, a.z - pos.current.z) - Math.hypot(b.x - pos.current.x, b.z - pos.current.z)).slice(0, 4)
+            .map(st => ({ x: st.x, z: st.z, color: '#d9c39a', title: st.name })) : []),
+          ...(net?.fair ? [{ x: net.fair.x, z: net.fair.z, color: '#b37fd6', title: FAIR_NAME }] : []),
           ...waymarks.filter(w => ww?.byName.has(w.tile)).map(w => { const o = ww!.offsetOf(w.tile); return { x: w.x + o.x, z: w.z + o.z, color: '#6fd3c4', title: 'your waymark' } }),
         ]
     marksRef.current = [...marksRef.current, ...questMarks(zone.kind === 'plot' ? 'ather' : 'wilds')]   // the journal's waymarks (pack.tsx)
-  }, [zone, nearNodes, waymarks, journal, ww])
+  }, [zone, nearNodes, waymarks, journal, ww, net])
   // THE FIRST ERRAND (business/errand.ts, Magii + Alex 11-16): Greg hands the birth letter's gems; the journal points to
   // the school's runesmith, then the Enchant Temple in the Citadel (those waymarks light on the continent page)
   const birth = useBirth(), loadoutNow = useLoadout()
   const castSet = useMemo(() => castMoves(loadoutNow, birth), [loadoutNow, birth])
   const castSetRef = useRef(castSet); castSetRef.current = castSet
-  const zoneRef = useRef(zone.kind); zoneRef.current = zone.kind
+  const zoneRef = useRef(zone.kind); zoneRef.current = zone.kind; zoneRef0.current = zone.kind
   /** Q / X: pay, then the keeper moves (surge, impulse) or the fight takes it (combat-casts.ts) */
   const castSlot = useCallback((slot: CastSlot) => {
     const move = castSetRef.current[slot], cc = castClocks.current[slot]
@@ -662,6 +684,9 @@ export default function AtherSlice() {
       if (panel || fade) return
       const n = near.current
       if (e.code === 'KeyE' && !n && (aimRef.current.tree || cAimRef.current.crystal) && stanceRef.current.kind === 'stowed') { workAimed(); return }
+      if (e.code === 'KeyE' && !n && atFairDoor(pos.current.x, pos.current.z)) {
+        hudSay(`${FAIR_NAME} · the troupe is still pitching. The season's games, contests and market open soon.`, 'info', 6); return
+      }
       if (e.code === 'KeyE' && n) {
         if (n.kind === 'greg') setPanel({ kind: 'greg' })
         else setPanel({ kind: 'map', view: 'ather', travel: true })
@@ -714,7 +739,9 @@ export default function AtherSlice() {
         {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
         {zone.kind === 'wilds' && ww && <ProspectingFX ww={ww} aim={cAimRef} fx={cFxRef} ground={ground} mineable={c => mineCheck(c.kind, c.id).ok} />}
         {zone.kind === 'wilds' && ww && <RinningFX waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT} onCatch={onCatch} onGone={onGone} />}
-        {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} /></group> })}
+        {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />{net && <TilePaths net={net} W={T} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />}</group> })}
+        {zone.kind === 'wilds' && ww && net && <Settlements net={net} loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
+        {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
             safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={held === 'repeater'} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} />

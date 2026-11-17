@@ -44,6 +44,8 @@ export interface WildsWorld {
   tileAtPoint(x: number, z: number): { W: Wilds; ox: number; oz: number } | null
   /** bumped whenever a tile streams in or out */
   rev: number
+  /** no tree stands where this says (the path network, network.ts › clearing); set before the first stream */
+  clear?: (x: number, z: number) => boolean
 }
 
 export function makeWorld(index: TileIndex): WildsWorld {
@@ -138,7 +140,7 @@ export function zonesOf(w: WildsWorld, name: string): (i: number, j: number) => 
   return (i, j) => m.get(`${i},${j}`) ?? 'meadows'
 }
 
-export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n))): Promise<boolean> {
+export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear)): Promise<boolean> {
   const want = new Set(wanted(w, x, z)), keep = new Set(wanted(w, x, z, 2))
   let changed = false
   for (const name of [...w.loaded.keys()]) if (!keep.has(name)) { w.loaded.delete(name); changed = true }

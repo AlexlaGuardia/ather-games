@@ -52,7 +52,10 @@ const hash = (a: number, b: number, s = 0) => {
 }
 
 /** `zoneAt(i, j)`: the zone of the tile's 200 m node (i, j) (tiles.json, zone_wilds.py); absent = every node meadows. */
-export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt: (i: number, j: number) => Zone = () => 'meadows'): Wilds {
+/** `clear(x, z)` in WORLD coords (tile-local + the tile's centre): no tree stands there (the path network: paths,
+ *  settlements, the fair's ground). Ids are counted as if it stood, so a prune saved before the paths still finds its
+ *  tree, and crystals still dodge it, so no crystal moved either. */
+export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt: (i: number, j: number) => Zone = () => 'meadows', clear?: (x: number, z: number) => boolean): Wilds {
   const { nx, nz, cell, sizeX, sizeZ } = meta
   if (dm.length !== nx * nz) throw new Error(`wilds ${meta.name}: ${dm.length} heights, want ${nx * nz}`)
   if (biomes.length !== (nx - 1) * (nz - 1)) throw new Error(`wilds ${meta.name}: ${biomes.length} biome cells, want ${(nx - 1) * (nz - 1)}`)
@@ -87,8 +90,9 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
 
   // Trees: by ZONE (forestry.ts › treeFor: which of the four, and how thick), none on ground too steep to root or under
   // the water line. Sizes by kind: a dawnwood is an old giant, a starwillow a slim weeping one.
-  const trees: Tree[] = []
+  const trees: Tree[] = [], stood: { x: number; z: number }[] = []
   const NODE_M = 200
+  const ox = ((meta as WildsMeta & { tx?: number }).tx ?? 0) * 1000, oz = ((meta as WildsMeta & { ty?: number }).ty ?? 0) * 1000
   for (let j = 0; j < ch; j++) for (let i = 0; i < cw; i++) {
     const b = biomes[j * cw + i]
     const cx = -hx + (i + 0.5) * cell, cz = -hz + (j + 0.5) * cell
@@ -100,7 +104,9 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
     const s = Math.hypot(heightAt(x + 1, z) - heightAt(x - 1, z), heightAt(x, z + 1) - heightAt(x, z - 1)) / 2
     if (s > 0.6 || y < meta.waterY + 1) continue
     const big = t.kind === 'dawnwood' ? 1.55 : t.kind === 'shimmeroak' ? 1.2 : t.kind === 'starwillow' ? 0.95 : 1
-    trees.push({ x, z, y, tall: (5 + hash(i, j, 4) * 5) * big, r: (1.6 + hash(i, j, 5) * 1.2) * big, kind: t.kind, id: `${meta.name}:${trees.length}` })
+    const id = `${meta.name}:${stood.length}`; stood.push({ x, z })
+    if (clear?.(x + ox, z + oz)) continue
+    trees.push({ x, z, y, tall: (5 + hash(i, j, 4) * 5) * big, r: (1.6 + hash(i, j, 5) * 1.2) * big, kind: t.kind, id })
   }
 
   // Crystals: by ZONE on the crag (prospecting.ts › crystalFor), never under the water line or on a cliff face, never
@@ -116,7 +122,7 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
     const y = heightAt(x, z)
     const s = Math.hypot(heightAt(x + 1, z) - heightAt(x - 1, z), heightAt(x, z + 1) - heightAt(x, z - 1)) / 2
     if (s > 0.9 || y < meta.waterY + 0.4) continue
-    if (trees.some(t => Math.abs(t.x - x) < 2.5 && Math.abs(t.z - z) < 2.5)) continue
+    if (stood.some(t => Math.abs(t.x - x) < 2.5 && Math.abs(t.z - z) < 2.5)) continue
     crystals.push({ x, z, y, kind: c.kind, s: 0.8 + hash(i, j, 11) * 0.5, rot: hash(i, j, 12) * Math.PI * 2, id: `${meta.name}:c${crystals.length}` })
   }
 
@@ -153,13 +159,13 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
 }
 
 /** Browser loader: the three files export_wilds.py writes. */
-export async function loadWilds(name: string, base = '/open/wilds', zoneAt?: (i: number, j: number) => Zone): Promise<Wilds> {
+export async function loadWilds(name: string, base = '/open/wilds', zoneAt?: (i: number, j: number) => Zone, clear?: (x: number, z: number) => boolean): Promise<Wilds> {
   const [meta, bin, bio] = await Promise.all([
     fetch(`${base}/${name}.json`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.json ${r.status}`); return r.json() as Promise<WildsMeta> }),
     fetch(`${base}/${name}.bin`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.bin ${r.status}`); return r.arrayBuffer() }),
     fetch(`${base}/${name}.biome`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.biome ${r.status}`); return r.arrayBuffer() }),
   ])
-  return parseWilds(meta, new Int16Array(bin), new Uint8Array(bio), zoneAt)
+  return parseWilds(meta, new Int16Array(bin), new Uint8Array(bio), zoneAt, clear)
 }
 
 /** The tile's centre in CONTINENT world coordinates (continent.json: origin at the centre, 10 m per source px).
