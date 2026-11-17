@@ -87,7 +87,26 @@ ok(reach.length > 0 && covered.length === 0, covered.length ? `M3[${mode}] cover
 
 }
 const panelUp = () => p.evaluate(() => !!document.querySelector('[data-panel], [aria-label="close"], [role="dialog"]'))
+const ROW = ['map', 'pack', 'options', 'camera', 'garage', 'road', 'friends', 'journal']
+const rowShown = () => p.evaluate((rows: string[]) => [...document.querySelectorAll<HTMLElement>('[data-touch]')].map(e => (e.dataset.touch ?? '').toLowerCase()).filter(l => rows.includes(l)), ROW)
+const tapTouch = async (l: string) => {
+  const pt = await p.evaluate((l: string) => { const e = document.querySelector<HTMLElement>(`[data-touch="${l}"]`); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, l)
+  if (pt) await p.touchscreen.tap(pt.x, pt.y)
+  return !!pt
+}
+// MENU: at rest only the menu chip shows from the row; tap it to open, tap again to fold
+const menuRest = async (mode: string) => {
+  const shown = await rowShown()
+  const hasMenu = await p.evaluate(() => !!document.querySelector('[data-touch="menu"]'))
+  ok(hasMenu && shown.length === 0, `MENU[${mode}] at rest only the menu chip: menu=${hasMenu} row buttons visible=[${shown}]`)
+  await tapTouch('menu'); await sleep(400)
+  const open = await rowShown()
+  ok(open.length > 0, `MENU[${mode}] tapping the chip opens the row: [${open}]`)
+  await tapTouch('menu'); await sleep(400)
+  ok((await rowShown()).length === 0, `MENU[${mode}] tapping the chip again folds it`)
+}
 const chip = async (l: string, mode: string) => {
+  if (!(await rowShown()).includes(l)) { await tapTouch('menu'); await sleep(400) }
   const pt = await p.evaluate((l: string) => { const e = document.querySelector<HTMLElement>(`[data-touch="${l}"]`); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, l)
   if (!pt) { ok(false, `M3[${mode}] chip "${l}" missing from the tap row`); return }
   await p.touchscreen.tap(pt.x, pt.y); await sleep(1800)
@@ -98,10 +117,12 @@ const chip = async (l: string, mode: string) => {
   let closed = false
   if (x) { await x.tap().catch(() => {}); await sleep(900); closed = !(await panelUp()) }
   ok(closed, `M3[${mode}] ${l} panel closes by tap${x ? '' : ' (no [aria-label=close] found)'}`)
+  ok((await rowShown()).length === 0, `MENU[${mode}] picking ${l} folded the row`)
   if (!closed) { await p.keyboard.press('Escape').catch(() => {}); await sleep(500) }
 }
 if (phase !== 'foot') {
 await layout('drive')
+await menuRest('drive')
 // ── M3: a left-thumb drag moves the car ──
 const c0 = await car()
 await drag(90, H - 260, 0, -70, 4000); await sleep(600)
@@ -117,6 +138,7 @@ if (phase !== 'drive') {
 // ── on foot: get out, same layout checks, thumb moves the keeper ──
 await p.evaluate(() => { const d = (window as any).__drive, s = d.state(); d.footTp(s.x, s.z, s.yaw ?? 0) }); await sleep(3500); await shot('foot')
 await layout('foot')
+await menuRest('foot')
 const f0 = await p.evaluate(() => { const s = (window as any).__drive?.foot?.(); return s && s.mode === 'foot' ? { x: s.px as number, z: s.pz as number } : null })
 ok(!!f0, 'M3 get out put the keeper on foot')
 await drag(90, H - 260, 0, -70, 4000); await sleep(600)

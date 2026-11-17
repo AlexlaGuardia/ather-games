@@ -74,12 +74,24 @@ await drag(90, H - 200, 70, 0, 2500); await sleep(500)
 await beat('thumb-right')
 // look: drag on the right half
 await drag(300, 500, -80, 0, 1200); await beat('look-drag')
+const ROW = ['map', 'pack', 'options', 'camera', 'garage', 'road', 'friends', 'journal']
+const rowShown = () => p.evaluate((rows: string[]) => [...document.querySelectorAll<HTMLElement>('[data-touch]')].map(e => (e.dataset.touch ?? '').toLowerCase()).filter(l => rows.includes(l)), ROW)
+const tapMenu = async () => { const e = await p.$('[data-touch="menu"]'); if (e) await e.tap(); await sleep(400) }
+{
+  const shown = await rowShown(), hasMenu = !!(await p.$('[data-touch="menu"]'))
+  console.log(shown.length === 0 && hasMenu ? '  ok   MENU at rest only the menu chip' : `  FAIL MENU at rest: menu=${hasMenu} row buttons visible=[${shown}]`)
+  await tapMenu(); const open = await rowShown(); console.log(open.length ? `  ok   MENU opens: [${open}]` : '  FAIL MENU chip did not open the row')
+  await tapMenu(); console.log((await rowShown()).length === 0 ? '  ok   MENU folds on second tap' : '  FAIL MENU did not fold')
+}
 for (const [name, re] of [['pack', /PACK$/], ['map', /MAP$/], ['options', /OPTIONS$/], ['friends', /FRIENDS$/], ['journal', /JOURNAL$/]] as const) {
+  if (!(await rowShown()).includes(name)) await tapMenu()
   const tapped = await tapText(re); await sleep(2500); await beat(`hud-${name}`, { tapped })
   // a phone has no Escape: does a close/× exist?
   const x = await p.$('[aria-label="close"]')
   const closeTapped = x ? (await x.tap().then(() => true, () => false)) : await tapText(/^(×|✕|close|back|done)$/); await sleep(800)
   if (closeTapped) await beat(`hud-${name}-closed`, { closeTapped })
+  if (tapped) console.log((await rowShown()).length === 0 ? `  ok   MENU folded after ${name}` : `  FAIL MENU still open after ${name}`)
+  else { console.log(`  note no ${name} chip on this page (pre-existing)`); if ((await rowShown()).length) await tapMenu() }
 }
 // a long walk forward: does a stranger reach anything?
 for (let i = 1; i <= 3; i++) { await drag(90, H - 200, 0, -70, 8000); await beat(`walk-${i}`) }

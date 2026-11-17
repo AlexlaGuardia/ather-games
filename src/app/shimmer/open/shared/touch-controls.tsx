@@ -38,6 +38,8 @@ const ring = (size: number, lit = false): React.CSSProperties => ({
   touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', backdropFilter: 'blur(2px)',
 })
 
+const CHIP: React.CSSProperties = { ...ring(40), width: 'auto', minWidth: 40, padding: '0 11px', borderRadius: 20, display: 'flex', alignItems: 'center', fontSize: 11 }
+
 export interface TouchHold { code: string; label: string }
 const WALK_HOLDS: TouchHold[] = [{ code: 'ShiftLeft', label: 'slide' }, { code: 'Space', label: 'jump' }]
 
@@ -51,6 +53,8 @@ export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint
   const roles = useRef(new Map<number, { kind: 'stick' | 'look' | 'fire'; ox: number; oy: number; lx: number; ly: number }>())
   const [stick, setStick] = useState<null | { ox: number; oy: number; x: number; y: number }>(null)
   const [down, setDown] = useState<Record<string, boolean>>({})
+  // M11: on a phone the standing taps fold into one MENU chip; tap it to open the row, tap again or pick one to fold
+  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => () => resetTouch(), [])
   // a hold set that changes under a held finger (driving → on foot) must not leave its key stuck down
@@ -129,9 +133,13 @@ export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint
 
       {/* standing taps: a compact row under the top-right HUD */}
       <div style={{ position: 'absolute', ...(row.side === 'right' ? { right: 'max(12px, env(safe-area-inset-right))' } : { left: 'max(12px, env(safe-area-inset-left))' }), top: row.top, display: 'flex', gap: 8, flexWrap: 'wrap', maxWidth: '62vw' }}>
-        {actions.filter(a => !a.near).map(a => (
-          <div key={a.code} data-touch={a.label} style={{ ...ring(40), width: 'auto', minWidth: 40, padding: '0 11px', borderRadius: 20, display: 'flex', alignItems: 'center', fontSize: 11 }}
-            onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); pressKey(a.code) }}>
+        <div data-touch="menu" style={{ ...CHIP, ...(menuOpen ? { background: 'rgba(212,168,67,0.42)' } : null) }}
+          onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setMenuOpen(o => !o) }}>
+          <span style={{ fontSize: 15, marginRight: 6, color: '#d4a843' }}>{'\u2261'}</span>MENU
+        </div>
+        {menuOpen && actions.filter(a => !a.near).map(a => (
+          <div key={a.code} data-touch={a.label} style={CHIP}
+            onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setMenuOpen(false); pressKey(a.code) }}>
             <span style={{ fontSize: 13, marginRight: 6, color: '#d4a843' }}>{a.key}</span>{a.label}
           </div>
         ))}
