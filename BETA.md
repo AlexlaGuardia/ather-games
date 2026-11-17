@@ -103,6 +103,10 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
+- **Alex 11-17: a RINNING ROOM** (craft rinsticks, make bait, prepare catches for the cooking room). Canon mostly settled
+  (rinsticks built from rinn; roast rinn at the hearth; workshop rooms + Moglin trade). Magii asked (CANON_GAPS 4a9a621): 6th room
+  + its name, what bait is made of, which Moglin. It is the bait-refill answer. New system: build with Alex or as its own row after the ruling.
+
 - **M6a rinning (11-17):** works end to end, but (1) nothing tells a stranger rinning exists: they must open the bag and
   read the bait pouch (a journal line or welcome-card line would fix it: wording = @lark); (2) 10 bait at birth and NO
   refill anywhere: where does more bait come from (Greg / Moglin / forage / Nyx shops)? Your call from 11-16, still open.
