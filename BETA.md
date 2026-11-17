@@ -12,6 +12,9 @@ A stranger lands on **ather.games on their phone**, makes a keeper, and plays th
 **In scope:** the open world (Ather plot, the Wilds, the continent, its towns). **Shelved, not beta:** Nolmir, the arcade
 cabinets, the Starforge ticket. They stay live but are not worked on; repurpose later (Alex 11-16).
 
+**A "coming soon" door is not a dead end** (the Thistledown Fair's "still pitching", the Station's "Not running yet").
+A dead end is a step the game points you at that cannot be done. Do not build a feature to close a coming-soon door.
+
 ## Milestones
 
 Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (look / feel / canon sign-off; the hive parks it and moves on)
@@ -23,7 +26,10 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 | M3 | **Touch controls.** The first touch moves you; the thumb zone does not sit on the hotbar; every HUD button opens its panel; every panel closes by tap | `scripts/beta-audit-2.mts`: Ather plot ✅ on prod (`9024f774`: every chip opens AND closes by tap); continent unaudited | 🟨 |
 | M4 | **The next step is told.** Right after birth, the keeper sees what to do (Greg's errand in the journal, the trail lit) | `shared/journal.test.ts` + `scripts/beta-m4-look.mts` (beacon + trail on Greg, prod 11-16, `92537123`) | ✅ |
 | M5 | **First errand, PLAYED.** Greg → runesmith → Enchant Temple → bracelet, reached on foot / courser, not by teleport hooks | `errand-check` + `runesmith-check` exist (hook-driven); new played version | 🟨 |
-| M6 | **Core loops reachable in the first hour**: rinning, prospecting, a Wilds fight, buying a business. Each one found without a guide | one check per loop | ⬜ |
+| M6a | **Rinning, found and played.** A keeper finds bait + the rinstick and lands a rinn without a guide | `rinning-check` (exists, hook-driven) + a played version | ⬜ |
+| M6b | **Prospecting, found and played.** A keeper finds a node and cuts a gem without a guide | `prospect-check` (exists) + a played version | ⬜ |
+| M6c | **A fight in the Wilds.** A keeper reaches the Wilds and wins (or survives) a fight without a guide | new | ⬜ |
+| M6d | **Buying a business.** A keeper finds a deed on the continent and buys it without a guide; it survives a reload | `market-check` (exists: Rune Hold mine, buy, reload) + a played version | ⬜ |
 | M7 | **Saves survive.** Reload, close tab, come back next day; anonymous → signed-in keeps everything | new | ⬜ |
 | M8 | **Clean console.** Zero page errors / console errors / 4xx-5xx across every beta check | rolled into each check | 🟨 |
 | M9 | **Phone performance.** Holds frame rate on a mid phone; heap stays bounded over 30 min | new + 🔒 Alex's phone | ⬜ |
@@ -62,6 +68,8 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **Checkpoints 11:00 / 13:30 ET:** the hub wraps (rows true, SHIMMER_SESSION, cortex), pushes "ready to clear", stops.
   Alex: `/clear`, then `/loop /hive`. It boots from files and loses nothing. **18:00:** final wrap + the day's summary.
 - **Magii:** her own window if Alex opens one. Canon gaps go to CANON_GAPS.md + dbr + the queue below; the row parks.
+- **A row closes on the hub's prod check, never on a worker's report.** The worker proves it on its devwin; the hub
+  builds, re-runs the row's check against ather.games, and only then flips the row.
 - **Never waits on Alex:** a 🔒 row goes to the queue and the next row is taken. A row that fails twice is ⛔ blocked.
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
