@@ -40,7 +40,13 @@ const errs: string[] = []; p.on('pageerror', e => errs.push(String(e)))
 await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); for (const k of ['open.inv.v1', 'open.skills.v1', 'open.mined.v1']) localStorage.removeItem(k) })
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 })
 await p.waitForFunction(() => !!(window as any).__ather?.mine, { timeout: 180000 }); await sleep(2000)
-await p.evaluate((P) => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'check', tile: P.tile, x: P.sx, y: P.sy, z: P.sz, biome: 4, made: 0 } }), P)
+// __ather.mine exists at mount but the Wilds index/network/tiles load after it: a travel sent before they land only toasts
+// "still loading". Re-send until the keeper is in the Wilds (never loosens an assert, just waits for the world).
+for (let i = 0; i < 40 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds'; i++) {
+  await p.evaluate((P) => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'check', tile: P.tile, x: P.sx, y: P.sy, z: P.sz, biome: 4, made: 0 } }), P)
+  await sleep(4000)
+}
+if ((await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds') { console.log('never reached the Wilds'); console.log('FAIL'); await br.close(); process.exit(1) }
 await sleep(10000)
 const frame = async (name = '_frame') => { try { await p.screenshot({ path: `${out}/${name}.png` }) } catch { /* slow */ } }
 await p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
