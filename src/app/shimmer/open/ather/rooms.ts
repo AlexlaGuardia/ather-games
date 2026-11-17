@@ -34,7 +34,7 @@ export interface RoomDef {
 // Costs are goldwood logs only on purpose: it is the one material a new keeper can gather (Forestry 1), and a room
 // that asks for something you cannot reach yet is a locked door, not a choice. Tune with play.
 export const ROOMS: Readonly<Record<RoomKind, RoomDef>> = {
-  rinnshop:   { name: 'Rinnshop',   blurb: 'Bait is cut here and catches readied for the hearth. Rinsticks soon.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 16 }], raiseMs: 90_000, open: true },
+  rinnshop:   { name: 'Rinnshop',   blurb: 'Rinsticks are built here, bait is cut and catches readied for the hearth.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 16 }], raiseMs: 90_000, open: true },
   cooking:    { name: 'Cooking room', blurb: 'A hearth that roasts your catch and the meat you bring home from the Smokehouse.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: true },
   alchemy:    { name: 'Alchemy room', blurb: 'A cauldron that boils crystals, shards and saps into potions.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 120_000, open: true },
   smith:      { name: 'Smithy',     blurb: 'Works metal brought over from the continent. Drawn up, not ready to build yet.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: false },

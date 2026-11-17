@@ -60,6 +60,7 @@ export const GARDEN_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'ather:trade:trial-ledger', worldTied: false },  // the trade ledger
   { base: 'open.companion.v1',        worldTied: false },  // the Moglins
   { base: 'open.works.v1',            worldTied: false },  // the workshop rooms (ather/rooms.ts)
+  { base: 'open.tools.v1',            worldTied: false },  // a keeper's equipped tools: rinsticks (ather/rinsticks.ts)
   { base: 'open.buffs.v1',            worldTied: false },  // a keeper's potion buffs, until-times (ather/alchemy.ts)
   { base: 'open.deeds-told.v1',      worldTied: false },  // BETA M6d: the deeds journal line was told (business/deed-pointer.ts)
   { base: 'open.village.v1',          worldTied: false },  // the garden village's Moglins (ather/moglins.ts)

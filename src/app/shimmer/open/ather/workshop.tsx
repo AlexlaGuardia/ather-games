@@ -31,6 +31,8 @@ import {
 import { FURNITURE, FURNITURE_ORDER, REFINE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, type Job } from './furniture'
 import { ROAST } from './cooking'
 import { BREW } from './alchemy'
+import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
+import { TOOL_DEFS } from '../../engine/tools'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
 let works: Works | null = null
@@ -485,10 +487,7 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
                 </div>
               ) : <div style={{ fontSize: 13, color: H.inkSoft }}>Nothing to cut. A small catch, or mast off a pruned tree, makes bait.</div>}
             </div>
-            <div style={{ opacity: 0.6 }}>
-              <div style={lab}>Rinsticks · soon</div>
-              <div style={{ fontSize: 12.5, color: H.inkSoft, marginTop: 4 }}>Built from rinn, since kin calls to kin. The rack is up. The work comes soon.</div>
-            </div>
+            <RinstickList r={r} inv={inv} />
           </>
         )}
         {r.kind === 'carpentry' && (
@@ -525,6 +524,38 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
         </div>
       </div>
     </HearthFrame>
+  )
+}
+
+/** The Rinnshop's rinsticks (ather/rinsticks.ts): canon's three, built from rinn. Making one equips it (it comes out when you
+ *  hold bait); the one in hand and its uses left are shown first. */
+function RinstickList({ r, inv }: { r: Room; inv: ReturnType<typeof useInv> }) {
+  const [tools, setTools] = useState(() => loadTools())
+  const cur = tools.rinning, curDef = cur ? TOOL_DEFS[cur.toolId] : undefined
+  return (
+    <div data-rinsticks>
+      <div style={lab}>Rinsticks</div>
+      <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }} data-rinstick-held={cur?.toolId ?? ''}>
+        In hand: {rinstickName(cur)}{curDef && !curDef.basic ? ` · ${cur!.usesRemaining} catches left` : ' · never wears out'}. Built from rinn, since kin calls to kin. A better one gives the reel more room.
+      </div>
+      <div style={{ display: 'grid', gap: 6 }}>
+        {RINSTICKS.map(id => {
+          const d = TOOL_DEFS[id], have = d.recipe.every(c => benchCount(r, inv, c.itemId) >= c.count)
+          return (
+            <div key={id} data-rinstick={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: H.ink }}>
+                {d.name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· {d.recipe.map(c => `${c.count} ${itemDef(c.itemId).name} (${benchCount(r, inv, c.itemId)})`).join(' + ')} · {d.durability} catches · reel ×{easeOf({ toolId: id, usesRemaining: 1 }).toFixed(2)}</span>
+              </span>
+              <HearthButton small disabled={!have} onClick={() => {
+                const m = makeRinstick(getW(), r.id, getInv(), loadTools(), id)
+                if (!m.ok) { if (m.why) hudSay(m.why, 'info'); return }
+                setWorks(m.works); setInv(m.inv); saveTools(m.tools, true); setTools(m.tools); hudSay(`${d.name} · in hand when you hold bait.`, 'item')
+              }}>Make</HearthButton>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
