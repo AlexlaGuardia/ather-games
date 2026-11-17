@@ -24,6 +24,7 @@ export const ACTIONS: Action[] = [
   { code: 'KeyL', label: 'lift your waymark' }, { code: 'KeyR', label: 'draw · swap · hold to stow · back to the road' },
   { code: 'KeyH', label: 'home (the Wilds)' }, { code: 'KeyM', label: 'map' },
   { code: 'KeyI', label: 'bag' }, { code: 'KeyJ', label: 'journal' }, { code: 'KeyP', label: 'character' },
+  { code: 'KeyQ', label: 'tactical cast (the bracelet)' }, { code: 'KeyX', label: 'signature cast (the glove)' },
   { code: 'KeyO', label: 'options' }, { code: 'KeyC', label: 'camera · linked plots' }, { code: 'KeyG', label: 'garage' },
 ]
 const DEFAULTS = new Set(ACTIONS.map(a => a.code))

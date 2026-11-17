@@ -6,7 +6,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { newCombat, stepCombat, fire, reload, populate, revive, spawnHollow, HEAD_Y, type Combat, type Terrain, type CombatEvent } from './combat'
+import { newCombat, stepCombat, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, type Combat, type Terrain, type CombatEvent, type Hollow } from './combat'
+import { runCast, type CastHit } from './combat-casts'
+import type { CastSpec } from '../../play3d/cast'
 import { touch } from '../shared/touch'
 import { wakeChampion, tellOf, CHAMP } from './champion'
 import { WAKE_R, STRAY_R, type WildsNode } from './nodes'
@@ -21,10 +23,24 @@ export interface CombatHud {
 const SETTLE = 1.5
 const EYE = 1.62   // locomotion eye height over the feet (approx; damage only needs the feet)
 
+/** The light a cast leaves under a Hollow it holds (the Hollow itself stays colourless goop): one colour per effect,
+ *  the strongest first. */
+function fxTint(h: Hollow | undefined): string | null {
+  if (!h?.fx) return null
+  if (fxOn(h, 'rooted')) return '#d9a441'
+  if (fxOn(h, 'blinded')) return '#f4efc8'
+  if (fxOn(h, 'disarmed')) return '#b48be0'
+  if (fxOn(h, 'slowed')) return '#7fc7ea'
+  if (fxOn(h, 'burning')) return '#ef7a3c'
+  if (fxOn(h, 'staggered') || fxOn(h, 'vulnerable')) return '#e7e2d4'
+  return null
+}
+const PUDDLE = '#55585b'
+
 /** One Hollow: goop with no colour of its own (design-briefs/hollows.md): diffuse dead flat grey, specular high so
  *  it borrows the world's light. A sag and sway carries the shamble; the lunge leans in. */
 function HollowBody({ c, id }: { c: React.MutableRefObject<Combat>; id: number }) {
-  const g = useRef<THREE.Group>(null), body = useRef<THREE.Mesh>(null), head = useRef<THREE.Mesh>(null)
+  const g = useRef<THREE.Group>(null), body = useRef<THREE.Mesh>(null), head = useRef<THREE.Mesh>(null), puddle = useRef<THREE.MeshBasicMaterial>(null)
   const mat = useMemo(() => new THREE.MeshPhongMaterial({ color: '#26272a', emissive: '#6d6f73', specular: '#eef3f6', shininess: 80, flatShading: true }), [])
   useFrame(({ clock }) => {
     const h = c.current.hollows.find(k => k.id === id); if (!h || !g.current) return
@@ -37,6 +53,7 @@ function HollowBody({ c, id }: { c: React.MutableRefObject<Combat>; id: number }
     if (body.current) body.current.scale.set(1 + Math.sin(t * 2.1) * 0.05, 1 - Math.sin(t * 2.1) * 0.04, 1)
     mat.emissive.setRGB(0.43 + h.hitFlash * 5, 0.435 + h.hitFlash * 5, 0.45 + h.hitFlash * 5)
     if (head.current) head.current.position.y = HEAD_Y + Math.sin(t * 1.7) * 0.04
+    if (puddle.current) { const tint = fxTint(h); puddle.current.color.set(tint ?? PUDDLE); puddle.current.opacity = tint ? 0.85 : 0.55 }
   })
   return (
     <group ref={g}>
@@ -46,7 +63,7 @@ function HollowBody({ c, id }: { c: React.MutableRefObject<Combat>; id: number }
       <mesh position={[0.36, 1.05, 0.28]} rotation-x={-1.1} material={mat}><capsuleGeometry args={[0.09, 0.55, 2, 5]} /></mesh>
       <mesh position={[-0.36, 1.05, 0.28]} rotation-x={-1.25} material={mat}><capsuleGeometry args={[0.09, 0.55, 2, 5]} /></mesh>
       {/* the drip: a puddle that follows */}
-      <mesh position-y={0.03} rotation-x={-Math.PI / 2}><circleGeometry args={[0.55, 9]} /><meshBasicMaterial color="#55585b" transparent opacity={0.55} /></mesh>
+      <mesh position-y={0.03} rotation-x={-Math.PI / 2}><circleGeometry args={[0.55, 9]} /><meshBasicMaterial ref={puddle} color={PUDDLE} transparent opacity={0.55} /></mesh>
     </group>
   )
 }
@@ -173,7 +190,49 @@ function Tells({ c, heightAt }: { c: React.MutableRefObject<Combat>; heightAt: (
   )
 }
 
-export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, reloadTick = 0 }: {
+/** A cast's flash: a ring that opens on the ground where it landed, or the bolt's line from the hand to what it struck
+ *  (and on to each body it chained to). Lives FX_S seconds. */
+const FX_S = 0.6
+type LiveFx = CastHit & { at: number; from: { x: number; y: number; z: number }; colour: string }
+const CAST_COLOUR: Record<string, string> = { status: '#9fd8ff', projectile: '#fff0b8', restore: '#9be59b', infusion: '#ffcf7a' }
+function CastFlash({ fx }: { fx: React.MutableRefObject<LiveFx[]> }) {
+  const rings = useRef<(THREE.Mesh | null)[]>([]), lines = useRef<(THREE.Mesh | null)[]>([])
+  const v = useMemo(() => ({ a: new THREE.Vector3(), b: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), q: new THREE.Quaternion() }), [])
+  useFrame(() => {
+    const now = performance.now() / 1000
+    fx.current = fx.current.filter(f => now - f.at < FX_S)
+    for (let i = 0; i < 4; i++) {
+      const f = fx.current[i], ring = rings.current[i], line = lines.current[i]
+      if (ring) ring.visible = false
+      if (line) line.visible = false
+      if (!f) continue
+      const u = (now - f.at) / FX_S
+      if (ring && f.kind !== 'bolt') {
+        ring.visible = true; ring.position.set(f.x, f.y + 0.08, f.z); const r = f.r * (0.4 + 0.6 * Math.min(1, u * 2.2)); ring.scale.set(r, r, r)
+        const m = ring.material as THREE.MeshBasicMaterial; m.color.set(f.colour); m.opacity = 0.75 * (1 - u)
+      }
+      if (line && f.kind === 'bolt') {
+        line.visible = true
+        v.a.set(f.from.x, f.from.y, f.from.z); v.b.set(f.x, f.y, f.z)
+        const len = v.a.distanceTo(v.b); line.position.copy(v.a).lerp(v.b, 0.5)
+        v.q.setFromUnitVectors(v.up, v.b.clone().sub(v.a).normalize()); line.quaternion.copy(v.q); line.scale.set(1, len, 1)
+        const m = line.material as THREE.MeshBasicMaterial; m.color.set(f.colour); m.opacity = 0.9 * (1 - u)
+      }
+    }
+  })
+  return (
+    <>
+      {[0, 1, 2, 3].map(i => (
+        <group key={i}>
+          <mesh ref={el => { rings.current[i] = el }} rotation-x={-Math.PI / 2} visible={false}><ringGeometry args={[0.85, 1, 32]} /><meshBasicMaterial transparent depthWrite={false} side={THREE.DoubleSide} /></mesh>
+          <mesh ref={el => { lines.current[i] = el }} visible={false}><cylinderGeometry args={[0.05, 0.05, 1, 5, 1, true]} /><meshBasicMaterial transparent depthWrite={false} /></mesh>
+        </group>
+      ))}
+    </>
+  )
+}
+
+export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, reloadTick = 0, casts, onCast }: {
   T: Terrain
   locked: React.MutableRefObject<boolean>
   frozen: React.MutableRefObject<boolean>
@@ -190,7 +249,12 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   armed?: boolean
   /** bumped by the page when R is tapped with a single gun drawn: reload */
   reloadTick?: number
+  /** casts the page has paid for (shared/casting.ts), run along the eye's aim on the next frame */
+  casts?: React.MutableRefObject<CastSpec[]>
+  /** what each one did (how many it touched), for the message line */
+  onCast?: (spec: CastSpec, hit: CastHit | null) => void
 }) {
+  const fx = useRef<LiveFx[]>([])
   const { camera } = useThree()
   const c = useRef<Combat>(newCombat(Date.now() >>> 0))
   const [ids, setIds] = useState<{ id: number; kind: string }[]>([])
@@ -250,6 +314,16 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       fire(C, camera.position, aim)
       if (!C.gun.auto) { trigger.current = false; touch.fire = false }
     }
+    if (casts?.current.length) {
+      camera.getWorldDirection(aim)
+      for (const spec of casts.current) {
+        const hit = runCast(C, T, camera.position, aim, spec)
+        if (hit) fx.current.push({ ...hit, at: performance.now() / 1000, from: { x: camera.position.x + aim.x * 0.6, y: camera.position.y - 0.25, z: camera.position.z + aim.z * 0.6 }, colour: CAST_COLOUR[spec.archetype] ?? '#ffffff' })
+        for (const t of hit?.to ?? []) fx.current.push({ kind: 'bolt', ...t, r: 0.4, hit: 0, at: performance.now() / 1000, from: { x: hit!.x, y: hit!.y, z: hit!.z }, colour: CAST_COLOUR[spec.archetype] ?? '#ffffff' })
+        onCast?.(spec, hit)
+      }
+      casts.current = []
+    }
     stepCombat(C, T, feet, dt)
     if (C.events.length) {
       const now = performance.now() / 1000
@@ -308,6 +382,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     <>
       {nodes.filter(n => !spent.current.has(n.id)).map(n => <NodeMound key={n.id} n={n} y={T.heightAt(n.x, n.z)} />)}
       <ChampionBody c={c} />
+      <CastFlash fx={fx} />
       <Tells c={c} heightAt={T.heightAt} />
       {ids.map(h => h.kind === 'floater' ? <FloaterBody key={h.id} c={c} id={h.id} /> : <HollowBody key={h.id} c={c} id={h.id} />)}
       <instancedMesh ref={spitsMesh} args={[undefined, undefined, 32]} frustumCulled={false}>

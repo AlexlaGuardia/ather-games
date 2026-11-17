@@ -94,6 +94,33 @@ function Messages({ style, align }: { style: React.CSSProperties; align: 'left' 
   )
 }
 
+export interface CastPlate { key: string; name: string | null; cool: number; tooDear: boolean }
+/** The two cast keys, left of the mana orb: the key, the word, a cooldown that drains left to right. Dim when it
+ *  cannot go (cooling, short of mana, or no word on the vessel). */
+function CastPlates({ casts }: { casts: React.RefObject<CastPlate[]> }) {
+  const [, tick] = React.useState(0)
+  useEffect(() => { const id = setInterval(() => tick(t => t + 1), 100); return () => clearInterval(id) }, [])
+  const list = casts.current ?? []
+  if (!list.length) return null
+  const t = HUD_FACES[FACE]
+  return (
+    <div className="pointer-events-none flex gap-2" style={{ position: 'fixed', right: 262, bottom: 22, zIndex: 33 }} data-hud="casts">
+      {list.map(c => {
+        const ready = !!c.name && c.cool <= 0 && !c.tooDear
+        return (
+          <HudPlate key={c.key} face={FACE} r={10} style={{ padding: 3, opacity: c.name ? 1 : 0.55 }}>
+            <div className="relative overflow-hidden flex items-center gap-2 px-2 py-1" style={{ minWidth: 112, ...hearthBody }}>
+              {c.cool > 0 && <div className="absolute inset-y-0 left-0" style={{ width: `${c.cool * 100}%`, background: 'rgba(40,26,14,.35)' }} />}
+              <b className="relative text-[13px] grid place-items-center" style={{ ...hearthDisplay, width: 20, height: 20, borderRadius: 5, background: ready ? t.accent : 'rgba(58,39,22,.25)', color: ready ? '#fff8e6' : t.text }}>{c.key}</b>
+              <span className="relative text-[12px] whitespace-nowrap" style={{ opacity: ready ? 1 : 0.6, color: c.tooDear ? '#8a3b2a' : undefined }}>{c.name ?? 'no word'}</span>
+            </div>
+          </HudPlate>
+        )
+      })}
+    </div>
+  )
+}
+
 function StatusChips({ items, top, right }: { items: readonly Status[]; top: number; right: number }) {
   if (!items.length) return null
   return (
@@ -110,7 +137,7 @@ function StatusChips({ items, top, right }: { items: readonly Status[]; top: num
   )
 }
 
-export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entries, sel, onSelect, onEquip, dimmed, input, minimap, status = [] }: {
+export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entries, sel, onSelect, onEquip, casts, dimmed, input, minimap, status = [] }: {
   size: HudSize
   pose: React.RefObject<CompassPose | null>
   marks?: React.RefObject<readonly CompassMark[]>
@@ -124,6 +151,9 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
   /** the wheel CLICK: equip the lit slot. Given, the wheel's roll only lights a cursor (Alex 11-16); without it the
    *  roll selects at once, as before */
   onEquip?: (i: number) => void
+  /** the two cast keys (shared/casting.ts): key, the word's name (null = nothing on that vessel), 0..1 cooldown left,
+   *  and whether the mana is short. Read every few frames; the page writes it */
+  casts?: React.RefObject<CastPlate[]>
   /** fades the bar (hands busy: at the wheel, at home with nothing to fight) */
   dimmed: boolean
   /** keys 1-8 and the wheel drive the bar only while true (not in a menu, not at the wheel) */
@@ -208,6 +238,7 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
       <StatusChips items={status} top={statusTop} right={box.right} />
       <div className="fixed bottom-4 left-4 pointer-events-none" style={{ zIndex: 32 }}><HearthVitals face={FACE} vitals={vitals} /></div>
       <div className="contents" style={{ zIndex: 32 }}><CornerFixed size={size} mana={mana} readouts={readouts} /></div>
+      {casts && <CastPlates casts={casts} />}
     </div>
   )
 }

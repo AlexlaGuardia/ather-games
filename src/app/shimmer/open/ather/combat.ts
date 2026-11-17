@@ -33,7 +33,15 @@ export interface Hollow {
   lx: number; lz: number                 // lunge direction
   hitFlash: number
   hitThisLunge: boolean
+  /** cast statuses on this body, seconds left each (combat-casts.ts lays them; stepCombat honours and counts them down) */
+  fx?: Partial<Record<HollowFx, number>>
 }
+/** The engine's statuses that mean something to a Hollow (engine/statuses.ts; `revealed`, `silenced`, `sealed`,
+ *  `shieldBroken` do not: a Hollow neither hides, casts, nor carries a shield). */
+export type HollowFx = 'rooted' | 'disarmed' | 'blinded' | 'slowed' | 'staggered' | 'vulnerable' | 'burning'
+export const fxOn = (h: Hollow, k: HollowFx) => (h.fx?.[k] ?? 0) > 0
+/** what a cast status does to a Hollow (build; tune with play) */
+export const FX = { slowMult: 0.45, vulnerableMult: 1.3, burnDps: 5 } as const
 /** A floater's spit: slow enough to see coming and side-step. */
 export interface Spit { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg?: number }
 export interface Round { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg: number; crit: number }
@@ -42,7 +50,10 @@ export interface Drop { id: number; x: number; y: number; z: number; amount: num
 export interface Keeper {
   hp: number; maxHp: number; sinceHurt: number
   ammo: number; reloading: number; sinceShot: number; bloom: number
+  /** an infusion cast on the gun: rounds hit harder until the combat clock passes this */
+  ampUntil?: number
 }
+export const AMP_MULT = 1.3
 
 export const KEEPER_HP = 100
 export const REGEN_DELAY = 5, REGEN_RATE = 8
@@ -188,7 +199,8 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     }
     if (best) {
       const h = best.h
-      h.hp -= best.head ? r.crit : r.dmg; h.hitFlash = 0.12; r.life = 0
+      const mult = (fxOn(h, 'vulnerable') ? FX.vulnerableMult : 1) * ((k.ampUntil ?? 0) > (c.clock ?? 0) ? AMP_MULT : 1)
+      h.hp -= (best.head ? r.crit : r.dmg) * mult; h.hitFlash = 0.12; r.life = 0
       if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = SHAMBLER.stagger }
       const killed = h.hp <= 0
       c.events.push({ kind: 'hit', id: h.id, head: best.head, killed })
@@ -201,12 +213,24 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   // hollows
   for (const h of c.hollows) {
     h.hitFlash = Math.max(0, h.hitFlash - dt); h.t -= dt
+    if (h.fx) {
+      for (const key in h.fx) { const kk = key as HollowFx; h.fx[kk] = Math.max(0, (h.fx[kk] ?? 0) - dt) }
+      if (fxOn(h, 'burning')) h.hp -= FX.burnDps * dt
+    }
+    const held = fxOn(h, 'rooted') || fxOn(h, 'staggered'), blind = fxOn(h, 'blinded'), unarmed = fxOn(h, 'disarmed')
     const dx = feet.x - h.x, dz = feet.z - h.z, d = Math.hypot(dx, dz)
-    if (h.kind === 'floater') { stepFloater(c, T, h, feet, d, dx, dz, dt); continue }
+    if (h.kind === 'floater') {
+      // a held, blinded or disarmed floater hangs where it is and spits nothing; a slowed one does all of it at half pace
+      if (!(held || blind || unarmed)) stepFloater(c, T, h, feet, d, dx, dz, fxOn(h, 'slowed') ? dt * FX.slowMult : dt)
+      continue
+    }
+    // blinded: it has lost you, and blunders about; disarmed: it will not wind up to lunge
+    if (blind && (h.state === 'chase' || h.state === 'windup')) { h.state = 'wander'; h.t = 0 }
+    if (unarmed && h.state === 'windup') { h.state = 'chase' }
     let speed = 0, mx = 0, mz = 0
     switch (h.state) {
       case 'wander':
-        if (d < SHAMBLER.notice && k.hp > 0) { h.state = 'chase'; break }
+        if (d < SHAMBLER.notice && k.hp > 0 && !blind) { h.state = 'chase'; break }
         if (h.t <= 0 || Math.hypot(h.wx - h.x, h.wz - h.z) < 1) {
           h.wx = h.x + (rnd(c) - 0.5) * 16; h.wz = h.z + (rnd(c) - 0.5) * 16; h.t = 3 + rnd(c) * 4
         }
@@ -214,7 +238,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
         break
       case 'chase':
         if (d > SHAMBLER.forget || k.hp <= 0) { h.state = 'wander'; h.t = 0; break }
-        if (d < SHAMBLER.lungeRange) { h.state = 'windup'; h.t = SHAMBLER.windup; h.lx = dx / d; h.lz = dz / d; break }
+        if (d < SHAMBLER.lungeRange && !unarmed) { h.state = 'windup'; h.t = SHAMBLER.windup; h.lx = dx / d; h.lz = dz / d; break }
         mx = dx; mz = dz; speed = SHAMBLER.chaseSpeed * (0.8 + 0.35 * Math.sin(h.id * 1.7 + h.x * 0.3))   // the stagger
         break
       case 'windup':
@@ -223,7 +247,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
         break
       case 'lunge':
         mx = h.lx; mz = h.lz; speed = SHAMBLER.lungeSpeed
-        if (!h.hitThisLunge && d < SHAMBLER.hitReach && Math.abs(feet.y - h.y) < 1.6 && k.hp > 0) {
+        if (!h.hitThisLunge && !unarmed && d < SHAMBLER.hitReach && Math.abs(feet.y - h.y) < 1.6 && k.hp > 0) {
           h.hitThisLunge = true
           k.hp = Math.max(0, k.hp - SHAMBLER.damage); k.sinceHurt = 0
           c.events.push({ kind: 'hurt', amount: SHAMBLER.damage })
@@ -235,6 +259,8 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
         if (h.t <= 0) h.state = d < SHAMBLER.notice ? 'chase' : 'wander'
         break
     }
+    if (held) speed = 0
+    else if (fxOn(h, 'slowed')) speed *= FX.slowMult
     if (speed > 0) {
       const l = Math.hypot(mx, mz) || 1
       const nx = h.x + (mx / l) * speed * dt, nz = h.z + (mz / l) * speed * dt
@@ -246,6 +272,12 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     }
     h.y = T.heightAt(h.x, h.z)
   }
+  // a burn can finish one off between rounds: it drops like any other
+  for (const h of c.hollows) if (h.hp <= 0) {
+    c.events.push({ kind: 'hit', id: h.id, head: false, killed: true })
+    c.drops.push({ id: c.nextId++, x: h.x, y: T.heightAt(h.x, h.z), z: h.z, amount: (h.kind === 'floater' ? 2 : 1) + Math.floor(rnd(c) * 3), age: 0 })
+  }
+  c.hollows = c.hollows.filter(h => h.hp > 0)
   // keep a crowd from stacking into one body
   for (let a = 0; a < c.hollows.length; a++) for (let b = a + 1; b < c.hollows.length; b++) {
     const A = c.hollows[a], B = c.hollows[b], dx = B.x - A.x, dz = B.z - A.z, d = Math.hypot(dx, dz), min = SHAMBLER.radius * 2

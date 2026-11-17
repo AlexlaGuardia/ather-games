@@ -34,6 +34,9 @@ import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gemsGiven, markGemsGiven, stageOf, gregsGems, errandEntries, birthSeat } from '../business/errand'
 import { SEATS } from '../business/letters'
 import { useBirth } from '../birth-gate'
+import { castMoves, press, freshClock, cooling, CAST_KEY, type CastSlot, type CastClock } from '../shared/casting'
+import { castForMove, type CastSpec } from '../../play3d/cast'
+import type { CastHit } from './combat-casts'
 import { useLoadout } from '../shared/loadout'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree } from './wilds'
@@ -123,6 +126,12 @@ export default function AtherSlice() {
   const vitalsRef = useRef<Vitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0 })
   // ★ mana is real now: pruning from a distance spends it (forestry.ts › MANA_COST), it refills slowly (build: 1.5/s)
   const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 1.5 })
+  // ★ THE CAST KEYS (Alex 11-16, Q tactical · X signature; shared/casting.ts): clocks per slot, keyed by the move they
+  // timed (a new word worn starts fresh), the fight's queue, and the two that move the keeper themselves
+  const castClocks = useRef<Record<CastSlot, { move: string | null; clock: CastClock }>>({ tactical: { move: null, clock: freshClock(castForMove(null)) }, signature: { move: null, clock: freshClock(castForMove(null)) } })
+  const castQueue = useRef<CastSpec[]>([])
+  const surge = useRef<{ until: number; mult: number }>({ until: 0, mult: 1 })
+  const impulse = useRef<CastSpec | null>(null)
   const aimRef = useRef<Aim>({ tree: null, dist: Infinity }), fxRef = useRef<ForestryFx | null>(null)
   const cAimRef = useRef<CrystalAim>({ crystal: null, dist: Infinity }), cFxRef = useRef<ProspectFx | null>(null)
   // ★ THE STANCE (shared/stance.ts, Alex 11-15): stowed by default; R draws / swaps / (held) stows; 1-8 / the wheel pick
@@ -312,7 +321,13 @@ export default function AtherSlice() {
   const onTick = useCallback((lc: Loco, _yaw: number, dt: number) => {
     pos.current = { x: lc.px, z: lc.pz, grounded: !lc.airborne, swimming: lc.swimming }
     { const m = manaRef.current; if (m.cur < m.max) m.cur = Math.min(m.max, m.cur + m.regen * dt) }   // mana refills (forestry spends it)
-    lc.speedMult = stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1   // hands free, a little quicker on foot
+    lc.speedMult = (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1)   // hands free, a little quicker on foot
+      * (performance.now() < surge.current.until ? surge.current.mult : 1)      // a surge cast (Static Burst)
+    if (impulse.current) {   // an impulse cast (Quickform): up, keeping the run
+      const sp = impulse.current; impulse.current = null
+      lc.vy = Math.max(lc.vy, sp.impulseUp || 8); lc.airborne = true
+      if (!sp.keepMomentum) { lc.hvx = 0; lc.hvz = 0 }
+    }
     poseRef.current = { x: lc.px, z: lc.pz, yaw: _yaw }
     let n: Near = null
     if (zone.kind === 'plot') {
@@ -559,6 +574,42 @@ export default function AtherSlice() {
   // THE FIRST ERRAND (business/errand.ts, Magii + Alex 11-16): Greg hands the birth letter's gems; the journal points to
   // the school's runesmith, then the Enchant Temple in the Citadel (those waymarks light on the continent page)
   const birth = useBirth(), loadoutNow = useLoadout()
+  const castSet = useMemo(() => castMoves(loadoutNow, birth), [loadoutNow, birth])
+  const castSetRef = useRef(castSet); castSetRef.current = castSet
+  const zoneRef = useRef(zone.kind); zoneRef.current = zone.kind
+  /** Q / X: pay, then the keeper moves (surge, impulse) or the fight takes it (combat-casts.ts) */
+  const castSlot = useCallback((slot: CastSlot) => {
+    const move = castSetRef.current[slot], cc = castClocks.current[slot]
+    if (cc.move !== move) castClocks.current[slot] = { move, clock: freshClock(castForMove(move)) }
+    const v = press(slot, move, castClocks.current[slot].clock, performance.now(), manaRef.current.cur, { fight: zoneRef.current === 'wilds' })
+    if (!v.ok) { hudSay(v.why, 'info'); return }
+    castClocks.current[slot].clock = v.clock; manaRef.current.cur = v.mana
+    const sp = v.spec
+    if (sp.archetype === 'surge') { surge.current = { until: performance.now() + sp.surgeSecs * 1000, mult: sp.surgeMult || 1.5 }; hudSay(sp.label, 'item'); return }
+    if (sp.archetype === 'impulse') { impulse.current = sp; hudSay(sp.label, 'item'); return }
+    if (sp.archetype === 'restore' && zoneRef.current !== 'wilds') { hudSay(`${sp.label} · you are whole`, 'item'); return }
+    castQueue.current.push(sp)
+  }, [])
+  const onCast = useCallback((sp: CastSpec, hit: CastHit | null) => {
+    if (!hit) return
+    const n = hit.hit
+    hudSay(sp.archetype === 'restore' ? `${sp.label} · +${sp.heal}` : sp.archetype === 'infusion' ? `${sp.label} · the gun hits harder` : n ? `${sp.label} · ${n} held` : `${sp.label} · nothing caught`, 'item')
+  }, [])
+  // what the HUD shows for the two keys
+  const castHud = useRef<{ key: string; name: string | null; cool: number; tooDear: boolean }[]>([])
+  useEffect(() => {
+    let raf = 0
+    const tick = () => {
+      const now = performance.now()
+      castHud.current = (['tactical', 'signature'] as CastSlot[]).map(slot => {
+        const move = castSetRef.current[slot], sp = castForMove(move), cc = castClocks.current[slot]
+        return { key: slot === 'tactical' ? 'Q' : 'X', name: move ? sp.label : null, cool: cc.move === move ? cooling(sp, cc.clock, now) : 0, tooDear: !!move && manaRef.current.cur < sp.manaCost }
+      })
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
   const [given, setGiven] = useState(false)
   useEffect(() => setGiven(gemsGiven()), [])
   const errandStage = stageOf(birth, inv, loadoutNow, given)
@@ -617,6 +668,8 @@ export default function AtherSlice() {
         return
       }
       if (e.code === 'KeyF') plantHere()
+      if (!e.repeat && e.code === CAST_KEY.tactical) castSlot('tactical')
+      if (!e.repeat && e.code === CAST_KEY.signature) castSlot('signature')
 
       if (e.code === 'KeyL' && n?.kind === 'waymark' && n.own) {
         const next = lift(waymarks, n.w.id); setWaymarks(next); saveWaymarks(next)
@@ -627,7 +680,7 @@ export default function AtherSlice() {
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [panel, fade, zone, waymarks, ww, goHome, tune, skipDays, allNodes, plantHere])
+  }, [panel, fade, zone, waymarks, ww, goHome, tune, skipDays, allNodes, plantHere, castSlot])
 
   const zoneName = zone.kind === 'plot' ? 'Your plot' : 'The Wilds'
   // Phone taps: only what applies here and now, each the key this page already handles.
@@ -664,7 +717,7 @@ export default function AtherSlice() {
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} /></group> })}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
-            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={held === 'repeater'} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} />
+            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={held === 'repeater'} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} />
         )}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
         {world && fade === 0 && <CompanionFollower pose={poseRef} ground={ground} />}
@@ -678,7 +731,7 @@ export default function AtherSlice() {
         )}
       </Canvas>
       <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
-      <GameHud size={hudSize} pose={poseRef} marks={marksRef} vitals={vitalsRef} mana={manaRef} entries={hotbar} sel={litSlot(stance, inv)} onSelect={i => setStance(st => selectSlot(st, i, getInv()))} onEquip={i => setStance(st => equipSlot(st, i, getInv()))} tools={toolsRef} skills={skillsRef}
+      <GameHud size={hudSize} pose={poseRef} marks={marksRef} vitals={vitalsRef} mana={manaRef} entries={hotbar} sel={litSlot(stance, inv)} onSelect={i => setStance(st => selectSlot(st, i, getInv()))} onEquip={i => setStance(st => equipSlot(st, i, getInv()))} tools={toolsRef} skills={skillsRef} casts={castHud}
         dimmed={zone.kind !== 'wilds'} input={!panel && !fade && !optionsOpen}
         minimap={ww && <AtherMiniMap size={hudSize} zone={zone.kind} world={ww} wrev={wrev} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regionsByTile={regionsByTile} cluster={cl.frame}
           owned={owned} onExpand={() => setPanel({ kind: 'map', view: 'ather', travel: false })} />}
