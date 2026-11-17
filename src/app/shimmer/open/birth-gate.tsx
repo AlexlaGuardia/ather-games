@@ -15,6 +15,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import BirthScreen from '../play3d/birth/BirthScreen'
 import { loadRuneInventory } from '../play3d/rune-inventory'
 import { saveOwnerResolved, SAVE_OWNER_EVENT } from '@/lib/save-slot'
+import { stampEpochIfAbsent } from '@/lib/ather-epoch'
 
 // ── the keeper's birth rune, as a store the open world can subscribe to ──────────────────────────────────────────
 let birth: string | null | undefined
@@ -48,6 +49,8 @@ export function BirthGate() {
   // anonymous key; Forget cleared both. Now: nothing shows until the owner is known, and the owner landing re-reads.
   const [owner, setOwner] = useState(false)
   useEffect(() => {
+    // M7: this keeper is current; say so, or /shimmer's resetIfStale deletes it (ather-epoch.ts › stampEpochIfAbsent)
+    stampEpochIfAbsent()
     const on = () => { refreshBirth(); setOwner(saveOwnerResolved()) }
     on()
     window.addEventListener(SAVE_OWNER_EVENT, on)

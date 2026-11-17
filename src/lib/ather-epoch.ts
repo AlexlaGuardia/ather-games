@@ -94,6 +94,21 @@ const CHARACTER_FAMILIES = WORLD_TIED_FAMILIES
 
 const BIRTH_PENDING_KEY = 'ather:shimmer:birthPending'
 
+/**
+ * Mark this browser as living in the CURRENT epoch, without resetting anything. Called by the open world.
+ *
+ * ★ WHY (M7, 2026-11-17, `scripts/beta-m7-saves.mts`): the open world (`/shimmer/open/*`) never called
+ * `resetIfStale`, so a keeper born there had a rune and NO epoch. The first visit to `/shimmer`, play3d or
+ * voxel3d (sign-in returns to `/shimmer` by default) read that as a pre-epoch character and DELETED it.
+ * ⚠ NEVER call `resetIfStale` from the open world instead: every live open-world keeper has no epoch, so it
+ * would wipe all of them. A keeper the open world can see is current by definition (it postdates epoch 2).
+ * Only stamps when the key is ABSENT; a browser holding an older epoch number is left for `resetIfStale`.
+ */
+export function stampEpochIfAbsent(): void {
+  if (typeof window === 'undefined') return
+  try { if (localStorage.getItem(EPOCH_KEY) === null) localStorage.setItem(EPOCH_KEY, String(ATHER_EPOCH)) } catch { /* private mode */ }
+}
+
 export function resetIfStale(): boolean {
   if (typeof window === 'undefined') return false   // SSR — no storage to reset
   try {

@@ -25,6 +25,7 @@
 // anonymous purse (confusing, reversible) rather than guessing a name and spending someone's coins.
 import { useEffect } from 'react'
 import { setSaveOwner, adoptAnonSlots } from '@/lib/save-slot'
+import { adoptAnonKeeperState } from '@/lib/keeper-local'
 
 export default function SaveOwnerBoot() {
   useEffect(() => {
@@ -37,6 +38,11 @@ export default function SaveOwnerBoot() {
         userId = body.session?.user_id ?? null
       } catch { /* offline — anonymous, local-only */ }
       if (cancelled) return
+      // ★ M7 (2026-11-17): the KEEPER (birth rune, runes) moves too, site-wide, and BEFORE setSaveOwner fires
+      // SAVE_OWNER_EVENT, because the open world's BirthGate re-reads the rune on that event. It used to run only on
+      // /shimmer, play3d and voxel3d, so signing in on the open world reopened the birth gate. Idempotent; an account
+      // that already has a keeper is 'locked' and the anonymous one stays put (the roster prompt is the later answer).
+      adoptAnonKeeperState(userId)
       setSaveOwner(userId)                 // fires SAVE_OWNER_EVENT; live readouts re-read
       // First sign-in moves this browser's anonymous purse and card save into the account. Once,
       // ever — `planSlotAdoption` has the rules and why an already-claimed browser is left alone.
