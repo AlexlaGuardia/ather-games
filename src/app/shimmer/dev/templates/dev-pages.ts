@@ -113,6 +113,13 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['keeper', 'body', 'rayman', 'doll', 'rig', 'joints', 'walk', 'multiplayer', 'avatar'],
   },
   {
+    path: '/shimmer/dev/hands',
+    title: 'The Hands Tuner',
+    blurb: 'Place the first-person hands in each key pose: rest, run, jump, cast.',
+    group: 'glass',
+    keywords: ['hands', 'gloves', 'first person', 'viewmodel', 'tune', 'run', 'jump', 'cast', 'pose'],
+  },
+  {
     path: '/shimmer/dev/break',
     title: 'The Chips',
     blurb: 'Every bucket breaking side by side, so the feel can be judged instead of argued.',

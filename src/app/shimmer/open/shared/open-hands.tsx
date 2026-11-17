@@ -18,7 +18,7 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, forwardRef } from 'react'
 import * as THREE from 'three'
 import { useThree } from '@react-three/fiber'
-import { newFpState, stepFpHands, type FpInput, type HandPose } from './fp-hands-pose'
+import { newFpState, stepFpHands, loadFpTune, FP, type FpInput, type HandPose } from './fp-hands-pose'
 
 const ORDER = 1000
 const C = { glove: '#6e4a2c', cuff: '#b9a582', cord: '#7a5a35', seat: '#7fb6d9', bracelet: '#8a6a3c' }
@@ -38,7 +38,6 @@ function buildHand(side: 1 | -1, seatMat: THREE.MeshStandardMaterial | null): TH
   part(new THREE.TorusGeometry(0.06, 0.008, 6, 16), mat(C.cord), [0, -0.075, 0.005], [Math.PI / 2, 0, 0])
   if (seatMat) part(new THREE.IcosahedronGeometry(0.02, 0), seatMat, [0, 0.012, 0.04])                     // the glove's seat, facing you
   else part(new THREE.TorusGeometry(0.063, 0.013, 6, 18), mat(C.bracelet), [0, -0.05, 0.005], [Math.PI / 2, 0, 0])   // the bracelet
-  g.scale.setScalar(1.0)
   return g
 }
 
@@ -56,7 +55,7 @@ export const OpenHands = forwardRef<OpenHandsApi>(function OpenHands(_, ref) {
     return { root, R, L }
   }, [seatMat])
   const st = useRef(newFpState())
-  const place = (o: THREE.Group, p: HandPose) => { o.position.set(p.x, p.y, p.z); o.rotation.set(p.pitch, 0, p.roll) }
+  const place = (o: THREE.Group, p: HandPose) => { o.position.set(p.x, p.y, p.z); o.rotation.set(p.pitch, 0, p.roll); o.scale.setScalar(FP.SCALE) }
   useImperativeHandle(ref, () => ({
     step: (i, dt) => {
       const { R, L } = stepFpHands(st.current, i, Math.min(dt, 0.1))
@@ -66,6 +65,7 @@ export const OpenHands = forwardRef<OpenHandsApi>(function OpenHands(_, ref) {
     seat: lit => { seatMat.emissiveIntensity = 0.3 + 1.6 * lit },
   }), [camera, rig, seatMat])
   useEffect(() => {
+    loadFpTune()   // this browser's tune from /shimmer/dev/hands, if any
     ;(window as unknown as { __openHands?: unknown }).__openHands = { R: () => ({ ...st.current.R }), L: () => ({ ...st.current.L }), air: () => st.current.air }
     return () => { rig.root.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); (o.material as THREE.Material).dispose() } }) }
   }, [rig])

@@ -134,6 +134,7 @@ const DEVICE_KEYS = [
   'ather:open:',                  // M12.5: this browser's sync record + its ONE conflict backup (lib/open-cloud-core.ts)
   'open.settings.v1',              // open-world settings: DEVICE
   'open.keymap.v1',               // open-world key bindings: DEVICE (the hands, not the character)
+  'open:hands-tune.v1',           // the first-person hands' tune from /shimmer/dev/hands: DEVICE (tuned against this screen)
   'ather.look2',                  // ground look: DEVICE
   'open.range.tried',             // gun-range tried flag: DEVICE
   'ather:courser:darter:build',   // ⚠ UNCLEAR (garage build): DEVICE for now, stays local (M12 step 1)
