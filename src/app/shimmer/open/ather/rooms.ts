@@ -14,7 +14,7 @@
 import type { Box } from '../terrain-world'
 import { squareAt, sqId, GATE, GREG, THRESHOLD, PATH_START, GROUND_Y } from './plot'
 import { gardenKey } from '@/lib/keeper-local'
-import { countOf, take, type Inv } from '../shared/inventory'
+import { countOf, take, give, type Inv } from '../shared/inventory'
 import { MAX_CHESTS } from './garden-bank'
 
 export type RoomKind = 'rinnshop' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
@@ -55,8 +55,11 @@ export const WALL_H = 3.2, WALL_T = 0.3, DOOR_W = 2.2
 
 /** A placed room. `q` = quarter turns (0..3); the door is on the front (local −z at q 0, turning with it). */
 export interface Room { id: string; kind: RoomKind; x: number; z: number; q: number; placedAt: number; doneAt: number }
-/** A chest the keeper placed: a door into the garden bank (garden-bank.ts). Each one adds CHEST_SLOTS. */
-export interface Chest { id: string; x: number; z: number; q: number; placedAt: number }
+/** A KEEPSTONE standing on the plot (canon 5a20b8f, ather-rework WORKSHOP ROOMS (6): a Blankstone pedestal whose top opens
+ *  on a set crystal's light; never "chest" to a player). A door into the garden bank; each adds CHEST_SLOTS. The code and
+ *  the save keep the word `chest` (the save field shipped as `chests` an hour before the ruling). `crystal` = the item
+ *  set inside: the basic one is a raw mana shard; found uniques set higher crystals, look only, never more space. */
+export interface Chest { id: string; x: number; z: number; q: number; placedAt: number; crystal?: string }
 export interface Works { v: 1; rooms: Room[]; chests: Chest[] }
 export const freshWorks = (): Works => ({ v: 1, rooms: [], chests: [] })
 
@@ -128,12 +131,12 @@ export function wallsOf(r: Room): Box[] {
 }
 
 /** The nearest thing the keeper can use with E, or null: the table, or a raised room's bench. */
-export type WorkNear = { kind: 'table' } | { kind: 'bench'; room: Room } | { kind: 'raising'; room: Room } | { kind: 'chest' }
+export type WorkNear = { kind: 'table' } | { kind: 'bench'; room: Room } | { kind: 'raising'; room: Room } | { kind: 'chest'; id: string }
 export function nearWork(works: Works, x: number, z: number, now = Date.now()): WorkNear | null {
   if (Math.hypot(TABLE.x - x, TABLE.z - z) < TABLE_REACH) return { kind: 'table' }
-  // a chest and a bench can share a room: the nearer one answers E
+  // a Keepstone and a bench can share a room: the nearer one answers E
   let best: WorkNear | null = null, bestD = Infinity
-  for (const c of allChests(works)) { const d = Math.hypot(c.x - x, c.z - z); if (d < CHEST_REACH && d < bestD) { best = { kind: 'chest' }; bestD = d } }
+  for (const c of allChests(works)) { const d = Math.hypot(c.x - x, c.z - z); if (d < CHEST_REACH && d < bestD) { best = { kind: 'chest', id: c.id }; bestD = d } }
   for (const r of works.rooms) {
     if (!raised(r, now)) { const d = doorOf(r); if (Math.hypot(d.x - x, d.z - z) < 3 && !best) return { kind: 'raising', room: r }; continue }
     const b = benchOf(r), d = Math.hypot(b.x - x, b.z - z); if (d < BENCH_REACH && d < bestD) { best = { kind: 'bench', room: r }; bestD = d }
@@ -141,11 +144,21 @@ export function nearWork(works: Works, x: number, z: number, now = Date.now()): 
   return best
 }
 
-// ── chests: doors into the garden bank ────────────────────────────────────────────────────────────────────────
-/** The plot's own chest, standing by the planning table from the first minute (garden-bank.ts says why). */
+// ── Keepstones: doors into the garden bank ────────────────────────────────────────────────────────────────────────
+/** The plot's own Keepstone, standing by the planning table from the first minute (garden-bank.ts says why). Fixed: it
+ *  cannot be picked up, so a garden always has a door into its bank. */
 export const STARTER_CHEST: Chest = { id: 'starter', x: TABLE.x + 3.2, z: TABLE.z, q: 0, placedAt: 0 }
-export const CHEST_W = 1.2, CHEST_D = 0.8, CHEST_H = 0.9, CHEST_REACH = 1.9
-export const CHEST_COST: readonly { id: string; n: number }[] = [{ id: 'goldwood_log', n: 8 }]
+export const CHEST_W = 0.9, CHEST_D = 0.9, CHEST_H = 1.1, CHEST_REACH = 1.9
+/** A Keepstone is an ITEM (canon): made at the planning table (the Stonery's job once it opens), set from the bag, picked
+ *  back up. Blankstone is the build's plain stone (RULED 11-16) and the shard is the light. */
+export const KEEPSTONE = 'keepstone'
+export const KEEPSTONE_RECIPE: readonly { id: string; n: number }[] = [{ id: 'blankstone', n: 3 }, { id: 'raw_mana_shard', n: 1 }]
+export function makeKeepstone(inv: Inv): Inv | null {
+  let out: Inv | null = inv
+  for (const c of KEEPSTONE_RECIPE) { out = out && take(out, c.id, c.n); if (!out) return null }
+  const r = give(out!, KEEPSTONE, 1)
+  return r.left > 0 ? null : r.inv
+}
 export const allChests = (w: Works): Chest[] => [STARTER_CHEST, ...w.chests]
 /** Chests standing, the starter included: what the bank's cap is counted from. */
 export const chestsStanding = (w: Works) => 1 + w.chests.length
@@ -154,7 +167,7 @@ export function chestBox(c: Pick<Chest, 'x' | 'z' | 'q'>): Box {
   return { x0: c.x - hw, x1: c.x + hw, y0: GROUND_Y - 0.5, y1: GROUND_Y + CHEST_H, z0: c.z - hd, z1: c.z + hd }
 }
 export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
-  if (chestsStanding(works) >= MAX_CHESTS) return { ok: false, why: `${MAX_CHESTS} chests already stand on the plot.` }
+  if (chestsStanding(works) >= MAX_CHESTS) return { ok: false, why: `${MAX_CHESTS} Keepstones already stand on the plot.` }
   const k = chestBox({ x, z, q })
   for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
     const s = squareAt(cx, cz); if (!s || !owned.has(sqId(s.i, s.j))) return { ok: false, why: 'Build on ground you hold.' }
@@ -171,16 +184,24 @@ export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: numbe
     if (Math.hypot(d.x - x, d.z - z) < 1.8) return { ok: false, why: 'That blocks the doorway.' }
     if (Math.hypot(b.x - x, b.z - z) < 1.8) return { ok: false, why: 'That crowds the bench.' }
   }
-  if (allChests(works).some(c => Math.hypot(c.x - x, c.z - z) < 1.4)) return { ok: false, why: 'Too close to another chest.' }
-  if (inv) { const short = CHEST_COST.find(c => countOf(inv, c.id) < c.n); if (short) return { ok: false, why: `Needs ${short.n} ${short.id.replace(/_/g, ' ')} (you have ${countOf(inv, short.id)}).` } }
+  if (allChests(works).some(c => Math.hypot(c.x - x, c.z - z) < 1.4)) return { ok: false, why: 'Too close to another Keepstone.' }
+  if (inv && countOf(inv, KEEPSTONE) < 1) return { ok: false, why: 'No Keepstone in the bag. Make one at the planning table.' }
   return { ok: true }
 }
 export function placeChest(works: Works, owned: ReadonlySet<string>, inv: Inv, x: number, z: number, q: number, now = Date.now()): { works: Works; inv: Inv; chest: Chest } | null {
   if (!canPlaceChest(works, owned, x, z, q, inv).ok) return null
   let out: Inv | null = inv
-  for (const c of CHEST_COST) { out = out && take(out, c.id, c.n); if (!out) return null }
-  const chest: Chest = { id: `chest-${now.toString(36)}`, x, z, q: ((q % 4) + 4) % 4, placedAt: now }
-  return { works: { ...works, chests: [...works.chests, chest] }, inv: out!, chest }
+  out = take(inv, KEEPSTONE, 1); if (!out) return null
+  const chest: Chest = { id: `chest-${now.toString(36)}`, x, z, q: ((q % 4) + 4) % 4, placedAt: now, crystal: 'raw_mana_shard' }
+  return { works: { ...works, chests: [...works.chests, chest] }, inv: out, chest }
+}
+/** Lift a placed Keepstone back into the bag. The starter one stays; a full bag refuses. The bank keeps every stack
+ *  (garden-bank.ts: over the cap is tolerated, deposits just stop until it drains). */
+export function pickUpChest(works: Works, id: string, inv: Inv): { works: Works; inv: Inv } | null {
+  if (!works.chests.some(c => c.id === id)) return null
+  const r = give(inv, KEEPSTONE, 1)
+  if (r.left > 0) return null
+  return { works: { ...works, chests: works.chests.filter(c => c.id !== id) }, inv: r.inv }
 }
 
 // ── save: garden-tied (the garden is shared across a roster; Alex 11-17), registered in GARDEN_KEY_SPECS ─────────────

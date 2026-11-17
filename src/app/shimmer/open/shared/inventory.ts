@@ -100,6 +100,9 @@ export const STARTING_BAIT = 10
 //    Shipped for an hour as the placeholder 'forage'; loadInv renames it.
 OPEN_ITEMS.mast = { name: 'Mast', blurb: 'Seeds and nuts shaken loose from a pruned branch. Rinn rise to it where it falls on water.', icon: '/open/icons/mast.svg', stack: 99, kind: 'material' }
 ITEM_GROUP.mast = 'forestry'
+// THE KEEPSTONE (RULED 11-17, athernyx 5a20b8f; glossary Keepstone): the plot's storage, an item made at the planning table and
+//    set on the plot (ather/rooms.ts). Never "chest" to a player.
+OPEN_ITEMS.keepstone = { name: 'Keepstone', blurb: 'A Blankstone pedestal with a mana shard set inside. Set it on your plot and it opens on the garden bank.', icon: '/open/icons/keepstone.svg', stack: 10, kind: 'placeable' }
 export const BAIT_FROM: Readonly<Record<string, number>> = { mast: 2, shimmerscale: 3, clickclaw: 3, glowfin: 3 }
 /** What the HUD says when the last bait is gone: where more comes from, so it is never a dead end. */
 export const NO_BAIT_LINE = 'No bait left. Make more in the bag from a small catch, or mast off a pruned tree.'

@@ -20,7 +20,7 @@ import { GROUND_Y } from './plot'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
   WALL_H, type Works, type Room, type RoomKind, type WorkNear,
-  CHEST_W, CHEST_D, CHEST_H, CHEST_COST, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
+  CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
 import {
   MAX_CHESTS, CHEST_SLOTS, bankCap, bankUsed, bankView, BANK_TABS, deposit, depositBag, withdraw, loadBank, saveBank, freshBank,
@@ -35,7 +35,7 @@ const getW = (): Works => { if (!works) works = typeof window === 'undefined' ? 
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export function setWorks(w: Works) { works = w; saveWorks(w); subs.forEach(f => f()) }
 export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER)
-/** Every room's walls and every chest, for the walker's plotShape. */
+/** Every room's walls and every Keepstone, for the walker's plotShape. */
 export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox)]
 
 // the garden bank's store (garden-bank.ts): one pool, every chest a door into it
@@ -60,9 +60,9 @@ function confirmPlace(owned: ReadonlySet<string>) {
   if (!placing) return
   if (placing.kind === 'chest') {
     const c = placeChest(getW(), owned, getInv(), ghost.x, ghost.z, placing.q)
-    if (!c) { const v = canPlaceChest(getW(), owned, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot set a chest there.' : v.why, 'info'); return }
+    if (!c) { const v = canPlaceChest(getW(), owned, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot set a Keepstone there.' : v.why, 'info'); return }
     setInv(c.inv); setWorks(c.works); setPlacing(null)
-    hudSay(`A chest stands · the bank holds ${bankCap(chestsStanding(c.works))} stacks now.`, 'item', 5)
+    hudSay(`The Keepstone opens on the bank · it holds ${bankCap(chestsStanding(c.works))} stacks now.`, 'item', 5)
     return
   }
   const r = place(getW(), owned, getInv(), placing.kind, ghost.x, ghost.z, placing.q)
@@ -105,7 +105,7 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
     <>
       <PlanningTable />
       {w.rooms.map(r => (raised(r) ? <RoomMesh key={r.id} r={r} /> : <Scaffold key={r.id} r={r} />))}
-      {allChests(w).map(c => <ChestMesh key={c.id} c={c} />)}
+      {allChests(w).map(c => <Keepstone key={c.id} c={c} pose={pose} />)}
       {p && (p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
     </>
   )
@@ -211,18 +211,48 @@ function Ghost({ pose, owned, kind, q }: { pose: React.MutableRefObject<Pose>; o
   )
 }
 
-/** A chest: a lidded box with iron bands and a lock plate on its front (the face toward +z at q 0: the keeper who set it). */
-function ChestMesh({ c }: { c: Chest }) {
+/** The crystal set in a Keepstone: its light's colour (the crystal ladder, game/shimmer-skilling.md › Skill 3). */
+const CRYSTAL_LIGHT: Record<string, string> = {
+  raw_mana_shard: '#9ad8ff', violet_crystal: '#b48cff', storm_crystal: '#ffe27a', earth_crystal: '#f0b070',
+  water_crystal: '#6fe0ff', pure_mana_core: '#f2f7ff', ather_crystal: '#ffc8ee',
+}
+const STONE = '#d3cab8', STONE_DK = '#aba291'
+/** THE KEEPSTONE (canon 5a20b8f): a Blankstone pedestal whose top opens and the set crystal's light rises from inside.
+ *  The lid swings back as a keeper comes near and the light climbs out of the bowl; it settles shut when they leave. */
+function Keepstone({ c, pose }: { c: Chest; pose: React.MutableRefObject<Pose> }) {
+  const lid = useRef<THREE.Group>(null), gem = useRef<THREE.Mesh>(null), shaft = useRef<THREE.Mesh>(null), shaftMat = useRef<THREE.MeshBasicMaterial>(null)
+  const open = useRef(0), col = CRYSTAL_LIGHT[c.crystal ?? 'raw_mana_shard'] ?? CRYSTAL_LIGHT.raw_mana_shard
+  useFrame((st, dt) => {
+    const near = Math.hypot(pose.current.x - c.x, pose.current.z - c.z) < 3.2
+    open.current += ((near ? 1 : 0) - open.current) * Math.min(1, dt * 4)
+    const o = open.current, t = st.clock.elapsedTime
+    if (lid.current) lid.current.rotation.x = -o * 1.9
+    if (gem.current) { gem.current.position.y = 1.0 + o * 0.28 + Math.sin(t * 1.6) * 0.03 * o; gem.current.rotation.y = t * 0.6 }
+    if (shaft.current) { shaft.current.scale.y = 0.05 + o; shaft.current.position.y = 1.02 + 0.65 * (0.05 + o) }
+    if (shaftMat.current) shaftMat.current.opacity = 0.2 * o
+  })
   return (
     <group position={[c.x, GROUND_Y, c.z]} rotation-y={-c.q * Math.PI / 2}>
-      <mesh position-y={0.32}><boxGeometry args={[CHEST_W, 0.64, CHEST_D]} /><meshLambertMaterial color="#9a6a3a" /></mesh>
-      <mesh position-y={0.74}><boxGeometry args={[CHEST_W + 0.04, 0.22, CHEST_D + 0.04]} /><meshLambertMaterial color="#7d5230" /></mesh>
-      {[-0.38, 0.38].map(x => <mesh key={x} position={[x, 0.45, 0]}><boxGeometry args={[0.08, 0.92, CHEST_D + 0.06]} /><meshLambertMaterial color="#5b5148" /></mesh>)}
-      <mesh position={[0, 0.58, CHEST_D / 2 + 0.04]}><boxGeometry args={[0.18, 0.2, 0.04]} /><meshLambertMaterial color="#d8b46e" /></mesh>
+      <mesh position-y={0.08}><boxGeometry args={[CHEST_W, 0.16, CHEST_D]} /><meshLambertMaterial color={STONE_DK} /></mesh>
+      <mesh position-y={0.5}><cylinderGeometry args={[0.3, 0.34, 0.7, 8]} /><meshLambertMaterial color={STONE} /></mesh>
+      {/* the bowl the crystal sits in, and its glow */}
+      <mesh position-y={0.92}><cylinderGeometry args={[0.42, 0.32, 0.18, 8]} /><meshLambertMaterial color={STONE} /></mesh>
+      <mesh position-y={1.015} rotation-x={-Math.PI / 2}><circleGeometry args={[0.34, 8]} /><meshBasicMaterial color={col} /></mesh>
+      <mesh ref={gem} position-y={1.0}><octahedronGeometry args={[0.13]} /><meshBasicMaterial color={col} /></mesh>
+      {/* the lid, hinged at the back edge */}
+      <group ref={lid} position={[0, 1.01, -0.42]}>
+        <mesh position={[0, 0.05, 0.42]}><cylinderGeometry args={[0.44, 0.44, 0.1, 8]} /><meshLambertMaterial color={STONE_DK} /></mesh>
+        <mesh position={[0, 0.14, 0.42]}><cylinderGeometry args={[0.1, 0.18, 0.1, 8]} /><meshLambertMaterial color={STONE} /></mesh>
+      </group>
+      {/* the light rising out of it */}
+      <mesh ref={shaft} position-y={1.67} scale-y={0.05}>
+        <cylinderGeometry args={[0.1, 0.24, 1.3, 10, 1, true]} />
+        <meshBasicMaterial ref={shaftMat} color={col} transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
     </group>
   )
 }
-/** The chest's ghost: snapped to the half metre, close in front of the keeper. */
+/** The Keepstone's ghost: snapped to the half metre, close in front of the keeper. */
 function ChestGhost({ pose, owned, q }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; q: number }) {
   const g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
   useFrame(() => {
@@ -233,8 +263,7 @@ function ChestGhost({ pose, owned, q }: { pose: React.MutableRefObject<Pose>; ow
   })
   return (
     <group ref={g} rotation-y={-q * Math.PI / 2}>
-      <mesh><boxGeometry args={[CHEST_W, CHEST_H, CHEST_D]} /><meshBasicMaterial ref={mat} color={GHOST_OK} transparent opacity={0.4} depthWrite={false} /></mesh>
-      <mesh position={[0, 0, CHEST_D / 2 + 0.05]}><boxGeometry args={[0.3, 0.3, 0.05]} /><meshBasicMaterial color="#ffffff" /></mesh>
+      <mesh><cylinderGeometry args={[CHEST_W / 2, CHEST_W / 2, CHEST_H, 8]} /><meshBasicMaterial ref={mat} color={GHOST_OK} transparent opacity={0.4} depthWrite={false} /></mesh>
     </group>
   )
 }
@@ -242,7 +271,7 @@ function ChestGhost({ pose, owned, q }: { pose: React.MutableRefObject<Pose>; ow
 // ── prompts + panels ──────────────────────────────────────────────────────────────────────────────────────────
 export function workPrompt(n: WorkNear): string {
   if (n.kind === 'table') return 'E · the planning table'
-  if (n.kind === 'chest') return 'E · the bank'
+  if (n.kind === 'chest') return 'E · the Keepstone'
   if (n.kind === 'raising') return `${ROOMS[n.room.kind].name} · going up (${Math.round(progress(n.room) * 100)}%)`
   return `E · the ${ROOMS[n.room.kind].name}`
 }
@@ -252,7 +281,7 @@ const lab: React.CSSProperties = { color: H.inkSoft, fontSize: 10, fontWeight: 7
 export function WorkshopPanel({ near, owned, onClose }: { near: WorkNear; owned: ReadonlySet<string>; onClose: () => void }) {
   if (near.kind === 'table') return <TablePanel owned={owned} onClose={onClose} />
   if (near.kind === 'bench') return <BenchPanel room={near.room} onClose={onClose} />
-  if (near.kind === 'chest') return <BankPanel onClose={onClose} />
+  if (near.kind === 'chest') return <BankPanel id={near.id} onClose={onClose} />
   return null
 }
 
@@ -263,16 +292,19 @@ function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: (
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 10 }}>
         <div style={{ fontSize: 13, color: H.inkSoft }}>Plan a room, then set it on your ground. The logs go when you place it.</div>
         {(() => {
-          const n = chestsStanding(w), short = CHEST_COST.find(c => countOf(inv, c.id) < c.n)
+          const n = chestsStanding(w), have = countOf(inv, KEEPSTONE), short = KEEPSTONE_RECIPE.find(c => countOf(inv, c.id) < c.n)
           return (
             <div data-room="chest" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ ...hearthDisplay, fontSize: 16, fontWeight: 600, color: H.ink }}>Chest</div>
-                <div style={{ fontSize: 12.5, color: H.inkSoft, lineHeight: 1.35 }}>Every chest opens the one bank, shared by all your keepers. Each adds {CHEST_SLOTS} slots.</div>
-                <div style={{ ...lab, marginTop: 4 }}>{CHEST_COST.map(c => `${countOf(inv, c.id)} / ${c.n} ${itemDef(c.id).name}`).join(' · ')} · {n} of {MAX_CHESTS} standing</div>
+                <div style={{ ...hearthDisplay, fontSize: 16, fontWeight: 600, color: H.ink }}>Keepstone{have ? <span style={{ color: H.inkSoft }}> · {have} in the bag</span> : null}</div>
+                <div style={{ fontSize: 12.5, color: H.inkSoft, lineHeight: 1.35 }}>Every Keepstone opens the one bank, shared by all your keepers. Each adds {CHEST_SLOTS} slots.</div>
+                <div style={{ ...lab, marginTop: 4 }}>{KEEPSTONE_RECIPE.map(c => `${countOf(inv, c.id)} / ${c.n} ${itemDef(c.id).name}`).join(' · ')} · {n} of {MAX_CHESTS} standing</div>
               </div>
-              {n >= MAX_CHESTS ? <span style={lab}>Full</span>
-                : <HearthButton primary disabled={!!short} onClick={() => { setPlacing({ kind: 'chest', q: 0 }); onClose(); hudSay('Placing a chest · R turns it · E sets it · Esc cancels', 'info', 8) }}>Plan</HearthButton>}
+              <div style={{ display: 'grid', gap: 6 }}>
+                <span data-act="make-keepstone"><HearthButton small disabled={!!short} onClick={() => { const r = makeKeepstone(getInv()); if (r) { setInv(r); hudSay('A Keepstone · in your bag.', 'item', 3) } else hudSay(short ? 'Prospect blankstone and a mana shard in the Wilds.' : 'No room in the bag.', 'info') }}>Make</HearthButton></span>
+                {n >= MAX_CHESTS ? <span style={lab}>Full</span>
+                  : <span data-act="set-keepstone"><HearthButton primary disabled={!have} onClick={() => { setPlacing({ kind: 'chest', q: 0 }); onClose(); hudSay('Setting a Keepstone · R turns it · E sets it · Esc cancels', 'info', 8) }}>Set one</HearthButton></span>}
+              </div>
             </div>
           )
         })()}
@@ -346,22 +378,23 @@ function Cell({ s, title, ...rest }: { s: Stack | null; title?: string } & React
 }
 const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(52px, 1fr))', gap: 5, justifyItems: 'center' }
 
-/** E at any chest: the garden bank above, the bag below. Click a stack to move it across. */
-function BankPanel({ onClose }: { onClose: () => void }) {
+/** E at any Keepstone: the garden bank above, the bag below. Click a stack to move it across. */
+function BankPanel({ id, onClose }: { id: string; onClose: () => void }) {
   const inv = useInv(), b = useBank(), w = useWorks()
   const [tab, setTab] = useState<BankTab>('all'), [query, setQuery] = useState('')
   const cap = bankCap(chestsStanding(w)), used = bankUsed(b), view = bankView(b, tab, query)
-  const put = (at: number) => { const r = deposit(getInv(), at, getB(), cap); if (r.moved) { setInv(r.inv); setBank(r.bank) } else hudSay('The bank is full. Plan another chest at the table.', 'info') }
+  const put = (at: number) => { const r = deposit(getInv(), at, getB(), cap); if (r.moved) { setInv(r.inv); setBank(r.bank) } else hudSay('The bank is full. Make another Keepstone at the planning table.', 'info') }
   const takeOut = (k: number) => { const r = withdraw(getB(), k, getInv()); if (r.moved) { setInv(r.inv); setBank(r.bank) } else hudSay('No room in the bag.', 'info') }
-  const putAll = () => { const r = depositBag(getInv(), getB(), cap); if (r.moved) { setInv(r.inv); setBank(r.bank) } else hudSay(used >= cap ? 'The bank is full. Plan another chest at the table.' : 'The bag is already empty.', 'info') }
+  const putAll = () => { const r = depositBag(getInv(), getB(), cap); if (r.moved) { setInv(r.inv); setBank(r.bank) } else hudSay(used >= cap ? 'The bank is full. Make another Keepstone at the planning table.' : 'The bag is already empty.', 'info') }
   return (
     <HearthFrame title="The bank" maxWidth={560} onClose={onClose} fixed dataPanel="bank"
       footer={<span className="text-[12px]">Click a stack to move it across · shared by every keeper in your garden</span>}>
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ ...lab, flex: 1 }} data-bank-used={used} data-bank-cap={cap}>
-            <span style={{ color: used > cap ? '#b5452c' : undefined }}>{used}</span> / {cap} slots · {chestsStanding(w)} of {MAX_CHESTS} chests
+            <span style={{ color: used > cap ? '#b5452c' : undefined }}>{used}</span> / {cap} slots · {chestsStanding(w)} of {MAX_CHESTS} Keepstones
           </div>
+          {id !== 'starter' && <span data-act="pickup-keepstone"><HearthButton small onClick={() => { const r = pickUpChest(getW(), id, getInv()); if (r) { setInv(r.inv); setWorks(r.works); onClose(); hudSay('The Keepstone is back in your bag. The bank keeps everything in it.', 'item', 4) } else hudSay('No room in the bag for it.', 'info') }}>Pick up</HearthButton></span>}
           <span data-act="deposit-bag"><HearthButton small onClick={putAll}>Put the bag away</HearthButton></span>
         </div>
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>

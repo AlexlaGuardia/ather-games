@@ -1,5 +1,5 @@
 // The workshop rooms core (rooms.ts). Run: npx tsx src/app/shimmer/open/ather/rooms.test.ts
-import { ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, CHEST_COST, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, type Works } from './rooms'
+import { ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, pickUpChest, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, type Works } from './rooms'
 import { STARTING_SQUARES, squareAt, sqId, GATE, GREG, GROUND_Y } from './plot'
 import { newInv, give, countOf } from '../shared/inventory'
 let pass = 0
@@ -64,28 +64,43 @@ ok(nearWork(freshWorks(), STARTER_CHEST.x, STARTER_CHEST.z - 1)?.kind === 'chest
 ok(nearWork(freshWorks(), TABLE.x + 1, TABLE.z)?.kind === 'table', 'chest: the starter chest steals the table')
 ok(chestsStanding(freshWorks()) === 1, 'chest: a fresh plot does not count its starter chest')
 const C = { x: -100, z: 110 }
-ok(canPlaceChest(freshWorks(), owned, C.x, C.z, 0, rich).ok, 'chest: a clear owned spot was refused')
-ok(!canPlaceChest(freshWorks(), owned, -60, 60, 0, rich).ok, 'chest: placed off held ground')
-ok(!canPlaceChest(freshWorks(), owned, C.x, C.z, 0, newInv(12)).ok, 'chest: placed without the logs')
-ok(!canPlaceChest(freshWorks(), owned, GATE.x + 3, GATE.z, 0, rich).ok, 'chest: placed in the gate')
-const pc = placeChest(freshWorks(), owned, rich, C.x, C.z, 1, 5)!
-ok(!!pc && pc.works.chests.length === 1 && countOf(pc.inv, 'goldwood_log') === 40 - CHEST_COST[0].n && chestsStanding(pc.works) === 2, 'chest: place took the wrong logs or did not count')
-ok(!canPlaceChest(pc.works, owned, C.x + 1, C.z, 0, rich).ok, 'chest: stacked onto another chest')
+const ks = give(rich, KEEPSTONE, 10).inv
+// a Keepstone is an ITEM: made from blankstone + a mana shard, set from the bag, picked back up
+{
+  const raw = give(give(newInv(12), 'blankstone', 7).inv, 'raw_mana_shard', 1).inv
+  const m = makeKeepstone(raw)
+  ok(!!m && countOf(m, KEEPSTONE) === 1 && countOf(m, 'blankstone') === 7 - KEEPSTONE_RECIPE[0].n && countOf(m, 'raw_mana_shard') === 0, 'keepstone: the recipe took the wrong things')
+  ok(makeKeepstone(m!) === null && countOf(raw, KEEPSTONE) === 0, 'keepstone: made without a shard, or mutated its input')
+}
+ok(canPlaceChest(freshWorks(), owned, C.x, C.z, 0, ks).ok, 'keepstone: a clear owned spot was refused')
+ok(!canPlaceChest(freshWorks(), owned, -60, 60, 0, ks).ok, 'keepstone: set off held ground')
+ok(!canPlaceChest(freshWorks(), owned, C.x, C.z, 0, rich).ok, 'keepstone: set without one in the bag')
+ok(!canPlaceChest(freshWorks(), owned, GATE.x + 3, GATE.z, 0, ks).ok, 'keepstone: set in the gate')
+const pc = placeChest(freshWorks(), owned, ks, C.x, C.z, 1, 5)!
+ok(!!pc && pc.works.chests.length === 1 && countOf(pc.inv, KEEPSTONE) === 9 && countOf(pc.inv, 'goldwood_log') === 40 && chestsStanding(pc.works) === 2, 'keepstone: setting it took the wrong things or did not count')
+ok(!canPlaceChest(pc.works, owned, C.x + 1, C.z, 0, ks).ok, 'keepstone: set onto another one')
+{
+  const up = pickUpChest(pc.works, pc.chest.id, pc.inv)
+  ok(!!up && up.works.chests.length === 0 && countOf(up.inv, KEEPSTONE) === 10, 'keepstone: pick up did not return it to the bag')
+  ok(pickUpChest(pc.works, 'starter', pc.inv) === null, 'keepstone: the starter one was picked up')
+  const packed = { v: 1 as const, slots: Array(32).fill(null).map(() => ({ id: 'blankstone', n: 99 })) }
+  ok(pickUpChest(pc.works, pc.chest.id, packed) === null, 'keepstone: picked up into a full bag (it would vanish)')
+}
 // with a room standing: inside is fine, the wall / door / bench are not
 {
   const rr = W.rooms[0], b = benchOf(rr), d = doorOf(rr), f = footprint(rr.kind, rr.x, rr.z, rr.q)
   const inside = toWorld(rr, -ROOMS.rinnshop.w / 2 + 1.2, 0)
-  ok(canPlaceChest(W, owned, inside.x, inside.z, 0, rich).ok, 'chest: refused inside a room (a storeroom should be fine)')
-  ok(!canPlaceChest(W, owned, b.x, b.z, 0, rich).ok, 'chest: placed on the bench')
-  ok(!canPlaceChest(W, owned, d.x, d.z, 0, rich).ok, 'chest: placed in the doorway')
-  ok(!canPlaceChest(W, owned, f.x0, (f.z0 + f.z1) / 2, 0, rich).ok, 'chest: placed in a wall')
+  ok(canPlaceChest(W, owned, inside.x, inside.z, 0, ks).ok, 'chest: refused inside a room (a storeroom should be fine)')
+  ok(!canPlaceChest(W, owned, b.x, b.z, 0, rich).ok, 'keepstone: set on the bench')
+  ok(!canPlaceChest(W, owned, d.x, d.z, 0, rich).ok, 'keepstone: set in the doorway')
+  ok(!canPlaceChest(W, owned, f.x0, (f.z0 + f.z1) / 2, 0, rich).ok, 'keepstone: set in a wall')
   // inside a room the nearer of chest and bench answers E
   const w2: Works = { ...W, chests: [{ id: 'c', x: inside.x, z: inside.z, q: 0, placedAt: 0 }] }
   ok(nearWork(w2, inside.x + 0.5, inside.z, 1e12)?.kind === 'chest' && nearWork(w2, b.x, b.z, 1e12)?.kind === 'bench', 'chest: chest vs bench nearest-wins wrong')
 }
 // the cap: ten chests and no more
 {
-  let w: Works = freshWorks(), inv = give(newInv(12), 'goldwood_log', 400).inv
+  let w: Works = freshWorks(), inv = give(newInv(12), KEEPSTONE, 20).inv
   for (let k = 0; k < 12; k++) { const r = placeChest(w, owned, inv, -146 + 4 * (k % 4) + 2, 92 + 4 * Math.floor(k / 4), 0, k); if (r) { w = r.works; inv = r.inv } }
   ok(chestsStanding(w) === 10, `chest: the cap is not ten (got ${chestsStanding(w)})`)
 }

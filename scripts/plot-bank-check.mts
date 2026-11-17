@@ -1,12 +1,12 @@
 // ── THE GARDEN BANK, PLAYED (2026-11-17, play / Jin 2 95f19652) ─────────────────────────────────────────────────
-// A keeper with a stuffed bag walks to the starter chest by the planning table, puts the bag away, takes a stack back,
-// then plans a second chest at the table, sets it down, and the bank's cap grows by one chest.
-// SETUP (stated): the bag holds 40 goldwood logs + 99 blankstone + 4 mast in BAG slots (not the hotbar), no works, no bank.
+// A keeper makes a KEEPSTONE at the planning table (canon 5a20b8f), puts the bag away at the starter Keepstone, takes a
+// stack back, sets the new Keepstone on the plot (the bank's cap grows by one), opens it, and picks it back up.
+// SETUP (stated): BAG slots (not the hotbar) hold 40 goldwood logs + 10 blankstone + 2 raw mana shards + 4 mast; no works, no bank.
 // Hooks used for MOVEMENT only (__ather.tp) and for READING (localStorage). Every E, click and the place are real inputs.
 //   npx tsx scripts/plot-bank-check.mts [--url http://localhost:3203] [--out dir]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
-import { STARTER_CHEST, CHEST_COST } from '../src/app/shimmer/open/ather/rooms'
+import { STARTER_CHEST, TABLE, KEEPSTONE_RECIPE } from '../src/app/shimmer/open/ather/rooms'
 import { CHEST_SLOTS } from '../src/app/shimmer/open/ather/garden-bank'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/bank')
@@ -20,7 +20,7 @@ await p.evaluateOnNewDocument(() => {
   localStorage.setItem('ather:shimmer:birthRune', 'star')
   const slots: unknown[] = Array(32).fill(null)
   slots[0] = { id: 'repeater', n: 1 }; slots[1] = { id: 'waymark', n: 12 }; slots[2] = { id: 'bait', n: 10 }
-  slots[8] = { id: 'goldwood_log', n: 40 }; slots[9] = { id: 'blankstone', n: 99 }; slots[10] = { id: 'mast', n: 4 }
+  slots[8] = { id: 'goldwood_log', n: 40 }; slots[9] = { id: 'blankstone', n: 10 }; slots[10] = { id: 'mast', n: 4 }; slots[11] = { id: 'raw_mana_shard', n: 2 }
   localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] })); localStorage.removeItem('open.works.v1'); localStorage.removeItem('open.bank.v1')
 })
 const read = (k: string) => p.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), k)
@@ -37,37 +37,48 @@ const res: Record<string, unknown> = { url }
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500)
 await hideCard()
-// 1. the starter chest: stand in front of it (its front faces −z), E, put the bag away
-await tp(STARTER_CHEST.x, STARTER_CHEST.z + 1.3, 0); await shot('bank-1-chest')   // yaw 0 looks −z: at the chest's front
+// 1. the table: Make a Keepstone (it lands in the hotbar's first free slot, so putting the bag away leaves it in hand)
+await tp(TABLE.x + 1.6, TABLE.z + 1.6, Math.PI / 4)
 await p.keyboard.press('e'); await sleep(900)
-res.bankPanel = await panel('bank'); res.capBefore = await capShown(); await shot('bank-2-panel-empty')
+res.tablePanel = await panel('planning-table')
+res.made = await click('[data-act="make-keepstone"] button'); await sleep(600)
+res.afterMake = await bag(); await shot('bank-0-table')
+await p.keyboard.press('Escape'); await sleep(500)
+// 2. the starter Keepstone: stand at its front (yaw 0 looks −z), E, put the bag away
+await tp(STARTER_CHEST.x, STARTER_CHEST.z + 1.3, 0); await shot('bank-1-keepstone')
+await p.keyboard.press('e'); await sleep(900)
+res.bankPanel = await panel('bank'); res.capBefore = await capShown(); res.starterPickup = await p.evaluate(() => !!document.querySelector('[data-act="pickup-keepstone"]'))
 res.putAway = await click('[data-act="deposit-bag"] button'); await sleep(700)
 res.afterPut = { bag: await bag(), bank: await bank() }; await shot('bank-3-put-away')
-// 2. take the logs back: click the goldwood stack in the bank
+// take the logs back: click the goldwood stack in the bank
 const logSlot = await p.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-bank-slot]')].find(e => e.title.startsWith('Goldwood Log'))?.getAttribute('data-bank-slot'))
 res.withdrew = logSlot != null && await click(`[data-bank-slot="${logSlot}"]`); await sleep(700)
 res.afterTake = { bag: await bag(), bank: await bank() }
 await p.keyboard.press('Escape'); await sleep(500)
-// 3. a second chest: the table's chest card → Plan → stand on open ground → E
-await tp(STARTER_CHEST.x - 3.2 + 1.6, STARTER_CHEST.z + 1.6, Math.PI / 4)
+// 3. set the new one: the table's Keepstone card → Set one → stand on open ground → E
+await tp(TABLE.x + 1.6, TABLE.z + 1.6, Math.PI / 4)
 await p.keyboard.press('e'); await sleep(900)
-res.tablePanel = await panel('planning-table')
-res.plan = await click('[data-room="chest"] button'); await sleep(800)
-await tp(-100, 112, 0); await sleep(600); await shot('bank-4-chest-ghost')
+res.set = await click('[data-act="set-keepstone"] button'); await sleep(800)
+await tp(-100, 112, 0); await sleep(600); await shot('bank-4-ghost')
 await p.keyboard.press('e'); await sleep(1000)
-const works = await read('open.works.v1')
-res.chests = works?.chests?.length ?? 0; res.logsAfterChest = (await bag()).goldwood_log ?? 0
-await tp(-100, 113.5, 0); await shot('bank-5-chest-placed')
-// 4. open the NEW chest (it stands ~1.8 m ahead of where it was set from): the cap shows two chests' worth
+res.chests = (await read('open.works.v1'))?.chests?.length ?? 0; res.keepstonesAfterSet = (await bag()).keepstone ?? 0
+await tp(-100, 113.5, 0); await shot('bank-5-placed')
+// 4. open the NEW one (it stands ~1.8 m ahead of where it was set from): the cap shows two Keepstones' worth
+await tp(-100, 112.9, 0); await sleep(1500); await shot('bank-5b-open')
 await tp(-100, 111.2, 0)
 await p.keyboard.press('e'); await sleep(900)
-res.capAfter = await capShown(); await shot('bank-6-two-chests')
+res.capAfter = await capShown(); await shot('bank-6-two')
+// 5. pick it back up: it returns to the bag, the bank keeps everything
+res.pickedUp = await click('[data-act="pickup-keepstone"] button'); await sleep(800)
+res.chestsAfterPickup = (await read('open.works.v1'))?.chests?.length ?? -1; res.afterPickup = { bag: await bag(), bank: await bank() }
 res.errs = errs
 console.log(JSON.stringify(res))
-const a = res.afterPut as { bag: Record<string, number>; bank: Record<string, number> }, t = res.afterTake as typeof a
-const pass = res.bankPanel === true && res.capBefore === CHEST_SLOTS
-  && a.bank.goldwood_log === 40 && a.bank.blankstone === 99 && a.bank.mast === 4 && !a.bag.goldwood_log && a.bag.bait === 10   // bag away, hotbar kept
+const a = res.afterPut as { bag: Record<string, number>; bank: Record<string, number> }, t = res.afterTake as typeof a, u = res.afterPickup as typeof a
+const pass = res.tablePanel === true && (res.afterMake as Record<string, number>).keepstone === 1 && (res.afterMake as Record<string, number>).blankstone === 10 - KEEPSTONE_RECIPE[0].n
+  && res.bankPanel === true && res.capBefore === CHEST_SLOTS && res.starterPickup === false
+  && a.bank.goldwood_log === 40 && a.bank.blankstone === 7 && a.bank.mast === 4 && !a.bag.goldwood_log && a.bag.bait === 10 && a.bag.keepstone === 1   // bag away, hotbar kept
   && t.bag.goldwood_log === 40 && !t.bank.goldwood_log
-  && res.chests === 1 && res.logsAfterChest === 40 - CHEST_COST[0].n && res.capAfter === 2 * CHEST_SLOTS && errs.length === 0
-console.log(pass ? 'PASS: starter chest → bag put away (hotbar kept) → logs taken back → second chest planned + placed → cap 96' : 'FAIL')
+  && res.chests === 1 && res.keepstonesAfterSet === 0 && res.capAfter === 2 * CHEST_SLOTS
+  && res.chestsAfterPickup === 0 && u.bag.keepstone === 1 && u.bank.blankstone === 7 && errs.length === 0
+console.log(pass ? 'PASS: Keepstone made → bag put away at the starter (hotbar kept) → logs back → Keepstone set (cap 96) → picked back up, bank intact' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)
