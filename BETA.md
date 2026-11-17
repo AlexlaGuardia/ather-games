@@ -29,7 +29,7 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 | M2 | **Phone HUD legible.** No two HUD elements overlap at 390×844 or at 360×780 | `beta-audit-2 [--w 360 --h 780]` (Ather plot) + `beta-audit-continent [--w --h --phase drive|foot]`: both pages PASS on prod 11-17 (`90e4226d`). Covers `data-hud`/`data-touch` boxes only; the hotbar clips ~2px each side at 360 (🔒 look) | ✅ |
 | M3 | **Touch controls.** The first touch moves you; the thumb zone does not sit on the hotbar; every HUD button opens its panel; every panel closes by tap | `beta-audit-2` (Ather plot) + `beta-audit-continent` (drive + foot): PASS on prod at 390 and 360, 11-17 (`90e4226d`) | ✅ |
 | M4 | **The next step is told.** Right after birth, the keeper sees what to do (Greg's errand in the journal, the trail lit) | `shared/journal.test.ts` + `scripts/beta-m4-look.mts` (beacon + trail on Greg, prod 11-16, `92537123`) | ✅ |
-| M5 | **First errand, PLAYED.** Greg → runesmith → Enchant Temple → bracelet, reached on foot / courser, not by teleport hooks | `errand-check` + `runesmith-check` exist (hook-driven); new played version | 🟨 |
+| M5 | **First errand, PLAYED.** Greg → runesmith → Enchant Temple → bracelet, reached on foot / courser, not by teleport hooks | `scripts/beta-m5-errand.mts` (`c9820f61`): PASS on prod 11-17 (walked to Greg + the gate, real fold-map Rune Hold tap, every errand step a real input; continent crossings tp'd, logged in its header). Friction → queue: no beacon between Greg and the continent (stranger must find the gate, Tab-flip the map, pick Rune Hold) | ✅ |
 | M6a | **Rinning, found and played.** A keeper finds bait + the rinstick and lands a rinn without a guide | `scripts/beta-m6a-rinning.mts [--phone]`: PASS on prod desktop + phone 11-17 (`424f86f1`: phone hotbar above the touch layer, FIRE casts/answers/reels). Gaps → queue: nothing points a stranger at rinning; 10 starting bait, no refill | ✅ |
 | M6b | **Prospecting, found and played.** A keeper finds a node and cuts a gem without a guide | `prospect-check` + `scripts/beta-m6b-prospect.mts` (real BE BORN, gate fold-map tap, real click cut): both PASS on prod 11-17 (`b140ba7d`, `33c3c32c`). Gap → queue: nothing points a stranger at prospecting until they stand at a node | ✅ |
 | M6c | **A fight in the Wilds.** A keeper reaches the Wilds and wins (or survives) a fight without a guide | new | ⬜ |
@@ -103,6 +103,8 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+
+- **M5 friction (11-17, not a dead end):** after Greg's gems the journal says 'Go to the Redstair runesmith' but 'Nowhere to point yet' on the Ather side: no beacon to the gate, and Rune Hold sits on the map's Athernyx face (Tab flips). Proposal: on the Ather the errand's waymark points at the gate. Hub can do it (small).
 
 - **✅ ANSWERED 11-17 → M6d reframed (prices stay, first deed = mid-game, deeds get told). Was:** **M6d pacing (11-17):** a fresh keeper has 1,500 Marks; the cheapest of 47 deeds is 35,000 (a lone farm nets +20/min, ~29 h payback). Only first-hour earning = Co. courser contracts (~4-12k per 15 km run). So 'buy a business in the first hour' fails as priced (you raised prices 11-15). Pick: (a) a starter lot ~3-5k, (b) richer first contracts, or (c) the first deed is a mid-game goal and M6d leaves beta. Plus a journal line pointing at deeds either way.
 
