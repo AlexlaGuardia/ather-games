@@ -1,10 +1,10 @@
-// ── BETA M6d: BUYING A BUSINESS, AS A FRESH KEEPER (2026-11-17, world) ───────────────────────────────────────────────
-// market-check.mts proves the buy mechanism but runs on `?tune=1` Marks. This is the played version: a brand-new keeper
-// (fresh profile, born through the real BE BORN tap, NO seeded Marks, NO tune) walks to the cheapest deed on the
-// continent, opens the deed card with the real E key, and reads the price against the purse. Hooks are used for MOVEMENT
-// (__drive.tp / footTp to the continent and the deed's door) and READING only; never to grant Marks or items.
-//   PASS  = the keeper could afford it, bought with a real click, it survived a reload, 0 page errors.
-//   FAIL  = "UNAFFORDABLE: price X, purse Y" (exits 1; nothing is seeded to make it pass).
+// ── BETA M6d: DEEDS ARE TOLD, AS A FRESH KEEPER (reframed 2026-11-17 per Alex: prices stay, the first deed is a mid-game goal) ──
+// A brand-new keeper (fresh profile, born through the real BE BORN tap, NO seeded Marks, NO tune) reaches a continent town and
+// must be TOLD deeds exist: the journal (real J key) carries 'A place of your own' (business/deed-pointer.ts, lark's line).
+// Then at the cheapest deed's door the real E opens the deed card, which shows the price against the purse ('You have N').
+// Hooks are used for MOVEMENT (__drive.tp / footTp) and READING only; never to grant Marks or items. Buying stays out of
+// scope (market-check.mts proves the buy on tune Marks).
+//   PASS = journal line present after reaching town + deed card shows price and 'You have N' + 0 page errors.
 //   npx tsx scripts/beta-m6d-business.mts [--url https://ather.games] [--out /tmp/m6d]
 import puppeteer from 'puppeteer-core'
 import { readFileSync, mkdirSync } from 'node:fs'
@@ -59,6 +59,13 @@ await p.evaluate((x, z) => (window as any).__drive.tp(x + 30, z + 30, 0, 0), o.l
 await p.evaluate((x, z, y) => (window as any).__drive.footTp(x, z, y, -0.08), at.x + fx * 0.8, at.z + fz * 0.8, yaw); await sleep(5000)
 res.reach = await poll(async () => await p.evaluate(() => (window as any).__market.reach()) === o.lot.id)
 if (!res.reach) await done(false, 'FAIL: the deed door is not in reach')
+// 3b · TOLD: the journal (real J) now carries the deeds line
+await sleep(1500)
+await p.keyboard.press('KeyJ'); await sleep(1200)
+res.journal = await text(); await p.screenshot({ path: `${out}/journal.png` })
+res.told = /A place of your own/.test(String(res.journal))
+await p.keyboard.press('KeyJ'); await sleep(800)
+// 4 · the deed card through the real E: price against the purse
 await p.keyboard.press('KeyE')
 res.cardOpen = await poll(async () => !!(await p.$('[data-panel="deed-card"]')), 15000)
 await p.screenshot({ path: `${out}/deed-card.png` })
@@ -66,14 +73,7 @@ if (!res.cardOpen) await done(false, 'FAIL: E did not open the deed card')
 res.card = await text()
 const purse = await p.evaluate(() => Number(document.querySelector('[data-panel="deed-card"] [data-marks]')?.textContent?.replace(/[^0-9]/g, '')))
 res.purse = purse; res.price = o.price
-if (purse < o.price) await done(false, `FAIL UNAFFORDABLE: price ${o.price}, purse ${purse} (${o.name}; cheapest of ${offers.length} deeds)`)
-// 4 · affordable: a real click on Buy, then a reload
-const clicked = await p.evaluate(() => { const bt = [...document.querySelectorAll<HTMLButtonElement>('[data-panel="deed-card"] button')].find(x => /^Buy/.test(x.textContent ?? '')); if (!bt || bt.disabled) return false; bt.click(); return true })
-await sleep(1500)
-const owned = () => p.evaluate(() => ((window as any).__tycoon?.t?.owned ?? []).map((x: any) => x.lotId) as string[])
-res.bought = clicked && (await owned()).includes(o.lot.id)
-await p.reload({ waitUntil: 'load', timeout: 240000 })
-await p.waitForFunction(() => !!(window as any).__tycoon?.t, { timeout: 240000 })
-res.stillOwned = (await owned()).includes(o.lot.id)
-const pass = !!res.bought && !!res.stillOwned && errs.length === 0
-await done(pass, pass ? 'PASS' : 'FAIL: buy/reload')
+const card = String(res.card)
+res.priceVsPurse = purse >= o.price ? /Buy for/.test(card) : new RegExp(`You have ${Math.floor(purse)}`).test(card) && card.includes(String(o.price))
+const pass = !!res.told && !!res.priceVsPurse && errs.length === 0
+await done(pass, pass ? 'PASS' : `FAIL: told=${res.told} priceVsPurse=${res.priceVsPurse} pageErrors=${errs.length}`)
