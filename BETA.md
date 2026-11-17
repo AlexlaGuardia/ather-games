@@ -58,7 +58,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 3. ✅ **11-17 `411d8cc2`, live in `5b3edbad` (keeper-prompt 32/0, beta-m7-saves PASS on prod; panel served on prod). Look not yet judged (🔒 Alex); real Google sign-in path untested.** **The sign-in prompt.** Anonymous keeper + an account that already has keepers → a panel: "Add this keeper to your
    roster?" Yes = it becomes a new roster entry; No = it stays on this browser, untouched (never deleted). Account with no
    keeper → adopt silently (live since d8b72da4).
-4. **Swap UI.** A keeper list (character panel or options) to switch, and "new keeper" opens the birth ritual. Character
+4. ✅ **11-17 `578abec9`, live: beta-m12-swap PASS on prod (new keeper → birth → swap back, rune + pack byte-identical, garden unchanged, 0 errors). Look 🔒 Alex.** **Swap UI.** A keeper list (character panel or options) to switch, and "new keeper" opens the birth ritual. Character
    creator rework = later (Alex).
 5. **Cloud save.** Design `docs/M12-cloud-save.md` (serb, 74c8c713), **APPROVED by Alex 11-17 with all four defaults**
    (server wins + local backup, cap 8, Marks in wallet, settings per device). Server side = serb (db + /api/saves/open),
