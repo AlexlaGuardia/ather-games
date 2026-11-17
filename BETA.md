@@ -39,6 +39,7 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 | M9 | **Phone performance.** Holds frame rate on a mid phone; heap stays bounded over 30 min | new + 🔒 Alex's phone | ⬜ |
 | M10 | **Alex's sign-off pass.** He plays the first hour on his phone and calls it | 🔒 | ⬜ |
 | M11 | **One menu button on the phone HUD** (Alex 11-17: too much clutter). On a phone the tap row folds into ONE MENU chip; tap to open, tap again or pick one to fold. Desktop unchanged | `beta-audit-2` + `beta-audit-continent` (menu rest/open/fold asserted): PASS on prod at 390 + 360, drive + foot, 11-17 (`46ed03f3`) | ✅ |
+| M6e | **Bait refills.** A keeper who runs out of bait can make more without a guide (Magii 11-17 [RULED-AFK], athernyx 65d4c21: bait = a craftable FOOD offering, one per cast, shimmer-skilling.md:563; recipes + which bait draws which rinn = Jin's call). Smallest path: craft bait from food the keeper already gets | new (fail before / pass after) | ⬜ |
 | M12 | **The keeper roster** (Alex 11-17, spec below). One garden file per account; several keepers in it, swapped like loadouts | per-step checks in the spec; `beta-m7-saves` stays green | ⬜ |
 
 ## M12 spec: the keeper roster (Alex 11-17, from the M7 save-loss finding)
@@ -105,7 +106,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 - **Alex 11-17: a RINNING ROOM** (craft rinsticks, make bait, prepare catches for the cooking room). Canon mostly settled
   (rinsticks built from rinn; roast rinn at the hearth; workshop rooms + Moglin trade). Magii asked (CANON_GAPS 4a9a621): 6th room
-  + its name, what bait is made of, which Moglin. It is the bait-refill answer. New system: build with Alex or as its own row after the ruling.
+  + its name, what bait is made of, which Moglin. Magii 11-17 (65d4c21): bait = craftable food offering (recipes ours) → row M6e; a Moglin never rins; the 6th room's name + Moglin = Alex's call (Magii asked him).
 
 - **M6a rinning (11-17):** works end to end, but (1) nothing tells a stranger rinning exists: they must open the bag and
   read the bait pouch (a journal line or welcome-card line would fix it: wording = @lark); (2) 10 bait at birth and NO
