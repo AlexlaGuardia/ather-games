@@ -23,7 +23,9 @@ ok(Math.max(...dR) - Math.min(...dR) > 0.05 && Math.max(...dL) - Math.min(...dL)
 ok(corr < 0, `the hands alternate (one up while the other is down; correlation ${corr.toFixed(4)})`)
 ok(Math.min(...dR) < BOTTOM - 0.1 && Math.min(...dL) < BOTTOM - 0.1, 'on its step each hand drops out of view below the frame')
 const HALF = 0.06   // a glove's half height: its top shows while its centre is within this of the edge
-ok(r.every(p => p.R.y > BOTTOM - HALF || p.L.y > BOTTOM - HALF), 'never both gone at once: one glove always shows')
+// they TAKE TURNS: when one hand is at its lowest, the other shows (Alex's tune drops both briefly as they cross; that is his look)
+const kR = dR.indexOf(Math.min(...dR)), kL = dL.indexOf(Math.min(...dL))
+ok(dL[kR] > BOTTOM - HALF && dR[kL] > BOTTOM - HALF, 'they take turns: at one hand\'s lowest the other is in view')
 // smooth: no frame-to-frame jump bigger than a centimetre while running at a steady speed
 // a pumping hand MOVES ~2 cm a frame; what must not happen is a sudden change in that motion (the second difference)
 const acc = (ys: number[]) => ys.slice(2).map((y, k) => Math.abs(y - 2 * ys[k + 1] + ys[k]))
@@ -33,7 +35,8 @@ ok(steady < ideal * 1.3, `steady run: no jerk (max second difference ${steady.to
 // jitter in the INPUT speed (a slope, an uneven frame) must not shake the hands
 const j = run(240, k => ({ speed: FP.RUN_SPEED * (k % 2 ? 0.7 : 1.3) })).out.slice(60)
 const jy = j.map(p => p.R.y)
-ok(Math.max(...acc(jy)) < steady * 1.3, `a speed that flickers ±30% every frame is no rougher than a steady run (${Math.max(...acc(jy)).toFixed(4)} vs ${steady.toFixed(4)})`)
+// unsmoothed, a flicker runs ~20x rougher than a steady run (the mutation below the test); 2x is the line
+ok(Math.max(...acc(jy)) < steady * 2, `a speed that flickers ±30% every frame stays within 2x a steady run (${Math.max(...acc(jy)).toFixed(4)} vs ${steady.toFixed(4)})`)
 // a jump: both up, the right higher; no alternation in the air
 const air = run(60, () => ({ speed: FP.RUN_SPEED, airborne: true })).out.at(-1)!
 ok(air.R.y > still.R.y + 0.1 && air.L.y > still.L.y + 0.07, 'a jump throws both hands up')

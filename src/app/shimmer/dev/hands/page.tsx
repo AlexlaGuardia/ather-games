@@ -30,14 +30,14 @@ const GROUPS: { title: string; note: string; show: Preview; knobs: Knob[] }[] = 
     { k: 'X', label: 'apart', min: 0.05, max: 0.5, step: 0.005 },
     { k: 'REST_Y', label: 'height', min: -0.6, max: -0.1, step: 0.005 },
     { k: 'Z', label: 'distance', min: -0.9, max: -0.3, step: 0.005 },
-    { k: 'PITCH', label: 'tilt', min: -1.5, max: 1.5, step: 0.01 },
+    { k: 'PITCH', label: 'tilt', min: -3.1, max: 3.1, step: 0.01 },
     { k: 'ROLL', label: 'roll (cuffs out)', min: -3.1, max: 3.1, step: 0.01 },
     { k: 'SCALE', label: 'size', min: 0.5, max: 2, step: 0.01 },
   ] },
   { title: 'Run', note: 'they take turns dropping out of view', show: 'run', knobs: [
-    { k: 'DROP_Y', label: 'drop', min: 0, max: 0.4, step: 0.005 },
+    { k: 'DROP_Y', label: 'drop', min: 0, max: 0.8, step: 0.005 },
     { k: 'SWING_Z', label: 'forward', min: 0, max: 0.15, step: 0.005 },
-    { k: 'STRIDE_M', label: 'stride (m)', min: 1, max: 5, step: 0.05 },
+    { k: 'STRIDE_M', label: 'stride (m)', min: 1, max: 10, step: 0.05 },
   ] },
   { title: 'Jump', note: 'both up, the right higher', show: 'jump', knobs: [
     { k: 'JUMP_Y_R', label: 'right up', min: 0, max: 0.4, step: 0.005 },

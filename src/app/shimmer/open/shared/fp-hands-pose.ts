@@ -29,16 +29,17 @@ export interface FpTune {
   JUMP_Y_R: number; JUMP_Y_L: number; JUMP_SPREAD: number; JUMP_PITCH: number
   CAST_X: number; CAST_Y: number; CAST_PITCH: number
 }
+// ★ ALEX'S TUNE (11-17, from /shimmer/dev/hands "Copy values"): these ARE the shipped hands. Change them in the tuner, not here.
 export const FP_DEFAULTS: Readonly<FpTune> = {
-  X: 0.27, REST_Y: -0.355, Z: -0.55,
-  PITCH: 0,
-  ROLL: 1.2,             // radians: the glove's cuff turned outward (a hand's cuff hangs at -y; +roll swings it toward +x)
-  SCALE: 1,
-  DROP_Y: 0.2,           // how far a hand drops on its step at a full run: clean out of view below the frame
-  SWING_Z: 0.04,         // the hand that stays up comes a little forward
-  STRIDE_M: 2.4,         // metres per full stride (two steps): each hand drops once per stride
-  JUMP_Y_R: 0.15, JUMP_Y_L: 0.1, JUMP_SPREAD: 0.05, JUMP_PITCH: 0.35,
-  CAST_X: 0.15, CAST_Y: -0.24, CAST_PITCH: 0.55,
+  X: 0.23, REST_Y: -0.37, Z: -0.56,      // rest: apart, height, distance
+  PITCH: -1.5,             // rest tilt
+  ROLL: 1.02,              // the cuffs turned outward (a hand's cuff hangs at -y; +roll swings it toward +x)
+  SCALE: 1.28,
+  DROP_Y: 0.4,             // how far a hand drops on its step at a full run: clean out of view below the frame
+  SWING_Z: 0.005,          // the hand that stays up comes a touch forward
+  STRIDE_M: 5,             // metres per full stride (two steps): each hand drops once per stride
+  JUMP_Y_R: 0.355, JUMP_Y_L: 0.17, JUMP_SPREAD: 0.13, JUMP_PITCH: 0.24,
+  CAST_X: 0.345, CAST_Y: -0.12, CAST_PITCH: 0.68,
 }
 /** LIVE numbers: the defaults, overwritten by this browser's tune (loadFpTune). Read every frame, so a slider moves the hands. */
 export const FP = {
