@@ -92,8 +92,8 @@ export const PRUNE_RANGE = 10
 export const MANA_COST = NODE_DEFS.goldwood.manaCost   // 5: the node table's forestry cost (every tier the same)
 /** Sapling odds per prune (build; tree-node.ts's felling odds are 0.35 / 0.28 / … and a pruned tree comes back). */
 export const SAPLING_CHANCE: Record<TreeKind, number> = { goldwood: 0.08, shimmeroak: 0.06, starwillow: 0.05, dawnwood: 0.04 }
-/** Forage per prune (BETA M6e): bait's floor for a keeper out of bait with nothing landed. 2 bait each, ~3 prunes = a few casts. */
-export const FORAGE_CHANCE = 0.35
+/** Mast per prune (BETA M6e; canon 017be29: any pruned Ather tree): bait's floor for a keeper out of bait with nothing landed. 2 bait each, ~3 prunes = a few casts. */
+export const MAST_CHANCE = 0.35
 export const logItem =(k: TreeKind) => `${k}_log`
 export const saplingItem = (k: TreeKind) => `${k}_sapling`
 
@@ -132,7 +132,7 @@ export function prune(kind: TreeKind, id: string, rand: () => number = Math.rand
   const def = NODE_DEFS[kind]
   const drops = [{ id: logItem(kind), n: 2 + Math.floor(rand() * 3) }]
   if (rand() < SAPLING_CHANCE[kind]) drops.push({ id: saplingItem(kind), n: 1 })
-  if (rand() < FORAGE_CHANCE) drops.push({ id: 'forage', n: 1 })   // bait's floor (inventory.ts › BAIT_FROM)
+  if (rand() < MAST_CHANCE) drops.push({ id: 'mast', n: 1 })   // bait's floor (inventory.ts › BAIT_FROM)
   const r =addSkillXP(skills.forestry, def.xp)   // mutates the skill in place (engine/skills.ts)
   pruned[id] = now + def.respawnMs
   save(now); bump()

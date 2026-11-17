@@ -24,6 +24,8 @@ import {
   loadGarden, saveGarden, freshGarden, type Garden,
 } from './plot'
 import { PlotScene } from './plot-scene'
+import { WorkshopScene, WorkshopPanel, PlacingBar, usePlacingKeys, useWorks, workWalls, workPrompt } from './workshop'
+import { nearWork, type WorkNear } from './rooms'
 import { ClusterScene } from './cluster-scene'
 import { cycleLook, LookChip } from './ground-look'
 import { GroundCover, coverFromUrl } from './ground-cover'
@@ -82,8 +84,8 @@ import type { Vitals } from '../../engine/vitals'
 
 type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
 type Spawn = { x: number; z: number; yaw: number }
-type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' }
-type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'waymark'; w: Waymark; own: boolean }
+type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear }
+type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean }
 
 export default function AtherSlice() {
   const locked = useRef(false), frozen = useRef(false)
@@ -202,9 +204,12 @@ export default function AtherSlice() {
   // mist) become ground
   const cl = useCluster(garden.owned)
   const clusterRef = useRef(cl.frame); clusterRef.current = cl.frame
+  const works = useWorks()   // the workshop rooms (workshop.tsx): their walls are solid
+  const worksRef = useRef(works); worksRef.current = works
+  usePlacingKeys(owned)
   const plotWorld = useMemo(() => terrainWorld(cl.frame.linked
-    ? plotShape(owned, [...mistWalls(owned), ...mateWalls(cl.frame)], (x, z) => clusterGround(cl.frame, x, z))
-    : plotShape(owned)), [owned, cl.frame])
+    ? plotShape(owned, [...mistWalls(owned), ...mateWalls(cl.frame), ...workWalls(works)], (x, z) => clusterGround(cl.frame, x, z))
+    : plotShape(owned, [...mistWalls(owned), ...workWalls(works)])), [owned, cl.frame, works])
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
   const fading = useRef(false)
@@ -343,6 +348,7 @@ export default function AtherSlice() {
     if (zone.kind === 'plot') {
       if (Math.hypot(GATE.x - lc.px, GATE.z - lc.pz) < REACH + 1.2) n = { kind: 'gate' }
       else if (Math.hypot(GREG.x - lc.px, GREG.z - lc.pz) < REACH) n = { kind: 'greg' }
+      else { const w = nearWork(worksRef.current, lc.px, lc.pz); if (w) n = { kind: 'work', near: w } }
     } else {
       const all = [{ w: GREG_WAYMARK, own: false }, ...waymarks.map(w => ({ w, own: true }))]
       for (const { w, own } of all) { const o = ww?.byName.has(w.tile) ? ww.offsetOf(w.tile) : null; if (o && Math.hypot(w.x + o.x - lc.px, w.z + o.z - lc.pz) < 2.6) n = { kind: 'waymark', w, own } }
@@ -359,6 +365,7 @@ export default function AtherSlice() {
       hudT.current = 0.12
       const p = n?.kind === 'gate' ? 'E · the gate (fold map)'
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
+        : n?.kind === 'work' ? workPrompt(n.near)
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
         : atFairDoor(lc.px, lc.pz) ? 'E · the Thistledown Fair'
         : rinPrompt() ?? (cAimRef.current.crystal && cAimRef.current.dist < aimRef.current.dist ? crystalPrompt() : treePrompt())
@@ -648,7 +655,7 @@ export default function AtherSlice() {
   const [given, setGiven] = useState(false)
   useEffect(() => setGiven(gemsGiven()), [])
   const errandStage = stageOf(birth, inv, loadoutNow, given)
-  useEffect(() => { postEntries('errand', errandEntries(errandStage, birth, { greg: { x: GREG.x, z: GREG.z } })) }, [errandStage, birth])
+  useEffect(() => { postEntries('errand', errandEntries(errandStage, birth, { greg: { x: GREG.x, z: GREG.z }, gate: { x: GATE.x, z: GATE.z } })) }, [errandStage, birth])
   // BETA M6a/M6b: the rinning + prospecting pointers, struck once used (re-read on every pack change: a catch/cut lands in it)
   useEffect(() => {
     const k = openSkills(), used = (id: 'rinning' | 'prospecting') => k[id].level > 1 || k[id].xp > 0
@@ -707,6 +714,7 @@ export default function AtherSlice() {
       }
       if (e.code === 'KeyE' && n) {
         if (n.kind === 'greg') setPanel({ kind: 'greg' })
+        else if (n.kind === 'work') { if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
         else setPanel({ kind: 'map', view: 'ather', travel: true })
         return
       }
@@ -752,6 +760,7 @@ export default function AtherSlice() {
       >
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && ww ? (x, z) => ww.canopyAt(x, z) * 0.7 : undefined} />
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} />}
+        {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
         {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
@@ -823,6 +832,8 @@ export default function AtherSlice() {
       )}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} errand={gregErrand} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
+      {panel?.kind === 'work' && <WorkshopPanel near={panel.near} owned={owned} onClose={() => setPanel(null)} />}
+      {zone.kind === 'plot' && <PlacingBar owned={owned} />}
       <LookChip />
       {zone.kind === 'wilds' && held === BAIT && <ReelBar api={rinApi} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} />}

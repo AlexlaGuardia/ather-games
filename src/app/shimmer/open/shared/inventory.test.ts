@@ -1,5 +1,5 @@
 // The open world's bag (inventory.ts). Run: npx tsx src/app/shimmer/open/shared/inventory.test.ts
-import { newInv, give, take, move, split, quickMove, countOf, HOTBAR, SLOTS, itemDef, OPEN_ITEMS, makeBait, BAIT_FROM, STARTING_BAIT, NO_BAIT_LINE } from './inventory'
+import { newInv, give, take, move, split, quickMove, countOf, HOTBAR, SLOTS, itemDef, OPEN_ITEMS, makeBait, BAIT_FROM, STARTING_BAIT, NO_BAIT_LINE, loadInv } from './inventory'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 let pass = 0
@@ -48,21 +48,30 @@ ok(quickMove(q, q.slots.findIndex(x => x?.id === 'repeater')).slots.findIndex(x 
 for (const [id, d] of Object.entries(OPEN_ITEMS)) if (d.icon) ok(existsSync(join(process.cwd(), 'public', d.icon)), `icon: ${id} names ${d.icon}, which is not in public/`)
 for (const id of ['bait', 'shimmerscale', 'clickclaw', 'glowfin', 'ribboneel', 'moonkoi', 'pearlshell', 'crystal_rinn']) ok(!!itemDef(id).icon, `icon: ${id} has no icon (the bag draws a blank chip)`)
 
-// bait is MADE (BETA M6e): a small catch or forage cuts into bait, one at a time; never a moonkoi; never into a full bag
+// bait is MADE (BETA M6e): a small catch or mast cuts into bait, one at a time; never a moonkoi; never into a full bag
 { const out = take(newInv(12), 'bait', STARTING_BAIT)!
   ok(countOf(out, 'bait') === 0, 'bait: setup, the bag still holds bait')
-  const f = makeBait(give(out, 'forage', 2).inv, 'forage')!
-  ok(!!f && countOf(f.inv, 'bait') === BAIT_FROM.forage && countOf(f.inv, 'forage') === 1, 'bait: forage did not cut into bait one at a time')
+  const f = makeBait(give(out, 'mast', 2).inv, 'mast')!
+  ok(!!f && countOf(f.inv, 'bait') === BAIT_FROM.mast && countOf(f.inv, 'mast') === 1, 'bait: mast did not cut into bait one at a time')
   const s = makeBait(give(out, 'shimmerscale', 1).inv, 'shimmerscale')!
   ok(!!s && countOf(s.inv, 'bait') === 3 && countOf(s.inv, 'shimmerscale') === 0, 'bait: a shimmerscale did not make 3 bait')
   ok(makeBait(give(out, 'moonkoi', 1).inv, 'moonkoi') === null && !BAIT_FROM.moonkoi, 'bait: a moonkoi was cut (worth more landed)')
-  ok(makeBait(out, 'forage') === null, 'bait: made bait from forage the bag does not hold')
-  let full = give(out, 'forage', 1).inv
+  ok(makeBait(out, 'mast') === null, 'bait: made bait from mast the bag does not hold')
+  let full = give(out, 'mast', 1).inv
   for (let k = 0; k < SLOTS; k++) if (!full.slots[k]) full = { ...full, slots: full.slots.map((x, j) => (j === k ? { id: 'waymark', n: 12 } : x)) }
-  full = { ...full, slots: full.slots.map(x => (x?.id === 'forage' ? { id: 'forage', n: 2 } : x)) }
-  ok(makeBait(full, 'forage') === null, 'bait: made bait into a full bag (it would vanish)')
+  full = { ...full, slots: full.slots.map(x => (x?.id === 'mast' ? { id: 'mast', n: 2 } : x)) }
+  ok(makeBait(full, 'mast') === null, 'bait: made bait into a full bag (it would vanish)')
   ok(Object.keys(BAIT_FROM).every(id => !!OPEN_ITEMS[id]), 'bait: a bait food is not a bag item')
   ok(/bag/i.test(NO_BAIT_LINE) && /prun/i.test(NO_BAIT_LINE), 'bait: the out-of-bait line does not say where more comes from') }
 
+// mast was shipped for an hour as 'forage': an old bag holding it loads as mast (loadInv), and mast has its icon
+{ const store: Record<string, string> = {}
+  ;(globalThis as any).localStorage = { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v }, removeItem: (k: string) => { delete store[k] } }
+  const old = newInv(12); old.slots[9] = { id: 'forage', n: 3 }
+  store['open.inv.v1'] = JSON.stringify(old)
+  const l = loadInv()
+  ok(countOf(l, 'mast') === 3 && countOf(l, 'forage') === 0, 'mast: an old forage stack did not load as mast')
+  delete (globalThis as any).localStorage }
+ok(!!itemDef('mast').icon && !OPEN_ITEMS.forage, 'mast: no icon, or the placeholder forage item is still a bag row')
 if (fails.length) { console.error(`inventory: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`inventory: ${pass}/0`)

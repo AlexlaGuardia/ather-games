@@ -50,7 +50,7 @@ Object.assign(OPEN_ITEMS, FORESTRY)
 //    Icons: public/open/icons/<id with dashes>.svg, drawn by tools/art/rinn_icons.py (asleep, never dead: shimmer-resources.md).
 const catchOf = (name: string, blurb: string): ItemDef => ({ name, blurb, icon: '', stack: 99, kind: 'material' })
 const RINNING: Record<string, ItemDef> = {
-  bait: { name: 'Bait', blurb: 'Hold it and click the water to cast. One bait a cast. Make more here from a small catch or forage.', icon: '', stack: 99, kind: 'material' },
+  bait: { name: 'Bait', blurb: 'Hold it and click the water to cast. One bait a cast. Make more here from a small catch or mast.', icon: '', stack: 99, kind: 'material' },
   shimmerscale: catchOf('Shimmerscale', 'Tiny, warm-scaled. Schools of them catch the light.'),
   clickclaw: catchOf('Clickclaw', 'Small crustacean. Clicks when annoyed. Surprisingly tasty.'),
   glowfin: catchOf('Glowfin', 'Soft bioluminescent scales. Nutritious. Spirits love it raw.'),
@@ -88,11 +88,12 @@ export const STARTING_BAIT = 10
 //    itself) and FORAGE off a pruned tree (Alex 11-17), because a rinn can get away and a keeper who spends all ten bait
 //    without landing one would otherwise have no food to cut: a dead end. Only tier-1 catches: a moonkoi is worth more
 //    landed than cut. Made in the bag for now; its home is the Rinnshop (glossary, 11-17) once the room stands.
-// ⚠ 'forage' is a PLACEHOLDER name (CANON_GAPS [OPEN] 11-17: what a pruned Ather tree drops that a rinn will eat).
-OPEN_ITEMS.forage = { name: 'Forage', blurb: 'Something edible shaken loose from a pruned tree. Make bait from it in the bag.', icon: '', stack: 99, kind: 'material' }
-export const BAIT_FROM: Readonly<Record<string, number>> = { forage: 2, shimmerscale: 3, clickclaw: 3, glowfin: 3 }
+// MAST (RULED 11-17, athernyx 017be29; glossary Mast): seeds and nuts in golden husks, one item from ANY pruned Ather tree.
+//    Shipped for an hour as the placeholder 'forage'; loadInv renames it.
+OPEN_ITEMS.mast = { name: 'Mast', blurb: 'Seeds and nuts shaken loose from a pruned branch. Rinn rise to it where it falls on water.', icon: '/open/icons/mast.svg', stack: 99, kind: 'material' }
+export const BAIT_FROM: Readonly<Record<string, number>> = { mast: 2, shimmerscale: 3, clickclaw: 3, glowfin: 3 }
 /** What the HUD says when the last bait is gone: where more comes from, so it is never a dead end. */
-export const NO_BAIT_LINE = 'No bait left. Make more in the bag from a small catch, or forage off a pruned tree.'
+export const NO_BAIT_LINE = 'No bait left. Make more in the bag from a small catch, or mast off a pruned tree.'
 export const itemDef = (id: string): ItemDef => OPEN_ITEMS[id] ?? { name: id.replace(/_/g, ' '), blurb: '', icon: '', stack: 99, kind: 'material' }
 
 export const HOTBAR = 8, BAG = 24, SLOTS = HOTBAR + BAG
@@ -180,6 +181,8 @@ export function loadInv(waymarksLeft = 12): Inv {
       // tool"): they sit in the sockets round the mana orb (engine/tools.ts). A Worn Blade a bag got for an hour on 11-15
       // is taken back out here.
       let out: Inv = v.slots.some((x: Stack | null) => x?.id === 'worn_blade') ? { ...v, slots: v.slots.map((x: Stack | null) => (x?.id === 'worn_blade' ? null : x)) } : v
+      // the bait floor shipped an hour as 'forage' before canon named it MAST (11-17): rename it in place
+      if (out.slots.some((x: Stack | null) => x?.id === 'forage')) out = { ...out, slots: out.slots.map((x: Stack | null) => (x?.id === 'forage' ? { ...x, id: 'mast' } : x)) }
       // rinning arrived (11-15): an older bag is handed the starting bait once
       if (!(out.gifts ?? []).includes('bait1')) out = { ...give(out, 'bait', STARTING_BAIT).inv, gifts: [...(out.gifts ?? []), 'bait1'] }
       return out

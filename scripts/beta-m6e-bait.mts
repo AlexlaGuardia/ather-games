@@ -2,8 +2,8 @@
 // A keeper who has spent every bait and landed nothing (the dead end: a rinn can get away) makes more without a guide.
 // SETUP (stated, not hidden): the bag starts with NO bait and the starting-bait gift already handed (a keeper who ran out).
 // Hooks are used for MOVEMENT (tp beside a goldwood) and for the prune itself (__ather.prune = the click's own path, as
-// forestry-check does); NEVER to grant an item. The bag opens on the real I key; the forage slot and "Make bait" are real
-// mouse clicks. PASS = bait is back in the bag, made from forage a pruned tree dropped.
+// forestry-check does); NEVER to grant an item. The bag opens on the real I key; the mast slot and "Make bait" are real
+// mouse clicks. PASS = bait is back in the bag, made from mast a pruned tree dropped.
 //   npx tsx scripts/beta-m6e-bait.mts [--url https://ather.games] [--out /tmp/m6e]
 import puppeteer from 'puppeteer-core'
 import { readFileSync, mkdirSync } from 'fs'
@@ -39,17 +39,17 @@ res.before = await bag()
 const frame = async () => { try { await p.screenshot({ path: `${out}/_frame.png` }) } catch { /* slow frame */ } }
 let prunes = 0
 for (const t of golds) {
-  if (((await bag()).forage ?? 0) > 0) break
+  if (((await bag()).mast ?? 0) > 0) break
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), t.x + 6, t.z); await sleep(3000); await frame(); await frame()
   if ((await p.evaluate(() => (window as any).__ather.aim())) !== t.id) continue
   await p.evaluate(() => (window as any).__ather.prune()); await sleep(4000); prunes++
 }
 res.prunes = prunes; res.afterPrunes = await bag()
-// the bag: real I key, real click on the forage slot, real click on Make bait
+// the bag: real I key, real click on the mast slot, real click on Make bait
 await p.keyboard.press('i'); await sleep(1200)
 const box = (sel: string) => p.evaluate((s: string) => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel)
-const slot = await box('[data-panel="bag"] [data-slot][title^="Forage"], [data-slot][title^="Forage"]')
-res.forageSlot = !!slot
+const slot = await box('[data-panel="bag"] [data-slot][title^="Mast"], [data-slot][title^="Mast"]')
+res.mastSlot = !!slot
 if (slot) { await p.mouse.click(slot.x, slot.y); await sleep(600) }
 try { await p.screenshot({ path: `${out}/m6e-1-card.png` }) } catch { /* slow frame */ }
 const make = await box('[data-act="make-bait"]')
@@ -59,5 +59,5 @@ try { await p.screenshot({ path: `${out}/m6e-2-made.png` }) } catch { /* slow fr
 res.after = await bag(); res.errs = errs
 console.log(JSON.stringify(res))
 const pass = !((res.before as Record<string, number>).bait) && ((res.after as Record<string, number>).bait ?? 0) > 0
-console.log(pass ? 'PASS: a keeper out of bait pruned a tree, got forage, and made bait in the bag' : 'FAIL: a keeper out of bait has no way to make more')
+console.log(pass ? 'PASS: a keeper out of bait pruned a tree, got mast, and made bait in the bag' : 'FAIL: a keeper out of bait has no way to make more')
 await br.close(); process.exit(pass ? 0 : 1)
