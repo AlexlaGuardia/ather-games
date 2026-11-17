@@ -80,7 +80,8 @@ export default function KeeperBodyBench() {
             <meshStandardMaterial color={bd.ground} roughness={1} />
           </mesh>
           {LOOKS.map((l, i) => (
-            <group key={l.label} position={[(i - 0.5) * spacing, 0, 0]}>
+            // the keeper faces +z, toward the camera; turned three-quarter on the turntable so the limbs read in depth
+            <group key={l.label} position={[(i - 0.5) * spacing, 0, 0]} rotation={[0, eye ? 0 : 0.45, 0]}>
               <KeeperDoll action={action} limbs={l.limbs} fps={fps} speed={speed} />
             </group>
           ))}

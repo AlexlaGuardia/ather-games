@@ -74,9 +74,10 @@ export function KeeperDoll({ action, limbs = true, fps = 0, speed = 1, phase = 0
                   <mesh position={[0, 0.12, 0]}><cylinderGeometry args={[0.015, 0.018, 0.16, 6]} /><primitive object={mat(C.horn)} attach="material" /></mesh>
                   <mesh position={[0, 0.3, 0]}><boxGeometry args={[0.035, 0.22, 0.012]} /><primitive object={mat(C.blade)} attach="material" /></mesh>
                 </group>
-                <group ref={g('gun')} position={[0, -0.08, 0.06]}>
-                  <mesh position={[0, -0.02, 0.06]} rotation={[Math.PI / 2, 0, 0]}><boxGeometry args={[0.04, 0.2, 0.06]} /><primitive object={mat(C.gun)} attach="material" /></mesh>
-                  <mesh position={[0, -0.06, -0.01]}><boxGeometry args={[0.035, 0.09, 0.045]} /><primitive object={mat(C.gun)} attach="material" /></mesh>
+                <group ref={g('gun')} position={[0, -0.06, 0]}>
+                  {/* barrel along the arm (local -y = where the hand points); grip toward local -z (world down when aimed) */}
+                  <mesh position={[0, -0.09, -0.04]}><boxGeometry args={[0.04, 0.22, 0.05]} /><primitive object={mat(C.gun)} attach="material" /></mesh>
+                  <mesh position={[0, 0.0, -0.1]}><boxGeometry args={[0.035, 0.05, 0.09]} /><primitive object={mat(C.gun)} attach="material" /></mesh>
                 </group>
               </>
             )}
@@ -108,7 +109,7 @@ export function KeeperDoll({ action, limbs = true, fps = 0, speed = 1, phase = 0
         <group ref={g('head')} position={[0, BODY.torso + BODY.headY - 0.04, 0]}>
           {/* hood + the shadow where a face would be: no skin, no species (hero art is Alex's) */}
           <mesh castShadow><sphereGeometry args={[0.135, 16, 12]} /><primitive object={mat(C.hood)} attach="material" /></mesh>
-          <mesh position={[0, -0.01, 0.075]} scale={[1, 1.15, 0.6]}><sphereGeometry args={[0.085, 14, 10]} /><primitive object={mat(C.shadow, { roughness: 1 })} attach="material" /></mesh>
+          <mesh position={[0, -0.015, 0.1]} scale={[1, 1.2, 0.5]}><sphereGeometry args={[0.088, 14, 10]} /><primitive object={mat(C.shadow, { roughness: 1 })} attach="material" /></mesh>
           <mesh position={[0, -0.13, 0]}><cylinderGeometry args={[0.13, 0.17, 0.08, 12]} /><primitive object={mat(C.hood)} attach="material" /></mesh>
         </group>
         {arm(1)}{arm(-1)}
