@@ -17,6 +17,10 @@ A dead end is a step the game points you at that cannot be done. Do not build a 
 
 ## Milestones
 
+> **Order for 11-17 (Alex away, check-ins ~2 h):** M2/M3 continent → M7 saves → M6a → M6b → M6d → M5 played → the
+> check-suite chore between rows. M6c: the hub checks a strangers' Wilds fight EXISTS before dispatching; if it needs
+> building, it is an ask, not a row. M1's remainder is 🔒 (birth wheel), so skip it.
+
 Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (look / feel / canon sign-off; the hive parks it and moves on)
 
 | # | Milestone | Check (passes on prod = done) | Status |
