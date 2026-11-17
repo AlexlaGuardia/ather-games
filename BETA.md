@@ -39,7 +39,7 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 | M9 | **Phone performance.** Holds frame rate on a mid phone; heap stays bounded over 30 min | new + 🔒 Alex's phone | ⬜ |
 | M10 | **Alex's sign-off pass.** He plays the first hour on his phone and calls it | 🔒 | ⬜ |
 | M11 | **One menu button on the phone HUD** (Alex 11-17: too much clutter). On a phone the tap row folds into ONE MENU chip; tap to open, tap again or pick one to fold. Desktop unchanged | `beta-audit-2` + `beta-audit-continent` (menu rest/open/fold asserted): PASS on prod at 390 + 360, drive + foot, 11-17 (`46ed03f3`) | ✅ |
-| M6e | **Bait refills.** A keeper who runs out of bait can make more without a guide (Magii 11-17 [RULED-AFK], athernyx 65d4c21: bait = a craftable FOOD offering, one per cast, shimmer-skilling.md:563; recipes + which bait draws which rinn = Jin's call). Smallest path: craft bait from food the keeper already gets | new (fail before / pass after) | ⬜ |
+| M6e | **Bait refills.** A keeper who runs out of bait can make more without a guide (Magii 65d4c21: bait = craftable food offering) | `scripts/beta-m6e-bait.mts`: PASS on prod 11-17 (Jin 2 `5fb891d4`, live in `5b3edbad`: out of bait → prune → forage → Make bait). 'Forage' = placeholder name (CANON_GAPS 2c6e25b) | ✅ |
 | M12 | **The keeper roster** (Alex 11-17, spec below). One garden file per account; several keepers in it, swapped like loadouts | per-step checks in the spec; `beta-m7-saves` stays green | ⬜ |
 
 ## M12 spec: the keeper roster (Alex 11-17, from the M7 save-loss finding)
@@ -55,7 +55,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
    with a one-time migration that MOVES (copy then delete, never delete first) today's data into keeper #1. keeper-local.test green.
 2. ✅ **11-17 `512cbad5` (module + 23 tests; inert until step 4 calls it, ships with it).** **Roster storage.** An account holds keepers `[k1, k2, …]` + `active`. Today's keeper = k1. Swapping = change `active`
    and re-read; garden untouched.
-3. **The sign-in prompt.** Anonymous keeper + an account that already has keepers → a panel: "Add this keeper to your
+3. ✅ **11-17 `411d8cc2`, live in `5b3edbad` (keeper-prompt 32/0, beta-m7-saves PASS on prod; panel served on prod). Look not yet judged (🔒 Alex); real Google sign-in path untested.** **The sign-in prompt.** Anonymous keeper + an account that already has keepers → a panel: "Add this keeper to your
    roster?" Yes = it becomes a new roster entry; No = it stays on this browser, untouched (never deleted). Account with no
    keeper → adopt silently (live since d8b72da4).
 4. **Swap UI.** A keeper list (character panel or options) to switch, and "new keeper" opens the birth ritual. Character
@@ -104,7 +104,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
-- **Discovery pointers (11-17, M6a + M6b):** neither rinning nor prospecting is told anywhere (welcome card, journal, bag) before you stumble on it; prospecting's only pointer is the HUD prompt AT a node. Proposal: @lark drafts one journal line each (the game register), you sign off, hub wires them. Yes / or your own wording?
+- **✅ LIVE 11-17 (`5b3edbad`, Alex approved lark's lines): 'Rin at the water' + 'Prospect a mana crystal' in the journal, struck once used. Was:** **Discovery pointers (11-17, M6a + M6b):** neither rinning nor prospecting is told anywhere (welcome card, journal, bag) before you stumble on it; prospecting's only pointer is the HUD prompt AT a node. Proposal: @lark drafts one journal line each (the game register), you sign off, hub wires them. Yes / or your own wording?
 
 - **Alex 11-17: a RINNING ROOM** (craft rinsticks, make bait, prepare catches for the cooking room). Canon mostly settled
   (rinsticks built from rinn; roast rinn at the hearth; workshop rooms + Moglin trade). Magii asked (CANON_GAPS 4a9a621): 6th room
