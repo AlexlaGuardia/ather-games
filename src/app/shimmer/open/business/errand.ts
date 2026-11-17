@@ -45,11 +45,13 @@ type At = { x: number; z: number } | null
 /** the errand's journal line for this stage (lark's, signed 11-16; the 'greg' line before it is a neutral system line).
  *  `greg` is Ather ground; `smith` / `temple` are continent doors (null where the posting page cannot see the continent:
  *  the line still shows, the waymark waits for the continent page). `word` = the bracelet's word name once done. */
-export function errandEntries(stage: Stage, birth: string | null, at: { greg?: At; smith?: At; temple?: At }, word?: string | null): JournalEntry[] {
+// `gate` (BETA M5 friction, 11-17): on the Ather the continent doors are out of sight, so the smith/temple line points at the
+// gate (the fold map's way to Rune Hold) instead of 'Nowhere to point yet'.
+export function errandEntries(stage: Stage, birth: string | null, at: { greg?: At; smith?: At; temple?: At; gate?: At }, word?: string | null): JournalEntry[] {
   const seat = birthSeat(birth), S = SEATS[seat ?? 'enchant']
   if (stage === 'greg') return [{ id: 'errand', hand: 'keeper', title: 'See Gregory about your first letter', note: 'Gregory has the gems for your birth letter. He stands by the threshold on your plot.', where: at.greg ? { zone: 'ather', ...at.greg } : null }]
-  if (stage === 'smith') return [{ id: 'errand', hand: 'keeper', ...journalSmith(S.short, S.name, S.where), where: at.smith ? { zone: 'continent', ...at.smith } : null }]
-  if (stage === 'temple') return [{ id: 'errand', hand: 'keeper', ...JOURNAL_TEMPLE, where: at.temple ? { zone: 'continent', ...at.temple } : null }]
+  if (stage === 'smith') return [{ id: 'errand', hand: 'keeper', ...journalSmith(S.short, S.name, S.where), where: at.smith ? { zone: 'continent', ...at.smith } : at.gate ? { zone: 'ather', ...at.gate } : null }]
+  if (stage === 'temple') return [{ id: 'errand', hand: 'keeper', ...JOURNAL_TEMPLE, where: at.temple ? { zone: 'continent', ...at.temple } : at.gate ? { zone: 'ather', ...at.gate } : null }]
   if (stage === 'done' && word) return [{ id: 'errand', hand: 'keeper', ...journalDone(word), where: null, struck: true }]
   return []
 }
