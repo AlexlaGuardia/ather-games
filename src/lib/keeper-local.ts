@@ -55,8 +55,8 @@ const OWNER_MARK = 'u:'
  * decision has not been made. Making it visible per key is the point; a silent omission is how the
  * tutorial survived every bump in the first place.
  */
-export { KEEPER_KEY_SPECS } from './keeper-key-specs'
-import { KEEPER_KEY_SPECS } from './keeper-key-specs'
+export { KEEPER_KEY_SPECS, GARDEN_KEY_SPECS } from './keeper-key-specs'
+import { KEEPER_KEY_SPECS, GARDEN_KEY_SPECS } from './keeper-key-specs'
 
 /** The bases alone. Derived — never restate this list. */
 export const KEEPER_KEYS: readonly string[] = KEEPER_KEY_SPECS.map(s => s.base)
@@ -77,6 +77,14 @@ export function keeperKeyFor(base: string, owner: string | null): string {
 
 /** Where the CURRENT keeper's copy lives. Reads the one definition of who is playing. */
 export function keeperKey(base: string): string {
+  return keeperKeyFor(base, saveOwner())
+}
+
+/** The GARDEN bases (plot, Moglins, fog, journal...). Derived from the registry. */
+export const GARDEN_KEYS: readonly string[] = GARDEN_KEY_SPECS.map(s => s.base)
+
+/** Where the CURRENT account's garden copy of `base` lives: account-scoped, same `u:<id>:` rule as a keeper key. */
+export function gardenKey(base: string): string {
   return keeperKeyFor(base, saveOwner())
 }
 
@@ -149,6 +157,41 @@ export function adoptAnonKeeperState(userId: string | null = saveOwner()): Keepe
     }
     for (const [from]  of plan.moves) localStorage.removeItem(from)
     if (plan.claim) localStorage.setItem(KEEPER_CLAIM, userId)
+    migrateBareKeysToOwner(userId)   // M12 step 1: the keys the plan above cannot reach (a 'locked' account's bare pack)
     return plan
   } catch { return nothing }   // private mode or quota — nothing moved, nothing lost
+}
+
+/** The keeper keys that were UNSCOPED (shared by every account on a browser) until M12 step 1, 2026-11-17. */
+export const STEP1_KEEPER_BASES: readonly string[] = ['open.inv.v1', 'open.loadout.v1', 'open.skills.v1']
+
+/**
+ * ★ M12 STEP 1 MIGRATION — move bare (unscoped) keeper/garden keys into the signed-in account. Copy, then delete; never
+ * the reverse. A key moves only when the bare one exists AND the account's own scoped copy does NOT (the account's copy
+ * is the newer claim). Skipped when the browser's keeper was claimed by a DIFFERENT account. Anonymous: nothing to do
+ * (anonymous players read the bare key already). Idempotent. Needed beyond `adoptAnonKeeperState` because that one
+ * stands down ('locked') when the account already owns a keeper, which strands a bare pack for a signed-in veteran.
+ */
+export function migrateBareKeysToOwner(userId: string | null = saveOwner()): string[] {
+  if (!userId) return []
+  try {
+    const claimedBy = localStorage.getItem(KEEPER_CLAIM)
+    if (claimedBy && claimedBy !== userId) return []
+    // ⚠ ONLY the keys scoped TODAY (the 3 new keeper keys + every garden key). The OLD keeper keys were account-scoped
+    // already, so a bare one on a signed-in browser is an ANONYMOUS keeper's, left for the roster prompt; moving it would
+    // silently merge two keepers. (Jin hub review, 11-17.)
+    const bases = [...STEP1_KEEPER_BASES, ...GARDEN_KEYS]
+    const names: string[] = []
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k) names.push(k) }
+    const moved: Array<[string, string]> = []
+    for (const k of names) {
+      if (!bases.some(b => (b.endsWith(':') ? k.startsWith(b) && k.length > b.length : k === b))) continue
+      const to = keeperKeyFor(k, userId)
+      if (localStorage.getItem(to) === null) moved.push([k, to])
+    }
+    for (const [from, to] of moved) { const v = localStorage.getItem(from); if (v !== null) localStorage.setItem(to, v) }
+    for (const [from] of moved) localStorage.removeItem(from)
+    if (moved.length && !claimedBy) localStorage.setItem(KEEPER_CLAIM, userId)
+    return moved.map(m => m[0])
+  } catch { return [] }
 }

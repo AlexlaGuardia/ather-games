@@ -9,6 +9,7 @@
 // active quest". Pure + store; the choices persist per viewer.
 
 import { useSyncExternalStore } from 'react'
+import { gardenKey } from '@/lib/keeper-local'
 
 export type Zone = 'continent' | 'ather' | 'wilds'
 export interface JournalEntry {
@@ -42,7 +43,7 @@ let snap: { entries: JournalEntry[]; prefs: JournalPrefs } = { entries: [], pref
 const SERVER = snap
 
 function loadPrefs(): JournalPrefs {
-  try { const p = JSON.parse(localStorage.getItem(KEY) ?? 'null') as JournalPrefs | null; if (p && p.v === 1) return p } catch { /* private */ }
+  try { const p = JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? 'null') as JournalPrefs | null; if (p && p.v === 1) return p } catch { /* private */ }
   return { v: 1, active: null, marker: {}, trail: {} }
 }
 function emit() {
@@ -64,7 +65,7 @@ export function postEntries(source: string, entries: JournalEntry[]) {
 export function setPrefs(fn: (p: JournalPrefs) => JournalPrefs) {
   if (!prefs) prefs = loadPrefs()
   prefs = fn(prefs)
-  try { localStorage.setItem(KEY, JSON.stringify(prefs)) } catch { /* private */ }
+  try { localStorage.setItem(gardenKey(KEY), JSON.stringify(prefs)) } catch { /* private */ }
   emit()
 }
 /** Make an entry the active one (or clear it). The active entry's waymark and trail default ON. */

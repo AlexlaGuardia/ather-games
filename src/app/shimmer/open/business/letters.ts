@@ -19,6 +19,7 @@ import { TRADE_POOL } from '../../play3d/scroll-market'
 import { lettersOf } from '../../play3d/gems'
 import { laneRunes } from '../../play3d/cast'
 import type { Loadout, OwnedVessel } from '../shared/loadout'
+import { gardenKey } from '@/lib/keeper-local'
 
 export type Seat = 'fire' | 'wind' | 'water' | 'earth' | 'barrier' | 'life' | 'enchant' | 'star'
 /** where each runesmith works: the Atlas place id (null = no place on the continent yet) */
@@ -45,7 +46,7 @@ export const SCATTER = new Set(['static', 'dust', 'vapor'])
 export const BLUEPRINT_KEY = 'open.blueprints.v1'
 export function hasBlueprint(rune: string): boolean {
   if (!SCATTER.has(rune)) return true
-  try { return (JSON.parse(localStorage.getItem(BLUEPRINT_KEY) ?? '[]') as string[]).includes(rune) } catch { return false }
+  try { return (JSON.parse(localStorage.getItem(gardenKey(BLUEPRINT_KEY)) ?? '[]') as string[]).includes(rune) } catch { return false }
 }
 
 export const CUT_FEE = 400

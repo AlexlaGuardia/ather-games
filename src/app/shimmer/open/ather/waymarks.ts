@@ -17,6 +17,7 @@
 // ★ PURE. The page persists the list (localStorage trial ledger); these functions decide.
 
 import { BIOME, BIOME_NAME, type BiomeId } from './wilds'
+import { gardenKey } from '@/lib/keeper-local'
 
 export interface Waymark { id: string; tile: string; x: number; y: number; z: number; biome: BiomeId; made: number }
 
@@ -58,13 +59,13 @@ export function reachedBiomes(list: readonly Waymark[]): BiomeId[] {
 const KEY = 'ather.waymarks.v1'
 export function loadWaymarks(): Waymark[] {
   try {
-    const raw = localStorage.getItem(KEY)
+    const raw = localStorage.getItem(gardenKey(KEY))
     const v = raw ? JSON.parse(raw) : []
     return Array.isArray(v) ? v.filter(w => w && typeof w.x === 'number' && typeof w.z === 'number') : []
   } catch { return [] }
 }
 export function saveWaymarks(list: readonly Waymark[]): void {
-  try { localStorage.setItem(KEY, JSON.stringify(list)) } catch { /* private window: the session keeps them */ }
+  try { localStorage.setItem(gardenKey(KEY), JSON.stringify(list)) } catch { /* private window: the session keeps them */ }
 }
 
 // ── world coordinates (for the continent map's Ather tab; hub reads these read-only) ──────────────────────────

@@ -8,6 +8,7 @@
 // Shared with the world lane: its gate's Athernyx side lists pitstopsUnlocked() so both sides show the same doors.
 // Storage: localStorage 'open.pitstops.v1' = JSON string[] of visited ids. Per browser, like the fog and waymarks.
 
+import { gardenKey } from '@/lib/keeper-local'
 export const PITSTOP_KEY = 'open.pitstops.v1'
 /** The 08-12 public gate-landing. Always a door, never needs unlocking. */
 export const FIRST_PITSTOP = 'rune-hold'
@@ -21,7 +22,7 @@ export const isPitstop = (p: PlaceLike) => !!p.name && (p.kind === 'city' || p.i
 
 export function loadVisited(): Set<string> {
   try {
-    const v = JSON.parse(localStorage.getItem(PITSTOP_KEY) ?? '[]')
+    const v = JSON.parse(localStorage.getItem(gardenKey(PITSTOP_KEY)) ?? '[]')
     return new Set(Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [])
   } catch { return new Set() }
 }
@@ -40,7 +41,7 @@ export function visitNear(places: readonly PlaceLike[], x: number, z: number, vi
   for (const p of allPitstops(places)) {
     if (p.id === FIRST_PITSTOP || visited.has(p.id) || Math.hypot(p.x - x, p.z - z) > VISIT_M) continue
     visited.add(p.id)
-    try { localStorage.setItem(PITSTOP_KEY, JSON.stringify([...visited])) } catch { /* private window: this session keeps it */ }
+    try { localStorage.setItem(gardenKey(PITSTOP_KEY), JSON.stringify([...visited])) } catch { /* private window: this session keeps it */ }
     return p
   }
   return null

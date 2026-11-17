@@ -15,14 +15,15 @@ import { buy as buyBiz, newTycoon, sell as sellBiz, tick, type BizKind, type Tyc
 import { readSavedLedger } from '../trade-ui'
 import type { Ledger } from '../trade'
 import { hudSay } from '../shared/game-hud'
+import { gardenKey } from '@/lib/keeper-local'
 
 export const TYCOON_KEY = 'open.tycoon.v1'
 
 function load(): Tycoon | null {
-  try { const raw = localStorage.getItem(TYCOON_KEY); if (raw) { const t = JSON.parse(raw) as Tycoon; if (t && t.v === 1 && Array.isArray(t.owned)) return t } } catch { /* fresh */ }
+  try { const raw = localStorage.getItem(gardenKey(TYCOON_KEY)); if (raw) { const t = JSON.parse(raw) as Tycoon; if (t && t.v === 1 && Array.isArray(t.owned)) return t } } catch { /* fresh */ }
   return null
 }
-function persist(t: Tycoon) { try { localStorage.setItem(TYCOON_KEY, JSON.stringify(t)) } catch { /* not remembered */ } }
+function persist(t: Tycoon) { try { localStorage.setItem(gardenKey(TYCOON_KEY), JSON.stringify(t)) } catch { /* not remembered */ } }
 
 const fmt = (n: number) => Math.round(n).toLocaleString()
 

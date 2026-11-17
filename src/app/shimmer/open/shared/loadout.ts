@@ -14,6 +14,7 @@
 
 import { useSyncExternalStore } from 'react'
 import { RANGE_GUNS, type RangeGun } from './gunplay'
+import { keeperKey } from '@/lib/keeper-local'
 
 export const OWN_ALL_RANGE_GUNS = true
 export type VesselKind = 'bracelet' | 'glove'
@@ -75,7 +76,7 @@ let cur: Loadout | null = null
 const SERVER = newLoadout()
 function load(): Loadout {
   try {
-    const raw = JSON.parse(localStorage.getItem(LOADOUT_KEY) ?? 'null') as Loadout | null
+    const raw = JSON.parse(localStorage.getItem(keeperKey(LOADOUT_KEY)) ?? 'null') as Loadout | null
     if (raw && raw.v === 1 && Array.isArray(raw.guns)) {
       // a test-period save keeps up with new range guns
       if (OWN_ALL_RANGE_GUNS) for (const g of RANGE_GUNS) if (!raw.guns.includes(g.id)) raw.guns.push(g.id)
@@ -88,7 +89,7 @@ const get = () => { if (typeof window === 'undefined') return SERVER; if (!cur) 
 export const getLoadout = get
 export function setLoadout(next: Loadout) {
   cur = next
-  try { localStorage.setItem(LOADOUT_KEY, JSON.stringify(next)) } catch { /* private window */ }
+  try { localStorage.setItem(keeperKey(LOADOUT_KEY), JSON.stringify(next)) } catch { /* private window */ }
   subs.forEach(f => f())
 }
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }

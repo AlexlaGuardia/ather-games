@@ -13,10 +13,11 @@ import type { Loadout } from '../shared/loadout'
 import type { JournalEntry } from '../shared/journal'
 import { RUNE_SEATS, SEATS, recipeOf, letterItem, type Seat } from './letters'
 import { journalSmith, JOURNAL_TEMPLE, journalDone } from './errand-lines'
+import { gardenKey } from '@/lib/keeper-local'
 
 export const ERRAND_KEY = 'open.errand.v1'
-export function gemsGiven(): boolean { try { return !!JSON.parse(localStorage.getItem(ERRAND_KEY) ?? '{}').given } catch { return false } }
-export function markGemsGiven() { try { localStorage.setItem(ERRAND_KEY, JSON.stringify({ given: true })) } catch { /* private window */ } }
+export function gemsGiven(): boolean { try { return !!JSON.parse(localStorage.getItem(gardenKey(ERRAND_KEY)) ?? '{}').given } catch { return false } }
+export function markGemsGiven() { try { localStorage.setItem(gardenKey(ERRAND_KEY), JSON.stringify({ given: true })) } catch { /* private window */ } }
 
 /** the seat that cuts a birth rune's letter on today's map (the first that has a place; Enchant cuts inside the Temple) */
 export function birthSeat(birth: string | null): Seat | null {

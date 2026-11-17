@@ -75,12 +75,16 @@ const tapText = async (p: Page, re: RegExp) => {
 const witness = (p: Page) => p.evaluate(() => {
   const ls = localStorage, all: Record<string, string> = {}
   for (let i = 0; i < ls.length; i++) { const k = ls.key(i)!; all[k] = ls.getItem(k)! }
+  // M12 step 1: keeper + garden keys are account-scoped (`u:<id>:` front marker) when signed in, bare when anonymous.
+  // ⚠ No named function in here: tsx/esbuild wraps it in `__name(...)`, which does not exist in the page.
+  const by: Record<string, string> = {}
+  for (const k of Object.keys(all)) by[k.startsWith('u:') ? k.slice(k.indexOf(':', 2) + 1) : k] = all[k]
   const rune = Object.keys(all).filter(k => k.endsWith('ather:shimmer:birthRune')).map(k => `${k}=${all[k]}`)
-  const g = all['ather.garden.v1'] ? JSON.parse(all['ather.garden.v1']) : null
-  const j = all['open.journal.v1'] ? JSON.parse(all['open.journal.v1']) : null
-  const ty = all['open.tycoon.v1'] ? JSON.parse(all['open.tycoon.v1']) : null
-  const led = all['ather:trade:trial-ledger'] ? JSON.parse(all['ather:trade:trial-ledger']) : null
-  return { rune, garden: g && { grey: g.grey, pages: g.pages, owned: g.owned.length }, inv: all['open.inv.v1'] ?? null,
+  const g = by['ather.garden.v1'] ? JSON.parse(by['ather.garden.v1']) : null
+  const j = by['open.journal.v1'] ? JSON.parse(by['open.journal.v1']) : null
+  const ty = by['open.tycoon.v1'] ? JSON.parse(by['open.tycoon.v1']) : null
+  const led = by['ather:trade:trial-ledger'] ? JSON.parse(by['ather:trade:trial-ledger']) : null
+  return { rune, garden: g && { grey: g.grey, pages: g.pages, owned: g.owned.length }, inv: by['open.inv.v1'] ?? null,
     journal: j && { active: j.active, chosen: j.chosen }, owned: ty?.owned?.map((o: any) => o.lotId) ?? null, lastMin: ty?.lastMin ?? null, marks: led?.marks ?? null,
     keys: Object.keys(all).filter(k => /^(open\.|ather[.:]|u:)/.test(k)).sort() }
 })
@@ -106,6 +110,8 @@ ok(await poll(async () => !(await gateUp(p)), 30000), 'the gate closes after bir
 await sleep(2500); await tapText(p, /^Tap to start$/); await sleep(1000)
 await p.evaluate(() => (window as any).__ather.grant(777, 3)); await sleep(1500)
 // the pack: swap two bag slots and set a journal line active, through the panel's own controls so the real writers run
+// M11 (11-17): on a phone the HUD row folds into one MENU chip; open it before PACK
+await p.evaluate(() => document.querySelector<HTMLElement>('[data-touch="menu"]')?.click()); await sleep(600)
 await tapText(p, /PACK$/); await sleep(1500)
 await p.evaluate(() => document.querySelector<HTMLElement>('[data-pack-tab="bag"]')?.click()); await sleep(800)
 const clickSlot = (n: number) => p.evaluate((i: number) => { const e = document.querySelector<HTMLElement>(`[data-slot="${i}"]`); e?.click(); return !!e }, n)

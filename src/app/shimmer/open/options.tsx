@@ -75,7 +75,7 @@ function ForgetBirth({ onDone }: { onDone: () => void }) {
   return (
     <OptionRow onClick={() => {
       if (!armed) { setArmed(true); return }
-      try { localStorage.removeItem(keeperKey(BIRTH_KEY)); localStorage.removeItem(BIRTH_KEY) } catch { /* private */ }
+      try { const birthKey = keeperKey(BIRTH_KEY); localStorage.removeItem(birthKey) } catch { /* private */ }
       refreshBirth(); setArmed(false); onDone()
     }} label={armed ? '⚠ Tap again: forget my birth rune' : '↺ Forget my birth rune'} tail={armed ? 'sure?' : 'see the ritual'} />
   )

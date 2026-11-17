@@ -26,6 +26,7 @@
 import { NODE_DEFS } from '../../world/resources'
 import { addOpenXp, openLevel, type Zone } from './forestry'
 import { perkFires, activeCompanion, perkLabel, GEM_DROP_CHANCE, GEM_ITEM } from '../shared/companion'
+import { gardenKey } from '@/lib/keeper-local'
 
 /** what stands on the rock. `egg` = a Wooded Trails element node: which element is only known when it shatters. */
 export type CrystalKind = 'raw' | 'violet' | 'storm' | 'earth' | 'water' | 'egg' | 'pure' | 'ather'
@@ -82,11 +83,11 @@ export const subscribeProspecting = (f: () => void) => { subs.add(f); return () 
 export const prospectingRev = () => rev
 const save = (now = Date.now()) => {
   for (const k of Object.keys(mined)) if (mined[k] <= now) delete mined[k]
-  try { localStorage.setItem(MINED_KEY, JSON.stringify(mined)) } catch { /* private window */ }
+  try { localStorage.setItem(gardenKey(MINED_KEY), JSON.stringify(mined)) } catch { /* private window */ }
 }
 if (typeof window !== 'undefined') {
   setInterval(() => { const now = Date.now(); if (Object.values(mined).some(t => t <= now)) { save(now); bump() } }, 10_000)
-  try { const m = JSON.parse(localStorage.getItem(MINED_KEY) ?? 'null'); if (m && typeof m === 'object') mined = m } catch { /* fresh */ }
+  try { const m = JSON.parse(localStorage.getItem(gardenKey(MINED_KEY)) ?? 'null'); if (m && typeof m === 'object') mined = m } catch { /* fresh */ }
 }
 export const regrowIn = (id: string, now = Date.now()) => Math.max(0, (mined[id] ?? 0) - now)
 export const isMined = (id: string, now = Date.now()) => regrowIn(id, now) > 0

@@ -7,6 +7,7 @@
 // Item names here are build vocabulary for things canon already has (the Repeater: engine/weapons.ts; waymarks:
 // gates.md). A new item is one row in OPEN_ITEMS.
 import { NYX_RINN } from '../continent/rinning-nyx'
+import { keeperKey } from '@/lib/keeper-local'
 
 export interface ItemDef {
   name: string
@@ -156,7 +157,7 @@ export const INV_KEY = 'open.inv.v1'
 /** Load the keeper's bag, or a fresh one. `waymarksLeft` seeds a fresh bag for a keeper who already planted some. */
 export function loadInv(waymarksLeft = 12): Inv {
   try {
-    const v = JSON.parse(localStorage.getItem(INV_KEY) ?? 'null')
+    const v = JSON.parse(localStorage.getItem(keeperKey(INV_KEY)) ?? 'null')
     if (v?.v === 1 && Array.isArray(v.slots) && v.slots.length === SLOTS) {
       // ★ tools are not bag items (Alex 11-15, the stance: "interacting with a node should just automatically use the right
       // tool"): they sit in the sockets round the mana orb (engine/tools.ts). A Worn Blade a bag got for an hour on 11-15
@@ -169,4 +170,4 @@ export function loadInv(waymarksLeft = 12): Inv {
   } catch { /* private window */ }
   return newInv(waymarksLeft)
 }
-export function saveInv(inv: Inv) { try { localStorage.setItem(INV_KEY, JSON.stringify(inv)) } catch { /* private window */ } }
+export function saveInv(inv: Inv) { try { localStorage.setItem(keeperKey(INV_KEY), JSON.stringify(inv)) } catch { /* private window */ } }

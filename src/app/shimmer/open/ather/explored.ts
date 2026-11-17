@@ -8,6 +8,7 @@
 // World coords: continent.json, origin at the centre, x east, z south, 11670 × 7830 m.
 // Storage: localStorage 'ather.fog.v2' = base64 of the packed bits. Per browser (the trial ledger, not the account).
 
+import { gardenKey } from '@/lib/keeper-local'
 export const FOG_CELL = 16
 export const REVEAL_R = 64
 export const WORLD = { sizeX: 11670, sizeZ: 7830 }
@@ -57,7 +58,7 @@ export const FOG_KEY = 'ather.fog.v2'
 export function loadFog(): Fog {
   const f = newFog()
   try {
-    const raw = localStorage.getItem(FOG_KEY)
+    const raw = localStorage.getItem(gardenKey(FOG_KEY))
     if (raw) { const bin = atob(raw); if (bin.length === f.bits.length) for (let k = 0; k < bin.length; k++) f.bits[k] = bin.charCodeAt(k) }
   } catch { /* fresh fog */ }
   return f
@@ -66,6 +67,6 @@ export function saveFog(f: Fog): void {
   try {
     let s = ''
     for (let k = 0; k < f.bits.length; k += 8192) s += String.fromCharCode(...f.bits.subarray(k, k + 8192))
-    localStorage.setItem(FOG_KEY, btoa(s))
+    localStorage.setItem(gardenKey(FOG_KEY), btoa(s))
   } catch { /* session only */ }
 }

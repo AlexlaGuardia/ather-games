@@ -23,6 +23,7 @@
 
 import type { Box, Shape } from '../terrain-world'
 import { shiftLegacyOwned, cornerTo15, LAYOUT } from './garden-snapshot'
+import { gardenKey } from '@/lib/keeper-local'
 
 // ── the garden grid ───────────────────────────────────────────────────────────────────────────────────────────
 // ★ 300 × 300 m (CANON_GAPS 2026-11-15, RULED: "the home plot is a square on a grid, up to 300 × 300 m at full size",
@@ -214,7 +215,7 @@ export function migrateLegacy(owned: readonly string[], grey: number): { owned: 
 
 export function loadGarden(): Garden {
   try {
-    const v = JSON.parse(localStorage.getItem(KEY) ?? 'null')
+    const v = JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? 'null')
     if (v && Array.isArray(v.owned) && typeof v.grey === 'number') {
       let owned: string[] = v.owned.filter((s: unknown): s is string => typeof s === 'string')
       let grey = Math.max(0, v.grey)
@@ -227,5 +228,5 @@ export function loadGarden(): Garden {
   return freshGarden()
 }
 export function saveGarden(g: Garden): void {
-  try { localStorage.setItem(KEY, JSON.stringify({ ...g, layout: LAYOUT })) } catch { /* private window: the session keeps it */ }
+  try { localStorage.setItem(gardenKey(KEY), JSON.stringify({ ...g, layout: LAYOUT })) } catch { /* private window: the session keeps it */ }
 }

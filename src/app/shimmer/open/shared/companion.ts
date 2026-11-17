@@ -22,6 +22,7 @@
 import type { SkillId } from '../../engine/skills'
 import { PERK_INFO, PERK_MAX_BONUS, type BeastPerk } from '../../beasts/beast'
 import { openLevel, subscribeForestry } from '../ather/forestry'
+import { gardenKey } from '@/lib/keeper-local'
 
 export type CompanionId =
   | 'dustwhisker' | 'drifthorn' | 'glowmite' | 'embermole' | 'sporeling'
@@ -79,7 +80,7 @@ let rev = 0
 let joined: CompanionId[] = []   // met since the page last asked (for its toast)
 const subs = new Set<() => void>()
 const bump = () => { rev++; subs.forEach(f => f()) }
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)) } catch { /* private window */ } }
+const save = () => { try { localStorage.setItem(gardenKey(KEY), JSON.stringify(st)) } catch { /* private window */ } }
 export const subscribeCompanion = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export const companionRev = () => rev
 
@@ -128,7 +129,7 @@ export function perkBonus(skill: SkillId, rand: () => number = Math.random): str
 
 if (typeof window !== 'undefined') {
   try {
-    const s = JSON.parse(localStorage.getItem(KEY) ?? 'null')
+    const s = JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? 'null')
     if (s && typeof s === 'object' && Array.isArray(s.met)) {
       const ids = new Set(COMPANIONS.map(c => c.id))
       st = { met: s.met.filter((x: CompanionId) => ids.has(x)), active: ids.has(s.active) ? s.active : null, sentHome: !!s.sentHome }

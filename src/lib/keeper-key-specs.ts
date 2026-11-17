@@ -34,4 +34,29 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'voxel3d:saplings:',       worldTied: false },  // ⚠ OPEN
   { base: 'voxel3d:grown:',          worldTied: false },  // ⚠ OPEN, same call as saplings: trees grown from them (ground-light sources)
   { base: 'voxel3d:leafdecay:',      worldTied: false },  // ⚠ OPEN
+  // ── the OPEN WORLD's keeper things (M12 step 1, 2026-11-17): the pack, the hotbar/loadout, the learned skills ──
+  { base: 'open.inv.v1',             worldTied: false },  // the whole pack + hotbar slots
+  { base: 'open.loadout.v1',         worldTied: false },  // the stance / worn vessel loadout
+  { base: 'open.skills.v1',          worldTied: false },  // forestry skill XP
+]
+
+// ── THE GARDEN: what the account's plot owns, shared by every keeper on it (M12 step 1, 2026-11-17) ───────────
+// Scoped per ACCOUNT with the same `u:<id>:` front marker as a keeper key (see gardenKey in keeper-local.ts); the
+// split from KEEPER_KEY_SPECS only matters once an account holds several keepers. Never worldTied: the open world
+// has no epoch sweep. Open-save-registry derives the cloud-save garden whitelist from this list.
+export const GARDEN_KEY_SPECS: readonly { base: string; worldTied: boolean }[] = [
+  { base: 'ather.garden.v1',          worldTied: false },  // the plot
+  { base: 'ather.fog.v2',             worldTied: false },  // the explored map
+  { base: 'open.journal.v1',          worldTied: false },  // journal progress
+  { base: 'ather.waymarks.v1',        worldTied: false },
+  { base: 'open.pruned.v1',           worldTied: false },  // forestry world state
+  { base: 'open.mined.v1',            worldTied: false },  // prospecting world state
+  { base: 'ather.nodes.v2',           worldTied: false },  // node spread state
+  { base: 'ather.nodes.skew',         worldTied: false },
+  { base: 'open.tycoon.v1',           worldTied: false },  // businesses
+  { base: 'open.errand.v1',           worldTied: false },
+  { base: 'open.blueprints.v1',       worldTied: false },
+  { base: 'open.pitstops.v1',         worldTied: false },
+  { base: 'ather:trade:trial-ledger', worldTied: false },  // the trade ledger
+  { base: 'open.companion.v1',        worldTied: false },  // the Moglins
 ]

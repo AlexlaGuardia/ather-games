@@ -12,6 +12,7 @@
 // ★ PURE. The page keeps the state in localStorage via load/save below.
 
 import { GAME_DAY_MS, nodeAdjacency, type WildsNode } from './nodes'
+import { gardenKey } from '@/lib/keeper-local'
 
 /** The dials. Alex tunes these; nothing else in the file should need to change. */
 export const SPREAD = { everyDays: 3, chance: 0.15, wellEveryDays: 5, wellChance: 0.03 }
@@ -68,10 +69,10 @@ export const infectedIds = (s: SpreadState, nodes: WildsNode[]) => nodes.filter(
 
 const KEY = 'ather.nodes.v2', SKEW = 'ather.nodes.skew'
 export function loadSpread(now: number): SpreadState {
-  try { const v = JSON.parse(localStorage.getItem(KEY) ?? 'null'); if (v?.v === 2 && Array.isArray(v.clean)) return v } catch { /* private window */ }
+  try { const v = JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? 'null'); if (v?.v === 2 && Array.isArray(v.clean)) return v } catch { /* private window */ }
   return freshSpread(now)
 }
-export function saveSpread(s: SpreadState) { try { localStorage.setItem(KEY, JSON.stringify(s)) } catch { /* private window */ } }
+export function saveSpread(s: SpreadState) { try { localStorage.setItem(gardenKey(KEY), JSON.stringify(s)) } catch { /* private window */ } }
 /** Tuning only (`?tune=1`): extra ms added to the clock, so ] can skip game days. 0 in normal play. */
-export function loadSkew(): number { try { return Number(localStorage.getItem(SKEW)) || 0 } catch { return 0 } }
-export function saveSkew(ms: number) { try { localStorage.setItem(SKEW, String(ms)) } catch { /* private window */ } }
+export function loadSkew(): number { try { return Number(localStorage.getItem(gardenKey(SKEW))) || 0 } catch { return 0 } }
+export function saveSkew(ms: number) { try { localStorage.setItem(gardenKey(SKEW), String(ms)) } catch { /* private window */ } }

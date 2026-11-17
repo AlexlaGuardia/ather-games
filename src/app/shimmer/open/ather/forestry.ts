@@ -21,6 +21,7 @@
 
 import { NODE_DEFS } from '../../world/resources'
 import { createSkillSet, addSkillXP, skillSetToSave, skillSetFromSave, type SkillSet, type SkillId } from '../../engine/skills'
+import { keeperKey, gardenKey } from '@/lib/keeper-local'
 
 export type Zone = 'meadows' | 'thicket' | 'springs' | 'trails' | 'arid' | 'caverns'
 /** This season's zone names (RULED 2026-11-15, game/shimmer-geography.md › THE WILDS' ZONES, THIS SEASON): they may
@@ -66,13 +67,13 @@ export const forestryRev = () => rev
 if (typeof window !== 'undefined') {
   // a tree whose timer ran out redraws whole: every 10 s, if any prune has expired since the last look, tell the scene
   setInterval(() => { const now = Date.now(); if (Object.values(pruned).some(t => t <= now)) { save(now); bump() } }, 10_000)
-  try { const s = JSON.parse(localStorage.getItem(SKILL_KEY) ?? 'null'); if (Array.isArray(s)) skills = skillSetFromSave(s) } catch { /* fresh */ }
-  try { const p = JSON.parse(localStorage.getItem(PRUNE_KEY) ?? 'null'); if (p && typeof p === 'object') pruned = p } catch { /* fresh */ }
+  try { const s = JSON.parse(localStorage.getItem(keeperKey(SKILL_KEY)) ?? 'null'); if (Array.isArray(s)) skills = skillSetFromSave(s) } catch { /* fresh */ }
+  try { const p = JSON.parse(localStorage.getItem(gardenKey(PRUNE_KEY)) ?? 'null'); if (p && typeof p === 'object') pruned = p } catch { /* fresh */ }
 }
 const save = (now = Date.now()) => {
-  try { localStorage.setItem(SKILL_KEY, JSON.stringify(skillSetToSave(skills))) } catch { /* private window */ }
+  try { localStorage.setItem(keeperKey(SKILL_KEY), JSON.stringify(skillSetToSave(skills))) } catch { /* private window */ }
   for (const k of Object.keys(pruned)) if (pruned[k] <= now) delete pruned[k]   // the SAME clock prune used (a test's, or the real one)
-  try { localStorage.setItem(PRUNE_KEY, JSON.stringify(pruned)) } catch { /* private window */ }
+  try { localStorage.setItem(gardenKey(PRUNE_KEY), JSON.stringify(pruned)) } catch { /* private window */ }
 }
 export const forestryLevel = () => skills.forestry.level
 /** Any open-world skill's level, and XP granted to it (saved with Forestry's: one open-world skill set). Rinning uses it. */

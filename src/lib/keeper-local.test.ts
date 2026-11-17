@@ -12,7 +12,7 @@
 // makes every shimmer key in it CLASSIFY itself: keeper or device, no third option, no default.
 
 import {
-  KEEPER_KEYS, KEEPER_KEY_SPECS, WORLD_TIED_FAMILIES, KEEPER_CLAIM, keeperKeyFor, planKeeperAdoption, adoptAnonKeeperState,
+  KEEPER_KEYS, GARDEN_KEYS, migrateBareKeysToOwner, KEEPER_KEY_SPECS, WORLD_TIED_FAMILIES, KEEPER_CLAIM, keeperKeyFor, keeperKey, planKeeperAdoption, adoptAnonKeeperState,
 } from './keeper-local'
 // ⚠ ANON_SAVE_KEY is IMPORTED, never spelled: `save-slot.test.ts` forbids a second spelling of
 // that literal anywhere in src/, and it caught this file on the first run.
@@ -129,6 +129,11 @@ const DEVICE_KEYS = [
   'worktable.hotbar',             // the structure worktable's nine slots (creative mode, 09-16).
                                   // A builder's tool layout, owner-gated dev page, one author per
                                   // box — a device convenience, not progress anyone earned.
+  'open.settings.v1',              // open-world settings: DEVICE
+  'open.keymap.v1',               // open-world key bindings: DEVICE (the hands, not the character)
+  'ather.look2',                  // ground look: DEVICE
+  'open.range.tried',             // gun-range tried flag: DEVICE
+  'ather:courser:darter:build',   // ⚠ UNCLEAR (garage build): DEVICE for now, stays local (M12 step 1)
   'shimmer:hands-tune',           // the Dev-tab hands tuner's arm offsets (play, 09-16). A pose
                                   // dialled in against THIS screen and THIS eye, like the bindings:
                                   // two keepers on one desktop want the same arm.
@@ -163,11 +168,11 @@ function classify(expr: string, code: string, depth = 0): Verdict {
   const e = expr.trim()
   if (depth > 3) return 'unknown'
   // Routed through a scoping helper — that IS the classification.
-  if (/^(keeperKey|saveKey|slotFor)\s*\(/.test(e)) return 'scoped'
+  if (/^(keeperKey|gardenKey|saveKey|slotFor)\s*\(/.test(e)) return 'scoped'
   const lit = /^[`'"]/.test(e) ? (/^[`'"]([^`'"]*)/.exec(e)?.[1] ?? '') : null
   if (lit !== null) {
     if (DEVICE_KEYS.some(d => lit.startsWith(d))) return 'device'
-    return KEEPER_KEYS.some(b => lit.startsWith(b)) ? 'raw-keeper' : 'unknown'
+    return [...KEEPER_KEYS, ...GARDEN_KEYS].some(b => lit.startsWith(b)) ? 'raw-keeper' : 'unknown'
   }
   // Otherwise it names something: follow the name to what it is BOUND to, never trust the name
   // itself. A constant called `POT_KEY` says nothing about whether anybody scoped it, and a helper
@@ -192,11 +197,11 @@ function classify(expr: string, code: string, depth = 0): Verdict {
   }
   const body = decl.split('\n').slice(0, 4).join('\n')
   const rhs = /=>?\s*([\s\S]*)/.exec(body)?.[1] ?? body
-  if (/\b(keeperKey|saveKey|slotFor)\s*\(/.test(rhs)) return 'scoped'
+  if (/\b(keeperKey|gardenKey|saveKey|slotFor)\s*\(/.test(rhs)) return 'scoped'
   const inner = /[`'"]([^`'"]+)/.exec(rhs)?.[1]
   if (!inner) return 'unknown'
   if (DEVICE_KEYS.some(d => inner.startsWith(d))) return 'device'
-  return KEEPER_KEYS.some(b => inner.startsWith(b)) ? 'raw-keeper' : 'unknown'
+  return [...KEEPER_KEYS, ...GARDEN_KEYS].some(b => inner.startsWith(b)) ? 'raw-keeper' : 'unknown'
 }
 
 for (const file of walk(ROOT)) {
@@ -387,6 +392,7 @@ const OWNERS: Record<string, string> = {
   'ather:shimmer:seen:': 'voxel3d/discovery.ts', 'voxel3d:tutorial:': 'voxel3d/tutorial.ts', 'voxel3d:recipes:': 'voxel3d/recipe-book.ts',
   'voxel3d:mist:': 'voxel3d/mist-encounter.ts', 'voxel3d:pots:': 'voxel3d/VoxelWorld.tsx',
   'voxel3d:saplings:': 'voxel3d/VoxelWorld.tsx', 'voxel3d:grown:': 'voxel3d/VoxelWorld.tsx', 'voxel3d:leafdecay:': 'voxel3d/VoxelWorld.tsx',
+  'open.inv.v1': 'open/shared/inventory.ts', 'open.loadout.v1': 'open/shared/loadout.ts', 'open.skills.v1': 'open/ather/forestry.ts',   // M12 step 1
 }
 ok(Object.keys(OWNERS).length === KEEPER_KEYS.length,
    `every registered key names an owning module (${Object.keys(OWNERS).length} vs ${KEEPER_KEYS.length}) — a new key needs a row here`)
@@ -411,6 +417,58 @@ ok(dupes.length === 0, `★★ a keeper key is spelled outside its owning module
 for (const [base, owner] of Object.entries(OWNERS)) {
   const src = readFileSync(join(ROOT, owner), 'utf8')
   ok(src.includes(`'${base}`), `${owner} still owns '${base}' — otherwise the rule above asserts nothing`)
+}
+
+// ── ★ M12 STEP 1 MIGRATION: bare open-world keys move into the signed-in account, never lost ─────
+{
+  // Alex's case: signed in, account ALREADY has a keeper ('locked'), pack still in the bare key.
+  const alex = fakeStore({
+    'open.inv.v1': '{"slots":[{"id":"ore","n":7}]}', 'ather.garden.v1': '{"g":1}', 'ather.look2': 'flat',
+    [`u:${A}:${BIRTH_KEY}`]: 'rune_ember', [KEEPER_CLAIM]: A,
+  })
+  ;(globalThis as { localStorage?: unknown }).localStorage = alex
+  setSaveOwner(A)
+  const plan = adoptAnonKeeperState(A)
+  ok(plan.reason === 'locked', `fixture: the account's keeper is locked (${plan.reason})`)
+  ok(alex.getItem(`u:${A}:open.inv.v1`) === '{"slots":[{"id":"ore","n":7}]}', '★★ the signed-in veteran sees the SAME pack under the scoped key')
+  ok(alex.getItem('open.inv.v1') === null, 'and the bare pack is gone')
+  ok(alex.getItem(`u:${A}:ather.garden.v1`) === '{"g":1}' && alex.getItem('ather.garden.v1') === null, 'the garden moved too, per account')
+  ok(alex.getItem('ather.look2') === 'flat', 'a DEVICE key was left alone')
+  ok(keeperKey('open.inv.v1') === `u:${A}:open.inv.v1`, 'keeperKey reads the migrated key')
+  // the account's own newer copy is never overwritten
+  alex.setItem('open.inv.v1', 'stale'); alex.setItem(`u:${A}:open.inv.v1`, 'mine')
+  migrateBareKeysToOwner(A)
+  ok(alex.getItem(`u:${A}:open.inv.v1`) === 'mine', 'an existing scoped key wins over a bare one')
+}
+{
+  // ★ An ANONYMOUS keeper's OLD keys (scoped before 11-17) stay put on a locked account: they are a second keeper for the
+  // roster prompt, not this account's data. Only the keys scoped by step 1 migrate. (Jin hub review 11-17.)
+  const A = 'u_alex2'
+  const st = fakeStore({ [KEEPER_CLAIM]: A, [`u:${A}:ather:shimmer:birthRune`]: 'star', 'ather:shimmer:birthRune': 'life', 'ather:shimmer:runes': '["flow"]', 'open.inv.v1': 'pack' })
+  ;(globalThis as { localStorage?: unknown }).localStorage = st
+  setSaveOwner(A)
+  migrateBareKeysToOwner(A)
+  ok(st.getItem('ather:shimmer:runes') === '["flow"]' && st.getItem(`u:${A}:ather:shimmer:runes`) === null, '★ an anonymous keeper\'s runes are NOT merged into the account')
+  ok(st.getItem('ather:shimmer:birthRune') === 'life', 'and its birth rune stays for the roster prompt')
+  ok(st.getItem(`u:${A}:open.inv.v1`) === 'pack', 'while the step-1 pack key does move')
+}
+{
+  // Anonymous: nothing moves, the bare key is the key.
+  const anon = fakeStore({ 'open.inv.v1': 'pack' })
+  ;(globalThis as { localStorage?: unknown }).localStorage = anon
+  setSaveOwner(null)
+  ok(migrateBareKeysToOwner(null).length === 0 && anon.getItem('open.inv.v1') === 'pack', 'anonymous keeps the bare key untouched')
+  ok(keeperKey('open.inv.v1') === 'open.inv.v1', 'anonymous reads the bare key')
+}
+{
+  // A second account on the same browser never inherits the first one's pack.
+  const two = fakeStore({ 'open.inv.v1': 'a-pack' })
+  ;(globalThis as { localStorage?: unknown }).localStorage = two
+  setSaveOwner(A); adoptAnonKeeperState(A)
+  setSaveOwner(B); adoptAnonKeeperState(B)
+  ok(two.getItem(`u:${A}:open.inv.v1`) === 'a-pack', 'A holds the pack')
+  ok(two.getItem(`u:${B}:open.inv.v1`) === null && two.getItem('open.inv.v1') === null, '★ B gets nothing of A\'s, and no bare copy is left to adopt')
+  setSaveOwner(A)
 }
 
 console.log(`\nkeeper-local: ${pass} passed, ${fails.length} failed  (${files} files, ${sites} localStorage sites)`)
