@@ -71,3 +71,26 @@ export const stockOf = (front: string) => FURNITURE_ORDER.filter(id => FURNITURE
 export const PIECE_JOBS: readonly Job[] = FURNITURE_ORDER.filter(id => FURNITURE[id].recipe.length > 0).map(id => ({ id, label: FURNITURE[id].name, in: FURNITURE[id].recipe, out: { id, n: 1 } }))
 /** How many pieces a plot holds (a keeper furnishes, not fills). */
 export const MAX_PIECES = 60
+
+// ── THE KEEPSTONE FAMILY (canon 5a20b8f, ather-rework WORKSHOP ROOMS (6)): the basic one sets a raw mana shard and is made
+//    at the planning table; UNIQUE Keepstones are FOUND in the world with a higher crystal set in them: LOOK ONLY, never
+//    more space (grade is worth and look, never power). Where they are found is Jin's: dug out of a crystal node while
+//    prospecting (ather/prospecting.ts › mine), the rarer the crystal the rarer the find. Blurbs await @lark.
+export interface KeepstoneDef { name: string; blurb: string; crystal: string }
+const found = (crystal: string, name: string, what: string): KeepstoneDef => ({ name, crystal, blurb: `An old Keepstone dug out of the rock, ${what} still set in its bowl. It opens on the same bank as any other.` })
+export const KEEPSTONES: Readonly<Record<string, KeepstoneDef>> = {
+  keepstone: { name: 'Keepstone', crystal: 'raw_mana_shard', blurb: 'A Blankstone pedestal with a mana shard set inside. Set it on your plot and it opens on the garden bank.' },
+  keepstone_violet: found('violet_crystal', 'Violet Keepstone', 'a violet crystal'),
+  keepstone_storm: found('storm_crystal', 'Storm Keepstone', 'a storm crystal'),
+  keepstone_earth: found('earth_crystal', 'Earth Keepstone', 'an earth crystal'),
+  keepstone_water: found('water_crystal', 'Water Keepstone', 'a water crystal'),
+  keepstone_pure: found('pure_mana_core', 'Pure Keepstone', 'a pure mana core'),
+  keepstone_ather: found('ather_crystal', 'Ather Keepstone', 'an Ather crystal'),
+}
+export const isKeepstone = (id: string) => id in KEEPSTONES
+/** The Keepstone item that carries this crystal (a placed one picked up comes back as itself). */
+export const keepstoneFor = (crystal: string | undefined) => Object.keys(KEEPSTONES).find(k => KEEPSTONES[k].crystal === crystal) ?? 'keepstone'
+/** The chance a crystal node gives up a unique Keepstone when it breaks: a find, not a farm. Raw nodes never do. */
+export const KEEPSTONE_FIND: Readonly<Record<string, number>> = {
+  violet_crystal: 0.02, storm_crystal: 0.02, earth_crystal: 0.02, water_crystal: 0.02, pure_mana_core: 0.04, ather_crystal: 0.08,
+}

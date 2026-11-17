@@ -87,6 +87,16 @@ ok(!canPlaceChest(pc.works, owned, C.x + 1, C.z, 0, ks).ok, 'keepstone: set onto
   const packed = { v: 1 as const, slots: Array(32).fill(null).map(() => ({ id: 'blankstone', n: 99 })) }
   ok(pickUpChest(pc.works, pc.chest.id, packed) === null, 'keepstone: picked up into a full bag (it would vanish)')
 }
+// a FOUND Keepstone: its crystal is what lights it, it fills the same bank, and it comes back as itself
+{
+  const fi = give(newInv(12), 'keepstone_violet', 1).inv
+  ok(!canPlaceChest(freshWorks(), owned, C.x, C.z, 0, fi).ok, 'found: a basic Keepstone was set from a bag holding only a violet one')
+  const f = placeChest(freshWorks(), owned, fi, C.x, C.z, 0, 9, 'keepstone_violet')!
+  ok(!!f && f.chest.crystal === 'violet_crystal' && countOf(f.inv, 'keepstone_violet') === 0 && chestsStanding(f.works) === 2, 'found: set wrong (crystal, bag, or it did not add to the bank)')
+  const back = pickUpChest(f.works, f.chest.id, f.inv)!
+  ok(!!back && countOf(back.inv, 'keepstone_violet') === 1 && countOf(back.inv, KEEPSTONE) === 0, 'found: picked up as a basic Keepstone (the violet one was lost)')
+  ok(!canPlaceChest(freshWorks(), owned, C.x, C.z, 0, fi, 'goldwood_stool').ok, 'found: a stool was set as a Keepstone')
+}
 // with a room standing: inside is fine, the wall / door / bench are not
 {
   const rr = W.rooms[0], b = benchOf(rr), d = doorOf(rr), f = footprint(rr.kind, rr.x, rr.z, rr.q)

@@ -76,6 +76,23 @@ for (const id of [BLANKSTONE, ...Object.values(CRYSTAL_ITEM)]) {
   ok(d.name !== id.replace(/_/g, ' ') && !!d.icon && existsSync('public' + d.icon), `bag: ${id} has no row or no icon`)
 }
 ok(CRYSTAL_KINDS.every(k => GATE[TIER[k]] >= 1), 'a kind without a tier')
+// found UNIQUE Keepstones (canon 5a20b8f): a rare dig from a crystal node, never from raw; ather is the likeliest
+{
+  const { KEEPSTONE_FIND, KEEPSTONES } = require('./furniture') as typeof import('./furniture')
+  const low = () => 0.0001   // every roll comes in under the find chance
+  _resetProspecting()
+  const k = mine('ather', 'ks-a', low, T0 + 1e9)
+  ok(k.ok && k.drops.some(d => d.id === 'keepstone_ather'), 'keepstone: a lucky ather dig found no Ather Keepstone')
+  _resetProspecting()
+  const r = mine('raw', 'ks-r', low, T0 + 1e9)
+  ok(r.ok && !r.drops.some(d => d.id in KEEPSTONES), 'keepstone: a raw node gave a Keepstone')
+  const high = () => 0.9999
+  _resetProspecting()
+  const n = mine('ather', 'ks-n', high, T0 + 1e9)
+  ok(n.ok && !n.drops.some(d => d.id in KEEPSTONES), 'keepstone: an unlucky dig found one anyway')
+  ok(Object.values(KEEPSTONE_FIND).every(c => c > 0 && c <= 0.1) && KEEPSTONE_FIND.ather_crystal > KEEPSTONE_FIND.violet_crystal, 'keepstone: find chances off (a find, not a farm; rarer crystal = likelier)')
+  ok(Object.keys(KEEPSTONE_FIND).every(c => Object.values(KEEPSTONES).some(v => v.crystal === c)), 'keepstone: a crystal can be found set but has no Keepstone item')
+}
 
 if (fails.length) { console.error(`prospecting: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`prospecting: ${pass}/0`)

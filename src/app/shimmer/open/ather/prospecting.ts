@@ -27,6 +27,7 @@ import { NODE_DEFS } from '../../world/resources'
 import { addOpenXp, openLevel, type Zone } from './forestry'
 import { perkFires, activeCompanion, perkLabel, GEM_DROP_CHANCE, GEM_ITEM } from '../shared/companion'
 import { gardenKey } from '@/lib/keeper-local'
+import { KEEPSTONE_FIND, keepstoneFor } from './furniture'
 
 /** what stands on the rock. `egg` = a Wooded Trails element node: which element is only known when it shatters. */
 export type CrystalKind = 'raw' | 'violet' | 'storm' | 'earth' | 'water' | 'egg' | 'pure' | 'ather'
@@ -121,6 +122,8 @@ export function mine(kind: CrystalKind, id: string, rand: () => number = Math.ra
     drops[1].n += 1; perk = perkLabel(c)
     if (c.id === 'gemdigger' && rand() < GEM_DROP_CHANCE) drops.push({ id: GEM_ITEM, n: 1 })
   }
+  // now and then a crystal node gives up an old UNIQUE Keepstone with its crystal still set (canon 5a20b8f; furniture.ts)
+  if (rand() < (KEEPSTONE_FIND[CRYSTAL_ITEM[found]] ?? 0)) drops.push({ id: keepstoneFor(CRYSTAL_ITEM[found]), n: 1 })
   const levelUp = addOpenXp('prospecting', XP[tier])
   mined[id] = now + RESPAWN_MS[tier]
   save(now); bump()

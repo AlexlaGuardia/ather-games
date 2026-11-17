@@ -16,7 +16,7 @@ import { squareAt, sqId, GATE, GREG, THRESHOLD, PATH_START, GROUND_Y } from './p
 import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, BAIT_FROM, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, type Bank } from './garden-bank'
-import { FURNITURE, MAX_PIECES, type Job } from './furniture'
+import { FURNITURE, MAX_PIECES, KEEPSTONES, keepstoneFor, type Job } from './furniture'
 
 export type RoomKind = 'rinnshop' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
 export interface RoomDef {
@@ -177,7 +177,7 @@ export function chestBox(c: Pick<Chest, 'x' | 'z' | 'q'>): Box {
   const [hw, hd] = c.q % 2 ? [CHEST_D / 2, CHEST_W / 2] : [CHEST_W / 2, CHEST_D / 2]
   return { x0: c.x - hw, x1: c.x + hw, y0: GROUND_Y - 0.5, y1: GROUND_Y + CHEST_H, z0: c.z - hd, z1: c.z + hd }
 }
-export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
+export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: number, z: number, q: number, inv?: Inv, item = KEEPSTONE): PlaceVerdict {
   if (chestsStanding(works) >= MAX_CHESTS) return { ok: false, why: `${MAX_CHESTS} Keepstones already stand on the plot.` }
   const k = chestBox({ x, z, q })
   for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
@@ -196,21 +196,22 @@ export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: numbe
     if (Math.hypot(b.x - x, b.z - z) < 1.8) return { ok: false, why: 'That crowds the bench.' }
   }
   if (allChests(works).some(c => Math.hypot(c.x - x, c.z - z) < 1.4)) return { ok: false, why: 'Too close to another Keepstone.' }
-  if (inv && countOf(inv, KEEPSTONE) < 1) return { ok: false, why: 'No Keepstone in the bag. Make one at the planning table.' }
+  if (!(item in KEEPSTONES)) return { ok: false, why: 'That is not a Keepstone.' }
+  if (inv && countOf(inv, item) < 1) return { ok: false, why: `No ${KEEPSTONES[item].name} in the bag.${item === KEEPSTONE ? ' Make one at the planning table.' : ''}` }
   return { ok: true }
 }
-export function placeChest(works: Works, owned: ReadonlySet<string>, inv: Inv, x: number, z: number, q: number, now = Date.now()): { works: Works; inv: Inv; chest: Chest } | null {
-  if (!canPlaceChest(works, owned, x, z, q, inv).ok) return null
-  let out: Inv | null = inv
-  out = take(inv, KEEPSTONE, 1); if (!out) return null
-  const chest: Chest = { id: `chest-${now.toString(36)}`, x, z, q: ((q % 4) + 4) % 4, placedAt: now, crystal: 'raw_mana_shard' }
+export function placeChest(works: Works, owned: ReadonlySet<string>, inv: Inv, x: number, z: number, q: number, now = Date.now(), item = KEEPSTONE): { works: Works; inv: Inv; chest: Chest } | null {
+  if (!canPlaceChest(works, owned, x, z, q, inv, item).ok) return null
+  const out = take(inv, item, 1); if (!out) return null
+  const chest: Chest = { id: `chest-${now.toString(36)}`, x, z, q: ((q % 4) + 4) % 4, placedAt: now, crystal: KEEPSTONES[item].crystal }
   return { works: { ...works, chests: [...works.chests, chest] }, inv: out, chest }
 }
 /** Lift a placed Keepstone back into the bag. The starter one stays; a full bag refuses. The bank keeps every stack
  *  (garden-bank.ts: over the cap is tolerated, deposits just stop until it drains). */
 export function pickUpChest(works: Works, id: string, inv: Inv): { works: Works; inv: Inv } | null {
-  if (!works.chests.some(c => c.id === id)) return null
-  const r = give(inv, KEEPSTONE, 1)
+  const c = works.chests.find(x => x.id === id)
+  if (!c) return null
+  const r = give(inv, keepstoneFor(c.crystal), 1)   // a found one comes back as itself
   if (r.left > 0) return null
   return { works: { ...works, chests: works.chests.filter(c => c.id !== id) }, inv: r.inv }
 }

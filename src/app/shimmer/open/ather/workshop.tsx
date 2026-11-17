@@ -28,7 +28,7 @@ import {
   MAX_CHESTS, CHEST_SLOTS, bankCap, bankUsed, bankView, BANK_TABS, deposit, depositBag, withdraw, loadBank, saveBank, freshBank,
   type Bank, type BankTab,
 } from './garden-bank'
-import { FURNITURE, FURNITURE_ORDER, REFINE, PIECE_JOBS, MAX_PIECES, type Job } from './furniture'
+import { FURNITURE, FURNITURE_ORDER, REFINE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, type Job } from './furniture'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
 let works: Works | null = null
@@ -50,7 +50,7 @@ export function setBank(b: Bank) { bank = b; saveBank(b); bsubs.forEach(f => f()
 export const useBank = () => useSyncExternalStore(f => { bsubs.add(f); return () => { bsubs.delete(f) } }, getB, () => SERVER_BANK)
 
 // placing: which room, its turn, and where the ghost stands now (set by the scene each frame)
-type Placing = { kind: RoomKind | 'chest'; q: number } | { kind: 'piece'; item: string; q: number } | null
+type Placing = { kind: RoomKind; q: number } | { kind: 'chest'; item: string; q: number } | { kind: 'piece'; item: string; q: number } | null
 let placing: Placing = null
 const ghost = { x: 0, z: 0 }
 const psubs = new Set<() => void>()
@@ -71,8 +71,8 @@ function confirmPlace(owned: ReadonlySet<string>) {
     return
   }
   if (placing.kind === 'chest') {
-    const c = placeChest(getW(), owned, getInv(), ghost.x, ghost.z, placing.q)
-    if (!c) { const v = canPlaceChest(getW(), owned, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot set a Keepstone there.' : v.why, 'info'); return }
+    const c = placeChest(getW(), owned, getInv(), ghost.x, ghost.z, placing.q, Date.now(), placing.item)
+    if (!c) { const v = canPlaceChest(getW(), owned, ghost.x, ghost.z, placing.q, getInv(), placing.item); hudSay(v.ok ? 'Cannot set a Keepstone there.' : v.why, 'info'); return }
     setInv(c.inv); setWorks(c.works); setPlacing(null)
     hudSay(`The Keepstone opens on the bank · it holds ${bankCap(chestsStanding(c.works))} stacks now.`, 'item', 5)
     return
@@ -119,7 +119,7 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
       {w.rooms.map(r => (raised(r) ? <RoomMesh key={r.id} r={r} /> : <Scaffold key={r.id} r={r} />))}
       {allChests(w).map(c => <Keepstone key={c.id} c={c} pose={pose} />)}
       {w.pieces.map(pc => <PieceMesh key={pc.id} p={pc} />)}
-      {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
+      {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} item={p.item} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
     </>
   )
 }
@@ -274,13 +274,13 @@ function Keepstone({ c, pose }: { c: Chest; pose: React.MutableRefObject<Pose> }
   )
 }
 /** The Keepstone's ghost: snapped to the half metre, close in front of the keeper. */
-function ChestGhost({ pose, owned, q }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; q: number }) {
+function ChestGhost({ pose, owned, q, item }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; q: number; item: string }) {
   const g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
   useFrame(() => {
     const p = pose.current
     ghost.x = Math.round((p.x - Math.sin(p.yaw) * 1.8) * 2) / 2; ghost.z = Math.round((p.z - Math.cos(p.yaw) * 1.8) * 2) / 2
     g.current?.position.set(ghost.x, GROUND_Y + CHEST_H / 2, ghost.z)
-    mat.current?.color.set(canPlaceChest(getW(), owned, ghost.x, ghost.z, q, getInv()).ok ? GHOST_OK : GHOST_BAD)
+    mat.current?.color.set(canPlaceChest(getW(), owned, ghost.x, ghost.z, q, getInv(), item).ok ? GHOST_OK : GHOST_BAD)
   })
   return (
     <group ref={g} rotation-y={-q * Math.PI / 2}>
@@ -369,7 +369,26 @@ function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: (
               <div style={{ display: 'grid', gap: 6 }}>
                 <span data-act="make-keepstone"><HearthButton small disabled={!!short} onClick={() => { const r = makeKeepstone(getInv()); if (r) { setInv(r); hudSay('A Keepstone · in your bag.', 'item', 3) } else hudSay(short ? 'Prospect blankstone and a mana shard in the Wilds.' : 'No room in the bag.', 'info') }}>Make</HearthButton></span>
                 {n >= MAX_CHESTS ? <span style={lab}>Full</span>
-                  : <span data-act="set-keepstone"><HearthButton primary disabled={!have} onClick={() => { setPlacing({ kind: 'chest', q: 0 }); onClose(); hudSay('Setting a Keepstone · R turns it · E sets it · Esc cancels', 'info', 8) }}>Set one</HearthButton></span>}
+                  : <span data-act="set-keepstone"><HearthButton primary disabled={!have} onClick={() => { setPlacing({ kind: 'chest', item: KEEPSTONE, q: 0 }); onClose(); hudSay('Setting a Keepstone · R turns it · E sets it · Esc cancels', 'info', 8) }}>Set one</HearthButton></span>}
+              </div>
+            </div>
+          )
+        })()}
+        {(() => {
+          const found = Object.keys(KEEPSTONES).filter(id => id !== KEEPSTONE && countOf(inv, id) > 0)
+          if (!found.length) return null
+          const full = chestsStanding(w) >= MAX_CHESTS
+          return (
+            <div data-found-keepstones style={{ padding: '10px 12px', borderRadius: 12, background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+              <div style={lab}>Found Keepstones · same bank, their own light</div>
+              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
+                {found.map(id => (
+                  <div key={id} data-keepstone={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ width: 12, height: 12, borderRadius: 3, background: CRYSTAL_LIGHT[KEEPSTONES[id].crystal] ?? '#fff', boxShadow: `0 0 0 1px ${H.rule}` }} />
+                    <span style={{ flex: 1, fontSize: 13.5, color: H.ink }}>{KEEPSTONES[id].name} <span style={{ color: H.inkSoft }}>× {countOf(inv, id)}</span></span>
+                    {full ? <span style={lab}>Full</span> : <HearthButton small onClick={() => { setPlacing({ kind: 'chest', item: id, q: 0 }); onClose(); hudSay(`Setting the ${KEEPSTONES[id].name} · R turns it · E sets it · Esc cancels`, 'info', 8) }}>Set</HearthButton>}
+                  </div>
+                ))}
               </div>
             </div>
           )

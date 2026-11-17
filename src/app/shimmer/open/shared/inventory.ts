@@ -8,7 +8,7 @@
 // gates.md). A new item is one row in OPEN_ITEMS.
 import { NYX_RINN } from '../continent/rinning-nyx'
 import { keeperKey } from '@/lib/keeper-local'
-import { FURNITURE } from '../ather/furniture'
+import { FURNITURE, KEEPSTONES } from '../ather/furniture'
 
 export interface ItemDef {
   name: string
@@ -103,7 +103,7 @@ OPEN_ITEMS.mast = { name: 'Mast', blurb: 'Seeds and nuts shaken loose from a pru
 ITEM_GROUP.mast = 'forestry'
 // THE KEEPSTONE (RULED 11-17, athernyx 5a20b8f; glossary Keepstone): the plot's storage, an item made at the planning table and
 //    set on the plot (ather/rooms.ts). Never "chest" to a player.
-OPEN_ITEMS.keepstone = { name: 'Keepstone', blurb: 'A Blankstone pedestal with a mana shard set inside. Set it on your plot and it opens on the garden bank.', icon: '/open/icons/keepstone.svg', stack: 10, kind: 'placeable' }
+for (const [id, k] of Object.entries(KEEPSTONES)) OPEN_ITEMS[id] = { name: k.name, blurb: k.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 10, kind: 'placeable' }
 // FURNITURE + DECOR (Alex 11-17): items made in the carpentry room, set on the plot (ather/furniture.ts holds the recipes,
 //    sizes and blurbs; the blurbs await @lark). Icons: public/open/icons/<id with dashes>.svg (tools/art/furniture_icons.py).
 for (const [id, f] of Object.entries(FURNITURE)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 10, kind: 'placeable' }; ITEM_GROUP[id] = 'decor' }
