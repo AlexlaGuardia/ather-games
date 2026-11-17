@@ -130,6 +130,8 @@ const DEVICE_KEYS = [
   'worktable.hotbar',             // the structure worktable's nine slots (creative mode, 09-16).
                                   // A builder's tool layout, owner-gated dev page, one author per
                                   // box — a device convenience, not progress anyone earned.
+  'ather:device',                 // M12.5: this browser's id for the cloud-save write lease (open/cloud-sync.tsx)
+  'ather:open:',                  // M12.5: this browser's sync record + its ONE conflict backup (lib/open-cloud-core.ts)
   'open.settings.v1',              // open-world settings: DEVICE
   'open.keymap.v1',               // open-world key bindings: DEVICE (the hands, not the character)
   'ather.look2',                  // ground look: DEVICE

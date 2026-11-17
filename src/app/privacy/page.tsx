@@ -92,6 +92,14 @@ export default function PrivacyPage() {
             it can follow you to another device. The blocks you build in your garden still stay in your
             browser, unless you join a garden cluster (below).
           </p>
+          <p>
+            In the open world, when you are signed in, a copy of your keepers and your garden is kept on our
+            server too: each keeper&apos;s rune, skills, gear and pack, and the garden&apos;s plot, storage,
+            journal and explored map. It lets you pick up on another device. Your settings and key bindings
+            stay on each device. If two devices both changed while apart, the account copy wins and this
+            browser keeps its own version as a backup; nothing is merged and nothing is thrown away. A keeper
+            you retire is kept for 30 days and then deleted. Deleting your account deletes all of it.
+          </p>
         </Section>
 
         <Section title="Garden clusters">
@@ -104,6 +112,7 @@ export default function PrivacyPage() {
             <li>which cluster you are in and which corner is yours, and the invitations and yeses that are waiting</li>
             <li>your garden&apos;s seed and size, so your cluster-mates can see its ground</li>
             <li>a picture of the blocks you have built in your garden, sent from your browser now and then, so your cluster-mates can see it. They can look at it but cannot change it.</li>
+            <li>your open-world garden as your cluster-mates see it: its plot and what stands on it, sent from your browser while you play, so they can walk your ground. They can look at it but cannot change it.</li>
             <li>when you were last in the world, so your cluster-mates see your gate station go quiet while you are away. Only the time is kept, never where you were.</li>
           </ul>
           <p>

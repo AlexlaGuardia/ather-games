@@ -23,6 +23,7 @@ const NAMED: Record<string, string> = {
   cluster_offers: 'the invitations and yeses that are waiting',
   cluster_consents: 'the invitations and yeses that are waiting',
   cluster_plots: 'a picture of the blocks you have built in your garden',
+  cluster_gardens: 'your open-world garden as your cluster-mates see it',
   cluster_seen: 'when you were last in the world',
 }
 const tables = [...schema.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/g)].map(m => m[1])
@@ -32,6 +33,7 @@ for (const t of tables) {
   if (NAMED[t]) ok(page.includes(NAMED[t]), `the page names \`${t}\`: "${NAMED[t]}"`)
 }
 ok(!/Signing in does not upload it/.test(page), '★ the old false line is gone')
+ok(/a copy of your keepers and your garden is kept on our\s+server/.test(page), "★ the open world's cloud save (saves row game 'open', M12) is named")
 ok(/picture of your garden, all from our server/.test(page), 'deletion lists the cluster picture')
 
 if (fails.length) { for (const f of fails) console.log('  FAIL ', f); console.log(`privacy: ${pass} passed, ${fails.length} FAILED`); process.exit(1) }
