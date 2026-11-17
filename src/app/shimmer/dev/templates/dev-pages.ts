@@ -106,6 +106,13 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['claymation', 'stop motion', 'moglin', 'rig', 'animation', 'doll', 'character'],
   },
   {
+    path: '/shimmer/dev/keeper-body',
+    title: 'The Keeper Body Bench',
+    blurb: 'Rayman or a segmented doll? One rig, two looks, side by side.',
+    group: 'glass',
+    keywords: ['keeper', 'body', 'rayman', 'doll', 'rig', 'joints', 'walk', 'multiplayer', 'avatar'],
+  },
+  {
     path: '/shimmer/dev/break',
     title: 'The Chips',
     blurb: 'Every bucket breaking side by side, so the feel can be judged instead of argued.',
