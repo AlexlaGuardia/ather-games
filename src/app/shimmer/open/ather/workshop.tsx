@@ -502,7 +502,7 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
           <JobList title="The hearth" note="Roasts go to your bag. Hold one in the Wilds and click to eat it mid-fight. Meat comes from the Smokehouse in the continent's towns." jobs={ROAST} r={r} inv={inv} refine />
         )}
         {r.kind === 'alchemy' && (
-          <JobList title="The cauldron" note="Potions go to your bag. Hold one and click to drink it. The cauldron takes from the room's store first, then your bag." jobs={BREW} r={r} inv={inv} refine />
+          <JobList title="The cauldron" note="Potions go to your bag. Hold one and click to drink. The cauldron uses the room's store first, then your bag." jobs={BREW} r={r} inv={inv} refine />
         )}
         <div data-room-store={r.kind}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

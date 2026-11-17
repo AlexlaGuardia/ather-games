@@ -36,7 +36,7 @@ export const POTIONS: Readonly<Record<string, PotionRow>> = {
     recipe: [{ id: 'raw_mana_shard', n: 3 }, { id: 'goldwood_bark', n: 2 }], makes: 1, mana: 65,
   },
   starlight_tincture: {
-    name: 'Starlight Tincture', blurb: 'Starwillow sap, mana cores and glowfin. Drink it and your gathering teaches you half again as much, for 8 minutes.',
+    name: 'Starlight Tincture', blurb: 'Starwillow sap, mana cores and glowfin, boiled together. Hold it and click to drink. Gathering teaches you half again as much for 8 minutes.',
     recipe: [{ id: 'starwillow_sap', n: 3 }, { id: 'pure_mana_core', n: 2 }, { id: 'glowfin', n: 2 }], makes: 1, buff: { id: 'starlight', ms: 8 * 60_000 },
   },
   ather_infusion: {
