@@ -57,7 +57,7 @@ import { eyeY, WALK_SPEED, SPEED_CAP, type LocoState } from '../shared/locomotio
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
 import { TUNNEL_H, TUNNEL_WALK, boreAt, tunnelWall, bridgeRail, drivable, ferryLanding, guardrails, loadRegion, roadRail, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
 import { touch, TOUCH_LOOK_SENS, isTouchOnly } from '../shared/touch'
-import { TouchControls, type TouchAction } from '../shared/touch-controls'
+import { TouchControls, PHONE_ROW_TOP, type TouchAction } from '../shared/touch-controls'
 
 const STEP = 1 / 120
 const FOV = 64
@@ -1327,7 +1327,7 @@ export default function ContinentRide() {
       {isTouch && started && !showMap && !garage && !board && !ferrying && (
         <TouchControls showFire={!!hud.foot && gunHud.holding} actions={touchActions}
           holds={hud.foot ? (gunHud.holding ? [{ code: AIM_CODE, label: 'aim' }, { code: 'ShiftLeft', label: 'slide' }, { code: 'Space', label: 'jump' }] : undefined) : [{ code: 'Space', label: 'drift' }]}
-          stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hud.foot ? 48 : 148 }} />
+          stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hudSize === 'phone' ? PHONE_ROW_TOP : hud.foot ? 48 : 148 }} />
       )}
       {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} marks={questMarksRef} vitals={vitalsRef} mana={manaRef} entries={gunHud.holding ? gunHud.entries : hotbarEntries(inv)} sel={slot} onSelect={setSlot} onEquip={gunHud.holding ? undefined : (i: number) => setStance(st => equipSlot(st, i, getInv()))}
         dimmed={!hud.foot} input={!!hud.foot && !showMap && !garage && !board && !bagOpen && !vesselShop && !deed && !optionsOpen}

@@ -112,7 +112,7 @@ export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint
         </div>
       )}
       {!stick && (
-        <div style={{ position: 'absolute', left: 28, bottom: ABOVE_BAR, color: 'rgba(244,239,226,0.55)', font: '600 10px system-ui', letterSpacing: '0.2em', textTransform: 'uppercase', pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', left: 28, bottom: ABOVE_BAR, maxWidth: 100, color: 'rgba(244,239,226,0.55)', font: '600 10px system-ui', letterSpacing: '0.2em', textTransform: 'uppercase', pointerEvents: 'none' }}>
           {stickHint}
         </div>
       )}
