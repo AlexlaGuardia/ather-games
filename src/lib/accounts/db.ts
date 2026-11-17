@@ -44,8 +44,18 @@ function db(): DatabaseSync {
   mkdirSync(DATA_DIR, { recursive: true })
   const d = new DatabaseSync(DB_PATH)
   d.exec(SCHEMA)
+  migrateSaves(d)
   _db = d
   return d
+}
+
+/** M12 (docs/M12-cloud-save.md §1): additive columns on `saves` for the open world's rev/CAS + write lease.
+ *  Idempotent (PRAGMA first), runs on every open, never touches existing rows' data. */
+function migrateSaves(d: DatabaseSync): void {
+  const have = new Set((d.prepare('PRAGMA table_info(saves)').all() as Array<{ name: string }>).map(c => c.name))
+  if (!have.has('rev')) d.exec('ALTER TABLE saves ADD COLUMN rev INTEGER NOT NULL DEFAULT 0')
+  if (!have.has('lease_device')) d.exec('ALTER TABLE saves ADD COLUMN lease_device TEXT')
+  if (!have.has('lease_at')) d.exec('ALTER TABLE saves ADD COLUMN lease_at INTEGER')
 }
 
 const SCHEMA = `
@@ -333,6 +343,48 @@ export function putSave(user_id: string, game: string, data: string): void {
   ).run(user_id, game, data, Date.now())
 }
 
+// ── the open world's save (game = 'open'): revision + compare-and-swap + write lease ─────────────────────────
+export const OPEN_GAME = 'open'
+export const OPEN_LEASE_MS = 10 * 60 * 1000
+
+export interface OpenSaveRow { data: string; rev: number; lease_device: string | null; lease_at: number | null }
+
+export function getOpenSave(user_id: string): OpenSaveRow | null {
+  const row = db().prepare('SELECT data, rev, lease_device, lease_at FROM saves WHERE user_id = ? AND game = ?')
+    .get(user_id, OPEN_GAME) as OpenSaveRow | undefined
+  return row ?? null
+}
+
+/** Compare and swap. Returns the new rev, or null = stale (someone wrote first). One UPDATE, so atomic.
+ *  INSERT only when there is no row and base_rev = 0. A successful write also refreshes the writer's lease. */
+export function casOpenSave(user_id: string, base_rev: number, data: string, device: string | null = null): number | null {
+  const d = db()
+  const now = Date.now()
+  const res = d.prepare(
+    'UPDATE saves SET data = ?, rev = rev + 1, updated_at = ?, lease_device = COALESCE(?, lease_device), lease_at = CASE WHEN ? IS NULL THEN lease_at ELSE ? END ' +
+    'WHERE user_id = ? AND game = ? AND rev = ?',
+  ).run(data, now, device, device, now, user_id, OPEN_GAME, base_rev)
+  if (Number(res.changes) > 0) return base_rev + 1
+  if (base_rev !== 0) return null
+  try {
+    d.prepare('INSERT INTO saves (user_id, game, data, updated_at, rev, lease_device, lease_at) VALUES (?, ?, ?, ?, 1, ?, ?)')
+      .run(user_id, OPEN_GAME, data, now, device, device ? now : null)
+    return 1
+  } catch { return null }   // row appeared between the UPDATE and the INSERT: stale
+}
+
+/** Take the write lease for `device`. False when no row exists yet (the first push claims it). */
+export function takeOpenLease(user_id: string, device: string): boolean {
+  const res = db().prepare('UPDATE saves SET lease_device = ?, lease_at = ? WHERE user_id = ? AND game = ?')
+    .run(device, Date.now(), user_id, OPEN_GAME)
+  return Number(res.changes) > 0
+}
+
+/** Does another device hold a LIVE (unexpired) lease? */
+export function leaseHeldByOther(row: Pick<OpenSaveRow, 'lease_device' | 'lease_at'>, device: string, now = Date.now()): boolean {
+  return !!row.lease_device && row.lease_device !== device && row.lease_at !== null && now - row.lease_at < OPEN_LEASE_MS
+}
+
 export function deleteAccount(user_id: string): boolean {
   const d = db()
   d.prepare('DELETE FROM friends WHERE a_id = ? OR b_id = ?').run(user_id, user_id)
@@ -359,5 +411,6 @@ export function _openAt(path: string): DatabaseSync {
   const d = new DatabaseSync(path)
   _db = d
   d.exec(SCHEMA)
+  migrateSaves(d)
   return d
 }
