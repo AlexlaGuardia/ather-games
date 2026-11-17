@@ -53,7 +53,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 1. ✅ **11-17 `88dcf26a`, live, beta-m7-saves PASS on prod.** **Scope the keys.** Today the open world's pack / hotbar / loadout live in UNSCOPED `open.*` keys (keeper-local.test's
    "unclassified key" red lists them all). Move keeper things to keeper-scoped keys and garden things to account-scoped keys,
    with a one-time migration that MOVES (copy then delete, never delete first) today's data into keeper #1. keeper-local.test green.
-2. **Roster storage.** An account holds keepers `[k1, k2, …]` + `active`. Today's keeper = k1. Swapping = change `active`
+2. ✅ **11-17 `512cbad5` (module + 23 tests; inert until step 4 calls it, ships with it).** **Roster storage.** An account holds keepers `[k1, k2, …]` + `active`. Today's keeper = k1. Swapping = change `active`
    and re-read; garden untouched.
 3. **The sign-in prompt.** Anonymous keeper + an account that already has keepers → a panel: "Add this keeper to your
    roster?" Yes = it becomes a new roster entry; No = it stays on this browser, untouched (never deleted). Account with no
