@@ -65,7 +65,11 @@ await p.keyboard.press('KeyJ'); await sleep(1200)
 res.journal = await text(); await p.screenshot({ path: `${out}/journal.png` })
 res.told = /A place of your own/.test(String(res.journal))
 await p.keyboard.press('KeyJ'); await sleep(800)
-// 4 · the deed card through the real E: price against the purse
+// closing a panel can leave the world paused on 'Click to resume' (pointer lock released): a real click resumes it
+if (/click to resume/i.test(String(await text()))) { await p.mouse.click(500, 320); await sleep(800) }
+// 4 · the deed card through the real E: price against the purse. Closing the journal drops the door's reach for a
+//     few frames (panels disable it), so wait for it again: E with nothing in reach is the check's mistake, not the game's
+await poll(async () => await p.evaluate(() => (window as any).__market.reach()) === o.lot.id, 15000)
 await p.keyboard.press('KeyE')
 res.cardOpen = await poll(async () => !!(await p.$('[data-panel="deed-card"]')), 15000)
 await p.screenshot({ path: `${out}/deed-card.png` })
