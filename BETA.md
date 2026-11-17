@@ -17,7 +17,7 @@ A dead end is a step the game points you at that cannot be done. Do not build a 
 
 ## Milestones
 
-> **Order for 11-17 (Alex away, check-ins ~2 h):** ~~M2/M3~~ ✅ → ~~M7~~ ✅ → M6a → **M11 menu chip** → **M12 step 1** → M6b → M6d → M5 played → the
+> **Order for 11-17 (Alex away, check-ins ~2 h):** ~~M2/M3~~ ✅ → ~~M7~~ ✅ → ~~M6a~~ ✅ → ~~M11~~ ✅ → ~~M12.1~~ ✅ → M6b (prospect-check FAILS on prod: no aim, empty bag) → M12.2 → M6d → M5 played → the
 > check-suite chore between rows. M6c: the hub checks a strangers' Wilds fight EXISTS before dispatching; if it needs
 > building, it is an ask, not a row. M1's remainder is 🔒 (birth wheel), so skip it.
 
@@ -49,7 +49,7 @@ storage, Marks, deeds/businesses, journal progress, explored map, forestry/prosp
 Canon: CANON_GAPS [OPEN] "More than one keeper in one garden" (athernyx f79b4da); build the plumbing, no lore words until ruled.
 
 Steps (one worker each, in order; each keeps `beta-m7-saves` green):
-1. **Scope the keys.** Today the open world's pack / hotbar / loadout live in UNSCOPED `open.*` keys (keeper-local.test's
+1. ✅ **11-17 `88dcf26a`, live, beta-m7-saves PASS on prod.** **Scope the keys.** Today the open world's pack / hotbar / loadout live in UNSCOPED `open.*` keys (keeper-local.test's
    "unclassified key" red lists them all). Move keeper things to keeper-scoped keys and garden things to account-scoped keys,
    with a one-time migration that MOVES (copy then delete, never delete first) today's data into keeper #1. keeper-local.test green.
 2. **Roster storage.** An account holds keepers `[k1, k2, …]` + `active`. Today's keeper = k1. Swapping = change `active`
