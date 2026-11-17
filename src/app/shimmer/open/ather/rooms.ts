@@ -15,6 +15,7 @@ import type { Box } from '../terrain-world'
 import { squareAt, sqId, GATE, GREG, THRESHOLD, PATH_START, GROUND_Y } from './plot'
 import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, type Inv } from '../shared/inventory'
+import { MAX_CHESTS } from './garden-bank'
 
 export type RoomKind = 'rinnshop' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
 export interface RoomDef {
@@ -54,8 +55,10 @@ export const WALL_H = 3.2, WALL_T = 0.3, DOOR_W = 2.2
 
 /** A placed room. `q` = quarter turns (0..3); the door is on the front (local −z at q 0, turning with it). */
 export interface Room { id: string; kind: RoomKind; x: number; z: number; q: number; placedAt: number; doneAt: number }
-export interface Works { v: 1; rooms: Room[] }
-export const freshWorks = (): Works => ({ v: 1, rooms: [] })
+/** A chest the keeper placed: a door into the garden bank (garden-bank.ts). Each one adds CHEST_SLOTS. */
+export interface Chest { id: string; x: number; z: number; q: number; placedAt: number }
+export interface Works { v: 1; rooms: Room[]; chests: Chest[] }
+export const freshWorks = (): Works => ({ v: 1, rooms: [], chests: [] })
 
 const turned = (def: RoomDef, q: number) => (q % 2 === 0 ? { hw: def.w / 2, hd: def.d / 2 } : { hw: def.d / 2, hd: def.w / 2 })
 /** The room's ground rectangle (axis-aligned: quarter turns only). */
@@ -101,7 +104,7 @@ export function place(works: Works, owned: ReadonlySet<string>, inv: Inv, kind: 
   let out: Inv | null = inv
   for (const c of ROOMS[kind].cost) { out = out && take(out, c.id, c.n); if (!out) return null }
   const room: Room = { id: `${kind}-${now.toString(36)}`, kind, x: Math.round(x), z: Math.round(z), q: ((q % 4) + 4) % 4, placedAt: now, doneAt: now + ROOMS[kind].raiseMs }
-  return { works: { v: 1, rooms: [...works.rooms, room] }, inv: out!, room }
+  return { works: { ...works, rooms: [...works.rooms, room] }, inv: out!, room }
 }
 export const raised = (r: Room, now = Date.now()) => now >= r.doneAt
 export const progress = (r: Room, now = Date.now()) => Math.max(0, Math.min(1, (now - r.placedAt) / Math.max(1, r.doneAt - r.placedAt)))
@@ -125,14 +128,59 @@ export function wallsOf(r: Room): Box[] {
 }
 
 /** The nearest thing the keeper can use with E, or null: the table, or a raised room's bench. */
-export type WorkNear = { kind: 'table' } | { kind: 'bench'; room: Room } | { kind: 'raising'; room: Room }
+export type WorkNear = { kind: 'table' } | { kind: 'bench'; room: Room } | { kind: 'raising'; room: Room } | { kind: 'chest' }
 export function nearWork(works: Works, x: number, z: number, now = Date.now()): WorkNear | null {
   if (Math.hypot(TABLE.x - x, TABLE.z - z) < TABLE_REACH) return { kind: 'table' }
+  // a chest and a bench can share a room: the nearer one answers E
+  let best: WorkNear | null = null, bestD = Infinity
+  for (const c of allChests(works)) { const d = Math.hypot(c.x - x, c.z - z); if (d < CHEST_REACH && d < bestD) { best = { kind: 'chest' }; bestD = d } }
   for (const r of works.rooms) {
-    if (!raised(r, now)) { const d = doorOf(r); if (Math.hypot(d.x - x, d.z - z) < 3) return { kind: 'raising', room: r }; continue }
-    const b = benchOf(r); if (Math.hypot(b.x - x, b.z - z) < BENCH_REACH) return { kind: 'bench', room: r }
+    if (!raised(r, now)) { const d = doorOf(r); if (Math.hypot(d.x - x, d.z - z) < 3 && !best) return { kind: 'raising', room: r }; continue }
+    const b = benchOf(r), d = Math.hypot(b.x - x, b.z - z); if (d < BENCH_REACH && d < bestD) { best = { kind: 'bench', room: r }; bestD = d }
   }
-  return null
+  return best
+}
+
+// ── chests: doors into the garden bank ────────────────────────────────────────────────────────────────────────
+/** The plot's own chest, standing by the planning table from the first minute (garden-bank.ts says why). */
+export const STARTER_CHEST: Chest = { id: 'starter', x: TABLE.x + 3.2, z: TABLE.z, q: 0, placedAt: 0 }
+export const CHEST_W = 1.2, CHEST_D = 0.8, CHEST_H = 0.9, CHEST_REACH = 1.9
+export const CHEST_COST: readonly { id: string; n: number }[] = [{ id: 'goldwood_log', n: 8 }]
+export const allChests = (w: Works): Chest[] => [STARTER_CHEST, ...w.chests]
+/** Chests standing, the starter included: what the bank's cap is counted from. */
+export const chestsStanding = (w: Works) => 1 + w.chests.length
+export function chestBox(c: Pick<Chest, 'x' | 'z' | 'q'>): Box {
+  const [hw, hd] = c.q % 2 ? [CHEST_D / 2, CHEST_W / 2] : [CHEST_W / 2, CHEST_D / 2]
+  return { x0: c.x - hw, x1: c.x + hw, y0: GROUND_Y - 0.5, y1: GROUND_Y + CHEST_H, z0: c.z - hd, z1: c.z + hd }
+}
+export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
+  if (chestsStanding(works) >= MAX_CHESTS) return { ok: false, why: `${MAX_CHESTS} chests already stand on the plot.` }
+  const k = chestBox({ x, z, q })
+  for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
+    const s = squareAt(cx, cz); if (!s || !owned.has(sqId(s.i, s.j))) return { ok: false, why: 'Build on ground you hold.' }
+  }
+  for (const c of KEEP_CLEAR) {
+    const px = Math.max(k.x0, Math.min(c.x, k.x1)), pz = Math.max(k.z0, Math.min(c.z, k.z1))
+    if (Math.hypot(px - c.x, pz - c.z) < c.r) return { ok: false, why: 'Too close to the gate, Gregory or the table.' }
+  }
+  // inside a room is fine (a storeroom), but never in a wall, the doorway or at the bench
+  const pad = 0.3
+  for (const r of works.rooms) {
+    if (wallsOf(r).some(b => k.x0 - pad < b.x1 && k.x1 + pad > b.x0 && k.z0 - pad < b.z1 && k.z1 + pad > b.z0)) return { ok: false, why: `In the wall of your ${ROOMS[r.kind].name}.` }
+    const d = doorOf(r), b = benchOf(r)
+    if (Math.hypot(d.x - x, d.z - z) < 1.8) return { ok: false, why: 'That blocks the doorway.' }
+    if (Math.hypot(b.x - x, b.z - z) < 1.8) return { ok: false, why: 'That crowds the bench.' }
+  }
+  if (allChests(works).some(c => Math.hypot(c.x - x, c.z - z) < 1.4)) return { ok: false, why: 'Too close to another chest.' }
+  if (inv) { const short = CHEST_COST.find(c => countOf(inv, c.id) < c.n); if (short) return { ok: false, why: `Needs ${short.n} ${short.id.replace(/_/g, ' ')} (you have ${countOf(inv, short.id)}).` } }
+  return { ok: true }
+}
+export function placeChest(works: Works, owned: ReadonlySet<string>, inv: Inv, x: number, z: number, q: number, now = Date.now()): { works: Works; inv: Inv; chest: Chest } | null {
+  if (!canPlaceChest(works, owned, x, z, q, inv).ok) return null
+  let out: Inv | null = inv
+  for (const c of CHEST_COST) { out = out && take(out, c.id, c.n); if (!out) return null }
+  const chest: Chest = { id: `chest-${now.toString(36)}`, x, z, q: ((q % 4) + 4) % 4, placedAt: now }
+  return { works: { ...works, chests: [...works.chests, chest] }, inv: out!, chest }
 }
 
 // ── save: garden-tied (the garden is shared across a roster; Alex 11-17), registered in GARDEN_KEY_SPECS ─────────────
@@ -140,7 +188,11 @@ export const WORKS_KEY = 'open.works.v1'
 export function loadWorks(): Works {
   try {
     const v = JSON.parse(localStorage.getItem(gardenKey(WORKS_KEY)) ?? 'null')
-    if (v?.v === 1 && Array.isArray(v.rooms)) return { v: 1, rooms: v.rooms.filter((r: Room) => r && r.kind in ROOMS && Number.isFinite(r.x) && Number.isFinite(r.z)) }
+    if (v?.v === 1 && Array.isArray(v.rooms)) return {
+      v: 1, rooms: v.rooms.filter((r: Room) => r && r.kind in ROOMS && Number.isFinite(r.x) && Number.isFinite(r.z)),
+      // chests arrived after rooms (11-17): an older save has none
+      chests: Array.isArray(v.chests) ? v.chests.filter((c: Chest) => c && typeof c.id === 'string' && Number.isFinite(c.x) && Number.isFinite(c.z)) : [],
+    }
   } catch { /* private window */ }
   return freshWorks()
 }

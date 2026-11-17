@@ -22,6 +22,10 @@ export const OPEN_ITEMS: Record<string, ItemDef> = {
   repeater: { name: 'Repeater', blurb: 'A sidearm. Twelve to a clip, R reloads. Only the Wilds give it work.', icon: '/open/icons/repeater.svg', stack: 1, kind: 'gun' },
   waymark: { name: 'Waymark', blurb: 'Plant it on open ground in the Wilds and the fold map can take you back. Lift it to carry it again.', icon: '/open/icons/waymark.svg', stack: 12, kind: 'placeable' },
 }
+/** Which skill an item comes from: the garden bank's tabs (ather/garden-bank.ts). Filled beside each table below, so a
+ *  new row lands in its tab with no second list to keep. Not in here = 'gear' (guns, waymarks). */
+export type ItemGroup = 'forestry' | 'rinning' | 'prospecting'
+export const ITEM_GROUP: Record<string, ItemGroup> = {}
 // ── Forestry's yield (canon: game/shimmer-skilling.md › Forestry resources + design-briefs/shimmer-resources.md; the drop
 //    table is world/resources.ts › NODE_DEFS). Icons: public/open/icons/<id with dashes>.svg, drawn by tools/art/forestry_icons.py.
 const wood = (name: string, blurb: string): ItemDef => ({ name, blurb, icon: '', stack: 99, kind: 'material' })
@@ -45,6 +49,7 @@ const FORESTRY = {
   dawnwood_sapling: wood('Dawnwood Sapling', 'A dawnwood seedling. Rare, and slow, and worth it.'),
 } satisfies Record<string, ItemDef>
 for (const [id, def] of Object.entries(FORESTRY)) def.icon = `/open/icons/${id.replace(/_/g, '-')}.svg`
+for (const id of Object.keys(FORESTRY)) ITEM_GROUP[id] = 'forestry'
 Object.assign(OPEN_ITEMS, FORESTRY)
 // ── Rinning (ather/rinning.ts): bait to cast with, and canon's rinn (game/shimmer-skilling.md › Skill 4: names + lines).
 //    Icons: public/open/icons/<id with dashes>.svg, drawn by tools/art/rinn_icons.py (asleep, never dead: shimmer-resources.md).
@@ -60,6 +65,7 @@ const RINNING: Record<string, ItemDef> = {
   crystal_rinn: catchOf('Crystal Rinn', 'A Rinn made partly of crystallized mana. Catching one feels like holding a wish.'),
 }
 for (const [id, def] of Object.entries(RINNING)) def.icon = `/open/icons/${id.replace(/_/g, '-')}.svg`
+for (const id of Object.keys(RINNING)) ITEM_GROUP[id] = 'rinning'
 Object.assign(OPEN_ITEMS, RINNING)
 // ── Prospecting in the Wilds (ather/prospecting.ts): canon's crystal ladder (game/shimmer-skilling.md › Skill 3; the
 //    lines are canon's Description column) and the base stone a letter is cut from (RULED 11-16: "a specific stone and not
@@ -76,11 +82,13 @@ const PROSPECTING: Record<string, ItemDef> = {
   ather_crystal: stone('Ather Crystal', 'Pure dream-stuff crystallized. Looking into it feels like looking into distance.'),
 }
 for (const [id, def] of Object.entries(PROSPECTING)) def.icon = `/open/icons/${id.replace(/_/g, '-')}.svg`
+for (const id of Object.keys(PROSPECTING)) ITEM_GROUP[id] = 'prospecting'
 Object.assign(OPEN_ITEMS, PROSPECTING)
 // ── Rinning on the waking continent (continent/rinning-nyx.ts): canon's mortal rinn (world/rinn.md), bag rows made from
 //    the catch table so a name or a line lives in one place. Clickclaw is already a row (the Ather's): one row, two shores.
 //    Icons: tools/art/nyx_rinn_icons.py.
 for (const n of NYX_RINN) if (!OPEN_ITEMS[n.id]) OPEN_ITEMS[n.id] = { name: n.name, blurb: n.blurb, icon: `/open/icons/${n.id.replace(/_/g, '-')}.svg`, stack: 99, kind: 'material' }
+for (const n of NYX_RINN) ITEM_GROUP[n.id] ??= 'rinning'
 /** Bait a new keeper starts with (and an older bag is handed once). More is MADE in the bag: see BAIT_FROM. */
 export const STARTING_BAIT = 10
 // ── BAIT IS MADE (BETA M6e, 2026-11-17). Canon: bait is a food OFFERING, craftable, one per cast (game/shimmer-skilling.md
@@ -91,6 +99,7 @@ export const STARTING_BAIT = 10
 // MAST (RULED 11-17, athernyx 017be29; glossary Mast): seeds and nuts in golden husks, one item from ANY pruned Ather tree.
 //    Shipped for an hour as the placeholder 'forage'; loadInv renames it.
 OPEN_ITEMS.mast = { name: 'Mast', blurb: 'Seeds and nuts shaken loose from a pruned branch. Rinn rise to it where it falls on water.', icon: '/open/icons/mast.svg', stack: 99, kind: 'material' }
+ITEM_GROUP.mast = 'forestry'
 export const BAIT_FROM: Readonly<Record<string, number>> = { mast: 2, shimmerscale: 3, clickclaw: 3, glowfin: 3 }
 /** What the HUD says when the last bait is gone: where more comes from, so it is never a dead end. */
 export const NO_BAIT_LINE = 'No bait left. Make more in the bag from a small catch, or mast off a pruned tree.'

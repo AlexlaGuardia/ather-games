@@ -12,29 +12,42 @@
 import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
-import { HearthFrame, HearthButton, H, hearthDisplay } from '../../ui/hearth'
+import { HearthFrame, HearthButton, Well, H, hearthDisplay } from '../../ui/hearth'
 import { getInv, setInv, useInv } from '../shared/bag'
-import { countOf, itemDef, makeBait, BAIT_FROM } from '../shared/inventory'
+import { countOf, itemDef, makeBait, BAIT_FROM, HOTBAR, SLOTS, type Stack } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
 import { GROUND_Y } from './plot'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
   WALL_H, type Works, type Room, type RoomKind, type WorkNear,
+  CHEST_W, CHEST_D, CHEST_H, CHEST_COST, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
+import {
+  MAX_CHESTS, CHEST_SLOTS, bankCap, bankUsed, bankView, BANK_TABS, deposit, depositBag, withdraw, loadBank, saveBank, freshBank,
+  type Bank, type BankTab,
+} from './garden-bank'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
 let works: Works | null = null
-const SERVER: Works = { v: 1, rooms: [] }
+const SERVER: Works = { v: 1, rooms: [], chests: [] }
 const subs = new Set<() => void>()
 const getW = (): Works => { if (!works) works = typeof window === 'undefined' ? SERVER : loadWorks(); return works }
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export function setWorks(w: Works) { works = w; saveWorks(w); subs.forEach(f => f()) }
 export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER)
-/** Every room's walls, for the walker's plotShape. */
-export const workWalls = (w: Works) => w.rooms.flatMap(wallsOf)
+/** Every room's walls and every chest, for the walker's plotShape. */
+export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox)]
+
+// the garden bank's store (garden-bank.ts): one pool, every chest a door into it
+let bank: Bank | null = null
+const SERVER_BANK: Bank = freshBank()
+const bsubs = new Set<() => void>()
+const getB = (): Bank => { if (!bank) bank = typeof window === 'undefined' ? SERVER_BANK : loadBank(); return bank }
+export function setBank(b: Bank) { bank = b; saveBank(b); bsubs.forEach(f => f()) }
+export const useBank = () => useSyncExternalStore(f => { bsubs.add(f); return () => { bsubs.delete(f) } }, getB, () => SERVER_BANK)
 
 // placing: which room, its turn, and where the ghost stands now (set by the scene each frame)
-type Placing = { kind: RoomKind; q: number } | null
+type Placing = { kind: RoomKind | 'chest'; q: number } | null
 let placing: Placing = null
 const ghost = { x: 0, z: 0 }
 const psubs = new Set<() => void>()
@@ -45,6 +58,13 @@ export const isPlacing = () => placing !== null
 /** Confirm the ghost where it stands. */
 function confirmPlace(owned: ReadonlySet<string>) {
   if (!placing) return
+  if (placing.kind === 'chest') {
+    const c = placeChest(getW(), owned, getInv(), ghost.x, ghost.z, placing.q)
+    if (!c) { const v = canPlaceChest(getW(), owned, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot set a chest there.' : v.why, 'info'); return }
+    setInv(c.inv); setWorks(c.works); setPlacing(null)
+    hudSay(`A chest stands · the bank holds ${bankCap(chestsStanding(c.works))} stacks now.`, 'item', 5)
+    return
+  }
   const r = place(getW(), owned, getInv(), placing.kind, ghost.x, ghost.z, placing.q)
   if (!r) { const v = canPlace(getW(), owned, placing.kind, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot build there.' : v.why, 'info'); return }
   setInv(r.inv); setWorks(r.works); setPlacing(null)
@@ -85,7 +105,8 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
     <>
       <PlanningTable />
       {w.rooms.map(r => (raised(r) ? <RoomMesh key={r.id} r={r} /> : <Scaffold key={r.id} r={r} />))}
-      {p && <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />}
+      {allChests(w).map(c => <ChestMesh key={c.id} c={c} />)}
+      {p && (p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
     </>
   )
 }
@@ -190,9 +211,38 @@ function Ghost({ pose, owned, kind, q }: { pose: React.MutableRefObject<Pose>; o
   )
 }
 
+/** A chest: a lidded box with iron bands and a lock plate on its front (the face toward +z at q 0: the keeper who set it). */
+function ChestMesh({ c }: { c: Chest }) {
+  return (
+    <group position={[c.x, GROUND_Y, c.z]} rotation-y={-c.q * Math.PI / 2}>
+      <mesh position-y={0.32}><boxGeometry args={[CHEST_W, 0.64, CHEST_D]} /><meshLambertMaterial color="#9a6a3a" /></mesh>
+      <mesh position-y={0.74}><boxGeometry args={[CHEST_W + 0.04, 0.22, CHEST_D + 0.04]} /><meshLambertMaterial color="#7d5230" /></mesh>
+      {[-0.38, 0.38].map(x => <mesh key={x} position={[x, 0.45, 0]}><boxGeometry args={[0.08, 0.92, CHEST_D + 0.06]} /><meshLambertMaterial color="#5b5148" /></mesh>)}
+      <mesh position={[0, 0.58, CHEST_D / 2 + 0.04]}><boxGeometry args={[0.18, 0.2, 0.04]} /><meshLambertMaterial color="#d8b46e" /></mesh>
+    </group>
+  )
+}
+/** The chest's ghost: snapped to the half metre, close in front of the keeper. */
+function ChestGhost({ pose, owned, q }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; q: number }) {
+  const g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
+  useFrame(() => {
+    const p = pose.current
+    ghost.x = Math.round((p.x - Math.sin(p.yaw) * 1.8) * 2) / 2; ghost.z = Math.round((p.z - Math.cos(p.yaw) * 1.8) * 2) / 2
+    g.current?.position.set(ghost.x, GROUND_Y + CHEST_H / 2, ghost.z)
+    mat.current?.color.set(canPlaceChest(getW(), owned, ghost.x, ghost.z, q, getInv()).ok ? GHOST_OK : GHOST_BAD)
+  })
+  return (
+    <group ref={g} rotation-y={-q * Math.PI / 2}>
+      <mesh><boxGeometry args={[CHEST_W, CHEST_H, CHEST_D]} /><meshBasicMaterial ref={mat} color={GHOST_OK} transparent opacity={0.4} depthWrite={false} /></mesh>
+      <mesh position={[0, 0, CHEST_D / 2 + 0.05]}><boxGeometry args={[0.3, 0.3, 0.05]} /><meshBasicMaterial color="#ffffff" /></mesh>
+    </group>
+  )
+}
+
 // ── prompts + panels ──────────────────────────────────────────────────────────────────────────────────────────
 export function workPrompt(n: WorkNear): string {
   if (n.kind === 'table') return 'E · the planning table'
+  if (n.kind === 'chest') return 'E · the bank'
   if (n.kind === 'raising') return `${ROOMS[n.room.kind].name} · going up (${Math.round(progress(n.room) * 100)}%)`
   return `E · the ${ROOMS[n.room.kind].name}`
 }
@@ -202,6 +252,7 @@ const lab: React.CSSProperties = { color: H.inkSoft, fontSize: 10, fontWeight: 7
 export function WorkshopPanel({ near, owned, onClose }: { near: WorkNear; owned: ReadonlySet<string>; onClose: () => void }) {
   if (near.kind === 'table') return <TablePanel owned={owned} onClose={onClose} />
   if (near.kind === 'bench') return <BenchPanel room={near.room} onClose={onClose} />
+  if (near.kind === 'chest') return <BankPanel onClose={onClose} />
   return null
 }
 
@@ -211,6 +262,20 @@ function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: (
     <HearthFrame title="The planning table" maxWidth={560} onClose={onClose} fixed dataPanel="planning-table">
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 10 }}>
         <div style={{ fontSize: 13, color: H.inkSoft }}>Plan a room, then set it on your ground. The logs go when you place it.</div>
+        {(() => {
+          const n = chestsStanding(w), short = CHEST_COST.find(c => countOf(inv, c.id) < c.n)
+          return (
+            <div data-room="chest" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ ...hearthDisplay, fontSize: 16, fontWeight: 600, color: H.ink }}>Chest</div>
+                <div style={{ fontSize: 12.5, color: H.inkSoft, lineHeight: 1.35 }}>Every chest opens the one bank, shared by all your keepers. Each adds {CHEST_SLOTS} slots.</div>
+                <div style={{ ...lab, marginTop: 4 }}>{CHEST_COST.map(c => `${countOf(inv, c.id)} / ${c.n} ${itemDef(c.id).name}`).join(' · ')} · {n} of {MAX_CHESTS} standing</div>
+              </div>
+              {n >= MAX_CHESTS ? <span style={lab}>Full</span>
+                : <HearthButton primary disabled={!!short} onClick={() => { setPlacing({ kind: 'chest', q: 0 }); onClose(); hudSay('Placing a chest · R turns it · E sets it · Esc cancels', 'info', 8) }}>Plan</HearthButton>}
+            </div>
+          )
+        })()}
         {ROOM_ORDER.map(k => {
           const def = ROOMS[k], built = w.rooms.find(r => r.kind === k)
           const short = def.cost.find(c => countOf(inv, c.id) < c.n)
@@ -263,6 +328,65 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
             </div>
           </>
         )}
+      </div>
+    </HearthFrame>
+  )
+}
+
+// ── the bank ──────────────────────────────────────────────────────────────────────────────────────────────────
+function Cell({ s, title, ...rest }: { s: Stack | null; title?: string } & React.HTMLAttributes<HTMLButtonElement> & Record<`data-${string}`, string | number>) {
+  const d = s ? itemDef(s.id) : null
+  return (
+    <button type="button" title={d ? `${d.name}${s!.n > 1 ? ` × ${s!.n}` : ''}${title ?? ''}` : 'empty'} disabled={!s}
+      className="relative rounded-[10px] transition-transform active:scale-95" style={{ cursor: s ? 'pointer' : 'default' }} {...rest}>
+      <Well size={46}>{s && d?.icon ? <img src={d.icon} alt="" width={32} height={32} draggable={false} /> : s ? <span style={{ fontSize: 11, fontWeight: 700, color: H.inkSoft }}>{d!.name.slice(0, 3)}</span> : null}</Well>
+      {s && s.n > 1 && <span className="absolute bottom-0.5 right-1 text-[11.5px] font-extrabold tabular-nums" style={{ color: H.ink, textShadow: '0 1px 0 rgba(255,250,235,.8)' }}>{s.n}</span>}
+    </button>
+  )
+}
+const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(52px, 1fr))', gap: 5, justifyItems: 'center' }
+
+/** E at any chest: the garden bank above, the bag below. Click a stack to move it across. */
+function BankPanel({ onClose }: { onClose: () => void }) {
+  const inv = useInv(), b = useBank(), w = useWorks()
+  const [tab, setTab] = useState<BankTab>('all'), [query, setQuery] = useState('')
+  const cap = bankCap(chestsStanding(w)), used = bankUsed(b), view = bankView(b, tab, query)
+  const put = (at: number) => { const r = deposit(getInv(), at, getB(), cap); if (r.moved) { setInv(r.inv); setBank(r.bank) } else hudSay('The bank is full. Plan another chest at the table.', 'info') }
+  const takeOut = (k: number) => { const r = withdraw(getB(), k, getInv()); if (r.moved) { setInv(r.inv); setBank(r.bank) } else hudSay('No room in the bag.', 'info') }
+  const putAll = () => { const r = depositBag(getInv(), getB(), cap); if (r.moved) { setInv(r.inv); setBank(r.bank) } else hudSay(used >= cap ? 'The bank is full. Plan another chest at the table.' : 'The bag is already empty.', 'info') }
+  return (
+    <HearthFrame title="The bank" maxWidth={560} onClose={onClose} fixed dataPanel="bank"
+      footer={<span className="text-[12px]">Click a stack to move it across · shared by every keeper in your garden</span>}>
+      <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ ...lab, flex: 1 }} data-bank-used={used} data-bank-cap={cap}>
+            <span style={{ color: used > cap ? '#b5452c' : undefined }}>{used}</span> / {cap} slots · {chestsStanding(w)} of {MAX_CHESTS} chests
+          </div>
+          <span data-act="deposit-bag"><HearthButton small onClick={putAll}>Put the bag away</HearthButton></span>
+        </div>
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+          {BANK_TABS.map(t => {
+            const on = t.id === tab && !query.trim()
+            return <button key={t.id} type="button" data-bank-tab={t.id} onClick={() => { setTab(t.id); setQuery('') }}
+              style={{ border: 0, borderRadius: 999, padding: '5px 11px', fontSize: 12, fontWeight: 700, cursor: 'pointer', background: on ? H.ember : 'rgba(255,250,235,.6)', color: on ? '#fff7ea' : H.inkSoft, boxShadow: on ? 'none' : `inset 0 0 0 1px ${H.rule}` }}>{t.label}</button>
+          })}
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="find…" data-bank-search
+            onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape' && query) { e.preventDefault(); setQuery('') } }}
+            style={{ marginLeft: 'auto', width: 110, borderRadius: 999, border: 0, padding: '5px 10px', fontSize: 12.5, background: 'rgba(255,250,235,.85)', boxShadow: `inset 0 0 0 1px ${H.rule}`, color: H.ink }} />
+        </div>
+        {view.length ? (
+          <div style={{ ...grid, maxHeight: 220, overflowY: 'auto', padding: 2 }}>
+            {view.map(k => <Cell key={k} s={b.stacks[k]} data-bank-slot={k} onClick={() => takeOut(k)} />)}
+          </div>
+        ) : <div style={{ fontSize: 12.5, color: H.inkFaint, minHeight: 46, display: 'flex', alignItems: 'center', padding: '0 4px' }}>{query.trim() ? `Nothing in the bank matches “${query.trim()}”.` : used ? 'Nothing under this tab.' : 'Empty. Click anything in your bag to put it here.'}</div>}
+        <div style={{ ...lab, marginTop: 4 }}>Your bag</div>
+        <div style={grid}>
+          {[...Array(SLOTS - HOTBAR).keys()].map(k => <Cell key={k} s={inv.slots[k + HOTBAR]} data-bag-slot={k + HOTBAR} onClick={() => put(k + HOTBAR)} />)}
+        </div>
+        <div style={{ ...lab, marginTop: 2 }}>Hotbar</div>
+        <div style={grid}>
+          {[...Array(HOTBAR).keys()].map(k => <Cell key={k} s={inv.slots[k]} data-bag-slot={k} onClick={() => put(k)} />)}
+        </div>
       </div>
     </HearthFrame>
   )

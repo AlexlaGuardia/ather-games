@@ -1,5 +1,5 @@
 // The workshop rooms core (rooms.ts). Run: npx tsx src/app/shimmer/open/ather/rooms.test.ts
-import { ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, type Works } from './rooms'
+import { ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, CHEST_COST, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, type Works } from './rooms'
 import { STARTING_SQUARES, squareAt, sqId, GATE, GREG, GROUND_Y } from './plot'
 import { newInv, give, countOf } from '../shared/inventory'
 let pass = 0
@@ -15,7 +15,7 @@ ok(!!squareAt(P.x, P.z) && owned.has(sqId(squareAt(P.x, P.z)!.i, squareAt(P.x, P
 // the table stands on the start ground and clear of the gate, and its reach finds it
 { const s = squareAt(TABLE.x, TABLE.z); ok(!!s && owned.has(sqId(s.i, s.j)), 'table: not on the start ground') }
 ok(Math.hypot(TABLE.x - GATE.x, TABLE.z - GATE.z) > 10, 'table: crowds the gate')
-ok(nearWork(freshWorks(), TABLE.x + 1, TABLE.z)?.kind === 'table' && nearWork(freshWorks(), TABLE.x + 5, TABLE.z) === null, 'table: reach wrong')
+ok(nearWork(freshWorks(), TABLE.x + 1, TABLE.z)?.kind === 'table' && nearWork(freshWorks(), TABLE.x, TABLE.z - 5) === null, 'table: reach wrong')
 
 // placing: owned ground only, clear of the keep-clear ground, no overlap, one of each, the mats leave the bag
 ok(canPlace(freshWorks(), owned, 'rinnshop', P.x, P.z, 0, rich).ok, 'place: a clear owned spot was refused')
@@ -57,6 +57,39 @@ for (let q = 0; q < 4; q++) {
   ok(inWall(back.x, back.z) && inWall(sideP.x, sideP.z) && inWall(frontEdge.x, frontEdge.z), `turn ${q}: a wall is missing (back, side or front beside the door)`)
 }
 ok(ROOM_ORDER.length === 6 && ROOM_ORDER.every(k => k in ROOMS) && ROOMS.rinnshop.open, 'rooms: the six canon rooms are not all on the table, or the Rinnshop is shut')
+
+// ── chests: the starter stands from the first minute; more are placed on held ground, never in a wall/door/bench ──
+{ const s = squareAt(STARTER_CHEST.x, STARTER_CHEST.z); ok(!!s && owned.has(sqId(s.i, s.j)), 'chest: the starter chest is off the start ground') }
+ok(nearWork(freshWorks(), STARTER_CHEST.x, STARTER_CHEST.z - 1)?.kind === 'chest', 'chest: the starter chest does not answer E')
+ok(nearWork(freshWorks(), TABLE.x + 1, TABLE.z)?.kind === 'table', 'chest: the starter chest steals the table')
+ok(chestsStanding(freshWorks()) === 1, 'chest: a fresh plot does not count its starter chest')
+const C = { x: -100, z: 110 }
+ok(canPlaceChest(freshWorks(), owned, C.x, C.z, 0, rich).ok, 'chest: a clear owned spot was refused')
+ok(!canPlaceChest(freshWorks(), owned, -60, 60, 0, rich).ok, 'chest: placed off held ground')
+ok(!canPlaceChest(freshWorks(), owned, C.x, C.z, 0, newInv(12)).ok, 'chest: placed without the logs')
+ok(!canPlaceChest(freshWorks(), owned, GATE.x + 3, GATE.z, 0, rich).ok, 'chest: placed in the gate')
+const pc = placeChest(freshWorks(), owned, rich, C.x, C.z, 1, 5)!
+ok(!!pc && pc.works.chests.length === 1 && countOf(pc.inv, 'goldwood_log') === 40 - CHEST_COST[0].n && chestsStanding(pc.works) === 2, 'chest: place took the wrong logs or did not count')
+ok(!canPlaceChest(pc.works, owned, C.x + 1, C.z, 0, rich).ok, 'chest: stacked onto another chest')
+// with a room standing: inside is fine, the wall / door / bench are not
+{
+  const rr = W.rooms[0], b = benchOf(rr), d = doorOf(rr), f = footprint(rr.kind, rr.x, rr.z, rr.q)
+  const inside = toWorld(rr, -ROOMS.rinnshop.w / 2 + 1.2, 0)
+  ok(canPlaceChest(W, owned, inside.x, inside.z, 0, rich).ok, 'chest: refused inside a room (a storeroom should be fine)')
+  ok(!canPlaceChest(W, owned, b.x, b.z, 0, rich).ok, 'chest: placed on the bench')
+  ok(!canPlaceChest(W, owned, d.x, d.z, 0, rich).ok, 'chest: placed in the doorway')
+  ok(!canPlaceChest(W, owned, f.x0, (f.z0 + f.z1) / 2, 0, rich).ok, 'chest: placed in a wall')
+  // inside a room the nearer of chest and bench answers E
+  const w2: Works = { ...W, chests: [{ id: 'c', x: inside.x, z: inside.z, q: 0, placedAt: 0 }] }
+  ok(nearWork(w2, inside.x + 0.5, inside.z, 1e12)?.kind === 'chest' && nearWork(w2, b.x, b.z, 1e12)?.kind === 'bench', 'chest: chest vs bench nearest-wins wrong')
+}
+// the cap: ten chests and no more
+{
+  let w: Works = freshWorks(), inv = give(newInv(12), 'goldwood_log', 400).inv
+  for (let k = 0; k < 12; k++) { const r = placeChest(w, owned, inv, -146 + 4 * (k % 4) + 2, 92 + 4 * Math.floor(k / 4), 0, k); if (r) { w = r.works; inv = r.inv } }
+  ok(chestsStanding(w) === 10, `chest: the cap is not ten (got ${chestsStanding(w)})`)
+}
+{ const k = chestBox(STARTER_CHEST); ok(k.y0 < GROUND_Y && k.y1 > GROUND_Y + 0.5, 'chest: the walker can walk through a chest') }
 
 if (fails.length) { console.error(`rooms: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`rooms: ${pass}/0`)
