@@ -34,6 +34,7 @@ import { ShopPanel } from '../business/shop-panel'
 import { RunesmithPanel } from '../business/smith-panel'
 import type { Seat } from '../business/letters'
 import { stageOf, errandEntries, birthSeat, gemsGiven } from '../business/errand'
+import { allOffers } from '../business/market'
 import { deedsTold, markDeedsTold, deedPointerEntries, TOLD_RADIUS } from '../business/deed-pointer'
 import { doorByKey } from '../business/doors'
 import { useLoadout } from '../shared/loadout'
@@ -1095,7 +1096,10 @@ export default function ContinentRide() {
   // journal for good; struck once the garden owns a place (business/deed-pointer.ts)
   const [told, setTold] = useState(false)
   useEffect(() => setTold(deedsTold()), [])
-  const nearTown = useMemo(() => !!R && TOWNS.some(t => { const p = R.meta.places.find(q => q.id === t); return !!p && Math.hypot(p.x - hud.x, p.z - hud.z) < TOLD_RADIUS }), [R, hud.x, hud.z])
+  // ...or near ANY For Sale door (deeds sell in unnamed villages too: the cheapest, Kettlemoor Farm, is in one)
+  const saleDoors = useMemo(() => (R ? allOffers(R).map(o => o.lot.door) : []), [R])
+  const nearTown = useMemo(() => !!R && (TOWNS.some(t => { const p = R.meta.places.find(q => q.id === t); return !!p && Math.hypot(p.x - hud.x, p.z - hud.z) < TOLD_RADIUS })
+    || saleDoors.some(d => Math.hypot(d.x - hud.x, d.z - hud.z) < TOLD_RADIUS)), [R, saleDoors, hud.x, hud.z])
   useEffect(() => { if (nearTown && !told) { markDeedsTold(); setTold(true) } }, [nearTown, told])
   const ownsAny = (tycoon.t?.owned.length ?? 0) > 0
   useEffect(() => { postEntries('deeds', deedPointerEntries(told, ownsAny)) }, [told, ownsAny])
