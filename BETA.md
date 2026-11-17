@@ -59,8 +59,9 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
    keeper → adopt silently (live since d8b72da4).
 4. **Swap UI.** A keeper list (character panel or options) to switch, and "new keeper" opens the birth ritual. Character
    creator rework = later (Alex).
-5. **Cloud save.** The open world never syncs to the server today (only Shimmer3D pushes). The garden file + roster go to
-   `/api/saves` for signed-in accounts so a second device gets them. ⚠ save format + server API = Alex reviews the shape first.
+5. **Cloud save.** Design `docs/M12-cloud-save.md` (serb, 74c8c713), **APPROVED by Alex 11-17 with all four defaults**
+   (server wins + local backup, cap 8, Marks in wallet, settings per device). Server side = serb (db + /api/saves/open),
+   client side (cloud-sync open path) = Jin. Builds after steps 1-4.
 
 ## Audit 2026-11-16 (pass 1 + 2, fresh profile, 390×844 touch, prod)
 

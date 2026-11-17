@@ -32,7 +32,7 @@
 {
   "v": 1,                       // document format. Server refuses an unknown v (fail closed, client keeps local).
   "_owner": "u_abc",            // REQUIRED and must equal the session user (no legacy grace: `open` is new).
-  "_epoch": 7,                  // the world epoch the data was written under (ather-epoch.ts).
+  "_epoch": 2,                  // the world epoch the data was written under (ather-epoch.ts).
   "rev": 41,                    // server-assigned. Client echoes it back as base_rev; never invents one.
   "garden": {                   // ONE per account, shared by every keeper on it
     "keys": { "ather.garden.v1": "<raw string>", "ather.fog.v2": "...", "open.journal.v1": "...", ... },
@@ -155,7 +155,11 @@ mismatch → 403, and `beta-m7-saves` still green.
 - `/api/saves` POST has no Origin check (same reasoning as §6). Low risk under `SameSite=Lax`, cheap to close.
 - No rate limit on `/api/saves` POST. With a 512 KB cap and a write per request, one account can churn the DB.
 
-## 9. Questions for Alex (the shape stops here until answered)
+## 9. Questions for Alex: ANSWERED 2026-11-17 (Alex to Jin hub: "all of this sounds good, you have the green light")
+
+All four DEFAULTS approved: (1) server wins, local copy kept as a recoverable backup · (2) roster cap 8 · (3) Marks stay in
+their own `wallet` row · (4) settings + keymaps per device. The shape is approved; build after steps 1-4.
+
 
 1. **Both devices changed offline:** server wins and the local copy goes to a recoverable backup (proposed), or a
    panel asking which one to keep?
