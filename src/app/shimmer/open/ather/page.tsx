@@ -17,6 +17,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OpenHands, type OpenHandsApi } from '../shared/open-hands'
+import { ThirdPersonBody, dollAction, pullBack, newDrive } from '../shared/third-person'
+import type { Camera } from 'three'
 import { VoxelDayNight } from '../shared/day-night'
 import { terrainWorld } from '../terrain-world'
 import { Walker, verbOf, type Loco } from './walker'
@@ -336,14 +338,23 @@ export default function AtherSlice() {
   useEffect(() => setCover(coverFromUrl()), [])
   const coverSkip = useCallback((x: number, z: number) => (cl.frame.linked && onPath(cl.frame, x, z)) || Math.hypot(x - GATE.x, z - GATE.z) < 5 || Math.hypot(x - GREG.x, z - GREG.z) < 2.5 || Math.hypot(x - THRESHOLD.x, z - THRESHOLD.z) < 2, [cl.frame])
   const ground = useMemo(() => zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : ww ? ww.heightAt : () => 0, [zone, ww, cl.frame])
+  const heightRef = useRef(ground); heightRef.current = ground
+  // third person (V): your own keeper, the segmented doll (open/shared/third-person.tsx), driven from the tick below
+  const thirdRef = useRef(false), dollDrive = useRef(newDrive()), camRef = useRef<Camera | null>(null)
 
-  const onTick = useCallback((lc: Loco, _yaw: number, dt: number) => {
+  const onTick = useCallback((lc: Loco, yaw: number, dt: number) => {
     pos.current = { x: lc.px, z: lc.pz, grounded: !lc.airborne, swimming: lc.swimming }
-    { // the hands: posed against THIS frame's camera (the walker placed it just before calling us), off the walker's own state
-      const now = performance.now(), h = heldRef.current
-      handsApi.current?.step({ now, speed: Math.hypot(lc.hvx, lc.hvz), airborne: lc.airborne, hidden: frozen.current || h === 'repeater',
-        castAt: handsCastAt.current, working: !!fxRef.current?.busy() || !!cFxRef.current?.busy() }, dt)
+    { // the body, read once: posed against THIS frame's camera (the walker placed it just before calling us), off its own state
+      const now = performance.now(), h = heldRef.current, third = thirdRef.current
+      const speed = Math.hypot(lc.hvx, lc.hvz), working = !!fxRef.current?.busy() || !!cFxRef.current?.busy()
+      // the first-person hands (hidden in third person: the doll's own hands are what you see)
+      handsApi.current?.step({ now, speed, airborne: lc.airborne, hidden: frozen.current || h === 'repeater' || third,
+        castAt: handsCastAt.current, working }, dt)
       handsApi.current?.seat(now - handsCastAt.current < 640 ? 1 : 0)
+      // the doll: where the keeper stands, facing where the camera looks (the doll faces +z, the lens looks down -z)
+      const d = dollDrive.current, a = dollAction({ speed, airborne: lc.airborne, working, castAgoMs: now - handsCastAt.current, gun: h === 'repeater' })
+      d.action = a.action; d.rate = a.rate; d.x = lc.px; d.y = lc.py; d.z = lc.pz; d.yaw = yaw + Math.PI; d.visible = third
+      if (third && camRef.current) pullBack(camRef.current, heightRef.current, lc.py)
     }
     { const m = manaRef.current; if (m.cur < m.max) m.cur = Math.min(m.max, m.cur + m.regen * dt) }   // mana refills (forestry spends it)
     lc.speedMult = (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1)   // hands free, a little quicker on foot
@@ -353,7 +364,7 @@ export default function AtherSlice() {
       lc.vy = Math.max(lc.vy, sp.impulseUp || 8); lc.airborne = true
       if (!sp.keepMomentum) { lc.hvx = 0; lc.hvz = 0 }
     }
-    poseRef.current = { x: lc.px, z: lc.pz, yaw: _yaw }
+    poseRef.current = { x: lc.px, z: lc.pz, yaw }
     let n: Near = null
     if (zone.kind === 'plot') {
       if (Math.hypot(GATE.x - lc.px, GATE.z - lc.pz) < REACH + 1.2) n = { kind: 'gate' }
@@ -731,6 +742,7 @@ export default function AtherSlice() {
       if (e.code === 'Escape' && panel) { setPanel(null); return }
       if (e.code === 'Tab' && panel?.kind === 'map') { e.preventDefault(); setPanel({ ...panel, view: panel.view === 'ather' ? 'athernyx' : 'ather' }); return }
       if (e.code === 'KeyM') { setPanel(p => p ? null : { kind: 'map', view: 'ather', travel: false }); return }
+      if (e.code === 'KeyV') { thirdRef.current = !thirdRef.current; hudSay(thirdRef.current ? 'Third person · V for first person' : 'First person', 'info'); return }
       if (e.code === 'KeyK') { cycleLook(); return }   // the ground-look A/B (ground-look.tsx)
       if (e.code === 'KeyC' && zone.kind === 'plot') { setPanel(p => p?.kind === 'cluster' ? null : p ? p : { kind: 'cluster' }); return }
       if (e.code === 'BracketRight' && tune) { skipDays(e.shiftKey ? 5 : 1); return }
@@ -793,6 +805,7 @@ export default function AtherSlice() {
         onCreated={({ gl }) => { canvasEl.current = gl.domElement }}
       >
         <OpenHands ref={handsApi} />
+        <ThirdPersonBody drive={dollDrive} camRef={camRef} />
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && ww ? (x, z) => ww.canopyAt(x, z) * 0.7 : undefined} />
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} />}

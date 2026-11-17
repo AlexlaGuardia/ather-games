@@ -26,6 +26,7 @@ export const ACTIONS: Action[] = [
   { code: 'KeyI', label: 'bag' }, { code: 'KeyJ', label: 'journal' }, { code: 'KeyP', label: 'character' },
   { code: 'KeyQ', label: 'tactical cast (the bracelet)' }, { code: 'KeyX', label: 'signature cast (the glove)' },
   { code: 'KeyO', label: 'options' }, { code: 'KeyC', label: 'camera · linked plots' }, { code: 'KeyG', label: 'garage' },
+  { code: 'KeyV', label: 'first / third person' },
 ]
 const DEFAULTS = new Set(ACTIONS.map(a => a.code))
 /** Keys that can never be bound (the browser's, menu navigation, the dev keys). */

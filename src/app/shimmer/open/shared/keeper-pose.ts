@@ -11,8 +11,8 @@
 //
 // Run: npx tsx src/app/shimmer/open/shared/keeper-pose.test.ts
 
-export type KeeperAction = 'idle' | 'walk' | 'run' | 'swing' | 'cast' | 'aim'
-export const KEEPER_ACTIONS: readonly KeeperAction[] = ['idle', 'walk', 'run', 'swing', 'cast', 'aim']
+export type KeeperAction = 'idle' | 'walk' | 'run' | 'jump' | 'swing' | 'cast' | 'aim'
+export const KEEPER_ACTIONS: readonly KeeperAction[] = ['idle', 'walk', 'run', 'jump', 'swing', 'cast', 'aim']
 
 /** Body measures (metres). Hip at 0.92, shoulders at 1.42, eye about 1.62. */
 export const BODY = {
@@ -69,6 +69,15 @@ export function poseKeeper(action: KeeperAction, t: number): KeeperPose {
       armL: still(-armAmp * -s, 0.08, run ? -1.25 : -0.25),
       armR: still(-armAmp * s, -0.08, run ? -1.25 : -0.25),
       legL: still(legL, 0, kneeL), legR: still(legR, 0, kneeR),
+    }
+  }
+
+  if (action === 'jump') {
+    // in the air: knees tucked, arms up and out, the right a little higher (the first-person hands' jump, seen from outside)
+    return {
+      ...base, hipY: 0.04, torsoPitch: -0.08, headPitch: 0.1,
+      armL: still(-1.6, 0.55, -0.5), armR: still(-2.0, -0.5, -0.4),
+      legL: still(-0.55, 0.05, 1.1), legR: still(-0.15, -0.05, 0.6),
     }
   }
 

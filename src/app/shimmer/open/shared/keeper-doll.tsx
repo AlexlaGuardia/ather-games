@@ -37,15 +37,22 @@ function apply(r: Refs, p: KeeperPose) {
 }
 
 /** One keeper. `fps` steps the clock (0 = smooth); `phase` offsets it so two dolls never move in lockstep by accident. */
-export function KeeperDoll({ action, limbs = true, fps = 0, speed = 1, phase = 0 }: { action: KeeperAction; limbs?: boolean; fps?: number; speed?: number; phase?: number }) {
+/** What the game feeds a doll every frame (no React state: a ref the walker writes in its tick). Feet at y. */
+export interface DollDrive { action: KeeperAction; rate: number; x: number; y: number; z: number; yaw: number; visible: boolean }
+
+export function KeeperDoll({ action, limbs = true, fps = 0, speed = 1, phase = 0, drive }: { action: KeeperAction; limbs?: boolean; fps?: number; speed?: number; phase?: number; drive?: React.MutableRefObject<DollDrive> }) {
   const r = useRef<Partial<Refs>>({})
+  const root = useRef<THREE.Group>(null)
   const t = useRef(phase)
   const seatMat = useRef(mat(C.seat, { emissive: new THREE.Color(C.seat), emissiveIntensity: 0.4, roughness: 0.3 }))
   r.current.seat = seatMat.current
   useFrame((_, dt) => {
-    t.current += Math.min(dt, 0.1) * speed
+    const d = drive?.current
+    t.current += Math.min(dt, 0.1) * (d ? d.rate : speed)
+    if (d && root.current) { root.current.visible = d.visible; root.current.position.set(d.x, d.y, d.z); root.current.rotation.set(0, d.yaw, 0) }
+    if (d && !d.visible) return
     const R = r.current as Refs
-    if (R.hips && R.kR) apply(R, poseKeeper(action, stepTime(t.current, fps)))
+    if (R.hips && R.kR) apply(R, poseKeeper(d ? d.action : action, stepTime(t.current, fps)))
   })
   const g = (k: keyof Refs) => (o: THREE.Group | null) => { if (o) (r.current as Record<string, unknown>)[k] = o }
   const limb = (len: number, rad: number, color: string) => limbs
@@ -99,6 +106,7 @@ export function KeeperDoll({ action, limbs = true, fps = 0, speed = 1, phase = 0
     </group>
   )
   return (
+    <group ref={root}>
     <group ref={g('hips')} position={[0, BODY.hipY, 0]}>
       {limbs && <mesh position={[0, 0.02, 0]} castShadow><boxGeometry args={[0.3, 0.14, 0.18]} /><primitive object={mat(C.trousers)} attach="material" /></mesh>}
       {leg(1)}{leg(-1)}
@@ -114,6 +122,7 @@ export function KeeperDoll({ action, limbs = true, fps = 0, speed = 1, phase = 0
         </group>
         {arm(1)}{arm(-1)}
       </group>
+    </group>
     </group>
   )
 }
