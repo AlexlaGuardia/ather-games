@@ -59,4 +59,5 @@ export const GARDEN_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'open.pitstops.v1',         worldTied: false },
   { base: 'ather:trade:trial-ledger', worldTied: false },  // the trade ledger
   { base: 'open.companion.v1',        worldTied: false },  // the Moglins
+  { base: 'open.works.v1',            worldTied: false },  // the workshop rooms (ather/rooms.ts)
 ]
