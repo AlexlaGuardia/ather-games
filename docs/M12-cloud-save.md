@@ -94,6 +94,10 @@ values. It makes "two devices writing at once" impossible instead:
    - local data whose `base_rev` == server rev (nothing new on the server) → keep local, push.
    - server rev ahead AND local has unpushed changes (both sides moved, e.g. offline play on a laptop) →
      **server wins, and the local copy is moved to a backup key** `ather:open:backup:<uid>:<ts>`, never deleted.
+     **One backup per account** (`ather:open:backup:<uid>`, holding `{ saved_at, rev, doc }`): a newer conflict
+     replaces the older backup, because localStorage is ~5 MB per origin and a pile of 1 MB backups would starve the
+     live save. If writing the backup throws (quota), the client **does NOT adopt the server copy**: it keeps local,
+     stops pushing, and shows the "Playing on another device" line, so a full disk can never turn into a silent loss.
      ⚠ Alex call (§9 Q1). Alternative: a "which one do you keep" panel.
 4. Lease expiry: 10 minutes without a push or heartbeat. That only matters for the "Continue here?" wording.
    Correctness comes from the rev check, not the lease.

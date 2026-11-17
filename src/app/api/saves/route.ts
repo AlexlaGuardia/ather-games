@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { readSessionToken, SESSION_COOKIE } from '@/lib/accounts/session'
 import { getSave, putSave } from '@/lib/accounts/db'
+import { allowSavePush, byteLength, sameOriginPost } from '@/lib/accounts/save-guards'
 
 // Cloud saves — stage 2 of per-keeper Home Plots. The client stays authoritative while
 // playing (localStorage); this is the copy that survives the browser. Signed-out players
@@ -33,14 +34,17 @@ export function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // Hardening 11-17 (docs/M12-cloud-save.md §8, saves.test.ts): Origin, bytes not code units, per-account rate limit.
+  if (!sameOriginPost(req)) return NextResponse.json({ error: 'Cross-site request refused' }, { status: 403 })
   const userId = auth(req)
   if (!userId) return NextResponse.json({ error: 'Sign in first' }, { status: 401 })
+  if (!allowSavePush(userId)) return NextResponse.json({ error: 'Too many saves, slow down' }, { status: 429 })
   const body = (await req.json().catch(() => null)) as { game?: string; data?: string } | null
   const game = String(body?.game ?? '')
   const data = body?.data
   if (!GAMES.has(game)) return NextResponse.json({ error: 'Unknown game' }, { status: 400 })
   if (typeof data !== 'string' || data.length === 0) return NextResponse.json({ error: 'data must be a non-empty string' }, { status: 400 })
-  if (data.length > MAX_BYTES) return NextResponse.json({ error: 'Save too large' }, { status: 413 })
+  if (byteLength(data) > MAX_BYTES) return NextResponse.json({ error: 'Save too large' }, { status: 413 })
   let parsed: Record<string, unknown>
   try { parsed = JSON.parse(data) as Record<string, unknown> } catch { return NextResponse.json({ error: 'data must be JSON' }, { status: 400 }) }
 
