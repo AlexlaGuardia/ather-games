@@ -231,7 +231,7 @@ export const ROOM_ACCEPTS: Readonly<Record<RoomKind, (id: string) => boolean>> =
   cooking: id => (grp(id) === 'rinning' && id !== 'bait') || id === 'mast',
   alchemy: id => (grp(id) === 'prospecting' && id !== 'blankstone') || /_sap$/.test(id),
   smith: id => id === 'deadfall' || id === 'charcoal',
-  carpentry: id => (grp(id) === 'forestry' && id !== 'mast') || id === 'deadfall',
+  carpentry: id => grp(id) === 'forestry' && id !== 'mast' && id !== 'charcoal',
   stonemason: id => grp(id) === 'prospecting',
 }
 /** Said when the room refuses something: what it does keep. */

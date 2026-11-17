@@ -61,5 +61,6 @@ export const GARDEN_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'open.companion.v1',        worldTied: false },  // the Moglins
   { base: 'open.works.v1',            worldTied: false },  // the workshop rooms (ather/rooms.ts)
   { base: 'open.deeds-told.v1',      worldTied: false },  // BETA M6d: the deeds journal line was told (business/deed-pointer.ts)
+  { base: 'open.village.v1',          worldTied: false },  // the garden village's Moglins (ather/moglins.ts)
   { base: 'open.bank.v1',             worldTied: false },  // the garden bank (ather/garden-bank.ts): every keeper on the account
 ]

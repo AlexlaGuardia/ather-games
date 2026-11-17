@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Charcoal: deadfall burned slow for the forge (canon c52ba1c). Code-drawn filler. -->
+  <ellipse cx="16" cy="27.5" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <path d="M5 24 L9 15 L16 13 L19 18 L15 26 L7 26.4 Z" fill="#2b2826" stroke="#0f0e0d" stroke-width=".8"/>
+  <path d="M14 22 L18 12 L25 11 L28 18 L24 26 L16 26 Z" fill="#383431" stroke="#0f0e0d" stroke-width=".8"/>
+  <path d="M10 17 L14 19 M19 14 L23 16 M21 20 L25 21" stroke="#5a5450" stroke-width=".7"/>
+  <circle cx="22" cy="17" r="1" fill="#ff8a3a" opacity=".7"/>
+</svg>

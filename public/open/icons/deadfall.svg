@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Deadfall: fallen goldwood, a carpenter Moglin's product (canon c52ba1c). Code-drawn filler. -->
+  <ellipse cx="16" cy="27.5" rx="12" ry="2.2" fill="#000" opacity=".22"/>
+  <path d="M4 22 L24 13 L27 16.6 L7 25.6 Z" fill="#b8894a" stroke="#6e4a22" stroke-width=".8"/>
+  <ellipse cx="25.4" cy="14.8" rx="2.2" ry="2.6" transform="rotate(-24 25.4 14.8)" fill="#e6c27e" stroke="#6e4a22" stroke-width=".7"/>
+  <path d="M8 17 L22 23.4 L20.4 26.6 L6.4 20.2 Z" fill="#a37940" stroke="#6e4a22" stroke-width=".8"/>
+  <path d="M12 19 L10 14.6 M18 17 L19.4 12.6" stroke="#6e4a22" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M9.6 14.6 Q8 13 9 11.6 M19.4 12.6 Q21.4 11.4 21 9.6" fill="none" stroke="#c9a85a" stroke-width=".9" stroke-linecap="round"/>
+</svg>

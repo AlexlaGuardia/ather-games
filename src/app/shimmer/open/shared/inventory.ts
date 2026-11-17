@@ -101,6 +101,11 @@ export const STARTING_BAIT = 10
 //    Shipped for an hour as the placeholder 'forage'; loadInv renames it.
 OPEN_ITEMS.mast = { name: 'Mast', blurb: 'Seeds and nuts shaken loose from a pruned branch. Rinn rise to it where it falls on water.', icon: '/open/icons/mast.svg', stack: 99, kind: 'material' }
 ITEM_GROUP.mast = 'forestry'
+// DEADFALL + CHARCOAL (RULED 11-17, athernyx c52ba1c; glossary Deadfall): a carpenter Moglin's idle product, and what an idle
+//    smith burns it into for the forge (ather/moglins.ts). Never from pruning: that stays the keeper's Forestry. Icons: forestry_icons.
+OPEN_ITEMS.deadfall = { name: 'Deadfall', blurb: 'Fallen goldwood, gathered up by a carpenter Moglin.', icon: '/open/icons/deadfall.svg', stack: 99, kind: 'material' }
+OPEN_ITEMS.charcoal = { name: 'Charcoal', blurb: 'Deadfall burned slow and black. The forge wants it.', icon: '/open/icons/charcoal.svg', stack: 99, kind: 'material' }
+ITEM_GROUP.deadfall = 'forestry'; ITEM_GROUP.charcoal = 'forestry'
 // THE KEEPSTONE (RULED 11-17, athernyx 5a20b8f; glossary Keepstone): the plot's storage, an item made at the planning table and
 //    set on the plot (ather/rooms.ts). Never "chest" to a player.
 for (const [id, k] of Object.entries(KEEPSTONES)) OPEN_ITEMS[id] = { name: k.name, blurb: k.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 10, kind: 'placeable' }
