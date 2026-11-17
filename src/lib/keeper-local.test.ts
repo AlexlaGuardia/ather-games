@@ -394,7 +394,7 @@ ok(Object.keys(OWNERS).length === KEEPER_KEYS.length,
 // spelling two of these — and that file DELETES them, so a stale copy there is a reset that does not
 // reset. A key's owner is not the only file that cares about it.
 const dupes: string[] = []
-const SPELL_ALLOWED = ['lib/keeper-local.ts']   // the registry itself must name them all
+const SPELL_ALLOWED = ['lib/keeper-local.ts', 'lib/keeper-key-specs.ts']   // the registry itself must name them all
 let spellChecked = 0
 for (const file of walk(SRC)) {
   const rel = file.slice(SRC.length + 1).replace(/^app\/shimmer\//, '')

@@ -1,6 +1,6 @@
 // Legal base keys for the open-world cloud save doc (docs/M12-cloud-save.md §2). A key outside these is REJECTED (400).
 // Server-side only: never parses a game value, only checks names.
-import { KEEPER_KEY_SPECS } from '@/lib/keeper-local'
+import { KEEPER_KEY_SPECS } from '@/lib/keeper-key-specs'   // NOT keeper-local: that one is 'use client'
 
 // ── TEMPORARY garden stub ── TODO(M12 step 1): replace with `GARDEN_KEY_SPECS.map(s => s.base)` once Jin adds it to keeper-local.ts.
 const GARDEN_KEYS_STUB: readonly string[] = [
