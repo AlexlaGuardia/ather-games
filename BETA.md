@@ -89,6 +89,12 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
   (and on boot if a keeper exists and no epoch does), so those keepers count as current; and `SaveOwnerBoot` runs
   `adoptAnonKeeperState` site-wide on sign-in, before the gate reads. Never call `resetIfStale` in the open world: that
   would wipe every live keeper. Then `beta-m7-saves.mts` must PASS on prod.
+  **Alex 11-17 (phone), the direction:** a keeper made before sign-in is a new game; on sign-in, if the account already has a
+  save, a menu asks whether to ADD this keeper to the account's ROSTER. One garden file per account (email), several keepers in
+  it, swapped like loadouts, so a birth rune stops being a one-way door. Character creator revisited later. Canon asked
+  (CANON_GAPS f79b4da, multiple keepers per garden). Plan: (a) the epoch-stamp bug fix ships first (no design under which
+  /shimmer should delete a keeper); (b) the roster replaces the plain site-wide adoption; it is a new system, so it gets its
+  own GBOARD block + rows once Alex confirms what belongs to a keeper vs the garden.
 
 - **Alex 11-17, on his phone: too much on-screen clutter** from the MAP / PACK / OPTIONS / etc. buttons. Noted, not yet acted on
   (he said continue). Proposal when he's back: one menu chip that opens the row, the rest hidden until tapped. Needs his yes on the shape.
