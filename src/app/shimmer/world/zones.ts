@@ -856,7 +856,7 @@ export const START_ZONE = 'garden'
 // No tilemap literal (like the Passage, the Station and the Hold): the floor is `generateExpedition(seed)`, written onto
 // this one Zone object before the keeper warps in, so the page's per-zone clone picks it up on entry. Warps are data,
 // so the exit is rewritten with it. The name stays neutral until canon says what these places are (CANON_GAPS).
-const EXP_ZONE_DEF: Zone = { id: EXP_ZONE, name: 'Expedition', grid: [[0]], warps: [], realm: 'outside' }
+const EXP_ZONE_DEF: Zone = { id: EXP_ZONE, name: 'Delve', grid: [[0]], warps: [], realm: 'outside' }
 ZONES.push(EXP_ZONE_DEF)
 export function rerollExpedition(seed: number): ExpLayout {
   const L = generateExpedition(seed)

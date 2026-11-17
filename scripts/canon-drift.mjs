@@ -192,7 +192,9 @@ const CANON_V1_ZONES = [
 // `world/rune-hold.md` › The Travelers Station): the way out of Rune Hold is a SKY-PORT the town
 // calls the Travelers Station, and the practice range sits with it rather than on the square.
 const CANON_MORTAL_ZONES = ['Rune Hold', 'The Crucible', 'Pyramid Zero', 'The Citadel', 'The Passage',
-  'The Travelers Station', 'The Firing Range']
+  'The Travelers Station', 'The Firing Range',
+  // a season world's DELVE (ruled 2026-11-13, two-lines-two-games.md › THE DELVE): the type-noun, as Breach/Slack
+  'Delve']
 // dev/benchmark zones that are intentionally non-canon — excluded from the check.
 const ZONE_IGNORE = /sandbox|demo|terrain|hub|^fp-|garden \(hub\)|large |medium |huge|chunk|bake|proof|test|[–—]/i
 
@@ -547,6 +549,10 @@ function canonRetiredVocabulary() {
   for (const line of sec.split('\n')) {
     const m = line.match(/^\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$/)
     if (!m || /^-+$/.test(m[1]) || /^Retired$/i.test(norm(m[1]))) continue
+    // ★ A STRUCK ROW IS A RETIREMENT CANON TOOK BACK (the shipyard, reinstated 2026-11-13, row struck
+    // 11-15). Canon keeps the row as history, so the reader must skip it, not read the term inside the
+    // strikethrough: before this line the gate failed the build for saying a word canon had restored.
+    if (/^~~/.test(m[1].trim())) continue
     // The cell carries a qualifier ("**clan** (as a canon noun)") — the TERM is the emphasised part.
     const term = (m[1].match(/\*\*([^*]+)\*\*/) ?? m[1].match(/\*([^*]+)\*/))?.[1]?.trim()
     if (term) out.push({ term, useInstead: norm(m[2]), retiredOn: norm(m[3]) })
@@ -578,7 +584,8 @@ function canonRetiredVocabulary() {
     // Promoting it back to `fail` re-arms a guard that cries wolf, and a guard that cries wolf gets
     // switched off, which is the failure this whole file exists to prevent.
     clan:     { mode: 'review', why: 'retired ONLY for a company of keepers (→ chord); the Wilds factions, the awakened-clans and the Tribal Era sense are canon' },
-    shipyard: { mode: 'fail',   why: 'there is one keeper home and it is the home plot / fold' },
+    // (shipyard: REINSTATED as the 1672 home base, the row is struck, so the reader never yields it.
+    // If canon ever retires it again, the term arrives here unruled and reads BLIND, never clean.)
     // ── added 2026-08-30, after Magii's RETIRED VOCABULARY sweep (athernyx 235db0f) put three new
     // rows in the table and this gate correctly went BLIND on all three rather than reading clean.
     // ★ Each mode is a MEASUREMENT, not a guess — occurrence counts taken before choosing:

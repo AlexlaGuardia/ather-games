@@ -290,7 +290,7 @@ export const MAT = {
    * and the keeper carries it home (Alex's "unique chest"). It IS a chest in every way that matters: it opens, it
    * counts against the plot's cap, it pools into the bank, with the same slots. What differs is only the LOOK, and
    * that it cannot be crafted: finer, never stronger (the vessel ruling's spirit). Use `isChest`, never `=== CHEST`.
-   * The name is a working label until canon rules (CANON_GAPS › Expeditions).
+   * RULED 2026-11-13: lawful, a keepsake (CANON_GAPS › Expeditions → the DELVE). The caches are drowned and warded.
    */
   HELD_CACHE: 117,
 

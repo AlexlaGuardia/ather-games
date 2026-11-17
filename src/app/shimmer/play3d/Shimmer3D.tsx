@@ -8863,9 +8863,11 @@ export default function Shimmer3D() {
     return [
       { id: 'survival', kind: 'Survival', name: 'The Breach', world: 'Lenna', blurb: 'Hold the building against the flood, round after round.', locked: null, coop: true },
       { id: 'boss', kind: 'Boss', name: 'The Slack', world: 'Lenna', blurb: 'The Stillwind, the season\u2019s colossus.', locked: road ? null : 'Read the Stillwind\u2019s Road in the Breach\u2019s lab first', coop: true },
-      // the first slice (09-29): a generated maze floor, solo while its elites are stepped on the page. Named neutrally until
-      // canon rules what these places are (CANON_GAPS › Expeditions)
-      { id: 'expedition', kind: 'Expedition', name: 'A maze floor', world: 'a new floor each time', blurb: 'Find the caches. Elites drop wrack that keeps for the Breach.', locked: null, coop: false },
+      // the first slice (09-29): a generated floor, solo while its elites are stepped on the page. ★ RULED 2026-11-13: the
+      // place is a DELVE (type-noun, like Breach and Slack) into the season people's drowned works, on Lenna the Lenn's
+      // vaults and undercrofts (two-lines-two-games.md › THE DELVE). Lenna's own delve has no name yet: canon names it
+      // with the Lenn, so the card says what it is and coins nothing. The id stays 'expedition' (saves + routes key on it).
+      { id: 'expedition', kind: 'Delve', name: 'The Lenn\u2019s vaults', world: 'Lenna', blurb: 'Recover what the Lenn left. Elites drop wrack that keeps for the Breach.', locked: null, coop: false },
     ]
   }, [])
   const closeDepartures = useCallback(() => {
@@ -9365,7 +9367,7 @@ export default function Shimmer3D() {
       {expHud?.near && !nearNpc && !dialogue && !battle && <Prompt text="E — open the cache" />}
       {expHud && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none" data-expedition-hud>
-          <HearthPillSoft face={HUD_FACE}>Expedition · elites {expHud.kills}/{expHud.elites} · +{expHud.wrack} wrack banked · +{expHud.marks} Marks</HearthPillSoft>
+          <HearthPillSoft face={HUD_FACE}>Delve · elites {expHud.kills}/{expHud.elites} · +{expHud.wrack} wrack banked · +{expHud.marks} Marks</HearthPillSoft>
         </div>
       )}
 
