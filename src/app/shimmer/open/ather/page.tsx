@@ -16,8 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { OpenHands } from '../shared/open-hands'
-import type { HandsSignal } from '../../voxel3d/hands'
+import { OpenHands, type OpenHandsApi } from '../shared/open-hands'
 import { VoxelDayNight } from '../shared/day-night'
 import { terrainWorld } from '../terrain-world'
 import { Walker, verbOf, type Loco } from './walker'
@@ -121,7 +120,7 @@ export default function AtherSlice() {
   const [fade, setFade] = useState(0)
   const [hud, setHud] = useState({ verb: 'idle', where: 'your plot' })
   const pos = useRef({ x: THRESHOLD.x, z: THRESHOLD.z, grounded: true, swimming: false })
-  const handsLoco = useRef<Loco | null>(null)
+  const handsApi = useRef<OpenHandsApi>(null)
   const near = useRef<Near>(null)
   const hereRef = useRef('first-wilds'), nearRef = useRef('')
   const hudT = useRef(0), fogT = useRef(0), fogDirty = useRef(false)
@@ -338,7 +337,12 @@ export default function AtherSlice() {
 
   const onTick = useCallback((lc: Loco, _yaw: number, dt: number) => {
     pos.current = { x: lc.px, z: lc.pz, grounded: !lc.airborne, swimming: lc.swimming }
-    handsLoco.current = lc   // the hands read the body's verbs off the walker itself (open-hands.tsx)
+    { // the hands: posed against THIS frame's camera (the walker placed it just before calling us), off the walker's own state
+      const now = performance.now(), h = heldRef.current
+      handsApi.current?.step({ now, speed: Math.hypot(lc.hvx, lc.hvz), airborne: lc.airborne, hidden: frozen.current || h === 'repeater',
+        castAt: handsCastAt.current, working: !!fxRef.current?.busy() || !!cFxRef.current?.busy() }, dt)
+      handsApi.current?.seat(now - handsCastAt.current < 640 ? 1 : 0)
+    }
     { const m = manaRef.current; if (m.cur < m.max) m.cur = Math.min(m.max, m.cur + m.regen * dt) }   // mana refills (forestry spends it)
     lc.speedMult = (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1)   // hands free, a little quicker on foot
       * (performance.now() < surge.current.until ? surge.current.mult : 1)      // a surge cast (Static Burst)
@@ -622,21 +626,8 @@ export default function AtherSlice() {
   const birth = useBirth(), loadoutNow = useLoadout()
   const castSet = useMemo(() => castMoves(loadoutNow, birth), [loadoutNow, birth])
   const castSetRef = useRef(castSet); castSetRef.current = castSet
-  // ── the keeper's hands (open/shared/open-hands.tsx): what the body is doing, read once a frame ─────────────────────
+  // ── the keeper's hands (open/shared/open-hands.tsx): stepped from the walker's onTick, after the camera moved ─────────
   const handsCastAt = useRef(-Infinity)
-  const feedHands = useCallback((sg: HandsSignal) => {
-    const pruning = !!fxRef.current?.busy(), mining = !!cFxRef.current?.busy(), h = heldRef.current
-    sg.family = pruning ? 'forestry' : mining ? 'prospecting' : h === BAIT ? 'rinning' : null
-    sg.breaking = pruning || mining
-    sg.tier = 0
-    sg.hidden = frozen.current || h === 'repeater'   // a panel owns the screen, or the gun is out (it draws its own)
-    sg.held = h === 'waymark' ? { colour: 0x8a6a3c, piece: true } : null
-    sg.castAt = handsCastAt.current
-    const lc = handsLoco.current
-    if (lc && !lc.airborne && sg.airborne) { sg.landAt = performance.now(); sg.landVy = Math.max(0, -lc.vy) }   // the landing edge: a dip with the knees
-    sg.airborne = !!lc?.airborne; sg.sliding = !!lc?.sliding; sg.crouching = !!lc?.crouching; sg.climbing = !!lc?.climbing
-    sg.wallCatch = false; sg.hanging = false; sg.mantle = -1; sg.swimming = !!lc?.swimming
-  }, [])
   const zoneRef = useRef(zone.kind); zoneRef.current = zone.kind; zoneRef0.current = zone.kind
   /** Q / X: pay, then the keeper moves (surge, impulse) or the fight takes it (combat-casts.ts) */
   const castSlot = useCallback((slot: CastSlot) => {
@@ -778,7 +769,7 @@ export default function AtherSlice() {
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => { canvasEl.current = gl.domElement }}
       >
-        <OpenHands feed={feedHands} />
+        <OpenHands ref={handsApi} />
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && ww ? (x, z) => ww.canopyAt(x, z) * 0.7 : undefined} />
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} />}
