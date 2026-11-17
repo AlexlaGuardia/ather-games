@@ -4,8 +4,8 @@
 //
 // ★ WHAT IS BEHIND EACH DOOR (Alex 11-16):
 //   · Eyuun's Bookstore → the house of tales (the live /bookstore audiobook player, opened beside the game).
-//   · The Travelers Station → a hero card for THE STARFORGE (a ticket in Marks, then /nolmir/starforge) with a
-//     "coming soon" card either side.
+//   · The Travelers Station → Alex's ship menu (11-17 sketch): THE STARFORGE (a ticket in Marks, then
+//     /nolmir/starforge), the Season Crucible, and the Season Expedition over the Expedition.
 //   · The Spirit Corner → a panel only, for now ("panel only", not a door to the plot: city-only travel stands).
 //   · The Kindled Mug is a TAVERN (never a potion shop). It, the Forgelight Inn, the Smithy and the Grand Exchange show
 //     their name and "closed for now" until each gets stock. Keepers, their names and every line are Magii's / @lark's.
@@ -48,7 +48,7 @@ export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
   )
 }
 
-/** the Station: the Starforge in the middle, a card either side for the lines still to come */
+/** the Station: Alex's ship menu, the Starforge first, then the lines still to come */
 function StationPanel({ ledger, setLedger, onClose, isTouch }: { ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void; isTouch: boolean }) {
   const [msg, setMsg] = useState<string | null>(null)
   const [going, setGoing] = useState(false)
@@ -69,19 +69,21 @@ function StationPanel({ ledger, setLedger, onClose, isTouch }: { ledger: Ledger;
     setGoing(true)
     setTimeout(() => { window.location.href = '/nolmir/starforge?from=continent' }, 700)
   }
-  const Soon = () => (
-    <div className="rounded-[14px] grid place-items-center text-center px-3" data-soon
-      style={{ minHeight: isTouch ? 72 : 260, background: 'rgba(60,40,24,.10)', boxShadow: `inset 0 0 0 1.5px ${H.rule}` }}>
-      <span className="text-[13px] uppercase tracking-[0.18em] font-semibold" style={{ ...hearthDisplay, color: H.inkSoft }}>Coming soon</span>
+  // ★ ALEX'S SHIP MENU (sketch, 11-17): the Starforge on the left, the Season Crucible tall in the middle, and a
+  // stacked pair on the right: the Season Expedition over the Expedition. Only the Starforge runs today.
+  const Card = ({ title, soon, tall, id }: { title: string; soon?: boolean; tall?: boolean; id: string }) => (
+    <div className="rounded-[14px] flex flex-col justify-between px-4 py-3" data-card={id} data-soon={soon ? '' : undefined}
+      style={{ minHeight: isTouch ? 72 : tall ? 300 : 144, background: 'rgba(60,40,24,.10)', boxShadow: `inset 0 0 0 1.5px ${H.rule}` }}>
+      <div className="text-[18px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{title}</div>
+      <span className="text-[12px] uppercase tracking-[0.18em] font-semibold self-end" style={{ ...hearthDisplay, color: H.inkSoft }}>{soon ? 'Coming soon' : 'Not running yet'}</span>
     </div>
   )
   return (
-    <HearthFrame title="Travelers Station" maxWidth={780} onClose={onClose} fixed dataPanel="shop-panel"
+    <HearthFrame title="Travelers Station" maxWidth={820} onClose={onClose} fixed dataPanel="shop-panel"
       footer={<span className="text-[12px]" style={hearthDisplay}>{Math.floor(ledger.marks).toLocaleString()} Marks</span>}>
-      <div className={`px-4 pt-4 pb-4 grid gap-3 ${isTouch ? 'grid-cols-1' : 'grid-cols-[1fr_2.2fr_1fr]'}`} data-shop="station">
-        {!isTouch && <Soon />}
+      <div className={`px-4 pt-4 pb-4 grid gap-3 ${isTouch ? 'grid-cols-1' : 'grid-cols-[1.1fr_1.4fr_1fr] items-stretch'}`} data-shop="station">
         <div className="relative rounded-[14px] overflow-hidden flex flex-col justify-end" data-hero="starforge"
-          style={{ minHeight: 260, background: '#05060a url(/nolmir/card.webp) center / cover no-repeat', boxShadow: '0 6px 18px rgba(0,0,0,.35)', opacity: going ? 0.6 : 1, transition: 'opacity .5s' }}>
+          style={{ minHeight: isTouch ? 220 : 300, background: '#05060a url(/nolmir/card.webp) center / cover no-repeat', boxShadow: '0 6px 18px rgba(0,0,0,.35)', opacity: going ? 0.6 : 1, transition: 'opacity .5s' }}>
           <div className="p-4" style={{ background: 'linear-gradient(180deg, rgba(5,6,10,0) 0%, rgba(5,6,10,.85) 70%)' }}>
             <div className="text-[24px] font-semibold" style={{ ...hearthDisplay, color: '#f4e6c8' }}>The Starforge</div>
             {running === false && <div className="text-[13px] mt-1" style={{ color: '#d9c9a8' }} data-starforge-closed>The line isn't running yet.</div>}
@@ -91,7 +93,11 @@ function StationPanel({ ledger, setLedger, onClose, isTouch }: { ledger: Ledger;
             </div>
           </div>
         </div>
-        {isTouch ? <div className="grid grid-cols-2 gap-3"><Soon /><Soon /></div> : <Soon />}
+        <Card id="season-crucible" title="Season Crucible" soon tall />
+        <div className={`grid gap-3 ${isTouch ? 'grid-cols-2' : 'grid-rows-2'}`}>
+          <Card id="season-expedition" title="Season Expedition" soon />
+          <Card id="expedition" title="Expedition" />
+        </div>
       </div>
     </HearthFrame>
   )

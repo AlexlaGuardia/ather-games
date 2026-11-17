@@ -44,7 +44,7 @@ await visit('citadel', 'enchant-temple')
 ok(!!(await p.$('[data-shop="enchant-temple"][data-closed]')) && (await p.$$('[data-counter]')).length === 2, 'the Enchant Temple (Citadel): the twins\' two counters, closed for now')
 await p.evaluate(() => document.querySelector<HTMLElement>('[data-panel="shop-panel"] button[aria-label]')?.click()); await wait(800)
 await visit('rune-hold', 'station')
-ok((await p.$$('[data-soon]')).length === 2 && !!(await p.$('[data-hero="starforge"]')), 'the Station: the Starforge hero + two coming soon')
+ok((await p.$$('[data-soon]')).length === 2 && !!(await p.$('[data-hero="starforge"]')) && !!(await p.$('[data-card="season-crucible"]')) && !!(await p.$('[data-card="expedition"]')), 'the Station: Alex\'s ship menu, the Starforge + Season Crucible + Season Expedition over Expedition')
 const before = await p.evaluate(() => JSON.parse(localStorage.getItem('ather:trade:trial-ledger') ?? '{"marks":1500}').marks ?? 1500)
 // Nolmir is shelved (back-room): unsigned, the line must say so and take nothing; as the owner (OWNER=1 with a cookie) it boards
 const closed = await poll(async () => !!(await p.$('[data-starforge-closed]')), 10000)
