@@ -16,6 +16,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
+import { OpenHands } from '../shared/open-hands'
+import type { HandsSignal } from '../../voxel3d/hands'
 import { VoxelDayNight } from '../shared/day-night'
 import { terrainWorld } from '../terrain-world'
 import { Walker, verbOf, type Loco } from './walker'
@@ -618,6 +620,19 @@ export default function AtherSlice() {
   const birth = useBirth(), loadoutNow = useLoadout()
   const castSet = useMemo(() => castMoves(loadoutNow, birth), [loadoutNow, birth])
   const castSetRef = useRef(castSet); castSetRef.current = castSet
+  // ── the keeper's hands (open/shared/open-hands.tsx): what the body is doing, read once a frame ─────────────────────
+  const handsCastAt = useRef(-Infinity)
+  const feedHands = useCallback((sg: HandsSignal) => {
+    const pruning = !!fxRef.current?.busy(), mining = !!cFxRef.current?.busy(), h = heldRef.current
+    sg.family = pruning ? 'forestry' : mining ? 'prospecting' : h === BAIT ? 'rinning' : null
+    sg.breaking = pruning || mining
+    sg.tier = 0
+    sg.hidden = frozen.current || h === 'repeater'   // a panel owns the screen, or the gun is out (it draws its own)
+    sg.held = h === 'waymark' ? { colour: 0x8a6a3c, piece: true } : null
+    sg.castAt = handsCastAt.current
+    sg.airborne = false; sg.sliding = false; sg.crouching = false; sg.climbing = false
+    sg.wallCatch = false; sg.hanging = false; sg.mantle = -1; sg.swimming = false
+  }, [])
   const zoneRef = useRef(zone.kind); zoneRef.current = zone.kind; zoneRef0.current = zone.kind
   /** Q / X: pay, then the keeper moves (surge, impulse) or the fight takes it (combat-casts.ts) */
   const castSlot = useCallback((slot: CastSlot) => {
@@ -626,6 +641,7 @@ export default function AtherSlice() {
     const v = press(slot, move, castClocks.current[slot].clock, performance.now(), manaRef.current.cur, { fight: zoneRef.current === 'wilds' })
     if (!v.ok) { hudSay(v.why, 'info'); return }
     castClocks.current[slot].clock = v.clock; manaRef.current.cur = v.mana
+    handsCastAt.current = performance.now()   // the glove comes up (open-hands.tsx)
     const sp = v.spec
     if (sp.archetype === 'surge') { surge.current = { until: performance.now() + sp.surgeSecs * 1000, mult: sp.surgeMult || 1.5 }; hudSay(sp.label, 'item'); return }
     if (sp.archetype === 'impulse') { impulse.current = sp; hudSay(sp.label, 'item'); return }
@@ -758,6 +774,7 @@ export default function AtherSlice() {
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => { canvasEl.current = gl.domElement }}
       >
+        <OpenHands feed={feedHands} />
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && ww ? (x, z) => ww.canopyAt(x, z) * 0.7 : undefined} />
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} />}
