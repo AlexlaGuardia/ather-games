@@ -3,7 +3,7 @@
 // Mutation-swept 2026-09-16: stride driven by time instead of distance (the bob-freezes assert) ·
 // chop sign flipped · PLACE window off-by-one · cast env never released · lower not eased.
 import { stepHands, newHandsState, BOB_Y, BREATH_Y, SWING_HZ, SWING_RAD, REACH, PRESENT_ROLL, PLACE_MS, CAST_MS, LOWER_Y, WALL_DROP_EXTRA, LAND_DIP, type HandsInput } from './hands-pose'
-import { RUN_SPEED } from './locomotion'
+import { RUN_SPEED, WALK_SPEED } from './locomotion'
 
 let pass = 0
 const fails: string[] = []
@@ -47,11 +47,21 @@ const run = (n: number, f: (i: number) => Partial<HandsInput>, s = newHandsState
   const s2 = newHandsState(); run(60, () => ({ speed: RUN_SPEED }), s2); const perRun = s2.stride
   const s3 = newHandsState(); run(60, () => ({ speed: RUN_SPEED * 1.6 }), s3)
   ok(s3.stride < perRun * 1.12, `★ a slide (${(RUN_SPEED * 1.6).toFixed(1)} b/s) strides at the RUN'S cadence, not 1.6× it (${s3.stride.toFixed(2)} vs ${perRun.toFixed(2)}; the ease-in is the few % over)`)
-  const air = run(90, () => ({ speed: RUN_SPEED, vy: 6 }))
-  ok(Math.min(...air.slice(30).map(p => p.dy)) > -BOB_Y * 0.15, '★ airborne (vy 6): no footfalls — the hand floats')
-  const s4 = newHandsState(); run(30, () => ({ speed: RUN_SPEED, vy: 6 }), s4); const st = s4.stride
-  run(30, () => ({ speed: RUN_SPEED, vy: 6 }), s4)
+  // airborne is the WALKER'S flag now, not the lens's vertical speed (Alex 11-17: open-world slopes tripped the vy test
+  // mid-run and the hand stuttered)
+  const air = run(90, () => ({ speed: RUN_SPEED, vy: 6, airborne: true }))
+  ok(Math.min(...air.slice(30).map(p => p.dy)) > -BOB_Y * 0.15, '★ airborne: no footfalls — the hand floats')
+  const s4 = newHandsState(); run(30, () => ({ speed: RUN_SPEED, vy: 6, airborne: true }), s4); const st = s4.stride
+  run(30, () => ({ speed: RUN_SPEED, vy: 6, airborne: true }), s4)
   ok(s4.stride - st < 0.05, '★ airborne: the stride does not advance either')
+  // ★ running UP a slope is still running: a climbing lens with the feet on the ground keeps the bob and the stride
+  const sSlope = newHandsState(); run(30, () => ({ speed: RUN_SPEED, vy: 2.5 }), sSlope); const st5 = sSlope.stride
+  const slope = run(30, () => ({ speed: RUN_SPEED, vy: 2.5 }), sSlope)
+  ok(sSlope.stride - st5 > 0.2 && Math.min(...slope.map(p => p.dy)) < -BOB_Y * 0.4, `★ a run up a slope (vy 2.5) keeps its footfalls (stride +${(sSlope.stride - st5).toFixed(2)})`)
+  // ★ the run's arm pump: at a full run the arm swings with the stride; at a walk it does not
+  const pumpRun = run(60, () => ({ speed: RUN_SPEED })), pumpWalk = run(60, () => ({ speed: WALK_SPEED }))
+  const spread = (ps: { pitch: number }[]) => Math.max(...ps.slice(20).map(p => p.pitch)) - Math.min(...ps.slice(20).map(p => p.pitch))
+  ok(spread(pumpRun) > 0.3 && spread(pumpWalk) < 0.05, `★ a run pumps the arm (${spread(pumpRun).toFixed(2)} rad), a walk does not (${spread(pumpWalk).toFixed(2)})`)
   // the raw delta is spiky: a single-frame speed spike barely moves the eased speed
   const s5 = newHandsState(); stepHands(s5, base({ speed: 30 }), DT)
   ok(s5.speed < 30 * 0.3, `a one-frame spike is eased (${s5.speed.toFixed(2)} of 30)`)

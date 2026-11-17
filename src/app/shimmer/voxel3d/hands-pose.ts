@@ -47,6 +47,10 @@ export const RAISE_RAD = 0.45
 export const LOWER_RATE = 6
 /** The whole rig sinks this far when lowered — enough to leave the frame at fov 75. */
 export const LOWER_Y = 0.55
+/** The run's arm pump (Alex 11-17): radians of swing, metres toward the lens, and how much lower a running hand rides. */
+export const RUN_PUMP_PITCH = 0.28
+export const RUN_PUMP_Z = 0.06
+export const RUN_CARRY_Y = 0.035
 /** On a wall the raise fights the drop; this much more takes the hands clean out of frame. */
 export const WALL_DROP_EXTRA = 0.45
 
@@ -179,7 +183,10 @@ export function stepHands(s: HandsState, i: HandsInput, dt: number): HandsPose {
   // takes the bob with it — the hand floats until the feet land.
   s.speed = approach(s.speed, i.speed, 14, dt)
   if (s.speed < 0.02) s.speed = 0   // an ease never reaches zero on its own, and a creeping stride is a hand that never quite stands still
-  s.ground = approach(s.ground, Math.abs(i.vy) > AIRBORNE_VY ? 0 : 1, 12, dt)
+  // ★ GROUND FROM THE BODY, NOT FROM THE LENS (Alex 11-17, open world: "when i run around its pretty buggy"). The camera's
+  // vertical speed was the airborne test, and on the open world's slopes a run climbs at 2+ m/s, so the bob switched off
+  // and on every few steps and the hand stuttered. Both hosts feed the walker's own airborne flag; that is the truth.
+  s.ground = approach(s.ground, i.airborne || i.swimming || i.hanging || i.climbing ? 0 : 1, 12, dt)
   const gait = clamp01(s.speed / WALK_SPEED) * s.ground
   s.stride += Math.min(s.speed, STRIDE_SPEED_CAP) * (STEP_HZ_RUN / RUN_SPEED) * dt * s.ground
   const ph = s.stride * Math.PI * 2
@@ -203,6 +210,16 @@ export function stepHands(s: HandsState, i: HandsInput, dt: number): HandsPose {
   const pu = (i.now - i.placeAt) / PLACE_MS
   let dz = 0
   if (pu >= 0 && pu < 1) dz = -Math.sin(pu * Math.PI) * PLACE_PUSH
+
+  // ── ★ THE RUN (Alex 11-17: "give the hands an animation for when the player is running around") ──
+  // Past a walk the arm PUMPS with the stride: forward and toward the lens on one footfall, back and down on the next, the
+  // way a runner's arm swings, and carried a touch lower. Rides the same distance-driven phase as the bob, so it stops
+  // with the feet; weighted from walk to full run, and off in the air or while a tool is swinging.
+  const runW = clamp01((s.speed - WALK_SPEED) / (RUN_SPEED - WALK_SPEED)) * s.ground * (1 - s.swingOn)
+  const pump = Math.sin(ph) * runW
+  pitch += pump * RUN_PUMP_PITCH
+  dz -= pump * RUN_PUMP_Z
+  dy -= runW * RUN_CARRY_Y
 
   // ── the cast: glove up to aim, bracelet into frame, both back down ──
   const cu = (i.now - i.castAt) / CAST_MS

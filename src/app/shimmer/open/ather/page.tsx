@@ -121,6 +121,7 @@ export default function AtherSlice() {
   const [fade, setFade] = useState(0)
   const [hud, setHud] = useState({ verb: 'idle', where: 'your plot' })
   const pos = useRef({ x: THRESHOLD.x, z: THRESHOLD.z, grounded: true, swimming: false })
+  const handsLoco = useRef<Loco | null>(null)
   const near = useRef<Near>(null)
   const hereRef = useRef('first-wilds'), nearRef = useRef('')
   const hudT = useRef(0), fogT = useRef(0), fogDirty = useRef(false)
@@ -337,6 +338,7 @@ export default function AtherSlice() {
 
   const onTick = useCallback((lc: Loco, _yaw: number, dt: number) => {
     pos.current = { x: lc.px, z: lc.pz, grounded: !lc.airborne, swimming: lc.swimming }
+    handsLoco.current = lc   // the hands read the body's verbs off the walker itself (open-hands.tsx)
     { const m = manaRef.current; if (m.cur < m.max) m.cur = Math.min(m.max, m.cur + m.regen * dt) }   // mana refills (forestry spends it)
     lc.speedMult = (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1)   // hands free, a little quicker on foot
       * (performance.now() < surge.current.until ? surge.current.mult : 1)      // a surge cast (Static Burst)
@@ -630,8 +632,10 @@ export default function AtherSlice() {
     sg.hidden = frozen.current || h === 'repeater'   // a panel owns the screen, or the gun is out (it draws its own)
     sg.held = h === 'waymark' ? { colour: 0x8a6a3c, piece: true } : null
     sg.castAt = handsCastAt.current
-    sg.airborne = false; sg.sliding = false; sg.crouching = false; sg.climbing = false
-    sg.wallCatch = false; sg.hanging = false; sg.mantle = -1; sg.swimming = false
+    const lc = handsLoco.current
+    if (lc && !lc.airborne && sg.airborne) { sg.landAt = performance.now(); sg.landVy = Math.max(0, -lc.vy) }   // the landing edge: a dip with the knees
+    sg.airborne = !!lc?.airborne; sg.sliding = !!lc?.sliding; sg.crouching = !!lc?.crouching; sg.climbing = !!lc?.climbing
+    sg.wallCatch = false; sg.hanging = false; sg.mantle = -1; sg.swimming = !!lc?.swimming
   }, [])
   const zoneRef = useRef(zone.kind); zoneRef.current = zone.kind; zoneRef0.current = zone.kind
   /** Q / X: pay, then the keeper moves (surge, impulse) or the fight takes it (combat-casts.ts) */
