@@ -32,6 +32,7 @@ import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gemsGiven, markGemsGiven, stageOf, gregsGems, errandEntries, birthSeat } from '../business/errand'
+import { skillPointerEntries } from '../business/skill-pointers'
 import { SEATS } from '../business/letters'
 import { useBirth } from '../birth-gate'
 import { castMoves, press, freshClock, cooling, CAST_KEY, type CastSlot, type CastClock } from '../shared/casting'
@@ -648,6 +649,11 @@ export default function AtherSlice() {
   useEffect(() => setGiven(gemsGiven()), [])
   const errandStage = stageOf(birth, inv, loadoutNow, given)
   useEffect(() => { postEntries('errand', errandEntries(errandStage, birth, { greg: { x: GREG.x, z: GREG.z } })) }, [errandStage, birth])
+  // BETA M6a/M6b: the rinning + prospecting pointers, struck once used (re-read on every pack change: a catch/cut lands in it)
+  useEffect(() => {
+    const k = openSkills(), used = (id: 'rinning' | 'prospecting') => k[id].level > 1 || k[id].xp > 0
+    postEntries('skills', skillPointerEntries({ rinning: used('rinning'), prospecting: used('prospecting') }))
+  }, [inv])
   const seat = birthSeat(birth)
   const gregErrand = {
     stage: errandStage, seatName: seat ? SEATS[seat].name : '', where: seat ? SEATS[seat].where : '', citadel: seat === 'enchant',
