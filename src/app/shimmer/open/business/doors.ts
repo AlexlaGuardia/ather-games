@@ -10,7 +10,7 @@ import { shopDoorPoint } from '../towns/shop-door'
 import { marketFor, type Offer } from './market'
 import { SEATS, type Seat } from './letters'
 
-export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple'
+export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple' | 'smokehouse'
 export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: string }> = {
   'kindled-mug': { name: 'The Kindled Mug', kind: 'tavern', line: 'A tavern on the square.' },
   'forgelight-inn': { name: 'The Forgelight Inn', kind: 'inn', line: 'Iron fixtures and forge-warmed walls.' },
@@ -20,6 +20,9 @@ export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: 
   station: { name: 'Travelers Station', kind: 'station' },
   'enchant-temple': { name: 'Enchant Temple', kind: 'temple', line: 'Permanent imbuing, by twin hands.' },
   'grand-exchange': { name: 'The Grand Exchange', kind: 'exchange', line: 'The trade at the centre of the capital.' },
+  // THE SMOKEHOUSE (RULED 11-17, world/cuisine.md): farmed meat by the bundle, one name across the continent's towns. It has
+  // no facade in the town kit: like a runesmith it takes a plain building near the town's heart (doorsOf). Stock: ather/cooking.ts.
+  smokehouse: { name: 'The Smokehouse', kind: 'smokehouse', line: 'Farmed meat by the bundle, smoked and wrapped for the road.' },
 }
 
 /** a door you can E: a market lot (key = lot id → the deed card) or a canon storefront (key = `front:<id>` → its panel) */
@@ -38,6 +41,17 @@ function doorsOf(R: Region, townId: string): Door[] {
     const at = plan.temple ?? { x: plan.buildings.length ? plan.buildings.reduce((a, b) => a + b.x, 0) / plan.buildings.length : R.meta.places[i].x, z: plan.buildings.length ? plan.buildings.reduce((a, b) => a + b.z, 0) / plan.buildings.length : R.meta.places[i].z }
     const b = plan.buildings.filter(x => !x.front && !taken.has(x)).sort((p, q) => Math.hypot(p.x - at.x, p.z - at.z) - Math.hypot(q.x - at.x, q.z - at.z))[0]
     if (b) out.push({ key: `smith:${seat}`, b, name: `${SEATS[seat].name} runesmith`, at: shopDoorPoint(b) })
+  }
+  // THE SMOKEHOUSE in every town (one name across towns, canon): the plain building nearest the town's heart that nothing
+  // else holds (after the runesmith, so a seat town's runesmith keeps the door it had). Jin's placement.
+  if (i >= 0) {
+    const plan = cachedPlan(R, i), taken = new Set(out.map(d => d.b))
+    const free = plan.buildings.filter(x => !x.front && !taken.has(x))
+    if (free.length) {
+      const at = plan.temple ?? { x: free.reduce((a, b) => a + b.x, 0) / free.length, z: free.reduce((a, b) => a + b.z, 0) / free.length }
+      const b = free.sort((p, q) => Math.hypot(p.x - at.x, p.z - at.z) - Math.hypot(q.x - at.x, q.z - at.z))[0]
+      out.push({ key: `front:smokehouse:${townId}`, b, name: FRONT_SHOPS.smokehouse.name, at: shopDoorPoint(b) })
+    }
   }
   return out
 }

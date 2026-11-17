@@ -66,6 +66,7 @@ import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take, itemDef, countOf, NO_BAIT_LINE } from '../shared/inventory'
+import { isDish, healOf } from './cooking'
 import { BAIT, rollRinn, type Rinn } from './rinning'
 import { RinningFX, type RinningApi } from '../shared/rinning-fx'
 import type { Reel } from '../shared/reel'
@@ -137,6 +138,7 @@ export default function AtherSlice() {
   // timed (a new word worn starts fresh), the fight's queue, and the two that move the keeper themselves
   const castClocks = useRef<Record<CastSlot, { move: string | null; clock: CastClock }>>({ tactical: { move: null, clock: freshClock(castForMove(null)) }, signature: { move: null, clock: freshClock(castForMove(null)) } })
   const castQueue = useRef<CastSpec[]>([])
+  const eatQueue = useRef<number[]>([])   // meals spent, healed on the combat layer's next frame (ather/cooking.ts)
   const [net, setNet] = useState<Network | null>(null), netRef = useRef<Network | null>(null), placeRef = useRef<string | null>(null)
   const atFairDoor = (x: number, z: number) => { const f = netRef.current?.fair; if (!f || zoneRef0.current !== 'wilds') return false; const d = fairDoor(f); return Math.hypot(d.x - x, d.z - z) < FAIR_DOOR_R }
   const zoneRef0 = useRef<string>('plot')
@@ -429,6 +431,7 @@ export default function AtherSlice() {
       spread: () => spreadRef.current, skipDays, ownerAt: (x: number, z: number) => nodeOwner?.(x, z),
       prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mine: () => mineAimed(), crystal: () => { const c = cAimRef.current.crystal; return c ? { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z } : null }, mana: () => manaRef.current.cur,
       stance: () => stanceRef.current, speedMult: () => (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1),
+      eat: () => eatHeld(), hp: () => vitalsRef.current.hp,
       rin: () => rinApi.current?.view() ?? null, cast: () => castOrAnswer(), hold: (h: boolean | 'track') => { reelHold.current = h === 'track' ? (r: Reel) => (r.zone - r.bob) * 6 + (r.zoneV - r.bobV) * 1.6 > 0 : h },
     }
   }, [zone, travel, garden, updateGarden, skipDays, nodeOwner])
@@ -519,6 +522,18 @@ export default function AtherSlice() {
     const o = ww.offsetOf(tt.name)
     return zonesOf(ww, tt.name)(Math.min(4, Math.floor((x - o.x + 500) / 200)), Math.min(4, Math.floor((z - o.z + 500) / 200)))
   }, [ww])
+  // EAT (the cooking room, 11-17): a held roast, clicked, heals mid-fight. Refuses where it would be wasted: off the Wilds
+  // (nothing hurts you there), at full health, or while down. One meal per click.
+  const eatHeld = useCallback(() => {
+    const id = heldRef.current
+    if (!isDish(id)) return
+    if (zoneRef0.current !== 'wilds') { hudSay('Save it for the Wilds. A meal heals you mid-fight.', 'info'); return }
+    const v = vitalsRef.current
+    if (v.hp <= 0) return
+    if (v.hp >= v.hpMax) { hudSay('You are whole. Keep it for a fight.', 'info'); return }
+    const out = take(getInv(), id, 1); if (!out) return
+    setInv(out); eatQueue.current.push(healOf(id)); hudSay(`${itemDef(id).name} · +${healOf(id)}`, 'item')
+  }, [])
   const castOrAnswer = useCallback(() => {
     const r = rinApi.current; if (!r || zone.kind !== 'wilds') return
     const v = r.view()
@@ -565,12 +580,13 @@ export default function AtherSlice() {
       if (!locked.current || frozen.current) return
       if (held === 'waymark') plantHere()
       else if (held === BAIT) castOrAnswer()
+      else if (isDish(held)) eatHeld()
       else if (stanceRef.current.kind === 'stowed') workAimed()   // stowed: the click works the node in front of you
     }
     const up = (e: MouseEvent) => { if (e.button === 0) reelHold.current = false }
     window.addEventListener('mousedown', down); window.addEventListener('mouseup', up)
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up) }
-  }, [held, plantHere, workAimed, castOrAnswer])
+  }, [held, plantHere, workAimed, castOrAnswer, eatHeld])
   // PHONE (BETA M6a, 11-17): the FIRE button is the click. With bait in hand it casts, answers the take, and is the reel's
   // hold, the same three jobs the mouse has above. (Polled on a timer, not rAF: a tap shorter than a frame still counts.)
   useEffect(() => {
@@ -583,6 +599,13 @@ export default function AtherSlice() {
     }, 30)
     return () => { clearInterval(id); reelHold.current = false }
   }, [isTouch, held, castOrAnswer])
+  // PHONE: with a roast in hand, the FIRE button eats it (one meal per press).
+  useEffect(() => {
+    if (!isTouch || !isDish(held)) return
+    let was = touch.fire
+    const id = setInterval(() => { const f = touch.fire; if (f === was) return; was = f; if (f && !frozen.current) eatHeld() }, 30)
+    return () => clearInterval(id)
+  }, [isTouch, held, eatHeld])
   // R: a TAP draws the primary / swaps / reloads, a HOLD (HOLD_MS) stows (shared/stance.ts). Timed off down → up so a
   // hold stows the moment it qualifies, without waiting for the release.
   const panelRef = useRef(panel); panelRef.current = panel
@@ -783,7 +806,7 @@ export default function AtherSlice() {
         {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
-            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={held === 'repeater'} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} />
+            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={held === 'repeater'} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} />
         )}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
         {world && fade === 0 && <CompanionFollower pose={poseRef} ground={ground} />}

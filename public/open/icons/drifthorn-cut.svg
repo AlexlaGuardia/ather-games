@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Drifthorn Cut: lean farmed meat in waxed paper, cord-tied. Code-drawn filler. -->
+  <ellipse cx="16" cy="27.5" rx="10" ry="2.2" fill="#000" opacity=".25"/>
+  <path d="M5 18 Q5 11 13 10 L24 10 Q28 11 27 17 Q27 24 19 25 L10 25 Q5 24 5 18 Z" fill="#efe2c2" stroke="#a8946a" stroke-width=".9"/>
+  <path d="M17 11 L24 10.4 Q27.5 11.5 26.6 17 Q26.4 22 21 23.6 Q19 18 17 11 Z" fill="#c8645a" stroke="#7a3a2a" stroke-width=".7"/>
+  <path d="M19.5 13 Q23 14 24.5 18" fill="none" stroke="#f2d6c8" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M11 10.4 L11.6 25 M14.6 10.2 L15 25" stroke="#7a6446" stroke-width="1.1"/>
+  <path d="M12.8 10.2 q-2.2 -2.4 -3 -.4 q1.2 1.2 3 .4 q2.2 -2.4 3 -.4 q-1.2 1.2 -3 .4" fill="none" stroke="#7a6446" stroke-width=".9"/>
+</svg>

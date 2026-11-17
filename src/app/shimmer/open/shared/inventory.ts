@@ -9,6 +9,7 @@
 import { NYX_RINN } from '../continent/rinning-nyx'
 import { keeperKey } from '@/lib/keeper-local'
 import { FURNITURE, KEEPSTONES } from '../ather/furniture'
+import { MEATS, DISHES } from '../ather/cooking'
 
 export interface ItemDef {
   name: string
@@ -25,7 +26,7 @@ export const OPEN_ITEMS: Record<string, ItemDef> = {
 }
 /** Which skill an item comes from: the garden bank's tabs (ather/garden-bank.ts). Filled beside each table below, so a
  *  new row lands in its tab with no second list to keep. Not in here = 'gear' (guns, waymarks). */
-export type ItemGroup = 'forestry' | 'rinning' | 'prospecting' | 'decor'
+export type ItemGroup = 'forestry' | 'rinning' | 'prospecting' | 'cooking' | 'decor'
 export const ITEM_GROUP: Record<string, ItemGroup> = {}
 // ── Forestry's yield (canon: game/shimmer-skilling.md › Forestry resources + design-briefs/shimmer-resources.md; the drop
 //    table is world/resources.ts › NODE_DEFS). Icons: public/open/icons/<id with dashes>.svg, drawn by tools/art/forestry_icons.py.
@@ -112,6 +113,10 @@ for (const [id, k] of Object.entries(KEEPSTONES)) OPEN_ITEMS[id] = { name: k.nam
 // FURNITURE + DECOR (Alex 11-17): items made in the carpentry room, set on the plot (ather/furniture.ts holds the recipes,
 //    sizes and blurbs; the blurbs await @lark). Icons: public/open/icons/<id with dashes>.svg (tools/art/furniture_icons.py).
 for (const [id, f] of Object.entries(FURNITURE)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 10, kind: 'placeable' }; ITEM_GROUP[id] = 'decor' }
+// COOKING (2026-11-17, ather/cooking.ts): Smokehouse meat (RULED 11-17) and the hearth's roasts (ruled 09-15). Raw meat is a
+//    material; a dish is held and clicked to eat (ather/page.tsx). Icons: tools/art/food_icons.py.
+for (const [id, f] of Object.entries(MEATS)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
+for (const [id, f] of Object.entries(DISHES)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 20, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
 export const BAIT_FROM: Readonly<Record<string, number>> = { mast: 2, shimmerscale: 3, clickclaw: 3, glowfin: 3 }
 /** What the HUD says when the last bait is gone: where more comes from, so it is never a dead end. */
 export const NO_BAIT_LINE = 'No bait left. Make more in the bag from a small catch, or mast off a pruned tree.'

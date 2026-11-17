@@ -21,6 +21,8 @@ import { FURNITURE, stockOf } from '../ather/furniture'
 import { itemDef } from '../shared/inventory'
 import { getInv, setInv, useInv } from '../shared/bag'
 import { buyDecor } from './decor-shop'
+import { buyBundle } from './smokehouse'
+import { SMOKEHOUSE_STOCK } from '../ather/cooking'
 
 /** a ticket to the Starforge (an emergency-fund sized price, Alex 11-16). TODO(world): move onto economy/prices.ts LADDER */
 export const STARFORGE_TICKET = 250
@@ -28,6 +30,7 @@ export const STARFORGE_TICKET = 250
 export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
   id: string; ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void; isTouch: boolean
 }) {
+  id = id.split(':')[0]   // a door in every town carries its town after the id (front:smokehouse:<town>, doors.ts)
   const shop = FRONT_SHOPS[id]
   if (!shop) return null
   if (shop.kind === 'station') return <StationPanel ledger={ledger} setLedger={setLedger} onClose={onClose} isTouch={isTouch} />
@@ -42,6 +45,7 @@ export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
       </div>
     </HearthFrame>
   )
+  if (shop.kind === 'smokehouse') return <SmokehousePanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (stockOf(id).length) return <DecorShop id={id} ledger={ledger} setLedger={setLedger} onClose={onClose} />
   return (
     <HearthFrame title={shop.name} maxWidth={380} onClose={onClose} fixed dataPanel="shop-panel">
@@ -162,6 +166,43 @@ function DecorShop({ id, ledger, setLedger, onClose }: { id: string; ledger: Led
                   const r = buyDecor(ledger, getInv(), pid, id)
                   if (r.ok) { setLedger(r.ledger); setInv(r.inv); setMsg(`${f.name} · in your bag.`); hudSay(`${f.name} · in your bag.`, 'item') } else setMsg(r.why)
                 }}>{price.toLocaleString()} Marks</HearthButton>
+              </div>
+            )
+          })}
+        </div>
+        <div className="mt-3 flex items-center text-[12.5px]" style={{ color: H.inkSoft }}>
+          <span className="flex-1" data-shop-msg>{msg ?? ''}</span>
+          <span className="tabular-nums">Purse · {ledger.marks.toLocaleString()} Marks</span>
+        </div>
+      </div>
+    </HearthFrame>
+  )
+}
+
+/** THE SMOKEHOUSE (RULED 11-17, world/cuisine.md): farmed meat by the bundle, for roasting at the keeper's Ather hearth (the
+ *  cooking room). Stock + prices: ather/cooking.ts › SMOKEHOUSE_STOCK. */
+function SmokehousePanel({ ledger, setLedger, onClose }: { ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void }) {
+  const shop = FRONT_SHOPS.smokehouse, inv = useInv()
+  const [msg, setMsg] = useState<string | null>(null)
+  return (
+    <HearthFrame title={shop.name} maxWidth={500} onClose={onClose} fixed dataPanel="shop-panel">
+      <div className="px-4 pt-5 pb-4 text-[14px] leading-snug" style={{ color: H.ink }} data-shop="smokehouse">
+        {shop.line && <p style={{ ...hearthDisplay, color: H.inkSoft }}>{shop.line}</p>}
+        <p className="mt-1 text-[12.5px]" style={{ color: H.inkSoft }}>Take it home through the gate and roast it at the hearth in your cooking room.</p>
+        <div className="mt-3 grid gap-2">
+          {SMOKEHOUSE_STOCK.map(b => {
+            const d = itemDef(b.id), have = inv.slots.reduce((a, x) => a + (x?.id === b.id ? x.n : 0), 0)
+            return (
+              <div key={b.id} data-bundle={b.id} className="flex items-center gap-3 rounded-[12px] px-3 py-2" style={{ background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+                {d.icon ? <img src={d.icon} alt="" width={36} height={36} /> : null}
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{d.name} × {b.n}{have ? <span style={{ color: H.inkSoft }}> · {have} in the bag</span> : null}</div>
+                  <div className="text-[12.5px]" style={{ color: H.inkSoft }}>{d.blurb}</div>
+                </div>
+                <HearthButton small primary disabled={ledger.marks < b.price} onClick={() => {
+                  const r = buyBundle(ledger, getInv(), b.id)
+                  if (r.ok) { setLedger(r.ledger); setInv(r.inv); setMsg(`${d.name} × ${b.n} · in your bag.`); hudSay(`${d.name} × ${b.n} · in your bag.`, 'item') } else setMsg(r.why)
+                }}>{b.price.toLocaleString()} Marks</HearthButton>
               </div>
             )
           })}

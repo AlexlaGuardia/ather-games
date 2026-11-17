@@ -25,7 +25,7 @@ ok(!canPlace(freshWorks(), owned, 'rinnshop', -92, 100, 0, rich).ok, 'place: a r
 ok(!canPlace(freshWorks(), owned, 'rinnshop', GREG.x, GREG.z + 1, 0, rich).ok, 'place: built on Gregory')
 ok(!canPlace(freshWorks(), owned, 'rinnshop', GATE.x + 4, GATE.z, 0, rich).ok, 'place: built in the gate')
 ok(KEEP_CLEAR.every(k => !canPlace(freshWorks(), owned, 'rinnshop', k.x, k.z, 0, rich).ok), 'place: some keep-clear centre took a room')
-ok(!canPlace(freshWorks(), owned, 'cooking', P.x, P.z, 0, rich).ok, 'place: a not-ready room was buildable (it is a coming-soon card)')
+ok(!canPlace(freshWorks(), owned, 'alchemy', P.x, P.z, 0, rich).ok, 'place: a not-ready room was buildable (it is a coming-soon card)')
 ok(!canPlace(freshWorks(), owned, 'rinnshop', P.x, P.z, 0, newInv(12)).ok, 'place: built without the logs')
 const placed = place(freshWorks(), owned, rich, 'rinnshop', P.x, P.z, 1, 1000)!
 ok(!!placed && countOf(placed.inv, 'goldwood_log') === 40 - ROOMS.rinnshop.cost[0].n && countOf(rich, 'goldwood_log') === 40, 'place: wrong logs taken, or it mutated its input')

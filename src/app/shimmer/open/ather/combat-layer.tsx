@@ -232,7 +232,7 @@ function CastFlash({ fx }: { fx: React.MutableRefObject<LiveFx[]> }) {
   )
 }
 
-export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, reloadTick = 0, casts, onCast }: {
+export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, reloadTick = 0, casts, onCast, eats }: {
   T: Terrain
   locked: React.MutableRefObject<boolean>
   frozen: React.MutableRefObject<boolean>
@@ -251,6 +251,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   reloadTick?: number
   /** casts the page has paid for (shared/casting.ts), run along the eye's aim on the next frame */
   casts?: React.MutableRefObject<CastSpec[]>
+  /** meals the page has spent (ather/cooking.ts › DISHES): heal amounts, applied to the keeper on the next frame */
+  eats?: React.MutableRefObject<number[]>
   /** what each one did (how many it touched), for the message line */
   onCast?: (spec: CastSpec, hit: CastHit | null) => void
 }) {
@@ -323,6 +325,11 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
         onCast?.(spec, hit)
       }
       casts.current = []
+    }
+    if (eats?.current.length) {
+      const k = C.keeper
+      for (const h of eats.current) if (k.hp > 0) k.hp = Math.min(k.maxHp, k.hp + h)
+      eats.current = []
     }
     stepCombat(C, T, feet, dt)
     if (C.events.length) {

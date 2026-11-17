@@ -29,6 +29,7 @@ import {
   type Bank, type BankTab,
 } from './garden-bank'
 import { FURNITURE, FURNITURE_ORDER, REFINE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, type Job } from './furniture'
+import { ROAST } from './cooking'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
 let works: Works | null = null
@@ -159,7 +160,19 @@ function RoomMesh({ r }: { r: Room }) {
 function Bench({ r, x, z }: { r: Room; x: number; z: number }) {
   return (
     <group position={[x, GROUND_Y, z]} rotation-y={-r.q * Math.PI / 2}>
-      <mesh position-y={0.5}><boxGeometry args={[2.4, 1, 0.8]} /><meshLambertMaterial color={WOOD} /></mesh>
+      {r.kind !== 'cooking' && <mesh position-y={0.5}><boxGeometry args={[2.4, 1, 0.8]} /><meshLambertMaterial color={WOOD} /></mesh>}
+      {r.kind === 'cooking' && (
+        <>
+          {/* THE HEARTH (canon: open coals, no vessel, no grate or flue): a low stone ring, a glowing bed, a wooden spit on
+              two forked posts with a rinn on it */}
+          <mesh position-y={0.22}><boxGeometry args={[2.0, 0.44, 1.1]} /><meshLambertMaterial color="#9a9286" /></mesh>
+          <mesh position-y={0.45}><boxGeometry args={[1.6, 0.04, 0.7]} /><meshBasicMaterial color="#ff8a3a" /></mesh>
+          {[-0.4, 0.1, 0.45].map((x, k) => <mesh key={k} position={[x, 0.5, (k - 1) * 0.15]}><boxGeometry args={[0.18, 0.08, 0.14]} /><meshBasicMaterial color={k % 2 ? '#ffcf7a' : '#e0551f'} /></mesh>)}
+          {[-0.85, 0.85].map(x => <mesh key={x} position={[x, 0.85, 0]}><cylinderGeometry args={[0.04, 0.05, 0.9, 6]} /><meshLambertMaterial color="#6b4a2a" /></mesh>)}
+          <mesh position={[0, 1.22, 0]} rotation-z={Math.PI / 2}><cylinderGeometry args={[0.025, 0.025, 1.9, 6]} /><meshLambertMaterial color="#8a6a45" /></mesh>
+          <mesh position={[0, 1.13, 0]} scale={[1, 0.45, 0.45]}><sphereGeometry args={[0.24, 10, 8]} /><meshLambertMaterial color="#d9a75c" /></mesh>
+        </>
+      )}
       {r.kind === 'rinnshop' && (
         <>
           {/* a rinstick on its rack and a crate of the day's catch */}
@@ -472,6 +485,9 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
               empty="No logs to work. Prune trees in the Wilds. Better woods come as your Forestry grows." refine />
             <JobList title="Furniture" note="Made pieces go to your bag. Set them from the planning table." jobs={PIECE_JOBS} r={r} inv={inv} />
           </>
+        )}
+        {r.kind === 'cooking' && (
+          <JobList title="The hearth" note="Roasts go to your bag. Hold one in the Wilds and click to eat it mid-fight. Meat comes from the Smokehouse in the continent's towns." jobs={ROAST} r={r} inv={inv} refine />
         )}
         <div data-room-store={r.kind}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
