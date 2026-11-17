@@ -34,6 +34,7 @@ import { ShopPanel } from '../business/shop-panel'
 import { RunesmithPanel } from '../business/smith-panel'
 import type { Seat } from '../business/letters'
 import { stageOf, errandEntries, birthSeat, gemsGiven } from '../business/errand'
+import { deedsTold, markDeedsTold, deedPointerEntries, TOLD_RADIUS } from '../business/deed-pointer'
 import { doorByKey } from '../business/doors'
 import { useLoadout } from '../shared/loadout'
 import { useNyxRinning } from './nyx-rinning'
@@ -1090,6 +1091,14 @@ export default function ContinentRide() {
     const word = errLoadout.vessels.find(v => v.id === 'starter-bracelet')?.label.replace(/ bracelet$/, '') ?? null
     postEntries('errand', errandEntries(errStage, errBirth, { smith: smith ? { x: smith.at.x, z: smith.at.z } : null, temple: temple ? { x: temple.at.x, z: temple.at.z } : null }, word))
   }, [R, errStage, errBirth, errLoadout])
+  // BETA M6d, deeds are told: the first time a town is in reach (on foot or riding, stopped or not), the deeds line joins the
+  // journal for good; struck once the garden owns a place (business/deed-pointer.ts)
+  const [told, setTold] = useState(false)
+  useEffect(() => setTold(deedsTold()), [])
+  const nearTown = useMemo(() => !!R && TOWNS.some(t => { const p = R.meta.places.find(q => q.id === t); return !!p && Math.hypot(p.x - hud.x, p.z - hud.z) < TOLD_RADIUS }), [R, hud.x, hud.z])
+  useEffect(() => { if (nearTown && !told) { markDeedsTold(); setTold(true) } }, [nearTown, told])
+  const ownsAny = (tycoon.t?.owned.length ?? 0) > 0
+  useEffect(() => { postEntries('deeds', deedPointerEntries(told, ownsAny)) }, [told, ownsAny])
   // the journal: a Co. contract in hand is the keeper's open line on the continent (pack.tsx › Journal)
   useEffect(() => {
     const a = ledger.active
