@@ -1,7 +1,8 @@
 // npx tsx src/app/shimmer/open/ather/network.test.ts — the season's network, against the baked file and real tiles
 import { readFileSync } from 'node:fs'
 import { parseWilds, BIOME } from './wilds'
-import { clearing, settlementAt, nearFair, fairDoor, pathDistance, pathsIn, type Network } from './network'
+import { clearing, settlementAt, nearFair, fairDoor, pathDistance, pathsIn, SETTLEMENT_GATHERS, type Network } from './network'
+import { OPEN_ITEMS } from '../shared/inventory'
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  ✗', m) } }
 const D = 'public/open/wilds'
@@ -33,4 +34,9 @@ const s0 = net.settlements[0]
 ok(settlementAt(net, s0.x + 10, s0.z)?.id === s0.id && settlementAt(net, s0.x + 200, s0.z) === null, 'settlementAt: wrong')
 const d = fairDoor(net.fair!)
 ok(nearFair(net, net.fair!.x, net.fair!.z) && pathDistance(net, d.x, d.z) < 40, `fair: its door is ${pathDistance(net, d.x, d.z).toFixed(0)} m from a path`)
+// Alex 11-17: every biome has at least one settlement, and each biome's trade names real items
+for (const b of ['shore', 'meadow', 'woods', 'rock'] as const) {
+  ok(net.settlements.some(s => s.biome === b), `no ${b} settlement in the baked network`)
+  ok(SETTLEMENT_GATHERS[b].length > 0 && SETTLEMENT_GATHERS[b].every(id => !!OPEN_ITEMS[id]), `${b} gathers an unknown item`)
+}
 console.log(`network: ${pass}/${fail}`); process.exit(fail ? 1 : 0)

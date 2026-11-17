@@ -8,7 +8,18 @@
 // ★ PURE apart from `loadNetwork` (fetch).
 
 export const SEASON = 1   // until the season clock exists, the network is season 1's
-export interface Settlement { id: string; name: string; x: number; z: number }
+export type SettlementBiome = 'shore' | 'meadow' | 'woods' | 'rock'
+/** `biome` = what lies around it (the bake guarantees at least one of each, Alex 11-17); older bakes lack it */
+export interface Settlement { id: string; name: string; x: number; z: number; biome?: SettlementBiome }
+/** What a settlement's Moglins gather, by its biome: their PRODUCT (Magii 11-17, c52ba1c: idle gathering is a Moglin's
+ *  product, never a keeper skill), moved by want-list trade. Existing items only; which goods are BUILD (Jin's).
+ *  Woods gives goldwood logs as the stand-in for DEADFALL (fallen tier-1 goldwood, canon) until that item exists. */
+export const SETTLEMENT_GATHERS: Readonly<Record<SettlementBiome, readonly string[]>> = {
+  shore: ['shimmerscale', 'clickclaw', 'pearlshell', 'bait'],
+  meadow: ['mast'],
+  woods: ['goldwood_log'],
+  rock: ['blankstone', 'raw_mana_shard'],
+}
 export interface Path { a: string; b: string; pts: [number, number][] }
 export interface Fair { x: number; z: number; yaw: number; path: string }
 export interface Network { v: 1; season: number; settlements: Settlement[]; paths: Path[]; fair: Fair | null }

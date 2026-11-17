@@ -4,8 +4,9 @@
 //   npx tsx scripts/bake-wilds-network.mts [--season 1] [--dry]
 //
 // Reads every streamed Wilds tile (public/open/wilds/*.bin|.biome|.json), and writes public/open/wilds/network-s<N>.json:
-//   settlements — generated free-Moglin settlements (canon: ather-rework §3, fresh each season), on dry, flat meadow,
-//                 well apart, clear of infected nodes and of Greg's stone
+//   settlements — generated free-Moglin settlements (canon: ather-rework §3, fresh each season): AT LEAST ONE PER
+//                 BIOME (shore, meadow, woods, rock; Alex 11-17), the rest on dry, flat meadow; well apart, clear of
+//                 infected nodes and of Greg's stone. Each carries its biome, which sets its trade (network.ts)
 //   paths       — routed on the real ground (A* on a 20 m grid: no open water, steep costs, woods cost more than
 //                 meadow), joining Greg's stone and every settlement: a spanning tree plus a few loops
 //   fair        — where THE THISTLEDOWN FAIR pitches its big top this season (RULED 11-17, athernyx 505c6d0: a new spot
@@ -68,12 +69,12 @@ function slopeAt(i: number, j: number): number {
 let seed = (SEASON * 2654435761) >>> 0
 const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
 const nodes = [...tiles.values()].flatMap(t => t.nodes)
-function goodSite(i: number, j: number, r: number, biomeOk: (b: number) => boolean): boolean {
+function goodSite(i: number, j: number, r: number, biomeOk: (b: number) => boolean, maxSlope = 0.12): boolean {
   const k = Math.ceil(r / G)
   for (let dj = -k; dj <= k; dj++) for (let di = -k; di <= k; di++) {
     if (di * di + dj * dj > k * k) continue
     const a = i + di, c = j + dj
-    if (!dry(a, c) || !biomeOk(B[c * GW + a]) || slopeAt(a, c) > 0.12) return false
+    if (!dry(a, c) || !biomeOk(B[c * GW + a]) || slopeAt(a, c) > maxSlope) return false
   }
   return true
 }
@@ -86,13 +87,57 @@ const sites: { x: number; z: number }[] = []
   const q = (f: number) => sl[Math.floor(f * (sl.length - 1))].toFixed(3)
   console.log(`grid ${GW}x${GH}, meadow candidates ${cands.length}, slope p10 ${q(0.1)} p50 ${q(0.5)} p90 ${q(0.9)}, sites passing r40 ${cands.filter(c => goodSite(c.i, c.j, 40, b => b === W.meadow || b === W.woods)).length}`)
 }
+// ★ ONE PER BIOME FIRST (Alex 11-17: "each biome spawns at least one settlement and it determines what they gather"):
+// a settlement's biome sets its Moglins' trade (network.ts › SETTLEMENT_GATHERS). Every settlement still stands on
+// flat dry meadow/woods (rock's median slope is ~0.87, and shore is a thin strip): a ROCK settlement is one at the
+// rock's foot, a SHORE one beside the water, i.e. the biome is what lies AROUND it (share within 150 m). Woods seeds first (flat
+// ground in woods is the rarest: 84 flat sites in s1), then two seeds each for the scarce biomes, so one dropped as unreachable still leaves one. Water hosts none.
+type SB = 'shore' | 'meadow' | 'woods' | 'rock'
+const SEED: { biome: SB; id: number; share: number; n: number }[] = [
+  { biome: 'woods',  id: W.woods,  share: 0.35, n: 1 },
+  { biome: 'rock',   id: W.rock,   share: 0.08, n: 2 },   // measured s1: the best flat site has ~20 % rock round it
+  { biome: 'shore',  id: W.shore,  share: 0.03, n: 2 },   // ~7 % at best: shore is a thin strip
+  { biome: 'meadow', id: W.meadow, share: 0.5,  n: 1 },
+]
+const AROUND = Math.ceil(150 / G)
+function shareOf(i0: number, j0: number, id: number): number {
+  let n = 0, all = 0
+  for (let dj = -AROUND; dj <= AROUND; dj++) for (let di = -AROUND; di <= AROUND; di++) {
+    if (di * di + dj * dj > AROUND * AROUND) continue
+    const a = i0 + di, c = j0 + dj; if (!inG(a, c) || B[c * GW + a] === 255) continue
+    all++; if (B[c * GW + a] === id) n++
+  }
+  return all ? n / all : 0
+}
+const fits = (x: number, z: number) => Math.hypot(x - GREG.x, z - GREG.z) >= 900 && !sites.some(s => Math.hypot(s.x - x, s.z - z) < SPACING)
+  && !nodes.some(n => Math.hypot(n.x - x, n.z - z) < 120)
+const seedCands: { i: number; j: number }[] = []
+for (let j = 2; j < GH - 2; j += 2) for (let i = 2; i < GW - 2; i += 2) if (dry(i, j) && (B[j * GW + i] === W.meadow || B[j * GW + i] === W.woods)) seedCands.push({ i, j })
+for (let k = seedCands.length - 1; k > 0; k--) { const r = Math.floor(rnd() * (k + 1)); [seedCands[k], seedCands[r]] = [seedCands[r], seedCands[k]] }
+const seeded = new Map<number, SB>()   // sites index -> its seeded biome
+for (const sd of SEED) {
+  let placed = 0
+  for (const c of seedCands) {   // meadow + woods cells, shuffled by the season seed
+    if (placed >= sd.n) break
+    const x = wx(c.i), z = wz(c.j)
+    if (!fits(x, z) || shareOf(c.i, c.j, sd.id) < sd.share || !goodSite(c.i, c.j, 40, b => b === W.meadow || b === W.woods)) continue
+    seeded.set(sites.length, sd.biome); sites.push({ x, z }); placed++
+  }
+  console.log(`seed ${sd.biome}: ${placed}/${sd.n} placed`)
+}
 for (const c of cands) {
   const x = wx(c.i), z = wz(c.j)
-  if (Math.hypot(x - GREG.x, z - GREG.z) < 900) continue
-  if (sites.some(s => Math.hypot(s.x - x, s.z - z) < SPACING)) continue
-  if (nodes.some(n => Math.hypot(n.x - x, n.z - z) < 120)) continue
+  if (!fits(x, z)) continue
   if (!goodSite(c.i, c.j, 40, b => b === W.meadow || b === W.woods)) continue
   sites.push({ x, z })
+}
+/** a filled site's biome = the most common dry biome within 150 m (a seeded site keeps its seed) */
+function biomeOf(k: number): SB {
+  const sd = seeded.get(k); if (sd) return sd
+  const n = [0, 0, 0, 0, 0], i0 = gx(sites[k].x), j0 = gz(sites[k].z), R = Math.ceil(150 / G)
+  for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) { const a = i0 + di, c = j0 + dj; if (dry(a, c)) n[B[c * GW + a]]++ }
+  const best = [W.shore, W.meadow, W.woods, W.rock].reduce((m, b) => (n[b] > n[m] ? b : m), W.meadow)
+  return (['water', 'shore', 'meadow', 'woods', 'rock'] as const)[best] as SB
 }
 
 // names: generated (two hedgerow words), never a canon name (the Moonwell folk, the holds, the kept places)
@@ -106,7 +151,7 @@ const nameFor = () => {
     if (!used.has(n) && ![...CANON].some(c => n.toLowerCase().includes(c))) { used.add(n); return n }
   }
 }
-const settlements = sites.map((s, k) => ({ id: `s${SEASON}-${k}`, name: nameFor(), x: Math.round(s.x), z: Math.round(s.z) }))
+const settlements = sites.map((s, k) => ({ id: `s${SEASON}-${k}`, name: nameFor(), x: Math.round(s.x), z: Math.round(s.z), biome: biomeOf(k) }))
 
 // ── the graph: Greg's stone + every settlement; a spanning tree on distance, then each node's next-nearest for loops ─
 const P = [{ id: 'greg', x: GREG.x, z: GREG.z }, ...settlements]
@@ -190,4 +235,7 @@ const out = { v: 1, season: SEASON, baked: 'scripts/bake-wilds-network.mts', set
 const km = paths.reduce((s, p) => s + p.pts.slice(1).reduce((a, q, k) => a + Math.hypot(q[0] - p.pts[k][0], q[1] - p.pts[k][1]), 0), 0) / 1000
 console.log(`season ${SEASON}: ${kept.length} settlements (${settlements.length - kept.length} unreachable dropped), ${paths.length} paths (${unrouted} unroutable), ${km.toFixed(1)} km of path, fair ${fair ? `at (${fair.x}, ${fair.z})` : 'NOT PLACED'}`)
 for (const s of kept) console.log(`  ${s.name.padEnd(16)} (${s.x}, ${s.z})  ${Math.round(Math.hypot(s.x - GREG.x, s.z - GREG.z))} m from Greg`)
+const missing = SEED.map(s => s.biome).filter(b => !kept.some(k => k.biome === b))
+console.log(`biomes: ${SEED.map(sd => `${sd.biome} ${kept.filter(k => k.biome === sd.biome).length}`).join(' · ')}`)
+if (missing.length) { console.error(`FAIL: no reachable settlement in ${missing.join(', ')}; nothing written`); process.exit(1) }
 if (!DRY) { writeFileSync(join(DIR, `network-s${SEASON}.json`), JSON.stringify(out)); console.log(`wrote public/open/wilds/network-s${SEASON}.json`) }
