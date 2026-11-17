@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { NextRequest } from 'next/server'
 import { signJwt, SESSION_COOKIE, SESSION_TTL_SEC } from '@/lib/accounts/session'
-import { _openAt, getSave, putSave, getOpenSave } from '@/lib/accounts/db'
+import { _openAt, getSave, putSave, getOpenSave, casOpenSave } from '@/lib/accounts/db'
 import * as route from './route'
 import * as leaseRoute from './lease/route'
 import { _resetSaveRateLimit } from '@/lib/accounts/save-guards'
@@ -95,23 +95,50 @@ async function main() {
   r = await push('u_a', 2, mkdoc('u_a', { keepers: [keeper('k2')], active: 'k2' }))
   j = await r.json()
   check('keeper dropped without tombstone 400', r.status === 400 && /vanished/.test(j.error), `${r.status} ${j.error}`)
+  // the client sends retired_at: 5 (1970) and NO keys: the server must stamp its own time and keep k1's last keys
   r = await push('u_a', 2, mkdoc('u_a', { keepers: [keeper('k2')], active: 'k2', retired: [{ id: 'k1', retired_at: 5 }] }))
   check('keeper dropped WITH tombstone accepted', r.status === 200, `got ${r.status}`)
+  {
+    const t = (JSON.parse(getOpenSave('u_a')!.data).retired ?? [])[0] ?? {}
+    check('★ tombstone retired_at is the SERVER clock, not the client\'s backdated 5', typeof t.retired_at === 'number' && Date.now() - t.retired_at < 60_000, String(t.retired_at))
+    check('★ tombstone keeps the keeper\'s last keys from the server copy', t.keys?.['ather:shimmer:loadout'] === '{}', JSON.stringify(t.keys))
+  }
+  const K1 = [{ id: 'k1' }]   // later pushes must carry the young tombstone
+  r = await push('u_a', 3, mkdoc('u_a', { keepers: [keeper('k2')], active: 'k2', retired: [] }))
+  j = await r.json()
+  check('★ dropping a tombstone younger than 30 days is 400', r.status === 400 && /tombstone/.test(j.error), `${r.status} ${j.error}`)
+  r = await push('u_a', 3, mkdoc('u_a', { keepers: [keeper('k2')], active: 'k2', retired: [{ id: 'k1', retired_at: 1 }] }))
+  check('carrying it (any client retired_at) is fine', r.status === 200, `got ${r.status}`)
+  {
+    const t = JSON.parse(getOpenSave('u_a')!.data).retired[0]
+    check('★ ...and the original server retired_at survives the client\'s new one', Date.now() - t.retired_at < 60_000, String(t.retired_at))
+  }
 
   // epoch
-  r = await push('u_a', 3, mkdoc('u_a', { _epoch: 1, keepers: [keeper('k2')], active: 'k2' }))
+  r = await push('u_a', 4, mkdoc('u_a', { _epoch: 1, keepers: [keeper('k2')], active: 'k2', retired: K1 }))
   j = await r.json()
   check('older epoch 409', r.status === 409 && j.reason === 'epoch', `${r.status} ${j.reason}`)
 
   // lease
   r = await lease('u_a', 'dB')
   j = await r.json()
-  check('lease route takes lease, returns doc+rev', r.status === 200 && j.rev === 3 && j.lease.device === 'dB')
-  r = await push('u_a', 3, mkdoc('u_a', { keepers: [keeper('k2')], active: 'k2' }), 'dA')
+  check('lease route takes lease, returns doc+rev', r.status === 200 && j.rev === 4 && j.lease.device === 'dB')
+  r = await push('u_a', 4, mkdoc('u_a', { keepers: [keeper('k2')], active: 'k2', retired: K1 }), 'dA')
   j = await r.json()
   check('lease held by another device 409', r.status === 409 && j.reason === 'lease', `${r.status} ${j.reason}`)
-  r = await push('u_a', 3, mkdoc('u_a', { keepers: [keeper('k2')], active: 'k2' }), 'dB')
+  r = await push('u_a', 4, mkdoc('u_a', { keepers: [keeper('k2')], active: 'k2', retired: K1 }), 'dB')
   check('lease holder pushes OK', r.status === 200, `got ${r.status}`)
+
+  // expiry: a tombstone older than 30 days is pruned by the server even if the client still sends it.
+  // Age it in the stored row directly (the only way to get a past retired_at, which is the point).
+  {
+    const row = getOpenSave('u_a')!
+    const d = JSON.parse(row.data); d.retired[0].retired_at = Date.now() - 31 * 24 * 3600 * 1000
+    casOpenSave('u_a', row.rev, JSON.stringify(d), 'dB')
+    r = await push('u_a', row.rev + 1, mkdoc('u_a', { keepers: [keeper('k2')], active: 'k2', retired: K1 }), 'dB')
+    check('push after expiry OK', r.status === 200, `got ${r.status}`)
+    check('★ a 31-day-old tombstone is pruned', JSON.parse(getOpenSave('u_a')!.data).retired.length === 0)
+  }
 
   // sizes
   const padTo = (bytes: number) => {
