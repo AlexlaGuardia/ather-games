@@ -1,7 +1,7 @@
 // The workshop rooms core (rooms.ts). Run: npx tsx src/app/shimmer/open/ather/rooms.test.ts
-import { ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, pickUpChest, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, type Works } from './rooms'
+import { ROOM_STORE_SLOTS, ROOM_ACCEPTS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, loadWorks, saveWorks, ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, pickUpChest, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, type Works } from './rooms'
 import { STARTING_SQUARES, squareAt, sqId, GATE, GREG, GROUND_Y } from './plot'
-import { newInv, give, countOf } from '../shared/inventory'
+import { newInv, give, countOf, HOTBAR, SLOTS, ITEM_GROUP, OPEN_ITEMS, type Inv } from '../shared/inventory'
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -105,6 +105,47 @@ ok(!canPlaceChest(pc.works, owned, C.x + 1, C.z, 0, ks).ok, 'keepstone: set onto
   ok(chestsStanding(w) === 10, `chest: the cap is not ten (got ${chestsStanding(w)})`)
 }
 { const k = chestBox(STARTER_CHEST); ok(k.y0 < GROUND_Y && k.y1 > GROUND_Y + 0.5, 'chest: the walker can walk through a chest') }
+
+// ── room stores: each room keeps its own, only its own materials, small on purpose ──
+{
+  const rid = W.rooms[0].id
+  const bagWith = (...st: [string, number][]) => { const inv = newInv(12); st.forEach(([id, n], k) => { inv.slots[HOTBAR + k] = { id, n } }); return inv }
+  const inv = bagWith(['mast', 6], ['glowfin', 2], ['goldwood_log', 30], ['blankstone', 5])
+  const logAt = HOTBAR + 2
+  const no = stockRoom(W, rid, inv, logAt)
+  ok(no.moved === 0 && 'why' in no && /keeps/.test(no.why) && no.inv === inv, 'store: the Rinnshop took logs')
+  const all = stockRoomFromBag(W, rid, inv)
+  const st = roomStore(all.works.rooms[0])
+  ok(all.moved === 8 && st.stacks.length === 2 && countOf(all.inv, 'goldwood_log') === 30 && countOf(all.inv, 'blankstone') === 5 && countOf(all.inv, 'mast') === 0, 'store: stock-from-bag moved the wrong things')
+  ok(countOf(all.inv, 'bait') === countOf(inv, 'bait'), 'store: stock-from-bag took bait out of the hotbar')
+  ok(roomStore(W.rooms[0]).stacks.length === 0, 'store: mutated the works it was given')
+  // the bench cuts from the store first, bait goes to the bag
+  const before = countOf(all.inv, 'bait')
+  const m = makeBaitAt(all.works, rid, all.inv, 'mast')!
+  ok(!!m && countOf(m.inv, 'bait') === before + 2 && benchCount(m.works.rooms[0], m.inv, 'mast') === 5 && countOf(m.inv, 'mast') === 0, 'bench: did not cut from the store first')
+  const bagOnly = makeBaitAt(W, rid, bagWith(['mast', 1]), 'mast')!
+  ok(!!bagOnly && countOf(bagOnly.inv, 'mast') === 0, 'bench: did not fall back to the bag')
+  ok(makeBaitAt(W, rid, newInv(12), 'mast') === null && makeBaitAt(W, rid, bagWith(['mast', 1]), 'goldwood_log') === null, 'bench: cut from nothing, or cut a log')
+  // take back out
+  const k = roomStore(all.works.rooms[0]).stacks.findIndex(s => s.id === 'glowfin')
+  const t = takeFromRoom(all.works, rid, k, all.inv)
+  ok(t.moved === 2 && countOf(t.inv, 'glowfin') === 2 && !roomStore(t.works.rooms[0]).stacks.some(s => s.id === 'glowfin'), 'store: take-back lost the catch')
+  // small on purpose: never past ROOM_STORE_SLOTS
+  let big: Inv = newInv(0); big.slots = big.slots.map((_, i) => (i >= HOTBAR ? { id: i % 2 ? 'glowfin' : 'moonkoi', n: 99 } : null))
+  const full = stockRoomFromBag(W, rid, big)
+  ok(roomStore(full.works.rooms[0]).stacks.length === ROOM_STORE_SLOTS && full.moved === ROOM_STORE_SLOTS * 99, 'store: went past its slots or lost items')
+  // every room's rule: every item a room keeps is real, and the Rinnshop keeps every catch
+  ok(Object.keys(OPEN_ITEMS).filter(id => ITEM_GROUP[id] === 'rinning').every(id => roomAccepts('rinnshop', id)), 'accepts: the Rinnshop refuses a catch')
+  ok(!roomAccepts('rinnshop', 'repeater') && !roomAccepts('carpentry', 'mast') && roomAccepts('carpentry', 'goldwood_log') && roomAccepts('stonemason', 'blankstone') && !roomAccepts('alchemy', 'blankstone'), 'accepts: a room rule is wrong')
+  ok(Object.keys(ROOM_ACCEPTS).length === ROOM_ORDER.length, 'accepts: a room has no rule')
+  // the save keeps the store; junk in it is dropped
+  const mem: Record<string, string> = {}
+  ;(globalThis as any).localStorage = { getItem: (k: string) => mem[k] ?? null, setItem: (k: string, v: string) => { mem[k] = v }, removeItem: (k: string) => { delete mem[k] } }
+  const dirty = { ...all.works, rooms: all.works.rooms.map(r => ({ ...r, store: [...(r.store ?? []), null, { id: 'x', n: -2 }] as any })) }
+  saveWorks(dirty)
+  const back = loadWorks()
+  ok(JSON.stringify(roomStore(back.rooms[0]).stacks) === JSON.stringify(roomStore(all.works.rooms[0]).stacks), 'save: the room store did not round-trip clean')
+}
 
 if (fails.length) { console.error(`rooms: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`rooms: ${pass}/0`)

@@ -14,8 +14,8 @@
 import type { Box } from '../terrain-world'
 import { squareAt, sqId, GATE, GREG, THRESHOLD, PATH_START, GROUND_Y } from './plot'
 import { gardenKey } from '@/lib/keeper-local'
-import { countOf, take, give, type Inv } from '../shared/inventory'
-import { MAX_CHESTS } from './garden-bank'
+import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, BAIT_FROM, type Inv, type Stack } from '../shared/inventory'
+import { MAX_CHESTS, putIn, withdraw, adoptBank, type Bank } from './garden-bank'
 
 export type RoomKind = 'rinnshop' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
 export interface RoomDef {
@@ -54,7 +54,11 @@ export const KEEP_CLEAR: readonly { x: number; z: number; r: number }[] = [
 export const WALL_H = 3.2, WALL_T = 0.3, DOOR_W = 2.2
 
 /** A placed room. `q` = quarter turns (0..3); the door is on the front (local −z at q 0, turning with it). */
-export interface Room { id: string; kind: RoomKind; x: number; z: number; q: number; placedAt: number; doneAt: number }
+export interface Room {
+  id: string; kind: RoomKind; x: number; z: number; q: number; placedAt: number; doneAt: number
+  /** the room's own store (ROOM_STORE_SLOTS, that room's materials only; Alex 11-17). Absent = empty. */
+  store?: Stack[]
+}
 /** A KEEPSTONE standing on the plot (canon 5a20b8f, ather-rework WORKSHOP ROOMS (6): a Blankstone pedestal whose top opens
  *  on a set crystal's light; never "chest" to a player). A door into the garden bank; each adds CHEST_SLOTS. The code and
  *  the save keep the word `chest` (the save field shipped as `chests` an hour before the ruling). `crystal` = the item
@@ -204,13 +208,86 @@ export function pickUpChest(works: Works, id: string, inv: Inv): { works: Works;
   return { works: { ...works, chests: works.chests.filter(c => c.id !== id) }, inv: r.inv }
 }
 
+// ── ROOM STORES (Alex 11-17, via hub): each workshop room keeps its OWN inventory, apart from the garden bank, and it
+//    takes only that room's materials. ★ WHY SMALL: the voxel station rack's argument (voxel3d/chest.ts › RACK_SLOTS): a
+//    room is stocked for the job it does, not a second bank; if it held a bagful nobody would need a Keepstone. 16 = two
+//    rows of the 8-wide grid. ★ What it is FOR: the bench works from it first (bait from the Rinnshop's own mast and
+//    catches), and it is what a room's Moglin trades will read and fill (deadfall into carpentry, charcoal to the smithy,
+//    RULED c52ba1c) when those land. ★ Over the cap is tolerated like the bank: nothing here ever trims a stack.
+export const ROOM_STORE_SLOTS = 16
+const grp = (id: string) => ITEM_GROUP[id]
+/** What each room keeps. Derived from where an item comes from (ITEM_GROUP), so a new catch or crystal lands in the right
+ *  room with no list to keep. Rooms not open yet have their rule now so the table can say what each will hold. */
+export const ROOM_ACCEPTS: Readonly<Record<RoomKind, (id: string) => boolean>> = {
+  rinnshop: id => grp(id) === 'rinning' || id === 'mast',
+  cooking: id => (grp(id) === 'rinning' && id !== 'bait') || id === 'mast',
+  alchemy: id => (grp(id) === 'prospecting' && id !== 'blankstone') || /_sap$/.test(id),
+  smith: id => id === 'deadfall' || id === 'charcoal',
+  carpentry: id => (grp(id) === 'forestry' && id !== 'mast') || id === 'deadfall',
+  stonemason: id => grp(id) === 'prospecting',
+}
+/** Said when the room refuses something: what it does keep. */
+export const ROOM_KEEPS: Readonly<Record<RoomKind, string>> = {
+  rinnshop: 'catches, bait and mast', cooking: 'catches and mast for the hearth', alchemy: 'crystals, shards and saps',
+  smith: 'deadfall and charcoal', carpentry: 'wood', stonemason: 'stone and crystal',
+}
+export const roomAccepts = (kind: RoomKind, id: string) => ROOM_ACCEPTS[kind](id)
+export const roomStore = (r: Room): Bank => ({ v: 1, stacks: r.store ?? [] })
+const setStore = (w: Works, id: string, b: Bank): Works => ({ ...w, rooms: w.rooms.map(r => (r.id === id ? { ...r, store: b.stacks } : r)) })
+export type StoreMove = { works: Works; inv: Inv; moved: number } | { works: Works; inv: Inv; moved: 0; why: string }
+
+/** Bag slot → the room's store. Refuses what the room does not keep; what does not fit stays in the bag. */
+export function stockRoom(w: Works, roomId: string, inv: Inv, at: number): StoreMove {
+  const r = w.rooms.find(x => x.id === roomId), s = inv.slots[at]
+  if (!r || !s) return { works: w, inv, moved: 0, why: '' }
+  if (!roomAccepts(r.kind, s.id)) return { works: w, inv, moved: 0, why: `The ${ROOMS[r.kind].name} keeps ${ROOM_KEEPS[r.kind]}.` }
+  const p = putIn(roomStore(r), ROOM_STORE_SLOTS, s.id, s.n), moved = s.n - p.left
+  if (!moved) return { works: w, inv, moved: 0, why: `The ${ROOMS[r.kind].name}'s store is full.` }
+  const slots = inv.slots.map((x, i) => (i !== at ? x : p.left > 0 ? { id: s.id, n: p.left } : null))
+  return { works: setStore(w, roomId, p.bank), inv: { ...inv, slots }, moved }
+}
+/** Everything in the BAG (not the hotbar: what you hold stays in your hands) that this room keeps, into its store. */
+export function stockRoomFromBag(w: Works, roomId: string, inv: Inv): StoreMove {
+  let out: StoreMove = { works: w, inv, moved: 0 }
+  for (let at = HOTBAR; at < SLOTS; at++) {
+    const r = stockRoom(out.works, roomId, out.inv, at)
+    if (r.moved) out = { works: r.works, inv: r.inv, moved: out.moved + r.moved }
+  }
+  return out
+}
+/** Store stack k → the bag; what the bag cannot take stays. */
+export function takeFromRoom(w: Works, roomId: string, k: number, inv: Inv): StoreMove {
+  const r = w.rooms.find(x => x.id === roomId)
+  if (!r) return { works: w, inv, moved: 0, why: '' }
+  const t = withdraw(roomStore(r), k, inv)
+  if (!t.moved) return { works: w, inv, moved: 0, why: 'No room in the bag.' }
+  return { works: setStore(w, roomId, t.bank), inv: t.inv, moved: t.moved }
+}
+/** How many of `id` the bench can reach: the room's store and the bag together. */
+export const benchCount = (r: Room, inv: Inv, id: string) => roomStore(r).stacks.reduce((a, s) => a + (s.id === id ? s.n : 0), 0) + countOf(inv, id)
+/** Cut ONE food into bait at the Rinnshop bench: from the room's store first, else the bag. The bait goes to the bag (you
+ *  cast from your hands); if the bag is full it waits in the store. Null when there is nothing to cut or nowhere for it. */
+export function makeBaitAt(w: Works, roomId: string, inv: Inv, id: string): { works: Works; inv: Inv; made: number } | null {
+  const r = w.rooms.find(x => x.id === roomId), made = BAIT_FROM[id]
+  if (!r || r.kind !== 'rinnshop' || !made) return null
+  let store = roomStore(r), bag: Inv | null = inv
+  const k = store.stacks.findIndex(s => s.id === id)
+  if (k >= 0) store = { v: 1, stacks: store.stacks.flatMap((s, i) => (i !== k ? [s] : s.n > 1 ? [{ ...s, n: s.n - 1 }] : [])) }
+  else { bag = take(inv, id, 1); if (!bag) return null }
+  const g = give(bag, 'bait', made)
+  let left = g.left
+  if (left > 0) { const p = putIn(store, ROOM_STORE_SLOTS, 'bait', left); store = p.bank; left = p.left }
+  return left > 0 ? null : { works: setStore(w, roomId, store), inv: g.inv, made }
+}
+
 // ── save: garden-tied (the garden is shared across a roster; Alex 11-17), registered in GARDEN_KEY_SPECS ─────────────
 export const WORKS_KEY = 'open.works.v1'
 export function loadWorks(): Works {
   try {
     const v = JSON.parse(localStorage.getItem(gardenKey(WORKS_KEY)) ?? 'null')
     if (v?.v === 1 && Array.isArray(v.rooms)) return {
-      v: 1, rooms: v.rooms.filter((r: Room) => r && r.kind in ROOMS && Number.isFinite(r.x) && Number.isFinite(r.z)),
+      v: 1, rooms: v.rooms.filter((r: Room) => r && r.kind in ROOMS && Number.isFinite(r.x) && Number.isFinite(r.z))
+        .map((r: Room) => (r.store ? { ...r, store: adoptBank({ v: 1, stacks: r.store }).stacks } : r)),
       // chests arrived after rooms (11-17): an older save has none
       chests: Array.isArray(v.chests) ? v.chests.filter((c: Chest) => c && typeof c.id === 'string' && Number.isFinite(c.x) && Number.isFinite(c.z)) : [],
     }

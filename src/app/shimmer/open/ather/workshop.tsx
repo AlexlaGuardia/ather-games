@@ -20,6 +20,7 @@ import { GROUND_Y } from './plot'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
   WALL_H, type Works, type Room, type RoomKind, type WorkNear,
+  ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
 import {
@@ -333,22 +334,26 @@ function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: (
 }
 
 function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
-  const inv = useInv(), def = ROOMS[room.kind]
-  const foods = Object.keys(BAIT_FROM).filter(id => countOf(inv, id) > 0)
+  const inv = useInv(), w = useWorks(), def = ROOMS[room.kind]
+  const r = w.rooms.find(x => x.id === room.id) ?? room   // the live room (its store moves under the panel)
+  const store = roomStore(r)
+  const apply = (m: StoreMove) => { if (m.moved) { setWorks(m.works); setInv(m.inv) } else if ('why' in m && m.why) hudSay(m.why, 'info') }
+  const foods = Object.keys(BAIT_FROM).filter(id => benchCount(r, inv, id) > 0)
+  const kept = [...Array(SLOTS).keys()].filter(at => { const s = inv.slots[at]; return !!s && roomAccepts(r.kind, s.id) })
   return (
-    <HearthFrame title={def.name} maxWidth={520} onClose={onClose} fixed dataPanel="bench">
+    <HearthFrame title={def.name} maxWidth={560} onClose={onClose} fixed dataPanel="bench">
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
-        {room.kind === 'rinnshop' && (
+        {r.kind === 'rinnshop' && (
           <>
             <div>
               <div style={lab}>Bait · {countOf(inv, 'bait')} in the bag</div>
-              <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>An offering the rinn come to. One a cast.</div>
+              <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>An offering the rinn come to. One a cast. Cut from the room's store first, then your bag.</div>
               {foods.length ? (
                 <div style={{ display: 'grid', gap: 6 }}>
                   {foods.map(id => (
                     <div key={id} data-bait-from={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ flex: 1, fontSize: 13.5, color: H.ink }}>{itemDef(id).name} <span style={{ color: H.inkSoft }}>× {countOf(inv, id)}</span></span>
-                      <HearthButton small onClick={() => { const r = makeBait(getInv(), id); if (r) setInv(r.inv) }}>Make bait +{BAIT_FROM[id]}</HearthButton>
+                      <span style={{ flex: 1, fontSize: 13.5, color: H.ink }}>{itemDef(id).name} <span style={{ color: H.inkSoft }}>× {benchCount(r, inv, id)}</span></span>
+                      <HearthButton small onClick={() => { const m = makeBaitAt(getW(), r.id, getInv(), id); if (m) { setWorks(m.works); setInv(m.inv) } else hudSay('No room for the bait.', 'info') }}>Make bait +{BAIT_FROM[id]}</HearthButton>
                     </div>
                   ))}
                 </div>
@@ -360,6 +365,25 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
             </div>
           </>
         )}
+        <div data-room-store={r.kind}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ ...lab, flex: 1 }}>The store · {store.stacks.length} / {ROOM_STORE_SLOTS} · keeps {ROOM_KEEPS[r.kind]}</div>
+            <span data-act="stock-room"><HearthButton small disabled={!kept.some(at => at >= HOTBAR)} onClick={() => apply(stockRoomFromBag(getW(), r.id, getInv()))}>Stock from the bag</HearthButton></span>
+          </div>
+          {store.stacks.length ? (
+            <div style={{ ...grid, marginTop: 6 }}>
+              {store.stacks.map((st, k) => <Cell key={k} s={st} data-room-slot={k} onClick={() => apply(takeFromRoom(getW(), r.id, k, getInv()))} />)}
+            </div>
+          ) : <div style={{ fontSize: 12.5, color: H.inkFaint, marginTop: 6 }}>Empty. The room works from what you keep here.</div>}
+          {kept.length > 0 && (
+            <>
+              <div style={{ ...lab, marginTop: 10 }}>From your bag · click to stock</div>
+              <div style={{ ...grid, marginTop: 6 }}>
+                {kept.map(at => <Cell key={at} s={inv.slots[at]} data-bag-slot={at} onClick={() => apply(stockRoom(getW(), r.id, getInv(), at))} />)}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </HearthFrame>
   )
