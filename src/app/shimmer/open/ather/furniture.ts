@@ -29,13 +29,18 @@ export const REFINE: readonly Job[] = [
 export interface PieceDef {
   name: string
   blurb: string
+  /** what the carpentry bench takes; EMPTY = not craftable (a shop piece) */
   recipe: readonly Cost[]
+  /** a UNIQUE piece: bought for Marks at a Nyx-side storefront (business/doors.ts › FRONT_SHOPS id), never made */
+  sold?: { at: string; price: number }
   /** footprint before turning (m): w across, d front to back; h for the walker's box */
   w: number; d: number; h: number
   /** false = you can walk through it (a stool, an arch) */
   solid: boolean
   /** the wood it is made of, for the look */
-  wood: 'goldwood' | 'shimmeroak' | 'starwillow' | 'dawnwood'
+  wood: 'goldwood' | 'shimmeroak' | 'starwillow' | 'dawnwood' | 'iron' | 'stone'
+  /** it gives off light (drawn lit) */
+  glow?: string
 }
 // Goldwood pieces first: goldwood is what a new keeper can prune (Forestry 1), so a first piece is never a locked door.
 export const FURNITURE: Readonly<Record<string, PieceDef>> = {
@@ -46,10 +51,23 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   shimmeroak_shelf: { name: 'Shimmeroak Shelf', blurb: 'Rippled grain that catches the light on every board.', recipe: [{ id: 'shimmeroak_plank', n: 4 }], w: 1.2, d: 0.4, h: 1.6, solid: true, wood: 'shimmeroak' },
   starwillow_arch: { name: 'Starwillow Arch', blurb: 'Bent branches, tips faintly lit. Walk under it on the way home.', recipe: [{ id: 'starwillow_branch', n: 6 }], w: 2.2, d: 0.5, h: 2.6, solid: false, wood: 'starwillow' },
   dawnwood_chair: { name: 'Dawnwood Chair', blurb: 'Ancient wood that holds warmth. Sit in it once and you will keep it.', recipe: [{ id: 'dawnwood_plank', n: 4 }], w: 0.6, d: 0.6, h: 1.0, solid: false, wood: 'dawnwood' },
+  // ── UNIQUE pieces, Nyx-side (Alex 11-17: "unique pieces are SOLD FOR MARKS by the carpenter + other Nyx-side shops";
+  //    Magii c52ba1c: which shops stock decor is ours, no new names). Made of the continent's canon goods (game/economy.md:
+  //    Spine ore + stone, ruin salvage, station mana cells), so each says where it came from. Rune Hold's Smithy is the
+  //    first shop a keeper reaches; the Citadel's Grand Exchange is the capital's dearer stock. Prices on the ladder's
+  //    scale (economy/prices.ts: a contract run pays ~2-8k): a lantern is a run, a mana-cell lamp is a week.
+  iron_lantern: { name: 'Iron Lantern', blurb: 'Smith-wrought, on its own post. A small fire that never needs feeding.', recipe: [], sold: { at: 'smithy', price: 1_200 }, w: 0.4, d: 0.4, h: 1.9, solid: false, wood: 'iron', glow: '#ffcf7a' },
+  iron_brazier: { name: 'Brazier', blurb: 'A bowl of hammered iron on three legs, warm to stand by.', recipe: [], sold: { at: 'smithy', price: 2_500 }, w: 0.8, d: 0.8, h: 1.0, solid: true, wood: 'iron', glow: '#ff9a4a' },
+  weathervane: { name: 'Weathervane', blurb: 'An iron arrow on a tall pole. It points at the wind, wherever that is.', recipe: [], sold: { at: 'smithy', price: 4_000 }, w: 0.4, d: 0.4, h: 3.2, solid: false, wood: 'iron' },
+  spinestone_birdbath: { name: 'Spinestone Birdbath', blurb: 'Grey stone from the Spine, cut into a shallow bowl.', recipe: [], sold: { at: 'grand-exchange', price: 6_000 }, w: 0.8, d: 0.8, h: 0.9, solid: true, wood: 'stone' },
+  ruin_column: { name: 'Salvaged Column', blurb: 'A carved column out of an old ruin. Nobody remembers what it held up.', recipe: [], sold: { at: 'grand-exchange', price: 9_000 }, w: 0.7, d: 0.7, h: 2.6, solid: true, wood: 'stone' },
+  mana_cell_lamp: { name: 'Mana-cell Lamp', blurb: 'A station mana cell in a brass cage. It hums very quietly.', recipe: [], sold: { at: 'grand-exchange', price: 15_000 }, w: 0.5, d: 0.5, h: 1.6, solid: false, wood: 'iron', glow: '#8fe3ff' },
 }
 export const FURNITURE_ORDER = Object.keys(FURNITURE)
 export const isPiece = (id: string) => id in FURNITURE
+/** What a storefront stocks (its FRONT_SHOPS id). */
+export const stockOf = (front: string) => FURNITURE_ORDER.filter(id => FURNITURE[id].sold?.at === front)
 /** Each piece as a carpentry job: its recipe in, one piece out. */
-export const PIECE_JOBS: readonly Job[] = FURNITURE_ORDER.map(id => ({ id, label: FURNITURE[id].name, in: FURNITURE[id].recipe, out: { id, n: 1 } }))
+export const PIECE_JOBS: readonly Job[] = FURNITURE_ORDER.filter(id => FURNITURE[id].recipe.length > 0).map(id => ({ id, label: FURNITURE[id].name, in: FURNITURE[id].recipe, out: { id, n: 1 } }))
 /** How many pieces a plot holds (a keeper furnishes, not fills). */
 export const MAX_PIECES = 60

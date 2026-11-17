@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A weathervane. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <rect x="15.2" y="8" width="1.6" height="19" rx="0.3" fill="#4e4a47" stroke="#26231f" stroke-width=".8"/><path d="M5 7 L25 7 L25 5 L29 7.6 L25 10 L25 8.4 L5 8.4 Z" fill="#77716b" stroke="#26231f" stroke-width=".7"/><path d="M5 4.4 L9 7.6 L5 11 Z" fill="#4e4a47" stroke="#26231f" stroke-width=".6"/><rect x="11" y="26" width="10" height="2" rx="0.6" fill="#4e4a47" stroke="#26231f" stroke-width=".8"/>
+</svg>

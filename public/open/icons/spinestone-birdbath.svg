@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A Spinestone birdbath. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <rect x="10" y="25" width="12" height="2.6" rx="0.6" fill="#bdb6a6" stroke="#7c7566" stroke-width=".8"/><rect x="13.6" y="15" width="4.8" height="10.4" rx="0.8" fill="#dcd6c8" stroke="#7c7566" stroke-width=".8"/><path d="M4 11 L28 11 L23 16 L9 16 Z" fill="#dcd6c8" stroke="#7c7566" stroke-width=".8"/><ellipse cx="16" cy="11.2" rx="11" ry="1.6" fill="#9fd0e8" stroke="#7c7566" stroke-width=".6"/>
+</svg>

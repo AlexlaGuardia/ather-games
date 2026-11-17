@@ -17,6 +17,10 @@ export { FRONT_SHOPS } from './doors'
 import { HearthFrame, H, hearthDisplay, HearthButton } from '../../ui/hearth'
 import { hudSay } from '../shared/game-hud'
 import type { Ledger } from '../trade'
+import { FURNITURE, stockOf } from '../ather/furniture'
+import { itemDef } from '../shared/inventory'
+import { getInv, setInv, useInv } from '../shared/bag'
+import { buyDecor } from './decor-shop'
 
 /** a ticket to the Starforge (an emergency-fund sized price, Alex 11-16). TODO(world): move onto economy/prices.ts LADDER */
 export const STARFORGE_TICKET = 250
@@ -38,6 +42,7 @@ export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
       </div>
     </HearthFrame>
   )
+  if (stockOf(id).length) return <DecorShop id={id} ledger={ledger} setLedger={setLedger} onClose={onClose} />
   return (
     <HearthFrame title={shop.name} maxWidth={380} onClose={onClose} fixed dataPanel="shop-panel">
       <div className="px-4 pt-4 pb-5 text-[14px] leading-snug" style={{ color: H.ink }} data-shop={id} data-closed>
@@ -127,6 +132,43 @@ function TemplePanel({ ledger, setLedger, onClose }: { ledger: Ledger; setLedger
               {!c.go && <div className="text-[12px] mt-2 font-semibold" style={hearthDisplay} data-closed>Closed for now.</div>}
             </button>
           ))}
+        </div>
+      </div>
+    </HearthFrame>
+  )
+}
+
+/** A storefront that stocks DECOR (ather/furniture.ts › sold): unique pieces for the plot, bought for Marks into the bag.
+ *  Rune Hold's Smithy (ironwork) and the Citadel's Grand Exchange (stone + mana-cell pieces). */
+function DecorShop({ id, ledger, setLedger, onClose }: { id: string; ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void }) {
+  const shop = FRONT_SHOPS[id], inv = useInv()
+  const [msg, setMsg] = useState<string | null>(null)
+  return (
+    <HearthFrame title={shop.name} maxWidth={500} onClose={onClose} fixed dataPanel="shop-panel">
+      <div className="px-4 pt-5 pb-4 text-[14px] leading-snug" style={{ color: H.ink }} data-shop={id} data-decor>
+        {shop.line && <p style={{ ...hearthDisplay, color: H.inkSoft }}>{shop.line}</p>}
+        <p className="mt-1 text-[12.5px]" style={{ color: H.inkSoft }}>Pieces for your plot. Set them from the planning table at home.</p>
+        <div className="mt-3 grid gap-2">
+          {stockOf(id).map(pid => {
+            const f = FURNITURE[pid], price = f.sold!.price, d = itemDef(pid), have = inv.slots.reduce((a, x) => a + (x?.id === pid ? x.n : 0), 0)
+            return (
+              <div key={pid} data-decor-item={pid} className="flex items-center gap-3 rounded-[12px] px-3 py-2" style={{ background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+                {d.icon ? <img src={d.icon} alt="" width={36} height={36} /> : null}
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{f.name}{have ? <span style={{ color: H.inkSoft }}> · {have} in the bag</span> : null}</div>
+                  <div className="text-[12.5px]" style={{ color: H.inkSoft }}>{f.blurb}</div>
+                </div>
+                <HearthButton small primary disabled={ledger.marks < price} onClick={() => {
+                  const r = buyDecor(ledger, getInv(), pid, id)
+                  if (r.ok) { setLedger(r.ledger); setInv(r.inv); setMsg(`${f.name} · in your bag.`); hudSay(`${f.name} · in your bag.`, 'item') } else setMsg(r.why)
+                }}>{price.toLocaleString()} Marks</HearthButton>
+              </div>
+            )
+          })}
+        </div>
+        <div className="mt-3 flex items-center text-[12.5px]" style={{ color: H.inkSoft }}>
+          <span className="flex-1" data-shop-msg>{msg ?? ''}</span>
+          <span className="tabular-nums">Purse · {ledger.marks.toLocaleString()} Marks</span>
         </div>
       </div>
     </HearthFrame>

@@ -289,7 +289,7 @@ function ChestGhost({ pose, owned, q }: { pose: React.MutableRefObject<Pose>; ow
   )
 }
 
-const WOODS: Record<string, string> = { goldwood: '#d9a957', shimmeroak: '#a77a52', starwillow: '#c8d2e8', dawnwood: '#c9774a' }
+const WOODS: Record<string, string> = { goldwood: '#d9a957', shimmeroak: '#a77a52', starwillow: '#c8d2e8', dawnwood: '#c9774a', iron: '#4e4a47', stone: '#bdb6a6' }
 const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, number]; c: string }) => <mesh position={p}><boxGeometry args={s} /><meshLambertMaterial color={c} /></mesh>
 /** One piece, built from boxes in its wood's colour. Blockout look like the rooms. */
 function PieceBody({ item }: { item: string }) {
@@ -303,6 +303,12 @@ function PieceBody({ item }: { item: string }) {
     case 'shimmeroak_shelf': return <><Bx p={[-f.w / 2 + 0.04, f.h / 2, 0]} s={[0.07, f.h, f.d]} c={c} /><Bx p={[f.w / 2 - 0.04, f.h / 2, 0]} s={[0.07, f.h, f.d]} c={c} />{[0.1, 0.6, 1.1, 1.56].map(y => <Bx key={y} p={[0, y, 0]} s={[f.w, 0.05, f.d]} c={c} />)}<Bx p={[0, f.h / 2, -f.d / 2 + 0.02]} s={[f.w, f.h, 0.03]} c={dk} /></>
     case 'starwillow_arch': return <><Bx p={[-f.w / 2 + 0.08, f.h / 2, 0]} s={[0.12, f.h, 0.12]} c={c} /><Bx p={[f.w / 2 - 0.08, f.h / 2, 0]} s={[0.12, f.h, 0.12]} c={c} /><Bx p={[0, f.h - 0.06, 0]} s={[f.w, 0.12, 0.14]} c={c} />{[-0.7, 0, 0.7].map(x => <mesh key={x} position={[x, f.h + 0.04, 0]}><sphereGeometry args={[0.07, 8, 6]} /><meshBasicMaterial color="#eaf2ff" /></mesh>)}</>
     case 'dawnwood_chair': return <><Bx p={[0, 0.45, 0]} s={[0.52, 0.07, 0.52]} c={c} />{legs(0.48, 0.48, 0.42)}<Bx p={[0, 0.75, -0.23]} s={[0.52, 0.6, 0.06]} c={c} /></>
+    case 'iron_lantern': return <><Bx p={[0, 0.85, 0]} s={[0.07, 1.7, 0.07]} c={c} /><Bx p={[0, 1.72, 0]} s={[0.26, 0.04, 0.26]} c={c} /><mesh position-y={1.56}><boxGeometry args={[0.2, 0.26, 0.2]} /><meshBasicMaterial color={f.glow} /></mesh><Bx p={[0, 1.42, 0]} s={[0.24, 0.04, 0.24]} c={c} /><Bx p={[0, 0.03, 0]} s={[0.3, 0.06, 0.3]} c={c} /></>
+    case 'iron_brazier': return <>{[0, 1, 2].map(k => <Bx key={k} p={[Math.sin(k * 2.094) * 0.25, 0.3, Math.cos(k * 2.094) * 0.25]} s={[0.06, 0.6, 0.06]} c={c} />)}<mesh position-y={0.7}><cylinderGeometry args={[0.4, 0.22, 0.24, 10]} /><meshLambertMaterial color={c} /></mesh><mesh position-y={0.84}><coneGeometry args={[0.24, 0.32, 8]} /><meshBasicMaterial color={f.glow} /></mesh></>
+    case 'weathervane': return <><Bx p={[0, 1.5, 0]} s={[0.06, 3, 0.06]} c={c} /><Bx p={[0, 3.05, 0]} s={[0.9, 0.05, 0.05]} c={c} /><mesh position={[0.48, 3.05, 0]} rotation-z={-Math.PI / 2}><coneGeometry args={[0.08, 0.18, 4]} /><meshLambertMaterial color={c} /></mesh><Bx p={[-0.42, 3.05, 0]} s={[0.12, 0.16, 0.02]} c={c} /><Bx p={[0, 0.04, 0]} s={[0.36, 0.08, 0.36]} c={c} /></>
+    case 'spinestone_birdbath': return <><Bx p={[0, 0.06, 0]} s={[0.6, 0.12, 0.6]} c={c} /><mesh position-y={0.45}><cylinderGeometry args={[0.12, 0.16, 0.7, 8]} /><meshLambertMaterial color={c} /></mesh><mesh position-y={0.82}><cylinderGeometry args={[0.4, 0.26, 0.14, 10]} /><meshLambertMaterial color={c} /></mesh><mesh position-y={0.895} rotation-x={-Math.PI / 2}><circleGeometry args={[0.33, 10]} /><meshBasicMaterial color="#9fd0e8" /></mesh></>
+    case 'ruin_column': return <><Bx p={[0, 0.1, 0]} s={[0.7, 0.2, 0.7]} c={c} /><mesh position-y={1.3}><cylinderGeometry args={[0.24, 0.27, 2.2, 10]} /><meshLambertMaterial color={c} /></mesh><Bx p={[0, 2.5, 0]} s={[0.66, 0.18, 0.66]} c={c} /><Bx p={[0.18, 2.62, 0.1]} s={[0.3, 0.1, 0.36]} c="#a39c8c" /></>
+    case 'mana_cell_lamp': return <><Bx p={[0, 0.04, 0]} s={[0.4, 0.08, 0.4]} c="#a4793e" /><Bx p={[0, 0.6, 0]} s={[0.05, 1.1, 0.05]} c="#a4793e" /><mesh position-y={1.32}><cylinderGeometry args={[0.1, 0.1, 0.34, 8]} /><meshBasicMaterial color={f.glow} /></mesh>{[0, 1, 2, 3].map(k => <Bx key={k} p={[Math.sin(k * 1.571) * 0.13, 1.32, Math.cos(k * 1.571) * 0.13]} s={[0.025, 0.42, 0.025]} c="#a4793e" />)}<Bx p={[0, 1.54, 0]} s={[0.3, 0.04, 0.3]} c="#a4793e" /></>
     default: return <Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={c} />
   }
 }

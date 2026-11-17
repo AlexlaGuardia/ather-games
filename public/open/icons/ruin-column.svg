@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A salvaged ruin column. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <rect x="8" y="24.5" width="16" height="3" rx="0.4" fill="#bdb6a6" stroke="#7c7566" stroke-width=".8"/><rect x="10.5" y="7" width="11" height="17.6" rx="0.4" fill="#dcd6c8" stroke="#7c7566" stroke-width=".8"/><path d="M13.2 7.4 L13.2 24.4" stroke="#7c7566" stroke-width=".6" opacity=".6"/><path d="M16 7.4 L16 24.4" stroke="#7c7566" stroke-width=".6" opacity=".6"/><path d="M18.8 7.4 L18.8 24.4" stroke="#7c7566" stroke-width=".6" opacity=".6"/><path d="M8 3.6 L24 3.6 L24 7 L8 7 Z M18 3.6 L21 1.8 L24 3.6" fill="#bdb6a6" stroke="#7c7566" stroke-width=".8"/>
+</svg>
