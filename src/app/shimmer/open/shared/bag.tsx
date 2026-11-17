@@ -10,7 +10,7 @@ import React, { useState, useSyncExternalStore } from 'react'
 import { HearthFrame, HearthLabel, Well, H, hearthDisplay } from '../../ui/hearth'
 import type { HotbarEntry } from '../../hud/hotbar'
 import { loadWaymarks } from '../ather/waymarks'
-import { HOTBAR, BAG, SLOTS, itemDef, loadInv, saveInv, move, split, quickMove, type Inv } from './inventory'
+import { HOTBAR, BAG, SLOTS, itemDef, loadInv, saveInv, move, split, quickMove, makeBait, BAIT_FROM, type Inv } from './inventory'
 
 // ── the store ────────────────────────────────────────────────────────────────────────────────────────────────
 let inv: Inv | null = null
@@ -102,6 +102,14 @@ export function BagBody({ sel }: { sel: number }) {
                 <div className="text-[16px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{d.name}{shown.n > 1 ? <span style={{ color: H.inkSoft }}> × {shown.n}</span> : null}</div>
                 <div className="text-[12.5px] leading-snug" style={{ color: H.inkSoft }}>{d.blurb}</div>
               </div>
+              {BAIT_FROM[shown.id] ? (
+                // BETA M6e: bait is MADE (inventory.ts › makeBait). One per tap; the card stays on the slot.
+                <button type="button" data-act="make-bait" className="ml-auto shrink-0 rounded-[10px] px-3 py-2 text-[13px] font-semibold"
+                  style={{ ...hearthDisplay, color: H.ink, background: 'rgba(255,250,235,.85)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}
+                  onClick={() => { const r = makeBait(i, shown.id); if (r) setInv(r.inv) }}>
+                  Make bait +{BAIT_FROM[shown.id]}
+                </button>
+              ) : null}
             </>
           ) : <div className="text-[12.5px]" style={{ color: H.inkFaint }}>Nothing picked. Choose a slot to see what is in it.</div>}
         </div>

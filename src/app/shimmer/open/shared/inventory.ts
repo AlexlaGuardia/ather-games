@@ -50,7 +50,7 @@ Object.assign(OPEN_ITEMS, FORESTRY)
 //    Icons: public/open/icons/<id with dashes>.svg, drawn by tools/art/rinn_icons.py (asleep, never dead: shimmer-resources.md).
 const catchOf = (name: string, blurb: string): ItemDef => ({ name, blurb, icon: '', stack: 99, kind: 'material' })
 const RINNING: Record<string, ItemDef> = {
-  bait: { name: 'Bait', blurb: 'Hold it and click the water to cast. One bait a cast.', icon: '', stack: 99, kind: 'material' },
+  bait: { name: 'Bait', blurb: 'Hold it and click the water to cast. One bait a cast. Make more here from a small catch or forage.', icon: '', stack: 99, kind: 'material' },
   shimmerscale: catchOf('Shimmerscale', 'Tiny, warm-scaled. Schools of them catch the light.'),
   clickclaw: catchOf('Clickclaw', 'Small crustacean. Clicks when annoyed. Surprisingly tasty.'),
   glowfin: catchOf('Glowfin', 'Soft bioluminescent scales. Nutritious. Spirits love it raw.'),
@@ -81,8 +81,18 @@ Object.assign(OPEN_ITEMS, PROSPECTING)
 //    the catch table so a name or a line lives in one place. Clickclaw is already a row (the Ather's): one row, two shores.
 //    Icons: tools/art/nyx_rinn_icons.py.
 for (const n of NYX_RINN) if (!OPEN_ITEMS[n.id]) OPEN_ITEMS[n.id] = { name: n.name, blurb: n.blurb, icon: `/open/icons/${n.id.replace(/_/g, '-')}.svg`, stack: 99, kind: 'material' }
-/** Bait a new keeper starts with (and an older bag is handed once). Where more comes from is open (Alex, 11-15). */
+/** Bait a new keeper starts with (and an older bag is handed once). More is MADE in the bag: see BAIT_FROM. */
 export const STARTING_BAIT = 10
+// ── BAIT IS MADE (BETA M6e, 2026-11-17). Canon: bait is a food OFFERING, craftable, one per cast (game/shimmer-skilling.md
+//    :563; Magii [RULED-AFK] 65d4c21); which foods + rates are Jin's. Two sources ON PURPOSE: a small catch (the loop feeds
+//    itself) and FORAGE off a pruned tree (Alex 11-17), because a rinn can get away and a keeper who spends all ten bait
+//    without landing one would otherwise have no food to cut: a dead end. Only tier-1 catches: a moonkoi is worth more
+//    landed than cut. Made in the bag for now; its home is the Rinnshop (glossary, 11-17) once the room stands.
+// ⚠ 'forage' is a PLACEHOLDER name (CANON_GAPS [OPEN] 11-17: what a pruned Ather tree drops that a rinn will eat).
+OPEN_ITEMS.forage = { name: 'Forage', blurb: 'Something edible shaken loose from a pruned tree. Make bait from it in the bag.', icon: '', stack: 99, kind: 'material' }
+export const BAIT_FROM: Readonly<Record<string, number>> = { forage: 2, shimmerscale: 3, clickclaw: 3, glowfin: 3 }
+/** What the HUD says when the last bait is gone: where more comes from, so it is never a dead end. */
+export const NO_BAIT_LINE = 'No bait left. Make more in the bag from a small catch, or forage off a pruned tree.'
 export const itemDef = (id: string): ItemDef => OPEN_ITEMS[id] ?? { name: id.replace(/_/g, ' '), blurb: '', icon: '', stack: 99, kind: 'material' }
 
 export const HOTBAR = 8, BAG = 24, SLOTS = HOTBAR + BAG
@@ -121,6 +131,13 @@ export function take(inv: Inv, id: string, n: number): Inv | null {
     if (s.n === 0) out.slots[i] = null
   }
   return out
+}
+/** Cut ONE of `id` into bait (BAIT_FROM). Null when it is not bait food, the bag has none, or the bait would not fit. */
+export function makeBait(inv: Inv, id: string): { inv: Inv; made: number } | null {
+  const made = BAIT_FROM[id]; if (!made) return null
+  const less = take(inv, id, 1); if (!less) return null
+  const r = give(less, 'bait', made)
+  return r.left > 0 ? null : { inv: r.inv, made }
 }
 /** Drop the stack at `from` onto `to`: merge into a matching stack (overflow stays behind), else swap. */
 export function move(inv: Inv, from: number, to: number): Inv {

@@ -18,7 +18,7 @@ import { RinningFX, type RinningApi } from '../shared/rinning-fx'
 import { ReelBar } from '../shared/reel-bar'
 import type { Rinn, Reel } from '../shared/reel'
 import { getInv, setInv } from '../shared/bag'
-import { give, take, countOf } from '../shared/inventory'
+import { give, take, countOf, NO_BAIT_LINE } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
 import { addOpenXp, openLevel } from '../ather/forestry'
 import { BAIT } from '../ather/rinning'
@@ -51,8 +51,8 @@ export function useNyxRinning(R: Region | null, held: string | null, active: boo
       if (v.phase !== 'idle' && v.phase !== 'landed' && v.phase !== 'gone') return
       if (!v.aim) { hudSay('Aim at open water to cast.', 'info'); return }
       const spent = take(getInv(), BAIT, 1)
-      if (!spent) { hudSay('No bait left.', 'info'); return }
-      if (r.cast()) setInv(spent)
+      if (!spent) { hudSay(NO_BAIT_LINE, 'info'); return }
+      if (r.cast()) { setInv(spent); if (!countOf(spent, BAIT)) hudSay(NO_BAIT_LINE, 'info') }   // the last bait: where more comes from
   }, [])
   useEffect(() => {
     const down = (e: MouseEvent) => {

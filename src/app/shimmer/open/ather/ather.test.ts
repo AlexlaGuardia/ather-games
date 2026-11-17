@@ -14,7 +14,7 @@ import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVE
 import { placeNodes, nodeAdjacency, ownerOf, nodeRegions, polyArea, NODE_CLEAR_OF, GAME_DAY_MS, SUB } from './nodes'
 import { advance, clearAt, freshSpread, infectedIds, SPREAD } from './spread'
 import { readGarden, gardenText } from './garden-snapshot'
-import { treeFor, prune, forestryLevel, _resetForestry, SAPLING_CHANCE, PRUNE_RANGE, MANA_COST, type Zone } from './forestry'
+import { treeFor, prune, forestryLevel, _resetForestry, SAPLING_CHANCE, FORAGE_CHANCE, PRUNE_RANGE, MANA_COST, type Zone } from './forestry'
 import { clusterFrame, clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow, D, MIDDLE_HALF, type Quarter } from './cluster'
 import { pathDist, PATH_W, meadowHeightAt } from './meadow'
 import { makeWorld, stream, tileOf, TILE_M, SEA_FLOOR, type TileIndex } from './wilds-world'
@@ -671,6 +671,9 @@ const worldDone = (async () => {
   const hi = prune('goldwood', 'test:hi', () => 0.99, now)
   ok(hi.ok && hi.drops.length === 1 && hi.drops[0].id === 'goldwood_log' && hi.drops[0].n === 4, 'prune: a high roll paid a sapling or not 4 logs')
   ok(Object.values(SAPLING_CHANCE).every(c => c > 0 && c <= 0.1), 'prune: a sapling chance is not SMALL (a pruned tree regrows in minutes)')
+  // BETA M6e: forage is bait's floor (a keeper out of bait with nothing landed): a roll of 0 pays one, a high roll none
+  ok(g.ok && g.drops.some(d => d.id === 'forage' && d.n === 1) && hi.ok && !hi.drops.some(d => d.id === 'forage'), 'prune: forage did not drop under its chance (or dropped over it)')
+  ok(FORAGE_CHANCE >= 0.2 && FORAGE_CHANCE <= 0.5, 'prune: forage is too rare to be a floor or common enough to farm')
   ok(PRUNE_RANGE === 10 && MANA_COST > 0, 'prune: the reach is not 10 m or pruning is free')
   ok(!prune('goldwood', 'test:g0', () => 0, now + 1000).ok, 'prune: a pruned goldwood pruned again before it regrew')
   ok(prune('goldwood', 'test:g0', () => 0, now + 3 * 60_000).ok, 'prune: a goldwood never regrew')

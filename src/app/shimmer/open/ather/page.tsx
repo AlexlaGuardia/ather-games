@@ -61,7 +61,7 @@ import type { SkillSet } from '../../engine/skills'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
-import { give, take, itemDef, countOf } from '../shared/inventory'
+import { give, take, itemDef, countOf, NO_BAIT_LINE } from '../shared/inventory'
 import { BAIT, rollRinn, type Rinn } from './rinning'
 import { RinningFX, type RinningApi } from '../shared/rinning-fx'
 import type { Reel } from '../shared/reel'
@@ -511,8 +511,8 @@ export default function AtherSlice() {
     if (!toolsRef.current.rinning) { setToast('You have no rinstick.'); return }
     if (!v.aim) { setToast('Aim at open water to cast.'); return }
     const spent = take(getInv(), BAIT, 1)
-    if (!spent) { setToast('No bait left.'); return }
-    if (r.cast()) setInv(spent)
+    if (!spent) { setToast(NO_BAIT_LINE); return }
+    if (r.cast()) { setInv(spent); if (!countOf(spent, BAIT)) setToast(NO_BAIT_LINE) }   // the last bait: say where more comes from
   }, [zone.kind])
   const onCatch = useCallback((rn: Rinn) => {
     const perk = perkBonus('rinning')   // Truesight (Embermole / Prismstrike): a second of the same rinn
