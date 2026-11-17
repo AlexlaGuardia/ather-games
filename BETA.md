@@ -47,7 +47,7 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 **Belongs to the KEEPER** (swaps with the character): birth rune, learned runes + skills, worn gear, the hotbar AND the whole
 inventory/pack. **Belongs to the GARDEN** (the cluster; one per account, shared by every keeper on it): the plot, Moglins,
 storage, Marks, deeds/businesses, journal progress, explored map, forestry/prospecting world state.
-Canon: CANON_GAPS [OPEN] "More than one keeper in one garden" (athernyx f79b4da); build the plumbing, no lore words until ruled.
+Canon RULED 11-17 (athernyx 8d3ada7): a player-side convenience; unplayed keepers have no in-world state; one tends at a time; cap ~8.
 
 Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 1. ✅ **11-17 `88dcf26a`, live, beta-m7-saves PASS on prod.** **Scope the keys.** Today the open world's pack / hotbar / loadout live in UNSCOPED `open.*` keys (keeper-local.test's
@@ -106,7 +106,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 - **Alex 11-17: a RINNING ROOM** (craft rinsticks, make bait, prepare catches for the cooking room). Canon mostly settled
   (rinsticks built from rinn; roast rinn at the hearth; workshop rooms + Moglin trade). Magii asked (CANON_GAPS 4a9a621): 6th room
-  + its name, what bait is made of, which Moglin. Magii 11-17 (65d4c21): bait = craftable food offering (recipes ours) → row M6e; a Moglin never rins; the 6th room's name + Moglin = Alex's call (Magii asked him).
+  + its name, what bait is made of, which Moglin. Magii 11-17 (65d4c21): bait = craftable food offering (recipes ours) → row M6e; a Moglin never rins; RULED 8d3ada7: the **RINNSHOP** is the 6th workshop room (rinsticks, bait, catches readied for the hearth); a Moglin trade pairs with it; which Moglin/recipes/rod tiers = ours. Jin 2 (play lane) owns plot stations.
 
 - **M6a rinning (11-17):** works end to end, but (1) nothing tells a stranger rinning exists: they must open the bag and
   read the bait pouch (a journal line or welcome-card line would fix it: wording = @lark); (2) 10 bait at birth and NO
