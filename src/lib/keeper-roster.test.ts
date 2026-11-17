@@ -1,5 +1,5 @@
 // Keeper roster (M12 step 2). Run: npx tsx src/lib/keeper-roster.test.ts
-import { ROSTER_CAP, ROSTER_BASE, readRoster, ensureRoster, addKeeper, swapKeeper } from './keeper-roster'
+import { ROSTER_CAP, ROSTER_BASE, readRoster, ensureRoster, addKeeper, swapKeeper, keeperBirthRune } from './keeper-roster'
 import { KEEPER_KEYS, GARDEN_KEYS, keeperKeyFor } from './keeper-local'
 
 const A = 'u_aaaaaaaaaaaaaaaaaa'
@@ -80,6 +80,18 @@ ok(swapKeeper(k2, A) && st.getItem(live(PACK)) === '{"slots":["pine"]}' && st.ge
   ok(fin.active === other && !fin.pending && snap(st, keeperBases) === packBefore, 'ensureRoster finishes an interrupted swap')
 }
 
+// keeperBirthRune: the rune a roster keeper was born of, live for the active one, parked for the others, null if unborn
+{
+  const st2 = fakeStore({ [live(RUNE)]: 'rune-a' }); (globalThis as any).localStorage = st2
+  const first = ensureRoster(A)!.active
+  const second = addKeeper(A)!
+  ok(keeperBirthRune(first, A) === 'rune-a', 'active keeper: live rune read')
+  ok(keeperBirthRune(second, A) === null, 'new keeper: no rune (not yet born)')
+  swapKeeper(second, A); st2.setItem(live(RUNE), 'rune-b')
+  ok(keeperBirthRune(second, A) === 'rune-b', 'swapped-in keeper: live rune')
+  ok(keeperBirthRune(first, A) === 'rune-a', 'parked keeper: parked copy read')
+  ok(keeperBirthRune(first, null) === null, 'anonymous: null')
+}
 // unknown id, cap
 ok(!swapKeeper('k_nope', A), 'unknown id refused')
 let n = readRoster(A)!.keepers.length

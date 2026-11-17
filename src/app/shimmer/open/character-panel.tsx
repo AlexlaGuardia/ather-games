@@ -12,6 +12,7 @@ import { useBirth } from './birth-gate'
 import { RUNES, ELEMENTS } from '../play3d/birth/runes.data'
 import { RuneMark } from '../play3d/birth/RuneMark'
 import { CompanionSlot } from './companion-slot'
+import { KeepersSection } from './keepers-section'
 
 type SlotId = 'primary' | 'secondary' | 'tactical' | 'signature'
 const SLOT_LABEL: Record<SlotId, string> = { primary: 'Primary', secondary: 'Secondary', tactical: 'Tactical', signature: 'Signature' }
@@ -115,6 +116,7 @@ export function CharacterBody() {
       </div>
       <div className="mt-4"><HearthLabel>Companion</HearthLabel></div>
       <div className="mt-1.5"><CompanionSlot /></div>
+      <KeepersSection />
     </div>
   )
 }

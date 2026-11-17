@@ -25,6 +25,7 @@
 import { saveOwner } from './save-slot'
 import { keeperKeyFor } from './keeper-local'
 import { KEEPER_KEY_SPECS } from './keeper-key-specs'
+import { BIRTH_KEY } from '@/app/shimmer/play3d/rune-inventory'
 
 /** Most keepers one account may hold (docs/M12-cloud-save.md: cap 8). */
 export const ROSTER_CAP = 8
@@ -180,4 +181,16 @@ export function swapKeeper(toId: string, owner: string | null = saveOwner()): bo
     writeRoster(owner, { v: 1, keepers: r.keepers, active: toId })
     return true
   } catch { return false }   // interrupted: the journal (if written) lets the next ensureRoster() finish it
+}
+
+/** The birth rune id of a roster keeper: the live key for the active one, its parked copy for the others. Null = not yet born. Pure read. */
+export function keeperBirthRune(id: string, owner: string | null = saveOwner()): string | null {
+  if (!owner) return null
+  try {
+    const r = readRoster(owner)
+    if (!r) return null
+    const base = BIRTH_KEY
+    const k = r.active === id && !r.pending ? keeperKeyFor(base, owner) : parkedPrefix(owner, id) + base
+    return localStorage.getItem(k) || null
+  } catch { return null }
 }
