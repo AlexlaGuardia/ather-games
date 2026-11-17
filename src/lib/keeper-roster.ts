@@ -137,6 +137,28 @@ export function addKeeper(owner: string | null = saveOwner()): string | null {
   } catch { return null }
 }
 
+/**
+ * Add a keeper that ALREADY HAS DATA (M12 step 3: an anonymous keeper joining the roster). `data` is { base -> raw }.
+ * Order is the safety: the parked copies are written FIRST, the roster entry LAST, so a failure never leaves a listed
+ * keeper with half a body; on a throw the parked keys written so far are removed again. Never touches live keys or
+ * the active keeper. Null when anonymous, at ROSTER_CAP, or storage failed (nothing added).
+ */
+export function addKeeperWith(data: Map<string, string>, owner: string | null = saveOwner()): string | null {
+  const r = ensureRoster(owner)
+  if (!owner || !r || r.keepers.length >= ROSTER_CAP) return null
+  const id = newId()
+  const pre = parkedPrefix(owner, id)
+  const written: string[] = []
+  try {
+    for (const [base, v] of data) { localStorage.setItem(pre + base, v); written.push(pre + base) }
+    writeRoster(owner, { ...r, keepers: [...r.keepers, { id, created_at: Date.now() }] })
+    return id
+  } catch {
+    for (const k of written) { try { localStorage.removeItem(k) } catch { /* best effort */ } }
+    return null
+  }
+}
+
 /** Make `toId` the active keeper (see the file doc for the order). True when it is active afterwards. The page must reload. */
 export function swapKeeper(toId: string, owner: string | null = saveOwner()): boolean {
   const r = ensureRoster(owner)

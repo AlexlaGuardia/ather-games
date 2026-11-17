@@ -118,6 +118,7 @@ const DEVICE_KEYS = [
                                   // not. Scoping these per keeper would hand a returning player
                                   // default controls for no reason they could name.
   'ather:gfx:shimmer',            //   ″
+  'ather:roster:anon-declined',   // M12 step 3: "Not now" on the roster prompt, remembered per BROWSER (keeper-prompt.ts)
   'ather:shimmer:genWarned',      // one generator warning per browser is the point of it
   'ather:shimmer:justBorn',       // read and cleared inside one boot
   'ather:shimmer:birthPending',   // vestigial, cleared only so an old latch does not look meaningful

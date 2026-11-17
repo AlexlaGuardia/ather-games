@@ -16,6 +16,7 @@ import BirthScreen from '../play3d/birth/BirthScreen'
 import { loadRuneInventory } from '../play3d/rune-inventory'
 import { saveOwnerResolved, SAVE_OWNER_EVENT } from '@/lib/save-slot'
 import { stampEpochIfAbsent } from '@/lib/ather-epoch'
+import { RosterPrompt } from './roster-prompt'
 
 // ── the keeper's birth rune, as a store the open world can subscribe to ──────────────────────────────────────────
 let birth: string | null | undefined
@@ -34,6 +35,9 @@ const BORN_HOLD_MS = 2800
 
 /** Mount once per open-world page, outside the Canvas. Renders nothing for a keeper who is already born. */
 export function BirthGate() {
+  return <><BirthGateInner /><RosterPrompt /></>
+}
+function BirthGateInner() {
   const b = useBirth()
   const [mounted, setMounted] = useState(false)
   const [closing, setClosing] = useState<number | null>(null)
