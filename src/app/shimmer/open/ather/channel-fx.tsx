@@ -35,10 +35,11 @@ export function ChannelFocus({ focus }: { focus: MutableRefObject<FocusState> })
     // hang a touch toward the keeper from the work point, bob gently, face the keeper's side
     camera.getWorldPosition(tmp.current)
     const dx = tmp.current.x - f.x, dz = tmp.current.z - f.z, d = Math.hypot(dx, dz) || 1
-    const back = f.node === 'tree' ? 0.55 + kick * 0.25 : 0
-    grp.position.set(f.x + (dx / d) * back, f.y + Math.sin(now / 420) * 0.06 + (f.node === 'crystal' ? kick * 0.18 : 0), f.z + (dz / d) * back)
+    // a tree's focus stands off the trunk toward the keeper and a little to its RIGHT, so it reads against the bark, not on it
+    const back = f.node === 'tree' ? 0.85 + kick * 0.3 : 0, side = f.node === 'tree' ? 0.75 : 0
+    grp.position.set(f.x + (dx / d) * back + (dz / d) * side, f.y + Math.sin(now / 420) * 0.06 + (f.node === 'crystal' ? kick * 0.18 : 0), f.z + (dz / d) * back - (dx / d) * side)
     grp.rotation.set(0, Math.atan2(dx, dz), 0)
-    grp.scale.setScalar(appear.current * (1 + p * 0.18))
+    grp.scale.setScalar(appear.current * 1.5 * (1 + p * 0.18))
     if (blade.current) { blade.current.visible = f.node === 'tree'; blade.current.rotation.z = -0.5 + kick * 0.35 }
     if (spike.current) { spike.current.visible = f.node === 'crystal'; spike.current.rotation.y = now / 700 }
     const lit = 0.55 + 0.45 * p + 0.1 * Math.sin(now / 160)

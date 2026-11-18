@@ -38,30 +38,31 @@ await p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filt
 const chan = () => p.evaluate(() => (window as any).__ather.chan?.() ?? null) as Promise<{ id: string; done: number; of: number } | null>
 const logs = () => p.evaluate(() => (JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots as ({ id: string; n: number } | null)[]).reduce((a, s) => a + (s?.id === 'goldwood_log' ? s.n : 0), 0))
 const pruned = () => p.evaluate(id => Object.keys(JSON.parse(localStorage.getItem('open.pruned.v1') ?? '{}')).includes(id), gold.id)
-// 1. start from 6 m: the channel is on this tree; wait for the first chip to land
+// ⚠ headless draws a frame only when asked, seconds apart, so EVERY frame lands a whole chip: the check never waits on
+// pacing. It starts, takes ONE frame, walks off at once, and judges what the channel kept.
+// 1. start from 6 m: the channel is on this tree
 await aimFrom(gold, 6)
 res.aim = await p.evaluate(() => (window as any).__ather.aim())
-await p.evaluate(() => (window as any).__ather.prune()); await frame()
+await p.evaluate(() => (window as any).__ather.prune())
 res.started = await chan()
-for (let i = 0; i < 60 && ((await chan())?.done ?? 0) < 1; i++) await frame()
-for (let i = 0; i < 6; i++) await frame()   // let the chip's drops land
-try { await p.screenshot({ path: `${out}/ch-1-working.png` }) } catch { /* slow frame */ }
-res.afterChip1 = { chan: await chan(), logs: await logs(), pruned: await pruned() }
-// 2. walk off (20 m): it lets go; the tree is not spent; the logs stay
-await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), gold.x + 20, gold.z); await sleep(1500); await frame(); await frame()
+await frame()
+res.oneFrame = { chan: await chan(), pruned: await pruned() }
+// 2. walk off (20 m) at once: it lets go; the tree is not spent; what landed stays
+await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), gold.x + 20, gold.z); await sleep(800); await frame(); await frame(); await sleep(1500); await frame()
 res.walkedOff = { chan: await chan(), logs: await logs(), pruned: await pruned() }
-// 3. back, E again: the same work resumes and runs to the last chip
+// 3. back, E again: the SAME work resumes (its done count carries on) and runs to the last chip
 await aimFrom(gold, 6)
-await p.evaluate(() => (window as any).__ather.prune()); await frame()
+await p.evaluate(() => (window as any).__ather.prune())
 res.resumed = await chan()
 for (let i = 0; i < 120 && await chan(); i++) await frame()
-await sleep(1200); await frame()
+await sleep(1500); await frame(); await frame()
 res.finished = { chan: await chan(), logs: await logs(), pruned: await pruned() }
+try { await p.screenshot({ path: `${out}/ch-2-done.png` }) } catch { /* slow frame */ }
 console.log(JSON.stringify(res))
-const s = res.started as { id: string; done: number; of: number } | null, c1 = res.afterChip1 as { chan: typeof s; logs: number; pruned: boolean }
-const wo = res.walkedOff as typeof c1, r = res.resumed as typeof s, f = res.finished as typeof c1
+const s = res.started as { id: string; done: number; of: number } | null, o = res.oneFrame as { chan: typeof s; pruned: boolean }
+const wo = res.walkedOff as { chan: typeof s; logs: number; pruned: boolean }, r = res.resumed as typeof s, f = res.finished as typeof wo
 const pass = res.aim === gold.id && s?.id === gold.id && s.done === 0 && s.of >= 3
-  && c1.logs >= 1 && !c1.pruned && wo.chan === null && !wo.pruned && wo.logs === c1.logs
-  && r?.id === gold.id && r.done >= 1 && r.of === s.of && f.chan === null && f.pruned && f.logs >= 2 && f.logs <= 5
-console.log(pass ? 'PASS: E on a goldwood → the channel chips it (logs per chip) → walking off lets go (tree not spent, logs kept) → E resumes the SAME work → the last chip prunes it' : 'FAIL')
+  && !o.pruned && !!o.chan && wo.chan === null && !wo.pruned && wo.logs >= 1
+  && r?.id === gold.id && r.done >= 1 && r.done < r.of && r.of === s.of && f.chan === null && f.pruned && f.logs >= 2 && f.logs <= 5
+console.log(pass ? 'PASS: E on a goldwood → the channel chips it → walking off lets go (tree not spent, logs kept) → E resumes the SAME work → the last chip prunes it' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)
