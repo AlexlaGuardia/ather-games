@@ -39,6 +39,8 @@ import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } f
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
 import { TOOL_DEFS } from '../../engine/tools'
 import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap } from './build-mode'
+import { useQuest, askAt } from './use-rinquest'
+import { currentStep } from './rinquest'
 import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, GRADE_CATEGORIES, type Village } from './moglins'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -684,11 +686,18 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
 function RinstickList({ r, inv }: { r: Room; inv: ReturnType<typeof useInv> }) {
   const [tools, setTools] = useState(() => loadTools())
   const cur = tools.rinning, curDef = cur ? TOOL_DEFS[cur.toolId] : undefined
+  const quest = useQuest(), step = currentStep(quest)   // M22: the first rinstick is earned here
   return (
     <div data-rinsticks>
       <div style={lab}>Rinsticks</div>
+      {step?.at === 'rinnshop' && (
+        <div data-rinquest-step={step.id} style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 0 4px' }}>
+          <span style={{ flex: 1, fontSize: 13, color: H.ink }}>{step.note}</span>
+          <HearthButton small primary onClick={() => { if (askAt('rinnshop')) setTools(loadTools()) }}>{step.button}</HearthButton>
+        </div>
+      )}
       <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }} data-rinstick-held={cur?.toolId ?? ''}>
-        In hand: {rinstickName(cur)}{curDef && !curDef.basic ? ` · ${cur!.usesRemaining} catches left` : ' · never wears out'}. Built from rinn, since kin calls to kin. A better one gives the reel more room.
+        In hand: {cur ? rinstickName(cur) : 'none yet'}{!cur ? '' : curDef && !curDef.basic ? ` · ${cur!.usesRemaining} catches left` : ' · never wears out'}. Built from rinn, since kin calls to kin. A better one gives the reel more room.
       </div>
       <div style={{ display: 'grid', gap: 6 }}>
         {RINSTICKS.map(id => {

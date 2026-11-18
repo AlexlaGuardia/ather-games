@@ -82,6 +82,8 @@ import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take, itemDef, countOf, NO_BAIT_LINE } from '../shared/inventory'
 import { isDish, healOf } from './cooking'
 import { loadTools, saveTools, easeOf, xpOf, wearRinstick, TOOLS_EVENT } from './rinsticks'
+import { useRinQuest } from './use-rinquest'
+import { noStickLine, hasStick } from './rinquest'
 import { manaFor, bonusXp, wearFocus } from './focuses'
 import { isPotion, drink, buffOn, loadBuffs, saveBuffs, BUFF_NAME, STARLIGHT_XP, OPEN_FLOW_MULT, type Buffs, type BuffId } from './alchemy'
 import { BAIT, rollRinn, type Rinn } from './rinning'
@@ -193,6 +195,7 @@ export default function AtherSlice() {
   const onCombatHud = useCallback((h: CombatHud) => { vitalsRef.current = { hp: h.hp, hpMax: h.maxHp, shield: 0, shieldMax: 0 }; setChud(h) }, [])
   const [pitstops, setPitstops] = useState<Pitstop[]>([LANDING])
   const [reviveKey, setReviveKey] = useState(0)
+  const rinQuest = useRinQuest(), rinQuestRef = useRef(rinQuest); rinQuestRef.current = rinQuest   // M22 the first rinstick (use-rinquest.ts)
   const [spread, setSpread] = useState<SpreadState | null>(null)
   const spreadRef = useRef<SpreadState | null>(null); spreadRef.current = spread
   // tuning (Alex 11-15: feel the raw spread before any brakes): ?tune=1 → ] skips a game day; skew is kept so a reload stays put
@@ -660,7 +663,7 @@ export default function AtherSlice() {
     const v = r.view()
     if (v.phase === 'waiting' || v.phase === 'rising' || v.phase === 'taking') { r.answer(); return }   // a click off the take costs nothing
     if (v.phase !== 'idle' && v.phase !== 'landed' && v.phase !== 'gone') return
-    if (!toolsRef.current.rinning) { setToast('You have no rinstick.'); return }
+    if (!toolsRef.current.rinning) { setToast(noStickLine(rinQuestRef.current)); return }   // M22: the first one is earned
     if (!v.aim) { setToast('Aim at open water to cast.'); return }
     const spent = take(getInv(), BAIT, 1)
     if (!spent) { setToast(NO_BAIT_LINE); return }
@@ -789,8 +792,8 @@ export default function AtherSlice() {
   // BETA M6a/M6b: the rinning + prospecting pointers, struck once used (re-read on every pack change: a catch/cut lands in it)
   useEffect(() => {
     const k = openSkills(), used = (id: 'rinning' | 'prospecting') => k[id].level > 1 || k[id].xp > 0
-    postEntries('skills', skillPointerEntries({ rinning: used('rinning'), prospecting: used('prospecting') }))
-  }, [inv])
+    postEntries('skills', skillPointerEntries({ rinning: used('rinning'), prospecting: used('prospecting') }, hasStick(rinQuest)))
+  }, [inv, rinQuest])
   const seat = birthSeat(birth)
   const gregErrand = {
     stage: errandStage, seatName: seat ? SEATS[seat].name : '', where: seat ? SEATS[seat].where : '', citadel: seat === 'enchant',
@@ -915,7 +918,7 @@ export default function AtherSlice() {
         {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
         {zone.kind === 'wilds' && <ChannelFocus focus={focusRef} />}
         {zone.kind === 'wilds' && ww && <ProspectingFX ww={ww} aim={cAimRef} fx={cFxRef} ground={ground} mineable={c => mineCheck(c.kind, c.id).ok} />}
-        {zone.kind === 'wilds' && ww && <RinningFX ease={easeOf(toolsRef.current.rinning)} waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT} onCatch={onCatch} onGone={onGone} />}
+        {zone.kind === 'wilds' && ww && <RinningFX ease={easeOf(toolsRef.current.rinning)} waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT && !!toolsRef.current.rinning} onCatch={onCatch} onGone={onGone} />}
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />{net && <TilePaths net={net} W={T} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />}</group> })}
         {ww && <DeathPack active={zone.kind === 'wilds'} />}
         {zone.kind === 'wilds' && ww && net && <Settlements net={net} loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}

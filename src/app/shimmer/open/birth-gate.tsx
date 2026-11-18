@@ -12,6 +12,7 @@
 // tab shows the rune; changing it is a rebirth, which stays a voxel-world act (Options › Dev links there).
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
+import { markBornWithoutStick } from './ather/rinsticks'
 import BirthScreen from '../play3d/birth/BirthScreen'
 import { loadRuneInventory } from '../play3d/rune-inventory'
 import { saveOwnerResolved, SAVE_OWNER_EVENT } from '@/lib/save-slot'
@@ -65,7 +66,7 @@ function BirthGateInner() {
     <div data-panel="birth" onKeyDownCapture={e => e.stopPropagation()}>
       {/* the pointer is freed while you choose: a locked mouse cannot click a rune */}
       <ReleaseLock />
-      <BirthScreen onChoose={() => setClosing(Date.now())} />
+      <BirthScreen onChoose={() => { markBornWithoutStick(); setClosing(Date.now()) }} />   {/* M22: a new keeper earns the first rinstick */}
     </div>
   )
 }

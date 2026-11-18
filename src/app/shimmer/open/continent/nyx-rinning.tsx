@@ -9,8 +9,9 @@
 //
 // Controls (the Wilds' exactly): bait in hand → the rinstick is out. LEFT MOUSE at open water casts (one bait), LEFT
 // MOUSE on the take answers, then HOLD to take line and LET GO to give. Not E (E is the shop doors and boards).
-// Every keeper carries the default rinstick (engine/tools.ts › ensureBasicTools: infinite durability), so there is no
-// tool check here; a better rinstick's `ease` comes in when upgrades do.
+// ★ M22 (11-18): the worn rinstick is EARNED (ather/rinquest.ts, a Rinnshop side quest), so a keeper born after M22 may
+// hold bait with no rinstick: no rod comes out and a click says where the first one comes from. A better rinstick's
+// `ease` comes in when upgrades do.
 
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { Region } from '../region'
@@ -23,11 +24,15 @@ import { hudSay } from '../shared/hud-say'
 import { addOpenXp, openLevel } from '../ather/forestry'
 import { BAIT } from '../ather/rinning'
 import { perkBonus } from '../shared/companion'
+import { loadQuest } from '../ather/rinsticks'
+import { hasStick, noStickLine } from '../ather/rinquest'
 import { NYX_WATER_Y, nyxIsWater, nyxWaterAt, rollNyxRinn } from './rinning-nyx'
 
 export function useNyxRinning(R: Region | null, held: string | null, active: boolean) {
   const api = useRef<RinningApi | null>(null), holding = useRef<boolean | ((r: Reel) => boolean)>(false)
-  const out = active && held === BAIT && !!R
+  const stick = useMemo(() => (typeof window === 'undefined' ? true : hasStick(loadQuest())), [held])   // re-read when the hand changes
+  const out = active && held === BAIT && !!R && stick
+  const noStickRef = useRef(false); noStickRef.current = active && held === BAIT && !stick
   const outRef = useRef(out); outRef.current = out
 
   const isWater = useCallback((x: number, z: number) => !!R && nyxIsWater(R, x, z), [R])
@@ -44,6 +49,7 @@ export function useNyxRinning(R: Region | null, held: string | null, active: boo
   // left mouse: cast at the aimed water, or answer the take; held = taking line during the reel
   // the click itself, shared by the mouse and a scripted check (headless gets no pointer lock)
   const act = useCallback(() => {
+      if (noStickRef.current) { hudSay(noStickLine(loadQuest()), 'info'); return }   // M22
       if (!outRef.current) return
       const r = api.current; if (!r) return
       const v = r.view()

@@ -39,6 +39,7 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'open.loadout.v1',         worldTied: false },  // the stance / worn vessel loadout
   { base: 'open.fleet.v1',           worldTied: false },  // the coursers they own + the one they drive (M14 lots), 11-18
   { base: 'open.pack.v1',            worldTied: false },  // the backpack a fallen keeper left in the Wilds (M20, 11-18): what they carried + when
+  { base: 'open.rinquest.v1',        worldTied: false },  // the first-rinstick quest (M22, 11-18): none / active / done; no flag = born before it
   { base: 'open.sights.v1',          worldTied: false },  // each gun's etched sight mark + tint (canon: look, never power), 11-18
   { base: 'open.skills.v1',          worldTied: false },  // forestry skill XP
 ]

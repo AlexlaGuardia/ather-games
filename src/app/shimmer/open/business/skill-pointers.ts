@@ -14,9 +14,14 @@ export const PROSPECTING_LINE = {
 }
 
 /** `used` = the skill has earned any xp (level above 1 or xp above 0). Struck lines stay as a record, like the errand. */
-export function skillPointerEntries(used: { rinning: boolean; prospecting: boolean }): JournalEntry[] {
+/** M22: a keeper without a rinstick yet is pointed at the Rinnshop instead (placeholder copy until @lark). */
+export const RINNSHOP_LINE = {
+  title: 'Build a Rinnshop',
+  note: 'Your first rinstick is earned at a Rinnshop. Raise one on your plot from the planning table.',
+}
+export function skillPointerEntries(used: { rinning: boolean; prospecting: boolean }, stick = true): JournalEntry[] {
   return [
-    { id: 'skill-rinning', hand: 'keeper', ...RINNING_LINE, where: null, struck: used.rinning },
+    stick ? { id: 'skill-rinning', hand: 'keeper', ...RINNING_LINE, where: null, struck: used.rinning } : { id: 'skill-rinning', hand: 'keeper', ...RINNSHOP_LINE, where: null },
     { id: 'skill-prospecting', hand: 'keeper', ...PROSPECTING_LINE, where: null, struck: used.prospecting },
   ]
 }

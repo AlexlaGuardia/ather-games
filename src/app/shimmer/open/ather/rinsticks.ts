@@ -13,6 +13,7 @@ import { TOOL_DEFS, ensureBasicTools, makeBasicTool, type EquippedTool, type Equ
 import { keeperKey } from '@/lib/keeper-local'
 import { countOf, take, type Inv } from '../shared/inventory'
 import { roomStore, type Works } from './rooms'
+import { migrate, fresh, hasStick, RINQUEST_KEY, type RinQuest } from './rinquest'
 
 export const RINSTICKS = ['basic_rinstick', 'glowfin_rinstick', 'moonkoi_rinstick'] as const
 /** The reel zone's width per rinstick tier (worn = 1). A felt step per tier, never a free catch: the tightest tier-4
@@ -50,7 +51,8 @@ export function wearRinstick(tools: EquippedTools): { tools: EquippedTools; brok
   if (!t || TOOL_DEFS[t.toolId]?.basic) return { tools, broke: null }
   const left = t.usesRemaining - 1
   if (left > 0) return { tools: { ...tools, rinning: { ...t, usesRemaining: left } }, broke: null }
-  return { tools: { ...tools, rinning: makeBasicTool('rinning') ?? undefined }, broke: rinstickName(t) }
+  // the worn starter comes back only to a keeper who earned it (M22); an unearned keeper is empty-handed again
+  return { tools: { ...tools, rinning: hasStick(loadQuest()) ? makeBasicTool('rinning') ?? undefined : undefined }, broke: rinstickName(t) }
 }
 
 export const TOOLS_KEY = 'open.tools.v1'
@@ -63,8 +65,24 @@ export function loadTools(): EquippedTools {
     if (v && typeof v === 'object') for (const [k, t] of Object.entries(v) as [keyof EquippedTools, EquippedTool][])
       if (t && TOOL_DEFS[t.toolId]?.skillId === k && Number.isFinite(t.usesRemaining) && t.usesRemaining > 0) out[k] = t
   } catch { /* fresh */ }
-  return ensureBasicTools(out)
+  ensureBasicTools(out)
+  // M22: the WORN rinstick is earned (rinquest.ts); a better one already in the save is never taken
+  if (!hasStick(loadQuest()) && out.rinning && TOOL_DEFS[out.rinning.toolId]?.basic) delete out.rinning
+  return out
 }
+
+// ── the first-rinstick quest's save (BETA M22, rinquest.ts holds the rules) ──
+/** No flag = born before M22 = done (migrate); the birth gate writes `fresh()` for a new keeper (markBornWithoutStick). */
+export function loadQuest(): RinQuest {
+  try { return migrate(JSON.parse(localStorage.getItem(keeperKey(RINQUEST_KEY)) ?? 'null')) } catch { return migrate(null) }
+}
+/** Saves and tells the page to re-read its tools (the stick appears or goes with the quest's state). */
+export function saveQuest(q: RinQuest) {
+  try { localStorage.setItem(keeperKey(RINQUEST_KEY), JSON.stringify(q)) } catch { /* private window */ }
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(TOOLS_EVENT))
+}
+/** The birth gate, the moment a NEW keeper chooses their rune: born without the worn rinstick. */
+export const markBornWithoutStick = () => saveQuest(fresh())
 export function saveTools(t: EquippedTools, announce = false) {
   try { localStorage.setItem(keeperKey(TOOLS_KEY), JSON.stringify(t)) } catch { /* private window */ }
   if (announce && typeof window !== 'undefined') window.dispatchEvent(new Event(TOOLS_EVENT))
