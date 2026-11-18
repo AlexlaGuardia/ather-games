@@ -168,8 +168,9 @@ export function MoglinModel({ build = 'plush', action = 'idle', garb = 'none', t
             {/* ears: large, rounded-pointed, out and up, pink inside; they droop when shy */}
             {([-1, 1] as const).map(sd => (
               <group key={sd} ref={sd < 0 ? earL : earR} position={[sd * H * 0.62, H * 0.55, -H * 0.05]} rotation={[0, 0, -sd * 0.78]}>
-                <mesh position={[0, H * 0.5 * B.earS, 0]} scale={[1, 1, 0.38]} castShadow><coneGeometry args={[H * 0.55 * B.earS, H * 1.15 * B.earS, 16]} />{fur}</mesh>
-                <mesh position={[0, H * 0.46 * B.earS, H * 0.09]} scale={[1, 1, 0.3]}><coneGeometry args={[H * 0.38 * B.earS, H * 0.9 * B.earS, 14]} /><meshStandardMaterial color={EAR_IN} roughness={0.9} /></mesh>
+                {/* canon: ROUNDED ears; the ref's are broad leaves with soft tips, so an ellipsoid, wide at the base, not a cone */}
+                <mesh position={[0, H * 0.52 * B.earS, 0]} scale={[0.62, 1.05, 0.26]} castShadow><sphereGeometry args={[H * 0.62 * B.earS, 18, 14]} />{fur}</mesh>
+                <mesh position={[0, H * 0.52 * B.earS, H * 0.1]} scale={[0.46, 0.86, 0.18]}><sphereGeometry args={[H * 0.62 * B.earS, 16, 12]} /><meshStandardMaterial color={EAR_IN} roughness={0.9} /></mesh>
               </group>
             ))}
             {/* the crown tuft */}

@@ -172,7 +172,8 @@ function MoglinLineup() {
   const [owner, setOwner] = useState(false)
   useEffect(() => { fetch('/api/owner', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then(j => setOwner(!!j?.owner)).catch(() => {}) }, [])
   if (!owner) return null
-  const x0 = TABLE.x + 3.2, z0 = TABLE.z + 0.5, yaw = Math.atan2(THRESHOLD.x - x0, THRESHOLD.z - z0)
+  // open ground past the table and the starter Keepstone, facing the threshold
+  const x0 = TABLE.x + 7.5, z0 = TABLE.z + 2.5, yaw = Math.atan2(THRESHOLD.x - x0, THRESHOLD.z - z0)
   return (
     <group data-moglin-lineup>
       {LINEUP.map((m, i) => {
