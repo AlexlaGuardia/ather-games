@@ -17,6 +17,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OpenHands, type OpenHandsApi } from '../shared/open-hands'
+import { FpGun, ScopeRing, fpGunAds, ADS_TIGHT, type FpGunApi } from '../shared/fp-gun'
+import { RANGE_GUNS } from '../shared/gunplay'
 import { ThirdPersonBody, dollAction, pullBack, newDrive } from '../shared/third-person'
 import type { Camera } from 'three'
 import { VoxelDayNight } from '../shared/day-night'
@@ -56,7 +58,7 @@ import { FolkPanel } from './folk-panel'
 import { TilePaths, Settlements, BigTop } from './network-scene'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
-import { CombatLayer, type CombatHud } from './combat-layer'
+import { CombatLayer, type CombatHud, type SightLink } from './combat-layer'
 import type { CombatEvent, Terrain } from './combat'
 import { ownerOf, nodeRegions, GAME_DAY_MS, SUB, type WildsNode } from './nodes'
 import { advance, clearAt, loadSpread, saveSpread, loadSkew, saveSkew, type SpreadState, type SpreadEvent } from './spread'
@@ -133,10 +135,15 @@ export default function AtherSlice() {
   const [hud, setHud] = useState({ verb: 'idle', where: 'your plot' })
   const pos = useRef({ x: THRESHOLD.x, z: THRESHOLD.z, grounded: true, swimming: false })
   const handsApi = useRef<OpenHandsApi>(null)
+  // THE GUN IN HAND + ITS SIGHTS (Alex 11-18; shared/fp-gun.tsx): drawn whenever R has a gun out (the gloves hold it now), right-click
+  // aims (combat-layer sets `aiming`), the cone tightens past ADS_TIGHT, and recoil + the etched mark's flare read firedAt / charge
+  const gunApi = useRef<FpGunApi>(null)
+  const sightRef = useRef<SightLink>({ aiming: false, ads: false, firedAt: -Infinity, charge: 0 })
   const near = useRef<Near>(null)
   const hereRef = useRef('first-wilds'), nearRef = useRef('')
   const hudT = useRef(0), fogT = useRef(0), fogDirty = useRef(false)
   const [chud, setChud] = useState<CombatHud | null>(null)
+  const chudRef = useRef(chud); chudRef.current = chud
   // ── THE HUD (shared/game-hud.tsx): the same hearth HUD as every open-world page ──
   const hudSize = useGameHudSize(isTouch)
   const poseRef = useRef<CompassPose>({ x: THRESHOLD.x, z: THRESHOLD.z, yaw: THRESHOLD.yaw })
@@ -382,6 +389,12 @@ export default function AtherSlice() {
       handsApi.current?.step({ now, speed, airborne: lc.airborne, hidden: frozen.current || stanceRef.current.kind === 'weapon' || third || isBuilding(),
         castAt: handsCastAt.current, working }, dt)
       handsApi.current?.seat(now - handsCastAt.current < 640 ? 1 : 0)
+      { // the held gun: out only with a gun drawn, first person, nothing owning the screen
+        const sg = sightRef.current, gun = stanceRef.current.kind === 'weapon' && !third && !frozen.current && !isBuilding() ? RANGE_GUNS.find(g => g.id === h) ?? null : null
+        if (!gun) sg.aiming = false
+        gunApi.current?.step({ gun, aiming: sg.aiming, speed, firedAt: sg.firedAt, reloading: !!chudRef.current?.reloading, charging: sg.charge, now }, dt)
+        sg.ads = fpGunAds().t > ADS_TIGHT
+      }
       // the doll: where the keeper stands, facing where the camera looks (the doll faces +z, the lens looks down -z)
       const d = dollDrive.current, a = dollAction({ speed, airborne: lc.airborne, working, castAgoMs: now - handsCastAt.current, gun: stanceRef.current.kind === 'weapon' })
       d.action = a.action; d.rate = a.rate; d.x = lc.px; d.y = lc.py; d.z = lc.pz; d.yaw = yaw + Math.PI; d.visible = third || isBuilding()
@@ -908,6 +921,7 @@ export default function AtherSlice() {
         onCreated={({ gl }) => { canvasEl.current = gl.domElement }}
       >
         <OpenHands ref={handsApi} />
+        <FpGun ref={gunApi} />
         <ThirdPersonBody drive={dollDrive} camRef={camRef} />
         {zone.kind === 'plot' && <BuildPointer />}
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && ww ? (x, z) => ww.canopyAt(x, z) * 0.7 : undefined} />
@@ -924,7 +938,7 @@ export default function AtherSlice() {
         {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
-            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} />
+            safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} />
         )}
         {talkNode && zone.kind === 'plot' && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={talkNode.line} />}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
@@ -947,11 +961,12 @@ export default function AtherSlice() {
           owned={owned} onExpand={() => setPanel({ kind: 'map', view: 'ather', travel: false })} />}
         status={[
           { label: hud.where },
-          ...(zone.kind === 'wilds' && chud ? [{ label: 'Repeater', value: chud.reloading ? 'reloading' : `${chud.ammo} / ${chud.clip}` }] : []),
+          ...(zone.kind === 'wilds' && chud ? [{ label: chud.gun.charAt(0) + chud.gun.slice(1).toLowerCase(), value: chud.reloading ? 'reloading' : `${chud.ammo} / ${chud.clip}` }] : []),
           { label: 'Grey matter', value: garden.grey, accent: true },
           { label: 'Grimoire', value: garden.pages },
           ...(tune && spread ? [{ label: `Tune · day ${Math.floor((clock() - spread.epoch) / GAME_DAY_MS)}`, value: `${allNodes.length - spread.clean.length}/${allNodes.length} grey · [ clear all · ] +1d · ⇧] +5d`, accent: true }] : []),
         ]} />
+      <ScopeRing />
       {zone.kind === 'wilds' && chud && (() => {
         const now = performance.now() / 1000, hurt = Math.max(0, 1 - (now - chud.hurtAt) / 0.6), hit = now - chud.hitAt < 0.12
         return (

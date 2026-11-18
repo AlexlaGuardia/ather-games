@@ -34,7 +34,8 @@ export const VM = {
   ADS_IN: 0.15, ADS_OUT: 0.11,  // seconds to come up / drop out of the sights
   BOB: 0.012, BOB_ADS: 0.15,    // the run's bob, and how much of it survives in the sights
   KICK_Z: 0.05, KICK_PITCH: 0.12, KICK_DECAY: 14,  // recoil: back and up, then home
-  HAND: 1.28,                   // the gloves' scale (open-hands FP.SCALE, so the hands read the same drawn or stowed)
+  HAND: 0.6,                    // the gloves' scale ON THE GUN: a fist (0.1 m box) at the gun's own scale, a touch fuller. NOT open-hands' 1.28,
+                                // which sizes free hands to the screen; at that size a fist out-grew the pistol and hid the 1x sight (11-18 shot)
 }
 export const ADS_TIGHT = 0.6     // past this the cone is the sights' (gunplay ads)
 
@@ -159,8 +160,9 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
         if (rig.model) { rig.held.remove(rig.model); rig.model.traverse(x => { if (x instanceof THREE.Mesh) x.geometry.dispose() }) }
         rig.model = buildModel(m, i.gun.color, o, mats); rig.held.add(rig.model); rig.key = key
         // the gloves on the gun: the right round the grip, the left under the foregrip (fists, knuckles to the side)
-        rig.R.position.set(m.grip[0] * VM.S + 0.012, m.grip[1] * VM.S - 0.01, m.grip[2] * VM.S + 0.02); rig.R.rotation.set(-0.25, 0, -0.5)
-        rig.L.position.set(m.fore[0] * VM.S - 0.01, m.fore[1] * VM.S - 0.03, m.fore[2] * VM.S); rig.L.rotation.set(0.15, 0, 0.6)
+        // the right fist wraps the grip from behind and below, the left cups the foregrip: both under the sight line, never over it
+        rig.R.position.set(m.grip[0] * VM.S + 0.008, m.grip[1] * VM.S - 0.012, m.grip[2] * VM.S + 0.012); rig.R.rotation.set(-0.35, 0, -0.45)
+        rig.L.position.set(m.fore[0] * VM.S - 0.006, m.fore[1] * VM.S - 0.02, m.fore[2] * VM.S); rig.L.rotation.set(0.15, 0, 0.55)
       }
       // the sights: ease in / out; reloading drops you out
       const aiming = i.aiming && !i.reloading

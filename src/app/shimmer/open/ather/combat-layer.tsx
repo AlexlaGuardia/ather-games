@@ -413,7 +413,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       hudT.current = 0.08
       const k = C.keeper
       const ch = C.champ
-      onHud({ ...hud.current, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0,
+      onHud({ ...hud.current, gun: C.gun.name, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0,
         champ: ch ? { bar: ch.bar, hp: ch.hp, barHp: CHAMP.barHp, bars: CHAMP.bars, open: ch.state !== 'rise' && ch.state !== 'submerge' && ch.state !== 'home' } : null })
     }
   })
