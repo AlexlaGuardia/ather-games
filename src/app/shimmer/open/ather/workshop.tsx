@@ -31,6 +31,8 @@ import {
 } from './garden-bank'
 import { FURNITURE, FURNITURE_ORDER, REFINE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, type Job } from './furniture'
 import { ROAST } from './cooking'
+import { FarmPanel, FarmInterior, FarmCrate, currentFarm, setFarm } from './farm-room'
+import { grantStarter } from './farmroom'
 import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { TOOL_DEFS } from '../../engine/tools'
@@ -101,8 +103,12 @@ function confirmPlace(owned: ReadonlySet<string>) {
   }
   const r = place(getW(), owned, getInv(), placing.kind, ghost.x, ghost.z, placing.q, Date.now(), getB())
   if (!r) { const v = canPlace(getW(), owned, placing.kind, ghost.x, ghost.z, placing.q, getInv(), getB()); hudSay(v.ok ? 'Cannot build there.' : v.why, 'info'); return }
-  setInv(r.inv); if (r.bank) setBank(r.bank); setWorks(r.works); setPlacing(null)
-  hudSay(`${ROOMS[r.room.kind].name} · the scaffolding is up. Ready in ${Math.round(ROOMS[r.room.kind].raiseMs / 1000)} s.`, 'item', 5)
+  setInv(r.inv); if (r.bank) setBank(r.bank); setPlacing(null)
+  // the first Farm of a garden comes with one starter packet of tier-1 seeds in its store (farmroom.ts), once
+  const st = r.room.kind === 'farm' ? grantStarter(currentFarm(), r.works, r.room.id) : null
+  if (st) setFarm(st.sv)
+  setWorks(st ? st.works : r.works)
+  hudSay(`${ROOMS[r.room.kind].name} · the scaffolding is up. Ready in ${Math.round(ROOMS[r.room.kind].raiseMs / 1000)} s.${st?.given ? ' A packet of seeds waits in its store.' : ''}`, 'item', 5)
 }
 
 /** While placing: R turns, E / Enter sets, Esc cancels. Capture phase, so the page's own E never sees these keys. */
@@ -199,13 +205,14 @@ function RoomMesh({ r }: { r: Room }) {
       <mesh position={[cx, GROUND_Y + WALL_H + 0.12, cz]}><boxGeometry args={[sx + 0.8, 0.24, sz + 0.8]} /><meshLambertMaterial color={ROOF} /></mesh>
       <mesh position={[cx, GROUND_Y + WALL_H + 0.7, cz]}><boxGeometry args={[sx * 0.6, 0.9, sz * 0.6]} /><meshLambertMaterial color={ROOF} /></mesh>
       <Bench r={r} x={b.x} z={b.z} />
+      {r.kind === 'farm' && <FarmInterior r={r} />}
     </group>
   )
 }
 function Bench({ r, x, z }: { r: Room; x: number; z: number }) {
   return (
     <group position={[x, GROUND_Y, z]} rotation-y={-r.q * Math.PI / 2}>
-      {r.kind !== 'cooking' && <mesh position-y={0.5}><boxGeometry args={[2.4, 1, 0.8]} /><meshLambertMaterial color={WOOD} /></mesh>}
+      {r.kind !== 'cooking' && r.kind !== 'farm' && <mesh position-y={0.5}><boxGeometry args={[2.4, 1, 0.8]} /><meshLambertMaterial color={WOOD} /></mesh>}
       {r.kind === 'cooking' && (
         <>
           {/* THE HEARTH (canon: open coals, no vessel, no grate or flue): a low stone ring, a glowing bed, a wooden spit on
@@ -218,6 +225,7 @@ function Bench({ r, x, z }: { r: Room; x: number; z: number }) {
           <mesh position={[0, 1.13, 0]} scale={[1, 0.45, 0.45]}><sphereGeometry args={[0.24, 10, 8]} /><meshLambertMaterial color="#d9a75c" /></mesh>
         </>
       )}
+      {r.kind === 'farm' && <FarmCrate />}
       {r.kind === 'alchemy' && (
         <>
           {/* THE CAULDRON (canon: the cauldron boils; homely words, no foundry): a round clay pot on three stones over a
@@ -411,6 +419,7 @@ const lab: React.CSSProperties = { color: H.inkSoft, fontSize: 10, fontWeight: 7
 
 export function WorkshopPanel({ near, owned, onClose }: { near: WorkNear; owned: ReadonlySet<string>; onClose: () => void }) {
   if (near.kind === 'table') return <TablePanel owned={owned} onClose={onClose} />
+  if (near.kind === 'bench' && near.room.kind === 'farm') return <FarmHost room={near.room} onClose={onClose} />
   if (near.kind === 'bench') return <BenchPanel room={near.room} onClose={onClose} />
   if (near.kind === 'chest') return <BankPanel id={near.id} onClose={onClose} />
   if (near.kind === 'piece') return <PiecePanel id={near.id} owned={owned} onClose={onClose} />
@@ -424,7 +433,7 @@ export function WorkshopPanel({ near, owned, onClose }: { near: WorkNear; owned:
 type TablePick = 'keepstone' | RoomKind
 const TABLE_PICKS: readonly TablePick[] = ['keepstone', ...ROOM_ORDER]
 const PICK_LOOK: Record<TablePick, { glyph: string; tint: string }> = {
-  keepstone: { glyph: '◆', tint: '#8fc6e8' }, rinnshop: { glyph: '≈', tint: '#5aa9c8' }, cooking: { glyph: '♨', tint: '#d9774a' },
+  keepstone: { glyph: '◆', tint: '#8fc6e8' }, rinnshop: { glyph: '≈', tint: '#5aa9c8' }, farm: { glyph: '❀', tint: '#6fae4f' }, cooking: { glyph: '♨', tint: '#d9774a' },
   alchemy: { glyph: '⚗', tint: '#9a7ad8' }, smith: { glyph: '⚒', tint: '#77726c' }, carpentry: { glyph: '⌂', tint: '#b0884f' }, stonemason: { glyph: '▦', tint: '#a9a090' },
 }
 const pickName = (k: TablePick) => (k === 'keepstone' ? 'Keepstone' : ROOMS[k].name)
@@ -591,6 +600,11 @@ export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
       {!p && !sel && <div style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>Pick something to build · drag to move · {touchy ? 'pinch' : 'wheel'} to zoom{touchy ? '' : ' · WASD · Q Z turn'}</div>}
     </div>
   )
+}
+
+function FarmHost({ room, onClose }: { room: Room; onClose: () => void }) {
+  const w = useWorks()
+  return <FarmPanel room={room} works={w} setWorks={setWorks} onClose={onClose} />
 }
 
 function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
