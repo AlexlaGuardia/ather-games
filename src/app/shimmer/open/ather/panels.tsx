@@ -125,10 +125,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
                       const o = offOf(w.tile); if (!o || !inA(w.x + o.x, w.z + o.z)) return null
                       return <button key={w.id} title={t} onClick={() => go({ kind: 'waymark', w })} style={{ ...pin(col, 12), ...ap(w.x + o.x, w.z + o.z) }} />
                     })}
-                    {/* blots where you have walked, and on the tile you stand in: across 3 km of fresh fog, 200 blots are noise */}
-                    {area.nodes.filter(n => inA(n.x, n.z) && ((fog && isRevealed(fog, n.x + area.tileOff.x, n.z + area.tileOff.z)) || (Math.abs(n.x - area.cx) < TILE_M / 2 && Math.abs(n.z - area.cz) < TILE_M / 2))).map(n => (
-                      <div key={n.id} title="Infected ground" style={{ position: 'absolute', width: 12, height: 12, margin: -6, borderRadius: 12, background: 'radial-gradient(circle, rgba(70,72,76,0.95) 30%, rgba(70,72,76,0.35) 65%, transparent 72%)', boxShadow: '0 0 0 1px rgba(220,224,228,0.4)', ...ap(n.x, n.z) }} />
-                    ))}
+                    {/* no node blots: the player tracks the champion (Alex 11-18); the section tint shows infected ground */}
                     {inWilds && <div style={{ ...pin('#ffffff', 8), cursor: 'default', ...ap(area.here.x, area.here.z) }} />}
                   </>
                 )
@@ -148,9 +145,6 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
                   ))}
                 </svg>
               )}
-              {nodes.map(n => (
-                <div key={n.id} title="Infected ground" style={{ position: 'absolute', width: 22, height: 22, margin: -11, borderRadius: 22, background: 'radial-gradient(circle, rgba(70,72,76,0.95) 30%, rgba(70,72,76,0.35) 65%, transparent 72%)', boxShadow: '0 0 0 1px rgba(220,224,228,0.4)', pointerEvents: 'auto', ...pct(n.x, n.z) }} />
-              ))}
               {inWilds && <div style={{ ...pin('#ffffff', 8), cursor: 'default', ...pct(here.x, here.z) }} />}
               </>)}
             </div>
@@ -165,7 +159,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
                 </div>
               )}
               {waymarks.map((w, k) => stop(`Waymark ${k + 1}`, `the Wilds · ${BIOME_NAME[w.biome]}`, { kind: 'waymark', w }, '#6fd3c4'))}
-              <div style={{ opacity: 0.6, fontSize: 11, marginTop: 6 }}>{waymarks.length} / {MAX_WAYMARKS} waymarks. Plant one with F where you stand in the Wilds.</div>
+              <div style={{ opacity: 0.6, fontSize: 11, marginTop: 6 }}>{waymarks.length} / {MAX_WAYMARKS} waymarks. Plant one with F inside a settlement.</div>
               {fog && W && (() => { const c = tileCentreWorld(W.meta); return <div style={{ opacity: 0.6, fontSize: 11 }}>Walked: {Math.round(walkedShare(fog, c.x - sx / 2, c.z - sz / 2, c.x + sx / 2, c.z + sz / 2) * 100)}% of this country</div> })()}
             </div>
           </div>

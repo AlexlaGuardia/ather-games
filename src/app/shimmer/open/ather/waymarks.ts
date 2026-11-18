@@ -19,7 +19,9 @@
 import { BIOME, BIOME_NAME, type BiomeId } from './wilds'
 import { gardenKey } from '@/lib/keeper-local'
 
-export interface Waymark { id: string; tile: string; x: number; y: number; z: number; biome: BiomeId; made: number }
+/** `settlement`: the free-Moglin settlement it is bound in (Alex 11-18: waymarks only bind where folk live). Older waymarks
+ *  planted before that rule have none and keep working until lifted. */
+export interface Waymark { id: string; tile: string; x: number; y: number; z: number; biome: BiomeId; made: number; settlement?: string }
 
 export const PER_BIOME = 4
 export const MIN_SPACING = 60          // metres between two waymarks on one tile
@@ -30,9 +32,13 @@ export const MAX_WAYMARKS = 12
 
 export type PlantVerdict = { ok: true } | { ok: false; why: string }
 
-export function canPlant(list: readonly Waymark[], at: { tile: string; x: number; z: number; biome: BiomeId; grounded: boolean; swimming: boolean }): PlantVerdict {
+export function canPlant(list: readonly Waymark[], at: { tile: string; x: number; z: number; biome: BiomeId; grounded: boolean; swimming: boolean; settlement: string | null }): PlantVerdict {
   if (!at.grounded || at.swimming) return { ok: false, why: 'A waymark binds ground. Stand on it.' }
   if (at.biome === BIOME.water) return { ok: false, why: 'Water will not hold a binding.' }
+  // ★ ONLY WHERE FOLK LIVE (Alex 11-18: anywhere-waymarks 'would add too many gates and make travel way too easy'). Canon
+  // already makes the kept settlements the fast-travel anchors (ather-rework › the net's inhabited nodes); one per settlement.
+  if (!at.settlement) return { ok: false, why: 'A waymark only binds where folk keep a home. Plant it inside a settlement.' }
+  if (list.some(w => w.settlement === at.settlement)) return { ok: false, why: 'You already hold a waymark in this settlement.' }
   if (list.length >= MAX_WAYMARKS) return { ok: false, why: `You hold ${MAX_WAYMARKS} waymarks, as many as the fold will carry. Lift one first.` }
   const same = list.filter(w => w.biome === at.biome)
   if (same.length >= PER_BIOME) return { ok: false, why: `You already hold ${PER_BIOME} waymarks in the ${BIOME_NAME[at.biome]}. Find other country.` }

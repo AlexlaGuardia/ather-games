@@ -485,14 +485,15 @@ export default function AtherSlice() {
     const p = pos.current, biome = ww.biomeAt(p.x, p.z), t = ww.at(tileOf(p.x, p.z).tx, tileOf(p.x, p.z).ty)
     if (!t) return
     const lx = p.x - t.tx * TILE_M, lz = p.z - t.ty * TILE_M
-    const v = canPlant(waymarks, { tile: t.name, x: lx, z: lz, biome, grounded: p.grounded, swimming: p.swimming })
+    const st = netRef.current ? settlementAt(netRef.current, p.x, p.z) : null   // waymarks bind only where folk live (Alex 11-18)
+    const v = canPlant(waymarks, { tile: t.name, x: lx, z: lz, biome, grounded: p.grounded, swimming: p.swimming, settlement: st?.id ?? null })
     if (!v.ok) { setToast(v.why); return }
     const spent = take(getInv(), 'waymark', 1)          // a waymark is a thing in the bag now: planting spends one
     if (!spent) { setToast('No waymarks in your bag. Lift one you planted to carry it again.'); return }
     setInv(spent)
-    const next = plant(waymarks, { tile: t.name, x: lx, y: ww.heightAt(p.x, p.z), z: lz, biome })
+    const next = plant(waymarks, { tile: t.name, x: lx, y: ww.heightAt(p.x, p.z), z: lz, biome, settlement: st?.id })
     setWaymarks(next); saveWaymarks(next)
-    setToast(`Waymark bound in the ${BIOME_NAME[biome]}. It is a stop on the fold map now.`)
+    setToast(`Waymark bound in ${st?.name ?? 'the Wilds'}. It is a stop on the fold map now.`)
   }, [zone, ww, waymarks])
   // what you hold is what the stance says (a drawn gun, a picked hotbar item, or nothing): a waymark plants on click,
   // the Repeater fires (combat-layer only fires while armed), stowed hands work a node
@@ -727,9 +728,8 @@ export default function AtherSlice() {
     marksRef.current = zone.kind === 'plot'
       ? [{ x: GATE.x, z: GATE.z, color: '#e7c766', title: 'the gate' }, { x: GREG.x, z: GREG.z, color: '#c9a27a', title: 'Gregory' }]
       : [
-          // the six nearest infected nodes (the continent holds hundreds), Greg's waymark, your waymarks, all in world coords
-          ...[...nearNodes].sort((a, b) => Math.hypot(a.x - pos.current.x, a.z - pos.current.z) - Math.hypot(b.x - pos.current.x, b.z - pos.current.z)).slice(0, 6)
-            .map(n => ({ x: n.x, z: n.z, color: '#5f6165', title: 'infected ground' })),
+          // ★ NO NODE MARKS (Alex 11-18: "the nodes really dont even need to be on the map.. as long as the section gets an
+          // infected theme its up to the player to track the champion"). Greg's waymark, settlements, the fair, your waymarks:
           { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, color: '#e7c766', title: "Gregory's waymark" },
           ...(net ? [...net.settlements].sort((a, b) => Math.hypot(a.x - pos.current.x, a.z - pos.current.z) - Math.hypot(b.x - pos.current.x, b.z - pos.current.z)).slice(0, 4)
             .map(st => ({ x: st.x, z: st.z, color: '#d9c39a', title: st.name })) : []),

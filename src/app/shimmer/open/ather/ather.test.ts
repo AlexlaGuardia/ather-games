@@ -205,9 +205,13 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
 
 // ── waymarks ──────────────────────────────────────────────────────────────────────────────────────────────────
 {
-  const at = (x: number, z: number, biome: number, o: Partial<{ grounded: boolean; swimming: boolean; tile: string }> = {}) =>
-    ({ tile: 'first-wilds', x, z, biome: biome as 0, grounded: true, swimming: false, ...o })
+  // every plant below stands in its own settlement unless a test says otherwise (the settlement rule is tested on its own)
+  const at = (x: number, z: number, biome: number, o: Partial<{ grounded: boolean; swimming: boolean; tile: string; settlement: string | null }> = {}) =>
+    ({ tile: 'first-wilds', x, z, biome: biome as 0, grounded: true, swimming: false, settlement: `s-${o.tile ?? 'first-wilds'}-${x}-${z}`, ...o })
   let list: Waymark[] = []
+  // ★ Alex 11-18: only inside a settlement, one per settlement
+  ok(!canPlant(list, at(0, 0, BIOME.woods, { settlement: null })).ok, 'waymark: planted outside any settlement')
+  ok(!canPlant(plant(list, { tile: 'first-wilds', x: 500, y: 1, z: 500, biome: BIOME.woods, settlement: 's1-3' }), at(0, 0, BIOME.meadow, { settlement: 's1-3' })).ok, 'waymark: a second one in the same settlement')
   ok(canPlant(list, at(0, 0, BIOME.woods)).ok, 'waymark: refused a plain plant')
   ok(!canPlant(list, at(0, 0, BIOME.woods, { grounded: false })).ok, 'waymark: planted mid-air')
   ok(!canPlant(list, at(0, 0, BIOME.woods, { swimming: true })).ok, 'waymark: planted while swimming')
