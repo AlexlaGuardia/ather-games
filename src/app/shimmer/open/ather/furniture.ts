@@ -62,6 +62,11 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   spinestone_birdbath: { name: 'Spinestone Bowl', blurb: 'Pale Spine stone, cut into a shallow bowl and set on a short pillar.', recipe: [], sold: { at: 'grand-exchange', price: 6_000 }, w: 0.8, d: 0.8, h: 0.9, solid: true, wood: 'stone' },
   ruin_column: { name: 'Salvaged Column', blurb: 'A carved column out of an old ruin. Nobody remembers what it held up.', recipe: [], sold: { at: 'grand-exchange', price: 9_000 }, w: 0.7, d: 0.7, h: 2.6, solid: true, wood: 'stone' },
   mana_cell_lamp: { name: 'Mana-cell Lamp', blurb: 'A charged mana cell in a brass cage. It hums, very quietly.', recipe: [], sold: { at: 'grand-exchange', price: 15_000 }, w: 0.5, d: 0.5, h: 1.6, solid: false, wood: 'iron', glow: '#8fe3ff' },
+  // ── THE WATER TAP + its tanks (canon RULED 11-15, world/mana-tech.md › The water tap; ather/water.ts holds the rules).
+  //    Mortal mana-tech bought Nyx-side, set in the fold: the only water a garden has. Plain nouns (Magii 11-18, athernyx
+  //    2bfa6b2). Sold at Rune Hold's Smithy, the first shop a keeper reaches. Blurbs await @lark.
+  water_tap: { name: 'Water Tap', blurb: 'Mortal mana-tech: sigils in an iron housing that sip the fold\'s mana and turn it into water. Holds one tank\'s worth.', recipe: [], sold: { at: 'smithy', price: 3_000 }, w: 0.7, d: 0.7, h: 1.5, solid: true, wood: 'iron', glow: '#8fe3ff' },
+  water_tank: { name: 'Water Tank', blurb: 'A riveted iron tank. Set it by a water tap and the tap fills it too.', recipe: [], sold: { at: 'smithy', price: 1_200 }, w: 1.0, d: 1.0, h: 1.4, solid: true, wood: 'iron' },
 }
 export const FURNITURE_ORDER = Object.keys(FURNITURE)
 export const isPiece = (id: string) => id in FURNITURE

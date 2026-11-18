@@ -4,8 +4,8 @@
 //
 // ★ ONE FARM PER GARDEN: the Farm is one room (canPlace refuses a second), so the save is one Farm, 6 beds + the composter
 //   charge, plus a flag that the starter seeds were handed out (once per garden, never again).
-// ★ NO WATERING here: the water tap does not exist in the open world yet (mana-tech.md: no natural water in the fold), so
-//   water() stays unused and beds grow at base time, the composter speeds them.
+// ★ WATERING (11-18): a bed takes one water from the tap's tanks (ather/water.ts, the panel draws it); the fold holds no
+//   natural water (mana-tech.md), so with no tap on the plot beds grow at base time and only the composter speeds them.
 // ★ NOTHING IS EVER LOST: a harvest that fits neither the store nor the composter is REFUSED (the bed stays ready), never
 //   dropped. Feeding the composter takes only what it eats; the rest stays in the bag.
 //

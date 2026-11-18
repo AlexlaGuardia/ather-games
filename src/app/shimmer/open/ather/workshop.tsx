@@ -31,7 +31,8 @@ import {
 } from './garden-bank'
 import { FURNITURE, FURNITURE_ORDER, REFINE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, type Job } from './furniture'
 import { ROAST } from './cooking'
-import { FarmPanel, FarmInterior, FarmCrate, currentFarm, setFarm } from './farm-room'
+import { FarmPanel, FarmInterior, FarmCrate, currentFarm, setFarm, currentWater, settleWater, farmNow } from './farm-room'
+import { plumbingOf, spillIfRemoved } from './water'
 import { grantStarter } from './farmroom'
 import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
@@ -45,7 +46,7 @@ const SERVER: Works = { v: 1, rooms: [], chests: [], pieces: [] }
 const subs = new Set<() => void>()
 const getW = (): Works => { if (!works) works = typeof window === 'undefined' ? SERVER : loadWorks(); return works }
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
-export function setWorks(w: Works) { works = w; saveWorks(w); subs.forEach(f => f()) }
+export function setWorks(w: Works) { works = w; saveWorks(w); subs.forEach(f => f()); settleWater(w.pieces) }
 export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER)
 /** The live works (the page's village tick reads and writes through this store, so an open panel sees the product land). */
 export const currentWorks = () => getW()
@@ -384,6 +385,8 @@ function PieceBody({ item }: { item: string }) {
     case 'spinestone_birdbath': return <><Bx p={[0, 0.06, 0]} s={[0.6, 0.12, 0.6]} c={c} /><mesh position-y={0.45}><cylinderGeometry args={[0.12, 0.16, 0.7, 8]} /><meshLambertMaterial color={c} /></mesh><mesh position-y={0.82}><cylinderGeometry args={[0.4, 0.26, 0.14, 10]} /><meshLambertMaterial color={c} /></mesh><mesh position-y={0.895} rotation-x={-Math.PI / 2}><circleGeometry args={[0.33, 10]} /><meshBasicMaterial color="#9fd0e8" /></mesh></>
     case 'ruin_column': return <><Bx p={[0, 0.1, 0]} s={[0.7, 0.2, 0.7]} c={c} /><mesh position-y={1.3}><cylinderGeometry args={[0.24, 0.27, 2.2, 10]} /><meshLambertMaterial color={c} /></mesh><Bx p={[0, 2.5, 0]} s={[0.66, 0.18, 0.66]} c={c} /><Bx p={[0.18, 2.62, 0.1]} s={[0.3, 0.1, 0.36]} c="#a39c8c" /></>
     case 'mana_cell_lamp': return <><Bx p={[0, 0.04, 0]} s={[0.4, 0.08, 0.4]} c="#a4793e" /><Bx p={[0, 0.6, 0]} s={[0.05, 1.1, 0.05]} c="#a4793e" /><mesh position-y={1.32}><cylinderGeometry args={[0.1, 0.1, 0.34, 8]} /><meshBasicMaterial color={f.glow} /></mesh>{[0, 1, 2, 3].map(k => <Bx key={k} p={[Math.sin(k * 1.571) * 0.13, 1.32, Math.cos(k * 1.571) * 0.13]} s={[0.025, 0.42, 0.025]} c="#a4793e" />)}<Bx p={[0, 1.54, 0]} s={[0.3, 0.04, 0.3]} c="#a4793e" /></>
+    case 'water_tap': return <><Bx p={[0, 0.05, 0]} s={[0.7, 0.1, 0.7]} c={c} /><Bx p={[0, 0.7, 0]} s={[0.5, 1.2, 0.5]} c={c} /><Bx p={[0, 1.36, 0]} s={[0.6, 0.1, 0.6]} c="#77716b" />{[-0.15, 0, 0.15].map(x => <mesh key={x} position={[x, 1.0, 0.255]}><boxGeometry args={[0.08, 0.08, 0.02]} /><meshBasicMaterial color={f.glow} /></mesh>)}<Bx p={[0, 0.55, 0.36]} s={[0.1, 0.1, 0.24]} c="#77716b" /><Bx p={[0, 0.47, 0.46]} s={[0.1, 0.16, 0.08]} c="#77716b" /></>
+    case 'water_tank': return <><mesh position-y={0.7}><cylinderGeometry args={[0.48, 0.48, 1.3, 14]} /><meshLambertMaterial color={c} /></mesh>{[0.15, 0.7, 1.25].map(y => <mesh key={y} position-y={y}><cylinderGeometry args={[0.5, 0.5, 0.06, 14]} /><meshLambertMaterial color="#77716b" /></mesh>)}<mesh position-y={1.36}><cylinderGeometry args={[0.42, 0.48, 0.08, 14]} /><meshLambertMaterial color="#77716b" /></mesh></>
     default: return <Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={c} />
   }
 }
@@ -771,11 +774,12 @@ function JobList({ title, note, jobs, r, inv, empty, refine }: { title: string; 
 function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<string>; onClose: () => void }) {
   const w = useWorks(), p = w.pieces.find(x => x.id === id)
   if (!p) return null
-  const f = FURNITURE[p.item]
+  const f = FURNITURE[p.item], spill = spillIfRemoved(currentWater(), plumbingOf(w.pieces), p.item, farmNow())
   return (
     <HearthFrame title={f.name} maxWidth={420} onClose={onClose} fixed dataPanel="piece">
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
         <div style={{ fontSize: 13, color: H.inkSoft }}>{f.blurb}</div>
+        {spill > 0 && <div data-spill={spill} style={{ fontSize: 12.5, color: '#9a4a2a', fontWeight: 600 }}>Picking this up pours away {spill} water.</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <span data-act="turn-piece"><HearthButton onClick={() => { const t = turnPiece(getW(), owned, id); if (t) setWorks(t); else hudSay('No room to turn it here.', 'info') }}>Turn</HearthButton></span>
           <span data-act="pickup-piece"><HearthButton primary onClick={() => { const r = pickUpPiece(getW(), id, getInv()); if (r) { setWorks(r.works); setInv(r.inv); onClose(); hudSay(`${f.name} · back in your bag.`, 'item', 3) } else hudSay('No room in the bag for it.', 'info') }}>Pick up</HearthButton></span>

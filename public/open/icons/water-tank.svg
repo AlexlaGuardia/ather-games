@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A riveted iron water tank. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <rect x="6" y="7" width="20" height="19" rx="2.4" fill="#4e4a47" stroke="#26231f" stroke-width=".8"/><rect x="5.4" y="6" width="21.2" height="3" rx="1" fill="#77716b" stroke="#26231f" stroke-width=".8"/><rect x="5.4" y="16" width="21.2" height="1.8" rx="0.4" fill="#77716b" stroke="#26231f" stroke-width=".8"/><rect x="13" y="9.6" width="6" height="5.4" rx="0.8" fill="#7fc4ea" stroke="#2f7fa0" stroke-width=".8"/><circle cx="8" cy="10.5" r=".7" fill="#77716b"/><circle cx="8" cy="20.5" r=".7" fill="#77716b"/><circle cx="8" cy="24" r=".7" fill="#77716b"/><circle cx="24" cy="10.5" r=".7" fill="#77716b"/><circle cx="24" cy="20.5" r=".7" fill="#77716b"/><circle cx="24" cy="24" r=".7" fill="#77716b"/>
+</svg>

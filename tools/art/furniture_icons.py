@@ -62,6 +62,15 @@ PIECES = {
         + '<rect x="12" y="4" width="8" height="10" rx="1.6" fill="#8fe3ff" stroke="#2f7fa0" stroke-width=".8"/>'
         + ''.join(f'<path d="M{x} 3.4 L{x} 14.6" stroke="#a4793e" stroke-width="1"/>' for x in (12.6, 16, 19.4))
         + r(11, 2.4, 10, 1.6, '#c99a52', '#5e4219', 0.4)),
+    'water_tap': ('iron', 'A water tap: an iron housing with lit sigils and a spout.', lambda h, m, d:
+        r(9, 8, 14, 18, m, d, 1.6) + r(8, 25, 16, 2.4, h, d, 0.6) + r(8.4, 6, 15.2, 2.6, h, d, 0.8)
+        + ''.join(f'<circle cx="{x}" cy="13" r="1.6" fill="#8fe3ff" stroke="#2f7fa0" stroke-width=".5"/>' for x in (12.5, 16, 19.5))
+        + r(22, 17, 5, 2.4, h, d, 0.6) + r(25, 17, 2.2, 4.6, h, d, 0.5)
+        + '<path d="M26.1 22.4 Q25.6 24 26.1 25 Q26.6 24 26.1 22.4 Z" fill="#7fc4ea"/>'),
+    'water_tank': ('iron', 'A riveted iron water tank.', lambda h, m, d:
+        r(6, 7, 20, 19, m, d, 2.4) + r(5.4, 6, 21.2, 3, h, d, 1) + r(5.4, 16, 21.2, 1.8, h, d, 0.4)
+        + r(13, 9.6, 6, 5.4, '#7fc4ea', '#2f7fa0', 0.8)
+        + ''.join(f'<circle cx="{x}" cy="{y}" r=".7" fill="{h}"/>' for x in (8, 24) for y in (10.5, 20.5, 24))),
 }
 for pid, (wood, note, body) in PIECES.items():
     with open(os.path.join(OUT, pid.replace('_', '-') + '.svg'), 'w') as f:

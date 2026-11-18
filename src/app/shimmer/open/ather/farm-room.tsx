@@ -3,7 +3,8 @@
 // the store, the panel (E at the farm's standing spot) and the code-built interior: six soil beds whose plants grow by phase,
 // and a wooden composter against the back wall that glows when it is armed.
 //
-// Panel copy is plain on purpose: no watering anywhere (the water tap is not in the open world yet), nothing invented.
+// Panel copy is plain on purpose, nothing invented. WATER (11-18): a growing bed takes one water from the tap's tanks
+// (ather/water.ts; the tap + tanks are plot pieces bought at Rune Hold's Smithy); no tap = the beds grow at base time.
 // Checks' hook, like __ather / __build: `__farm.skew(ms)` moves the FARM'S clock forward (nothing else), so a check can grow
 // a crop without waiting real minutes. Planting, harvesting and feeding are always real clicks.
 import React, { useEffect, useState, useSyncExternalStore } from 'react'
@@ -11,7 +12,8 @@ import { HearthFrame, HearthButton, Well, H } from '../../ui/hearth'
 import { getInv, setInv, useInv } from '../shared/bag'
 import { itemDef } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
-import { CROPS, phaseOf, parseGraded, CHARGE_CAP, DOSE_COST, type Bed, type CropId } from './farming'
+import { CROPS, phaseOf, parseGraded, growMs, water as waterBed, CHARGE_CAP, DOSE_COST, type Bed, type CropId } from './farming'
+import { plumbingOf, capacityOf, wholeOf, msToNext, settle, stale, draw, freshWater, loadWater, saveWater, type WaterSave } from './water'
 import { loadFarmSave, saveFarmSave, freshFarmSave, plantAt, harvestAt, feedAt, seedsReach, dosesOf, roomLeft, msLeft, isArmed, BEDS, type FarmSave } from './farmroom'
 import { roomStore, ROOM_STORE_SLOTS, ROOM_KEEPS, stockRoomFromBag, takeFromRoom, toWorld, ROOMS, type Room, type Works, type StoreMove } from './rooms'
 import { GROUND_Y } from './plot'
@@ -30,6 +32,22 @@ export const farmNow = () => Date.now() + skew
 if (typeof window !== 'undefined') (window as unknown as { __farm: unknown }).__farm = { skew: (ms: number) => { skew += ms; subs.forEach(f => f()) }, now: () => farmNow() }
 const useNow = (everyMs: number) => { const [n, set] = useState(farmNow); useEffect(() => { const t = setInterval(() => set(farmNow()), everyMs); return () => clearInterval(t) }, [everyMs]); return n }
 
+// ── the water store (one per garden). Same clock as the farm, so __farm.skew fills the tanks too. ─────────────────
+let wsv: WaterSave | null = null
+const WSERVER = freshWater(0)
+const wsubs = new Set<() => void>()
+const getWater = (): WaterSave => { if (!wsv) wsv = typeof window === 'undefined' ? WSERVER : loadWater(farmNow()); return wsv }
+export function setWater(n: WaterSave) { wsv = n; saveWater(n); wsubs.forEach(f => f()) }
+export const currentWater = getWater
+export const useWater = () => useSyncExternalStore(f => { wsubs.add(f); return () => { wsubs.delete(f) } }, getWater, () => WSERVER)
+/** Call whenever the plot's pieces change (workshop setWorks): a tap set or picked up re-bases the level from now, so a new
+ *  tap never back-fills and a lifted tank clamps once (ather/water.ts › settle). */
+export function settleWater(pieces: readonly { item: string }[]) {
+  if (typeof window === 'undefined') return
+  const pl = plumbingOf(pieces), cur = getWater()
+  if (stale(cur, pl) || wholeOf(cur, pl, farmNow()) < Math.floor(cur.n + 1e-9)) setWater(settle(cur, pl, farmNow()))
+}
+
 export const PHASE_NAME = ['Planted', 'Sprout', 'Growing', 'Ready'] as const
 const mmss = (ms: number) => { const s = Math.ceil(ms / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? `${h}h ${m}m` : `${m}:${String(s % 60).padStart(2, '0')}` }
 const lab: React.CSSProperties = { color: H.inkSoft, fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase' }
@@ -47,8 +65,10 @@ function Cell({ s, ...rest }: { s: { id: string; n: number } | null } & React.HT
 
 // ── the panel ─────────────────────────────────────────────────────────────────────────────────────────────────
 export function FarmPanel({ room, works, setWorks, onClose }: { room: Room; works: Works; setWorks: (w: Works) => void; onClose: () => void }) {
-  const inv = useInv(), save = useFarm(), now = useNow(1000)
+  const inv = useInv(), save = useFarm(), now = useNow(1000), wsave = useWater()
   const r = works.rooms.find(x => x.id === room.id) ?? room
+  const pl = plumbingOf(works.pieces), cap = capacityOf(pl), have = wholeOf(wsave, pl, now), next = msToNext(wsave, pl, now)
+  useEffect(() => { settleWater(works.pieces) }, [works.pieces])
   const { farm } = save, armed = isArmed(farm), doses = dosesOf(farm)
   const [pick, setPick] = useState<number | null>(null)
   const [sel, setSel] = useState<number | null>(null), [count, setCount] = useState(1)
@@ -68,6 +88,13 @@ export function FarmPanel({ room, works, setWorks, onClose }: { room: Room; work
     if (!m.ok) { hudSay(m.why, 'info'); return }
     setFarm(m.sv); setWorks(m.works); hudSay(m.say, 'item', 4)
   }
+  const doWater = (i: number) => {
+    const t = farmNow(), f = waterBed(currentFarm().farm, i, t)
+    if (!f.ok) { hudSay(f.why === 'already watered' ? 'Already watered.' : 'Nothing to water.', 'info'); return }
+    const d = draw(currentWater(), plumbingOf(works.pieces), t)
+    if (!d.ok) { hudSay(d.why, 'info'); return }
+    setWater(d.sv); setFarm({ ...currentFarm(), farm: f.farm }); hudSay(`Bed ${i + 1} watered.`, 'item', 2)
+  }
   const putIn = () => {
     if (sel === null) return
     const m = feedAt(currentFarm(), getInv(), sel, count)
@@ -80,7 +107,12 @@ export function FarmPanel({ room, works, setWorks, onClose }: { room: Room; work
       <div data-farm-root style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
         <div>
           <div style={lab}>The beds</div>
-          <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>Plant a seed, wait, harvest. A crop comes up the grade of its seed, and two seeds come back.</div>
+          <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>Plant a seed, wait, harvest. A crop comes up the grade of its seed, and two seeds come back. A watered bed grows in three quarters of the time.</div>
+          <div data-water={have} data-water-cap={cap} data-taps={pl.taps} style={{ fontSize: 12.5, color: H.ink, margin: '0 0 8px', fontVariantNumeric: 'tabular-nums' }}>
+            {pl.taps > 0
+              ? <>Water · <b>{have}</b> / {cap}{next !== null ? <span style={{ color: H.inkSoft }}> · next in {mmss(next)}</span> : <span style={{ color: H.inkSoft }}> · full</span>}</>
+              : <span style={{ color: H.inkSoft }}>No water tap on your plot. Rune Hold&apos;s Smithy sells one; set it from the planning table.</span>}
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
             {Array.from({ length: BEDS }, (_, i) => {
               const bed = farm.beds[i], ph = bed ? phaseOf(bed, now, armed) : null
@@ -96,7 +128,14 @@ export function FarmPanel({ room, works, setWorks, onClose }: { room: Room; work
                     <>
                       <div style={{ fontSize: 13, fontWeight: 700, color: H.ink, lineHeight: 1.2 }}>{CROPS[bed.crop].name} · {bed.grade}</div>
                       <div style={{ fontSize: 11.5, color: H.inkSoft }}>{PHASE_NAME[ph!]}{ph! < 3 ? ` · ${mmss(msLeft(bed, farm, now))}` : ''}</div>
-                      {ph === 3 ? <span data-harvest={i}><HearthButton small primary onClick={() => doHarvest(i)}>Harvest</HearthButton></span> : <div style={{ height: 4, borderRadius: 2, background: 'rgba(0,0,0,.12)', overflow: 'hidden' }}><div style={{ height: '100%', width: `${Math.min(100, Math.round(((now - bed.plantedAt) / (CROPS[bed.crop].growMs * (armed ? 0.85 : 1))) * 100))}%`, background: '#6fbf55' }} /></div>}
+                      {ph === 3 ? <span data-harvest={i}><HearthButton small primary onClick={() => doHarvest(i)}>Harvest</HearthButton></span> : (
+                        <>
+                          <div style={{ height: 4, borderRadius: 2, background: 'rgba(0,0,0,.12)', overflow: 'hidden' }}><div style={{ height: '100%', width: `${Math.min(100, Math.round(((now - bed.plantedAt) / growMs(bed, armed)) * 100))}%`, background: bed.watered ? '#5aa9d6' : '#6fbf55' }} /></div>
+                          {bed.watered
+                            ? <div data-watered={i} style={{ fontSize: 11, color: '#2f7fa0', fontWeight: 700 }}>Watered</div>
+                            : pl.taps > 0 ? <span data-water-bed={i}><HearthButton small disabled={have < 1} onClick={() => doWater(i)}>Water</HearthButton></span> : null}
+                        </>
+                      )}
                     </>
                   )}
                 </div>
