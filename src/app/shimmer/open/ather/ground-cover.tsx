@@ -100,13 +100,22 @@ export function GroundCover({ cover, ground, skip, focus }: {
   }, [])
   useEffect(() => () => { for (const k of kinds) k.geo.dispose() }, [kinds])
   const refs = useRef<(THREE.InstancedMesh | null)[]>([])
-  const last = useRef({ x: Infinity, z: Infinity, cover: '' as string })
+  const last = useRef({ x: Infinity, z: Infinity, cover: '' as string, skip: null as null | ((x: number, z: number) => boolean) })
+  const laid = useRef<{ x: number; z: number }[]>([])
+  // checks' hook (like __folk): READ where the cover stands (M23: nothing under a placed room or piece)
+  useEffect(() => {
+    const g = window as unknown as { __cover?: unknown }
+    const within = (x0: number, x1: number, z0: number, z1: number) => laid.current.filter(t => t.x > x0 && t.x < x1 && t.z > z0 && t.z < z1)
+    g.__cover = { inside: (x0: number, x1: number, z0: number, z1: number) => within(x0, x1, z0, z1).length, points: (x0: number, x1: number, z0: number, z1: number) => within(x0, x1, z0, z1), total: () => laid.current.length }
+    return () => { delete g.__cover }
+  }, [])
 
   useFrame(() => {
     const f = focus.current
     if (refs.current.length < kinds.length || refs.current.some(r => !r)) return   // not mounted yet: lay next frame
-    if (cover === last.current.cover && Math.hypot(f.x - last.current.x, f.z - last.current.z) < RELAY) return
-    last.current = { x: f.x, z: f.z, cover }
+    // re-lay on a move, a new look, or a new skip (M23: a room or piece placed / lifted hands the page a new skip)
+    if (cover === last.current.cover && skip === last.current.skip && Math.hypot(f.x - last.current.x, f.z - last.current.z) < RELAY) return
+    last.current = { x: f.x, z: f.z, cover, skip }
     const lists: { x: number; y: number; z: number; r: number; s: number; c: THREE.Color }[][] = kinds.map(() => [])
     if (cover !== 'none') {
       const c0 = new THREE.Color(), cx = Math.floor(f.x / CELL), cz = Math.floor(f.z / CELL), R = Math.ceil(COVER_R / CELL)
@@ -143,6 +152,7 @@ export function GroundCover({ cover, ground, skip, focus }: {
       }
     }
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0)
+    laid.current = lists.flatMap(L => L.slice(0, MAX).map(t => ({ x: t.x, z: t.z })))
     kinds.forEach((_, k) => {
       const mesh = refs.current[k]; if (!mesh) return
       const L = lists[k], n = Math.min(L.length, MAX)
