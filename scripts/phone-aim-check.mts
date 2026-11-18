@@ -33,7 +33,7 @@ for (const [w, h] of [[844, 390], [390, 844]]) {
   // the cluster: no two of these boxes overlap
   const boxes = await p.evaluate(() => {
     const pick = (sel: string) => [...document.querySelectorAll<HTMLElement>(sel)].map(e => { const r = e.getBoundingClientRect(); return { sel, x: r.x, y: r.y, w: r.width, h: r.height } }).filter(b => b.w > 0 && b.h > 0)
-    return [...pick('[data-touch="aim"]'), ...pick('[data-touch="fire"]'), ...pick('[data-touch="menu"]'), ...pick('[data-touch="jump"]'), ...pick('[data-touch="slide"]'), ...pick('[data-hud="status"]'), ...pick('[data-hud="hotbar"]')]
+    return [...pick('[data-touch="aim"]'), ...pick('[data-touch="fire"]'), ...pick('[data-touch="menu"]'), ...pick('[data-touch="jump"]'), ...pick('[data-touch="slide"]'), ...pick('[data-hud="status"]'), ...pick('[data-hud="hotbar"]'), ...pick('[data-touch-near]')]   // the in-reach pills too (the Wilds' DRAW pill hid under the hotbar once)
   })
   const hit = (a: any, b: any) => a.x < b.x + b.w - 1 && b.x < a.x + a.w - 1 && a.y < b.y + b.h - 1 && b.y < a.y + a.h - 1
   const overlaps: string[] = []
@@ -44,6 +44,7 @@ for (const [w, h] of [[844, 390], [390, 844]]) {
   // the thumb cluster must be wholly on screen; the shared status line is REPORTED (not this file's surface: in portrait it runs off the left
   // edge, found 11-18 and routed to hub) so it can neither hide nor fail the cluster's verdict
   res.onScreen = boxes.filter(b => b.sel.startsWith('[data-touch')).every(inside)
+  res.nearPills = boxes.filter(b => b.sel === '[data-touch-near]').length
   res.statusClipped = boxes.some(b => b.sel === '[data-hud="status"]' && !inside(b))
   await p.screenshot({ path: `${out}/${w}x${h}-1-drawn.png` })
   // AIM: tap up, tap down
