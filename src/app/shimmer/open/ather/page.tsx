@@ -14,6 +14,7 @@
 // CANON_GAPS for Magii; UI copy stays plain until it is authored. Desktop: pointer lock + keys. Phone (11-15): shared/
 // touch-controls (stick, drag-look, jump/slide/fire, context taps that press the same keys this page handles).
 
+import { OwnerReady } from '../shared/owner-ready'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OpenHands, type OpenHandsApi } from '../shared/open-hands'
@@ -111,7 +112,9 @@ type Spawn = { x: number; z: number; yaw: number }
 type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement }
 type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement }
 
-export default function AtherSlice() {
+// ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
+export default function AtherSlice() { return <OwnerReady><AtherSliceGame /></OwnerReady> }
+function AtherSliceGame() {
   const locked = useRef(false), frozen = useRef(false)
   const [isLocked, setLocked] = useState(false)
   const [isTouch, setIsTouch] = useState(false)
@@ -495,6 +498,8 @@ export default function AtherSlice() {
     const g = window as unknown as { __ather?: Record<string, unknown> }
     g.__ather = {
       ...(g.__ather ?? {}),
+      // read-only probe (owner-race-check): the plot the page is DRAWING, from the live store
+      works: () => { const w = currentWorks(); return { rooms: w.rooms.map(r => r.kind), pieces: w.pieces.map(p => p.item) } },
       zone: () => zone.kind,
       open: (k: 'gate' | 'greg' | 'athernyx') => setPanel(k === 'greg' ? { kind: 'talk', step: 0 } : { kind: 'map', view: k === 'athernyx' ? 'athernyx' : 'ather', travel: true }),
       travel: (d: Dest) => travel(d),

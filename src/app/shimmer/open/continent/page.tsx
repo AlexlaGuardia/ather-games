@@ -9,6 +9,7 @@
 // show sky. Houses and trees are placeholder geometry: towns read as towns, nothing more is claimed.
 // Desktop only for now (keys). ?region=<name> picks another exported region.
 
+import { OwnerReady } from '../shared/owner-ready'
 import { GateRings } from '../shared/gate-rings'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMenuLock } from '../shared/menu-lock'
@@ -1052,7 +1053,9 @@ const JUNCTION_LABEL: Record<string, string> = { square: 'Town square', roundabo
 const ROAD_LABEL: Record<string, string> = { paved: 'Paved road', road: 'Road', trail: 'Trail', pass: 'Mountain pass',
   ...Object.fromEntries(Object.entries(JUNCTION_LABEL).map(([k, v]) => [`j:${k}`, v])) }
 
-export default function ContinentRide() {
+// ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
+export default function ContinentRide() { return <OwnerReady><ContinentRideGame /></OwnerReady> }
+function ContinentRideGame() {
   const [R, setR] = useState<Region | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [hud, setHud] = useState<RideHud>({ x: 0, z: 0, yaw: 0, mph: 0, frac: 0, drift: false, air: 0, gearR: false, place: null, road: null, sign: null })
