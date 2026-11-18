@@ -9,6 +9,7 @@
 import { treeFor, TRUNK, type Zone, type TreeKind } from './forestry'
 import { crystalFor, type CrystalKind } from './prospecting'
 import type { Box, Shape } from '../terrain-world'
+import { relieve } from './relief'
 
 /** Biome ids, matched to export_wilds.py. What a biome is FOR: what you gather there, what a waymark there sends
  *  home. The numbers are the file format; the names are build vocabulary, not canon place names. */
@@ -55,20 +56,27 @@ const hash = (a: number, b: number, s = 0) => {
 /** `clear(x, z)` in WORLD coords (tile-local + the tile's centre): no tree stands there (the path network: paths,
  *  settlements, the fair's ground). Ids are counted as if it stood, so a prune saved before the paths still finds its
  *  tree, and crystals still dodge it, so no crystal moved either. */
-export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt: (i: number, j: number) => Zone = () => 'meadows', clear?: (x: number, z: number) => boolean): Wilds {
+export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt: (i: number, j: number) => Zone = () => 'meadows', clear?: (x: number, z: number) => boolean, relief = true): Wilds {
   const { nx, nz, cell, sizeX, sizeZ } = meta
   if (dm.length !== nx * nz) throw new Error(`wilds ${meta.name}: ${dm.length} heights, want ${nx * nz}`)
   if (biomes.length !== (nx - 1) * (nz - 1)) throw new Error(`wilds ${meta.name}: ${biomes.length} biome cells, want ${(nx - 1) * (nz - 1)}`)
-  const h = new Float32Array(dm.length)
-  for (let k = 0; k < dm.length; k++) h[k] = dm[k] / 10
   const hx = sizeX / 2, hz = sizeZ / 2
-
-  const heightAt = (x: number, z: number): number => {
+  const ox = ((meta as WildsMeta & { tx?: number }).tx ?? 0) * 1000, oz = ((meta as WildsMeta & { ty?: number }).ty ?? 0) * 1000
+  // RAW heights (the file) and the RELIEVED ones everyone stands on (relief.ts, BETA M16). The raw copy only decides which
+  // trees and crystals count, so their saved ids (prunes, fractures) never move when the relief is tuned.
+  const raw = new Float32Array(dm.length), h = new Float32Array(dm.length)
+  for (let k = 0; k < dm.length; k++) raw[k] = dm[k] / 10
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const k = j * nx + i
+    h[k] = relief ? relieve(-hx + i * cell + ox, -hz + j * cell + oz, raw[k], meta.waterY, clear) : raw[k]
+  }
+  const sampler = (H: Float32Array) => (x: number, z: number): number => {
     const fx = Math.min(nx - 1 - 1e-6, Math.max(0, (x + hx) / cell)), fz = Math.min(nz - 1 - 1e-6, Math.max(0, (z + hz) / cell))
     const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j
-    const h00 = h[j * nx + i], h10 = h[j * nx + i + 1], h01 = h[(j + 1) * nx + i], h11 = h[(j + 1) * nx + i + 1]
+    const h00 = H[j * nx + i], h10 = H[j * nx + i + 1], h01 = H[(j + 1) * nx + i], h11 = H[(j + 1) * nx + i + 1]
     return u >= v ? h00 + (h10 - h00) * u + (h11 - h10) * v : h00 + (h11 - h01) * u + (h01 - h00) * v
   }
+  const heightAt = sampler(h), rawAt = sampler(raw)
   const cellOf = (x: number, z: number) => {
     const i = Math.min(nx - 2, Math.max(0, Math.floor((x + hx) / cell))), j = Math.min(nz - 2, Math.max(0, Math.floor((z + hz) / cell)))
     return j * (nx - 1) + i
@@ -92,7 +100,7 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
   // the water line. Sizes by kind: a dawnwood is an old giant, a starwillow a slim weeping one.
   const trees: Tree[] = [], stood: { x: number; z: number }[] = []
   const NODE_M = 200
-  const ox = ((meta as WildsMeta & { tx?: number }).tx ?? 0) * 1000, oz = ((meta as WildsMeta & { ty?: number }).ty ?? 0) * 1000
+  const slopeOf = (at: (x: number, z: number) => number, x: number, z: number) => Math.hypot(at(x + 1, z) - at(x - 1, z), at(x, z + 1) - at(x, z - 1)) / 2
   for (let j = 0; j < ch; j++) for (let i = 0; i < cw; i++) {
     const b = biomes[j * cw + i]
     const cx = -hx + (i + 0.5) * cell, cz = -hz + (j + 0.5) * cell
@@ -100,18 +108,20 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
     const t = treeFor(zone, b, canopy[j * cw + i], hash(i, j, 6))
     if (!t || hash(i, j, 1) >= t.p) continue
     const x = -hx + (i + 0.2 + hash(i, j, 2) * 0.6) * cell, z = -hz + (j + 0.2 + hash(i, j, 3) * 0.6) * cell
+    // which trees COUNT is decided on the raw land (ids stable); where they stand is the relieved land
+    if (slopeOf(rawAt, x, z) > 0.6 || rawAt(x, z) < meta.waterY + 1) continue
     const y = heightAt(x, z)
-    const s = Math.hypot(heightAt(x + 1, z) - heightAt(x - 1, z), heightAt(x, z + 1) - heightAt(x, z - 1)) / 2
-    if (s > 0.6 || y < meta.waterY + 1) continue
     const big = t.kind === 'dawnwood' ? 1.55 : t.kind === 'shimmeroak' ? 1.2 : t.kind === 'starwillow' ? 0.95 : 1
     const id = `${meta.name}:${stood.length}`; stood.push({ x, z })
     if (clear?.(x + ox, z + oz)) continue
+    if (slopeOf(heightAt, x, z) > 0.9) continue   // an outcrop's flank holds no tree (its id still counted above)
     trees.push({ x, z, y, tall: (5 + hash(i, j, 4) * 5) * big, r: (1.6 + hash(i, j, 5) * 1.2) * big, kind: t.kind, id })
   }
 
   // Crystals: by ZONE on the crag (prospecting.ts › crystalFor), never under the water line or on a cliff face, never
   // inside a trunk. Their own hash salts, so adding them moved no tree.
   const crystals: Crystal[] = []
+  let cn = 0   // crystal ids count on the raw land, like trees (relief.ts never renumbers a saved fracture)
   for (let j = 0; j < ch; j++) for (let i = 0; i < cw; i++) {
     const b = biomes[j * cw + i]
     const cx = -hx + (i + 0.5) * cell, cz = -hz + (j + 0.5) * cell
@@ -119,11 +129,10 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
     const c = crystalFor(zone, b, hash(i, j, 9))
     if (!c || hash(i, j, 7) >= c.p) continue
     const x = -hx + (i + 0.25 + hash(i, j, 8) * 0.5) * cell, z = -hz + (j + 0.25 + hash(i, j, 10) * 0.5) * cell
-    const y = heightAt(x, z)
-    const s = Math.hypot(heightAt(x + 1, z) - heightAt(x - 1, z), heightAt(x, z + 1) - heightAt(x, z - 1)) / 2
-    if (s > 0.9 || y < meta.waterY + 0.4) continue
+    if (slopeOf(rawAt, x, z) > 0.9 || rawAt(x, z) < meta.waterY + 0.4) continue
     if (stood.some(t => Math.abs(t.x - x) < 2.5 && Math.abs(t.z - z) < 2.5)) continue
-    crystals.push({ x, z, y, kind: c.kind, s: 0.8 + hash(i, j, 11) * 0.5, rot: hash(i, j, 12) * Math.PI * 2, id: `${meta.name}:c${crystals.length}` })
+    const y = heightAt(x, z)
+    crystals.push({ x, z, y, kind: c.kind, s: 0.8 + hash(i, j, 11) * 0.5, rot: hash(i, j, 12) * Math.PI * 2, id: `${meta.name}:c${cn++}` })
   }
 
   // Trunk boxes in a cell grid for `solids` (the walker asks a small box many times a frame).

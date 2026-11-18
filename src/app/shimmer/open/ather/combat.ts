@@ -184,6 +184,16 @@ export function reload(c: Combat) {
   k.reloading = c.gun.reloadTime
 }
 
+/** Does the ground rise above the segment a→b anywhere along it? Marched at RAY_STEP (BETA M16: the Wilds have hills now, and
+ *  a round or a spit stepped ~10-30 m in one slow frame used to test only its END point, so it passed clean through a crest).
+ *  The end point is tested too; the start is where the shot was last frame, already above ground. */
+export const RAY_STEP = 4
+export function throughGround(T: Terrain, ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
+  const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / RAY_STEP))
+  for (let k = 1; k <= n; k++) { const t = k / n; if (ay + (by - ay) * t < T.heightAt(ax + (bx - ax) * t, az + (bz - az) * t)) return true }
+  return false
+}
+
 /** Closest approach of segment a→b to point p, squared. */
 function segDist2(ax: number, ay: number, az: number, bx: number, by: number, bz: number, px: number, py: number, pz: number) {
   const dx = bx - ax, dy = by - ay, dz = bz - az, L = dx * dx + dy * dy + dz * dz
@@ -206,7 +216,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   for (const r of c.rounds) {
     const ox = r.x, oy = r.y, oz = r.z
     r.x += r.vx * dt; r.y += r.vy * dt; r.z += r.vz * dt; r.life -= dt
-    if (r.y < T.heightAt(r.x, r.z)) { r.life = 0; continue }
+    if (throughGround(T, ox, oy, oz, r.x, r.y, r.z)) { r.life = 0; continue }
     const ch = c.champ
     if (ch && Math.hypot(ch.x - r.x, ch.z - r.z) < 4) {
       const head = segDist2(ox, oy, oz, r.x, r.y, r.z, ch.x, ch.y + CHAMP.headY, ch.z) < CHAMP.headR * CHAMP.headR
@@ -319,8 +329,9 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
 
   // spits
   for (const p of c.spits) {
+    const px0 = p.x, py0 = p.y, pz0 = p.z
     p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= 2.5 * dt; p.life -= dt
-    if (p.y < T.heightAt(p.x, p.z)) { p.life = 0; continue }
+    if (throughGround(T, px0, py0, pz0, p.x, p.y, p.z)) { p.life = 0; continue }
     const top = solidTop(c, p.x, p.z)
     if (top !== null && p.y < top) { p.life = 0; continue }   // stopped by a raised piece
     const bx = p.x - feet.x, bz = p.z - feet.z, by = p.y - (feet.y + 0.9)
