@@ -9,12 +9,14 @@
 import { treeFor, TRUNK, type Zone, type TreeKind } from './forestry'
 import { crystalFor, type CrystalKind } from './prospecting'
 import type { Box, Shape } from '../terrain-world'
-import { relieve } from './relief'
+import { relieve, outcropsIn, outcropRoll } from './relief'
 import type { RoadField } from './network'
 
 /** Biome ids, matched to export_wilds.py. What a biome is FOR: what you gather there, what a waymark there sends
  *  home. The numbers are the file format; the names are build vocabulary, not canon place names. */
 export const BIOME = { water: 0, shore: 1, meadow: 2, woods: 3, rock: 4 } as const
+/** Share of the standing M16 outcrops that carry one crystal node (relief.ts outcrops; ~0.45 per 60 m square stand). */
+export const OUTCROP_CRYSTAL_P = 0.5
 export type BiomeId = (typeof BIOME)[keyof typeof BIOME]
 export const BIOME_NAME: Record<BiomeId, string> = { 0: 'water', 1: 'shore', 2: 'meadow', 3: 'woods', 4: 'rock' }
 
@@ -134,6 +136,25 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
     if (stood.some(t => Math.abs(t.x - x) < 2.5 && Math.abs(t.z - z) < 2.5)) continue
     const y = heightAt(x, z)
     crystals.push({ x, z, y, kind: c.kind, s: 0.8 + hash(i, j, 11) * 0.5, rot: hash(i, j, 12) * Math.PI * 2, id: `${meta.name}:c${cn++}` })
+  }
+  // ★ CRYSTALS ON THE OUTCROPS (Alex 11-18 playtest: "I didn't see any rocky nodes"). The map's rock cells are 6% of the land
+  // and NONE lie on Greg's tile or its west/south neighbours, so no crystal stood within ~1 km of the start, while the M16
+  // outcrops look like rock and carried nothing. OUTCROP_CRYSTAL_P of the standing outcrops now carry ONE node on the flank,
+  // in the tile's own ZONE mix (crystalFor on rock; the Thicket stays stoneless). Ids are the outcrop's GLOBAL lattice
+  // square (`o<i>_<j>`), so no rock-cell id moved and a fractured outcrop crystal saves like any other.
+  if (relief) for (const o of outcropsIn(-hx + ox, -hz + oz, hx + ox, hz + oz)) {
+    const lx = o.x - ox, lz = o.z - oz
+    const zone = zoneAt(Math.min(4, Math.max(0, Math.floor((lx + hx) / NODE_M))), Math.min(4, Math.max(0, Math.floor((lz + hz) / NODE_M))))
+    const c = crystalFor(zone, BIOME.rock, outcropRoll(o, 301))
+    if (!c || outcropRoll(o, 302) >= OUTCROP_CRYSTAL_P) continue
+    const a = outcropRoll(o, 303) * Math.PI * 2, d = o.R * 0.55
+    const x = lx + Math.cos(a) * d, z = lz + Math.sin(a) * d
+    if (Math.abs(x) > hx - 2 || Math.abs(z) > hz - 2) continue
+    // the outcrop must really stand here (the path / water / arrival masks flatten some away)
+    let ring = 0
+    for (let k = 0; k < 6; k++) ring += heightAt(lx + Math.cos(k * Math.PI / 3) * o.R * 1.6, lz + Math.sin(k * Math.PI / 3) * o.R * 1.6) / 6
+    if (heightAt(lx, lz) - ring < 1.5 || rawAt(x, z) < meta.waterY + 0.4) continue
+    crystals.push({ x, z, y: heightAt(x, z), kind: c.kind, s: 0.8 + outcropRoll(o, 304) * 0.5, rot: outcropRoll(o, 305) * Math.PI * 2, id: `${meta.name}:o${o.i}_${o.j}` })
   }
 
   // Trunk boxes in a cell grid for `solids` (the walker asks a small box many times a frame).

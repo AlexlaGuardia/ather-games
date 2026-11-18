@@ -45,6 +45,26 @@ export const OUT_CELL = 60, OUT_P = 0.45
  *  Kept as a literal because waymarks.ts imports wilds.ts; relief.test.ts asserts the two agree. */
 export const ARRIVAL = { x: -300, z: 300 }, ARRIVAL_FLAT = 22, ARRIVAL_FADE = 30
 
+export type Outcrop = { i: number; j: number; x: number; z: number; R: number; H: number }
+/** The outcrop standing in lattice square (i, j), world coordinates, or null (OUT_P of the squares hold one). */
+export function outcropAt(i: number, j: number): Outcrop | null {
+  if (h32(i, j, 201) >= OUT_P) return null
+  return { i, j, x: (i + 0.2 + h32(i, j, 202) * 0.6) * OUT_CELL, z: (j + 0.2 + h32(i, j, 203) * 0.6) * OUT_CELL,
+    R: 5 + h32(i, j, 204) * 4, H: 3.5 + h32(i, j, 205) * 3 }
+}
+/** Every outcrop whose centre lies in the world box [x0,x1) × [z0,z1). Global lattice: a tile edge never splits one in two. */
+export function outcropsIn(x0: number, z0: number, x1: number, z1: number): Outcrop[] {
+  const out: Outcrop[] = []
+  for (let j = Math.floor(z0 / OUT_CELL) - 1; j <= Math.floor(z1 / OUT_CELL); j++)
+    for (let i = Math.floor(x0 / OUT_CELL) - 1; i <= Math.floor(x1 / OUT_CELL); i++) {
+      const o = outcropAt(i, j)
+      if (o && o.x >= x0 && o.x < x1 && o.z >= z0 && o.z < z1) out.push(o)
+    }
+  return out
+}
+/** An outcrop's own salt, for anything that rides on it (wilds.ts: the crystal it may carry). */
+export const outcropRoll = (o: Outcrop, salt: number) => h32(o.i, o.j, salt)
+
 /** The raw relief at a world point, before any mask: hills + ridges + outcrops, metres. */
 export function reliefRaw(x: number, z: number): number {
   const hill = (vnoise(x, z, HILL_W, 101) * 0.65 + vnoise(x, z, HILL_W * 0.5, 102) * 0.35 - 0.5) * 2 * HILL_M
@@ -53,12 +73,10 @@ export function reliefRaw(x: number, z: number): number {
   let out = 0
   const ci = Math.floor(x / OUT_CELL), cj = Math.floor(z / OUT_CELL)
   for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
-    const i = ci + di, j = cj + dj
-    if (h32(i, j, 201) >= OUT_P) continue
-    const ox = (i + 0.2 + h32(i, j, 202) * 0.6) * OUT_CELL, oz = (j + 0.2 + h32(i, j, 203) * 0.6) * OUT_CELL
-    const R = 5 + h32(i, j, 204) * 4, H = 3.5 + h32(i, j, 205) * 3
-    const d = Math.hypot(x - ox, z - oz)
-    if (d < R) out = Math.max(out, H * smooth(1 - d / R) + (h32(Math.floor(x), Math.floor(z), 206) - 0.5) * 0.3)   // a rough crown
+    const o = outcropAt(ci + di, cj + dj)
+    if (!o) continue
+    const d = Math.hypot(x - o.x, z - o.z)
+    if (d < o.R) out = Math.max(out, o.H * smooth(1 - d / o.R) + (h32(Math.floor(x), Math.floor(z), 206) - 0.5) * 0.3)   // a rough crown
   }
   return hill + ridge + out
 }

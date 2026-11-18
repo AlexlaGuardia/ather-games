@@ -72,7 +72,14 @@ ok(dug === 0, `relief never digs dry land under the water line (${dug})`)
   ok(W.trees.length <= R0.trees.length && R0.trees.length - W.trees.length < 50, `only a few trees drop off outcrops (${R0.trees.length} -> ${W.trees.length})`)
   ok(W.trees.every(t => Math.abs(t.y - W.heightAt(t.x, t.z)) < 1e-6), 'trees stand on the relieved ground')
   const rawC = new Map(R0.crystals.map(c => [c.id, c]))
-  ok(W.crystals.length === R0.crystals.length && W.crystals.every(c => rawC.get(c.id)?.x === c.x && rawC.get(c.id)?.z === c.z), 'crystal ids keep their spots')
+  // rock-cell crystals (`:c<n>`) are the raw tile's, spot for spot; outcrop crystals (`:o<i>_<j>`, Alex 11-18) come ON TOP
+  const cell = W.crystals.filter(c => /:c\d+$/.test(c.id)), outc = W.crystals.filter(c => /:o-?\d+_-?\d+$/.test(c.id))
+  ok(cell.length === R0.crystals.length && cell.every(c => rawC.get(c.id)?.x === c.x && rawC.get(c.id)?.z === c.z), 'rock-cell crystal ids keep their spots')
+  ok(cell.length + outc.length === W.crystals.length, `every crystal is a rock-cell one or an outcrop one (${W.crystals.length - cell.length - outc.length} other)`)
+  ok(outc.length >= 20, `outcrops carry crystals on this tile (${outc.length}; raw rock cells gave ${R0.crystals.length})`)
+  ok(R0.crystals.every(c => !/:o/.test(c.id)), 'the raw (no-relief) parse adds no outcrop crystals')
+  ok(new Set(W.crystals.map(c => c.id)).size === W.crystals.length, 'crystal ids unique')
+  ok(outc.every(c => Math.abs(c.y - W.heightAt(c.x, c.z)) < 1e-6), 'outcrop crystals sit on the relieved ground')
 }
 
 // 6. SEAMS: first-wilds (tile 0,0) and w1_0 (tile 1,0) agree on their shared column, raw and relieved
