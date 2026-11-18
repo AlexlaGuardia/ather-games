@@ -171,7 +171,8 @@ const LINEUP: readonly { build: MoglinBuild; garb: MoglinGarb; tone: number; act
 function MoglinLineup() {
   const [owner, setOwner] = useState(false)
   useEffect(() => { fetch('/api/owner', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then(j => setOwner(!!j?.owner)).catch(() => {}) }, [])
-  if (!owner) return null
+  // owner on ather.games; any dev server too (devwin previews: a production build is never 'development')
+  if (!owner && process.env.NODE_ENV !== 'development') return null
   // open ground past the table and the starter Keepstone, facing the threshold
   const x0 = TABLE.x + 7.5, z0 = TABLE.z + 2.5, yaw = Math.atan2(THRESHOLD.x - x0, THRESHOLD.z - z0)
   return (
