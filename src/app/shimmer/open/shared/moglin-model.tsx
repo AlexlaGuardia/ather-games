@@ -35,6 +35,12 @@ export const FUR_TONES: readonly { id: string; label: string; fur: string; light
   { id: 'moss', label: 'Moss-brown', fur: '#7d6a45', light: '#ddd1b0' },
 ]
 
+/** ★ ALEX 11-18: THE CHIBI is the Moglin, and a Moglin's fur tone is RANDOM like its grades and trade, then fixed for
+ *  life. Drawn from its id (a stable hash): random across folk, the same Moglin always the same coat, no new save field,
+ *  and the settlement scene and the plot agree because both ask this one function. */
+export const MOGLIN_BUILD: MoglinBuild = 'chibi'
+export const furOf = (id: string) => FUR_TONES[[...id].reduce((a, c) => (Math.imul(a, 31) + c.charCodeAt(0)) >>> 0, 2166136261) % FUR_TONES.length]
+
 /** Proportions per build (metres; a Moglin is ~0.91 m, the keeper ~1.8). */
 const BUILD = {
   plush: { hip: 0.17, torsoY: 0.33, torsoR: 0.2, headPivot: 0.52, headR: 0.2, earS: 1, legL: 0.12, armL: 0.13, s: 1 },
@@ -44,7 +50,7 @@ const BUILD = {
 const PINK = '#f0a3a0', EAR_IN = '#ee9a92', EYE = '#1d1410', NOSE = '#e98282', WHISKER = '#3a2a20'
 const TAU = Math.PI * 2
 
-export function MoglinModel({ build = 'plush', action = 'idle', garb = 'none', tone = FUR_TONES[0], speed = 1, seed = 0 }: {
+export function MoglinModel({ build = MOGLIN_BUILD, action = 'idle', garb = 'none', tone = FUR_TONES[0], speed = 1, seed = 0 }: {
   build?: MoglinBuild; action?: MoglinAction; garb?: MoglinGarb; tone?: (typeof FUR_TONES)[number]; speed?: number; seed?: number
 }) {
   const B = BUILD[build]
