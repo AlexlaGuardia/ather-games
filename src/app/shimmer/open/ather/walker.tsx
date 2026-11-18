@@ -6,6 +6,8 @@
 // A phone feeds the same step through shared/touch.ts (stick, drag-look, held jump/slide), merged below.
 
 import { useEffect, useMemo, useRef } from 'react'
+import { fpGunAds } from '../shared/fp-gun'
+import { adsFov, adsLookScale } from '../shared/optics'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { createLoco, tickLocomotion, eyeY, WALK_SPEED, SPEED_CAP, type LocoWorld } from '../shared/locomotion'
@@ -13,6 +15,9 @@ import { touch, TOUCH_LOOK_SENS } from '../shared/touch'
 import { getSettings, useSettings, pixelRatioCap } from '../shared/settings'
 
 const SENS = 0.0022
+// ★ THE SIGHTS (Alex 11-18): while a held gun is in its sights (shared/fp-gun.tsx owns the eased adsT), the field of view is the optic's
+// true zoom (optics.adsFov) and the look slows by exactly 1/zoom (adsLookScale), for the mouse and the thumb alike. Nothing aims, nothing changes.
+const sightLook = () => { const a = fpGunAds(); return a.optic && a.t > 0.001 ? adsLookScale(getSettings().fov, a.optic, a.t) : 1 }
 const FOV_KICK = 8   // the walk FOV itself is a setting now (shared/settings.ts › fov, default 75)
 
 export type Loco = ReturnType<typeof createLoco>
@@ -45,7 +50,7 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
     const move = (e: MouseEvent) => {
       if (!locked.current || frozen.current) return
       // sensitivity and invert are Options (shared/settings.ts), read live so a slider takes effect mid-walk
-      const st = getSettings(), k = SENS * st.mouseSens
+      const st = getSettings(), k = SENS * st.mouseSens * sightLook()
       look.current.yaw -= e.movementX * k
       look.current.pitch = Math.max(-1.5, Math.min(1.5, look.current.pitch - e.movementY * k * (st.invertY ? -1 : 1)))
     }
@@ -76,7 +81,7 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
     const k = frozen.current ? new Set<string>() : new Set([...keys.current, ...touch.held]), lc = loco.current
     // touch look: consume the dragged pixels every frame (dropped, not banked, while a panel has the screen)
     if (!frozen.current && (touch.look.dx || touch.look.dy)) {
-      const st = getSettings(), k = TOUCH_LOOK_SENS * st.touchSens
+      const st = getSettings(), k = TOUCH_LOOK_SENS * st.touchSens * sightLook()
       look.current.yaw -= touch.look.dx * k
       look.current.pitch = Math.max(-1.5, Math.min(1.5, look.current.pitch - touch.look.dy * k * (st.invertY ? -1 : 1)))
     }
@@ -106,7 +111,9 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
     const speed = Math.hypot(lc.hvx, lc.hvz), cam = camera as THREE.PerspectiveCamera
     const st = getSettings()
     const fov = st.fov + (st.speedFov ? FOV_KICK : 0) * Math.min(1, Math.max(0, (speed - WALK_SPEED) / (SPEED_CAP - WALK_SPEED)))
-    if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, dt * 8); cam.updateProjectionMatrix() }
+    const ads = fpGunAds()
+    if (ads.optic && ads.t > 0.001) { const f = adsFov(st.fov, ads.optic, ads.t); if (Math.abs(cam.fov - f) > 0.01) { cam.fov = f; cam.updateProjectionMatrix() } }   // the gun already eases t: follow it exactly
+    else if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, dt * 8); cam.updateProjectionMatrix() }
     onTick(lc, yaw, dt)
   })
   return null
