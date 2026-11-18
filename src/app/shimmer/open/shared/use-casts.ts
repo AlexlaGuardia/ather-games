@@ -8,7 +8,8 @@
 //   - restore heals the vitals (or reads "you are whole")
 import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react'
 import { castForMove, type CastSpec } from '../../play3d/cast'
-import { castMoves, press, freshClock, cooling, type CastSlot, type CastClock } from './casting'
+import { castMoves, press, freshClock, cooling, CAST_KEY, type CastSlot, type CastClock } from './casting'
+import { beginChannel, channelTick, type ChannelRun } from '../ather/combat-casts'
 import { useBirth } from '../birth-gate'
 import { useLoadout } from './loadout'
 import { hudSay, type Mana } from './game-hud'
@@ -16,7 +17,7 @@ import { hudSay, type Mana } from './game-hud'
 export interface CastChip { key: string; name: string | null; cool: number; tooDear: boolean }
 interface VitalsLike { hp: number; hpMax: number }
 
-const FLASH: Record<string, string> = { terrain: '190,190,200', field: '255,217,160', projectile: '143,211,255', status: '201,160,255', restore: '143,227,160', infusion: '255,207,112' }
+const FLASH: Record<string, string> = { veil: '255,170,120', channel: '255,140,80', terrain: '190,190,200', field: '255,217,160', projectile: '143,211,255', status: '201,160,255', restore: '143,227,160', infusion: '255,207,112' }
 /** Off the Wilds there is nothing to catch, but the cast is still seen: a ring at the aim point (screen centre). */
 function flashAtAim(sp: CastSpec) {
   if (typeof document === 'undefined') return
@@ -49,6 +50,15 @@ export function useCasts(o: {
   const impulse = useRef<CastSpec | null>(null)
   const handsCastAt = useRef(-Infinity)
   const castHud = useRef<CastChip[]>([])
+  /** the channel the keeper is HOLDING (Meltbore): billed each frame below, ended by the key coming up (the keyup effect) or an empty pool */
+  const channel = useRef<(ChannelRun & { slot: CastSlot; keyDown: boolean }) | null>(null)
+  const endChannel = useCallback((why: 'released' | 'dry' | 'broken') => {
+    const ch = channel.current; if (!ch) return
+    channel.current = null
+    const cc = clocks.current[ch.slot]; cc.clock = { ...cc.clock, readyAt: performance.now() + ch.spec.cooldownMs }   // the cooldown starts on RELEASE, never on press
+    const s = ch.sustain.held.toFixed(1)
+    hudSay(why === 'dry' ? `${ch.spec.label} · out of mana after ${s}s, nothing here to open` : `${ch.spec.label} · held ${s}s, nothing here to open`, 'item')
+  }, [])
 
   const paint = useCallback((now: number) => {
     castHud.current = (['tactical', 'signature'] as CastSlot[]).map(slot => {
@@ -68,6 +78,13 @@ export function useCasts(o: {
     const sp = v.spec, fight = oRef.current.fightHere()
     if (sp.archetype === 'surge') { surge.current = { until: performance.now() + sp.surgeSecs * 1000, mult: sp.surgeMult || 1.5 }; hudSay(sp.label, 'item'); return }
     if (sp.archetype === 'impulse') { impulse.current = sp; hudSay(sp.label, 'item'); return }
+    if (sp.archetype === 'channel') {
+      if (!fight) { flashAtAim(sp); hudSay(`${sp.label} · nothing here to open`, 'item'); return }
+      if (channel.current) return
+      clocks.current[slot].clock = { ...clocks.current[slot].clock, readyAt: Infinity }   // held: not ready again until released
+      channel.current = { ...beginChannel(sp), slot, keyDown: true }
+      return
+    }
     if (fight) { castQueue.current.push(sp); return }   // the Wilds' CombatLayer resolves it and says what it caught
     if (sp.archetype === 'restore') {
       const vt = oRef.current.vitalsRef?.current
@@ -75,7 +92,7 @@ export function useCasts(o: {
       else hudSay(`${sp.label} · you are whole`, 'item')
       return
     }
-    flashAtAim(sp); hudSay(sp.archetype === 'field' || sp.archetype === 'terrain' ? `${sp.label} · set down, nothing here to hold` : `${sp.label} · nothing caught`, 'item')
+    flashAtAim(sp); hudSay(sp.archetype === 'veil' ? `${sp.label} · a double stands, nothing here to fool` : sp.archetype === 'field' || sp.archetype === 'terrain' ? `${sp.label} · set down, nothing here to hold` : `${sp.label} · nothing caught`, 'item')
   }, [manaRef, paint])
 
   useEffect(() => {
@@ -84,13 +101,22 @@ export function useCasts(o: {
       const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now
       const m = manaRef.current
       if (m.cur < m.max) m.cur = Math.min(m.max, m.cur + m.regen * (oRef.current.flow?.() ?? 1) * dt)   // the refill
+      const ch = channel.current
+      if (ch) {
+        const r = channelTick(ch, dt, m.cur, ch.keyDown)
+        m.cur = r.mana; channel.current = { ...r.run, slot: ch.slot, keyDown: ch.keyDown }
+        if (r.ended) endChannel(r.ended)
+      }
       paint(now)
       raf = requestAnimationFrame(tick)
     }
-    ;(window as unknown as { __casts?: unknown }).__casts = { mana: () => manaRef.current.cur, hud: () => castHud.current }   // harness handle (scripts/cast-everywhere-check.mts)
+    ;(window as unknown as { __casts?: unknown }).__casts = { mana: () => manaRef.current.cur, hud: () => castHud.current, channel: () => channel.current && { held: channel.current.sustain.held, paid: channel.current.sustain.paid } }   // harness handle (scripts/cast-everywhere-check.mts)
     raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [manaRef, paint])
+    const up = (e: KeyboardEvent) => { const ch = channel.current; if (ch && e.code === CAST_KEY[ch.slot]) ch.keyDown = false }
+    const stop = () => { if (channel.current) channel.current.keyDown = false }
+    window.addEventListener('keyup', up); window.addEventListener('blur', stop)
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('keyup', up); window.removeEventListener('blur', stop) }
+  }, [manaRef, paint, endChannel])
 
-  return { castSlot, castQueue, castHud, surge, impulse, handsCastAt, castSet: castSetRef }
+  return { castSlot, channel, castQueue, castHud, surge, impulse, handsCastAt, castSet: castSetRef }
 }

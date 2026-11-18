@@ -10,7 +10,7 @@ import { RANGE_GUNS } from '../shared/gunplay'
 import { weaponDef } from '../../engine/weapons'
 import { newCombat, stepCombat, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, type Combat, type Terrain, type CombatEvent, type Hollow } from './combat'
 import { live as liveSolids } from './dynamic-solids'
-import { runCast, stepFields, stepPieces, type CastHit } from './combat-casts'
+import { runCast, stepFields, stepPieces, channelAim, type ChannelRun, type CastHit } from './combat-casts'
 import type { CastSpec } from '../../play3d/cast'
 import { touch } from '../shared/touch'
 import { wakeChampion, tellOf, CHAMP } from './champion'
@@ -254,6 +254,40 @@ function PieceBlocks({ c }: { c: React.MutableRefObject<Combat> }) {
   )
 }
 
+/** The veil's decoy (c.decoy): a plain translucent keeper-height pillar where the false keeper stands. Not canon art. */
+function DecoyPillar({ c }: { c: React.MutableRefObject<Combat> }) {
+  const m = useRef<THREE.Mesh>(null)
+  useFrame(() => {
+    const me = m.current; if (!me) return
+    const d = c.current.decoy, now = c.current.clock ?? 0
+    me.visible = !!d && d.until > now
+    if (!d || !me.visible) return
+    me.position.set(d.x, d.y + 0.9, d.z)
+    const mat = me.material as THREE.MeshBasicMaterial; mat.opacity = 0.35 * Math.min(1, (d.until - now) / 0.6) * (0.85 + 0.15 * Math.sin(now * 9))
+  })
+  return <mesh ref={m} visible={false}><cylinderGeometry args={[0.3, 0.3, 1.8, 12]} /><meshBasicMaterial color="#ffb07a" transparent opacity={0.35} depthWrite={false} /></mesh>
+}
+
+/** A HELD channel (Meltbore): a thin hot line from the glove to where the aim meets the ground, while the key is down. */
+function ChannelBeam({ channel, T }: { channel: React.MutableRefObject<ChannelRun | null>; T: Terrain }) {
+  const m = useRef<THREE.Mesh>(null)
+  const { camera } = useThree()
+  const v = useMemo(() => ({ a: new THREE.Vector3(), b: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), d: new THREE.Vector3() }), [])
+  useFrame(() => {
+    const me = m.current; if (!me) return
+    const ch = channel.current
+    me.visible = !!ch
+    if (!ch) return
+    camera.getWorldDirection(v.d)
+    const p = channelAim(T, camera.position, v.d, 12)
+    v.a.set(camera.position.x + v.d.x * 0.6, camera.position.y - 0.25, camera.position.z + v.d.z * 0.6); v.b.set(p.x, p.y, p.z)
+    const len = v.a.distanceTo(v.b); me.position.copy(v.a).lerp(v.b, 0.5)
+    me.quaternion.setFromUnitVectors(v.up, v.b.clone().sub(v.a).normalize()); me.scale.set(1, Math.max(0.1, len), 1)
+    ;(me.material as THREE.MeshBasicMaterial).opacity = 0.7 + 0.2 * Math.sin(ch.sustain.held * 30)
+  })
+  return <mesh ref={m} visible={false}><cylinderGeometry args={[0.05, 0.05, 1, 6, 1, true]} /><meshBasicMaterial color="#ff8c50" transparent opacity={0.8} depthWrite={false} /></mesh>
+}
+
 function CastFlash({ fx }: { fx: React.MutableRefObject<LiveFx[]> }) {
   const rings = useRef<(THREE.Mesh | null)[]>([]), lines = useRef<(THREE.Mesh | null)[]>([])
   const v = useMemo(() => ({ a: new THREE.Vector3(), b: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), q: new THREE.Quaternion() }), [])
@@ -296,7 +330,7 @@ function CastFlash({ fx }: { fx: React.MutableRefObject<LiveFx[]> }) {
  *  flare) and how far a charge has built (0..1, the Charred Rifle). */
 export interface SightLink { aiming: boolean; ads: boolean; firedAt: number; charge: number }
 
-export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats, sight }: {
+export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats, sight, channel }: {
   T: Terrain
   locked: React.MutableRefObject<boolean>
   frozen: React.MutableRefObject<boolean>
@@ -321,6 +355,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   eats?: React.MutableRefObject<number[]>
   /** what each one did (how many it touched), for the message line */
   onCast?: (spec: CastSpec, hit: CastHit | null) => void
+  /** the channel the keeper is holding (shared/use-casts.ts), drawn as a held beam */
+  channel?: React.MutableRefObject<ChannelRun | null>
   /** aim down the sights + what the held gun shows (see SightLink) */
   sight?: React.MutableRefObject<SightLink>
 }) {
@@ -487,6 +523,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       <ChampionBody c={c} />
       <CastFlash fx={fx} />
       <FieldDiscs c={c} />
+      <DecoyPillar c={c} />
+      {channel && <ChannelBeam channel={channel} T={T} />}
       <PieceBlocks c={c} />
       <Tells c={c} heightAt={T.heightAt} />
       {ids.map(h => h.kind === 'floater' ? <FloaterBody key={h.id} c={c} id={h.id} /> : <HollowBody key={h.id} c={c} id={h.id} />)}

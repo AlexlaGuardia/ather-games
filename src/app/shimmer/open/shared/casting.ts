@@ -19,7 +19,7 @@ export const CAST_KEY: Record<CastSlot, string> = { tactical: 'KeyQ', signature:
 
 /** Archetypes the open world carries out, and where: the page moves the keeper, the fight (combat-casts) the rest. */
 export const KEEPER_SIDE = new Set(['surge', 'impulse'])
-export const FIGHT_SIDE = new Set(['projectile', 'status', 'restore', 'infusion', 'field', 'terrain'])
+export const FIGHT_SIDE = new Set(['projectile', 'status', 'restore', 'infusion', 'field', 'terrain', 'veil', 'channel'])
 export const castsHere = (s: CastSpec) => KEEPER_SIDE.has(s.archetype) || FIGHT_SIDE.has(s.archetype)
 
 /** A worn vessel's word is stored by NAME (the vessel shop writes `wordName`), or by id: either resolves. */

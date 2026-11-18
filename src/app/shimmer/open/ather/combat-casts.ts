@@ -17,11 +17,18 @@
 //                Pillar Tomb also lays its statuses on the Hollow nearest the aim and rises around it. NOT done (no hook here):
 //                the keeper does not collide with it (the walker's LocoWorld is built by the page; a dynamic box needs a
 //                refactor); the second-press topple (Monolith); a ledge's stair is drawn but only blocks (nobody climbs it).
-// surge and impulse move the KEEPER and live on the page (shared/casting.ts says which). The rest (channel, veil, gate) are not out here yet, and say so: never a silent no-op.
+//   veil       — Heat Mirage: a plain decoy stands decoyOffset m out along the aim for decoySecs; Hollows close on it, face it and spit at it
+//                instead of the keeper (combat.ts › stepCombat reads c.decoy). Champions still track the keeper (champion.ts is not touched).
+//   channel    — Meltbore: HELD. shared/use-casts.ts keeps the key's state and bills sustainDrain mana/s through play3d/sustain.ts (channelTick
+//                below); release or an empty pool stops it, the cooldown starts on release. Its effect in canon is boring ONE block until it stops
+//                existing; the Wilds hold no borable blocks (raised pieces are conjured matter, which a bore cannot chew: breach.ts), so here the
+//                held beam is drawn along the aim and the seconds are paid and counted, and it opens nothing. Said out loud on release.
+// surge and impulse move the KEEPER and live on the page (shared/casting.ts says which). The rest (gate) is not out here yet, and says so: never a silent no-op.
 //
 // ★ PURE. No React, no three: it reads and writes the Combat, and returns where to draw the flash.
 
 import { castForMove, type CastSpec } from '../../play3d/cast'
+import { beginSustain, sustainStep, type Sustain, type SustainEnd } from '../../play3d/sustain'
 import { shapeCells } from '../../engine/conjured-terrain'
 import { FIELD_TICK_MS } from '../../engine/field-effects'
 import { HEAD_Y, BODY_Y, fxOn, type Combat, type CombatField, type CombatPiece, type Hollow, type HollowFx, type Terrain } from './combat'
@@ -144,10 +151,28 @@ export function runCast(c: Combat, T: Terrain, eye: V3, dir: V3, spec: CastSpec)
       else if (statuses.length) for (const h of c.hollows) if (h.hp > 0 && shapeInside(spec.shape, at, spec.areaSize, h) && layStatuses(h, statuses, Math.max(spec.areaSecs, 1))) hit++   // Cordon: foes sealed inside
       return { kind: 'area', ...p, r: Math.max(MIN_AREA_M, spec.areaSize) / 2, hit }
     }
+    case 'veil': {
+      const l = Math.hypot(dir.x, dir.z) || 1, now = c.clock ?? 0
+      const x = eye.x + (dir.x / l) * spec.decoyOffset, z = eye.z + (dir.z / l) * spec.decoyOffset
+      c.decoy = { x, z, y: T.heightAt(x, z), until: now + spec.decoySecs, moveId: spec.moveId }
+      return { kind: 'area', x, y: c.decoy.y, z, r: 0.8, hit: 0 }
+    }
     default:
       return null
   }
 }
+
+/** A channel in flight: play3d/sustain.ts's Sustain plus the spec it bills by. */
+export interface ChannelRun { spec: CastSpec; sustain: Sustain }
+export const beginChannel = (spec: CastSpec, slot = 0): ChannelRun => ({ spec, sustain: beginSustain(slot, spec.moveId) })
+/** One frame of a held channel: pays sustainDrain per second from `mana` while `holding`, credits only what was paid, stops on release or an empty pool. */
+export function channelTick(run: ChannelRun, dt: number, mana: number, holding: boolean): { run: ChannelRun; mana: number; ended: SustainEnd | null } {
+  if (!holding) return { run, mana, ended: 'released' }
+  const st = sustainStep(run.sustain, dt, mana, run.spec.sustainDrain)
+  return { run: { ...run, sustain: st.sustain }, mana: mana - st.manaSpent, ended: st.ended }
+}
+/** Where a held channel points: the ground the aim meets, or the point `range` out. */
+export const channelAim = (T: Terrain, eye: V3, dir: V3, range = 12) => aimPoint(T, eye, dir, range)
 
 export const MAX_PIECES = 6
 /** Only a ring or block has an inside (a ring's radius / a block's side). */

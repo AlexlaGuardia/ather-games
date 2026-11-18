@@ -89,6 +89,8 @@ export function solidTop(c: Combat, x: number, z: number): number | null {
   for (const p of ps) for (const q of p.cells) if (q.x === cx && q.z === cz) return q.base + q.rise
   return null
 }
+/** A veil's false keeper: foes that would aim at the keeper aim here until `until` (c.clock seconds). Heat Mirage: decoySecs, decoyOffset. */
+export interface CombatDecoy { x: number; z: number; y: number; until: number; moveId: string }
 export interface Combat {
   hollows: Hollow[]; rounds: Round[]; drops: Drop[]; spits: Spit[]
   keeper: Keeper; gun: WeaponDef
@@ -98,6 +100,8 @@ export interface Combat {
   fields?: CombatField[]
   /** Terrain raised by terrain casts (combat-casts.ts, stepPieces): Hollows cannot step into a cell, spit stops on it. */
   pieces?: CombatPiece[]
+  /** The veil's decoy (combat-casts.ts › runCast 'veil'): Hollows target it instead of the keeper while it lasts. */
+  decoy?: CombatDecoy | null
   /** The node's champion, when one is up (champion.ts). */
   champ?: Champion
   /** Champions that went back under, by node: the bar each had reached. */
@@ -241,10 +245,12 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
       if (fxOn(h, 'burning')) h.hp -= FX.burnDps * dt
     }
     const held = fxOn(h, 'rooted') || fxOn(h, 'staggered'), blind = fxOn(h, 'blinded'), unarmed = fxOn(h, 'disarmed')
-    const dx = feet.x - h.x, dz = feet.z - h.z, d = Math.hypot(dx, dz)
+    // a veil's decoy stands in for the keeper: foes close on it, face it and spit at it (the real keeper is still hit by what reaches them)
+    const tgt = c.decoy && c.decoy.until > (c.clock ?? 0) ? c.decoy : feet
+    const dx = tgt.x - h.x, dz = tgt.z - h.z, d = Math.hypot(dx, dz)
     if (h.kind === 'floater') {
       // a held, blinded or disarmed floater hangs where it is and spits nothing; a slowed one does all of it at half pace
-      if (!(held || blind || unarmed)) stepFloater(c, T, h, feet, d, dx, dz, fxOn(h, 'slowed') ? dt * FX.slowMult : dt)
+      if (!(held || blind || unarmed)) stepFloater(c, T, h, { x: tgt.x, y: feet.y, z: tgt.z }, d, dx, dz, fxOn(h, 'slowed') ? dt * FX.slowMult : dt)
       continue
     }
     // blinded: it has lost you, and blunders about; disarmed: it will not wind up to lunge
@@ -270,7 +276,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
         break
       case 'lunge':
         mx = h.lx; mz = h.lz; speed = SHAMBLER.lungeSpeed
-        if (!h.hitThisLunge && !unarmed && d < SHAMBLER.hitReach && Math.abs(feet.y - h.y) < 1.6 && k.hp > 0) {
+        if (!h.hitThisLunge && !unarmed && Math.hypot(feet.x - h.x, feet.z - h.z) < SHAMBLER.hitReach && Math.abs(feet.y - h.y) < 1.6 && k.hp > 0) {
           h.hitThisLunge = true
           k.hp = Math.max(0, k.hp - SHAMBLER.damage); k.sinceHurt = 0
           c.events.push({ kind: 'hurt', amount: SHAMBLER.damage })
@@ -381,5 +387,5 @@ const performanceSafeNow = (c: Combat) => (c.clock = (c.clock ?? 0))
 /** After the fold returns a downed keeper home: full health, a full clip, the Wilds' crowd forgets them. */
 export function revive(c: Combat) {
   c.keeper.hp = c.keeper.maxHp; c.keeper.sinceHurt = 99; c.keeper.ammo = c.gun.clip; c.keeper.reloading = 0
-  c.hollows = []; c.rounds = []; c.spits = []; c.fields = []; c.pieces = []; c.champ = undefined
+  c.hollows = []; c.rounds = []; c.spits = []; c.fields = []; c.pieces = []; c.decoy = null; c.champ = undefined
 }
