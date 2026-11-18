@@ -24,6 +24,7 @@ import { emptySeen, isSeen, see, loadSeen, saveSeen, CELL, type Seen } from '../
 import { drawCloud, drawDoor, drawDoorPinned, drawKeeper, PARCHMENT, ATHER_CLOUD } from '../../ui/map-kit'
 import { loadFog, FOG_CELL, type Fog } from '../ather/explored'
 import { waymarksInWorld } from '../ather/waymarks'
+import { doorsCached } from '../business/doors'
 import { allPitstops, loadVisited, FIRST_PITSTOP } from './pitstops'
 import { screenHeading } from '../../voxel3d/map-heading'
 import { HearthFrame, H } from '../../ui/hearth'
@@ -203,6 +204,16 @@ const placeSeen = (m: ContinentMapState, x: number, z: number) => {
   const { cell, sizeX, sizeZ } = m.R.meta
   return isSeen(m.seen, Math.floor((x + sizeX / 2) / cell / CELL), Math.floor((z + sizeZ / 2) / cell / CELL))
 }
+/** SHOP MARKS: the doors a keeper can look for, only in towns they have uncovered (like the names). Gun shops for now:
+ *  one small slate-grey mark on the door. Pure; also read by the check (data-shop-marks on the map canvas). */
+export function shopMarks(m: ContinentMapState): { key: string; kind: string; x: number; z: number }[] {
+  const out: { key: string; kind: string; x: number; z: number }[] = []
+  for (const p of m.R.meta.places) {
+    if (!p.name || !placeSeen(m, p.x, p.z)) continue
+    for (const d of doorsCached(m.R, p.id)) if (d.key.startsWith('front:gunshop:')) out.push({ key: d.key, kind: 'gunshop', x: d.at.x, z: d.at.z })
+  }
+  return out
+}
 const gateOf = (m: ContinentMapState) => m.R.meta.places.find(p => p.id === GATE_ID)
 /** The door ring, with a dark halo so the pale ring reads on parchment. */
 function gateRing(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number) {
@@ -313,6 +324,12 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
       ctx.lineWidth = 3.5 * dpr; ctx.strokeStyle = 'rgba(236,226,198,0.9)'; ctx.strokeText(p.name, x * S + 7 * dpr, y * S)
       ctx.fillStyle = '#2c1a0c'; ctx.fillText(p.name, x * S + 7 * dpr, y * S)
     }
+    for (const sm of shopMarks(map)) {   // a gun shop: a small inked diamond, no name (the shop has none)
+      const [mx, my] = map.toPx(sm.x, sm.z), r = 3.2 * dpr
+      ctx.save(); ctx.fillStyle = '#4a4f57'; ctx.strokeStyle = 'rgba(236,226,198,0.95)'; ctx.lineWidth = 1.2 * dpr
+      ctx.beginPath(); ctx.moveTo(mx * S, my * S - r); ctx.lineTo(mx * S + r, my * S); ctx.lineTo(mx * S, my * S + r); ctx.lineTo(mx * S - r, my * S); ctx.closePath()
+      ctx.fill(); ctx.stroke(); ctx.restore()
+    }
     const g = gateOf(map)
     if (g) {
       const [x, y] = map.toPx(g.x, g.z), gx = x * S + 12 * dpr, gy = y * S + 17 * dpr; gateRing(ctx, x * S, y * S, 4 * dpr)
@@ -392,7 +409,7 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
           )}
         </div>
         <div style={{ position: 'relative' }}>
-          <canvas ref={base} data-map="base" onClick={tap} style={{ maxWidth: '86vw', maxHeight: '68vh', width: 'auto', height: 'auto', display: 'block', borderRadius: 8,
+          <canvas ref={base} data-map="base" data-shop-marks={shopMarks(map).map(m => m.key).join(',')} onClick={tap} style={{ maxWidth: '86vw', maxHeight: '68vh', width: 'auto', height: 'auto', display: 'block', borderRadius: 8,
             border: '3px solid #5a3d22', boxShadow: '0 0 0 1px #c9a86a55, 0 18px 50px rgba(0,0,0,0.6)' }} />
           <canvas ref={marks} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', borderRadius: 8 }} />
         </div>

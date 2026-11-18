@@ -23,7 +23,8 @@ import { getInv, setInv, useInv } from '../shared/bag'
 import { buyDecor } from './decor-shop'
 import { buyBundle } from './smokehouse'
 import { SMOKEHOUSE_STOCK } from '../ather/cooking'
-import { useLoadout, setLoadout, getLoadout, claimKaelsArms } from '../shared/loadout'
+import { useLoadout, setLoadout, getLoadout, claimKaelsArms, slotOfGun } from '../shared/loadout'
+import { buyGun, GUN_PRICES, SHOP_GUNS } from './gun-shop'
 
 /** a ticket to the Starforge (an emergency-fund sized price, Alex 11-16). TODO(world): move onto economy/prices.ts LADDER */
 export const STARFORGE_TICKET = 250
@@ -47,6 +48,7 @@ export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
     </HearthFrame>
   )
   if (shop.kind === 'smokehouse') return <SmokehousePanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
+  if (shop.kind === 'gunshop') return <GunShopPanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (shop.kind === 'shipyard') return <ShipyardPanel onClose={onClose} />
   if (stockOf(id).length) return <DecorShop id={id} ledger={ledger} setLedger={setLedger} onClose={onClose} />
   return (
@@ -239,6 +241,41 @@ function ShipyardPanel({ onClose }: { onClose: () => void }) {
         ) : (
           <p className="mt-3" data-chest="empty">The chest is empty now. You carry what was in it.</p>
         )}
+      </div>
+    </HearthFrame>
+  )
+}
+
+/** THE GUN SHOP (RULED 11-15, world/rune-hold.md): the five base guns at a counter, bought with Marks. No name, no keeper, no
+ *  lore line: plain copy. Pure rule: business/gun-shop.ts. */
+function GunShopPanel({ ledger, setLedger, onClose }: { ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void }) {
+  const l = useLoadout()
+  const [msg, setMsg] = useState<string | null>(null)
+  return (
+    <HearthFrame title={FRONT_SHOPS.gunshop.name} maxWidth={500} onClose={onClose} fixed dataPanel="gun-shop">
+      <div className="px-4 pt-5 pb-4 text-[14px] leading-snug" style={{ color: H.ink }}>
+        <div className="grid gap-2">
+          {SHOP_GUNS.map(g => {
+            const price = GUN_PRICES[g.id], owned = l.guns.includes(g.id), short = !owned && ledger.marks < price
+            return (
+              <div key={g.id} data-gun={g.id} className="flex items-center gap-3 rounded-[12px] px-3 py-2" style={{ background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+                <img src={`/open/icons/gun-${g.id}.svg`} alt="" width={36} height={36} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{g.name[0] + g.name.slice(1).toLowerCase()}</div>
+                  <div className="text-[12.5px]" style={{ color: H.inkSoft }}>{slotOfGun(g) === 'secondary' ? 'Secondary' : 'Primary'} · {price.toLocaleString()} Marks</div>
+                </div>
+                <span data-buy={g.id} style={{ display: 'contents' }}><HearthButton small primary disabled={owned || short} onClick={() => {
+                  const r = buyGun(getLoadout(), ledger, g.id)
+                  if (r.ok) { setLedger(r.ledger); setLoadout(r.loadout); const t = `${g.name[0] + g.name.slice(1).toLowerCase()} bought · it is in your Character tab`; setMsg(t); hudSay(t, 'item') } else setMsg(r.why ?? null)
+                }}>{owned ? 'Yours' : short ? 'Not enough Marks' : 'Buy'}</HearthButton></span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="mt-3 flex items-center text-[12.5px]" style={{ color: H.inkSoft }}>
+          <span className="flex-1" data-shop-msg>{msg ?? ''}</span>
+          <span className="tabular-nums">Purse · {ledger.marks.toLocaleString()} Marks</span>
+        </div>
       </div>
     </HearthFrame>
   )

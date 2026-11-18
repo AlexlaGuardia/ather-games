@@ -10,7 +10,7 @@ import { shopDoorPoint } from '../towns/shop-door'
 import { marketFor, type Offer } from './market'
 import { SEATS, type Seat } from './letters'
 
-export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple' | 'smokehouse' | 'shipyard' | 'trade-co'
+export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple' | 'smokehouse' | 'shipyard' | 'trade-co' | 'gunshop'
 export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: string }> = {
   'kindled-mug': { name: 'The Kindled Mug', kind: 'tavern', line: 'A tavern on the square.' },
   'forgelight-inn': { name: 'The Forgelight Inn', kind: 'inn', line: 'Iron fixtures and forge-warmed walls.' },
@@ -29,6 +29,9 @@ export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: 
   // THE CO.'S CITADEL OFFICE (Alex 11-18; Magii 49d8a0f AFK, world/gates.md: the door reads the house's own name, an Alkin clerk at
   // the counter, Lingston stays the HQ). Its panel is the contract board (continent/page.tsx), not a ShopPanel. Citadel only.
   'trade-co': { name: 'Ather Trading Co.', kind: 'trade-co' },
+  // THE GUN SHOP (RULED 11-15, world/rune-hold.md): sells the five base guns at a counter; more of them in other towns. No proper
+  // name, no keeper: the UI says "The gun shop". Like the smokehouse it takes a plain building (doorsOf). Stock: business/gun-shop.ts.
+  gunshop: { name: 'The gun shop', kind: 'gunshop' },
 }
 
 /** a door you can E: a market lot (key = lot id → the deed card) or a canon storefront (key = `front:<id>` → its panel) */
@@ -57,6 +60,17 @@ function doorsOf(R: Region, townId: string): Door[] {
       const at = plan.temple ?? { x: free.reduce((a, b) => a + b.x, 0) / free.length, z: free.reduce((a, b) => a + b.z, 0) / free.length }
       const b = free.sort((p, q) => Math.hypot(p.x - at.x, p.z - at.z) - Math.hypot(q.x - at.x, q.z - at.z))[0]
       out.push({ key: `front:smokehouse:${townId}`, b, name: FRONT_SHOPS.smokehouse.name, at: shopDoorPoint(b) })
+    }
+  }
+  // THE GUN SHOP in every town that has a smokehouse except the Passage (its shop is in its cave): the free plain building nearest
+  // the heart that nothing else holds, computed after the smokehouse so it takes a different building. Jin's placement.
+  if (i >= 0 && townId !== 'passage' && out.some(d => d.key === `front:smokehouse:${townId}`)) {
+    const plan = cachedPlan(R, i), taken = new Set(out.map(d => d.b))
+    const free = plan.buildings.filter(x => !x.front && !taken.has(x))
+    if (free.length) {
+      const at = plan.temple ?? { x: free.reduce((a, b) => a + b.x, 0) / free.length, z: free.reduce((a, b) => a + b.z, 0) / free.length }
+      const b = free.sort((p, q) => Math.hypot(p.x - at.x, p.z - at.z) - Math.hypot(q.x - at.x, q.z - at.z))[0]
+      out.push({ key: `front:gunshop:${townId}`, b, name: FRONT_SHOPS.gunshop.name, at: shopDoorPoint(b) })
     }
   }
   // THE SHIPYARD: Rune Hold only (where the keeper arrives, canon), on the town's OUTSKIRTS: the free plain building farthest
