@@ -7,7 +7,10 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const b = await puppeteer.launch({ protocolTimeout: 240000, executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const p = await (await b.createBrowserContext()).newPage()
 await p.setViewport({ width: 1280, height: 760 })
-await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))
+// ★ 11-18 (051b0c3d): weapons are equipment; a fresh keeper owns NO gun until Kael's chest (shipyard-check proves the chest).
+// Seed what loadout.claimKaelsArms() hands over.
+await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star')
+  localStorage.setItem('open.loadout.v1', JSON.stringify({ v: 1, guns: ['charred-rifle', 'repeater'], primary: 'charred-rifle', secondary: 'repeater', kael: true, vessels: [{ id: 'starter-bracelet', kind: 'bracelet', label: 'Bracelet', word: null }, { id: 'starter-glove', kind: 'glove', label: 'Glove', word: null }], tactical: 'starter-bracelet', signature: 'starter-glove' })) })
 await p.goto(`${origin}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
 await p.waitForFunction(() => (window as any).__ather?.zone?.() === 'wilds', { timeout: 240000 }); await sleep(5000)
 const st = () => p.evaluate(() => JSON.stringify((window as any).__ather.stance()))
