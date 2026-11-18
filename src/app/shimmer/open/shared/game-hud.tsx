@@ -27,7 +27,7 @@
 // ⚠ Built from the Carved Hearth kit (ui/hearth-hud*.tsx, Alex's Full-hearth pick 09-23). Change a LOOK there; change
 // an ARRANGEMENT here. Never fork either into a page.
 
-import React, { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { HearthHudLayer, hudMapBox, Corner, toolReadout, type ToolFamily } from '../../ui/hearth-hud-layer'
 import { HearthCompass, compassWidth, HearthHotbar, HearthVitals, HearthClock, HudPlate, WELL, useHudSize, type CompassMark, type CompassPose } from '../../ui/hearth-hud'
 import { HUD_FACES } from '../../ui/hud-face'
@@ -164,7 +164,11 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
 }) {
   const basicTools = useRef<EquippedTools>(ensureBasicTools({}))
   const basicSkills = useRef<SkillSet>(createSkillSet())
-  const T = tools ?? basicTools, S = skills ?? basicSkills
+  // ★ the server has no save, so it draws the orb with a fresh keeper's tools + skills; the first client render must match it
+  // (a leveled keeper's real levels on that render were a hydration mismatch, React #418, 11-18). Real ones after mount.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  const T = (mounted && tools) || basicTools, S = (mounted && skills) || basicSkills
   const readouts = T.current && S.current ? TOOL_FAMILIES.map(f => toolReadout(T.current!, S.current!, f, null)) : []
   const box = hudMapBox(size)
   const tray = trayBox(size)

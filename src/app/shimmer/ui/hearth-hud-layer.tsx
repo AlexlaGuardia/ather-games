@@ -67,7 +67,7 @@ function Socket({ face, r, glyph }: { face: HudFace; r: ReturnType<typeof toolRe
   const t = HUD_FACES[face]
   const RING_R = 21, RING_C = 2 * Math.PI * RING_R
   return (
-    <div className="relative w-full h-full rounded-full" style={{ background: t.well, boxShadow: r.active ? t.wellSelShadow : `${t.ring}, ${t.ringShadow}` }}>
+    <div data-socket={r.family} className="relative w-full h-full rounded-full" style={{ background: t.well, boxShadow: r.active ? t.wellSelShadow : `${t.ring}, ${t.ringShadow}` }}>
       <svg viewBox="0 0 48 48" className="absolute inset-0 w-full h-full -rotate-90">
         <circle cx="24" cy="24" r={RING_R} fill="none" stroke={face === 'full' ? 'rgba(58,39,22,.14)' : 'rgba(255,255,255,.12)'} strokeWidth="2" />
         <circle cx="24" cy="24" r={RING_R} fill="none" stroke={face === 'full' ? '#5f7d45' : '#9cc58a'} strokeWidth="2.2" strokeLinecap="round"
