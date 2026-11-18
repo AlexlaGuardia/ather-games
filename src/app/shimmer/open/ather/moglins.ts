@@ -11,6 +11,9 @@
 // skill. Idle CARPENTER = DEADFALL (fallen tier-1 Goldwood only); idle SMITH gathers nothing, it burns deadfall into
 // CHARCOAL, the deadfall reaching it by room-to-room TRADE. Grades come in CATEGORIES that set how well a Moglin does its
 // trade (crafting speed, gathering yield, and the like). Jin's: categories, scale, rates, caps, which rooms pair.
+// THE FARMER (play 11-18, hub-approved build call): a farmer in the Farm TENDS, never plants or harvests (the beds stay the
+// keeper's skill). Its work is WATERING growing beds from the water tap's tanks (ather/water.ts; no free water, the fold
+// holds none), as often as its YIELD grade says. No bed to water, or dry tanks = nothing banked.
 //
 // ★ PURE: no React, no DOM except the guarded load/save. Registered in GARDEN_KEY_SPECS (the village is the garden's).
 import { gardenKey } from '@/lib/keeper-local'
@@ -19,13 +22,15 @@ import { ROOM_STORE_SLOTS, roomStore, type Room, type RoomKind, type Works } fro
 import type { Job } from './furniture'
 import { ROAST } from './cooking'
 import { BREW } from './alchemy'
+import { phaseOf, water as waterBed, isArmed, type Farm } from './farming'
+import { plumbingOf, draw, type WaterSave } from './water'
 
 /** Canon's trades (ather-rework › Needs: "a farmer + a cook, then a carpenter + a stonemason, then specialists: alchemist,
  *  smith, jeweler, and more trades as they are ruled"). A new trade is canon's to rule, then one row here. */
 export type Profession = 'farmer' | 'cook' | 'carpenter' | 'stonemason' | 'alchemist' | 'smith' | 'jeweler'
 export const PROFESSIONS: readonly Profession[] = ['farmer', 'cook', 'carpenter', 'stonemason', 'alchemist', 'smith', 'jeweler']
 /** Which rooms a trade can work. The cook pairs with the Rinnshop too (catches readied for the hearth; a Moglin never
- *  rins, canon 8d3ada7). The farmer keeps the Farm room (no idle product yet: the beds are the keeper's); the jeweler shares the Stonery's bench. */
+ *  rins, canon 8d3ada7). The farmer keeps the Farm room (it waters, never plants or harvests: see THE FARMER above); the jeweler shares the Stonery's bench. */
 export const WORKS_IN: Readonly<Record<Profession, readonly RoomKind[]>> = {
   farmer: ['farm'], cook: ['cooking', 'rinnshop'], carpenter: ['carpentry'], stonemason: ['stonemason'],
   alchemist: ['alchemy'], smith: ['smith'], jeweler: ['stonemason'],
@@ -89,10 +94,16 @@ export const MAX_TICK_MS = 12 * 3_600_000
  *  between neighbours, never labour): only while a carpenter keeps that room. */
 const setStore = (w: Works, id: string, stacks: Room['store']): Works => ({ ...w, rooms: w.rooms.map(r => (r.id === id ? { ...r, store: stacks } : r)) })
 
-/** Run the village forward to `now`: each working Moglin's idle product lands in its room's store. Pure. */
-export function tick(v: Village, w: Works, now = Date.now()): { village: Village; works: Works; made: Record<string, number> } {
+/** What the farmer tends: the Farm's beds and the tap's water. Passed in and handed back (both live in their own saves). */
+export interface Grounds { farm: Farm; water: WaterSave }
+/** The next bed a farmer waters: growing, not yet watered (lowest bed first). -1 = none. */
+export const bedToTend = (farm: Farm, now: number) => farm.beds.findIndex(b => !!b && !b.watered && phaseOf(b, now, isArmed(farm)) < 3)
+
+/** Run the village forward to `now`: each working Moglin's idle product lands in its room's store; a farmer waters the
+ *  Farm's beds (`grounds`, handed back changed, with `tended` = beds watered). Pure. */
+export function tick(v: Village, w: Works, now = Date.now(), grounds?: Grounds): { village: Village; works: Works; made: Record<string, number>; grounds?: Grounds; tended: number } {
   const dt = Math.max(0, Math.min(MAX_TICK_MS, now - v.lastTick)), made: Record<string, number> = {}
-  let works = w
+  let works = w, g = grounds, tended = 0
   const moglins = v.moglins.map(m => {
     const r = m.room ? works.rooms.find(x => x.id === m.room) : undefined
     if (!r || now < r.doneAt) return m
@@ -117,6 +128,22 @@ export function tick(v: Village, w: Works, now = Date.now()): { village: Village
     let acc = (m.acc ?? 0) + (PER_HOUR(m.grades.yield) * dt) / 3_600_000
     let n = Math.floor(acc)
     if (n <= 0) return { ...m, acc }
+    if (m.profession === 'farmer' && r.kind === 'farm') {
+      if (!g) return { ...m, acc: 0 }
+      const pl = plumbingOf(works.pieces)
+      let did = 0
+      while (did < n) {
+        const i = bedToTend(g.farm, now)
+        if (i < 0) break
+        const d = draw(g.water, pl, now)
+        if (!d.ok) break
+        const f = waterBed(g.farm, i, now)
+        if (!f.ok) break
+        g = { farm: f.farm, water: d.sv }; did++
+      }
+      tended += did
+      return { ...m, acc: did === n ? acc - n : 0 }   // nothing left to water, or dry tanks: no debt banked
+    }
     if (m.profession === 'carpenter' && r.kind === 'carpentry') {
       const p = putIn(roomStore(r), ROOM_STORE_SLOTS, 'deadfall', n)
       n -= p.left; works = setStore(works, r.id, p.bank.stacks)
@@ -138,9 +165,9 @@ export function tick(v: Village, w: Works, now = Date.now()): { village: Village
       }
       return { ...m, acc: done === n ? acc - n : 0 }
     }
-    return { ...m, acc: 0 }   // a trade with no idle product yet (farmer, stonemason, jeweler): nothing accrues
+    return { ...m, acc: 0 }   // a trade with no idle product yet (stonemason, jeweler): nothing accrues
   })
-  return { village: { ...v, moglins, lastTick: now }, works, made }
+  return { village: { ...v, moglins, lastTick: now }, works, made, grounds: g, tended }
 }
 
 /** Which bench jobs a trade runs in which room (BENCH WORK above). */
@@ -163,6 +190,7 @@ export function benchRun(stacks: readonly { id: string; n: number }[], j: Job): 
 /** What a Moglin does in a room, in a line (the bench panel). */
 export function dutyLine(m: MoglinRecord, kind: RoomKind): string {
   if (m.profession === 'carpenter' && kind === 'carpentry') return `Brings in deadfall, about ${PER_HOUR(m.grades.yield)} an hour.`
+  if (m.profession === 'farmer' && kind === 'farm') return `Waters the growing beds from the tanks, up to ${PER_HOUR(m.grades.yield)} an hour. Plants and harvests stay yours.`
   if (m.profession === 'smith' && kind === 'smith') return `Trades for deadfall from the carpentry room and burns it to charcoal, about ${PER_HOUR(m.grades.yield)} an hour.`
   if (BENCH_JOBS[m.profession]?.[kind]) return `Works from the room's store, about ${PER_HOUR(m.grades.craft)} an hour. Stock it and there is always something on.`
   return 'Keeps the room. Their trade has no work here yet.'

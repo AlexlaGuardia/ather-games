@@ -32,6 +32,7 @@ import {
 } from './plot'
 import { PlotScene } from './plot-scene'
 import { WorkshopScene, WorkshopPanel, PlacingBar, BuildBar, usePlacingKeys, isPlacing, useWorks, workWalls, workPrompt, currentWorks, setWorks } from './workshop'
+import { currentFarm, setFarm, currentWater, setWater, farmNow } from './farm-room'
 import { BuildPointer, stepBuildCam, useBuildMode, useBuildKeys, isBuilding, exitBuild } from './build-mode'
 import { tick as villageTick, loadVillage, saveVillage } from './moglins'
 import { nearWork, type WorkNear } from './rooms'
@@ -163,9 +164,12 @@ export default function AtherSlice() {
   const runVillage = useCallback((say: boolean) => {
     const v = loadVillage()
     if (!v.moglins.some(m => m.room)) { saveVillage({ ...v, lastTick: Date.now() }); return {} }
-    const t = villageTick(v, currentWorks())
+    // the farm's own clock (farm-room.tsx › farmNow; equals Date.now() but for a check's skew), so a farmer tends on the
+    // same time the beds grow on
+    const t = villageTick(v, currentWorks(), farmNow(), { farm: currentFarm().farm, water: currentWater() })
     saveVillage(t.village)
     if (Object.keys(t.made).length) setWorks(t.works)
+    if (t.tended && t.grounds) { setFarm({ ...currentFarm(), farm: t.grounds.farm }); setWater(t.grounds.water) }
     const names = Object.entries(t.made).map(([id, n]) => `${n} ${itemDef(id).name}`)
     // an info line held 9 s, after the arrival lines (an 'item' line lasts 1.8 s and the next slot name replaces it)
     if (say && names.length) { const text = `While you were away, your village made ${names.join(', ')}. You will find it all in the rooms' stores.`; setTimeout(() => hudSay(text, 'info', 9), 1500) }

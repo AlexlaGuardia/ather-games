@@ -124,18 +124,33 @@ const age = async () => p.evaluate(() => { const w = window as any, f = JSON.par
 await skew(212_000 - await age()); await sleep(1300); res.at212 = await attr('[data-bed="0"]', 'data-phase')
 // unwatered, Goldleaf would need 300 s: at 212 s the watered bed must still be growing, at 226 s ready
 await skew(226_000 - await age()); res.at226 = await poll(async () => (await attr('[data-bed="0"]', 'data-phase')) === '3', 6000)
+
+step('5. a farmer waters a growing bed')
+// SETUP (stated): a rare-yield farmer (7 waterings an hour) is put straight into the village save, working this Farm (the
+// recruit + assign flow is the folk/workshop checks' job). A Dewdrop Vine (10 min) is planted by click on bed 2; the farm's
+// clock moves 9 min; the page's own village tick runs (__ather.villageTick). The farmer waters bed 2 from the tanks, once.
+await click('[data-bed="1"] button'); await click(`[data-plant-seed="${seedId('dewdrop_vine')}"] button`)
+const before = { water: Number(await attr('[data-water]', 'data-water')), bed1: (await read('open.farm.v1'))?.farm?.beds?.[1] }
+await p.evaluate(rid => { const w = window as any; localStorage.setItem('open.village.v1', JSON.stringify({ v: 1, lastTick: w.__farm.now(), moglins: [{ id: 'chk-farmer', name: 'Pib', home: 'chk', grades: { craft: 1, yield: 5, trade: 1 }, dream: '', profession: 'farmer', recruitedAt: 0, room: rid, acc: 0 }] })) }, room.id)
+await skew(9 * 60_000)
+await p.evaluate(() => (window as any).__ather.villageTick()); await sleep(800)
+const fs1 = (await read('open.farm.v1'))?.farm?.beds
+res.farmer = { before, bed1: fs1?.[1], others: fs1?.filter((b: any, i: number) => i !== 1 && i !== 0 && b?.watered).length, water: await attr('[data-water]', 'data-water'), ready: await attr('[data-bed="1"]', 'data-phase') === '3' }
+// (watered, Dewdrop's 10 min becomes 7.5, so at 9 min the bed is READY: the farmer's watering is what ripened it)
+await shot('wt-5-farmer')
 await p.setViewport({ width: 390, height: 800 }); await sleep(800); await shot('wt-4-phone')
 res.phoneOverflow = await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
 res.errs = errs
 console.log(JSON.stringify(res))
 const T = FURNITURE.water_tap.sold!.price, K = FURNITURE.water_tank.sold!.price
-const a = res.afterSmithy as { marks: number; bag: Record<string, number> }, nt = res.noTap as any, np = res.noTapPlanted as any, fr = res.fresh as any, af = res.after as any
+const fm = res.farmer as any, a = res.afterSmithy as { marks: number; bag: Record<string, number> }, nt = res.noTap as any, np = res.noTapPlanted as any, fr = res.fresh as any, af = res.after as any
 const pass = res.smithy === true && (res.stock as string[]).includes('water_tap') && (res.stock as string[]).includes('water_tank')
   && a.marks === 20_000 - T - K && a.bag.water_tap === 1 && a.bag.water_tank === 1
   && room?.kind === 'farm' && nt.panel === true && nt.taps === '0' && nt.waterButtons === 0 && np.phase === '0' && np.waterButtons === 0
   && JSON.stringify(res.placed) === JSON.stringify(['water_tank', 'water_tap'])
   && fr.water === '0' && fr.cap === '12' && fr.taps === '1' && res.filled === '2'
   && res.waterButtonShown === true && res.watered === true && af.water === '1' && af.mark === true && af.saved === true
-  && ['0', '1', '2'].includes(res.at212 as string) && res.at226 === true && res.phoneOverflow === false && errs.length === 0
-console.log(pass ? 'PASS: Water Tap + Water Tank bought at the Smithy for Marks → no tap, no water line on the Farm → both set from the table → 2 water after 3 min (cap 12) → a Goldleaf watered (1 spent, Watered) → ready at 226 s, still growing at 212 s (0.75 of 300 s) → 0 page errors' : 'FAIL')
+  && ['0', '1', '2'].includes(res.at212 as string) && res.at226 === true && fm.before.bed1?.crop === 'dewdrop_vine' && fm.before.bed1?.watered === false && fm.bed1?.watered === true && fm.others === 0 && fm.ready === true
+  && res.phoneOverflow === false && errs.length === 0
+console.log(pass ? 'PASS: Water Tap + Water Tank bought at the Smithy for Marks → no tap, no water line on the Farm → both set from the table → 2 water after 3 min (cap 12) → a Goldleaf watered (1 spent, Watered) → ready at 226 s, still growing at 212 s (0.75 of 300 s) → a farmer waters the growing Dewdrop from the tanks → 0 page errors' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)

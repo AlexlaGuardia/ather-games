@@ -1,6 +1,7 @@
 // farmroom.ts: the Farm room's moves over the pure model. Run: npx tsx src/app/shimmer/open/ather/farmroom.test.ts
 import { plantAt, harvestAt, feedAt, grantStarter, seedsReach, adoptFarm, freshFarmSave, STARTER, BEDS, dosesOf, msLeft } from './farmroom'
-import { CROPS, seedId, cropId, CHARGE_CAP, DOSE_COST, isArmed } from './farming'
+import { CROPS, seedId, cropId, CHARGE_CAP, DOSE_COST, isArmed, type CropId } from './farming'
+import { existsSync } from 'node:fs'
 import { freshWorks, ROOM_STORE_SLOTS, type Works } from './rooms'
 import { newInv, give, countOf, itemDef, ITEM_GROUP } from '../shared/inventory'
 let pass = 0, fail = 0
@@ -12,7 +13,9 @@ const stackOf = (w: Works, id: string) => (w.rooms[0].store ?? []).reduce((a, s)
 
 // items: graded ids are real rows
 ok(itemDef(seedId('starbloom')).name === 'Starbloom seed · D' && itemDef(cropId('starbloom', 'C')).name === 'Starbloom · C', 'graded ids name themselves')
-ok(itemDef(seedId('goldleaf')).icon === '/open/icons/seed.svg' && itemDef(cropId('goldleaf')).icon === '/open/icons/crop.svg' && itemDef(cropId('goldleaf')).stack === 99, 'icons + stack')
+ok(itemDef(seedId('goldleaf')).icon === '/open/icons/seed-goldleaf.svg' && itemDef(cropId('ather_wheat')).icon === '/open/icons/crop-ather-wheat.svg' && itemDef(cropId('goldleaf')).stack === 99, 'icons + stack (per crop, tools/art/crop_icons.py)')
+// every crop's two icons are on disk (a missing file is a blank cell in the bag)
+for (const c of Object.keys(CROPS) as CropId[]) for (const id of [seedId(c), cropId(c)]) ok(existsSync(`public${itemDef(id).icon}`), `icon file missing: ${itemDef(id).icon}`)
 ok(ITEM_GROUP[seedId('ather_lily', 'S')] === 'farming' && ITEM_GROUP[cropId('goldleaf')] === 'farming', 'farming group')
 
 // starter: once
