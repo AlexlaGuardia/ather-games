@@ -34,11 +34,17 @@ await tp(TABLE.x + 1.6, TABLE.z + 1.6, Math.PI / 4)
 await p.keyboard.press('e'); await sleep(900)
 res.row = await p.evaluate(() => !!document.querySelector('[data-found-keepstones] [data-keepstone="keepstone_violet"]')); await shot('fk-1-table')
 res.set = await click('[data-keepstone="keepstone_violet"] button'); await sleep(800)
-await tp(-100, 112, 0); await p.keyboard.press('e'); await sleep(1000)
+// Set lifts into the flying planner (table rework 33501da3): fly over open ground, a click sets it, then land
+await sleep(1200); await p.evaluate(() => (window as any).__build.to(-100, 112)); await sleep(2500)
+const vp = p.viewport()!, mid = { x: vp.width / 2, y: vp.height / 2 }
+await p.mouse.move(mid.x - 3, mid.y); await sleep(300); await p.mouse.move(mid.x, mid.y); await sleep(800); await p.mouse.click(mid.x, mid.y); await sleep(1500)
+if (await p.evaluate(() => (window as any).__build?.on() === true)) { await p.evaluate(() => document.querySelector<HTMLElement>('[data-act="land"]')?.click()); await sleep(1200) }
 const works = await read('open.works.v1')
 res.crystal = works?.chests?.[0]?.crystal; res.bagAfterSet = (await bag()).keepstone_violet ?? 0
-await tp(-100, 112.9, 0); await sleep(1500); await shot('fk-2-violet-open')
-await tp(-100, 111.2, 0); await p.keyboard.press('e'); await sleep(900)
+// open it where it actually stands: at its front, yaw 0 looks -z
+const k = (works?.chests?.[0] ?? { x: -100, z: 112 }) as { x: number; z: number }
+await tp(k.x, k.z + 1.3, 0); await sleep(1500); await shot('fk-2-violet-open')
+await p.keyboard.press('e'); await sleep(900)
 res.cap = await p.evaluate(() => Number(document.querySelector('[data-bank-cap]')?.getAttribute('data-bank-cap') ?? -1))
 res.pickedUp = await click('[data-act="pickup-keepstone"] button'); await sleep(800)
 res.after = { chests: (await read('open.works.v1'))?.chests?.length, bag: await bag() }
