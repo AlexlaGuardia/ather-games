@@ -46,8 +46,9 @@ import { gemsGiven, markGemsGiven, stageOf, gregsGems, errandEntries, birthSeat 
 import { skillPointerEntries } from '../business/skill-pointers'
 import { SEATS } from '../business/letters'
 import { useBirth } from '../birth-gate'
-import { castMoves, press, freshClock, cooling, CAST_KEY, type CastSlot, type CastClock } from '../shared/casting'
-import { castForMove, type CastSpec } from '../../play3d/cast'
+import { CAST_KEY } from '../shared/casting'
+import { useCasts } from '../shared/use-casts'
+import { type CastSpec } from '../../play3d/cast'
 import type { CastHit } from './combat-casts'
 import { useLoadout } from '../shared/loadout'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
@@ -152,10 +153,6 @@ export default function AtherSlice() {
   const vitalsRef = useRef<Vitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0 })
   // ★ mana is real now: pruning from a distance spends it (forestry.ts › MANA_COST), it refills slowly (build: 1.5/s)
   const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 1.5 })
-  // ★ THE CAST KEYS (Alex 11-16, Q tactical · X signature; shared/casting.ts): clocks per slot, keyed by the move they
-  // timed (a new word worn starts fresh), the fight's queue, and the two that move the keeper themselves
-  const castClocks = useRef<Record<CastSlot, { move: string | null; clock: CastClock }>>({ tactical: { move: null, clock: freshClock(castForMove(null)) }, signature: { move: null, clock: freshClock(castForMove(null)) } })
-  const castQueue = useRef<CastSpec[]>([])
   const buffsRef = useRef<Buffs>({})   // potion buffs (ather/alchemy.ts), loaded per keeper on mount
   useEffect(() => { buffsRef.current = loadBuffs(); toolsRef.current = loadTools() }, [])   // per keeper, after mount (localStorage)
   useEffect(() => { const on = () => { toolsRef.current = loadTools() }; window.addEventListener(TOOLS_EVENT, on); return () => window.removeEventListener(TOOLS_EVENT, on) }, [])   // a rinstick made at the Rinnshop
@@ -177,8 +174,6 @@ export default function AtherSlice() {
   const [net, setNet] = useState<Network | null>(null), netRef = useRef<Network | null>(null), placeRef = useRef<string | null>(null)
   const atFairDoor = (x: number, z: number) => { const f = netRef.current?.fair; if (!f || zoneRef0.current !== 'wilds') return false; const d = fairDoor(f); return Math.hypot(d.x - x, d.z - z) < FAIR_DOOR_R }
   const zoneRef0 = useRef<string>('plot')
-  const surge = useRef<{ until: number; mult: number }>({ until: 0, mult: 1 })
-  const impulse = useRef<CastSpec | null>(null)
   const aimRef = useRef<Aim>({ tree: null, dist: Infinity }), fxRef = useRef<ForestryFx | null>(null)
   const cAimRef = useRef<CrystalAim>({ crystal: null, dist: Infinity }), cFxRef = useRef<ProspectFx | null>(null)
   // ★ THE STANCE (shared/stance.ts, Alex 11-15): stowed by default; R draws / swaps / (held) stows; 1-8 / the wheel pick
@@ -401,8 +396,6 @@ export default function AtherSlice() {
       if (third && camRef.current) pullBack(camRef.current, heightRef.current, lc.py)
       if (isBuilding() && camRef.current) stepBuildCam(camRef.current, dt)   // the flying planner owns the lens
     }
-    { const m = manaRef.current, flow = buffOn(buffsRef.current, 'ather_flow') ? OPEN_FLOW_MULT : 1
-      if (m.cur < m.max) m.cur = Math.min(m.max, m.cur + m.regen * flow * dt) }   // mana refills (forestry spends it); Ather Flow lifts it
     { const b = buffsRef.current, t = Date.now()   // a potion buff that has run out says so, once, and leaves the save
       setOpenXpMult(buffOn(b, 'starlight', t) ? STARLIGHT_XP : 1)
       for (const k of Object.keys(b) as BuffId[]) if (!buffOn(b, k, t)) { const nb = { ...b }; delete nb[k]; buffsRef.current = nb; saveBuffs(nb); hudSay(`${BUFF_NAME[k]} fades.`, 'info') } }
@@ -762,44 +755,14 @@ export default function AtherSlice() {
   // THE FIRST ERRAND (business/errand.ts, Magii + Alex 11-16): Greg hands the birth letter's gems; the journal points to
   // the school's runesmith, then the Enchant Temple in the Citadel (those waymarks light on the continent page)
   const birth = useBirth(), loadoutNow = useLoadout()
-  const castSet = useMemo(() => castMoves(loadoutNow, birth), [loadoutNow, birth])
-  const castSetRef = useRef(castSet); castSetRef.current = castSet
   // ── the keeper's hands (open/shared/open-hands.tsx): stepped from the walker's onTick, after the camera moved ─────────
-  const handsCastAt = useRef(-Infinity)
   const zoneRef = useRef(zone.kind); zoneRef.current = zone.kind; zoneRef0.current = zone.kind
-  /** Q / X: pay, then the keeper moves (surge, impulse) or the fight takes it (combat-casts.ts) */
-  const castSlot = useCallback((slot: CastSlot) => {
-    const move = castSetRef.current[slot], cc = castClocks.current[slot]
-    if (cc.move !== move) castClocks.current[slot] = { move, clock: freshClock(castForMove(move)) }
-    const v = press(slot, move, castClocks.current[slot].clock, performance.now(), manaRef.current.cur, { fight: zoneRef.current === 'wilds' })
-    if (!v.ok) { hudSay(v.why, 'info'); return }
-    castClocks.current[slot].clock = v.clock; manaRef.current.cur = v.mana
-    handsCastAt.current = performance.now()   // the glove comes up (open-hands.tsx)
-    const sp = v.spec
-    if (sp.archetype === 'surge') { surge.current = { until: performance.now() + sp.surgeSecs * 1000, mult: sp.surgeMult || 1.5 }; hudSay(sp.label, 'item'); return }
-    if (sp.archetype === 'impulse') { impulse.current = sp; hudSay(sp.label, 'item'); return }
-    if (sp.archetype === 'restore' && zoneRef.current !== 'wilds') { hudSay(`${sp.label} · you are whole`, 'item'); return }
-    castQueue.current.push(sp)
-  }, [])
+  // Q / X + mana refill + the cast chips: ONE shared hook (shared/use-casts.ts), the same on the continent
+  const { castSlot, castQueue, castHud, surge, impulse, handsCastAt } = useCasts({ manaRef, vitalsRef, fightHere: () => zoneRef.current === 'wilds', flow: () => (buffOn(buffsRef.current, 'ather_flow') ? OPEN_FLOW_MULT : 1) })
   const onCast = useCallback((sp: CastSpec, hit: CastHit | null) => {
     if (!hit) return
     const n = hit.hit
     hudSay(sp.archetype === 'restore' ? `${sp.label} · +${sp.heal}` : sp.archetype === 'infusion' ? `${sp.label} · the gun hits harder` : n ? `${sp.label} · ${n} held` : `${sp.label} · nothing caught`, 'item')
-  }, [])
-  // what the HUD shows for the two keys
-  const castHud = useRef<{ key: string; name: string | null; cool: number; tooDear: boolean }[]>([])
-  useEffect(() => {
-    let raf = 0
-    const tick = () => {
-      const now = performance.now()
-      castHud.current = (['tactical', 'signature'] as CastSlot[]).map(slot => {
-        const move = castSetRef.current[slot], sp = castForMove(move), cc = castClocks.current[slot]
-        return { key: slot === 'tactical' ? 'Q' : 'X', name: move ? sp.label : null, cool: cc.move === move ? cooling(sp, cc.clock, now) : 0, tooDear: !!move && manaRef.current.cur < sp.manaCost }
-      })
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
   }, [])
   const [given, setGiven] = useState(false)
   useEffect(() => setGiven(gemsGiven()), [])

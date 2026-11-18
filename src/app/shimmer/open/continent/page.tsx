@@ -38,6 +38,9 @@ import { allOffers } from '../business/market'
 import { deedsTold, markDeedsTold, deedPointerEntries, TOLD_RADIUS } from '../business/deed-pointer'
 import { doorByKey } from '../business/doors'
 import { useLoadout } from '../shared/loadout'
+import { useCasts } from '../shared/use-casts'
+import { CAST_KEY } from '../shared/casting'
+import type { CastSpec } from '../../play3d/cast'
 import { useNyxRinning } from './nyx-rinning'
 import { veradynFerry } from '../towns/veradyn'
 import { townDiscs } from '../towns/plan'
@@ -681,7 +684,7 @@ export interface RideHud { x: number; z: number; yaw: number; mph: number; frac:
 const LANDING = 'rune-hold'
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
-function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.MutableRefObject<Track>; R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<{ tp?: (x: number, z: number, yaw: number) => void }> }) {
+function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx }: { castFx: { surge: React.MutableRefObject<{ until: number; mult: number }>; impulse: React.MutableRefObject<CastSpec | null> }; track: React.MutableRefObject<Track>; R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<{ tp?: (x: number, z: number, yaw: number) => void }> }) {
   const { camera, gl } = useThree()
   const spawn = useMemo(() => {
     const road = R.meta.roads.find(r => r.from === 'ashfeld' && r.to === 'millbrook') ?? R.meta.roads[0]
@@ -863,7 +866,13 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track }: { track: React.M
       const r = clamp1((k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) + touch.move.x)
       let mx = fwx * f + rtx * r, mz = fwz * f + rtz * r
       const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml }
-      lc.speedMult = continentStance.current.kind === 'stowed' ? STOWED_SPEED : 1   // hands free, a little quicker
+      lc.speedMult = (continentStance.current.kind === 'stowed' ? STOWED_SPEED : 1)   // hands free, a little quicker
+        * (performance.now() < castFx.surge.current.until ? castFx.surge.current.mult : 1)   // a surge cast (Static Burst)
+      if (castFx.impulse.current) {   // an impulse cast (Quickform): up, keeping the run (same as the Ather's walker)
+        const sp = castFx.impulse.current; castFx.impulse.current = null
+        lc.vy = Math.max(lc.vy, sp.impulseUp || 8); lc.airborne = true
+        if (!sp.keepMomentum) { lc.hvx = 0; lc.hvz = 0 }
+      }
       tickFoot(fw, R, lc, { mvX: mx, mvZ: mz, fwdX: fwx, fwdZ: fwz, rightX: rtx, rightZ: rtz,
         jumpKey: k.has('Space') || touch.held.has('Space'), crouchKey: k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyC') || touch.held.has('ShiftLeft'), dt: Math.min(frameDt, 0.05) })
       // fell off the world (or into it): back beside the courser
@@ -1197,7 +1206,18 @@ export default function ContinentRide() {
   const lastPlace = useRef<string | null>(null)
   useEffect(() => { if (hud.place && hud.place !== lastPlace.current) hudSay(`Approaching ${hud.place}`, 'zone'); lastPlace.current = hud.place ?? null }, [hud.place])
   const vitalsRef = useRef<Vitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0 })
-  const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 0 })
+  const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 1.5 })
+  // Q / X on foot (BETA M15b): the same shared hook as the Ather. No fight here yet, so a fight cast resolves against nothing.
+  const casts = useCasts({ manaRef, vitalsRef, fightHere: () => false })
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.repeat || (e.code !== CAST_KEY.tactical && e.code !== CAST_KEY.signature)) return
+      if (!footRef.current) { hudSay('Your hands are busy at the wheel.', 'info'); return }
+      if (stanceBlocked.current) return
+      casts.castSlot(e.code === CAST_KEY.tactical ? 'tactical' : 'signature')
+    }
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
+  }, [casts.castSlot])
   const cave = useMemo(() => (R ? buildCavern(R) : null), [R])
   // ── THE MAP (./map.tsx): ink in what you drive, minimap top-right, M opens it whole ──
   const track = useRef<Track>({ x: 0, z: 0, yaw: 0 })
@@ -1326,7 +1346,7 @@ export default function ContinentRide() {
           <Posts R={R} />
           <Roadside R={R} />
           <Trees R={R} focus={focus} />
-          <Driver R={R} cave={cave} onHud={setHud} focus={focus} tuneRef={tuneRef} ctl={ctl} track={track} />
+          <Driver castFx={casts} R={R} cave={cave} onHud={setHud} focus={focus} tuneRef={tuneRef} ctl={ctl} track={track} />
         </Canvas>
       )}
       <LookChip />
@@ -1337,7 +1357,7 @@ export default function ContinentRide() {
           holds={hud.foot ? (gunHud.holding ? [{ code: AIM_CODE, label: 'aim' }, { code: 'ShiftLeft', label: 'slide' }, { code: 'Space', label: 'jump' }] : undefined) : [{ code: 'Space', label: 'drift' }]}
           stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hudSize === 'phone' ? PHONE_ROW_TOP : hud.foot ? 48 : 148 }} />
       )}
-      {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} marks={questMarksRef} vitals={vitalsRef} mana={manaRef} entries={gunHud.holding ? gunHud.entries : hotbarEntries(inv)} sel={slot} onSelect={setSlot} onEquip={gunHud.holding ? undefined : (i: number) => setStance(st => equipSlot(st, i, getInv()))}
+      {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} marks={questMarksRef} vitals={vitalsRef} mana={manaRef} casts={casts.castHud} entries={gunHud.holding ? gunHud.entries : hotbarEntries(inv)} sel={slot} onSelect={setSlot} onEquip={gunHud.holding ? undefined : (i: number) => setStance(st => equipSlot(st, i, getInv()))}
         dimmed={!hud.foot} input={!!hud.foot && !showMap && !garage && !board && !bagOpen && !vesselShop && !deed && !optionsOpen}
         minimap={mapState && <ContinentMiniMap map={mapState} track={track} onExpand={() => setShowMap(true)} box={openMapBox(hudSize)} />}
         status={[

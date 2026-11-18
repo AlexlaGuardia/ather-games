@@ -52,13 +52,12 @@ export type CastVerdict =
   | { ok: true; spec: CastSpec; clock: CastClock; mana: number }
   | { ok: false; why: string }
 
-/** Press a key. `now` in ms. Spends nothing on a refusal. */
-export function press(slot: CastSlot, moveId: string | null, clock: CastClock, now: number, mana: number, where: { fight: boolean }): CastVerdict {
+/** Press a key. `now` in ms. Spends nothing on a refusal. NO refusal by place: a cast fires in every mode (M15), and hits what the mode holds. */
+export function press(slot: CastSlot, moveId: string | null, clock: CastClock, now: number, mana: number): CastVerdict {
   if (!moveId) return { ok: false, why: slot === 'signature' ? 'Your glove has no word on it yet.' : 'You are wearing no bracelet.' }
   const s = castForMove(moveId)
   if (s === NO_CAST || s.archetype === 'unbuilt') return { ok: false, why: `${s.label || moveId} has no shape in the world yet.` }
   if (!castsHere(s)) return { ok: false, why: `${s.label} is not out here yet.` }
-  if (FIGHT_SIDE.has(s.archetype) && s.archetype !== 'restore' && !where.fight) return { ok: false, why: `Nothing here for ${s.label} to touch.` }
   const c = recharge(s, clock, now)
   const multi = Math.max(1, s.charges) > 1
   if (multi ? c.charges <= 0 : now < c.readyAt) return { ok: false, why: `${s.label} is not ready.` }
