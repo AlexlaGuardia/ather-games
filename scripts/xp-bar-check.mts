@@ -62,8 +62,9 @@ const barWhen = (p: Page, cond: string, timeout = 180000) => p.waitForFunction((
 const frame = async (p: Page, name = '_frame') => { try { await p.screenshot({ path: `${out}/${name}.png` }) } catch { /* slow frame */ } }
 const pruneAt = async (p: Page, t: { x: number; z: number; id: string }) => {
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), t.x + 6, t.z)
-  for (let i = 0; i < 20 && (await p.evaluate(() => (window as any).__ather.aim())) !== t.id; i++) { await frame(p); await sleep(500) }
+  for (let i = 0; i < 40 && (await p.evaluate(() => (window as any).__ather.aim())) !== t.id; i++) { await frame(p); await sleep(500) }
   res[`aim_${t.id}`] = await p.evaluate(() => (window as any).__ather.aim())
+  if (res[`aim_${t.id}`] !== t.id) throw new Error(`never aimed ${t.id}`)
   await p.evaluate(() => (window as any).__ather.prune())
 }
 
@@ -71,8 +72,13 @@ let pass = false
 try {
   // ── desktop: a gain, then a level-up ─────────────────────────────────────────────────────────────────────────────
   const p = await open(1100, 680, false, SEED)
-  await p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))
-  await sleep(9000)
+  // travel until the page SAYS it is in the Wilds (prod under load took >9 s; a fixed sleep left the keeper on the plot)
+  for (let i = 0; i < 40 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds'; i++) {
+    await p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))
+    await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 15000, polling: 1000 }).catch(() => {})
+  }
+  if ((await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds') throw new Error('never reached the Wilds')
+  await sleep(4000)
   res.before = await bar(p)
   const gain = barWhen(p, "s.shown === '1' && s.skill === 'forestry'")
   await pruneAt(p, g1)
