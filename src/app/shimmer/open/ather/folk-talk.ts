@@ -4,16 +4,17 @@
 // answers. "What do you need?" shows ITS goods and the bring answers; "Would you keep a room for me?" is the recruit ask
 // (talkLine yes / trustFirst / trusted, lark's); "Who else lives here?" turns to the next; "Goodbye" leaves.
 // All game logic stays in settlement-folk.ts (wantsLeft / trusted / bring / recruit); this file only arranges lines.
-// ★ PLACEHOLDERS for @lark (no signed text exists yet): the answer labels (ASK) and the two stock lines below. Swap when signed.
+// ★ @lark draft 11-18, awaiting Alex sign-off: the answer labels (ASK), the bring verb and the two stock lines below. The dream
+// stays the hello (lark: the only place a keeper ever hears a Moglin's dream). Checks import these, never retype them.
 import type { TalkNode } from '../shared/npc-talk'
 import { wantsLeft, trusted, type Folk, type Trust } from './settlement-folk'
 import { talkLine } from './folk-lines'
 import { itemDef } from '../shared/inventory'
 
-export const ASK = { needs: 'What do you need?', room: 'Would you keep a room for me?', others: 'Who else lives here?', back: 'Go on', bye: 'Goodbye' }   // PLACEHOLDER labels (lark)
-export const FOLK_NO_ROOM = 'Your garden has no room for another.'                 // PLACEHOLDER (lark): was a stock string in folk-panel.tsx
-export const FOLK_EMPTY = 'Everyone here has gone to a garden this season.'        // PLACEHOLDER (lark): was a stock string in folk-panel.tsx
-export const giveLabel = (n: number, id: string) => `Give ${n} ${itemDef(id).name}`  // PLACEHOLDER (lark): the bring answer
+export const ASK = { needs: 'What do you need?', room: 'Would you keep a room for me?', others: 'Who else lives here?', back: 'Anything else?', bye: 'See you soon.' }
+export const FOLK_NO_ROOM = 'Your garden is full just now. Ask me again when there is a free room.'
+export const FOLK_EMPTY = 'The houses are quiet now. Everyone here has found a garden.'   // no speaker: reads as narration
+export const giveLabel = (n: number, id: string) => `Bring ${n} ${itemDef(id).name}`  // the bring answer: the same verb as lark's trustFirst ask
 export const goodsText = (ws: { id: string; n: number }[]) => ws.map(w => `${w.n} ${itemDef(w.id).name}`).join(' and ')
 
 /** Where the talk is: whose bubble, which screen, and (after an answer) the line it said. */
