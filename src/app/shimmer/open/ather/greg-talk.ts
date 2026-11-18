@@ -8,8 +8,8 @@ import { gregSendOff, gregRepeat } from '../business/errand-lines'
 import type { TalkNode } from '../shared/npc-talk'
 import type { GregErrand } from './panels'
 
-export const GREG_HELLO = 'Keeper.'   // PLACEHOLDER (lark): Greg's idle greeting
-export const ANSWERS = { more: 'Go on', take: 'Take them', ground: 'About my ground', bye: 'Goodbye' }   // PLACEHOLDER labels (lark)
+export const GREG_HELLO = 'Now then, Keeper. Blue says hello.'   // @lark draft 11-18, awaiting Alex sign-off: Greg's idle greeting
+export const ANSWERS = { more: 'And then?', take: 'Take the gems', ground: 'My ground', bye: 'See you, Greg.' }   // @lark draft 11-18, awaiting Alex sign-off (checks import these, never retype them)
 
 export interface GregTalkActs { ground: () => void; bye: () => void; goto: (step: number) => void }
 

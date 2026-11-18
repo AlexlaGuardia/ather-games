@@ -18,6 +18,7 @@ import { doorByKey } from '../src/app/shimmer/open/business/doors'
 import { SEATS, wordsFor, letterItem } from '../src/app/shimmer/open/business/letters'
 import { birthSeat } from '../src/app/shimmer/open/business/errand'
 import { GREG, GATE, REACH } from '../src/app/shimmer/open/ather/plot'
+import { ANSWERS } from '../src/app/shimmer/open/ather/greg-talk'   // the labels lark writes; a reword never stales the check
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m5')
 mkdirSync(out, { recursive: true })
@@ -99,8 +100,8 @@ await p.keyboard.press('KeyE'); await sleep(1200)
 if (!(await poll(async () => !!(await p.$('[data-talk-choices]')), 8000))) { sees.atGreg = await text(); await shot('greg-noE'); await fail('greg: E starts his conversation', 'no talk after E at Greg') }
 await shot('greg-talk'); sees.gregTalk = await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')
 // BETA M13: his send-off one bubble at a time; E answers the lit option (Go on x3, then Take them)
-for (let k = 0; k < 6 && !(await p.evaluate(() => [...document.querySelectorAll('[data-talk-option]')].some(b => /Take them/.test(b.textContent ?? '')))); k++) { await p.keyboard.press('KeyE'); await sleep(600) }
-if (!(await p.evaluate(() => [...document.querySelectorAll('[data-talk-option]')].some(b => /Take them/.test(b.textContent ?? ''))))) await fail('greg: take the gems', 'no Take them answer in his talk')
+for (let k = 0; k < 6 && !(await p.evaluate((t: string) => [...document.querySelectorAll('[data-talk-option]')].some(b => (b.textContent ?? '').includes(t)), ANSWERS.take)); k++) { await p.keyboard.press('KeyE'); await sleep(600) }
+if (!(await p.evaluate((t: string) => [...document.querySelectorAll('[data-talk-option]')].some(b => (b.textContent ?? '').includes(t)), ANSWERS.take))) await fail('greg: take the gems', `no ${ANSWERS.take} answer in his talk`)
 await p.keyboard.press('KeyE'); await sleep(1200)
 const bg = await bag(); res.bagAfterGreg = bg.join(' ')
 if (!bg.includes('blankstonex1')) await fail('greg: take the gems', `bag after Take: ${bg.join(' ')}`)

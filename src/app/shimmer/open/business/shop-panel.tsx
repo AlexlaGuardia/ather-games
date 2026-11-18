@@ -221,25 +221,25 @@ function SmokehousePanel({ ledger, setLedger, onClose }: { ledger: Ledger; setLe
 }
 
 /** THE SHIPYARD (hub, Alex 11-18): Kael's chest hands over the keeper's first weapons, once: the Charred Rifle (primary) and
- *  the Repeater (secondary). Plain copy until @lark writes Kael's chest; the broken ship and the ledger are canon, not built. */
+ *  the Repeater (secondary). Copy = @lark draft 11-18, awaiting Alex sign-off; the broken ship and the ledger are canon, not built. */
 function ShipyardPanel({ onClose }: { onClose: () => void }) {
   const l = useLoadout()
   const open = () => {
     const r = claimKaelsArms(getLoadout()); if (!r.ok) return
     setLoadout(r.loadout)
-    hudSay('The Charred Rifle and the Repeater are yours. R draws them; the Character tab sets which is which.', 'item', 6)
+    hudSay('The Charred Rifle and the Repeater are yours. R draws them. The Character tab sets which is which.', 'item', 6)
   }
   return (
     <HearthFrame title="The Shipyard" maxWidth={460} onClose={onClose} fixed dataPanel="shipyard">
       <div className="px-4 pt-3 pb-4 text-[14px] leading-snug" style={{ color: H.ink }}>
-        <p style={{ ...hearthDisplay, color: H.inkSoft }}>Kael&apos;s yard, left to you with a broken ship in the slip.</p>
+        <p style={{ ...hearthDisplay, color: H.inkSoft }}>Kael&apos;s yard. A broken ship sits in the slip.</p>
         {!l.kael ? (
           <>
-            <p className="mt-3">A chest stands by the slip with your name on it: Kael&apos;s rifle and a handgun.</p>
-            <div className="flex justify-end mt-4"><HearthButton primary onClick={open}>Open Kael&apos;s chest</HearthButton></div>
+            <p className="mt-3">A chest by the slip, your name on the lid. Kael&apos;s rifle and a handgun inside.</p>
+            <div className="flex justify-end mt-4"><HearthButton primary onClick={open}>Open the chest</HearthButton></div>
           </>
         ) : (
-          <p className="mt-3" data-chest="empty">The chest is empty now. You carry what was in it.</p>
+          <p className="mt-3" data-chest="empty">Empty now. You have what Kael left.</p>
         )}
       </div>
     </HearthFrame>

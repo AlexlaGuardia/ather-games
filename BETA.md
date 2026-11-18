@@ -113,6 +113,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 - **M6c (11-18, ⛔ for the hive):** the Wilds fight never ran headless (memory / swiftshader). While you try the new gun: go to the Wilds, does a Hollow come at you within a minute, and does it die? If none ever come, that is a real bug (the count drops 7→0 after arrival in headless runs).
 - **M13 look (11-18):** talk to Greg on your phone: bubble, camera turn, answer list. Placeholder lines ("Keeper.", "Go on", "About my ground") wait for lark.
+- **Lark copy pass (11-18), sign-off:** lark's drafts replace today's placeholders: Greg ("Now then, Keeper. Blue says hello." / And then? / Take the gems / My ground / See you, Greg.), the Shipyard + Kael's chest ("Open the chest", "Empty now. You have what Kael left."), the Co.'s contract board ("Contract board", hand it back, "That one's yours: …"). Yes / reword any. Held for Magii: a Citadel board saying goods come "from the Ather".
 
 - **M5 friction (11-17, not a dead end):** after Greg's gems the journal says 'Go to the Redstair runesmith' but 'Nowhere to point yet' on the Ather side: no beacon to the gate, and Rune Hold sits on the map's Athernyx face (Tab flips). Proposal: on the Ather the errand's waymark points at the gate. Hub can do it (small).
 

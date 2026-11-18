@@ -3,6 +3,7 @@
 // the saved bag agrees, shift-clicks it back, closes on the RED X (the camera relock path), and shoots the bag, the
 // fold map and Gregory. Fresh profile: never a keeper's real save.   npx tsx scripts/bag-check.mts [--url] [--out]
 import puppeteer from 'puppeteer-core'
+import { ANSWERS } from '../src/app/shimmer/open/ather/greg-talk'   // the labels lark writes; a reword never stales the check
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const out = flag('--out', '/tmp'), url = flag('--url', 'https://ather.games')
 const b = await puppeteer.launch({ protocolTimeout: 120000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -39,7 +40,7 @@ await shot('bag-3-foldmap')
 await p.click('[data-panel="fold-map"] button[aria-label="close"]'); await sleep(500)
 await p.evaluate(() => (window as any).__ather.open('greg')); await sleep(1000)
 // BETA M13: Greg is talk first; the ground screen is one answer
-await p.evaluate(() => ([...document.querySelectorAll('[data-talk-option]')].find(b => /About my ground/.test(b.textContent ?? '')) as HTMLElement | undefined)?.click()); await sleep(800)
+await p.evaluate((g: string) => ([...document.querySelectorAll('[data-talk-option]')].find(b => (b.textContent ?? '').includes(g)) as HTMLElement | undefined)?.click(), ANSWERS.ground); await sleep(800)
 res.gregHearth = !!(await p.$('[data-panel="greg"] button[aria-label="close"]'))
 await shot('bag-4-greg')
 console.log(JSON.stringify(res))

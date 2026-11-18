@@ -33,17 +33,17 @@ export function BoardPanel({ town, contracts, ledger, capacity, onAccept, onAban
   const name = (id: string) => id.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
   return (
     // ★ The Carved Hearth frame with the red close (Alex 11-15: every menu)
-    <HearthFrame title={`${town} board`} maxWidth={420} onClose={onClose} fixed dataPanel="trade-board">
+    <HearthFrame title="Contract board" maxWidth={420} onClose={onClose} fixed dataPanel="trade-board">
       <div style={{ padding: '26px 16px 14px', fontSize: 13 }}>
       <div style={{ font: '700 11px system-ui', letterSpacing: '0.24em', color: H.ember }}>ATHER TRADING CO.</div>
       {ledger.active && (
         <div style={{ margin: '10px 0', padding: '8px 10px', borderRadius: 8, background: 'rgba(58,39,22,0.07)', fontSize: 12 }}>
           Holding: {ledger.active.qty} {GOODS[ledger.active.good].name} → {name(ledger.active.to)} ({ledger.active.loaded ? 'loaded' : 'not loaded yet'})
-          <button onClick={onAbandon} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#c96b4f', cursor: 'pointer', fontSize: 11 }}>drop it</button>
+          <button onClick={onAbandon} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#c96b4f', cursor: 'pointer', fontSize: 11 }}>hand it back</button>
         </div>
       )}
       <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
-        {contracts.length === 0 && <div style={{ opacity: 0.6, fontSize: 12 }}>No work posted here today.</div>}
+        {contracts.length === 0 && <div style={{ opacity: 0.6, fontSize: 12 }}>Nothing posted. Come back later.</div>}
         {contracts.map(c => {
           const g = GOODS[c.good], fits = crates(c) <= capacity
           return (
@@ -64,7 +64,7 @@ export function BoardPanel({ town, contracts, ledger, capacity, onAccept, onAban
         })}
       </div>
       {msg && <div style={{ marginTop: 8, fontSize: 11, color: H.rust, fontWeight: 600 }}>{msg}</div>}
-      <div style={{ marginTop: 10, fontSize: 11, opacity: 0.6 }}>Load at the pickup and deliver at the drop by stopping there. One contract at a time.</div>
+      <div style={{ marginTop: 10, fontSize: 11, opacity: 0.6 }}>Stop at the pickup to load, at the drop to deliver. One at a time.</div>
       </div>
     </HearthFrame>
   )

@@ -3,6 +3,7 @@
 // School runesmith in Redstair and on to the Enchant Temple. (The cut + imbue are scripts/runesmith-check.mts.)
 // npx tsx scripts/errand-check.mts  (URL= to point elsewhere). Writes /tmp/errand-<n>.png
 import puppeteer from 'puppeteer-core'
+import { ANSWERS } from '../src/app/shimmer/open/ather/greg-talk'   // the labels lark writes; a reword never stales the check
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 const URL = process.env.URL ?? 'https://ather.games'
 const br = await puppeteer.launch({ executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -23,11 +24,11 @@ await p.evaluate(() => (window as any).__ather.open('greg'))
 ok(await poll(async () => !!(await p.$('[data-talk-choices]')) && /Now then/.test(await bubble())), "E at Greg starts a conversation: his first send-off line in a bubble")
 ok(!(await p.$('[data-panel="greg"]')), 'the ground screen does NOT open with it (one thing at a time)')
 const first = await answers()
-ok(first.includes('About my ground') && first.includes('Goodbye'), `the first answers include the ground screen and goodbye (${first.join(' / ')})`)
+ok(first.includes(ANSWERS.ground) && first.includes(ANSWERS.bye), `the first answers include the ground screen and goodbye (${first.join(' / ')})`)
 const sendOff: string[] = [await bubble()]
 for (let k = 0; k < 3; k++) { await p.keyboard.press('KeyE'); await wait(500); sendOff.push(await bubble()) }
 ok(sendOff.length === 4 && /Now then\. A Blankstone, and the gems to go on it\./.test(sendOff[0]) && /Yours is the Fire School runesmith, at Redstair\./.test(sendOff[1]), `Greg's send-off, lark's lines one bubble each, seat filled in (${sendOff.map(x => x.slice(0, 18)).join(' | ')})`)
-ok((await answers()).join() === 'Take them', 'the last line offers Take them')
+ok((await answers()).join() === ANSWERS.take, `the last line offers ${ANSWERS.take}`)
 await p.screenshot({ path: '/tmp/errand-1.png' })
 await p.keyboard.press('KeyE'); await wait(1200)
 const bag = await p.evaluate(() => (JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots as any[]).filter(Boolean).map(s => `${s.id}x${s.n}`))
@@ -40,13 +41,13 @@ await p.keyboard.press('ArrowDown'); await wait(200)
 const sel = await p.evaluate(() => document.querySelector('[data-talk-sel]')?.getAttribute('data-talk-option'))
 ok(sel === '1', `the arrows move the pick (lit answer ${sel})`)
 await p.keyboard.press('ArrowUp'); await wait(200); await p.keyboard.press('KeyE')
-ok(await poll(async () => !!(await p.$('[data-panel="greg"]')) && !(await p.$('[data-talk-choices]')), 5000), '"About my ground" opens the ground screen alone')
+ok(await poll(async () => !!(await p.$('[data-panel="greg"]')) && !(await p.$('[data-talk-choices]')), 5000), `"${ANSWERS.ground}" opens the ground screen alone`)
 await p.keyboard.press('Escape'); await wait(500)
 await p.screenshot({ path: '/tmp/errand-2.png' })
 ok(await p.evaluate(() => JSON.parse(localStorage.getItem('open.errand.v1') ?? '{}').given === true), 'the gems are given once (the flag holds)')
 await p.reload({ waitUntil: 'load', timeout: 240000 }); await p.waitForFunction(() => !!(window as any).__ather?.open, { timeout: 240000 }); await wait(1500)
 await p.evaluate(() => (window as any).__ather.open('greg'))
-ok(await poll(async () => /Redstair first/.test(await bubble())) && !(await answers()).includes('Take them'), 'after a reload Greg does not hand them out again')
+ok(await poll(async () => /Redstair first/.test(await bubble())) && !(await answers()).includes(ANSWERS.take), 'after a reload Greg does not hand them out again')
 ok(errs.length === 0, `no page errors${errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''}`)
 await br.close()
 console.log(fails ? `errand-check: ${fails} FAIL` : 'errand-check: PASS')

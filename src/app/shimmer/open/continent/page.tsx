@@ -1126,7 +1126,7 @@ export default function ContinentRide() {
     const target = a && R ? R.meta.places.find(p => p.id === (a.loaded ? a.to : a.from)) : null
     postEntries('continent-contract', a && target ? [{ id: `contract-${a.id}`, hand: 'keeper',
       title: a.loaded ? `Deliver ${a.qty} ${GOODS[a.good].name} to ${placeName(a.to)}` : `Load ${a.qty} ${GOODS[a.good].name} at ${placeName(a.from)}`,
-      note: `A Co. contract from ${placeName(a.from)} to ${placeName(a.to)}, ${Math.round(a.km)} km by road. It pays ${a.pay} Marks and ${a.deeds} deed${a.deeds === 1 ? '' : 's'} on delivery; goods spoil the longer they ride.`,
+      note: `Co. haul, ${placeName(a.from)} to ${placeName(a.to)}, ${Math.round(a.km)} km by road. Pays ${a.pay} Marks and ${a.deeds} deed${a.deeds === 1 ? '' : 's'}. Goods spoil the longer they ride.`,
       where: { zone: 'continent', x: target.x, z: target.z } }] : [])
   }, [ledger.active, R])
   const journal = useJournal()
@@ -1386,7 +1386,7 @@ export default function ContinentRide() {
       <TradeHud ledger={ledger} objective={objective} toast={null} purse={false} />
       {board && (
         <BoardPanel town="Ather Trading Co." contracts={contracts} ledger={ledger} capacity={CAPACITY.darter} msg={boardMsg}
-          onAccept={c => { const r = accept(ledger, c, CAPACITY.darter); if (r.ok) { setLedger(r.ledger); setDeed(null); flash(`Contract taken · ${GOODS[c.good].name} to ${placeName(c.to)}`) } else setBoardMsg(r.why ?? null) }}
+          onAccept={c => { const r = accept(ledger, c, CAPACITY.darter); if (r.ok) { setLedger(r.ledger); setDeed(null); flash(`That one's yours: ${GOODS[c.good].name} to ${placeName(c.to)}.`) } else setBoardMsg(r.why ?? null) }}
           onAbandon={() => setLedger(abandon(ledger))} onClose={() => { setDeed(null); setBoardMsg(null) }} />
       )}
       {!R && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#1d2a33', font: '600 14px system-ui' }}>{err ?? 'Loading the continent…'}</div>}

@@ -25,10 +25,10 @@ export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: 
   smokehouse: { name: 'The Smokehouse', kind: 'smokehouse', line: 'Farmed meat by the bundle, smoked and wrapped for the road.' },
   // THE SHIPYARD (canon timeline 1672: the keeper inherits the shipyard, a broken ship, the Charred Rifle and Kael's ledger;
   // CANON_GAPS 11-15: Kael leaves the rifle there). Alex 11-18: it hands over the keeper's first weapons. Rune Hold only.
-  shipyard: { name: 'The Shipyard', kind: 'shipyard', line: "Kael's yard, left to you with a broken ship." },
+  shipyard: { name: 'The Shipyard', kind: 'shipyard', line: "Kael's yard. A broken ship in the slip." },   // @lark draft 11-18, awaiting Alex sign-off
   // THE CO.'S CITADEL OFFICE (Alex 11-18; Magii 49d8a0f AFK, world/gates.md: the door reads the house's own name, an Alkin clerk at
   // the counter, Lingston stays the HQ). Its panel is the contract board (continent/page.tsx), not a ShopPanel. Citadel only.
-  'trade-co': { name: 'Ather Trading Co.', kind: 'trade-co' },
+  'trade-co': { name: 'Ather Trading Co.', kind: 'trade-co', line: 'Haul contracts posted within. Goods paid in Marks.' },   // line: @lark draft 11-18 (clerk script §1), awaiting Alex sign-off
   // THE GUN SHOP (RULED 11-15, world/rune-hold.md): sells the five base guns at a counter; more of them in other towns. No proper
   // name, no keeper: the UI says "The gun shop". Like the smokehouse it takes a plain building (doorsOf). Stock: business/gun-shop.ts.
   gunshop: { name: 'The gun shop', kind: 'gunshop' },
