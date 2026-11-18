@@ -26,7 +26,7 @@ await (stop as any).click()
 await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds' && (window as any).__ather.nodes?.().length > 0, { timeout: 90000 })
 const nodes = await p.evaluate(() => (window as any).__ather.nodes())
 console.log('nodes', JSON.stringify(nodes))
-// the map shows them as grey blots
+// ★ 1baed69d (Alex 11-18): nodes are OFF the fold map and the compass; the section tint is all that marks infected ground
 await p.evaluate(() => (window as any).__ather.open('gate'))
 await new Promise(r => setTimeout(r, 1000))
 const blots = await p.$$eval('div[title="Infected ground"]', d => d.length)
@@ -81,19 +81,29 @@ await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 5, 0), n.x, n.z)
 await new Promise(r => setTimeout(r, 20000))
 const quiet = await p.evaluate((id: string) => { const A = (window as any).__ather; return A.combat().hollows.filter((h: any) => A.ownerAt(h.x, h.z) === id).length }, n.id)   // strays on ITS ground (neighbours stay infested)
 const ledger = await p.evaluate(() => JSON.parse(localStorage.getItem('ather.nodes.v2') ?? '{}'))
-await p.waitForFunction((k: number) => (window as any).__ather.nodes().length < k, { timeout: 60000 }, nodes.length).catch(() => {})
-const left = await p.evaluate(() => (window as any).__ather.nodes().length)
+// ★ nodes() is every STREAMED tile's infected nodes, so its length grows as tiles load (16 -> 23 on 11-18): ask whether
+// THIS node left the infected list, not whether the list got shorter
+await p.waitForFunction((id: string) => !(window as any).__ather.nodes().some((m: any) => m.id === id), { timeout: 60000 }, n.id).catch(() => {})
+const gone = await p.evaluate((id: string) => !(window as any).__ather.nodes().some((m: any) => m.id === id), n.id)
 await shot(`${out}/node-5-clear.png`)
 // the borders: the cleared country reads green-edged, the other still grey and dashed (Alex 11-15); HUD names the ground
-const tag = await p.evaluate(() => [...document.querySelectorAll('div')].map(d => d.textContent ?? '').find(t => /· (cleared|infected) ground/.test(t)) ?? '')
+// read the HUD's own line (a leaf), not the first container whose text happens to include it
+const hudTag = () => p.evaluate(() => [...document.querySelectorAll('div,span')].filter(d => !d.children.length).map(d => d.textContent ?? '').find(t => /(cleared|infected) ground/i.test(t)) ?? '')
+const tag = await hudTag()
 await p.evaluate(() => (window as any).__ather.open('gate'))
 await new Promise(r => setTimeout(r, 1500))
-const borders = await p.$$eval('polygon', ps => ps.map(p => p.getAttribute('stroke-dasharray') ? 'infected' : 'cleared'))
+// the streamed fold map paints its borders on a canvas (AreaView), so the DOM holds no polygons to count: the shot is
+// the look; the TRUTH both read is infectedSet, so prove it from the other side too: a neighbour's ground still reads infected
 await shot(`${out}/node-6-borders.png`)
-console.log(JSON.stringify({ tag: tag.slice(0, 60), borders }))
-const res = { quiet, blots, before, hudBars, tell, wave, cleared: (ledger.clean ?? []) as string[], nodesLeft: left, of: nodes.length }
+await p.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' })))
+const other = await p.evaluate((x: number, z: number) => { const ns = (window as any).__ather.nodes(); return ns.sort((a: any, b: any) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z))[0] }, n.x, n.z)
+await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 3, 0), other.x, other.z)
+await p.waitForFunction(() => [...document.querySelectorAll('div,span')].some(d => !d.children.length && /infected ground/i.test(d.textContent ?? '')), { timeout: 30000 }).catch(() => {})
+const otherTag = await hudTag()
+console.log(JSON.stringify({ tag: tag.slice(0, 60), otherTag: otherTag.slice(0, 60), other: other?.id }))
+const res = { quiet, blots, before, hudBars, tell, wave, cleared: (ledger.clean ?? []) as string[], gone, of: nodes.length }
 console.log(JSON.stringify(res))
-const pass = blots === nodes.length && !before && hudBars && !!tell && wave >= 4 && res.cleared.includes(n.id) && left === nodes.length - 1 && quiet <= 1 && /cleared ground/.test(tag) && borders.filter(b => b === 'cleared').length === 1 && borders.length === nodes.length
+const pass = blots === 0 && !before && hudBars && !!tell && wave >= 4 && res.cleared.includes(n.id) && gone && quiet <= 1 && /cleared ground/i.test(tag) && /infected ground/i.test(otherTag) && other.id !== n.id
 console.log(pass ? 'PASS' : 'FAIL')
 await b.close()
 process.exit(pass ? 0 : 1)
