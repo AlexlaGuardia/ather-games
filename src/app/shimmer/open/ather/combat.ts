@@ -71,11 +71,18 @@ export const FLOATER = {
 export const HEAD_Y = 1.55, HEAD_R = 0.26, BODY_Y = 0.85, BODY_R = 0.44
 export const PICKUP_R = 1.4, MAGNET_R = 4.5
 
+/** A placed field: a ground area at (x,z), `r` m radius, until `until` (c.clock seconds). The numbers are castForMove's. */
+export interface CombatField {
+  id: number; moveId: string; x: number; y: number; z: number; r: number; until: number; nextTick: number
+  dps: number; hps: number; cage: boolean; stopsShots: boolean; colour: string
+}
 export interface Combat {
   hollows: Hollow[]; rounds: Round[]; drops: Drop[]; spits: Spit[]
   keeper: Keeper; gun: WeaponDef
   nextId: number; seed: number
   clock?: number
+  /** Fields placed by field casts (combat-casts.ts › stepFields): each lasts its spec's secs and ticks on its own clock. */
+  fields?: CombatField[]
   /** The node's champion, when one is up (champion.ts). */
   champ?: Champion
   /** Champions that went back under, by node: the bar each had reached. */
@@ -355,5 +362,5 @@ const performanceSafeNow = (c: Combat) => (c.clock = (c.clock ?? 0))
 /** After the fold returns a downed keeper home: full health, a full clip, the Wilds' crowd forgets them. */
 export function revive(c: Combat) {
   c.keeper.hp = c.keeper.maxHp; c.keeper.sinceHurt = 99; c.keeper.ammo = c.gun.clip; c.keeper.reloading = 0
-  c.hollows = []; c.rounds = []; c.spits = []; c.champ = undefined
+  c.hollows = []; c.rounds = []; c.spits = []; c.fields = []; c.champ = undefined
 }

@@ -9,7 +9,7 @@ import * as THREE from 'three'
 import { RANGE_GUNS } from '../shared/gunplay'
 import { weaponDef } from '../../engine/weapons'
 import { newCombat, stepCombat, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, type Combat, type Terrain, type CombatEvent, type Hollow } from './combat'
-import { runCast, type CastHit } from './combat-casts'
+import { runCast, stepFields, type CastHit } from './combat-casts'
 import type { CastSpec } from '../../play3d/cast'
 import { touch } from '../shared/touch'
 import { wakeChampion, tellOf, CHAMP } from './champion'
@@ -196,7 +196,37 @@ function Tells({ c, heightAt }: { c: React.MutableRefObject<Combat>; heightAt: (
  *  (and on to each body it chained to). Lives FX_S seconds. */
 const FX_S = 0.6
 type LiveFx = CastHit & { at: number; from: { x: number; y: number; z: number }; colour: string }
-const CAST_COLOUR: Record<string, string> = { status: '#9fd8ff', projectile: '#fff0b8', restore: '#9be59b', infusion: '#ffcf7a' }
+const CAST_COLOUR: Record<string, string> = { field: '#ffd9a0', status: '#9fd8ff', projectile: '#fff0b8', restore: '#9be59b', infusion: '#ffcf7a' }
+/** The placed fields (combat-casts.ts › stepFields): a faint disc and a ring on the ground for as long as each lasts. */
+function FieldDiscs({ c }: { c: React.MutableRefObject<Combat> }) {
+  const discs = useRef<(THREE.Mesh | null)[]>([]), rings = useRef<(THREE.Mesh | null)[]>([])
+  useFrame(() => {
+    const fs = c.current.fields ?? [], now = c.current.clock ?? 0
+    for (let i = 0; i < 4; i++) {
+      const f = fs[fs.length - 1 - i], d = discs.current[i], r = rings.current[i]
+      if (d) d.visible = !!f
+      if (r) r.visible = !!f
+      if (!f) continue
+      const fade = Math.min(1, (f.until - now) / 0.8), pulse = 0.85 + 0.15 * Math.sin(now * 4)
+      for (const [m, op, lift] of [[d, 0.18, 0.06], [r, 0.8, 0.09]] as const) {
+        if (!m) continue
+        m.position.set(f.x, f.y + lift, f.z); m.scale.set(f.r * pulse, f.r * pulse, f.r * pulse)
+        const mat = m.material as THREE.MeshBasicMaterial; mat.color.set(f.colour); mat.opacity = op * fade
+      }
+    }
+  })
+  return (
+    <>
+      {[0, 1, 2, 3].map(i => (
+        <group key={i}>
+          <mesh ref={el => { discs.current[i] = el }} rotation-x={-Math.PI / 2} visible={false}><circleGeometry args={[1, 32]} /><meshBasicMaterial transparent depthWrite={false} side={THREE.DoubleSide} /></mesh>
+          <mesh ref={el => { rings.current[i] = el }} rotation-x={-Math.PI / 2} visible={false}><ringGeometry args={[0.92, 1, 40]} /><meshBasicMaterial transparent depthWrite={false} side={THREE.DoubleSide} /></mesh>
+        </group>
+      ))}
+    </>
+  )
+}
+
 function CastFlash({ fx }: { fx: React.MutableRefObject<LiveFx[]> }) {
   const rings = useRef<(THREE.Mesh | null)[]>([]), lines = useRef<(THREE.Mesh | null)[]>([])
   const v = useMemo(() => ({ a: new THREE.Vector3(), b: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), q: new THREE.Quaternion() }), [])
@@ -369,6 +399,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       eats.current = []
     }
     stepCombat(C, T, feet, dt)
+    stepFields(C, T, feet)
     if (C.events.length) {
       const now = performance.now() / 1000
       for (const e of C.events) {
@@ -427,6 +458,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       {nodes.filter(n => !spent.current.has(n.id)).map(n => <NodeMound key={n.id} n={n} y={T.heightAt(n.x, n.z)} />)}
       <ChampionBody c={c} />
       <CastFlash fx={fx} />
+      <FieldDiscs c={c} />
       <Tells c={c} heightAt={T.heightAt} />
       {ids.map(h => h.kind === 'floater' ? <FloaterBody key={h.id} c={c} id={h.id} /> : <HollowBody key={h.id} c={c} id={h.id} />)}
       <instancedMesh ref={spitsMesh} args={[undefined, undefined, 32]} frustumCulled={false}>

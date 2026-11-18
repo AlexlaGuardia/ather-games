@@ -762,7 +762,7 @@ export default function AtherSlice() {
   const onCast = useCallback((sp: CastSpec, hit: CastHit | null) => {
     if (!hit) return
     const n = hit.hit
-    hudSay(sp.archetype === 'restore' ? `${sp.label} · +${sp.heal}` : sp.archetype === 'infusion' ? `${sp.label} · the gun hits harder` : n ? `${sp.label} · ${n} held` : `${sp.label} · nothing caught`, 'item')
+    hudSay(sp.archetype === 'restore' ? `${sp.label} · +${sp.heal}` : sp.archetype === 'infusion' ? `${sp.label} · the gun hits harder` : sp.archetype === 'field' ? `${sp.label} · set down` : n ? `${sp.label} · ${n} held` : `${sp.label} · nothing caught`, 'item')
   }, [])
   const [given, setGiven] = useState(false)
   useEffect(() => setGiven(gemsGiven()), [])

@@ -6,13 +6,20 @@
 //   status     — the cast's statuses on every Hollow round the aim point (castRange out, areaSize across)
 //   restore    — the keeper heals
 //   infusion   — the gun hits harder for surgeSecs
-// surge and impulse move the KEEPER and live on the page (shared/casting.ts says which). The rest (field, terrain,
+//   field      — a persistent ground area at the aim point (castRange out; 0 = under the keeper), for areaSecs. Each second
+//                (FIELD_TICK_MS, engine/field-effects.ts) it does what the spec carries, and ONLY that:
+//                  fieldDps   damage to Hollows inside        fieldHps   heals the keeper standing inside
+//                  cage       Hollows inside are held (rooted)  fieldStopsShots  eats Hollow spit crossing it
+//                No open-world meaning, so not done: fieldShps (the keeper has no shield), fieldHp / ward (nothing here
+//                hits the field), hides (Hollows do not track by sight), surgeMult (Exhale's surge is the page's).
+// surge and impulse move the KEEPER and live on the page (shared/casting.ts says which). The rest (terrain,
 // channel, veil, gate) are not out here yet, and say so: never a silent no-op.
 //
 // ★ PURE. No React, no three: it reads and writes the Combat, and returns where to draw the flash.
 
 import { castForMove, type CastSpec } from '../../play3d/cast'
-import { HEAD_Y, BODY_Y, fxOn, type Combat, type Hollow, type HollowFx, type Terrain } from './combat'
+import { FIELD_TICK_MS } from '../../engine/field-effects'
+import { HEAD_Y, BODY_Y, fxOn, type Combat, type CombatField, type Hollow, type HollowFx, type Terrain } from './combat'
 
 type V3 = { x: number; y: number; z: number }
 const HOLLOW_FX: ReadonlySet<string> = new Set<HollowFx>(['rooted', 'disarmed', 'blinded', 'slowed', 'staggered', 'vulnerable', 'burning'])
@@ -110,9 +117,37 @@ export function runCast(c: Combat, T: Terrain, eye: V3, dir: V3, spec: CastSpec)
       for (const h of c.hollows) if (h.hp > 0 && Math.hypot(h.x - p.x, h.z - p.z) <= r + 0.5 && layStatuses(h, statuses, secs)) hit++
       return { kind: 'area', ...p, r, hit }
     }
+    case 'field': {
+      const p = spec.castRange > 0 ? aimPoint(T, eye, dir, spec.castRange) : { x: eye.x, y: T.heightAt(eye.x, eye.z), z: eye.z }
+      const r = Math.max(MIN_AREA_M, spec.areaSize) / 2, now = c.clock ?? 0
+      const f: CombatField = { id: c.nextId++, moveId: spec.moveId, x: p.x, y: p.y, z: p.z, r, until: now + spec.areaSecs, nextTick: now,
+        dps: spec.fieldDps, hps: spec.fieldHps, cage: spec.cage, stopsShots: spec.fieldStopsShots, colour: spec.cage ? '#d8e0ff' : spec.fieldHps > 0 ? '#9be59b' : '#ffd9a0' }
+      c.fields = [...(c.fields ?? []), f]
+      return { kind: 'area', ...p, r, hit: c.hollows.filter(h => h.hp > 0 && Math.hypot(h.x - p.x, h.z - p.z) <= r + 0.5).length }
+    }
     default:
       return null
   }
+}
+
+/** Advance the placed fields by one frame: eat spit every frame, do the tick's work once per FIELD_TICK_MS, expire. Call before stepCombat. */
+export function stepFields(c: Combat, T: Terrain, feet: { x: number; z: number }) {
+  const fs = c.fields
+  if (!fs?.length) return
+  const now = c.clock ?? 0
+  for (const f of fs) {
+    if (f.stopsShots) c.spits = c.spits.filter(s => Math.hypot(s.x - f.x, s.z - f.z) > f.r)
+    if (now < f.nextTick) continue
+    f.nextTick += FIELD_TICK_MS / 1000
+    if (f.nextTick < now) f.nextTick = now + FIELD_TICK_MS / 1000   // a stalled tab does not burst-apply
+    if (f.hps > 0 && Math.hypot(feet.x - f.x, feet.z - f.z) <= f.r) c.keeper.hp = Math.min(c.keeper.maxHp, c.keeper.hp + f.hps)
+    for (const h of c.hollows) {
+      if (h.hp <= 0 || Math.hypot(h.x - f.x, h.z - f.z) > f.r + 0.5) continue
+      if (f.cage) layStatuses(h, ['rooted'], FIELD_TICK_MS / 1000 + 0.3)
+      if (f.dps > 0) damage(c, T, h, f.dps)
+    }
+  }
+  c.fields = fs.filter(f => f.until > now)
 }
 
 /** The move a cast slot holds, as play3d's spec (NO_CAST when empty or unknown). */
