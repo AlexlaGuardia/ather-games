@@ -453,17 +453,20 @@ cmd_build() {
   # Three incidents in one night: a lane editing DURING a build shipped its half-edits, because the dirty check above
   # is a reading taken at build START and the tree keeps moving for the build's whole length. No reading can close
   # that (see 09-08 above: there is no act to make atomic). So the build no longer reads the shared tree at all: it
-  # builds `git archive HEAD` in .coord/snap (node_modules symlinked, .env copied; public/ is served from $REPO at
+  # builds `git archive HEAD` in /root/.ather-games-snap (node_modules hard-linked, .env copied; public/ is served from $REPO at
   # runtime, never from the build), then moves the finished slot into $REPO. A slot keeps its NAME (.next / .next_b)
   # through the move, which is the only thing route modules bake in; the one absolute path, in
   # required-server-files, is rewritten back to $REPO. A peer's uncommitted edit can no longer ship, mid-build or not.
   # Escape hatch (old behaviour, the working tree): COORD_BUILD_TREE=1.
   local bdir="$REPO"
   if [ "${COORD_BUILD_TREE:-0}" != "1" ]; then
-    bdir="$REPO/.coord/snap"
+    # OUTSIDE the repo (11-18, first try): inside it, Turbopack takes the repo as the workspace root (two lockfiles)
+    # and Tailwind's scan of both trees timed the PostCSS loader out. node_modules is HARD-LINKED in (same disk, no
+    # extra space): a symlink points outside the project root, which Turbopack refuses.
+    bdir="${COORD_SNAP_DIR:-/root/.ather-games-snap}"
     rm -rf "$bdir" && mkdir -p "$bdir"
     if ! git -C "$REPO" archive HEAD | tar -x -C "$bdir"; then echo ">> ⛔ snapshot of HEAD failed; nothing built"; rm -rf "$bdir"; exit 1; fi
-    ln -s "$REPO/node_modules" "$bdir/node_modules"
+    if ! cp -al "$REPO/node_modules" "$bdir/node_modules"; then echo ">> ⛔ could not link node_modules into the snapshot; nothing built"; rm -rf "$bdir"; exit 1; fi
     for _e in "$REPO"/.env "$REPO"/.env.local "$REPO"/.env.production; do [ -f "$_e" ] && cp "$_e" "$bdir/"; done
     # keep the idle slot's build cache warm across the move
     [ -d "$REPO/$target/cache" ] && mv "$REPO/$target/cache" "$bdir/.cache-carry" 2>/dev/null && mkdir -p "$bdir/$target" && mv "$bdir/.cache-carry" "$bdir/$target/cache"
