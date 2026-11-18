@@ -27,7 +27,8 @@ import {
   loadGarden, saveGarden, freshGarden, type Garden,
 } from './plot'
 import { PlotScene } from './plot-scene'
-import { WorkshopScene, WorkshopPanel, PlacingBar, usePlacingKeys, useWorks, workWalls, workPrompt } from './workshop'
+import { WorkshopScene, WorkshopPanel, PlacingBar, usePlacingKeys, useWorks, workWalls, workPrompt, currentWorks, setWorks } from './workshop'
+import { tick as villageTick, loadVillage, saveVillage } from './moglins'
 import { nearWork, type WorkNear } from './rooms'
 import { ClusterScene } from './cluster-scene'
 import { cycleLook, LookChip } from './ground-look'
@@ -148,6 +149,19 @@ export default function AtherSlice() {
   const buffsRef = useRef<Buffs>({})   // potion buffs (ather/alchemy.ts), loaded per keeper on mount
   useEffect(() => { buffsRef.current = loadBuffs(); toolsRef.current = loadTools() }, [])   // per keeper, after mount (localStorage)
   useEffect(() => { const on = () => { toolsRef.current = loadTools() }; window.addEventListener(TOOLS_EVENT, on); return () => window.removeEventListener(TOOLS_EVENT, on) }, [])   // a rinstick made at the Rinnshop
+  // THE GARDEN VILLAGE AT WORK (moglins.ts): on load the village catches up on the time you were away (capped at 12 h) and
+  // says what it made; then it ticks every minute while you play. The product lands in each room's own store.
+  const runVillage = useCallback((say: boolean) => {
+    const v = loadVillage()
+    if (!v.moglins.some(m => m.room)) { saveVillage({ ...v, lastTick: Date.now() }); return {} }
+    const t = villageTick(v, currentWorks())
+    saveVillage(t.village)
+    if (Object.keys(t.made).length) setWorks(t.works)
+    const names = Object.entries(t.made).map(([id, n]) => `${n} ${itemDef(id).name}`)
+    if (say && names.length) hudSay(`While you were away, your village made ${names.join(', ')}. It is in the rooms' stores.`, 'item')
+    return t.made
+  }, [])
+  useEffect(() => { runVillage(true); const id = setInterval(() => runVillage(false), 60_000); return () => clearInterval(id) }, [runVillage])
   const eatQueue = useRef<number[]>([])   // meals spent, healed on the combat layer's next frame (ather/cooking.ts)
   const [net, setNet] = useState<Network | null>(null), netRef = useRef<Network | null>(null), placeRef = useRef<string | null>(null)
   const atFairDoor = (x: number, z: number) => { const f = netRef.current?.fair; if (!f || zoneRef0.current !== 'wilds') return false; const d = fairDoor(f); return Math.hypot(d.x - x, d.z - z) < FAIR_DOOR_R }
@@ -458,6 +472,7 @@ export default function AtherSlice() {
       spread: () => spreadRef.current, skipDays, ownerAt: (x: number, z: number) => nodeOwner?.(x, z),
       chan: () => (chanRef.current ? { id: chanRef.current.w.id, done: chanRef.current.w.done, of: chanRef.current.w.chips.length } : null), prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mine: () => mineAimed(), crystal: () => { const c = cAimRef.current.crystal; return c ? { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z } : null }, mana: () => manaRef.current.cur,
       stance: () => stanceRef.current, speedMult: () => (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1),
+      village: () => loadVillage(), villageTick: () => runVillage(false),
       eat: () => eatHeld(), hp: () => vitalsRef.current.hp, drink: () => drinkHeld(), buffs: () => buffsRef.current, tools: () => toolsRef.current, setMana: (n: number) => { manaRef.current.cur = n },
       rin: () => rinApi.current?.view() ?? null, cast: () => castOrAnswer(), hold: (h: boolean | 'track') => { reelHold.current = h === 'track' ? (r: Reel) => (r.zone - r.bob) * 6 + (r.zoneV - r.bobV) * 1.6 > 0 : h },
     }

@@ -33,6 +33,7 @@ import { ROAST } from './cooking'
 import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { TOOL_DEFS } from '../../engine/tools'
+import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, GRADE_CATEGORIES, type Village } from './moglins'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
 let works: Works | null = null
@@ -42,6 +43,8 @@ const getW = (): Works => { if (!works) works = typeof window === 'undefined' ? 
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export function setWorks(w: Works) { works = w; saveWorks(w); subs.forEach(f => f()) }
 export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER)
+/** The live works (the page's village tick reads and writes through this store, so an open panel sees the product land). */
+export const currentWorks = () => getW()
 /** Every room's walls and every Keepstone, for the walker's plotShape. */
 export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox), ...pieceBoxes(w)]
 
@@ -503,6 +506,7 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
         {r.kind === 'alchemy' && (
           <JobList title="The cauldron" note="Potions go to your bag. Hold one and click to drink. The cauldron uses the room's store first, then your bag." jobs={BREW} r={r} inv={inv} refine />
         )}
+        <MoglinDuty r={r} />
         <div data-room-store={r.kind}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ ...lab, flex: 1 }}>The store · {store.stacks.length} / {ROOM_STORE_SLOTS} · keeps {ROOM_KEEPS[r.kind]}</div>
@@ -555,6 +559,42 @@ function RinstickList({ r, inv }: { r: Room; inv: ReturnType<typeof useInv> }) {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+/** WHO WORKS THIS ROOM (moglins.ts; the hub recruits in the Wilds' settlements, play puts them to work). One Moglin to a
+ *  room, its trade must fit. Its grades never change (canon); its dream is lark's line. */
+function MoglinDuty({ r }: { r: Room }) {
+  const [v, setV] = useState<Village>(() => loadVillage())
+  const here = v.moglins.find(m => m.room === r.id)
+  const fits = v.moglins.filter(m => m.id !== here?.id && WORKS_IN[m.profession].includes(r.kind))
+  const put = (id: string, room: string | null) => {
+    const nv = assign(loadVillage(), getW(), id, room); if (!nv) { hudSay('They cannot work here.', 'info'); return }
+    saveVillage(nv); setV(nv)
+  }
+  const grades = (m: Village['moglins'][number]) => GRADE_CATEGORIES.map(c => `${c} ${GRADE_NAME[m.grades[c]]}`).join(' · ')
+  if (!here && !fits.length && !v.moglins.length) return null
+  return (
+    <div data-moglin-duty={r.kind}>
+      <div style={lab}>Who works here</div>
+      {here ? (
+        <div data-moglin-here={here.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, color: H.ink, fontWeight: 600 }}>{here.name} <span style={{ fontWeight: 400, color: H.inkSoft, fontSize: 12.5 }}>· the {here.profession} · {grades(here)}</span></div>
+            <div style={{ fontSize: 12.5, color: H.inkSoft }}>{dutyLine(here, r.kind)}{here.dream ? ` "${here.dream}"` : ''}</div>
+          </div>
+          <span data-act="off-duty"><HearthButton small onClick={() => put(here.id, null)}>Off duty</HearthButton></span>
+        </div>
+      ) : (
+        <div style={{ fontSize: 12.5, color: H.inkSoft, marginTop: 4 }}>{fits.length ? 'No one yet. Someone in your village could take it on.' : 'No one in your village works this trade yet. Folk in the Wilds settlements might come.'}</div>
+      )}
+      {fits.map(m => (
+        <div key={m.id} data-moglin={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: H.ink }}>{m.name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· the {m.profession} · {grades(m)}{m.room ? ' · works another room' : ''}</span></span>
+          <HearthButton small onClick={() => put(m.id, r.id)}>{here ? 'Swap in' : 'Work here'}</HearthButton>
+        </div>
+      ))}
     </div>
   )
 }
