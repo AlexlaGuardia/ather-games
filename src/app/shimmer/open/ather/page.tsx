@@ -81,6 +81,7 @@ import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take, itemDef, countOf, NO_BAIT_LINE } from '../shared/inventory'
 import { isDish, healOf } from './cooking'
 import { loadTools, saveTools, easeOf, xpOf, wearRinstick, TOOLS_EVENT } from './rinsticks'
+import { manaFor, bonusXp, wearFocus } from './focuses'
 import { isPotion, drink, buffOn, loadBuffs, saveBuffs, BUFF_NAME, STARLIGHT_XP, OPEN_FLOW_MULT, type Buffs, type BuffId } from './alchemy'
 import { BAIT, rollRinn, type Rinn } from './rinning'
 import { RinningFX, type RinningApi } from '../shared/rinning-fx'
@@ -546,7 +547,7 @@ export default function AtherSlice() {
     if (!toolsRef.current.forestry) { setToast('You have no Forestry focus.'); return }
     const c = pruneCheck(t.kind, t.id); if (!c.ok) { setToast(c.why); return }
     stopChannel()
-    const w = beginWork('tree', t.id, () => { const d = prunePlan(t.kind); const perk = perkBonus('forestry'); if (perk) d[0].n += 1; return { drops: d, extra: perk } }, TREE_TIER[t.kind], MANA_COST)
+    const w = beginWork('tree', t.id, () => { const d = prunePlan(t.kind); const perk = perkBonus('forestry'); if (perk) d[0].n += 1; return { drops: d, extra: perk } }, TREE_TIER[t.kind], manaFor(toolsRef.current.forestry, TREE_TIER[t.kind], MANA_COST))   // M17: double above the focus's reach
     chanRef.current = { w, node: 'tree', t, nextAt: 0, waiting: false, got: {} }
   }, [zone.kind, stopChannel])
   const mineAimed = useCallback(() => {
@@ -557,7 +558,7 @@ export default function AtherSlice() {
     if (!toolsRef.current.prospecting) { setToast('You have no Prospecting focus.'); return }
     const v = mineCheck(c.kind, c.id); if (!v.ok) { setToast(v.why); return }
     stopChannel()
-    const w = beginWork('crystal', c.id, () => { const p = minePlan(c.kind); return { drops: p.drops, extra: p } }, CRYSTAL_TIER[c.kind], MINE_COST)
+    const w = beginWork('crystal', c.id, () => { const p = minePlan(c.kind); return { drops: p.drops, extra: p } }, CRYSTAL_TIER[c.kind], manaFor(toolsRef.current.prospecting, CRYSTAL_TIER[c.kind], MINE_COST))
     chanRef.current = { w, node: 'crystal', c, nextAt: 0, waiting: false, got: {} }
   }, [zone.kind, stopChannel])
   /** one frame of the channel (called from onTick): let go when it should, else land the next chip when its beat comes */
@@ -587,7 +588,12 @@ export default function AtherSlice() {
       ch.nextAt = performance.now() + gap
       if (chip.last) {
         const r = ch.node === 'tree' ? pruneCommit(ch.t.kind, ch.t.id) : mineCommit(ch.c.kind, ch.c.id)
-        const skill = ch.node === 'tree' ? 'Forestry' : 'Prospecting'
+        const skill = ch.node === 'tree' ? 'Forestry' : 'Prospecting', sk = ch.node === 'tree' ? 'forestry' : 'prospecting'
+        // M17: the focus's xpBonus on top of the node's XP, and the node wears it one use (worn out = the worn starter back)
+        const extraXp = bonusXp(toolsRef.current[sk], r.xp); if (extraXp > 0) { const up2 = addOpenXp(sk, extraXp); if (up2 && !r.levelUp) r.levelUp = up2 }
+        r.xp += extraXp
+        const wore = wearFocus(toolsRef.current, sk); toolsRef.current = wore.tools; saveTools(wore.tools)
+        if (wore.broke) hudSay(`Your ${wore.broke} wore out. The worn one is back in hand.`, 'item', 6)
         const names = Object.entries(ch.got).filter(([, n]) => n > 0).map(([id, n]) => `${n > 1 ? n + ' × ' : ''}${itemDef(id).name}`)
         const ex = ch.w.extra as { found?: string; perk?: string } | string | undefined
         const perk = typeof ex === 'string' ? ex : ex?.perk
@@ -611,7 +617,7 @@ export default function AtherSlice() {
     const v = mineCheck(c.kind, c.id)
     const ch = chanRef.current, w = workOf(c.id)
     if (ch?.w.id === c.id) return `Working the ${CRYSTAL_NAME[c.kind]} · ${ch.w.done} / ${ch.w.chips.length} · E to let go`
-    return v.ok ? (w ? `Click or E · keep working the ${CRYSTAL_NAME[c.kind]} (${w.done} / ${w.chips.length})` : `Click or E · prospect the ${CRYSTAL_NAME[c.kind]} (${MINE_COST} mana)`) : v.why
+    return v.ok ? (w ? `Click or E · keep working the ${CRYSTAL_NAME[c.kind]} (${w.done} / ${w.chips.length})` : `Click or E · prospect the ${CRYSTAL_NAME[c.kind]} (${manaFor(toolsRef.current.prospecting, CRYSTAL_TIER[c.kind], MINE_COST)} mana)`) : v.why
   }
   // ── rinning (rinning.ts + rinning-fx.tsx): bait in hand → the rinstick is out; click the water to cast (one bait),
   //    click the take to answer, hold to reel while the rinn rests, let go while it pulls
@@ -687,7 +693,7 @@ export default function AtherSlice() {
     const c = pruneCheck(t.kind, t.id)
     const ch = chanRef.current, w = workOf(t.id)
     if (ch?.w.id === t.id) return `Working the ${TREE_NAME[t.kind]} · ${ch.w.done} / ${ch.w.chips.length} · E to let go`
-    return c.ok ? (w ? `Click or E · keep working the ${TREE_NAME[t.kind]} (${w.done} / ${w.chips.length})` : `Click or E · prune the ${TREE_NAME[t.kind]} (${MANA_COST} mana)`) : c.why
+    return c.ok ? (w ? `Click or E · keep working the ${TREE_NAME[t.kind]} (${w.done} / ${w.chips.length})` : `Click or E · prune the ${TREE_NAME[t.kind]} (${manaFor(toolsRef.current.forestry, TREE_TIER[t.kind], MANA_COST)} mana)`) : c.why
   }
   useEffect(() => {
     const down = (e: MouseEvent) => {

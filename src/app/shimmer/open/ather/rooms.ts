@@ -40,7 +40,9 @@ export const ROOMS: Readonly<Record<RoomKind, RoomDef>> = {
   alchemy:    { name: 'Alchemy room', blurb: 'A cauldron that boils crystals, shards and saps into potions.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 120_000, open: true },
   smith:      { name: 'Smithy',     blurb: 'Works metal brought over from the continent. Drawn up, not ready to build yet.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: false },
   carpentry:  { name: 'Carpentry room', blurb: 'Saw logs, strip bark, tap sap, and make furniture for your plot.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: true },
-  stonemason: { name: 'Stonery',    blurb: 'Rubble in, stone and the lesser gems out. Drawn up, not ready to build yet.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: false },
+  // OPEN 11-18 (BETA M17): its bench binds Spikes (ather/focuses.ts, Magii 5626aaf); its own stonework comes later. The blurb is a
+  // PLACEHOLDER for @lark (promises only what the bench does).
+  stonemason: { name: 'Stonery',    blurb: 'Spikes are made here. Stonework comes later.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: true },
 }
 export const ROOM_ORDER: readonly RoomKind[] = ['rinnshop', 'farm', 'cooking', 'alchemy', 'smith', 'carpentry', 'stonemason']
 

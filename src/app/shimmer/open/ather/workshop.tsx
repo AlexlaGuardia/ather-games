@@ -36,6 +36,7 @@ import { plumbingOf, spillIfRemoved } from './water'
 import { grantStarter } from './farmroom'
 import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
+import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
 import { TOOL_DEFS } from '../../engine/tools'
 import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap } from './build-mode'
 import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, GRADE_CATEGORIES, type Village } from './moglins'
@@ -639,6 +640,7 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
             <RinstickList r={r} inv={inv} />
           </>
         )}
+        {(Object.keys(BENCH) as FocusSkill[]).filter(s => BENCH[s] === r.kind).map(s => <FocusList key={s} r={r} inv={inv} skill={s} />)}
         {r.kind === 'carpentry' && (
           <>
             <JobList title="Refine" note="Each log works two ways. The bench takes from the room's store first, then your bag." jobs={REFINE.filter(j => benchCount(r, inv, j.in[0].id) > 0)} r={r} inv={inv}
@@ -700,6 +702,40 @@ function RinstickList({ r, inv }: { r: Room; inv: ReturnType<typeof useInv> }) {
                 const m = makeRinstick(getW(), r.id, getInv(), loadTools(), id)
                 if (!m.ok) { if (m.why) hudSay(m.why, 'info'); return }
                 setWorks(m.works); setInv(m.inv); saveTools(m.tools, true); setTools(m.tools); hudSay(`${d.name} · in hand when you hold bait.`, 'item')
+              }}>Make</HearthButton>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/** BLADES (carpentry) / SPIKES (stonemason) at their bench (ather/focuses.ts, BETA M17; which bench = Jin's proposal pending
+ *  Magii). The engine's three tiers; making one equips it (it comes out when your hands are stowed at a tree or a crystal). A
+ *  focus works its reach at a node's own mana, double above it. */
+function FocusList({ r, inv, skill }: { r: Room; inv: ReturnType<typeof useInv>; skill: FocusSkill }) {
+  const [tools, setTools] = useState(() => loadTools())
+  const cur = tools[skill], curDef = cur ? TOOL_DEFS[cur.toolId] : undefined
+  const fam = skill === 'forestry' ? 'Blades' : 'Spikes', node = skill === 'forestry' ? 'tree' : 'crystal'
+  return (
+    <div data-focuses={skill}>
+      <div style={lab}>{fam}</div>
+      <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }} data-focus-held={cur?.toolId ?? ''}>
+        In hand: {focusName(cur, skill)}{curDef && !curDef.basic ? ` · ${cur!.usesRemaining} uses left` : ' · never wears out'}. Works a tier {reachOf(cur)} {node} or lower at its own mana; anything higher costs double.
+      </div>
+      <div style={{ display: 'grid', gap: 6 }}>
+        {FOCUSES[skill].map(id => {
+          const d = TOOL_DEFS[id], have = d.recipe.every(c => benchCount(r, inv, c.itemId) >= c.count)
+          return (
+            <div key={id} data-focus={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: H.ink }}>
+                {d.name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· {d.recipe.map(c => `${c.count} ${itemDef(c.itemId).name} (${benchCount(r, inv, c.itemId)})`).join(' + ')} · {d.durability} uses · reaches tier {d.tier + 1} · XP ×{d.xpBonus}</span>
+              </span>
+              <HearthButton small disabled={!have} onClick={() => {
+                const m = makeFocus(getW(), r.id, getInv(), loadTools(), id)
+                if (!m.ok) { if (m.why) hudSay(m.why, 'info'); return }
+                setWorks(m.works); setInv(m.inv); saveTools(m.tools, true); setTools(m.tools); hudSay(`${d.name} · in hand when you work a ${node}.`, 'item')
               }}>Make</HearthButton>
             </div>
           )
