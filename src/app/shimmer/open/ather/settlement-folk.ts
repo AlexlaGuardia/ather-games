@@ -33,13 +33,12 @@ export const BIOME_TRADES: Readonly<Record<SettlementBiome, Partial<Record<Profe
  *  (burrs and thorns are collarer names), drawn from canon's free-folk pool, and no two living speakers share a name. */
 export const CANON_POOL = ['Cress', 'Dill', 'Chervil', 'Comfrey', 'Clover', 'Vervain', 'Lovage', 'Burnet', 'Betony', 'Woad', 'Flax',
   'Madder', 'Hyssop', 'Clary', 'Rue', 'Bracken', 'Thyme', 'Basil', 'Marjoram', 'Chive', 'Sprig', 'Cowslip', 'Primrose', 'Campion',
-  'Alder', 'Rowan']
-/** STAND-IN (Magii eef97dc, provisional): 26 names cannot cover a season (11 settlements x up to 5 = 55). Soft plants only,
- *  grepped against CANON/ 11-18 (no hits). Extending the pool is Magii's; replace this list when the ruled extension lands. */
-export const STANDIN_POOL = ['Parsley', 'Tarragon', 'Angelica', 'Borage', 'Chamomile', 'Meadowsweet', 'Lavender', 'Daisy', 'Fern',
-  'Linden', 'Willow', 'Aster', 'Bluebell', 'Speedwell', 'Valerian', 'Agrimony', 'Pennyroyal', 'Cicely', 'Celandine', 'Feverfew',
-  'Bergamot', 'Rosemary', 'Caraway', 'Anise', 'Lilac', 'Poppy', 'Iris', 'Lupin', 'Heather', 'Myrtle', 'Laurel']
-const NAMES = [...CANON_POOL, ...STANDIN_POOL]
+  'Alder', 'Rowan',
+  // extended 26 -> 60 (athernyx 295f27f, Alex 11-18 "yes extend the name pool, adopt Jin's list"): covers a season (11 x up to 5)
+  'Parsley', 'Tarragon', 'Angelica', 'Borage', 'Chamomile', 'Meadowsweet', 'Lavender', 'Daisy', 'Fern', 'Linden', 'Willow', 'Aster',
+  'Bluebell', 'Speedwell', 'Valerian', 'Agrimony', 'Pennyroyal', 'Cicely', 'Celandine', 'Feverfew', 'Bergamot', 'Rosemary', 'Caraway',
+  'Anise', 'Lilac', 'Poppy', 'Iris', 'Lupin', 'Heather', 'Myrtle', 'Laurel', 'Chicory', 'Marigold', 'Woodruff']
+const NAMES = CANON_POOL
 export const CANON_NAMES = new Set(['hazel', 'saxifrage', 'sax', 'yarrow', 'fennel', 'mallow', 'burdock', 'vetch', 'sorrel', 'hemlock',
   'marl', 'teasel', 'sedge', 'brack', 'thistle', 'jimbo', 'marra', 'pell', 'wend', 'pertle', 'grust', 'vane', 'heslur', 'tansy', 'nettle', 'tuckbank', 'thistledown', 'downbarrow', 'snagbarrows', 'gorsejacks', 'cinchfist', 'greg', 'gregory'])
 

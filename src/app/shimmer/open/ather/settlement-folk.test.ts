@@ -1,5 +1,5 @@
 // settlement-folk.ts: each season's Moglins per settlement, biome-tilted trades, fixed grades, and trust earned by trade.
-import { folkOf, wantsLeft, trusted, bring, recruit, stillHome, freshTrust, CANON_NAMES, CANON_POOL, STANDIN_POOL, FOLK_MIN, FOLK_MAX, BIOME_TRADES } from './settlement-folk'
+import { folkOf, wantsLeft, trusted, bring, recruit, stillHome, freshTrust, CANON_NAMES, CANON_POOL, FOLK_MIN, FOLK_MAX, BIOME_TRADES } from './settlement-folk'
 import { freshVillage, PROFESSIONS, VILLAGE_CAP } from './moglins'
 import { SETTLEMENT_GATHERS, type Settlement, type SettlementBiome } from './network'
 import { OPEN_ITEMS } from '../shared/inventory'
@@ -19,8 +19,8 @@ ok(many.flat().every(f => !CANON_NAMES.has(f.name.toLowerCase())), 'never a cano
 // canon names law (shimmer-folds-settlements.md Names): soft-plant pool only, no two living speakers share a name season-wide
 const season11 = Array.from({ length: 11 }, (_, k) => folkOf(S(`s1-${k}`, 'meadow'), 1)).flat()
 ok(new Set(season11.map(f => f.name)).size === season11.length, `no two Moglins share a name across a whole 11-settlement season (${season11.length} folk)`)
-ok(many.flat().every(f => CANON_POOL.includes(f.name) || STANDIN_POOL.includes(f.name)), 'every name comes from the free-folk pool (canon + stand-in)')
-ok(CANON_POOL.length + STANDIN_POOL.length >= 11 * FOLK_MAX, 'the pool covers a full season')
+ok(many.flat().every(f => CANON_POOL.includes(f.name)), 'every name comes from canon\'s free-folk pool')
+ok(CANON_POOL.length === 60 && new Set(CANON_POOL).size === 60 && CANON_POOL.length >= 11 * FOLK_MAX, 'the pool covers a full season')
 ok(many.flat().every(f => Object.values(f.grades).every(g => g >= 1 && g <= 5)), 'grades are 1-5')
 ok(many.flat().every(f => PROFESSIONS.includes(f.profession)), 'every trade is a canon trade')
 // biome tilt: rock settlements lean to stone trades, shore to cooks
