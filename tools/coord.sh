@@ -352,10 +352,15 @@ cmd_build() {
   # untracked `vessel-card.tsx` and listed only the tracked file beside it.
   pre=$(git -C "$REPO" status --porcelain 2>/dev/null | grep -E '^( *[MADRC]|\?\?)' || true)
   if [ -n "$pre" ]; then
-    echo ">> ⚠ BUILDING A DIRTY TREE — these uncommitted files are about to go live:"
-    echo "$pre" | sed 's/^/>>    /'
-    echo ">>   ?? = untracked: it exists in NO history anywhere, and it is about to be served."
-    echo ">>   if any of them are not yours, STOP and ask that window before this ships."
+    if [ "${COORD_BUILD_TREE:-0}" = "1" ]; then
+      echo ">> ⚠ BUILDING A DIRTY TREE (COORD_BUILD_TREE=1) — these uncommitted files are about to go live:"
+      echo "$pre" | sed 's/^/>>    /'
+      echo ">>   ?? = untracked: it exists in NO history anywhere, and it is about to be served."
+      echo ">>   if any of them are not yours, STOP and ask that window before this ships."
+    else
+      echo ">> uncommitted files in the shared tree (NOT shipping: this build is a snapshot of HEAD):"
+      echo "$pre" | sed 's/^/>>    /'
+    fi
   fi
 
   # ── ★★★ TWO THINGS THIS NOW REFUSES, AND WHY THESE TWO ONLY (2026-09-09, play lane) ───────────
@@ -444,7 +449,31 @@ cmd_build() {
   # build-time only — the running server never reads it — so it is safe to clear from under the live slot.
   rm -rf "$REPO/$live/types" "$REPO/$live/dev/types"
   echo ">> live slot $live keeps serving; building into $target"
-  if NEXT_DIST_DIR="$target" npm run build; then
+  # ── ★★★ THE BUILD IS A SNAPSHOT OF HEAD, NOT THE SHARED TREE (2026-11-18, hub; Alex pinned it 11-18 01:30) ──────
+  # Three incidents in one night: a lane editing DURING a build shipped its half-edits, because the dirty check above
+  # is a reading taken at build START and the tree keeps moving for the build's whole length. No reading can close
+  # that (see 09-08 above: there is no act to make atomic). So the build no longer reads the shared tree at all: it
+  # builds `git archive HEAD` in .coord/snap (node_modules symlinked, .env copied; public/ is served from $REPO at
+  # runtime, never from the build), then moves the finished slot into $REPO. A slot keeps its NAME (.next / .next_b)
+  # through the move, which is the only thing route modules bake in; the one absolute path, in
+  # required-server-files, is rewritten back to $REPO. A peer's uncommitted edit can no longer ship, mid-build or not.
+  # Escape hatch (old behaviour, the working tree): COORD_BUILD_TREE=1.
+  local bdir="$REPO"
+  if [ "${COORD_BUILD_TREE:-0}" != "1" ]; then
+    bdir="$REPO/.coord/snap"
+    rm -rf "$bdir" && mkdir -p "$bdir"
+    if ! git -C "$REPO" archive HEAD | tar -x -C "$bdir"; then echo ">> ⛔ snapshot of HEAD failed; nothing built"; rm -rf "$bdir"; exit 1; fi
+    ln -s "$REPO/node_modules" "$bdir/node_modules"
+    for _e in "$REPO"/.env "$REPO"/.env.local "$REPO"/.env.production; do [ -f "$_e" ] && cp "$_e" "$bdir/"; done
+    # keep the idle slot's build cache warm across the move
+    [ -d "$REPO/$target/cache" ] && mv "$REPO/$target/cache" "$bdir/.cache-carry" 2>/dev/null && mkdir -p "$bdir/$target" && mv "$bdir/.cache-carry" "$bdir/$target/cache"
+    echo ">> snapshot of $sha at $bdir (the shared tree is not read by this build)"
+  fi
+  cd "$bdir"
+  if NEXT_DIST_DIR="$target" npm run build && { [ "$bdir" = "$REPO" ] || {
+        rm -rf "$REPO/$target" && mv "$bdir/$target" "$REPO/$target" &&
+        sed -i "s#$bdir#$REPO#g" "$REPO/$target"/required-server-files.json "$REPO/$target"/required-server-files.js 2>/dev/null; true; }; }; then
+    cd "$REPO"; [ "$bdir" != "$REPO" ] && rm -rf "$bdir"
     # ── ★★★ THE ARTIFACT HAS TO BE WHOLE, AND `npm run build` EXITING 0 DOES NOT PROVE IT ──────
     # 2026-08-27: a build was KILLED MID-WRITE by a harness timeout; the lock released cleanly and the board
     # read FREE while the dir had no BUILD_ID. Checked BEFORE anything switches now (the old order restarted
@@ -505,7 +534,7 @@ cmd_build() {
     # as covering the general problem, and it silently covered the milder half of it.
     local dirty
     dirty=$(git -C "$REPO" status --porcelain 2>/dev/null | grep -c '^ *[MADRC]' || true)
-    if [ "${dirty:-0}" -gt 0 ] 2>/dev/null; then
+    if [ "${COORD_BUILD_TREE:-0}" = "1" ] && [ "${dirty:-0}" -gt 0 ] 2>/dev/null; then
       echo ">> ⚠⚠ DEPLOYED FROM A DIRTY TREE — $dirty modified file(s) are live on prod and in no commit."
       echo ">>   git add -p && git commit    (then push; see below)"
     fi
@@ -520,6 +549,7 @@ cmd_build() {
       echo ">>   git push origin master   (pull --rebase first if a satellite has landed work)"
     fi
   else
+    cd "$REPO"; [ "$bdir" != "$REPO" ] && rm -rf "$bdir"
     echo ">> BUILD FAILED — nothing deployed; prod is still serving $live"
     signal "$WIN BUILD FAILED: $msg"
     release_lock; trap - EXIT
