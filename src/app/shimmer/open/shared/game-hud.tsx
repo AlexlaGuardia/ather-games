@@ -121,13 +121,13 @@ function CastPlates({ casts }: { casts: React.RefObject<CastPlate[]> }) {
   )
 }
 
-function StatusChips({ items, top, right }: { items: readonly Status[]; top: number; right: number }) {
+function StatusChips({ items, top, right, maxW }: { items: readonly Status[]; top: number; right: number; maxW?: number }) {
   if (!items.length) return null
   return (
     <div className="pointer-events-none flex flex-col items-end gap-1.5" style={{ position: 'fixed', top, right, zIndex: 33 }} data-hud="status">
       {items.map((s, i) => (
         <HudPlate key={i} face={FACE} r={999} style={{ padding: 3 }}>
-          <div className="px-2.5 py-0.5 text-[12px] whitespace-nowrap tabular-nums" style={{ ...hearthBody }}>
+          <div className={`px-2.5 py-0.5 text-[12px] tabular-nums ${maxW ? 'text-right' : 'whitespace-nowrap'}`} style={{ ...hearthBody, ...(maxW ? { maxWidth: maxW } : {}) }}>
             <span style={{ opacity: 0.75 }}>{s.label}</span>
             {s.value !== undefined && <b className="ml-1.5" style={{ color: s.accent ? HUD_FACES[FACE].accent : undefined }}>{s.value}</b>}
           </div>
@@ -216,10 +216,11 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
       <div className={`contents ${HEARTH_FONT_VARS}`}>
         <HearthHudLayer face={FACE} size="phone" entries={entries} sel={shown} held={null} dimmed={dimmed} onSelect={onSelect}
           objective={null} vitals={vitals} mana={mana} tools={T} skills={S} activeTool={null} glyph={glyph} mapFrame={false} />
-        <HearthCompass face={FACE} pose={pose} marks={marks} size="phone" />
+        {/* 11-18 (play's 390x844 shot): the screen-centred compass ran under the minimap; slide it left just enough */}
+        <HearthCompass face={FACE} pose={pose} marks={marks} size="phone" centerX={Math.min(vw / 2, vw - box.right - box.size - 8 - compassWidth('phone') / 2 - 6)} />
         {minimap}
         {/* a phone's right edge belongs to the thumbs below the map: the chips join into one line */}
-        <StatusChips items={status.length ? [{ label: status.map(x => x.value !== undefined ? `${x.label} ${x.value}` : x.label).join(' · ') }] : []} top={statusTop} right={box.right} />
+        <StatusChips items={status.length ? [{ label: status.map(x => x.value !== undefined ? `${x.label} ${x.value}` : x.label).join(' · ') }] : []} top={statusTop} right={box.right} maxW={vw - box.right - 16 - 12} />
         <Messages align="center" style={{ left: '50%', transform: 'translateX(-50%)', bottom: 118 }} />
       </div>
     )
