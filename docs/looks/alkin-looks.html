@@ -1,0 +1,145 @@
+<title>Alkin Look Options</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=Nunito:wght@400;600&display=swap">
+<style>
+/* Layout: a row of turntable cards, one per proportion style, same Alkin shopkeeper in each. Hearth-wood plates like the game UI. */
+:root {
+  --bg: #f1ece3; --plate: #fffaf2; --ink: #2e2318; --ink-soft: #6b5238; --rule: #dccfbd; --accent: #8a5a2b; --stage: #dfe9e4;
+  --display: "Chakra Petch", "Segoe UI", system-ui, sans-serif; --body: "Nunito", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15130f; --plate: #201c16; --ink: #f0e6d6; --ink-soft: #b9a68a; --rule: #3a3227; --accent: #e0a865; --stage: #1d2622; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #15130f; --plate: #201c16; --ink: #f0e6d6; --ink-soft: #b9a68a; --rule: #3a3227; --accent: #e0a865; --stage: #1d2622; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5 }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+h1 { font-family: var(--display); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; font-size: 1.35rem; margin: 0 0 6px; text-wrap: balance }
+.lede { color: var(--ink-soft); max-width: 68ch; margin: 0 0 22px }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px }
+.card { background: var(--plate); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; min-width: 0 }
+.card.pick { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent) }
+canvas { display: block; width: 100%; aspect-ratio: 3 / 4; max-width: 100%; background: var(--stage); cursor: grab; touch-action: none }
+.meta { padding: 12px 14px 14px; display: grid; gap: 6px }
+.tag { font-family: var(--display); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+.name { font-family: var(--display); font-weight: 600; font-size: 1.05rem; letter-spacing: .04em }
+.ratio { font-variant-numeric: tabular-nums; color: var(--ink-soft); font-size: .82rem }
+.note { font-size: .9rem; margin: 0 }
+.foot { margin-top: 22px; color: var(--ink-soft); font-size: .88rem; max-width: 70ch }
+@media (prefers-reduced-motion: reduce) { canvas { cursor: default } }
+</style>
+
+<div class="wrap">
+  <h1>Alkin look options</h1>
+  <p class="lede">The same Alkin shopkeeper built five ways, from code blockouts like the game's. Drag a figure to turn it. The proportions and shading are what differ; colours and clothes are placeholders.</p>
+  <div class="grid" id="grid"></div>
+  <p class="foot">Head-to-height ratio is the number under each name: 1 : 2 means the head is half the figure. All five use about the same polygon budget as the chibi Moglin, so any of them is fine for phones. Jin's pick is marked.</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const STYLES = [
+  { id: 'chibi', tag: 'Today', name: 'Chibi', ratio: '1 : 2', note: 'What the Moglins use. Reads cute at a distance, but Alkin would look like Moglins in clothes.',
+    head: 0.62, body: 0.5, leg: 0.28, arm: 0.36, eye: 'bead', mat: 'lambert', outline: false, flat: false },
+  { id: 'toon', tag: 'Jin’s pick', name: 'Cartoon', ratio: '1 : 3', note: 'Big expressive head, long-ish limbs, cel shading with an ink outline. Clearly a person, still friendly next to Moglins.',
+    head: 0.5, body: 0.62, leg: 0.55, arm: 0.6, eye: 'big', mat: 'toon', outline: true, flat: false },
+  { id: 'story', tag: 'Option', name: 'Storybook', ratio: '1 : 5', note: 'Tall, slim, mitten hands and dot eyes. Feels like the Spirit Tales books; Moglins look small beside them.',
+    head: 0.32, body: 0.8, leg: 0.85, arm: 0.78, eye: 'dot', mat: 'lambert', outline: false, flat: false },
+  { id: 'facet', tag: 'Option', name: 'Low-poly', ratio: '1 : 4', note: 'Faceted flat shading that matches the Wilds’ trees and rocks. Cheapest to read at a distance; less face.',
+    head: 0.4, body: 0.72, leg: 0.7, arm: 0.66, eye: 'dot', mat: 'lambert', outline: false, flat: true },
+  { id: 'plush', tag: 'Option', name: 'Clay', ratio: '1 : 3', note: 'Soft rounded shapes and a warm rim light, no outline. Cosy like stop-motion; hands and faces stay simple.',
+    head: 0.48, body: 0.62, leg: 0.5, arm: 0.56, eye: 'bead', mat: 'standard', outline: false, flat: false },
+]
+const C = { skin: 0xe8b98f, hair: 0x5a3a24, shirt: 0x4f7c8a, apron: 0xc9a06a, trouser: 0x3f3a33, boot: 0x2a221b, eye: 0x1c1712, white: 0xffffff }
+
+function material(style, color) {
+  if (style.mat === 'toon') {
+    const g = new Uint8Array([90, 170, 255]); const tex = new THREE.DataTexture(g, 3, 1, THREE.LuminanceFormat)
+    tex.minFilter = tex.magFilter = THREE.NearestFilter; tex.needsUpdate = true
+    return new THREE.MeshToonMaterial({ color, gradientMap: tex })
+  }
+  if (style.mat === 'standard') return new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0 })
+  return new THREE.MeshLambertMaterial({ color, flatShading: style.flat })
+}
+function part(style, geo, color, group, pos, scale) {
+  const m = new THREE.Mesh(geo, material(style, color)); m.position.set(...pos); if (scale) m.scale.set(...scale); group.add(m)
+  if (style.outline) { const o = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x1b140e, side: THREE.BackSide }))
+    o.position.copy(m.position); o.scale.copy(m.scale).multiplyScalar(1.07); group.add(o) }
+  return m
+}
+function build(style) {
+  const g = new THREE.Group(), seg = style.flat ? 6 : 18
+  const sphere = new THREE.SphereGeometry(1, seg, style.flat ? 5 : 14)
+  const cyl = (rt, rb) => new THREE.CylinderGeometry(rt, rb, 1, style.flat ? 6 : 16)
+  const L = style.leg, B = style.body, H = style.head, A = style.arm
+  // legs + boots
+  for (const s of [-1, 1]) {
+    part(style, cyl(0.075, 0.085), C.trouser, g, [s * 0.1, L / 2 + 0.06, 0], [1, L, 1])
+    part(style, sphere, C.boot, g, [s * 0.1, 0.06, 0.04], [0.1, 0.07, 0.14])
+  }
+  // body: shirt + apron
+  const top = L + B
+  part(style, cyl(0.17, 0.2), C.shirt, g, [0, L + B / 2, 0], [1, B, 1])
+  part(style, new THREE.BoxGeometry(0.3, B * 0.72, 0.02), C.apron, g, [0, L + B * 0.4, 0.2])
+  // arms + hands (mittens in storybook)
+  for (const s of [-1, 1]) {
+    const arm = part(style, cyl(0.055, 0.05), C.shirt, g, [s * 0.25, top - A / 2 - 0.02, 0], [1, A, 1])
+    arm.rotation.z = s * 0.12
+    part(style, sphere, C.skin, g, [s * 0.29, top - A - 0.02, 0], style.id === 'story' ? [0.07, 0.085, 0.06] : [0.06, 0.06, 0.06])
+  }
+  // head + hair
+  const hy = top + H * 0.55
+  part(style, sphere, C.skin, g, [0, hy, 0], [H * 0.5, H * 0.55, H * 0.5])
+  part(style, sphere, C.hair, g, [0, hy + H * 0.12, -H * 0.06], [H * 0.53, H * 0.42, H * 0.52])
+  // ears: Alkin ears left round and human-ish on purpose (canon gives no ear ruling; a pointed ear would be a canon call)
+  for (const s of [-1, 1]) part(style, sphere, C.skin, g, [s * H * 0.5, hy, 0], [H * 0.08, H * 0.12, H * 0.06])
+  // face
+  for (const s of [-1, 1]) {
+    const ex = s * H * 0.17, ey = hy + H * 0.02, ez = H * 0.47
+    if (style.eye === 'big') {
+      const w = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ color: C.white })); w.position.set(ex, ey, ez - 0.01); w.scale.set(H * 0.11, H * 0.14, H * 0.05); g.add(w)
+      const p = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ color: C.eye })); p.position.set(ex, ey - H * 0.01, ez + H * 0.03); p.scale.set(H * 0.065, H * 0.09, H * 0.03); g.add(p)
+    } else {
+      const r = style.eye === 'dot' ? 0.035 : 0.055
+      const p = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ color: C.eye })); p.position.set(ex, ey, ez); p.scale.set(H * r, H * r * 1.2, H * r * 0.6); g.add(p)
+    }
+  }
+  const nose = new THREE.Mesh(sphere, material(style, 0xd9a47c)); nose.position.set(0, hy - H * 0.08, H * 0.5); nose.scale.setScalar(H * 0.05); g.add(nose)
+  const height = hy + H * 0.55
+  g.position.y = -height / 2
+  return { g, height }
+}
+
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+const grid = document.getElementById('grid'), views = []
+for (const s of STYLES) {
+  const card = document.createElement('div'); card.className = 'card' + (s.id === 'toon' ? ' pick' : '')
+  const cv = document.createElement('canvas'); cv.setAttribute('aria-label', s.name + ' Alkin, drag to turn')
+  card.innerHTML = ''
+  card.append(cv)
+  const meta = document.createElement('div'); meta.className = 'meta'
+  meta.innerHTML = `<span class="tag">${s.tag}</span><span class="name">${s.name}</span><span class="ratio">head : height ${s.ratio}</span><p class="note">${s.note}</p>`
+  card.append(meta); grid.append(card)
+  const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true }); r.setPixelRatio(Math.min(2, devicePixelRatio))
+  const scene = new THREE.Scene()
+  scene.add(new THREE.HemisphereLight(0xfff4e0, 0x6a7d6e, s.mat === 'toon' ? 0.55 : 0.75))
+  const sun = new THREE.DirectionalLight(0xffffff, s.mat === 'toon' ? 0.9 : 0.75); sun.position.set(2, 3, 2.5); scene.add(sun)
+  if (s.id === 'plush') { const rim = new THREE.DirectionalLight(0xffd9a0, 0.6); rim.position.set(-2, 1.5, -2.5); scene.add(rim) }
+  const { g, height } = build(s); scene.add(g)
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(0.6, 32), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.12 }))
+  ground.rotation.x = -Math.PI / 2; ground.position.y = -height / 2 + 0.001; scene.add(ground)
+  const cam = new THREE.PerspectiveCamera(30, 3 / 4, 0.1, 50); cam.position.set(0, 0.15, 4.2); cam.lookAt(0, 0, 0)
+  const v = { r, scene, cam, g, cv, yaw: -0.5, drag: null }
+  cv.addEventListener('pointerdown', e => { v.drag = e.clientX; cv.setPointerCapture(e.pointerId) })
+  cv.addEventListener('pointermove', e => { if (v.drag === null) return; v.yaw += (e.clientX - v.drag) * 0.012; v.drag = e.clientX })
+  cv.addEventListener('pointerup', () => { v.drag = null })
+  views.push(v)
+}
+function size() { for (const v of views) { const w = v.cv.clientWidth, h = v.cv.clientHeight; if (w && h) { v.r.setSize(w, h, false); v.cam.aspect = w / h; v.cam.updateProjectionMatrix() } } }
+addEventListener('resize', size); size()
+let last = performance.now()
+function frame(t) {
+  const dt = Math.min(0.05, (t - last) / 1000); last = t
+  for (const v of views) { if (v.drag === null && !reduce) v.yaw += dt * 0.5; v.g.rotation.y = v.yaw; v.r.render(v.scene, v.cam) }
+  requestAnimationFrame(frame)
+}
+requestAnimationFrame(frame)
+</script>
