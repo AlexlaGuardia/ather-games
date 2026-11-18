@@ -26,6 +26,8 @@ import { SMOKEHOUSE_STOCK } from '../ather/cooking'
 import { useLoadout, setLoadout, getLoadout, claimKaelsArms, slotOfGun } from '../shared/loadout'
 import { buyGun, GUN_PRICES, SHOP_GUNS } from './gun-shop'
 import { yardRows, buyPart, slotName, YARD_SLOTS } from './courser-yard'
+import { makeOfTown, modelsOfMake, buyCourser, DARTER_MODEL } from './courser-lot'
+import { useFleet, getFleet, setFleet } from '../shared/fleet'
 
 /** a ticket to the Starforge (an emergency-fund sized price, Alex 11-16). TODO(world): move onto economy/prices.ts LADDER */
 export const STARFORGE_TICKET = 250
@@ -33,6 +35,7 @@ export const STARFORGE_TICKET = 250
 export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
   id: string; ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void; isTouch: boolean
 }) {
+  const town = id.split(':')[1] ?? ''
   id = id.split(':')[0]   // a door in every town carries its town after the id (front:smokehouse:<town>, doors.ts)
   const shop = FRONT_SHOPS[id]
   if (!shop) return null
@@ -51,6 +54,7 @@ export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
   if (shop.kind === 'smokehouse') return <SmokehousePanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (shop.kind === 'gunshop') return <GunShopPanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (shop.kind === 'courseryard') return <CourserYardPanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
+  if (shop.kind === 'courserlot') return <CourserLotPanel town={town} ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (shop.kind === 'shipyard') return <ShipyardPanel onClose={onClose} />
   if (stockOf(id).length) return <DecorShop id={id} ledger={ledger} setLedger={setLedger} onClose={onClose} />
   return (
@@ -315,6 +319,46 @@ function CourserYardPanel({ ledger, setLedger, onClose }: { ledger: Ledger; setL
         <div className="mt-3 flex items-center text-[12.5px]" style={{ color: H.inkSoft }}>
           <span className="flex-1" data-shop-msg>{msg ?? rows.find(r => r.state === 'later' && r.tier === 1)?.why ?? ''}</span>
           <span className="tabular-nums">Purse · {ledger.marks.toLocaleString()} Marks · {ledger.deeds} deeds</span>
+        </div>
+      </div>
+    </HearthFrame>
+  )
+}
+
+/** THE COURSER LOT (BETA M14; makes + models RULED 11-18): one make's coursers, whole, for Marks. Each line reads against the
+ *  starting Darter (top speed, 0-60, crates) so the feel shows before the drive. Bought = owned; picked in the garage (G). */
+function CourserLotPanel({ town, ledger, setLedger, onClose }: { town: string; ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void }) {
+  const fleet = useFleet()
+  const [msg, setMsg] = useState<string | null>(null)
+  const make = makeOfTown(town)
+  if (!make) return null
+  const D = DARTER_MODEL
+  return (
+    <HearthFrame title={FRONT_SHOPS.courserlot.name} maxWidth={540} onClose={onClose} fixed dataPanel="courser-lot">
+      <div className="px-4 pt-5 pb-4 text-[14px] leading-snug" style={{ color: H.ink }} data-make={make.id}>
+        <div className="text-[13px] mb-2" style={{ ...hearthDisplay, color: H.inkSoft }}><b style={{ color: H.ink }}>{make.name}</b> · {make.feel}</div>
+        <div className="grid gap-2">
+          {modelsOfMake(make.id).map(m => {
+            const owned = fleet.owned.includes(m.id), short = !owned && ledger.marks < m.price
+            return (
+              <div key={m.id} data-model={m.id} className="flex items-center gap-3 rounded-[12px] px-3 py-2" style={{ background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+                <span className="w-9 h-6 rounded-[6px] shrink-0" style={{ background: m.look.body, boxShadow: `inset 0 -6px 0 ${m.look.cabin}` }} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{m.name} <span className="text-[12px] font-normal" style={{ color: H.inkSoft }}>· a {m.kind}</span></div>
+                  <div className="text-[12px]" style={{ color: H.inkSoft }}>{m.feel}</div>
+                  <div className="text-[12px] tabular-nums" style={{ color: H.inkSoft }}>{m.spec.topMph} mph ({m.spec.topMph - D.spec.topMph >= 0 ? '+' : ''}{m.spec.topMph - D.spec.topMph}) · 0-60 {m.spec.zeroTo60}s · {m.crates} crates · {m.price.toLocaleString()} Marks</div>
+                </div>
+                <span data-buy={m.id} style={{ display: 'contents' }}><HearthButton small primary disabled={owned || short} onClick={() => {
+                  const r = buyCourser(getFleet(), ledger, m.id)
+                  if (r.ok) { setLedger(r.ledger); setFleet(r.fleet); const t = `${m.name} is yours · pick it in the garage (G while driving)`; setMsg(t); hudSay(t, 'item') } else setMsg(r.why ?? null)
+                }}>{owned ? 'Yours' : short ? 'Not enough Marks' : 'Buy'}</HearthButton></span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="mt-3 flex items-center text-[12.5px]" style={{ color: H.inkSoft }}>
+          <span className="flex-1" data-shop-msg>{msg ?? ''}</span>
+          <span className="tabular-nums">Purse · {Math.floor(ledger.marks).toLocaleString()} Marks</span>
         </div>
       </div>
     </HearthFrame>

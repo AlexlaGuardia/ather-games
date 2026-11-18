@@ -55,8 +55,10 @@ import { VoxelDayNight } from '../shared/day-night'
 import { createCourser, tickCourser, bodySpeeds, slipAngle, type Courser, type CourserInput, type CourserTune } from '../courser'
 import { GaragePanel, useCourserBuild } from '../garage'
 import { BoardPanel, TradeHud, useLedger } from '../trade-ui'
-import { postBoard, accept, arrive, abandon, buy, GOODS, CAPACITY, type Contract, type Supply } from '../trade'
-import { DARTER_STOCK, tuneFromSpec } from '../courser'
+import { postBoard, accept, arrive, abandon, buy, GOODS, type Contract, type Supply } from '../trade'
+import { tuneFromSpec } from '../courser'
+import { modelById, pickCourser } from '../business/courser-lot'
+import { useFleet, getFleet, setFleet } from '../shared/fleet'
 import { buildSpec, type Slot, type Tier } from '../courser-build'
 import { buildCavern, caveRoomAt, type Cavern } from '../cavern'
 import { CavernView } from '../cavern-view'
@@ -697,6 +699,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
     return { x: ax, z: az, yaw: Math.atan2(-(bx - ax), -(bz - az)) }
   }, [R])
   const car = useRef<Courser>(createCourser(spawn.x, spawn.z, spawn.yaw, R.groundAt))
+  const driven = modelById(useFleet().active)   // the courser's blockout (M14 lots); its feel arrives through tuneRef
   const model = useRef<THREE.Group | null>(null)
   const steerVis = useRef(0)
   const keys = useRef(new Set<string>())
@@ -776,6 +779,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
     window.addEventListener('keydown', down); window.addEventListener('keyup', up); window.addEventListener('blur', blur)
     window.addEventListener('mousemove', move); gl.domElement.addEventListener('click', click)
     ;(window as unknown as { __drive: unknown }).__drive = {
+      tune: () => tuneRef.current,   // the live drive feel (M14 lots: a bought model changes it)
       state: () => ({ ...car.current, ...bodySpeeds(car.current), slip: slipAngle(car.current), road: nearestRoad(R, car.current.x, car.current.z).d }),
       tp: (x: number, z: number, yaw = 0, speed = 0) => place(x, z, yaw, speed),
       place: (id: string, speed = 0) => {
@@ -1013,7 +1017,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
 
   return (
     <>
-      <DarterModel car={model} steer={steerVis} />
+      <DarterModel car={model} steer={steerVis} look={driven.look} />
       <DriftFx car={car} ground={(x, z) => R.groundAt(x, z, car.current.y)} slip={() => slipAngle(car.current)} />
     </>
   )
@@ -1066,7 +1070,9 @@ export default function ContinentRide() {
   }, [setLedger])
   // the continent's garage is REAL: a part you have not bought does not fit, whatever the test track remembers
   const eff = useMemo(() => ({ ...build, core: Math.min(build.core, ledger.owned.core) as Tier, trim: Math.min(build.trim, ledger.owned.trim) as Tier, rune: Math.min(build.rune, ledger.owned.rune) as Tier }), [build, ledger.owned])
-  const tune = useMemo(() => tuneFromSpec(buildSpec(DARTER_STOCK, eff)), [eff])
+  // the courser driven (M14 lots): a bought model's own feel, with the parts bought at the yard stacked on it
+  const fleet = useFleet(), courser = modelById(fleet.active)
+  const tune = useMemo(() => tuneFromSpec(buildSpec(courser.spec, eff)), [eff, courser])
   const tuneRef = useRef<CourserTune>(tune)
   tuneRef.current = tune
   // THE CO.'S CONTRACT BOARD is a place you walk into (Alex 11-18: "the player shouldnt be able to reach it through a hot key but
@@ -1099,8 +1105,8 @@ export default function ContinentRide() {
     }
   }, [R])
   // the Citadel office posts EVERY supply town's work (Jin's call, Magii (3)): each town's three; a row names its pickup town
-  const contracts: Contract[] = useMemo(() => (board ? SUPPLY.flatMap(s => postBoard(s.place, SUPPLY, TOWNS.filter(t => R?.meta.places.some(p => p.id === t)), kmBetween, ledger.deeds + 1, CAPACITY.darter))
-    .filter((c, k, all) => all.findIndex(d => d.from === c.from && d.to === c.to && d.good === c.good && d.qty === c.qty) === k) : []), [board, R, kmBetween, ledger.deeds])   // the filter: one roll can repeat itself
+  const contracts: Contract[] = useMemo(() => (board ? SUPPLY.flatMap(s => postBoard(s.place, SUPPLY, TOWNS.filter(t => R?.meta.places.some(p => p.id === t)), kmBetween, ledger.deeds + 1, courser.crates))
+    .filter((c, k, all) => all.findIndex(d => d.from === c.from && d.to === c.to && d.good === c.good && d.qty === c.qty) === k) : []), [board, R, kmBetween, ledger.deeds, courser.crates])   // the filter: one roll can repeat itself
   // arriving: stopped at the contract's pickup loads it, at its drop pays it
   useEffect(() => {
     if (!atTown || !ledger.active) return
@@ -1440,11 +1446,12 @@ export default function ContinentRide() {
       {pack && <PackMenu tab={pack} onTab={setPack} onClose={() => setPack(null)} sel={slot} isTouch={isTouch} />}
       {mapState && showMap && <ContinentMap map={mapState} track={track} onClose={() => setShowMap(false)} />}
       <GaragePanel open={garage} onClose={() => setGarage(false)} build={eff} setBuild={setBuild}
+        fleet={{ owned: fleet.owned.map(modelById), active: courser, pick: (id: string) => { const f = pickCourser(getFleet(), id); if (f) { setFleet(f); flash(`Driving the ${modelById(id).name}`) } } }}
         shop={{ ledger, buy: (slot: Slot, t: Tier) => { const r = buy(ledger, slot, t); if (r.ok) setLedger(r.ledger); else flash(r.why ?? 'Not yet') } }} />
       <TradeHud ledger={ledger} objective={objective} toast={null} purse={false} />
       {board && (
-        <BoardPanel town="Ather Trading Co." contracts={contracts} ledger={ledger} capacity={CAPACITY.darter} msg={boardMsg} clerk={boardLine(!!ledger.active, contracts.length)}
-          onAccept={c => { const r = accept(ledger, c, CAPACITY.darter); if (r.ok) { setLedger(r.ledger); setDeed(null); setTalk(null); flash(`${CO_BARK.taken} ${GOODS[c.good].name} to ${placeName(c.to)}.`) } else setBoardMsg(refusalLine(!!ledger.active)) }}
+        <BoardPanel town="Ather Trading Co." contracts={contracts} ledger={ledger} capacity={courser.crates} msg={boardMsg} clerk={boardLine(!!ledger.active, contracts.length)}
+          onAccept={c => { const r = accept(ledger, c, courser.crates); if (r.ok) { setLedger(r.ledger); setDeed(null); setTalk(null); flash(`${CO_BARK.taken} ${GOODS[c.good].name} to ${placeName(c.to)}.`) } else setBoardMsg(refusalLine(!!ledger.active)) }}
           onAbandon={() => setLedger(abandon(ledger))} onClose={() => { if (talk) hudSay(byeLine(!!ledger.active), 'info'); setDeed(null); setTalk(null); setBoardMsg(null) }} />
       )}
       {!R && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#1d2a33', font: '600 14px system-ui' }}>{err ?? 'Loading the continent…'}</div>}

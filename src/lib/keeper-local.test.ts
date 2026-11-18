@@ -396,7 +396,7 @@ const OWNERS: Record<string, string> = {
   'ather:shimmer:seen:': 'voxel3d/discovery.ts', 'voxel3d:tutorial:': 'voxel3d/tutorial.ts', 'voxel3d:recipes:': 'voxel3d/recipe-book.ts',
   'voxel3d:mist:': 'voxel3d/mist-encounter.ts', 'voxel3d:pots:': 'voxel3d/VoxelWorld.tsx',
   'voxel3d:saplings:': 'voxel3d/VoxelWorld.tsx', 'voxel3d:grown:': 'voxel3d/VoxelWorld.tsx', 'voxel3d:leafdecay:': 'voxel3d/VoxelWorld.tsx',
-  'open.inv.v1': 'open/shared/inventory.ts', 'open.loadout.v1': 'open/shared/loadout.ts', 'open.sights.v1': 'open/shared/sight-looks.ts', 'open.skills.v1': 'open/ather/forestry.ts',   // M12 step 1
+  'open.inv.v1': 'open/shared/inventory.ts', 'open.loadout.v1': 'open/shared/loadout.ts', 'open.fleet.v1': 'open/shared/fleet.ts', 'open.sights.v1': 'open/shared/sight-looks.ts', 'open.skills.v1': 'open/ather/forestry.ts',   // M12 step 1
 }
 ok(Object.keys(OWNERS).length === KEEPER_KEYS.length,
    `every registered key names an owning module (${Object.keys(OWNERS).length} vs ${KEEPER_KEYS.length}) — a new key needs a row here`)

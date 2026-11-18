@@ -1,5 +1,6 @@
 // business/doors.ts: every runesmith seat with a place on the map has a lit door (the Enchant seat works inside the
 // Temple in the Citadel; the Star Temple has no place yet), no door is listed twice, and the Temple is a storefront.
+import { MAKES } from './courser-lot'
 import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
 import { makeRegion, type RegionMeta } from '../region'
@@ -58,5 +59,12 @@ for (const p of meta.places) {
   }
 }
 ok(all.filter(d => d.key.startsWith('front:courseryard:')).length > 0, 'the continent has courser yards')
+// THE COURSER LOTS (M14): exactly one per ruled make, in that make's town, on its own building, plainly named
+for (const mk of Object.values(MAKES)) {
+  const ls = doorsCached(R, mk.town).filter(d => d.key.startsWith('front:courserlot:'))
+  ok(ls.length === 1 && ls[0].key === `front:courserlot:${mk.town}` && ls[0].name === 'The courser lot', `${mk.name}: one courser lot in ${mk.town}`)
+  if (ls[0]) ok(doorsCached(R, mk.town).filter(d => d.b === ls[0].b).length === 1, `${mk.name}: the lot has its own building`)
+}
+ok(all.filter(d => d.key.startsWith('front:courserlot:')).length === 4, 'four courser lots on the continent, no more')
 console.log(`doors: ${pass} pass, ${fail} fail (${all.length} doors)`)
 if (fail) process.exit(1)

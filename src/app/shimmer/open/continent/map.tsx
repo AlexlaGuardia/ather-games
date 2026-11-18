@@ -212,6 +212,7 @@ export function shopMarks(m: ContinentMapState): { key: string; kind: string; x:
     if (!p.name || !placeSeen(m, p.x, p.z)) continue
     for (const d of doorsCached(m.R, p.id)) if (d.key.startsWith('front:gunshop:')) out.push({ key: d.key, kind: 'gunshop', x: d.at.x, z: d.at.z })
       else if (d.key.startsWith('front:courseryard:')) out.push({ key: d.key, kind: 'courseryard', x: d.at.x, z: d.at.z })
+      else if (d.key.startsWith('front:courserlot:')) out.push({ key: d.key, kind: 'courserlot', x: d.at.x, z: d.at.z })
   }
   return out
 }
@@ -327,9 +328,10 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
     }
     for (const sm of shopMarks(map)) {   // a gun shop: a small inked diamond, no name (the shop has none)
       const [mx, my] = map.toPx(sm.x, sm.z), r = 3.2 * dpr
-      ctx.save(); ctx.fillStyle = sm.kind === 'courseryard' ? '#8a5a2e' : '#4a4f57'; ctx.strokeStyle = 'rgba(236,226,198,0.95)'; ctx.lineWidth = 1.2 * dpr
+      ctx.save(); ctx.fillStyle = sm.kind === 'courseryard' ? '#8a5a2e' : sm.kind === 'courserlot' ? '#2c5a86' : '#4a4f57'; ctx.strokeStyle = 'rgba(236,226,198,0.95)'; ctx.lineWidth = 1.2 * dpr
       ctx.beginPath()
       if (sm.kind === 'courseryard') ctx.rect(mx * S - r * 0.8, my * S - r * 0.8, r * 1.6, r * 1.6)   // a courser yard: a small rust square
+      else if (sm.kind === 'courserlot') { ctx.arc(mx * S, my * S, r * 1.1, 0, Math.PI * 2) }   // a courser lot: a ring-edged disc
       else { ctx.moveTo(mx * S, my * S - r); ctx.lineTo(mx * S + r, my * S); ctx.lineTo(mx * S, my * S + r); ctx.lineTo(mx * S - r, my * S); ctx.closePath() }
       ctx.fill(); ctx.stroke(); ctx.restore()
     }

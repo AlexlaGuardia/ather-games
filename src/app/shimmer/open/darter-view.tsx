@@ -22,7 +22,14 @@ function Headlights() {
 }
 
 // ── the Darter (placeholder geometry): a low coupe, channel trim and a mana core that glow ──
-export function DarterModel({ car, steer }: { car: React.MutableRefObject<THREE.Group | null>; steer: React.MutableRefObject<number> }) {
+/** `look` (M14 courser lots, business/courser-lot.ts): a code-built BLOCKOUT per kind (darter coupe / hauler with a bed /
+ *  scrambler riding high / skitter on two wheels), scaled and painted per model. Visual only: the physics never read it.
+ *  Absent: the Darter as it always was. Alex models the real ones later. */
+export function DarterModel({ car, steer, look }: { car: React.MutableRefObject<THREE.Group | null>; steer: React.MutableRefObject<number>
+  look?: { kind: 'darter' | 'hauler' | 'scrambler' | 'skitter'; body: string; cabin: string; len: number; wide: number; tall: number } }) {
+  const k = look?.kind ?? 'darter', L = look?.len ?? 1, W = look?.wide ?? 1, T = look?.tall ?? 1
+  const bodyC = look?.body ?? '#2c5a86', cabC = look?.cabin ?? '#1b2c44'
+  const bike = k === 'skitter', lift = k === 'scrambler' ? 0.28 : 0, bw = bike ? 0.55 : 1.82 * W
   const wheels = useRef<(THREE.Group | null)[]>([])
   const spinners = useRef<(THREE.Mesh | null)[]>([])
   useFrame(() => {
@@ -31,15 +38,23 @@ export function DarterModel({ car, steer }: { car: React.MutableRefObject<THREE.
     spinners.current.forEach(w => { if (w) w.rotation.x = -ang })
     ;[0, 1].forEach(i => { const w = wheels.current[i]; if (w) w.rotation.y = -steer.current })
   })
-  const wheelPos: [number, number, number][] = [[-0.86, WHEEL_R, -1.3], [0.86, WHEEL_R, -1.3], [-0.86, WHEEL_R, 1.25], [0.86, WHEEL_R, 1.25]]
+  const wx = 0.86 * W, wheelPos: [number, number, number][] = bike
+    ? [[0, WHEEL_R, -1.3 * L], [0, WHEEL_R, 1.25 * L]]
+    : [[-wx, WHEEL_R, -1.3 * L], [wx, WHEEL_R, -1.3 * L], [-wx, WHEEL_R, 1.25 * L], [wx, WHEEL_R, 1.25 * L]]
   return (
     <group ref={car}>
       <group name="body">
-        <mesh position={[0, 0.62, 0]}><boxGeometry args={[1.82, 0.5, 4.3]} /><meshStandardMaterial color="#2c5a86" metalness={0.45} roughness={0.32} /></mesh>
-        <mesh position={[0, 0.98, 0.35]}><boxGeometry args={[1.45, 0.42, 1.9]} /><meshStandardMaterial color="#1b2c44" metalness={0.4} roughness={0.25} /></mesh>
+        <mesh position={[0, 0.62 + lift, 0]}><boxGeometry args={[bw, 0.5 * T, 4.3 * L * (bike ? 0.82 : 1)]} /><meshStandardMaterial color={bodyC} metalness={0.45} roughness={0.32} /></mesh>
+        {k === 'hauler'
+          ? <>{/* a high cab up front and an open bed behind */}
+              <mesh position={[0, 1.15 * T + lift, -1.0 * L]}><boxGeometry args={[1.6 * W, 0.8 * T, 1.5 * L]} /><meshStandardMaterial color={cabC} metalness={0.4} roughness={0.25} /></mesh>
+              <mesh position={[0, 0.98 * T, 1.0 * L]}><boxGeometry args={[1.7 * W, 0.28, 2.0 * L]} /><meshStandardMaterial color={cabC} roughness={0.8} /></mesh></>
+          : bike
+            ? <mesh position={[0, 1.02, 0.25]}><boxGeometry args={[0.42, 0.34, 1.1]} /><meshStandardMaterial color={cabC} metalness={0.4} roughness={0.25} /></mesh>
+            : <mesh position={[0, 0.98 * T + lift, 0.35 * L]}><boxGeometry args={[1.45 * W, 0.42 * T, 1.9 * L]} /><meshStandardMaterial color={cabC} metalness={0.4} roughness={0.25} /></mesh>}
         <mesh position={[0, 1.0, -0.62]} rotation-x={0.55}><boxGeometry args={[1.42, 0.05, 0.62]} /><meshStandardMaterial color="#7fd4ff" emissive="#2a6f99" emissiveIntensity={0.5} transparent opacity={0.75} /></mesh>
         {/* channel trim: the rune-lit line canon gives every manalic vehicle */}
-        {[-0.92, 0.92].map(x => (
+        {[-(bw / 2 + 0.01), bw / 2 + 0.01].map(x => (
           <mesh key={x} position={[x, 0.6, 0]}><boxGeometry args={[0.04, 0.06, 3.9]} /><meshStandardMaterial color="#d4a843" emissive="#d4a843" emissiveIntensity={1.4} /></mesh>
         ))}
         {/* mana core, behind the cabin */}

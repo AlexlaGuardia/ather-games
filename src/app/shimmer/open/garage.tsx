@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DARTER_STOCK, tuneFromSpec, type CourserTune } from './courser'
 import { buildSpec, statBars, PART_LABEL, tierLabel, DIAL, STOCK_BUILD, type CourserBuild, type Slot, type Tier } from './courser-build'
 import { canBuy, TIER_PRICE, type Ledger } from './trade'
+import { DARTER_MODEL, type CourserModel } from './business/courser-lot'
 import { HearthFrame, H } from '../ui/hearth'
 
 // tier names + dial poles are canon (Magii 11-13); see courser-build.ts
@@ -43,18 +44,35 @@ function Bar({ label, v, base }: { label: string; v: number; base: number }) {
 
 /** `shop` = the real garage (the continent): tiers are owned, bought with Marks, gated by deeds. Without it, a test
  *  garage with every part unlocked (the test track). */
-export function GaragePanel({ open, onClose, build, setBuild, shop }: { open: boolean; onClose: () => void; build: CourserBuild; setBuild: (b: CourserBuild) => void
-  shop?: { ledger: Ledger; buy: (slot: Slot, t: Tier) => void } }) {
+export function GaragePanel({ open, onClose, build, setBuild, shop, fleet }: { open: boolean; onClose: () => void; build: CourserBuild; setBuild: (b: CourserBuild) => void
+  shop?: { ledger: Ledger; buy: (slot: Slot, t: Tier) => void }
+  /** the keeper's coursers (M14 lots): which one they drive; parts fit whichever it is. Absent: the Darter (test track). */
+  fleet?: { owned: CourserModel[]; active: CourserModel; pick: (id: string) => void } }) {
   if (!open) return null
-  const spec = buildSpec(DARTER_STOCK, build), stock = DARTER_STOCK
+  const model = fleet?.active ?? DARTER_MODEL
+  const spec = buildSpec(model.spec, build), stock = model.spec
   const bars = statBars(spec), base = statBars(stock)
   const slots: Slot[] = ['core', 'trim', 'rune']
   return (
     // ★ The Carved Hearth card with the red close (Alex 11-15: every menu). A side panel, not a modal: no backdrop,
     // pinned right, so the stats move while you tune.
     <div style={{ position: 'absolute', right: 16, top: 70, zIndex: 40 }}>
-    <HearthFrame title="Garage · the Darter" maxWidth={360} onClose={onClose} backdrop={false} dataPanel="garage">
+    <HearthFrame title={`Garage · ${model.id === DARTER_MODEL.id ? 'the Darter' : model.name}`} maxWidth={360} onClose={onClose} backdrop={false} dataPanel="garage">
     <div style={{ padding: '26px 16px 14px', fontSize: 13 }}>
+      {fleet && fleet.owned.length > 1 && (
+        <div style={{ marginBottom: 12 }} data-fleet>
+          <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}>Courser</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+            {fleet.owned.map(m => (
+              <button key={m.id} type="button" data-courser={m.id} data-active={m.id === model.id || undefined} onClick={() => fleet.pick(m.id)}
+                style={{ padding: '4px 8px', borderRadius: 8, border: 0, cursor: 'pointer', font: '600 12px system-ui',
+                  background: m.id === model.id ? H.ember : 'rgba(255,250,235,.55)', color: m.id === model.id ? '#fff' : H.ink, boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+                {m.id === DARTER_MODEL.id ? 'Darter' : m.name.split(' ').slice(1).join(' ')} <span style={{ opacity: 0.7, fontWeight: 400 }}>· {m.crates}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {slots.map(slot => (
         <div key={slot} style={{ marginBottom: 10 }}>

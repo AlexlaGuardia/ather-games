@@ -37,6 +37,7 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   // ── the OPEN WORLD's keeper things (M12 step 1, 2026-11-17): the pack, the hotbar/loadout, the learned skills ──
   { base: 'open.inv.v1',             worldTied: false },  // the whole pack + hotbar slots
   { base: 'open.loadout.v1',         worldTied: false },  // the stance / worn vessel loadout
+  { base: 'open.fleet.v1',           worldTied: false },  // the coursers they own + the one they drive (M14 lots), 11-18
   { base: 'open.sights.v1',          worldTied: false },  // each gun's etched sight mark + tint (canon: look, never power), 11-18
   { base: 'open.skills.v1',          worldTied: false },  // forestry skill XP
 ]
