@@ -30,12 +30,14 @@ export function TilePaths({ net, W, off }: { net: Network; W: Wilds; off: { x: n
         const [x, z] = L[k], [px, pz] = L[Math.max(0, k - 1)], [nx, nz] = L[Math.min(L.length - 1, k + 1)]
         let tx = nx - px, tz = nz - pz; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l
         const w = PATH_W / 2 * (0.9 + 0.2 * Math.sin(k * 0.37))   // a worn path wanders in width
-        for (const side of [-1, 1]) {
+        // THREE points across, not two (BETA M18): the sculpted ground is not flat across a path on a 4 m grid, and where it
+        // bulges (an embankment's crown) it poked through a two-point ribbon as faint lines across the path (hub, 11-18)
+        for (const side of [-1, 0, 1]) {
           const lx = x - off.x - tz * w * side, lz = z - off.z + tx * w * side
-          pos.push(lx, W.heightAt(lx, lz) + 0.06, lz)
+          pos.push(lx, W.heightAt(lx, lz) + 0.12, lz)   // 12 cm: at 6 the ribbon z-fought the ground past ~50 m (M18 shots)
           const c = side < 0 ? PATH_EDGE : PATH_COLOUR; col.push(c.r, c.g, c.b)
         }
-        if (k) { const a = base + (k - 1) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2) }
+        if (k) { const a = base + (k - 1) * 3; idx.push(a, a + 1, a + 3, a + 1, a + 4, a + 3, a + 1, a + 2, a + 4, a + 2, a + 5, a + 4) }
       }
     }
     const g = new THREE.BufferGeometry()
@@ -44,7 +46,7 @@ export function TilePaths({ net, W, off }: { net: Network; W: Wilds; off: { x: n
     return g
   }, [net, W, off.x, off.z])
   if (!geo) return null
-  return <mesh geometry={geo}><meshLambertMaterial vertexColors polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} side={THREE.DoubleSide} /></mesh>
+  return <mesh geometry={geo}><meshLambertMaterial vertexColors polygonOffset polygonOffsetFactor={-4} polygonOffsetUnits={-4} side={THREE.DoubleSide} /></mesh>
 }
 
 // ── a settlement: a grassy knoll dug with round doors, a well, a signpost, lanterns ────────────────────────────────
