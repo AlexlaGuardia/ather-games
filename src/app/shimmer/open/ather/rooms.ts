@@ -18,7 +18,7 @@ import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, BAIT_FROM, type Inv, ty
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
 import { FURNITURE, MAX_PIECES, KEEPSTONES, keepstoneFor, type Job } from './furniture'
 
-export type RoomKind = 'rinnshop' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
+export type RoomKind = 'rinnshop' | 'farm' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
 export interface RoomDef {
   name: string
   /** one short line for the table's card */
@@ -35,13 +35,14 @@ export interface RoomDef {
 // that asks for something you cannot reach yet is a locked door, not a choice. Tune with play.
 export const ROOMS: Readonly<Record<RoomKind, RoomDef>> = {
   rinnshop:   { name: 'Rinnshop',   blurb: 'Rinsticks are built here, bait is cut and catches readied for the hearth.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 16 }], raiseMs: 90_000, open: true },
+  farm:       { name: 'Farm', blurb: 'Soil beds for crops, and a composter that eats what you give it and what the farm cannot hold.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 18 }], raiseMs: 100_000, open: true },
   cooking:    { name: 'Cooking room', blurb: 'A hearth that roasts your catch and the meat you bring home from the Smokehouse.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: true },
   alchemy:    { name: 'Alchemy room', blurb: 'A cauldron that boils crystals, shards and saps into potions.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 120_000, open: true },
   smith:      { name: 'Smithy',     blurb: 'Works metal brought over from the continent. Drawn up, not ready to build yet.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: false },
   carpentry:  { name: 'Carpentry room', blurb: 'Saw logs, strip bark, tap sap, and make furniture for your plot.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: true },
   stonemason: { name: 'Stonery',    blurb: 'Rubble in, stone and the lesser gems out. Drawn up, not ready to build yet.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: false },
 }
-export const ROOM_ORDER: readonly RoomKind[] = ['rinnshop', 'cooking', 'alchemy', 'smith', 'carpentry', 'stonemason']
+export const ROOM_ORDER: readonly RoomKind[] = ['rinnshop', 'farm', 'cooking', 'alchemy', 'smith', 'carpentry', 'stonemason']
 
 /** The planning table: a fixture beside Greg on the start ground. */
 export const TABLE = { x: GREG.x + 6, z: GREG.z - 10 }
@@ -248,6 +249,7 @@ const grp = (id: string) => ITEM_GROUP[id]
  *  room with no list to keep. Rooms not open yet have their rule now so the table can say what each will hold. */
 export const ROOM_ACCEPTS: Readonly<Record<RoomKind, (id: string) => boolean>> = {
   rinnshop: id => grp(id) === 'rinning' || id === 'mast',
+  farm: id => grp(id) === 'farming',
   cooking: id => (grp(id) === 'rinning' && id !== 'bait') || grp(id) === 'cooking',
   alchemy: id => (grp(id) === 'prospecting' && id !== 'blankstone') || /_sap$/.test(id) || grp(id) === 'alchemy',
   smith: id => id === 'deadfall' || id === 'charcoal',
@@ -256,7 +258,7 @@ export const ROOM_ACCEPTS: Readonly<Record<RoomKind, (id: string) => boolean>> =
 }
 /** Said when the room refuses something: what it does keep. */
 export const ROOM_KEEPS: Readonly<Record<RoomKind, string>> = {
-  rinnshop: 'catches, bait and mast', cooking: 'catches, meat and roasts', alchemy: 'crystals, shards, saps and potions',
+  rinnshop: 'catches, bait and mast', farm: 'crops and seeds', cooking: 'catches, meat and roasts', alchemy: 'crystals, shards, saps and potions',
   smith: 'deadfall and charcoal', carpentry: 'wood, bark and sap', stonemason: 'stone and crystal',
 }
 export const roomAccepts = (kind: RoomKind, id: string) => ROOM_ACCEPTS[kind](id)

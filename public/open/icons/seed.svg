@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A seed packet: one generic seed for every crop. Code-drawn filler. -->
+  <ellipse cx="16" cy="27.5" rx="9" ry="2" fill="#000" opacity=".25"/>
+  <path d="M8 8 L24 8 L25 26 L7 26 Z" fill="#d9b779" stroke="#6b4a2a" stroke-width="1"/>
+  <path d="M8 8 L24 8 L23.4 11 L8.6 11 Z" fill="#b98d5a" stroke="#6b4a2a" stroke-width=".8"/>
+  <path d="M16 23 Q11.5 20.5 12.5 15.5 Q16 16 17.5 19.5 Q18.2 22 16 23 Z" fill="#7bbf5a" stroke="#3f6b2a" stroke-width=".8"/>
+  <path d="M16 23 Q16.4 19.8 14.6 16.8" fill="none" stroke="#3f6b2a" stroke-width=".7"/>
+  <circle cx="21" cy="17" r="1.1" fill="#6b4a2a"/><circle cx="20" cy="21" r="1" fill="#6b4a2a"/>
+</svg>

@@ -11,6 +11,7 @@ import { keeperKey } from '@/lib/keeper-local'
 import { FURNITURE, KEEPSTONES } from '../ather/furniture'
 import { MEATS, DISHES } from '../ather/cooking'
 import { POTIONS } from '../ather/alchemy'
+import { CROPS, GRADES, seedId, cropId, parseGraded } from '../ather/farming'
 
 export interface ItemDef {
   name: string
@@ -27,7 +28,7 @@ export const OPEN_ITEMS: Record<string, ItemDef> = {
 }
 /** Which skill an item comes from: the garden bank's tabs (ather/garden-bank.ts). Filled beside each table below, so a
  *  new row lands in its tab with no second list to keep. Not in here = 'gear' (guns, waymarks). */
-export type ItemGroup = 'forestry' | 'rinning' | 'prospecting' | 'cooking' | 'alchemy' | 'decor'
+export type ItemGroup = 'forestry' | 'rinning' | 'prospecting' | 'cooking' | 'alchemy' | 'farming' | 'decor'
 export const ITEM_GROUP: Record<string, ItemGroup> = {}
 // ── Forestry's yield (canon: game/shimmer-skilling.md › Forestry resources + design-briefs/shimmer-resources.md; the drop
 //    table is world/resources.ts › NODE_DEFS). Icons: public/open/icons/<id with dashes>.svg, drawn by tools/art/forestry_icons.py.
@@ -124,7 +125,15 @@ for (const [id, p] of Object.entries(POTIONS)) { OPEN_ITEMS[id] = { name: p.name
 export const BAIT_FROM: Readonly<Record<string, number>> = { mast: 2, shimmerscale: 3, clickclaw: 3, glowfin: 3 }
 /** What the HUD says when the last bait is gone: where more comes from, so it is never a dead end. */
 export const NO_BAIT_LINE = 'No bait left. Make more in the bag from a small catch, or mast off a pruned tree.'
-export const itemDef = (id: string): ItemDef => OPEN_ITEMS[id] ?? { name: id.replace(/_/g, ' '), blurb: '', icon: '', stack: 99, kind: 'material' }
+// FARMING (ather/farming.ts): graded seeds and crops are ids, not table rows: `seed:<crop>:<grade>`, `crop:<crop>:<grade>`.
+const gradedDef = (id: string): ItemDef | null => {
+  const g = parseGraded(id); if (!g) return null
+  const c = CROPS[g.crop], seed = g.kind === 'seed'
+  return { name: seed ? `${c.name} seed · ${g.grade}` : `${c.name} · ${g.grade}`, icon: `/open/icons/${seed ? 'seed' : 'crop'}.svg`, stack: 99, kind: 'material',
+    blurb: seed ? `Plant it in a bed at your Farm. Grade ${g.grade}: the crop comes up the same grade.` : `Grown in your Farm. Grade ${g.grade}.` }
+}
+for (const c of Object.keys(CROPS) as (keyof typeof CROPS)[]) for (const g of GRADES) { ITEM_GROUP[seedId(c, g)] = 'farming'; ITEM_GROUP[cropId(c, g)] = 'farming' }
+export const itemDef = (id: string): ItemDef => OPEN_ITEMS[id] ?? gradedDef(id) ?? { name: id.replace(/_/g, ' '), blurb: '', icon: '', stack: 99, kind: 'material' }
 
 export const HOTBAR = 8, BAG = 24, SLOTS = HOTBAR + BAG
 export type Stack = { id: string; n: number }

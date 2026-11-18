@@ -86,9 +86,9 @@ export function bankTake(b: Bank, id: string, n: number): Bank | null {
 export type BankTab = 'all' | ItemGroup | 'gear'
 export const BANK_TABS: readonly { id: BankTab; label: string }[] = [
   { id: 'all', label: 'All' }, { id: 'forestry', label: 'Forestry' }, { id: 'rinning', label: 'Rinning' },
-  { id: 'prospecting', label: 'Prospecting' }, { id: 'cooking', label: 'Food' }, { id: 'alchemy', label: 'Potions' }, { id: 'decor', label: 'Decor' }, { id: 'gear', label: 'Gear' },
+  { id: 'prospecting', label: 'Prospecting' }, { id: 'cooking', label: 'Food' }, { id: 'alchemy', label: 'Potions' }, { id: 'farming', label: 'Farm' }, { id: 'decor', label: 'Decor' }, { id: 'gear', label: 'Gear' },
 ]
-const RANK: Record<Exclude<BankTab, 'all'>, number> = { forestry: 0, rinning: 1, prospecting: 2, cooking: 3, alchemy: 4, decor: 5, gear: 6 }
+const RANK: Record<Exclude<BankTab, 'all'>, number> = { forestry: 0, rinning: 1, prospecting: 2, cooking: 3, alchemy: 4, farming: 5, decor: 6, gear: 7 }
 export const bankGroup = (id: string): Exclude<BankTab, 'all'> => ITEM_GROUP[id] ?? 'gear'
 
 /** Every query word must appear in the item's name or id (voxel bank's search rule). A live query ignores the tab. */

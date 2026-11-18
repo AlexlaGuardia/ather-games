@@ -58,7 +58,8 @@ for (let q = 0; q < 4; q++) {
   const back = toWorld(rr, 0, ROOMS.rinnshop.d / 2), sideP = toWorld(rr, ROOMS.rinnshop.w / 2, 0), frontEdge = toWorld(rr, ROOMS.rinnshop.w / 2 - 0.5, -ROOMS.rinnshop.d / 2)
   ok(inWall(back.x, back.z) && inWall(sideP.x, sideP.z) && inWall(frontEdge.x, frontEdge.z), `turn ${q}: a wall is missing (back, side or front beside the door)`)
 }
-ok(ROOM_ORDER.length === 6 && ROOM_ORDER.every(k => k in ROOMS) && ROOMS.rinnshop.open, 'rooms: the six canon rooms are not all on the table, or the Rinnshop is shut')
+ok(ROOM_ORDER.length === 7 && ROOM_ORDER.every(k => k in ROOMS) && ROOMS.rinnshop.open && ROOMS.farm.open && ROOMS.farm.name === 'Farm', 'rooms: the seven canon rooms (the Farm joined 11-18) are not all on the table, or the Rinnshop / Farm is shut')
+ok(roomAccepts('farm', 'seed:goldleaf:D') && roomAccepts('farm', 'crop:starbloom:C') && !roomAccepts('farm', 'goldwood_log'), 'rooms: the farm keeps seeds and crops only')
 
 // ── chests: the starter stands from the first minute; more are placed on held ground, never in a wall/door/bench ──
 { const s = squareAt(STARTER_CHEST.x, STARTER_CHEST.z); ok(!!s && owned.has(sqId(s.i, s.j)), 'chest: the starter chest is off the start ground') }

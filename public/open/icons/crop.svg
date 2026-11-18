@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A harvested crop: one generic bundle of leaves for every crop. Code-drawn filler. -->
+  <ellipse cx="16" cy="27.5" rx="9" ry="2" fill="#000" opacity=".25"/>
+  <path d="M16 26 Q8 22 7 12 Q14 12 16 20 Z" fill="#6fbf55" stroke="#3a6a2a" stroke-width=".9"/>
+  <path d="M16 26 Q24 22 25 12 Q18 12 16 20 Z" fill="#8bd06a" stroke="#3a6a2a" stroke-width=".9"/>
+  <path d="M16 26 Q12 18 16 6 Q20 18 16 26 Z" fill="#a4dc7a" stroke="#3a6a2a" stroke-width=".9"/>
+  <path d="M16 25 L16 9 M15 21 L10 15 M17 21 L22 15" fill="none" stroke="#3a6a2a" stroke-width=".7" stroke-linecap="round"/>
+  <path d="M12.5 25.5 L19.5 25.5" stroke="#8a6a45" stroke-width="2" stroke-linecap="round"/>
+</svg>

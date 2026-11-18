@@ -25,9 +25,9 @@ import { BREW } from './alchemy'
 export type Profession = 'farmer' | 'cook' | 'carpenter' | 'stonemason' | 'alchemist' | 'smith' | 'jeweler'
 export const PROFESSIONS: readonly Profession[] = ['farmer', 'cook', 'carpenter', 'stonemason', 'alchemist', 'smith', 'jeweler']
 /** Which rooms a trade can work. The cook pairs with the Rinnshop too (catches readied for the hearth; a Moglin never
- *  rins, canon 8d3ada7). The farmer works the fields, not a room; the jeweler shares the Stonery's bench. */
+ *  rins, canon 8d3ada7). The farmer keeps the Farm room (no idle product yet: the beds are the keeper's); the jeweler shares the Stonery's bench. */
 export const WORKS_IN: Readonly<Record<Profession, readonly RoomKind[]>> = {
-  farmer: [], cook: ['cooking', 'rinnshop'], carpenter: ['carpentry'], stonemason: ['stonemason'],
+  farmer: ['farm'], cook: ['cooking', 'rinnshop'], carpenter: ['carpentry'], stonemason: ['stonemason'],
   alchemist: ['alchemy'], smith: ['smith'], jeweler: ['stonemason'],
 }
 
