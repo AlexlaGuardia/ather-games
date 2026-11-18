@@ -20,7 +20,9 @@ export const SETTLEMENT_GATHERS: Readonly<Record<SettlementBiome, readonly strin
   woods: ['goldwood_log'],
   rock: ['blankstone', 'raw_mana_shard'],
 }
-export interface Path { a: string; b: string; pts: [number, number][] }
+/** `pts[k][2]` = the PATH'S OWN HEIGHT there (BETA M18, scripts/bake-path-profiles.mts): the ground smoothed along the path and
+ *  held to a trail grade. Older bakes lack it, and then the land is not sculpted (relief.ts falls back to the M16 mask). */
+export interface Path { a: string; b: string; pts: [number, number, number?][] }
 export interface Fair { x: number; z: number; yaw: number; path: string }
 export interface Network { v: 1; season: number; settlements: Settlement[]; paths: Path[]; fair: Fair | null }
 
@@ -91,4 +93,52 @@ export function clearing(n: Network): (x: number, z: number) => boolean {
   for (const s of n.settlements) disc(s.x, s.z, SETTLEMENT_CLEAR)
   if (n.fair) disc(n.fair.x, n.fair.z, FAIR_CLEAR)
   return (x, z) => mask.has(key(Math.floor(x / C), Math.floor(z / C)))
+}
+
+// ── THE ROAD FIELD (BETA M18): what the land needs to meet the paths. Pure. ────────────────────────────────────────────
+/** A path's half width, for the sculpt (the drawn ribbon is PATH_W). */
+export const PATH_HALF = PATH_W / 2
+/** Settlement and fair ground stays flat: full inside the disc, fading out over DISC_FADE metres. */
+export const DISC_FADE = 16
+export interface RoadField {
+  /** the nearest path point within `r` metres: its distance, the path's own height there, its half width */
+  near(x: number, z: number, r: number): { d: number; y: number; hw: number } | null
+  /** 0..1: how much a settlement's or the fair's flat ground holds this point (1 = fully flat, no relief) */
+  flat(x: number, z: number): number
+}
+/** Null when the bake carries no path heights (an older network): the caller keeps the M16 mask. */
+/** `reach` = the farthest `near` is ever asked (relief.ts ROAD_REACH): each 32 m cell lists every segment within it, so a
+ *  query reads ONE cell (a tile parse asks 63k times; a 7x7 cell scan cost ~0.7 s a tile). */
+export function roadField(n: Network, reach = 70): RoadField | null {
+  if (!n.paths.length || n.paths.some(p => p.pts.some(q => typeof q[2] !== 'number'))) return null
+  const C = 32, key = (i: number, j: number) => i * 100003 + j
+  type Seg = { ax: number; az: number; ay: number; bx: number; bz: number; by: number }
+  const segs: Seg[] = [], cells = new Map<number, number[]>()
+  for (const p of n.paths) for (let k = 1; k < p.pts.length; k++) {
+    const [ax, az, ay] = p.pts[k - 1], [bx, bz, by] = p.pts[k]
+    const id = segs.push({ ax, az, ay: ay!, bx, bz, by: by! }) - 1
+    for (let j = Math.floor((Math.min(az, bz) - reach) / C); j <= Math.floor((Math.max(az, bz) + reach) / C); j++)
+      for (let i = Math.floor((Math.min(ax, bx) - reach) / C); i <= Math.floor((Math.max(ax, bx) + reach) / C); i++) { const kk = key(i, j); const l = cells.get(kk); if (l) l.push(id); else cells.set(kk, [id]) }
+  }
+  const discs: { x: number; z: number; r: number }[] = n.settlements.map(s => ({ x: s.x, z: s.z, r: SETTLEMENT_CLEAR }))
+  if (n.fair) discs.push({ x: n.fair.x, z: n.fair.z, r: FAIR_CLEAR })
+  return {
+    near(x, z, r) {
+      const list = cells.get(key(Math.floor(x / C), Math.floor(z / C)))
+      if (!list) return null
+      let best: { d: number; y: number; hw: number } | null = null
+      for (const id of list) {
+        const g = segs[id], dx = g.bx - g.ax, dz = g.bz - g.az, L = dx * dx + dz * dz || 1
+        const t = Math.max(0, Math.min(1, ((x - g.ax) * dx + (z - g.az) * dz) / L))
+        const d = Math.hypot(g.ax + dx * t - x, g.az + dz * t - z)
+        if (d <= r && (!best || d < best.d)) best = { d, y: g.ay + (g.by - g.ay) * t, hw: PATH_HALF }
+      }
+      return best
+    },
+    flat(x, z) {
+      let f = 0
+      for (const c of discs) { const d = Math.hypot(c.x - x, c.z - z) - c.r; if (d < DISC_FADE) f = Math.max(f, d <= 0 ? 1 : 1 - d / DISC_FADE) }
+      return f * f * (3 - 2 * f)
+    },
+  }
 }

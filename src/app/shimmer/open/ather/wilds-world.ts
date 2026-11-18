@@ -14,6 +14,7 @@
 import type { Box, Shape } from '../terrain-world'
 import { parseWilds, loadWilds, BIOME, type BiomeId, type Wilds, type Tree, type Crystal } from './wilds'
 import type { Zone } from './forestry'
+import type { RoadField } from './network'
 
 export const TILE_M = 1000
 export const SEA_FLOOR = -20
@@ -46,6 +47,8 @@ export interface WildsWorld {
   rev: number
   /** no tree stands where this says (the path network, network.ts › clearing); set before the first stream */
   clear?: (x: number, z: number) => boolean
+  /** the paths' own heights (network.ts › roadField, BETA M18): the land is sculpted to meet them; set before the first stream */
+  roads?: RoadField | null
 }
 
 export function makeWorld(index: TileIndex): WildsWorld {
@@ -140,7 +143,7 @@ export function zonesOf(w: WildsWorld, name: string): (i: number, j: number) => 
   return (i, j) => m.get(`${i},${j}`) ?? 'meadows'
 }
 
-export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear)): Promise<boolean> {
+export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear, w.roads)): Promise<boolean> {
   const want = new Set(wanted(w, x, z)), keep = new Set(wanted(w, x, z, 2))
   let changed = false
   for (const name of [...w.loaded.keys()]) if (!keep.has(name)) { w.loaded.delete(name); changed = true }

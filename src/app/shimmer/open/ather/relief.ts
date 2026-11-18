@@ -14,7 +14,15 @@
 //   beside the path network, settlements and the fair (network.ts clearing: settlements keep their saved waymark heights),
 //   and a disc round Greg's arrival waymark.
 // ★ Never digs below the water line: a dip that would go under waterY stops at the raw height (no dry-floored ponds).
+// ★ M18 (Alex 11-18: "sculpt the terrain around the roads"): with a ROAD FIELD (network.ts roadField, from path heights baked
+//   by scripts/bake-path-profiles.mts) the paths no longer just switch the relief off. The ground UNDER a path is the path's
+//   own smoothed, grade-held height; beside it the land is CUT or FILLED back to the relieved terrain across a VERGE whose
+//   width grows with the height gap (BANK: about 1 in 2), so a path through a hill runs in a cutting, a path over a dip on a
+//   low bank, and nothing steps at the path's edge. Settlement + fair discs stay flat (roads.flat). Without a field (an
+//   older bake, the unit tests' raw tile) the M16 path mask stands.
 // PURE. No three, no React, no DOM.
+
+import type { RoadField } from './network'
 
 const h32 = (i: number, j: number, s: number) => {
   let h = (i * 374761393 + j * 668265263 + s * 2147483647) | 0
@@ -69,8 +77,25 @@ export function reliefMask(x: number, z: number, rawH: number, waterY: number, c
   return m * (1 - Math.min(1, n / 6))
 }
 
-/** The relieved height of a vertex at a world point. Never below the water line where the raw ground was above it. */
-export function relieve(x: number, z: number, rawH: number, waterY: number, clear?: (x: number, z: number) => boolean): number {
+/** the bank beside a sculpted path: rise over run (verge width = height gap / BANK) */
+export const BANK = 0.5, VERGE_MIN = 3, PATH_EDGE = 0.6, ROAD_REACH = 70
+
+/** The relieved height of a vertex at a world point. Never below the water line where the raw ground was above it.
+ *  With `roads` the land is sculpted to meet the paths (M18); without, the M16 path mask (`clear`) applies. */
+export function relieve(x: number, z: number, rawH: number, waterY: number, clear?: (x: number, z: number) => boolean, roads?: RoadField | null): number {
+  if (roads) {
+    // the land as it would be with no path here: relief everywhere but water, the arrival and settlement/fair ground
+    let m = ramp(waterY + 1.5, waterY + 7, rawH) * ramp(ARRIVAL_FLAT, ARRIVAL_FLAT + ARRIVAL_FADE, Math.hypot(x - ARRIVAL.x, z - ARRIVAL.z))
+    if (m > 0) m *= 1 - roads.flat(x, z)
+    let land = m > 0 ? rawH + reliefRaw(x, z) * m : rawH
+    if (land < waterY + 1 && rawH > waterY + 1) land = waterY + 1
+    // then meet the nearest path: its own height underfoot, a verge back to the land as wide as the gap needs
+    const r = roads.near(x, z, ROAD_REACH)
+    if (!r) return land
+    const edge = r.hw + PATH_EDGE, gap = land - r.y, verge = Math.max(VERGE_MIN, Math.abs(gap) / BANK)
+    if (r.d >= edge + verge) return land
+    return r.y + gap * smooth(Math.max(0, Math.min(1, (r.d - edge) / verge)))
+  }
   const m = reliefMask(x, z, rawH, waterY, clear)
   if (m <= 0) return rawH
   const h = rawH + reliefRaw(x, z) * m
