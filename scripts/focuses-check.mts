@@ -92,7 +92,8 @@ res.woreLine = /Goldwood Blade wore out/.test(await bodyText())
 await p.screenshot({ path: `${out}/focuses-end.png` }).catch(() => {})
 // ⚠ KNOWN, PRE-EXISTING (prod 11-18, before M17): a keeper with a skill level above 1 gets a React HYDRATION mismatch on load (the
 // server renders the HUD at level 1, the client at its saved level). Reported to hub; counted apart so it neither hides nor fails M17.
-const hydration = errs.filter(e => /Hydration failed/.test(e)), other = errs.filter(e => !/Hydration failed/.test(e))
+const HYD = /Hydration failed|Minified React error #418/   // the prod build reports the same mismatch minified (#418 = hydration text)
+const hydration = errs.filter(e => HYD.test(e)), other = errs.filter(e => !HYD.test(e))
 res.errs = other; res.hydrationKnown = hydration.length
 console.log(JSON.stringify(res, null, 1))
 const c = res.carpentry as { panel: boolean; made: boolean }, s = res.stonery as typeof c, u = res.usesAfter as { toolId: string; usesRemaining: number }
