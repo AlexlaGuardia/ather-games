@@ -35,6 +35,7 @@ import { ShopPanel } from '../business/shop-panel'
 import { RunesmithPanel, IdonyPanel, commitImbue } from '../business/smith-panel'
 import { TalkBubble, TalkChoices } from '../shared/npc-talk'
 import { smithTalk, templeTalk, beatTalk } from './door-talk'
+import { coTalk, boardLine, refusalLine, paidLine, byeLine, loadCoSeen, saveCoSeen, CO_BARK } from '../business/co-lines'
 import type { Beat } from '../business/errand-lines'
 import type { Seat } from '../business/letters'
 import { stageOf, errandEntries, birthSeat, gemsGiven } from '../business/errand'
@@ -1107,7 +1108,7 @@ export default function ContinentRide() {
     if (!r.event) return
     setLedger(r.ledger)
     if (r.event.kind === 'loaded') flash(`Loaded ${ledger.active.qty} ${GOODS[ledger.active.good].name}`)
-    else flash(`Delivered · +${r.event.marks} Marks · +${r.event.deeds} deed${r.event.spoiled > 0.05 ? ` (${Math.round(r.event.spoiled * 100)}% spoiled)` : ''}`)
+    else flash(`${paidLine(ledger.deeds + 1)} +${r.event.marks} Marks · +${r.event.deeds} deed${r.event.spoiled > 0.05 ? ` (${Math.round(r.event.spoiled * 100)}% spoiled)` : ''}`)
   }, [atTown, ledger, setLedger])
   // THE FIRST ERRAND (business/errand.ts): the same journal line as the Ather, with the continent doors as its waymarks
   const errBirth = useBirth(), errLoadout = useLoadout(), errInv = useInv()
@@ -1217,15 +1218,18 @@ export default function ContinentRide() {
   // ── BETA M13 part 3: a runesmith's door and the Enchant Temple TALK first (door-talk.ts), the way Greg does on the Ather:
   // the counter's line in a bubble over its door, the camera turns to it, each answer opens ONE thing. Idony's imbue beat
   // plays in the same bubble. Other doors (shops, deeds, the Co.'s board) still open straight to their panel.
-  type Talk = { key: string; name: string; at: { x: number; y: number; z: number }; beat?: { steps: Beat[]; at: number; vesselId: string; wordId: string } }
+  type Talk = { key: string; name: string; at: { x: number; y: number; z: number }; beat?: { steps: Beat[]; at: number; vesselId: string; wordId: string }; greet?: number | null; visit?: number }
   const [talk, setTalk] = useState<Talk | null>(null)
   const talkFocus = useRef<{ x: number; y: number; z: number } | null>(null)
   const openDoor = useCallback((key: string) => {
-    const d = R && (key.startsWith('smith:') || key === 'front:enchant-temple') ? doorByKey(R, key) : undefined
+    const d = R && (key.startsWith('smith:') || key === 'front:enchant-temple' || key === 'front:trade-co') ? doorByKey(R, key) : undefined
     if (!d) { setDeed(key); return }
+    // the Co. clerk (business/co-lines.ts, signed 11-18): the greeting once per garden, then a flavour line per visit
+    let co: { greet: number | null; visit: number } = { greet: null, visit: 0 }
+    if (key === 'front:trade-co') { const s = loadCoSeen(); co = { greet: s.greeted ? null : 0, visit: s.visits }; saveCoSeen({ ...s, visits: s.greeted ? s.visits + 1 : s.visits }) }
     // over the door itself: the step stone, a step back toward the building, above the lintel
     const bx = d.b.x - d.at.x, bz = d.b.z - d.at.z, bl = Math.hypot(bx, bz) || 1
-    setTalk({ key, name: key === 'front:enchant-temple' ? 'Idony' : d.name, at: { x: d.at.x + (bx / bl) * 0.6, y: d.at.y + 2.6, z: d.at.z + (bz / bl) * 0.6 } })
+    setTalk({ key, name: key === 'front:enchant-temple' ? 'Idony' : key === 'front:trade-co' ? 'Clerk' : d.name, at: { x: d.at.x + (bx / bl) * 0.6, y: d.at.y + 2.6, z: d.at.z + (bz / bl) * 0.6 }, ...(key === 'front:trade-co' ? co : {}) })
   }, [R])
   const bracelet = !errLoadout.vessels.some(x => x.id === 'starter-bracelet' && x.word === null)
   const talkNode = useMemo(() => {
@@ -1239,6 +1243,11 @@ export default function ContinentRide() {
       })
     }
     if (deed) return null   // a counter's panel is open: the talk waits behind it
+    if (talk.key === 'front:trade-co') return coTalk(talk.greet ?? null, talk.visit ?? 0, {
+      next: () => setTalk(t => (t ? { ...t, greet: (t.greet ?? 0) + 1 } : t)),
+      board: () => { const s = loadCoSeen(); if (!s.greeted) saveCoSeen({ ...s, greeted: true }); setTalk(t => (t ? { ...t, greet: null } : t)); setDeed('front:trade-co') },
+      bye: () => { hudSay(byeLine(!!ledger.active), 'info'); setTalk(null) },
+    })
     return talk.key === 'front:enchant-temple' ? templeTalk(bracelet, acts) : smithTalk(talk.key, acts)
   }, [talk, deed, bracelet, ledger, setLedger])
   useEffect(() => { talkFocus.current = talkNode && talk ? talk.at : null }, [talkNode, talk])
@@ -1434,9 +1443,9 @@ export default function ContinentRide() {
         shop={{ ledger, buy: (slot: Slot, t: Tier) => { const r = buy(ledger, slot, t); if (r.ok) setLedger(r.ledger); else flash(r.why ?? 'Not yet') } }} />
       <TradeHud ledger={ledger} objective={objective} toast={null} purse={false} />
       {board && (
-        <BoardPanel town="Ather Trading Co." contracts={contracts} ledger={ledger} capacity={CAPACITY.darter} msg={boardMsg}
-          onAccept={c => { const r = accept(ledger, c, CAPACITY.darter); if (r.ok) { setLedger(r.ledger); setDeed(null); flash(`That one's yours: ${GOODS[c.good].name} to ${placeName(c.to)}.`) } else setBoardMsg(r.why ?? null) }}
-          onAbandon={() => setLedger(abandon(ledger))} onClose={() => { setDeed(null); setBoardMsg(null) }} />
+        <BoardPanel town="Ather Trading Co." contracts={contracts} ledger={ledger} capacity={CAPACITY.darter} msg={boardMsg} clerk={boardLine(!!ledger.active, contracts.length)}
+          onAccept={c => { const r = accept(ledger, c, CAPACITY.darter); if (r.ok) { setLedger(r.ledger); setDeed(null); setTalk(null); flash(`${CO_BARK.taken} ${GOODS[c.good].name} to ${placeName(c.to)}.`) } else setBoardMsg(refusalLine(!!ledger.active)) }}
+          onAbandon={() => setLedger(abandon(ledger))} onClose={() => { if (talk) hudSay(byeLine(!!ledger.active), 'info'); setDeed(null); setTalk(null); setBoardMsg(null) }} />
       )}
       {!R && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#1d2a33', font: '600 14px system-ui' }}>{err ?? 'Loading the continent…'}</div>}
 

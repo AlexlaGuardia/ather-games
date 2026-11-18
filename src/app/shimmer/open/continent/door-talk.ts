@@ -3,7 +3,7 @@
 // line in a bubble over the door, the keeper answers, each answer opens ONE thing (the counter's panel, or goodbye). Idony's
 // imbue beat (errand-lines.ts idonyBeat, signed 11-16) plays in the same bubble, one step per answer.
 // ★ Every NPC line here is a SIGNED line from errand-lines.ts, never edited. The answer labels (DOOR_ASK) are @lark's
-//   drafts, awaiting Alex sign-off. The Co. clerk is not here: its script (co-citadel-office-script.md) is unsigned.
+//   drafts, awaiting Alex sign-off. The Co. clerk talks too, from its own signed script: business/co-lines.ts.
 import type { TalkNode } from '../shared/npc-talk'
 import { RUNESMITH_CUT, IDONY_HUSH, IDONY_AFTER, type Beat } from '../business/errand-lines'
 

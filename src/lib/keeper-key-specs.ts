@@ -63,7 +63,8 @@ export const GARDEN_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'open.works.v1',            worldTied: false },  // the workshop rooms (ather/rooms.ts)
   { base: 'open.tools.v1',            worldTied: false },  // a keeper's equipped tools: rinsticks (ather/rinsticks.ts)
   { base: 'open.buffs.v1',            worldTied: false },  // a keeper's potion buffs, until-times (ather/alchemy.ts)
-  { base: 'open.deeds-told.v1',      worldTied: false },  // BETA M6d: the deeds journal line was told (business/deed-pointer.ts)
+  { base: 'open.deeds-told.v1',      worldTied: false },
+  { base: 'open.co-office.v1',       worldTied: false },  // the Co. clerk's greeting was heard + visit count (business/co-lines.ts)  // BETA M6d: the deeds journal line was told (business/deed-pointer.ts)
   { base: 'open.village.v1',          worldTied: false },  // the garden village's Moglins (ather/moglins.ts)
   { base: 'open.trust.v1',            worldTied: false },  // recruiting: goods brought to each settlement Moglin (ather/settlement-folk.ts)
   { base: 'open.farm.v1',            worldTied: false },  // the Farm room's beds + composter charge (ather/farmroom.ts)

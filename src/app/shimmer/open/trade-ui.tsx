@@ -26,8 +26,10 @@ export function useLedger(): [Ledger, (l: Ledger) => void] {
 }
 
 
-export function BoardPanel({ town, contracts, ledger, capacity, onAccept, onAbandon, onClose, msg }: {
+export function BoardPanel({ town, contracts, ledger, capacity, onAccept, onAbandon, onClose, msg, clerk }: {
   town: string; contracts: Contract[]; ledger: Ledger; capacity: number
+  /** the Co. clerk's line over the board (business/co-lines.ts › boardLine; signed) */
+  clerk?: string
   onAccept: (c: Contract) => void; onAbandon: () => void; onClose: () => void; msg: string | null
   }) {
   const name = (id: string) => id.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
@@ -36,6 +38,7 @@ export function BoardPanel({ town, contracts, ledger, capacity, onAccept, onAban
     <HearthFrame title="Contract board" maxWidth={420} onClose={onClose} fixed dataPanel="trade-board">
       <div style={{ padding: '26px 16px 14px', fontSize: 13 }}>
       <div style={{ font: '700 11px system-ui', letterSpacing: '0.24em', color: H.ember }}>ATHER TRADING CO.</div>
+      {clerk && <div data-clerk-line style={{ marginTop: 6, fontSize: 13, color: H.ink, fontStyle: 'italic' }}>{clerk}</div>}
       {ledger.active && (
         <div style={{ margin: '10px 0', padding: '8px 10px', borderRadius: 8, background: 'rgba(58,39,22,0.07)', fontSize: 12 }}>
           Holding: {ledger.active.qty} {GOODS[ledger.active.good].name} → {name(ledger.active.to)} ({ledger.active.loaded ? 'loaded' : 'not loaded yet'})
@@ -43,7 +46,7 @@ export function BoardPanel({ town, contracts, ledger, capacity, onAccept, onAban
         </div>
       )}
       <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
-        {contracts.length === 0 && <div style={{ opacity: 0.6, fontSize: 12 }}>Nothing posted. Come back later.</div>}
+        {contracts.length === 0 && !clerk && <div style={{ opacity: 0.6, fontSize: 12 }}>Nothing posted. Come back later.</div>}
         {contracts.map(c => {
           const g = GOODS[c.good], fits = crates(c) <= capacity
           return (
