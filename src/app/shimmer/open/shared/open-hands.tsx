@@ -20,12 +20,12 @@ import * as THREE from 'three'
 import { useThree } from '@react-three/fiber'
 import { newFpState, stepFpHands, loadFpTune, FP, type FpInput, type HandPose } from './fp-hands-pose'
 
-const ORDER = 1000
+export const ORDER = 1000
 const C = { glove: '#6e4a2c', cuff: '#b9a582', cord: '#7a5a35', seat: '#7fb6d9', bracelet: '#8a6a3c' }
 
 export interface OpenHandsApi { step: (i: FpInput, dt: number) => void; seat: (lit: number) => void }
 
-function buildHand(side: 1 | -1, seatMat: THREE.MeshStandardMaterial | null): THREE.Group {
+export function buildHand(side: 1 | -1, seatMat: THREE.MeshStandardMaterial | null): THREE.Group {
   const g = new THREE.Group()
   const mat = (color: string) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, transparent: true, opacity: 1 })
   const part = (geo: THREE.BufferGeometry, m: THREE.Material, p: [number, number, number], r: [number, number, number] = [0, 0, 0]) => {
