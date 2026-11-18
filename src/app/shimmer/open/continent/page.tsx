@@ -9,6 +9,7 @@
 // show sky. Houses and trees are placeholder geometry: towns read as towns, nothing more is claimed.
 // Desktop only for now (keys). ?region=<name> picks another exported region.
 
+import { GateRings } from '../shared/gate-rings'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMenuLock } from '../shared/menu-lock'
 import { useInv, hotbarEntries, getInv } from '../shared/bag'
@@ -684,7 +685,7 @@ export interface RideHud { x: number; z: number; yaw: number; mph: number; frac:
 const LANDING = 'rune-hold'
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
-function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx }: { castFx: { surge: React.MutableRefObject<{ until: number; mult: number }>; impulse: React.MutableRefObject<CastSpec | null> }; track: React.MutableRefObject<Track>; R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<{ tp?: (x: number, z: number, yaw: number) => void }> }) {
+function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx }: { castFx: { surge: React.MutableRefObject<{ until: number; mult: number }>; impulse: React.MutableRefObject<CastSpec | null>; gateStep: (lc: Parameters<ReturnType<typeof useCasts>['gateStep']>[0], yaw: number, dt: number, groundAt: (x: number, z: number) => number) => void }; track: React.MutableRefObject<Track>; R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<{ tp?: (x: number, z: number, yaw: number) => void }> }) {
   const { camera, gl } = useThree()
   const spawn = useMemo(() => {
     const road = R.meta.roads.find(r => r.from === 'ashfeld' && r.to === 'millbrook') ?? R.meta.roads[0]
@@ -873,6 +874,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx }: { castFx
         lc.vy = Math.max(lc.vy, sp.impulseUp || 8); lc.airborne = true
         if (!sp.keepMomentum) { lc.hvx = 0; lc.hvz = 0 }
       }
+      castFx.gateStep(lc, view.current.yaw, Math.min(frameDt, 0.05), R.groundAt)   // a standing Gate (M15c): bills, and carries the keeper through an end
       tickFoot(fw, R, lc, { mvX: mx, mvZ: mz, fwdX: fwx, fwdZ: fwz, rightX: rtx, rightZ: rtz,
         jumpKey: k.has('Space') || touch.held.has('Space'), crouchKey: k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyC') || touch.held.has('ShiftLeft'), dt: Math.min(frameDt, 0.05) })
       // fell off the world (or into it): back beside the courser
@@ -1208,7 +1210,7 @@ export default function ContinentRide() {
   const vitalsRef = useRef<Vitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0 })
   const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 1.5 })
   // Q / X on foot (BETA M15b): the same shared hook as the Ather. No fight here yet, so a fight cast resolves against nothing.
-  const casts = useCasts({ manaRef, vitalsRef, fightHere: () => false })
+  const casts = useCasts({ manaRef, vitalsRef, fightHere: () => false, gateHere: () => true })
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.repeat || (e.code !== CAST_KEY.tactical && e.code !== CAST_KEY.signature)) return
@@ -1347,6 +1349,7 @@ export default function ContinentRide() {
           <Roadside R={R} />
           <Trees R={R} focus={focus} />
           <Driver castFx={casts} R={R} cave={cave} onHud={setHud} focus={focus} tuneRef={tuneRef} ctl={ctl} track={track} />
+          <GateRings gate={casts.gate} />
         </Canvas>
       )}
       <LookChip />
