@@ -22,6 +22,7 @@
 import { NODE_DEFS } from '../../world/resources'
 import { createSkillSet, addSkillXP, skillSetToSave, skillSetFromSave, type SkillSet, type SkillId } from '../../engine/skills'
 import { keeperKey, gardenKey } from '@/lib/keeper-local'
+import { emitXp } from '../shared/xp-feed'
 
 export type Zone = 'meadows' | 'thicket' | 'springs' | 'trails' | 'arid' | 'caverns'
 /** This season's zone names (RULED 2026-11-15, game/shimmer-geography.md › THE WILDS' ZONES, THIS SEASON): they may
@@ -83,7 +84,8 @@ let xpMult = 1
 export const setOpenXpMult = (m: number) => { xpMult = m > 0 ? m : 1 }
 const scaled = (xp: number) => Math.round(xp * xpMult)
 export function addOpenXp(id: SkillId, xp: number): number | null {
-  const r = addSkillXP(skills[id], scaled(xp)); save(); bump()
+  const n = scaled(xp), r = addSkillXP(skills[id], n); save(); bump()
+  emitXp(skills[id], n, r.leveled)   // the HUD's XP bar (M21)
   return r.leveled ? r.newLevel : null
 }
 /** The open world's skill set (the HUD's tool sockets read it; addSkillXP mutates it in place, so a ref to it stays live). */
@@ -146,9 +148,10 @@ export function prunePlan(kind: TreeKind, rand: () => number = Math.random): { i
 /** The tree is done: XP lands on Forestry and it regrows on the table's timer. */
 export function pruneCommit(kind: TreeKind, id: string, now = Date.now()): { xp: number; levelUp: number | null } {
   const def = NODE_DEFS[kind]
-  const r =addSkillXP(skills.forestry, scaled(def.xp))   // mutates the skill in place (engine/skills.ts)
+  const n = scaled(def.xp), r = addSkillXP(skills.forestry, n)   // mutates the skill in place (engine/skills.ts)
   pruned[id] = now + def.respawnMs
   save(now); bump()
+  emitXp(skills.forestry, n, r.leveled)   // the HUD's XP bar (M21)
   return { xp: def.xp, levelUp: r.leveled ? r.newLevel : null }
 }
 

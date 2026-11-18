@@ -30,6 +30,7 @@
 import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { HearthHudLayer, hudMapBox, Corner, toolReadout, type ToolFamily } from '../../ui/hearth-hud-layer'
 import { HearthCompass, compassWidth, HearthHotbar, HearthVitals, HearthClock, HudPlate, WELL, useHudSize, type CompassMark, type CompassPose } from '../../ui/hearth-hud'
+import { XpBar } from './xp-bar'
 import { HUD_FACES } from '../../ui/hud-face'
 import { HEARTH_FONT_VARS } from '../../ui/hearth-fonts'
 import { hearthDisplay, hearthBody } from '../../ui/hearth'
@@ -57,6 +58,8 @@ export function useGameHudSize(touch: boolean): HudSize {
 export const openMapBox = hudMapBox
 
 const FACE = 'full' as const
+/** The XP bar (M21) hangs this far below the compass's top: its plate + the bearing readout under it. */
+const XP_BELOW_COMPASS = 62   // measured 11-18: the compass (plate + readout) is 57 px tall at every size
 const glyph = (f: ToolFamily) => <ToolGlyph family={f} />
 
 /** The hotbar tray's outer size at a size (top-left anchor), from the same tokens the tray draws with. */
@@ -216,13 +219,15 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
   useEffect(() => { if (first.current) { first.current = false; return } if (selName) hudSay(cursor !== null ? `${selName} · click the wheel to hold` : selName, 'item') }, [shown]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const statusTop = box.top + box.size + 40
+  const phoneCompassX = Math.min(vw / 2, vw - box.right - box.size - 8 - compassWidth('phone') / 2 - 6)
   if (size === 'phone') {
     return (
       <div className={`contents ${HEARTH_FONT_VARS}`}>
         <HearthHudLayer face={FACE} size="phone" entries={entries} sel={shown} held={null} dimmed={dimmed} onSelect={onSelect}
           objective={null} vitals={vitals} mana={mana} tools={T} skills={S} activeTool={null} glyph={glyph} mapFrame={false} />
         {/* 11-18 (play's 390x844 shot): the screen-centred compass ran under the minimap; slide it left just enough */}
-        <HearthCompass face={FACE} pose={pose} marks={marks} size="phone" centerX={Math.min(vw / 2, vw - box.right - box.size - 8 - compassWidth('phone') / 2 - 6)} />
+        <HearthCompass face={FACE} pose={pose} marks={marks} size="phone" centerX={phoneCompassX} />
+        <XpBar face={FACE} size="phone" centerX={phoneCompassX} top={8 + XP_BELOW_COMPASS} />
         {minimap}
         {/* a phone's right edge belongs to the thumbs below the map: the chips join into one line */}
         <StatusChips items={status.length ? [{ label: status.map(x => x.value !== undefined ? `${x.label} ${x.value}` : x.label).join(' · ') }] : []} top={statusTop} right={box.right} maxW={vw - box.right - 16 - 12} />
@@ -239,6 +244,7 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
       <HearthHotbar face={FACE} size={size} entries={entries} sel={shown} held={null} dimmed={dimmed} onSelect={onSelect} anchor="top-left" />
       <Messages align="left" style={{ left: 16, top: 12 + tray.h + 10 }} />
       <HearthCompass face={FACE} pose={pose} marks={marks} size={size} centerX={compassX} />
+      <XpBar face={FACE} size={size} centerX={compassX} top={12 + XP_BELOW_COMPASS} />
       {minimap}
       <HearthClock face={FACE} box={box} />
       <StatusChips items={status} top={statusTop} right={box.right} />
