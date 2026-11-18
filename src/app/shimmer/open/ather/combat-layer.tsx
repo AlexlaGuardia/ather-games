@@ -406,7 +406,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     g.__ather = { ...(g.__ather ?? {}), combat: () => c.current, spawn: (dx = 0, dz = -10, kind: 'shambler' | 'floater' = 'shambler') => {
       const f = camera.getWorldDirection(new THREE.Vector3()); const x = camera.position.x + f.x * -dz + dx, z = camera.position.z + f.z * -dz
       spawnHollow(c.current, T, x, z, kind)
-    }, nodes: () => nodesRef.current, wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
+    }, aim: () => { const f = camera.getWorldDirection(new THREE.Vector3()); return { x: f.x, y: f.y, z: f.z, cx: camera.position.x, cy: camera.position.y, cz: camera.position.z } }, nodes: () => nodesRef.current, wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('contextmenu', menu) }
   }, [locked, frozen, camera, T])
 
