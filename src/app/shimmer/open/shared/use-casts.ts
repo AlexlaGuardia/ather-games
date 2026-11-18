@@ -64,7 +64,7 @@ export function useCasts(o: {
     channel.current = null
     const cc = clocks.current[ch.slot]; cc.clock = { ...cc.clock, readyAt: performance.now() + ch.spec.cooldownMs }   // the cooldown starts on RELEASE, never on press
     const s = ch.sustain.held.toFixed(1)
-    hudSay(why === 'dry' ? `${ch.spec.label} · out of mana after ${s}s, nothing here to open` : `${ch.spec.label} · held ${s}s, nothing here to open`, 'item')
+    hudSay(`${ch.spec.label} · ${why === 'dry' ? `out of mana after ${s}s` : `held ${s}s`}, ${ch.spec.shieldStrip ? 'no shields in the beam' : 'nothing here to open'}`, 'item')   // the EMP (Alex 11-18) strips keepers' shields; nothing out here carries one
   }, [])
 
   const paint = useCallback((now: number) => {
@@ -89,7 +89,7 @@ export function useCasts(o: {
     if (sp.archetype === 'gate') { gateReq.current = sp; hudSay(sp.label, 'item'); return }
     if (sp.archetype === 'impulse') { impulse.current = sp; hudSay(sp.label, 'item'); return }
     if (sp.archetype === 'channel') {
-      if (!fight) { flashAtAim(sp); hudSay(`${sp.label} · nothing here to open`, 'item'); return }
+      if (!fight) { flashAtAim(sp); hudSay(`${sp.label} · ${sp.shieldStrip ? 'no shields in the beam' : 'nothing here to open'}`, 'item'); return }
       if (channel.current) return
       clocks.current[slot].clock = { ...clocks.current[slot].clock, readyAt: Infinity }   // held: not ready again until released
       channel.current = { ...beginChannel(sp), slot, keyDown: true }

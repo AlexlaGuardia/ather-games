@@ -314,6 +314,9 @@ export interface CastSpec {
    * continuously — would not be spent at all.
    */
   sustainDrain: number
+  /** shield stripped from every keeper caught in the cast's beam, ONCE per target per cast (Meltbore's EMP, Alex 11-18). 0 = none.
+   *  Applied wherever a target carries a shield pool (keepers in PvP); Hollows carry none, so in the Wilds it strips nothing. */
+  shieldStrip: number
   /** why this move has no sim behaviour yet — only set on 'unbuilt' */
   why?: string
 }
@@ -338,6 +341,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   senseRadius: 0,
   cloakBurn: 0, cloakRebuild: 0,
   sustainDrain: 0,
+  shieldStrip: 0,
 }
 
 /** per-move build spec, keyed by keeper-moves id. Numbers are Jin's and free to tune. */
@@ -639,7 +643,10 @@ const BUILDS: Record<string, Build> = {
   // `sustain.ts` is emphatic about why: a channel that charged its whole price up front would be a
   // normal cast with a long animation. The press is deliberately cheap (4) because the press buys
   // nothing on its own; every block this move opens is bought by the seconds after it.
-  meltbore:  { archetype: 'channel', manaCost: 4, cooldownMs: 3000, sustainDrain: 8 },
+  // ★ PvP-FIRST (Alex 11-18: "any tactical or signature moves should be designed for pvp first" / "what if it hits like an emp
+  // removing 50 shields from any caught in the beam"): the held beam is an EMP. Each keeper it catches loses 50 shield, once per
+  // channel. The breaching half is back on the drawing board (CANON_GAPS 11-18, Magii to record the ruling).
+  meltbore:  { archetype: 'channel', manaCost: 4, cooldownMs: 3000, sustainDrain: 8, shieldStrip: 50 },
   // "Sight goes soft, edges stop agreeing on where they are. Confrontation DECLINED rather than won."
   // ⚠ It lands on `blinded` — the same option Enlighten removes — and that is not the two converging:
   // the sim's three statuses are what a move can take, and both of these take sight. The geometry is
@@ -1022,4 +1029,15 @@ export function canSlot(owned: string[], birth: string | null, slot: number, mov
   const kind = ALL_BANDS[slot]
   if (!kind) return false
   return eligibleMoves(owned, birth, kind, book).some((m) => m.id === moveId)
+}
+
+/** Meltbore's EMP (Alex 11-18): every target the beam catches loses `shieldStrip` shield, ONCE per cast (`struck` is the cast's
+ *  own memory of who it has hit). Shield never goes below 0; health is untouched. Pure: the host decides who is in the beam. */
+export function stripShields<T extends { id: string; shield: number }>(spec: Pick<CastSpec, 'shieldStrip'>, caught: readonly T[], struck: Set<string>): T[] {
+  if (!spec.shieldStrip) return caught.slice()
+  return caught.map(t => {
+    if (struck.has(t.id)) return t
+    struck.add(t.id)
+    return { ...t, shield: Math.max(0, t.shield - spec.shieldStrip) }
+  })
 }

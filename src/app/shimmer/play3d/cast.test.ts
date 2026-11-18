@@ -15,7 +15,7 @@
 //       rather than stack, and a death clears its target
 //   7. the birth rune is rune #1 of an inventory and can never be revoked
 
-import { castForMove, isBuilt, defaultLoadout, eligibleMoves, canSlot, derivePassive, CAST_SLOTS, SLOT_KEYS,
+import { stripShields, castForMove, isBuilt, defaultLoadout, eligibleMoves, canSlot, derivePassive, CAST_SLOTS, SLOT_KEYS,
          ALL_BANDS, BAND_KEYS, NO_CAST, laneRunes } from './cast'
 /** the same every-rune rule `cast.ts` › `onLane` applies, restated here so a divergence shows. */
 const onLaneTest = (runes: string[], lane: Set<string>) => runes.length > 0 && runes.every((r) => lane.has(r))
@@ -616,5 +616,15 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     JSON.stringify(setBirthRune(inv, 'freeze').owned) === JSON.stringify(['freeze', 'barrier']))
 }
 
+// MELTBORE = EMP (Alex 11-18): 50 shield off each keeper in the beam, once per cast; health untouched; never below 0
+{
+  const mb = castForMove('meltbore'), struck = new Set<string>()
+  chk('meltbore is an EMP: shieldStrip 50', mb.shieldStrip === 50)
+  const a = stripShields(mb, [{ id: 'a', shield: 100, hp: 100 }, { id: 'b', shield: 30, hp: 100 }], struck)
+  chk('EMP strips 50 shield, floors at 0, leaves health', a[0].shield === 50 && a[1].shield === 0 && a[0].hp === 100)
+  const again = stripShields(mb, a, struck)
+  chk('EMP hits each keeper once per cast', again[0].shield === 50)
+  chk('a move without shieldStrip strips nothing', stripShields(castForMove('firewall'), [{ id: 'c', shield: 100 }], new Set())[0].shield === 100)
+}
 console.log(`\ncast oracle: ${ok} passed, ${bad} failed`)
 process.exit(bad ? 1 : 0)
