@@ -30,7 +30,7 @@ ok(press('tactical', 'mend', freshClock(castForMove('mend')), 0, 100).ok, 'press
 ok(press('tactical', 'quickform', freshClock(castForMove('quickform')), 0, 100).ok, 'press: a launch on the plot')
 ok(press('tactical', 'meltbore', freshClock(castForMove('meltbore')), 0, 100).ok, 'press: a channel cast (held, M15c) is out here')
 ok(press('tactical', 'heat-mirage', freshClock(castForMove('heat-mirage')), 0, 100).ok, 'press: a veil cast (M15c) is out here')
-ok(!press('tactical', 'gate', freshClock(castForMove('gate')), 0, 100).ok, 'press: a gate cast (not out here yet) is refused')
+ok(press('tactical', 'gate', freshClock(castForMove('gate')), 0, 100).ok, 'press: a gate cast (keeper-side, M15c) is out here')
 ok(!press('signature', null, freshClock(castForMove(null)), 0, 100).ok, 'press: an empty glove cast')
 
 // charges: Quickform holds two, each back one cooldown apart

@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react'
 import { castForMove, type CastSpec } from '../../play3d/cast'
 import { castMoves, press, freshClock, cooling, CAST_KEY, type CastSlot, type CastClock } from './casting'
+import { openGate, gateTick, type GateSpiral } from './gate-open'
 import { beginChannel, channelTick, type ChannelRun } from '../ather/combat-casts'
 import { useBirth } from '../birth-gate'
 import { useLoadout } from './loadout'
@@ -17,7 +18,7 @@ import { hudSay, type Mana } from './game-hud'
 export interface CastChip { key: string; name: string | null; cool: number; tooDear: boolean }
 interface VitalsLike { hp: number; hpMax: number }
 
-const FLASH: Record<string, string> = { veil: '255,170,120', channel: '255,140,80', terrain: '190,190,200', field: '255,217,160', projectile: '143,211,255', status: '201,160,255', restore: '143,227,160', infusion: '255,207,112' }
+const FLASH: Record<string, string> = { gate: '170,140,255', veil: '255,170,120', channel: '255,140,80', terrain: '190,190,200', field: '255,217,160', projectile: '143,211,255', status: '201,160,255', restore: '143,227,160', infusion: '255,207,112' }
 /** Off the Wilds there is nothing to catch, but the cast is still seen: a ring at the aim point (screen centre). */
 function flashAtAim(sp: CastSpec) {
   if (typeof document === 'undefined') return
@@ -38,6 +39,8 @@ export function useCasts(o: {
   fightHere: () => boolean
   /** a multiplier on the mana refill (Ather Flow) */
   flow?: () => number
+  /** true where the host steps a Gate each walker frame (gateStep); a host that does not says so and spends nothing */
+  gateHere?: () => boolean
 }) {
   const { manaRef } = o
   const birth = useBirth(), loadout = useLoadout()
@@ -49,6 +52,10 @@ export function useCasts(o: {
   const surge = useRef<{ until: number; mult: number }>({ until: 0, mult: 1 })
   const impulse = useRef<CastSpec | null>(null)
   const handsCastAt = useRef(-Infinity)
+  /** GATE: the one standing spiral (shared/gate-open.ts), and the cast waiting for the host's next walker frame to strike it where the keeper stands */
+  const gate = useRef<GateSpiral | null>(null)
+  const gateReq = useRef<CastSpec | null>(null)
+  const gateWarps = useRef(0)   // how many times the keeper has been carried through (harness handle)
   const castHud = useRef<CastChip[]>([])
   /** the channel the keeper is HOLDING (Meltbore): billed each frame below, ended by the key coming up (the keyup effect) or an empty pool */
   const channel = useRef<(ChannelRun & { slot: CastSlot; keyDown: boolean }) | null>(null)
@@ -69,6 +76,8 @@ export function useCasts(o: {
 
   const castSlot = useCallback((slot: CastSlot) => {
     const move = castSetRef.current[slot], cc = clocks.current[slot]
+    if (gate.current && move && gate.current.moveId === move) { gate.current = null; hudSay(`${castForMove(move).label} · let go`, 'item'); return }   // a re-press lets a standing spiral go: free
+    if (move && castForMove(move).archetype === 'gate' && !oRef.current.gateHere?.()) { hudSay(`${castForMove(move).label} · no door to strike here yet`, 'info'); return }   // nothing spent
     if (cc.move !== move) clocks.current[slot] = { move, clock: freshClock(castForMove(move)) }
     const v = press(slot, move, clocks.current[slot].clock, performance.now(), manaRef.current.cur)
     if (!v.ok) { hudSay(v.why, 'info'); return }
@@ -77,6 +86,7 @@ export function useCasts(o: {
     handsCastAt.current = performance.now()   // the glove comes up (open-hands.tsx)
     const sp = v.spec, fight = oRef.current.fightHere()
     if (sp.archetype === 'surge') { surge.current = { until: performance.now() + sp.surgeSecs * 1000, mult: sp.surgeMult || 1.5 }; hudSay(sp.label, 'item'); return }
+    if (sp.archetype === 'gate') { gateReq.current = sp; hudSay(sp.label, 'item'); return }
     if (sp.archetype === 'impulse') { impulse.current = sp; hudSay(sp.label, 'item'); return }
     if (sp.archetype === 'channel') {
       if (!fight) { flashAtAim(sp); hudSay(`${sp.label} · nothing here to open`, 'item'); return }
@@ -95,6 +105,19 @@ export function useCasts(o: {
     flashAtAim(sp); hudSay(sp.archetype === 'veil' ? `${sp.label} · a double stands, nothing here to fool` : sp.archetype === 'field' || sp.archetype === 'terrain' ? `${sp.label} · set down, nothing here to hold` : `${sp.label} · nothing caught`, 'item')
   }, [manaRef, paint])
 
+  /** The host's walker calls this once a frame with the keeper's loco state (feet px/py/pz), yaw and the ground: strikes a waiting gate, bills it, and carries the keeper through an end. */
+  const gateStep = useCallback((lc: { px: number; py: number; pz: number; hvx: number; hvz: number; vy: number; airborne: boolean }, yaw: number, dt: number, groundAt: (x: number, z: number) => number) => {
+    const now = performance.now(), m = manaRef.current
+    if (gateReq.current) { gate.current = openGate(gateReq.current, { x: lc.px, y: lc.py, z: lc.pz }, yaw, groundAt, now); gateReq.current = null }
+    if (!gate.current) return
+    const r = gateTick(gate.current, { x: lc.px, y: lc.py, z: lc.pz }, Math.min(dt, 0.1), m.cur, now)
+    m.cur = r.mana; gate.current = r.gate
+    if (r.warpTo) { lc.px = r.warpTo.x; lc.py = r.warpTo.y; lc.pz = r.warpTo.z; lc.hvx = 0; lc.hvz = 0; lc.vy = 0; lc.airborne = true; gateWarps.current++ }   // out the other end, settling onto its ground
+    if (r.closed) hudSay(r.closed === 'spent' ? 'Gate · out of mana, it closes' : 'Gate · it closes', 'item')
+  }, [manaRef])
+  /** a zone change shuts it: a gate never leaves the zone (RULED 09-28) */
+  const closeGate = useCallback(() => { gate.current = null; gateReq.current = null }, [])
+
   useEffect(() => {
     let raf = 0, last = performance.now()
     const tick = () => {
@@ -110,7 +133,7 @@ export function useCasts(o: {
       paint(now)
       raf = requestAnimationFrame(tick)
     }
-    ;(window as unknown as { __casts?: unknown }).__casts = { mana: () => manaRef.current.cur, hud: () => castHud.current, channel: () => channel.current && { held: channel.current.sustain.held, paid: channel.current.sustain.paid } }   // harness handle (scripts/cast-everywhere-check.mts)
+    ;(window as unknown as { __casts?: unknown }).__casts = { mana: () => manaRef.current.cur, hud: () => castHud.current, warps: () => gateWarps.current, gate: () => gate.current && { near: gate.current.near, far: gate.current.far }, channel: () => channel.current && { held: channel.current.sustain.held, paid: channel.current.sustain.paid } }   // harness handle (scripts/cast-everywhere-check.mts)
     raf = requestAnimationFrame(tick)
     const up = (e: KeyboardEvent) => { const ch = channel.current; if (ch && e.code === CAST_KEY[ch.slot]) ch.keyDown = false }
     const stop = () => { if (channel.current) channel.current.keyDown = false }
@@ -118,5 +141,5 @@ export function useCasts(o: {
     return () => { cancelAnimationFrame(raf); window.removeEventListener('keyup', up); window.removeEventListener('blur', stop) }
   }, [manaRef, paint, endChannel])
 
-  return { castSlot, channel, castQueue, castHud, surge, impulse, handsCastAt, castSet: castSetRef }
+  return { castSlot, channel, gate, gateStep, closeGate, castQueue, castHud, surge, impulse, handsCastAt, castSet: castSetRef }
 }

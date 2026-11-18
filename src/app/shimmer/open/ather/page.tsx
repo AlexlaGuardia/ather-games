@@ -24,6 +24,7 @@ import type { Camera } from 'three'
 import { VoxelDayNight } from '../shared/day-night'
 import { terrainWorld } from '../terrain-world'
 import { withPieces } from './dynamic-solids'
+import { GateRings } from '../shared/gate-rings'
 import { Walker, verbOf, type Loco } from './walker'
 import {
   plotShape, plotHeightAt, mistWalls, THRESHOLD, GATE, GREG, FALL_Y, REACH, squareAt, sqId, canBuy,
@@ -375,6 +376,7 @@ export default function AtherSlice() {
   // third person (V): your own keeper, the segmented doll (open/shared/third-person.tsx), driven from the tick below
   const thirdRef = useRef(false), dollDrive = useRef(newDrive()), camRef = useRef<Camera | null>(null)
 
+  const gateStepRef = useRef<(lc: Loco, yaw: number, dt: number, g: (x: number, z: number) => number) => void>(() => {})
   const onTick = useCallback((lc: Loco, yaw: number, dt: number) => {
     pos.current = { x: lc.px, z: lc.pz, grounded: !lc.airborne, swimming: lc.swimming }
     stepChannel(lc.px, lc.pz)   // gathering by channel: the next chip, or let go
@@ -407,6 +409,7 @@ export default function AtherSlice() {
       lc.vy = Math.max(lc.vy, sp.impulseUp || 8); lc.airborne = true
       if (!sp.keepMomentum) { lc.hvx = 0; lc.hvz = 0 }
     }
+    gateStepRef.current(lc, yaw, dt, heightRef.current)   // a standing Gate (shared/use-casts.ts): bills, and carries the keeper through an end
     poseRef.current = { x: lc.px, z: lc.pz, yaw }
     let n: Near = null
     if (zone.kind === 'plot') {
@@ -759,7 +762,9 @@ export default function AtherSlice() {
   // ── the keeper's hands (open/shared/open-hands.tsx): stepped from the walker's onTick, after the camera moved ─────────
   const zoneRef = useRef(zone.kind); zoneRef.current = zone.kind; zoneRef0.current = zone.kind
   // Q / X + mana refill + the cast chips: ONE shared hook (shared/use-casts.ts), the same on the continent
-  const { castSlot, channel: castChannel, castQueue, castHud, surge, impulse, handsCastAt } = useCasts({ manaRef, vitalsRef, fightHere: () => zoneRef.current === 'wilds', flow: () => (buffOn(buffsRef.current, 'ather_flow') ? OPEN_FLOW_MULT : 1) })
+  const { castSlot, gate: castGate, gateStep, closeGate, channel: castChannel, castQueue, castHud, surge, impulse, handsCastAt } = useCasts({ manaRef, vitalsRef, fightHere: () => zoneRef.current === 'wilds', flow: () => (buffOn(buffsRef.current, 'ather_flow') ? OPEN_FLOW_MULT : 1), gateHere: () => true })
+  gateStepRef.current = gateStep
+  useEffect(() => { closeGate() }, [zone.kind, closeGate])   // a Gate never leaves the zone
   const onCast = useCallback((sp: CastSpec, hit: CastHit | null) => {
     if (!hit) return
     const n = hit.hit
@@ -907,6 +912,7 @@ export default function AtherSlice() {
         {talkNode && zone.kind === 'plot' && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={talkNode.line} />}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
         {world && fade === 0 && <CompanionFollower pose={poseRef} ground={ground} />}
+        <GateRings gate={castGate} />
         {world && (
           <Walker
             key={epoch} world={world} ground={ground} spawn={spawn} locked={locked} frozen={frozen} focus={talkFocus}

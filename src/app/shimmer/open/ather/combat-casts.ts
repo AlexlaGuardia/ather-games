@@ -23,7 +23,7 @@
 //                below); release or an empty pool stops it, the cooldown starts on release. Its effect in canon is boring ONE block until it stops
 //                existing; the Wilds hold no borable blocks (raised pieces are conjured matter, which a bore cannot chew: breach.ts), so here the
 //                held beam is drawn along the aim and the seconds are paid and counted, and it opens nothing. Said out loud on release.
-// surge and impulse move the KEEPER and live on the page (shared/casting.ts says which). The rest (gate) is not out here yet, and says so: never a silent no-op.
+// surge and impulse move the KEEPER and live on the page (shared/casting.ts says which). gate is keeper-side too (shared/gate-open.ts, stepped by the host walker via use-casts gateStep).
 //
 // ★ PURE. No React, no three: it reads and writes the Combat, and returns where to draw the flash.
 
