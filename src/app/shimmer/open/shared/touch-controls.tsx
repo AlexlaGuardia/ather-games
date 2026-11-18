@@ -55,6 +55,15 @@ export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint
   const [down, setDown] = useState<Record<string, boolean>>({})
   // M11: on a phone the standing taps fold into one MENU chip; tap it to open the row, tap again or pick one to fold
   const [menuOpen, setMenuOpen] = useState(false)
+  // the aim toggle's lit state follows touch.aim (combat drops it when the gun is put away, so poll it cheaply)
+  const [aimOn, setAimOn] = useState(false)
+  // ★ LANDSCAPE (11-18, sprites' sweep at 844x390): the cluster stacked up from ABOVE_BAR met the MENU row hung from PHONE_ROW_TOP and
+  // FIRE sat under the chip. On a short, wide screen the hotbar is centred and narrow, so the cluster need not clear it: it drops to
+  // the bottom edge. Portrait keeps ABOVE_BAR (the bar spans the width there).
+  const [short, setShort] = useState(false)
+  useEffect(() => { const f = () => setShort(window.innerHeight < 520 && window.innerWidth > window.innerHeight); f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [])
+  const clusterBottom = short ? 'max(14px, env(safe-area-inset-bottom))' : ABOVE_BAR
+  useEffect(() => { if (!showFire) { touch.aim = false; setAimOn(false); return } const id = setInterval(() => setAimOn(a => (a === touch.aim ? a : touch.aim)), 200); return () => clearInterval(id) }, [showFire])
 
   useEffect(() => () => resetTouch(), [])
   // a hold set that changes under a held finger (driving → on foot) must not leave its key stuck down
@@ -122,13 +131,17 @@ export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint
       )}
 
       {/* right cluster: fire big, jump + slide beside it */}
-      <div style={{ position: 'absolute', right: 'max(18px, env(safe-area-inset-right))', bottom: ABOVE_BAR, display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+      <div data-touch-cluster style={{ position: 'absolute', right: 'max(18px, env(safe-area-inset-right))', bottom: clusterBottom, display: 'flex', gap: 12, alignItems: 'flex-end' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {holds.map(h => <div key={h.code} data-touch={h.label} style={ring(56, down[h.code])} {...holdKey(h.code)}>{h.label}</div>)}
         </div>
-        {showFire
-          ? <div data-touch="fire" style={ring(84, down.fire)} {...hold('fire', () => { touch.fire = true }, () => { touch.fire = false }, true)}>fire</div>
-          : null}
+        {showFire && (   // AIM (11-18): a toggle, not a hold, stacked over FIRE so the same thumb rocks between them
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+            <div data-touch="aim" data-on={aimOn ? '1' : '0'} style={ring(56, aimOn)}
+              onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); touch.aim = !touch.aim; setAimOn(touch.aim) }}>aim</div>
+            <div data-touch="fire" style={ring(84, down.fire)} {...hold('fire', () => { touch.fire = true }, () => { touch.fire = false }, true)}>fire</div>
+          </div>
+        )}
       </div>
 
       {/* standing taps: a compact row under the top-right HUD */}
@@ -145,7 +158,7 @@ export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint
         ))}
       </div>
       {/* what is in reach right now: big, beside the thumb cluster */}
-      <div style={{ position: 'absolute', right: `calc(max(18px, env(safe-area-inset-right)) + ${showFire ? 84 + 12 : 0}px + 56px + 16px)`, bottom: ABOVE_BAR, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
+      <div style={{ position: 'absolute', right: `calc(max(18px, env(safe-area-inset-right)) + ${showFire ? 84 + 12 : 0}px + 56px + 16px)`, bottom: clusterBottom, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
         {actions.filter(a => a.near).map(a => (
           <div key={a.code} data-touch={a.label} style={{ ...ring(60, true), width: 'auto', minWidth: 60, padding: '0 18px', borderRadius: 30, display: 'flex', alignItems: 'center', fontSize: 13 }}
             onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); pressKey(a.code) }}>

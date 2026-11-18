@@ -271,7 +271,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const { camera } = useThree()
   const c = useRef<Combat>(newCombat(Date.now() >>> 0))
   const [ids, setIds] = useState<{ id: number; kind: string }[]>([])
-  const trigger = useRef(false), popT = useRef(0), hudT = useRef(0)
+  const trigger = useRef(false), mouseAim = useRef(false), popT = useRef(0), hudT = useRef(0)
   const hud = useRef<CombatHud>({ hp: 100, maxHp: 100, ammo: 12, clip: 12, reloading: false, hurtAt: -9, hitAt: -9, gun: c.current.gun.name, champ: null })
   const roundsMesh = useRef<THREE.InstancedMesh>(null), dropsMesh = useRef<THREE.InstancedMesh>(null), spitsMesh = useRef<THREE.InstancedMesh>(null)
   const aim = useMemo(() => new THREE.Vector3(), [])
@@ -300,9 +300,9 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   useEffect(() => {
     const down = (e: MouseEvent) => {
       if (e.button === 0 && locked.current && !frozen.current) trigger.current = true
-      if (e.button === 2 && locked.current && !frozen.current && sight) sight.current.aiming = true   // hold right-click: the sights
+      if (e.button === 2 && locked.current && !frozen.current) mouseAim.current = true   // hold right-click: the sights
     }
-    const up = (e: MouseEvent) => { if (e.button === 0) trigger.current = false; if (e.button === 2 && sight) sight.current.aiming = false }
+    const up = (e: MouseEvent) => { if (e.button === 0) trigger.current = false; if (e.button === 2) mouseAim.current = false }
     const menu = (e: MouseEvent) => { if (locked.current) e.preventDefault() }   // right-click is the sights, never the browser menu
     window.addEventListener('contextmenu', menu)
     // R is the STANCE's now (shared/stance.ts: draw / swap / hold to stow); a tap with one gun drawn reloads via reloadTick
@@ -349,6 +349,9 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       else { camera.getWorldDirection(aim); shoot() }
       if (!C.gun.auto) { trigger.current = false; touch.fire = false }
     }
+    // the sights: the mouse HOLDS them, the phone TOGGLES them (touch.aim); putting the gun away drops both
+    if (!armedRef.current || frozen.current) { mouseAim.current = false; touch.aim = false }
+    if (sight) sight.current.aiming = mouseAim.current || touch.aim
     if (sight) sight.current.charge = charging.current >= 0 && charge > 0 ? Math.max(0, Math.min(1, 1 - charging.current / charge)) : 0
     if (casts?.current.length) {
       camera.getWorldDirection(aim)

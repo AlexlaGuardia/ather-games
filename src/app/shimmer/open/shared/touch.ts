@@ -5,6 +5,8 @@
 //   · look    pixels dragged since the walker last read them (it consumes and zeroes them each frame)
 //   · held    the hold-buttons, as the key codes the walker already knows (Space, ShiftLeft)
 //   · fire    the fire button is down; combat clears it after a semi-auto shot, same as the mouse trigger
+//   · aim     the sights are up (Alex 11-18, ADS): a TOGGLE on a phone (tap up, tap down), since one thumb cannot hold aim, fire
+//             and look at once; combat drops it when the gun is put away
 // Taps that are page ACTIONS (E use, M map, F plant...) are not in here: pressKey() sends a real keydown/keyup,
 // so the page's one key handler decides what they mean.
 
@@ -13,6 +15,7 @@ export const touch = {
   look: { dx: 0, dy: 0 },
   held: new Set<string>(),
   fire: false,
+  aim: false,
 }
 
 /** Radians per dragged pixel. The mouse is 0.0022 per count; a thumb covers far less ground, so it turns more. */
@@ -31,5 +34,5 @@ export function pressKey(code: string) {
 }
 
 export function resetTouch() {
-  touch.move.x = 0; touch.move.y = 0; touch.look.dx = 0; touch.look.dy = 0; touch.held.clear(); touch.fire = false
+  touch.move.x = 0; touch.move.y = 0; touch.look.dx = 0; touch.look.dy = 0; touch.held.clear(); touch.fire = false; touch.aim = false
 }
