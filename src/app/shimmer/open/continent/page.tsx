@@ -36,6 +36,8 @@ import { ShopPanel } from '../business/shop-panel'
 import { RunesmithPanel, IdonyPanel, commitImbue } from '../business/smith-panel'
 import { TalkBubble, TalkChoices } from '../shared/npc-talk'
 import { smithTalk, templeTalk, beatTalk } from './door-talk'
+import { DoorFolk } from './door-folk-scene'
+import { standOf, headOf, faceOf } from './door-folk'
 import { coTalk, boardLine, refusalLine, paidLine, byeLine, loadCoSeen, saveCoSeen, CO_BARK } from '../business/co-lines'
 import type { Beat } from '../business/errand-lines'
 import type { Seat } from '../business/letters'
@@ -1227,7 +1229,7 @@ function ContinentRideGame() {
   // ── BETA M13 part 3: a runesmith's door and the Enchant Temple TALK first (door-talk.ts), the way Greg does on the Ather:
   // the counter's line in a bubble over its door, the camera turns to it, each answer opens ONE thing. Idony's imbue beat
   // plays in the same bubble. Other doors (shops, deeds, the Co.'s board) still open straight to their panel.
-  type Talk = { key: string; name: string; at: { x: number; y: number; z: number }; beat?: { steps: Beat[]; at: number; vesselId: string; wordId: string }; greet?: number | null; visit?: number }
+  type Talk = { key: string; name: string; at: { x: number; y: number; z: number }; face?: { x: number; y: number; z: number }; beat?: { steps: Beat[]; at: number; vesselId: string; wordId: string }; greet?: number | null; visit?: number }
   const [talk, setTalk] = useState<Talk | null>(null)
   const talkFocus = useRef<{ x: number; y: number; z: number } | null>(null)
   const openDoor = useCallback((key: string) => {
@@ -1238,7 +1240,9 @@ function ContinentRideGame() {
     if (key === 'front:trade-co') { const s = loadCoSeen(); co = { greet: s.greeted ? null : 0, visit: s.visits }; saveCoSeen({ ...s, visits: s.greeted ? s.visits + 1 : s.visits }) }
     // over the door itself: the step stone, a step back toward the building, above the lintel
     const bx = d.b.x - d.at.x, bz = d.b.z - d.at.z, bl = Math.hypot(bx, bz) || 1
-    setTalk({ key, name: key === 'front:enchant-temple' ? 'Idony' : key === 'front:trade-co' ? 'Clerk' : d.name, at: { x: d.at.x + (bx / bl) * 0.6, y: d.at.y + 2.6, z: d.at.z + (bz / bl) * 0.6 }, ...(key === 'front:trade-co' ? co : {}) })
+    // M26: the talker stands beside the door (door-folk.ts); the bubble sits over their head, the camera looks at their face
+    const st = standOf(d)
+    setTalk({ key, name: st.name, at: headOf(st), face: faceOf(st), ...(key === 'front:trade-co' ? co : {}) })
   }, [R])
   const bracelet = !errLoadout.vessels.some(x => x.id === 'starter-bracelet' && x.word === null)
   const talkNode = useMemo(() => {
@@ -1259,7 +1263,7 @@ function ContinentRideGame() {
     })
     return talk.key === 'front:enchant-temple' ? templeTalk(bracelet, acts) : smithTalk(talk.key, acts)
   }, [talk, deed, bracelet, ledger, setLedger])
-  useEffect(() => { talkFocus.current = talkNode && talk ? talk.at : null }, [talkNode, talk])
+  useEffect(() => { talkFocus.current = talkNode && talk ? talk.face ?? talk.at : null }, [talkNode, talk])
   useEffect(() => {   // Esc leaves the talk (the beat cannot be walked out of halfway: she is writing)
     const k = (e: KeyboardEvent) => { if (e.code === 'Escape' && !deed) setTalk(t => (t?.beat ? t : null)) }
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
@@ -1407,6 +1411,7 @@ function ContinentRideGame() {
           <Water R={R} />
           {rin.fx}
           <Towns R={R} focus={focus} />
+          <DoorFolk R={R} focus={focus} talking={talk?.key ?? null} />
           <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={openDoor} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} />
           <Posts R={R} />
           <Roadside R={R} />

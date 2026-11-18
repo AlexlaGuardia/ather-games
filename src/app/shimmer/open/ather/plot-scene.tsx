@@ -3,6 +3,7 @@
 // The home plot's scene: the full-size island, the garden grid, fold-mist over ground you do not hold, the one
 // gate, Gregory, and the threshold. Rules live in plot.ts; this only draws them.
 
+import { FolkModel, folkLook } from '../shared/folk-model'
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import {
@@ -78,11 +79,9 @@ function Gate() {
 function Gregory() {
   const y = plotHeightAt(GREG.x, GREG.z)
   return (
+    // the Alkin rig (shared/folk-model.tsx, Alex's cartoon pick 11-18), his old blockout's colours carried over
     <group position={[GREG.x, y, GREG.z]} rotation-y={-0.6}>
-      <mesh position-y={0.75}><coneGeometry args={[0.5, 1.5, 8]} /><meshLambertMaterial color="#6f5a8a" flatShading /></mesh>
-      <mesh position-y={1.62}><icosahedronGeometry args={[0.26, 0]} /><meshLambertMaterial color="#e8d2b4" flatShading /></mesh>
-      <mesh position-y={1.86}><cylinderGeometry args={[0.55, 0.55, 0.06, 10]} /><meshLambertMaterial color="#4a3b5c" flatShading /></mesh>
-      <mesh position-y={2.15}><coneGeometry args={[0.28, 0.6, 8]} /><meshLambertMaterial color="#4a3b5c" flatShading /></mesh>
+      <FolkModel look={folkLook('gregory')} />
     </group>
   )
 }
