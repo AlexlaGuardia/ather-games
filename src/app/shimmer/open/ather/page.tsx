@@ -47,7 +47,8 @@ import { useLoadout } from '../shared/loadout'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree } from './wilds'
 import { loadIndex, makeWorld, stream, tileOf, zonesOf, TILE_M, type WildsWorld } from './wilds-world'
-import { loadNetwork, clearing, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network } from './network'
+import { loadNetwork, clearing, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
+import { FolkPanel } from './folk-panel'
 import { TilePaths, Settlements, BigTop } from './network-scene'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
@@ -90,8 +91,8 @@ import type { Vitals } from '../../engine/vitals'
 
 type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
 type Spawn = { x: number; z: number; yaw: number }
-type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear }
-type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean }
+type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement }
+type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement }
 
 export default function AtherSlice() {
   const locked = useRef(false), frozen = useRef(false)
@@ -382,6 +383,8 @@ export default function AtherSlice() {
     } else {
       const all = [{ w: GREG_WAYMARK, own: false }, ...waymarks.map(w => ({ w, own: true }))]
       for (const { w, own } of all) { const o = ww?.byName.has(w.tile) ? ww.offsetOf(w.tile) : null; if (o && Math.hypot(w.x + o.x - lc.px, w.z + o.z - lc.pz) < 2.6) n = { kind: 'waymark', w, own } }
+      // a settlement's folk: E anywhere inside it talks to them (settlement-folk.ts / folk-panel.tsx); a waymark at your feet wins
+      if (!n && netRef.current) { const st = settlementAt(netRef.current, lc.px, lc.pz); if (st) n = { kind: 'folk', s: st } }
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
       const t = ww ? ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty) : undefined
       if (t && t.name !== hereRef.current) { hereRef.current = t.name; setHereTile(t.name); streamAt(lc.px, lc.pz) }
@@ -397,6 +400,7 @@ export default function AtherSlice() {
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
         : n?.kind === 'work' ? workPrompt(n.near)
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
+        : n?.kind === 'folk' ? `E · talk to the folk of ${n.s.name}`
         : atFairDoor(lc.px, lc.pz) ? 'E · the Thistledown Fair'
         : rinPrompt() ?? (cAimRef.current.crystal && cAimRef.current.dist < aimRef.current.dist ? crystalPrompt() : treePrompt())
       setPrompt(p)
@@ -785,6 +789,7 @@ export default function AtherSlice() {
       if (e.code === 'KeyE' && n) {
         if (n.kind === 'greg') setPanel({ kind: 'greg' })
         else if (n.kind === 'work') { if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
+        else if (n.kind === 'folk') setPanel({ kind: 'folk', s: n.s })
         else setPanel({ kind: 'map', view: 'ather', travel: true })
         return
       }
@@ -904,6 +909,7 @@ export default function AtherSlice() {
           area={ww ? { world: ww, regionsByTile, cx: hereOff.x, cz: hereOff.z, tileOff, nodes: nodes.filter(n => Math.abs(n.x - hereOff.x) < 1600 && Math.abs(n.z - hereOff.z) < 1600), here: { x: pos.current.x, z: pos.current.z } } : undefined}
           onClose={() => setPanel(null)} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
+      {panel?.kind === 'folk' && <FolkPanel settlement={panel.s} onClose={() => setPanel(null)} />}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} errand={gregErrand} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       {panel?.kind === 'work' && <WorkshopPanel near={panel.near} owned={owned} onClose={() => setPanel(null)} />}
