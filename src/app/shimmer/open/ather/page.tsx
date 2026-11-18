@@ -809,7 +809,9 @@ export default function AtherSlice() {
       if (e.code === 'Escape' && panel) { setPanel(null); return }
       if (e.code === 'Tab' && panel?.kind === 'map') { e.preventDefault(); setPanel({ ...panel, view: panel.view === 'ather' ? 'athernyx' : 'ather' }); return }
       if (e.code === 'KeyM') { setPanel(p => p ? null : { kind: 'map', view: 'ather', travel: false }); return }
-      if (e.code === 'KeyV') { thirdRef.current = !thirdRef.current; hudSay(thirdRef.current ? 'Third person · V for first person' : 'First person', 'info'); return }
+      // third person is a TEST VIEW, not part of the game (Alex 11-18: "the game is meant to be played in 1st person"): only
+      // under ?tune=1, to check the doll other keepers will see. Driving / emote pull-backs are their own thing, later.
+      if (e.code === 'KeyV' && tune) { thirdRef.current = !thirdRef.current; hudSay(thirdRef.current ? 'Test view: third person · V back' : 'First person', 'info'); return }
       if (e.code === 'KeyK') { cycleLook(); return }   // the ground-look A/B (ground-look.tsx)
       if (e.code === 'KeyC' && zone.kind === 'plot') { setPanel(p => p?.kind === 'cluster' ? null : p ? p : { kind: 'cluster' }); return }
       if (e.code === 'BracketRight' && tune) { skipDays(e.shiftKey ? 5 : 1); return }

@@ -1,7 +1,9 @@
 'use client'
-// ── THIRD PERSON: SEE YOUR OWN KEEPER (Alex 11-17: the body is the segmented doll, "if we are talking end goals") ─────────
-// There are no other keepers in the world yet, so the first place the doll earns its keep is behind your own camera: V
-// pulls the lens back over your shoulder and the doll (keeper-doll.tsx) walks, runs, jumps, swings, casts and aims off the
+// ── THIRD PERSON, A TEST VIEW (Alex 11-17: the body is the segmented doll; 11-18: the game is played in FIRST person) ─────
+// NOT part of the game: V works only under ?tune=1, to look at the doll other keepers will see. The game's own camera is
+// first person; any later pull-back (driving, emotes) is its own feature.
+// There are no other keepers in the world yet, so the doll is checked behind your own camera: V (tune only) pulls the lens
+// back over your shoulder and the doll (keeper-doll.tsx) walks, runs, jumps, swings, casts and aims off the
 // walker's real state. The same body is what other keepers will see once the Wilds are shared.
 //
 // The page drives it from the walker's onTick (after the walker has placed the first-person camera): `dollAction` picks the
