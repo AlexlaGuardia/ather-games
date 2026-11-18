@@ -4,11 +4,15 @@
 // Close / Flip buttons, and the fire button empties the clip in the Wilds. Screenshots to --out (default scratch).
 //   npx tsx scripts/touch-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
+import { GATE, THRESHOLD } from '../src/app/shimmer/open/ather/plot'
+// the gate moved (plot rework): stand 2 m in front of it on the threshold side, facing it (in reach: REACH + 1.2)
+const GD = Math.hypot(THRESHOLD.x - GATE.x, THRESHOLD.z - GATE.z), AT_GATE = { x: GATE.x + (THRESHOLD.x - GATE.x) / GD * 2, z: GATE.z + (THRESHOLD.z - GATE.z) / GD * 2, yaw: THRESHOLD.yaw }
 
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const out = flag('--out', '/tmp')
 const b = await puppeteer.launch({ executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const p = await b.newPage()
+await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))   // a fresh profile is born first (birth-gate.tsx): seed a rune so the ritual does not take the screen
 await p.emulate({ viewport: { width: 844, height: 390, deviceScaleFactor: 1, isMobile: true, hasTouch: true, isLandscape: true },
   userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' })
 await p.goto(`${flag('--url', 'https://ather.games')}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 120000 })
@@ -36,7 +40,7 @@ await new Promise(r => setTimeout(r, 800))
 const s2 = await st()
 await p.screenshot({ path: `${out}/touch-3-look.png` })
 // in reach: stand at the gate, the big E pill must appear and open the map by touch
-await p.evaluate(() => (window as any).__ather.tp(0, -11.5, 0))
+await p.evaluate((g) => (window as any).__ather.tp(g.x, g.z, g.yaw), AT_GATE)
 await new Promise(r => setTimeout(r, 1500))
 await p.screenshot({ path: `${out}/touch-3b-gate.png` })
 const pillUse = await p.evaluateHandle(() => [...document.querySelectorAll('div')].find(d => d.textContent === 'Euse')!)
@@ -58,6 +62,8 @@ const bb = await (stop as any).boundingBox()
 await p.touchscreen.tap(bb!.x + bb!.width / 2, bb!.y + bb!.height / 2)
 await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 60000 })
 await new Promise(r => setTimeout(r, 4000))
+// draw first: guns are equipment since 11-18 (R / the 'draw' chip pulls the loadout's primary; fire does nothing stowed)
+{ const d = await p.evaluate(() => { const e = document.querySelector<HTMLElement>('[data-touch="draw"]'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }); if (d) { await p.touchscreen.tap(d.x, d.y); await new Promise(r => setTimeout(r, 1200)) } }
 // fire: hold the fire button, the clip must drop
 const ammo = () => p.evaluate(() => (window as any).__ather.combat().keeper.ammo as number)
 const a0 = await ammo()

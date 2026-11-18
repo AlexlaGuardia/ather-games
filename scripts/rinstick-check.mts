@@ -31,7 +31,7 @@ const click = async (sel: string) => { const b = await p.evaluate(s => { const e
 const held = () => p.evaluate(() => (window as any).__ather.tools()?.rinning ?? null)
 const res: Record<string, unknown> = { url }
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 })
-await p.waitForFunction(() => !!(window as any).__ather?.tools, { timeout: 180000 }); await sleep(2500)
+await p.waitForFunction(() => !!(window as any).__ather?.tools && typeof (window as any).__ather?.tp === 'function', { timeout: 180000 }); await sleep(2500)
 res.before = await held()
 const b = benchOf(ROOM)
 await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), b.x, b.z - 1.4); await sleep(2000)
@@ -41,7 +41,7 @@ res.made = await click('[data-rinstick="basic_rinstick"] button'); await sleep(7
 res.panelHeld = await p.evaluate(() => document.querySelector('[data-rinstick-held]')?.getAttribute('data-rinstick-held'))
 res.after = await held(); res.bag = await bag(); res.store = ((await read('open.works.v1'))?.rooms?.[0]?.store ?? []).length
 await shot('rc-1-made')
-await p.reload({ waitUntil: 'load', timeout: 180000 }); await p.waitForFunction(() => !!(window as any).__ather?.tools, { timeout: 180000 }); await sleep(2500)
+await p.reload({ waitUntil: 'load', timeout: 180000 }); await p.waitForFunction(() => !!(window as any).__ather?.tools && typeof (window as any).__ather?.tp === 'function', { timeout: 180000 }); await sleep(2500)
 res.reloaded = await held()
 res.errs = errs
 console.log(JSON.stringify(res))
