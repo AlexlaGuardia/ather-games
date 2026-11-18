@@ -62,6 +62,7 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
       ...((window as unknown as { __ather?: Record<string, unknown> }).__ather ?? {}),
       state: () => ({ ...loco.current, yaw: look.current.yaw }),
       tp: (x: number, z: number, yaw = look.current.yaw) => { loco.current = createLoco(x, ground(x, z), z); look.current.yaw = yaw },
+      ground: (x: number, z: number) => ground(x, z),   // read-only: the ground the walker stands on (wilds-cover-check)
       look: (yaw: number, pitch: number) => { look.current.yaw = yaw; look.current.pitch = pitch },
     }
     return () => {
