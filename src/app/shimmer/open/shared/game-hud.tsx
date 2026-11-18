@@ -127,7 +127,8 @@ function StatusChips({ items, top, right, maxW }: { items: readonly Status[]; to
     <div className="pointer-events-none flex flex-col items-end gap-1.5" style={{ position: 'fixed', top, right, zIndex: 33 }} data-hud="status">
       {items.map((s, i) => (
         <HudPlate key={i} face={FACE} r={999} style={{ padding: 3 }}>
-          <div className={`px-2.5 py-0.5 text-[12px] tabular-nums ${maxW ? 'text-right' : 'whitespace-nowrap'}`} style={{ ...hearthBody, ...(maxW ? { maxWidth: maxW } : {}) }}>
+          {/* phone: ONE line, cut with an ellipsis (a wrap grew down into the MENU chip, play's phone-aim-check 11-18) */}
+          <div className="px-2.5 py-0.5 text-[12px] whitespace-nowrap tabular-nums" style={{ ...hearthBody, ...(maxW ? { maxWidth: maxW, overflow: 'hidden', textOverflow: 'ellipsis' } : {}) }}>
             <span style={{ opacity: 0.75 }}>{s.label}</span>
             {s.value !== undefined && <b className="ml-1.5" style={{ color: s.accent ? HUD_FACES[FACE].accent : undefined }}>{s.value}</b>}
           </div>
