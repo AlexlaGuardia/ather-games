@@ -45,6 +45,6 @@ ok(!!assign({ v: 1, moglins: [mog('h', 'cook', 1)], lastTick: T0 }, W, 'h', 'k',
 // benchRun: full store refuses (the output must fit)
 const full = Array.from({ length: 16 }, (_, i) => ({ id: i === 0 ? 'shimmerscale' : `junk${i}`, n: 1 }))
 ok(benchRun(full, ROAST[0]) !== null, 'benchRun: an input slot freeing up should make room')
-ok(/an hour/.test(dutyLine(mog('h', 'cook', 2), 'cooking')) && /later/.test(dutyLine(mog('h', 'cook', 2), 'rinnshop')), 'duty: lines')
+ok(/an hour/.test(dutyLine(mog('h', 'cook', 2), 'cooking')) && /yet/.test(dutyLine(mog('h', 'cook', 2), 'rinnshop')), 'duty: lines')
 if (fails.length) { console.error(`moglins-bench: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`moglins-bench: ${pass}/0`)

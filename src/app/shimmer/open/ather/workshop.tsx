@@ -570,29 +570,29 @@ function MoglinDuty({ r }: { r: Room }) {
   const here = v.moglins.find(m => m.room === r.id)
   const fits = v.moglins.filter(m => m.id !== here?.id && WORKS_IN[m.profession].includes(r.kind))
   const put = (id: string, room: string | null) => {
-    const nv = assign(loadVillage(), getW(), id, room); if (!nv) { hudSay('They cannot work here.', 'info'); return }
+    const nv = assign(loadVillage(), getW(), id, room); if (!nv) { hudSay('Their trade does not suit this room.', 'info'); return }
     saveVillage(nv); setV(nv)
   }
   const grades = (m: Village['moglins'][number]) => GRADE_CATEGORIES.map(c => `${c} ${GRADE_NAME[m.grades[c]]}`).join(' · ')
   if (!here && !fits.length && !v.moglins.length) return null
   return (
     <div data-moglin-duty={r.kind}>
-      <div style={lab}>Who works here</div>
+      <div style={lab}>Who keeps this room</div>
       {here ? (
         <div data-moglin-here={here.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, color: H.ink, fontWeight: 600 }}>{here.name} <span style={{ fontWeight: 400, color: H.inkSoft, fontSize: 12.5 }}>· the {here.profession} · {grades(here)}</span></div>
             <div style={{ fontSize: 12.5, color: H.inkSoft }}>{dutyLine(here, r.kind)}{here.dream ? ` "${here.dream}"` : ''}</div>
           </div>
-          <span data-act="off-duty"><HearthButton small onClick={() => put(here.id, null)}>Off duty</HearthButton></span>
+          <span data-act="off-duty"><HearthButton small onClick={() => put(here.id, null)}>Rest</HearthButton></span>
         </div>
       ) : (
-        <div style={{ fontSize: 12.5, color: H.inkSoft, marginTop: 4 }}>{fits.length ? 'No one yet. Someone in your village could take it on.' : 'No one in your village works this trade yet. Folk in the Wilds settlements might come.'}</div>
+        <div style={{ fontSize: 12.5, color: H.inkSoft, marginTop: 4 }}>{fits.length ? 'No one yet. Someone in your village could take it on.' : 'No one in your village has this trade yet. Folk in the Wilds settlements might come, if asked.'}</div>
       )}
       {fits.map(m => (
         <div key={m.id} data-moglin={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: H.ink }}>{m.name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· the {m.profession} · {grades(m)}{m.room ? ' · works another room' : ''}</span></span>
-          <HearthButton small onClick={() => put(m.id, r.id)}>{here ? 'Swap in' : 'Work here'}</HearthButton>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: H.ink }}>{m.name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· the {m.profession} · {grades(m)}{m.room ? ' · busy in another room' : ''}</span></span>
+          <HearthButton small onClick={() => put(m.id, r.id)}>{here ? 'Ask instead' : 'Ask to work here'}</HearthButton>
         </div>
       ))}
     </div>

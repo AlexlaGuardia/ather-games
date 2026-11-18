@@ -159,7 +159,7 @@ export default function AtherSlice() {
     if (Object.keys(t.made).length) setWorks(t.works)
     const names = Object.entries(t.made).map(([id, n]) => `${n} ${itemDef(id).name}`)
     // an info line held 9 s, after the arrival lines (an 'item' line lasts 1.8 s and the next slot name replaces it)
-    if (say && names.length) { const text = `While you were away, your village made ${names.join(', ')}. It is in the rooms' stores.`; setTimeout(() => hudSay(text, 'info', 9), 1500) }
+    if (say && names.length) { const text = `While you were away, your village made ${names.join(', ')}. You will find it all in the rooms' stores.`; setTimeout(() => hudSay(text, 'info', 9), 1500) }
     return t.made
   }, [])
   useEffect(() => { runVillage(true); const id = setInterval(() => runVillage(false), 60_000); return () => clearInterval(id) }, [runVillage])

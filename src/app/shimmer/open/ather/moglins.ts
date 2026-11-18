@@ -163,9 +163,9 @@ export function benchRun(stacks: readonly { id: string; n: number }[], j: Job): 
 /** What a Moglin does in a room, in a line (the bench panel). */
 export function dutyLine(m: MoglinRecord, kind: RoomKind): string {
   if (m.profession === 'carpenter' && kind === 'carpentry') return `Brings in deadfall, about ${PER_HOUR(m.grades.yield)} an hour.`
-  if (m.profession === 'smith' && kind === 'smith') return `Burns deadfall from the carpentry room into charcoal, about ${PER_HOUR(m.grades.yield)} an hour.`
-  if (BENCH_JOBS[m.profession]?.[kind]) return `Works the room's store, about ${PER_HOUR(m.grades.craft)} an hour. Stock it and it keeps busy.`
-  return 'Keeps the room. Its own work here comes later.'
+  if (m.profession === 'smith' && kind === 'smith') return `Trades for deadfall from the carpentry room and burns it to charcoal, about ${PER_HOUR(m.grades.yield)} an hour.`
+  if (BENCH_JOBS[m.profession]?.[kind]) return `Works from the room's store, about ${PER_HOUR(m.grades.craft)} an hour. Stock it and there is always something on.`
+  return 'Keeps the room. Their trade has no work here yet.'
 }
 
 // ── save: garden-tied, registered in GARDEN_KEY_SPECS ─────────────────────────────────────────────────────────
