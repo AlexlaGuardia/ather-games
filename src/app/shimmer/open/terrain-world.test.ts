@@ -97,6 +97,34 @@ const run = (w: ReturnType<typeof terrainWorld>, s: ReturnType<typeof createLoco
   ok(s.py > 3.4, `Space swims up toward the surface (feet ${s.py.toFixed(2)})`)
 }
 
+// ── a fast hop that comes down on an UPHILL slope keeps its speed (Alex 11-18 after the Wilds relief:
+// "when I try to slide jump it seems like I'm catching something on the jump and it's canceling out the
+// momentum"). Airborne and falling, the rising land ahead reaches the feet a frame before the vertical
+// step lands them; that used to read as a WALL: the axis zeroed and the air bank collapsed to the sliver.
+{
+  // the same hop onto FLAT land is the yardstick: landing uphill must cost no more speed than landing on the flat
+  const k = Math.tan(20 * Math.PI / 180)
+  const hop = (g: (x: number, z: number) => number) => {
+    const w = terrainWorld(shape(g)), s = createLoco(-2, 5.6, 0)
+    s.airborne = true; s.hvx = 11; s.vy = -2; s.airSpeed = 11
+    const sp: number[] = []
+    for (let i = 0; i < 15; i++) { tickLocomotion(s, input({ mvX: 1 }), w); sp.push(Math.hypot(s.hvx, s.hvz)) }
+    return { sp, x: s.px }
+  }
+  const flat = hop(() => 5), up = hop((x) => 5 + Math.max(0, x) * k)
+  const worst = Math.max(...up.sp.map((v, i) => flat.sp[i] - v))
+  ok(worst < 0.5, `a hop landing uphill keeps the speed it keeps on the flat (worst gap ${worst.toFixed(2)} m/s, slowest uphill ${Math.min(...up.sp).toFixed(2)})`)
+  ok(up.x > flat.x - 0.3, `and covers the ground it covers on the flat (x ${up.x.toFixed(2)} vs ${flat.x.toFixed(2)})`)
+}
+// ── but a steep face caught in the air is still a wall (no climbing a cliff by hopping at it) ──────
+{
+  const w = terrainWorld(shape((x) => (x > 0 ? 5 + x * 3 : 5)))
+  const s = createLoco(-1, 5.3, 0)
+  s.airborne = true; s.hvx = 11; s.vy = -1; s.airSpeed = 11
+  run(w, s, 20, { mvX: 1 })
+  ok(s.px < 0.6, `a steep rise still stops a hop (x ${s.px.toFixed(2)})`)
+}
+
 console.log(`\nterrain-world: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)

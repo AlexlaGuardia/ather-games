@@ -253,6 +253,9 @@ export const TREAD_SINK_CAP = 1.8   // water catches a fall fast — no crater d
 // surfaces can exist inside this band. Airborne landing keeps the tiny FLOOR_CAPTURE — the
 // falling-past-a-lip pop this band would reintroduce is exactly what 07-08-07 ruled out.
 export const STEP_CAPTURE = 0.55
+/** The most a FALLING keeper lands up onto in one frame: a 46° slope at a 12 m/s hop rises ~0.21 m per 1/60 s. Above it
+ *  is a lip, which belongs to the ledge grab. */
+export const AIR_STEP_RISE = 0.25
 
 // ── ★ STEP SMOOTHING (2026-08-11, Alex: walking up half slabs "feels jagged") ────────────────
 // A step-up is a TELEPORT and has to be: the body cannot be halfway inside the slab for a few
@@ -857,9 +860,16 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
   // onto a ≤0.5 surface at the target. Full blocks fail the rise check by a whole half-block,
   // so the vault ruling cannot be re-armed from here.
   const stepped = (tx: number, tz: number): boolean => {
-    if (s.airborne) return false
+    // ★ A FALLING keeper LANDS on the rise ahead instead of hitting it (Alex 11-18, after the Wilds relief: "when I try
+    // to slide jump ... I'm catching something on the jump and it's canceling out the momentum"). Coming down on an
+    // uphill slope, the land reaches the feet a frame before the vertical step lands them, and that read as a WALL: the
+    // axis zeroed and the air bank collapsed. floorAt only offers WALKABLE land above the feet, so a cliff still stops a
+    // hop. Rising keepers keep the old rule: a jump does not snap up onto a ledge mid-climb (that is the vault's).
+    // ⚠ Only the sliver a SLOPE rises in one frame (AIR_STEP_RISE): a real lip is still the ledge grab's, and a falling
+    // keeper must hang from it, not pop up onto it (voxel3d locomotion.test 'a held Space still grabs').
+    if (s.airborne && s.vy > 0) return false
     const ft = w.floorAt(tx, tz, s.py, STEP_CAPTURE)
-    if (ft === null || ft <= s.py || ft - s.py > 0.5 + 1e-6) return false
+    if (ft === null || ft <= s.py || ft - s.py > (s.airborne ? AIR_STEP_RISE : 0.5) + 1e-6) return false
     if (!w.bodyFree(tx, tz, ft)) return false
     // The feet snap (see STEP_SMOOTH_HALF_LIFE) and the eye owes the difference.
     stepDebt(s, ft - s.py)
