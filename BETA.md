@@ -70,6 +70,14 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
    (server wins + local backup, cap 8, Marks in wallet, settings per device). Server side = serb (db + /api/saves/open),
    client side (cloud-sync open path) = Jin. Builds after steps 1-4.
 
+## Audit 2026-11-18 refresh (play, prod, swiftshader at load ~3-6, one browser at a time)
+Re-ran the 11-16 audits against today's prod. **M1:** Home → Play → born goes live in 21.8 s (11-17: 19.2 s, 11-16: ~15 s),
+heap 48 MB, 1 console entry (the audit counts warnings too and prints only the count; 11-16 had one three.js deprecation
+warning). Over the 20 s line, but this box ran other windows' browsers all day: re-time on a quiet box before calling it a
+regression. **M2/M3/M11 (Ather plot, 390×844 and 360×780):** all 3 touch buttons reachable; the MENU chip folds/opens/folds
+after pack, map, options and friends; the thumb walks. **M2 continent (drive + foot, 390×844):** no overlap among 7 / 8 HUD
+boxes, PASS. Everything the 11-16 list below calls broken is fixed except the birth-wheel ghost names (🔒 Alex).
+
 ## Audit 2026-11-16 (pass 1 + 2, fresh profile, 390×844 touch, prod)
 
 **Works:** the home page loads in 1.2 s · PLAY FREE → the world goes live in about 15 s (swiftshader) · the birth gate shows, the tap
