@@ -10,7 +10,11 @@ const res: Record<string, unknown> = {}
 const p = await b.newPage(); await p.setViewport({ width: 1280, height: 760 })
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e)))
 // a born keeper: an unborn one meets the birth ritual first (birth-gate.tsx), which rightly takes the screen and the keys
-await p.evaluateOnNewDocument(() => { try { if (!localStorage.getItem('ather:shimmer:birthRune')) localStorage.setItem('ather:shimmer:birthRune', 'star') } catch {} })
+// ★ 11-18 (051b0c3d): weapons are equipment; a fresh keeper owns NO gun until Kael's chest (shipyard-check proves the chest).
+// Seed what loadout.claimKaelsArms() hands over, plus an owned Backbone so the primary dropdown has a second long gun
+// to switch to (the dropdown lists OWNED guns only; 'lance' was never an open-world gun).
+await p.evaluateOnNewDocument(() => { try { if (!localStorage.getItem('ather:shimmer:birthRune')) localStorage.setItem('ather:shimmer:birthRune', 'star')
+  if (!localStorage.getItem('open.loadout.v1')) localStorage.setItem('open.loadout.v1', JSON.stringify({ v: 1, guns: ['charred-rifle', 'repeater', 'backbone'], primary: 'charred-rifle', secondary: 'repeater', kael: true, vessels: [{ id: 'starter-bracelet', kind: 'bracelet', label: 'Bracelet', word: null }, { id: 'starter-glove', kind: 'glove', label: 'Glove', word: null }], tactical: 'starter-bracelet', signature: 'starter-glove' })) } catch {} })
 await p.goto(`${url}/shimmer/open/continent?hour=13`, { waitUntil: 'load', timeout: 180000 })
 await p.waitForFunction('!!window.__drive && !!window.__range', { timeout: 180000 })
 await sleep(3000); await p.keyboard.press('KeyW'); await sleep(2000)
@@ -32,7 +36,7 @@ await p.screenshot({ path: `${out}/pack-2-bag.png` })
 await p.click('[data-pack-go="character"]'); await sleep(700); res.right2 = await panel()
 await p.click('[data-slot-id="primary"] > button'); await sleep(500)
 res.primaryOptions = await p.evaluate(() => [...document.querySelectorAll('[data-slot-id="primary"] [data-option]')].map(e => e.getAttribute('data-option')))
-await p.click('[data-slot-id="primary"] [data-option="lance"]'); await sleep(500)
+await p.click('[data-slot-id="primary"] [data-option="backbone"]'); await sleep(500)
 res.primaryNow = await p.evaluate(() => JSON.parse(localStorage.getItem('open.loadout.v1') ?? '{}').primary)
 await p.click('[data-slot-id="tactical"] > button'); await sleep(400)
 await p.screenshot({ path: `${out}/pack-3-character.png` })
@@ -48,4 +52,7 @@ res.atherLines = await p.evaluate(() => [...document.querySelectorAll('[data-ent
 await p.screenshot({ path: `${out}/pack-5-ather-journal.png` })
 res.errors = errs.slice(0, 5)
 console.log(JSON.stringify(res, null, 1))
-await b.close()
+// verdict (11-18): the owned-only primary dropdown switched, and the page stayed clean (BETA M8)
+const pass = res.primaryNow === 'backbone' && (res.primaryOptions as string[]).includes('backbone') && (res.errors as string[]).length === 0
+console.log(pass ? 'PASS' : 'FAIL')
+await b.close(); process.exit(pass ? 0 : 1)

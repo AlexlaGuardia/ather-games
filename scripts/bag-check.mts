@@ -13,7 +13,10 @@ await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 120000 }); await sleep(2000)
 const hotbar0 = () => p.evaluate(() => !!document.querySelector('[data-hud="hotbar"] .rounded-\\[11px\\] img'))
 const saved = () => p.evaluate(() => JSON.parse(localStorage.getItem('open.inv.v1') ?? 'null')?.slots?.map((s: any) => s?.id ?? null))
-const res: Record<string, unknown> = { hotbarHasRepeaterAtStart: await hotbar0() }
+// ★ 11-18 (051b0c3d): no gun in any bag any more; a fresh bag opens with WAYMARKS in slot 0 (then bait). The move legs follow
+// whatever slot 0 holds instead of the Repeater. A fresh bag is not stored until it changes, so slot 0's item is read off the
+// first save (the move) and must be a real item; the shift-move must bring that same item back.
+const res: Record<string, unknown> = { hotbarSlot0FilledAtStart: await hotbar0() }
 await p.keyboard.press('KeyI'); await sleep(800)
 res.bagOpens = !!(await p.$('[data-panel="pack-bag"]'))
 res.redX = await p.evaluate(() => { const x = document.querySelector('[data-panel="pack-bag"] button[aria-label="close"]') as HTMLElement; return x ? getComputedStyle(x).backgroundImage.includes('224, 96, 79') : false })
@@ -21,12 +24,13 @@ await shot('bag-1-open')
 await p.click('[data-panel="pack-bag"] [data-slot="0"]'); await sleep(200)
 await p.click('[data-panel="pack-bag"] [data-slot="12"]'); await sleep(500)
 const s1 = await saved()
-res.moved = s1?.[0] === null && s1?.[12] === 'repeater'
+const first = s1?.[12] ?? null
+res.moved = s1?.[0] === null && typeof first === 'string'
 await shot('bag-2-moved')
 await p.click('[data-panel="pack-bag"] [data-slot="12"]', { modifiers: undefined } as any).catch(() => {})
 await p.keyboard.down('Shift'); await p.click('[data-panel="pack-bag"] [data-slot="12"]'); await p.keyboard.up('Shift'); await sleep(500)
 const s2 = await saved()
-res.quickBack = s2?.slice(0, 8).includes('repeater') && s2?.[12] === null
+res.quickBack = first !== null && !!s2?.slice(0, 8).includes(first) && s2?.[12] === null
 await p.click('[data-panel="pack-bag"] button[aria-label="close"]'); await sleep(600)
 res.closesOnX = !(await p.$('[data-panel="pack-bag"]'))
 await p.evaluate(() => (window as any).__ather.open('gate')); await sleep(1200)
