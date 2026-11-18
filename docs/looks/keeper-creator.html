@@ -52,18 +52,26 @@ const SKIN = ['#f6d7bd', '#e8b98f', '#c98e62', '#9c6644', '#6e4630', '#4a2f22']
 const HAIR = ['#1f1914', '#4a3020', '#7a4a26', '#b07a3c', '#d9b770', '#9a9a96', '#e9e6df', '#7a2f1e']
 const CLOTH = ['#4f7c8a', '#7a8a4f', '#8a4f4f', '#5a4f8a', '#c9a06a', '#3f3a33', '#d8d0c0', '#2f4a5e']
 const OPT = {
-  frame: ['Small', 'Medium', 'Large'], body: ['Joined limbs', 'Floating limbs'], age: ['Young', 'Adult', 'Elder'],
+  frame: ['Small', 'Medium', 'Large'], body: ['Joined limbs', 'Floating limbs'], torso: ['Broad', 'Curved'], age: ['Young', 'Adult', 'Elder'],
   skin: SKIN, hairStyle: ['Short', 'Tousled', 'Long', 'Bun', 'Tail', 'Shaved'], hair: HAIR,
   eyes: ['Round', 'Sleepy', 'Bright'], brows: ['Soft', 'Bold', 'None'],
-  topColor: CLOTH, legColor: CLOTH, accent: CLOTH,
+  topColor: CLOTH, legColor: CLOTH, accent: CLOTH, scarf: ['#b3473a', '#d9a441', '#4f7c8a', '#5a8a4f', '#7a4f8a', '#e9e6df', '#2f2a26'],
 }
-const LABEL = { frame: 'Frame', body: 'Body', age: 'Age', skin: 'Skin', hairStyle: 'Hair', hair: 'Hair colour', eyes: 'Eyes', brows: 'Brows', topColor: 'Body colour', legColor: 'Legs colour', accent: 'Hands and feet' }
+const LABEL = { frame: 'Frame', body: 'Body', torso: 'Torso', age: 'Age', skin: 'Skin', hairStyle: 'Hair', hair: 'Hair colour', eyes: 'Eyes', brows: 'Brows', topColor: 'Body colour', legColor: 'Legs colour', accent: 'Hands and feet', scarf: 'Scarf' }
+const BODY_NOTE = ''
 const FRAME_NOTE = ['A smaller hitbox and +5% move speed.', 'The baseline: no bonus.', 'A bigger hitbox and +10% defence.']
-const k = { frame: 1, body: 0, age: 1, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, topColor: 0, legColor: 5, accent: 5 }
+const k = { frame: 1, body: 0, age: 1, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, topColor: 0, legColor: 5, accent: 5, torso: 0, scarf: 0 }
 
 // ── the cartoon rig (docs/looks/alkin-looks.html 'toon': 1:3, cel shading, ink hull) with keeper params ──
 const grad = (() => { const t = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.LuminanceFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t })()
 const SPH = new THREE.SphereGeometry(1, 20, 14), CYL = (a, b) => new THREE.CylinderGeometry(a, b, 1, 16), BOX = new THREE.BoxGeometry(1, 1, 1)
+// A torso profile turned on the lathe: BROAD = wide shoulders tapering to the waist; CURVED = narrower shoulders, a waist,
+// fuller hips. Points are (radius, height) from the hips (0) to the neck (1); flattened front-to-back when placed.
+const TORSO = {
+  0: [[0.0, 0], [0.15, 0.02], [0.16, 0.25], [0.17, 0.55], [0.22, 0.85], [0.2, 0.95], [0.08, 1]],
+  1: [[0.0, 0], [0.19, 0.04], [0.2, 0.22], [0.14, 0.5], [0.17, 0.75], [0.18, 0.88], [0.15, 0.96], [0.07, 1]],
+}
+const torsoGeo = t => new THREE.LatheGeometry(TORSO[t].map(([r, y]) => new THREE.Vector2(r, y)), 24)
 const INK = new THREE.MeshBasicMaterial({ color: 0x1b140e, side: THREE.BackSide })
 function put(g, geo, color, pos, scale, rot, ink = true) {
   const m = new THREE.Mesh(geo, new THREE.MeshToonMaterial({ color, gradientMap: grad })); m.position.set(...pos); m.scale.set(...scale); if (rot) m.rotation.set(...rot); g.add(m)
@@ -83,14 +91,18 @@ function keeper(o) {
     put(g, SPH, acc, [s * 0.1 * wide * (float ? 1.3 : 1), 0.06 * fs, 0.04], [0.1 * fs, 0.07 * fs, 0.14 * fs])
   }
   const tY = L + B
-  if (float) put(g, SPH, top, [0, tY - B * 0.5, 0], [0.22 * wide, B * 0.62, 0.2 * wide])
-  else put(g, CYL(0.17 * wide, 0.2 * wide * (age === 2 ? 1.05 : 1)), top, [0, tY - B / 2, 0], [1, B, 1])
-  if (float) put(g, SPH, legC, [0, L + 0.02, 0], [0.18 * wide, 0.1, 0.17 * wide])
+  // the torso: one lathe for both bodies; floating limbs drop the hips into a soft point (no bubble under it)
+  put(g, torsoGeo(o.torso), top, [0, L + (float ? B * 0.08 : 0), 0], [wide, B * (float ? 0.92 : 1), wide * 0.8])
   for (const s of [-1, 1]) {
     if (!float) { const arm = put(g, CYL(0.055, 0.05), top, [s * (0.22 * wide + 0.04), tY - A / 2 - 0.02, 0], [1, A, 1]); arm.rotation.z = s * 0.12 }
     put(g, SPH, float ? acc : skin, [s * (0.22 * wide + (float ? 0.2 : 0.08)), tY - A * (float ? 0.75 : 1) - 0.02, float ? 0.04 : 0], [0.06 * fs, 0.06 * fs, 0.06 * fs])
   }
-  const hy = tY + H * 0.55
+  const gap = float ? 0.08 : 0
+  const hy = tY + H * 0.55 + gap
+  // the SCARF wraps the neck (and, floating, hides the gap between head and torso): a thick ring + a tail down the front
+  const sc = OPT.scarf[o.scarf]
+  put(g, new THREE.TorusGeometry(1, 0.42, 10, 24), sc, [0, tY + gap * 0.45, 0], [0.13 * wide, 0.13 * wide, 0.11 + gap * 0.5], [Math.PI / 2, 0, 0])
+  put(g, BOX, sc, [0.06 * wide, tY - 0.12, 0.15 * wide], [0.07, 0.22, 0.03], [0.15, 0, 0.12])
   put(g, SPH, skin, [0, hy, 0], [H * 0.5, H * 0.55, H * 0.5])
   for (const s of [-1, 1]) put(g, SPH, skin, [s * H * 0.5, hy, 0], [H * 0.08, H * 0.12, H * 0.06])
   const hs = OPT.hairStyle[o.hairStyle]
