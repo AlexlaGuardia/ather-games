@@ -129,7 +129,7 @@ export const NO_BAIT_LINE = 'No bait left. Make more in the bag from a small cat
 const gradedDef = (id: string): ItemDef | null => {
   const g = parseGraded(id); if (!g) return null
   const c = CROPS[g.crop], seed = g.kind === 'seed'
-  return { name: seed ? `${c.name} seed · ${g.grade}` : `${c.name} · ${g.grade}`, icon: `/open/icons/${seed ? 'seed' : 'crop'}.svg`, stack: 99, kind: 'material',
+  return { name: seed ? `${c.name} seed · ${g.grade}` : `${c.name} · ${g.grade}`, icon: `/open/icons/${seed ? 'seed' : 'crop'}-${g.crop.replace(/_/g, '-')}.svg`, stack: 99, kind: 'material',
     blurb: seed ? `Plant it in a bed at your Farm. Grade ${g.grade}: the crop comes up the same grade.` : `Grown in your Farm. Grade ${g.grade}.` }
 }
 for (const c of Object.keys(CROPS) as (keyof typeof CROPS)[]) for (const g of GRADES) { ITEM_GROUP[seedId(c, g)] = 'farming'; ITEM_GROUP[cropId(c, g)] = 'farming' }

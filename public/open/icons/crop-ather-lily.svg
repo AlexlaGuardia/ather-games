@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Radiates golden light. (canon, shimmer-skilling.md) Code-drawn filler (tools/art/crop_icons.py). -->
+  <ellipse cx="16" cy="27.5" rx="9" ry="2" fill="#000" opacity=".25"/>
+  <circle cx="16" cy="11" r="10" fill="#ffd36a" opacity="0.4"/><path d="M16 26 Q15.0 21.0 16 16" fill="none" stroke="#3a6a2a" stroke-width="1.1" stroke-linecap="round"/><path d="M16 23 Q9 22 8 17 Q13 17 16 23 Z" fill="#6fbf55" stroke="#3a6a2a" stroke-width="0.9"/><path d="M16 16 Q9 13 8.5 6 Q13 8 16 16 Z" fill="#fff1c4" stroke="#b8862a" stroke-width="0.9"/><path d="M16 16 Q23 13 23.5 6 Q19 8 16 16 Z" fill="#fff1c4" stroke="#b8862a" stroke-width="0.9"/><path d="M16 16 Q12.5 9 16 3.5 Q19.5 9 16 16 Z" fill="#fffae6" stroke="#b8862a" stroke-width="0.9"/><path d="M16 15 L14.5 10 M16 15 L17.5 10" stroke="#e8a92a" stroke-width=".8" stroke-linecap="round"/>
+</svg>

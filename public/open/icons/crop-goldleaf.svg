@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Hardy golden herb. (canon, shimmer-skilling.md) Code-drawn filler (tools/art/crop_icons.py). -->
+  <ellipse cx="16" cy="27.5" rx="9" ry="2" fill="#000" opacity=".25"/>
+  <path d="M16 26 Q8 22 7 12 Q14 12 16 20 Z" fill="#e8c24a" stroke="#8a6a1e" stroke-width="0.9"/><path d="M16 26 Q24 22 25 12 Q18 12 16 20 Z" fill="#f2d465" stroke="#8a6a1e" stroke-width="0.9"/><path d="M16 26 Q12 18 16 6 Q20 18 16 26 Z" fill="#f7e08a" stroke="#8a6a1e" stroke-width="0.9"/><path d="M16 25 L16 9 M15 21 L10 15 M17 21 L22 15" fill="none" stroke="#8a6a1e" stroke-width=".7" stroke-linecap="round"/><path d="M12.5 25.5 L19.5 25.5" stroke="#8a6a45" stroke-width="2" stroke-linecap="round"/>
+</svg>

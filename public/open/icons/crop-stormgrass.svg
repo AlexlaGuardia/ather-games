@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Blue-tipped blades that crackle faintly in still air. (canon, shimmer-skilling.md) Code-drawn filler (tools/art/crop_icons.py). -->
+  <ellipse cx="16" cy="27.5" rx="9" ry="2" fill="#000" opacity=".25"/>
+  <path d="M13 26 Q14.2 16 8 9" fill="none" stroke="#5f9a4a" stroke-width="1.8" stroke-linecap="round"/><path d="M10.0 13.5 L8 9" stroke="#4aa3e6" stroke-width="2" stroke-linecap="round"/><path d="M15 26 Q15.4 16 13 5" fill="none" stroke="#5f9a4a" stroke-width="1.8" stroke-linecap="round"/><path d="M13.74 9.5 L13 5" stroke="#4aa3e6" stroke-width="2" stroke-linecap="round"/><path d="M17 26 Q16.6 16 19 6" fill="none" stroke="#5f9a4a" stroke-width="1.8" stroke-linecap="round"/><path d="M18.259999999999998 10.5 L19 6" stroke="#4aa3e6" stroke-width="2" stroke-linecap="round"/><path d="M19 26 Q17.8 16 24 10" fill="none" stroke="#5f9a4a" stroke-width="1.8" stroke-linecap="round"/><path d="M22.0 14.5 L24 10" stroke="#4aa3e6" stroke-width="2" stroke-linecap="round"/><path d="M22.5 4 L21 7 L23 7 L21.4 10" fill="none" stroke="#bfe3ff" stroke-width=".9" stroke-linejoin="round"/>
+</svg>
