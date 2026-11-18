@@ -35,7 +35,7 @@ input[type=range] { width: 100%; accent-color: var(--accent) }
 
 <div class="wrap">
   <h1>Keeper creator</h1>
-  <p class="lede">A rough creator on the cartoon Alkin rig. Every option here is look-only. Drag the keeper to turn them; Random rolls a whole keeper.</p>
+  <p class="lede">A rough creator on the cartoon Alkin rig. Frame is the one choice that plays: it sets the PvP hitbox. Everything else is look-only. Drag the keeper to turn them; Random rolls a whole keeper.</p>
   <div class="main">
     <div class="stage">
       <canvas id="cv" aria-label="Your keeper, drag to turn"></canvas>
@@ -43,7 +43,7 @@ input[type=range] { width: 100%; accent-color: var(--accent) }
     </div>
     <div class="panel" id="panel"></div>
   </div>
-  <p class="note" style="margin-top:14px">Not in this mock: names, voices, pointed ears or other species traits (canon calls), and glowing colours (canon keeps soul-colour for when a rune fires).</p>
+  <p class="note" style="margin-top:14px">Floating limbs: no arms or legs, the hands and feet hover where they would be. It is a body style, and it would be a canon call for Magii if it means Alkin look like that. Not in this mock: names, voices, species traits, glowing colours.</p>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -52,14 +52,14 @@ const SKIN = ['#f6d7bd', '#e8b98f', '#c98e62', '#9c6644', '#6e4630', '#4a2f22']
 const HAIR = ['#1f1914', '#4a3020', '#7a4a26', '#b07a3c', '#d9b770', '#9a9a96', '#e9e6df', '#7a2f1e']
 const CLOTH = ['#4f7c8a', '#7a8a4f', '#8a4f4f', '#5a4f8a', '#c9a06a', '#3f3a33', '#d8d0c0', '#2f4a5e']
 const OPT = {
-  build: ['Slim', 'Average', 'Sturdy'], height: null, age: ['Young', 'Adult', 'Elder'],
+  frame: ['Small', 'Medium', 'Large'], body: ['Joined limbs', 'Floating limbs'], age: ['Young', 'Adult', 'Elder'],
   skin: SKIN, hairStyle: ['Short', 'Tousled', 'Long', 'Bun', 'Tail', 'Shaved'], hair: HAIR,
   eyes: ['Round', 'Sleepy', 'Bright'], brows: ['Soft', 'Bold', 'None'],
-  top: ['Shirt', 'Waistcoat', 'Smock', 'Coat'], topColor: CLOTH, legs: ['Trousers', 'Shorts', 'Skirt'], legColor: CLOTH,
-  extra: ['None', 'Spectacles', 'Scarf', 'Satchel', 'Apron'],
+  topColor: CLOTH, legColor: CLOTH, accent: CLOTH,
 }
-const LABEL = { build: 'Build', height: 'Height', age: 'Age', skin: 'Skin', hairStyle: 'Hair', hair: 'Hair colour', eyes: 'Eyes', brows: 'Brows', top: 'Top', topColor: 'Top colour', legs: 'Legs', legColor: 'Legs colour', extra: 'Extra' }
-const k = { build: 1, height: 0.5, age: 1, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, top: 1, topColor: 0, legs: 0, legColor: 5, extra: 0 }
+const LABEL = { frame: 'Frame', body: 'Body', age: 'Age', skin: 'Skin', hairStyle: 'Hair', hair: 'Hair colour', eyes: 'Eyes', brows: 'Brows', topColor: 'Body colour', legColor: 'Legs colour', accent: 'Hands and feet' }
+const FRAME_NOTE = ['A smaller hitbox and +5% move speed.', 'The baseline: no bonus.', 'A bigger hitbox and +10% defence.']
+const k = { frame: 1, body: 0, age: 1, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, topColor: 0, legColor: 5, accent: 5 }
 
 // ── the cartoon rig (docs/looks/alkin-looks.html 'toon': 1:3, cel shading, ink hull) with keeper params ──
 const grad = (() => { const t = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.LuminanceFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t })()
@@ -73,26 +73,22 @@ function put(g, geo, color, pos, scale, rot, ink = true) {
 function flat(g, geo, color, pos, scale, rot) { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color })); m.position.set(...pos); m.scale.set(...scale); if (rot) m.rotation.set(...rot); g.add(m) }
 function keeper(o) {
   const g = new THREE.Group()
-  const wide = [0.85, 1, 1.22][o.build], tall = 0.9 + o.height * 0.22, age = o.age
+  const wide = [0.88, 1, 1.16][o.frame], tall = [0.9, 1, 1.1][o.frame], age = o.age, float = o.body === 1
   const H = 0.5 * (age === 0 ? 1.08 : 1), B = 0.62 * tall * (age === 0 ? 0.92 : 1), L = 0.55 * tall * (age === 0 ? 0.9 : 1), A = 0.6 * tall
-  const skin = OPT.skin[o.skin], hair = age === 2 && o.hair < 5 ? '#b9b6ae' : OPT.hair[o.hair], top = OPT.topColor[o.topColor], legC = OPT.legColor[o.legColor]
-  const legs = OPT.legs[o.legs]
+  const skin = OPT.skin[o.skin], hair = age === 2 && o.hair < 5 ? '#b9b6ae' : OPT.hair[o.hair], top = OPT.topColor[o.topColor], legC = OPT.legColor[o.legColor], acc = OPT.accent[o.accent]
+  // FLOATING LIMBS: no arms or legs drawn, the hands and feet hover where they would be (bigger, so they read)
+  const fs = float ? 1.35 : 1
   for (const s of [-1, 1]) {
-    if (legs === 'Trousers') put(g, CYL(0.075 * wide, 0.085 * wide), legC, [s * 0.1 * wide, L / 2 + 0.06, 0], [1, L, 1])
-    else { const cover = legs === 'Shorts' ? 0.4 : 0.15
-      put(g, CYL(0.06, 0.065), skin, [s * 0.1 * wide, L / 2 + 0.06, 0], [1, L, 1])
-      if (legs === 'Shorts') put(g, CYL(0.085 * wide, 0.09 * wide), legC, [s * 0.1 * wide, L - L * cover / 2 + 0.06, 0], [1, L * cover, 1]) }
-    put(g, SPH, '#2a221b', [s * 0.1 * wide, 0.06, 0.04], [0.1, 0.07, 0.14])
+    if (!float) put(g, CYL(0.075 * wide, 0.085 * wide), legC, [s * 0.1 * wide, L / 2 + 0.06, 0], [1, L, 1])
+    put(g, SPH, acc, [s * 0.1 * wide * (float ? 1.3 : 1), 0.06 * fs, 0.04], [0.1 * fs, 0.07 * fs, 0.14 * fs])
   }
-  if (legs === 'Skirt') put(g, CYL(0.2 * wide, 0.27 * wide), legC, [0, L - 0.12, 0], [1, 0.34, 1])
-  const tY = L + B, bodyLen = OPT.top[o.top] === 'Coat' ? B + 0.28 : OPT.top[o.top] === 'Smock' ? B + 0.12 : B
-  put(g, CYL(0.17 * wide, 0.2 * wide * (age === 2 ? 1.05 : 1)), top, [0, tY - bodyLen / 2, 0], [1, bodyLen, 1])
-  if (OPT.top[o.top] === 'Waistcoat') { put(g, CYL(0.175 * wide, 0.205 * wide), '#efe6d6', [0, tY - B * 0.35, 0], [1, B * 0.7, 0.97], null, false); put(g, CYL(0.18 * wide, 0.21 * wide), top, [0, tY - B * 0.55, 0], [1, B * 0.9, 1]) }
-  if (OPT.extra[o.extra] === 'Apron') put(g, BOX, '#c9a06a', [0, L + B * 0.35, 0.2 * wide], [0.3 * wide, B * 0.8, 0.02])
+  const tY = L + B
+  if (float) put(g, SPH, top, [0, tY - B * 0.5, 0], [0.22 * wide, B * 0.62, 0.2 * wide])
+  else put(g, CYL(0.17 * wide, 0.2 * wide * (age === 2 ? 1.05 : 1)), top, [0, tY - B / 2, 0], [1, B, 1])
+  if (float) put(g, SPH, legC, [0, L + 0.02, 0], [0.18 * wide, 0.1, 0.17 * wide])
   for (const s of [-1, 1]) {
-    const sleeve = OPT.top[o.top] === 'Waistcoat' ? '#efe6d6' : top
-    const arm = put(g, CYL(0.055, 0.05), sleeve, [s * (0.22 * wide + 0.04), tY - A / 2 - 0.02, 0], [1, A, 1]); arm.rotation.z = s * 0.12
-    put(g, SPH, skin, [s * (0.22 * wide + 0.08), tY - A - 0.02, 0], [0.06, 0.06, 0.06])
+    if (!float) { const arm = put(g, CYL(0.055, 0.05), top, [s * (0.22 * wide + 0.04), tY - A / 2 - 0.02, 0], [1, A, 1]); arm.rotation.z = s * 0.12 }
+    put(g, SPH, float ? acc : skin, [s * (0.22 * wide + (float ? 0.2 : 0.08)), tY - A * (float ? 0.75 : 1) - 0.02, float ? 0.04 : 0], [0.06 * fs, 0.06 * fs, 0.06 * fs])
   }
   const hy = tY + H * 0.55
   put(g, SPH, skin, [0, hy, 0], [H * 0.5, H * 0.55, H * 0.5])
@@ -121,10 +117,6 @@ function keeper(o) {
   }
   put(g, SPH, '#d9a47c', [0, hy - H * 0.08, H * 0.5], [H * 0.05, H * 0.05, H * 0.05], null, false)
   flat(g, BOX, '#7a3b2e', [0, hy - H * 0.2, H * 0.47], [H * 0.12, H * 0.02, H * 0.02])
-  const ex = OPT.extra[o.extra]
-  if (ex === 'Spectacles') for (const s of [-1, 1]) flat(g, new THREE.TorusGeometry(1, 0.15, 6, 18), '#3a2a1c', [s * H * 0.17, ey, ez + H * 0.06], [H * 0.12, H * 0.12, H * 0.12])
-  if (ex === 'Scarf') put(g, new THREE.TorusGeometry(1, 0.35, 8, 20), '#b3473a', [0, tY + 0.01, 0], [0.18 * wide, 0.18 * wide, 0.2], [Math.PI / 2, 0, 0])
-  if (ex === 'Satchel') { put(g, BOX, '#7a5230', [0.22 * wide, L + B * 0.25, 0.08], [0.08, 0.16, 0.18]); put(g, BOX, '#5a3a22', [0, L + B * 0.62, 0], [0.04, 0.04, 0.44 * wide], [0, Math.PI / 2, 0.75]) }
   const h = hy + H * 0.6; g.position.y = -h / 2
   return g
 }
@@ -152,10 +144,7 @@ const panel = document.getElementById('panel'), ctl = {}
 for (const key of Object.keys(LABEL)) {
   const row = document.createElement('div'); row.className = 'row'
   row.innerHTML = `<span class="label" id="l-${key}">${LABEL[key]}</span>`
-  if (key === 'height') {
-    const inp = document.createElement('input'); inp.type = 'range'; inp.id = 'opt-height'; inp.min = 0; inp.max = 1; inp.step = 0.01; inp.value = k.height; inp.setAttribute('aria-labelledby', 'l-height')
-    inp.addEventListener('input', () => { k.height = +inp.value; rebuild() }); row.append(inp); ctl.height = inp
-  } else {
+  {
     const chips = document.createElement('div'); chips.className = 'chips'; chips.setAttribute('role', 'group'); chips.setAttribute('aria-labelledby', 'l-' + key)
     const colour = OPT[key][0].startsWith('#')
     OPT[key].forEach((v, i) => {
@@ -164,11 +153,12 @@ for (const key of Object.keys(LABEL)) {
       b.addEventListener('click', () => { k[key] = i; sync(); rebuild() }); chips.append(b)
     })
     row.append(chips); ctl[key] = chips
+    if (key === 'frame') { const n = document.createElement('p'); n.className = 'note'; n.id = 'frame-note'; row.append(n) }
   }
   panel.append(row)
 }
-function sync() { for (const key of Object.keys(LABEL)) { if (key === 'height') { ctl.height.value = k.height; continue } [...ctl[key].children].forEach((b, i) => b.setAttribute('aria-pressed', String(k[key] === i))) } }
-document.getElementById('rand').addEventListener('click', () => { for (const key of Object.keys(LABEL)) k[key] = key === 'height' ? Math.random() : Math.floor(Math.random() * OPT[key].length); if (Math.random() < 0.6) k.extra = 0; sync(); rebuild() })
+function sync() { for (const key of Object.keys(LABEL)) [...ctl[key].children].forEach((b, i) => b.setAttribute('aria-pressed', String(k[key] === i))); document.getElementById('frame-note').textContent = FRAME_NOTE[k.frame] }
+document.getElementById('rand').addEventListener('click', () => { for (const key of Object.keys(LABEL)) k[key] = Math.floor(Math.random() * OPT[key].length); sync(); rebuild() })
 const sp = document.getElementById('spin'); sp.addEventListener('click', () => { spin = !spin; sp.setAttribute('aria-pressed', String(spin)) })
 sync(); rebuild()
 </script>
