@@ -2,12 +2,13 @@
 // E at a runesmith's door or the Enchant Temple starts a conversation (shared/npc-talk.tsx) instead of a panel: the counter's
 // line in a bubble over the door, the keeper answers, each answer opens ONE thing (the counter's panel, or goodbye). Idony's
 // imbue beat (errand-lines.ts idonyBeat, signed 11-16) plays in the same bubble, one step per answer.
-// ★ Every NPC line here is a SIGNED line from errand-lines.ts, never edited. The answer labels (DOOR_ASK) are PLACEHOLDERS
-//   for @lark. The Co. clerk is not here: its script (co-citadel-office-script.md) is unsigned.
+// ★ Every NPC line here is a SIGNED line from errand-lines.ts, never edited. The answer labels (DOOR_ASK) are @lark's
+//   drafts, awaiting Alex sign-off. The Co. clerk is not here: its script (co-citadel-office-script.md) is unsigned.
 import type { TalkNode } from '../shared/npc-talk'
 import { RUNESMITH_CUT, IDONY_HUSH, IDONY_AFTER, type Beat } from '../business/errand-lines'
 
-export const DOOR_ASK = { cut: 'I have a letter to cut', inscribe: 'Will you inscribe a vessel?', letters: 'The runesmith, please', bye: 'Goodbye' }   // PLACEHOLDER labels (lark)
+// @lark draft 11-18, awaiting Alex sign-off. Idony has just hushed the keeper, so her answers defer instead of pester.
+export const DOOR_ASK = { cut: 'Here. A letter to cut.', inscribe: 'When you are free.', letters: 'The runesmith, please.', bye: 'Goodbye.', byeTemple: "I'll let you work." }
 
 export interface DoorTalkActs { open: (deed: string) => void; bye: () => void }
 
@@ -24,7 +25,7 @@ export const templeTalk = (bracelet: boolean, a: DoorTalkActs): TalkNode => ({
   options: [
     { label: DOOR_ASK.inscribe, pick: () => a.open('idony') },
     { label: DOOR_ASK.letters, pick: () => a.open('smith:enchant') },
-    { label: DOOR_ASK.bye, pick: a.bye },
+    { label: DOOR_ASK.byeTemple, pick: a.bye },
   ],
 })
 
