@@ -38,6 +38,7 @@ import { TalkBubble, TalkChoices } from '../shared/npc-talk'
 import { smithTalk, templeTalk, beatTalk } from './door-talk'
 import { DoorFolk } from './door-folk-scene'
 import { standOf, headOf, faceOf } from './door-folk'
+import { useOpenMultiplayer, RemoteKeepers, OPEN_CONTINENT } from '../shared/open-mp'
 import { coTalk, boardLine, refusalLine, paidLine, byeLine, loadCoSeen, saveCoSeen, CO_BARK } from '../business/co-lines'
 import type { Beat } from '../business/errand-lines'
 import type { Seat } from '../business/letters'
@@ -1311,6 +1312,8 @@ function ContinentRideGame() {
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
   }, [showMap])
   const focus = useRef(new THREE.Vector3())
+  // M27: others on the continent (shared/open-mp.tsx): where you stand (or your courser), facing as the walker/driver faces
+  const mp = useOpenMultiplayer(OPEN_CONTINENT, () => ({ x: focus.current.x, y: focus.current.y, z: focus.current.z, yaw: track.current.yaw }))
   // menus free the mouse (on foot it is locked); closing one takes the camera back (shared/menu-lock.ts)
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
   const getCanvas = useCallback(() => canvasEl.current, [])
@@ -1412,6 +1415,7 @@ function ContinentRideGame() {
           {rin.fx}
           <Towns R={R} focus={focus} />
           <DoorFolk R={R} focus={focus} talking={talk?.key ?? null} />
+          <RemoteKeepers peers={mp.peers} me={() => focus.current} />
           <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={openDoor} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} />
           <Posts R={R} />
           <Roadside R={R} />
