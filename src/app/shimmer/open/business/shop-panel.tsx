@@ -23,6 +23,7 @@ import { getInv, setInv, useInv } from '../shared/bag'
 import { buyDecor } from './decor-shop'
 import { buyBundle } from './smokehouse'
 import { SMOKEHOUSE_STOCK } from '../ather/cooking'
+import { useLoadout, setLoadout, getLoadout, claimKaelsArms } from '../shared/loadout'
 
 /** a ticket to the Starforge (an emergency-fund sized price, Alex 11-16). TODO(world): move onto economy/prices.ts LADDER */
 export const STARFORGE_TICKET = 250
@@ -46,6 +47,7 @@ export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
     </HearthFrame>
   )
   if (shop.kind === 'smokehouse') return <SmokehousePanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
+  if (shop.kind === 'shipyard') return <ShipyardPanel onClose={onClose} />
   if (stockOf(id).length) return <DecorShop id={id} ledger={ledger} setLedger={setLedger} onClose={onClose} />
   return (
     <HearthFrame title={shop.name} maxWidth={380} onClose={onClose} fixed dataPanel="shop-panel">
@@ -211,6 +213,32 @@ function SmokehousePanel({ ledger, setLedger, onClose }: { ledger: Ledger; setLe
           <span className="flex-1" data-shop-msg>{msg ?? ''}</span>
           <span className="tabular-nums">Purse · {ledger.marks.toLocaleString()} Marks</span>
         </div>
+      </div>
+    </HearthFrame>
+  )
+}
+
+/** THE SHIPYARD (hub, Alex 11-18): Kael's chest hands over the keeper's first weapons, once: the Charred Rifle (primary) and
+ *  the Repeater (secondary). Plain copy until @lark writes Kael's chest; the broken ship and the ledger are canon, not built. */
+function ShipyardPanel({ onClose }: { onClose: () => void }) {
+  const l = useLoadout()
+  const open = () => {
+    const r = claimKaelsArms(getLoadout()); if (!r.ok) return
+    setLoadout(r.loadout)
+    hudSay('The Charred Rifle and the Repeater are yours. R draws them; the Character tab sets which is which.', 'item', 6)
+  }
+  return (
+    <HearthFrame title="The Shipyard" maxWidth={460} onClose={onClose} fixed dataPanel="shipyard">
+      <div className="px-4 pt-3 pb-4 text-[14px] leading-snug" style={{ color: H.ink }}>
+        <p style={{ ...hearthDisplay, color: H.inkSoft }}>Kael&apos;s yard, left to you with a broken ship in the slip.</p>
+        {!l.kael ? (
+          <>
+            <p className="mt-3">A chest stands by the slip with your name on it: Kael&apos;s rifle and a handgun.</p>
+            <div className="flex justify-end mt-4"><HearthButton primary onClick={open}>Open Kael&apos;s chest</HearthButton></div>
+          </>
+        ) : (
+          <p className="mt-3" data-chest="empty">The chest is empty now. You carry what was in it.</p>
+        )}
       </div>
     </HearthFrame>
   )
