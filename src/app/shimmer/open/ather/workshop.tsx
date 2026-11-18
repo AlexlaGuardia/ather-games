@@ -16,11 +16,13 @@ import { HearthFrame, HearthButton, Well, H, hearthDisplay } from '../../ui/hear
 import { getInv, setInv, useInv } from '../shared/bag'
 import { countOf, itemDef, makeBait, BAIT_FROM, HOTBAR, SLOTS, type Stack } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
-import { GROUND_Y } from './plot'
+import { GROUND_Y, THRESHOLD } from './plot'
+import { Html } from '@react-three/drei'
+import { MoglinModel, FUR_TONES, type MoglinGarb, type MoglinBuild, type MoglinAction } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
   WALL_H, type Works, type Room, type RoomKind, type WorkNear,
-  craftAt, jobRuns, pieceRect, pieceBoxes, canPlacePiece, placePiece, pickUpPiece, turnPiece, type Piece,
+  craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, canPlacePiece, placePiece, pickUpPiece, turnPiece, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
@@ -126,8 +128,65 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
       {w.rooms.map(r => (raised(r) ? <RoomMesh key={r.id} r={r} /> : <Scaffold key={r.id} r={r} />))}
       {allChests(w).map(c => <Keepstone key={c.id} c={c} pose={pose} />)}
       {w.pieces.map(pc => <PieceMesh key={pc.id} p={pc} />)}
+      <MoglinsAtWork w={w} />
+      <MoglinLineup />
       {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} item={p.item} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
     </>
+  )
+}
+
+// ── MOGLINS, SEEN (moglin-model.tsx; Alex 11-18 "add one to my garden so i can check em out") ───────────────────
+const GARB_OF: Partial<Record<string, MoglinGarb>> = { cook: 'apron', carpenter: 'toolbelt', alchemist: 'scarf', smith: 'toolbelt', stonemason: 'toolbelt', jeweler: 'scarf' }
+const toneOf = (id: string) => FUR_TONES[[...id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % FUR_TONES.length]
+/** Every Moglin keeping a room stands at its bench, working (the village re-reads every few seconds: a panel assigns). */
+function MoglinsAtWork({ w }: { w: Works }) {
+  const [v, setV] = useState(() => (typeof window === 'undefined' ? null : loadVillage()))
+  useEffect(() => { const t = setInterval(() => setV(loadVillage()), 3000); return () => clearInterval(t) }, [])
+  if (!v) return null
+  return (
+    <>
+      {v.moglins.map(m => {
+        const r = m.room ? w.rooms.find(x => x.id === m.room) : undefined
+        if (!r || !raised(r)) return null
+        const at = toWorld(r, 0, ROOMS[r.kind].d / 2 - 2.35)   // in front of the bench, facing it (local +z = the back wall)
+        return (
+          <group key={m.id} position={[at.x, GROUND_Y, at.z]} rotation-y={-r.q * Math.PI / 2}>
+            <MoglinModel build="plush" action="work" garb={GARB_OF[m.profession] ?? 'none'} tone={toneOf(m.id)} seed={m.id.length} />
+          </group>
+        )
+      })}
+    </>
+  )
+}
+/** THE LINE-UP (owner only, a look test): both builds in a few garbs beside the planning table, facing the threshold, each
+ *  labelled. Not a game thing: it never touches the save and players never see it. Pull it once Alex has picked. */
+const LINEUP: readonly { build: MoglinBuild; garb: MoglinGarb; tone: number; action: MoglinAction; label: string }[] = [
+  { build: 'plush', garb: 'none', tone: 0, action: 'idle', label: 'A · plush · bare' },
+  { build: 'plush', garb: 'apron', tone: 2, action: 'work', label: 'A · plush · cook' },
+  { build: 'plush', garb: 'satchel', tone: 1, action: 'wave', label: 'A · plush · traveller' },
+  { build: 'chibi', garb: 'none', tone: 0, action: 'idle', label: 'B · chibi · bare' },
+  { build: 'chibi', garb: 'toolbelt', tone: 3, action: 'waddle', label: 'B · chibi · carpenter' },
+  { build: 'chibi', garb: 'scarf', tone: 4, action: 'shy', label: 'B · chibi · alchemist' },
+]
+function MoglinLineup() {
+  const [owner, setOwner] = useState(false)
+  useEffect(() => { fetch('/api/owner', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then(j => setOwner(!!j?.owner)).catch(() => {}) }, [])
+  if (!owner) return null
+  const x0 = TABLE.x + 3.2, z0 = TABLE.z + 0.5, yaw = Math.atan2(THRESHOLD.x - x0, THRESHOLD.z - z0)
+  return (
+    <group data-moglin-lineup>
+      {LINEUP.map((m, i) => {
+        const x = x0 + Math.cos(yaw) * (i - 2.5) * 1.15, z = z0 - Math.sin(yaw) * (i - 2.5) * 1.15
+        return (
+          <group key={i} position={[x, GROUND_Y, z]} rotation-y={yaw}>
+            <MoglinModel build={m.build} garb={m.garb} tone={FUR_TONES[m.tone]} action={m.action} seed={i} />
+            <Html position={[0, 1.25, 0]} center distanceFactor={7} zIndexRange={[5, 0]}>
+              <div style={{ background: 'rgba(33,24,16,.78)', color: '#f3e7cf', font: '600 11px system-ui', padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{m.label}</div>
+            </Html>
+          </group>
+        )
+      })}
+    </group>
   )
 }
 

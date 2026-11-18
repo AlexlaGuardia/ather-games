@@ -113,6 +113,13 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['keeper', 'body', 'rayman', 'doll', 'rig', 'joints', 'walk', 'multiplayer', 'avatar'],
   },
   {
+    path: '/shimmer/dev/moglins',
+    title: 'The Moglin Bench',
+    blurb: 'Plush or chibi? The Moglin in tones and trade garb, beside a keeper for height.',
+    group: 'glass',
+    keywords: ['moglin', 'model', 'folk', 'villager', 'plush', 'chibi', 'garb', 'rig', 'character'],
+  },
+  {
     path: '/shimmer/dev/hands',
     title: 'The Hands Tuner',
     blurb: 'Place the first-person hands in each key pose: rest, run, jump, cast.',
