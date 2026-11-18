@@ -44,7 +44,7 @@ await p.keyboard.press('KeyE')
 res.panel = await poll(board, 15000)
 await p.screenshot({ path: `${out}/trade-co.png` })
 if (!res.panel) await done(false, 'FAIL: E at the Co. door did not open the board')
-res.title = await p.evaluate(() => document.querySelector('[data-panel="trade-board"]')?.textContent?.includes('Ather Trading Co.') ?? false)
+res.title = await p.evaluate(() => /ather trading co\./i.test(document.querySelector('[data-panel="trade-board"]')?.textContent ?? ''))   // the house name heads the board (a caps header since the lark pass 46c963a5; the title says 'Contract board')
 res.noShopPanel = !(await p.$('[data-panel="shop-panel"]'))
 // every supply town's work: three per town (Rune Hold, Millbrook, Ashfeld), so more than any one town's board ever held
 res.rows = await p.evaluate(() => [...document.querySelectorAll('[data-panel="trade-board"] button')].filter(x => /\d+ M$/.test(x.textContent ?? '')).length)
@@ -52,6 +52,6 @@ res.rows = await p.evaluate(() => [...document.querySelectorAll('[data-panel="tr
 res.took = await p.evaluate(() => { const bt = [...document.querySelectorAll<HTMLButtonElement>('[data-panel="trade-board"] button')].find(x => /\d+ M$/.test(x.textContent ?? '') && !x.disabled); if (!bt) return false; bt.click(); return true })
 await sleep(1200)
 res.closedOnTake = !(await board())
-res.toast = await p.evaluate(() => /Contract taken/.test(document.body.innerText))
+res.toast = await p.evaluate(() => /That one's yours:/.test(document.body.innerText))
 const pass = !!res.seatE_noBoard && !!res.noSeatPrompt && !!res.title && !!res.noShopPanel && (res.rows as number) > 3 && !!res.took && !!res.closedOnTake && !!res.toast && errs.length === 0
 await done(pass, pass ? 'PASS' : 'FAIL')

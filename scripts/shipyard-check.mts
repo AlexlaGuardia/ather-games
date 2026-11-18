@@ -55,7 +55,7 @@ await p.keyboard.press('KeyE')
 res.panel = await poll(async () => !!(await p.$('[data-panel="shipyard"]')), 15000)
 await p.screenshot({ path: `${out}/shipyard.png` })
 if (!res.panel) await done(false, 'FAIL: E did not open the shipyard')
-res.opened = await p.evaluate(() => { const bt = [...document.querySelectorAll<HTMLButtonElement>('[data-panel="shipyard"] button')].find(x => /Kael/.test(x.textContent ?? '')); if (!bt) return false; bt.click(); return true })
+res.opened = await p.evaluate(() => { const bt = [...document.querySelectorAll<HTMLButtonElement>('[data-panel="shipyard"] button')].find(x => /chest/i.test(x.textContent ?? '')); if (!bt) return false; bt.click(); return true })
 await sleep(1000)
 const lo = await p.evaluate(() => { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i)!; if (k.endsWith('open.loadout.v1')) return JSON.parse(localStorage.getItem(k)!) } return null })
 res.loadout = lo && { guns: lo.guns, primary: lo.primary, secondary: lo.secondary, kael: lo.kael }
