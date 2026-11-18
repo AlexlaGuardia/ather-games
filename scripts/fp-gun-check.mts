@@ -52,6 +52,22 @@ await p.mouse.up({ button: 'right' }); await sleep(600)
 res.idleGlow = idle
 res.chip = await p.evaluate(() => [...document.querySelectorAll('[data-hud] *')].map(e => e.textContent ?? '').find(t => /^(Repeater|Charred rifle)\s*\d+ \/ \d+$/.test(t.trim())) ?? null)
 await p.screenshot({ path: `${out}/4-after-shot.png` })
+// 5 · THE SIGHT IS THE KEEPER'S (canon, look only): the Character tab re-cuts the rifle's mark to a mana-blue ring; aiming it shows that cut
+await p.keyboard.down('KeyR'); await sleep(600); await p.keyboard.up('KeyR'); await sleep(400)   // hold R: stow
+await p.keyboard.press('KeyP'); await sleep(900)
+await p.click('[data-slot-id="primary"] > button'); await sleep(500)
+res.sightRow = !!(await p.$('[data-sight="charred-rifle"]'))
+await p.click('[data-sight="charred-rifle"] [data-mark="ring"]').catch(() => {}); await sleep(200)
+await p.click('[data-sight="charred-rifle"] [data-tint="mana"]').catch(() => {}); await sleep(300)
+await p.screenshot({ path: `${out}/5-sight-menu.png` })
+res.savedLook = await p.evaluate(() => { const k = Object.keys(localStorage).find(x => x.endsWith('open.sights.v1')); return k ? JSON.parse(localStorage.getItem(k)!)['charred-rifle'] ?? null : null })
+await p.keyboard.press('Escape'); await sleep(700); await p.mouse.click(640, 380); await sleep(600)
+await tapR(); await poll(async () => (await G())?.key === 'charred-rifle:scope2')
+await p.mouse.down({ button: 'right' }); await poll(async () => ((await G())?.ads ?? 0) >= 0.99)
+res.recut = await G(); await poll(ring, 4000)   // the ring is DOM: it renders a frame after the sights reach full
+res.ringMark = await p.evaluate(() => document.querySelector('[data-hud="scope"]')?.getAttribute('data-mark') ?? null)
+await p.screenshot({ path: `${out}/6-scope-recut.png` })
+await p.mouse.up({ button: 'right' })
 res.pageErrors = errs
 console.log(JSON.stringify(res, null, 1))
 const d = res.drawn as any, ar = res.aimedRifle as any, sw = res.swapped as any, rp = res.aimedRepeater as any, st = res.stowed as any
@@ -61,5 +77,7 @@ const pass = !!st && !st.shown
   && !!res.adsLeft && !!res.ringGone
   && sw?.key === 'repeater:reddot' && rp?.ads >= 0.99 && !res.ringRepeater && rp.shown === true
   && (res.flare as number) > idle
+  && !!res.sightRow && (res.savedLook as any)?.mark === 'ring' && (res.savedLook as any)?.tint === 'mana'
+  && (res.recut as any)?.mark === 'ring:mana' && res.ringMark === 'ring'
   && errs.length === 0
 console.log(pass ? 'PASS' : 'FAIL'); await br.close(); process.exit(pass ? 0 : 1)

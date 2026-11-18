@@ -8,6 +8,9 @@ import { useState } from 'react'
 import { H, hearthDisplay, Well, HearthLabel } from '../ui/hearth'
 import { RANGE_GUNS } from './shared/gunplay'
 import { useLoadout, setLoadout, equip, gunsFor, vesselsFor, type OwnedVessel } from './shared/loadout'
+import { opticOf } from './shared/optics'
+import { MARKS, TINTS, type MarkId, type TintId, type Stroke } from './shared/sight-marks'
+import { useSightLooks, setSightLook, lookFor } from './shared/sight-looks'
 import { useBirth } from './birth-gate'
 import { RUNES, ELEMENTS } from '../play3d/birth/runes.data'
 import { RuneMark } from '../play3d/birth/RuneMark'
@@ -73,12 +76,51 @@ function Slot({ id, open, onOpen }: { id: SlotId; open: boolean; onOpen: () => v
             <button type="button" onClick={() => pick(null)} className="rounded-[9px] px-2 py-1.5 text-left text-[13px]" style={{ color: H.inkSoft }}>Leave this slot empty</button>
           )}
           {options.length === 0 && <div className="px-2 py-1 text-[13px] italic" style={{ color: H.inkFaint }}>Nothing you own fits here yet.</div>}
+          {gun && <SightPick gunId={gun.id} slot={gun.slot} />}
         </div>
       )}
     </div>
   )
 }
 const cap = (s: string) => s[0] + s.slice(1).toLowerCase()
+
+/** One etched cut, drawn the way the lens draws it (sight-marks strokes), for the picker. */
+function MarkGlyph({ id, hex, size = 26 }: { id: MarkId; hex: string; size?: number }) {
+  const w = 0.09
+  return (
+    <svg viewBox="-1 -1 2 2" width={size} height={size} aria-hidden>
+      {MARKS[id].strokes.map((k: Stroke, n: number) => k.k === 'dot' ? <circle key={n} r={k.r} fill={hex} />
+        : k.k === 'ring' ? <circle key={n} r={k.r} fill="none" stroke={hex} strokeWidth={w} />
+        : <line key={n} x1={k.a[0]} y1={-k.a[1]} x2={k.b[0]} y2={-k.b[1]} stroke={hex} strokeWidth={w} strokeLinecap="round" />)}
+    </svg>
+  )
+}
+/** THE SIGHT (canon world/manalic-weapons.md › Sights, RULED 11-18): the etched mark in this gun's crystal lens, cut and tinted to the
+ *  keeper's choosing. Look, never power: nothing here touches a number that fires. Plain labels until @lark. */
+function SightPick({ gunId, slot }: { gunId: string; slot: string }) {
+  const looks = useSightLooks(), o = opticOf({ slot }), lk = lookFor(looks, gunId, o.scoped)
+  return (
+    <div data-sight={gunId} className="mt-1 rounded-[9px] px-2 py-2" style={{ boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+      <div className="text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: H.inkFaint }}>Sight · {o.mag}×</div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {(Object.keys(MARKS) as MarkId[]).map(m => (
+          <button key={m} type="button" data-mark={m} aria-label={MARKS[m].name} title={MARKS[m].name} onClick={() => setSightLook(gunId, { ...lk, mark: m })}
+            className="grid place-items-center w-10 h-10 rounded-[8px]"
+            style={{ background: 'rgba(30,26,22,.82)', boxShadow: m === lk.mark ? `0 0 0 2px ${H.ember}` : undefined }}>
+            <MarkGlyph id={m} hex={TINTS[lk.tint].hex} />
+          </button>
+        ))}
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {(Object.keys(TINTS) as TintId[]).map(t => (
+          <button key={t} type="button" data-tint={t} aria-label={TINTS[t].name} title={TINTS[t].name} onClick={() => setSightLook(gunId, { ...lk, tint: t })}
+            className="w-7 h-7 rounded-full"
+            style={{ background: TINTS[t].hex, boxShadow: t === lk.tint ? `0 0 0 2px #fff, 0 0 0 4px ${H.ember}` : `inset 0 0 0 1px rgba(0,0,0,.25)` }} />
+        ))}
+      </div>
+    </div>
+  )
+}
 
 /** Who the keeper is: their birth rune (canon: "your birth rune is you"), at the head of the sheet. */
 function BornOf() {

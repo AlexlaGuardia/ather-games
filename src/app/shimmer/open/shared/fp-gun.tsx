@@ -24,6 +24,7 @@ import { useThree } from '@react-three/fiber'
 import { buildHand, ORDER } from './open-hands'
 import { opticOf, throughScope, type Optic } from './optics'
 import { MARKS, TINTS, drawMark, markGlow, defaultLook, type SightLook } from './sight-marks'
+import { getSightLooks, lookFor } from './sight-looks'
 import type { RangeGun } from './gunplay'
 
 // ── the tune (metres / radians, the viewmodel's own frame: the camera's) ──
@@ -113,7 +114,7 @@ export interface FpGunInput {
   firedAt: number         // ms of the last round out (recoil)
   reloading: boolean      // drops you out of the sights
   charging?: number       // 0..1, a charged gun's build (the Charred Rifle): mana running, so the mark flares
-  look?: SightLook        // the owner's cut + tint for this gun (default: defaultLook)
+  look?: SightLook        // override the owner's cut (tests); by default the keeper's own (sight-looks.ts) or the plain default
   now: number             // ms
 }
 export interface FpGunApi { step: (i: FpGunInput, dt: number) => void }
@@ -167,7 +168,7 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
       // the sights: ease in / out; reloading drops you out
       const aiming = i.aiming && !i.reloading
       adsT = Math.max(0, Math.min(1, adsT + (aiming ? d / VM.ADS_IN : -d / VM.ADS_OUT)))
-      look = i.look ?? defaultLook(o.scoped); setMark(look)
+      look = i.look ?? lookFor(getSightLooks(), i.gun.id, o.scoped); setMark(look)   // the keeper's own cut (Character tab), else the plain default
       // the etching lights faintly while mana runs through a drawn gun, and flares as a round leaves or a charge builds
       glow = markGlow(true, i.now, i.firedAt, i.charging ?? 0); (mats.dot as THREE.MeshBasicMaterial).opacity = glow
       optic = o; publish()
