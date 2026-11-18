@@ -8,6 +8,7 @@ import { talkLine } from '../src/app/shimmer/open/ather/folk-lines'
 import { itemDef } from '../src/app/shimmer/open/shared/inventory'
 import { goodsText, ASK, giveLabel } from '../src/app/shimmer/open/ather/folk-talk'   // lark's labels: a reword never stales the check
 import type { Network } from '../src/app/shimmer/open/ather/network'
+import { folkSpots, nearestSpot } from '../src/app/shimmer/open/ather/folk-spots'   // M19: where each Moglin stands
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -35,6 +36,12 @@ ok((await p.evaluate(() => (window as any).__ather.zone())) === 'wilds', 'in the
 await sleep(8000)
 await p.evaluate((x, z) => (window as any).__ather.tp(x, z), st.x, st.z); await sleep(4000)
 await p.mouse.click(500, 350); await sleep(800)
+// M19: the settlement's folk STAND in it, every one of them, as the chibi (drawn only near the keeper)
+const drawn = () => p.evaluate((id: string) => ((window as any).__folk?.drawn?.() ?? {})[id] as { id: string; x: number; z: number }[] | undefined, st.id)
+ok(await (async () => { for (let t = 0; t < 15000; t += 500) { if ((await drawn())?.length === folk.length) return true; await sleep(500) } return false })(), `${st.name}: ${folk.length} Moglins stand in it (${(await drawn())?.length})`)
+ok(((await p.evaluate(() => (window as any).__folk?.mapSettlements?.() ?? 0)) as number) === net.settlements.length, 'the maps have every settlement to draw')
+const spots = folkSpots(st, folk.map(f => f.id)), kp = await p.evaluate(() => (window as any).__folk.keeper()) as { x: number; z: number }
+const nearest = nearestSpot(spots, kp.x, kp.z)!
 await p.keyboard.press('KeyE'); await p.mouse.move(5, 5)   // the pointer off the answers (a hover moves the pick)
 const bubble = () => p.evaluate(() => document.querySelector('[data-talk-bubble]')?.firstElementChild?.textContent ?? '')
 const nameOver = () => p.evaluate(() => document.querySelector('[data-talk-name]')?.textContent ?? '')
@@ -48,14 +55,20 @@ const pick = async (label: string) => { const a = await answers(), i = a.indexOf
 // E in a settlement starts a conversation with ONE Moglin (M13): its dream in a bubble over its name, answers below
 ok(await poll(async () => !!(await p.$('[data-talk-choices]'))), `E in ${st.name} starts a conversation`)
 ok(!(await p.$('[data-panel="folk"]')), 'no folk panel: the talk is not a menu')
-const first = folk[0]
+// M19: the talk opens on the Moglin NEAREST the keeper, and the camera aims at it (not the settlement's anchor)
+const first = folk.find(f => f.id === nearest.id)!
+const talkOn = () => p.evaluate(() => (window as any).__folkTalk ?? null) as Promise<{ on: string | null; at: { x: number; z: number } | null } | null>
+const t0 = await talkOn()
+ok(t0?.on === first.id && !!t0.at && Math.hypot(t0.at.x - nearest.x, t0.at.z - nearest.z) < 0.01, `E picks the nearest Moglin (${first.name}) and the camera aims at it (${JSON.stringify(t0)})`)
+const at0 = folk.indexOf(first), others = folk.filter(f => f !== first), second = others.find((_, k) => k >= at0) ?? others[0]   // folk-talk.ts' "who else" order
 ok(await bubble() === first.dream && await nameOver() === first.name, `a Moglin's dream in the bubble over its name (${first.name})`)
 const hello = await answers()
 ok(hello.includes(ASK.needs) === first.employed && hello.includes(ASK.room) && hello.includes(ASK.others) && hello.includes(ASK.bye), `answers: ${hello.join(' | ')}`)
-ok(!(await bubble()).includes(folk[1].dream), 'only this Moglin speaks, not the settlement')
+ok(!(await bubble()).includes(second.dream), 'only this Moglin speaks, not the settlement')
 // "Who else lives here?" turns to the next Moglin
 ok(await pick(hello.find(a => /else/.test(a))!), 'ask who else lives here')
-ok(await bubble() === folk[1].dream && await nameOver() === folk[1].name, `the next Moglin answers (${folk[1].name})`)
+ok(await bubble() === second.dream && await nameOver() === second.name, `the next Moglin answers (${second.name})`)
+ok((await talkOn())?.on === second.id, `the camera turns to ${second.name}`)
 // the employed Moglin: "What do you need?" names its goods and offers only what is in the bag (empty: only Go on)
 const goTo = async (m: typeof folk[0]) => { for (let k = 0; k < folk.length && await nameOver() !== m.name; k++) { if (!(await pick(ASK.others))) break } return await nameOver() === m.name }
 ok(await goTo(emp), `turn to ${emp.name} (has work)`)
@@ -83,6 +96,10 @@ const village = await p.evaluate(() => JSON.parse(localStorage.getItem('open.vil
 ok(!!village && village.moglins?.some((m: { id: string }) => m.id === free.id), `${free.name} is in the garden village`)
 ok(/./.test(await bubble()) && await nameOver() === free.name, `${free.name} answers in the bubble`)
 ok(await pick(ASK.bye), ASK.bye); ok(await poll(async () => !(await p.$('[data-talk-choices]')), 5000), 'the conversation ends')
+// M19: the recruited Moglin has left the settlement; the others stay where they stood
+ok(await poll(async () => { const d = await drawn(); return !!d && d.length === folk.length - 1 && !d.some(x => x.id === free.id) }, 8000), `${free.name} is gone from ${st.name}, ${folk.length - 1} remain`)
+const kept = (await drawn()) ?? []
+ok(kept.every(k => { const o = spots.find(sp => sp.id === k.id); return !!o && Math.hypot(o.x - k.x, o.z - k.z) < 0.01 }), 'the rest did not move')
 ok(errs.length === 0, `0 page errors ${errs.length ? JSON.stringify(errs) : ''}`)
 await br.close()
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)

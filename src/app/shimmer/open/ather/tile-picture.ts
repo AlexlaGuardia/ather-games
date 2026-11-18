@@ -11,6 +11,11 @@ import type { Wilds } from './wilds'
 
 export type Region = { id: string; poly: { x: number; z: number }[]; infected: boolean }
 
+// ── SETTLEMENTS on the maps (BETA M19): the scene hands the network's settlements over once it has them (network-scene.tsx);
+// both maps compose through here, so the minimap and the fold map show them alike. World coords; a tile draws its own.
+let mapSettlements: readonly { x: number; z: number }[] = [], settleRev = 0
+export function setMapSettlements(s: readonly { x: number; z: number }[]) { if (s.length !== mapSettlements.length) { mapSettlements = s; settleRev++ } }
+export const mapSettlementsRev = () => settleRev
 export function composeTilePicture(c: HTMLCanvasElement, W: Wilds, o: {
   px: number; regions: Region[]; fog: Fog | null; tileOff: { x: number; z: number }; ox: number; oz: number; waymarks: Waymark[]
 }) {
@@ -37,4 +42,6 @@ export function composeTilePicture(c: HTMLCanvasElement, W: Wilds, o: {
   }
   if (W.meta.name === GREG_WAYMARK.tile) pin(GREG_WAYMARK.x, GREG_WAYMARK.z, '#e7c766', 9)
   for (const w of o.waymarks) if (w.tile === W.meta.name) pin(w.x, w.z, '#6fd3c4', 8)
+  // a settlement: the warm burrow-tan the compass gives it (page.tsx marks), larger than a pin, under the walked fog's reveal
+  for (const s of mapSettlements) { const lx = s.x - o.ox, lz = s.z - o.oz; if (Math.abs(lx) <= sx / 2 && Math.abs(lz) <= sz / 2) pin(lx, lz, '#d9c39a', 16) }
 }

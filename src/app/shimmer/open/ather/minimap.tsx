@@ -18,7 +18,7 @@ import type { Waymark } from './waymarks'
 import { GATE, GREG, PLOT_R } from './plot'
 import { TILE_M, type WildsWorld } from './wilds-world'
 import { plotPlate, PLOT_MPP } from './plate'
-import { composeTilePicture } from './tile-picture'
+import { composeTilePicture, mapSettlementsRev } from './tile-picture'
 import type { CompassPose } from '../shared/game-hud'
 import { D, type Frame } from './cluster'
 import { MEADOW_CELL, type Meadow } from './meadow'
@@ -74,7 +74,7 @@ export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waym
       keep.add(name)
       // the fog moves only where you walk: only YOUR tile recomposes on a fog change; the rest when their borders,
       // pins or the loaded set change (a full redraw of nine tiles every quarter-second would stutter)
-      const sig = `${wrev}|${regionsByTile.get(name)?.map(r => r.infected ? 1 : 0).join('') ?? ''}|${waymarks.length}${name === here ? `|${fog?.rev ?? 0}` : ''}`
+      const sig = `${wrev}|${regionsByTile.get(name)?.map(r => r.infected ? 1 : 0).join('') ?? ''}|${waymarks.length}|${mapSettlementsRev()}${name === here ? `|${fog?.rev ?? 0}` : ''}`
       if (sigs.current.get(name) === sig && comps.current.has(name)) continue
       sigs.current.set(name, sig)
       const c = comps.current.get(name) ?? document.createElement('canvas'); comps.current.set(name, c)

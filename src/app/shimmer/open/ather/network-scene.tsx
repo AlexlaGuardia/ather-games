@@ -4,10 +4,16 @@
 // settlements (DUG, never built: canon, "free Moglins dig"; Tuckbank is tucked into a bank), and THE THISTLEDOWN FAIR's
 // big top (RULED 11-17: a travelling fair of free Moglins; the tent's look is build, thistle purple and down-white).
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Wilds } from './wilds'
-import { pathsIn, PATH_W, fairDoor, FAIR_NAME, type Network, type Settlement, type Fair } from './network'
+import { pathsIn, PATH_W, fairDoor, FAIR_NAME, SEASON, type Network, type Settlement, type Fair } from './network'
+import { folkOf, stillHome } from './settlement-folk'
+import { loadVillage } from './moglins'
+import { folkSpots, type Spot } from './folk-spots'
+import { setMapSettlements } from './tile-picture'
+import { MoglinModel, furOf } from '../shared/moglin-model'
 
 // ── the paths ────────────────────────────────────────────────────────────────────────────────────────────────────
 const PATH_COLOUR = new THREE.Color('#c8b285'), PATH_EDGE = new THREE.Color('#a99467')
@@ -77,7 +83,56 @@ function SettlementModel({ s, y }: { s: Settlement; y: number }) {
   )
 }
 export function Settlements({ net, loaded }: { net: Network; loaded: (x: number, z: number) => number | null }) {
-  return <>{net.settlements.map(s => { const y = loaded(s.x, s.z); return y === null ? null : <SettlementModel key={s.id} s={s} y={y} /> })}</>
+  return <>
+    {net.settlements.map(s => { const y = loaded(s.x, s.z); return y === null ? null : <SettlementModel key={s.id} s={s} y={y} /> })}
+    <SettlementFolk net={net} loaded={loaded} />
+  </>
+}
+
+// ── THE FOLK, standing in their settlements (BETA M19, Alex 11-18) ───────────────────────────────────────────────────
+/** where the keeper is (the first-person camera), for the talk's "nearest Moglin" (use-folk-talk.tsx); written each frame */
+export const keeperNow = { x: 0, z: 0 }
+/** settlements within this of the keeper mount their Moglins; the rest draw no rigs (11 x 5 never all live) */
+export const FOLK_DRAW_R = 110
+/** the Moglins drawn right now, world spots (checks + the talk read it): settlement id -> its home folk's spots */
+export const folkDrawn = new Map<string, Spot[]>()
+
+function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: number) => number | null }) {
+  useEffect(() => { setMapSettlements(net.settlements) }, [net])   // the maps draw them (tile-picture.ts)
+  const [near, setNear] = useState<string[]>([])
+  const [villageRev, setVillageRev] = useState(0)
+  const acc = useRef(0)
+  useFrame(({ camera }, dt) => {
+    keeperNow.x = camera.position.x; keeperNow.z = camera.position.z
+    acc.current += dt; if (acc.current < 1) return
+    acc.current = 0
+    const ids = net.settlements.filter(s => Math.hypot(s.x - camera.position.x, s.z - camera.position.z) < FOLK_DRAW_R && loaded(s.x, s.z) !== null).map(s => s.id)
+    setNear(cur => (cur.join() === ids.join() ? cur : ids))
+    setVillageRev(v => v + 1)   // a recruit happens in the talk: re-read who is still home once a second
+  })
+  const village = useMemo(() => loadVillage(), [villageRev])   // eslint-disable-line react-hooks/exhaustive-deps
+  const drawn = useMemo(() => {
+    const out: { s: Settlement; spots: Spot[] }[] = []
+    for (const id of near) {
+      const s = net.settlements.find(x => x.id === id); if (!s) continue
+      const all = folkOf(s, SEASON), home = new Set(stillHome(all, village).map(f => f.id))
+      out.push({ s, spots: folkSpots(s, all.map(f => f.id)).filter(p => home.has(p.id)) })   // laid out over ALL, so a recruit never shuffles the rest
+    }
+    return out
+  }, [near, net, village])
+  const key = drawn.map(d => `${d.s.id}:${d.spots.map(p => p.id).join('.')}`).join('|')
+  useEffect(() => {
+    folkDrawn.clear(); for (const d of drawn) folkDrawn.set(d.s.id, d.spots)
+    ;(window as unknown as { __folk?: unknown }).__folk = { drawn: () => Object.fromEntries(folkDrawn), keeper: () => ({ ...keeperNow }), mapSettlements: () => net.settlements.length }
+  }, [key])   // eslint-disable-line react-hooks/exhaustive-deps
+  return <>{drawn.flatMap(d => d.spots.map((p, k) => {
+    const y = loaded(p.x, p.z)   // the ground's height HERE, asked at draw (M18 reshapes ground near paths)
+    return y === null ? null : (
+      <group key={p.id} position={[p.x, y, p.z]} rotation-y={p.yaw}>
+        <MoglinModel build="chibi" action="idle" tone={furOf(p.id)} seed={k * 1.7 + d.s.x * 0.01} />
+      </group>
+    )
+  }))}</>
 }
 
 // ── the big top ──────────────────────────────────────────────────────────────────────────────────────────────────
