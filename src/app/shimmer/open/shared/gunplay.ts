@@ -19,6 +19,10 @@ export interface RangeGun extends WeaponDef {
   shove: number
   /** the rack's colour: what the model is painted and what labels it */
   color: string
+  /** seconds the trigger CHARGES before the round leaves (the Charred Rifle's short charge-up); 0 / absent = instant */
+  charge?: number
+  /** canon: a weapon that can never take a sigil (the Enchant Temple turns it away) */
+  noSigil?: boolean
 }
 
 const base = (id: string) => WEAPONS.find(w => w.id === id)!
@@ -42,6 +46,16 @@ export const RANGE_GUNS: RangeGun[] = [
     converge: 14, headR: 0.05, trailR: 0.04, hipMove: 0.78, adsMove: 0.6,
     burst: 1, burstGap: 0, pellets: 9, shove: 0.35, color: '#d0503c' },
   { ...base('lance'), burst: 1, burstGap: 0, pellets: 1, shove: 0.12, color: '#a070d8' },
+  // ★ THE CHARRED RIFLE (canon RULED 11-15, CANON_GAPS › "Kael leaves the Charred Rifle at the shipyard"; Alex: "its single
+  // fire with a short charge up but packs a punch"). Kael's retired Prototype, left to the keeper with the shipyard; it can
+  // NEVER take a sigil (world/manalic-weapons.md). A primary: one heavy round per pull after a 0.35 s charge. Numbers = build.
+  { id: 'charred-rifle', name: 'CHARRED RIFLE', slot: 'LONGBARREL', auto: false,
+    fireCd: 0.9, projSpeed: 70, projLife: 2.2,
+    damage: 34, crit: 55, clip: 5, reloadTime: 2.0, reloadMana: 12,
+    hipSpread: 0.5, adsSpread: 0.06, bloomPerShot: 0, bloomMax: 0,
+    bloomDecay: 6, adsBloomScale: 0, kickPitch: 0.03, kickYaw: 0.006,
+    converge: 60, headR: 0.09, trailR: 0.07, hipMove: 0.85, adsMove: 0.55,
+    burst: 1, burstGap: 0, pellets: 1, shove: 0.2, color: '#6b4a2f', charge: 0.35, noSigil: true },
 ]
 export const gunForSlate = (slate: string) => RANGE_GUNS.find(g => g.slot === slate) ?? null
 

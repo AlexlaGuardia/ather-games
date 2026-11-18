@@ -132,9 +132,9 @@ export interface Inv { v: 1; slots: (Stack | null)[]; /** one-off gifts already 
 
 export function newInv(waymarks = 12): Inv {
   const slots: (Stack | null)[] = Array(SLOTS).fill(null)
-  slots[0] = { id: 'repeater', n: 1 }
-  if (waymarks > 0) slots[1] = { id: 'waymark', n: waymarks }
-  slots[2] = { id: 'bait', n: STARTING_BAIT }   // rinning (ather/rinning.ts): hold it, click the water
+  // ★ no gun (Alex 11-18): weapons are equipment (the Character tab's primary / secondary), never bag items
+  if (waymarks > 0) slots[0] = { id: 'waymark', n: waymarks }
+  slots[1] = { id: 'bait', n: STARTING_BAIT }   // rinning (ather/rinning.ts): hold it, click the water
   return { v: 1, slots, gifts: ['bait1'] }
 }
 // ⚠ keeps `gifts`: dropping it (11-16) re-armed the one-off bait gift, so every reload after any bag change handed out
@@ -203,6 +203,9 @@ export function quickMove(inv: Inv, at: number): Inv {
 
 export const INV_KEY = 'open.inv.v1'
 /** Load the keeper's bag, or a fresh one. `waymarksLeft` seeds a fresh bag for a keeper who already planted some. */
+/** Guns left the bag (11-18): an older bag's gun stacks are taken out (weapons are equipment, loadout.ts). Pure. */
+export const dropGuns = (i: Inv): Inv => (i.slots.some(x => x && OPEN_ITEMS[x.id]?.kind === 'gun') ? { ...i, slots: i.slots.map(x => (x && OPEN_ITEMS[x.id]?.kind === 'gun' ? null : x)) } : i)
+
 export function loadInv(waymarksLeft = 12): Inv {
   try {
     const v = JSON.parse(localStorage.getItem(keeperKey(INV_KEY)) ?? 'null')
@@ -211,6 +214,9 @@ export function loadInv(waymarksLeft = 12): Inv {
       // tool"): they sit in the sockets round the mana orb (engine/tools.ts). A Worn Blade a bag got for an hour on 11-15
       // is taken back out here.
       let out: Inv = v.slots.some((x: Stack | null) => x?.id === 'worn_blade') ? { ...v, slots: v.slots.map((x: Stack | null) => (x?.id === 'worn_blade' ? null : x)) } : v
+      // ★ guns left the bag (Alex 11-18: "i have a repeater in my hotbar that shouldnt be there ... remove it"): weapons are
+      // equipment now (loadout.ts), so any gun stack is taken out of an older bag
+      out = dropGuns(out)
       // the bait floor shipped an hour as 'forage' before canon named it MAST (11-17): rename it in place
       if (out.slots.some((x: Stack | null) => x?.id === 'forage')) out = { ...out, slots: out.slots.map((x: Stack | null) => (x?.id === 'forage' ? { ...x, id: 'mast' } : x)) }
       // rinning arrived (11-15): an older bag is handed the starting bait once

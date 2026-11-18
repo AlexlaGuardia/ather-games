@@ -11,8 +11,11 @@ const DT = 1 / 60
 
 // one rack per Slate, every Slate stocked, names are canon's anchors
 ok(['SIDEARM', 'SHORTBARREL', 'LONGBARREL', 'BREACHER', 'REACHER'].every(s => !!gunForSlate(s)), 'a Slate has no gun on its rack')
-ok(RANGE_GUNS.map(g => g.name).join() === 'REPEATER,SPITTER,BACKBONE,ROAR,LANCE', `rack names drifted: ${RANGE_GUNS.map(g => g.name)}`)
-ok(new Set(RANGE_GUNS.map(g => g.color)).size === 5, 'two racks share a colour')
+ok(RANGE_GUNS.map(g => g.name).join() === 'REPEATER,SPITTER,BACKBONE,ROAR,LANCE,CHARRED RIFLE', `rack names drifted: ${RANGE_GUNS.map(g => g.name)}`)
+// ★ the Charred Rifle (canon 11-15): a primary, single fire after a short charge, heavier than any round on the racks, never takes a sigil
+const cr = RANGE_GUNS.find(g => g.id === 'charred-rifle')!
+ok(!!cr && cr.slot !== 'SIDEARM' && !cr.auto && (cr.charge ?? 0) > 0 && cr.noSigil === true && cr.damage > Math.max(...RANGE_GUNS.filter(g => g !== cr && g.pellets === 1).map(g => g.damage)), 'the Charred Rifle: a charged single-fire primary that packs a punch and takes no sigil')
+ok(new Set(RANGE_GUNS.map(g => g.color)).size === RANGE_GUNS.length, 'two racks share a colour')
 
 const run = (id: string, frames: number, down: (i: number) => boolean) => {
   const g = holdGun(RANGE_GUNS.find(w => w.id === id)!), out: Round[] = []

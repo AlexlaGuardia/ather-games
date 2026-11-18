@@ -6,6 +6,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
+import { RANGE_GUNS } from '../shared/gunplay'
+import { weaponDef } from '../../engine/weapons'
 import { newCombat, stepCombat, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, type Combat, type Terrain, type CombatEvent, type Hollow } from './combat'
 import { runCast, type CastHit } from './combat-casts'
 import type { CastSpec } from '../../play3d/cast'
@@ -232,7 +234,7 @@ function CastFlash({ fx }: { fx: React.MutableRefObject<LiveFx[]> }) {
   )
 }
 
-export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, reloadTick = 0, casts, onCast, eats }: {
+export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats }: {
   T: Terrain
   locked: React.MutableRefObject<boolean>
   frozen: React.MutableRefObject<boolean>
@@ -245,8 +247,10 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   nodes?: WildsNode[]
   /** Which node's ground a spot is (id), or undefined on a tile with no nodes: strays only well up where it is infected. */
   ownerOf?: (x: number, z: number) => string | undefined
-  /** The Repeater is the held slot (the hotbar): only then does a click fire. */
+  /** A gun is drawn (shared/stance.ts): only then does a click fire. */
   armed?: boolean
+  /** WHICH gun is drawn (the loadout's primary or secondary, Alex 11-18): its stats replace the last gun's on a swap */
+  gunId?: string | null
   /** bumped by the page when R is tapped with a single gun drawn: reload */
   reloadTick?: number
   /** casts the page has paid for (shared/casting.ts), run along the eye's aim on the next frame */
@@ -271,6 +275,15 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const settled = useRef(0)
   useEffect(() => { if (!active) settled.current = 0 }, [active])
   const armedRef = useRef(armed); armedRef.current = armed
+  // the drawn gun: any range gun (gunplay.ts, which holds the Charred Rifle, Backbone, Roar too) or an engine weapon. A swap
+  // takes the new gun's stats and a full clip; a charge in progress is dropped.
+  const charging = useRef(-1)
+  useEffect(() => {
+    if (!gunId) return
+    const g = RANGE_GUNS.find(x => x.id === gunId) ?? weaponDef(gunId)
+    if (!g || c.current.gun.id === g.id) return
+    c.current.gun = g; c.current.keeper.ammo = g.clip; c.current.keeper.reloading = 0; c.current.keeper.bloom = 0; charging.current = -1
+  }, [gunId])
   const ownerRef = useRef(ownerOf); ownerRef.current = ownerOf
   const spent = useRef(new Set<string>())   // cleared this visit: never re-woken before the page drops it
   // once the page's list has caught up (the cleared node dropped out, or the spread brought one back), forget the bridge
@@ -311,9 +324,15 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       const infested = own ? (x: number, z: number) => { const id = own(x, z); return !id || (!spent.current.has(id) && nodesRef.current.some(n => n.id === id)) } : undefined
       populate(C, T, feet.x, feet.z, C.champ ? 0 : near ? 11 : 7, safe, infested)
     }
-    if ((trigger.current || touch.fire) && !frozen.current && armedRef.current) {
-      camera.getWorldDirection(aim)
-      fire(C, camera.position, aim)
+    // a CHARGED gun (the Charred Rifle): the pull starts a short charge, the round leaves when it ends (still aimed by the eye)
+    const charge = (C.gun as { charge?: number }).charge ?? 0
+    if (charging.current >= 0) {
+      charging.current -= dt
+      if (charging.current < 0) { camera.getWorldDirection(aim); fire(C, camera.position, aim) }
+      if (!armedRef.current || frozen.current) charging.current = -1
+    } else if ((trigger.current || touch.fire) && !frozen.current && armedRef.current) {
+      if (charge > 0) { if (C.keeper.ammo > 0 && C.keeper.reloading <= 0 && C.keeper.sinceShot >= C.gun.fireCd) charging.current = charge; else { camera.getWorldDirection(aim); fire(C, camera.position, aim) } }
+      else { camera.getWorldDirection(aim); fire(C, camera.position, aim) }
       if (!C.gun.auto) { trigger.current = false; touch.fire = false }
     }
     if (casts?.current.length) {

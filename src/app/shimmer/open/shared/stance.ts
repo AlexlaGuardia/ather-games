@@ -17,6 +17,7 @@
 //
 // ★ PURE. The page owns the state; this decides every transition so the rules have one home and a test.
 
+import { getLoadout } from './loadout'
 import type { Inv } from './inventory'
 import { itemDef } from './inventory'
 
@@ -27,11 +28,11 @@ export const STOWED_SPEED = 1.2
 /** How long R must be held before it stows (a shorter press is a tap). */
 export const HOLD_MS = 350
 
-/** The keeper's weapons: the first two guns in the bag, hotbar first. */
-export function weapons(inv: Inv): string[] {
-  const out: string[] = []
-  for (const s of inv.slots) if (s && itemDef(s.id).kind === 'gun' && !out.includes(s.id)) { out.push(s.id); if (out.length === 2) break }
-  return out
+/** The keeper's weapons: the equipped PRIMARY then SECONDARY (the Character tab, loadout.ts), never bag items (Alex 11-18).
+ *  `inv` stays in the signature so every caller keeps working; guns no longer live in it. */
+export function weapons(_inv?: Inv): string[] {
+  const l = getLoadout()
+  return [l.primary, l.secondary].filter((x): x is string => !!x)
 }
 
 export type RTap = { stance: Stance; reload: boolean }
