@@ -63,6 +63,8 @@ export function JournalBody() {
   return (
     <div className="relative px-5 pt-7 pb-5 min-h-[340px]"
       style={{ backgroundImage: `linear-gradient(90deg, transparent 34px, ${MARGIN} 34px, ${MARGIN} 35.5px, transparent 35.5px), repeating-linear-gradient(180deg, transparent 0 39px, ${RULE} 39px 40px)`, backgroundPosition: '0 0, 0 22px' }}>
+      {/* the ledger's cover title (Alex 11-18, athernyx 5411aa4: "On the cover, in the same square hand: THE DIG") */}
+      <div className="pl-6 text-[15px] tracking-[0.18em]" style={{ ...hearthDisplay, color: H.ink }}>THE DIG</div>
       <div className="pl-6 mb-1 text-[13px] italic" style={{ ...hearthDisplay, color: H.inkSoft }}>Kael&apos;s ledger</div>
       {kael.length > 0 && <div className="pl-1">{page(kael)}</div>}
       <div className="pl-1">{mine.length ? page(mine) : <div className="pl-6 py-2 italic" style={{ ...hearthDisplay, color: H.inkFaint, fontSize: 16 }}>Nothing written yet.</div>}</div>
