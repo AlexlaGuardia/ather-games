@@ -389,7 +389,16 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const spent = useRef(new Set<string>())   // cleared this visit: never re-woken before the page drops it
   // once the page's list has caught up (the cleared node dropped out, or the spread brought one back), forget the bridge
   useEffect(() => { spent.current.clear() }, [nodes])
-  useEffect(() => { revive(c.current); setIds([]) }, [reviveKey])
+  // ★ tell the page at once (M20, Alex 11-18 'spawned in the home plot with 2 hp'): revive() always set full health, but the
+  // HUD only hears from the frame loop below, which stops off the Wilds, so the plot kept showing the last hp of the fight
+  const onHudRef = useRef(onHud); onHudRef.current = onHud
+  const onEventsRef = useRef(onEvents); onEventsRef.current = onEvents
+  useEffect(() => {
+    revive(c.current); setIds([])
+    if (!reviveKey) return
+    const k = c.current.keeper
+    onHudRef.current({ ...hud.current, gun: c.current.gun.name, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: c.current.gun.clip, reloading: false, champ: null })
+  }, [reviveKey])
   useEffect(() => { if (reloadTick) reload(c.current) }, [reloadTick])
   useEffect(() => {
     const down = (e: MouseEvent) => {
@@ -406,7 +415,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     g.__ather = { ...(g.__ather ?? {}), combat: () => c.current, spawn: (dx = 0, dz = -10, kind: 'shambler' | 'floater' = 'shambler') => {
       const f = camera.getWorldDirection(new THREE.Vector3()); const x = camera.position.x + f.x * -dz + dx, z = camera.position.z + f.z * -dz
       spawnHollow(c.current, T, x, z, kind)
-    }, aim: () => { const f = camera.getWorldDirection(new THREE.Vector3()); return { x: f.x, y: f.y, z: f.z, cx: camera.position.x, cy: camera.position.y, cz: camera.position.z } }, nodes: () => nodesRef.current, wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
+    }, aim: () => { const f = camera.getWorldDirection(new THREE.Vector3()); return { x: f.x, y: f.y, z: f.z, cx: camera.position.x, cy: camera.position.y, cz: camera.position.z } }, nodes: () => nodesRef.current, fall: () => { c.current.keeper.hp = 0; onEventsRef.current([{ kind: 'down' }]) }, wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('contextmenu', menu) }
   }, [locked, frozen, camera, T])
 

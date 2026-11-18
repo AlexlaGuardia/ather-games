@@ -38,6 +38,7 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'open.inv.v1',             worldTied: false },  // the whole pack + hotbar slots
   { base: 'open.loadout.v1',         worldTied: false },  // the stance / worn vessel loadout
   { base: 'open.fleet.v1',           worldTied: false },  // the coursers they own + the one they drive (M14 lots), 11-18
+  { base: 'open.pack.v1',            worldTied: false },  // the backpack a fallen keeper left in the Wilds (M20, 11-18): what they carried + when
   { base: 'open.sights.v1',          worldTied: false },  // each gun's etched sight mark + tint (canon: look, never power), 11-18
   { base: 'open.skills.v1',          worldTied: false },  // forestry skill XP
 ]
