@@ -28,8 +28,13 @@ await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'loa
 await p.waitForFunction(() => (window as any).__ather?.zone?.() === 'wilds' && !!(window as any).__fpGun, { timeout: 240000 }); await sleep(4000)
 await p.mouse.click(640, 380); await sleep(800)
 res.stowed = await G()
+res.freeHandsStowed = await p.evaluate(() => (window as any).__openHands?.visible?.() ?? null)   // stowed: the free gloves ARE drawn
 // 1 · R draws the primary: the Charred Rifle, held, its 2x, the etching lit faintly
 await tapR(); await poll(async () => !!(await G())?.shown); res.drawn = await G()
+// 1b · ONE pair of hands (Alex 11-18: 'extra hands when I pull out a weapon'): with the gun out the free gloves are not drawn at
+//      all, and a jump (which throws the free hands up) does not bring them back over the gun
+res.freeHandsDrawnWithGun = await p.evaluate(() => (window as any).__openHands?.visible?.() ?? null)
+await p.keyboard.down('Space'); await sleep(250); res.freeHandsMidJump = await p.evaluate(() => (window as any).__openHands?.visible?.() ?? null); await p.keyboard.up('Space'); await sleep(900)
 await p.screenshot({ path: `${out}/1-hip-rifle.png` })
 // 2 · right-click: the sights; at full ADS the 2x's scope ring takes the screen and the model gives way
 await p.mouse.down({ button: 'right' })
@@ -72,6 +77,7 @@ res.pageErrors = errs
 console.log(JSON.stringify(res, null, 1))
 const d = res.drawn as any, ar = res.aimedRifle as any, sw = res.swapped as any, rp = res.aimedRepeater as any, st = res.stowed as any
 const pass = !!st && !st.shown
+  && res.freeHandsStowed === true && res.freeHandsDrawnWithGun === false && res.freeHandsMidJump === false
   && d?.shown && d.key === 'charred-rifle:scope2' && d.optic === 'scope2' && d.glow >= 0.15 && d.glow <= 0.5
   && !!res.adsReached && ar?.ads >= 0.99 && !!res.ringRifle && ar.shown === false
   && !!res.adsLeft && !!res.ringGone

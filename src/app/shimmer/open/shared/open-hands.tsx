@@ -60,13 +60,18 @@ export const OpenHands = forwardRef<OpenHandsApi>(function OpenHands(_, ref) {
     step: (i, dt) => {
       const { R, L } = stepFpHands(st.current, i, Math.min(dt, 0.1))
       rig.root.position.copy(camera.position); rig.root.quaternion.copy(camera.quaternion)   // this frame's camera
+      // ★ HIDDEN MEANS GONE, AT ONCE (Alex 11-18 playtest: "extra hands when I pull out a weapon"). Hidden used to only EASE the
+      // gloves down (s.low, ~0.3 s), so for that long the free pair and the gun's own gloves (fp-gun.tsx) were both on screen,
+      // and any pose that lifts the hands (a jump throws them up) could bring the lowered pair back into view under a drawn gun.
+      // Now a hidden rig is not drawn; coming back still rises from below (s.low eases 1 -> 0).
+      rig.root.visible = !i.hidden
       place(rig.R, R); place(rig.L, L)
     },
     seat: lit => { seatMat.emissiveIntensity = 0.3 + 1.6 * lit },
   }), [camera, rig, seatMat])
   useEffect(() => {
     loadFpTune()   // this browser's tune from /shimmer/dev/hands, if any
-    ;(window as unknown as { __openHands?: unknown }).__openHands = { R: () => ({ ...st.current.R }), L: () => ({ ...st.current.L }), air: () => st.current.air }
+    ;(window as unknown as { __openHands?: unknown }).__openHands = { R: () => ({ ...st.current.R }), L: () => ({ ...st.current.L }), air: () => st.current.air, visible: () => rig.root.visible }
     return () => { rig.root.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); (o.material as THREE.Material).dispose() } }) }
   }, [rig])
   return <primitive object={rig.root} />
