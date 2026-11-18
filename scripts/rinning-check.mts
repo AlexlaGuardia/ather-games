@@ -27,7 +27,8 @@ if (!spot) { console.log('no shore found'); process.exit(1) }
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const p = await br.newPage(); await p.setViewport({ width: 1000, height: 640 })
-await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.removeItem('open.inv.v1'); localStorage.removeItem('open.skills.v1') })
+// a fresh keeper's bag, written down so the check can find the bait's slot (11-18: guns left the bag)
+await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); { const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'waymark', n: 12 }; slots[1] = { id: 'bait', n: 10 }; localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] })) } localStorage.removeItem('open.skills.v1') })
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 120000 })
 await p.waitForFunction(() => !!(window as any).__ather?.rin, { timeout: 120000 }); await sleep(2000)
 await p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))
@@ -35,7 +36,8 @@ await sleep(9000)
 const frame = async (name = '_frame') => { try { await p.screenshot({ path: `${out}/${name}.png` }) } catch { /* slow */ } }
 await p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
 await p.evaluate((s) => { const A = (window as any).__ather; A.tp(s.x, s.z, s.yaw); A.look(s.yaw, s.pitch) }, spot); await sleep(3000)
-await p.keyboard.press('Digit3'); await sleep(400)
+// the bait's own slot: guns left the bag 11-18, so it is no longer always slot 3
+await p.keyboard.press(`Digit${await p.evaluate(() => (((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots ?? []) as ({ id: string } | null)[]).slice(0, 8).findIndex(s => s?.id === 'bait') + 1) || 3)}`); await sleep(400)
 await p.evaluate((s) => (window as any).__ather.look(s.yaw, s.pitch), spot)
 await frame(); await frame('rinning-1-aim')
 const res: Record<string, unknown> = { spot, stance: await p.evaluate(() => (window as any).__ather.stance()), aimed: await p.evaluate(() => !!(window as any).__ather.rin()?.aim) }

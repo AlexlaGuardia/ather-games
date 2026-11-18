@@ -28,7 +28,8 @@ const URL = process.env.URL ?? 'https://ather.games'
 const br = await puppeteer.launch({ executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const p = await br.newPage()
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e)))
-await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.removeItem('open.inv.v1'); localStorage.removeItem('open.skills.v1') })
+// a fresh keeper's bag, written down so the check can find the bait's slot (11-18: guns left the bag)
+await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); { const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'waymark', n: 12 }; slots[1] = { id: 'bait', n: 10 }; localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] })) } localStorage.removeItem('open.skills.v1') })
 await p.setViewport({ width: 560, height: 350 })
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(c ? '  ok  ' : '  FAIL', m); if (!c) fails++ }
@@ -38,7 +39,8 @@ await p.waitForFunction(() => !!(window as any).__drive?.state && !!(window as a
 await p.keyboard.press('KeyW'); await wait(500)
 await p.evaluate((s) => (window as any).__drive.tp(s.x + 25, s.z + 25, 0, 0), spot); await wait(6000)
 await p.evaluate((s) => (window as any).__drive.footTp(s.x, s.z, s.yaw, s.pitch), spot); await wait(4000)
-await p.keyboard.press('Digit3'); await wait(800); await frame(); await frame()
+// the bait's own slot: guns left the bag 11-18, so it is no longer always slot 3
+await p.keyboard.press(`Digit${await p.evaluate(() => (((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots ?? []) as ({ id: string } | null)[]).slice(0, 8).findIndex(s => s?.id === 'bait') + 1) || 3)}`); await wait(800); await frame(); await frame()
 const view = () => p.evaluate(() => (window as any).__rin.view())
 ok(!!(await view())?.aim, 'bait in hand, aimed at open water')
 const bag = () => p.evaluate(() => (JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots as ({ id: string; n: number } | null)[]).filter(Boolean).map(s => `${s!.id}x${s!.n}`))
