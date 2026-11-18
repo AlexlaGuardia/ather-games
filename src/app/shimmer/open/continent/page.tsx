@@ -32,7 +32,10 @@ import { Towns } from '../towns/Towns'
 import { MarketView, DeedCard } from '../business/market-view'
 import { useTycoon } from '../business/use-tycoon'
 import { ShopPanel } from '../business/shop-panel'
-import { RunesmithPanel } from '../business/smith-panel'
+import { RunesmithPanel, IdonyPanel, commitImbue } from '../business/smith-panel'
+import { TalkBubble, TalkChoices } from '../shared/npc-talk'
+import { smithTalk, templeTalk, beatTalk } from './door-talk'
+import type { Beat } from '../business/errand-lines'
 import type { Seat } from '../business/letters'
 import { stageOf, errandEntries, birthSeat, gemsGiven } from '../business/errand'
 import { allOffers } from '../business/market'
@@ -685,7 +688,7 @@ export interface RideHud { x: number; z: number; yaw: number; mph: number; frac:
 const LANDING = 'rune-hold'
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
-function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx }: { castFx: { surge: React.MutableRefObject<{ until: number; mult: number }>; impulse: React.MutableRefObject<CastSpec | null>; gateStep: (lc: Parameters<ReturnType<typeof useCasts>['gateStep']>[0], yaw: number, dt: number, groundAt: (x: number, z: number) => number) => void }; track: React.MutableRefObject<Track>; R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<{ tp?: (x: number, z: number, yaw: number) => void }> }) {
+function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus }: { talkFocus?: React.MutableRefObject<{ x: number; y: number; z: number } | null>; castFx: { surge: React.MutableRefObject<{ until: number; mult: number }>; impulse: React.MutableRefObject<CastSpec | null>; gateStep: (lc: Parameters<ReturnType<typeof useCasts>['gateStep']>[0], yaw: number, dt: number, groundAt: (x: number, z: number) => number) => void }; track: React.MutableRefObject<Track>; R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<{ tp?: (x: number, z: number, yaw: number) => void }> }) {
   const { camera, gl } = useThree()
   const spawn = useMemo(() => {
     const road = R.meta.roads.find(r => r.from === 'ashfeld' && r.to === 'millbrook') ?? R.meta.roads[0]
@@ -861,10 +864,18 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx }: { castFx
         view.current.yaw -= touch.look.dx * ts
         view.current.pitch = Math.max(-1.5, Math.min(1.5, view.current.pitch - touch.look.dy * ts * (st.invertY ? -1 : 1)))
       }
+      const fc = talkFocus?.current
+      if (fc) {   // a talk (M13): turn to the counter the way the Ather's walker turns to Greg (ather/walker.tsx), shortest way round
+        const dx = fc.x - lc.px, dz = fc.z - lc.pz, dy = fc.y - (lc.py + 1.6)
+        const ty = Math.atan2(-dx, -dz), tp = Math.max(-0.6, Math.min(0.6, Math.atan2(dy, Math.hypot(dx, dz))))
+        const a = Math.min(1, frameDt * 6), dYaw = Math.atan2(Math.sin(ty - view.current.yaw), Math.cos(ty - view.current.yaw))
+        view.current.yaw += dYaw * a; view.current.pitch += (tp - view.current.pitch) * a
+      }
       const { yaw } = view.current
       const fwx = -Math.sin(yaw), fwz = -Math.cos(yaw), rtx = Math.cos(yaw), rtz = -Math.sin(yaw)
-      const f = clamp1((k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0) + touch.move.y)
-      const r = clamp1((k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) + touch.move.x)
+      const still = fc ? 0 : 1   // the keeper stands still while talking (W/S and the arrows pick answers)
+      const f = still * clamp1((k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0) + touch.move.y)
+      const r = still * clamp1((k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) + touch.move.x)
       let mx = fwx * f + rtx * r, mz = fwz * f + rtz * r
       const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml }
       lc.speedMult = (continentStance.current.kind === 'stowed' ? STOWED_SPEED : 1)   // hands free, a little quicker
@@ -1203,6 +1214,40 @@ export default function ContinentRide() {
   // ── THE HUD (shared/game-hud.tsx): the same hearth HUD as the Ather. Nothing on the continent can hurt you yet and
   // nothing casts, so health and mana stand full; the bar is dimmed at the wheel (hands are busy) ──
   const hudSize = useGameHudSize(isTouch)
+  // ── BETA M13 part 3: a runesmith's door and the Enchant Temple TALK first (door-talk.ts), the way Greg does on the Ather:
+  // the counter's line in a bubble over its door, the camera turns to it, each answer opens ONE thing. Idony's imbue beat
+  // plays in the same bubble. Other doors (shops, deeds, the Co.'s board) still open straight to their panel.
+  type Talk = { key: string; name: string; at: { x: number; y: number; z: number }; beat?: { steps: Beat[]; at: number; vesselId: string; wordId: string } }
+  const [talk, setTalk] = useState<Talk | null>(null)
+  const talkFocus = useRef<{ x: number; y: number; z: number } | null>(null)
+  const openDoor = useCallback((key: string) => {
+    const d = R && (key.startsWith('smith:') || key === 'front:enchant-temple') ? doorByKey(R, key) : undefined
+    if (!d) { setDeed(key); return }
+    // over the door itself: the step stone, a step back toward the building, above the lintel
+    const bx = d.b.x - d.at.x, bz = d.b.z - d.at.z, bl = Math.hypot(bx, bz) || 1
+    setTalk({ key, name: key === 'front:enchant-temple' ? 'Idony' : d.name, at: { x: d.at.x + (bx / bl) * 0.6, y: d.at.y + 2.6, z: d.at.z + (bz / bl) * 0.6 } })
+  }, [R])
+  const bracelet = !errLoadout.vessels.some(x => x.id === 'starter-bracelet' && x.word === null)
+  const talkNode = useMemo(() => {
+    if (!talk) return null
+    const acts = { open: (k: string) => { setTalk(t => (t ? { ...t, beat: undefined } : t)); setDeed(k) }, bye: () => setTalk(null) }
+    if (talk.beat) {
+      const b = talk.beat
+      return beatTalk(b.steps, b.at, () => {
+        if (b.steps[b.at].keeper) commitImbue(b.vesselId, b.wordId, ledger, setLedger)   // the keeper says it: the last stone closes
+        setTalk(t => t && t.beat ? (b.at + 1 >= b.steps.length ? null : { ...t, beat: { ...b, at: b.at + 1 } }) : t)
+      })
+    }
+    if (deed) return null   // a counter's panel is open: the talk waits behind it
+    return talk.key === 'front:enchant-temple' ? templeTalk(bracelet, acts) : smithTalk(talk.key, acts)
+  }, [talk, deed, bracelet, ledger, setLedger])
+  useEffect(() => { talkFocus.current = talkNode && talk ? talk.at : null }, [talkNode, talk])
+  useEffect(() => {   // Esc leaves the talk (the beat cannot be walked out of halfway: she is writing)
+    const k = (e: KeyboardEvent) => { if (e.code === 'Escape' && !deed) setTalk(t => (t?.beat ? t : null)) }
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
+  }, [deed])
+  // walking off (or driving) ends it, like a panel
+  useEffect(() => { if (!hud.foot) setTalk(null) }, [hud.foot])
   const gunHud = useGunHud()    // the gun shop's held gun → the template's hotbar + an ammo chip
   // approaching a place speaks on the message line (was a banner)
   const lastPlace = useRef<string | null>(null)
@@ -1344,11 +1389,12 @@ export default function ContinentRide() {
           <Water R={R} />
           {rin.fx}
           <Towns R={R} focus={focus} />
-          <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={setDeed} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} />
+          <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={openDoor} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} />
           <Posts R={R} />
           <Roadside R={R} />
           <Trees R={R} focus={focus} />
-          <Driver castFx={casts} R={R} cave={cave} onHud={setHud} focus={focus} tuneRef={tuneRef} ctl={ctl} track={track} />
+          <Driver castFx={casts} R={R} cave={cave} onHud={setHud} focus={focus} tuneRef={tuneRef} ctl={ctl} track={track} talkFocus={talkFocus} />
+          {talk && talkNode && <TalkBubble at={[talk.at.x, talk.at.y, talk.at.z]} name={talk.name} line={talkNode.line} scene={(talkNode as { scene?: string }).scene} />}
           <GateRings gate={casts.gate} />
         </Canvas>
       )}
@@ -1371,9 +1417,12 @@ export default function ContinentRide() {
         ]} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} keys={CONTINENT_KEYS} />}
       <BirthGate />
-      {deed?.startsWith('smith:') && <RunesmithPanel seat={deed.slice(6) as Seat} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} />}
+      {talkNode && <TalkChoices node={talkNode} phone={hudSize === 'phone'} />}
+      {deed?.startsWith('smith:') && <RunesmithPanel seat={deed.slice(6) as Seat} ledger={ledger} setLedger={setLedger} onClose={() => { setDeed(null); setTalk(null) }} onBack={talk ? () => setDeed(null) : undefined} />}
+      {deed === 'idony' && <IdonyPanel ledger={ledger} setLedger={setLedger} onClose={() => { setDeed(null); setTalk(null) }} onBack={talk ? () => setDeed(null) : undefined}
+        onBeat={b => { setDeed(null); setTalk(t => (t ? { ...t, beat: { ...b, at: 0 } } : t)) }} />}
       {deed?.startsWith('front:') && !board && <ShopPanel id={deed.slice(6)} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} isTouch={isTouch} />}
-      {deed && !deed.startsWith('front:') && !deed.startsWith('smith:') && R && tycoon.t && (
+      {deed && deed !== 'idony' && !deed.startsWith('front:') && !deed.startsWith('smith:') && R && tycoon.t && (
         <DeedCard R={R} lotId={deed} t={tycoon.t} marks={ledger.marks} onClose={() => setDeed(null)}
           onBuy={o => { const r = tycoon.buy(o.lot.id, o.kind, o.lot.tier); if (r.ok) hudSay(`${o.name} is yours · −${o.price.toLocaleString()} Marks`, 'item'); return r }}
           onSell={o => { const r = tycoon.sell(o.lot.id); if (r.ok) { hudSay(`${o.name} sold · +${(r.refund ?? 0).toLocaleString()} Marks`, 'item'); setDeed(null) } return r }} />

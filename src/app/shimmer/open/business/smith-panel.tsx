@@ -4,8 +4,8 @@
 import { useState } from 'react'
 import { HearthFrame, H, hearthDisplay, HearthButton } from '../../ui/hearth'
 import { hudSay } from '../shared/game-hud'
-import { useInv, setInv } from '../shared/bag'
-import { useLoadout, setLoadout } from '../shared/loadout'
+import { useInv, setInv, getInv } from '../shared/bag'
+import { useLoadout, setLoadout, getLoadout } from '../shared/loadout'
 import { countOf, itemDef } from '../shared/inventory'
 import { useBirth } from '../birth-gate'
 import { RUNES } from '../../play3d/birth/runes.data'
@@ -61,7 +61,19 @@ export function RunesmithPanel({ seat, ledger, setLedger, onClose, onBack }: {
   )
 }
 
-export function IdonyPanel({ ledger, setLedger, onClose, onBack }: { ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void; onBack?: () => void }) {
+/** Write the word into the vessel (the keeper has just SAID it): fee, letters and the vessel, read fresh at the moment it
+ *  happens, so the beat can play outside this panel (the continent's talk, M13 part 3). */
+export function commitImbue(vesselId: string, wordId: string, ledger: Ledger, setLedger: (l: Ledger) => void): { ok: boolean; why?: string } {
+  const r = imbue(getLoadout(), getInv(), ledger.marks, vesselId, wordId)
+  if (!r.ok) return { ok: false, why: r.why }
+  setLoadout(r.loadout); setInv(r.inv); setLedger({ ...ledger, marks: r.marks })
+  hudSay(`${r.name} imbued · −${IMBUE_FEE} Marks · wear it from the Character tab (P)`, 'item')
+  return { ok: true }
+}
+
+export function IdonyPanel({ ledger, setLedger, onClose, onBack, onBeat }: { ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void; onBack?: () => void
+  /** given: the imbue beat plays in the caller's talk bubble (the continent, M13), not in this panel's overlay */
+  onBeat?: (b: { steps: Beat[]; vesselId: string; wordId: string }) => void }) {
   const inv = useInv(), loadout = useLoadout(), birth = useBirth()
   const vessels = imbuable(loadout)
   const [pick, setPick] = useState<string | null>(vessels[0]?.id ?? null)
@@ -75,15 +87,16 @@ export function IdonyPanel({ ledger, setLedger, onClose, onBack }: { ledger: Led
   const [beat, setBeat] = useState<{ wordId: string; steps: Beat[]; at: number } | null>(null)
   const commit = (wordId: string) => {
     if (!v) return
-    const r = imbue(loadout, inv, ledger.marks, v.id, wordId)
-    if (!r.ok) { setMsg(r.why); setBeat(null); return }
-    setLoadout(r.loadout); setInv(r.inv); setLedger({ ...ledger, marks: r.marks }); setMsg(null)
-    hudSay(`${r.name} imbued · −${IMBUE_FEE} Marks · wear it from the Character tab (P)`, 'item')
+    const r = commitImbue(v.id, wordId, ledger, setLedger)
+    if (!r.ok) { setMsg(r.why ?? null); setBeat(null); return }
+    setMsg(null)
   }
   const doImbue = (wordId: string) => {
     if (!v) return
     const w = words.find(x => x.id === wordId); if (!w || w.miss.length) return
-    setBeat({ wordId, steps: idonyBeat(w.name, v.id === 'starter-bracelet'), at: 0 })
+    const steps = idonyBeat(w.name, v.id === 'starter-bracelet')
+    if (onBeat) { onBeat({ steps, vesselId: v.id, wordId }); return }
+    setBeat({ wordId, steps, at: 0 })
   }
   const step = () => {
     if (!beat) return

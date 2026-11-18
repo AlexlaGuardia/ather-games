@@ -11,12 +11,15 @@ export interface TalkOption { label: string; pick: () => void }
 export interface TalkNode { line: string; options: TalkOption[] }
 
 /** In the scene (inside the Canvas): the NPC's name plate with the bubble above it. `at` = the point just over their head. */
-export function TalkBubble({ at, name, line }: { at: [number, number, number]; name: string; line: string }) {
+export function TalkBubble({ at, name, line, scene }: { at: [number, number, number]; name: string; line: string
+  /** optional stage direction above the line, in italics (Idony's beat, M13 part 3) */
+  scene?: string }) {
   return (
     <Html position={at} center zIndexRange={[40, 0]} style={{ pointerEvents: 'none' }}>
       <div data-talk-bubble style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: 'translateY(-50%)' }}>
         <div style={{ position: 'relative', maxWidth: 'min(300px, 72vw)', width: 'max-content', padding: '9px 13px', borderRadius: 14,
           background: 'rgba(250,244,232,.96)', color: '#2a2320', font: '500 14px/1.45 system-ui', boxShadow: '0 4px 14px rgba(0,0,0,.35)' }}>
+          {scene && <div data-talk-scene style={{ fontStyle: 'italic', opacity: 0.72, fontSize: 13, marginBottom: line ? 5 : 0 }}>{scene}</div>}
           {line}
           <div style={{ position: 'absolute', left: '50%', bottom: -7, marginLeft: -7, width: 14, height: 14, transform: 'rotate(45deg)', background: 'rgba(250,244,232,.96)' }} />
         </div>
