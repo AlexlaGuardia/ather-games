@@ -7,6 +7,8 @@ import { gunzipSync } from 'node:zlib'
 import { makeRegion, type RegionMeta } from '../src/app/shimmer/open/region'
 import { cachedPlan } from '../src/app/shimmer/open/foot-solids'
 import { shopDoorPoint } from '../src/app/shimmer/open/towns/shop-door'
+import { IDONY_HUSH } from '../src/app/shimmer/open/business/errand-lines'
+import { DOOR_ASK } from '../src/app/shimmer/open/continent/door-talk'   // lark's labels: a reword never stales the check
 const meta = JSON.parse(readFileSync('public/open/continent.json', 'utf8')) as RegionMeta
 const raw = gunzipSync(readFileSync('public/open/continent.bin.gz'))
 const R = makeRegion(meta, new Int16Array(raw.buffer, raw.byteOffset, raw.byteLength / 2))
@@ -35,18 +37,29 @@ const visit = async (town: string, id: string) => {
   ok(await poll(async () => !!(await p.$(`[data-panel="shop-panel"] [data-shop="${id}"]`)), 15000), `${id}: E opens its panel`)
   await p.screenshot({ path: `/tmp/shop-${++shot}.png` })
 }
+/** a door that TALKS first (continent/door-talk.ts): E shows the bubble, not a panel */
+const visitTalk = async (town: string, id: string) => {
+  const b = front(town, id), at = shopDoorPoint(b), fx = Math.cos(b.yaw), fz = Math.sin(b.yaw), yaw = Math.atan2(fx, fz)
+  await p.evaluate((x, z) => (window as any).__drive.tp(x + 30, z + 30, 0, 0), at.x, at.z); await wait(6000)
+  await p.evaluate((x, z, y) => (window as any).__drive.footTp(x, z, y, -0.08), at.x + fx * 1, at.z + fz * 1, yaw)
+  ok(await poll(async () => await p.evaluate(() => (window as any).__market.reach()) === `front:${id}`), `${id}: in reach at its step`)
+  await p.keyboard.press('KeyE')
+  ok(await poll(async () => !!(await p.$('[data-talk-bubble]')) && !(await p.$('[data-panel="shop-panel"]')), 15000), `${id}: E starts a talk, no panel`)
+  await p.screenshot({ path: `/tmp/shop-${++shot}.png` })
+}
 await visit('rune-hold', 'bookstore')
 await p.evaluate(() => document.querySelector<HTMLElement>('[data-panel="shop-panel"] button[aria-label]')?.click()); await wait(800)
 await visit('rune-hold', 'kindled-mug')
 ok(!!(await p.$('[data-shop="kindled-mug"][data-closed]')), 'the Kindled Mug says closed for now')
 await p.evaluate(() => document.querySelector<HTMLElement>('[data-panel="shop-panel"] button[aria-label]')?.click()); await wait(800)
-await visit('citadel', 'enchant-temple')
-// live since 204e8fab (11-16): Idony + the runesmith serve; the twin's counter waits on its letters
-const counters = await p.$$eval('[data-shop="enchant-temple"] [data-counter]', bs => bs.map(b => [b.getAttribute('data-counter'), (b as HTMLButtonElement).disabled, !!b.querySelector('[data-closed]')]))
-const ctr = (w: string) => counters.find(c => c[0] === w)
-ok(counters.length === 3 && ctr('Idony')?.[1] === false && ctr('The runesmith')?.[1] === false && ctr('Her twin')?.[1] === true && ctr('Her twin')?.[2] === true,
-  `the Enchant Temple (Citadel): Idony + the runesmith open, the twin closed for now (${JSON.stringify(counters)})`)
-await p.evaluate(() => document.querySelector<HTMLElement>('[data-panel="shop-panel"] button[aria-label]')?.click()); await wait(800)
+// the Enchant Temple TALKS first since M13 part 3 (49eac508): Idony's line in a bubble over the door, the counters are answers.
+// Live since 204e8fab (11-16): Idony + the runesmith serve; the twin has nothing to open yet, so she is not an answer.
+await visitTalk('citadel', 'enchant-temple')
+const temple = await p.evaluate(() => ({ line: document.querySelector('[data-talk-bubble]')?.textContent ?? '', answers: [...document.querySelectorAll('[data-talk-option]')].map(e => (e.textContent ?? '').replace('›', '').trim()) }))
+ok(temple.line.includes(IDONY_HUSH) && temple.answers.includes(DOOR_ASK.inscribe) && temple.answers.includes(DOOR_ASK.letters) && temple.answers.length === 3,
+  `the Enchant Temple (Citadel): Idony talks, her vessels + the runesmith are answers, the twin is not (${JSON.stringify(temple)})`)
+await p.evaluate((l: string) => ([...document.querySelectorAll<HTMLElement>('[data-talk-option]')].find(e => (e.textContent ?? '').includes(l)))?.click(), DOOR_ASK.byeTemple); await wait(800)
+ok(!(await p.$('[data-talk-choices]')), 'goodbye ends the talk (the next door is reachable again)')
 await visit('rune-hold', 'station')
 ok((await p.$$('[data-soon]')).length === 2 && !!(await p.$('[data-hero="starforge"]')) && !!(await p.$('[data-card="season-crucible"]')) && !!(await p.$('[data-card="expedition"]')), 'the Station: Alex\'s ship menu, the Starforge + Season Crucible + Season Expedition over Expedition')
 const before = await p.evaluate(() => JSON.parse(localStorage.getItem('ather:trade:trial-ledger') ?? '{"marks":1500}').marks ?? 1500)
