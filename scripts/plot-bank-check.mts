@@ -37,13 +37,17 @@ const res: Record<string, unknown> = { url }
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500)
 await hideCard()
-// 1. the table: Make a Keepstone (it lands in the hotbar's first free slot, so putting the bag away leaves it in hand)
+// 1. the table (reworked 11-18, 33501da3: a strip of icons, a card, Build lifts into the flying planner): the Keepstone icon →
+// Build makes one (it lands in the hotbar's first free slot) and lifts you with it on the pointer; Back to keeper lands without
+// setting it, so it stays in the bag
 await tp(TABLE.x + 1.6, TABLE.z + 1.6, Math.PI / 4)
 await p.keyboard.press('e'); await sleep(900)
 res.tablePanel = await panel('planning-table')
-res.made = await click('[data-act="make-keepstone"] button'); await sleep(600)
+await click('[data-pick="keepstone"]'); await sleep(600)
+res.made = await click('[data-build-card="keepstone"] [data-act="build"] button'); await sleep(1500)
+res.liftedToMake = await p.evaluate(() => (window as any).__build?.on() === true)
 res.afterMake = await bag(); await shot('bank-0-table')
-await p.keyboard.press('Escape'); await sleep(500)
+await click('[data-act="land"]'); await sleep(1200)
 // 2. the starter Keepstone: stand at its front (yaw 0 looks −z), E, put the bag away
 await tp(STARTER_CHEST.x, STARTER_CHEST.z + 1.3, 0); await shot('bank-1-keepstone')
 await p.keyboard.press('e'); await sleep(900)
@@ -55,17 +59,21 @@ const logSlot = await p.evaluate(() => [...document.querySelectorAll<HTMLElement
 res.withdrew = logSlot != null && await click(`[data-bank-slot="${logSlot}"]`); await sleep(700)
 res.afterTake = { bag: await bag(), bank: await bank() }
 await p.keyboard.press('Escape'); await sleep(500)
-// 3. set the new one: the table's Keepstone card → Set one → stand on open ground → E
+// 3. set the new one: the Keepstone icon → Set (one is in the bag) → the planner flies over open ground → click sets it
 await tp(TABLE.x + 1.6, TABLE.z + 1.6, Math.PI / 4)
 await p.keyboard.press('e'); await sleep(900)
-res.set = await click('[data-act="set-keepstone"] button'); await sleep(800)
-await tp(-100, 112, 0); await sleep(600); await shot('bank-4-ghost')
-await p.keyboard.press('e'); await sleep(1000)
-res.chests = (await read('open.works.v1'))?.chests?.length ?? 0; res.keepstonesAfterSet = (await bag()).keepstone ?? 0
-await tp(-100, 113.5, 0); await shot('bank-5-placed')
-// 4. open the NEW one (it stands ~1.8 m ahead of where it was set from): the cap shows two Keepstones' worth
-await tp(-100, 112.9, 0); await sleep(1500); await shot('bank-5b-open')
-await tp(-100, 111.2, 0)
+await click('[data-pick="keepstone"]'); await sleep(600)
+res.set = await click('[data-build-card="keepstone"] [data-act="build"] button'); await sleep(1500)
+await p.evaluate(() => (window as any).__build.to(-100, 112)); await sleep(2500)
+const vp = p.viewport()!, mid = { x: vp.width / 2, y: vp.height / 2 }
+await p.mouse.move(mid.x - 3, mid.y); await sleep(300); await p.mouse.move(mid.x, mid.y); await sleep(800); await shot('bank-4-ghost')
+await p.mouse.click(mid.x, mid.y); await sleep(1500)
+const placed = ((await read('open.works.v1'))?.chests ?? []) as { x: number; z: number }[]
+res.chests = placed.length; res.keepstonesAfterSet = (await bag()).keepstone ?? 0
+if (await p.evaluate(() => (window as any).__build?.on() === true)) { await click('[data-act="land"]'); await sleep(1200) }
+// 4. open the NEW one where it was set: stand at its front (yaw 0 looks −z), E: the cap shows two Keepstones' worth
+const k = placed[0] ?? { x: -100, z: 112 }
+await tp(k.x, k.z + 1.3, 0); await sleep(1500); await shot('bank-5-placed')
 await p.keyboard.press('e'); await sleep(900)
 res.capAfter = await capShown(); await shot('bank-6-two')
 // 5. pick it back up: it returns to the bag, the bank keeps everything
