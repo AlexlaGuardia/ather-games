@@ -126,14 +126,15 @@ export function populate(c: Combat, T: Terrain, kx: number, kz: number, target: 
 }
 
 /** Pull the trigger along an aim (unit vector). Returns false when the gun cannot fire. */
-export function fire(c: Combat, eye: { x: number; y: number; z: number }, aim: { x: number; y: number; z: number }): boolean {
+/** `ads` = aiming down the sights (Alex 11-18): the tighter cone (gunplay's adsSpread), the same rule the range uses. */
+export function fire(c: Combat, eye: { x: number; y: number; z: number }, aim: { x: number; y: number; z: number }, ads = false): boolean {
   const k = c.keeper, w = c.gun
   if (!canFire(w, k.sinceShot, k.ammo, k.reloading)) {
     if (k.ammo <= 0 && k.reloading <= 0) reload(c)
     return false
   }
   // a cone around the aim: pick a random direction inside spreadDeg
-  const cone = (spreadDeg(w, k.bloom, false) * Math.PI) / 180
+  const cone = (spreadDeg(w, k.bloom, ads) * Math.PI) / 180
   const r = Math.sqrt(rnd(c)) * Math.tan(cone), th = rnd(c) * Math.PI * 2
   // two perpendiculars to aim
   const ux = Math.abs(aim.y) < 0.95 ? 0 : 1, uy = Math.abs(aim.y) < 0.95 ? 1 : 0

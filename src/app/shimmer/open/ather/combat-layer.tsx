@@ -234,7 +234,12 @@ function CastFlash({ fx }: { fx: React.MutableRefObject<LiveFx[]> }) {
   )
 }
 
-export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats }: {
+/** The sights, shared with the page's held gun (shared/fp-gun.tsx). IN: `aiming` (right mouse here, the phone's aim button from the
+ *  page) and `ads` (the gun's eased adsT past ADS_TIGHT: the tighter cone). OUT: when a round last left (ms, recoil + the mark's
+ *  flare) and how far a charge has built (0..1, the Charred Rifle). */
+export interface SightLink { aiming: boolean; ads: boolean; firedAt: number; charge: number }
+
+export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats, sight }: {
   T: Terrain
   locked: React.MutableRefObject<boolean>
   frozen: React.MutableRefObject<boolean>
@@ -259,6 +264,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   eats?: React.MutableRefObject<number[]>
   /** what each one did (how many it touched), for the message line */
   onCast?: (spec: CastSpec, hit: CastHit | null) => void
+  /** aim down the sights + what the held gun shows (see SightLink) */
+  sight?: React.MutableRefObject<SightLink>
 }) {
   const fx = useRef<LiveFx[]>([])
   const { camera } = useThree()
@@ -291,8 +298,13 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   useEffect(() => { revive(c.current); setIds([]) }, [reviveKey])
   useEffect(() => { if (reloadTick) reload(c.current) }, [reloadTick])
   useEffect(() => {
-    const down = (e: MouseEvent) => { if (e.button === 0 && locked.current && !frozen.current) trigger.current = true }
-    const up = (e: MouseEvent) => { if (e.button === 0) trigger.current = false }
+    const down = (e: MouseEvent) => {
+      if (e.button === 0 && locked.current && !frozen.current) trigger.current = true
+      if (e.button === 2 && locked.current && !frozen.current && sight) sight.current.aiming = true   // hold right-click: the sights
+    }
+    const up = (e: MouseEvent) => { if (e.button === 0) trigger.current = false; if (e.button === 2 && sight) sight.current.aiming = false }
+    const menu = (e: MouseEvent) => { if (locked.current) e.preventDefault() }   // right-click is the sights, never the browser menu
+    window.addEventListener('contextmenu', menu)
     // R is the STANCE's now (shared/stance.ts: draw / swap / hold to stow); a tap with one gun drawn reloads via reloadTick
     window.addEventListener('mousedown', down); window.addEventListener('mouseup', up)
     // probes for tests and scripted shots
@@ -301,7 +313,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       const f = camera.getWorldDirection(new THREE.Vector3()); const x = camera.position.x + f.x * -dz + dx, z = camera.position.z + f.z * -dz
       spawnHollow(c.current, T, x, z, kind)
     }, nodes: () => nodesRef.current, wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
-    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up) }
+    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('contextmenu', menu) }
   }, [locked, frozen, camera, T])
 
   useFrame((_, rawDt) => {
@@ -326,15 +338,18 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     }
     // a CHARGED gun (the Charred Rifle): the pull starts a short charge, the round leaves when it ends (still aimed by the eye)
     const charge = (C.gun as { charge?: number }).charge ?? 0
+    // a round out, through the sights' cone when aiming; the held gun reads when it left (recoil, the mark's flare)
+    const shoot = () => { if (fire(C, camera.position, aim, !!sight?.current.ads) && sight) sight.current.firedAt = performance.now() }
     if (charging.current >= 0) {
       charging.current -= dt
-      if (charging.current < 0) { camera.getWorldDirection(aim); fire(C, camera.position, aim) }
+      if (charging.current < 0) { camera.getWorldDirection(aim); shoot() }
       if (!armedRef.current || frozen.current) charging.current = -1
     } else if ((trigger.current || touch.fire) && !frozen.current && armedRef.current) {
-      if (charge > 0) { if (C.keeper.ammo > 0 && C.keeper.reloading <= 0 && C.keeper.sinceShot >= C.gun.fireCd) charging.current = charge; else { camera.getWorldDirection(aim); fire(C, camera.position, aim) } }
-      else { camera.getWorldDirection(aim); fire(C, camera.position, aim) }
+      if (charge > 0) { if (C.keeper.ammo > 0 && C.keeper.reloading <= 0 && C.keeper.sinceShot >= C.gun.fireCd) charging.current = charge; else { camera.getWorldDirection(aim); shoot() } }
+      else { camera.getWorldDirection(aim); shoot() }
       if (!C.gun.auto) { trigger.current = false; touch.fire = false }
     }
+    if (sight) sight.current.charge = charging.current >= 0 && charge > 0 ? Math.max(0, Math.min(1, 1 - charging.current / charge)) : 0
     if (casts?.current.length) {
       camera.getWorldDirection(aim)
       for (const spec of casts.current) {
