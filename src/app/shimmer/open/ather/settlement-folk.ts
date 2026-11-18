@@ -29,12 +29,19 @@ export const BIOME_TRADES: Readonly<Record<SettlementBiome, Partial<Record<Profe
   woods:  { carpenter: 5, farmer: 2, cook: 2, stonemason: 1, alchemist: 3, smith: 1, jeweler: 1 },
   rock:   { stonemason: 4, jeweler: 3, smith: 3, alchemist: 2, carpenter: 1, farmer: 1, cook: 1 },
 }
-/** Personal names: plant, earth and craft words. Filtered against canon's named Moglins and places (glossary). */
-const NAMES = ['Loam', 'Heath', 'Furrow', 'Pebble', 'Briar', 'Rowan', 'Thatch', 'Wicker', 'Spindle', 'Bracken', 'Clove', 'Quill',
-  'Tumble', 'Burl', 'Knot', 'Chert', 'Flint', 'Shale', 'Pumice', 'Ochre', 'Umber', 'Sumac', 'Lupin', 'Cobnut', 'Acorn', 'Tallow',
-  'Bobbin', 'Ember', 'Hob', 'Peat', 'Rush', 'Withy', 'Hazelnut', 'Dock', 'Sloe', 'Tinder', 'Gravel', 'Mica', 'Basil', 'Pippin']
+/** Personal names (canon law: CANON/game/shimmer-folds-settlements.md › Names, RULED 09-18): the free folk are SOFT PLANTS
+ *  (burrs and thorns are collarer names), drawn from canon's free-folk pool, and no two living speakers share a name. */
+export const CANON_POOL = ['Cress', 'Dill', 'Chervil', 'Comfrey', 'Clover', 'Vervain', 'Lovage', 'Burnet', 'Betony', 'Woad', 'Flax',
+  'Madder', 'Hyssop', 'Clary', 'Rue', 'Bracken', 'Thyme', 'Basil', 'Marjoram', 'Chive', 'Sprig', 'Cowslip', 'Primrose', 'Campion',
+  'Alder', 'Rowan']
+/** STAND-IN (Magii eef97dc, provisional): 26 names cannot cover a season (11 settlements x up to 5 = 55). Soft plants only,
+ *  grepped against CANON/ 11-18 (no hits). Extending the pool is Magii's; replace this list when the ruled extension lands. */
+export const STANDIN_POOL = ['Parsley', 'Tarragon', 'Angelica', 'Borage', 'Chamomile', 'Meadowsweet', 'Lavender', 'Daisy', 'Fern',
+  'Linden', 'Willow', 'Aster', 'Bluebell', 'Speedwell', 'Valerian', 'Agrimony', 'Pennyroyal', 'Cicely', 'Celandine', 'Feverfew',
+  'Bergamot', 'Rosemary', 'Caraway', 'Anise', 'Lilac', 'Poppy', 'Iris', 'Lupin', 'Heather', 'Myrtle', 'Laurel']
+const NAMES = [...CANON_POOL, ...STANDIN_POOL]
 export const CANON_NAMES = new Set(['hazel', 'saxifrage', 'sax', 'yarrow', 'fennel', 'mallow', 'burdock', 'vetch', 'sorrel', 'hemlock',
-  'marl', 'teasel', 'sedge', 'nettle', 'tuckbank', 'thistledown', 'downbarrow', 'snagbarrows', 'gorsejacks', 'cinchfist', 'greg', 'gregory'])
+  'marl', 'teasel', 'sedge', 'brack', 'thistle', 'jimbo', 'marra', 'pell', 'wend', 'pertle', 'grust', 'vane', 'heslur', 'tansy', 'nettle', 'tuckbank', 'thistledown', 'downbarrow', 'snagbarrows', 'gorsejacks', 'cinchfist', 'greg', 'gregory'])
 
 export interface Folk {
   id: string                      // `${season}:${settlement id}:${k}`: also the MoglinRecord id once recruited
@@ -65,12 +72,15 @@ export function folkOf(s: Settlement, season: number): Folk[] {
   const trades = Object.entries(BIOME_TRADES[biome]) as [Profession, number][]
   const others = (Object.keys(SETTLEMENT_GATHERS) as SettlementBiome[]).filter(b => b !== biome).flatMap(b => SETTLEMENT_GATHERS[b])
   const n = FOLK_MIN + Math.floor(rnd() * (FOLK_MAX - FOLK_MIN + 1))
-  const used = new Set<string>(), out: Folk[] = []
+  const out: Folk[] = []
+  // One season-wide order of the pool; each settlement owns FOLK_MAX slots of it by its index (ids are `s<season>-<i>`), so no
+  // two Moglins alive this season share a name across ALL settlements, not just within one (canon: two living speakers never do).
   const names = NAMES.filter(x => !CANON_NAMES.has(x.toLowerCase()))
+  const order = names.map((_, i) => i), shuf = rngOf(`folk-names:${season}`)
+  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(shuf() * (i + 1)); [order[i], order[j]] = [order[j], order[i]] }
+  const idx = Number(/-(\d+)$/.exec(s.id)?.[1] ?? 0)
   for (let k = 0; k < n; k++) {
-    let name = names[Math.floor(rnd() * names.length)]
-    for (let tries = 0; used.has(name) && tries < names.length; tries++) name = names[(names.indexOf(name) + 1) % names.length]
-    used.add(name)
+    const name = names[order[(idx * FOLK_MAX + k) % order.length]]
     const profession = pick(rnd, trades)
     const grades = { craft: pick(rnd, GRADE_ODDS), yield: pick(rnd, GRADE_ODDS), trade: pick(rnd, GRADE_ODDS) }
     const pool = DREAMS[profession]
