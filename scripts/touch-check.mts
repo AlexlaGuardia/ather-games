@@ -55,7 +55,9 @@ await new Promise(r => setTimeout(r, 500))
 await p.evaluate(() => (window as any).__ather.open('gate'))
 await new Promise(r => setTimeout(r, 1200))
 await p.screenshot({ path: `${out}/touch-4-map.png` })
-const panelBtns = await p.$$eval('button', bs => bs.map(b => b.textContent?.trim()).filter(t => t === 'Close' || t === 'Flip map'))
+// 11-18: the fold map's close is the red X now (aria-label=close), not a text 'Close' button; count it by its label, beside 'Flip map'.
+// Still exactly two, the same claim as before: the map can be closed AND flipped.
+const panelBtns = await p.$$eval('button', bs => bs.map(b => b.getAttribute('aria-label') === 'close' ? 'close (X)' : b.textContent?.trim()).filter(t => t === 'close (X)' || t === 'Flip map'))
 // the Stops list, not the pin: on a fresh save the map image is all fog and the pin sits under it
 const stop = await p.evaluateHandle(() => [...document.querySelectorAll('button')].find(b => b.textContent?.startsWith("Gregory's waymark"))!)
 const bb = await (stop as any).boundingBox()
