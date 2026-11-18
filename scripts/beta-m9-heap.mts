@@ -3,10 +3,16 @@
 // Every 30 s: a forced GC (HeapProfiler.collectGarbage), then Runtime.getHeapUsage, so a sample is what the page RETAINS, not
 // garbage it has not swept yet. Prints every sample.
 //   npx tsx scripts/beta-m9-heap.mts [--url https://ather.games] [--min 15]
+// --settlement [--settle-min 5]: INSTEAD, the M19 leg (11-18): stand in a Wilds settlement with its Moglin rigs mounted
+// (__folk.drawn), short walks inside it, a sample every 30 s; PASS = after a 2-sample warm-up the last third is within 15%
+// of the first, the rigs stayed mounted, 0 page errors. The default run is unchanged.
 // PASS = in each phase, after its warm-up, the last third's average is within 15% of the first third's (no steady climb), coming
 // home from the Wilds gives the memory back (within 25% of the plot's own level), and 0 page errors. A Wilds level ABOVE the plot's
 // is expected (tiles stream in); a Wilds level that keeps rising is the leak. Run ONCE on a quiet box (free -m > 2 GB, no build).
 import puppeteer from 'puppeteer-core'
+import { readFileSync } from 'fs'
+import { folkOf } from '../src/app/shimmer/open/ather/settlement-folk'
+import type { Network } from '../src/app/shimmer/open/ather/network'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), MIN = Number(flag('--min', '15'))
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -30,6 +36,37 @@ const slice = async (phase: string, play: () => Promise<void>) => { const end = 
 
 await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
 await p.waitForFunction(() => !!(window as any).__ather?.zone, { timeout: 240000 }); await sleep(3000)
+if (process.argv.includes('--settlement')) {
+  // M19 leg: the settlement folk-check stands in (a free + an employed Moglin), reached the way folk-check reaches it
+  const net = JSON.parse(readFileSync('public/open/wilds/network-s1.json', 'utf8')) as Network
+  const st = net.settlements.find(x => { const f = folkOf(x, net.season); return f.some(y => !y.employed) && f.some(y => y.employed) })!
+  const nFolk = folkOf(st, net.season).length
+  const tx = Math.floor((st.x + 500) / 1000), tz = Math.floor((st.z + 500) / 1000)
+  const tile = (JSON.parse(readFileSync('public/open/wilds/tiles.json', 'utf8')) as { tiles: { name: string; tx: number; ty: number }[] }).tiles.find(t => t.tx === tx && t.ty === tz)!
+  for (let i = 0; i < 40 && (await A('zone')) !== 'wilds'; i++) {
+    await A('travel', { kind: 'waymark', w: { id: 'm9-settle', tile: tile.name, x: st.x - tx * 1000, y: 0, z: st.z - tz * 1000, biome: 2, made: 0 } })
+    await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 15000, polling: 1000 }).catch(() => {})
+  }
+  if ((await A('zone')) !== 'wilds') { console.log('never reached the Wilds\nFAIL'); await br.close(); process.exit(1) }
+  await sleep(6000); await A('tp', st.x, st.z, 0)
+  const rigs = () => p.evaluate((id: string) => (((window as any).__folk?.drawn?.() ?? {})[id] ?? []).length as number, st.id)
+  await p.waitForFunction((id: string, n: number) => ((((window as any).__folk?.drawn?.() ?? {})[id]) ?? []).length === n, { timeout: 60000, polling: 1000 }, st.id, nFolk).catch(() => {})
+  console.log(`settlement ${st.name}: ${await rigs()}/${nFolk} Moglin rigs mounted`)
+  const SN = Math.max(6, Math.round(Number(flag('--settle-min', '5')) * 2)), mounted: number[] = []
+  await sample('settle')
+  for (let i = 0; i < SN; i++) await slice('settle', async () => {   // short walks round the burrows, back to the anchor each time
+    await hold('KeyW', 1500); await hold('KeyD', 800); await hold('KeyS', 1500); await A('tp', st.x, st.z, i * 0.9); mounted.push(await rigs())
+  })
+  await br.close()
+  const xs = samples.filter(x => x.phase === 'settle').slice(2).map(x => x.mb), k = Math.max(1, Math.floor(xs.length / 3))
+  const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / Math.max(1, v.length)
+  const first = mean(xs.slice(0, k)), last = mean(xs.slice(-k)), ratio = last / first
+  const stayed = mounted.length > 0 && mounted.every(n => n === nFolk)
+  console.log(`settle: ${xs.length} samples after 2 warm-up · first third ${first.toFixed(1)} MB · last third ${last.toFixed(1)} MB · ${(ratio * 100 - 100).toFixed(1)}%`)
+  console.log(`rigs mounted every slice: ${stayed} (${mounted.join(',')}) · page errors: ${errs.length}${errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''}`)
+  const ok = ratio <= 1.15 && stayed && errs.length === 0
+  console.log(ok ? 'PASS' : 'FAIL'); process.exit(ok ? 0 : 1)
+}
 await sample('plot')
 const slices = Math.max(6, Math.round(MIN * 2)), plotN = Math.round(slices * 0.4), wildsN = slices - plotN
 // 1 · the plot: walking loops round the garden, back to the middle each loop
