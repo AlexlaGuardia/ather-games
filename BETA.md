@@ -123,6 +123,27 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
+- **CATALOG in plan mode: Jin's proposal (11-18, Alex asked "got any ideas"). Pick / change, then it becomes a row.**
+  Alex's brief: a CATALOG button in plan mode to browse every building piece; NOT a survival ladder of wall tiers but a RANGE OF
+  MATERIALS to match a keeper's taste; some need hard-to-get items.
+  1. **Grid = PIECE × MATERIAL.** Pieces down the side (wall, floor, roof, door, window, stair, fence, path, light, furniture);
+     materials across the top as swatches. Every material does the SAME job: no stats, no tiers, look only (your 09-27 law:
+     grade is worth and look, never power).
+  2. **Materials from what the world already has** (no new lore needed for v1): Goldwood, Shimmeroak, Starwillow, Dawnwood
+     planks/bark; Spinestone; salvaged ruin stone; Co. iron; crystal panes (raw → violet/storm/earth/water tints); rinn
+     pearlshell inlay. A new material family (thatch, clay, river stone…) = a Magii ask first.
+  3. **Hard to get = the material, never the shape.** A Dawnwood wall costs Dawnwood (level 10 trees); an Ather-crystal window
+     costs an Ather crystal (caverns, rare). So the catalog quietly sends you to every biome: building taste drives exploring.
+  4. **Locked cards still show.** Greyed with a one-line WHERE ("Dawnwood: the old giants of the Trails"), never hidden: the
+     catalog is also the world's shopping list. A material lights up (a small 'new' mark) the first time you gather it.
+  5. **Have / need on every card** (like the room cards today), Build lit when met; pays from the Keepstone first.
+  6. **RESKIN, not rebuild.** In plan mode tap a placed piece → swap its material from the same row; pay the new material,
+     the old one comes back. Taste can change without tearing a room down.
+  7. **Palettes.** Save a set (e.g. Shimmeroak + Spinestone + iron) and paint a whole room with it in one go.
+  **Jin's pick for v1:** 1 + 2 + 3 + 4 + 5 on the pieces that exist today (rooms' walls/floor/roof + the 15 furniture), then 6.
+  Palettes later. Open for you: which piece types first, and is reskin-refunds-the-old-material right?
+
+
 - **M20 death backpack (11-18, play `d4e43245`, live):** (1) SIGN the 4 pack lines (@lark pass, `ather/death-pack.tsx` PACK_LINES): left 'Your pack lies where you fell. Go back for it soon.' / back 'You shoulder your pack. Everything is still there.' / some 'You take what fits. The rest waits in the pack.' / full 'Your bag is full. The pack waits.' (2) LOOK: the pack (leather box + a small warm mote over it); fall in the Wilds to see it. Hidden clock is 5 min, never shown.
 
 - **✅ ANSWERED 11-18 → Meltbore + every mining/utility-shaped move goes BACK TO THE DRAWING BOARD; Alex: "any tactical or signature moves should be designed for pvp first". Was:** **M15 Meltbore (11-18):** the channel cast now holds, bills mana per second and draws its beam, but does nothing to the world: canon has it boring through blocks and the Wilds have no borable blocks (and conjured walls can't be bored). Should a held Meltbore burn Hollows in its beam, or stay a pure utility until there is something to bore?
