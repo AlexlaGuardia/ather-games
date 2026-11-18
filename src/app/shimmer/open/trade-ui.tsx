@@ -49,7 +49,7 @@ export function BoardPanel({ town, contracts, ledger, capacity, onAccept, onAban
           return (
             <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center', padding: '8px 10px', borderRadius: 8, border: `1px solid ${H.rule}`, background: 'rgba(255,250,235,0.5)' }}>
               <div>
-                <div style={{ fontWeight: 600 }}>{c.qty} {g.name} <span style={{ opacity: 0.55, fontWeight: 400 }}>→ {name(c.to)}</span></div>
+                <div style={{ fontWeight: 600 }}>{c.qty} {g.name} <span style={{ opacity: 0.55, fontWeight: 400 }}>{name(c.from)} → {name(c.to)}</span></div>
                 <div style={{ fontSize: 11, opacity: 0.65, marginTop: 2 }}>
                   {crates(c)}/{capacity} crates · {c.km.toFixed(1)} km{g.spoils ? ' · spoils, be quick' : ''}{g.side === 'ather' ? ' · from the Ather, through the landing' : ''}
                 </div>

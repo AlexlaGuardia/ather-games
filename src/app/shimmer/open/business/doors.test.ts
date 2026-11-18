@@ -21,5 +21,16 @@ for (const s of Object.keys(SEATS) as Seat[]) {
 const all = meta.places.flatMap(p => doorsCached(R, p.id))
 ok(new Set(all.map(d => d.key)).size === all.length, 'no door key twice')
 ok(new Set(all.map(d => d.b)).size === all.length, 'no building carries two doors')
+// THE CO.'S CITADEL OFFICE (Alex 11-18; Magii 49d8a0f): one door, in the Citadel only, the free building nearest the GE
+const co = all.filter(d => d.key === 'front:trade-co')
+ok(co.length === 1, `exactly one Ather Trading Co. door on the continent (${co.length})`)
+const cit = doorsCached(R, 'citadel'), ge = cit.find(d => d.key === 'front:grand-exchange')
+ok(!!co[0] && cit.includes(co[0]), 'the Co. door stands in the Citadel')
+if (co[0] && ge) {
+  const dGe = (d: { b: { x: number; z: number } }) => Math.hypot(d.b.x - ge.b.x, d.b.z - ge.b.z)
+  const plain = cit.filter(d => !d.b.front)
+  ok(plain.every(d => dGe(co[0]) <= dGe(d)), 'no plain door in the Citadel stands nearer the Grand Exchange than the Co.')
+}
+ok(co[0]?.name === 'Ather Trading Co.', `its door reads the house's own name (${co[0]?.name})`)
 console.log(`doors: ${pass} pass, ${fail} fail (${all.length} doors)`)
 if (fail) process.exit(1)

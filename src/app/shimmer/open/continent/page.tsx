@@ -1046,7 +1046,11 @@ export default function ContinentRide() {
   const tune = useMemo(() => tuneFromSpec(buildSpec(DARTER_STOCK, eff)), [eff])
   const tuneRef = useRef<CourserTune>(tune)
   tuneRef.current = tune
-  const [board, setBoard] = useState<string | null>(null)
+  // THE CO.'S CONTRACT BOARD is a place you walk into (Alex 11-18: "the player shouldnt be able to reach it through a hot key but
+  // by visiting the citadels trade co"). Magii 49d8a0f (AFK, world/gates.md › The Co.'s Citadel office): the door reads the house's
+  // own name, an Alkin clerk keeps the counter; Lingston stays the HQ (not on the map yet). The office's door is `front:trade-co`;
+  // the board is open exactly while that door is.
+  const board = deed === 'front:trade-co' ? 'office' : null
   const [boardMsg, setBoardMsg] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   // toasts speak on the template's message line (game-hud.tsx), under the hotbar
@@ -1071,7 +1075,9 @@ export default function ContinentRide() {
       return cache.get(key)!
     }
   }, [R])
-  const contracts: Contract[] = useMemo(() => (board ? postBoard(board, SUPPLY, TOWNS.filter(t => R?.meta.places.some(p => p.id === t)), kmBetween, ledger.deeds + 1, CAPACITY.darter) : []), [board, R, kmBetween, ledger.deeds])
+  // the Citadel office posts EVERY supply town's work (Jin's call, Magii (3)): each town's three; a row names its pickup town
+  const contracts: Contract[] = useMemo(() => (board ? SUPPLY.flatMap(s => postBoard(s.place, SUPPLY, TOWNS.filter(t => R?.meta.places.some(p => p.id === t)), kmBetween, ledger.deeds + 1, CAPACITY.darter))
+    .filter((c, k, all) => all.findIndex(d => d.from === c.from && d.to === c.to && d.good === c.good && d.qty === c.qty) === k) : []), [board, R, kmBetween, ledger.deeds])   // the filter: one roll can repeat itself
   // arriving: stopped at the contract's pickup loads it, at its drop pays it
   useEffect(() => {
     if (!atTown || !ledger.active) return
@@ -1149,21 +1155,17 @@ export default function ContinentRide() {
   useEffect(() => {
     const e = (ev: KeyboardEvent) => {
       if (ev.code !== 'KeyE' || footRef.current) return
-      if (ferryRef.current) { takeFerry(); return }
-      setBoard(b => (b ? null : atTownRef.current && SUPPLY.some(s => s.place === atTownRef.current) ? atTownRef.current : null))
-      setBoardMsg(null)
+      if (ferryRef.current) takeFerry()
     }
     window.addEventListener('keydown', e); return () => window.removeEventListener('keydown', e)
   }, [takeFerry])
-  const atTownRef = useRef<string | null>(null)
   const footRef = useRef(false)
   footRef.current = !!hud.foot
-  // Phone (11-15): the same keys this page handles, as taps. In reach (big pill): E at a ferry or a Co. board, F to get
+  // Phone (11-15): the same keys this page handles, as taps. In reach (big pill): E at a ferry, F to get
   // out / in. Standing: map, back to the road, and while driving the camera and the garage.
-  const canBoard = !!atTown && !board && SUPPLY.some(s => s.place === atTown)
   const touchActions: TouchAction[] = [
     ...(!hud.foot && ferryAt && !ferrying ? [{ code: 'KeyE', key: 'E', label: 'ferry', near: true }]
-      : !hud.foot && canBoard ? [{ code: 'KeyE', key: 'E', label: 'board', near: true }] : []),
+      : []),
     ...(hud.foot && deedReach && !deed ? [{ code: 'KeyE', key: 'E', label: deedReach.startsWith('front:') || deedReach.startsWith('smith:') ? 'go in' : 'deed', near: true }] : []),
     ...(hud.prompt ? [{ code: 'KeyF', key: 'F', label: hud.foot ? 'get in' : 'get out', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
@@ -1173,13 +1175,6 @@ export default function ContinentRide() {
     ...(!hud.foot ? [{ code: 'KeyR', key: 'R', label: 'road' }]
       : [{ code: 'KeyR', key: 'R', label: continentStance.current.kind === 'weapon' ? 'swap' : 'draw' }, ...(continentStance.current.kind !== 'stowed' ? [{ code: 'Stow', key: 'R', label: 'stow' }] : [])]),
   ]
-  atTownRef.current = atTown
-  // the board stays open until you actually drive away (> 60 m), not on the first nudge of the throttle
-  useEffect(() => {
-    if (!board || !R) return
-    const p = R.meta.places.find(q => q.id === board)
-    if (!p || Math.hypot(p.x - hud.x, p.z - hud.z) > 60) setBoard(null)
-  }, [board, R, hud.x, hud.z])
   const [garage, setGarage] = useState(false)
   useEffect(() => {
     const g = (e: KeyboardEvent) => { if (e.code === 'KeyG' && !footRef.current) setGarage(v => !v) }
@@ -1354,7 +1349,7 @@ export default function ContinentRide() {
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} keys={CONTINENT_KEYS} />}
       <BirthGate />
       {deed?.startsWith('smith:') && <RunesmithPanel seat={deed.slice(6) as Seat} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} />}
-      {deed?.startsWith('front:') && <ShopPanel id={deed.slice(6)} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} isTouch={isTouch} />}
+      {deed?.startsWith('front:') && !board && <ShopPanel id={deed.slice(6)} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} isTouch={isTouch} />}
       {deed && !deed.startsWith('front:') && !deed.startsWith('smith:') && R && tycoon.t && (
         <DeedCard R={R} lotId={deed} t={tycoon.t} marks={ledger.marks} onClose={() => setDeed(null)}
           onBuy={o => { const r = tycoon.buy(o.lot.id, o.kind, o.lot.tier); if (r.ok) hudSay(`${o.name} is yours · −${o.price.toLocaleString()} Marks`, 'item'); return r }}
@@ -1366,15 +1361,10 @@ export default function ContinentRide() {
       <GaragePanel open={garage} onClose={() => setGarage(false)} build={eff} setBuild={setBuild}
         shop={{ ledger, buy: (slot: Slot, t: Tier) => { const r = buy(ledger, slot, t); if (r.ok) setLedger(r.ledger); else flash(r.why ?? 'Not yet') } }} />
       <TradeHud ledger={ledger} objective={objective} toast={null} purse={false} />
-      {atTown && !board && !bagOpen && !vesselShop && !deed && !optionsOpen && SUPPLY.some(s => s.place === atTown) && (
-        <div style={{ position: 'absolute', left: '50%', top: '40%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px system-ui', pointerEvents: 'none' }}>
-          E · Ather Trading Co. board
-        </div>
-      )}
       {board && (
-        <BoardPanel town={placeName(board)} contracts={contracts} ledger={ledger} capacity={CAPACITY.darter} msg={boardMsg}
-          onAccept={c => { const r = accept(ledger, c, CAPACITY.darter); if (r.ok) { setLedger(r.ledger); setBoard(null); flash(`Contract taken · ${GOODS[c.good].name} to ${placeName(c.to)}`) } else setBoardMsg(r.why ?? null) }}
-          onAbandon={() => setLedger(abandon(ledger))} onClose={() => setBoard(null)} />
+        <BoardPanel town="Ather Trading Co." contracts={contracts} ledger={ledger} capacity={CAPACITY.darter} msg={boardMsg}
+          onAccept={c => { const r = accept(ledger, c, CAPACITY.darter); if (r.ok) { setLedger(r.ledger); setDeed(null); flash(`Contract taken · ${GOODS[c.good].name} to ${placeName(c.to)}`) } else setBoardMsg(r.why ?? null) }}
+          onAbandon={() => setLedger(abandon(ledger))} onClose={() => { setDeed(null); setBoardMsg(null) }} />
       )}
       {!R && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#1d2a33', font: '600 14px system-ui' }}>{err ?? 'Loading the continent…'}</div>}
 
@@ -1421,7 +1411,7 @@ export default function ContinentRide() {
           <div style={{ padding: '18px 24px', borderRadius: 10, background: 'rgba(12,16,20,0.72)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.65, textAlign: 'center', maxWidth: 460 }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>The Darter · Ashfeld</div>
             You start on the road out of Ashfeld. It runs down to Millbrook on the river; the trunk south ends at Rune Hold under the Spine.
-            {isTouch ? <div style={{ marginTop: 8 }}>Left thumb drives: push up for throttle, down to brake, sideways to steer. Hold drift for the handbrake. On foot, drag on the right to look.</div> : <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road · G garage · E board (stopped at a town) · F get out / in (on foot: mouse look, Space jump, Shift slide, R draw / swap, hold R to stow, 1-8 hold an item) · M map</div>}
+            {isTouch ? <div style={{ marginTop: 8 }}>Left thumb drives: push up for throttle, down to brake, sideways to steer. Hold drift for the handbrake. On foot, drag on the right to look.</div> : <div style={{ marginTop: 8 }}>W / ↑ throttle · S / ↓ brake · A D steer · Space handbrake · C camera · R back to the road · G garage · F get out / in (on foot: mouse look, Space jump, Shift slide, R draw / swap, hold R to stow, 1-8 hold an item) · M map</div>}
             <div style={{ marginTop: 8, fontWeight: 600 }}>{isTouch ? 'Tap to drive' : 'Press any key to drive'}</div>
           </div>
         </div>

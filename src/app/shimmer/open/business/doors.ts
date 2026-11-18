@@ -10,7 +10,7 @@ import { shopDoorPoint } from '../towns/shop-door'
 import { marketFor, type Offer } from './market'
 import { SEATS, type Seat } from './letters'
 
-export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple' | 'smokehouse' | 'shipyard'
+export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple' | 'smokehouse' | 'shipyard' | 'trade-co'
 export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: string }> = {
   'kindled-mug': { name: 'The Kindled Mug', kind: 'tavern', line: 'A tavern on the square.' },
   'forgelight-inn': { name: 'The Forgelight Inn', kind: 'inn', line: 'Iron fixtures and forge-warmed walls.' },
@@ -26,6 +26,9 @@ export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: 
   // THE SHIPYARD (canon timeline 1672: the keeper inherits the shipyard, a broken ship, the Charred Rifle and Kael's ledger;
   // CANON_GAPS 11-15: Kael leaves the rifle there). Alex 11-18: it hands over the keeper's first weapons. Rune Hold only.
   shipyard: { name: 'The Shipyard', kind: 'shipyard', line: "Kael's yard, left to you with a broken ship." },
+  // THE CO.'S CITADEL OFFICE (Alex 11-18; Magii 49d8a0f AFK, world/gates.md: the door reads the house's own name, an Alkin clerk at
+  // the counter, Lingston stays the HQ). Its panel is the contract board (continent/page.tsx), not a ShopPanel. Citadel only.
+  'trade-co': { name: 'Ather Trading Co.', kind: 'trade-co' },
 }
 
 /** a door you can E: a market lot (key = lot id → the deed card) or a canon storefront (key = `front:<id>` → its panel) */
@@ -65,6 +68,17 @@ function doorsOf(R: Region, townId: string): Door[] {
       const at = plan.temple ?? { x: R.meta.places[i].x, z: R.meta.places[i].z }
       const b = free.sort((p, q) => Math.hypot(q.x - at.x, q.z - at.z) - Math.hypot(p.x - at.x, p.z - at.z))[0]
       out.push({ key: 'front:shipyard', b, name: FRONT_SHOPS.shipyard.name, at: shopDoorPoint(b) })
+    }
+  }
+  // THE CO.'S OFFICE: the Citadel only, the free plain building NEAREST the Grand Exchange (the Co. → GE spine, canon). Jin's
+  // placement; Alex can pick another.
+  if (i >= 0 && townId === 'citadel') {
+    const plan = cachedPlan(R, i), taken = new Set(out.map(d => d.b))
+    const ge = plan.buildings.find(x => x.front === 'grand-exchange')
+    const free = plan.buildings.filter(x => !x.front && !taken.has(x))
+    if (ge && free.length) {
+      const b = free.sort((p, q) => Math.hypot(p.x - ge.x, p.z - ge.z) - Math.hypot(q.x - ge.x, q.z - ge.z))[0]
+      out.push({ key: 'front:trade-co', b, name: FRONT_SHOPS['trade-co'].name, at: shopDoorPoint(b) })
     }
   }
   return out
