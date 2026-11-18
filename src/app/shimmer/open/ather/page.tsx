@@ -583,7 +583,7 @@ export default function AtherSlice() {
     const g = give(getInv(), rn.id, perk ? 2 : 1); setInv(g.inv)
     const xp = xpOf(toolsRef.current.rinning, rn.xp), up = addOpenXp('rinning', xp)
     const worn = wearRinstick(toolsRef.current); toolsRef.current = worn.tools; saveTools(worn.tools)   // a landed rinn wears the rinstick
-    setToast(`${perk ? `${perk}! 2 × ` : ''}${rn.name}${g.left ? ' (bag full)' : ''} · +${xp} Rinning${up ? `. Rinning ${up}!` : ''}${worn.broke ? `. Your ${worn.broke} wore out; the worn one is back in hand.` : ''}`)
+    setToast(`${perk ? `${perk}! 2 × ` : ''}${rn.name}${g.left ? ' (bag full)' : ''} · +${xp} Rinning${up ? `. Rinning ${up}!` : ''}${worn.broke ? `. Your ${worn.broke} wore out. The worn one is back in hand.` : ''}`)
   }, [])
   // 11-16: the rinn can get away. The bait is spent; nothing else is lost.
   const onGone = useCallback((rn: Rinn) => setToast(`It got away. A ${rn.name.toLowerCase()}, by the way it moved.`), [])
