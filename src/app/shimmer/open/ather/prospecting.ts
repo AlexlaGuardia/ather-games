@@ -112,6 +112,11 @@ export type MineVerdict =
 export function mine(kind: CrystalKind, id: string, rand: () => number = Math.random, now = Date.now()): MineVerdict {
   const c = mineCheck(kind, id, openLevel('prospecting'), now)
   if (!c.ok) return c
+  const p = minePlan(kind, rand)
+  return { ok: true, ...p, ...mineCommit(kind, id, now) }
+}
+/** What a node gives (rolled, nothing changes): the channel deals this out a chip at a time (channel.ts). */
+export function minePlan(kind: CrystalKind, rand: () => number = Math.random): { drops: { id: string; n: number }[]; found: Exclude<CrystalKind, 'egg'>; perk?: string } {
   const found: Exclude<CrystalKind, 'egg'> = kind === 'egg' ? ELEMENTS[Math.min(3, Math.floor(rand() * 4))] : kind
   const tier = TIER[kind]
   const drops = [{ id: BLANKSTONE, n: 1 + (rand() < 0.5 ? 1 : 0) }, { id: CRYSTAL_ITEM[found], n: found === 'raw' ? 1 + Math.floor(rand() * 3) : 1 }]
@@ -124,10 +129,15 @@ export function mine(kind: CrystalKind, id: string, rand: () => number = Math.ra
   }
   // now and then a crystal node gives up an old UNIQUE Keepstone with its crystal still set (canon 5a20b8f; furniture.ts)
   if (rand() < (KEEPSTONE_FIND[CRYSTAL_ITEM[found]] ?? 0)) drops.push({ id: keepstoneFor(CRYSTAL_ITEM[found]), n: 1 })
+  return { drops, found, perk }
+}
+/** The node is done: XP lands on Prospecting and it grows back on its tier's timer. */
+export function mineCommit(kind: CrystalKind, id: string, now = Date.now()): { xp: number; levelUp: number | null } {
+  const tier = TIER[kind]
   const levelUp = addOpenXp('prospecting', XP[tier])
   mined[id] = now + RESPAWN_MS[tier]
   save(now); bump()
-  return { ok: true, drops, xp: XP[tier], levelUp, found, perk }
+  return { xp: XP[tier], levelUp }
 }
 
 /** Test hook: a clean slate of mined nodes (skills live in forestry.ts › _resetForestry). */

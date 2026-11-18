@@ -133,14 +133,23 @@ export function pruneCheck(kind: TreeKind, id: string, level = forestryLevel(), 
 export function prune(kind: TreeKind, id: string, rand: () => number = Math.random, now = Date.now()): PruneVerdict {
   const c = pruneCheck(kind, id, forestryLevel(), now)
   if (!c.ok) return c
-  const def = NODE_DEFS[kind]
+  const drops = prunePlan(kind, rand)
+  return { ok: true, drops, ...pruneCommit(kind, id, now) }
+}
+/** What a tree gives (rolled, nothing changes): the channel deals this out a chip at a time (channel.ts). */
+export function prunePlan(kind: TreeKind, rand: () => number = Math.random): { id: string; n: number }[] {
   const drops = [{ id: logItem(kind), n: 2 + Math.floor(rand() * 3) }]
   if (rand() < SAPLING_CHANCE[kind]) drops.push({ id: saplingItem(kind), n: 1 })
   if (rand() < MAST_CHANCE) drops.push({ id: 'mast', n: 1 })   // bait's floor (inventory.ts › BAIT_FROM)
+  return drops
+}
+/** The tree is done: XP lands on Forestry and it regrows on the table's timer. */
+export function pruneCommit(kind: TreeKind, id: string, now = Date.now()): { xp: number; levelUp: number | null } {
+  const def = NODE_DEFS[kind]
   const r =addSkillXP(skills.forestry, scaled(def.xp))   // mutates the skill in place (engine/skills.ts)
   pruned[id] = now + def.respawnMs
   save(now); bump()
-  return { ok: true, drops, xp: def.xp, levelUp: r.leveled ? r.newLevel : null }
+  return { xp: def.xp, levelUp: r.leveled ? r.newLevel : null }
 }
 
 /** Test hook: set any open-world skill's level (prospecting.test, rinning checks). */

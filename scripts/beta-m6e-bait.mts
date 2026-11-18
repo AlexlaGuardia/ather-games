@@ -42,7 +42,9 @@ for (const t of golds) {
   if (((await bag()).mast ?? 0) > 0) break
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), t.x + 6, t.z); await sleep(3000); await frame(); await frame()
   if ((await p.evaluate(() => (window as any).__ather.aim())) !== t.id) continue
-  await p.evaluate(() => (window as any).__ather.prune()); await sleep(4000); prunes++
+  await p.evaluate(() => (window as any).__ather.prune()); await sleep(500)
+  for (let i = 0; i < 80 && await p.evaluate(() => !!(window as any).__ather.chan?.()); i++) { try { await p.screenshot({ path: `${out}/_frame.png` }) } catch { /* slow frame */ } }   // gathering is a CHANNEL now (channel.ts): wait for the last chip
+  await sleep(1500); prunes++
 }
 res.prunes = prunes; res.afterPrunes = await bag()
 // the bag: real I key, real click on the mast slot, real click on Make bait

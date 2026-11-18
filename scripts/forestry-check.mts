@@ -39,9 +39,10 @@ try { await p.screenshot({ path: `${out}/forestry-1-aim.png` }) } catch { /* slo
 const mana0 = await p.evaluate(() => (window as any).__ather.mana())
 await p.evaluate(() => (window as any).__ather.prune()); await sleep(450)
 try { await p.screenshot({ path: `${out}/forestry-2-channel.png` }) } catch { /* slow frame */ }
-await sleep(1100)
+res.chanStarted = await p.evaluate(() => (window as any).__ather.chan?.())
+for (let i = 0; i < 80 && await p.evaluate(() => !!(window as any).__ather.chan?.()); i++) { try { await p.screenshot({ path: `${out}/_frame.png` }) } catch { /* slow frame */ } }   // gathering is a CHANNEL now (channel.ts): wait for the last chip
 try { await p.screenshot({ path: `${out}/forestry-3-drops.png` }) } catch { /* slow frame */ }
-await sleep(2500)
+await sleep(1500)
 res.manaSpent = +(mana0 - (await p.evaluate(() => (window as any).__ather.mana()))).toFixed(1)
 res.afterGold = await p.evaluate(() => ({ pruned: Object.keys(JSON.parse(localStorage.getItem('open.pruned.v1') ?? '{}')), inv: (JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots as ({ id: string; n: number } | null)[]).filter(Boolean).map(s => `${s!.id}x${s!.n}`) }))
 // out of reach: 14 m off, nothing is aimed

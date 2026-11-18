@@ -57,6 +57,7 @@ await frame('prospect-1-aim')
 const res: Record<string, unknown> = { pick: { tile: P.tile, id: P.id }, stance: await p.evaluate(() => (window as any).__ather.stance()?.kind), aimed: await p.evaluate(() => (window as any).__ather.crystal()) }
 await p.evaluate(() => (window as any).__ather.mine())
 for (let i = 0; i < 6; i++) await frame(i === 2 ? 'prospect-2-burst' : '_frame')
+for (let i = 0; i < 80 && await p.evaluate(() => !!(window as any).__ather.chan?.()); i++) { try { await p.screenshot({ path: `${out}/_frame.png` }) } catch { /* slow frame */ } }   // gathering is a CHANNEL now (channel.ts): wait for the last chip
 await sleep(1500); for (let i = 0; i < 4; i++) await frame()
 await frame('prospect-3-after')
 res.bag = await p.evaluate(() => (JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots as ({ id: string; n: number } | null)[]).filter(Boolean).map(s => `${s!.id}x${s!.n}`))
