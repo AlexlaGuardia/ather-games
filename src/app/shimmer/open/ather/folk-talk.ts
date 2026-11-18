@@ -1,0 +1,63 @@
+// ── A SETTLEMENT MOGLIN'S CONVERSATION (BETA M13, Alex 11-18): one Moglin at a time, one screen per answer ───────────────────
+// Before: E in a settlement opened folk-panel.tsx, every Moglin of the season, trades, wants, trust and recruit buttons at once.
+// Now E starts a talk with ONE Moglin (shared/npc-talk.tsx): its dream in the bubble (folk-lines.ts DREAMS, lark's), the keeper
+// answers. "What do you need?" shows ITS goods and the bring answers; "Would you keep a room for me?" is the recruit ask
+// (talkLine yes / trustFirst / trusted, lark's); "Who else lives here?" turns to the next; "Goodbye" leaves.
+// All game logic stays in settlement-folk.ts (wantsLeft / trusted / bring / recruit); this file only arranges lines.
+// ★ PLACEHOLDERS for @lark (no signed text exists yet): the answer labels (ASK) and the two stock lines below. Swap when signed.
+import type { TalkNode } from '../shared/npc-talk'
+import { wantsLeft, trusted, type Folk, type Trust } from './settlement-folk'
+import { talkLine } from './folk-lines'
+import { itemDef } from '../shared/inventory'
+
+export const ASK = { needs: 'What do you need?', room: 'Would you keep a room for me?', others: 'Who else lives here?', back: 'Go on', bye: 'Goodbye' }   // PLACEHOLDER labels (lark)
+export const FOLK_NO_ROOM = 'Your garden has no room for another.'                 // PLACEHOLDER (lark): was a stock string in folk-panel.tsx
+export const FOLK_EMPTY = 'Everyone here has gone to a garden this season.'        // PLACEHOLDER (lark): was a stock string in folk-panel.tsx
+export const giveLabel = (n: number, id: string) => `Give ${n} ${itemDef(id).name}`  // PLACEHOLDER (lark): the bring answer
+export const goodsText = (ws: { id: string; n: number }[]) => ws.map(w => `${w.n} ${itemDef(w.id).name}`).join(' and ')
+
+/** Where the talk is: whose bubble, which screen, and (after an answer) the line it said. */
+export interface FolkTalkState { fid: string; screen: 'hello' | 'needs' | 'said'; line?: string }
+export interface FolkTalkCtx { folk: Folk[]; home: Folk[]; trust: Trust; have: (id: string) => number; room: number }
+export interface FolkTalkActs {
+  go: (s: FolkTalkState) => void
+  give: (f: Folk, id: string, n: number) => void
+  recruit: (f: Folk) => void        // saves the village; the talk then shows `line` via go()
+  bye: () => void
+}
+
+export const folkStart = (home: Folk[]): FolkTalkState => ({ fid: home[0]?.id ?? '', screen: 'hello' })
+
+/** The node for `st`. A Moglin that has just been recruited is no longer in `home`, so it is looked up in the full season list. */
+export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): TalkNode {
+  const bye = { label: ASK.bye, pick: act.bye }
+  const f = c.folk.find(x => x.id === st.fid)
+  if (!f) return { line: FOLK_EMPTY, options: [bye] }
+  const others = c.home.filter(x => x.id !== f.id)
+  const at = c.home.findIndex(x => x.id === f.id), after = others.length ? (at < 0 ? others[0] : others.find((_, k) => k >= at) ?? others[0]) : null
+  const next = after ? { label: ASK.others, pick: () => act.go({ fid: after.id, screen: 'hello' }) } : null
+  const homeNow = c.home.some(x => x.id === f.id)
+  if (!homeNow) return { line: st.line ?? FOLK_EMPTY, options: [...(next ? [next] : []), bye] }   // just came home with the keeper
+  const ok = trusted(f, c.trust)
+  const askRoom = {
+    label: ASK.room,
+    pick: () => {
+      if (!ok) { act.go({ fid: f.id, screen: 'needs' }); return }
+      if (c.room <= 0) { act.go({ fid: f.id, screen: 'said', line: FOLK_NO_ROOM }); return }
+      act.recruit(f); act.go({ fid: f.id, screen: 'said', line: talkLine(f.employed ? 'trusted' : 'yes', f.id) })
+    },
+  }
+  if (st.screen === 'needs') {
+    const left = wantsLeft(f, c.trust)
+    if (ok) return { line: talkLine('trusted', f.id), options: [askRoom, { label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello' }) }] }
+    return {
+      line: talkLine('trustFirst', f.id, goodsText(left)),
+      options: [
+        ...left.filter(w => c.have(w.id) > 0).map(w => ({ label: giveLabel(Math.min(w.n, c.have(w.id)), w.id), pick: () => act.give(f, w.id, Math.min(w.n, c.have(w.id))) })),
+        { label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello' }) },
+      ],
+    }
+  }
+  if (st.screen === 'said') return { line: st.line ?? f.dream, options: [{ label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello' }) }, ...(next ? [next] : []), bye] }
+  return { line: f.dream, options: [...(f.employed && !ok ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, ...(next ? [next] : []), bye] }
+}

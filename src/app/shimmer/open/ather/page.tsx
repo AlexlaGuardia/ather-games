@@ -57,7 +57,7 @@ import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pit
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree, type Crystal } from './wilds'
 import { loadIndex, makeWorld, stream, tileOf, zonesOf, TILE_M, type WildsWorld } from './wilds-world'
 import { loadNetwork, clearing, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
-import { FolkPanel } from './folk-panel'
+import { useFolkTalk } from './use-folk-talk'
 import { TilePaths, Settlements, BigTop } from './network-scene'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
@@ -798,7 +798,9 @@ export default function AtherSlice() {
   }), [talkStep, errandStage, birth, given])
   const talkFocus = useRef<{ x: number; y: number; z: number } | null>(null)
   const gregHead = useMemo(() => ({ x: GREG.x, y: plotHeightAt(GREG.x, GREG.z) + 1.7, z: GREG.z }), [])
-  useEffect(() => { talkFocus.current = talkNode ? gregHead : null }, [talkNode, gregHead])
+  // BETA M13: E in a settlement talks to ONE Moglin (folk-talk.ts); the settlement's heart is its anchor (no Moglin models are drawn yet)
+  const folkTalk = useFolkTalk(panel?.kind === 'folk' ? panel.s : null, useCallback((x: number, z: number) => ww && ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : 0, [ww]), () => setPanel(null))
+  useEffect(() => { talkFocus.current = talkNode ? gregHead : folkTalk.focus }, [talkNode, gregHead, folkTalk.focus])
   // the journal: the nearest infected node is the keeper's open line on this side (re-aimed as you move; unchanged posts are free)
   useEffect(() => {
     const post = () => {
@@ -909,6 +911,7 @@ export default function AtherSlice() {
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
             safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
         )}
+        {folkTalk.node && folkTalk.bubbleAt && zone.kind === 'wilds' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} />}
         {talkNode && zone.kind === 'plot' && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={talkNode.line} />}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
         {world && fade === 0 && <CompanionFollower pose={poseRef} ground={ground} />}
@@ -971,7 +974,7 @@ export default function AtherSlice() {
           area={ww ? { world: ww, regionsByTile, cx: hereOff.x, cz: hereOff.z, tileOff, nodes: nodes.filter(n => Math.abs(n.x - hereOff.x) < 1600 && Math.abs(n.z - hereOff.z) < 1600), here: { x: pos.current.x, z: pos.current.z } } : undefined}
           onClose={() => setPanel(null)} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
-      {panel?.kind === 'folk' && <FolkPanel settlement={panel.s} onClose={() => setPanel(null)} />}
+      {folkTalk.node && <TalkChoices node={folkTalk.node} phone={hudSize === 'phone'} />}
       {talkNode && <TalkChoices node={talkNode} phone={hudSize === 'phone'} />}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}

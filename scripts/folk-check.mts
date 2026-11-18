@@ -1,10 +1,12 @@
-// folk-check: Moglin recruiting, played. Into the Wilds, stand in a settlement, press the real E, the folk panel lists this
-// season's Moglins; ask a FREE one -> it comes (the garden village holds it); ask an EMPLOYED one -> it names its goods
-// and the give rows show. Hooks are used for MOVEMENT (travel / tp) and READING only.
+// folk-check: Moglin recruiting, played. Into the Wilds, stand in a settlement, press the real E: a CONVERSATION with one Moglin (BETA M13, bubble over its name, arrows + E to answer);
+// "who else" turns to the next; an EMPLOYED one names its goods and will not come untrusted; a FREE one comes (the garden village holds it). Hooks are used for MOVEMENT (travel / tp) and READING only.
 //   npx tsx scripts/folk-check.mts [--url https://ather.games]
 import puppeteer from 'puppeteer-core'
 import { readFileSync } from 'node:fs'
 import { folkOf } from '../src/app/shimmer/open/ather/settlement-folk'
+import { talkLine } from '../src/app/shimmer/open/ather/folk-lines'
+import { itemDef } from '../src/app/shimmer/open/shared/inventory'
+import { goodsText } from '../src/app/shimmer/open/ather/folk-talk'
 import type { Network } from '../src/app/shimmer/open/ather/network'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games')
@@ -20,7 +22,7 @@ const tx = Math.floor((st.x + 500) / 1000), tz = Math.floor((st.z + 500) / 1000)
 const tiles = JSON.parse(readFileSync('public/open/wilds/tiles.json', 'utf8')) as { tiles: { name: string; tx: number; ty: number }[] }
 const tile = tiles.tiles.find(t => t.tx === tx && t.ty === tz)!
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
-const p = await br.newPage(); await p.setViewport({ width: 1000, height: 700 })
+const p = await br.newPage(); await p.setViewport({ width: 800, height: 500 })
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.removeItem('open.village.v1'); localStorage.removeItem('open.trust.v1') })
 await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
@@ -33,21 +35,54 @@ ok((await p.evaluate(() => (window as any).__ather.zone())) === 'wilds', 'in the
 await sleep(8000)
 await p.evaluate((x, z) => (window as any).__ather.tp(x, z), st.x, st.z); await sleep(4000)
 await p.mouse.click(500, 350); await sleep(800)
-await p.keyboard.press('KeyE')
-const open = await (async () => { for (let i = 0; i < 30; i++) { if (await p.$('[data-panel="folk"]')) return true; await sleep(500) } return false })()
-ok(open, `E in ${st.name} opens the folk panel`)
-if (open) {
-  const cards = await p.$$eval('[data-folk]', es => es.map(e => e.getAttribute('data-folk')))
-  ok(cards.length === folk.length && folk.every(f => cards.includes(f.id)), `the panel lists this season's ${folk.length} Moglins`)
-  const clickIn = (id: string, re: string) => p.evaluate((id, re) => { const c = document.querySelector(`[data-folk="${id}"]`); const b = [...(c?.querySelectorAll('button') ?? [])].find(x => new RegExp(re).test(x.textContent ?? '')) as HTMLButtonElement | undefined; if (!b || b.disabled) return false; b.click(); return true }, id, re)
-  ok(await clickIn(emp.id, '^Ask to come'), `ask ${emp.name} (has work)`); await sleep(800)
-  const empText = await p.$eval(`[data-folk="${emp.id}"]`, e => e.textContent ?? '')
-  ok(/Give/.test(empText) && /still wanted/.test(empText), `${emp.name} names its goods and the give rows show`)
-  ok(await clickIn(free.id, '^Ask to come'), `ask ${free.name} (free)`); await sleep(1200)
-  const village = await p.evaluate(() => JSON.parse(localStorage.getItem('open.village.v1') ?? 'null'))
-  ok(!!village && village.moglins?.some((m: { id: string }) => m.id === free.id), `${free.name} is in the garden village`)
-  ok(!(await p.$(`[data-folk="${free.id}"]`)), `${free.name} has left the settlement's list`)
+await p.keyboard.press('KeyE'); await p.mouse.move(5, 5)   // the pointer off the answers (a hover moves the pick)
+const bubble = () => p.evaluate(() => document.querySelector('[data-talk-bubble]')?.firstElementChild?.textContent ?? '')
+const nameOver = () => p.evaluate(() => document.querySelector('[data-talk-name]')?.textContent ?? '')
+const answers = () => p.evaluate(() => [...document.querySelectorAll('[data-talk-option]')].map(e => (e.textContent ?? '').replace('›', '').trim()))
+const poll = async (f: () => Promise<boolean>, ms = 15000) => { for (let t = 0; t < ms; t += 400) { if (await f()) return true; await sleep(400) } return false }
+const lit = () => p.evaluate(() => Number(document.querySelector('[data-talk-sel]')?.getAttribute('data-talk-option') ?? -1))
+const pick = async (label: string) => { const a = await answers(), i = a.indexOf(label); if (i < 0) return false
+  for (let k = 0; k < a.length && await lit() !== i; k++) { await p.keyboard.press('ArrowDown'); await sleep(200) }   // arrows from wherever the pick sits
+  if (await lit() !== i) return false
+  await p.keyboard.press('KeyE'); await sleep(1500); return true }
+// E in a settlement starts a conversation with ONE Moglin (M13): its dream in a bubble over its name, answers below
+ok(await poll(async () => !!(await p.$('[data-talk-choices]'))), `E in ${st.name} starts a conversation`)
+ok(!(await p.$('[data-panel="folk"]')), 'no folk panel: the talk is not a menu')
+const first = folk[0]
+ok(await bubble() === first.dream && await nameOver() === first.name, `a Moglin's dream in the bubble over its name (${first.name})`)
+const hello = await answers()
+ok(hello.some(a => /need/.test(a)) === first.employed && hello.some(a => /room/.test(a)) && hello.some(a => /else/.test(a)) && hello.includes('Goodbye'), `answers: ${hello.join(' | ')}`)
+ok(!(await bubble()).includes(folk[1].dream), 'only this Moglin speaks, not the settlement')
+// "Who else lives here?" turns to the next Moglin
+ok(await pick(hello.find(a => /else/.test(a))!), 'ask who else lives here')
+ok(await bubble() === folk[1].dream && await nameOver() === folk[1].name, `the next Moglin answers (${folk[1].name})`)
+// the employed Moglin: "What do you need?" names its goods and offers only what is in the bag (empty: only Go on)
+const goTo = async (m: typeof folk[0]) => { for (let k = 0; k < folk.length && await nameOver() !== m.name; k++) { if (!(await pick((await answers()).find(a => /else/.test(a))!))) break } return await nameOver() === m.name }
+ok(await goTo(emp), `turn to ${emp.name} (has work)`)
+ok(await pick((await answers()).find(a => /need/.test(a))!), `ask ${emp.name} what it needs`)
+const needs = await bubble(), ans = await answers()
+const names = emp.wants.map(w => itemDef(w.id).name)
+ok(needs === talkLine('trustFirst', emp.id, goodsText(emp.wants)) && /Go on/.test(ans.join('|')), `${emp.name}: its goods in the bubble (${needs})`)
+const gives = ans.filter(a => /^Give/.test(a))
+ok(gives.every(g => names.some(n => g.endsWith(n))), `give answers only for goods it wants (${gives.join(', ') || 'none in the bag'})`)
+if (gives.length) {   // bring one good: it leaves the bag and the bubble asks only for what is still wanted
+  const before = await p.evaluate(() => localStorage.getItem('open.trust.v1'))
+  ok(await pick(gives[0]), `bring: ${gives[0]}`)
+  const trustNow = await p.evaluate(() => localStorage.getItem('open.trust.v1'))
+  ok(trustNow !== before && !(await answers()).includes(gives[0]), 'the goods are given once: trust recorded, the answer is gone')
 }
+ok(await pick('Go on'), 'back to the greeting')
+ok(await pick((await answers()).find(a => /room/.test(a))!), `ask ${emp.name} to keep a room before the goods: no recruit`)
+ok((await answers()).some(a => /Go on/.test(a)), 'untrusted: back on the needs screen')
+const v0 = await p.evaluate(() => JSON.parse(localStorage.getItem('open.village.v1') ?? 'null'))
+ok(!v0 || !v0.moglins?.some((m: { id: string }) => m.id === emp.id), `${emp.name} is not in the garden village yet`)
+// the free Moglin: "Would you keep a room for me?" and it comes
+ok(await pick('Go on'), 'back'); ok(await goTo(free), `turn to ${free.name} (free)`)
+ok(await pick((await answers()).find(a => /room/.test(a))!), `ask ${free.name} to keep a room`); await sleep(800)
+const village = await p.evaluate(() => JSON.parse(localStorage.getItem('open.village.v1') ?? 'null'))
+ok(!!village && village.moglins?.some((m: { id: string }) => m.id === free.id), `${free.name} is in the garden village`)
+ok(/./.test(await bubble()) && await nameOver() === free.name, `${free.name} answers in the bubble`)
+ok(await pick('Goodbye'), 'Goodbye'); ok(await poll(async () => !(await p.$('[data-talk-choices]')), 5000), 'the conversation ends')
 ok(errs.length === 0, `0 page errors ${errs.length ? JSON.stringify(errs) : ''}`)
 await br.close()
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)
