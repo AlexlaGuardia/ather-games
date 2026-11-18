@@ -871,7 +871,7 @@ export default function AtherSlice() {
     ...(stance.kind !== 'stowed' ? [{ code: 'Stow', key: 'R', label: 'stow' }] : []),
     ...(zone.kind === 'wilds' ? [
       { code: 'KeyF', key: 'F', label: 'waymark' },
-      { code: 'KeyR', key: 'R', label: stance.kind === 'weapon' ? 'swap · reload' : 'draw' },
+      { code: 'KeyR', key: 'R', label: stance.kind === 'weapon' ? 'swap · reload' : 'draw', near: true },
       { code: 'KeyH', key: 'H', label: 'home' },
     ] : []),
   ]
