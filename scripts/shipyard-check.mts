@@ -1,4 +1,4 @@
-// THE SHIPYARD (Alex 11-18): a fresh keeper has no gun; Kael's chest in Rune Hold hands over the Charred Rifle + the Repeater.
+// THE SHIPYARD (Alex 11-18): a fresh keeper owns only the starting Repeater (sidearm), never a gun in the bag; Kael's chest in Rune Hold adds the Charred Rifle as the primary.
 //   npx tsx scripts/shipyard-check.mts [--url https://ather.games]
 import puppeteer from 'puppeteer-core'
 import { readFileSync, mkdirSync } from 'node:fs'

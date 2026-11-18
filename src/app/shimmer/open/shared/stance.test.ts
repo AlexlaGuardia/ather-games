@@ -14,10 +14,11 @@ const oneGun = equip(kael, 'primary', null)                     // only the side
 const wield = (l: typeof none) => setLoadout(l)
 
 ok(STOWED.kind === 'stowed' && STOWED_SPEED > 1 && HOLD_MS >= 200, 'stance: not stowed by default, or stowed is not quicker')
-wield(none); ok(weapons(bag).length === 0, 'weapons: a new keeper has none (they come from the shipyard)')
+wield(none); ok(weapons(bag).join() === 'repeater', 'weapons: a new keeper starts with the Repeater (Alex 11-18), worn as the sidearm')
+ok(tapR(STOWED, bag).stance.kind === 'weapon' && heldOf(tapR(STOWED, bag).stance, bag) === 'repeater', 'R: a new keeper draws the starting Repeater')
 wield(kael); ok(weapons(bag).join() === `${KAEL_PRIMARY},${KAEL_SECONDARY}`, `weapons: Kael's chest gives primary + secondary (${weapons(bag)})`)
 // R tap
-wield(none); ok(tapR(STOWED, bag).stance.kind === 'stowed', 'R: drew a weapon with nothing equipped')
+wield(equip(none, 'secondary', null)); ok(tapR(STOWED, bag).stance.kind === 'stowed', 'R: drew a weapon with nothing equipped')
 wield(oneGun)
 let r = tapR(STOWED, bag)
 ok(r.stance.kind === 'weapon' && r.stance.which === 0 && !r.reload && heldOf(r.stance, bag) === KAEL_SECONDARY, 'R: with only the sidearm, a tap did not draw it')
@@ -43,7 +44,7 @@ ok(litSlot(STOWED, bag) === -1 && litSlot({ kind: 'item', slot: 1 }, bag) === 1 
 // falling back when the hand empties, or the equipped gun goes away
 const spent: Inv = { v: 1, slots: bag.slots.map((s, i) => (i === 1 ? null : s)) }
 ok(settle({ kind: 'item', slot: 1 }, spent).kind === 'stowed', 'settle: an emptied hand did not fall back to stowed')
-wield(none); ok(settle({ kind: 'weapon', which: 0 }, bag).kind === 'stowed', 'settle: unequipping every gun did not stow')
+wield(equip(none, 'secondary', null)); ok(settle({ kind: 'weapon', which: 0 }, bag).kind === 'stowed', 'settle: unequipping every gun did not stow')
 ok(heldOf(STOWED, bag) === null, 'stowed: something is in hand')
 void SLOTS
 if (fails.length) { for (const f of fails) console.log('  ✗', f); console.log(`stance: ${pass} pass, ${fails.length} FAIL`); process.exit(1) }

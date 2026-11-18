@@ -39,9 +39,9 @@ export const slotOfGun = (g: RangeGun): 'primary' | 'secondary' => (g.slot === '
 export const SLOT_OF_VESSEL: Record<VesselKind, 'tactical' | 'signature'> = { bracelet: 'tactical', glove: 'signature' }
 
 export function newLoadout(): Loadout {
-  const guns = OWN_ALL_RANGE_GUNS ? RANGE_GUNS.map(g => g.id) : []
+  const guns = OWN_ALL_RANGE_GUNS ? RANGE_GUNS.map(g => g.id) : [STARTER_GUN]
   return {
-    v: 1, guns, primary: null, secondary: null, kael: false,
+    v: 1, guns, primary: null, secondary: STARTER_GUN, kael: false,
     vessels: [{ id: 'starter-bracelet', kind: 'bracelet', label: 'Bracelet', word: null }, { id: 'starter-glove', kind: 'glove', label: 'Glove', word: null }],
     tactical: 'starter-bracelet', signature: 'starter-glove',
   }
@@ -65,9 +65,12 @@ export function equip(l: Loadout, slot: 'primary' | 'secondary' | 'tactical' | '
   return { ...l, [slot]: id }
 }
 
-/** THE STARTER ARMS (Alex 11-18: "the ship yard should have a free weapon for the player ... the charred rifle with a handgun
- *  as the secondary"; canon 11-15: Kael leaves the rifle at the shipyard). Once per keeper: owned and equipped. */
-export const KAEL_PRIMARY = 'charred-rifle', KAEL_SECONDARY = 'repeater'
+/** THE STARTER GUN (Alex 11-18, later: "the handgun should be the default starting weapon and the charred rifle a bonus they
+ *  can find in the shipyard easily"): every keeper is born owning the Repeater, worn as the sidearm (secondary); with no
+ *  primary, R draws it. KAEL'S CHEST (canon 11-15: Kael leaves the rifle at the shipyard) adds the Charred Rifle as the
+ *  primary, once per keeper. Guns are bought at the Passage gun shop and the other Nyx gun shops (next). */
+export const STARTER_GUN = 'repeater'
+export const KAEL_PRIMARY = 'charred-rifle', KAEL_SECONDARY = STARTER_GUN
 export function claimKaelsArms(l: Loadout): { ok: boolean; loadout: Loadout } {
   if (l.kael) return { ok: false, loadout: l }
   const guns = [...new Set([...l.guns, KAEL_PRIMARY, KAEL_SECONDARY])]
@@ -93,7 +96,9 @@ function load(): Loadout {
       // a test-period save keeps up with new range guns
       if (OWN_ALL_RANGE_GUNS) for (const g of RANGE_GUNS) if (!raw.guns.includes(g.id)) raw.guns.push(g.id)
       // ★ 11-18: before Kael's chest existed every gun was owned as a TEST STAND-IN; that ownership is taken back once
-      if (raw.kael === undefined) return { ...raw, guns: [], primary: null, secondary: null, kael: false }
+      if (raw.kael === undefined) return { ...raw, guns: [STARTER_GUN], primary: null, secondary: STARTER_GUN, kael: false }
+      // ★ 11-18 later: the Repeater is every keeper's starting gun; a keeper born between the two rulings is handed theirs
+      if (!raw.guns.includes(STARTER_GUN)) return { ...raw, guns: [...raw.guns, STARTER_GUN], secondary: raw.secondary ?? STARTER_GUN }
       return raw
     }
   } catch { /* private window */ }
