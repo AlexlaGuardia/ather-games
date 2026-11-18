@@ -33,6 +33,18 @@ const msg = await p.evaluate(() => document.body.innerText.includes('not out her
 ok(!msg, 'no "not out here yet" refusal')
 ok(r.pieces === 1 && r.cells >= 5, `a terrain piece is raised in the Combat (${JSON.stringify(r)})`)
 ok((await p.evaluate(() => (window as any).__casts.mana())) < mana - 10, 'X spent its mana')
+// the keeper collides with it (dynamic-solids.ts): from 4 m short of the wall, hold W ~2 s and never get past its cells at ground level
+{
+  const wall = await p.evaluate(() => { const c = (window as any).__ather.combat(); const q = c.pieces[0].cells; return { z: q[0].z, x0: Math.min(...q.map((k: any) => k.x)), x1: Math.max(...q.map((k: any) => k.x)) } })
+  await p.evaluate((w) => { const a = (window as any).__ather; a.combat().hollows.length = 0; a.tp(Math.round((w.x0 + w.x1) / 2), w.z + 4, 0) }, wall)
+  await sleep(300)
+  await p.keyboard.down('KeyW')
+  for (let i = 0; i < 20; i++) await sleep(100)
+  await p.keyboard.up('KeyW')
+  const end = await p.evaluate(() => (window as any).__ather.state())
+  ok(end.pz < wall.z + 4 - 1, `the keeper did walk toward it (z ${end.pz.toFixed(2)})`)
+  ok(end.pz > wall.z - 0.6, `holding W 2 s, the keeper did not pass the wall's cells (z ${end.pz.toFixed(2)}, wall z ${wall.z}, y ${end.py.toFixed(2)})`)
+}
 if (shot) await p.screenshot({ path: shot })
 ok(errors.length === 0, `0 page errors (${errors.slice(0, 2).join(' | ')})`)
 void mana0

@@ -23,6 +23,7 @@ import { ThirdPersonBody, dollAction, pullBack, newDrive } from '../shared/third
 import type { Camera } from 'three'
 import { VoxelDayNight } from '../shared/day-night'
 import { terrainWorld } from '../terrain-world'
+import { withPieces } from './dynamic-solids'
 import { Walker, verbOf, type Loco } from './walker'
 import {
   plotShape, plotHeightAt, mistWalls, THRESHOLD, GATE, GREG, FALL_Y, REACH, squareAt, sqId, canBuy,
@@ -364,7 +365,7 @@ export default function AtherSlice() {
     travel({ kind: 'waymark', w })
   }, [ww, travel])
 
-  const world = useMemo(() => zone.kind === 'plot' ? plotWorld : ww ? terrainWorld(ww.shape) : null, [zone, ww, plotWorld])   // ww.shape reads the live tiles
+  const world = useMemo(() => zone.kind === 'plot' ? plotWorld : ww ? terrainWorld(withPieces(ww.shape)) : null, [zone, ww, plotWorld])   // ww.shape reads the live tiles
   // ground cover preview (ground-cover.tsx, ?cover=): nothing on a path, the gate's pad or at Greg's feet
   const [cover, setCover] = useState<'none' | 'tufts' | 'meadow' | 'lush'>('meadow')
   useEffect(() => setCover(coverFromUrl()), [])

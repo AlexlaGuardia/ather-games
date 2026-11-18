@@ -9,6 +9,7 @@ import * as THREE from 'three'
 import { RANGE_GUNS } from '../shared/gunplay'
 import { weaponDef } from '../../engine/weapons'
 import { newCombat, stepCombat, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, type Combat, type Terrain, type CombatEvent, type Hollow } from './combat'
+import { live as liveSolids } from './dynamic-solids'
 import { runCast, stepFields, stepPieces, type CastHit } from './combat-casts'
 import type { CastSpec } from '../../play3d/cast'
 import { touch } from '../shared/touch'
@@ -326,6 +327,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const fx = useRef<LiveFx[]>([])
   const { camera } = useThree()
   const c = useRef<Combat>(newCombat(Date.now() >>> 0))
+  useEffect(() => { liveSolids.combat = c.current; return () => { if (liveSolids.combat === c.current) liveSolids.combat = null } }, [])   // the keeper's walker reads c.pieces as solids (dynamic-solids.ts)
   const [ids, setIds] = useState<{ id: number; kind: string }[]>([])
   const trigger = useRef(false), mouseAim = useRef(false), popT = useRef(0), hudT = useRef(0)
   const hud = useRef<CombatHud>({ hp: 100, maxHp: 100, ammo: 12, clip: 12, reloading: false, hurtAt: -9, hitAt: -9, gun: c.current.gun.name, champ: null })
