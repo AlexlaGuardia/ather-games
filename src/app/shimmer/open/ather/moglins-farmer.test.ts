@@ -72,7 +72,7 @@ const fullTanks = (w: Works, at: number): WaterSave => settle(settle(freshWater(
   ok(t2.tended === 0, 'a farmer with no room tends nothing')
 }
 // 7. the duty line names the rate and keeps planting/harvest the keeper's
-ok(/7 an hour/.test(dutyLine(farmer(5), 'farm')) && /harvests stay yours/.test(dutyLine(farmer(5), 'farm')), 'duty line: rate + the beds stay yours')
+ok(/7 an hour/.test(dutyLine(farmer(5), 'farm')) && /harvesting are yours/.test(dutyLine(farmer(5), 'farm')), 'duty line: rate + the beds stay yours')
 
 console.log(`moglins-farmer: ${pass}/${fails.length}`)
 if (fails.length) { for (const f of fails) console.log('  FAIL ' + f); process.exit(1) }

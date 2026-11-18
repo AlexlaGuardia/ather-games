@@ -111,7 +111,7 @@ export function FarmPanel({ room, works, setWorks, onClose }: { room: Room; work
           <div data-water={have} data-water-cap={cap} data-taps={pl.taps} style={{ fontSize: 12.5, color: H.ink, margin: '0 0 8px', fontVariantNumeric: 'tabular-nums' }}>
             {pl.taps > 0
               ? <>Water · <b>{have}</b> / {cap}{next !== null ? <span style={{ color: H.inkSoft }}> · next in {mmss(next)}</span> : <span style={{ color: H.inkSoft }}> · full</span>}</>
-              : <span style={{ color: H.inkSoft }}>No water tap on your plot. Rune Hold&apos;s Smithy sells one; set it from the planning table.</span>}
+              : <span style={{ color: H.inkSoft }}>No water tap on your plot yet. Rune Hold&apos;s Smithy sells one. Set it from the planning table.</span>}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
             {Array.from({ length: BEDS }, (_, i) => {

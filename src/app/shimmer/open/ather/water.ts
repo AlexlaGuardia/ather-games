@@ -60,9 +60,9 @@ export const stale = (sv: WaterSave, pl: Plumbing) => sv.taps !== pl.taps
 export type Drawn = { ok: true; sv: WaterSave } | { ok: false; why: string }
 /** Take n water out of the tanks. */
 export function draw(sv: WaterSave, pl: Plumbing, now: number, n = 1): Drawn {
-  if (pl.taps <= 0) return { ok: false, why: 'No water here. A water tap from the Nyx side fills tanks in the fold.' }
+  if (pl.taps <= 0) return { ok: false, why: 'No water tap on your plot yet. Rune Hold\'s Smithy sells one.' }
   const lv = levelOf(sv, pl, now)
-  if (lv + 1e-9 < n) return { ok: false, why: 'The tanks are dry. The tap is still filling them.' }
+  if (lv + 1e-9 < n) return { ok: false, why: 'Out of water for now. The tap is still filling.' }
   return { ok: true, sv: { v: 1, n: lv - n, at: now, taps: pl.taps } }
 }
 

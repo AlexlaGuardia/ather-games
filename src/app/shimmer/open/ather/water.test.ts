@@ -20,7 +20,7 @@ ok(capacityOf({ taps: 2, tanks: 0 }) === 12, 'two taps hold 12')
 // no tap: nothing, ever
 const none = freshWater(T0)
 ok(levelOf(none, { taps: 0, tanks: 2 }, T0 + 3600 * S) === 0, 'no tap: no water after an hour')
-const d0 = draw(none, { taps: 0, tanks: 0 }, T0); ok(!d0.ok && /water tap/.test(d0.why), 'no tap: draw refused, names the tap')
+const d0 = draw(none, { taps: 0, tanks: 0 }, T0); ok(!d0.ok && /water tap/.test(d0.why) && /Smithy/.test(d0.why), 'no tap: draw refused, names the tap')
 
 // one tap: 1 per 90 s, capped at 6
 const one = { taps: 1, tanks: 0 }
@@ -49,7 +49,7 @@ const d1 = draw(full, one, T0 + 3600 * S, 1)
 ok(d1.ok && wholeOf(d1.sv, one, T0 + 3600 * S) === 5, 'draw 1 from 6 leaves 5')
 let s6 = full, t = T0 + 3600 * S
 for (let i = 0; i < 6; i++) { const d = draw(s6, one, t); if (d.ok) s6 = d.sv }
-const d7 = draw(s6, one, t); ok(!d7.ok && /dry/.test(d7.why), 'seventh draw from 6 refused (dry)')
+const d7 = draw(s6, one, t); ok(!d7.ok && /Out of water/.test(d7.why), 'seventh draw from 6 refused (out of water)')
 ok(wholeOf(s6, one, t + 90 * S) === 1, 'refills after drawing dry')
 // partial progress kept across a draw
 const half = settle(freshWater(T0), one, T0)
