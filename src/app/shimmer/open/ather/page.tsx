@@ -76,6 +76,8 @@ import { BirthGate, useBirthGateUp } from '../birth-gate'
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
 import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
 import { DeathPack, fallAndDrop } from './death-pack'
+import { CloudReefs, CloudDeck, HorizonRing } from '../shared/cloud-edge'
+import { wildsReefPuffs, deckSquares } from './edge-clouds'
 import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, equipSlot, heldOf, litSlot, settle, type Stance } from '../shared/stance'
 import { ensureBasicTools, type EquippedTools } from '../../engine/tools'
 import type { SkillSet } from '../../engine/skills'
@@ -128,6 +130,9 @@ function AtherSliceGame() {
   // THE WILDS, STREAMED (wilds-world.ts, Alex 11-15): `ww` is the whole continent's Wilds as one ground, its tiles
   // loading round you; `W` is the tile you stand in (the fold map, its borders). One space: first-wilds local = world.
   const [ww, setWw] = useState<WildsWorld | null>(null)
+  // M24 the sea turns to cloud past the map: reef layout off the tile INDEX (not what is loaded), so it never flickers as tiles stream
+  const reefLayout = useCallback((cx: number, cz: number) => (ww ? wildsReefPuffs(cx, cz, (tx, ty) => ww.at(tx, ty)?.land ?? 0, WILDS_WATER_Y, TILE_M) : []), [ww])
+  const deckLayout = useCallback((cx: number, cz: number) => (ww ? deckSquares(cx, cz, (tx, ty) => !!ww.at(tx, ty), TILE_M) : []), [ww])
   const [wrev, setWrev] = useState(0)
   const [hereTile, setHereTile] = useState('first-wilds')
   const W: Wilds | null = ww?.loaded.get(hereTile) ?? null
@@ -921,7 +926,7 @@ function AtherSliceGame() {
         <ThirdPersonBody drive={dollDrive} camRef={camRef} />
         {zone.kind === 'plot' && <BuildPointer />}
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && ww ? (x, z) => ww.canopyAt(x, z) * 0.7 : undefined} />
-        {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} />}
+        {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} linked={cl.frame.linked} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
         {zone.kind === 'wilds' && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
@@ -932,6 +937,7 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && ww && <RinningFX ease={easeOf(toolsRef.current.rinning)} waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT && !!toolsRef.current.rinning} onCatch={onCatch} onGone={onGone} />}
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />{net && <TilePaths net={net} W={T} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />}</group> })}
         {ww && <DeathPack active={zone.kind === 'wilds'} />}
+        {zone.kind === 'wilds' && ww && <><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
         {zone.kind === 'wilds' && ww && net && <Settlements net={net} loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
         {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
         {terrain && (

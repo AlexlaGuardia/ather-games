@@ -85,7 +85,10 @@ export function makeWorld(index: TileIndex): WildsWorld {
       const out: Box[] = []
       for (const { tx, ty } of tilesIn(x0, z0, x1, z1)) {
         const t = at(tx, ty)
-        if (!t) continue
+        // ★ M24 (11-18): PAST THE MAP is cloud, and the map's edge is a wall you stand at and look out from (Alex: 'let me
+        // walk to the edge and look out'; hub: never off the world). Before this an off-map square had no solids at all,
+        // so a keeper could walk the seabed out forever. Same tall box the streaming fence below uses (Hollows, rounds too).
+        if (!t) { const ox = tx * TILE_M, oz = ty * TILE_M; out.push({ x0: ox - TILE_M / 2, x1: ox + TILE_M / 2, z0: oz - TILE_M / 2, z1: oz + TILE_M / 2, y0: -400, y1: 400 }); continue }
         const W = loaded.get(t.name), ox = tx * TILE_M, oz = ty * TILE_M
         if (!W) {   // in the index but still streaming: fence the whole square
           out.push({ x0: ox - TILE_M / 2, x1: ox + TILE_M / 2, z0: oz - TILE_M / 2, z1: oz + TILE_M / 2, y0: -400, y1: 400 })

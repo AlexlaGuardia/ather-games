@@ -11,6 +11,8 @@ import {
   plotHeightAt, plotVertexHeight, plotCellIsLand, sqId, ringOf, canBuy,
 } from './plot'
 import { P } from './palette'
+import { CloudPillows, CloudSea, HorizonRing } from '../shared/cloud-edge'
+import { plotEdgePuffs, plotFarPuffs, PLOT_SEA_Y } from './edge-clouds'
 import { GROUND, pushLayer, useGroundMaterial } from './ground-look'
 
 function plotGeometry(): THREE.BufferGeometry {
@@ -138,16 +140,17 @@ export function PlotIsland({ owned, pages }: { owned: ReadonlySet<string>; pages
   )
 }
 
-export function PlotScene({ owned, pages }: { owned: ReadonlySet<string>; pages: number }) {
-  const puffs = useMemo(() => Array.from({ length: 34 }, (_, k) => {
-    const a = k * 2.399, r = 130 + (k * 37 % 140)
-    return { x: Math.cos(a) * r, y: -40 + (k * 13 % 16), z: Math.sin(a) * r, s: 9 + (k * 7 % 12) }
-  }), [])
+export function PlotScene({ owned, pages, linked = false }: { owned: ReadonlySet<string>; pages: number; linked?: boolean }) {
+  // BETA M24: the island hangs IN the cloud-ocean (edge-clouds.ts): pillows banked round the rim and under it, loose puffs
+  // out in the void, the sea below and the horizon ring. One instanced draw for every puff (was 34 separate meshes).
+  // linked into a cluster the meadow meets the rim, so only the far puffs (cluster-scene's skirt is that edge)
+  const puffs = useMemo(() => [...(linked ? [] : plotEdgePuffs()), ...plotFarPuffs()], [linked])
   return (
     <>
       <PlotIsland owned={owned} pages={pages} />
-      <mesh position-y={-56} rotation-x={-Math.PI / 2}><planeGeometry args={[3000, 3000]} /><meshLambertMaterial color="#f3efe6" /></mesh>
-      {puffs.map((p, k) => <mesh key={k} position={[p.x, p.y, p.z]} scale={p.s}><icosahedronGeometry args={[1, 0]} /><meshLambertMaterial color="#fbf8f1" flatShading /></mesh>)}
+      <CloudSea y={PLOT_SEA_Y} r={1400} />
+      <CloudPillows puffs={puffs} />
+      <HorizonRing y={PLOT_SEA_Y + 20} />
     </>
   )
 }
