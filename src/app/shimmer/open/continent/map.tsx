@@ -204,13 +204,14 @@ const placeSeen = (m: ContinentMapState, x: number, z: number) => {
   const { cell, sizeX, sizeZ } = m.R.meta
   return isSeen(m.seen, Math.floor((x + sizeX / 2) / cell / CELL), Math.floor((z + sizeZ / 2) / cell / CELL))
 }
-/** SHOP MARKS: the doors a keeper can look for, only in towns they have uncovered (like the names). Gun shops for now:
+/** SHOP MARKS: the doors a keeper can look for, only in towns they have uncovered (like the names). Gun shops (a slate diamond) and courser yards (a rust square):
  *  one small slate-grey mark on the door. Pure; also read by the check (data-shop-marks on the map canvas). */
 export function shopMarks(m: ContinentMapState): { key: string; kind: string; x: number; z: number }[] {
   const out: { key: string; kind: string; x: number; z: number }[] = []
   for (const p of m.R.meta.places) {
     if (!p.name || !placeSeen(m, p.x, p.z)) continue
     for (const d of doorsCached(m.R, p.id)) if (d.key.startsWith('front:gunshop:')) out.push({ key: d.key, kind: 'gunshop', x: d.at.x, z: d.at.z })
+      else if (d.key.startsWith('front:courseryard:')) out.push({ key: d.key, kind: 'courseryard', x: d.at.x, z: d.at.z })
   }
   return out
 }
@@ -326,8 +327,10 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
     }
     for (const sm of shopMarks(map)) {   // a gun shop: a small inked diamond, no name (the shop has none)
       const [mx, my] = map.toPx(sm.x, sm.z), r = 3.2 * dpr
-      ctx.save(); ctx.fillStyle = '#4a4f57'; ctx.strokeStyle = 'rgba(236,226,198,0.95)'; ctx.lineWidth = 1.2 * dpr
-      ctx.beginPath(); ctx.moveTo(mx * S, my * S - r); ctx.lineTo(mx * S + r, my * S); ctx.lineTo(mx * S, my * S + r); ctx.lineTo(mx * S - r, my * S); ctx.closePath()
+      ctx.save(); ctx.fillStyle = sm.kind === 'courseryard' ? '#8a5a2e' : '#4a4f57'; ctx.strokeStyle = 'rgba(236,226,198,0.95)'; ctx.lineWidth = 1.2 * dpr
+      ctx.beginPath()
+      if (sm.kind === 'courseryard') ctx.rect(mx * S - r * 0.8, my * S - r * 0.8, r * 1.6, r * 1.6)   // a courser yard: a small rust square
+      else { ctx.moveTo(mx * S, my * S - r); ctx.lineTo(mx * S + r, my * S); ctx.lineTo(mx * S, my * S + r); ctx.lineTo(mx * S - r, my * S); ctx.closePath() }
       ctx.fill(); ctx.stroke(); ctx.restore()
     }
     const g = gateOf(map)

@@ -25,6 +25,7 @@ import { buyBundle } from './smokehouse'
 import { SMOKEHOUSE_STOCK } from '../ather/cooking'
 import { useLoadout, setLoadout, getLoadout, claimKaelsArms, slotOfGun } from '../shared/loadout'
 import { buyGun, GUN_PRICES, SHOP_GUNS } from './gun-shop'
+import { yardRows, buyPart, slotName, YARD_SLOTS } from './courser-yard'
 
 /** a ticket to the Starforge (an emergency-fund sized price, Alex 11-16). TODO(world): move onto economy/prices.ts LADDER */
 export const STARFORGE_TICKET = 250
@@ -49,6 +50,7 @@ export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
   )
   if (shop.kind === 'smokehouse') return <SmokehousePanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (shop.kind === 'gunshop') return <GunShopPanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
+  if (shop.kind === 'courseryard') return <CourserYardPanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (shop.kind === 'shipyard') return <ShipyardPanel onClose={onClose} />
   if (stockOf(id).length) return <DecorShop id={id} ledger={ledger} setLedger={setLedger} onClose={onClose} />
   return (
@@ -275,6 +277,44 @@ function GunShopPanel({ ledger, setLedger, onClose }: { ledger: Ledger; setLedge
         <div className="mt-3 flex items-center text-[12.5px]" style={{ color: H.inkSoft }}>
           <span className="flex-1" data-shop-msg>{msg ?? ''}</span>
           <span className="tabular-nums">Purse · {ledger.marks.toLocaleString()} Marks</span>
+        </div>
+      </div>
+    </HearthFrame>
+  )
+}
+
+/** THE COURSER YARD (BETA M14, Magii RULED 11-18): the courser trade's town shop. The garage's three part ladders, at the garage's
+ *  prices and deed gates (business/courser-yard.ts); a bought part fits from the garage (G while driving). No name, no keeper:
+ *  plain copy. Whole coursers wait on Alex. */
+function CourserYardPanel({ ledger, setLedger, onClose }: { ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void }) {
+  const [msg, setMsg] = useState<string | null>(null)
+  const rows = yardRows(ledger)
+  return (
+    <HearthFrame title={FRONT_SHOPS.courseryard.name} maxWidth={560} onClose={onClose} fixed dataPanel="courser-yard">
+      <div className="px-4 pt-5 pb-4 text-[14px] leading-snug" style={{ color: H.ink }}>
+        <div className="grid gap-3">
+          {YARD_SLOTS.map(slot => (
+            <div key={slot} data-slot={slot}>
+              <div className="text-[12px] font-bold uppercase tracking-[0.14em] mb-1" style={{ color: H.inkSoft }}>{slotName(slot)}</div>
+              <div className="grid grid-cols-3 gap-2">
+                {rows.filter(r => r.slot === slot).map(r => (
+                  <div key={r.tier} data-part={`${slot}-${r.tier}`} data-state={r.state} className="rounded-[12px] px-2.5 py-2 flex flex-col gap-1"
+                    style={{ background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}`, opacity: r.state === 'later' ? 0.6 : 1 }}>
+                    <div className="text-[14px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{r.name}</div>
+                    <div className="text-[12px] tabular-nums" style={{ color: H.inkSoft }}>{r.price.toLocaleString()} Marks{r.deeds ? ` · ${r.deeds} deeds` : ''}</div>
+                    <HearthButton small primary disabled={r.state !== 'buy'} onClick={() => {
+                      const b = buyPart(ledger, r.slot, r.tier)
+                      if (b.ok) { setLedger(b.ledger); const t = `${r.name} bought · fit it in the garage (G while driving)`; setMsg(t); hudSay(t, 'item') } else setMsg(b.why ?? null)
+                    }}>{r.state === 'owned' ? 'Yours' : r.state === 'buy' ? 'Buy' : 'Not yet'}</HearthButton>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex items-center text-[12.5px]" style={{ color: H.inkSoft }}>
+          <span className="flex-1" data-shop-msg>{msg ?? rows.find(r => r.state === 'later' && r.tier === 1)?.why ?? ''}</span>
+          <span className="tabular-nums">Purse · {ledger.marks.toLocaleString()} Marks · {ledger.deeds} deeds</span>
         </div>
       </div>
     </HearthFrame>

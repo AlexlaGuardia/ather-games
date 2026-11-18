@@ -10,7 +10,7 @@ import { shopDoorPoint } from '../towns/shop-door'
 import { marketFor, type Offer } from './market'
 import { SEATS, type Seat } from './letters'
 
-export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple' | 'smokehouse' | 'shipyard' | 'trade-co' | 'gunshop'
+export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple' | 'smokehouse' | 'shipyard' | 'trade-co' | 'gunshop' | 'courseryard'
 export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: string }> = {
   'kindled-mug': { name: 'The Kindled Mug', kind: 'tavern', line: 'A tavern on the square.' },
   'forgelight-inn': { name: 'The Forgelight Inn', kind: 'inn', line: 'Iron fixtures and forge-warmed walls.' },
@@ -32,6 +32,9 @@ export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: 
   // THE GUN SHOP (RULED 11-15, world/rune-hold.md): sells the five base guns at a counter; more of them in other towns. No proper
   // name, no keeper: the UI says "The gun shop". Like the smokehouse it takes a plain building (doorsOf). Stock: business/gun-shop.ts.
   gunshop: { name: 'The gun shop', kind: 'gunshop' },
+  // THE COURSER YARD (BETA M14, Magii RULED 11-18: a town craft-shop of the courser trade, no named maker, a plain trade name; it
+  // sells the Core / Trim / Rune part ladders). Every town with a gun shop. Stock: business/courser-yard.ts.
+  courseryard: { name: 'The courser yard', kind: 'courseryard' },
 }
 
 /** a door you can E: a market lot (key = lot id → the deed card) or a canon storefront (key = `front:<id>` → its panel) */
@@ -82,6 +85,17 @@ function doorsOf(R: Region, townId: string): Door[] {
       const at = plan.temple ?? { x: R.meta.places[i].x, z: R.meta.places[i].z }
       const b = free.sort((p, q) => Math.hypot(q.x - at.x, q.z - at.z) - Math.hypot(p.x - at.x, p.z - at.z))[0]
       out.push({ key: 'front:shipyard', b, name: FRONT_SHOPS.shipyard.name, at: shopDoorPoint(b) })
+    }
+  }
+  // THE COURSER YARD in every town with a gun shop, on the town's EDGE (a yard wants room for coursers): the free plain building
+  // farthest from the heart that nothing else holds, computed after the shipyard so Rune Hold's outskirts stay Kael's. Jin's placement.
+  if (i >= 0 && out.some(d => d.key === `front:gunshop:${townId}`)) {
+    const plan = cachedPlan(R, i), taken = new Set(out.map(d => d.b))
+    const free = plan.buildings.filter(x => !x.front && !taken.has(x))
+    if (free.length) {
+      const at = plan.temple ?? { x: R.meta.places[i].x, z: R.meta.places[i].z }
+      const b = free.sort((p, q) => Math.hypot(q.x - at.x, q.z - at.z) - Math.hypot(p.x - at.x, p.z - at.z))[0]
+      out.push({ key: `front:courseryard:${townId}`, b, name: FRONT_SHOPS.courseryard.name, at: shopDoorPoint(b) })
     }
   }
   // THE CO.'S OFFICE: the Citadel only, the free plain building NEAREST the Grand Exchange (the Co. → GE spine, canon). Jin's

@@ -47,5 +47,16 @@ for (const p of meta.places) {
   }
 }
 ok(all.filter(d => d.key.startsWith('front:gunshop:')).length > 0, 'the continent has gun shops')
+// THE COURSER YARD (M14): exactly one in every town with a gun shop, plainly named, on a building nothing else holds
+for (const p of meta.places) {
+  const ds = doorsCached(R, p.id), ys = ds.filter(d => d.key.startsWith('front:courseryard:')), gun = ds.some(d => d.key === `front:gunshop:${p.id}`)
+  const spare = cachedPlan(R, meta.places.indexOf(p)).buildings.some(b => !b.front && !ds.some(d => d.b === b && !d.key.startsWith('front:courseryard:')))
+  ok(ys.length === (gun && spare ? 1 : 0), `${p.id}: ${gun && spare ? 'one' : 'no'} courser yard (${ys.length})`)
+  for (const y of ys) {
+    ok(y.name === 'The courser yard' && y.key === `front:courseryard:${p.id}`, `${p.id}: "The courser yard", keyed by its town`)
+    ok(ds.filter(d => d.b === y.b).length === 1, `${p.id}: the yard has its own building`)
+  }
+}
+ok(all.filter(d => d.key.startsWith('front:courseryard:')).length > 0, 'the continent has courser yards')
 console.log(`doors: ${pass} pass, ${fail} fail (${all.length} doors)`)
 if (fail) process.exit(1)
