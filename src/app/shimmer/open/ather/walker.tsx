@@ -28,9 +28,11 @@ export interface WalkerProps {
   onTick: (lc: Loco, yaw: number, dt: number) => void
   /** While true (a map is open) the body takes no move keys. */
   frozen: React.MutableRefObject<boolean>
+  /** While set (talking to an NPC, BETA M13), the look eases to face this point; the keeper's own look takes over again after. */
+  focus?: React.MutableRefObject<{ x: number; y: number; z: number } | null>
 }
 
-export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, frozen }: WalkerProps) {
+export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, frozen, focus }: WalkerProps) {
   const { camera, gl } = useThree()
   const born = () => createLoco(spawn.x, Math.max(ground(spawn.x, spawn.z), -1e3), spawn.z)
   const loco = useRef(born())
@@ -79,6 +81,13 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
       look.current.pitch = Math.max(-1.5, Math.min(1.5, look.current.pitch - touch.look.dy * k * (st.invertY ? -1 : 1)))
     }
     touch.look.dx = 0; touch.look.dy = 0
+    const fc = focus?.current
+    if (fc) {   // turn to the NPC: yaw 0 looks down -z, so the yaw to (dx, dz) is atan2(-dx, -dz); ease, shortest way round
+      const dx = fc.x - lc.px, dz = fc.z - lc.pz, dy = fc.y - eyeY(lc)
+      const ty = Math.atan2(-dx, -dz), tp = Math.max(-0.6, Math.min(0.6, Math.atan2(dy, Math.hypot(dx, dz))))
+      const a = Math.min(1, dt * 6), dYaw = Math.atan2(Math.sin(ty - look.current.yaw), Math.cos(ty - look.current.yaw))
+      look.current.yaw += dYaw * a; look.current.pitch += (tp - look.current.pitch) * a
+    }
     const { yaw, pitch } = look.current
     fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw)); right.set(Math.cos(yaw), 0, -Math.sin(yaw))
     const tm = frozen.current ? { x: 0, y: 0 } : touch.move

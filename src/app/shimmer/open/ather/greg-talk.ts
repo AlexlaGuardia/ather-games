@@ -1,0 +1,32 @@
+// ── GREG'S CONVERSATION (BETA M13, Alex 11-18): talk first, one screen per answer ───────────────────────────────────────────
+// Before: E at Greg opened ONE panel with the errand, his lines, the ground grid and its prices all at once. Now E starts a
+// conversation (shared/npc-talk.tsx): his line in a bubble, the keeper's answers below. "About my ground" opens the ground
+// screen alone; the errand is talk; "Goodbye" leaves.
+// Greg's lines are lark's, signed (business/errand-lines.ts). ★ PLACEHOLDERS for @lark: GREG_HELLO (no signed idle line exists
+// yet) and the keeper's answer labels (ANSWERS). Swap them when lark's pass is signed; do not write new Greg lines here.
+import { gregSendOff, gregRepeat } from '../business/errand-lines'
+import type { TalkNode } from '../shared/npc-talk'
+import type { GregErrand } from './panels'
+
+export const GREG_HELLO = 'Keeper.'   // PLACEHOLDER (lark): Greg's idle greeting
+export const ANSWERS = { more: 'Go on', take: 'Take them', ground: 'About my ground', bye: 'Goodbye' }   // PLACEHOLDER labels (lark)
+
+export interface GregTalkActs { ground: () => void; bye: () => void; goto: (step: number) => void }
+
+/** The node at `step` of Greg's talk. Step 0 is where every conversation starts; steps 1+ walk the send-off lines. */
+export function gregTalk(errand: GregErrand, step: number, act: GregTalkActs): TalkNode {
+  const ground = { label: ANSWERS.ground, pick: act.ground }, bye = { label: ANSWERS.bye, pick: act.bye }
+  if (errand.stage === 'greg') {   // the first errand's hand-over: his signed send-off, one line a bubble, then the gems
+    const lines = gregSendOff(errand.seatName, errand.where, errand.citadel), i = Math.min(step, lines.length - 1)
+    const last = i === lines.length - 1
+    return {
+      line: lines[i],
+      options: last
+        ? [{ label: ANSWERS.take, pick: () => { errand.onTake(); act.bye() } }]
+        : [{ label: ANSWERS.more, pick: () => act.goto(i + 1) }, ...(i === 0 ? [ground, bye] : [])],
+    }
+  }
+  // before the bracelet is lit his signed bark points the way (trigger greg:bark:errand); otherwise a plain hello
+  const line = (errand.stage === 'smith' || errand.stage === 'temple') && errand.where ? gregRepeat(errand.where) : GREG_HELLO
+  return { line, options: [ground, bye] }
+}

@@ -34,6 +34,8 @@ res.foldMapHearth = !!(await p.$('[data-panel="fold-map"] button[aria-label="clo
 await shot('bag-3-foldmap')
 await p.click('[data-panel="fold-map"] button[aria-label="close"]'); await sleep(500)
 await p.evaluate(() => (window as any).__ather.open('greg')); await sleep(1000)
+// BETA M13: Greg is talk first; the ground screen is one answer
+await p.evaluate(() => ([...document.querySelectorAll('[data-talk-option]')].find(b => /About my ground/.test(b.textContent ?? '')) as HTMLElement | undefined)?.click()); await sleep(800)
 res.gregHearth = !!(await p.$('[data-panel="greg"] button[aria-label="close"]'))
 await shot('bag-4-greg')
 console.log(JSON.stringify(res))

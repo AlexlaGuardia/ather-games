@@ -96,10 +96,12 @@ await journal('0-born')
 const s0 = await A('state') as { px: number; pz: number }; res.spawn = `${s0.px.toFixed(0)},${s0.pz.toFixed(0)}`; res.gregDist = Math.hypot(GREG.x - s0.px, GREG.z - s0.pz).toFixed(0)
 await walkTo('plot -> Greg', GREG.x, GREG.z, REACH * 0.8)
 await p.keyboard.press('KeyE'); await sleep(1200)
-if (!(await poll(async () => !!(await p.$('[data-panel="greg"]')), 8000))) { sees.atGreg = await text(); await shot('greg-noE'); await fail('greg: E opens his panel', 'no panel after E at Greg') }
-await shot('greg-panel'); sees.gregPanel = await text()
-if (!(await poll(async () => !!(await p.$('[data-errand-take]')), 8000))) await fail('greg: take the gems', 'no Take button in his panel')
-await clickSel('[data-errand-take]'); await sleep(1200)
+if (!(await poll(async () => !!(await p.$('[data-talk-choices]')), 8000))) { sees.atGreg = await text(); await shot('greg-noE'); await fail('greg: E starts his conversation', 'no talk after E at Greg') }
+await shot('greg-talk'); sees.gregTalk = await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')
+// BETA M13: his send-off one bubble at a time; E answers the lit option (Go on x3, then Take them)
+for (let k = 0; k < 6 && !(await p.evaluate(() => [...document.querySelectorAll('[data-talk-option]')].some(b => /Take them/.test(b.textContent ?? '')))); k++) { await p.keyboard.press('KeyE'); await sleep(600) }
+if (!(await p.evaluate(() => [...document.querySelectorAll('[data-talk-option]')].some(b => /Take them/.test(b.textContent ?? ''))))) await fail('greg: take the gems', 'no Take them answer in his talk')
+await p.keyboard.press('KeyE'); await sleep(1200)
 const bg = await bag(); res.bagAfterGreg = bg.join(' ')
 if (!bg.includes('blankstonex1')) await fail('greg: take the gems', `bag after Take: ${bg.join(' ')}`)
 await p.keyboard.press('Escape'); await sleep(600)

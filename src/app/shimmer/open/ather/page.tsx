@@ -37,6 +37,8 @@ import { ClusterPanel, useCluster } from './cluster-panel'
 import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './cluster'
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
+import { gregTalk } from './greg-talk'
+import { TalkBubble, TalkChoices } from '../shared/npc-talk'
 import { gemsGiven, markGemsGiven, stageOf, gregsGems, errandEntries, birthSeat } from '../business/errand'
 import { skillPointerEntries } from '../business/skill-pointers'
 import { SEATS } from '../business/letters'
@@ -94,7 +96,7 @@ import type { Vitals } from '../../engine/vitals'
 
 type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
 type Spawn = { x: number; z: number; yaw: number }
-type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement }
+type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement }
 type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement }
 
 export default function AtherSlice() {
@@ -466,7 +468,7 @@ export default function AtherSlice() {
     g.__ather = {
       ...(g.__ather ?? {}),
       zone: () => zone.kind,
-      open: (k: 'gate' | 'greg' | 'athernyx') => setPanel(k === 'greg' ? { kind: 'greg' } : { kind: 'map', view: k === 'athernyx' ? 'athernyx' : 'ather', travel: true }),
+      open: (k: 'gate' | 'greg' | 'athernyx') => setPanel(k === 'greg' ? { kind: 'talk', step: 0 } : { kind: 'map', view: k === 'athernyx' ? 'athernyx' : 'ather', travel: true }),
       travel: (d: Dest) => travel(d),
       grant: (grey = 0, pages = 0) => updateGarden({ ...garden, grey: garden.grey + grey, pages: garden.pages + pages }),
       resetGarden: () => updateGarden(freshGarden()),
@@ -800,6 +802,15 @@ export default function AtherSlice() {
       hudSay(`Gregory's gems · cut your letter at the ${seat ? SEATS[seat].name : ''} runesmith`, 'item')
     },
   }
+  // BETA M13: E at Greg is a conversation (greg-talk.ts): his line in a bubble, one screen per answer; the camera turns to him
+  const talkStep = panel?.kind === 'talk' ? panel.step : -1
+  const talkNode = useMemo(() => talkStep < 0 ? null : gregTalk(gregErrand, talkStep, {
+    ground: () => setPanel({ kind: 'greg' }), bye: () => setPanel(null), goto: step => setPanel({ kind: 'talk', step }),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [talkStep, errandStage, birth, given])
+  const talkFocus = useRef<{ x: number; y: number; z: number } | null>(null)
+  const gregHead = useMemo(() => ({ x: GREG.x, y: plotHeightAt(GREG.x, GREG.z) + 1.7, z: GREG.z }), [])
+  useEffect(() => { talkFocus.current = talkNode ? gregHead : null }, [talkNode, gregHead])
   // the journal: the nearest infected node is the keeper's open line on this side (re-aimed as you move; unchanged posts are free)
   useEffect(() => {
     const post = () => {
@@ -844,7 +855,7 @@ export default function AtherSlice() {
         hudSay(`${FAIR_NAME} · the troupe is still pitching. The season's games, contests and market open soon.`, 'info', 6); return
       }
       if (e.code === 'KeyE' && n) {
-        if (n.kind === 'greg') setPanel({ kind: 'greg' })
+        if (n.kind === 'greg') setPanel({ kind: 'talk', step: 0 })
         else if (n.kind === 'work') { if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
         else if (n.kind === 'folk') setPanel({ kind: 'folk', s: n.s })
         else setPanel({ kind: 'map', view: 'ather', travel: true })
@@ -908,11 +919,12 @@ export default function AtherSlice() {
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
             safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} />
         )}
+        {talkNode && zone.kind === 'plot' && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={talkNode.line} />}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
         {world && fade === 0 && <CompanionFollower pose={poseRef} ground={ground} />}
         {world && (
           <Walker
-            key={epoch} world={world} ground={ground} spawn={spawn} locked={locked} frozen={frozen}
+            key={epoch} world={world} ground={ground} spawn={spawn} locked={locked} frozen={frozen} focus={talkFocus}
             fallY={zone.kind === 'plot' ? FALL_Y : -60}
             onFall={goHome}
             onTick={onTick}
@@ -968,7 +980,8 @@ export default function AtherSlice() {
           onClose={() => setPanel(null)} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
       {panel?.kind === 'folk' && <FolkPanel settlement={panel.s} onClose={() => setPanel(null)} />}
-      {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} errand={gregErrand} />}
+      {talkNode && <TalkChoices node={talkNode} phone={hudSize === 'phone'} />}
+      {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       {panel?.kind === 'work' && <WorkshopPanel near={panel.near} owned={owned} onClose={() => setPanel(null)} />}
       {zone.kind === 'plot' && <PlacingBar owned={owned} />}
