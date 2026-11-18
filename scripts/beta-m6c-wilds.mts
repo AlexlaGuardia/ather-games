@@ -25,7 +25,7 @@ if (!door) { console.log('FAIL: no shipyard door in Rune Hold'); process.exit(1)
 const at = shopDoorPoint(door.b)
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const ctx = await br.createBrowserContext()
-const p = await ctx.newPage(); await p.setViewport({ width: 1000, height: 640 })
+const p = await ctx.newPage(); await p.setViewport({ width: 800, height: 500 })
 const errs: string[] = [], cerrs: string[] = []
 p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 p.on('console', m => { if (m.type() === 'error') cerrs.push(m.text().slice(0, 200)) })
@@ -48,7 +48,8 @@ const tapText = async (re: RegExp) => {
   await p.mouse.click(box.x, box.y); return true
 }
 const tick = async (n = 3, ms = 150) => { for (let i = 0; i < n; i++) { await p.screenshot({ path: `${out}/_tick.png`, clip: { x: 0, y: 0, width: 64, height: 64 } }).catch(() => {}); if (ms) await sleep(ms) } }
-const A = <T,>(f: string) => p.evaluate((f: string) => (window as any).__ather[f]?.(), f) as Promise<T>
+// a zone fold can swap the frame under us ('detached frame'): retry against the live frame instead of dying
+const A = async <T,>(f: string): Promise<T> => { for (let i = 0; ; i++) { try { return await p.evaluate((f: string) => (window as any).__ather?.[f]?.(), f) as T } catch (e) { if (i >= 20) throw e; await sleep(1500) } } }
 const clickCanvas = async () => { const c = await p.$('canvas'); const bx = await c?.boundingBox(); if (bx) await p.mouse.click(bx.x + bx.width / 2, bx.y + bx.height / 2) }
 const loadout = () => p.evaluate(() => { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i)!; if (k.endsWith('open.loadout.v1')) return JSON.parse(localStorage.getItem(k)!) } return null })
 
@@ -110,7 +111,8 @@ while (Date.now() - t0 < 330000) {
   const eye = (s.y ?? 0) + 1.6, pitch = -Math.atan2(eye - (tgt.y + 1.0), Math.max(d, 0.5))
   await p.evaluate((yw, pt) => (window as any).__ather.look(yw, pt), Math.atan2(-dx, -dz), pitch)
   if (!held) { await p.mouse.down(); held = true }
-  if (d > 16 && !walking) { await p.keyboard.down('KeyW'); walking = true } else if (d <= 16 && walking) { await p.keyboard.up('KeyW'); walking = false }
+  // MOVEMENT hook: a hollow is 55-100 m out and never notices an idle keeper; walk (tp) to ~15 m of it, on the keeper's side
+  if (d > 18) { const k = 15 / d; await p.evaluate((x, z, yw) => (window as any).__ather.tp(x, z, yw), tgt.x - dx * k, tgt.z - dz * k, Math.atan2(-dx, -dz)); res.tps = ((res.tps as number) ?? 0) + 1 }
   fired++
   if (fired === 8) await shot('3-firing')
   } catch (e) { res.loopErr = String(e).slice(0, 120); await sleep(1000); if (!(await A<string>('zone').catch(() => null))) break }
