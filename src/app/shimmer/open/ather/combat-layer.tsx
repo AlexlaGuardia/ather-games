@@ -9,7 +9,7 @@ import * as THREE from 'three'
 import { RANGE_GUNS } from '../shared/gunplay'
 import { weaponDef } from '../../engine/weapons'
 import { newCombat, stepCombat, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, type Combat, type Terrain, type CombatEvent, type Hollow } from './combat'
-import { runCast, stepFields, type CastHit } from './combat-casts'
+import { runCast, stepFields, stepPieces, type CastHit } from './combat-casts'
 import type { CastSpec } from '../../play3d/cast'
 import { touch } from '../shared/touch'
 import { wakeChampion, tellOf, CHAMP } from './champion'
@@ -196,7 +196,7 @@ function Tells({ c, heightAt }: { c: React.MutableRefObject<Combat>; heightAt: (
  *  (and on to each body it chained to). Lives FX_S seconds. */
 const FX_S = 0.6
 type LiveFx = CastHit & { at: number; from: { x: number; y: number; z: number }; colour: string }
-const CAST_COLOUR: Record<string, string> = { field: '#ffd9a0', status: '#9fd8ff', projectile: '#fff0b8', restore: '#9be59b', infusion: '#ffcf7a' }
+const CAST_COLOUR: Record<string, string> = { terrain: '#b8b8c0', field: '#ffd9a0', status: '#9fd8ff', projectile: '#fff0b8', restore: '#9be59b', infusion: '#ffcf7a' }
 /** The placed fields (combat-casts.ts › stepFields): a faint disc and a ring on the ground for as long as each lasts. */
 function FieldDiscs({ c }: { c: React.MutableRefObject<Combat> }) {
   const discs = useRef<(THREE.Mesh | null)[]>([]), rings = useRef<(THREE.Mesh | null)[]>([])
@@ -224,6 +224,32 @@ function FieldDiscs({ c }: { c: React.MutableRefObject<Combat> }) {
         </group>
       ))}
     </>
+  )
+}
+
+/** The raised terrain (stepPieces): plain stone-grey blocks, one per cell, as tall as the cell stands. The canon look is not locked. */
+const MAX_BLOCKS = 384
+function PieceBlocks({ c }: { c: React.MutableRefObject<Combat> }) {
+  const mesh = useRef<THREE.InstancedMesh>(null)
+  const m = useMemo(() => new THREE.Matrix4(), [])
+  useFrame(() => {
+    const im = mesh.current; if (!im) return
+    const ps = c.current.pieces ?? [], now = c.current.clock ?? 0
+    let n = 0
+    for (const p of ps) {
+      const sink = Math.min(1, (p.until - now) / 0.6)   // sinks back into the ground over its last moments
+      for (const q of p.cells) {
+        if (n >= MAX_BLOCKS) break
+        const h = Math.max(0.05, q.rise * sink)
+        m.makeScale(0.98, h, 0.98); m.setPosition(q.x, q.base + h / 2, q.z); im.setMatrixAt(n++, m)
+      }
+    }
+    im.count = n; im.instanceMatrix.needsUpdate = true
+  })
+  return (
+    <instancedMesh ref={mesh} args={[undefined, undefined, MAX_BLOCKS]} frustumCulled={false}>
+      <boxGeometry args={[1, 1, 1]} /><meshStandardMaterial color="#8a8a92" roughness={1} />
+    </instancedMesh>
   )
 }
 
@@ -399,7 +425,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       eats.current = []
     }
     stepCombat(C, T, feet, dt)
-    stepFields(C, T, feet)
+    stepFields(C, T, feet); stepPieces(C)
     if (C.events.length) {
       const now = performance.now() / 1000
       for (const e of C.events) {
@@ -459,6 +485,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       <ChampionBody c={c} />
       <CastFlash fx={fx} />
       <FieldDiscs c={c} />
+      <PieceBlocks c={c} />
       <Tells c={c} heightAt={T.heightAt} />
       {ids.map(h => h.kind === 'floater' ? <FloaterBody key={h.id} c={c} id={h.id} /> : <HollowBody key={h.id} c={c} id={h.id} />)}
       <instancedMesh ref={spitsMesh} args={[undefined, undefined, 32]} frustumCulled={false}>

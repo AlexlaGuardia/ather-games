@@ -52,5 +52,5 @@ const fresh = (z = -6) => { const c = newCombat(1); const h = spawnHollow(c, T, 
   runCast(c, T, eye, fwd, castForMove('keenshard')); ok((c.keeper.ampUntil ?? 0) > (c.clock ?? 0), 'keenshard: the gun is not amped')
 }
 // what the open world does not carry yet comes back null (the page says so before paying)
-ok(runCast(newCombat(1), T, eye, fwd, castForMove('stonewall')) === null, 'stonewall: a terrain cast did something')
+ok(runCast(newCombat(1), T, eye, fwd, castForMove('meltbore')) === null, 'meltbore: a channel cast did something')
 console.log(`combat-casts: ${pass}/${fail}`); process.exit(fail ? 1 : 0)

@@ -76,6 +76,19 @@ export interface CombatField {
   id: number; moveId: string; x: number; y: number; z: number; r: number; until: number; nextTick: number
   dps: number; hps: number; cage: boolean; stopsShots: boolean; colour: string
 }
+/** A raised terrain piece (terrain casts): grid cells (1 m, the engine's rounding), each `base` to `base + rise` m tall, until `until`. The numbers are castForMove's. */
+export interface CombatPiece {
+  id: number; moveId: string; until: number
+  cells: { x: number; z: number; base: number; rise: number }[]
+}
+/** Is the ground cell at (x,z) held by a raised piece? Returns the piece cell's top (m), or null. */
+export function solidTop(c: Combat, x: number, z: number): number | null {
+  const ps = c.pieces
+  if (!ps?.length) return null
+  const cx = Math.round(x), cz = Math.round(z)
+  for (const p of ps) for (const q of p.cells) if (q.x === cx && q.z === cz) return q.base + q.rise
+  return null
+}
 export interface Combat {
   hollows: Hollow[]; rounds: Round[]; drops: Drop[]; spits: Spit[]
   keeper: Keeper; gun: WeaponDef
@@ -83,6 +96,8 @@ export interface Combat {
   clock?: number
   /** Fields placed by field casts (combat-casts.ts › stepFields): each lasts its spec's secs and ticks on its own clock. */
   fields?: CombatField[]
+  /** Terrain raised by terrain casts (combat-casts.ts, stepPieces): Hollows cannot step into a cell, spit stops on it. */
+  pieces?: CombatPiece[]
   /** The node's champion, when one is up (champion.ts). */
   champ?: Champion
   /** Champions that went back under, by node: the bar each had reached. */
@@ -272,9 +287,11 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     if (speed > 0) {
       const l = Math.hypot(mx, mz) || 1
       const nx = h.x + (mx / l) * speed * dt, nz = h.z + (mz / l) * speed * dt
-      if (T.walkable(nx, nz)) { h.x = nx; h.z = nz }
-      else if (T.walkable(nx, h.z)) h.x = nx
-      else if (T.walkable(h.x, nz)) h.z = nz
+      // a raised piece is a wall: a Hollow already standing in one (it rose on them) may walk out, never in
+      const out = solidTop(c, h.x, h.z) !== null, free = (x: number, z: number) => T.walkable(x, z) && (out || solidTop(c, x, z) === null)
+      if (free(nx, nz)) { h.x = nx; h.z = nz }
+      else if (free(nx, h.z)) h.x = nx
+      else if (free(h.x, nz)) h.z = nz
       else if (h.state === 'wander') h.t = 0
       if (h.state !== 'lunge') h.yaw = Math.atan2(mx, mz)
     }
@@ -298,6 +315,8 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   for (const p of c.spits) {
     p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= 2.5 * dt; p.life -= dt
     if (p.y < T.heightAt(p.x, p.z)) { p.life = 0; continue }
+    const top = solidTop(c, p.x, p.z)
+    if (top !== null && p.y < top) { p.life = 0; continue }   // stopped by a raised piece
     const bx = p.x - feet.x, bz = p.z - feet.z, by = p.y - (feet.y + 0.9)
     if (k.hp > 0 && bx * bx + bz * bz < (FLOATER.spitR + 0.35) ** 2 && Math.abs(by) < 1.0) {
       const dmg = p.dmg ?? FLOATER.damage
@@ -351,7 +370,7 @@ function stepFloater(c: Combat, T: Terrain, h: Hollow, feet: { x: number; y: num
   if (speed > 0) {
     const l = Math.hypot(mx, mz) || 1
     const nx = h.x + (mx / l) * speed * dt, nz = h.z + (mz / l) * speed * dt
-    if (Number.isFinite(T.heightAt(nx, nz))) { h.x = nx; h.z = nz }
+    if (Number.isFinite(T.heightAt(nx, nz)) && (solidTop(c, h.x, h.z) !== null || solidTop(c, nx, nz) === null)) { h.x = nx; h.z = nz }
   }
   const want = T.heightAt(h.x, h.z) + FLOATER.hover + Math.sin(h.id + performanceSafeNow(c) * 1.3) * 0.25
   h.y += (want - h.y) * Math.min(1, dt * 3)
@@ -362,5 +381,5 @@ const performanceSafeNow = (c: Combat) => (c.clock = (c.clock ?? 0))
 /** After the fold returns a downed keeper home: full health, a full clip, the Wilds' crowd forgets them. */
 export function revive(c: Combat) {
   c.keeper.hp = c.keeper.maxHp; c.keeper.sinceHurt = 99; c.keeper.ammo = c.gun.clip; c.keeper.reloading = 0
-  c.hollows = []; c.rounds = []; c.spits = []; c.fields = []; c.champ = undefined
+  c.hollows = []; c.rounds = []; c.spits = []; c.fields = []; c.pieces = []; c.champ = undefined
 }

@@ -12,14 +12,19 @@
 //                  cage       Hollows inside are held (rooted)  fieldStopsShots  eats Hollow spit crossing it
 //                No open-world meaning, so not done: fieldShps (the keeper has no shield), fieldHp / ward (nothing here
 //                hits the field), hides (Hollows do not track by sight), surgeMult (Exhale's surge is the page's).
-// surge and impulse move the KEEPER and live on the page (shared/casting.ts says which). The rest (terrain,
-// channel, veil, gate) are not out here yet, and say so: never a silent no-op.
+//   terrain    — the spec's shape (wall / ring / block / ledge, engine/conjured-terrain.ts shapeCells) rises at the aim point, shapeHeight
+//                tiers (1 tier = 1 m here) tall, for areaSecs. Hollows cannot step into its cells and Hollow spit stops on it.
+//                Pillar Tomb also lays its statuses on the Hollow nearest the aim and rises around it. NOT done (no hook here):
+//                the keeper does not collide with it (the walker's LocoWorld is built by the page; a dynamic box needs a
+//                refactor); the second-press topple (Monolith); a ledge's stair is drawn but only blocks (nobody climbs it).
+// surge and impulse move the KEEPER and live on the page (shared/casting.ts says which). The rest (channel, veil, gate) are not out here yet, and say so: never a silent no-op.
 //
 // ★ PURE. No React, no three: it reads and writes the Combat, and returns where to draw the flash.
 
 import { castForMove, type CastSpec } from '../../play3d/cast'
+import { shapeCells } from '../../engine/conjured-terrain'
 import { FIELD_TICK_MS } from '../../engine/field-effects'
-import { HEAD_Y, BODY_Y, fxOn, type Combat, type CombatField, type Hollow, type HollowFx, type Terrain } from './combat'
+import { HEAD_Y, BODY_Y, fxOn, type Combat, type CombatField, type CombatPiece, type Hollow, type HollowFx, type Terrain } from './combat'
 
 type V3 = { x: number; y: number; z: number }
 const HOLLOW_FX: ReadonlySet<string> = new Set<HollowFx>(['rooted', 'disarmed', 'blinded', 'slowed', 'staggered', 'vulnerable', 'burning'])
@@ -125,9 +130,34 @@ export function runCast(c: Combat, T: Terrain, eye: V3, dir: V3, spec: CastSpec)
       c.fields = [...(c.fields ?? []), f]
       return { kind: 'area', ...p, r, hit: c.hollows.filter(h => h.hp > 0 && Math.hypot(h.x - p.x, h.z - p.z) <= r + 0.5).length }
     }
+    case 'terrain': {
+      const p = aimPoint(T, eye, dir, Math.max(spec.castRange, 2))
+      let foe: Hollow | null = null
+      if (spec.entomb) { let nd = 3; for (const h of c.hollows) { const d = Math.hypot(h.x - p.x, h.z - p.z); if (h.hp > 0 && d < nd) { nd = d; foe = h } } }
+      const at = foe ?? p, now = c.clock ?? 0
+      const raw = shapeCells(spec.shape, at.x, at.z, dir.x, dir.z, spec.areaSize, spec.shapeHeight) as { x: number; z: number; rise?: number }[]
+      const piece: CombatPiece = { id: c.nextId++, moveId: spec.moveId, until: now + spec.areaSecs,
+        cells: raw.map(q => ({ x: q.x, z: q.z, base: T.heightAt(q.x, q.z), rise: q.rise ?? spec.shapeHeight })) }
+      c.pieces = [...(c.pieces ?? []), piece].slice(-MAX_PIECES)   // oldest drops at the cap so a paid cast always appears
+      let hit = 0
+      if (foe) { if (layStatuses(foe, statuses, Math.max(spec.areaSecs, 1))) hit = 1 }
+      else if (statuses.length) for (const h of c.hollows) if (h.hp > 0 && shapeInside(spec.shape, at, spec.areaSize, h) && layStatuses(h, statuses, Math.max(spec.areaSecs, 1))) hit++   // Cordon: foes sealed inside
+      return { kind: 'area', ...p, r: Math.max(MIN_AREA_M, spec.areaSize) / 2, hit }
+    }
     default:
       return null
   }
+}
+
+export const MAX_PIECES = 6
+/** Only a ring or block has an inside (a ring's radius / a block's side). */
+const shapeInside = (shape: string, at: { x: number; z: number }, size: number, h: { x: number; z: number }) =>
+  (shape === 'ring' || shape === 'block') && Math.hypot(h.x - at.x, h.z - at.z) <= (shape === 'ring' ? size : size / 2 + 0.5)
+/** Expire raised terrain. (Blocking itself lives in combat.ts stepCombat via solidTop.) Call before stepCombat. */
+export function stepPieces(c: Combat) {
+  if (!c.pieces?.length) return
+  const now = c.clock ?? 0
+  if (c.pieces.some(p => p.until <= now)) c.pieces = c.pieces.filter(p => p.until > now)
 }
 
 /** Advance the placed fields by one frame: eat spit every frame, do the tick's work once per FIELD_TICK_MS, expire. Call before stepCombat. */

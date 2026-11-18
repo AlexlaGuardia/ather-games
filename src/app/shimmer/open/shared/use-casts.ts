@@ -16,7 +16,7 @@ import { hudSay, type Mana } from './game-hud'
 export interface CastChip { key: string; name: string | null; cool: number; tooDear: boolean }
 interface VitalsLike { hp: number; hpMax: number }
 
-const FLASH: Record<string, string> = { field: '255,217,160', projectile: '143,211,255', status: '201,160,255', restore: '143,227,160', infusion: '255,207,112' }
+const FLASH: Record<string, string> = { terrain: '190,190,200', field: '255,217,160', projectile: '143,211,255', status: '201,160,255', restore: '143,227,160', infusion: '255,207,112' }
 /** Off the Wilds there is nothing to catch, but the cast is still seen: a ring at the aim point (screen centre). */
 function flashAtAim(sp: CastSpec) {
   if (typeof document === 'undefined') return
@@ -75,7 +75,7 @@ export function useCasts(o: {
       else hudSay(`${sp.label} · you are whole`, 'item')
       return
     }
-    flashAtAim(sp); hudSay(sp.archetype === 'field' ? `${sp.label} · set down, nothing here to hold` : `${sp.label} · nothing caught`, 'item')
+    flashAtAim(sp); hudSay(sp.archetype === 'field' || sp.archetype === 'terrain' ? `${sp.label} · set down, nothing here to hold` : `${sp.label} · nothing caught`, 'item')
   }, [manaRef, paint])
 
   useEffect(() => {
