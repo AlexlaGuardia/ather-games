@@ -127,6 +127,13 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['hands', 'gloves', 'first person', 'viewmodel', 'tune', 'run', 'jump', 'cast', 'pose'],
   },
   {
+    path: '/shimmer/dev/guns',
+    title: 'The Gun Tuner',
+    blurb: 'Place the held gun and the gloves on it: hip, aim, run, fire.',
+    group: 'glass',
+    keywords: ['gun', 'weapon', 'first person', 'viewmodel', 'tune', 'aim', 'ads', 'recoil', 'sights', 'hands'],
+  },
+  {
     path: '/shimmer/dev/break',
     title: 'The Chips',
     blurb: 'Every bucket breaking side by side, so the feel can be judged instead of argued.',

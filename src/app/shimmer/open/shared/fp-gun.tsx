@@ -28,16 +28,46 @@ import { getSightLooks, lookFor } from './sight-looks'
 import type { RangeGun } from './gunplay'
 
 // ── the tune (metres / radians, the viewmodel's own frame: the camera's) ──
-export const VM = {
+// ★ TUNABLE LIKE THE HANDS (Alex 11-18: "a similar dev tool for the guns like we made for the hands so I can tweak it later"):
+// /shimmer/dev/guns writes the LIVE numbers (VM) and saves them to this browser (GUN_TUNE_KEY, a device key); "Copy values" →
+// paste to Jin → they become GUN_DEFAULTS for everyone. Every number is read per frame, so a slider moves the gun at once.
+export interface GunTune {
+  S: number; HIP_X: number; HIP_Y: number; HIP_Z: number
+  ADS_DIST: number; ADS_IN: number; ADS_OUT: number
+  BOB: number; BOB_ADS: number
+  KICK_Z: number; KICK_PITCH: number; KICK_DECAY: number
+  HAND: number
+  R_DX: number; R_DY: number; R_DZ: number; R_PITCH: number; R_ROLL: number
+  L_DX: number; L_DY: number; L_DZ: number; L_PITCH: number; L_ROLL: number
+}
+export const GUN_DEFAULTS: Readonly<GunTune> = {
   S: 0.55,                      // the gun's scale against its real size
-  HIP: [0.17, -0.2, -0.5] as const,   // where the grip sits at the hip: low right, close
+  HIP_X: 0.17, HIP_Y: -0.2, HIP_Z: -0.5,   // where the grip sits at the hip: low right, close
   ADS_DIST: 0.34,               // how far ahead of the eye the sight sits when aiming
   ADS_IN: 0.15, ADS_OUT: 0.11,  // seconds to come up / drop out of the sights
   BOB: 0.012, BOB_ADS: 0.15,    // the run's bob, and how much of it survives in the sights
   KICK_Z: 0.05, KICK_PITCH: 0.12, KICK_DECAY: 14,  // recoil: back and up, then home
   HAND: 0.6,                    // the gloves' scale ON THE GUN: a fist (0.1 m box) at the gun's own scale, a touch fuller. NOT open-hands' 1.28,
                                 // which sizes free hands to the screen; at that size a fist out-grew the pistol and hid the 1x sight (11-18 shot)
+  // the gloves on the gun, offsets from each model's grip / foregrip point (metres) + their turn (radians)
+  R_DX: 0.008, R_DY: -0.012, R_DZ: 0.012, R_PITCH: -0.35, R_ROLL: -0.45,
+  L_DX: -0.006, L_DY: -0.02, L_DZ: 0, L_PITCH: 0.15, L_ROLL: 0.55,
 }
+/** LIVE numbers: the defaults, overwritten by this browser's tune (loadGunTune). */
+export const VM: GunTune = { ...GUN_DEFAULTS }
+export const GUN_TUNE_KEY = 'open:gun-tune.v1'
+export const GUN_TUNE_KEYS = Object.keys(GUN_DEFAULTS) as (keyof GunTune)[]
+export function loadGunTune(): void {
+  try {
+    const t = JSON.parse(localStorage.getItem(GUN_TUNE_KEY) ?? 'null') as Partial<GunTune> | null
+    for (const k of GUN_TUNE_KEYS) VM[k] = typeof t?.[k] === 'number' && Number.isFinite(t[k]) ? t[k]! : GUN_DEFAULTS[k]
+  } catch { /* private window: the defaults */ }
+}
+export function setGunTune(patch: Partial<GunTune>): void {
+  for (const k of GUN_TUNE_KEYS) if (typeof patch[k] === 'number') VM[k] = patch[k]!
+  try { localStorage.setItem(GUN_TUNE_KEY, JSON.stringify(Object.fromEntries(GUN_TUNE_KEYS.map(k => [k, VM[k]])))) } catch { /* private window */ }
+}
+export function resetGunTune(): void { try { localStorage.removeItem(GUN_TUNE_KEY) } catch { /* */ } for (const k of GUN_TUNE_KEYS) VM[k] = GUN_DEFAULTS[k] }
 export const ADS_TIGHT = 0.6     // past this the cone is the sights' (gunplay ads)
 
 // ── the models ──
@@ -160,11 +190,12 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
       if (rig.key !== key) {
         if (rig.model) { rig.held.remove(rig.model); rig.model.traverse(x => { if (x instanceof THREE.Mesh) x.geometry.dispose() }) }
         rig.model = buildModel(m, i.gun.color, o, mats); rig.held.add(rig.model); rig.key = key
-        // the gloves on the gun: the right round the grip, the left under the foregrip (fists, knuckles to the side)
-        // the right fist wraps the grip from behind and below, the left cups the foregrip: both under the sight line, never over it
-        rig.R.position.set(m.grip[0] * VM.S + 0.008, m.grip[1] * VM.S - 0.012, m.grip[2] * VM.S + 0.012); rig.R.rotation.set(-0.35, 0, -0.45)
-        rig.L.position.set(m.fore[0] * VM.S - 0.006, m.fore[1] * VM.S - 0.02, m.fore[2] * VM.S); rig.L.rotation.set(0.15, 0, 0.55)
       }
+      // the gloves on the gun (every frame, so the tuner moves them): the right fist wraps the grip from behind and below, the
+      // left cups the foregrip, both under the sight line, never over it
+      rig.model!.scale.setScalar(VM.S); rig.R.scale.setScalar(VM.HAND); rig.L.scale.setScalar(VM.HAND)
+      rig.R.position.set(m.grip[0] * VM.S + VM.R_DX, m.grip[1] * VM.S + VM.R_DY, m.grip[2] * VM.S + VM.R_DZ); rig.R.rotation.set(VM.R_PITCH, 0, VM.R_ROLL)
+      rig.L.position.set(m.fore[0] * VM.S + VM.L_DX, m.fore[1] * VM.S + VM.L_DY, m.fore[2] * VM.S + VM.L_DZ); rig.L.rotation.set(VM.L_PITCH, 0, VM.L_ROLL)
       // the sights: ease in / out; reloading drops you out
       const aiming = i.aiming && !i.reloading
       adsT = Math.max(0, Math.min(1, adsT + (aiming ? d / VM.ADS_IN : -d / VM.ADS_OUT)))
@@ -181,14 +212,15 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
       const e = adsT * adsT * (3 - 2 * adsT)   // smoothstep: the gun glides up, it does not slide linearly
       const a = adsPos(m, o)
       rig.held.position.set(
-        VM.HIP[0] + (a[0] - VM.HIP[0]) * e + Math.cos(s.phase) * bob,
-        VM.HIP[1] + (a[1] - VM.HIP[1]) * e + Math.abs(Math.sin(s.phase)) * bob,
-        VM.HIP[2] + (a[2] - VM.HIP[2]) * e + s.kick * VM.KICK_Z * (1 - 0.6 * e))
+        VM.HIP_X + (a[0] - VM.HIP_X) * e + Math.cos(s.phase) * bob,
+        VM.HIP_Y + (a[1] - VM.HIP_Y) * e + Math.abs(Math.sin(s.phase)) * bob,
+        VM.HIP_Z + (a[2] - VM.HIP_Z) * e + s.kick * VM.KICK_Z * (1 - 0.6 * e))
       rig.held.rotation.set(s.kick * VM.KICK_PITCH * (1 - 0.5 * e), 0, 0)
       rig.root.position.copy(camera.position); rig.root.quaternion.copy(camera.quaternion)   // this frame's camera
       rig.root.visible = !throughScope(o, adsT)   // the scope ring takes the screen; the model gives way
     },
   }), [camera, rig, mats])
+  useEffect(() => { loadGunTune() }, [])   // this browser's tune from /shimmer/dev/guns
   useEffect(() => {
     ;(window as unknown as { __fpGun?: unknown }).__fpGun = { ads: () => adsT, optic: () => optic?.id ?? null, shown: () => rig.root.visible, key: () => rig.key, mark: () => (look ? `${look.mark}:${look.tint}` : null), glow: () => glow }
     return () => {
