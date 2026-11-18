@@ -27,7 +27,8 @@ import {
   loadGarden, saveGarden, freshGarden, type Garden,
 } from './plot'
 import { PlotScene } from './plot-scene'
-import { WorkshopScene, WorkshopPanel, PlacingBar, usePlacingKeys, useWorks, workWalls, workPrompt, currentWorks, setWorks } from './workshop'
+import { WorkshopScene, WorkshopPanel, PlacingBar, BuildBar, usePlacingKeys, isPlacing, useWorks, workWalls, workPrompt, currentWorks, setWorks } from './workshop'
+import { BuildPointer, stepBuildCam, useBuildMode, useBuildKeys, isBuilding, exitBuild } from './build-mode'
 import { tick as villageTick, loadVillage, saveVillage } from './moglins'
 import { nearWork, type WorkNear } from './rooms'
 import { ClusterScene } from './cluster-scene'
@@ -214,12 +215,16 @@ export default function AtherSlice() {
   // the birth gate (Jin 1's birth-gate.tsx): a keeper with no birth rune is born on first entry; Play lands here, so the
   // ritual must be here too. Its screen drives on arrows/Enter/Space, so the walker freezes under it.
   const birthUp = useBirthGateUp()
-  useOptionsKeys(panel !== null || birthUp)
-  useEffect(() => { frozen.current = panel !== null || optionsOpen || birthUp }, [panel, optionsOpen, birthUp])
+  // BUILD MODE (build-mode.tsx, Alex 11-18): the planning table's flying planner. The keeper freezes where they stand,
+  // the mouse is freed (you click the ground), and the lens flies from the walker's tick below
+  const building = useBuildMode()
+  useBuildKeys(isPlacing)
+  useOptionsKeys(panel !== null || birthUp || building)
+  useEffect(() => { frozen.current = panel !== null || optionsOpen || birthUp || building }, [panel, optionsOpen, birthUp, building])
   // panels are clicked, so they free the mouse; closing one takes the camera back (shared/menu-lock.ts)
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
   const getCanvas = useCallback(() => canvasEl.current, [])
-  useMenuLock(panel !== null || optionsOpen, getCanvas)
+  useMenuLock(panel !== null || optionsOpen || building, getCanvas)
   // toasts speak on the template's message line (under the hotbar), then clear
   useEffect(() => { if (!toast) return; hudSay(toast, 'info'); setToast(null) }, [toast])
   // persist the walked fog every few seconds and on the way out
@@ -246,7 +251,7 @@ export default function AtherSlice() {
   const fading = useRef(false)
   const arrive = useCallback((z: Zone, s: Spawn) => {
     if (fading.current) return
-    fading.current = true; setFade(1); setPanel(null)
+    fading.current = true; setFade(1); setPanel(null); exitBuild()
     setTimeout(() => { setZone(z); setSpawn(s); setEpoch(e => e + 1); setFade(0); fading.current = false }, 380)
   }, [])
   const goHome = useCallback(() => arrive({ kind: 'plot' }, THRESHOLD), [arrive])
@@ -374,13 +379,14 @@ export default function AtherSlice() {
       const now = performance.now(), h = heldRef.current, third = thirdRef.current
       const speed = Math.hypot(lc.hvx, lc.hvz), working = !!chanRef.current || !!fxRef.current?.busy() || !!cFxRef.current?.busy()
       // the first-person hands (hidden in third person: the doll's own hands are what you see)
-      handsApi.current?.step({ now, speed, airborne: lc.airborne, hidden: frozen.current || stanceRef.current.kind === 'weapon' || third,
+      handsApi.current?.step({ now, speed, airborne: lc.airborne, hidden: frozen.current || stanceRef.current.kind === 'weapon' || third || isBuilding(),
         castAt: handsCastAt.current, working }, dt)
       handsApi.current?.seat(now - handsCastAt.current < 640 ? 1 : 0)
       // the doll: where the keeper stands, facing where the camera looks (the doll faces +z, the lens looks down -z)
       const d = dollDrive.current, a = dollAction({ speed, airborne: lc.airborne, working, castAgoMs: now - handsCastAt.current, gun: stanceRef.current.kind === 'weapon' })
-      d.action = a.action; d.rate = a.rate; d.x = lc.px; d.y = lc.py; d.z = lc.pz; d.yaw = yaw + Math.PI; d.visible = third
+      d.action = a.action; d.rate = a.rate; d.x = lc.px; d.y = lc.py; d.z = lc.pz; d.yaw = yaw + Math.PI; d.visible = third || isBuilding()
       if (third && camRef.current) pullBack(camRef.current, heightRef.current, lc.py)
+      if (isBuilding() && camRef.current) stepBuildCam(camRef.current, dt)   // the flying planner owns the lens
     }
     { const m = manaRef.current, flow = buffOn(buffsRef.current, 'ather_flow') ? OPEN_FLOW_MULT : 1
       if (m.cur < m.max) m.cur = Math.min(m.max, m.cur + m.regen * flow * dt) }   // mana refills (forestry spends it); Ather Flow lifts it
@@ -897,12 +903,13 @@ export default function AtherSlice() {
     <div style={{ position: 'fixed', inset: 0, background: '#bcd6e6' }}>
       <Canvas
         camera={{ fov: 75, near: 0.05, far: 900, position: [THRESHOLD.x, 3, THRESHOLD.z] }}
-        onClick={(e) => { if (!panel && !isTouch) (e.target as HTMLCanvasElement).requestPointerLock?.() }}
+        onClick={(e) => { if (!panel && !isTouch && !isBuilding()) (e.target as HTMLCanvasElement).requestPointerLock?.() }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => { canvasEl.current = gl.domElement }}
       >
         <OpenHands ref={handsApi} />
         <ThirdPersonBody drive={dollDrive} camRef={camRef} />
+        {zone.kind === 'plot' && <BuildPointer />}
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && ww ? (x, z) => ww.canopyAt(x, z) * 0.7 : undefined} />
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} />}
@@ -931,11 +938,11 @@ export default function AtherSlice() {
           />
         )}
       </Canvas>
-      <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
+      {!building && <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />}
       <GameHud size={hudSize} pose={poseRef} marks={marksRef} vitals={vitalsRef} mana={manaRef} entries={hotbar} sel={litSlot(stance, inv)} onSelect={i => setStance(st => selectSlot(st, i, getInv()))} onEquip={i => setStance(st => equipSlot(st, i, getInv()))} tools={toolsRef} skills={skillsRef} casts={castHud}
         // never dimmed in the Ather (Alex 11-17: 'the hotbar stays greyed out and doesnt highlight'): the plot uses the bar now
         // (Keepstones, furniture, bait), and HearthHotbar drops the selected slot's light while dimmed (selected = i === sel && !dimmed)
-        dimmed={false} input={!panel && !fade && !optionsOpen}
+        dimmed={false} input={!panel && !fade && !optionsOpen && !building}
         minimap={ww && <AtherMiniMap size={hudSize} zone={zone.kind} world={ww} wrev={wrev} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regionsByTile={regionsByTile} cluster={cl.frame}
           owned={owned} onExpand={() => setPanel({ kind: 'map', view: 'ather', travel: false })} />}
         status={[
@@ -969,7 +976,7 @@ export default function AtherSlice() {
           </>
         )
       })()}
-      {prompt && !panel && (
+      {prompt && !panel && !building && (
         <div style={{ position: 'absolute', left: '50%', top: '58%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none' }}>{prompt}</div>
       )}
       {panel?.kind === 'map' && (
@@ -985,16 +992,17 @@ export default function AtherSlice() {
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       {panel?.kind === 'work' && <WorkshopPanel near={panel.near} owned={owned} onClose={() => setPanel(null)} />}
       {zone.kind === 'plot' && <PlacingBar owned={owned} />}
+      {zone.kind === 'plot' && <BuildBar owned={owned} />}
       <LookChip />
       {zone.kind === 'wilds' && held === BAIT && <ReelBar api={rinApi} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} />}
       <BirthGate />
       {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={litSlot(stance, inv)} isTouch={isTouch} />}
       <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />
-      {isTouch && !panel && (
+      {isTouch && !panel && !building && (
         <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} />
       )}
-      {isTouch && !introSeen && !panel && (
+      {isTouch && !introSeen && !panel && !building && (
         <div onPointerDown={() => setIntroSeen(true)} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: 16, zIndex: 30, background: 'rgba(5,6,14,0.35)' }}>
           <div style={{ padding: '18px 20px', borderRadius: 10, background: 'rgba(12,16,20,0.82)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.6, textAlign: 'center', maxWidth: 420 }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Ather · your plot and the Wilds</div>

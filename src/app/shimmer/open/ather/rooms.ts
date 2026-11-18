@@ -15,7 +15,7 @@ import type { Box } from '../terrain-world'
 import { squareAt, sqId, GATE, GREG, THRESHOLD, PATH_START, GROUND_Y } from './plot'
 import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, BAIT_FROM, type Inv, type Stack } from '../shared/inventory'
-import { MAX_CHESTS, putIn, withdraw, adoptBank, type Bank } from './garden-bank'
+import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
 import { FURNITURE, MAX_PIECES, KEEPSTONES, keepstoneFor, type Job } from './furniture'
 
 export type RoomKind = 'rinnshop' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
@@ -87,8 +87,28 @@ export const benchOf = (r: Room) => toWorld(r, 0, ROOMS[r.kind].d / 2 - 1.4)
 /** The door's middle, on the front wall. */
 export const doorOf = (r: Room) => toWorld(r, 0, -ROOMS[r.kind].d / 2)
 
+// ── BUILD COSTS PAY FROM THE KEEPSTONE FIRST (Alex 11-18: "it should automatically use items from the keepstone
+// first"). The bank and the bag count together; the bank pays, the bag tops up the rest. The table stands beside the
+// starter Keepstone, so a keeper who banked their logs never has to carry them back out to build. ─────────────────────
+export type Cost = readonly { id: string; n: number }[]
+/** How many of an item a build can draw on: the garden bank plus the bag. */
+export const haveFor = (inv: Inv, bank: Bank | null | undefined, id: string) => countOf(inv, id) + (bank ? bankCount(bank, id) : 0)
+/** The first line of a cost the bank and bag together cannot meet, or undefined when it is met. */
+export const shortOf = (cost: Cost, inv: Inv, bank?: Bank | null) => cost.find(c => haveFor(inv, bank, c.id) < c.n)
+/** Pay a cost bank-first. Null when bank + bag fall short; inputs are never mutated. */
+export function payCost(cost: Cost, inv: Inv, bank?: Bank | null): { inv: Inv; bank: Bank | null } | null {
+  let b: Bank | null = bank ?? null, out: Inv | null = inv
+  for (const c of cost) {
+    const fromBank = b ? Math.min(c.n, bankCount(b, c.id)) : 0
+    if (fromBank && b) { b = bankTake(b, c.id, fromBank); if (!b) return null }
+    const rest = c.n - fromBank
+    if (rest) { out = out && take(out, c.id, rest); if (!out) return null }
+  }
+  return { inv: out!, bank: b }
+}
+
 export type PlaceVerdict = { ok: true } | { ok: false; why: string }
-export function canPlace(works: Works, owned: ReadonlySet<string>, kind: RoomKind, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
+export function canPlace(works: Works, owned: ReadonlySet<string>, kind: RoomKind, x: number, z: number, q: number, inv?: Inv, bank?: Bank | null): PlaceVerdict {
   const def = ROOMS[kind]
   if (!def.open) return { ok: false, why: `The ${def.name} is not ready to build yet.` }
   if (works.rooms.some(r => r.kind === kind)) return { ok: false, why: `You already have a ${def.name}.` }
@@ -105,16 +125,15 @@ export function canPlace(works: Works, owned: ReadonlySet<string>, kind: RoomKin
     const g = footprint(o.kind, o.x, o.z, o.q)
     if (f.x0 < g.x1 + 1 && f.x1 > g.x0 - 1 && f.z0 < g.z1 + 1 && f.z1 > g.z0 - 1) return { ok: false, why: `Too close to your ${ROOMS[o.kind].name}.` }
   }
-  if (inv) { const short = def.cost.find(c => countOf(inv, c.id) < c.n); if (short) return { ok: false, why: `Needs ${short.n} ${short.id.replace(/_/g, ' ')} (you have ${countOf(inv, short.id)}).` } }
+  if (inv) { const short = shortOf(def.cost, inv, bank); if (short) return { ok: false, why: `Needs ${short.n} ${short.id.replace(/_/g, ' ')} (you have ${haveFor(inv, bank, short.id)}).` } }
   return { ok: true }
 }
 /** Place a room: the mats leave the bag and the scaffolding goes up. Null when it cannot. */
-export function place(works: Works, owned: ReadonlySet<string>, inv: Inv, kind: RoomKind, x: number, z: number, q: number, now = Date.now()): { works: Works; inv: Inv; room: Room } | null {
-  if (!canPlace(works, owned, kind, x, z, q, inv).ok) return null
-  let out: Inv | null = inv
-  for (const c of ROOMS[kind].cost) { out = out && take(out, c.id, c.n); if (!out) return null }
+export function place(works: Works, owned: ReadonlySet<string>, inv: Inv, kind: RoomKind, x: number, z: number, q: number, now = Date.now(), bank?: Bank | null): { works: Works; inv: Inv; bank: Bank | null; room: Room } | null {
+  if (!canPlace(works, owned, kind, x, z, q, inv, bank).ok) return null
+  const paid = payCost(ROOMS[kind].cost, inv, bank); if (!paid) return null
   const room: Room = { id: `${kind}-${now.toString(36)}`, kind, x: Math.round(x), z: Math.round(z), q: ((q % 4) + 4) % 4, placedAt: now, doneAt: now + ROOMS[kind].raiseMs }
-  return { works: { ...works, rooms: [...works.rooms, room] }, inv: out!, room }
+  return { works: { ...works, rooms: [...works.rooms, room] }, inv: paid.inv, bank: paid.bank, room }
 }
 export const raised = (r: Room, now = Date.now()) => now >= r.doneAt
 export const progress = (r: Room, now = Date.now()) => Math.max(0, Math.min(1, (now - r.placedAt) / Math.max(1, r.doneAt - r.placedAt)))
@@ -164,11 +183,12 @@ export const CHEST_W = 0.9, CHEST_D = 0.9, CHEST_H = 1.1, CHEST_REACH = 1.9
  *  back up. Blankstone is the build's plain stone (RULED 11-16) and the shard is the light. */
 export const KEEPSTONE = 'keepstone'
 export const KEEPSTONE_RECIPE: readonly { id: string; n: number }[] = [{ id: 'blankstone', n: 3 }, { id: 'raw_mana_shard', n: 1 }]
-export function makeKeepstone(inv: Inv): Inv | null {
-  let out: Inv | null = inv
-  for (const c of KEEPSTONE_RECIPE) { out = out && take(out, c.id, c.n); if (!out) return null }
-  const r = give(out!, KEEPSTONE, 1)
-  return r.left > 0 ? null : r.inv
+export function makeKeepstone(inv: Inv): Inv | null { return makeKeepstoneFrom(inv, null)?.inv ?? null }
+/** Make a Keepstone bank-first (the stone and the shard may sit in the bank); the Keepstone itself lands in the bag. */
+export function makeKeepstoneFrom(inv: Inv, bank: Bank | null | undefined): { inv: Inv; bank: Bank | null } | null {
+  const paid = payCost(KEEPSTONE_RECIPE, inv, bank); if (!paid) return null
+  const r = give(paid.inv, KEEPSTONE, 1)
+  return r.left > 0 ? null : { inv: r.inv, bank: paid.bank }
 }
 export const allChests = (w: Works): Chest[] => [STARTER_CHEST, ...w.chests]
 /** Chests standing, the starter included: what the bank's cap is counted from. */

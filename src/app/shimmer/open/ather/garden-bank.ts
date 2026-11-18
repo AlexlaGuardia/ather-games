@@ -70,6 +70,18 @@ export function withdraw(b: Bank, k: number, inv: Inv): { inv: Inv; bank: Bank; 
   return { inv: r.inv, bank: { v: 1, stacks }, moved }
 }
 
+/** Take n of an item out of the pool (spent, not moved to the bag): the smallest stacks first, so the pool stays tidy.
+ *  Null when the pool holds fewer than n; the input is never mutated. */
+export function bankTake(b: Bank, id: string, n: number): Bank | null {
+  if (n <= 0) return b
+  if (bankCount(b, id) < n) return null
+  const order = b.stacks.map((s, i) => i).filter(i => b.stacks[i].id === id).sort((x, y) => b.stacks[x].n - b.stacks[y].n)
+  const left = b.stacks.map(s => s.n)
+  let need = n
+  for (const i of order) { const t = Math.min(need, left[i]); left[i] -= t; need -= t; if (!need) break }
+  return { v: 1, stacks: b.stacks.flatMap((s, i) => (left[i] > 0 ? [{ id: s.id, n: left[i] }] : [])) }
+}
+
 // ── the tabs: lenses on the one pool ──────────────────────────────────────────────────────────────────────────
 export type BankTab = 'all' | ItemGroup | 'gear'
 export const BANK_TABS: readonly { id: BankTab; label: string }[] = [

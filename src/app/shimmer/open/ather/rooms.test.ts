@@ -1,7 +1,8 @@
 // The workshop rooms core (rooms.ts). Run: npx tsx src/app/shimmer/open/ather/rooms.test.ts
-import { craftAt, jobRuns, canPlacePiece, placePiece, pickUpPiece, turnPiece, pieceBoxes, pieceRect, ROOM_STORE_SLOTS, ROOM_ACCEPTS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, loadWorks, saveWorks, ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, pickUpChest, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, type Works } from './rooms'
+import { craftAt, jobRuns, canPlacePiece, placePiece, pickUpPiece, turnPiece, pieceBoxes, pieceRect, ROOM_STORE_SLOTS, ROOM_ACCEPTS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, loadWorks, saveWorks, ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, payCost, shortOf, haveFor, pickUpChest, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, type Works } from './rooms'
 import { STARTING_SQUARES, squareAt, sqId, GATE, GREG, GROUND_Y } from './plot'
 import { REFINE, PIECE_JOBS, FURNITURE } from './furniture'
+import { freshBank, putIn, bankCount, bankTake } from './garden-bank'
 import { newInv, give, countOf, HOTBAR, SLOTS, ITEM_GROUP, OPEN_ITEMS, type Inv } from '../shared/inventory'
 let pass = 0
 const fails: string[] = []
@@ -211,6 +212,39 @@ ok(!canPlaceChest(pc.works, owned, C.x + 1, C.z, 0, ks).ok, 'keepstone: set onto
   saveWorks({ ...pp.works, pieces: [...pp.works.pieces, { id: 'ghost', item: 'no_such_thing', x: 0, z: 0, q: 0, placedAt: 0 }] })
   const back = loadWorks()
   ok(back.pieces.length === 1 && back.pieces[0].item === 'goldwood_bench', 'save: pieces did not round-trip clean')
+}
+
+// ── BUILD COSTS PAY FROM THE KEEPSTONE FIRST (Alex 11-18) ──
+{
+  const bankOf = (id: string, n: number) => putIn(freshBank(), 999, id, n).bank
+  const need = ROOMS.rinnshop.cost[0].n   // 16 goldwood logs
+  // all in the bank, nothing in the bag: buildable, and the bank pays it all
+  const b16 = bankOf('goldwood_log', need), empty = newInv(12)
+  ok(canPlace(freshWorks(), owned, 'rinnshop', P.x, P.z, 0, empty, b16).ok, 'bank-first: logs in the bank did not count')
+  ok(!canPlace(freshWorks(), owned, 'rinnshop', P.x, P.z, 0, empty).ok, 'bank-first: an empty bag with no bank was buildable')
+  const r1 = place(freshWorks(), owned, empty, 'rinnshop', P.x, P.z, 0, 1, b16)!
+  ok(!!r1 && bankCount(r1.bank!, 'goldwood_log') === 0 && countOf(r1.inv, 'goldwood_log') === 0 && bankCount(b16, 'goldwood_log') === need, 'bank-first: bank did not pay, or the input bank was mutated')
+  // split: the bank pays what it has FIRST, the bag only tops up
+  const b10 = bankOf('goldwood_log', 10), bag20 = give(newInv(12), 'goldwood_log', 20).inv
+  const r2 = place(freshWorks(), owned, bag20, 'rinnshop', P.x, P.z, 0, 1, b10)!
+  ok(!!r2 && bankCount(r2.bank!, 'goldwood_log') === 0 && countOf(r2.inv, 'goldwood_log') === 20 - (need - 10), 'bank-first: the bag paid before the bank was empty')
+  // bank + bag one short: refused, nothing spent
+  const b5 = bankOf('goldwood_log', 5), bag10 = give(newInv(12), 'goldwood_log', need - 6).inv
+  ok(shortOf(ROOMS.rinnshop.cost, bag10, b5)?.id === 'goldwood_log' && haveFor(bag10, b5, 'goldwood_log') === need - 1, 'bank-first: short count wrong')
+  ok(place(freshWorks(), owned, bag10, 'rinnshop', P.x, P.z, 0, 1, b5) === null && payCost(ROOMS.rinnshop.cost, bag10, b5) === null, 'bank-first: built one log short')
+  // the bank has plenty: the bag is untouched
+  const b40 = bankOf('goldwood_log', 40), r3 = payCost(ROOMS.rinnshop.cost, bag20, b40)!
+  ok(countOf(r3.inv, 'goldwood_log') === 20 && bankCount(r3.bank!, 'goldwood_log') === 40 - need, 'bank-first: took from the bag while the bank had enough')
+  // a Keepstone made from banked stone + a banked shard lands in the bag
+  const kb = putIn(bankOf('blankstone', 5), 999, 'raw_mana_shard', 1).bank
+  const mk = makeKeepstoneFrom(newInv(12), kb)!
+  ok(!!mk && countOf(mk.inv, KEEPSTONE) === 1 && bankCount(mk.bank!, 'blankstone') === 2 && bankCount(mk.bank!, 'raw_mana_shard') === 0, 'bank-first: keepstone not made from the bank')
+  ok(makeKeepstoneFrom(newInv(12), bankOf('blankstone', 5)) === null, 'bank-first: keepstone made without a shard')
+  // bankTake: smallest stacks first, null when short, never mutates
+  const two = { v: 1 as const, stacks: [{ id: 'goldwood_log', n: 30 }, { id: 'blankstone', n: 3 }, { id: 'goldwood_log', n: 4 }] }
+  const t = bankTake(two, 'goldwood_log', 6)!
+  ok(t.stacks.length === 2 && t.stacks[0].n === 28 && two.stacks[2].n === 4, 'bankTake: wrong stacks drained, or mutated')
+  ok(bankTake(two, 'goldwood_log', 35) === null, 'bankTake: took more than the pool held')
 }
 
 if (fails.length) { console.error(`rooms: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

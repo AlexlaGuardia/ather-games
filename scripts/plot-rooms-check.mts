@@ -38,11 +38,16 @@ await p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filt
 await tp(TABLE.x + 1.6, TABLE.z + 1.6, Math.PI / 4); await shot('rooms-1-table')
 await p.keyboard.press('e'); await sleep(900)
 res.tablePanel = await panel('planning-table'); await shot('rooms-2-table-panel')
-res.plan = await click('[data-room="rinnshop"] button'); await sleep(800)
-// 2. the ghost: stand south of the spot facing north (yaw 0 looks −z), a ghost 6.5 m ahead lands on (−100, 100)
-await tp(-100, 106.5, 0); await sleep(600); await shot('rooms-3-ghost')
+// the table (Alex 11-18): tap the Rinnshop icon, its card drops down, Build lifts you into the flying planner
+res.plan = (await click('[data-pick="rinnshop"]')) && (await sleep(500), await click('[data-build-card="rinnshop"] [data-act="build"] button')); await sleep(1200)
+res.flying = await p.evaluate(() => (window as any).__build?.on() === true && !!document.querySelector('[data-build-bar]'))
+// 2. the ghost follows the pointer: fly the view over (−100, 100) (hook moves the VIEW only), point at the middle, click
+await p.evaluate(() => (window as any).__build.to(-100, 100)); await sleep(2500)
+const mid = await p.evaluate(() => { const r = document.querySelector('canvas')!.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })
+await p.mouse.move(mid.x - 3, mid.y); await sleep(300); await p.mouse.move(mid.x, mid.y); await sleep(800); await shot('rooms-3-ghost')
 res.placingBar = await p.evaluate(() => !!document.querySelector('[data-placing]'))
-await p.keyboard.press('e'); await sleep(1200)
+await p.mouse.click(mid.x, mid.y); await sleep(1200)
+await click('[data-act="land"]'); await sleep(800)
 const rooms = await works(); res.rooms = rooms.map(r => ({ kind: r.kind, x: r.x, z: r.z, q: r.q }))
 res.logsAfter = (await bag()).goldwood_log ?? 0
 await tp(-100, 112, 0); await shot('rooms-4-scaffold')
@@ -66,6 +71,6 @@ if (r && !fast) {
 res.errs = errs
 console.log(JSON.stringify(res))
 const placed = rooms.length === 1 && rooms[0].kind === 'rinnshop' && res.logsAfter === 20 - ROOMS.rinnshop.cost[0].n
-const pass = res.tablePanel === true && res.plan === true && placed && errs.length === 0 && (fast || (res.benchPanel === true && made === 2))
+const pass = res.tablePanel === true && res.plan === true && res.flying === true && placed && errs.length === 0 && (fast || (res.benchPanel === true && made === 2))
 console.log(pass ? `PASS: table → plan → placed → ${fast ? 'scaffold (fast)' : 'raised → bench → bait made'}` : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)

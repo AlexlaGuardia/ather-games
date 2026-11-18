@@ -14,7 +14,7 @@ import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { HearthFrame, HearthButton, Well, H, hearthDisplay } from '../../ui/hearth'
 import { getInv, setInv, useInv } from '../shared/bag'
-import { countOf, itemDef, makeBait, BAIT_FROM, HOTBAR, SLOTS, type Stack } from '../shared/inventory'
+import { countOf, itemDef, makeBait, BAIT_FROM, HOTBAR, SLOTS, type Stack, type Inv } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
 import { GROUND_Y } from './plot'
 import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
@@ -23,17 +23,18 @@ import {
   WALL_H, type Works, type Room, type RoomKind, type WorkNear,
   craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, canPlacePiece, placePiece, pickUpPiece, turnPiece, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
-  CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
+  CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
 import {
   MAX_CHESTS, CHEST_SLOTS, bankCap, bankUsed, bankView, BANK_TABS, deposit, depositBag, withdraw, loadBank, saveBank, freshBank,
-  type Bank, type BankTab,
+  bankCount, type Bank, type BankTab,
 } from './garden-bank'
 import { FURNITURE, FURNITURE_ORDER, REFINE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, type Job } from './furniture'
 import { ROAST } from './cooking'
 import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { TOOL_DEFS } from '../../engine/tools'
+import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap } from './build-mode'
 import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, GRADE_CATEGORIES, type Village } from './moglins'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -65,6 +66,19 @@ const psubs = new Set<() => void>()
 const setPlacing = (p: Placing) => { placing = p; psubs.forEach(f => f()) }
 export const usePlacing = () => useSyncExternalStore(f => { psubs.add(f); return () => { psubs.delete(f) } }, () => placing, () => null)
 export const isPlacing = () => placing !== null
+/** Where a ghost stands: under the pointer while flying (build-mode.tsx), else `ahead` metres in front of the keeper. */
+function ghostAt(p: Pose, ahead: number, snap: number) {
+  const b = buildPoint(), x = b ? b.x : p.x - Math.sin(p.yaw) * ahead, z = b ? b.z : p.z - Math.cos(p.yaw) * ahead
+  ghost.x = Math.round(x * snap) / snap; ghost.z = Math.round(z * snap) / snap
+}
+/** The keeper's pose as the scene last saw it (the table's Plan lifts off from here). */
+let lastPose: React.MutableRefObject<Pose> | null = null
+/** Lift into build mode, optionally with something on the pointer already. */
+function startBuild(p: Placing) {
+  const at = lastPose?.current ?? { x: TABLE.x, z: TABLE.z + 4, yaw: 0 }
+  if (!isBuilding()) enterBuild(at)
+  setPlacing(p)
+}
 
 /** Confirm the ghost where it stands. */
 function confirmPlace(owned: ReadonlySet<string>) {
@@ -85,9 +99,9 @@ function confirmPlace(owned: ReadonlySet<string>) {
     hudSay(`Keepstone set · the bank holds ${bankCap(chestsStanding(c.works))} stacks now.`, 'item', 5)
     return
   }
-  const r = place(getW(), owned, getInv(), placing.kind, ghost.x, ghost.z, placing.q)
-  if (!r) { const v = canPlace(getW(), owned, placing.kind, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot build there.' : v.why, 'info'); return }
-  setInv(r.inv); setWorks(r.works); setPlacing(null)
+  const r = place(getW(), owned, getInv(), placing.kind, ghost.x, ghost.z, placing.q, Date.now(), getB())
+  if (!r) { const v = canPlace(getW(), owned, placing.kind, ghost.x, ghost.z, placing.q, getInv(), getB()); hudSay(v.ok ? 'Cannot build there.' : v.why, 'info'); return }
+  setInv(r.inv); if (r.bank) setBank(r.bank); setWorks(r.works); setPlacing(null)
   hudSay(`${ROOMS[r.room.kind].name} · the scaffolding is up. Ready in ${Math.round(ROOMS[r.room.kind].raiseMs / 1000)} s.`, 'item', 5)
 }
 
@@ -116,6 +130,7 @@ const GHOST_OK = '#5aa9ff', GHOST_BAD = '#ff6a5a'
 type Pose = { x: number; z: number; yaw: number }
 
 export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string> }) {
+  lastPose = pose
   const w = useWorks(), p = usePlacing()
   // a raising room re-renders once a second until it stands
   const [, tick] = useState(0)
@@ -268,10 +283,9 @@ function Ghost({ pose, owned, kind, q }: { pose: React.MutableRefObject<Pose>; o
   const def = ROOMS[kind], [w, d] = q % 2 ? [def.d, def.w] : [def.w, def.d]
   const box = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(w, WALL_H, d)), [w, d])
   useFrame(() => {
-    const p = pose.current, ahead = Math.max(w, d) / 2 + 2.5
-    ghost.x = Math.round(p.x - Math.sin(p.yaw) * ahead); ghost.z = Math.round(p.z - Math.cos(p.yaw) * ahead)
+    ghostAt(pose.current, Math.max(w, d) / 2 + 2.5, 1)
     g.current?.position.set(ghost.x, GROUND_Y + WALL_H / 2, ghost.z)
-    const ok = canPlace(getW(), owned, kind, ghost.x, ghost.z, q, getInv()).ok
+    const ok = canPlace(getW(), owned, kind, ghost.x, ghost.z, q, getInv(), getB()).ok
     mat.current?.color.set(ok ? GHOST_OK : GHOST_BAD); edge.current?.color.set(ok ? GHOST_OK : GHOST_BAD)
   })
   return (
@@ -331,8 +345,7 @@ function Keepstone({ c, pose }: { c: Chest; pose: React.MutableRefObject<Pose> }
 function ChestGhost({ pose, owned, q, item }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; q: number; item: string }) {
   const g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
   useFrame(() => {
-    const p = pose.current
-    ghost.x = Math.round((p.x - Math.sin(p.yaw) * 1.8) * 2) / 2; ghost.z = Math.round((p.z - Math.cos(p.yaw) * 1.8) * 2) / 2
+    ghostAt(pose.current, 1.8, 2)
     g.current?.position.set(ghost.x, GROUND_Y + CHEST_H / 2, ghost.z)
     mat.current?.color.set(canPlaceChest(getW(), owned, ghost.x, ghost.z, q, getInv(), item).ok ? GHOST_OK : GHOST_BAD)
   })
@@ -373,8 +386,7 @@ function PieceMesh({ p }: { p: Piece }) {
 function PieceGhost({ pose, owned, item, q }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; item: string; q: number }) {
   const f = FURNITURE[item], g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
   useFrame(() => {
-    const p = pose.current, ahead = Math.max(f.w, f.d) / 2 + 1.2
-    ghost.x = Math.round((p.x - Math.sin(p.yaw) * ahead) * 4) / 4; ghost.z = Math.round((p.z - Math.cos(p.yaw) * ahead) * 4) / 4
+    ghostAt(pose.current, Math.max(f.w, f.d) / 2 + 1.2, 4)
     g.current?.position.set(ghost.x, GROUND_Y, ghost.z)
     mat.current?.color.set(canPlacePiece(getW(), owned, item, ghost.x, ghost.z, q, getInv()).ok ? GHOST_OK : GHOST_BAD)
   })
@@ -405,29 +417,118 @@ export function WorkshopPanel({ near, owned, onClose }: { near: WorkNear; owned:
   return null
 }
 
+// ── THE PLANNING TABLE (Alex 11-18): a big PLAN button that lifts you into the flying build mode (build-mode.tsx),
+// and beside it a strip of icons, one per thing the table builds. Tap an icon: its card drops down (what it is, what it
+// costs, a Build button lit once the bank + bag hold enough). Build lifts you too, with that thing on the pointer.
+// Costs pay from the Keepstone first (rooms.ts › payCost). Icons are placeholders until Alex draws them.
+type TablePick = 'keepstone' | RoomKind
+const TABLE_PICKS: readonly TablePick[] = ['keepstone', ...ROOM_ORDER]
+const PICK_LOOK: Record<TablePick, { glyph: string; tint: string }> = {
+  keepstone: { glyph: '◆', tint: '#8fc6e8' }, rinnshop: { glyph: '≈', tint: '#5aa9c8' }, cooking: { glyph: '♨', tint: '#d9774a' },
+  alchemy: { glyph: '⚗', tint: '#9a7ad8' }, smith: { glyph: '⚒', tint: '#77726c' }, carpentry: { glyph: '⌂', tint: '#b0884f' }, stonemason: { glyph: '▦', tint: '#a9a090' },
+}
+const pickName = (k: TablePick) => (k === 'keepstone' ? 'Keepstone' : ROOMS[k].name)
+const pickCost = (k: TablePick) => (k === 'keepstone' ? KEEPSTONE_RECIPE : ROOMS[k].cost)
+/** Can the table build this now? `state` drives the icon's dot and the card's button. */
+function pickState(k: TablePick, inv: Inv, bank: Bank, w: Works): { state: 'ready' | 'short' | 'built' | 'soon' | 'full'; note?: string } {
+  if (k === 'keepstone') {
+    if (chestsStanding(w) >= MAX_CHESTS) return { state: 'full', note: `${MAX_CHESTS} Keepstones stand. That is all a plot holds.` }
+    if (countOf(inv, KEEPSTONE) > 0) return { state: 'ready', note: `${countOf(inv, KEEPSTONE)} in the bag, ready to set.` }
+    return shortOf(KEEPSTONE_RECIPE, inv, bank) ? { state: 'short', note: 'Prospect blankstone and a mana shard in the Wilds.' } : { state: 'ready' }
+  }
+  const def = ROOMS[k], built = w.rooms.find(r => r.kind === k)
+  if (built) return { state: 'built', note: raised(built) ? 'Built.' : 'Going up.' }
+  if (!def.open) return { state: 'soon', note: 'Drawn up, not ready to build yet.' }
+  return shortOf(def.cost, inv, bank) ? { state: 'short', note: 'Prune goldwood in the Wilds for logs.' } : { state: 'ready' }
+}
+/** Build: lift into the flying planner with it on the pointer. A Keepstone is made first (bank-first) unless one is in the bag. */
+function buildPick(k: TablePick): boolean {
+  if (k !== 'keepstone') { startBuild({ kind: k, q: 0 }); hudSay(`Planning the ${ROOMS[k].name} · click (or Place) sets it · R turns · Esc cancels`, 'info', 8); return true }
+  if (chestsStanding(getW()) >= MAX_CHESTS) { hudSay(`${MAX_CHESTS} Keepstones already stand.`, 'info'); return false }
+  if (countOf(getInv(), KEEPSTONE) < 1) {
+    const m = makeKeepstoneFrom(getInv(), getB())
+    if (!m) { hudSay(shortOf(KEEPSTONE_RECIPE, getInv(), getB()) ? 'Prospect blankstone and a mana shard in the Wilds.' : 'No room in the bag.', 'info'); return false }
+    setInv(m.inv); if (m.bank) setBank(m.bank)
+  }
+  startBuild({ kind: 'chest', item: KEEPSTONE, q: 0 })
+  hudSay('Setting a Keepstone · click (or Place) sets it · R turns · Esc cancels', 'info', 8)
+  return true
+}
+
+/** The icon strip: scrolls sideways; the open icon is ringed; a green dot = buildable now. */
+function BuildStrip({ sel, onSel, size = 56 }: { sel: TablePick | null; onSel: (k: TablePick) => void; size?: number }) {
+  const inv = useInv(), bank = useBank(), w = useWorks()
+  return (
+    <div data-build-strip style={{ display: 'flex', gap: 8, overflowX: 'auto', overflowY: 'hidden', padding: '4px 2px 6px', scrollbarWidth: 'thin', minWidth: 0, flex: 1, WebkitOverflowScrolling: 'touch' }}>
+      {TABLE_PICKS.map(k => {
+        const st = pickState(k, inv, bank, w).state, look = PICK_LOOK[k], on = sel === k
+        return (
+          <button key={k} type="button" data-pick={k} data-state={st} title={pickName(k)} onClick={() => onSel(k)}
+            style={{ flex: '0 0 auto', width: size, height: size + 16, border: 0, borderRadius: 12, padding: 0, cursor: 'pointer', position: 'relative',
+              background: on ? 'rgba(255,250,235,.95)' : 'rgba(255,250,235,.55)', boxShadow: on ? `inset 0 0 0 2px ${H.ink}` : `inset 0 0 0 1px ${H.rule}`,
+              opacity: st === 'soon' || st === 'built' || st === 'full' ? 0.5 : 1, display: 'grid', placeItems: 'center', gridTemplateRows: `${size - 8}px 16px` }}>
+            <span style={{ width: size - 18, height: size - 18, borderRadius: 10, background: look.tint, color: '#fff', display: 'grid', placeItems: 'center', fontSize: size * 0.42, lineHeight: 1, textShadow: '0 1px 2px rgba(0,0,0,.35)' }}>{look.glyph}</span>
+            <span style={{ fontSize: 9.5, fontWeight: 700, color: H.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: size - 4 }}>{pickName(k).replace(' room', '')}</span>
+            {st === 'ready' && <span style={{ position: 'absolute', top: 5, right: 5, width: 9, height: 9, borderRadius: 5, background: '#5cbf62', boxShadow: '0 0 0 2px rgba(255,250,235,.9)' }} />}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** The dropdown under an icon: what it is, what it costs (bank + bag, the Keepstone's share shown), Build. */
+function BuildCard({ k, onBuilt }: { k: TablePick; onBuilt: () => void }) {
+  const inv = useInv(), bank = useBank(), w = useWorks()
+  const st = pickState(k, inv, bank, w), cost = pickCost(k)
+  const blurb = k === 'keepstone' ? `Every Keepstone opens the one bank, shared by all your keepers. Each adds ${CHEST_SLOTS} slots.` : ROOMS[k].blurb
+  const size = k === 'keepstone' ? `${chestsStanding(w)} of ${MAX_CHESTS} standing` : `${ROOMS[k].w}×${ROOMS[k].d} m · ${Math.round(ROOMS[k].raiseMs / 1000)} s to raise`
+  const inBag = k === 'keepstone' && countOf(inv, KEEPSTONE) > 0
+  return (
+    <div data-build-card={k} style={{ padding: '10px 12px', borderRadius: 12, background: 'rgba(255,250,235,.7)', boxShadow: `inset 0 0 0 1px ${H.rule}`, display: 'grid', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <div style={{ ...hearthDisplay, fontSize: 16, fontWeight: 600, color: H.ink, flex: 1 }}>{pickName(k)}</div>
+        <span style={lab}>{size}</span>
+      </div>
+      <div style={{ fontSize: 12.5, color: H.inkSoft, lineHeight: 1.35 }}>{blurb}</div>
+      {!inBag && (
+        <div style={{ display: 'grid', gap: 2 }}>
+          {cost.map(c => {
+            const fromBank = bankCount(bank, c.id), have = haveFor(inv, bank, c.id), okc = have >= c.n
+            return (
+              <div key={c.id} data-cost={c.id} style={{ fontSize: 12.5, display: 'flex', gap: 6, color: okc ? H.ink : '#b5452c' }}>
+                <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{Math.min(have, c.n)} / {c.n}</span>
+                <span style={{ flex: 1 }}>{itemDef(c.id).name}</span>
+                <span style={{ color: H.inkSoft, fontSize: 11 }}>{fromBank ? `${fromBank} in the Keepstone` : ''}{fromBank && countOf(inv, c.id) ? ' · ' : ''}{countOf(inv, c.id) ? `${countOf(inv, c.id)} in the bag` : ''}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 12, color: H.inkSoft, flex: 1 }}>{st.note ?? (st.state === 'ready' ? 'The Keepstone pays first, the bag tops up.' : '')}</span>
+        {(st.state === 'ready' || st.state === 'short') && (
+          <span data-act="build"><HearthButton primary disabled={st.state !== 'ready'} onClick={() => { if (buildPick(k)) onBuilt() }}>{inBag ? 'Set' : 'Build'}</HearthButton></span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: () => void }) {
   const inv = useInv(), w = useWorks()
+  const [sel, setSel] = useState<TablePick | null>(null)
   return (
     <HearthFrame title="The planning table" maxWidth={560} onClose={onClose} fixed dataPanel="planning-table">
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 10 }}>
-        <div style={{ fontSize: 13, color: H.inkSoft }}>Plan a room, then set it on your ground. The logs go when you place it.</div>
-        {(() => {
-          const n = chestsStanding(w), have = countOf(inv, KEEPSTONE), short = KEEPSTONE_RECIPE.find(c => countOf(inv, c.id) < c.n)
-          return (
-            <div data-room="chest" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ ...hearthDisplay, fontSize: 16, fontWeight: 600, color: H.ink }}>Keepstone{have ? <span style={{ color: H.inkSoft }}> · {have} in the bag</span> : null}</div>
-                <div style={{ fontSize: 12.5, color: H.inkSoft, lineHeight: 1.35 }}>Every Keepstone opens the one bank, shared by all your keepers. Each adds {CHEST_SLOTS} slots.</div>
-                <div style={{ ...lab, marginTop: 4 }}>{KEEPSTONE_RECIPE.map(c => `${countOf(inv, c.id)} / ${c.n} ${itemDef(c.id).name}`).join(' · ')} · {n} of {MAX_CHESTS} standing</div>
-              </div>
-              <div style={{ display: 'grid', gap: 6 }}>
-                <span data-act="make-keepstone"><HearthButton small disabled={!!short} onClick={() => { const r = makeKeepstone(getInv()); if (r) { setInv(r); hudSay('A Keepstone · in your bag.', 'item', 3) } else hudSay(short ? 'Prospect blankstone and a mana shard in the Wilds.' : 'No room in the bag.', 'info') }}>Make</HearthButton></span>
-                {n >= MAX_CHESTS ? <span style={lab}>Full</span>
-                  : <span data-act="set-keepstone"><HearthButton primary disabled={!have} onClick={() => { setPlacing({ kind: 'chest', item: KEEPSTONE, q: 0 }); onClose(); hudSay('Setting a Keepstone · R turns it · E sets it · Esc cancels', 'info', 8) }}>Set one</HearthButton></span>}
-              </div>
-            </div>
-          )
-        })()}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', minWidth: 0 }}>
+          <button type="button" data-act="plan" onClick={() => { startBuild(null); onClose(); hudSay(window.matchMedia?.('(pointer: coarse)').matches ? 'Planning · drag to move · pinch to zoom' : 'Planning · drag or WASD to move · wheel zooms · Q Z turn · Esc lands', 'info', 8) }}
+            style={{ flex: '0 0 auto', width: 92, border: 0, borderRadius: 14, cursor: 'pointer', background: '#e0823f', color: '#fff', ...hearthDisplay, fontSize: 18, fontWeight: 700, letterSpacing: '0.08em', boxShadow: '0 2px 8px rgba(0,0,0,.2)' }}>
+            PLAN
+          </button>
+          <BuildStrip sel={sel} onSel={k => setSel(s => (s === k ? null : k))} />
+        </div>
+        {sel ? <BuildCard k={sel} onBuilt={onClose} /> : <div style={{ fontSize: 12.5, color: H.inkSoft }}>Tap a room to see what it takes. Plan flies you over your ground. Building takes from your Keepstone first.</div>}
         {(() => {
           const found = Object.keys(KEEPSTONES).filter(id => id !== KEEPSTONE && countOf(inv, id) > 0)
           if (!found.length) return null
@@ -440,31 +541,13 @@ function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: (
                   <div key={id} data-keepstone={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ width: 12, height: 12, borderRadius: 3, background: CRYSTAL_LIGHT[KEEPSTONES[id].crystal] ?? '#fff', boxShadow: `0 0 0 1px ${H.rule}` }} />
                     <span style={{ flex: 1, fontSize: 13.5, color: H.ink }}>{KEEPSTONES[id].name} <span style={{ color: H.inkSoft }}>× {countOf(inv, id)}</span></span>
-                    {full ? <span style={lab}>Full</span> : <HearthButton small onClick={() => { setPlacing({ kind: 'chest', item: id, q: 0 }); onClose(); hudSay(`Setting the ${KEEPSTONES[id].name} · R turns it · E sets it · Esc cancels`, 'info', 8) }}>Set</HearthButton>}
+                    {full ? <span style={lab}>Full</span> : <HearthButton small onClick={() => { startBuild({ kind: 'chest', item: id, q: 0 }); onClose(); hudSay(`Setting the ${KEEPSTONES[id].name} · click (or Place) sets it · R turns · Esc cancels`, 'info', 8) }}>Set</HearthButton>}
                   </div>
                 ))}
               </div>
             </div>
           )
         })()}
-        {ROOM_ORDER.map(k => {
-          const def = ROOMS[k], built = w.rooms.find(r => r.kind === k)
-          const short = def.cost.find(c => countOf(inv, c.id) < c.n)
-          return (
-            <div key={k} data-room={k} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}`, opacity: def.open ? 1 : 0.6 }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ ...hearthDisplay, fontSize: 16, fontWeight: 600, color: H.ink }}>{def.name}</div>
-                <div style={{ fontSize: 12.5, color: H.inkSoft, lineHeight: 1.35 }}>{def.blurb}</div>
-                <div style={{ ...lab, marginTop: 4 }}>
-                  {def.cost.map(c => `${countOf(inv, c.id)} / ${c.n} ${itemDef(c.id).name}`).join(' · ')} · {def.w}×{def.d} m
-                </div>
-              </div>
-              {built ? <span style={lab}>{raised(built) ? 'Built' : 'Going up'}</span>
-                : !def.open ? <span style={lab}>Soon</span>
-                : <HearthButton primary disabled={!!short} onClick={() => { setPlacing({ kind: k, q: 0 }); onClose(); hudSay(`Planning the ${def.name} · R turns it · E sets it · Esc cancels`, 'info', 8) }}>Plan</HearthButton>}
-            </div>
-          )
-        })}
         {(() => {
           const have = FURNITURE_ORDER.filter(id => countOf(inv, id) > 0)
           if (!have.length) return null
@@ -482,9 +565,31 @@ function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: (
             </div>
           )
         })()}
-        {(() => { const short = ROOMS.rinnshop.cost.find(c => countOf(inv, c.id) < c.n); return short && !w.rooms.some(r => r.kind === 'rinnshop') ? <div style={{ fontSize: 12.5, color: H.inkSoft }}>Prune goldwood in the Wilds for logs.</div> : null })()}
       </div>
     </HearthFrame>
+  )
+}
+
+/** Flying (build-mode.tsx): the strip rides along at the top so you can pick the next thing without landing. */
+export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
+  const b = useBuildMode(), p = usePlacing()
+  const [sel, setSel] = useState<TablePick | null>(null)
+  const ownedRef = useRef(owned); ownedRef.current = owned
+  const touchy = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
+  // a mouse click on the ground places what is on the pointer
+  useEffect(() => { if (!b) return; onBuildTap(() => { if (placing) confirmPlace(ownedRef.current) }); return () => onBuildTap(null) }, [b])
+  useEffect(() => { if (!b) setSel(null) }, [b])
+  if (!b) return null
+  return (
+    <div data-build-bar style={{ position: 'fixed', top: typeof window !== 'undefined' && window.innerWidth < 600 ? 112 : 96, left: '50%', transform: 'translateX(-50%)', width: 'min(560px, calc(100vw - 24px))', zIndex: 41, pointerEvents: 'auto', display: 'grid', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 8px', borderRadius: 14, background: 'rgba(255,250,235,.88)', boxShadow: '0 2px 10px rgba(0,0,0,.25)', minWidth: 0 }}>
+        <button type="button" data-act="land" onClick={() => { setPlacing(null); exitBuild() }}
+          style={{ flex: '0 0 auto', border: 0, borderRadius: 10, padding: '0 10px', height: 52, cursor: 'pointer', background: H.ink, color: '#fff', font: '700 12px system-ui', lineHeight: 1.15 }}>Back to<br />keeper</button>
+        <BuildStrip sel={sel} onSel={k => setSel(s => (s === k ? null : k))} size={44} />
+      </div>
+      {sel && <BuildCard k={sel} onBuilt={() => setSel(null)} />}
+      {!p && !sel && <div style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>Pick something to build · drag to move · {touchy ? 'pinch' : 'wheel'} to zoom{touchy ? '' : ' · WASD · Q Z turn'}</div>}
+    </div>
   )
 }
 
