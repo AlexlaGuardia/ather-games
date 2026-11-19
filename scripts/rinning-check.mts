@@ -78,6 +78,9 @@ await sleep(1500)
 res.bag = await readBag()
 console.log(JSON.stringify(res))
 const bag = res.bag as string[]
-const pass = res.aimed === true && answered && phase === 'gone' && bag1.includes('baitx9') && !bag1.some(x => RINN.some(r => x.startsWith(r + 'x')))
-  && answered2 && phase2 === 'landed' && bag.includes('baitx8') && bag.some(x => RINN.some(r => x.startsWith(r + 'x')))
+// bait is judged RELATIVE (11-19): answerTake re-presses cast until the take is caught, and at 1-2 fps a take can lapse first,
+// so that press casts again (one more bait). 'exactly 9 then 8' failed on that alone with every rinning step passing.
+const baitOf = (b: string[]) => Number((b.find(x => x.startsWith('baitx')) ?? 'baitx0').slice(5))
+const pass = res.aimed === true && answered && phase === 'gone' && baitOf(bag1) <= 9 && baitOf(bag1) >= 1 && !bag1.some(x => RINN.some(r => x.startsWith(r + 'x')))
+  && answered2 && phase2 === 'landed' && baitOf(bag) < baitOf(bag1) && bag.some(x => RINN.some(r => x.startsWith(r + 'x')))
 console.log(pass ? 'PASS' : 'FAIL'); await br.close(); process.exit(pass ? 0 : 1)

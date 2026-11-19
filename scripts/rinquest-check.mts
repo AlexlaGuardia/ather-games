@@ -109,7 +109,8 @@ const pickAnswer = async (label: string) => {
 }
 await talkTo()
 ok(await poll(async () => (await bubble()).includes('Fennel'), 20000), `C. Fennel stands by the Rinnshop and E talks (bubble: ${(await bubble()).slice(0, 60)})`)
-ok(await pickAnswer('How does one give itself') && await pickAnswer("I'll go at dusk"), 'C. the talk: ask, then agree to go')
+// lark's lines (3f0dab22, live 11-19) made the meeting three screens: ask -> 'Anything I should bring?' -> agree
+ok(await pickAnswer('How does one give itself') && await pickAnswer('Anything I should bring') && await pickAnswer("I'll go at dusk"), 'C. the talk: ask, ask what to bring, then agree to go')
 ok(await poll(async () => ((await Q(p, 'quest')) as { step: number }).step === 1, 10000), 'C. ...the quest moves to the Moonwell')
 const jw = (await Q(p, 'journal')) as { id: string; title: string }[]
 ok(jw.some(e => e.id === 'rinquest' && e.title === RINQUEST_STEPS[1].title), `C. the journal says '${RINQUEST_STEPS[1].title}'`)
