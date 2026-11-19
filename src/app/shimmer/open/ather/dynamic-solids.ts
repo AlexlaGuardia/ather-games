@@ -5,6 +5,15 @@
 import type { Combat } from './combat'
 import type { Shape, Box } from '../terrain-world'
 import { gladeHomeBoxes } from './glade-home'
+import { stationBoxes, jettyBoxes } from './glade-lots'
+import { GLADE, WATER_DROP } from './relief'
+// M40: the Glade's station blockouts + Greg's jetty, built once (the Glade's floor is one level, GLADE.y)
+let gladeParts: Box[] | null = null
+const gladeSolids = (x0: number, z0: number, x1: number, z1: number) => {
+  gladeParts ??= [...stationBoxes(GLADE.y), ...jettyBoxes(GLADE.y - WATER_DROP)]
+  if (x1 < GLADE.pondX - 40 || x0 > GLADE.gx + 45 || z1 < GLADE.gz - 45 || z0 > GLADE.gz + 45) return []
+  return gladeParts.filter(b => b.x0 <= x1 && b.x1 >= x0 && b.z0 <= z1 && b.z1 >= z0)
+}
 
 export const live: { combat: Combat | null } = { combat: null }
 
@@ -23,7 +32,7 @@ export function withPieces(shape: Shape, get: () => Combat | null = () => live.c
   return {
     ground: shape.ground, water: shape.water,
     solids(x0, y0, z0, x1, y1, z1) {
-      const base = shape.solids(x0, y0, z0, x1, y1, z1), extra = [...pieceBoxes(get(), x0, z0, x1, z1), ...gladeHomeBoxes(shape.ground, x0, z0, x1, z1)]
+      const base = shape.solids(x0, y0, z0, x1, y1, z1), extra = [...pieceBoxes(get(), x0, z0, x1, z1), ...gladeHomeBoxes(shape.ground, x0, z0, x1, z1), ...gladeSolids(x0, z0, x1, z1)]
       return extra.length ? [...base, ...extra] : base
     },
   }

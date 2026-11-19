@@ -48,8 +48,9 @@ import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
-import { gregSpot } from './moonwell-glade'
-import { GLADE_GREEN } from './moonwell'   // M40: the Glade's green is the Wilds' safe heart (the five, the pond, the waymark)   // M30 part 2: Greg lives at the Glade
+import { gregSpot } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
+import { GLADE_GREEN } from './moonwell'   // M40: the Glade's green is the Wilds' safe heart (the five, the pond, the waymark)
+import { GladeLots } from './glade-lots-view'   // M40: the green, the five's lots + stations, Greg's jetty
 import { GladeGreg, type GregTourState, type GregLive } from './glade-greg'
 import { biomeGround } from './hollow-goop'   // M34: what a Hollow's sheen borrows
 import { tourStops, giveGloveWord, TABLE_STOP, TABLE_KEEPER, GLOVE_GIVE, TOUR_NEXT, TOUR_SKIP, TOUR_DONE } from './greg-tour'
@@ -1054,6 +1055,7 @@ function AtherSliceGame() {
         {ww && <DeathPack active={zone.kind === 'wilds'} />}
         {zone.kind === 'wilds' && ww && <WildsEditorRig ww={ww} onChanged={() => setWrev(ww.rev)} />}
         {zone.kind === 'wilds' && ww && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
+        {zone.kind === 'wilds' && ww && <GladeLots />}
         {zone.kind === 'wilds' && ww && <GladeGreg loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} tour={tour} hold={panel?.kind === 'talk' || panel?.kind === 'greg'} keeper={poseRef} onArrive={onTourArrive} live={gregLive} />}
         {zone.kind === 'wilds' && ww && net && <Settlements net={net} loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
         {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
