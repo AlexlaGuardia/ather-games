@@ -48,6 +48,8 @@ import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
+import { gregSpot } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
+import { GladeGreg } from './glade-greg'
 import { TalkBubble, TalkChoices } from '../shared/npc-talk'
 import { gemsGiven, markGemsGiven, stageOf, gregsGems, errandEntries, birthSeat } from '../business/errand'
 import { skillPointerEntries } from '../business/skill-pointers'
@@ -117,6 +119,7 @@ type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
 type Spawn = { x: number; z: number; yaw: number }
 type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number }
 type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'fennel' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement }
+const gregAt = gregSpot()   // BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
 export default function AtherSlice() { return <OwnerReady><AtherSliceGame /></OwnerReady> }
@@ -440,7 +443,6 @@ function AtherSliceGame() {
     let n: Near = null
     if (zone.kind === 'plot') {
       if (Math.hypot(GATE.x - lc.px, GATE.z - lc.pz) < REACH + 1.2) n = { kind: 'gate' }
-      else if (Math.hypot(GREG.x - lc.px, GREG.z - lc.pz) < REACH) n = { kind: 'greg' }
       else if (fennelRef.current && Math.hypot(fennelRef.current.x - lc.px, fennelRef.current.z - lc.pz) < REACH) n = { kind: 'fennel' }   // M22
       else { const w = nearWork(worksRef.current, lc.px, lc.pz); if (w) n = { kind: 'work', near: w } }
     } else {
@@ -448,6 +450,7 @@ function AtherSliceGame() {
       for (const { w, own } of all) { const o = ww?.byName.has(w.tile) ? ww.offsetOf(w.tile) : null; if (o && Math.hypot(w.x + o.x - lc.px, w.z + o.z - lc.pz) < 2.6) n = { kind: 'waymark', w, own } }
       // a settlement's folk: E anywhere inside it talks to them (settlement-folk.ts / folk-panel.tsx); a waymark at your feet wins
       if (!n && netRef.current) { const st = settlementAt(netRef.current, lc.px, lc.pz); if (st) n = { kind: 'folk', s: st } }
+      if (!n && Math.hypot(gregAt.x - lc.px, gregAt.z - lc.pz) < REACH) n = { kind: 'greg' }   // M30: Gregory sits at Moonwell Glade
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
       const t = ww ? ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty) : undefined
       if (t && t.name !== hereRef.current) { hereRef.current = t.name; setHereTile(t.name); streamAt(lc.px, lc.pz) }
@@ -779,7 +782,7 @@ function AtherSliceGame() {
   // compass marks: what the keeper might be heading for, by zone
   useEffect(() => {
     marksRef.current = zone.kind === 'plot'
-      ? [{ x: GATE.x, z: GATE.z, color: '#e7c766', title: 'the gate' }, { x: GREG.x, z: GREG.z, color: '#c9a27a', title: 'Gregory' }]
+      ? [{ x: GATE.x, z: GATE.z, color: '#e7c766', title: 'the gate' }]
       : [
           // ★ NO NODE MARKS (Alex 11-18: "the nodes really dont even need to be on the map.. as long as the section gets an
           // infected theme its up to the player to track the champion"). Greg's waymark, settlements, the fair, your waymarks:
@@ -808,7 +811,7 @@ function AtherSliceGame() {
   const [given, setGiven] = useState(false)
   useEffect(() => setGiven(gemsGiven()), [])
   const errandStage = stageOf(birth, inv, loadoutNow, given)
-  useEffect(() => { postEntries('errand', errandEntries(errandStage, birth, { greg: { x: GREG.x, z: GREG.z }, gate: { x: GATE.x, z: GATE.z } })) }, [errandStage, birth])
+  useEffect(() => { postEntries('errand', errandEntries(errandStage, birth, { greg: { x: gregAt.x, z: gregAt.z }, gate: { x: GATE.x, z: GATE.z } })) }, [errandStage, birth])
   // BETA M6a/M6b: the rinning + prospecting pointers, struck once used (re-read on every pack change: a catch/cut lands in it)
   useEffect(() => {
     const k = openSkills(), used = (id: 'rinning' | 'prospecting') => k[id].level > 1 || k[id].xp > 0
@@ -832,7 +835,7 @@ function AtherSliceGame() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [talkStep, errandStage, birth, given])
   const talkFocus = useRef<{ x: number; y: number; z: number } | null>(null)
-  const gregHead = useMemo(() => ({ x: GREG.x, y: plotHeightAt(GREG.x, GREG.z) + 1.7, z: GREG.z }), [])
+  const gregHead = useMemo(() => ({ x: gregAt.x, y: (ww && ww.tileAtPoint(gregAt.x, gregAt.z) ? ww.heightAt(gregAt.x, gregAt.z) : 0) + 1.55, z: gregAt.z }), [ww, hereTile])   // seated, M30
   // BETA M13: E in a settlement talks to ONE Moglin (folk-talk.ts); the settlement's heart is its anchor (no Moglin models are drawn yet)
   const folkTalk = useFolkTalk(panel?.kind === 'folk' ? panel.s : null, useCallback((x: number, z: number) => ww && ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : 0, [ww]), () => setPanel(null))
   // BETA M22: Fennel at the Rinnshop while the first-rinstick quest is open (fennel.tsx, use-rinquest.ts › fennelTalk)
@@ -951,12 +954,13 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && ww && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
         {zone.kind === 'wilds' && ww && net && <Settlements net={net} loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
         {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
+        {zone.kind === 'wilds' && ww && <GladeGreg loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
             safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
         )}
         {folkTalk.node && folkTalk.bubbleAt && zone.kind === 'wilds' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} />}
-        {talkNode && zone.kind === 'plot' && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={talkNode.line} />}
+        {talkNode && zone.kind === 'wilds' && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={talkNode.line} />}
         {zone.kind === 'plot' && fennelAt && <Fennel spot={fennelAt} y={plotHeightAt(fennelAt.x, fennelAt.z)} talking={!!fennelNode} />}
         {fennelNode && fennelHead && zone.kind === 'plot' && <TalkBubble at={[fennelHead.x, fennelHead.y + 0.5, fennelHead.z]} name={FENNEL_NAME} line={fennelNode.line} />}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
@@ -1043,7 +1047,7 @@ function AtherSliceGame() {
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Ather · your plot and the Wilds</div>
             Left thumb moves. Drag on the right to look.<br />Buttons for jump, slide, and whatever is in reach.
             <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>
-              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out through a city's door. Gregory, by the threshold, sells the ground under the mist. In the Wilds the Hollows wander: hold fire to shoot.
+              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out through a city's door. Gregory, at Moonwell Glade in the Wilds, sells the ground under the mist. In the Wilds the Hollows wander: hold fire to shoot.
             </div>
             <div style={{ marginTop: 12, color: '#d4a843', font: '600 12px system-ui', letterSpacing: '0.2em', textTransform: 'uppercase' }}>Tap to start</div>
           </div>
@@ -1059,7 +1063,7 @@ function AtherSliceGame() {
             Click to play<br />
             WASD move · Space jump (again in the air) / climb · Shift slide · E use · M map · Esc release
             <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>
-              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out through a city's door in Athernyx. Gregory, by the threshold, sells the ground under the mist. In the Wilds the Hollows wander: R draws the Repeater (tap again to reload, hold R to put it away), click to shoot, walk over grey matter to take it. Hands free, click a tree to prune it. F plants a waymark, H walks home, I opens your bag.
+              The gate ahead is the fold map: travel to the Wilds, your waymarks, or out through a city's door in Athernyx. Gregory, at Moonwell Glade in the Wilds, sells the ground under the mist. In the Wilds the Hollows wander: R draws the Repeater (tap again to reload, hold R to put it away), click to shoot, walk over grey matter to take it. Hands free, click a tree to prune it. F plants a waymark, H walks home, I opens your bag.
             </div>
           </div>
         </div>
