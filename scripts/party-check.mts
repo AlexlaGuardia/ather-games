@@ -71,7 +71,9 @@ try {
   await panel(A)
   const bId = await selfId(B), bName = ((await mp(A, 'peers')) as { id: string; name: string }[]).find(x => x.id === bId)?.name
   res.bName = bName
-  res.roster = await A.$eval('[data-roster]', e => e.textContent ?? ''); res.rosterHasB = !!bName && String(res.roster).includes(bName)
+  // the roster refreshes on a 500 ms tick (useRoster): poll for B's name, never read it once on open
+  res.rosterHasB = !!bName && await poll(async () => String(await A.$eval('[data-roster]', e => e.textContent ?? '')).includes(bName), 10000)
+  res.roster = await A.$eval('[data-roster]', e => e.textContent ?? '')
   try { await A.screenshot({ path: `${out}/party-1-panel.png` }) } catch { /* slow frame */ }
   // B leaves the party: B goes back to the public Wilds, A loses B
   await panel(B); await B.click('[data-act="leave-party"]')
