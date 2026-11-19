@@ -51,6 +51,7 @@ import { gregTalk } from './greg-talk'
 import { gregSpot } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
 import { GLADE_GREEN } from './moonwell'   // M40: the Glade's green is the Wilds' safe heart (the five, the pond, the waymark)
 import { GladeLots } from './glade-lots-view'   // M40: the green, the five's lots + stations, Greg's jetty
+import { loadSpot, saveSpot, clearSpot, makeSpot, resumeFrom } from './last-spot'   // where you were (a reload in the Wilds resumes there)
 import { GladeGreg, type GregTourState, type GregLive } from './glade-greg'
 import { biomeGround } from './hollow-goop'   // M34: what a Hollow's sheen borrows
 import { tourStops, giveGloveWord, TABLE_STOP, TABLE_KEEPER, GLOVE_GIVE, TOUR_NEXT, TOUR_SKIP, TOUR_DONE } from './greg-tour'
@@ -411,6 +412,29 @@ function AtherSliceGame() {
     if (!w) { setToast('That door is not bound to anything you have walked to. You are home.'); return }
     travel({ kind: 'waymark', w })
   }, [ww, travel])
+
+  // WHERE YOU WERE (last-spot.ts, Alex 11-19: "if the page refreshes i should still be in the same spot"). A load with a
+  // saved Wilds spot sets the keeper back down there (after the Hallway's ?waymark=, which wins; ?home=1 goes home). While
+  // out in the Wilds the spot is saved every 3 s and as the page hides; arriving HOME (epoch > 0: a real arrival, not the
+  // page's first plot frame) clears it, so dying or folding home starts the next load at home.
+  useEffect(() => {
+    if (landed.current || !ww) return
+    const sp = resumeFrom(window.location.search, loadSpot(), n => !!ww.byName.get(n))
+    if (!sp) return
+    landed.current = true
+    stream(ww, sp.x, sp.z).then(() => { setWrev(ww.rev); setHereTile(sp.tile); arrive({ kind: 'wilds', tile: sp.tile }, { x: sp.x, z: sp.z, yaw: sp.yaw }) })
+  }, [ww, arrive])
+  const hereTileRef = useRef(hereTile); hereTileRef.current = hereTile
+  const fadeRef = useRef(fade); fadeRef.current = fade
+  useEffect(() => {
+    if (zone.kind === 'plot') { if (epoch > 0) clearSpot(); return }
+    if (zone.kind !== 'wilds') return
+    const save = () => { if (fadeRef.current === 0) { const p = poseRef.current; saveSpot(makeSpot(hereTileRef.current, p.x, p.z, p.yaw)) } }
+    const hide = () => { if (document.visibilityState === 'hidden') save() }
+    const t = setInterval(save, 3000)
+    window.addEventListener('pagehide', save); document.addEventListener('visibilitychange', hide)
+    return () => { clearInterval(t); window.removeEventListener('pagehide', save); document.removeEventListener('visibilitychange', hide) }
+  }, [zone, epoch])
 
   // BORN AT MOONWELL (BETA M31, Alex 11-19: 'the start loses new keepers'). A keeper born on this page (the rune chosen)
   // opens their eyes at Moonwell Glade beside Greg, not on the plot: set down at his waymark (~6.6 m from his bench) behind
