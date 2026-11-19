@@ -450,6 +450,7 @@ function AtherSliceGame() {
       for (const { w, own } of all) { const o = ww?.byName.has(w.tile) ? ww.offsetOf(w.tile) : null; if (o && Math.hypot(w.x + o.x - lc.px, w.z + o.z - lc.pz) < 2.6) n = { kind: 'waymark', w, own } }
       // a settlement's folk: E anywhere inside it talks to them (settlement-folk.ts / folk-panel.tsx); a waymark at your feet wins
       if (!n && netRef.current) { const st = settlementAt(netRef.current, lc.px, lc.pz); if (st) n = { kind: 'folk', s: st } }
+      if (Math.hypot(gregAt.x - lc.px, gregAt.z - lc.pz) < REACH) n = { kind: 'greg' }   // M30: Gregory at Moonwell Glade; at his bench he wins over the arrival waymark 3.5 m away
       if (!n && Math.hypot(gregAt.x - lc.px, gregAt.z - lc.pz) < REACH) n = { kind: 'greg' }   // M30: Gregory sits at Moonwell Glade
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
       const t = ww ? ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty) : undefined

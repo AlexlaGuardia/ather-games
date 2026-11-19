@@ -43,6 +43,7 @@ ok(await toGlade(), 'in the Wilds, Greg is drawn at the Glade on the rig, sittin
 { const g = await p.evaluate(() => (window as any).__greg), s = gregSpot()
   ok(g?.pose === 'sit' && g?.look === 'gregory' && Math.hypot(g.x - s.x, g.z - s.z) < 0.01, `his rig stands at the Glade (${g?.x?.toFixed?.(1)}, ${g?.z?.toFixed?.(1)})`) }
 ok(await poll(async () => await prompt(), 6000), 'the E prompt names Gregory at his bench')
+if (!(await prompt())) console.log('   dbg keeper', JSON.stringify(await p.evaluate(() => (window as any).__folk?.keeper?.())), 'greg', JSON.stringify(gregSpot()), (await p.evaluate(() => document.body.innerText)).split('\n').filter(l => /^E ·/.test(l)).join('|'))
 await p.screenshot({ path: '/tmp/errand-0.png' })
 // BETA M13: talking to Greg is a conversation: his line in a bubble over his name, the keeper answers (E picks the lit answer)
 const bubble = () => p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')
