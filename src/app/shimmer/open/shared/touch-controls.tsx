@@ -157,9 +157,11 @@ export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint
           </div>
         ))}
       </div>
+      {/* ★ a SHORT (landscape phone) screen lays the near pills in a ROW (11-19 sweep: at 844x390 Gregory's E pill stacked on the
+          Wilds DRAW pill and the column climbed into the status chip). */}
       {/* what is in reach right now: big, beside the thumb cluster. At ABOVE_BAR, NOT clusterBottom: in landscape the pills sit left of the
           cluster, over the centred hotbar's span, so dropping them to the edge hid the Wilds' DRAW pill behind the hotbar (11-18 shot) */}
-      <div style={{ position: 'absolute', right: `calc(max(18px, env(safe-area-inset-right)) + ${showFire ? 84 + 12 : 0}px + 56px + 16px)`, bottom: ABOVE_BAR, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
+      <div style={{ position: 'absolute', right: `calc(max(18px, env(safe-area-inset-right)) + ${showFire ? 84 + 12 : 0}px + 56px + 16px)`, bottom: ABOVE_BAR, display: 'flex', flexDirection: short ? 'row-reverse' : 'column', gap: 10, alignItems: 'flex-end' }}>
         {actions.filter(a => a.near).map(a => (
           <div key={a.code} data-touch={a.label} data-touch-near style={{ ...ring(60, true), width: 'auto', minWidth: 60, padding: '0 18px', borderRadius: 30, display: 'flex', alignItems: 'center', fontSize: 13 }}
             onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); pressKey(a.code) }}>
