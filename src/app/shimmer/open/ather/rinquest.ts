@@ -27,24 +27,25 @@ export type StepDo =
   | { kind: 'bench'; at: 'rinnshop'; takes: string; grants: true }   // the Rinnshop bench binds it: the stick is yours
 export interface QuestStep { id: string; title: string; note: string; button?: string; do: StepDo }
 
-// ⚠ PLACEHOLDER COPY (@lark writes, Alex signs). Steps = the ruling's four, the talk split round the bind.
+// lark draft, athernyx 112926e, UNSIGNED until Alex signs (CANON/game/first-rinstick-script.md); slots the script has no line for keep their placeholder.
+// Step notes = the script's step logs (step 4's log also covers the 'catch' step). Titles + the 'catch' note: still placeholder.
 export const RINQUEST_STEPS: readonly QuestStep[] = [
-  { id: 'meet', title: 'Meet Fennel at your Rinnshop', note: 'Fennel, the Moonwell cook, has come to your Rinnshop. Fennel trades in rinn and may know how a first rinstick is made.', do: { kind: 'talk', who: 'fennel' } },
-  { id: 'dusk', title: 'Sit by the Moonwell at dusk', note: 'Go to the Moonwell water in the Wilds at dusk. Hold nothing. Sit still and wait.', do: { kind: 'wait', at: 'moonwell', phase: 'dusk', stillS: 12 } },
-  { id: 'scale', title: 'Take the shed scale', note: 'A rinn came up and left a scale on the bank. Pick it up.', do: { kind: 'pickup', item: SHED_SCALE } },
-  { id: 'bind', title: 'Bind the scale at your Rinnshop', note: 'Take the scale to your Rinnshop bench and bind it into a rinstick.', button: 'Bind the scale', do: { kind: 'bench', at: 'rinnshop', takes: SHED_SCALE, grants: true } },
+  { id: 'meet', title: 'Meet Fennel at your Rinnshop', note: 'Fennel says a rinn may give you a stick. Sit at the Moonwell at dusk with no tool.', do: { kind: 'talk', who: 'fennel' } },
+  { id: 'dusk', title: 'Sit by the Moonwell at dusk', note: 'Sit still at the Moonwell water at dusk. Hold nothing.', do: { kind: 'wait', at: 'moonwell', phase: 'dusk', stillS: 12 } },
+  { id: 'scale', title: 'Take the shed scale', note: 'A rinn left a shed scale on the bank. Take it to the Rinnshop bench.', do: { kind: 'pickup', item: SHED_SCALE } },
+  { id: 'bind', title: 'Bind the scale at your Rinnshop', note: 'Bind the scale into a rinstick at the bench. Bring Fennel your first catch.', button: 'Bind the scale', do: { kind: 'bench', at: 'rinnshop', takes: SHED_SCALE, grants: true } },
   { id: 'catch', title: 'Bring Fennel your first catch', note: 'Rin a catch with your new rinstick and bring it to Fennel at your Rinnshop.', do: { kind: 'talk', who: 'fennel', needs: 'catch' } },
 ]
-export const RINQUEST_LINES = {
+export const RINQUEST_LINES = {  // lark draft, athernyx 112926e, UNSIGNED until Alex signs (noShop/started/inQuest/done: no script line, still placeholder)
   noShop: 'You have no rinstick. Build a Rinnshop on your plot to earn your first.',
   started: 'Your Rinnshop stands. Someone has come to see it.',
   inQuest: 'You have no rinstick yet. See your journal.',
-  waitHeld: 'Put away what you are holding, and wait.',
-  waitTime: 'Not yet. Come back at dusk.',
-  waitStart: 'You sit by the water and keep still.',
-  surfaced: 'A rinn rises, turns once and is gone. Something glints on the bank.',
-  picked: 'A shed scale, still cool from the water.',
-  got: 'The scale takes the shape of a rinstick. It is yours.',
+  waitHeld: 'Put it away. Come with empty hands.',
+  waitTime: 'Not yet. Wait for the light to go.',
+  waitStart: 'Sit by the water. Hold nothing.',
+  surfaced: 'A ripple, a flash of scale, and then only the water again. On the bank, where it touched the stones, something small is shining.',
+  picked: 'A shed scale. It was left for you.',
+  got: 'First rinstick made. Go and ask something of the water.',
   done: 'Fennel takes your first catch. The Rinnshop is yours to work.',
 }
 
@@ -114,5 +115,5 @@ export function questEntries(q: RinQuest, moonwell?: { x: number; z: number }): 
     const where = (s.do.kind === 'wait' || s.do.kind === 'pickup') && moonwell ? { zone: 'wilds' as const, x: moonwell.x, z: moonwell.z } : null
     return [{ id: 'rinquest', hand: 'keeper', title: s.title, note: s.note, where }]
   }
-  return [{ id: 'rinquest', hand: 'keeper', title: 'A rinstick of your own', note: 'Given by a rinn at the Moonwell, bound at your Rinnshop.', where: null, struck: true }]
+  return [{ id: 'rinquest', hand: 'keeper', title: 'A rinstick of your own', note: 'Quest done: A Stick That Gives Itself. You have your first rinstick.', where: null, struck: true }]
 }

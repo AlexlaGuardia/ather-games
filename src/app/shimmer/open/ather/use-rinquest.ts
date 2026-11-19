@@ -50,24 +50,30 @@ export function questEvent(ev: QuestEvent): boolean {
   return true
 }
 
-// ── Fennel's talk (shared/npc-talk.tsx shape). ⚠ PLACEHOLDER LINES for @lark (canon: Fennel is warm, loud, feeds everyone).
-// The first line is canon's own saying (rework 4½). `page` = which screen of the meeting; `close` ends the talk.
+// ── Fennel's talk (shared/npc-talk.tsx shape). lark draft, athernyx 112926e, UNSIGNED until Alex signs (CANON/game/first-rinstick-script.md); slots the script has no line for keep their placeholder.
+// Placeholder still: the 'I'll go at dusk.' option, the Goodbye label, the 'catch' with-nothing-in-bag and fallback lines. `page` = which screen of the meeting; `close` ends the talk.
 export const FENNEL_NAME = 'Fennel'
 export function fennelTalk(quest: RinQuest, page: number, inv: Inv, acts: { goto: (page: number) => void; close: () => void }): TalkNode {
   const d = currentStep(quest)?.do
   const bye = { label: 'Goodbye, Fennel.', pick: acts.close }
   if (d?.kind === 'talk' && !d.needs) {
-    if (page === 0) return { line: 'A Rinnshop! And no rinstick in it. No stick, no catch. No catch, no stick. Unless one gives itself.', options: [{ label: 'How does one give itself?', pick: () => acts.goto(1) }, bye] }
-    return { line: 'Go to the Moonwell when the light goes. Hold nothing. Sit still by the water, and see who comes up to look at you.', options: [{ label: "I'll go at dusk.", pick: () => { questEvent({ kind: 'talk', who: 'fennel', hasCatch: false }); acts.close() } }] }
+    if (page === 0) return { line: "A Rinnshop! Look at the shelves. Now all it needs is a stick. Here's the trouble. No stick, no catch. No catch, no stick. Unless one gives itself.", options: [{ label: 'How does one give itself?', pick: () => acts.goto(1) }, bye] }
+    if (page === 1) return { line: 'Sit by the Moonwell when the light goes. Bring nothing. Sit still and be easy to like.', options: [{ label: 'Anything I should bring?', pick: () => acts.goto(2) }, bye] }
+    return { line: "Only your patience. Dusk, at the water. I'll keep the pot warm.", options: [{ label: "I'll go at dusk.", pick: () => { questEvent({ kind: 'talk', who: 'fennel', hasCatch: false }); acts.close() } }] }
   }
   if (d?.kind === 'talk' && d.needs === 'catch') {
     const c = firstCatch(inv)
-    if (c) return { line: 'Is that your first? Oh, look at it. Give it here, I know just the pot.', options: [{ label: 'It is yours.', pick: () => { questEvent({ kind: 'talk', who: 'fennel', hasCatch: true }); acts.close() } }, bye] }
-    return { line: 'A rinstick of your own! Now bring me the first thing it catches.', options: [bye] }
+    if (c) {
+      if (page === 0) return { line: "Oh, look at you. First catch, and it's a good one. Somebody gave you that stick, so go easy on the water. Come back hungry.", options: [{ label: 'Thank you.', pick: () => acts.goto(1) }, { label: '(leave)', pick: () => acts.goto(2) }] }
+      const fin = { label: 'Goodbye, Fennel.', pick: () => { questEvent({ kind: 'talk', who: 'fennel', hasCatch: true }); acts.close() } }
+      if (page === 1) return { line: "Don't thank me. Thank whoever left the scale. Then eat.", options: [{ label: '(leave)', pick: () => acts.goto(2) }] }
+      return { line: "Pot's on. It's always on.", options: [fin] }
+    }
+    return { line: "A stick's only half. Go and ask the water for the rest.", options: [bye] }
   }
-  if (d?.kind === 'wait') return { line: 'The Moonwell, at dusk. Hands empty. Be still and be patient.', options: [bye] }
-  if (d?.kind === 'pickup') return { line: 'It came up for you? Then it left you something. Go and get it.', options: [bye] }
-  if (d?.kind === 'bench') return { line: 'Bind it at your bench. It knows what it wants to be.', options: [bye] }
+  if (d?.kind === 'wait') return { line: "Dusk, at the water, empty hands. It's not hard. It's only slow.", options: [bye] }
+  if (d?.kind === 'pickup') return { line: "Dusk, at the water, empty hands. It's not hard. It's only slow.", options: [bye] }
+  if (d?.kind === 'bench') return { line: 'Got something shiny? Take it to the bench before it forgets what it\'s for.', options: [bye] }
   return { line: 'Back to the kitchen with me. Feed those spirits!', options: [bye] }
 }
 
