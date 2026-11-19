@@ -6,7 +6,8 @@
     "note": "Alex r2: yay (code, softer); recorded grass nay",
     "desc": "Footstep on grass: soft brushy rustle",
     "source": "synth",
-    "bus": "sfx"
+    "bus": "sfx",
+    "vol": 0.5
   },
   {
     "id": "step-stone",
@@ -23,7 +24,8 @@
       "/sfx/kenney/footstep_concrete_003.ogg",
       "/sfx/kenney/footstep_concrete_004.ogg"
     ],
-    "licence": "CC0 (Kenney audio packs)"
+    "licence": "CC0 (Kenney audio packs)",
+    "vol": 0.5
   },
   {
     "id": "step-wood",
@@ -40,7 +42,8 @@
       "/sfx/kenney/footstep_wood_003.ogg",
       "/sfx/kenney/footstep_wood_004.ogg"
     ],
-    "licence": "CC0 (Kenney audio packs)"
+    "licence": "CC0 (Kenney audio packs)",
+    "vol": 0.5
   },
   {
     "id": "jump",
@@ -67,7 +70,8 @@
       ],
       "chance": 1,
       "vol": 0.7
-    }
+    },
+    "vol": 0.5
   },
   {
     "id": "land",
@@ -76,7 +80,8 @@
     "note": "Alex r2: yay (code, dirt push); recorded land nay",
     "desc": "Land: soft thud with a breath of dust",
     "source": "synth",
-    "bus": "sfx"
+    "bus": "sfx",
+    "vol": 0.5
   },
   {
     "id": "hit-axe-tree",
@@ -197,7 +202,8 @@
       "/sfx/kenney/footstep_grass_002.ogg",
       "/sfx/kenney/footstep_grass_003.ogg",
       "/sfx/kenney/footstep_grass_004.ogg"
-    ]
+    ],
+    "vol": 0.5
   },
   {
     "id": "rec-step-wood-creak",
@@ -223,7 +229,8 @@
       ],
       "chance": 0.25,
       "vol": 0.5
-    }
+    },
+    "vol": 0.5
   },
   {
     "id": "rec-land",
@@ -240,7 +247,8 @@
       "/sfx/kenney/impactSoft_heavy_002.ogg",
       "/sfx/kenney/impactSoft_heavy_003.ogg",
       "/sfx/kenney/impactSoft_heavy_004.ogg"
-    ]
+    ],
+    "vol": 0.5
   },
   {
     "id": "slide",
@@ -256,7 +264,8 @@
       "/sfx/kenney/cloth3.ogg",
       "/sfx/kenney/cloth4.ogg"
     ],
-    "licence": "CC0 (Kenney audio packs)"
+    "licence": "CC0 (Kenney audio packs)",
+    "vol": 0.5
   },
   {
     "id": "air-jump",
@@ -272,6 +281,7 @@
       "/sfx/kenney/cloth3.ogg",
       "/sfx/kenney/cloth4.ogg"
     ],
-    "licence": "CC0 (Kenney audio packs)"
+    "licence": "CC0 (Kenney audio packs)",
+    "vol": 0.5
   }
 ]

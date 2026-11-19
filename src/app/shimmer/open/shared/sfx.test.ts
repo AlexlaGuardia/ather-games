@@ -86,6 +86,8 @@ const run = async () => {
   ok(sfx.lowpassFor(0) > sfx.lowpassFor(20) && sfx.lowpassFor(20) > sfx.lowpassFor(500) && sfx.lowpassFor(1e6) >= 900, 'lowpass closes with distance, floor 900 Hz')
   ok(made === 1, `still ONE AudioContext after buses/reverb/panner (made ${made})`)
   row('land').status = was
+  // per-sound level (11-19, Alex: movement too loud): every footstep/movement row carries vol 0.5
+  ok(sfx.SOUNDS.filter(s => s.area === 'footsteps' || s.area === 'movement').every(s => s.vol === 0.5), 'movement sounds at half level')
   console.log(`${pass} passed, ${fails.length} failed`); if (fails.length) { console.log(fails.join('\n')); process.exit(1) }
 }
 void run()

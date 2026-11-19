@@ -11,7 +11,7 @@ export type SoundStatus = 'proposed' | 'yay' | 'nay'
 export type BusName = 'sfx' | 'ui' | 'ambience' | 'music'
 export type AreaName = 'open' | 'glade' | 'town' | 'indoor'
 export interface SoundLayer { files: string[]; chance: number; vol?: number }
-export interface SoundRow { id: string; area: string; status: SoundStatus; note: string; desc?: string; source: 'synth' | 'cc0'; licence?: string; bus?: BusName; files?: string[]; layer?: SoundLayer }
+export interface SoundRow { id: string; area: string; status: SoundStatus; note: string; desc?: string; source: 'synth' | 'cc0'; licence?: string; bus?: BusName; files?: string[]; layer?: SoundLayer; /** this sound's own level, 0..1 (default 1): Alex 11-19 'the player sounds come off too loud' -> movement 0.5 */ vol?: number }
 export const SOUNDS = registry as unknown as SoundRow[]
 export const statusOf = (id: string): SoundStatus | null => SOUNDS.find(s => s.id === id)?.status ?? null
 export const BUSES: BusName[] = ['sfx', 'ui', 'ambience', 'music']
@@ -188,7 +188,7 @@ function run(id: string, o: PlayOpts) {
   const c = audio(), m = masterBus(); if (!c || !m) return
   try {
     const w = wobble(), out = voiceInput(c, m, busOf(row), o.at)
-    const b: Bus = { c, out, t: c.currentTime + 0.003, vol: (o.vol ?? 1) * w.vol, pitch: (o.pitch ?? 1) * w.pitch }
+    const b: Bus = { c, out, t: c.currentTime + 0.003, vol: (o.vol ?? 1) * (row.vol ?? 1) * w.vol, pitch: (o.pitch ?? 1) * w.pitch }
     if (r) { r(b); return }
     const f = nextFile(id, files!); if (f) sample(b, f, 1)
     const L = row.layer
