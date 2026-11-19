@@ -26,7 +26,7 @@ try {
   ok(await poll(async () => (await n('ui-panel-open')) > o0, 15000), 'M opens the map: ui-panel-open played')
   await sleep(1500)
   const t0 = await n('ui-tap')
-  const box = await p.evaluate(() => { const b = [...document.querySelectorAll('button')].find(b => { const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0 }); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, t: b.textContent?.slice(0, 30) } })
+  const box = await p.evaluate(() => { const b = [...document.querySelectorAll('button')].find(b => { const r = b.getBoundingClientRect(); if (r.width <= 0 || r.height <= 0) return false; const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !!top && b.contains(top) })   // the button that is ON TOP (11-19: the first visible one sat under the panel's backdrop); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, t: b.textContent?.slice(0, 30) } })
   if (box) { await p.mouse.click(box.x, box.y); ok(await poll(async () => (await n('ui-tap')) > t0, 8000), `a real button click ticks: ui-tap played ("${box.t}")`) } else ok(false, 'a visible button to click')
   if (await p.evaluate(() => !document.querySelector('[data-panel], [role=dialog]')) && (await n('ui-panel-close')) > c0) ok(true, 'the click closed the panel: ui-panel-close played')
   else { await p.keyboard.press('Escape'); ok(await poll(async () => (await n('ui-panel-close')) > c0, 15000), 'Escape closes it: ui-panel-close played') }
