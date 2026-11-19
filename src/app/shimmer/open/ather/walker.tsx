@@ -11,6 +11,7 @@ import { adsFov, adsLookScale } from '../shared/optics'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { createLoco, tickLocomotion, eyeY, WALK_SPEED, SPEED_CAP, type LocoWorld } from '../shared/locomotion'
+import { tickFeet } from '../shared/sfx'
 import { touch, TOUCH_LOOK_SENS } from '../shared/touch'
 import { getSettings, useSettings, pixelRatioCap } from '../shared/settings'
 
@@ -106,6 +107,7 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
       jumpKey: k.has('Space'), crouchKey: k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyC'), dt,
     }, world)
     if (lc.py < fallY) { onFall(); return }
+    tickFeet(lc, dt)   // footsteps / jump / land: silent until the sound is voted yay
 
     camera.position.set(lc.px, eyeY(lc), lc.pz)
     camera.rotation.set(pitch, yaw, 0, 'YXZ')

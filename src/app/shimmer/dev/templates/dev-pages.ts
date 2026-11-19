@@ -127,6 +127,13 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['hands', 'gloves', 'first person', 'viewmodel', 'tune', 'run', 'jump', 'cast', 'pose'],
   },
   {
+    path: '/shimmer/dev/sounds',
+    title: 'Game sounds',
+    blurb: 'Audition every game sound and vote yay or nay: only a yay plays in the game.',
+    group: 'glass',
+    keywords: ['sound', 'sfx', 'audio', 'footstep', 'vote', 'yay', 'nay'],
+  },
+  {
     path: '/shimmer/dev/guns',
     title: 'The Gun Tuner',
     blurb: 'Place the held gun and the gloves on it: hip, aim, run, fire.',

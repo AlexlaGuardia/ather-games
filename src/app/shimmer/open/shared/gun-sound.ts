@@ -38,7 +38,9 @@ export function resetVoices() { try { localStorage.removeItem(GUN_SOUND_KEY) } c
 
 // ── the engine: one AudioContext, made on the first shot (a shot is always a user gesture's consequence) ──
 let ctx: AudioContext | null = null, master: GainNode | null = null, noiseBuf: AudioBuffer | null = null
-function audio(): AudioContext | null {
+/** The ONE master bus (sfx.ts plays through it too: one context, not two). Valid after audio() returned a context. */
+export const masterBus = (): GainNode | null => master
+export function audio(): AudioContext | null {
   if (typeof window === 'undefined') return null
   try {
     if (!ctx) {
@@ -51,7 +53,7 @@ function audio(): AudioContext | null {
     return ctx
   } catch { return null }
 }
-function noise(c: AudioContext): AudioBuffer {
+export function noise(c: AudioContext): AudioBuffer {
   if (noiseBuf) return noiseBuf
   const n = Math.floor(c.sampleRate * 1.5); noiseBuf = c.createBuffer(1, n, c.sampleRate)
   const d = noiseBuf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1
