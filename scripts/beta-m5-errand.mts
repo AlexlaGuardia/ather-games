@@ -92,6 +92,10 @@ await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 24000
 sees.gate = await text()
 res.born = await tapText(/^BE BORN/); await sleep(6000)
 if (!res.born) await fail('BE BORN', 'tap not found')
+// M29 (11-19): the keeper creator ('Who are you?') follows the birth; a stranger takes the default with a real tap on Looks good
+for (let i = 0; i < 20; i++) { if (await clickSel('[data-creator-done]')) { await sleep(2500); break } await sleep(500) }
+res.creatorPassed = !(await p.$('[data-creator-done]'))
+if (!res.creatorPassed) await fail('creator', 'Looks good did not close the creator')
 const c = await p.$('canvas'); const bx = await c?.boundingBox(); if (bx) await p.mouse.click(bx.x + bx.width / 2, bx.y + bx.height / 2); await sleep(1500)
 const birth = await lsGet('ather:shimmer:birthRune'); res.birth = birth
 const seat = birthSeat(birth), S = SEATS[seat ?? 'enchant']; res.seat = `${S.name} @ ${S.where}`
