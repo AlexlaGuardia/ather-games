@@ -372,6 +372,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   useEffect(() => { liveSolids.combat = c.current; return () => { if (liveSolids.combat === c.current) liveSolids.combat = null } }, [])
   useEffect(() => () => setAmmoFeed(null), [])   // M33: leaving the Wilds, Morel's bubble has no gun to read   // the keeper's walker reads c.pieces as solids (dynamic-solids.ts)
   const [ids, setIds] = useState<{ id: number; kind: string }[]>([])
+  const held = useRef(false)   // M33: the left button really down (trigger is cleared per shot on a semi-auto)
   const trigger = useRef(false), mouseAim = useRef(false), popT = useRef(0), hudT = useRef(0)
   const hud = useRef<CombatHud>({ hp: 100, maxHp: 100, ammo: 12, clip: 12, reloading: false, hurtAt: -9, hitAt: -9, gun: c.current.gun.name, champ: null })
   const roundsMesh = useRef<THREE.InstancedMesh>(null), dropsMesh = useRef<THREE.InstancedMesh>(null), spitsMesh = useRef<THREE.InstancedMesh>(null)
@@ -409,10 +410,10 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   useEffect(() => { if (reloadTick) reload(c.current) }, [reloadTick])
   useEffect(() => {
     const down = (e: MouseEvent) => {
-      if (e.button === 0 && locked.current && !frozen.current) trigger.current = true
+      if (e.button === 0 && locked.current && !frozen.current) { trigger.current = true; held.current = true }
       if (e.button === 2 && locked.current && !frozen.current) mouseAim.current = true   // hold right-click: the sights
     }
-    const up = (e: MouseEvent) => { if (e.button === 0) trigger.current = false; if (e.button === 2) mouseAim.current = false }
+    const up = (e: MouseEvent) => { if (e.button === 0) { trigger.current = false; held.current = false } if (e.button === 2) mouseAim.current = false }
     const menu = (e: MouseEvent) => { if (locked.current) e.preventDefault() }   // right-click is the sights, never the browser menu
     window.addEventListener('contextmenu', menu)
     // R is the STANCE's now (shared/stance.ts: draw / swap / hold to stow); a tap with one gun drawn reloads via reloadTick
@@ -535,9 +536,9 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       const k = C.keeper
       const ch = C.champ
       onHud({ ...hud.current, gun: C.gun.name, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0,
-        firing: armedRef.current && !frozen.current && (trigger.current || touch.fire || k.sinceShot < 0.3),   // a semi-auto clears the trigger per shot
+        firing: armedRef.current && !frozen.current && (held.current || trigger.current || touch.fire),   // raw input; morel.ts adds a wall-clock grace per round
         champ: ch ? { bar: ch.bar, hp: ch.hp, barHp: CHAMP.barHp, bars: CHAMP.bars, open: ch.state !== 'rise' && ch.state !== 'submerge' && ch.state !== 'home' } : null })
-      setAmmoFeed({ ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0, firing: armedRef.current && !frozen.current && (trigger.current || touch.fire || k.sinceShot < 0.3) })
+      setAmmoFeed({ ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0, firing: armedRef.current && !frozen.current && (held.current || trigger.current || touch.fire) })
     }
   })
 

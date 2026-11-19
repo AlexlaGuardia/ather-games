@@ -1,5 +1,5 @@
 // node test: npx tsx src/app/shimmer/open/shared/morel.test.ts
-import { ammoStep, newAmmoWatch, gemGlow, _resetGem, RED_AT, BUBBLE_HOLD, FADE, PULSE, hintStep, newHintWatch, STALL, COOL, AWAY, AWAY_M, MAX_HINTS } from './morel'
+import { ammoStep, newAmmoWatch, gemGlow, _resetGem, RED_AT, BUBBLE_HOLD, FADE, PULSE, SHOT_GRACE, hintStep, newHintWatch, STALL, COOL, AWAY, AWAY_M, MAX_HINTS } from './morel'
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 
@@ -40,6 +40,15 @@ ok(ss.join(',') === 'empty', `a 5-round clip: only 'empty' (${ss.join(',')})`)
 _resetGem()
 const g = newAmmoWatch(12); ammoStep(g, { ammo: 11, clip: 12, firing: true, reloading: false, now: 100 })
 ok(gemGlow(100) === 1 && gemGlow(100 + PULSE / 2) > 0 && gemGlow(100 + PULSE + 0.01) === 0, 'gem pulses on a round change, then fades')
+
+// a semi-auto tap: the trigger is never seen held, but a round leaving shows the bubble (wall-clock grace), then it holds
+{
+  const s2 = newAmmoWatch(12)
+  let q = ammoStep(s2, { ammo: 11, clip: 12, firing: false, reloading: false, now: 200 })
+  ok(q.bubble.show && q.bubble.alpha === 1 && q.bubble.n === 11, 'a tap (no held trigger seen) still shows the bubble')
+  q = ammoStep(s2, { ammo: 11, clip: 12, firing: false, reloading: false, now: 200 + SHOT_GRACE + BUBBLE_HOLD + FADE + 0.05 })
+  ok(!q.bubble.show, 'and it is gone hold + fade after that round, in wall time')
+}
 
 // ── S2 stuck hints ──
 {

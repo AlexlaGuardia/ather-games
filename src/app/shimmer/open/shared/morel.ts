@@ -18,13 +18,15 @@ export const BUBBLE_HOLD = 3
 export const FADE = 0.5
 /** how long a round's pulse lights the gem (s) */
 export const PULSE = 0.35
+/** a round that just left counts as firing for this long (wall s): covers a semi-auto tap between two HUD samples */
+export const SHOT_GRACE = 0.3
 
 export type AmmoSay = 'low' | 'empty'
-export interface AmmoWatch { ammo: number; firingAt: number; releasedAt: number; saidLow: boolean; saidEmpty: boolean; pulseAt: number }
+export interface AmmoWatch { ammo: number; firingAt: number; releasedAt: number; saidLow: boolean; saidEmpty: boolean; pulseAt: number; shotAt: number }
 export interface AmmoIn { ammo: number; clip: number; firing: boolean; reloading: boolean; now: number }
 export interface Bubble { show: boolean; n: number; clip: number; red: boolean; alpha: number; reloading: boolean }
 
-export const newAmmoWatch = (ammo = 0): AmmoWatch => ({ ammo, firingAt: -1e9, releasedAt: -1e9, saidLow: false, saidEmpty: false, pulseAt: -1e9 })
+export const newAmmoWatch = (ammo = 0): AmmoWatch => ({ ammo, firingAt: -1e9, releasedAt: -1e9, saidLow: false, saidEmpty: false, pulseAt: -1e9, shotAt: -1e9 })
 
 /** One look at the gun. Mutates `w`; returns what to draw and, at most once per crossing, what Morel says. */
 export function ammoStep(w: AmmoWatch, a: AmmoIn): { bubble: Bubble; say: AmmoSay | null } {
@@ -32,12 +34,18 @@ export function ammoStep(w: AmmoWatch, a: AmmoIn): { bubble: Bubble; say: AmmoSa
   if (a.ammo !== w.ammo) {
     w.pulseAt = a.now; pulseAt = a.now
     if (a.ammo > w.ammo) { w.saidLow = false; w.saidEmpty = false }   // a reload re-arms both lines
-    else if (a.ammo <= 0 && !w.saidEmpty) { w.saidEmpty = true; w.saidLow = true; say = 'empty' }
-    else if (a.ammo <= RED_AT && w.ammo > RED_AT && a.clip > RED_AT && !w.saidLow) { w.saidLow = true; say = 'low' }
+    else {
+      w.shotAt = a.now
+      if (a.ammo <= 0 && !w.saidEmpty) { w.saidEmpty = true; w.saidLow = true; say = 'empty' }
+      else if (a.ammo <= RED_AT && w.ammo > RED_AT && a.clip > RED_AT && !w.saidLow) { w.saidLow = true; say = 'low' }
+    }
     w.ammo = a.ammo
   }
-  if (a.firing) { w.firingAt = a.now; w.releasedAt = a.now }
-  const since = a.firing ? 0 : a.now - w.releasedAt
+  // firing = the trigger held (raw input) OR a round left within SHOT_GRACE s of WALL time (a semi-auto tap): never the game
+  // clock, which a slow device stretches (a capped frame step makes 0.3 game-seconds last several real ones)
+  const firing = a.firing || a.now - w.shotAt < SHOT_GRACE
+  if (firing) { w.firingAt = a.now; w.releasedAt = a.now }
+  const since = firing ? 0 : a.now - w.releasedAt
   const alpha = since <= BUBBLE_HOLD ? 1 : Math.max(0, 1 - (since - BUBBLE_HOLD) / FADE)
   return { bubble: { show: alpha > 0, n: a.ammo, clip: a.clip, red: a.ammo <= RED_AT, alpha, reloading: a.reloading }, say }
 }
