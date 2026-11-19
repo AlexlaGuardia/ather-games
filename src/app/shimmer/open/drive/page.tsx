@@ -14,6 +14,7 @@ import * as THREE from 'three'
 import { VoxelDayNight } from '../shared/day-night'
 import { createCourser, tickCourser, bodySpeeds, slipAngle, type Courser, type CourserInput, type CourserTune } from '../courser'
 import { GaragePanel, useCourserBuild } from '../garage'
+import { modelById } from '../business/courser-lot'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
 import { TRACK_SIZE, HALF, ROAD_W, SPAWN, JUMP, WHOOPS, baseHeight, jumpHeight, whoopsHeight, trackHeight, ovalOffset, cones } from '../track'
 
@@ -150,7 +151,7 @@ function Driver({ onHud, tuneRef }: { onHud: (h: DriveHud) => void; tuneRef: Rea
   const scripted = useRef<Partial<CourserInput> | null>(null)
   const coneBodies = useRef<ConeBody[]>(makeCones())
   const acc = useRef(0), hudT = useRef(0)
-  const camMode = useRef<'chase' | 'hood'>('chase')
+  const camMode = useRef<'chase' | 'hood' | 'side'>('chase')   // side: M35 look shots only (probe)
   const camPos = useMemo(() => new THREE.Vector3(SPAWN.x, 4, SPAWN.z + 8), [])
   const look = useMemo(() => new THREE.Vector3(), [])
   const shake = useRef(0)
@@ -179,7 +180,7 @@ function Driver({ onHud, tuneRef }: { onHud: (h: DriveHud) => void; tuneRef: Rea
         car.current = c; camPos.set(x + Math.sin(yaw) * 8, trackHeight(x, z) + 3, z + Math.cos(yaw) * 8)
       },
       input: (i: Partial<CourserInput> | null) => { scripted.current = i },
-      cam: (m: 'chase' | 'hood') => { camMode.current = m },
+      cam: (m: 'chase' | 'hood' | 'side') => { camMode.current = m },
     }
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -265,6 +266,8 @@ function Driver({ onHud, tuneRef }: { onHud: (h: DriveHud) => void; tuneRef: Rea
       cam.position.set(camPos.x + (Math.random() - 0.5) * sk + rx2, camPos.y + (Math.random() - 0.5) * sk + ry2, camPos.z)
       look.set(c.x + fx * 4, c.y + 1.0, c.z + fz * 4)
       cam.lookAt(look)
+    } else if (camMode.current === 'side') {   // M35: a side-on look at the body (probe-only, never a key)
+      cam.position.set(c.x - fz * 7, c.y + 1.3, c.z + fx * 7); look.set(c.x, c.y + 0.8, c.z); cam.lookAt(look)
     } else {
       cam.position.set(c.x + fx * 0.4, c.y + 1.25, c.z + fz * 0.4)
       look.set(c.x + fx * 20, c.y + 1.0, c.z + fz * 20)
@@ -280,9 +283,12 @@ function Driver({ onHud, tuneRef }: { onHud: (h: DriveHud) => void; tuneRef: Rea
     }
   })
 
+  // BETA M35: ?model=<lot model id> (business/courser-lot.ts) draws that courser's BODY on the test track (shots, look checks).
+  // The physics stays the Darter's: this is a look preview, not a test of that model's drive.
+  const previewLook = useMemo(() => { if (typeof window === 'undefined') return undefined; const id = new URLSearchParams(window.location.search).get('model'); return id ? modelById(id).look : undefined }, [])
   return (
     <>
-      <DarterModel car={model} steer={steerVis} />
+      <DarterModel car={model} steer={steerVis} look={previewLook} />
       <DriftFx car={car} ground={trackHeight} slip={() => slipAngle(car.current)} />
       <RoadPosts posts={OVAL_POSTS} ground={trackHeight} />
       <Cones bodies={coneBodies} />

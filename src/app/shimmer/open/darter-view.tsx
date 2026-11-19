@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { WHEEL_R } from './courser'
+import { buildCourser, animateCourser } from './courser-model'
 
 function Headlights() {
   const target = useMemo(() => { const o = new THREE.Object3D(); o.position.set(0, 0, -22); return o }, [])
@@ -21,68 +22,31 @@ function Headlights() {
   )
 }
 
-// ── the Darter (placeholder geometry): a low coupe, channel trim and a mana core that glow ──
-/** `look` (M14 courser lots, business/courser-lot.ts): a code-built BLOCKOUT per kind (darter coupe / hauler with a bed /
- *  scrambler riding high / skitter on two wheels), scaled and painted per model. Visual only: the physics never read it.
- *  Absent: the Darter as it always was. Alex models the real ones later. */
+// ── THE COURSER BODIES (BETA M35, Alex's pick 11-19): courser-model.ts builds them (Darter carriage-born, every other kind
+// chunky). This wrapper keeps the old props: `car` is the group the page places, its userData.wheelAngle (the physics' roll at
+// WHEEL_R) and `steer` drive the wheels; speed for the trim and core comes from how fast that angle turns. Visual only.
+/** `look` (M14 courser lots, business/courser-lot.ts): the kind + paint + proportions. Absent: the stock Darter. */
 export function DarterModel({ car, steer, look }: { car: React.MutableRefObject<THREE.Group | null>; steer: React.MutableRefObject<number>
   look?: { kind: 'darter' | 'hauler' | 'scrambler' | 'skitter'; body: string; cabin: string; len: number; wide: number; tall: number } }) {
-  const k = look?.kind ?? 'darter', L = look?.len ?? 1, W = look?.wide ?? 1, T = look?.tall ?? 1
-  const bodyC = look?.body ?? '#2c5a86', cabC = look?.cabin ?? '#1b2c44'
-  const bike = k === 'skitter', lift = k === 'scrambler' ? 0.28 : 0, bw = bike ? 0.55 : 1.82 * W
-  const wheels = useRef<(THREE.Group | null)[]>([])
-  const spinners = useRef<(THREE.Mesh | null)[]>([])
-  useFrame(() => {
+  const key = look ? `${look.kind}|${look.body}|${look.cabin}|${look.len}|${look.wide}|${look.tall}` : 'stock'
+  const rig = useMemo(() => buildCourser(look ?? { kind: 'darter', body: '#2c5a86', cabin: '#1b2c44', len: 1, wide: 1, tall: 1 }), [key])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { rig.root.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.geometry.dispose(); (m.material as THREE.Material).dispose() } }) }, [rig])
+  const last = useRef<{ a: number; mph: number } | null>(null)
+  useFrame(({ clock }, dt) => {
     const g = car.current; if (!g) return
     const ang = (g.userData.wheelAngle as number) ?? 0
-    spinners.current.forEach(w => { if (w) w.rotation.x = -ang })
-    ;[0, 1].forEach(i => { const w = wheels.current[i]; if (w) w.rotation.y = -steer.current })
+    const L = last.current ?? { a: ang, mph: 0 }
+    const mph = dt > 0 ? Math.abs(ang - L.a) * WHEEL_R / dt * 2.237 : L.mph
+    last.current = { a: ang, mph: L.mph + (mph - L.mph) * Math.min(1, dt * 6) }   // eased: the angle steps unevenly frame to frame
+    animateCourser(rig, ang * WHEEL_R / rig.R, steer.current, last.current.mph, clock.elapsedTime, dt)
   })
-  const wx = 0.86 * W, wheelPos: [number, number, number][] = bike
-    ? [[0, WHEEL_R, -1.3 * L], [0, WHEEL_R, 1.25 * L]]
-    : [[-wx, WHEEL_R, -1.3 * L], [wx, WHEEL_R, -1.3 * L], [-wx, WHEEL_R, 1.25 * L], [wx, WHEEL_R, 1.25 * L]]
   return (
     <group ref={car}>
-      <group name="body">
-        <mesh position={[0, 0.62 + lift, 0]}><boxGeometry args={[bw, 0.5 * T, 4.3 * L * (bike ? 0.82 : 1)]} /><meshStandardMaterial color={bodyC} metalness={0.45} roughness={0.32} /></mesh>
-        {k === 'hauler'
-          ? <>{/* a high cab up front and an open bed behind */}
-              <mesh position={[0, 1.15 * T + lift, -1.0 * L]}><boxGeometry args={[1.6 * W, 0.8 * T, 1.5 * L]} /><meshStandardMaterial color={cabC} metalness={0.4} roughness={0.25} /></mesh>
-              <mesh position={[0, 0.98 * T, 1.0 * L]}><boxGeometry args={[1.7 * W, 0.28, 2.0 * L]} /><meshStandardMaterial color={cabC} roughness={0.8} /></mesh></>
-          : bike
-            ? <mesh position={[0, 1.02, 0.25]}><boxGeometry args={[0.42, 0.34, 1.1]} /><meshStandardMaterial color={cabC} metalness={0.4} roughness={0.25} /></mesh>
-            : <mesh position={[0, 0.98 * T + lift, 0.35 * L]}><boxGeometry args={[1.45 * W, 0.42 * T, 1.9 * L]} /><meshStandardMaterial color={cabC} metalness={0.4} roughness={0.25} /></mesh>}
-        <mesh position={[0, 1.0, -0.62]} rotation-x={0.55}><boxGeometry args={[1.42, 0.05, 0.62]} /><meshStandardMaterial color="#7fd4ff" emissive="#2a6f99" emissiveIntensity={0.5} transparent opacity={0.75} /></mesh>
-        {/* channel trim: the rune-lit line canon gives every manalic vehicle */}
-        {[-(bw / 2 + 0.01), bw / 2 + 0.01].map(x => (
-          <mesh key={x} position={[x, 0.6, 0]}><boxGeometry args={[0.04, 0.06, 3.9]} /><meshStandardMaterial color="#d4a843" emissive="#d4a843" emissiveIntensity={1.4} /></mesh>
-        ))}
-        {/* mana core, behind the cabin */}
-        <mesh position={[0, 0.92, 1.75]}><boxGeometry args={[0.7, 0.18, 0.5]} /><meshStandardMaterial color="#6be4ff" emissive="#3ccfff" emissiveIntensity={2} /></mesh>
-        {/* lamps */}
-        {[-0.62, 0.62].map(x => (
-          <mesh key={'h' + x} position={[x, 0.66, -2.16]}><boxGeometry args={[0.38, 0.1, 0.04]} /><meshStandardMaterial color="#fff6dc" emissive="#fff1c4" emissiveIntensity={2} /></mesh>
-        ))}
-        {[-0.66, 0.66].map(x => (
-          <mesh key={'t' + x} position={[x, 0.7, 2.16]}><boxGeometry args={[0.4, 0.08, 0.04]} /><meshStandardMaterial color="#ff4a3a" emissive="#ff2a1a" emissiveIntensity={1.6} /></mesh>
-        ))}
-        {/* headlights that actually light the road: the track at night is the canon night */}
-        <Headlights />
-        {/* underglow */}
-        <mesh position={[0, 0.06, 0]} rotation-x={-Math.PI / 2}><planeGeometry args={[1.7, 4]} /><meshBasicMaterial color="#3ccfff" transparent opacity={0.22} /></mesh>
-      </group>
-      {wheelPos.map((wp, i) => (
-        <group key={i} position={wp} ref={el => { wheels.current[i] = el }}>
-          <mesh ref={el => { spinners.current[i] = el }} rotation-z={Math.PI / 2}>
-            <cylinderGeometry args={[WHEEL_R, WHEEL_R, 0.3, 12]} />
-            <meshLambertMaterial color="#1a1a1e" flatShading />
-          </mesh>
-          <mesh rotation-z={Math.PI / 2} position={[wp[0] < 0 ? -0.16 : 0.16, 0, 0]}>
-            <cylinderGeometry args={[0.2, 0.2, 0.02, 8]} />
-            <meshStandardMaterial color="#d4a843" emissive="#d4a843" emissiveIntensity={0.35} />
-          </mesh>
-        </group>
-      ))}
+      <primitive object={rig.root} />
+      {/* headlights that actually light the road: the track at night is the canon night */}
+      <Headlights />
+      {/* underglow: the mana core's spill on the road */}
+      <mesh position={[0, 0.06, 0]} rotation-x={-Math.PI / 2}><planeGeometry args={[1.7, 4]} /><meshBasicMaterial color="#3ccfff" transparent opacity={0.22} /></mesh>
     </group>
   )
 }
