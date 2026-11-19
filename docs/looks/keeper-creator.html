@@ -53,7 +53,7 @@ const HAIR = ['#1f1914', '#4a3020', '#7a4a26', '#b07a3c', '#d9b770', '#9a9a96', 
 const CLOTH = ['#4f7c8a', '#7a8a4f', '#8a4f4f', '#5a4f8a', '#c9a06a', '#3f3a33', '#d8d0c0', '#2f4a5e']
 const OPT = {
   frame: ['Small', 'Medium', 'Large'], body: ['Joined limbs', 'Floating limbs'], torso: ['Broad', 'Curved'],
-  skin: SKIN, hairStyle: ['Short', 'Tousled', 'Spiky', 'Swept', 'Long', 'Bun', 'Tail', 'Buzz'], hair: HAIR,
+  skin: SKIN, hairStyle: ['Short', 'Tousled', 'Spiky', 'Swept', 'Bob', 'Long', 'Bun', 'Tail'], hair: HAIR,
   eyes: ['Lines', 'Dots', 'Round', 'Bright', 'Wide', 'Happy', 'Sleepy', 'Wink'], brows: ['Soft', 'Bold', 'None'], mouth: ['Smile', 'Grin', 'Smirk', 'Flat', 'Open', 'Cat'],
   topColor: CLOTH, legColor: CLOTH, accent: CLOTH, scarf: ['#b3473a', '#d9a441', '#4f7c8a', '#5a8a4f', '#7a4f8a', '#e9e6df', '#2f2a26'],
 }
@@ -72,6 +72,8 @@ const TORSO = {
   1: [[0.0, 0], [0.19, 0.04], [0.2, 0.22], [0.14, 0.5], [0.17, 0.75], [0.18, 0.88], [0.15, 0.96], [0.07, 1]],
 }
 const torsoGeo = t => new THREE.LatheGeometry(TORSO[t].map(([r, y]) => new THREE.Vector2(r, y)), 24)
+// a hair LOCK: a petal along +y, root at 0, tip at 1 (round at the root, pointed at the tip)
+const LOCK = new THREE.LatheGeometry([[0, 0], [0.5, 0.05], [0.55, 0.22], [0.45, 0.5], [0.25, 0.78], [0.08, 0.95], [0, 1]].map(([r, y]) => new THREE.Vector2(r, y)), 10)
 const INK = new THREE.MeshBasicMaterial({ color: 0x1b140e, side: THREE.BackSide })
 function put(g, geo, color, pos, scale, rot, ink = true) {
   const m = new THREE.Mesh(geo, new THREE.MeshToonMaterial({ color, gradientMap: grad })); m.position.set(...pos); m.scale.set(...scale); if (rot) m.rotation.set(...rot); g.add(m)
@@ -115,26 +117,47 @@ function keeper(o) {
 function headAndFace(g, o, hy, H, hair, skin) {
   put(g, SPH, skin, [0, hy, 0], [H * 0.5, H * 0.55, H * 0.5])
   for (const s of [-1, 1]) put(g, SPH, skin, [s * H * 0.5, hy, 0], [H * 0.08, H * 0.12, H * 0.06])
-  // ── HAIR: one CAP (the top of a sphere, a touch bigger than the head, tipped back to show the forehead) so the crown is
-  //    always covered, then each style adds its pieces. The old cap was a whole sphere sharing the head's top, so the skin
-  //    poked through down the middle.
-  const hs = OPT.hairStyle[o.hairStyle]
-  const CAP = new THREE.SphereGeometry(1, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.56)
-  const capS = hs === 'Buzz' ? 1.015 : 1.07
-  put(g, CAP, hair, [0, hy + H * 0.02, -H * 0.02], [H * 0.5 * capS, H * 0.55 * capS, H * 0.5 * capS], [-0.32, 0, 0], hs !== 'Buzz')
-  const lump = (x, y, z, sx, sy, sz, rot) => put(g, SPH, hair, [x, hy + y, z], [sx, sy, sz], rot)
-  const spike = (x, y, z, h, rx, rz) => put(g, new THREE.ConeGeometry(H * 0.09, h, 8), hair, [x, hy + y, z], [1, 1, 1], [rx, 0, rz])
-  if (hs === 'Short') lump(0, H * 0.36, H * 0.28, H * 0.34, H * 0.1, H * 0.16, [0.5, 0, 0])
-  if (hs === 'Tousled') { // the doodle's: a messy fringe and tufts that stick out at the sides
-    for (let i = 0; i < 5; i++) lump((i - 2) * H * 0.15, H * 0.38 - Math.abs(i - 2) * H * 0.05, H * 0.27, H * 0.11, H * 0.08, H * 0.12, [0.6, 0, (i - 2) * 0.25])
-    for (const s of [-1, 1]) spike(s * H * 0.47, H * 0.18, 0, H * 0.22, 0, -s * 1.1)
-    spike(0, H * 0.62, -H * 0.05, H * 0.18, -0.2, 0.2)
+  // ── HAIR v3 (Alex 11-19: the cap + blobs read bald / helmet-like): hair is LOCKS. Each lock is a tapered petal (round at the
+  //    root, pointed at the tip, flat across) rooted on the scalp and laid along it, standing a little proud so the outline
+  //    breaks. A style = which locks: where they root (around the crown, angle `a` round the head from the front, `p` down
+  //    from the top), how long, how far they lift off the head, and a sideways sweep. A small cap underneath fills the gaps.
+  const hs = OPT.hairStyle[o.hairStyle], R = H * 0.5
+  put(g, new THREE.SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.5), hair, [0, hy + H * 0.02, -H * 0.02], [R * 1.05, H * 0.55 * 1.05, R * 1.05], [-0.4, 0, 0], true)
+  const head = new THREE.Vector3(0, hy, 0)
+  const lock = (a, p, len, wid, lift = 0.15, sweep = 0, grav = 0.6) => {
+    // root on the head ellipsoid; `a` = 0 is the front (+z), positive to the keeper's left
+    const n = new THREE.Vector3(Math.sin(p) * Math.sin(a), Math.cos(p), Math.sin(p) * Math.cos(a)).normalize()
+    const root = head.clone().add(new THREE.Vector3(n.x * R * 0.98, n.y * H * 0.55 * 0.98, n.z * R * 0.98))
+    const down = new THREE.Vector3(Math.cos(p) * Math.sin(a), -Math.sin(p), Math.cos(p) * Math.cos(a)).normalize()   // along the scalp, away from the crown
+    const side = new THREE.Vector3().crossVectors(n, down).normalize()
+    // hair FALLS: the scalp's own direction, pulled toward the ground by `grav`, lifted off the head by `lift`
+    const dir = down.clone().multiplyScalar(Math.max(0, 1 - grav)).addScaledVector(new THREE.Vector3(0, -1, 0), grav).addScaledVector(n, lift).addScaledVector(side, sweep).normalize()
+    const z = new THREE.Vector3().crossVectors(side, dir).normalize(), x = new THREE.Vector3().crossVectors(dir, z).normalize()
+    const m = new THREE.Mesh(LOCK, new THREE.MeshToonMaterial({ color: hair, gradientMap: grad }))
+    m.matrixAutoUpdate = false
+    m.matrix.makeBasis(x.multiplyScalar(wid), dir.multiplyScalar(len), z.multiplyScalar(wid * 0.45)).setPosition(root)
+    g.add(m)
+    const o2 = new THREE.Mesh(LOCK, INK); o2.matrixAutoUpdate = false
+    o2.matrix.copy(m.matrix).multiply(new THREE.Matrix4().makeScale(1.12, 1.06, 1.25)); g.add(o2)
   }
-  if (hs === 'Spiky') for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2; spike(Math.cos(a) * H * 0.26, H * 0.52, Math.sin(a) * H * 0.22 - H * 0.04, H * 0.26, Math.sin(a) * 0.6, -Math.cos(a) * 0.6) }
-  if (hs === 'Swept') lump(H * 0.1, H * 0.34, H * 0.27, H * 0.42, H * 0.12, H * 0.16, [0.55, 0, -0.35])
-  if (hs === 'Long') { lump(0, -H * 0.2, -H * 0.24, H * 0.5, H * 0.62, H * 0.24); for (const s of [-1, 1]) lump(s * H * 0.44, -H * 0.18, H * 0.06, H * 0.1, H * 0.42, H * 0.12); lump(0, H * 0.36, H * 0.28, H * 0.34, H * 0.1, H * 0.16, [0.5, 0, 0]) }
-  if (hs === 'Bun') { lump(0, H * 0.5, -H * 0.22, H * 0.2, H * 0.2, H * 0.2); lump(0, H * 0.36, H * 0.28, H * 0.3, H * 0.08, H * 0.14, [0.5, 0, 0]) }
-  if (hs === 'Tail') { lump(0, -H * 0.12, -H * 0.56, H * 0.13, H * 0.42, H * 0.13, [0.25, 0, 0]); lump(0, H * 0.36, H * 0.28, H * 0.3, H * 0.08, H * 0.14, [0.5, 0, 0]) }
+  const ring = (count, p, len, wid, lift, sweep = 0, from = -Math.PI, to = Math.PI, jit = 0, grav = 0.6) => {
+    for (let i = 0; i < count; i++) {
+      const t = count === 1 ? 0.5 : i / (count - 1), a = from + (to - from) * t, j = jit ? Math.sin(i * 12.9898) * jit : 0
+      lock(a, p, len * (1 + j), wid, lift, sweep, grav)
+    }
+  }
+  const back = Math.PI   // the back of the head
+  // ring(count, p (0 = crown, 1.57 = ear level), length, width, lift, sweep, from, to, jitter, gravity); a = 0 is the front
+  const fringe = (n, len, sweep = 0, grav = 0.75, spread = 0.65, jit = 0) => ring(n, 0.42, len, H * 0.2, 0.12, sweep, -spread, spread, jit, grav)
+  if (hs === 'Short')   { ring(10, 0.8, H * 0.3, H * 0.22, 0.08, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(4, H * 0.28) }
+  if (hs === 'Tousled') { ring(11, 0.75, H * 0.4, H * 0.22, 0.25, 0, 0.6, 2 * Math.PI - 0.6, 0.3, 0.45); fringe(5, H * 0.38, 0.3, 0.55, 0.7, 0.3); for (const a of [-0.5, 0.4, 2.6]) lock(a, 0.2, H * 0.24, H * 0.14, 0.75, 0.2, 0) }
+  if (hs === 'Spiky')   { ring(9, 0.6, H * 0.34, H * 0.18, 0.7, 0, -Math.PI, Math.PI, 0.15, 0); ring(4, 0.22, H * 0.3, H * 0.17, 0.85, 0, -2.4, 2.4, 0, 0) }
+  if (hs === 'Swept')   { ring(10, 0.8, H * 0.32, H * 0.22, 0.08, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(5, H * 0.5, 0.9, 0.35, 0.7) }
+  if (hs === 'Bob')     { ring(14, 0.95, H * 0.62, H * 0.27, 0.22, 0, 0.95, 2 * Math.PI - 0.95, 0, 0.75); fringe(5, H * 0.32, 0, 0.8, 0.75) }
+  if (hs === 'Long')    { ring(14, 0.95, H * 1.15, H * 0.27, 0.2, 0, 1.0, 2 * Math.PI - 1.0, 0.1, 0.85); fringe(5, H * 0.34, 0.2, 0.8, 0.75) }
+  if (hs === 'Bun')     { ring(10, 0.8, H * 0.28, H * 0.22, 0.06, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(3, H * 0.24, 0, 0.8, 0.45); put(g, SPH, hair, [0, hy + H * 0.5, -H * 0.24], [H * 0.21, H * 0.21, H * 0.21]) }
+  if (hs === 'Tail')    { ring(10, 0.8, H * 0.28, H * 0.22, 0.06, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(3, H * 0.24, 0, 0.8, 0.45); for (const d of [-0.2, 0, 0.2]) lock(back + d, 1.05, H * 0.8, H * 0.17, 0.15, 0, 0.9) }
+
   // ── FACE ──
   const INKC = '#1c1712', ey = hy + H * 0.02, ez = H * 0.47, eyes = OPT.eyes[o.eyes]
   const arc = (x, y, r, thick, span, rotZ, color = INKC) => flat(g, new THREE.TorusGeometry(1, thick, 6, 18, span), color, [x, y, ez + H * 0.03], [r, r, r], [0, 0, rotZ])
