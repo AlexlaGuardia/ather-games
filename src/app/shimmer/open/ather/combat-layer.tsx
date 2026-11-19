@@ -15,6 +15,7 @@ import type { CastSpec } from '../../play3d/cast'
 import { touch } from '../shared/touch'
 import { wakeChampion, tellOf, CHAMP } from './champion'
 import { WAKE_R, STRAY_R, type WildsNode } from './nodes'
+import { playShot, playEmpty, playReload } from '../shared/gun-sound'
 
 export interface CombatHud {
   hp: number; maxHp: number; ammo: number; clip: number; reloading: boolean; hurtAt: number; hitAt: number; gun: string
@@ -442,7 +443,13 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     // a CHARGED gun (the Charred Rifle): the pull starts a short charge, the round leaves when it ends (still aimed by the eye)
     const charge = (C.gun as { charge?: number }).charge ?? 0
     // a round out, through the sights' cone when aiming; the held gun reads when it left (recoil, the mark's flare)
-    const shoot = () => { if (fire(C, camera.position, aim, !!sight?.current.ads) && sight) sight.current.firedAt = performance.now() }
+    // ★ every shot SPEAKS (Alex 11-19: a breath / sizzle / discharge per gun, shared/gun-sound.ts); an empty pull sputters
+    const shoot = () => {
+      const wasReloading = C.keeper.reloading > 0
+      if (fire(C, camera.position, aim, !!sight?.current.ads)) { playShot(C.gun.id); if (sight) sight.current.firedAt = performance.now() }
+      else if (C.keeper.ammo <= 0) playEmpty()
+      if (!wasReloading && C.keeper.reloading > 0) playReload()   // the shot that emptied the clip (or the empty pull) started a reload
+    }
     if (charging.current >= 0) {
       charging.current -= dt
       if (charging.current < 0) { camera.getWorldDirection(aim); shoot() }

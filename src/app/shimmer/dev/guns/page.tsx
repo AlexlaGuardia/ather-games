@@ -19,6 +19,7 @@ import { FpGun, ScopeRing, VM, GUN_DEFAULTS, setGunTune, resetGunTune, loadGunTu
 import { RANGE_GUNS, type RangeGun } from '../../open/shared/gunplay'
 import { opticOf } from '../../open/shared/optics'
 import { EYE_STAND } from '../../open/shared/locomotion'
+import { SoundBench } from './sound-bench'
 
 type Preview = 'hip' | 'aim' | 'run' | 'fire'
 const PREVIEWS: { id: Preview; label: string }[] = [{ id: 'hip', label: 'Hip' }, { id: 'aim', label: 'Aim' }, { id: 'run', label: 'Run' }, { id: 'fire', label: 'Fire' }]
@@ -119,6 +120,7 @@ export default function GunTuner() {
           <button style={chip} onClick={() => { resetGunTune(); bump(n => n + 1) }}>Reset to defaults</button>
         </div>
         <pre data-values style={{ marginTop: 8, fontSize: 9, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#8b8598' }}>{values()}</pre>
+        <SoundBench chip={chip} />
       </aside>
       <div style={{ flex: 1, position: 'relative' }}>
         <Canvas camera={{ position: [0, EYE_STAND, 0], fov: 75, near: 0.05, far: 500 }} onCreated={({ camera }) => camera.lookAt(0, EYE_STAND, -10)}>

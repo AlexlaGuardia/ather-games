@@ -120,6 +120,7 @@ const DEVICE_KEYS = [
   'ather:gfx:shimmer',            //   ″
   'ather:roster:anon-declined',   // M12 step 3: "Not now" on the roster prompt, remembered per BROWSER (keeper-prompt.ts)
   'ather:shimmer:genWarned',      // one generator warning per browser is the point of it
+  'open:gun-sound.v1',            // shared/gun-sound.ts GUN_SOUND_KEY: the guns' voices tuned on /shimmer/dev/guns, this machine's
   'open:gun-tune.v1',             // fp-gun.tsx GUN_TUNE_KEY: the /shimmer/dev/guns tuner's live numbers, a dev tool on this machine
   'ather:shimmer:justBorn',       // read and cleared inside one boot
   'ather:shimmer:birthPending',   // vestigial, cleared only so an old latch does not look meaningful
