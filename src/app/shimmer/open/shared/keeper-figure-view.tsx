@@ -6,11 +6,22 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type * as THREE from 'three'
 import { buildKeeper, poseKeeper } from './keeper-figure'
+import { gunProp } from './held-gun-prop'   // M27 slice 4: a peer's held gun on the right hand
 import type { Look } from './keeper-look'
 import type { DollDrive } from './keeper-doll'
 
-export function KeeperFigure({ look, drive, spin = 0, yaw = 0 }: { look: Look; drive?: React.MutableRefObject<DollDrive>; spin?: number; yaw?: number }) {
+export function KeeperFigure({ look, drive, spin = 0, yaw = 0, gun = null }: { look: Look; drive?: React.MutableRefObject<DollDrive>; spin?: number; yaw?: number
+  /** BETA M27 slice 4: a gun id held in the right hand (a remote keeper's), null = hands empty */
+  gun?: string | null }) {
   const body = useMemo(() => buildKeeper(look), [look])
+  // the gun rides the BODY, following 'hand-r' each frame (the hand mesh is scaled to a mitten: a child would shrink with it)
+  const prop = useRef<THREE.Group | null>(null)
+  useEffect(() => {
+    if (!gun) return
+    const g = gunProp(gun); g.rotation.y = Math.PI   // the figure faces +Z; the prop's barrel is built down -Z
+    body.group.add(g); prop.current = g
+    return () => { body.group.remove(g); prop.current = null }
+  }, [gun, body])
   const host = useRef<THREE.Group>(null)
   const t = useRef(0)
   useEffect(() => () => { body.group.clear() }, [body])   // geometry + materials are shared caches: only the meshes go
@@ -26,6 +37,8 @@ export function KeeperFigure({ look, drive, spin = 0, yaw = 0 }: { look: Look; d
       if (spin) h.rotation.y += dt * spin
       poseKeeper(body, t.current, 0)
     }
+    const hand = prop.current && body.group.getObjectByName('hand-r')
+    if (prop.current && hand) prop.current.position.set(hand.position.x, hand.position.y + 0.02, hand.position.z + 0.06)
   })
   return <group ref={host} rotation-y={yaw}><primitive object={body.group} /></group>
 }

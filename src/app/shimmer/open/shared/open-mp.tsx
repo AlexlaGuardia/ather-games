@@ -23,6 +23,8 @@ import { useRoster } from '../../play3d/RemotePlayers'
 import { useParty } from '@/lib/party'
 import { useAccount } from '@/lib/accounts/use-account'
 import { FolkModel, folkLook, FOLK_HEIGHT } from './folk-model'
+import { HELD_KIND, heldDue, newHeldSend, decodeHeld } from './held-gun'   // BETA M27 slice 4
+import { gunProp } from './held-gun-prop'
 
 export const OPEN_WILDS = 'open:wilds', OPEN_CONTINENT = 'open:continent'
 /** Peers drawn on the full rig; the rest are a capsule. */
@@ -48,6 +50,9 @@ export interface OpenNet { zone: string | null; self: string; party: string | nu
   relay: (kind: string, data: unknown, to?: string) => boolean; onRelay: (f: (m: { from: string; kind: string; data: unknown }) => void) => () => void }
 let netBox: OpenNet | null = null
 export const openNet = () => netBox
+// BETA M27 slice 4: what each peer says is in their hand (gun id, or null), and which guns are actually drawn on a rig (checks)
+const peerGuns = new Map<string, string | null>()
+const GUN_SHOWN = new Map<string, string>()
 
 /** true while the tab is visible (the socket only lives then). */
 function useVisible(): boolean {
@@ -61,7 +66,8 @@ function useVisible(): boolean {
 }
 
 /** The page's socket. `zone` null = no socket (the plot, a loading screen). `where()` is read at send time (12 Hz). */
-export function useOpenMultiplayer(zone: string | null, where: () => { x: number; y: number; z: number; yaw: number } | null) {
+/** `held` (BETA M27 slice 4): the gun in this keeper's hand right now (id, or null): the party sees it on our rig. */
+export function useOpenMultiplayer(zone: string | null, where: () => { x: number; y: number; z: number; yaw: number } | null, held?: () => string | null) {
   const visible = useVisible()
   const { party } = useParty()
   const { session } = useAccount()
@@ -72,12 +78,24 @@ export function useOpenMultiplayer(zone: string | null, where: () => { x: number
   const myLook = useLook()
   const mp = useMultiplayer({ enabled: !!zone && visible, zoneId: zone ?? '', posRef, yawRef, party, playerName: session?.username ?? '', sprite: LOOK_SYNC ? LOOK_SPRITE + packLook(myLook) : undefined })
   peersBox.current = mp.peers.current
+  const heldRef = useRef(held); heldRef.current = held
+  useEffect(() => {   // M27 slice 4: say what I hold (change / a newcomer / 10 s keepalive); hear what they hold
+    const off = mp.onRelay(m => { if (m.kind !== HELD_KIND) return; const g = decodeHeld(m.data); if (g !== undefined) peerGuns.set(m.from, g) })
+    const st = newHeldSend()
+    const t = setInterval(() => {
+      const now = performance.now(), live = [...mp.peers.current.values()].filter(p => now - p.lastSeen <= STALE_MS).map(p => p.id)
+      const g = heldRef.current ? heldRef.current() : null
+      if (heldDue(st, g, live, now / 1000)) mp.relay(HELD_KIND, { g })
+    }, 500)
+    return () => { off(); clearInterval(t) }
+  }, [mp.onRelay, mp.relay, mp.peers])
   netBox = { zone, self: mp.selfId.current, party: party ?? null, relay: mp.relay, onRelay: mp.onRelay,
     live: () => { const now = performance.now(); return [...mp.peers.current.values()].filter(p => now - p.lastSeen <= STALE_MS).map(p => p.id) } }
   if (typeof window !== 'undefined') (window as unknown as { __mp?: unknown }).__mp = {
     zone: () => zone, status: () => mp.status.current, party: () => party, me: () => whereRef.current(),
     peers: () => [...mp.peers.current.values()].map(p => ({ id: p.id, name: p.name, x: p.x, y: p.y, z: p.z, tx: p.tx, tz: p.tz, sprite: p.sprite ?? null })),
     figures: () => [...FIGURES],   // M29: peers drawn as their own keeper (look-sync-check)
+    guns: () => Object.fromEntries(peerGuns), gunsShown: () => Object.fromEntries(GUN_SHOWN),   // M27 slice 4 (held-gun-check)
   }
   return mp
 }
@@ -94,6 +112,9 @@ function Plate({ name }: { name: string }) {
 
 function Peer({ peer, rig, seed }: { peer: RemotePlayer; rig: boolean; seed: number }) {
   const g = useRef<THREE.Group>(null)
+  // M27 slice 4: the gun they say they hold (none while stale); rarely changes, so a state is fine
+  const [gun, setGun] = useState<string | null>(null), gunNow = useRef<string | null>(null)
+  useEffect(() => { if (gun) GUN_SHOWN.set(peer.id, gun); else GUN_SHOWN.delete(peer.id); return () => { GUN_SHOWN.delete(peer.id) } }, [gun, peer.id])
   const look = useMemo(() => folkLook(`keeper:${peer.id}`), [peer.id])
   // M29: a peer who sent a packed look draws as their own keeper (LOOK_SYNC; anything else keeps the folk rig)
   const theirs = useMemo(() => (LOOK_SYNC && peer.sprite?.startsWith(LOOK_SPRITE) ? unpackLook(peer.sprite.slice(LOOK_SPRITE.length)) : null), [peer.sprite])
@@ -102,6 +123,8 @@ function Peer({ peer, rig, seed }: { peer: RemotePlayer; rig: boolean; seed: num
     const o = g.current; if (!o) return
     const stale = performance.now() - peer.lastSeen > STALE_MS
     o.visible = !stale
+    const want = stale ? null : (peerGuns.get(peer.id) ?? null)
+    if (want !== gunNow.current) { gunNow.current = want; setGun(want) }
     if (stale) return
     const k = 1 - Math.exp(-LERP * dt)
     peer.x += (peer.tx - peer.x) * k; peer.y += (peer.ty - peer.y) * k; peer.z += (peer.tz - peer.z) * k
@@ -111,12 +134,19 @@ function Peer({ peer, rig, seed }: { peer: RemotePlayer; rig: boolean; seed: num
   })
   return (
     <group ref={g}>
-      {rig && theirs ? <KeeperFigure look={theirs} />
+      {rig && theirs ? <KeeperFigure look={theirs} gun={gun} />
         : rig ? <FolkModel look={look} action={peer.moving ? 'talk' : 'idle'} seed={seed} speed={peer.moving ? 1.6 : 1} />
         : <mesh position={[0, 0.85, 0]}><capsuleGeometry args={[0.3, 0.9, 4, 8]} /><meshLambertMaterial color={look.shirt} /></mesh>}
+      {gun && !(rig && theirs) && <GunAt id={gun} />}
       <Html position={[0, FOLK_HEIGHT + 0.25, 0]} center distanceFactor={12} zIndexRange={[10, 0]}><Plate name={peer.name} /></Html>
     </group>
   )
+}
+
+/** a held gun on a rig that names no hand (the folk rig, the far capsule): at the right side, about hand height */
+function GunAt({ id }: { id: string }) {
+  const g = useMemo(() => { const x = gunProp(id); x.rotation.y = Math.PI; x.position.set(-0.36, 0.9, 0.12); return x }, [id])
+  return <primitive object={g} />
 }
 
 /** Mount inside the Canvas. `me()` = where this keeper stands (who counts as near). */

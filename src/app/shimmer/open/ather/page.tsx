@@ -427,7 +427,8 @@ function AtherSliceGame() {
   const coverSkip = useCallback((x: number, z: number) => placedClear(x, z) || (cl.frame.linked && onPath(cl.frame, x, z)) || Math.hypot(x - GATE.x, z - GATE.z) < 5 || Math.hypot(x - GREG.x, z - GREG.z) < 2.5 || Math.hypot(x - THRESHOLD.x, z - THRESHOLD.z) < 2, [cl.frame, placedClear])
   const ground = useMemo(() => zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : ww ? ww.heightAt : () => 0, [zone, ww, cl.frame])
   // M27: others in the Wilds (shared/open-mp.tsx); the plot is personal, no socket. Feet on the ground the page knows.
-  const mp = useOpenMultiplayer(zone.kind === 'wilds' ? OPEN_WILDS : null, () => { const p = poseRef.current, y = ground(p.x, p.z); return { x: p.x, y: Number.isFinite(y) ? y : 0, z: p.z, yaw: p.yaw } })
+  const mp = useOpenMultiplayer(zone.kind === 'wilds' ? OPEN_WILDS : null, () => { const p = poseRef.current, y = ground(p.x, p.z); return { x: p.x, y: Number.isFinite(y) ? y : 0, z: p.z, yaw: p.yaw } },
+    () => (stanceRef.current.kind === 'weapon' ? heldRef.current : null))   // M27 slice 4: the party sees my gun
   const heightRef = useRef(ground); heightRef.current = ground
   // third person (V): your own keeper, the segmented doll (open/shared/third-person.tsx), driven from the tick below
   const thirdRef = useRef(false), dollDrive = useRef(newDrive()), camRef = useRef<Camera | null>(null)

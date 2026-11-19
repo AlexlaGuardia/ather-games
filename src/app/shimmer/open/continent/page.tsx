@@ -1317,7 +1317,8 @@ function ContinentRideGame() {
   }, [showMap])
   const focus = useRef(new THREE.Vector3())
   // M27: others on the continent (shared/open-mp.tsx): where you stand (or your courser), facing as the walker/driver faces
-  const mp = useOpenMultiplayer(OPEN_CONTINENT, () => ({ x: focus.current.x, y: focus.current.y, z: focus.current.z, yaw: track.current.yaw }))
+  const mp = useOpenMultiplayer(OPEN_CONTINENT, () => ({ x: focus.current.x, y: focus.current.y, z: focus.current.z, yaw: track.current.yaw }),
+    () => continentStance.current.kind === 'weapon' ? heldOf(continentStance.current, getInv()) : null)   // M27 slice 4: the party sees my gun
   // menus free the mouse (on foot it is locked); closing one takes the camera back (shared/menu-lock.ts)
   const canvasEl = useRef<HTMLCanvasElement | null>(null)
   const getCanvas = useCallback(() => canvasEl.current, [])
