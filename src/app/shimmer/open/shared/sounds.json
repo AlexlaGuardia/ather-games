@@ -275,5 +275,30 @@
       "/sfx/kenney/cloth3.ogg",
       "/sfx/kenney/cloth4.ogg"
     ]
+  },
+  {
+    "id": "air-jump",
+    "area": "movement",
+    "status": "proposed",
+    "note": "new 11-19 (Alex asked)",
+    "desc": "Double jump: an airy whoosh up + a soft kick",
+    "source": "synth",
+    "bus": "sfx"
+  },
+  {
+    "id": "rec-air-jump",
+    "area": "movement",
+    "status": "proposed",
+    "note": "new 11-19 (Alex asked)",
+    "desc": "Double jump: recorded cloth swish of the body",
+    "source": "cc0",
+    "licence": "CC0 (Kenney audio packs)",
+    "bus": "sfx",
+    "files": [
+      "/sfx/kenney/cloth1.ogg",
+      "/sfx/kenney/cloth2.ogg",
+      "/sfx/kenney/cloth3.ogg",
+      "/sfx/kenney/cloth4.ogg"
+    ]
   }
 ]

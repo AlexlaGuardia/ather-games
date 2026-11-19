@@ -167,6 +167,7 @@ const RECIPES: Record<string, (b: Bus) => void> = {
   'step-stone': b => { tone(b, 'triangle', 2600, 2300, 0.12, 0.001, 0.025); puff(b, 'highpass', 4000, 1, 0.06, 0.001, 0.012); tone(b, 'triangle', 2100, 1900, 0.09, 0.001, 0.022, 0.04) },   // r2: domino click-clack (Alex)
   'step-wood': b => { tone(b, 'sine', 130, 65, 0.26, 0.002, 0.12); puff(b, 'bandpass', 320, 4, 0.12, 0.002, 0.1); tone(b, 'sawtooth', 210, 260, 0.018, 0.03, 0.14, 0.05) },   // r2: hollow thud + soft creak (Alex)
   'jump': b => { tone(b, 'sine', 95, 50, 0.3, 0.002, 0.09); puff(b, 'lowpass', 500, 0.6, 0.28, 0.003, 0.11); puff(b, 'bandpass', 900, 0.7, 0.1, 0.03, 0.16, 0.03); puff(b, 'bandpass', 2200, 0.7, 0.06, 0.04, 0.14, 0.05) },   // r3: heavier push-off thump + a body swish (r2 + recorded nay)
+  'air-jump': b => { puff(b, 'bandpass', 1600, 0.6, 0.16, 0.015, 0.2); tone(b, 'sine', 330, 620, 0.07, 0.01, 0.16); puff(b, 'lowpass', 700, 0.6, 0.12, 0.004, 0.08) },   // new 11-19: double jump = an airy whoosh up + a soft kick
   'slide': b => { puff(b, 'bandpass', 2400, 0.6, 0.16, 0.02, 0.5); puff(b, 'bandpass', 1100, 0.5, 0.12, 0.03, 0.42, 0.04); puff(b, 'lowpass', 420, 0.6, 0.1, 0.01, 0.3) },   // new 11-19: grassy swoosh fading as the slide bleeds off
   'land': b => { tone(b, 'sine', 120, 60, 0.16, 0.002, 0.08); puff(b, 'lowpass', 700, 0.5, 0.26, 0.012, 0.22); puff(b, 'bandpass', 1100, 0.6, 0.08, 0.02, 0.18, 0.03) },   // r2: pushing dirt (Alex)
   'hit-axe-tree': b => { tone(b, 'triangle', 220, 80, 0.34, 0.001, 0.09); puff(b, 'highpass', 3500, 1, 0.18, 0.001, 0.02); puff(b, 'bandpass', 1300, 1.6, 0.2, 0.001, 0.045) },   // r2: sharper (Alex)
@@ -206,12 +207,13 @@ export type Surface = 'grass' | 'stone' | 'wood'
 export const surfaceUnder = (): Surface => 'grass'
 export const STRIDE = 1.9   // metres of ground covered per footfall
 let strideLeft = STRIDE, wasAir = false
-export interface FeetState { px: number; pz: number; hvx: number; hvz: number; vy: number; airborne: boolean; swimming?: boolean; sliding?: boolean }
+export interface FeetState { px: number; pz: number; hvx: number; hvz: number; vy: number; airborne: boolean; swimming?: boolean; sliding?: boolean; justAirJumped?: boolean }
 let wasSliding = false
 /** One call per walker frame, after the locomotion tick. */
 export function tickFeet(lc: FeetState, dt: number, surface: Surface = surfaceUnder()) {
   const air = lc.airborne && !lc.swimming
   if (air && !wasAir && lc.vy > 0) play('jump')
+  if (lc.justAirJumped) play('air-jump')   // the double jump (one-tick edge from locomotion)
   if (!air && wasAir) { play('land'); strideLeft = STRIDE }
   wasAir = air
   if (lc.sliding && !wasSliding) play('slide')   // the slide's start; no footsteps while it lasts

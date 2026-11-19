@@ -36,6 +36,11 @@ const run = async () => {
     const sl = { ...lc, sliding: true }; voices = 0; sfx.tickFeet(sl, 1 / 30); const first = voices
     voices = 0; for (let i = 0; i < 60; i++) sfx.tickFeet(sl, 1 / 30); ok(first > 0 && voices === 0, `slide: plays once at the start (${first}), then silent, no steps (${voices})`)
     row('step-grass').status = st0; row('slide').status = sl0; sfx.tickFeet(lc, 1 / 30) }
+  // double jump (11-19): plays on the locomotion's one-tick edge, once
+  { const a0 = row('air-jump').status; row('air-jump').status = 'yay'; voices = 0
+    sfx.tickFeet({ ...lc, airborne: true, vy: 3, justAirJumped: true }, 1 / 30); const once = voices; voices = 0
+    sfx.tickFeet({ ...lc, airborne: true, vy: 2, justAirJumped: false }, 1 / 30); ok(once > 0 && voices === 0, `air jump: plays on the edge only (${once}, then ${voices})`)
+    row('air-jump').status = a0; sfx.tickFeet(lc, 1 / 30) }
 
   // ── M36 quality layer ──
   // variant picker: never repeats back-to-back, covers all variants
