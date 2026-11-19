@@ -107,10 +107,17 @@ await p.keyboard.press('KeyE'); await sleep(1500); await tick(3)
 sees.gateToWilds = await text(); await shot('gate-foldmap-wilds')
 // the Wilds stream in behind the page ("The Wilds are still loading." until they have): re-open the map and tap the stop again until it takes
 let inWilds = false; say('tapping the Wilds stop')
-for (let k = 0; k < 40 && !inWilds; k++) {
-  if (!(await p.$('button[title="Gregory\'s waymark"]'))) { await p.keyboard.press('KeyE'); await sleep(1500) }
-  if (!(await clickSel('button[title="Gregory\'s waymark"]'))) { if (k > 3) await fail('gate: fold map offers Gregory\'s waymark', 'no Gregory\'s waymark stop on the fold map'); continue }
-  for (let j = 0; j < 8 && !inWilds; j++) { await tick(2, 500); inWilds = (await A('zone')) === 'wilds' }
+// ★ TAP ONCE, THEN WAIT (11-19 hub): the old loop re-pressed E and re-clicked the stop's old screen spot while the Wilds streamed;
+// once the map had closed or flipped to Athernyx that click could land on a CITY DOOR, which navigates to the continent
+// ('Attempted to use detached Frame'). Now: re-tap ONLY while the game itself says the Wilds are still loading, and only
+// when the fold map is open with Gregory's stop on it.
+const loadingToast = () => p.evaluate(() => /still loading/i.test(document.body.innerText)).catch(() => false)
+for (let k = 0; k < 12 && !inWilds; k++) {
+  if (k === 0 || (await loadingToast())) {
+    if (!(await p.$('button[title="Gregory\'s waymark"]'))) { if ((await A('zone')) !== 'wilds') { await p.keyboard.press('KeyE'); await sleep(1500) } }
+    if ((await A('zone')) !== 'wilds' && !(await clickSel('button[title="Gregory\'s waymark"]'))) { if (k > 3) await fail('gate: fold map offers Gregory\'s waymark', 'no Gregory\'s waymark stop on the fold map'); continue }
+  }
+  for (let j = 0; j < 20 && !inWilds; j++) { await tick(2, 500); inWilds = (await A('zone')) === 'wilds' }
 }
 legs.push("gate -> Wilds: the fold map's Gregory's waymark (game-offered, real tap)")
 if (!inWilds) await fail('gate: arrive in the Wilds', `zone ${await A('zone')} after 40 taps`)
