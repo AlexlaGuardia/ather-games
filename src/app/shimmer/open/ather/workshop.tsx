@@ -17,6 +17,7 @@ import { getInv, setInv, useInv } from '../shared/bag'
 import { countOf, itemDef, makeBait, BAIT_FROM, HOTBAR, SLOTS, type Stack, type Inv } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
 import { GROUND_Y, squareAt, sqId } from './plot'
+import { forestryLevel } from './forestry'
 import { snapCorner, runKeys, canLay, lay, raze, wallBoxes, edgeRect, findRooms, roofMesh, pieceAt, roomAt, toggleDoor, toggleWindow, paintWall, paintFloor, floorOf, WALL_MATS, WALL_MAT_ORDER, ROOF_STYLES, LOW_WALL, DOOR_H, SILL, WIN_TOP, WALL_T, type Corner, type WallMat, type Walls, type RoofStyle, type PlotRoom, type Floors } from './plot-walls'
 import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
@@ -220,6 +221,47 @@ function WallGhost() {
   const d = useWallDrag(), down = useWallsDown()
   if (!d || !d.keys.length) return null
   return <WallRun mat={wallMat} keys={d.keys} ghost={d.erase ? '#ff5a4a' : d.ok ? '#5aa0ff' : '#ff9a3a'} h={down ? LOW_WALL : WALL_H} />
+}
+// ── THE CATALOG (Alex 11-18 brief + 11-19 playtest: 'it should be next to back to keeper'). v1 = the house pieces you
+// can build today, by wood: Walls and Floors in Goldwood / Shimmeroak / Dawnwood, plus Door and Window (cut into a wall,
+// they keep its wood). A wood you can't work yet shows greyed with WHERE it comes from (plain facts: the Forestry level its
+// trees need and the bench that saws its planks), never hidden: the catalog is also the world's shopping list. Have / need on
+// every card. Tapping a lit card picks that tool and wood (the catalog IS the paint picker). Same rule as the 09-27 law:
+// a material is a LOOK, never power.
+const WOOD_GATE: Record<WallMat, number> = { goldwood: 1, shimmeroak: 4, dawnwood: 10 }   // forestry.ts TREE_TIER gates
+function Catalog({ onPick }: { onPick: () => void }) {
+  const inv = useInv(), lvl = forestryLevel()
+  const pick = (t: 'walls' | 'paint' | 'door' | 'window', m?: WallMat) => { setPlacing(null); if (m) { wallMat = m; wdEmit() } setBuildTool(t); onPick() }
+  const card = (key: string, label: string, sub: string, lit: boolean, onClick: () => void, swatch?: string) => (
+    <button key={key} type="button" data-cat={key} data-lit={lit} disabled={!lit} onClick={onClick}
+      style={{ border: 0, borderRadius: 10, padding: '7px 8px', textAlign: 'left', cursor: lit ? 'pointer' : 'default', background: lit ? 'rgba(255,250,235,.96)' : 'rgba(255,250,235,.5)', boxShadow: `inset 0 0 0 1px ${H.rule}`, opacity: lit ? 1 : 0.6, display: 'grid', gridTemplateColumns: swatch ? '18px 1fr' : '1fr', gap: 7, alignItems: 'center', minWidth: 0 }}>
+      {swatch && <i style={{ width: 18, height: 18, borderRadius: 4, background: swatch, display: 'inline-block' }} />}
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'block', font: '700 12px system-ui', color: H.ink }}>{label}</span>
+        <span style={{ display: 'block', fontSize: 10.5, color: H.ink, opacity: 0.75, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</span>
+      </span>
+    </button>
+  )
+  return (
+    <div data-catalog style={{ display: 'grid', gap: 8, padding: '10px', borderRadius: 14, background: 'rgba(255,250,235,.9)', boxShadow: '0 2px 10px rgba(0,0,0,.25)', maxHeight: '52vh', overflowY: 'auto' }}>
+      {(['walls', 'paint'] as const).map(t => (
+        <div key={t} style={{ display: 'grid', gap: 5 }}>
+          <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>{t === 'walls' ? 'Walls · 1 plank a metre' : 'Floors · paint a whole room'}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
+            {WALL_MAT_ORDER.map(m => {
+              const have = countOf(inv, WALL_MATS[m].item), open = lvl >= WOOD_GATE[m] || have > 0
+              const sub = open ? `${have} planks` : `Forestry ${WOOD_GATE[m]} · saw at your Carpentry`
+              return card(`${t}:${m}`, WALL_MATS[m].name, sub, open && (t === 'paint' || have > 0), () => pick(t, m), WALL_MATS[m].color)
+            })}
+          </div>
+        </div>
+      ))}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+        {card('door', 'Door', 'Tap a wall · 2 m · keeps its wood', true, () => pick('door'))}
+        {card('window', 'Window', 'Tap a wall · a crystal pane', true, () => pick('window'))}
+      </div>
+    </div>
+  )
 }
 /** the Walls / Erase tools and the wood picker, in the build bar */
 function WallTools({ owned }: { owned: React.MutableRefObject<ReadonlySet<string>> }) {
@@ -783,20 +825,23 @@ function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: (
 /** Flying (build-mode.tsx): the strip rides along at the top so you can pick the next thing without landing. */
 export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
   const b = useBuildMode(), p = usePlacing(), tool = useBuildTool()
-  const [sel, setSel] = useState<TablePick | null>(null)
+  const [sel, setSel] = useState<TablePick | null>(null), [cat, setCat] = useState(false)
   const ownedRef = useRef(owned); ownedRef.current = owned
   const touchy = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
   // a mouse click on the ground places what is on the pointer
   useEffect(() => { if (!b) return; onBuildTap(() => { if (placing) confirmPlace(ownedRef.current) }); return () => onBuildTap(null) }, [b])
-  useEffect(() => { if (!b) setSel(null) }, [b])
+  useEffect(() => { if (!b) { setSel(null); setCat(false) } }, [b])
   if (!b) return null
   return (
     <div data-build-bar style={{ position: 'fixed', top: typeof window !== 'undefined' && window.innerWidth < 600 ? 112 : 96, left: '50%', transform: 'translateX(-50%)', width: 'min(560px, calc(100vw - 24px))', zIndex: 41, pointerEvents: 'auto', display: 'grid', gap: 6 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 8px', borderRadius: 14, background: 'rgba(255,250,235,.88)', boxShadow: '0 2px 10px rgba(0,0,0,.25)', minWidth: 0 }}>
         <button type="button" data-act="land" onClick={() => { setPlacing(null); exitBuild() }}
           style={{ flex: '0 0 auto', border: 0, borderRadius: 10, padding: '0 10px', height: 52, cursor: 'pointer', background: H.ink, color: '#fff', font: '700 12px system-ui', lineHeight: 1.15 }}>Back to<br />keeper</button>
+        <button type="button" data-act="catalog" aria-pressed={cat} onClick={() => { setSel(null); setCat(c => !c) }}
+          style={{ flex: '0 0 auto', border: 0, borderRadius: 10, padding: '0 10px', height: 52, cursor: 'pointer', background: cat ? H.ink : 'rgba(255,250,235,.95)', color: cat ? '#fff' : H.ink, boxShadow: `inset 0 0 0 1px ${H.rule}`, font: '700 12px system-ui', letterSpacing: '.06em', textTransform: 'uppercase' }}>Catalog</button>
         <BuildStrip sel={sel} onSel={k => { setBuildTool('look'); setSel(s => (s === k ? null : k)) }} size={44} />
       </div>
+      {cat && <Catalog onPick={() => setCat(false)} />}
       <WallTools owned={ownedRef} />
       {sel && <BuildCard k={sel} onBuilt={() => setSel(null)} />}
       {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a wall · a plank a metre · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · the planks come back' : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? 'Pick a wood, then tap a wall (a plank swaps) or a floor (the whole room)' : <>Pick something to build · drag to move · {touchy ? 'pinch' : 'wheel'} to zoom{touchy ? '' : ' · WASD · Q Z turn'}</>}</div>}

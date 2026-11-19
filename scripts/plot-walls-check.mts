@@ -89,6 +89,12 @@ try {
   const s0 = await read()
   ok(s0.planks === 20 && s0.walls.length === 0, `start: 20 planks, no walls (${s0.planks}, ${s0.walls.length})`)
   ok(await goPlan(), 'E at the table, Plan: flying')
+  // the CATALOG (Alex 11-19 playtest): next to Back to keeper; lit/locked cards; a card picks its tool
+  ok(await tap('[data-act="catalog"]') && await poll(() => p.evaluate(() => !!document.querySelector('[data-catalog]'))), 'the Catalog button (beside Back to keeper) opens the catalog')
+  const cards = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>('[data-cat]')].map(e => [e.dataset.cat, { lit: e.dataset.lit === 'true', text: e.textContent ?? '' }])))
+  ok(cards['walls:goldwood']?.lit && /20 planks/.test(cards['walls:goldwood'].text) && cards['walls:dawnwood'] && !cards['walls:dawnwood'].lit && /Forestry 10/.test(cards['walls:dawnwood'].text), `   Goldwood walls lit (20 planks), Dawnwood greyed with where it comes from (${cards['walls:dawnwood']?.text})`)
+  ok(await tap('[data-cat="walls:goldwood"]') && await poll(() => p.evaluate(() => (window as any).__build.tool() === 'walls' && !document.querySelector('[data-catalog]'))), '   a card picks its tool and closes the catalog')
+  await tap('[data-tool="walls"]'); await sleep(300)   // back to look, so the next line proves the bar's own Walls button
   ok(await tap('[data-tool="walls"]'), 'the Walls tool is on the build bar'); await sleep(400)
   await shot('walls-1-tool')
   await drag(); await shot('walls-2-drawn')
