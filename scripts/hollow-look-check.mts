@@ -28,14 +28,27 @@ await wait(8000)
 await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z), GREG_WAYMARK.x + 70, GREG_WAYMARK.z + 10); await wait(6000)
 ok(await poll(async () => typeof (await p.evaluate(() => typeof (window as any).__ather?.combat)) === 'string' && !!(await p.evaluate(() => (window as any).__ather.combat?.())), 60000), 'the fight layer is up in the Wilds')
 await p.evaluate(() => { (window as any).__ather.combat().hollows.length = 0 }); await wait(1500)
-const calls = async () => { let s = 0; for (let k = 0; k < 3; k++) { s += await p.evaluate(() => (window as any).__ather.calls?.() ?? -1); await wait(300) } return s / 3 }
-// draw calls per Hollow: an EMPTY field (strays well up on infected ground, so clear it right before each read), then SIX at once
+// ★ FRAMES, not milliseconds (11-19 sweep: shambler read -0.8 and -1.0, floater 6.5 then 1.7 on the edesk): the drawn bodies follow
+// the sim a frame or more late, and on a 1-2 fps box a 900 ms wait is one frame or none; strays also keep spawning during the
+// wait (a floater pass counted 11 after spawning 6). So every sample first trims the field back to EXACTLY our Hollows (none for
+// the empty read), then waits real frames, then reads; the median of five.
+const frames = (n: number) => p.evaluate((k: number) => new Promise<void>(r => { let i = 0; const f = () => { if (++i >= k) r(); else requestAnimationFrame(f) }; requestAnimationFrame(f) }), n)
+const median = (v: number[]) => [...v].sort((x, y) => x - y)[Math.floor(v.length / 2)]
+const sample = async (keep: number[]) => {
+  const out: number[] = []
+  for (let k = 0; k < 5; k++) {
+    await p.evaluate((ids: number[]) => { const c = (window as any).__ather.combat(); c.hollows = c.hollows.filter((h: { id: number }) => ids.includes(h.id)) }, keep)
+    await frames(4)
+    out.push(await p.evaluate(() => (window as any).__ather.calls?.() ?? -1))
+  }
+  return median(out)
+}
+// draw calls per Hollow: an EMPTY field, then SIX at once
 const per = async (kind: string) => {
-  await p.evaluate(() => { (window as any).__ather.combat().hollows.length = 0 }); await wait(900)
-  const a = await calls()
-  await p.evaluate((k: string) => { const A = (window as any).__ather; A.combat().hollows.length = 0; for (let i = 0; i < 6; i++) A.spawn(-5 + i * 2, -12, k) }, kind); await wait(900)
-  const n = await p.evaluate(() => (window as any).__ather.combat().hollows.length)
-  const b = await calls()
+  const a = await sample([])
+  const ids = await p.evaluate((k: string) => { const A = (window as any).__ather; A.combat().hollows.length = 0; for (let i = 0; i < 6; i++) A.spawn(-5 + i * 2, -12, k); return A.combat().hollows.map((h: { id: number }) => h.id) }, kind) as number[]
+  const b = await sample(ids)
+  const n = ids.length
   return { a, b, n, each: (b - a) / Math.max(1, n) }
 }
 const sh = await per('shambler'), fl = await per('floater')
