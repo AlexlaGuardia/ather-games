@@ -45,8 +45,8 @@ export function borrowedGround(biomeHex: string, step: number): string {
 
 const ENV_W = 64, ENV_H = 32
 const envs = new Map<string, THREE.DataTexture>()
-/** the sky (day palette: the HOUR rides intensity, not the texture) over `groundHex`. Cached per ground colour, never
- *  disposed (shared by every Hollow on that ground). Same curve as voxel3d/sky-env.ts: mix(horizon, zenith, up^0.6) above,
+/** the sky (day palette: the HOUR rides intensity, not the texture) over `groundHex`. Cached per ground colour (shared by
+ *  every Hollow on that ground) until the Wilds are left: releaseGroundEnvs() (M34 heap, 11-19). Same curve as voxel3d/sky-env.ts: mix(horizon, zenith, up^0.6) above,
  *  the ground fading in below the horizon so the highlight sweeps no seam. */
 export function groundEnv(groundHex: string): THREE.DataTexture {
   const hit = envs.get(groundHex); if (hit) return hit
@@ -65,6 +65,14 @@ export function groundEnv(groundHex: string): THREE.DataTexture {
   envs.set(groundHex, t)
   return t
 }
+
+/** Leaving the Wilds (combat-layer.tsx, once the layer has been inactive a moment): every Hollow has unmounted, so no
+ *  material still holds these. dispose() frees the GPU texture AND three's PMREM copy (WebGLCubeUVMaps listens for it);
+ *  clearing the map lets the JS side go. Returns how many were freed. M34 heap, 11-19: ~0.7 MB back at home. */
+export function releaseGroundEnvs(): number { const n = envs.size; for (const t of envs.values()) t.dispose(); envs.clear(); return n }
+/** probe for checks: how many ground envs are cached right now (0 at home) */
+export const groundEnvCount = () => envs.size
+if (typeof window !== 'undefined') (window as unknown as { __goop?: object }).__goop = { envs: groundEnvCount }
 
 /** one Hollow's goop: dark, wet, borrowing. No emissive, ever (the hit flash is an overlay elsewhere). */
 export function goopMaterial(): THREE.MeshStandardMaterial {

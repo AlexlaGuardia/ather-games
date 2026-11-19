@@ -22,7 +22,7 @@ import { play as sfx } from '../shared/sfx'   // M36 batch 2: Hollow sounds (pro
 import { setAmmoFeed } from '../shared/morel'
 import { openNet, openPeers } from '../shared/open-mp'
 import { sharing, hostOf, encodeSnap, applySnap, SNAP_KIND, SNAP_HZ, HIT_KIND, KILL_KIND, encodeHits, decodeHits, newDrops, decodeKills, layDrop, HURT_KIND, encodeHurt, decodeHurt, type Snap, type HitRow, type KillRow } from '../shared/fight-share'   // BETA M28 shared fights   // M33: Morel's bubble reads the gun straight from here
-import { goopMaterial, groundEnv, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'
+import { goopMaterial, groundEnv, releaseGroundEnvs, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'
 import { sprout, poseSprout, lumpyGeometry } from './hollow-body'   // M34: Alex's pick A, the rooted sprout   // M34: no light of its own; borrows the ground
 import { borrowedSky } from '../../voxel3d/sky-env'
 import { dayProgress, daylight } from '../../engine/day-cycle'
@@ -494,6 +494,9 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const nodesRef = useRef(nodes); nodesRef.current = nodes
   const settled = useRef(0)
   useEffect(() => { if (!active) settled.current = 0 }, [active])
+  // M34 heap (11-19): inactive = every Hollow unmounted (the early return below), so the cached ground envs are nobody's.
+  // Free them after a moment, so a waymark fade inside the Wilds does not rebuild them for nothing.
+  useEffect(() => { if (active) return; const t = setTimeout(releaseGroundEnvs, 5000); return () => clearTimeout(t) }, [active])
   const armedRef = useRef(armed); armedRef.current = armed
   // the drawn gun: any range gun (gunplay.ts, which holds the Charred Rifle, Backbone, Roar too) or an engine weapon. A swap
   // takes the new gun's stats and a full clip; a charge in progress is dropped.
