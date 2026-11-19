@@ -6,7 +6,7 @@
  * drifted, so this file is a CACHE OF A COMPUTATION rather than a hand-kept list somebody has to
  * remember to update. `band-derive.ts` says why that distinction is the entire point.
  *
- * Derived against: voxel3d closure 316 files, play3d closure 236 files.
+ * Derived against: voxel3d closure 344 files, play3d closure 275 files.
  */
 export type Band = 'live' | 'legacy' | 'orphan' | 'tool' | 'opaque'
 
