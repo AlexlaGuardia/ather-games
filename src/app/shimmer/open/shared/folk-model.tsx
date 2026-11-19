@@ -18,7 +18,7 @@ import * as THREE from 'three'
 import { EAR } from './keeper-figure'
 
 export type FolkPose = 'stand' | 'sit'
-export type FolkAction = 'idle' | 'talk' | 'wave'
+export type FolkAction = 'idle' | 'talk' | 'wave' | 'walk'   // walk: BETA M32 (Greg's tour), legs swing from the hip
 export interface FolkLook {
   skin: string; hair: string; shirt: string; apron: string | null; trouser: string; boot: string
   /** a robe to the ankles instead of shirt + trousers (Greg) */
@@ -96,6 +96,7 @@ function Part({ geo, color, pos, scale, ink = true, rot }: { geo: THREE.BufferGe
 export function FolkModel({ look, action = 'idle', seed = 0, speed = 1, pose = 'stand' }: { look: FolkLook; action?: FolkAction; seed?: number; speed?: number; pose?: FolkPose }) {
   const head = useRef<THREE.Group>(null), body = useRef<THREE.Group>(null), eyes = useRef<THREE.Group>(null)
   const armL = useRef<THREE.Group>(null), armR = useRef<THREE.Group>(null)
+  const legL = useRef<THREE.Group>(null), legR = useRef<THREE.Group>(null)
   const t0 = useRef(seed * 1.3)
   useFrame((_, dt) => {
     const t = (t0.current += Math.min(0.05, dt) * speed)
@@ -106,10 +107,16 @@ export function FolkModel({ look, action = 'idle', seed = 0, speed = 1, pose = '
       aR = -0.9 + Math.sin(ph) * 0.25; sR = 0.2 + Math.sin(ph * 0.5) * 0.15; yaw = Math.sin(ph * 0.5) * 0.12; pitch = Math.sin(ph) * 0.05
     } else if (action === 'wave') {
       sR = 2.5 + Math.sin(t * 6) * 0.3; roll = 0.08; yaw = 0
+    } else if (action === 'walk') {   // M32: a stride at ~1.9 steps/s (speed scales it); arms counter-swing, a step's bob
+      const ph = t * 6
+      aL = Math.sin(ph) * 0.45; aR = -aL; yaw = 0
     } else {
       aL = Math.sin(t * 1.8) * 0.03; aR = -aL
     }
-    if (body.current) body.current.position.y = Math.sin(t * 1.8) * 0.006
+    const stride = action === 'walk' ? Math.sin(t * 6) * 0.5 : 0
+    if (legL.current) legL.current.rotation.x = -stride
+    if (legR.current) legR.current.rotation.x = stride
+    if (body.current) body.current.position.y = action === 'walk' ? Math.abs(Math.cos(t * 6)) * 0.03 : Math.sin(t * 1.8) * 0.006
     if (head.current) head.current.rotation.set(pitch, yaw, roll)
     if (armL.current) armL.current.rotation.set(aL, 0, -sL)
     if (armR.current) armR.current.rotation.set(aR, 0, sR)
@@ -129,10 +136,10 @@ export function FolkModel({ look, action = 'idle', seed = 0, speed = 1, pose = '
         </group>
       )) : look.robe ? (
         <Part geo={cylOf(0.19, 0.3)} color={look.shirt} pos={[0, (L + 0.06) / 2, 0]} scale={[1, L + 0.06, 1]} />
-      ) : ([-1, 1] as const).map(s => (
-        <group key={s}>
-          <Part geo={cylOf(0.075, 0.085)} color={look.trouser} pos={[s * 0.1, L / 2 + 0.06, 0]} scale={[1, L, 1]} />
-          <Part geo={S} color={look.boot} pos={[s * 0.1, 0.06, 0.04]} scale={[0.1, 0.07, 0.14]} />
+      ) : ([-1, 1] as const).map(s => (   // each leg pivots at its hip (rotation 0 = the old standing pose exactly)
+        <group key={s} ref={s < 0 ? legL : legR} position={[s * 0.1, L + 0.06, 0]}>
+          <Part geo={cylOf(0.075, 0.085)} color={look.trouser} pos={[0, -L / 2, 0]} scale={[1, L, 1]} />
+          <Part geo={S} color={look.boot} pos={[0, -L, 0.04]} scale={[0.1, 0.07, 0.14]} />
         </group>
       ))}
       {/* the body: shirt (+ apron) */}
