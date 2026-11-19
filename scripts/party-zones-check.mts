@@ -57,6 +57,14 @@ await poll(async () => (await mp(a, 'status')) === 'live' && (await mp(a, 'zone'
 await toContinent(b, 'B')
 ok(await poll(async () => (await sees(a, bid)) && (await sees(b, aid))), '3. B follows: on the continent they see each other again')
 const t2 = await goneIn(b, aid, () => a.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'domcontentloaded', timeout: 240000 }))
+if (process.argv.includes('--trace')) {   // why leg 4 is slow: what A is, and how B's copy of A ages
+  for (let k = 0; k < 6; k++) {
+    const A = await a.evaluate(() => { const m = (window as any).__mp, Z = (window as any).__ather?.zone?.(); return { mpZone: m?.zone?.() ?? null, status: m?.status?.() ?? null, page: location.pathname + location.search, atherZone: Z ?? null } }).catch(e => ({ err: String(e).slice(0, 80) }))
+    const B = ((await mp(b, 'peers')) as { id: string; x: number; z: number }[] ?? []).find(q => q.id === aid)
+    console.log(`   trace +${k * 3}s A ${JSON.stringify(A)} · B sees A: ${B ? `${B.x.toFixed(1)},${B.z.toFixed(1)}` : 'no'}`)
+    await sleep(3000)
+  }
+}
 ok(t2 !== null && t2 <= 5, `4. A goes home to the plot (no socket): gone from B's continent in ${t2 ?? '>15'} s (want <= 5)`)
 ok(errs.length === 0, `5. 0 page errors${errs.length ? ': ' + errs.join(' | ') : ''}`)
 await br.close()
