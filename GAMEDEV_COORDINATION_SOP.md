@@ -333,6 +333,21 @@ coord build "what changed"     # acquire lock -> npm run build -> pm2 restart ->
   Hit an unsettled fact → park the build piece, add an `[OPEN]` block, let Alex bridge to /magii.
 - Canon-touching work runs the drift gate: `npm run canon` (safe concurrently — read-only).
 
+## ★ PROD BROWSER CHECKS RUN ON THE ELITEDESK (Alex 11-19, day-to-day SOP)
+> This box has 8 GB and serves the live site; two Chromiums at once (11-19 morning: play's gem-check + sprites' look check)
+> left 2 GB and every lane taking turns on one browser. The EliteDesk (12 cores, ~11 GB free, same tailnet) has Chrome
+> installed at the path every check already expects, and a clone of this repo.
+- **Any check aimed at `https://ather.games` runs there by default:** `tools/edesk-check.sh scripts/<check>.mts [args]`.
+  It pulls `origin/master` on the EliteDesk first, so **push your check before you run it**. The log prints here, exit code
+  = the check's (verified both ways 11-19: beta-m6b PASS -> 0, a missing script -> 1). Screenshots stay on the EliteDesk under
+  `/home/ajin/edesk-out/<check>/` (fetch with `/root/cortex/scripts/elitedesk 'cat ...'` if you need one).
+- **No browser UP/DOWN turn-taking for EliteDesk runs**: lanes may run there at the same time (keep it to ~2-3 at once).
+- **Stays on THIS box:** checks against a lane's devwin (`localhost:320x`; the EliteDesk can't see them), page-shot/bake
+  scripts that write into the repo, and anything else that is not a prod URL. Those keep the one-browser-at-a-time rule.
+- **Fallback:** desktop off / ssh fails -> run the check here as before, browser UP/DOWN by dbr.
+- Chrome there is Chrome for Testing, linked at `/usr/bin/chromium-browser`; swiftshader timing is still a robot's, so
+  frame-time numbers stay "noted, not asserted" either way.
+
 ## Remote render node (cross-machine — the elitedesk)
 > The swarm's `.coord/` board is a SERVER filesystem thing; a window on another box can't share it.
 - The **elitedesk render node** owns the `render` lane: runs `/picaso` (Blender/bpy) on its own clone, **syncs via `origin`** (git push producer + sprite), holds **NO build-lock**, and **never deploys** — the hub pulls its push, wires, and `coord build`s.
