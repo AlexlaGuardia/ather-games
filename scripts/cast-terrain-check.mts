@@ -28,8 +28,9 @@ const mana0 = await p.evaluate(() => (window as any).__ather.mana())
 const mana = await p.evaluate(() => (window as any).__casts.mana())
 // wait for the CAMERA to take the look (play 11-18): the cast aims along the camera's world direction (combat-layer runCast), and
 // at 1-2 fps no frame had applied look(0, -0.25) yet, so the cast went out along the ARRIVAL view (x -0.71, z +0.71, level) and the
-// wall rose along the keeper's line, behind it. __ather.aim() is the camera's own direction (read-only probe).
-await p.waitForFunction(() => { const a = (window as any).__ather.aim?.(); return !!a && a.z < -0.9 && a.y < -0.1 }, { timeout: 30000, polling: 250 })
+// wall rose along the keeper's line, behind it. __ather.camAim() is the camera's own direction (read-only probe; renamed 11-19
+// from `aim`, which the page's forestry hook of the same name overwrote whenever its effect re-ran).
+await p.waitForFunction(() => { const a = (window as any).__ather.camAim?.(); return !!a && a.z < -0.9 && a.y < -0.1 }, { timeout: 30000, polling: 250 })
 await p.keyboard.press('KeyX'); await sleep(300)
 // poll for the raised piece (it lands on a combat frame; fixed reads raced it at load ~6, play 11-18)
 const readPieces = () => p.evaluate(() => { const c = (window as any).__ather.combat(); return { pieces: (c.pieces ?? []).length, cells: (c.pieces ?? []).reduce((n: number, q: any) => n + q.cells.length, 0) } })

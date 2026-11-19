@@ -19,9 +19,11 @@ res.boot = await st()
 await p.keyboard.down('KeyR'); await sleep(80); await p.keyboard.up('KeyR'); await sleep(300); res.tap1 = await st()      // draws
 await p.keyboard.down('KeyR'); await sleep(80); await p.keyboard.up('KeyR'); await sleep(300); res.tap2 = await st()      // two guns now (rifle + Repeater): swaps, stays drawn
 await p.keyboard.press('Digit2'); await sleep(300); res.digitWhileDrawn = await st()                                       // ignored while a weapon is out
-await p.keyboard.down('KeyR'); await sleep(600); res.holding = await st(); await p.keyboard.up('KeyR'); await sleep(300); res.held = await st()   // hold stows
+// HOLD until the stance stows (11-19): the stow is a 350 ms setTimeout and at 1-2 fps it fires late, so a fixed 600 ms hold read as a TAP
+const holdUntilStowed = async () => { await p.keyboard.down('KeyR'); for (let t = 0; t < 5000 && JSON.parse(await st()).kind !== 'stowed'; t += 200) await sleep(200) }
+await holdUntilStowed(); res.holding = await st(); await p.keyboard.up('KeyR'); await sleep(300); res.held = await st()   // hold stows
 await p.keyboard.press('Digit2'); await sleep(300); res.digitStowed = await st()                                          // picks the waymark
-await p.keyboard.down('KeyR'); await sleep(600); await p.keyboard.up('KeyR'); await sleep(300); res.stowItem = await st()   // hold stows the item
+await holdUntilStowed(); await p.keyboard.up('KeyR'); await sleep(300); res.stowItem = await st()   // hold stows the item
 res.speed = String(await p.evaluate(() => (window as any).__ather.speedMult()))
 console.log(JSON.stringify(res))
 const J = (k: string) => JSON.parse(res[k])

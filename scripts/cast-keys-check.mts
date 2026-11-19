@@ -18,6 +18,8 @@ const plates = await p.evaluate(() => document.querySelector('[data-hud="casts"]
 ok(plates.includes('Q') && plates.includes('Firewall') && plates.includes('X') && plates.includes('no word'), `HUD plates: "${plates}"`)
 // a Hollow 6 m ahead, look down at it
 await p.evaluate(() => (window as any).__ather.look(0, -0.25)); await sleep(600)
+// wait for the CAMERA to take the look (11-19: at 1-2 fps a fixed 600 ms cast along the arrival view and the field missed)
+await p.waitForFunction(() => { const a = (window as any).__ather.camAim?.(); return !!a && a.z < -0.9 && a.y < -0.1 }, { timeout: 30000, polling: 250 })
 await p.evaluate(() => { const a = (window as any).__ather; a.combat().hollows.length = 0; a.spawn(0, -6) })
 await sleep(300)
 const mana0 = await p.evaluate(() => (window as any).__ather.mana())
