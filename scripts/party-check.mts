@@ -24,9 +24,13 @@ const open = async (tag: string): Promise<Page> => {
   return p
 }
 const panel = async (p: Page) => {   // O opens Options; its Game tab's "Play together" row opens the panel
-  await p.keyboard.press('KeyO'); await poll(async () => !!(await p.$('[data-panel="options"]')), 10000)
-  await clickText(p, '[data-panel="options"] button', 'Play together')
-  return poll(async () => !!(await p.$('[data-panel="play-together"]')), 10000)
+  for (let i = 0; i < 4; i++) {
+    if (await p.$('[data-panel="play-together"]')) return true
+    if (!(await p.$('[data-panel="options"]'))) { await p.keyboard.press('KeyO'); await poll(async () => !!(await p.$('[data-panel="options"]')), 8000) }   // O TOGGLES: only press it when Options is shut
+    await clickText(p, '[data-panel="options"] button', 'Play together')
+    if (await poll(async () => !!(await p.$('[data-panel="play-together"]')), 6000)) return true
+  }
+  return false
 }
 const toWilds = async (p: Page) => {
   for (let i = 0; i < 30 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds'; i++) {
