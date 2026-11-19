@@ -42,6 +42,7 @@ import { cycleLook, LookChip } from './ground-look'
 import { GroundCover, coverFromUrl } from './ground-cover'
 import { coverClear } from './cover-clear'
 import { useOpenMultiplayer, RemoteKeepers, OPEN_WILDS } from '../shared/open-mp'
+import { OpenSocial } from '../shared/play-together'
 import { ClusterPanel, useCluster } from './cluster-panel'
 import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './cluster'
 import { WildsScene } from './wilds-scene'
@@ -1017,6 +1018,7 @@ function AtherSliceGame() {
       <LookChip />
       {zone.kind === 'wilds' && held === BAIT && <ReelBar api={rinApi} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} />}
+      <OpenSocial />   {/* M27: presence + invites + the Play together panel */}
       <BirthGate />
       {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={litSlot(stance, inv)} isTouch={isTouch} />}
       <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />

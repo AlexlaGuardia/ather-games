@@ -39,6 +39,7 @@ import { smithTalk, templeTalk, beatTalk } from './door-talk'
 import { DoorFolk } from './door-folk-scene'
 import { standOf, headOf, faceOf } from './door-folk'
 import { useOpenMultiplayer, RemoteKeepers, OPEN_CONTINENT } from '../shared/open-mp'
+import { OpenSocial } from '../shared/play-together'
 import { coTalk, boardLine, refusalLine, paidLine, byeLine, loadCoSeen, saveCoSeen, CO_BARK } from '../business/co-lines'
 import type { Beat } from '../business/errand-lines'
 import type { Seat } from '../business/letters'
@@ -1443,6 +1444,7 @@ function ContinentRideGame() {
           ...gunHud.status,
         ]} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} keys={CONTINENT_KEYS} />}
+      <OpenSocial />   {/* M27: presence + invites + the Play together panel */}
       <BirthGate />
       {talkNode && <TalkChoices node={talkNode} phone={hudSize === 'phone'} />}
       {deed?.startsWith('smith:') && <RunesmithPanel seat={deed.slice(6) as Seat} ledger={ledger} setLedger={setLedger} onClose={() => { setDeed(null); setTalk(null) }} onBack={talk ? () => setDeed(null) : undefined} />}

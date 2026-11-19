@@ -29,6 +29,11 @@ export const NEAR_RIGS = 6
 const STALE_MS = 20_000
 const LERP = 10
 
+/** The live peer map, for DOM readers outside the page (the Play together panel's roster). A stable box: it points at the
+ *  mounted page's map (useMultiplayer keeps one Map and clears it, never replaces it). */
+const peersBox: { current: Map<string, RemotePlayer> } = { current: new Map() }
+export const openPeers = () => peersBox as React.RefObject<Map<string, RemotePlayer>>
+
 /** true while the tab is visible (the socket only lives then). */
 function useVisible(): boolean {
   const [v, setV] = useState(true)
@@ -50,6 +55,7 @@ export function useOpenMultiplayer(zone: string | null, where: () => { x: number
   const posRef = useMemo(() => ({ get current() { const w = whereRef.current(); return w ? { x: w.x, y: w.y, z: w.z } : null } }) as React.RefObject<{ x: number; y: number; z: number } | null>, [])
   const yawRef = useMemo(() => ({ get current() { return whereRef.current()?.yaw ?? 0 } }) as React.RefObject<number>, [])
   const mp = useMultiplayer({ enabled: !!zone && visible, zoneId: zone ?? '', posRef, yawRef, party, playerName: session?.username ?? '' })
+  peersBox.current = mp.peers.current
   if (typeof window !== 'undefined') (window as unknown as { __mp?: unknown }).__mp = {
     zone: () => zone, status: () => mp.status.current, party: () => party, me: () => whereRef.current(),
     peers: () => [...mp.peers.current.values()].map(p => ({ id: p.id, name: p.name, x: p.x, y: p.y, z: p.z, tx: p.tx, tz: p.tz })),

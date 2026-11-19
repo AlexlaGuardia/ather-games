@@ -15,6 +15,7 @@ import { useSettings, setSettings, resetSettings, FOV_RANGE, RENDER_RANGE, SENS_
 import { keeperKey } from '@/lib/keeper-local'
 import { BIRTH_KEY } from '../play3d/rune-inventory'
 import { refreshBirth } from './birth-gate'
+import { setPlayTogether } from './shared/play-together'
 import { ACTIONS, RESERVED, useKeymap, keyFor, keyName, setBinding, resetKeymap, setCapturing, installKeymap } from './shared/keymap'
 
 function Toggle({ label, on, onFlip, sub, id }: { label: string; on: boolean; onFlip: () => void; sub?: string; id: string }) {
@@ -98,6 +99,8 @@ export function OpenOptions({ onClose, keys = WALK_KEYS, extraGame }: { onClose:
         game={<>
           <Toggle id="tooltips" label="Tooltips" sub="explanations on hover, and a warning before a buy that is not written for you" on={s.tooltips} onFlip={() => setSettings({ tooltips: !s.tooltips })} />
           {extraGame}
+          {/* M27: the party + friends (shared/play-together.tsx, mounted by the page's <OpenSocial/>) */}
+          <OptionRow onClick={() => { onClose(); setPlayTogether(true) }} label="⚑ Play together" tail="party · friends" />
         </>}
         video={<>
           <OptionHead>View</OptionHead>
