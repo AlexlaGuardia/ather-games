@@ -20,7 +20,7 @@ async function open(tag: string, look: Look): Promise<Page> {
   p.on('pageerror', e => errs.push(`${tag}: ${String(e).slice(0, 180)}`))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.evaluateOnNewDocument((k: string, l: string) => { localStorage.setItem('ather:shimmer:birthRune', 'star'); if (!sessionStorage.getItem('ls')) { sessionStorage.setItem('ls', '1'); localStorage.setItem(k, l) } }, LOOK_KEY, JSON.stringify(look))
-  await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
+  await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg&mp=on`, { waitUntil: 'load', timeout: 240000 })
   ok(await poll(async () => (await p.evaluate(() => (window as any).__ather?.zone?.())) === 'wilds', 240000), `${tag}: in the Wilds`)
   ok(await poll(async () => (await p.evaluate(() => (window as any).__mp?.status?.())) === 'live'), `${tag}: the socket is live`)
   return p
@@ -36,7 +36,7 @@ ok(await poll(async () => (await peerOf(a, bid))?.sprite === 'lk1:' + packLook(B
 ok(await poll(async () => drawn(a, bid), 30000), '2. A draws B as B\'s own keeper figure (not the folk rig)')
 // B changes look and comes back: A gets the new one (a look change reconnects B's socket once)
 await b.evaluate((k: string, l: string) => localStorage.setItem(k, l), LOOK_KEY, JSON.stringify(B2))
-await b.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })   // not a bare reload: the page drops ?waymark= and would land on the plot (no socket)
+await b.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg&mp=on`, { waitUntil: 'load', timeout: 240000 })   // not a bare reload: the page drops ?waymark= and would land on the plot (no socket)
 await poll(async () => (await b.evaluate(() => (window as any).__mp?.status?.())) === 'live', 240000)
 ok(await poll(async () => (await peerOf(a, bid))?.sprite === 'lk1:' + packLook(B2)), `3. B changes look and rejoins: A gets the new one (${(await peerOf(a, bid))?.sprite})`)
 ok(errs.length === 0, `4. 0 page errors${errs.length ? ': ' + errs.join(' | ') : ''}`)

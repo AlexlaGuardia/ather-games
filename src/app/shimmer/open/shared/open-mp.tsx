@@ -54,6 +54,17 @@ export const openNet = () => netBox
 const peerGuns = new Map<string, string | null>()
 const GUN_SHOWN = new Map<string, string>()
 
+// ── checks never land beside a real player (Alex 11-19 saw a solo-fight-check keeper in HIS Wilds) ──
+// An automated browser (navigator.webdriver: puppeteer, playwright) does NOT join PUBLIC matchmaking unless the page was
+// opened with ?mp=on (open-mp-check, look-sync-check: the checks that test public instances). A party is a private instance,
+// so party checks are unchanged. The flag is read ONCE per page and kept: the page drops query params as it goes.
+let mpOptIn: boolean | null = null
+export function publicMpAllowed(): boolean {
+  if (typeof window === 'undefined') return true
+  if (mpOptIn === null) { try { mpOptIn = new URLSearchParams(window.location.search).get('mp') === 'on' } catch { mpOptIn = false } }
+  return mpOptIn || !navigator.webdriver
+}
+
 /** true while the tab is visible (the socket only lives then). */
 function useVisible(): boolean {
   const [v, setV] = useState(true)
@@ -76,7 +87,7 @@ export function useOpenMultiplayer(zone: string | null, where: () => { x: number
   const posRef = useMemo(() => ({ get current() { const w = whereRef.current(); return w ? { x: w.x, y: w.y, z: w.z } : null } }) as React.RefObject<{ x: number; y: number; z: number } | null>, [])
   const yawRef = useMemo(() => ({ get current() { return whereRef.current()?.yaw ?? 0 } }) as React.RefObject<number>, [])
   const myLook = useLook()
-  const mp = useMultiplayer({ enabled: !!zone && visible, zoneId: zone ?? '', posRef, yawRef, party, playerName: session?.username ?? '', sprite: LOOK_SYNC ? LOOK_SPRITE + packLook(myLook) : undefined })
+  const mp = useMultiplayer({ enabled: !!zone && visible && (!!party || publicMpAllowed()), zoneId: zone ?? '', posRef, yawRef, party, playerName: session?.username ?? '', sprite: LOOK_SYNC ? LOOK_SPRITE + packLook(myLook) : undefined })
   peersBox.current = mp.peers.current
   const heldRef = useRef(held); heldRef.current = held
   useEffect(() => {   // M27 slice 4: say what I hold (change / a newcomer / 10 s keepalive); hear what they hold

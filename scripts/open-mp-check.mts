@@ -30,7 +30,7 @@ let pass = false
 try {
   const A = await open('A'), B = await open('B')
   // ── the continent ──
-  for (const p of [A, B]) { await p.goto(`${url}/shimmer/open/continent?hour=12`, { waitUntil: 'load', timeout: 240000 }); await p.waitForFunction(() => !!(window as any).__drive?.state && !!(window as any).__mp, { timeout: 240000, polling: 1000 }) }
+  for (const p of [A, B]) { await p.goto(`${url}/shimmer/open/continent?hour=12&mp=on`, { waitUntil: 'load', timeout: 240000 }); await p.waitForFunction(() => !!(window as any).__drive?.state && !!(window as any).__mp, { timeout: 240000, polling: 1000 }) }
   res.contZone = await mp(A, 'zone')
   if (offline) {
     await sleep(8000)
@@ -47,7 +47,7 @@ try {
     res.plate = await A.evaluate(() => document.querySelectorAll('[data-mp-plate]').length)
     // ── the Wilds: both travel to Greg's waymark ──
     for (const p of [A, B]) {
-      await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 240000 })
+      await p.goto(`${url}/shimmer/open/ather?hour=14&mp=on`, { waitUntil: 'load', timeout: 240000 })
       await p.waitForFunction(() => !!(window as any).__ather?.travel && !!(window as any).__mp, { timeout: 240000, polling: 1000 })
       res[`plotNoSocket_${p === A ? 'A' : 'B'}`] = (await mp(p, 'zone')) === null
       for (let i = 0; i < 30 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds'; i++) {
