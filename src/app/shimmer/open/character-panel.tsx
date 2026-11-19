@@ -4,8 +4,13 @@
 // (the bracelet's tactical slot, the glove's signature slot). Tap a slot and the things you own that fit it drop down
 // under it; tap one to wear it. Attire comes later (Alex: "eventually"). The rules are in shared/loadout.ts.
 
+import { Canvas } from '@react-three/fiber'
+import { KeeperCreator } from './keeper-creator'
+import { KeeperFigure } from './shared/keeper-figure-view'
+import { useLook } from './shared/look-store'
+import { OPT } from './shared/keeper-look'
 import { useState } from 'react'
-import { H, hearthDisplay, Well, HearthLabel } from '../ui/hearth'
+import { H, hearthDisplay, Well, HearthLabel, HearthButton } from '../ui/hearth'
 import { RANGE_GUNS } from './shared/gunplay'
 import { useLoadout, setLoadout, equip, gunsFor, vesselsFor, type OwnedVessel } from './shared/loadout'
 import { opticOf } from './shared/optics'
@@ -140,12 +145,35 @@ function BornOf() {
   )
 }
 
+// BETA M29: the keeper's own figure + Change look (the creator, keeper-creator.tsx)
+function LookCard() {
+  const look = useLook()
+  const [editing, setEditing] = useState(false)
+  return (
+    <div data-look-card className="mb-4 flex items-center gap-3 rounded-[12px] px-3 py-2" style={{ background: 'rgba(255,250,235,.5)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+      <div className="w-[72px] h-[92px] shrink-0 rounded-[10px] overflow-hidden" style={{ background: 'radial-gradient(circle at 50% 35%, #fbf4e4, #e8d8b8)' }}>
+        <Canvas camera={{ position: [0, 1.0, 3.4], fov: 32 }} dpr={[1, 1.5]} onCreated={({ camera }) => camera.lookAt(0, 0.8, 0)}>
+          <hemisphereLight args={['#fff4e0', '#6a7d6e', 0.75]} /><directionalLight position={[2, 3, 2.5]} intensity={1.1} />
+          <KeeperFigure look={look} yaw={-0.35} />
+        </Canvas>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: H.inkFaint }}>Frame</div>
+        <div className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{OPT.frame[look.frame]}</div>
+      </div>
+      <HearthButton small onClick={() => setEditing(true)}><span data-change-look>Change look</span></HearthButton>
+      {editing && <KeeperCreator onDone={() => setEditing(false)} />}
+    </div>
+  )
+}
+
 export function CharacterBody() {
   const [open, setOpen] = useState<SlotId | null>(null)
   const tap = (id: SlotId) => () => setOpen(o => (o === id ? null : id))
   return (
     <div className="px-4 pt-7 pb-4">
       <BornOf />
+      <LookCard />
       <HearthLabel>Weapons</HearthLabel>
       <div className="grid gap-2 mt-1.5 sm:grid-cols-2">
         <Slot id="primary" open={open === 'primary'} onOpen={tap('primary')} />

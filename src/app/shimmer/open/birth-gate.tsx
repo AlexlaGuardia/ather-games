@@ -11,8 +11,10 @@
 // be skipped (the voxel first-entry rule, HANDOFF-first-entry.md). Already born = the gate never shows. The Character
 // tab shows the rune; changing it is a rebirth, which stays a voxel-world act (Options › Dev links there).
 
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { markBornWithoutStick } from './ather/rinsticks'
+import { KeeperCreator } from './keeper-creator'
+import { refreshLook } from './shared/look-store'
 import BirthScreen from '../play3d/birth/BirthScreen'
 import { loadRuneInventory } from '../play3d/rune-inventory'
 import { saveOwnerResolved, SAVE_OWNER_EVENT } from '@/lib/save-slot'
@@ -42,10 +44,12 @@ function BirthGateInner() {
   const b = useBirth()
   const [mounted, setMounted] = useState(false)
   const [closing, setClosing] = useState<number | null>(null)
+  // BETA M29: rune -> LOOK -> born. The creator holds the gate open after the rune; Looks good (or Random + Looks good) closes it
+  const [creating, setCreating] = useState(false), wantLook = useRef(false)
   useEffect(() => { setMounted(true) }, [])
   // a keeper born in another tab, or on the voxel side, closes the gate here too
   useEffect(() => { const s = (e: StorageEvent) => { if (e.key?.endsWith('birthRune')) refreshBirth() }; window.addEventListener('storage', s); return () => window.removeEventListener('storage', s) }, [])
-  useEffect(() => { if (closing === null) return; const t = setTimeout(() => { refreshBirth(); setClosing(null) }, BORN_HOLD_MS); return () => clearTimeout(t) }, [closing])
+  useEffect(() => { if (closing === null) return; const t = setTimeout(() => { refreshBirth(); setClosing(null); if (wantLook.current) { wantLook.current = false; setCreating(true) } }, BORN_HOLD_MS); return () => clearTimeout(t) }, [closing])
   // ★ WAIT FOR WHO IS PLAYING (bug, Alex 11-15: after "Forget my birth rune" the ritual popped on every fast travel, and
   // twice). The rune lives under the ACCOUNT's key, and on a fresh page load the account lands a few frames late
   // (SaveOwnerBoot): until then keeperKey() answers the anonymous key. The gate read that, found it empty, and opened;
@@ -61,12 +65,13 @@ function BirthGateInner() {
     window.addEventListener(SAVE_OWNER_EVENT, on)
     return () => window.removeEventListener(SAVE_OWNER_EVENT, on)
   }, [])
+  if (creating) return <div data-panel="birth-look" onKeyDownCapture={e => e.stopPropagation()}><ReleaseLock /><KeeperCreator first onDone={() => setCreating(false)} /></div>
   if (!mounted || !owner || (b && closing === null)) return null
   return (
     <div data-panel="birth" onKeyDownCapture={e => e.stopPropagation()}>
       {/* the pointer is freed while you choose: a locked mouse cannot click a rune */}
       <ReleaseLock />
-      <BirthScreen onChoose={() => { markBornWithoutStick(); setClosing(Date.now()) }} />   {/* M22: a new keeper earns the first rinstick */}
+      <BirthScreen onChoose={() => { markBornWithoutStick(); refreshLook(); wantLook.current = true; setClosing(Date.now()) }} />   {/* M22: a new keeper earns the first rinstick */}
     </div>
   )
 }

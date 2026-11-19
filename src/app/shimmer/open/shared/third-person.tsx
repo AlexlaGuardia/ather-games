@@ -10,7 +10,9 @@
 // pose, `pullBack` moves the lens. Both pure; the component only mounts the doll and lends the page its camera.
 import { useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { KeeperDoll, type DollDrive } from './keeper-doll'
+import type { DollDrive } from './keeper-doll'
+import { KeeperFigure } from './keeper-figure-view'
+import { useLook } from './look-store'
 import type { KeeperAction } from './keeper-pose'
 
 export const THIRD = { BACK: 3.4, UP: 0.55, CLEAR: 0.35, WALK: 4.2, RUN: 6.5, RUN_AT: 5.2, CAST_MS: 640 } as const
@@ -43,5 +45,7 @@ export const newDrive = (): DollDrive => ({ action: 'idle', rate: 1, x: 0, y: 0,
 export function ThirdPersonBody({ drive, camRef }: { drive: React.MutableRefObject<DollDrive>; camRef: React.MutableRefObject<THREE.Camera | null> }) {
   const { camera } = useThree()
   camRef.current = camera
-  return <KeeperDoll action="idle" drive={drive} />
+  // BETA M29: the keeper's own body (the creator's look, floating limbs) instead of the old jointed doll
+  const look = useLook()
+  return <KeeperFigure look={look} drive={drive} />
 }

@@ -121,6 +121,7 @@ const DEVICE_KEYS = [
   'ather:roster:anon-declined',   // M12 step 3: "Not now" on the roster prompt, remembered per BROWSER (keeper-prompt.ts)
   'ather:shimmer:genWarned',      // one generator warning per browser is the point of it
   'open:gun-sound.v1',            // shared/gun-sound.ts GUN_SOUND_KEY: the guns' voices tuned on /shimmer/dev/guns, this machine's
+  'open:gun-tune.v2',             // fp-gun.tsx GUN_TUNE_KEY since 11-19: the tuner's moves PER GUN (a map), this machine's
   'open:gun-tune.v1',             // fp-gun.tsx GUN_TUNE_KEY: the /shimmer/dev/guns tuner's live numbers, a dev tool on this machine
   'ather:shimmer:justBorn',       // read and cleared inside one boot
   'ather:shimmer:birthPending',   // vestigial, cleared only so an old latch does not look meaningful
@@ -398,7 +399,7 @@ const OWNERS: Record<string, string> = {
   'ather:shimmer:seen:': 'voxel3d/discovery.ts', 'voxel3d:tutorial:': 'voxel3d/tutorial.ts', 'voxel3d:recipes:': 'voxel3d/recipe-book.ts',
   'voxel3d:mist:': 'voxel3d/mist-encounter.ts', 'voxel3d:pots:': 'voxel3d/VoxelWorld.tsx',
   'voxel3d:saplings:': 'voxel3d/VoxelWorld.tsx', 'voxel3d:grown:': 'voxel3d/VoxelWorld.tsx', 'voxel3d:leafdecay:': 'voxel3d/VoxelWorld.tsx',
-  'open.inv.v1': 'open/shared/inventory.ts', 'open.loadout.v1': 'open/shared/loadout.ts', 'open.fleet.v1': 'open/shared/fleet.ts', 'open.pack.v1': 'open/ather/backpack.ts', 'open.rinquest.v1': 'open/ather/rinquest.ts', 'open.sights.v1': 'open/shared/sight-looks.ts', 'open.skills.v1': 'open/ather/forestry.ts',   // M12 step 1
+  'open.inv.v1': 'open/shared/inventory.ts', 'open.loadout.v1': 'open/shared/loadout.ts', 'open.fleet.v1': 'open/shared/fleet.ts', 'open.pack.v1': 'open/ather/backpack.ts', 'open.rinquest.v1': 'open/ather/rinquest.ts', 'open.look.v1': 'open/shared/keeper-look.ts', 'open.sights.v1': 'open/shared/sight-looks.ts', 'open.skills.v1': 'open/ather/forestry.ts',   // M12 step 1
 }
 ok(Object.keys(OWNERS).length === KEEPER_KEYS.length,
    `every registered key names an owning module (${Object.keys(OWNERS).length} vs ${KEEPER_KEYS.length}) — a new key needs a row here`)
