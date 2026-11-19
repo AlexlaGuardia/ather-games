@@ -1,0 +1,264 @@
+<title>Hollow Look Options</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=Nunito:wght@400;600&display=swap">
+<style>
+/* BETA M34 mock board (sprites, 11-19). Three body options for the Hollows, each showing the three densities side by side
+   (warden / stalker / caster), live, in three.js r128 like the game's code-built models. Built against CANON
+   design-briefs/hollows.md: one grey substance, a nucleus it gathers on, upright + rooted, no face, NO EMISSION (the sheen is
+   the scene's own light via an environment map built from the chosen ground), dispersal = cohesion lost + a bloom of the
+   ground's colour from the floor. */
+:root {
+  --bg: #f1ece3; --plate: #fffaf2; --ink: #2e2318; --ink-soft: #6b5238; --rule: #dccfbd; --accent: #8a5a2b; --chip: #efe6d8;
+  --display: "Chakra Petch", "Segoe UI", system-ui, sans-serif; --body: "Nunito", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15130f; --plate: #201c16; --ink: #f0e6d6; --ink-soft: #b9a68a; --rule: #3a3227; --accent: #e0a865; --chip: #2a251d; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #15130f; --plate: #201c16; --ink: #f0e6d6; --ink-soft: #b9a68a; --rule: #3a3227; --accent: #e0a865; --chip: #2a251d; color-scheme: dark }
+* { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5 }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+h1 { font-family: var(--display); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; font-size: 1.35rem; margin: 0 0 6px; text-wrap: balance }
+.lede { color: var(--ink-soft); max-width: 72ch; margin: 0 0 16px }
+.bar { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 0 0 18px; position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 8px 0 }
+.grp { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+.lbl { font-family: var(--display); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); margin-right: 2px }
+button { font: 600 .85rem var(--body); color: var(--ink); background: var(--chip); border: 1px solid var(--rule); border-radius: 999px; padding: 6px 12px; cursor: pointer; min-height: 34px }
+button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--plate) }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px }
+.card { background: var(--plate); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; min-width: 0 }
+canvas { display: block; width: 100%; aspect-ratio: 4 / 3; max-width: 100%; cursor: grab; touch-action: none }
+.meta { padding: 12px 14px 14px; display: grid; gap: 6px }
+.tag { font-family: var(--display); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+.name { font-family: var(--display); font-weight: 600; font-size: 1.05rem; letter-spacing: .04em }
+.note { font-size: .9rem; margin: 0 }
+.tell { font-size: .84rem; margin: 0; color: var(--ink-soft) }
+.foot { margin-top: 22px; color: var(--ink-soft); font-size: .88rem; max-width: 76ch }
+.foot li { margin-bottom: 4px }
+</style>
+
+<div class="wrap">
+  <h1>Hollow look options</h1>
+  <p class="lede">Three bodies for the Hollows, each shown in all three densities: warden (most gathered), stalker, and the floating caster. Same grey goop in every option; what differs is the build and how the attack is telegraphed. Drag a card to turn it. Play the actions to compare the tell, the hit and the death.</p>
+  <div class="bar" role="toolbar" aria-label="Board controls">
+    <div class="grp" id="g-ground"><span class="lbl">Ground</span></div>
+    <div class="grp" id="g-act"><span class="lbl">Play</span></div>
+    <div class="grp" id="g-dist"><span class="lbl">View</span></div>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="foot">
+    <p><b>Held for every option (from the brief, not a choice):</b></p>
+    <ul>
+      <li>No light of its own. Today's game Hollow glows faintly grey (an emissive), which the brief bars; all three options drop it. The shine you see is the ground's own colour reflected, so a Hollow on a tended plot looks wet and gold, and one in a greyfield looks dry and hard to see. Switch the ground to compare.</li>
+      <li>One substance gathered on a seed: a denser core, the edges always shedding drips that fall and are drawn back.</li>
+      <li>No face, no kit. The head only tilts.</li>
+      <li>The death is cohesion lost: it sags flat, then the ground's own colour blooms up from the floor where it stood.</li>
+      <li>Hit: the body is knocked back and a lump flies off and crawls home. The board also shows a brief white flash; the brief bars a Hollow owning light, so the flash is your call (it can go and the knock-back alone carries the hit).</li>
+    </ul>
+    <p>At 30 m (the View switch) the camera really stands 30 m off with the game's lens, so the figures are as small as a phone shows them; that is the size the silhouette has to work at. The option you pick replaces the game's blob body; today's body stays live until then.</p>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const OPTIONS = [
+  { id: 'sprout', tag: 'Option A', name: 'Rooted sprout',
+    note: 'Short legs, heavy heels, a fat core low in the chest. Reads as something that grew up out of the ground. The warden is nearly as wide as it is tall.',
+    tell: 'Tell: the whole body draws IN toward the core and rises up tall, then falls forward onto you. Shape change you can read from far off.',
+    p: { h: 1.0, w: 1.0, leg: 0.42, arm: 0.55, armDrop: 0.95, coreY: 0.85, hunch: 0.15, tell: 'gather' } },
+  { id: 'reach', tag: 'Option B', name: 'Long reach',
+    note: 'Keeper-tall and thin, with long arms that hang to the knee. The most person-like outline, which is the wrongness the brief asks for.',
+    tell: 'Tell: one arm lifts and stretches toward you, the head tips down after it. The arm is the signal.',
+    p: { h: 1.15, w: 0.8, leg: 0.6, arm: 0.85, armDrop: 0.6, coreY: 1.05, hunch: 0.05, tell: 'reach' } },
+  { id: 'slump', tag: 'Option C', name: 'Slump',
+    note: 'Top-heavy: big drooping shoulders over thin legs, always about to fall forward. The heaviest silhouette at distance.',
+    tell: 'Tell: it straightens up to its full height (as if reaching for light), holds, then topples into the lunge.',
+    p: { h: 1.05, w: 1.15, leg: 0.5, arm: 0.6, armDrop: 0.85, coreY: 1.15, hunch: 0.35, tell: 'rise' } },
+]
+// grounds: what the Hollow borrows from (sky + ground colours build its environment map; nothing on the body emits)
+const GROUNDS = {
+  plot:  { label: 'Tended plot', sky: 0x9fc6e8, horizon: 0xf2dcae, ground: 0xd9a441, floor: 0x8fae5a, bloom: 0xe8c45a, sun: 1.0, amb: 0.55, fog: 0xe9e1c8 },
+  grey:  { label: 'Greyfield', sky: 0xa9adb1, horizon: 0x9a9da0, ground: 0x6e7174, floor: 0x7c7f82, bloom: 0x9fb86a, sun: 0.75, amb: 0.5, fog: 0xa3a6a9 },
+  night: { label: 'Night', sky: 0x0d1630, horizon: 0x33406a, ground: 0x1b2117, floor: 0x26301f, bloom: 0x6fae6a, sun: 0.12, amb: 0.22, fog: 0x141c33 },
+}
+const ACTS = [['idle', 'Idle'], ['tell', 'Wind-up'], ['hit', 'Hit'], ['die', 'Disperse']]
+const DIST = [['near', 'Close'], ['far', '30 m']]
+let ground = 'plot', dist = 'near'
+const cards = []
+
+function chip(gid, items, cur, on) {
+  const g = document.getElementById(gid)
+  const bs = items.map(([v, l]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = l; b.setAttribute('aria-pressed', String(v === cur)); b.onclick = () => { bs.forEach(x => x.setAttribute('aria-pressed', String(x === b))); on(v) }; g.appendChild(b); return b })
+}
+chip('g-ground', Object.entries(GROUNDS).map(([k, v]) => [k, v.label]), ground, v => { ground = v; cards.forEach(c => c.setGround()) })
+chip('g-dist', DIST, dist, v => { dist = v; cards.forEach(c => c.setDist()) })
+{ const g = document.getElementById('g-act'); ACTS.forEach(([v, l]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = l; b.onclick = () => cards.forEach(c => c.play(v)); g.appendChild(b) }) }
+
+// ── the environment a Hollow borrows: a big sphere, sky above, ground colour below, PMREM'd per ground ────────────────
+function envFor(renderer, G) {
+  const s = new THREE.Scene(), geo = new THREE.SphereGeometry(10, 32, 16), col = [], c = new THREE.Color()
+  const top = new THREE.Color(G.sky), hor = new THREE.Color(G.horizon), bot = new THREE.Color(G.ground)
+  for (let i = 0; i < geo.attributes.position.count; i++) {
+    const y = geo.attributes.position.getY(i) / 10
+    if (y > 0) c.copy(hor).lerp(top, Math.min(1, y * 1.6)); else c.copy(hor).lerp(bot, Math.min(1, -y * 3))
+    col.push(c.r, c.g, c.b)
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
+  s.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })))
+  const pm = new THREE.PMREMGenerator(renderer), t = pm.fromScene(s, 0.04).texture; pm.dispose(); return t
+}
+
+// goop is never a clean sphere: a lumpy one, shared by every blob (each blob also wobbles on its own clock)
+const LUMPY = (() => { const g = new THREE.SphereGeometry(1, 20, 14), v = new THREE.Vector3(), a = g.attributes.position
+  for (let i = 0; i < a.count; i++) { v.fromBufferAttribute(a, i); const n = 1 + 0.09 * Math.sin(v.x * 5.1 + v.y * 2.3) * Math.cos(v.z * 4.7 - v.y * 3.1) + 0.05 * Math.sin(v.y * 9 + v.x * 3); v.multiplyScalar(n); if (v.y < -0.4) v.y -= (-(v.y) - 0.4) * 0.35; a.setXYZ(i, v.x, v.y, v.z) }
+  g.computeVertexNormals(); return g })()
+// a hanging drip: a teardrop that stretches, lets go, and grows back
+const TEAR = (() => { const g = new THREE.SphereGeometry(1, 10, 8), a = g.attributes.position; for (let i = 0; i < a.count; i++) { const y = a.getY(i); if (y < 0) { const k = 1 + y * 0.75; a.setX(i, a.getX(i) * k); a.setZ(i, a.getZ(i) * k); a.setY(i, y * 2.2) } } g.computeVertexNormals(); return g })()
+// ── one Hollow: blobs gathered on a nucleus. density 1 = warden, 0.6 = stalker, 0.3 = caster (floats, the reach is dense)
+function makeHollow(P, density, mat) {
+  const root = new THREE.Group(), body = new THREE.Group(); root.add(body)
+  const S = LUMPY
+  const blob = (x, y, z, sx, sy, sz, parent = body) => { const m = new THREE.Mesh(S, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.userData.base = { x, y, z, sx, sy, sz }; parent.add(m); return m }
+  const floats = density < 0.4
+  const H = P.h * (0.82 + density * 0.18), W = P.w * (0.55 + density * 0.55)
+  const parts = { legs: [], arms: [], drips: [], torso: [] }
+  const legH = floats ? 0 : P.leg * H
+  const coreY = floats ? 1.15 : P.coreY * H
+  // the seed: the densest point (a slightly larger, darker blob deep in the chest)
+  parts.core = blob(0, coreY, 0, 0.2 * W, 0.22 * W, 0.2 * W)
+  // the torso: a stack of blobs thinning upward (a caster barely has one)
+  const n = floats ? 2 : 4
+  for (let k = 0; k < n; k++) {
+    const f = k / Math.max(1, n - 1), y = (floats ? coreY - 0.1 : legH + 0.12) + f * (coreY + 0.32 * H - (floats ? coreY - 0.1 : legH + 0.12))
+    const r = (floats ? 0.16 : 0.27) * W * (1 - f * 0.25) * (k === 1 ? 1.08 : 1)
+    parts.torso.push(blob((k % 2 ? 0.03 : -0.03), y, P.hunch * f * 0.25, r, r * 1.15, r * 0.9))
+  }
+  // the head: a lump that only tilts
+  parts.head = blob(0, coreY + 0.52 * H, P.hunch * 0.3, 0.17 * Math.max(0.8, W), 0.19 * Math.max(0.8, W), 0.17 * Math.max(0.8, W))
+  // legs: plantigrade, heavy heels (walkers only)
+  if (!floats) for (const s of [-1, 1]) {
+    const leg = new THREE.Group(); leg.position.set(s * 0.13 * W, legH, 0); body.add(leg)
+    blob(0, -legH * 0.45, 0, 0.1 * W, legH * 0.55, 0.11 * W, leg)
+    blob(0, -legH + 0.05, 0.05, 0.13 * W, 0.07, 0.19 * W, leg)   // the heel-heavy foot
+    parts.legs.push(leg)
+  }
+  // arms: hang forward; a caster's reaching arm is the only solid part of it
+  for (const s of [-1, 1]) {
+    const arm = new THREE.Group(); arm.position.set(s * 0.27 * W, coreY + 0.28 * H, 0.02); arm.rotation.x = -0.25; arm.rotation.z = s * 0.12; body.add(arm)
+    const L = P.arm * H * (floats && s > 0 ? 1.15 : 1), thick = floats ? (s > 0 ? 0.08 : 0.035) : 0.07 * Math.max(0.8, W)
+    blob(0, -L * 0.45 * P.armDrop, 0.05, thick, L * 0.5, thick, arm)
+    blob(0, -L * 0.92 * P.armDrop, 0.08, thick * 1.35, thick * 1.5, thick * 1.35, arm)
+    parts.arms.push(arm)
+  }
+  // hanging drips: under each hand and under the body, stretching until they let go
+  parts.tears = []
+  const tear = (parent, x, y, z, r) => { const m = new THREE.Mesh(TEAR, mat); m.position.set(x, y, z); m.scale.setScalar(r); m.userData.r = r; m.userData.y = y; m.userData.ph = Math.random(); parent.add(m); parts.tears.push(m) }
+  parts.arms.forEach(arm => { const hand = arm.children[1]; tear(arm, hand.position.x, hand.position.y - hand.scale.y * 0.9, hand.position.z, hand.scale.x * 0.55) })
+  parts.torso.slice(0, 2).forEach((b, k) => tear(body, b.position.x + (k ? 0.12 : -0.1) * W, b.position.y - b.scale.y * 0.8, b.position.z + 0.08, 0.05 * Math.max(0.8, W)))
+  // drips: shed off the edges, fall, and crawl back toward the seed
+  const dr = floats ? 7 : 4 + Math.round(density * 4)
+  for (let k = 0; k < dr; k++) { const d = blob(0, 0, 0, 0.045, 0.06, 0.045); d.userData.ph = Math.random(); d.userData.a = Math.random() * Math.PI * 2; parts.drips.push(d) }
+  // the shadow it stands in (no puddle colour: the ground's own, darkened)
+  const sh = new THREE.Mesh(new THREE.CircleGeometry(0.42 * Math.max(0.7, W), 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }))
+  sh.rotation.x = -Math.PI / 2; sh.position.y = 0.01; root.add(sh)
+  return { root, body, parts, floats, H, W, coreY, legH, density, sh }
+}
+
+function makeCard(O, idx) {
+  const card = document.createElement('div'); card.className = 'card'
+  const cv = document.createElement('canvas'); card.appendChild(cv)
+  const meta = document.createElement('div'); meta.className = 'meta'
+  meta.innerHTML = `<span class="tag">${O.tag}</span><span class="name">${O.name}</span><p class="note">${O.note}</p><p class="tell">${O.tell}</p>`
+  card.appendChild(meta); document.getElementById('grid').appendChild(card)
+
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true })
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); renderer.outputEncoding = THREE.sRGBEncoding
+  const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(38, 4 / 3, 0.1, 200)
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5), sun = new THREE.DirectionalLight(0xffffff, 1); sun.position.set(3, 6, 4)
+  scene.add(hemi, sun)
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(60, 48), new THREE.MeshLambertMaterial({ color: 0x8fae5a })); floor.rotation.x = -Math.PI / 2; scene.add(floor)
+  // the goop: dead flat dark diffuse, very smooth (wet), NO emissive. Its shine is the envMap = the ground it stands on.
+  const mat = new THREE.MeshStandardMaterial({ color: 0x050506, roughness: 0.2, metalness: 0.0, envMapIntensity: 1.6 })   // r128 reads hex as LINEAR: 0x050506 is the dead dark the brief means
+  const flashMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false })
+  const bloom = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.5, 32), new THREE.MeshBasicMaterial({ color: 0xe8c45a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }))
+  bloom.rotation.x = -Math.PI / 2; bloom.position.y = 0.02
+  const H3 = [makeHollow(O.p, 1.0, mat), makeHollow(O.p, 0.6, mat), makeHollow(O.p, 0.3, mat)]
+  H3.forEach((h, k) => { h.root.position.x = (k - 1) * 1.35; h.root.userData.x0 = h.root.position.x; scene.add(h.root) })
+  const blooms = H3.map(h => { const b = bloom.clone(); b.material = bloom.material.clone(); b.position.x = h.root.position.x; scene.add(b); return b })
+  let yaw = 0.35, act = 'idle', t0 = 0
+  const setGround = () => {
+    const G = GROUNDS[ground]
+    scene.background = new THREE.Color(G.sky); scene.fog = new THREE.Fog(G.fog, 20, 70)
+    floor.material.color.set(G.floor); hemi.color.set(G.sky); hemi.groundColor.set(G.ground); hemi.intensity = G.amb; sun.intensity = G.sun
+    if (mat.envMap) mat.envMap.dispose(); mat.envMap = envFor(renderer, G); mat.needsUpdate = true
+    blooms.forEach(b => b.material.color.set(G.bloom))
+  }
+  const setDist = () => { cam.fov = 38; cam.updateProjectionMatrix() }   // 30 m: the same lens, the camera really 30 m off: the TRUE size a phone sees
+  const play = a => { act = a; t0 = performance.now() / 1000 }
+  setGround(); setDist()
+  // drag to turn
+  let drag = null
+  cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: yaw }; cv.setPointerCapture(e.pointerId) })
+  cv.addEventListener('pointermove', e => { if (drag) yaw = drag.y + (e.clientX - drag.x) * 0.01 })
+  cv.addEventListener('pointerup', () => { drag = null })
+  const resize = () => { const w = cv.clientWidth, h = cv.clientHeight; if (w && h && (cv.width !== Math.round(w * renderer.getPixelRatio()))) { renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix() } }
+
+  function animate(now) {
+    const t = now / 1000 + idx * 0.7, at = t - idx * 0.7 - t0   // `at` = seconds into the current action
+    resize()
+    const R = dist === 'far' ? 30 : 5.2
+    cam.position.set(Math.sin(yaw) * R, dist === 'far' ? 1.7 : 1.55, Math.cos(yaw) * R); cam.lookAt(0, dist === 'far' ? 1.2 : 0.9, 0)
+    H3.forEach((h, k) => {
+      const { parts, body } = h, ph = t * 1.3 + k
+      let rx = 0, sy = 1, sxz = 1, dx = 0, lift = h.floats ? 0.25 + Math.sin(t * 1.6 + k) * 0.06 : 0, armL = 0, armR = 0, flash = 0, flat = 0
+      // idle: sag and re-gather (the body is always losing itself), a slow sway, the head tilting
+      sy = 1 - Math.sin(ph) * 0.035; sxz = 1 + Math.sin(ph) * 0.03
+      rx = O.p.hunch * 0.4 + Math.sin(ph * 0.5) * 0.04
+      if (act === 'tell' || act === 'hit') {
+        const T = 1.1   // wind-up length (game tuning; the board loops it)
+        const u = act === 'tell' ? (at % 2.2) : 0
+        if (act === 'tell' && u < T) {
+          const p = u / T
+          if (O.p.tell === 'gather') { sxz *= 1 - 0.28 * p; sy *= 1 + 0.22 * p; rx -= 0.25 * p }
+          if (O.p.tell === 'reach') { armR = -1.9 * p; rx += 0.18 * p }
+          if (O.p.tell === 'rise') { sy *= 1 + 0.3 * p; rx -= 0.4 * p - O.p.hunch * 0.3 * p }
+        } else if (act === 'tell' && u < T + 0.35) { const q = (u - T) / 0.35; rx += 0.7 * Math.sin(q * Math.PI); dx = 0.35 * Math.sin(q * Math.PI); if (O.p.tell === 'reach') armR = -1.9 * (1 - q) }
+        if (act === 'hit') { const q = at % 1.6; if (q < 0.5) { rx -= 0.5 * Math.sin(q / 0.5 * Math.PI); dx = -0.25 * Math.sin(q / 0.5 * Math.PI) } flash = q < 0.12 ? 1 - q / 0.12 : 0 }
+      }
+      if (act === 'die') { const q = Math.min(1, (at % 3.8) / 1.3); flat = q }
+      // pose
+      body.rotation.x = rx; body.position.z = dx
+      body.scale.set(sxz * (1 + flat * 1.6), sy * (1 - flat * 0.93), sxz * (1 + flat * 1.6)); body.position.y = lift * (1 - flat)
+      parts.arms[1].rotation.x = -0.25 + armR + Math.sin(ph + 1) * 0.05; parts.arms[0].rotation.x = -0.25 + armL + Math.sin(ph) * 0.05
+      parts.head.rotation.z = Math.sin(ph * 0.4) * 0.25
+      parts.head.position.x = Math.sin(ph * 0.4) * 0.03
+      // every blob wobbles on its own clock: the body never holds a crisp shape
+      body.traverse(m => { const b = m.userData.base; if (m.isMesh && b) { const w = Math.sin(t * 2.2 + b.y * 7 + b.x * 11) * 0.07; m.scale.set(b.sx * (1 + w), b.sy * (1 - w * 0.8), b.sz * (1 + w)) } })
+      parts.tears.forEach(d => { const u = (t * 0.45 + d.userData.ph) % 1; d.scale.set(d.userData.r * (1 - u * 0.3), d.userData.r * (0.6 + u * 1.6), d.userData.r * (1 - u * 0.3)); d.position.y = d.userData.y - u * d.userData.r * 1.2; d.visible = flat < 0.5 })
+      // drips: drop from the body's edge, land, and crawl back to the seed (the loop the brief calls the most important note)
+      parts.drips.forEach(d => {
+        const u = ((t * 0.35 + d.userData.ph) % 1), a = d.userData.a, r0 = 0.24 * h.W
+        const y0 = h.coreY + 0.1, gx = Math.cos(a) * r0 * 1.4, gz = Math.sin(a) * r0 * 1.4
+        if (u < 0.45) { const f = u / 0.45; d.position.set(Math.cos(a) * r0, y0 - f * f * (y0 - 0.03), Math.sin(a) * r0); d.scale.set(0.04, 0.06 + f * 0.03, 0.04) }
+        else if (u < 0.6) { d.position.set(gx, 0.03, gz); d.scale.set(0.06, 0.025, 0.06) }
+        else { const f = (u - 0.6) / 0.4; d.position.set(gx * (1 - f), 0.03 + f * (h.coreY - 0.03), gz * (1 - f)); d.scale.setScalar(0.045 * (1 - f * 0.5)) }
+        d.visible = flat < 0.6
+      })
+      // the white flash (OPTIONAL, see the foot): a shell over the body, not the goop's own material
+      if (!h.flash) { h.flash = new THREE.Group(); body.children.forEach(c => { if (c.isMesh) { const s = new THREE.Mesh(c.geometry, flashMat); s.position.copy(c.position); s.scale.copy(c.scale).multiplyScalar(1.04); h.flash.add(s) } }); body.add(h.flash) }
+      flashMat.opacity = flash * 0.85
+      h.sh.scale.setScalar(1 + flat * 1.3); h.sh.material.opacity = 0.22 * (1 - flat * 0.6)
+      // dispersal: the ground's own colour blooms up out of the floor where it stood (never from the body)
+      const b = blooms[k]
+      if (act === 'die') { const q = (at % 3.8 - 1.1) / 1.8; b.material.opacity = q > 0 && q < 1 ? Math.sin(q * Math.PI) * 0.9 : 0; b.scale.setScalar(0.6 + Math.max(0, q) * 1.0); h.root.visible = (at % 3.8) < 2.3 }
+      else { b.material.opacity = 0; h.root.visible = true }
+    })
+    renderer.render(scene, cam)
+    requestAnimationFrame(animate)
+  }
+  requestAnimationFrame(animate)
+  return { setGround, setDist, play }
+}
+OPTIONS.forEach((o, i) => cards.push(makeCard(o, i)))
+</script>
