@@ -130,6 +130,10 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
+- **📌 PINNED IDEA (Alex 11-19, 'for another time'): AMMO THOUGHT BUBBLE.** A thought bubble beside the gun fades in while the
+  trigger is held, showing the rounds left; it turns RED on the last 7; after the trigger is released it holds ~3 s, then fades.
+  Replaces / complements the ammo chip. Not a row yet.
+
 - **CATALOG in plan mode: Jin's proposal (11-18, Alex asked "got any ideas"). Pick / change, then it becomes a row.**
   Alex's brief: a CATALOG button in plan mode to browse every building piece; NOT a survival ladder of wall tiers but a RANGE OF
   MATERIALS to match a keeper's taste; some need hard-to-get items.
