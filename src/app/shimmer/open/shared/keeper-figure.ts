@@ -13,8 +13,8 @@ const grad = (() => {
 const SPH = new THREE.SphereGeometry(1, 20, 14), BOX = new THREE.BoxGeometry(1, 1, 1)
 const LOCK = new THREE.LatheGeometry([[0, 0], [0.5, 0.05], [0.55, 0.22], [0.45, 0.5], [0.25, 0.78], [0.08, 0.95], [0, 1]].map(([r, y]) => new THREE.Vector2(r, y)), 10)
 const CAP = new THREE.SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.5)
-/** a pointed ear: a petal (round at the root, a tip at the top) */
-const EAR = new THREE.LatheGeometry([[0, -0.5], [0.45, -0.38], [0.5, -0.1], [0.36, 0.2], [0.14, 0.42], [0, 0.5]].map(([r, y]) => new THREE.Vector2(r, y)), 10)
+/** a pointed ear: a petal (round at the root, a tip at the top); shared with the NPC rig (folk-model.tsx) */
+export const EAR = new THREE.LatheGeometry([[0, -0.5], [0.45, -0.38], [0.5, -0.1], [0.36, 0.2], [0.14, 0.42], [0, 0.5]].map(([r, y]) => new THREE.Vector2(r, y)), 10)
 const SCARF_RING = new THREE.TorusGeometry(1, 0.45, 10, 24)
 const EGG = [
   [[0, 0], [0.07, 0.03], [0.13, 0.15], [0.19, 0.42], [0.24, 0.74], [0.22, 0.92], [0.12, 1]],   // Broad

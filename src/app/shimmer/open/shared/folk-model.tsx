@@ -3,7 +3,7 @@
 // then PICKED THE CARTOON LOOK from five (hub 11-18; the reference is docs/looks/alkin-looks.html › STYLES 'toon' +
 // build()). This file is that build() on a joint hierarchy so it can move: head 1:3 of the height, long-ish limbs,
 // big white eyes with dark pupils, MeshToonMaterial on a 3-step gradient (90/170/255, nearest), an inverted-hull ink
-// outline at 1.07x (#1b140e, BackSide). Ears are ROUND on purpose (canon gives no ear ruling; pointed = a canon call).
+// outline at 1.07x (#1b140e, BackSide). Ears are SMALL + POINTED (canon, Magii RULED 11-19: Alkin ears small and pointed; the creator's EAR petal, shared).
 //
 // ⚠ PLACEHOLDER LOOKS. No canon look exists for Gregory or any NPC (asked of Magii 11-18). A NAMED NPC carries only
 // the colours its old blockout already shipped with (Greg's purple robe + wide hat); an unnamed one (a clerk, a smith)
@@ -15,6 +15,7 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import { EAR } from './keeper-figure'
 
 export type FolkPose = 'stand' | 'sit'
 export type FolkAction = 'idle' | 'talk' | 'wave'
@@ -83,9 +84,9 @@ const flat = (c: string) => { const r = res(), k = `b${c}`; if (!r.mats.has(k)) 
 
 type V3 = [number, number, number]
 /** One part: the toon mesh and its ink hull (the reference's part()). */
-function Part({ geo, color, pos, scale, ink = true }: { geo: THREE.BufferGeometry; color: string; pos: V3; scale: V3; ink?: boolean }) {
+function Part({ geo, color, pos, scale, ink = true, rot }: { geo: THREE.BufferGeometry; color: string; pos: V3; scale: V3; ink?: boolean; rot?: V3 }) {
   return (
-    <group position={pos}>
+    <group position={pos} rotation={rot}>
       <mesh geometry={geo} material={toon(color)} scale={scale} />
       {ink && <mesh geometry={geo} material={res().ink} scale={[scale[0] * 1.07, scale[1] * 1.07, scale[2] * 1.07]} />}
     </group>
@@ -152,7 +153,7 @@ export function FolkModel({ look, action = 'idle', seed = 0, speed = 1, pose = '
         <group position={[0, HY - TOP, 0]}>
           <Part geo={S} color={look.skin} pos={[0, 0, 0]} scale={[H * 0.5, H * 0.55, H * 0.5]} />
           <Part geo={S} color={look.hair} pos={[0, H * 0.14, -H * 0.08]} scale={[H * 0.53, H * 0.42, H * 0.52]} />   {/* a touch back + up of the reference's -0.06: its cap bled through the face at 3/4 view; -0.1 read bald */}
-          {([-1, 1] as const).map(s => <Part key={s} geo={S} color={look.skin} pos={[s * H * 0.5, 0, 0]} scale={[H * 0.08, H * 0.12, H * 0.06]} />)}
+          {([-1, 1] as const).map(s => <Part key={s} geo={EAR} color={look.skin} pos={[s * H * 0.49, H * 0.02, -H * 0.02]} scale={[H * 0.09, H * 0.2, H * 0.05]} rot={[-0.35, 0, s * -0.55]} />)}
           {/* eyes: big whites, dark pupils (blink scales the group) */}
           <group ref={eyes} position={[0, H * 0.02, 0]}>
             {([-1, 1] as const).map(s => (

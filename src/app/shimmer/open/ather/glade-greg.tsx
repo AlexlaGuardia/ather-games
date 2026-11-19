@@ -7,6 +7,8 @@
 import { useEffect } from 'react'
 import { FolkModel, folkLook } from '../shared/folk-model'
 import { gregSpot } from './moonwell-glade'
+import { GladeHome } from './glade-home-view'
+import { gladeHome } from './glade-home'
 
 export const BENCH_H = 0.48
 export function GladeGreg({ loaded }: { loaded: (x: number, z: number) => number | null }) {
@@ -17,12 +19,16 @@ export function GladeGreg({ loaded }: { loaded: (x: number, z: number) => number
     return () => { delete (window as unknown as { __greg?: unknown }).__greg }
   }, [y === null])   // eslint-disable-line react-hooks/exhaustive-deps
   if (y === null) return null
+  const hm = gladeHome(), hy = loaded(hm.x, hm.z) ?? y
   return (
+    <>
+    <GladeHome y={hy} />
     <group position={[s.x, y, s.z]} rotation-y={s.yaw}>
       {/* a plain bench: seat 0.48 m, two ends */}
       <mesh position={[0, BENCH_H - 0.03, 0.05]}><boxGeometry args={[1.5, 0.06, 0.6]} /><meshLambertMaterial color="#8a6a44" /></mesh>
       {[-0.65, 0.65].map(x => <mesh key={x} position={[x, (BENCH_H - 0.06) / 2, 0.05]}><boxGeometry args={[0.08, BENCH_H - 0.06, 0.5]} /><meshLambertMaterial color="#6f5436" /></mesh>)}
       <FolkModel look={folkLook('gregory')} pose="sit" />
     </group>
+    </>
   )
 }

@@ -4,6 +4,7 @@
 // (floorAt) and vaults/climbs them like any rock. Nothing is rebuilt per cast: the query reads c.pieces live.
 import type { Combat } from './combat'
 import type { Shape, Box } from '../terrain-world'
+import { gladeHomeBoxes } from './glade-home'
 
 export const live: { combat: Combat | null } = { combat: null }
 
@@ -22,7 +23,7 @@ export function withPieces(shape: Shape, get: () => Combat | null = () => live.c
   return {
     ground: shape.ground, water: shape.water,
     solids(x0, y0, z0, x1, y1, z1) {
-      const base = shape.solids(x0, y0, z0, x1, y1, z1), extra = pieceBoxes(get(), x0, z0, x1, z1)
+      const base = shape.solids(x0, y0, z0, x1, y1, z1), extra = [...pieceBoxes(get(), x0, z0, x1, z1), ...gladeHomeBoxes(shape.ground, x0, z0, x1, z1)]
       return extra.length ? [...base, ...extra] : base
     },
   }

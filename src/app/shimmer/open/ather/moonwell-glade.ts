@@ -75,7 +75,7 @@ export const isGlade = (homeOrId: string) => homeOrId === GLADE_ID || homeOrId.s
  *  keeper arrives facing the household). Metres from the pool's centre. Placement is Jin's (canon). */
 export const GLADE_LAYOUT = {
   greg: { dx: 7.5, dz: 4.5 },        // on his bench outside his home
-  home: { dx: 10.5, dz: 6.5 },       // Greg's house: the "grown structure" beside the pool
+  home: { dx: 10.9, dz: 2.1 },       // Greg's house, just behind his bench and clear of the waymark (pool+10,+7) and the five's ring
 }
 export const gladeAt = (o: { dx: number; dz: number }) => ({ x: MOONWELL.x + o.dx, z: MOONWELL.z + o.dz })
 /** Where Greg sits (M30 part 2: he left the keeper's plot; plot ground is bought at his door here), turned to face the pool. */
