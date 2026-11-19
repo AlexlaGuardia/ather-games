@@ -77,7 +77,9 @@ function FogLayer({ fog, W }: { fog: Fog; W: Wilds }) {
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
 }
 
-export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [], onClose, onFlip, area }: {
+export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [], onClose, onFlip, area, goal }: {
+  /** BETA M32 trail: the pitstop the keeper's errand runs through (Rune Hold for the runesmith): its pin glows, its door says so */
+  goal?: string
   view: 'ather' | 'athernyx'; travel: boolean; W: Wilds | null; fog: Fog | null; waymarks: Waymark[]
   onClose: () => void; onFlip: () => void
   here: { x: number; z: number }; inWilds: boolean; onTravel: (d: Dest) => void; tile: string; pitstops: Pitstop[]
@@ -169,15 +171,15 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
               <img src="/open/wilds/continent-relief.jpg" alt="" style={{ width: '100%', display: 'block' }} />
               <div title="Your Wilds stand here" style={{ position: 'absolute', left: `${(src.x0 / 1168) * 100}%`, top: `${(src.y0 / 784) * 100}%`, width: `${((src.x1 - src.x0) / 1168) * 100}%`, height: `${((src.y1 - src.y0) / 784) * 100}%`, border: '2px solid #6fd3c4', boxShadow: '0 0 0 2px rgba(0,0,0,0.5)', pointerEvents: 'none' }} />
               {pitstops.map(p => (
-                <button key={p.id} title={`${p.name} · a door off the hall`} onClick={() => go({ kind: 'landing', id: p.id, name: p.name })}
-                  style={{ ...pin('#f2d88a', 13), left: `${((p.x + 5835) / 11670) * 100}%`, top: `${((p.z + 3915) / 7830) * 100}%` }} />
+                <button key={p.id} title={`${p.name} · a door off the hall`} onClick={() => go({ kind: 'landing', id: p.id, name: p.name })} data-goal={p.id === goal || undefined}
+                  style={{ ...pin(p.id === goal ? '#ff9a4a' : '#f2d88a', p.id === goal ? 18 : 13), left: `${((p.x + 5835) / 11670) * 100}%`, top: `${((p.z + 3915) / 7830) * 100}%`, ...(p.id === goal ? { boxShadow: '0 0 0 3px rgba(255,154,74,.45), 0 0 14px #ff9a4a' } : {}) }} />
               ))}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 200px', gap: 14, marginTop: 10, alignItems: 'start' }}>
               <div style={{ opacity: 0.75, fontSize: 12 }}>The same ground in its other state. Each city keeps a door off the hall; visit a city and its door opens to you. {LANDING.name}&apos;s is open from the start.</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={label}>Doors</div>
-                {pitstops.map(p => stop(p.name, p.id === LANDING.id ? 'the gate-landing' : 'city door', { kind: 'landing', id: p.id, name: p.name }, '#f2d88a'))}
+                {pitstops.map(p => stop(p.name, p.id === goal ? 'your errand: the way to your runesmith' : p.id === LANDING.id ? 'the gate-landing' : 'city door', { kind: 'landing', id: p.id, name: p.name }, p.id === goal ? '#ff9a4a' : '#f2d88a'))}
               </div>
             </div>
           </div>

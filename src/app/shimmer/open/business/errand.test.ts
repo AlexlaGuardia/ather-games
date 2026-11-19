@@ -23,6 +23,8 @@ ok(errandEntries('greg', 'star', { greg: { x: 1, z: 2 } })[0].where?.zone === 'w
 { const g = { x: 5, z: 6 }, s = errandEntries('smith', 'star', { gate: g })[0].where, m = errandEntries('temple', 'star', { gate: g, temple: { x: 7, z: 8 } })[0].where
   ok(s?.zone === 'ather' && s.x === 5 && m?.zone === 'continent' && m.x === 7, 'M5: on the Ather the smith line points at the gate; the continent door wins where seen') }
 ok(errandEntries('done', 'star', {}).length === 0, 'done: the line comes off the page')
+{ const w = errandEntries('smith', 'star', { gate: { x: 1, z: 2, zone: 'wilds' } })[0].where
+  ok(w?.zone === 'wilds' && w.x === 1 && w.z === 2, 'M32 trail: in the Wilds the smith line points at the Glade stone (its zone carried)') }
 // BETA M32 (11-19): Greg's give REFUSES on a full bag. gregsGems reports what did not fit (`left`); page.tsx onTake then keeps
 // the OLD bag and says so, so nothing is handed over by halves and nothing is lost.
 { let full = newInv(); for (let i = 0; i < SLOTS; i++) full = give(full, 'repeater', 1).inv

@@ -844,7 +844,15 @@ function AtherSliceGame() {
   const [given, setGiven] = useState(false)
   useEffect(() => setGiven(gemsGiven()), [])
   const errandStage = stageOf(birth, inv, loadoutNow, given)
-  useEffect(() => { postEntries('errand', errandEntries(errandStage, birth, { greg: { x: gregAt.x, z: gregAt.z }, gate: { x: GATE.x, z: GATE.z } })) }, [errandStage, birth])
+  const errandToHold = errandStage === 'smith' || errandStage === 'temple'   // M32 trail: the next step is through Rune Hold
+  // M32 trail (hub 11-19): the way on to the runesmith is continuous. On the plot it is the gate; in the Wilds it is the Glade's
+  // waymark stone (both open the fold map, which then opens on Rune Hold for an errand keeper); on the continent, the door.
+  const errandGate = useMemo(() => {
+    if (zone.kind !== 'wilds') return { x: GATE.x, z: GATE.z, zone: 'ather' as const }
+    if (!ww || !ww.byName.has(GREG_WAYMARK.tile)) return null
+    const o = ww.offsetOf(GREG_WAYMARK.tile); return { x: GREG_WAYMARK.x + o.x, z: GREG_WAYMARK.z + o.z, zone: 'wilds' as const }
+  }, [zone.kind, ww, wrev])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { postEntries('errand', errandEntries(errandStage, birth, { greg: { x: gregAt.x, z: gregAt.z }, gate: errandGate })) }, [errandStage, birth, errandGate])
   useMorelHints({ stage: errandStage, zone: zone.kind === 'plot' ? 'ather' : 'wilds', pos: () => poseRef.current,
     busy: () => frozen.current || (!!chudRef.current && performance.now() / 1000 - chudRef.current.hurtAt < 10) })   // a fight is not 'stuck'
   // BETA M6a/M6b: the rinning + prospecting pointers, struck once used (re-read on every pack change: a catch/cut lands in it)
@@ -969,7 +977,7 @@ function AtherSliceGame() {
         else if (n.kind === 'fennel') setPanel({ kind: 'fennel', page: 0 })
         else if (n.kind === 'work') { if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
         else if (n.kind === 'folk') setPanel({ kind: 'folk', s: n.s })
-        else setPanel({ kind: 'map', view: 'ather', travel: true })
+        else setPanel({ kind: 'map', view: errandToHold ? 'athernyx' : 'ather', travel: true })   // M32 trail: an errand keeper's map opens on Rune Hold
         return
       }
       if (e.code === 'KeyF') plantHere()
@@ -985,7 +993,7 @@ function AtherSliceGame() {
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [panel, fade, zone, waymarks, ww, goHome, tune, skipDays, allNodes, plantHere, castSlot])
+  }, [panel, fade, zone, waymarks, ww, goHome, tune, skipDays, allNodes, plantHere, castSlot, errandToHold])
 
   const zoneName = zone.kind === 'plot' ? 'Your plot' : 'The Wilds'
   // Phone taps: only what applies here and now, each the key this page already handles.
@@ -1102,7 +1110,7 @@ function AtherSliceGame() {
           inWilds={zone.kind === 'wilds'} onTravel={travel} tile={hereTile} pitstops={pitstops}
           nodes={(nodesByTile.get(hereTile) ?? []).filter(n => infectedSet.has(n.id)).map(n => ({ ...n, x: n.x - hereOff.x, z: n.z - hereOff.z }))} regions={regions}
           area={ww ? { world: ww, regionsByTile, cx: hereOff.x, cz: hereOff.z, tileOff, nodes: nodes.filter(n => Math.abs(n.x - hereOff.x) < 1600 && Math.abs(n.z - hereOff.z) < 1600), here: { x: pos.current.x, z: pos.current.z } } : undefined}
-          onClose={() => setPanel(null)} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
+          onClose={() => setPanel(null)} goal={errandToHold ? LANDING.id : undefined} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
       {folkTalk.node && <TalkChoices node={folkTalk.node} phone={hudSize === 'phone'} />}
       {(talkNode ?? fennelNode ?? tourNode) && <TalkChoices node={(talkNode ?? fennelNode ?? tourNode)!} phone={hudSize === 'phone'} />}

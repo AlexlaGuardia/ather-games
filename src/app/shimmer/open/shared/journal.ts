@@ -50,6 +50,7 @@ function emit() {
   if (!prefs) prefs = typeof window === 'undefined' ? SERVER.prefs : loadPrefs()
   const entries = [...bySource.values()].flat()
   snap = { entries, prefs: withDefault(prefs, entries) }
+  if (typeof window !== 'undefined') (window as unknown as { __journal?: () => typeof snap }).__journal = () => snap   // checks' READ-only probe (trail-check)
   subs.forEach(f => f())
 }
 const same = (a: JournalEntry[], b: JournalEntry[]) =>
