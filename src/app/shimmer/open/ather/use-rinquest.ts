@@ -93,7 +93,7 @@ export function useRinQuest() {
     const tick = () => {
       const shop = currentWorks().rooms.some(r => r.kind === 'rinnshop' && raised(r))
       const n = onShop(get(), shop)
-      if (n !== get()) { put(n); hudSay(RINQUEST_LINES.started, 'info'); morelPing('rinquest', MOREL_PING.fennel_rinstick) }   // the first Rinnshop: Fennel calls (her meeting's marker lights)
+      if (n !== get()) { put(n); hudSay(RINQUEST_LINES.started, 'info'); morelPing('rinquest', MOREL_PING.fennel_rinstick, FENNEL_NAME, true) }   // intro: her first call IS how you meet her (pending hub/Alex)   // the first Rinnshop: Fennel calls (her meeting's marker lights)
     }
     tick(); const id = setInterval(tick, 2000); return () => clearInterval(id)
   }, [quest.state])

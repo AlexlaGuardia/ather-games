@@ -6,6 +6,7 @@
 // Lines are @lark's: a tree only arranges them. The tree is plain data (TalkNode), so any NPC can use this.
 import { useEffect, useState } from 'react'
 import { Html } from '@react-three/drei'
+import { markMet } from './met'   // BETA M33: a first talk = met (Morel may carry their calls)
 
 export interface TalkOption { label: string; pick: () => void }
 export interface TalkNode { line: string; options: TalkOption[] }
@@ -14,6 +15,7 @@ export interface TalkNode { line: string; options: TalkOption[] }
 export function TalkBubble({ at, name, line, scene }: { at: [number, number, number]; name: string; line: string
   /** optional stage direction above the line, in italics (Idony's beat, M13 part 3) */
   scene?: string }) {
+  useEffect(() => { markMet(name) }, [name])
   return (
     <Html position={at} center zIndexRange={[40, 0]} style={{ pointerEvents: 'none' }}>
       <div data-talk-bubble style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: 'translateY(-50%)' }}>
