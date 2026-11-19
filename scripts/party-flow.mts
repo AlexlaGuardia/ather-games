@@ -89,8 +89,9 @@ try {
   const stats = await fetch('http://127.0.0.1:8400/stats').then(r => r.ok ? r.json() : null).catch(() => null)
   const blob = JSON.stringify(stats ?? {})
   console.log('  server stats:', blob.slice(0, 300))
-  const inst = (stats?.instances ?? []).find((i: { id: string }) => i.id === `party_${aParty}__play3d:rune-hold`)
-  ok(!!inst && inst.players === 2, `★★ both keepers stand in ONE party instance of Rune Hold (${inst?.id}: ${inst?.players} players)`)
+  // the party's instance in whatever zone play3d spawns in (it was Rune Hold when this was written 09-28; Stillwind Edge by 11-19)
+  const inst = (stats?.instances ?? []).find((i: { id: string }) => i.id.startsWith(`party_${aParty}__play3d:`))
+  ok(!!inst && inst.players === 2, `★★ both keepers stand in ONE party instance (${inst?.id}: ${inst?.players} players)`)
 } finally {
   await browser.close()
 }
