@@ -28,8 +28,8 @@ export const OPEN_WILDS = 'open:wilds', OPEN_CONTINENT = 'open:continent'
 /** Peers drawn on the full rig; the rest are a capsule. */
 export const NEAR_RIGS = 6
 /** M29 slice 3 (docs/M29-look-sync.md, option A): send this keeper's packed look as the socket's `sprite` and draw peers who
- *  sent one as their own figure. ★ OFF until hub/Alex pick A: with it off nothing is sent and every peer draws as before. */
-export const LOOK_SYNC = false
+ *  sent one as their own figure. With it off nothing is sent and every peer draws the folk rig as before. */
+export const LOOK_SYNC = true   // ★ ON 11-19 (hub: option A approved, client-only, reversible: set false to roll back)
 export const LOOK_SPRITE = 'lk1:'
 /** ids of the peers currently drawn as their own figure (a probe for look-sync-check, reading only) */
 const FIGURES = new Set<string>()
