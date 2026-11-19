@@ -42,6 +42,12 @@ const LERP = 10
  *  mounted page's map (useMultiplayer keeps one Map and clears it, never replaces it). */
 const peersBox: { current: Map<string, RemotePlayer> } = { current: new Map() }
 export const openPeers = () => peersBox as React.RefObject<Map<string, RemotePlayer>>
+// ── the socket's party handles for systems that live elsewhere (BETA M28 shared fights: combat-layer reads this, so the page
+// passes nothing). `null` when no socket hook is mounted. `live()` = the peers heard from inside STALE_MS (a ghost never hosts).
+export interface OpenNet { zone: string | null; self: string; party: string | null; live: () => string[]
+  relay: (kind: string, data: unknown, to?: string) => boolean; onRelay: (f: (m: { from: string; kind: string; data: unknown }) => void) => () => void }
+let netBox: OpenNet | null = null
+export const openNet = () => netBox
 
 /** true while the tab is visible (the socket only lives then). */
 function useVisible(): boolean {
@@ -66,6 +72,8 @@ export function useOpenMultiplayer(zone: string | null, where: () => { x: number
   const myLook = useLook()
   const mp = useMultiplayer({ enabled: !!zone && visible, zoneId: zone ?? '', posRef, yawRef, party, playerName: session?.username ?? '', sprite: LOOK_SYNC ? LOOK_SPRITE + packLook(myLook) : undefined })
   peersBox.current = mp.peers.current
+  netBox = { zone, self: mp.selfId.current, party: party ?? null, relay: mp.relay, onRelay: mp.onRelay,
+    live: () => { const now = performance.now(); return [...mp.peers.current.values()].filter(p => now - p.lastSeen <= STALE_MS).map(p => p.id) } }
   if (typeof window !== 'undefined') (window as unknown as { __mp?: unknown }).__mp = {
     zone: () => zone, status: () => mp.status.current, party: () => party, me: () => whereRef.current(),
     peers: () => [...mp.peers.current.values()].map(p => ({ id: p.id, name: p.name, x: p.x, y: p.y, z: p.z, tx: p.tx, tz: p.tz, sprite: p.sprite ?? null })),

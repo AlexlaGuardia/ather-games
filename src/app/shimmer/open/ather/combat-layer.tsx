@@ -18,7 +18,9 @@ import { touch } from '../shared/touch'
 import { wakeChampion, tellOf, CHAMP } from './champion'
 import { WAKE_R, STRAY_R, type WildsNode } from './nodes'
 import { playShot, playEmpty, playReload } from '../shared/gun-sound'
-import { setAmmoFeed } from '../shared/morel'   // M33: Morel's bubble reads the gun straight from here
+import { setAmmoFeed } from '../shared/morel'
+import { openNet } from '../shared/open-mp'
+import { sharing, hostOf, encodeSnap, applySnap, SNAP_KIND, SNAP_HZ, type Snap } from '../shared/fight-share'   // BETA M28 shared fights   // M33: Morel's bubble reads the gun straight from here
 import { goopMaterial, groundEnv, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'
 import { sprout, poseSprout, lumpyGeometry } from './hollow-body'   // M34: Alex's pick A, the rooted sprout   // M34: no light of its own; borrows the ground
 import { borrowedSky } from '../../voxel3d/sky-env'
@@ -450,7 +452,19 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const { camera, gl } = useThree()
   const c = useRef<Combat>(newCombat(Date.now() >>> 0))
   useEffect(() => { liveSolids.combat = c.current; return () => { if (liveSolids.combat === c.current) liveSolids.combat = null } }, [])
-  useEffect(() => () => setAmmoFeed(null), [])   // M33: leaving the Wilds, Morel's bubble has no gun to read   // the keeper's walker reads c.pieces as solids (dynamic-solids.ts)
+  useEffect(() => () => setAmmoFeed(null), [])
+  // ── M28 SHARED FIGHTS (shared/fight-share.ts): in a party with someone here, the lowest id hosts the Hollows and relays a
+  // snapshot; the others draw it (C.remote). Solo = today's game exactly. The latest snapshot waits here for the frame loop.
+  const net = useRef({ snap: null as Snap | null, fresh: false, snapT: 0, host: true, share: false, hostId: '' })
+  useEffect(() => {
+    let off: (() => void) | null = null
+    const hook = () => { const n = openNet(); if (!n || off) return; off = n.onRelay(m => { if (m.kind === SNAP_KIND && m.from === net.current.hostId) { net.current.snap = m.data as Snap; net.current.fresh = true } }) }
+    hook(); const t = setInterval(hook, 1000)   // the socket hook may mount after this layer
+    const g = window as unknown as { __fight?: unknown }
+    g.__fight = { host: () => net.current.host, sharing: () => net.current.share, hostId: () => net.current.hostId,
+      ids: () => c.current.hollows.map(h => ({ id: h.id, x: +h.x.toFixed(1), z: +h.z.toFixed(1), hp: Math.ceil(h.hp) })) }   // checks' hook: READ only
+    return () => { clearInterval(t); off?.(); delete g.__fight }
+  }, [])   // M33: leaving the Wilds, Morel's bubble has no gun to read   // the keeper's walker reads c.pieces as solids (dynamic-solids.ts)
   const [ids, setIds] = useState<{ id: number; kind: string }[]>([])
   // M34: what the goop borrows (read through a ref: bodies never re-render for it), last positions, dispersals in flight
   const goopWorld = useRef<GoopWorld>({ groundAt: groundAt ?? (() => GRASS), nodes })
@@ -527,7 +541,19 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     if (!C.champ && C.keeper.hp > 0 && settled.current > SETTLE) for (const n of nodesRef.current) {
       if (!spent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < WAKE_R) { wakeChampion(C, T, n); break }
     }
-    if (popT.current <= 0) {
+    // M28: host or guest, decided from the live roster every frame (a leaver hands the Hollows to the next lowest id)
+    {
+      const n = openNet(), live = n && n.zone === 'open:wilds' ? n.live() : []
+      const N = net.current
+      N.share = !!n && sharing(n.party, live)
+      N.hostId = N.share ? hostOf(n!.self, live) : ''
+      N.host = !N.share || N.hostId === n!.self
+      C.remote = !N.host
+      if (C.remote) { if (N.fresh && N.snap) { applySnap(C, T, N.snap); N.fresh = false } }
+      else if (N.share) { N.snapT -= dt; if (N.snapT <= 0) { N.snapT = 1 / SNAP_HZ; n!.relay(SNAP_KIND, encodeSnap(C, feet)) } }
+      C.netHits = []   // slice 3 sends these to the host
+    }
+    if (!C.remote && popT.current <= 0) {
       popT.current = 1.5
       // strays thicken round an infected node; during a champion fight the waves are the only adds
       const near = nodesRef.current.some(n => !spent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < STRAY_R)

@@ -138,6 +138,16 @@ export function useMultiplayer(opts: {
   const peers = useRef<Map<string, RemotePlayer>>(new Map())
   const selfId = useRef<string>('')
   const status = useRef<'off' | 'connecting' | 'live' | 'error'>('off')
+  // ── RELAY (ather.games BETA M28 shared fights, server afc1d34): an opaque party message to the rest of the instance (or
+  // one player with `to`). Additive: a page that never calls relay() / onRelay() behaves exactly as before.
+  const wsBox = useRef<WebSocket | null>(null)
+  const relaySubs = useRef(new Set<(m: { from: string; kind: string; data: unknown }) => void>())
+  const relay = useRef((kind: string, data: unknown, to?: string) => {
+    const w = wsBox.current
+    if (!w || w.readyState !== WebSocket.OPEN) return false
+    w.send(JSON.stringify({ type: 'relay', kind, data, ...(to ? { to } : {}) })); return true
+  }).current
+  const onRelay = useRef((f: (m: { from: string; kind: string; data: unknown }) => void) => { relaySubs.current.add(f); return () => { relaySubs.current.delete(f) } }).current
 
   useEffect(() => {
     if (!enabled || !zoneId) return
@@ -178,6 +188,7 @@ export function useMultiplayer(opts: {
       if (closed) return
       status.current = 'connecting'
       try { ws = new WebSocket(url) } catch { status.current = 'error'; return }
+      wsBox.current = ws
 
       ws.onopen = () => {
         attempt = 0
@@ -221,6 +232,11 @@ export function useMultiplayer(opts: {
             if (id) peers.current.delete(id)
             break
           }
+          case 'relayed': {
+            const from = String((msg.player_id as string) ?? '')
+            if (from && from !== selfId.current && typeof msg.kind === 'string') for (const f of relaySubs.current) f({ from, kind: msg.kind, data: msg.data })
+            break
+          }
         }
       }
 
@@ -253,5 +269,5 @@ export function useMultiplayer(opts: {
     }
   }, [enabled, zoneId, posRef, yawRef, party, playerName, sprite])
 
-  return { peers, status }
+  return { peers, status, selfId, relay, onRelay }
 }
