@@ -455,7 +455,9 @@ function AtherSliceGame() {
       // 'Greg always wins' left a keeper at the stone unable to open the fold map home).
       { const gd = Math.hypot(gregAt.x - lc.px, gregAt.z - lc.pz); if (gd < REACH && gd < wmD) n = { kind: 'greg' } }
       // a settlement's folk: E anywhere inside it talks to them (settlement-folk.ts / folk-panel.tsx); a waymark at your feet wins
-      if (!n && netRef.current) { const st = settlementAt(netRef.current, lc.px, lc.pz); if (st) n = { kind: 'folk', s: st } }
+      // ...but a node under the crosshair with hands stowed keeps E for the work (Alex 11-19: at Moonwell Glade the folk ate E, no mining)
+      const workAim = (aimRef.current.tree || cAimRef.current.crystal) && stanceRef.current.kind === 'stowed'
+      if (!n && !workAim && netRef.current) { const st = settlementAt(netRef.current, lc.px, lc.pz); if (st) n = { kind: 'folk', s: st } }
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
       const t = ww ? ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty) : undefined
       if (t && t.name !== hereRef.current) { hereRef.current = t.name; setHereTile(t.name); streamAt(lc.px, lc.pz) }
