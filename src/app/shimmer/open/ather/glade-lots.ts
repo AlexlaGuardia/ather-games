@@ -6,6 +6,7 @@
 // A part is in its LOT's frame: `ahead` m toward the green from the lot's centre, `side` m to its right; w across, d deep, h tall.
 import { onLot, lotAt, GLADE_LOTS, gladeJetty } from './moonwell-glade'
 import type { Box } from '../terrain-world'
+import { placeBlueprint, fitsPad, type HouseBlueprint } from './plot-blueprint'
 
 export interface Part { ahead: number; side: number; w: number; d: number; h: number; y0?: number; color: string; solid?: boolean; turn?: number }
 const WOOD = '#9a6a3c', PLANK = '#d2a157', STONE = '#9aa3ad', DARK = '#6d5038', HERB = '#6fa857', CLOTH = '#d9806a', JAR = '#b7d8e6', HEARTH = '#8a4b32'
@@ -50,15 +51,15 @@ export function partAt(lot: string, p: Part): { x: number; z: number; yaw: numbe
 }
 /** the walker's boxes for every solid part: a turned part is sampled along its long side into small square boxes (an AABB
  *  round a turned table would block a whole corner), each as wide as the part is thin */
-export function stationBoxes(groundY: number): Box[] {
-  const out: Box[] = []
+export function stationBoxes(groundY: number): (Box & { _lot?: string })[] {
+  const out: (Box & { _lot?: string })[] = []
   for (const l of GLADE_LOTS) for (const p of STATIONS[l.id] ?? []) {
     if (!p.solid) continue
     const long = Math.max(p.w, p.d), thin = Math.max(0.3, Math.min(p.w, p.d)), n = Math.max(1, Math.round(long / thin))
     for (let k = 0; k < n; k++) {
       const t = (k + 0.5) / n - 0.5, along = p.w >= p.d ? { a: 0, s: t * p.w } : { a: t * p.d, s: 0 }
       const c = onLot(l.id, p.ahead + along.a, p.side + along.s), r = thin / 2
-      out.push({ x0: c.x - r, x1: c.x + r, z0: c.z - r, z1: c.z + r, y0: groundY + (p.y0 ?? 0) - 0.5, y1: groundY + (p.y0 ?? 0) + p.h })
+      out.push({ x0: c.x - r, x1: c.x + r, z0: c.z - r, z1: c.z + r, y0: groundY + (p.y0 ?? 0) - 0.5, y1: groundY + (p.y0 ?? 0) + p.h, _lot: l.id } as Box & { _lot: string })
     }
   }
   return out
@@ -71,4 +72,24 @@ export function jettyBoxes(waterY: number): Box[] {
     out.push({ x0: x - j.w / 2, x1: x + j.w / 2, z0: z - j.w / 2, z1: z + j.w / 2, y0: waterY - 2, y1: waterY + 0.35 })
   }
   return out
+}
+
+// ── M39 slice 1: a lot with a saved BLUEPRINT (glade-<lot>, Alex's drawing) stands that building INSTEAD of its blockout.
+// The view fetches them and registers them here; the walker's boxes follow (version bumps so dynamic-solids rebuilds).
+const blueprints = new Map<string, HouseBlueprint>()
+let bpVersion = 0
+export const gladeBlueprintVersion = () => bpVersion
+export const gladeBlueprint = (lot: string) => blueprints.get(lot) ?? null
+export function setGladeBlueprint(lot: string, bp: HouseBlueprint | null) {
+  if (bp && !fitsPad(bp, (lotAt(lot)?.w ?? 0), (lotAt(lot)?.d ?? 0))) bp = null   // oversize: refused, the blockout stays (never over the green)
+  if (bp) blueprints.set(lot, bp); else blueprints.delete(lot)
+  bpVersion++
+}
+/** where a lot's blueprint stands (its pad's centre, facing the green, on the Glade floor) */
+export function lotPad(lot: string, y: number) { const l = lotAt(lot)!; return { x: l.x, z: l.z, yaw: l.yaw, y } }
+/** every lot's solids: its blueprint's walls if it has one, else its blockout's */
+export function gladeLotBoxes(groundY: number): Box[] {
+  const out: Box[] = []
+  for (const l of GLADE_LOTS) { const bp = blueprints.get(l.id); if (bp) out.push(...placeBlueprint(bp, lotPad(l.id, groundY)).boxes) }
+  return [...out, ...stationBoxes(groundY).filter(b => !b._lot || !blueprints.has(b._lot))]
 }

@@ -18,6 +18,8 @@ import { countOf, itemDef, makeBait, BAIT_FROM, HOTBAR, SLOTS, type Stack, type 
 import { hudSay } from '../shared/hud-say'
 import { GROUND_Y, squareAt, sqId } from './plot'
 import { forestryLevel } from './forestry'
+import { connectedPieces, extractBlueprint, fitsPad } from './plot-blueprint'
+import { LOT_W, LOT_D, GLADE_LOTS } from './moonwell-glade'
 import { snapCorner, runKeys, canLay, lay, raze, wallBoxes, edgeRect, findRooms, roofMesh, pieceAt, roomAt, toggleDoor, toggleWindow, paintWall, paintFloor, floorOf, WALL_MATS, WALL_MAT_ORDER, ROOF_STYLES, LOW_WALL, DOOR_H, SILL, WIN_TOP, WALL_T, type Corner, type WallMat, type Walls, type RoofStyle, type PlotRoom, type Floors } from './plot-walls'
 import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
@@ -84,7 +86,49 @@ function wallVerdict(owned: ReadonlySet<string>, a: Corner, b: Corner, erase: bo
   return { keys, ok: v.ok, why: v.ok ? '' : v.why }
 }
 /** M37 slice 3: Door / Window / Paint act on a TAP (a press that barely moves): the piece under it, or the room */
-function tapToolHandler(kind: 'door' | 'window' | 'paint') {
+// ── M39 slice 1: BLUEPRINTS (owner). The Blueprint tool: tap a wall, the building it belongs to lights, a bar shows its
+// footprint, whether it fits a Glade lot's pad, which Moglin it is for, and Save (POST /shimmer/save-house-blueprint; the
+// Glade stands it on that lot at the next visit, no deploy).
+let bpPick: string | null = null
+const setBpPick = (k: string | null) => { bpPick = k; wdEmit() }
+const useBpPick = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => bpPick, () => null)
+let ownerP: Promise<boolean> | null = null
+const ownerCheck = () => (ownerP ??= fetch('/api/owner', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { owner: false })).then(d => !!d.owner).catch(() => false))
+function useOwner() { const [o, setO] = useState(false); useEffect(() => { let alive = true; ownerCheck().then(v => { if (alive) setO(v) }); return () => { alive = false } }, []); return o }
+function BlueprintPicked() {
+  const k = useBpPick(), w = useWorks(), down = useWallsDown()
+  const keys = useMemo(() => (k && w.walls ? connectedPieces(w.walls, k) : []), [k, w.walls])
+  if (!keys.length) return null
+  return <WallRun mat="goldwood" keys={keys} ghost="#5aa0ff" h={down ? LOW_WALL : WALL_H} />
+}
+function BlueprintBar() {
+  const k = useBpPick(), w = useWorks()
+  const [lot, setLot] = useState('hazel'), [busy, setBusy] = useState(false)
+  const bp = useMemo(() => (k && w.walls ? extractBlueprint(w.walls, w.floors, w.roof ?? 'gable', k, `glade-${lot}`, `${lot[0].toUpperCase()}${lot.slice(1)}'s workshop`) : null), [k, w, lot])
+  if (!bp) return <div data-bp-bar style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>Tap a wall of the building to save as a blueprint</div>
+  const fits = fitsPad(bp, LOT_W, LOT_D)
+  const save = async () => {
+    setBusy(true)
+    try {
+      const r = await fetch('/shimmer/save-house-blueprint', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ blueprint: bp }) })
+      const j = await r.json().catch(() => ({}))
+      hudSay(r.ok ? `Saved for ${lot}'s lot (${bp.w} x ${bp.d} m). It stands at the Glade on your next visit.` : `Not saved: ${j.error ?? r.status}`, r.ok ? 'item' : 'info', 6)
+    } finally { setBusy(false) }
+  }
+  return (
+    <div data-bp-bar style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', padding: '6px 10px', borderRadius: 12, background: 'rgba(255,250,235,.9)', boxShadow: '0 2px 8px rgba(0,0,0,.2)', font: '700 12px system-ui', color: H.ink }}>
+      <span data-bp-size>{bp.w} x {bp.d} m · {Object.keys(bp.walls).length} pieces</span>
+      <span data-bp-fits={fits} style={{ color: fits ? '#2f7a3a' : '#b0452a' }}>{fits ? `fits a lot (${LOT_W} x ${LOT_D})` : `too big for a lot (${LOT_W} x ${LOT_D})`}</span>
+      <label style={{ display: 'flex', gap: 4, alignItems: 'center' }}>For
+        <select id="bp-lot" data-bp-lot value={lot} onChange={e => setLot(e.target.value)} style={{ font: 'inherit' }}>
+          {GLADE_LOTS.map(l => <option key={l.id} value={l.id}>{l.id[0].toUpperCase() + l.id.slice(1)}</option>)}
+        </select>
+      </label>
+      <button type="button" data-act="bp-save" disabled={busy || !fits} onClick={save} style={{ border: 0, borderRadius: 10, height: 32, padding: '0 12px', cursor: fits ? 'pointer' : 'default', background: fits ? H.ink : 'rgba(0,0,0,.2)', color: '#fff', font: 'inherit' }}>{busy ? 'Saving' : 'Save blueprint'}</button>
+    </div>
+  )
+}
+function tapToolHandler(kind: 'door' | 'window' | 'paint' | 'blueprint') {
   let at: { x: number; z: number } | null = null
   return {
     start(x: number, z: number) { at = { x, z } },
@@ -93,6 +137,7 @@ function tapToolHandler(kind: 'door' | 'window' | 'paint') {
       if (!at || Math.hypot(x - at.x, z - at.z) > 1.2) { at = null; return }
       at = null
       const w = currentWorks(), walls = w.walls ?? {}, k = pieceAt(walls, x, z)
+      if (kind === 'blueprint') { if (!k) hudSay('Tap a wall of the building.', 'info'); setBpPick(k); return }
       if (kind === 'paint') {
         if (k) { const r = paintWall(walls, getInv(), k, wallMat); if ('why' in r) { hudSay(r.why, 'info'); return } setWorks({ ...w, walls: r.walls }); setInv(r.inv); return }
         const room = roomAt(findRooms(walls), x, z); if (!room) { hudSay('Tap a wall, or the floor of one of your rooms.', 'info'); return }
@@ -132,20 +177,25 @@ function wallDrawHandler(owned: () => ReadonlySet<string>, erase: boolean) {
   }
 }
 const WALL_GEO = new THREE.BoxGeometry(1, 1, 1)
+/** M39: a saved blueprint standing somewhere else (a Glade lot): the plot's own renderer, in a group turned + lifted onto the
+ *  pad (the renderer draws at GROUND_Y, the plot's floor, so the group lifts by the difference) */
+export function BlueprintBuilding({ walls, roof, floors, x, z, y, rotY }: { walls: Walls; roof: RoofStyle; floors?: Floors; x: number; z: number; y: number; rotY: number }) {
+  return <group position={[x, y - GROUND_Y, z]} rotation-y={rotY}><DrawnWalls walls={walls} roof={roof} floors={floors} probe={false} /></group>
+}
 /** every drawn wall, one instanced mesh per wood (Lambert, like the rooms' walls) */
 // M37 slice 2: walls DOWN (plan mode only; Sims' trick): drawn walls drop to knee height and the roofs lift off, so you
 // see into your rooms while you plan. Leaving plan mode puts them back up.
 let wallsDown = false
 const setWallsDown = (v: boolean) => { wallsDown = v; wdEmit() }
 const useWallsDown = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => wallsDown, () => false)
-function DrawnWalls({ walls, roof, floors }: { walls: Walls; roof: RoofStyle; floors?: Floors }) {
+function DrawnWalls({ walls, roof, floors, probe = true }: { walls: Walls; roof: RoofStyle; floors?: Floors; probe?: boolean }) {
   const b = useBuildMode(), down = useWallsDown() && b
   useEffect(() => { if (!b && wallsDown) setWallsDown(false) }, [b])
   // runs by wood AND kind: a plain piece is floor to top, a door only its lintel, a window a sill + a head + a pane
   const byMat = useMemo(() => { const m = new Map<string, string[]>(); for (const [k, w] of Object.entries(walls)) { const id = `${w.mat}|${w.kind ?? 'wall'}`; const l = m.get(id) ?? []; l.push(k); m.set(id, l) } return [...m].map(([id, keys]) => { const [mat, kind] = id.split('|'); return { mat: mat as WallMat, kind, keys } }) }, [walls])
   const panes = useMemo(() => Object.entries(walls).filter(([, w]) => w.kind === 'window').map(([k]) => k), [walls])
   const rooms = useMemo(() => findRooms(walls), [walls])
-  useEffect(() => { (window as unknown as { __walls?: object }).__walls = { rooms: () => rooms.map(r => ({ cells: r.cells.length, rect: !!r.rect })), down: () => down, roof: () => roof } }, [rooms, down, roof])
+  useEffect(() => { if (probe) (window as unknown as { __walls?: object }).__walls = { rooms: () => rooms.map(r => ({ cells: r.cells.length, rect: !!r.rect })), down: () => down, roof: () => roof } }, [rooms, down, roof, probe])
   return (
     <>
       {byMat.map(({ mat, kind, keys }) => {
@@ -265,10 +315,10 @@ function Catalog({ onPick }: { onPick: () => void }) {
 }
 /** the Walls / Erase tools and the wood picker, in the build bar */
 function WallTools({ owned }: { owned: React.MutableRefObject<ReadonlySet<string>> }) {
-  const t = useBuildTool(), mat = useWallMat(), inv = useInv(), down = useWallsDown(), w = useWorks(), roof = w.roof ?? 'gable'
+  const t = useBuildTool(), mat = useWallMat(), inv = useInv(), down = useWallsDown(), w = useWorks(), roof = w.roof ?? 'gable', owner = useOwner()
   useEffect(() => {
     if (t === 'look') return
-    onBuildDraw(t === 'door' || t === 'window' || t === 'paint' ? tapToolHandler(t) : wallDrawHandler(() => owned.current, t === 'erase'))
+    onBuildDraw(t === 'door' || t === 'window' || t === 'paint' || t === 'blueprint' ? tapToolHandler(t) : wallDrawHandler(() => owned.current, t === 'erase'))
     return () => onBuildDraw(null)
   }, [t, owned])
   const btn = (on: boolean): React.CSSProperties => ({ border: 0, borderRadius: 10, height: 34, padding: '0 10px', cursor: 'pointer', font: '700 12px system-ui', letterSpacing: '.06em', textTransform: 'uppercase', background: on ? H.ink : 'rgba(255,250,235,.7)', color: on ? '#fff' : H.ink, boxShadow: `inset 0 0 0 1px ${H.rule}` })
@@ -277,6 +327,7 @@ function WallTools({ owned }: { owned: React.MutableRefObject<ReadonlySet<string
       <button type="button" data-tool="walls" style={btn(t === 'walls')} onClick={() => { setPlacing(null); setBuildTool(t === 'walls' ? 'look' : 'walls') }}>Walls</button>
       <button type="button" data-tool="erase" style={btn(t === 'erase')} onClick={() => { setPlacing(null); setBuildTool(t === 'erase' ? 'look' : 'erase') }}>Erase</button>
       {(['door', 'window', 'paint'] as const).map(k => <button key={k} type="button" data-tool={k} style={btn(t === k)} onClick={() => { setPlacing(null); setBuildTool(t === k ? 'look' : k) }}>{k}</button>)}
+      {owner && <button type="button" data-tool="blueprint" style={btn(t === 'blueprint')} onClick={() => { setPlacing(null); setBpPick(null); setBuildTool(t === 'blueprint' ? 'look' : 'blueprint') }}>blueprint</button>}
       {(t === 'walls' || t === 'paint') && WALL_MAT_ORDER.map(m => (
         <button key={m} type="button" data-wall-mat={m} title={`${WALL_MATS[m].name} · ${countOf(inv, WALL_MATS[m].item)} planks`} onClick={() => { wallMat = m; wdEmit() }}
           style={{ ...btn(false), display: 'flex', alignItems: 'center', gap: 5, textTransform: 'none', letterSpacing: 0, boxShadow: mat === m ? `inset 0 0 0 2px ${H.ink}` : `inset 0 0 0 1px ${H.rule}` }}>
@@ -388,6 +439,7 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
       {allChests(w).map(c => <Keepstone key={c.id} c={c} pose={pose} />)}
       {w.pieces.map(pc => <PieceMesh key={pc.id} p={pc} />)}
       <MoglinsAtWork w={w} />
+      <BlueprintPicked />
       {w.walls && <DrawnWalls walls={w.walls} roof={w.roof ?? 'gable'} floors={w.floors} />}
       <WallGhost />
       {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} item={p.item} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
@@ -843,6 +895,7 @@ export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
       </div>
       {cat && <Catalog onPick={() => setCat(false)} />}
       <WallTools owned={ownedRef} />
+      {tool === 'blueprint' && <BlueprintBar />}
       {sel && <BuildCard k={sel} onBuilt={() => setSel(null)} />}
       {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a wall · a plank a metre · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · the planks come back' : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? 'Pick a wood, then tap a wall (a plank swaps) or a floor (the whole room)' : <>Pick something to build · drag to move · {touchy ? 'pinch' : 'wheel'} to zoom{touchy ? '' : ' · WASD · Q Z turn'}</>}</div>}
     </div>
