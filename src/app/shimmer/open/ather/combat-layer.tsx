@@ -19,6 +19,9 @@ import { wakeChampion, tellOf, CHAMP } from './champion'
 import { WAKE_R, STRAY_R, type WildsNode } from './nodes'
 import { playShot, playEmpty, playReload } from '../shared/gun-sound'
 import { setAmmoFeed } from '../shared/morel'   // M33: Morel's bubble reads the gun straight from here
+import { goopMaterial, groundEnv, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'   // M34: no light of its own; borrows the ground
+import { borrowedSky } from '../../voxel3d/sky-env'
+import { dayProgress, daylight } from '../../engine/day-cycle'
 
 export interface CombatHud {
   hp: number; maxHp: number; ammo: number; clip: number; reloading: boolean; hurtAt: number; hitAt: number; gun: string
@@ -46,58 +49,159 @@ function fxTint(h: Hollow | undefined): string | null {
 }
 const PUDDLE = '#55585b'
 
-/** One Hollow: goop with no colour of its own (design-briefs/hollows.md): diffuse dead flat grey, specular high so
- *  it borrows the world's light. A sag and sway carries the shamble; the lunge leans in. */
-function HollowBody({ c, id }: { c: React.MutableRefObject<Combat>; id: number }) {
-  const g = useRef<THREE.Group>(null), body = useRef<THREE.Mesh>(null), head = useRef<THREE.Mesh>(null), puddle = useRef<THREE.MeshBasicMaterial>(null)
-  const mat = useMemo(() => new THREE.MeshPhongMaterial({ color: '#26272a', emissive: '#6d6f73', specular: '#eef3f6', shininess: 80, flatShading: true }), [])
+/** BETA M34 (shared by every look option, docs/looks/hollows.html): what a Hollow's surface borrows. `groundAt` = the biome
+ *  colour under a point (the page's Wilds); `nodes` = the infected nodes (the drain). Read through a ref so bodies never re-render. */
+export interface GoopWorld { groundAt: (x: number, z: number) => string; nodes: readonly { x: number; z: number }[] }
+const GRASS = '#9cc46a'
+
+/** One Hollow's goop material, re-aimed at the ground under it every half second (a cached env per ground colour), its
+ *  borrow scaled by the hour. emissive stays BLACK except for the held white hit flash (Alex's call, M34). */
+function useGoop(c: React.MutableRefObject<Combat>, id: number, world: React.MutableRefObject<GoopWorld>) {
+  const mat = useMemo(() => goopMaterial(), [])
+  const next = useRef(0), key = useRef('')
+  useEffect(() => () => mat.dispose(), [mat])
+  useFrame(({ clock }) => {
+    const h = c.current.hollows.find(k => k.id === id); if (!h) return
+    if (clock.elapsedTime >= next.current) {
+      next.current = clock.elapsedTime + 0.5
+      const W = world.current, g = borrowedGround(W.groundAt(h.x, h.z), greyStep(greyAt(h.x, h.z, W.nodes)))
+      if (g !== key.current) { key.current = g; mat.envMap = groundEnv(g); mat.needsUpdate = true }
+      mat.envMapIntensity = BORROW * borrowedSky(daylight(dayProgress()))
+    }
+    const f = Math.min(1, h.hitFlash * 5); mat.emissive.setRGB(f, f, f)   // ★ the HELD white hit flash, and nothing else
+  })
+  return mat
+}
+
+/** The goop that leaves and comes back: DRIP_N drips shed off the body, fall, and crawl back to it (the brief's "always
+ *  visibly losing itself"); the last instance is the LUMP a hit flings off backwards, which lands and crawls home. One
+ *  instanced draw for all of it. Positions are the Hollow's LOCAL space (the parent group carries x/z/yaw). */
+const DRIP_N = 5
+function Sheds({ c, id, mat, top }: { c: React.MutableRefObject<Combat>; id: number; mat: THREE.Material; top: number }) {
+  const im = useRef<THREE.InstancedMesh>(null)
+  const st = useMemo(() => ({ m: new THREE.Matrix4(), p: new THREE.Vector3(), q: new THREE.Quaternion(), s: new THREE.Vector3(), lastFlash: 0, lumpT: -1, seed: Array.from({ length: DRIP_N }, (_, k) => ({ a: k * 1.256 + id, ph: (k * 0.37 + id * 0.11) % 1 })) }), [id])
+  useFrame(({ clock }, dt) => {
+    const h = c.current.hollows.find(k => k.id === id), M = im.current; if (!h || !M) return
+    const t = clock.elapsedTime, { m, p, q, s } = st
+    st.seed.forEach((d, k) => {
+      const u = (t * 0.32 + d.ph) % 1, r0 = 0.3, gx = Math.cos(d.a) * 0.55, gz = Math.sin(d.a) * 0.55
+      if (u < 0.45) { const f = u / 0.45; p.set(Math.cos(d.a) * r0, top - f * f * (top - 0.04), Math.sin(d.a) * r0); s.set(0.07, 0.09 + f * 0.04, 0.07) }
+      else if (u < 0.6) { p.set(gx, 0.03, gz); s.set(0.1, 0.035, 0.1) }
+      else { const f = (u - 0.6) / 0.4; p.set(gx * (1 - f), 0.03 + f * (top * 0.6), gz * (1 - f)); s.setScalar(0.07 * (1 - f * 0.5)) }
+      M.setMatrixAt(k, m.compose(p, q.identity(), s))
+    })
+    // the lump: a fresh hit (the flash rising) throws one off backwards; it lands, then crawls back
+    if (h.hitFlash > st.lastFlash + 0.02) st.lumpT = 0
+    st.lastFlash = h.hitFlash
+    if (st.lumpT >= 0) {
+      st.lumpT += dt
+      const T1 = 0.35, T2 = 1.5, u = st.lumpT
+      if (u < T1) { const f = u / T1; p.set(0.15, top * 0.8 + Math.sin(f * Math.PI) * 0.5 - f * top * 0.75, -0.3 - f * 1.1); s.setScalar(0.16) }
+      else if (u < T2) { const f = (u - T1) / (T2 - T1); p.set(0.15 * (1 - f), 0.05 + f * top * 0.5, -1.4 * (1 - f)); s.set(0.17, 0.09 + f * 0.06, 0.17) }
+      else st.lumpT = -1
+      M.setMatrixAt(DRIP_N, m.compose(p, q.identity(), s))
+    } else M.setMatrixAt(DRIP_N, m.compose(p.set(0, -50, 0), q.identity(), s.setScalar(0.001)))
+    M.instanceMatrix.needsUpdate = true
+  })
+  return <instancedMesh ref={im} args={[undefined, undefined, DRIP_N + 1]} material={mat} frustumCulled={false}><sphereGeometry args={[1, 8, 6]} /></instancedMesh>
+}
+
+/** One Hollow: goop with no colour of its own (design-briefs/hollows.md): diffuse dead dark, specular high so it borrows the
+ *  ground it stands on (M34). A sag and sway carries the shamble; the lunge leans in; a hit knocks it back and flings a lump.
+ *  ★ The SILHOUETTE + the wind-up tell are what Alex's pick (docs/looks/hollows.html) replaces; everything else here stays. */
+function HollowBody({ c, id, world }: { c: React.MutableRefObject<Combat>; id: number; world: React.MutableRefObject<GoopWorld> }) {
+  const g = useRef<THREE.Group>(null), inner = useRef<THREE.Group>(null), body = useRef<THREE.Mesh>(null), head = useRef<THREE.Mesh>(null), puddle = useRef<THREE.MeshBasicMaterial>(null)
+  const mat = useGoop(c, id, world)
   useFrame(({ clock }) => {
     const h = c.current.hollows.find(k => k.id === id); if (!h || !g.current) return
     const t = clock.elapsedTime + id * 1.3
     g.current.position.set(h.x, h.y, h.z)
     g.current.rotation.y = h.yaw
     const lean = h.state === 'windup' ? -0.35 : h.state === 'lunge' ? 0.55 : h.state === 'stagger' ? -0.25 : 0.12
-    g.current.rotation.x = THREE.MathUtils.lerp(g.current.rotation.x, lean, 0.25)
+    g.current.rotation.x = THREE.MathUtils.lerp(g.current.rotation.x, lean - h.hitFlash * 2.5, 0.25)   // M34: a hit knocks it back
     g.current.rotation.z = Math.sin(t * (h.state === 'chase' ? 3.4 : 1.6)) * 0.12
+    if (inner.current) inner.current.position.z = -h.hitFlash * 2.2   // ...and shoves the body a step back, then it settles
     if (body.current) body.current.scale.set(1 + Math.sin(t * 2.1) * 0.05, 1 - Math.sin(t * 2.1) * 0.04, 1)
-    mat.emissive.setRGB(0.43 + h.hitFlash * 5, 0.435 + h.hitFlash * 5, 0.45 + h.hitFlash * 5)
     if (head.current) head.current.position.y = HEAD_Y + Math.sin(t * 1.7) * 0.04
     if (puddle.current) { const tint = fxTint(h); puddle.current.color.set(tint ?? PUDDLE); puddle.current.opacity = tint ? 0.85 : 0.55 }
   })
   return (
     <group ref={g}>
-      <mesh ref={body} position-y={0.85} material={mat}><capsuleGeometry args={[0.36, 0.8, 3, 7]} /></mesh>
-      <mesh ref={head} position-y={HEAD_Y} position-z={0.08} material={mat}><icosahedronGeometry args={[0.24, 0]} /></mesh>
-      {/* arms that hang forward: the drowned reach */}
-      <mesh position={[0.36, 1.05, 0.28]} rotation-x={-1.1} material={mat}><capsuleGeometry args={[0.09, 0.55, 2, 5]} /></mesh>
-      <mesh position={[-0.36, 1.05, 0.28]} rotation-x={-1.25} material={mat}><capsuleGeometry args={[0.09, 0.55, 2, 5]} /></mesh>
-      {/* the drip: a puddle that follows */}
+      <group ref={inner}>
+        <mesh ref={body} position-y={0.85} material={mat}><capsuleGeometry args={[0.36, 0.8, 3, 7]} /></mesh>
+        <mesh ref={head} position-y={HEAD_Y} position-z={0.08} material={mat}><icosahedronGeometry args={[0.24, 1]} /></mesh>
+        {/* arms that hang forward: the drowned reach */}
+        <mesh position={[0.36, 1.05, 0.28]} rotation-x={-1.1} material={mat}><capsuleGeometry args={[0.09, 0.55, 2, 5]} /></mesh>
+        <mesh position={[-0.36, 1.05, 0.28]} rotation-x={-1.25} material={mat}><capsuleGeometry args={[0.09, 0.55, 2, 5]} /></mesh>
+      </group>
+      <Sheds c={c} id={id} mat={mat} top={1.05} />
+      {/* the drip: a puddle that follows (a cast's tint shows under it) */}
       <mesh position-y={0.03} rotation-x={-Math.PI / 2}><circleGeometry args={[0.55, 9]} /><meshBasicMaterial ref={puddle} color={PUDDLE} transparent opacity={0.55} /></mesh>
     </group>
   )
 }
 
-/** The floater: the one Hollow that floats. A sagging blob trailing drips, no legs. It swells when it charges a spit. */
-function FloaterBody({ c, id }: { c: React.MutableRefObject<Combat>; id: number }) {
+/** The floater: the one Hollow that floats (the caster: too little gathered to be pulled down). A sagging blob trailing drips,
+ *  no legs. It swells when it charges a spit. M34: no glow on the charge any more (it owns no light): the swell IS the tell. */
+function FloaterBody({ c, id, world }: { c: React.MutableRefObject<Combat>; id: number; world: React.MutableRefObject<GoopWorld> }) {
   const g = useRef<THREE.Group>(null), blob = useRef<THREE.Mesh>(null)
-  const mat = useMemo(() => new THREE.MeshPhongMaterial({ color: '#26272a', emissive: '#6d6f73', specular: '#eef3f6', shininess: 80, flatShading: true }), [])
+  const mat = useGoop(c, id, world)
   useFrame(({ clock }) => {
     const h = c.current.hollows.find(k => k.id === id); if (!h || !g.current) return
     const t = clock.elapsedTime + id
     g.current.position.set(h.x, h.y, h.z); g.current.rotation.y = h.yaw
-    const swell = h.state === 'charge' ? 1 + (1 - h.t / 0.75) * 0.35 : 1
+    const swell = h.state === 'charge' ? 1 + (1 - h.t / 0.75) * 0.5 : 1
     if (blob.current) blob.current.scale.set(swell * (1 + Math.sin(t * 2.3) * 0.06), swell * (0.85 - Math.sin(t * 2.3) * 0.05), swell)
-    const glow = h.state === 'charge' ? 0.25 + (1 - h.t / 0.75) * 0.5 : 0
-    mat.emissive.setRGB(0.43 + h.hitFlash * 5 + glow, 0.435 + h.hitFlash * 5 + glow, 0.45 + h.hitFlash * 5 + glow)
+    g.current.rotation.x = -h.hitFlash * 2.5
   })
   return (
     <group ref={g}>
-      <mesh ref={blob} material={mat}><icosahedronGeometry args={[0.48, 1]} /></mesh>
+      <mesh ref={blob} material={mat}><icosahedronGeometry args={[0.48, 2]} /></mesh>
       {[[-0.22, 0.1], [0.18, -0.12], [0.02, 0.22], [0.25, 0.15]].map(([x, z], k) => (
         <mesh key={k} position={[x, -0.5 - k * 0.06, z]} rotation-x={Math.PI} material={mat}><coneGeometry args={[0.08, 0.5 + k * 0.12, 5]} /></mesh>
       ))}
+      <Sheds c={c} id={id} mat={mat} top={-0.2} />
     </group>
   )
+}
+
+/** DISPERSAL (brief: "cohesion lost", then "a brief bloom of the ground's own colour at the spot", from the FLOOR, never the
+ *  body). Where a Hollow died: its goop sags flat and spreads, and the ground's own colour comes up in a ring under it. The
+ *  sim drops a dead Hollow at once, so this plays from where it LAST stood. A pool of 6; one goop puddle + one ring each. */
+export interface Dispersal { x: number; y: number; z: number; at: number; colour: string }
+const DISPERSE_T = 2.2
+const WHITE = new THREE.Color('#ffffff')
+/** what the dispersals actually DREW (frames with a sag, the brightest ring): a 1-2 fps box shoots slower than a death lasts */
+export const DISPERSE_SEEN = { sagFrames: 0, ringPeak: 0 }
+function Dispersals({ list }: { list: React.MutableRefObject<Dispersal[]> }) {
+  const goop = useMemo(() => goopMaterial(), [])
+  const pool = useRef<{ g: THREE.Group | null; sag: THREE.Mesh | null; ring: THREE.Mesh | null }[]>(Array.from({ length: 6 }, () => ({ g: null, sag: null, ring: null })))
+  useEffect(() => () => goop.dispose(), [goop])
+  useFrame(() => {
+    const now = performance.now() / 1000   // the same clock the layer stamps a death with
+    list.current = list.current.filter(d => now - d.at < DISPERSE_T)
+    pool.current.forEach((slot, k) => {
+      const d = list.current[k], G = slot.g; if (!G) return
+      G.visible = !!d; if (!d || !slot.sag || !slot.ring) return
+      const u = (now - d.at) / DISPERSE_T
+      G.position.set(d.x, d.y, d.z)
+      const f = Math.min(1, u / 0.35)   // the sag: the body's height goes, its width spreads
+      slot.sag.scale.set(0.45 + f * 0.6, Math.max(0.02, 0.9 * (1 - f)), 0.45 + f * 0.6); slot.sag.position.y = 0.9 * (1 - f) * 0.5 + 0.02
+      slot.sag.visible = u < 0.6
+      if (slot.sag.visible) DISPERSE_SEEN.sagFrames++
+      // the ground's OWN hue, risen: brightened toward white and added, so grass blooms on grass (its exact colour on itself is invisible)
+      const r = slot.ring.material as THREE.MeshBasicMaterial, b = Math.max(0, (u - 0.2) / 0.8)
+      r.color.set(d.colour).lerp(WHITE, 0.45); r.opacity = b > 0 ? Math.sin(Math.min(1, b) * Math.PI) * 0.95 : 0
+      DISPERSE_SEEN.ringPeak = Math.max(DISPERSE_SEEN.ringPeak, r.opacity)
+      slot.ring.scale.setScalar(0.6 + b * 1.6)
+    })
+  })
+  return <>{pool.current.map((slot, k) => (
+    <group key={k} ref={el => { slot.g = el }} visible={false}>
+      <mesh ref={el => { slot.sag = el }} material={goop}><sphereGeometry args={[1, 12, 8]} /></mesh>
+      <mesh ref={el => { slot.ring = el }} position-y={0.04} rotation-x={-Math.PI / 2}><ringGeometry args={[0.15, 1, 28]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} toneMapped={false} /></mesh>
+    </group>
+  ))}</>
 }
 
 /** An infected node: a sump of grey goop on the ground, a slumped mound with drips, and a faint grey plume you can
@@ -336,8 +440,10 @@ function CastFlash({ fx }: { fx: React.MutableRefObject<LiveFx[]> }) {
  *  flare) and how far a charge has built (0..1, the Charred Rifle). */
 export interface SightLink { aiming: boolean; ads: boolean; firedAt: number; charge: number }
 
-export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats, sight, channel }: {
+export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats, sight, channel, groundAt }: {
   T: Terrain
+  /** M34: the biome colour under a point (sRGB hex): what a Hollow's sheen borrows, and the colour its dispersal blooms */
+  groundAt?: (x: number, z: number) => string
   locked: React.MutableRefObject<boolean>
   frozen: React.MutableRefObject<boolean>
   active: boolean
@@ -367,11 +473,16 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   sight?: React.MutableRefObject<SightLink>
 }) {
   const fx = useRef<LiveFx[]>([])
-  const { camera } = useThree()
+  const { camera, gl } = useThree()
   const c = useRef<Combat>(newCombat(Date.now() >>> 0))
   useEffect(() => { liveSolids.combat = c.current; return () => { if (liveSolids.combat === c.current) liveSolids.combat = null } }, [])
   useEffect(() => () => setAmmoFeed(null), [])   // M33: leaving the Wilds, Morel's bubble has no gun to read   // the keeper's walker reads c.pieces as solids (dynamic-solids.ts)
   const [ids, setIds] = useState<{ id: number; kind: string }[]>([])
+  // M34: what the goop borrows (read through a ref: bodies never re-render for it), last positions, dispersals in flight
+  const goopWorld = useRef<GoopWorld>({ groundAt: groundAt ?? (() => GRASS), nodes })
+  goopWorld.current = { groundAt: groundAt ?? (() => GRASS), nodes }
+  const lastAt = useRef(new Map<number, { x: number; y: number; z: number }>())
+  const dispersals = useRef<Dispersal[]>([])
   const held = useRef(false)   // M33: the left button really down (trigger is cleared per shot on a semi-auto)
   const trigger = useRef(false), mouseAim = useRef(false), popT = useRef(0), hudT = useRef(0)
   const hud = useRef<CombatHud>({ hp: 100, maxHp: 100, ammo: 12, clip: 12, reloading: false, hurtAt: -9, hitAt: -9, gun: c.current.gun.name, champ: null })
@@ -420,12 +531,14 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     window.addEventListener('mousedown', down); window.addEventListener('mouseup', up)
     // probes for tests and scripted shots
     const g = window as unknown as { __ather?: Record<string, unknown> }
-    g.__ather = { ...(g.__ather ?? {}), combat: () => c.current, spawn: (dx = 0, dz = -10, kind: 'shambler' | 'floater' = 'shambler') => {
+    g.__ather = { ...(g.__ather ?? {}), combat: () => c.current, calls: () => gl.info.render.calls,   // M34: draw calls per frame (hollow-look-check)
+      dispersing: () => dispersals.current.map(d => ({ ...d })), dispersed: () => ({ ...DISPERSE_SEEN }),   // M34: in flight / what was drawn (hollow-look-check)
+      spawn: (dx = 0, dz = -10, kind: 'shambler' | 'floater' = 'shambler') => {
       const f = camera.getWorldDirection(new THREE.Vector3()); const x = camera.position.x + f.x * -dz + dx, z = camera.position.z + f.z * -dz
       spawnHollow(c.current, T, x, z, kind)
     }, camAim: () => { const f = camera.getWorldDirection(new THREE.Vector3()); return { x: f.x, y: f.y, z: f.z, cx: camera.position.x, cy: camera.position.y, cz: camera.position.z } }, nodes: () => nodesRef.current, fall: () => { c.current.keeper.hp = 0; onEventsRef.current([{ kind: 'down' }]) }, wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('contextmenu', menu) }
-  }, [locked, frozen, camera, T])
+  }, [locked, frozen, camera, T, gl])
 
   useFrame((_, rawDt) => {
     if (!active) return
@@ -492,6 +605,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       const now = performance.now() / 1000
       for (const e of C.events) {
         if (e.kind === 'hurt') hud.current.hurtAt = now; if (e.kind === 'hit') hud.current.hitAt = now
+        if (e.kind === 'hit' && e.killed) { const L = lastAt.current.get(e.id); if (L) dispersals.current.push({ ...L, at: performance.now() / 1000, colour: goopWorld.current.groundAt(L.x, L.z) }) }   // M34
         if (e.kind === 'champ-down') {
           spent.current.add(e.nodeId)
           // its ground goes quiet at once: the Hollows standing on it melt back into nothing (no drops; the chunk is the pay)
@@ -501,6 +615,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       }
       onEvents(C.events)
     }
+    // M34: where each Hollow last stood (the sim drops a dead one at once; its dispersal plays from here)
+    lastAt.current.clear(); for (const h of C.hollows) lastAt.current.set(h.id, { x: h.x, y: h.y, z: h.z })
     // keep the list of drawn bodies in step with the sim
     if (C.hollows.length !== ids.length || C.hollows.some((h, i) => h.id !== ids[i].id)) setIds(C.hollows.map(h => ({ id: h.id, kind: h.kind })))
     const sm = spitsMesh.current
@@ -553,7 +669,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       {channel && <ChannelBeam channel={channel} T={T} />}
       <PieceBlocks c={c} />
       <Tells c={c} heightAt={T.heightAt} />
-      {ids.map(h => h.kind === 'floater' ? <FloaterBody key={h.id} c={c} id={h.id} /> : <HollowBody key={h.id} c={c} id={h.id} />)}
+      {ids.map(h => h.kind === 'floater' ? <FloaterBody key={h.id} c={c} id={h.id} world={goopWorld} /> : <HollowBody key={h.id} c={c} id={h.id} world={goopWorld} />)}
+      <Dispersals list={dispersals} />
       <instancedMesh ref={spitsMesh} args={[undefined, undefined, 32]} frustumCulled={false}>
         <icosahedronGeometry args={[0.3, 0]} /><meshPhongMaterial color="#3a3c40" emissive="#8a8d92" specular="#ffffff" shininess={90} flatShading />
       </instancedMesh>
