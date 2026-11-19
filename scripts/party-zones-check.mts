@@ -37,13 +37,21 @@ async function toContinent(p: Page, tag: string) {
   await p.goto(`${url}/shimmer/open/continent`, { waitUntil: 'load', timeout: 240000 })
   ok(await poll(async () => (await mp(p, 'status')) === 'live' && (await mp(p, 'zone')) === 'open:continent', 240000), `${tag}: live on the continent`)
 }
-/** how long until `watcher` stops seeing `id`, starting now (null = still seen at `ms`) */
+/** how long until `watcher` stops seeing `id`, starting now (null = still seen at `ms`).
+ *  ★ The watcher's OWN page stamps the moment (a 100 ms interval reading __mp.peers, Date.now on the same machine): polling it
+ *  with evaluate round trips measured the box, not the game. While the other page loads the plot in the same browser on a
+ *  1-2 fps box, those round trips starved past 15 s although the peer was long gone (leg 4, traced 11-19). */
 async function goneIn(watcher: Page, id: string | null, act: () => Promise<unknown>, ms = 15000): Promise<number | null> {
+  await watcher.evaluate((pid: string | null) => {
+    const w = window as any; w.__goneAt = null; clearInterval(w.__goneT)
+    w.__goneT = setInterval(() => { const ps = w.__mp?.peers?.() ?? []; if (!ps.some((q: { id: string }) => q.id === pid)) { w.__goneAt = Date.now(); clearInterval(w.__goneT) } }, 100)
+  }, id)
   const t0 = Date.now()
   const actP = act()
-  const gone = await poll(async () => !(await sees(watcher, id)), ms)
+  await poll(async () => (await watcher.evaluate(() => (window as any).__goneAt)) !== null, ms + 30000)
   await actP
-  return gone ? (Date.now() - t0) / 1000 : null
+  const at = await watcher.evaluate(() => (window as any).__goneAt) as number | null
+  return at !== null && at - t0 <= ms ? (at - t0) / 1000 : null
 }
 
 const a = await open('A'), b = await open('B')
