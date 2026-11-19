@@ -17,7 +17,7 @@ import { getInv, setInv, useInv } from '../shared/bag'
 import { countOf, itemDef, makeBait, BAIT_FROM, HOTBAR, SLOTS, type Stack, type Inv } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
 import { GROUND_Y, squareAt, sqId } from './plot'
-import { snapCorner, runKeys, canLay, lay, raze, wallBoxes, edgeRect, WALL_MATS, WALL_MAT_ORDER, type Corner, type WallMat, type Walls } from './plot-walls'
+import { snapCorner, runKeys, canLay, lay, raze, wallBoxes, edgeRect, findRooms, roofMesh, WALL_MATS, WALL_MAT_ORDER, ROOF_STYLES, LOW_WALL, type Corner, type WallMat, type Walls, type RoofStyle, type PlotRoom } from './plot-walls'
 import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
@@ -109,18 +109,67 @@ function wallDrawHandler(owned: () => ReadonlySet<string>, erase: boolean) {
 }
 const WALL_GEO = new THREE.BoxGeometry(1, 1, 1)
 /** every drawn wall, one instanced mesh per wood (Lambert, like the rooms' walls) */
-function DrawnWalls({ walls }: { walls: Walls }) {
+// M37 slice 2: walls DOWN (plan mode only; Sims' trick): drawn walls drop to knee height and the roofs lift off, so you
+// see into your rooms while you plan. Leaving plan mode puts them back up.
+let wallsDown = false
+const setWallsDown = (v: boolean) => { wallsDown = v; wdEmit() }
+const useWallsDown = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => wallsDown, () => false)
+function DrawnWalls({ walls, roof }: { walls: Walls; roof: RoofStyle }) {
+  const b = useBuildMode(), down = useWallsDown() && b
+  useEffect(() => { if (!b && wallsDown) setWallsDown(false) }, [b])
   const byMat = useMemo(() => { const m = new Map<WallMat, string[]>(); for (const [k, w] of Object.entries(walls)) { const l = m.get(w.mat) ?? []; l.push(k); m.set(w.mat, l) } return [...m] }, [walls])
-  return <>{byMat.map(([mat, keys]) => <WallRun key={mat + keys.length} mat={mat} keys={keys} />)}</>
+  const rooms = useMemo(() => findRooms(walls), [walls])
+  useEffect(() => { (window as unknown as { __walls?: object }).__walls = { rooms: () => rooms.map(r => ({ cells: r.cells.length, rect: !!r.rect })), down: () => down, roof: () => roof } }, [rooms, down, roof])
+  return (
+    <>
+      {byMat.map(([mat, keys]) => <WallRun key={mat + keys.length + (down ? 'd' : '')} mat={mat} keys={keys} h={down ? LOW_WALL : WALL_H} />)}
+      {rooms.map(r => <RoomFloor key={r.key} room={r} />)}
+      {!down && rooms.map(r => <RoomRoof key={r.key + roof} room={r} style={roof} walls={walls} />)}
+    </>
+  )
 }
-function WallRun({ mat, keys, ghost }: { mat: WallMat; keys: string[]; ghost?: string }) {
+const FLOOR_GEO = new THREE.BoxGeometry(1, 0.06, 1)
+/** a drawn room's floor: planks, one cell a metre (the room's own paint comes with slice 3) */
+function RoomFloor({ room }: { room: PlotRoom }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   useEffect(() => {
     const m = ref.current; if (!m) return
     const o = new THREE.Object3D()
-    keys.forEach((k, n) => { const r = edgeRect(k); o.position.set((r.x0 + r.x1) / 2, GROUND_Y + WALL_H / 2 + (ghost ? 0.01 : 0), (r.z0 + r.z1) / 2); o.scale.set(r.x1 - r.x0 + (ghost ? 0.04 : 0), WALL_H + (ghost ? 0.02 : 0), r.z1 - r.z0 + (ghost ? 0.04 : 0)); o.updateMatrix(); m.setMatrixAt(n, o.matrix) })
+    room.cells.forEach(([i, j], n) => { o.position.set(i + 0.5, GROUND_Y + 0.03, j + 0.5); o.updateMatrix(); m.setMatrixAt(n, o.matrix) })
+    m.count = room.cells.length; m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere()
+  }, [room])
+  return <instancedMesh ref={ref} args={[FLOOR_GEO, undefined, room.cells.length]} frustumCulled={false} receiveShadow><meshLambertMaterial color="#b98d5a" /></instancedMesh>
+}
+/** the auto roof over a drawn room: the house's style on a rectangle, flat over any other shape; gable ends in the wall's wood */
+function RoomRoof({ room, style, walls }: { room: PlotRoom; style: RoofStyle; walls: Walls }) {
+  const y = GROUND_Y + WALL_H
+  const m = useMemo(() => roofMesh(room, style, y), [room, style, y])
+  const geo = useMemo(() => { if (!m.roof.length) return null; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(m.roof, 3)); g.computeVertexNormals(); return g }, [m])
+  const ends = useMemo(() => { if (!m.ends.length) return null; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(m.ends, 3)); g.computeVertexNormals(); return g }, [m])
+  useEffect(() => () => { geo?.dispose(); ends?.dispose() }, [geo, ends])
+  // the end walls' wood: the commonest wood on the room's edge
+  const endColor = useMemo(() => {
+    const n: Partial<Record<WallMat, number>> = {}
+    for (const [i, j] of room.cells) for (const k of [`h,${i},${j}`, `h,${i},${j + 1}`, `v,${i},${j}`, `v,${i + 1},${j}`]) { const w = walls[k]; if (w) n[w.mat] = (n[w.mat] ?? 0) + 1 }
+    const best = (Object.entries(n) as [WallMat, number][]).sort((a, b) => b[1] - a[1])[0]
+    return WALL_MATS[best?.[0] ?? 'goldwood'].color
+  }, [room, walls])
+  return (
+    <>
+      {geo && <mesh geometry={geo} castShadow><meshLambertMaterial color={ROOF} side={THREE.DoubleSide} /></mesh>}
+      {ends && <mesh geometry={ends}><meshLambertMaterial color={endColor} side={THREE.DoubleSide} /></mesh>}
+      {m.slabs.map((r, n) => <mesh key={n} position={[(r.x0 + r.x1) / 2, y + 0.11, (r.z0 + r.z1) / 2]} castShadow><boxGeometry args={[r.x1 - r.x0, 0.22, r.z1 - r.z0]} /><meshLambertMaterial color={ROOF} /></mesh>)}
+    </>
+  )
+}
+function WallRun({ mat, keys, ghost, h = WALL_H }: { mat: WallMat; keys: string[]; ghost?: string; h?: number }) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  useEffect(() => {
+    const m = ref.current; if (!m) return
+    const o = new THREE.Object3D()
+    keys.forEach((k, n) => { const r = edgeRect(k); o.position.set((r.x0 + r.x1) / 2, GROUND_Y + h / 2 + (ghost ? 0.01 : 0), (r.z0 + r.z1) / 2); o.scale.set(r.x1 - r.x0 + (ghost ? 0.04 : 0), h + (ghost ? 0.02 : 0), r.z1 - r.z0 + (ghost ? 0.04 : 0)); o.updateMatrix(); m.setMatrixAt(n, o.matrix) })
     m.count = keys.length; m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere()
-  }, [keys, ghost])
+  }, [keys, ghost, h])
   return (
     <instancedMesh ref={ref} args={[WALL_GEO, undefined, Math.max(1, keys.length)]} frustumCulled={false}>
       {ghost ? <meshBasicMaterial color={ghost} transparent opacity={0.45} depthWrite={false} /> : <meshLambertMaterial color={WALL_MATS[mat].color} />}
@@ -128,13 +177,13 @@ function WallRun({ mat, keys, ghost }: { mat: WallMat; keys: string[]; ghost?: s
   )
 }
 function WallGhost() {
-  const d = useWallDrag()
+  const d = useWallDrag(), down = useWallsDown()
   if (!d || !d.keys.length) return null
-  return <WallRun mat={wallMat} keys={d.keys} ghost={d.erase ? '#ff5a4a' : d.ok ? '#5aa0ff' : '#ff9a3a'} />
+  return <WallRun mat={wallMat} keys={d.keys} ghost={d.erase ? '#ff5a4a' : d.ok ? '#5aa0ff' : '#ff9a3a'} h={down ? LOW_WALL : WALL_H} />
 }
 /** the Walls / Erase tools and the wood picker, in the build bar */
 function WallTools({ owned }: { owned: React.MutableRefObject<ReadonlySet<string>> }) {
-  const t = useBuildTool(), mat = useWallMat(), inv = useInv()
+  const t = useBuildTool(), mat = useWallMat(), inv = useInv(), down = useWallsDown(), w = useWorks(), roof = w.roof ?? 'gable'
   useEffect(() => {
     if (t === 'look') return
     onBuildDraw(wallDrawHandler(() => owned.current, t === 'erase'))
@@ -150,6 +199,10 @@ function WallTools({ owned }: { owned: React.MutableRefObject<ReadonlySet<string
           style={{ ...btn(false), display: 'flex', alignItems: 'center', gap: 5, textTransform: 'none', letterSpacing: 0, boxShadow: mat === m ? `inset 0 0 0 2px ${H.ink}` : `inset 0 0 0 1px ${H.rule}` }}>
           <i style={{ width: 14, height: 14, borderRadius: 3, background: WALL_MATS[m].color, display: 'inline-block' }} />{countOf(inv, WALL_MATS[m].item)}
         </button>
+      ))}
+      <button type="button" data-act="walls-down" aria-pressed={down} style={btn(down)} onClick={() => setWallsDown(!down)}>{down ? 'Walls up' : 'Walls down'}</button>
+      {t !== 'look' && ROOF_STYLES.map(r => (
+        <button key={r} type="button" data-roof={r} aria-pressed={roof === r} style={{ ...btn(roof === r), height: 30, fontSize: 11 }} onClick={() => setWorks({ ...currentWorks(), roof: r })}>{r}</button>
       ))}
     </div>
   )
@@ -252,7 +305,7 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
       {allChests(w).map(c => <Keepstone key={c.id} c={c} pose={pose} />)}
       {w.pieces.map(pc => <PieceMesh key={pc.id} p={pc} />)}
       <MoglinsAtWork w={w} />
-      {w.walls && <DrawnWalls walls={w.walls} />}
+      {w.walls && <DrawnWalls walls={w.walls} roof={w.roof ?? 'gable'} />}
       <WallGhost />
       {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} item={p.item} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
     </>

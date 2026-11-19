@@ -104,3 +104,73 @@ export function adoptWalls(v: unknown): Walls {
   }
   return out
 }
+
+// ── M37 slice 2: ROOMS, FLOORS, ROOFS (the mock's rules) ────────────────────────────────────────────────────────────
+// A room is whatever the outside cannot reach: flood from beyond the walls' bounding box, crossing any grid edge that has
+// no piece on it; every 1 m cell left over belongs to a room (cells joined the same way). Cell (i, j) = the square
+// [i, i+1] × [j, j+1]. A rectangular room gets the house's roof style; any other shape gets a flat roof over its cells.
+export const ROOF_STYLES = ['gable', 'hip', 'flat'] as const
+export type RoofStyle = typeof ROOF_STYLES[number]
+export const ROOF_OVER = 0.3, ROOF_PITCH = 0.72, LOW_WALL = 0.7   // eave overhang (m), rise per metre of half-span, walls-down height
+export interface PlotRoom { cells: [number, number][]; rect: Rect | null; key: string }
+const crossKey = (i: number, j: number, di: number, dj: number) => (di ? `v,${i + Math.max(di, 0)},${j}` : `h,${i},${j + Math.max(dj, 0)}`)
+const STEPS: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+export function findRooms(walls: Walls): PlotRoom[] {
+  const keys = Object.keys(walls); if (keys.length < 4) return []
+  let i0 = Infinity, j0 = Infinity, i1 = -Infinity, j1 = -Infinity
+  for (const k of keys) for (const [x, z] of edgeEnds(k)) { i0 = Math.min(i0, x); j0 = Math.min(j0, z); i1 = Math.max(i1, x); j1 = Math.max(j1, z) }
+  i0 -= 1; j0 -= 1   // cells i0..i1 cover the box plus a ring outside it
+  const id = (i: number, j: number) => `${i},${j}`, out = new Set<string>(), q: [number, number][] = []
+  for (let i = i0; i <= i1; i++) for (const j of [j0, j1]) if (!out.has(id(i, j))) { out.add(id(i, j)); q.push([i, j]) }
+  for (let j = j0; j <= j1; j++) for (const i of [i0, i1]) if (!out.has(id(i, j))) { out.add(id(i, j)); q.push([i, j]) }
+  while (q.length) {
+    const [i, j] = q.pop()!
+    for (const [di, dj] of STEPS) {
+      const a = i + di, b = j + dj
+      if (a < i0 || b < j0 || a > i1 || b > j1 || out.has(id(a, b)) || walls[crossKey(i, j, di, dj)]) continue
+      out.add(id(a, b)); q.push([a, b])
+    }
+  }
+  const seen = new Set<string>(), rooms: PlotRoom[] = []
+  for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+    if (out.has(id(i, j)) || seen.has(id(i, j))) continue
+    const cells: [number, number][] = [], st: [number, number][] = [[i, j]]; seen.add(id(i, j))
+    while (st.length) {
+      const [a, b] = st.pop()!; cells.push([a, b])
+      for (const [di, dj] of STEPS) {
+        const c = a + di, d = b + dj
+        if (out.has(id(c, d)) || seen.has(id(c, d)) || walls[crossKey(a, b, di, dj)]) continue
+        seen.add(id(c, d)); st.push([c, d])
+      }
+    }
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity
+    for (const [a, b] of cells) { x0 = Math.min(x0, a); z0 = Math.min(z0, b); x1 = Math.max(x1, a + 1); z1 = Math.max(z1, b + 1) }
+    cells.sort((p, r) => p[0] - r[0] || p[1] - r[1])
+    rooms.push({ cells, rect: cells.length === (x1 - x0) * (z1 - z0) ? { x0, x1, z0, z1 } : null, key: `${cells[0][0]},${cells[0][1]}:${cells.length}` })
+  }
+  return rooms
+}
+/** a roof as flat triangles (x, y, z per vertex; y from the wall top `y`): `roof` = the sloped skin, `ends` = the gable
+ *  triangles over the wall line (drawn in the wall's wood). A non-rectangular room gets a flat slab per cell. */
+export function roofMesh(room: PlotRoom, style: RoofStyle, y: number): { roof: number[]; ends: number[]; slabs: Rect[] } {
+  const o = ROOF_OVER
+  if (style === 'flat' || !room.rect) return { roof: [], ends: [], slabs: room.rect ? [{ x0: room.rect.x0 - o, x1: room.rect.x1 + o, z0: room.rect.z0 - o, z1: room.rect.z1 + o }] : room.cells.map(([i, j]) => ({ x0: i - 0.1, x1: i + 1.1, z0: j - 0.1, z1: j + 1.1 })) }
+  const r = room.rect, alongX = r.x1 - r.x0 >= r.z1 - r.z0
+  const [u0, u1, v0, v1] = alongX ? [r.x0 - o, r.x1 + o, r.z0 - o, r.z1 + o] : [r.z0 - o, r.z1 + o, r.x0 - o, r.x1 + o]
+  const P = (u: number, yy: number, v: number) => (alongX ? [u, yy, v] : [v, yy, u])
+  const half = (v1 - v0) / 2, vc = (v0 + v1) / 2, top = y + half * ROOF_PITCH
+  const quad = (a: number[], b: number[], c: number[], d: number[]) => [...a, ...b, ...c, ...a, ...c, ...d]
+  if (style === 'gable') {
+    const ends: number[] = []   // the gable triangle sits on the end wall, its apex just under the ridge
+    for (const u of [u0 + o, u1 - o]) ends.push(...P(u, y, v0 + o), ...P(u, y, v1 - o), ...P(u, top - 0.05, vc))
+    return { roof: [...quad(P(u0, y, v0), P(u1, y, v0), P(u1, top, vc), P(u0, top, vc)), ...quad(P(u0, y, v1), P(u1, y, v1), P(u1, top, vc), P(u0, top, vc))], ends, slabs: [] }
+  }
+  const mid = (u0 + u1) / 2, r0 = Math.min(u0 + half, mid), r1 = Math.max(u1 - half, mid)
+  return { roof: [
+    ...quad(P(u0, y, v0), P(u1, y, v0), P(r1, top, vc), P(r0, top, vc)),
+    ...quad(P(u0, y, v1), P(u1, y, v1), P(r1, top, vc), P(r0, top, vc)),
+    ...P(u0, y, v0), ...P(u0, y, v1), ...P(r0, top, vc),
+    ...P(u1, y, v0), ...P(u1, y, v1), ...P(r1, top, vc),
+  ], ends: [], slabs: [] }
+}
+export const adoptRoof = (v: unknown): RoofStyle => (ROOF_STYLES as readonly string[]).includes(v as string) ? v as RoofStyle : 'gable'

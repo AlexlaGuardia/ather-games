@@ -5,6 +5,7 @@
 // round-trips; the walker cannot cross a drawn wall.
 import {
   snapCorner, straighten, runKeys, edgeRect, edgeEnds, wallBoxes, canLay, lay, raze, adoptWalls, WALL_T, WALL_H, MAX_RUN, WALL_MATS, type Walls,
+  findRooms, roofMesh, adoptRoof, ROOF_PITCH,
 } from './plot-walls'
 import { WALL_T as ROOM_T, WALL_H as ROOM_H } from './rooms'
 import { newInv, give, countOf } from '../shared/inventory'
@@ -67,6 +68,32 @@ ok(Object.values(WALL_MATS).every(m => /_plank$/.test(m.item)), 'every wall wood
   ok(!tw.bodyFree(0.5, 0, 0), 'the walker cannot stand inside a drawn wall')
   ok(tw.bodyFree(0.5, -1.2, 0) && tw.bodyFree(4.2, 0, 0), 'it can stand beside it and past its end')
 }
+
+// ── slice 2: rooms + roofs
+const box = (x0: number, z0: number, x1: number, z1: number): Record<string, { mat: 'goldwood' }> => Object.fromEntries([
+  ...runKeys({ i: x0, j: z0 }, { i: x1, j: z0 }), ...runKeys({ i: x0, j: z1 }, { i: x1, j: z1 }),
+  ...runKeys({ i: x0, j: z0 }, { i: x0, j: z1 }), ...runKeys({ i: x1, j: z0 }, { i: x1, j: z1 }),
+].map(k => [k, { mat: 'goldwood' as const }]))
+{ const r = findRooms(box(0, 0, 4, 3))
+  ok(r.length === 1 && r[0].cells.length === 12 && !!r[0].rect && r[0].rect.x1 - r[0].rect.x0 === 4, `a closed 4x3 loop is one room of 12 m² (${r.length}, ${r[0]?.cells.length})`) }
+{ const w = box(0, 0, 4, 3); delete w['h,1,0']
+  ok(findRooms(w).length === 0, 'a loop with a gap is no room (the outside gets in)') }
+{ const w = { ...box(0, 0, 4, 3), ...box(4, 0, 7, 3) }
+  const r = findRooms(w); ok(r.length === 2 && r.map(x => x.cells.length).sort().join() === '12,9', `two rooms sharing a wall are two rooms (${r.map(x => x.cells.length)})`) }
+{ // an L: 4x4 with the corner 2x2 walled off outside
+  const w: Record<string, { mat: 'goldwood' }> = {}
+  for (const k of [...runKeys({ i: 0, j: 0 }, { i: 4, j: 0 }), ...runKeys({ i: 4, j: 0 }, { i: 4, j: 2 }), ...runKeys({ i: 2, j: 2 }, { i: 4, j: 2 }), ...runKeys({ i: 2, j: 2 }, { i: 2, j: 4 }), ...runKeys({ i: 0, j: 4 }, { i: 2, j: 4 }), ...runKeys({ i: 0, j: 0 }, { i: 0, j: 4 })]) w[k] = { mat: 'goldwood' }
+  const r = findRooms(w); ok(r.length === 1 && r[0].cells.length === 12 && r[0].rect === null, `an L room is found, and is not a rectangle (${r[0]?.cells.length})`)
+  const m = roofMesh(r[0], 'gable', 3.2); ok(m.roof.length === 0 && m.slabs.length === 12, 'a non-rectangle gets a flat roof over its cells') }
+{ const room = findRooms(box(0, 0, 6, 4))[0]
+  const g = roofMesh(room, 'gable', 3.2), h = roofMesh(room, 'hip', 3.2), f = roofMesh(room, 'flat', 3.2)
+  const ys = (a: number[]) => a.filter((_, n) => n % 3 === 1)
+  ok(g.roof.length === 2 * 6 * 3 && g.ends.length === 2 * 3 * 3, 'a gable: two sloped quads + two end triangles')
+  ok(Math.abs(Math.max(...ys(g.roof)) - (3.2 + (2 + 0.3) * ROOF_PITCH)) < 1e-9 && Math.min(...ys(g.roof)) === 3.2, 'the ridge sits half-span x pitch above the eaves')
+  ok(h.roof.length === (2 * 6 + 2 * 3) * 3 && h.ends.length === 0, 'a hip: two trapezoids + two hip triangles, no gable ends')
+  const xs = g.roof.filter((_, n) => n % 3 === 0); ok(Math.min(...xs) === -0.3 && Math.max(...xs) === 6.3, 'the eaves overhang the walls by 0.3 m')
+  ok(f.slabs.length === 1 && f.slabs[0].x0 === -0.3, 'flat = one slab with the overhang') }
+ok(adoptRoof('hip') === 'hip' && adoptRoof('dome') === 'gable' && adoptRoof(undefined) === 'gable', 'a saved roof style round-trips; anything else is a gable')
 
 console.log(`plot-walls: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  ✗ ' + f)

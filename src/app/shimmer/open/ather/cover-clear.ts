@@ -5,6 +5,7 @@
 // Pure: tested in cover-clear.test.ts.
 import { footprint, pieceRect, allChests, chestBox, TABLE, type Works } from './rooms'
 import { FURNITURE } from './furniture'
+import { wallRects, findRooms } from './plot-walls'
 
 /** Grid cell (m). A tuft is ~0.7 m across, so half a metre keeps the cleared edge tight to the footprint. */
 export const CLEAR_CELL = 0.5
@@ -22,6 +23,11 @@ export function placedRects(w: Works): Rect[] {
   for (const r of w.rooms) out.push(footprint(r.kind, r.x, r.z, r.q))
   for (const p of w.pieces) if (FURNITURE[p.item]) out.push(pieceRect(p.item, p.x, p.z, p.q))
   for (const c of allChests(w)) { const b = chestBox(c); out.push({ x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1 }) }
+  // M37: drawn walls and the floors of the rooms they close (one rect per room's bounding box when it is a rectangle)
+  if (w.walls) {
+    out.push(...wallRects(w.walls))
+    for (const room of findRooms(w.walls)) { if (room.rect) out.push(room.rect); else for (const [i, j] of room.cells) out.push({ x0: i, x1: i + 1, z0: j, z1: j + 1 }) }
+  }
   out.push({ x0: TABLE.x - TABLE_HALF.hw, x1: TABLE.x + TABLE_HALF.hw, z0: TABLE.z - TABLE_HALF.hd, z1: TABLE.z + TABLE_HALF.hd })
   return out
 }

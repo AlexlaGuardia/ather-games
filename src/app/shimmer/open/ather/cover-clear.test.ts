@@ -21,4 +21,11 @@ const lifted = coverClear({ ...w, pieces: w.pieces.filter(p => p.id !== 'p1') })
 ok(grid(piece).every(([x, z]) => !lifted(x, z)), 'lift the piece: its floor grows again')
 ok(grid(room).every(([x, z]) => lifted(x, z)), 'the room stays clear')
 ok(coverClear(w) !== skip, 'a new works gives a new skip (the cover re-lays on identity)')
+// M37: a drawn 4x3 room far from everything clears its floor and walls; outside it the grass stays
+{ const walls: Record<string, { mat: 'goldwood' }> = {}
+  for (let i = 60; i < 64; i++) { walls[`h,${i},60`] = { mat: 'goldwood' }; walls[`h,${i},63`] = { mat: 'goldwood' } }
+  for (let j = 60; j < 63; j++) { walls[`v,60,${j}`] = { mat: 'goldwood' }; walls[`v,64,${j}`] = { mat: 'goldwood' } }
+  const s2 = coverClear({ ...w, walls })
+  ok(s2(62, 61.5) && s2(60, 61) && s2(63.8, 60.2), 'a drawn room clears its floor and its walls')
+  ok(!s2(70, 61.5) && !s2(62, 66), 'outside the drawn room the grass stays') }
 console.log(`cover-clear: ${pass} pass, ${fails.length} fail`); fails.forEach(f => console.log('  FAIL', f)); if (fails.length) process.exit(1)
