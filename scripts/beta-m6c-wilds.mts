@@ -120,7 +120,8 @@ while (Date.now() - t0 < 330000) {
   const dx = tgt.x - s.x, dz = tgt.z - s.z, d = Math.hypot(dx, dz)
   const eye = (s.y ?? 0) + 1.6, pitch = -Math.atan2(eye - (tgt.y + 1.0), Math.max(d, 0.5))
   await p.evaluate((yw, pt) => (window as any).__ather.look(yw, pt), Math.atan2(-dx, -dz), pitch)
-  if (!held) { await p.mouse.down(); held = true }
+  // ★ a CLICK per shot: the primary is the Charred Rifle (single fire + charge), so a held button fires ONCE and never again
+  await p.mouse.down(); await sleep(250); await p.mouse.up()
   // MOVEMENT hook: a hollow is 55-100 m out and never notices an idle keeper; walk (tp) to ~15 m of it, on the keeper's side
   if (d > 18) { const k = 15 / d; await p.evaluate((x, z, yw) => (window as any).__ather.tp(x, z, yw), tgt.x - dx * k, tgt.z - dz * k, Math.atan2(-dx, -dz)); res.tps = ((res.tps as number) ?? 0) + 1 }
   fired++
