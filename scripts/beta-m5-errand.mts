@@ -119,6 +119,7 @@ await p.keyboard.press('KeyE'); await sleep(1200)
 if (!(await poll(async () => !!(await p.$('[data-talk-choices]')), 8000))) { sees.atGreg = await text(); await shot('greg-noE'); await fail('greg: E starts his conversation', 'no talk after E at Greg') }
 await shot('greg-talk'); sees.gregTalk = await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')
 // BETA M13: his send-off one bubble at a time; E answers the lit option (Go on x3, then Take them)
+await p.keyboard.press('ArrowDown'); await sleep(300)   // M32: a newborn's first answer is Greg's tour (tour-check.mts); this check takes the send-off
 for (let k = 0; k < 6 && !(await p.evaluate((t: string) => [...document.querySelectorAll('[data-talk-option]')].some(b => (b.textContent ?? '').includes(t)), ANSWERS.take)); k++) { await p.keyboard.press('KeyE'); await sleep(600) }
 if (!(await p.evaluate((t: string) => [...document.querySelectorAll('[data-talk-option]')].some(b => (b.textContent ?? '').includes(t)), ANSWERS.take))) await fail('greg: take the gems', `no ${ANSWERS.take} answer in his talk`)
 await p.keyboard.press('KeyE'); await sleep(1200)

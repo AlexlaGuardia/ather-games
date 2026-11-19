@@ -54,6 +54,7 @@ ok(!(await p.$('[data-panel="greg"]')), 'the ground screen does NOT open with it
 const first = await answers()
 ok(first.includes(ANSWERS.ground) && first.includes(ANSWERS.bye), `the first answers include the ground screen and goodbye (${first.join(' / ')})`)
 const sendOff: string[] = [await bubble()]
+await p.keyboard.press('ArrowDown'); await wait(200)   // M32: a newborn's first answer is the tour; the send-off is the next one
 for (let k = 0; k < 3; k++) { await p.keyboard.press('KeyE'); await wait(500); sendOff.push(await bubble()) }
 ok(sendOff.length === 4 && /Now then\. A Blankstone, and the gems to go on it\./.test(sendOff[0]) && /Yours is the Fire School runesmith, at Redstair\./.test(sendOff[1]), `Greg's send-off, lark's lines one bubble each, seat filled in (${sendOff.map(x => x.slice(0, 18)).join(' | ')})`)
 ok((await answers()).join() === ANSWERS.take, `the last line offers ${ANSWERS.take}`)

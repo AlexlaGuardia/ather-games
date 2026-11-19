@@ -28,7 +28,8 @@ export function gregTalk(errand: GregErrand, step: number, act: GregTalkActs): T
       line: lines[i],
       options: last
         ? [{ label: ANSWERS.take, pick: () => { errand.onTake(); act.bye() } }]
-        : [{ label: ANSWERS.more, pick: () => act.goto(i + 1) }, ...(i === 0 ? [ground, ...tour, bye] : [])],
+        // M32 (hub 11-19): for a newborn (stage greg) the tour is Greg's FIRST offer; it ends in these same gems
+        : [...(i === 0 ? tour : []), { label: ANSWERS.more, pick: () => act.goto(i + 1) }, ...(i === 0 ? [ground, bye] : [])],
     }
   }
   // before the bracelet is lit his signed bark points the way (trigger greg:bark:errand); otherwise a plain hello

@@ -50,7 +50,9 @@ import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
 import { gregSpot } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
 import { GladeGreg, type GregTourState, type GregLive } from './glade-greg'
-import { tourStops, TOUR_NEXT, TOUR_SKIP, TOUR_DONE } from './greg-tour'
+import { tourStops, giveGloveWord, TABLE_STOP, TABLE_KEEPER, GLOVE_GIVE, TOUR_NEXT, TOUR_SKIP, TOUR_DONE } from './greg-tour'
+import { FolkModel, folkLook } from '../shared/folk-model'
+import { getLoadout, setLoadout } from '../shared/loadout'
 import { TalkBubble, TalkChoices, type TalkNode } from '../shared/npc-talk'
 import { gemsGiven, markGemsGiven, stageOf, gregsGems, errandEntries, birthSeat } from '../business/errand'
 import { skillPointerEntries } from '../business/skill-pointers'
@@ -492,7 +494,8 @@ function AtherSliceGame() {
     hudT.current -= dt
     if (hudT.current <= 0) {
       hudT.current = 0.12
-      const p = n?.kind === 'gate' ? 'E · the gate (fold map)'
+      const p = tourRef.current?.talk ? null   // M32: Greg is talking at a stop; E answers him, nothing else
+        : n?.kind === 'gate' ? 'E · the gate (fold map)'
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
         : n?.kind === 'fennel' ? 'E · Fennel'
         : n?.kind === 'work' ? workPrompt(n.near)
@@ -857,6 +860,7 @@ function AtherSliceGame() {
       const g = gregsGems(getInv(), birth)
       if (g.left) { hudSay('Your bag is full. Make room for the gems.', 'info'); return }
       setInv(g.inv); markGemsGiven(); setGiven(true)
+      lightGlove()   // M32 (hub rule): any route that reaches the gems also lights the glove (empty seat only)
       hudSay(`Gregory's gems · cut your letter at the ${seat ? SEATS[seat].name : ''} runesmith`, 'item')
     },
   }
@@ -864,25 +868,48 @@ function AtherSliceGame() {
   const talkStep = panel?.kind === 'talk' ? panel.step : -1
   const talkNode = useMemo(() => talkStep < 0 ? null : gregTalk(gregErrand, talkStep, {
     ground: () => setPanel({ kind: 'greg' }), bye: () => setPanel(null), goto: step => setPanel({ kind: 'talk', step }),
-    tour: () => { setPanel(null); setTour({ i: 0, talk: false }) },
+    tour: () => { setPanel(null); setStops(tourStops()); setTour({ i: 0, talk: false }) },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [talkStep, errandStage, birth, given])
   const talkFocus = useRef<{ x: number; y: number; z: number } | null>(null)
+  // M32 (Magii 944ad1d): Greg lights the starter glove with the birth's ruled word, only while its seat is empty
+  function lightGlove() {
+    const r = giveGloveWord(getLoadout(), birth); if (!r) return
+    setLoadout(r.loadout); hudSay(`Gregory: ${GLOVE_GIVE}`, 'chat'); hudSay(`${r.name} · lit in your glove`, 'item')
+  }
   const gl0 = gregLive.current   // M32: he may be standing anywhere on the Glade (tour); seated = his bench (M30)
-  const gregHead = useMemo(() => ({ x: gl0.x, y: (ww && ww.tileAtPoint(gl0.x, gl0.z) ? ww.heightAt(gl0.x, gl0.z) : 0) + (gl0.seated ? 1.55 : 1.75), z: gl0.z }),
-    [ww, hereTile, gl0.x, gl0.z, gl0.seated, panel, tour])   // eslint-disable-line react-hooks/exhaustive-deps
+  const gregHead = useMemo(() => zone.kind === 'plot'   // M32: on the plot he is only ever at the planning table (the tour's end)
+    ? { x: TABLE_STOP.at.x, y: plotHeightAt(TABLE_STOP.at.x, TABLE_STOP.at.z) + 1.75, z: TABLE_STOP.at.z }
+    : { x: gl0.x, y: (ww && ww.tileAtPoint(gl0.x, gl0.z) ? ww.heightAt(gl0.x, gl0.z) : 0) + (gl0.seated ? 1.55 : 1.75), z: gl0.z },
+    [zone.kind, ww, hereTile, gl0.x, gl0.z, gl0.seated, panel, tour])   // eslint-disable-line react-hooks/exhaustive-deps
   // BETA M32: a tour stop's talk (lines are @lark placeholders, greg-tour.ts). Skip at every stop; the last one ends it, and a
   // keeper still on the first errand goes straight into his send-off (the gems), where he stands.
-  const stops = useMemo(() => tourStops(), [])
-  const endTour = useCallback(() => { setTour(null); if (errandStage === 'greg') setPanel({ kind: 'talk', step: 0 }) }, [errandStage])
+  // The Glade stops, then the keeper's own planning TABLE (Magii: Greg visits the plot for it, then goes home). A skip at a Glade
+  // stop jumps to the table (the tour's END: the glove word, then the gems for a keeper still on the first errand).
+  const [stops, setStops] = useState(() => tourStops())   // re-read at each tour start (who of the five is home)
+  const tableIdx = stops.findIndex(x => x.zone === 'plot')
+  const [tableVisit, setTableVisit] = useState(false)     // Greg standing at the keeper's table (plot), until his talk ends
+  const endTour = useCallback(() => {
+    setTour(null); lightGlove()
+    if (errandStage === 'greg') setPanel({ kind: 'talk', step: 0 })
+  }, [errandStage, birth])   // eslint-disable-line react-hooks/exhaustive-deps
   const tourNode = useMemo<TalkNode | null>(() => {
     if (!tour?.talk) return null
-    const last = tour.i >= stops.length - 1
-    return { line: stops[tour.i].line, options: last ? [{ label: TOUR_DONE, pick: endTour }]
-      : [{ label: TOUR_NEXT, pick: () => setTour({ i: tour.i + 1, talk: false }) }, { label: TOUR_SKIP, pick: endTour }] }
-  }, [tour, stops, endTour])
+    if (tour.i >= tableIdx) return { line: stops[tour.i].line, options: [{ label: TOUR_DONE, pick: endTour }] }
+    return { line: stops[tour.i].line, options: [{ label: TOUR_NEXT, pick: () => setTour({ i: tour.i + 1, talk: false }) }, { label: TOUR_SKIP, pick: () => setTour({ i: tableIdx, talk: false }) }] }
+  }, [tour, stops, tableIdx, endTour])
   const onTourArrive = useCallback((i: number) => setTour(t => t && t.i === i ? { i, talk: true } : t), [])
-  useEffect(() => { if (zone.kind !== 'wilds') setTour(null) }, [zone.kind])
+  // to the table: the fade home, set down facing Greg; on the plot his talk opens at once (he is already there)
+  useEffect(() => {
+    if (!tour || tour.i !== tableIdx) return
+    if (zone.kind === 'wilds' && !tour.talk) {
+      const k = TABLE_KEEPER, g = TABLE_STOP.at
+      setTableVisit(true); arrive({ kind: 'plot' }, { x: k.x, z: k.z, yaw: Math.atan2(-(g.x - k.x), -(g.z - k.z)) })   // walker: forward = (-sin, -cos)
+    } else if (zone.kind === 'plot' && !tour.talk) setTour({ i: tour.i, talk: true })
+  }, [tour, tableIdx, zone.kind, arrive])
+  // the tour lives in the Wilds and at the table; anywhere else ends it. Greg leaves the table once his talk is over.
+  useEffect(() => { if (tourRef.current && zone.kind === 'plot' && tourRef.current.i !== tableIdx) setTour(null) }, [zone.kind, tableIdx])
+  useEffect(() => { if (!tour && panel?.kind !== 'talk' && panel?.kind !== 'greg') setTableVisit(false) }, [tour, panel])
   // BETA M13: E in a settlement talks to ONE Moglin (folk-talk.ts); the settlement's heart is its anchor (no Moglin models are drawn yet)
   const folkTalk = useFolkTalk(panel?.kind === 'folk' ? panel.s : null, useCallback((x: number, z: number) => ww && ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : 0, [ww]), () => setPanel(null))
   // BETA M22: Fennel at the Rinnshop while the first-rinstick quest is open (fennel.tsx, use-rinquest.ts › fennelTalk)
@@ -890,7 +917,9 @@ function AtherSliceGame() {
   const fennelRef = useRef(fennelAt); fennelRef.current = fennelAt
   const fennelHead = useMemo(() => (fennelAt ? { x: fennelAt.x, y: plotHeightAt(fennelAt.x, fennelAt.z) + FENNEL_HEAD, z: fennelAt.z } : null), [fennelAt])
   const fennelNode = panel?.kind === 'fennel' ? fennelTalk(rinQuest, panel.page, inv, { goto: page => setPanel({ kind: 'fennel', page }), close: () => setPanel(null) }) : null
-  useEffect(() => { talkFocus.current = talkNode ? gregHead : tourNode && tour ? (() => { const L = stops[tour.i].look; return { x: L.x, y: (ww && ww.tileAtPoint(L.x, L.z) ? ww.heightAt(L.x, L.z) : 0) + 1.0, z: L.z } })() : fennelNode && fennelHead ? fennelHead : folkTalk.focus }, [talkNode, gregHead, tourNode, tour, stops, ww, fennelNode, fennelHead, folkTalk.focus])
+  useEffect(() => { talkFocus.current = talkNode ? gregHead : tourNode && tour ? (() => { const L = stops[tour.i].look, ly = (stops[tour.i].zone === 'plot' ? plotHeightAt(L.x, L.z) : ww && ww.tileAtPoint(L.x, L.z) ? ww.heightAt(L.x, L.z) : 0) + 1.0
+    // M32: between what he shows and his head (his side heavier: his bubble must stay on screen), so a phone frames both (aimed at the station alone, his bubble left the screen)
+    return { x: L.x * 0.4 + gregHead.x * 0.6, y: ly * 0.4 + (gregHead.y + 0.6) * 0.6, z: L.z * 0.4 + gregHead.z * 0.6 } })() : fennelNode && fennelHead ? fennelHead : folkTalk.focus }, [talkNode, gregHead, tourNode, tour, stops, ww, fennelNode, fennelHead, folkTalk.focus])
   // the journal: the nearest infected node is the keeper's open line on this side (re-aimed as you move; unchanged posts are free)
   useEffect(() => {
     const post = () => {
@@ -1008,7 +1037,9 @@ function AtherSliceGame() {
             safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
         )}
         {folkTalk.node && folkTalk.bubbleAt && zone.kind === 'wilds' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} />}
-        {(talkNode ?? tourNode) && zone.kind === 'wilds' && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} />}
+        {zone.kind === 'plot' && tableVisit && (() => { const g = TABLE_STOP.at, p = poseRef.current; return (
+          <group position={[g.x, plotHeightAt(g.x, g.z), g.z]} rotation-y={Math.atan2(p.x - g.x, p.z - g.z)}><FolkModel look={folkLook('gregory')} action={tourNode || talkNode ? 'talk' : 'idle'} /></group>) })()}
+        {(talkNode ?? tourNode) && (zone.kind === 'wilds' || tableVisit) && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} />}
         {zone.kind === 'plot' && fennelAt && <Fennel spot={fennelAt} y={plotHeightAt(fennelAt.x, fennelAt.z)} talking={!!fennelNode} />}
         {fennelNode && fennelHead && zone.kind === 'plot' && <TalkBubble at={[fennelHead.x, fennelHead.y + 0.5, fennelHead.z]} name={FENNEL_NAME} line={fennelNode.line} />}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
