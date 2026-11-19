@@ -1,7 +1,7 @@
 // business/errand.ts: the first errand's stage is read off facts (gems given, the letter in the bag, Greg's bracelet).
 import { stageOf, gregsGems, birthSeat, errandEntries } from './errand'
 import { cut, letterItem, imbue, wordsFor } from './letters'
-import { newInv, countOf } from '../shared/inventory'
+import { newInv, countOf, give, SLOTS } from '../shared/inventory'
 import { newLoadout } from '../shared/loadout'
 
 let pass = 0, fail = 0
@@ -23,5 +23,12 @@ ok(errandEntries('greg', 'star', { greg: { x: 1, z: 2 } })[0].where?.zone === 'w
 { const g = { x: 5, z: 6 }, s = errandEntries('smith', 'star', { gate: g })[0].where, m = errandEntries('temple', 'star', { gate: g, temple: { x: 7, z: 8 } })[0].where
   ok(s?.zone === 'ather' && s.x === 5 && m?.zone === 'continent' && m.x === 7, 'M5: on the Ather the smith line points at the gate; the continent door wins where seen') }
 ok(errandEntries('done', 'star', {}).length === 0, 'done: the line comes off the page')
+// BETA M32 (11-19): Greg's give REFUSES on a full bag. gregsGems reports what did not fit (`left`); page.tsx onTake then keeps
+// the OLD bag and says so, so nothing is handed over by halves and nothing is lost.
+{ let full = newInv(); for (let i = 0; i < SLOTS; i++) full = give(full, 'repeater', 1).inv
+  const r = gregsGems(full, 'star')
+  ok(r.left > 0 && countOf(r.inv, 'blankstone') === 0, `M32: a full bag takes none of the gems (left ${r.left})`)
+  let one = newInv(); for (let i = 0; i < SLOTS - 1; i++) one = give(one, 'repeater', 1).inv
+  ok(gregsGems(one, 'star').left > 0, 'M32: one free slot is not room for all three kinds: still reported as left over') }
 console.log(`errand: ${pass} pass, ${fail} fail`)
 if (fail) process.exit(1)

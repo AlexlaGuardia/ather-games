@@ -66,6 +66,15 @@ export function recipeOf(rune: string): { id: string; n: number }[] {
 }
 /** the letters a seat cuts, in rune order */
 export const lettersAt = (seat: Seat) => RUNES.map(r => r.id).filter(id => (RUNE_SEATS[id] ?? []).includes(seat))
+/** BETA M32 (11-19): the counter's rows for THIS keeper. The birth letter (when this seat cuts it) comes first; while the keeper
+ *  is in the first errand, the seat's other letters fold away so the one they came for is the one they see. Out of the errand,
+ *  or at a seat that does not cut their letter, nothing folds: it is the plain rune-order list. */
+export function smithRows(seat: Seat, birth: string | null, firstErrand: boolean): { shown: string[]; folded: string[] } {
+  const all = lettersAt(seat)
+  if (!birth || !all.includes(birth)) return { shown: all, folded: [] }
+  const rest = all.filter(r => r !== birth)
+  return firstErrand ? { shown: [birth], folded: rest } : { shown: [birth, ...rest], folded: [] }
+}
 
 export type CutVerdict = { ok: true } | { ok: false; why: string }
 export function canCut(inv: Inv, marks: number, seat: Seat, rune: string, blueprint = hasBlueprint(rune)): CutVerdict {

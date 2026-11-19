@@ -10,8 +10,9 @@ import { countOf, itemDef } from '../shared/inventory'
 import { useBirth } from '../birth-gate'
 import { RUNES } from '../../play3d/birth/runes.data'
 import type { Ledger } from '../trade'
+import { stageOf, gemsGiven } from './errand'
 import { RUNESMITH_CUT, idonyBeat, IDONY_AFTER, type Beat } from './errand-lines'
-import { SEATS, lettersAt, recipeOf, canCut, cut, hasBlueprint, letterItem, CUT_FEE, IMBUE_FEE, imbuable, wordsFor, missingLetters, lightsFor, imbue, type Seat } from './letters'
+import { SEATS, smithRows, recipeOf, canCut, cut, hasBlueprint, letterItem, CUT_FEE, IMBUE_FEE, imbuable, wordsFor, missingLetters, lightsFor, imbue, type Seat } from './letters'
 
 const runeName = (id: string) => RUNES.find(r => r.id === id)?.name ?? id
 const runeGlow = (id: string) => RUNES.find(r => r.id === id)?.glow ?? '#c9a35a'
@@ -19,9 +20,14 @@ const runeGlow = (id: string) => RUNES.find(r => r.id === id)?.glow ?? '#c9a35a'
 export function RunesmithPanel({ seat, ledger, setLedger, onClose, onBack }: {
   seat: Seat; ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void; onBack?: () => void
 }) {
-  const inv = useInv()
+  const inv = useInv(), loadout = useLoadout(), birth = useBirth()
   const [msg, setMsg] = useState<string | null>(null)
+  const [more, setMore] = useState(false)
   const s = SEATS[seat]
+  // BETA M32: the birth letter leads; in the first errand it is the only row until the keeper asks for more
+  const stage = stageOf(birth, inv, loadout, gemsGiven())
+  const errand = stage === 'greg' || stage === 'smith' || stage === 'temple'
+  const rows = smithRows(seat, birth, errand)
   const doCut = (rune: string) => {
     const r = cut(inv, ledger.marks, seat, rune)
     if (!r.ok) { setMsg(r.why); return }
@@ -39,14 +45,15 @@ export function RunesmithPanel({ seat, ledger, setLedger, onClose, onBack }: {
       }
       footer={<span className="text-[12px]" style={hearthDisplay}>Bring the stone and the ink; the letter is cut here. A word&apos;s letters may come from different schools.</span>}>
       <div className="px-4 pt-3 pb-4 grid gap-1.5" data-seat={seat}>
-        {lettersAt(seat).map(rune => {
+        {[...rows.shown, ...(more ? rows.folded : [])].map(rune => {
           const bp = hasBlueprint(rune), v = canCut(inv, ledger.marks, seat, rune, bp)
+          const mine = rune === birth, gems = mine && (stage === 'smith' || stage === 'temple')
           return (
-            <div key={rune} className="flex items-center gap-3 rounded-[12px] px-3 py-2" data-letter={rune}
+            <div key={rune} className="flex items-center gap-3 rounded-[12px] px-3 py-2" data-letter={rune} data-birth-letter={mine || undefined}
               style={{ background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}`, opacity: bp ? 1 : 0.55 }}>
               <span className="w-3 h-3 rounded-full shrink-0" style={{ background: runeGlow(rune), boxShadow: `0 0 8px ${runeGlow(rune)}` }} />
               <div className="min-w-0 flex-1">
-                <div className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{runeName(rune)} <span className="text-[12px] font-normal" style={{ color: H.inkSoft }}>· you hold {countOf(inv, letterItem(rune))}</span></div>
+                <div className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{runeName(rune)}{mine && <span className="text-[11px] font-normal ml-1.5 px-1.5 py-0.5 rounded-full" data-greg-gems={gems || undefined} style={{ background: 'rgba(201,163,90,.22)', color: H.ink }}>{gems ? "your letter · Greg's gems" : 'your letter'}</span>} <span className="text-[12px] font-normal" style={{ color: H.inkSoft }}>· you hold {countOf(inv, letterItem(rune))}</span></div>
                 <div className="text-[12px]" style={{ color: H.inkSoft }}>
                   {bp ? recipeOf(rune).map(x => `${x.n} ${itemDef(x.id).name} (${countOf(inv, x.id)})`).join(' · ') : 'A lost letter. It needs a blueprint.'}
                 </div>
@@ -55,6 +62,11 @@ export function RunesmithPanel({ seat, ledger, setLedger, onClose, onBack }: {
             </div>
           )
         })}
+        {rows.folded.length > 0 && (
+          <button type="button" className="text-[12px] underline justify-self-start mt-0.5" style={{ ...hearthDisplay, color: H.inkSoft }} data-smith-more onClick={() => setMore(m => !m)}>
+            {more ? 'fewer letters' : `more letters (${rows.folded.length})`}
+          </button>
+        )}
         {msg && <div className="text-[13px] font-semibold mt-1" style={{ color: '#a8321f' }} data-smith-msg>{msg}</div>}
       </div>
     </HearthFrame>

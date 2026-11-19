@@ -1,7 +1,7 @@
 // business/letters.ts: every rune has a seat per canon, a cut takes the recipe + fee, Scatter needs a blueprint,
 // Idony inscribes blank vessels (never Greg's glove), the word's letters come out of the bag.
 import { RUNES } from '../../play3d/birth/runes.data'
-import { RUNE_SEATS, SEATS, SCATTER, lettersAt, recipeOf, cut, canCut, letterItem, imbuable, wordsFor, imbue, CUT_FEE, IMBUE_FEE, lightsFor } from './letters'
+import { RUNE_SEATS, SEATS, SCATTER, lettersAt, smithRows, recipeOf, cut, canCut, letterItem, imbuable, wordsFor, imbue, CUT_FEE, IMBUE_FEE, lightsFor } from './letters'
 import { newInv, give, countOf, itemDef, type Inv } from '../shared/inventory'
 import { existsSync } from 'node:fs'
 import { newLoadout } from '../shared/loadout'
@@ -41,5 +41,11 @@ ok(lightsFor([w.letters[0]], w.letters[0]) && !lightsFor(['freeze'], 'magma'), '
 ok(wordsFor('glove').length === 0 && wordsFor('bracelet').length > 20, `a glove takes no cut word (signature words are earned); bracelets take ${wordsFor('bracelet').length} tactical words`)
 // every rune's letter has its glyph icon on disk (design-briefs/letter-glyphs.md; tools/art/letter_glyphs.py)
 for (const r of RUNES) { const d = itemDef(letterItem(r.id)); ok(!!d.icon && existsSync('public' + d.icon), `icon: the ${r.name} letter has no glyph icon`) }
+// BETA M32: the birth letter first; folded only in the first errand, only at the seat that cuts it
+{ const f = smithRows('fire', 'star', true), d = smithRows('fire', 'star', false), o = smithRows('water', 'star', true)
+  ok(f.shown.join() === 'star' && f.folded.length === lettersAt('fire').length - 1 && !f.folded.includes('star'), 'M32: in the errand the smith shows the birth letter alone, the rest folded')
+  ok(d.shown[0] === 'star' && d.shown.length === lettersAt('fire').length && !d.folded.length, 'M32: after the errand the birth letter still leads, nothing folds')
+  ok(o.shown.join() === lettersAt('water').join() && !o.folded.length, 'M32: a seat that does not cut your letter is the plain list')
+  ok(smithRows('fire', null, true).shown.join() === lettersAt('fire').join(), 'M32: no birth rune, the plain list') }
 console.log(`letters: ${pass} pass, ${fail} fail`)
 if (fail) process.exit(1)
