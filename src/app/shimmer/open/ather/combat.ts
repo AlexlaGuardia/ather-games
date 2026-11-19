@@ -15,7 +15,6 @@
 
 import { canFire, spreadDeg, bloomAfterShot, bloomAfterRest, weaponDef, type WeaponDef } from '../../engine/weapons'
 import { stepChampion, hitChampion, CHAMP, type Champion } from './champion'
-import { easeRemote } from '../shared/fight-share'   // M28: a non-host's Hollows ease to the host's snapshot
 
 export interface Terrain {
   heightAt: (x: number, z: number) => number
@@ -100,11 +99,6 @@ export function solidTop(c: Combat, x: number, z: number): number | null {
 export interface CombatDecoy { x: number; z: number; y: number; until: number; moveId: string }
 export interface Combat {
   hollows: Hollow[]; rounds: Round[]; drops: Drop[]; spits: Spit[]
-  /** BETA M28 shared fights: a NON-HOST in a party. The host runs the Hollows (fight-share.ts snapshots); here they only
-   *  ease to the host's word: no AI, no spawning, no spit; a round that hits one flashes it and queues the hit in `netHits`
-   *  (slice 3 sends them to the host), and never changes its hp (the host decides that). */
-  remote?: boolean
-  netHits?: { id: number; dmg: number; head: boolean }[]
   keeper: Keeper; gun: WeaponDef
   nextId: number; seed: number
   clock?: number
@@ -246,13 +240,6 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
       if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + HEAD_Y, h.z) < HEAD_R * HEAD_R) { best = { h, head: true }; break }
       if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + BODY_Y, h.z) < BODY_R * BODY_R * 1.6) best = { h, head: false }
     }
-    if (best && c.remote) {   // M28: a non-host's round: feedback now, the host decides the damage (slice 3)
-      const h = best.h, dmg = (best.head ? r.crit : r.dmg) * ((k.ampUntil ?? 0) > (c.clock ?? 0) ? AMP_MULT : 1)
-      h.hitFlash = 0.12; r.life = 0
-      ;(c.netHits ??= []).push({ id: h.id, dmg, head: best.head })
-      c.events.push({ kind: 'hit', id: h.id, head: best.head, killed: false })
-      continue
-    }
     if (best) {
       const h = best.h
       const mult = (fxOn(h, 'vulnerable') ? FX.vulnerableMult : 1) * ((k.ampUntil ?? 0) > (c.clock ?? 0) ? AMP_MULT : 1)
@@ -275,7 +262,6 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   // hollows
   for (const h of c.hollows) {
     h.hitFlash = Math.max(0, h.hitFlash - dt); h.t -= dt
-    if (c.remote) { easeRemote(h, dt); h.y = T.heightAt(h.x, h.z) + (h.kind === 'floater' ? FLOATER.hover : 0); continue }   // M28: the host's word
     if (h.fx) {
       for (const key in h.fx) { const kk = key as HollowFx; h.fx[kk] = Math.max(0, (h.fx[kk] ?? 0) - dt) }
       if (fxOn(h, 'burning')) h.hp -= FX.burnDps * dt
