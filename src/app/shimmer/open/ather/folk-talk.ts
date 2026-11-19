@@ -6,6 +6,7 @@
 // All game logic stays in settlement-folk.ts (wantsLeft / trusted / bring / recruit); this file only arranges lines.
 // ★ @lark draft 11-18, awaiting Alex sign-off: the answer labels (ASK), the bring verb and the two stock lines below. The dream
 // stays the hello (lark: the only place a keeper ever hears a Moglin's dream). Checks import these, never retype them.
+import { isGlade, GLADE_STAYS } from './moonwell-glade'
 import type { TalkNode } from '../shared/npc-talk'
 import { wantsLeft, trusted, type Folk, type Trust } from './settlement-folk'
 import { talkLine } from './folk-lines'
@@ -43,6 +44,7 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): 
   const askRoom = {
     label: ASK.room,
     pick: () => {
+      if (isGlade(f.home)) { act.go({ fid: f.id, screen: 'said', line: GLADE_STAYS }); return }   // M30: Moonwell's five stay home
       if (!ok) { act.go({ fid: f.id, screen: 'needs' }); return }
       if (c.room <= 0) { act.go({ fid: f.id, screen: 'said', line: FOLK_NO_ROOM }); return }
       act.recruit(f); act.go({ fid: f.id, screen: 'said', line: talkLine(f.employed ? 'trusted' : 'yes', f.id) })

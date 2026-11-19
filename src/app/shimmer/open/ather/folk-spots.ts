@@ -4,6 +4,7 @@
 // -z), the well at local (0, 5), the whole group turned by `settlementTurn`. Spots are x/z only: the draw asks the ground's
 // height there every time (M18 reshapes ground near paths), never a cached y. All inside the settlement's flat disc.
 import type { Settlement } from './network'
+import { GLADE_ID, gladeSpots } from './moonwell-glade'
 
 /** the same hash network-scene.tsx uses for a settlement's doors and turn */
 export const h01 = (s: string, k: number) => { let h = 2166136261 ^ k; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return ((h >>> 0) % 10000) / 10000 }
@@ -13,6 +14,7 @@ export const MIN_GAP = 1.6
 export interface Spot { id: string; x: number; z: number; yaw: number }
 /** one spot per Moglin, in the green: radius 3.5-8 m round a point just behind the well, spread across the half facing out */
 export function folkSpots(s: Settlement, ids: readonly string[]): Spot[] {
+  if (s.id === GLADE_ID) return gladeSpots(ids)   // Moonwell Glade: a ring round the pool, not the knoll's green (M30)
   const turn = settlementTurn(s), c = Math.cos(turn), sn = Math.sin(turn)
   const out: Spot[] = []
   ids.forEach((id, k) => {

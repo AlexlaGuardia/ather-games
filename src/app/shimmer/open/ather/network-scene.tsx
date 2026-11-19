@@ -12,6 +12,7 @@ import { pathsIn, PATH_W, fairDoor, FAIR_NAME, SEASON, type Network, type Settle
 import { folkOf, stillHome } from './settlement-folk'
 import { loadVillage } from './moglins'
 import { folkSpots, type Spot } from './folk-spots'
+import { GLADE_ID } from './moonwell-glade'
 import { setMapSettlements } from './tile-picture'
 import { MoglinModel, furOf } from '../shared/moglin-model'
 
@@ -86,7 +87,7 @@ function SettlementModel({ s, y }: { s: Settlement; y: number }) {
 }
 export function Settlements({ net, loaded }: { net: Network; loaded: (x: number, z: number) => number | null }) {
   return <>
-    {net.settlements.map(s => { const y = loaded(s.x, s.z); return y === null ? null : <SettlementModel key={s.id} s={s} y={y} /> })}
+    {net.settlements.map(s => { const y = loaded(s.x, s.z); return y === null || s.id === GLADE_ID ? null : <SettlementModel key={s.id} s={s} y={y} /> })}   {/* the Glade is the pool + Greg's home, not a knoll (moonwell-glade.ts) */}
     <SettlementFolk net={net} loaded={loaded} />
   </>
 }

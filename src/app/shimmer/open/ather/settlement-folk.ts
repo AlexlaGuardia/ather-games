@@ -16,6 +16,7 @@ import { gardenKey } from '@/lib/keeper-local'
 import { SETTLEMENT_GATHERS, type Settlement, type SettlementBiome } from './network'
 import { welcome, type MoglinRecord, type Profession, type Grade, type Village } from './moglins'
 import { DREAMS } from './folk-lines'
+import { GLADE_ID, gladeFolk } from './moonwell-glade'
 
 export const FOLK_MIN = 3, FOLK_MAX = 5
 /** Odds a Moglin already has a job in its settlement (then it wants trust earned first). */
@@ -66,6 +67,7 @@ function pick<T>(rnd: () => number, w: readonly [T, number][]): T {
 
 /** The Moglins living in a settlement this season. Same inputs, same folk, on every device. */
 export function folkOf(s: Settlement, season: number): Folk[] {
+  if (s.id === GLADE_ID) return gladeFolk()   // Moonwell Glade: the five, fixed, never re-rolled (moonwell-glade.ts, M30)
   const rnd = rngOf(`folk:${season}:${s.id}`)
   const biome: SettlementBiome = s.biome ?? 'meadow'
   const trades = Object.entries(BIOME_TRADES[biome]) as [Profession, number][]

@@ -27,13 +27,13 @@ import { plumbingOf, draw, type WaterSave } from './water'
 
 /** Canon's trades (ather-rework › Needs: "a farmer + a cook, then a carpenter + a stonemason, then specialists: alchemist,
  *  smith, jeweler, and more trades as they are ruled"). A new trade is canon's to rule, then one row here. */
-export type Profession = 'farmer' | 'cook' | 'carpenter' | 'stonemason' | 'alchemist' | 'smith' | 'jeweler'
+export type Profession = 'farmer' | 'cook' | 'carpenter' | 'stonemason' | 'alchemist' | 'smith' | 'jeweler' | 'shopkeeper'   // shopkeeper: Moonwell's Mallow, talk + trust only, never a village job (hub 11-19)
 export const PROFESSIONS: readonly Profession[] = ['farmer', 'cook', 'carpenter', 'stonemason', 'alchemist', 'smith', 'jeweler']
 /** Which rooms a trade can work. The cook pairs with the Rinnshop too (catches readied for the hearth; a Moglin never
  *  rins, canon 8d3ada7). The farmer keeps the Farm room (it waters, never plants or harvests: see THE FARMER above); the jeweler shares the Stonery's bench. */
 export const WORKS_IN: Readonly<Record<Profession, readonly RoomKind[]>> = {
   farmer: ['farm'], cook: ['cooking', 'rinnshop'], carpenter: ['carpentry'], stonemason: ['stonemason'],
-  alchemist: ['alchemy'], smith: ['smith'], jeweler: ['stonemason'],
+  alchemist: ['alchemy'], smith: ['smith'], jeweler: ['stonemason'], shopkeeper: [],
 }
 
 /** GRADE CATEGORIES (Jin's; canon: fixed, never trained up, the Moglin's own gifts). 1 (fair) .. 5 (rare).

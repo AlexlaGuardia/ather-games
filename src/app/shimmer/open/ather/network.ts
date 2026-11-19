@@ -7,6 +7,7 @@
 //
 // ★ PURE apart from `loadNetwork` (fetch).
 
+import { GLADE } from './moonwell-glade'
 export const SEASON = 1   // until the season clock exists, the network is season 1's
 export type SettlementBiome = 'shore' | 'meadow' | 'woods' | 'rock'
 /** `biome` = what lies around it (the bake guarantees at least one of each, Alex 11-17); older bakes lack it */
@@ -31,8 +32,11 @@ export const FAIR_NAME = 'The Thistledown Fair'
 export const SETTLEMENT_R = 45, FAIR_R = 34, FAIR_DOOR_R = 9
 
 export async function loadNetwork(season = SEASON, base = '/open/wilds'): Promise<Network | null> {
-  try { const r = await fetch(`${base}/network-s${season}.json`); return r.ok ? (await r.json()) as Network : null } catch { return null }
+  try { const r = await fetch(`${base}/network-s${season}.json`); return r.ok ? withGlade((await r.json()) as Network) : null } catch { return null }
 }
+
+/** Moonwell Glade (M30, moonwell-glade.ts) joins every season's settlements: fixed, at the Wilds' front door. */
+export const withGlade = (n: Network): Network => (n.settlements.some(s => s.id === GLADE.id) ? n : { ...n, settlements: [GLADE, ...n.settlements] })
 
 /** The settlement the keeper stands in, if any. */
 export function settlementAt(n: Network, x: number, z: number): Settlement | null {
