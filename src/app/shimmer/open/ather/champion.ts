@@ -14,7 +14,7 @@
 //
 // ★ PURE, like combat.ts (which steps it and routes rounds into it).
 
-import { spawnHollow, type Combat, type Terrain } from './combat'
+import { spawnHollow, blowCost, type Combat, type Terrain } from './combat'
 import type { WildsNode } from './nodes'
 
 export type Attack = 'slam' | 'lunge' | 'volley'
@@ -109,8 +109,9 @@ export function hitChampion(c: Combat, T: Terrain, ch: Champion, head: boolean, 
 function hurt(c: Combat, amount: number) {
   const k = c.keeper
   if (k.hp <= 0) return
-  k.hp = Math.max(0, k.hp - amount); k.sinceHurt = 0
-  c.events.push({ kind: 'hurt', amount })
+  const cost = blowCost(k, amount)   // M29 frame: a Large keeper takes 10% less
+  k.hp = Math.max(0, k.hp - cost); k.sinceHurt = 0
+  c.events.push({ kind: 'hurt', amount: cost })
   if (k.hp <= 0) c.events.push({ kind: 'down' })
 }
 
@@ -169,7 +170,7 @@ export function stepChampion(c: Combat, T: Terrain, feet: { x: number; y: number
       if (ch.attack === 'lunge') {
         const sp = CHAMP.lunge.len / CHAMP.lunge.act, nx = ch.x + ch.ax * sp * dt, nz = ch.z + ch.az * sp * dt
         if (T.walkable(nx, nz)) { ch.x = nx; ch.z = nz }
-        if (!ch.hitDone && d < CHAMP.radius + 0.6 && Math.abs(feet.y - ch.y) < 2.5) { ch.hitDone = true; hurt(c, CHAMP.lunge.damage) }
+        if (!ch.hitDone && d < CHAMP.radius + 0.6 * (c.keeper.hit ?? 1) && Math.abs(feet.y - ch.y) < 2.5) { ch.hitDone = true; hurt(c, CHAMP.lunge.damage) }
       }
       if (ch.t <= 0) {
         const next = ch.queue.shift()

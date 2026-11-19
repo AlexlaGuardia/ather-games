@@ -15,6 +15,8 @@
 // Every hand part is in the TRANSPARENT list (transparent, opacity 1) at renderOrder ORDER, and an invisible sentinel at
 // ORDER - 1 clears the depth buffer in onBeforeRender: three draws the transparent list last, sorted by renderOrder, so the
 // clear lands after the whole world and before the hands, which then depth-test only against each other.
+import { useLook } from './look-store'
+import { OPT } from './keeper-look'
 import { useEffect, useImperativeHandle, useMemo, useRef, forwardRef } from 'react'
 import * as THREE from 'three'
 import { useThree } from '@react-three/fiber'
@@ -25,20 +27,27 @@ const C = { glove: '#6e4a2c', cuff: '#b9a582', cord: '#7a5a35', seat: '#7fb6d9',
 
 export interface OpenHandsApi { step: (i: FpInput, dt: number) => void; seat: (lit: number) => void }
 
-export function buildHand(side: 1 | -1, seatMat: THREE.MeshStandardMaterial | null): THREE.Group {
+export function buildHand(side: 1 | -1, seatMat: THREE.MeshStandardMaterial | null, mitten: string = C.glove): THREE.Group {
   const g = new THREE.Group()
   const mat = (color: string) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, transparent: true, opacity: 1 })
+  const mit = mat(mitten); mit.userData.mitten = true   // M29: the keeper's own mittens, in their hands colour (tintMittens)
   const part = (geo: THREE.BufferGeometry, m: THREE.Material, p: [number, number, number], r: [number, number, number] = [0, 0, 0]) => {
     const mesh = new THREE.Mesh(geo, m); mesh.position.set(...p); mesh.rotation.set(...r); mesh.renderOrder = ORDER; mesh.frustumCulled = false; g.add(mesh)
   }
-  // a fist seen from behind, knuckles up: the mitt, the thumb across, the cuff and its cord below
-  part(new THREE.BoxGeometry(0.1, 0.115, 0.075), mat(C.glove), [0, 0, 0])
-  part(new THREE.CapsuleGeometry(0.019, 0.045, 3, 8), mat(C.glove), [side * -0.045, -0.01, -0.03], [0, 0, side * 1.2])
-  part(new THREE.CylinderGeometry(0.06, 0.056, 0.08, 12), mat(C.cuff), [0, -0.095, 0.005])
-  part(new THREE.TorusGeometry(0.06, 0.008, 6, 16), mat(C.cord), [0, -0.075, 0.005], [Math.PI / 2, 0, 0])
+  // ★ M29 (Alex 11-19: the POV matches the body): every keeper has FLOATING LIMBS, so the hand is the body's MITTEN: a
+  // rounded mitt and a thumb across, floating with no wrist or sleeve (the old cuff + cord went with the arms). The canon
+  // vessels stay: the glove's seat on the right, the bracelet round the left mitten's base.
+  const ball = new THREE.SphereGeometry(1, 16, 12); ball.scale(0.056, 0.066, 0.042)
+  part(ball, mit, [0, 0, 0])
+  part(new THREE.CapsuleGeometry(0.019, 0.04, 3, 8), mit, [side * -0.043, -0.012, -0.026], [0, 0, side * 1.2])
   if (seatMat) part(new THREE.IcosahedronGeometry(0.02, 0), seatMat, [0, 0.012, 0.04])                     // the glove's seat, facing you
-  else part(new THREE.TorusGeometry(0.063, 0.013, 6, 18), mat(C.bracelet), [0, -0.05, 0.005], [Math.PI / 2, 0, 0])   // the bracelet
+  else part(new THREE.TorusGeometry(0.05, 0.011, 6, 18), mat(C.bracelet), [0, -0.05, 0.003], [Math.PI / 2, 0, 0])   // the bracelet, round the mitten's base
   return g
+}
+
+/** Recolour a built hand's mittens (the look changed). */
+export function tintMittens(hand: THREE.Object3D, color: string) {
+  hand.traverse(o => { const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined; if (m?.userData?.mitten) m.color.set(color) })
 }
 
 export const OpenHands = forwardRef<OpenHandsApi>(function OpenHands(_, ref) {
@@ -54,6 +63,12 @@ export const OpenHands = forwardRef<OpenHandsApi>(function OpenHands(_, ref) {
     root.add(sentinel, R, L)
     return { root, R, L }
   }, [seatMat])
+  const look = useLook()
+  useEffect(() => { const c = OPT.accent[look.accent]; tintMittens(rig.R, c); tintMittens(rig.L, c) }, [look.accent, rig])
+  // probe for creator-check (reading only): the right mitten's colour as drawn
+  useEffect(() => {
+    (window as unknown as { __fpHands?: unknown }).__fpHands = () => { let c = ''; rig.R.traverse(o => { const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined; if (!c && m?.userData?.mitten) c = '#' + m.color.getHexString() }); return c }
+  }, [rig])
   const st = useRef(newFpState())
   const place = (o: THREE.Group, p: HandPose) => { o.position.set(p.x, p.y, p.z); o.rotation.set(p.pitch, 0, p.roll); o.scale.setScalar(FP.SCALE) }
   useImperativeHandle(ref, () => ({

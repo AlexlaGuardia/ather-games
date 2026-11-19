@@ -52,7 +52,13 @@ export interface Keeper {
   ammo: number; reloading: number; sinceShot: number; bloom: number
   /** an infusion cast on the gun: rounds hit harder until the combat clock passes this */
   ampUntil?: number
+  /** M29 FRAME (keeper-look.ts › FRAME_STATS): `hit` scales how close a blow or a spit must come (Small 0.88, Large 1.16),
+   *  `takes` scales what a hit costs (Large 0.9 = +10% defence). Unset = the baseline 1. The page sets both from the look. */
+  hit?: number
+  takes?: number
 }
+/** what a blow of `amount` costs this keeper (rounded, never below 1 so a hit always registers) */
+export const blowCost = (k: Keeper, amount: number) => Math.max(1, Math.round(amount * (k.takes ?? 1)))
 export const AMP_MULT = 1.3
 
 export const KEEPER_HP = 100
@@ -286,10 +292,11 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
         break
       case 'lunge':
         mx = h.lx; mz = h.lz; speed = SHAMBLER.lungeSpeed
-        if (!h.hitThisLunge && !unarmed && Math.hypot(feet.x - h.x, feet.z - h.z) < SHAMBLER.hitReach && Math.abs(feet.y - h.y) < 1.6 && k.hp > 0) {
+        if (!h.hitThisLunge && !unarmed && Math.hypot(feet.x - h.x, feet.z - h.z) < SHAMBLER.hitReach * (k.hit ?? 1) && Math.abs(feet.y - h.y) < 1.6 && k.hp > 0) {
           h.hitThisLunge = true
-          k.hp = Math.max(0, k.hp - SHAMBLER.damage); k.sinceHurt = 0
-          c.events.push({ kind: 'hurt', amount: SHAMBLER.damage })
+          const cost = blowCost(k, SHAMBLER.damage)
+          k.hp = Math.max(0, k.hp - cost); k.sinceHurt = 0
+          c.events.push({ kind: 'hurt', amount: cost })
           if (k.hp <= 0) c.events.push({ kind: 'down' })
         }
         if (h.t <= 0) { h.state = 'recover'; h.t = SHAMBLER.recover }
@@ -335,8 +342,8 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     const top = solidTop(c, p.x, p.z)
     if (top !== null && p.y < top) { p.life = 0; continue }   // stopped by a raised piece
     const bx = p.x - feet.x, bz = p.z - feet.z, by = p.y - (feet.y + 0.9)
-    if (k.hp > 0 && bx * bx + bz * bz < (FLOATER.spitR + 0.35) ** 2 && Math.abs(by) < 1.0) {
-      const dmg = p.dmg ?? FLOATER.damage
+    if (k.hp > 0 && bx * bx + bz * bz < (FLOATER.spitR + 0.35 * (k.hit ?? 1)) ** 2 && Math.abs(by) < 1.0) {
+      const dmg = blowCost(k, p.dmg ?? FLOATER.damage)
       p.life = 0; k.hp = Math.max(0, k.hp - dmg); k.sinceHurt = 0
       c.events.push({ kind: 'hurt', amount: dmg })
       if (k.hp <= 0) c.events.push({ kind: 'down' })

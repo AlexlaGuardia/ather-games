@@ -11,6 +11,9 @@
 // Others are drawn on the cartoon rig (shared/folk-model.tsx) with a look from their id, eased toward each 12 Hz update;
 // only the nearest NEAR_RIGS get the rig (≈32 draws each), the rest a single capsule. A name plate over each (game-UI
 // rule: text never sits raw on the scene).
+import { KeeperFigure } from './keeper-figure-view'
+import { packLook, unpackLook } from './keeper-look'
+import { useLook } from './look-store'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
@@ -24,6 +27,12 @@ import { FolkModel, folkLook, FOLK_HEIGHT } from './folk-model'
 export const OPEN_WILDS = 'open:wilds', OPEN_CONTINENT = 'open:continent'
 /** Peers drawn on the full rig; the rest are a capsule. */
 export const NEAR_RIGS = 6
+/** M29 slice 3 (docs/M29-look-sync.md, option A): send this keeper's packed look as the socket's `sprite` and draw peers who
+ *  sent one as their own figure. ★ OFF until hub/Alex pick A: with it off nothing is sent and every peer draws as before. */
+export const LOOK_SYNC = false
+export const LOOK_SPRITE = 'lk1:'
+/** ids of the peers currently drawn as their own figure (a probe for look-sync-check, reading only) */
+const FIGURES = new Set<string>()
 /** Not heard from in this long = hidden (a killed tab sends no 'left'); play3d uses 90 s for a background tab's timers,
  *  but our hidden tabs CLOSE the socket (a clean 'left'), so a silent peer here is a dead one. */
 const STALE_MS = 20_000
@@ -54,11 +63,13 @@ export function useOpenMultiplayer(zone: string | null, where: () => { x: number
   // stable ref objects whose `current` reads the page's live pose each time the hook sends
   const posRef = useMemo(() => ({ get current() { const w = whereRef.current(); return w ? { x: w.x, y: w.y, z: w.z } : null } }) as React.RefObject<{ x: number; y: number; z: number } | null>, [])
   const yawRef = useMemo(() => ({ get current() { return whereRef.current()?.yaw ?? 0 } }) as React.RefObject<number>, [])
-  const mp = useMultiplayer({ enabled: !!zone && visible, zoneId: zone ?? '', posRef, yawRef, party, playerName: session?.username ?? '' })
+  const myLook = useLook()
+  const mp = useMultiplayer({ enabled: !!zone && visible, zoneId: zone ?? '', posRef, yawRef, party, playerName: session?.username ?? '', sprite: LOOK_SYNC ? LOOK_SPRITE + packLook(myLook) : undefined })
   peersBox.current = mp.peers.current
   if (typeof window !== 'undefined') (window as unknown as { __mp?: unknown }).__mp = {
     zone: () => zone, status: () => mp.status.current, party: () => party, me: () => whereRef.current(),
-    peers: () => [...mp.peers.current.values()].map(p => ({ id: p.id, name: p.name, x: p.x, y: p.y, z: p.z, tx: p.tx, tz: p.tz })),
+    peers: () => [...mp.peers.current.values()].map(p => ({ id: p.id, name: p.name, x: p.x, y: p.y, z: p.z, tx: p.tx, tz: p.tz, sprite: p.sprite ?? null })),
+    figures: () => [...FIGURES],   // M29: peers drawn as their own keeper (look-sync-check)
   }
   return mp
 }
@@ -76,6 +87,9 @@ function Plate({ name }: { name: string }) {
 function Peer({ peer, rig, seed }: { peer: RemotePlayer; rig: boolean; seed: number }) {
   const g = useRef<THREE.Group>(null)
   const look = useMemo(() => folkLook(`keeper:${peer.id}`), [peer.id])
+  // M29: a peer who sent a packed look draws as their own keeper (LOOK_SYNC; anything else keeps the folk rig)
+  const theirs = useMemo(() => (LOOK_SYNC && peer.sprite?.startsWith(LOOK_SPRITE) ? unpackLook(peer.sprite.slice(LOOK_SPRITE.length)) : null), [peer.sprite])
+  useEffect(() => { if (rig && theirs) { FIGURES.add(peer.id); return () => { FIGURES.delete(peer.id) } } }, [rig, theirs, peer.id])
   useFrame((_, dt) => {
     const o = g.current; if (!o) return
     const stale = performance.now() - peer.lastSeen > STALE_MS
@@ -89,7 +103,8 @@ function Peer({ peer, rig, seed }: { peer: RemotePlayer; rig: boolean; seed: num
   })
   return (
     <group ref={g}>
-      {rig ? <FolkModel look={look} action={peer.moving ? 'talk' : 'idle'} seed={seed} speed={peer.moving ? 1.6 : 1} />
+      {rig && theirs ? <KeeperFigure look={theirs} />
+        : rig ? <FolkModel look={look} action={peer.moving ? 'talk' : 'idle'} seed={seed} speed={peer.moving ? 1.6 : 1} />
         : <mesh position={[0, 0.85, 0]}><capsuleGeometry args={[0.3, 0.9, 4, 8]} /><meshLambertMaterial color={look.shirt} /></mesh>}
       <Html position={[0, FOLK_HEIGHT + 0.25, 0]} center distanceFactor={12} zIndexRange={[10, 0]}><Plate name={peer.name} /></Html>
     </group>

@@ -6,6 +6,7 @@ const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
 // the mock's options, as signed off (Alex 11-19: no body option, no legs colour, no age)
+ok(OPT.ears.length === 2 && OPT.ears[DEFAULT_LOOK.ears] === 'Pointed', 'ears: canon (Magii 11-19) is Round / Pointed, default Pointed')
 ok(OPT.frame.length === 3 && OPT.hairStyle.length === 8 && OPT.eyes.length === 8 && OPT.brows.length === 3 && OPT.mouth.length === 6, 'options: not the signed-off mock (3 frames, 8 hair, 8 eyes, 3 brows, 6 mouths)')
 ok(!('legColor' in OPT) && !('body' in OPT) && !('age' in OPT), 'options: a retired choice is back (legs colour / body / age)')
 ok(ROWS.length === Object.keys(OPT).length && ROWS.every(r => r.key in OPT), 'rows: a row without an option, or an option without a row')

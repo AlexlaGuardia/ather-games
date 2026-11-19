@@ -3,6 +3,8 @@
 // The Wilds' combat, drawn and driven: reads the camera (the keeper's eye), fires on mouse-down under pointer lock,
 // steps combat.ts, and draws Hollows, rounds and grey matter. The rules are in combat.ts; this is the glue.
 
+import { frameStats } from '../shared/keeper-look'
+import { getLook } from '../shared/look-store'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -423,6 +425,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   useFrame((_, rawDt) => {
     if (!active) return
     const dt = Math.min(rawDt, 1 / 20), C = c.current
+    { const f = frameStats(getLook()); C.keeper.hit = f.hit; C.keeper.takes = f.damage }   // M29: the keeper's FRAME
     const feet = { x: camera.position.x, y: camera.position.y - EYE, z: camera.position.z }
     popT.current -= dt
     // a champion rises out of an infected node when the keeper comes close, once they have SETTLED: for the first

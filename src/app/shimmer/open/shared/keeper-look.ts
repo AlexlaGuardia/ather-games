@@ -18,6 +18,9 @@ export const OPT = {
   eyes: ['Lines', 'Dots', 'Round', 'Bright', 'Wide', 'Happy', 'Sleepy', 'Wink'],
   brows: ['Soft', 'Bold', 'None'],
   mouth: ['Smile', 'Grin', 'Smirk', 'Flat', 'Open', 'Cat'],
+  // Magii RULED-AFK 11-19 (athernyx 0bd797a, keepers.md › The player keeper): Alkin have SMALL POINTED ears, often half hidden
+  // by hair (helga.md); offer Round / Pointed, default Pointed. Builds now; Alex nods in the morning.
+  ears: ['Round', 'Pointed'],
   topColor: CLOTH,
   accent: CLOTH,
   scarf: SCARF,
@@ -27,14 +30,14 @@ export type LookKey = keyof typeof OPT
 export const ROWS: readonly { key: LookKey; label: string; swatch: boolean }[] = [
   { key: 'frame', label: 'Frame', swatch: false }, { key: 'torso', label: 'Torso', swatch: false }, { key: 'skin', label: 'Skin', swatch: true },
   { key: 'hairStyle', label: 'Hair', swatch: false }, { key: 'hair', label: 'Hair colour', swatch: true }, { key: 'eyes', label: 'Eyes', swatch: false },
-  { key: 'brows', label: 'Brows', swatch: false }, { key: 'mouth', label: 'Mouth', swatch: false }, { key: 'topColor', label: 'Body colour', swatch: true },
+  { key: 'brows', label: 'Brows', swatch: false }, { key: 'mouth', label: 'Mouth', swatch: false }, { key: 'ears', label: 'Ears', swatch: false }, { key: 'topColor', label: 'Body colour', swatch: true },
   { key: 'accent', label: 'Hands and feet', swatch: true }, { key: 'scarf', label: 'Scarf', swatch: true },
 ]
 export const FRAME_NOTE = ['A smaller hitbox and +5% move speed.', 'The baseline: no bonus.', 'A bigger hitbox and +10% defence.'] as const
 
 export type Look = { v: 1 } & Record<LookKey, number>
 /** the mock's starting keeper */
-export const DEFAULT_LOOK: Look = { v: 1, frame: 1, torso: 0, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, mouth: 0, topColor: 0, accent: 5, scarf: 0 }
+export const DEFAULT_LOOK: Look = { v: 1, frame: 1, torso: 0, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, mouth: 0, ears: 1, topColor: 0, accent: 5, scarf: 0 }
 
 // ── the ONE PvP choice ──
 /** what FRAME does in play: `hit` scales the keeper's hitbox (radius + reach tests), `speed` the walk/run, `damage` what a hit
@@ -65,7 +68,7 @@ export function randomLook(l: Look, rnd: () => number = Math.random): Look {
   return out
 }
 
-/** Packed for presence (M27: a remote keeper draws your look): one short string, 11 single digits/letters in ROWS order. */
+/** Packed for presence (M27: a remote keeper draws your look): one short string, one digit/letter per row in ROWS order. */
 export const packLook = (l: Look) => ROWS.map(r => l[r.key].toString(36)).join('')
 export function unpackLook(s: unknown): Look | null {
   if (typeof s !== 'string' || s.length !== ROWS.length) return null

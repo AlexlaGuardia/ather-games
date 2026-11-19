@@ -94,6 +94,8 @@ import { useRinQuest, fennelTalk, FENNEL_NAME } from './use-rinquest'
 import { noStickLine, hasStick, fennelHere } from './rinquest'
 import { Fennel, fennelSpot, FENNEL_HEAD } from './fennel'
 import { MoonwellPool } from './moonwell-quest'
+import { frameStats } from '../shared/keeper-look'
+import { getLook } from '../shared/look-store'
 import { manaFor, bonusXp, wearFocus } from './focuses'
 import { isPotion, drink, buffOn, loadBuffs, saveBuffs, BUFF_NAME, STARLIGHT_XP, OPEN_FLOW_MULT, type Buffs, type BuffId } from './alchemy'
 import { BAIT, rollRinn, type Rinn } from './rinning'
@@ -431,7 +433,7 @@ function AtherSliceGame() {
     { const b = buffsRef.current, t = Date.now()   // a potion buff that has run out says so, once, and leaves the save
       setOpenXpMult(buffOn(b, 'starlight', t) ? STARLIGHT_XP : 1)
       for (const k of Object.keys(b) as BuffId[]) if (!buffOn(b, k, t)) { const nb = { ...b }; delete nb[k]; buffsRef.current = nb; saveBuffs(nb); hudSay(`${BUFF_NAME[k]} fades.`, 'info') } }
-    lc.speedMult = (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1)   // hands free, a little quicker on foot
+    lc.speedMult = (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1) * frameStats(getLook()).speed   // hands free, a little quicker on foot; M29 frame (Small +5%)
       * (performance.now() < surge.current.until ? surge.current.mult : 1)      // a surge cast (Static Burst)
     if (impulse.current) {   // an impulse cast (Quickform): up, keeping the run
       const sp = impulse.current; impulse.current = null
@@ -524,7 +526,7 @@ function AtherSliceGame() {
       resetGarden: () => updateGarden(freshGarden()),
       spread: () => spreadRef.current, skipDays, ownerAt: (x: number, z: number) => nodeOwner?.(x, z),
       chan: () => (chanRef.current ? { id: chanRef.current.w.id, done: chanRef.current.w.done, of: chanRef.current.w.chips.length } : null), prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mine: () => mineAimed(), crystal: () => { const c = cAimRef.current.crystal; return c ? { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z } : null }, mana: () => manaRef.current.cur,
-      stance: () => stanceRef.current, speedMult: () => (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1),
+      stance: () => stanceRef.current, speedMult: () => (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1) * frameStats(getLook()).speed,
       village: () => loadVillage(), villageTick: () => runVillage(false),
       eat: () => eatHeld(), hp: () => vitalsRef.current.hp, drink: () => drinkHeld(), buffs: () => buffsRef.current, tools: () => toolsRef.current, setMana: (n: number) => { manaRef.current.cur = n },
       rin: () => rinApi.current?.view() ?? null, cast: () => castOrAnswer(), hold: (h: boolean | 'track') => { reelHold.current = h === 'track' ? (r: Reel) => (r.zone - r.bob) * 6 + (r.zoneV - r.bobV) * 1.6 > 0 : h },

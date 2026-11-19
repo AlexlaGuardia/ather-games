@@ -18,10 +18,12 @@
 // mark ETCHED into it that lights faintly when mana runs through the gun; no free light, "so it never reads as a modern red dot". The
 // cut and its tint are the owner's (shared/sight-marks.ts; look, never power). Here: the lens is pale crystal, the mark a canvas
 // texture on it whose glow is markGlow() (faint while drawn, a flare as a round leaves or a charge builds). Copy: none.
+import { useLook } from './look-store'
+import { OPT } from './keeper-look'
 import { useEffect, useImperativeHandle, useMemo, useRef, forwardRef, useSyncExternalStore } from 'react'
 import * as THREE from 'three'
 import { useThree } from '@react-three/fiber'
-import { buildHand, ORDER } from './open-hands'
+import { buildHand, tintMittens, ORDER } from './open-hands'
 import { opticOf, throughScope, type Optic } from './optics'
 import { MARKS, TINTS, drawMark, markGlow, defaultLook, type SightLook } from './sight-marks'
 import { getSightLooks, lookFor } from './sight-looks'
@@ -188,6 +190,8 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
     held.add(R, L); root.add(sentinel, held); root.visible = false
     return { root, held, R, L, model: null as THREE.Group | null, key: '' }
   }, [])
+  const keeperLook = useLook()
+  useEffect(() => { const c = OPT.accent[keeperLook.accent]; tintMittens(rig.R, c); tintMittens(rig.L, c) }, [keeperLook.accent, rig])   // M29: the keeper's mittens hold the gun
   const st = useRef({ phase: 0, kick: 0, lastFired: -Infinity })
   const markTex = useRef<{ key: string; tex: THREE.CanvasTexture | null }>({ key: '', tex: null })
   const setMark = (lk: SightLook) => {

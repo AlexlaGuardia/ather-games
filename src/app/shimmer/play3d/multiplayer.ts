@@ -25,6 +25,8 @@ export interface RemotePlayer {
   x: number; y: number; z: number; yaw: number
   moving: boolean
   lastSeen: number
+  /** the sender's `sprite` (server PlayerState.sprite, sent whole on join): the open world puts a packed look here ('lk1:...', M29) */
+  sprite?: string
 }
 
 const SEND_HZ = 12          // position updates/sec. 2D shipped 5Hz on a grid; a first-person
@@ -98,7 +100,7 @@ export function selfPlayerId(): string {
   return identity().id
 }
 
-export function wsUrl(zoneId: string, party: string | null, playerName: string): string | null {
+export function wsUrl(zoneId: string, party: string | null, playerName: string, sprite?: string): string | null {
   if (typeof window === 'undefined') return null
   const { protocol, host } = window.location
   const scheme = protocol === 'https:' ? 'wss:' : 'ws:'
@@ -109,6 +111,7 @@ export function wsUrl(zoneId: string, party: string | null, playerName: string):
     zone: zoneId.includes(':') ? zoneId : ZONE_PREFIX + zoneId,
     instance_type: 'zone',
   })
+  if (sprite) q.set('sprite', sprite)   // M29: the server keeps it in PlayerState and sends it whole on join (docs/M29-look-sync.md)
   if (party) q.set('party', party)
   return `${scheme}//${host}/shimmer-ws/ws?${q}`
 }
@@ -128,15 +131,17 @@ export function useMultiplayer(opts: {
   party?: string | null
   /** display name — a change reconnects so the roster shows the new name */
   playerName?: string
+  /** a per-player look key sent on connect (the open world's packed look, M29); a change reconnects (looks change rarely) */
+  sprite?: string
 }) {
-  const { enabled, zoneId, posRef, yawRef, party = null, playerName = '' } = opts
+  const { enabled, zoneId, posRef, yawRef, party = null, playerName = '', sprite } = opts
   const peers = useRef<Map<string, RemotePlayer>>(new Map())
   const selfId = useRef<string>('')
   const status = useRef<'off' | 'connecting' | 'live' | 'error'>('off')
 
   useEffect(() => {
     if (!enabled || !zoneId) return
-    const url = wsUrl(zoneId, party, playerName)
+    const url = wsUrl(zoneId, party, playerName, sprite)
     if (!url) return
     selfId.current = identity().id
 
@@ -156,6 +161,7 @@ export function useMultiplayer(opts: {
         cur.tx = x; cur.ty = y; cur.tz = z; cur.tyaw = yaw
         cur.moving = Boolean(p.moving)
         cur.lastSeen = performance.now()
+        if (typeof p.sprite === 'string') cur.sprite = p.sprite
       } else {
         // first sighting snaps rather than lerps in from wherever the last player stood
         peers.current.set(id, {
@@ -163,6 +169,7 @@ export function useMultiplayer(opts: {
           tx: x, ty: y, tz: z, tyaw: yaw,
           x, y, z, yaw,
           moving: Boolean(p.moving), lastSeen: performance.now(),
+          ...(typeof p.sprite === 'string' ? { sprite: p.sprite } : {}),
         })
       }
     }
@@ -239,7 +246,7 @@ export function useMultiplayer(opts: {
       peers.current.clear()
       status.current = 'off'
     }
-  }, [enabled, zoneId, posRef, yawRef, party, playerName])
+  }, [enabled, zoneId, posRef, yawRef, party, playerName, sprite])
 
   return { peers, status }
 }

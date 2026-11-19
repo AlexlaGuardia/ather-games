@@ -7,11 +7,15 @@
 //   3. never a gate you can get stuck in (hub 11-19): a second new keeper taps Looks good at once -> the default is saved and
 //      the gate closes
 //   4. phone 390 x 844: the creator fits (Looks good on screen, no sideways scroll), the preview canvas is there
+//   6. (slice 2) the first-person mittens wear the hands colour
+//   7. Large in the fight: the combat keeper's hitbox x1.16 and blows cost x0.9 (a 14 blow costs 13)
+//   8. Small: the walker's speed x1.05 of Large, hitbox x0.88, full cost
 //   5. 0 page errors
 // SETUP: a fresh browser per keeper. Hooks: none for the creator (real clicks on real buttons); reading localStorage.
 //   npx tsx scripts/creator-check.mts [--url https://ather.games]
 import puppeteer, { type Page } from 'puppeteer-core'
-import { OPT, LOOK_KEY } from '../src/app/shimmer/open/shared/keeper-look'
+import { OPT, LOOK_KEY, FRAME_STATS } from '../src/app/shimmer/open/shared/keeper-look'
+import { blowCost } from '../src/app/shimmer/open/ather/combat'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -56,6 +60,7 @@ await born(p, '1')
 ok(await poll(() => creatorUp(p), 30000), '1. after the born moment the creator shows')
 ok(await p.evaluate(() => !!document.querySelector('[data-creator-preview] canvas, [data-panel="keeper-creator"] canvas')), '1. ...with the turning preview')
 const LARGE = OPT.frame.indexOf('Large'), LONG = OPT.hairStyle.indexOf('Long')
+ok((await pressed(p, 'ears')) === OPT.ears.indexOf('Pointed'), '1. Ears: Pointed by default (canon, Magii 11-19)')
 ok(await pick(p, 'frame', LARGE) && await pick(p, 'hairStyle', LONG) && await pick(p, 'scarf', 3), '1. pick Frame Large, Long hair, scarf 4')
 ok((await pressed(p, 'frame')) === LARGE && (await p.evaluate(() => document.querySelector('[data-frame-note]')?.textContent ?? '')).includes('defence'), '1. ...the frame note says what Large does')
 await p.evaluate(() => (document.querySelector('[data-creator-done]') as HTMLElement | null)?.click())
@@ -76,6 +81,25 @@ const after = await p.evaluate(() => [...document.querySelectorAll('[data-creato
 ok(after !== before && (await pressed(p, 'frame')) === LARGE, `2. Random rolls the look and never the frame (${before} -> ${after})`)
 await p.evaluate(() => (document.querySelector('[data-creator-done]') as HTMLElement | null)?.click()); await sleep(800)
 ok((await saved(p))?.frame === LARGE, '2. ...saved, frame still Large')
+// ── slice 2: the POV mittens + FRAME in play (still Large, now hands colour 3) ──
+const A = (f: string, ...a: unknown[]) => p.evaluate((f, a) => (window as any).__ather[f](...a), f, a)
+await p.evaluate((k: string) => { const v = JSON.parse(localStorage.getItem(k)!); v.accent = 3; v.frame = 2; localStorage.setItem(k, JSON.stringify(v)) }, LOOK_KEY)
+await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
+await poll(async () => (await p.evaluate(() => (window as any).__ather?.zone?.())) === 'wilds', 240000); await sleep(4000); await p.mouse.click(550, 380); await sleep(800)
+ok(await poll(async () => (await p.evaluate(() => (window as any).__fpHands?.() ?? '')) === OPT.accent[3], 20000), `6. the first-person mittens are the hands colour (${await p.evaluate(() => (window as any).__fpHands?.() ?? '')} vs ${OPT.accent[3]})`)
+await poll(async () => (await p.evaluate(() => (window as any).__ather.combat?.()?.keeper?.hit)) !== undefined, 30000)
+const kL = await p.evaluate(() => { const k = (window as any).__ather.combat().keeper; return { hit: k.hit, takes: k.takes } })
+ok(kL.hit === FRAME_STATS[2].hit && kL.takes === FRAME_STATS[2].damage, `7. Large in the fight: hitbox x${kL.hit}, takes x${kL.takes}`)
+ok(blowCost({ takes: FRAME_STATS[2].damage } as never, 14) === 13 && blowCost({} as never, 14) === 14, '7. ...a 14 blow costs a Large keeper 13, the baseline 14')
+const spL = await A('speedMult') as number
+await p.evaluate((k: string) => { const v = JSON.parse(localStorage.getItem(k)!); v.frame = 0; localStorage.setItem(k, JSON.stringify(v)) }, LOOK_KEY)
+// back to the WILDS (the page drops ?waymark= once it has landed, so a bare reload would land on the plot, where no fight runs)
+await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
+await poll(async () => (await p.evaluate(() => (window as any).__ather?.zone?.())) === 'wilds', 240000); await sleep(4000); await p.mouse.click(550, 380); await sleep(800)
+const spS = await A('speedMult') as number
+await poll(async () => (await p.evaluate(() => (window as any).__ather.combat?.()?.keeper?.hit)) !== undefined, 30000)   // set by the fight's frame loop: poll, never a fixed wait
+const kS = await p.evaluate(() => { const k = (window as any).__ather.combat().keeper; return { hit: k.hit, takes: k.takes } })
+ok(Math.abs(spS / spL - 1.05) < 1e-6 && kS.hit === FRAME_STATS[0].hit && kS.takes === 1, `8. Small: walks x1.05 of Large (${spL} -> ${spS}), hitbox x${kS.hit}, takes x${kS.takes}`)
 await p.close()
 
 // ── 3 + 4: a phone, and straight through ──

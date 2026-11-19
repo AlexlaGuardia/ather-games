@@ -9,6 +9,8 @@
 // show sky. Houses and trees are placeholder geometry: towns read as towns, nothing more is claimed.
 // Desktop only for now (keys). ?region=<name> picks another exported region.
 
+import { frameStats } from '../shared/keeper-look'
+import { getLook } from '../shared/look-store'
 import { OwnerReady } from '../shared/owner-ready'
 import { GateRings } from '../shared/gate-rings'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -888,7 +890,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
       const r = still * clamp1((k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) + touch.move.x)
       let mx = fwx * f + rtx * r, mz = fwz * f + rtz * r
       const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml }
-      lc.speedMult = (continentStance.current.kind === 'stowed' ? STOWED_SPEED : 1)   // hands free, a little quicker
+      lc.speedMult = (continentStance.current.kind === 'stowed' ? STOWED_SPEED : 1) * frameStats(getLook()).speed   // hands free, a little quicker; M29 frame
         * (performance.now() < castFx.surge.current.until ? castFx.surge.current.mult : 1)   // a surge cast (Static Burst)
       if (castFx.impulse.current) {   // an impulse cast (Quickform): up, keeping the run (same as the Ather's walker)
         const sp = castFx.impulse.current; castFx.impulse.current = null
