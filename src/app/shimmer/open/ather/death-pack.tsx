@@ -15,7 +15,7 @@ import { dropPack, reclaim, parsePack, near, PACK_KEY, type Pack } from './backp
 // ── the store ────────────────────────────────────────────────────────────────────────────────────────────────
 // ⚠ PLAYER COPY: @lark's pass 11-18 (only 'left' changed), AWAITING ALEX SIGN-OFF (BETA › Alex's queue). Keep the hidden clock
 // hidden (no time in any line); 'bag' = what you carry, 'pack' = what you left behind: keep that split (lark)
-export const PACK_LINES = {
+export const PACK_LINES = {   // @lark, SIGNED by Alex 11-19
   left: 'Your pack lies where you fell. Go back for it soon.',
   back: 'You shoulder your pack. Everything is still there.',
   some: 'You take what fits. The rest waits in the pack.',

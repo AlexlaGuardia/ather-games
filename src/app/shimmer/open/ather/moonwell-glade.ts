@@ -46,9 +46,9 @@ export function gladeFolk(now = Date.now()): Folk[] {
     f('mallow', 'Mallow', 'shopkeeper', mallowWants(now), MALLOW_DREAM, [2, 3, 5]),
   ].filter(x => !away.has(x.id))
 }
-/** @lark placeholder (11-19), awaiting a real line + Alex sign-off: Mallow has no DREAMS pool (a shopkeeper is not a village trade). */
+/** @lark line, SIGNED by Alex 11-19: Mallow has no DREAMS pool (a shopkeeper is not a village trade). */
 export const MALLOW_DREAM = 'What does the world want today? Ask me again tomorrow. It will be something else.'
-/** @lark placeholder (11-19), awaiting a real line + Alex sign-off: a Moonwell Moglin asked to come to a keeper's garden. */
+/** @lark line, SIGNED by Alex 11-19: a Moonwell Moglin asked to come to a keeper's garden. */
 export const GLADE_STAYS = 'This is my home. Greg kept it when everything else was lost. But come back often.'
 
 /** Who is away from the Glade right now: Fennel, while the first-rinstick quest has her at the keeper's Rinnshop

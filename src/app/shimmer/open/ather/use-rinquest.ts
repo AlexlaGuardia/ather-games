@@ -50,7 +50,7 @@ export function questEvent(ev: QuestEvent): boolean {
   return true
 }
 
-// ── Fennel's talk (shared/npc-talk.tsx shape). lark draft, athernyx 112926e, UNSIGNED until Alex signs (CANON/game/first-rinstick-script.md); slots the script has no line for keep their placeholder.
+// ── Fennel's talk (shared/npc-talk.tsx shape). lark, athernyx 112926e, SIGNED by Alex 11-19 ('easy company' swap) (CANON/game/first-rinstick-script.md); slots the script has no line for keep their placeholder.
 // Placeholder still: the 'I'll go at dusk.' option, the Goodbye label, the 'catch' with-nothing-in-bag and fallback lines. `page` = which screen of the meeting; `close` ends the talk.
 export const FENNEL_NAME = 'Fennel'
 export function fennelTalk(quest: RinQuest, page: number, inv: Inv, acts: { goto: (page: number) => void; close: () => void }): TalkNode {
@@ -58,7 +58,7 @@ export function fennelTalk(quest: RinQuest, page: number, inv: Inv, acts: { goto
   const bye = { label: 'Goodbye, Fennel.', pick: acts.close }
   if (d?.kind === 'talk' && !d.needs) {
     if (page === 0) return { line: "A Rinnshop! Look at the shelves. Now all it needs is a stick. Here's the trouble. No stick, no catch. No catch, no stick. Unless one gives itself.", options: [{ label: 'How does one give itself?', pick: () => acts.goto(1) }, bye] }
-    if (page === 1) return { line: 'Sit by the Moonwell when the light goes. Bring nothing. Sit still and be easy to like.', options: [{ label: 'Anything I should bring?', pick: () => acts.goto(2) }, bye] }
+    if (page === 1) return { line: 'Sit by the Moonwell when the light goes. Bring nothing. Sit still and be easy company.', options: [{ label: 'Anything I should bring?', pick: () => acts.goto(2) }, bye] }
     return { line: "Only your patience. Dusk, at the water. I'll keep the pot warm.", options: [{ label: "I'll go at dusk.", pick: () => { questEvent({ kind: 'talk', who: 'fennel', hasCatch: false }); acts.close() } }] }
   }
   if (d?.kind === 'talk' && d.needs === 'catch') {

@@ -27,7 +27,7 @@ export type StepDo =
   | { kind: 'bench'; at: 'rinnshop'; takes: string; grants: true }   // the Rinnshop bench binds it: the stick is yours
 export interface QuestStep { id: string; title: string; note: string; button?: string; do: StepDo }
 
-// lark draft, athernyx 112926e, UNSIGNED until Alex signs (CANON/game/first-rinstick-script.md); slots the script has no line for keep their placeholder.
+// lark, athernyx 112926e, SIGNED by Alex 11-19 (CANON/game/first-rinstick-script.md); slots the script has no line for keep their placeholder.
 // Step notes = the script's step logs (step 4's log also covers the 'catch' step). Titles + the 'catch' note: still placeholder.
 export const RINQUEST_STEPS: readonly QuestStep[] = [
   { id: 'meet', title: 'Meet Fennel at your Rinnshop', note: 'Fennel says a rinn may give you a stick. Sit at the Moonwell at dusk with no tool.', do: { kind: 'talk', who: 'fennel' } },
@@ -36,7 +36,7 @@ export const RINQUEST_STEPS: readonly QuestStep[] = [
   { id: 'bind', title: 'Bind the scale at your Rinnshop', note: 'Bind the scale into a rinstick at the bench. Bring Fennel your first catch.', button: 'Bind the scale', do: { kind: 'bench', at: 'rinnshop', takes: SHED_SCALE, grants: true } },
   { id: 'catch', title: 'Bring Fennel your first catch', note: 'Rin a catch with your new rinstick and bring it to Fennel at your Rinnshop.', do: { kind: 'talk', who: 'fennel', needs: 'catch' } },
 ]
-export const RINQUEST_LINES = {  // lark draft, athernyx 112926e, UNSIGNED until Alex signs (noShop/started/inQuest/done: no script line, still placeholder)
+export const RINQUEST_LINES = {  // lark, SIGNED by Alex 11-19 (noShop/started/inQuest/done: no script line, still placeholder)
   noShop: 'You have no rinstick. Build a Rinnshop on your plot to earn your first.',
   started: 'Your Rinnshop stands. Someone has come to see it.',
   inQuest: 'You have no rinstick yet. See your journal.',
