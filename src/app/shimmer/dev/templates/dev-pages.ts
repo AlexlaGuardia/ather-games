@@ -91,6 +91,14 @@ export const DEV_GROUPS: Record<DevGroup, { label: string; note: string }> = {
 export const DEV_PAGES: DevPage[] = [
   // ── Looking glasses ─────────────────────────────────────────────────────────────────────────
   {
+    path: '/shimmer/dev/blueprints',
+    title: 'The Settlement Worktable',
+    blurb: "Draw a Moglin's workshop for a Moonwell Glade lot with the keeper's own house parts; Save and it stands on that lot.",
+    group: 'editor',
+    era: 'live',
+    keywords: ['blueprint', 'settlement', 'glade', 'moglin', 'workshop', 'house', 'walls', 'building', 'worktable', 'lot'],
+  },
+  {
     path: '/shimmer/dev/folk',
     title: 'The Folk Bench',
     blurb: 'The human NPC rig: Gregory and four unnamed folk, beside a keeper for height and a Moglin for scale.',

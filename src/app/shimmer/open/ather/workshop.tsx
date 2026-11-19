@@ -188,8 +188,8 @@ export function BlueprintBuilding({ walls, roof, floors, x, z, y, rotY }: { wall
 let wallsDown = false
 const setWallsDown = (v: boolean) => { wallsDown = v; wdEmit() }
 const useWallsDown = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => wallsDown, () => false)
-function DrawnWalls({ walls, roof, floors, probe = true }: { walls: Walls; roof: RoofStyle; floors?: Floors; probe?: boolean }) {
-  const b = useBuildMode(), down = useWallsDown() && b
+export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverride }: { walls: Walls; roof: RoofStyle; floors?: Floors; probe?: boolean; /** set by a page outside plan mode (dev/blueprints) */ down?: boolean }) {
+  const b = useBuildMode(), wd = useWallsDown(), down = downOverride ?? (wd && b)   // hooks always run; the override only picks
   useEffect(() => { if (!b && wallsDown) setWallsDown(false) }, [b])
   // runs by wood AND kind: a plain piece is floor to top, a door only its lintel, a window a sill + a head + a pane
   const byMat = useMemo(() => { const m = new Map<string, string[]>(); for (const [k, w] of Object.entries(walls)) { const id = `${w.mat}|${w.kind ?? 'wall'}`; const l = m.get(id) ?? []; l.push(k); m.set(id, l) } return [...m].map(([id, keys]) => { const [mat, kind] = id.split('|'); return { mat: mat as WallMat, kind, keys } }) }, [walls])
@@ -249,7 +249,7 @@ function RoomRoof({ room, style, walls }: { room: PlotRoom; style: RoofStyle; wa
     </>
   )
 }
-function WallRun({ mat, keys, ghost, h = WALL_H, y0 = 0, pane }: { mat: WallMat; keys: string[]; ghost?: string; h?: number; y0?: number; pane?: boolean }) {
+export function WallRun({ mat, keys, ghost, h = WALL_H, y0 = 0, pane }: { mat: WallMat; keys: string[]; ghost?: string; h?: number; y0?: number; pane?: boolean }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   useEffect(() => {
     const m = ref.current; if (!m) return
