@@ -73,7 +73,8 @@ const slices = Math.max(6, Math.round(MIN * 2)), plotN = Math.round(slices * 0.4
 for (let i = 0; i < plotN; i++) await slice('plot', async () => { await walkLoop(); await A('tp', 0, 8, i * 0.7) })
 // 2 · the Wilds: Greg's waymark, wake what is near, cast, shoot; every 4th slice a waymark trip home and back
 const greg = { kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }
-await A('travel', greg)
+// travel can be refused while the Wilds are still streaming ('The Wilds are still loading'): ask again until it lands
+for (let k = 0; k < 40 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds'; k++) { await A('travel', greg); await sleep(4000) }
 await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 120000 }); await sleep(4000)
 for (let i = 0; i < wildsN; i++) {
   await slice('wilds', async () => {
