@@ -119,9 +119,9 @@ import type { Vitals } from '../../engine/vitals'
 
 type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
 type Spawn = { x: number; z: number; yaw: number }
+const gregAt = gregSpot()   // BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
 type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number }
 type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'fennel' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement }
-const gregAt = gregSpot()   // BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
 export default function AtherSlice() { return <OwnerReady><AtherSliceGame /></OwnerReady> }
@@ -449,11 +449,13 @@ function AtherSliceGame() {
       else { const w = nearWork(worksRef.current, lc.px, lc.pz); if (w) n = { kind: 'work', near: w } }
     } else {
       const all = [{ w: GREG_WAYMARK, own: false }, ...waymarks.map(w => ({ w, own: true }))]
-      for (const { w, own } of all) { const o = ww?.byName.has(w.tile) ? ww.offsetOf(w.tile) : null; if (o && Math.hypot(w.x + o.x - lc.px, w.z + o.z - lc.pz) < 2.6) n = { kind: 'waymark', w, own } }
+      let wmD = Infinity
+      for (const { w, own } of all) { const o = ww?.byName.has(w.tile) ? ww.offsetOf(w.tile) : null; const d = o ? Math.hypot(w.x + o.x - lc.px, w.z + o.z - lc.pz) : Infinity; if (d < 2.6) { n = { kind: 'waymark', w, own }; wmD = d } }
+      // M30: Gregory at Moonwell Glade, ~3.5 m from the arrival waymark. The NEARER one takes E (11-19 overnight, beta-m5-errand:
+      // 'Greg always wins' left a keeper at the stone unable to open the fold map home).
+      { const gd = Math.hypot(gregAt.x - lc.px, gregAt.z - lc.pz); if (gd < REACH && gd < wmD) n = { kind: 'greg' } }
       // a settlement's folk: E anywhere inside it talks to them (settlement-folk.ts / folk-panel.tsx); a waymark at your feet wins
       if (!n && netRef.current) { const st = settlementAt(netRef.current, lc.px, lc.pz); if (st) n = { kind: 'folk', s: st } }
-      if (Math.hypot(gregAt.x - lc.px, gregAt.z - lc.pz) < REACH) n = { kind: 'greg' }   // M30: Gregory at Moonwell Glade; at his bench he wins over the arrival waymark 3.5 m away
-      if (!n && Math.hypot(gregAt.x - lc.px, gregAt.z - lc.pz) < REACH) n = { kind: 'greg' }   // M30: Gregory sits at Moonwell Glade
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
       const t = ww ? ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty) : undefined
       if (t && t.name !== hereRef.current) { hereRef.current = t.name; setHereTile(t.name); streamAt(lc.px, lc.pz) }
@@ -955,9 +957,9 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />{net && <TilePaths net={net} W={T} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />}</group> })}
         {ww && <DeathPack active={zone.kind === 'wilds'} />}
         {zone.kind === 'wilds' && ww && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
+        {zone.kind === 'wilds' && ww && <GladeGreg loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
         {zone.kind === 'wilds' && ww && net && <Settlements net={net} loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
         {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
-        {zone.kind === 'wilds' && ww && <GladeGreg loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
             safe={{ x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, r: 30 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
