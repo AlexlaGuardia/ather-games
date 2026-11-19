@@ -472,7 +472,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     hook(); const t = setInterval(hook, 1000)   // the socket hook may mount after this layer
     const g = window as unknown as { __fight?: unknown }
     g.__fight = { host: () => net.current.host, sharing: () => net.current.share, hostId: () => net.current.hostId,
-      ids: () => c.current.hollows.map(h => ({ id: h.id, x: +h.x.toFixed(1), z: +h.z.toFixed(1), hp: Math.ceil(h.hp) })),
+      ids: () => c.current.hollows.map(h => ({ id: h.id, kind: h.kind, x: +h.x.toFixed(1), y: +h.y.toFixed(2), z: +h.z.toFixed(1), hp: Math.ceil(h.hp) })),
+      eye: () => ({ x: camera.position.x, y: camera.position.y, z: camera.position.z }),   // where a round starts (checks aim from here)
       drops: () => c.current.drops.length, hp: () => Math.ceil(c.current.keeper.hp), others: () => (c.current.others ?? []).map(o => o.id) }   // checks' hook: READ only (#1651: hp, others)
     return () => { clearInterval(t); off?.(); delete g.__fight }
   }, [])   // M33: leaving the Wilds, Morel's bubble has no gun to read   // the keeper's walker reads c.pieces as solids (dynamic-solids.ts)

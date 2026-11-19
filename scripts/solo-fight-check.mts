@@ -14,7 +14,7 @@ let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const poll = async (fn: () => Promise<boolean>, ms = 60000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(300) } return false }
-type H = { id: number; x: number; z: number; hp: number }
+type H = { id: number; kind?: string; x: number; y?: number; z: number; hp: number }
 try {
   const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 1100, height: 760 })
   const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
@@ -56,17 +56,24 @@ try {
       await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, y), gx, gz, Math.atan2(-dx, -dz))
       await poll(async () => { const a = await p.evaluate(() => (window as any).__ather.state()); return Math.hypot(a.px - gx, a.pz - gz) < 1.5 }, 10000)
     }
-    const aim = await p.evaluate((id: number) => {
-      const w = window as any, a = w.__ather.state(), h = w.__fight.ids().find((o: any) => o.id === id); if (!h) return null
-      const ex = h.x - a.px, ez = h.z - a.pz, dd = Math.hypot(ex, ez) || 1
-      w.__ather.look(Math.atan2(-ex, -ez), -Math.atan2(0.75, dd)); return dd   // eye ~1.6 m, body ~0.85 m
-    }, t.id)
-    if (aim === null) continue
-    await p.mouse.down(); await sleep(200); await p.mouse.up()
-    const h = await poll(async () => !!(await anyHit()), 6000) ? await anyHit() : null
-    if (h) hit = `Hollow ${h.id}: ${maxSeen.get(h.id)} -> ${h.hp} (aimed ${t.id} at ${aim.toFixed(1)} m, shot ${i + 1})`
+    // aim from where a round really starts (__fight.eye = the camera) at where it really hits: a shambler's body is BODY_Y
+    // (0.85 m) over its feet, a floater is one 0.5 m ball at its hover height (h.y already includes the hover). The first
+    // version aimed every Hollow at 0.85 m, so a floater as the nearest target was a guaranteed 40-shot miss (#1652).
+    // A short burst: up to 3 shots, each re-aimed from the Hollow's LIVE spot, a hit polled after each.
+    let shots = 0
+    for (let b = 0; b < 3 && !hit; b++) {
+      const aim = await p.evaluate((id: number) => {
+        const w = window as any, e = w.__fight.eye(), h = w.__fight.ids().find((o: any) => o.id === id); if (!h) return null
+        const ty = h.kind === 'floater' ? h.y : h.y + 0.85, ex = h.x - e.x, ez = h.z - e.z, dd = Math.hypot(ex, ez) || 1
+        w.__ather.look(Math.atan2(-ex, -ez), Math.atan2(ty - e.y, dd)); return { dd, kind: h.kind as string }
+      }, t.id)
+      if (aim === null) break
+      await p.mouse.down(); await sleep(200); await p.mouse.up(); shots++
+      const h = await poll(async () => !!(await anyHit()), 2500) ? await anyHit() : null
+      if (h) hit = `Hollow ${h.id}: ${maxSeen.get(h.id)} -> ${h.hp} (aimed ${t.id}, a ${aim.kind} at ${aim.dd.toFixed(1)} m; aim ${i + 1}, burst shot ${shots})`
+    }
   }
-  ok(!!hit, `3. a real shot lowers a Hollow's hp locally: ${hit ?? 'never hit in 40 shots'}`)
+  ok(!!hit, `3. a real shot lowers a Hollow's hp locally: ${hit ?? 'never hit in 40 aims (up to 3 shots each)'}`)
   ok(errs.length === 0, `4. page errors: ${errs.length} ${errs.join(' | ')}`)
 } finally { await br.close() }
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)
