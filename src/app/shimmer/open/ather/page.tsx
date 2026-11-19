@@ -109,6 +109,7 @@ import { BAIT, rollRinn, type Rinn } from './rinning'
 import { RinningFX, type RinningApi } from '../shared/rinning-fx'
 import type { Reel } from '../shared/reel'
 import { ReelBar } from '../shared/reel-bar'
+import { play as sfx } from '../shared/sfx'
 /** the Wilds' water surface (the rinning float rides it) */
 const WILDS_WATER_Y = 0.02
 import { prunePlan, pruneCommit, pruneCheck, startShake, openSkills, openLevel, addOpenXp, setOpenXpMult, TREE_NAME, MANA_COST, ZONE_NAME, type Zone as WildsZone } from './forestry'
@@ -156,6 +157,10 @@ function AtherSliceGame() {
   const [waymarks, setWaymarks] = useState<Waymark[]>([])
   const [garden, setGarden] = useState<Garden>(freshGarden)
   const [panel, setPanel] = useState<Panel>(null)
+  // M36 (Alex 11-19 'yes wire the page.tsx sfx hooks'): a panel opening / closing swishes; any button tap ticks. Only yay sounds play.
+  const panelWas = useRef(false)
+  useEffect(() => { const on = !!panel; if (on !== panelWas.current) sfx(on ? 'ui-panel-open' : 'ui-panel-close'); panelWas.current = on }, [panel])
+  useEffect(() => { const tap = (e: MouseEvent) => { if ((e.target as Element | null)?.closest?.('button')) sfx('ui-tap') }; document.addEventListener('click', tap, true); return () => document.removeEventListener('click', tap, true) }, [])
   // BETA M32: Greg's walking tour (greg-tour.ts). Not a panel: the keeper walks along with him; only a stop's talk freezes them.
   const [tour, setTour] = useState<GregTourState | null>(null)
   const tourRef = useRef(tour); tourRef.current = tour
@@ -359,7 +364,7 @@ function AtherSliceGame() {
   const onCombat = useCallback((evs: CombatEvent[]) => {
     let got = 0
     for (const e of evs) {
-      if (e.kind === 'pickup') got += e.amount
+      if (e.kind === 'pickup') { got += e.amount; sfx('pickup-grey-matter') }
       if (e.kind === 'champ-wake') setToast('Something heaves up out of the grey.')
       if (e.kind === 'champ-break') setToast(e.bar === 0 ? 'It sinks into the ooze, and more come crawling out.' : 'It sinks again. When it rises it moves wrong, wild.')
       if (e.kind === 'champ-down') {
@@ -649,6 +654,7 @@ function AtherSliceGame() {
       let inv = getInv(), full = false
       for (const d of chip.drops) { const g = give(inv, d.id, d.n); inv = g.inv; if (g.left) full = true; ch.got[d.id] = (ch.got[d.id] ?? 0) + d.n - g.left }
       setInv(inv)
+      if (chip.drops.some(d => d.n > 0)) sfx('pickup-item')
       ch.nextAt = performance.now() + gap
       if (chip.last) {
         const r = ch.node === 'tree' ? pruneCommit(ch.t.kind, ch.t.id) : mineCommit(ch.c.kind, ch.c.id)
@@ -667,6 +673,9 @@ function AtherSliceGame() {
       } else if (full) { if (chanRef.current === ch) stopChannel('Your bag is full. The node keeps the rest.') }
       return chip.drops
     }
+    // M36: each chip knocks (axe on wood / pick on crystal); the last one finishes with the snip / the glassy ring
+    if (ch.node === 'tree') sfx(chip.last ? 'hit-prune-tree' : 'hit-axe-tree', { at: { x: ch.t.x, y: 1, z: ch.t.z } })
+    else sfx(chip.last ? 'hit-prospect-crystal' : 'hit-pick-crystal', { at: { x: ch.c.x, y: ch.c.y, z: ch.c.z } })
     if (ch.node === 'tree') { fxRef.current!.start(ch.t, land, () => {}); startShake(ch.t.id) }
     else cFxRef.current!.start(ch.c, () => { const d = land(); const ex = ch.w.extra as { found: Exclude<CrystalKind, 'egg'> }; return { found: ex.found, n: Math.max(1, d.find(x => x.id === CRYSTAL_ITEM[ex.found])?.n ?? 1) } }, () => {})
   }, [stopChannel])
