@@ -1,0 +1,372 @@
+<title>Plot Walls Mock</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap">
+<style>
+/* layout: one screen, the plot fills it; a tool rail at the bottom (thumb reach), materials + bill in a side sheet */
+:root {
+  --bg: #eef1ea; --panel: #fbfcf8; --line: #d5dacd; --fg: #263028; --dim: #6b766c; --accent: #3f7fd0; --accent-ink: #ffffff;
+  --display: "Chakra Petch", "Rajdhani", system-ui, sans-serif; --body: "Nunito", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141a17; --panel: #1c2420; --line: #2f3a34; --fg: #e4ebe4; --dim: #93a096; --accent: #6aa6f0; --accent-ink: #0d1520; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #141a17; --panel: #1c2420; --line: #2f3a34; --fg: #e4ebe4; --dim: #93a096; --accent: #6aa6f0; --accent-ink: #0d1520; color-scheme: dark }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); overflow: hidden; }
+.app { height: 100%; display: grid; grid-template-columns: 1fr 300px; grid-template-rows: auto 1fr auto; }
+header { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--line); background: var(--panel); }
+h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 17px; letter-spacing: .12em; text-transform: uppercase; }
+header p { margin: 0; color: var(--dim); font-size: 13px; }
+#stage { position: relative; min-width: 0; min-height: 0; touch-action: none; }
+#stage canvas { display: block; width: 100%; height: 100%; }
+.hint { position: absolute; left: 12px; top: 12px; max-width: min(360px, calc(100% - 24px)); padding: 8px 11px; border-radius: 8px; background: rgba(16, 22, 18, .72); color: #eef3ee; font-size: 12.5px; line-height: 1.4; pointer-events: none; }
+.hint b { font-family: var(--display); letter-spacing: .08em; text-transform: uppercase; font-size: 11.5px; }
+aside { grid-row: 2 / 4; grid-column: 2; overflow-y: auto; border-left: 1px solid var(--line); background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.label { font-family: var(--display); font-size: 11.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); margin: 0 0 8px; }
+.swatches { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sw { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--fg); font: inherit; font-size: 13px; text-align: left; cursor: pointer; min-width: 0; }
+.sw i { flex: none; width: 18px; height: 18px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); }
+.sw span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sw[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.where { margin: 8px 0 0; font-size: 12.5px; color: var(--dim); min-height: 2.6em; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+td { padding: 4px 0; border-bottom: 1px solid var(--line); }
+td:last-child { text-align: right; font-weight: 700; }
+.note { font-size: 12px; color: var(--dim); line-height: 1.45; margin: 6px 0 0; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { flex: 1; padding: 7px 4px; border: 0; background: transparent; color: var(--fg); font-family: var(--display); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+nav { grid-column: 1; display: flex; gap: 6px; flex-wrap: wrap; padding-block: 8px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: 12px; border-top: 1px solid var(--line); background: var(--panel); }
+.tool { padding: 9px 13px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--fg); font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; opacity: .62; }
+.tool[aria-pressed="true"] { opacity: 1; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.tool.toggle { margin-left: auto; opacity: 1; }
+.tool:focus-visible, .sw:focus-visible, .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) auto auto; }
+  aside { grid-row: 4; grid-column: 1; border-left: 0; border-top: 1px solid var(--line); max-height: 34vh; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  nav { grid-row: 3; }
+  .tool { padding: 8px 10px; font-size: 12px; }
+  .tool.toggle { margin-left: 0; }
+}
+</style>
+
+<div class="app">
+  <header>
+    <h1>Plot walls</h1>
+    <p>Look-mock for building on the home plot. Walls are 0.3 m thick and 3.2 m tall, the same as today's rooms. Nothing here is in the game yet.</p>
+  </header>
+  <div id="stage"><div class="hint" id="hint"></div></div>
+  <aside>
+    <section>
+      <p class="label">Material</p>
+      <div class="swatches" id="mats"></div>
+      <p class="where" id="where"></p>
+    </section>
+    <section>
+      <p class="label">Roof</p>
+      <div class="seg" id="roofs">
+        <button type="button" data-roof="gable">Gable</button>
+        <button type="button" data-roof="hip">Hip</button>
+        <button type="button" data-roof="flat">Flat</button>
+      </div>
+    </section>
+    <section>
+      <p class="label">What it costs</p>
+      <table id="bill"></table>
+      <p class="note">You build from crafted pieces, made at the bench: one wall piece per metre, one floor or roof piece per square metre (proposed). Erasing gives the pieces back.</p>
+    </section>
+    <section>
+      <p class="label">For Alex to call</p>
+      <p class="note">Wall thickness (0.3 m today) · straight walls only, or diagonals too · roof styles · walls-down height · do inside and outside faces paint separately · per-metre prices.</p>
+    </section>
+  </aside>
+  <nav id="tools">
+    <button type="button" class="tool" data-tool="wall">Walls</button>
+    <button type="button" class="tool" data-tool="door">Door</button>
+    <button type="button" class="tool" data-tool="window">Window</button>
+    <button type="button" class="tool" data-tool="paint">Paint</button>
+    <button type="button" class="tool" data-tool="erase">Erase</button>
+    <button type="button" class="tool" data-tool="look">Look</button>
+    <button type="button" class="tool toggle" id="down" aria-pressed="false">Walls down</button>
+  </nav>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+const N = 24, HALF = N / 2, T = 0.3, H = 3.2, LOW = 0.7, DOOR_H = 2.2, SILL = 1.0, WIN_TOP = 2.2, OVER = 0.3
+const MATS = {
+  goldwood:   { name: 'Goldwood',   c: 0xd2a157, unit: 'planks', where: 'Goldwood planks. Meadow trees, Forestry 1.' },
+  shimmeroak: { name: 'Shimmeroak', c: 0xa79bbd, unit: 'planks', where: 'Shimmeroak planks. Forestry 4.' },
+  starwillow: { name: 'Starwillow', c: 0xd8e2ef, unit: 'planks', where: 'Starwillow planks. Forestry 7, a faint glow.' },
+  dawnwood:   { name: 'Dawnwood',   c: 0xc27a5b, unit: 'planks', where: 'Dawnwood planks. The old giants, Forestry 10.' },
+  spinestone: { name: 'Spinestone', c: 0x7d8893, unit: 'blocks', where: 'Spinestone blocks. Cut at the Stonery.' },
+  ruinstone:  { name: 'Ruin stone', c: 0x9b9877, unit: 'blocks', where: 'Salvaged ruin stone. Old ground in the Wilds.' },
+}
+const GLASS = 0x9fd8e8
+const S = {
+  walls: new Map(),      // 'h,i,j' | 'v,i,j' -> { mat, kind: 'wall' | 'door' | 'window' }
+  floors: new Map(),     // 'i,j' -> mat
+  roofMat: 'dawnwood', roof: 'gable', down: false, tool: 'wall', mat: 'goldwood',
+}
+
+// ── a starter house so the board opens working: a 6x5 main room, a 4x5 room beside it, a door between, a front door
+function run(x0, z0, x1, z1, mat) {
+  if (z0 === z1) for (let i = Math.min(x0, x1); i < Math.max(x0, x1); i++) S.walls.set(`h,${i},${z0}`, { mat, kind: 'wall' })
+  else for (let j = Math.min(z0, z1); j < Math.max(z0, z1); j++) S.walls.set(`v,${x0},${j}`, { mat, kind: 'wall' })
+}
+run(7, 9, 13, 9, 'goldwood'); run(7, 14, 13, 14, 'goldwood'); run(7, 9, 7, 14, 'goldwood'); run(13, 9, 13, 14, 'goldwood')
+run(13, 9, 17, 9, 'spinestone'); run(13, 14, 17, 14, 'spinestone'); run(17, 9, 17, 14, 'spinestone')
+S.walls.get('h,9,14').kind = 'door'; S.walls.get('h,10,14').kind = 'door'
+S.walls.get('v,13,11').kind = 'door'; S.walls.get('v,13,12').kind = 'door'
+S.walls.get('v,7,11').kind = 'window'; S.walls.get('v,7,12').kind = 'window'; S.walls.get('h,15,9').kind = 'window'
+
+// ── three
+const stage = document.getElementById('stage')
+const renderer = new THREE.WebGLRenderer({ antialias: true })
+renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
+renderer.outputEncoding = THREE.sRGBEncoding
+stage.appendChild(renderer.domElement)
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xbcd7ea); scene.fog = new THREE.Fog(0xbcd7ea, 45, 95)
+const cam = new THREE.PerspectiveCamera(42, 1, 0.1, 300); cam.position.set(4, 21, 23)
+const controls = new THREE.OrbitControls(cam, renderer.domElement)
+controls.target.set(0, 0, 0); controls.enableDamping = true; controls.maxPolarAngle = 1.35; controls.minDistance = 6; controls.maxDistance = 60
+scene.add(new THREE.HemisphereLight(0xeaf3ff, 0x5d6b4a, 0.75))
+const sun = new THREE.DirectionalLight(0xfff1d8, 0.95); sun.position.set(-14, 26, 12); sun.castShadow = true
+sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 70 }); sun.shadow.bias = -0.0006
+scene.add(sun)
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(N + 10, N + 10), new THREE.MeshStandardMaterial({ color: 0x86b25e, roughness: 1 }))
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground)
+const grid = new THREE.GridHelper(N, N, 0x4f7a3a, 0x6f9a52); grid.position.y = 0.012; grid.material.transparent = true; grid.material.opacity = 0.45; scene.add(grid)
+// a keeper for scale (1.7 m), by the front door
+const keeper = new THREE.Group()
+const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 1.2, 14), new THREE.MeshStandardMaterial({ color: 0x5d7fa8 }))
+body.position.y = 0.6; const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), new THREE.MeshStandardMaterial({ color: 0xf0d6bd }))
+head.position.y = 1.46; keeper.add(body, head); keeper.traverse(o => { o.castShadow = true })
+keeper.position.set(10 - HALF, 0, 15.6 - HALF); scene.add(keeper)
+
+const mats = {}
+const matOf = id => mats[id] || (mats[id] = new THREE.MeshStandardMaterial({ color: MATS[id].c, roughness: 0.82, side: THREE.DoubleSide }))
+const glassMat = new THREE.MeshStandardMaterial({ color: GLASS, roughness: 0.15, transparent: true, opacity: 0.45 })
+const ghostMat = new THREE.MeshStandardMaterial({ color: 0x5aa0ff, transparent: true, opacity: 0.45, depthWrite: false })
+const eraseMat = new THREE.MeshStandardMaterial({ color: 0xff5a4a, transparent: true, opacity: 0.45, depthWrite: false })
+const built = new THREE.Group(); scene.add(built)
+
+// ── rooms: flood the outside; whatever it cannot reach, inside the plot, is a room
+const cross = (i, j, di, dj) => di ? `v,${i + Math.max(di, 0)},${j}` : `h,${i},${j + Math.max(dj, 0)}`
+const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+function rooms() {
+  const out = new Set(), q = [], k = (i, j) => `${i},${j}`
+  for (let i = -1; i <= N; i++) for (const j of [-1, N]) { out.add(k(i, j)); q.push([i, j]); out.add(k(j, i)); q.push([j, i]) }
+  while (q.length) {
+    const [i, j] = q.pop()
+    for (const [di, dj] of DIRS) {
+      const a = i + di, b = j + dj
+      if (a < -1 || b < -1 || a > N || b > N || out.has(k(a, b))) continue
+      if (S.walls.has(cross(i, j, di, dj))) continue
+      out.add(k(a, b)); q.push([a, b])
+    }
+  }
+  const seen = new Set(), list = []
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    if (out.has(k(i, j)) || seen.has(k(i, j))) continue
+    const cells = [], st = [[i, j]]; seen.add(k(i, j))
+    while (st.length) {
+      const [a, b] = st.pop(); cells.push([a, b])
+      for (const [di, dj] of DIRS) {
+        const c = a + di, d = b + dj
+        if (c < 0 || d < 0 || c >= N || d >= N || seen.has(k(c, d)) || out.has(k(c, d))) continue
+        if (S.walls.has(cross(a, b, di, dj))) continue
+        seen.add(k(c, d)); st.push([c, d])
+      }
+    }
+    list.push(cells)
+  }
+  return list
+}
+
+// ── geometry helpers
+const box = (w, h, d, m, x, y, z, ud) => { const g = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); g.position.set(x, y, z); g.castShadow = g.receiveShadow = true; if (ud) g.userData = ud; built.add(g); return g }
+function edgeInfo(key) {
+  const [o, a, b] = key.split(','), i = +a, j = +b
+  return o === 'h' ? { along: 'x', cx: i + 0.5 - HALF, cz: j - HALF } : { along: 'z', cx: i - HALF, cz: j + 0.5 - HALF }
+}
+function wallPiece(key, w, y0, y1, m, ext = true) {
+  if (y1 <= y0) return
+  const e = edgeInfo(key), L = 1 + (ext ? T : 0), h = y1 - y0
+  return e.along === 'x' ? box(L, h, T, m, e.cx, y0 + h / 2, e.cz, { key }) : box(T, h, L, m, e.cx, y0 + h / 2, e.cz, { key })
+}
+function tri(pts, m) {   // pts: flat [x,y,z,...] in triangles
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); g.computeVertexNormals()
+  const mesh = new THREE.Mesh(g, m); mesh.castShadow = true; mesh.receiveShadow = true; built.add(mesh)
+}
+const quad = (a, b, c, d) => [...a, ...b, ...c, ...a, ...c, ...d]
+function roof(cells) {
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity
+  for (const [i, j] of cells) { x0 = Math.min(x0, i); z0 = Math.min(z0, j); x1 = Math.max(x1, i + 1); z1 = Math.max(z1, j + 1) }
+  const rect = cells.length === (x1 - x0) * (z1 - z0), m = matOf(S.roofMat), y = H
+  x0 -= HALF; x1 -= HALF; z0 -= HALF; z1 -= HALF
+  if (S.roof === 'flat' || !rect) {
+    if (rect) box(x1 - x0 + 2 * OVER, 0.22, z1 - z0 + 2 * OVER, m, (x0 + x1) / 2, y + 0.11, (z0 + z1) / 2)
+    else for (const [i, j] of cells) box(1 + 2 * OVER / 3, 0.22, 1 + 2 * OVER / 3, m, i + 0.5 - HALF, y + 0.11, j + 0.5 - HALF)
+    return
+  }
+  const alongX = x1 - x0 >= z1 - z0
+  // work in (u along the ridge, v across it), map back to x/z
+  const [u0, u1, v0, v1] = alongX ? [x0 - OVER, x1 + OVER, z0 - OVER, z1 + OVER] : [z0 - OVER, z1 + OVER, x0 - OVER, x1 + OVER]
+  const P = (u, yy, v) => alongX ? [u, yy, v] : [v, yy, u]
+  const half = (v1 - v0) / 2, vc = (v0 + v1) / 2, rise = half * 0.72, top = y + rise
+  if (S.roof === 'gable') {
+    tri(quad(P(u0, y, v0), P(u1, y, v0), P(u1, top, vc), P(u0, top, vc)), m)
+    tri(quad(P(u0, y, v1), P(u1, y, v1), P(u1, top, vc), P(u0, top, vc)), m)
+    // the gable ends close in the wall's own material, over the wall line (not the eave)
+    const wm = matOf(S.mat), a0 = u0 + OVER, a1 = u1 - OVER
+    for (const u of [a0, a1]) tri([...P(u, y, v0 + OVER), ...P(u, y, v1 - OVER), ...P(u, top - rise * OVER / half, vc)], wm)
+  } else {   // hip
+    const r0 = Math.min(u0 + half, (u0 + u1) / 2), r1 = Math.max(u1 - half, (u0 + u1) / 2)
+    tri(quad(P(u0, y, v0), P(u1, y, v0), P(r1, top, vc), P(r0, top, vc)), m)
+    tri(quad(P(u0, y, v1), P(u1, y, v1), P(r1, top, vc), P(r0, top, vc)), m)
+    tri([...P(u0, y, v0), ...P(u0, y, v1), ...P(r0, top, vc)], m)
+    tri([...P(u1, y, v0), ...P(u1, y, v1), ...P(r1, top, vc)], m)
+  }
+}
+
+let roomList = []
+function rebuild() {
+  for (const c of [...built.children]) { built.remove(c); c.geometry.dispose() }
+  roomList = rooms()
+  // floors: a room's cells take the room's paint (new rooms start in Goldwood)
+  for (const cells of roomList) for (const [i, j] of cells) {
+    const k = `${i},${j}`; if (!S.floors.has(k)) S.floors.set(k, 'goldwood')
+    const f = box(1, 0.06, 1, matOf(S.floors.get(k)), i + 0.5 - HALF, 0.03, j + 0.5 - HALF, { cell: k }); f.castShadow = false
+  }
+  const top = S.down ? LOW : H
+  for (const [key, w] of S.walls) {
+    const m = matOf(w.mat)
+    if (w.kind === 'wall') wallPiece(key, w, 0, top, m)
+    else if (w.kind === 'door') wallPiece(key, w, DOOR_H, top, m, false) || (!S.down && null)
+    else {   // window: a sill, a head, a pane between
+      wallPiece(key, w, 0, Math.min(SILL, top), m); wallPiece(key, w, WIN_TOP, top, m)
+      if (!S.down) { const e = edgeInfo(key); const g = e.along === 'x' ? box(1, WIN_TOP - SILL, 0.05, glassMat, e.cx, (SILL + WIN_TOP) / 2, e.cz, { key }) : box(0.05, WIN_TOP - SILL, 1, glassMat, e.cx, (SILL + WIN_TOP) / 2, e.cz, { key }); g.castShadow = false }
+    }
+  }
+  // door pieces: a little posts-and-threshold so a doorway reads with walls down too
+  for (const [key, w] of S.walls) if (w.kind === 'door') { const e = edgeInfo(key); const t = e.along === 'x' ? box(1, 0.04, T + 0.06, matOf(w.mat), e.cx, 0.02, e.cz, { key }) : box(T + 0.06, 0.04, 1, matOf(w.mat), e.cx, 0.02, e.cz, { key }); t.castShadow = false }
+  if (!S.down) for (const cells of roomList) roof(cells)
+  bill()
+}
+
+// ── the bill
+function bill() {
+  const n = {}, add = (id, v) => { n[id] = (n[id] || 0) + v }
+  // canon (Magii 11-19, RULED-AFK): a house goes up from CRAFTED pieces, made at the bench from the material
+  for (const [, w] of S.walls) if (w.kind === 'wall') add(`${w.mat}|wall`, 1)
+  const doors = [...S.walls.values()].filter(w => w.kind === 'door').length / 2, glass = [...S.walls.values()].filter(w => w.kind === 'window')
+  for (const w of glass) add(`${w.mat}|wall`, 1)
+  for (const cells of roomList) for (const [i, j] of cells) add(`${S.floors.get(`${i},${j}`)}|floor`, 1)
+  const roofArea = roomList.reduce((a, c) => a + c.length, 0)
+  if (roofArea) add(`${S.roofMat}|roof`, Math.round(roofArea * (S.roof === 'flat' ? 1 : 1.3)))
+  const rows = Object.entries(n).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([k, v]) => { const [id, part] = k.split('|'); return `<tr><td>${MATS[id].name} ${part} pieces</td><td>${v}</td></tr>` })
+  if (doors) rows.push(`<tr><td>Doors</td><td>${Math.round(doors)}</td></tr>`)
+  if (glass.length) rows.push(`<tr><td>Windows</td><td>${glass.length}</td></tr>`)
+  rows.push(`<tr><td>Rooms</td><td>${roomList.length}</td></tr>`)
+  document.getElementById('bill').innerHTML = rows.join('')
+}
+
+// ── input
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+function setNdc(e) { const r = renderer.domElement.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, cam) }
+function groundPoint(e) { setNdc(e); const p = new THREE.Vector3(); return ray.ray.intersectPlane(plane, p) ? p : null }
+const snap = p => ({ i: Math.max(0, Math.min(N, Math.round(p.x + HALF))), j: Math.max(0, Math.min(N, Math.round(p.z + HALF))) })
+function pick(e) { setNdc(e); const hit = ray.intersectObjects(built.children, false).find(h => h.object.userData.key || h.object.userData.cell); return hit ? hit.object.userData : null }
+function runEdges(a, b) {
+  const out = []
+  if (a.j === b.j) for (let i = Math.min(a.i, b.i); i < Math.max(a.i, b.i); i++) out.push(`h,${i},${a.j}`)
+  else for (let j = Math.min(a.j, b.j); j < Math.max(a.j, b.j); j++) out.push(`v,${a.i},${j}`)
+  return out
+}
+let drag = null, ghost = null, pointers = new Set()
+function clearGhost() { if (ghost) { scene.remove(ghost); ghost.traverse(o => o.geometry && o.geometry.dispose()); ghost = null } }
+function showGhost(edges, erase) {
+  clearGhost(); ghost = new THREE.Group()
+  for (const k of edges) { const e = edgeInfo(k), m = erase ? eraseMat : ghostMat; const g = new THREE.Mesh(e.along === 'x' ? new THREE.BoxGeometry(1 + T, H + 0.02, T + 0.04) : new THREE.BoxGeometry(T + 0.04, H + 0.02, 1 + T), m); g.position.set(e.cx, H / 2, e.cz); ghost.add(g) }
+  scene.add(ghost)
+}
+const el = renderer.domElement
+el.addEventListener('pointerdown', e => {
+  pointers.add(e.pointerId)
+  if (pointers.size > 1) { drag = null; clearGhost(); return }   // two fingers: the camera's
+  if (S.tool === 'look' || (e.pointerType === 'mouse' && e.button !== 0)) return
+  if (S.tool === 'wall' || S.tool === 'erase') { const p = groundPoint(e); if (p) { drag = { a: snap(p), b: snap(p) }; el.setPointerCapture(e.pointerId) } return }
+  const u = pick(e); if (!u) return
+  if (S.tool === 'paint') {
+    if (u.key && S.walls.has(u.key)) S.walls.get(u.key).mat = S.mat
+    else if (u.cell) { const room = roomList.find(c => c.some(([i, j]) => `${i},${j}` === u.cell)); for (const [i, j] of room || []) S.floors.set(`${i},${j}`, S.mat) }
+    rebuild(); return
+  }
+  if ((S.tool === 'door' || S.tool === 'window') && u.key && S.walls.has(u.key)) {
+    const w = S.walls.get(u.key)
+    if (S.tool === 'window') { w.kind = w.kind === 'window' ? 'wall' : 'window'; rebuild(); return }
+    // a door takes two metres of wall: this one and its neighbour along the same line
+    const [o, a, b] = u.key.split(','), i = +a, j = +b
+    const next = o === 'h' ? [`h,${i + 1},${j}`, `h,${i - 1},${j}`] : [`v,${i},${j + 1}`, `v,${i},${j - 1}`]
+    const mate = next.find(k => S.walls.has(k)), to = w.kind === 'door' ? 'wall' : 'door'
+    w.kind = to; if (mate) S.walls.get(mate).kind = to
+    rebuild()
+  }
+})
+el.addEventListener('pointermove', e => {
+  if (!drag) return
+  const p = groundPoint(e); if (!p) return
+  const s = snap(p), di = Math.abs(s.i - drag.a.i), dj = Math.abs(s.j - drag.a.j)
+  drag.b = di >= dj ? { i: s.i, j: drag.a.j } : { i: drag.a.i, j: s.j }   // straight runs only (v1)
+  showGhost(runEdges(drag.a, drag.b), S.tool === 'erase')
+})
+const end = e => {
+  pointers.delete(e.pointerId)
+  if (!drag) return
+  const edges = runEdges(drag.a, drag.b); drag = null; clearGhost()
+  if (!edges.length) return
+  for (const k of edges) S.tool === 'erase' ? S.walls.delete(k) : (!S.walls.has(k) && S.walls.set(k, { mat: S.mat, kind: 'wall' }))
+  rebuild()
+}
+el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end)
+
+// ── camera: left = the tool; right drag turns, wheel zooms, middle pans; two fingers pinch and turn. "Look" = left turns too.
+function setTool(t) {
+  S.tool = t
+  for (const b of document.querySelectorAll('[data-tool]')) b.setAttribute('aria-pressed', String(b.dataset.tool === t))
+  const look = t === 'look'
+  controls.mouseButtons = { LEFT: look ? THREE.MOUSE.ROTATE : -1, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE }
+  controls.touches = { ONE: look ? THREE.TOUCH.ROTATE : -1, TWO: THREE.TOUCH.DOLLY_ROTATE }
+  const H_ = {
+    wall: '<b>Walls</b> · press on a grid corner and drag. Close a loop and it becomes a room with a floor and a roof.',
+    door: '<b>Door</b> · tap a wall to cut a doorway (2 m). Tap it again to close it.',
+    window: '<b>Window</b> · tap a wall for a crystal-pane window. Tap again to fill it in.',
+    paint: '<b>Paint</b> · tap a wall to give it the chosen material, or a floor to paint the whole room.',
+    erase: '<b>Erase</b> · drag along walls to take them down. What they cost comes back.',
+    look: '<b>Look</b> · drag to turn, pinch or scroll to zoom.',
+  }
+  document.getElementById('hint').innerHTML = H_[t] + (look ? '' : ' Right-drag or two fingers turn the view.')
+}
+for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => setTool(b.dataset.tool))
+const downBtn = document.getElementById('down')
+const setDown = v => { S.down = v; downBtn.setAttribute('aria-pressed', String(v)); downBtn.textContent = v ? 'Walls up' : 'Walls down'; rebuild() }
+downBtn.addEventListener('click', () => setDown(!S.down))
+addEventListener('keydown', e => { if (e.key === 'Tab' && document.activeElement === document.body) { e.preventDefault(); setDown(!S.down) } })
+for (const b of document.querySelectorAll('[data-roof]')) b.addEventListener('click', () => { S.roof = b.dataset.roof; S.roofMat = ['spinestone', 'ruinstone'].includes(S.mat) ? 'dawnwood' : S.mat === 'goldwood' ? 'dawnwood' : S.mat; syncRoof(); rebuild() })
+function syncRoof() { for (const b of document.querySelectorAll('[data-roof]')) b.setAttribute('aria-pressed', String(b.dataset.roof === S.roof)) }
+const matsEl = document.getElementById('mats')
+for (const [id, m] of Object.entries(MATS)) {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'sw'; b.dataset.mat = id
+  b.innerHTML = `<i style="background:#${m.c.toString(16).padStart(6, '0')}"></i><span>${m.name}</span>`
+  b.addEventListener('click', () => { S.mat = id; syncMat() }); matsEl.appendChild(b)
+}
+function syncMat() { for (const b of matsEl.children) b.setAttribute('aria-pressed', String(b.dataset.mat === S.mat)); document.getElementById('where').textContent = MATS[S.mat].where }
+
+function size() { const r = stage.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); cam.aspect = r.width / Math.max(1, r.height); cam.updateProjectionMatrix() }
+new ResizeObserver(size).observe(stage); size()
+setTool('wall'); syncMat(); syncRoof(); rebuild()
+const loop = () => { controls.update(); renderer.render(scene, cam); requestAnimationFrame(loop) }; loop()
+})()
+</script>
