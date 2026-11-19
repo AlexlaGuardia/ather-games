@@ -8,17 +8,16 @@
 //   · the five do not leave with a keeper (hub 11-19: block recruiting here for now; the test bed must not empty itself).
 //   · Fennel stands at the keeper's Rinnshop while the first-rinstick quest is open (fennel.tsx), so the Glade hides her then.
 // Pure; moonwell-glade.test.ts.
-import { MOONWELL } from './moonwell'
+import { MOONWELL, GLADE_GREEN, shoreToward } from './moonwell'
 import type { Settlement } from './network'
 import type { Folk } from './settlement-folk'
 import { DREAMS } from './folk-lines'
-import { GREG_WAYMARK } from './waymarks'
 import { loadQuest } from './rinsticks'
 
 export const GLADE_ID = 'moonwell'
 export const GLADE_NAME = 'Moonwell Glade'
-/** The Glade as a settlement: centred on the pool. Meadow ground (canon: "the tended heart"). */
-export const GLADE: Settlement = { id: GLADE_ID, name: GLADE_NAME, x: MOONWELL.x, z: MOONWELL.z, biome: 'meadow' }
+/** The Glade as a settlement: centred on the GREEN (M40 layout B). Meadow ground (canon: "the tended heart"). */
+export const GLADE: Settlement = { id: GLADE_ID, name: GLADE_NAME, x: GLADE_GREEN.x, z: GLADE_GREEN.z, biome: 'meadow' }
 
 /** Canon's own trade words, for player copy (the profession enum is ours; hub 11-19). */
 export const GLADE_TRADE: Readonly<Record<string, string>> = { hazel: 'carpenter', sax: 'the stonery', yarrow: 'apothecary', fennel: 'cook', mallow: 'shopkeeper' }
@@ -57,29 +56,56 @@ export function gladeAway(): Set<string> {
   try { return loadQuest().state === 'active' ? new Set([`${GLADE_ID}:fennel`]) : new Set() } catch { return new Set() }
 }
 
-/** Where the five stand: a ring round the pool at FOLK_RING m, fanned across the side AWAY from the arrival waymark, so a
- *  keeper stepping off the waymark sees the household across the water, each facing the pool. Placement is Jin's. */
-export const FOLK_RING = MOONWELL.r + 3.6
+// ── M40 LAYOUT B 'THE GREEN' (Alex 11-19, docs/looks/moonwell-glade.html; mock scale 0.25 m a pixel). Metres from the
+// green's centre (GLADE_GREEN). The five's LOTS stand in a horseshoe round the green, each a level pad (relief.ts levels the
+// whole Glade) with its station at the back and its Moglin at the front, all turned to face the green. Fennel's kitchen is
+// the head (north); clockwise Hazel, Sax, Yarrow, Mallow; the waymark sits at the open south end. Placement is Jin's.
+export interface GladeLot { id: string; dx: number; dz: number; w: number; d: number }
+export const LOT_W = 13.5, LOT_D = 8.5
+export const GLADE_LOTS: readonly GladeLot[] = [
+  { id: 'fennel', dx: 0, dz: -25.25, w: LOT_W, d: LOT_D },
+  { id: 'hazel', dx: 19.25, dz: -15.75, w: LOT_W, d: LOT_D },
+  { id: 'sax', dx: 21, dz: 1.75, w: LOT_W, d: LOT_D },
+  { id: 'yarrow', dx: 15.5, dz: 19.75, w: LOT_W, d: LOT_D },
+  { id: 'mallow', dx: -14.5, dz: 21.25, w: LOT_W, d: LOT_D },
+]
+/** a lot in world coords: its centre, and `yaw` turned so its FRONT (local -z) faces the green */
+export function lotAt(id: string): { id: string; x: number; z: number; yaw: number; w: number; d: number } | null {
+  const l = GLADE_LOTS.find(q => q.id === id); if (!l) return null
+  const x = GLADE_GREEN.x + l.dx, z = GLADE_GREEN.z + l.dz
+  return { id, x, z, yaw: Math.atan2(x - GLADE_GREEN.x, z - GLADE_GREEN.z), w: l.w, d: l.d }
+}
+/** a point on a lot, in the lot's own frame: `ahead` m toward the green from its centre, `side` m to its right */
+export function onLot(id: string, ahead: number, side = 0): { x: number; z: number } {
+  const l = lotAt(id)!, fx = -Math.sin(l.yaw), fz = -Math.cos(l.yaw)   // forward = toward the green
+  return { x: l.x + fx * ahead - fz * side, z: l.z + fz * ahead + fx * side }
+}
+/** Where the five stand: at the FRONT of their own lot, facing the green (a keeper on the green sees all five). */
 export function gladeSpots(ids: readonly string[]): { id: string; x: number; z: number; yaw: number }[] {
-  const away = Math.atan2(MOONWELL.x - GREG_WAYMARK.x, MOONWELL.z - GREG_WAYMARK.z)   // bearing waymark -> pool
-  return ids.map((id, k) => {
-    const a = away + (-1.1 + ((k + 0.5) / Math.max(1, ids.length)) * 2.2)
-    const x = MOONWELL.x + Math.sin(a) * FOLK_RING, z = MOONWELL.z + Math.cos(a) * FOLK_RING
-    return { id, x, z, yaw: Math.atan2(MOONWELL.x - x, MOONWELL.z - z) }   // facing the pool
+  return ids.map(id => {
+    const k = id.split(':').pop() ?? id, p = lotAt(k) ? onLot(k, LOT_D / 2 - 1.2) : { x: GLADE_GREEN.x, z: GLADE_GREEN.z }
+    return { id, x: p.x, z: p.z, yaw: Math.atan2(GLADE_GREEN.x - p.x, GLADE_GREEN.z - p.z) }
   })
 }
+/** kept for older callers: the old ring radius (now unused by placement) */
+export const FOLK_RING = GLADE_GREEN.r
 
 export const isGlade = (homeOrId: string) => homeOrId === GLADE_ID || homeOrId.startsWith(`${GLADE_ID}:`)
 
-/** Where Greg sits, his door, and the five stand: a ring round the pool, the side away from the arrival waymark (so the
- *  keeper arrives facing the household). Metres from the pool's centre. Placement is Jin's (canon). */
+/** Greg's home on the pond's north-east shore, his bench between it and the green (facing the green), and the jetty out
+ *  from the shore into the pond. Metres from the green's centre. */
 export const GLADE_LAYOUT = {
-  greg: { dx: 7.5, dz: 4.5 },        // on his bench outside his home
-  home: { dx: 10.9, dz: 2.1 },       // Greg's house, just behind his bench and clear of the waymark (pool+10,+7) and the five's ring
+  home: { dx: -23.75, dz: -24.5 },
+  greg: { dx: -19.3, dz: -20.6 },     // on his bench, ~5.9 m in front of his door toward the green
 }
-export const gladeAt = (o: { dx: number; dz: number }) => ({ x: MOONWELL.x + o.dx, z: MOONWELL.z + o.dz })
+export const gladeAt = (o: { dx: number; dz: number }) => ({ x: GLADE_GREEN.x + o.dx, z: GLADE_GREEN.z + o.dz })
+/** the jetty: from the shore nearest Greg's home, 6 m out over the water toward the pond's centre */
+export function gladeJetty(): { x0: number; z0: number; x1: number; z1: number; w: number } {
+  const h = gladeAt(GLADE_LAYOUT.home), a = shoreToward(h.x, h.z, 1), dx = MOONWELL.x - a.x, dz = MOONWELL.z - a.z, d = Math.hypot(dx, dz)
+  return { x0: a.x, z0: a.z, x1: a.x + (dx / d) * 7, z1: a.z + (dz / d) * 7, w: 2 }
+}
 /** Where Greg sits (M30 part 2: he left the keeper's plot; plot ground is bought at his door here), turned to face the pool. */
 export function gregSpot(): { x: number; z: number; yaw: number } {
   const p = gladeAt(GLADE_LAYOUT.greg)
-  return { ...p, yaw: Math.atan2(MOONWELL.x - p.x, MOONWELL.z - p.z) }
+  return { ...p, yaw: Math.atan2(GLADE_GREEN.x - p.x, GLADE_GREEN.z - p.z) }   // M40: he faces the green
 }

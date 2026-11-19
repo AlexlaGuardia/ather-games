@@ -45,6 +45,46 @@ export const OUT_CELL = 60, OUT_P = 0.45
  *  Kept as a literal because waymarks.ts imports wilds.ts; relief.test.ts asserts the two agree. */
 export const ARRIVAL = { x: -300, z: 300 }, ARRIVAL_FLAT = 22, ARRIVAL_FADE = 30
 
+// ── M40 MOONWELL GLADE, layout B (Alex 11-19): the ground is SHAPED here, pointwise, so no tile is re-baked. Over the Glade
+// the relief is off and the floor is one level (GLADE.y) so the green and every lot's pad are flat; the pond is a bowl carved
+// GLADE.depth below it inside the pond's ellipse (water drawn at GLADE.y - WATER_DROP by moonwell-quest.tsx); outside, the
+// Glade fades back to the land over GLADE.fade m. Literals, because moonwell.ts -> waymarks.ts -> wilds.ts -> here would be a
+// cycle: relief.test.ts asserts they agree with moonwell.ts / moonwell-glade.ts.
+// Sizes are as tight as the plan allows (lotsR 31 still covers every lot's far corners, 30.7 m out): each metre of Glade
+// is a metre of the M16 relief gone from the arrival's view (measured on first-wilds: 80.6 % far ground hidden without the
+// Glade, 70.5 % with it at these sizes, 69.4 % at a looser 33/7/16).
+export const GLADE = { gx: -300, gz: 269.25, lotsR: 31, pondX: -347.5, pondZ: 270.5, rx: 20.5, rz: 24.5, bank: 3, homeX: -323.75, homeZ: 244.75, homeR: 7, y: 24, depth: 1.8, fade: 10 } as const
+export const WATER_DROP = 0.35
+/** past this the Glade never reaches (a 30 m hill beside it would want a 60 m bank: the bank is capped here) */
+export const GLADE_REACH = 60
+/** metres outside the Glade's level ground (<= 0 = on it): the green + lots disc, the pond and its bank, Greg's home */
+export function gladeDist(x: number, z: number): number {
+  const lots = Math.hypot(x - GLADE.gx, z - GLADE.gz) - GLADE.lotsR
+  const dx = x - GLADE.pondX, dz = z - GLADE.pondZ, d = Math.hypot(dx, dz) || 1
+  const pond = d - 1 / Math.hypot(dx / d / (GLADE.rx + GLADE.bank), dz / d / (GLADE.rz + GLADE.bank))
+  const home = Math.hypot(x - GLADE.homeX, z - GLADE.homeZ) - GLADE.homeR
+  return Math.min(lots, pond, home)
+}
+/** inside the pond's ellipse: metres in from the shore (> 0 = water) */
+export function pondDepthIn(x: number, z: number): number {
+  const dx = x - GLADE.pondX, dz = z - GLADE.pondZ, d = Math.hypot(dx, dz) || 1
+  return 1 / Math.hypot(dx / d / GLADE.rx, dz / d / GLADE.rz) - d
+}
+/** no tree, crystal or outcrop stands on the Glade (wilds.ts asks) */
+export const inGlade = (x: number, z: number) => gladeDist(x, z) < 4
+/** the Glade's shaping applied to a land height: level floor, pond bowl, a smooth fade back to `land` */
+export function gladeGround(x: number, z: number, land: number): number {
+  const d = gladeDist(x, z)
+  if (d >= GLADE_REACH) return land
+  // the fade is as wide as the height gap needs (BANK, like a path's verge), never under GLADE.fade: a fixed width made a
+  // 1.34 slope where a relief hill sits beside the Glade (measured on first-wilds), steeper than the keeper can walk
+  const verge = Math.max(GLADE.fade, Math.abs(land - GLADE.y) / BANK)
+  if (d >= verge) return land
+  const w = smooth(Math.max(0, Math.min(1, 1 - d / verge)))
+  const p = pondDepthIn(x, z), floor = GLADE.y - (p > 0 ? GLADE.depth * smooth(Math.min(1, p / 4)) : 0)
+  return land + (floor - land) * w
+}
+
 export type Outcrop = { i: number; j: number; x: number; z: number; R: number; H: number }
 /** The outcrop standing in lattice square (i, j), world coordinates, or null (OUT_P of the squares hold one). */
 export function outcropAt(i: number, j: number): Outcrop | null {
@@ -109,13 +149,13 @@ export function relieve(x: number, z: number, rawH: number, waterY: number, clea
     if (land < waterY + 1 && rawH > waterY + 1) land = waterY + 1
     // then meet the nearest path: its own height underfoot, a verge back to the land as wide as the gap needs
     const r = roads.near(x, z, ROAD_REACH)
-    if (!r) return land
+    if (!r) return gladeGround(x, z, land)
     const edge = r.hw + PATH_EDGE, gap = land - r.y, verge = Math.max(VERGE_MIN, Math.abs(gap) / BANK)
-    if (r.d >= edge + verge) return land
-    return r.y + gap * smooth(Math.max(0, Math.min(1, (r.d - edge) / verge)))
+    if (r.d >= edge + verge) return gladeGround(x, z, land)
+    return gladeGround(x, z, r.y + gap * smooth(Math.max(0, Math.min(1, (r.d - edge) / verge))))   // M40: the Glade wins over a path through it
   }
   const m = reliefMask(x, z, rawH, waterY, clear)
-  if (m <= 0) return rawH
+  if (m <= 0) return gladeGround(x, z, rawH)
   const h = rawH + reliefRaw(x, z) * m
-  return h < waterY + 1 ? Math.min(rawH, Math.max(h, waterY + 1)) : h
+  return gladeGround(x, z, h < waterY + 1 ? Math.min(rawH, Math.max(h, waterY + 1)) : h)
 }

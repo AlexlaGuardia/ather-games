@@ -10,9 +10,9 @@
 import type { Pt } from '../shared/folk-path'
 import { aroundPath } from '../shared/folk-path'
 import type { Loadout } from '../shared/loadout'
-import { MOONWELL } from './moonwell'
+import { MOONWELL, GLADE_GREEN } from './moonwell'
 import { GREG_WAYMARK } from './waymarks'
-import { gladeFolk, gladeSpots, GLADE_TRADE, gregSpot } from './moonwell-glade'
+import { gladeFolk, gladeSpots, GLADE_TRADE, GLADE_LOTS, gregSpot } from './moonwell-glade'
 import { TABLE } from './rooms'
 import { GREG_GLOVE_PICK } from '../../play3d/vessels'
 import { KEEPER_MOVES } from '../../play3d/keeper-moves'
@@ -28,8 +28,8 @@ export interface TourStop { id: string; at: Pt; look: Pt; line: string; zone: 'w
 
 /** a point `d` metres from `c` toward `p` */
 const toward = (c: Pt, p: Pt, d: number): Pt => { const a = Math.atan2(p.x - c.x, p.z - c.z); return { x: c.x + Math.sin(a) * d, z: c.z + Math.cos(a) * d } }
-/** how wide Greg keeps of the pool's centre while walking (its rim + a stride) */
-export const POOL_KEEP = MOONWELL.r + 1.1
+/** how wide Greg keeps of the pond's centre while walking (its LONG radius + a stride: the whole ellipse sits inside; M40) */
+export const POOL_KEEP = Math.max(MOONWELL.rx, MOONWELL.rz) + 1.5
 
 /** a Glade folk's stop line (SIGNED by Alex 11-19) */
 export const folkLine = (name: string, trade: string) => `This is ${name}, our ${trade}. A garden needs one, and this one is the best.`
@@ -38,9 +38,12 @@ export const folkLine = (name: string, trade: string) => `This is ${name}, our $
  *  then the keeper's own planning table (on the plot). `folk` = who is home now (Fennel is away on her rinstick errand). */
 export function tourStops(folk: readonly { id: string; name: string }[] = gladeFolk()): TourStop[] {
   const pool = { x: MOONWELL.x, z: MOONWELL.z }, wm = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z }, bench = gregSpot()
-  const spots = gladeSpots(folk.map(f => f.id))
+  // M40 (layout B): Greg walks the GREEN clockwise from the kitchen at its head (GLADE_LOTS order), each Moglin at their lot
+  const rank = (id: string) => { const k = GLADE_LOTS.findIndex(l => l.id === id.split(':').pop()); return k < 0 ? 99 : k }
+  folk = [...folk].sort((a, b) => rank(a.id) - rank(b.id))
+  const spots = gladeSpots(folk.map(f => f.id)), green = { x: GLADE_GREEN.x, z: GLADE_GREEN.z }
   const five: TourStop[] = folk.map((f, k) => {
-    const s = spots[k], inward = toward(s, pool, 1.5)
+    const s = spots[k], inward = toward(s, green, 1.5)
     const side = { x: inward.x + Math.cos(s.yaw) * 1.7, z: inward.z - Math.sin(s.yaw) * 1.7 }   // well to the folk's side: a keeper behind him still sees them (0.9 hid Hazel)
     const k2 = f.id.split(':').pop() ?? f.id
     return { id: `folk:${k2}`, at: side, look: { x: s.x, z: s.z }, line: folkLine(f.name, GLADE_TRADE[k2] ?? 'neighbour'), zone: 'wilds', meets: f.name }

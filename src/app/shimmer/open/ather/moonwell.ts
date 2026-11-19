@@ -1,16 +1,31 @@
-// THE MOONWELL WATER in the Wilds (BETA M22). Canon (11-18 amend, rework §3): Moonwell Glade is the Wilds' FRONT DOOR,
-// where the keeper arrives at Greg's waymark; the Glade is a glowing pool among grown structures (glossary › Moonwell Glade).
-// The Glade itself isn't built yet: this is its FIRST PIECE, the pool, placed beside the arrival waymark so the first
-// rinstick quest (rinquest.ts) has its water. ★ ONE CONSTANT: whoever builds the Glade moves MOONWELL and everything that
-// reads it (the pool, the wait, the scale on the bank, the journal beacon) follows. World coords (first-wilds is tile 0,0).
+// THE MOONWELL water in the Wilds (BETA M22; the place). Canon (11-18 amend, rework §3): Moonwell Glade is the Wilds' FRONT
+// DOOR, where the keeper arrives at Greg's waymark; the Glade is a glowing pool among grown structures (glossary › Moonwell Glade).
+// ★ ONE CONSTANT: whoever moves the Glade moves MOONWELL and everything that reads it (the pond, the wait, the scale on the bank,
+//   the journal beacon, Greg's tour) follows. World coords (first-wilds is tile 0,0).
+// ★ M40 (Alex 11-19 picked LAYOUT B 'the green', docs/looks/moonwell-glade.html): the arrival waymark stays put (saves key on
+//   it) at the SOUTH end of a round green; the five stand in a horseshoe round the green; the Moonwell is Greg's POND on the
+//   green's west side, ~41 x 49 m (an ellipse: rx across x, rz across z). Mock scale 0.25 m a pixel. `r` = the short radius,
+//   kept for callers that only need "about how big".
 import { GREG_WAYMARK } from './waymarks'
 
-export const MOONWELL = { x: GREG_WAYMARK.x - 10, z: GREG_WAYMARK.z - 7, r: 3.2 }
-/** how close counts as 'at the water' for the dusk wait (from the pool's centre) */
-export const AT_WATER = MOONWELL.r + 2.6
-/** where the rinn leaves the scale: on the bank, on the side toward the waymark (where the keeper sits) */
-export const SCALE_AT = (() => {
-  const dx = GREG_WAYMARK.x - MOONWELL.x, dz = GREG_WAYMARK.z - MOONWELL.z, d = Math.hypot(dx, dz) || 1
-  return { x: MOONWELL.x + (dx / d) * (MOONWELL.r + 0.7), z: MOONWELL.z + (dz / d) * (MOONWELL.r + 0.7) }
-})()
+/** the green: the Glade's heart, 13 m round, its south edge on the path to the waymark */
+export const GLADE_GREEN = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z - 30.75, r: 13 }
+export const MOONWELL = { x: GLADE_GREEN.x - 47.5, z: GLADE_GREEN.z + 1.25, rx: 20.5, rz: 24.5, r: 20.5 }
+/** the pond's radius toward (x, z): where the shore is along that bearing */
+export function shoreRadius(x: number, z: number): number {
+  const dx = x - MOONWELL.x, dz = z - MOONWELL.z, d = Math.hypot(dx, dz) || 1
+  return 1 / Math.hypot(dx / d / MOONWELL.rx, dz / d / MOONWELL.rz)
+}
+/** metres from the shore: negative = in the water */
+export const fromShore = (x: number, z: number) => Math.hypot(x - MOONWELL.x, z - MOONWELL.z) - shoreRadius(x, z)
+/** how close to the shore counts as 'at the water' for the dusk wait (either side of it) */
+export const AT_WATER = 2.6
+export const atWater = (x: number, z: number) => fromShore(x, z) < AT_WATER
+/** a point on the shore toward (x, z), `out` metres onto the bank */
+export function shoreToward(x: number, z: number, out = 0): { x: number; z: number } {
+  const dx = x - MOONWELL.x, dz = z - MOONWELL.z, d = Math.hypot(dx, dz) || 1, r = shoreRadius(x, z) + out
+  return { x: MOONWELL.x + (dx / d) * r, z: MOONWELL.z + (dz / d) * r }
+}
+/** where the rinn leaves the scale: on the bank, on the green's side (where a keeper waits) */
+export const SCALE_AT = shoreToward(GLADE_GREEN.x, GLADE_GREEN.z, 0.7)
 export const SCALE_REACH = 1.6

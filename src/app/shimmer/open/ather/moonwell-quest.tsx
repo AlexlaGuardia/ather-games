@@ -11,7 +11,10 @@ import { dayProgress, getPhase } from '../../engine/day-cycle'
 import { hudSay } from '../shared/hud-say'
 import { getInv, setInv } from '../shared/bag'
 import { give } from '../shared/inventory'
-import { MOONWELL, AT_WATER, SCALE_AT, SCALE_REACH } from './moonwell'
+import { MOONWELL, SCALE_AT, SCALE_REACH, GLADE_GREEN, atWater, shoreToward } from './moonwell'
+import { GLADE as GLADE_GROUND, WATER_DROP } from './relief'
+// M40: the Moonwell is Greg's POND (an ellipse, relief.ts carves its bowl); the rinn rises just off the bank on the green's side
+const RISE = shoreToward(GLADE_GREEN.x, GLADE_GREEN.z, -2.5)
 import { waitingAt, scaleOnBank, waitTick, RINQUEST_LINES, SHED_SCALE } from './rinquest'
 import { useQuest, questEvent, currentQuest } from './use-rinquest'
 
@@ -20,7 +23,7 @@ const POOL = '#bfe4ff', RIM = '#8d9aa6'
 export function MoonwellPool({ ground, stowed }: { ground: (x: number, z: number) => number; stowed: () => boolean }) {
   const quest = useQuest()
   const camera = useThree(s => s.camera)
-  const y = useMemo(() => { const h = ground(MOONWELL.x, MOONWELL.z); return Number.isFinite(h) ? h : 0 }, [ground])
+  const y = GLADE_GROUND.y - WATER_DROP   // the water's surface (the ground there is the carved bowl, under it)
   const sy = useMemo(() => { const h = ground(SCALE_AT.x, SCALE_AT.z); return Number.isFinite(h) ? h : y }, [ground, y])
   const glow = useRef<THREE.MeshBasicMaterial>(null)
   const rinn = useRef<THREE.Group>(null)
@@ -38,7 +41,7 @@ export function MoonwellPool({ ground, stowed }: { ground: (x: number, z: number
         W.rise += dt
         const k = Math.min(1, W.rise / 2)
         rinn.current.visible = k < 1
-        rinn.current.position.set(MOONWELL.x - 0.8 + k * 1.6, y - 0.2 + Math.sin(k * Math.PI) * 0.9, MOONWELL.z)
+        rinn.current.position.set(RISE.x - 0.8 + k * 1.6, y - 0.2 + Math.sin(k * Math.PI) * 0.9, RISE.z)
         rinn.current.rotation.z = (0.5 - k) * 2.2
         if (k >= 1) W.rise = -1
       } else rinn.current.visible = false
@@ -54,7 +57,7 @@ export function MoonwellPool({ ground, stowed }: { ground: (x: number, z: number
     }
     const wait = waitingAt(q)
     if (!wait) { W.t = 0; return }
-    const at = Math.hypot(p.x - MOONWELL.x, p.z - MOONWELL.z) < AT_WATER
+    const at = atWater(p.x, p.z)   // M40: by the shore of the pond, wherever round it
     const still = Math.hypot(p.x - W.last.x, p.z - W.last.z) < Math.max(0.02, dt * 0.15)
     W.last = { x: p.x, z: p.z }
     const empty = stowed(), phase = getPhase(dayProgress()) === wait.phase
@@ -73,16 +76,16 @@ export function MoonwellPool({ ground, stowed }: { ground: (x: number, z: number
   useEffect(() => { (window as unknown as { __moonwell?: unknown }).__moonwell = { wait: () => w.current.t, rising: () => w.current.rise >= 0 } }, [])
   return (
     <group>
-      {/* the pool: a soft glowing disc in a ring of pale stones */}
-      <mesh position={[MOONWELL.x, y + 0.05, MOONWELL.z]} rotation-x={-Math.PI / 2}>
-        <circleGeometry args={[MOONWELL.r, 40]} />
+      {/* the pond (M40): a soft glowing ellipse at the water line, in Sax's rim of pale stone on the bank */}
+      <mesh position={[MOONWELL.x, y, MOONWELL.z]} rotation-x={-Math.PI / 2} scale={[MOONWELL.rx, MOONWELL.rz, 1]}>
+        <circleGeometry args={[1, 64]} />
         <meshBasicMaterial ref={glow} color={POOL} transparent opacity={0.8} />
       </mesh>
-      <mesh position={[MOONWELL.x, y + 0.02, MOONWELL.z]} rotation-x={-Math.PI / 2}>
-        <ringGeometry args={[MOONWELL.r, MOONWELL.r + 0.45, 40]} />
+      <mesh position={[MOONWELL.x, GLADE_GROUND.y + 0.04, MOONWELL.z]} rotation-x={-Math.PI / 2} scale={[MOONWELL.rx, MOONWELL.rz, 1]}>
+        <ringGeometry args={[1, 1.05, 64]} />
         <meshLambertMaterial color={RIM} />
       </mesh>
-      <pointLight position={[MOONWELL.x, y + 1.2, MOONWELL.z]} color={POOL} intensity={0.8} distance={9} />
+      <pointLight position={[RISE.x, y + 1.5, RISE.z]} color={POOL} intensity={1.2} distance={30} />
       {/* the rinn that rises (placeholder shape: a small silver body + tail) */}
       <group ref={rinn} visible={false}>
         <mesh scale={[0.32, 0.12, 0.12]}><sphereGeometry args={[1, 10, 8]} /><meshLambertMaterial color="#e7f2ff" emissive="#9fd2ff" emissiveIntensity={0.5} /></mesh>

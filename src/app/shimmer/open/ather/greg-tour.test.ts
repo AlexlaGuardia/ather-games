@@ -3,7 +3,7 @@
 // overwrites an earned word (944ad1d).
 import { tourStops, tourLeg, giveGloveWord, gloveWordFor, POOL_KEEP, TABLE_STOP, TABLE_KEEPER, TOUR_ASK, TOUR_NEXT, TOUR_SKIP, TOUR_DONE } from './greg-tour'
 import { segClear, type Pt } from '../shared/folk-path'
-import { MOONWELL } from './moonwell'
+import { MOONWELL, fromShore } from './moonwell'
 import { gladeHome, HOME_R } from './glade-home'
 import { gregSpot, gladeFolk, gladeSpots } from './moonwell-glade'
 import { TABLE } from './rooms'
@@ -15,19 +15,20 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.lo
 const pool = { x: MOONWELL.x, z: MOONWELL.z }, home = gladeHome()
 const five = [{ id: 'moonwell:hazel', name: 'Hazel' }, { id: 'moonwell:sax', name: 'Sax' }, { id: 'moonwell:yarrow', name: 'Yarrow' }, { id: 'moonwell:fennel', name: 'Fennel' }, { id: 'moonwell:mallow', name: 'Mallow' }]
 const s = tourStops(five)
-ok(s.map(x => x.id).join() === 'pool,folk:hazel,folk:sax,folk:yarrow,folk:fennel,folk:mallow,waymark,table', `the order: pool, the five, waymark, table (${s.map(x => x.id).join()})`)
+ok(s.map(x => x.id).join() === 'pool,folk:fennel,folk:hazel,folk:sax,folk:yarrow,folk:mallow,waymark,table', `the order (M40): pool, the green clockwise from the kitchen, waymark, table (${s.map(x => x.id).join()})`)
 ok(s.filter(x => x.zone === 'plot').length === 1 && s[s.length - 1].zone === 'plot', 'one plot stop, and it is the last')
 ok(tourStops(five.filter(f => f.name !== 'Fennel')).every(x => x.id !== 'folk:fennel'), 'a folk away from home (Fennel on her errand) is not a stop')
 ok(tourStops().length === gladeFolk().length + 3, 'the default reads who is home now')
-const spots = gladeSpots(five.map(f => f.id))
+const tourOrder = ['fennel', 'hazel', 'sax', 'yarrow', 'mallow'].map(k => five.find(f => f.id.endsWith(k))!)
+const spots = gladeSpots(tourOrder.map(f => f.id))
 for (const t of s.filter(x => x.zone === 'wilds')) {
-  ok(Math.hypot(t.at.x - pool.x, t.at.z - pool.z) >= MOONWELL.r + 0.5, `${t.id}: Greg stands out of the water`)
+  ok(fromShore(t.at.x, t.at.z) >= 0.5, `${t.id}: Greg stands out of the water`)
   ok(Math.hypot(t.at.x - home.x, t.at.z - home.z) >= HOME_R + 0.5, `${t.id}: Greg stands outside his house`)
   ok(Math.hypot(t.at.x - t.look.x, t.at.z - t.look.z) > 1, `${t.id}: what he shows is a step away from him`)
   for (const f of spots) ok(Math.hypot(t.at.x - f.x, t.at.z - f.z) > 0.8, `${t.id}: not standing inside ${f.id}`)
 }
 for (const t of s) ok(t.line.length > 0 && t.line.length < 120, `${t.id}: one bubble's worth of line`)
-s.filter(x => x.id.startsWith('folk:')).forEach((t, k) => ok(t.look.x === spots[k].x && t.look.z === spots[k].z && t.line.includes(five[k].name), `${t.id}: shows that folk, by name`))
+s.filter(x => x.id.startsWith('folk:')).forEach((t, k) => ok(t.look.x === spots[k].x && t.look.z === spots[k].z && t.line.includes(tourOrder[k].name), `${t.id}: shows that folk, by name`))
 // the table: Greg beside it, the keeper set down facing him, a step apart
 ok(Math.hypot(TABLE_STOP.at.x - TABLE.x, TABLE_STOP.at.z - TABLE.z) < 3 && Math.hypot(TABLE_KEEPER.x - TABLE_STOP.at.x, TABLE_KEEPER.z - TABLE_STOP.at.z) > 1.5, 'the table stop: Greg beside the table, the keeper a step off')
 // walk every Glade leg as the scene does: bench -> each Glade stop -> back to the bench
@@ -37,7 +38,7 @@ for (let i = 0; i <= glade.length; i++) {
   const leg = tourLeg(at, i, glade)
   let prev = at
   for (const q of leg) {
-    if (!segClear(prev, q, pool, MOONWELL.r + 0.2)) { legsOk = false; console.log('   pool cut on leg', i) }
+    for (let u = 0; u <= 8; u++) { const x = prev.x + (q.x - prev.x) * u / 8, z = prev.z + (q.z - prev.z) * u / 8; if (fromShore(x, z) < 0.2) { legsOk = false; console.log('   pool cut on leg', i); break } }
     if (!segClear(prev, q, home, HOME_R + 0.1)) { legsOk = false; console.log('   house cut on leg', i) }
     prev = q
   }
@@ -46,7 +47,7 @@ for (let i = 0; i <= glade.length; i++) {
 ok(legsOk, 'no Glade leg walks through the pool or the house')
 ok(Math.hypot(at.x - gregSpot().x, at.z - gregSpot().z) < 1e-9, 'past the Glade stops he walks back to his bench')
 ok(tourLeg(gregSpot(), s.length - 1, s).length >= 1, 'the table index walks him home (he is not drawn at the Glade meanwhile)')
-ok(POOL_KEEP > MOONWELL.r, 'the walking ring is outside the rim')
+ok(POOL_KEEP > Math.max(MOONWELL.rx, MOONWELL.rz), 'the walking ring is outside the whole pond')
 ok(new Set([TOUR_ASK, TOUR_NEXT, TOUR_SKIP, TOUR_DONE]).size === 4, 'the four answer labels are distinct')
 // the glove word: the ruled column for every birth, lit only into an EMPTY starter glove
 for (const b of Object.keys(GREG_GLOVE_PICK)) ok(gloveWordFor(b)?.id === GREG_GLOVE_PICK[b], `${b}: the glove word is the ruled column (${gloveWordFor(b)?.name})`)

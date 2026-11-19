@@ -1,14 +1,14 @@
 // GREG'S HOME at Moonwell Glade (M30): a code-built round cottage blockout just behind his bench. PURE (no three, no react):
 // the footprint and its collision boxes live here so the walker (dynamic-solids.ts) and the drawing (glade-home.tsx) agree.
-// Placement: GLADE_LAYOUT.home, clear of the waymark, the pool and the five's ring. The door faces the pool.
+// Placement: GLADE_LAYOUT.home (M40 layout B: on the pond's north-east shore). The door faces the green.
 import { GLADE_LAYOUT, gladeAt } from './moonwell-glade'
-import { MOONWELL } from './moonwell'
+import { GLADE_GREEN } from './moonwell'
 import type { Box } from '../terrain-world'
 
 export const HOME_R = 1.9, HOME_H = 3.2
 export function gladeHome(): { x: number; z: number; yaw: number } {
   const p = gladeAt(GLADE_LAYOUT.home)
-  return { ...p, yaw: Math.atan2(MOONWELL.x - p.x, MOONWELL.z - p.z) }
+  return { ...p, yaw: Math.atan2(GLADE_GREEN.x - p.x, GLADE_GREEN.z - p.z) }   // M40: the door faces the green (his bench is in front of it)
 }
 /** A round footprint as a plus of two AABBs (corners cut), so it reads as a drum, not a crate. */
 export function gladeHomeBoxes(ground: (x: number, z: number) => number, x0: number, z0: number, x1: number, z1: number): Box[] {

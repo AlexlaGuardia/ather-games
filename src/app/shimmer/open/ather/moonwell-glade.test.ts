@@ -1,8 +1,10 @@
 // M30 Moonwell Glade. Run: npx tsx src/app/shimmer/open/ather/moonwell-glade.test.ts
-import { GLADE, GLADE_ID, gladeFolk, mallowWants, MALLOW_POOL, isGlade, GLADE_STAYS, GLADE_TRADE } from './moonwell-glade'
+import { GLADE, GLADE_ID, gladeFolk, mallowWants, MALLOW_POOL, isGlade, GLADE_STAYS, GLADE_TRADE, GLADE_LOTS, lotAt, gladeSpots, gregSpot, gladeJetty, GLADE_LAYOUT, gladeAt, LOT_D } from './moonwell-glade'
 import { folkOf } from './settlement-folk'
 import { withGlade, settlementAt, type Network } from './network'
-import { MOONWELL } from './moonwell'
+import { MOONWELL, GLADE_GREEN, fromShore, atWater, SCALE_AT } from './moonwell'
+import { GREG_WAYMARK } from './waymarks'
+import { gladeHome } from './glade-home'
 import { itemDef } from '../shared/inventory'
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -15,10 +17,36 @@ ok(five.every(f => !!f.dream), 'every one has a hello line')
 ok(five.find(f => f.name === 'Mallow')!.profession === 'shopkeeper' && GLADE_TRADE.yarrow === 'apothecary', "Mallow is the shopkeeper; Yarrow reads 'apothecary' in copy")
 const wk = 7 * 86_400_000
 ok(mallowWants(0)[0].id !== mallowWants(wk)[0].id && mallowWants(wk * MALLOW_POOL.length)[0].id === mallowWants(0)[0].id, "Mallow's list changes weekly and cycles")
-ok(GLADE.x === MOONWELL.x && GLADE.z === MOONWELL.z, 'the Glade sits on the pool')
+ok(GLADE.x === GLADE_GREEN.x && GLADE.z === GLADE_GREEN.z, 'the Glade sits on the green (M40 layout B)')
+// ── M40 layout B (mock: docs/looks/moonwell-glade.html, 0.25 m a pixel)
+ok(GLADE_GREEN.x === GREG_WAYMARK.x && Math.abs(GREG_WAYMARK.z - GLADE_GREEN.z - 30.75) < 1e-9, 'the waymark stays put, at the green\'s open south end')
+ok(MOONWELL.x < GLADE_GREEN.x - 40 && MOONWELL.rx === 20.5 && MOONWELL.rz === 24.5, 'the pond is ~41 x 49 m, west of the green')
+ok(fromShore(GLADE_GREEN.x, GLADE_GREEN.z) > GLADE_GREEN.r, 'the green is dry ground, clear of the pond')
+const order = GLADE_LOTS.map(l => l.id).join(',')
+ok(order === 'fennel,hazel,sax,yarrow,mallow', `the kitchen at the head, then clockwise Hazel, Sax, Yarrow, Mallow (${order})`)
+const ang = GLADE_LOTS.map(l => Math.atan2(l.dx, -l.dz))   // clockwise from north, seen from above
+ok(ang.every((a, k) => k === 0 || (((a - ang[k - 1]) + 2 * Math.PI) % (2 * Math.PI)) < Math.PI), 'the lots run clockwise round the green')
+for (const l of GLADE_LOTS) {
+  const w = lotAt(l.id)!, d = Math.hypot(w.x - GLADE_GREEN.x, w.z - GLADE_GREEN.z)
+  ok(d - LOT_D / 2 > GLADE_GREEN.r + 2 && fromShore(w.x, w.z) > 8, `${l.id}'s lot sits off the green and out of the pond (${d.toFixed(1)} m out)`)
+  ok(Math.hypot(w.x + Math.sin(w.yaw) * -d - GLADE_GREEN.x, w.z + Math.cos(w.yaw) * -d - GLADE_GREEN.z) < 0.01, `${l.id}'s lot faces the green`)
+}
+for (let a = 0; a < GLADE_LOTS.length; a++) for (let b = a + 1; b < GLADE_LOTS.length; b++) {
+  const p = lotAt(GLADE_LOTS[a].id)!, q = lotAt(GLADE_LOTS[b].id)!
+  ok(Math.hypot(p.x - q.x, p.z - q.z) > 12, `${p.id} and ${q.id} lots do not overlap`)
+}
+const spots = gladeSpots(five.map(f => f.id))
+ok(spots.every(s => { const l = lotAt(s.id.split(':')[1])!; return Math.hypot(s.x - l.x, s.z - l.z) < 4.5 && Math.hypot(s.x - GLADE_GREEN.x, s.z - GLADE_GREEN.z) < Math.hypot(l.x - GLADE_GREEN.x, l.z - GLADE_GREEN.z) }), 'each Moglin stands at the front of their own lot, toward the green')
+ok(spots.every(s => Math.abs(Math.atan2(GLADE_GREEN.x - s.x, GLADE_GREEN.z - s.z) - s.yaw) < 1e-9), 'each faces the green')
+const home = gladeHome(), bench = gregSpot()
+ok(fromShore(home.x, home.z) > 3 && fromShore(home.x, home.z) < 16 && Math.hypot(home.x - (GLADE_GREEN.x + GLADE_LAYOUT.home.dx), home.z - (GLADE_GREEN.z + GLADE_LAYOUT.home.dz)) < 1e-9, 'Greg\'s home stands near the pond\'s shore, dry')
+ok(Math.hypot(bench.x - GLADE_GREEN.x, bench.z - GLADE_GREEN.z) < Math.hypot(home.x - GLADE_GREEN.x, home.z - GLADE_GREEN.z), 'his bench is between his home and the green')
+const j = gladeJetty(); ok(fromShore(j.x0, j.z0) > 0 && fromShore(j.x1, j.z1) < -4, 'the jetty runs from the bank out over the water')
+ok(atWater(SCALE_AT.x, SCALE_AT.z) && fromShore(SCALE_AT.x, SCALE_AT.z) > 0, 'the rinn scale lies on the bank, at the water')
+void gladeAt
 const net: Network = { v: 1, season: 1, settlements: [{ id: 's1-0', name: 'X', x: 900, z: 900 }], paths: [], fair: null }
 const g = withGlade(net)
 ok(g.settlements.length === 2 && g.settlements[0].id === GLADE_ID && withGlade(g).settlements.length === 2, 'the network gains the Glade once')
-ok(settlementAt(g, MOONWELL.x + 3, MOONWELL.z)?.id === GLADE_ID, 'standing by the pool = in Moonwell Glade')
+ok(settlementAt(g, GLADE_GREEN.x, GLADE_GREEN.z + 5)?.id === GLADE_ID && GLADE_LOTS.every(l => settlementAt(g, lotAt(l.id)!.x, lotAt(l.id)!.z)?.id === GLADE_ID), 'the green and every lot = in Moonwell Glade')
 ok(GLADE_STAYS.length > 0, 'the stay-home line exists (lark placeholder)')
 console.log(`moonwell-glade: ${pass} pass, ${fails.length} fail`); fails.forEach(f => console.log('  FAIL', f)); if (fails.length) process.exit(1)
