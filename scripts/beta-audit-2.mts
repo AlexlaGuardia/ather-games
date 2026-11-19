@@ -55,6 +55,8 @@ await p.goto(`${url}/shimmer/open/ather`, { waitUntil: 'load', timeout: 180000 }
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }).catch(() => {})
 await sleep(4000); await beat('birth-gate')
 await beat('tap-born', { tapped: await tapText(/^BE BORN/) })
+// M29 (11-19): the keeper creator follows the birth; a stranger takes the default with a real tap on Looks good
+for (let i = 0; i < 20; i++) { const b = await p.evaluate(() => { const e = document.querySelector('[data-creator-done]'); const r = e?.getBoundingClientRect(); return r && r.width ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null }); if (b) { await p.touchscreen.tap(b.x, b.y); await sleep(2500); break } await sleep(500) }
 for (let i = 1; i <= 4; i++) { await sleep(3000); await beat(`after-born-${i * 3}s`) }
 await beat('tap-to-start', { tapped: await tapText(/^Tap to start$/) }); await sleep(800)
 // M2/M3: every touch button must be the TOPMOST thing under its own centre (else a tap lands on whatever covers it)

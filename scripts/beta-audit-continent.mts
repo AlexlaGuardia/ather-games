@@ -52,6 +52,8 @@ const tapText = async (re: RegExp) => {
   await p.touchscreen.tap(box.x, box.y); return true
 }
 await tapText(/^BE BORN/); await sleep(6000)
+// M29 (11-19): the keeper creator follows the birth; a stranger takes the default with a real tap on Looks good
+for (let i = 0; i < 20; i++) { const b = await p.evaluate(() => { const e = document.querySelector('[data-creator-done]'); const r = e?.getBoundingClientRect(); return r && r.width ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null }); if (b) { await p.touchscreen.tap(b.x, b.y); await sleep(2500); break } await sleep(500) }
 ok(await tapText(/^Tap to drive$/), 'tapped "Tap to drive"'); await sleep(2500); await shot('start')
 
 // ── M2 + M3 layout, run once driving and once on foot ──
