@@ -80,7 +80,8 @@ await clickCanvas(); await sleep(1000)
 await p.evaluate((g: { x: number; z: number }) => (window as any).__ather.tp(g.x + 2, g.z - 2), GATE); await tick(4)
 for (let i = 0; i < 20 && (await A<string>('zone')) !== 'wilds'; i++) {
   await p.keyboard.press('KeyE'); await sleep(1500)
-  res.travelTapped = (await tapText(/Gregory.s waymark/)) || res.travelTapped
+  // the fold map's stop is a BUTTON titled "Gregory's waymark" (beta-m5-errand's lookup); a text tap could land on its label
+  res.travelTapped = (await p.evaluate(() => { const b = document.querySelector<HTMLButtonElement>('button[title="Gregory\'s waymark"]'); b?.click(); return !!b })) || res.travelTapped
   for (let k = 0; k < 6; k++) await tick(2); await sleep(2500)
 }
 res.zone = await A<string>('zone')
