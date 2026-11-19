@@ -199,7 +199,10 @@ function run(id: string, o: PlayOpts) {
   } catch { /* a sound never breaks the game */ }
 }
 /** Play a sound IN THE GAME. Only a `yay` sound makes noise; proposed and nay are silent. `at` = positional (3D); none = 2D. */
-export function play(id: string, opts: PlayOpts = {}) { if (statusOf(id) === 'yay') run(id, opts) }
+/** probe for checks (sfx-check.mts): how many times each yay id was played this page */
+const played: Record<string, number> = {}
+if (typeof window !== 'undefined') (window as unknown as { __sfx?: object }).__sfx = { played: () => ({ ...played }) }
+export function play(id: string, opts: PlayOpts = {}) { if (statusOf(id) === 'yay') { played[id] = (played[id] ?? 0) + 1; run(id, opts) } }
 /** The review page's play button: sounds regardless of status. Never call from the game. */
 export function audition(id: string) { run(id, {}) }
 
