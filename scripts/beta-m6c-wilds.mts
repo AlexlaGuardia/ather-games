@@ -107,7 +107,7 @@ while (Date.now() - t0 < 330000) {
   if (kills >= 1) break
   const tgt = [...hs].sort((a, c) => Math.hypot(a.x - s.x, a.z - s.z) - Math.hypot(c.x - s.x, c.z - s.z))[0]
   if (!tgt) { if (walking) { await p.keyboard.up('KeyW'); walking = false } if (held) { await p.mouse.up(); held = false } await sleep(500); continue }
-  if ((await A<any>('stance'))?.kind === 'stowed' && !drew) { await p.keyboard.press('KeyR'); drew = true; await sleep(800); res.stanceAfterR = (await A<any>('stance'))?.kind; await shot('2-drawn') }
+  if ((await A<any>('stance'))?.kind === 'stowed' && !drew) { for (let t = 0; t < 4 && (await A<any>('stance'))?.kind === 'stowed'; t++) { await p.keyboard.down('KeyR'); await sleep(120); await p.keyboard.up('KeyR'); await sleep(900) }   /* a bare press can fall between two frames (gem-check holds 80+ ms) */ drew = true; await sleep(800); res.stanceAfterR = (await A<any>('stance'))?.kind; await shot('2-drawn') }
   const dx = tgt.x - s.x, dz = tgt.z - s.z, d = Math.hypot(dx, dz)
   const eye = (s.y ?? 0) + 1.6, pitch = -Math.atan2(eye - (tgt.y + 1.0), Math.max(d, 0.5))
   await p.evaluate((yw, pt) => (window as any).__ather.look(yw, pt), Math.atan2(-dx, -dz), pitch)
