@@ -57,7 +57,16 @@ const loadout = () => p.evaluate(() => { for (let i = 0; i < localStorage.length
 await p.goto(`${url}/shimmer/open/ather`, { waitUntil: 'load', timeout: 240000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(4000)
 seen.gate = await text()
-res.born = await tapText(/^BE BORN/); await sleep(5000)
+// ★ wait for the gate, tap BE BORN until the rune is SAVED (a single tap 4 s after load could land before the screen takes
+// input: no rune, and the gate then swallowed every key in the Wilds, R included), then take the creator's default (M29)
+await poll(async () => !!(await p.$('[data-panel="birth"]')), 60000)
+for (let i = 0; i < 4 && !res.born; i++) {
+  await tapText(/^BE BORN/)
+  res.born = await poll(async () => !!(await p.evaluate(() => Object.keys(localStorage).some(k => k.endsWith('birthRune') && !!localStorage.getItem(k)))), 10000)
+}
+if (!res.born) await done(false, 'FAIL: BE BORN never saved a birth rune')
+await poll(async () => !!(await p.$('[data-creator-done]')), 20000)
+await p.evaluate(() => document.querySelector<HTMLElement>('[data-creator-done]')?.click()); await sleep(2500)
 res.loadoutAtBirth = await loadout()
 // 2 · Kael's chest: continent, tp to the shipyard door (allowed), real E + chest click
 await p.goto(`${url}/shimmer/open/continent?hour=12`, { waitUntil: 'load', timeout: 240000 })
