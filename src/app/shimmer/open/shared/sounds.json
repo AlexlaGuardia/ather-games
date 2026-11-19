@@ -333,5 +333,51 @@
     "source": "synth",
     "bus": "ambience",
     "vol": 0.35
+  },
+  {
+    "id": "hollow-windup",
+    "area": "hollows",
+    "status": "proposed",
+    "note": "",
+    "desc": "A Hollow gathers to strike (the tell): a breathy suck-in rising under a low swell, positional",
+    "source": "synth",
+    "bus": "sfx"
+  },
+  {
+    "id": "hollow-hit",
+    "area": "hollows",
+    "status": "proposed",
+    "note": "",
+    "desc": "Your round lands in a Hollow: a soft wet thud, positional",
+    "source": "synth",
+    "bus": "sfx"
+  },
+  {
+    "id": "hollow-disperse",
+    "area": "hollows",
+    "status": "proposed",
+    "note": "",
+    "desc": "A Hollow lets go and disperses: a falling hiss with a few bubbly pops, positional",
+    "source": "synth",
+    "bus": "sfx"
+  },
+  {
+    "id": "morel-chime",
+    "area": "morel",
+    "status": "proposed",
+    "note": "",
+    "desc": "Morel speaks (any Morel line): two small glassy notes from the gem",
+    "source": "synth",
+    "bus": "sfx"
+  },
+  {
+    "id": "gem-pulse",
+    "area": "morel",
+    "status": "proposed",
+    "note": "",
+    "desc": "The gem pulses on a round change (every shot + reload): a very quiet glassy tick under the gun",
+    "source": "synth",
+    "bus": "sfx",
+    "vol": 0.5
   }
 ]

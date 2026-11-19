@@ -182,6 +182,12 @@ const RECIPES: Record<string, (b: Bus) => void> = {
   'ui-tap': b => { tone(b, 'sine', 1300, 1100, 0.1, 0.001, 0.03) },
   'ui-panel-open': b => { puff(b, 'bandpass', 900, 1, 0.09, 0.03, 0.1); tone(b, 'sine', 400, 700, 0.06, 0.02, 0.1) },
   'ui-panel-close': b => { puff(b, 'bandpass', 1300, 1, 0.08, 0.02, 0.09); tone(b, 'sine', 700, 380, 0.06, 0.015, 0.09) },
+  // batch 2 (11-19, proposed): Hollows, Morel, the gem
+  'hollow-windup': b => { puff(b, 'bandpass', 500, 1.2, 0.05, 0.36, 0.1); puff(b, 'bandpass', 1400, 1.5, 0.03, 0.4, 0.08); tone(b, 'sine', 70, 120, 0.1, 0.38, 0.1) },   // a gather: the suck-in rises over the shambler's 0.45 s windup
+  'hollow-hit': b => { tone(b, 'sine', 150, 70, 0.22, 0.002, 0.1); puff(b, 'lowpass', 600, 0.8, 0.2, 0.002, 0.09); puff(b, 'bandpass', 1700, 2, 0.06, 0.002, 0.05, 0.015) },   // wet thud, no ring (goop, not metal)
+  'hollow-disperse': b => { puff(b, 'bandpass', 1800, 0.8, 0.12, 0.01, 0.55); puff(b, 'lowpass', 400, 0.7, 0.14, 0.005, 0.3); for (const [f, at] of [[520, 0.08], [760, 0.17], [430, 0.27], [640, 0.38]]) tone(b, 'sine', f, f * 1.6, 0.05, 0.003, 0.05, at) },   // falls apart: a hiss + bubbly pops
+  'morel-chime': b => { tone(b, 'sine', 1319, 1319, 0.07, 0.004, 0.35); tone(b, 'sine', 2637, 2637, 0.02, 0.004, 0.2); tone(b, 'sine', 1976, 1976, 0.06, 0.004, 0.45, 0.09) },   // E6 then B6, glassy, small
+  'gem-pulse': b => { tone(b, 'sine', 2350, 2200, 0.035, 0.002, 0.06) },   // one tiny glass tick: it rides every shot, so it must sit UNDER the gun
 }
 
 function run(id: string, o: PlayOpts) {

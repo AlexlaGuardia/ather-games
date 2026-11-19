@@ -18,6 +18,7 @@ import { touch } from '../shared/touch'
 import { wakeChampion, tellOf, CHAMP } from './champion'
 import { WAKE_R, STRAY_R, type WildsNode } from './nodes'
 import { playShot, playEmpty, playReload } from '../shared/gun-sound'
+import { play as sfx } from '../shared/sfx'   // M36 batch 2: Hollow sounds (proposed = silent until Alex's yay)
 import { setAmmoFeed } from '../shared/morel'
 import { openNet } from '../shared/open-mp'
 import { sharing, hostOf, encodeSnap, applySnap, SNAP_KIND, SNAP_HZ, HIT_KIND, KILL_KIND, encodeHits, decodeHits, newDrops, decodeKills, layDrop, type Snap, type HitRow, type KillRow } from '../shared/fight-share'   // BETA M28 shared fights   // M33: Morel's bubble reads the gun straight from here
@@ -479,6 +480,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const goopWorld = useRef<GoopWorld>({ groundAt: groundAt ?? (() => GRASS), nodes })
   goopWorld.current = { groundAt: groundAt ?? (() => GRASS), nodes }
   const lastAt = useRef(new Map<number, { x: number; y: number; z: number }>())
+  const lastState = useRef(new Map<number, string>())   // M36: the windup's EDGE (a tell sounds once, as the gather starts)
   const dispersals = useRef<Dispersal[]>([])
   const held = useRef(false)   // M33: the left button really down (trigger is cleared per shot on a semi-auto)
   const trigger = useRef(false), mouseAim = useRef(false), popT = useRef(0), hudT = useRef(0)
@@ -631,6 +633,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       for (const e of C.events) {
         if (e.kind === 'hurt') hud.current.hurtAt = now; if (e.kind === 'hit') hud.current.hitAt = now
         if (e.kind === 'hit' && e.killed) { const L = lastAt.current.get(e.id); if (L) dispersals.current.push({ ...L, at: performance.now() / 1000, colour: goopWorld.current.groundAt(L.x, L.z) }) }   // M34
+        if (e.kind === 'hit') { const L = lastAt.current.get(e.id); sfx(e.killed ? 'hollow-disperse' : 'hollow-hit', L ? { at: { x: L.x, y: L.y + 0.8, z: L.z } } : {}) }   // M36
         if (e.kind === 'champ-down') {
           spent.current.add(e.nodeId)
           // its ground goes quiet at once: the Hollows standing on it melt back into nothing (no drops; the chunk is the pay)
@@ -642,6 +645,10 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     }
     // M34: where each Hollow last stood (the sim drops a dead one at once; its dispersal plays from here)
     lastAt.current.clear(); for (const h of C.hollows) lastAt.current.set(h.id, { x: h.x, y: h.y, z: h.z })
+    // M36: a Hollow's tell sounds once, on the edge into its windup (shambler) / charge (floater); guests read the host's states too
+    { const was = lastState.current, now = new Map<number, string>()
+      for (const h of C.hollows) { now.set(h.id, h.state); if ((h.state === 'windup' || h.state === 'charge') && was.get(h.id) !== h.state) sfx('hollow-windup', { at: { x: h.x, y: h.y + 0.8, z: h.z } }) }
+      lastState.current = now }
     // keep the list of drawn bodies in step with the sim
     if (C.hollows.length !== ids.length || C.hollows.some((h, i) => h.id !== ids[i].id)) setIds(C.hollows.map(h => ({ id: h.id, kind: h.kind })))
     const sm = spitsMesh.current

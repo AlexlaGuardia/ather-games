@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ammoStep, newAmmoWatch, getAmmoFeed, type Bubble, type AmmoFeed } from './morel'
 import { MOREL_AMMO } from './morel-lines'
 import { hudSay } from './hud-say'
+import { play as sfx } from './sfx'   // M36 batch 2: the gem pulse (proposed = silent until Alex's yay)
 
 /** `feed` is the fallback; the combat layer's own store (morel.ts setAmmoFeed) wins when it has spoken. */
 export function MorelBubble({ feed }: { feed?: React.MutableRefObject<AmmoFeed | null> }) {
@@ -25,7 +26,9 @@ export function MorelBubble({ feed }: { feed?: React.MutableRefObject<AmmoFeed |
       raf = requestAnimationFrame(tick)
       const f = getAmmoFeed() ?? feed?.current; if (!f) return
       if (!watch.current) watch.current = newAmmoWatch(f.ammo)
+      const pulsed = watch.current.pulseAt
       const r = ammoStep(watch.current, { ammo: f.ammo, clip: f.clip, firing: !!f.firing, reloading: f.reloading, now: performance.now() / 1000 })
+      if (watch.current.pulseAt !== pulsed) sfx('gem-pulse')   // the same round change that lights the gem
       if (r.say) { said.push(r.say); hudSay(MOREL_AMMO[r.say], 'morel') }
       lastB = r.bubble
       // re-render only when what is drawn changes (alpha in 10 steps)

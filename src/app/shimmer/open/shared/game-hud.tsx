@@ -42,6 +42,7 @@ import { ensureBasicTools, type EquippedTools } from '../../engine/tools'
 import { createSkillSet, type SkillSet } from '../../engine/skills'
 import type { Vitals } from '../../engine/vitals'
 import { hudSay, linesAt, subscribe, type Line } from './hud-say'
+import { play as sfx } from './sfx'   // M36 batch 2: Morel's chime (proposed = silent until Alex's yay)
 /** how long the wheel's cursor stays lit without a roll */
 const BROWSE_MS = 2500
 
@@ -173,6 +174,11 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
   // (a leveled keeper's real levels on that render were a hydration mismatch, React #418, 11-18). Real ones after mount.
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
+  // M36: the gem chimes when Morel speaks: once per NEW morel line (ids only grow; lines already up at mount stay quiet)
+  useEffect(() => {
+    let seen = Math.max(0, ...linesAt().map(l => l.id))
+    return subscribe(() => { const n = linesAt().filter(l => l.kind === 'morel' && l.id > seen); for (const l of linesAt()) seen = Math.max(seen, l.id); if (n.length) sfx('morel-chime') })
+  }, [])
   const T = (mounted && tools) || basicTools, S = (mounted && skills) || basicSkills
   const readouts = T.current && S.current ? TOOL_FAMILIES.map(f => toolReadout(T.current!, S.current!, f, null)) : []
   const box = hudMapBox(size)

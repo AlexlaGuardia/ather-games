@@ -130,6 +130,11 @@ const run = async () => {
     { const s0 = A.status; A.status = 'proposed'; voices = 0; amb.auditionAmbience('amb-glade-day', 1); ok(voices > 0, 'audition plays a proposed bed'); await new Promise(r => setTimeout(r, 1300)); clock += 5; ok(amb.ambienceBeds().main === null, 'audition fades out and hands the slot back'); A.status = s0 }
     ok(made === made0 && made === 1, `ambience shares the ONE AudioContext (made ${made})`)
     A.status = 'proposed'; B.status = 'proposed'; W.status = 'proposed' }
+  // ── batch 2 (11-19): Hollows, Morel's chime, the gem pulse. Each has a recipe, and each stays SILENT in play until a yay ──
+  { const b2 = ['hollow-windup', 'hollow-hit', 'hollow-disperse', 'morel-chime', 'gem-pulse']
+    ok(b2.every(i => row(i)), 'every batch-2 id is in the registry')
+    for (const i of b2) { voices = 0; sfx.audition(i); ok(voices > 0, `recipe ${i} makes sound`) }
+    for (const i of b2) { const r = row(i), st = r.status; r.status = 'proposed'; voices = 0; sfx.play(i, { at: { x: 3, y: 1, z: 0 } }); ok(voices === 0, `${i} proposed is silent in play`); r.status = 'yay'; voices = 0; sfx.play(i, { at: { x: 3, y: 1, z: 0 } }); ok(voices > 0, `${i} yay plays (positional)`); r.status = st } }
   console.log(`${pass} passed, ${fails.length} failed`); if (fails.length) { console.log(fails.join('\n')); process.exit(1) }
 }
 void run()
