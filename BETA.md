@@ -25,7 +25,7 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 
 | # | Milestone | Check (passes on prod = done) | Status |
 |---|---|---|---|
-| M1 | **Front door.** Home → Play → rune → born, on a phone, live in under 20 s, zero page errors | `scripts/beta-audit.mts`: PASS on prod 11-17 (live 19.2 s, tight; 0 page errors, one three.js Clock deprecation warn). Birth wheel ghost names: Alex 11-17 "good as is for now", he'll playtest | ✅ |
+| M1 | **Front door.** Home → Play → rune → born, on a phone, live in under 20 s, zero page errors | `scripts/beta-audit.mts`: PASS on prod 11-17 (live 19.2 s, tight; 0 page errors, one three.js Clock deprecation warn). Birth wheel ghost names: Alex 11-17 "good as is for now", he'll playtest · **Re-timed on a quiet box 11-19 23:40 (after the creator + Glade + sounds landed): live 17.8 s (under 20), 0 page errors, only the known three.js Clock deprecation warn.** | ✅ |
 | M2 | **Phone HUD legible.** No two HUD elements overlap at 390×844 or at 360×780 | `beta-audit-2 [--w 360 --h 780]` (Ather plot) + `beta-audit-continent [--w --h --phase drive|foot]`: both pages PASS on prod 11-17 (`90e4226d`). Covers `data-hud`/`data-touch` boxes only; the hotbar clips ~2px each side at 360 (🔒 look) | ✅ |
 | M3 | **Touch controls.** The first touch moves you; the thumb zone does not sit on the hotbar; every HUD button opens its panel; every panel closes by tap | `beta-audit-2` (Ather plot) + `beta-audit-continent` (drive + foot): PASS on prod at 390 and 360, 11-17 (`90e4226d`) | ✅ |
 | M4 | **The next step is told.** Right after birth, the keeper sees what to do (Greg's errand in the journal, the trail lit) | `shared/journal.test.ts` + `scripts/beta-m4-look.mts` (beacon + trail on Greg, prod 11-16, `92537123`) | ✅ |
