@@ -12,7 +12,7 @@
 //
 // ★ PURE: no React, no three, no DOM except the guarded load/save. Plot-local metres (plot.ts frame).
 import type { Box } from '../terrain-world'
-import { squareAt, sqId, GATE, GREG, THRESHOLD, PATH_START, GROUND_Y } from './plot'
+import { squareAt, sqId, GATE, GREG_PLOT_ANCHOR as GREG, THRESHOLD, PATH_START, GROUND_Y } from './plot'
 import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, BAIT_FROM, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'

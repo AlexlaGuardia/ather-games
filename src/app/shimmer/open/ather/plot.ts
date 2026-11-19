@@ -92,8 +92,11 @@ export const THRESHOLD = { ...TH, yaw: Math.atan2(-(GATE.x - TH.x), -(GATE.z - T
 export const PATH_START = { x: -GRID_HALF + 10, z: GRID_HALF - 10 }
 /** The gate's ring turns to face the threshold (rotation.y; the ring's face is +z unturned). */
 export const GATE_FACE = Math.atan2(THRESHOLD.x - GATE.x, THRESHOLD.z - GATE.z)
-/** Gregory, beside the threshold: he sells ground. */
+/** ★ A PLOT ANCHOR ONLY since BETA M30 part 2 (canon 44bc0c1: Greg is NOT on the plot; he lives at Moonwell Glade, moonwell-glade.ts
+ *  gregSpot). The numbers are kept EXACTLY because the planning TABLE, the starting rooms, the ground pad and the collision
+ *  box are anchored to them, and a keeper's saved plot must not move. Nothing is drawn or talked to here any more. */
 export const GREG = { x: -GRID_HALF + 32, z: GRID_HALF - 14 }
+export const GREG_PLOT_ANCHOR = GREG
 /** The rise of the island is centred on the start ground (home is the high ground; the far corner runs low). */
 const DOME = { x: -GRID_HALF + 40, z: GRID_HALF - 40 }
 /** The building grid's one floor height (the old pad height, so the gate, Greg and the threshold do not move). */

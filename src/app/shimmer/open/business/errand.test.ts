@@ -19,7 +19,7 @@ const w = wordsFor('bracelet').find(x => x.letters.join() === 'star')!
 const im = c.ok ? imbue(l, c.inv, c.marks, 'starter-bracelet', w.id) : null
 ok(!!im && im.ok && stageOf('star', im.inv, im.loadout, true) === 'done', 'imbued: done')
 ok(countOf(newInv(), letterItem('star')) === 0, 'a fresh bag holds no letter')
-ok(errandEntries('greg', 'star', { greg: { x: 1, z: 2 } })[0].where?.zone === 'ather' && errandEntries('smith', 'star', { smith: { x: 3, z: 4 } })[0].where?.zone === 'continent', 'Greg on the Ather, the runesmith on the continent')
+ok(errandEntries('greg', 'star', { greg: { x: 1, z: 2 } })[0].where?.zone === 'wilds' && errandEntries('smith', 'star', { smith: { x: 3, z: 4 } })[0].where?.zone === 'continent', 'M30: Greg at Moonwell Glade in the Wilds, the runesmith on the continent')
 { const g = { x: 5, z: 6 }, s = errandEntries('smith', 'star', { gate: g })[0].where, m = errandEntries('temple', 'star', { gate: g, temple: { x: 7, z: 8 } })[0].where
   ok(s?.zone === 'ather' && s.x === 5 && m?.zone === 'continent' && m.x === 7, 'M5: on the Ather the smith line points at the gate; the continent door wins where seen') }
 ok(errandEntries('done', 'star', {}).length === 0, 'done: the line comes off the page')

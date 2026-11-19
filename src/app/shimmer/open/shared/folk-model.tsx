@@ -16,6 +16,7 @@ import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
+export type FolkPose = 'stand' | 'sit'
 export type FolkAction = 'idle' | 'talk' | 'wave'
 export interface FolkLook {
   skin: string; hair: string; shirt: string; apron: string | null; trouser: string; boot: string
@@ -24,6 +25,13 @@ export interface FolkLook {
   hat?: 'none' | 'wide' | 'cap'
   hatColor?: string
   beard?: boolean
+  /** M30 (Gregory's locked look, additive): a waistcoat over the shirt, spectacles, a pencil behind the right ear, crinkled eye corners */
+  vest?: string
+  specs?: boolean
+  pencil?: boolean
+  crinkle?: boolean
+  /** body build: girth widens x/z, height scales y (1 = the standard rig) */
+  build?: { girth?: number; height?: number }
 }
 
 const SKINS = ['#e8b98f', '#f1d2b6', '#c99470', '#a8734f', '#7d5236', '#f4dcc8']
@@ -38,7 +46,9 @@ const pick = <T,>(xs: readonly T[], id: string, salt: number) => xs[hash(id, sal
 /** Looks for NPCs with a name. Only colours an old blockout already showed; see the header. */
 export const NAMED_LOOKS: Readonly<Record<string, FolkLook>> = {
   // the plot-scene blockout since 11-13: a purple robe, a pale face, a wide hat with a pointed crown
-  gregory: { skin: '#e8d2b4', hair: '#d8d0bc', shirt: '#6f5a8a', apron: null, trouser: '#4a3b5c', boot: '#3a2c44', robe: true, hat: 'wide', hatColor: '#4a3b5c', beard: true },
+  // LOCKED 11-18 (design-briefs/gregory-look.md, "shopkeeper-uncle"): round, short, spectacles, crinkly eyes, waistcoat over
+  // shirtsleeves, a pencil behind one ear. No staff, no robe, no beard, no hat, no weapon. Colours are Jin's within that.
+  gregory: { skin: '#eccdab', hair: '#dcd7cb', shirt: '#e9dfc6', vest: '#5f6b4a', apron: null, trouser: '#5a4632', boot: '#3a2a1c', hat: 'none', beard: false, specs: true, pencil: true, crinkle: true, build: { girth: 1.28, height: 0.9 } },
 }
 /** An NPC's look: its named look, else colours drawn from its id (fixed for life, the same everywhere). */
 export function folkLook(id: string): FolkLook {
@@ -58,13 +68,13 @@ export const FOLK_HEIGHT = HY + H * 0.55
 export const FOLK_EYE_Y = HY + H * 0.02
 
 // ── shared GPU resources (module-level: one per page, every NPC reuses them) ────────────────────────────────────────
-type Shared = { sphere: THREE.SphereGeometry; cyl: Map<string, THREE.CylinderGeometry>; box: THREE.BoxGeometry; cone: THREE.ConeGeometry; grad: THREE.DataTexture; mats: Map<string, THREE.Material>; ink: THREE.MeshBasicMaterial }
+type Shared = { torus: THREE.TorusGeometry; sphere: THREE.SphereGeometry; cyl: Map<string, THREE.CylinderGeometry>; box: THREE.BoxGeometry; cone: THREE.ConeGeometry; grad: THREE.DataTexture; mats: Map<string, THREE.Material>; ink: THREE.MeshBasicMaterial }
 let shared: Shared | null = null
 function res(): Shared {
   if (shared) return shared
   const grad = new THREE.DataTexture(new Uint8Array([90, 90, 90, 255, 170, 170, 170, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat)
   grad.minFilter = grad.magFilter = THREE.NearestFilter; grad.needsUpdate = true
-  shared = { sphere: new THREE.SphereGeometry(1, 18, 14), cyl: new Map(), box: new THREE.BoxGeometry(1, 1, 1), cone: new THREE.ConeGeometry(1, 1, 14), grad, mats: new Map(), ink: new THREE.MeshBasicMaterial({ color: '#1b140e', side: THREE.BackSide }) }
+  shared = { torus: new THREE.TorusGeometry(1, 0.1, 6, 20), sphere: new THREE.SphereGeometry(1, 18, 14), cyl: new Map(), box: new THREE.BoxGeometry(1, 1, 1), cone: new THREE.ConeGeometry(1, 1, 14), grad, mats: new Map(), ink: new THREE.MeshBasicMaterial({ color: '#1b140e', side: THREE.BackSide }) }
   return shared
 }
 const cylOf = (rt: number, rb: number) => { const r = res(), k = `${rt}:${rb}`; if (!r.cyl.has(k)) r.cyl.set(k, new THREE.CylinderGeometry(rt, rb, 1, 16)); return r.cyl.get(k)! }
@@ -82,7 +92,7 @@ function Part({ geo, color, pos, scale, ink = true }: { geo: THREE.BufferGeometr
   )
 }
 
-export function FolkModel({ look, action = 'idle', seed = 0, speed = 1 }: { look: FolkLook; action?: FolkAction; seed?: number; speed?: number }) {
+export function FolkModel({ look, action = 'idle', seed = 0, speed = 1, pose = 'stand' }: { look: FolkLook; action?: FolkAction; seed?: number; speed?: number; pose?: FolkPose }) {
   const head = useRef<THREE.Group>(null), body = useRef<THREE.Group>(null), eyes = useRef<THREE.Group>(null)
   const armL = useRef<THREE.Group>(null), armR = useRef<THREE.Group>(null)
   const t0 = useRef(seed * 1.3)
@@ -105,10 +115,18 @@ export function FolkModel({ look, action = 'idle', seed = 0, speed = 1 }: { look
     if (eyes.current) eyes.current.scale.y = ((t + seed) % 4.1) < 0.12 ? 0.15 : 1
   })
   const r = res(), S = r.sphere
+  const sit = pose === 'sit'   // seated on something ~0.48 m high: thighs forward, shins down (the bench is the scene's)
   return (
+    <group scale={[look.build?.girth ?? 1, look.build?.height ?? 1, look.build?.girth ?? 1]}>
     <group ref={body}>
       {/* legs + boots, or a robe to the ankles */}
-      {look.robe ? (
+      {sit && !look.robe ? ([-1, 1] as const).map(s => (
+        <group key={s}>
+          <group position={[s * 0.1, 0.58, 0.2]} rotation={[Math.PI / 2, 0, 0]}><Part geo={cylOf(0.085, 0.08)} color={look.trouser} pos={[0, 0, 0]} scale={[1, 0.42, 1]} /></group>
+          <Part geo={cylOf(0.075, 0.07)} color={look.trouser} pos={[s * 0.1, 0.3, 0.4]} scale={[1, 0.5, 1]} />
+          <Part geo={S} color={look.boot} pos={[s * 0.1, 0.06, 0.44]} scale={[0.1, 0.07, 0.14]} />
+        </group>
+      )) : look.robe ? (
         <Part geo={cylOf(0.19, 0.3)} color={look.shirt} pos={[0, (L + 0.06) / 2, 0]} scale={[1, L + 0.06, 1]} />
       ) : ([-1, 1] as const).map(s => (
         <group key={s}>
@@ -118,6 +136,7 @@ export function FolkModel({ look, action = 'idle', seed = 0, speed = 1 }: { look
       ))}
       {/* the body: shirt (+ apron) */}
       <Part geo={cylOf(0.17, 0.2)} color={look.shirt} pos={[0, L + B / 2, 0]} scale={[1, B, 1]} />
+      {look.vest && <Part geo={cylOf(0.18, 0.212)} color={look.vest} pos={[0, L + B * 0.43, 0]} scale={[1, B * 0.86, 1]} />}
       {look.apron && <Part geo={r.box} color={look.apron} pos={[0, L + B * 0.4, 0.2]} scale={[0.3, B * 0.72, 0.02]} ink={false} />}
       {/* arms: pivots at the shoulders (slightly splayed, the reference's 0.12), hands at the ends */}
       {([-1, 1] as const).map(s => (
@@ -144,6 +163,12 @@ export function FolkModel({ look, action = 'idle', seed = 0, speed = 1 }: { look
             ))}
           </group>
           <mesh geometry={S} material={toon('#d9a47c')} position={[0, -H * 0.08, H * 0.5]} scale={H * 0.05} />
+          {look.specs && <>
+            {([-1, 1] as const).map(s => <mesh key={s} geometry={r.torus} material={flat('#2b2118')} position={[s * H * 0.17, H * 0.02, H * 0.5]} scale={H * 0.14} />)}
+            <mesh geometry={r.box} material={flat('#2b2118')} position={[0, H * 0.04, H * 0.5]} scale={[H * 0.1, 0.012, 0.012]} />
+          </>}
+          {look.crinkle && ([-1, 1] as const).map(s => [0.35, -0.35].map(a => <mesh key={`${s}${a}`} geometry={r.box} material={flat('#7a5a44')} position={[s * H * 0.33, H * 0.02, H * 0.4]} rotation={[0, s * 0.6, s * a]} scale={[H * 0.1, 0.008, 0.008]} />))}
+          {look.pencil && <group position={[H * 0.5, H * 0.2, -H * 0.04]} rotation={[0.5, 0, -0.35]}><Part geo={cylOf(1, 1)} color="#d9a031" pos={[0, 0, 0]} scale={[0.014, 0.15, 0.014]} ink={false} /><Part geo={r.cone} color="#2b2118" pos={[0, 0.09, 0]} scale={[0.014, 0.03, 0.014]} ink={false} /></group>}
           {look.beard && <Part geo={S} color={look.hair} pos={[0, -H * 0.32, H * 0.2]} scale={[H * 0.34, H * 0.28, H * 0.3]} />}
           {look.hat === 'wide' && (
             <group position={[0, H * 0.4, 0]}>
@@ -154,6 +179,7 @@ export function FolkModel({ look, action = 'idle', seed = 0, speed = 1 }: { look
           {look.hat === 'cap' && <Part geo={S} color={look.hatColor ?? look.shirt} pos={[0, H * 0.24, -H * 0.02]} scale={[H * 0.55, H * 0.3, H * 0.55]} />}
         </group>
       </group>
+    </group>
     </group>
   )
 }

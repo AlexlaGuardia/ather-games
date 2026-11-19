@@ -3,11 +3,10 @@
 // The home plot's scene: the full-size island, the garden grid, fold-mist over ground you do not hold, the one
 // gate, Gregory, and the threshold. Rules live in plot.ts; this only draws them.
 
-import { FolkModel, folkLook } from '../shared/folk-model'
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import {
-  PLOT_N, PLOT_CELL, PLOT_HALF, PLOT_R, GRID, SQ, GRID_HALF, THRESHOLD, GATE, GATE_FACE, GREG,
+  PLOT_N, PLOT_CELL, PLOT_HALF, PLOT_R, GRID, SQ, GRID_HALF, THRESHOLD, GATE, GATE_FACE,
   plotHeightAt, plotVertexHeight, plotCellIsLand, sqId, ringOf, canBuy,
 } from './plot'
 import { P } from './palette'
@@ -77,16 +76,7 @@ function Gate() {
   )
 }
 
-/** Gregory, a placeholder figure until the model lands: robe, head, a wide hat. */
-function Gregory() {
-  const y = plotHeightAt(GREG.x, GREG.z)
-  return (
-    // the Alkin rig (shared/folk-model.tsx, Alex's cartoon pick 11-18), his old blockout's colours carried over
-    <group position={[GREG.x, y, GREG.z]} rotation-y={-0.6}>
-      <FolkModel look={folkLook('gregory')} />
-    </group>
-  )
-}
+/* Gregory is not drawn here any more (BETA M30 part 2): he lives at Moonwell Glade (glade-greg.tsx). */
 
 /** Fold-mist over every square you do not hold. Squares Greg would sell you now glow gold under the mist. Instanced, one
  *  mesh per look (for sale, or sealed by ring): a 15×15 garden has up to 216 mist squares, four gardens in a cluster. */
@@ -134,7 +124,6 @@ export function PlotIsland({ owned, pages }: { owned: ReadonlySet<string>; pages
         <ringGeometry args={[1.1, 1.45, 18]} /><meshBasicMaterial color="#efe0a8" />
       </mesh>
       <Gate />
-      <Gregory />
       <Mist owned={owned} pages={pages} />
     </>
   )

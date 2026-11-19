@@ -78,3 +78,8 @@ export const GLADE_LAYOUT = {
   home: { dx: 10.5, dz: 6.5 },       // Greg's house: the "grown structure" beside the pool
 }
 export const gladeAt = (o: { dx: number; dz: number }) => ({ x: MOONWELL.x + o.dx, z: MOONWELL.z + o.dz })
+/** Where Greg sits (M30 part 2: he left the keeper's plot; plot ground is bought at his door here), turned to face the pool. */
+export function gregSpot(): { x: number; z: number; yaw: number } {
+  const p = gladeAt(GLADE_LAYOUT.greg)
+  return { ...p, yaw: Math.atan2(MOONWELL.x - p.x, MOONWELL.z - p.z) }
+}
