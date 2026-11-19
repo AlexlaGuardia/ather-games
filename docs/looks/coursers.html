@@ -1,0 +1,245 @@
+<title>Courser Look Options</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=Nunito:wght@400;600&display=swap">
+<style>
+/* BETA M35 mock board (sprites, 11-19). The four courser KINDS (canon, world/transportation.md: Darter coupe, Hauler pickup,
+   Scrambler off-roader, Skitter bike) built three ways, code-built in three.js r128 like the game. Each keeps the Mana-
+   Carriage's three canon parts visible: the MANA CORE, the CHANNEL TRIM (the rune-lit line) and the DRIVER'S RUNE. Wheels
+   and runes move with speed. Paint = the shipped lot models (Tally, Dray, Scree, Flick). Archetypes only, never a real make. */
+:root {
+  --bg: #f1ece3; --plate: #fffaf2; --ink: #2e2318; --ink-soft: #6b5238; --rule: #dccfbd; --accent: #8a5a2b; --chip: #efe6d8;
+  --display: "Chakra Petch", "Segoe UI", system-ui, sans-serif; --body: "Nunito", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15130f; --plate: #201c16; --ink: #f0e6d6; --ink-soft: #b9a68a; --rule: #3a3227; --accent: #e0a865; --chip: #2a251d; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #15130f; --plate: #201c16; --ink: #f0e6d6; --ink-soft: #b9a68a; --rule: #3a3227; --accent: #e0a865; --chip: #2a251d; color-scheme: dark }
+* { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5 }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+h1 { font-family: var(--display); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; font-size: 1.35rem; margin: 0 0 6px; text-wrap: balance }
+.lede { color: var(--ink-soft); max-width: 72ch; margin: 0 0 16px }
+.bar { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 0 0 18px; position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 8px 0 }
+.grp { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+.lbl { font-family: var(--display); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); margin-right: 2px }
+button { font: 600 .85rem var(--body); color: var(--ink); background: var(--chip); border: 1px solid var(--rule); border-radius: 999px; padding: 6px 12px; cursor: pointer; min-height: 34px }
+button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--plate) }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+input[type=range] { accent-color: var(--accent); width: 140px }
+.mph { font-variant-numeric: tabular-nums; font-size: .85rem; color: var(--ink-soft); min-width: 52px }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px }
+.card { background: var(--plate); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; min-width: 0 }
+canvas { display: block; width: 100%; aspect-ratio: 4 / 3; max-width: 100%; cursor: grab; touch-action: none }
+.meta { padding: 12px 14px 14px; display: grid; gap: 6px }
+.tag { font-family: var(--display); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+.name { font-family: var(--display); font-weight: 600; font-size: 1.05rem; letter-spacing: .04em }
+.note { font-size: .9rem; margin: 0 }
+.foot { margin-top: 22px; color: var(--ink-soft); font-size: .88rem; max-width: 76ch }
+.foot li { margin-bottom: 4px }
+</style>
+
+<div class="wrap">
+  <h1>Courser look options</h1>
+  <p class="lede">The four courser kinds built three ways. Pick a kind, set a speed, and look from outside, from behind (the driving camera) or from the side. Drag a card to turn it. Paint is each lot's shipped model: Tally, Dray, Scree and Flick.</p>
+  <div class="bar" role="toolbar" aria-label="Board controls">
+    <div class="grp" id="g-kind"><span class="lbl">Kind</span></div>
+    <div class="grp" id="g-view"><span class="lbl">View</span></div>
+    <div class="grp"><span class="lbl">Speed</span><input type="range" id="speed" min="0" max="120" value="35" aria-label="Speed in mph"><span class="mph" id="mph">35 mph</span></div>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="foot">
+    <p><b>The same in all three (canon, not a choice):</b></p>
+    <ul>
+      <li>Every courser shows the Mana-Carriage's three parts: the <b>mana core</b> (its glow brightens as you push it), the <b>channel trim</b> (a rune-lit line; light runs along it faster with speed) and the <b>driver's rune</b> at the wheel or bars.</li>
+      <li>Kinds are archetypes (coupe, pickup, off-roader, bike), never a real make's design.</li>
+      <li>Polish here is readability and motion: shape and moving light, not small detail.</li>
+    </ul>
+    <p>The pick sets one look per kind; each make's models are then that kind in their own paint and proportions. Today's box blockouts stay until you pick.</p>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const STYLES = [
+  { id: 'carriage', tag: 'Option A', name: 'Carriage-born',
+    note: 'Keeps the Mana-Carriage in its bones: arched fenders over open spoked wheels, a coachwork waist line, brass trim. Reads as old craft made common.' },
+  { id: 'smooth', tag: 'Option B', name: 'Smooth',
+    note: 'Rounded, soft-cornered bodies like the folk rig: one pebble shape per kind, a glowing trim line down each flank. Clean and friendly.' },
+  { id: 'toy', tag: 'Option C', name: 'Chunky',
+    note: 'Big wheels, short bodies, exaggerated stances. Most readable from far off and from the driving camera; the most playful.' },
+]
+const KINDS = [
+  ['darter', 'Darter', { body: 0x3f7a52, cabin: 0x1d3326 }],
+  ['hauler', 'Hauler', { body: 0x7a5a34, cabin: 0x3b2c1c }],
+  ['scrambler', 'Scrambler', { body: 0x6b6f3a, cabin: 0x2b2d18 }],
+  ['skitter', 'Skitter', { body: 0xd9a43a, cabin: 0x2a2010 }],
+]
+const VIEWS = [['out', 'Outside'], ['behind', 'Behind'], ['side', 'Side']]
+let kind = 'darter', view = 'out', mph = 35
+const cards = []
+function chip(gid, items, cur, on) {
+  const g = document.getElementById(gid)
+  const bs = items.map(([v, l]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = l; b.setAttribute('aria-pressed', String(v === cur)); b.onclick = () => { bs.forEach(x => x.setAttribute('aria-pressed', String(x === b))); on(v) }; g.appendChild(b); return b })
+}
+chip('g-kind', KINDS.map(k => [k[0], k[1]]), kind, v => { kind = v; cards.forEach(c => c.build()) })
+chip('g-view', VIEWS, view, v => { view = v })
+const sp = document.getElementById('speed'), mo = document.getElementById('mph')
+sp.addEventListener('input', () => { mph = +sp.value; mo.textContent = `${mph} mph` })
+
+const TRIM = 0xd4a843, CORE = 0x6be4ff, RUNE = 0xf2d27a
+const std = (c, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.45, metalness: 0.2 }, o))
+const glow = c => new THREE.MeshBasicMaterial({ color: c })
+
+// rounded box (Option B): a box with its corners pulled onto a sphere of radius r
+function roundBox(w, h, d, r) {
+  const g = new THREE.BoxGeometry(w, h, d, 6, 4, 8), a = g.attributes.position, v = new THREE.Vector3(), c = new THREE.Vector3()
+  for (let i = 0; i < a.count; i++) {
+    v.fromBufferAttribute(a, i)
+    c.set(Math.max(-w / 2 + r, Math.min(w / 2 - r, v.x)), Math.max(-h / 2 + r, Math.min(h / 2 - r, v.y)), Math.max(-d / 2 + r, Math.min(d / 2 - r, v.z)))
+    const dd = v.clone().sub(c); if (dd.length() > r) { dd.setLength(r); v.copy(c).add(dd) }
+    a.setXYZ(i, v.x, v.y, v.z)
+  }
+  g.computeVertexNormals(); return g
+}
+
+// a sloped cabin: a trapezoid side profile (front rake, back rake) extruded across the width, so a coupe reads as a coupe
+function wedge(w, h, len, front, back) {
+  const sh = new THREE.Shape(); sh.moveTo(-len / 2, 0); sh.lineTo(len / 2, 0); sh.lineTo(len / 2 - back, h); sh.lineTo(-len / 2 + front, h); sh.closePath()
+  const g = new THREE.ExtrudeGeometry(sh, { depth: w, bevelEnabled: false }); g.rotateY(-Math.PI / 2); g.translate(w / 2, 0, 0); g.computeVertexNormals(); return g
+}
+// a wheel: tyre + hub; spoked (A), disc (B) or fat lugged (C). Returns the group that spins.
+function wheel(style, R, w) {
+  const g = new THREE.Group(), spin = new THREE.Group(); g.add(spin)
+  const tyre = new THREE.Mesh(new THREE.TorusGeometry(R * 0.78, R * (style === 'toy' ? 0.3 : 0.22), 8, 18), std(0x1b1b1f, { roughness: 0.9, metalness: 0 }))
+  tyre.rotation.y = Math.PI / 2; tyre.scale.z = w / (R * 0.45); spin.add(tyre)
+  if (style === 'carriage') {
+    for (let k = 0; k < 8; k++) { const s = new THREE.Mesh(new THREE.BoxGeometry(0.03, R * 1.45, 0.03), std(0xb08a3e, { metalness: 0.6, roughness: 0.3 })); s.rotation.x = (k / 8) * Math.PI; spin.add(s) }
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.18, R * 0.18, w * 0.9, 10), std(0xb08a3e, { metalness: 0.6, roughness: 0.3 })); hub.rotation.z = Math.PI / 2; spin.add(hub)
+  } else {
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.6, R * 0.6, w * 0.7, 14), std(style === 'toy' ? 0xe8e2d4 : 0x8c8f96, { metalness: 0.5, roughness: 0.35 })); disc.rotation.z = Math.PI / 2; spin.add(disc)
+    // a rune mark on the hub, so the spin reads
+    const mark = new THREE.Mesh(new THREE.BoxGeometry(w * 0.72, R * 0.5, 0.06), glow(RUNE)); spin.add(mark)
+  }
+  g.userData.spin = spin; g.userData.R = R
+  return g
+}
+
+// one courser of `k` in `style`. Returns { root, wheels[], steer[], trimMats[], core }
+function courser(style, k, paint) {
+  const root = new THREE.Group(), body = new THREE.Group(); root.add(body)
+  const bodyM = std(paint.body, { roughness: style === 'smooth' ? 0.3 : 0.4, metalness: style === 'carriage' ? 0.35 : 0.2 })
+  const cabM = std(paint.cabin, { roughness: 0.3 }), glassM = std(0x9fd6ee, { roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.6 })
+  const brass = std(0xb08a3e, { metalness: 0.7, roughness: 0.3 })
+  const bike = k === 'skitter'
+  const big = style === 'toy' ? 1.35 : 1
+  const R = (k === 'scrambler' ? 0.46 : k === 'hauler' ? 0.42 : bike ? 0.36 : 0.36) * big
+  const L = { darter: 3.9, hauler: 4.6, scrambler: 3.7, skitter: 2.1 }[k] * (style === 'toy' ? 0.82 : 1)
+  const W = bike ? 0.5 : { darter: 1.8, hauler: 1.9, scrambler: 1.9 }[k]
+  const lift = (k === 'scrambler' ? 0.32 : k === 'hauler' ? 0.18 : 0.06) + (style === 'toy' ? 0.08 : 0)
+  const cabin = (w, h, len, front, back, m, y, z) => { const me = new THREE.Mesh(wedge(w, h, len, front, back), m); me.position.set(0, y, z); body.add(me); return me }
+  const box = (w, h, d, m, x, y, z, rr = 0.12) => { const g = style === 'smooth' ? roundBox(w, h, d, Math.min(rr * 2.2, w / 2.2, h / 2.2, d / 2.2)) : new THREE.BoxGeometry(w, h, d); const me = new THREE.Mesh(g, m); me.position.set(x, y, z); body.add(me); return me }
+  const baseY = R + lift
+  const trims = [], wheels = [], steer = []
+  if (bike) {
+    box(0.42, 0.4, L * 0.62, bodyM, 0, baseY + 0.2, 0.05)                       // the tank/frame
+    box(0.36, 0.14, 0.7, cabM, 0, baseY + 0.46, 0.45)                           // the seat
+    const fork = box(0.08, 0.8, 0.08, brass, 0, baseY + 0.25, -L * 0.42); fork.rotation.x = -0.35
+    const bars = box(0.7, 0.05, 0.05, cabM, 0, baseY + 0.7, -L * 0.36)
+    // the driver's rune: a disc between the bars
+    const rune = new THREE.Mesh(new THREE.CircleGeometry(0.1, 16), glow(RUNE)); rune.position.set(0, baseY + 0.72, -L * 0.34); rune.rotation.x = -1.1; body.add(rune)
+    // core: under the tank
+    const core = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.16, 0.42), glow(CORE)); core.position.set(0, baseY - 0.02, 0.05); body.add(core)
+    for (const s of [-1, 1]) { const t = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, L * 0.58), new THREE.MeshBasicMaterial({ color: TRIM })); t.position.set(s * 0.22, baseY + 0.18, 0.05); body.add(t); trims.push(t) }
+    for (const z of [-L * 0.5, L * 0.45]) { const w = wheel(style, R, 0.16); w.position.set(0, R, z); root.add(w); wheels.push(w); if (z < 0) steer.push(w) }
+    if (style === 'carriage') { box(0.2, 0.06, R * 2.2, brass, 0, R * 2 + 0.02, -L * 0.5); box(0.2, 0.06, R * 2.2, brass, 0, R * 2 + 0.02, L * 0.45) }   // the mudguard arches
+    return { root, wheels, steer, trims, core, rune }
+  }
+  // chassis
+  const chH = k === 'darter' ? 0.42 : 0.55
+  box(W, chH, L, bodyM, 0, baseY + chH / 2, 0)
+  // cabin / bed by kind
+  if (k === 'hauler') {
+    cabin(W * 0.92, 0.75, L * 0.34, 0.32, 0.04, cabM, baseY + chH, -L * 0.2)
+    box(W * 0.94, 0.28, L * 0.42, cabM, 0, baseY + chH + 0.1, L * 0.26)                 // the open bed's walls
+    box(W * 0.8, 0.04, L * 0.38, std(0x3a2a1a, { roughness: 0.9 }), 0, baseY + chH + 0.02, L * 0.26)
+  } else if (k === 'scrambler') {
+    cabin(W * 0.9, 0.7, L * 0.55, 0.28, 0.06, cabM, baseY + chH, 0)
+    box(W * 0.95, 0.06, L * 0.5, brass, 0, baseY + chH + 0.74, 0)                        // the roof rack
+    const spare = wheel(style, R * 0.9, 0.22); spare.rotation.y = Math.PI / 2; spare.position.set(0, baseY + chH * 0.6, L / 2 + 0.12); body.add(spare)
+  } else {   // darter: a low cabin set back
+    cabin(W * 0.82, 0.44, L * 0.5, 0.62, 0.5, cabM, baseY + chH, L * 0.06)   // raked both ways: a coupe's glasshouse
+  }
+  // the driver's rune: a lit disc where the wheel would be (seen through the glass from behind)
+  const rune = new THREE.Mesh(new THREE.CircleGeometry(0.11, 16), glow(RUNE))
+  rune.position.set(-W * 0.22, baseY + chH + 0.22, k === 'darter' ? -L * 0.04 : -L * 0.12); rune.rotation.x = -0.9; body.add(rune)
+  // the mana core: a visible cell at the back (or in the bed)
+  const core = new THREE.Mesh(style === 'smooth' ? new THREE.SphereGeometry(0.2, 14, 10) : new THREE.BoxGeometry(0.5, 0.2, 0.32), glow(CORE))
+  core.position.set(0, baseY + chH + (k === 'hauler' ? 0.15 : 0.02), k === 'hauler' ? L * 0.38 : L * 0.42); body.add(core)
+  // channel trim: a rune-lit line along each flank (light runs along it with speed)
+  for (const s of [-1, 1]) for (let i = 0; i < 10; i++) {
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, L * 0.085), new THREE.MeshBasicMaterial({ color: TRIM }))
+    t.position.set(s * (W / 2 + 0.01), baseY + chH * (style === 'carriage' ? 0.75 : 0.5), -L * 0.45 + (i + 0.5) * L * 0.09); body.add(t); trims.push(t)
+  }
+  // lamps
+  for (const s of [-1, 1]) { const h = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.03), glow(0xfff1c4)); h.position.set(s * W * 0.32, baseY + chH * 0.6, -L / 2 - 0.02); body.add(h); const tl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.03), glow(0xff3a2a)); tl.position.set(s * W * 0.34, baseY + chH * 0.6, L / 2 + 0.02); body.add(tl) }
+  // wheels; Option A gets arched fenders (the carriage's), C gets fat flares
+  const wx = W / 2 - (style === 'carriage' ? -0.06 : 0.12), wz = L * 0.33
+  for (const [x, z] of [[-wx, -wz], [wx, -wz], [-wx, wz], [wx, wz]]) {
+    const w = wheel(style, R, style === 'toy' ? 0.38 : 0.26); w.position.set(x, R, z); root.add(w); wheels.push(w); if (z < 0) steer.push(w)
+    if (style === 'carriage') { const f = new THREE.Mesh(new THREE.TorusGeometry(R * 1.12, 0.06, 6, 14, Math.PI), bodyM); f.position.set(x, R, z); f.rotation.y = Math.PI / 2; body.add(f) }
+    if (style === 'toy') { const f = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, R * 2.3), bodyM); f.position.set(x > 0 ? x - 0.05 : x + 0.05, R * 2 + 0.02, z); body.add(f) }
+  }
+  if (style === 'carriage') box(W + 0.02, 0.05, L * 0.98, brass, 0, baseY + chH * 0.92, 0)   // the coachwork waist line
+  return { root, wheels, steer, trims, core, rune }
+}
+
+function makeCard(S, idx) {
+  const card = document.createElement('div'); card.className = 'card'
+  const cv = document.createElement('canvas'); card.appendChild(cv)
+  const meta = document.createElement('div'); meta.className = 'meta'
+  meta.innerHTML = `<span class="tag">${S.tag}</span><span class="name">${S.name}</span><p class="note">${S.note}</p>`
+  card.appendChild(meta); document.getElementById('grid').appendChild(card)
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true }); renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); renderer.outputEncoding = THREE.sRGBEncoding
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0xbcd7ea); scene.fog = new THREE.Fog(0xdfe6dc, 25, 80)
+  const cam = new THREE.PerspectiveCamera(42, 4 / 3, 0.1, 200)
+  scene.add(new THREE.HemisphereLight(0xeaf3ff, 0x6c7a4a, 0.75)); const sun = new THREE.DirectionalLight(0xfff3dc, 0.9); sun.position.set(4, 8, 3); scene.add(sun)
+  // a road that scrolls under the courser (so speed reads), verge either side
+  const verge = new THREE.Mesh(new THREE.PlaneGeometry(80, 120), new THREE.MeshLambertMaterial({ color: 0x8fae5a })); verge.rotation.x = -Math.PI / 2; scene.add(verge)
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(5, 120), new THREE.MeshLambertMaterial({ color: 0xb59c76 })); road.rotation.x = -Math.PI / 2; road.position.y = 0.005; scene.add(road)
+  const dashes = []; for (let i = 0; i < 30; i++) { const d = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 1.2), new THREE.MeshBasicMaterial({ color: 0xe9dcc0 })); d.rotation.x = -Math.PI / 2; d.position.set(0, 0.01, -60 + i * 4); scene.add(d); dashes.push(d) }
+  const posts = []; for (let i = 0; i < 12; i++) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.8, 0.12), std(0x6f5436)); p.position.set(i % 2 ? 3.3 : -3.3, 0.4, -60 + i * 10); scene.add(p); posts.push(p) }
+  let C = null, yaw = Math.PI - 0.75   // a front three-quarter: the face of the thing
+  const build = () => { if (C) scene.remove(C.root); const K = KINDS.find(x => x[0] === kind); C = courser(S.id, kind, K[2]); scene.add(C.root) }
+  build()
+  let drag = null
+  cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: yaw }; cv.setPointerCapture(e.pointerId) })
+  cv.addEventListener('pointermove', e => { if (drag) yaw = drag.y + (e.clientX - drag.x) * 0.01 })
+  cv.addEventListener('pointerup', () => { drag = null })
+  let last = performance.now(), dist = 0
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now
+    const w = cv.clientWidth, h = cv.clientHeight; if (w && h && cv.width !== Math.round(w * renderer.getPixelRatio())) { renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix() }
+    const v = mph * 0.447   // m/s
+    dist += v * dt
+    for (const d of dashes) { d.position.z = ((d.position.z + 60 + v * dt) % 120) - 60 }
+    for (const p of posts) { p.position.z = ((p.position.z + 60 + v * dt) % 120) - 60 }
+    // wheels roll with the road; front ones steer a little; the trim's light runs faster with speed; the core brightens
+    C.wheels.forEach(wh => { wh.userData.spin.rotation.x = -dist / wh.userData.R })
+    const st = Math.sin(now / 1000 * 0.7) * 0.18; C.steer.forEach(wh => { wh.rotation.y = st })
+    const run = (now / 1000) * (0.6 + mph / 15)
+    C.trims.forEach((t, i) => { const k = (Math.sin(run * 3 - (i % 10) * 0.9) + 1) / 2; t.material.color.setRGB(0.55 + k * 0.45, 0.42 + k * 0.4, 0.15 + k * 0.25) })
+    const c = 0.55 + Math.min(1, mph / 100) * 0.45; C.core.material.color.setRGB(0.42 * c, 0.89 * c, 1.0 * c)
+    if (C.rune) C.rune.rotation.z += dt * (0.5 + mph / 25)
+    C.root.position.y = Math.sin(now / 1000 * (4 + mph / 10)) * 0.006 * Math.min(1, mph / 20)
+    // camera
+    if (view === 'behind') { cam.position.set(0, 2.3, 7.2); cam.lookAt(0, 1.0, -2) }
+    else if (view === 'side') { cam.position.set(7.5, 1.4, 0); cam.lookAt(0, 0.8, 0) }
+    else { cam.position.set(Math.sin(yaw) * 7.5, 2.6, Math.cos(yaw) * 7.5); cam.lookAt(0, 0.8, 0) }
+    renderer.render(scene, cam)
+    requestAnimationFrame(frame)
+  }
+  requestAnimationFrame(frame)
+  return { build }
+}
+STYLES.forEach((s, i) => cards.push(makeCard(s, i)))
+</script>
