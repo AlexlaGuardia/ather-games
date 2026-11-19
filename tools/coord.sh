@@ -612,6 +612,37 @@ cmd_status() {
   fi
 }
 
+
+# ── THE BOX BROWSER LOCK (11-19, hub): one headless browser on THIS box at a time ─────────────────────────────────────
+# Was a dbr convention ("browser UP / DOWN"); sprites ran over play's open UP twice in one day, both honestly (it read
+# one lane's DOWN, not every lane's). A step every window must remember is a step one will forget, so it is a lock:
+#   coord browser up "<what>"   -> refuses (exit 1) while another window holds it; stale after 45 min
+#   coord browser down          -> releases (only the holder, or COORD_FORCE=1)
+# EliteDesk runs (tools/edesk-check.sh) do NOT take it: they are not on this box.
+BROWSER_FILE="$COORD_DIR/browser"
+cmd_browser() {
+  local op="${1:-status}"; shift || true
+  local holder="" ts="" ep=0 age=0
+  if [ -f "$BROWSER_FILE" ]; then holder=$(sed -n 's/^owner=//p' "$BROWSER_FILE"); ts=$(sed -n 's/^ts=//p' "$BROWSER_FILE"); ep=$(iso_to_epoch "$ts"); age=$(( $(now_epoch) - ep )); fi
+  case "$op" in
+    up)
+      if [ -n "$holder" ] && [ "$holder" != "$WIN" ] && [ "${age:-0}" -lt 2700 ] && [ "${COORD_FORCE:-0}" != 1 ]; then
+        echo "box browser HELD by '$holder' ($(age_human "$age") ago): $(sed -n 's/^note=//p' "$BROWSER_FILE")"
+        echo "  wait for it (coord browser), run your prod check on the EliteDesk (tools/edesk-check.sh), or COORD_FORCE=1 if that window is gone"
+        return 1
+      fi
+      mkdir -p "$COORD_DIR"
+      printf 'owner=%s\nts=%s\nsession=%s\nnote=%s\n' "$WIN" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${SESSION:-}" "$*" > "$BROWSER_FILE.tmp" && mv "$BROWSER_FILE.tmp" "$BROWSER_FILE"
+      echo "box browser UP for '$WIN': $*" ;;
+    down)
+      if [ -z "$holder" ]; then echo "box browser already free"; return 0; fi
+      if [ "$holder" != "$WIN" ] && [ "${COORD_FORCE:-0}" != 1 ]; then echo "refusing: held by '$holder', not '$WIN' (COORD_FORCE=1 if it is gone)"; return 1; fi
+      rm -f "$BROWSER_FILE"; echo "box browser DOWN (was '$holder')" ;;
+    *)
+      if [ -n "$holder" ]; then echo "  held by $holder, $(age_human "$age") ago: $(sed -n 's/^note=//p' "$BROWSER_FILE")$([ "$age" -ge 2700 ] && echo '  ⚠ STALE')"; else echo "  free"; fi ;;
+  esac
+}
+
 case "${1:-status}" in
   claim)   shift; cmd_claim "$@" ;;
   release) shift; cmd_release "$@" ;;
@@ -619,7 +650,8 @@ case "${1:-status}" in
   sweep)   shift; cmd_sweep "$@" ;;
   lock)    cmd_lock ;;
   unlock)  cmd_unlock ;;
-  status)  cmd_status ;;
+  status)  cmd_status; echo "--- box browser ---"; cmd_browser status ;;
+  browser) shift; cmd_browser "$@" ;;
   reap)    cmd_reap ;;
-  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | reap | lock | unlock}"; exit 1 ;;
+  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | reap | lock | unlock | browser up <what>|down}"; exit 1 ;;
 esac

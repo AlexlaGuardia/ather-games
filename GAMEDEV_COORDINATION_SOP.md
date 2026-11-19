@@ -344,6 +344,9 @@ coord build "what changed"     # acquire lock -> npm run build -> pm2 restart ->
 - **No browser UP/DOWN turn-taking for EliteDesk runs**: lanes may run there at the same time (keep it to ~2-3 at once).
 - **Stays on THIS box:** checks against a lane's devwin (`localhost:320x`; the EliteDesk can't see them), page-shot/bake
   scripts that write into the repo, and anything else that is not a prod URL. Those keep the one-browser-at-a-time rule.
+- **★ The one-browser rule is a LOCK now (11-19):** `COORD_WIN=<lane> tools/coord.sh browser up "<what>"` before any box
+  browser run (refuses while another lane holds it; stale after 45 min), `tools/coord.sh browser down` after. `coord status`
+  shows the holder. It replaced the dbr UP/DOWN convention after a lane ran over another's open UP twice in one day.
 - **Fallback:** desktop off / ssh fails -> run the check here as before, browser UP/DOWN by dbr.
 - Chrome there is Chrome for Testing, linked at `/usr/bin/chromium-browser`; swiftshader timing is still a robot's, so
   frame-time numbers stay "noted, not asserted" either way.
