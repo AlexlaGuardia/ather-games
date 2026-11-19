@@ -81,7 +81,9 @@ try {
   await tap('[data-tool="walls"]'); await sleep(300)
   await dragW(X0, Z0, X1, Z0); await dragW(X0, Z1, X1, Z1); await dragW(X0, Z0, X0, Z1); await dragW(X1, Z0, X1, Z1)
   ok(await tap('[data-tool="blueprint"]'), '1. the owner sees the Blueprint tool'); await sleep(300)
-  await tapW(X0 + 2.5, Z0)
+  await tapW(X0 + 2.5, Z1)   // the NEAR wall: the far one sits under the build bar on screen (the click hit the bar)
+  console.log('  diag:', JSON.stringify(await p.evaluate(() => ({ walls: Object.keys(JSON.parse(localStorage.getItem('open.works.v1') ?? '{}').walls ?? {}).length, tool: (window as any).__build.tool(), drawer: (window as any).__build.drawer(), bar: document.querySelector('[data-bp-bar]')?.textContent ?? null }))))
+  await shot('bp-0-after-tap')
   const size = await p.evaluate(() => document.querySelector('[data-bp-size]')?.textContent ?? '')
   const fits = await p.evaluate(() => document.querySelector('[data-bp-fits]')?.getAttribute('data-bp-fits'))
   ok(/^5 x 4 m · 18 pieces/.test(size) && fits === 'true', `   a tap on a wall picks the building: ${size}, fits a lot: ${fits}`)
@@ -99,7 +101,8 @@ try {
   ok(await poll(() => p.evaluate(() => (window as any).__ather?.zone?.() === 'wilds'), 240000), 'off to the Glade')
   ok(await poll(async () => ((await p.evaluate(() => (window as any).__glade?.blueprints?.() ?? [])) as string[]).includes(lot!), 30000), `3. ${lot}'s lot stands the blueprint instead of the blockout`)
   const l = lotAt(lot)!
-  await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, Math.atan2(-(l.x - GLADE_GREEN.x), -(l.z - GLADE_GREEN.z))), GLADE_GREEN.x + (l.x - GLADE_GREEN.x) * 0.45, GLADE_GREEN.z + (l.z - GLADE_GREEN.z) * 0.45); await sleep(2500)
+  const face = Math.atan2(-(l.x - GLADE_GREEN.x), -(l.z - GLADE_GREEN.z))
+  await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, y), GLADE_GREEN.x + (l.x - GLADE_GREEN.x) * 0.45, GLADE_GREEN.z + (l.z - GLADE_GREEN.z) * 0.45, face); await sleep(2500)
   await shot('bp-2-glade')
   ok(errs.length === 0, `0 page errors${errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''}`)
 } finally {
