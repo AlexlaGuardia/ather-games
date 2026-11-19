@@ -1,8 +1,14 @@
 // sfx registry gate: proposed / nay never play, yay plays, ONE AudioContext shared with gun-sound. Run: npx tsx src/app/shimmer/open/shared/sfx.test.ts
 let made = 0, voices = 0, panners = 0, fetched: string[] = []
 const node: any = new Proxy(function () {}, { get: (_t, k) => (k === 'connect' ? () => node : k === 'gain' || k === 'frequency' || k === 'detune' || k === 'playbackRate' ? { value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {} } : () => (k === 'start' ? voices++ : undefined)), set: () => true })
-class FakeAC { state = 'running'; currentTime = 0; sampleRate = 8000; destination = node; constructor() { made++ }
-  createGain() { return node } createOscillator() { return node } createBufferSource() { return node } createBiquadFilter() { return node }
+// recording nodes: count creation, starts (= voices) and stop times, so ambience can be checked for leaks and fades
+const made_nodes: any[] = []; let clock = 0
+const param = () => ({ value: 0, target: undefined as number | undefined, setValueAtTime() {}, exponentialRampToValueAtTime() {}, linearRampToValueAtTime() {}, cancelScheduledValues() {}, setTargetAtTime(v: number) { this.target = v; this.value = v } })
+const rec = (kind: string): any => { const r: any = { kind, started: false, stopAt: undefined as number | undefined, gain: param(), frequency: param(), detune: param(), playbackRate: param(), Q: param(), connect() { return this }, disconnect() { r.gone = true }, start() { r.started = true; voices++ }, stop(t: number) { r.stopAt = t } }; made_nodes.push(r); return r }
+let base = 0
+const liveSources = () => made_nodes.slice(base).filter(r => r.started && !r.gone && (r.stopAt === undefined || r.stopAt > clock)).length
+class FakeAC { state = 'running'; get currentTime() { return clock }; sampleRate = 8000; destination = node; constructor() { made++ }
+  createGain() { return rec('gain') } createOscillator() { return rec('osc') } createBufferSource() { return rec('src') } createBiquadFilter() { return rec('filter') }
   createPanner() { panners++; return node } createConvolver() { return node } listener = {}; decodeAudioData(b: any) { if (b.bad) throw new Error('bad'); return Promise.resolve({ ok: true }) }
   createBuffer(_c: number, n: number) { return { getChannelData: () => new Float32Array(n) } } resume() {} }
 ;(globalThis as any).window = { AudioContext: FakeAC }
@@ -56,7 +62,7 @@ const run = async () => {
   const fs = await import('fs'), recs = sfx.SOUNDS.filter(s => s.id.startsWith('rec-'))
   ok(recs.length >= 1 && recs.every(r => r.status !== 'yay' && r.source === 'cc0' && r.licence && r.files && r.files.length >= 4), 'rec-* candidate rows: never yay (a winner merges into the game id), cc0, licence, files')
   ok(recs.every(r => [...r.files!, ...(r.layer?.files ?? [])].every(f => f.startsWith('/sfx/') && fs.existsSync('public' + f))), 'every rec file exists under public/sfx')
-  ok(sfx.SOUNDS.every(s => sfx.busOf(s) === (s.area === 'ui' ? 'ui' : 'sfx')), 'bus defaults: ui rows ui, rest sfx')
+  ok(sfx.SOUNDS.every(s => sfx.busOf(s) === (s.area === 'ui' ? 'ui' : s.area === 'ambience' ? 'ambience' : 'sfx')), 'bus defaults: ui rows ui, ambience rows ambience, rest sfx')
   // file rows: gate unchanged; first play kicks a load (silent), then plays the sample; variant never repeats
   const rec = row('rec-step-grass'); const files = rec.files!
   for (const st of ['proposed', 'nay'] as const) { rec.status = st; voices = 0; fetched.length = 0; sfx.play('rec-step-grass'); ok(voices === 0 && fetched.length === 0, `file row ${st} is silent and fetches nothing`) }
@@ -88,6 +94,42 @@ const run = async () => {
   row('land').status = was
   // per-sound level (11-19, Alex: movement too loud): every footstep/movement row carries vol 0.5
   ok(sfx.SOUNDS.filter(s => s.area === 'footsteps' || s.area === 'movement').every(s => s.vol === 0.5), 'movement sounds at half level')
+  // ── M36 batch 3: ambience ──
+  { const amb = await import('./ambience'); const ids = amb.AMBIENCE_BEDS
+    const ambRows = sfx.SOUNDS.filter(s => s.id.startsWith('amb-'))
+    ok(ambRows.length === 5 && ambRows.every(r => r.status === 'proposed' && !!r.desc && r.vol !== undefined && r.vol > 0 && r.vol <= 0.5 && r.area === 'ambience' && r.bus === 'ambience' && r.source === 'synth'), 'every amb-* row is proposed, with desc + vol, ambience bus, synth')
+    ok(ambRows.every(r => ids.includes(r.id)) && ids.every(i => row(i)), 'every amb-* row has a bed recipe and vice versa')
+    let nearW = 0; const ticks = (n: number) => { for (let i = 0; i < n; i++) { clock += 1 / 30; amb.ambienceTick(1 / 30, { hour: 12, near: { water: nearW } }) } }
+    const made0 = made; base = made_nodes.length
+    voices = 0; amb.setAmbience('amb-glade-day'); ticks(30); ok(voices === 0 && amb.ambienceBeds().main === null, 'a proposed bed is silent: no voices')
+    amb.ambienceTick(1 / 30, { near: { water: 1 } }); ok(voices === 0 && amb.ambienceBeds().water === null, 'a proposed water layer is silent too')
+    const A = row('amb-glade-day'), B = row('amb-wilds-wind'), W = row('amb-water'); A.status = 'yay'; B.status = 'yay'
+    voices = 0; amb.setAmbience('amb-glade-day'); ok(voices > 0 && amb.ambienceBeds().main === 'amb-glade-day', `a yay bed starts (${voices} sources)`)
+    const outA = amb.ambienceBeds().nodes.main as any; ticks(5); ok(outA.gain.target > 0.3 && outA.gain.target <= 0.35, 'bed fades in towards its vol')
+    // events actually fire (birds): more sources appear over 20 s
+    const before = made_nodes.length;  ticks(600);  const grew = made_nodes.length - before
+    ok(grew > 0 && grew < 400, `sparse events fire but stay sparse (${grew} nodes in 20 s)`)
+    // no node growth: live sources are bounded and stable
+    ticks(300); const l1 = liveSources(); ticks(600); const l2 = liveSources(); ok(l2 <= l1 + 12 && l2 < 40, `no live-node growth over 600 ticks (${l1} -> ${l2})`)
+    // crossfade: A stops, B starts
+    amb.setAmbience('amb-wilds-wind'); const st = amb.ambienceBeds(); ok(st.main === 'amb-wilds-wind' && st.dying.includes('amb-glade-day'), 'crossfade starts B, A is dying')
+    ok(outA.gain.target === 0, 'A gain target is 0'); const aSrc = made_nodes.filter(r => r.started && r.stopAt !== undefined && r.stopAt <= clock + 3.5 && r.stopAt > clock)
+    ok(aSrc.length >= 3, `A's nodes are scheduled to stop within the fade (${aSrc.length})`)
+    ticks(30 * 4); ok(amb.ambienceBeds().dying.length === 0 && outA.gone === true, 'A is torn down after the fade')
+    ok(liveSources() < 20, `only B is alive after the crossfade (${liveSources()})`)
+    // water layer under the bed, volume from near.water
+    W.status = 'yay'; nearW = 0.8; ticks(1); ok(amb.ambienceBeds().water === 'amb-water', 'near.water layers the pool bed')
+    const outW = amb.ambienceBeds().nodes.water as any; nearW = 0.4; ticks(5); ok(Math.abs(outW.gain.target - 0.14) < 0.01, `water level follows near.water (${outW.gain.target})`)
+    nearW = 0; ticks(1); ok(amb.ambienceBeds().water === null && outW.gain.target === 0, 'walking away fades the water layer out')
+    // fade out
+    const outB = amb.ambienceBeds().nodes.main as any; amb.setAmbience(null); ok(amb.ambienceBeds().main === null && outB.gain.target === 0, 'setAmbience(null) fades out')
+    ticks(30 * 4); ok(liveSources() === 0, `silence after the fade: no live sources (${liveSources()})`)
+    // yay -> proposed mid-play is honoured at the next setAmbience; unknown ids are silent
+    B.status = 'proposed'; voices = 0; amb.setAmbience('amb-wilds-wind'); amb.setAmbience('amb-nope'); ok(voices === 0, 'proposed / unknown bed: silent')
+    // audition ignores status, then fades itself
+    { const s0 = A.status; A.status = 'proposed'; voices = 0; amb.auditionAmbience('amb-glade-day', 1); ok(voices > 0, 'audition plays a proposed bed'); await new Promise(r => setTimeout(r, 1300)); clock += 5; ok(amb.ambienceBeds().main === null, 'audition fades out and hands the slot back'); A.status = s0 }
+    ok(made === made0 && made === 1, `ambience shares the ONE AudioContext (made ${made})`)
+    A.status = 'proposed'; B.status = 'proposed'; W.status = 'proposed' }
   console.log(`${pass} passed, ${fails.length} failed`); if (fails.length) { console.log(fails.join('\n')); process.exit(1) }
 }
 void run()

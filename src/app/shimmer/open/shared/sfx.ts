@@ -60,6 +60,9 @@ function busNode(c: AudioContext, m: AudioNode, b: BusName): AudioNode {
   return n
 }
 
+/** The ambience bus input, for ambience.ts (one mixer, one context). */
+export const ambienceBus = (c: AudioContext, m: AudioNode): AudioNode => busNode(c, m, 'ambience')
+
 // ── space: a short generated reverb send per area (decaying noise, no files) ──
 const AREAS: Record<AreaName, { secs: number; send: number }> = { open: { secs: 0.2, send: 0.03 }, glade: { secs: 0.9, send: 0.16 }, town: { secs: 0.6, send: 0.18 }, indoor: { secs: 0.45, send: 0.28 } }
 let area: AreaName = 'open'

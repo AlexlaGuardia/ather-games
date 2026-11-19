@@ -283,5 +283,55 @@
     ],
     "licence": "CC0 (Kenney audio packs)",
     "vol": 0.5
+  },
+  {
+    "id": "amb-glade-day",
+    "area": "ambience",
+    "status": "proposed",
+    "note": "M36 batch 3: ambience bed, code-made; awaiting Alex's vote",
+    "desc": "Glade, daytime: soft breeze in leaves with sparse, gentle birdsong",
+    "source": "synth",
+    "bus": "ambience",
+    "vol": 0.35
+  },
+  {
+    "id": "amb-glade-night",
+    "area": "ambience",
+    "status": "proposed",
+    "note": "M36 batch 3: ambience bed, code-made; awaiting Alex's vote",
+    "desc": "Glade, night: a quieter breeze, soft crickets, a rare distant owl hoot",
+    "source": "synth",
+    "bus": "ambience",
+    "vol": 0.35
+  },
+  {
+    "id": "amb-water",
+    "area": "ambience",
+    "status": "proposed",
+    "note": "M36 batch 3: ambience bed, code-made; awaiting Alex's vote",
+    "desc": "Pool water: gentle lapping and a soft trickle (layers under the glade bed near water)",
+    "source": "synth",
+    "bus": "ambience",
+    "vol": 0.35
+  },
+  {
+    "id": "amb-wilds-wind",
+    "area": "ambience",
+    "status": "proposed",
+    "note": "M36 batch 3: ambience bed, code-made; awaiting Alex's vote",
+    "desc": "Open wilds: airy wind with slow gusts",
+    "source": "synth",
+    "bus": "ambience",
+    "vol": 0.35
+  },
+  {
+    "id": "amb-town",
+    "area": "ambience",
+    "status": "proposed",
+    "note": "M36 batch 3: ambience bed, code-made; awaiting Alex's vote",
+    "desc": "Town: a very soft distant murmur that swells and fades slowly",
+    "source": "synth",
+    "bus": "ambience",
+    "vol": 0.35
   }
 ]
