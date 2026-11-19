@@ -10,7 +10,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { RANGE_GUNS } from '../shared/gunplay'
 import { weaponDef } from '../../engine/weapons'
-import { newCombat, stepCombat, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, type Combat, type Terrain, type CombatEvent, type Hollow } from './combat'
+import { newCombat, stepCombat, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, SHAMBLER, FLOATER, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
 import { live as liveSolids } from './dynamic-solids'
 import { runCast, stepFields, stepPieces, channelAim, type ChannelRun, type CastHit } from './combat-casts'
 import type { CastSpec } from '../../play3d/cast'
@@ -19,7 +19,8 @@ import { wakeChampion, tellOf, CHAMP } from './champion'
 import { WAKE_R, STRAY_R, type WildsNode } from './nodes'
 import { playShot, playEmpty, playReload } from '../shared/gun-sound'
 import { setAmmoFeed } from '../shared/morel'   // M33: Morel's bubble reads the gun straight from here
-import { goopMaterial, groundEnv, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'   // M34: no light of its own; borrows the ground
+import { goopMaterial, groundEnv, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'
+import { sprout, poseSprout, lumpyGeometry } from './hollow-body'   // M34: Alex's pick A, the rooted sprout   // M34: no light of its own; borrows the ground
 import { borrowedSky } from '../../voxel3d/sky-env'
 import { dayProgress, daylight } from '../../engine/day-cycle'
 
@@ -55,7 +56,7 @@ export interface GoopWorld { groundAt: (x: number, z: number) => string; nodes: 
 const GRASS = '#9cc46a'
 
 /** One Hollow's goop material, re-aimed at the ground under it every half second (a cached env per ground colour), its
- *  borrow scaled by the hour. emissive stays BLACK except for the held white hit flash (Alex's call, M34). */
+ *  borrow scaled by the hour. emissive stays BLACK, always: Alex dropped the white hit flash (M34, 11-19). */
 function useGoop(c: React.MutableRefObject<Combat>, id: number, world: React.MutableRefObject<GoopWorld>) {
   const mat = useMemo(() => goopMaterial(), [])
   const next = useRef(0), key = useRef('')
@@ -68,7 +69,6 @@ function useGoop(c: React.MutableRefObject<Combat>, id: number, world: React.Mut
       if (g !== key.current) { key.current = g; mat.envMap = groundEnv(g); mat.needsUpdate = true }
       mat.envMapIntensity = BORROW * borrowedSky(daylight(dayProgress()))
     }
-    const f = Math.min(1, h.hitFlash * 5); mat.emissive.setRGB(f, f, f)   // ★ the HELD white hit flash, and nothing else
   })
   return mat
 }
@@ -106,61 +106,35 @@ function Sheds({ c, id, mat, top }: { c: React.MutableRefObject<Combat>; id: num
   return <instancedMesh ref={im} args={[undefined, undefined, DRIP_N + 1]} material={mat} frustumCulled={false}><sphereGeometry args={[1, 8, 6]} /></instancedMesh>
 }
 
-/** One Hollow: goop with no colour of its own (design-briefs/hollows.md): diffuse dead dark, specular high so it borrows the
- *  ground it stands on (M34). A sag and sway carries the shamble; the lunge leans in; a hit knocks it back and flings a lump.
- *  ★ The SILHOUETTE + the wind-up tell are what Alex's pick (docs/looks/hollows.html) replaces; everything else here stays. */
-function HollowBody({ c, id, world }: { c: React.MutableRefObject<Combat>; id: number; world: React.MutableRefObject<GoopWorld> }) {
-  const g = useRef<THREE.Group>(null), inner = useRef<THREE.Group>(null), body = useRef<THREE.Mesh>(null), head = useRef<THREE.Mesh>(null), puddle = useRef<THREE.MeshBasicMaterial>(null)
+/** One Hollow, ROOTED SPROUT (Alex's M34 pick, ather/hollow-body.ts): lumps of goop gathered on a seed, drawn as ONE instanced
+ *  mesh, posed every frame from the sim's state. The TELL: through the wind-up it gathers in toward its core and rises, then
+ *  the lunge falls forward onto you. A hit knocks it back and flings a lump (no flash: Alex dropped it, 11-19). The floater is
+ *  the same substance in the caster's amount: no legs, dense only at the reach, and its spit charge is the same gather-and-rise. */
+function SproutBody({ c, id, kind, world }: { c: React.MutableRefObject<Combat>; id: number; kind: HollowKind; world: React.MutableRefObject<GoopWorld> }) {
+  const g = useRef<THREE.Group>(null), im = useRef<THREE.InstancedMesh>(null), puddle = useRef<THREE.MeshBasicMaterial>(null)
   const mat = useGoop(c, id, world)
-  useFrame(({ clock }) => {
-    const h = c.current.hollows.find(k => k.id === id); if (!h || !g.current) return
-    const t = clock.elapsedTime + id * 1.3
-    g.current.position.set(h.x, h.y, h.z)
-    g.current.rotation.y = h.yaw
-    const lean = h.state === 'windup' ? -0.35 : h.state === 'lunge' ? 0.55 : h.state === 'stagger' ? -0.25 : 0.12
-    g.current.rotation.x = THREE.MathUtils.lerp(g.current.rotation.x, lean - h.hitFlash * 2.5, 0.25)   // M34: a hit knocks it back
-    g.current.rotation.z = Math.sin(t * (h.state === 'chase' ? 3.4 : 1.6)) * 0.12
-    if (inner.current) inner.current.position.z = -h.hitFlash * 2.2   // ...and shoves the body a step back, then it settles
-    if (body.current) body.current.scale.set(1 + Math.sin(t * 2.1) * 0.05, 1 - Math.sin(t * 2.1) * 0.04, 1)
-    if (head.current) head.current.position.y = HEAD_Y + Math.sin(t * 1.7) * 0.04
+  const S = useMemo(() => sprout(kind), [kind])
+  const mats = useMemo(() => S.lumps.map(() => new THREE.Matrix4()), [S])
+  const st = useRef({ tell: 0, fall: 0, walk: 0 })
+  useFrame(({ clock }, dt) => {
+    const h = c.current.hollows.find(k => k.id === id), M = im.current; if (!h || !g.current || !M) return
+    g.current.position.set(h.x, h.y, h.z); g.current.rotation.y = h.yaw
+    const e = 1 - Math.exp(-dt * 14), s = st.current
+    const tellTo = h.state === 'windup' ? 1 - h.t / SHAMBLER.windup : h.state === 'charge' ? 1 - h.t / FLOATER.charge : 0
+    s.tell += (Math.max(0, Math.min(1, tellTo)) - s.tell) * (tellTo > s.tell ? 1 : e)   // the gather is read straight off the sim; the let-go eases
+    s.fall += ((h.state === 'lunge' ? 1 : 0) - s.fall) * e
+    s.walk += ((h.state === 'chase' ? 1 : h.state === 'wander' ? 0.45 : 0) - s.walk) * e
+    poseSprout(S, { t: clock.elapsedTime + id * 1.3, tell: s.tell, fall: s.fall, walk: s.walk, knock: Math.min(1, h.hitFlash * 8) }, mats)
+    for (let i = 0; i < mats.length; i++) M.setMatrixAt(i, mats[i])
+    M.instanceMatrix.needsUpdate = true
     if (puddle.current) { const tint = fxTint(h); puddle.current.color.set(tint ?? PUDDLE); puddle.current.opacity = tint ? 0.85 : 0.55 }
   })
   return (
     <group ref={g}>
-      <group ref={inner}>
-        <mesh ref={body} position-y={0.85} material={mat}><capsuleGeometry args={[0.36, 0.8, 3, 7]} /></mesh>
-        <mesh ref={head} position-y={HEAD_Y} position-z={0.08} material={mat}><icosahedronGeometry args={[0.24, 1]} /></mesh>
-        {/* arms that hang forward: the drowned reach */}
-        <mesh position={[0.36, 1.05, 0.28]} rotation-x={-1.1} material={mat}><capsuleGeometry args={[0.09, 0.55, 2, 5]} /></mesh>
-        <mesh position={[-0.36, 1.05, 0.28]} rotation-x={-1.25} material={mat}><capsuleGeometry args={[0.09, 0.55, 2, 5]} /></mesh>
-      </group>
-      <Sheds c={c} id={id} mat={mat} top={1.05} />
-      {/* the drip: a puddle that follows (a cast's tint shows under it) */}
-      <mesh position-y={0.03} rotation-x={-Math.PI / 2}><circleGeometry args={[0.55, 9]} /><meshBasicMaterial ref={puddle} color={PUDDLE} transparent opacity={0.55} /></mesh>
-    </group>
-  )
-}
-
-/** The floater: the one Hollow that floats (the caster: too little gathered to be pulled down). A sagging blob trailing drips,
- *  no legs. It swells when it charges a spit. M34: no glow on the charge any more (it owns no light): the swell IS the tell. */
-function FloaterBody({ c, id, world }: { c: React.MutableRefObject<Combat>; id: number; world: React.MutableRefObject<GoopWorld> }) {
-  const g = useRef<THREE.Group>(null), blob = useRef<THREE.Mesh>(null)
-  const mat = useGoop(c, id, world)
-  useFrame(({ clock }) => {
-    const h = c.current.hollows.find(k => k.id === id); if (!h || !g.current) return
-    const t = clock.elapsedTime + id
-    g.current.position.set(h.x, h.y, h.z); g.current.rotation.y = h.yaw
-    const swell = h.state === 'charge' ? 1 + (1 - h.t / 0.75) * 0.5 : 1
-    if (blob.current) blob.current.scale.set(swell * (1 + Math.sin(t * 2.3) * 0.06), swell * (0.85 - Math.sin(t * 2.3) * 0.05), swell)
-    g.current.rotation.x = -h.hitFlash * 2.5
-  })
-  return (
-    <group ref={g}>
-      <mesh ref={blob} material={mat}><icosahedronGeometry args={[0.48, 2]} /></mesh>
-      {[[-0.22, 0.1], [0.18, -0.12], [0.02, 0.22], [0.25, 0.15]].map(([x, z], k) => (
-        <mesh key={k} position={[x, -0.5 - k * 0.06, z]} rotation-x={Math.PI} material={mat}><coneGeometry args={[0.08, 0.5 + k * 0.12, 5]} /></mesh>
-      ))}
-      <Sheds c={c} id={id} mat={mat} top={-0.2} />
+      <instancedMesh ref={im} args={[lumpyGeometry(), mat, S.lumps.length]} frustumCulled={false} />
+      <Sheds c={c} id={id} mat={mat} top={S.floats ? -0.2 : S.core} />
+      {/* the drip: a puddle that follows a walker (a cast's tint shows under it) */}
+      {!S.floats && <mesh position-y={0.03} rotation-x={-Math.PI / 2}><circleGeometry args={[0.55, 9]} /><meshBasicMaterial ref={puddle} color={PUDDLE} transparent opacity={0.55} /></mesh>}
     </group>
   )
 }
@@ -669,7 +643,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       {channel && <ChannelBeam channel={channel} T={T} />}
       <PieceBlocks c={c} />
       <Tells c={c} heightAt={T.heightAt} />
-      {ids.map(h => h.kind === 'floater' ? <FloaterBody key={h.id} c={c} id={h.id} world={goopWorld} /> : <HollowBody key={h.id} c={c} id={h.id} world={goopWorld} />)}
+      {ids.map(h => <SproutBody key={h.id} c={c} id={h.id} kind={h.kind as HollowKind} world={goopWorld} />)}
       <Dispersals list={dispersals} />
       <instancedMesh ref={spitsMesh} args={[undefined, undefined, 32]} frustumCulled={false}>
         <icosahedronGeometry args={[0.3, 0]} /><meshPhongMaterial color="#3a3c40" emissive="#8a8d92" specular="#ffffff" shininess={90} flatShading />

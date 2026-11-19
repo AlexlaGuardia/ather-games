@@ -28,16 +28,23 @@ await wait(8000)
 await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z), GREG_WAYMARK.x + 70, GREG_WAYMARK.z + 10); await wait(6000)
 ok(await poll(async () => typeof (await p.evaluate(() => typeof (window as any).__ather?.combat)) === 'string' && !!(await p.evaluate(() => (window as any).__ather.combat?.())), 60000), 'the fight layer is up in the Wilds')
 await p.evaluate(() => { (window as any).__ather.combat().hollows.length = 0 }); await wait(1500)
-const calls = async () => { let s = 0; for (let k = 0; k < 4; k++) { s += await p.evaluate(() => (window as any).__ather.calls?.() ?? -1); await wait(400) } return s / 4 }
-const c0 = await calls()
+const calls = async () => { let s = 0; for (let k = 0; k < 3; k++) { s += await p.evaluate(() => (window as any).__ather.calls?.() ?? -1); await wait(300) } return s / 3 }
+// draw calls per Hollow: an EMPTY field (strays well up on infected ground, so clear it right before each read), then SIX at once
+const per = async (kind: string) => {
+  await p.evaluate(() => { (window as any).__ather.combat().hollows.length = 0 }); await wait(900)
+  const a = await calls()
+  await p.evaluate((k: string) => { const A = (window as any).__ather; A.combat().hollows.length = 0; for (let i = 0; i < 6; i++) A.spawn(-5 + i * 2, -12, k) }, kind); await wait(900)
+  const n = await p.evaluate(() => (window as any).__ather.combat().hollows.length)
+  const b = await calls()
+  return { a, b, n, each: (b - a) / Math.max(1, n) }
+}
+const sh = await per('shambler'), fl = await per('floater')
+console.log(`   draw calls per Hollow: shambler ${sh.each.toFixed(1)} (${sh.a.toFixed(0)} -> ${sh.b.toFixed(0)}, ${sh.n} up) · floater ${fl.each.toFixed(1)} (${fl.a.toFixed(0)} -> ${fl.b.toFixed(0)}, ${fl.n} up)`)
+ok(sh.a >= 0 && sh.each > 0 && sh.each <= 6 && fl.each > 0 && fl.each <= 6, 'a Hollow costs a handful of draw calls (budget 6)')
 // one shambler 30 m ahead: the phone's 30 m read
+await p.evaluate(() => { (window as any).__ather.combat().hollows.length = 0 }); await wait(500)
 await p.evaluate(() => (window as any).__ather.spawn(0, -30, 'shambler')); await wait(3000)
-const c1 = await calls()
 await p.screenshot({ path: `${OUT}/hollow-30m-${TAG}.png` })
-await p.evaluate(() => (window as any).__ather.spawn(4, -30, 'floater')); await wait(3000)
-const c2 = await calls()
-console.log(`   draw calls: none ${c0.toFixed(1)} · +shambler ${c1.toFixed(1)} (${(c1 - c0).toFixed(1)}) · +floater ${c2.toFixed(1)} (${(c2 - c1).toFixed(1)})`)
-ok(c0 >= 0 && c1 > c0 && c2 > c1, 'each Hollow adds draw calls (the probe reads)')
 // close up: in front of the keeper, then a hit, then a kill
 await p.evaluate(() => { (window as any).__ather.combat().hollows.length = 0 }); await wait(800)
 await p.evaluate(() => (window as any).__ather.spawn(0, -6, 'shambler')); await wait(2500)
