@@ -7,6 +7,9 @@
 //      and the guest has spawned none of its own
 //   3b (slice 3) the GUEST draws (real R) and shoots (real clicks) a shared Hollow: its hp drops ON THE HOST; shot down, BOTH
 //      keepers get a drop (each their own copy)
+//   3c (#1651, Alex 11-19) Hollows hunt GUESTS too: the host stands 60 m off, the guest ~8 m from one of the host's Hollows
+//      (standing still, not shooting): the host's sim counts the guest as a target, that Hollow closes on the GUEST, and the guest's hp
+//      drops (the host's 'fight.hurt'; a guest runs no Hollow AI of its own, so nothing else can hurt it there)
 //   4. the host leaves (a page load home: no socket there): within 15 s the guest is the host and its Hollows are still there
 //   5. 0 page errors
 // Hooks READ only: __mp (status, peers), __fight (host, hostId, ids).
@@ -84,6 +87,22 @@ try {
   ok(killedId !== null, `3b. the guest's shots took a shared Hollow down (${killedId ?? 'none in 60 shots'})`)
   ok(await poll(async () => (await F(host, 'drops') as number) > dropsH0 && (await F(guest, 'drops') as number) > dropsG0, 10000),
     `3b. a drop for BOTH keepers (host ${dropsH0} -> ${await F(host, 'drops')}, guest ${dropsG0} -> ${await F(guest, 'drops')})`)
+  // 3c · #1651: the host's Hollows hunt the guest. Positions move only by tp (stated); everything else is polled.
+  {
+    const hh = (await F(host, 'ids')) as H[]
+    ok(hh.length > 0, `3c. the host has Hollows (${hh.length})`)
+    const t = hh[0], ang = Math.random() * Math.PI * 2
+    await host.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z), t.x + Math.cos(ang) * 60, t.z + Math.sin(ang) * 60)
+    await guest.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, y), t.x - Math.cos(ang) * 8, t.z - Math.sin(ang) * 8, Math.atan2(-Math.cos(ang), -Math.sin(ang)))   // facing it
+    ok(await poll(async () => ((await F(host, 'others')) as string[]).includes((ha ? idb : ida)!), 15000), `3c. the host's Hollows count ${gt} as a target`)
+    const gPos = async () => guest.evaluate(() => { const a = (window as any).__ather.state(); return { x: a.px, z: a.pz } })
+    const near = async () => { const g = await gPos(), hs2 = (await F(host, 'ids')) as H[]; return Math.min(...hs2.map(h => Math.hypot(h.x - g.x, h.z - g.z)), 1e9) }
+    const d0 = await near(), hp0 = await F(guest, 'hp') as number
+    let dMin = d0
+    const hurt = await poll(async () => { dMin = Math.min(dMin, await near()); return (await F(guest, 'hp') as number) < hp0 }, 90000)
+    ok(dMin < Math.max(3, d0 - 3), `3c. a Hollow closed on ${gt} (nearest ${d0.toFixed(1)} m -> ${dMin.toFixed(1)} m)`)
+    ok(hurt, `3c. ${gt} was hurt by the host's Hollow (hp ${hp0} -> ${await F(guest, 'hp')})`)
+  }
   // 4 · the host leaves: the guest takes over with the Hollows intact
   const before = ((await F(guest, 'ids')) as H[]).map(g => g.id)
   await host.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })   // home: the plot opens no socket

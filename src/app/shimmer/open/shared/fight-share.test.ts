@@ -1,6 +1,6 @@
 // node test: npx tsx src/app/shimmer/open/shared/fight-share.test.ts (BETA M28 slice 2)
-import { hostOf, sharing, encodeSnap, applySnap, SNAP_MAX, encodeHits, decodeHits, newDrops, decodeKills, layDrop, type NetHollow } from './fight-share'
-import { newCombat, spawnHollow, stepCombat, applyNetHit, type Terrain } from '../ather/combat'
+import { hostOf, sharing, encodeSnap, applySnap, SNAP_MAX, encodeHits, decodeHits, newDrops, decodeKills, layDrop, encodeHurt, decodeHurt, type NetHollow } from './fight-share'
+import { newCombat, spawnHollow, stepCombat, applyNetHit, applyNetHurt, blowCost, SHAMBLER, type Terrain } from '../ather/combat'
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 const T: Terrain = { heightAt: () => 0, walkable: () => true }
@@ -61,4 +61,26 @@ ok(!guest.hollows.some(h => h.id === g0.id), 'gone from the host = gone from the
   ok(decodeKills({ k: [[1, 2, 99], ['x', 1, 1]] }).length === 0 && decodeHits({ h: 'nope' }).length === 0, 'junk on the wire is refused')
 }
 
+// ── #1651: the host's Hollows hunt the NEAREST keeper; what reaches a guest is an event for that guest, never the host's hp ──
+{
+  const H = newCombat(11); const h = spawnHollow(H, T, 0, 0, 'shambler'); const me = { x: 30, y: 0, z: 0 }
+  H.others = [{ id: 'p_g', x: 5, y: 0, z: 0 }]
+  for (let i = 0; i < 6; i++) stepCombat(H, T, me, 1 / 30)
+  ok(h.state === 'chase' && h.x > 0, `a Hollow chases the NEAREST keeper, the guest (${h.state}, x ${h.x.toFixed(2)})`)
+  const hp0 = H.keeper.hp; let other = 0
+  H.others = [{ id: 'p_g', x: h.x + 1, y: 0, z: h.z }]
+  for (let i = 0; i < 90 && !other; i++) { stepCombat(H, T, me, 1 / 30); other += H.events.filter(e => e.kind === 'hurt-other' && e.id === 'p_g').length; H.others = [{ id: 'p_g', x: h.x + 1, y: 0, z: h.z }] }
+  ok(other === 1 && H.keeper.hp === hp0, `its lunge reaches the guest: ONE 'hurt-other' for p_g, the host's hp untouched (${other}, ${hp0} -> ${H.keeper.hp})`)
+  const S = newCombat(12); const s1 = spawnHollow(S, T, 0, 0, 'shambler')
+  for (let i = 0; i < 6; i++) stepCombat(S, T, me, 1 / 30)
+  ok(s1.state === 'wander', `solo (no others): a keeper 30 m off is not noticed, as before (${s1.state})`)
+  // the guest's side: raw damage, its own frame; nothing while down; junk refused
+  const G = newCombat(13); G.keeper.takes = 0.9
+  const wire = decodeHurt(JSON.parse(JSON.stringify(encodeHurt(SHAMBLER.damage))))!
+  applyNetHurt(G, wire)
+  ok(G.keeper.hp === G.keeper.maxHp - blowCost(G.keeper, SHAMBLER.damage) && blowCost(G.keeper, SHAMBLER.damage) < SHAMBLER.damage && G.events.some(e => e.kind === 'hurt'), `the guest takes it with ITS frame (Large x0.9: ${G.keeper.maxHp} -> ${G.keeper.hp}) + a hurt event`)
+  G.keeper.hp = 0; G.events = []; applyNetHurt(G, wire)
+  ok(G.keeper.hp === 0 && !G.events.length, 'a hurt that lands while down is dropped (no double death)')
+  ok(decodeHurt({ d: 999 }) === null && decodeHurt({ d: -1 }) === null && decodeHurt('x') === null, 'junk hurt on the wire is refused')
+}
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)

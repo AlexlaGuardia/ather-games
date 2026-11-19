@@ -97,6 +97,17 @@ export function decodeKills(d: unknown): KillRow[] {
   const k = (d as { k?: unknown })?.k
   return Array.isArray(k) ? k.filter((r): r is KillRow => Array.isArray(r) && r.length >= 3 && r.every(v => typeof v === 'number') && r[2] > 0 && r[2] <= 10).slice(0, 20) : []
 }
+// ── #1651 (Alex 11-19): Hollows hunt GUESTS too. The host's sim picks the nearest keeper; a blow or spit that reaches a guest
+// is a 'hurt-other' event there, sent to THAT guest (addressed), who applies it to its own hp with its own frame's defence.
+// Known limit: the host judges reach from the guest's synced spot (~100 ms behind), so a last-instant dodge can still be hit.
+export const HURT_KIND = 'fight.hurt'
+export const HURT_MAX = 50
+export const encodeHurt = (dmg: number) => ({ d: Math.round(dmg * 10) / 10 })
+/** Raw damage, or null for junk (non-number, <= 0, > HURT_MAX). */
+export function decodeHurt(x: unknown): number | null {
+  const d = (x as { d?: unknown })?.d
+  return typeof d === 'number' && d > 0 && d <= HURT_MAX ? d : null
+}
 /** A guest lays its own copy of the host's drop. */
 export function layDrop(c: Combat, T: Terrain, [x, z, amount]: KillRow) {
   c.drops.push({ id: c.nextId++, x, y: T.heightAt(x, z), z, amount, age: 0 })

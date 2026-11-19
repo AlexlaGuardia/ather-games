@@ -104,6 +104,9 @@ export interface Combat {
    *  ease to the host's word: no AI, no spawning, no spit; a round that hits one flashes it and queues the hit in `netHits`
    *  (slice 3 sends them to the host), and never changes its hp (the host decides that). */
   remote?: boolean
+  /** #1651 (Alex 11-19: Hollows hunt guests too): the HOST's party mates here, by their synced spot. Each Hollow chases the
+   *  NEAREST keeper (me or one of these); what reaches one of them is an event ('hurt-other'), never my hp. Unset = solo. */
+  others?: { id: string; x: number; y: number; z: number }[]
   netHits?: { id: number; dmg: number; head: boolean }[]
   keeper: Keeper; gun: WeaponDef
   nextId: number; seed: number
@@ -124,6 +127,8 @@ export interface Combat {
 export type CombatEvent =
   | { kind: 'hit'; id: number; head: boolean; killed: boolean }
   | { kind: 'hurt'; amount: number }
+  /** #1651 (host only): a Hollow's blow or spit reached ANOTHER keeper in the party; `dmg` is RAW (their frame applies there) */
+  | { kind: 'hurt-other'; id: string; dmg: number }
   | { kind: 'pickup'; amount: number }
   | { kind: 'fired' }
   | { kind: 'down' }
@@ -154,6 +159,16 @@ export function spawnHollow(c: Combat, T: Terrain, x: number, z: number, kind: H
  *  would (the guest already folded in its own amp; the Hollow's 'vulnerable' is the host's to know). The KILL is not made
  *  here: the next stepCombat gives a Hollow taken to 0 between steps its kill event + drop (1f0e15d2), so a guest's kill
  *  drops exactly once, and the host's drop-watch tells every keeper. Unknown or dead id = ignored (it died first). */
+/** #1651: the host says one of its Hollows reached ME (a guest). Raw damage; MY frame's defence applies, as if local. */
+export function applyNetHurt(c: Combat, raw: number) {
+  const k = c.keeper
+  if (!(raw > 0) || raw > 50 || k.hp <= 0) return
+  const cost = blowCost(k, raw)
+  k.hp = Math.max(0, k.hp - cost); k.sinceHurt = 0
+  c.events.push({ kind: 'hurt', amount: cost })
+  if (k.hp <= 0) c.events.push({ kind: 'down' })
+}
+
 export function applyNetHit(c: Combat, id: number, dmg: number) {
   const h = c.hollows.find(o => o.id === id)
   if (!h || h.hp <= 0 || !(dmg > 0) || dmg > 200) return
@@ -293,11 +308,17 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     }
     const held = fxOn(h, 'rooted') || fxOn(h, 'staggered'), blind = fxOn(h, 'blinded'), unarmed = fxOn(h, 'disarmed')
     // a veil's decoy stands in for the keeper: foes close on it, face it and spit at it (the real keeper is still hit by what reaches them)
-    const tgt = c.decoy && c.decoy.until > (c.clock ?? 0) ? c.decoy : feet
+    let tgt: { x: number; y: number; z: number } = c.decoy && c.decoy.until > (c.clock ?? 0) ? c.decoy : feet
+    let ty = feet.y, alive = k.hp > 0
+    // #1651: in a party the host's Hollows hunt the NEAREST keeper (a downed one goes home and leaves `others`)
+    if (c.others?.length) {
+      let best = alive ? Math.hypot(tgt.x - h.x, tgt.z - h.z) : Infinity
+      for (const o of c.others) { const od = Math.hypot(o.x - h.x, o.z - h.z); if (od < best) { best = od; tgt = o; ty = o.y; alive = true } }
+    }
     const dx = tgt.x - h.x, dz = tgt.z - h.z, d = Math.hypot(dx, dz)
     if (h.kind === 'floater') {
       // a held, blinded or disarmed floater hangs where it is and spits nothing; a slowed one does all of it at half pace
-      if (!(held || blind || unarmed)) stepFloater(c, T, h, { x: tgt.x, y: feet.y, z: tgt.z }, d, dx, dz, fxOn(h, 'slowed') ? dt * FX.slowMult : dt)
+      if (!(held || blind || unarmed)) stepFloater(c, T, h, { x: tgt.x, y: ty, z: tgt.z }, d, dx, dz, fxOn(h, 'slowed') ? dt * FX.slowMult : dt, alive)
       continue
     }
     // blinded: it has lost you, and blunders about; disarmed: it will not wind up to lunge
@@ -306,14 +327,14 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     let speed = 0, mx = 0, mz = 0
     switch (h.state) {
       case 'wander':
-        if (d < SHAMBLER.notice && k.hp > 0 && !blind) { h.state = 'chase'; break }
+        if (d < SHAMBLER.notice && alive && !blind) { h.state = 'chase'; break }
         if (h.t <= 0 || Math.hypot(h.wx - h.x, h.wz - h.z) < 1) {
           h.wx = h.x + (rnd(c) - 0.5) * 16; h.wz = h.z + (rnd(c) - 0.5) * 16; h.t = 3 + rnd(c) * 4
         }
         mx = h.wx - h.x; mz = h.wz - h.z; speed = SHAMBLER.wanderSpeed
         break
       case 'chase':
-        if (d > SHAMBLER.forget || k.hp <= 0) { h.state = 'wander'; h.t = 0; break }
+        if (d > SHAMBLER.forget || !alive) { h.state = 'wander'; h.t = 0; break }
         if (d < SHAMBLER.lungeRange && !unarmed) { h.state = 'windup'; h.t = SHAMBLER.windup; h.lx = dx / d; h.lz = dz / d; break }
         mx = dx; mz = dz; speed = SHAMBLER.chaseSpeed * (0.8 + 0.35 * Math.sin(h.id * 1.7 + h.x * 0.3))   // the stagger
         break
@@ -329,6 +350,9 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
           k.hp = Math.max(0, k.hp - cost); k.sinceHurt = 0
           c.events.push({ kind: 'hurt', amount: cost })
           if (k.hp <= 0) c.events.push({ kind: 'down' })
+        }
+        if (!h.hitThisLunge && !unarmed && c.others) for (const o of c.others) if (Math.hypot(o.x - h.x, o.z - h.z) < SHAMBLER.hitReach && Math.abs(o.y - h.y) < 1.6) {
+          h.hitThisLunge = true; c.events.push({ kind: 'hurt-other', id: o.id, dmg: SHAMBLER.damage }); break   // #1651: their frame applies on their side
         }
         if (h.t <= 0) { h.state = 'recover'; h.t = SHAMBLER.recover }
         break
@@ -379,6 +403,10 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
       c.events.push({ kind: 'hurt', amount: dmg })
       if (k.hp <= 0) c.events.push({ kind: 'down' })
     }
+    if (p.life > 0 && c.others) for (const o of c.others) {   // #1651: a spit can reach a party mate
+      const ox = p.x - o.x, oz = p.z - o.z, oy = p.y - (o.y + 0.9)
+      if (ox * ox + oz * oz < (FLOATER.spitR + 0.35) ** 2 && Math.abs(oy) < 1.0) { p.life = 0; c.events.push({ kind: 'hurt-other', id: o.id, dmg: p.dmg ?? FLOATER.damage }); break }
+    }
   }
   c.spits = c.spits.filter(p => p.life > 0)
 
@@ -392,17 +420,16 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   c.drops = c.drops.filter(p => p.amount > 0 && p.age < 300)
 }
 
-function stepFloater(c: Combat, T: Terrain, h: Hollow, feet: { x: number; y: number; z: number }, d: number, dx: number, dz: number, dt: number) {
-  const k = c.keeper
+function stepFloater(c: Combat, T: Terrain, h: Hollow, feet: { x: number; y: number; z: number }, d: number, dx: number, dz: number, dt: number, alive = c.keeper.hp > 0) {
   let mx = 0, mz = 0, speed = 0
   switch (h.state) {
     case 'wander':
-      if (d < FLOATER.notice && k.hp > 0) { h.state = 'chase'; h.t = 1 + rnd(c) * 1.5; break }
+      if (d < FLOATER.notice && alive) { h.state = 'chase'; h.t = 1 + rnd(c) * 1.5; break }
       if (h.t <= 0) { h.wx = h.x + (rnd(c) - 0.5) * 20; h.wz = h.z + (rnd(c) - 0.5) * 20; h.t = 4 + rnd(c) * 4 }
       mx = h.wx - h.x; mz = h.wz - h.z; speed = FLOATER.speed * 0.4
       break
     case 'chase':   // hold a band of distance, circling a little; spit when the timer runs out
-      if (d > FLOATER.forget || k.hp <= 0) { h.state = 'wander'; h.t = 0; break }
+      if (d > FLOATER.forget || !alive) { h.state = 'wander'; h.t = 0; break }
       if (d > FLOATER.keepFar) { mx = dx; mz = dz } else if (d < FLOATER.keepNear) { mx = -dx; mz = -dz } else { mx = -dz; mz = dx }
       speed = FLOATER.speed
       h.yaw = Math.atan2(dx, dz)

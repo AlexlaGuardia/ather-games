@@ -10,7 +10,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { RANGE_GUNS } from '../shared/gunplay'
 import { weaponDef } from '../../engine/weapons'
-import { newCombat, stepCombat, applyNetHit, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, SHAMBLER, FLOATER, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
+import { newCombat, stepCombat, applyNetHit, applyNetHurt, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, SHAMBLER, FLOATER, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
 import { live as liveSolids } from './dynamic-solids'
 import { runCast, stepFields, stepPieces, channelAim, type ChannelRun, type CastHit } from './combat-casts'
 import type { CastSpec } from '../../play3d/cast'
@@ -20,8 +20,8 @@ import { WAKE_R, STRAY_R, type WildsNode } from './nodes'
 import { playShot, playEmpty, playReload } from '../shared/gun-sound'
 import { play as sfx } from '../shared/sfx'   // M36 batch 2: Hollow sounds (proposed = silent until Alex's yay)
 import { setAmmoFeed } from '../shared/morel'
-import { openNet } from '../shared/open-mp'
-import { sharing, hostOf, encodeSnap, applySnap, SNAP_KIND, SNAP_HZ, HIT_KIND, KILL_KIND, encodeHits, decodeHits, newDrops, decodeKills, layDrop, type Snap, type HitRow, type KillRow } from '../shared/fight-share'   // BETA M28 shared fights   // M33: Morel's bubble reads the gun straight from here
+import { openNet, openPeers } from '../shared/open-mp'
+import { sharing, hostOf, encodeSnap, applySnap, SNAP_KIND, SNAP_HZ, HIT_KIND, KILL_KIND, encodeHits, decodeHits, newDrops, decodeKills, layDrop, HURT_KIND, encodeHurt, decodeHurt, type Snap, type HitRow, type KillRow } from '../shared/fight-share'   // BETA M28 shared fights   // M33: Morel's bubble reads the gun straight from here
 import { goopMaterial, groundEnv, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'
 import { sprout, poseSprout, lumpyGeometry } from './hollow-body'   // M34: Alex's pick A, the rooted sprout   // M34: no light of its own; borrows the ground
 import { borrowedSky } from '../../voxel3d/sky-env'
@@ -459,7 +459,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   // snapshot; the others draw it (C.remote). Solo = today's game exactly. The latest snapshot waits here for the frame loop.
   const net = useRef({ snap: null as Snap | null, fresh: false, snapT: 0, host: true, share: false, hostId: '',
     // slice 3: hits a guest owes the host, hits the host owes its sim, kills a guest owes its drops; the host's drop-watch
-    outHits: [] as { id: number; dmg: number }[], hitT: 0, inHits: [] as HitRow[], inKills: [] as KillRow[], seen: new Set<number>(), wasHost: false })
+    outHits: [] as { id: number; dmg: number }[], hitT: 0, inHits: [] as HitRow[], inKills: [] as KillRow[], seen: new Set<number>(), wasHost: false, inHurt: [] as number[] })
   useEffect(() => {
     let off: (() => void) | null = null
     const hook = () => { const n = openNet(); if (!n || off) return; off = n.onRelay(m => {
@@ -467,12 +467,13 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       if (m.kind === SNAP_KIND && m.from === N.hostId) { N.snap = m.data as Snap; N.fresh = true }
       else if (m.kind === HIT_KIND && N.host && N.share) N.inHits.push(...decodeHits(m.data).slice(0, 40 - N.inHits.length))
       else if (m.kind === KILL_KIND && m.from === N.hostId && !N.host) N.inKills.push(...decodeKills(m.data))
+      else if (m.kind === HURT_KIND && m.from === N.hostId && !N.host && N.share) { const d = decodeHurt(m.data); if (d !== null && N.inHurt.length < 10) N.inHurt.push(d) }   // #1651
     }) }
     hook(); const t = setInterval(hook, 1000)   // the socket hook may mount after this layer
     const g = window as unknown as { __fight?: unknown }
     g.__fight = { host: () => net.current.host, sharing: () => net.current.share, hostId: () => net.current.hostId,
       ids: () => c.current.hollows.map(h => ({ id: h.id, x: +h.x.toFixed(1), z: +h.z.toFixed(1), hp: Math.ceil(h.hp) })),
-      drops: () => c.current.drops.length }   // checks' hook: READ only
+      drops: () => c.current.drops.length, hp: () => Math.ceil(c.current.keeper.hp), others: () => (c.current.others ?? []).map(o => o.id) }   // checks' hook: READ only (#1651: hp, others)
     return () => { clearInterval(t); off?.(); delete g.__fight }
   }, [])   // M33: leaving the Wilds, Morel's bubble has no gun to read   // the keeper's walker reads c.pieces as solids (dynamic-solids.ts)
   const [ids, setIds] = useState<{ id: number; kind: string }[]>([])
@@ -567,10 +568,15 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
         N.hitT -= dt
         if (N.outHits.length && N.hitT <= 0) { N.hitT = 0.1; n!.relay(HIT_KIND, encodeHits(N.outHits), N.hostId); N.outHits = [] }
         for (const k of N.inKills) layDrop(C, T, k)
-        N.inKills = []; N.inHits = []
+        for (const d of N.inHurt) applyNetHurt(C, d)   // #1651: the host's Hollow reached me (dropped while I am down: applyNetHurt)
+        N.inKills = []; N.inHits = []; N.inHurt = []
+        C.others = undefined
       } else {
         for (const [id, dmg] of N.inHits) applyNetHit(C, id, dmg)   // a guest's round, applied like mine; a kill drops in the step below
-        N.inHits = []; N.outHits = []; N.inKills = []
+        N.inHits = []; N.outHits = []; N.inKills = []; N.inHurt = []
+        // #1651: my party mates here, by the spot the server last gave (not the drawn lerp): my Hollows hunt the nearest of us
+        if (N.share) { const P = openPeers().current, ids = new Set(live); C.others = []; if (P) for (const p of P.values()) if (ids.has(p.id)) C.others.push({ id: p.id, x: p.tx, y: p.ty, z: p.tz }) }
+        else C.others = undefined
         if (N.share) { N.snapT -= dt; if (N.snapT <= 0) { N.snapT = 1 / SNAP_HZ; n!.relay(SNAP_KIND, encodeSnap(C, feet)) } }
       }
       C.netHits = []
@@ -632,6 +638,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       const now = performance.now() / 1000
       for (const e of C.events) {
         if (e.kind === 'hurt') hud.current.hurtAt = now; if (e.kind === 'hit') hud.current.hitAt = now
+        if (e.kind === 'hurt-other') openNet()?.relay(HURT_KIND, encodeHurt(e.dmg), e.id)   // #1651: addressed to the guest it reached
         if (e.kind === 'hit' && e.killed) { const L = lastAt.current.get(e.id); if (L) dispersals.current.push({ ...L, at: performance.now() / 1000, colour: goopWorld.current.groundAt(L.x, L.z) }) }   // M34
         if (e.kind === 'hit') { const L = lastAt.current.get(e.id); sfx(e.killed ? 'hollow-disperse' : 'hollow-hit', L ? { at: { x: L.x, y: L.y + 0.8, z: L.z } } : {}) }   // M36
         if (e.kind === 'champ-down') {
