@@ -75,7 +75,7 @@ import { advance, clearAt, loadSpread, saveSpread, loadSkew, saveSkew, type Spre
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey, touch } from '../shared/touch'
 import { useMenuLock } from '../shared/menu-lock'
-import { BirthGate, useBirthGateUp } from '../birth-gate'
+import { BirthGate, useBirthGateUp, BORN_EVENT } from '../birth-gate'
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
 import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
 import { DeathPack, fallAndDrop } from './death-pack'
@@ -393,6 +393,20 @@ function AtherSliceGame() {
     if (!w) { setToast('That door is not bound to anything you have walked to. You are home.'); return }
     travel({ kind: 'waymark', w })
   }, [ww, travel])
+
+  // BORN AT MOONWELL (BETA M31, Alex 11-19: 'the start loses new keepers'). A keeper born on this page (the rune chosen)
+  // opens their eyes at Moonwell Glade beside Greg, not on the plot: set down at his waymark (~6.6 m from his bench) behind
+  // the Born beat + the creator, turned to FACE him (the waymark's own yaw looks past him). Waits for the Wilds if they are
+  // still streaming. A returning keeper never fires it (born already), so they load as today; the plot stays theirs.
+  const [bornPending, setBornPending] = useState(false)
+  useEffect(() => { const on = () => setBornPending(true); window.addEventListener(BORN_EVENT, on); return () => window.removeEventListener(BORN_EVENT, on) }, [])
+  useEffect(() => {
+    if (!bornPending || !ww) return
+    setBornPending(false)
+    const o = ww.offsetOf(GREG_WAYMARK.tile), x = GREG_WAYMARK.x + o.x + 2.2, z = GREG_WAYMARK.z + o.z + 2.2
+    const yaw = Math.atan2(-(gregAt.x - x), -(gregAt.z - z))   // walker: forward = (-sin yaw, -cos yaw)
+    stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(GREG_WAYMARK.tile); arrive({ kind: 'wilds', tile: GREG_WAYMARK.tile }, { x, z, yaw }) })
+  }, [bornPending, ww, arrive])
 
   const world = useMemo(() => zone.kind === 'plot' ? plotWorld : ww ? terrainWorld(withPieces(ww.shape)) : null, [zone, ww, plotWorld])   // ww.shape reads the live tiles
   // ground cover preview (ground-cover.tsx, ?cover=): nothing on a path, the gate's pad or at Greg's feet

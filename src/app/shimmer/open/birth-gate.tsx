@@ -33,6 +33,10 @@ const server = () => null
 export const useBirth = () => useSyncExternalStore(subscribe, get, server)
 export const getBirth = get
 
+/** BETA M31 (Alex 11-19, 'the start loses new keepers'): fired the moment a keeper is BORN (the rune chosen), so the page
+ *  can set them down at Moonwell Glade beside Greg behind the Born beat + the creator; their first frame is the Glade. */
+export const BORN_EVENT = 'ather:born'
+
 /** How long the "Born of <Rune>" beat holds before the world takes over. */
 const BORN_HOLD_MS = 2800
 
@@ -71,7 +75,7 @@ function BirthGateInner() {
     <div data-panel="birth" onKeyDownCapture={e => e.stopPropagation()}>
       {/* the pointer is freed while you choose: a locked mouse cannot click a rune */}
       <ReleaseLock />
-      <BirthScreen onChoose={() => { markBornWithoutStick(); refreshLook(); wantLook.current = true; setClosing(Date.now()) }} />   {/* M22: a new keeper earns the first rinstick */}
+      <BirthScreen onChoose={() => { markBornWithoutStick(); refreshLook(); wantLook.current = true; setClosing(Date.now()); window.dispatchEvent(new Event(BORN_EVENT)) }} />   {/* M22: a new keeper earns the first rinstick */}
     </div>
   )
 }

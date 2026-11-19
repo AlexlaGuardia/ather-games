@@ -49,7 +49,7 @@ type At = { x: number; z: number } | null
 // gate (the fold map's way to Rune Hold) instead of 'Nowhere to point yet'.
 export function errandEntries(stage: Stage, birth: string | null, at: { greg?: At; smith?: At; temple?: At; gate?: At }, word?: string | null): JournalEntry[] {
   const seat = birthSeat(birth), S = SEATS[seat ?? 'enchant']
-  if (stage === 'greg') return [{ id: 'errand', hand: 'keeper', title: 'See Gregory about your first letter', note: 'Gregory waits at Moonwell Glade, just through the gate.', where: at.greg ? { zone: 'wilds', ...at.greg } : null }]
+  if (stage === 'greg') return [{ id: 'errand', hand: 'keeper', title: 'See Gregory about your first letter', note: 'Gregory sits on the bench by the pool at Moonwell Glade.', where: at.greg ? { zone: 'wilds', ...at.greg } : null }]
   if (stage === 'smith') return [{ id: 'errand', hand: 'keeper', ...journalSmith(S.short, S.name, S.where), where: at.smith ? { zone: 'continent', ...at.smith } : at.gate ? { zone: 'ather', ...at.gate } : null }]
   if (stage === 'temple') return [{ id: 'errand', hand: 'keeper', ...JOURNAL_TEMPLE, where: at.temple ? { zone: 'continent', ...at.temple } : at.gate ? { zone: 'ather', ...at.gate } : null }]
   if (stage === 'done' && word) return [{ id: 'errand', hand: 'keeper', ...journalDone(word), where: null, struck: true }]
