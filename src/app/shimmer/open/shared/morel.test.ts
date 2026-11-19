@@ -1,5 +1,5 @@
 // node test: npx tsx src/app/shimmer/open/shared/morel.test.ts
-import { ammoStep, newAmmoWatch, gemGlow, _resetGem, RED_AT, BUBBLE_HOLD, FADE, PULSE } from './morel'
+import { ammoStep, newAmmoWatch, gemGlow, _resetGem, RED_AT, BUBBLE_HOLD, FADE, PULSE, hintStep, newHintWatch, STALL, COOL, AWAY, AWAY_M, MAX_HINTS } from './morel'
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 
@@ -40,5 +40,38 @@ ok(ss.join(',') === 'empty', `a 5-round clip: only 'empty' (${ss.join(',')})`)
 _resetGem()
 const g = newAmmoWatch(12); ammoStep(g, { ammo: 11, clip: 12, firing: true, reloading: false, now: 100 })
 ok(gemGlow(100) === 1 && gemGlow(100 + PULSE / 2) > 0 && gemGlow(100 + PULSE + 0.01) === 0, 'gem pulses on a round change, then fades')
+
+// ── S2 stuck hints ──
+{
+  const h = newHintWatch(); const got: string[] = []
+  const run = (from: number, to: number, o: { stage?: 'greg' | 'smith'; active?: boolean; dist?: (t: number) => number | null } = {}) => {
+    for (let t = from; t <= to; t += 1) { const r = hintStep(h, { stage: o.stage ?? 'greg', now: t, active: o.active ?? true, dist: o.dist ? o.dist(t) : null }); if (r) got.push(`${r.i}${r.why[0]}@${t}`) }
+  }
+  run(0, STALL - 2)
+  ok(got.length === 0, `no hint before ${STALL} s idle`)
+  run(STALL - 1, STALL + 2)
+  ok(got.length === 1 && got[0].startsWith('0s'), `one stall hint at ~${STALL} s (${got.join(',')})`)
+  run(STALL + 3, STALL + COOL - 2)
+  ok(got.length === 1, `quiet through the cooldown (${COOL} s)`)
+  run(STALL + COOL - 1, STALL + COOL + STALL + 5)
+  ok(got.length === 2 && got[1].startsWith('1'), `the second hint is the other line (${got.join(',')})`)
+  run(STALL * 2 + COOL + 6, STALL * 4 + COOL * 3)
+  ok(got.length === MAX_HINTS, `never more than ${MAX_HINTS} per stage (${got.length})`)
+  run(STALL * 4 + COOL * 3 + 1, STALL * 4 + COOL * 3 + 2, { stage: 'smith' })
+  ok(got.length === MAX_HINTS, 'progress (a new stage) says nothing by itself')
+  const before = got.length
+  run(STALL * 5 + COOL * 4, STALL * 5 + COOL * 4 + STALL * 3, { stage: 'smith', active: false })
+  ok(got.length === before, 'paused (menu up / tab hidden / a fight) never counts as stuck')
+}
+{
+  const h = newHintWatch(); const got: string[] = []
+  hintStep(h, { stage: 'greg', now: 0, active: true, dist: 20 })
+  for (let t = 1; t <= AWAY + 5; t++) { const r = hintStep(h, { stage: 'greg', now: t, active: true, dist: 20 + t * 0.5 }); if (r) got.push(`${r.why}@${t}`) }
+  ok(got.length === 1 && got[0].startsWith('away'), `walking away for ~${AWAY} s (> ${AWAY_M} m further) -> one 'away' hint (${got.join(',')})`)
+  const h2 = newHintWatch(); const g2: string[] = []
+  hintStep(h2, { stage: 'greg', now: 0, active: true, dist: 60 })
+  for (let t = 1; t <= AWAY + 5; t++) { const r = hintStep(h2, { stage: 'greg', now: t, active: true, dist: Math.max(3, 60 - t) }); if (r) g2.push(`${r.why}@${t}`) }
+  ok(g2.length === 0, 'walking TOWARD the mark: no hint')
+}
 
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)

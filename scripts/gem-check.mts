@@ -5,6 +5,8 @@
 //   3. Morel speaks ONCE crossing 7 and ONCE at empty ('Morel:' on the message line), never per shot: exactly [low, empty]
 //   4. let go: the bubble holds ~3 s, then is gone by ~4 s
 //   (the gem's pulse per round is shared/morel.test.ts's: gemGlow; the screenshots show it lit)
+//   7. (S2) STUCK: a keeper standing idle on the errand's first step (see Greg) with ?morel=fast (x20: the 4 min stall = 12 s)
+//      gets ONE Morel hint ('greg' line on the message line), and not a second within the cooldown (15 s fast)
 //   6. 0 page errors. Screenshot to --out (bubble white + red) for the LOOK.
 // Hooks READ only (__morel.bubble/said, __ather.zone, __fpGun). Seeds a born keeper + Kael's loadout (fp-gun-check's seed).
 //   npx tsx scripts/gem-check.mts [--url https://ather.games] [--out dir]
@@ -66,6 +68,22 @@ try {
   ok(await drawn(), `4. still shown ${((Date.now() - t0) / 1000).toFixed(1)} s after release`)
   ok(await poll(async () => !(await drawn()), 6000), `4. gone after the hold (${((Date.now() - t0) / 1000).toFixed(1)} s)`)
   ok(Date.now() - t0 >= 3000, '4. not before ~3 s')
+  // 7 · S2: idle on the errand -> one hint, not repeated inside the cooldown
+  const q = await (await br.createBrowserContext()).newPage(); await q.setViewport({ width: 1280, height: 760 })
+  q.on('pageerror', e => errs.push(String(e).slice(0, 200)))
+  await q.evaluateOnNewDocument('window.__name = (f) => f')
+  await q.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star') })   // born, gems not given: stage 'greg'
+  await q.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg&morel=fast`, { waitUntil: 'load', timeout: 240000 })
+  ok(await poll(() => q.evaluate(() => (window as any).__ather?.zone?.() === 'wilds' && !!(window as any).__morelHints), 240000), '7. in the Wilds on the errand, hints mounted')
+  const H = () => q.evaluate(() => (window as any).__morelHints.said()) as Promise<string[]>
+  const t1 = Date.now()
+  ok(await poll(async () => (await H()).length >= 1, 120000), `7. standing idle: Morel gives a hint (${((Date.now() - t1) / 1000).toFixed(0)} s; fast stall = 12 s)`)
+  const h1 = await H()
+  ok(h1[0]?.startsWith('greg:0'), `7. it is the errand stage's first hint (${h1.join(',')})`)
+  ok(await q.evaluate(() => [...document.querySelectorAll('[data-say="morel"]')].some(e => /Gregory/.test(e.textContent ?? ''))), '7. the hint is on the message line')
+  await sleep(8000)
+  ok((await H()).length === 1, `7. not repeated inside the cooldown (${(await H()).join(',')})`)
+  await q.screenshot({ path: `${out}/3-hint.png` })
   ok(errs.length === 0, `6. page errors: ${errs.length} ${errs.join(' | ')}`)
 } finally { await br.close() }
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)

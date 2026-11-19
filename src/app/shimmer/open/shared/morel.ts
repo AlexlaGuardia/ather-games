@@ -48,3 +48,32 @@ let pulseAt = -1e9
 export const gemGlow = (now: number) => { const t = now - pulseAt; return t < 0 || t > PULSE ? 0 : 1 - t / PULSE }
 /** tests only */
 export const _resetGem = () => { pulseAt = -1e9 }
+
+// ── S2 STUCK HINTS ──
+// No errand progress for STALL s of ACTIVE play (tab visible, no menu or panel up, not in a fight), or AWAY s spent walking
+// AWAY from the errand's mark (AWAY_M further than the nearest point of that window) -> ONE hint for that stage. Then quiet
+// for COOL s; at most MAX_HINTS per stage. A stage change (progress) resets everything. Times scale by `speed` (checks:
+// ?morel=fast = x20, so a 4 min stall is 12 s).
+export const STALL = 240, AWAY = 60, AWAY_M = 15, COOL = 300, MAX_HINTS = 2
+export type HintStage = 'none' | 'greg' | 'smith' | 'temple' | 'done'
+export interface HintWatch { stage: HintStage | null; idle: number; last: number; lastHint: number; count: number; track: { t: number; d: number }[] }
+export const newHintWatch = (): HintWatch => ({ stage: null, idle: 0, last: -1, lastHint: -1e9, count: 0, track: [] })
+export interface HintIn { stage: HintStage; now: number; active: boolean; dist: number | null; speed?: number }
+/** One look at the errand. Mutates `w`; returns which of the stage's hints to say (0 / 1), and why, or null. */
+export function hintStep(w: HintWatch, a: HintIn): { i: number; why: 'stall' | 'away' } | null {
+  const k = a.speed ?? 1, stall = STALL / k, away = AWAY / k, cool = COOL / k
+  if (a.stage !== w.stage) { w.stage = a.stage; w.idle = 0; w.count = 0; w.track = []; w.last = a.now; return null }
+  const dt = w.last < 0 ? 0 : Math.min(2, Math.max(0, a.now - w.last)); w.last = a.now
+  if (a.stage === 'none' || a.stage === 'done' || !a.active) return null
+  w.idle += dt
+  let goingAway = false
+  if (a.dist !== null) {
+    w.track.push({ t: a.now, d: a.dist }); w.track = w.track.filter(s => a.now - s.t <= away)
+    const min = Math.min(...w.track.map(s => s.d))
+    goingAway = a.now - w.track[0].t >= away * 0.9 && a.dist - min > AWAY_M && a.dist >= w.track[0].d + AWAY_M
+  } else w.track = []
+  if (!(w.idle >= stall || goingAway) || a.now - w.lastHint < cool || w.count >= MAX_HINTS) return null
+  const why = goingAway ? 'away' : 'stall'
+  w.count++; w.lastHint = a.now; w.idle = 0; w.track = []
+  return { i: (w.count - 1) % 2, why }
+}

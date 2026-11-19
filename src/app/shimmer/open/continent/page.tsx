@@ -77,6 +77,7 @@ import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble 
 import { TUNNEL_H, TUNNEL_WALK, boreAt, tunnelWall, bridgeRail, drivable, ferryLanding, guardrails, loadRegion, roadRail, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
 import { touch, TOUCH_LOOK_SENS, isTouchOnly } from '../shared/touch'
 import { TouchControls, PHONE_ROW_TOP, type TouchAction } from '../shared/touch-controls'
+import { useMorelHints } from '../shared/morel-hints'   // BETA M33 S2: Morel's stuck hints on the errand
 
 const STEP = 1 / 120
 const FOV = 64
@@ -1337,6 +1338,8 @@ function ContinentRideGame() {
   const optionsOpen = useOptionsOpen()   // Options (options.tsx): O, Esc once the mouse is free, the pack's gear
   useOptionsKeys(showMap || garage || !!board || bagOpen || vesselShop || !!deed)
   useMenuLock(showMap || garage || !!board || bagOpen || vesselShop || !!deed || optionsOpen, getCanvas)
+  useMorelHints({ stage: errStage, zone: 'continent', pos: () => ({ x: focus.current.x, z: focus.current.z }),
+    busy: () => showMap || garage || !!board || bagOpen || vesselShop || !!deed || optionsOpen || !!talk })
   // ★ THE STANCE on the continent (shared/stance.ts, Alex 11-15, the same rules as the Ather): on foot you are STOWED
   // by default and a little quicker; R taps draw the primary / swap / reload, a hold stows; 1-8 and the wheel pick a
   // hotbar item while no weapon is drawn. At the wheel the hands are busy: R is back to the road there. In the gun shop

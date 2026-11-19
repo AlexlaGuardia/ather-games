@@ -78,6 +78,7 @@ import { isTouchOnly, pressKey, touch } from '../shared/touch'
 import { useMenuLock } from '../shared/menu-lock'
 import { BirthGate, useBirthGateUp, BORN_EVENT } from '../birth-gate'
 import { MorelBubble } from '../shared/morel-bubble'   // BETA M33: the glove's gem speaks (ammo)
+import { useMorelHints } from '../shared/morel-hints'   // BETA M33 S2: stuck hints on the errand
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
 import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
 import { DeathPack, fallAndDrop } from './death-pack'
@@ -841,6 +842,8 @@ function AtherSliceGame() {
   useEffect(() => setGiven(gemsGiven()), [])
   const errandStage = stageOf(birth, inv, loadoutNow, given)
   useEffect(() => { postEntries('errand', errandEntries(errandStage, birth, { greg: { x: gregAt.x, z: gregAt.z }, gate: { x: GATE.x, z: GATE.z } })) }, [errandStage, birth])
+  useMorelHints({ stage: errandStage, zone: zone.kind === 'plot' ? 'ather' : 'wilds', pos: () => poseRef.current,
+    busy: () => frozen.current || (!!chudRef.current && performance.now() / 1000 - chudRef.current.hurtAt < 10) })   // a fight is not 'stuck'
   // BETA M6a/M6b: the rinning + prospecting pointers, struck once used (re-read on every pack change: a catch/cut lands in it)
   useEffect(() => {
     const k = openSkills(), used = (id: 'rinning' | 'prospecting') => k[id].level > 1 || k[id].xp > 0
