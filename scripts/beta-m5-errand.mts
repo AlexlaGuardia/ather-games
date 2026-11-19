@@ -12,6 +12,7 @@
 //          because a courser/foot trip across the continent is many minutes under swiftshader. TP'D, logged per leg.
 //   npx tsx scripts/beta-m5-errand.mts [--url https://ather.games] [--out /tmp/m5]
 //   PASS = bracelet carries a word, journal errand line struck, stage done, 0 page errors. A FAIL names the step (a finding).
+import { DOOR_ASK } from '../src/app/shimmer/open/continent/door-talk'   // M13 part 3: counters talk first
 import puppeteer from 'puppeteer-core'
 import { readFileSync, mkdirSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
@@ -181,7 +182,10 @@ const goTo = async (key: string, leg: string) => {
 }
 if (seat !== 'enchant') {
   if (!(await goTo(smithKey, 'Rune Hold -> runesmith'))) await fail('smith: door in reach / E', `${smithKey} not in reach`)
-  if (!(await poll(async () => !!(await p.$('[data-panel="smith-panel"]')), 15000))) await fail('smith: E opens the counter', 'no smith-panel')
+  // M13 part 3 (11-18): a counter TALKS first; the keeper answers (real click on the answer) and that opens the cut list
+  if (!(await poll(async () => !!(await p.$('[data-talk-option]')), 15000))) await fail('smith: E starts the talk', 'no talk answers')
+  if (!(await clickSel('[data-talk-option]', new RegExp(DOOR_ASK.cut.replace(/[.]/g, '\\.'))))) await fail('smith: the cut answer', 'no answer to cut a letter')
+  if (!(await poll(async () => !!(await p.$('[data-panel="smith-panel"]')), 15000))) await fail('smith: the answer opens the counter', 'no smith-panel')
   sees.smithPanel = await text(); await shot('smith-panel')
   if (!(await poll(async () => !!(await p.$(`[data-letter="${birth}"]`)), 10000))) await fail('smith: counter lists the birth letter', `no [data-letter=${birth}]`)
   if (!(await clickSel(`[data-letter="${birth}"] button`, /Cut/))) await fail('smith: Cut button', 'no Cut button')
@@ -194,8 +198,10 @@ if (seat !== 'enchant') {
 await journal('3-after-cut')
 // 5 · STEP temple: tp to the Temple door, real E, Idony's counter, Imbue, the beat
 if (!(await goTo('front:enchant-temple', 'smith -> Enchant Temple'))) await fail('temple: door in reach / E', 'front:enchant-temple not in reach')
-if (!(await poll(async () => !!(await p.$('[data-counter="Idony"]')), 15000))) await fail('temple: E shows the counters', 'no [data-counter=Idony]')
-await clickSel('[data-counter="Idony"]'); await sleep(800)
+// M13 part 3: Idony talks first; 'When you are free.' opens her vessels
+if (!(await poll(async () => !!(await p.$('[data-talk-option]')), 15000))) await fail('temple: E starts the talk', 'no talk answers')
+if (!(await clickSel('[data-talk-option]', new RegExp(DOOR_ASK.inscribe.replace(/[.]/g, '\\.'))))) await fail('temple: the inscribe answer', 'no answer for Idony')
+await sleep(800)
 if (!word || !(await poll(async () => !!(await p.$(`[data-panel="idony-panel"] [data-word="${word.id}"][data-ready]`)), 15000))) await fail('temple: Idony offers a ready word', `word ${word?.id} not ready`)
 sees.idony = await text(); await shot('idony-panel')
 await clickSel(`[data-word="${word.id}"] button`, /Imbue/); await sleep(1200)
