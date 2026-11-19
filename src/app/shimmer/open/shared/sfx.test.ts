@@ -18,11 +18,11 @@ const run = async () => {
   const ids = ['step-grass', 'step-stone', 'step-wood', 'jump', 'land', 'hit-axe-tree', 'hit-prune-tree', 'hit-pick-crystal', 'hit-prospect-crystal', 'pickup-grey-matter', 'pickup-item', 'ui-tap', 'ui-panel-open', 'ui-panel-close']
   ok(ids.every(i => row(i)), 'every batch-1 id is in the registry')
   ok(sfx.SOUNDS.every(s => ['proposed', 'yay', 'nay'].includes(s.status) && ['synth', 'cc0'].includes(s.source)), 'registry rows are well-formed')
-  const was = row('jump').status
-  for (const st of ['proposed', 'nay'] as const) { row('jump').status = st; voices = 0; sfx.play('jump'); ok(voices === 0 && made === 0, `${st} is silent (and makes no context)`) }
-  row('jump').status = 'yay'; voices = 0; sfx.play('jump'); ok(voices > 0, 'yay plays')
-  sfx.play('no-such-sound'); row('jump').status = 'proposed'
-  voices = 0; sfx.audition('jump'); ok(voices > 0, 'audition plays regardless of status')
+  const was = row('land').status
+  for (const st of ['proposed', 'nay'] as const) { row('land').status = st; voices = 0; sfx.play('land'); ok(voices === 0 && made === 0, `${st} is silent (and makes no context)`) }
+  row('land').status = 'yay'; voices = 0; sfx.play('land'); ok(voices > 0, 'yay plays')
+  sfx.play('no-such-sound'); row('land').status = 'proposed'
+  voices = 0; sfx.audition('land'); ok(voices > 0, 'audition plays regardless of status')
   for (const i of ids) { const r = row(i); if (r.files) { ok(r.files.length > 0 && r.source === 'cc0' && !!r.licence, `${i} plays recorded files (licensed)`); continue } voices = 0; sfx.audition(i); ok(voices > 0, `recipe ${i} makes sound`) }   // 11-19: Alex picked recorded stone/wood/axe/pick
   gun.playShot('repeater'); ok(made === 1, `one AudioContext across sfx + gun-sound (made ${made})`)
   // cadence: 0.5s of walking at 4.2 m/s = 2.1 m = one step at most; stepping is gated by yay too
@@ -33,11 +33,12 @@ const run = async () => {
   row('step-grass').status = 'proposed'; voices = 0; for (let i = 0; i < 60; i++) sfx.tickFeet(lc, 1 / 30); ok(voices === 0, 'a proposed footstep is silent')
   // slide (11-19): the swoosh fires ONCE at the slide's start and no footsteps play while sliding
   { const st0 = row('step-grass').status, sl0 = row('slide').status; row('step-grass').status = 'yay'; row('slide').status = 'yay'
+    sfx.preload('slide'); await new Promise(r => setTimeout(r, 20))   // slide is recorded since r4: load first
     const sl = { ...lc, sliding: true }; voices = 0; sfx.tickFeet(sl, 1 / 30); const first = voices
     voices = 0; for (let i = 0; i < 60; i++) sfx.tickFeet(sl, 1 / 30); ok(first > 0 && voices === 0, `slide: plays once at the start (${first}), then silent, no steps (${voices})`)
     row('step-grass').status = st0; row('slide').status = sl0; sfx.tickFeet(lc, 1 / 30) }
   // double jump (11-19): plays on the locomotion's one-tick edge, once
-  { const a0 = row('air-jump').status; row('air-jump').status = 'yay'; voices = 0
+  { const a0 = row('air-jump').status; row('air-jump').status = 'yay'; sfx.preload('air-jump'); await new Promise(r => setTimeout(r, 20)); voices = 0
     sfx.tickFeet({ ...lc, airborne: true, vy: 3, justAirJumped: true }, 1 / 30); const once = voices; voices = 0
     sfx.tickFeet({ ...lc, airborne: true, vy: 2, justAirJumped: false }, 1 / 30); ok(once > 0 && voices === 0, `air jump: plays on the edge only (${once}, then ${voices})`)
     row('air-jump').status = a0; sfx.tickFeet(lc, 1 / 30) }
@@ -79,12 +80,12 @@ const run = async () => {
   // area + 3D + listener
   for (const a of ['open', 'glade', 'town', 'indoor'] as const) { sfx.setArea(a); ok(sfx.currentArea() === a, `setArea ${a}`) }
   sfx.setListener({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: -1 })
-  panners = 0; voices = 0; sfx.audition('jump'); ok(panners === 0, '2D play (no at) makes no panner')
-  sfx.SOUNDS.find(s => s.id === 'jump')!.status = 'yay'; sfx.play('jump', { at: { x: 10, y: 0, z: 5 } }); ok(panners === 1 && voices > 0, 'play with at routes through one PannerNode')
-  sfx.SOUNDS.find(s => s.id === 'jump')!.status = 'proposed'
+  panners = 0; voices = 0; sfx.audition('land'); ok(panners === 0, '2D play (no at) makes no panner')
+  sfx.SOUNDS.find(s => s.id === 'land')!.status = 'yay'; sfx.play('land', { at: { x: 10, y: 0, z: 5 } }); ok(panners === 1 && voices > 0, 'play with at routes through one PannerNode')
+  sfx.SOUNDS.find(s => s.id === 'land')!.status = 'proposed'
   ok(sfx.lowpassFor(0) > sfx.lowpassFor(20) && sfx.lowpassFor(20) > sfx.lowpassFor(500) && sfx.lowpassFor(1e6) >= 900, 'lowpass closes with distance, floor 900 Hz')
   ok(made === 1, `still ONE AudioContext after buses/reverb/panner (made ${made})`)
-  row('jump').status = was
+  row('land').status = was
   console.log(`${pass} passed, ${fails.length} failed`); if (fails.length) { console.log(fails.join('\n')); process.exit(1) }
 }
 void run()

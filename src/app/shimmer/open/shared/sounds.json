@@ -45,11 +45,29 @@
   {
     "id": "jump",
     "area": "movement",
-    "status": "proposed",
-    "note": "Alex r2 nay + recorded nay: r3 = heavier push-off thump + body swish",
+    "status": "yay",
+    "note": "Alex r4: recorded yay (Kenney) -> used in game; code recipe kept as fallback",
     "desc": "Jump: quick rising puff",
-    "source": "synth",
-    "bus": "sfx"
+    "source": "cc0",
+    "bus": "sfx",
+    "files": [
+      "/sfx/kenney/footstep_grass_000.ogg",
+      "/sfx/kenney/footstep_grass_001.ogg",
+      "/sfx/kenney/footstep_grass_002.ogg",
+      "/sfx/kenney/footstep_grass_003.ogg",
+      "/sfx/kenney/footstep_grass_004.ogg"
+    ],
+    "licence": "CC0 (Kenney audio packs)",
+    "layer": {
+      "files": [
+        "/sfx/kenney/cloth1.ogg",
+        "/sfx/kenney/cloth2.ogg",
+        "/sfx/kenney/cloth3.ogg",
+        "/sfx/kenney/cloth4.ogg"
+      ],
+      "chance": 1,
+      "vol": 0.7
+    }
   },
   {
     "id": "land",
@@ -208,33 +226,6 @@
     }
   },
   {
-    "id": "rec-jump",
-    "area": "movement",
-    "status": "proposed",
-    "note": "r2: a grass step + a cloth swish (r1 soft thump nay)",
-    "desc": "Jump: a step pushing off + a body swish",
-    "source": "cc0",
-    "licence": "CC0 (Kenney audio packs)",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/footstep_grass_000.ogg",
-      "/sfx/kenney/footstep_grass_001.ogg",
-      "/sfx/kenney/footstep_grass_002.ogg",
-      "/sfx/kenney/footstep_grass_003.ogg",
-      "/sfx/kenney/footstep_grass_004.ogg"
-    ],
-    "layer": {
-      "files": [
-        "/sfx/kenney/cloth1.ogg",
-        "/sfx/kenney/cloth2.ogg",
-        "/sfx/kenney/cloth3.ogg",
-        "/sfx/kenney/cloth4.ogg"
-      ],
-      "chance": 1,
-      "vol": 0.7
-    }
-  },
-  {
     "id": "rec-land",
     "area": "movement",
     "status": "nay",
@@ -254,51 +245,33 @@
   {
     "id": "slide",
     "area": "movement",
-    "status": "proposed",
-    "note": "new 11-19 (Alex asked)",
+    "status": "yay",
+    "note": "Alex r4: recorded yay (Kenney) -> used in game; code recipe kept as fallback",
     "desc": "Slide: a fast grassy swoosh that fades as the slide bleeds off",
-    "source": "synth",
-    "bus": "sfx"
-  },
-  {
-    "id": "rec-slide",
-    "area": "movement",
-    "status": "proposed",
-    "note": "new 11-19 (Alex asked)",
-    "desc": "Slide: recorded cloth rustle",
     "source": "cc0",
-    "licence": "CC0 (Kenney audio packs)",
     "bus": "sfx",
     "files": [
       "/sfx/kenney/cloth1.ogg",
       "/sfx/kenney/cloth2.ogg",
       "/sfx/kenney/cloth3.ogg",
       "/sfx/kenney/cloth4.ogg"
-    ]
+    ],
+    "licence": "CC0 (Kenney audio packs)"
   },
   {
     "id": "air-jump",
     "area": "movement",
-    "status": "proposed",
-    "note": "new 11-19 (Alex asked)",
+    "status": "yay",
+    "note": "Alex r4: recorded yay (Kenney) -> used in game; code recipe kept as fallback",
     "desc": "Double jump: an airy whoosh up + a soft kick",
-    "source": "synth",
-    "bus": "sfx"
-  },
-  {
-    "id": "rec-air-jump",
-    "area": "movement",
-    "status": "proposed",
-    "note": "new 11-19 (Alex asked)",
-    "desc": "Double jump: recorded cloth swish of the body",
     "source": "cc0",
-    "licence": "CC0 (Kenney audio packs)",
     "bus": "sfx",
     "files": [
       "/sfx/kenney/cloth1.ogg",
       "/sfx/kenney/cloth2.ogg",
       "/sfx/kenney/cloth3.ogg",
       "/sfx/kenney/cloth4.ogg"
-    ]
+    ],
+    "licence": "CC0 (Kenney audio packs)"
   }
 ]
