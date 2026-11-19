@@ -62,7 +62,7 @@ ok(Object.values(WALL_MATS).every(m => /_plank$/.test(m.item)), 'every wall wood
 { // the walker: flat ground, a wall along x at z=0 from x=-3..3; walking +z from z=-2 stops short of it
   const W: Walls = Object.fromEntries(runKeys({ i: -3, j: 0 }, { i: 3, j: 0 }).map(k => [k, { mat: 'goldwood' as const }]))
   const boxes = wallBoxes(W, 0)
-  const flat: Shape = { ground: () => 0, water: () => null, solids: (x0, y0, z0, x1, y1, z1) => boxes.filter(b => b.x0 < x1 && b.x1 > x0 && b.y0 < y1 && b.y1 > y0 && b.z0 < z1 && b.z1 > z0) } as unknown as Shape
+  const flat: Shape = { ground: () => 0, water: () => [], solids: (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number) => boxes.filter(b => b.x0 < x1 && b.x1 > x0 && b.y0 < y1 && b.y1 > y0 && b.z0 < z1 && b.z1 > z0) }
   const tw = terrainWorld(flat)
   ok(!tw.bodyFree(0.5, 0, 0), 'the walker cannot stand inside a drawn wall')
   ok(tw.bodyFree(0.5, -1.2, 0) && tw.bodyFree(4.2, 0, 0), 'it can stand beside it and past its end')

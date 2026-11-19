@@ -16,11 +16,12 @@ import { HearthFrame, HearthButton, Well, H, hearthDisplay } from '../../ui/hear
 import { getInv, setInv, useInv } from '../shared/bag'
 import { countOf, itemDef, makeBait, BAIT_FROM, HOTBAR, SLOTS, type Stack, type Inv } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
-import { GROUND_Y } from './plot'
+import { GROUND_Y, squareAt, sqId } from './plot'
+import { snapCorner, runKeys, canLay, lay, raze, wallBoxes, edgeRect, WALL_MATS, WALL_MAT_ORDER, type Corner, type WallMat, type Walls } from './plot-walls'
 import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
-  WALL_H, type Works, type Room, type RoomKind, type WorkNear,
+  WALL_H, KEEP_CLEAR, type Works, type Room, type RoomKind, type WorkNear,
   craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, canPlacePiece, placePiece, pickUpPiece, turnPiece, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
@@ -38,7 +39,7 @@ import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
 import { TOOL_DEFS } from '../../engine/tools'
-import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap } from './build-mode'
+import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw } from './build-mode'
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
 import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, GRADE_CATEGORIES, type Village } from './moglins'
@@ -54,7 +55,105 @@ export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER
 /** The live works (the page's village tick reads and writes through this store, so an open panel sees the product land). */
 export const currentWorks = () => getW()
 /** Every room's walls and every Keepstone, for the walker's plotShape. */
-export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox), ...pieceBoxes(w)]
+export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox), ...pieceBoxes(w), ...wallBoxes(w.walls ?? {}, GROUND_Y)]
+
+// ── M37 slice 1: YOUR OWN WALLS (plot-walls.ts; Alex 11-19 "like the sims ... walls a little thicker, like the rooms") ──
+// In plan mode, the Walls tool: drag along the metre grid, a ghost run shows (blue = it can stand, red = it cannot), let go
+// and it stands (a plank a metre). Erase drags it back down (every plank back). The walker meets them like a room's walls.
+type WallDrag = { a: Corner; b: Corner; keys: string[]; ok: boolean; erase: boolean }
+let wallDrag: WallDrag | null = null, wallMat: WallMat = 'goldwood'
+const wdSubs = new Set<() => void>(), wdEmit = () => wdSubs.forEach(f => f())
+const useWallDrag = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => wallDrag, () => null)
+const useWallMat = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => wallMat, () => 'goldwood' as WallMat)
+/** a corner is on held ground when any of the four squares around it is yours (a wall may run along your edge) */
+const heldCorner = (owned: ReadonlySet<string>) => (x: number, z: number) =>
+  [[0.01, 0.01], [-0.01, 0.01], [0.01, -0.01], [-0.01, -0.01]].some(([dx, dz]) => { const s = squareAt(x + dx, z + dz); return !!s && owned.has(sqId(s.i, s.j)) })
+/** what a new wall must keep clear of: rooms (whole footprint + a hand), Keepstones, furniture */
+function wallBlockers(w: Works) {
+  const rects: { r: { x0: number; x1: number; z0: number; z1: number }; why: string }[] = []
+  for (const r of w.rooms) { const f = footprint(r.kind, r.x, r.z, r.q); rects.push({ r: { x0: f.x0 - 0.3, x1: f.x1 + 0.3, z0: f.z0 - 0.3, z1: f.z1 + 0.3 }, why: `In your ${ROOMS[r.kind].name}.` }) }
+  for (const c of allChests(w)) rects.push({ r: chestBox(c), why: 'A Keepstone is in the way.' })
+  for (const p of w.pieces) rects.push({ r: pieceRect(p.item, p.x, p.z, p.q), why: 'Something already stands there.' })
+  return { rects, circles: KEEP_CLEAR }
+}
+function wallVerdict(owned: ReadonlySet<string>, a: Corner, b: Corner, erase: boolean) {
+  const w = currentWorks(), keys = runKeys(a, b)
+  if (erase) return { keys, ok: keys.some(k => !!w.walls?.[k]), why: 'No wall there to take down.' }
+  const v = canLay(w.walls ?? {}, keys, wallMat, heldCorner(owned), wallBlockers(w), getInv())
+  return { keys, ok: v.ok, why: v.ok ? '' : v.why }
+}
+/** BuildBar registers this while the Walls / Erase tool is on */
+function wallDrawHandler(owned: () => ReadonlySet<string>, erase: boolean) {
+  const at = (x: number, z: number) => snapCorner(x, z)
+  const show = (a: Corner, b: Corner) => { const v = wallVerdict(owned(), a, b, erase); wallDrag = { a, b, keys: v.keys, ok: v.ok, erase }; wdEmit() }
+  return {
+    start(x: number, z: number) { const c = at(x, z); show(c, c) },
+    move(x: number, z: number) { if (wallDrag) show(wallDrag.a, at(x, z)) },
+    end(x: number, z: number) {
+      if (!wallDrag) return
+      const a = wallDrag.a, b = at(x, z); wallDrag = null; wdEmit()
+      const w = currentWorks(), keys = runKeys(a, b); if (!keys.length) return
+      if (erase) {
+        const r = raze(w.walls ?? {}, getInv(), keys); if (!r.down) return
+        setWorks({ ...w, walls: r.walls }); setInv(r.inv)
+        hudSay(`${r.down} m of wall down, the planks back in your bag.${r.full ? ' Your bag is full: the rest stays up.' : ''}`, 'item')
+        return
+      }
+      const v = canLay(w.walls ?? {}, keys, wallMat, heldCorner(owned()), wallBlockers(w), getInv())
+      if (!v.ok) { hudSay(v.why, 'info'); return }
+      const r = lay(w.walls ?? {}, getInv(), v.add, wallMat); if (!r) return
+      setWorks({ ...w, walls: r.walls }); setInv(r.inv)
+    },
+    cancel() { if (wallDrag) { wallDrag = null; wdEmit() } },
+  }
+}
+const WALL_GEO = new THREE.BoxGeometry(1, 1, 1)
+/** every drawn wall, one instanced mesh per wood (Lambert, like the rooms' walls) */
+function DrawnWalls({ walls }: { walls: Walls }) {
+  const byMat = useMemo(() => { const m = new Map<WallMat, string[]>(); for (const [k, w] of Object.entries(walls)) { const l = m.get(w.mat) ?? []; l.push(k); m.set(w.mat, l) } return [...m] }, [walls])
+  return <>{byMat.map(([mat, keys]) => <WallRun key={mat + keys.length} mat={mat} keys={keys} />)}</>
+}
+function WallRun({ mat, keys, ghost }: { mat: WallMat; keys: string[]; ghost?: string }) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  useEffect(() => {
+    const m = ref.current; if (!m) return
+    const o = new THREE.Object3D()
+    keys.forEach((k, n) => { const r = edgeRect(k); o.position.set((r.x0 + r.x1) / 2, GROUND_Y + WALL_H / 2 + (ghost ? 0.01 : 0), (r.z0 + r.z1) / 2); o.scale.set(r.x1 - r.x0 + (ghost ? 0.04 : 0), WALL_H + (ghost ? 0.02 : 0), r.z1 - r.z0 + (ghost ? 0.04 : 0)); o.updateMatrix(); m.setMatrixAt(n, o.matrix) })
+    m.count = keys.length; m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere()
+  }, [keys, ghost])
+  return (
+    <instancedMesh ref={ref} args={[WALL_GEO, undefined, Math.max(1, keys.length)]} frustumCulled={false}>
+      {ghost ? <meshBasicMaterial color={ghost} transparent opacity={0.45} depthWrite={false} /> : <meshLambertMaterial color={WALL_MATS[mat].color} />}
+    </instancedMesh>
+  )
+}
+function WallGhost() {
+  const d = useWallDrag()
+  if (!d || !d.keys.length) return null
+  return <WallRun mat={wallMat} keys={d.keys} ghost={d.erase ? '#ff5a4a' : d.ok ? '#5aa0ff' : '#ff9a3a'} />
+}
+/** the Walls / Erase tools and the wood picker, in the build bar */
+function WallTools({ owned }: { owned: React.MutableRefObject<ReadonlySet<string>> }) {
+  const t = useBuildTool(), mat = useWallMat(), inv = useInv()
+  useEffect(() => {
+    if (t === 'look') return
+    onBuildDraw(wallDrawHandler(() => owned.current, t === 'erase'))
+    return () => onBuildDraw(null)
+  }, [t, owned])
+  const btn = (on: boolean): React.CSSProperties => ({ border: 0, borderRadius: 10, height: 34, padding: '0 10px', cursor: 'pointer', font: '700 12px system-ui', letterSpacing: '.06em', textTransform: 'uppercase', background: on ? H.ink : 'rgba(255,250,235,.7)', color: on ? '#fff' : H.ink, boxShadow: `inset 0 0 0 1px ${H.rule}` })
+  return (
+    <div data-wall-tools style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', padding: '5px 8px', borderRadius: 12, background: 'rgba(255,250,235,.82)', boxShadow: '0 2px 8px rgba(0,0,0,.2)' }}>
+      <button type="button" data-tool="walls" style={btn(t === 'walls')} onClick={() => { setPlacing(null); setBuildTool(t === 'walls' ? 'look' : 'walls') }}>Walls</button>
+      <button type="button" data-tool="erase" style={btn(t === 'erase')} onClick={() => { setPlacing(null); setBuildTool(t === 'erase' ? 'look' : 'erase') }}>Erase</button>
+      {t === 'walls' && WALL_MAT_ORDER.map(m => (
+        <button key={m} type="button" data-wall-mat={m} title={`${WALL_MATS[m].name} · ${countOf(inv, WALL_MATS[m].item)} planks`} onClick={() => { wallMat = m; wdEmit() }}
+          style={{ ...btn(false), display: 'flex', alignItems: 'center', gap: 5, textTransform: 'none', letterSpacing: 0, boxShadow: mat === m ? `inset 0 0 0 2px ${H.ink}` : `inset 0 0 0 1px ${H.rule}` }}>
+          <i style={{ width: 14, height: 14, borderRadius: 3, background: WALL_MATS[m].color, display: 'inline-block' }} />{countOf(inv, WALL_MATS[m].item)}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 // the garden bank's store (garden-bank.ts): one pool, every chest a door into it
 let bank: Bank | null = null
@@ -153,6 +252,8 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
       {allChests(w).map(c => <Keepstone key={c.id} c={c} pose={pose} />)}
       {w.pieces.map(pc => <PieceMesh key={pc.id} p={pc} />)}
       <MoglinsAtWork w={w} />
+      {w.walls && <DrawnWalls walls={w.walls} />}
+      <WallGhost />
       {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} item={p.item} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
     </>
   )
@@ -587,7 +688,7 @@ function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: (
 
 /** Flying (build-mode.tsx): the strip rides along at the top so you can pick the next thing without landing. */
 export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
-  const b = useBuildMode(), p = usePlacing()
+  const b = useBuildMode(), p = usePlacing(), tool = useBuildTool()
   const [sel, setSel] = useState<TablePick | null>(null)
   const ownedRef = useRef(owned); ownedRef.current = owned
   const touchy = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
@@ -600,10 +701,11 @@ export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 8px', borderRadius: 14, background: 'rgba(255,250,235,.88)', boxShadow: '0 2px 10px rgba(0,0,0,.25)', minWidth: 0 }}>
         <button type="button" data-act="land" onClick={() => { setPlacing(null); exitBuild() }}
           style={{ flex: '0 0 auto', border: 0, borderRadius: 10, padding: '0 10px', height: 52, cursor: 'pointer', background: H.ink, color: '#fff', font: '700 12px system-ui', lineHeight: 1.15 }}>Back to<br />keeper</button>
-        <BuildStrip sel={sel} onSel={k => setSel(s => (s === k ? null : k))} size={44} />
+        <BuildStrip sel={sel} onSel={k => { setBuildTool('look'); setSel(s => (s === k ? null : k)) }} size={44} />
       </div>
+      <WallTools owned={ownedRef} />
       {sel && <BuildCard k={sel} onBuilt={() => setSel(null)} />}
-      {!p && !sel && <div style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>Pick something to build · drag to move · {touchy ? 'pinch' : 'wheel'} to zoom{touchy ? '' : ' · WASD · Q Z turn'}</div>}
+      {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a wall · a plank a metre · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · the planks come back' : <>Pick something to build · drag to move · {touchy ? 'pinch' : 'wheel'} to zoom{touchy ? '' : ' · WASD · Q Z turn'}</>}</div>}
     </div>
   )
 }

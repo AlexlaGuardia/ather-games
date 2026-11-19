@@ -17,6 +17,7 @@ import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, BAIT_FROM, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
 import { FURNITURE, MAX_PIECES, KEEPSTONES, keepstoneFor, type Job } from './furniture'
+import { adoptWalls, wallRects, type Walls } from './plot-walls'
 
 export type RoomKind = 'rinnshop' | 'farm' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
 export interface RoomDef {
@@ -70,7 +71,9 @@ export interface Room {
 export interface Chest { id: string; x: number; z: number; q: number; placedAt: number; crystal?: string }
 /** A piece of furniture or decor standing on the plot (furniture.ts). Picked up, it is the bag item `item` again. */
 export interface Piece { id: string; item: string; x: number; z: number; q: number; placedAt: number }
-export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[] }
+export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls }
+/** M37: is this rectangle in a drawn wall (plot-walls.ts)? */
+const inDrawnWall = (w: Works, r: { x0: number; x1: number; z0: number; z1: number }, pad = 0) => wallRects(w.walls ?? {}).some(b => r.x0 - pad < b.x1 && r.x1 + pad > b.x0 && r.z0 - pad < b.z1 && r.z1 + pad > b.z0)
 export const freshWorks = (): Works => ({ v: 1, rooms: [], chests: [], pieces: [] })
 
 const turned = (def: RoomDef, q: number) => (q % 2 === 0 ? { hw: def.w / 2, hd: def.d / 2 } : { hw: def.d / 2, hd: def.w / 2 })
@@ -128,6 +131,7 @@ export function canPlace(works: Works, owned: ReadonlySet<string>, kind: RoomKin
     const g = footprint(o.kind, o.x, o.z, o.q)
     if (f.x0 < g.x1 + 1 && f.x1 > g.x0 - 1 && f.z0 < g.z1 + 1 && f.z1 > g.z0 - 1) return { ok: false, why: `Too close to your ${ROOMS[o.kind].name}.` }
   }
+  if (inDrawnWall(works, f)) return { ok: false, why: 'Your own walls are in the way.' }
   if (inv) { const short = shortOf(def.cost, inv, bank); if (short) return { ok: false, why: `Needs ${short.n} ${short.id.replace(/_/g, ' ')} (you have ${haveFor(inv, bank, short.id)}).` } }
   return { ok: true }
 }
@@ -219,6 +223,7 @@ export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: numbe
     if (Math.hypot(b.x - x, b.z - z) < 1.8) return { ok: false, why: 'That crowds the bench.' }
   }
   if (allChests(works).some(c => Math.hypot(c.x - x, c.z - z) < 1.4)) return { ok: false, why: 'Too close to another Keepstone.' }
+  if (inDrawnWall(works, k, pad)) return { ok: false, why: 'In one of your walls.' }
   if (!(item in KEEPSTONES)) return { ok: false, why: 'That is not a Keepstone.' }
   if (inv && countOf(inv, item) < 1) return { ok: false, why: `No ${KEEPSTONES[item].name} in the bag.${item === KEEPSTONE ? ' Make one at the planning table.' : ''}` }
   return { ok: true }
@@ -366,6 +371,7 @@ export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: st
   }
   if (allChests(works).map(chestBox).some(hit)) return { ok: false, why: 'Too close to a Keepstone.' }
   if (works.pieces.some(p => hit(pieceRect(p.item, p.x, p.z, p.q)))) return { ok: false, why: 'Something already stands there.' }
+  if (inDrawnWall(works, k, pad)) return { ok: false, why: 'In one of your walls.' }
   if (inv && countOf(inv, item) < 1) return { ok: false, why: `No ${f.name} in the bag.` }
   return { ok: true }
 }
@@ -402,6 +408,7 @@ export function loadWorks(): Works {
       chests: Array.isArray(v.chests) ? v.chests.filter((c: Chest) => c && typeof c.id === 'string' && Number.isFinite(c.x) && Number.isFinite(c.z)) : [],
       // furniture arrived after Keepstones (11-17): an older save has none; a piece whose item is gone is dropped
       pieces: Array.isArray(v.pieces) ? v.pieces.filter((p: Piece) => p && typeof p.id === 'string' && p.item in FURNITURE && Number.isFinite(p.x) && Number.isFinite(p.z)) : [],
+      walls: adoptWalls(v.walls),   // M37 (11-19): the keeper's own walls
     }
   } catch { /* private window */ }
   return freshWorks()

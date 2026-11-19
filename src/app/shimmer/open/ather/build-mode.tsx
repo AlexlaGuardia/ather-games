@@ -34,7 +34,20 @@ export function enterBuild(at: { x: number; z: number; yaw: number }) {
   cur.h = 2   // start at eye height and rise: the lift reads as a lift, not a cut
   entered = true; on = true; emit()
 }
-export function exitBuild() { if (!on) return; on = false; held.clear(); point.has = false; emit() }
+export function exitBuild() { if (!on) return; on = false; held.clear(); point.has = false; tool = 'look'; draw?.cancel(); emit() }
+
+// ── M37 (11-19): a DRAWING tool (plot-walls.ts). With 'walls' or 'erase' on, one finger / a left drag draws instead of
+//    panning: the handler gets ground points at the start, along the way and at the end. Two fingers pinch AND pan; a
+//    right or middle mouse drag pans; WASD still flies. 'look' = the old behaviour (a drag pans, a click places).
+export type BuildTool = 'look' | 'walls' | 'erase'
+let tool: BuildTool = 'look'
+export const buildTool = () => tool
+export function setBuildTool(t: BuildTool) { if (t === tool) return; draw?.cancel(); tool = t; emit() }
+export const useBuildTool = () => useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f) } }, () => tool, () => 'look' as BuildTool)
+type DrawHandler = { start(x: number, z: number): void; move(x: number, z: number): void; end(x: number, z: number): void; cancel(): void }
+let draw: DrawHandler | null = null
+/** workshop.tsx: what a drawing drag does. One handler; the last registered wins. */
+export function onBuildDraw(h: DrawHandler | null) { draw = h }
 
 // ── the ground point under the pointer (written by <BuildPointer/>, read by the ghosts) ──
 const point = { x: 0, z: 0, has: false }
@@ -126,11 +139,19 @@ export function BuildPointer() {
     if (!b) return
     const el = gl.domElement
     const pts = new Map<number, { x: number; y: number; sx: number; sy: number }>()
-    let moved = false, pinch0 = 0
+    let moved = false, pinch0 = 0, drawing = false, mid: { x: number; y: number } | null = null
     const setNdc = (e: PointerEvent) => { const r = el.getBoundingClientRect(); ndc.current = { x: ((e.clientX - r.left) / r.width) * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1 } }
+    // the ground under a pointer event NOW (the per-frame point lags a frame; a drag's ends must be exact)
+    const groundAt = (e: PointerEvent) => {
+      setNdc(e); const n = ndc.current!
+      ray.current.setFromCamera(new THREE.Vector2(n.x, n.y), camera)
+      return ray.current.ray.intersectPlane(plane.current, hit.current) ? { x: hit.current.x, z: hit.current.z } : null
+    }
+    const drawsWith = (e: PointerEvent) => tool !== 'look' && !!draw && (e.pointerType !== 'mouse' || e.button === 0)
     const down = (e: PointerEvent) => {
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY }); moved = false
-      if (pts.size === 2) { const [p, q] = [...pts.values()]; pinch0 = Math.hypot(p.x - q.x, p.y - q.y) }
+      if (pts.size === 2) { const [p, q] = [...pts.values()]; pinch0 = Math.hypot(p.x - q.x, p.y - q.y); mid = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }; if (drawing) { drawing = false; draw?.cancel() } }
+      else if (pts.size === 1 && drawsWith(e)) { const g = groundAt(e); if (g) { drawing = true; draw!.start(g.x, g.z) } }
       try { el.setPointerCapture(e.pointerId) } catch { /* old browsers */ }
     }
     const move = (e: PointerEvent) => {
@@ -143,28 +164,35 @@ export function BuildPointer() {
       if (pts.size === 2) {
         const [a, c] = [...pts.values()], d = Math.hypot(a.x - c.x, a.y - c.y)
         if (pinch0 > 0 && d > 0) zoom(pinch0 / d); pinch0 = d
+        const m = { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 }   // M37: two fingers also pan (one finger may be drawing)
+        if (mid) dragPan(m.x - mid.x, m.y - mid.y, el.clientHeight); mid = m
         return
       }
+      if (drawing) { const g = groundAt(e); if (g) draw?.move(g.x, g.z); return }
       if (moved) dragPan(dx, dy, el.clientHeight)
       if (e.pointerType === 'mouse') setNdc(e)
     }
     const up = (e: PointerEvent) => {
       const p = pts.get(e.pointerId); pts.delete(e.pointerId)
       try { el.releasePointerCapture(e.pointerId) } catch { /* fine */ }
+      if (pts.size < 2) mid = null
+      if (drawing) { drawing = false; const g = groundAt(e); if (g && e.type === 'pointerup') draw?.end(g.x, g.z); else draw?.cancel(); return }
       if (!p || moved || pts.size) return
       // a tap, not a drag: touch moves the ghost there; a mouse click places (the ghost is already under it)
       setNdc(e)
       if (e.pointerType === 'mouse' && e.button === 0) tap?.()
     }
     const wheel = (e: WheelEvent) => { e.preventDefault(); zoom(Math.exp(e.deltaY * 0.0012)) }
+    const menu = (e: Event) => e.preventDefault()   // a right drag pans; no menu
     el.addEventListener('pointerdown', down); el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up)
-    el.addEventListener('wheel', wheel, { passive: false })
+    el.addEventListener('wheel', wheel, { passive: false }); el.addEventListener('contextmenu', menu)
     const ta = el.style.touchAction; el.style.touchAction = 'none'
     return () => {
       el.removeEventListener('pointerdown', down); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up)
-      el.removeEventListener('wheel', wheel); el.style.touchAction = ta; ndc.current = null; point.has = false
+      el.removeEventListener('wheel', wheel); el.removeEventListener('contextmenu', menu); el.style.touchAction = ta; ndc.current = null; point.has = false
+      if (drawing) draw?.cancel()
     }
-  }, [b, gl])
+  }, [b, gl, camera])
   useFrame(() => {
     if (!on || !ndc.current) return
     ray.current.setFromCamera(new THREE.Vector2(ndc.current.x, ndc.current.y), camera)
