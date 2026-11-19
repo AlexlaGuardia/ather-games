@@ -68,7 +68,7 @@ const tapText = async (p: Page, re: RegExp) => {
     const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'waymark', n: 12 }; slots[1] = { id: 'bait', n: 10 }
     localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
   })
-  await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 }); await ready(p); await sleep(2500)
+  await p.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'load', timeout: 240000 }); await ready(p); await sleep(2500)
   const t = await A(p, 'tools') as Record<string, { toolId: string } | undefined>
   ok(t.rinning?.toolId === 'worn_rinstick', `A. an old save keeps the worn rinstick (${t.rinning?.toolId ?? 'none'})`)
   ok(((await Q(p, 'quest')) as { state: string })?.state === 'done', 'A. ...and reads as done')
@@ -77,7 +77,7 @@ const tapText = async (p: Page, re: RegExp) => {
 
 // ── B: a fresh birth ──
 const p = await page()
-await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 }); await sleep(6000)
+await p.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'load', timeout: 240000 }); await sleep(6000)
 ok(await poll(() => p.evaluate(() => !!document.querySelector('[data-panel="birth"]')), 60000), 'B. the birth gate shows for a new keeper')
 ok(await tapText(p, /^BE BORN/), 'B. tapped BE BORN')
 ok(await poll(() => p.evaluate(() => !document.querySelector('[data-panel="birth"]')), 30000), 'B. the gate closes')
@@ -97,7 +97,7 @@ ok(((await Q(p, 'said')) as string[]).includes(RINQUEST_LINES.noShop) && b0 > 0 
 
 // ── C: the Rinnshop stands -> Fennel comes -> the talk sends you to the Moonwell at dusk ──
 await p.evaluate((room: Room) => localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [room], chests: [], pieces: [] })), SHOP)
-await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 }); await ready(p); await sleep(2500); await p.mouse.click(500, 350)
+await p.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'load', timeout: 240000 }); await ready(p); await sleep(2500); await p.mouse.click(500, 350)
 ok(await poll(async () => ((await Q(p, 'quest')) as { state: string }).state === 'active', 30000), 'C. a standing Rinnshop starts the quest')
 ok(await poll(async () => ((await Q(p, 'journal')) as { id: string; title: string }[]).some(e => e.id === 'rinquest' && e.title === RINQUEST_STEPS[0].title), 10000), `C. the journal says '${RINQUEST_STEPS[0].title}'`)
 const fs = fennelSpot({ v: 1, rooms: [SHOP], chests: [], pieces: [] } as never)!
@@ -145,7 +145,7 @@ await A(p, 'tp', SCALE_AT.x, SCALE_AT.z); await sleep(1500)
 ok(await poll(async () => ((await Q(p, 'quest')) as { step: number }).step === 3, 20000) && (await countIn(p, 'shed_scale')) === 1, 'E. walking over the bank takes the shed scale')
 
 // ── F: bind it at the Rinnshop bench ──
-await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 }); await ready(p); await sleep(2500); await p.mouse.click(500, 350)
+await p.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'load', timeout: 240000 }); await ready(p); await sleep(2500); await p.mouse.click(500, 350)
 const b = benchOf(SHOP)
 await A(p, 'tp', b.x, b.z - 1.4, 0); await sleep(2500)
 await p.keyboard.press('e')

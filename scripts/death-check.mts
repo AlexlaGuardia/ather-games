@@ -45,7 +45,7 @@ async function walkTo(x: number, z: number) {
 }
 
 // ── 1 + 2: fall ──
-await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'domcontentloaded', timeout: 240000 })
+await p.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'domcontentloaded', timeout: 240000 })
 await p.evaluate((ik, pk, bag) => { localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem(ik, JSON.stringify(bag)); localStorage.removeItem(pk) }, INV_KEY, PACK_KEY, bagOf(START))
 await intoWilds()
 const a0 = await at(), spot = { x: a0.x + 24, z: a0.z - 18 }

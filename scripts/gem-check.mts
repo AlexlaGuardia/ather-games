@@ -102,7 +102,7 @@ try {
   await r.evaluateOnNewDocument(() => { const w = window as any; w.__morelSeen = []
     new MutationObserver(() => { for (const e of document.querySelectorAll('[data-say="morel"]')) { const t = e.textContent ?? ''; if (!w.__morelSeen.includes(t)) w.__morelSeen.push(t) } })
       .observe(document, { childList: true, subtree: true }) })
-  await r.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
+  await r.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'load', timeout: 240000 })
   const P = () => r.evaluate(() => (window as any).__morelPing?.ids ?? []) as Promise<string[]>
   ok(await poll(async () => (await P()).includes('rinquest'), 120000), `8. the Rinnshop stands: Morel pings for Fennel (${(await P()).join(',')})`)
   ok(await r.evaluate(() => ((window as any).__morelSeen as string[]).some(t => /Morel:.*Fennel says/.test(t))), "8. 'Morel: Fennel says…' on the message line")

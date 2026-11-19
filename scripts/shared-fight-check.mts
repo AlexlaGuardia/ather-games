@@ -107,7 +107,7 @@ try {
   }
   // 4 · the host leaves: the guest takes over with the Hollows intact
   const before = ((await F(guest, 'ids')) as H[]).map(g => g.id)
-  await host.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })   // home: the plot opens no socket
+  await host.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'load', timeout: 240000 })   // home: the plot opens no socket
   ok(await poll(async () => (await F(guest, 'host')) === true, 15000), `4. ${ht} left: ${gt} hosts within 15 s`)
   const after = (await F(guest, 'ids')) as H[]
   const kept = before.filter(id => after.some(h => h.id === id)).length

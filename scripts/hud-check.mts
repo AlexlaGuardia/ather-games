@@ -54,7 +54,7 @@ const q = await b.newPage()
 await q.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))   // a fresh profile is born first (birth-gate.tsx); seed a rune so the ritual does not take the screen
 await q.emulate({ viewport: { width: 844, height: 390, deviceScaleFactor: 1, isMobile: true, hasTouch: true, isLandscape: true },
   userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' })
-await q.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 120000 })
+await q.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'load', timeout: 120000 })
 await q.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 120000 })
 await sleep(2500); await q.touchscreen.tap(420, 200); await sleep(800)
 await q.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))
