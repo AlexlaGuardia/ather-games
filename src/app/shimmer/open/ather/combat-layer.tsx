@@ -21,6 +21,8 @@ import { playShot, playEmpty, playReload } from '../shared/gun-sound'
 
 export interface CombatHud {
   hp: number; maxHp: number; ammo: number; clip: number; reloading: boolean; hurtAt: number; hitAt: number; gun: string
+  /** the trigger is held on a drawn gun (BETA M33: Morel's ammo bubble shows while it is) */
+  firing?: boolean
   /** The node champion's bars, when one is up: bar 0..2 is the one being worn down. */
   champ: { bar: number; hp: number; barHp: number; bars: number; open: boolean } | null
 }
@@ -531,6 +533,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       const k = C.keeper
       const ch = C.champ
       onHud({ ...hud.current, gun: C.gun.name, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0,
+        firing: armedRef.current && !frozen.current && (trigger.current || touch.fire || k.sinceShot < 0.3),   // a semi-auto clears the trigger per shot
         champ: ch ? { bar: ch.bar, hp: ch.hp, barHp: CHAMP.barHp, bars: CHAMP.bars, open: ch.state !== 'rise' && ch.state !== 'submerge' && ch.state !== 'home' } : null })
     }
   })

@@ -7,13 +7,14 @@
 //   item — the slot you just selected: REPLACES the last item line (scrolling the bar must not stack names)
 //   info — a toast: something happened (ground bought, a waymark bound)
 //   chat — a line from a person (multiplayer, later)
+//   morel — the glove's gem speaking (BETA M33, shared/morel.ts decides WHEN): drawn 'Morel:' in the gem's colour
 //
 // ★ PURE (no React here): the hook lives in game-hud.tsx. Node tests drive this file directly.
 
-export type SayKind = 'zone' | 'item' | 'info' | 'chat'
+export type SayKind = 'zone' | 'item' | 'info' | 'chat' | 'morel'
 export interface Line { id: number; text: string; kind: SayKind; at: number; ttl: number }
 
-export const TTL: Record<SayKind, number> = { zone: 4.5, item: 1.8, info: 4, chat: 10 }
+export const TTL: Record<SayKind, number> = { zone: 4.5, item: 1.8, info: 4, chat: 10, morel: 4 }
 export const MAX_LINES = 5
 
 let lines: Line[] = []

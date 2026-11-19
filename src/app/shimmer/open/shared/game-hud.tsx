@@ -81,6 +81,8 @@ function useLines(): Line[] {
 }
 
 /** The message line: on the world, never on a plate (the held-label rule), newest at the bottom. */
+/** the glove's seat colour (open-hands C.seat): Morel's lines wear it (BETA M33) */
+const MOREL_GEM = '#7fb6d9'
 function Messages({ style, align }: { style: React.CSSProperties; align: 'left' | 'center' }) {
   const lines = useLines()
   return (
@@ -90,7 +92,7 @@ function Messages({ style, align }: { style: React.CSSProperties; align: 'left' 
           ...(l.kind === 'zone' ? { ...hearthDisplay, fontSize: 20, fontWeight: 700, letterSpacing: '0.04em' } : { ...hearthBody, fontSize: l.kind === 'item' ? 14 : 13, fontWeight: l.kind === 'item' ? 800 : 600 }),
           color: l.kind === 'chat' ? '#cfe8ff' : '#fff6e4', textShadow: '0 1px 3px rgba(0,0,0,.95), 0 0 10px rgba(0,0,0,.45)',
           textAlign: align, lineHeight: 1.3, animation: 'gamehud-in .18s ease-out',
-        }}>{l.text}</div>
+        }} data-say={l.kind}>{l.kind === 'morel' ? <><span style={{ color: MOREL_GEM, fontWeight: 800 }}>Morel:</span> {l.text}</> : l.text}</div>
       ))}
       <style>{'@keyframes gamehud-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}'}</style>
     </div>

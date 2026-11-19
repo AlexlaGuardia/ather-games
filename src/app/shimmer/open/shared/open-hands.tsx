@@ -16,6 +16,7 @@
 // ORDER - 1 clears the depth buffer in onBeforeRender: three draws the transparent list last, sorted by renderOrder, so the
 // clear lands after the whole world and before the hands, which then depth-test only against each other.
 import { useLook } from './look-store'
+import { gemGlow } from './morel'   // M33: the gem pulses when Morel's count changes
 import { OPT } from './keeper-look'
 import { useEffect, useImperativeHandle, useMemo, useRef, forwardRef } from 'react'
 import * as THREE from 'three'
@@ -24,6 +25,8 @@ import { newFpState, stepFpHands, loadFpTune, FP, type FpInput, type HandPose } 
 
 export const ORDER = 1000
 const C = { glove: '#6e4a2c', cuff: '#b9a582', cord: '#7a5a35', seat: '#7fb6d9', bracelet: '#8a6a3c' }
+/** the glove's seat = the gem (M33: Morel's colour too, game-hud MOREL_GEM) */
+export const SEAT_COLOR = C.seat
 
 export interface OpenHandsApi { step: (i: FpInput, dt: number) => void; seat: (lit: number) => void }
 
@@ -82,7 +85,7 @@ export const OpenHands = forwardRef<OpenHandsApi>(function OpenHands(_, ref) {
       rig.root.visible = !i.hidden
       place(rig.R, R); place(rig.L, L)
     },
-    seat: lit => { seatMat.emissiveIntensity = 0.3 + 1.6 * lit },
+    seat: lit => { seatMat.emissiveIntensity = 0.3 + 1.6 * Math.max(lit, gemGlow(performance.now() / 1000)) },
   }), [camera, rig, seatMat])
   useEffect(() => {
     loadFpTune()   // this browser's tune from /shimmer/dev/hands, if any

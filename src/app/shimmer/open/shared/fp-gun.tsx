@@ -23,7 +23,8 @@ import { OPT } from './keeper-look'
 import { useEffect, useImperativeHandle, useMemo, useRef, forwardRef, useSyncExternalStore } from 'react'
 import * as THREE from 'three'
 import { useThree } from '@react-three/fiber'
-import { buildHand, tintMittens, ORDER } from './open-hands'
+import { buildHand, tintMittens, ORDER, SEAT_COLOR } from './open-hands'
+import { gemGlow } from './morel'   // M33: the gem on the gun hand pulses as the rounds change
 import { opticOf, throughScope, type Optic } from './optics'
 import { MARKS, TINTS, drawMark, markGlow, defaultLook, type SightLook } from './sight-marks'
 import { getSightLooks, lookFor } from './sight-looks'
@@ -185,10 +186,11 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
     const sentinel = new THREE.Mesh(new THREE.PlaneGeometry(0.001, 0.001), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }))
     sentinel.renderOrder = ORDER - 1; sentinel.frustumCulled = false; sentinel.position.set(0, 0, -0.3)
     sentinel.onBeforeRender = (renderer) => renderer.clearDepth()
-    const R = buildHand(1, null), L = buildHand(-1, null)
+    const gem = new THREE.MeshStandardMaterial({ color: SEAT_COLOR, emissive: new THREE.Color(SEAT_COLOR), emissiveIntensity: 0.4, roughness: 0.3 })
+    const R = buildHand(1, gem), L = buildHand(-1, null)
     R.scale.setScalar(VM.HAND); L.scale.setScalar(VM.HAND)
     held.add(R, L); root.add(sentinel, held); root.visible = false
-    return { root, held, R, L, model: null as THREE.Group | null, key: '' }
+    return { root, held, R, L, gem, model: null as THREE.Group | null, key: '' }
   }, [])
   const keeperLook = useLook()
   useEffect(() => { const c = OPT.accent[keeperLook.accent]; tintMittens(rig.R, c); tintMittens(rig.L, c) }, [keeperLook.accent, rig])   // M29: the keeper's mittens hold the gun
@@ -204,6 +206,7 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
   }
   useImperativeHandle(ref, () => ({
     step: (i, dt) => {
+      rig.gem.emissiveIntensity = 0.4 + 2.2 * gemGlow(performance.now() / 1000)
       const d = Math.min(dt, 0.1), s = st.current
       if (!i.gun) { adsT = Math.max(0, adsT - d / VM.ADS_OUT); optic = null; glow = 0; publish(); rig.root.visible = false; return }
       selectGunTune(i.gun.id)   // this gun's own tune (per gun since 11-19)

@@ -77,6 +77,7 @@ import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey, touch } from '../shared/touch'
 import { useMenuLock } from '../shared/menu-lock'
 import { BirthGate, useBirthGateUp, BORN_EVENT } from '../birth-gate'
+import { MorelBubble } from '../shared/morel-bubble'   // BETA M33: the glove's gem speaks (ammo)
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
 import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
 import { DeathPack, fallAndDrop } from './death-pack'
@@ -1034,6 +1035,7 @@ function AtherSliceGame() {
           ...(tune && spread ? [{ label: `Tune · day ${Math.floor((clock() - spread.epoch) / GAME_DAY_MS)}`, value: `${allNodes.length - spread.clean.length}/${allNodes.length} grey · [ clear all · ] +1d · ⇧] +5d`, accent: true }] : []),
         ]} />
       <ScopeRing />
+      {zone.kind === 'wilds' && chud && <MorelBubble feed={chudRef} />}
       {zone.kind === 'wilds' && chud && (() => {
         const now = performance.now() / 1000, hurt = Math.max(0, 1 - (now - chud.hurtAt) / 0.6), hit = now - chud.hitAt < 0.12
         return (
