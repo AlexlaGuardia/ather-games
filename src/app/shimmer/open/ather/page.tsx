@@ -69,8 +69,6 @@ import { useLoadout } from '../shared/loadout'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree, type Crystal } from './wilds'
 import { loadIndex, makeWorld, stream, tileOf, zonesOf, TILE_M, type WildsWorld } from './wilds-world'
-import { loadEdits } from './wilds-edits'
-import { WildsEditorRig, WildsEditorPanel } from './wilds-editor'   // BETA M38: owner's terrain editor (B)
 import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
 import { useFolkTalk } from './use-folk-talk'
 import { TilePaths, Settlements, BigTop } from './network-scene'
@@ -249,7 +247,7 @@ function AtherSliceGame() {
   }, [])
   useEffect(() => {
     // the season's path network first (network.ts): no tree may stand on a path, so it must be known before a tile parses
-    Promise.all([loadIndex(), loadNetwork(), loadEdits()]).then(async ([idx, nw]) => {   // M38: the edit layer before the first stream
+    Promise.all([loadIndex(), loadNetwork()]).then(async ([idx, nw]) => {
       const w = makeWorld(idx); if (nw) { w.clear = clearing(nw); w.roads = roadField(nw); setNet(nw); netRef.current = nw }
       await stream(w, GREG_WAYMARK.x, GREG_WAYMARK.z); setWw(w); setWrev(w.rev)
     })
@@ -1053,7 +1051,6 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && ww && <RinningFX ease={easeOf(toolsRef.current.rinning)} waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT && !!toolsRef.current.rinning} onCatch={onCatch} onGone={onGone} />}
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />{net && <TilePaths net={net} W={T} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />}</group> })}
         {ww && <DeathPack active={zone.kind === 'wilds'} />}
-        {zone.kind === 'wilds' && ww && <WildsEditorRig ww={ww} onChanged={() => setWrev(ww.rev)} />}
         {zone.kind === 'wilds' && ww && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
         {zone.kind === 'wilds' && ww && <GladeLots />}
         {zone.kind === 'wilds' && ww && <GladeGreg loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} tour={tour} hold={panel?.kind === 'talk' || panel?.kind === 'greg'} keeper={poseRef} onArrive={onTourArrive} live={gregLive} />}
@@ -1083,7 +1080,6 @@ function AtherSliceGame() {
         )}
       </Canvas>
       {!building && <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />}
-      {zone.kind === 'wilds' && <WildsEditorPanel />}
       <GameHud size={hudSize} pose={poseRef} marks={marksRef} vitals={vitalsRef} mana={manaRef} entries={hotbar} sel={litSlot(stance, inv)} onSelect={i => setStance(st => selectSlot(st, i, getInv()))} onEquip={i => setStance(st => equipSlot(st, i, getInv()))} tools={toolsRef} skills={skillsRef} casts={castHud}
         // never dimmed in the Ather (Alex 11-17: 'the hotbar stays greyed out and doesnt highlight'): the plot uses the bar now
         // (Keepstones, furniture, bait), and HearthHotbar drops the selected slot's light while dimmed (selected = i === sel && !dimmed)

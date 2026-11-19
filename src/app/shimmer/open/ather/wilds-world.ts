@@ -15,7 +15,6 @@ import type { Box, Shape } from '../terrain-world'
 import { parseWilds, loadWilds, BIOME, type BiomeId, type Wilds, type Tree, type Crystal } from './wilds'
 import type { Zone } from './forestry'
 import type { RoadField } from './network'
-import { editsFor } from './wilds-edits'
 
 export const TILE_M = 1000
 export const SEA_FLOOR = -20
@@ -147,20 +146,11 @@ export function zonesOf(w: WildsWorld, name: string): (i: number, j: number) => 
   return (i, j) => m.get(`${i},${j}`) ?? 'meadows'
 }
 
-export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear, w.roads, editsFor(n))): Promise<boolean> {
+export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear, w.roads)): Promise<boolean> {
   const want = new Set(wanted(w, x, z)), keep = new Set(wanted(w, x, z, 2))
   let changed = false
   for (const name of [...w.loaded.keys()]) if (!keep.has(name)) { w.loaded.delete(name); changed = true }
   await Promise.all([...want].filter(n => !w.loaded.has(n)).map(async n => { try { w.loaded.set(n, await load(n)); changed = true } catch { /* retried next tick */ } }))
-  if (changed) w.rev++
-  return changed
-}
-
-/** BETA M38: re-parse loaded tiles with their CURRENT edits (the editor, after a stroke): new Wilds objects, so the scene rebuilds
- *  their mesh and trees. The files come from the browser cache. Returns true if any tile was replaced. */
-export async function reloadTiles(w: WildsWorld, names: string[], load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear, w.roads, editsFor(n))): Promise<boolean> {
-  let changed = false
-  await Promise.all(names.filter(n => w.loaded.has(n)).map(async n => { try { const W = await load(n); if (w.loaded.has(n)) { w.loaded.set(n, W); changed = true } } catch { /* keep the old one */ } }))
   if (changed) w.rev++
   return changed
 }
