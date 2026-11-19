@@ -1,4 +1,7 @@
 // ── BETA M6a: RINNING, FOUND AND PLAYED (2026-11-17, world) ─────────────────────────────────────────────────────────
+// ⚠ PREMISE RETIRED 11-19 (hub): since BETA M22 a newborn has NO rinstick (it is earned: Rinnshop -> Fennel -> the first
+// rinstick), so on prod this check now stops at 'no take' with an empty bag. That is the rule, not a bug. The newborn rinning path
+// is proven by scripts/rinquest-check.mts; run this one only against a keeper that already holds a rinstick.
 // A brand-new keeper (fresh profile, born through the real BE BORN tap) lands a rinn using ONLY what the game offers:
 // the starting bag, the hotbar, the gate's fold map, the HUD prompts. Hooks are used for MOVEMENT (tp to the gate (plot.ts GATE), tp to a
 // shore), for READING (rin(), stance(), the bag in localStorage) and for the stand-in reel hand (hold('track'), the same
@@ -69,6 +72,9 @@ await p.goto(`${url}/shimmer/open/ather`, { waitUntil: 'load', timeout: 240000 }
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(4000)
 seen.gate = await text(); await shot('1-gate')
 res.born = await tapText(/^BE BORN/); await sleep(6000)
+// M29 (11-19): the keeper creator ('Who are you?') follows the birth; a stranger takes the default with a real tap on Looks good
+for (let i = 0; i < 20; i++) { const b = await p.$('[data-creator-done]'); if (b) { if (phone) await b.tap(); else await b.click(); await sleep(2500); break } await sleep(500) }
+res.creatorPassed = !(await p.$('[data-creator-done]'))
 seen.afterBorn = await text(); await shot('2-born')
 // 2 · the welcome card (what a stranger is told before moving)
 if (phone) await tapText(/^Tap to start$/); else { const c = await p.$('canvas'); const bx = await c?.boundingBox(); if (bx) await p.mouse.click(bx.x + bx.width / 2, bx.y + bx.height / 2) }

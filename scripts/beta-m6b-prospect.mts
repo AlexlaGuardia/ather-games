@@ -69,6 +69,9 @@ await p.goto(`${url}/shimmer/open/ather`, { waitUntil: 'load', timeout: 240000 }
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(4000)
 seen.gate = await text()
 res.born = await tapText(/^BE BORN/); await sleep(6000)
+// M29 (11-19): the keeper creator ('Who are you?') follows the birth; a stranger takes the default with a real tap on Looks good
+for (let i = 0; i < 20; i++) { const b = await p.$('[data-creator-done]'); if (b) { await b.click(); await sleep(2500); break } await sleep(500) }
+res.creatorPassed = !(await p.$('[data-creator-done]'))
 await clickCanvas(); await sleep(1500)
 seen.welcomeCard = await text(); await shot('1-welcome')
 res.bagAtBirth = await readBag()
