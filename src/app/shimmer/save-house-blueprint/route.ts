@@ -4,10 +4,10 @@
 // /shimmer/open/house-blueprints (no deploy needed to see a save in the Glade). Validated by the same parseHouse the loader
 // uses; an overwrite is backed up first (safeWriteFile). ⚠ These are Alex's drawings: commit them by pathspec.
 import { NextRequest, NextResponse } from 'next/server'
-import { mkdir, readdir } from 'fs/promises'
+import { mkdir, readdir, rename } from 'fs/promises'
 import { join } from 'path'
 import { safeWriteFile } from '../lib/backup'
-import { parseHouse, houseProblems } from '../open/ather/plot-blueprint'
+import { parseHouse, houseProblems, SAFE_HOUSE_ID } from '../open/ather/plot-blueprint'
 
 const HOUSE_DIR = join(process.cwd(), 'world/house-blueprints')
 
@@ -28,4 +28,12 @@ export async function POST(req: NextRequest) {
   await mkdir(HOUSE_DIR, { recursive: true })
   await safeWriteFile(join(HOUSE_DIR, `${bp.id}.json`), JSON.stringify(bp, null, 1) + '\n')
   return NextResponse.json({ ok: true, id: bp.id, w: bp.w, d: bp.d, pieces: Object.keys(bp.walls).length })
+}
+/** DELETE ?id=: set one aside (renamed to <id>.json.deleted-<ts>, never erased; checks clean up their own test saves with it) */
+export async function DELETE(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get('id') ?? ''
+  if (!SAFE_HOUSE_ID.test(id)) return NextResponse.json({ error: 'bad id' }, { status: 400 })
+  const f = join(HOUSE_DIR, `${id}.json`)
+  try { await rename(f, `${f}.deleted-${Date.now()}`) } catch { return NextResponse.json({ error: 'none' }, { status: 404 }) }
+  return NextResponse.json({ ok: true, id })
 }
