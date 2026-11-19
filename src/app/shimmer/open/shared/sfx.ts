@@ -170,6 +170,10 @@ const RECIPES: Record<string, (b: Bus) => void> = {
   'step-stone': b => { tone(b, 'triangle', 2600, 2300, 0.12, 0.001, 0.025); puff(b, 'highpass', 4000, 1, 0.06, 0.001, 0.012); tone(b, 'triangle', 2100, 1900, 0.09, 0.001, 0.022, 0.04) },   // r2: domino click-clack (Alex)
   'step-wood': b => { tone(b, 'sine', 130, 65, 0.26, 0.002, 0.12); puff(b, 'bandpass', 320, 4, 0.12, 0.002, 0.1); tone(b, 'sawtooth', 210, 260, 0.018, 0.03, 0.14, 0.05) },   // r2: hollow thud + soft creak (Alex)
   'jump': b => { tone(b, 'sine', 95, 50, 0.3, 0.002, 0.09); puff(b, 'lowpass', 500, 0.6, 0.28, 0.003, 0.11); puff(b, 'bandpass', 900, 0.7, 0.1, 0.03, 0.16, 0.03); puff(b, 'bandpass', 2200, 0.7, 0.06, 0.04, 0.14, 0.05) },   // r3: heavier push-off thump + a body swish (r2 + recorded nay)
+  // r6 candidates (Alex 11-19 PM after playtest: jump + double jump need another go); a winner merges into 'jump' / 'air-jump'
+  'cand-jump-hop': b => { tone(b, 'sine', 140, 80, 0.22, 0.002, 0.06); puff(b, 'lowpass', 700, 0.7, 0.12, 0.002, 0.05); tone(b, 'sine', 260, 480, 0.05, 0.01, 0.1, 0.02); puff(b, 'bandpass', 1800, 0.8, 0.07, 0.01, 0.1, 0.02) },
+  'cand-air-jump-spark': b => { puff(b, 'bandpass', 2000, 0.7, 0.12, 0.01, 0.16); tone(b, 'sine', 880, 1100, 0.05, 0.004, 0.12, 0.03); tone(b, 'sine', 1320, 1660, 0.04, 0.004, 0.14, 0.07) },
+  'cand-air-jump-puff': b => { puff(b, 'lowpass', 450, 0.6, 0.2, 0.004, 0.12); tone(b, 'sine', 200, 420, 0.07, 0.01, 0.14); puff(b, 'bandpass', 1200, 0.6, 0.06, 0.02, 0.12, 0.04) },
   'air-jump': b => { puff(b, 'bandpass', 1600, 0.6, 0.16, 0.015, 0.2); tone(b, 'sine', 330, 620, 0.07, 0.01, 0.16); puff(b, 'lowpass', 700, 0.6, 0.12, 0.004, 0.08) },   // new 11-19: double jump = an airy whoosh up + a soft kick
   'slide': b => { puff(b, 'bandpass', 2400, 0.6, 0.16, 0.02, 0.5); puff(b, 'bandpass', 1100, 0.5, 0.12, 0.03, 0.42, 0.04); puff(b, 'lowpass', 420, 0.6, 0.1, 0.01, 0.3) },   // new 11-19: grassy swoosh fading as the slide bleeds off
   'land': b => { tone(b, 'sine', 120, 60, 0.16, 0.002, 0.08); puff(b, 'lowpass', 700, 0.5, 0.26, 0.012, 0.22); puff(b, 'bandpass', 1100, 0.6, 0.08, 0.02, 0.18, 0.03) },   // r2: pushing dirt (Alex)
