@@ -4,12 +4,13 @@
  * Gregory (his old blockout's colours carried onto the rig) and four unnamed folk whose looks are drawn from their ids,
  * beside a keeper for height and a Moglin for scale. ⚠ PLACEHOLDER CRAFT: no canon look exists for any human NPC yet.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { FolkModel, folkLook, type FolkAction } from '../../open/shared/folk-model'
 import { MoglinModel } from '../../open/shared/moglin-model'
 import { KeeperDoll } from '../../open/shared/keeper-doll'
+import { EYE_STAND } from '../../open/shared/locomotion'
 
 const chip: React.CSSProperties = { background: '#211f2b', border: '1px solid #38344a', color: '#ddd6ea', padding: '5px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }
 const IDS = ['gregory', 'co-clerk-rune-hold', 'runesmith-rune-hold', 'smithy-citadel', 'cafe-veradyn']
@@ -22,8 +23,17 @@ function BenchProbe() {
   return null
 }
 
+
+/** A KEEPER'S EYE (dev-eye.test): the camera at EYE_STAND, looking level at the line-up from `dist` m back, where a keeper
+ *  standing in front of them would see them. The orbit lifts you off the ground; this is the view the scale question needs. */
+function EyeCam({ dist }: { dist: number }) {
+  const cam = useThree(s => s.camera)
+  useEffect(() => { cam.position.set(0, EYE_STAND, dist); cam.lookAt(0, EYE_STAND, 0) }, [cam, dist])
+  return null
+}
+
 export default function FolkBench() {
-  const [action, setAction] = useState<FolkAction>('idle')
+  const [action, setAction] = useState<FolkAction>('idle'), [eye, setEye] = useState(false)
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#14131a' }}>
       <header style={{ padding: '10px 14px', borderBottom: '1px solid #2c2a38' }}>
@@ -34,6 +44,7 @@ export default function FolkBench() {
         </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
           {ACTIONS.map(a => <button key={a} data-action={a} onClick={() => setAction(a)} style={{ ...chip, opacity: action === a ? 1 : 0.45, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{a}</button>)}
+          <button data-eye onClick={() => setEye(e => !e)} style={{ ...chip, opacity: eye ? 1 : 0.45 }}>{eye ? 'keeper eye' : 'orbit'}</button>
         </div>
       </header>
       <div style={{ flex: 1, minHeight: 0 }} data-bench="folk">
@@ -50,7 +61,7 @@ export default function FolkBench() {
           ))}
           <group position={[-3.1, 0, -0.4]} rotation={[0, 0.5, 0]}><KeeperDoll action="idle" limbs fps={0} speed={1} /></group>
           <group position={[3.0, 0, -0.2]} rotation={[0, -0.4, 0]}><MoglinModel action="idle" /></group>
-          <OrbitControls target={[0, 0.9, 0]} maxPolarAngle={Math.PI / 2 - 0.02} />
+          {eye ? <EyeCam dist={5.2} /> : <OrbitControls target={[0, 0.9, 0]} maxPolarAngle={Math.PI / 2 - 0.02} />}
           <BenchProbe />
         </Canvas>
       </div>
