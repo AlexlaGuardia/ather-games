@@ -108,11 +108,13 @@ export const noStickLine = (q: RinQuest) => (q.state === 'active' ? RINQUEST_LIN
 
 /** The journal: the open step (keeper's hand), or the done record struck; nothing before the Rinnshop stands (the rinning
  *  pointer says 'build a Rinnshop' then, skill-pointers.ts). The Moonwell step points at the water (beacon + trail). */
-export function questEntries(q: RinQuest, moonwell?: { x: number; z: number }): JournalEntry[] {
+/** `fennel` = where she stands by the Rinnshop (BETA M33: Morel's ping lights the meeting's marker, so the step points at her). */
+export function questEntries(q: RinQuest, moonwell?: { x: number; z: number }, fennel?: { x: number; z: number } | null): JournalEntry[] {
   if (q.state === 'none') return []
   const s = currentStep(q)
   if (s) {
-    const where = (s.do.kind === 'wait' || s.do.kind === 'pickup') && moonwell ? { zone: 'wilds' as const, x: moonwell.x, z: moonwell.z } : null
+    const where = (s.do.kind === 'wait' || s.do.kind === 'pickup') && moonwell ? { zone: 'wilds' as const, x: moonwell.x, z: moonwell.z }
+      : s.id === 'meet' && fennel ? { zone: 'ather' as const, x: fennel.x, z: fennel.z } : null
     return [{ id: 'rinquest', hand: 'keeper', title: s.title, note: s.note, where }]
   }
   return [{ id: 'rinquest', hand: 'keeper', title: 'A rinstick of your own', note: 'Quest done: A Stick That Gives Itself. You have your first rinstick.', where: null, struck: true }]

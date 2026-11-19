@@ -63,6 +63,7 @@ ok(questEntries(doStep(act, T()).q, mw)[0].where?.x === mw.x && questEntries(act
 
 // lines + journal
 ok(noStickLine(fresh()) === RINQUEST_LINES.noShop && noStickLine(act) === RINQUEST_LINES.inQuest, 'line: the no-stick line does not point the right way')
+ok(questEntries(act, mw, { x: 3, z: 4 })[0].where?.zone === 'ather' && questEntries(act, mw, { x: 3, z: 4 })[0].where?.x === 3, 'journal: given where Fennel stands, the meeting step does not point at her (M33 ping)')
 ok(questEntries(fresh()).length === 0, 'journal: a line before the Rinnshop stands (the rinning pointer covers it)')
 ok(questEntries(act)[0]?.title === RINQUEST_STEPS[0].title && !questEntries(act)[0].struck, 'journal: the open step is not shown')
 ok(!!questEntries(q)[0]?.struck, 'journal: the done quest is not struck')

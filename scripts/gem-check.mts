@@ -7,11 +7,14 @@
 //   (the gem's pulse per round is shared/morel.test.ts's: gemGlow; the screenshots show it lit)
 //   7. (S2) STUCK: a keeper standing idle on the errand's first step (see Greg) with ?morel=fast (x20: the 4 min stall = 12 s)
 //      gets ONE Morel hint ('greg' line on the message line), and not a second within the cooldown (15 s fast)
+//   8. (S3) FOLK PING: a born keeper whose first Rinnshop stands: Morel reports Fennel's call ('Fennel says' on the message
+//      line) ONCE, and the quest's meeting marker lights (journal marker on for 'rinquest'); a reload does not ping again
 //   6. 0 page errors. Screenshot to --out (bubble white + red) for the LOOK.
 // Hooks READ only (__morel.bubble/said, __ather.zone, __fpGun). Seeds a born keeper + Kael's loadout (fp-gun-check's seed).
 //   npx tsx scripts/gem-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'node:fs'
+import { RINQUEST_KEY } from '../src/app/shimmer/open/ather/rinquest'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/gem-check')
 mkdirSync(out, { recursive: true })
@@ -84,6 +87,25 @@ try {
   await sleep(8000)
   ok((await H()).length === 1, `7. not repeated inside the cooldown (${(await H()).join(',')})`)
   await q.screenshot({ path: `${out}/3-hint.png` })
+  // 8 · S3: the first Rinnshop stands -> Fennel calls through the gem, her marker lights; once
+  const r = await (await br.createBrowserContext()).newPage(); await r.setViewport({ width: 1280, height: 760 })
+  r.on('pageerror', e => errs.push(String(e).slice(0, 200)))
+  await r.evaluateOnNewDocument('window.__name = (f) => f')
+  await r.evaluateOnNewDocument((k: string) => {
+    if (sessionStorage.getItem('seeded')) return; sessionStorage.setItem('seeded', '1')   // seed once: the reload keeps the game's own writes
+    localStorage.setItem('ather:shimmer:birthRune', 'star')
+    localStorage.setItem(k, JSON.stringify({ v: 1, state: 'none', step: 0 }))
+    localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [{ id: 'gem-check', kind: 'rinnshop', x: -100, z: 100, q: 0, placedAt: 1, doneAt: 2, store: [] }], chests: [], pieces: [] }))
+  }, RINQUEST_KEY)
+  await r.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
+  const P = () => r.evaluate(() => (window as any).__morelPing?.ids ?? []) as Promise<string[]>
+  ok(await poll(async () => (await P()).includes('rinquest'), 120000), `8. the Rinnshop stands: Morel pings for Fennel (${(await P()).join(',')})`)
+  ok(await r.evaluate(() => [...document.querySelectorAll('[data-say="morel"]')].some(e => /Fennel says/.test(e.textContent ?? ''))), "8. 'Morel: Fennel says…' on the message line")
+  ok(await r.evaluate(() => (window as any).__morelPing.marker('rinquest')), "8. her meeting's marker is lit")
+  await r.screenshot({ path: `${out}/4-ping.png` })
+  await sleep(5000); ok((await P()).length === 1, '8. once, not on every tick')
+  await r.reload({ waitUntil: 'load', timeout: 240000 }); await poll(() => r.evaluate(() => !!(window as any).__rinquest), 120000); await sleep(8000)
+  ok((await P()).length === 0, '8. a reload (quest already active) does not ping again')
   ok(errs.length === 0, `6. page errors: ${errs.length} ${errs.join(' | ')}`)
 } finally { await br.close() }
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)

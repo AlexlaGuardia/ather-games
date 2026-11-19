@@ -17,6 +17,9 @@ import { raised } from './rooms'
 import { onShop, doStep, questEntries, currentStep, RINQUEST_LINES, type RinQuest, type QuestEvent } from './rinquest'
 import { loadQuest, saveQuest, TOOLS_EVENT } from './rinsticks'
 import { MOONWELL } from './moonwell'
+import { fennelSpot } from './fennel'
+import { morelPing } from '../shared/morel-ping'   // BETA M33 S3: Fennel calls through the gem
+import { MOREL_PING } from '../shared/morel-lines'
 
 let q: RinQuest | null = null
 const get = () => (q ??= loadQuest())
@@ -84,13 +87,13 @@ export function useRinQuest() {
     const g = window as unknown as { __rinquest?: Record<string, unknown> }
     g.__rinquest = { quest: () => get(), journal: () => getJournal().entries.map(e => ({ id: e.id, title: e.title, struck: !!e.struck })), said: () => linesAt().map(l => l.text), moonwell: () => MOONWELL }
   }, [])
-  useEffect(() => { postEntries('rinquest', questEntries(quest, MOONWELL)) }, [quest])
+  useEffect(() => { postEntries('rinquest', questEntries(quest, MOONWELL, fennelSpot(currentWorks()))) }, [quest])
   useEffect(() => {
     if (quest.state !== 'none') return
     const tick = () => {
       const shop = currentWorks().rooms.some(r => r.kind === 'rinnshop' && raised(r))
       const n = onShop(get(), shop)
-      if (n !== get()) { put(n); hudSay(RINQUEST_LINES.started, 'info') }
+      if (n !== get()) { put(n); hudSay(RINQUEST_LINES.started, 'info'); morelPing('rinquest', MOREL_PING.fennel_rinstick) }   // the first Rinnshop: Fennel calls (her meeting's marker lights)
     }
     tick(); const id = setInterval(tick, 2000); return () => clearInterval(id)
   }, [quest.state])
