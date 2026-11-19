@@ -30,24 +30,41 @@ try {
   const F = (k: string) => p.evaluate((f: string) => (window as any).__fight[f](), k)
   ok((await F('sharing')) === false && (await F('host')) === true, '1. alone: not sharing, its own host')
   ok(await poll(async () => ((await F('ids')) as H[]).length > 0, 120000), `2. Hollows spawn round a lone keeper (${((await F('ids')) as H[]).length})`)
-  await p.keyboard.down('KeyR'); await sleep(150); await p.keyboard.up('KeyR')
-  ok(await poll(async () => (await p.evaluate(() => (window as any).__ather.stance()?.kind)) === 'weapon', 10000), '   R drew the Repeater')
-  // 3 · stand 7 m off the nearest Hollow, aim at its body, click until its hp drops
+  // R tap, polled: on a 1-2 fps box one 150 ms tap can fall between frames, so tap again until the stance says weapon
+  let drawn = false
+  for (let i = 0; i < 5 && !drawn; i++) {
+    await p.keyboard.down('KeyR'); await sleep(150); await p.keyboard.up('KeyR')
+    drawn = await poll(async () => (await p.evaluate(() => (window as any).__ather.stance()?.kind)) === 'weapon', 4000)
+  }
+  ok(drawn, '   R drew the Repeater')
+  // 3 · stand ~7 m off the nearest Hollow, aim at its body, click until a Hollow's hp drops.
+  // #1652: Hollows CHASE, so nothing here waits a fixed time. The tp is polled until the keeper is there; the aim is
+  // computed from positions read in the SAME evaluate that turns the camera (no round trip for the Hollow to move in);
+  // and a hit is ANY Hollow below the highest hp we have seen it at (Hollows never regen; solo, only our shots hurt),
+  // so a shot that lands late, or lands on the Hollow that stepped in front, still counts instead of being lost.
+  const maxSeen = new Map<number, number>()
+  const read = async () => { const hs = (await F('ids')) as H[]; for (const h of hs) maxSeen.set(h.id, Math.max(maxSeen.get(h.id) ?? 0, h.hp)); return hs }
+  const anyHit = async () => (await read()).find(h => h.hp < (maxSeen.get(h.id) ?? h.hp)) ?? null
   let hit: string | null = null
   for (let i = 0; i < 40 && !hit; i++) {
-    const s = await p.evaluate(() => { const a = (window as any).__ather.state(); return { x: a.px, y: a.py ?? 0, z: a.pz } })
-    const hs = (await F('ids')) as H[]; if (!hs.length) { await sleep(1000); continue }
+    const s = await p.evaluate(() => { const a = (window as any).__ather.state(); return { x: a.px, z: a.pz } })
+    const hs = await read(); if (!hs.length) { await sleep(1000); continue }
     const t = [...hs].sort((a, b) => Math.hypot(a.x - s.x, a.z - s.z) - Math.hypot(b.x - s.x, b.z - s.z))[0]
-    const dx = t.x - s.x, dz = t.z - s.z, d = Math.hypot(dx, dz) || 1, yaw = Math.atan2(-dx, -dz)
-    if (d > 9 || d < 4) { await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, y), t.x - dx / d * 7, t.z - dz / d * 7, yaw); await sleep(1500) }
-    const s2 = await p.evaluate(() => { const a = (window as any).__ather.state(); return { x: a.px, y: a.py ?? 0, z: a.pz } })
-    const hs2 = (await F('ids')) as H[]; const t2 = hs2.find(h => h.id === t.id); if (!t2) continue
-    const ex = t2.x - s2.x, ez = t2.z - s2.z, dd = Math.hypot(ex, ez) || 1
-    await p.evaluate((yw: number, pt: number) => (window as any).__ather.look(yw, pt), Math.atan2(-ex, -ez), -Math.atan2(0.75, dd))   // eye ~1.6 m, body ~0.85 m
-    const hp0 = t2.hp
+    const dx = t.x - s.x, dz = t.z - s.z, d = Math.hypot(dx, dz) || 1
+    if (d > 9 || d < 4) {
+      const gx = t.x - dx / d * 7, gz = t.z - dz / d * 7
+      await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, y), gx, gz, Math.atan2(-dx, -dz))
+      await poll(async () => { const a = await p.evaluate(() => (window as any).__ather.state()); return Math.hypot(a.px - gx, a.pz - gz) < 1.5 }, 10000)
+    }
+    const aim = await p.evaluate((id: number) => {
+      const w = window as any, a = w.__ather.state(), h = w.__fight.ids().find((o: any) => o.id === id); if (!h) return null
+      const ex = h.x - a.px, ez = h.z - a.pz, dd = Math.hypot(ex, ez) || 1
+      w.__ather.look(Math.atan2(-ex, -ez), -Math.atan2(0.75, dd)); return dd   // eye ~1.6 m, body ~0.85 m
+    }, t.id)
+    if (aim === null) continue
     await p.mouse.down(); await sleep(200); await p.mouse.up()
-    const dropped = await poll(async () => { const h = ((await F('ids')) as H[]).find(o => o.id === t.id); return !h || h.hp < hp0 }, 3000)
-    if (dropped) { const h = ((await F('ids')) as H[]).find(o => o.id === t.id); hit = `Hollow ${t.id}: ${hp0} -> ${h ? h.hp : 'dispersed'} at ${dd.toFixed(1)} m (shot ${i + 1})` }
+    const h = await poll(async () => !!(await anyHit()), 6000) ? await anyHit() : null
+    if (h) hit = `Hollow ${h.id}: ${maxSeen.get(h.id)} -> ${h.hp} (aimed ${t.id} at ${aim.toFixed(1)} m, shot ${i + 1})`
   }
   ok(!!hit, `3. a real shot lowers a Hollow's hp locally: ${hit ?? 'never hit in 40 shots'}`)
   ok(errs.length === 0, `4. page errors: ${errs.length} ${errs.join(' | ')}`)
