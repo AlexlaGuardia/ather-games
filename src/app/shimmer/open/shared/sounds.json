@@ -1,114 +1,114 @@
 [
- {
-  "id": "step-grass",
-  "area": "footsteps",
-  "status": "proposed",
-  "note": "",
-  "desc": "Footstep on grass: soft brushy rustle",
-  "source": "synth"
- },
- {
-  "id": "step-stone",
-  "area": "footsteps",
-  "status": "proposed",
-  "note": "",
-  "desc": "Footstep on stone: dry tick with a short knock",
-  "source": "synth"
- },
- {
-  "id": "step-wood",
-  "area": "footsteps",
-  "status": "proposed",
-  "note": "",
-  "desc": "Footstep on wood: hollow thock",
-  "source": "synth"
- },
- {
-  "id": "jump",
-  "area": "movement",
-  "status": "proposed",
-  "note": "",
-  "desc": "Jump: quick rising puff",
-  "source": "synth"
- },
- {
-  "id": "land",
-  "area": "movement",
-  "status": "proposed",
-  "note": "",
-  "desc": "Land: soft thud with a breath of dust",
-  "source": "synth"
- },
- {
-  "id": "hit-axe-tree",
-  "area": "tool hits",
-  "status": "proposed",
-  "note": "",
-  "desc": "Axe on a tree: chop, woody knock",
-  "source": "synth"
- },
- {
-  "id": "hit-prune-tree",
-  "area": "tool hits",
-  "status": "proposed",
-  "note": "",
-  "desc": "Prune on a tree: lighter snip and leaf rustle",
-  "source": "synth"
- },
- {
-  "id": "hit-pick-crystal",
-  "area": "tool hits",
-  "status": "proposed",
-  "note": "",
-  "desc": "Pick on a crystal node: bright chink",
-  "source": "synth"
- },
- {
-  "id": "hit-prospect-crystal",
-  "area": "tool hits",
-  "status": "proposed",
-  "note": "",
-  "desc": "Prospect on a crystal node: glassy tap with a ring",
-  "source": "synth"
- },
- {
-  "id": "pickup-grey-matter",
-  "area": "pickups",
-  "status": "proposed",
-  "note": "",
-  "desc": "Grey matter pickup: low soft blip",
-  "source": "synth"
- },
- {
-  "id": "pickup-item",
-  "area": "pickups",
-  "status": "proposed",
-  "note": "",
-  "desc": "Item pickup: two-note pop",
-  "source": "synth"
- },
- {
-  "id": "ui-tap",
-  "area": "ui",
-  "status": "proposed",
-  "note": "",
-  "desc": "UI tap: tiny tick",
-  "source": "synth"
- },
- {
-  "id": "ui-panel-open",
-  "area": "ui",
-  "status": "proposed",
-  "note": "",
-  "desc": "Panel open: short rising swish",
-  "source": "synth"
- },
- {
-  "id": "ui-panel-close",
-  "area": "ui",
-  "status": "proposed",
-  "note": "",
-  "desc": "Panel close: short falling swish",
-  "source": "synth"
- }
+  {
+    "id": "step-grass",
+    "area": "footsteps",
+    "status": "proposed",
+    "note": "Alex r1 nay: \"a little softer\" (r2)",
+    "desc": "Footstep on grass: soft brushy rustle",
+    "source": "synth"
+  },
+  {
+    "id": "step-stone",
+    "area": "footsteps",
+    "status": "proposed",
+    "note": "Alex r1 nay: \"more like a domino click clack\" (r2)",
+    "desc": "Footstep on stone: dry tick with a short knock",
+    "source": "synth"
+  },
+  {
+    "id": "step-wood",
+    "area": "footsteps",
+    "status": "proposed",
+    "note": "Alex r1 nay: \"a hollow thudding with a soft creaking\" (r2)",
+    "desc": "Footstep on wood: hollow thock",
+    "source": "synth"
+  },
+  {
+    "id": "jump",
+    "area": "movement",
+    "status": "proposed",
+    "note": "Alex r1 nay: \"exaggerate the last step type so it sounds like pushing off\" (r2)",
+    "desc": "Jump: quick rising puff",
+    "source": "synth"
+  },
+  {
+    "id": "land",
+    "area": "movement",
+    "status": "proposed",
+    "note": "Alex r1 nay: \"more like a pushing dirt noise\" (r2)",
+    "desc": "Land: soft thud with a breath of dust",
+    "source": "synth"
+  },
+  {
+    "id": "hit-axe-tree",
+    "area": "tool hits",
+    "status": "yay",
+    "note": "Alex r1: yay, \"Sharper\" (r2 sharpened)",
+    "desc": "Axe on a tree: chop, woody knock",
+    "source": "synth"
+  },
+  {
+    "id": "hit-prune-tree",
+    "area": "tool hits",
+    "status": "yay",
+    "note": "",
+    "desc": "Prune on a tree: lighter snip and leaf rustle",
+    "source": "synth"
+  },
+  {
+    "id": "hit-pick-crystal",
+    "area": "tool hits",
+    "status": "yay",
+    "note": "",
+    "desc": "Pick on a crystal node: bright chink",
+    "source": "synth"
+  },
+  {
+    "id": "hit-prospect-crystal",
+    "area": "tool hits",
+    "status": "yay",
+    "note": "",
+    "desc": "Prospect on a crystal node: glassy tap with a ring",
+    "source": "synth"
+  },
+  {
+    "id": "pickup-grey-matter",
+    "area": "pickups",
+    "status": "yay",
+    "note": "",
+    "desc": "Grey matter pickup: low soft blip",
+    "source": "synth"
+  },
+  {
+    "id": "pickup-item",
+    "area": "pickups",
+    "status": "yay",
+    "note": "",
+    "desc": "Item pickup: two-note pop",
+    "source": "synth"
+  },
+  {
+    "id": "ui-tap",
+    "area": "ui",
+    "status": "yay",
+    "note": "",
+    "desc": "UI tap: tiny tick",
+    "source": "synth"
+  },
+  {
+    "id": "ui-panel-open",
+    "area": "ui",
+    "status": "yay",
+    "note": "",
+    "desc": "Panel open: short rising swish",
+    "source": "synth"
+  },
+  {
+    "id": "ui-panel-close",
+    "area": "ui",
+    "status": "yay",
+    "note": "",
+    "desc": "Panel close: short falling swish",
+    "source": "synth"
+  }
 ]
