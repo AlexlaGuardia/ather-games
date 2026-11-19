@@ -52,40 +52,49 @@ function kit(c: AudioContext, out: AudioNode) {
   return { sources, hiss, lfo, blip }
 }
 
+// a pentatonic set for the spring's mana chimes (C major pentatonic around C6): soft, never a melody, never dissonant
+const MANA_NOTES = [1046.5, 1174.7, 1318.5, 1568.0, 1760.0]
+const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)]
+
 const BUILD: Record<string, (c: AudioContext, out: AudioNode) => Built> = {
+  // r2 (Alex 11-19 on the Sound Desk): day "sounds like an ocean ... a mana rich spring"; night "the ringing is too much";
+  // water "just softer". So: no big swelling breeze; a spring = a soft trickle + sparse mana chimes (pentatonic, long tails)
+  // + a few birds; night = the same spring hushed, crickets as rare soft chirps, not a constant ring.
   'amb-glade-day': (c, out) => {
     const k = kit(c, out)
-    const leaves = k.hiss('bandpass', 700, 0.45, 0.5); k.lfo(0.11, 0.18, leaves.g.gain); k.lfo(0.07, 260, leaves.f.frequency)
-    k.hiss('highpass', 2600, 0.3, 0.05)   // the thin rustle on top
+    const rustle = k.hiss('highpass', 3200, 0.3, 0.035); k.lfo(0.08, 0.015, rustle.g.gain)   // a thin leaf rustle, no swell
+    const brook = k.hiss('bandpass', 1500, 2.2, 0.06); k.lfo(0.9, 0.025, brook.g.gain); k.lfo(0.31, 380, brook.f.frequency)   // the spring's trickle
+    const chimes = c.createBiquadFilter(); chimes.type = 'lowpass'; chimes.frequency.value = 3800; chimes.connect(out)
     const birds = c.createBiquadFilter(); birds.type = 'lowpass'; birds.frequency.value = 5200; birds.connect(out)
     const gapScale = { v: 1 }
-    return { sources: k.sources, gapScale, ev: { gap: () => rr(2.2, 6.5) * gapScale.v, fire: (cx, _o, t) => {
-      const n = 2 + Math.floor(Math.random() * 4), base = rr(2300, 4200), up = Math.random() < 0.6
-      let at = t
-      for (let i = 0; i < n; i++) { const f = base * (1 + (Math.random() - 0.5) * 0.12) * (up ? 1 + i * 0.03 : 1 - i * 0.03), d = rr(0.05, 0.1); k.blip(birds, at, f, f * rr(1.08, 1.3), rr(0.07, 0.13), 0.012, d); at += d + rr(0.07, 0.2) }
-      void cx } } }
+    return { sources: k.sources, gapScale, ev: { gap: () => rr(1.6, 4.2) * gapScale.v, fire: (_cx, _o, t) => {
+      if (Math.random() < 0.7) { const f = pick(MANA_NOTES) * (Math.random() < 0.3 ? 2 : 1); k.blip(chimes, t, f, f * 0.998, rr(0.025, 0.045), 0.02, rr(1.4, 2.4)); k.blip(chimes, t, f * 2.01, f * 2.0, rr(0.006, 0.012), 0.02, rr(0.8, 1.3)) }
+      else { const n = 2 + Math.floor(Math.random() * 3), base = rr(2600, 4000); let at = t
+        for (let i = 0; i < n; i++) { const fb = base * (1 + (Math.random() - 0.5) * 0.1), d = rr(0.05, 0.09); k.blip(birds, at, fb, fb * rr(1.08, 1.25), rr(0.035, 0.07), 0.012, d); at += d + rr(0.08, 0.2) } }
+    } } }
   },
   'amb-glade-night': (c, out) => {
     const k = kit(c, out)
-    const leaves = k.hiss('bandpass', 520, 0.45, 0.28); k.lfo(0.09, 0.1, leaves.g.gain); k.lfo(0.06, 160, leaves.f.frequency)
-    for (const [f, rate] of [[4300, 5.1], [4650, 4.4]] as const) {   // each cricket: a high sine pulsed by a fast LFO, swelling by a slow one
-      const o = c.createOscillator(), g = c.createGain(); o.frequency.value = f; g.gain.value = 0.012; o.connect(g); g.connect(out); o.start(); k.sources.push(o)
-      k.lfo(rate, 0.011, g.gain); k.lfo(0.17 + rate / 100, 0.004, g.gain)
-    }
+    const brook = k.hiss('bandpass', 1300, 2.2, 0.035); k.lfo(0.7, 0.015, brook.g.gain)
+    const soft = c.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 3000; soft.connect(out)
     const owl = c.createBiquadFilter(); owl.type = 'lowpass'; owl.frequency.value = 700; owl.connect(out)
-    return { sources: k.sources, ev: { gap: () => rr(18, 45), fire: (_c, _o, t) => {
-      const f = rr(330, 400); k.blip(owl, t, f * 1.05, f, 0.11, 0.06, 0.32); k.blip(owl, t + 0.55, f, f * 0.9, 0.12, 0.07, 0.5) } } }
+    return { sources: k.sources, ev: { gap: () => rr(2.5, 6), fire: (_c, _o, t) => {
+      const r = Math.random()
+      if (r < 0.55) { const f = rr(3400, 3800); for (let i = 0; i < 3; i++) k.blip(soft, t + i * 0.09, f, f * 0.99, 0.008, 0.006, 0.05) }   // a cricket chirp, then quiet
+      else if (r < 0.93) { const f = pick(MANA_NOTES) * 0.5; k.blip(soft, t, f, f, rr(0.015, 0.025), 0.03, rr(1.8, 2.8)) }   // a slow, low mana note
+      else { const f = rr(330, 400); k.blip(owl, t, f * 1.05, f, 0.08, 0.06, 0.32); k.blip(owl, t + 0.55, f, f * 0.9, 0.09, 0.07, 0.5) }
+    } } }
   },
-  'amb-water': (c, out) => {
+  'amb-water': (c, out) => {   // r2: softer (Alex)
     const k = kit(c, out)
-    const lap = k.hiss('bandpass', 420, 0.9, 0.55); k.lfo(0.36, 0.22, lap.g.gain); k.lfo(0.23, 120, lap.f.frequency)
-    const tr = k.hiss('bandpass', 2300, 3.5, 0.06); k.lfo(1.7, 0.035, tr.g.gain); k.lfo(0.5, 500, tr.f.frequency)
-    return { sources: k.sources, ev: { gap: () => rr(0.9, 3), fire: (_c, o, t) => { const f = rr(700, 1300); k.blip(o, t, f, f * 1.7, rr(0.03, 0.06), 0.004, 0.07) } } }
+    const lap = k.hiss('bandpass', 420, 0.9, 0.3); k.lfo(0.36, 0.11, lap.g.gain); k.lfo(0.23, 100, lap.f.frequency)
+    const tr = k.hiss('bandpass', 2300, 3.5, 0.035); k.lfo(1.7, 0.02, tr.g.gain); k.lfo(0.5, 400, tr.f.frequency)
+    return { sources: k.sources, ev: { gap: () => rr(1.4, 3.6), fire: (_c, o, t) => { const f = rr(700, 1300); k.blip(o, t, f, f * 1.7, rr(0.015, 0.035), 0.004, 0.07) } } }
   },
   'amb-wilds-wind': (c, out) => {
     const k = kit(c, out)
-    const w = k.hiss('bandpass', 480, 0.4, 0.5); k.lfo(0.05, 0.3, w.g.gain); k.lfo(0.08, 320, w.f.frequency)   // slow gusts: level and colour drift together
-    const air = k.hiss('highpass', 1800, 0.3, 0.08); k.lfo(0.06, 0.06, air.g.gain)
+    const w = k.hiss('bandpass', 480, 0.4, 0.22); k.lfo(0.05, 0.1, w.g.gain); k.lfo(0.08, 200, w.f.frequency)   // r2 (Alex: too windy): half the level, gentler gusts
+    const air = k.hiss('highpass', 1800, 0.3, 0.035); k.lfo(0.06, 0.02, air.g.gain)
     return { sources: k.sources }
   },
   'amb-town': (c, out) => {
