@@ -5,7 +5,7 @@
  * beside a keeper for height and a Moglin for scale. ⚠ PLACEHOLDER CRAFT: no canon look exists for any human NPC yet.
  */
 import { useState } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { FolkModel, folkLook, type FolkAction } from '../../open/shared/folk-model'
 import { MoglinModel } from '../../open/shared/moglin-model'
@@ -14,6 +14,13 @@ import { KeeperDoll } from '../../open/shared/keeper-doll'
 const chip: React.CSSProperties = { background: '#211f2b', border: '1px solid #38344a', color: '#ddd6ea', padding: '5px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }
 const IDS = ['gregory', 'co-clerk-rune-hold', 'runesmith-rune-hold', 'smithy-citadel', 'cafe-veradyn']
 const ACTIONS: FolkAction[] = ['idle', 'talk', 'wave']
+
+// checks' hook (m25-folk-perf-check): the renderer's per-frame draw calls with the whole crowd on screen
+function BenchProbe() {
+  const gl = useThree(s => s.gl)
+  if (typeof window !== 'undefined') (window as unknown as { __folkBench?: unknown }).__folkBench = { calls: () => gl.info.render.calls, rigs: IDS.length }
+  return null
+}
 
 export default function FolkBench() {
   const [action, setAction] = useState<FolkAction>('idle')
@@ -44,6 +51,7 @@ export default function FolkBench() {
           <group position={[-3.1, 0, -0.4]} rotation={[0, 0.5, 0]}><KeeperDoll action="idle" limbs fps={0} speed={1} /></group>
           <group position={[3.0, 0, -0.2]} rotation={[0, -0.4, 0]}><MoglinModel action="idle" /></group>
           <OrbitControls target={[0, 0.9, 0]} maxPolarAngle={Math.PI / 2 - 0.02} />
+          <BenchProbe />
         </Canvas>
       </div>
     </div>
