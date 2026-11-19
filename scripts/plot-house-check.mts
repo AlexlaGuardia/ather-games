@@ -119,7 +119,10 @@ try {
   const doorX = (Math.min(...dk) + Math.max(...dk) + 1) / 2
   await p.mouse.click(550, 340); await sleep(400)
   await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), doorX, Z1 + 1.6); await sleep(1500)
-  await p.keyboard.down('KeyW'); await sleep(3500); await p.keyboard.up('KeyW'); await sleep(500)
+  // hold W until the keeper is inside or 25 s pass (1-2 fps here: a fixed hold measures the frame rate, not the door)
+  await p.keyboard.down('KeyW')
+  await poll(async () => (await p.evaluate(() => (window as any).__ather.state().pz)) < Z1 - 0.6, 25000)
+  await p.keyboard.up('KeyW'); await sleep(500)
   const inside = await p.evaluate(() => { const a = (window as any).__ather.state(); return { x: a.px, z: a.pz } })
   ok(inside.z < Z1 - 0.3 && inside.z > Z0 && Math.abs(inside.x - doorX) < 1.2, `8. the keeper walks in through the door (ended at ${inside.x.toFixed(1)}, ${inside.z.toFixed(1)}; the wall line is z ${Z1})`)
   await shot('house-7-inside')
