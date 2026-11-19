@@ -17,7 +17,7 @@ import { getInv, setInv, useInv } from '../shared/bag'
 import { countOf, itemDef, makeBait, BAIT_FROM, HOTBAR, SLOTS, type Stack, type Inv } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
 import { GROUND_Y, squareAt, sqId } from './plot'
-import { snapCorner, runKeys, canLay, lay, raze, wallBoxes, edgeRect, findRooms, roofMesh, WALL_MATS, WALL_MAT_ORDER, ROOF_STYLES, LOW_WALL, type Corner, type WallMat, type Walls, type RoofStyle, type PlotRoom } from './plot-walls'
+import { snapCorner, runKeys, canLay, lay, raze, wallBoxes, edgeRect, findRooms, roofMesh, pieceAt, roomAt, toggleDoor, toggleWindow, paintWall, paintFloor, floorOf, WALL_MATS, WALL_MAT_ORDER, ROOF_STYLES, LOW_WALL, DOOR_H, SILL, WIN_TOP, WALL_T, type Corner, type WallMat, type Walls, type RoofStyle, type PlotRoom, type Floors } from './plot-walls'
 import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
@@ -82,6 +82,29 @@ function wallVerdict(owned: ReadonlySet<string>, a: Corner, b: Corner, erase: bo
   const v = canLay(w.walls ?? {}, keys, wallMat, heldCorner(owned), wallBlockers(w), getInv())
   return { keys, ok: v.ok, why: v.ok ? '' : v.why }
 }
+/** M37 slice 3: Door / Window / Paint act on a TAP (a press that barely moves): the piece under it, or the room */
+function tapToolHandler(kind: 'door' | 'window' | 'paint') {
+  let at: { x: number; z: number } | null = null
+  return {
+    start(x: number, z: number) { at = { x, z } },
+    move() { /* a tap tool ignores drags */ },
+    end(x: number, z: number) {
+      if (!at || Math.hypot(x - at.x, z - at.z) > 1.2) { at = null; return }
+      at = null
+      const w = currentWorks(), walls = w.walls ?? {}, k = pieceAt(walls, x, z)
+      if (kind === 'paint') {
+        if (k) { const r = paintWall(walls, getInv(), k, wallMat); if ('why' in r) { hudSay(r.why, 'info'); return } setWorks({ ...w, walls: r.walls }); setInv(r.inv); return }
+        const room = roomAt(findRooms(walls), x, z); if (!room) { hudSay('Tap a wall, or the floor of one of your rooms.', 'info'); return }
+        setWorks({ ...w, floors: paintFloor(w.floors, room, wallMat) }); return
+      }
+      if (!k) { hudSay(kind === 'door' ? 'Tap a wall to put a door in it.' : 'Tap a wall to put a window in it.', 'info'); return }
+      const c = kind === 'door' ? toggleDoor(walls, k) : toggleWindow(walls, k)
+      if (!c.ok) { hudSay(c.why, 'info'); return }
+      setWorks({ ...w, walls: c.walls })
+    },
+    cancel() { at = null },
+  }
+}
 /** BuildBar registers this while the Walls / Erase tool is on */
 function wallDrawHandler(owned: () => ReadonlySet<string>, erase: boolean) {
   const at = (x: number, z: number) => snapCorner(x, z)
@@ -114,31 +137,44 @@ const WALL_GEO = new THREE.BoxGeometry(1, 1, 1)
 let wallsDown = false
 const setWallsDown = (v: boolean) => { wallsDown = v; wdEmit() }
 const useWallsDown = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => wallsDown, () => false)
-function DrawnWalls({ walls, roof }: { walls: Walls; roof: RoofStyle }) {
+function DrawnWalls({ walls, roof, floors }: { walls: Walls; roof: RoofStyle; floors?: Floors }) {
   const b = useBuildMode(), down = useWallsDown() && b
   useEffect(() => { if (!b && wallsDown) setWallsDown(false) }, [b])
-  const byMat = useMemo(() => { const m = new Map<WallMat, string[]>(); for (const [k, w] of Object.entries(walls)) { const l = m.get(w.mat) ?? []; l.push(k); m.set(w.mat, l) } return [...m] }, [walls])
+  // runs by wood AND kind: a plain piece is floor to top, a door only its lintel, a window a sill + a head + a pane
+  const byMat = useMemo(() => { const m = new Map<string, string[]>(); for (const [k, w] of Object.entries(walls)) { const id = `${w.mat}|${w.kind ?? 'wall'}`; const l = m.get(id) ?? []; l.push(k); m.set(id, l) } return [...m].map(([id, keys]) => { const [mat, kind] = id.split('|'); return { mat: mat as WallMat, kind, keys } }) }, [walls])
+  const panes = useMemo(() => Object.entries(walls).filter(([, w]) => w.kind === 'window').map(([k]) => k), [walls])
   const rooms = useMemo(() => findRooms(walls), [walls])
   useEffect(() => { (window as unknown as { __walls?: object }).__walls = { rooms: () => rooms.map(r => ({ cells: r.cells.length, rect: !!r.rect })), down: () => down, roof: () => roof } }, [rooms, down, roof])
   return (
     <>
-      {byMat.map(([mat, keys]) => <WallRun key={mat + keys.length + (down ? 'd' : '')} mat={mat} keys={keys} h={down ? LOW_WALL : WALL_H} />)}
-      {rooms.map(r => <RoomFloor key={r.key} room={r} />)}
+      {byMat.map(({ mat, kind, keys }) => {
+        const top = down ? LOW_WALL : WALL_H, id = mat + kind + keys.length + (down ? 'd' : '')
+        if (kind === 'door') return top > DOOR_H ? <WallRun key={id} mat={mat} keys={keys} y0={DOOR_H} h={top - DOOR_H} /> : null
+        if (kind === 'window') return <React.Fragment key={id}><WallRun mat={mat} keys={keys} h={Math.min(SILL, top)} />{top > WIN_TOP && <WallRun mat={mat} keys={keys} y0={WIN_TOP} h={top - WIN_TOP} />}</React.Fragment>
+        return <WallRun key={id} mat={mat} keys={keys} h={top} />
+      })}
+      {!down && panes.length > 0 && <WallRun key={'pane' + panes.length} mat="goldwood" keys={panes} y0={SILL} h={WIN_TOP - SILL} pane />}
+      {rooms.map(r => <RoomFloor key={r.key} room={r} floors={floors} />)}
       {!down && rooms.map(r => <RoomRoof key={r.key + roof} room={r} style={roof} walls={walls} />)}
     </>
   )
 }
 const FLOOR_GEO = new THREE.BoxGeometry(1, 0.06, 1)
-/** a drawn room's floor: planks, one cell a metre (the room's own paint comes with slice 3) */
-function RoomFloor({ room }: { room: PlotRoom }) {
+/** a drawn room's floor: planks a metre square, in the wood it was painted (Goldwood until then), a shade under the walls */
+function RoomFloor({ room, floors }: { room: PlotRoom; floors?: Floors }) {
+  const groups = useMemo(() => { const g = new Map<WallMat, [number, number][]>(); for (const c of room.cells) { const m = floorOf(floors, c[0], c[1]); const l = g.get(m) ?? []; l.push(c); g.set(m, l) } return [...g] }, [room, floors])
+  return <>{groups.map(([mat, cells]) => <FloorCells key={mat + cells.length} mat={mat} cells={cells} />)}</>
+}
+function FloorCells({ mat, cells }: { mat: WallMat; cells: [number, number][] }) {
   const ref = useRef<THREE.InstancedMesh>(null)
+  const color = useMemo(() => new THREE.Color(WALL_MATS[mat].color).multiplyScalar(0.82), [mat])
   useEffect(() => {
     const m = ref.current; if (!m) return
     const o = new THREE.Object3D()
-    room.cells.forEach(([i, j], n) => { o.position.set(i + 0.5, GROUND_Y + 0.03, j + 0.5); o.updateMatrix(); m.setMatrixAt(n, o.matrix) })
-    m.count = room.cells.length; m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere()
-  }, [room])
-  return <instancedMesh ref={ref} args={[FLOOR_GEO, undefined, room.cells.length]} frustumCulled={false} receiveShadow><meshLambertMaterial color="#b98d5a" /></instancedMesh>
+    cells.forEach(([i, j], n) => { o.position.set(i + 0.5, GROUND_Y + 0.03, j + 0.5); o.updateMatrix(); m.setMatrixAt(n, o.matrix) })
+    m.count = cells.length; m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere()
+  }, [cells])
+  return <instancedMesh ref={ref} args={[FLOOR_GEO, undefined, cells.length]} frustumCulled={false} receiveShadow><meshLambertMaterial color={color} /></instancedMesh>
 }
 /** the auto roof over a drawn room: the house's style on a rectangle, flat over any other shape; gable ends in the wall's wood */
 function RoomRoof({ room, style, walls }: { room: PlotRoom; style: RoofStyle; walls: Walls }) {
@@ -162,17 +198,21 @@ function RoomRoof({ room, style, walls }: { room: PlotRoom; style: RoofStyle; wa
     </>
   )
 }
-function WallRun({ mat, keys, ghost, h = WALL_H }: { mat: WallMat; keys: string[]; ghost?: string; h?: number }) {
+function WallRun({ mat, keys, ghost, h = WALL_H, y0 = 0, pane }: { mat: WallMat; keys: string[]; ghost?: string; h?: number; y0?: number; pane?: boolean }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   useEffect(() => {
     const m = ref.current; if (!m) return
     const o = new THREE.Object3D()
-    keys.forEach((k, n) => { const r = edgeRect(k); o.position.set((r.x0 + r.x1) / 2, GROUND_Y + h / 2 + (ghost ? 0.01 : 0), (r.z0 + r.z1) / 2); o.scale.set(r.x1 - r.x0 + (ghost ? 0.04 : 0), h + (ghost ? 0.02 : 0), r.z1 - r.z0 + (ghost ? 0.04 : 0)); o.updateMatrix(); m.setMatrixAt(n, o.matrix) })
+    keys.forEach((k, n) => {
+      const r = edgeRect(k), thin = pane ? (WALL_T - 0.06) : 0, alongX = r.x1 - r.x0 > r.z1 - r.z0
+      o.position.set((r.x0 + r.x1) / 2, GROUND_Y + y0 + h / 2 + (ghost ? 0.01 : 0), (r.z0 + r.z1) / 2)
+      o.scale.set(r.x1 - r.x0 + (ghost ? 0.04 : 0) - (alongX ? 0 : thin), h + (ghost ? 0.02 : 0), r.z1 - r.z0 + (ghost ? 0.04 : 0) - (alongX ? thin : 0)); o.updateMatrix(); m.setMatrixAt(n, o.matrix)
+    })
     m.count = keys.length; m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere()
-  }, [keys, ghost, h])
+  }, [keys, ghost, h, y0, pane])
   return (
     <instancedMesh ref={ref} args={[WALL_GEO, undefined, Math.max(1, keys.length)]} frustumCulled={false}>
-      {ghost ? <meshBasicMaterial color={ghost} transparent opacity={0.45} depthWrite={false} /> : <meshLambertMaterial color={WALL_MATS[mat].color} />}
+      {ghost ? <meshBasicMaterial color={ghost} transparent opacity={0.45} depthWrite={false} /> : pane ? <meshLambertMaterial color="#a9dcea" transparent opacity={0.45} depthWrite={false} /> : <meshLambertMaterial color={WALL_MATS[mat].color} />}
     </instancedMesh>
   )
 }
@@ -186,7 +226,7 @@ function WallTools({ owned }: { owned: React.MutableRefObject<ReadonlySet<string
   const t = useBuildTool(), mat = useWallMat(), inv = useInv(), down = useWallsDown(), w = useWorks(), roof = w.roof ?? 'gable'
   useEffect(() => {
     if (t === 'look') return
-    onBuildDraw(wallDrawHandler(() => owned.current, t === 'erase'))
+    onBuildDraw(t === 'door' || t === 'window' || t === 'paint' ? tapToolHandler(t) : wallDrawHandler(() => owned.current, t === 'erase'))
     return () => onBuildDraw(null)
   }, [t, owned])
   const btn = (on: boolean): React.CSSProperties => ({ border: 0, borderRadius: 10, height: 34, padding: '0 10px', cursor: 'pointer', font: '700 12px system-ui', letterSpacing: '.06em', textTransform: 'uppercase', background: on ? H.ink : 'rgba(255,250,235,.7)', color: on ? '#fff' : H.ink, boxShadow: `inset 0 0 0 1px ${H.rule}` })
@@ -194,7 +234,8 @@ function WallTools({ owned }: { owned: React.MutableRefObject<ReadonlySet<string
     <div data-wall-tools style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', padding: '5px 8px', borderRadius: 12, background: 'rgba(255,250,235,.82)', boxShadow: '0 2px 8px rgba(0,0,0,.2)' }}>
       <button type="button" data-tool="walls" style={btn(t === 'walls')} onClick={() => { setPlacing(null); setBuildTool(t === 'walls' ? 'look' : 'walls') }}>Walls</button>
       <button type="button" data-tool="erase" style={btn(t === 'erase')} onClick={() => { setPlacing(null); setBuildTool(t === 'erase' ? 'look' : 'erase') }}>Erase</button>
-      {t === 'walls' && WALL_MAT_ORDER.map(m => (
+      {(['door', 'window', 'paint'] as const).map(k => <button key={k} type="button" data-tool={k} style={btn(t === k)} onClick={() => { setPlacing(null); setBuildTool(t === k ? 'look' : k) }}>{k}</button>)}
+      {(t === 'walls' || t === 'paint') && WALL_MAT_ORDER.map(m => (
         <button key={m} type="button" data-wall-mat={m} title={`${WALL_MATS[m].name} · ${countOf(inv, WALL_MATS[m].item)} planks`} onClick={() => { wallMat = m; wdEmit() }}
           style={{ ...btn(false), display: 'flex', alignItems: 'center', gap: 5, textTransform: 'none', letterSpacing: 0, boxShadow: mat === m ? `inset 0 0 0 2px ${H.ink}` : `inset 0 0 0 1px ${H.rule}` }}>
           <i style={{ width: 14, height: 14, borderRadius: 3, background: WALL_MATS[m].color, display: 'inline-block' }} />{countOf(inv, WALL_MATS[m].item)}
@@ -305,7 +346,7 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
       {allChests(w).map(c => <Keepstone key={c.id} c={c} pose={pose} />)}
       {w.pieces.map(pc => <PieceMesh key={pc.id} p={pc} />)}
       <MoglinsAtWork w={w} />
-      {w.walls && <DrawnWalls walls={w.walls} roof={w.roof ?? 'gable'} />}
+      {w.walls && <DrawnWalls walls={w.walls} roof={w.roof ?? 'gable'} floors={w.floors} />}
       <WallGhost />
       {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} item={p.item} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
     </>
@@ -758,7 +799,7 @@ export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
       </div>
       <WallTools owned={ownedRef} />
       {sel && <BuildCard k={sel} onBuilt={() => setSel(null)} />}
-      {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a wall · a plank a metre · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · the planks come back' : <>Pick something to build · drag to move · {touchy ? 'pinch' : 'wheel'} to zoom{touchy ? '' : ' · WASD · Q Z turn'}</>}</div>}
+      {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a wall · a plank a metre · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · the planks come back' : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? 'Pick a wood, then tap a wall (a plank swaps) or a floor (the whole room)' : <>Pick something to build · drag to move · {touchy ? 'pinch' : 'wheel'} to zoom{touchy ? '' : ' · WASD · Q Z turn'}</>}</div>}
     </div>
   )
 }

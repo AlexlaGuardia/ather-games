@@ -39,7 +39,7 @@ export function exitBuild() { if (!on) return; on = false; held.clear(); point.h
 // ── M37 (11-19): a DRAWING tool (plot-walls.ts). With 'walls' or 'erase' on, one finger / a left drag draws instead of
 //    panning: the handler gets ground points at the start, along the way and at the end. Two fingers pinch AND pan; a
 //    right or middle mouse drag pans; WASD still flies. 'look' = the old behaviour (a drag pans, a click places).
-export type BuildTool = 'look' | 'walls' | 'erase'
+export type BuildTool = 'look' | 'walls' | 'erase' | 'door' | 'window' | 'paint'   // M37 slice 3: door / window / paint are taps
 let tool: BuildTool = 'look'
 export const buildTool = () => tool
 export function setBuildTool(t: BuildTool) { if (t === tool) return; draw?.cancel(); tool = t; emit() }
