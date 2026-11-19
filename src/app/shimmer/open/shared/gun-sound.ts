@@ -19,6 +19,7 @@ export const GUN_VOICES: Record<string, GunVoice> = {
   spitter: { breath: { gain: .45, freq: 2400, q: 2.4, attack: .001, decay: .035 }, sizzle: { gain: .05, freq: 7000, crackle: .1, decay: .03 }, ring: { gain: .06, freq: 2600, shimmer: 2, decay: .05 }, thump: { gain: .15, from: 220, to: 120, decay: .025 } },
   backbone: { breath: { gain: .5, freq: 1100, q: 1.6, attack: .002, decay: .07 }, sizzle: { gain: .14, freq: 5200, crackle: .35, decay: .12 }, ring: { gain: .1, freq: 1300, shimmer: 4, decay: .12 }, thump: { gain: .3, from: 160, to: 55, decay: .06 } },
   roar: { breath: { gain: .8, freq: 520, q: .8, attack: .004, decay: .22 }, sizzle: { gain: .5, freq: 4200, crackle: .75, decay: .65 }, ring: { gain: .05, freq: 700, shimmer: 10, decay: .3 }, thump: { gain: .75, from: 120, to: 35, decay: .2 } },
+  lance: { breath: { gain: .4, freq: 3200, q: 3, attack: .001, decay: .05 }, sizzle: { gain: .42, freq: 7600, crackle: .15, decay: .95 }, ring: { gain: .2, freq: 2900, shimmer: 12, decay: .7 }, thump: { gain: .25, from: 260, to: 90, decay: .05 } },
   'charred-rifle': { breath: { gain: .65, freq: 900, q: 1, attack: .003, decay: .14 }, sizzle: { gain: .32, freq: 5600, crackle: .25, decay: .55 }, ring: { gain: .14, freq: 1150, shimmer: 8, decay: .4 }, thump: { gain: .45, from: 140, to: 45, decay: .1 } },
 }
 
