@@ -67,3 +67,37 @@ export function easeRemote(h: NetHollow, dt: number) {
   h.x += (h.nx - h.x) * k; h.z += (h.nz - h.z) * k
   if (h.nyaw !== undefined) { let d = h.nyaw - h.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); h.yaw += d * k }
 }
+
+// ── SLICE 3: HITS + DROPS ──
+// A guest's round flashes its Hollow at once (Combat.remote) and queues the hit; the queue goes to the HOST ('fight.hit',
+// addressed), which applies it like its own (combat.ts applyNetHit). Every kill the host sees, its own or a guest's, shows up
+// as a NEW DROP in the host's sim; the host broadcasts those ('fight.kill') and each guest lays its OWN copy (Alex 11-19:
+// each keeper gets their own drop, no loot fights).
+export const HIT_KIND = 'fight.hit'
+export const KILL_KIND = 'fight.kill'
+export const HIT_MAX = 20
+/** [hollow id, damage] */
+export type HitRow = [number, number]
+export const encodeHits = (hits: readonly { id: number; dmg: number }[]): { h: HitRow[] } =>
+  ({ h: hits.slice(0, HIT_MAX).map(x => [x.id, Math.round(x.dmg * 10) / 10]) })
+export function decodeHits(d: unknown): HitRow[] {
+  const h = (d as { h?: unknown })?.h
+  return Array.isArray(h) ? h.filter((r): r is HitRow => Array.isArray(r) && typeof r[0] === 'number' && typeof r[1] === 'number').slice(0, HIT_MAX) : []
+}
+/** [x, z, amount] */
+export type KillRow = [number, number, number]
+/** The host's new drops since last look (marks them seen). The first look marks what is already lying there, sends nothing. */
+export function newDrops(c: Combat, seen: Set<number>, first: boolean): KillRow[] {
+  const out: KillRow[] = []
+  for (const d of c.drops) if (!seen.has(d.id)) { seen.add(d.id); if (!first) out.push([r1(d.x), r1(d.z), d.amount]) }
+  for (const id of seen) if (!c.drops.some(d => d.id === id)) seen.delete(id)
+  return out
+}
+export function decodeKills(d: unknown): KillRow[] {
+  const k = (d as { k?: unknown })?.k
+  return Array.isArray(k) ? k.filter((r): r is KillRow => Array.isArray(r) && r.length >= 3 && r.every(v => typeof v === 'number') && r[2] > 0 && r[2] <= 10).slice(0, 20) : []
+}
+/** A guest lays its own copy of the host's drop. */
+export function layDrop(c: Combat, T: Terrain, [x, z, amount]: KillRow) {
+  c.drops.push({ id: c.nextId++, x, y: T.heightAt(x, z), z, amount, age: 0 })
+}

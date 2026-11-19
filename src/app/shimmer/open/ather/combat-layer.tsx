@@ -10,7 +10,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { RANGE_GUNS } from '../shared/gunplay'
 import { weaponDef } from '../../engine/weapons'
-import { newCombat, stepCombat, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, SHAMBLER, FLOATER, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
+import { newCombat, stepCombat, applyNetHit, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, SHAMBLER, FLOATER, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
 import { live as liveSolids } from './dynamic-solids'
 import { runCast, stepFields, stepPieces, channelAim, type ChannelRun, type CastHit } from './combat-casts'
 import type { CastSpec } from '../../play3d/cast'
@@ -20,7 +20,7 @@ import { WAKE_R, STRAY_R, type WildsNode } from './nodes'
 import { playShot, playEmpty, playReload } from '../shared/gun-sound'
 import { setAmmoFeed } from '../shared/morel'
 import { openNet } from '../shared/open-mp'
-import { sharing, hostOf, encodeSnap, applySnap, SNAP_KIND, SNAP_HZ, type Snap } from '../shared/fight-share'   // BETA M28 shared fights   // M33: Morel's bubble reads the gun straight from here
+import { sharing, hostOf, encodeSnap, applySnap, SNAP_KIND, SNAP_HZ, HIT_KIND, KILL_KIND, encodeHits, decodeHits, newDrops, decodeKills, layDrop, type Snap, type HitRow, type KillRow } from '../shared/fight-share'   // BETA M28 shared fights   // M33: Morel's bubble reads the gun straight from here
 import { goopMaterial, groundEnv, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'
 import { sprout, poseSprout, lumpyGeometry } from './hollow-body'   // M34: Alex's pick A, the rooted sprout   // M34: no light of its own; borrows the ground
 import { borrowedSky } from '../../voxel3d/sky-env'
@@ -455,14 +455,22 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   useEffect(() => () => setAmmoFeed(null), [])
   // ── M28 SHARED FIGHTS (shared/fight-share.ts): in a party with someone here, the lowest id hosts the Hollows and relays a
   // snapshot; the others draw it (C.remote). Solo = today's game exactly. The latest snapshot waits here for the frame loop.
-  const net = useRef({ snap: null as Snap | null, fresh: false, snapT: 0, host: true, share: false, hostId: '' })
+  const net = useRef({ snap: null as Snap | null, fresh: false, snapT: 0, host: true, share: false, hostId: '',
+    // slice 3: hits a guest owes the host, hits the host owes its sim, kills a guest owes its drops; the host's drop-watch
+    outHits: [] as { id: number; dmg: number }[], hitT: 0, inHits: [] as HitRow[], inKills: [] as KillRow[], seen: new Set<number>(), wasHost: false })
   useEffect(() => {
     let off: (() => void) | null = null
-    const hook = () => { const n = openNet(); if (!n || off) return; off = n.onRelay(m => { if (m.kind === SNAP_KIND && m.from === net.current.hostId) { net.current.snap = m.data as Snap; net.current.fresh = true } }) }
+    const hook = () => { const n = openNet(); if (!n || off) return; off = n.onRelay(m => {
+      const N = net.current
+      if (m.kind === SNAP_KIND && m.from === N.hostId) { N.snap = m.data as Snap; N.fresh = true }
+      else if (m.kind === HIT_KIND && N.host && N.share) N.inHits.push(...decodeHits(m.data).slice(0, 40 - N.inHits.length))
+      else if (m.kind === KILL_KIND && m.from === N.hostId && !N.host) N.inKills.push(...decodeKills(m.data))
+    }) }
     hook(); const t = setInterval(hook, 1000)   // the socket hook may mount after this layer
     const g = window as unknown as { __fight?: unknown }
     g.__fight = { host: () => net.current.host, sharing: () => net.current.share, hostId: () => net.current.hostId,
-      ids: () => c.current.hollows.map(h => ({ id: h.id, x: +h.x.toFixed(1), z: +h.z.toFixed(1), hp: Math.ceil(h.hp) })) }   // checks' hook: READ only
+      ids: () => c.current.hollows.map(h => ({ id: h.id, x: +h.x.toFixed(1), z: +h.z.toFixed(1), hp: Math.ceil(h.hp) })),
+      drops: () => c.current.drops.length }   // checks' hook: READ only
     return () => { clearInterval(t); off?.(); delete g.__fight }
   }, [])   // M33: leaving the Wilds, Morel's bubble has no gun to read   // the keeper's walker reads c.pieces as solids (dynamic-solids.ts)
   const [ids, setIds] = useState<{ id: number; kind: string }[]>([])
@@ -549,9 +557,20 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       N.hostId = N.share ? hostOf(n!.self, live) : ''
       N.host = !N.share || N.hostId === n!.self
       C.remote = !N.host
-      if (C.remote) { if (N.fresh && N.snap) { applySnap(C, T, N.snap); N.fresh = false } }
-      else if (N.share) { N.snapT -= dt; if (N.snapT <= 0) { N.snapT = 1 / SNAP_HZ; n!.relay(SNAP_KIND, encodeSnap(C, feet)) } }
-      C.netHits = []   // slice 3 sends these to the host
+      if (C.remote) {
+        if (N.fresh && N.snap) { applySnap(C, T, N.snap); N.fresh = false }
+        // slice 3: my hits go to the host (batched ~10/s, addressed); the host's kills become MY drops
+        if (C.netHits?.length) N.outHits.push(...C.netHits)
+        N.hitT -= dt
+        if (N.outHits.length && N.hitT <= 0) { N.hitT = 0.1; n!.relay(HIT_KIND, encodeHits(N.outHits), N.hostId); N.outHits = [] }
+        for (const k of N.inKills) layDrop(C, T, k)
+        N.inKills = []; N.inHits = []
+      } else {
+        for (const [id, dmg] of N.inHits) applyNetHit(C, id, dmg)   // a guest's round, applied like mine; a kill drops in the step below
+        N.inHits = []; N.outHits = []; N.inKills = []
+        if (N.share) { N.snapT -= dt; if (N.snapT <= 0) { N.snapT = 1 / SNAP_HZ; n!.relay(SNAP_KIND, encodeSnap(C, feet)) } }
+      }
+      C.netHits = []
     }
     if (!C.remote && popT.current <= 0) {
       popT.current = 1.5
@@ -600,6 +619,11 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       eats.current = []
     }
     stepCombat(C, T, feet, dt)
+    // slice 3: the host tells the party about every new drop (its kills and guests' kills alike); each keeper lays its own.
+    // Becoming host (or starting to share) marks what already lies there, so old drops are never re-sent.
+    { const N = net.current, n = openNet()
+      if (N.host && N.share && n) { const k = newDrops(C, N.seen, !N.wasHost); N.wasHost = true; if (k.length) n.relay(KILL_KIND, { k }) }
+      else N.wasHost = false }
     stepFields(C, T, feet); stepPieces(C)
     if (C.events.length) {
       const now = performance.now() / 1000

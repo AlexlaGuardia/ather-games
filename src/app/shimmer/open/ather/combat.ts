@@ -150,6 +150,17 @@ export function spawnHollow(c: Combat, T: Terrain, x: number, z: number, kind: H
   return h
 }
 
+/** BETA M28 slice 3: a GUEST's round landed (fight-share relays it to the host). The host applies it as its own round
+ *  would (the guest already folded in its own amp; the Hollow's 'vulnerable' is the host's to know). The KILL is not made
+ *  here: the next stepCombat gives a Hollow taken to 0 between steps its kill event + drop (1f0e15d2), so a guest's kill
+ *  drops exactly once, and the host's drop-watch tells every keeper. Unknown or dead id = ignored (it died first). */
+export function applyNetHit(c: Combat, id: number, dmg: number) {
+  const h = c.hollows.find(o => o.id === id)
+  if (!h || h.hp <= 0 || !(dmg > 0) || dmg > 200) return
+  h.hp -= dmg * (fxOn(h, 'vulnerable') ? FX.vulnerableMult : 1); h.hitFlash = 0.12
+  if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = SHAMBLER.stagger }
+}
+
 /** Keep a scatter of strays around the keeper: top up in a ring out of sight, cull the far ones. */
 export function populate(c: Combat, T: Terrain, kx: number, kz: number, target: number, safe?: { x: number; z: number; r: number }, infested?: (x: number, z: number) => boolean) {
   c.hollows = c.hollows.filter(h => Math.hypot(h.x - kx, h.z - kz) < 130)

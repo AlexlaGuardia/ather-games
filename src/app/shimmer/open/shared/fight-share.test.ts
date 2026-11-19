@@ -1,6 +1,6 @@
 // node test: npx tsx src/app/shimmer/open/shared/fight-share.test.ts (BETA M28 slice 2)
-import { hostOf, sharing, encodeSnap, applySnap, SNAP_MAX, type NetHollow } from './fight-share'
-import { newCombat, spawnHollow, stepCombat, type Terrain } from '../ather/combat'
+import { hostOf, sharing, encodeSnap, applySnap, SNAP_MAX, encodeHits, decodeHits, newDrops, decodeKills, layDrop, type NetHollow } from './fight-share'
+import { newCombat, spawnHollow, stepCombat, applyNetHit, type Terrain } from '../ather/combat'
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 const T: Terrain = { heightAt: () => 0, walkable: () => true }
@@ -39,5 +39,26 @@ ok(tgt.hp === hp0 && (guest.netHits?.length ?? 0) === 1 && guest.netHits![0].id 
 host.hollows = host.hollows.slice(1)
 applySnap(guest, T, encodeSnap(host, { x: 0, z: 0 }))
 ok(!guest.hollows.some(h => h.id === g0.id), 'gone from the host = gone from the guest')
+
+// ── slice 3: a guest's hit reaches the host; kills become drops, ONE each; guests lay their own copy ──
+{
+  const H = newCombat(3); const victim = spawnHollow(H, T, 50, 50); const seen = new Set<number>()
+  ok(newDrops(H, seen, true).length === 0, 'the drop-watch\'s first look sends nothing')
+  const wire = decodeHits(JSON.parse(JSON.stringify(encodeHits([{ id: victim.id, dmg: 12 }]))))
+  for (const [id, dmg] of wire) applyNetHit(H, id, dmg)
+  ok(victim.hp === victim.maxHp - 12, `the host applies a guest's hit (${victim.maxHp} -> ${victim.hp})`)
+  for (const [id] of wire) applyNetHit(H, id, 999)   // over the cap: ignored
+  ok(victim.hp === victim.maxHp - 12, 'an absurd hit (> 200) is ignored')
+  for (let i = 0; i < 3; i++) applyNetHit(H, victim.id, 12)   // the killing blows land between steps
+  stepCombat(H, T, { x: 0, y: 0, z: 0 }, 1 / 30)
+  const kills = H.events.filter(e => e.kind === 'hit' && e.killed).length
+  const rows = newDrops(H, seen, false)
+  ok(kills === 1 && H.drops.length === 1 && rows.length === 1, `a guest's kill: ONE kill event, ONE drop, ONE broadcast row (${kills}/${H.drops.length}/${rows.length})`)
+  ok(newDrops(H, seen, false).length === 0, 'the same drop is never re-sent')
+  const G = newCombat(4); G.remote = true
+  for (const k of decodeKills(JSON.parse(JSON.stringify({ k: rows })))) layDrop(G, T, k)
+  ok(G.drops.length === 1 && Math.abs(G.drops[0].x - H.drops[0].x) < 0.11 && G.drops[0].amount === H.drops[0].amount, 'the guest lays its OWN copy of the drop (same place, same amount)')
+  ok(decodeKills({ k: [[1, 2, 99], ['x', 1, 1]] }).length === 0 && decodeHits({ h: 'nope' }).length === 0, 'junk on the wire is refused')
+}
 
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)
