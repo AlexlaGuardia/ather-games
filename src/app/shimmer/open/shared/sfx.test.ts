@@ -23,7 +23,7 @@ const run = async () => {
   row('jump').status = 'yay'; voices = 0; sfx.play('jump'); ok(voices > 0, 'yay plays')
   sfx.play('no-such-sound'); row('jump').status = 'proposed'
   voices = 0; sfx.audition('jump'); ok(voices > 0, 'audition plays regardless of status')
-  for (const i of ids) { voices = 0; sfx.audition(i); ok(voices > 0, `recipe ${i} makes sound`) }
+  for (const i of ids) { const r = row(i); if (r.files) { ok(r.files.length > 0 && r.source === 'cc0' && !!r.licence, `${i} plays recorded files (licensed)`); continue } voices = 0; sfx.audition(i); ok(voices > 0, `recipe ${i} makes sound`) }   // 11-19: Alex picked recorded stone/wood/axe/pick
   gun.playShot('repeater'); ok(made === 1, `one AudioContext across sfx + gun-sound (made ${made})`)
   // cadence: 0.5s of walking at 4.2 m/s = 2.1 m = one step at most; stepping is gated by yay too
   row('step-grass').status = 'yay'; voices = 0
@@ -31,6 +31,11 @@ const run = async () => {
   for (let i = 0; i < 60; i++) sfx.tickFeet(lc, 1 / 30)   // 2 s = 8.4 m ≈ 4 steps
   const steps = voices; ok(steps > 0 && steps < 4 * 8, `footsteps rate-limited to the stride (${steps} voices for 2 s)`)
   row('step-grass').status = 'proposed'; voices = 0; for (let i = 0; i < 60; i++) sfx.tickFeet(lc, 1 / 30); ok(voices === 0, 'a proposed footstep is silent')
+  // slide (11-19): the swoosh fires ONCE at the slide's start and no footsteps play while sliding
+  { const st0 = row('step-grass').status, sl0 = row('slide').status; row('step-grass').status = 'yay'; row('slide').status = 'yay'
+    const sl = { ...lc, sliding: true }; voices = 0; sfx.tickFeet(sl, 1 / 30); const first = voices
+    voices = 0; for (let i = 0; i < 60; i++) sfx.tickFeet(sl, 1 / 30); ok(first > 0 && voices === 0, `slide: plays once at the start (${first}), then silent, no steps (${voices})`)
+    row('step-grass').status = st0; row('slide').status = sl0; sfx.tickFeet(lc, 1 / 30) }
 
   // ── M36 quality layer ──
   // variant picker: never repeats back-to-back, covers all variants
@@ -43,7 +48,7 @@ const run = async () => {
     ok(pOk && vOk && sfx.wobble(() => 0).pitch === 0.96 && sfx.wobble(() => 1).vol === 1.1, 'wobble inside +-4% pitch, +-10% volume') }
   // registry: new rec rows are cc0, proposed, with files that exist on disk
   const fs = await import('fs'), recs = sfx.SOUNDS.filter(s => s.id.startsWith('rec-'))
-  ok(recs.length === 8 && recs.every(r => r.status === 'proposed' && r.source === 'cc0' && r.licence && r.files && r.files.length >= 5), 'eight rec-* rows, proposed, cc0, licence, files')
+  ok(recs.length >= 1 && recs.every(r => r.status !== 'yay' && r.source === 'cc0' && r.licence && r.files && r.files.length >= 4), 'rec-* candidate rows: never yay (a winner merges into the game id), cc0, licence, files')
   ok(recs.every(r => [...r.files!, ...(r.layer?.files ?? [])].every(f => f.startsWith('/sfx/') && fs.existsSync('public' + f))), 'every rec file exists under public/sfx')
   ok(sfx.SOUNDS.every(s => sfx.busOf(s) === (s.area === 'ui' ? 'ui' : 'sfx')), 'bus defaults: ui rows ui, rest sfx')
   // file rows: gate unchanged; first play kicks a load (silent), then plays the sample; variant never repeats
