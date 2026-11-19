@@ -1,5 +1,5 @@
 // The first-rinstick quest (rinquest.ts + the gate in rinsticks.ts, BETA M22). Run: npx tsx src/app/shimmer/open/ather/rinquest.test.ts
-import { migrate, fresh, onShop, doStep, currentStep, hasStick, noStickLine, questEntries, RINQUEST_STEPS, RINQUEST_LINES } from './rinquest'
+import { migrate, fresh, onShop, doStep, currentStep, hasStick, noStickLine, questEntries, fennelHere, waitingAt, scaleOnBank, waitTick, SHED_SCALE, RINQUEST_STEPS, RINQUEST_LINES } from './rinquest'
 import { loadTools, wearRinstick, markBornWithoutStick, saveQuest } from './rinsticks'
 import { skillPointerEntries, RINNSHOP_LINE, RINNING_LINE } from '../business/skill-pointers'
 let pass = 0
@@ -15,7 +15,7 @@ ok(migrate(null).state === 'done' && hasStick(migrate(null)), 'migrate: a keeper
 ok(migrate(fresh()).state === 'none' && !hasStick(migrate(fresh())), 'migrate: a fresh birth flag did not survive the read')
 ok(migrate({ v: 1, state: 'active', step: 0 }).state === 'active', 'migrate: an active quest was not kept')
 ok(migrate({ v: 2, state: 'none' }).state === 'done' && migrate({ v: 1, state: 'odd', step: 0 }).state === 'done', 'migrate: junk read as a fresh keeper (would take a stick off a live save)')
-ok(migrate({ v: 1, state: 'active', step: 99 }).step === RINQUEST_STEPS.length, 'migrate: a step past the table was not clamped')
+ok(migrate({ v: 1, state: 'active', step: 99 }).step === RINQUEST_STEPS.length - 1, 'migrate: an active step past the table was not clamped to the last')
 
 // start: only a standing Rinnshop starts it, and only from none
 ok(onShop(fresh(), false).state === 'none', 'start: began with no Rinnshop')
@@ -23,14 +23,43 @@ ok(onShop(fresh(), true).state === 'active' && onShop(fresh(), true).step === 0,
 const done = migrate(null)
 ok(onShop(done, true) === done, 'start: a keeper who already has the stick was put back on the quest')
 
-// steps: done at the right place, the last one grants
+// steps (ruling 4½): Fennel -> the Moonwell at dusk -> the scale -> the bind (stick in hand) -> Fennel gets the first catch
 const act = onShop(fresh(), true)
-ok(currentStep(act)?.id === RINQUEST_STEPS[0].id, 'step: the first step is not current')
-let q = act, granted = false
-for (let i = 0; i < RINQUEST_STEPS.length; i++) { const r = doStep(q, RINQUEST_STEPS[i].at); q = r.q; granted = r.granted || granted }
-ok(q.state === 'done' && granted, 'step: walking every step did not grant the stick')
-ok(doStep(fresh(), 'rinnshop').granted === false && doStep(fresh(), 'rinnshop').q.state === 'none', 'step: the bench granted a stick before the quest started')
-ok(doStep(done, 'rinnshop').granted === false, 'step: a done quest granted twice')
+ok(currentStep(act)?.id === 'meet' && fennelHere(act), 'step: the quest does not open on meeting Fennel')
+const has = (yes: boolean) => (_: string) => yes
+const T = (hasCatch = false) => ({ kind: 'talk' as const, who: 'fennel' as const, hasCatch })
+const W = { kind: 'waited' as const, at: 'moonwell' as const }, P = { kind: 'picked' as const, item: SHED_SCALE }
+const B = (yes: boolean) => ({ kind: 'bench' as const, at: 'rinnshop' as const, has: has(yes) })
+// out of order: nothing moves
+ok(doStep(act, W).q === act && doStep(act, P).q === act && doStep(act, B(true)).q === act, 'order: a later step finished the first one')
+let q = doStep(act, T()).q
+ok(currentStep(q)?.id === 'dusk' && !!waitingAt(q) && waitingAt(q)!.phase === 'dusk', 'step: talking to Fennel does not send you to the Moonwell at dusk')
+ok(doStep(q, T()).q === q, 'order: talking again skipped the wait')
+q = doStep(q, W).q
+ok(scaleOnBank(q), 'step: the wait did not leave a scale on the bank')
+ok(doStep(q, { kind: 'picked', item: 'bait' }).q === q, 'pickup: the wrong item counted as the scale')
+q = doStep(q, P).q
+ok(currentStep(q)?.do.kind === 'bench' && !hasStick(q), 'step: the scale gave the stick before the bind')
+ok(doStep(q, B(false)).q === q, 'bind: bound with no scale in the bag')
+const bound = doStep(q, B(true))
+ok(bound.granted && bound.took === SHED_SCALE && hasStick(bound.q) && bound.q.state === 'active', 'bind: did not take the scale and put the stick in hand (quest still open)')
+q = bound.q
+ok(currentStep(q)?.id === 'catch' && doStep(q, T(false)).q === q, 'catch: Fennel closed the quest with no catch')
+const closed = doStep(q, T(true))
+ok(closed.q.state === 'done' && hasStick(closed.q) && !closed.granted, 'catch: the first catch did not close the quest (or granted twice)')
+q = closed.q
+ok(doStep(q, B(true)).q === q && !fennelHere(q), 'done: a closed quest moved, or Fennel still waits')
+// the wait clock: only at the water, still, hands empty, at dusk; any break resets it
+const ok4 = { at: true, still: true, empty: true, phase: true }
+ok(waitTick(0, 5, ok4, 12).t === 5 && !waitTick(0, 5, ok4, 12).done && waitTick(10, 3, ok4, 12).done, 'wait: the clock does not count to its length')
+for (const k of ['at', 'still', 'empty', 'phase'] as const) ok(waitTick(10, 1, { ...ok4, [k]: false }, 12).t === 0, `wait: '${k}' breaking does not reset the clock`)
+// migration from the one-step placeholder that was live 11-18
+ok(migrate({ v: 1, state: 'active', step: 0 }).step === 0 && currentStep(migrate({ v: 1, state: 'active', step: 0 }))?.id === 'meet', 'migrate: a placeholder save mid-quest does not land on meeting Fennel')
+ok(migrate({ v: 1, state: 'done', step: 1 }).state === 'done' && hasStick(migrate({ v: 1, state: 'done', step: 1 })), 'migrate: a placeholder save that finished lost its stick')
+ok(migrate({ v: 1, state: 'active', step: 3, stick: true }).stick === true, 'migrate: a bound stick was not kept')
+// the journal points the Moonwell steps at the water
+const mw = { x: -310, z: 293 }
+ok(questEntries(doStep(act, T()).q, mw)[0].where?.x === mw.x && questEntries(act, mw)[0].where === null, "journal: the Moonwell step does not point at the water (or Fennel's does)")
 
 // lines + journal
 ok(noStickLine(fresh()) === RINQUEST_LINES.noShop && noStickLine(act) === RINQUEST_LINES.inQuest, 'line: the no-stick line does not point the right way')

@@ -88,8 +88,10 @@ import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take, itemDef, countOf, NO_BAIT_LINE } from '../shared/inventory'
 import { isDish, healOf } from './cooking'
 import { loadTools, saveTools, easeOf, xpOf, wearRinstick, TOOLS_EVENT } from './rinsticks'
-import { useRinQuest } from './use-rinquest'
-import { noStickLine, hasStick } from './rinquest'
+import { useRinQuest, fennelTalk, FENNEL_NAME } from './use-rinquest'
+import { noStickLine, hasStick, fennelHere } from './rinquest'
+import { Fennel, fennelSpot, FENNEL_HEAD } from './fennel'
+import { MoonwellPool } from './moonwell-quest'
 import { manaFor, bonusXp, wearFocus } from './focuses'
 import { isPotion, drink, buffOn, loadBuffs, saveBuffs, BUFF_NAME, STARLIGHT_XP, OPEN_FLOW_MULT, type Buffs, type BuffId } from './alchemy'
 import { BAIT, rollRinn, type Rinn } from './rinning'
@@ -113,8 +115,8 @@ import type { Vitals } from '../../engine/vitals'
 
 type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
 type Spawn = { x: number; z: number; yaw: number }
-type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement }
-type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement }
+type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number }
+type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'fennel' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement }
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
 export default function AtherSlice() { return <OwnerReady><AtherSliceGame /></OwnerReady> }
@@ -439,6 +441,7 @@ function AtherSliceGame() {
     if (zone.kind === 'plot') {
       if (Math.hypot(GATE.x - lc.px, GATE.z - lc.pz) < REACH + 1.2) n = { kind: 'gate' }
       else if (Math.hypot(GREG.x - lc.px, GREG.z - lc.pz) < REACH) n = { kind: 'greg' }
+      else if (fennelRef.current && Math.hypot(fennelRef.current.x - lc.px, fennelRef.current.z - lc.pz) < REACH) n = { kind: 'fennel' }   // M22
       else { const w = nearWork(worksRef.current, lc.px, lc.pz); if (w) n = { kind: 'work', near: w } }
     } else {
       const all = [{ w: GREG_WAYMARK, own: false }, ...waymarks.map(w => ({ w, own: true }))]
@@ -458,6 +461,7 @@ function AtherSliceGame() {
       hudT.current = 0.12
       const p = n?.kind === 'gate' ? 'E · the gate (fold map)'
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
+        : n?.kind === 'fennel' ? 'E · Fennel'
         : n?.kind === 'work' ? workPrompt(n.near)
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
         : n?.kind === 'folk' ? `E · talk to the folk of ${n.s.name}`
@@ -831,7 +835,12 @@ function AtherSliceGame() {
   const gregHead = useMemo(() => ({ x: GREG.x, y: plotHeightAt(GREG.x, GREG.z) + 1.7, z: GREG.z }), [])
   // BETA M13: E in a settlement talks to ONE Moglin (folk-talk.ts); the settlement's heart is its anchor (no Moglin models are drawn yet)
   const folkTalk = useFolkTalk(panel?.kind === 'folk' ? panel.s : null, useCallback((x: number, z: number) => ww && ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : 0, [ww]), () => setPanel(null))
-  useEffect(() => { talkFocus.current = talkNode ? gregHead : folkTalk.focus }, [talkNode, gregHead, folkTalk.focus])
+  // BETA M22: Fennel at the Rinnshop while the first-rinstick quest is open (fennel.tsx, use-rinquest.ts › fennelTalk)
+  const fennelAt = useMemo(() => (fennelHere(rinQuest) ? fennelSpot(works) : null), [rinQuest, works])
+  const fennelRef = useRef(fennelAt); fennelRef.current = fennelAt
+  const fennelHead = useMemo(() => (fennelAt ? { x: fennelAt.x, y: plotHeightAt(fennelAt.x, fennelAt.z) + FENNEL_HEAD, z: fennelAt.z } : null), [fennelAt])
+  const fennelNode = panel?.kind === 'fennel' ? fennelTalk(rinQuest, panel.page, inv, { goto: page => setPanel({ kind: 'fennel', page }), close: () => setPanel(null) }) : null
+  useEffect(() => { talkFocus.current = talkNode ? gregHead : fennelNode && fennelHead ? fennelHead : folkTalk.focus }, [talkNode, gregHead, fennelNode, fennelHead, folkTalk.focus])
   // the journal: the nearest infected node is the keeper's open line on this side (re-aimed as you move; unchanged posts are free)
   useEffect(() => {
     const post = () => {
@@ -877,6 +886,7 @@ function AtherSliceGame() {
       }
       if (e.code === 'KeyE' && n) {
         if (n.kind === 'greg') setPanel({ kind: 'talk', step: 0 })
+        else if (n.kind === 'fennel') setPanel({ kind: 'fennel', page: 0 })
         else if (n.kind === 'work') { if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
         else if (n.kind === 'folk') setPanel({ kind: 'folk', s: n.s })
         else setPanel({ kind: 'map', view: 'ather', travel: true })
@@ -938,7 +948,7 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && ww && <RinningFX ease={easeOf(toolsRef.current.rinning)} waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT && !!toolsRef.current.rinning} onCatch={onCatch} onGone={onGone} />}
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />{net && <TilePaths net={net} W={T} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />}</group> })}
         {ww && <DeathPack active={zone.kind === 'wilds'} />}
-        {zone.kind === 'wilds' && ww && <><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
+        {zone.kind === 'wilds' && ww && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
         {zone.kind === 'wilds' && ww && net && <Settlements net={net} loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
         {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
         {terrain && (
@@ -947,6 +957,8 @@ function AtherSliceGame() {
         )}
         {folkTalk.node && folkTalk.bubbleAt && zone.kind === 'wilds' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} />}
         {talkNode && zone.kind === 'plot' && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={talkNode.line} />}
+        {zone.kind === 'plot' && fennelAt && <Fennel spot={fennelAt} y={plotHeightAt(fennelAt.x, fennelAt.z)} talking={!!fennelNode} />}
+        {fennelNode && fennelHead && zone.kind === 'plot' && <TalkBubble at={[fennelHead.x, fennelHead.y + 0.5, fennelHead.z]} name={FENNEL_NAME} line={fennelNode.line} />}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
         {world && fade === 0 && <CompanionFollower pose={poseRef} ground={ground} />}
         <GateRings gate={castGate} />
@@ -1009,7 +1021,7 @@ function AtherSliceGame() {
           onClose={() => setPanel(null)} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
       {folkTalk.node && <TalkChoices node={folkTalk.node} phone={hudSize === 'phone'} />}
-      {talkNode && <TalkChoices node={talkNode} phone={hudSize === 'phone'} />}
+      {(talkNode ?? fennelNode) && <TalkChoices node={(talkNode ?? fennelNode)!} phone={hudSize === 'phone'} />}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       {panel?.kind === 'work' && <WorkshopPanel near={panel.near} owned={owned} onClose={() => setPanel(null)} />}
@@ -1017,7 +1029,7 @@ function AtherSliceGame() {
       {zone.kind === 'plot' && <BuildBar owned={owned} />}
       <LookChip />
       {zone.kind === 'wilds' && held === BAIT && <ReelBar api={rinApi} />}
-      {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} />}
+      {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} inGarden={zone.kind === 'plot'} />}
       <OpenSocial />   {/* M27: presence + invites + the Play together panel */}
       <BirthGate />
       {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={litSlot(stance, inv)} isTouch={isTouch} />}

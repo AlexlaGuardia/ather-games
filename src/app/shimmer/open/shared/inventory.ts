@@ -71,6 +71,11 @@ const RINNING: Record<string, ItemDef> = {
 for (const [id, def] of Object.entries(RINNING)) def.icon = `/open/icons/${id.replace(/_/g, '-')}.svg`
 for (const id of Object.keys(RINNING)) ITEM_GROUP[id] = 'rinning'
 Object.assign(OPEN_ITEMS, RINNING)
+// BETA M22 (canon rework 4½): the shed scale a rinn leaves on the Moonwell bank, bound at the Rinnshop into the first
+// rinstick. One of a kind, never a catch (no rinning group: it must not count as 'the first catch'). Blurb = @lark placeholder.
+OPEN_ITEMS.shed_scale = { name: 'Shed Scale', blurb: 'Left on the Moonwell bank by a rinn. Bind it at your Rinnshop.', icon: '', stack: 1, kind: 'material' }
+/** a landed rinn of either side (bait is not a catch) */
+export const isCatch = (id: string) => ITEM_GROUP[id] === 'rinning' && id !== 'bait'
 // ── Prospecting in the Wilds (ather/prospecting.ts): canon's crystal ladder (game/shimmer-skilling.md › Skill 3; the
 //    lines are canon's Description column) and the base stone a letter is cut from (RULED 11-16: "a specific stone and not
 //    a hard to get one"; its name is Jin's). Grade is worth and look, never power. Icons: tools/art/crystal_icons.py.

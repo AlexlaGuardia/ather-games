@@ -4,16 +4,22 @@
 //   B. a FRESH keeper born through the real birth gate: flag = none, NO rinstick, still none after a reload (the bag has been
 //      saved by then: hub's catch); the journal's rinning pointer says 'Build a Rinnshop'; in the Wilds with bait in hand a
 //      cast says the no-Rinnshop line and spends no bait
-//   C. a Rinnshop standing in the garden (seeded raised in the save) -> the quest starts (active) and the journal shows its
-//      step; E at the bench -> the step's button -> worn rinstick in hand, quest done, journal line struck
-//   D. back in the Wilds with bait: the cast passes the stick gate ('Aim at open water', not the no-stick line)
-//   E. 0 page errors
-// Landing a rinn with the stick is rinning-check's job (unchanged code path). Hooks: __ather tp/tools/cast/zone (movement,
-// reading, the click's own handler), __rinquest quest/journal/said (reading). The bench button is a real click.
+//   C. (ruling 4½) a Rinnshop standing (seeded raised) -> the quest starts; FENNEL stands by its door, E talks: ask, agree
+//      -> the quest moves to the Moonwell and the journal says so
+//   D. the MOONWELL: at noon nothing counts ('come back at dusk'); at dusk holding bait nothing counts ('put it away'); hold
+//      R to stow (the stance, hub's rule), sit still by the water -> a rinn comes up (the wait completes)
+//   E. walking over the bank takes the SHED SCALE
+//   F. the Rinnshop bench binds it: the worn rinstick in hand, the scale used, the quest still open
+//   G. Fennel takes the first catch (SETUP: a glowfin put in the bag) -> done, the catch handed over, the line struck
+//   H. 0 page errors
+// Landing a rinn with the stick is rinning-check's job (unchanged code path). Hooks: __ather tp/tools/zone/stance (movement,
+// reading), __rinquest quest/journal/said/moonwell (reading). The talk answers, the bench button, E, R and walking are real.
 //   npx tsx scripts/rinquest-check.mts [--url https://ather.games]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { benchOf, type Room } from '../src/app/shimmer/open/ather/rooms'
 import { RINQUEST_LINES, RINQUEST_STEPS, RINQUEST_KEY } from '../src/app/shimmer/open/ather/rinquest'
+import { fennelSpot } from '../src/app/shimmer/open/ather/fennel'
+import { SCALE_AT } from '../src/app/shimmer/open/ather/moonwell'
 import { RINNSHOP_LINE } from '../src/app/shimmer/open/business/skill-pointers'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games')
@@ -29,7 +35,8 @@ const poll = async (f: () => Promise<boolean>, ms = 60000) => { for (let t = 0; 
 const A = (p: Page, fn: string, ...a: unknown[]) => p.evaluate((f, args) => (window as any).__ather[f](...args), fn, a)
 const Q = (p: Page, fn: string) => p.evaluate(f => (window as any).__rinquest?.[f]?.() ?? null, fn)
 const stored = (p: Page, k: string) => p.evaluate(k => JSON.parse(localStorage.getItem(k) ?? 'null'), k)
-const ready = (p: Page) => poll(() => p.evaluate(() => typeof (window as any).__ather?.tools === 'function' && typeof (window as any).__rinquest?.quest === 'function'), 240000)
+const ready = (p: Page) => poll(() => p.evaluate(() => typeof (window as any).__ather?.tools === 'function' && typeof (window as any).__ather?.tp === 'function' && typeof (window as any).__rinquest?.quest === 'function'), 240000)
+const countIn = async (p: Page, id: string) => (((await stored(p, 'open.inv.v1'))?.slots ?? []) as ({ id: string; n: number } | null)[]).reduce((a, s) => a + (s?.id === id ? s.n : 0), 0)
 const bait = async (p: Page) => (((await stored(p, 'open.inv.v1'))?.slots ?? []) as ({ id: string; n: number } | null)[]).reduce((a, s) => a + (s?.id === 'bait' ? s.n : 0), 0)
 async function holdBaitInWilds(p: Page) {
   await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
@@ -88,29 +95,75 @@ const b0 = await bait(p)
 await A(p, 'cast'); await sleep(800)
 ok(((await Q(p, 'said')) as string[]).includes(RINQUEST_LINES.noShop) && b0 > 0 && (await bait(p)) === b0, `B. bait at the water says where the first rinstick comes from, no bait spent (${b0} -> ${await bait(p)})`)
 
-// ── C: the Rinnshop stands -> the quest -> the bench ──
+// ── C: the Rinnshop stands -> Fennel comes -> the talk sends you to the Moonwell at dusk ──
 await p.evaluate((room: Room) => localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [room], chests: [], pieces: [] })), SHOP)
-await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 }); await ready(p)
+await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 }); await ready(p); await sleep(2500); await p.mouse.click(500, 350)
 ok(await poll(async () => ((await Q(p, 'quest')) as { state: string }).state === 'active', 30000), 'C. a standing Rinnshop starts the quest')
-ok(await poll(async () => ((await Q(p, 'journal')) as { id: string; title: string }[]).some(e => e.id === 'rinquest' && e.title === RINQUEST_STEPS[0].title), 10000), `C. the journal shows '${RINQUEST_STEPS[0].title}'`)
+ok(await poll(async () => ((await Q(p, 'journal')) as { id: string; title: string }[]).some(e => e.id === 'rinquest' && e.title === RINQUEST_STEPS[0].title), 10000), `C. the journal says '${RINQUEST_STEPS[0].title}'`)
+const fs = fennelSpot({ v: 1, rooms: [SHOP], chests: [], pieces: [] } as never)!
+const talkTo = async () => { await A(p, 'tp', fs.x - Math.sin(fs.yaw) * -1.6, fs.z - Math.cos(fs.yaw) * -1.6, fs.yaw + Math.PI); await sleep(2500); await p.keyboard.press('e') }
+const bubble = () => p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')
+const pickAnswer = async (label: string) => {
+  const ok2 = await p.evaluate((l: string) => { const e = [...document.querySelectorAll<HTMLElement>('[data-talk-option]')].find(x => (x.textContent ?? '').includes(l)); e?.click(); return !!e }, label)
+  await sleep(1500); return ok2
+}
+await talkTo()
+ok(await poll(async () => (await bubble()).includes('Fennel'), 20000), `C. Fennel stands by the Rinnshop and E talks (bubble: ${(await bubble()).slice(0, 60)})`)
+ok(await pickAnswer('How does one give itself') && await pickAnswer("I'll go at dusk"), 'C. the talk: ask, then agree to go')
+ok(await poll(async () => ((await Q(p, 'quest')) as { step: number }).step === 1, 10000), 'C. ...the quest moves to the Moonwell')
+const jw = (await Q(p, 'journal')) as { id: string; title: string }[]
+ok(jw.some(e => e.id === 'rinquest' && e.title === RINQUEST_STEPS[1].title), `C. the journal says '${RINQUEST_STEPS[1].title}'`)
+
+// ── D: the Moonwell. Wrong hour first (nothing counts), then DUSK: holding bait (nothing counts), then hands empty + still ──
+const mw = (await Q(p, 'moonwell')) as { x: number; z: number; r: number }
+const sitBy = async () => { await A(p, 'tp', mw.x + mw.r + 1.2, mw.z, Math.PI / 2); await sleep(1500) }
+await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
+ok(await poll(async () => (await A(p, 'zone')) === 'wilds', 240000), '   in the Wilds (noon)')
+await sleep(5000); await p.mouse.click(500, 350); await sitBy()
+ok(await poll(async () => ((await Q(p, 'said')) as string[]).includes(RINQUEST_LINES.waitTime), 20000), 'D. at noon the water says: come back at dusk')
+await sleep(15000)
+ok(((await Q(p, 'quest')) as { step: number }).step === 1, 'D. ...and 15 s of sitting at noon changes nothing')
+await p.goto(`${url}/shimmer/open/ather?hour=19&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
+ok(await poll(async () => (await A(p, 'zone')) === 'wilds', 240000), '   in the Wilds (dusk)')
+await sleep(5000); await p.mouse.click(500, 350)
+const baitSlot = (((await stored(p, 'open.inv.v1'))?.slots ?? []) as ({ id: string } | null)[]).findIndex(s => s?.id === 'bait')
+await p.keyboard.press(String(baitSlot + 1)); await sleep(800)
+await sitBy()
+ok(await poll(async () => ((await Q(p, 'said')) as string[]).includes(RINQUEST_LINES.waitHeld), 20000), 'D. holding bait at dusk, the water says: put it away')
+await sleep(15000)
+ok(((await Q(p, 'quest')) as { step: number }).step === 1, 'D. ...and holding bait it never counts')
+// put it away: the stowed stance (hold R), the hub's rule: hands empty = stowed, not just 'no item'
+await p.keyboard.down('KeyR'); await sleep(900); await p.keyboard.up('KeyR'); await sleep(800)
+ok(((await A(p, 'stance')) as { kind: string }).kind === 'stowed', `D. hold R stows (stance ${JSON.stringify(await A(p, 'stance'))})`)
+await sitBy()
+ok(await poll(async () => ((await Q(p, 'quest')) as { step: number }).step === 2, 120000), 'D. still, hands empty, at dusk by the water: a rinn comes up (the wait completes)')
+ok(((await Q(p, 'said')) as string[]).includes(RINQUEST_LINES.surfaced), 'D. ...and says so')
+
+// ── E: the scale on the bank ──
+await A(p, 'tp', SCALE_AT.x, SCALE_AT.z); await sleep(1500)
+ok(await poll(async () => ((await Q(p, 'quest')) as { step: number }).step === 3, 20000) && (await countIn(p, 'shed_scale')) === 1, 'E. walking over the bank takes the shed scale')
+
+// ── F: bind it at the Rinnshop bench ──
+await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 }); await ready(p); await sleep(2500); await p.mouse.click(500, 350)
 const b = benchOf(SHOP)
-await A(p, 'tp', b.x, b.z - 1.4, 0); await sleep(2500); await p.mouse.click(500, 350); await sleep(800)
+await A(p, 'tp', b.x, b.z - 1.4, 0); await sleep(2500)
 await p.keyboard.press('e')
-ok(await poll(() => p.evaluate(() => !!document.querySelector('[data-panel="bench"] [data-rinquest-step]')), 20000), 'C. E at the Rinnshop bench shows the quest step')
-await p.evaluate(() => document.querySelector<HTMLElement>('[data-rinquest-step] button')?.click())
-ok(await poll(async () => ((await A(p, 'tools')) as Record<string, { toolId: string } | undefined>).rinning?.toolId === 'worn_rinstick', 15000), 'C. the step puts the worn rinstick in hand')
-ok(((await Q(p, 'quest')) as { state: string }).state === 'done' && ((await stored(p, RINQUEST_KEY)) as { state: string }).state === 'done', 'C. ...quest done, and saved')
-ok(((await Q(p, 'journal')) as { id: string; struck: boolean }[]).some(e => e.id === 'rinquest' && e.struck), 'C. ...the journal line struck')
-ok(await p.evaluate(() => document.querySelector('[data-rinstick-held]')?.getAttribute('data-rinstick-held') === 'worn_rinstick'), 'C. ...and the bench says it is in hand')
-await p.keyboard.press('Escape'); await sleep(500)
+ok(await poll(() => p.evaluate(() => !!document.querySelector('[data-panel="bench"] [data-rinquest-step="bind"] button:not([disabled])')), 20000), 'F. E at the Rinnshop bench offers to bind the scale')
+await p.evaluate(() => document.querySelector<HTMLElement>('[data-rinquest-step="bind"] button')?.click())
+ok(await poll(async () => ((await A(p, 'tools')) as Record<string, { toolId: string } | undefined>).rinning?.toolId === 'worn_rinstick', 15000), 'F. the bind puts the worn rinstick in hand')
+ok((await countIn(p, 'shed_scale')) === 0 && ((await Q(p, 'quest')) as { stick?: boolean; state: string }).stick === true, 'F. ...the scale is used, the stick saved, the quest still open')
+await p.keyboard.press('Escape'); await sleep(600)
 
-// ── D: the cast passes the gate ──
-await holdBaitInWilds(p)
-await A(p, 'cast'); await sleep(800)
-const said = (await Q(p, 'said')) as string[]
-ok(!said.includes(RINQUEST_LINES.noShop) && !said.includes(RINQUEST_LINES.inQuest) && ((await A(p, 'tools')) as Record<string, unknown>).rinning !== undefined, `D. bait at the water casts (or asks for aim), no no-stick line (${said.slice(-2).join(' | ')})`)
+// ── G: Fennel gets the first catch (SETUP, stated: a glowfin put in the bag; landing one is rinning-check's job) ──
+await p.evaluate(() => { const v = JSON.parse(localStorage.getItem('open.inv.v1')!); const i = v.slots.findIndex((x: unknown) => !x); v.slots[i] = { id: 'glowfin', n: 1 }; localStorage.setItem('open.inv.v1', JSON.stringify(v)) })
+await p.reload({ waitUntil: 'load', timeout: 240000 }); await ready(p); await sleep(2500); await p.mouse.click(500, 350)
+await talkTo()
+ok(await poll(async () => (await bubble()).includes('first'), 20000) && await pickAnswer('It is yours'), 'G. Fennel asks for the first catch, and takes it')
+ok(await poll(async () => ((await Q(p, 'quest')) as { state: string }).state === 'done', 10000) && (await countIn(p, 'glowfin')) === 0, 'G. ...the quest is done, the catch handed over')
+ok(((await Q(p, 'journal')) as { id: string; struck: boolean }[]).some(e => e.id === 'rinquest' && e.struck), 'G. ...the journal line struck')
+ok(((await A(p, 'tools')) as Record<string, { toolId: string } | undefined>).rinning?.toolId === 'worn_rinstick', 'G. ...the stick stays in hand')
 
-ok(errs.length === 0, `E. 0 page errors${errs.length ? ': ' + errs.join(' | ') : ''}`)
+ok(errs.length === 0, `H. 0 page errors${errs.length ? ': ' + errs.join(' | ') : ''}`)
 await br.close()
 console.log(fails ? `rinquest-check: ${fails} FAIL` : 'rinquest-check: PASS')
 process.exit(fails ? 1 : 0)
