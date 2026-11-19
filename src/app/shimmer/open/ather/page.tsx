@@ -160,7 +160,7 @@ function AtherSliceGame() {
   // M36 (Alex 11-19 'yes wire the page.tsx sfx hooks'): a panel opening / closing swishes; any button tap ticks. Only yay sounds play.
   const panelWas = useRef(false)
   useEffect(() => { const on = !!panel; if (on !== panelWas.current) sfx(on ? 'ui-panel-open' : 'ui-panel-close'); panelWas.current = on }, [panel])
-  useEffect(() => { const tap = (e: MouseEvent) => { if ((e.target as Element | null)?.closest?.('button')) sfx('ui-tap') }; document.addEventListener('click', tap, true); return () => document.removeEventListener('click', tap, true) }, [])
+  useEffect(() => { const tap = (e: PointerEvent) => { if ((e.target as Element | null)?.closest?.('button')) sfx('ui-tap') }; document.addEventListener('pointerdown', tap, true); return () => document.removeEventListener('pointerdown', tap, true) }, [])   // pointerdown: some buttons act (and unmount) on press, so a click never lands
   // BETA M32: Greg's walking tour (greg-tour.ts). Not a panel: the keeper walks along with him; only a stop's talk freezes them.
   const [tour, setTour] = useState<GregTourState | null>(null)
   const tourRef = useRef(tour); tourRef.current = tour
