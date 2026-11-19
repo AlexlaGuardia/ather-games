@@ -206,7 +206,10 @@ if (!word || !(await poll(async () => !!(await p.$(`[data-panel="idony-panel"] [
 sees.idony = await text(); await shot('idony-panel')
 await clickSel(`[data-word="${word.id}"] button`, /Imbue/); await sleep(1200)
 let beats = 0
-for (let k = 0; k < 14 && (await p.$('[data-beat]')); k++) { beats++; if (!(await clickSel('[data-beat] button'))) break; await sleep(600) }
+// M13 part 3: Idony's beat plays in the TALK BUBBLE over her door, one step per answer; a keeper answers with E (the lit option)
+await sleep(800)
+for (let k = 0; k < 14 && (await p.$('[data-talk-option]')); k++) { beats++; await p.keyboard.press('KeyE'); await sleep(800) }
+for (let k = 0; k < 14 && (await p.$('[data-beat]')); k++) { beats++; if (!(await clickSel('[data-beat] button'))) break; await sleep(600) }   // the older panel beat, if a build still has it
 res.beats = beats
 const fin = await bracelet(); res.bracelet = fin ? `${fin.label} word=${fin.word}` : null
 await clickSel('[data-panel="idony-panel"] button[aria-label]'); await sleep(800)
