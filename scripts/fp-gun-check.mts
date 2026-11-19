@@ -13,6 +13,11 @@ const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: pro
 const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 1280, height: 760 })
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 await p.evaluateOnNewDocument('window.__name = (f) => f')
+// count what the guns' voices start (shared/gun-sound.ts): every shot builds oscillators/buffer sources on one AudioContext
+await p.evaluateOnNewDocument(() => { const w = window as any; w.__snd = { ctx: 0, osc: 0, src: 0 }
+  const AC = w.AudioContext; if (!AC) return
+  w.AudioContext = class extends AC { constructor(...a: any[]) { super(...a); w.__snd.ctx++ }
+    createOscillator() { w.__snd.osc++; return super.createOscillator() } createBufferSource() { w.__snd.src++; return super.createBufferSource() } } })
 await p.evaluateOnNewDocument(() => {
   localStorage.setItem('ather:shimmer:birthRune', 'star')
   // what Kael's chest hands over (shipyard-check proves the chest): the Charred Rifle primary, the Repeater secondary
@@ -55,6 +60,7 @@ await p.mouse.down({ button: 'left' }); let flare = 0
 await poll(async () => { flare = Math.max(flare, (await G())?.glow ?? 0); return flare > idle + 0.05 }, 3000); res.flare = flare; await p.mouse.up({ button: 'left' })
 await p.mouse.up({ button: 'right' }); await sleep(600)
 res.idleGlow = idle
+res.sound = await p.evaluate(() => (window as any).__snd)   // after the shots above: the guns spoke
 res.chip = await p.evaluate(() => [...document.querySelectorAll('[data-hud] *')].map(e => e.textContent ?? '').find(t => /^(Repeater|Charred rifle)\s*\d+ \/ \d+$/.test(t.trim())) ?? null)
 await p.screenshot({ path: `${out}/4-after-shot.png` })
 // 5 · THE SIGHT IS THE KEEPER'S (canon, look only): the Character tab re-cuts the rifle's mark to a mana-blue ring; aiming it shows that cut
@@ -77,6 +83,7 @@ res.pageErrors = errs
 console.log(JSON.stringify(res, null, 1))
 const d = res.drawn as any, ar = res.aimedRifle as any, sw = res.swapped as any, rp = res.aimedRepeater as any, st = res.stowed as any
 const pass = !!st && !st.shown
+  && (res.sound as any)?.ctx >= 1 && (res.sound as any)?.osc > 0 && (res.sound as any)?.src > 0
   && res.freeHandsStowed === true && res.freeHandsDrawnWithGun === false && res.freeHandsMidJump === false
   && d?.shown && d.key === 'charred-rifle:scope2' && d.optic === 'scope2' && d.glow >= 0.15 && d.glow <= 0.5
   && !!res.adsReached && ar?.ads >= 0.99 && !!res.ringRifle && ar.shown === false
