@@ -5,7 +5,8 @@
     "status": "proposed",
     "note": "Alex r1 nay: \"a little softer\" (r2)",
     "desc": "Footstep on grass: soft brushy rustle",
-    "source": "synth"
+    "source": "synth",
+    "bus": "sfx"
   },
   {
     "id": "step-stone",
@@ -13,7 +14,8 @@
     "status": "proposed",
     "note": "Alex r1 nay: \"more like a domino click clack\" (r2)",
     "desc": "Footstep on stone: dry tick with a short knock",
-    "source": "synth"
+    "source": "synth",
+    "bus": "sfx"
   },
   {
     "id": "step-wood",
@@ -21,7 +23,8 @@
     "status": "proposed",
     "note": "Alex r1 nay: \"a hollow thudding with a soft creaking\" (r2)",
     "desc": "Footstep on wood: hollow thock",
-    "source": "synth"
+    "source": "synth",
+    "bus": "sfx"
   },
   {
     "id": "jump",
@@ -29,7 +32,8 @@
     "status": "proposed",
     "note": "Alex r1 nay: \"exaggerate the last step type so it sounds like pushing off\" (r2)",
     "desc": "Jump: quick rising puff",
-    "source": "synth"
+    "source": "synth",
+    "bus": "sfx"
   },
   {
     "id": "land",
@@ -37,7 +41,8 @@
     "status": "proposed",
     "note": "Alex r1 nay: \"more like a pushing dirt noise\" (r2)",
     "desc": "Land: soft thud with a breath of dust",
-    "source": "synth"
+    "source": "synth",
+    "bus": "sfx"
   },
   {
     "id": "hit-axe-tree",
@@ -45,7 +50,8 @@
     "status": "yay",
     "note": "Alex r1: yay, \"Sharper\" (r2 sharpened)",
     "desc": "Axe on a tree: chop, woody knock",
-    "source": "synth"
+    "source": "synth",
+    "bus": "sfx"
   },
   {
     "id": "hit-prune-tree",
@@ -53,7 +59,8 @@
     "status": "yay",
     "note": "",
     "desc": "Prune on a tree: lighter snip and leaf rustle",
-    "source": "synth"
+    "source": "synth",
+    "bus": "sfx"
   },
   {
     "id": "hit-pick-crystal",
@@ -61,7 +68,8 @@
     "status": "yay",
     "note": "",
     "desc": "Pick on a crystal node: bright chink",
-    "source": "synth"
+    "source": "synth",
+    "bus": "sfx"
   },
   {
     "id": "hit-prospect-crystal",
@@ -69,7 +77,8 @@
     "status": "yay",
     "note": "",
     "desc": "Prospect on a crystal node: glassy tap with a ring",
-    "source": "synth"
+    "source": "synth",
+    "bus": "sfx"
   },
   {
     "id": "pickup-grey-matter",
@@ -77,7 +86,8 @@
     "status": "yay",
     "note": "",
     "desc": "Grey matter pickup: low soft blip",
-    "source": "synth"
+    "source": "synth",
+    "bus": "sfx"
   },
   {
     "id": "pickup-item",
@@ -85,7 +95,8 @@
     "status": "yay",
     "note": "",
     "desc": "Item pickup: two-note pop",
-    "source": "synth"
+    "source": "synth",
+    "bus": "sfx"
   },
   {
     "id": "ui-tap",
@@ -93,7 +104,8 @@
     "status": "yay",
     "note": "",
     "desc": "UI tap: tiny tick",
-    "source": "synth"
+    "source": "synth",
+    "bus": "ui"
   },
   {
     "id": "ui-panel-open",
@@ -101,7 +113,8 @@
     "status": "yay",
     "note": "",
     "desc": "Panel open: short rising swish",
-    "source": "synth"
+    "source": "synth",
+    "bus": "ui"
   },
   {
     "id": "ui-panel-close",
@@ -109,6 +122,159 @@
     "status": "yay",
     "note": "",
     "desc": "Panel close: short falling swish",
-    "source": "synth"
+    "source": "synth",
+    "bus": "ui"
+  },
+  {
+    "id": "rec-step-grass",
+    "area": "footsteps",
+    "status": "proposed",
+    "note": "",
+    "desc": "Recorded footstep on grass (Kenney CC0)",
+    "source": "cc0",
+    "licence": "CC0 (Kenney audio packs)",
+    "bus": "sfx",
+    "files": [
+      "/sfx/kenney/footstep_grass_000.ogg",
+      "/sfx/kenney/footstep_grass_001.ogg",
+      "/sfx/kenney/footstep_grass_002.ogg",
+      "/sfx/kenney/footstep_grass_003.ogg",
+      "/sfx/kenney/footstep_grass_004.ogg"
+    ]
+  },
+  {
+    "id": "rec-step-stone",
+    "area": "footsteps",
+    "status": "proposed",
+    "note": "",
+    "desc": "Recorded footstep on stone (Kenney CC0)",
+    "source": "cc0",
+    "licence": "CC0 (Kenney audio packs)",
+    "bus": "sfx",
+    "files": [
+      "/sfx/kenney/footstep_concrete_000.ogg",
+      "/sfx/kenney/footstep_concrete_001.ogg",
+      "/sfx/kenney/footstep_concrete_002.ogg",
+      "/sfx/kenney/footstep_concrete_003.ogg",
+      "/sfx/kenney/footstep_concrete_004.ogg"
+    ]
+  },
+  {
+    "id": "rec-step-wood",
+    "area": "footsteps",
+    "status": "proposed",
+    "note": "",
+    "desc": "Recorded footstep on wood (Kenney CC0)",
+    "source": "cc0",
+    "licence": "CC0 (Kenney audio packs)",
+    "bus": "sfx",
+    "files": [
+      "/sfx/kenney/footstep_wood_000.ogg",
+      "/sfx/kenney/footstep_wood_001.ogg",
+      "/sfx/kenney/footstep_wood_002.ogg",
+      "/sfx/kenney/footstep_wood_003.ogg",
+      "/sfx/kenney/footstep_wood_004.ogg"
+    ]
+  },
+  {
+    "id": "rec-step-wood-creak",
+    "area": "footsteps",
+    "status": "proposed",
+    "note": "",
+    "desc": "Recorded wood footstep with an occasional low creak (Kenney CC0)",
+    "source": "cc0",
+    "licence": "CC0 (Kenney audio packs)",
+    "bus": "sfx",
+    "files": [
+      "/sfx/kenney/footstep_wood_000.ogg",
+      "/sfx/kenney/footstep_wood_001.ogg",
+      "/sfx/kenney/footstep_wood_002.ogg",
+      "/sfx/kenney/footstep_wood_003.ogg",
+      "/sfx/kenney/footstep_wood_004.ogg"
+    ],
+    "layer": {
+      "files": [
+        "/sfx/kenney/creak1.ogg",
+        "/sfx/kenney/creak2.ogg",
+        "/sfx/kenney/creak3.ogg"
+      ],
+      "chance": 0.25,
+      "vol": 0.5
+    }
+  },
+  {
+    "id": "rec-jump",
+    "area": "movement",
+    "status": "proposed",
+    "note": "",
+    "desc": "Recorded jump push-off, soft impact (Kenney CC0)",
+    "source": "cc0",
+    "licence": "CC0 (Kenney audio packs)",
+    "bus": "sfx",
+    "files": [
+      "/sfx/kenney/impactSoft_medium_000.ogg",
+      "/sfx/kenney/impactSoft_medium_001.ogg",
+      "/sfx/kenney/impactSoft_medium_002.ogg",
+      "/sfx/kenney/impactSoft_medium_003.ogg",
+      "/sfx/kenney/impactSoft_medium_004.ogg"
+    ]
+  },
+  {
+    "id": "rec-land",
+    "area": "movement",
+    "status": "proposed",
+    "note": "",
+    "desc": "Recorded landing, heavy soft impact (Kenney CC0)",
+    "source": "cc0",
+    "licence": "CC0 (Kenney audio packs)",
+    "bus": "sfx",
+    "files": [
+      "/sfx/kenney/impactSoft_heavy_000.ogg",
+      "/sfx/kenney/impactSoft_heavy_001.ogg",
+      "/sfx/kenney/impactSoft_heavy_002.ogg",
+      "/sfx/kenney/impactSoft_heavy_003.ogg",
+      "/sfx/kenney/impactSoft_heavy_004.ogg"
+    ]
+  },
+  {
+    "id": "rec-axe",
+    "area": "tool hits",
+    "status": "proposed",
+    "note": "",
+    "desc": "Recorded axe: chop layered on a heavy wood impact (Kenney CC0)",
+    "source": "cc0",
+    "licence": "CC0 (Kenney audio packs)",
+    "bus": "sfx",
+    "files": [
+      "/sfx/kenney/impactWood_heavy_000.ogg",
+      "/sfx/kenney/impactWood_heavy_001.ogg",
+      "/sfx/kenney/impactWood_heavy_002.ogg",
+      "/sfx/kenney/impactWood_heavy_003.ogg",
+      "/sfx/kenney/impactWood_heavy_004.ogg"
+    ],
+    "layer": {
+      "files": [
+        "/sfx/kenney/chop.ogg"
+      ],
+      "chance": 1,
+      "vol": 0.8
+    }
+  },
+  {
+    "id": "rec-pick",
+    "area": "tool hits",
+    "status": "proposed",
+    "note": "",
+    "desc": "Recorded pick: mining impact (Kenney CC0)",
+    "source": "cc0",
+    "licence": "CC0 (Kenney audio packs)",
+    "bus": "sfx",
+    "files": [
+      "/sfx/kenney/impactMining_000.ogg",
+      "/sfx/kenney/impactMining_001.ogg",
+      "/sfx/kenney/impactMining_002.ogg",
+      "/sfx/kenney/impactMining_003.ogg",
+      "/sfx/kenney/impactMining_004.ogg"
+    ]
   }
 ]

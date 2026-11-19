@@ -8,12 +8,142 @@ import registry from './sounds.json'
 import { audio, masterBus, noise } from './gun-sound'
 
 export type SoundStatus = 'proposed' | 'yay' | 'nay'
-export interface SoundRow { id: string; area: string; status: SoundStatus; note: string; desc?: string; source: 'synth' | 'cc0'; licence?: string }
-export const SOUNDS = registry as SoundRow[]
+export type BusName = 'sfx' | 'ui' | 'ambience' | 'music'
+export type AreaName = 'open' | 'glade' | 'town' | 'indoor'
+export interface SoundLayer { files: string[]; chance: number; vol?: number }
+export interface SoundRow { id: string; area: string; status: SoundStatus; note: string; desc?: string; source: 'synth' | 'cc0'; licence?: string; bus?: BusName; files?: string[]; layer?: SoundLayer }
+export const SOUNDS = registry as unknown as SoundRow[]
 export const statusOf = (id: string): SoundStatus | null => SOUNDS.find(s => s.id === id)?.status ?? null
+export const BUSES: BusName[] = ['sfx', 'ui', 'ambience', 'music']
+export const busOf = (r: SoundRow): BusName => r.bus ?? (r.area === 'ui' ? 'ui' : 'sfx')
 
-export interface PlayOpts { vol?: number; pitch?: number }
+export interface V3 { x: number; y: number; z: number }
+export interface PlayOpts { vol?: number; pitch?: number; at?: V3 }
 type Bus = { c: AudioContext; out: AudioNode; t: number; vol: number; pitch: number }
+
+// ── variation: a random variant (never the same twice running) + a small pitch/volume wobble ──
+export const PITCH_WOBBLE = 0.04, VOL_WOBBLE = 0.1
+/** index in [0,n), never `last` when n > 1. `rnd` is injectable for tests. */
+export function pickVariant(n: number, last: number, rnd: () => number = Math.random): number {
+  if (n <= 1) return 0
+  if (last < 0 || last >= n) return Math.min(n - 1, Math.floor(rnd() * n))
+  const i = Math.min(n - 2, Math.floor(rnd() * (n - 1))); return i >= last ? i + 1 : i
+}
+export function wobble(rnd: () => number = Math.random) { return { pitch: 1 + (rnd() * 2 - 1) * PITCH_WOBBLE, vol: 1 + (rnd() * 2 - 1) * VOL_WOBBLE } }
+const lastPick = new Map<string, number>()
+function nextFile(key: string, files: string[]): string | null {
+  if (!files.length) return null
+  const i = pickVariant(files.length, lastPick.get(key) ?? -1); lastPick.set(key, i); return files[i]
+}
+
+// ── mixer: buses under the master, persisted ──
+const BUS_KEY = 'open:sfx-buses.v1'
+const clamp01 = (v: number) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1)
+let busVols: Record<BusName, number> | null = null
+function vols() {
+  if (!busVols) {
+    busVols = { sfx: 1, ui: 1, ambience: 1, music: 1 }
+    try { const j = JSON.parse(localStorage.getItem(BUS_KEY) ?? 'null'); if (j && typeof j === 'object') for (const b of BUSES) if (typeof j[b] === 'number') busVols[b] = clamp01(j[b]) } catch { /* fine */ }
+  }
+  return busVols
+}
+export const getBusVolume = (b: BusName) => vols()[b]
+const busNodes: Partial<Record<BusName, GainNode>> = {}
+export function setBusVolume(b: BusName, v: number) {
+  const x = clamp01(v); vols()[b] = x
+  const n = busNodes[b]; if (n) n.gain.value = x
+  try { localStorage.setItem(BUS_KEY, JSON.stringify(vols())) } catch { /* fine */ }
+}
+function busNode(c: AudioContext, m: AudioNode, b: BusName): AudioNode {
+  let n = busNodes[b]
+  if (!n) { n = c.createGain(); n.gain.value = vols()[b]; n.connect(m); busNodes[b] = n }
+  return n
+}
+
+// ── space: a short generated reverb send per area (decaying noise, no files) ──
+const AREAS: Record<AreaName, { secs: number; send: number }> = { open: { secs: 0.2, send: 0.03 }, glade: { secs: 0.9, send: 0.16 }, town: { secs: 0.6, send: 0.18 }, indoor: { secs: 0.45, send: 0.28 } }
+let area: AreaName = 'open'
+let verb: { conv: ConvolverNode; send: GainNode } | null = null
+const irCache = new Map<AreaName, AudioBuffer>()
+function impulse(c: AudioContext, a: AreaName): AudioBuffer {
+  let b = irCache.get(a); if (b) return b
+  const n = Math.max(1, Math.floor(c.sampleRate * AREAS[a].secs)); b = c.createBuffer(2, n, c.sampleRate)
+  for (let ch = 0; ch < 2; ch++) { const d = b.getChannelData(ch); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.5) }
+  irCache.set(a, b); return b
+}
+function reverb(c: AudioContext, m: AudioNode) {
+  if (!verb && typeof c.createConvolver === 'function') {
+    const conv = c.createConvolver(), send = c.createGain(); conv.buffer = impulse(c, area); send.gain.value = AREAS[area].send
+    send.connect(conv); conv.connect(m); verb = { conv, send }
+  }
+  return verb
+}
+/** Pick the room: a short reverb send mixed lightly. `open` is almost dry. */
+export function setArea(a: AreaName) {
+  if (!AREAS[a]) return
+  area = a
+  const c = audio(); if (!c || !verb) return
+  try { verb.conv.buffer = impulse(c, a); verb.send.gain.value = AREAS[a].send } catch { /* fine */ }
+}
+export const currentArea = () => area
+
+// ── distance + pan ──
+let lpos: V3 = { x: 0, y: 0, z: 0 }
+/** Once per frame: where the listener is and which way it faces. */
+export function setListener(pos: V3, forward: V3) {
+  lpos = pos
+  const c = audio(); if (!c) return
+  try {
+    const l = c.listener as AudioListener & { positionX?: AudioParam }
+    if (l.positionX) { l.positionX.value = pos.x; l.positionY.value = pos.y; l.positionZ.value = pos.z; l.forwardX.value = forward.x; l.forwardY.value = forward.y; l.forwardZ.value = forward.z; l.upX.value = 0; l.upY.value = 1; l.upZ.value = 0 }
+    else if (l.setPosition) { l.setPosition(pos.x, pos.y, pos.z); l.setOrientation(forward.x, forward.y, forward.z, 0, 1, 0) }
+  } catch { /* fine */ }
+}
+/** lowpass cutoff for a distance: open at 0, closing towards ~900 Hz. */
+export const lowpassFor = (d: number) => Math.max(900, 18000 / (1 + d / 12))
+
+/** Build the per-voice chain and return its input. 2D (no `at`) goes straight to the bus. */
+function voiceInput(c: AudioContext, m: AudioNode, bus: BusName, at?: V3): AudioNode {
+  const bn = busNode(c, m, bus), tail = c.createGain()
+  tail.connect(bn)
+  const rv = bus === 'sfx' || bus === 'ambience' ? reverb(c, m) : null
+  if (rv) tail.connect(rv.send)
+  if (!at) return tail
+  const d = Math.hypot(at.x - lpos.x, at.y - lpos.y, at.z - lpos.z)
+  const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = lowpassFor(d); lp.Q.value = 0.5
+  const head: AudioNode = lp
+  if (typeof c.createPanner === 'function') {
+    const p = c.createPanner()
+    try { p.panningModel = 'HRTF' } catch { try { p.panningModel = 'equalpower' } catch { /* fine */ } }
+    p.distanceModel = 'inverse'; p.refDistance = 4; p.rolloffFactor = 1; p.maxDistance = 80
+    if (p.positionX) { p.positionX.value = at.x; p.positionY.value = at.y; p.positionZ.value = at.z } else p.setPosition?.(at.x, at.y, at.z)
+    lp.connect(p); p.connect(tail)
+  } else lp.connect(tail)
+  return head
+}
+
+// ── recorded samples: fetched + decoded lazily, cached per url, a failure is silent ──
+const samples = new Map<string, AudioBuffer | 'loading' | 'fail'>()
+function load(c: AudioContext, url: string) {
+  if (samples.has(url)) return
+  samples.set(url, 'loading')
+  try {
+    void fetch(url).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer() }).then(b => c.decodeAudioData(b)).then(buf => { samples.set(url, buf) }).catch(() => { samples.set(url, 'fail') })
+  } catch { samples.set(url, 'fail') }
+}
+/** Warm the cache for a row so its first play is not silent. Never throws, never blocks. */
+export function preload(id: string) {
+  const r = SOUNDS.find(s => s.id === id), c = audio(); if (!r?.files || !c) return
+  for (const f of [...r.files, ...(r.layer?.files ?? [])]) load(c, f)
+}
+export const sampleState = (url: string) => { const s = samples.get(url); return s === undefined ? 'none' : typeof s === 'string' ? s : 'ready' }
+function sample(b: Bus, url: string, vol: number) {
+  const s = samples.get(url)
+  if (s === undefined) { load(b.c, url); return }   // not loaded yet: silent this time, ready next
+  if (typeof s === 'string') return
+  const src = b.c.createBufferSource(), g = b.c.createGain(); src.buffer = s; src.playbackRate.value = b.pitch; g.gain.value = b.vol * vol
+  src.connect(g).connect(b.out); src.start(b.t)
+}
 
 function env(g: GainNode, t: number, peak: number, attack: number, decay: number) {
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay)
@@ -50,11 +180,20 @@ const RECIPES: Record<string, (b: Bus) => void> = {
 }
 
 function run(id: string, o: PlayOpts) {
-  const r = RECIPES[id]; if (!r) return
-  const c = audio(), out = masterBus(); if (!c || !out) return
-  try { r({ c, out, t: c.currentTime + 0.003, vol: o.vol ?? 1, pitch: o.pitch ?? 1 }) } catch { /* a sound never breaks the game */ }
+  const row = SOUNDS.find(s => s.id === id); if (!row) return
+  const files = row.files?.length ? row.files : null, r = files ? null : RECIPES[id]
+  if (!files && !r) return
+  const c = audio(), m = masterBus(); if (!c || !m) return
+  try {
+    const w = wobble(), out = voiceInput(c, m, busOf(row), o.at)
+    const b: Bus = { c, out, t: c.currentTime + 0.003, vol: (o.vol ?? 1) * w.vol, pitch: (o.pitch ?? 1) * w.pitch }
+    if (r) { r(b); return }
+    const f = nextFile(id, files!); if (f) sample(b, f, 1)
+    const L = row.layer
+    if (L && Math.random() < L.chance) { const lf = nextFile(id + '#layer', L.files); if (lf) sample(b, lf, L.vol ?? 1) }
+  } catch { /* a sound never breaks the game */ }
 }
-/** Play a sound IN THE GAME. Only a `yay` sound makes noise; proposed and nay are silent. */
+/** Play a sound IN THE GAME. Only a `yay` sound makes noise; proposed and nay are silent. `at` = positional (3D); none = 2D. */
 export function play(id: string, opts: PlayOpts = {}) { if (statusOf(id) === 'yay') run(id, opts) }
 /** The review page's play button: sounds regardless of status. Never call from the game. */
 export function audition(id: string) { run(id, {}) }
