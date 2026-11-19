@@ -68,7 +68,8 @@ function useGoop(c: React.MutableRefObject<Combat>, id: number, world: React.Mut
     if (clock.elapsedTime >= next.current) {
       next.current = clock.elapsedTime + 0.5
       const W = world.current, g = borrowedGround(W.groundAt(h.x, h.z), greyStep(greyAt(h.x, h.z, W.nodes)))
-      if (g !== key.current) { key.current = g; mat.envMap = groundEnv(g); mat.needsUpdate = true }
+      // __noBorrow (beta-m9-heap --nosheen): the A/B leg that leaves the env maps out, to see what they cost the heap
+      if (g !== key.current && !(window as unknown as { __noBorrow?: boolean }).__noBorrow) { key.current = g; mat.envMap = groundEnv(g); mat.needsUpdate = true }
       mat.envMapIntensity = BORROW * borrowedSky(daylight(dayProgress()))
     }
   })

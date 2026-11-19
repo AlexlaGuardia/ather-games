@@ -18,6 +18,11 @@ const url = flag('--url', 'https://ather.games'), MIN = Number(flag('--min', '15
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const p = await br.newPage(); await p.setViewport({ width: 800, height: 500 })
+
+// A/B legs (M34 heap, 11-19): --nosound stubs the AudioContext out before the page loads (sfx.ts decodes + caches samples);
+// --nosheen sets window.__noBorrow (combat-layer.tsx: Hollows take no env map). Same walk, one suspect removed.
+if (process.argv.includes('--nosound')) await p.evaluateOnNewDocument(() => { try { (window as any).AudioContext = undefined; (window as any).webkitAudioContext = undefined } catch { /* sandboxed */ } })
+if (process.argv.includes('--nosheen')) await p.evaluateOnNewDocument(() => { (window as any).__noBorrow = true })
 await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))   // born: the ritual does not take the screen
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 const cdp = await p.createCDPSession(); await cdp.send('HeapProfiler.enable')
