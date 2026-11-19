@@ -69,7 +69,7 @@ await p.evaluate((x, z, y) => (window as any).__drive.footTp(x, z, y, -0.08), at
 if (!(await poll(async () => await p.evaluate(() => (window as any).__market.reach()) === 'front:shipyard'))) await done(false, 'FAIL: shipyard door not in reach')
 await p.keyboard.press('KeyE')
 if (!(await poll(async () => !!(await p.$('[data-panel="shipyard"]')), 15000))) await done(false, 'FAIL: E did not open the shipyard')
-res.chestClicked = await p.evaluate(() => { const bt = [...document.querySelectorAll<HTMLButtonElement>('[data-panel="shipyard"] button')].find(x => /Kael/.test(x.textContent ?? '')); if (!bt) return false; bt.click(); return true })
+res.chestClicked = await p.evaluate(() => { const bt = [...document.querySelectorAll<HTMLButtonElement>('[data-panel="shipyard"] button')].find(x => /chest|Kael/i.test(x.textContent ?? ''))   /* the button names the chest now (shipyard-check) */; if (!bt) return false; bt.click(); return true })
 await sleep(1000)
 const lo = await loadout(); res.loadout = lo && { guns: lo.guns, primary: lo.primary, secondary: lo.secondary, kael: lo.kael }
 if (!lo?.kael) await done(false, 'FAIL: no arms from the chest')
