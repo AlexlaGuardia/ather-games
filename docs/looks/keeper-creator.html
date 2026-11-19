@@ -43,7 +43,7 @@ input[type=range] { width: 100%; accent-color: var(--accent) }
     </div>
     <div class="panel" id="panel"></div>
   </div>
-  <p class="note" style="margin-top:14px">Floating limbs: no arms or legs, the hands and feet hover where they would be. It is a body style, and it would be a canon call for Magii if it means Alkin look like that. Not in this mock: names, voices, species traits, glowing colours.</p>
+  <p class="note" style="margin-top:14px">Every keeper has floating limbs: no arms or legs, the hands and feet hover where they would be. Not in this mock: names, voices, species traits, glowing colours.</p>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -52,15 +52,15 @@ const SKIN = ['#f6d7bd', '#e8b98f', '#c98e62', '#9c6644', '#6e4630', '#4a2f22']
 const HAIR = ['#1f1914', '#4a3020', '#7a4a26', '#b07a3c', '#d9b770', '#9a9a96', '#e9e6df', '#7a2f1e']
 const CLOTH = ['#4f7c8a', '#7a8a4f', '#8a4f4f', '#5a4f8a', '#c9a06a', '#3f3a33', '#d8d0c0', '#2f4a5e']
 const OPT = {
-  frame: ['Small', 'Medium', 'Large'], body: ['Joined limbs', 'Floating limbs'], torso: ['Broad', 'Curved'],
+  frame: ['Small', 'Medium', 'Large'], torso: ['Broad', 'Curved'],
   skin: SKIN, hairStyle: ['Short', 'Tousled', 'Spiky', 'Swept', 'Bob', 'Long', 'Bun', 'Tail'], hair: HAIR,
   eyes: ['Lines', 'Dots', 'Round', 'Bright', 'Wide', 'Happy', 'Sleepy', 'Wink'], brows: ['Soft', 'Bold', 'None'], mouth: ['Smile', 'Grin', 'Smirk', 'Flat', 'Open', 'Cat'],
   topColor: CLOTH, legColor: CLOTH, accent: CLOTH, scarf: ['#b3473a', '#d9a441', '#4f7c8a', '#5a8a4f', '#7a4f8a', '#e9e6df', '#2f2a26'],
 }
-const LABEL = { frame: 'Frame', body: 'Body', torso: 'Torso', skin: 'Skin', hairStyle: 'Hair', hair: 'Hair colour', eyes: 'Eyes', brows: 'Brows', mouth: 'Mouth', topColor: 'Body colour', legColor: 'Legs colour', accent: 'Hands and feet', scarf: 'Scarf' }
+const LABEL = { frame: 'Frame', torso: 'Torso', skin: 'Skin', hairStyle: 'Hair', hair: 'Hair colour', eyes: 'Eyes', brows: 'Brows', mouth: 'Mouth', topColor: 'Body colour', accent: 'Hands and feet', scarf: 'Scarf' }
 const BODY_NOTE = ''
 const FRAME_NOTE = ['A smaller hitbox and +5% move speed.', 'The baseline: no bonus.', 'A bigger hitbox and +10% defence.']
-const k = { frame: 1, body: 1, mouth: 0, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, topColor: 0, legColor: 5, accent: 5, torso: 0, scarf: 0 }
+const k = { frame: 1, mouth: 0, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, topColor: 0, legColor: 5, accent: 5, torso: 0, scarf: 0 }
 
 // ── the cartoon rig (docs/looks/alkin-looks.html 'toon': 1:3, cel shading, ink hull) with keeper params ──
 const grad = (() => { const t = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.LuminanceFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t })()
@@ -83,7 +83,7 @@ function put(g, geo, color, pos, scale, rot, ink = true) {
 function flat(g, geo, color, pos, scale, rot) { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color })); m.position.set(...pos); m.scale.set(...scale); if (rot) m.rotation.set(...rot); g.add(m) }
 function keeper(o) {
   const g = new THREE.Group()
-  const wide = [0.88, 1, 1.16][o.frame], tall = [0.9, 1, 1.1][o.frame], age = 1, float = o.body === 1
+  const wide = [0.88, 1, 1.16][o.frame], tall = [0.9, 1, 1.1][o.frame], age = 1, float = true   // every keeper has floating limbs (Alex 11-19)
   const H = 0.5 * (age === 0 ? 1.08 : 1), B = 0.62 * tall * (age === 0 ? 0.92 : 1), L = 0.55 * tall * (age === 0 ? 0.9 : 1), A = 0.6 * tall
   const skin = OPT.skin[o.skin], hair = age === 2 && o.hair < 5 ? '#b9b6ae' : OPT.hair[o.hair], top = OPT.topColor[o.topColor], legC = OPT.legColor[o.legColor], acc = OPT.accent[o.accent]
   // FLOATING LIMBS (Alex's doodle 11-18): an inverted-egg torso with no arms, a scarf over the shoulders with a tail down
