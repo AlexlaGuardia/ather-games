@@ -9,6 +9,7 @@
 //      gets ONE Morel hint ('greg' line on the message line), and not a second within the cooldown (15 s fast)
 //   8. (S3) FOLK PING: a born keeper whose first Rinnshop stands: Morel reports Fennel's call ('Fennel says' on the message
 //      line) ONCE, and the quest's meeting marker lights (journal marker on for 'rinquest'); a reload does not ping again
+//   9. PHONE 390 x 844: the touch FIRE button (held) shows the bubble, and the bubble overlaps NO HUD piece or touch control
 //   6. 0 page errors. Screenshot to --out (bubble white + red) for the LOOK.
 // Hooks READ only (__morel.bubble/said, __ather.zone, __fpGun). Seeds a born keeper + Kael's loadout (fp-gun-check's seed).
 //   npx tsx scripts/gem-check.mts [--url https://ather.games] [--out dir]
@@ -97,15 +98,51 @@ try {
     localStorage.setItem(k, JSON.stringify({ v: 1, state: 'none', step: 0 }))
     localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [{ id: 'gem-check', kind: 'rinnshop', x: -100, z: 100, q: 0, placedAt: 1, doneAt: 2, store: [] }], chests: [], pieces: [] }))
   }, RINQUEST_KEY)
+  // every Morel line ever drawn (a line lives 4 s; on this 1-2 fps box a read after the poll can miss it)
+  await r.evaluateOnNewDocument(() => { const w = window as any; w.__morelSeen = []
+    new MutationObserver(() => { for (const e of document.querySelectorAll('[data-say="morel"]')) { const t = e.textContent ?? ''; if (!w.__morelSeen.includes(t)) w.__morelSeen.push(t) } })
+      .observe(document, { childList: true, subtree: true }) })
   await r.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
   const P = () => r.evaluate(() => (window as any).__morelPing?.ids ?? []) as Promise<string[]>
   ok(await poll(async () => (await P()).includes('rinquest'), 120000), `8. the Rinnshop stands: Morel pings for Fennel (${(await P()).join(',')})`)
-  ok(await r.evaluate(() => [...document.querySelectorAll('[data-say="morel"]')].some(e => /Fennel says/.test(e.textContent ?? ''))), "8. 'Morel: Fennel says…' on the message line")
+  ok(await r.evaluate(() => ((window as any).__morelSeen as string[]).some(t => /Morel:.*Fennel says/.test(t))), "8. 'Morel: Fennel says…' on the message line")
   ok(await r.evaluate(() => (window as any).__morelPing.marker('rinquest')), "8. her meeting's marker is lit")
   await r.screenshot({ path: `${out}/4-ping.png` })
   await sleep(5000); ok((await P()).length === 1, '8. once, not on every tick')
   await r.reload({ waitUntil: 'load', timeout: 240000 }); await poll(() => r.evaluate(() => !!(window as any).__rinquest), 120000); await sleep(8000)
   ok((await P()).length === 0, '8. a reload (quest already active) does not ping again')
+  // 9 · phone: touch fire shows the bubble; it sits clear of the HUD and the thumbs
+  const ph = await (await br.createBrowserContext()).newPage()
+  await ph.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
+  ph.on('pageerror', e => errs.push(String(e).slice(0, 200)))
+  await ph.evaluateOnNewDocument('window.__name = (f) => f')
+  await ph.evaluateOnNewDocument(() => {
+    localStorage.setItem('ather:shimmer:birthRune', 'star')
+    localStorage.setItem('open.loadout.v1', JSON.stringify({ v: 1, guns: ['repeater', 'charred-rifle'], primary: 'repeater', secondary: 'charred-rifle', kael: true,
+      vessels: [{ id: 'starter-bracelet', kind: 'bracelet', label: 'Bracelet', word: null }, { id: 'starter-glove', kind: 'glove', label: 'Glove', word: null }], tactical: 'starter-bracelet', signature: 'starter-glove' }))
+  })
+  await ph.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
+  ok(await poll(() => ph.evaluate(() => (window as any).__ather?.zone?.() === 'wilds' && !!document.querySelector('[data-touch="fire"]')), 240000), '9. phone: in the Wilds, touch controls up')
+  await sleep(3000)
+  const tapAt = async (sel: string) => { const b = await ph.evaluate((q: string) => { const e = document.querySelector(q); const r = e?.getBoundingClientRect(); return r && r.width ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null }, sel); if (b) await ph.touchscreen.tap(b.x, b.y); return !!b }
+  // the phone's 'Tap to start' (the game is paused under it), then the DRAW pill a thumb would tap
+  const start = await ph.evaluate(() => { for (const e of document.querySelectorAll<HTMLElement>('button, div, span')) if ((e.innerText ?? '').trim() === 'Tap to start') { const r = e.getBoundingClientRect(); if (r.width) return { x: r.x + r.width / 2, y: r.y + r.height / 2 } } return null })
+  if (start) { await ph.touchscreen.tap(start.x, start.y); await sleep(1500) }
+  ok(await tapAt('[data-touch="draw"]'), '9. phone: tapped DRAW')
+  await poll(async () => (await ph.evaluate(() => (window as any).__fpGun?.shown?.())) === true, 15000)
+  const fb = await ph.evaluate(() => { const r = document.querySelector('[data-touch="fire"]')!.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })
+  await ph.touchscreen.touchStart(fb.x, fb.y)
+  const shownPh = await poll(() => ph.evaluate(() => !!document.querySelector('[data-morel-bubble]')), 20000)
+  ok(shownPh, '9. phone: holding FIRE shows the bubble')
+  const hits = await ph.evaluate(() => {
+    const b = document.querySelector('[data-morel-bubble]')?.getBoundingClientRect(); if (!b) return ['no bubble']
+    const pad = 2, over = (r: DOMRect) => r.width > 0 && r.height > 0 && b.left < r.right - pad && b.right > r.left + pad && b.top < r.bottom - pad && b.bottom > r.top + pad
+    const els = [...document.querySelectorAll<HTMLElement>('[data-touch], [data-hud]:not([data-hud="messages"])')]
+    return els.filter(e => !e.contains(document.querySelector('[data-morel-bubble]')) && over(e.getBoundingClientRect())).map(e => e.getAttribute('data-touch') ?? e.getAttribute('data-hud') ?? '?')
+  })
+  ok(shownPh && hits.length === 0, `9. phone: the bubble overlaps nothing (${hits.join(',') || 'clear'})`)
+  await ph.screenshot({ path: `${out}/5-phone.png` })
+  await ph.touchscreen.touchEnd()
   ok(errs.length === 0, `6. page errors: ${errs.length} ${errs.join(' | ')}`)
 } finally { await br.close() }
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)

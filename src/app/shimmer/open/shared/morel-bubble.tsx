@@ -13,6 +13,8 @@ import { hudSay } from './hud-say'
 /** `feed` is the fallback; the combat layer's own store (morel.ts setAmmoFeed) wins when it has spoken. */
 export function MorelBubble({ feed }: { feed?: React.MutableRefObject<AmmoFeed | null> }) {
   const [b, setB] = useState<Bubble | null>(null)
+  // on a phone the right-thumb cluster (touch-controls [data-touch-cluster]) sits where the glove's bubble goes: sit just ABOVE it
+  const [over, setOver] = useState<{ right: number; bottom: number } | null>(null)
   const watch = useRef<ReturnType<typeof newAmmoWatch> | null>(null), last = useRef('')
   useEffect(() => {
     let raf = 0
@@ -28,7 +30,11 @@ export function MorelBubble({ feed }: { feed?: React.MutableRefObject<AmmoFeed |
       lastB = r.bubble
       // re-render only when what is drawn changes (alpha in 10 steps)
       const sig = r.bubble.show ? `${r.bubble.n}|${r.bubble.red}|${r.bubble.reloading}|${Math.round(r.bubble.alpha * 10)}` : ''
-      if (sig !== last.current) { last.current = sig; setB(r.bubble.show ? r.bubble : null) }
+      if (sig !== last.current) {
+        last.current = sig; setB(r.bubble.show ? r.bubble : null)
+        const c = r.bubble.show ? document.querySelector('[data-touch-cluster]')?.getBoundingClientRect() : null
+        setOver(c && c.width ? { right: Math.max(14, window.innerWidth - c.right), bottom: window.innerHeight - c.top + 14 } : null)
+      }
     }
     raf = requestAnimationFrame(tick)
     return () => { cancelAnimationFrame(raf); delete (window as unknown as { __morel?: unknown }).__morel }
@@ -36,7 +42,7 @@ export function MorelBubble({ feed }: { feed?: React.MutableRefObject<AmmoFeed |
   if (!b) return null
   const ink = b.red ? '#ff6a5c' : '#eaf4fb'
   return (
-    <div data-morel-bubble data-red={b.red ? '1' : '0'} style={{ position: 'fixed', right: 'max(14px, 17vw)', bottom: 'max(150px, 27vh)', zIndex: 32, pointerEvents: 'none', opacity: b.alpha, transition: 'opacity .1s linear' }}>
+    <div data-morel-bubble data-red={b.red ? '1' : '0'} style={{ position: 'fixed', right: over ? over.right : 'max(14px, 17vw)', bottom: over ? over.bottom : 'max(150px, 27vh)', zIndex: 32, pointerEvents: 'none', opacity: b.alpha, transition: 'opacity .1s linear' }}>
       <div style={{ background: 'rgba(16,22,30,.78)', border: `1px solid ${b.red ? 'rgba(255,106,92,.7)' : 'rgba(127,182,217,.55)'}`, borderRadius: 14, padding: '5px 11px', boxShadow: '0 2px 10px rgba(0,0,0,.45)', display: 'flex', alignItems: 'baseline', gap: 4, fontVariantNumeric: 'tabular-nums' }}>
         {b.reloading
           ? <span style={{ color: '#9fc4dc', fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' }}>reloading</span>
