@@ -42,8 +42,10 @@ try {
   // 2 · fire the clip out, one real click at a time, sampling the bubble
   const seen: { n: number; red: boolean }[] = []
   let shotWhite = false, shotRed = false
-  for (let i = 0; i < 80; i++) {
-    await p.mouse.down(); await sleep(90); await p.mouse.up(); await sleep(260)
+  for (let i = 0; i < 30; i++) {
+    // ★ hold until the round LEAVES (this box draws 1-2 fps: a 90 ms click lands between two frames and the game never sees it)
+    const n0 = (await B())?.n ?? -1
+    await p.mouse.down(); await poll(async () => { const b = await B(); return !!b && b.n !== n0 && b.show }, 6000); await p.mouse.up(); await sleep(150)
     const b = await B()
     if (b?.show && (!seen.length || seen[seen.length - 1].n !== b.n)) seen.push({ n: b.n, red: b.red })
     if (b?.show && !b.red && !shotWhite && await drawn()) { shotWhite = true; await p.screenshot({ path: `${out}/1-bubble.png` }) }
