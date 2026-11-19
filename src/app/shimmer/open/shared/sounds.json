@@ -1,466 +1,466 @@
 [
-  {
-    "id": "step-grass",
-    "area": "footsteps",
-    "status": "yay",
-    "note": "Alex r2: yay (code, softer); recorded grass nay",
-    "desc": "Footstep on grass: soft brushy rustle",
-    "source": "synth",
-    "bus": "sfx",
-    "vol": 0.5
+ {
+  "id": "step-grass",
+  "area": "footsteps",
+  "status": "yay",
+  "note": "Alex r2: yay (code, softer); recorded grass nay",
+  "desc": "Footstep on grass: soft brushy rustle",
+  "source": "synth",
+  "bus": "sfx",
+  "vol": 0.5
+ },
+ {
+  "id": "step-stone",
+  "area": "footsteps",
+  "status": "yay",
+  "note": "Alex r3: recorded (Kenney concrete steps) yay; code click-clack nay",
+  "desc": "Footstep on stone: dry tick with a short knock",
+  "source": "cc0",
+  "bus": "sfx",
+  "files": [
+   "/sfx/kenney/footstep_concrete_000.ogg",
+   "/sfx/kenney/footstep_concrete_001.ogg",
+   "/sfx/kenney/footstep_concrete_002.ogg",
+   "/sfx/kenney/footstep_concrete_003.ogg",
+   "/sfx/kenney/footstep_concrete_004.ogg"
+  ],
+  "licence": "CC0 (Kenney audio packs)",
+  "vol": 0.5
+ },
+ {
+  "id": "step-wood",
+  "area": "footsteps",
+  "status": "yay",
+  "note": "Alex r3: recorded (Kenney wood steps) yay; code + creak versions nay",
+  "desc": "Footstep on wood: hollow thock",
+  "source": "cc0",
+  "bus": "sfx",
+  "files": [
+   "/sfx/kenney/footstep_wood_000.ogg",
+   "/sfx/kenney/footstep_wood_001.ogg",
+   "/sfx/kenney/footstep_wood_002.ogg",
+   "/sfx/kenney/footstep_wood_003.ogg",
+   "/sfx/kenney/footstep_wood_004.ogg"
+  ],
+  "licence": "CC0 (Kenney audio packs)",
+  "vol": 0.5
+ },
+ {
+  "id": "jump",
+  "area": "movement",
+  "status": "nay",
+  "note": "Alex r4: recorded yay (Kenney) -> used in game; code recipe kept as fallback",
+  "desc": "Jump: quick rising puff",
+  "source": "cc0",
+  "bus": "sfx",
+  "files": [
+   "/sfx/kenney/footstep_grass_000.ogg",
+   "/sfx/kenney/footstep_grass_001.ogg",
+   "/sfx/kenney/footstep_grass_002.ogg",
+   "/sfx/kenney/footstep_grass_003.ogg",
+   "/sfx/kenney/footstep_grass_004.ogg"
+  ],
+  "licence": "CC0 (Kenney audio packs)",
+  "layer": {
+   "files": [
+    "/sfx/kenney/cloth1.ogg",
+    "/sfx/kenney/cloth2.ogg",
+    "/sfx/kenney/cloth3.ogg",
+    "/sfx/kenney/cloth4.ogg"
+   ],
+   "chance": 1,
+   "vol": 0.7
   },
-  {
-    "id": "step-stone",
-    "area": "footsteps",
-    "status": "yay",
-    "note": "Alex r3: recorded (Kenney concrete steps) yay; code click-clack nay",
-    "desc": "Footstep on stone: dry tick with a short knock",
-    "source": "cc0",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/footstep_concrete_000.ogg",
-      "/sfx/kenney/footstep_concrete_001.ogg",
-      "/sfx/kenney/footstep_concrete_002.ogg",
-      "/sfx/kenney/footstep_concrete_003.ogg",
-      "/sfx/kenney/footstep_concrete_004.ogg"
-    ],
-    "licence": "CC0 (Kenney audio packs)",
-    "vol": 0.5
-  },
-  {
-    "id": "step-wood",
-    "area": "footsteps",
-    "status": "yay",
-    "note": "Alex r3: recorded (Kenney wood steps) yay; code + creak versions nay",
-    "desc": "Footstep on wood: hollow thock",
-    "source": "cc0",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/footstep_wood_000.ogg",
-      "/sfx/kenney/footstep_wood_001.ogg",
-      "/sfx/kenney/footstep_wood_002.ogg",
-      "/sfx/kenney/footstep_wood_003.ogg",
-      "/sfx/kenney/footstep_wood_004.ogg"
-    ],
-    "licence": "CC0 (Kenney audio packs)",
-    "vol": 0.5
-  },
-  {
-    "id": "jump",
-    "area": "movement",
-    "status": "nay",
-    "note": "Alex r4: recorded yay (Kenney) -> used in game; code recipe kept as fallback",
-    "desc": "Jump: quick rising puff",
-    "source": "cc0",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/footstep_grass_000.ogg",
-      "/sfx/kenney/footstep_grass_001.ogg",
-      "/sfx/kenney/footstep_grass_002.ogg",
-      "/sfx/kenney/footstep_grass_003.ogg",
-      "/sfx/kenney/footstep_grass_004.ogg"
-    ],
-    "licence": "CC0 (Kenney audio packs)",
-    "layer": {
-      "files": [
-        "/sfx/kenney/cloth1.ogg",
-        "/sfx/kenney/cloth2.ogg",
-        "/sfx/kenney/cloth3.ogg",
-        "/sfx/kenney/cloth4.ogg"
-      ],
-      "chance": 1,
-      "vol": 0.7
-    },
-    "vol": 0.5
-  },
-  {
-    "id": "land",
-    "area": "movement",
-    "status": "yay",
-    "note": "Alex r2: yay (code, dirt push); recorded land nay",
-    "desc": "Land: soft thud with a breath of dust",
-    "source": "synth",
-    "bus": "sfx",
-    "vol": 0.5
-  },
-  {
-    "id": "hit-axe-tree",
-    "area": "tool hits",
-    "status": "yay",
-    "note": "Alex: both code and recorded yay -> recorded used in game (code recipe kept as fallback)",
-    "desc": "Axe on a tree: chop, woody knock",
-    "source": "cc0",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/impactWood_heavy_000.ogg",
-      "/sfx/kenney/impactWood_heavy_001.ogg",
-      "/sfx/kenney/impactWood_heavy_002.ogg",
-      "/sfx/kenney/impactWood_heavy_003.ogg",
-      "/sfx/kenney/impactWood_heavy_004.ogg"
-    ],
-    "licence": "CC0 (Kenney audio packs)",
-    "layer": {
-      "files": [
-        "/sfx/kenney/chop.ogg"
-      ],
-      "chance": 1,
-      "vol": 0.8
-    }
-  },
-  {
-    "id": "hit-prune-tree",
-    "area": "tool hits",
-    "status": "yay",
-    "note": "",
-    "desc": "Prune on a tree: lighter snip and leaf rustle",
-    "source": "synth",
-    "bus": "sfx"
-  },
-  {
-    "id": "hit-pick-crystal",
-    "area": "tool hits",
-    "status": "yay",
-    "note": "Alex: both code and recorded yay -> recorded used in game (code recipe kept as fallback)",
-    "desc": "Pick on a crystal node: bright chink",
-    "source": "cc0",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/impactMining_000.ogg",
-      "/sfx/kenney/impactMining_001.ogg",
-      "/sfx/kenney/impactMining_002.ogg",
-      "/sfx/kenney/impactMining_003.ogg",
-      "/sfx/kenney/impactMining_004.ogg"
-    ],
-    "licence": "CC0 (Kenney audio packs)"
-  },
-  {
-    "id": "hit-prospect-crystal",
-    "area": "tool hits",
-    "status": "yay",
-    "note": "",
-    "desc": "Prospect on a crystal node: glassy tap with a ring",
-    "source": "synth",
-    "bus": "sfx"
-  },
-  {
-    "id": "pickup-grey-matter",
-    "area": "pickups",
-    "status": "yay",
-    "note": "",
-    "desc": "Grey matter pickup: low soft blip",
-    "source": "synth",
-    "bus": "sfx"
-  },
-  {
-    "id": "pickup-item",
-    "area": "pickups",
-    "status": "yay",
-    "note": "",
-    "desc": "Item pickup: two-note pop",
-    "source": "synth",
-    "bus": "sfx"
-  },
-  {
-    "id": "ui-tap",
-    "area": "ui",
-    "status": "yay",
-    "note": "",
-    "desc": "UI tap: tiny tick",
-    "source": "synth",
-    "bus": "ui"
-  },
-  {
-    "id": "ui-panel-open",
-    "area": "ui",
-    "status": "yay",
-    "note": "",
-    "desc": "Panel open: short rising swish",
-    "source": "synth",
-    "bus": "ui"
-  },
-  {
-    "id": "ui-panel-close",
-    "area": "ui",
-    "status": "yay",
-    "note": "",
-    "desc": "Panel close: short falling swish",
-    "source": "synth",
-    "bus": "ui"
-  },
-  {
-    "id": "rec-step-grass",
-    "area": "footsteps",
-    "status": "nay",
-    "note": "Alex r3 nay",
-    "desc": "Recorded footstep on grass (Kenney CC0)",
-    "source": "cc0",
-    "licence": "CC0 (Kenney audio packs)",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/footstep_grass_000.ogg",
-      "/sfx/kenney/footstep_grass_001.ogg",
-      "/sfx/kenney/footstep_grass_002.ogg",
-      "/sfx/kenney/footstep_grass_003.ogg",
-      "/sfx/kenney/footstep_grass_004.ogg"
-    ],
-    "vol": 0.5
-  },
-  {
-    "id": "rec-step-wood-creak",
-    "area": "footsteps",
-    "status": "nay",
-    "note": "Alex r3 nay",
-    "desc": "Recorded wood footstep with an occasional low creak (Kenney CC0)",
-    "source": "cc0",
-    "licence": "CC0 (Kenney audio packs)",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/footstep_wood_000.ogg",
-      "/sfx/kenney/footstep_wood_001.ogg",
-      "/sfx/kenney/footstep_wood_002.ogg",
-      "/sfx/kenney/footstep_wood_003.ogg",
-      "/sfx/kenney/footstep_wood_004.ogg"
-    ],
-    "layer": {
-      "files": [
-        "/sfx/kenney/creak1.ogg",
-        "/sfx/kenney/creak2.ogg",
-        "/sfx/kenney/creak3.ogg"
-      ],
-      "chance": 0.25,
-      "vol": 0.5
-    },
-    "vol": 0.5
-  },
-  {
-    "id": "rec-land",
-    "area": "movement",
-    "status": "nay",
-    "note": "Alex r3 nay",
-    "desc": "Recorded landing, heavy soft impact (Kenney CC0)",
-    "source": "cc0",
-    "licence": "CC0 (Kenney audio packs)",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/impactSoft_heavy_000.ogg",
-      "/sfx/kenney/impactSoft_heavy_001.ogg",
-      "/sfx/kenney/impactSoft_heavy_002.ogg",
-      "/sfx/kenney/impactSoft_heavy_003.ogg",
-      "/sfx/kenney/impactSoft_heavy_004.ogg"
-    ],
-    "vol": 0.5
-  },
-  {
-    "id": "slide",
-    "area": "movement",
-    "status": "yay",
-    "note": "Alex r4: recorded yay (Kenney) -> used in game; code recipe kept as fallback",
-    "desc": "Slide: a fast grassy swoosh that fades as the slide bleeds off",
-    "source": "cc0",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/cloth1.ogg",
-      "/sfx/kenney/cloth2.ogg",
-      "/sfx/kenney/cloth3.ogg",
-      "/sfx/kenney/cloth4.ogg"
-    ],
-    "licence": "CC0 (Kenney audio packs)",
-    "vol": 0.5
-  },
-  {
-    "id": "air-jump",
-    "area": "movement",
-    "status": "nay",
-    "note": "Alex r4: recorded yay (Kenney) -> used in game; code recipe kept as fallback",
-    "desc": "Double jump: an airy whoosh up + a soft kick",
-    "source": "cc0",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/cloth1.ogg",
-      "/sfx/kenney/cloth2.ogg",
-      "/sfx/kenney/cloth3.ogg",
-      "/sfx/kenney/cloth4.ogg"
-    ],
-    "licence": "CC0 (Kenney audio packs)",
-    "vol": 0.5
-  },
-  {
-    "id": "cand-jump-hop",
-    "area": "movement",
-    "status": "proposed",
-    "note": "r6 candidate (Alex 11-19 PM: jump + double jump need another go after playtest)",
-    "desc": "JUMP r6 A (code): light \"hup\", a short soft push-off and a quick upward breath",
-    "source": "synth",
-    "bus": "sfx",
-    "vol": 0.5
-  },
-  {
-    "id": "rec-jump-soft",
-    "area": "movement",
-    "status": "proposed",
-    "note": "r6 candidate (Alex 11-19 PM: jump + double jump need another go after playtest)",
-    "desc": "JUMP r6 B (recorded): soft medium push-off thud",
-    "source": "cc0",
-    "licence": "CC0 (Kenney audio packs)",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/impactSoft_medium_000.ogg",
-      "/sfx/kenney/impactSoft_medium_001.ogg",
-      "/sfx/kenney/impactSoft_medium_002.ogg",
-      "/sfx/kenney/impactSoft_medium_003.ogg",
-      "/sfx/kenney/impactSoft_medium_004.ogg"
-    ],
-    "vol": 0.5
-  },
-  {
-    "id": "rec-jump-snow",
-    "area": "movement",
-    "status": "proposed",
-    "note": "r6 candidate (Alex 11-19 PM: jump + double jump need another go after playtest)",
-    "desc": "JUMP r6 C (recorded): soft crunchy push-off",
-    "source": "cc0",
-    "licence": "CC0 (Kenney audio packs)",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/footstep_snow_000.ogg",
-      "/sfx/kenney/footstep_snow_001.ogg",
-      "/sfx/kenney/footstep_snow_002.ogg",
-      "/sfx/kenney/footstep_snow_003.ogg",
-      "/sfx/kenney/footstep_snow_004.ogg"
-    ],
-    "vol": 0.5
-  },
-  {
-    "id": "cand-air-jump-spark",
-    "area": "movement",
-    "status": "proposed",
-    "note": "r6 candidate (Alex 11-19 PM: jump + double jump need another go after playtest)",
-    "desc": "DOUBLE JUMP r6 A (code): airy whoosh up with a small mana sparkle",
-    "source": "synth",
-    "bus": "sfx",
-    "vol": 0.5
-  },
-  {
-    "id": "cand-air-jump-puff",
-    "area": "movement",
-    "status": "proposed",
-    "note": "r6 candidate (Alex 11-19 PM: jump + double jump need another go after playtest)",
-    "desc": "DOUBLE JUMP r6 B (code): soft puff of air under the feet, rising",
-    "source": "synth",
-    "bus": "sfx",
-    "vol": 0.5
-  },
-  {
-    "id": "rec-air-jump-leather",
-    "area": "movement",
-    "status": "proposed",
-    "note": "r6 candidate (Alex 11-19 PM: jump + double jump need another go after playtest)",
-    "desc": "DOUBLE JUMP r6 C (recorded): quick gear and leather flick",
-    "source": "cc0",
-    "licence": "CC0 (Kenney audio packs)",
-    "bus": "sfx",
-    "files": [
-      "/sfx/kenney/clothBelt.ogg",
-      "/sfx/kenney/clothBelt2.ogg",
-      "/sfx/kenney/handleSmallLeather.ogg",
-      "/sfx/kenney/handleSmallLeather2.ogg"
-    ],
-    "vol": 0.5
-  },
-  {
-    "id": "amb-glade-day",
-    "area": "ambience",
-    "status": "proposed",
-    "note": "Alex r1 nay: \"sounds like an ocean ... a mana rich spring\" -> r2 spring trickle + mana chimes + birds",
-    "desc": "Glade, day: a mana-rich spring: soft trickle, sparse chimes, a few birds",
-    "source": "synth",
-    "bus": "ambience",
-    "vol": 0.35
-  },
-  {
-    "id": "amb-glade-night",
-    "area": "ambience",
-    "status": "proposed",
-    "note": "Alex r1 nay: \"the ringing is too much\" -> r2 rare cricket chirps, low mana notes",
-    "desc": "Glade, night: hushed spring, rare soft cricket chirps, slow low chimes, a rare hoot",
-    "source": "synth",
-    "bus": "ambience",
-    "vol": 0.35
-  },
-  {
-    "id": "amb-water",
-    "area": "ambience",
-    "status": "yay",
-    "note": "Alex r1: yay, \"just softer\" (r2 softened)",
-    "desc": "Pool water: gentle lapping and a soft trickle (layers under the glade bed near water)",
-    "source": "synth",
-    "bus": "ambience",
-    "vol": 0.35
-  },
-  {
-    "id": "amb-wilds-wind",
-    "area": "ambience",
-    "status": "proposed",
-    "note": "Alex r1: \"too windy\" -> r2 half level, gentler gusts",
-    "desc": "Open wilds: airy wind with slow gusts",
-    "source": "synth",
-    "bus": "ambience",
-    "vol": 0.35
-  },
-  {
-    "id": "amb-town",
-    "area": "ambience",
-    "status": "proposed",
-    "note": "M36 batch 3: ambience bed, code-made; awaiting Alex's vote",
-    "desc": "Town: a very soft distant murmur that swells and fades slowly",
-    "source": "synth",
-    "bus": "ambience",
-    "vol": 0.35
-  },
-  {
-    "id": "hollow-windup",
-    "area": "hollows",
-    "status": "proposed",
-    "note": "",
-    "desc": "A Hollow gathers to strike (the tell): a breathy suck-in rising under a low swell, positional",
-    "source": "synth",
-    "bus": "sfx"
-  },
-  {
-    "id": "hollow-hit",
-    "area": "hollows",
-    "status": "proposed",
-    "note": "",
-    "desc": "Your round lands in a Hollow: a soft wet thud, positional",
-    "source": "synth",
-    "bus": "sfx"
-  },
-  {
-    "id": "hollow-disperse",
-    "area": "hollows",
-    "status": "proposed",
-    "note": "",
-    "desc": "A Hollow lets go and disperses: a falling hiss with a few bubbly pops, positional",
-    "source": "synth",
-    "bus": "sfx"
-  },
-  {
-    "id": "morel-chime",
-    "area": "morel",
-    "status": "proposed",
-    "note": "",
-    "desc": "Morel speaks (any Morel line): two small glassy notes from the gem",
-    "source": "synth",
-    "bus": "sfx"
-  },
-  {
-    "id": "gem-pulse",
-    "area": "morel",
-    "status": "proposed",
-    "note": "",
-    "desc": "The gem pulses on a round change (every shot + reload): a very quiet glassy tick under the gun",
-    "source": "synth",
-    "bus": "sfx",
-    "vol": 0.5
+  "vol": 0.5
+ },
+ {
+  "id": "land",
+  "area": "movement",
+  "status": "yay",
+  "note": "Alex r2: yay (code, dirt push); recorded land nay",
+  "desc": "Land: soft thud with a breath of dust",
+  "source": "synth",
+  "bus": "sfx",
+  "vol": 0.5
+ },
+ {
+  "id": "hit-axe-tree",
+  "area": "tool hits",
+  "status": "yay",
+  "note": "Alex: both code and recorded yay -> recorded used in game (code recipe kept as fallback)",
+  "desc": "Axe on a tree: chop, woody knock",
+  "source": "cc0",
+  "bus": "sfx",
+  "files": [
+   "/sfx/kenney/impactWood_heavy_000.ogg",
+   "/sfx/kenney/impactWood_heavy_001.ogg",
+   "/sfx/kenney/impactWood_heavy_002.ogg",
+   "/sfx/kenney/impactWood_heavy_003.ogg",
+   "/sfx/kenney/impactWood_heavy_004.ogg"
+  ],
+  "licence": "CC0 (Kenney audio packs)",
+  "layer": {
+   "files": [
+    "/sfx/kenney/chop.ogg"
+   ],
+   "chance": 1,
+   "vol": 0.8
   }
+ },
+ {
+  "id": "hit-prune-tree",
+  "area": "tool hits",
+  "status": "yay",
+  "note": "",
+  "desc": "Prune on a tree: lighter snip and leaf rustle",
+  "source": "synth",
+  "bus": "sfx"
+ },
+ {
+  "id": "hit-pick-crystal",
+  "area": "tool hits",
+  "status": "yay",
+  "note": "Alex: both code and recorded yay -> recorded used in game (code recipe kept as fallback)",
+  "desc": "Pick on a crystal node: bright chink",
+  "source": "cc0",
+  "bus": "sfx",
+  "files": [
+   "/sfx/kenney/impactMining_000.ogg",
+   "/sfx/kenney/impactMining_001.ogg",
+   "/sfx/kenney/impactMining_002.ogg",
+   "/sfx/kenney/impactMining_003.ogg",
+   "/sfx/kenney/impactMining_004.ogg"
+  ],
+  "licence": "CC0 (Kenney audio packs)"
+ },
+ {
+  "id": "hit-prospect-crystal",
+  "area": "tool hits",
+  "status": "yay",
+  "note": "",
+  "desc": "Prospect on a crystal node: glassy tap with a ring",
+  "source": "synth",
+  "bus": "sfx"
+ },
+ {
+  "id": "pickup-grey-matter",
+  "area": "pickups",
+  "status": "yay",
+  "note": "",
+  "desc": "Grey matter pickup: low soft blip",
+  "source": "synth",
+  "bus": "sfx"
+ },
+ {
+  "id": "pickup-item",
+  "area": "pickups",
+  "status": "yay",
+  "note": "",
+  "desc": "Item pickup: two-note pop",
+  "source": "synth",
+  "bus": "sfx"
+ },
+ {
+  "id": "ui-tap",
+  "area": "ui",
+  "status": "yay",
+  "note": "",
+  "desc": "UI tap: tiny tick",
+  "source": "synth",
+  "bus": "ui"
+ },
+ {
+  "id": "ui-panel-open",
+  "area": "ui",
+  "status": "yay",
+  "note": "",
+  "desc": "Panel open: short rising swish",
+  "source": "synth",
+  "bus": "ui"
+ },
+ {
+  "id": "ui-panel-close",
+  "area": "ui",
+  "status": "yay",
+  "note": "",
+  "desc": "Panel close: short falling swish",
+  "source": "synth",
+  "bus": "ui"
+ },
+ {
+  "id": "rec-step-grass",
+  "area": "footsteps",
+  "status": "nay",
+  "note": "Alex r3 nay",
+  "desc": "Recorded footstep on grass (Kenney CC0)",
+  "source": "cc0",
+  "licence": "CC0 (Kenney audio packs)",
+  "bus": "sfx",
+  "files": [
+   "/sfx/kenney/footstep_grass_000.ogg",
+   "/sfx/kenney/footstep_grass_001.ogg",
+   "/sfx/kenney/footstep_grass_002.ogg",
+   "/sfx/kenney/footstep_grass_003.ogg",
+   "/sfx/kenney/footstep_grass_004.ogg"
+  ],
+  "vol": 0.5
+ },
+ {
+  "id": "rec-step-wood-creak",
+  "area": "footsteps",
+  "status": "nay",
+  "note": "Alex r3 nay",
+  "desc": "Recorded wood footstep with an occasional low creak (Kenney CC0)",
+  "source": "cc0",
+  "licence": "CC0 (Kenney audio packs)",
+  "bus": "sfx",
+  "files": [
+   "/sfx/kenney/footstep_wood_000.ogg",
+   "/sfx/kenney/footstep_wood_001.ogg",
+   "/sfx/kenney/footstep_wood_002.ogg",
+   "/sfx/kenney/footstep_wood_003.ogg",
+   "/sfx/kenney/footstep_wood_004.ogg"
+  ],
+  "layer": {
+   "files": [
+    "/sfx/kenney/creak1.ogg",
+    "/sfx/kenney/creak2.ogg",
+    "/sfx/kenney/creak3.ogg"
+   ],
+   "chance": 0.25,
+   "vol": 0.5
+  },
+  "vol": 0.5
+ },
+ {
+  "id": "rec-land",
+  "area": "movement",
+  "status": "nay",
+  "note": "Alex r3 nay",
+  "desc": "Recorded landing, heavy soft impact (Kenney CC0)",
+  "source": "cc0",
+  "licence": "CC0 (Kenney audio packs)",
+  "bus": "sfx",
+  "files": [
+   "/sfx/kenney/impactSoft_heavy_000.ogg",
+   "/sfx/kenney/impactSoft_heavy_001.ogg",
+   "/sfx/kenney/impactSoft_heavy_002.ogg",
+   "/sfx/kenney/impactSoft_heavy_003.ogg",
+   "/sfx/kenney/impactSoft_heavy_004.ogg"
+  ],
+  "vol": 0.5
+ },
+ {
+  "id": "slide",
+  "area": "movement",
+  "status": "yay",
+  "note": "Alex r4: recorded yay (Kenney) -> used in game; code recipe kept as fallback",
+  "desc": "Slide: a fast grassy swoosh that fades as the slide bleeds off",
+  "source": "cc0",
+  "bus": "sfx",
+  "files": [
+   "/sfx/kenney/cloth1.ogg",
+   "/sfx/kenney/cloth2.ogg",
+   "/sfx/kenney/cloth3.ogg",
+   "/sfx/kenney/cloth4.ogg"
+  ],
+  "licence": "CC0 (Kenney audio packs)",
+  "vol": 0.5
+ },
+ {
+  "id": "air-jump",
+  "area": "movement",
+  "status": "nay",
+  "note": "Alex r4: recorded yay (Kenney) -> used in game; code recipe kept as fallback",
+  "desc": "Double jump: an airy whoosh up + a soft kick",
+  "source": "cc0",
+  "bus": "sfx",
+  "files": [
+   "/sfx/kenney/cloth1.ogg",
+   "/sfx/kenney/cloth2.ogg",
+   "/sfx/kenney/cloth3.ogg",
+   "/sfx/kenney/cloth4.ogg"
+  ],
+  "licence": "CC0 (Kenney audio packs)",
+  "vol": 0.5
+ },
+ {
+  "id": "cand-jump-hop",
+  "area": "movement",
+  "status": "nay",
+  "note": "r6 candidate (Alex 11-19 PM: jump + double jump need another go after playtest)",
+  "desc": "JUMP r6 A (code): light \"hup\", a short soft push-off and a quick upward breath",
+  "source": "synth",
+  "bus": "sfx",
+  "vol": 0.5
+ },
+ {
+  "id": "rec-jump-soft",
+  "area": "movement",
+  "status": "nay",
+  "note": "r6 candidate (Alex 11-19 PM: jump + double jump need another go after playtest)",
+  "desc": "JUMP r6 B (recorded): soft medium push-off thud",
+  "source": "cc0",
+  "licence": "CC0 (Kenney audio packs)",
+  "bus": "sfx",
+  "files": [
+   "/sfx/kenney/impactSoft_medium_000.ogg",
+   "/sfx/kenney/impactSoft_medium_001.ogg",
+   "/sfx/kenney/impactSoft_medium_002.ogg",
+   "/sfx/kenney/impactSoft_medium_003.ogg",
+   "/sfx/kenney/impactSoft_medium_004.ogg"
+  ],
+  "vol": 0.5
+ },
+ {
+  "id": "rec-jump-snow",
+  "area": "movement",
+  "status": "nay",
+  "note": "r6 candidate (Alex 11-19 PM: jump + double jump need another go after playtest)",
+  "desc": "JUMP r6 C (recorded): soft crunchy push-off",
+  "source": "cc0",
+  "licence": "CC0 (Kenney audio packs)",
+  "bus": "sfx",
+  "files": [
+   "/sfx/kenney/footstep_snow_000.ogg",
+   "/sfx/kenney/footstep_snow_001.ogg",
+   "/sfx/kenney/footstep_snow_002.ogg",
+   "/sfx/kenney/footstep_snow_003.ogg",
+   "/sfx/kenney/footstep_snow_004.ogg"
+  ],
+  "vol": 0.5
+ },
+ {
+  "id": "cand-air-jump-spark",
+  "area": "movement",
+  "status": "nay",
+  "note": "r6 candidate (Alex 11-19 PM: jump + double jump need another go after playtest)",
+  "desc": "DOUBLE JUMP r6 A (code): airy whoosh up with a small mana sparkle",
+  "source": "synth",
+  "bus": "sfx",
+  "vol": 0.5
+ },
+ {
+  "id": "cand-air-jump-puff",
+  "area": "movement",
+  "status": "nay",
+  "note": "r6 candidate (Alex 11-19 PM: jump + double jump need another go after playtest)",
+  "desc": "DOUBLE JUMP r6 B (code): soft puff of air under the feet, rising",
+  "source": "synth",
+  "bus": "sfx",
+  "vol": 0.5
+ },
+ {
+  "id": "rec-air-jump-leather",
+  "area": "movement",
+  "status": "nay",
+  "note": "r6 candidate (Alex 11-19 PM: jump + double jump need another go after playtest)",
+  "desc": "DOUBLE JUMP r6 C (recorded): quick gear and leather flick",
+  "source": "cc0",
+  "licence": "CC0 (Kenney audio packs)",
+  "bus": "sfx",
+  "files": [
+   "/sfx/kenney/clothBelt.ogg",
+   "/sfx/kenney/clothBelt2.ogg",
+   "/sfx/kenney/handleSmallLeather.ogg",
+   "/sfx/kenney/handleSmallLeather2.ogg"
+  ],
+  "vol": 0.5
+ },
+ {
+  "id": "amb-glade-day",
+  "area": "ambience",
+  "status": "nay",
+  "note": "Alex r1 nay: \"sounds like an ocean ... a mana rich spring\" -> r2 spring trickle + mana chimes + birds",
+  "desc": "Glade, day: a mana-rich spring: soft trickle, sparse chimes, a few birds",
+  "source": "synth",
+  "bus": "ambience",
+  "vol": 0.35
+ },
+ {
+  "id": "amb-glade-night",
+  "area": "ambience",
+  "status": "nay",
+  "note": "Alex r1 nay: \"the ringing is too much\" -> r2 rare cricket chirps, low mana notes",
+  "desc": "Glade, night: hushed spring, rare soft cricket chirps, slow low chimes, a rare hoot",
+  "source": "synth",
+  "bus": "ambience",
+  "vol": 0.35
+ },
+ {
+  "id": "amb-water",
+  "area": "ambience",
+  "status": "yay",
+  "note": "Alex r1: yay, \"just softer\" (r2 softened)",
+  "desc": "Pool water: gentle lapping and a soft trickle (layers under the glade bed near water)",
+  "source": "synth",
+  "bus": "ambience",
+  "vol": 0.35
+ },
+ {
+  "id": "amb-wilds-wind",
+  "area": "ambience",
+  "status": "nay",
+  "note": "Alex r1: \"too windy\" -> r2 half level, gentler gusts",
+  "desc": "Open wilds: airy wind with slow gusts",
+  "source": "synth",
+  "bus": "ambience",
+  "vol": 0.35
+ },
+ {
+  "id": "amb-town",
+  "area": "ambience",
+  "status": "nay",
+  "note": "M36 batch 3: ambience bed, code-made; awaiting Alex's vote",
+  "desc": "Town: a very soft distant murmur that swells and fades slowly",
+  "source": "synth",
+  "bus": "ambience",
+  "vol": 0.35
+ },
+ {
+  "id": "hollow-windup",
+  "area": "hollows",
+  "status": "yay",
+  "note": "",
+  "desc": "A Hollow gathers to strike (the tell): a breathy suck-in rising under a low swell, positional",
+  "source": "synth",
+  "bus": "sfx"
+ },
+ {
+  "id": "hollow-hit",
+  "area": "hollows",
+  "status": "yay",
+  "note": "",
+  "desc": "Your round lands in a Hollow: a soft wet thud, positional",
+  "source": "synth",
+  "bus": "sfx"
+ },
+ {
+  "id": "hollow-disperse",
+  "area": "hollows",
+  "status": "yay",
+  "note": "",
+  "desc": "A Hollow lets go and disperses: a falling hiss with a few bubbly pops, positional",
+  "source": "synth",
+  "bus": "sfx"
+ },
+ {
+  "id": "morel-chime",
+  "area": "morel",
+  "status": "yay",
+  "note": "",
+  "desc": "Morel speaks (any Morel line): two small glassy notes from the gem",
+  "source": "synth",
+  "bus": "sfx"
+ },
+ {
+  "id": "gem-pulse",
+  "area": "morel",
+  "status": "yay",
+  "note": "",
+  "desc": "The gem pulses on a round change (every shot + reload): a very quiet glassy tick under the gun",
+  "source": "synth",
+  "bus": "sfx",
+  "vol": 0.5
+ }
 ]
