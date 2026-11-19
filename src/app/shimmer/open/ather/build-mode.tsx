@@ -131,8 +131,9 @@ export function BuildPointer() {
   // checks' hook (like __ather.tp): MOVE the view only, and read it. Placing still takes a real click.
   useEffect(() => {
     (window as unknown as { __build: unknown }).__build = {
-      on: () => on, to: (x: number, z: number) => { const c = clampView(x, z, home.x, home.z); want.x = c.x; want.z = c.z },
+      on: () => on, to: (x: number, z: number, yaw?: number) => { const c = clampView(x, z, home.x, home.z); want.x = c.x; want.z = c.z; if (yaw !== undefined) want.yaw = yaw },   // yaw: M37 checks square the view to the grid
       view: () => ({ ...cur }), point: () => (point.has ? { x: point.x, z: point.z } : null),
+      tool: () => tool, drawer: () => !!draw,   // M37: which tool, and is a drawing handler registered
     }
   }, [])
   useEffect(() => {
