@@ -53,21 +53,39 @@ export const GUN_DEFAULTS: Readonly<GunTune> = {
   R_DX: 0.008, R_DY: -0.012, R_DZ: 0.012, R_PITCH: -0.35, R_ROLL: -0.45,
   L_DX: -0.006, L_DY: -0.02, L_DZ: 0, L_PITCH: 0.15, L_ROLL: 0.55,
 }
-/** LIVE numbers: the defaults, overwritten by this browser's tune (loadGunTune). */
+// ★ PER GUN (Alex 11-19, tuning the Repeater: "do I have to pass you the values for each one"). The tune used to be ONE set for
+//   every gun, so tuning the Repeater moved the Breacher too. Now: GUN_DEFAULTS is the base, GUN_BAKED[id] is a gun's tuned
+//   numbers everyone gets (Alex's pastes land here), and this browser's per-gun slider moves sit on top (GUN_TUNE_KEY, v2 map).
+export const GUN_BAKED: Readonly<Record<string, Partial<GunTune>>> = {
+  // Alex 11-19, the Repeater: bigger in hand, closer and lower, a stronger kick that settles fast, fuller gloves
+  repeater: { S: 1.18, HIP_X: 0.07, HIP_Y: -0.125, HIP_Z: -0.365, ADS_DIST: 0.155, ADS_IN: 0.13, ADS_OUT: 0.13, BOB: 0.008, BOB_ADS: 0.19,
+    KICK_Z: 0.066, KICK_PITCH: 0.255, KICK_DECAY: 25, HAND: 0.94,
+    R_DX: 0.026, R_DY: 0.036, R_DZ: 0.042, R_PITCH: -0.91, R_ROLL: -0.36, L_DX: -0.008, L_DY: 0.018, L_DZ: 0.036, L_PITCH: -0.58, L_ROLL: -0.69 },
+}
+/** LIVE numbers for the gun in hand: defaults, then the gun's baked tune, then this browser's tune for that gun. */
 export const VM: GunTune = { ...GUN_DEFAULTS }
-export const GUN_TUNE_KEY = 'open:gun-tune.v1'
+export const GUN_TUNE_KEY = 'open:gun-tune.v2'
 export const GUN_TUNE_KEYS = Object.keys(GUN_DEFAULTS) as (keyof GunTune)[]
+let tuned: Record<string, Partial<GunTune>> = {}, curGun = ''
+/** what a gun is WITHOUT this browser's moves (the tuner greys a value that matches it) */
+export const defaultsFor = (id: string): GunTune => ({ ...GUN_DEFAULTS, ...(GUN_BAKED[id] ?? {}) })
+function apply() {
+  const t = { ...defaultsFor(curGun), ...(tuned[curGun] ?? {}) }
+  for (const k of GUN_TUNE_KEYS) VM[k] = typeof t[k] === 'number' && Number.isFinite(t[k]) ? t[k]! : GUN_DEFAULTS[k]
+}
+/** the gun in hand changed (fp-gun's step calls this; the tuner calls it when you pick a gun) */
+export function selectGunTune(id: string): void { if (id === curGun) return; curGun = id; apply() }
 export function loadGunTune(): void {
-  try {
-    const t = JSON.parse(localStorage.getItem(GUN_TUNE_KEY) ?? 'null') as Partial<GunTune> | null
-    for (const k of GUN_TUNE_KEYS) VM[k] = typeof t?.[k] === 'number' && Number.isFinite(t[k]) ? t[k]! : GUN_DEFAULTS[k]
-  } catch { /* private window: the defaults */ }
+  try { const t = JSON.parse(localStorage.getItem(GUN_TUNE_KEY) ?? 'null'); tuned = t && typeof t === 'object' ? t : {} } catch { tuned = {} }
+  apply()
 }
 export function setGunTune(patch: Partial<GunTune>): void {
   for (const k of GUN_TUNE_KEYS) if (typeof patch[k] === 'number') VM[k] = patch[k]!
-  try { localStorage.setItem(GUN_TUNE_KEY, JSON.stringify(Object.fromEntries(GUN_TUNE_KEYS.map(k => [k, VM[k]])))) } catch { /* private window */ }
+  tuned[curGun] = Object.fromEntries(GUN_TUNE_KEYS.map(k => [k, VM[k]]))
+  try { localStorage.setItem(GUN_TUNE_KEY, JSON.stringify(tuned)) } catch { /* private window */ }
 }
-export function resetGunTune(): void { try { localStorage.removeItem(GUN_TUNE_KEY) } catch { /* */ } for (const k of GUN_TUNE_KEYS) VM[k] = GUN_DEFAULTS[k] }
+/** this gun back to everyone's numbers (its baked tune, else the defaults) */
+export function resetGunTune(): void { delete tuned[curGun]; try { localStorage.setItem(GUN_TUNE_KEY, JSON.stringify(tuned)) } catch { /* */ } apply() }
 export const ADS_TIGHT = 0.6     // past this the cone is the sights' (gunplay ads)
 
 // ── the models ──
@@ -184,6 +202,7 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
     step: (i, dt) => {
       const d = Math.min(dt, 0.1), s = st.current
       if (!i.gun) { adsT = Math.max(0, adsT - d / VM.ADS_OUT); optic = null; glow = 0; publish(); rig.root.visible = false; return }
+      selectGunTune(i.gun.id)   // this gun's own tune (per gun since 11-19)
       const m = modelOf(i.gun), o = opticOf(i.gun)
       // (re)build when the gun changes
       const key = `${i.gun.id}:${o.id}`

@@ -15,7 +15,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { FpGun, ScopeRing, VM, GUN_DEFAULTS, setGunTune, resetGunTune, loadGunTune, type FpGunApi, type GunTune } from '../../open/shared/fp-gun'
+import { FpGun, ScopeRing, VM, GUN_DEFAULTS, setGunTune, resetGunTune, loadGunTune, selectGunTune, defaultsFor, type FpGunApi, type GunTune } from '../../open/shared/fp-gun'
 import { RANGE_GUNS, type RangeGun } from '../../open/shared/gunplay'
 import { opticOf } from '../../open/shared/optics'
 import { EYE_STAND } from '../../open/shared/locomotion'
@@ -83,7 +83,9 @@ export default function GunTuner() {
   const [copied, setCopied] = useState(false)
   useEffect(() => { loadGunTune(); bump(n => n + 1) }, [])
   const gun = RANGE_GUNS.find(g => g.id === gunId) ?? RANGE_GUNS[0]
-  const values = () => JSON.stringify(Object.fromEntries(Object.keys(GUN_DEFAULTS).map(k => [k, VM[k as keyof GunTune]])))
+  // per gun (11-19): picking a gun loads ITS numbers into the sliders
+  useEffect(() => { selectGunTune(gunId); bump(n => n + 1) }, [gunId])
+  const values = () => JSON.stringify({ gun: gunId, ...Object.fromEntries(Object.keys(GUN_DEFAULTS).map(k => [k, VM[k as keyof GunTune]])) })
 
   return (
     <div style={{ height: '100dvh', display: 'flex', background: '#14131a' }}>
@@ -110,7 +112,7 @@ export default function GunTuner() {
                 <span style={{ color: '#b5afc2' }}>{n.label}</span>
                 <input type="range" data-knob={n.k} min={n.min} max={n.max} step={n.step} value={VM[n.k]}
                   onChange={e => { setGunTune({ [n.k]: Number(e.target.value) }); bump(x => x + 1) }} />
-                <span style={{ fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: VM[n.k] === GUN_DEFAULTS[n.k] ? '#8b8598' : '#e8b04a' }}>{VM[n.k].toFixed(3)}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: VM[n.k] === defaultsFor(gunId)[n.k] ? '#8b8598' : '#e8b04a' }}>{VM[n.k].toFixed(3)}</span>
               </label>
             ))}
           </section>
