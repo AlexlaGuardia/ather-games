@@ -6,13 +6,12 @@
 // always on a plate; tabular numerals. Mount in the Wilds (where guns fire), outside the Canvas; feed it the combat HUD.
 
 import { useEffect, useRef, useState } from 'react'
-import { ammoStep, newAmmoWatch, type Bubble } from './morel'
+import { ammoStep, newAmmoWatch, getAmmoFeed, type Bubble, type AmmoFeed } from './morel'
 import { MOREL_AMMO } from './morel-lines'
 import { hudSay } from './hud-say'
 
-export interface AmmoFeed { ammo: number; clip: number; reloading: boolean; firing?: boolean }
-
-export function MorelBubble({ feed }: { feed: React.MutableRefObject<AmmoFeed | null> }) {
+/** `feed` is the fallback; the combat layer's own store (morel.ts setAmmoFeed) wins when it has spoken. */
+export function MorelBubble({ feed }: { feed?: React.MutableRefObject<AmmoFeed | null> }) {
   const [b, setB] = useState<Bubble | null>(null)
   const watch = useRef<ReturnType<typeof newAmmoWatch> | null>(null), last = useRef('')
   useEffect(() => {
@@ -22,7 +21,7 @@ export function MorelBubble({ feed }: { feed: React.MutableRefObject<AmmoFeed | 
     let lastB: Bubble | null = null
     const tick = () => {
       raf = requestAnimationFrame(tick)
-      const f = feed.current; if (!f) return
+      const f = getAmmoFeed() ?? feed?.current; if (!f) return
       if (!watch.current) watch.current = newAmmoWatch(f.ammo)
       const r = ammoStep(watch.current, { ammo: f.ammo, clip: f.clip, firing: !!f.firing, reloading: f.reloading, now: performance.now() / 1000 })
       if (r.say) { said.push(r.say); hudSay(MOREL_AMMO[r.say], 'morel') }

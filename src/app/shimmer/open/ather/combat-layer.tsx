@@ -18,6 +18,7 @@ import { touch } from '../shared/touch'
 import { wakeChampion, tellOf, CHAMP } from './champion'
 import { WAKE_R, STRAY_R, type WildsNode } from './nodes'
 import { playShot, playEmpty, playReload } from '../shared/gun-sound'
+import { setAmmoFeed } from '../shared/morel'   // M33: Morel's bubble reads the gun straight from here
 
 export interface CombatHud {
   hp: number; maxHp: number; ammo: number; clip: number; reloading: boolean; hurtAt: number; hitAt: number; gun: string
@@ -368,7 +369,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const fx = useRef<LiveFx[]>([])
   const { camera } = useThree()
   const c = useRef<Combat>(newCombat(Date.now() >>> 0))
-  useEffect(() => { liveSolids.combat = c.current; return () => { if (liveSolids.combat === c.current) liveSolids.combat = null } }, [])   // the keeper's walker reads c.pieces as solids (dynamic-solids.ts)
+  useEffect(() => { liveSolids.combat = c.current; return () => { if (liveSolids.combat === c.current) liveSolids.combat = null } }, [])
+  useEffect(() => () => setAmmoFeed(null), [])   // M33: leaving the Wilds, Morel's bubble has no gun to read   // the keeper's walker reads c.pieces as solids (dynamic-solids.ts)
   const [ids, setIds] = useState<{ id: number; kind: string }[]>([])
   const trigger = useRef(false), mouseAim = useRef(false), popT = useRef(0), hudT = useRef(0)
   const hud = useRef<CombatHud>({ hp: 100, maxHp: 100, ammo: 12, clip: 12, reloading: false, hurtAt: -9, hitAt: -9, gun: c.current.gun.name, champ: null })
@@ -535,6 +537,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       onHud({ ...hud.current, gun: C.gun.name, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0,
         firing: armedRef.current && !frozen.current && (trigger.current || touch.fire || k.sinceShot < 0.3),   // a semi-auto clears the trigger per shot
         champ: ch ? { bar: ch.bar, hp: ch.hp, barHp: CHAMP.barHp, bars: CHAMP.bars, open: ch.state !== 'rise' && ch.state !== 'submerge' && ch.state !== 'home' } : null })
+      setAmmoFeed({ ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0, firing: armedRef.current && !frozen.current && (trigger.current || touch.fire || k.sinceShot < 0.3) })
     }
   })
 

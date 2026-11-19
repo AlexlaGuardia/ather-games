@@ -42,6 +42,13 @@ export function ammoStep(w: AmmoWatch, a: AmmoIn): { bubble: Bubble; say: AmmoSa
   return { bubble: { show: alpha > 0, n: a.ammo, clip: a.clip, red: a.ammo <= RED_AT, alpha, reloading: a.reloading }, say }
 }
 
+// ── the gun's numbers, published by the combat layer itself (not through a React state: on a slow device a page re-render
+// lags the trigger by seconds, and the bubble would hold for as long as the page took to draw) ──
+export interface AmmoFeed { ammo: number; clip: number; reloading: boolean; firing?: boolean }
+let ammoFeed: AmmoFeed | null = null
+export const setAmmoFeed = (f: AmmoFeed | null) => { ammoFeed = f }
+export const getAmmoFeed = () => ammoFeed
+
 // ── the gem's glow, read by the gloves every frame (open-hands, fp-gun) ──
 let pulseAt = -1e9
 /** 0..1: a round just changed (fades over PULSE s). */
