@@ -1,0 +1,148 @@
+<title>Moonwell Glade Layouts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap">
+<style>
+/* Layout: a header, three top-down plans side by side (stack on phone), then the station tour table. Same tokens as the other ather.games mock boards. */
+:root {
+  --bg: #eef1ea; --panel: #fbfcf8; --line: #d5dacd; --fg: #263028; --dim: #6b766c; --accent: #3f7fd0; --accent-ink: #ffffff;
+  --water: #9cc8e6; --water-edge: #6aa2c9; --meadow: #d9e8c4; --path: #e8dcc2; --lot: #f6efe0; --lot-edge: #b99a6c; --home: #e9b98f; --kitchen: #f2c76b;
+  --display: "Chakra Petch", "Rajdhani", system-ui, sans-serif; --body: "Nunito", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141a17; --panel: #1c2420; --line: #2f3a34; --fg: #e4ebe4; --dim: #93a096; --accent: #6aa6f0; --accent-ink: #0d1520;
+  --water: #2f5f80; --water-edge: #5d93ba; --meadow: #25331f; --path: #4a4233; --lot: #2e2a22; --lot-edge: #8a7350; --home: #8a5d3c; --kitchen: #9a7a2e; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #141a17; --panel: #1c2420; --line: #2f3a34; --fg: #e4ebe4; --dim: #93a096; --accent: #6aa6f0; --accent-ink: #0d1520;
+  --water: #2f5f80; --water-edge: #5d93ba; --meadow: #25331f; --path: #4a4233; --lot: #2e2a22; --lot-edge: #8a7350; --home: #8a5d3c; --kitchen: #9a7a2e; color-scheme: dark }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); line-height: 1.5;
+  padding-block: 20px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: .12em; text-transform: uppercase; text-wrap: balance; }
+h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .12em; text-transform: uppercase; }
+.lede { margin: 6px 0 0; color: var(--dim); max-width: 70ch; }
+.label { font-family: var(--display); font-size: 11.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.plan { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.plan.pick { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.plan header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.tag { font-family: var(--display); font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; background: var(--accent); color: var(--accent-ink); }
+svg { width: 100%; height: auto; display: block; border-radius: 6px; }
+svg text { font-family: var(--body); font-size: 9.5px; font-weight: 700; fill: var(--fg); }
+svg .small { font-size: 7.5px; font-weight: 600; fill: var(--dim); }
+.plan p { margin: 0; font-size: 14px; }
+.plan ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--dim); display: flex; flex-direction: column; gap: 3px; }
+.tablewrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--display); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+td b { font-family: var(--display); letter-spacing: .04em; }
+tr:last-child td { border-bottom: 0; }
+.note { font-size: 13.5px; color: var(--dim); max-width: 80ch; margin: 0; }
+.decide { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.decide ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+</style>
+
+<div class="wrap">
+  <div>
+    <div class="label">ather.games · Wilds front door · mock for Alex</div>
+    <h1>Moonwell Glade, reworked</h1>
+    <p class="lede">Today the Glade is a street corner: a 3.2 m pool, Greg's cottage and five Moglins in a ring who all say the same thing. Three layouts below give Greg a real pond beside his home and each of the five a lot with their own station, so a walk through the Glade teaches every trade. Pick one; the maps are to scale, 1 grid square = 5 m.</p>
+  </div>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" fill="none" stroke="var(--line)" stroke-width=".5"/></pattern>
+    </defs>
+  </svg>
+
+  <div class="plans">
+    <!-- A: pondside lane -->
+    <section class="plan">
+      <header><h2>A · Pondside lane</h2></header>
+      <svg viewBox="0 0 400 300" role="img" aria-label="Plan A: a big pond on the west, Greg's home on its north shore, one lane curving round the east shore past five lots">
+        <rect width="400" height="300" fill="var(--meadow)"/><rect width="400" height="300" fill="url(#grid)"/>
+        <ellipse cx="135" cy="160" rx="105" ry="85" fill="var(--water)" stroke="var(--water-edge)" stroke-width="3"/>
+        <text x="110" y="165">Moonwell pond</text><text class="small" x="105" y="177">≈ 52 × 42 m · Sax's stone rim</text>
+        <rect x="120" y="60" width="30" height="10" fill="var(--lot-edge)"/><text class="small" x="153" y="68">jetty</text>
+        <circle cx="135" cy="38" r="17" fill="var(--home)" stroke="var(--lot-edge)" stroke-width="2"/><text x="157" y="34">Greg's home</text><text class="small" x="157" y="44">bench + ground sale at the door</text>
+        <path d="M370 285 C 330 230, 270 230, 262 170 S 290 70, 220 40" fill="none" stroke="var(--path)" stroke-width="12" stroke-linecap="round"/>
+        <rect x="350" y="268" width="14" height="14" fill="var(--accent)"/><text x="300" y="296">waymark (arrive)</text>
+        <rect x="300" y="215" width="54" height="34" fill="var(--lot)" stroke="var(--lot-edge)"/><text x="304" y="235">Mallow</text><text class="small" x="304" y="245">shop</text>
+        <rect x="292" y="160" width="54" height="34" fill="var(--lot)" stroke="var(--lot-edge)"/><text x="296" y="180">Yarrow</text><text class="small" x="296" y="190">apothecary</text>
+        <rect x="300" y="105" width="54" height="34" fill="var(--lot)" stroke="var(--lot-edge)"/><text x="304" y="125">Hazel</text><text class="small" x="304" y="135">carpenter</text>
+        <rect x="262" y="52" width="54" height="34" fill="var(--lot)" stroke="var(--lot-edge)"/><text x="266" y="72">Sax</text><text class="small" x="266" y="82">stonery</text>
+        <rect x="196" y="78" width="46" height="30" fill="var(--kitchen)" stroke="var(--lot-edge)"/><text x="199" y="96">Fennel</text><text class="small" x="199" y="105">kitchen</text>
+      </svg>
+      <p>One lane from the waymark to Greg's door. The tour walks it in order and ends at the kitchen and Greg.</p>
+      <ul><li>Clear story order: shop first, Greg last</li><li>Long walk on every Wilds trip (~70 m)</li><li>Lots face the lane, backs to the meadow</li></ul>
+    </section>
+
+    <!-- B: the green -->
+    <section class="plan pick">
+      <header><h2>B · The green</h2><span class="tag">my pick</span></header>
+      <svg viewBox="0 0 400 300" role="img" aria-label="Plan B: pond on the west beside Greg's home, five lots in a horseshoe around a round green on the east, kitchen at its head">
+        <rect width="400" height="300" fill="var(--meadow)"/><rect width="400" height="300" fill="url(#grid)"/>
+        <ellipse cx="95" cy="165" rx="82" ry="98" fill="var(--water)" stroke="var(--water-edge)" stroke-width="3"/>
+        <text x="58" y="170">Moonwell pond</text><text class="small" x="52" y="182">≈ 41 × 49 m · Sax's stone rim</text>
+        <circle cx="190" cy="62" r="18" fill="var(--home)" stroke="var(--lot-edge)" stroke-width="2"/><text x="150" y="30">Greg's home</text><text class="small" x="150" y="40">on the shore, bench faces the green</text>
+        <rect x="168" y="96" width="26" height="8" fill="var(--lot-edge)"/><text class="small" x="140" y="114">jetty</text>
+        <circle cx="285" cy="160" r="52" fill="var(--path)"/><text x="265" y="158">the green</text><text class="small" x="262" y="169">Ø 26 m · Greg tours here</text>
+        <rect x="258" y="42" width="54" height="34" fill="var(--kitchen)" stroke="var(--lot-edge)"/><text x="262" y="62">Fennel</text><text class="small" x="262" y="72">kitchen (head)</text>
+        <rect x="335" y="80" width="54" height="34" fill="var(--lot)" stroke="var(--lot-edge)"/><text x="339" y="100">Hazel</text><text class="small" x="339" y="110">carpenter</text>
+        <rect x="342" y="150" width="54" height="34" fill="var(--lot)" stroke="var(--lot-edge)"/><text x="346" y="170">Sax</text><text class="small" x="346" y="180">stonery</text>
+        <rect x="320" y="222" width="54" height="34" fill="var(--lot)" stroke="var(--lot-edge)"/><text x="324" y="242">Yarrow</text><text class="small" x="324" y="252">apothecary</text>
+        <rect x="200" y="228" width="54" height="34" fill="var(--lot)" stroke="var(--lot-edge)"/><text x="204" y="248">Mallow</text><text class="small" x="204" y="258">shop</text>
+        <path d="M285 212 L 285 290" stroke="var(--path)" stroke-width="12"/>
+        <rect x="278" y="276" width="14" height="14" fill="var(--accent)"/><text x="298" y="290">waymark (arrive)</text>
+      </svg>
+      <p>The five stand in a horseshoe round a green, with the kitchen at its head and the pond and Greg's home on the open side.</p>
+      <ul><li>Every lot is in view from the green: one camera turn shows the whole Glade on a phone</li><li>Short trip through (~25 m from waymark to the Wilds)</li><li>Kitchen at the head reads as the household (canon: where the five gather)</li></ul>
+    </section>
+
+    <!-- C: terraces -->
+    <section class="plan">
+      <header><h2>C · Terraces to the water</h2></header>
+      <svg viewBox="0 0 400 300" role="img" aria-label="Plan C: waymark at the top, a path zigzags down a slope past lots two by two, ending at Greg's home on the pond shore">
+        <rect width="400" height="300" fill="var(--meadow)"/><rect width="400" height="300" fill="url(#grid)"/>
+        <path d="M0 210 Q 200 180 400 215 L400 300 L0 300Z" fill="var(--water)" stroke="var(--water-edge)" stroke-width="3"/>
+        <text x="230" y="265">Moonwell pond</text><text class="small" x="230" y="277">≈ 80 m of shore · Sax's stone rim</text>
+        <path d="M200 18 L 200 50 L 110 80 L 290 120 L 110 160 L 180 190" fill="none" stroke="var(--path)" stroke-width="11" stroke-linejoin="round"/>
+        <rect x="193" y="8" width="14" height="14" fill="var(--accent)"/><text x="212" y="20">waymark (arrive)</text>
+        <rect x="236" y="56" width="54" height="30" fill="var(--lot)" stroke="var(--lot-edge)"/><text x="240" y="74">Mallow</text><text class="small" x="240" y="83">shop</text>
+        <rect x="20" y="62" width="54" height="30" fill="var(--lot)" stroke="var(--lot-edge)"/><text x="24" y="80">Hazel</text><text class="small" x="24" y="89">carpenter</text>
+        <rect x="318" y="104" width="54" height="30" fill="var(--lot)" stroke="var(--lot-edge)"/><text x="322" y="122">Sax</text><text class="small" x="322" y="131">stonery</text>
+        <rect x="20" y="142" width="54" height="30" fill="var(--lot)" stroke="var(--lot-edge)"/><text x="24" y="160">Yarrow</text><text class="small" x="24" y="169">apothecary</text>
+        <rect x="236" y="140" width="54" height="30" fill="var(--kitchen)" stroke="var(--lot-edge)"/><text x="240" y="158">Fennel</text><text class="small" x="240" y="167">kitchen</text>
+        <circle cx="160" cy="200" r="16" fill="var(--home)" stroke="var(--lot-edge)" stroke-width="2"/><text x="70" y="214">Greg's home</text><text class="small" x="62" y="224">on the shore, jetty out</text>
+      </svg>
+      <p>The Glade steps down a slope. You arrive at the top and walk down past the lots to Greg's home on the water.</p>
+      <ul><li>Best view on arrival: the whole Glade and pond below you</li><li>Needs a slope in the terrain (new ground shaping)</li><li>Zigzag is slow on a phone</li></ul>
+    </section>
+  </div>
+
+  <div>
+    <h2>The tour: what each station shows</h2>
+    <p class="note" style="margin-top:6px">Each Moglin gets their own talk at their own station instead of one shared line. Every word a player reads goes to lark after you pick a layout; below is only what each stop has to teach. Trades and want-lists are canon (Moonwell folk, RULED 09-11).</p>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Stop</th><th>Station on the lot</th><th>What they show you</th><th>What they want from you</th><th>Your own version</th></tr></thead>
+      <tbody>
+        <tr><td><b>Greg</b></td><td>Home, bench, jetty on the pond</td><td>Why you're here, the Wilds beyond, buying plot ground at his door</td><td>Nothing yet: he sends you round the five</td><td>Your plot (ground sale)</td></tr>
+        <tr><td><b>Mallow</b></td><td>Shop counter</td><td>Sell what you gather for Marks; the list changes each week</td><td>A rotating want-list (mast, goldwood, blankstone…)</td><td>None: Mallow is where the loop closes</td></tr>
+        <tr><td><b>Hazel</b></td><td>Carpenter's yard: sawhorse, plank stacks</td><td>Furniture, storage and jointed pieces to dress a pocket with</td><td>Planks (goldwood first), cord, sap</td><td>Carpentry room</td></tr>
+        <tr><td><b>Sax</b></td><td>Stonery: cut blocks, the pond's rim</td><td>Paving and low walls, anything that holds weight; points at the rim Sax built</td><td>Cooled-cloud stone, mana crystal</td><td>Stonemason room</td></tr>
+        <tr><td><b>Yarrow</b></td><td>Apothecary: herb beds, jars</td><td>Catalysts and jars, and gives you your first recipe; then buys what you brew</td><td>Herbs, bark, raw shards, finished brews</td><td>Alchemy room</td></tr>
+        <tr><td><b>Fennel</b></td><td>The Glade kitchen, the long table</td><td>Spirit food and meals, the one thing every gathering skill feeds; the five eat here together</td><td>Crops, rinn, honey-like things</td><td>Cooking room</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="decide">
+    <h2>Your calls</h2>
+    <ol>
+      <li>Layout A, B or C (or move lots on the one you like).</li>
+      <li>Pond size: these are 40 to 80 m across, about 13 to 25 times today's pool. Bigger is fine; it also becomes the Glade's fishing water.</li>
+      <li>Tour order. In B, Greg walks you round the green clockwise from the kitchen; in A and C the path sets the order.</li>
+    </ol>
+  </div>
+</div>
