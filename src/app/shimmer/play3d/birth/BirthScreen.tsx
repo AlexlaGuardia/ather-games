@@ -204,9 +204,10 @@ export default function BirthScreen({
           </button>
 
           {/* keys only where there are keys: a phone has no arrows or Enter (BETA M1, fresh-phone audit 11-16) */}
+          {/* ★ a SHORT window (11-19, play: 800x500) put this line ON the Be born button and it ate the click; it never takes one now */}
           <div className="birth-keys" style={{
             position: 'absolute', bottom: 14, fontSize: 10, letterSpacing: '.14em',
-            color: '#4a525e', textTransform: 'uppercase',
+            color: '#4a525e', textTransform: 'uppercase', pointerEvents: 'none',
           }}>
             ↑↓ rune · ←→ element · enter to choose
           </div>
@@ -215,6 +216,7 @@ export default function BirthScreen({
 
       <style>{`
         @media (hover: none) and (pointer: coarse) { .birth-keys { display: none } }
+        @media (max-height: 620px) { .birth-keys { display: none } }
         @keyframes birthFade { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
         @keyframes bornIn { from { opacity: 0; transform: scale(.9) } to { opacity: 1; transform: none } }
         @keyframes pulseGlow { 0%,100% { opacity: .85 } 50% { opacity: 1 } }
