@@ -23,7 +23,8 @@ export const TOUR_SKIP = 'That will do, thanks.'     // @lark PLACEHOLDER: jumps
 export const TOUR_DONE = 'Thanks, Greg.'             // @lark PLACEHOLDER: the last stop's answer
 export const GLOVE_GIVE = 'One more thing. Your glove. Here is its first word.'   // @lark PLACEHOLDER: Greg's handover
 
-export interface TourStop { id: string; at: Pt; look: Pt; line: string; zone: 'wilds' | 'plot' }
+/** `meets` = the folk Greg introduces at this stop (BETA M33: being introduced = met, so Morel may carry their calls). */
+export interface TourStop { id: string; at: Pt; look: Pt; line: string; zone: 'wilds' | 'plot'; meets?: string }
 
 /** a point `d` metres from `c` toward `p` */
 const toward = (c: Pt, p: Pt, d: number): Pt => { const a = Math.atan2(p.x - c.x, p.z - c.z); return { x: c.x + Math.sin(a) * d, z: c.z + Math.cos(a) * d } }
@@ -42,7 +43,7 @@ export function tourStops(folk: readonly { id: string; name: string }[] = gladeF
     const s = spots[k], inward = toward(s, pool, 1.5)
     const side = { x: inward.x + Math.cos(s.yaw) * 1.7, z: inward.z - Math.sin(s.yaw) * 1.7 }   // well to the folk's side: a keeper behind him still sees them (0.9 hid Hazel)
     const k2 = f.id.split(':').pop() ?? f.id
-    return { id: `folk:${k2}`, at: side, look: { x: s.x, z: s.z }, line: folkLine(f.name, GLADE_TRADE[k2] ?? 'neighbour'), zone: 'wilds' }
+    return { id: `folk:${k2}`, at: side, look: { x: s.x, z: s.z }, line: folkLine(f.name, GLADE_TRADE[k2] ?? 'neighbour'), zone: 'wilds', meets: f.name }
   })
   return [
     { id: 'pool', at: toward(pool, bench, POOL_KEEP), look: pool, zone: 'wilds',

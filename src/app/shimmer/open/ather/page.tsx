@@ -80,6 +80,7 @@ import { isTouchOnly, pressKey, touch } from '../shared/touch'
 import { useMenuLock } from '../shared/menu-lock'
 import { BirthGate, useBirthGateUp, BORN_EVENT } from '../birth-gate'
 import { MorelBubble } from '../shared/morel-bubble'   // BETA M33: the glove's gem speaks (ammo)
+import { markMet } from '../shared/met'
 import { useMorelHints } from '../shared/morel-hints'   // BETA M33 S2: stuck hints on the errand
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
 import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
@@ -925,6 +926,7 @@ function AtherSliceGame() {
   const fennelRef = useRef(fennelAt); fennelRef.current = fennelAt
   const fennelHead = useMemo(() => (fennelAt ? { x: fennelAt.x, y: plotHeightAt(fennelAt.x, fennelAt.z) + FENNEL_HEAD, z: fennelAt.z } : null), [fennelAt])
   const fennelNode = panel?.kind === 'fennel' ? fennelTalk(rinQuest, panel.page, inv, { goto: page => setPanel({ kind: 'fennel', page }), close: () => setPanel(null) }) : null
+  useEffect(() => { const m = tour && tourNode ? stops[tour.i]?.meets : undefined; if (m) markMet(m) }, [tour, tourNode, stops])   // BETA M33: Greg's introduction = met
   useEffect(() => { talkFocus.current = talkNode ? gregHead : tourNode && tour ? (() => { const L = stops[tour.i].look, ly = (stops[tour.i].zone === 'plot' ? plotHeightAt(L.x, L.z) : ww && ww.tileAtPoint(L.x, L.z) ? ww.heightAt(L.x, L.z) : 0) + 1.0
     // M32: between what he shows and his head (his side heavier: his bubble must stay on screen), so a phone frames both (aimed at the station alone, his bubble left the screen)
     return { x: L.x * 0.4 + gregHead.x * 0.6, y: ly * 0.4 + (gregHead.y + 0.6) * 0.6, z: L.z * 0.4 + gregHead.z * 0.6 } })() : fennelNode && fennelHead ? fennelHead : folkTalk.focus }, [talkNode, gregHead, tourNode, tour, stops, ww, fennelNode, fennelHead, folkTalk.focus])
