@@ -64,14 +64,14 @@ const run = async () => {
   ok(recs.every(r => [...r.files!, ...(r.layer?.files ?? [])].every(f => f.startsWith('/sfx/') && fs.existsSync('public' + f))), 'every rec file exists under public/sfx')
   ok(sfx.SOUNDS.every(s => sfx.busOf(s) === (s.area === 'ui' ? 'ui' : s.area === 'ambience' ? 'ambience' : 'sfx')), 'bus defaults: ui rows ui, ambience rows ambience, rest sfx')
   // file rows: gate unchanged; first play kicks a load (silent), then plays the sample; variant never repeats
-  const rec = row('rec-step-grass'); const files = rec.files!
-  for (const st of ['proposed', 'nay'] as const) { rec.status = st; voices = 0; fetched.length = 0; sfx.play('rec-step-grass'); ok(voices === 0 && fetched.length === 0, `file row ${st} is silent and fetches nothing`) }
-  rec.status = 'yay'; voices = 0; sfx.play('rec-step-grass'); ok(voices === 0 && fetched.length > 0, 'yay file row: first play is non-blocking (loads, silent)')
-  sfx.preload('rec-step-grass'); await new Promise(r => setTimeout(r, 20))
+  const rec = row('rec-land'); const files = rec.files!
+  for (const st of ['proposed', 'nay'] as const) { rec.status = st; voices = 0; fetched.length = 0; sfx.play('rec-land'); ok(voices === 0 && fetched.length === 0, `file row ${st} is silent and fetches nothing`) }
+  rec.status = 'yay'; voices = 0; sfx.play('rec-land'); ok(voices === 0 && fetched.length > 0, 'yay file row: first play is non-blocking (loads, silent)')
+  sfx.preload('rec-land'); await new Promise(r => setTimeout(r, 20))
   ok(files.every(f => sfx.sampleState(f) === 'ready'), 'all variants decoded and cached')
-  const n0 = fetched.length; sfx.preload('rec-step-grass'); ok(fetched.length === n0, 'cache per url: no refetch')
-  voices = 0; sfx.play('rec-step-grass'); ok(voices > 0, 'yay file row plays the decoded sample')
-  rec.status = 'proposed'; voices = 0; sfx.play('rec-step-grass'); ok(voices === 0, 'file row back to proposed is silent again')
+  const n0 = fetched.length; sfx.preload('rec-land'); ok(fetched.length === n0, 'cache per url: no refetch')
+  voices = 0; sfx.play('rec-land'); ok(voices > 0, 'yay file row plays the decoded sample')
+  rec.status = 'proposed'; voices = 0; sfx.play('rec-land'); ok(voices === 0, 'file row back to proposed is silent again')
   // missing / failed file: silent, no throw
   { const m = { id: 'rec-missing', area: 'x', status: 'yay', note: '', source: 'cc0', files: ['/sfx/missing.ogg', '/sfx/404.ogg'] } as any; sfx.SOUNDS.push(m)
     let threw = false; try { for (let i = 0; i < 6; i++) { sfx.play('rec-missing'); await new Promise(r => setTimeout(r, 10)) } sfx.audition('rec-missing') } catch { threw = true }
@@ -97,12 +97,12 @@ const run = async () => {
   // ── M36 batch 3: ambience ──
   { const amb = await import('./ambience'); const ids = amb.AMBIENCE_BEDS
     const ambRows = sfx.SOUNDS.filter(s => s.id.startsWith('amb-'))
-    ok(ambRows.length === 5 && ambRows.every(r => r.status === 'proposed' && !!r.desc && r.vol !== undefined && r.vol > 0 && r.vol <= 0.5 && r.area === 'ambience' && r.bus === 'ambience' && r.source === 'synth'), 'every amb-* row is proposed, with desc + vol, ambience bus, synth')
+    ok(ambRows.length === 5 && ambRows.every(r => !!r.desc && r.vol !== undefined && r.vol > 0 && r.vol <= 0.5 && r.area === 'ambience' && r.bus === 'ambience' && r.source === 'synth'), 'every amb-* row has desc + vol, ambience bus, synth')
     ok(ambRows.every(r => ids.includes(r.id)) && ids.every(i => row(i)), 'every amb-* row has a bed recipe and vice versa')
     let nearW = 0; const ticks = (n: number) => { for (let i = 0; i < n; i++) { clock += 1 / 30; amb.ambienceTick(1 / 30, { hour: 12, near: { water: nearW } }) } }
     const made0 = made; base = made_nodes.length
     voices = 0; amb.setAmbience('amb-glade-day'); ticks(30); ok(voices === 0 && amb.ambienceBeds().main === null, 'a proposed bed is silent: no voices')
-    amb.ambienceTick(1 / 30, { near: { water: 1 } }); ok(voices === 0 && amb.ambienceBeds().water === null, 'a proposed water layer is silent too')
+    { const w0 = row('amb-water').status; row('amb-water').status = 'proposed'; amb.ambienceTick(1 / 30, { near: { water: 1 } }); ok(voices === 0 && amb.ambienceBeds().water === null, 'a proposed water layer is silent too'); row('amb-water').status = w0 }
     const A = row('amb-glade-day'), B = row('amb-wilds-wind'), W = row('amb-water'); A.status = 'yay'; B.status = 'yay'
     voices = 0; amb.setAmbience('amb-glade-day'); ok(voices > 0 && amb.ambienceBeds().main === 'amb-glade-day', `a yay bed starts (${voices} sources)`)
     const outA = amb.ambienceBeds().nodes.main as any; ticks(5); ok(outA.gain.target > 0.3 && outA.gain.target <= 0.35, 'bed fades in towards its vol')
