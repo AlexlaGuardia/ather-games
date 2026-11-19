@@ -1,7 +1,8 @@
 // ── THE HELD GUN, SEEN BY THE PARTY (BETA M27 slice 4, play / Jin 2 16e8df5e, 11-19) ─────────────────────────────────────
 // Two keepers in one party in the Wilds (party-zones-check's setup). PROD ONLY (the game socket is behind the tunnel). PASS =
 //   1. A is in the Wilds and DRAWS (real R) before B arrives
-//   2. B joins AFTER: within 5 s of seeing A, B hears A's gun AND draws it on A's rig (the newcomer is told at once)
+//   2. B joins AFTER: within 5 s of A SEEING B (that is when 'a newcomer appeared' fires on A's side), B hears A's gun AND
+//      draws it on A's rig (the newcomer is told at once, not at the 10 s keepalive)
 //   3. A swaps (real R tap): B sees the other gun
 //   4. A stows (R held): B sees empty hands, no gun on A's rig
 //   5. 0 page errors
@@ -45,6 +46,8 @@ try {
   // 2 · B joins after: told at once
   const b = await open('B'); await toWilds(b, 'B')
   ok(await poll(async () => (((await mp(b, 'peers')) ?? []) as { id: string }[]).some(q => q.id === idA), 60000), '2. B sees A')
+  const idB = await b.evaluate(() => localStorage.getItem('ather:mp:id'))
+  ok(await poll(async () => (((await mp(a, 'peers')) ?? []) as { id: string }[]).some(q => q.id === idB), 60000), '2. A sees B (the newcomer)')
   const t0 = Date.now()
   const told = await poll(async () => { const g = ((await mp(b, 'guns')) ?? {})[idA!]; return typeof g === 'string' }, 5000)
   const g1 = ((await mp(b, 'guns')) ?? {})[idA!] as string | null
