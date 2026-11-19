@@ -80,14 +80,20 @@ if (!phone) { await p.keyboard.press('KeyI'); await sleep(1500); seen.bagPanel =
   await sleep(600) }
 if (!phone) { await p.keyboard.press('KeyJ'); await sleep(1500); seen.journal = await text(); await shot('5-journal'); await p.keyboard.press('KeyJ'); await sleep(600) }
 // 4 · to the Wilds the way the game says: Gregory's waymark off the gate's fold map (walk = tp to the gate (plot.ts GATE), then E)
-await p.evaluate((g: { x: number; z: number }) => (window as any).__ather.tp(g.x + 2, g.z - 2), GATE)   // the gate (plot.ts GATE = -68, 50); movement only
-await tick(4)
-if (phone) await tapText(/use$/i); else await p.keyboard.press('KeyE')
-await sleep(1500); seen.atGate = await text()
-const wm = await tapText(/Gregory.s waymark/)
-res.travelTapped = wm; seen.foldMap = await text(); await shot('6-foldmap')
-for (let i = 0; i < 12; i++) await tick(2)
-await sleep(3000)
+// ★ BETA M31 (11-19): a newborn opens their eyes at Moonwell Glade, already in the Wilds: give the arrival a minute, and take the
+// gate leg below only if the keeper is still on the plot (a returning keeper, or M31 broken: then the run says so)
+for (let i = 0; i < 60 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds'; i++) await sleep(1000)
+const bornInWilds = (await p.evaluate(() => (window as any).__ather.zone())) === 'wilds'; res.bornInWilds = bornInWilds
+if (!bornInWilds) {
+  await p.evaluate((g: { x: number; z: number }) => (window as any).__ather.tp(g.x + 2, g.z - 2), GATE)   // the gate (plot.ts GATE = -68, 50); movement only
+  await tick(4)
+  if (phone) await tapText(/use$/i); else await p.keyboard.press('KeyE')
+  await sleep(1500); seen.atGate = await text()
+  const wm = await tapText(/Gregory.s waymark/)
+  res.travelTapped = wm; seen.foldMap = await text(); await shot('6-foldmap')
+  for (let i = 0; i < 12; i++) await tick(2)
+  await sleep(3000)
+}
 res.zone = await p.evaluate(() => (window as any).__ather.zone())
 if (res.zone !== 'wilds') { res.stuck = 'could not reach the Wilds via the gate'; console.log(JSON.stringify({ res, seen, errs })); await br.close(); process.exit(1) }
 if (phone) { await tapText(/^Tap to start$/) } else { const c = await p.$('canvas'); const bx = await c?.boundingBox(); if (bx) await p.mouse.click(bx.x + bx.width / 2, bx.y + bx.height / 2) }

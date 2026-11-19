@@ -76,7 +76,11 @@ res.bagAtBirth = await readBag()
 await p.keyboard.press('KeyI'); await sleep(1500); seen.bagPanel = await text(); await shot('2-bag'); await p.keyboard.press('KeyI'); await sleep(600)
 await p.keyboard.press('KeyJ'); await sleep(1500); seen.journal = await text(); await shot('3-journal'); await p.keyboard.press('KeyJ'); await sleep(600)
 // 3 · to the Wilds the way the game says: the gate's fold map, Gregory's waymark. Re-send until the Wilds stream in.
-await p.evaluate((g: { x: number; z: number }) => (window as any).__ather.tp(g.x + 2, g.z - 2), GATE); await tick(4)
+// ★ BETA M31 (11-19): a newborn opens their eyes at Moonwell Glade, already in the Wilds: give the arrival a minute, and take the
+// gate leg below only if the keeper is still on the plot (a returning keeper, or M31 broken: then the run says so)
+for (let i = 0; i < 60 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds'; i++) await sleep(1000)
+const bornInWilds = (await p.evaluate(() => (window as any).__ather.zone())) === 'wilds'; res.bornInWilds = bornInWilds
+if (!bornInWilds) { await p.evaluate((g: { x: number; z: number }) => (window as any).__ather.tp(g.x + 2, g.z - 2), GATE); await tick(4) }
 for (let i = 0; i < 20 && (await A<string>('zone')) !== 'wilds'; i++) {
   await p.keyboard.press('KeyE'); await sleep(1500)
   if (i === 0) { seen.atGate = await text() }

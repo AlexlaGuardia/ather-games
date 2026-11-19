@@ -4,8 +4,8 @@
 // EVERY errand step is a real input: E at Greg, the Take button, E at the gate + the fold map's Rune Hold door, E at the
 // runesmith + the Cut button, E at the Temple + Idony's counter + Imbue + the beat's buttons. Nothing is granted, no stage forced.
 // Hooks are used to READ (stage, bag, loadout, position, journal panel text) and for MOVEMENT only:
-//   leg A  plot spawn -> the gate (WALKED), the fold map's "Gregory's waymark" stop (real tap) into the Wilds, then WALKED to Greg at
-//          Moonwell Glade (M30 part 2: he no longer stands on the plot), and back to the waymark stone + the "Your plot" stop (real tap),
+//   leg A  born at Moonwell Glade (M31: the first frame is the Wilds, ~7 m from Greg), WALKED to Greg, and back to the waymark
+//          stone + the "Your plot" stop (real tap),
 //          then plot -> the gate again (WALKED). (real W key, __ather.look aims the camera; tp only as a stuck fallback, logged)
 //   leg B  gate -> continent: the game's own fold-map door "Rune Hold" (real tap, page navigates; no hook)
 //   leg C  Rune Hold -> the runesmith door, and -> the Temple door: __drive.tp / footTp to the journal's waymark target (the door),
@@ -105,27 +105,13 @@ const word = wordsFor('bracelet').find(w => w.letters.length === 1 && w.letters[
 res.word = word?.name
 await journal('0-born')
 // 2 · STEP greg: walk to Greg, real E, real Take
+// ★ BETA M31 (11-19): a newborn opens their eyes at Moonwell Glade beside Greg, not on the plot. The old leg (plot -> gate ->
+// fold map -> Gregory's waymark) is gone from a new keeper's path; the first frame must already be the Wilds.
+say('M31: born at Moonwell')
+const inWilds = await poll(async () => { await tick(2, 0); return (await A('zone')) === 'wilds' }, 120000)
 const s0 = await A('state') as { px: number; pz: number }; res.spawn = `${s0.px.toFixed(0)},${s0.pz.toFixed(0)}`
-// through the gate to the Wilds: walk to the gate, real E, fold map, tap Gregory's waymark (the map's own stop)
-await walkTo('plot -> gate (to the Wilds)', GATE.x, GATE.z, REACH * 0.8)
-await p.keyboard.press('KeyE'); await sleep(1500); await tick(3)
-sees.gateToWilds = await text(); await shot('gate-foldmap-wilds')
-// the Wilds stream in behind the page ("The Wilds are still loading." until they have): re-open the map and tap the stop again until it takes
-let inWilds = false; say('tapping the Wilds stop')
-// ★ TAP ONCE, THEN WAIT (11-19 hub): the old loop re-pressed E and re-clicked the stop's old screen spot while the Wilds streamed;
-// once the map had closed or flipped to Athernyx that click could land on a CITY DOOR, which navigates to the continent
-// ('Attempted to use detached Frame'). Now: re-tap ONLY while the game itself says the Wilds are still loading, and only
-// when the fold map is open with Gregory's stop on it.
-const loadingToast = () => p.evaluate(() => /still loading/i.test(document.body.innerText)).catch(() => false)
-for (let k = 0; k < 12 && !inWilds; k++) {
-  if (k === 0 || (await loadingToast())) {
-    if (!(await p.$('button[title="Gregory\'s waymark"]'))) { if ((await A('zone')) !== 'wilds') { await p.keyboard.press('KeyE'); await sleep(1500) } }
-    if ((await A('zone')) !== 'wilds' && !(await clickSel('button[title="Gregory\'s waymark"]'))) { if (k > 3) await fail('gate: fold map offers Gregory\'s waymark', 'no Gregory\'s waymark stop on the fold map'); continue }
-  }
-  for (let j = 0; j < 20 && !inWilds; j++) { await tick(2, 500); inWilds = (await A('zone')) === 'wilds' }
-}
-legs.push("gate -> Wilds: the fold map's Gregory's waymark (game-offered, real tap)")
-if (!inWilds) await fail('gate: arrive in the Wilds', `zone ${await A('zone')} after 40 taps`)
+legs.push('born at Moonwell Glade (M31): the first frame is the Wilds beside Greg')
+if (!inWilds) await fail('M31: born at Moonwell (first frame in the Wilds)', `zone ${await A('zone')} 120 s after Looks good`)
 await sleep(10000); await p.mouse.click(500, 350); await sleep(500)   // the tile streams in; the click takes pointer-lock focus
 const gl = gregSpot(); res.gladeGreg = `${gl.x.toFixed(0)},${gl.z.toFixed(0)}`
 await walkTo('Wilds arrival -> Greg at Moonwell Glade', gl.x, gl.z, REACH * 0.8)
