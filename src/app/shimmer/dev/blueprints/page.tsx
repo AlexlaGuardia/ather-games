@@ -48,7 +48,7 @@ export default function SettlementWorktable() {
   const [walls, setWalls] = useState<Walls>({}), [floors, setFloors] = useState<Floors>({}), [roof, setRoof] = useState<RoofStyle>('gable')
   const [tool, setTool] = useState<Tool>('walls'), [mat, setMat] = useState<WallMat>('goldwood'), [down, setDown] = useState(false)
   const [lot, setLot] = useState('hazel'), [status, setStatus] = useState<Record<string, string>>({}), [msg, setMsg] = useState(''), [confirm, setConfirm] = useState(false)
-  const [eye, setEye] = useState(false), [view, setView] = useState({ yaw: Math.PI / 2, pitch: 0.75, dist: 18 })
+  const [eye, setEye] = useState(false), [view, setView] = useState({ yaw: -Math.PI / 2, pitch: 0.75, dist: 18 })   // from the FRONT (the green side): you face the building as a keeper on the green would
   const [ghost, setGhost] = useState<{ keys: string[]; erase: boolean } | null>(null)
   const drag = useRef<Corner | null>(null), tapAt = useRef<{ x: number; z: number } | null>(null)
   const target = useMemo(() => new THREE.Vector3(LW / 2, 0.5, LD / 2), [])
@@ -131,7 +131,7 @@ export default function SettlementWorktable() {
         </div>
       </header>
       <div style={{ flex: 1, minHeight: 0 }} data-bench="worktable">
-        <Canvas shadows camera={{ position: [LW / 2, 14, LD + 12], fov: 45 }}>
+        <Canvas shadows camera={{ position: [LW / 2, 14, -12], fov: 45 }}>
           <color attach="background" args={['#cfe3ef']} />
           <hemisphereLight args={['#cfe3ef', '#7d9455', 0.9]} />
           <directionalLight position={[-8, 18, 10]} intensity={1.1} castShadow shadow-mapSize={[1024, 1024]} />

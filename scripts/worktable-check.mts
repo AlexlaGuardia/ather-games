@@ -1,6 +1,6 @@
 // ── M39 slice 2: THE SETTLEMENT WORKTABLE, AS THE OWNER (world d5a9e927, 11-19) ─────────────────────────────────────────
 // /shimmer/dev/blueprints with real input: draw a 6 x 4 room (four mouse drags, screen points projected through the page's own
-// orbit lens: shelf-rig's view yaw pi/2, pitch 0.75, dist 18 round (6.5, 0.5, 4), fov 45), tap a door into its front, pick a
+// orbit lens: shelf-rig's view yaw -pi/2 (from the front), pitch 0.75, dist 18 round (6.5, 0.5, 4), fov 45), tap a door into its front, pick a
 // lot with NO saved blueprint (never Alex's), Save; the status strip shows it; New clears, Load brings it back; at the Glade
 // that lot stands it. The keeper's save is untouched (open.works.v1 never written). The test save is set aside in a finally.
 //   set -a; . /root/ather-games/.env; set +a; npx tsx scripts/worktable-check.mts [--url https://ather.games]
@@ -13,7 +13,7 @@ let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 const KEY = process.env.OWNER_KEY
 if (!KEY) { console.error('OWNER_KEY not set: set -a; . /root/ather-games/.env; set +a'); process.exit(2) }
-const VIEW = { yaw: Math.PI / 2, pitch: 0.75, dist: 18 }, TGT = new THREE.Vector3(6.5, 0.5, 4)
+const VIEW = { yaw: -Math.PI / 2, pitch: 0.75, dist: 18 }, TGT = new THREE.Vector3(6.5, 0.5, 4)
 
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 1200, height: 800 })
