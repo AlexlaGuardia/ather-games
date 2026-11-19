@@ -6,7 +6,7 @@
 //   (2) Greg walks to the keeper's plot for the planning-table talk, then goes home to the Glade (a visit; the plot stays theirs).
 //   (3) the tour's END: Greg, first teacher, lights the first glove word = the 09-28 DEFAULT LOADOUT glove column, already in
 //       code as play3d/vessels.ts GREG_GLOVE_PICK. No new names. (Earned words swap into the glove later.)
-// ★ Every LINE below is a PLACEHOLDER for @lark (Alex signs). Checks import these; never retype them.
+// ★ Every LINE below is SIGNED by Alex (11-19). Checks import these; never retype them.
 import type { Pt } from '../shared/folk-path'
 import { aroundPath } from '../shared/folk-path'
 import type { Loadout } from '../shared/loadout'
@@ -17,11 +17,11 @@ import { TABLE } from './rooms'
 import { GREG_GLOVE_PICK } from '../../play3d/vessels'
 import { KEEPER_MOVES } from '../../play3d/keeper-moves'
 
-export const TOUR_ASK = 'Tell me about the Ather.'   // @lark PLACEHOLDER: the keeper's answer that starts the tour
-export const TOUR_NEXT = 'Go on.'                    // @lark PLACEHOLDER
-export const TOUR_SKIP = 'That will do, thanks.'     // @lark PLACEHOLDER: jumps to the tour's end (the table, the glove word)
-export const TOUR_DONE = 'Thanks, Greg.'             // @lark PLACEHOLDER: the last stop's answer
-export const GLOVE_GIVE = 'One more thing. Your glove. Here is its first word.'   // @lark PLACEHOLDER: Greg's handover
+export const TOUR_ASK = 'Tell me about the Ather.'   // SIGNED by Alex 11-19: the keeper's answer that starts the tour
+export const TOUR_NEXT = 'Go on.'                    // SIGNED by Alex 11-19
+export const TOUR_SKIP = 'That will do, thanks.'     // SIGNED by Alex 11-19: jumps to the tour's end (the table, the glove word)
+export const TOUR_DONE = 'Thanks, Greg.'             // SIGNED by Alex 11-19: the last stop's answer
+export const GLOVE_GIVE = 'One more thing. Your glove. Here is its first word.'   // SIGNED by Alex 11-19: Greg's handover
 
 /** `meets` = the folk Greg introduces at this stop (BETA M33: being introduced = met, so Morel may carry their calls). */
 export interface TourStop { id: string; at: Pt; look: Pt; line: string; zone: 'wilds' | 'plot'; meets?: string }
@@ -31,7 +31,7 @@ const toward = (c: Pt, p: Pt, d: number): Pt => { const a = Math.atan2(p.x - c.x
 /** how wide Greg keeps of the pool's centre while walking (its rim + a stride) */
 export const POOL_KEEP = MOONWELL.r + 1.1
 
-/** a Glade folk's stop line (@lark PLACEHOLDER) */
+/** a Glade folk's stop line (SIGNED by Alex 11-19) */
 export const folkLine = (name: string, trade: string) => `This is ${name}, our ${trade}. A garden needs one, and this one is the best.`
 
 /** The tour, in order: the Moonwell, each of the five present at the Glade (beside them, at their trade), the waymark stone,
@@ -47,12 +47,12 @@ export function tourStops(folk: readonly { id: string; name: string }[] = gladeF
   })
   return [
     { id: 'pool', at: toward(pool, bench, POOL_KEEP), look: pool, zone: 'wilds',
-      line: 'This is the Moonwell, and the five who keep it. See what a garden can be.' },                     // @lark PLACEHOLDER
+      line: 'This is the Moonwell, and the five who keep it. See what a garden can be.' },                     // SIGNED by Alex 11-19
     ...five,
     { id: 'waymark', at: toward(wm, pool, 1.6), look: wm, zone: 'wilds',
-      line: 'The waymark stone. Touch it and the fold map opens: home, and anywhere you have set a stone.' },   // @lark PLACEHOLDER
+      line: 'The waymark stone. Touch it and the fold map opens: home, and anywhere you have set a stone.' },   // SIGNED by Alex 11-19
     { id: 'table', ...TABLE_STOP, zone: 'plot',
-      line: 'And this is your corner of the Ather. Plan it here, at your table. More ground is bought at my door.' },   // @lark PLACEHOLDER
+      line: 'And this is your corner of the Ather. Plan it here, at your table. More ground is bought at my door.' },   // SIGNED by Alex 11-19
   ]
 }
 /** where Greg stands at the keeper's planning table (plot coords), and where the keeper is set down facing him */
