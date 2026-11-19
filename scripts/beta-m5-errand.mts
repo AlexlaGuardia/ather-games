@@ -4,7 +4,9 @@
 // EVERY errand step is a real input: E at Greg, the Take button, E at the gate + the fold map's Rune Hold door, E at the
 // runesmith + the Cut button, E at the Temple + Idony's counter + Imbue + the beat's buttons. Nothing is granted, no stage forced.
 // Hooks are used to READ (stage, bag, loadout, position, journal panel text) and for MOVEMENT only:
-//   leg A  plot spawn -> Greg and -> the gate: WALKED (real W key, __ather.look aims the camera; tp only as a stuck fallback, logged)
+//   leg A  plot spawn -> the gate (WALKED), the fold map's "Gregory's waymark" stop (real tap) into the Wilds, then WALKED to Greg at
+//          Moonwell Glade (M30 part 2: he no longer stands on the plot), and back to the waymark stone + the "Your plot" stop (real tap),
+//          then plot -> the gate again (WALKED). (real W key, __ather.look aims the camera; tp only as a stuck fallback, logged)
 //   leg B  gate -> continent: the game's own fold-map door "Rune Hold" (real tap, page navigates; no hook)
 //   leg C  Rune Hold -> the runesmith door, and -> the Temple door: __drive.tp / footTp to the journal's waymark target (the door),
 //          because a courser/foot trip across the continent is many minutes under swiftshader. TP'D, logged per leg.
@@ -17,7 +19,9 @@ import { makeRegion, type RegionMeta } from '../src/app/shimmer/open/region'
 import { doorByKey } from '../src/app/shimmer/open/business/doors'
 import { SEATS, wordsFor, letterItem } from '../src/app/shimmer/open/business/letters'
 import { birthSeat } from '../src/app/shimmer/open/business/errand'
-import { GREG, GATE, REACH } from '../src/app/shimmer/open/ather/plot'
+import { GATE, REACH } from '../src/app/shimmer/open/ather/plot'
+import { gregSpot } from '../src/app/shimmer/open/ather/moonwell-glade'   // M30 part 2: where Greg sits now (Moonwell Glade, the Wilds)
+import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'
 import { ANSWERS } from '../src/app/shimmer/open/ather/greg-talk'   // the labels lark writes; a reword never stales the check
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m5')
@@ -30,6 +34,7 @@ const ctx = await br.createBrowserContext()
 const p = await ctx.newPage(); await p.setViewport({ width: 1000, height: 640 })
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 const res: Record<string, unknown> = { url }, sees: Record<string, string> = {}, legs: string[] = []
+const t00 = Date.now(), say = (m: string) => console.log(`[${((Date.now() - t00) / 1000).toFixed(0)}s] ${m}`)   // progress, so a timeout still says how far it got
 const text = () => p.evaluate(() => (document.body?.innerText ?? '').replace(/\s*\n\s*/g, ' | ').slice(0, 700)).catch(() => '?')
 const shot = (n: string) => p.screenshot({ path: `${out}/${n}.png` }).catch(() => {})
 const poll = async (fn: () => Promise<boolean>, ms = 60000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn()) return true; await sleep(500) } return false }
@@ -62,6 +67,7 @@ const clickSel = async (sel: string, re?: RegExp) => {
 }
 // what the stranger sees pointing at the next step: the journal panel (real J key) + the HUD prompt line
 const journal = async (label: string) => {
+  say(`journal ${label}`)
   await p.keyboard.press('KeyJ'); await sleep(1200); await tick(2)
   sees[`journal@${label}`] = await text(); await shot(`journal-${label}`)
   await p.keyboard.press('KeyJ'); await sleep(600); await tick(2)
@@ -77,7 +83,7 @@ const walkTo = async (name: string, tx: number, tz: number, stop: number, max = 
   }
   await p.keyboard.up('KeyW')
   if (d >= stop) { legs.push(`${name}: WALK TIMED OUT at ${d.toFixed(1)}m, tp fallback`); const dx = tx - GATE.x; void dx; await A('tp', tx, tz + stop * 0.5); await tick(3) }
-  else legs.push(`${name}: walked ${((Date.now() - t0) / 1000).toFixed(0)}s`)
+  else say(`${name}: arrived`); legs.push(`${name}: walked ${((Date.now() - t0) / 1000).toFixed(0)}s`)
 }
 
 // 1 · born through the real tap
@@ -94,8 +100,23 @@ const word = wordsFor('bracelet').find(w => w.letters.length === 1 && w.letters[
 res.word = word?.name
 await journal('0-born')
 // 2 · STEP greg: walk to Greg, real E, real Take
-const s0 = await A('state') as { px: number; pz: number }; res.spawn = `${s0.px.toFixed(0)},${s0.pz.toFixed(0)}`; res.gregDist = Math.hypot(GREG.x - s0.px, GREG.z - s0.pz).toFixed(0)
-await walkTo('plot -> Greg', GREG.x, GREG.z, REACH * 0.8)
+const s0 = await A('state') as { px: number; pz: number }; res.spawn = `${s0.px.toFixed(0)},${s0.pz.toFixed(0)}`
+// through the gate to the Wilds: walk to the gate, real E, fold map, tap Gregory's waymark (the map's own stop)
+await walkTo('plot -> gate (to the Wilds)', GATE.x, GATE.z, REACH * 0.8)
+await p.keyboard.press('KeyE'); await sleep(1500); await tick(3)
+sees.gateToWilds = await text(); await shot('gate-foldmap-wilds')
+// the Wilds stream in behind the page ("The Wilds are still loading." until they have): re-open the map and tap the stop again until it takes
+let inWilds = false; say('tapping the Wilds stop')
+for (let k = 0; k < 40 && !inWilds; k++) {
+  if (!(await p.$('button[title="Gregory\'s waymark"]'))) { await p.keyboard.press('KeyE'); await sleep(1500) }
+  if (!(await clickSel('button[title="Gregory\'s waymark"]'))) { if (k > 3) await fail('gate: fold map offers Gregory\'s waymark', 'no Gregory\'s waymark stop on the fold map'); continue }
+  for (let j = 0; j < 8 && !inWilds; j++) { await tick(2, 500); inWilds = (await A('zone')) === 'wilds' }
+}
+legs.push("gate -> Wilds: the fold map's Gregory's waymark (game-offered, real tap)")
+if (!inWilds) await fail('gate: arrive in the Wilds', `zone ${await A('zone')} after 40 taps`)
+await sleep(10000); await p.mouse.click(500, 350); await sleep(500)   // the tile streams in; the click takes pointer-lock focus
+const gl = gregSpot(); res.gladeGreg = `${gl.x.toFixed(0)},${gl.z.toFixed(0)}`
+await walkTo('Wilds arrival -> Greg at Moonwell Glade', gl.x, gl.z, REACH * 0.8)
 await p.keyboard.press('KeyE'); await sleep(1200)
 if (!(await poll(async () => !!(await p.$('[data-talk-choices]')), 8000))) { sees.atGreg = await text(); await shot('greg-noE'); await fail('greg: E starts his conversation', 'no talk after E at Greg') }
 await shot('greg-talk'); sees.gregTalk = await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')
@@ -107,8 +128,15 @@ const bg = await bag(); res.bagAfterGreg = bg.join(' ')
 if (!bg.includes('blankstonex1')) await fail('greg: take the gems', `bag after Take: ${bg.join(' ')}`)
 await p.keyboard.press('Escape'); await sleep(600)
 await journal('1-after-greg')
-// 3 · STEP gate: walk to the gate, real E, fold map, the Rune Hold door
-await walkTo('Greg -> gate', GATE.x, GATE.z, REACH * 0.8)
+// 3 · STEP gate: back to the plot (waymark stone + the fold map's Your plot stop), walk to the gate, real E, fold map, the Rune Hold door
+await walkTo('Greg -> waymark stone', GREG_WAYMARK.x, GREG_WAYMARK.z, REACH * 0.8)
+await p.keyboard.press('KeyE'); await sleep(1500); await tick(3)
+sees.atWaymark = await text(); await shot('waymark-foldmap')
+if (!(await tapText(/^Your plot/))) await fail('Wilds: the way back to the plot', "no 'Your plot' stop on the fold map at the waymark stone")
+legs.push("Wilds -> plot: the fold map's Your plot stop (game-offered, real tap)")
+if (!(await poll(async () => { await tick(2, 0); return (await A('zone')) === 'plot' }, 120000))) await fail('Wilds: arrive home', `zone ${await A('zone')}`)
+await sleep(3000); await p.mouse.click(500, 350); await sleep(500)
+await walkTo('plot -> gate (to the continent)', GATE.x, GATE.z, REACH * 0.8)
 await p.keyboard.press('KeyE'); await sleep(1500); await tick(3)
 sees.atGate = await text(); await shot('gate-foldmap')
 await p.keyboard.press('Tab'); await sleep(1200); await tick(3)   // the fold map says "TAB FLIPS": the continent doors are on the Athernyx face
