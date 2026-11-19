@@ -1,0 +1,227 @@
+{
+ "v": 1,
+ "id": "glade-sax",
+ "name": "Sax's workshop",
+ "w": 13,
+ "d": 8,
+ "walls": {
+  "h,7,0": {
+   "mat": "goldwood"
+  },
+  "h,8,0": {
+   "mat": "goldwood"
+  },
+  "h,9,0": {
+   "mat": "goldwood"
+  },
+  "h,10,0": {
+   "mat": "goldwood"
+  },
+  "h,11,0": {
+   "mat": "goldwood"
+  },
+  "v,7,0": {
+   "mat": "goldwood"
+  },
+  "v,7,1": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "v,7,2": {
+   "mat": "goldwood"
+  },
+  "h,7,3": {
+   "mat": "goldwood"
+  },
+  "v,8,3": {
+   "mat": "goldwood",
+   "kind": "door"
+  },
+  "v,8,4": {
+   "mat": "goldwood",
+   "kind": "door"
+  },
+  "h,4,5": {
+   "mat": "goldwood"
+  },
+  "h,5,5": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,6,5": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,7,5": {
+   "mat": "goldwood"
+  },
+  "v,4,0": {
+   "mat": "goldwood"
+  },
+  "v,4,1": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "v,4,2": {
+   "mat": "goldwood"
+  },
+  "v,4,3": {
+   "mat": "goldwood"
+  },
+  "v,4,4": {
+   "mat": "goldwood"
+  },
+  "h,1,0": {
+   "mat": "goldwood"
+  },
+  "h,2,0": {
+   "mat": "goldwood"
+  },
+  "h,3,0": {
+   "mat": "goldwood"
+  },
+  "v,1,0": {
+   "mat": "goldwood"
+  },
+  "v,1,1": {
+   "mat": "goldwood"
+  },
+  "v,1,2": {
+   "mat": "goldwood"
+  },
+  "v,1,3": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "v,1,4": {
+   "mat": "goldwood"
+  },
+  "v,1,5": {
+   "mat": "goldwood"
+  },
+  "v,1,6": {
+   "mat": "goldwood"
+  },
+  "h,1,7": {
+   "mat": "goldwood"
+  },
+  "h,2,7": {
+   "mat": "goldwood"
+  },
+  "h,3,7": {
+   "mat": "goldwood"
+  },
+  "h,4,7": {
+   "mat": "goldwood"
+  },
+  "h,5,7": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,6,7": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,7,7": {
+   "mat": "goldwood"
+  },
+  "h,8,7": {
+   "mat": "goldwood"
+  },
+  "h,9,7": {
+   "mat": "goldwood"
+  },
+  "h,10,7": {
+   "mat": "goldwood"
+  },
+  "h,11,7": {
+   "mat": "goldwood"
+  },
+  "v,12,0": {
+   "mat": "goldwood"
+  },
+  "v,12,1": {
+   "mat": "goldwood"
+  },
+  "v,12,2": {
+   "mat": "goldwood"
+  },
+  "v,12,3": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "v,12,4": {
+   "mat": "goldwood"
+  },
+  "v,12,5": {
+   "mat": "goldwood"
+  },
+  "v,12,6": {
+   "mat": "goldwood"
+  }
+ },
+ "floors": {
+  "1,0": "dawnwood",
+  "1,1": "dawnwood",
+  "1,2": "dawnwood",
+  "1,3": "dawnwood",
+  "1,4": "dawnwood",
+  "1,5": "dawnwood",
+  "1,6": "dawnwood",
+  "2,0": "dawnwood",
+  "2,1": "dawnwood",
+  "2,2": "dawnwood",
+  "2,3": "dawnwood",
+  "2,4": "dawnwood",
+  "2,5": "dawnwood",
+  "2,6": "dawnwood",
+  "3,0": "dawnwood",
+  "3,1": "dawnwood",
+  "3,2": "dawnwood",
+  "3,3": "dawnwood",
+  "3,4": "dawnwood",
+  "3,5": "dawnwood",
+  "3,6": "dawnwood",
+  "4,5": "dawnwood",
+  "4,6": "dawnwood",
+  "5,5": "dawnwood",
+  "5,6": "dawnwood",
+  "6,5": "dawnwood",
+  "6,6": "dawnwood",
+  "7,0": "dawnwood",
+  "7,1": "dawnwood",
+  "7,2": "dawnwood",
+  "7,5": "dawnwood",
+  "7,6": "dawnwood",
+  "8,0": "dawnwood",
+  "8,1": "dawnwood",
+  "8,2": "dawnwood",
+  "8,3": "dawnwood",
+  "8,4": "dawnwood",
+  "8,5": "dawnwood",
+  "8,6": "dawnwood",
+  "9,0": "dawnwood",
+  "9,1": "dawnwood",
+  "9,2": "dawnwood",
+  "9,3": "dawnwood",
+  "9,4": "dawnwood",
+  "9,5": "dawnwood",
+  "9,6": "dawnwood",
+  "10,0": "dawnwood",
+  "10,1": "dawnwood",
+  "10,2": "dawnwood",
+  "10,3": "dawnwood",
+  "10,4": "dawnwood",
+  "10,5": "dawnwood",
+  "10,6": "dawnwood",
+  "11,0": "dawnwood",
+  "11,1": "dawnwood",
+  "11,2": "dawnwood",
+  "11,3": "dawnwood",
+  "11,4": "dawnwood",
+  "11,5": "dawnwood",
+  "11,6": "dawnwood"
+ },
+ "roof": "flat",
+ "saved": 1795132271556
+}

@@ -1,0 +1,102 @@
+{
+ "v": 1,
+ "id": "glade-mallow",
+ "name": "Mallow's workshop",
+ "w": 13,
+ "d": 8,
+ "walls": {
+  "h,3,7": {
+   "mat": "goldwood"
+  },
+  "h,4,7": {
+   "mat": "goldwood"
+  },
+  "h,5,7": {
+   "mat": "goldwood"
+  },
+  "h,6,7": {
+   "mat": "goldwood"
+  },
+  "h,7,7": {
+   "mat": "goldwood"
+  },
+  "h,8,7": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,9,7": {
+   "mat": "goldwood"
+  },
+  "h,10,7": {
+   "mat": "goldwood"
+  },
+  "v,3,1": {
+   "mat": "goldwood"
+  },
+  "v,3,2": {
+   "mat": "goldwood"
+  },
+  "v,3,3": {
+   "mat": "goldwood"
+  },
+  "v,3,4": {
+   "mat": "goldwood"
+  },
+  "v,3,5": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "v,3,6": {
+   "mat": "goldwood"
+  },
+  "h,3,1": {
+   "mat": "goldwood"
+  },
+  "h,4,1": {
+   "mat": "goldwood"
+  },
+  "h,5,1": {
+   "mat": "goldwood",
+   "kind": "door"
+  },
+  "h,6,1": {
+   "mat": "goldwood",
+   "kind": "door"
+  },
+  "h,7,1": {
+   "mat": "goldwood"
+  },
+  "h,8,1": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,9,1": {
+   "mat": "goldwood"
+  },
+  "h,10,1": {
+   "mat": "goldwood"
+  },
+  "v,11,1": {
+   "mat": "goldwood"
+  },
+  "v,11,2": {
+   "mat": "goldwood"
+  },
+  "v,11,3": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "v,11,4": {
+   "mat": "goldwood"
+  },
+  "v,11,5": {
+   "mat": "goldwood"
+  },
+  "v,11,6": {
+   "mat": "goldwood"
+  }
+ },
+ "floors": {},
+ "roof": "flat",
+ "saved": 1795132337243
+}

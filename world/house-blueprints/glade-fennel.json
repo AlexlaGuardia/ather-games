@@ -1,0 +1,132 @@
+{
+ "v": 1,
+ "id": "glade-fennel",
+ "name": "Fennel's workshop",
+ "w": 13,
+ "d": 8,
+ "walls": {
+  "h,3,7": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,4,7": {
+   "mat": "goldwood"
+  },
+  "h,5,7": {
+   "mat": "goldwood"
+  },
+  "h,6,7": {
+   "mat": "goldwood"
+  },
+  "h,7,7": {
+   "mat": "goldwood"
+  },
+  "h,8,7": {
+   "mat": "goldwood"
+  },
+  "h,9,7": {
+   "mat": "goldwood"
+  },
+  "h,10,7": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,11,7": {
+   "mat": "goldwood"
+  },
+  "v,12,0": {
+   "mat": "goldwood"
+  },
+  "v,12,1": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "v,12,2": {
+   "mat": "goldwood"
+  },
+  "v,12,3": {
+   "mat": "goldwood"
+  },
+  "v,12,4": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "v,12,5": {
+   "mat": "goldwood"
+  },
+  "v,12,6": {
+   "mat": "goldwood"
+  },
+  "h,2,0": {
+   "mat": "goldwood"
+  },
+  "h,3,0": {
+   "mat": "goldwood"
+  },
+  "h,4,0": {
+   "mat": "goldwood"
+  },
+  "h,5,0": {
+   "mat": "goldwood"
+  },
+  "h,6,0": {
+   "mat": "goldwood"
+  },
+  "h,7,0": {
+   "mat": "goldwood"
+  },
+  "h,8,0": {
+   "mat": "goldwood"
+  },
+  "h,9,0": {
+   "mat": "goldwood"
+  },
+  "h,10,0": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,11,0": {
+   "mat": "goldwood"
+  },
+  "h,1,0": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "v,1,0": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "v,1,1": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,1,2": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,2,2": {
+   "mat": "goldwood"
+  },
+  "v,3,6": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "v,3,2": {
+   "mat": "goldwood"
+  },
+  "v,3,3": {
+   "mat": "goldwood",
+   "kind": "door"
+  },
+  "v,3,4": {
+   "mat": "goldwood",
+   "kind": "door"
+  },
+  "v,3,5": {
+   "mat": "goldwood"
+  }
+ },
+ "floors": {},
+ "roof": "flat",
+ "saved": 1795132126810
+}

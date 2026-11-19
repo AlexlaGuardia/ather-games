@@ -1,0 +1,197 @@
+{
+ "v": 1,
+ "id": "glade-hazel",
+ "name": "Hazel's workshop",
+ "w": 13,
+ "d": 8,
+ "walls": {
+  "h,9,6": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,10,6": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,3,6": {
+   "mat": "goldwood"
+  },
+  "h,4,6": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,5,6": {
+   "mat": "goldwood"
+  },
+  "h,6,6": {
+   "mat": "goldwood"
+  },
+  "h,7,6": {
+   "mat": "goldwood"
+  },
+  "h,8,6": {
+   "mat": "goldwood"
+  },
+  "h,2,6": {
+   "mat": "goldwood"
+  },
+  "v,2,4": {
+   "mat": "goldwood"
+  },
+  "v,2,5": {
+   "mat": "goldwood"
+  },
+  "h,1,4": {
+   "mat": "goldwood"
+  },
+  "v,1,0": {
+   "mat": "goldwood"
+  },
+  "v,1,1": {
+   "mat": "goldwood"
+  },
+  "v,1,2": {
+   "mat": "goldwood"
+  },
+  "v,1,3": {
+   "mat": "goldwood"
+  },
+  "h,1,0": {
+   "mat": "goldwood"
+  },
+  "h,2,0": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,3,0": {
+   "mat": "goldwood"
+  },
+  "h,4,0": {
+   "mat": "goldwood"
+  },
+  "h,5,0": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,6,0": {
+   "mat": "goldwood"
+  },
+  "v,7,0": {
+   "mat": "goldwood"
+  },
+  "v,7,1": {
+   "mat": "goldwood"
+  },
+  "h,7,2": {
+   "mat": "shimmeroak",
+   "kind": "door"
+  },
+  "h,8,2": {
+   "mat": "shimmeroak",
+   "kind": "door"
+  },
+  "v,9,1": {
+   "mat": "goldwood"
+  },
+  "v,9,0": {
+   "mat": "goldwood"
+  },
+  "h,9,0": {
+   "mat": "goldwood"
+  },
+  "h,10,0": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "h,11,0": {
+   "mat": "goldwood"
+  },
+  "v,12,0": {
+   "mat": "goldwood"
+  },
+  "v,12,1": {
+   "mat": "goldwood"
+  },
+  "v,12,2": {
+   "mat": "goldwood"
+  },
+  "v,12,3": {
+   "mat": "goldwood",
+   "kind": "window"
+  },
+  "v,12,4": {
+   "mat": "goldwood"
+  },
+  "v,12,5": {
+   "mat": "goldwood"
+  },
+  "h,11,6": {
+   "mat": "goldwood",
+   "kind": "window"
+  }
+ },
+ "floors": {
+  "1,0": "shimmeroak",
+  "1,1": "shimmeroak",
+  "1,2": "shimmeroak",
+  "1,3": "shimmeroak",
+  "2,0": "shimmeroak",
+  "2,1": "shimmeroak",
+  "2,2": "shimmeroak",
+  "2,3": "shimmeroak",
+  "2,4": "shimmeroak",
+  "2,5": "shimmeroak",
+  "3,0": "shimmeroak",
+  "3,1": "shimmeroak",
+  "3,2": "shimmeroak",
+  "3,3": "shimmeroak",
+  "3,4": "shimmeroak",
+  "3,5": "shimmeroak",
+  "4,0": "shimmeroak",
+  "4,1": "shimmeroak",
+  "4,2": "shimmeroak",
+  "4,3": "shimmeroak",
+  "4,4": "shimmeroak",
+  "4,5": "shimmeroak",
+  "5,0": "shimmeroak",
+  "5,1": "shimmeroak",
+  "5,2": "shimmeroak",
+  "5,3": "shimmeroak",
+  "5,4": "shimmeroak",
+  "5,5": "shimmeroak",
+  "6,0": "shimmeroak",
+  "6,1": "shimmeroak",
+  "6,2": "shimmeroak",
+  "6,3": "shimmeroak",
+  "6,4": "shimmeroak",
+  "6,5": "shimmeroak",
+  "7,2": "shimmeroak",
+  "7,3": "shimmeroak",
+  "7,4": "shimmeroak",
+  "7,5": "shimmeroak",
+  "8,2": "shimmeroak",
+  "8,3": "shimmeroak",
+  "8,4": "shimmeroak",
+  "8,5": "shimmeroak",
+  "9,0": "shimmeroak",
+  "9,1": "shimmeroak",
+  "9,2": "shimmeroak",
+  "9,3": "shimmeroak",
+  "9,4": "shimmeroak",
+  "9,5": "shimmeroak",
+  "10,0": "shimmeroak",
+  "10,1": "shimmeroak",
+  "10,2": "shimmeroak",
+  "10,3": "shimmeroak",
+  "10,4": "shimmeroak",
+  "10,5": "shimmeroak",
+  "11,0": "shimmeroak",
+  "11,1": "shimmeroak",
+  "11,2": "shimmeroak",
+  "11,3": "shimmeroak",
+  "11,4": "shimmeroak",
+  "11,5": "shimmeroak"
+ },
+ "roof": "flat",
+ "saved": 1795131990743
+}
