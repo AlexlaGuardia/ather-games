@@ -8,6 +8,7 @@
 // Keys are listed, not rebindable yet: the open world's keys are written per page, and rebinding means one keymap for
 // all of them first (the voxel BindingsPanel is the model for that step).
 
+import { KeepersSection } from './keepers-section'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { OptionsPanel, OptionRow, OptionSlider, OptionHead } from '../hud/options-panel'
 import { hearthDisplay } from '../ui/hearth'
@@ -89,13 +90,15 @@ export const WALK_KEYS: KeyRow[] = [
   ['Mouse', 'look'], ['Esc', 'free the mouse · options · close'], ['Tab · ← →', 'switch tabs in the pack'], ['1–8 · wheel', 'hotbar'],
 ]
 
-export function OpenOptions({ onClose, keys = WALK_KEYS, extraGame }: { onClose: () => void; keys?: KeyRow[]; extraGame?: React.ReactNode }) {
+// inGarden: the page says whether the keeper stands in their own garden (the Ather plot); only there may they switch keepers.
+export function OpenOptions({ onClose, keys = WALK_KEYS, extraGame, inGarden = false }: { onClose: () => void; keys?: KeyRow[]; extraGame?: React.ReactNode; inGarden?: boolean }) {
   const s = useSettings()
   const [isOwner, setOwner] = useState(false)
   useEffect(() => { fetch('/api/owner', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(j => setOwner(!!j?.owner)).catch(() => {}) }, [])
   return (
     <div data-panel="options" className="fixed inset-0 z-[40] pointer-events-none">
       <OptionsPanel onClose={onClose} isOwner={isOwner}
+        leave={<KeepersSection canSwitch={inGarden} title="Keepers list" />}
         game={<>
           <Toggle id="tooltips" label="Tooltips" sub="explanations on hover, and a warning before a buy that is not written for you" on={s.tooltips} onFlip={() => setSettings({ tooltips: !s.tooltips })} />
           {extraGame}

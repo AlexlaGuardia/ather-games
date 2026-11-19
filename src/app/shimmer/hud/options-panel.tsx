@@ -46,7 +46,7 @@ export function OptionSlider({ label, value, min = 0, max = 1, step = 0.05, onCh
 export const OptionHead = ({ children, tone = 'hk-soft' }: { children: React.ReactNode; tone?: string }) =>
   <div className={`hk-label pt-2 text-[14px] ${tone}`}>{children}</div>
 
-export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, dev, initial = 'game' }: {
+export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, dev, initial = 'game', leave }: {
   onClose: () => void
   /**
    * The keeper of the realm (`/api/owner`). Gates the Dev TAB. ⚠ This flag hides the DOOR; the dev
@@ -62,6 +62,8 @@ export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, d
   controls?: React.ReactNode
   dev?: React.ReactNode
   initial?: OptionsTab
+  /** replaces The Room + All games (the open world puts its Keepers list there, Alex 11-19) */
+  leave?: React.ReactNode
 }) {
   const [tab, setTab] = useState<OptionsTab>(initial)
   const tabs: [OptionsTab, string][] = [['game', 'Game'], ['video', 'Video'], ['sound', 'Sound'], ['controls', 'Controls']]
@@ -79,8 +81,10 @@ export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, d
             loses progress. */}
         <OptionRow onClick={onClose} label="▶ Resume" tail="esc" />
         {game}
-        <OptionRow href="/room?wall=0" label="⌂ The Room" tail="leave" />
-        <OptionRow href="/arcade/all" label="▦ All games" tail="arcade" />
+        {leave ?? (<>
+          <OptionRow href="/room?wall=0" label="⌂ The Room" tail="leave" />
+          <OptionRow href="/arcade/all" label="▦ All games" tail="arcade" />
+        </>)}
         <p className="pt-1 text-[13px] italic leading-relaxed hk-faint" style={hearthDisplay}>
           Your world saves itself as you play. Leaving is never a loss.
         </p>

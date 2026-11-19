@@ -8,7 +8,9 @@ import { saveOwner, saveOwnerResolved, SAVE_OWNER_EVENT } from '@/lib/save-slot'
 import { ensureRoster, addKeeper, swapKeeper, keeperBirthRune, ROSTER_CAP, type Roster } from '@/lib/keeper-roster'
 import { RUNES } from '../play3d/birth/runes.data'
 
-export function KeepersSection() {
+/** `canSwitch` false = the list shows but picking another keeper or making a new one waits for the garden (Alex 11-19: "they
+ *  have to be in the garden to switch"). The Character tab passes nothing (true), the Options list passes the page's answer. */
+export function KeepersSection({ canSwitch = true, title = 'Keepers' }: { canSwitch?: boolean; title?: string } = {}) {
   const [owner, setOwner] = useState<string | null>(null)
   const [roster, setRoster] = useState<Roster | null>(null)
   useEffect(() => {
@@ -18,18 +20,19 @@ export function KeepersSection() {
     return () => window.removeEventListener(SAVE_OWNER_EVENT, on)
   }, [])
   if (!owner || !roster) return null
-  const go = (id: string) => { if (id !== roster.active && swapKeeper(id, owner)) location.reload() }
-  const fresh = () => { const id = addKeeper(owner); if (id && swapKeeper(id, owner)) location.reload() }
+  const go = (id: string) => { if (canSwitch && id !== roster.active && swapKeeper(id, owner)) location.reload() }
+  const fresh = () => { if (!canSwitch) return; const id = addKeeper(owner); if (id && swapKeeper(id, owner)) location.reload() }
   return (
     <div data-keepers className="mt-4">
-      <HearthLabel>Keepers</HearthLabel>
+      <HearthLabel>{title}</HearthLabel>
+      {!canSwitch && <p data-keepers-locked className="mt-1 text-[12.5px] italic leading-snug" style={{ ...hearthDisplay, color: H.inkFaint }}>Go home to your garden to switch keepers or make a new one.</p>}
       <div className="flex flex-col gap-1.5 mt-1.5">
         {roster.keepers.map(k => {
           const rid = keeperBirthRune(k.id, owner)
           const name = rid ? RUNES.find(x => x.id === rid)?.name ?? rid : null
           const on = k.id === roster.active
           return (
-            <button key={k.id} type="button" data-keeper={k.id} data-active={on ? '1' : '0'} onClick={() => go(k.id)}
+            <button key={k.id} type="button" data-keeper={k.id} data-active={on ? '1' : '0'} onClick={() => go(k.id)} disabled={!canSwitch && !on}
               className="flex items-center gap-2.5 rounded-[12px] px-3 py-2 text-left"
               style={{ background: on ? 'rgba(200,100,42,.14)' : 'rgba(255,250,235,.5)', boxShadow: on ? `inset 0 0 0 1.5px ${H.ember}` : `inset 0 0 0 1px ${H.rule}` }}>
               <span className="text-[16px] font-semibold" style={{ ...hearthDisplay, color: name ? H.ink : H.inkFaint }}>{name ?? 'not yet born'}</span>
@@ -39,7 +42,7 @@ export function KeepersSection() {
         })}
       </div>
       {roster.keepers.length < ROSTER_CAP && (
-        <div className="mt-2 flex justify-end"><HearthButton small onClick={fresh}>New keeper</HearthButton></div>
+        <div className="mt-2 flex justify-end"><HearthButton small onClick={fresh} disabled={!canSwitch}>New keeper</HearthButton></div>
       )}
     </div>
   )
