@@ -6,6 +6,7 @@
 import {
   snapCorner, straighten, runKeys, edgeRect, edgeEnds, wallBoxes, canLay, lay, raze, adoptWalls, WALL_T, WALL_H, MAX_RUN, WALL_MATS, type Walls,
   findRooms, roofMesh, adoptRoof, ROOF_PITCH,
+  pieceAt, toggleDoor, toggleWindow, paintWall, paintFloor, floorOf, adoptFloors, roomAt, DOOR_H,
 } from './plot-walls'
 import { WALL_T as ROOM_T, WALL_H as ROOM_H } from './rooms'
 import { newInv, give, countOf } from '../shared/inventory'
@@ -94,6 +95,34 @@ const box = (x0: number, z0: number, x1: number, z1: number): Record<string, { m
   const xs = g.roof.filter((_, n) => n % 3 === 0); ok(Math.min(...xs) === -0.3 && Math.max(...xs) === 6.3, 'the eaves overhang the walls by 0.3 m')
   ok(f.slabs.length === 1 && f.slabs[0].x0 === -0.3, 'flat = one slab with the overhang') }
 ok(adoptRoof('hip') === 'hip' && adoptRoof('dome') === 'gable' && adoptRoof(undefined) === 'gable', 'a saved roof style round-trips; anything else is a gable')
+
+// ── slice 3: doors, windows, paint
+{ const w0 = box(0, 0, 4, 3)
+  ok(pieceAt(w0, 1.5, 0.1) === 'h,1,0' && pieceAt(w0, 2, 1.5) === null, 'a tap finds the piece under it, nothing in the middle of a room')
+  const d = toggleDoor(w0, 'h,1,0')
+  ok(d.ok && d.walls['h,1,0'].kind === 'door' && (d.walls['h,2,0']?.kind === 'door' || d.walls['h,0,0']?.kind === 'door'), 'a door takes the tapped metre and its neighbour')
+  if (d.ok) {
+    ok(findRooms(d.walls).length === 1, 'a room with a door is still a room')
+    const b = wallBoxes(d.walls, 0).filter((_, n) => Object.values(d.walls)[n].kind === 'door')
+    ok(b.length === 2 && b.every(x => x.y0 === DOOR_H), 'a door is open from the floor to its lintel (the walker passes)')
+    const W2 = terrainWorld({ ground: () => 0, water: () => [], solids: (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number) => wallBoxes(d.walls, 0).filter(q => q.x0 < x1 && q.x1 > x0 && q.y0 < y1 && q.y1 > y0 && q.z0 < z1 && q.z1 > z0) })
+    const doorX = d.walls['h,2,0']?.kind === 'door' ? 2 : 1
+    ok(W2.bodyFree(doorX, 0, 0) && !W2.bodyFree(3.5, 0, 0), 'the walker fits through the doorway, not through the wall beside it')
+    const back = toggleDoor(d.walls, 'h,1,0'); ok(back.ok && Object.values(back.walls).every(x => !x.kind), 'tapping a door fills both halves back in')
+    const win = toggleWindow(d.walls, 'h,1,0'); ok(!win.ok, 'a doorway cannot also be a window')
+  }
+  ok(!toggleDoor({ 'h,0,0': { mat: 'goldwood' } }, 'h,0,0').ok, 'a lone metre of wall is too short for a door')
+  const wi = toggleWindow(w0, 'v,0,1'); ok(wi.ok && wi.walls['v,0,1'].kind === 'window' && findRooms(wi.walls).length === 1, 'a window is one metre; the room still stands')
+  if (wi.ok) ok(wallBoxes(wi.walls, 0).every(x => x.y0 === -0.5), 'a window is solid to the walker')
+  let inv2 = give(newInv(0), 'dawnwood_plank', 3).inv
+  const pw = paintWall(w0, inv2, 'h,1,0', 'dawnwood')
+  ok('walls' in pw && pw.walls['h,1,0'].mat === 'dawnwood' && countOf(pw.inv, 'dawnwood_plank') === 2 && countOf(pw.inv, 'goldwood_plank') === 1, 'painting a piece takes a plank of the new wood and gives the old one back')
+  ok('why' in paintWall(w0, newInv(0), 'h,1,0', 'shimmeroak'), 'no planks of that wood, no paint')
+  const room = findRooms(w0)[0], fl = paintFloor(undefined, room, 'shimmeroak')
+  ok(Object.keys(fl).length === 12 && floorOf(fl, 2, 1) === 'shimmeroak' && floorOf(fl, 9, 9) === 'goldwood', 'painting a floor paints the whole room; unpainted is Goldwood')
+  ok(roomAt(findRooms(w0), 2.5, 1.5)?.key === room.key && roomAt(findRooms(w0), 9, 9) === null, 'a tap inside a room finds it')
+  ok(Object.keys(adoptFloors({ '1,2': 'dawnwood', '3,x': 'goldwood', '4,4': 'iron' })).length === 1, 'saved floors round-trip; junk dropped')
+  ok(adoptWalls({ 'h,1,1': { mat: 'goldwood', kind: 'door' }, 'h,2,2': { mat: 'goldwood', kind: 'gate' } })['h,1,1'].kind === 'door' && !adoptWalls({ 'h,2,2': { mat: 'goldwood', kind: 'gate' } })['h,2,2'].kind, 'a saved door/window keeps its kind; an unknown kind is a plain wall') }
 
 console.log(`plot-walls: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  ✗ ' + f)
