@@ -4,7 +4,9 @@
 //   1. the four sides close one rectangular room of 20 m² (__walls.rooms), 18 planks spent
 //   2. the roof buttons switch the house's style (gable -> hip -> flat), saved (Works.roof)
 //   3. Walls down drops them in plan mode (__walls.down), Walls up / leaving plan mode puts them back
-//   4. a reload keeps the room and the style; 0 page errors. Screenshots: gable, hip, flat, walls down.
+//   4. a reload keeps the room and the style; 0 page errors.
+//   5-8 (slice 3): Door taps a 2 m doorway into the front wall, Window one pane into the side, Paint turns a wall and the
+//   whole floor Dawnwood (a plank swap for the wall), and after the reload the keeper walks in through the door. Screenshots: gable, hip, flat, walls down.
 // SETUP (stated): bag = 30 goldwood planks, no works. Hooks: __ather.tp, __build.to (VIEW only), __build.view / __walls (read).
 //   npx tsx scripts/plot-house-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
@@ -51,12 +53,13 @@ try {
   await p.evaluateOnNewDocument(() => {
     if (sessionStorage.getItem('house')) return; sessionStorage.setItem('house', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star')
-    const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'repeater', n: 1 }; slots[8] = { id: 'goldwood_plank', n: 30 }
+    const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'repeater', n: 1 }; slots[8] = { id: 'goldwood_plank', n: 30 }; slots[9] = { id: 'dawnwood_plank', n: 6 }
     localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
     localStorage.removeItem('open.works.v1')
   })
   const planks = () => p.evaluate(() => ((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{}').slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, s) => t + (s?.id === 'goldwood_plank' ? s.n : 0), 0))
   const saved = () => p.evaluate(() => { const w = JSON.parse(localStorage.getItem('open.works.v1') ?? '{}'); return { walls: Object.keys(w.walls ?? {}).length, roof: w.roof } })
+  const savedFull = () => p.evaluate(() => { const w = JSON.parse(localStorage.getItem('open.works.v1') ?? '{}'); return { walls: (w.walls ?? {}) as Record<string, { mat: string; kind?: string }>, floors: (w.floors ?? {}) as Record<string, string> } })
   const walls = () => p.evaluate(() => { const w = (window as any).__walls; return w ? { rooms: w.rooms(), down: w.down(), roof: w.roof() } : null })
   const hideCard = () => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
   const shot = async (n: string) => { await hideCard(); try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
@@ -88,11 +91,38 @@ try {
   await tap('[data-roof="gable"]'); await sleep(500)
   ok(await tap('[data-act="walls-down"]') && await poll(async () => (await walls())?.down === true), '3. Walls down drops them'); await shot('house-4-down')
   await tap('[data-act="walls-down"]'); ok(await poll(async () => (await walls())?.down === false), '   Walls up puts them back')
-  await tap('[data-act="walls-down"]'); await poll(async () => (await walls())?.down === true)
+  // ── slice 3: a door in the front wall, a window in the side, paint a wall + the floor Dawnwood (all taps)
+  const tapW = async (x: number, z: number) => { await settled(); const v = await view(), a = screenOf(v, x, z); await p.mouse.click(a.x, a.y); await sleep(900) }
+  await tap('[data-tool="door"]'); await sleep(300); await tapW(X0 + 2.5, Z1)
+  const f1 = await savedFull(), doors = Object.entries(f1.walls).filter(([, w]) => w.kind === 'door').map(([k]) => k)
+  ok(doors.length === 2 && doors.every(k => k.startsWith('h,') && k.endsWith(`,${Z1}`)), `5. Door: a tap on the front wall cuts a 2 m doorway (${doors.join(' ')})`)
+  ok(((await walls())?.rooms.length ?? 0) === 1, '   the room still stands with a door in it')
+  await tap('[data-tool="window"]'); await sleep(300); await tapW(X0, Z0 + 1.5)
+  const wins = Object.entries((await savedFull()).walls).filter(([, w]) => w.kind === 'window').map(([k]) => k)
+  ok(wins.length === 1 && wins[0] === `v,${X0},${Z0 + 1}`, `6. Window: a tap on the side wall makes one window (${wins.join(' ')})`)
+  await tap('[data-tool="paint"]'); await sleep(300); await tap('[data-wall-mat="dawnwood"]'); await sleep(300)
+  const d0 = await p.evaluate(() => ((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{}').slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, s) => t + (s?.id === 'dawnwood_plank' ? s.n : 0), 0))
+  await tapW(X1, Z0 + 1.5)
+  const f3 = await savedFull(), d1 = await p.evaluate(() => ((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{}').slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, s) => t + (s?.id === 'dawnwood_plank' ? s.n : 0), 0))
+  ok(f3.walls[`v,${X1},${Z0 + 1}`]?.mat === 'dawnwood' && d0 - d1 === 1, `7. Paint: a tapped wall turns Dawnwood for one plank (${f3.walls[`v,${X1},${Z0 + 1}`]?.mat}, ${d0 - d1})`)
+  await tapW((X0 + X1) / 2, (Z0 + Z1) / 2)
+  const fl = Object.values((await savedFull()).floors)
+  ok(fl.length === 20 && fl.every(m => m === 'dawnwood'), `   a tapped floor paints the whole room (${fl.length} cells)`)
+  await shot('house-5-door-window-paint')
+  await tap('[data-act="walls-down"]'); await poll(async () => (await walls())?.down === true); await shot('house-6-down-painted')
   await tap('[data-act="land"]'); ok(await poll(async () => (await walls())?.down === false), '   leaving plan mode puts them back up')
   await p.reload({ waitUntil: 'load', timeout: 180000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 })
   ok(await poll(async () => { const w = await walls(); return !!w && w.rooms.length === 1 && w.roof === 'gable' }, 30000), '4. a reload keeps the room and its roof style')
+  // 8. walk in through the door: from 1.6 m outside the doorway, facing it (yaw 0 looks -z), hold W
+  const dk = Object.entries((await savedFull()).walls).filter(([, w]) => w.kind === 'door').map(([k]) => +k.split(',')[1])
+  const doorX = (Math.min(...dk) + Math.max(...dk) + 1) / 2
+  await p.mouse.click(550, 340); await sleep(400)
+  await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), doorX, Z1 + 1.6); await sleep(1500)
+  await p.keyboard.down('KeyW'); await sleep(3500); await p.keyboard.up('KeyW'); await sleep(500)
+  const inside = await p.evaluate(() => { const a = (window as any).__ather.state(); return { x: a.px, z: a.pz } })
+  ok(inside.z < Z1 - 0.3 && inside.z > Z0 && Math.abs(inside.x - doorX) < 1.2, `8. the keeper walks in through the door (ended at ${inside.x.toFixed(1)}, ${inside.z.toFixed(1)}; the wall line is z ${Z1})`)
+  await shot('house-7-inside')
   ok(errs.length === 0, `   0 page errors${errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''}`)
 } finally { await br.close() }
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)
