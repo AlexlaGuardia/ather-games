@@ -53,4 +53,11 @@ const fresh = (z = -6) => { const c = newCombat(1); const h = spawnHollow(c, T, 
 }
 // what the open world does not carry yet comes back null (the page says so before paying)
 ok(runCast(newCombat(1), T, eye, fwd, castForMove('meltbore')) === null, 'meltbore: a channel cast did something')
+// a Hollow a cast finishes BETWEEN steps still dies properly: one kill event + one grey-matter drop (11-19, was swept silently)
+{
+  const { c, h } = fresh(-20); h.hp = 0
+  stepCombat(c, T, { x: 0, y: 0, z: 0 }, 0.05)
+  const kills = c.events.filter(e => e.kind === 'hit' && e.killed).length
+  ok(c.drops.length === 1 && kills === 1 && c.hollows.length === 0, `between-step kill: drops ${c.drops.length}, kill events ${kills}, left ${c.hollows.length}`)
+}
 console.log(`combat-casts: ${pass}/${fail}`); process.exit(fail ? 1 : 0)
