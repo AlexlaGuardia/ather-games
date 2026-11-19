@@ -15,7 +15,7 @@
  */
 
 import { useState, useMemo } from 'react'
-import { DEV_PAGES, DEV_GROUPS, DEV_GROUP_ORDER, type DevPage } from './dev-pages'
+import { DEV_PAGES, DEV_GROUPS, DEV_GROUP_ORDER, DEV_ERAS, DEV_ERA_ORDER, type DevPage, type DevEra } from './dev-pages'
 import { bandOf, BAND_LABELS, EDITOR_BANDS, type Band } from './editor-bands.generated'
 
 /**
@@ -26,6 +26,8 @@ import { bandOf, BAND_LABELS, EDITOR_BANDS, type Band } from './editor-bands.gen
  * the shipped voxel game imports. The badge puts that measurement on the card so nobody has to take
  * it again, and `editor-bands.generated.ts` is DERIVED, so it cannot rot into a comfortable answer.
  */
+const BAND_SHOWN: Record<Band, string> = { live: 'Voxel', legacy: 'Play3d', orphan: 'Orphaned', opaque: 'Opaque', tool: 'Tool' }
+
 const BAND_STYLE: Record<Band, string> = {
   live:   'border-emerald-400/30 text-emerald-300/80',
   legacy: 'border-amber-400/30 text-amber-300/80',
@@ -60,7 +62,7 @@ export default function DevIndex({
 }) {
   const [q, setQ] = useState('')
   const [bandFilter, setBandFilter] = useState<Band | null>(null)
-  const [protoOpen, setProtoOpen] = useState(false)
+  const [oldOpen, setOldOpen] = useState(false)
   const query = q.trim().toLowerCase()
 
   const matchPage = (p: DevPage) =>
@@ -102,18 +104,39 @@ export default function DevIndex({
     return [...by.entries()]
   }, [eds])
 
+
+  const renderCards = (list: DevPage[]) => (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-2">
+      {list.map(p => (
+        <a
+          key={p.path}
+          href={p.path}
+          className="block px-3.5 py-3 rounded-md border border-white/8 bg-white/[0.02]
+                     hover:border-violet-400/40 hover:bg-white/[0.06] transition-all group"
+        >
+          <span className="flex items-baseline justify-between gap-2">
+            <span className="text-[13px] text-white/90 group-hover:text-white font-medium">{p.title}</span>
+            <code className="text-[10px] text-white/30 group-hover:text-violet-300/70 font-mono shrink-0">
+              {p.path}
+            </code>
+          </span>
+          <span className="block text-[11px] text-white/55 mt-1 leading-snug">{p.blurb}</span>
+        </a>
+      ))}
+    </div>
+  )
+
   return (
     <div>
       <div className="flex items-baseline gap-3 mb-1">
-        <h2 className="font-display text-2xl text-gold tracking-wide">The dev surface</h2>
+        <h2 className="font-display text-2xl text-gold tracking-wide">Dev tools</h2>
         <span className="text-[11px] text-white/40 tabular-nums">
-          {editors.length} editors &middot; {DEV_PAGES.length} standalone pages
+          {DEV_PAGES.length} pages &middot; {editors.length} editors
         </span>
       </div>
       <p className="text-[12px] text-white/50 mb-5 max-w-[70ch]">
-        Editors live in this hub behind tabs. The standalone pages have their own URL &mdash; most of
-        them are looking glasses, built so one thing can be judged without loading the world and
-        walking to it.
+        The first section is the live game, Ather. The old pixel and voxel versions are folded away at the
+        bottom. Nothing was removed and every link still works.
       </p>
 
       <input
@@ -128,12 +151,47 @@ export default function DevIndex({
         <p className="text-sm text-white/30 py-8">Nothing matches “{q}”.</p>
       )}
 
+      {DEV_ERA_ORDER.map(era => {
+        const inEra = pages.filter(p => p.era === era)
+        const isOld = era === 'old'
+        const edCount = isOld ? eds.length : 0
+        if (inEra.length + edCount === 0) return null
+        /* THE OLD VERSIONS FOLD. A search or a band filter opens them, so a match is never hidden. */
+        const open = isOld ? oldOpen || !!query || !!bandFilter : true
+        return (
+          <section key={era} className="mb-8">
+            <h3 className="font-display text-xs uppercase tracking-[0.18em] text-white/60 mb-1">
+              {isOld ? (
+                <button
+                  onClick={() => setOldOpen(v => !v)}
+                  className="inline-flex items-center gap-1.5 uppercase tracking-[0.18em] hover:text-white/85 transition-colors"
+                  aria-expanded={open}
+                >
+                  <span className={`text-[9px] transition-transform ${open ? 'rotate-90' : ''}`}>&#9656;</span>
+                  {DEV_ERAS[era].label}
+                  <span className="tabular-nums text-white/30 normal-case tracking-normal">{inEra.length + edCount}</span>
+                </button>
+              ) : DEV_ERAS[era].label}
+            </h3>
+            <p className="text-[11px] text-white/40 mb-3 max-w-[70ch]">{DEV_ERAS[era].note}</p>
+            {open && (isOld ? (
+              <>
+                {DEV_GROUP_ORDER.map(g => {
+                  const inGroup = inEra.filter(p => p.group === g)
+                  if (inGroup.length === 0) return null
+                  return (
+                    <div key={g} className="mb-4">
+                      <h4 className="text-[10px] uppercase tracking-[0.16em] text-white/30 mb-1.5">{DEV_GROUPS[g].label}</h4>
+                      {renderCards(inGroup)}
+                    </div>
+                  )
+                })}
       {eds.length > 0 && (
-        <section className="mb-8">
-          <h3 className="font-display text-xs uppercase tracking-[0.18em] text-white/60 mb-1">Editors</h3>
+        <div className="mb-4">
+          <h4 className="text-[10px] uppercase tracking-[0.16em] text-white/30 mb-1.5">Pixel tab editors</h4>
           <p className="text-[11px] text-white/40 mb-2 max-w-[70ch]">
-            Author game data. Open in this hub, no navigation. The badge says which game&rsquo;s data each
-            one actually feeds &mdash; measured from the shipped import graph, not maintained by hand.
+            Pixel-era tabs that open inside this hub. The badge was measured against the voxel game, which is
+            also an old version now, so read it as history, not as what the live game uses.
           </p>
           <div className="flex flex-wrap items-center gap-1.5 mb-3">
             {(Object.keys(BAND_LABELS) as Band[]).map(b => (
@@ -145,7 +203,7 @@ export default function DevIndex({
                   bandFilter === b ? 'bg-white/10' : 'bg-transparent hover:bg-white/5'
                 }`}
               >
-                {BAND_LABELS[b].label} <span className="tabular-nums opacity-60">{bandCounts[b] ?? 0}</span>
+                {BAND_SHOWN[b]} <span className="tabular-nums opacity-60">{bandCounts[b] ?? 0}</span>
               </button>
             ))}
             {bandFilter && (
@@ -179,7 +237,7 @@ export default function DevIndex({
                         <span className="text-[13px] text-white/85 group-hover:text-white">{e.label}</span>
                         {b && (
                           <span className={`shrink-0 px-1 rounded border text-[9px] uppercase tracking-wider ${BAND_STYLE[b.band]}`}>
-                            {BAND_LABELS[b.band].label}
+                            {BAND_SHOWN[b.band]}
                             {/* ⚠ THE COUNT KEEPS THE ACCUSATION HONEST WITHOUT PRINTING THE CASE.
                                 A bare "orphaned" badge is an accusation with no evidence on it and
                                 the only safe response to one is to ignore it — that reasoning still
@@ -198,54 +256,12 @@ export default function DevIndex({
               </div>
             </div>
           ))}
-        </section>
+        </div>
       )}
 
-      {DEV_GROUP_ORDER.map(g => {
-        const inGroup = pages.filter(p => p.group === g)
-        if (inGroup.length === 0) return null
-        /* ★ THE ONE SECTION THAT ASKS TO BE FOLDED IS THE ONE THAT DESCRIBES ITSELF AS UNMAINTAINED.
-           `proto`'s own note is "Standalone routes kept because they still answer a question. Not
-           maintained as tools." — so it is the only group on this page that is explicitly not part of
-           anyone's working set, and it sat open at the bottom taking the same room as the benches.
-           Folded, not removed: the routes still answer their question, and a search still finds them
-           because `pages` is filtered before this runs. */
-        const foldable = g === 'proto' && !query
-        const open = foldable ? protoOpen : true
-        return (
-          <section key={g} className="mb-8">
-            <h3 className="font-display text-xs uppercase tracking-[0.18em] text-white/60 mb-1">
-              {foldable ? (
-                <button
-                  onClick={() => setProtoOpen(v => !v)}
-                  className="inline-flex items-center gap-1.5 uppercase tracking-[0.18em] hover:text-white/85 transition-colors"
-                  aria-expanded={open}
-                >
-                  <span className={`text-[9px] transition-transform ${open ? 'rotate-90' : ''}`}>&#9656;</span>
-                  {DEV_GROUPS[g].label}
-                  <span className="tabular-nums text-white/30 normal-case tracking-normal">{inGroup.length}</span>
-                </button>
-              ) : DEV_GROUPS[g].label}
-            </h3>
-            {open && <p className="text-[11px] text-white/40 mb-3 max-w-[70ch]">{DEV_GROUPS[g].note}</p>}
-            {open && <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-2">
-              {inGroup.map(p => (
-                <a
-                  key={p.path}
-                  href={p.path}
-                  className="block px-3.5 py-3 rounded-md border border-white/8 bg-white/[0.02]
-                             hover:border-violet-400/40 hover:bg-white/[0.06] transition-all group"
-                >
-                  <span className="flex items-baseline justify-between gap-2">
-                    <span className="text-[13px] text-white/90 group-hover:text-white font-medium">{p.title}</span>
-                    <code className="text-[10px] text-white/30 group-hover:text-violet-300/70 font-mono shrink-0">
-                      {p.path}
-                    </code>
-                  </span>
-                  <span className="block text-[11px] text-white/55 mt-1 leading-snug">{p.blurb}</span>
-                </a>
-              ))}
-            </div>}
+
+              </>
+            ) : renderCards(inEra))}
           </section>
         )
       })}

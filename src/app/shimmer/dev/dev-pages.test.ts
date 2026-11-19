@@ -19,9 +19,9 @@
  *
  * Run: `npx tsx src/app/shimmer/dev/dev-pages.test.ts` (repo convention — there is no vitest).
  */
-import { readdirSync, existsSync } from 'node:fs'
+import { readdirSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DEV_PAGES, DEV_GROUPS, DEV_GROUP_ORDER, type DevPage } from './templates/dev-pages'
+import { DEV_PAGES, DEV_GROUPS, DEV_GROUP_ORDER, DEV_ERAS, DEV_ERA_ORDER, type DevPage } from './templates/dev-pages'
 
 let pass = 0
 const fails: string[] = []
@@ -115,6 +115,31 @@ for (const p of DEV_PAGES) {
 }
 
 // ── 4. THE INDEX CAN RENDER ALL OF THEM ───────────────────────────────────────────────────────
+// ★ ERA RULE (2026-11-19): every page names which game it serves, the index leads with the live game,
+// and the pages that import the open world's models are the ones in the live era.
+const LIVE_PAGES = ['folk', 'guns', 'hands', 'keeper-body', 'moglins', 'sounds', 'sky'].map(n => `/shimmer/dev/${n}`)
+const OTHER_PAGES = ['/vault/dev', '/nolmir/dev', '/nolmir/sfx-lab']
+for (const p of DEV_PAGES) {
+  ok(DEV_ERAS[p.era] !== undefined, `UNKNOWN ERA: ${p.path} is in "${p.era}", which DEV_ERAS does not define`)
+}
+ok(DEV_ERA_ORDER[0] === 'live', 'LIVE GAME MUST LEAD: DEV_ERA_ORDER[0] is not "live"')
+ok(DEV_ERA_ORDER[DEV_ERA_ORDER.length - 1] === 'old', 'OLD VERSIONS MUST BE LAST: they are the folded archive')
+for (const e of DEV_ERA_ORDER) ok(DEV_ERAS[e] !== undefined, `ORDERED ERA UNDEFINED: "${e}"`)
+for (const path of LIVE_PAGES) {
+  const p = DEV_PAGES.find(x => x.path === path)
+  ok(p !== undefined && p.era === 'live', `LIVE PAGE NOT LIVE: ${path} serves the open world but is ${p ? `in era "${p.era}"` : 'unregistered'}`)
+}
+for (const path of OTHER_PAGES) ok(DEV_PAGES.find(x => x.path === path)?.era === 'other', `OTHER-GAME PAGE MISPLACED: ${path} should be era "other"`)
+// A page imports the open world's models => it must not sit in the archive. Reading the source is the
+// measurement; a hand list alone is a mirror. locomotion and day-night alone do not count (11-14 sweep).
+for (const p of DEV_PAGES.filter(x => x.era === 'old' && x.path.startsWith('/shimmer/dev/'))) {
+  const f = join(DEV, p.path.slice('/shimmer/dev/'.length), 'page.tsx')
+  if (!existsSync(f)) continue
+  const imports = [...readFileSync(f, 'utf8').matchAll(/from '[./]*\/open\/shared\/([^']+)'/g)].map(m => m[1])
+  const modelImports = imports.filter(i => i !== 'locomotion' && i !== 'day-night')
+  ok(modelImports.length === 0, `OLD PAGE IMPORTS THE LIVE GAME: ${p.path} imports open/shared/${modelImports.join(', ')} but is filed under old versions`)
+}
+
 // ⚠ A group missing from DEV_GROUP_ORDER does not error — it silently renders NOTHING, so the
 // pages in it vanish from the index while still passing every check above. That is this file's own
 // failure mode wearing a costume, so it gets an assert of its own.

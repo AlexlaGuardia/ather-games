@@ -30,6 +30,31 @@
 
 export type DevGroup = 'glass' | 'bench' | 'editor' | 'proto'
 
+/**
+ * ★ 2026-11-19. Alex: "im not sure whats what.. clean this page up a bit of stale tools from voxel
+ * and the pixel versions". `group` says what KIND of tool a page is; `era` says which GAME it serves,
+ * and the index leads with era. `live` = imports open/shared models (the open world). `old` = the
+ * voxel / play3d / pixel versions, kept and still routable, folded away. `other` = a different game.
+ */
+export type DevEra = 'live' | 'other' | 'old'
+
+export const DEV_ERAS: Record<DevEra, { label: string; note: string }> = {
+  live: {
+    label: 'Ather, the live game',
+    note: 'Tools for the open world: the Ather plot, the Wilds and the continent. Start here.',
+  },
+  other: {
+    label: 'Other games',
+    note: 'Tools for the vault and Nolmir.',
+  },
+  old: {
+    label: 'Old versions (pixel and voxel)',
+    note: 'Tools for the earlier pixel and voxel games. Nothing here is deleted and every route still works.',
+  },
+}
+
+export const DEV_ERA_ORDER: DevEra[] = ['live', 'other', 'old']
+
 export interface DevPage {
   /** Route path, exactly as the browser sees it. */
   path: string
@@ -38,6 +63,8 @@ export interface DevPage {
   /** One line, lifted from the page's own header comment. */
   blurb: string
   group: DevGroup
+  /** Which game this serves. `live` = the open world (Ather plot, the Wilds, the continent). */
+  era: DevEra
   /** Extra search terms for Ctrl-K. */
   keywords?: string[]
 }
@@ -64,10 +91,19 @@ export const DEV_GROUPS: Record<DevGroup, { label: string; note: string }> = {
 export const DEV_PAGES: DevPage[] = [
   // ── Looking glasses ─────────────────────────────────────────────────────────────────────────
   {
+    path: '/shimmer/dev/folk',
+    title: 'The Folk Bench',
+    blurb: 'The human NPC rig: Gregory and four unnamed folk, beside a keeper for height and a Moglin for scale.',
+    group: 'glass',
+    era: 'live',
+    keywords: ['folk', 'npc', 'gregory', 'villager', 'human', 'rig', 'character', 'wave', 'talk'],
+  },
+  {
     path: '/shimmer/dev/panel',
     title: 'The keeper panel',
     blurb: 'The inventory panel over a fabricated keeper, so a dark seat can be read without earning 75 Marks first.',
     group: 'glass',
+    era: 'old',
     keywords: ['panel', 'inventory', 'seats', 'vessel', 'bracelet', 'focus', 'gear', 'satchel', 'letters', 'gems'],
   },
   {
@@ -75,6 +111,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'The Grey',
     blurb: 'A Hollow, at the hour it actually exists, next to the ground it has to stand out from.',
     group: 'glass',
+    era: 'old',
     keywords: ['hollow', 'night', 'silhouette', 'contrast', 'luma'],
   },
   {
@@ -82,6 +119,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'The Ather sky',
     blurb: 'The Core at every hour: blaze by day, banked to a veined coal by night, the rim kindling in the turn.',
     group: 'glass',
+    era: 'live',
     keywords: ['sky', 'core', 'day', 'night', 'dusk', 'dawn', 'flecks', 'coal', 'canon'],
   },
   {
@@ -89,6 +127,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Building vocabulary',
     blurb: 'Every building material, drawn the way the world draws it, mixed and re-rollable.',
     group: 'glass',
+    era: 'old',
     keywords: ['wall', 'texture', 'stone', 'brick', 'palette', 'material'],
   },
   {
@@ -96,6 +135,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'The Hollow Bench',
     blurb: 'Can a Hollow be findable at night without owning a light?',
     group: 'glass',
+    era: 'old',
     keywords: ['hollow', 'grey', 'borrowed specular', 'emissive', 'enemy', 'night', 'canon'],
   },
   {
@@ -103,6 +143,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'The Clay Bench',
     blurb: 'Does a rigid-part moglin, posed and shot on twos, read as clay?',
     group: 'glass',
+    era: 'old',
     keywords: ['claymation', 'stop motion', 'moglin', 'rig', 'animation', 'doll', 'character'],
   },
   {
@@ -110,6 +151,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'The Keeper Body Bench',
     blurb: 'Rayman or a segmented doll? One rig, two looks, side by side.',
     group: 'glass',
+    era: 'live',
     keywords: ['keeper', 'body', 'rayman', 'doll', 'rig', 'joints', 'walk', 'multiplayer', 'avatar'],
   },
   {
@@ -117,6 +159,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'The Moglin Bench',
     blurb: 'Plush or chibi? The Moglin in tones and trade garb, beside a keeper for height.',
     group: 'glass',
+    era: 'live',
     keywords: ['moglin', 'model', 'folk', 'villager', 'plush', 'chibi', 'garb', 'rig', 'character'],
   },
   {
@@ -124,6 +167,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'The Hands Tuner',
     blurb: 'Place the first-person hands in each key pose: rest, run, jump, cast.',
     group: 'glass',
+    era: 'live',
     keywords: ['hands', 'gloves', 'first person', 'viewmodel', 'tune', 'run', 'jump', 'cast', 'pose'],
   },
   {
@@ -131,6 +175,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Game sounds',
     blurb: 'Audition every game sound and vote yay or nay: only a yay plays in the game.',
     group: 'glass',
+    era: 'live',
     keywords: ['sound', 'sfx', 'audio', 'footstep', 'vote', 'yay', 'nay'],
   },
   {
@@ -138,6 +183,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'The Gun Tuner',
     blurb: 'Place the held gun and the gloves on it: hip, aim, run, fire.',
     group: 'glass',
+    era: 'live',
     keywords: ['gun', 'weapon', 'first person', 'viewmodel', 'tune', 'aim', 'ads', 'recoil', 'sights', 'hands'],
   },
   {
@@ -145,6 +191,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'The Chips',
     blurb: 'Every bucket breaking side by side, so the feel can be judged instead of argued.',
     group: 'glass',
+    era: 'old',
     keywords: ['particle', 'vfx', 'block break', 'mining'],
   },
   {
@@ -152,6 +199,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'The Court',
     blurb: 'The crossing station on a bare plane, at any tier, from any distance.',
     group: 'glass',
+    era: 'old',
     keywords: ['landmark', 'station', 'crossing', 'tier', 'fog'],
   },
   {
@@ -159,6 +207,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'The Green',
     blurb: "The Snagbarrows' set piece on a bare plane, free or taken, from any bearing.",
     group: 'glass',
+    era: 'old',
     keywords: ['snagbarrows', 'hold', 'town', 'collar', 'audience'],
   },
   {
@@ -166,6 +215,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Plot ring',
     blurb: 'The spirits that live about your fold, standing still enough to look at.',
     group: 'glass',
+    era: 'old',
     keywords: ['home plot', 'spirits', 'fold', 'ambient'],
   },
   {
@@ -173,6 +223,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'The Seam',
     blurb: 'The shipped shimmer, standing still so it can be looked at.',
     group: 'glass',
+    era: 'old',
     keywords: ['shimmer', 'seam', 'effect'],
   },
   {
@@ -180,6 +231,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Spirit portraits',
     blurb: 'Every locked spirit portrait, in the states the grimoire draws.',
     group: 'glass',
+    era: 'old',
     keywords: ['grimoire', 'spirit', 'art', 'portrait'],
   },
   {
@@ -187,6 +239,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Item icons',
     blurb: "Every icon the game can put in a keeper's hands, drawn the way the bag draws it.",
     group: 'glass',
+    era: 'old',
     keywords: ['item', 'icon', 'inventory', 'hotbar', 'bag'],
   },
   {
@@ -194,6 +247,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'HUD corner',
     blurb: 'The HUD corner, alone, with no world under it.',
     group: 'glass',
+    era: 'old',
     keywords: ['ui', 'hud', 'mana', 'health', 'sockets'],
   },
 
@@ -203,6 +257,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Moves bench',
     blurb: 'Cast behaviour with no world under it — tremor sense, flame cloak, channel and bore.',
     group: 'bench',
+    era: 'old',
     keywords: ['cast', 'rune', 'meltbore', 'tremor', 'flame cloak', 'channel'],
   },
   {
@@ -210,6 +265,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Hollow voice',
     blurb: 'Hear a thing walk around you, and see where it actually is. Headphones required.',
     group: 'bench',
+    era: 'old',
     keywords: ['audio', 'sound', 'stalker', 'listening', 'positional'],
   },
   {
@@ -217,6 +273,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Rune Hold',
     blurb: 'Greybox, walkable, with the mannequin on a live toggle. Settles how tall the keeper is.',
     group: 'bench',
+    era: 'old',
     keywords: ['greybox', 'town', 'scale', 'proportion', 'keeper height'],
   },
   {
@@ -224,6 +281,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Structure worktable',
     blurb: 'Build a building on a bare pad, save it, load it back.',
     group: 'bench',
+    era: 'old',
     keywords: ['structure', 'house', 'build', 'blocks', 'pad'],
   },
   {
@@ -231,6 +289,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Bed shelf',
     blurb: 'One garden bed at every growth stage — rim, sown patch, sign, crop — drawn by the shipped renderers, from any angle. Judge the beds here, not from one prod screenshot.',
     group: 'bench',
+    era: 'old',
     keywords: ['bed', 'garden', 'crop', 'stage', 'sign', 'rim', 'farming', 'shelf'],
   },
   {
@@ -238,6 +297,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Passage bench',
     blurb: 'The tunnel under Rune Hold, the cavern market and the arcade room, drawn by the shipped scene at a keeper\'s eye. Judge the look here; walk it through the Passage door.',
     group: 'bench',
+    era: 'old',
     keywords: ['passage', 'market', 'stall', 'arcade', 'cabinet', 'tunnel', 'cavern', 'rune hold', 'merchant'],
   },
   {
@@ -245,6 +305,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Rune Hold look',
     blurb: 'The town in the Passage\'s materials: stone houses, the hillside, cobbles and lanterns, over the town\'s own grid. Before/after and day/night toggles.',
     group: 'bench',
+    era: 'old',
     keywords: ['rune hold', 'town', 'look', 'stone', 'houses', 'roof', 'lantern', 'cobbles', 'before', 'after'],
   },
   {
@@ -252,6 +313,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Travelers Station bench',
     blurb: 'The spaceport: the stone terminal, the field of berths, the departures board and the Hold\'s ship, drawn by the shipped scene at a keeper\'s eye.',
     group: 'bench',
+    era: 'old',
     keywords: ['travelers station', 'spaceport', 'berth', 'ship', 'terminal', 'departures', 'field', 'rune hold'],
   },
   {
@@ -259,6 +321,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Station shelf',
     blurb: 'Every modelled station side by side, drawn by the shipped renderer. Judge the shapes here.',
     group: 'bench',
+    era: 'old',
     keywords: ['station', 'model', 'cauldron', 'oven', 'hearth', 'kiln', 'bench', 'shelf'],
   },
   {
@@ -266,6 +329,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Carved Hearth menus',
     blurb: 'Direction B for the in-game menus, mocked on the crafter: carved wood frame, parchment, one ember accent. Toggle against the shipped skin.',
     group: 'proto',
+    era: 'old',
     keywords: ['menu', 'ui', 'crafter', 'panel', 'hearth', 'parchment', 'redesign', 'modern'],
   },
   {
@@ -273,6 +337,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'HUD look-call',
     blurb: 'The always-on HUD three ways over one real world frame — now, light touch, full hearth — by day and by night.',
     group: 'proto',
+    era: 'old',
     keywords: ['hud', 'hotbar', 'health', 'mana', 'minimap', 'hearth', 'mock', 'look'],
   },
   {
@@ -280,6 +345,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'HUD kit (live pieces)',
     blurb: 'The shippable Phase 9 HUD components from ui/hearth-hud, mounted over the hud-mock frame — light touch or full hearth, day or night. What the swap will draw.',
     group: 'proto',
+    era: 'old',
     keywords: ['hud', 'hotbar', 'health', 'mana', 'minimap', 'hearth', 'kit', 'phase 9'],
   },
 
@@ -289,6 +355,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Dialogue editor',
     blurb: 'Visual conversation graphs for NPCs.',
     group: 'editor',
+    era: 'old',
     keywords: ['npc', 'conversation', 'talk', 'graph', 'nodes'],
   },
   {
@@ -296,6 +363,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Vault map editor',
     blurb: 'Pick a ladder slot (Area x Level), paint the run, save it live.',
     group: 'editor',
+    era: 'other',
     keywords: ['vault', 'map', 'level', 'ladder', 'platformer'],
   },
   {
@@ -303,6 +371,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Crucible editor',
     blurb: 'Nolmir’s integration hub — paint a layout with the mouse, balance-test it.',
     group: 'editor',
+    era: 'other',
     keywords: ['nolmir', 'crucible', 'layout', 'terrarium'],
   },
   {
@@ -310,6 +379,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'SFX vibe lab',
     blurb: 'Three sonic directions mapped to game events, synthesized live, zero assets.',
     group: 'editor',
+    era: 'other',
     keywords: ['nolmir', 'sound', 'sfx', 'audio', 'vibe'],
   },
   {
@@ -317,6 +387,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Luna voice test',
     blurb: 'Pick the voice that IS Luna — 3 voices x 4 moods. Luna stack, not game dev.',
     group: 'editor',
+    era: 'old',
     keywords: ['luna', 'voice', 'tts', 'casting'],
   },
 
@@ -326,6 +397,7 @@ export const DEV_PAGES: DevPage[] = [
     title: "Keeper's Arena",
     blurb: 'Standalone cold-play harness for a spirit fight.',
     group: 'proto',
+    era: 'old',
     keywords: ['battle', 'combat', 'arena', 'fight'],
   },
   {
@@ -333,6 +405,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Birth rune ritual',
     blurb: 'Spin the carousel, pick a rune, be born to it.',
     group: 'proto',
+    era: 'old',
     keywords: ['rune', 'birth', 'ritual', 'onboarding'],
   },
   {
@@ -340,6 +413,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Garden cluster · plan',
     blurb: 'Four folds, and the Green made of the corners they gave, from above.',
     group: 'proto',
+    era: 'old',
     keywords: ['cluster', 'green', 'plot', 'friends', 'multiplayer', 'fold'],
   },
   {
@@ -347,6 +421,7 @@ export const DEV_PAGES: DevPage[] = [
     title: 'Block texture spike',
     blurb: 'Textured against flat, identical geometry, so mipmaps and variation can be compared.',
     group: 'proto',
+    era: 'old',
     keywords: ['texture', 'voxel', 'mipmap', 'tiles'],
   },
 ]
