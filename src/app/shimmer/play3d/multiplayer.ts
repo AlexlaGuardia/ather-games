@@ -238,7 +238,12 @@ export function useMultiplayer(opts: {
     }
 
     connect()
+    // ★ M27 slice 3 (11-19): leaving the page (a travel, a tab close) closes the socket CLEANLY, so the server tells the
+    // instance at once (player_left) instead of peers holding a ghost until they stop hearing from us
+    const leave = () => { closed = true; try { ws?.close(1000, 'leave') } catch { /* gone already */ } }
+    window.addEventListener('pagehide', leave)
     return () => {
+      window.removeEventListener('pagehide', leave)
       closed = true
       if (sendTimer) clearInterval(sendTimer)
       if (retry) clearTimeout(retry)

@@ -35,7 +35,7 @@ export const LOOK_SPRITE = 'lk1:'
 const FIGURES = new Set<string>()
 /** Not heard from in this long = hidden (a killed tab sends no 'left'); play3d uses 90 s for a background tab's timers,
  *  but our hidden tabs CLOSE the socket (a clean 'left'), so a silent peer here is a dead one. */
-const STALE_MS = 20_000
+const STALE_MS = 8_000   // ★ M27 slice 3 (11-19, was 20 s; hub: 2x the 4 s keepalive so one phone hiccup never blinks a friend away). The fast path is the clean close on pagehide
 const LERP = 10
 
 /** The live peer map, for DOM readers outside the page (the Play together panel's roster). A stable box: it points at the
