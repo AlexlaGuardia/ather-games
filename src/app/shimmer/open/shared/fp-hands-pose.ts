@@ -31,10 +31,11 @@ export interface FpTune {
 }
 // ★ ALEX'S TUNE (11-17, from /shimmer/dev/hands "Copy values"): these ARE the shipped hands. Change them in the tuner, not here.
 export const FP_DEFAULTS: Readonly<FpTune> = {
-  X: 0.23, REST_Y: -0.37, Z: -0.56,      // rest: apart, height, distance
-  PITCH: -1.5,             // rest tilt
-  ROLL: 1.02,              // the cuffs turned outward (a hand's cuff hangs at -y; +roll swings it toward +x)
-  SCALE: 1.28,
+  // Alex 11-19 (/shimmer/dev/hands): wider apart, lower, less tilt, the cuffs turned in a little, bigger
+  X: 0.355, REST_Y: -0.415, Z: -0.56,    // rest: apart, height, distance
+  PITCH: -1.4,             // rest tilt
+  ROLL: 0.63,              // the cuffs turned outward (a hand's cuff hangs at -y; +roll swings it toward +x)
+  SCALE: 1.54,
   DROP_Y: 0.4,             // how far a hand drops on its step at a full run: clean out of view below the frame
   SWING_Z: 0.005,          // the hand that stays up comes a touch forward
   STRIDE_M: 5,             // metres per full stride (two steps): each hand drops once per stride

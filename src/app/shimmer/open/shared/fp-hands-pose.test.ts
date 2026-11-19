@@ -13,7 +13,8 @@ const BOTTOM = FP.Z * Math.tan((75 / 2) * Math.PI / 180)   // the frame's bottom
 // rest: both in view, low, cuffs turned outward (right cuff to the right: +roll; left to the left: -roll)
 const still = run(120, () => ({})).out.at(-1)!
 ok(still.R.y > BOTTOM && still.R.y < BOTTOM + 0.12 && still.L.y > BOTTOM, `at rest both hands are in view, low (y ${still.R.y.toFixed(3)} vs edge ${BOTTOM.toFixed(3)})`)
-ok(still.R.roll > 1 && still.L.roll < -1, `cuffs point away from each other (roll R ${still.R.roll.toFixed(2)}, L ${still.L.roll.toFixed(2)})`)
+// the DIRECTION is the rule (right cuff +, left cuff -); the old '> 1' was fitted to ROLL 1.02 and Alex tuned 0.63 on 11-19
+ok(still.R.roll > 0.3 && still.L.roll < -0.3, `cuffs point away from each other (roll R ${still.R.roll.toFixed(2)}, L ${still.L.roll.toFixed(2)})`)
 // run: alternating, opposite phase, each hand rising into view in turn
 const r = run(240, () => ({ speed: FP.RUN_SPEED })).out.slice(60)
 const dR = r.map(p => p.R.y), dL = r.map(p => p.L.y)
