@@ -12,6 +12,7 @@ const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 const br = await puppeteer.launch({ protocolTimeout: 240000, executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const p = await br.newPage()
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e)))
+await p.evaluateOnNewDocument('window.__name = (f) => f')   // tsx wraps named helpers inside evaluate in __name(), which the page lacks (the 90ebd468 frame sampler has one)
 await p.evaluateOnNewDocument(() => { try { localStorage.setItem('ather:shimmer:birthRune', 'star') } catch { /* sandboxed frame */ } })
 await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 1 })
 let fails = 0
