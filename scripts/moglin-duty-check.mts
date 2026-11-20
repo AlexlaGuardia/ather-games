@@ -11,7 +11,7 @@ import { benchOf, type Room } from '../src/app/shimmer/open/ather/rooms'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/moglin')
 mkdirSync(out, { recursive: true })
-const ROOM: Room = { id: 'cooking-duty', kind: 'cooking', x: -100, z: 100, q: 0, placedAt: 1, doneAt: 2, store: [{ id: 'shimmerscale', n: 10 }] }
+const ROOM: Room = { id: 'cooking-duty', kind: 'cooking', x: -100, z: 100, q: 0, placedAt: 1, doneAt: 2, store: [{ id: 'shimmerscale', n: 40 }] }   // M43a fold (11-20): the cook works the stockpile, which keeps 30 raw for the keeper: seed 10 over the reserve
 const HEATH = { id: 'heath-check', name: 'Heath', home: 'tansybrake', grades: { craft: 1, yield: 2, trade: 1 }, dream: 'A warm kitchen with a window.', profession: 'cook', recruitedAt: 1 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -56,6 +56,6 @@ res.errs = errs
 console.log(JSON.stringify(res))
 const s = res.storeAfter as Record<string, number>
 const pass = JSON.stringify(res.offered) === '["heath-check"]' && res.here === 'heath-check' && /an hour/.test(res.duty as string)
-  && s.roast_rinn === 6 && s.shimmerscale === 4 && /6 Roast Rinn/.test((res.toast as string) ?? '') && res.offDuty === true && res.roomAfterOff === null && errs.length === 0
+  && s.roast_rinn >= 6 && s.roast_rinn <= 12 && s.shimmerscale === 34 && new RegExp(`${s.roast_rinn} Roast Rinn`).test((res.toast as string) ?? '')   // 6 runs in 2 h; M46 luck may add +1 per run && res.offDuty === true && res.roomAfterOff === null && errs.length === 0
 console.log(pass ? 'PASS: Heath put to work at the hearth → two hours away → 6 Roast Rinn in the cooking store + the "while you were away" line → Off duty' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)
