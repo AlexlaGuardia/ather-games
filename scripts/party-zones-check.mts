@@ -64,6 +64,18 @@ ok(t1 !== null && t1 <= 5, `2. A travels to the continent: gone from B's Wilds i
 await poll(async () => (await mp(a, 'status')) === 'live' && (await mp(a, 'zone')) === 'open:continent', 240000)
 await toContinent(b, 'B')
 ok(await poll(async () => (await sees(a, bid)) && (await sees(b, aid))), '3. B follows: on the continent they see each other again')
+if (process.argv.includes('--trace')) {   // diagnosis: is A's continent page busy while it draws B?
+  for (const [pg, tag] of [[a, 'A'], [b, 'B']] as const) {
+    const t = Date.now(); await pg.evaluate(() => 1); const rt = Date.now() - t
+    const fps = await pg.evaluate(() => new Promise<number>(r => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else r(n / 3) }; requestAnimationFrame(f) }))
+    const lt = await pg.evaluate(() => new Promise<number>(r => { let worst = 0, last = performance.now(); const id = setInterval(() => { const n = performance.now(); worst = Math.max(worst, n - last - 50); last = n }, 50); setTimeout(() => { clearInterval(id); r(Math.round(worst)) }, 3000) }))
+    console.log(`   trace ${tag} on continent: evaluate ${rt} ms, ${fps.toFixed(1)} fps, worst main-thread stall ${lt} ms`)
+  }
+}
+// ★ Leg 4 measures the GAME's clean close, so start it only once A's page can run JS promptly. Two software-GL continent pages
+// starve a slow box (traced 11-19: A answered a no-op evaluate in 3.3 s, B stalled 9.6 s): a starved page runs its pagehide late,
+// and the leg read 8-17 s on 5 runs while the server saw the same leave in 0.2 s for a page that was not starved.
+await poll(async () => { const t = Date.now(); await a.evaluate(() => 1); return Date.now() - t < 400 }, 90000)
 const t2 = await goneIn(b, aid, () => a.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'domcontentloaded', timeout: 240000 }))
 if (process.argv.includes('--trace')) {   // why leg 4 is slow: what A is, and how B's copy of A ages
   for (let k = 0; k < 6; k++) {
