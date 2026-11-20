@@ -36,6 +36,10 @@ await sleep(9000)
 const frame = async (name = '_frame') => { try { await p.screenshot({ path: `${out}/${name}.png` }) } catch { /* slow */ } }
 await p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
 await p.evaluate((s) => { const A = (window as any).__ather; A.tp(s.x, s.z, s.yaw); A.look(s.yaw, s.pitch) }, spot); await sleep(3000)
+// aim from the keeper's REAL feet height: the spot was found on the bare tile, but the live page sculpts the land to the paths
+// (M18) and its relief differs, so a pitch from the parsed height could miss the water (11-20 sweep: aimed=false)
+{ const py = await p.evaluate(() => (window as any).__ather.state().py) as number; spot.pitch = -Math.atan2(py + 1.62 - 0, 7); console.log(`  feet ${py.toFixed(2)} (parsed ${W.heightAt(spot.x, spot.z).toFixed(2)}), pitch ${spot.pitch.toFixed(3)}`) }
+await p.evaluate((s) => (window as any).__ather.look(s.yaw, s.pitch), spot)
 // the bait's own slot: guns left the bag 11-18, so it is no longer always slot 3
 await p.keyboard.press(`Digit${await p.evaluate(() => (((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots ?? []) as ({ id: string } | null)[]).slice(0, 8).findIndex(s => s?.id === 'bait') + 1) || 3)}`); await sleep(400)
 await p.evaluate((s) => (window as any).__ather.look(s.yaw, s.pitch), spot)
