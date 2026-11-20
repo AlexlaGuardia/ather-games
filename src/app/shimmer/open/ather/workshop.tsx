@@ -14,7 +14,7 @@ import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { HearthFrame, HearthButton, Well, H, hearthDisplay } from '../../ui/hearth'
 import { getInv, setInv, useInv } from '../shared/bag'
-import { countOf, itemDef, makeBait, BAIT_FROM, HOTBAR, SLOTS, type Stack, type Inv } from '../shared/inventory'
+import { countOf, itemDef, give, makeBait, BAIT_FROM, HOTBAR, SLOTS, type Stack, type Inv } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
 import { GROUND_Y, squareAt, sqId } from './plot'
 import { forestryLevel } from './forestry'
@@ -25,7 +25,7 @@ import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
   WALL_H, KEEP_CLEAR, type Works, type Room, type RoomKind, type WorkNear,
-  craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, canPlacePiece, placePiece, pickUpPiece, turnPiece, type Piece,
+  stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, canPlacePiece, placePiece, pickUpPiece, turnPiece, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
@@ -46,6 +46,7 @@ import { TOOL_DEFS } from '../../engine/tools'
 import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw } from './build-mode'
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
+import { advance, enqueue, cancel, dequeue, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, OUT_CAP } from './station-queue'
 import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, GRADE_CATEGORIES, type Village } from './moglins'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -322,7 +323,7 @@ function Catalog({ onPick }: { onPick: () => void }) {
   )
 }
 /** the Walls / Erase tools and the wood picker, in the build bar */
-function WallTools({ owned }: { owned: React.MutableRefObject<ReadonlySet<string>> }) {
+function WallTools({ owned, cat, onCat }: { owned: React.MutableRefObject<ReadonlySet<string>>; cat: boolean; onCat: () => void }) {
   const t = useBuildTool(), mat = useWallMat(), inv = useInv(), down = useWallsDown(), w = useWorks(), roof = w.roof ?? 'gable', owner = useOwner()
   useEffect(() => {
     if (t === 'look') return
@@ -332,6 +333,7 @@ function WallTools({ owned }: { owned: React.MutableRefObject<ReadonlySet<string
   const btn = (on: boolean): React.CSSProperties => ({ border: 0, borderRadius: 10, height: 34, padding: '0 10px', cursor: 'pointer', font: '700 12px system-ui', letterSpacing: '.06em', textTransform: 'uppercase', background: on ? H.ink : 'rgba(255,250,235,.7)', color: on ? '#fff' : H.ink, boxShadow: `inset 0 0 0 1px ${H.rule}` })
   return (
     <div data-wall-tools style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', padding: '5px 8px', borderRadius: 12, background: 'rgba(255,250,235,.82)', boxShadow: '0 2px 8px rgba(0,0,0,.2)' }}>
+      <button type="button" data-act="wall-catalog" aria-pressed={cat} style={btn(cat)} onClick={onCat}>Catalog</button>
       <button type="button" data-tool="walls" style={btn(t === 'walls')} onClick={() => { setPlacing(null); setBuildTool(t === 'walls' ? 'look' : 'walls') }}>Walls</button>
       <button type="button" data-tool="erase" style={btn(t === 'erase')} onClick={() => { setPlacing(null); setBuildTool(t === 'erase' ? 'look' : 'erase') }}>Erase</button>
       {(['door', 'window', 'paint'] as const).map(k => <button key={k} type="button" data-tool={k} style={btn(t === k)} onClick={() => { setPlacing(null); setBuildTool(t === k ? 'look' : k) }}>{k}</button>)}
@@ -440,6 +442,7 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
   const [, tick] = useState(0)
   const anyRaising = w.rooms.some(r => !raised(r))
   useEffect(() => { if (!anyRaising) return; const t = setInterval(() => tick(n => n + 1), 1000); return () => clearInterval(t) }, [anyRaising])
+  useEffect(() => { stationTick(); const t = setInterval(() => stationTick(), 1000); return () => clearInterval(t) }, [])
   return (
     <>
       <PlanningTable />
@@ -924,12 +927,10 @@ export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 8px', borderRadius: 14, background: 'rgba(255,250,235,.88)', boxShadow: '0 2px 10px rgba(0,0,0,.25)', minWidth: 0 }}>
         <button type="button" data-act="land" onClick={() => { setPlacing(null); exitBuild() }}
           style={{ flex: '0 0 auto', border: 0, borderRadius: 10, padding: '0 10px', height: 52, cursor: 'pointer', background: H.ink, color: '#fff', font: '700 12px system-ui', lineHeight: 1.15 }}>Back to<br />keeper</button>
-        <button type="button" data-act="catalog" aria-pressed={cat} onClick={() => { setSel(null); setCat(c => !c) }}
-          style={{ flex: '0 0 auto', border: 0, borderRadius: 10, padding: '0 10px', height: 52, cursor: 'pointer', background: cat ? H.ink : 'rgba(255,250,235,.95)', color: cat ? '#fff' : H.ink, boxShadow: `inset 0 0 0 1px ${H.rule}`, font: '700 12px system-ui', letterSpacing: '.06em', textTransform: 'uppercase' }}>Catalog</button>
         <BuildStrip sel={sel} onSel={k => { setBuildTool('look'); setSel(s => (s === k ? null : k)) }} size={44} />
       </div>
       {cat && <Catalog onPick={() => setCat(false)} />}
-      <WallTools owned={ownedRef} />
+      <WallTools owned={ownedRef} cat={cat} onCat={() => { setSel(null); setCat(c => !c) }} />
       <PlanBom />
       {tool === 'blueprint' && <BlueprintBar />}
       {sel && <BuildCard k={sel} onBuilt={() => setSel(null)} />}
@@ -943,15 +944,54 @@ function FarmHost({ room, onClose }: { room: Room; onClose: () => void }) {
   return <FarmPanel room={room} works={w} setWorks={setWorks} onClose={onClose} />
 }
 
+// ── M43: THE STATION = a work panel + its own STORE panel beside it (desktop side by side; phone stacked) ─────────────
+let openBench: string | null = null   // the room whose panel is open: with no Moglin, the keeper works the queue only then
+/** Re-start a queue's clock at now (its worker changed): the time nobody worked it is never banked. */
+function touchQueue(roomId: string) {
+  const w = getW(), r = w.rooms.find(x => x.id === roomId); if (!r?.queue) return
+  setWorks(setStation(w, roomId, { ...stationOf(r), queue: { ...r.queue, last: Date.now() } }))
+}
+/** Who works a room's queue and how fast: its Moglin (its CRAFT grade), else the keeper while the panel is open, else nobody (0). */
+function workerOf(r: Room, v: Village): { moglin?: Village['moglins'][number]; speed: number } {
+  const m = v.moglins.find(x => x.room === r.id && WORKS_IN[x.profession].includes(r.kind))
+  return m ? { moglin: m, speed: moglinSpeed(m.grades.craft) } : { speed: openBench === r.id ? 1 : 0 }
+}
+/** Run every station queue to now. Offline catch-up is the same call: `last` is a timestamp, the Moglin's hours since are
+ *  worked out of the store and into the output (station-queue.ts: capped by inputs and the 30 cap). */
+export function stationTick(now = Date.now()) {
+  const w = getW(); if (!w.rooms.some(r => r.queue)) return
+  const v = loadVillage(); let nw = w, changed = false
+  for (const r of w.rooms) {
+    if (!r.queue || !raised(r, now)) continue
+    const { speed } = workerOf(r, v)
+    if (speed <= 0) continue
+    nw = setStation(nw, r.id, advance(stationOf(r), now, speed).station); changed = true
+  }
+  if (changed) setWorks(nw)
+}
+const fmtSecs = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); return s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min` : s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s` }
+function useNarrow() {
+  const [n, setN] = useState(() => typeof window !== 'undefined' && window.innerWidth < 760)
+  useEffect(() => { const f = () => setN(window.innerWidth < 760); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [])
+  return n
+}
+const QTYS = [1, 10, 99, 'max'] as const
+type Qty = (typeof QTYS)[number]
+interface Pick { job: Job | null; qty: Qty }
+
 function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
-  const inv = useInv(), w = useWorks(), def = ROOMS[room.kind]
+  const inv = useInv(), w = useWorks(), def = ROOMS[room.kind], bankNow = useBank(), narrow = useNarrow()
   const r = w.rooms.find(x => x.id === room.id) ?? room   // the live room (its store moves under the panel)
-  const store = roomStore(r)
-  const apply = (m: StoreMove) => { if (m.moved) { setWorks(m.works); setInv(m.inv) } else if ('why' in m && m.why) hudSay(m.why, 'info') }
+  const [pick, setPick] = useState<Pick>({ job: null, qty: 10 })
+  useEffect(() => { openBench = room.id; touchQueue(room.id); return () => { if (openBench === room.id) openBench = null } }, [room.id])
   const foods = Object.keys(BAIT_FROM).filter(id => benchCount(r, inv, id) > 0)
-  const kept = [...Array(SLOTS).keys()].filter(at => { const s = inv.slots[at]; return !!s && roomAccepts(r.kind, s.id) })
-  return (
-    <HearthFrame title={def.name} maxWidth={560} onClose={onClose} fixed dataPanel="bench">
+  const inBank = (id: string) => bankCount(bankNow, id)
+  const reach = (id: string) => benchCount(r, inv, id) + inBank(id)
+  const crafts = (jobs: readonly Job[]) => jobs.filter(j => j.in.some(c => reach(c.id) > 0))
+  const cl = (jobs: readonly Job[], title: string, note: string, empty?: string) => <CraftList title={title} note={note} jobs={jobs} r={r} pick={pick} setPick={setPick} empty={empty} />
+  const dim = narrow ? '!max-h-none' : ''
+  const work = (
+    <HearthFrame title={def.name} maxWidth={narrow ? 520 : 520} onClose={onClose} fixed dataPanel="bench" backdrop={false} bodyClass={dim}>
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
         {r.kind === 'rinnshop' && (
           <>
@@ -975,43 +1015,124 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
         {(Object.keys(BENCH) as FocusSkill[]).filter(s => BENCH[s] === r.kind).map(s => <FocusList key={s} r={r} inv={inv} skill={s} />)}
         {r.kind === 'carpentry' && (
           <>
-            <JobList title="Refine" note="Each log works two ways. The bench takes from the room's store first, then your bag." jobs={REFINE.filter(j => benchCount(r, inv, j.in[0].id) > 0)} r={r} inv={inv}
-              empty="No logs to work. Prune trees in the Wilds. Better woods come as your Forestry grows." refine />
-            <JobList title="Furniture" note="Made pieces go to your bag. Set them from the planning table." jobs={PIECE_JOBS} r={r} inv={inv} />
+            {cl(crafts(REFINE), 'Refine', 'Each log works two ways. Pick one, set how many, and the station works it from its store, one log at a time.', 'No logs to work. Prune trees in the Wilds. Better woods come as your Forestry grows.')}
+            {cl(PIECE_JOBS, 'Furniture', 'Made pieces wait in the output. Set them from the planning table.', undefined)}
           </>
         )}
-        {r.kind === 'stonemason' && (
-          <JobList title="Refine" note="Parts for a house plan. The bench takes from the room's store first, then your bag." jobs={STONE_REFINE.filter(j => benchCount(r, inv, j.in[0].id) > 0)} r={r} inv={inv}
-            empty="No blankstone or mana shards to cut. Prospect them in the Wilds." refine />
-        )}
-        {r.kind === 'cooking' && (
-          <JobList title="The hearth" note="Roasts go to your bag. Hold one in the Wilds and click to eat it mid-fight. Meat comes from the Smokehouse in the continent's towns." jobs={ROAST} r={r} inv={inv} refine />
-        )}
-        {r.kind === 'alchemy' && (
-          <JobList title="The cauldron" note="Potions go to your bag. Hold one and click to drink. The cauldron uses the room's store first, then your bag." jobs={BREW} r={r} inv={inv} refine />
-        )}
+        {r.kind === 'stonemason' && cl(crafts(STONE_REFINE), 'Refine', 'Parts for a house plan. Pick one, set how many, and the station cuts it from its store, one stone at a time.', 'No blankstone or mana shards to cut. Prospect them in the Wilds.')}
+        {r.kind === 'cooking' && cl(ROAST, 'The hearth', 'Roasts wait in the output. Hold one in the Wilds and click to eat it mid-fight. Meat comes from the Smokehouse in the continent\'s towns.')}
+        {r.kind === 'alchemy' && cl(BREW, 'The cauldron', 'Potions wait in the output. Hold one and click to drink.')}
+        <QueueView r={r} />
         <MoglinDuty r={r} />
-        <div data-room-store={r.kind}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ ...lab, flex: 1 }}>The store · {store.stacks.length} / {ROOM_STORE_SLOTS} · keeps {ROOM_KEEPS[r.kind]}</div>
-            <span data-act="stock-room"><HearthButton small disabled={!kept.some(at => at >= HOTBAR)} onClick={() => apply(stockRoomFromBag(getW(), r.id, getInv()))}>Stock from the bag</HearthButton></span>
-          </div>
-          {store.stacks.length ? (
-            <div style={{ ...grid, marginTop: 6 }}>
-              {store.stacks.map((st, k) => <Cell key={k} s={st} data-room-slot={k} onClick={() => apply(takeFromRoom(getW(), r.id, k, getInv()))} />)}
-            </div>
-          ) : <div style={{ fontSize: 12.5, color: H.inkFaint, marginTop: 6 }}>Empty. The room works from what you keep here.</div>}
-          {kept.length > 0 && (
-            <>
-              <div style={{ ...lab, marginTop: 10 }}>From your bag · click to stock</div>
-              <div style={{ ...grid, marginTop: 6 }}>
-                {kept.map(at => <Cell key={at} s={inv.slots[at]} data-bag-slot={at} onClick={() => apply(stockRoom(getW(), r.id, getInv(), at))} />)}
-              </div>
-            </>
-          )}
-        </div>
       </div>
     </HearthFrame>
+  )
+  return (
+    <div data-station={r.kind} className="fixed inset-0 z-[60] bg-black/25 backdrop-blur-[3px] pointer-events-auto overflow-y-auto" onClick={onClose} onContextMenu={e => e.preventDefault()}
+      style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'center' : 'flex-start', justifyContent: 'center', gap: narrow ? 22 : 18, padding: narrow ? '34px 0 24px' : '6vh 16px 24px' }}>
+      {work}
+      <StorePanel r={r} pick={pick} narrow={narrow} onClose={onClose} />
+    </div>
+  )
+}
+
+/** The store panel: the station's own store, and a SOURCE (your pack, or the Keepstone) to move things in from. Whatever the
+ *  selected job needs is lit, with have / need. One tap moves 1 / 10 / all of an item. */
+function StorePanel({ r, pick, narrow, onClose }: { r: Room; pick: Pick; narrow: boolean; onClose: () => void }) {
+  const inv = useInv(), bank = useBank(), store = roomStore(r)
+  const [src, setSrc] = useState<'pack' | 'bank'>('pack')
+  const need = new Map<string, number>()
+  if (pick.job) { const q = pick.qty === 'max' ? maxAffordableAny(pick.job, r, inv, bank) : pick.qty; const runs = Math.max(1, runsFor(pick.job, q)); for (const c of pick.job.in) need.set(c.id, c.n * runs) }
+  const inStore = (id: string) => store.stacks.reduce((a, s) => a + (s.id === id ? s.n : 0), 0)
+  const rows = (() => {
+    const m = new Map<string, number>()
+    if (src === 'pack') for (const s of inv.slots) if (s) m.set(s.id, (m.get(s.id) ?? 0) + s.n)
+    else for (const s of bank.stacks) m.set(s.id, (m.get(s.id) ?? 0) + s.n)
+    return [...m].filter(([id]) => roomAccepts(r.kind, id) || need.has(id)).sort((a, b) => (need.has(b[0]) ? 1 : 0) - (need.has(a[0]) ? 1 : 0) || itemDef(a[0]).name.localeCompare(itemDef(b[0]).name))
+  })()
+  const mv = (id: string, n: number) => {
+    if (src === 'pack') { const m = stockItemFromBag(getW(), r.id, getInv(), id, n); if (m.moved) { setWorks(m.works); setInv(m.inv) } else if ('why' in m && m.why) hudSay(m.why, 'info') }
+    else { const m = stockItemFromBank(getW(), r.id, getB(), id, n); if (m.moved) { setWorks(m.works); setBank(m.bank) } else if (m.why) hudSay(m.why, 'info') }
+  }
+  const back = (k: number) => { const m = takeFromRoom(getW(), r.id, k, getInv()); if (m.moved) { setWorks(m.works); setInv(m.inv) } else if ('why' in m && m.why) hudSay(m.why, 'info') }
+  const tab = (on: boolean): React.CSSProperties => ({ border: 0, borderRadius: 10, height: 32, padding: '0 14px', cursor: 'pointer', font: '700 12px system-ui', letterSpacing: '.06em', textTransform: 'uppercase', background: on ? H.ink : 'rgba(58,39,22,.08)', color: on ? '#fff' : H.ink })
+  return (
+    <HearthFrame title="Store" maxWidth={narrow ? 520 : 400} onClose={onClose} fixed dataPanel="station-store" backdrop={false} bodyClass={narrow ? '!max-h-none' : ''}>
+      <div data-room-store={r.kind} style={{ padding: '26px 16px 14px', display: 'grid', gap: 10 }}>
+        <div>
+          <div style={lab}>In the station · {store.stacks.length} / {ROOM_STORE_SLOTS} · keeps {ROOM_KEEPS[r.kind]}</div>
+          {store.stacks.length ? (
+            <div style={{ ...grid, marginTop: 6 }}>
+              {store.stacks.map((st, k) => <Cell key={k} s={st} data-room-slot={k} title=" · tap to take back to the bag" onClick={() => back(k)} />)}
+            </div>
+          ) : <div style={{ fontSize: 12.5, color: H.inkFaint, marginTop: 6 }}>Empty. The station works from what you put here.</div>}
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ ...lab, flex: 1 }}>Bring from</span>
+          <button type="button" data-src="pack" aria-pressed={src === 'pack'} style={tab(src === 'pack')} onClick={() => setSrc('pack')}>Pack</button>
+          <button type="button" data-src="bank" aria-pressed={src === 'bank'} style={tab(src === 'bank')} onClick={() => setSrc('bank')}>Keepstone</button>
+        </div>
+        {pick.job && <div style={{ fontSize: 12, color: H.inkSoft }}>Needed for {pick.job.label.toLowerCase()} ({itemDef(pick.job.out.id).name}): lit below.</div>}
+        {rows.length ? (
+          <div data-src-list={src} style={{ display: 'grid', gap: 4 }}>
+            {rows.map(([id, n]) => {
+              const nd = need.get(id), have = inStore(id), lit = nd !== undefined, short = lit && have < nd!
+              return (
+                <div key={id} data-src-item={id} data-have={have} data-need={nd ?? 0} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', borderRadius: 8, background: lit ? (short ? 'rgba(214,150,60,.22)' : 'rgba(110,170,90,.22)') : 'transparent', boxShadow: lit ? `inset 0 0 0 1px ${short ? '#c98a2e' : '#6aa35a'}` : 'none' }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: H.ink }}>{itemDef(id).name} <span style={{ color: H.inkSoft }}>× {n}</span>
+                    {lit && <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: short ? '#9a5f10' : '#3d7a30' }}>in station {have} / need {nd}</span>}
+                  </span>
+                  <HearthButton small onClick={() => mv(id, 1)}><span data-move="1">+1</span></HearthButton>
+                  <HearthButton small onClick={() => mv(id, 10)}><span data-move="10">+10</span></HearthButton>
+                  <HearthButton small onClick={() => mv(id, n)}><span data-move="all">All</span></HearthButton>
+                </div>
+              )
+            })}
+          </div>
+        ) : <div style={{ fontSize: 12.5, color: H.inkFaint }}>{src === 'pack' ? 'Nothing in your pack that this station keeps.' : 'Nothing in the Keepstone that this station keeps.'}</div>}
+      </div>
+    </HearthFrame>
+  )
+}
+/** max-affordable in output items, counting what the station holds (the queue takes from the STORE only) */
+const maxAffordableAny = (j: Job, r: Room, _inv: Inv, _bank: Bank) => maxAffordable(j, r.store)
+
+/** The queue and the output: what is being made, how long, and what is waiting to be collected. */
+function QueueView({ r }: { r: Room }) {
+  const [, force] = useState(0)
+  useEffect(() => { const t = setInterval(() => force(n => n + 1), 1000); return () => clearInterval(t) }, [])
+  const st = stationOf(r), q = st.queue, status = statusOf(st), v = loadVillage(), who = workerOf(r, v)
+  const outs = st.out ?? []
+  const collect = (id: string, n?: number) => {
+    const cur = stationOf(getW().rooms.find(x => x.id === r.id)!), t = takeOut(cur, id, n), g = give(getInv(), id, t.took)
+    setWorks(setStation(getW(), r.id, putOut(t.station, id, g.left))); setInv(g.inv)
+    if (g.left > 0) hudSay('Your bag is full. The rest waits in the station.', 'info')
+  }
+  const left = q ? q.items.reduce((a, i, k) => { const j = jobById(i.job); return a + (j ? runMs(j) * i.left - (k === 0 && q.run ? q.t : 0) : 0) }, 0) : 0
+  return (
+    <div data-queue>
+      <div style={lab}>The queue</div>
+      {q ? (
+        <div style={{ display: 'grid', gap: 4, marginTop: 4 }}>
+          {q.items.map((i, k) => { const j = jobById(i.job)!; return (
+            <div key={i.job} data-queue-line={i.job} data-left={i.left} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: H.ink }}>
+              <span style={{ flex: 1 }}>{itemDef(j.out.id).name} <span style={{ color: H.inkSoft }}>· {i.left * j.out.n} to make{k === 0 && q.run ? ' · working' : ''}</span></span>
+              <HearthButton small onClick={() => setWorks(setStation(getW(), r.id, dequeue(stationOf(getW().rooms.find(x => x.id === r.id)!), i.job)))}>Drop</HearthButton>
+            </div>) })}
+          <div data-queue-status={status} style={{ fontSize: 12.5, color: status === 'working' ? H.inkSoft : '#9a5f10', fontWeight: status === 'working' ? 400 : 700 }}>
+            {status === 'empty' ? 'Paused: the store has no inputs for the next one. Bring more and it carries on.' : status === 'full' ? `Paused: the output holds ${OUT_CAP} of an item. Collect some.` : who.speed > 0 ? `${who.moglin ? `${who.moglin.name} is working` : 'You are working it (while this panel is open)'} · about ${fmtSecs(left / who.speed)} left` : 'No one is working it. Put a Moglin on the room, or keep this panel open.'}
+          </div>
+          <span data-act="cancel-queue"><HearthButton small onClick={() => setWorks(setStation(getW(), r.id, cancel(stationOf(getW().rooms.find(x => x.id === r.id)!))))}>Cancel the queue</HearthButton></span>
+        </div>
+      ) : <div style={{ fontSize: 12.5, color: H.inkFaint, marginTop: 4 }}>Nothing queued.</div>}
+      <div style={{ ...lab, marginTop: 10 }}>The output · up to {OUT_CAP} of an item</div>
+      {outs.length ? (
+        <div style={{ ...grid, marginTop: 6 }}>
+          {outs.map(s => <Cell key={s.id} s={s} data-out-item={s.id} title=" · tap to collect" onClick={() => collect(s.id)} />)}
+        </div>
+      ) : <div style={{ fontSize: 12.5, color: H.inkFaint, marginTop: 4 }}>Nothing finished yet.</div>}
+      {outs.length > 0 && <span data-act="collect-all"><HearthButton small onClick={() => outs.forEach(s => collect(s.id))}>Collect all</HearthButton></span>}
+    </div>
   )
 }
 
@@ -1099,7 +1220,7 @@ function MoglinDuty({ r }: { r: Room }) {
   const fits = v.moglins.filter(m => m.id !== here?.id && WORKS_IN[m.profession].includes(r.kind))
   const put = (id: string, room: string | null) => {
     const nv = assign(loadVillage(), getW(), id, room); if (!nv) { hudSay('Their trade does not suit this room.', 'info'); return }
-    saveVillage(nv); setV(nv)
+    saveVillage(nv); setV(nv); touchQueue(r.id)
   }
   const grades = (m: Village['moglins'][number]) => GRADE_CATEGORIES.map(c => `${c} ${GRADE_NAME[m.grades[c]]}`).join(' · ')
   if (!here && !fits.length && !v.moglins.length) return null
@@ -1127,8 +1248,9 @@ function MoglinDuty({ r }: { r: Room }) {
   )
 }
 
-/** A bench's job list: each row shows what goes in (with how many you can reach) and a Make button. */
-function JobList({ title, note, jobs, r, inv, empty, refine }: { title: string; note: string; jobs: readonly Job[]; r: Room; inv: ReturnType<typeof useInv>; empty?: string; refine?: boolean }) {
+/** A bench's craft list (M43): each job shows its time per item; tap one to set how many (1 / 10 / 99 / max) and queue it. */
+function CraftList({ title, note, jobs, r, pick, setPick, empty }: { title: string; note: string; jobs: readonly Job[]; r: Room; pick: Pick; setPick: (p: Pick) => void; empty?: string }) {
+  const inv = useInv(), bank = useBank()
   return (
     <div>
       <div style={lab}>{title}</div>
@@ -1136,13 +1258,26 @@ function JobList({ title, note, jobs, r, inv, empty, refine }: { title: string; 
       {jobs.length ? (
         <div style={{ display: 'grid', gap: 6 }}>
           {jobs.map(j => {
-            const can = jobRuns(r, inv, j) > 0
+            const on = pick.job?.id === j.id, afford = maxAffordable(j, r.store), reach = Math.min(...j.in.map(c => Math.floor((benchCount(r, inv, c.id) + bankCount(bank, c.id)) / c.n)))
+            const qty = pick.qty === 'max' ? afford : pick.qty
             return (
-              <div key={j.id} data-job={j.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: H.ink }}>
-                  {j.out.n > 1 ? `${j.out.n} ` : ''}{itemDef(j.out.id).name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· {j.in.map(c => `${c.n} ${itemDef(c.id).name} (${benchCount(r, inv, c.id)})`).join(' + ')}</span>
-                </span>
-                <HearthButton small disabled={!can} onClick={() => { const m = craftAt(getW(), r.id, getInv(), j); if (m) { setWorks(m.works); setInv(m.inv) } else hudSay('No room in the bag.', 'info') }}>{refine ? j.label : 'Make'}</HearthButton>
+              <div key={j.id} data-job={j.id} data-sel={on} style={{ display: 'grid', gap: 5, padding: '5px 7px', borderRadius: 10, background: on ? 'rgba(58,39,22,.08)' : 'transparent', boxShadow: on ? `inset 0 0 0 1px ${H.rule}` : 'none' }}>
+                <button type="button" data-job-pick={j.id} onClick={() => setPick({ ...pick, job: on ? null : j })} style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: H.ink }}>
+                    {j.out.n > 1 ? `${j.out.n} ` : ''}{itemDef(j.out.id).name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· {j.in.map(c => `${c.n} ${itemDef(c.id).name}`).join(' + ')} · {itemMs(j) / 1000} s each</span>
+                  </span>
+                  <span style={{ fontSize: 11.5, color: H.inkSoft }}>{reach > 0 ? `${reach} run${reach === 1 ? '' : 's'} on hand` : 'none on hand'}</span>
+                </button>
+                {on && (
+                  <div data-craft-controls style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {QTYS.map(q => (
+                      <button key={q} type="button" data-qty={q} aria-pressed={pick.qty === q} onClick={() => setPick({ ...pick, qty: q })}
+                        style={{ border: 0, borderRadius: 8, height: 30, minWidth: 38, padding: '0 9px', cursor: 'pointer', font: '700 12px system-ui', background: pick.qty === q ? H.ink : 'rgba(58,39,22,.1)', color: pick.qty === q ? '#fff' : H.ink }}>{q === 'max' ? `Max${afford ? ` ${afford}` : ''}` : q}</button>
+                    ))}
+                    <span data-act="queue"><HearthButton small primary disabled={qty < 1} onClick={() => { const w = getW(); setWorks(setStation(w, r.id, enqueue(stationOf(w.rooms.find(x => x.id === r.id)!), j.id, qty, Date.now()))); if (afford < qty) hudSay(`The store holds inputs for ${afford} so far. It pauses when they run out.`, 'info') }}>Queue {qty || ''}</HearthButton></span>
+                    <span style={{ fontSize: 11.5, color: H.inkSoft }}>{qty ? `${fmtSecs(runsFor(j, qty) * runMs(j))} at your pace` : ''}</span>
+                  </div>
+                )}
               </div>
             )
           })}

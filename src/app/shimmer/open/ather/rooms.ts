@@ -17,6 +17,7 @@ import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, BAIT_FROM, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
 import { FURNITURE, MAX_PIECES, KEEPSTONES, keepstoneFor, type Job } from './furniture'
+import { adoptQueue, adoptOut, type Queue, type Station } from './station-queue'
 import { adoptWalls, adoptRoof, adoptFloors, adoptPaid, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
 
 export type RoomKind = 'rinnshop' | 'farm' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
@@ -63,6 +64,9 @@ export interface Room {
   id: string; kind: RoomKind; x: number; z: number; q: number; placedAt: number; doneAt: number
   /** the room's own store (ROOM_STORE_SLOTS, that room's materials only; Alex 11-17). Absent = empty. */
   store?: Stack[]
+  /** M43: finished goods wait here (up to OUT_CAP of an item) until taken; the queue is the station's batch work (station-queue.ts). Absent = none. */
+  out?: Stack[]
+  queue?: Queue
 }
 /** A KEEPSTONE standing on the plot (canon 5a20b8f, ather-rework WORKSHOP ROOMS (6): a Blankstone pedestal whose top opens
  *  on a set crystal's light; never "chest" to a player). A door into the garden bank; each adds CHEST_SLOTS. The code and
@@ -271,6 +275,29 @@ export const ROOM_KEEPS: Readonly<Record<RoomKind, string>> = {
 export const roomAccepts = (kind: RoomKind, id: string) => ROOM_ACCEPTS[kind](id)
 export const roomStore = (r: Room): Bank => ({ v: 1, stacks: r.store ?? [] })
 const setStore = (w: Works, id: string, b: Bank): Works => ({ ...w, rooms: w.rooms.map(r => (r.id === id ? { ...r, store: b.stacks } : r)) })
+/** M43: the station as the queue engine sees it, and writing one back to its room. */
+export const stationOf = (r: Room): Station => ({ store: r.store, out: r.out, queue: r.queue })
+export const setStation = (w: Works, id: string, st: Station): Works => ({ ...w, rooms: w.rooms.map(r => (r.id === id ? { ...r, store: st.store, out: st.out, queue: st.queue } : r)) })
+/** M43: move up to n of an item from the BAG (any slot) into the room's store. Refuses what the room does not keep. */
+export function stockItemFromBag(w: Works, roomId: string, inv: Inv, id: string, n: number): StoreMove {
+  const r = w.rooms.find(x => x.id === roomId)
+  if (!r || n < 1) return { works: w, inv, moved: 0, why: '' }
+  if (!roomAccepts(r.kind, id)) return { works: w, inv, moved: 0, why: `The ${ROOMS[r.kind].name} only keeps ${ROOM_KEEPS[r.kind]}.` }
+  const want = Math.min(n, countOf(inv, id)), p = putIn(roomStore(r), ROOM_STORE_SLOTS, id, want), moved = want - p.left
+  if (!moved) return { works: w, inv, moved: 0, why: want ? `The ${ROOMS[r.kind].name}'s store is full. Take something out first.` : '' }
+  const out = take(inv, id, moved); if (!out) return { works: w, inv, moved: 0, why: '' }
+  return { works: setStore(w, roomId, p.bank), inv: out, moved }
+}
+/** M43: the same from the KEEPSTONE bank. */
+export function stockItemFromBank(w: Works, roomId: string, bank: Bank, id: string, n: number): { works: Works; bank: Bank; moved: number; why?: string } {
+  const r = w.rooms.find(x => x.id === roomId)
+  if (!r || n < 1) return { works: w, bank, moved: 0 }
+  if (!roomAccepts(r.kind, id)) return { works: w, bank, moved: 0, why: `The ${ROOMS[r.kind].name} only keeps ${ROOM_KEEPS[r.kind]}.` }
+  const want = Math.min(n, bankCount(bank, id)), p = putIn(roomStore(r), ROOM_STORE_SLOTS, id, want), moved = want - p.left
+  if (!moved) return { works: w, bank, moved: 0, why: want ? `The ${ROOMS[r.kind].name}'s store is full. Take something out first.` : undefined }
+  const nb = bankTake(bank, id, moved); if (!nb) return { works: w, bank, moved: 0 }
+  return { works: setStore(w, roomId, p.bank), bank: nb, moved }
+}
 export type StoreMove = { works: Works; inv: Inv; moved: number } | { works: Works; inv: Inv; moved: 0; why: string }
 
 /** Bag slot → the room's store. Refuses what the room does not keep; what does not fit stays in the bag. */
@@ -403,7 +430,7 @@ export function loadWorks(): Works {
     const v = JSON.parse(localStorage.getItem(gardenKey(WORKS_KEY)) ?? 'null')
     if (v?.v === 1 && Array.isArray(v.rooms)) return {
       v: 1, rooms: v.rooms.filter((r: Room) => r && r.kind in ROOMS && Number.isFinite(r.x) && Number.isFinite(r.z))
-        .map((r: Room) => (r.store ? { ...r, store: adoptBank({ v: 1, stacks: r.store }).stacks } : r)),
+        .map((r: Room) => { const { out: _o, queue: _q, ...rest } = r; void _o; void _q; return { ...rest, ...(r.store ? { store: adoptBank({ v: 1, stacks: r.store }).stacks } : {}), ...(adoptOut(r.out) ? { out: adoptOut(r.out) } : {}), ...(adoptQueue(r.queue) ? { queue: adoptQueue(r.queue) } : {}) } as Room }),   // M43: an older save has no queue or output
       // chests arrived after rooms (11-17): an older save has none
       chests: Array.isArray(v.chests) ? v.chests.filter((c: Chest) => c && typeof c.id === 'string' && Number.isFinite(c.x) && Number.isFinite(c.z)) : [],
       // furniture arrived after Keepstones (11-17): an older save has none; a piece whose item is gone is dropped
