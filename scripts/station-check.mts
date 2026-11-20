@@ -60,7 +60,14 @@ async function session(w: number, h: number, touch = false) {
 // ── desktop ─────────────────────────────────────────────────────────────────────────────────────────────────────
 {
   const s = await session(1280, 800); const { p } = s
-  const reload = async (d: number) => { await Promise.all([p.waitForNavigation({ waitUntil: 'load', timeout: 180000 }), p.evaluate((d: number) => { const w = JSON.parse(localStorage.getItem('open.works.v1')!); w.rooms[0].work.last -= d; localStorage.setItem('open.works.v1', JSON.stringify(w)); location.reload() }, d)]); await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(3500) }
+  // time passes: leave the game for a static page on the same origin (nothing of the game is alive to write its state back),
+  // shift the station's clock in the guest save, and come back: the load runs the offline catch-up
+  const reload = async (d: number) => {
+    await p.goto(`${url}/robots.txt`, { waitUntil: 'load', timeout: 60000 })
+    await p.evaluate((d: number) => { const w = JSON.parse(localStorage.getItem('open.works.v1')!); w.rooms[0].work.last -= d; localStorage.setItem('open.works.v1', JSON.stringify(w)) }, d)
+    await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 })
+    await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(3500)
+  }
   await s.open()
   const panels = await p.evaluate(() => { const a = document.querySelector('[data-panel="bench"]')?.getBoundingClientRect(), b = document.querySelector('[data-panel="station-store"]')?.getBoundingClientRect(); return a && b ? { aR: a.right, bL: b.left } : null })
   ok(!!panels, '1. E at the bench: the station panel AND a separate store panel are up')
