@@ -125,7 +125,7 @@ function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: 
     }
     return out
   }, [near, net, village])
-  const key = drawn.map(d => `${d.s.id}:${d.spots.map(p => p.id).join('.')}`).join('|')
+  const key = drawn.map(d => `${d.s.id}:${d.spots.map(p => `${p.id}@${p.x.toFixed(1)},${p.z.toFixed(1)}`).join('.')}`).join('|')   // M39: positions too (a blueprint moves a Moglin to its door with the same ids; the probe went stale)
   useEffect(() => {
     folkDrawn.clear(); for (const d of drawn) folkDrawn.set(d.s.id, d.spots)
     ;(window as unknown as { __folk?: unknown }).__folk = { drawn: () => Object.fromEntries(folkDrawn), keeper: () => ({ ...keeperNow }), mapSettlements: () => net.settlements.length }
