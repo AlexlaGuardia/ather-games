@@ -51,6 +51,7 @@ const bench = async (r: Room, focus: string) => {
   const at = benchOf(r); await tp(at.x, at.z - 1.2, 0)
   await p.keyboard.press('e'); await sleep(1000)
   const panel = await p.evaluate(() => !!document.querySelector('[data-panel="bench"]'))
+  await click('[data-bench-tab="blades"],[data-bench-tab="spikes"]'); await sleep(300)   // bench tabs (11-20): tool focuses on their own tab
   const made = await click(`[data-focus="${focus}"] button`); await sleep(800)
   await p.keyboard.press('Escape'); await sleep(500)
   return { panel, made }

@@ -151,7 +151,7 @@ await p.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'load', ti
 const b = benchOf(SHOP)
 await A(p, 'tp', b.x, b.z - 1.4, 0); await sleep(2500)
 await p.keyboard.press('e')
-ok(await poll(() => p.evaluate(() => !!document.querySelector('[data-panel="bench"] [data-rinquest-step="bind"] button:not([disabled])')), 20000), 'F. E at the Rinnshop bench offers to bind the scale')
+ok(await poll(() => p.evaluate(() => { document.querySelector<HTMLElement>('[data-bench-tab="rinsticks"][aria-selected="false"]')?.click(); return !!document.querySelector('[data-panel="bench"] [data-rinquest-step="bind"] button:not([disabled])') }), 20000), 'F. E at the Rinnshop bench offers to bind the scale')
 await p.evaluate(() => document.querySelector<HTMLElement>('[data-rinquest-step="bind"] button')?.click())
 ok(await poll(async () => ((await A(p, 'tools')) as Record<string, { toolId: string } | undefined>).rinning?.toolId === 'worn_rinstick', 15000), 'F. the bind puts the worn rinstick in hand')
 ok((await countIn(p, 'shed_scale')) === 0 && ((await Q(p, 'quest')) as { stick?: boolean; state: string }).stick === true, 'F. ...the scale is used, the stick saved, the quest still open')

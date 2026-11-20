@@ -24,7 +24,7 @@ export const QTY_PICKS = [1, 10, 99] as const
 
 /** The station's work state. `run` = one run's inputs are out of the store and `t` ms of it are done (`f` = a focus run).
  *  `cur` = the stockpile's position in its product list. Present on a room that has been worked or focused. */
-export interface Focus { job: string; left: number }
+export interface Focus { job: string; left: number; /** runs asked for when it was set (the crafting panel's overall bar); absent on older saves */ of?: number }
 export interface Work { focus?: Focus; run?: { job: string; t: number; f?: boolean }; cur: number; last: number }
 /** what the engine reads off a Room */
 export interface Station { store?: Stack[]; out?: Stack[]; work?: Work }
@@ -70,8 +70,15 @@ const stockOk = (s: { store?: Stack[]; out?: Stack[] }, j: Job) => affords(s.sto
 /** Start a FOCUS: `qty` output items of one job (replaces a focus not yet mid-run; a run in progress is finished first). */
 export function setFocus(s: Station, job: string, qty: number, now: number): Station {
   const j = jobById(job); if (!j || !(qty >= 1)) return s
-  const w: Work = { cur: 0, last: now, ...s.work, focus: { job, left: runsFor(j, qty) } }
+  const w: Work = { cur: 0, last: now, ...s.work, focus: { job, left: runsFor(j, qty), of: runsFor(j, qty) } }
   return { ...s, work: w }
+}
+/** THE RUN IN PROGRESS, live (the crafting panel's bar): `t` is banked at the last tick, the time since is worked at `speed`.
+ *  Pure read, never writes: frac 0..1 of this run, ms left at that pace (Infinity when no one works it). Null = nothing running. */
+export function runProgress(s: Station, now: number, speed: number): { job: Job; frac: number; msLeft: number } | null {
+  const run = s.work?.run, j = run && jobById(run.job); if (!run || !j) return null
+  const total = runMs(j), done = Math.min(total, run.t + (speed > 0 ? Math.max(0, now - s.work!.last) * speed : 0))
+  return { job: j, frac: total > 0 ? done / total : 1, msLeft: speed > 0 ? (total - done) / speed : Infinity }
 }
 /** Drop the focus. A focus run in progress hands its inputs back (inputs are only ever taken for the run in progress). */
 export function cancelFocus(s: Station): Station {
@@ -157,7 +164,7 @@ export function adoptWork(v: unknown): Work | undefined {
   const w = v as Partial<Work> | null
   if (!w || typeof w !== 'object' || !Number.isFinite(w.last)) return undefined
   const f = w.focus, r = w.run
-  const focus = f && typeof f.job === 'string' && jobById(f.job) && Number.isFinite(f.left) && f.left >= 1 ? { job: f.job, left: Math.min(MAX_QTY, Math.floor(f.left)) } : undefined
+  const focus = f && typeof f.job === 'string' && jobById(f.job) && Number.isFinite(f.left) && f.left >= 1 ? { job: f.job, left: Math.min(MAX_QTY, Math.floor(f.left)), ...(Number.isFinite(f.of) && f.of! >= f.left ? { of: Math.min(MAX_QTY, Math.floor(f.of!)) } : {}) } : undefined
   const run = r && typeof r.job === 'string' && jobById(r.job) && Number.isFinite(r.t) && r.t >= 0 ? { job: r.job, t: r.t, ...(r.f ? { f: true as const } : {}) } : undefined
   return { cur: Number.isFinite(w.cur) && w.cur! >= 0 ? Math.floor(w.cur!) : 0, last: w.last!, focus, run }
 }

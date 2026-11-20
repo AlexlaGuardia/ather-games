@@ -38,11 +38,14 @@ const res: Record<string, unknown> = { url }
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 }); await ready()
 // 1. at the hearth: Heath is offered; Work here
 await bench()
+await click('[data-bench-tab="keeper"]'); await sleep(300)   // bench tabs (11-20): the room keeper live on their own tab
 res.offered = await p.evaluate(() => [...document.querySelectorAll('[data-moglin]')].map(e => e.getAttribute('data-moglin')))
-res.assigned = await click('[data-moglin="heath-check"] button'); await sleep(600)
+res.assigned = await click('[data-moglin="heath-check"] [data-act="ask"] button'); await sleep(600)
 res.here = await p.evaluate(() => document.querySelector('[data-moglin-here]')?.getAttribute('data-moglin-here') ?? null)
 res.duty = await p.evaluate(() => document.querySelector('[data-moglin-here]')?.textContent ?? '')
 await shot('md-1-assigned')
+// the crafting panel (11-20) lands a run the moment its bar fills, so a roast may already be done before the clock is wound
+const before = (await p.evaluate(() => { const w = JSON.parse(localStorage.getItem('open.works.v1') ?? 'null'); return (w?.rooms?.[0]?.out ?? []).filter((x: any) => x.id === 'roast_rinn').reduce((a: number, x: any) => a + x.n, 0) })) as number
 // 2. away two hours: wind the village clock back, reload; the village catches up and says so
 // since M43a the cook works the hearth's STOCKPILE on the station's own clock (room.work.last), so wind THAT back too
 await p.evaluate(() => { const v = JSON.parse(localStorage.getItem('open.village.v1')!); v.lastTick = Date.now() - 2 * 3_600_000; localStorage.setItem('open.village.v1', JSON.stringify(v))
@@ -55,21 +58,26 @@ res.storeAfter = await store(); res.outAfter = await outOf()
 await shot('md-2-away')
 // 3. Off duty
 await bench()
+await click('[data-bench-tab="keeper"]'); await sleep(400)   // bench tabs (11-20): the room keeper has its own tab
+res.inspect = await click('[data-moglin-here] [data-act="inspect"] button'); await sleep(900)
+res.card = await p.evaluate(() => { const c = document.querySelector('[data-moglin-card-for="heath-check"] [data-moglin-card]'); return c ? { full: c.hasAttribute('data-card-full'), lit: c.querySelectorAll('[data-card-skill]:not([data-card-grade="0"])').length, luck: +(c.querySelector('[data-card-luck]')?.getAttribute('data-card-luck') ?? 0) } : null })
+await shot('md-3-card')
 res.offDuty = await click('[data-act="off-duty"] button'); await sleep(600)
 res.roomAfterOff = ((await read('open.village.v1'))?.moglins?.[0]?.room) ?? null
 res.errs = errs
 console.log(JSON.stringify(res))
 const s = res.storeAfter as Record<string, number>, o = res.outAfter as Record<string, number>
 // 2 h at a fair cook (speed 1) = 10 roasts, bounded by the surplus over the 30-raw reserve (40 seeded); M46 luck may add +1 a run
-const made = (o.roast_rinn ?? 0) + (s.roast_rinn ?? 0)
+const made = (o.roast_rinn ?? 0) + (s.roast_rinn ?? 0) - before   // made WHILE AWAY (not the one landed live before)
 const checks: [boolean, string][] = [
   [JSON.stringify(res.offered) === '["heath-check"]', 'Heath offered at the hearth'],
   [res.here === 'heath-check', 'Heath put to work'],
   [/Cooking (fair|good|fine|gifted|rare)/.test(res.duty as string) && /stockpile/.test(res.duty as string), `duty row names the room's skill (${res.duty})`],
   [res.wound === true, 'station clock wound back 2 h'],
-  [o.roast_rinn >= 10 && o.roast_rinn <= 20, `roasts in the hearth's output (${o.roast_rinn})`],
+  [o.roast_rinn >= 10 && o.roast_rinn <= 20 && made >= 1, `roasts in the hearth's output (${o.roast_rinn})`],
   [s.shimmerscale === 30, `the 30-raw reserve kept (${s.shimmerscale})`],
   [new RegExp(`made ${made} Roast Rinn`).test((res.toast as string) ?? ''), `the 'while you were away' line says ${made} Roast Rinn (${res.toast})`],
+  [res.inspect === true && !!res.card && (res.card as any).full && (res.card as any).lit === 9 && (res.card as any).luck >= 1, `M46: Inspect on a RECRUITED Moglin opens its full card, 9 skills + luck (${JSON.stringify(res.card)})`],
   [res.offDuty === true && res.roomAfterOff === null, 'Off duty clears the room'],
   [errs.length === 0, `0 page errors ${errs.join(' | ')}`],
 ]

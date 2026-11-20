@@ -36,6 +36,7 @@ res.before = await held()
 const b = benchOf(ROOM)
 await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), b.x, b.z - 1.4); await sleep(2000)
 await p.keyboard.press('e'); await sleep(900)
+await click('[data-bench-tab="rinsticks"]'); await sleep(300)   // bench tabs (11-20): rinsticks live on their own tab
 res.list = await p.evaluate(() => [...document.querySelectorAll('[data-rinstick]')].map(e => e.getAttribute('data-rinstick')))
 res.made = await click('[data-rinstick="basic_rinstick"] button'); await sleep(700)
 res.panelHeld = await p.evaluate(() => document.querySelector('[data-rinstick-held]')?.getAttribute('data-rinstick-held'))

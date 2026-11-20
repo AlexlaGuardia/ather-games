@@ -3,7 +3,7 @@
 // the surplus, ONE item's worth of input at a time, a stack of 30 of each product, one product at a time (planks to 30, then bark);
 // refining jobs only. FOCUS ignores both the reserve and the cap, uses all the material, then drops back to stockpile (also when
 // the inputs run out). Offline catch-up from timestamps, bounded by surplus and caps; idle / unstaffed time is never banked.
-import { advance, setFocus, cancelFocus, touch, maxAffordable, runsFor, statusOf, takeOut, adoptWork, jobById, itemMs, runMs, moglinSpeed, stockJobs, OUT_CAP, RESERVE, MAX_QTY, type Station } from './station-queue'
+import { advance, setFocus, runProgress, cancelFocus, touch, maxAffordable, runsFor, statusOf, takeOut, adoptWork, jobById, itemMs, runMs, moglinSpeed, stockJobs, OUT_CAP, RESERVE, MAX_QTY, type Station } from './station-queue'
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -109,6 +109,24 @@ ok(statusOf(setFocus(touch(logs(5), T0), 'goldwood-plank', 4, T0), carp) === 'fo
 ok(adoptWork(undefined) === undefined && adoptWork({ last: 'x' }) === undefined, 'a save from before M43 loads with no work state')
 ok(adoptWork({ last: 5, focus: { job: 'goldwood-plank', left: 500 }, run: { job: 'nope', t: 1 } })!.focus!.left === 99 && !adoptWork({ last: 5, run: { job: 'nope', t: 1 } })!.run, 'adoptWork clamps to 99 and drops unknown jobs')
 
+// THE CRAFTING PANEL's bar (runProgress + focus.of): a live read of the run in progress, never a write
+{
+  const st = setFocus(touch(logs(40), T0), 'goldwood-plank', 10, T0)
+  ok(st.work!.focus!.of === st.work!.focus!.left && st.work!.focus!.of === runsFor(plank, 10), 'focus keeps its total (of)')
+  ok(runProgress(st, T0, 1) === null, 'nothing running yet: no bar')
+  const a = advance(st, T0 + runMs(plank) * 0.25, 1, []).station   // a quarter into the first run
+  const p0 = runProgress(a, T0 + runMs(plank) * 0.25, 1)!
+  ok(!!p0 && p0.job.id === 'goldwood-plank' && Math.abs(p0.frac - 0.25) < 1e-9, 'banked quarter reads 0.25')
+  const p1 = runProgress(a, T0 + runMs(plank) * 0.75, 1)!
+  ok(Math.abs(p1.frac - 0.75) < 1e-9 && Math.abs(p1.msLeft - runMs(plank) * 0.25) < 1e-6, 'live elapsed since the tick counts, msLeft at pace')
+  const p2 = runProgress(a, T0 + runMs(plank) * 0.5, 2)!
+  ok(Math.abs(p2.frac - 0.75) < 1e-9 && Math.abs(p2.msLeft - runMs(plank) * 0.125) < 1e-6, 'a faster worker fills it faster')
+  ok(runProgress(a, T0 + runMs(plank) * 9, 1)!.frac === 1, 'never past full before the tick lands it')
+  ok(runProgress(a, T0 + runMs(plank) * 0.75, 0)!.msLeft === Infinity && Math.abs(runProgress(a, T0 + runMs(plank) * 0.75, 0)!.frac - 0.25) < 1e-9, 'no worker: bar holds, no ETA')
+  const back = adoptWork(JSON.parse(JSON.stringify(a.work)))!
+  ok(back.focus?.of === a.work!.focus!.of, 'focus total survives a save round-trip')
+  ok(adoptWork({ ...a.work, focus: { job: 'goldwood-plank', left: 5, of: 2 } })!.focus!.of === undefined, 'a total below what is left is dropped')
+}
 console.log(`station-queue.test: ${pass} passed, ${fails.length} failed`)
 for (const x of fails) console.log('  FAIL', x)
 process.exit(fails.length ? 1 : 0)

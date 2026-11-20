@@ -49,6 +49,7 @@ res.focusSaw = await click('[data-act="focus"] button')
 res.sawn = await poll(async () => ((await outOf()).goldwood_plank ?? 0) === 4)
 await sleep(500); await click('[data-act="collect-all"] button'); await sleep(600)
 res.afterSaw = await bag(); await shot('fc-1-sawn')
+await click('[data-bench-tab="furniture"]'); await sleep(300)   // bench tabs (11-20): pieces live on their own tab
 await click('[data-job-pick="goldwood_bench"]'); await sleep(300)
 await click('[data-src-item="goldwood_plank"] [data-move="all"]'); await sleep(400)
 await click('[data-qty="max"]'); await sleep(200)

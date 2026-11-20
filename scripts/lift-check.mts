@@ -74,6 +74,7 @@ try {
   const b = benchOf(ROOM)
   await tp(b.x, b.z - 1.2, 0)
   await p.keyboard.press('e'); await sleep(900)
+  await click('[data-bench-tab="furniture"]'); await sleep(300)   // bench tabs (11-20): pieces live on their own tab
   await click('[data-job-pick="lift"]'); await sleep(300)
   await click('[data-src-item="goldwood_plank"] [data-move="all"]'); await sleep(400)
   await click('[data-src-item="stone_brick"] [data-move="all"]'); await sleep(400)

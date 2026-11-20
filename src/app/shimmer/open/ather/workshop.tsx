@@ -50,9 +50,11 @@ import { TOOL_DEFS } from '../../engine/tools'
 import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw } from './build-mode'
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
-import { advance, setFocus, cancelFocus, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
+import { advance, setFocus, cancelFocus, runProgress, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
 import { skillIn, luckOf, skillsOf, SKILL_OF_ROOM, SKILL_LABEL } from './moglin-skills'
 import { recordCard } from './moglin-card'
+import { benchTabs, TAB_LABEL, tabOfFocus, type BenchTab } from './bench-tabs'
+import { TabGlyph } from './bench-glyphs'
 import { MoglinCard } from './moglin-card-view'
 import { reportAway, addMade, type Made } from './away-report'
 import { MeleeAim, useHitWobble } from './melee-view'
@@ -1119,59 +1121,94 @@ const QTYS = [1, 10, 99, 'max'] as const
 type Qty = (typeof QTYS)[number]
 interface Pick { job: Job | null; qty: Qty }
 
+/** The tab each room's bench last showed (this page load): reopening a bench lands where you left it. */
+const lastTab = new Map<string, BenchTab>()
+
+/** The icon tab rail (Alex 11-20: tabs with icons, not one long list). Pinned above the scrolling body. */
+function TabRail({ tabs, on, go }: { tabs: BenchTab[]; on: BenchTab; go: (t: BenchTab) => void }) {
+  return (
+    <div role="tablist" data-bench-tabs style={{ display: 'flex', gap: 6, paddingBottom: 10, borderBottom: `1px solid ${H.rule}` }}>
+      {tabs.map(t => {
+        const sel = t === on
+        return (
+          <button key={t} type="button" role="tab" aria-selected={sel} data-bench-tab={t} title={TAB_LABEL[t]} onClick={() => go(t)}
+            style={{ all: 'unset', cursor: 'pointer', flex: '1 1 0', minWidth: 0, maxWidth: 92, display: 'grid', justifyItems: 'center', gap: 3, padding: '7px 4px 6px', borderRadius: 10,
+              color: sel ? '#fff' : H.ink, background: sel ? H.ink : 'rgba(58,39,22,.07)', opacity: sel ? 1 : 0.72, transition: 'background .12s, opacity .12s' }}>
+            <TabGlyph tab={t} />
+            <span style={{ font: '700 9.5px system-ui', letterSpacing: '.05em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{TAB_LABEL[t]}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
   const inv = useInv(), w = useWorks(), def = ROOMS[room.kind], bankNow = useBank(), narrow = useNarrow()
   const r = w.rooms.find(x => x.id === room.id) ?? room   // the live room (its store moves under the panel)
   const [pick, setPick] = useState<Pick>({ job: null, qty: 10 })
+  const tabs = benchTabs(r.kind)
+  const [tab, setTab] = useState<BenchTab>(() => { const t = lastTab.get(r.id); return t && tabs.includes(t) ? t : tabs[0] })
+  const go = (t: BenchTab) => { lastTab.set(r.id, t); setTab(t); setPick(p => ({ ...p, job: null })) }
   useEffect(() => { stationTick(); openBench = room.id; touchWork(room.id); return () => { if (openBench === room.id) openBench = null } }, [room.id])
   const foods = Object.keys(BAIT_FROM).filter(id => benchCount(r, inv, id) > 0)
   const inBank = (id: string) => bankCount(bankNow, id)
   const reach = (id: string) => benchCount(r, inv, id) + inBank(id)
   const crafts = (jobs: readonly Job[]) => jobs.filter(j => j.in.some(c => reach(c.id) > 0))
-  const cl = (jobs: readonly Job[], title: string, note: string, empty?: string) => <CraftList title={title} note={note} jobs={jobs} r={r} pick={pick} setPick={setPick} empty={empty} />
+  const cl = (jobs: readonly Job[], note: string, empty?: string) => <CraftList note={note} jobs={jobs} r={r} pick={pick} setPick={setPick} empty={empty} />
   const dim = narrow ? '!max-h-none' : ''
-  const work = (
-    <HearthFrame title={def.name} maxWidth={narrow ? 520 : 520} onClose={onClose} fixed dataPanel="bench" backdrop={false} bodyClass={dim}>
-      <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
-        {r.kind === 'rinnshop' && (
-          <>
-            <div>
-              <div style={lab}>Bait · {countOf(inv, 'bait')} in the bag</div>
-              <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>An offering the rinn come to, one per cast. Cut from the room's store first, then your bag.</div>
-              {foods.length ? (
-                <div style={{ display: 'grid', gap: 6 }}>
-                  {foods.map(id => (
-                    <div key={id} data-bait-from={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ flex: 1, fontSize: 13.5, color: H.ink }}>{itemDef(id).name} <span style={{ color: H.inkSoft }}>× {benchCount(r, inv, id)}</span></span>
-                      <HearthButton small onClick={() => { const m = makeBaitAt(getW(), r.id, getInv(), id); if (m) { setWorks(m.works); setInv(m.inv) } else hudSay('No room for the bait. Clear a slot in your bag.', 'info') }}>Make bait +{BAIT_FROM[id]}</HearthButton>
-                    </div>
-                  ))}
+  const focusSkill = (Object.keys(BENCH) as FocusSkill[]).find(s => BENCH[s] === r.kind && tabOfFocus(s) === tab)
+  const body = (() => {
+    switch (tab) {
+      case 'refine': return r.kind === 'stonemason'
+        ? cl(crafts(STONE_REFINE), 'Parts for a house plan, cut from every stone in the store. A Moglin also keeps stacks going by itself.', 'No blankstone or mana shards to cut. Prospect them in the Wilds.')
+        : cl(crafts(REFINE), 'Each log works two ways. Focus one: the station works every log in its store, one at a time. A Moglin also keeps stacks going by itself.', 'No logs to work. Prune trees in the Wilds. Better woods come as your Forestry grows.')
+      case 'furniture': return cl(PIECE_JOBS, 'Finished pieces wait in the output. Hold one from the hotbar on your plot and E sets it.')
+      case 'hearth': return cl(ROAST, 'Hold a roast in the Wilds and click to eat it mid-fight. Meat comes from the Smokehouse in the continent\'s towns.')
+      case 'cauldron': return cl(BREW, 'Hold a potion and click to drink.')
+      case 'blades': case 'spikes': return focusSkill ? <FocusList r={r} inv={inv} skill={focusSkill} /> : null
+      case 'rinsticks': return <RinstickList r={r} inv={inv} />
+      case 'keeper': return <MoglinDuty r={r} />
+      case 'bait': return (
+        <div>
+          <div style={lab}>Bait · {countOf(inv, 'bait')} in the bag</div>
+          <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>An offering the rinn come to, one per cast. Cut from the room's store first, then your bag.</div>
+          {foods.length ? (
+            <div style={{ display: 'grid', gap: 6 }}>
+              {foods.map(id => (
+                <div key={id} data-bait-from={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ flex: 1, fontSize: 13.5, color: H.ink }}>{itemDef(id).name} <span style={{ color: H.inkSoft }}>× {benchCount(r, inv, id)}</span></span>
+                  <HearthButton small onClick={() => { const m = makeBaitAt(getW(), r.id, getInv(), id); if (m) { setWorks(m.works); setInv(m.inv) } else hudSay('No room for the bait. Clear a slot in your bag.', 'info') }}>Make bait +{BAIT_FROM[id]}</HearthButton>
                 </div>
-              ) : <div style={{ fontSize: 13, color: H.inkSoft }}>Nothing to cut. A small catch, or mast off a pruned tree, makes bait.</div>}
+              ))}
             </div>
-            <RinstickList r={r} inv={inv} />
-          </>
-        )}
-        {(Object.keys(BENCH) as FocusSkill[]).filter(s => BENCH[s] === r.kind).map(s => <FocusList key={s} r={r} inv={inv} skill={s} />)}
-        {r.kind === 'carpentry' && (
-          <>
-            {cl(crafts(REFINE), 'Refine', 'Each log works two ways. Pick one to Focus: the station uses every log in its store to make it, one at a time. A Moglin also keeps stacks of each going by itself.', 'No logs to work. Prune trees in the Wilds. Better woods come as your Forestry grows.')}
-            {cl(PIECE_JOBS, 'Furniture', 'Pick a piece and Focus a number: the station makes them from its store. They wait in the output. Hold one from the hotbar on your plot and E sets it.', undefined)}
-          </>
-        )}
-        {r.kind === 'stonemason' && cl(crafts(STONE_REFINE), 'Refine', 'Parts for a house plan. Pick one to Focus: the station cuts it from every stone in its store, one at a time. A Moglin also keeps stacks of each going by itself.', 'No blankstone or mana shards to cut. Prospect them in the Wilds.')}
-        {r.kind === 'cooking' && cl(ROAST, 'The hearth', 'Roasts wait in the output. Hold one in the Wilds and click to eat it mid-fight. Meat comes from the Smokehouse in the continent\'s towns.')}
-        {r.kind === 'alchemy' && cl(BREW, 'The cauldron', 'Potions wait in the output. Hold one and click to drink.')}
-        <WorkView r={r} />
-        <MoglinDuty r={r} />
-      </div>
+          ) : <div style={{ fontSize: 13, color: H.inkSoft }}>Nothing to cut. A small catch, or mast off a pruned tree, makes bait.</div>}
+        </div>
+      )
+    }
+  })()
+  const work = (
+    <HearthFrame title={def.name} maxWidth={520} onClose={onClose} fixed dataPanel="bench" backdrop={false} bodyClass={dim}
+      head={<TabRail tabs={tabs} on={tab} go={go} />}>
+      <div data-bench-body={tab} style={{ padding: '12px 16px 14px', display: 'grid', gap: 12 }}>{body}</div>
     </HearthFrame>
   )
+  // what is crafting NOW gets its own panel (Alex 11-20: "its own panel ... a buffer bar so the player can actively see the thing crafting")
+  const now = (
+    <HearthFrame title="Crafting" maxWidth={narrow ? 520 : 400} onClose={onClose} fixed dataPanel="crafting" backdrop={false} closable={false} bodyClass={dim}>
+      <div style={{ padding: '24px 16px 14px' }}><WorkView r={r} /></div>
+    </HearthFrame>
+  )
+  const store = <StorePanel r={r} pick={pick} narrow={narrow} onClose={onClose} />
   return (
     <div data-station={r.kind} className="fixed inset-0 z-[60] bg-black/25 backdrop-blur-[3px] pointer-events-auto overflow-y-auto" onClick={onClose} onContextMenu={e => e.preventDefault()}
       style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'center' : 'flex-start', justifyContent: 'center', gap: narrow ? 22 : 18, padding: narrow ? '34px 0 24px' : '6vh 16px 24px' }}>
-      {work}
-      <StorePanel r={r} pick={pick} narrow={narrow} onClose={onClose} />
+      {narrow ? <>{now}{work}{store}</> : (
+        <>
+          {work}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>{now}{store}</div>
+        </>
+      )}
     </div>
   )
 }
@@ -1239,12 +1276,27 @@ function StorePanel({ r, pick, narrow, onClose }: { r: Room; pick: Pick; narrow:
 const maxAffordableAny = (j: Job, r: Room, _inv: Inv, _bank: Bank) => maxAffordable(j, r.store)
 
 /** What the station is doing: the Moglin's stockpile (30 of each product, above a 30 reserve of the raw), a focus, and the output. */
+/** A filling bar (the crafting panel). */
+function Bar({ frac, tone = '#c8902f', h = 10, ...rest }: { frac: number; tone?: string; h?: number } & Record<`data-${string}`, string | number>) {
+  return (
+    <div {...rest} style={{ height: h, borderRadius: h, background: 'rgba(58,39,22,.12)', boxShadow: 'inset 0 1px 2px rgba(58,39,22,.25)', overflow: 'hidden' }}>
+      <div style={{ width: `${Math.max(0, Math.min(1, frac)) * 100}%`, height: '100%', borderRadius: h, background: `linear-gradient(180deg, ${tone}, #a06a1c)`, transition: 'width .25s linear' }} />
+    </div>
+  )
+}
+
+/** THE CRAFTING PANEL (Alex 11-20): the run in progress with a live bar, the Focus with its overall bar, who works it, the
+ *  Moglin's stockpile, and the finished output to collect. Redraws 4x a second; when the bar fills it runs the station tick
+ *  so the item lands now, not at the next minute tick. */
 function WorkView({ r }: { r: Room }) {
   const [, force] = useState(0)
-  useEffect(() => { const t = setInterval(() => force(n => n + 1), 1000); return () => clearInterval(t) }, [])
+  useEffect(() => { const t = setInterval(() => force(n => n + 1), 250); return () => clearInterval(t) }, [])
   const st = stationOf(r), w = st.work, v = loadVillage(), who = workerOf(r, v), stock = stockJobs(r.kind)
   const status = statusOf(st, who.moglin ? stock : []), outs = st.out ?? []
   const fj = w?.focus && jobById(w.focus.job)
+  const prog = runProgress(st, Date.now(), who.speed)
+  const landed = useRef(0)
+  useEffect(() => { if (prog && prog.frac >= 1 && Date.now() - landed.current > 400) { landed.current = Date.now(); stationTick() } })
   const collect = (id: string, n?: number) => {
     touchWork(r.id)
     const cur = stationOf(getW().rooms.find(x => x.id === r.id)!), t = takeOut(cur, id, n), g = give(getInv(), id, t.took)
@@ -1252,35 +1304,59 @@ function WorkView({ r }: { r: Room }) {
     if (g.left > 0) hudSay('Your bag is full. The rest waits in the station.', 'info')
   }
   const liveStock = stock.filter(j => st.store?.some(x => x.id === j.in[0].id) || (st.out ?? []).some(x => x.id === j.out.id))
+  const pd = prog && itemDef(prog.job.out.id)
+  // the focus's overall share: runs done of the runs asked (an older save has no total: the bar is left out)
+  const of = w?.focus?.of, done = of && w?.focus ? of - w.focus.left + (prog && w.run?.f ? prog.frac : 0) : 0
   return (
-    <div data-work>
-      <div style={lab}>The station's work</div>
-      {fj && w?.focus ? (
-        <div data-focus-line={fj.id} data-left={w.focus.left} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: H.ink, marginTop: 4 }}>
-          <span style={{ flex: 1 }}><b>Focus:</b> {itemDef(fj.out.id).name} <span style={{ color: H.inkSoft }}>· {w.focus.left * fj.out.n} to go · uses every {fj.in.map(c => itemDef(c.id).name).join(' + ')} in the store</span></span>
-          <span data-act="cancel-focus"><HearthButton small onClick={() => { touchWork(r.id); setWorks(setStation(getW(), r.id, cancelFocus(stationOf(getW().rooms.find(x => x.id === r.id)!)))) }}>Stop</HearthButton></span>
+    <div data-work style={{ display: 'grid', gap: 10 }}>
+      {prog && pd ? (
+        <div data-run={prog.job.id} data-run-frac={prog.frac.toFixed(3)} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <Well size={52}>{pd.icon ? <img src={pd.icon} alt="" width={36} height={36} draggable={false} /> : <span style={{ fontSize: 12, fontWeight: 700, color: H.inkSoft }}>{pd.name.slice(0, 3)}</span>}</Well>
+          <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 5 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+              <b style={{ fontSize: 14, color: H.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prog.job.out.n > 1 ? `${prog.job.out.n} ` : ''}{pd.name}</b>
+              <span className="tabular-nums" style={{ marginLeft: 'auto', fontSize: 12, color: H.inkSoft, whiteSpace: 'nowrap' }}>{prog.msLeft === Infinity ? 'paused' : prog.frac >= 1 ? 'done' : `${fmtSecs(prog.msLeft)} left`}</span>
+            </div>
+            <Bar frac={prog.frac} data-run-bar={prog.job.id} />
+          </div>
         </div>
-      ) : stock.length ? (
-        <div style={{ fontSize: 12.5, color: H.inkSoft, marginTop: 4 }}>{who.moglin ? `${who.moglin.name} keeps ${RESERVE} of each raw material for you and refines the rest into a stack of ${OUT_CAP} of each product.` : `Stockpile: a Moglin keeping this room refines whatever is above ${RESERVE} of each raw material into a stack of ${OUT_CAP} of each product. Until then, pick a product and Focus it.`}</div>
-      ) : <div style={{ fontSize: 12.5, color: H.inkSoft, marginTop: 4 }}>Pick something and Focus it: the station makes it from the store.</div>}
+      ) : (
+        <div style={{ fontSize: 13, color: H.inkSoft }}>{stock.length && who.moglin ? 'Nothing on the bench right now.' : 'Nothing crafting. Pick something in the panel and Focus it.'}</div>
+      )}
+      {fj && w?.focus && (
+        <div data-focus-line={fj.id} data-left={w.focus.left} style={{ display: 'grid', gap: 5 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: H.ink }}>
+            <span style={{ flex: 1, minWidth: 0 }}><b>Focus:</b> {itemDef(fj.out.id).name} <span className="tabular-nums" style={{ color: H.inkSoft }}>· {w.focus.left * fj.out.n} to go</span></span>
+            <span data-act="cancel-focus"><HearthButton small onClick={() => { touchWork(r.id); setWorks(setStation(getW(), r.id, cancelFocus(stationOf(getW().rooms.find(x => x.id === r.id)!)))) }}>Stop</HearthButton></span>
+          </div>
+          {of ? <Bar frac={done / of} h={6} tone="#7fa35a" data-focus-bar={fj.id} /> : null}
+        </div>
+      )}
+      {!fj && stock.length > 0 && (
+        <div style={{ fontSize: 12, color: H.inkSoft }}>{who.moglin ? `${who.moglin.name} keeps ${RESERVE} of each raw material for you and refines the rest into a stack of ${OUT_CAP} of each product.` : `A Moglin keeping this room refines whatever is above ${RESERVE} of each raw material into a stack of ${OUT_CAP} of each product.`}</div>
+      )}
       {who.moglin && liveStock.length > 0 && (
-        <div data-stockpile style={{ display: 'grid', gap: 2, marginTop: 6 }}>
+        <div data-stockpile style={{ display: 'grid', gap: 4 }}>
           {liveStock.map(j => { const l = stockLine(st, j); return (
-            <div key={j.id} data-stock={j.out.id} data-made={l.made} style={{ display: 'flex', gap: 8, fontSize: 12.5, color: H.ink }}>
-              <span style={{ flex: 1 }}>{itemDef(j.out.id).name}</span><span style={{ color: l.made >= l.cap ? '#3d7a30' : H.inkSoft }}>{l.made} / {l.cap}{l.made < l.cap && !l.waiting ? ' · waiting for more than 30 ' + itemDef(j.in[0].id).name.toLowerCase() : ''}</span>
+            <div key={j.id} data-stock={j.out.id} data-made={l.made} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '2px 8px', fontSize: 12, color: H.ink }}>
+              <span>{itemDef(j.out.id).name}</span><span className="tabular-nums" style={{ color: l.made >= l.cap ? '#3d7a30' : H.inkSoft }}>{l.made} / {l.cap}</span>
+              <div style={{ gridColumn: '1 / -1' }}><Bar frac={l.made / l.cap} h={4} tone="#8aa0b8" /></div>
+              {l.made < l.cap && !l.waiting && <span style={{ gridColumn: '1 / -1', fontSize: 11, color: H.inkFaint }}>waiting for more than {RESERVE} {itemDef(j.in[0].id).name.toLowerCase()}</span>}
             </div>) })}
         </div>
       )}
-      <div data-work-status={status} style={{ fontSize: 12.5, marginTop: 6, color: status === 'idle' ? '#9a5f10' : H.inkSoft, fontWeight: status === 'idle' ? 700 : 400 }}>
-        {status === 'idle' ? (who.moglin ? 'Idle: every product has its stack, or nothing is left above the reserve.' : fj ? 'Paused: the store has no inputs for it.' : 'Idle.') : who.speed > 0 ? `${who.moglin ? `${who.moglin.name} is working` : 'You are working it (while this panel is open)'}${w?.run ? ` · ${itemDef(jobById(w.run.job)!.out.id).name}` : ''}` : 'No one is working it. Keep this panel open, or put a Moglin on the room.'}
+      <div data-work-status={status} style={{ fontSize: 12, color: status === 'idle' ? '#9a5f10' : H.inkSoft, fontWeight: status === 'idle' ? 700 : 400 }}>
+        {status === 'idle' ? (who.moglin ? 'Idle: every product has its stack, or nothing is left above the reserve.' : fj ? 'Paused: the store has no inputs for it.' : 'Idle.') : who.speed > 0 ? (who.moglin ? `${who.moglin.name} is working` : 'You are working it (while this panel is open)') : 'No one is working it. Keep this panel open, or put a Moglin on the room.'}
       </div>
-      <div style={{ ...lab, marginTop: 10 }}>The output · up to {OUT_CAP} of an item in a stockpile</div>
-      {outs.length ? (
-        <div style={{ ...grid, marginTop: 6 }}>
-          {outs.map(s => <Cell key={s.id} s={s} data-out-item={s.id} title=" · tap to collect" onClick={() => collect(s.id)} />)}
-        </div>
-      ) : <div style={{ fontSize: 12.5, color: H.inkFaint, marginTop: 4 }}>Nothing finished yet.</div>}
-      {outs.length > 0 && <span data-act="collect-all"><HearthButton small onClick={() => outs.forEach(s => collect(s.id))}>Collect all</HearthButton></span>}
+      <div>
+        <div style={lab}>Done · up to {OUT_CAP} of an item</div>
+        {outs.length ? (
+          <div style={{ ...grid, marginTop: 6 }}>
+            {outs.map(s => <Cell key={s.id} s={s} data-out-item={s.id} title=" · tap to collect" onClick={() => collect(s.id)} />)}
+          </div>
+        ) : <div style={{ fontSize: 12.5, color: H.inkFaint, marginTop: 4 }}>Nothing finished yet.</div>}
+        {outs.length > 0 && <div style={{ marginTop: 6 }}><span data-act="collect-all"><HearthButton small onClick={() => outs.forEach(s => collect(s.id))}>Collect all</HearthButton></span></div>}
+      </div>
     </div>
   )
 }
@@ -1403,7 +1479,7 @@ function MoglinDuty({ r }: { r: Room }) {
         <div data-moglin={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
           <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: H.ink }}>{m.name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· the {m.profession} · {grades(m)}{m.room ? ' · busy in another room' : ''}</span></span>
           {inspect(m)}
-          <HearthButton small onClick={() => put(m.id, r.id)}>{here ? 'Ask instead' : 'Ask to work here'}</HearthButton>
+          <span data-act="ask"><HearthButton small onClick={() => put(m.id, r.id)}>{here ? 'Ask instead' : 'Ask to work here'}</HearthButton></span>
         </div>
         {cardFor(m)}
       </div>))}
@@ -1412,40 +1488,49 @@ function MoglinDuty({ r }: { r: Room }) {
 }
 
 /** A bench's craft list (M43): each job shows its time per item; tap one to set how many (1 / 10 / 99 / max) and Focus it. */
-function CraftList({ title, note, jobs, r, pick, setPick, empty }: { title: string; note: string; jobs: readonly Job[]; r: Room; pick: Pick; setPick: (p: Pick) => void; empty?: string }) {
+function CraftList({ note, jobs, r, pick, setPick, empty }: { note: string; jobs: readonly Job[]; r: Room; pick: Pick; setPick: (p: Pick) => void; empty?: string }) {
   const inv = useInv(), bank = useBank()
+  const reachOf = (j: Job) => Math.min(...j.in.map(c => Math.floor((benchCount(r, inv, c.id) + bankCount(bank, c.id)) / c.n)))
+  const j = pick.job && jobs.some(x => x.id === pick.job!.id) ? pick.job : null
+  if (!jobs.length) return <div style={{ fontSize: 13, color: H.inkSoft }}>{empty}</div>
+  const afford = j ? maxAffordable(j, r.store) : 0, qty = pick.qty === 'max' ? afford : pick.qty, reach = j ? reachOf(j) : 0
   return (
-    <div>
-      <div style={lab}>{title}</div>
-      <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>{note}</div>
-      {jobs.length ? (
-        <div style={{ display: 'grid', gap: 6 }}>
-          {jobs.map(j => {
-            const on = pick.job?.id === j.id, afford = maxAffordable(j, r.store), reach = Math.min(...j.in.map(c => Math.floor((benchCount(r, inv, c.id) + bankCount(bank, c.id)) / c.n)))
-            const qty = pick.qty === 'max' ? afford : pick.qty
-            return (
-              <div key={j.id} data-job={j.id} data-sel={on} style={{ display: 'grid', gap: 5, padding: '5px 7px', borderRadius: 10, background: on ? 'rgba(58,39,22,.08)' : 'transparent', boxShadow: on ? `inset 0 0 0 1px ${H.rule}` : 'none' }}>
-                <button type="button" data-job-pick={j.id} onClick={() => setPick({ ...pick, job: on ? null : j })} style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: H.ink }}>
-                    {j.out.n > 1 ? `${j.out.n} ` : ''}{itemDef(j.out.id).name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· {j.in.map(c => `${c.n} ${itemDef(c.id).name}`).join(' + ')} · {itemMs(j) / 1000} s each</span>
-                  </span>
-                  <span style={{ fontSize: 11.5, color: H.inkSoft }}>{reach > 0 ? `${reach} run${reach === 1 ? '' : 's'} on hand` : 'none on hand'}</span>
-                </button>
-                {on && (
-                  <div data-craft-controls style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
-                    {QTYS.map(q => (
-                      <button key={q} type="button" data-qty={q} aria-pressed={pick.qty === q} onClick={() => setPick({ ...pick, qty: q })}
-                        style={{ border: 0, borderRadius: 8, height: 30, minWidth: 38, padding: '0 9px', cursor: 'pointer', font: '700 12px system-ui', background: pick.qty === q ? H.ink : 'rgba(58,39,22,.1)', color: pick.qty === q ? '#fff' : H.ink }}>{q === 'max' ? `Max${afford ? ` ${afford}` : ''}` : q}</button>
-                    ))}
-                    <span data-act="focus"><HearthButton small primary disabled={qty < 1} onClick={() => { touchWork(r.id); const w = getW(); setWorks(setStation(w, r.id, setFocus(stationOf(w.rooms.find(x => x.id === r.id)!), j.id, qty, Date.now()))) }}>Focus {qty || ''}</HearthButton></span>
-                    <span style={{ fontSize: 11.5, color: H.inkSoft }}>{qty ? `${fmtSecs(runsFor(j, qty) * runMs(j))} at base pace · ignores the reserve and the cap` : 'put material in the store first'}</span>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+    <div style={{ display: 'grid', gap: 10 }}>
+      {/* the tiles: what this tab makes, as icons (tap one to pick it). Dim = nothing on hand for it. */}
+      <div data-craft-tiles style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))', gap: 6 }}>
+        {jobs.map(x => {
+          const on = j?.id === x.id, d = itemDef(x.out.id), has = reachOf(x) > 0
+          return (
+            <button key={x.id} type="button" data-job={x.id} data-job-pick={x.id} data-sel={on} title={d.name} onClick={() => setPick({ ...pick, job: on ? null : x })}
+              style={{ all: 'unset', cursor: 'pointer', display: 'grid', justifyItems: 'center', gap: 3, padding: '6px 3px 5px', borderRadius: 10, opacity: has || on ? 1 : 0.5,
+                background: on ? 'rgba(58,39,22,.1)' : 'transparent', boxShadow: on ? `inset 0 0 0 2px ${H.ink}` : `inset 0 0 0 1px ${H.rule}` }}>
+              <span style={{ position: 'relative' }}>
+                <Well size={44}>{d.icon ? <img src={d.icon} alt="" width={30} height={30} draggable={false} /> : <span style={{ fontSize: 11, fontWeight: 700, color: H.inkSoft }}>{d.name.slice(0, 3)}</span>}</Well>
+                {x.out.n > 1 && <span className="absolute bottom-0.5 right-1 text-[11px] font-extrabold tabular-nums" style={{ color: H.ink, textShadow: '0 1px 0 rgba(255,250,235,.8)' }}>{x.out.n}</span>}
+              </span>
+              <span style={{ fontSize: 10.5, lineHeight: 1.15, color: H.ink, textAlign: 'center', maxWidth: '100%', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{d.name}</span>
+            </button>
+          )
+        })}
+      </div>
+      {/* the picked one: what it takes, how long, how many, Focus */}
+      {j ? (
+        <div data-craft-detail={j.id} style={{ display: 'grid', gap: 6, padding: '8px 10px', borderRadius: 10, background: 'rgba(58,39,22,.06)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+            <b style={{ fontSize: 14, color: H.ink }}>{j.out.n > 1 ? `${j.out.n} ` : ''}{itemDef(j.out.id).name}</b>
+            <span style={{ fontSize: 12, color: H.inkSoft }}>{j.in.map(c => `${c.n} ${itemDef(c.id).name}`).join(' + ')} · {itemMs(j) / 1000} s each</span>
+            <span style={{ marginLeft: 'auto', fontSize: 11.5, color: H.inkSoft }}>{reach > 0 ? `${reach} run${reach === 1 ? '' : 's'} on hand` : 'none on hand'}</span>
+          </div>
+          <div data-craft-controls style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+            {QTYS.map(q => (
+              <button key={q} type="button" data-qty={q} aria-pressed={pick.qty === q} onClick={() => setPick({ ...pick, qty: q })}
+                style={{ border: 0, borderRadius: 8, height: 30, minWidth: 38, padding: '0 9px', cursor: 'pointer', font: '700 12px system-ui', background: pick.qty === q ? H.ink : 'rgba(58,39,22,.1)', color: pick.qty === q ? '#fff' : H.ink }}>{q === 'max' ? `Max${afford ? ` ${afford}` : ''}` : q}</button>
+            ))}
+            <span data-act="focus"><HearthButton small primary disabled={qty < 1} onClick={() => { touchWork(r.id); const w = getW(); setWorks(setStation(w, r.id, setFocus(stationOf(w.rooms.find(x => x.id === r.id)!), j.id, qty, Date.now()))) }}>Focus {qty || ''}</HearthButton></span>
+          </div>
+          <span style={{ fontSize: 11.5, color: H.inkSoft }}>{qty ? `${fmtSecs(runsFor(j, qty) * runMs(j))} at base pace · ignores the reserve and the cap` : 'Put material in the store first.'}</span>
         </div>
-      ) : <div style={{ fontSize: 13, color: H.inkSoft }}>{empty}</div>}
+      ) : <div style={{ fontSize: 12, color: H.inkFaint }}>{note}</div>}
     </div>
   )
 }
