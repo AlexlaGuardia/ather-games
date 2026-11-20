@@ -1,13 +1,14 @@
 // ── M37 slice 2: A DRAWN LOOP IS A ROOM WITH A FLOOR AND A ROOF (world d5a9e927, 11-19) ──────────────────────────────
 // Real inputs: E at the table, Plan, Walls, four real drags along the sides of a 5 x 4 m rectangle (screen points are the
 // rectangle's corners projected through plan mode's own lens: fov 75, pitch 0.98, the live view from __build.view()).
-//   1. the four sides close one rectangular room of 20 m² (__walls.rooms), 18 planks spent
+// (slice 4, 11-20: drawn walls are DRAFTS paid by Build from the plan bar's list; the roof/door/paint steps run on the BUILT house)
+//   1. the four sides close one rectangular room of 20 m² (__walls.rooms), 18 draft pieces, nothing spent; Build then spends the list (38 planks + 20 bricks)
 //   2. the roof buttons switch the house's style (gable -> hip -> flat), saved (Works.roof)
 //   3. Walls down drops them in plan mode (__walls.down), Walls up / leaving plan mode puts them back
 //   4. a reload keeps the room and the style; 0 page errors.
 //   5-8 (slice 3): Door taps a 2 m doorway into the front wall, Window one pane into the side, Paint turns a wall and the
 //   whole floor Dawnwood (a plank swap for the wall), and after the reload the keeper walks in through the door. Screenshots: gable, hip, flat, walls down.
-// SETUP (stated): bag = 30 goldwood planks, no works. Hooks: __ather.tp, __build.to (VIEW only), __build.view / __walls (read).
+// SETUP (stated): bag = 100 goldwood planks, 20 stone bricks, 3 crystal panes, 6 dawnwood planks, no works. Hooks: __ather.tp, __build.to (VIEW only), __build.view / __walls (read).
 //   npx tsx scripts/plot-house-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
@@ -53,11 +54,13 @@ try {
   await p.evaluateOnNewDocument(() => {
     if (sessionStorage.getItem('house')) return; sessionStorage.setItem('house', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star')
-    const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'repeater', n: 1 }; slots[8] = { id: 'goldwood_plank', n: 30 }; slots[9] = { id: 'dawnwood_plank', n: 6 }
+    const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'repeater', n: 1 }; slots[8] = { id: 'goldwood_plank', n: 100 }; slots[9] = { id: 'dawnwood_plank', n: 6 }; slots[10] = { id: 'stone_brick', n: 20 }; slots[11] = { id: 'crystal_pane', n: 3 }
     localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
     localStorage.removeItem('open.works.v1')
   })
   const planks = () => p.evaluate(() => ((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{}').slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, s) => t + (s?.id === 'goldwood_plank' ? s.n : 0), 0))
+  const brickCount = () => p.evaluate(() => ((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{}').slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, s) => t + (s?.id === 'stone_brick' ? s.n : 0), 0))
+  const draftN = () => p.evaluate(() => Object.values(JSON.parse(localStorage.getItem('open.works.v1') ?? '{}').walls ?? {}).filter((x: any) => x.draft).length)
   const saved = () => p.evaluate(() => { const w = JSON.parse(localStorage.getItem('open.works.v1') ?? '{}'); return { walls: Object.keys(w.walls ?? {}).length, roof: w.roof } })
   const savedFull = () => p.evaluate(() => { const w = JSON.parse(localStorage.getItem('open.works.v1') ?? '{}'); return { walls: (w.walls ?? {}) as Record<string, { mat: string; kind?: string }>, floors: (w.floors ?? {}) as Record<string, string> } })
   const walls = () => p.evaluate(() => { const w = (window as any).__walls; return w ? { rooms: w.rooms(), down: w.down(), roof: w.roof() } : null })
@@ -81,10 +84,13 @@ try {
   await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), spot.x, spot.z)
   await tap('[data-tool="walls"]'); await sleep(400)
   const p0 = await planks()
-  await dragW(X0, Z0, X1, Z0); await dragW(X0, Z1, X1, Z1); await dragW(X0, Z0, X0, Z1); await dragW(X1, Z0, X1, Z1)
+  for (const [ax, az, bx, bz] of [[X0, Z0, X1, Z0], [X0, Z1, X1, Z1], [X0, Z0, X0, Z1], [X1, Z0, X1, Z1]]) { await dragW(ax, az, bx, bz); console.log('  side drawn, walls so far', (await saved()).walls) }
   const w1 = await walls(), sv1 = await saved()
   ok(!!w1 && w1.rooms.length === 1 && w1.rooms[0].cells === 20 && w1.rooms[0].rect, `1. four sides close one 5x4 room (${JSON.stringify(w1?.rooms)})`)
-  ok(sv1.walls === 18 && p0 - (await planks()) === 18, `   18 m of wall, 18 planks spent (${sv1.walls}, ${p0 - (await planks())})`)
+  ok(sv1.walls === 18 && (await draftN()) === 18 && p0 === await planks() && w1?.rooms[0].built === false, `   18 m of wall, all DRAFT, nothing spent, room not built (${sv1.walls}, ${await draftN()}, ${p0 - (await planks())})`)
+  ok(await poll(async () => p.evaluate(() => document.querySelector('[data-plan-bom]')?.getAttribute('data-ready') === 'true')), '   the list is met from the bag: Build is ready')
+  ok(await tap('[data-act="build-plan"] button') && await poll(async () => (await draftN()) === 0 && (await walls())?.rooms[0]?.built === true), '   Build stands the walls and the room (floor + roof)')
+  ok(p0 - (await planks()) === 38 && (await brickCount()) === 0, `   the list was spent exactly: 38 planks, 20 bricks (${p0 - (await planks())}, ${20 - (await brickCount())})`)
   await shot('house-1-gable')
   ok(await tap('[data-roof="hip"]') && await poll(async () => (await walls())?.roof === 'hip' && (await saved()).roof === 'hip'), '2. Hip: the roof style switches and saves'); await shot('house-2-hip')
   ok(await tap('[data-roof="flat"]') && await poll(async () => (await walls())?.roof === 'flat'), '   Flat'); await shot('house-3-flat')
