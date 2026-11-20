@@ -20,7 +20,7 @@ import { GROUND_Y, squareAt, sqId } from './plot'
 import { forestryLevel } from './forestry'
 import { connectedPieces, extractBlueprint, fitsPad } from './plot-blueprint'
 import { LOT_W, LOT_D, GLADE_LOTS } from './moonwell-glade'
-import { snapCorner, runKeys, canLay, lay, raze, wallBoxes, edgeRect, findRooms, roofMesh, pieceAt, roomAt, toggleDoor, toggleWindow, paintWall, paintFloor, floorOf, WALL_MATS, WALL_MAT_ORDER, ROOF_STYLES, LOW_WALL, DOOR_H, SILL, WIN_TOP, WALL_T, type Corner, type WallMat, type Walls, type RoofStyle, type PlotRoom, type Floors } from './plot-walls'
+import { snapCorner, runKeys, canLay, planRun, raze, wallBoxes, edgeRect, findRooms, roofMesh, pieceAt, roomAt, toggleDoor, toggleWindow, paintWall, paintFloor, floorOf, WALL_MATS, WALL_MAT_ORDER, ROOF_STYLES, LOW_WALL, DOOR_H, SILL, WIN_TOP, WALL_T, type Corner, type WallMat, type Walls, type RoofStyle, type PlotRoom, type Floors } from './plot-walls'
 import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
@@ -33,7 +33,8 @@ import {
   MAX_CHESTS, CHEST_SLOTS, bankCap, bankUsed, bankView, BANK_TABS, deposit, depositBag, withdraw, loadBank, saveBank, freshBank,
   bankCount, type Bank, type BankTab,
 } from './garden-bank'
-import { FURNITURE, FURNITURE_ORDER, REFINE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, type Job } from './furniture'
+import { buildPlan, billOf, reconcile, paneFor } from './plot-bom'
+import { FURNITURE, FURNITURE_ORDER, REFINE, STONE_REFINE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, type Job } from './furniture'
 import { ROAST } from './cooking'
 import { FarmPanel, FarmInterior, FarmCrate, currentFarm, setFarm, currentWater, settleWater, farmNow } from './farm-room'
 import { plumbingOf, spillIfRemoved } from './water'
@@ -79,10 +80,12 @@ function wallBlockers(w: Works) {
   for (const p of w.pieces) rects.push({ r: pieceRect(p.item, p.x, p.z, p.q), why: 'Something already stands there.' })
   return { rects, circles: KEEP_CLEAR }
 }
+/** rooms the plan closes whose floor + roof are not built yet (they appear at Build) */
+const unbuiltRooms = (walls: Walls, paid: Works['paid']) => new Set(findRooms(walls).map(r => r.key).filter(k => !(paid ?? {})[k]))
 function wallVerdict(owned: ReadonlySet<string>, a: Corner, b: Corner, erase: boolean) {
   const w = currentWorks(), keys = runKeys(a, b)
   if (erase) return { keys, ok: keys.some(k => !!w.walls?.[k]), why: 'No wall there to take down.' }
-  const v = canLay(w.walls ?? {}, keys, wallMat, heldCorner(owned), wallBlockers(w), getInv())
+  const v = canLay(w.walls ?? {}, keys, wallMat, heldCorner(owned), wallBlockers(w))   // a plan is drawn free: the list is paid at Build
   return { keys, ok: v.ok, why: v.ok ? '' : v.why }
 }
 /** M37 slice 3: Door / Window / Paint act on a TAP (a press that barely moves): the piece under it, or the room */
@@ -146,7 +149,11 @@ function tapToolHandler(kind: 'door' | 'window' | 'paint' | 'blueprint') {
       if (!k) { hudSay(kind === 'door' ? 'Tap a wall to put a door in it.' : 'Tap a wall to put a window in it.', 'info'); return }
       const c = kind === 'door' ? toggleDoor(walls, k) : toggleWindow(walls, k)
       if (!c.ok) { hudSay(c.why, 'info'); return }
-      setWorks({ ...w, walls: c.walls })
+      if (kind === 'window') {   // a pane for a window cut into a BUILT wall (a plan's pane is on the list instead)
+        const pn = paneFor(walls, c.walls, k, getInv(), getB()); if ('why' in pn) { hudSay(pn.why, 'info'); return }
+        setInv(pn.inv); if (pn.bank) setBank(pn.bank)
+      }
+      setWorks({ ...w, walls: c.walls, paid: w.paid ?? {} })
     },
     cancel() { at = null },
   }
@@ -164,14 +171,14 @@ function wallDrawHandler(owned: () => ReadonlySet<string>, erase: boolean) {
       const w = currentWorks(), keys = runKeys(a, b); if (!keys.length) return
       if (erase) {
         const r = raze(w.walls ?? {}, getInv(), keys); if (!r.down) return
-        setWorks({ ...w, walls: r.walls }); setInv(r.inv)
-        hudSay(`${r.down} m of wall down, the planks back in your bag.${r.full ? ' Your bag is full: the rest stays up.' : ''}`, 'item')
+        const rc = reconcile(r.walls, w.paid, r.inv)   // a built room that no longer closes gives its floor and roof back too
+        setWorks({ ...w, walls: r.walls, paid: rc.paid }); setInv(rc.inv)
+        hudSay(`${r.down} m of wall down, what was built comes back to your bag.${r.full ? ' Your bag is full: the rest stays up.' : ''}`, 'item')
         return
       }
-      const v = canLay(w.walls ?? {}, keys, wallMat, heldCorner(owned()), wallBlockers(w), getInv())
+      const v = canLay(w.walls ?? {}, keys, wallMat, heldCorner(owned()), wallBlockers(w))
       if (!v.ok) { hudSay(v.why, 'info'); return }
-      const r = lay(w.walls ?? {}, getInv(), v.add, wallMat); if (!r) return
-      setWorks({ ...w, walls: r.walls }); setInv(r.inv)
+      setWorks({ ...w, walls: planRun(w.walls ?? {}, v.add, wallMat), paid: w.paid ?? {} })   // a PLAN: the list is paid at Build
     },
     cancel() { if (wallDrag) { wallDrag = null; wdEmit() } },
   }
@@ -188,28 +195,29 @@ export function BlueprintBuilding({ walls, roof, floors, x, z, y, rotY }: { wall
 let wallsDown = false
 const setWallsDown = (v: boolean) => { wallsDown = v; wdEmit() }
 const useWallsDown = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => wallsDown, () => false)
-export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverride }: { walls: Walls; roof: RoofStyle; floors?: Floors; probe?: boolean; /** set by a page outside plan mode (dev/blueprints) */ down?: boolean }) {
+export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverride, unbuilt }: { walls: Walls; roof: RoofStyle; floors?: Floors; unbuilt?: ReadonlySet<string>; probe?: boolean; /** set by a page outside plan mode (dev/blueprints) */ down?: boolean }) {
   const b = useBuildMode(), wd = useWallsDown(), down = downOverride ?? (wd && b)   // hooks always run; the override only picks
   useEffect(() => { if (!b && wallsDown) setWallsDown(false) }, [b])
   // runs by wood AND kind: a plain piece is floor to top, a door only its lintel, a window a sill + a head + a pane
-  const byMat = useMemo(() => { const m = new Map<string, string[]>(); for (const [k, w] of Object.entries(walls)) { const id = `${w.mat}|${w.kind ?? 'wall'}`; const l = m.get(id) ?? []; l.push(k); m.set(id, l) } return [...m].map(([id, keys]) => { const [mat, kind] = id.split('|'); return { mat: mat as WallMat, kind, keys } }) }, [walls])
-  const panes = useMemo(() => Object.entries(walls).filter(([, w]) => w.kind === 'window').map(([k]) => k), [walls])
+  const byMat = useMemo(() => { const m = new Map<string, string[]>(); for (const [k, w] of Object.entries(walls)) { const id = `${w.mat}|${w.kind ?? 'wall'}|${w.draft ? 'draft' : ''}`; const l = m.get(id) ?? []; l.push(k); m.set(id, l) } return [...m].map(([id, keys]) => { const [mat, kind, dr] = id.split('|'); return { mat: mat as WallMat, kind, keys, draft: !!dr } }) }, [walls])
+  const panes = useMemo(() => Object.entries(walls).filter(([, w]) => w.kind === 'window' && !w.draft).map(([k]) => k), [walls])
   const rooms = useMemo(() => findRooms(walls), [walls])
-  useEffect(() => { if (probe) (window as unknown as { __walls?: object }).__walls = { rooms: () => rooms.map(r => ({ cells: r.cells.length, rect: !!r.rect })), down: () => down, roof: () => roof } }, [rooms, down, roof, probe])
+  useEffect(() => { if (probe) (window as unknown as { __walls?: object }).__walls = { rooms: () => rooms.map(r => ({ cells: r.cells.length, rect: !!r.rect, built: !unbuilt?.has(r.key) })), down: () => down, roof: () => roof } }, [rooms, down, roof, probe, unbuilt])
   return (
     <>
-      {byMat.map(({ mat, kind, keys }) => {
-        const top = down ? LOW_WALL : WALL_H, id = mat + kind + keys.length + (down ? 'd' : '')
-        if (kind === 'door') return top > DOOR_H ? <WallRun key={id} mat={mat} keys={keys} y0={DOOR_H} h={top - DOOR_H} /> : null
-        if (kind === 'window') return <React.Fragment key={id}><WallRun mat={mat} keys={keys} h={Math.min(SILL, top)} />{top > WIN_TOP && <WallRun mat={mat} keys={keys} y0={WIN_TOP} h={top - WIN_TOP} />}</React.Fragment>
-        return <WallRun key={id} mat={mat} keys={keys} h={top} />
+      {byMat.map(({ mat, kind, keys, draft }) => {
+        const top = down ? LOW_WALL : WALL_H, id = mat + kind + draft + keys.length + (down ? 'd' : ''), g = draft ? DRAFT_LOOK : undefined   // a plan is a blue blueprint until it is built
+        if (kind === 'door') return top > DOOR_H ? <WallRun key={id} mat={mat} keys={keys} y0={DOOR_H} h={top - DOOR_H} ghost={g} /> : null
+        if (kind === 'window') return <React.Fragment key={id}><WallRun mat={mat} keys={keys} h={Math.min(SILL, top)} ghost={g} />{top > WIN_TOP && <WallRun mat={mat} keys={keys} y0={WIN_TOP} h={top - WIN_TOP} ghost={g} />}</React.Fragment>
+        return <WallRun key={id} mat={mat} keys={keys} h={top} ghost={g} />
       })}
       {!down && panes.length > 0 && <WallRun key={'pane' + panes.length} mat="goldwood" keys={panes} y0={SILL} h={WIN_TOP - SILL} pane />}
-      {rooms.map(r => <RoomFloor key={r.key} room={r} floors={floors} />)}
-      {!down && rooms.map(r => <RoomRoof key={r.key + roof} room={r} style={roof} walls={walls} />)}
+      {rooms.filter(r => !unbuilt?.has(r.key)).map(r => <RoomFloor key={r.key} room={r} floors={floors} />)}
+      {!down && rooms.filter(r => !unbuilt?.has(r.key)).map(r => <RoomRoof key={r.key + roof} room={r} style={roof} walls={walls} />)}
     </>
   )
 }
+const DRAFT_LOOK = '#6fb4ff'
 const FLOOR_GEO = new THREE.BoxGeometry(1, 0.06, 1)
 /** a drawn room's floor: planks a metre square, in the wood it was painted (Goldwood until then), a shade under the walls */
 function RoomFloor({ room, floors }: { room: PlotRoom; floors?: Floors }) {
@@ -296,19 +304,19 @@ function Catalog({ onPick }: { onPick: () => void }) {
     <div data-catalog style={{ display: 'grid', gap: 8, padding: '10px', borderRadius: 14, background: 'rgba(255,250,235,.9)', boxShadow: '0 2px 10px rgba(0,0,0,.25)', maxHeight: '52vh', overflowY: 'auto' }}>
       {(['walls', 'paint'] as const).map(t => (
         <div key={t} style={{ display: 'grid', gap: 5 }}>
-          <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>{t === 'walls' ? 'Walls · 1 plank a metre' : 'Floors · paint a whole room'}</div>
+          <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>{t === 'walls' ? 'Walls · drawn as a plan, built from the list' : 'Floors · paint a whole room'}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
             {WALL_MAT_ORDER.map(m => {
               const have = countOf(inv, WALL_MATS[m].item), open = lvl >= WOOD_GATE[m] || have > 0
               const sub = open ? `${have} planks` : `Forestry ${WOOD_GATE[m]} · saw at your Carpentry`
-              return card(`${t}:${m}`, WALL_MATS[m].name, sub, open && (t === 'paint' || have > 0), () => pick(t, m), WALL_MATS[m].color)
+              return card(`${t}:${m}`, WALL_MATS[m].name, sub, true, () => pick(t, m), WALL_MATS[m].color)   // a plan needs no planks to draw: the list is paid at Build
             })}
           </div>
         </div>
       ))}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
         {card('door', 'Door', 'Tap a wall · 2 m · keeps its wood', true, () => pick('door'))}
-        {card('window', 'Window', 'Tap a wall · a crystal pane', true, () => pick('window'))}
+        {card('window', 'Window', 'Tap a wall · a crystal pane (on the list)', true, () => pick('window'))}
       </div>
     </div>
   )
@@ -440,7 +448,7 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
       {w.pieces.map(pc => <PieceMesh key={pc.id} p={pc} />)}
       <MoglinsAtWork w={w} />
       <BlueprintPicked />
-      {w.walls && <DrawnWalls walls={w.walls} roof={w.roof ?? 'gable'} floors={w.floors} />}
+      {w.walls && <DrawnWalls walls={w.walls} roof={w.roof ?? 'gable'} floors={w.floors} unbuilt={unbuiltRooms(w.walls, w.paid)} />}
       <WallGhost />
       {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} item={p.item} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
     </>
@@ -874,6 +882,33 @@ function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: (
   )
 }
 
+/** M37 slice 4: the plan's BILL OF MATERIALS, in the plan-mode bar. Shows once something is planned: each part with
+ *  have / need (the Keepstone and the bag count together), red when short, and Build (enabled only when it is all there). */
+function PlanBom() {
+  const w = useWorks(), inv = useInv(), bank = useBank()
+  const bom = useMemo(() => billOf(w.walls ?? {}, w.paid, inv, bank), [w.walls, w.paid, inv, bank])
+  if (bom.empty) return null
+  const build = () => {
+    const c = currentWorks(), r = buildPlan(c.walls ?? {}, c.paid, getInv(), getB())
+    if (!r.ok) { hudSay(r.why, 'info'); return }
+    setInv(r.inv); if (r.bank) setBank(r.bank); setWorks({ ...c, walls: r.walls, paid: r.paid })
+    hudSay('Built. The house stands.', 'item')
+  }
+  return (
+    <div data-plan-bom data-ready={bom.ok} style={{ display: 'grid', gap: 4, padding: '8px 10px', borderRadius: 12, background: 'rgba(255,250,235,.92)', boxShadow: '0 2px 8px rgba(0,0,0,.2)', color: H.ink }}>
+      <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', opacity: 0.7 }}>Plan · {bom.pieces} m of wall{bom.rooms ? ` · ${bom.rooms} room${bom.rooms > 1 ? 's' : ''}` : ''} · materials</div>
+      {bom.lines.map(l => (
+        <div key={l.id} data-bom-line={l.id} data-need={l.n} data-have={l.have} data-short={l.short} style={{ display: 'flex', gap: 6, fontSize: 12.5, color: l.short ? '#b5452c' : H.ink }}>
+          <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, minWidth: 54 }}>{Math.min(l.have, l.n)} / {l.n}</span><span>{l.name}</span>
+        </div>
+      ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ flex: 1, fontSize: 11.5, color: H.inkSoft }}>{bom.ok ? 'Everything is here.' : 'Planks: Carpentry. Bricks and panes: Stonery.'}</span>
+        <span data-act="build-plan"><HearthButton primary disabled={!bom.ok} onClick={build}>Build</HearthButton></span>
+      </div>
+    </div>
+  )
+}
 /** Flying (build-mode.tsx): the strip rides along at the top so you can pick the next thing without landing. */
 export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
   const b = useBuildMode(), p = usePlacing(), tool = useBuildTool()
@@ -895,9 +930,10 @@ export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
       </div>
       {cat && <Catalog onPick={() => setCat(false)} />}
       <WallTools owned={ownedRef} />
+      <PlanBom />
       {tool === 'blueprint' && <BlueprintBar />}
       {sel && <BuildCard k={sel} onBuilt={() => setSel(null)} />}
-      {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a wall · a plank a metre · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · the planks come back' : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? 'Pick a wood, then tap a wall (a plank swaps) or a floor (the whole room)' : <>Pick something to build{touchy ? '' : ' · drag to move · wheel to zoom · WASD · Q Z turn'}</>}</div>}
+      {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a plan · it costs nothing until you Build · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · what was built comes back to the bag' : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? 'Pick a wood, then tap a wall (a plank swaps) or a floor (the whole room)' : <>Pick something to build{touchy ? '' : ' · drag to move · wheel to zoom · WASD · Q Z turn'}</>}</div>}
     </div>
   )
 }
@@ -943,6 +979,10 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
               empty="No logs to work. Prune trees in the Wilds. Better woods come as your Forestry grows." refine />
             <JobList title="Furniture" note="Made pieces go to your bag. Set them from the planning table." jobs={PIECE_JOBS} r={r} inv={inv} />
           </>
+        )}
+        {r.kind === 'stonemason' && (
+          <JobList title="Refine" note="Parts for a house plan. The bench takes from the room's store first, then your bag." jobs={STONE_REFINE.filter(j => benchCount(r, inv, j.in[0].id) > 0)} r={r} inv={inv}
+            empty="No blankstone or mana shards to cut. Prospect them in the Wilds." refine />
         )}
         {r.kind === 'cooking' && (
           <JobList title="The hearth" note="Roasts go to your bag. Hold one in the Wilds and click to eat it mid-fight. Meat comes from the Smokehouse in the continent's towns." jobs={ROAST} r={r} inv={inv} refine />

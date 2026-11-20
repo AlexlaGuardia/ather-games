@@ -17,7 +17,7 @@ import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, BAIT_FROM, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
 import { FURNITURE, MAX_PIECES, KEEPSTONES, keepstoneFor, type Job } from './furniture'
-import { adoptWalls, adoptRoof, adoptFloors, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
+import { adoptWalls, adoptRoof, adoptFloors, adoptPaid, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
 
 export type RoomKind = 'rinnshop' | 'farm' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
 export interface RoomDef {
@@ -43,7 +43,7 @@ export const ROOMS: Readonly<Record<RoomKind, RoomDef>> = {
   carpentry:  { name: 'Carpentry room', blurb: 'Saw logs, strip bark, tap sap, and make furniture for your plot.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: true },
   // OPEN 11-18 (BETA M17): its bench binds Spikes (ather/focuses.ts, Magii 5626aaf); its own stonework comes later. The blurb is a
   // PLACEHOLDER for @lark (promises only what the bench does).
-  stonemason: { name: 'Stonery',    blurb: 'Spikes are made here. Stonework comes later.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: true },
+  stonemason: { name: 'Stonery',    blurb: 'Spikes are made here. Stone is cut into bricks and crystal into panes.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: true },
 }
 export const ROOM_ORDER: readonly RoomKind[] = ['rinnshop', 'farm', 'cooking', 'alchemy', 'smith', 'carpentry', 'stonemason']
 
@@ -71,7 +71,7 @@ export interface Room {
 export interface Chest { id: string; x: number; z: number; q: number; placedAt: number; crystal?: string }
 /** A piece of furniture or decor standing on the plot (furniture.ts). Picked up, it is the bag item `item` again. */
 export interface Piece { id: string; item: string; x: number; z: number; q: number; placedAt: number }
-export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors }
+export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number> }
 /** M37: is this rectangle in a drawn wall (plot-walls.ts)? */
 const inDrawnWall = (w: Works, r: { x0: number; x1: number; z0: number; z1: number }, pad = 0) => wallRects(w.walls ?? {}).some(b => r.x0 - pad < b.x1 && r.x1 + pad > b.x0 && r.z0 - pad < b.z1 && r.z1 + pad > b.z0)
 export const freshWorks = (): Works => ({ v: 1, rooms: [], chests: [], pieces: [] })
@@ -411,6 +411,7 @@ export function loadWorks(): Works {
       walls: adoptWalls(v.walls),   // M37 (11-19): the keeper's own walls
       roof: adoptRoof(v.roof),
       floors: adoptFloors(v.floors),
+      paid: adoptPaid(v.paid, adoptWalls(v.walls)),   // M37 slice 4: a save from before it has none, so every room standing counts as built
     }
   } catch { /* private window */ }
   return freshWorks()

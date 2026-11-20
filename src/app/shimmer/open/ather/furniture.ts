@@ -25,6 +25,13 @@ export const REFINE: readonly Job[] = [
   { id: 'dawnwood-sap', label: 'Take the old sap', in: [{ id: 'dawnwood_log', n: 1 }], out: { id: 'crystallized_sap', n: 1 } },
 ]
 
+/** The Stonery's refining (M37 slice 4): the building parts a house plan spends. Blankstone is the plain stone prospecting
+ *  leaves; a raw mana shard is the common crystal. Same shape as REFINE, so the bench lists them the same way. */
+export const STONE_REFINE: readonly Job[] = [
+  { id: 'stone-brick', label: 'Cut into bricks', in: [{ id: 'blankstone', n: 1 }], out: { id: 'stone_brick', n: 3 } },
+  { id: 'crystal-pane', label: 'Cut a pane', in: [{ id: 'raw_mana_shard', n: 1 }], out: { id: 'crystal_pane', n: 2 } },
+]
+
 /** A piece of furniture or decor: its bag row, its recipe, and how it stands on the plot. */
 export interface PieceDef {
   name: string
