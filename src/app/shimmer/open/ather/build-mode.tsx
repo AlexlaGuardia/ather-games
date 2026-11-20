@@ -34,6 +34,8 @@ const aim = { x: 0, z: 0 }   // where the lens actually looks (cur, shifted by t
 let entered = false
 
 export const isBuilding = () => on
+/** M56: which way the lens faces (the Stairs tool climbs away from the camera) */
+export const buildYaw = () => cur.yaw
 export const useBuildMode = () => useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f) } }, () => on, () => false)
 /** Lift off from where the keeper stands, looking the way they look. */
 export function enterBuild(at: { x: number; z: number; yaw: number }) {
@@ -46,7 +48,7 @@ export function exitBuild() { if (!on) return; setPlanLevel(0); on = false; held
 // ── M37 (11-19): a DRAWING tool (plot-walls.ts). With 'walls' or 'erase' on, one finger / a left drag draws instead of
 //    panning: the handler gets ground points at the start, along the way and at the end. Two fingers pinch AND pan; a
 //    right or middle mouse drag pans; WASD still flies. 'look' = the old behaviour (a drag pans, a click places).
-export type BuildTool = 'look' | 'walls' | 'erase' | 'column' | 'door' | 'window' | 'paint' | 'blueprint'   // blueprint (M39): owner, a tap picks a building   // M37 slice 3: door / window / paint are taps
+export type BuildTool = 'look' | 'walls' | 'erase' | 'column' | 'stairs' | 'door' | 'window' | 'paint' | 'blueprint'   // blueprint (M39): owner, a tap picks a building   // M37 slice 3: door / window / paint are taps
 let tool: BuildTool = 'look'
 export const buildTool = () => tool
 export function setBuildTool(t: BuildTool) { if (t === tool) return; draw?.cancel(); tool = t; emit() }

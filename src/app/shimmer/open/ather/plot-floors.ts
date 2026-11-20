@@ -7,22 +7,23 @@
 import type { Box } from '../terrain-world'
 import { WALL_H, DOOR_H, edgeRect, findRooms, parseKey, adoptWalls, adoptFloors, adoptPaid, type Walls, type Floors, type Paid, type Rect } from './plot-walls'
 import { adoptCols, colBoxes, colStandsOn, type Cols } from './plot-cols'
+import { adoptStairs, stairBoxes, stairCellSet, stairStandsOn, type Stairs } from './plot-stairs'
 
 export const SLAB_T = 0.2, STOREY = WALL_H + SLAB_T, MAX_LEVELS = 3
 /** the floor surface of level k above the plot's ground (level 0 = 0) */
 export const levelBase = (k: number) => k * STOREY
-export interface Level { walls: Walls; floors?: Floors; paid?: Paid; /** M54: columns on corners (plot-cols.ts) */ cols?: Cols }
+export interface Level { walls: Walls; floors?: Floors; paid?: Paid; /** M54: columns on corners (plot-cols.ts) */ cols?: Cols; /** M56: stairs up to the next level (plot-stairs.ts) */ stairs?: Stairs }
 /** the part of Works this module reads and writes */
-export interface Stacked { walls?: Walls; floors?: Floors; paid?: Paid; cols?: Cols; upper?: Level[] }
+export interface Stacked { walls?: Walls; floors?: Floors; paid?: Paid; cols?: Cols; stairs?: Stairs; upper?: Level[] }
 
 export const levelCount = (w: Stacked) => 1 + (w.upper?.length ?? 0)
-export const levelOf = (w: Stacked, k: number): Level => k === 0 ? { walls: w.walls ?? {}, floors: w.floors, paid: w.paid, cols: w.cols } : (w.upper?.[k - 1] ?? { walls: {} })
+export const levelOf = (w: Stacked, k: number): Level => k === 0 ? { walls: w.walls ?? {}, floors: w.floors, paid: w.paid, cols: w.cols, stairs: w.stairs } : (w.upper?.[k - 1] ?? { walls: {} })
 /** a level with nothing on it (no wall, no column) is no level */
-const emptyLevel = (l: Level) => !Object.keys(l.walls).length && !Object.keys(l.cols ?? {}).length
+const emptyLevel = (l: Level) => !Object.keys(l.walls).length && !Object.keys(l.cols ?? {}).length && !Object.keys(l.stairs ?? {}).length
 export const levelsOf = (w: Stacked): Level[] => Array.from({ length: levelCount(w) }, (_, k) => levelOf(w, k))
 /** w with level k replaced (growing the stack when k is the next one up) */
 export function withLevel<T extends Stacked>(w: T, k: number, lv: Level): T {
-  if (k === 0) return { ...w, walls: lv.walls, floors: lv.floors, paid: lv.paid, cols: lv.cols }
+  if (k === 0) return { ...w, walls: lv.walls, floors: lv.floors, paid: lv.paid, cols: lv.cols, stairs: lv.stairs }
   const up = [...(w.upper ?? [])]; while (up.length < k) up.push({ walls: {} }); up[k - 1] = lv
   while (up.length && emptyLevel(up[up.length - 1])) up.pop()   // an emptied top level is no level
   return { ...w, upper: up }
@@ -33,8 +34,8 @@ export function adoptUpper(v: unknown): Level[] {
   const out: Level[] = []
   for (const l of v.slice(0, MAX_LEVELS - 1)) {
     const walls = adoptWalls((l as { walls?: unknown })?.walls)
-    const cols = adoptCols((l as { cols?: unknown })?.cols)
-    out.push({ walls, floors: adoptFloors((l as { floors?: unknown })?.floors), paid: adoptPaid((l as { paid?: unknown })?.paid, walls), ...(Object.keys(cols).length ? { cols } : {}) })
+    const cols = adoptCols((l as { cols?: unknown })?.cols), stairs = adoptStairs((l as { stairs?: unknown })?.stairs)
+    out.push({ walls, floors: adoptFloors((l as { floors?: unknown })?.floors), paid: adoptPaid((l as { paid?: unknown })?.paid, walls), ...(Object.keys(cols).length ? { cols } : {}), ...(Object.keys(stairs).length ? { stairs } : {}) })
   }
   while (out.length && emptyLevel(out[out.length - 1])) out.pop()
   return out
@@ -61,6 +62,7 @@ export function floating(w: Stacked): string[] {
   const out: string[] = [], lv = levelsOf(w)
   for (let k = 1; k < lv.length; k++) for (const key of Object.keys(lv[k].walls)) if (!standsOn(lv[k - 1].walls, key)) out.push(`${k}:${key}`)
   for (let k = 1; k < lv.length; k++) for (const key of Object.keys(lv[k].cols ?? {})) if (!colStandsOn(lv[k - 1], key)) out.push(`${k}:c${key}`)   // M54
+  for (let k = 1; k < lv.length; k++) for (const [key, st] of Object.entries(lv[k].stairs ?? {})) if (!stairStandsOn(lv[k].walls, key, st)) out.push(`${k}:s${key}`)   // M56: an upper stair stands on its level's rooms
   return out
 }
 /** the highest level that has any wall: the roof goes there (and nowhere lower) */
@@ -78,8 +80,11 @@ export function upperBoxes(w: Stacked, groundY: number, shaft?: ReadonlySet<stri
   for (let k = 1; k < lv.length; k++) {
     const base = groundY + levelBase(k)
     for (const [key, x] of Object.entries(lv[k].walls)) if (!x.draft) { const r: Rect = edgeRect(key); out.push({ ...r, y0: x.kind === 'door' ? base + DOOR_H : base - SLAB_T, y1: base + WALL_H }) }
-    for (const [i, j] of slabCells(lv[k])) if (!shaft?.has(`${i},${j}`) && !shaft?.has(`${i},${j},${k}`)) out.push({ x0: i, x1: i + 1, z0: j, z1: j + 1, y0: base - SLAB_T, y1: base })
+    const stairHole = stairCellSet(lv[k - 1].stairs)   // M56: the slab is open over the stairs that climb to it
+    for (const [i, j] of slabCells(lv[k])) if (!shaft?.has(`${i},${j}`) && !shaft?.has(`${i},${j},${k}`) && !stairHole.has(`${i},${j}`)) out.push({ x0: i, x1: i + 1, z0: j, z1: j + 1, y0: base - SLAB_T, y1: base })
     out.push(...colBoxes(lv[k].cols, base))   // M54
   }
+  // M56: every level's built stairs are solid steps from that level's floor (level 0's from the ground)
+  for (let k = 0; k < lv.length; k++) { const base = groundY + levelBase(k); for (const [key, st] of Object.entries(lv[k].stairs ?? {})) if (!st.draft) out.push(...stairBoxes(key, st, base)) }
   return out
 }

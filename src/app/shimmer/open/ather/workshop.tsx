@@ -38,6 +38,7 @@ import { getPlanLevel, setPlanLevel, usePlanLevel } from './plot-level'
 import { shaftKeys, shaftHoles, liveLift, cellMid, shaftBlockers, SHAFT_WHY, isLiftPiece } from './lift'
 import { LiftMesh, LiftInput } from './lift-view'
 import { levelOf, withLevel, levelCount, levelBase, canStack, floating, upperBoxes, MAX_LEVELS, SLAB_T } from './plot-floors'
+import { stairBoxes, stairCellSet, toggleStair, dirOfYaw, type Stairs } from './plot-stairs'
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, type Job } from './furniture'
 import { ROAST } from './cooking'
@@ -48,7 +49,7 @@ import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
 import { TOOL_DEFS } from '../../engine/tools'
-import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw } from './build-mode'
+import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw, buildYaw } from './build-mode'
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
 import { advance, setFocus, cancelFocus, runProgress, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
@@ -223,6 +224,30 @@ function columnHandler(owned: () => ReadonlySet<string>) {
     cancel() { at = null },
   }
 }
+/** M56: the Stairs tool. A tap on a cell starts a straight stair there that climbs AWAY from the camera (turn the view with Q / Z to
+ *  turn it); a tap on a stair takes it away (a built one with its cost back). Ground floor: every cell on ground you hold; upper
+ *  floors: every cell on a room of that floor. */
+function stairsHandler(owned: () => ReadonlySet<string>) {
+  let at: { x: number; z: number } | null = null
+  return {
+    start(x: number, z: number) { at = { x, z } },
+    move() { /* a tap tool ignores drags */ },
+    end(x: number, z: number) {
+      if (!at || Math.hypot(x - at.x, z - at.z) > 1.2) { at = null; return }
+      at = null
+      const i = Math.floor(x), j = Math.floor(z), w = currentWorks(), lv = getPlanLevel(), L = levelOf(w, lv)
+      const roomCells = lv > 0 ? new Set(findRooms(L.walls).flatMap(r => r.cells.map(([a, b]) => `${a},${b}`))) : null
+      const held = heldCorner(owned())
+      const cellOk = (a: number, b: number) => roomCells ? roomCells.has(`${a},${b}`) : held(a + 0.5, b + 0.5)
+      if (lv + 1 >= MAX_LEVELS && !Object.values(L.stairs ?? {}).length) { hudSay('This is the top floor: nowhere for stairs to go.', 'info'); return }
+      const r = toggleStair(L.stairs, L.walls, i, j, dirOfYaw(buildYaw()), wallMat, cellOk)
+      if (!r.ok) { hudSay(r.why, 'info'); return }
+      if (r.refund) { const g = give(getInv(), r.refund.id, r.refund.n); if (g.left) { hudSay('Your bag is full: no room for what the stairs give back.', 'info'); return } setInv(g.inv) }
+      setWorks(withLevel(w, lv, { ...L, stairs: r.stairs })); hudSay(r.said, 'info')
+    },
+    cancel() { at = null },
+  }
+}
 /** BuildBar registers this while the Walls / Erase tool is on */
 function wallDrawHandler(owned: () => ReadonlySet<string>, erase: boolean) {
   const at = (x: number, z: number) => snapCorner(x, z)
@@ -262,7 +287,7 @@ export function BlueprintBuilding({ walls, roof, floors, x, z, y, rotY }: { wall
 let wallsDown = false
 const setWallsDown = (v: boolean) => { wallsDown = v; wdEmit() }
 const useWallsDown = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => wallsDown, () => false)
-export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverride, unbuilt, roofed = true, slab = false }: { walls: Walls; roof: RoofStyle; floors?: Floors; unbuilt?: ReadonlySet<string>; /** M47: no roof here (a floor is above) */ roofed?: boolean; /** M47: an upper level: a slab under its built rooms, seen from below as the ceiling */ slab?: boolean; probe?: boolean; /** set by a page outside plan mode (dev/blueprints) */ down?: boolean }) {
+export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverride, unbuilt, roofed = true, slab = false, holes }: { walls: Walls; roof: RoofStyle; floors?: Floors; unbuilt?: ReadonlySet<string>; /** M56: cells left open in this level's floor + slab (stairs climb through) */ holes?: ReadonlySet<string>; /** M47: no roof here (a floor is above) */ roofed?: boolean; /** M47: an upper level: a slab under its built rooms, seen from below as the ceiling */ slab?: boolean; probe?: boolean; /** set by a page outside plan mode (dev/blueprints) */ down?: boolean }) {
   const b = useBuildMode(), wd = useWallsDown(), down = downOverride ?? (wd && b)   // hooks always run; the override only picks
   useEffect(() => { if (!b && wallsDown) setWallsDown(false) }, [b])
   // runs by wood AND kind: a plain piece is floor to top, a door only its lintel, a window a sill + a head + a pane
@@ -279,8 +304,8 @@ export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverri
         return <WallRun key={id} mat={mat} tint={tint} keys={keys} h={top} ghost={g} />
       })}
       {!down && panes.length > 0 && <WallRun key={'pane' + panes.length} mat="goldwood" keys={panes} y0={SILL} h={WIN_TOP - SILL} pane />}
-      {rooms.filter(r => !unbuilt?.has(r.key)).map(r => <RoomFloor key={r.key} room={r} floors={floors} />)}
-      {slab && <Slab cells={rooms.filter(r => !unbuilt?.has(r.key)).flatMap(r => r.cells)} />}
+      {rooms.filter(r => !unbuilt?.has(r.key)).map(r => <RoomFloor key={r.key + (holes?.size ?? 0)} room={r} floors={floors} holes={holes} />)}
+      {slab && <Slab cells={rooms.filter(r => !unbuilt?.has(r.key)).flatMap(r => r.cells).filter(([i, j]) => !holes?.has(`${i},${j}`))} />}
       {!down && roofed && rooms.filter(r => !unbuilt?.has(r.key)).map(r => <RoomRoof key={r.key + roof} room={r} style={roof} walls={walls} />)}
     </>
   )
@@ -300,8 +325,8 @@ function Slab({ cells }: { cells: [number, number][] }) {
 const DRAFT_LOOK = '#6fb4ff'
 const FLOOR_GEO = new THREE.BoxGeometry(1, 0.06, 1)
 /** a drawn room's floor: a pattern and a colour per cell (slice 5), a shade under the walls; unset = plain goldwood planks */
-function RoomFloor({ room, floors }: { room: PlotRoom; floors?: Floors }) {
-  const groups = useMemo(() => { const g = new Map<string, { pat: FloorPat; col: string; cells: [number, number][] }>(); for (const c of room.cells) { const f = floorOf(floors, c[0], c[1]); const id = `${f.pat}|${f.col}`; const e = g.get(id) ?? { pat: f.pat, col: f.col, cells: [] }; e.cells.push(c); g.set(id, e) } return [...g] }, [room, floors])
+function RoomFloor({ room, floors, holes }: { room: PlotRoom; floors?: Floors; holes?: ReadonlySet<string> }) {
+  const groups = useMemo(() => { const g = new Map<string, { pat: FloorPat; col: string; cells: [number, number][] }>(); for (const c of room.cells) { if (holes?.has(`${c[0]},${c[1]}`)) continue; const f = floorOf(floors, c[0], c[1]); const id = `${f.pat}|${f.col}`; const e = g.get(id) ?? { pat: f.pat, col: f.col, cells: [] }; e.cells.push(c); g.set(id, e) } return [...g] }, [room, floors, holes])
   return <>{groups.map(([id, e]) => <FloorCells key={id + e.cells.length} pat={e.pat} col={e.col} cells={e.cells} />)}</>
 }
 /** procedural pattern textures (no art files): grey lines on white, multiplied by the floor's colour. One canvas per pattern. */
@@ -402,15 +427,33 @@ function HouseLevels({ w }: { w: Works }) {
   return (
     <>
       {shown.map(k => {
-        const L = levelOf(w, k), hasCols = Object.keys(L.cols ?? {}).length > 0; if (!Object.keys(L.walls).length && !hasCols) return null
+        const L = levelOf(w, k), hasCols = Object.keys(L.cols ?? {}).length > 0, hasStairs = Object.keys(L.stairs ?? {}).length > 0; if (!Object.keys(L.walls).length && !hasCols && !hasStairs) return null
+        const holes = k > 0 ? stairCellSet(levelOf(w, k - 1).stairs) : undefined
         const guide = b && k < edit
         return (
           <group key={k} position-y={levelBase(k)}>
-            {Object.keys(L.walls).length > 0 && <DrawnWalls walls={L.walls} roof={w.roof ?? 'gable'} floors={L.floors} unbuilt={unbuiltRooms(L.walls, L.paid)} probe={k === 0} roofed={k === last} slab={k > 0} down={guide ? true : undefined} />}
+            {Object.keys(L.walls).length > 0 && <DrawnWalls walls={L.walls} roof={w.roof ?? 'gable'} floors={L.floors} unbuilt={unbuiltRooms(L.walls, L.paid)} probe={k === 0} roofed={k === last} slab={k > 0} down={guide ? true : undefined} holes={holes} />}
             {hasCols && <DrawnCols cols={L.cols!} down={guide ? true : undefined} />}
+            {hasStairs && <DrawnStairs stairs={L.stairs!} />}
           </group>
         )
       })}
+    </>
+  )
+}
+/** M56: a level's stairs: one box per step from the floor up (drawn from the solids' own boxes, plot-stairs.ts); a draft is a blue ghost */
+function DrawnStairs({ stairs }: { stairs: Stairs }) {
+  return (
+    <>
+      {Object.entries(stairs).map(([k, st]) => stairBoxes(k, st, GROUND_Y).map((b, n) => {
+        const y0 = GROUND_Y, h = b.y1 - y0   // each step a block from the floor to its tread (a solid stair, no gaps under it)
+        return (
+          <mesh key={k + n} data-stair={k} position={[(b.x0 + b.x1) / 2, y0 + h / 2 + (st.draft ? 0.01 : 0), (b.z0 + b.z1) / 2]} castShadow receiveShadow>
+            <boxGeometry args={[b.x1 - b.x0, h, b.z1 - b.z0]} />
+            {st.draft ? <meshBasicMaterial color="#5aa0ff" transparent opacity={0.45} depthWrite={false} /> : <WallMaterial mat={st.mat} />}
+          </mesh>
+        )
+      }))}
     </>
   )
 }
@@ -482,7 +525,7 @@ function WallTools({ owned, cat, onCat }: { owned: React.MutableRefObject<Readon
   const t = useBuildTool(), mat = useWallMat(), pk = usePaint(), [pPat, pCol] = pk.split('|') as [FloorPat, string], inv = useInv(), down = useWallsDown(), w = useWorks(), roof = w.roof ?? 'gable', owner = useOwner()
   useEffect(() => {
     if (t === 'look') return
-    onBuildDraw(t === 'column' ? columnHandler(() => owned.current) : t === 'door' || t === 'window' || t === 'paint' || t === 'blueprint' ? tapToolHandler(t) : wallDrawHandler(() => owned.current, t === 'erase'))
+    onBuildDraw(t === 'stairs' ? stairsHandler(() => owned.current) : t === 'column' ? columnHandler(() => owned.current) : t === 'door' || t === 'window' || t === 'paint' || t === 'blueprint' ? tapToolHandler(t) : wallDrawHandler(() => owned.current, t === 'erase'))
     return () => onBuildDraw(null)
   }, [t, owned])
   const btn = (on: boolean): React.CSSProperties => ({ border: 0, borderRadius: 10, height: 34, padding: '0 10px', cursor: 'pointer', font: '700 12px system-ui', letterSpacing: '.06em', textTransform: 'uppercase', background: on ? H.ink : 'rgba(255,250,235,.7)', color: on ? '#fff' : H.ink, boxShadow: `inset 0 0 0 1px ${H.rule}` })
@@ -491,14 +534,14 @@ function WallTools({ owned, cat, onCat }: { owned: React.MutableRefObject<Readon
       <button type="button" data-act="wall-catalog" aria-pressed={cat} style={btn(cat)} onClick={onCat}>Catalog</button>
       <button type="button" data-tool="walls" style={btn(t === 'walls')} onClick={() => { setPlacing(null); setBuildTool(t === 'walls' ? 'look' : 'walls') }}>Walls</button>
       <button type="button" data-tool="erase" style={btn(t === 'erase')} onClick={() => { setPlacing(null); setBuildTool(t === 'erase' ? 'look' : 'erase') }}>Erase</button>
-      {(['column', 'door', 'window', 'paint'] as const).map(k => <button key={k} type="button" data-tool={k} style={btn(t === k)} onClick={() => { setPlacing(null); setBuildTool(t === k ? 'look' : k) }}>{k}</button>)}
+      {(['column', 'stairs', 'door', 'window', 'paint'] as const).map(k => <button key={k} type="button" data-tool={k} style={btn(t === k)} onClick={() => { setPlacing(null); setBuildTool(t === k ? 'look' : k) }}>{k}</button>)}
       {owner && <button type="button" data-tool="blueprint" style={btn(t === 'blueprint')} onClick={() => { setPlacing(null); setBpPick(null); setBuildTool(t === 'blueprint' ? 'look' : 'blueprint') }}>blueprint</button>}
       {t === 'paint' && <div data-paint-picker style={{ display: 'grid', gap: 5, flexBasis: '100%', justifyItems: 'center' }}>
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'center' }}>{FLOOR_PAT_ORDER.map(f => <button key={f} type="button" data-floor-pat={f} aria-pressed={pPat === f} title={`${FLOOR_PATS[f].name} floor · ${itemDef(FLOOR_PATS[f].item).name} per m²`} style={{ ...btn(pPat === f), height: 30, fontSize: 11 }} onClick={() => { paintPat = f; paintCol = FLOOR_PATS[f].color; wdEmit() }}>{FLOOR_PATS[f].name}</button>)}</div>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'nowrap', alignItems: 'center' }}>{SWATCHES.map(c => <button key={c} type="button" data-swatch={c} title={c} aria-label={`paint ${c}`} onClick={() => { paintCol = c; wdEmit() }} style={{ width: 20, height: 20, borderRadius: 5, border: 0, cursor: 'pointer', flex: 'none', background: c, boxShadow: pCol === c ? `inset 0 0 0 2px ${H.ink}, 0 0 0 1px #fff` : `inset 0 0 0 1px ${H.rule}` }} />)}
         <input type="color" data-paint-custom aria-label="custom colour" value={isColour(pCol) ? pCol : '#dcd3c2'} onChange={e => { if (isColour(e.target.value)) { paintCol = e.target.value; wdEmit() } }} style={{ width: 28, height: 24, padding: 0, border: 0, background: 'none', cursor: 'pointer', flex: 'none' }} /></div>
       </div>}
-      {(t === 'walls' || t === 'column') && WALL_MAT_ORDER.map(m => (
+      {(t === 'walls' || t === 'column' || t === 'stairs') && WALL_MAT_ORDER.map(m => (
         <button key={m} type="button" data-wall-mat={m} title={`${WALL_MATS[m].name} · ${countOf(inv, WALL_MATS[m].item)} ${itemDef(WALL_MATS[m].item).name}`} onClick={() => { wallMat = m; wdEmit() }}
           style={{ ...btn(false), display: 'flex', alignItems: 'center', gap: 5, textTransform: 'none', letterSpacing: 0, boxShadow: mat === m ? `inset 0 0 0 2px ${H.ink}` : `inset 0 0 0 1px ${H.rule}` }}>
           <i style={{ width: 14, height: 14, borderRadius: 3, background: WALL_MATS[m].color, display: 'inline-block' }} />{countOf(inv, WALL_MATS[m].item)}
@@ -1127,7 +1170,7 @@ export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
       <PlanBom />
       {tool === 'blueprint' && <BlueprintBar />}
       {sel && <BuildCard k={sel} onBuilt={() => setSel(null)} />}
-      {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a plan · it costs nothing until you Build · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · what was built comes back to the bag' : tool === 'column' ? 'Tap a grid corner for a column (pick its material) · tap a column to take it away' : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? `Pick a pattern and a colour, then tap a floor (the whole room) or a stucco wall · ${touchy ? 'long-press' : 'right-click'} paints everything connected. Wood and brick keep their own colour` : <>Pick something to build{touchy ? '' : ' · drag to move · wheel to zoom · WASD · Q Z turn'}</>}</div>}
+      {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a plan · it costs nothing until you Build · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · what was built comes back to the bag' : tool === 'column' ? 'Tap a grid corner for a column (pick its material) · tap a column to take it away' : tool === 'stairs' ? `Tap a cell: stairs climb one floor, away from you (${touchy ? 'turn the view' : 'Q / Z turns the view'} to turn them) · tap stairs to take them away` : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? `Pick a pattern and a colour, then tap a floor (the whole room) or a stucco wall · ${touchy ? 'long-press' : 'right-click'} paints everything connected. Wood and brick keep their own colour` : <>Pick something to build{touchy ? '' : ' · drag to move · wheel to zoom · WASD · Q Z turn'}</>}</div>}
     </div>
     </>
   )

@@ -9,6 +9,7 @@
 //   a wall piece = 1 plank of its wood per metre   a window = that plank + 1 crystal pane   a door = 2 m of plank wall, no extra
 //   a room's floor = 1 goldwood plank per m²       a room's roof = 1 stone brick per m²   (a drawn room's own area, not the eaves)
 import { draftCols, colNeeds, standCols } from './plot-cols'
+import { draftStairs, stairNeeds, standStairs } from './plot-stairs'
 import { findRooms, WALL_MATS, FLOOR_PATS, FLOOR_PER_M2, roomFloor, floorByKey, type Walls, type Paid, type Floors } from './plot-walls'
 import { payCost, haveFor } from './rooms'
 import { give, itemDef, type Inv } from '../shared/inventory'
@@ -95,7 +96,8 @@ export function paneFor(from: Walls, to: Walls, k: string, inv: Inv, bank?: Bank
 export function billOfAll(w: Stacked, inv: Inv, bank?: Bank | null): { lines: Line[]; ok: boolean; empty: boolean; pieces: number; rooms: number } {
   const m = new Map<string, number>(); let pieces = 0, rooms = 0
   levelsOf(w).forEach((lv, k) => { const p = planNeeds(lv.walls, lv.paid, lv.floors, k === 0); pieces += p.pieces; rooms += p.rooms; for (const c of p.needs) add(m, c.id, c.n)
-    pieces += draftCols(lv.cols); for (const c of colNeeds(lv.cols, PER_COL)) add(m, c.id, c.n) })   // M54: columns, 2 m of their wall each
+    pieces += draftCols(lv.cols); for (const c of colNeeds(lv.cols, PER_COL)) add(m, c.id, c.n)   // M54: columns, 2 m of their wall each
+    pieces += draftStairs(lv.stairs); for (const c of stairNeeds(lv.stairs)) add(m, c.id, c.n) })   // M56: stairs, a step's worth each
   const ls = lines(m).map(c => { const have = haveFor(inv, bank, c.id); return { ...c, have, short: have < c.n, name: itemDef(c.id).name } })
   return { lines: ls, ok: ls.length > 0 && ls.every(l => !l.short), empty: ls.length === 0, pieces, rooms }
 }
@@ -113,11 +115,11 @@ export function buildAll<T extends Stacked>(w: T, inv: Inv, bank?: Bank | null):
     for (const c of r.spent) add(spent, c.id, c.n)
   }
   // M54: then every level's draft columns, paid as one list (billOfAll already checked the whole of it is on hand)
-  const cm = new Map<string, number>(); levelsOf(cur).forEach(lv => { for (const c of colNeeds(lv.cols, PER_COL)) add(cm, c.id, c.n) })
+  const cm = new Map<string, number>(); levelsOf(cur).forEach(lv => { for (const c of colNeeds(lv.cols, PER_COL)) add(cm, c.id, c.n); for (const c of stairNeeds(lv.stairs)) add(cm, c.id, c.n) })   // + M56 stairs
   if (cm.size) {
     const need = lines(cm), pay = payCost(need, bag, bk); if (!pay) return { ok: false, why: 'Not enough on hand for the columns.' }
     bag = pay.inv; bk = pay.bank; for (const c of need) add(spent, c.id, c.n)
-    for (let k = 0; k < levelCount(cur); k++) { const lv = levelOf(cur, k); if (draftCols(lv.cols)) cur = withLevel(cur, k, { ...lv, cols: standCols(lv.cols) }) }
+    for (let k = 0; k < levelCount(cur); k++) { const lv = levelOf(cur, k); if (draftCols(lv.cols) || draftStairs(lv.stairs)) cur = withLevel(cur, k, { ...lv, cols: standCols(lv.cols), stairs: standStairs(lv.stairs) }) }
   }
   return { ok: true, works: cur, inv: bag, bank: bk, spent: lines(spent) }
 }
