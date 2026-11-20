@@ -63,8 +63,13 @@ try {
   await sleep(4000); if (!phone) { await p.mouse.click(550, 340); await sleep(500) }
   // 1. the five where the plan puts them
   ok(await poll(async () => ((await p.evaluate(() => (window as any).__folk?.drawn?.()?.moonwell?.length ?? 0)) as number) >= 5, 30000), 'the five are drawn at the Glade')
-  const drawn = await p.evaluate(() => (window as any).__folk.drawn().moonwell) as { id: string; x: number; z: number }[]
-  const off = plan.map(q => { const d = drawn.find(x => x.id === q.id); return d ? Math.hypot(d.x - q.x, d.z - q.z) : 99 })
+  // the blueprints arrive after the folk are first drawn (a fetch per lot), then the folk re-place: wait for that
+  let off: number[] = []
+  await poll(async () => {
+    const drawn = await p.evaluate(() => (window as any).__folk.drawn().moonwell) as { id: string; x: number; z: number }[]
+    off = plan.map(q => { const d = drawn.find(x => x.id === q.id); return d ? Math.hypot(d.x - q.x, d.z - q.z) : 99 })
+    return off.every(d => d <= 1)
+  }, 60000)
   ok(off.every(d => d <= 1), `1. each Moglin stands where the plan puts them, at the front of their lot (worst ${Math.max(...off).toFixed(2)} m)`)
   // 2. level: the green, the waymark, every lot's pad (stand on the pad's front corners, clear of the station)
   const ys: { at: string; y: number }[] = []
@@ -89,7 +94,8 @@ try {
     for (const w of turns(r).slice(1)) {
       const s0 = await st(); await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, y), s0.x, s0.z, Math.atan2(-(w.x - s0.x), -(w.z - s0.z)))
       await p.keyboard.down('KeyW')
-      const got = await poll(async () => { const s1 = await st(); return Math.hypot(s1.x - w.x, s1.z - w.z) < 0.7 }, 40000)
+      const legT = 20000 + Math.hypot(w.x - s0.x, w.z - s0.z) / 0.25 * 1000   // ~0.4 m/s at 1-2 fps: time by the leg's length, not a fixed 40 s
+      const got = await poll(async () => { const s1 = await st(); return Math.hypot(s1.x - w.x, s1.z - w.z) < 0.7 }, legT)
       await p.keyboard.up('KeyW')
       if (!got) { stuck = true; break }
     }
