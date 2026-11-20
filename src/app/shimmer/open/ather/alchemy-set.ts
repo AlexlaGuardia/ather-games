@@ -1,0 +1,160 @@
+// ALCHEMY IS A FURNITURE SET, NOT A ROOM (Alex 11-20: "the alchemy room was a mistake.. this is actually going to have to be
+// the only skill that is a furniture set ... this way the player could plan a potion party"; then "more advanced manatech
+// introduced to alchemy .. the four i mentioned, the mixing table would have a cauldron attached"). Pure: the four stations,
+// each potion's step chain, and POTENCY from the grades of what went in ("the higher the ingredients grade the higher the
+// potency"). No React, no bag: the panel spends and pays, this file says what a step takes and what it makes.
+//
+// ★ NAMES ARE PLACEHOLDERS until Magii rules CANON_GAPS [OPEN] "Alchemy as a MANATECH furniture set" (athernyx 711aa01):
+//   the station names are Alex's words, the intermediate + potion names are build stand-ins. Every name lives in this file only.
+// ⚖ Jin's (canon 09-16): every step list, every number, potency, the grade maths. Canon's: a brewing, every hand a bottle,
+//   bottle-only, more-never-only (alchemy.md). Run: npx tsx src/app/shimmer/open/ather/alchemy-set.test.ts
+import { GRADES, type Grade } from './farming'
+
+export type AlcStation = 'mortar' | 'still' | 'mixer' | 'desk'
+export const ALC_STATIONS: Readonly<Record<AlcStation, { name: string; verb: string; blurb: string }>> = {
+  mortar: { name: 'Mortar and Pestle Table', verb: 'Grind', blurb: 'A mana-driven pestle grinds dry things to powder.' },
+  still:  { name: 'Distillation Machine', verb: 'Distil', blurb: 'Runs a mixture through glass coils into a clear extract.' },
+  mixer:  { name: 'Mixing Table', verb: 'Mix', blurb: 'A table with a cauldron set into it: folds herbs together over heat.' },
+  desk:   { name: 'Alchemy Desk', verb: 'Combine', blurb: 'Where the prepared parts become a potion, and its potency is read.' },
+}
+export const ALC_ORDER: readonly AlcStation[] = ['mortar', 'still', 'mixer', 'desk']
+
+/** A slot a step takes: a plain bag id, a graded crop (`crop:<crop>`, any grade) or an earlier step's product (`alc:<id>`). */
+export interface Slot { id: string; n: number }
+export interface Step { at: AlcStation; in: readonly Slot[]; out: string; ms: number }
+export interface Potion {
+  name: string
+  blurb: string
+  steps: readonly Step[]
+  /** how many bottles the last step pours */
+  makes: number
+  /** the effect at potency 1 (grade D); potency scales it */
+  effect: { heal: number } | { mana: number } | { xp: number; ms: number }
+}
+
+/** The things a chain makes on the way (each is graded like a crop: `alc:<id>:<grade>`). */
+export const INTERMEDIATES: Readonly<Record<string, string>> = {
+  scale_powder: 'Scale Powder', golden_mixture: 'Golden Mixture', golden_dew_extract: 'Golden Dew Extract',
+  shard_dust: 'Shard Dust', mana_mixture: 'Mana Mixture', sap_extract: 'Sap Extract', core_dust: 'Core Dust',
+}
+
+const S = 1000
+export const ALC_POTIONS: Readonly<Record<string, Potion>> = {
+  // Alex's own chain, word for word: ground scales, Goldleaf + Dewdrop Vine mixed, distilled to Golden Dew Extract, combined.
+  health: {
+    name: 'Health Potion', blurb: 'Golden dew and scale powder. Drink it to heal.', makes: 2, effect: { heal: 40 },
+    steps: [
+      { at: 'mortar', in: [{ id: 'shimmerscale', n: 2 }], out: 'scale_powder', ms: 6 * S },
+      { at: 'mixer', in: [{ id: 'crop:goldleaf', n: 2 }, { id: 'crop:dewdrop_vine', n: 2 }], out: 'golden_mixture', ms: 10 * S },
+      { at: 'still', in: [{ id: 'alc:golden_mixture', n: 1 }], out: 'golden_dew_extract', ms: 12 * S },
+      { at: 'desk', in: [{ id: 'alc:scale_powder', n: 1 }, { id: 'alc:golden_dew_extract', n: 1 }], out: 'health', ms: 8 * S },
+    ],
+  },
+  mana: {
+    name: 'Mana Potion', blurb: 'Shard dust folded into dewdrop. Drink it for mana.', makes: 2, effect: { mana: 65 },
+    steps: [
+      { at: 'mortar', in: [{ id: 'raw_mana_shard', n: 3 }], out: 'shard_dust', ms: 6 * S },
+      { at: 'mixer', in: [{ id: 'alc:shard_dust', n: 1 }, { id: 'crop:dewdrop_vine', n: 2 }], out: 'mana_mixture', ms: 10 * S },
+      { at: 'desk', in: [{ id: 'alc:mana_mixture', n: 1 }], out: 'mana', ms: 8 * S },
+    ],
+  },
+  wisdom: {
+    name: 'Wisdom Potion', blurb: 'Starwillow extract on core dust. Gathering teaches you more for a while.', makes: 2, effect: { xp: 0.25, ms: 8 * 60 * S },
+    steps: [
+      { at: 'mortar', in: [{ id: 'pure_mana_core', n: 2 }], out: 'core_dust', ms: 6 * S },
+      { at: 'still', in: [{ id: 'starwillow_sap', n: 3 }], out: 'sap_extract', ms: 12 * S },
+      { at: 'desk', in: [{ id: 'alc:core_dust', n: 1 }, { id: 'alc:sap_extract', n: 1 }, { id: 'crop:goldleaf', n: 1 }], out: 'wisdom', ms: 8 * S },
+    ],
+  },
+}
+export const ALC_POTION_ORDER = Object.keys(ALC_POTIONS)
+
+// ── grades and potency ──────────────────────────────────────────────────────────────────────────────────────────────
+/** D = 1 ... S = 5 */
+export const gradeScore = (g: Grade) => GRADES.indexOf(g) + 1
+/** What potency a grade gives: D ×1, C ×1.15, B ×1.3, A ×1.5, S ×1.75 (felt at every rung, S not doubling the bottle). */
+export const POTENCY: Readonly<Record<Grade, number>> = { D: 1, C: 1.15, B: 1.3, A: 1.5, S: 1.75 }
+
+/** The grade an id carries (`crop:goldleaf:B`, `alc:x:A`, `potion:x:S`), or null for a plain bag id. */
+export function gradeOf(id: string): Grade | null {
+  const p = id.split(':')
+  return p.length === 3 && (GRADES as readonly string[]).includes(p[2]) ? p[2] as Grade : null
+}
+/** Does a bag id fill a slot? A graded slot (`crop:x`, `alc:x`) takes any grade of it; a plain slot takes only itself. An
+ *  intermediate made from nothing graded is plain (`alc:x`, see stepMakes) and fills its own slot too. */
+export const fills = (slot: string, id: string) =>
+  id === slot ? !slot.startsWith('crop:') : slot.includes(':') && id.startsWith(slot + ':') && gradeOf(id) !== null
+
+/** The grade a step's product takes: the mean score of its GRADED inputs (weighted by count), rounded down; a step fed
+ *  nothing graded makes a D. Rounding down means one S cannot carry a pile of D's up. */
+export function gradeFrom(spent: readonly { id: string; n: number }[]): Grade {
+  return gradeOrNull(spent) ?? 'D'
+}
+/** The same, but null when nothing graded went in (an intermediate made only of plain things carries no grade, so ground
+ *  scales never drag a grade-A extract down at the desk). */
+export function gradeOrNull(spent: readonly { id: string; n: number }[]): Grade | null {
+  let sum = 0, n = 0
+  for (const s of spent) { const g = gradeOf(s.id); if (g) { sum += gradeScore(g) * s.n; n += s.n } }
+  return n ? GRADES[Math.max(0, Math.floor(sum / n) - 1)] : null
+}
+
+export const alcId = (inter: string, g: Grade) => `alc:${inter}:${g}`
+export const potionId = (p: string, g: Grade) => `potion:${p}:${g}`
+export const isAlcPotion = (id: string) => id.startsWith('potion:') && id.split(':')[1] in ALC_POTIONS && gradeOf(id) !== null
+export function alcName(id: string): string | null {
+  const [k, x, g] = id.split(':')
+  if (k === 'alc' && !g && INTERMEDIATES[x]) return INTERMEDIATES[x]
+  if (!g || !gradeOf(id)) return null
+  if (k === 'alc' && INTERMEDIATES[x]) return `${INTERMEDIATES[x]} · ${g}`
+  if (k === 'potion' && ALC_POTIONS[x]) return `${ALC_POTIONS[x].name} · ${g}`
+  return null
+}
+
+/** What a bottle does at its grade. */
+export function effectOf(id: string): { heal: number } | { mana: number } | { xp: number; ms: number } | null {
+  if (!isAlcPotion(id)) return null
+  const p = ALC_POTIONS[id.split(':')[1]], m = POTENCY[gradeOf(id)!]
+  const e = p.effect
+  if ('heal' in e) return { heal: Math.round(e.heal * m) }
+  if ('mana' in e) return { mana: Math.round(e.mana * m) }
+  return { xp: Math.round(e.xp * m * 100) / 100, ms: e.ms }
+}
+
+// ── a step ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+export type Have = Readonly<Record<string, number>>
+
+/** Which bag ids a step would spend, best grade first by default (a keeper brewing for potency wants their best). Null when
+ *  the bag cannot fill every slot. Plain slots spend themselves. */
+export function pickFor(step: Step, have: Have, prefer: 'best' | 'worst' = 'best'): { id: string; n: number }[] | null {
+  const out: { id: string; n: number }[] = []
+  for (const slot of step.in) {
+    const ids = Object.keys(have).filter(id => (have[id] ?? 0) > 0 && fills(slot.id, id))
+    ids.sort((a, b) => (gradeScore(gradeOf(b) ?? 'D') - gradeScore(gradeOf(a) ?? 'D')) * (prefer === 'best' ? 1 : -1))
+    let need = slot.n
+    for (const id of ids) {
+      if (!need) break
+      const take = Math.min(need, have[id])
+      out.push({ id, n: take }); need -= take
+    }
+    if (need) return null
+  }
+  return out
+}
+
+/** What a step makes from what it spent: the next intermediate, or (the last step) the bottles. */
+export function stepMakes(potion: string, k: number, spent: readonly { id: string; n: number }[]): { id: string; n: number } {
+  const p = ALC_POTIONS[potion], st = p.steps[k], g = gradeOrNull(spent)
+  if (k === p.steps.length - 1) return { id: potionId(potion, g ?? 'D'), n: p.makes }
+  return { id: g ? alcId(st.out, g) : `alc:${st.out}`, n: 1 }
+}
+
+/** The step a keeper is on: the first whose product they do not hold yet (counting back from the bottle). A keeper holding
+ *  the extract skips straight to the desk. Returns the step index, or -1 when the bag cannot start anywhere. */
+export function nextStep(potion: string, have: Have): number {
+  const p = ALC_POTIONS[potion]
+  for (let k = p.steps.length - 1; k >= 0; k--) if (pickFor(p.steps[k], have)) return k
+  return -1
+}
+
+/** Every step done at a station, across every potion (what the station's panel lists). */
+export const stepsAt = (at: AlcStation) => ALC_POTION_ORDER.flatMap(p => ALC_POTIONS[p].steps.map((s, k) => ({ potion: p, k, step: s })).filter(x => x.step.at === at))

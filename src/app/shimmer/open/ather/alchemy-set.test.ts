@@ -1,0 +1,71 @@
+// alchemy-set.ts. Run: npx tsx src/app/shimmer/open/ather/alchemy-set.test.ts
+import {
+  ALC_POTIONS, ALC_POTION_ORDER, ALC_ORDER, INTERMEDIATES, POTENCY, gradeOf, gradeFrom, fills, pickFor, stepMakes, nextStep,
+  effectOf, isAlcPotion, alcName, stepsAt,
+} from './alchemy-set'
+import { OPEN_ITEMS } from '../shared/inventory'
+import { CROPS } from './farming'
+let pass = 0
+const fails: string[] = []
+const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
+
+// every chain is well formed: ends at the desk, every alc: input is made by an earlier step, every plain input is a real bag row
+for (const id of ALC_POTION_ORDER) {
+  const p = ALC_POTIONS[id], made = new Set<string>()
+  ok(p.steps[p.steps.length - 1].at === 'desk' && p.steps[p.steps.length - 1].out === id, `${id}: the last step is the desk and pours it`)
+  p.steps.forEach((s, k) => {
+    for (const slot of s.in) {
+      if (slot.id.startsWith('alc:')) ok(made.has(slot.id.slice(4)), `${id} step ${k}: ${slot.id} is made by an earlier step`)
+      else if (slot.id.startsWith('crop:')) ok(slot.id.slice(5) in CROPS, `${id} step ${k}: ${slot.id} is a crop`)
+      else ok(slot.id in OPEN_ITEMS, `${id} step ${k}: ${slot.id} is a bag row`)
+    }
+    if (k < p.steps.length - 1) { ok(s.out in INTERMEDIATES, `${id} step ${k}: ${s.out} is named`); made.add(s.out) }
+  })
+}
+ok(ALC_ORDER.every(a => stepsAt(a).length > 0), 'every station has work to do')
+ok(['health', 'mana', 'wisdom'].every(p => p in ALC_POTIONS), 'the starter set: health, mana, an XP boost')
+// Alex's chain, word for word
+const h = ALC_POTIONS.health.steps.map(s => s.at).join()
+ok(h === 'mortar,mixer,still,desk', 'health: grind scales, mix goldleaf + dewdrop, distil, combine')
+
+// grades
+ok(gradeOf('crop:goldleaf:B') === 'B' && gradeOf('goldleaf') === null && gradeOf('alc:scale_powder:S') === 'S', 'gradeOf')
+ok(fills('crop:goldleaf', 'crop:goldleaf:A') && !fills('crop:goldleaf', 'crop:dewdrop_vine:A') && !fills('crop:goldleaf', 'seed:goldleaf:A'), 'a graded slot takes any grade of that crop only')
+ok(fills('shimmerscale', 'shimmerscale') && !fills('shimmerscale', 'crop:shimmerscale:A'), 'a plain slot takes itself')
+ok(gradeFrom([{ id: 'crop:goldleaf:S', n: 2 }, { id: 'crop:dewdrop_vine:S', n: 2 }]) === 'S', 'all S makes S')
+ok(gradeFrom([{ id: 'crop:goldleaf:S', n: 1 }, { id: 'crop:dewdrop_vine:D', n: 3 }]) === 'C', 'one S on three D rounds down to C (score 2)')
+ok(gradeFrom([{ id: 'shimmerscale', n: 2 }]) === 'D', 'nothing graded makes D')
+ok(stepMakes('health', 0, [{ id: 'shimmerscale', n: 2 }]).id === 'alc:scale_powder' && fills('alc:scale_powder', 'alc:scale_powder') && !fills('crop:goldleaf', 'crop:goldleaf'), 'ground plain scales stay plain and fill their slot')
+ok(stepMakes('mana', 2, [{ id: 'alc:mana_mixture', n: 1 }]).id === 'potion:mana:D', 'a bottle with no grade in it is a D')
+ok(gradeFrom([{ id: 'shimmerscale', n: 9 }, { id: 'alc:x:A', n: 1 }]) === 'A', 'plain inputs do not drag a grade down')
+
+// a whole chain: grades carry through every step to the bottle's potency
+const bag: Record<string, number> = { shimmerscale: 2, 'crop:goldleaf:A': 2, 'crop:dewdrop_vine:A': 2 }
+const spend = (s: { id: string; n: number }[]) => { for (const x of s) { bag[x.id] -= x.n; if (!bag[x.id]) delete bag[x.id] } }
+const give = (x: { id: string; n: number }) => { bag[x.id] = (bag[x.id] ?? 0) + x.n }
+ok(nextStep('health', bag) === 1 || nextStep('health', bag) === 0, 'health can start')
+for (let k = 0; k < 4; k++) {
+  const s = pickFor(ALC_POTIONS.health.steps[k], bag)
+  ok(!!s, `health step ${k} can be filled`)
+  if (!s) break
+  spend(s); give(stepMakes('health', k, s))
+}
+ok(bag['potion:health:A'] === 2 && Object.keys(bag).length === 1, `the chain pours 2 grade-A health, nothing left over (${JSON.stringify(bag)})`)
+const eA = effectOf('potion:health:A'), eD = effectOf('potion:health:D')
+ok(!!eA && !!eD && 'heal' in eA && 'heal' in eD && eA.heal === 60 && eD.heal === 40, 'potency: grade A heals 60, grade D 40')
+ok(Object.values(POTENCY).every((v, i, a) => i === 0 || v > a[i - 1]), 'potency climbs with every grade')
+const w = effectOf('potion:wisdom:S')
+ok(!!w && 'xp' in w && w.xp > 0.25, 'an S wisdom potion lifts XP more than a D')
+ok(isAlcPotion('potion:mana:B') && !isAlcPotion('potion:nope:B') && !isAlcPotion('potion:mana'), 'isAlcPotion')
+ok(alcName('alc:golden_dew_extract:B') === 'Golden Dew Extract · B' && alcName('potion:mana:S') === 'Mana Potion · S', 'names')
+
+// pickFor spends the best first, and refuses a short bag
+const best = pickFor(ALC_POTIONS.health.steps[1], { 'crop:goldleaf:D': 5, 'crop:goldleaf:S': 1, 'crop:dewdrop_vine:B': 2 })
+ok(!!best && best[0].id === 'crop:goldleaf:S' && best[0].n === 1 && best[1].id === 'crop:goldleaf:D', 'best grade spent first, topped up with the rest')
+ok(pickFor(ALC_POTIONS.health.steps[1], { 'crop:goldleaf:S': 1, 'crop:dewdrop_vine:B': 2 }) === null, 'a short bag cannot fill a step')
+// a keeper holding the extract skips to the desk
+ok(nextStep('health', { 'alc:golden_dew_extract:B': 1, 'alc:scale_powder:C': 1 }) === 3, 'holding the parts goes straight to the desk')
+ok(nextStep('health', {}) === -1, 'an empty bag cannot start')
+
+console.log(`alchemy-set: ${pass} pass, ${fails.length} fail`)
+if (fails.length) { console.log(fails.join('\n')); process.exit(1) }
