@@ -20,7 +20,7 @@ export const GLADE_NAME = 'Moonwell Glade'
 export const GLADE: Settlement = { id: GLADE_ID, name: GLADE_NAME, x: GLADE_GREEN.x, z: GLADE_GREEN.z, biome: 'meadow' }
 
 /** Canon's own trade words, for player copy (the profession enum is ours; hub 11-19). */
-export const GLADE_TRADE: Readonly<Record<string, string>> = { hazel: 'carpenter', sax: 'the stonery', yarrow: 'apothecary', fennel: 'cook', mallow: 'shopkeeper' }
+export const GLADE_TRADE: Readonly<Record<string, string>> = { hazel: 'carpenter', sax: 'stonemason', yarrow: 'apothecary', fennel: 'cook', mallow: 'shopkeeper' }
 
 /** Mallow's list CHANGES (canon); the cadence and what is on it are Jin's: one pick a week from this pool. */
 export const MALLOW_POOL: readonly { id: string; n: number }[] = [
@@ -98,12 +98,12 @@ export const isGlade = (homeOrId: string) => homeOrId === GLADE_ID || homeOrId.s
 
 /** M40: each of the five talks about THEIR station (what they make, what they want, your matching room). @lark, SIGNED by
  *  Alex 11-19 (athernyx 40bf1c6, CANON/game/glade-station-lines.md), verbatim. The first talk is `main`, a repeat talk the
- *  `alt`. ⚠ OPEN for Alex: Sax says 'Stonemason room' as signed, but the build strip names that room the Stonery (the signed
+ *  `alt`. Alex 11-20: the ROOM is the Stonery, Sax's JOB is stonemason (Sax's two lines say Stonery; the signed
  *  file's own note says the lines follow the UI label). Checks import these, never retype them. */
 export const GLADE_STATION_LINES: Readonly<Record<string, { main: string; alt: string }>> = {
   fennel: { main: "Table's long and the hearth is lit. Bring crops, rinn, honey-like things. A Cooking room on your plot gets you your own.", alt: 'Everybody eats here at evening. Your plot could hold a table like this one. Start with the Cooking room.' },
   hazel: { main: 'Planks, goldwood first, then cord and sap. I make tables and chests. Build a Carpentry room and you get your own bench.', alt: 'A crooked stack makes a crooked table. Stack them square. The Carpentry room runs on the same rule.' },
-  sax: { main: 'Cooled-cloud stone, and crystal for the good work. I cut paving and low walls. Your plot can have a Stonemason room.', alt: 'Ground stays where I put it. Build a Stonemason room and yours will too.' },
+  sax: { main: 'Cooled-cloud stone, and crystal for the good work. I cut paving and low walls. Your plot can have a Stonery.', alt: 'Ground stays where I put it. Build a Stonery and yours will too.' },
   yarrow: { main: 'Herbs, bark, raw shards, and brews once you make them. Jars and catalysts here. Your plot can have an Alchemy room.', alt: 'I will not brew for you. Build an Alchemy room and the work is your hands.' },
   mallow: { main: 'Bring me what the list asks. I pay Marks, and the list changes every week. This is where it all closes up.', alt: 'Check the list before you gather. It will not be the same list as last week.' },
 }
