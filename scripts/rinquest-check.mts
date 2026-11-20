@@ -137,7 +137,9 @@ ok(((await Q(p, 'quest')) as { step: number }).step === 1, 'D. ...and holding ba
 await p.keyboard.down('KeyR'); await sleep(900); await p.keyboard.up('KeyR'); await sleep(800)
 ok(((await A(p, 'stance')) as { kind: string }).kind === 'stowed', `D. hold R stows (stance ${JSON.stringify(await A(p, 'stance'))})`)
 await sitBy()
-ok(await poll(async () => ((await Q(p, 'quest')) as { step: number }).step === 2, 120000), 'D. still, hands empty, at dusk by the water: a rinn comes up (the wait completes)')
+const waited = await poll(async () => ((await Q(p, 'quest')) as { step: number }).step === 2, 120000)
+if (!waited) console.log('  diag:', JSON.stringify(await p.evaluate(() => { const a = (window as any).__ather; const s = a.state(); return { wait: (window as any).__moonwell?.wait?.(), rising: (window as any).__moonwell?.rising?.(), stance: a.stance(), px: s.px, pz: s.pz, py: s.py, said: (window as any).__rinquest?.said?.()?.slice(-3), mw: (window as any).__rinquest?.moonwell?.() } })))
+ok(waited, 'D. still, hands empty, at dusk by the water: a rinn comes up (the wait completes)')
 ok(((await Q(p, 'said')) as string[]).includes(RINQUEST_LINES.surfaced), 'D. ...and says so')
 
 // ── E: the scale on the bank ──
