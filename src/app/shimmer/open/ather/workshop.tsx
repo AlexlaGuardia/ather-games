@@ -51,8 +51,9 @@ import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
 import { advance, setFocus, cancelFocus, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
-import { skillIn, luckOf } from './moglin-skills'
-import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, GRADE_CATEGORIES, type Village } from './moglins'
+import { skillIn, luckOf, skillsOf, SKILL_OF_ROOM, SKILL_LABEL } from './moglin-skills'
+import { reportAway, addMade, type Made } from './away-report'
+import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, type Village } from './moglins'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
 let works: Works | null = null
@@ -1069,17 +1070,22 @@ function workerOf(r: Room, v: Village): { moglin?: Village['moglins'][number]; s
 }
 /** Run every station to now. Offline catch-up is the same call: `last` is a timestamp, the Moglin's hours since are worked
  *  out of the store into the output (station-queue.ts: stockpile above the 30 reserve, capped at 30 a product). */
+let firstTick = true   // the first run per page load is the offline catch-up: what the Moglins made joins the 'while you were away' line
 export function stationTick(now = Date.now()) {
+  const first = firstTick; firstTick = false
   const w = getW(); if (!w.rooms.some(r => raised(r, now))) return
   const v = loadVillage(); let nw = w, changed = false
+  const away: Made = {}
   for (const r of w.rooms) {
     if (!raised(r, now)) continue
     const { moglin, speed } = workerOf(r, v)
     if (!moglin && (speed <= 0 || !(r.work?.focus || r.work?.run))) continue   // the keeper only ever works a focus
     const a = advance(stationOf(r), now, speed, moglin ? stockJobs(r.kind) : [], moglin ? { grade: luckOf(moglin), rnd: Math.random } : undefined)
     if (a.active || !r.work) { nw = setStation(nw, r.id, a.station); changed = true }   // an idle Moglin saves nothing (the panel re-starts its clock when the stock changes)
+    if (first && moglin) addMade(away, a.made)
   }
   if (changed) setWorks(nw)
+  if (first && Object.keys(away).length) reportAway(away)
 }
 const fmtSecs = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); return s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min` : s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s` }
 function useNarrow() {
@@ -1343,7 +1349,9 @@ function MoglinDuty({ r }: { r: Room }) {
     const nv = assign(loadVillage(), getW(), id, room); if (!nv) { hudSay('Their trade does not suit this room.', 'info'); return }
     saveVillage(nv); setV(nv); touchWork(r.id)
   }
-  const grades = (m: Village['moglins'][number]) => GRADE_CATEGORIES.map(c => `${c} ${GRADE_NAME[m.grades[c]]}`).join(' · ')
+  // M46: the skills THIS room reads (its craft + idle-yield skill, once when they are the same), not the old craft/yield/trade grades
+  const grades = (m: Village['moglins'][number]) => { const sk = skillsOf(m), u = SKILL_OF_ROOM[r.kind]
+    return [...new Set([u.craft, u.yield])].map(k => `${SKILL_LABEL[k]} ${GRADE_NAME[sk[k]]}`).join(' · ') }
   if (!here && !fits.length && !v.moglins.length) return null
   return (
     <div data-moglin-duty={r.kind}>

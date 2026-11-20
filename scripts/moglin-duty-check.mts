@@ -28,10 +28,11 @@ await p.evaluateOnNewDocument((room: Room, heath: unknown) => {
   localStorage.setItem('open.village.v1', JSON.stringify({ v: 1, moglins: [heath], lastTick: Date.now() }))
 }, ROOM, HEATH)
 const read = (k: string) => p.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), k)
+const outOf = async () => { const r: Record<string, number> = {}; for (const s of ((await read('open.works.v1'))?.rooms?.[0]?.out ?? []) as { id: string; n: number }[]) r[s.id] = (r[s.id] ?? 0) + s.n; return r }
 const store = async () => { const r: Record<string, number> = {}; for (const s of ((await read('open.works.v1'))?.rooms?.[0]?.store ?? []) as { id: string; n: number }[]) r[s.id] = (r[s.id] ?? 0) + s.n; return r }
 const shot = async (n: string) => { try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
 const click = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (b) await p.mouse.click(b.x, b.y); return !!b }
-const ready = async () => { await p.waitForFunction(() => !!(window as any).__ather?.village, { timeout: 180000 }); await sleep(2500) }
+const ready = async () => { await p.waitForFunction(() => !!(window as any).__ather?.village && typeof (window as any).__ather?.tp === 'function', { timeout: 180000 }); await sleep(2500) }
 const bench = async () => { const b = benchOf(ROOM); await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), b.x, b.z - 1.4); await sleep(1800); await p.keyboard.press('e'); await sleep(900) }
 const res: Record<string, unknown> = { url }
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 }); await ready()
@@ -43,10 +44,14 @@ res.here = await p.evaluate(() => document.querySelector('[data-moglin-here]')?.
 res.duty = await p.evaluate(() => document.querySelector('[data-moglin-here]')?.textContent ?? '')
 await shot('md-1-assigned')
 // 2. away two hours: wind the village clock back, reload; the village catches up and says so
-await p.evaluate(() => { const v = JSON.parse(localStorage.getItem('open.village.v1')!); v.lastTick = Date.now() - 2 * 3_600_000; localStorage.setItem('open.village.v1', JSON.stringify(v)) })
+// since M43a the cook works the hearth's STOCKPILE on the station's own clock (room.work.last), so wind THAT back too
+await p.evaluate(() => { const v = JSON.parse(localStorage.getItem('open.village.v1')!); v.lastTick = Date.now() - 2 * 3_600_000; localStorage.setItem('open.village.v1', JSON.stringify(v))
+  const w = JSON.parse(localStorage.getItem('open.works.v1')!), r = w.rooms[0]; r.work = { ...(r.work ?? { cur: 0 }), last: Date.now() - 2 * 3_600_000 }; localStorage.setItem('open.works.v1', JSON.stringify(w)) })
+res.wound = ((await read('open.works.v1'))?.rooms?.[0]?.work?.last ?? 0) < Date.now() - 3_600_000
 await p.reload({ waitUntil: 'load', timeout: 180000 }); await ready()
-res.toast = await p.evaluate(() => document.body.innerText.match(/While you were away[^\n]*/)?.[0] ?? null)
-res.storeAfter = await store()
+const toastNow = () => p.evaluate(() => document.body.innerText.match(/While you were away[^\n]*/)?.[0] ?? null)
+res.toast = null; for (let t = 0; t < 15000 && !res.toast; t += 500) { res.toast = await toastNow(); if (!res.toast) await sleep(500) }   // the line joins every source ~1.5 s after the scene mounts
+res.storeAfter = await store(); res.outAfter = await outOf()
 await shot('md-2-away')
 // 3. Off duty
 await bench()
@@ -54,8 +59,21 @@ res.offDuty = await click('[data-act="off-duty"] button'); await sleep(600)
 res.roomAfterOff = ((await read('open.village.v1'))?.moglins?.[0]?.room) ?? null
 res.errs = errs
 console.log(JSON.stringify(res))
-const s = res.storeAfter as Record<string, number>
-const pass = JSON.stringify(res.offered) === '["heath-check"]' && res.here === 'heath-check' && /an hour/.test(res.duty as string)
-  && s.roast_rinn >= 6 && s.roast_rinn <= 12 && s.shimmerscale === 34 && new RegExp(`${s.roast_rinn} Roast Rinn`).test((res.toast as string) ?? '')   // 6 runs in 2 h; M46 luck may add +1 per run && res.offDuty === true && res.roomAfterOff === null && errs.length === 0
-console.log(pass ? 'PASS: Heath put to work at the hearth → two hours away → 6 Roast Rinn in the cooking store + the "while you were away" line → Off duty' : 'FAIL')
+const s = res.storeAfter as Record<string, number>, o = res.outAfter as Record<string, number>
+// 2 h at a fair cook (speed 1) = 10 roasts, bounded by the surplus over the 30-raw reserve (40 seeded); M46 luck may add +1 a run
+const made = (o.roast_rinn ?? 0) + (s.roast_rinn ?? 0)
+const checks: [boolean, string][] = [
+  [JSON.stringify(res.offered) === '["heath-check"]', 'Heath offered at the hearth'],
+  [res.here === 'heath-check', 'Heath put to work'],
+  [/Cooking (fair|good|fine|gifted|rare)/.test(res.duty as string) && /stockpile/.test(res.duty as string), `duty row names the room's skill (${res.duty})`],
+  [res.wound === true, 'station clock wound back 2 h'],
+  [o.roast_rinn >= 10 && o.roast_rinn <= 20, `roasts in the hearth's output (${o.roast_rinn})`],
+  [s.shimmerscale === 30, `the 30-raw reserve kept (${s.shimmerscale})`],
+  [new RegExp(`made ${made} Roast Rinn`).test((res.toast as string) ?? ''), `the 'while you were away' line says ${made} Roast Rinn (${res.toast})`],
+  [res.offDuty === true && res.roomAfterOff === null, 'Off duty clears the room'],
+  [errs.length === 0, `0 page errors ${errs.join(' | ')}`],
+]
+for (const [c, m] of checks) console.log(c ? '  ok  ' : '  FAIL', m)
+const pass = checks.every(([c]) => c)
+console.log(pass ? 'PASS: Heath at the hearth → two hours away → roasts in the hearth output + the "while you were away" line → Off duty' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)
