@@ -17,11 +17,12 @@
 import { OwnerReady } from '../shared/owner-ready'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
+import { ProgramKeeper } from './program-keeper-view'
 import { OpenHands, type OpenHandsApi } from '../shared/open-hands'
 import { FpGun, ScopeRing, fpGunAds, ADS_TIGHT, type FpGunApi } from '../shared/fp-gun'
 import { RANGE_GUNS } from '../shared/gunplay'
 import { ThirdPersonBody, dollAction, pullBack, newDrive } from '../shared/third-person'
-import type { Camera } from 'three'
+import type { Camera, Scene, WebGLRenderer } from 'three'
 import { VoxelDayNight } from '../shared/day-night'
 import { terrainWorld } from '../terrain-world'
 import { withPieces } from './dynamic-solids'
@@ -301,10 +302,22 @@ function AtherSliceGame() {
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
   const fading = useRef(false)
+  const rendererRef = useRef<{ gl: WebGLRenderer; scene: Scene; camera: Camera } | null>(null)
   const arrive = useCallback((z: Zone, s: Spawn) => {
     if (fading.current) return
     fading.current = true; setFade(1); setPanel(null); exitBuild()
-    setTimeout(() => { setZone(z); setSpawn(s); setEpoch(e => e + 1); setFade(0); fading.current = false }, 380)
+    setTimeout(() => {
+      setZone(z); setSpawn(s); setEpoch(e => e + 1)
+      // M44: let the new zone mount, WARM its shaders (parallel compile) behind the veil, then lift; capped so it never traps
+      const lift = () => { setFade(0); fading.current = false }
+      const r = rendererRef.current
+      if (!r) { lift(); return }
+      let done = false; const once = () => { if (!done) { done = true; lift() } }
+      const cap = setTimeout(once, 2500)
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        r.gl.compileAsync(r.scene, r.camera).catch(() => {}).finally(() => { clearTimeout(cap); once() })
+      }))
+    }, 380)
   }, [])
   const goHome = useCallback(() => arrive({ kind: 'plot' }, THRESHOLD), [arrive])
 
@@ -1074,8 +1087,9 @@ function AtherSliceGame() {
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         // M44 (profile dcff05b4): three's checkShaderErrors reads getProgramInfoLog/getShaderInfoLog after EVERY link, a SYNC
         // GPU wait (up to 1.3 s in one arrival frame). Dev keeps the check so a broken shader still shouts.
-        onCreated={({ gl }) => { canvasEl.current = gl.domElement; gl.debug.checkShaderErrors = process.env.NODE_ENV !== 'production' }}
+        onCreated={({ gl, scene, camera }) => { rendererRef.current = { gl, scene, camera }; canvasEl.current = gl.domElement; gl.debug.checkShaderErrors = process.env.NODE_ENV !== 'production' }}
       >
+        <ProgramKeeper />
         <OpenHands ref={handsApi} held={<HeldItem id={stance.kind === 'item' ? held : null} />} />
         <FpGun ref={gunApi} />
         <ThirdPersonBody drive={dollDrive} camRef={camRef} />
