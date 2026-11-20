@@ -21,6 +21,10 @@ import type { Port } from './gale-haven'
 import { STATION_COLS, STATION_ROWS, STATION } from '../../play3d/station-field'
 import type { StationSite } from './rune-hold-core'
 import { nearestRoad } from '../region'
+import { shipyardDeed } from './deed-site'
+import { deedBlueprint, deedPad, type Deed } from './deed-plots'
+import { placeBlueprint } from '../ather/plot-blueprint'
+import { BlueprintStack } from '../ather/blueprint-stack'
 
 // ── looks per town, from canon + the concept shots Alex judged 11-15 (tools/art/gen_towns.py). Roman bones
 // (world/athernyx.md): pale stone, terracotta. Unlisted towns take the country default. ──
@@ -218,6 +222,29 @@ function FrontSign({ b }: { b: Building }) {
 // ── RUNE HOLD'S TRAVELERS STATION: play3d's spaceport scene (terminal, six berths, the seated ship, the departures
 // board), set down on its continent site (rune-hold-core › placeStation) on a stone terrace built up to one level.
 // Station metres = continent metres; the scene's (0,0) is the field's north-west corner. ──
+/** M49 s1: a deed plot: a stone platform built up to the deed's level (its skirt a 0.5 bank all round) and the deed's blueprint
+ *  building stood on it by the same renderer as the Ather side's plots (BlueprintStack). */
+function DeedField({ d }: { d: Deed }) {
+  const bp = useMemo(() => deedBlueprint(d), [d]), g = useMemo(() => placeBlueprint(bp, deedPad(d)).group, [bp, d])
+  const h = d.level - d.base, run = h / 0.5, hw = d.w / 2 + 0.5, hd = d.d / 2 + 0.5
+  const geo = useMemo(() => {
+    // a frustum: the top rectangle at level, the foot rectangle `run` further out all round at base (local x right, z toward the front)
+    const t = [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]], f = [[-hw - run, -hd - run], [hw + run, -hd - run], [hw + run, hd + run], [-hw - run, hd + run]]
+    const v = [...t.map(([x, z]) => [x, 0, z]), ...f.map(([x, z]) => [x, -h, z])].flat()
+    const idx = [0, 3, 2, 0, 2, 1]
+    for (let k = 0; k < 4; k++) { const a = k, b = (k + 1) % 4; idx.push(a, 4 + a, 4 + b, a, 4 + b, b) }
+    const gm = new THREE.BufferGeometry(); gm.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); gm.setIndex(idx); gm.computeVertexNormals(); return gm
+  }, [hw, hd, run, h])
+  // the grid's right/front axes in the world: placeBlueprint's pad frame (right = (cos, -sin), front = (-sin, -cos)), so the platform's local
+  // x is the pad's right and local z its BACK; rotate by the pad's yaw
+  return (
+    <>
+      <group position={[d.x, d.level - 0.02, d.z]} rotation={[0, d.yaw, 0]}><mesh geometry={geo}><meshLambertMaterial color="#8d887c" side={THREE.DoubleSide} flatShading /></mesh></group>
+      <BlueprintStack bp={bp} x={g.x} z={g.z} y={d.level} rotY={g.rotY} />
+    </>
+  )
+}
+
 function StationField({ s }: { s: StationSite }) {
   const h = s.level - s.base
   return (
@@ -385,6 +412,8 @@ function StarBeacon({ b }: { b: Building }) {
 
 export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<THREE.Vector3> }) {
   const cache = useRef(new Map<number, TownPlan>())
+  const deed = useMemo(() => shipyardDeed(R), [R])
+  useEffect(() => { (window as unknown as { __deedPlot?: () => Deed | null }).__deedPlot = () => deed }, [deed])   // M49 s1: read by scripts/deed-plot-check.mts
   const [shown, setShown] = useState<TownPlan[]>([])
   const [close, setClose] = useState<Set<string>>(new Set())
   const closeKey = useRef('')
@@ -490,6 +519,7 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
       {shown.filter(pl => pl.wall).map(pl => <HeritageWall key={pl.place} R={R} w={pl.wall!} lanes={pl.lanes} />)}
       {shown.filter(pl => pl.port).map(pl => <GalePort key={pl.place} port={pl.port!} detail={close.has(pl.place)} />)}
       {shown.filter(pl => pl.station).map(pl => <StationField key={pl.place} s={pl.station!} />)}
+      {deed && shown.some(pl => pl.place === deed.town) && <DeedField d={deed} />}
       {R.meta.places.filter(p => p.name).map(p => (
         <mesh key={p.id} position={[p.x, R.heightAt(p.x, p.z) + 45, p.z]}>
           <cylinderGeometry args={[0.6, 1.4, 90, 8, 1, true]} />

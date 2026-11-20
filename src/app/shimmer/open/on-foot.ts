@@ -10,10 +10,13 @@
 // floor; on the hill above it, the hill.
 
 import { terrainWorld, type Box } from './terrain-world'
-import { createLoco, tickLocomotion, type LocoState, type LocoInput, type LocoWorld } from './shared/locomotion'
+import { BODY_H, BODY_R, createLoco, tickLocomotion, type LocoState, type LocoInput, type LocoWorld } from './shared/locomotion'
 import { tunnelWall, type Region } from './region'
 import { caveContain, nearCave, type Cavern } from './cavern'
 import { townSolids, solidHit, prefetchTowns, pushOut, stationGround, type TownSolids } from './foot-solids'
+import { shipyardDeed } from './towns/deed-site'
+import { deedBlueprint, deedGround, deedPad, deedReach } from './towns/deed-plots'
+import { placeBlueprint } from './ather/plot-blueprint'
 
 /** Water plane the page draws (Water: y = -0.15). Land under it is a river or the sea: the walker swims. */
 export const WATER_Y = -0.15
@@ -28,13 +31,17 @@ export interface FootWorld { world: LocoWorld; hint: { y: number }; cave: Cavern
 export function footWorld(R: Region, cave: Cavern | null = null): FootWorld {
   const hint = { y: 0 }
   const solids = townSolids(R), st = solids.station
+  // M49 s1: the shipyard's deed plot (a levelled terrace with a blueprint building on it: towns/deed-plots.ts)
+  const deed = shipyardDeed(R), deedPl = deed ? placeBlueprint(deedBlueprint(deed), deedPad(deed)) : null
+  const deedFar = deed ? deedReach(deed) + 2 : 0
+  const deedHit = (x: number, z: number, y: number) => !!deed && Math.hypot(x - deed.x, z - deed.z) < deedFar && deedPl!.boxes.some(b => y + 0.01 < b.y1 && y + BODY_H - 0.01 > b.y0 && x + BODY_R > b.x0 && x - BODY_R < b.x1 && z + BODY_R > b.z0 && z - BODY_R < b.z1)
   const base = terrainWorld({
     // the Passage market's floor where the walker is down in it, else the region's layered ground (raised, at Rune Hold,
     // by the Station's terrace and its stair: foot-solids.ts › stationGround)
     ground: (x, z) => {
       if (cave && Math.abs(hint.y - cave.y) < 4 && cave.nearFloor(x, z) && !R.tunnelAt(x, z)) return cave.y
       const g = R.groundAt(x, z, hint.y + 0.6)
-      return st ? Math.max(g, stationGround(st, x, z)) : g
+      return Math.max(st ? Math.max(g, stationGround(st, x, z)) : g, deed ? deedGround(deed, x, z) : -Infinity)
     },
     solids: () => [],
     water: (x0, _y0, z0, x1, _y1, z1): readonly Box[] => {
@@ -44,7 +51,7 @@ export function footWorld(R: Region, cave: Cavern | null = null): FootWorld {
   })
   // houses and the Station's walls are turned boxes the Shape cannot hold: they gate bodyFree, which is every move the
   // walker makes (it moves x and z apart, so it slides along a wall at any angle) and every spot exitSpot tries
-  const world: LocoWorld = { ...base, bodyFree: (x, z, feetY) => base.bodyFree(x, z, feetY) && !solidHit(R, solids, x, z, feetY) }
+  const world: LocoWorld = { ...base, bodyFree: (x, z, feetY) => base.bodyFree(x, z, feetY) && !solidHit(R, solids, x, z, feetY) && !deedHit(x, z, feetY) }
   return { world, hint, cave, solids }
 }
 
