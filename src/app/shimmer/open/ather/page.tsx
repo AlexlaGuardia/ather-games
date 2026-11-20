@@ -310,14 +310,17 @@ function AtherSliceGame() {
     fading.current = true; setFade(1); setPanel(null); exitBuild()
     setTimeout(() => {
       setZone(z); setSpawn(s); setEpoch(e => e + 1)
-      // M44: let the new zone mount, WARM its shaders (parallel compile) behind the veil, then lift; capped so it never traps
+      // M44: let the new zone mount, WARM its shaders behind the veil, then lift; capped so it never traps
       const lift = () => { setFade(0); fading.current = false }
       const r = rendererRef.current
       if (!r) { lift(); return }
       let done = false; const once = () => { if (!done) { done = true; lift() } }
       const cap = setTimeout(once, 2500)
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        r.gl.compileAsync(r.scene, r.camera).catch(() => {}).finally(() => { clearTimeout(cap); once() })
+        // SYNC compile, not compileAsync: three's async poll reads currentProgram.isReady on a timer, and a zone that disposes a
+        // material mid-poll threw an uncaught 'reading isReady' page error on prod (folk-check 11-20). The veil is up; blocking is fine.
+        try { r.gl.compile(r.scene, r.camera) } catch { /* warm-up is best effort */ }
+        clearTimeout(cap); once()
       }))
     }, 380)
   }, [])
