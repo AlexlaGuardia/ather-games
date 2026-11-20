@@ -109,6 +109,11 @@ try {
   // M37 slice 5 (11-20) changed paint: wood + brick walls keep their set colour, only stucco takes paint (plot-materials-check
   // covers stucco + patterns). Here: a goldwood wall refuses paint and costs nothing; a tapped floor paints the whole room.
   await tap('[data-tool="paint"]'); await sleep(300); await tap('[data-swatch="#4c6b97"]'); await sleep(300)
+  // the Paint bar (patterns + swatches) is tall and covers the house at the default framing: pan the view (a player drags) so
+  // the room sits clear below it, picking whichever offset puts the room centre lowest on screen inside the canvas.
+  { let best = { dz: 0, y: -1 }
+    for (const dz of [-4, -2, 0, 2, 4]) { await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), spot.x, spot.z + dz); await settled(); const y = screenOf(await view(), (X0 + X1) / 2, Z0).y; if (y < H - 140 && y > best.y) best = { dz, y } }
+    await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), spot.x, spot.z + best.dz); console.log('  paint view pan dz', best.dz, 'room top y', Math.round(best.y)) }
   const bag = () => p.evaluate(() => ((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{}').slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, s) => t + (s?.n ?? 0), 0))
   const d0 = await bag()
   await tapW(X1, Z0 + 1.5)
