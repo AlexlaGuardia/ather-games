@@ -577,7 +577,7 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
     <>
       <PlanningTable />
       {w.rooms.map(r => (raised(r) ? <RoomMesh key={r.id} r={r} /> : <Scaffold key={r.id} r={r} />))}
-      {allChests(w).map(c => <Wobbly key={c.id} id={c.id}><Keepstone c={c} pose={pose} /></Wobbly>)}
+      {allChests(w).map(c => <Wobbly key={c.id} id={c.id} at={[c.x, GROUND_Y, c.z]}><Keepstone c={c} pose={pose} /></Wobbly>)}
       {w.pieces.map(pc => <Wobbly key={pc.id} id={pc.id} at={[pc.x, GROUND_Y, pc.z]}><PieceMesh p={pc} /></Wobbly>)}
       {stowed && <MeleeAim stowed={stowed} />}
       {w.pieces.some(x => x.item === 'lift') && <LiftInput />}
