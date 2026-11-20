@@ -19,13 +19,8 @@ import {
 } from '../../open/ather/plot-walls'
 import { houseProblems, parseHouse, type HouseBlueprint } from '../../open/ather/plot-blueprint'
 import { GLADE_LOTS } from '../../open/ather/moonwell-glade'
-import { TRADES, tradeBlueprintId } from '../../open/ather/settlement-lots'
 import { GROUND_Y } from '../../open/ather/plot'   // the renderer draws at the plot's floor; the worktable's floor is y = 0
 
-/** M39 s3: the 'For' picker's choices are the Glade's five lots, then the trades (a generated settlement's houses, `trade-<profession>`) */
-const FORS = [...GLADE_LOTS.map(l => l.id), ...TRADES.map(tradeBlueprintId)]
-const bpId = (f: string) => (f.startsWith('trade-') ? f : `glade-${f}`)
-const forName = (f: string) => (f.startsWith('trade-') ? `${f.slice(6)} (settlement house)` : `${f[0].toUpperCase()}${f.slice(1)}'s workshop`)
 const LW = 13, LD = 8   // the lot, whole metres (the pad is 13.5 x 8.5)
 type Tool = 'walls' | 'erase' | 'door' | 'window' | 'paint'
 const chip = (on: boolean): React.CSSProperties => ({ background: on ? '#e8c27a' : '#211f2b', color: on ? '#1b1712' : '#ddd6ea', border: '1px solid #38344a', padding: '5px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.08em' })
@@ -59,9 +54,9 @@ export default function SettlementWorktable() {
   const target = useMemo(() => new THREE.Vector3(LW / 2, 0.5, LD / 2), [])
 
   const refreshStatus = useCallback(() => {
-    for (const f of FORS) fetch(`/shimmer/open/house-blueprints?id=${bpId(f)}`, { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then(j => {
+    for (const l of GLADE_LOTS) fetch(`/shimmer/open/house-blueprints?id=glade-${l.id}`, { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then(j => {
       const b = j ? parseHouse(j) : null
-      setStatus(s => ({ ...s, [f]: b ? `blueprint ${b.w} x ${b.d}` : 'blockout' }))
+      setStatus(s => ({ ...s, [l.id]: b ? `blueprint ${b.w} x ${b.d}` : 'blockout' }))
     }).catch(() => {})
   }, [])
   useEffect(() => { refreshStatus() }, [refreshStatus])
@@ -89,7 +84,7 @@ export default function SettlementWorktable() {
     if (c.ok) setWalls(c.walls); else setMsg(c.why)
   }, [tool, mat, walls])
 
-  const blueprint = (): HouseBlueprint => ({ v: 1, id: bpId(lot), name: forName(lot), w: LW, d: LD, walls, floors, roof, saved: Date.now() })
+  const blueprint = (): HouseBlueprint => ({ v: 1, id: `glade-${lot}`, name: `${lot[0].toUpperCase()}${lot.slice(1)}'s workshop`, w: LW, d: LD, walls, floors, roof, saved: Date.now() })
   const save = async (force = false) => {
     const bp = blueprint(), why = houseProblems(bp)
     if (why.length) { setMsg(`Not saved: ${why.join('; ')}`); return }
@@ -97,11 +92,11 @@ export default function SettlementWorktable() {
     setConfirm(false)
     const r = await fetch('/shimmer/save-house-blueprint', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ blueprint: bp }) })
     const j = await r.json().catch(() => ({}))
-    setMsg(r.ok ? (lot.startsWith('trade-') ? `Saved for ${lot}. Generated settlements stand it on your next visit.` : `Saved for ${lot}'s lot. The Glade stands it on your next visit.`) : `Not saved: ${j.error ?? r.status}`)
+    setMsg(r.ok ? `Saved for ${lot}'s lot. The Glade stands it on your next visit.` : `Not saved: ${j.error ?? r.status}`)
     refreshStatus()
   }
   const load = async () => {
-    const r = await fetch(`/shimmer/open/house-blueprints?id=${bpId(lot)}`, { cache: 'no-store' })
+    const r = await fetch(`/shimmer/open/house-blueprints?id=glade-${lot}`, { cache: 'no-store' })
     const b = r.ok ? parseHouse(await r.json()) : null
     if (!b) { setMsg(`${lot}'s lot has no blueprint yet (blockout).`); return }
     setWalls(b.walls); setFloors(b.floors); setRoof(b.roof); setMsg(`Loaded ${b.name} (${b.w} x ${b.d}).`)
@@ -125,14 +120,14 @@ export default function SettlementWorktable() {
           <button data-act="new" style={chip(false)} onClick={() => { setWalls({}); setFloors({}); setMsg('A clean lot.') }}>new</button>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', fontSize: 12 }}>
-          <label>For <select id="wt-lot" data-wt-lot value={lot} onChange={e => { setLot(e.target.value); setConfirm(false) }} style={{ font: 'inherit' }}>{FORS.map(f => <option key={f} value={f}>{f}</option>)}</select></label>
+          <label>For <select id="wt-lot" data-wt-lot value={lot} onChange={e => { setLot(e.target.value); setConfirm(false) }} style={{ font: 'inherit' }}>{GLADE_LOTS.map(l => <option key={l.id} value={l.id}>{l.id}</option>)}</select></label>
           <button data-act="load" style={chip(false)} onClick={load}>load</button>
           <button data-act="save" style={chip(true)} onClick={() => save(false)} disabled={!pieces}>save blueprint</button>
           {confirm && <span data-wt-confirm style={{ color: '#f0b36a' }}>{lot}'s lot already has your blueprint. <button data-act="save-over" style={chip(true)} onClick={() => save(true)}>replace it</button> <button style={chip(false)} onClick={() => setConfirm(false)}>keep it</button></span>}
           <span data-wt-msg style={{ color: '#9a94a8' }}>{msg || `${pieces} pieces · ${findRooms(walls).length} rooms`}</span>
         </div>
         <div data-wt-status style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11, color: '#9a94a8' }}>
-          {FORS.map(f => <span key={f} data-lot={f}>{f}: <b style={{ color: status[f]?.startsWith('blueprint') ? '#9fd28b' : '#9a94a8' }}>{status[f] ?? '...'}</b></span>)}
+          {GLADE_LOTS.map(l => <span key={l.id} data-lot={l.id}>{l.id}: <b style={{ color: status[l.id]?.startsWith('blueprint') ? '#9fd28b' : '#9a94a8' }}>{status[l.id] ?? '...'}</b></span>)}
         </div>
       </header>
       <div style={{ flex: 1, minHeight: 0 }} data-bench="worktable">
