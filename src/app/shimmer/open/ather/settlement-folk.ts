@@ -15,6 +15,7 @@
 import { gardenKey } from '@/lib/keeper-local'
 import { SETTLEMENT_GATHERS, type Settlement, type SettlementBiome } from './network'
 import { welcome, type MoglinRecord, type Profession, type Grade, type Village } from './moglins'
+import { rngOf, rollSkills, SKILL_OF_ROOM, type Skills } from './moglin-skills'
 import { DREAMS } from './folk-lines'
 import { GLADE_ID, gladeFolk } from './moonwell-glade'
 
@@ -47,24 +48,26 @@ export interface Folk {
   id: string                      // `${season}:${settlement id}:${k}`: also the MoglinRecord id once recruited
   name: string; home: string; profession: Profession
   grades: MoglinRecord['grades']
+  skills?: Skills; luck?: Grade   // M46 (absent on the glade's five: they migrate when recruited)
   dream: string
   employed: boolean
   /** the hoop: what it asks a keeper to bring before it trusts them (employed only; empty when it would come for the asking) */
   wants: { id: string; n: number }[]
 }
 
-function rngOf(seed: string): () => number {
-  let h = 2166136261
-  for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619) }
-  let s = h >>> 0
-  return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296 }
-}
 function pick<T>(rnd: () => number, w: readonly [T, number][]): T {
   const total = w.reduce((a, [, x]) => a + x, 0); let r = rnd() * total
   for (const [v, x] of w) { if ((r -= x) < 0) return v }
   return w[w.length - 1][0]
 }
 
+/** the legacy craft/yield grades, read back off the skills so the old fields never disagree with the new */
+const legacyGrades = (p: Profession, sk: Skills) => {
+  const g: Partial<MoglinRecord['grades']> = {}
+  const r = ({ farmer: 'farm', cook: 'cooking', carpenter: 'carpentry', stonemason: 'stonemason', alchemist: 'alchemy', smith: 'smith', jeweler: 'stonemason' } as const)[p as 'farmer']
+  if (r) { g.craft = sk[SKILL_OF_ROOM[r].craft]; g.yield = sk[SKILL_OF_ROOM[r].yield] }
+  return g
+}
 /** The Moglins living in a settlement this season. Same inputs, same folk, on every device. */
 export function folkOf(s: Settlement, season: number): Folk[] {
   if (s.id === GLADE_ID) return gladeFolk()   // Moonwell Glade: the five, fixed, never re-rolled (moonwell-glade.ts, M30)
@@ -83,7 +86,9 @@ export function folkOf(s: Settlement, season: number): Folk[] {
   for (let k = 0; k < n; k++) {
     const name = names[order[(idx * FOLK_MAX + k) % order.length]]
     const profession = pick(rnd, trades)
-    const grades = { craft: pick(rnd, GRADE_ODDS), yield: pick(rnd, GRADE_ODDS), trade: pick(rnd, GRADE_ODDS) }
+    const drawn = { craft: pick(rnd, GRADE_ODDS), yield: pick(rnd, GRADE_ODDS), trade: pick(rnd, GRADE_ODDS) }   // kept so the season's other rolls do not shift
+    const { skills, luck } = rollSkills(profession, rngOf(`skills:${season}:${s.id}:${k}`))   // M46: its own seeded stream
+    const grades = { ...drawn, ...legacyGrades(profession, skills) }
     const pool = DREAMS[profession]
     const dream = pool[Math.floor(rnd() * pool.length)]
     const employed = rnd() < EMPLOYED_P
@@ -96,7 +101,7 @@ export function folkOf(s: Settlement, season: number): Folk[] {
         if (!wants.some(w => w.id === id)) wants.push({ id, n: 3 + Math.floor(rnd() * 4) })
       }
     }
-    out.push({ id: `${season}:${s.id}:${k}`, name, home: s.id, profession, grades, dream, employed, wants })
+    out.push({ id: `${season}:${s.id}:${k}`, name, home: s.id, profession, grades, dream, employed, wants, skills, luck })
   }
   return out
 }
@@ -128,7 +133,7 @@ export function bring(t: Trust, f: Folk, id: string, n: number): { trust: Trust;
 /** The recruit step: a trusted Moglin comes to the garden (play's welcome: the cap, no repeats). Null when it cannot. */
 export function recruit(v: Village, f: Folk, t: Trust, stage = 0, now = Date.now()): Village | null {
   if (!trusted(f, t)) return null
-  const rec: MoglinRecord = { id: f.id, name: f.name, home: f.home, grades: f.grades, dream: f.dream, profession: f.profession, recruitedAt: now }
+  const rec: MoglinRecord = { id: f.id, name: f.name, home: f.home, grades: f.grades, ...(f.skills ? { skills: f.skills, luck: f.luck } : {}), dream: f.dream, profession: f.profession, recruitedAt: now }
   return welcome(v, rec, stage)
 }
 /** The folk still living in a settlement: anyone already in the keeper's village has moved out. */

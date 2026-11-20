@@ -23,6 +23,7 @@ import type { Job } from './furniture'
 import { stockJobs, RESERVE, OUT_CAP } from './station-queue'
 import { phaseOf, water as waterBed, isArmed, type Farm } from './farming'
 import { plumbingOf, draw, type WaterSave } from './water'
+import { skillIn, migrateSkills, validSkills, type Skills } from './moglin-skills'
 
 /** Canon's trades (ather-rework › Needs: "a farmer + a cook, then a carpenter + a stonemason, then specialists: alchemist,
  *  smith, jeweler, and more trades as they are ruled"). A new trade is canon's to rule, then one row here. */
@@ -49,7 +50,11 @@ export interface MoglinRecord {
   name: string
   /** the settlement it came from (network.ts › Settlement id) */
   home: string
+  /** LEGACY (pre-M46): kept readable; the skills below are what rooms read now (skillIn) */
   grades: Record<GradeCategory, Grade>
+  /** M46: nine skills + luck (moglin-skills.ts). Absent on an old save until adoptVillage migrates it. */
+  skills?: Skills
+  luck?: Grade
   /** what it hopes for, in its own words (lark) */
   dream: string
   profession: Profession
@@ -107,7 +112,7 @@ export function tick(v: Village, w: Works, now = Date.now(), grounds?: Grounds):
     const r = m.room ? works.rooms.find(x => x.id === m.room) : undefined
     if (!r || now < r.doneAt) return m
     // Cook / alchemist bench work is the STATION STOCKPILE's (station-queue.ts, ticked by workshop.tsx): one ticker per room.
-    let acc = (m.acc ?? 0) + (PER_HOUR(m.grades.yield) * dt) / 3_600_000
+    let acc = (m.acc ?? 0) + (PER_HOUR(skillIn(m, r.kind, 'yield')) * dt) / 3_600_000
     let n = Math.floor(acc)
     if (n <= 0) return { ...m, acc }
     if (m.profession === 'farmer' && r.kind === 'farm') {
@@ -154,9 +159,9 @@ export function tick(v: Village, w: Works, now = Date.now(), grounds?: Grounds):
 
 /** What a Moglin does in a room, in a line (the bench panel). */
 export function dutyLine(m: MoglinRecord, kind: RoomKind): string {
-  if (m.profession === 'carpenter' && kind === 'carpentry') return `Brings in deadfall, about ${PER_HOUR(m.grades.yield)} an hour.`
-  if (m.profession === 'farmer' && kind === 'farm') return `Waters your growing beds, up to ${PER_HOUR(m.grades.yield)} an hour. Planting and harvesting are yours.`
-  if (m.profession === 'smith' && kind === 'smith') return `Trades for deadfall from the carpentry room and burns it to charcoal, about ${PER_HOUR(m.grades.yield)} an hour.`
+  if (m.profession === 'carpenter' && kind === 'carpentry') return `Brings in deadfall, about ${PER_HOUR(skillIn(m, kind, 'yield'))} an hour.`
+  if (m.profession === 'farmer' && kind === 'farm') return `Waters your growing beds, up to ${PER_HOUR(skillIn(m, kind, 'yield'))} an hour. Planting and harvesting are yours.`
+  if (m.profession === 'smith' && kind === 'smith') return `Trades for deadfall from the carpentry room and burns it to charcoal, about ${PER_HOUR(skillIn(m, kind, 'yield'))} an hour.`
   if (stockJobs(kind).length && WORKS_IN[m.profession].includes(kind)) return `Works the room's stockpile from its store: keeps ${RESERVE} of each raw for you, makes up to ${OUT_CAP} of each product. Stock it and there is always something on.`
   return 'Keeps the room. Their trade has no work here yet.'
 }
@@ -164,12 +169,14 @@ export function dutyLine(m: MoglinRecord, kind: RoomKind): string {
 // ── save: garden-tied, registered in GARDEN_KEY_SPECS ─────────────────────────────────────────────────────────
 export const VILLAGE_KEY = 'open.village.v1'
 const okGrade = (g: unknown): g is Grade => g === 1 || g === 2 || g === 3 || g === 4 || g === 5
+/** an old record gets its skills + luck once (stable: seeded by id); a good one is untouched */
+const withSkills = (m: MoglinRecord): MoglinRecord => (validSkills(m.skills) && okGrade(m.luck) ? m : { ...m, ...migrateSkills(m) })
 export function adoptVillage(raw: unknown, now = Date.now()): Village {
   const v = raw as Partial<Village> | null
   if (v?.v !== 1 || !Array.isArray(v.moglins)) return freshVillage(now)
   const moglins = v.moglins.filter((m): m is MoglinRecord => !!m && typeof m.id === 'string' && typeof m.name === 'string'
     && PROFESSIONS.includes(m.profession) && !!m.grades && GRADE_CATEGORIES.every(c => okGrade(m.grades[c])))
-  return { v: 1, moglins, lastTick: Number.isFinite(v.lastTick) ? Math.min(v.lastTick!, now) : now }
+  return { v: 1, moglins: moglins.map(withSkills), lastTick: Number.isFinite(v.lastTick) ? Math.min(v.lastTick!, now) : now }
 }
 export function loadVillage(now = Date.now()): Village {
   try { return adoptVillage(JSON.parse(localStorage.getItem(gardenKey(VILLAGE_KEY)) ?? 'null'), now) } catch { return freshVillage(now) }

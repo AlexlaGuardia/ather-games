@@ -47,6 +47,7 @@ import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
 import { advance, setFocus, cancelFocus, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
+import { skillIn, luckOf } from './moglin-skills'
 import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, GRADE_CATEGORIES, type Village } from './moglins'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -951,7 +952,7 @@ function touchWork(roomId: string) {
 /** Who works a room and how fast: its Moglin (its CRAFT grade), else the keeper while the panel is open (a focus only), else nobody (0). */
 function workerOf(r: Room, v: Village): { moglin?: Village['moglins'][number]; speed: number } {
   const m = v.moglins.find(x => x.room === r.id && WORKS_IN[x.profession].includes(r.kind))
-  return m ? { moglin: m, speed: moglinSpeed(m.grades.craft) } : { speed: openBench === r.id ? 1 : 0 }
+  return m ? { moglin: m, speed: moglinSpeed(skillIn(m, r.kind, 'craft')) } : { speed: openBench === r.id ? 1 : 0 }
 }
 /** Run every station to now. Offline catch-up is the same call: `last` is a timestamp, the Moglin's hours since are worked
  *  out of the store into the output (station-queue.ts: stockpile above the 30 reserve, capped at 30 a product). */
@@ -962,7 +963,7 @@ export function stationTick(now = Date.now()) {
     if (!raised(r, now)) continue
     const { moglin, speed } = workerOf(r, v)
     if (!moglin && (speed <= 0 || !(r.work?.focus || r.work?.run))) continue   // the keeper only ever works a focus
-    const a = advance(stationOf(r), now, speed, moglin ? stockJobs(r.kind) : [])
+    const a = advance(stationOf(r), now, speed, moglin ? stockJobs(r.kind) : [], moglin ? { grade: luckOf(moglin), rnd: Math.random } : undefined)
     if (a.active || !r.work) { nw = setStation(nw, r.id, a.station); changed = true }   // an idle Moglin saves nothing (the panel re-starts its clock when the stock changes)
   }
   if (changed) setWorks(nw)

@@ -14,6 +14,8 @@ import { REFINE, STONE_REFINE, PIECE_JOBS, type Job } from './furniture'
 import { ROAST } from './cooking'
 import { BREW } from './alchemy'
 import type { Stack } from '../shared/inventory'
+import { luckBonus } from './moglin-skills'
+import type { Grade } from './moglins'
 
 export const OUT_CAP = 30
 export const RESERVE = 30
@@ -105,7 +107,7 @@ function takeRun(stacks: readonly Stack[], j: Job): Stack[] | null {
 
 /** Move the station to `now` at `speed` (0 = nobody works it: the clock moves on, nothing is banked, no input is taken).
  *  `stock` = the jobs to stockpile (empty = focus only: the keeper's own work). Pure. `active` = there is work state worth saving. */
-export function advance(s: Station, now: number, speed: number, stock: readonly Job[]): { station: Station; made: Stack[]; status: Status; active: boolean } {
+export function advance(s: Station, now: number, speed: number, stock: readonly Job[], luck?: { grade: Grade; rnd: () => number }): { station: Station; made: Stack[]; status: Status; active: boolean } {
   const w: Work = s.work ? { ...s.work, run: s.work.run && { ...s.work.run }, focus: s.work.focus && { ...s.work.focus } } : { cur: 0, last: now }
   let store = s.store ?? [], out = s.out ?? []
   let budget = speed > 0 ? Math.max(0, now - w.last) * speed : 0
@@ -130,8 +132,9 @@ export function advance(s: Station, now: number, speed: number, stock: readonly 
     const need = runMs(j) - w.run.t
     if (budget >= need) {
       budget -= need
-      out = putIn({ v: 1, stacks: out }, BIG, j.out.id, j.out.n).bank.stacks
-      const m = made.find(x => x.id === j.out.id); if (m) m.n += j.out.n; else made.push({ id: j.out.id, n: j.out.n })
+      const n = j.out.n + (luck ? luckBonus(luck.grade, luck.rnd) : 0)   // M46: a lucky run brings one extra
+      out = putIn({ v: 1, stacks: out }, BIG, j.out.id, n).bank.stacks
+      const m = made.find(x => x.id === j.out.id); if (m) m.n += n; else made.push({ id: j.out.id, n })
       if (w.run.f && w.focus?.job === j.id) { w.focus.left--; if (w.focus.left <= 0) w.focus = undefined }
       w.run = undefined
     } else { w.run.t += budget; budget = 0; break }
