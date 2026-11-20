@@ -96,7 +96,9 @@ async function session(w: number, h: number, touch = false) {
   await reload(5 * 60_000)
   const st2 = await s.store(), o2 = await s.output()
   ok(st2.goldwood_log === 30, `   after 5 minutes: 30 logs REMAIN, the reserve (${st2.goldwood_log})`)
-  ok(o2.goldwood_plank === 20 && !o2.goldwood_bark, `   the 10 surplus logs became 20 planks, no bark yet (${JSON.stringify(o2)})`)
+  // M46 s1 (11-20): a Moglin's LUCK can add +1 output per run (moglin-skills.ts), so a run yields its base or base+1: 10 runs = 20..30
+  const n1 = o2.goldwood_plank ?? 0
+  ok(n1 >= 20 && n1 <= 30 && !o2.goldwood_bark, `   the 10 surplus logs became 20 planks (+ up to 10 luck), no bark yet (${JSON.stringify(o2)})`)
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), benchOf(ROOM).x, benchOf(ROOM).z - 1.2); await sleep(1500); await s.hideCard(); await p.keyboard.press('e'); await sleep(900)
   await s.shot('st-4-stockpile')
   // 4. focus planks, max
@@ -109,12 +111,13 @@ async function session(w: number, h: number, touch = false) {
   await reload(10 * 60_000)
   const st3 = await s.store(), o3 = await s.output()
   ok((st3.goldwood_log ?? 0) === 0, `   focus used ALL the logs: 30 -> ${st3.goldwood_log ?? 0}`)
-  ok(o3.goldwood_plank === 80, `   planks 20 + 60 = 80, past the 30 cap (${o3.goldwood_plank})`)
+  const n4 = (o3.goldwood_plank ?? 0) - n1   // 30 focus runs: 60 planks + up to 30 luck
+  ok(n4 >= 60 && n4 <= 90, `   planks ${n1} + 60 (+ up to 30 luck) = ${o3.goldwood_plank}, past the 30 cap`)
   ok(!(await s.room())?.work?.focus, '   the focus ended and the station is back on stockpile')
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), benchOf(ROOM).x, benchOf(ROOM).z - 1.2); await sleep(1500); await s.hideCard(); await p.keyboard.press('e'); await sleep(900)
   ok(await s.click('[data-act="collect-all"] button'), '   Collect all')
   await sleep(600)
-  ok((await s.bag()).goldwood_plank === 80 && !(await s.output()).goldwood_plank, `   80 planks in the bag, output empty (${JSON.stringify(await s.bag())})`)
+  ok((await s.bag()).goldwood_plank === o3.goldwood_plank && !(await s.output()).goldwood_plank, `   all ${o3.goldwood_plank} planks in the bag, output empty (${JSON.stringify(await s.bag())})`)
   await s.shot('st-6-done')
   await p.keyboard.press('Escape'); await sleep(300)
   // 5. plan mode: no catalog button beside Back to keeper
