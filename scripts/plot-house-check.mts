@@ -69,7 +69,8 @@ try {
   const tap = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (!b) return false; await p.mouse.click(b.x, b.y); return true }
   const poll = async (fn: () => Promise<boolean>, ms = 10000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(250) } return false }
   const view = () => p.evaluate(() => (window as any).__build.view())
-  const settled = () => poll(async () => { const a = await view(); await sleep(500); const b = await view(); return Math.hypot(a.x - spot!.x, a.z - spot!.z) < 0.2 && Math.abs(a.yaw) < 0.01 && Math.abs(a.h - b.h) < 0.05 }, 60000)
+  let aimDz = 0
+  const settled = () => poll(async () => { const a = await view(); await sleep(500); const b = await view(); return Math.hypot(a.x - spot!.x, a.z - (spot!.z + aimDz)) < 0.2 && Math.abs(a.yaw) < 0.01 && Math.abs(a.h - b.h) < 0.05 }, 60000)
   const dragW = async (ax: number, az: number, bx: number, bz: number) => {
     await settled(); const v = await view(), a = screenOf(v, ax, az), b = screenOf(v, bx, bz)
     await p.mouse.move(a.x, a.y); await p.mouse.down(); await p.mouse.move(b.x, b.y, { steps: 12 }); await p.mouse.up(); await sleep(900)
@@ -112,8 +113,8 @@ try {
   // the Paint bar (patterns + swatches) is tall and covers the house at the default framing: pan the view (a player drags) so
   // the room sits clear below it, picking whichever offset puts the room centre lowest on screen inside the canvas.
   { let best = { dz: 0, y: -1 }
-    for (const dz of [-4, -2, 0, 2, 4]) { await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), spot.x, spot.z + dz); await settled(); const y = screenOf(await view(), (X0 + X1) / 2, Z0).y; if (y < H - 140 && y > best.y) best = { dz, y } }
-    await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), spot.x, spot.z + best.dz); console.log('  paint view pan dz', best.dz, 'room top y', Math.round(best.y)) }
+    for (const dz of [-4, -2, 0, 2, 4]) { await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), spot.x, spot.z + dz); aimDz = dz; await settled(); const y = screenOf(await view(), (X0 + X1) / 2, Z0).y; if (y < H - 140 && y > best.y) best = { dz, y } }
+    await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), spot.x, spot.z + best.dz); aimDz = best.dz; console.log('  paint view pan dz', best.dz, 'room top y', Math.round(best.y)) }
   const bag = () => p.evaluate(() => ((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{}').slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, s) => t + (s?.n ?? 0), 0))
   const d0 = await bag()
   await tapW(X1, Z0 + 1.5)
