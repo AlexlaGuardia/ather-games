@@ -17,7 +17,7 @@ import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, BAIT_FROM, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
 import { FURNITURE, MAX_PIECES, KEEPSTONES, keepstoneFor, type Job } from './furniture'
-import { adoptWork, adoptOut, type Work, type Station } from './station-queue'
+import { adoptWork, adoptOut, stockJobs, type Work, type Station } from './station-queue'
 import { adoptWalls, adoptRoof, adoptFloors, adoptPaid, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
 
 export type RoomKind = 'rinnshop' | 'farm' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
@@ -272,7 +272,9 @@ export const ROOM_KEEPS: Readonly<Record<RoomKind, string>> = {
   rinnshop: 'catches, bait and mast', farm: 'crops and seeds', cooking: 'catches, meat and roasts', alchemy: 'crystals, shards, saps and potions',
   smith: 'deadfall and charcoal', carpentry: 'wood, bark and sap', stonemason: 'stone and crystal',
 }
-export const roomAccepts = (kind: RoomKind, id: string) => ROOM_ACCEPTS[kind](id)
+/** A room always keeps every INPUT of the jobs it works (M43: a focus job draws from the store only; 11-20 the alchemy store
+ *  refused goldwood bark + glowfin, so no keeper could brew a Shard Tonic or a Starlight Tincture). */
+export const roomAccepts = (kind: RoomKind, id: string) => ROOM_ACCEPTS[kind](id) || stockJobs(kind).some(j => j.in.some(c => c.id === id))
 export const roomStore = (r: Room): Bank => ({ v: 1, stacks: r.store ?? [] })
 const setStore = (w: Works, id: string, b: Bank): Works => ({ ...w, rooms: w.rooms.map(r => (r.id === id ? { ...r, store: b.stacks } : r)) })
 /** M43: the station as the queue engine sees it, and writing one back to its room. */

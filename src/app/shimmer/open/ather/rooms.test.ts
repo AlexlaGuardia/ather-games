@@ -2,6 +2,7 @@
 import { craftAt, jobRuns, canPlacePiece, placePiece, pickUpPiece, turnPiece, pieceBoxes, pieceRect, ROOM_STORE_SLOTS, ROOM_ACCEPTS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, loadWorks, saveWorks, ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, payCost, shortOf, haveFor, pickUpChest, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, type Works } from './rooms'
 import { STARTING_SQUARES, squareAt, sqId, GATE, GREG, GROUND_Y } from './plot'
 import { REFINE, PIECE_JOBS, FURNITURE } from './furniture'
+import { stockJobs } from './station-queue'
 import { freshBank, putIn, bankCount, bankTake } from './garden-bank'
 import { newInv, give, countOf, HOTBAR, SLOTS, ITEM_GROUP, OPEN_ITEMS, type Inv } from '../shared/inventory'
 let pass = 0
@@ -246,6 +247,11 @@ ok(!canPlaceChest(pc.works, owned, C.x + 1, C.z, 0, ks).ok, 'keepstone: set onto
   const t = bankTake(two, 'goldwood_log', 6)!
   ok(t.stacks.length === 2 && t.stacks[0].n === 28 && two.stacks[2].n === 4, 'bankTake: wrong stacks drained, or mutated')
   ok(bankTake(two, 'goldwood_log', 35) === null, 'bankTake: took more than the pool held')
+}
+
+{ // 11-20: every station keeps every INPUT of the jobs it works (focus draws from the store only; alchemy refused bark + glowfin)
+  for (const k of ['carpentry', 'stonemason', 'cooking', 'alchemy'] as const)
+    for (const j of stockJobs(k)) for (const c of j.in) ok(roomAccepts(k, c.id), `${k} refuses ${c.id}, an input of ${j.out.id}`)
 }
 
 if (fails.length) { console.error(`rooms: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
