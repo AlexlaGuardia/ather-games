@@ -1192,12 +1192,14 @@ function BankPanel({ id, onClose }: { id: string; onClose: () => void }) {
 }
 
 /** On a phone there is no R or Esc: Turn / Place / Cancel while placing. Shown on desktop too (it does no harm). */
+/** ⚠ It sits ABOVE the HUD message line (game-hud Messages, bottom 118, up to five lines stacking upward): at bottom 120 the two
+ *  overlapped and the placing hint read through the buttons (phone pass 11-19, 360x780 + 390x844). */
 export function PlacingBar({ owned }: { owned: ReadonlySet<string> }) {
   const p = usePlacing()
   if (!p) return null
   const btn: React.CSSProperties = { border: 0, borderRadius: 999, padding: '10px 16px', font: '700 13px system-ui', cursor: 'pointer', background: 'rgba(255,250,235,.95)', color: H.ink, boxShadow: '0 2px 8px rgba(0,0,0,.25)' }
   return (
-    <div data-placing={p.kind} style={{ position: 'fixed', left: '50%', bottom: 120, transform: 'translateX(-50%)', display: 'flex', gap: 8, zIndex: 40, pointerEvents: 'auto' }}>
+    <div data-placing={p.kind} style={{ position: 'fixed', left: '50%', bottom: 'max(230px, 27vh)', transform: 'translateX(-50%)', display: 'flex', gap: 8, zIndex: 40, pointerEvents: 'auto' }}>
       <button type="button" style={btn} onClick={() => setPlacing({ ...p, q: (p.q + 1) % 4 })}>Turn (R)</button>
       <button type="button" data-act="place" style={{ ...btn, background: '#e0823f', color: '#fff' }} onClick={() => confirmPlace(owned)}>Place (E)</button>
       <button type="button" style={btn} onClick={() => setPlacing(null)}>Cancel (Esc)</button>

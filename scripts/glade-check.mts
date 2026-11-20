@@ -61,6 +61,7 @@ try {
   await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
   ok(await poll(() => p.evaluate(() => (window as any).__ather?.zone?.() === 'wilds'), 240000), 'arrived in the Wilds at the waymark')
   await sleep(4000); if (!phone) { await p.mouse.click(550, 340); await sleep(500) }
+  else { const vp = p.viewport()!; await p.touchscreen.tap(vp.width / 2, vp.height * 0.6); await sleep(800) }   // phone: tap the start card away, or every phone shot is the card (phone pass 11-19)
   // 1. the five where the plan puts them
   ok(await poll(async () => ((await p.evaluate(() => (window as any).__folk?.drawn?.()?.moonwell?.length ?? 0)) as number) >= 5, 30000), 'the five are drawn at the Glade')
   // the blueprints arrive after the folk are first drawn (a fetch per lot), then the folk re-place: wait for that
