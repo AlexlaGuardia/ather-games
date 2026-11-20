@@ -9,7 +9,7 @@ import type { Network, Settlement } from './network'
 import { SEASON } from './network'
 import { settlementLots, tradeBuilding, setTradeBlueprint, setSettlementBoxes, lotBoxes, lotPadOf, tradeBlueprintId, TRADES, type SettlementLot } from './settlement-lots'
 import { parseHouse, placeBlueprint } from './plot-blueprint'
-import { BlueprintBuilding } from './workshop'
+import { BlueprintStack } from './blueprint-stack'
 
 const PAD = '#cdb88e'
 export const BUILD_R = 110   // = network-scene FOLK_DRAW_R (kept literal: network-scene imports this file)
@@ -19,7 +19,7 @@ function Lot({ l, y }: { l: SettlementLot; y: number }) {
   return (
     <group>
       <mesh position={[l.x, y + 0.035, l.z]} rotation-y={l.yaw} receiveShadow><boxGeometry args={[l.w, 0.07, l.d]} /><meshLambertMaterial color={PAD} /></mesh>
-      <BlueprintBuilding walls={bp.walls} roof={bp.roof} floors={bp.floors} x={g.x} z={g.z} y={y} rotY={g.rotY} />
+      <BlueprintStack bp={bp} x={g.x} z={g.z} y={y} rotY={g.rotY} />
     </group>
   )
 }

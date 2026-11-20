@@ -3,8 +3,8 @@
 // of ONE building drawn on a plot in plan mode, re-based so its footprint's min corner is (0, 0). Its FRONT is the
 // footprint's z = 0 side: placed on a Glade lot, the front faces the green. Saved by the owner (save-house-blueprint) into
 // world/house-blueprints/<id>.json, read at runtime (no deploy). PURE.
-import { parseKey, adoptWalls, adoptRoof, adoptFloors, edgeEnds, edgeRect, WALL_T, DOOR_H, type Walls, type Floors, type RoofStyle } from './plot-walls'
-import { adoptUpper, type Level } from './plot-floors'
+import { parseKey, adoptWalls, adoptRoof, adoptFloors, edgeEnds, edgeRect, findRooms, WALL_T, WALL_H, DOOR_H, type Walls, type Floors, type RoofStyle } from './plot-walls'
+import { adoptUpper, levelBase, SLAB_T, type Level } from './plot-floors'
 import type { Box } from '../terrain-world'
 
 export interface HouseBlueprint { v: 1; id: string; name: string; w: number; d: number; walls: Walls; floors: Floors; roof: RoofStyle; saved: number; /** M47: the floors above the ground one (level 1, 2), re-based the same way; absent = one storey */ upper?: Level[] }
@@ -81,6 +81,25 @@ export function placeBlueprint(b: HouseBlueprint, pad: { x: number; z: number; y
       boxes.push({ x0: p.x - h, x1: p.x + h, z0: p.z - h, z1: p.z + h, y0: w.kind === 'door' ? pad.y + DOOR_H : pad.y - 0.5, y1: pad.y + 3.2 })
     }
   }
+  // M47 slice 2: the upper levels' solids, same rules as the plot's upperBoxes (a door only its lintel, a slab under each built room
+  // cell, its top at the floor), sampled small because the yaw is not a quarter turn. Slab cells are sampled 2x2 and overlap a hair.
+  ;(b.upper ?? []).forEach((lv, n) => {
+    const base = pad.y + levelBase(n + 1)
+    for (const [k, w] of Object.entries(lv.walls)) {
+      if (w.draft) continue
+      const r = edgeRect(k), alongU = r.x1 - r.x0 > r.z1 - r.z0, m = 4
+      for (let q = 0; q < m; q++) {
+        const t = (q + 0.5) / m, u = alongU ? r.x0 + (r.x1 - r.x0) * t : (r.x0 + r.x1) / 2, v = alongU ? (r.z0 + r.z1) / 2 : r.z0 + (r.z1 - r.z0) * t
+        const p = toWorld(u, v), h = Math.max(WALL_T, (alongU ? r.x1 - r.x0 : r.z1 - r.z0) / m) / 2
+        boxes.push({ x0: p.x - h, x1: p.x + h, z0: p.z - h, z1: p.z + h, y0: w.kind === 'door' ? base + DOOR_H : base - SLAB_T, y1: base + WALL_H })
+      }
+    }
+    const built: Walls = Object.fromEntries(Object.entries(lv.walls).filter(([, x]) => !x.draft))
+    for (const room of findRooms(built)) for (const [i, j] of room.cells) for (const du of [0.25, 0.75]) for (const dv of [0.25, 0.75]) {
+      const p = toWorld(i + du, j + dv)
+      boxes.push({ x0: p.x - 0.36, x1: p.x + 0.36, z0: p.z - 0.36, z1: p.z + 0.36, y0: base - SLAB_T, y1: base })
+    }
+  })
   // the group: a local point (u, y, v) lands at toWorld(u, v). Three: position = toWorld(0,0), rotation-y so +x -> right, +z -> back
   const o = toWorld(0, 0)
   return { boxes, toWorld, group: { x: o.x, z: o.z, rotY: Math.atan2(-right.z, right.x) } }

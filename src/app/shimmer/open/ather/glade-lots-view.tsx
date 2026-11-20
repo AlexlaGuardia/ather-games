@@ -6,7 +6,7 @@ import { GLADE_GREEN } from './moonwell'
 import { GLADE_LOTS, lotAt, gladeJetty } from './moonwell-glade'
 import { STATIONS, partAt, setGladeBlueprint, gladeBlueprint, lotPad } from './glade-lots'
 import { parseHouse, placeBlueprint } from './plot-blueprint'
-import { BlueprintBuilding } from './workshop'
+import { BlueprintStack } from './blueprint-stack'
 import { GLADE as GROUND, WATER_DROP } from './relief'
 import { GREG_WAYMARK } from './waymarks'
 
@@ -20,7 +20,7 @@ export function GladeLots() {
     let alive = true
     for (const l of GLADE_LOTS) fetch(`/shimmer/open/house-blueprints?id=glade-${l.id}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null)).then(j => { const bp = j ? parseHouse(j) : null; if (alive && bp) { setGladeBlueprint(l.id, bp); setBpRev(n => n + 1) } }).catch(() => {})
-    ;(window as unknown as { __glade?: object }).__glade = { blueprints: () => GLADE_LOTS.filter(l => !!gladeBlueprint(l.id)).map(l => l.id) }
+    ;(window as unknown as { __glade?: object }).__glade = { /* dev/check hook: stand a blueprint on a lot (visual + solids only, nothing saved) */ setBlueprint: (lot: string, j: unknown) => { const bp = j ? parseHouse(j) : null; setGladeBlueprint(lot, bp); setBpRev(n => n + 1); return !!bp }, blueprints: () => GLADE_LOTS.filter(l => !!gladeBlueprint(l.id)).map(l => l.id) }
     return () => { alive = false }
   }, [])
   const lots = useMemo(() => GLADE_LOTS.map(l => lotAt(l.id)!), [])
@@ -42,7 +42,7 @@ export function GladeLots() {
           <mesh position={[l.x, y + 0.035, l.z]} rotation-y={l.yaw} receiveShadow>
             <boxGeometry args={[l.w, 0.07, l.d]} /><meshLambertMaterial color={PAD} />
           </mesh>
-          {gladeBlueprint(l.id) ? (() => { const bp = gladeBlueprint(l.id)!, g = placeBlueprint(bp, lotPad(l.id, y)).group; return <BlueprintBuilding walls={bp.walls} roof={bp.roof} floors={bp.floors} x={g.x} z={g.z} y={y} rotY={g.rotY} /> })() : (STATIONS[l.id] ?? []).map((p, k) => { const c = partAt(l.id, p); return (
+          {gladeBlueprint(l.id) ? (() => { const bp = gladeBlueprint(l.id)!, g = placeBlueprint(bp, lotPad(l.id, y)).group; return <BlueprintStack bp={bp} x={g.x} z={g.z} y={y} rotY={g.rotY} /> })() : (STATIONS[l.id] ?? []).map((p, k) => { const c = partAt(l.id, p); return (
             <mesh key={k} position={[c.x, y + (p.y0 ?? 0) + p.h / 2, c.z]} rotation-y={c.yaw} castShadow receiveShadow>
               <boxGeometry args={[p.w, p.h, p.d]} /><meshLambertMaterial color={p.color} />
             </mesh>
