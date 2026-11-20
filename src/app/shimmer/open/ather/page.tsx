@@ -115,7 +115,7 @@ import { MoonwellPool } from './moonwell-quest'
 import { frameStats } from '../shared/keeper-look'
 import { getLook } from '../shared/look-store'
 import { manaFor, bonusXp, wearFocus } from './focuses'
-import { isPotion, drink, buffOn, loadBuffs, saveBuffs, BUFF_NAME, STARLIGHT_XP, OPEN_FLOW_MULT, type Buffs, type BuffId } from './alchemy'
+import { isPotion, drink, buffOn, loadBuffs, saveBuffs, BUFF_NAME, STARLIGHT_XP, WISDOM_XP, OPEN_FLOW_MULT, type Buffs, type BuffId } from './alchemy'
 import { BAIT, rollRinn, type Rinn } from './rinning'
 import { RinningFX, type RinningApi } from '../shared/rinning-fx'
 import type { Reel } from '../shared/reel'
@@ -542,7 +542,7 @@ function AtherSliceGame() {
       if (isBuilding() && camRef.current) stepBuildCam(camRef.current, dt)   // the flying planner owns the lens
     }
     { const b = buffsRef.current, t = Date.now()   // a potion buff that has run out says so, once, and leaves the save
-      setOpenXpMult(buffOn(b, 'starlight', t) ? STARLIGHT_XP : 1)
+      setOpenXpMult(Math.max(buffOn(b, 'starlight', t) ? STARLIGHT_XP : 1, buffOn(b, 'wisdom', t) ? WISDOM_XP : 1))   // the stronger of the two, never stacked
       for (const k of Object.keys(b) as BuffId[]) if (!buffOn(b, k, t)) { const nb = { ...b }; delete nb[k]; buffsRef.current = nb; saveBuffs(nb); hudSay(`${BUFF_NAME[k]} fades.`, 'info') } }
     lc.speedMult = (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1) * frameStats(getLook()).speed   // hands free, a little quicker on foot; M29 frame (Small +5%)
       * (performance.now() < surge.current.until ? surge.current.mult : 1)      // a surge cast (Static Burst)
@@ -805,8 +805,15 @@ function AtherSliceGame() {
     if (!isPotion(id)) return
     const d = drink(id, manaRef.current, buffsRef.current)
     if (!d.ok) { if (d.why) hudSay(d.why, 'info'); return }
+    if (d.heal !== undefined) {   // M57 health potion: the same rules as a roast (Wilds only, not at full health, not while down)
+      if (zoneRef0.current !== 'wilds') { hudSay('Save it for the Wilds. It heals you mid-fight.', 'info'); return }
+      const v = vitalsRef.current
+      if (v.hp <= 0) return
+      if (v.hp >= v.hpMax) { hudSay('You are whole. Keep it for a fight.', 'info'); return }
+    }
     const out = take(getInv(), id, 1); if (!out) return
     setInv(out)
+    if (d.heal !== undefined) eatQueue.current.push(d.heal)
     if (d.mana !== undefined) manaRef.current.cur = d.mana
     if (d.buffs !== buffsRef.current) { buffsRef.current = d.buffs; saveBuffs(d.buffs) }
     hudSay(d.line, 'item')

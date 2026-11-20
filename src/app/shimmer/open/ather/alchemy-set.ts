@@ -117,7 +117,8 @@ export function effectOf(id: string): { heal: number } | { mana: number } | { xp
   const e = p.effect
   if ('heal' in e) return { heal: Math.round(e.heal * m) }
   if ('mana' in e) return { mana: Math.round(e.mana * m) }
-  return { xp: Math.round(e.xp * m * 100) / 100, ms: e.ms }
+  // the XP boost's strength is fixed (one Wisdom buff, alchemy.ts) and potency makes it LAST longer: a D runs 8 min, an S 14
+  return { xp: e.xp, ms: Math.round(e.ms * m) }
 }
 
 // ── a step ─────────────────────────────────────────────────────────────────────────────────────────────────────────

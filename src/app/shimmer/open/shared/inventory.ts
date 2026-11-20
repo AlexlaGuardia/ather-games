@@ -12,6 +12,7 @@ import { FURNITURE, KEEPSTONES } from '../ather/furniture'
 import { MEATS, DISHES } from '../ather/cooking'
 import { POTIONS } from '../ather/alchemy'
 import { CROPS, GRADES, seedId, cropId, parseGraded } from '../ather/farming'
+import { alcName, isAlcPotion, effectOf, INTERMEDIATES, ALC_POTIONS, alcId, potionId } from '../ather/alchemy-set'
 
 export interface ItemDef {
   name: string
@@ -144,7 +145,19 @@ const gradedDef = (id: string): ItemDef | null => {
     blurb: seed ? `Plant it in a bed at your Farm. Grade ${g.grade}: the crop comes up the same grade.` : `Grown in your Farm. Grade ${g.grade}.` }
 }
 for (const c of Object.keys(CROPS) as (keyof typeof CROPS)[]) for (const g of GRADES) { ITEM_GROUP[seedId(c, g)] = 'farming'; ITEM_GROUP[cropId(c, g)] = 'farming' }
-export const itemDef = (id: string): ItemDef => OPEN_ITEMS[id] ?? gradedDef(id) ?? { name: id.replace(/_/g, ' '), blurb: '', icon: '', stack: 99, kind: 'material' }
+// M57 ALCHEMY (ather/alchemy-set.ts): a step's product `alc:<id>[:<grade>]` and a bottle `potion:<id>:<grade>` are ids too.
+const alcDef = (id: string): ItemDef | null => {
+  const name = alcName(id); if (!name) return null
+  if (isAlcPotion(id)) {
+    const e = effectOf(id)!
+    const does = 'heal' in e ? `Heals ${e.heal}.` : 'mana' in e ? `Restores ${e.mana} mana.` : `Gathering XP +${Math.round(e.xp * 100)}% for ${Math.round(e.ms / 60_000)} min.`
+    return { name, icon: '', stack: 20, kind: 'material', blurb: `Hold it and click to drink. ${does} Potency from the grade of what went in.` }
+  }
+  return { name, icon: '', stack: 99, kind: 'material', blurb: 'Part of a potion. Take it to the next alchemy station.' }
+}
+for (const x of Object.keys(INTERMEDIATES)) { ITEM_GROUP[`alc:${x}`] = 'alchemy'; for (const g of GRADES) ITEM_GROUP[alcId(x, g)] = 'alchemy' }
+for (const p of Object.keys(ALC_POTIONS)) for (const g of GRADES) ITEM_GROUP[potionId(p, g)] = 'alchemy'
+export const itemDef = (id: string): ItemDef => OPEN_ITEMS[id] ?? gradedDef(id) ?? alcDef(id) ?? { name: id.replace(/_/g, ' '), blurb: '', icon: '', stack: 99, kind: 'material' }
 
 export const HOTBAR = 8, BAG = 24, SLOTS = HOTBAR + BAG
 export type Stack = { id: string; n: number }

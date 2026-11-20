@@ -186,7 +186,10 @@ ok(!canPlaceChest(pc.works, owned, C.x + 1, C.z, 0, ks).ok, 'keepstone: set onto
   const mb = craftAt(w2, cid, bag3, benchJob)!
   ok(!!mb && countOf(mb.inv, 'goldwood_bench') === 1 && countOf(mb.inv, 'goldwood_plank') === 0 && roomStore(mb.works.rooms[0]).stacks.length === 0, 'carpentry: a recipe across store + bag went wrong')
   ok(craftAt(w2, cid, give(newInv(12), 'goldwood_plank', 2).inv, benchJob) === null, 'carpentry: made a bench from three planks')
-  ok(PIECE_JOBS.every(j => j.in.every(c => c.id in Object.fromEntries([...REFINE, ...STONE_REFINE].map(r => [r.out.id, 1])))), 'carpentry: a piece needs something no station refines')
+  // M57: the alchemy set's manatech also takes mana from Prospecting (shards, cores), a bag row a keeper gathers, never refined
+  const refined = new Set([...REFINE, ...STONE_REFINE].map(r => r.out.id))
+  ok(PIECE_JOBS.every(j => j.in.every(c => refined.has(c.id) || (!!FURNITURE[j.id].alc && ITEM_GROUP[c.id] === 'prospecting'))), 'carpentry: a piece needs something no station refines')
+  ok(PIECE_JOBS.filter(j => !FURNITURE[j.id].alc).every(j => j.in.every(c => refined.has(c.id))), 'carpentry: only the alchemy set may take raw mana')
   ok(roomAccepts('carpentry', 'stone_brick') && roomAccepts('carpentry', 'goldwood_plank'), 'carpentry: the store keeps every input of a piece (the Lift needs Stone Brick)')
   ok(Object.values(FURNITURE).some(f => f.recipe.every(c => c.id.startsWith('goldwood'))), 'carpentry: no piece a new keeper (goldwood only) can make')
   // set it, turn it, pick it up

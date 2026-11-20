@@ -15,8 +15,9 @@
 //   so the copy cannot drift silently (PATTERNS: never trust a hand-kept mirror; make it a checked one).
 import type { Job } from './furniture'
 import { keeperKey } from '@/lib/keeper-local'
+import { isAlcPotion, effectOf, alcName } from './alchemy-set'
 
-export type BuffId = 'starlight' | 'ather_flow'
+export type BuffId = 'starlight' | 'ather_flow' | 'wisdom'
 export interface PotionRow {
   name: string
   blurb: string
@@ -26,9 +27,11 @@ export interface PotionRow {
   /** instant mana */
   mana?: number
   /** a timed buff */
-  buff?: { id: BuffId; ms: number }
+  buff?: { id: Exclude<BuffId, 'wisdom'>; ms: number }   // the engine's buffs (BUFF_DEFS); Wisdom is the alchemy set's own
 }
 export const STARLIGHT_XP = 1.5
+/** M57: the alchemy set's XP potion (alchemy-set.ts › wisdom): +25%, its grade sets how long */
+export const WISDOM_XP = 1.25
 export const OPEN_FLOW_MULT = 2
 export const POTIONS: Readonly<Record<string, PotionRow>> = {
   shard_tonic: {
@@ -44,8 +47,8 @@ export const POTIONS: Readonly<Record<string, PotionRow>> = {
     recipe: [{ id: 'ather_crystal', n: 1 }, { id: 'crystallized_sap', n: 2 }, { id: 'pure_mana_core', n: 3 }], makes: 1, buff: { id: 'ather_flow', ms: 10 * 60_000 },
   },
 }
-export const BUFF_NAME: Readonly<Record<BuffId, string>> = { starlight: 'Starlight', ather_flow: 'Ather Flow' }
-export const isPotion = (id: string | null | undefined): id is string => !!id && id in POTIONS
+export const BUFF_NAME: Readonly<Record<BuffId, string>> = { starlight: 'Starlight', ather_flow: 'Ather Flow', wisdom: 'Wisdom' }
+export const isPotion = (id: string | null | undefined): id is string => !!id && (id in POTIONS || isAlcPotion(id))
 
 /** The cauldron's jobs, in the order a keeper reaches them. */
 export const BREW: readonly Job[] = Object.entries(POTIONS).map(([id, p]) => ({ id: `brew-${id}`, label: 'Brew', in: p.recipe, out: { id, n: p.makes } }))
@@ -57,9 +60,18 @@ export const buffOn = (b: Buffs, id: BuffId, now = Date.now()) => buffLeft(b, id
 /** Drinking a buff potion sets its clock to a fresh span; a second bottle refreshes, it never stacks. */
 export const withBuff = (b: Buffs, id: BuffId, ms: number, now = Date.now()): Buffs => ({ ...b, [id]: now + ms })
 
-export type Drink = { ok: true; mana?: number; buffs: Buffs; line: string } | { ok: false; why: string }
+export type Drink = { ok: true; mana?: number; heal?: number; buffs: Buffs; line: string } | { ok: false; why: string }
 /** What drinking `id` does now. Refuses a tonic at a full bar (it would be wasted). The page spends the bottle on ok. */
 export function drink(id: string, mana: { cur: number; max: number }, buffs: Buffs, now = Date.now()): Drink {
+  if (isAlcPotion(id)) {   // M57: a graded bottle from the alchemy set; its grade is already in the numbers (effectOf)
+    const e = effectOf(id)!, name = alcName(id)!
+    if ('mana' in e) {
+      if (mana.cur >= mana.max - 0.5) return { ok: false, why: 'Your mana is full. Keep it for a cast.' }
+      return { ok: true, mana: Math.min(mana.max, mana.cur + e.mana), buffs, line: `${name} · +${Math.round(Math.min(e.mana, mana.max - mana.cur))} mana` }
+    }
+    if ('heal' in e) return { ok: true, heal: e.heal, buffs, line: `${name} · +${e.heal}` }   // the page checks the Wilds + health first
+    return { ok: true, buffs: withBuff(buffs, 'wisdom', e.ms, now), line: `${name} · Wisdom for ${Math.round(e.ms / 60_000)} min` }
+  }
   const p = POTIONS[id]
   if (!p) return { ok: false, why: '' }
   if (p.mana) {
