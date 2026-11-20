@@ -1,12 +1,13 @@
 // ── M37 slice 1: YOUR OWN WALLS ON THE PLOT (world d5a9e927, 11-19) ──────────────────────────────────────────────────
 // Real inputs: E at the planning table, Plan, the Walls tool, a mouse DRAG across the ground (or one finger on --phone),
 // Erase + the same drag, Walls again, Back to keeper, then W held into the wall.
-//   1. a drag lays a straight wall: Works.walls gains N pieces, N goldwood planks leave the bag
-//   2. erase drags it down: no walls, every plank back
-//   3. drawn again, it survives a reload (saved with the plot)
-//   4. the walker cannot cross it: held W from 1.6 m off ends on the same side
+// (slice 4, 11-20: a drawn wall is a DRAFT plan, free and not solid; the plan bar's list is paid by Build)
+//   1. a drag lays a straight DRAFT run: N pieces, all draft, no plank spent; the list says N planks; Build spends exactly N
+//   2. erase drags the BUILT run down: no walls, every plank back
+//   3. drawn + built again, it survives a reload (saved with the plot)
+//   4. the walker cannot cross the built wall: held W from 1.6 m off ends on the same side
 //   5. 0 page errors
-// SETUP (stated): bag = 20 goldwood planks, no works. Hooks: __ather.tp (stand by the table, stand by the wall),
+// SETUP (stated): bag = 40 goldwood planks, no works. Hooks: __ather.tp (stand by the table, stand by the wall),
 // __build.to (move the VIEW over clear held ground). Every E / button / drag / key is real.
 //   npx tsx scripts/plot-walls-check.mts [--url https://ather.games] [--out dir] [--phone [--w 360 --h 780]]
 import puppeteer from 'puppeteer-core'
@@ -46,17 +47,19 @@ try {
   await p.evaluateOnNewDocument(() => {
     if (sessionStorage.getItem('walls')) return; sessionStorage.setItem('walls', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star')
-    const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'repeater', n: 1 }; slots[8] = { id: 'goldwood_plank', n: 20 }
+    const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'repeater', n: 1 }; slots[8] = { id: 'goldwood_plank', n: 40 }
     localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
     localStorage.removeItem('open.works.v1')
   })
   const read = () => p.evaluate(() => ({
     planks: ((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{}').slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, s) => t + (s?.id === 'goldwood_plank' ? s.n : 0), 0),
     walls: Object.keys(JSON.parse(localStorage.getItem('open.works.v1') ?? '{}').walls ?? {}),
+    draft: Object.values(JSON.parse(localStorage.getItem('open.works.v1') ?? '{}').walls ?? {}).filter((x: any) => x.draft).length,
   }))
   const hideCard = () => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
   const shot = async (n: string) => { await hideCard(); try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
   const at = (sel: string) => p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel)
+  const bomNeed = () => p.evaluate(() => { const e = document.querySelector('[data-plan-bom]'); if (!e) return null; const l = e.querySelector('[data-bom-line="goldwood_plank"]'); return { need: l ? +l.getAttribute('data-need')! : 0, ready: e.getAttribute('data-ready') === 'true' } })
   const tap = async (sel: string) => { const b = await at(sel); if (!b) return false; if (phone) await p.touchscreen.tap(b.x, b.y); else await p.mouse.click(b.x, b.y); return true }
   const poll = async (fn: () => Promise<boolean>, ms = 10000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(200) } return false }
   const W = phone ? Number(flag('--w', '390')) : 1100, Hh = phone ? Number(flag('--h', '844')) : 680
@@ -87,19 +90,23 @@ try {
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500); await hideCard()
   if (!phone) { await p.mouse.click(550, 340); await sleep(600) }
   const s0 = await read()
-  ok(s0.planks === 20 && s0.walls.length === 0, `start: 20 planks, no walls (${s0.planks}, ${s0.walls.length})`)
+  ok(s0.planks === 40 && s0.walls.length === 0, `start: 40 planks, no walls (${s0.planks}, ${s0.walls.length})`)
   ok(await goPlan(), 'E at the table, Plan: flying')
   // the CATALOG (Alex 11-19 playtest): next to Back to keeper; lit/locked cards; a card picks its tool
-  ok(await tap('[data-act="catalog"]') && await poll(() => p.evaluate(() => !!document.querySelector('[data-catalog]'))), 'the Catalog button (beside Back to keeper) opens the catalog')
+  ok(!await at('[data-act="catalog"]'), 'the old Catalog button beside Back to keeper is gone (M43)')
+  ok(await tap('[data-act="wall-catalog"]') && await poll(() => p.evaluate(() => !!document.querySelector('[data-catalog]'))), 'the Catalog button (in the Walls tool row) opens the catalog')
   const cards = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>('[data-cat]')].map(e => [e.dataset.cat, { lit: e.dataset.lit === 'true', text: e.textContent ?? '' }])))
-  ok(cards['walls:goldwood']?.lit && /20 planks/.test(cards['walls:goldwood'].text) && cards['walls:dawnwood'] && !cards['walls:dawnwood'].lit && /Forestry 10/.test(cards['walls:dawnwood'].text), `   Goldwood walls lit (20 planks), Dawnwood greyed with where it comes from (${cards['walls:dawnwood']?.text})`)
+  ok(cards['walls:goldwood']?.lit && /40 planks/.test(cards['walls:goldwood'].text) && cards['walls:dawnwood']?.lit && /Forestry 10/.test(cards['walls:dawnwood'].text), `   Goldwood walls lit (40 planks); Dawnwood is a plan too (needs no planks to draw) and says where its planks come from (${cards['walls:dawnwood']?.text})`)
   ok(await tap('[data-cat="walls:goldwood"]') && await poll(() => p.evaluate(() => (window as any).__build.tool() === 'walls' && !document.querySelector('[data-catalog]'))), '   a card picks its tool and closes the catalog')
   await tap('[data-tool="walls"]'); await sleep(300)   // back to look, so the next line proves the bar's own Walls button
   ok(await tap('[data-tool="walls"]'), 'the Walls tool is on the build bar'); await sleep(400)
   await shot('walls-1-tool')
   await drag(); await shot('walls-2-drawn')
   const s1 = await read()
-  ok(s1.walls.length >= 3 && s0.planks - s1.planks === s1.walls.length, `1. a drag lays a wall: ${s1.walls.length} pieces, ${s0.planks - s1.planks} planks spent`)
+  ok(s1.walls.length >= 3 && s1.draft === s1.walls.length && s1.planks === s0.planks, `1. a drag lays a DRAFT wall: ${s1.walls.length} pieces, ${s1.draft} draft, ${s0.planks - s1.planks} planks spent (none yet)`)
+  const bn = await bomNeed(); ok(!!bn && bn.need === s1.walls.length && bn.ready, `   the plan bar's list says ${s1.walls.length} goldwood planks and is ready (${JSON.stringify(bn)})`)
+  ok(await tap('[data-act="build-plan"] button') && await poll(async () => (await read()).draft === 0), '   Build stands the run')
+  const s1b = await read(); ok(s1b.walls.length === s1.walls.length && s0.planks - s1b.planks === s1.walls.length, `   built: ${s1b.walls.length} pieces, exactly ${s0.planks - s1b.planks} planks spent`)
   const straight = s1.walls.every(k => k[0] === s1.walls[0][0]) && new Set(s1.walls.map(k => k[0] === 'h' ? k.split(',')[2] : k.split(',')[1])).size === 1
   ok(straight, `   it is one straight run (${s1.walls.slice(0, 4).join(' ')}…)`)
   ok(await tap('[data-tool="erase"]'), 'the Erase tool'); await sleep(400)
@@ -107,9 +114,11 @@ try {
   await drag(); await shot('walls-2b-erased')
   console.log('  probe after:', JSON.stringify(await p.evaluate(() => ({ tool: (window as any).__build.tool?.(), view: (window as any).__build.view() }))))
   const s2 = await read()
-  ok(s2.walls.length === 0 && s2.planks === 20, `2. erase takes it down, every plank back (${s2.walls.length} walls, ${s2.planks} planks)`)
+  ok(s2.walls.length === 0 && s2.planks === 40, `2. erase takes it down, every plank back (${s2.walls.length} walls, ${s2.planks} planks)`)
   await tap('[data-tool="walls"]'); await sleep(400); await drag()
-  const s3 = await read(); ok(s3.walls.length >= 3, `   drawn again (${s3.walls.length})`)
+  const s3a = await read(); ok(s3a.walls.length >= 3 && s3a.draft === s3a.walls.length, `   drawn again as a draft (${s3a.walls.length})`)
+  ok(await tap('[data-act="build-plan"] button') && await poll(async () => (await read()).draft === 0), '   built again')
+  const s3 = await read()
   await tap('[data-act="land"]'); await sleep(1200)
   await p.reload({ waitUntil: 'load', timeout: 180000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(3000); await hideCard()
