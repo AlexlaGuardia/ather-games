@@ -11,21 +11,24 @@ import type { TalkNode } from '../shared/npc-talk'
 import { wantsLeft, trusted, type Folk, type Trust } from './settlement-folk'
 import { talkLine } from './folk-lines'
 import { itemDef } from '../shared/inventory'
+import { cardOf, type CardView } from './moglin-card'
 
-export const ASK = { needs: 'What do you need?', room: 'Would you keep a room for me?', others: 'Who else lives here?', back: 'Anything else?', bye: 'See you soon.' }
+export const ASK = { needs: 'What do you need?', room: 'Would you keep a room for me?', others: 'Who else lives here?', back: 'Anything else?', bye: 'See you soon.', inspect: 'Inspect' }   // M46: 'Inspect' is Alex's word (11-20)
 export const FOLK_NO_ROOM = 'Your garden is full just now. Ask me again when there is a free room.'
 export const FOLK_EMPTY = 'The houses are quiet now. Everyone here has found a garden.'   // no speaker: reads as narration
 export const giveLabel = (n: number, id: string) => `Bring ${n} ${itemDef(id).name}`  // the bring answer: the same verb as lark's trustFirst ask
 export const goodsText = (ws: { id: string; n: number }[]) => ws.map(w => `${w.n} ${itemDef(w.id).name}`).join(' and ')
 
 /** Where the talk is: whose bubble, which screen, and (after an answer) the line it said. */
-export interface FolkTalkState { fid: string; screen: 'hello' | 'needs' | 'said'; line?: string; /** M40: this hello is a repeat (a Glade Moglin says its alternate) */ alt?: boolean }
+export interface FolkTalkState { fid: string; screen: 'hello' | 'needs' | 'said' | 'card'; line?: string; /** M40: this hello is a repeat (a Glade Moglin says its alternate) */ alt?: boolean }
 // M40: Glade Moglins heard this visit (a repeat talk gets the alternate line). Per page, not saved: a new visit starts fresh.
 const heard = new Set<string>()
 /** a hello state for `fid`, marking it heard (the NEXT hello is a repeat) */
 export function helloFor(fid: string): FolkTalkState { const alt = heard.has(fid); heard.add(fid); return { fid, screen: 'hello', alt } }
 export const _resetHeard = () => heard.clear()
-export interface FolkTalkCtx { folk: Folk[]; home: Folk[]; trust: Trust; have: (id: string) => number; room: number }
+export interface FolkTalkCtx { folk: Folk[]; home: Folk[]; trust: Trust; have: (id: string) => number; room: number; /** the card's home line (M46) */ homeName?: string }
+/** M46: a talk node may carry the Moglin's card (the HUD draws it above the answers) */
+export type FolkTalkNode = TalkNode & { card?: CardView }
 export interface FolkTalkActs {
   go: (s: FolkTalkState) => void
   give: (f: Folk, id: string, n: number) => void
@@ -36,7 +39,7 @@ export interface FolkTalkActs {
 export const folkStart = (home: Folk[]): FolkTalkState => (home[0] ? helloFor(home[0].id) : { fid: '', screen: 'hello' })
 
 /** The node for `st`. A Moglin that has just been recruited is no longer in `home`, so it is looked up in the full season list. */
-export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): TalkNode {
+export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): FolkTalkNode {
   const bye = { label: ASK.bye, pick: act.bye }
   const f = c.folk.find(x => x.id === st.fid)
   if (!f) return { line: FOLK_EMPTY, options: [bye] }
@@ -67,5 +70,8 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): 
     }
   }
   if (st.screen === 'said') return { line: st.line ?? f.dream, options: [{ label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello' }) }, ...(next ? [next] : []), bye] }
-  return { line: gladeHello(f.id, !!st.alt) ?? f.dream, options: [...(f.employed && !ok ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, ...(next ? [next] : []), bye] }
+  const hello = gladeHello(f.id, !!st.alt) ?? f.dream
+  const inspect = { label: ASK.inspect, pick: () => act.go({ fid: f.id, screen: 'card', alt: st.alt }) }
+  if (st.screen === 'card') return { line: hello, card: cardOf(f, c.trust, c.homeName ?? f.home), options: [{ label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello', alt: st.alt }) }, bye] }
+  return { line: hello, options: [...(f.employed && !ok ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, inspect, ...(next ? [next] : []), bye] }
 }

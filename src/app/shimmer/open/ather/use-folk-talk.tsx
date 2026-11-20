@@ -11,12 +11,14 @@ import { SEASON } from './network'
 import { folkOf, stillHome, bring, recruit, loadTrust, saveTrust, wantsLeft } from './settlement-folk'
 import { loadVillage, saveVillage, VILLAGE_CAP } from './moglins'
 import { folkTalk, folkStart, helloFor, type FolkTalkState } from './folk-talk'
+import { MoglinCard } from './moglin-card-view'
 import { nearestSpot } from './folk-spots'
 import { builtFolkSpots } from './settlement-lots'   // M39 s3: where a Moglin is DRAWN (trade Moglins at their doors); talk must agree
 import { keeperNow } from './network-scene'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
 
 export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number) => number, onClose: () => void) {
+  const phone = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches   // M46 card sizing; page.tsx untouched
   const inv = useInv()
   const [village, setVillage] = useState(() => loadVillage())
   const [trust, setTrust] = useState(() => loadTrust())
@@ -37,7 +39,7 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
   const node: TalkNode | null = useMemo(() => {
     if (!s || !st) return null
     const home = stillHome(folk, village), room = VILLAGE_CAP[0] - village.moglins.length   // stage gating is play's: stage 0
-    return folkTalk({ folk, home, trust, have: id => countOf(invRef.current, id), room }, st, {
+    const n = folkTalk({ folk, home, trust, have: id => countOf(invRef.current, id), room, homeName: s.name }, st, {
       go: setSt, bye: onClose,
       give: (f, id, n) => {
         const left = wantsLeft(f, trust).find(w => w.id === id)?.n ?? 0, k = Math.min(left, n, countOf(getInv(), id)); if (k <= 0) return
@@ -51,6 +53,8 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
         hudSay(`${f.name} is coming to your garden`, 'item', 5)
       },
     })
+    // M46: the card rides on the node as a HUD panel above the answers (TalkChoices draws it; page.tsx needs no change)
+    return n.card ? { ...n, panel: <MoglinCard card={n.card} id={st.fid} phone={phone} /> } : n
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, st, folk, village, trust, haveKey])
   const f = st ? folk.find(x => x.id === st.fid) : undefined

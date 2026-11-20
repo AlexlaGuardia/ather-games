@@ -4,12 +4,12 @@
 // NAME, and the keeper answers from a short list: ARROWS (or W/S) move the pick, E / Enter / Space chooses, Esc leaves, a tap
 // picks on a phone. Each answer opens ONE thing (a screen, the next line, or goodbye): never errand + shop + upgrades at once.
 // Lines are @lark's: a tree only arranges them. The tree is plain data (TalkNode), so any NPC can use this.
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Html } from '@react-three/drei'
 import { markMet } from './met'   // BETA M33: a first talk = met (Morel may carry their calls)
 
 export interface TalkOption { label: string; pick: () => void }
-export interface TalkNode { line: string; options: TalkOption[] }
+export interface TalkNode { line: string; options: TalkOption[]; /** optional HUD panel drawn above the answers (M46: a Moglin's card) */ panel?: ReactNode }
 
 /** In the scene (inside the Canvas): the NPC's name plate with the bubble above it. `at` = the point just over their head. */
 export function TalkBubble({ at, name, line, scene }: { at: [number, number, number]; name: string; line: string
@@ -51,6 +51,7 @@ export function TalkChoices({ node, phone }: { node: TalkNode; phone: boolean })
   return (
     <div data-talk-choices style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: phone ? 150 : 84,
       width: 'min(360px, calc(100vw - 32px))', display: 'grid', gap: 6, zIndex: 30 }}>
+      {node.panel}
       {node.options.map((o, i) => (
         <button key={i} type="button" data-talk-option={i} data-talk-sel={i === sel ? '' : undefined}
           onPointerEnter={() => setSel(i)} onClick={() => o.pick()}

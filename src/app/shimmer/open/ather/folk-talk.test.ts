@@ -22,7 +22,7 @@ const labels = (n: { options: { label: string }[] }) => n.options.map(o => o.lab
 // hello: ONE Moglin's dream in the bubble, a short answer list (never every Moglin at once)
 const h = folkTalk(ctx(), { fid: emp.id, screen: 'hello' }, acts)
 ok(h.line === emp.dream && !h.line.includes(free.dream), 'hello is this Moglin\'s own dream, nothing of the others')
-ok(labels(h).join('|') === [ASK.needs, ASK.room, ASK.others, ASK.bye].join('|'), 'a Moglin with work: needs, room, others, goodbye')
+ok(labels(h).join('|') === [ASK.needs, ASK.room, ASK.inspect, ASK.others, ASK.bye].join('|'), 'a Moglin with work: needs, room, inspect, others, goodbye')
 const fh = folkTalk(ctx(), { fid: free.id, screen: 'hello' }, acts)
 ok(!labels(fh).includes(ASK.needs), 'a free Moglin has no needs answer')
 ok(folkStart(home).fid === home[0].id && folkStart([]).fid === '', 'start = the first Moglin at home')
