@@ -20,8 +20,7 @@ import { gardenKey } from '@/lib/keeper-local'
 import { putIn } from './garden-bank'
 import { ROOM_STORE_SLOTS, roomStore, type Room, type RoomKind, type Works } from './rooms'
 import type { Job } from './furniture'
-import { ROAST } from './cooking'
-import { BREW } from './alchemy'
+import { stockJobs, RESERVE, OUT_CAP } from './station-queue'
 import { phaseOf, water as waterBed, isArmed, type Farm } from './farming'
 import { plumbingOf, draw, type WaterSave } from './water'
 
@@ -107,24 +106,7 @@ export function tick(v: Village, w: Works, now = Date.now(), grounds?: Grounds):
   const moglins = v.moglins.map(m => {
     const r = m.room ? works.rooms.find(x => x.id === m.room) : undefined
     if (!r || now < r.doneAt) return m
-    // BENCH WORK (play 11-18): a cook at the hearth ROASTS and an alchemist at the cauldron BREWS, from the room's STORE
-    // only (never the keeper's bag), the made goods back into the store, at the CRAFT grade's pace. Canon's pairing: a
-    // Moglin trade works with its room, want-list in, goods out. Nothing to work = nothing banked (no debt to cash later).
-    const jobs = BENCH_JOBS[m.profession]?.[r.kind]
-    if (jobs) {
-      let acc2 = (m.acc ?? 0) + (PER_HOUR(m.grades.craft) * dt) / 3_600_000
-      let runs = Math.floor(acc2), did = 0
-      let stacks = roomStore(r).stacks
-      while (runs > 0) {
-        const step = jobs.map(j => benchRun(stacks, j)).find(x => x !== null)
-        if (!step) break
-        stacks = step.stacks; did++; runs--
-        made[step.out.id] = (made[step.out.id] ?? 0) + step.out.n
-      }
-      if (did) works = setStore(works, r.id, stacks)
-      acc2 = runs > 0 ? 0 : acc2 - did   // stalled (nothing stocked, or the store is full): nothing banked
-      return { ...m, acc: acc2 }
-    }
+    // Cook / alchemist bench work is the STATION STOCKPILE's (station-queue.ts, ticked by workshop.tsx): one ticker per room.
     let acc = (m.acc ?? 0) + (PER_HOUR(m.grades.yield) * dt) / 3_600_000
     let n = Math.floor(acc)
     if (n <= 0) return { ...m, acc }
@@ -170,29 +152,12 @@ export function tick(v: Village, w: Works, now = Date.now(), grounds?: Grounds):
   return { village: { ...v, moglins, lastTick: now }, works, made, grounds: g, tended }
 }
 
-/** Which bench jobs a trade runs in which room (BENCH WORK above). */
-export const BENCH_JOBS: Partial<Record<Profession, Partial<Record<RoomKind, readonly Job[]>>>> = {
-  cook: { cooking: ROAST },
-  alchemist: { alchemy: BREW },
-}
-/** One run of a job from a store's stacks alone: inputs out, the output in (if it fits). Null when short or full. */
-export function benchRun(stacks: readonly { id: string; n: number }[], j: Job): { stacks: { id: string; n: number }[]; out: { id: string; n: number } } | null {
-  let left = stacks.map(s => ({ ...s }))
-  for (const c of j.in) {
-    if (left.reduce((a, s) => a + (s.id === c.id ? s.n : 0), 0) < c.n) return null
-    let need = c.n
-    for (const s of left) if (need > 0 && s.id === c.id) { const t = Math.min(need, s.n); s.n -= t; need -= t }
-    left = left.filter(s => s.n > 0)
-  }
-  const p = putIn({ v: 1, stacks: left }, ROOM_STORE_SLOTS, j.out.id, j.out.n)
-  return p.left > 0 ? null : { stacks: p.bank.stacks, out: j.out }
-}
 /** What a Moglin does in a room, in a line (the bench panel). */
 export function dutyLine(m: MoglinRecord, kind: RoomKind): string {
   if (m.profession === 'carpenter' && kind === 'carpentry') return `Brings in deadfall, about ${PER_HOUR(m.grades.yield)} an hour.`
   if (m.profession === 'farmer' && kind === 'farm') return `Waters your growing beds, up to ${PER_HOUR(m.grades.yield)} an hour. Planting and harvesting are yours.`
   if (m.profession === 'smith' && kind === 'smith') return `Trades for deadfall from the carpentry room and burns it to charcoal, about ${PER_HOUR(m.grades.yield)} an hour.`
-  if (BENCH_JOBS[m.profession]?.[kind]) return `Works from the room's store, about ${PER_HOUR(m.grades.craft)} an hour. Stock it and there is always something on.`
+  if (stockJobs(kind).length && WORKS_IN[m.profession].includes(kind)) return `Works the room's stockpile from its store: keeps ${RESERVE} of each raw for you, makes up to ${OUT_CAP} of each product. Stock it and there is always something on.`
   return 'Keeps the room. Their trade has no work here yet.'
 }
 

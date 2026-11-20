@@ -3,7 +3,7 @@
 // STOCKPILE (default, the room's Moglin only): the station keeps RESERVE (30) of each RAW input in its store for the player;
 // from the surplus above that it refines, ONE item's worth of input at a time, until the output holds OUT_CAP (30) of each
 // product; it works one product to its stack, then swaps to the next (planks to 30, then bark to 30 ...), then idles. Only
-// REFINING jobs (REFINE / STONE_REFINE) are ever stockpiled; furniture, roasts and brews are made by FOCUS only.
+// REFINE / STONE_REFINE / ROAST / BREW are stockpiled (cook + alchemist rooms too, M43 fold); furniture is FOCUS only.
 // FOCUS (the player picks ONE job + a quantity 1/10/99/max): ignores both the reserve and the cap, uses ALL matching material in
 // the store to make that item asap, then drops back to stockpile (also when the inputs run out). The Moglin works it at its
 // CRAFT grade; with no Moglin the keeper works a focus themselves, only while the bench panel is open (speed 1).
@@ -50,9 +50,9 @@ export const moglinSpeed = (craft: number) => 1 + 0.25 * (Math.max(1, Math.min(5
 
 const have = (stacks: readonly Stack[] | undefined, id: string) => (stacks ?? []).reduce((a, s) => a + (s.id === id ? s.n : 0), 0)
 const BIG = 1e9
-/** the refining jobs a room stockpiles (never furniture, roasts or brews) */
+/** the jobs a room stockpiles: refining, plus the hearth's roasts and the cauldron's brews (M43 fold; never furniture) */
 export function stockJobs(kind: string): readonly Job[] {
-  return kind === 'carpentry' ? REFINE : kind === 'stonemason' ? STONE_REFINE : []
+  return kind === 'carpentry' ? REFINE : kind === 'stonemason' ? STONE_REFINE : kind === 'cooking' ? ROAST : kind === 'alchemy' ? BREW : []
 }
 /** runs a quantity of OUTPUT items takes */
 export const runsFor = (j: Job, qty: number) => Math.ceil(Math.max(0, Math.min(MAX_QTY, qty)) / j.out.n)

@@ -16,7 +16,7 @@ ok(RESERVE === 30 && OUT_CAP === 30 && MAX_QTY === 99, 'reserve 30, cap 30, quan
 const plank = jobById('goldwood-plank')!
 ok(itemMs(plank) === 4000 && runMs(plank) === 8000 && itemMs(jobById('stone-brick')!) === 6000 && itemMs(jobById('crystal-pane')!) === 8000, 'times: plank 4 s, brick 6 s, pane 8 s')
 ok(itemMs(jobById('goldwood_stool')!) >= 20000 && itemMs(jobById('goldwood_stool')!) <= 60000, 'furniture 20-60 s')
-ok(stockJobs('carpentry').every(j => j.in.length === 1) && stockJobs('cooking').length === 0 && stockJobs('alchemy').length === 0 && !stockJobs('carpentry').some(j => j.id === 'goldwood_stool'), 'stockpile = refining jobs only (never furniture, roasts, brews)')
+ok(stockJobs('carpentry').every(j => j.in.length === 1) && stockJobs('cooking').length > 0 && stockJobs('alchemy').length > 0 && stockJobs('smith').length === 0 && !stockJobs('carpentry').some(j => j.id === 'goldwood_stool'), 'stockpile = refining + roast + brew only (never furniture, other roomss)')
 ok(runsFor(plank, 10) === 5 && runsFor(plank, 500) === 50, '10 planks = 5 runs; the 99 cap')
 ok(maxAffordable(plank, [{ id: 'goldwood_log', n: 7 }]) === 14 && maxAffordable(plank, [{ id: 'goldwood_log', n: 400 }]) === 99 && maxAffordable(plank, []) === 0, 'focus max = all the material (capped at 99)')
 
