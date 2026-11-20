@@ -9,6 +9,7 @@
 import { treeFor, TRUNK, type Zone, type TreeKind } from './forestry'
 import { crystalFor, type CrystalKind } from './prospecting'
 import type { Box, Shape } from '../terrain-world'
+import type { VoidField } from './wilds-voids'
 import { relieve, outcropsIn, outcropRoll, inGlade } from './relief'
 import type { RoadField } from './network'
 
@@ -43,6 +44,8 @@ export interface Wilds {
   trees: Tree[]
   crystals: Crystal[]
   shape: Shape
+  /** M41: per cell, 1 where the crust is gone (a cloud void: drawn dark, no tree or crystal). Absent when the tile has no voids. */
+  voided?: Uint8Array
 }
 
 const TRUNK_R = 0.35
@@ -59,7 +62,7 @@ const hash = (a: number, b: number, s = 0) => {
 /** `clear(x, z)` in WORLD coords (tile-local + the tile's centre): no tree stands there (the path network: paths,
  *  settlements, the fair's ground). Ids are counted as if it stood, so a prune saved before the paths still finds its
  *  tree, and crystals still dodge it, so no crystal moved either. */
-export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt: (i: number, j: number) => Zone = () => 'meadows', clear?: (x: number, z: number) => boolean, relief = true, roads?: RoadField | null): Wilds {
+export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt: (i: number, j: number) => Zone = () => 'meadows', clear?: (x: number, z: number) => boolean, relief = true, roads?: RoadField | null, voids?: VoidField | null): Wilds {
   const { nx, nz, cell, sizeX, sizeZ } = meta
   if (dm.length !== nx * nz) throw new Error(`wilds ${meta.name}: ${dm.length} heights, want ${nx * nz}`)
   if (biomes.length !== (nx - 1) * (nz - 1)) throw new Error(`wilds ${meta.name}: ${biomes.length} biome cells, want ${(nx - 1) * (nz - 1)}`)
@@ -72,6 +75,17 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
     const k = j * nx + i
     h[k] = relief ? relieve(-hx + i * cell + ox, -hz + j * cell + oz, raw[k], meta.waterY, clear, roads) : raw[k]
+    if (voids) h[k] = voids.carve(-hx + i * cell + ox, -hz + j * cell + oz, h[k], meta.waterY)   // M41: the crust is gone between zones
+  }
+  // a cell is void where its corners are carved most of the way down (wilds-scene draws it dark; no tree or crystal stands there)
+  let voided: Uint8Array | undefined
+  if (voids) {
+    const floor = meta.waterY + 0.6 + 0.01
+    for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
+      if (h[j * nx + i] > floor && h[j * nx + i + 1] > floor && h[(j + 1) * nx + i] > floor && h[(j + 1) * nx + i + 1] > floor) continue
+      const w = voids.weight(-hx + (i + 0.5) * cell + ox, -hz + (j + 0.5) * cell + oz)
+      if (w > 0.35) { voided ??= new Uint8Array((nx - 1) * (nz - 1)); voided[j * (nx - 1) + i] = 1 }
+    }
   }
   const sampler = (H: Float32Array) => (x: number, z: number): number => {
     const fx = Math.min(nx - 1 - 1e-6, Math.max(0, (x + hx) / cell)), fz = Math.min(nz - 1 - 1e-6, Math.max(0, (z + hz) / cell))
@@ -116,6 +130,8 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
     const y = heightAt(x, z)
     const big = t.kind === 'dawnwood' ? 1.55 : t.kind === 'shimmeroak' ? 1.2 : t.kind === 'starwillow' ? 0.95 : 1
     const id = `${meta.name}:${stood.length}`; stood.push({ x, z })
+    if (voids && voids.weight(x + ox, z + oz) > 0) continue   // M41: none on the lip of a cloud void
+    if (voids && voids.weight(x + ox, z + oz) > 0) continue   // M41: none on the lip of a cloud void
     if (clear?.(x + ox, z + oz) || inGlade(x + ox, z + oz)) continue   // M40: none on Moonwell Glade's green, lots or pond
     if (slopeOf(heightAt, x, z) > 0.9) continue   // an outcrop's flank holds no tree (its id still counted above)
     trees.push({ x, z, y, tall: (5 + hash(i, j, 4) * 5) * big, r: (1.6 + hash(i, j, 5) * 1.2) * big, kind: t.kind, id })
@@ -135,6 +151,7 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
     if (slopeOf(rawAt, x, z) > 0.9 || rawAt(x, z) < meta.waterY + 0.4) continue
     if (stood.some(t => Math.abs(t.x - x) < 2.5 && Math.abs(t.z - z) < 2.5)) continue
     const y = heightAt(x, z), id = `${meta.name}:c${cn++}`
+    if (voids && voids.weight(x + ox, z + oz) > 0) continue   // M41
     if (inGlade(x + ox, z + oz)) continue   // M40: none on Moonwell Glade (after the id: no other crystal's id moves)
     crystals.push({ x, z, y, kind: c.kind, s: 0.8 + hash(i, j, 11) * 0.5, rot: hash(i, j, 12) * Math.PI * 2, id })
   }
@@ -154,7 +171,7 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
     // the outcrop must really stand here (the path / water / arrival masks flatten some away)
     let ring = 0
     for (let k = 0; k < 6; k++) ring += heightAt(lx + Math.cos(k * Math.PI / 3) * o.R * 1.6, lz + Math.sin(k * Math.PI / 3) * o.R * 1.6) / 6
-    if (heightAt(lx, lz) - ring < 1.5 || rawAt(x, z) < meta.waterY + 0.4 || inGlade(x + ox, z + oz)) continue
+    if (heightAt(lx, lz) - ring < 1.5 || rawAt(x, z) < meta.waterY + 0.4 || inGlade(x + ox, z + oz) || (voids && voids.weight(x + ox, z + oz) > 0)) continue
     crystals.push({ x, z, y: heightAt(x, z), kind: c.kind, s: 0.8 + outcropRoll(o, 304) * 0.5, rot: outcropRoll(o, 305) * Math.PI * 2, id: `${meta.name}:o${o.i}_${o.j}` })
   }
 
@@ -187,17 +204,17 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
     },
     water: () => water,
   }
-  return { meta, h, biomes, heightAt, biomeAt, canopyAt, trees, crystals, shape }
+  return { meta, h, biomes, heightAt, biomeAt, canopyAt, trees, crystals, shape, voided }
 }
 
 /** Browser loader: the three files export_wilds.py writes. */
-export async function loadWilds(name: string, base = '/open/wilds', zoneAt?: (i: number, j: number) => Zone, clear?: (x: number, z: number) => boolean, roads?: RoadField | null): Promise<Wilds> {
+export async function loadWilds(name: string, base = '/open/wilds', zoneAt?: (i: number, j: number) => Zone, clear?: (x: number, z: number) => boolean, roads?: RoadField | null, voids?: VoidField | null): Promise<Wilds> {
   const [meta, bin, bio] = await Promise.all([
     fetch(`${base}/${name}.json`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.json ${r.status}`); return r.json() as Promise<WildsMeta> }),
     fetch(`${base}/${name}.bin`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.bin ${r.status}`); return r.arrayBuffer() }),
     fetch(`${base}/${name}.biome`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.biome ${r.status}`); return r.arrayBuffer() }),
   ])
-  return parseWilds(meta, new Int16Array(bin), new Uint8Array(bio), zoneAt, clear, true, roads)
+  return parseWilds(meta, new Int16Array(bin), new Uint8Array(bio), zoneAt, clear, true, roads, voids)
 }
 
 /** The tile's centre in CONTINENT world coordinates (continent.json: origin at the centre, 10 m per source px).

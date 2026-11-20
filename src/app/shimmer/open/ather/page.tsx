@@ -73,6 +73,7 @@ import { useLoadout } from '../shared/loadout'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree, type Crystal } from './wilds'
 import { loadIndex, makeWorld, stream, tileOf, zonesOf, TILE_M, type WildsWorld } from './wilds-world'
+import { makeVoids, type VoidField } from './wilds-voids'
 import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
 import { useFolkTalk } from './use-folk-talk'
 import { TilePaths, Settlements, BigTop } from './network-scene'
@@ -253,6 +254,7 @@ function AtherSliceGame() {
     // the season's path network first (network.ts): no tree may stand on a path, so it must be known before a tile parses
     Promise.all([loadIndex(), loadNetwork()]).then(async ([idx, nw]) => {
       const w = makeWorld(idx); if (nw) { w.clear = clearing(nw); w.roads = roadField(nw); setNet(nw); netRef.current = nw }
+      w.voids = voidsRef.current = makeVoids(idx, nw ?? null)   // M41: the cloud voids between zones, carved as each tile parses
       await stream(w, GREG_WAYMARK.x, GREG_WAYMARK.z); setWw(w); setWrev(w.rev)
     })
       .catch(e => setToast(`The Wilds would not load: ${e.message}`))
@@ -320,6 +322,20 @@ function AtherSliceGame() {
     }, 380)
   }, [])
   const goHome = useCallback(() => arrive({ kind: 'plot' }, THRESHOLD), [arrive])
+  // ── M41 CLOUD VOIDS: a fall costs time, never gore. Over the edge -> a short fade -> set down at the last crossing you used,
+  // else the last waymark (Greg's stone when you hold none).
+  const voidsRef = useRef<VoidField | null>(null)
+  const lastCross = useRef<{ x: number; z: number } | null>(null)
+  const wwRef = useRef<WildsWorld | null>(null); wwRef.current = ww
+  const wayRef = useRef<Waymark[]>([]); wayRef.current = waymarks
+  const voidFall = useCallback(() => {
+    const w = wwRef.current; if (!w || fading.current) return
+    const way = wayRef.current[wayRef.current.length - 1], o = way ? w.offsetOf(way.tile) : { x: 0, z: 0 }
+    const at = lastCross.current ?? (way ? { x: way.x + o.x + 2.2, z: way.z + o.z + 2.2 } : { x: GREG_WAYMARK.x + 2.2, z: GREG_WAYMARK.z + 2.2 })
+    const { tx, ty } = tileOf(at.x, at.z), t = w.at(tx, ty); if (!t) return
+    fading.current = true   // arrive() below takes it over once the tile is in
+    stream(w, at.x, at.z).then(() => { fading.current = false; setWrev(w.rev); setHereTile(t.name); arrive({ kind: 'wilds', tile: t.name }, { x: at.x, z: at.z, yaw: Math.PI * 0.75 }); setToast(lastCross.current ? 'You went over the edge. You are back at the last crossing.' : 'You went over the edge. You are back at your last waymark.') })
+  }, [arrive])
 
   // ── combat in the Wilds ──
   const terrain = useMemo<Terrain | null>(() => ww ? { heightAt: ww.heightAt, walkable: (x, z) => ww.walkable(x, z) } : null, [ww])
@@ -482,6 +498,11 @@ function AtherSliceGame() {
   const gateStepRef = useRef<(lc: Loco, yaw: number, dt: number, g: (x: number, z: number) => number) => void>(() => {})
   const onTick = useCallback((lc: Loco, yaw: number, dt: number) => {
     pos.current = { x: lc.px, z: lc.pz, grounded: !lc.airborne, swimming: lc.swimming }
+    { const v = voidsRef.current   // M41: on a crossing = the place to come back to; in a void = over the edge
+      if (v && zoneRef0.current === 'wilds') {
+        const c = v.crossingNear(lc.px, lc.pz, 7); if (c) lastCross.current = { x: c.x, z: c.z }
+        if (v.isVoid(lc.px, lc.pz)) { voidFall(); return }
+      } }
     stepChannel(lc.px, lc.pz)   // gathering by channel: the next chip, or let go
     { // the body, read once: posed against THIS frame's camera (the walker placed it just before calling us), off its own state
       const now = performance.now(), h = heldRef.current, third = thirdRef.current
@@ -582,7 +603,7 @@ function AtherSliceGame() {
       }
       setHud({ verb: verbOf(lc), where })
     }
-  }, [zone, waymarks, ww, fog, tileOff, streamAt])
+  }, [zone, waymarks, ww, fog, tileOff, streamAt, voidFall])
 
   const buy = useCallback((i: number, j: number) => {
     const v = canBuy(owned, i, j, garden.pages, garden.grey)

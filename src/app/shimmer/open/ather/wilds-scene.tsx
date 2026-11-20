@@ -17,6 +17,8 @@ import { DAY } from '../shared/sky-palette'
  *  fog has swallowed (Alex 11-16 lag: one 375k-vertex mesh per tile drew whole, four tiles a frame). Flat-shaded,
  *  colour per triangle, so a piece is still its own unindexed triangles. */
 const CHUNKS = 8
+/** M41: a cloud void's floor, the plot edge's pressed-cloud dark (a look call for Alex) */
+const VOID_DARK = new THREE.Color('#4a5870')
 type GroundChunk = { geo: THREE.BufferGeometry; cx: number; cz: number; r: number }
 function wildsGeometry(W: Wilds): GroundChunk[] {
   const { nx, nz, cell, sizeX, sizeZ } = W.meta
@@ -38,7 +40,8 @@ function wildsGeometry(W: Wilds): GroundChunk[] {
       const tris = [[x0, y00, z0, x1, y11, z1, x1, y10, z0], [x0, y00, z0, x0, y01, z1, x1, y11, z1]]
       for (let t = 0; t < 2; t++) {
         const n = ((i * 7 + j * 13 + t * 5) % 11) / 11
-        if (b === BIOME.water) c.copy(P.bed)
+        if (W.voided?.[j * (nx - 1) + i]) c.copy(VOID_DARK).offsetHSL(0, 0, (n - 0.5) * 0.05)
+        else if (b === BIOME.water) c.copy(P.bed)
         else if (b === BIOME.shore) c.copy(P.shore)
         else if (b === BIOME.rock) c.copy(P.rock)
         else if (b === BIOME.woods) c.copy(P.woods).lerp(P.woodsHi, n * 0.5)
@@ -46,7 +49,7 @@ function wildsGeometry(W: Wilds): GroundChunk[] {
         const tri = tris[t]
         for (let k = 0; k < 9; k++) pos[o + k] = tri[k]
         for (let k = 0; k < 3; k++) { col[o + k * 3] = c.r; col[o + k * 3 + 1] = c.g; col[o + k * 3 + 2] = c.b }
-        const L = b === BIOME.water || b === BIOME.shore ? GROUND.sand : b === BIOME.rock ? GROUND.stone : b === BIOME.woods ? GROUND.loam : GROUND.grass
+        const L = W.voided?.[j * (nx - 1) + i] ? GROUND.stone : b === BIOME.water || b === BIOME.shore ? GROUND.sand : b === BIOME.rock ? GROUND.stone : b === BIOME.woods ? GROUND.loam : GROUND.grass
         lay[o / 3] = L; lay[o / 3 + 1] = L; lay[o / 3 + 2] = L
         o += 9
       }
