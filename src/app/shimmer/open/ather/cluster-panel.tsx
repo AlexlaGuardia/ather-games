@@ -42,16 +42,15 @@ export function useCluster(owned: readonly string[]) {
     const t = setTimeout(() => { fetch('/api/cluster/garden', { method: 'POST', body: gardenText(owned) }).catch(() => {}) }, 1500)
     return () => clearTimeout(t)
   }, [key, rem.quarter]) // eslint-disable-line react-hooks/exhaustive-deps
-  // ?cluster=preview: a stand-in friend in the opposite quarter, so the linked world can be walked (and checked)
-  // without a second account. Nothing is sent anywhere; it is a picture of what linking opens.
+  // ?cluster=preview (CHECKS ONLY, never linked from the game): ONE stand-in mate across the square so the linked world can be
+  // walked without a second account. BETA M52 (Alex 11-20): the three dummy gardens are gone; the Green and its open spots
+  // are there for everyone now, so the preview only adds the one mate a check needs. Nothing is sent anywhere.
   const [preview, setPreview] = useState(false)
   useEffect(() => { setPreview(new URLSearchParams(location.search).get('cluster') === 'preview') }, [])
   const frame: Frame = useMemo(() => {
     if (preview) return clusterFrame('ne', [
       { quarter: 'ne', name: 'you', owned: [...owned] },
-      { quarter: 'nw', name: 'a friend (preview)', owned: [...STARTING_SQUARES, '3,6', '3,7', '3,8', '0,5', '1,5'] },
-      { quarter: 'sw', name: 'another friend (preview)', owned: [...STARTING_SQUARES] },
-      { quarter: 'se', name: 'a third friend (preview)', owned: [...STARTING_SQUARES, '3,8', '4,8', '3,7', '4,7', '0,5', '0,4', '1,5', '1,4', '2,5'] },
+      { quarter: 'sw', name: 'a mate (preview)', owned: [...STARTING_SQUARES] },
     ])
     if (!rem.view || !rem.quarter) return clusterFrame(null, [])
     const mates: Mate[] = rem.view.members.map(m => {

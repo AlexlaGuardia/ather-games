@@ -32,7 +32,22 @@ try {
   await sleep(4500)   // past one 3 s save
   const saved = await p.evaluate(() => Object.keys(localStorage).filter(k => k.includes('open.lastspot')).map(k => localStorage.getItem(k)))
   ok(saved.length === 1 && saved[0]!.includes('"zone":"wilds"'), `the spot is saved while out (${saved[0]?.slice(0, 90)})`)
+  // NO HOME FLASH (Alex 11-20): from the first frame after the reload until the Wilds land, the plot is never seen with
+  // the veil down. A page-side sampler (every animation frame) records any frame where zone=plot and the veil is not opaque.
+  await p.evaluateOnNewDocument(() => {
+    const w = window as any; w.__flash = 0; w.__veilSeen = 0
+    const tick = () => {
+      const v = document.querySelector('[data-veil]') as HTMLElement | null
+      const z = w.__ather?.zone?.(); const op = v ? +getComputedStyle(v).opacity : 0
+      if (v?.dataset.veil === 'resume') w.__veilSeen++
+      if (z === 'plot' && op < 0.99 && w.__ather?.state) w.__flash++
+      if (z !== 'wilds') requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
   await p.reload({ waitUntil: 'load', timeout: 240000 }); await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 })
+  ok(await poll(async () => (await zone()) === 'wilds', 240000), '1a. the reload lands in the Wilds')
+  { const f = await p.evaluate(() => ({ flash: (window as any).__flash, veil: (window as any).__veilSeen })); ok(f.flash === 0 && f.veil > 0, `1a. no home flash on the reload (plot frames with the veil down: ${f.flash}, resume-veil frames: ${f.veil})`) }
   const back = await poll(async () => (await zone()) === 'wilds', 240000) && await poll(async () => { const s = await st(); return Math.hypot(s.x - want.x, s.z - want.z) < 1.5 }, 60000)
   const s1 = await st()
   ok(back, `1. a reload puts the keeper back where they stood (${s1.x.toFixed(1)}, ${s1.z.toFixed(1)} vs ${want.x}, ${want.z})`)

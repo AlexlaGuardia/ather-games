@@ -1,5 +1,6 @@
 // ── Prod check for garden clusters in the open world (2026-11-15, hub) ─────────────────────────────────────
-// Solo: nothing beyond the island is ground. ?cluster=preview: three stand-in friends — the walker stands on my gate's
+// BETA M52 (11-20): solo, the Green is ground (the square, my path, three open spots) and the gate stands in its centre.
+// (Was: solo, nothing beyond the island is ground.) ?cluster=preview: three stand-in friends — the walker stands on my gate's
 // ramp, the crossroads, a street, the shared square and two friends' islands (teleports, then the walker must NOT fall).
 // Updated 11-15 (world) for Alex's sketch: square middle, # streets, corner start + gate.
 // C opens the Linked plots menu (hearth frame, red close). Screenshots to --out.   npx tsx scripts/cluster-check.mts
@@ -18,7 +19,9 @@ const standAt = async (x: number, z: number) => {
   return p.evaluate(() => { const s = (window as any).__ather.state(); return { zone: (window as any).__ather.zone(), x: Math.round(s.px), z: Math.round(s.pz), y: +s.py.toFixed(2) } })
 }
 await load('')
-res.soloOff = await standAt(-212, 212)   // where the square would be: alone, there is no ground (the fall takes you home)
+res.soloGate = await standAt(-206, 212)  // beside the gate in the Green's centre: alone, it is ground now (M52)
+res.soloSpot = await standAt(-424, 424)  // the open spot across the square: level mown ground, no stand-in garden
+try { await p.screenshot({ path: `${out}/cluster-0-alone-gate.png` }) } catch { /* slow frame */ }
 res.home = await standAt(-128, 128)      // the threshold: the start is the corner 3×3 of the 300 m plot (RULED 11-15)
 await load('&cluster=preview')
 // Alex's sketch + the valley, 300 m plots (D = 212): I am NE of the Green at (-212, 212). My path leaves my start
@@ -39,5 +42,5 @@ try { await p.screenshot({ path: `${out}/cluster-3-menu.png` }) } catch { /* slo
 console.log(JSON.stringify(res))
 const onPlot = (r: any) => r.zone === 'plot'
 const near = (r: any, x: number, z: number) => Math.hypot(r.x - x, r.z - z) < 6
-const pass = !near(res.soloOff, -212, 212) && near(res.home, -128, 128) && (res.hill as any).y > 8 && [['path', -160, 160], ['hill', -212, 0], ['middle', -212, 212], ['friend', -424, 424], ['friendNW', -424, 0]].every(([k, x, z]) => onPlot(res[k as string]) && near(res[k as string], x as number, z as number)) && res.menu === true
+const pass = onPlot(res.soloGate) && near(res.soloGate, -206, 212) && Math.abs((res.soloGate as any).y - 2) < 0.6 && onPlot(res.soloSpot) && near(res.soloSpot, -424, 424) && near(res.home, -128, 128) && (res.hill as any).y > 8 && [['path', -160, 160], ['hill', -212, 0], ['middle', -212, 212], ['friend', -424, 424], ['friendNW', -424, 0]].every(([k, x, z]) => onPlot(res[k as string]) && near(res[k as string], x as number, z as number)) && res.menu === true
 console.log(pass ? 'PASS' : 'FAIL'); await b.close(); process.exit(pass ? 0 : 1)

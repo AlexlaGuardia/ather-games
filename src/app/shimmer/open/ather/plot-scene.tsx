@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import {
-  PLOT_N, PLOT_CELL, PLOT_HALF, PLOT_R, GRID, SQ, GRID_HALF, THRESHOLD, GATE, GATE_FACE,
+  PLOT_N, PLOT_CELL, PLOT_HALF, PLOT_R, GRID, SQ, GRID_HALF, THRESHOLD, GATE, GATE_FACE, GROUND_Y,
   plotHeightAt, plotVertexHeight, plotCellIsLand, sqId, ringOf, canBuy,
 } from './plot'
 import { P } from './palette'
@@ -65,7 +65,7 @@ function gridLines(): THREE.BufferGeometry {
 }
 
 function Gate() {
-  const y = plotHeightAt(GATE.x, GATE.z) - 0.4
+  const y = GROUND_Y - 0.4   // M52: it stands in the Green's centre, on the square (MIDDLE_Y = GROUND_Y)
   return (
     <group position={[GATE.x, y, GATE.z]} rotation-y={GATE_FACE}>
       <mesh position-y={0.375}><cylinderGeometry args={[1.6, 1.8, 0.75, 12]} /><meshLambertMaterial color="#b9ab90" flatShading /></mesh>

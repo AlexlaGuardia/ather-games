@@ -15,7 +15,7 @@
 // touch-controls (stick, drag-look, jump/slide/fire, context taps that press the same keys this page handles).
 
 import { OwnerReady } from '../shared/owner-ready'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { ProgramKeeper } from './program-keeper-view'
 import { WarmProxies } from './warm-proxies'
@@ -455,12 +455,23 @@ function AtherSliceGame() {
   // saved Wilds spot sets the keeper back down there (after the Hallway's ?waymark=, which wins; ?home=1 goes home). While
   // out in the Wilds the spot is saved every 3 s and as the page hides; arriving HOME (epoch > 0: a real arrival, not the
   // page's first plot frame) clears it, so dying or folding home starts the next load at home.
+  // ★ NO HOME FLASH (Alex 11-20: "if i refresh the screen the game takes me to the homeplot for a sec, then the last location"):
+  // the page's first zone is the plot, and the Wilds stream in after it. When a resume is coming, the veil is UP before the
+  // first paint (layout effect, no fade-in) and stays up until arrive() takes over its own fade; a resume that turns out
+  // void (tile unknown) or never lands lifts it.
+  const [resuming, setResuming] = useState(false)
+  useLayoutEffect(() => {
+    if (!resumeFrom(window.location.search, loadSpot(), () => true)) return
+    setResuming(true)
+    const cap = setTimeout(() => setResuming(false), 20000)
+    return () => clearTimeout(cap)
+  }, [])
   useEffect(() => {
     if (landed.current || !ww) return
     const sp = resumeFrom(window.location.search, loadSpot(), n => !!ww.byName.get(n))
-    if (!sp) return
+    if (!sp) { setResuming(false); return }
     landed.current = true
-    stream(ww, sp.x, sp.z).then(() => { setWrev(ww.rev); setHereTile(sp.tile); arrive({ kind: 'wilds', tile: sp.tile }, { x: sp.x, z: sp.z, yaw: sp.yaw }) })
+    stream(ww, sp.x, sp.z).then(() => { setWrev(ww.rev); setHereTile(sp.tile); arrive({ kind: 'wilds', tile: sp.tile }, { x: sp.x, z: sp.z, yaw: sp.yaw }); setResuming(false) })
   }, [ww, arrive])
   const hereTileRef = useRef(hereTile); hereTileRef.current = hereTile
   const fadeRef = useRef(fade); fadeRef.current = fade
@@ -1071,7 +1082,7 @@ function AtherSliceGame() {
         else if (n.kind === 'fennel') setPanel({ kind: 'fennel', page: 0 })
         else if (n.kind === 'work') { if (n.near.kind === 'piece' && currentWorks().pieces.some(x => x.id === (n.near as { id: string }).id && x.item === 'lift') && callNearest()) return; if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
         else if (n.kind === 'folk') setPanel({ kind: 'folk', s: n.s })
-        else setPanel({ kind: 'map', view: errandToHold ? 'athernyx' : 'ather', travel: true })   // M32 trail: an errand keeper's map opens on Rune Hold
+        else setPanel({ kind: 'map', view: 'ather', travel: true })   // Alex 11-20: the map opens on the side you stand on (the Ather here); an errand keeper's Rune Hold goal waits one Tab away
         return
       }
       if (e.code === 'KeyF') plantHere()
@@ -1228,7 +1239,7 @@ function AtherSliceGame() {
       <OpenSocial />   {/* M27: presence + invites + the Play together panel */}
       <BirthGate />
       {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={litSlot(stance, inv)} isTouch={isTouch} />}
-      <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />
+      <div data-veil={resuming ? 'resume' : 'fade'} style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: resuming ? 1 : fade, transition: resuming ? 'none' : 'opacity 0.35s', pointerEvents: 'none' }} />
       {isTouch && !panel && !building && (
         <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} />
       )}

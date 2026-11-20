@@ -24,7 +24,7 @@
 // as is; a member's quarter comes from there.
 
 import type { Box } from '../terrain-world'
-import { plotHeightAt, mistWalls } from './plot'
+import { plotHeightAt, mistWalls, GREEN_D } from './plot'
 import { buildMeadow, gardenPath, meadowHeightAt, pathDist, toWorld, toLocal, type Meadow, type Path } from './meadow'
 
 export type Quarter = 'ne' | 'nw' | 'sw' | 'se'
@@ -36,7 +36,7 @@ export const MIDDLE_HALF = 32
 /** Garden centre to the Green's centre, along each axis (a multiple of 4 m, so every island grid lines up with the
  *  valley's). 212 for the 300 m plot: start corners still ~30 m off the Green's corner (friends start beside each
  *  other), neighbours' shores ~80 m apart across the hill between them, and everyone grows AWAY from the middle. */
-export const D = 212
+export const D = GREEN_D   // plot.ts holds it (the gate stands on the Green's centre)
 /** The square and the paths stand at the gate pad's height. */
 export const MIDDLE_Y = 2.0
 
@@ -47,8 +47,10 @@ export interface Frame {
   middle: { x: number; z: number; half: number } | null
   /** each mate at their place, turned by `rot` (radians, rotation.y) so their gate corner faces the square */
   mates: (Mate & { x: number; z: number; rot: number; where: Quarter })[]
-  /** gate corner → the middle of the square: mine first, then each mate's */
+  /** gate corner → the middle of the square: mine first, then each mate's, then each open spot's */
   paths: Path[]
+  /** BETA M52: the quarters no mate holds yet, level mown ground where one will land (never a stand-in garden) */
+  open: { x: number; z: number; rot: number; where: Quarter }[]
   meadow: Meadow | null
 }
 
@@ -64,24 +66,30 @@ function rotFor(where: Quarter): number {
 /** Where a server quarter stands in MY view (mine is always ne). */
 const relQuarter = (mine: Quarter, q: Quarter) => ORDER[(ORDER.indexOf(q) - ORDER.indexOf(mine) + 4) % 4]
 
-export function clusterFrame(mine: Quarter | null, mates: Mate[]): Frame {
+// ★ BETA M52 (Alex 11-20): the Green is ALWAYS drawn, alone too: `linked` now means "the Green is here" (always true), the
+// quarters nobody holds are OPEN SPOTS, and the one main gate stands in the square's centre (plot.ts GATE). No record yet
+// (signed out, never linked) = I am ne, as every view is.
+export function clusterFrame(mineIn: Quarter | null, mates: Mate[]): Frame {
+  const mine: Quarter = mineIn ?? 'ne'
   const others = mates.filter(m => m.quarter !== mine)
-  if (!mine || others.length === 0) return { mine, linked: false, middle: null, mates: [], paths: [], meadow: null }
   const mx = -D, mz = D                                                   // the square, south-west of me
   const placed = others.map(m => {
     const where = relQuarter(mine, m.quarter)
     return { ...m, where, x: mx + D * QV[where].x, z: mz + D * QV[where].z, rot: Math.round(rotFor(where) * 1e9) / 1e9 }
   })
   const gardens = [{ x: 0, z: 0, rot: 0 }, ...placed]
+  const held = new Set<Quarter>(['ne', ...placed.map(m => m.where)])
+  const open = ORDER.filter(w => !held.has(w)).map(where => ({ where, x: mx + D * QV[where].x, z: mz + D * QV[where].z, rot: Math.round(rotFor(where) * 1e9) / 1e9 }))
   // each path bends its own way (by where it stands), so four of them read as paths and not as an X
   const bendOf = (x: number, z: number) => ((x > mx) === (z > mz) ? 1 : -1)
-  const paths = gardens.map(g => gardenPath(g, mx, mz, bendOf(g.x, g.z)))
+  const paths = [...gardens, ...open].map(g => gardenPath(g, mx, mz, bendOf(g.x, g.z)))
   return {
     mine, linked: true,
     middle: { x: mx, z: mz, half: MIDDLE_HALF },
     mates: placed,
     paths,
-    meadow: buildMeadow(gardens, mx, mz, MIDDLE_HALF, paths),
+    open,
+    meadow: buildMeadow(gardens, mx, mz, MIDDLE_HALF, paths, open),
   }
 }
 

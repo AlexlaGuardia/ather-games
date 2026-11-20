@@ -119,8 +119,8 @@ ok(STARTING_SQUARES.length === 9 && STARTING_SQUARES.every(id => { const [i, j] 
   for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) counts[ringOf(i, j)]++
   ok(counts.join() === '9,40,72,104', `grid: ring sizes ${counts}`)
 }
-// the gate, Greg and the threshold all stand on the starting ground
-for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] as const) {
+// Greg and the threshold stand on the starting ground (the gate moved to the Green's centre, BETA M52: tested with the cluster)
+for (const [n, p] of [['greg', GREG], ['threshold', THRESHOLD]] as const) {
   const s = squareAt(p.x, p.z)
   ok(!!s && START.has(sqId(s.i, s.j)), `plot: the ${n} is not on the starting ground`)
   ok(Math.abs(plotHeightAt(p.x, p.z) - 2) < 0.05, `plot: the ${n}'s pad is not level`)
@@ -181,7 +181,7 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
 // the gate and Greg are in reach from the threshold
 {
   const world = terrainWorld(plotShape(START))
-  for (const [n, p, r] of [['gate', GATE, REACH + 1.2], ['greg', GREG, REACH]] as const) {
+  for (const [n, p, r] of [['greg', GREG, REACH]] as const) {
     const lc = createLoco(THRESHOLD.x, plotHeightAt(THRESHOLD.x, THRESHOLD.z), THRESHOLD.z)
     let best = Infinity
     for (let t = 0; t < 60 * 10; t++) {
@@ -482,18 +482,28 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
 //    the layout is his sketch: a square in the middle, a # of streets, every garden's gate corner on a crossroads) ──
 {
   const own = new Set(STARTING_SQUARES)
-  const alone = clusterFrame('ne', [{ quarter: 'ne', name: 'me', owned: [...own] }])
-  ok(!alone.linked && !alone.middle && !alone.meadow && alone.paths.length === 0, 'cluster: alone, something opened (the clouds should hide it all)')
-  ok(clusterGround(alone, -D, D) === -Infinity, 'cluster: alone, there is ground where the middle would be')
+  // BETA M52 (Alex 11-20): the Green is always there. Alone = the square, my path, three OPEN SPOTS (level mown ground, no
+  // stand-in gardens), and the one gate in the square's centre
+  for (const alone of [clusterFrame('ne', [{ quarter: 'ne', name: 'me', owned: [...own] }]), clusterFrame(null, [])]) {
+    ok(alone.linked && !!alone.middle && !!alone.meadow && alone.mates.length === 0 && alone.open.length === 3, `cluster: alone, the Green is not drawn with three open spots (${alone.open.length})`)
+    ok(Math.abs(clusterGround(alone, -D, D) - 2) < 0.01, 'cluster: alone, the square is not level ground')
+    for (const sp of alone.open) {
+      ok(Math.abs(clusterGround(alone, sp.x, sp.z) - 2) < 0.01 && Math.abs(clusterGround(alone, sp.x + 40, sp.z - 30) - 2) < 0.01, `cluster: the open spot ${sp.where} is not level ground`)
+      ok(alone.meadow!.kind[Math.floor((sp.z - alone.meadow!.z0) / 4) * (alone.meadow!.n - 1) + Math.floor((sp.x - alone.meadow!.x0) / 4)] === 3, `cluster: the open spot ${sp.where} is not marked as one`)
+    }
+    ok(alone.paths.length === 4, 'cluster: alone, a path is missing (mine + one per open spot)')
+  }
+  // the one gate: the Green's centre, where every path meets, the same spot in every keeper's frame
+  ok(GATE.x === -D && GATE.z === D, `cluster: the gate is not in the Green's centre (${GATE.x}, ${GATE.z})`)
   const f = clusterFrame('ne', [{ quarter: 'ne', name: 'me', owned: [...own] }, { quarter: 'sw', name: 'pal', owned: [...own] }])
-  ok(f.linked && !!f.middle && !!f.meadow && f.mates.length === 1 && f.paths.length === 2, 'cluster: a friend joined and the frame did not link')
+  ok(f.linked && !!f.middle && !!f.meadow && f.mates.length === 1 && f.open.length === 2 && f.paths.length === 4, 'cluster: a friend joined and the frame did not link')
   ok(f.middle!.x === -D && f.middle!.z === D, 'cluster: the square is not south-west of me')
   ok(MIDDLE_HALF * 2 > 40, 'cluster: the square is too small to be a place')
   const pal = f.mates[0]
   ok(pal.x === -2 * D && pal.z === 2 * D, 'cluster: the opposite mate is not across the square')
   ok(Math.abs(clusterGround(f, f.middle!.x, f.middle!.z) - 2) < 0.01, 'cluster: the square is not level ground once linked')
   ok(Number.isFinite(clusterGround(f, pal.x, pal.z)) && mateAt(f, pal.x, pal.z) === pal, "cluster: no ground on the mate's island")
-  ok(clusterGround(f, -2 * D, 0) === -Infinity, 'cluster: an empty corner (nobody there) is ground; it should stay sky')
+  ok(Math.abs(clusterGround(f, -2 * D, 0) - 2) < 0.01 && !mateAt(f, -2 * D, 0), 'cluster: an empty quarter is not a level open spot (M52)')
   // every view, every mate: everyone sees themselves north-east, every start corner faces the square
   const QS: Quarter[] = ['ne', 'nw', 'sw', 'se']
   const full = (mine: Quarter) => clusterFrame(mine, QS.map(q => ({ quarter: q, name: q, owned: [...own] })))
@@ -548,9 +558,9 @@ for (const [n, p] of [['gate', GATE], ['greg', GREG], ['threshold', THRESHOLD]] 
   {
     const ff = full('ne')
     ok(ff.paths.length === 4 && ff.paths.every(p => Math.hypot(p.pts[p.pts.length - 1][0] - ff.middle!.x, p.pts[p.pts.length - 1][1] - ff.middle!.z) < 0.01), 'paths: they do not all meet in the middle of the square')
-    // the gate stands BESIDE my path, not on it (Alex 11-15: "the gate should sit off to the side ... not blocking it")
-    const gd = pathDist(ff.paths[0], GATE.x, GATE.z)
-    ok(gd > PATH_W / 2 + 2.5 && gd < 16, `paths: the gate is ${gd.toFixed(1)} m from my path (want beside it, clear of it)`)
+    // the gate stands where every path meets, in the square's centre (BETA M52), on level ground
+    ok(ff.paths.every(p => Math.hypot(p.pts[p.pts.length - 1][0] - GATE.x, p.pts[p.pts.length - 1][1] - GATE.z) < 0.01), 'paths: they do not meet at the gate')
+    ok(Math.abs(clusterGround(ff, GATE.x, GATE.z) - 2) < 0.01, "paths: the gate's ground is not level")
   }
   // walkable end to end: my threshold → my path → the square → their path → their threshold, no hole, no stall
   const path: [number, number][] = []

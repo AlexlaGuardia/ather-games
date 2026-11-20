@@ -30,6 +30,8 @@ function meadowGeometry(m: Meadow): THREE.BufferGeometry {
       const nse = ((a * 7 + b * 13 + t * 5) % 11) / 11
       if (m.kind[k] === 1) c.copy(DIRT).lerp(DIRT_HI, nse * 0.5)
       else if (m.kind[k] === 2) c.copy(SQUARE).lerp(P.grassHi, nse * 0.3)
+      // BETA M52: an OPEN SPOT, mown and level where a mate's garden will land: lighter, even grass with a faint mow stripe
+      else if (m.kind[k] === 3) c.copy(P.grass).lerp(P.grassHi, 0.45 + ((a + b) % 4 < 2 ? 0.08 : 0) + nse * 0.05)
       else c.copy(P.grass).lerp(P.grassHi, Math.min(1, Math.max(0, (y - 3) / 12)) * 0.8 + nse * 0.15).lerp(P.gold, ((a * 3 + b) % 17) / 17 * 0.14)
       for (const p of tri) { pos.push(p[0], p[1], p[2]); col.push(c.r, c.g, c.b) }
       // the tile: the path's dirt, and stone where a hillside is too steep to hold turf

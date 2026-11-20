@@ -112,9 +112,14 @@ function hillAt(mx: number, mz: number, x: number, z: number): number {
   return 2 + 12 * ridge + 4 * roll + 1.2 * Math.sin(x * 0.12 - z * 0.05) * Math.cos(z * 0.1 + x * 0.03)
 }
 
-export function buildMeadow(gardens: Placed[], mx: number, mz: number, half: number, paths: Path[]): Meadow {
+/** How far round an OPEN SPOT's centre the ground lies mown and level (BETA M52): the island's own reach, so a mate's
+ *  garden landing there sits on ground that was already flat. */
+export const SPOT_R = PLOT_R - 8
+/** `spots` (BETA M52, Alex 11-20: "keep the whole green as is with just open spots"): quarters no mate holds yet. Each is
+ *  level, mown ground where a garden will land (kind 3), inside the outline, so the Green is whole even alone. */
+export function buildMeadow(gardens: Placed[], mx: number, mz: number, half: number, paths: Path[], spots: Placed[] = []): Meadow {
   const C = MEADOW_CELL   // HX a whole number of cells, so x0 shares the islands' lattice (multiples of C)
-  const HX = Math.ceil((Math.max(...gardens.map(g => Math.max(Math.abs(g.x - mx), Math.abs(g.z - mz))), half) + MEADOW_R + 10) / C) * C
+  const HX = Math.ceil((Math.max(...[...gardens, ...spots].map(g => Math.max(Math.abs(g.x - mx), Math.abs(g.z - mz))), half) + MEADOW_R + 10) / C) * C
   const x0 = mx - HX, z0 = mz - HX, n = (2 * HX) / C + 1
   const N = n * n, dist = new Float32Array(N).fill(Infinity), ha = new Float32Array(N), h = new Float32Array(N)
   // anchors: islands (their own vertex heights), the square, the paths
@@ -122,6 +127,7 @@ export function buildMeadow(gardens: Placed[], mx: number, mz: number, half: num
     const x = x0 + a * C, z = z0 + b * C, k = b * n + a
     const iv = islandVertex(gardens, x, z)
     if (iv !== null) { dist[k] = 0; ha[k] = iv; continue }
+    if (spots.some(sp => Math.hypot(x - sp.x, z - sp.z) <= SPOT_R)) { dist[k] = 0; ha[k] = PATH_Y; continue }
     if (Math.max(Math.abs(x - mx), Math.abs(z - mz)) <= half || paths.some(p => pathDist(p, x, z) <= p.w / 2 + 1)) { dist[k] = 0; ha[k] = PATH_Y }
   }
   // chamfer distance transform, carrying the nearest anchor's height along
@@ -146,9 +152,11 @@ export function buildMeadow(gardens: Placed[], mx: number, mz: number, half: num
   for (let b = 0; b < cn; b++) for (let a = 0; a < cn; a++) {
     const x = x0 + a * C, z = z0 + b * C, cx = x + C / 2, cz = z + C / 2, k = b * cn + a
     if (islandCell(gardens, cx, cz)) { island[k] = 1; continue }
-    if (!(inOutline(gardens, mx, mz, half, x, z) && inOutline(gardens, mx, mz, half, x + C, z) && inOutline(gardens, mx, mz, half, x, z + C) && inOutline(gardens, mx, mz, half, x + C, z + C))) continue
+    const all = spots.length ? [...gardens, ...spots] : gardens
+    if (!(inOutline(all, mx, mz, half, x, z) && inOutline(all, mx, mz, half, x + C, z) && inOutline(all, mx, mz, half, x, z + C) && inOutline(all, mx, mz, half, x + C, z + C))) continue
     land[k] = 1
-    kind[k] = paths.some(p => pathDist(p, cx, cz) <= p.w / 2 + 0.5) ? 1 : Math.max(Math.abs(cx - mx), Math.abs(cz - mz)) < half ? 2 : 0
+    kind[k] = paths.some(p => pathDist(p, cx, cz) <= p.w / 2 + 0.5) ? 1 : Math.max(Math.abs(cx - mx), Math.abs(cz - mz)) < half ? 2
+      : spots.some(sp => Math.hypot(cx - sp.x, cz - sp.z) <= SPOT_R) ? 3 : 0
   }
   // trees: a scatter on the open meadow, thicker along the ridges; never on a path, the square, or near either
   const trees: Tree[] = []

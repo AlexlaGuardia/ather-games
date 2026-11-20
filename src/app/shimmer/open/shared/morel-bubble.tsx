@@ -1,6 +1,6 @@
 'use client'
 // ── MOREL'S AMMO BUBBLE (BETA M33 slice 1) ────────────────────────────────────────────────────────────────────────────────
-// The thought bubble by the right glove (where the gem sits): while the trigger is held it shows the rounds left, RED at
+// The thought bubble, on the LEFT of the screen since M51 (it began by the right glove, where the gem sits): while the trigger is held it shows the rounds left, RED at
 // morel.ts RED_AT and under, and it holds a few seconds after release, then fades. WHEN is decided in morel.ts (pure); this
 // draws it and puts Morel's two ammo lines on the message line (hudSay 'morel'). Game-UI rule: never raw on the scene,
 // always on a plate; tabular numerals. Mount in the Wilds (where guns fire), outside the Canvas; feed it the combat HUD.
@@ -14,8 +14,9 @@ import { play as sfx } from './sfx'   // M36 batch 2: the gem pulse (proposed = 
 /** `feed` is the fallback; the combat layer's own store (morel.ts setAmmoFeed) wins when it has spoken. */
 export function MorelBubble({ feed }: { feed?: React.MutableRefObject<AmmoFeed | null> }) {
   const [b, setB] = useState<Bubble | null>(null)
-  // on a phone the right-thumb cluster (touch-controls [data-touch-cluster]) sits where the glove's bubble goes: sit just ABOVE it
-  const [over, setOver] = useState<{ right: number; bottom: number } | null>(null)
+  // M51 (Alex 11-20): the bubble sits on the LEFT, ~2x, trail from the left. On a phone it lifts to the right cluster's height so it
+  // clears the left thumb's stick zone and the action row at the bottom
+  const [over, setOver] = useState<{ bottom: number } | null>(null)
   const watch = useRef<ReturnType<typeof newAmmoWatch> | null>(null), last = useRef('')
   useEffect(() => {
     let raf = 0
@@ -36,7 +37,7 @@ export function MorelBubble({ feed }: { feed?: React.MutableRefObject<AmmoFeed |
       if (sig !== last.current) {
         last.current = sig; setB(r.bubble.show ? r.bubble : null)
         const c = r.bubble.show ? document.querySelector('[data-touch-cluster]')?.getBoundingClientRect() : null
-        setOver(c && c.width ? { right: Math.max(14, window.innerWidth - c.right), bottom: window.innerHeight - c.top + 14 } : null)
+        setOver(c && c.width ? { bottom: window.innerHeight - c.top + 14 } : null)
       }
     }
     raf = requestAnimationFrame(tick)
@@ -45,15 +46,15 @@ export function MorelBubble({ feed }: { feed?: React.MutableRefObject<AmmoFeed |
   if (!b) return null
   const ink = b.red ? '#ff6a5c' : '#eaf4fb'
   return (
-    <div data-morel-bubble data-red={b.red ? '1' : '0'} style={{ position: 'fixed', right: over ? over.right : 'max(14px, 17vw)', bottom: over ? over.bottom : 'max(150px, 27vh)', zIndex: 32, pointerEvents: 'none', opacity: b.alpha, transition: 'opacity .1s linear' }}>
-      <div style={{ background: 'rgba(16,22,30,.78)', border: `1px solid ${b.red ? 'rgba(255,106,92,.7)' : 'rgba(127,182,217,.55)'}`, borderRadius: 14, padding: '5px 11px', boxShadow: '0 2px 10px rgba(0,0,0,.45)', display: 'flex', alignItems: 'baseline', gap: 4, fontVariantNumeric: 'tabular-nums' }}>
+    <div data-morel-bubble data-red={b.red ? '1' : '0'} style={{ position: 'fixed', left: over ? 'max(14px, env(safe-area-inset-left))' : 'max(14px, 17vw)', bottom: over ? over.bottom : 'max(150px, 27vh)', zIndex: 32, pointerEvents: 'none', opacity: b.alpha, transition: 'opacity .1s linear' }}>
+      <div style={{ background: 'rgba(16,22,30,.78)', border: `1px solid ${b.red ? 'rgba(255,106,92,.7)' : 'rgba(127,182,217,.55)'}`, borderWidth: 2, borderRadius: 26, padding: '10px 22px', boxShadow: '0 3px 16px rgba(0,0,0,.5)', display: 'flex', alignItems: 'baseline', gap: 7, fontVariantNumeric: 'tabular-nums' }}>
         {b.reloading
-          ? <span style={{ color: '#9fc4dc', fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' }}>reloading</span>
-          : <><span data-morel-n style={{ color: ink, fontSize: 20, fontWeight: 800, lineHeight: 1 }}>{b.n}</span><span style={{ color: '#8aa3b5', fontSize: 11, fontWeight: 700 }}>/ {b.clip}</span></>}
+          ? <span style={{ color: '#9fc4dc', fontSize: 22, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' }}>reloading</span>
+          : <><span data-morel-n style={{ color: ink, fontSize: 40, fontWeight: 800, lineHeight: 1 }}>{b.n}</span><span style={{ color: '#8aa3b5', fontSize: 22, fontWeight: 700 }}>/ {b.clip}</span></>}
       </div>
-      {/* the thought trail down toward the glove's gem */}
-      <div style={{ position: 'absolute', right: 6, bottom: -9, width: 7, height: 7, borderRadius: 9, background: 'rgba(16,22,30,.78)', border: '1px solid rgba(127,182,217,.45)' }} />
-      <div style={{ position: 'absolute', right: 0, bottom: -16, width: 4, height: 4, borderRadius: 9, background: 'rgba(16,22,30,.78)', border: '1px solid rgba(127,182,217,.4)' }} />
+      {/* the thought trail, from the LEFT (M51) */}
+      <div style={{ position: 'absolute', left: 12, bottom: -17, width: 13, height: 13, borderRadius: 9, background: 'rgba(16,22,30,.78)', border: '1px solid rgba(127,182,217,.45)' }} />
+      <div style={{ position: 'absolute', left: 0, bottom: -30, width: 8, height: 8, borderRadius: 9, background: 'rgba(16,22,30,.78)', border: '1px solid rgba(127,182,217,.4)' }} />
     </div>
   )
 }

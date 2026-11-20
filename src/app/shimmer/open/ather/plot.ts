@@ -85,7 +85,12 @@ export const PLOT_HALF = HALF
 /** The one gate, beside the start ground's outer corner (the island's south-west) and OFF the diagonal (Alex 11-15:
  *  "the gate should sit off to the side of the bridge not blocking it"): a linked cluster's path leaves along the
  *  diagonal and runs past it. */
-export const GATE = { x: -GRID_HALF + 4, z: GRID_HALF - 22 }
+/** Garden centre to the Green's centre along each axis (cluster.ts D; here so the gate can stand on it without an import loop). */
+export const GREEN_D = 212
+/** ★ ONE SHARED GATE (Alex 11-20, BETA M52): the main gate stands in the CENTRE of the Green, the same spot for every keeper
+ *  in a cluster (each sees the Green to their south-west, so its centre is (−D, D) in every frame). It used to stand at
+ *  each garden's own start corner. The Green is always drawn now (open spots where no mate has landed), so it has ground. */
+export const GATE = { x: -GREEN_D, z: GREEN_D }
 const TH = { x: -GRID_HALF + 22, z: GRID_HALF - 22 }
 export const THRESHOLD = { ...TH, yaw: Math.atan2(-(GATE.x - TH.x), -(GATE.z - TH.z)) }
 /** Where a linked cluster's path leaves the start ground: on the corner's diagonal, the gate off to its side. */
@@ -134,7 +139,7 @@ function rawHeight(x: number, z: number): number {
   const pad = (cx: number, cz: number, R: number, h: number) => {
     const k = Math.max(0, Math.min(1, (Math.hypot(x - cx, z - cz) - R) / 4)); y = y * k + h * (1 - k)
   }
-  pad(GATE.x, GATE.z, 5, 2.0); pad(THRESHOLD.x, THRESHOLD.z, 4, 2.0); pad(GREG.x, GREG.z, 4, 2.0)
+  pad(THRESHOLD.x, THRESHOLD.z, 4, 2.0); pad(GREG.x, GREG.z, 4, 2.0)
   // the corner's apron: level ground out to the shore along the diagonal, where a cluster's path leaves
   for (let t = 0; t <= 22; t += 5.5) pad(PATH_START.x - t * Math.SQRT1_2, PATH_START.z + t * Math.SQRT1_2, 4, 2.0)
   return y
