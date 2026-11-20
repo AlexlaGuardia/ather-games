@@ -897,7 +897,7 @@ export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
       <WallTools owned={ownedRef} />
       {tool === 'blueprint' && <BlueprintBar />}
       {sel && <BuildCard k={sel} onBuilt={() => setSel(null)} />}
-      {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a wall · a plank a metre · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · the planks come back' : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? 'Pick a wood, then tap a wall (a plank swaps) or a floor (the whole room)' : <>Pick something to build · drag to move · {touchy ? 'pinch' : 'wheel'} to zoom{touchy ? '' : ' · WASD · Q Z turn'}</>}</div>}
+      {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a wall · a plank a metre · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · the planks come back' : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? 'Pick a wood, then tap a wall (a plank swaps) or a floor (the whole room)' : <>Pick something to build{touchy ? '' : ' · drag to move · wheel to zoom · WASD · Q Z turn'}</>}</div>}
     </div>
   )
 }
