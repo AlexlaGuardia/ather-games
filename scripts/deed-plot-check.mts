@@ -8,7 +8,7 @@
 //   6. 0 page errors
 //   npx tsx scripts/deed-plot-check.mts [http://localhost:3201]
 import puppeteer from 'puppeteer-core'
-import { deedBlueprint, deedPad, type Deed } from '../src/app/shimmer/open/towns/deed-plots'
+import { deedBlueprint, deedPad, deedGround, type Deed } from '../src/app/shimmer/open/towns/deed-plots'
 import { placeBlueprint } from '../src/app/shimmer/open/ather/plot-blueprint'
 const url = process.argv.slice(2).filter(a => a.startsWith('http'))[0] ?? 'https://ather.games'
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -30,7 +30,7 @@ try {
     const bp = deedBlueprint(deed), pl = placeBlueprint(bp, deedPad(deed))
     await p.mouse.click(550, 340).catch(() => {})
     const tpFoot = async (x: number, z: number, yaw = 0) => { await p.evaluate((a: number, b: number, c: number) => (window as any).__drive.footTp(a, b, c), x, z, yaw); await sleep(1500) }
-    // footTp stands the walker on the NATURAL land, so every walk starts out on the plain, beyond the bank, and goes on by real W.
+    // footTp stands the walker on the NATURAL land: deed-site.ts guarantees a walkable corridor on the deed's front, so every walk starts out there, beyond the bank, and goes on by real W.
     const run = (deed.level - deed.base) / 0.5 + 3
     const walkTo = async (x: number, z: number, tol = 0.45, ms = 60000) => {
       await p.keyboard.down('KeyW'); const t = Date.now(); let s = await foot()
@@ -44,6 +44,8 @@ try {
     const ys: number[] = [], c0 = -0.5, c1 = bp.w + 0.5, r0 = -0.5, r1 = bp.d + 0.5
     const f0 = pl.toWorld(c0, r0 - run); await tpFoot(f0.x, f0.z, Math.atan2(-(pl.toWorld(c0, r0).x - f0.x), -(pl.toWorld(c0, r0).z - f0.z)))
     for (const [u, v] of [[c0, r0], [c1, r0], [c1, r1], [c0, r1]]) { const q = pl.toWorld(u, v); const s = await walkTo(q.x, q.z, 0.35); ys.push(s.py) }
+    const gy = [[c0, r0], [c1, r0], [c1, r1], [c0, r1]].map(([u, v]) => { const q = pl.toWorld(u, v); return deedGround(deed, q.x, q.z) })
+    ok(Math.max(...gy) - Math.min(...gy) <= 0.05, `2a. the deed's own ground is level at the grid corners (${gy.map(y => y.toFixed(3)).join(' ')})`)
     ok(Math.max(...ys) - Math.min(...ys) <= 0.05 && Math.abs(ys[0] - deed.level) < 0.2, `2. the plot is level: feet y at the four corners ${ys.map(y => y.toFixed(3)).join(' ')} (spread ${(Math.max(...ys) - Math.min(...ys)).toFixed(3)} m, want <= 0.05; level ${deed.level.toFixed(2)})`)
     // 3. the building in the scene
     ok(await poll(async () => !!(await p.evaluate((id: string) => (window as any).__bpStacks?.[id] ?? null, bp.id)), 20000), `3. the building stands in the scene (${bp.id})`)
@@ -53,6 +55,8 @@ try {
     const yaw = Math.atan2(-(inside.x - from.x), -(inside.z - from.z))
     await tpFoot(from.x, from.z, yaw)
     const s4 = await walkTo(inside.x, inside.z, 0.9, 70000), got = Math.hypot(s4.px - inside.x, s4.pz - inside.z) < 0.9
+    const loc = (q: { px: number; pz: number }) => { const dx = q.px - pl.toWorld(0, 0).x, dz = q.pz - pl.toWorld(0, 0).z, r = pl.toWorld(1, 0), ux = r.x - pl.toWorld(0, 0).x, uz = r.z - pl.toWorld(0, 0).z, f = pl.toWorld(0, 1), vx = f.x - pl.toWorld(0, 0).x, vz = f.z - pl.toWorld(0, 0).z; return `u${(dx * ux + dz * uz).toFixed(1)} v${(dx * vx + dz * vz).toFixed(1)}` }
+    console.log(`   door walk: start v${(-5 - run).toFixed(1)} run ${run.toFixed(1)} end ${loc(s4)} door u${doorU}`)
     ok(got, `4. the walker walked in through the door gap (${Math.hypot(s4.px - inside.x, s4.pz - inside.z).toFixed(2)} m from the room point, feet y ${s4.py.toFixed(2)})`)
     // 5. a wall holds: aim at the front wall beside the door
     const wallU = doorU + 3.5, wf = pl.toWorld(wallU, -4 - run), wi = pl.toWorld(wallU, 2)
