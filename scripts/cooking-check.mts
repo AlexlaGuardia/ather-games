@@ -5,6 +5,9 @@
 // Tuskroot at Rune Hold's Smokehouse for Marks. SETUP (stated): a cooking room standing at (-100, 100) with 1 Drifthorn
 // Cut in its store; bag slot 8 holds 2 Shimmerscale; 20k Marks. Hooks: movement, reading, __ather.eat (the click's own
 // handler) and combat().keeper.hp (the hurt).
+// M43 (11-20): the Make button is gone. Each roast = bring the meat into the STATION STORE (store panel, Pack toggle, All), pick the
+// job, quantity Max, FOCUS; the station works it in real time with the panel open (no Moglin seeded); Collect all to the bag.
+
 //   npx tsx scripts/cooking-check.mts [--url http://localhost:3203] [--out dir]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync, readFileSync } from 'fs'
@@ -39,6 +42,7 @@ const shot = async (n: string) => { try { await p.screenshot({ path: `${out}/${n
 const click = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (b) await p.mouse.click(b.x, b.y); return !!b }
 const poll = async (fn: () => Promise<boolean>, ms = 60000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn()) return true; await sleep(500) } return false }
 const res: Record<string, unknown> = { url }
+const outOf = async () => { const r: Record<string, number> = {}; for (const s of ((await read('open.works.v1'))?.rooms?.[0]?.out ?? []) as ({ id: string; n: number } | null)[]) if (s) r[s.id] = (r[s.id] ?? 0) + s.n; return r }
 // 1. the hearth: roast 2 Shimmerscale from the bag, the Drifthorn Cut from the store
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500)
@@ -46,8 +50,16 @@ const b = benchOf(ROOM)
 await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), b.x, b.z - 1.4); await sleep(2000); await shot('cc-0-hearth')
 await p.keyboard.press('e'); await sleep(900)
 res.hearth = await p.evaluate(() => !!document.querySelector('[data-panel="bench"] [data-job="roast-roast_rinn"]'))
-for (let k = 0; k < 2; k++) { await click('[data-job="roast-roast_rinn"] button'); await sleep(500) }
-await click('[data-job="roast-roast_drifthorn"] button'); await sleep(500)
+await click('[data-job-pick="roast-roast_rinn"]'); await sleep(300)
+await click('[data-src-item="shimmerscale"] [data-move="all"]'); await sleep(400)
+await click('[data-qty="max"]'); await sleep(200)
+res.focusRinn = await click('[data-act="focus"] button')
+res.madeRinn = await poll(async () => ((await outOf()).roast_rinn ?? 0) === 2, 90000)
+await click('[data-job-pick="roast-roast_drifthorn"]'); await sleep(300)
+await click('[data-qty="max"]'); await sleep(200)
+res.focusDrift = await click('[data-act="focus"] button')
+res.madeDrift = await poll(async () => ((await outOf()).roast_drifthorn ?? 0) === 1, 90000)
+await sleep(500); await click('[data-act="collect-all"] button'); await sleep(600)
 res.afterRoast = await bag(); res.store = ((await read('open.works.v1'))?.rooms?.[0]?.store ?? []).length; await shot('cc-1-roasted')
 await p.keyboard.press('Escape'); await sleep(500)
 // 2. hold the Roast Rinn: refused on the plot
@@ -93,7 +105,7 @@ res.afterBuy = { marks: (await read('ather:trade:trial-ledger'))?.marks, bag: aw
 res.errs = errs
 console.log(JSON.stringify(res))
 const r = res.afterRoast as Record<string, number>, u = res.afterBuy as { marks: number; bag: Record<string, number> }, T = SMOKEHOUSE_STOCK.find(x => x.id === 'tuskroot_cut')!
-const pass = res.hearth === true && r.roast_rinn === 2 && !r.shimmerscale && r.roast_drifthorn === 1 && res.store === 0
+const pass = res.hearth === true && res.focusRinn === true && res.madeRinn === true && res.focusDrift === true && res.madeDrift === true && r.roast_rinn === 2 && !r.shimmerscale && r.roast_drifthorn === 1 && res.store === 0
   && res.plotEat === 2 && (res.hurt as number) <= 31 && Math.abs((res.healed as number) - (30 + healOf('roast_rinn'))) <= 1 && res.afterEat === 1 && res.fullEat === 1
   && res.reach === true && res.shop === true && u.marks === 20_000 - T.price && u.bag.tuskroot_cut === T.n && errs.length === 0
 console.log(pass ? 'PASS: roasted 2 rinn + a Drifthorn Cut from the store → refused on the plot → ate mid-fight (+40) → refused when whole → a Tuskroot bundle at Rune Hold\'s Smokehouse' : 'FAIL')
