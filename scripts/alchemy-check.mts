@@ -73,8 +73,8 @@ res.buffsAfterReload = await A('buffs')
 res.errs = errs
 console.log(JSON.stringify(res))
 const r = res.afterBrew as Record<string, number>, bu = res.buffs as Record<string, number>, ba = res.buffsAfterReload as Record<string, number>
-const lit = res.lit as string[]
-const pass = res.cauldron === true && res.focus === true && res.made === true && lit.includes('goldwood_bark') && lit.includes('raw_mana_shard') && r.shard_tonic === 1 && !r.goldwood_bark && res.store === 0
+const lit = res.lit as string[]   // the PACK panel lights what the job needs from the pack: bark only (the shards already sit in the store)
+const pass = res.cauldron === true && res.focus === true && res.made === true && lit.includes('goldwood_bark') && !lit.includes('raw_mana_shard') && r.shard_tonic === 1 && !r.goldwood_bark && res.store === 0
   && res.fullDrink === 1 && Math.abs((res.mana as number) - 85) < 3 && res.afterDrink === 0
   && bu?.starlight > Date.now() && res.afterTincture === 0 && ba?.starlight === bu.starlight && errs.length === 0
 console.log(pass ? 'PASS: Shard Tonic brewed (store + bag) → refused at a full bar → drunk at 20 (→ 85) → Starlight Tincture drunk, the buff survives a reload' : 'FAIL')
