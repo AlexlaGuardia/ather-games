@@ -116,11 +116,12 @@ try {
   await enterPlan(); await tap('[data-tool="erase"]'); await sleep(400)
   const e0 = await planks()
   await dragW(X0 + 1, Z0, X0 + 3, Z0)
-  ok(await poll(async () => (await planks()) - e0 === 2), `4. erasing 2 built metres refunds 2 planks (${(await planks()) - e0})`)
+  // opening the top wall also stops the room closing, so its floor planks and roof bricks come back with the 2 pieces
+  ok(await poll(async () => (await planks()) - e0 === 2 + 20), `4. erasing 2 built metres refunds 2 planks, and the opened room its 20 floor planks (${(await planks()) - e0})`)
   const e1 = await planks()
-  await dragW(X0, Z0, X1, Z0)   // the rest of the top wall: 3 more pieces, and the room no longer closes
-  ok(await poll(async () => (await count('stone_brick')) === 20), `   the broken room gives its roof back: 20 bricks (${await count('stone_brick')})`)
-  ok((await planks()) - e1 === 3 + 20, `   and its floor: 3 pieces + 20 floor planks = 23 (${(await planks()) - e1})`)
+  ok((await count('stone_brick')) === 20, `   and its roof: 20 bricks (${await count('stone_brick')})`)
+  await dragW(X0, Z0, X1, Z0)   // the rest of the top wall: 3 more pieces, nothing more to refund but their planks
+  ok(await poll(async () => (await planks()) - e1 === 3), `   the other 3 pieces: 3 planks, no second floor refund (${(await planks()) - e1})`)
   ok((await draftCount()).paid === 0, '   the room is no longer recorded as built')
   await shot('bom-4-erased')
   // 5. grandfather: strip draft + paid from what is saved, as a pre-slice-4 save would be; re-draw nothing
