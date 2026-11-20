@@ -18,6 +18,7 @@ import { OwnerReady } from '../shared/owner-ready'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { ProgramKeeper } from './program-keeper-view'
+import { WarmProxies } from './warm-proxies'
 import { OpenHands, type OpenHandsApi } from '../shared/open-hands'
 import { FpGun, ScopeRing, fpGunAds, ADS_TIGHT, type FpGunApi } from '../shared/fp-gun'
 import { RANGE_GUNS } from '../shared/gunplay'
@@ -1119,6 +1120,7 @@ function AtherSliceGame() {
         onCreated={({ gl, scene, camera }) => { rendererRef.current = { gl, scene, camera }; canvasEl.current = gl.domElement; gl.debug.checkShaderErrors = process.env.NODE_ENV !== 'production' }}
       >
         <ProgramKeeper />
+        {zone.kind === 'wilds' && <WarmProxies key={epoch} />}   {/* M44: late-mounting shader variants, compiled behind the arrival veil */}
         <OpenHands ref={handsApi} held={<HeldItem id={stance.kind === 'item' ? held : null} />} />
         <FpGun ref={gunApi} />
         <ThirdPersonBody drive={dollDrive} camRef={camRef} />
