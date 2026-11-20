@@ -2,7 +2,7 @@
 //   A test blueprint (6x5 ground room, a 4x3 room on floor 2) is stood on Hazel's lot through the dev hook __glade.setBlueprint
 //   (visual + solids only, nothing saved; Alex's authored glade-<lot>.json are untouched).
 //   1. the scene stands the blueprint with 2 levels (__bpStacks)
-//   2. __ather.tp onto its upper slab (y = a storey up + 0.8 drop): the keeper stands at ground + 3.4 m, not on the ground
+//   2. __ather.tp onto its upper slab (y = a storey up + 0.8 drop): the keeper stands at ground + 5.0 m (M50), not on the ground
 //   3. 0 page errors
 //   npx tsx scripts/glade-floors-check.mts [--url http://localhost:3201]
 import puppeteer from 'puppeteer-core'
@@ -41,10 +41,10 @@ try {
   // ground reference: the lot's floor
   await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), pl.toWorld(3, -3).x, pl.toWorld(3, -3).z); await sleep(2500)
   const g = await p.evaluate(() => (window as any).__ather.state()) as { py: number }
-  await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, 0, y), c.x, c.z, g.py + 3.4 + 0.8); await sleep(1500)
+  await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, 0, y), c.x, c.z, g.py + 5.0 + 0.8); await sleep(1500)
   let last = 1e9, st: any = null
   for (let n = 0; n < 40; n++) { st = await p.evaluate(() => (window as any).__ather.state()); if (Math.abs(st.py - last) < 0.005) break; last = st.py; await sleep(1000) }
-  ok(Math.abs(st.py - (g.py + 3.4)) < 0.25, `2. standing on the blueprint's upper slab: feet ${st.py.toFixed(2)} vs ${(g.py + 3.4).toFixed(2)} (ground ${g.py.toFixed(2)} + one storey)`)
+  ok(Math.abs(st.py - (g.py + 5.0)) < 0.25, `2. standing on the blueprint's upper slab: feet ${st.py.toFixed(2)} vs ${(g.py + 5.0).toFixed(2)} (ground ${g.py.toFixed(2)} + one storey)`)
   ok(errs.length === 0, `3. 0 page errors${errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''}`)
 } finally { await br.close() }
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)

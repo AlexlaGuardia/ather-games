@@ -2,7 +2,7 @@
 // Real inputs: E at the table, Plan, Walls, four real drags along the sides of a 5 x 4 m rectangle (screen points are the
 // rectangle's corners projected through plan mode's own lens: fov 75, pitch 0.98, the live view from __build.view()).
 // (slice 4, 11-20: drawn walls are DRAFTS paid by Build from the plan bar's list; the roof/door/paint steps run on the BUILT house)
-//   1. the four sides close one rectangular room of 20 m² (__walls.rooms), 18 draft pieces, nothing spent; Build then spends the list (38 planks + 20 bricks)
+//   1. the four sides close one rectangular room of 20 m² (__walls.rooms), 18 draft pieces, nothing spent; Build then spends the list (47 planks [18 pieces x 1.5, M50, + 20 floor] + 20 bricks)
 //   2. the roof buttons switch the house's style (gable -> hip -> flat), saved (Works.roof)
 //   3. Walls down drops them in plan mode (__walls.down), Walls up / leaving plan mode puts them back
 //   4. a reload keeps the room and the style; 0 page errors.
@@ -93,7 +93,7 @@ try {
   ok(sv1.walls === 18 && (await draftN()) === 18 && p0 === await planks() && w1?.rooms[0].built === false, `   18 m of wall, all DRAFT, nothing spent, room not built (${sv1.walls}, ${await draftN()}, ${p0 - (await planks())})`)
   ok(await poll(async () => p.evaluate(() => document.querySelector('[data-plan-bom]')?.getAttribute('data-ready') === 'true')), '   the list is met from the bag: Build is ready')
   ok(await tap('[data-act="build-plan"] button') && await poll(async () => (await draftN()) === 0 && (await walls())?.rooms[0]?.built === true), '   Build stands the walls and the room (floor + roof)')
-  ok(p0 - (await planks()) === 38 && (await brickCount()) === 0, `   the list was spent exactly: 38 planks, 20 bricks (${p0 - (await planks())}, ${20 - (await brickCount())})`)
+  ok(p0 - (await planks()) === 47 && (await brickCount()) === 0, `   the list was spent exactly: 47 planks, 20 bricks (${p0 - (await planks())}, ${20 - (await brickCount())})`)
   await shot('house-1-gable')
   ok(await tap('[data-roof="hip"]') && await poll(async () => (await walls())?.roof === 'hip' && (await saved()).roof === 'hip'), '2. Hip: the roof style switches and saves'); await shot('house-2-hip')
   ok(await tap('[data-roof="flat"]') && await poll(async () => (await walls())?.roof === 'flat'), '   Flat'); await shot('house-3-flat')

@@ -3,7 +3,7 @@
 //   2. a wall on floor 2 that floats over open ground is refused (nothing saved)
 //   3. the cutaway: editing floor 1 hides floor 2, editing floor 2 shows both (floor 1 as a low guide)
 //   4. Build spends BOTH levels' drafts (one list); the bag drops by exactly the list
-//   5. test teleport (__ather.tp with a height) onto floor 2: feet stand ~ one storey (3.4 m) up on the slab
+//   5. test teleport (__ather.tp with a height) onto floor 2: feet stand ~ one storey (5.0 m, M50) up on the slab
 //   6. reload keeps both levels, still built, floor 2 still stands
 //   7. an OLD save (no `upper`) loads as one level. 0 page errors.
 //   npx tsx scripts/plot-floors-check.mts [--url http://localhost:3201] [--out dir]
@@ -82,7 +82,7 @@ try {
   const works = () => p.evaluate(() => JSON.parse(localStorage.getItem('open.works.v1') ?? '{}'))
   const floors = () => p.evaluate(() => { const f = (window as any).__floors; return f ? { shown: f.shown() as number[], editing: f.editing() as number, count: f.count() as number } : null })
   const dc = (sel: string) => p.evaluate((x: string) => { document.querySelector<HTMLElement>(x)?.click() }, sel)
-  const STOREY = 3.4
+  const STOREY = 5.0   // M50: WALL_H 4.8 + slab 0.2 (was 3.4)
   // a drag on floor `lv`: the pointer's plane is that floor's, so project the points at its height
   const dragL = async (lv: number, ax: number, az: number, bx: number, bz: number) => {
     await settled(); const v = await view(), y = GROUND_Y + lv * STOREY, a = screenOf(v, ax, az, y), b = screenOf(v, bx, bz, y)
@@ -116,11 +116,11 @@ try {
   // 4. Build spends both
   const before = { p: await count2('goldwood_plank'), b: await count2('stone_brick') }
   const bomv = await p.evaluate(() => { const e = document.querySelector('[data-plan-bom]'); return e ? { ready: e.getAttribute('data-ready') === 'true', lines: Object.fromEntries([...e.querySelectorAll('[data-bom-line]')].map(l => [l.getAttribute('data-bom-line'), +(l.getAttribute('data-need') ?? 0)])) } : null })
-  ok(!!bomv && bomv.ready && bomv.lines.goldwood_plank === 52 && bomv.lines.stone_brick === 12, `4. one list for both floors: 52 planks (2 x 14 wall + 2 x 12 floor), 12 bricks (ground roof only) (${JSON.stringify(bomv)})`)
+  ok(!!bomv && bomv.ready && bomv.lines.goldwood_plank === 66 && bomv.lines.stone_brick === 12, `4. one list for both floors: 66 planks (2 x 14 wall x 1.5 [M50] + 2 x 12 floor), 12 bricks (ground roof only) (${JSON.stringify(bomv)})`)
   ok(await tap('[data-act="build-plan"] button'), '   tap Build')
   ok(await poll(async () => { const w = await works(); return Object.values(w.walls ?? {}).every((x: any) => !x.draft) && Object.values(w.upper?.[0]?.walls ?? {}).length === 14 && Object.values(w.upper[0].walls).every((x: any) => !x.draft) && Object.keys(w.upper[0].paid ?? {}).length === 1 && Object.keys(w.paid ?? {}).length === 1 }, 15000), '   both floors stand built, both rooms paid')
   const after = { p: await count2('goldwood_plank'), b: await count2('stone_brick') }
-  ok(before.p - after.p === 52 && before.b - after.b === 12, `   spent exactly the list: planks -${before.p - after.p}, bricks -${before.b - after.b}`)
+  ok(before.p - after.p === 66 && before.b - after.b === 12, `   spent exactly the list: planks -${before.p - after.p}, bricks -${before.b - after.b}`)
   await shot('floors-3-built')
   // 5. leave plan mode, teleport up (dev hook: __ather.tp takes a height) and stand on floor 2
   await dc('[data-act="land"]'); await sleep(1200)

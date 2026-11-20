@@ -3,7 +3,7 @@
 // through JSON save/load; a wall on level k must stand on a wall or a room cell of level k-1 (a floating wall is refused);
 // the slab costs like a floor (no roof bill) and the whole stack builds in one go, spending every level's draft; the roof
 // is the top level's; an upper level stands one storey up with a slab the walker can stand on; blueprints carry levels.
-import { planRun, runKeys, adoptWalls, adoptPaid, findRooms, type Walls } from './plot-walls'
+import { planRun, runKeys, adoptWalls, adoptPaid, findRooms, WALL_H, type Walls } from './plot-walls'
 import { levelsOf, levelOf, withLevel, levelCount, adoptUpper, standsOn, canStack, floating, topLevel, slabCells, upperBoxes, levelBase, STOREY, SLAB_T, type Stacked } from './plot-floors'
 import { billOfAll, buildAll, AMOUNTS } from './plot-bom'
 import { extractBlueprint, parseHouse } from './plot-blueprint'
@@ -42,7 +42,7 @@ let w: Stacked = { walls: box(0, 0, 4, 3), upper: [{ walls: up1 }] }
 ok(levelCount(w) === 2 && topLevel(w) === 1 && floating(w).length === 0, 'two levels, the roof belongs to level 1, nothing floats')
 { const b = billOfAll(w, bag(200)); const pl = (id: string) => b.lines.find(l => l.id === id)?.n ?? 0
   // ground: 14 wall + 12 floor planks + 12 roof bricks; upper: 14 wall + 12 slab planks, NO roof bricks
-  ok(pl('goldwood_plank') === 14 + 12 + 14 + 12 && pl('stone_brick') === 12, `bill: planks 52, bricks 12 (ground roof only); got ${JSON.stringify(b.lines.map(l => [l.id, l.n]))}`)
+  ok(pl('goldwood_plank') === Math.ceil((14 + 14) * AMOUNTS.wallPerM) + 12 + 12 && pl('stone_brick') === 12, `bill: planks 52, bricks 12 (ground roof only); got ${JSON.stringify(b.lines.map(l => [l.id, l.n]))}`)
   ok(b.pieces === 28 && b.rooms === 2 && b.ok, 'the list counts both levels\' pieces and rooms') }
 { const r = buildAll(w, bag(10)); ok(!r.ok, 'a short bag builds nothing') }
 { const inv = bag(200), r = buildAll(w, inv)
@@ -51,13 +51,13 @@ ok(levelCount(w) === 2 && topLevel(w) === 1 && floating(w).length === 0, 'two le
     const lv = levelsOf(r.works)
     ok(Object.values(lv[0].walls).every(x => !x.draft) && Object.values(lv[1].walls).every(x => !x.draft), 'every draft on both levels stands')
     ok(Object.keys(lv[0].paid ?? {}).length === 1 && Object.keys(lv[1].paid ?? {}).length === 1, 'both rooms are paid')
-    ok(countOf(r.inv, 'goldwood_plank') === 200 - 52 && countOf(r.inv, 'stone_brick') === 200 - 12, 'spent exactly the list (52 planks, 12 bricks)')
+    ok(countOf(r.inv, 'goldwood_plank') === 200 - (Math.ceil((14 + 14) * AMOUNTS.wallPerM) + 24) && countOf(r.inv, 'stone_brick') === 200 - 12, 'spent exactly the list (52 planks, 12 bricks)')
     ok(buildAll(r.works, r.inv).ok === false, 'nothing left to build afterwards')
     // slab + solids
     ok(slabCells(lv[1]).length === 12 && slabCells({ walls: lv[1].walls }).length === 0, 'the slab covers the built room\'s 12 cells (none while it is only a plan)')
     const bx = upperBoxes(r.works, 0), slab = bx.filter(b => b.y1 === levelBase(1))
     ok(slab.length === 12 && slab.every(b => Math.abs(b.y1 - b.y0 - SLAB_T) < 1e-9), `12 slab boxes, ${SLAB_T} m thick, top at one storey (${levelBase(1)})`)
-    ok(Math.abs(STOREY - 3.4) < 1e-9 && bx.length === 12 + 14, 'plus the 14 upper wall boxes')
+    ok(Math.abs(STOREY - (WALL_H + 0.2)) < 1e-9 && bx.length === 12 + 14, 'plus the 14 upper wall boxes')
   }
 }
 // erasing the support floats the floor above: floating() sees it

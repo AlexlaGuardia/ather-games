@@ -18,7 +18,7 @@ mkdirSync(out, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
-const STOREY = 3.4
+const STOREY = 5.0   // M50: WALL_H 4.8 + slab 0.2 (was 3.4)
 const ROOM: Room = { id: 'carpentry-check', kind: 'carpentry', x: -100, z: 100, q: 0, placedAt: 1, doneAt: 2 }
 
 const held = new Set(STARTING_SQUARES)

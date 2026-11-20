@@ -59,7 +59,7 @@ export const KEEP_CLEAR: readonly { x: number; z: number; r: number }[] = [
   { x: GATE.x, z: GATE.z, r: 9 }, { x: THRESHOLD.x, z: THRESHOLD.z, r: 6 }, { x: GREG.x, z: GREG.z, r: 4 },
   { x: TABLE.x, z: TABLE.z, r: 4 }, { x: PATH_START.x, z: PATH_START.z, r: 10 },
 ]
-export const WALL_H = 3.2, WALL_T = 0.3, DOOR_W = 2.2
+export const WALL_H = 4.8, WALL_T = 0.3, DOOR_W = 2.2   // M50: 3.2 -> 4.8 (plot-walls.ts WALL_H is the same family)
 
 /** A placed room. `q` = quarter turns (0..3); the door is on the front (local −z at q 0, turning with it). */
 export interface Room {

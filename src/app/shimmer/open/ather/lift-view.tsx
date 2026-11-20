@@ -8,6 +8,7 @@ import * as THREE from 'three'
 import type { Piece } from './rooms'
 import { GROUND_Y } from './plot'
 import { STOREY } from './plot-floors'
+import { WALL_H } from './plot-walls'
 import { liveLift, carBase, carLevel, liftLevels, cordsOf, cordAimed, rideNow, CORD_LOW, CORD_HIGH, PANEL_Z } from './lift'
 import { useWorks } from './workshop'
 
@@ -17,7 +18,7 @@ const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, numb
 /** posts up the whole shaft (the top of the highest level), the car on its cords, and the stone weight beside it */
 export function LiftMesh({ p }: { p: Piece }) {
   const w = useWorks(), n = liftLevels(w, p), car = useRef<THREE.Group>(null), weight = useRef<THREE.Mesh>(null)   // the floors its shaft reaches
-  const top = GROUND_Y + (n - 1) * STOREY + 3.2
+  const top = GROUND_Y + (n - 1) * STOREY + WALL_H   // M50: a storey's walls, not a 3.2 literal
   useFrame(() => {
     const y = liveLift.ys.get(p.id) ?? carBase(GROUND_Y, carLevel(w, p)), span = (n - 1) * STOREY
     car.current?.position.set(0, y - GROUND_Y, 0)

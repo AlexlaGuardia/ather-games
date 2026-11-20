@@ -23,19 +23,21 @@ const need = (n: { id: string; n: number }[], id: string) => n.find(x => x.id ==
 const plan = box(5, 4)
 ok(Object.values(plan).every(w => w.draft === true) && Object.keys(plan).length === 18, 'a drawn run is a plan: every piece draft')
 ok(wallBoxes(plan, 0).length === 0, 'a draft wall is not solid to the walker')
+// M50: a wall piece costs AMOUNTS.wallPerM (1.5) planks; a list's line rounds up. W(n) = n pieces' planks
+const W = (n: number) => Math.ceil(n * AMOUNTS.wallPerM - 1e-9)
 // the list: 18 m of goldwood, a 20 m² room: floor planks + roof bricks
 { const p = planNeeds(plan, {})
-  ok(p.pieces === 18 && p.rooms === 1 && need(p.needs, 'goldwood_plank') === 18 * AMOUNTS.wallPerM + 20 * AMOUNTS.floorPerM2 && need(p.needs, STONE_BRICK) === 20 * AMOUNTS.roofPerM2, `5x4 room list: ${JSON.stringify(p.needs)}`) }
+  ok(p.pieces === 18 && p.rooms === 1 && need(p.needs, 'goldwood_plank') === W(18) + 20 * AMOUNTS.floorPerM2 && need(p.needs, STONE_BRICK) === 20 * AMOUNTS.roofPerM2, `5x4 room list: ${JSON.stringify(p.needs)}`) }
 { const m = box(3, 3, 'dawnwood'), p = planNeeds(m, {})
-  ok(need(p.needs, 'dawnwood_plank') === 12 && need(p.needs, 'goldwood_plank') === 9 && need(p.needs, STONE_BRICK) === 9, 'each wood pays in its own planks; the floor is goldwood') }
+  ok(need(p.needs, 'dawnwood_plank') === W(12) && need(p.needs, 'goldwood_plank') === 9 && need(p.needs, STONE_BRICK) === 9, 'each wood pays in its own planks; the floor is goldwood') }
 // a window adds a pane on the list; a door adds nothing
 { const w = toggleWindow(plan, 'v,0,1'); ok(w.ok && need(planNeeds(w.walls, {}).needs, CRYSTAL_PANE) === 1, 'a planned window puts one pane on the list')
-  const d = toggleDoor(plan, 'h,1,0'); ok(d.ok && need(planNeeds(d.walls, {}).needs, 'goldwood_plank') === 38 && !need(planNeeds(d.walls, {}).needs, CRYSTAL_PANE), 'a planned door costs the same planks, no extra')
+  const d = toggleDoor(plan, 'h,1,0'); ok(d.ok && need(planNeeds(d.walls, {}).needs, 'goldwood_plank') === W(18) + 20 && !need(planNeeds(d.walls, {}).needs, CRYSTAL_PANE), 'a planned door costs the same planks, no extra')
   ok(d.ok && Object.values(d.walls).every(x => x.draft), 'a door / window keeps the piece a draft') }
 // have / need against bag + bank; Build only when every line is there
 { const empty = newInv(0), b0 = billOf(plan, {}, empty, freshBank())
   ok(!b0.ok && !b0.empty && b0.lines.every(l => l.short && l.have === 0), 'nothing on hand: every line short, Build off')
-  let inv = give(newInv(0), 'goldwood_plank', 38).inv; inv = give(inv, STONE_BRICK, 19).inv
+  let inv = give(newInv(0), 'goldwood_plank', W(18) + 20).inv; inv = give(inv, STONE_BRICK, 19).inv
   ok(!billOf(plan, {}, inv, freshBank()).ok, 'one brick short: Build off')
   const bank = putIn(freshBank(), 30, STONE_BRICK, 1).bank
   ok(billOf(plan, {}, inv, bank).ok, 'the Keepstone counts with the bag: Build on')
@@ -64,15 +66,15 @@ ok(wallBoxes(plan, 0).length === 0, 'a draft wall is not solid to the walker')
 { const st = planRun({}, ['h,0,0'], 'stucco'), p = paintWall(st, 'h,0,0', '#336699'); ok('walls' in p && p.walls['h,0,0'].tint === '#336699' && p.walls['h,0,0'].draft === true, 'a planned stucco wall paints free and stays a plan') }
 // slice 5: brick / stucco walls and floor patterns on the list
 { let m: Walls = {}; for (const [a, b] of [[{ i: 0, j: 0 }, { i: 4, j: 0 }]]) m = planRun(m, runKeys(a, b), 'brick')
-  ok(need(planNeeds(m, {}).needs, STONE_BRICK) === 4, 'a 4 m brick wall costs 4 Stone Brick')
-  const s2 = planRun({}, runKeys({ i: 0, j: 0 }, { i: 3, j: 0 }), 'stucco'); ok(need(planNeeds(s2, {}).needs, 'stucco') === 3, 'a 3 m stucco wall costs 3 Stucco')
+  ok(need(planNeeds(m, {}).needs, STONE_BRICK) === W(4), 'a 4 m brick wall costs W(4) Stone Brick')
+  const s2 = planRun({}, runKeys({ i: 0, j: 0 }, { i: 3, j: 0 }), 'stucco'); ok(need(planNeeds(s2, {}).needs, 'stucco') === W(3), 'a 3 m stucco wall costs W(3) Stucco')
   const bx = box(3, 2), room = findRooms(bx)[0], tile = paintFloor(undefined, room, 'tile', '#999999')
   const a = planNeeds(bx, {}, tile).needs, b = planNeeds(bx, {}).needs
-  ok(need(a, 'goldwood_plank') === 10 && need(a, STONE_BRICK) === 12, 'a 6 m² tile floor swaps its 6 planks for 6 bricks (+ roof 6)')
-  ok(need(b, 'goldwood_plank') === 16 && need(b, STONE_BRICK) === 6, 'no floor set = planks, as before')
-  const hb = planNeeds(bx, {}, paintFloor(undefined, room, 'herringbone', '#aa8844')).needs; ok(need(hb, 'goldwood_plank') === 16, 'herringbone is a wood pattern: planks')
+  ok(need(a, 'goldwood_plank') === W(10) && need(a, STONE_BRICK) === 12, 'a 6 m² tile floor swaps its 6 planks for 6 bricks (+ roof 6)')
+  ok(need(b, 'goldwood_plank') === W(10) + 6 && need(b, STONE_BRICK) === 6, 'no floor set = planks, as before')
+  const hb = planNeeds(bx, {}, paintFloor(undefined, room, 'herringbone', '#aa8844')).needs; ok(need(hb, 'goldwood_plank') === W(10) + 6, 'herringbone is a wood pattern: planks')
   const fl = paintFloor(undefined, room, 'flagstone', '#777777'), inv = give(newInv(0), 'stone_brick', 40).inv
-  const built = buildPlan(bx, {}, give(inv, 'goldwood_plank', 10).inv, null, fl); ok(built.ok, 'builds with the pattern\'s materials')
+  const built = buildPlan(bx, {}, give(inv, 'goldwood_plank', W(10)).inv, null, fl); ok(built.ok, 'builds with the pattern\'s materials')
   if (built.ok) { const rc = reconcile({}, built.paid, built.inv, fl); ok(countOf(rc.inv, STONE_BRICK) - countOf(built.inv, STONE_BRICK) === 12, 'a broken flagstone room refunds its stone floor and roof') } }
 // GRANDFATHER: a pre-slice-4 save loads built, its room paid, nothing on the list
 { const old = JSON.parse(JSON.stringify({ 'h,0,0': { mat: 'goldwood' }, 'h,1,0': { mat: 'goldwood' }, 'h,0,1': { mat: 'goldwood' }, 'h,1,1': { mat: 'goldwood' }, 'v,0,0': { mat: 'goldwood' }, 'v,2,0': { mat: 'goldwood' } }))

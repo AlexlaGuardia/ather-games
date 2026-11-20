@@ -15,12 +15,13 @@ import type { Bank } from './garden-bank'
 import { levelsOf, levelOf, levelCount, withLevel, type Stacked } from './plot-floors'
 
 export const STONE_BRICK = 'stone_brick', CRYSTAL_PANE = 'crystal_pane', FLOOR_ITEM = 'goldwood_plank'
-export const AMOUNTS = { wallPerM: 1, panePerWindow: 1, floorPerM2: FLOOR_PER_M2, roofPerM2: 1 } as const
+// M50: walls stand 1.5x taller (4.8 m), so a piece costs 1.5 planks; a list rounds UP per line (lines())
+export const AMOUNTS = { wallPerM: 1.5, panePerWindow: 1, floorPerM2: FLOOR_PER_M2, roofPerM2: 1 } as const
 export interface Need { id: string; n: number }
 export interface Line extends Need { have: number; short: boolean; name: string }
 
 const add = (m: Map<string, number>, id: string, n: number) => { if (n > 0) m.set(id, (m.get(id) ?? 0) + n) }
-const lines = (m: Map<string, number>): Need[] => [...m].map(([id, n]) => ({ id, n }))
+const lines = (m: Map<string, number>): Need[] => [...m].map(([id, n]) => ({ id, n: Math.ceil(n - 1e-9) }))   // whole items: half-plank walls round up per line
 
 /** a room's own cost: its floor and its roof */
 export const roomCost = (m2: number, floorItem: string = FLOOR_ITEM, roofed = true): Need[] => {

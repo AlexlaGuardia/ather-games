@@ -12,7 +12,7 @@
 import type { Box } from '../terrain-world'
 import { countOf, take, give, itemDef, type Inv } from '../shared/inventory'
 
-export const WALL_T = 0.3, WALL_H = 3.2   // = rooms.ts (a drawn wall and a room's wall are one family); rooms.test asserts it
+export const WALL_T = 0.3, WALL_H = 4.8   // BETA M50 (Alex 11-20: "50% taller walls so the rooms feel a little bigger"; was 3.2). = rooms.ts (a drawn wall and a room's wall are one family); rooms.test asserts it
 export const MAX_RUN = 24                  // the longest run one drag lays (metres)
 export const MAX_WALLS = 600               // pieces on one plot
 export const WALL_MATS = {

@@ -92,7 +92,7 @@ try {
   const works = () => p.evaluate(() => JSON.parse(localStorage.getItem('open.works.v1') ?? '{}'))
   const floors = () => p.evaluate(() => { const f = (window as any).__floors; return f ? { shown: f.shown() as number[], editing: f.editing() as number, count: f.count() as number } : null })
   const dc = (sel: string) => p.evaluate((x: string) => { document.querySelector<HTMLElement>(x)?.click() }, sel)
-  const STOREY = 3.4
+  const STOREY = 5.0   // M50: WALL_H 4.8 + slab 0.2 (was 3.4)
   // a drag on floor `lv`: the pointer's plane is that floor's, so project the points at its height
   const dragL = async (lv: number, ax: number, az: number, bx: number, bz: number) => {
     await settled(); const v = await view(), y = GROUND_Y + lv * STOREY, a = screenOf(v, ax, az, y), b = screenOf(v, bx, bz, y)
