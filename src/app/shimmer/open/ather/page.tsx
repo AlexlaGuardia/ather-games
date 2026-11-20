@@ -48,6 +48,7 @@ import { OpenSocial } from '../shared/play-together'
 import { ClusterPanel, useCluster } from './cluster-panel'
 import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './cluster'
 import { WildsScene } from './wilds-scene'
+import { ZoneReady, markVeil, NAME_AFTER_MS, MAX_HOLD_MS } from './travel-veil'   // M44: the veil holds until the new zone is ready
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
 import { gregSpot } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
@@ -301,12 +302,20 @@ function AtherSliceGame() {
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
   const fading = useRef(false)
-  const arrive = useCallback((z: Zone, s: Spawn) => {
+  const [veilHold, setVeilHold] = useState(false), [veilName, setVeilName] = useState(''), [veilNameOn, setVeilNameOn] = useState(false)
+  const veilDone = useRef<(() => void) | null>(null)
+  const veilTok = useRef(0)   // the cap timer of an older trip must not lift a newer trip's veil
+  const arrive = useCallback((z: Zone, s: Spawn, name?: string) => {
     if (fading.current) return
-    fading.current = true; setFade(1); setPanel(null); exitBuild()
-    setTimeout(() => { setZone(z); setSpawn(s); setEpoch(e => e + 1); setFade(0); fading.current = false }, 380)
+    fading.current = true; setFade(1); setPanel(null); exitBuild(); markVeil('up')
+    setVeilName(name ?? ''); setVeilNameOn(false)
+    const nameT = setTimeout(() => setVeilNameOn(true), NAME_AFTER_MS)
+    // M44: swap behind the veil, then HOLD it until ZoneReady says the new zone is steady (cap MAX_HOLD_MS)
+    setTimeout(() => { markVeil('swap'); setZone(z); setSpawn(s); setEpoch(e => e + 1); setVeilHold(true)
+      veilDone.current = () => { clearTimeout(nameT); setVeilHold(false); setFade(0); fading.current = false; markVeil('ready'); veilDone.current = null }
+      const tok = ++veilTok.current; setTimeout(() => { if (veilTok.current === tok) veilDone.current?.() }, MAX_HOLD_MS + 500) }, 380)
   }, [])
-  const goHome = useCallback(() => arrive({ kind: 'plot' }, THRESHOLD), [arrive])
+  const goHome = useCallback(() => arrive({ kind: 'plot' }, THRESHOLD, 'Your plot'), [arrive])
 
   // ── combat in the Wilds ──
   const terrain = useMemo<Terrain | null>(() => ww ? { heightAt: ww.heightAt, walkable: (x, z) => ww.walkable(x, z) } : null, [ww])
@@ -393,7 +402,7 @@ function AtherSliceGame() {
       if (!ww) { setToast('The Wilds are still loading.'); return }
       // a waymark is saved in its tile's own coords; the world is one space, so place it, load round it, then arrive
       const o = ww.offsetOf(d.w.tile), x = d.w.x + o.x + 2.2, z = d.w.z + o.z + 2.2
-      stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(d.w.tile); arrive({ kind: 'wilds', tile: d.w.tile }, { x, z, yaw: Math.PI * 0.75 }) })
+      stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(d.w.tile); arrive({ kind: 'wilds', tile: d.w.tile }, { x, z, yaw: Math.PI * 0.75 }, d.w.id === GREG_WAYMARK.id ? 'Moonwell Glade' : `Waymark ${loadWaymarks().findIndex(k => k.id === d.w.id) + 1}`) })
       return
     }
     // Athernyx: out through a city's door off the hall (hub's ?at= sets you down at that pitstop).
@@ -1074,6 +1083,7 @@ function AtherSliceGame() {
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => { canvasEl.current = gl.domElement }}
       >
+        <ZoneReady hold={veilHold} onReady={() => veilDone.current?.()} />
         <OpenHands ref={handsApi} held={<HeldItem id={stance.kind === 'item' ? held : null} />} />
         <FpGun ref={gunApi} />
         <ThirdPersonBody drive={dollDrive} camRef={camRef} />
@@ -1181,7 +1191,9 @@ function AtherSliceGame() {
       <OpenSocial />   {/* M27: presence + invites + the Play together panel */}
       <BirthGate />
       {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={litSlot(stance, inv)} isTouch={isTouch} />}
-      <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: fade, transition: 'opacity 0.35s', pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {veilNameOn && veilName && <span style={{ color: '#4a4030', fontSize: 22, letterSpacing: '0.12em', fontFamily: 'Georgia, serif' }}>{veilName}</span>}
+      </div>
       {isTouch && !panel && !building && (
         <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} />
       )}
