@@ -14,6 +14,8 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 import * as THREE from 'three'
 import { useFrame, useThree } from '@react-three/fiber'
 import { GROUND_Y } from './plot'
+import { getPlanLevel, setPlanLevel } from './plot-level'
+import { levelBase } from './plot-floors'
 
 export const BUILD_CAM = { PITCH: 0.98, H0: 22, HMIN: 7, HMAX: 48, REACH: 140, PAN: 1.15, EASE: 10, TURN: 1.6 } as const
 
@@ -34,7 +36,7 @@ export function enterBuild(at: { x: number; z: number; yaw: number }) {
   cur.h = 2   // start at eye height and rise: the lift reads as a lift, not a cut
   entered = true; on = true; emit()
 }
-export function exitBuild() { if (!on) return; on = false; held.clear(); point.has = false; tool = 'look'; draw?.cancel(); emit() }
+export function exitBuild() { if (!on) return; setPlanLevel(0); on = false; held.clear(); point.has = false; tool = 'look'; draw?.cancel(); emit() }
 
 // ── M37 (11-19): a DRAWING tool (plot-walls.ts). With 'walls' or 'erase' on, one finger / a left drag draws instead of
 //    panning: the handler gets ground points at the start, along the way and at the end. Two fingers pinch AND pan; a
@@ -145,6 +147,7 @@ export function BuildPointer() {
     // the ground under a pointer event NOW (the per-frame point lags a frame; a drag's ends must be exact)
     const groundAt = (e: PointerEvent) => {
       setNdc(e); const n = ndc.current!
+      plane.current.constant = -(GROUND_Y + (tool === 'look' ? 0 : levelBase(getPlanLevel())))   // M47: a drawing tool works on the floor being edited
       ray.current.setFromCamera(new THREE.Vector2(n.x, n.y), camera)
       return ray.current.ray.intersectPlane(plane.current, hit.current) ? { x: hit.current.x, z: hit.current.z } : null
     }
@@ -196,6 +199,7 @@ export function BuildPointer() {
   }, [b, gl, camera])
   useFrame(() => {
     if (!on || !ndc.current) return
+    plane.current.constant = -(GROUND_Y + (tool === 'look' ? 0 : levelBase(getPlanLevel())))
     ray.current.setFromCamera(new THREE.Vector2(ndc.current.x, ndc.current.y), camera)
     if (ray.current.ray.intersectPlane(plane.current, hit.current)) { point.x = hit.current.x; point.z = hit.current.z; point.has = true }
   })

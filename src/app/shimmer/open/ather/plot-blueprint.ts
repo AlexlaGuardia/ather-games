@@ -4,9 +4,10 @@
 // footprint's z = 0 side: placed on a Glade lot, the front faces the green. Saved by the owner (save-house-blueprint) into
 // world/house-blueprints/<id>.json, read at runtime (no deploy). PURE.
 import { parseKey, adoptWalls, adoptRoof, adoptFloors, edgeEnds, edgeRect, WALL_T, DOOR_H, type Walls, type Floors, type RoofStyle } from './plot-walls'
+import { adoptUpper, type Level } from './plot-floors'
 import type { Box } from '../terrain-world'
 
-export interface HouseBlueprint { v: 1; id: string; name: string; w: number; d: number; walls: Walls; floors: Floors; roof: RoofStyle; saved: number }
+export interface HouseBlueprint { v: 1; id: string; name: string; w: number; d: number; walls: Walls; floors: Floors; roof: RoofStyle; saved: number; /** M47: the floors above the ground one (level 1, 2), re-based the same way; absent = one storey */ upper?: Level[] }
 export const SAFE_HOUSE_ID = /^[a-z0-9][a-z0-9-]{0,47}$/
 export const MAX_BP_SIDE = 40, MAX_BP_PIECES = 400
 
@@ -20,7 +21,7 @@ export function connectedPieces(walls: Walls, start: string): string[] {
   return [...seen]
 }
 /** lift one building off a plot as a blueprint: its pieces + the painted floor cells inside its footprint, re-based to 0,0 */
-export function extractBlueprint(walls: Walls, floors: Floors | undefined, roof: RoofStyle, tapped: string, id: string, name: string, now = Date.now()): HouseBlueprint | null {
+export function extractBlueprint(walls: Walls, floors: Floors | undefined, roof: RoofStyle, tapped: string, id: string, name: string, now = Date.now(), upper?: Level[]): HouseBlueprint | null {
   const keys = connectedPieces(walls, tapped); if (keys.length < 1) return null
   let i0 = Infinity, j0 = Infinity, i1 = -Infinity, j1 = -Infinity
   for (const k of keys) for (const [x, z] of edgeEnds(k)) { i0 = Math.min(i0, x); j0 = Math.min(j0, z); i1 = Math.max(i1, x); j1 = Math.max(j1, z) }
@@ -28,7 +29,15 @@ export function extractBlueprint(walls: Walls, floors: Floors | undefined, roof:
   for (const k of keys) { const e = parseKey(k)!; out[`${e.o},${e.i - i0},${e.j - j0}`] = walls[k] }
   const fl: Record<string, Floors[string]> = {}
   for (const [c, m] of Object.entries(floors ?? {})) { const [a, b] = c.split(',').map(Number); if (a >= i0 && a < i1 && b >= j0 && b < j1) fl[`${a - i0},${b - j0}`] = m }
-  return { v: 1, id, name, w: i1 - i0, d: j1 - j0, walls: out, floors: fl, roof, saved: now }
+  const up: Level[] = []   // each upper level: the pieces whose corners lie inside the footprint, re-based, with the floor cells there
+  for (const lv of upper ?? []) {
+    const uw: Record<string, Walls[string]> = {}, uf: Record<string, Floors[string]> = {}
+    for (const [k, w] of Object.entries(lv.walls)) { const e = parseKey(k)!; if (edgeEnds(k).every(([x, z]) => x >= i0 && x <= i1 && z >= j0 && z <= j1)) uw[`${e.o},${e.i - i0},${e.j - j0}`] = w }
+    for (const [c, m] of Object.entries(lv.floors ?? {})) { const [a, b] = c.split(',').map(Number); if (a >= i0 && a < i1 && b >= j0 && b < j1) uf[`${a - i0},${b - j0}`] = m }
+    up.push({ walls: uw, floors: uf })
+  }
+  while (up.length && !Object.keys(up[up.length - 1].walls).length) up.pop()
+  return { v: 1, id, name, w: i1 - i0, d: j1 - j0, walls: out, floors: fl, roof, saved: now, ...(up.length ? { upper: up } : {}) }
 }
 /** what is wrong with a would-be blueprint (empty = fine); the route and the loader both ask */
 export function houseProblems(v: unknown): string[] {
@@ -47,7 +56,7 @@ export function houseProblems(v: unknown): string[] {
 export function parseHouse(v: unknown): HouseBlueprint | null {
   if (houseProblems(v).length) return null
   const b = v as HouseBlueprint
-  return { v: 1, id: b.id, name: b.name.trim(), w: b.w, d: b.d, walls: adoptWalls(b.walls), floors: adoptFloors(b.floors), roof: adoptRoof(b.roof), saved: Number.isFinite(b.saved) ? b.saved : 0 }
+  return { v: 1, id: b.id, name: b.name.trim(), w: b.w, d: b.d, walls: adoptWalls(b.walls), floors: adoptFloors(b.floors), roof: adoptRoof(b.roof), saved: Number.isFinite(b.saved) ? b.saved : 0, ...(adoptUpper(b.upper).length ? { upper: adoptUpper(b.upper) } : {}) }
 }
 /** does it fit a pad (w across, d deep), either way round is NOT allowed: the front must face the green */
 export const fitsPad = (b: { w: number; d: number }, padW: number, padD: number) => b.w <= padW && b.d <= padD

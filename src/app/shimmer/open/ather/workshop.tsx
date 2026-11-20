@@ -33,7 +33,9 @@ import {
   MAX_CHESTS, CHEST_SLOTS, bankCap, bankUsed, bankView, BANK_TABS, deposit, depositBag, withdraw, loadBank, saveBank, freshBank,
   bankCount, type Bank, type BankTab,
 } from './garden-bank'
-import { buildPlan, billOf, reconcile, paneFor } from './plot-bom'
+import { reconcile, paneFor, billOfAll, buildAll } from './plot-bom'
+import { getPlanLevel, setPlanLevel, usePlanLevel } from './plot-level'
+import { levelOf, withLevel, levelCount, levelBase, canStack, floating, upperBoxes, MAX_LEVELS, SLAB_T } from './plot-floors'
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, type Job } from './furniture'
 import { ROAST } from './cooking'
 import { FarmPanel, FarmInterior, FarmCrate, currentFarm, setFarm, currentWater, settleWater, farmNow } from './farm-room'
@@ -61,7 +63,7 @@ export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER
 /** The live works (the page's village tick reads and writes through this store, so an open panel sees the product land). */
 export const currentWorks = () => getW()
 /** Every room's walls and every Keepstone, for the walker's plotShape. */
-export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox), ...pieceBoxes(w), ...wallBoxes(w.walls ?? {}, GROUND_Y)]
+export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox), ...pieceBoxes(w), ...wallBoxes(w.walls ?? {}, GROUND_Y), ...upperBoxes(w, GROUND_Y)]
 
 // ── M37 slice 1: YOUR OWN WALLS (plot-walls.ts; Alex 11-19 "like the sims ... walls a little thicker, like the rooms") ──
 // In plan mode, the Walls tool: drag along the metre grid, a ghost run shows (blue = it can stand, red = it cannot), let go
@@ -87,10 +89,18 @@ function wallBlockers(w: Works) {
 }
 /** rooms the plan closes whose floor + roof are not built yet (they appear at Build) */
 const unbuiltRooms = (walls: Walls, paid: Works['paid']) => new Set(findRooms(walls).map(r => r.key).filter(k => !(paid ?? {})[k]))
+/** M47: lay a run on level `lv`: the ground floor keeps every ground rule; an upper floor has no ground to hold or keep clear,
+ *  only the support rule (a wall must stand on a wall or a room of the floor below) */
+function layOn(w: Works, lv: number, keys: string[], owned: ReadonlySet<string>) {
+  if (lv === 0) return canLay(w.walls ?? {}, keys, wallMat, heldCorner(owned), wallBlockers(w))
+  const v = canLay(levelOf(w, lv).walls, keys, wallMat, () => true, { rects: [], circles: [] })
+  if (!v.ok) return v
+  const s = canStack(levelOf(w, lv - 1).walls, v.add); return s.ok ? v : { ok: false as const, why: s.why }
+}
 function wallVerdict(owned: ReadonlySet<string>, a: Corner, b: Corner, erase: boolean) {
-  const w = currentWorks(), keys = runKeys(a, b)
-  if (erase) return { keys, ok: keys.some(k => !!w.walls?.[k]), why: 'No wall there to take down.' }
-  const v = canLay(w.walls ?? {}, keys, wallMat, heldCorner(owned), wallBlockers(w))   // a plan is drawn free: the list is paid at Build
+  const w = currentWorks(), keys = runKeys(a, b), lv = getPlanLevel(), cur = levelOf(w, lv).walls
+  if (erase) return { keys, ok: keys.some(k => !!cur[k]), why: 'No wall there to take down.' }
+  const v = layOn(w, lv, keys, owned)   // a plan is drawn free: the list is paid at Build
   return { keys, ok: v.ok, why: v.ok ? '' : v.why }
 }
 /** M37 slice 3: Door / Window / Paint act on a TAP (a press that barely moves): the piece under it, or the room */
@@ -112,7 +122,7 @@ function BlueprintPicked() {
 function BlueprintBar() {
   const k = useBpPick(), w = useWorks()
   const [lot, setLot] = useState('hazel'), [busy, setBusy] = useState(false)
-  const bp = useMemo(() => (k && w.walls ? extractBlueprint(w.walls, w.floors, w.roof ?? 'gable', k, `glade-${lot}`, `${lot[0].toUpperCase()}${lot.slice(1)}'s workshop`) : null), [k, w, lot])
+  const bp = useMemo(() => (k && w.walls ? extractBlueprint(w.walls, w.floors, w.roof ?? 'gable', k, `glade-${lot}`, `${lot[0].toUpperCase()}${lot.slice(1)}'s workshop`, Date.now(), w.upper) : null), [k, w, lot])
   if (!bp) return <div data-bp-bar style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>Tap a wall of the building to save as a blueprint</div>
   const fits = fitsPad(bp, LOT_W, LOT_D)
   const save = async () => {
@@ -144,13 +154,13 @@ function tapToolHandler(kind: 'door' | 'window' | 'paint' | 'blueprint') {
     end(x: number, z: number) {
       if (!at || Math.hypot(x - at.x, z - at.z) > 1.2) { at = null; return }
       at = null
-      const w = currentWorks(), walls = w.walls ?? {}, k = pieceAt(walls, x, z)
+      const w = currentWorks(), lv = getPlanLevel(), L = levelOf(w, lv), walls = L.walls, k = pieceAt(walls, x, z)
       if (kind === 'blueprint') { if (!k) hudSay('Tap a wall of the building.', 'info'); setBpPick(k); return }
       if (kind === 'paint') {
-        if (k) { const r = paintWall(walls, k, paintCol); if ('why' in r) { hudSay(r.why, 'info'); return } setWorks({ ...w, walls: r.walls }); return }
+        if (k) { const r = paintWall(walls, k, paintCol); if ('why' in r) { hudSay(r.why, 'info'); return } setWorks(withLevel(w, lv, { ...L, walls: r.walls })); return }
         const room = roomAt(findRooms(walls), x, z); if (!room) { hudSay('Tap a wall, or the floor of one of your rooms.', 'info'); return }
-        const fr = setFloor(w.floors, room, paintPat, paintCol, !!(w.paid ?? {})[room.key], getInv()); if ('why' in fr) { hudSay(fr.why, 'info'); return }
-        setWorks({ ...w, floors: fr.floors }); setInv(fr.inv); return
+        const fr = setFloor(L.floors, room, paintPat, paintCol, !!(L.paid ?? {})[room.key], getInv()); if ('why' in fr) { hudSay(fr.why, 'info'); return }
+        setWorks(withLevel(w, lv, { ...L, floors: fr.floors })); setInv(fr.inv); return
       }
       if (!k) { hudSay(kind === 'door' ? 'Tap a wall to put a door in it.' : 'Tap a wall to put a window in it.', 'info'); return }
       const c = kind === 'door' ? toggleDoor(walls, k) : toggleWindow(walls, k)
@@ -159,7 +169,7 @@ function tapToolHandler(kind: 'door' | 'window' | 'paint' | 'blueprint') {
         const pn = paneFor(walls, c.walls, k, getInv(), getB()); if ('why' in pn) { hudSay(pn.why, 'info'); return }
         setInv(pn.inv); if (pn.bank) setBank(pn.bank)
       }
-      setWorks({ ...w, walls: c.walls, paid: w.paid ?? {} })
+      setWorks(withLevel(w, lv, { ...L, walls: c.walls, paid: L.paid ?? {} }))
     },
     cancel() { at = null },
   }
@@ -175,16 +185,18 @@ function wallDrawHandler(owned: () => ReadonlySet<string>, erase: boolean) {
       if (!wallDrag) return
       const a = wallDrag.a, b = at(x, z); wallDrag = null; wdEmit()
       const w = currentWorks(), keys = runKeys(a, b); if (!keys.length) return
+      const lv = getPlanLevel(), L = levelOf(w, lv)
       if (erase) {
-        const r = raze(w.walls ?? {}, getInv(), keys); if (!r.down) return
-        const rc = reconcile(r.walls, w.paid, r.inv, w.floors)   // a built room that no longer closes gives its floor and roof back too
-        setWorks({ ...w, walls: r.walls, paid: rc.paid }); setInv(rc.inv)
+        const r = raze(L.walls, getInv(), keys); if (!r.down) return
+        if (floating(withLevel(w, lv, { ...L, walls: r.walls })).length) { hudSay('Take the floor above down first: it stands on that wall.', 'info'); return }   // M47: nothing floats
+        const rc = reconcile(r.walls, L.paid, r.inv, L.floors, lv === 0)   // a built room that no longer closes gives its floor (and roof) back too
+        setWorks(withLevel(w, lv, { ...L, walls: r.walls, paid: rc.paid })); setInv(rc.inv)
         hudSay(`${r.down} m of wall down, what was built comes back to your bag.${r.full ? ' Your bag is full: the rest stays up.' : ''}`, 'item')
         return
       }
-      const v = canLay(w.walls ?? {}, keys, wallMat, heldCorner(owned()), wallBlockers(w))
+      const v = layOn(w, lv, keys, owned())
       if (!v.ok) { hudSay(v.why, 'info'); return }
-      setWorks({ ...w, walls: planRun(w.walls ?? {}, v.add, wallMat), paid: w.paid ?? {} })   // a PLAN: the list is paid at Build
+      setWorks(withLevel(w, lv, { ...L, walls: planRun(L.walls, v.add, wallMat), paid: L.paid ?? {} }))   // a PLAN: the list is paid at Build
     },
     cancel() { if (wallDrag) { wallDrag = null; wdEmit() } },
   }
@@ -201,7 +213,7 @@ export function BlueprintBuilding({ walls, roof, floors, x, z, y, rotY }: { wall
 let wallsDown = false
 const setWallsDown = (v: boolean) => { wallsDown = v; wdEmit() }
 const useWallsDown = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => wallsDown, () => false)
-export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverride, unbuilt }: { walls: Walls; roof: RoofStyle; floors?: Floors; unbuilt?: ReadonlySet<string>; probe?: boolean; /** set by a page outside plan mode (dev/blueprints) */ down?: boolean }) {
+export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverride, unbuilt, roofed = true, slab = false }: { walls: Walls; roof: RoofStyle; floors?: Floors; unbuilt?: ReadonlySet<string>; /** M47: no roof here (a floor is above) */ roofed?: boolean; /** M47: an upper level: a slab under its built rooms, seen from below as the ceiling */ slab?: boolean; probe?: boolean; /** set by a page outside plan mode (dev/blueprints) */ down?: boolean }) {
   const b = useBuildMode(), wd = useWallsDown(), down = downOverride ?? (wd && b)   // hooks always run; the override only picks
   useEffect(() => { if (!b && wallsDown) setWallsDown(false) }, [b])
   // runs by wood AND kind: a plain piece is floor to top, a door only its lintel, a window a sill + a head + a pane
@@ -219,9 +231,22 @@ export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverri
       })}
       {!down && panes.length > 0 && <WallRun key={'pane' + panes.length} mat="goldwood" keys={panes} y0={SILL} h={WIN_TOP - SILL} pane />}
       {rooms.filter(r => !unbuilt?.has(r.key)).map(r => <RoomFloor key={r.key} room={r} floors={floors} />)}
-      {!down && rooms.filter(r => !unbuilt?.has(r.key)).map(r => <RoomRoof key={r.key + roof} room={r} style={roof} walls={walls} />)}
+      {slab && <Slab cells={rooms.filter(r => !unbuilt?.has(r.key)).flatMap(r => r.cells)} />}
+      {!down && roofed && rooms.filter(r => !unbuilt?.has(r.key)).map(r => <RoomRoof key={r.key + roof} room={r} style={roof} walls={walls} />)}
     </>
   )
+}
+/** M47: an upper level's slab: SLAB_T thick under each built room cell, its top at the level's floor */
+function Slab({ cells }: { cells: [number, number][] }) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  useEffect(() => {
+    const m = ref.current; if (!m) return
+    const o = new THREE.Object3D()
+    cells.forEach(([i, j], n) => { o.position.set(i + 0.5, GROUND_Y - SLAB_T / 2, j + 0.5); o.scale.set(1, SLAB_T, 1); o.updateMatrix(); m.setMatrixAt(n, o.matrix) })
+    m.count = cells.length; m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere()
+  }, [cells])
+  if (!cells.length) return null
+  return <instancedMesh ref={ref} args={[WALL_GEO, undefined, cells.length]} frustumCulled={false}><meshLambertMaterial color="#a98558" /></instancedMesh>
 }
 const DRAFT_LOOK = '#6fb4ff'
 const FLOOR_GEO = new THREE.BoxGeometry(1, 0.06, 1)
@@ -318,10 +343,31 @@ function WallMaterial({ mat, tint }: { mat: WallMat; tint?: string }) {
   const col = mat === 'brick' ? (map ? '#ffffff' : WALL_MATS.brick.color) : (mat === 'stucco' && tint ? tint : WALL_MATS[mat].color)
   return <meshLambertMaterial key={map ? 'm' : 'c'} color={col} map={map} />
 }
+/** M47: every level of the house, each lifted by its storeys. In plan mode the Sims cutaway: levels ABOVE the one being edited are
+ *  hidden, the level(s) below show as a faint low guide, and only the top shown level wears the roof. Out of plan mode: all of them. */
+function HouseLevels({ w }: { w: Works }) {
+  const b = useBuildMode(), edit = usePlanLevel(), n = levelCount(w)
+  const last = b ? Math.min(edit, n - 1) : n - 1
+  const shown = Array.from({ length: last + 1 }, (_, k) => k)
+  useEffect(() => { (window as unknown as { __floors?: object }).__floors = { shown: () => shown, editing: () => (b ? edit : -1), count: () => n } }, [shown.join(','), b, edit, n])   // checks' probe
+  return (
+    <>
+      {shown.map(k => {
+        const L = levelOf(w, k); if (!Object.keys(L.walls).length) return null
+        const guide = b && k < edit
+        return (
+          <group key={k} position-y={levelBase(k)}>
+            <DrawnWalls walls={L.walls} roof={w.roof ?? 'gable'} floors={L.floors} unbuilt={unbuiltRooms(L.walls, L.paid)} probe={k === 0} roofed={k === last} slab={k > 0} down={guide ? true : undefined} />
+          </group>
+        )
+      })}
+    </>
+  )
+}
 function WallGhost() {
-  const d = useWallDrag(), down = useWallsDown()
+  const d = useWallDrag(), down = useWallsDown(), lv = usePlanLevel()
   if (!d || !d.keys.length) return null
-  return <WallRun mat={wallMat} keys={d.keys} ghost={d.erase ? '#ff5a4a' : d.ok ? '#5aa0ff' : '#ff9a3a'} h={down ? LOW_WALL : WALL_H} />
+  return <group position-y={levelBase(lv)}><WallRun mat={wallMat} keys={d.keys} ghost={d.erase ? '#ff5a4a' : d.ok ? '#5aa0ff' : '#ff9a3a'} h={down ? LOW_WALL : WALL_H} /></group>
 }
 // ── THE CATALOG (Alex 11-18 brief + 11-19 playtest: 'it should be next to back to keeper'). v1 = the house pieces you
 // can build today, by wood: Walls and Floors in Goldwood / Shimmeroak / Dawnwood, plus Door and Window (cut into a wall,
@@ -530,7 +576,7 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
       {w.pieces.map(pc => <PieceMesh key={pc.id} p={pc} />)}
       <MoglinsAtWork w={w} />
       <BlueprintPicked />
-      {w.walls && <DrawnWalls walls={w.walls} roof={w.roof ?? 'gable'} floors={w.floors} unbuilt={unbuiltRooms(w.walls, w.paid)} />}
+      <HouseLevels w={w} />
       <WallGhost />
       {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} item={p.item} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
     </>
@@ -929,16 +975,29 @@ function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: (
   )
 }
 
+/** M47: the floor switcher in the plan bar: 1 / 2 / 3. Drawing goes onto the selected floor; floors above it hide. */
+function FloorSwitch() {
+  const lv = usePlanLevel(), w = useWorks()
+  return (
+    <div data-floor-switch style={{ position: 'fixed', left: 'calc(10px + env(safe-area-inset-left, 0px))', top: '50%', transform: 'translateY(-50%)', zIndex: 41, pointerEvents: 'auto', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', padding: '6px 6px', borderRadius: 12, background: 'rgba(255,250,235,.88)', boxShadow: '0 2px 8px rgba(0,0,0,.2)' }}>
+      <span style={{ font: '700 10px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>Floor</span>
+      {Array.from({ length: MAX_LEVELS }, (_, k) => (
+        <button key={k} type="button" data-floor={k} aria-pressed={lv === k} title={k < levelCount(w) ? `Floor ${k + 1}` : `Plan floor ${k + 1}`} onClick={() => setPlanLevel(k)}
+          style={{ width: 34, height: 30, borderRadius: 8, border: 0, cursor: 'pointer', font: '700 14px system-ui', background: lv === k ? H.ink : 'rgba(0,0,0,.08)', color: lv === k ? '#fff' : H.ink }}>{k + 1}</button>
+      ))}
+    </div>
+  )
+}
 /** M37 slice 4: the plan's BILL OF MATERIALS, in the plan-mode bar. Shows once something is planned: each part with
  *  have / need (the Keepstone and the bag count together), red when short, and Build (enabled only when it is all there). */
 function PlanBom() {
   const w = useWorks(), inv = useInv(), bank = useBank()
-  const bom = useMemo(() => billOf(w.walls ?? {}, w.paid, inv, bank, w.floors), [w.walls, w.paid, inv, bank, w.floors])
+  const bom = useMemo(() => billOfAll(w, inv, bank), [w, inv, bank])
   if (bom.empty) return null
   const build = () => {
-    const c = currentWorks(), r = buildPlan(c.walls ?? {}, c.paid, getInv(), getB(), c.floors)
+    const c = currentWorks(), r = buildAll(c, getInv(), getB())   // M47: every level's draft
     if (!r.ok) { hudSay(r.why, 'info'); return }
-    setInv(r.inv); if (r.bank) setBank(r.bank); setWorks({ ...c, walls: r.walls, paid: r.paid })
+    setInv(r.inv); if (r.bank) setBank(r.bank); setWorks(r.works)
     hudSay('Built. The house stands.', 'item')
   }
   return (
@@ -967,6 +1026,8 @@ export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
   useEffect(() => { if (!b) { setSel(null); setCat(false) } }, [b])
   if (!b) return null
   return (
+    <>
+    <FloorSwitch />
     <div data-build-bar style={{ position: 'fixed', top: typeof window !== 'undefined' && window.innerWidth < 600 ? 112 : 96, left: '50%', transform: 'translateX(-50%)', width: 'min(560px, calc(100vw - 24px))', zIndex: 41, pointerEvents: 'auto', display: 'grid', gap: 6 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 8px', borderRadius: 14, background: 'rgba(255,250,235,.88)', boxShadow: '0 2px 10px rgba(0,0,0,.25)', minWidth: 0 }}>
         <button type="button" data-act="land" onClick={() => { setPlacing(null); exitBuild() }}
@@ -980,6 +1041,7 @@ export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
       {sel && <BuildCard k={sel} onBuilt={() => setSel(null)} />}
       {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a plan · it costs nothing until you Build · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · what was built comes back to the bag' : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? 'Pick a pattern and a colour, then tap a floor (the whole room) or a stucco wall. Wood and brick keep their own colour' : <>Pick something to build{touchy ? '' : ' · drag to move · wheel to zoom · WASD · Q Z turn'}</>}</div>}
     </div>
+    </>
   )
 }
 
