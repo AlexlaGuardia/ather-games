@@ -11,7 +11,9 @@ import type { Wilds } from './wilds'
 import { pathsIn, PATH_W, fairDoor, FAIR_NAME, SEASON, type Network, type Settlement, type Fair } from './network'
 import { folkOf, stillHome } from './settlement-folk'
 import { loadVillage } from './moglins'
-import { folkSpots, type Spot } from './folk-spots'
+import { type Spot } from './folk-spots'
+import { builtFolkSpots } from './settlement-lots'
+import { SettlementBuildings } from './settlement-buildings'
 import { GLADE_ID } from './moonwell-glade'
 import { setMapSettlements } from './tile-picture'
 import { MoglinModel, furOf } from '../shared/moglin-model'
@@ -88,6 +90,7 @@ function SettlementModel({ s, y }: { s: Settlement; y: number }) {
 export function Settlements({ net, loaded }: { net: Network; loaded: (x: number, z: number) => number | null }) {
   return <>
     {net.settlements.map(s => { const y = loaded(s.x, s.z); return y === null || s.id === GLADE_ID ? null : <SettlementModel key={s.id} s={s} y={y} /> })}   {/* the Glade is the pool + Greg's home, not a knoll (moonwell-glade.ts) */}
+    <SettlementBuildings net={net} loaded={loaded} />
     <SettlementFolk net={net} loaded={loaded} />
   </>
 }
@@ -105,7 +108,7 @@ function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: 
   const [near, setNear] = useState<string[]>([])
   const [villageRev, setVillageRev] = useState(0)
   // M39: a Glade blueprint landing moves that lot's Moglin to the building's door: re-place the folk
-  useEffect(() => { const on = () => setVillageRev(n => n + 1); window.addEventListener('glade-blueprints', on); return () => window.removeEventListener('glade-blueprints', on) }, [])
+  useEffect(() => { const on = () => setVillageRev(n => n + 1); window.addEventListener('glade-blueprints', on); window.addEventListener('settlement-blueprints', on); return () => { window.removeEventListener('glade-blueprints', on); window.removeEventListener('settlement-blueprints', on) } }, [])
   const acc = useRef(0)
   useFrame(({ camera }, dt) => {
     keeperNow.x = camera.position.x; keeperNow.z = camera.position.z
@@ -121,7 +124,7 @@ function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: 
     for (const id of near) {
       const s = net.settlements.find(x => x.id === id); if (!s) continue
       const all = folkOf(s, SEASON), home = new Set(stillHome(all, village).map(f => f.id))
-      out.push({ s, spots: folkSpots(s, all.map(f => f.id)).filter(p => home.has(p.id)) })   // laid out over ALL, so a recruit never shuffles the rest
+      out.push({ s, spots: builtFolkSpots(s, all, SEASON).filter(p => home.has(p.id)) })   // laid out over ALL, so a recruit never shuffles the rest
     }
     return out
   }, [near, net, village])
