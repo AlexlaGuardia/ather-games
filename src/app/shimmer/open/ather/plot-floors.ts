@@ -6,22 +6,25 @@
 // The roof sits on the TOP level only (the highest level with any wall). PURE: no three, no react.
 import type { Box } from '../terrain-world'
 import { WALL_H, DOOR_H, edgeRect, findRooms, parseKey, adoptWalls, adoptFloors, adoptPaid, type Walls, type Floors, type Paid, type Rect } from './plot-walls'
+import { adoptCols, colBoxes, colStandsOn, type Cols } from './plot-cols'
 
 export const SLAB_T = 0.2, STOREY = WALL_H + SLAB_T, MAX_LEVELS = 3
 /** the floor surface of level k above the plot's ground (level 0 = 0) */
 export const levelBase = (k: number) => k * STOREY
-export interface Level { walls: Walls; floors?: Floors; paid?: Paid }
+export interface Level { walls: Walls; floors?: Floors; paid?: Paid; /** M54: columns on corners (plot-cols.ts) */ cols?: Cols }
 /** the part of Works this module reads and writes */
-export interface Stacked { walls?: Walls; floors?: Floors; paid?: Paid; upper?: Level[] }
+export interface Stacked { walls?: Walls; floors?: Floors; paid?: Paid; cols?: Cols; upper?: Level[] }
 
 export const levelCount = (w: Stacked) => 1 + (w.upper?.length ?? 0)
-export const levelOf = (w: Stacked, k: number): Level => k === 0 ? { walls: w.walls ?? {}, floors: w.floors, paid: w.paid } : (w.upper?.[k - 1] ?? { walls: {} })
+export const levelOf = (w: Stacked, k: number): Level => k === 0 ? { walls: w.walls ?? {}, floors: w.floors, paid: w.paid, cols: w.cols } : (w.upper?.[k - 1] ?? { walls: {} })
+/** a level with nothing on it (no wall, no column) is no level */
+const emptyLevel = (l: Level) => !Object.keys(l.walls).length && !Object.keys(l.cols ?? {}).length
 export const levelsOf = (w: Stacked): Level[] => Array.from({ length: levelCount(w) }, (_, k) => levelOf(w, k))
 /** w with level k replaced (growing the stack when k is the next one up) */
 export function withLevel<T extends Stacked>(w: T, k: number, lv: Level): T {
-  if (k === 0) return { ...w, walls: lv.walls, floors: lv.floors, paid: lv.paid }
+  if (k === 0) return { ...w, walls: lv.walls, floors: lv.floors, paid: lv.paid, cols: lv.cols }
   const up = [...(w.upper ?? [])]; while (up.length < k) up.push({ walls: {} }); up[k - 1] = lv
-  while (up.length && !Object.keys(up[up.length - 1].walls).length) up.pop()   // an emptied top level is no level
+  while (up.length && emptyLevel(up[up.length - 1])) up.pop()   // an emptied top level is no level
   return { ...w, upper: up }
 }
 /** load-side: well-formed upper levels (a save from before floors has none) */
@@ -30,9 +33,10 @@ export function adoptUpper(v: unknown): Level[] {
   const out: Level[] = []
   for (const l of v.slice(0, MAX_LEVELS - 1)) {
     const walls = adoptWalls((l as { walls?: unknown })?.walls)
-    out.push({ walls, floors: adoptFloors((l as { floors?: unknown })?.floors), paid: adoptPaid((l as { paid?: unknown })?.paid, walls) })
+    const cols = adoptCols((l as { cols?: unknown })?.cols)
+    out.push({ walls, floors: adoptFloors((l as { floors?: unknown })?.floors), paid: adoptPaid((l as { paid?: unknown })?.paid, walls), ...(Object.keys(cols).length ? { cols } : {}) })
   }
-  while (out.length && !Object.keys(out[out.length - 1].walls).length) out.pop()
+  while (out.length && emptyLevel(out[out.length - 1])) out.pop()
   return out
 }
 
@@ -56,10 +60,11 @@ export function canStack(below: Walls | undefined, keys: string[]): Support {
 export function floating(w: Stacked): string[] {
   const out: string[] = [], lv = levelsOf(w)
   for (let k = 1; k < lv.length; k++) for (const key of Object.keys(lv[k].walls)) if (!standsOn(lv[k - 1].walls, key)) out.push(`${k}:${key}`)
+  for (let k = 1; k < lv.length; k++) for (const key of Object.keys(lv[k].cols ?? {})) if (!colStandsOn(lv[k - 1], key)) out.push(`${k}:c${key}`)   // M54
   return out
 }
 /** the highest level that has any wall: the roof goes there (and nowhere lower) */
-export const topLevel = (w: Stacked): number => { const lv = levelsOf(w); for (let k = lv.length - 1; k > 0; k--) if (Object.keys(lv[k].walls).length) return k; return 0 }
+export const topLevel = (w: Stacked): number => { const lv = levelsOf(w); for (let k = lv.length - 1; k > 0; k--) if (Object.keys(lv[k].walls).length) return k; return 0 }   // columns alone carry no roof
 
 /** the cells of a level's BUILT rooms (rooms in `paid`): its slab, the floor above the room below */
 export function slabCells(lv: Level): [number, number][] {
@@ -74,6 +79,7 @@ export function upperBoxes(w: Stacked, groundY: number, shaft?: ReadonlySet<stri
     const base = groundY + levelBase(k)
     for (const [key, x] of Object.entries(lv[k].walls)) if (!x.draft) { const r: Rect = edgeRect(key); out.push({ ...r, y0: x.kind === 'door' ? base + DOOR_H : base - SLAB_T, y1: base + WALL_H }) }
     for (const [i, j] of slabCells(lv[k])) if (!shaft?.has(`${i},${j}`) && !shaft?.has(`${i},${j},${k}`)) out.push({ x0: i, x1: i + 1, z0: j, z1: j + 1, y0: base - SLAB_T, y1: base })
+    out.push(...colBoxes(lv[k].cols, base))   // M54
   }
   return out
 }

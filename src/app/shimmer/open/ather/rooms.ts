@@ -19,6 +19,7 @@ import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank 
 import { FURNITURE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, keepstoneFor, type Job } from './furniture'
 import { adoptWork, adoptOut, stockJobs, type Work, type Station } from './station-queue'
 import { adoptUpper, type Level } from './plot-floors'
+import { adoptCols, type Cols } from './plot-cols'
 import { cellMid, shaftBlocked } from './lift'
 import { adoptWalls, adoptRoof, adoptFloors, adoptPaid, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
 
@@ -77,7 +78,7 @@ export interface Room {
 export interface Chest { id: string; x: number; z: number; q: number; placedAt: number; crystal?: string }
 /** A piece of furniture or decor standing on the plot (furniture.ts). Picked up, it is the bag item `item` again. */
 export interface Piece { id: string; item: string; x: number; z: number; q: number; placedAt: number; /** M48: a lift's car level (lift.ts); absent = the ground */ lv?: number }
-export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[] }
+export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[]; /** M54: ground-floor columns (plot-cols.ts) */ cols?: Cols }
 /** M37: is this rectangle in a drawn wall (plot-walls.ts)? */
 const inDrawnWall = (w: Works, r: { x0: number; x1: number; z0: number; z1: number }, pad = 0) => wallRects(w.walls ?? {}).some(b => r.x0 - pad < b.x1 && r.x1 + pad > b.x0 && r.z0 - pad < b.z1 && r.z1 + pad > b.z0)
 export const freshWorks = (): Works => ({ v: 1, rooms: [], chests: [], pieces: [] })
@@ -442,6 +443,7 @@ export function loadWorks(): Works {
       // furniture arrived after Keepstones (11-17): an older save has none; a piece whose item is gone is dropped
       pieces: Array.isArray(v.pieces) ? v.pieces.filter((p: Piece) => p && typeof p.id === 'string' && p.item in FURNITURE && Number.isFinite(p.x) && Number.isFinite(p.z)) : [],
       walls: adoptWalls(v.walls),   // M37 (11-19): the keeper's own walls
+      ...(Object.keys(adoptCols(v.cols)).length ? { cols: adoptCols(v.cols) } : {}),   // M54: columns
       roof: adoptRoof(v.roof),
       floors: adoptFloors(v.floors),
       ...(adoptUpper(v.upper).length ? { upper: adoptUpper(v.upper) } : {}),   // M47: floors above the ground one
