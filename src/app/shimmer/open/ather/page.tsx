@@ -77,6 +77,7 @@ import { loadIndex, makeWorld, stream, tileOf, zonesOf, TILE_M, type WildsWorld 
 import { makeVoids, type VoidField } from './wilds-voids'
 import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
 import { useFolkTalk } from './use-folk-talk'
+import { useMeleeReady } from './melee-view'
 import { reportAway } from './away-report'
 import { TilePaths, Settlements, BigTop } from './network-scene'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
@@ -232,6 +233,7 @@ function AtherSliceGame() {
   // a hotbar item while not holding a weapon; stowed, a node is worked with the socket's tool
   const [stance, setStance] = useState<Stance>(STOWED)
   const stanceRef = useRef(stance); stanceRef.current = stance
+  const stowedNow = useCallback(() => stanceRef.current.kind === 'stowed', [])   // M42: melee swings only with empty hands
   const [reloadTick, setReloadTick] = useState(0)
   const toolsRef = useRef<EquippedTools>(ensureBasicTools({})), skillsRef = useRef<SkillSet>(openSkills())
   const onCombatHud = useCallback((h: CombatHud) => { vitalsRef.current = { hp: h.hp, hpMax: h.maxHp, shield: 0, shieldMax: 0 }; setChud(h) }, [])
@@ -1088,6 +1090,7 @@ function AtherSliceGame() {
 
   const zoneName = zone.kind === 'plot' ? 'Your plot' : 'The Wilds'
   // Phone taps: only what applies here and now, each the key this page already handles.
+  const meleeReady = useMeleeReady()
   const touchActions: TouchAction[] = [
     ...(useLabel(heldUseNow) ? [{ code: 'KeyE', key: 'E', label: useLabel(heldUseNow)!, near: true }]   // M45: the Use button for what is in hand
       : prompt ? [{ code: 'KeyE', key: 'E', label: prompt.startsWith('E · Gregory') ? 'Gregory' : 'use', near: true }] : []),
@@ -1098,6 +1101,7 @@ function AtherSliceGame() {
     { code: 'KeyI', key: 'I', label: 'pack' },
     // a phone button sends down + up at once, so it cannot HOLD R: stowing gets its own button while something is in hand
     ...(stance.kind !== 'stowed' ? [{ code: 'Stow', key: 'R', label: 'stow' }] : []),
+    ...(zone.kind === 'plot' && stance.kind === 'stowed' && meleeReady ? [{ code: 'Melee', key: '✊', label: 'hit', near: true }] : []),   // M42: three hits pop it into the bag
     ...(zone.kind === 'wilds' ? [
       { code: 'KeyF', key: 'F', label: 'waymark' },
       { code: 'KeyR', key: 'R', label: stance.kind === 'weapon' ? 'swap · reload' : 'draw', near: true },
@@ -1121,7 +1125,7 @@ function AtherSliceGame() {
         {zone.kind === 'plot' && <BuildPointer />}
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && ww ? (x, z) => ww.canopyAt(x, z) * 0.7 : undefined} />
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} linked={cl.frame.linked} />}
-        {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} />}
+        {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
         {zone.kind === 'wilds' && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}

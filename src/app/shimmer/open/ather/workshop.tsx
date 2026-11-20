@@ -53,6 +53,7 @@ import { currentStep } from './rinquest'
 import { advance, setFocus, cancelFocus, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
 import { skillIn, luckOf, skillsOf, SKILL_OF_ROOM, SKILL_LABEL } from './moglin-skills'
 import { reportAway, addMade, type Made } from './away-report'
+import { MeleeAim, useHitWobble } from './melee-view'
 import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, type Village } from './moglins'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -564,7 +565,7 @@ const WOOD = '#8f6038', WALL = '#d8b46e', ROOF = '#7a4a2a', SHEET = '#5aa9ff'
 const GHOST_OK = '#5aa9ff', GHOST_BAD = '#ff6a5a'
 type Pose = { x: number; z: number; yaw: number }
 
-export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string> }) {
+export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; /** M42: hands empty (melee swings) */ stowed?: () => boolean }) {
   lastPose = pose
   const w = useWorks(), p = usePlacing()
   // a raising room re-renders once a second until it stands
@@ -576,8 +577,9 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
     <>
       <PlanningTable />
       {w.rooms.map(r => (raised(r) ? <RoomMesh key={r.id} r={r} /> : <Scaffold key={r.id} r={r} />))}
-      {allChests(w).map(c => <Keepstone key={c.id} c={c} pose={pose} />)}
-      {w.pieces.map(pc => <PieceMesh key={pc.id} p={pc} />)}
+      {allChests(w).map(c => <Wobbly key={c.id} id={c.id}><Keepstone c={c} pose={pose} /></Wobbly>)}
+      {w.pieces.map(pc => <Wobbly key={pc.id} id={pc.id} at={[pc.x, GROUND_Y, pc.z]}><PieceMesh p={pc} /></Wobbly>)}
+      {stowed && <MeleeAim stowed={stowed} />}
       {w.pieces.some(x => x.item === 'lift') && <LiftInput />}
       <MoglinsAtWork w={w} />
       <BlueprintPicked />
@@ -822,6 +824,11 @@ export function PieceBody({ item }: { item: string }) {
     case 'water_tank': return <><mesh position-y={0.7}><cylinderGeometry args={[0.48, 0.48, 1.3, 14]} /><meshLambertMaterial color={c} /></mesh>{[0.15, 0.7, 1.25].map(y => <mesh key={y} position-y={y}><cylinderGeometry args={[0.5, 0.5, 0.06, 14]} /><meshLambertMaterial color="#77716b" /></mesh>)}<mesh position-y={1.36}><cylinderGeometry args={[0.42, 0.48, 0.08, 14]} /><meshLambertMaterial color="#77716b" /></mesh></>
     default: return <Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={c} />
   }
+}
+/** M42: a hit wobbles the thing about its own foot (melee-view.tsx) */
+function Wobbly({ id, at, children }: { id: string; at?: [number, number, number]; children: React.ReactNode }) {
+  const g = useHitWobble(id), [x, y, z] = at ?? [0, 0, 0]
+  return <group position={[x, y, z]}><group ref={g}><group position={[-x, -y, -z]}>{children}</group></group></group>
 }
 function PieceMesh({ p }: { p: Piece }) {
   if (p.item === 'lift') return <LiftMesh p={p} />
