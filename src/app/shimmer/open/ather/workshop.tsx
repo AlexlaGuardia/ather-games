@@ -895,7 +895,7 @@ function PlanBom() {
     hudSay('Built. The house stands.', 'item')
   }
   return (
-    <div data-plan-bom data-ready={bom.ok} style={{ display: 'grid', gap: 4, padding: '8px 10px', borderRadius: 12, background: 'rgba(255,250,235,.92)', boxShadow: '0 2px 8px rgba(0,0,0,.2)', color: H.ink }}>
+    <div data-plan-bom data-ready={bom.ok} style={{ position: 'fixed', bottom: 'calc(10px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)', width: 'min(400px, calc(100vw - 24px))', zIndex: 41, pointerEvents: 'auto', display: 'grid', gap: 4, padding: '8px 10px', borderRadius: 12, background: 'rgba(255,250,235,.92)', boxShadow: '0 2px 8px rgba(0,0,0,.2)', color: H.ink }}>
       <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', opacity: 0.7 }}>Plan · {bom.pieces} m of wall{bom.rooms ? ` · ${bom.rooms} room${bom.rooms > 1 ? 's' : ''}` : ''} · materials</div>
       {bom.lines.map(l => (
         <div key={l.id} data-bom-line={l.id} data-need={l.n} data-have={l.have} data-short={l.short} style={{ display: 'flex', gap: 6, fontSize: 12.5, color: l.short ? '#b5452c' : H.ink }}>
