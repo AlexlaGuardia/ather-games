@@ -17,7 +17,9 @@ import { GROUND_Y } from './plot'
 import { getPlanLevel, setPlanLevel } from './plot-level'
 import { levelBase } from './plot-floors'
 
-export const BUILD_CAM = { PITCH: 0.98, H0: 22, HMIN: 7, HMAX: 48, REACH: 140, PAN: 1.15, EASE: 10, TURN: 1.6 } as const
+export const BUILD_CAM = { PITCH: 0.98, H0: 22, HMIN: 7, HMAX: 48, REACH: 140, PAN: 1.15, EASE: 10, TURN: 1.6, PAINT_LIFT: 0.32 } as const
+// PAINT_LIFT (Alex 11-20, ask #2 "frame lower"): with Paint on, the tall paint bar covers the bottom of the view, so the lens
+// aims this fraction of its height NEARER the camera than the view point: the house rides up the screen, clear of the bar.
 
 let on = false
 const subs = new Set<() => void>()
@@ -26,6 +28,7 @@ const emit = () => subs.forEach(f => f())
 const want = { x: 0, z: 0, h: BUILD_CAM.H0 as number, yaw: 0 }
 const cur = { x: 0, z: 0, h: BUILD_CAM.H0 as number, yaw: 0 }
 const home = { x: 0, z: 0 }
+let lift = 0   // eased 0..1: how much of PAINT_LIFT applies (Paint on = 1)
 let entered = false
 
 export const isBuilding = () => on
@@ -110,7 +113,9 @@ export function stepBuildCam(cam: THREE.Camera, dt: number) {
   const a = entered ? 1 - Math.exp(-BUILD_CAM.EASE * dt) : 1
   cur.x += (want.x - cur.x) * a; cur.z += (want.z - cur.z) * a; cur.h += (want.h - cur.h) * a * 0.6
   cur.yaw += Math.atan2(Math.sin(want.yaw - cur.yaw), Math.cos(want.yaw - cur.yaw)) * a
-  const l = lensFor(cur)
+  lift += ((tool === 'paint' ? 1 : 0) - lift) * a
+  const o = cur.h * BUILD_CAM.PAINT_LIFT * lift
+  const l = lensFor({ x: cur.x + Math.sin(cur.yaw) * o, z: cur.z + Math.cos(cur.yaw) * o, h: cur.h, yaw: cur.yaw })
   cam.position.set(l.px, l.py, l.pz)
   cam.rotation.set(l.pitch, l.yaw, 0, 'YXZ')
 }
