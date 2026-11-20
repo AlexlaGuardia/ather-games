@@ -34,7 +34,8 @@ ok(fills('crop:goldleaf', 'crop:goldleaf:A') && !fills('crop:goldleaf', 'crop:de
 ok(fills('shimmerscale', 'shimmerscale') && !fills('shimmerscale', 'crop:shimmerscale:A'), 'a plain slot takes itself')
 ok(gradeFrom([{ id: 'crop:goldleaf:S', n: 2 }, { id: 'crop:dewdrop_vine:S', n: 2 }]) === 'S', 'all S makes S')
 ok(gradeFrom([{ id: 'crop:goldleaf:S', n: 1 }, { id: 'crop:dewdrop_vine:D', n: 3 }]) === 'C', 'one S on three D rounds down to C (score 2)')
-ok(gradeFrom([{ id: 'shimmerscale', n: 2 }]) === 'D', 'nothing graded makes D')
+ok(gradeFrom([{ id: 'crop:goldleaf:A', n: 1 }, { id: 'crop:dewdrop_vine:D', n: 1 }]) === 'C', 'A with D (2.5) rounds DOWN to C')
+&
 ok(stepMakes('health', 0, [{ id: 'shimmerscale', n: 2 }]).id === 'alc:scale_powder' && fills('alc:scale_powder', 'alc:scale_powder') && !fills('crop:goldleaf', 'crop:goldleaf'), 'ground plain scales stay plain and fill their slot')
 ok(stepMakes('mana', 2, [{ id: 'alc:mana_mixture', n: 1 }]).id === 'potion:mana:D', 'a bottle with no grade in it is a D')
 ok(gradeFrom([{ id: 'shimmerscale', n: 9 }, { id: 'alc:x:A', n: 1 }]) === 'A', 'plain inputs do not drag a grade down')
