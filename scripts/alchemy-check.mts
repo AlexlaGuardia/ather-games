@@ -4,6 +4,9 @@
 // Tincture (the buff saves per keeper and survives a reload). SETUP (stated): an alchemy room standing at (-100, 100) with
 // 3 Raw Mana Shards in its store; bag slot 8 holds 2 Goldwood Bark, slot 9 a Starlight Tincture. Hooks: movement, reading,
 // __ather.drink (the click's own handler), setMana (the spend).
+// M43 (11-20): the Make button is gone. The keeper brings the bark into the STATION STORE (store panel: Pack toggle, +/All), picks the
+// brew, quantity, FOCUS; the station works it in real time with the panel open (no Moglin seeded) into its output; Collect all.
+
 //   npx tsx scripts/alchemy-check.mts [--url http://localhost:3203] [--out dir]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
@@ -33,6 +36,8 @@ const shot = async (n: string) => { try { await p.screenshot({ path: `${out}/${n
 const click = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (b) await p.mouse.click(b.x, b.y); return !!b }
 const A = (fn: string, ...a: unknown[]) => p.evaluate((f, args) => (window as any).__ather[f](...args), fn, a)
 const res: Record<string, unknown> = { url }
+const poll = async (fn: () => Promise<boolean>, ms = 90000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(500) } return false }
+const outOf = async () => { const r: Record<string, number> = {}; for (const s of ((await read('open.works.v1'))?.rooms?.[0]?.out ?? []) as ({ id: string; n: number } | null)[]) if (s) r[s.id] = (r[s.id] ?? 0) + s.n; return r }
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500)
 // 1. the cauldron
@@ -41,7 +46,13 @@ await A('tp', b.x, b.z - 1.4, Math.PI); await sleep(2000); await shot('ac-0-caul
 await A('tp', b.x, b.z - 1.4, 0); await sleep(800)
 await p.keyboard.press('e'); await sleep(900)
 res.cauldron = await p.evaluate(() => !!document.querySelector('[data-panel="bench"] [data-job="brew-shard_tonic"]'))
-await click('[data-job="brew-shard_tonic"] button'); await sleep(600)
+await click('[data-job-pick="brew-shard_tonic"]'); await sleep(300)
+res.lit = await p.evaluate(() => [...document.querySelectorAll('[data-src-item]')].filter(e => +e.getAttribute('data-need')! > 0).map(e => e.getAttribute('data-src-item')).sort())
+await click('[data-src-item="goldwood_bark"] [data-move="all"]'); await sleep(400)
+await click('[data-qty="1"]'); await sleep(200)
+res.focus = await click('[data-act="focus"] button')
+res.made = await poll(async () => ((await outOf()).shard_tonic ?? 0) === 1)
+await sleep(500); await click('[data-act="collect-all"] button'); await sleep(600)
 res.afterBrew = await bag(); res.store = ((await read('open.works.v1'))?.rooms?.[0]?.store ?? []).length; await shot('ac-1-brewed')
 await p.keyboard.press('Escape'); await sleep(500)
 // 2. hold the tonic: refused at a full bar, then drunk at 20
@@ -62,7 +73,8 @@ res.buffsAfterReload = await A('buffs')
 res.errs = errs
 console.log(JSON.stringify(res))
 const r = res.afterBrew as Record<string, number>, bu = res.buffs as Record<string, number>, ba = res.buffsAfterReload as Record<string, number>
-const pass = res.cauldron === true && r.shard_tonic === 1 && !r.goldwood_bark && res.store === 0
+const lit = res.lit as string[]
+const pass = res.cauldron === true && res.focus === true && res.made === true && lit.includes('goldwood_bark') && lit.includes('raw_mana_shard') && r.shard_tonic === 1 && !r.goldwood_bark && res.store === 0
   && res.fullDrink === 1 && Math.abs((res.mana as number) - 85) < 3 && res.afterDrink === 0
   && bu?.starlight > Date.now() && res.afterTincture === 0 && ba?.starlight === bu.starlight && errs.length === 0
 console.log(pass ? 'PASS: Shard Tonic brewed (store + bag) → refused at a full bar → drunk at 20 (→ 85) → Starlight Tincture drunk, the buff survives a reload' : 'FAIL')
