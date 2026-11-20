@@ -35,7 +35,7 @@ import {
 } from './garden-bank'
 import { reconcile, paneFor, billOfAll, buildAll } from './plot-bom'
 import { getPlanLevel, setPlanLevel, usePlanLevel } from './plot-level'
-import { shaftKeys, liveLift, cellMid } from './lift'
+import { shaftKeys, shaftHoles, liveLift, cellMid, shaftBlockers, SHAFT_WHY, isLiftPiece } from './lift'
 import { LiftMesh, LiftInput } from './lift-view'
 import { levelOf, withLevel, levelCount, levelBase, canStack, floating, upperBoxes, MAX_LEVELS, SLAB_T } from './plot-floors'
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, type Job } from './furniture'
@@ -67,7 +67,7 @@ export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER
 /** The live works (the page's village tick reads and writes through this store, so an open panel sees the product land). */
 export const currentWorks = () => getW()
 /** Every room's walls and every Keepstone, for the walker's plotShape. */
-export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox), ...pieceBoxes(w), ...wallBoxes(w.walls ?? {}, GROUND_Y), ...upperBoxes(w, GROUND_Y, shaftKeys(w))]
+export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox), ...pieceBoxes(w), ...wallBoxes(w.walls ?? {}, GROUND_Y), ...upperBoxes(w, GROUND_Y, shaftHoles(w))]
 
 // ── M37 slice 1: YOUR OWN WALLS (plot-walls.ts; Alex 11-19 "like the sims ... walls a little thicker, like the rooms") ──
 // In plan mode, the Walls tool: drag along the metre grid, a ghost run shows (blue = it can stand, red = it cannot), let go
@@ -88,7 +88,7 @@ function wallBlockers(w: Works) {
   const rects: { r: { x0: number; x1: number; z0: number; z1: number }; why: string }[] = []
   for (const r of w.rooms) { const f = footprint(r.kind, r.x, r.z, r.q); rects.push({ r: { x0: f.x0 - 0.3, x1: f.x1 + 0.3, z0: f.z0 - 0.3, z1: f.z1 + 0.3 }, why: `In your ${ROOMS[r.kind].name}.` }) }
   for (const c of allChests(w)) rects.push({ r: chestBox(c), why: 'A Keepstone is in the way.' })
-  for (const p of w.pieces) rects.push({ r: pieceRect(p.item, p.x, p.z, p.q), why: 'Something already stands there.' })
+  for (const p of w.pieces) rects.push({ r: pieceRect(p.item, p.x, p.z, p.q), why: isLiftPiece(p) ? SHAFT_WHY : 'Something already stands there.' })
   return { rects, circles: KEEP_CLEAR }
 }
 /** rooms the plan closes whose floor + roof are not built yet (they appear at Build) */
@@ -97,7 +97,7 @@ const unbuiltRooms = (walls: Walls, paid: Works['paid']) => new Set(findRooms(wa
  *  only the support rule (a wall must stand on a wall or a room of the floor below) */
 function layOn(w: Works, lv: number, keys: string[], owned: ReadonlySet<string>) {
   if (lv === 0) return canLay(w.walls ?? {}, keys, wallMat, heldCorner(owned), wallBlockers(w))
-  const v = canLay(levelOf(w, lv).walls, keys, wallMat, () => true, { rects: [], circles: [] })
+  const v = canLay(levelOf(w, lv).walls, keys, wallMat, () => true, { rects: shaftBlockers(w), circles: [] })   // M48: the shaft runs through every level
   if (!v.ok) return v
   const s = canStack(levelOf(w, lv - 1).walls, v.add); return s.ok ? v : { ok: false as const, why: s.why }
 }

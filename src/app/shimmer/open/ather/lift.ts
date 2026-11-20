@@ -8,18 +8,39 @@
 // PURE state machine + the live runtime the walker reads (no three, no react).
 import type { Box, Shape } from '../terrain-world'
 import type { Works, Piece } from './rooms'
-import { levelCount, levelsOf, levelBase, SLAB_T } from './plot-floors'
+import { levelCount, levelsOf, levelBase, slabCells, SLAB_T } from './plot-floors'
 import { wallRects } from './plot-walls'
 
 export const LIFT = 'lift', CAR_SPEED = 2.6, GATE_H = 2.0, CELL_INSET = 0.03
 export const isLiftPiece = (p: { item: string }) => p.item === LIFT
 export const liftsOf = (w: Works): Piece[] => w.pieces.filter(isLiftPiece)
 export const cellMid = (v: number) => Math.floor(v) + 0.5
-/** which level the car stands at (saved; clamped to the levels that exist) */
-export const carLevel = (w: Works, p: Piece) => Math.max(0, Math.min(levelCount(w) - 1, Math.round(p.lv ?? 0)))
+/** M48 (hub 11-20): the highest level the SHAFT reaches: the ground, then each level up while that level has a BUILT room over
+ *  the cell (its slab). The frame stops there under a plank cap and the house's roof stays closed over it: no post or car pokes
+ *  through a roof, and the car never rides above the top floor it serves. */
+export function shaftTop(w: Works, p: { x: number; z: number }): number {
+  const i = Math.floor(p.x), j = Math.floor(p.z), lv = levelsOf(w); let top = 0
+  for (let k = 1; k < lv.length; k++) { if (slabCells(lv[k]).some(([a, b]) => a === i && b === j)) top = k; else break }
+  return top
+}
+/** how many floors this lift serves (its cords, its gates) */
+export const liftLevels = (w: Works, p: { x: number; z: number }) => shaftTop(w, p) + 1
+/** which level the car stands at (saved; clamped to the levels its shaft reaches) */
+export const carLevel = (w: Works, p: Piece) => Math.max(0, Math.min(shaftTop(w, p), Math.round(p.lv ?? 0)))
 /** the plot cells (`i,j`) the shafts claim, on every level */
 export const shaftKeys = (w: Works): Set<string> => new Set(liftsOf(w).map(p => `${Math.floor(p.x)},${Math.floor(p.z)}`))
+/** the slab holes: `i,j,k` for every level k (1..top) the shaft passes up through; a slab above the top stays whole */
+export const shaftHoles = (w: Works): Set<string> => {
+  const out = new Set<string>()
+  for (const p of liftsOf(w)) for (let k = 1; k <= shaftTop(w, p); k++) out.add(`${Math.floor(p.x)},${Math.floor(p.z)},${k}`)
+  return out
+}
 
+/** the shaft cells as wall-tool blockers: a wall may not touch a shaft cell on ANY level (the ground already refuses it via the
+ *  lift piece's rect; upper levels have no pieces, so they ask this). Same overlap rule as shaftBlocked. */
+export const SHAFT_WHY = 'The lift shaft runs up through here.'
+export const shaftBlockers = (w: Works): { r: { x0: number; x1: number; z0: number; z1: number }; why: string }[] =>
+  [...shaftKeys(w)].map(k => { const [i, j] = k.split(',').map(Number); return { r: { x0: i, x1: i + 1, z0: j, z1: j + 1 }, why: SHAFT_WHY } })
 /** a wall on ANY level inside this cell? (the shaft goes up through the whole house) */
 export function shaftBlocked(w: Works, x: number, z: number): boolean {
   const i = Math.floor(x), j = Math.floor(z)
@@ -28,7 +49,7 @@ export function shaftBlocked(w: Works, x: number, z: number): boolean {
 /** The state machine's two moves. Both save the car's new level; null = nothing to do (no such lift/level, or already there). */
 export function ride(w: Works, id: string, target: number): Works | null {
   const p = w.pieces.find(x => x.id === id && isLiftPiece(x))
-  if (!p || !Number.isInteger(target) || target < 0 || target >= levelCount(w) || carLevel(w, p) === target) return null
+  if (!p || !Number.isInteger(target) || target < 0 || target > shaftTop(w, p) || carLevel(w, p) === target) return null
   return { ...w, pieces: w.pieces.map(x => (x.id === id ? { ...x, lv: target } : x)) }
 }
 /** call(level): the car comes to `level` (the same move as a ride, made from outside the car) */
@@ -73,7 +94,7 @@ export function liftSolids(w: Works, groundY: number, ys: ReadonlyMap<string, nu
     const lv = carLevel(w, p), rest = carBase(groundY, lv), y = ys.get(p.id) ?? rest
     const cell = { x0: Math.floor(p.x) + CELL_INSET, x1: Math.floor(p.x) + 1 - CELL_INSET, z0: Math.floor(p.z) + CELL_INSET, z1: Math.floor(p.z) + 1 - CELL_INSET }
     out.push({ ...cell, y0: y - SLAB_T, y1: y })
-    if (Math.abs(y - rest) < 0.02) for (let k = 0; k < levelCount(w); k++) if (k !== lv) out.push({ ...cell, y0: k === 0 ? groundY - 0.5 : carBase(groundY, k) - SLAB_T, y1: carBase(groundY, k) + GATE_H })
+    if (Math.abs(y - rest) < 0.02) for (let k = 0; k < liftLevels(w, p); k++) if (k !== lv) out.push({ ...cell, y0: k === 0 ? groundY - 0.5 : carBase(groundY, k) - SLAB_T, y1: carBase(groundY, k) + GATE_H })
   }
   return out
 }

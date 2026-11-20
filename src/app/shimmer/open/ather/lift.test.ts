@@ -3,9 +3,9 @@
 // wall on ANY level is refused, the ride/call state machine, the walker's moving floor, the save round-trip, an old save has no lift.
 import { FURNITURE, PIECE_JOBS } from './furniture'
 import { freshWorks, canPlacePiece, placePiece, type Works } from './rooms'
-import { planRun, runKeys, findRooms, type Walls } from './plot-walls'
+import { planRun, runKeys, findRooms, canLay, type Walls } from './plot-walls'
 import { withLevel, upperBoxes, levelBase, SLAB_T, STOREY } from './plot-floors'
-import { ride, call, carLevel, shaftKeys, shaftBlocked, liftSolids, stepCar, cordsOf, cordAimed, levelAt, CAR_SPEED, GATE_H } from './lift'
+import { shaftTop, liftLevels, shaftHoles, shaftBlockers, SHAFT_WHY, ride, call, carLevel, shaftKeys, shaftBlocked, liftSolids, stepCar, cordsOf, cordAimed, levelAt, CAR_SPEED, GATE_H } from './lift'
 import { newInv, give, countOf } from '../shared/inventory'
 import { STARTING_SQUARES } from './plot'
 let pass = 0
@@ -75,6 +75,31 @@ ok(shaftKeys(w1).has('1,1') && shaftKeys(w1).size === 1, 'a lift claims one cell
   ok(back.pieces[0].lv === 1 && carLevel(back, back.pieces[0]) === 1, 'the car level survives a save/load')
   ok(shaftKeys(freshWorks()).size === 0 && liftSolids(freshWorks(), G, new Map()).length === 0, 'an old save (no pieces) has no lift')
   ok(carLevel(base, { id: 'x', item: 'lift', x: 1.5, z: 1.5, q: 0, placedAt: 1 }) === 0, 'a lift with no saved level stands at the ground') }
+
+// M48 leftover (hub 11-20): the shaft stops at the top floor that has a BUILT room over its cell; nothing pokes through a roof
+{ ok(shaftTop(w1, w1.pieces[0]) === 1 && liftLevels(w1, w1.pieces[0]) === 2 && shaftHoles(w1).has('1,1,1'), 'room over the cell on floor 2: the shaft reaches floor 2, slab holed there')
+  // floor 2 holds a room elsewhere (x 6..8), not over the lift: a one-storey shaft under the ground room's roof
+  const other = box(6, 0, 2, 2), ok2 = findRooms(other)[0].key
+  const w2: Works = { ...withLevel({ ...freshWorks(), walls: box(0, 0, 4, 3) }, 1, { walls: other, paid: { [ok2]: 4 } }), pieces: [{ id: 'l1', item: 'lift', x: 1.5, z: 1.5, q: 0, placedAt: 1 }] }
+  ok(shaftTop(w2, w2.pieces[0]) === 0 && liftLevels(w2, w2.pieces[0]) === 1, 'no room over the cell upstairs: the shaft stops at the ground floor')
+  ok(ride(w2, 'l1', 1) === null, 'the car never rides above the top floor it serves')
+  ok(shaftHoles(w2).size === 0, 'no slab holes above the top')
+  ok(liftSolids(w2, G, new Map()).length === 1, 'one floor served: the car, no gates')
+  ok(carLevel({ ...w2, pieces: [{ ...w2.pieces[0], lv: 1 }] }, w2.pieces[0] as never) === 0 || carLevel({ ...w2, pieces: [{ ...w2.pieces[0], lv: 1 }] }, { ...w2.pieces[0], lv: 1 }) === 0, 'a saved level above the top clamps to the top')
+  // a DRAFT room over the cell does not raise the shaft (only built rooms are a slab)
+  const draft = Object.fromEntries(Object.entries(box(0, 0, 4, 3)).map(([k, v]) => [k, { ...v, draft: true as const }]))
+  const w3: Works = { ...withLevel({ ...freshWorks(), walls: box(0, 0, 4, 3) }, 1, { walls: draft }), pieces: w2.pieces }
+  ok(shaftTop(w3, w3.pieces[0]) === 0, 'a drafted room upstairs is not a floor yet') }
+
+// M48 leftover: the wall tool refuses a run touching the shaft cell on an UPPER level (no pieces up there to block it)
+{ const bl = { rects: shaftBlockers(w1), circles: [] }
+  const into = canLay({}, runKeys({ i: 1, j: 2 }, { i: 3, j: 2 }), 'goldwood', () => true, bl)   // along the shaft cell's far edge (z = 2)
+  ok(!into.ok && into.why === SHAFT_WHY, `a wall on the shaft cell's edge is refused (${'why' in into ? into.why : 'ok'})`)
+  const across = canLay({}, runKeys({ i: 0, j: 1 }, { i: 3, j: 1 }), 'goldwood', () => true, bl)   // through the cell's near edge
+  ok(!across.ok, 'a run crossing the shaft is refused')
+  const clear = canLay({}, runKeys({ i: 3, j: 0 }, { i: 3, j: 3 }), 'goldwood', () => true, bl)   // x = 3, a cell away
+  ok(clear.ok, 'a wall a cell away is fine')
+  ok(shaftBlockers(base).length === 0, 'no lift: nothing blocked') }
 
 if (fails.length) { console.log(`FAIL ${fails.length}:\n - ${fails.join('\n - ')}`); process.exit(1) }
 console.log(`lift.test: ${pass} pass, 0 fail`)

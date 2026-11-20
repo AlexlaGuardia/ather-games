@@ -7,8 +7,8 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Piece } from './rooms'
 import { GROUND_Y } from './plot'
-import { levelCount, STOREY } from './plot-floors'
-import { liveLift, carBase, carLevel, cordsOf, cordAimed, rideNow, CORD_LOW, CORD_HIGH, PANEL_Z } from './lift'
+import { STOREY } from './plot-floors'
+import { liveLift, carBase, carLevel, liftLevels, cordsOf, cordAimed, rideNow, CORD_LOW, CORD_HIGH, PANEL_Z } from './lift'
 import { useWorks } from './workshop'
 
 const WOOD = '#d9a957', DARK = '#6b4a2a', STONE = '#bdb6a6', CORD = '#c9b27a', BEAD = '#8a8478', BEAD_HERE = '#efe6c8'
@@ -16,7 +16,7 @@ const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, numb
 
 /** posts up the whole shaft (the top of the highest level), the car on its cords, and the stone weight beside it */
 export function LiftMesh({ p }: { p: Piece }) {
-  const w = useWorks(), n = levelCount(w), car = useRef<THREE.Group>(null), weight = useRef<THREE.Mesh>(null)
+  const w = useWorks(), n = liftLevels(w, p), car = useRef<THREE.Group>(null), weight = useRef<THREE.Mesh>(null)   // the floors its shaft reaches
   const top = GROUND_Y + (n - 1) * STOREY + 3.2
   useFrame(() => {
     const y = liveLift.ys.get(p.id) ?? carBase(GROUND_Y, carLevel(w, p)), span = (n - 1) * STOREY
@@ -29,6 +29,8 @@ export function LiftMesh({ p }: { p: Piece }) {
     <group position={[p.x, GROUND_Y, p.z]} rotation-y={-p.q * Math.PI / 2}>
       {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b], k) => <Bx key={k} p={[a * 0.47, h / 2, b * 0.47]} s={[0.07, h, 0.07]} c={WOOD} />)}
       <Bx p={[0, h - 0.03, 0.47]} s={[1, 0.06, 0.07]} c={DARK} /><Bx p={[0, h - 0.03, -0.47]} s={[1, 0.06, 0.07]} c={DARK} />
+      {/* the plank cap: the shaft ends here, under the top floor's ceiling (the roof stays closed over it) */}
+      <Bx p={[0, h - 0.1, 0]} s={[1.0, 0.06, 1.0]} c={WOOD} />
       <group ref={car}>
         <Bx p={[0, -0.1, 0]} s={[0.94, 0.2, 0.94]} c={WOOD} />
         <Bx p={[0, 1.3, 0.47]} s={[0.94, 0.05, 0.05]} c={DARK} />
@@ -42,7 +44,7 @@ export function LiftMesh({ p }: { p: Piece }) {
 }
 /** one pull-cord per floor on the car's panel: a cord and a stone bead; the floor the car is at has the pale bead */
 function CordsOnCar({ p }: { p: Piece }) {
-  const w = useWorks(), n = levelCount(w), here = carLevel(w, p)
+  const w = useWorks(), n = liftLevels(w, p), here = carLevel(w, p)
   return <>{Array.from({ length: n }, (_, k) => {
     const x = (k - (n - 1) / 2) * 0.26, len = CORD_HIGH - CORD_LOW + 0.3
     return <group key={k} position={[x, 0, PANEL_Z - 0.04]}>
@@ -65,7 +67,7 @@ export function LiftInput() {
       const o = ray.ray.origin, d = ray.ray.direction
       for (const p of w.pieces) {
         if (p.item !== 'lift') continue
-        const k = cordAimed(p, liveLift.ys.get(p.id) ?? carBase(GROUND_Y, carLevel(w, p)), levelCount(w), [o.x, o.y, o.z], [d.x, d.y, d.z])
+        const k = cordAimed(p, liveLift.ys.get(p.id) ?? carBase(GROUND_Y, carLevel(w, p)), liftLevels(w, p), [o.x, o.y, o.z], [d.x, d.y, d.z])
         if (k != null && rideNow(p.id)(k)) return
       }
     }
