@@ -34,7 +34,7 @@ import {
   bankCount, type Bank, type BankTab,
 } from './garden-bank'
 import { buildPlan, billOf, reconcile, paneFor } from './plot-bom'
-import { FURNITURE, FURNITURE_ORDER, REFINE, STONE_REFINE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, type Job } from './furniture'
+import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, type Job } from './furniture'
 import { ROAST } from './cooking'
 import { FarmPanel, FarmInterior, FarmCrate, currentFarm, setFarm, currentWater, settleWater, farmNow } from './farm-room'
 import { plumbingOf, spillIfRemoved } from './water'
@@ -361,13 +361,26 @@ export function setBank(b: Bank) { bank = b; saveBank(b); bsubs.forEach(f => f()
 export const useBank = () => useSyncExternalStore(f => { bsubs.add(f); return () => { bsubs.delete(f) } }, getB, () => SERVER_BANK)
 
 // placing: which room, its turn, and where the ghost stands now (set by the scene each frame)
-type Placing = { kind: RoomKind; q: number } | { kind: 'chest'; item: string; q: number } | { kind: 'piece'; item: string; q: number } | null
+// `hand` (M45): the thing came from the HOTBAR (held in hand), not from a menu. It follows the stance: stow or swap and the
+// ghost goes; E taps set it, an E hold turns it; R stays the stance's key (draw / stow), Esc is not a cancel.
+type Placing = { kind: RoomKind; q: number } | { kind: 'chest'; item: string; q: number; hand?: true } | { kind: 'piece'; item: string; q: number; hand?: true } | null
 let placing: Placing = null
 const ghost = { x: 0, z: 0 }
 const psubs = new Set<() => void>()
 const setPlacing = (p: Placing) => { placing = p; psubs.forEach(f => f()) }
 export const usePlacing = () => useSyncExternalStore(f => { psubs.add(f); return () => { psubs.delete(f) } }, () => placing, () => null)
 export const isPlacing = () => placing !== null
+/** M45: what the keeper holds drives a placing from the hand. `id` = the held furniture / Keepstone id, or null when the hand
+ *  holds nothing that places (or a panel / the planner is up). A menu placing (rooms, the table) is never touched. */
+export function holdFromHand(id: string | null) {
+  const want: 'piece' | 'chest' | null = id == null ? null : isPiece(id) ? 'piece' : id in KEEPSTONES ? 'chest' : null
+  const cur = placing
+  if (!want || !id) { if (cur && 'hand' in cur && cur.hand) setPlacing(null); return }
+  if (cur && !('hand' in cur && cur.hand)) return   // a menu placing is up: it wins until it ends
+  if (cur && cur.kind === want && cur.item === id) return
+  setPlacing({ kind: want, item: id, q: cur && 'q' in cur ? cur.q : 0, hand: true })
+}
+const fromHand = (p: Placing) => !!p && 'hand' in p && !!p.hand
 /** Where a ghost stands: under the pointer while flying (build-mode.tsx), else `ahead` metres in front of the keeper. */
 function ghostAt(p: Pose, ahead: number, snap: number) {
   const b = buildPoint(), x = b ? b.x : p.x - Math.sin(p.yaw) * ahead, z = b ? b.z : p.z - Math.cos(p.yaw) * ahead
@@ -390,7 +403,7 @@ function confirmPlace(owned: ReadonlySet<string>) {
     if (!c) { const v = canPlacePiece(getW(), owned, item, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot set it there.' : v.why, 'info'); return }
     setInv(c.inv); setWorks(c.works)
     // keep placing while more of the same are in the bag (a row of stools is one job, not five trips to the table)
-    if (countOf(c.inv, item) > 0) hudSay(`${FURNITURE[item].name} set · ${countOf(c.inv, item)} more in the bag · Esc stops`, 'item', 4)
+    if (countOf(c.inv, item) > 0) hudSay(`${FURNITURE[item].name} set · ${countOf(c.inv, item)} more in the bag · ${placing.hand ? 'hold R to put it away' : 'Esc stops'}`, 'item', 4)
     else { setPlacing(null); hudSay(`${FURNITURE[item].name} set.`, 'item', 3) }
     return
   }
@@ -411,24 +424,43 @@ function confirmPlace(owned: ReadonlySet<string>) {
   hudSay(`${ROOMS[r.room.kind].name} · the scaffolding is up. Ready in ${Math.round(ROOMS[r.room.kind].raiseMs / 1000)} s.${st?.given ? ' A packet of seeds waits in its store.' : ''}`, 'item', 5)
 }
 
-/** While placing: R turns, E / Enter sets, Esc cancels. Capture phase, so the page's own E never sees these keys. */
+/** While placing: R turns, E / Enter sets, Esc cancels. Capture phase, so the page's own E never sees these keys.
+ *  From the HAND (M45): a TAP of E sets, a HOLD of E turns (a quarter every HOLD_MS while held); R and Esc pass through. */
 export function usePlacingKeys(owned: ReadonlySet<string>) {
   const p = usePlacing()
   const ownedRef = useRef(owned); ownedRef.current = owned
   useEffect(() => {
     if (!p) return
+    let eDown: { turned: boolean; t: ReturnType<typeof setInterval> } | null = null
+    const stopE = () => { if (eDown) clearInterval(eDown.t); eDown = null }
     const down = (e: KeyboardEvent) => {
       if (!placing) return
+      if (fromHand(placing)) {
+        if (e.code === 'KeyE') {
+          if (!e.repeat && !eDown) { const h = { turned: false, t: setInterval(() => { if (placing) { h.turned = true; setPlacing({ ...placing, q: (placing.q + 1) % 4 }) } }, HAND_TURN_MS) }; eDown = h }
+        } else if (e.code === 'Enter') confirmPlace(ownedRef.current)
+        else return
+        e.preventDefault(); e.stopImmediatePropagation(); return
+      }
       if (e.code === 'KeyR') setPlacing({ ...placing, q: (placing.q + 1) % 4 })
       else if (e.code === 'KeyE' || e.code === 'Enter') confirmPlace(ownedRef.current)
       else if (e.code === 'Escape') setPlacing(null)
       else return
       e.preventDefault(); e.stopImmediatePropagation()
     }
-    window.addEventListener('keydown', down, true)
-    return () => window.removeEventListener('keydown', down, true)
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyE' || !eDown) return
+      const turned = eDown.turned; stopE()
+      if (!turned) confirmPlace(ownedRef.current)
+      e.preventDefault(); e.stopImmediatePropagation()
+    }
+    window.addEventListener('keydown', down, true); window.addEventListener('keyup', up, true)
+    return () => { stopE(); window.removeEventListener('keydown', down, true); window.removeEventListener('keyup', up, true) }
   }, [p])
 }
+/** An E held this long turns the hand's ghost a quarter (and again each time after, while held). */
+export const HAND_TURN_MS = 350
+
 
 // ── the scene ─────────────────────────────────────────────────────────────────────────────────────────────────
 const WOOD = '#8f6038', WALL = '#d8b46e', ROOF = '#7a4a2a', SHEET = '#5aa9ff'
@@ -671,7 +703,7 @@ function ChestGhost({ pose, owned, q, item }: { pose: React.MutableRefObject<Pos
 const WOODS: Record<string, string> = { goldwood: '#d9a957', shimmeroak: '#a77a52', starwillow: '#c8d2e8', dawnwood: '#c9774a', iron: '#4e4a47', stone: '#bdb6a6' }
 const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, number]; c: string }) => <mesh position={p}><boxGeometry args={s} /><meshLambertMaterial color={c} /></mesh>
 /** One piece, built from boxes in its wood's colour. Blockout look like the rooms. */
-function PieceBody({ item }: { item: string }) {
+export function PieceBody({ item }: { item: string }) {
   const f = FURNITURE[item], c = WOODS[f.wood], dk = '#6b4a2a'
   const legs = (w: number, d: number, h: number, t = 0.07) => [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b], k) => <Bx key={k} p={[a * (w / 2 - t), h / 2, b * (d / 2 - t)]} s={[t, h, t]} c={c} />)
   switch (item) {
@@ -844,42 +876,7 @@ function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: (
           <BuildStrip sel={sel} onSel={k => setSel(s => (s === k ? null : k))} />
         </div>
         {sel ? <BuildCard k={sel} onBuilt={onClose} /> : <div style={{ fontSize: 12.5, color: H.inkSoft }}>Tap a room to see what it takes. Plan flies you over your ground. Building takes from your Keepstone first.</div>}
-        {(() => {
-          const found = Object.keys(KEEPSTONES).filter(id => id !== KEEPSTONE && countOf(inv, id) > 0)
-          if (!found.length) return null
-          const full = chestsStanding(w) >= MAX_CHESTS
-          return (
-            <div data-found-keepstones style={{ padding: '10px 12px', borderRadius: 12, background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
-              <div style={lab}>Found Keepstones · same bank, their own light</div>
-              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
-                {found.map(id => (
-                  <div key={id} data-keepstone={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ width: 12, height: 12, borderRadius: 3, background: CRYSTAL_LIGHT[KEEPSTONES[id].crystal] ?? '#fff', boxShadow: `0 0 0 1px ${H.rule}` }} />
-                    <span style={{ flex: 1, fontSize: 13.5, color: H.ink }}>{KEEPSTONES[id].name} <span style={{ color: H.inkSoft }}>× {countOf(inv, id)}</span></span>
-                    {full ? <span style={lab}>Full</span> : <HearthButton small onClick={() => { startBuild({ kind: 'chest', item: id, q: 0 }); onClose(); hudSay(`Setting the ${KEEPSTONES[id].name} · click (or Place) sets it · R turns · Esc cancels`, 'info', 8) }}>Set</HearthButton>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )
-        })()}
-        {(() => {
-          const have = FURNITURE_ORDER.filter(id => countOf(inv, id) > 0)
-          if (!have.length) return null
-          return (
-            <div data-furnish style={{ padding: '10px 12px', borderRadius: 12, background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
-              <div style={lab}>Furnish · {w.pieces.length} of {MAX_PIECES} set</div>
-              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
-                {have.map(id => (
-                  <div key={id} data-piece={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ flex: 1, fontSize: 13.5, color: H.ink }}>{FURNITURE[id].name} <span style={{ color: H.inkSoft }}>× {countOf(inv, id)}</span></span>
-                    <HearthButton small onClick={() => { setPlacing({ kind: 'piece', item: id, q: 0 }); onClose(); hudSay(`Setting the ${FURNITURE[id].name} · R turns it · E sets it · Esc stops`, 'info', 8) }}>Set</HearthButton>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )
-        })()}
+        {/* M45: furniture and found Keepstones are set from the HAND now (hold one from the hotbar, E sets it); the table keeps rooms + plans */}
       </div>
     </HearthFrame>
   )
@@ -1017,7 +1014,7 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
         {r.kind === 'carpentry' && (
           <>
             {cl(crafts(REFINE), 'Refine', 'Each log works two ways. Pick one to Focus: the station uses every log in its store to make it, one at a time. A Moglin also keeps stacks of each going by itself.', 'No logs to work. Prune trees in the Wilds. Better woods come as your Forestry grows.')}
-            {cl(PIECE_JOBS, 'Furniture', 'Pick a piece and Focus a number: the station makes them from its store. They wait in the output. Set them from the planning table.', undefined)}
+            {cl(PIECE_JOBS, 'Furniture', 'Pick a piece and Focus a number: the station makes them from its store. They wait in the output. Hold one from the hotbar on your plot and E sets it.', undefined)}
           </>
         )}
         {r.kind === 'stonemason' && cl(crafts(STONE_REFINE), 'Refine', 'Parts for a house plan. Pick one to Focus: the station cuts it from every stone in its store, one at a time. A Moglin also keeps stacks of each going by itself.', 'No blankstone or mana shards to cut. Prospect them in the Wilds.')}
@@ -1385,9 +1382,9 @@ export function PlacingBar({ owned }: { owned: ReadonlySet<string> }) {
   const btn: React.CSSProperties = { border: 0, borderRadius: 999, padding: '10px 16px', font: '700 13px system-ui', cursor: 'pointer', background: 'rgba(255,250,235,.95)', color: H.ink, boxShadow: '0 2px 8px rgba(0,0,0,.25)' }
   return (
     <div data-placing={p.kind} style={{ position: 'fixed', left: '50%', bottom: 'max(230px, 27vh)', transform: 'translateX(-50%)', display: 'flex', gap: 8, zIndex: 40, pointerEvents: 'auto' }}>
-      <button type="button" style={btn} onClick={() => setPlacing({ ...p, q: (p.q + 1) % 4 })}>Turn (R)</button>
+      <button type="button" data-act="turn" style={btn} onClick={() => setPlacing({ ...p, q: (p.q + 1) % 4 })}>{fromHand(p) ? 'Turn (hold E)' : 'Turn (R)'}</button>
       <button type="button" data-act="place" style={{ ...btn, background: '#e0823f', color: '#fff' }} onClick={() => confirmPlace(owned)}>Place (E)</button>
-      <button type="button" style={btn} onClick={() => setPlacing(null)}>Cancel (Esc)</button>
+      {!fromHand(p) && <button type="button" style={btn} onClick={() => setPlacing(null)}>Cancel (Esc)</button>}
     </div>
   )
 }

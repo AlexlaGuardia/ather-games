@@ -18,9 +18,9 @@
 import { useLook } from './look-store'
 import { gemGlow } from './morel'   // M33: the gem pulses when Morel's count changes
 import { OPT } from './keeper-look'
-import { useEffect, useImperativeHandle, useMemo, useRef, forwardRef } from 'react'
+import { useEffect, useImperativeHandle, useMemo, useRef, forwardRef, type ReactNode } from 'react'
 import * as THREE from 'three'
-import { useThree } from '@react-three/fiber'
+import { useThree, createPortal } from '@react-three/fiber'
 import { newFpState, stepFpHands, loadFpTune, FP, type FpInput, type HandPose } from './fp-hands-pose'
 
 export const ORDER = 1000
@@ -53,7 +53,8 @@ export function tintMittens(hand: THREE.Object3D, color: string) {
   hand.traverse(o => { const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined; if (m?.userData?.mitten) m.color.set(color) })
 }
 
-export const OpenHands = forwardRef<OpenHandsApi>(function OpenHands(_, ref) {
+/** `held` (M45): what the keeper holds, drawn in the RIGHT mitten (ather/held-item.tsx); it rides and hides with the hand. */
+export const OpenHands = forwardRef<OpenHandsApi, { held?: ReactNode }>(function OpenHands({ held }, ref) {
   const { camera } = useThree()
   const seatMat = useMemo(() => new THREE.MeshStandardMaterial({ color: C.seat, emissive: new THREE.Color(C.seat), emissiveIntensity: 0.4, roughness: 0.3, transparent: true, opacity: 1 }), [])
   const rig = useMemo(() => {
@@ -92,5 +93,5 @@ export const OpenHands = forwardRef<OpenHandsApi>(function OpenHands(_, ref) {
     ;(window as unknown as { __openHands?: unknown }).__openHands = { R: () => ({ ...st.current.R }), L: () => ({ ...st.current.L }), air: () => st.current.air, visible: () => rig.root.visible }
     return () => { rig.root.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); (o.material as THREE.Material).dispose() } }) }
   }, [rig])
-  return <primitive object={rig.root} />
+  return <><primitive object={rig.root} />{held ? createPortal(held, rig.R) : null}</>
 })

@@ -32,7 +32,9 @@ import {
   loadGarden, saveGarden, freshGarden, type Garden,
 } from './plot'
 import { PlotScene } from './plot-scene'
-import { WorkshopScene, WorkshopPanel, PlacingBar, BuildBar, usePlacingKeys, isPlacing, useWorks, workWalls, workPrompt, currentWorks, setWorks } from './workshop'
+import { HeldItem } from './held-item'
+import { heldUse, placesFromHand, useLabel } from './held-use'
+import { WorkshopScene, WorkshopPanel, PlacingBar, BuildBar, usePlacingKeys, isPlacing, holdFromHand, useWorks, workWalls, workPrompt, currentWorks, setWorks } from './workshop'
 import { currentFarm, setFarm, currentWater, setWater, farmNow } from './farm-room'
 import { BuildPointer, stepBuildCam, useBuildMode, useBuildKeys, isBuilding, exitBuild } from './build-mode'
 import { tick as villageTick, loadVillage, saveVillage } from './moglins'
@@ -619,6 +621,11 @@ function AtherSliceGame() {
   const held = heldOf(stance, inv)
   useEffect(() => { setStance(st => settle(st, inv)) }, [inv])   // the last waymark planted empties the hand
   const heldRef = useRef(held); heldRef.current = held
+  // M45: what E does with it (held-use.ts). Furniture / a Keepstone in hand stands its ghost in front of you on the plot
+  // (workshop holdFromHand: E taps set it, an E hold turns it); it goes when a panel, the planner or a fade is up.
+  const heldUseNow = heldUse(held, zone.kind === 'plot' ? 'plot' : 'wilds')
+  useEffect(() => { holdFromHand(placesFromHand(heldUseNow) && !panel && !building && !fade ? held : null) }, [held, heldUseNow, panel, building, fade])
+  useEffect(() => { (window as unknown as { __held?: unknown }).__held = () => ({ id: heldRef.current, use: heldUse(heldRef.current, zoneRef0.current === 'wilds' ? 'wilds' : 'plot') }) }, [])
   // ── forestry from a distance (forestry.ts + forestry-fx.tsx): stowed, click (or E) a tree within 10 m; the Forestry
   //    socket's tool does the work
   // ── GATHERING BY CHANNEL (channel.ts; Alex 11-17): stowed, E or click a tree / crystal in reach → the right focus appears
@@ -1007,6 +1014,13 @@ function AtherSliceGame() {
       if (packTab) { setPanel(p => p?.kind === 'pack' ? (p.tab === packTab ? null : { kind: 'pack', tab: packTab }) : p ? p : { kind: 'pack', tab: packTab }); return }
       if (panel || fade) return
       const n = near.current
+      // M45: E uses what is in hand first (a placing from the hand is caught earlier, by workshop's usePlacingKeys)
+      if (e.code === 'KeyE' && !e.repeat) {
+        const u = heldUse(heldRef.current, zone.kind === 'plot' ? 'plot' : 'wilds')
+        if (u === 'eat') { eatHeld(); return }
+        if (u === 'drink') { drinkHeld(); return }
+        if (u === 'plant') { plantHere(); return }
+      }
       if (e.code === 'KeyE' && !n && (aimRef.current.tree || cAimRef.current.crystal) && stanceRef.current.kind === 'stowed') { workAimed(); return }
       if (e.code === 'KeyE' && !n && atFairDoor(pos.current.x, pos.current.z)) {
         hudSay(`${FAIR_NAME} · the troupe is still pitching. The season's games, contests and market open soon.`, 'info', 6); return
@@ -1032,12 +1046,13 @@ function AtherSliceGame() {
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [panel, fade, zone, waymarks, ww, goHome, tune, skipDays, allNodes, plantHere, castSlot, errandToHold])
+  }, [panel, fade, zone, waymarks, ww, goHome, tune, skipDays, allNodes, plantHere, castSlot, errandToHold, eatHeld, drinkHeld])
 
   const zoneName = zone.kind === 'plot' ? 'Your plot' : 'The Wilds'
   // Phone taps: only what applies here and now, each the key this page already handles.
   const touchActions: TouchAction[] = [
-    ...(prompt ? [{ code: 'KeyE', key: 'E', label: prompt.startsWith('E · Gregory') ? 'Gregory' : 'use', near: true }] : []),
+    ...(useLabel(heldUseNow) ? [{ code: 'KeyE', key: 'E', label: useLabel(heldUseNow)!, near: true }]   // M45: the Use button for what is in hand
+      : prompt ? [{ code: 'KeyE', key: 'E', label: prompt.startsWith('E · Gregory') ? 'Gregory' : 'use', near: true }] : []),
     ...(prompt?.includes('L lift') ? [{ code: 'KeyL', key: 'L', label: 'lift', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
     { code: 'KeyO', key: 'O', label: 'options' },
@@ -1059,7 +1074,7 @@ function AtherSliceGame() {
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => { canvasEl.current = gl.domElement }}
       >
-        <OpenHands ref={handsApi} />
+        <OpenHands ref={handsApi} held={<HeldItem id={stance.kind === 'item' ? held : null} />} />
         <FpGun ref={gunApi} />
         <ThirdPersonBody drive={dollDrive} camRef={camRef} />
         {zone.kind === 'plot' && <BuildPointer />}
