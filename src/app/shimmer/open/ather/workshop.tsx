@@ -20,7 +20,7 @@ import { GROUND_Y, squareAt, sqId } from './plot'
 import { forestryLevel } from './forestry'
 import { connectedPieces, extractBlueprint, fitsPad } from './plot-blueprint'
 import { LOT_W, LOT_D, GLADE_LOTS } from './moonwell-glade'
-import { snapCorner, runKeys, canLay, planRun, raze, wallBoxes, edgeRect, findRooms, roofMesh, pieceAt, roomAt, toggleDoor, toggleWindow, paintWall, setFloor, floorOf, wallColour, paintable, isWood, isColour, WALL_MATS, WALL_MAT_ORDER, FLOOR_PATS, FLOOR_PAT_ORDER, SWATCHES, ROOF_STYLES, LOW_WALL, DOOR_H, SILL, WIN_TOP, WALL_T, type Corner, type WallMat, type Walls, type RoofStyle, type PlotRoom, type Floors, type FloorPat } from './plot-walls'
+import { snapCorner, runKeys, canLay, planRun, raze, wallBoxes, edgeRect, findRooms, roofMesh, pieceAt, roomAt, toggleDoor, toggleWindow, paintWall, paintConnected, connectedRooms, setFloor, floorOf, wallColour, paintable, isWood, isColour, WALL_MATS, WALL_MAT_ORDER, FLOOR_PATS, FLOOR_PAT_ORDER, SWATCHES, ROOF_STYLES, LOW_WALL, DOOR_H, SILL, WIN_TOP, WALL_T, type Corner, type WallMat, type Walls, type RoofStyle, type PlotRoom, type Floors, type FloorPat } from './plot-walls'
 import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
@@ -181,6 +181,20 @@ function tapToolHandler(kind: 'door' | 'window' | 'paint' | 'blueprint') {
       setWorks(withLevel(w, lv, { ...L, walls: c.walls, paid: L.paid ?? {} }))
     },
     cancel() { at = null },
+    // M53 (Alex 11-20): right-click (phone: long-press) with Paint = every connected stucco piece, or every joined room's floor
+    ...(kind === 'paint' ? { alt(x: number, z: number) {
+      at = null
+      const w = currentWorks(), lv = getPlanLevel(), L = levelOf(w, lv), walls = L.walls, k = pieceAt(walls, x, z)
+      if (k) { const r = paintConnected(walls, k, paintCol); if ('why' in r) { hudSay(r.why, 'info'); return } setWorks(withLevel(w, lv, { ...L, walls: r.walls })); hudSay(`Painted ${r.n} connected wall${r.n === 1 ? '' : 's'}.`, 'info'); return }
+      const rooms = findRooms(walls), room = roomAt(rooms, x, z); if (!room) { hudSay('Right-click a wall, or the floor of one of your rooms.', 'info'); return }
+      let floors = L.floors, inv = getInv(), n = 0
+      for (const rm of connectedRooms(rooms, room)) {
+        const fr = setFloor(floors, rm, paintPat, paintCol, !!(L.paid ?? {})[rm.key], inv); if ('why' in fr) { hudSay(fr.why, 'info'); break }
+        floors = fr.floors; inv = fr.inv; n++
+      }
+      if (!n) return
+      setWorks(withLevel(w, lv, { ...L, floors })); setInv(inv); hudSay(`Painted ${n} connected floor${n === 1 ? '' : 's'}.`, 'info')
+    } } : {}),
   }
 }
 /** BuildBar registers this while the Walls / Erase tool is on */
@@ -1069,7 +1083,7 @@ export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
       <PlanBom />
       {tool === 'blueprint' && <BlueprintBar />}
       {sel && <BuildCard k={sel} onBuilt={() => setSel(null)} />}
-      {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a plan · it costs nothing until you Build · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · what was built comes back to the bag' : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? 'Pick a pattern and a colour, then tap a floor (the whole room) or a stucco wall. Wood and brick keep their own colour' : <>Pick something to build{touchy ? '' : ' · drag to move · wheel to zoom · WASD · Q Z turn'}</>}</div>}
+      {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw a plan · it costs nothing until you Build · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · what was built comes back to the bag' : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? `Pick a pattern and a colour, then tap a floor (the whole room) or a stucco wall · ${touchy ? 'long-press' : 'right-click'} paints everything connected. Wood and brick keep their own colour` : <>Pick something to build{touchy ? '' : ' · drag to move · wheel to zoom · WASD · Q Z turn'}</>}</div>}
     </div>
     </>
   )

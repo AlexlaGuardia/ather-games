@@ -52,7 +52,7 @@ try {
   await p.evaluateOnNewDocument(() => {
     if (sessionStorage.getItem('house')) return; sessionStorage.setItem('house', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star')
-    const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'repeater', n: 1 }; slots[8] = { id: 'goldwood_plank', n: 40 }; slots[9] = { id: 'stone_brick', n: 30 }; slots[10] = { id: 'stucco', n: 30 }
+    const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'repeater', n: 1 }; slots[8] = { id: 'goldwood_plank', n: 40 }; slots[9] = { id: 'stone_brick', n: 34 }   /* M50: walls cost 1.5x; 34 keeps 10 left after the build (step 4 needs exactly 10) */; slots[10] = { id: 'stucco', n: 30 }
     localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
     localStorage.removeItem('open.works.v1')
   })
@@ -85,18 +85,19 @@ try {
   await pickMat('stucco'); await dragW(X0, Z0, X0, Z1); await dragW(X1, Z0, X1, Z1)
   // the plan bar can sit over the house at this zoom: let the pointer through it for this tap (the swatches themselves are DOM-clicked)
   const press = async (x: number, y: number) => { await p.evaluate((px: number, py: number) => { for (const e of document.elementsFromPoint(px, py)) { if (e.tagName === 'CANVAS') break; (e as HTMLElement).style.pointerEvents = 'none'; (e as HTMLElement).dataset.pe = '1' } }, x, y); await p.mouse.move(x, y); await p.mouse.down(); await sleep(120); await p.mouse.move(x + 1, y + 1); await p.mouse.up(); await p.evaluate(() => document.querySelectorAll<HTMLElement>('[data-pe]').forEach(e => { e.style.pointerEvents = ''; delete e.dataset.pe })) }
+  const rpress = async (x: number, y: number) => { await p.evaluate((px: number, py: number) => { for (const e of document.elementsFromPoint(px, py)) { if (e.tagName === 'CANVAS') break; (e as HTMLElement).style.pointerEvents = 'none'; (e as HTMLElement).dataset.pe = '1' } }, x, y); await p.mouse.move(x, y); await p.mouse.down({ button: 'right' }); await sleep(120); await p.mouse.up({ button: 'right' }); await p.evaluate(() => document.querySelectorAll<HTMLElement>('[data-pe]').forEach(e => { e.style.pointerEvents = ''; delete e.dataset.pe })) }   // M53: a right-click, no drag
   const dc = (sel: string) => p.evaluate((x: string) => { document.querySelector<HTMLElement>(x)?.click() }, sel)
   const w1 = await walls(), s1 = await works(), b1 = await bom()
   const mats = Object.values(s1.walls ?? {}).map((x: any) => x.mat)
   ok(mats.filter((m: string) => m === 'brick').length === 8 && mats.filter((m: string) => m === 'stucco').length === 6, `1. 8 m of brick + 6 m of stucco drawn (${mats.length} pieces)`)
   ok(!!w1 && w1.rooms.length === 1 && w1.rooms[0].cells === 12, '   they close one 4x3 room')
-  ok(!!b1 && b1.lines.stone_brick?.need === 20 && b1.lines.stucco?.need === 6 && b1.lines.goldwood_plank?.need === 12, `   the list asks for bricks + stucco: 20 Stone Brick (8 wall + 12 roof), 6 Stucco, 12 planks (${JSON.stringify(b1?.lines)})`)
+  ok(!!b1 && b1.lines.stone_brick?.need === 24 && b1.lines.stucco?.need === 9 && b1.lines.goldwood_plank?.need === 12, `   the list asks for bricks + stucco: 24 Stone Brick (8 wall x 1.5 [M50] + 12 roof), 9 Stucco (6 x 1.5), 12 planks (${JSON.stringify(b1?.lines)})`)
   ok(!!b1 && b1.ready && !b1.disabled, '   Build is lit (bag holds it)')
   await shot('mat-1-plan')
   // 2. Build spends them
   ok(await tap('[data-act="build-plan"] button'), '2. tap Build')
   ok(await poll(async () => (await draftCount()).draft === 0 && (await draftCount()).paid === 1), '   walls stand, room paid')
-  ok((await count('stone_brick')) === 10 && (await count('stucco')) === 24 && (await planks()) === 28, `   spent exactly: bricks 30->${await count('stone_brick')}, stucco 30->${await count('stucco')}, planks 40->${await planks()}`)
+  ok((await count('stone_brick')) === 10 && (await count('stucco')) === 21 && (await planks()) === 28, `   spent exactly: bricks 34->${await count('stone_brick')}, stucco 30->${await count('stucco')}, planks 40->${await planks()}`)
   await shot('mat-2-built')
   // 3. paint: stucco takes it, brick refuses
   await dc('[data-tool="paint"]'); await sleep(300)
@@ -108,6 +109,14 @@ try {
   sc = screenOf(v, X0 + 1.5, Z0); await press(sc.x, sc.y); await sleep(700)
   s3 = await works(); ok(!s3.walls[bk]?.tint && s3.walls[bk]?.mat === 'brick' && (await count('stone_brick')) === 10, '   painting the brick wall is refused (no tint, nothing spent)')
   await shot('mat-3-painted')
+  // 3b. M53: a RIGHT-CLICK paints every connected stucco piece: the whole left side (3 m), but not the right side (the brick runs between)
+  await dc('[data-swatch="#8fae7a"]'); await sleep(200)
+  sc = screenOf(v, X0, Z0 + 1.5); await rpress(sc.x, sc.y); await sleep(700)
+  { const s = await works(), left = [0, 1, 2].map(d => s.walls[`v,${X0},${Z0 + d}`]?.tint), right = [0, 1, 2].map(d => s.walls[`v,${X1},${Z0 + d}`]?.tint)
+    ok(left.every(t => t === '#8fae7a') && right.every(t => t !== '#8fae7a'), `3b. right-click paints the connected stucco side, stops at brick (left ${left}, right ${right})`) }
+  await shot('mat-3b-connected')
+  // put the left side back to the tapped colour so the reload leg below reads as before
+  await dc('[data-swatch="#4c6b97"]'); await sleep(200); await rpress(sc.x, sc.y); await sleep(700)
   // 4. floors: herringbone, painted; tile is refused for want of bricks (needs 12, has 10)
   await dc('[data-floor-pat="herringbone"]'); await sleep(200); await dc('[data-swatch="#e3b94f"]'); await sleep(200)
   sc = screenOf(v, X0 + 2, Z0 + 1.5); await press(sc.x, sc.y); await sleep(700)

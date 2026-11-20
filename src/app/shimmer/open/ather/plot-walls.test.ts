@@ -7,6 +7,7 @@ import {
   snapCorner, straighten, runKeys, edgeRect, edgeEnds, wallBoxes, canLay, lay, raze, adoptWalls, WALL_T, WALL_H, MAX_RUN, WALL_MATS, WOOD_ORDER, type Walls,
   findRooms, roofMesh, adoptRoof, ROOF_PITCH,
   pieceAt, toggleDoor, toggleWindow, paintWall, paintFloor, setFloor, floorOf, adoptFloors, roomAt, DOOR_H,
+  connectedPaintable, paintConnected, connectedRooms,
 } from './plot-walls'
 import { WALL_T as ROOM_T, WALL_H as ROOM_H } from './rooms'
 import { newInv, give, countOf } from '../shared/inventory'
@@ -134,6 +135,30 @@ ok(adoptRoof('hip') === 'hip' && adoptRoof('dome') === 'gable' && adoptRoof(unde
     ok(ow['h,0,0'].tint === '#112233' && !ow['h,1,0'].tint && ow['h,2,0'].mat === 'brick', 'a saved stucco keeps its paint; wood and brick drop any tint; brick loads') }
   ok(adoptWalls({ 'h,1,1': { mat: 'goldwood', kind: 'door' }, 'h,2,2': { mat: 'goldwood', kind: 'gate' } })['h,1,1'].kind === 'door' && !adoptWalls({ 'h,2,2': { mat: 'goldwood', kind: 'gate' } })['h,2,2'].kind, 'a saved door/window keeps its kind; an unknown kind is a plain wall') }
 
+// ── M53: paint all connected (right-click) ──
+{
+  // two rooms side by side, all stucco except one brick piece on the far end of the outer run; plus a lone stucco piece apart
+  const W: Record<string, { mat: 'stucco' | 'brick' }> = {}
+  const box = (i0: number, j0: number, i1: number, j1: number, mat: 'stucco' | 'brick' = 'stucco') => {
+    for (let i = i0; i < i1; i++) { W[`h,${i},${j0}`] = { mat }; W[`h,${i},${j1}`] = { mat } }
+    for (let j = j0; j < j1; j++) { W[`v,${i0},${j}`] = { mat }; W[`v,${i1},${j}`] = { mat } }
+  }
+  box(0, 0, 3, 3); box(3, 0, 6, 3)   // shares the wall at i = 3
+  W['h,9,0'] = { mat: 'stucco' }     // apart: not joined
+  W['h,6,5'] = { mat: 'brick' }; W['h,7,5'] = { mat: 'stucco' }   // a stucco piece joined only THROUGH a brick one
+  W['v,6,3'] = { mat: 'brick' }; W['v,6,4'] = { mat: 'brick' }    // brick leg from the house corner (6,3) down to (6,5)
+  const walls = W as unknown as Walls
+  const set = new Set(connectedPaintable(walls, 'h,0,0'))
+  ok(set.has('h,5,3') && set.has('v,3,1') && set.has('v,6,2'), 'connected: both rooms\' stucco, through corners and the shared wall')
+  ok(!set.has('h,9,0') && !set.has('h,7,5') && !set.has('v,6,3'), 'connected: stops at brick, skips a piece that is not joined')
+  ok(connectedPaintable(walls, 'v,6,3').length === 0, 'connected: a brick piece starts nothing')
+  const r = paintConnected(walls, 'h,0,0', '#3366AA')
+  ok('walls' in r && r.n === set.size && Object.entries(r.walls).every(([k, w]) => set.has(k) ? w.tint === '#3366aa' : !w.tint), `paintConnected tints exactly the set (${'walls' in r ? r.n : r.why})`)
+  ok('walls' in r && 'why' in paintConnected(r.walls, 'h,0,0', '#3366aa'), 'paintConnected: already that colour')
+  ok('why' in paintConnected(walls, 'v,6,3', '#3366aa'), 'paintConnected: brick refuses')
+  const rooms = findRooms(walls)
+  ok(rooms.length === 2 && connectedRooms(rooms, rooms[0]).length === 2, `connectedRooms: the two rooms of the house (${rooms.length})`)
+}
 console.log(`plot-walls: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)

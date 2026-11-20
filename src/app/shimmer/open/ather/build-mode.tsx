@@ -51,7 +51,8 @@ let tool: BuildTool = 'look'
 export const buildTool = () => tool
 export function setBuildTool(t: BuildTool) { if (t === tool) return; draw?.cancel(); tool = t; emit() }
 export const useBuildTool = () => useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f) } }, () => tool, () => 'look' as BuildTool)
-type DrawHandler = { start(x: number, z: number): void; move(x: number, z: number): void; end(x: number, z: number): void; cancel(): void }
+/** `alt` (M53): a RIGHT-CLICK (no drag; a right-drag pans) or a phone LONG-PRESS at a ground point: the tool's 'all connected' act */
+type DrawHandler = { start(x: number, z: number): void; move(x: number, z: number): void; end(x: number, z: number): void; cancel(): void; alt?(x: number, z: number): void }
 let draw: DrawHandler | null = null
 /** workshop.tsx: what a drawing drag does. One handler; the last registered wins. */
 export function onBuildDraw(h: DrawHandler | null) { draw = h }
@@ -151,6 +152,8 @@ export function BuildPointer() {
     const el = gl.domElement
     const pts = new Map<number, { x: number; y: number; sx: number; sy: number }>()
     let moved = false, pinch0 = 0, drawing = false, mid: { x: number; y: number } | null = null
+    let press: ReturnType<typeof setTimeout> | null = null, pressed = false   // M53: a phone long-press = alt
+    const clearPress = () => { if (press) { clearTimeout(press); press = null } }
     const setNdc = (e: PointerEvent) => { const r = el.getBoundingClientRect(); ndc.current = { x: ((e.clientX - r.left) / r.width) * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1 } }
     // the ground under a pointer event NOW (the per-frame point lags a frame; a drag's ends must be exact)
     const groundAt = (e: PointerEvent) => {
@@ -164,6 +167,11 @@ export function BuildPointer() {
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY }); moved = false
       if (pts.size === 2) { const [p, q] = [...pts.values()]; pinch0 = Math.hypot(p.x - q.x, p.y - q.y); mid = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }; if (drawing) { drawing = false; draw?.cancel() } }
       else if (pts.size === 1 && drawsWith(e)) { const g = groundAt(e); if (g) { drawing = true; draw!.start(g.x, g.z) } }
+      clearPress(); pressed = false
+      if (pts.size === 1 && e.pointerType !== 'mouse' && tool !== 'look' && draw?.alt) {
+        const g0 = groundAt(e)
+        press = setTimeout(() => { press = null; if (moved || pts.size !== 1 || !g0) return; pressed = true; if (drawing) { drawing = false; draw?.cancel() } draw?.alt?.(g0.x, g0.z) }, 550)
+      }
       try { el.setPointerCapture(e.pointerId) } catch { /* old browsers */ }
     }
     const move = (e: PointerEvent) => {
@@ -172,7 +180,7 @@ export function BuildPointer() {
       if (!p) return
       const dx = e.clientX - p.x, dy = e.clientY - p.y
       p.x = e.clientX; p.y = e.clientY
-      if (Math.hypot(p.x - p.sx, p.y - p.sy) > 6) moved = true
+      if (Math.hypot(p.x - p.sx, p.y - p.sy) > 6) { moved = true; clearPress() }
       if (pts.size === 2) {
         const [a, c] = [...pts.values()], d = Math.hypot(a.x - c.x, a.y - c.y)
         if (pinch0 > 0 && d > 0) zoom(pinch0 / d); pinch0 = d
@@ -188,11 +196,13 @@ export function BuildPointer() {
       const p = pts.get(e.pointerId); pts.delete(e.pointerId)
       try { el.releasePointerCapture(e.pointerId) } catch { /* fine */ }
       if (pts.size < 2) mid = null
+      clearPress(); if (pressed) { pressed = false; return }   // the long-press already acted
       if (drawing) { drawing = false; const g = groundAt(e); if (g && e.type === 'pointerup') draw?.end(g.x, g.z); else draw?.cancel(); return }
       if (!p || moved || pts.size) return
       // a tap, not a drag: touch moves the ghost there; a mouse click places (the ghost is already under it)
       setNdc(e)
       if (e.pointerType === 'mouse' && e.button === 0) tap?.()
+      if (e.pointerType === 'mouse' && e.button === 2 && tool !== 'look' && draw?.alt) { const g = groundAt(e); if (g) draw.alt(g.x, g.z) }   // M53: right-click = all connected
     }
     const wheel = (e: WheelEvent) => { e.preventDefault(); zoom(Math.exp(e.deltaY * 0.0012)) }
     const menu = (e: Event) => e.preventDefault()   // a right drag pans; no menu
@@ -200,6 +210,7 @@ export function BuildPointer() {
     el.addEventListener('wheel', wheel, { passive: false }); el.addEventListener('contextmenu', menu)
     const ta = el.style.touchAction; el.style.touchAction = 'none'
     return () => {
+      clearPress()
       el.removeEventListener('pointerdown', down); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up)
       el.removeEventListener('wheel', wheel); el.removeEventListener('contextmenu', menu); el.style.touchAction = ta; ndc.current = null; point.has = false
       if (drawing) draw?.cancel()

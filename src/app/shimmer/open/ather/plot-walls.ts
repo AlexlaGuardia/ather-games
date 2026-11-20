@@ -245,6 +245,35 @@ export function paintWall(walls: Walls, k: string, colour: string): { walls: Wal
   const next: Record<string, Wall> = { ...walls }; for (const n of ks) next[n] = { ...next[n], tint: c }
   return { walls: next }
 }
+/** BETA M53 (Alex 11-20 "a paint all connected pieces button.. maybe the right click in the planning mode"): every piece JOINED to
+ *  `k` end to end (through corners, any direction) that takes paint, walking only through paintable pieces, so a run of
+ *  stucco stops where a wood or brick piece stands. */
+export function connectedPaintable(walls: Walls, k: string): string[] {
+  const w = walls[k]; if (!w || !paintable(w.mat)) return []
+  const byCorner = new Map<string, string[]>()
+  for (const n of Object.keys(walls)) if (paintable(walls[n].mat)) for (const [x, z] of edgeEnds(n)) { const c = `${x},${z}`; const l = byCorner.get(c); if (l) l.push(n); else byCorner.set(c, [n]) }
+  const seen = new Set([k]), todo = [k]
+  while (todo.length) { const n = todo.pop()!; for (const [x, z] of edgeEnds(n)) for (const m of byCorner.get(`${x},${z}`) ?? []) if (!seen.has(m)) { seen.add(m); todo.push(m) } }
+  return [...seen]
+}
+/** paint `k` and every paintable piece connected to it (M53). Free, like one piece. */
+export function paintConnected(walls: Walls, k: string, colour: string): { walls: Walls; n: number } | { why: string } {
+  const w = walls[k]; if (!w) return { why: 'Tap a wall to paint it.' }
+  if (!paintable(w.mat)) return { why: `${WALL_MATS[w.mat].name} keeps its own colour. Only stucco takes paint.` }
+  if (!isColour(colour)) return { why: 'That is not a colour.' }
+  const c = colour.toLowerCase(), ks = connectedPaintable(walls, k).filter(n => wallColour(walls[n]) !== c)
+  if (!ks.length) return { why: 'Already that colour.' }
+  const next: Record<string, Wall> = { ...walls }; for (const n of ks) next[n] = { ...next[n], tint: c }
+  return { walls: next, n: ks.length }
+}
+/** M53: the rooms joined to `room` across a shared wall (a house), itself first. */
+export function connectedRooms(rooms: PlotRoom[], room: PlotRoom): PlotRoom[] {
+  const cellOf = new Map<string, number>(); rooms.forEach((r, i) => { for (const [a, b] of r.cells) cellOf.set(`${a},${b}`, i) })
+  const start = rooms.findIndex(r => r.key === room.key); if (start < 0) return [room]
+  const seen = new Set([start]), todo = [start]
+  while (todo.length) { const i = todo.pop()!; for (const [a, b] of rooms[i].cells) for (const [di, dj] of STEPS) { const o = cellOf.get(`${a + di},${b + dj}`); if (o !== undefined && !seen.has(o)) { seen.add(o); todo.push(o) } } }
+  return [...seen].map(i => rooms[i])
+}
 /** FLOORS (slice 5): a pattern and a colour per cell, set a whole room at once, every pattern freely paintable. A pattern costs
  *  its base material per m² (wood patterns planks, stone patterns bricks); a colour is free. Unset cells = plain goldwood planks. */
 export const FLOOR_PATS = {
