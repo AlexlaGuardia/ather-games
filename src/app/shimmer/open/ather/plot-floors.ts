@@ -67,12 +67,12 @@ export function slabCells(lv: Level): [number, number][] {
   return findRooms(built).filter(r => paid[r.key]).flatMap(r => r.cells)
 }
 /** the walker's solids for levels above the ground: each wall (a door only its lintel) and a slab box per cell, its top at the floor */
-export function upperBoxes(w: Stacked, groundY: number): Box[] {
+export function upperBoxes(w: Stacked, groundY: number, shaft?: ReadonlySet<string>): Box[] {
   const out: Box[] = [], lv = levelsOf(w)
   for (let k = 1; k < lv.length; k++) {
     const base = groundY + levelBase(k)
     for (const [key, x] of Object.entries(lv[k].walls)) if (!x.draft) { const r: Rect = edgeRect(key); out.push({ ...r, y0: x.kind === 'door' ? base + DOOR_H : base - SLAB_T, y1: base + WALL_H }) }
-    for (const [i, j] of slabCells(lv[k])) out.push({ x0: i, x1: i + 1, z0: j, z1: j + 1, y0: base - SLAB_T, y1: base })
+    for (const [i, j] of slabCells(lv[k])) if (!shaft?.has(`${i},${j}`)) out.push({ x0: i, x1: i + 1, z0: j, z1: j + 1, y0: base - SLAB_T, y1: base })
   }
   return out
 }

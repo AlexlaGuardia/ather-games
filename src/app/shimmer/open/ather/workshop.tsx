@@ -35,6 +35,8 @@ import {
 } from './garden-bank'
 import { reconcile, paneFor, billOfAll, buildAll } from './plot-bom'
 import { getPlanLevel, setPlanLevel, usePlanLevel } from './plot-level'
+import { shaftKeys, liveLift, cellMid } from './lift'
+import { LiftMesh, LiftInput } from './lift-view'
 import { levelOf, withLevel, levelCount, levelBase, canStack, floating, upperBoxes, MAX_LEVELS, SLAB_T } from './plot-floors'
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, type Job } from './furniture'
 import { ROAST } from './cooking'
@@ -59,11 +61,12 @@ const subs = new Set<() => void>()
 const getW = (): Works => { if (!works) works = typeof window === 'undefined' ? SERVER : loadWorks(); return works }
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export function setWorks(w: Works) { works = w; saveWorks(w); subs.forEach(f => f()); settleWater(w.pieces) }
+liveLift.get = getW; liveLift.set = setWorks   // M48: the lift's runtime reads and writes the live works
 export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER)
 /** The live works (the page's village tick reads and writes through this store, so an open panel sees the product land). */
 export const currentWorks = () => getW()
 /** Every room's walls and every Keepstone, for the walker's plotShape. */
-export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox), ...pieceBoxes(w), ...wallBoxes(w.walls ?? {}, GROUND_Y), ...upperBoxes(w, GROUND_Y)]
+export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox), ...pieceBoxes(w), ...wallBoxes(w.walls ?? {}, GROUND_Y), ...upperBoxes(w, GROUND_Y, shaftKeys(w))]
 
 // ── M37 slice 1: YOUR OWN WALLS (plot-walls.ts; Alex 11-19 "like the sims ... walls a little thicker, like the rooms") ──
 // In plan mode, the Walls tool: drag along the metre grid, a ghost run shows (blue = it can stand, red = it cannot), let go
@@ -574,6 +577,7 @@ export function WorkshopScene({ pose, owned }: { pose: React.MutableRefObject<Po
       {w.rooms.map(r => (raised(r) ? <RoomMesh key={r.id} r={r} /> : <Scaffold key={r.id} r={r} />))}
       {allChests(w).map(c => <Keepstone key={c.id} c={c} pose={pose} />)}
       {w.pieces.map(pc => <PieceMesh key={pc.id} p={pc} />)}
+      {w.pieces.some(x => x.item === 'lift') && <LiftInput />}
       <MoglinsAtWork w={w} />
       <BlueprintPicked />
       <HouseLevels w={w} />
@@ -819,6 +823,7 @@ export function PieceBody({ item }: { item: string }) {
   }
 }
 function PieceMesh({ p }: { p: Piece }) {
+  if (p.item === 'lift') return <LiftMesh p={p} />
   return <group position={[p.x, GROUND_Y, p.z]} rotation-y={-p.q * Math.PI / 2}><PieceBody item={p.item} /></group>
 }
 /** The piece's ghost: the real piece, tinted, snapped to the quarter metre in front of the keeper. */
@@ -826,7 +831,7 @@ function PieceGhost({ pose, owned, item, q }: { pose: React.MutableRefObject<Pos
   const f = FURNITURE[item], g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
   useFrame(() => {
     ghostAt(pose.current, Math.max(f.w, f.d) / 2 + 1.2, 4)
-    g.current?.position.set(ghost.x, GROUND_Y, ghost.z)
+    g.current?.position.set(f.shaft ? cellMid(ghost.x) : ghost.x, GROUND_Y, f.shaft ? cellMid(ghost.z) : ghost.z)
     mat.current?.color.set(canPlacePiece(getW(), owned, item, ghost.x, ghost.z, q, getInv()).ok ? GHOST_OK : GHOST_BAD)
   })
   return (

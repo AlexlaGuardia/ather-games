@@ -1,7 +1,7 @@
 // The workshop rooms core (rooms.ts). Run: npx tsx src/app/shimmer/open/ather/rooms.test.ts
 import { craftAt, jobRuns, canPlacePiece, placePiece, pickUpPiece, turnPiece, pieceBoxes, pieceRect, ROOM_STORE_SLOTS, ROOM_ACCEPTS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, loadWorks, saveWorks, ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, payCost, shortOf, haveFor, pickUpChest, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, type Works } from './rooms'
 import { STARTING_SQUARES, squareAt, sqId, GATE, GREG, GROUND_Y } from './plot'
-import { REFINE, PIECE_JOBS, FURNITURE } from './furniture'
+import { REFINE, STONE_REFINE, PIECE_JOBS, FURNITURE } from './furniture'
 import { stockJobs } from './station-queue'
 import { freshBank, putIn, bankCount, bankTake } from './garden-bank'
 import { newInv, give, countOf, HOTBAR, SLOTS, ITEM_GROUP, OPEN_ITEMS, type Inv } from '../shared/inventory'
@@ -186,7 +186,8 @@ ok(!canPlaceChest(pc.works, owned, C.x + 1, C.z, 0, ks).ok, 'keepstone: set onto
   const mb = craftAt(w2, cid, bag3, benchJob)!
   ok(!!mb && countOf(mb.inv, 'goldwood_bench') === 1 && countOf(mb.inv, 'goldwood_plank') === 0 && roomStore(mb.works.rooms[0]).stacks.length === 0, 'carpentry: a recipe across store + bag went wrong')
   ok(craftAt(w2, cid, give(newInv(12), 'goldwood_plank', 2).inv, benchJob) === null, 'carpentry: made a bench from three planks')
-  ok(PIECE_JOBS.every(j => j.in.every(c => c.id in Object.fromEntries(REFINE.map(r => [r.out.id, 1])))), 'carpentry: a piece needs something the bench cannot refine')
+  ok(PIECE_JOBS.every(j => j.in.every(c => c.id in Object.fromEntries([...REFINE, ...STONE_REFINE].map(r => [r.out.id, 1])))), 'carpentry: a piece needs something no station refines')
+  ok(roomAccepts('carpentry', 'stone_brick') && roomAccepts('carpentry', 'goldwood_plank'), 'carpentry: the store keeps every input of a piece (the Lift needs Stone Brick)')
   ok(Object.values(FURNITURE).some(f => f.recipe.every(c => c.id.startsWith('goldwood'))), 'carpentry: no piece a new keeper (goldwood only) can make')
   // set it, turn it, pick it up
   const P2 = { x: -130, z: 100 }

@@ -40,6 +40,7 @@ import { currentFarm, setFarm, currentWater, setWater, farmNow } from './farm-ro
 import { BuildPointer, stepBuildCam, useBuildMode, useBuildKeys, isBuilding, exitBuild } from './build-mode'
 import { tick as villageTick, loadVillage, saveVillage } from './moglins'
 import { nearWork, type WorkNear } from './rooms'
+import { callNearest, withLifts } from './lift'
 import { ClusterScene } from './cluster-scene'
 import { cycleLook, LookChip } from './ground-look'
 import { GroundCover, coverFromUrl } from './ground-cover'
@@ -298,9 +299,9 @@ function AtherSliceGame() {
   const works = useWorks()   // the workshop rooms (workshop.tsx): their walls are solid
   const worksRef = useRef(works); worksRef.current = works
   usePlacingKeys(owned)
-  const plotWorld = useMemo(() => terrainWorld(cl.frame.linked
+  const plotWorld = useMemo(() => terrainWorld(withLifts(cl.frame.linked
     ? plotShape(owned, [...mistWalls(owned), ...mateWalls(cl.frame), ...workWalls(works)], (x, z) => clusterGround(cl.frame, x, z))
-    : plotShape(owned, [...mistWalls(owned), ...workWalls(works)])), [owned, cl.frame, works])
+    : plotShape(owned, [...mistWalls(owned), ...workWalls(works)]))), [owned, cl.frame, works])
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
   const fading = useRef(false)
@@ -1065,7 +1066,7 @@ function AtherSliceGame() {
       if (e.code === 'KeyE' && n) {
         if (n.kind === 'greg') setPanel({ kind: 'talk', step: 0 })
         else if (n.kind === 'fennel') setPanel({ kind: 'fennel', page: 0 })
-        else if (n.kind === 'work') { if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
+        else if (n.kind === 'work') { if (n.near.kind === 'piece' && currentWorks().pieces.some(x => x.id === (n.near as { id: string }).id && x.item === 'lift') && callNearest()) return; if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
         else if (n.kind === 'folk') setPanel({ kind: 'folk', s: n.s })
         else setPanel({ kind: 'map', view: errandToHold ? 'athernyx' : 'ather', travel: true })   // M32 trail: an errand keeper's map opens on Rune Hold
         return

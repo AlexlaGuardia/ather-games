@@ -12,6 +12,8 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { createLoco, tickLocomotion, eyeY, WALK_SPEED, SPEED_CAP, type LocoWorld } from '../shared/locomotion'
 import { tickFeet } from '../shared/sfx'
+import { liftCarry } from './lift'
+import { GROUND_Y } from './plot'
 import { touch, TOUCH_LOOK_SENS } from '../shared/touch'
 import { getSettings, useSettings, pixelRatioCap } from '../shared/settings'
 
@@ -106,6 +108,7 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
       mvX: wish.x, mvZ: wish.z, fwdX: fwd.x, fwdZ: fwd.z, rightX: right.x, rightZ: right.z,
       jumpKey: k.has('Space'), crouchKey: k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyC'), dt,
     }, world)
+    liftCarry(lc, dt, GROUND_Y)   // M48: the lift's cars move, the keeper on one rides
     if (lc.py < fallY) { onFall(); return }
     tickFeet(lc, dt)   // footsteps / jump / land: silent until the sound is voted yay
 

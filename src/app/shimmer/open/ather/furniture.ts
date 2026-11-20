@@ -49,6 +49,8 @@ export interface PieceDef {
   wood: 'goldwood' | 'shimmeroak' | 'starwillow' | 'dawnwood' | 'iron' | 'stone'
   /** it gives off light (drawn lit) */
   glow?: string
+  /** M48: a SHAFT piece claims its cell on every level of the house (the lift, lift.ts) */
+  shaft?: boolean
 }
 // Goldwood pieces first: goldwood is what a new keeper can prune (Forestry 1), so a first piece is never a locked door.
 export const FURNITURE: Readonly<Record<string, PieceDef>> = {
@@ -59,6 +61,9 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   shimmeroak_shelf: { name: 'Shimmeroak Shelf', blurb: 'Rippled grain that catches the light on every board.', recipe: [{ id: 'shimmeroak_plank', n: 4 }], w: 1.2, d: 0.4, h: 1.6, solid: true, wood: 'shimmeroak' },
   starwillow_arch: { name: 'Starwillow Arch', blurb: 'Bent branches, tips faintly lit. Walk under it on the way home.', recipe: [{ id: 'starwillow_branch', n: 6 }], w: 2.2, d: 0.5, h: 2.6, solid: false, wood: 'starwillow' },
   dawnwood_chair: { name: 'Dawnwood Chair', blurb: 'Ancient wood that holds warmth. Sit in it once and you will keep it.', recipe: [{ id: 'dawnwood_plank', n: 4 }], w: 0.6, d: 0.6, h: 1.0, solid: false, wood: 'dawnwood' },
+  // M48 (11-20): the lift. Canon RULED-AFK (athernyx 29b26fa): cord + counterweight, wood and stone, no metal, no runes. Planks and
+  //    Stone Brick (no cord item exists in the bag). Blurb = placeholder for @lark.
+  lift: { name: 'Lift', blurb: 'A wooden car on cords, a stone weight to balance it. Pull a cord and it carries you to that floor.', recipe: [{ id: 'goldwood_plank', n: 8 }, { id: 'stone_brick', n: 4 }], w: 1.0, d: 1.0, h: 2.0, solid: false, wood: 'goldwood', shaft: true },
   // ── UNIQUE pieces, Nyx-side (Alex 11-17: "unique pieces are SOLD FOR MARKS by the carpenter + other Nyx-side shops";
   //    Magii c52ba1c: which shops stock decor is ours, no new names). Made of the continent's canon goods (game/economy.md:
   //    Spine ore + stone, ruin salvage, station mana cells), so each says where it came from. Rune Hold's Smithy is the

@@ -16,9 +16,10 @@ import { squareAt, sqId, GATE, GREG_PLOT_ANCHOR as GREG, THRESHOLD, PATH_START, 
 import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, BAIT_FROM, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
-import { FURNITURE, MAX_PIECES, KEEPSTONES, keepstoneFor, type Job } from './furniture'
+import { FURNITURE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, keepstoneFor, type Job } from './furniture'
 import { adoptWork, adoptOut, stockJobs, type Work, type Station } from './station-queue'
 import { adoptUpper, type Level } from './plot-floors'
+import { cellMid, shaftBlocked } from './lift'
 import { adoptWalls, adoptRoof, adoptFloors, adoptPaid, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
 
 export type RoomKind = 'rinnshop' | 'farm' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
@@ -75,7 +76,7 @@ export interface Room {
  *  set inside: the basic one is a raw mana shard; found uniques set higher crystals, look only, never more space. */
 export interface Chest { id: string; x: number; z: number; q: number; placedAt: number; crystal?: string }
 /** A piece of furniture or decor standing on the plot (furniture.ts). Picked up, it is the bag item `item` again. */
-export interface Piece { id: string; item: string; x: number; z: number; q: number; placedAt: number }
+export interface Piece { id: string; item: string; x: number; z: number; q: number; placedAt: number; /** M48: a lift's car level (lift.ts); absent = the ground */ lv?: number }
 export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[] }
 /** M37: is this rectangle in a drawn wall (plot-walls.ts)? */
 const inDrawnWall = (w: Works, r: { x0: number; x1: number; z0: number; z1: number }, pad = 0) => wallRects(w.walls ?? {}).some(b => r.x0 - pad < b.x1 && r.x1 + pad > b.x0 && r.z0 - pad < b.z1 && r.z1 + pad > b.z0)
@@ -275,7 +276,7 @@ export const ROOM_KEEPS: Readonly<Record<RoomKind, string>> = {
 }
 /** A room always keeps every INPUT of the jobs it works (M43: a focus job draws from the store only; 11-20 the alchemy store
  *  refused goldwood bark + glowfin, so no keeper could brew a Shard Tonic or a Starlight Tincture). */
-export const roomAccepts = (kind: RoomKind, id: string) => ROOM_ACCEPTS[kind](id) || stockJobs(kind).some(j => j.in.some(c => c.id === id))
+export const roomAccepts = (kind: RoomKind, id: string) => ROOM_ACCEPTS[kind](id) || [...stockJobs(kind), ...(kind === 'carpentry' ? PIECE_JOBS : [])].some(j => j.in.some(c => c.id === id))   // M48: a piece may need a Stonery part (the Lift's Stone Brick)
 export const roomStore = (r: Room): Bank => ({ v: 1, stacks: r.store ?? [] })
 const setStore = (w: Works, id: string, b: Bank): Works => ({ ...w, rooms: w.rooms.map(r => (r.id === id ? { ...r, store: b.stacks } : r)) })
 /** M43: the station as the queue engine sees it, and writing one back to its room. */
@@ -383,6 +384,7 @@ export const pieceBoxes = (w: Works): Box[] => w.pieces.filter(p => FURNITURE[p.
 export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: string, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
   const f = FURNITURE[item]
   if (!f) return { ok: false, why: 'That is not furniture.' }
+  if (f.shaft) { x = cellMid(x); z = cellMid(z); if (shaftBlocked(works, x, z)) return { ok: false, why: 'A wall stands in that cell on one of the floors.' } }   // M48: a shaft takes the whole cell, every level
   if (works.pieces.length >= MAX_PIECES) return { ok: false, why: `${MAX_PIECES} pieces already stand. Pick one up to make room.` }
   const k = pieceRect(item, x, z, q)
   for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
@@ -407,6 +409,7 @@ export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: st
 }
 export function placePiece(works: Works, owned: ReadonlySet<string>, inv: Inv, item: string, x: number, z: number, q: number, now = Date.now()): { works: Works; inv: Inv; piece: Piece } | null {
   if (!canPlacePiece(works, owned, item, x, z, q, inv).ok) return null
+  if (FURNITURE[item].shaft) { x = cellMid(x); z = cellMid(z) }
   const out = take(inv, item, 1); if (!out) return null
   const piece: Piece = { id: `piece-${now.toString(36)}-${works.pieces.length}`, item, x, z, q: ((q % 4) + 4) % 4, placedAt: now }
   return { works: { ...works, pieces: [...works.pieces, piece] }, inv: out, piece }
