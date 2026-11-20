@@ -990,9 +990,22 @@ function TablePanel({ owned, onClose }: { owned: ReadonlySet<string>; onClose: (
 
 /** M47: the floor switcher in the plan bar: 1 / 2 / 3. Drawing goes onto the selected floor; floors above it hide. */
 function FloorSwitch() {
-  const lv = usePlanLevel(), w = useWorks()
+  const lv = usePlanLevel(), w = useWorks(), ref = useRef<HTMLDivElement>(null)
+  // centred on the left edge, unless a plan bar reaches over it (phone: the Paint bar runs past the middle): then just below that bar
+  const [below, setBelow] = useState<number | null>(null)
+  useEffect(() => {
+    const f = () => {
+      const el = ref.current; if (!el) return
+      const me = el.getBoundingClientRect(); let b = 0
+      document.querySelectorAll('[data-build-bar],[data-plan-bom]').forEach(e => { const r = e.getBoundingClientRect(); if (r.left < me.right + 8 && r.height > 0 && r.top < innerHeight / 2) b = Math.max(b, r.bottom) })
+      const mid = innerHeight / 2 - el.offsetHeight / 2
+      setBelow(b + 10 > mid ? Math.round(b + 10) : null)
+    }
+    f(); const t = setInterval(f, 300); addEventListener('resize', f)
+    return () => { clearInterval(t); removeEventListener('resize', f) }
+  }, [])
   return (
-    <div data-floor-switch style={{ position: 'fixed', left: 'calc(10px + env(safe-area-inset-left, 0px))', top: '50%', transform: 'translateY(-50%)', zIndex: 41, pointerEvents: 'auto', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', padding: '6px 6px', borderRadius: 12, background: 'rgba(255,250,235,.88)', boxShadow: '0 2px 8px rgba(0,0,0,.2)' }}>
+    <div ref={ref} data-floor-switch style={{ position: 'fixed', left: 'calc(10px + env(safe-area-inset-left, 0px))', top: below ?? '50%', transform: below == null ? 'translateY(-50%)' : 'none', zIndex: 41, pointerEvents: 'auto', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', padding: '6px 6px', borderRadius: 12, background: 'rgba(255,250,235,.88)', boxShadow: '0 2px 8px rgba(0,0,0,.2)' }}>
       <span style={{ font: '700 10px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>Floor</span>
       {Array.from({ length: MAX_LEVELS }, (_, k) => (
         <button key={k} type="button" data-floor={k} aria-pressed={lv === k} title={k < levelCount(w) ? `Floor ${k + 1}` : `Plan floor ${k + 1}`} onClick={() => setPlanLevel(k)}
