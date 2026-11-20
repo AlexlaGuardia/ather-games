@@ -1047,8 +1047,8 @@ function StorePanel({ r, pick, narrow, onClose }: { r: Room; pick: Pick; narrow:
   const inStore = (id: string) => store.stacks.reduce((a, s) => a + (s.id === id ? s.n : 0), 0)
   const rows = (() => {
     const m = new Map<string, number>()
-    if (src === 'pack') for (const s of inv.slots) if (s) m.set(s.id, (m.get(s.id) ?? 0) + s.n)
-    else for (const s of bank.stacks) m.set(s.id, (m.get(s.id) ?? 0) + s.n)
+    if (src === 'pack') { for (const s of inv.slots) if (s) m.set(s.id, (m.get(s.id) ?? 0) + s.n) }
+    else { for (const s of bank.stacks) m.set(s.id, (m.get(s.id) ?? 0) + s.n) }
     return [...m].filter(([id]) => roomAccepts(r.kind, id) || need.has(id)).sort((a, b) => (need.has(b[0]) ? 1 : 0) - (need.has(a[0]) ? 1 : 0) || itemDef(a[0]).name.localeCompare(itemDef(b[0]).name))
   })()
   const mv = (id: string, n: number) => {
