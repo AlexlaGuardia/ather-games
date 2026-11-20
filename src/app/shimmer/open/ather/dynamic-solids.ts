@@ -7,6 +7,7 @@ import type { Shape, Box } from '../terrain-world'
 import { gladeHomeBoxes } from './glade-home'
 import { gladeLotBoxes, jettyBoxes, gladeBlueprintVersion } from './glade-lots'
 import { GLADE, WATER_DROP } from './relief'
+import { settlementSolids } from './settlement-lots'
 // M40: the Glade's station blockouts + Greg's jetty, built once (the Glade's floor is one level, GLADE.y)
 let gladeParts: Box[] | null = null, gladeVer = -1
 const gladeSolids = (x0: number, z0: number, x1: number, z1: number) => {
@@ -32,7 +33,7 @@ export function withPieces(shape: Shape, get: () => Combat | null = () => live.c
   return {
     ground: shape.ground, water: shape.water,
     solids(x0, y0, z0, x1, y1, z1) {
-      const base = shape.solids(x0, y0, z0, x1, y1, z1), extra = [...pieceBoxes(get(), x0, z0, x1, z1), ...gladeHomeBoxes(shape.ground, x0, z0, x1, z1), ...gladeSolids(x0, z0, x1, z1)]
+      const base = shape.solids(x0, y0, z0, x1, y1, z1), extra = [...pieceBoxes(get(), x0, z0, x1, z1), ...gladeHomeBoxes(shape.ground, x0, z0, x1, z1), ...gladeSolids(x0, z0, x1, z1), ...settlementSolids(x0, z0, x1, z1)]
       return extra.length ? [...base, ...extra] : base
     },
   }
