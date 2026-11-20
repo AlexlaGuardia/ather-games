@@ -14,11 +14,11 @@ const loop = (x0: number, z0: number, x1: number, z1: number) => Object.fromEntr
 let walls: Walls = { ...loop(-130, 100, -124, 104), ...loop(-110, 90, -107, 93) }
 const d = toggleDoor(walls, 'h,-128,100'); if (d.ok) walls = d.walls
 ok(connectedPieces(walls, 'h,-128,100').length === 20 && connectedPieces(walls, 'v,-110,91').length === 12, 'a tap picks only the building it touches')
-const floors = { '-129,101': 'dawnwood' as const, '-109,91': 'shimmeroak' as const }
+const floors = { '-129,101': { pat: 'planks' as const, col: '#c27a5b' }, '-109,91': { pat: 'tile' as const, col: '#a79bbd' } }
 const bp = extractBlueprint(walls, floors, 'hip', 'v,-124,101', 'glade-hazel', "Hazel's yard", 5)!
 ok(bp.w === 6 && bp.d === 4 && Object.keys(bp.walls).length === 20, `the footprint is the building's box, re-based (${bp.w}x${bp.d})`)
 ok(!!bp.walls['h,2,0'] && bp.walls['h,2,0'].kind === 'door' && Object.keys(bp.walls).every(k => !k.includes('-')), 'pieces re-based to 0,0 keep their kind (the door)')
-ok(Object.keys(bp.floors).join() === '1,1' && bp.floors['1,1'] === 'dawnwood', "only this building's painted floor comes along")
+ok(Object.keys(bp.floors).join() === '1,1' && bp.floors['1,1'].col === '#c27a5b', "only this building's painted floor comes along")
 ok(houseProblems(bp).length === 0, `a fresh blueprint is valid (${houseProblems(bp)})`)
 const back = parseHouse(JSON.parse(JSON.stringify(bp)))
 ok(!!back && JSON.stringify(back.walls) === JSON.stringify(bp.walls) && back.roof === 'hip' && back.name === "Hazel's yard", 'it round-trips through JSON')

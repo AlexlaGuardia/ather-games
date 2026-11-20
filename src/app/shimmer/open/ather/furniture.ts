@@ -29,6 +29,7 @@ export const REFINE: readonly Job[] = [
  *  leaves; a raw mana shard is the common crystal. Same shape as REFINE, so the bench lists them the same way. */
 export const STONE_REFINE: readonly Job[] = [
   { id: 'stone-brick', label: 'Cut into bricks', in: [{ id: 'blankstone', n: 1 }], out: { id: 'stone_brick', n: 3 } },
+  { id: 'stucco', label: 'Mix stucco', in: [{ id: 'blankstone', n: 1 }], out: { id: 'stucco', n: 3 } },
   { id: 'crystal-pane', label: 'Cut a pane', in: [{ id: 'raw_mana_shard', n: 1 }], out: { id: 'crystal_pane', n: 2 } },
 ]
 

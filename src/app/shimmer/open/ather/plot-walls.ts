@@ -10,7 +10,7 @@
 // Cost (interim, until slice 4's crafted wall pieces): 1 plank of the wall's wood per metre, all of it back on erase.
 // PURE: no three, no react, no rooms.ts (rooms.ts imports THIS for its overlap checks).
 import type { Box } from '../terrain-world'
-import { countOf, take, give, type Inv } from '../shared/inventory'
+import { countOf, take, give, itemDef, type Inv } from '../shared/inventory'
 
 export const WALL_T = 0.3, WALL_H = 3.2   // = rooms.ts (a drawn wall and a room's wall are one family); rooms.test asserts it
 export const MAX_RUN = 24                  // the longest run one drag lays (metres)
@@ -19,13 +19,25 @@ export const WALL_MATS = {
   goldwood: { name: 'Goldwood', item: 'goldwood_plank', color: '#d2a157' },
   shimmeroak: { name: 'Shimmeroak', item: 'shimmeroak_plank', color: '#a79bbd' },
   dawnwood: { name: 'Dawnwood', item: 'dawnwood_plank', color: '#c27a5b' },
+  // M37 slice 5 (Alex 11-20): walls come in WOOD and BRICK, each a SET colour (the material's own, never painted), and STONE = a
+  // STUCCO that takes any colour. Brick is laid from Stone Brick, stucco from Stucco (both cut at the Stonery, furniture.ts).
+  brick: { name: 'Brick', item: 'stone_brick', color: '#a4573f' },
+  stucco: { name: 'Stucco', item: 'stucco', color: '#dcd3c2' },
 } as const
 export type WallMat = keyof typeof WALL_MATS
 export const WALL_MAT_ORDER = Object.keys(WALL_MATS) as WallMat[]
+export const WOOD_ORDER = ['goldwood', 'shimmeroak', 'dawnwood'] as const
+export const isWood = (m: WallMat) => (WOOD_ORDER as readonly string[]).includes(m)
+/** only stucco takes paint (a wood and a brick wall keep their own colour) */
+export const paintable = (m: WallMat) => m === 'stucco'
+export const SWATCHES = ['#dcd3c2', '#f2ece0', '#e9c9a0', '#d98c6a', '#b5543c', '#e3b94f', '#8fae7a', '#5f8a6e', '#7fa6c4', '#4c6b97', '#9b82b5', '#5b5560'] as const
+export const isColour = (c: unknown): c is string => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)
+/** the colour a wall piece shows: stucco its paint (cream until painted), everything else its material's own */
+export const wallColour = (w: Wall): string => (w.mat === 'stucco' && w.tint ? w.tint : WALL_MATS[w.mat].color)
 /** kind (slice 3): a plain wall, half of a 2 m DOOR (open from the floor to DOOR_H) or a WINDOW (a crystal pane SILL..WIN_TOP) */
 /** draft (M37 slice 4): a PLAN, not yet built: drawn for free, shown as a blueprint, not solid, spends nothing and refunds nothing.
  *  A piece with no `draft` is BUILT, so every wall saved before slice 4 stands as it did. */
-export interface Wall { mat: WallMat; kind?: 'door' | 'window'; draft?: true }
+export interface Wall { mat: WallMat; tint?: string; kind?: 'door' | 'window'; draft?: true }
 const keep = (w: Wall, over: Partial<Wall>): Wall => ({ ...w, ...over })
 export const DOOR_H = 2.2, SILL = 1.0, WIN_TOP = 2.2
 export type Walls = Readonly<Record<string, Wall>>
@@ -81,7 +93,7 @@ export function canLay(walls: Walls, keys: string[], mat: WallMat, held: (x: num
     for (const b of blocked.rects) if (r.x0 < b.r.x1 && r.x1 > b.r.x0 && r.z0 < b.r.z1 && r.z1 > b.r.z0) return { ok: false, why: b.why }
   }
   const item = WALL_MATS[mat].item
-  if (inv && countOf(inv, item) < add.length) return { ok: false, why: `${add.length} ${WALL_MATS[mat].name} Planks needed, ${countOf(inv, item)} in the bag.` }
+  if (inv && countOf(inv, item) < add.length) return { ok: false, why: `${add.length} ${itemDef(item).name} needed, ${countOf(inv, item)} in the bag.` }
   return { ok: true, add, cost: add.length }
 }
 /** lay the run: the new pieces stand, their planks leave the bag */
@@ -111,7 +123,7 @@ export function raze(walls: Walls, inv: Inv, keys: string[]): { walls: Walls; in
 export function adoptWalls(v: unknown): Walls {
   const out: Record<string, Wall> = {}
   if (v && typeof v === 'object') for (const [k, w] of Object.entries(v as Record<string, { mat?: string }>)) {
-    if (parseKey(k) && w && typeof w.mat === 'string' && w.mat in WALL_MATS) { const kd = (w as Wall).kind === 'door' || (w as Wall).kind === 'window' ? { kind: (w as Wall).kind } : {}; out[k] = { mat: w.mat as WallMat, ...kd, ...((w as Wall).draft === true ? { draft: true as const } : {}) } }
+    if (parseKey(k) && w && typeof w.mat === 'string' && w.mat in WALL_MATS) { const kd = (w as Wall).kind === 'door' || (w as Wall).kind === 'window' ? { kind: (w as Wall).kind } : {}; out[k] = { mat: w.mat as WallMat, ...(w.mat === 'stucco' && isColour((w as Wall).tint) ? { tint: (w as Wall).tint!.toLowerCase() } : {}), ...kd, ...((w as Wall).draft === true ? { draft: true as const } : {}) } }
   }
   return out
 }
@@ -200,7 +212,7 @@ export function pieceAt(walls: Walls, x: number, z: number, reach = 0.6): string
 /** the two pieces either side of `k` along its own line */
 const along = (k: string): [string, string] => { const e = parseKey(k)!; return e.o === 'h' ? [`h,${e.i + 1},${e.j}`, `h,${e.i - 1},${e.j}`] : [`v,${e.i},${e.j + 1}`, `v,${e.i},${e.j - 1}`] }
 /** a piece with its door / window cut back out (it keeps its wood and its draft) */
-const plain = (w: Wall): Wall => ({ mat: w.mat, ...(w.draft ? { draft: true as const } : {}) })
+const plain = (w: Wall): Wall => ({ mat: w.mat, ...(w.tint ? { tint: w.tint } : {}), ...(w.draft ? { draft: true as const } : {}) })
 export type Change = { ok: true; walls: Walls; said: string } | { ok: false; why: string }
 /** a door takes 2 m: the tapped piece and a plain neighbour on its line. Tapping a door fills both halves back in. */
 export function toggleDoor(walls: Walls, k: string): Change {
@@ -222,27 +234,59 @@ export function toggleWindow(walls: Walls, k: string): Change {
   if (w.kind === 'door') return { ok: false, why: 'That is a doorway.' }
   return { ok: true, walls: { ...walls, [k]: w.kind === 'window' ? plain(w) : keep(w, { kind: 'window' }) }, said: w.kind === 'window' ? 'Window filled in.' : 'A window.' }
 }
-/** repaint a wall piece in another wood: one plank of the new wood in, the old plank back (a door's two halves go together) */
-export function paintWall(walls: Walls, inv: Inv, k: string, mat: WallMat): { walls: Walls; inv: Inv } | { why: string } {
+/** PAINT a wall (slice 5): only STUCCO takes it, any colour, free (a door's two halves go together). Wood and brick keep their
+ *  own colour: the verdict says so. */
+export function paintWall(walls: Walls, k: string, colour: string): { walls: Walls } | { why: string } {
   const w = walls[k]; if (!w) return { why: 'Tap a wall to paint it.' }
-  const all = [k, ...(w.kind === 'door' ? along(k).filter(n => walls[n]?.kind === 'door').slice(0, 1) : [])].filter(n => walls[n].mat !== mat)
-  if (!all.length) return { why: `Already ${WALL_MATS[mat].name}.` }
-  const keys = all.filter(n => !walls[n].draft)   // a plan repaints free; only a built piece swaps planks
-  let bag: Inv | null = take(inv, WALL_MATS[mat].item, keys.length)
-  if (!bag) return { why: `${keys.length} ${WALL_MATS[mat].name} Plank${keys.length > 1 ? 's' : ''} needed.` }
-  const next: Record<string, Wall> = { ...walls }
-  for (const n of all) { if (!next[n].draft) { const g = give(bag, WALL_MATS[next[n].mat].item, 1); if (g.left) return { why: 'Your bag is full: no room for the old planks.' }; bag = g.inv } next[n] = { ...next[n], mat } }
-  return { walls: next, inv: bag }
+  if (!paintable(w.mat)) return { why: `${WALL_MATS[w.mat].name} keeps its own colour. Only stucco takes paint.` }
+  if (!isColour(colour)) return { why: 'That is not a colour.' }
+  const c = colour.toLowerCase(), ks = [k, ...(w.kind === 'door' ? along(k).filter(n => walls[n]?.kind === 'door' && walls[n].mat === 'stucco').slice(0, 1) : [])]
+  if (ks.every(n => wallColour(walls[n]) === c)) return { why: 'Already that colour.' }
+  const next: Record<string, Wall> = { ...walls }; for (const n of ks) next[n] = { ...next[n], tint: c }
+  return { walls: next }
 }
-/** floors (slice 3): painted per cell, a whole room at once; unpainted cells are Goldwood */
-export type Floors = Readonly<Record<string, WallMat>>
-export const floorOf = (floors: Floors | undefined, i: number, j: number): WallMat => floors?.[`${i},${j}`] ?? 'goldwood'
-export function paintFloor(floors: Floors | undefined, room: PlotRoom, mat: WallMat): Floors {
-  const next: Record<string, WallMat> = { ...(floors ?? {}) }; for (const [i, j] of room.cells) next[`${i},${j}`] = mat; return next
+/** FLOORS (slice 5): a pattern and a colour per cell, set a whole room at once, every pattern freely paintable. A pattern costs
+ *  its base material per m² (wood patterns planks, stone patterns bricks); a colour is free. Unset cells = plain goldwood planks. */
+export const FLOOR_PATS = {
+  planks: { name: 'Planks', item: 'goldwood_plank', color: '#d2a157' },
+  herringbone: { name: 'Herringbone', item: 'goldwood_plank', color: '#c08a4e' },
+  tile: { name: 'Tile', item: 'stone_brick', color: '#b9b2a6' },
+  flagstone: { name: 'Flagstone', item: 'stone_brick', color: '#8d8a84' },
+} as const
+export type FloorPat = keyof typeof FLOOR_PATS
+export const FLOOR_PAT_ORDER = Object.keys(FLOOR_PATS) as FloorPat[]
+export const FLOOR_PER_M2 = 1
+export interface Floor { pat: FloorPat; col: string }
+export type Floors = Readonly<Record<string, Floor>>
+export const DEFAULT_FLOOR: Floor = { pat: 'planks', col: FLOOR_PATS.planks.color }
+export const floorOf = (floors: Floors | undefined, i: number, j: number): Floor => floors?.[`${i},${j}`] ?? DEFAULT_FLOOR
+/** a room's floor as laid: its first cell's (a room is set whole) */
+export const roomFloor = (floors: Floors | undefined, room: PlotRoom): Floor => floorOf(floors, room.cells[0][0], room.cells[0][1])
+/** the room whose key ('i,j:n') names it: the floor a vanished room had is its first cell's */
+export const floorByKey = (floors: Floors | undefined, key: string): Floor => { const [c] = key.split(':'); const [i, j] = c.split(',').map(Number); return floorOf(floors, i, j) }
+export function paintFloor(floors: Floors | undefined, room: PlotRoom, pat: FloorPat, col: string): Floors {
+  const next: Record<string, Floor> = { ...(floors ?? {}) }; for (const [i, j] of room.cells) next[`${i},${j}`] = { pat, col }; return next
+}
+/** set a room's floor. A BUILT room whose base material changes swaps it: the new pattern's m² in, the old m² back (the bag
+ *  only; the plan pays in the list). A plan, or a colour-only change, is free. */
+export function setFloor(floors: Floors | undefined, room: PlotRoom, pat: FloorPat, col: string, built: boolean, inv: Inv): { floors: Floors; inv: Inv } | { why: string } {
+  if (!isColour(col)) return { why: 'That is not a colour.' }
+  const was = roomFloor(floors, room), n = room.cells.length * FLOOR_PER_M2, a = FLOOR_PATS[was.pat].item, b = FLOOR_PATS[pat].item
+  let bag = inv
+  if (built && a !== b) {
+    const t = take(inv, b, n); if (!t) return { why: `${n} ${itemDef(b).name} needed for that floor, ${countOf(inv, b)} in the bag.` }
+    const g = give(t, a, n); if (g.left) return { why: 'Your bag is full: no room for the old floor.' }
+    bag = g.inv
+  }
+  return { floors: paintFloor(floors, room, pat, col.toLowerCase()), inv: bag }
 }
 export function adoptFloors(v: unknown): Floors {
-  const out: Record<string, WallMat> = {}
-  if (v && typeof v === 'object') for (const [k, m] of Object.entries(v as Record<string, unknown>)) if (/^-?\d+,-?\d+$/.test(k) && typeof m === 'string' && m in WALL_MATS) out[k] = m as WallMat
+  const out: Record<string, Floor> = {}
+  if (v && typeof v === 'object') for (const [k, m] of Object.entries(v as Record<string, unknown>)) {
+    if (!/^-?\d+,-?\d+$/.test(k)) continue
+    if (typeof m === 'string' && m in WALL_MATS) out[k] = { pat: 'planks', col: WALL_MATS[m as WallMat].color }   // slice 3 saved a wood per cell: it stays that wood, as planks
+    else if (m && typeof m === 'object') { const f = m as { pat?: unknown; col?: unknown }; if (typeof f.pat === 'string' && f.pat in FLOOR_PATS && isColour(f.col)) out[k] = { pat: f.pat as FloorPat, col: f.col.toLowerCase() } }
+  }
   return out
 }
 /** the room a ground point stands in (null outside every room) */

@@ -3,7 +3,7 @@
 // planks per metre by wood, a pane per window, floor planks + roof bricks per room m²; Build needs every line (bag + bank),
 // spends exactly it and stands the walls; erasing a built piece refunds, a draft refunds nothing; a save from before slice 4
 // (no draft, no paid) loads as BUILT and its rooms count as paid; the Stonery's jobs make the new parts from existing items.
-import { planRun, runKeys, raze, wallBoxes, adoptWalls, adoptPaid, findRooms, toggleWindow, toggleDoor, paintWall, type Walls } from './plot-walls'
+import { planRun, runKeys, raze, wallBoxes, adoptWalls, adoptPaid, findRooms, toggleWindow, toggleDoor, paintWall, paintFloor, type Walls } from './plot-walls'
 import { billOf, buildPlan, planNeeds, reconcile, paneFor, STONE_BRICK, CRYSTAL_PANE, AMOUNTS } from './plot-bom'
 import { STONE_REFINE, REFINE } from './furniture'
 import { newInv, give, countOf, itemDef } from '../shared/inventory'
@@ -61,7 +61,19 @@ ok(wallBoxes(plan, 0).length === 0, 'a draft wall is not solid to the walker')
     const back = toggleWindow(w.walls, 'h,0,0'); if (back.ok) { const g = paneFor(w.walls, back.walls, 'h,0,0', newInv(0), null); ok(!('why' in g) && countOf(g.inv, CRYSTAL_PANE) === 1, 'filling the window in returns the pane') }
     const z = raze(w.walls, newInv(0), ['h,0,0']); ok(countOf(z.inv, CRYSTAL_PANE) === 1 && countOf(z.inv, 'goldwood_plank') === 1, 'erasing a built window returns plank and pane') } else ok(false, 'toggleWindow') }
 // paint: a plan repaints free
-{ const p = paintWall(plan, newInv(0), 'h,1,0', 'dawnwood'); ok('walls' in p && p.walls['h,1,0'].mat === 'dawnwood' && p.walls['h,1,0'].draft === true, 'a plan repaints free and stays a plan') }
+{ const st = planRun({}, ['h,0,0'], 'stucco'), p = paintWall(st, 'h,0,0', '#336699'); ok('walls' in p && p.walls['h,0,0'].tint === '#336699' && p.walls['h,0,0'].draft === true, 'a planned stucco wall paints free and stays a plan') }
+// slice 5: brick / stucco walls and floor patterns on the list
+{ let m: Walls = {}; for (const [a, b] of [[{ i: 0, j: 0 }, { i: 4, j: 0 }]]) m = planRun(m, runKeys(a, b), 'brick')
+  ok(need(planNeeds(m, {}).needs, STONE_BRICK) === 4, 'a 4 m brick wall costs 4 Stone Brick')
+  const s2 = planRun({}, runKeys({ i: 0, j: 0 }, { i: 3, j: 0 }), 'stucco'); ok(need(planNeeds(s2, {}).needs, 'stucco') === 3, 'a 3 m stucco wall costs 3 Stucco')
+  const bx = box(3, 2), room = findRooms(bx)[0], tile = paintFloor(undefined, room, 'tile', '#999999')
+  const a = planNeeds(bx, {}, tile).needs, b = planNeeds(bx, {}).needs
+  ok(need(a, 'goldwood_plank') === 10 && need(a, STONE_BRICK) === 12, 'a 6 m² tile floor swaps its 6 planks for 6 bricks (+ roof 6)')
+  ok(need(b, 'goldwood_plank') === 16 && need(b, STONE_BRICK) === 6, 'no floor set = planks, as before')
+  const hb = planNeeds(bx, {}, paintFloor(undefined, room, 'herringbone', '#aa8844')).needs; ok(need(hb, 'goldwood_plank') === 16, 'herringbone is a wood pattern: planks')
+  const fl = paintFloor(undefined, room, 'flagstone', '#777777'), inv = give(newInv(0), 'stone_brick', 40).inv
+  const built = buildPlan(bx, {}, give(inv, 'goldwood_plank', 10).inv, null, fl); ok(built.ok, 'builds with the pattern\'s materials')
+  if (built.ok) { const rc = reconcile({}, built.paid, built.inv, fl); ok(countOf(rc.inv, STONE_BRICK) - countOf(built.inv, STONE_BRICK) === 12, 'a broken flagstone room refunds its stone floor and roof') } }
 // GRANDFATHER: a pre-slice-4 save loads built, its room paid, nothing on the list
 { const old = JSON.parse(JSON.stringify({ 'h,0,0': { mat: 'goldwood' }, 'h,1,0': { mat: 'goldwood' }, 'h,0,1': { mat: 'goldwood' }, 'h,1,1': { mat: 'goldwood' }, 'v,0,0': { mat: 'goldwood' }, 'v,2,0': { mat: 'goldwood' } }))
   const ws = adoptWalls(old), paid = adoptPaid(undefined, ws)
@@ -75,6 +87,7 @@ for (const j of STONE_REFINE) {
   ok(j.in.every(c => itemDef(c.id).name !== c.id && itemDef(c.id).name.length > 0) && itemDef(j.out.id).name !== j.out.id, `Stonery job ${j.id}: input and output are real items`)
   ok(!REFINE.some(r => r.id === j.id), `Stonery job ${j.id} does not shadow a Carpentry job`)
 }
+ok(STONE_REFINE.some(j => j.out.id === 'stucco' && j.in[0].id === 'blankstone') && itemDef('stucco').name === 'Stucco', 'the Stonery mixes Stucco from blankstone')
 ok(itemDef(STONE_BRICK).name === 'Stone Brick' && itemDef(CRYSTAL_PANE).name === 'Crystal Pane', 'plain names, no proper names')
 console.log(`plot-bom: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  ✗ ' + f)

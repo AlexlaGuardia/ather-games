@@ -97,7 +97,8 @@ Object.assign(OPEN_ITEMS, PROSPECTING)
 //    blankstone and a raw mana shard (ather/furniture.ts STONE_REFINE), spent by a house plan (ather/plot-bom.ts). Plain words.
 OPEN_ITEMS.stone_brick = { name: 'Stone Brick', blurb: 'A blankstone, cut square. Houses are laid from them.', icon: '', stack: 99, kind: 'material' }
 OPEN_ITEMS.crystal_pane = { name: 'Crystal Pane', blurb: 'A shard of crystal cut flat and clear, for a window.', icon: '', stack: 99, kind: 'material' }
-ITEM_GROUP.stone_brick = 'prospecting'; ITEM_GROUP.crystal_pane = 'prospecting'
+OPEN_ITEMS.stucco = { name: 'Stucco', blurb: 'Blankstone ground and mixed to a plaster. Walls are rendered with it, and it takes any colour.', icon: '', stack: 99, kind: 'material' }
+ITEM_GROUP.stone_brick = 'prospecting'; ITEM_GROUP.crystal_pane = 'prospecting'; ITEM_GROUP.stucco = 'prospecting'
 // ── Rinning on the waking continent (continent/rinning-nyx.ts): canon's mortal rinn (world/rinn.md), bag rows made from
 //    the catch table so a name or a line lives in one place. Clickclaw is already a row (the Ather's): one row, two shores.
 //    Icons: tools/art/nyx_rinn_icons.py.

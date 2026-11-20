@@ -4,9 +4,9 @@
 // back; standing pieces are free to re-draw; ground you do not hold, the keep-clear rings and a room refuse; a saved plot
 // round-trips; the walker cannot cross a drawn wall.
 import {
-  snapCorner, straighten, runKeys, edgeRect, edgeEnds, wallBoxes, canLay, lay, raze, adoptWalls, WALL_T, WALL_H, MAX_RUN, WALL_MATS, type Walls,
+  snapCorner, straighten, runKeys, edgeRect, edgeEnds, wallBoxes, canLay, lay, raze, adoptWalls, WALL_T, WALL_H, MAX_RUN, WALL_MATS, WOOD_ORDER, type Walls,
   findRooms, roofMesh, adoptRoof, ROOF_PITCH,
-  pieceAt, toggleDoor, toggleWindow, paintWall, paintFloor, floorOf, adoptFloors, roomAt, DOOR_H,
+  pieceAt, toggleDoor, toggleWindow, paintWall, paintFloor, setFloor, floorOf, adoptFloors, roomAt, DOOR_H,
 } from './plot-walls'
 import { WALL_T as ROOM_T, WALL_H as ROOM_H } from './rooms'
 import { newInv, give, countOf } from '../shared/inventory'
@@ -42,7 +42,7 @@ let walls: Walls = {}
 { const v = canLay(walls, runKeys({ i: 0, j: 0 }, { i: 4, j: 0 }), 'goldwood', held, none, inv)
   ok(!v.ok, 'a run that is already up says so') }
 { const v = canLay(walls, runKeys({ i: 0, j: 1 }, { i: 0, j: 8 }), 'goldwood', held, none, inv)
-  ok(!v.ok && /Planks needed/.test(v.why), 'short of planks, it says how many') }
+  ok(!v.ok && /Planks? needed/.test(v.why), 'short of planks, it says how many') }
 { const v = canLay(walls, runKeys({ i: 0, j: 1 }, { i: 0, j: 3 }), 'dawnwood', held, none, inv)
   ok(!v.ok && /Dawnwood/.test(v.why), 'each wood pays in its own planks') }
 { const v = canLay(walls, runKeys({ i: 19, j: 0 }, { i: 23, j: 0 }), 'goldwood', held, none, inv)
@@ -59,7 +59,7 @@ let walls: Walls = {}
   const back = adoptWalls(saved)
   ok(Object.keys(back).length === 4 && !back['x,1,1'] && !back['h,9,9'], 'a saved plot round-trips; junk keys and unknown woods are dropped')
   ok(adoptWalls(undefined) && Object.keys(adoptWalls(null)).length === 0, 'an older save (no walls) loads as none') }
-ok(Object.values(WALL_MATS).every(m => /_plank$/.test(m.item)), 'every wall wood pays in planks (Co. iron is trim, never a wall: canon e0ecc99)')
+ok(Object.values(WALL_MATS).filter(m => m.item.endsWith('_plank') || ['stone_brick', 'stucco'].includes(m.item)).length === 5 && WOOD_ORDER.every(w => /_plank$/.test(WALL_MATS[w].item)), 'every wall wood pays in planks, brick in Stone Brick, stucco in Stucco (Co. iron is trim, never a wall: canon e0ecc99)')
 
 { // the walker: flat ground, a wall along x at z=0 from x=-3..3; walking +z from z=-2 stops short of it
   const W: Walls = Object.fromEntries(runKeys({ i: -3, j: 0 }, { i: 3, j: 0 }).map(k => [k, { mat: 'goldwood' as const }]))
@@ -114,14 +114,24 @@ ok(adoptRoof('hip') === 'hip' && adoptRoof('dome') === 'gable' && adoptRoof(unde
   ok(!toggleDoor({ 'h,0,0': { mat: 'goldwood' } }, 'h,0,0').ok, 'a lone metre of wall is too short for a door')
   const wi = toggleWindow(w0, 'v,0,1'); ok(wi.ok && wi.walls['v,0,1'].kind === 'window' && findRooms(wi.walls).length === 1, 'a window is one metre; the room still stands')
   if (wi.ok) ok(wallBoxes(wi.walls, 0).every(x => x.y0 === -0.5), 'a window is solid to the walker')
-  let inv2 = give(newInv(0), 'dawnwood_plank', 3).inv
-  const pw = paintWall(w0, inv2, 'h,1,0', 'dawnwood')
-  ok('walls' in pw && pw.walls['h,1,0'].mat === 'dawnwood' && countOf(pw.inv, 'dawnwood_plank') === 2 && countOf(pw.inv, 'goldwood_plank') === 1, 'painting a piece takes a plank of the new wood and gives the old one back')
-  ok('why' in paintWall(w0, newInv(0), 'h,1,0', 'shimmeroak'), 'no planks of that wood, no paint')
-  const room = findRooms(w0)[0], fl = paintFloor(undefined, room, 'shimmeroak')
-  ok(Object.keys(fl).length === 12 && floorOf(fl, 2, 1) === 'shimmeroak' && floorOf(fl, 9, 9) === 'goldwood', 'painting a floor paints the whole room; unpainted is Goldwood')
+  // slice 5: paint is stucco-only and free; floors take a pattern + colour
+  const wst: Walls = { ...w0, 'h,1,0': { mat: 'stucco' }, 'h,2,0': { mat: 'brick' } }
+  const pw = paintWall(wst, 'h,1,0', '#4c6b97')
+  ok('walls' in pw && pw.walls['h,1,0'].tint === '#4c6b97' && pw.walls['h,1,0'].mat === 'stucco', 'a stucco wall takes any colour')
+  ok('why' in paintWall(wst, 'h,2,0', '#ff0000') && 'why' in paintWall(wst, 'h,0,0', '#ff0000'), 'brick and wood walls refuse paint')
+  ok('why' in paintWall(wst, 'h,1,0', 'red'), 'a non-colour is refused')
+  const room = findRooms(w0)[0], fl = paintFloor(undefined, room, 'herringbone', '#336699')
+  ok(Object.keys(fl).length === 12 && floorOf(fl, 2, 1).pat === 'herringbone' && floorOf(fl, 2, 1).col === '#336699' && floorOf(fl, 9, 9).pat === 'planks', 'painting a floor sets the whole room; unset is plain planks')
+  const sf = setFloor(undefined, room, 'tile', '#aaaaaa', true, give(newInv(0), 'stone_brick', 12).inv)
+  ok('floors' in sf && countOf(sf.inv, 'stone_brick') === 0 && countOf(sf.inv, 'goldwood_plank') === 12, 'a built room changing wood to stone swaps 12 planks for 12 bricks')
+  ok('why' in setFloor(undefined, room, 'tile', '#aaaaaa', true, newInv(0)), 'no bricks, no tile floor')
+  const sp = setFloor(undefined, room, 'tile', '#aaaaaa', false, newInv(0)); ok('floors' in sp, 'a plan changes its floor free')
+  const sc = setFloor(fl, room, 'herringbone', '#abcdef', true, newInv(0)); ok('floors' in sc && floorOf(sc.floors, 2, 1).col === '#abcdef', 'a colour-only change on a built floor is free')
   ok(roomAt(findRooms(w0), 2.5, 1.5)?.key === room.key && roomAt(findRooms(w0), 9, 9) === null, 'a tap inside a room finds it')
-  ok(Object.keys(adoptFloors({ '1,2': 'dawnwood', '3,x': 'goldwood', '4,4': 'iron' })).length === 1, 'saved floors round-trip; junk dropped')
+  { const af = adoptFloors({ '1,2': 'dawnwood', '3,x': 'goldwood', '4,4': 'iron', '5,5': { pat: 'tile', col: '#ABCDEF' }, '6,6': { pat: 'lava', col: '#fff000' } })
+    ok(Object.keys(af).join() === '1,2,5,5' && af['1,2'].pat === 'planks' && af['1,2'].col === WALL_MATS.dawnwood.color && af['5,5'].col === '#abcdef', 'saved floors round-trip; an old wood floor stays that wood as planks; junk dropped') }
+  { const ow = adoptWalls({ 'h,0,0': { mat: 'stucco', tint: '#112233' }, 'h,1,0': { mat: 'goldwood', tint: '#112233' }, 'h,2,0': { mat: 'brick' } })
+    ok(ow['h,0,0'].tint === '#112233' && !ow['h,1,0'].tint && ow['h,2,0'].mat === 'brick', 'a saved stucco keeps its paint; wood and brick drop any tint; brick loads') }
   ok(adoptWalls({ 'h,1,1': { mat: 'goldwood', kind: 'door' }, 'h,2,2': { mat: 'goldwood', kind: 'gate' } })['h,1,1'].kind === 'door' && !adoptWalls({ 'h,2,2': { mat: 'goldwood', kind: 'gate' } })['h,2,2'].kind, 'a saved door/window keeps its kind; an unknown kind is a plain wall') }
 
 console.log(`plot-walls: ${pass} pass, ${fails.length} fail`)

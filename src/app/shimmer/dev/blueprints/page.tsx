@@ -14,7 +14,7 @@ import * as THREE from 'three'
 import { Rig } from '../shelf-rig'
 import { DrawnWalls, WallRun } from '../../open/ather/workshop'
 import {
-  runKeys, snapCorner, pieceAt, roomAt, findRooms, toggleDoor, toggleWindow, paintFloor, edgeEnds,
+  runKeys, snapCorner, pieceAt, roomAt, findRooms, toggleDoor, toggleWindow, paintFloor, paintWall, edgeEnds,
   WALL_MATS, WALL_MAT_ORDER, ROOF_STYLES, WALL_H, LOW_WALL, type Walls, type Floors, type WallMat, type RoofStyle, type Corner,
 } from '../../open/ather/plot-walls'
 import { houseProblems, parseHouse, type HouseBlueprint } from '../../open/ather/plot-blueprint'
@@ -80,8 +80,8 @@ export default function SettlementWorktable() {
     const t = tapAt.current; tapAt.current = null; if (!t || Math.hypot(x - t.x, z - t.z) > 1.2) return
     const k = pieceAt(walls, x, z)
     if (tool === 'paint') {
-      if (k) { setWalls(w => ({ ...w, [k]: { ...w[k], mat } })); return }
-      const room = roomAt(findRooms(walls), x, z); if (room) setFloors(f => paintFloor(f, room, mat)); else setMsg('Tap a wall, or the floor of a closed room.')
+      if (k) { const r = paintWall(walls, k, WALL_MATS[mat].color); if ('why' in r) setMsg(r.why); else setWalls(r.walls); return }   // stucco only; the picked material's colour is the paint
+      const room = roomAt(findRooms(walls), x, z); if (room) setFloors(f => paintFloor(f, room, 'planks', WALL_MATS[mat].color)); else setMsg('Tap a wall, or the floor of a closed room.')
       return
     }
     if (!k) { setMsg('Tap a wall.'); return }
