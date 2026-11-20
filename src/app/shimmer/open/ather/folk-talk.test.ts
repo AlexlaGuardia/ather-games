@@ -1,6 +1,7 @@
 // folk-talk.ts: a settlement Moglin's conversation is one screen per answer, lark's lines only, game logic via the acts.
 import { folkTalk, folkStart, ASK, FOLK_NO_ROOM, FOLK_EMPTY, giveLabel, goodsText, type FolkTalkState } from './folk-talk'
 import { helloFor, _resetHeard } from './folk-talk'
+import type { Folk } from './settlement-folk'
 import { GLADE_STATION_LINES } from './moonwell-glade'
 import { folkOf, freshTrust, bring, stillHome } from './settlement-folk'
 import { talkLine, DREAMS } from './folk-lines'
