@@ -19,8 +19,9 @@ export interface FpInput {
   hidden: boolean      // a panel owns the screen, or the gun is out (it draws its own)
   castAt: number       // ms of the last paid cast; -Infinity for never
   working: boolean     // a node is being worked (prune / prospect): the right hand chops
+  holding?: boolean    // M45: a hotbar item is out (the item stance): the right mitt turns to present it
 }
-export interface FpState { phase: number; run: number; air: number; low: number; wasAir: boolean; landAt: number; chop: number; R: HandPose; L: HandPose }
+export interface FpState { phase: number; run: number; air: number; low: number; wasAir: boolean; landAt: number; chop: number; hold: number; R: HandPose; L: HandPose }
 
 /** The tunable numbers (the /shimmer/dev/hands tuner writes these; the defaults are what ships). Metres / radians. */
 export interface FpTune {
@@ -28,6 +29,8 @@ export interface FpTune {
   DROP_Y: number; SWING_Z: number; STRIDE_M: number
   JUMP_Y_R: number; JUMP_Y_L: number; JUMP_SPREAD: number; JUMP_PITCH: number
   CAST_X: number; CAST_Y: number; CAST_PITCH: number
+  HOLD_X: number; HOLD_Y: number; HOLD_Z: number; HOLD_PITCH: number; HOLD_ROLL: number
+  ITEM_UP: number; ITEM_FWD: number; ITEM_SIZE: number; ITEM_TILT: number; ITEM_SPIN: number; ITEM_BOB: number
 }
 // ★ ALEX'S TUNE (11-17, from /shimmer/dev/hands "Copy values"): these ARE the shipped hands. Change them in the tuner, not here.
 export const FP_DEFAULTS: Readonly<FpTune> = {
@@ -41,6 +44,15 @@ export const FP_DEFAULTS: Readonly<FpTune> = {
   STRIDE_M: 5,             // metres per full stride (two steps): each hand drops once per stride
   JUMP_Y_R: 0.355, JUMP_Y_L: 0.17, JUMP_SPREAD: 0.13, JUMP_PITCH: 0.24,
   CAST_X: 0.345, CAST_Y: -0.12, CAST_PITCH: 0.68,
+  // M45 (Alex 11-20: the voxel world's presented palm, "we want the mitt to turn" — tuned in /shimmer/dev/hands, Hold):
+  // the right mitt's pose while a hotbar item is out (absolute, like rest), and the item floating over it (held-item.tsx)
+  HOLD_X: 0.25, HOLD_Y: -0.33, HOLD_Z: -0.56, HOLD_PITCH: -1.4, HOLD_ROLL: 0.63,
+  ITEM_UP: 0.075,          // metres above the mitt, in camera space (up the screen)
+  ITEM_FWD: 0,             // metres toward (+) / away (-) from the eye
+  ITEM_SIZE: 1,            // x the mini's own size
+  ITEM_TILT: 0.35,         // tipped toward the eye so its top reads
+  ITEM_SPIN: 0.9,          // radians a second about screen-up (the voxel rig's turn)
+  ITEM_BOB: 0.006,         // metres of slow bob
 }
 /** LIVE numbers: the defaults, overwritten by this browser's tune (loadFpTune). Read every frame, so a slider moves the hands. */
 export const FP = {
@@ -70,7 +82,9 @@ export function resetFpTune(): void { try { localStorage.removeItem(FP_TUNE_KEY)
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 const approach = (cur: number, to: number, rate: number, dt: number) => cur + (to - cur) * (1 - Math.exp(-rate * dt))
 const rest = (side: 1 | -1): HandPose => ({ x: side * FP.X, y: FP.REST_Y, z: FP.Z, pitch: FP.PITCH, roll: side * FP.ROLL })
-export const newFpState = (): FpState => ({ phase: 0, run: 0, air: 0, low: 0, wasAir: false, landAt: -Infinity, chop: 0, R: rest(1), L: rest(-1) })
+export const newFpState = (): FpState => ({ phase: 0, run: 0, air: 0, low: 0, wasAir: false, landAt: -Infinity, chop: 0, hold: 0, R: rest(1), L: rest(-1) })
+/** How far the right mitt has turned to present (0..1), written each step by the rig; the held item grows in with it. */
+export const fpLive = { hold: 0 }
 
 /** Advance the state by dt seconds and return the two hands (R = right/glove, L = left/bracelet). */
 export function stepFpHands(s: FpState, i: FpInput, dt: number): { R: HandPose; L: HandPose } {
@@ -82,11 +96,14 @@ export function stepFpHands(s: FpState, i: FpInput, dt: number): { R: HandPose; 
   if (s.wasAir && !i.airborne) s.landAt = i.now
   s.wasAir = i.airborne
   if (i.working) s.chop += FP.CHOP_HZ * dt; else s.chop = 0
+  s.hold = approach(s.hold, i.holding ? 1 : 0, 9, dt)
 
   const sw = Math.sin(s.phase)
   // alternating: the right hand rises while the left sinks, then the other way; up also means a little forward
   // a full sine each, opposite: one drops out of view exactly as the other comes back (no kink at a half-wave)
-  const downR = (1 - sw) / 2 * s.run, downL = (1 + sw) / 2 * s.run
+  const hold = s.hold
+  // holding: the right hand mostly stays up on a run (the thing in it stays in view); the left still swings
+  const downR = (1 - sw) / 2 * s.run * (1 - 0.75 * hold), downL = (1 + sw) / 2 * s.run
   const landU = (i.now - s.landAt) / FP.LAND_MS
   const dip = landU >= 0 && landU < 1 ? -Math.sin(landU * Math.PI) * FP.LAND_DIP : 0
   const castU = (i.now - i.castAt) / FP.CAST_MS
@@ -100,6 +117,10 @@ export function stepFpHands(s: FpState, i: FpInput, dt: number): { R: HandPose; 
     z: FP.Z - (1 - downR) * s.run * FP.SWING_Z,
     pitch: FP.PITCH + s.air * FP.JUMP_PITCH + cast * FP.CAST_PITCH - chop * FP.CHOP_PITCH,
     roll: FP.ROLL - s.air * 0.35 - cast * 0.8,   // a jump or a cast turns the glove upright toward the aim
+  }
+  if (hold > 0) {   // presenting: the rest numbers give way to the Hold numbers (run / jump / cast / chop stay on top)
+    tR.x += hold * (FP.HOLD_X - FP.X); tR.y += hold * (FP.HOLD_Y - FP.REST_Y); tR.z += hold * (FP.HOLD_Z - FP.Z)
+    tR.pitch += hold * (FP.HOLD_PITCH - FP.PITCH); tR.roll += hold * (FP.HOLD_ROLL - FP.ROLL)
   }
   const tL: HandPose = {
     x: -FP.X - s.air * FP.JUMP_SPREAD,

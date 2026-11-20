@@ -19,10 +19,11 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { OpenHands, type OpenHandsApi } from '../../open/shared/open-hands'
 import { FP, FP_DEFAULTS, setFpTune, resetFpTune, loadFpTune, type FpTune, type FpInput } from '../../open/shared/fp-hands-pose'
 import { EYE_STAND } from '../../open/shared/locomotion'
+import { HeldItem } from '../../open/ather/held-item'
 
-type Preview = 'rest' | 'run' | 'jump' | 'cast' | 'hidden'
+type Preview = 'rest' | 'run' | 'jump' | 'cast' | 'hold' | 'hidden'
 const PREVIEWS: { id: Preview; label: string }[] = [
-  { id: 'rest', label: 'Rest' }, { id: 'run', label: 'Run' }, { id: 'jump', label: 'Jump' }, { id: 'cast', label: 'Cast' }, { id: 'hidden', label: 'Hidden' },
+  { id: 'rest', label: 'Rest' }, { id: 'run', label: 'Run' }, { id: 'jump', label: 'Jump' }, { id: 'cast', label: 'Cast' }, { id: 'hold', label: 'Hold' }, { id: 'hidden', label: 'Hidden' },
 ]
 type Knob = { k: keyof FpTune; label: string; min: number; max: number; step: number }
 const GROUPS: { title: string; note: string; show: Preview; knobs: Knob[] }[] = [
@@ -50,6 +51,25 @@ const GROUPS: { title: string; note: string; show: Preview; knobs: Knob[] }[] = 
     { k: 'CAST_Y', label: 'height', min: -0.5, max: 0, step: 0.005 },
     { k: 'CAST_PITCH', label: 'tilt', min: -1, max: 1.5, step: 0.01 },
   ] },
+  { title: 'Hold', note: 'the right mitt turned to present a hotbar item', show: 'hold', knobs: [
+    { k: 'HOLD_X', label: 'x', min: -0.2, max: 0.5, step: 0.005 },
+    { k: 'HOLD_Y', label: 'height', min: -0.6, max: 0, step: 0.005 },
+    { k: 'HOLD_Z', label: 'distance', min: -0.9, max: -0.3, step: 0.005 },
+    { k: 'HOLD_PITCH', label: 'tilt', min: -3.1, max: 3.1, step: 0.01 },
+    { k: 'HOLD_ROLL', label: 'roll (turn)', min: -3.1, max: 3.1, step: 0.01 },
+  ] },
+  { title: 'Held item', note: 'floating over the mitt', show: 'hold', knobs: [
+    { k: 'ITEM_UP', label: 'float up', min: -0.1, max: 0.25, step: 0.005 },
+    { k: 'ITEM_FWD', label: 'toward eye', min: -0.15, max: 0.15, step: 0.005 },
+    { k: 'ITEM_SIZE', label: 'size', min: 0.3, max: 3, step: 0.01 },
+    { k: 'ITEM_TILT', label: 'tip to eye', min: -1, max: 1.5, step: 0.01 },
+    { k: 'ITEM_SPIN', label: 'spin (rad/s)', min: 0, max: 4, step: 0.05 },
+    { k: 'ITEM_BOB', label: 'bob', min: 0, max: 0.03, step: 0.001 },
+  ] },
+]
+/** Things to hold in the Hold preview: a piece, a Keepstone, a potion, a dish. */
+const SAMPLES: { id: string; label: string }[] = [
+  { id: 'goldwood_stool', label: 'Stool' }, { id: 'iron_lantern', label: 'Lantern' }, { id: 'keepstone_violet', label: 'Keepstone' }, { id: 'starlight_tincture', label: 'Tincture' },
 ]
 const chip: React.CSSProperties = { background: '#211f2b', border: '1px solid #38344a', color: '#ddd6ea', padding: '5px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }
 
@@ -59,7 +79,7 @@ function Driver({ api, preview, paused }: { api: React.RefObject<OpenHandsApi | 
     const now = performance.now()
     const input: FpInput = {
       now, speed: preview === 'run' ? FP.RUN_SPEED : 0, airborne: preview === 'jump', hidden: preview === 'hidden',
-      castAt: preview === 'cast' ? now - FP.CAST_MS * 0.4 : -Infinity, working: false,
+      castAt: preview === 'cast' ? now - FP.CAST_MS * 0.4 : -Infinity, working: false, holding: preview === 'hold',
     }
     api.current?.step(input, paused ? 0 : dt)
     api.current?.seat(preview === 'cast' ? 1 : 0)
@@ -73,6 +93,7 @@ export default function HandsTuner() {
   const [paused, setPaused] = useState(false)
   const [, bump] = useState(0)
   const [copied, setCopied] = useState(false)
+  const [sample, setSample] = useState(SAMPLES[0].id)
   useEffect(() => { loadFpTune(); bump(n => n + 1) }, [])
   const values = () => JSON.stringify(Object.fromEntries(Object.keys(FP_DEFAULTS).map(k => [k, FP[k as keyof FpTune]])))
 
@@ -87,6 +108,9 @@ export default function HandsTuner() {
           {PREVIEWS.map(p => <button key={p.id} data-preview={p.id} onClick={() => setPreview(p.id)} style={{ ...chip, opacity: preview === p.id ? 1 : 0.45 }}>{p.label}</button>)}
           <button onClick={() => setPaused(!paused)} style={{ ...chip, opacity: paused ? 1 : 0.45 }}>{paused ? 'Paused' : 'Pause'}</button>
         </div>
+        {preview === 'hold' && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          {SAMPLES.map(x => <button key={x.id} data-sample={x.id} onClick={() => setSample(x.id)} style={{ ...chip, opacity: sample === x.id ? 1 : 0.45 }}>{x.label}</button>)}
+        </div>}
         {GROUPS.map(g => (
           <section key={g.title} style={{ marginBottom: 12 }}>
             <button onClick={() => setPreview(g.show)} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
@@ -116,7 +140,7 @@ export default function HandsTuner() {
           <directionalLight position={[3, 6, 4]} intensity={1.1} />
           <mesh rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[400, 400]} /><meshStandardMaterial color="#86a35a" roughness={1} /></mesh>
           {[-6, -3, 3, 6].map(x => <mesh key={x} position={[x, 0.75, -12]}><boxGeometry args={[0.3, 1.5, 0.3]} /><meshStandardMaterial color="#8a6a3c" /></mesh>)}
-          <OpenHands ref={api} />
+          <OpenHands ref={api} held={<HeldItem id={preview === 'hold' ? sample : null} />} />
           <Driver api={api} preview={preview} paused={paused} />
         </Canvas>
         {/* where the HUD's mana orb + Q/X chips sit at 1100x700 (bottom right), so a glove can stay clear of them */}

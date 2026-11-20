@@ -52,4 +52,14 @@ ok(hid.R.y < BOTTOM - 0.4 && hid.L.y < BOTTOM - 0.4, 'a panel or the gun takes b
 // a cast raises the right only
 const c = run(20, k => ({ castAt: 0 })).out.at(-1)!
 ok(c.R.y > still.R.y + 0.08 && Math.abs(c.L.y - still.L.y) < 0.02, 'a cast raises the glove, not the bracelet hand')
+// M45 holding: the right mitt goes to the Hold numbers, the left stays at rest, and a run barely drops the presenting hand
+const hd = run(120, () => ({ holding: true }))
+const hp = hd.out.at(-1)!
+ok(Math.abs(hp.R.x - FP.HOLD_X) < 0.005 && Math.abs(hp.R.y - FP.HOLD_Y) < 0.005 && Math.abs(hp.R.roll - FP.HOLD_ROLL) < 0.01, 'holding: the right mitt settles on the Hold pose')
+ok(Math.abs(hp.L.y - still.L.y) < 0.005 && hd.s.hold > 0.99, 'holding: the left stays at rest; the hold weight reaches 1')
+const hr = run(240, () => ({ holding: true, speed: FP.RUN_SPEED })).out
+const lowHeld = Math.min(...hr.slice(120).map(f => f.R.y)), lowBare = Math.min(...run(240, () => ({ speed: FP.RUN_SPEED })).out.slice(120).map(f => f.R.y))
+ok(lowHeld > lowBare + FP.DROP_Y * 0.5, `holding on a run: the presenting hand stays up (${lowHeld.toFixed(3)} vs bare ${lowBare.toFixed(3)})`)
+const let_ = run(120, k => ({ holding: k < 60 })).out.at(-1)!
+ok(Math.abs(let_.R.x - still.R.x) < 0.005 && Math.abs(let_.R.roll - still.R.roll) < 0.01, 'put away: back to rest')
 console.log(`fp-hands-pose: ${pass} passed, ${fail} failed`); if (fail) process.exit(1)

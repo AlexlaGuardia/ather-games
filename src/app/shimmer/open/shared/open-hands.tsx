@@ -21,7 +21,7 @@ import { OPT } from './keeper-look'
 import { useEffect, useImperativeHandle, useMemo, useRef, forwardRef, type ReactNode } from 'react'
 import * as THREE from 'three'
 import { useThree, createPortal } from '@react-three/fiber'
-import { newFpState, stepFpHands, loadFpTune, FP, type FpInput, type HandPose } from './fp-hands-pose'
+import { newFpState, stepFpHands, loadFpTune, FP, fpLive, type FpInput, type HandPose } from './fp-hands-pose'
 
 export const ORDER = 1000
 const C = { glove: '#6e4a2c', cuff: '#b9a582', cord: '#7a5a35', seat: '#7fb6d9', bracelet: '#8a6a3c' }
@@ -53,7 +53,7 @@ export function tintMittens(hand: THREE.Object3D, color: string) {
   hand.traverse(o => { const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined; if (m?.userData?.mitten) m.color.set(color) })
 }
 
-/** `held` (M45): what the keeper holds, drawn in the RIGHT mitten (ather/held-item.tsx); it rides and hides with the hand. */
+/** `held` (M45): what the keeper holds, floated over the RIGHT mitten (ather/held-item.tsx); it rides and hides with the hand. */
 export const OpenHands = forwardRef<OpenHandsApi, { held?: ReactNode }>(function OpenHands({ held }, ref) {
   const { camera } = useThree()
   const seatMat = useMemo(() => new THREE.MeshStandardMaterial({ color: C.seat, emissive: new THREE.Color(C.seat), emissiveIntensity: 0.4, roughness: 0.3, transparent: true, opacity: 1 }), [])
@@ -78,6 +78,7 @@ export const OpenHands = forwardRef<OpenHandsApi, { held?: ReactNode }>(function
   useImperativeHandle(ref, () => ({
     step: (i, dt) => {
       const { R, L } = stepFpHands(st.current, i, Math.min(dt, 0.1))
+      fpLive.hold = st.current.hold   // the held item (ather/held-item.tsx) grows in as the mitt turns
       rig.root.position.copy(camera.position); rig.root.quaternion.copy(camera.quaternion)   // this frame's camera
       // ★ HIDDEN MEANS GONE, AT ONCE (Alex 11-18 playtest: "extra hands when I pull out a weapon"). Hidden used to only EASE the
       // gloves down (s.low, ~0.3 s), so for that long the free pair and the gun's own gloves (fp-gun.tsx) were both on screen,

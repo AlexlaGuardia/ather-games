@@ -512,7 +512,7 @@ function AtherSliceGame() {
       const speed = Math.hypot(lc.hvx, lc.hvz), working = !!chanRef.current || !!fxRef.current?.busy() || !!cFxRef.current?.busy()
       // the first-person hands (hidden in third person: the doll's own hands are what you see)
       handsApi.current?.step({ now, speed, airborne: lc.airborne, hidden: frozen.current || stanceRef.current.kind === 'weapon' || third || isBuilding(),
-        castAt: handsCastAt.current, working }, dt)
+        castAt: handsCastAt.current, working, holding: stanceRef.current.kind === 'item' && !!h }, dt)   // M45: the mitt turns to present
       handsApi.current?.seat(now - handsCastAt.current < 640 ? 1 : 0)
       { // the held gun: out only with a gun drawn, first person, nothing owning the screen
         const sg = sightRef.current, gun = stanceRef.current.kind === 'weapon' && !third && !frozen.current && !isBuilding() ? RANGE_GUNS.find(g => g.id === h) ?? null : null
