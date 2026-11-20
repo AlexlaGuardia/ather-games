@@ -141,6 +141,29 @@ export const BANK = 0.5, VERGE_MIN = 3, PATH_EDGE = 0.6, ROAD_REACH = 70
 /** The relieved height of a vertex at a world point. Never below the water line where the raw ground was above it.
  *  With `roads` the land is sculpted to meet the paths (M18); without, the M16 path mask (`clear`) applies. */
 export function relieve(x: number, z: number, rawH: number, waterY: number, clear?: (x: number, z: number) => boolean, roads?: RoadField | null): number {
+  const h = relieveBase(x, z, rawH, waterY, clear, roads)
+  const pads = roads?.pads(x, z)
+  return pads?.length ? padGround(pads, h) : h
+}
+/** how far a pad's blend ring can reach (a literal, like GLADE: network.ts PAD_REACH, which relief.test asserts agrees) */
+export const PAD_REACH = 20
+/** M39 s3: settlement lots stand on LEVEL PADS. Each baked pad is one height over its footprint + apron, blended back to the
+ *  ground across a verge as wide as the gap needs (BANK, the Glade's and the paths'): no cliff, no tile seam, because the pad's
+ *  level is baked data and everything else is a function of the point. Several pads' rings overlap between lots: a Shepard
+ *  blend (weight -> infinity on a pad) keeps every pad exactly level and the ground continuous. */
+export function padGround(pads: { d: number; y: number }[], land: number): number {
+  let wsum = 0, wy = 0, hold = 0
+  for (const p of pads) {
+    if (p.d <= 0) return p.y
+    const verge = Math.min(PAD_REACH, Math.max(VERGE_MIN, Math.abs(land - p.y) / BANK))
+    if (p.d >= verge) continue
+    const s = smooth(p.d / verge), a = (1 - s) / s
+    wsum += a; wy += a * p.y; hold = Math.max(hold, 1 - s)
+  }
+  if (!wsum) return land
+  return land + (wy / wsum - land) * hold
+}
+function relieveBase(x: number, z: number, rawH: number, waterY: number, clear?: (x: number, z: number) => boolean, roads?: RoadField | null): number {
   if (roads) {
     // the land as it would be with no path here: relief everywhere but water, the arrival and settlement/fair ground
     let m = ramp(waterY + 1.5, waterY + 7, rawH) * ramp(ARRIVAL_FLAT, ARRIVAL_FLAT + ARRIVAL_FADE, Math.hypot(x - ARRIVAL.x, z - ARRIVAL.z))

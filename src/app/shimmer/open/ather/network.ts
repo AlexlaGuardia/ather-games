@@ -11,7 +11,9 @@ import { GLADE } from './moonwell-glade'
 export const SEASON = 1   // until the season clock exists, the network is season 1's
 export type SettlementBiome = 'shore' | 'meadow' | 'woods' | 'rock'
 /** `biome` = what lies around it (the bake guarantees at least one of each, Alex 11-17); older bakes lack it */
-export interface Settlement { id: string; name: string; x: number; z: number; biome?: SettlementBiome }
+/** `pads` (M39 s3, baked by scripts/bake-path-profiles.mts): each generated lot slot's level pad [x, z, yaw, y]: the footprint's
+ *  ONE height, so every tile reads the same ground there (relief.ts levels it). Absent on the Glade and on older bakes. */
+export interface Settlement { id: string; name: string; x: number; z: number; biome?: SettlementBiome; pads?: [number, number, number, number][] }
 /** What a settlement's Moglins gather, by its biome: their PRODUCT (Magii 11-17, c52ba1c: idle gathering is a Moglin's
  *  product, never a keeper skill), moved by want-list trade. Existing items only; which goods are BUILD (Jin's).
  *  Woods gives goldwood logs as the stand-in for DEADFALL (fallen tier-1 goldwood, canon) until that item exists. */
@@ -109,7 +111,11 @@ export interface RoadField {
   near(x: number, z: number, r: number): { d: number; y: number; hw: number } | null
   /** 0..1: how much a settlement's or the fair's flat ground holds this point (1 = fully flat, no relief) */
   flat(x: number, z: number): number
+  /** the level pads (settlement lots) whose blend can reach (x, z): signed distance outside the pad + apron (<= 0 = on it) and its height */
+  pads(x: number, z: number): { d: number; y: number }[]
 }
+/** a lot pad's size (settlement-lots LOT_W x LOT_D; a test asserts they agree) and the apron levelled round it */
+export const PAD_W = 13.5, PAD_D = 8.5, PAD_APRON = 4.5, PAD_REACH = 20
 /** Null when the bake carries no path heights (an older network): the caller keeps the M16 mask. */
 /** `reach` = the farthest `near` is ever asked (relief.ts ROAD_REACH): each 32 m cell lists every segment within it, so a
  *  query reads ONE cell (a tile parse asks 63k times; a 7x7 cell scan cost ~0.7 s a tile). */
@@ -126,7 +132,21 @@ export function roadField(n: Network, reach = 70): RoadField | null {
   }
   const discs: { x: number; z: number; r: number }[] = n.settlements.map(s => ({ x: s.x, z: s.z, r: SETTLEMENT_CLEAR }))
   if (n.fair) discs.push({ x: n.fair.x, z: n.fair.z, r: FAIR_CLEAR })
+  const pads: { x: number; z: number; s: number; c: number; y: number }[] = []
+  for (const st of n.settlements) for (const p of st.pads ?? []) pads.push({ x: p[0], z: p[1], s: Math.sin(p[2]), c: Math.cos(p[2]), y: p[3] })
+  const padR = Math.hypot(PAD_W, PAD_D) / 2 + PAD_APRON + PAD_REACH
   return {
+    pads(x, z) {
+      const out: { d: number; y: number }[] = []
+      for (const p of pads) {
+        const dx = x - p.x, dz = z - p.z
+        if (dx * dx + dz * dz > padR * padR) continue
+        // outside distance to the rotated rect (right = (c, -s), front = (-s, -c)), apron included
+        const u = Math.abs(dx * p.c - dz * p.s) - (PAD_W / 2 + PAD_APRON), v = Math.abs(-dx * p.s - dz * p.c) - (PAD_D / 2 + PAD_APRON)
+        out.push({ d: Math.hypot(Math.max(u, 0), Math.max(v, 0)) + Math.min(Math.max(u, v), 0), y: p.y })
+      }
+      return out
+    },
     near(x, z, r) {
       const list = cells.get(key(Math.floor(x / C), Math.floor(z / C)))
       if (!list) return null

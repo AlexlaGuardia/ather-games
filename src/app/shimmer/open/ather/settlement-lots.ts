@@ -21,8 +21,8 @@ import type { Box } from '../terrain-world'
 export const MAX_LOTS = 5
 /** the pad, as the Glade's lots (the worktable draws 13 x 8 inside it) */
 export const LOT_W = 13.5, LOT_D = 8.5
-/** pad centre's distance from the settlement centre: pads span 16.75..25.3 m out along the radius, 26.1 m at the far corners, all inside SETTLEMENT_CLEAR (32) */
-export const LOT_RING = 21
+/** pad centre's distance from the settlement centre: pads span 20.75..29.3 m out along the radius, 30.1 m at the far corners, inside SETTLEMENT_CLEAR (32); wide enough apart that the pads + 4.5 m aprons (network.ts PAD_APRON, the 4 m ground cell + the check margin) never overlap */
+export const LOT_RING = 25
 /** the trades that have a blueprint slot (shopkeeper is Moonwell's Mallow only) */
 export const TRADES: readonly Profession[] = PROFESSIONS
 export const tradeBlueprintId = (p: Profession) => `trade-${p}`
@@ -42,12 +42,16 @@ export function settlementLots(s: Settlement, season: number, folk: Folk[] = fol
   const firstOf = new Map<Profession, Folk>()
   for (const f of folk) if (ORDER.includes(f.profession) && !firstOf.has(f.profession)) firstOf.set(f.profession, f)
   const trades = [...firstOf.keys()].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)).slice(0, MAX_LOTS)
-  const base = h01(`${season}:${s.id}`, 77) * Math.PI * 2
   return trades.map((p, k) => {
-    const a = base + (k * Math.PI * 2) / MAX_LOTS, x = s.x + Math.sin(a) * LOT_RING, z = s.z + Math.cos(a) * LOT_RING
-    // forward = (-sin yaw, -cos yaw) points at the centre: (s - lot) / |.| = (-sin a, -cos a)  =>  yaw = a
-    return { id: `${s.id}:${p}`, settlement: s.id, profession: p, folkId: firstOf.get(p)!.id, x, z, yaw: a, w: LOT_W, d: LOT_D }
+    const { x, z, yaw } = lotSlot(s, season, k)
+    return { id: `${s.id}:${p}`, settlement: s.id, profession: p, folkId: firstOf.get(p)!.id, x, z, yaw, w: LOT_W, d: LOT_D }
   })
+}
+/** Slot k of the ring (0..MAX_LOTS-1): the pad's centre and turn. The bake (scripts/bake-path-profiles.mts) levels all five. */
+export function lotSlot(s: Settlement, season: number, k: number): { x: number; z: number; yaw: number } {
+  const a = h01(`${season}:${s.id}`, 77) * Math.PI * 2 + (k * Math.PI * 2) / MAX_LOTS
+  // forward = (-sin yaw, -cos yaw) points at the centre: (s - lot) / |.| = (-sin a, -cos a)  =>  yaw = a
+  return { x: s.x + Math.sin(a) * LOT_RING, z: s.z + Math.cos(a) * LOT_RING, yaw: a }
 }
 
 // ── the blockout: a plain goldwood house with a door on the front, a window each side, a gable roof ───────────────────

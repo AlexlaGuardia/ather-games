@@ -13,6 +13,9 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseWilds, type WildsMeta, type Wilds } from '../src/app/shimmer/open/ather/wilds'
+import { lotSlot, MAX_LOTS, LOT_W, LOT_D } from '../src/app/shimmer/open/ather/settlement-lots'
+import type { Settlement } from '../src/app/shimmer/open/ather/network'
+import { GLADE_ID } from '../src/app/shimmer/open/ather/moonwell-glade'
 import { TILE_M } from '../src/app/shimmer/open/ather/wilds-world'
 
 const DIR = join(dirname(fileURLToPath(import.meta.url)), '../public/open/wilds')
@@ -75,6 +78,30 @@ for (const p of net.paths) {
   for (let i = 1; i < fin.length; i++) worst = Math.max(worst, Math.abs(fin[i] - fin[i - 1]) / STEP)
   p.pts = P.map((q, k) => [q[0], q[1], Math.round(fin[at[k]] * 100) / 100])
   n += P.length
+}
+// M39 s3: LEVEL PADS for the generated settlements' five lot slots (settlement-lots.ts lotSlot). Each pad's height = the mean RAW
+// ground over its footprint + apron (inside a settlement's flat disc the ground is the raw ground), rounded to the cm. Baked, so
+// every tile reads one number however the settlement straddles a tile edge (relief.ts padGround levels + blends it).
+{
+  const full = net as unknown as { season: number; settlements: Settlement[] }
+  let np = 0, worstCut = 0
+  for (const st of full.settlements) {
+    if (st.id === GLADE_ID) continue
+    st.pads = []
+    for (let k = 0; k < MAX_LOTS; k++) {
+      const l = lotSlot(st, full.season, k), sn = Math.sin(l.yaw), cs = Math.cos(l.yaw)
+      let sum = 0, c = 0, lo = Infinity, hi = -Infinity
+      for (let a = -LOT_W / 2; a <= LOT_W / 2 + 1e-6; a += 1.5) for (let b = -LOT_D / 2; b <= LOT_D / 2 + 1e-6; b += 1.5) {
+        const y = rawAt(l.x + cs * a + sn * b, l.z - sn * a + cs * b)   // right = (c, -s), back = (sin, cos)
+        if (Number.isFinite(y)) { sum += y; c++; lo = Math.min(lo, y); hi = Math.max(hi, y) }
+      }
+      if (!c) throw new Error(`no ground under ${st.id} lot ${k}`)
+      const y = Math.round((sum / c) * 100) / 100
+      worstCut = Math.max(worstCut, hi - y, y - lo)
+      st.pads.push([Math.round(l.x * 100) / 100, Math.round(l.z * 100) / 100, l.yaw, y]); np++
+    }
+  }
+  console.log(`levelled ${np} lot pads; the biggest cut/fill under a footprint ${worstCut.toFixed(2)} m`)
 }
 console.log(`profiled ${net.paths.length} paths, ${n} points; steepest 2 m step after the cap: ${worst.toFixed(3)} (cap ${MAX_GRADE}); deepest cut/fill vs raw ${deep.toFixed(2)} m; ends off the ground by at most ${pinned.toFixed(2)} m; held at the ${MAX_CUT} m cut limit ${(100 * clamped / total).toFixed(1)} % of the length`)
 if (!DRY) { writeFileSync(join(DIR, `network-s${SEASON}.json`), JSON.stringify(net)); console.log(`wrote public/open/wilds/network-s${SEASON}.json`) }
