@@ -60,8 +60,7 @@ async function session(w: number, h: number, touch = false) {
 // ── desktop ─────────────────────────────────────────────────────────────────────────────────────────────────────
 {
   const s = await session(1280, 800); const { p } = s
-  const reload = async () => { await p.reload({ waitUntil: 'load', timeout: 180000 }); await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(3500) }
-  const ago = (ms: number) => p.evaluate((d: number) => { const w = JSON.parse(localStorage.getItem('open.works.v1')!); w.rooms[0].work.last -= d; localStorage.setItem('open.works.v1', JSON.stringify(w)) }, ms)
+  const reload = async (d: number) => { await Promise.all([p.waitForNavigation({ waitUntil: 'load', timeout: 180000 }), p.evaluate((d: number) => { const w = JSON.parse(localStorage.getItem('open.works.v1')!); w.rooms[0].work.last -= d; localStorage.setItem('open.works.v1', JSON.stringify(w)); location.reload() }, d)]); await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(3500) }
   await s.open()
   const panels = await p.evaluate(() => { const a = document.querySelector('[data-panel="bench"]')?.getBoundingClientRect(), b = document.querySelector('[data-panel="station-store"]')?.getBoundingClientRect(); return a && b ? { aR: a.right, bL: b.left } : null })
   ok(!!panels, '1. E at the bench: the station panel AND a separate store panel are up')
@@ -87,7 +86,7 @@ async function session(w: number, h: number, touch = false) {
   await sleep(3000)
   const r1 = await s.room(), st1 = await s.store()
   ok(!!r1?.work?.run && st1.goldwood_log >= 38, `3. stockpile started by itself: one run's inputs out, not the surplus (store ${st1.goldwood_log} of 40)`)
-  await ago(5 * 60_000); await reload()
+  await reload(5 * 60_000)
   const st2 = await s.store(), o2 = await s.output()
   ok(st2.goldwood_log === 30, `   after 5 minutes: 30 logs REMAIN, the reserve (${st2.goldwood_log})`)
   ok(o2.goldwood_plank === 20 && !o2.goldwood_bark, `   the 10 surplus logs became 20 planks, no bark yet (${JSON.stringify(o2)})`)
@@ -100,7 +99,7 @@ async function session(w: number, h: number, touch = false) {
   await sleep(1500)
   ok(await p.evaluate(() => !!document.querySelector('[data-focus-line="goldwood-plank"]')), '   the panel shows the focus')
   await s.shot('st-5-focus')
-  await ago(10 * 60_000); await reload()
+  await reload(10 * 60_000)
   const st3 = await s.store(), o3 = await s.output()
   ok((st3.goldwood_log ?? 0) === 0, `   focus used ALL the logs: 30 -> ${st3.goldwood_log ?? 0}`)
   ok(o3.goldwood_plank === 80, `   planks 20 + 60 = 80, past the 30 cap (${o3.goldwood_plank})`)
