@@ -52,6 +52,8 @@ import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
 import { advance, setFocus, cancelFocus, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
 import { skillIn, luckOf, skillsOf, SKILL_OF_ROOM, SKILL_LABEL } from './moglin-skills'
+import { recordCard } from './moglin-card'
+import { MoglinCard } from './moglin-card-view'
 import { reportAway, addMade, type Made } from './away-report'
 import { MeleeAim, useHitWobble } from './melee-view'
 import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, type Village } from './moglins'
@@ -1365,6 +1367,14 @@ function MoglinDuty({ r }: { r: Room }) {
   const [v, setV] = useState<Village>(() => loadVillage())
   const here = v.moglins.find(m => m.room === r.id)
   const fits = v.moglins.filter(m => m.id !== here?.id && WORKS_IN[m.profession].includes(r.kind))
+  // M46: Inspect a garden Moglin = its card (full: it came because it trusts you), opened under its row, one at a time
+  const [card, setCard] = useState<string | null>(null)
+  const phone = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
+  const inspect = (m: Village['moglins'][number]) => (
+    <span data-act="inspect"><HearthButton small onClick={() => setCard(c => (c === m.id ? null : m.id))}>{card === m.id ? 'Close' : 'Inspect'}</HearthButton></span>
+  )
+  const cardFor = (m: Village['moglins'][number]) => card === m.id
+    ? <div data-moglin-card-for={m.id} style={{ marginTop: 6, maxWidth: 340 }}><MoglinCard card={recordCard(m)} id={m.id} phone={phone} /></div> : null
   const put = (id: string, room: string | null) => {
     const nv = assign(loadVillage(), getW(), id, room); if (!nv) { hudSay('Their trade does not suit this room.', 'info'); return }
     saveVillage(nv); setV(nv); touchWork(r.id)
@@ -1382,17 +1392,21 @@ function MoglinDuty({ r }: { r: Room }) {
             <div style={{ fontSize: 14, color: H.ink, fontWeight: 600 }}>{here.name} <span style={{ fontWeight: 400, color: H.inkSoft, fontSize: 12.5 }}>· the {here.profession} · {grades(here)}</span></div>
             <div style={{ fontSize: 12.5, color: H.inkSoft }}>{dutyLine(here, r.kind)}{here.dream ? ` "${here.dream}"` : ''}</div>
           </div>
+          {inspect(here)}
           <span data-act="off-duty"><HearthButton small onClick={() => put(here.id, null)}>Rest</HearthButton></span>
         </div>
       ) : (
         <div style={{ fontSize: 12.5, color: H.inkSoft, marginTop: 4 }}>{fits.length ? 'No one yet. Someone in your village could take it on.' : 'No one in your village has this trade yet. Folk in the Wilds settlements might come, if asked.'}</div>
       )}
-      {fits.map(m => (
-        <div key={m.id} data-moglin={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+      {here && cardFor(here)}
+      {fits.map(m => (<div key={m.id}>
+        <div data-moglin={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
           <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: H.ink }}>{m.name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· the {m.profession} · {grades(m)}{m.room ? ' · busy in another room' : ''}</span></span>
+          {inspect(m)}
           <HearthButton small onClick={() => put(m.id, r.id)}>{here ? 'Ask instead' : 'Ask to work here'}</HearthButton>
         </div>
-      ))}
+        {cardFor(m)}
+      </div>))}
     </div>
   )
 }

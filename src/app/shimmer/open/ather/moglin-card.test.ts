@@ -1,5 +1,8 @@
 // Moglin card + trust reveal (M46 slices 2+3). Run: npx tsx src/app/shimmer/open/ather/moglin-card.test.ts
-import { cardOf, trustShare, tradeLabel } from './moglin-card'
+import { cardOf, trustShare, tradeLabel, recordCard, homeOfRecord } from './moglin-card'
+import { recruit } from './settlement-folk'
+import { freshVillage, type MoglinRecord } from './moglins'
+import { GLADE_NAME } from './moonwell-glade'
 import { SKILLS, rollSkills, rngOf } from './moglin-skills'
 import { freshTrust, bring, type Folk } from './settlement-folk'
 import { ASK, folkTalk, type FolkTalkActs } from './folk-talk'
@@ -60,6 +63,26 @@ ok(cardNode.line === hello.line, 'bubble keeps the hello line on the card')
 cardNode.options.find(o => o.label === ASK.back)?.pick()
 ok((at as { screen?: string })?.screen === 'hello', 'Back returns to hello')
 
-console.log(`moglin-card: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  FAIL', f)
-if (fails.length) process.exit(1)
+// RECRUITED (M46 'card for recruited Moglins'): a Moglin in the garden came because it trusts the keeper, so the card is full,
+// and the settlement's NAME is kept at recruit so the card can say where it came from
+{
+  let t = freshTrust(); for (const w of base.wants) t = bring(t, base, w.id, w.n).trust
+  const v = recruit(freshVillage(0), base, t, 0, 0, 'Reedbank')
+  const m = v?.moglins[0]
+  ok(!!m && m.homeName === 'Reedbank', 'recruit keeps the home NAME')
+  const c = recordCard(m!)
+  ok(c.full && c.shown === 1 && c.rows.every(r => r.grade !== null) && c.luck === roll.luck, 'recruited: full card, luck shown')
+  ok(c.home === 'Reedbank' && c.trade === 'Carpenter' && c.name === 'Cress', 'recruited: name/home/trade')
+  ok(c.rows.every(r => r.grade === roll.skills[r.skill]) && c.rows.map(r => r.skill).join() === SKILLS.join(), 'recruited: its own skills, fixed order')
+  ok(c.best === Math.max(...SKILLS.map(k => roll.skills[k])), 'recruited: frame = best grade')
+  const same = cardOf(base, t, 'Reedbank')
+  ok(JSON.stringify(same) === JSON.stringify(c), 'recruited card == the trusted talk card for the same Moglin')
+  const old = { ...m!, homeName: undefined } as MoglinRecord
+  ok(homeOfRecord(old) === 'a Wilds settlement' && homeOfRecord({ home: 'moonwell' }) === GLADE_NAME, 'older save: home falls back')
+  const legacy = { ...old, skills: undefined, luck: undefined } as MoglinRecord
+  const lc = recordCard(legacy)
+  ok(lc.full && lc.rows.every(r => r.grade !== null) && lc.luck !== null, 'pre-M46 save (no skills): migrated, still a full card')
+}
+console.log(`moglin-card: ${pass} pass, ${fails.length} fail`)
+if (fails.length) { console.log(fails.join('\n')); process.exit(1) }

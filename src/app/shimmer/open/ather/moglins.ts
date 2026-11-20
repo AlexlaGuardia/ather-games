@@ -50,6 +50,8 @@ export interface MoglinRecord {
   name: string
   /** the settlement it came from (network.ts › Settlement id) */
   home: string
+  /** M46: that settlement's NAME, kept at recruit so the garden card can say where it came from (absent on older saves) */
+  homeName?: string
   /** LEGACY (pre-M46): kept readable; the skills below are what rooms read now (skillIn) */
   grades: Record<GradeCategory, Grade>
   /** M46: nine skills + luck (moglin-skills.ts). Absent on an old save until adoptVillage migrates it. */

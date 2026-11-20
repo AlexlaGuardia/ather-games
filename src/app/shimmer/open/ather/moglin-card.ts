@@ -2,7 +2,8 @@
 // Slice 2: nine skill pips + a luck charm, the frame tinted by the best grade. Slice 3 (TRUST REVEAL): a Moglin that does not
 // trust the keeper yet shows its trade only; every good brought toward its hoop lights more skills, best first; luck shows
 // last, once it trusts. A Moglin that would come for the asking (no hoop) trusts from the start, so its card is full.
-import type { Grade, Profession } from './moglins'
+import type { Grade, MoglinRecord, Profession } from './moglins'
+import { GLADE_NAME } from './moonwell-glade'
 import { SKILLS, SKILL_LABEL, skillsOf, luckOf, type Skill } from './moglin-skills'
 import { wantsLeft, type Folk, type Trust } from './settlement-folk'
 
@@ -38,4 +39,15 @@ export function cardOf(f: Folk, t: Trust, homeName: string): CardView {
   const rows = SKILLS.map(s => ({ skill: s, label: SKILL_LABEL[s], grade: lit.has(s) ? skills[s] : null }))
   const best = rows.reduce<Grade | 0>((a, r) => (r.grade && r.grade > a ? r.grade : a), 0)
   return { name: f.name, home: homeName, trade: tradeLabel(f.profession), rows, luck: full ? luckOf(f) : null, best, shown: full ? 1 : n / SKILLS.length, full }
+}
+
+/** A Moglin already in the keeper's garden (M46 'card for recruited Moglins'): it came because it trusts the keeper, so its
+ *  card is FULL. Home = the settlement name kept at recruit; an older save without one falls back (the Glade by its id). */
+export const homeOfRecord = (m: Pick<MoglinRecord, 'home' | 'homeName'>): string =>
+  m.homeName || (m.home === 'moonwell' ? GLADE_NAME : 'a Wilds settlement')
+export function recordCard(m: MoglinRecord): CardView {
+  const skills = skillsOf(m)
+  const rows = SKILLS.map(s => ({ skill: s, label: SKILL_LABEL[s], grade: skills[s] }))
+  const best = rows.reduce<Grade>((a, r) => (r.grade > a ? r.grade : a), 1)
+  return { name: m.name, home: homeOfRecord(m), trade: tradeLabel(m.profession), rows, luck: luckOf(m), best, shown: 1, full: true }
 }

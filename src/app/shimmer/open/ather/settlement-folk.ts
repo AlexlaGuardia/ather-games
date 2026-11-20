@@ -131,9 +131,9 @@ export function bring(t: Trust, f: Folk, id: string, n: number): { trust: Trust;
 }
 
 /** The recruit step: a trusted Moglin comes to the garden (play's welcome: the cap, no repeats). Null when it cannot. */
-export function recruit(v: Village, f: Folk, t: Trust, stage = 0, now = Date.now()): Village | null {
+export function recruit(v: Village, f: Folk, t: Trust, stage = 0, now = Date.now(), homeName?: string): Village | null {
   if (!trusted(f, t)) return null
-  const rec: MoglinRecord = { id: f.id, name: f.name, home: f.home, grades: f.grades, ...(f.skills ? { skills: f.skills, luck: f.luck } : {}), dream: f.dream, profession: f.profession, recruitedAt: now }
+  const rec: MoglinRecord = { id: f.id, name: f.name, home: f.home, ...(homeName ? { homeName } : {}), grades: f.grades, ...(f.skills ? { skills: f.skills, luck: f.luck } : {}), dream: f.dream, profession: f.profession, recruitedAt: now }
   return welcome(v, rec, stage)
 }
 /** The folk still living in a settlement: anyone already in the keeper's village has moved out. */

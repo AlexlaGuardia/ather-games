@@ -48,7 +48,7 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
         setSt({ fid: f.id, screen: 'needs' })
       },
       recruit: f => {
-        const v = recruit(village, f, trust); if (!v) return
+        const v = recruit(village, f, trust, 0, Date.now(), s.name); if (!v) return
         saveVillage(v); setVillage(v)
         hudSay(`${f.name} is coming to your garden`, 'item', 5)
       },
