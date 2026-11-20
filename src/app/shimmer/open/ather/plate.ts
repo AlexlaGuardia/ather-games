@@ -17,6 +17,9 @@ import { SQ, GRID_HALF, PLOT_R, insideIsland, plotHeightAt, sqId, squareAt } fro
 
 export const PLATE_MPP = 2          // metres per plate pixel (a 1 km tile = 500 px)
 export const CONTOUR = 4            // metres between contour lines
+/** M41 s3: the cloud voids on the maps, the world's pressed-cloud dark (wilds-scene VOID_DARK #4a5870), with a pale lip */
+export const VOID_RGB: [number, number, number] = [74, 88, 112]
+export const VOID_LIP_RGB: [number, number, number] = [196, 204, 222]
 
 /** The Atlas's Ather hues, assigned by biome. */
 export const ATHER_HUE: Record<BiomeId, [number, number, number]> = {
@@ -38,11 +41,23 @@ export function atherPlatePixels(W: Wilds, mpp = PLATE_MPP): { w: number; h: num
   const biomeOf = new Uint8Array(w * h)
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) biomeOf[j * w + i] = W.biomeAt(X(i), Z(j))
   const B = (i: number, j: number) => biomeOf[Math.min(h - 1, Math.max(0, j)) * w + Math.min(w - 1, Math.max(0, i))]
+  // M41 s3: which plate pixels sit on a void cell (wilds.ts W.voided, one flag per mesh cell), so the maps show the breaks
+  const vd = W.voided, cell = W.meta.cell, cx = W.meta.nx - 1
+  const voidPx = vd ? new Uint8Array(w * h) : null
+  if (vd && voidPx) for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const ci = Math.min(cx - 1, Math.max(0, Math.floor((X(i) + sx / 2) / cell))), cj = Math.min(W.meta.nz - 2, Math.max(0, Math.floor((Z(j) + sz / 2) / cell)))
+    voidPx[j * w + i] = vd[cj * cx + ci]
+  }
+  const VP = (i: number, j: number) => (voidPx ? voidPx[Math.min(h - 1, Math.max(0, j)) * w + Math.min(w - 1, Math.max(0, i))] : 0)
   const S = 3   // the light reads the slope over ±S px (12 m): a tile's relief is gentle, a 1-px slope is noise
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
     const y = H(i, j), b = B(i, j)
     let [r, g, bl] = ATHER_HUE[b as BiomeId]
-    if (b === BIOME.water || y < wy) {
+    if (VP(i, j)) {
+      // the void: pressed-cloud dark; a 1-px pale lip where the crust ends, so the edge reads at minimap scale
+      const lip = !VP(i + 1, j) || !VP(i - 1, j) || !VP(i, j + 1) || !VP(i, j - 1)
+      ;[r, g, bl] = lip ? VOID_LIP_RGB : VOID_RGB
+    } else if (b === BIOME.water || y < wy) {
       // the shallows pale toward the shore, like the parchment's coast, but they GLOW (the Ather's water is lit);
       // faint depth lines every metre where the parchment draws none
       const depth = wy - y, t = Math.min(1, depth / 2.5)
