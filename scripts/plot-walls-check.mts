@@ -8,7 +8,7 @@
 //   5. 0 page errors
 // SETUP (stated): bag = 20 goldwood planks, no works. Hooks: __ather.tp (stand by the table, stand by the wall),
 // __build.to (move the VIEW over clear held ground). Every E / button / drag / key is real.
-//   npx tsx scripts/plot-walls-check.mts [--url https://ather.games] [--out dir] [--phone]
+//   npx tsx scripts/plot-walls-check.mts [--url https://ather.games] [--out dir] [--phone [--w 360 --h 780]]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { TABLE, KEEP_CLEAR } from '../src/app/shimmer/open/ather/rooms'
@@ -39,7 +39,7 @@ console.log(`spot ${spot.x},${spot.z} · table ${TABLE.x},${TABLE.z}`)
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 try {
   const p = await (await br.createBrowserContext()).newPage()
-  await p.setViewport(phone ? { width: 390, height: 844, isMobile: true, hasTouch: true } : { width: 1100, height: 680 })
+  await p.setViewport(phone ? { width: Number(flag('--w', '390')), height: Number(flag('--h', '844')), isMobile: true, hasTouch: true } : { width: 1100, height: 680 })
   const errs: string[] = []
   p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
@@ -59,7 +59,7 @@ try {
   const at = (sel: string) => p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel)
   const tap = async (sel: string) => { const b = await at(sel); if (!b) return false; if (phone) await p.touchscreen.tap(b.x, b.y); else await p.mouse.click(b.x, b.y); return true }
   const poll = async (fn: () => Promise<boolean>, ms = 10000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(200) } return false }
-  const W = phone ? 390 : 1100, Hh = phone ? 844 : 680
+  const W = phone ? Number(flag('--w', '390')) : 1100, Hh = phone ? Number(flag('--h', '844')) : 680
   // a straight drag across the middle of the view (the view looks at the spot)
   // the view EASES toward __build.to (1-2 fps here): a drag before it lands draws on another line, so wait for it to settle
   const settled = () => poll(async () => { const v = await p.evaluate(() => (window as any).__build.view()); await sleep(500); const w = await p.evaluate(() => (window as any).__build.view()); return Math.hypot(v.x - spot!.x, v.z - spot!.z) < 0.2 && Math.abs(Math.atan2(Math.sin(v.yaw), Math.cos(v.yaw))) < 0.01 && Math.abs(v.h - w.h) < 0.05 && Math.abs(v.x - w.x) < 0.02 }, 60000)

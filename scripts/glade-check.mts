@@ -8,7 +8,7 @@
 //   5. the five say five distinct things (their hello lines; @lark words come after this blockout)
 //   6. --phone 390x844: shots from the green at four headings (Alex's look: the green shows all five with one turn); 0 errors
 // Hooks: __ather.tp / look (stand + face only, stated), __ather.state / __folk.drawn / __rinquest (read). Walking is real W.
-//   npx tsx scripts/glade-check.mts [--url https://ather.games] [--out dir] [--phone]
+//   npx tsx scripts/glade-check.mts [--url https://ather.games] [--out dir] [--phone [--w 360 --h 780]]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { GLADE_GREEN, MOONWELL, SCALE_AT, atWater } from '../src/app/shimmer/open/ather/moonwell'
@@ -48,7 +48,7 @@ const turns = (pts: { x: number; z: number }[]) => pts.filter((p, k) => k === 0 
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 try {
   const p = await (await br.createBrowserContext()).newPage()
-  await p.setViewport(phone ? { width: 390, height: 844, isMobile: true, hasTouch: true } : { width: 1100, height: 680 })
+  await p.setViewport(phone ? { width: Number(flag('--w', '390')), height: Number(flag('--h', '844')), isMobile: true, hasTouch: true } : { width: 1100, height: 680 })
   const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star') })

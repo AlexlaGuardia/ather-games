@@ -5,7 +5,7 @@
 // SETUP (stated): bag = repeater + waymarks, no logs; bank (open.bank.v1) = 16 goldwood logs; no rooms.
 // Hooks: __ather.tp (stand by the table) and __build.to (move the VIEW) only. Every E, icon, Build, Plan, Land and the
 // placing click are real inputs. --phone runs at 390×844 for the look. Screenshots to --out.
-//   npx tsx scripts/plan-table-check.mts [--url https://ather.games] [--out dir] [--phone]
+//   npx tsx scripts/plan-table-check.mts [--url https://ather.games] [--out dir] [--phone [--w 360 --h 780]]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { TABLE, ROOMS } from '../src/app/shimmer/open/ather/rooms'
@@ -16,7 +16,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const NEED = ROOMS.rinnshop.cost[0].n
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const p = await (await br.createBrowserContext()).newPage()
-await p.setViewport(phone ? { width: 390, height: 844, isMobile: true, hasTouch: true } : { width: 1100, height: 680 })
+await p.setViewport(phone ? { width: Number(flag('--w', '390')), height: Number(flag('--h', '844')), isMobile: true, hasTouch: true } : { width: 1100, height: 680 })
 const errs: string[] = []
 p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 p.on('console', m => { if (m.type() === 'error') errs.push('console: ' + m.text().slice(0, 160)) })
