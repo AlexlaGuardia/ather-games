@@ -69,7 +69,50 @@ export function pathsIn(n: Network, x0: number, z0: number, x1: number, z1: numb
 }
 
 /** Distance from a point to the nearest path (for keeping trees and crowds off it, and for "you are on the road"). */
-export function pathDistance(n: Network, x: number, z: number): number {
+/** `cap`: the caller only cares below this many metres; past it any answer >= cap may come back (the void carve passes its ramp's end) */
+export function pathDistance(n: Network, x: number, z: number, cap = Infinity): number {
+  if (cap === Infinity) return pathDistanceScan(n, x, z)   // the index pays off only with a cap (rings stop early); far points would walk many rings
+  const ix = segIndex(n), C = PD_CELL, ci = Math.floor(x / C), cj = Math.floor(z / C), s = ix.segs
+  let best = Infinity
+  // M44 part 3: rings of grid cells outward from the point; a cell r rings out is at least (r - 1) * C away, so once the best
+  // found is that close, nothing further can beat it. Exact, same answer as the full scan (pathDistanceScan, the test's oracle).
+  for (let r = 0; r <= PD_RINGS; r++) {
+    if (best <= (r - 1) * C) return best
+    if ((r - 1) * C >= cap) return Math.max(best === Infinity ? cap : best, cap)   // nothing nearer than cap is left
+    const ring = r === 0 ? 1 : 8 * r   // the perimeter cells only
+    for (let e = 0; e < ring; e++) {
+      let di = 0, dj = 0
+      if (r > 0) { const side = Math.floor(e / (2 * r)), o = e % (2 * r) - r; [di, dj] = side === 0 ? [o, -r] : side === 1 ? [r, o] : side === 2 ? [-o, r] : [-r, -o] }
+      const cell = ix.grid.get((ci + di) * 100003 + (cj + dj)); if (!cell) continue
+      for (const q of cell) {
+        const ax = s[q], az = s[q + 1], dx = s[q + 2] - ax, dz = s[q + 3] - az, l2 = dx * dx + dz * dz || 1
+        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2))
+        const d = Math.hypot(ax + dx * t - x, az + dz * t - z); if (d < best) best = d
+      }
+    }
+  }
+  return best <= PD_RINGS * C ? best : pathDistanceScan(n, x, z)   // far from every path: the plain scan (rare: open sea)
+}
+/** M44 part 3: path segments bucketed into PD_CELL squares (every square a segment's box touches), once per network */
+const PD_CELL = 64, PD_RINGS = 24
+const segIndexes = new WeakMap<Network, { grid: Map<number, number[]>; segs: Float64Array }>()
+function segIndex(n: Network) {
+  const hit = segIndexes.get(n); if (hit) return hit
+  let m = 0; for (const p of n.paths) m += Math.max(0, p.pts.length - 1)
+  const segs = new Float64Array(m * 4), grid = new Map<number, number[]>(); let q = 0
+  for (const p of n.paths) for (let k = 1; k < p.pts.length; k++) {
+    const [ax, az] = p.pts[k - 1], [bx, bz] = p.pts[k]
+    segs[q] = ax; segs[q + 1] = az; segs[q + 2] = bx; segs[q + 3] = bz
+    for (let j = Math.floor(Math.min(az, bz) / PD_CELL); j <= Math.floor(Math.max(az, bz) / PD_CELL); j++)
+      for (let i = Math.floor(Math.min(ax, bx) / PD_CELL); i <= Math.floor(Math.max(ax, bx) / PD_CELL); i++) {
+        const key = i * 100003 + j, l = grid.get(key); if (l) l.push(q); else grid.set(key, [q])
+      }
+    q += 4
+  }
+  const out = { grid, segs }; segIndexes.set(n, out); return out
+}
+/** the plain full scan: the oracle the indexed pathDistance is tested against */
+export function pathDistanceScan(n: Network, x: number, z: number): number {
   let best = Infinity
   for (const p of n.paths) for (let k = 1; k < p.pts.length; k++) {
     const [ax, az] = p.pts[k - 1], [bx, bz] = p.pts[k]

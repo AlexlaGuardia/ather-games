@@ -153,7 +153,7 @@ export function makeVoids(index: IndexLike, net: Network | null, extra: readonly
     if (f > 0 && net) {
       for (const s of net.settlements) f = Math.min(f, ramp(Math.hypot(x - s.x, z - s.z) - SETTLEMENT_CLEAR, PROTECT.settle))
       if (net.fair) f = Math.min(f, ramp(Math.hypot(x - net.fair.x, z - net.fair.z) - FAIR_CLEAR, PROTECT.settle))
-      if (f > 0) f = Math.min(f, ramp(pathDistance(net, x, z), PROTECT.path))
+      if (f > 0) f = Math.min(f, ramp(pathDistance(net, x, z, PROTECT.path[1]), PROTECT.path))   // capped: the ramp is flat past its end
     }
     return f
   }
