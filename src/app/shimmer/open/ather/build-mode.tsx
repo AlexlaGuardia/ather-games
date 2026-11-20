@@ -34,6 +34,9 @@ const aim = { x: 0, z: 0 }   // where the lens actually looks (cur, shifted by t
 let entered = false
 
 export const isBuilding = () => on
+/** M55: the house's foundation height: drawing tools aim at the raised floor (workshop.tsx keeps it in step with the save) */
+let planLift = 0
+export const setPlanLift = (h: number) => { planLift = h }
 /** M56: which way the lens faces (the Stairs tool climbs away from the camera) */
 export const buildYaw = () => cur.yaw
 export const useBuildMode = () => useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f) } }, () => on, () => false)
@@ -160,7 +163,7 @@ export function BuildPointer() {
     // the ground under a pointer event NOW (the per-frame point lags a frame; a drag's ends must be exact)
     const groundAt = (e: PointerEvent) => {
       setNdc(e); const n = ndc.current!
-      plane.current.constant = -(GROUND_Y + (tool === 'look' ? 0 : levelBase(getPlanLevel())))   // M47: a drawing tool works on the floor being edited
+      plane.current.constant = -(GROUND_Y + (tool === 'look' ? 0 : planLift + levelBase(getPlanLevel())))   // M47: a drawing tool works on the floor being edited; M55: on top of the foundation
       ray.current.setFromCamera(new THREE.Vector2(n.x, n.y), camera)
       return ray.current.ray.intersectPlane(plane.current, hit.current) ? { x: hit.current.x, z: hit.current.z } : null
     }

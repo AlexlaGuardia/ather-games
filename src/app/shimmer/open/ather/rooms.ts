@@ -21,6 +21,7 @@ import { adoptWork, adoptOut, stockJobs, type Work, type Station } from './stati
 import { adoptUpper, type Level } from './plot-floors'
 import { adoptCols, type Cols } from './plot-cols'
 import { adoptStairs, type Stairs } from './plot-stairs'
+import { adoptFound, floorAt } from './plot-found'
 import { cellMid, shaftBlocked } from './lift'
 import { adoptWalls, adoptRoof, adoptFloors, adoptPaid, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
 
@@ -79,7 +80,7 @@ export interface Room {
 export interface Chest { id: string; x: number; z: number; q: number; placedAt: number; crystal?: string }
 /** A piece of furniture or decor standing on the plot (furniture.ts). Picked up, it is the bag item `item` again. */
 export interface Piece { id: string; item: string; x: number; z: number; q: number; placedAt: number; /** M48: a lift's car level (lift.ts); absent = the ground */ lv?: number }
-export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[]; /** M54: ground-floor columns (plot-cols.ts) */ cols?: Cols; /** M56: ground-floor stairs (plot-stairs.ts) */ stairs?: Stairs }
+export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[]; /** M54: ground-floor columns (plot-cols.ts) */ cols?: Cols; /** M56: ground-floor stairs (plot-stairs.ts) */ stairs?: Stairs; /** M55: the house's foundation height (plot-found.ts), 0 / 0.6 / 1.2 */ found?: number }
 /** M37: is this rectangle in a drawn wall (plot-walls.ts)? */
 const inDrawnWall = (w: Works, r: { x0: number; x1: number; z0: number; z1: number }, pad = 0) => wallRects(w.walls ?? {}).some(b => r.x0 - pad < b.x1 && r.x1 + pad > b.x0 && r.z0 - pad < b.z1 && r.z1 + pad > b.z0)
 export const freshWorks = (): Works => ({ v: 1, rooms: [], chests: [], pieces: [] })
@@ -208,9 +209,9 @@ export function makeKeepstoneFrom(inv: Inv, bank: Bank | null | undefined): { in
 export const allChests = (w: Works): Chest[] => [STARTER_CHEST, ...w.chests]
 /** Chests standing, the starter included: what the bank's cap is counted from. */
 export const chestsStanding = (w: Works) => 1 + w.chests.length
-export function chestBox(c: Pick<Chest, 'x' | 'z' | 'q'>): Box {
+export function chestBox(c: Pick<Chest, 'x' | 'z' | 'q'>, base: number = GROUND_Y): Box {   // base (M55): the floor it stands on
   const [hw, hd] = c.q % 2 ? [CHEST_D / 2, CHEST_W / 2] : [CHEST_W / 2, CHEST_D / 2]
-  return { x0: c.x - hw, x1: c.x + hw, y0: GROUND_Y - 0.5, y1: GROUND_Y + CHEST_H, z0: c.z - hd, z1: c.z + hd }
+  return { x0: c.x - hw, x1: c.x + hw, y0: base - 0.5, y1: base + CHEST_H, z0: c.z - hd, z1: c.z + hd }
 }
 export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: number, z: number, q: number, inv?: Inv, item = KEEPSTONE): PlaceVerdict {
   if (chestsStanding(works) >= MAX_CHESTS) return { ok: false, why: `${MAX_CHESTS} Keepstones already stand. That is all a plot holds.` }
@@ -381,7 +382,8 @@ export function pieceRect(item: string, x: number, z: number, q: number) {
 /** The walker's boxes: solid pieces only (you walk through a stool or under an arch). */
 export const pieceBoxes = (w: Works): Box[] => w.pieces.filter(p => FURNITURE[p.item]?.solid).map(p => {
   const k = pieceRect(p.item, p.x, p.z, p.q)
-  return { ...k, y0: GROUND_Y - 0.5, y1: GROUND_Y + FURNITURE[p.item].h }
+  const b = floorAt(w, GROUND_Y, p.x, p.z)   // M55: inside the house it stands on the foundation
+  return { ...k, y0: b - 0.5, y1: b + FURNITURE[p.item].h }
 })
 export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: string, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
   const f = FURNITURE[item]
@@ -446,6 +448,7 @@ export function loadWorks(): Works {
       walls: adoptWalls(v.walls),   // M37 (11-19): the keeper's own walls
       ...(Object.keys(adoptCols(v.cols)).length ? { cols: adoptCols(v.cols) } : {}),   // M54: columns
       ...(Object.keys(adoptStairs(v.stairs)).length ? { stairs: adoptStairs(v.stairs) } : {}),   // M56: stairs
+      ...(adoptFound(v.found) ? { found: adoptFound(v.found) } : {}),   // M55: foundation
       roof: adoptRoof(v.roof),
       floors: adoptFloors(v.floors),
       ...(adoptUpper(v.upper).length ? { upper: adoptUpper(v.upper) } : {}),   // M47: floors above the ground one

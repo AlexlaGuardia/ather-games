@@ -6,6 +6,7 @@
 // stands at one level, `lv` on the Piece (saved; an old save has no lift at all). ride(target) sends the car (the keeper on
 // it rides along), call(level) brings it to you. Where the car is NOT, the shaft is shut by a gate (nobody falls in).
 // PURE state machine + the live runtime the walker reads (no three, no react).
+import { foundH } from './plot-found'
 import type { Box, Shape } from '../terrain-world'
 import type { Works, Piece } from './rooms'
 import { levelCount, levelsOf, levelBase, slabCells, SLAB_T } from './plot-floors'
@@ -111,8 +112,9 @@ export const liveLiftBoxes = (x0: number, z0: number, x1: number, z1: number): B
 /** the plot's shape with the lifts' cars and gates added (they move, so they are read live, never memoised) */
 export const withLifts = (shape: Shape): Shape => ({ ...shape, solids: (x0, y0, z0, x1, y1, z1) => { const base = shape.solids(x0, y0, z0, x1, y1, z1), lift = liveLiftBoxes(x0, z0, x1, z1); return lift.length ? [...base, ...lift] : base } })
 /** every frame (the walker): advance the cars, and carry the keeper who stands on one */
-export function liftCarry(lc: LocoState, dt: number, groundY: number) {
-  const w = liveLift.get?.(); liveLift.loco = lc; liveLift.groundY = groundY
+export function liftCarry(lc: LocoState, dt: number, ground: number) {
+  const w = liveLift.get?.(), groundY = ground + (w ? foundH(w) : 0)   // M55: a lift stands on the house's foundation
+  liveLift.loco = lc; liveLift.groundY = groundY
   if (!w) return
   const lifts = liftsOf(w), ids = new Set(lifts.map(p => p.id))
   for (const id of [...liveLift.ys.keys()]) if (!ids.has(id)) liveLift.ys.delete(id)

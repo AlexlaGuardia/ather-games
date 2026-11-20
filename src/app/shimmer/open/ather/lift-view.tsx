@@ -7,6 +7,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Piece } from './rooms'
 import { GROUND_Y } from './plot'
+import { foundH } from './plot-found'
 import { STOREY } from './plot-floors'
 import { WALL_H } from './plot-walls'
 import { liveLift, carBase, carLevel, liftLevels, cordsOf, cordAimed, rideNow, CORD_LOW, CORD_HIGH, PANEL_Z } from './lift'
@@ -18,16 +19,17 @@ const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, numb
 /** posts up the whole shaft (the top of the highest level), the car on its cords, and the stone weight beside it */
 export function LiftMesh({ p }: { p: Piece }) {
   const w = useWorks(), n = liftLevels(w, p), car = useRef<THREE.Group>(null), weight = useRef<THREE.Mesh>(null)   // the floors its shaft reaches
-  const top = GROUND_Y + (n - 1) * STOREY + WALL_H   // M50: a storey's walls, not a 3.2 literal
+  const B = GROUND_Y + foundH(w)   // M55: the lift stands on the house's foundation
+  const top = B + (n - 1) * STOREY + WALL_H   // M50: a storey's walls, not a 3.2 literal
   useFrame(() => {
-    const y = liveLift.ys.get(p.id) ?? carBase(GROUND_Y, carLevel(w, p)), span = (n - 1) * STOREY
-    car.current?.position.set(0, y - GROUND_Y, 0)
+    const y = liveLift.ys.get(p.id) ?? carBase(B, carLevel(w, p)), span = (n - 1) * STOREY
+    car.current?.position.set(0, y - B, 0)
     // the weight runs the other way: down as the car goes up
-    weight.current?.position.set(0.36, GROUND_Y + 0.5 + (span - (y - GROUND_Y)), 0.36)
+    weight.current?.position.set(0.36, 0.5 + (span - (y - B)), 0.36)
   })
-  const h = top - GROUND_Y
+  const h = top - B
   return (
-    <group position={[p.x, GROUND_Y, p.z]} rotation-y={-p.q * Math.PI / 2}>
+    <group position={[p.x, B, p.z]} rotation-y={-p.q * Math.PI / 2}>
       {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b], k) => <Bx key={k} p={[a * 0.47, h / 2, b * 0.47]} s={[0.07, h, 0.07]} c={WOOD} />)}
       <Bx p={[0, h - 0.03, 0.47]} s={[1, 0.06, 0.07]} c={DARK} /><Bx p={[0, h - 0.03, -0.47]} s={[1, 0.06, 0.07]} c={DARK} />
       {/* the plank cap: the shaft ends here, under the top floor's ceiling (the roof stays closed over it) */}
@@ -68,7 +70,7 @@ export function LiftInput() {
       const o = ray.ray.origin, d = ray.ray.direction
       for (const p of w.pieces) {
         if (p.item !== 'lift') continue
-        const k = cordAimed(p, liveLift.ys.get(p.id) ?? carBase(GROUND_Y, carLevel(w, p)), liftLevels(w, p), [o.x, o.y, o.z], [d.x, d.y, d.z])
+        const k = cordAimed(p, liveLift.ys.get(p.id) ?? carBase(GROUND_Y + foundH(w), carLevel(w, p)), liftLevels(w, p), [o.x, o.y, o.z], [d.x, d.y, d.z])
         if (k != null && rideNow(p.id)(k)) return
       }
     }

@@ -27,17 +27,18 @@ import {
   WALL_H, KEEP_CLEAR, type Works, type Room, type RoomKind, type WorkNear,
   stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, canPlacePiece, placePiece, pickUpPiece, turnPiece, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
-  CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
+  CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, payCost, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
 import {
   MAX_CHESTS, CHEST_SLOTS, bankCap, bankUsed, bankView, BANK_TABS, deposit, depositBag, withdraw, loadBank, saveBank, freshBank,
   bankCount, type Bank, type BankTab,
 } from './garden-bank'
-import { reconcile, paneFor, billOfAll, buildAll, PER_COL } from './plot-bom'
+import { reconcile, paneFor, billOfAll, buildAll, PER_COL, STONE_BRICK } from './plot-bom'
 import { getPlanLevel, setPlanLevel, usePlanLevel } from './plot-level'
 import { shaftKeys, shaftHoles, liveLift, cellMid, shaftBlockers, SHAFT_WHY, isLiftPiece } from './lift'
 import { LiftMesh, LiftInput } from './lift-view'
 import { levelOf, withLevel, levelCount, levelBase, canStack, floating, upperBoxes, MAX_LEVELS, SLAB_T } from './plot-floors'
+import { floorAt, foundH, plinthBoxes, doorSteps, foundDelta, FOUND_OPTS, FOUND_NAME, type FoundH } from './plot-found'
 import { stairBoxes, stairCellSet, toggleStair, dirOfYaw, type Stairs } from './plot-stairs'
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, type Job } from './furniture'
@@ -49,7 +50,7 @@ import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
 import { TOOL_DEFS } from '../../engine/tools'
-import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw, buildYaw } from './build-mode'
+import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw, buildYaw, setPlanLift } from './build-mode'
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
 import { advance, setFocus, cancelFocus, runProgress, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
@@ -74,7 +75,7 @@ export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER
 /** The live works (the page's village tick reads and writes through this store, so an open panel sees the product land). */
 export const currentWorks = () => getW()
 /** Every room's walls and every Keepstone, for the walker's plotShape. */
-export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(chestBox), ...pieceBoxes(w), ...wallBoxes(w.walls ?? {}, GROUND_Y), ...colBoxes(w.cols, GROUND_Y), ...upperBoxes(w, GROUND_Y, shaftHoles(w))]
+export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(c => chestBox(c, floorAt(w, GROUND_Y, c.x, c.z))), ...pieceBoxes(w), ...wallBoxes(w.walls ?? {}, GROUND_Y + foundH(w)), ...colBoxes(w.cols, GROUND_Y + foundH(w)), ...upperBoxes(w, GROUND_Y + foundH(w), shaftHoles(w)), ...plinthBoxes(w, GROUND_Y), ...doorSteps(w, GROUND_Y)]   // M55: the house stands on its foundation
 
 // ── M37 slice 1: YOUR OWN WALLS (plot-walls.ts; Alex 11-19 "like the sims ... walls a little thicker, like the rooms") ──
 // In plan mode, the Walls tool: drag along the metre grid, a ghost run shows (blue = it can stand, red = it cannot), let go
@@ -431,13 +432,36 @@ function HouseLevels({ w }: { w: Works }) {
         const holes = k > 0 ? stairCellSet(levelOf(w, k - 1).stairs) : undefined
         const guide = b && k < edit
         return (
-          <group key={k} position-y={levelBase(k)}>
+          <group key={k} position-y={levelBase(k) + foundH(w)}>
             {Object.keys(L.walls).length > 0 && <DrawnWalls walls={L.walls} roof={w.roof ?? 'gable'} floors={L.floors} unbuilt={unbuiltRooms(L.walls, L.paid)} probe={k === 0} roofed={k === last} slab={k > 0} down={guide ? true : undefined} holes={holes} />}
             {hasCols && <DrawnCols cols={L.cols!} down={guide ? true : undefined} />}
             {hasStairs && <DrawnStairs stairs={L.stairs!} />}
           </group>
         )
       })}
+    </>
+  )
+}
+/** M55: set the house's foundation. Raising it pays Stone Brick for the built footprint (the Keepstone first, the bag tops up);
+ *  lowering gives the difference back to the bag. Nothing changes unless all of it is there. */
+function setFoundation(h: FoundH) {
+  const w = currentWorks(), from = foundH(w); if (from === h) return
+  const d = foundDelta(w, from, h)
+  if (d > 0) { const pay = payCost([{ id: STONE_BRICK, n: d }], getInv(), getB()); if (!pay) { hudSay(`${d} Stone Brick needed to raise the house, ${haveFor(getInv(), getB(), STONE_BRICK)} on hand.`, 'info'); return } setInv(pay.inv); if (pay.bank) setBank(pay.bank) }
+  else if (d < 0) { const g = give(getInv(), STONE_BRICK, -d); if (g.left) { hudSay('Your bag is full: no room for the stone that comes back.', 'info'); return } setInv(g.inv) }
+  setWorks({ ...w, found: h }); hudSay(h ? `The house stands on a ${FOUND_NAME[h].toLowerCase()} foundation.` : 'The house is back on the ground.', 'info')
+}
+/** M55: the plinth under the built house and the steps at its doors (stone, the solids' own boxes) */
+function Plinth({ w }: { w: Works }) {
+  const boxes = useMemo(() => [...plinthBoxes(w, GROUND_Y), ...doorSteps(w, GROUND_Y)], [w])
+  if (!boxes.length) return null
+  return (
+    <>
+      {boxes.map((b, n) => { const y0 = Math.max(b.y0, GROUND_Y - 0.15), h = b.y1 - y0; return (
+        <mesh key={n} data-plinth position={[(b.x0 + b.x1) / 2, y0 + h / 2, (b.z0 + b.z1) / 2]} receiveShadow castShadow>
+          <boxGeometry args={[b.x1 - b.x0, h, b.z1 - b.z0]} /><meshLambertMaterial color="#a8a196" />
+        </mesh>
+      ) })}
     </>
   )
 }
@@ -523,6 +547,7 @@ function Catalog({ onPick }: { onPick: () => void }) {
 /** the Walls / Erase tools and the wood picker, in the build bar */
 function WallTools({ owned, cat, onCat }: { owned: React.MutableRefObject<ReadonlySet<string>>; cat: boolean; onCat: () => void }) {
   const t = useBuildTool(), mat = useWallMat(), pk = usePaint(), [pPat, pCol] = pk.split('|') as [FloorPat, string], inv = useInv(), down = useWallsDown(), w = useWorks(), roof = w.roof ?? 'gable', owner = useOwner()
+  useEffect(() => { setPlanLift(foundH(w)) }, [w])   // M55: drawing tools aim at the raised floor
   useEffect(() => {
     if (t === 'look') return
     onBuildDraw(t === 'stairs' ? stairsHandler(() => owned.current) : t === 'column' ? columnHandler(() => owned.current) : t === 'door' || t === 'window' || t === 'paint' || t === 'blueprint' ? tapToolHandler(t) : wallDrawHandler(() => owned.current, t === 'erase'))
@@ -551,6 +576,9 @@ function WallTools({ owned, cat, onCat }: { owned: React.MutableRefObject<Readon
       {t !== 'look' && ROOF_STYLES.map(r => (
         <button key={r} type="button" data-roof={r} aria-pressed={roof === r} style={{ ...btn(roof === r), height: 30, fontSize: 11 }} onClick={() => setWorks({ ...currentWorks(), roof: r })}>{r}</button>
       ))}
+      {t !== 'look' && <span data-found-picker style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><span style={{ font: '700 10px system-ui', letterSpacing: '.1em', textTransform: 'uppercase', color: H.ink, opacity: 0.6 }}>Foundation</span>{FOUND_OPTS.map(h => (
+        <button key={h} type="button" data-found={h} aria-pressed={foundH(w) === h} style={{ ...btn(foundH(w) === h), height: 30, fontSize: 11 }} onClick={() => setFoundation(h)}>{FOUND_NAME[h]}</button>
+      ))}</span>}
     </div>
   )
 }
@@ -682,8 +710,9 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
     <>
       <PlanningTable />
       {w.rooms.map(r => (raised(r) ? <RoomMesh key={r.id} r={r} /> : <Scaffold key={r.id} r={r} />))}
-      {allChests(w).map(c => <Wobbly key={c.id} id={c.id} at={[c.x, GROUND_Y, c.z]}><Keepstone c={c} pose={pose} /></Wobbly>)}
-      {w.pieces.map(pc => <Wobbly key={pc.id} id={pc.id} at={[pc.x, GROUND_Y, pc.z]}><PieceMesh p={pc} /></Wobbly>)}
+      {allChests(w).map(c => <Wobbly key={c.id} id={c.id} at={[c.x, floorAt(w, GROUND_Y, c.x, c.z), c.z]}><Keepstone c={c} pose={pose} /></Wobbly>)}
+      {w.pieces.map(pc => <Wobbly key={pc.id} id={pc.id} at={[pc.x, floorAt(w, GROUND_Y, pc.x, pc.z), pc.z]}><PieceMesh p={pc} /></Wobbly>)}
+      <Plinth w={w} />
       {stowed && <MeleeAim stowed={stowed} />}
       {w.pieces.some(x => x.item === 'lift') && <LiftInput />}
       <MoglinsAtWork w={w} />
@@ -895,7 +924,7 @@ function ChestGhost({ pose, owned, q, item }: { pose: React.MutableRefObject<Pos
   const g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
   useFrame(() => {
     ghostAt(pose.current, 1.8, 2)
-    g.current?.position.set(ghost.x, GROUND_Y + CHEST_H / 2, ghost.z)
+    g.current?.position.set(ghost.x, floorAt(getW(), GROUND_Y, ghost.x, ghost.z) + CHEST_H / 2, ghost.z)
     mat.current?.color.set(canPlaceChest(getW(), owned, ghost.x, ghost.z, q, getInv(), item).ok ? GHOST_OK : GHOST_BAD)
   })
   return (
@@ -944,7 +973,7 @@ function PieceGhost({ pose, owned, item, q }: { pose: React.MutableRefObject<Pos
   const f = FURNITURE[item], g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
   useFrame(() => {
     ghostAt(pose.current, Math.max(f.w, f.d) / 2 + 1.2, 4)
-    g.current?.position.set(f.shaft ? cellMid(ghost.x) : ghost.x, GROUND_Y, f.shaft ? cellMid(ghost.z) : ghost.z)
+    g.current?.position.set(f.shaft ? cellMid(ghost.x) : ghost.x, floorAt(getW(), GROUND_Y, ghost.x, ghost.z), f.shaft ? cellMid(ghost.z) : ghost.z)
     mat.current?.color.set(canPlacePiece(getW(), owned, item, ghost.x, ghost.z, q, getInv()).ok ? GHOST_OK : GHOST_BAD)
   })
   return (
