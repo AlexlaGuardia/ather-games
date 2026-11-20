@@ -8,7 +8,8 @@ import { talkLine } from '../src/app/shimmer/open/ather/folk-lines'
 import { itemDef } from '../src/app/shimmer/open/shared/inventory'
 import { goodsText, ASK, giveLabel } from '../src/app/shimmer/open/ather/folk-talk'   // lark's labels: a reword never stales the check
 import { withGlade, type Network } from '../src/app/shimmer/open/ather/network'
-import { folkSpots, nearestSpot } from '../src/app/shimmer/open/ather/folk-spots'   // M19: where each Moglin stands
+import { nearestSpot } from '../src/app/shimmer/open/ather/folk-spots'   // M19: where each Moglin stands
+import { builtFolkSpots } from '../src/app/shimmer/open/ather/settlement-lots'   // M39 s3: a trade's Moglin stands at its house door, the rest on the green's fan
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -40,7 +41,7 @@ await p.mouse.click(500, 350); await sleep(800)
 const drawn = () => p.evaluate((id: string) => ((window as any).__folk?.drawn?.() ?? {})[id] as { id: string; x: number; z: number }[] | undefined, st.id)
 ok(await (async () => { for (let t = 0; t < 15000; t += 500) { if ((await drawn())?.length === folk.length) return true; await sleep(500) } return false })(), `${st.name}: ${folk.length} Moglins stand in it (${(await drawn())?.length})`)
 ok(((await p.evaluate(() => (window as any).__folk?.mapSettlements?.() ?? 0)) as number) === withGlade(net).settlements.length, 'the maps have every settlement to draw (the season\'s + Moonwell Glade, M30)')
-const spots = folkSpots(st, folk.map(f => f.id)), kp = await p.evaluate(() => (window as any).__folk.keeper()) as { x: number; z: number }
+const spots = builtFolkSpots(st, folk, net.season), kp = await p.evaluate(() => (window as any).__folk.keeper()) as { x: number; z: number }
 const nearest = nearestSpot(spots, kp.x, kp.z)!
 await p.keyboard.press('KeyE'); await p.mouse.move(5, 5)   // the pointer off the answers (a hover moves the pick)
 const bubble = () => p.evaluate(() => document.querySelector('[data-talk-bubble]')?.firstElementChild?.textContent ?? '')
