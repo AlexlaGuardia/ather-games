@@ -46,7 +46,7 @@ import { TOOL_DEFS } from '../../engine/tools'
 import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw } from './build-mode'
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
-import { advance, enqueue, cancel, dequeue, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, OUT_CAP } from './station-queue'
+import { advance, setFocus, cancelFocus, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
 import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, GRADE_CATEGORIES, type Village } from './moglins'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -945,27 +945,28 @@ function FarmHost({ room, onClose }: { room: Room; onClose: () => void }) {
 }
 
 // ── M43: THE STATION = a work panel + its own STORE panel beside it (desktop side by side; phone stacked) ─────────────
-let openBench: string | null = null   // the room whose panel is open: with no Moglin, the keeper works the queue only then
-/** Re-start a queue's clock at now (its worker changed): the time nobody worked it is never banked. */
-function touchQueue(roomId: string) {
-  const w = getW(), r = w.rooms.find(x => x.id === roomId); if (!r?.queue) return
-  setWorks(setStation(w, roomId, { ...stationOf(r), queue: { ...r.queue, last: Date.now() } }))
+let openBench: string | null = null   // the room whose panel is open: with no Moglin, the keeper works a focus only then
+/** Re-start a station's clock at now (its worker or its stock changed): idle or unstaffed time is never banked. */
+function touchWork(roomId: string) {
+  const w = getW(), r = w.rooms.find(x => x.id === roomId); if (!r) return
+  setWorks(setStation(w, roomId, touch(stationOf(r), Date.now())))
 }
-/** Who works a room's queue and how fast: its Moglin (its CRAFT grade), else the keeper while the panel is open, else nobody (0). */
+/** Who works a room and how fast: its Moglin (its CRAFT grade), else the keeper while the panel is open (a focus only), else nobody (0). */
 function workerOf(r: Room, v: Village): { moglin?: Village['moglins'][number]; speed: number } {
   const m = v.moglins.find(x => x.room === r.id && WORKS_IN[x.profession].includes(r.kind))
   return m ? { moglin: m, speed: moglinSpeed(m.grades.craft) } : { speed: openBench === r.id ? 1 : 0 }
 }
-/** Run every station queue to now. Offline catch-up is the same call: `last` is a timestamp, the Moglin's hours since are
- *  worked out of the store and into the output (station-queue.ts: capped by inputs and the 30 cap). */
+/** Run every station to now. Offline catch-up is the same call: `last` is a timestamp, the Moglin's hours since are worked
+ *  out of the store into the output (station-queue.ts: stockpile above the 30 reserve, capped at 30 a product). */
 export function stationTick(now = Date.now()) {
-  const w = getW(); if (!w.rooms.some(r => r.queue)) return
+  const w = getW(); if (!w.rooms.some(r => raised(r, now))) return
   const v = loadVillage(); let nw = w, changed = false
   for (const r of w.rooms) {
-    if (!r.queue || !raised(r, now)) continue
-    const { speed } = workerOf(r, v)
-    if (speed <= 0) continue
-    nw = setStation(nw, r.id, advance(stationOf(r), now, speed).station); changed = true
+    if (!raised(r, now)) continue
+    const { moglin, speed } = workerOf(r, v)
+    if (!moglin && (speed <= 0 || !(r.work?.focus || r.work?.run))) continue   // the keeper only ever works a focus
+    const a = advance(stationOf(r), now, speed, moglin ? stockJobs(r.kind) : [])
+    if (a.active || !r.work) { nw = setStation(nw, r.id, a.station); changed = true }   // an idle Moglin saves nothing (the panel re-starts its clock when the stock changes)
   }
   if (changed) setWorks(nw)
 }
@@ -983,7 +984,7 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
   const inv = useInv(), w = useWorks(), def = ROOMS[room.kind], bankNow = useBank(), narrow = useNarrow()
   const r = w.rooms.find(x => x.id === room.id) ?? room   // the live room (its store moves under the panel)
   const [pick, setPick] = useState<Pick>({ job: null, qty: 10 })
-  useEffect(() => { openBench = room.id; touchQueue(room.id); return () => { if (openBench === room.id) openBench = null } }, [room.id])
+  useEffect(() => { stationTick(); openBench = room.id; touchWork(room.id); return () => { if (openBench === room.id) openBench = null } }, [room.id])
   const foods = Object.keys(BAIT_FROM).filter(id => benchCount(r, inv, id) > 0)
   const inBank = (id: string) => bankCount(bankNow, id)
   const reach = (id: string) => benchCount(r, inv, id) + inBank(id)
@@ -1015,14 +1016,14 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
         {(Object.keys(BENCH) as FocusSkill[]).filter(s => BENCH[s] === r.kind).map(s => <FocusList key={s} r={r} inv={inv} skill={s} />)}
         {r.kind === 'carpentry' && (
           <>
-            {cl(crafts(REFINE), 'Refine', 'Each log works two ways. Pick one, set how many, and the station works it from its store, one log at a time.', 'No logs to work. Prune trees in the Wilds. Better woods come as your Forestry grows.')}
-            {cl(PIECE_JOBS, 'Furniture', 'Made pieces wait in the output. Set them from the planning table.', undefined)}
+            {cl(crafts(REFINE), 'Refine', 'Each log works two ways. Pick one to Focus: the station uses every log in its store to make it, one at a time. A Moglin also keeps stacks of each going by itself.', 'No logs to work. Prune trees in the Wilds. Better woods come as your Forestry grows.')}
+            {cl(PIECE_JOBS, 'Furniture', 'Pick a piece and Focus a number: the station makes them from its store. They wait in the output. Set them from the planning table.', undefined)}
           </>
         )}
-        {r.kind === 'stonemason' && cl(crafts(STONE_REFINE), 'Refine', 'Parts for a house plan. Pick one, set how many, and the station cuts it from its store, one stone at a time.', 'No blankstone or mana shards to cut. Prospect them in the Wilds.')}
+        {r.kind === 'stonemason' && cl(crafts(STONE_REFINE), 'Refine', 'Parts for a house plan. Pick one to Focus: the station cuts it from every stone in its store, one at a time. A Moglin also keeps stacks of each going by itself.', 'No blankstone or mana shards to cut. Prospect them in the Wilds.')}
         {r.kind === 'cooking' && cl(ROAST, 'The hearth', 'Roasts wait in the output. Hold one in the Wilds and click to eat it mid-fight. Meat comes from the Smokehouse in the continent\'s towns.')}
         {r.kind === 'alchemy' && cl(BREW, 'The cauldron', 'Potions wait in the output. Hold one and click to drink.')}
-        <QueueView r={r} />
+        <WorkView r={r} />
         <MoglinDuty r={r} />
       </div>
     </HearthFrame>
@@ -1051,10 +1052,11 @@ function StorePanel({ r, pick, narrow, onClose }: { r: Room; pick: Pick; narrow:
     return [...m].filter(([id]) => roomAccepts(r.kind, id) || need.has(id)).sort((a, b) => (need.has(b[0]) ? 1 : 0) - (need.has(a[0]) ? 1 : 0) || itemDef(a[0]).name.localeCompare(itemDef(b[0]).name))
   })()
   const mv = (id: string, n: number) => {
+    touchWork(r.id)
     if (src === 'pack') { const m = stockItemFromBag(getW(), r.id, getInv(), id, n); if (m.moved) { setWorks(m.works); setInv(m.inv) } else if ('why' in m && m.why) hudSay(m.why, 'info') }
     else { const m = stockItemFromBank(getW(), r.id, getB(), id, n); if (m.moved) { setWorks(m.works); setBank(m.bank) } else if (m.why) hudSay(m.why, 'info') }
   }
-  const back = (k: number) => { const m = takeFromRoom(getW(), r.id, k, getInv()); if (m.moved) { setWorks(m.works); setInv(m.inv) } else if ('why' in m && m.why) hudSay(m.why, 'info') }
+  const back = (k: number) => { touchWork(r.id); const m = takeFromRoom(getW(), r.id, k, getInv()); if (m.moved) { setWorks(m.works); setInv(m.inv) } else if ('why' in m && m.why) hudSay(m.why, 'info') }
   const tab = (on: boolean): React.CSSProperties => ({ border: 0, borderRadius: 10, height: 32, padding: '0 14px', cursor: 'pointer', font: '700 12px system-ui', letterSpacing: '.06em', textTransform: 'uppercase', background: on ? H.ink : 'rgba(58,39,22,.08)', color: on ? '#fff' : H.ink })
   return (
     <HearthFrame title="Store" maxWidth={narrow ? 520 : 400} onClose={onClose} fixed dataPanel="station-store" backdrop={false} bodyClass={narrow ? '!max-h-none' : ''}>
@@ -1094,38 +1096,46 @@ function StorePanel({ r, pick, narrow, onClose }: { r: Room; pick: Pick; narrow:
     </HearthFrame>
   )
 }
-/** max-affordable in output items, counting what the station holds (the queue takes from the STORE only) */
+/** max-affordable in output items, counting what the station holds (a focus takes from the STORE only) */
 const maxAffordableAny = (j: Job, r: Room, _inv: Inv, _bank: Bank) => maxAffordable(j, r.store)
 
-/** The queue and the output: what is being made, how long, and what is waiting to be collected. */
-function QueueView({ r }: { r: Room }) {
+/** What the station is doing: the Moglin's stockpile (30 of each product, above a 30 reserve of the raw), a focus, and the output. */
+function WorkView({ r }: { r: Room }) {
   const [, force] = useState(0)
   useEffect(() => { const t = setInterval(() => force(n => n + 1), 1000); return () => clearInterval(t) }, [])
-  const st = stationOf(r), q = st.queue, status = statusOf(st), v = loadVillage(), who = workerOf(r, v)
-  const outs = st.out ?? []
+  const st = stationOf(r), w = st.work, v = loadVillage(), who = workerOf(r, v), stock = stockJobs(r.kind)
+  const status = statusOf(st, who.moglin ? stock : []), outs = st.out ?? []
+  const fj = w?.focus && jobById(w.focus.job)
   const collect = (id: string, n?: number) => {
+    touchWork(r.id)
     const cur = stationOf(getW().rooms.find(x => x.id === r.id)!), t = takeOut(cur, id, n), g = give(getInv(), id, t.took)
     setWorks(setStation(getW(), r.id, putOut(t.station, id, g.left))); setInv(g.inv)
     if (g.left > 0) hudSay('Your bag is full. The rest waits in the station.', 'info')
   }
-  const left = q ? q.items.reduce((a, i, k) => { const j = jobById(i.job); return a + (j ? runMs(j) * i.left - (k === 0 && q.run ? q.t : 0) : 0) }, 0) : 0
+  const liveStock = stock.filter(j => st.store?.some(x => x.id === j.in[0].id) || (st.out ?? []).some(x => x.id === j.out.id))
   return (
-    <div data-queue>
-      <div style={lab}>The queue</div>
-      {q ? (
-        <div style={{ display: 'grid', gap: 4, marginTop: 4 }}>
-          {q.items.map((i, k) => { const j = jobById(i.job)!; return (
-            <div key={i.job} data-queue-line={i.job} data-left={i.left} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: H.ink }}>
-              <span style={{ flex: 1 }}>{itemDef(j.out.id).name} <span style={{ color: H.inkSoft }}>· {i.left * j.out.n} to make{k === 0 && q.run ? ' · working' : ''}</span></span>
-              <HearthButton small onClick={() => setWorks(setStation(getW(), r.id, dequeue(stationOf(getW().rooms.find(x => x.id === r.id)!), i.job)))}>Drop</HearthButton>
-            </div>) })}
-          <div data-queue-status={status} style={{ fontSize: 12.5, color: status === 'working' ? H.inkSoft : '#9a5f10', fontWeight: status === 'working' ? 400 : 700 }}>
-            {status === 'empty' ? 'Paused: the store has no inputs for the next one. Bring more and it carries on.' : status === 'full' ? `Paused: the output holds ${OUT_CAP} of an item. Collect some.` : who.speed > 0 ? `${who.moglin ? `${who.moglin.name} is working` : 'You are working it (while this panel is open)'} · about ${fmtSecs(left / who.speed)} left` : 'No one is working it. Put a Moglin on the room, or keep this panel open.'}
-          </div>
-          <span data-act="cancel-queue"><HearthButton small onClick={() => setWorks(setStation(getW(), r.id, cancel(stationOf(getW().rooms.find(x => x.id === r.id)!))))}>Cancel the queue</HearthButton></span>
+    <div data-work>
+      <div style={lab}>The station's work</div>
+      {fj && w?.focus ? (
+        <div data-focus-line={fj.id} data-left={w.focus.left} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: H.ink, marginTop: 4 }}>
+          <span style={{ flex: 1 }}><b>Focus:</b> {itemDef(fj.out.id).name} <span style={{ color: H.inkSoft }}>· {w.focus.left * fj.out.n} to go · uses every {fj.in.map(c => itemDef(c.id).name).join(' + ')} in the store</span></span>
+          <span data-act="cancel-focus"><HearthButton small onClick={() => { touchWork(r.id); setWorks(setStation(getW(), r.id, cancelFocus(stationOf(getW().rooms.find(x => x.id === r.id)!)))) }}>Stop</HearthButton></span>
         </div>
-      ) : <div style={{ fontSize: 12.5, color: H.inkFaint, marginTop: 4 }}>Nothing queued.</div>}
-      <div style={{ ...lab, marginTop: 10 }}>The output · up to {OUT_CAP} of an item</div>
+      ) : stock.length ? (
+        <div style={{ fontSize: 12.5, color: H.inkSoft, marginTop: 4 }}>{who.moglin ? `${who.moglin.name} keeps ${RESERVE} of each raw material for you and refines the rest into a stack of ${OUT_CAP} of each product.` : `Stockpile: a Moglin keeping this room refines whatever is above ${RESERVE} of each raw material into a stack of ${OUT_CAP} of each product. Until then, pick a product and Focus it.`}</div>
+      ) : <div style={{ fontSize: 12.5, color: H.inkSoft, marginTop: 4 }}>Pick something and Focus it: the station makes it from the store.</div>}
+      {who.moglin && liveStock.length > 0 && (
+        <div data-stockpile style={{ display: 'grid', gap: 2, marginTop: 6 }}>
+          {liveStock.map(j => { const l = stockLine(st, j); return (
+            <div key={j.id} data-stock={j.out.id} data-made={l.made} style={{ display: 'flex', gap: 8, fontSize: 12.5, color: H.ink }}>
+              <span style={{ flex: 1 }}>{itemDef(j.out.id).name}</span><span style={{ color: l.made >= l.cap ? '#3d7a30' : H.inkSoft }}>{l.made} / {l.cap}{l.made < l.cap && !l.waiting ? ' · waiting for more than 30 ' + itemDef(j.in[0].id).name.toLowerCase() : ''}</span>
+            </div>) })}
+        </div>
+      )}
+      <div data-work-status={status} style={{ fontSize: 12.5, marginTop: 6, color: status === 'idle' ? '#9a5f10' : H.inkSoft, fontWeight: status === 'idle' ? 700 : 400 }}>
+        {status === 'idle' ? (who.moglin ? 'Idle: every product has its stack, or nothing is left above the reserve.' : fj ? 'Paused: the store has no inputs for it.' : 'Idle.') : who.speed > 0 ? `${who.moglin ? `${who.moglin.name} is working` : 'You are working it (while this panel is open)'}${w?.run ? ` · ${itemDef(jobById(w.run.job)!.out.id).name}` : ''}` : 'No one is working it. Keep this panel open, or put a Moglin on the room.'}
+      </div>
+      <div style={{ ...lab, marginTop: 10 }}>The output · up to {OUT_CAP} of an item in a stockpile</div>
       {outs.length ? (
         <div style={{ ...grid, marginTop: 6 }}>
           {outs.map(s => <Cell key={s.id} s={s} data-out-item={s.id} title=" · tap to collect" onClick={() => collect(s.id)} />)}
@@ -1220,7 +1230,7 @@ function MoglinDuty({ r }: { r: Room }) {
   const fits = v.moglins.filter(m => m.id !== here?.id && WORKS_IN[m.profession].includes(r.kind))
   const put = (id: string, room: string | null) => {
     const nv = assign(loadVillage(), getW(), id, room); if (!nv) { hudSay('Their trade does not suit this room.', 'info'); return }
-    saveVillage(nv); setV(nv); touchQueue(r.id)
+    saveVillage(nv); setV(nv); touchWork(r.id)
   }
   const grades = (m: Village['moglins'][number]) => GRADE_CATEGORIES.map(c => `${c} ${GRADE_NAME[m.grades[c]]}`).join(' · ')
   if (!here && !fits.length && !v.moglins.length) return null
@@ -1248,7 +1258,7 @@ function MoglinDuty({ r }: { r: Room }) {
   )
 }
 
-/** A bench's craft list (M43): each job shows its time per item; tap one to set how many (1 / 10 / 99 / max) and queue it. */
+/** A bench's craft list (M43): each job shows its time per item; tap one to set how many (1 / 10 / 99 / max) and Focus it. */
 function CraftList({ title, note, jobs, r, pick, setPick, empty }: { title: string; note: string; jobs: readonly Job[]; r: Room; pick: Pick; setPick: (p: Pick) => void; empty?: string }) {
   const inv = useInv(), bank = useBank()
   return (
@@ -1274,8 +1284,8 @@ function CraftList({ title, note, jobs, r, pick, setPick, empty }: { title: stri
                       <button key={q} type="button" data-qty={q} aria-pressed={pick.qty === q} onClick={() => setPick({ ...pick, qty: q })}
                         style={{ border: 0, borderRadius: 8, height: 30, minWidth: 38, padding: '0 9px', cursor: 'pointer', font: '700 12px system-ui', background: pick.qty === q ? H.ink : 'rgba(58,39,22,.1)', color: pick.qty === q ? '#fff' : H.ink }}>{q === 'max' ? `Max${afford ? ` ${afford}` : ''}` : q}</button>
                     ))}
-                    <span data-act="queue"><HearthButton small primary disabled={qty < 1} onClick={() => { const w = getW(); setWorks(setStation(w, r.id, enqueue(stationOf(w.rooms.find(x => x.id === r.id)!), j.id, qty, Date.now()))); if (afford < qty) hudSay(`The store holds inputs for ${afford} so far. It pauses when they run out.`, 'info') }}>Queue {qty || ''}</HearthButton></span>
-                    <span style={{ fontSize: 11.5, color: H.inkSoft }}>{qty ? `${fmtSecs(runsFor(j, qty) * runMs(j))} at your pace` : ''}</span>
+                    <span data-act="focus"><HearthButton small primary disabled={qty < 1} onClick={() => { touchWork(r.id); const w = getW(); setWorks(setStation(w, r.id, setFocus(stationOf(w.rooms.find(x => x.id === r.id)!), j.id, qty, Date.now()))) }}>Focus {qty || ''}</HearthButton></span>
+                    <span style={{ fontSize: 11.5, color: H.inkSoft }}>{qty ? `${fmtSecs(runsFor(j, qty) * runMs(j))} at base pace · ignores the reserve and the cap` : 'put material in the store first'}</span>
                   </div>
                 )}
               </div>

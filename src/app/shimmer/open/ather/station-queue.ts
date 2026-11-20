@@ -1,11 +1,14 @@
-// STATION QUEUE: batch crafting at a workshop room (BETA M43; Alex 11-20 playtest: "no click-per-plank").
-// A job gets a CRAFT TIME per item and a quantity up to 99. The station works its queue: inputs leave the station's STORE
-// ONE RUN AT A TIME (never the whole batch up front), a finished run lands in the station's OUTPUT, which holds OUT_CAP of an
-// item. The queue pauses when the store has no inputs for the next run, or when the output has no room for it, and resumes by
-// itself when the player stocks the store / empties the output. Nothing is burned for nowhere to put it.
-// WHO WORKS IT (hub default): the room's own Moglin, at its CRAFT grade's pace, ALSO while you are away (offline catch-up
-// from timestamps). With no Moglin the keeper works it themselves, only while the bench panel is open (speed 1). Time on a
-// blocked queue is not banked (no debt). ★ PURE: no React, no DOM.
+// STATION WORK: stockpile + focus crafting at a workshop room (BETA M43; Alex 11-20 playtest: "no click-per-plank", then
+// "the Moglin works a STOCKPILE, not a manual queue").
+// STOCKPILE (default, the room's Moglin only): the station keeps RESERVE (30) of each RAW input in its store for the player;
+// from the surplus above that it refines, ONE item's worth of input at a time, until the output holds OUT_CAP (30) of each
+// product; it works one product to its stack, then swaps to the next (planks to 30, then bark to 30 ...), then idles. Only
+// REFINING jobs (REFINE / STONE_REFINE) are ever stockpiled; furniture, roasts and brews are made by FOCUS only.
+// FOCUS (the player picks ONE job + a quantity 1/10/99/max): ignores both the reserve and the cap, uses ALL matching material in
+// the store to make that item asap, then drops back to stockpile (also when the inputs run out). The Moglin works it at its
+// CRAFT grade; with no Moglin the keeper works a focus themselves, only while the bench panel is open (speed 1).
+// Time passes offline: `last` is a timestamp; advance() credits (now - last) * speed, bounded by inputs and the caps. Time with
+// nothing to do is never banked. ★ PURE: no React, no DOM.
 import { putIn } from './garden-bank'
 import { REFINE, STONE_REFINE, PIECE_JOBS, type Job } from './furniture'
 import { ROAST } from './cooking'
@@ -13,16 +16,17 @@ import { BREW } from './alchemy'
 import type { Stack } from '../shared/inventory'
 
 export const OUT_CAP = 30
+export const RESERVE = 30
 export const MAX_QTY = 99
 export const QTY_PICKS = [1, 10, 99] as const
 
-/** one queued job: `left` = RUNS still to make (the one in progress included) */
-export interface QItem { job: string; left: number }
-/** The queue on a Room. `run` = the head's inputs are already out of the store and `t` ms of its work are done. */
-export interface Queue { items: QItem[]; t: number; run: boolean; last: number }
+/** The station's work state. `run` = one run's inputs are out of the store and `t` ms of it are done (`f` = a focus run).
+ *  `cur` = the stockpile's position in its product list. Present on a room that has been worked or focused. */
+export interface Focus { job: string; left: number }
+export interface Work { focus?: Focus; run?: { job: string; t: number; f?: boolean }; cur: number; last: number }
 /** what the engine reads off a Room */
-export interface Station { store?: Stack[]; out?: Stack[]; queue?: Queue }
-export type Status = 'idle' | 'working' | 'empty' | 'full'
+export interface Station { store?: Stack[]; out?: Stack[]; work?: Work }
+export type Status = 'idle' | 'working' | 'focus'
 
 export const ALL_JOBS: readonly Job[] = [...REFINE, ...STONE_REFINE, ...PIECE_JOBS, ...ROAST, ...BREW]
 export const jobById = (id: string): Job | undefined => ALL_JOBS.find(j => j.id === id)
@@ -46,53 +50,48 @@ export const moglinSpeed = (craft: number) => 1 + 0.25 * (Math.max(1, Math.min(5
 
 const have = (stacks: readonly Stack[] | undefined, id: string) => (stacks ?? []).reduce((a, s) => a + (s.id === id ? s.n : 0), 0)
 const BIG = 1e9
+/** the refining jobs a room stockpiles (never furniture, roasts or brews) */
+export function stockJobs(kind: string): readonly Job[] {
+  return kind === 'carpentry' ? REFINE : kind === 'stonemason' ? STONE_REFINE : []
+}
 /** runs a quantity of OUTPUT items takes */
 export const runsFor = (j: Job, qty: number) => Math.ceil(Math.max(0, Math.min(MAX_QTY, qty)) / j.out.n)
-/** the most output items worth queueing for a job from what the store holds right now (1 / 10 / 99 / MAX), capped at 99 */
+/** Max for a FOCUS: every run the store's inputs allow (ALL the matching material), in output items, capped at 99. */
 export function maxAffordable(j: Job, store: readonly Stack[] | undefined): number {
   const runs = Math.min(...j.in.map(c => Math.floor(have(store, c.id) / c.n)))
   return Math.max(0, Math.min(MAX_QTY, runs * j.out.n))
 }
-/** items still to make across the whole queue, per job id */
-export const queued = (q: Queue | undefined, job: string) => (q?.items ?? []).reduce((a, i) => a + (i.job === job ? i.left : 0), 0)
-export const totalLeft = (q: Queue | undefined) => (q?.items ?? []).reduce((a, i) => a + i.left, 0)
+const affords = (store: readonly Stack[] | undefined, j: Job, reserve = 0) => j.in.every(c => have(store, c.id) - reserve >= c.n)
+/** the stockpile may start a run of j now: its surplus (above the reserve) pays, and the output has room for the stack */
+const stockOk = (s: { store?: Stack[]; out?: Stack[] }, j: Job) => affords(s.store, j, RESERVE) && have(s.out, j.out.id) + j.out.n <= OUT_CAP
 
-/** Add `qty` output items of a job to the tail of the queue (merging into an equal tail). The 99 cap is per queued job. */
-export function enqueue(s: Station, job: string, qty: number, now: number): Station {
+/** Start a FOCUS: `qty` output items of one job (replaces a focus not yet mid-run; a run in progress is finished first). */
+export function setFocus(s: Station, job: string, qty: number, now: number): Station {
   const j = jobById(job); if (!j || !(qty >= 1)) return s
-  const q: Queue = s.queue ? { ...s.queue, items: s.queue.items.map(i => ({ ...i })) } : { items: [], t: 0, run: false, last: now }
-  const runs = runsFor(j, qty), cap = runsFor(j, MAX_QTY)
-  const cur = q.items.find(i => i.job === job)
-  if (cur) cur.left = Math.min(cap, cur.left + runs); else q.items.push({ job, left: Math.min(cap, runs) })
-  if (!s.queue) q.last = now
-  return { ...s, queue: q }
+  const w: Work = { cur: 0, last: now, ...s.work, focus: { job, left: runsFor(j, qty) } }
+  return { ...s, work: w }
 }
-/** Cancel everything. Inputs are only ever taken for the run in progress, so that is the only thing to hand back. */
-export function cancel(s: Station): Station {
-  const q = s.queue; if (!q) return s
-  let store = s.store ?? []
-  const head = q.items[0], j = head && jobById(head.job)
-  if (q.run && j) for (const c of j.in) store = putIn({ v: 1, stacks: store }, BIG, c.id, c.n).bank.stacks
-  return { ...s, store, queue: undefined }
+/** Drop the focus. A focus run in progress hands its inputs back (inputs are only ever taken for the run in progress). */
+export function cancelFocus(s: Station): Station {
+  const w = s.work; if (!w?.focus && !w?.run?.f) return s
+  let store = s.store ?? [], run = w.run
+  const j = run?.f ? jobById(run.job) : undefined
+  if (run?.f && j) { for (const c of j.in) store = putIn({ v: 1, stacks: store }, BIG, c.id, c.n).bank.stacks; run = undefined }
+  return { ...s, store, work: { ...w, focus: undefined, run } }
 }
-/** Drop one queued job (not the head while it is mid-run: cancel hands that back). Returns the station. */
-export function dequeue(s: Station, job: string): Station {
-  const q = s.queue; if (!q) return s
-  if (q.items[0]?.job === job) { if (q.items.length === 1) return cancel(s); if (!q.run) return { ...s, queue: { ...q, items: q.items.slice(1), t: 0 } }; return s }
-  const items = q.items.filter(i => i.job !== job)
-  return { ...s, queue: items.length ? { ...q, items } : undefined }
-}
+/** Re-start the clock (the worker changed or the stock changed): idle or unstaffed time is never banked. */
+export const touch = (s: Station, now: number): Station => (s.work ? { ...s, work: { ...s.work, last: now } } : { ...s, work: { cur: 0, last: now } })
 
-export function statusOf(s: Station): Status {
-  const q = s.queue; if (!q?.items.length) return 'idle'
-  if (q.run) return 'working'
-  const j = jobById(q.items[0].job); if (!j) return 'idle'
-  if (!j.in.every(c => have(s.store, c.id) >= c.n)) return 'empty'
-  if (have(s.out, j.out.id) + j.out.n > OUT_CAP) return 'full'
-  return 'working'
+export function statusOf(s: Station, stock: readonly Job[]): Status {
+  const w = s.work
+  if (w?.run) return w.run.f ? 'focus' : 'working'
+  const fj = w?.focus && jobById(w.focus.job)
+  if (fj && affords(s.store, fj)) return 'focus'
+  return stock.some(j => stockOk(s, j)) ? 'working' : 'idle'
 }
+/** Where a stockpiled product stands: for the panel's list (made / 30, and whether the surplus could make more). */
+export const stockLine = (s: Station, j: Job) => ({ made: have(s.out, j.out.id), cap: OUT_CAP, waiting: affords(s.store, j, RESERVE) })
 
-/** Take a run's inputs out of a stack list (null if short). */
 function takeRun(stacks: readonly Stack[], j: Job): Stack[] | null {
   let left = stacks.map(s => ({ ...s }))
   for (const c of j.in) {
@@ -104,43 +103,41 @@ function takeRun(stacks: readonly Stack[], j: Job): Stack[] | null {
   return left
 }
 
-/** Move the station to `now` at `speed` (1 = the keeper's own pace, 0 = nobody works it: the clock just moves on, no time
- *  is banked). Pure: returns the new station, the items made this call and the status it stopped in. The loop makes at most
- *  MAX_QTY*something runs: bounded by the queue itself. */
-export function advance(s: Station, now: number, speed: number): { station: Station; made: Stack[]; status: Status } {
-  const q0 = s.queue
-  if (!q0?.items.length) return { station: s, made: [], status: 'idle' }
+/** Move the station to `now` at `speed` (0 = nobody works it: the clock moves on, nothing is banked, no input is taken).
+ *  `stock` = the jobs to stockpile (empty = focus only: the keeper's own work). Pure. `active` = there is work state worth saving. */
+export function advance(s: Station, now: number, speed: number, stock: readonly Job[]): { station: Station; made: Stack[]; status: Status; active: boolean } {
+  const w: Work = s.work ? { ...s.work, run: s.work.run && { ...s.work.run }, focus: s.work.focus && { ...s.work.focus } } : { cur: 0, last: now }
   let store = s.store ?? [], out = s.out ?? []
-  const q: Queue = { ...q0, items: q0.items.map(i => ({ ...i })) }
-  let budget = speed > 0 ? Math.max(0, now - q.last) * speed : 0
-  q.last = now
+  let budget = speed > 0 ? Math.max(0, now - w.last) * speed : 0
+  w.last = now
   const made: Stack[] = []
-  let status: Status = 'working'
-  for (let guard = 0; guard < 5000; guard++) {
-    const head = q.items[0]
-    if (!head) break
-    const j = jobById(head.job)
-    if (!j || head.left <= 0) { q.items.shift(); q.run = false; q.t = 0; continue }
-    if (!q.run) {
-      const rest = takeRun(store, j)
-      if (!rest) { status = 'empty'; q.t = 0; break }
-      if (have(out, j.out.id) + j.out.n > OUT_CAP) { status = 'full'; q.t = 0; break }
-      if (budget <= 0) break   // nobody is working it: inputs stay in the store
-      store = rest; q.run = true; q.t = 0
+  for (let guard = 0; guard < 20000; guard++) {
+    if (!w.run) {
+      let pick: Job | null = null, f = false
+      if (w.focus) {
+        const fj = jobById(w.focus.job)
+        if (!fj || w.focus.left <= 0 || !affords(store, fj)) { w.focus = undefined; continue }   // done, or the inputs ran out: back to stockpile
+        pick = fj; f = true
+      } else if (stock.length) {
+        const st = { store, out }
+        for (let k = 0; k < stock.length; k++) { const idx = (w.cur + k) % stock.length; if (stockOk(st, stock[idx])) { pick = stock[idx]; w.cur = idx; break } }
+      }
+      if (!pick || budget <= 0) break
+      store = takeRun(store, pick)!; w.run = { job: pick.id, t: 0, ...(f ? { f: true } : {}) }
     }
-    if (budget <= 0) break
-    const need = runMs(j) - q.t
+    const j = jobById(w.run.job)
+    if (!j) { w.run = undefined; continue }
+    const need = runMs(j) - w.run.t
     if (budget >= need) {
       budget -= need
       out = putIn({ v: 1, stacks: out }, BIG, j.out.id, j.out.n).bank.stacks
       const m = made.find(x => x.id === j.out.id); if (m) m.n += j.out.n; else made.push({ id: j.out.id, n: j.out.n })
-      head.left--; q.run = false; q.t = 0
-    } else { q.t += budget; budget = 0; break }
+      if (w.run.f && w.focus?.job === j.id) { w.focus.left--; if (w.focus.left <= 0) w.focus = undefined }
+      w.run = undefined
+    } else { w.run.t += budget; budget = 0; break }
   }
-  while (q.items.length && q.items[0].left <= 0) q.items.shift()
-  const station: Station = { ...s, store, out, queue: q.items.length ? q : undefined }
-  if (!station.queue) status = 'idle'
-  return { station, made, status }
+  const station: Station = { ...s, store, out, work: w }
+  return { station, made, status: statusOf(station, stock), active: !!(w.run || w.focus || made.length) }
 }
 
 /** Collect an output stack into somewhere (the caller gives it to the bag): `n` of `id` out of the output, or everything of it. */
@@ -152,13 +149,14 @@ export function takeOut(s: Station, id: string, n = BIG): { station: Station; to
 /** put back what the bag could not take */
 export const putOut = (s: Station, id: string, n: number): Station => (n > 0 ? { ...s, out: putIn({ v: 1, stacks: s.out ?? [] }, BIG, id, n).bank.stacks } : s)
 
-/** Off disk: a queue from before M43 is absent; anything unreadable becomes absent too. */
-export function adoptQueue(v: unknown): Queue | undefined {
-  const q = v as Partial<Queue> | null
-  if (!q || !Array.isArray(q.items)) return undefined
-  const items = q.items.filter((i): i is QItem => !!i && typeof i.job === 'string' && !!jobById(i.job) && Number.isFinite(i.left) && i.left >= 1).map(i => ({ job: i.job, left: Math.min(MAX_QTY, Math.floor(i.left)) }))
-  if (!items.length) return undefined
-  return { items, t: Number.isFinite(q.t) && q.t! >= 0 ? q.t! : 0, run: q.run === true, last: Number.isFinite(q.last) ? q.last! : Date.now() }
+/** Off disk: a save from before M43 has none; anything unreadable becomes absent too. */
+export function adoptWork(v: unknown): Work | undefined {
+  const w = v as Partial<Work> | null
+  if (!w || typeof w !== 'object' || !Number.isFinite(w.last)) return undefined
+  const f = w.focus, r = w.run
+  const focus = f && typeof f.job === 'string' && jobById(f.job) && Number.isFinite(f.left) && f.left >= 1 ? { job: f.job, left: Math.min(MAX_QTY, Math.floor(f.left)) } : undefined
+  const run = r && typeof r.job === 'string' && jobById(r.job) && Number.isFinite(r.t) && r.t >= 0 ? { job: r.job, t: r.t, ...(r.f ? { f: true as const } : {}) } : undefined
+  return { cur: Number.isFinite(w.cur) && w.cur! >= 0 ? Math.floor(w.cur!) : 0, last: w.last!, focus, run }
 }
 export function adoptOut(v: unknown): Stack[] | undefined {
   if (!Array.isArray(v)) return undefined

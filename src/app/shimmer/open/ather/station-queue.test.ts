@@ -1,95 +1,114 @@
 // Run: npx tsx src/app/shimmer/open/ather/station-queue.test.ts
-// Station queue (ather/station-queue.ts, BETA M43). The pins: inputs leave the store ONE RUN at a time (never the batch);
-// the queue pauses on empty inputs and on a full output (30 of an item) and resumes; offline catch-up from timestamps is
-// bounded by inputs and the cap; the 99 cap; cancel hands back only the run in progress; no worker banks no time.
-import { advance, enqueue, cancel, dequeue, maxAffordable, runsFor, statusOf, takeOut, adoptQueue, jobById, itemMs, runMs, moglinSpeed, OUT_CAP, MAX_QTY, type Station } from './station-queue'
+// Station work (ather/station-queue.ts, BETA M43). The pins: STOCKPILE keeps 30 of each RAW input in the store and refines only
+// the surplus, ONE item's worth of input at a time, a stack of 30 of each product, one product at a time (planks to 30, then bark);
+// refining jobs only. FOCUS ignores both the reserve and the cap, uses all the material, then drops back to stockpile (also when
+// the inputs run out). Offline catch-up from timestamps, bounded by surplus and caps; idle / unstaffed time is never banked.
+import { advance, setFocus, cancelFocus, touch, maxAffordable, runsFor, statusOf, takeOut, adoptWork, jobById, itemMs, runMs, moglinSpeed, stockJobs, OUT_CAP, RESERVE, MAX_QTY, type Station } from './station-queue'
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const n = (st: readonly { id: string; n: number }[] | undefined, id: string) => (st ?? []).reduce((a, s) => a + (s.id === id ? s.n : 0), 0)
-const T0 = 1_000_000
+const T0 = 1_000_000, HOUR = 3600_000
+const carp = stockJobs('carpentry')
+const logs = (k: number): Station => ({ store: [{ id: 'goldwood_log', n: k }] })
 
-// times: plank 4 s/item, a run of 2 planks = 8 s
+ok(RESERVE === 30 && OUT_CAP === 30 && MAX_QTY === 99, 'reserve 30, cap 30, quantity 99')
 const plank = jobById('goldwood-plank')!
-ok(itemMs(plank) === 4000 && runMs(plank) === 8000, 'plank: 4 s an item, 8 s a run of two')
-ok(itemMs(jobById('stone-brick')!) === 6000 && itemMs(jobById('crystal-pane')!) === 8000, 'brick 6 s, pane 8 s')
+ok(itemMs(plank) === 4000 && runMs(plank) === 8000 && itemMs(jobById('stone-brick')!) === 6000 && itemMs(jobById('crystal-pane')!) === 8000, 'times: plank 4 s, brick 6 s, pane 8 s')
 ok(itemMs(jobById('goldwood_stool')!) >= 20000 && itemMs(jobById('goldwood_stool')!) <= 60000, 'furniture 20-60 s')
+ok(stockJobs('carpentry').every(j => j.in.length === 1) && stockJobs('cooking').length === 0 && stockJobs('alchemy').length === 0 && !stockJobs('carpentry').some(j => j.id === 'goldwood_stool'), 'stockpile = refining jobs only (never furniture, roasts, brews)')
+ok(runsFor(plank, 10) === 5 && runsFor(plank, 500) === 50, '10 planks = 5 runs; the 99 cap')
+ok(maxAffordable(plank, [{ id: 'goldwood_log', n: 7 }]) === 14 && maxAffordable(plank, [{ id: 'goldwood_log', n: 400 }]) === 99 && maxAffordable(plank, []) === 0, 'focus max = all the material (capped at 99)')
 
-// quantity: 10 planks = 5 runs; the 99 cap; max-affordable follows the store
-ok(runsFor(plank, 10) === 5 && runsFor(plank, 99) === 50 && runsFor(plank, 500) === 50, '10 planks = 5 runs, 99 caps the batch')
-ok(maxAffordable(plank, [{ id: 'goldwood_log', n: 7 }]) === 14 && maxAffordable(plank, [{ id: 'goldwood_log', n: 400 }]) === MAX_QTY && maxAffordable(plank, []) === 0, 'max-affordable: 7 logs = 14 planks, capped at 99, none = 0')
-let s: Station = { store: [{ id: 'goldwood_log', n: 20 }] }
-ok(enqueue(s, 'goldwood-plank', 500, T0).queue!.items[0].left === 50, 'enqueue clamps to 99 items')
-ok(enqueue(enqueue(s, 'goldwood-plank', 90, T0), 'goldwood-plank', 90, T0).queue!.items[0].left === 50, 'a second add still caps at 99 items')
+// STOCKPILE: 65 logs, the reserve keeps 30, only 35 are used; planks to 30 (15 logs), then bark to 30 (15 logs), then 5 left over go on
+let s: Station = touch(logs(65), T0)
+let r = advance(s, T0 + 100 * HOUR, 1, carp)
+ok(n(r.station.store, 'goldwood_log') === 35, `65 logs: the 30 reserve is untouched, 30 used (planks 15 + bark 15) (${n(r.station.store, 'goldwood_log')} left)`)
+ok(n(r.station.out, 'goldwood_plank') === 30 && n(r.station.out, 'goldwood_bark') === 30 && r.status === 'idle', `planks 30 (15 logs), bark 30 (15 logs), the last 5 surplus have no product left to make, idle (${n(r.station.out, 'goldwood_plank')}/${n(r.station.out, 'goldwood_bark')}, ${r.status})`)
+ok(!r.station.work!.run, 'idle: no run started, nothing taken')
+// 40 logs: 10 surplus = 20 planks, no bark yet (one product at a time)
+r = advance(touch(logs(40), T0), T0 + 100 * HOUR, 1, carp)
+ok(n(r.station.out, 'goldwood_plank') === 20 && n(r.station.out, 'goldwood_bark') === 0 && n(r.station.store, 'goldwood_log') === 30, '40 logs: 10 surplus -> 20 planks, 30 logs remain')
+// at or under the reserve nothing happens
+r = advance(touch(logs(30), T0), T0 + 100 * HOUR, 1, carp)
+ok(!r.made.length && n(r.station.store, 'goldwood_log') === 30 && r.status === 'idle', '30 logs or fewer: it keeps them for you')
+// inputs ONE run at a time: 1 s into a run, a single log is gone
+r = advance(touch(logs(40), T0), T0 + 1000, 1, carp)
+ok(n(r.station.store, 'goldwood_log') === 39 && !!r.station.work!.run && !r.made.length, 'one run started: one log taken, not the surplus')
+// partial progress carries
+r = advance(touch(logs(40), T0), T0 + 20_000, 1, carp)
+ok(n(r.station.out, 'goldwood_plank') === 4 && r.station.work!.run!.t === 4000 && n(r.station.store, 'goldwood_log') === 37, '20 s = 2 runs and 4 s into the third')
+// the output cap: with 29 planks a 2-plank run does not start (nothing is burned for nowhere to put it); a collect lets it on
+const near: Station = { store: [{ id: 'goldwood_log', n: 50 }], out: [{ id: 'goldwood_plank', n: 29 }], work: { cur: 0, last: T0 } }
+r = advance(near, T0 + HOUR, 1, carp)
+ok(n(r.station.out, 'goldwood_plank') === 29 && n(r.station.out, 'goldwood_bark') > 0, 'planks at 29 cannot take a run of 2: it swaps to the next product')
+r = advance({ store: [{ id: 'goldwood_log', n: 100 }], out: [{ id: 'goldwood_plank', n: 30 }], work: { cur: 0, last: T0 } }, T0 + 1000 * HOUR, 1, carp)
+ok(n(r.station.out, 'goldwood_plank') === 30 && n(r.station.out, 'goldwood_bark') === 30 && n(r.station.store, 'goldwood_log') === 100 - 15, 'planks full: bark to 30 (15 logs), then idle')
+r = advance({ ...r.station, out: takeOut(r.station, 'goldwood_plank', 10).station.out }, T0 + 2000 * HOUR, 1, carp)
+ok(n(r.station.out, 'goldwood_plank') === 30, 'taking planks out refills the stack from the surplus')
 
-// inputs ONE RUN at a time: 10 planks queued, 20 logs stocked; after 1 run's time only 1 log is gone
-s = enqueue(s, 'goldwood-plank', 10, T0)
-ok(n(s.store, 'goldwood_log') === 20, 'queueing takes nothing')
-let r = advance(s, T0 + 1000, 1)
-ok(n(r.station.store, 'goldwood_log') === 19 && r.station.queue!.run && n(r.station.out, 'goldwood_plank') === 0, 'one run started: ONE log taken, not the batch')
-r = advance(r.station, T0 + 8000, 1)
-ok(n(r.station.out, 'goldwood_plank') === 2 && n(r.station.store, 'goldwood_log') === 19 - 0 || n(r.station.store, 'goldwood_log') === 18, 'a finished run lands in the output')
-// the whole batch: 5 logs gone exactly, 10 planks out
-r = advance(s, T0 + 5 * 8000 + 5, 1)
-ok(n(r.station.out, 'goldwood_plank') === 10 && n(r.station.store, 'goldwood_log') === 15 && !r.station.queue, `10 planks cost exactly 5 logs, queue done (${n(r.station.out, 'goldwood_plank')}, ${n(r.station.store, 'goldwood_log')})`)
+// round-robin on the stack list: the pointer stays on a product until it is done, then moves on
+const two = advance(touch({ store: [{ id: 'goldwood_log', n: 50 }, { id: 'shimmeroak_log', n: 50 }] }, T0), T0 + 1000 * HOUR, 1, carp)
+ok(n(two.station.out, 'goldwood_plank') === 30 && n(two.station.out, 'goldwood_bark') === 10 && n(two.station.out, 'shimmeroak_plank') === 30 && n(two.station.out, 'amber_sap') === 5, 'each raw input has its own reserve and every one of its products gets its stack')
 
-// pause on EMPTY inputs: 3 logs for 10 planks asked = 6 made, then stops; no time banked while empty
-let e: Station = enqueue({ store: [{ id: 'goldwood_log', n: 3 }] }, 'goldwood-plank', 10, T0)
-r = advance(e, T0 + 10 * 3600_000, 1)
-ok(n(r.station.out, 'goldwood_plank') === 6 && n(r.station.store, 'goldwood_log') === 0 && r.status === 'empty' && r.station.queue!.items[0].left === 2, `stops on empty inputs, 2 runs still queued (${n(r.station.out, 'goldwood_plank')}, ${r.status})`)
-ok(!r.station.queue!.run && r.station.queue!.t === 0, 'an empty queue holds no half-run')
-// resume when stocked: the hours spent waiting do not count
-let r2 = advance({ ...r.station, store: [{ id: 'goldwood_log', n: 5 }] }, T0 + 10 * 3600_000 + 8000, 1)
-ok(n(r2.station.out, 'goldwood_plank') === 6 + 2 && r2.status === 'working', 'stocked again: it resumes at one run per 8 s, the idle hours are not banked')
-
-// pause on a FULL output (30): never burns a log it cannot place
-const big = enqueue({ store: [{ id: 'goldwood_log', n: 50 }] }, 'goldwood-plank', 99, T0)
-r = advance(big, T0 + 99 * 3600_000, 1)
-ok(n(r.station.out, 'goldwood_plank') === OUT_CAP && n(r.station.store, 'goldwood_log') === 50 - 15 && r.status === 'full', `pauses at ${OUT_CAP} in the output, 15 logs spent, the rest kept (${n(r.station.out, 'goldwood_plank')}, ${n(r.station.store, 'goldwood_log')}, ${r.status})`)
-ok(!r.station.queue!.run, 'full: no run started')
-// empty the output, it goes on
-const t = takeOut(r.station, 'goldwood_plank', 10)
-ok(t.took === 10 && n(t.station.out, 'goldwood_plank') === 20 && statusOf(t.station) === 'working', 'taking from the output frees room and the queue resumes')
-const t2 = takeOut(r.station, 'goldwood_plank')
-ok(t2.took === 30 && !t2.station.out!.length, 'take all of an item')
-
-// OFFLINE catch-up from timestamps: a Moglin for 1 h at fair pace (speed 1): 450 runs of capacity, but 50 queued, inputs 50, cap 30 -> bounded
-r = advance(big, T0 + 3600_000, 1)
-ok(n(r.station.out, 'goldwood_plank') === 30, 'an hour away: capped by the output (30)')
-const small = enqueue({ store: [{ id: 'goldwood_log', n: 50 }] }, 'goldwood-plank', 10, T0)
-r = advance(small, T0 + 3600_000, 1)
-ok(n(r.station.out, 'goldwood_plank') === 10 && n(r.station.store, 'goldwood_log') === 45, 'an hour away: 10 queued is 10 made, 5 logs')
-// partway offline: 20 s = 2 runs and 4 s into the third
-r = advance(small, T0 + 20_000, 1)
-ok(n(r.station.out, 'goldwood_plank') === 4 && r.station.queue!.run && r.station.queue!.t === 4000 && n(r.station.store, 'goldwood_log') === 47, 'partial progress carries (t = 4 s into the third run)')
-// a faster Moglin
+// OFFLINE catch-up: 5 min away = 37 runs worth of time, 20 s of work per... bounded by surplus
+r = advance(touch(logs(40), T0), T0 + 60_000, 1, carp)
+ok(n(r.station.out, 'goldwood_plank') === 14 && n(r.station.store, 'goldwood_log') === 32, 'a minute away: 7 runs done (14 planks), the 8th under way (8 logs taken)')
+r = advance(touch(logs(40), T0), T0 + 12 * HOUR, 1, carp)
+ok(n(r.station.out, 'goldwood_plank') === 20 && n(r.station.store, 'goldwood_log') === 30, '12 h away: bounded by the 10-log surplus')
+// pace
 ok(moglinSpeed(1) === 1 && moglinSpeed(5) === 2, 'moglin pace: fair x1, rare x2')
-r = advance(small, T0 + 8000, moglinSpeed(5))
+r = advance(touch(logs(40), T0), T0 + 8000, moglinSpeed(5), carp)
 ok(n(r.station.out, 'goldwood_plank') === 4, 'a rare Moglin makes two runs in 8 s')
-// nobody working: the clock moves on, nothing banked, no input taken
-r = advance(small, T0 + 3600_000, 0)
-ok(n(r.station.out, 'goldwood_plank') === 0 && n(r.station.store, 'goldwood_log') === 50 && !r.station.queue!.run && r.station.queue!.last === T0 + 3600_000, 'no worker: nothing taken, no time banked')
+// nobody working (speed 0): nothing taken, the clock moves, nothing banked
+r = advance(touch(logs(40), T0), T0 + 5 * HOUR, 0, carp)
+ok(!r.made.length && n(r.station.store, 'goldwood_log') === 40 && r.station.work!.last === T0 + 5 * HOUR, 'unstaffed: nothing taken, no time banked')
+// idle time is not banked: idle at 30 logs for an hour, then 10 logs arrive: it does not make an hour of planks at once
+let idle = advance(touch(logs(30), T0), T0 + HOUR, 1, carp).station
+idle = touch({ ...idle, store: [{ id: 'goldwood_log', n: 40 }] }, T0 + HOUR)   // the panel touches the clock when the store changes
+r = advance(idle, T0 + HOUR + 8000, 1, carp)
+ok(n(r.station.out, 'goldwood_plank') === 2, 'stocked after an idle hour: one run in 8 s, not an hour of crafting')
 
-// two jobs in order; cancel refunds only the run in progress
-let two = enqueue(enqueue({ store: [{ id: 'goldwood_log', n: 4 }] }, 'goldwood-plank', 2, T0), 'goldwood-bark', 2, T0)
-r = advance(two, T0 + 8000 + 4000, 1)
-ok(n(r.station.out, 'goldwood_plank') === 2 && r.station.queue!.items[0].job === 'goldwood-bark' && r.station.queue!.run, 'jobs run in order')
-const c = cancel(r.station)
-ok(!c.queue && n(c.store, 'goldwood_log') === 3 && n(c.out, 'goldwood_plank') === 2, 'cancel: the run in progress is handed back (3 logs of 4, 1 used for the finished one), finished output kept')
-const c0 = cancel(enqueue({ store: [{ id: 'goldwood_log', n: 4 }] }, 'goldwood-plank', 10, T0))
-ok(!c0.queue && n(c0.store, 'goldwood_log') === 4, 'cancel with nothing started: nothing to refund, store untouched')
-ok(!dequeue(enqueue({}, 'goldwood-plank', 4, T0), 'goldwood-plank').queue, 'dequeue the only job clears the queue')
-
-// stone: 1 blankstone = 3 bricks, a run is 18 s
-const st = enqueue({ store: [{ id: 'blankstone', n: 4 }] }, 'stone-brick', 99, T0)
-r = advance(st, T0 + 1000 * 3600, 1)
-ok(n(r.station.out, 'stone_brick') === 12 && r.status === 'empty', 'stonery: 4 blankstone = 12 bricks')
-
-// old saves: no queue, no output
-ok(adoptQueue(undefined) === undefined && adoptQueue({ items: 'x' }) === undefined && adoptQueue({ items: [{ job: 'nope', left: 3 }] }) === undefined, 'a save from before M43 (or junk) loads with an empty queue')
-ok(adoptQueue({ items: [{ job: 'goldwood-plank', left: 500 }], t: 1, run: true, last: 5 })!.items[0].left === 99, 'adoptQueue clamps to 99')
-ok(advance({}, T0, 1).status === 'idle', 'no queue is idle')
+// FOCUS ignores the reserve and the cap
+let f = setFocus(touch(logs(40), T0), 'goldwood-plank', maxAffordable(plank, logs(40).store), T0)
+r = advance(f, T0 + 100 * HOUR, 1, [])
+ok(n(r.station.out, 'goldwood_plank') === 80 && n(r.station.store, 'goldwood_log') === 0, `focus planks, max: ALL 40 logs -> 80 planks, logs 0, past the 30 cap and the reserve (${n(r.station.out, 'goldwood_plank')}, ${n(r.station.store, 'goldwood_log')})`)
+ok(!r.station.work!.focus, 'the focus ends when the material is gone')
+// a counted focus: 10 planks = exactly 5 logs, then back to stockpile (with a Moglin)
+f = setFocus(touch(logs(40), T0), 'goldwood-plank', 10, T0)
+r = advance(f, T0 + 5 * 8000, 1, carp)
+ok(n(r.station.out, 'goldwood_plank') === 10 && n(r.station.store, 'goldwood_log') === 35 && !r.station.work!.focus, '10 planks cost exactly 5 logs; the focus is done')
+r = advance(r.station, T0 + 5 * 8000 + 8000, 1, carp)
+ok(n(r.station.out, 'goldwood_plank') === 12 || r.status !== 'idle', 'then it drops back to stockpile (35 logs: surplus 5 makes more)')
+// focus without surplus: 20 logs, below the reserve, still made
+r = advance(setFocus(touch(logs(20), T0), 'goldwood-bark', 99, T0), T0 + 100 * HOUR, 1, [])
+ok(n(r.station.out, 'goldwood_bark') === 40 && n(r.station.store, 'goldwood_log') === 0, 'focus uses material under the reserve')
+// focus stops on empty inputs mid-way and falls back to stockpile
+r = advance(setFocus(touch(logs(3), T0), 'goldwood-plank', 99, T0), T0 + 100 * HOUR, 1, carp)
+ok(n(r.station.out, 'goldwood_plank') === 6 && !r.station.work!.focus && r.status === 'idle', 'focus stops on empty inputs and drops back')
+// furniture is focus-only
+const fur = advance(setFocus(touch({ store: [{ id: 'goldwood_plank', n: 5 }] }, T0), 'goldwood_stool', 2, T0), T0 + HOUR, 1, carp)
+ok(n(fur.station.out, 'goldwood_stool') === 2 && n(fur.station.store, 'goldwood_plank') === 1, 'furniture by focus, 2 stools = 4 planks')
+ok(advance(touch({ store: [{ id: 'goldwood_plank', n: 99 }] }, T0), T0 + HOUR, 1, carp).made.length === 0, 'planks as furniture input are never auto-stockpiled into stools')
+// keeper focus without Moglin: speed 1 and no stockpile list
+r = advance(setFocus(touch(logs(40), T0), 'goldwood-plank', 10, T0), T0 + 40_000, 1, [])
+ok(n(r.station.out, 'goldwood_plank') === 10, 'the keeper at the open bench: 10 planks in 40 s')
+r = advance(touch(logs(40), T0), T0 + 40_000, 1, [])
+ok(!r.made.length, 'no Moglin, no focus: nothing makes by itself')
+// cancel a focus: only the run in progress is handed back
+const mid = advance(setFocus(touch(logs(4), T0), 'goldwood-plank', 10, T0), T0 + 3000, 1, [])
+const c = cancelFocus(mid.station)
+ok(!c.work!.focus && !c.work!.run && n(c.store, 'goldwood_log') === 4, 'cancel focus: the run in progress returns its log, nothing else to refund')
+ok(n(cancelFocus(setFocus(touch(logs(4), T0), 'goldwood-plank', 10, T0)).store, 'goldwood_log') === 4, 'cancel before anything started: nothing taken, nothing to hand back')
+// stone: 1 blankstone = 3 bricks
+r = advance(touch({ store: [{ id: 'blankstone', n: 34 }] }, T0), T0 + 1000 * HOUR, 1, stockJobs('stonemason'))
+ok(n(r.station.out, 'stone_brick') === 12 && n(r.station.store, 'blankstone') === 30, 'stonery stockpile: 34 blankstone -> 4 used = 12 bricks')
+// status
+ok(statusOf(setFocus(touch(logs(5), T0), 'goldwood-plank', 4, T0), carp) === 'focus' && statusOf(touch(logs(40), T0), carp) === 'working' && statusOf(touch(logs(5), T0), carp) === 'idle', 'status: focus / working / idle')
+// old saves
+ok(adoptWork(undefined) === undefined && adoptWork({ last: 'x' }) === undefined, 'a save from before M43 loads with no work state')
+ok(adoptWork({ last: 5, focus: { job: 'goldwood-plank', left: 500 }, run: { job: 'nope', t: 1 } })!.focus!.left === 99 && !adoptWork({ last: 5, run: { job: 'nope', t: 1 } })!.run, 'adoptWork clamps to 99 and drops unknown jobs')
 
 console.log(`station-queue.test: ${pass} passed, ${fails.length} failed`)
-for (const f of fails) console.log('  FAIL', f)
+for (const x of fails) console.log('  FAIL', x)
 process.exit(fails.length ? 1 : 0)
