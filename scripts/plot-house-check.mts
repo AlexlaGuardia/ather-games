@@ -21,7 +21,8 @@ mkdirSync(out, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
-const W = 1100, H = 680, PITCH = 0.98   // = build-mode.tsx BUILD_CAM.PITCH
+const PHONE = process.argv.includes('--phone')   // 390x844 touch: the paint framing at phone size (the bar lays out differently)
+const W = PHONE ? 390 : 1100, H = PHONE ? 844 : 680, PITCH = 0.98   // = build-mode.tsx BUILD_CAM.PITCH
 
 const held = new Set(STARTING_SQUARES)
 const isHeld = (x: number, z: number) => { const s = squareAt(x, z); return !!s && held.has(sqId(s.i, s.j)) }
@@ -48,7 +49,7 @@ function screenOf(v: { x: number; z: number; h: number; yaw: number }, wx: numbe
 
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 try {
-  const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: W, height: H })
+  const p = await (await br.createBrowserContext()).newPage(); await p.setViewport(PHONE ? { width: W, height: H, isMobile: true, hasTouch: true } : { width: W, height: H })
   const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.evaluateOnNewDocument(() => {
@@ -69,8 +70,9 @@ try {
   const tap = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (!b) return false; await p.mouse.click(b.x, b.y); return true }
   const poll = async (fn: () => Promise<boolean>, ms = 10000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(250) } return false }
   const view = () => p.evaluate(() => (window as any).__build.view())
-  let aimDz = 0
-  const settled = () => poll(async () => { const a = await view(); await sleep(500); const b = await view(); return Math.hypot(a.x - spot!.x, a.z - (spot!.z + aimDz)) < 0.2 && Math.abs(a.yaw) < 0.01 && Math.abs(a.h - b.h) < 0.05 }, 60000)
+  // settled = the lens has stopped moving (yaw home). Not 'aimed at the spot': since 57a58263 view() reports the REAL aim, which the
+  // Paint lift shifts toward the camera, so an exact-position test never settles with Paint on.
+  const settled = () => poll(async () => { const a = await view(); await sleep(500); const b = await view(); return Math.hypot(a.x - b.x, a.z - b.z) < 0.02 && Math.abs(a.yaw) < 0.01 && Math.abs(a.h - b.h) < 0.05 }, 60000)
   const dragW = async (ax: number, az: number, bx: number, bz: number) => {
     await settled(); const v = await view(), a = screenOf(v, ax, az), b = screenOf(v, bx, bz)
     await p.mouse.move(a.x, a.y); await p.mouse.down(); await p.mouse.move(b.x, b.y, { steps: 12 }); await p.mouse.up(); await sleep(900)
@@ -110,11 +112,12 @@ try {
   // M37 slice 5 (11-20) changed paint: wood + brick walls keep their set colour, only stucco takes paint (plot-materials-check
   // covers stucco + patterns). Here: a goldwood wall refuses paint and costs nothing; a tapped floor paints the whole room.
   await tap('[data-tool="paint"]'); await sleep(300); await tap('[data-swatch="#4c6b97"]'); await sleep(300)
-  // the Paint bar (patterns + swatches) is tall and covers the house at the default framing: pan the view (a player drags) so
-  // the room sits clear below it, picking whichever offset puts the room centre lowest on screen inside the canvas.
-  { let best = { dz: 0, y: -1 }
-    for (const dz of [-4, -2, 0, 2, 4]) { await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), spot.x, spot.z + dz); aimDz = dz; await settled(); const y = screenOf(await view(), (X0 + X1) / 2, Z0).y; if (y < H - 140 && y > best.y) best = { dz, y } }
-    await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), spot.x, spot.z + best.dz); aimDz = best.dz; console.log('  paint view pan dz', best.dz, 'room top y', Math.round(best.y)) }
+  // the Paint bar is tall; since 57a58263 the plan camera's PAINT LIFT frames the house clear of it (build-mode PAINT_LIFT), so no
+  // pan: assert the room really sits below the bar on screen, then tap where a player would
+  { await settled(); const v = await view(), top = screenOf(v, (X0 + X1) / 2, Z0).y, mid = screenOf(v, (X0 + X1) / 2, (Z0 + Z1) / 2).y
+    const bar = await p.evaluate(() => { let b = 0; document.querySelectorAll('[data-build-bar]').forEach(e => { b = Math.max(b, e.getBoundingClientRect().bottom) }); return b })
+    ok(mid > bar && mid < H - 40, `   with Paint on the room sits clear below the paint bar (room centre y ${Math.round(mid)}, top y ${Math.round(top)}, bar bottom ${Math.round(bar)})`)
+    await shot('house-4b-paint-framing') }
   const bag = () => p.evaluate(() => ((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{}').slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, s) => t + (s?.n ?? 0), 0))
   const d0 = await bag()
   await tapW(X1, Z0 + 1.5)

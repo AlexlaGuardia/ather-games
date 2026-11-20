@@ -17,7 +17,10 @@ import { GROUND_Y } from './plot'
 import { getPlanLevel, setPlanLevel } from './plot-level'
 import { levelBase } from './plot-floors'
 
-export const BUILD_CAM = { PITCH: 0.98, H0: 22, HMIN: 7, HMAX: 48, REACH: 140, PAN: 1.15, EASE: 10, TURN: 1.6 } as const
+export const BUILD_CAM = { PITCH: 0.98, H0: 22, HMIN: 7, HMAX: 48, REACH: 140, PAN: 1.15, EASE: 10, TURN: 1.6, PAINT_LIFT: -0.32 } as const
+// PAINT_LIFT (Alex 11-20, ask #2 "frame lower"): with Paint on, the tall paint bar covers the TOP of the view (desktop and phone),
+// so the lens aims this fraction of its height FARTHER from the camera than the view point (negative = away): the house rides DOWN
+// the screen, clear of the bar. (The first cut had the sign the other way and pushed the house under the bar: reverted a06cbfd1.)
 
 let on = false
 const subs = new Set<() => void>()
@@ -26,6 +29,8 @@ const emit = () => subs.forEach(f => f())
 const want = { x: 0, z: 0, h: BUILD_CAM.H0 as number, yaw: 0 }
 const cur = { x: 0, z: 0, h: BUILD_CAM.H0 as number, yaw: 0 }
 const home = { x: 0, z: 0 }
+let lift = 0   // eased 0..1: how much of PAINT_LIFT applies (Paint on = 1)
+const aim = { x: 0, z: 0 }   // where the lens actually looks (cur, shifted by the Paint lift): what __build.view() reports, so checks that rebuild the lens with lensFor stay true
 let entered = false
 
 export const isBuilding = () => on
@@ -110,7 +115,10 @@ export function stepBuildCam(cam: THREE.Camera, dt: number) {
   const a = entered ? 1 - Math.exp(-BUILD_CAM.EASE * dt) : 1
   cur.x += (want.x - cur.x) * a; cur.z += (want.z - cur.z) * a; cur.h += (want.h - cur.h) * a * 0.6
   cur.yaw += Math.atan2(Math.sin(want.yaw - cur.yaw), Math.cos(want.yaw - cur.yaw)) * a
-  const l = lensFor(cur)
+  lift += ((tool === 'paint' ? 1 : 0) - lift) * a
+  const o = cur.h * BUILD_CAM.PAINT_LIFT * lift
+  aim.x = cur.x + Math.sin(cur.yaw) * o; aim.z = cur.z + Math.cos(cur.yaw) * o
+  const l = lensFor({ x: aim.x, z: aim.z, h: cur.h, yaw: cur.yaw })
   cam.position.set(l.px, l.py, l.pz)
   cam.rotation.set(l.pitch, l.yaw, 0, 'YXZ')
 }
@@ -134,7 +142,7 @@ export function BuildPointer() {
   useEffect(() => {
     (window as unknown as { __build: unknown }).__build = {
       on: () => on, to: (x: number, z: number, yaw?: number) => { const c = clampView(x, z, home.x, home.z); want.x = c.x; want.z = c.z; if (yaw !== undefined) want.yaw = yaw },   // yaw: M37 checks square the view to the grid
-      view: () => ({ ...cur }), point: () => (point.has ? { x: point.x, z: point.z } : null),
+      view: () => ({ ...cur, x: aim.x, z: aim.z }), point: () => (point.has ? { x: point.x, z: point.z } : null),
       tool: () => tool, drawer: () => !!draw,   // M37: which tool, and is a drawing handler registered
     }
   }, [])
