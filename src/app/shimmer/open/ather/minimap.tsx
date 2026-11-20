@@ -7,7 +7,7 @@
 // The tile picture is composed ONCE per change (fog walked, a waymark planted, a node cleared) into an offscreen
 // canvas; a frame only crops it. Per frame cost = one drawImage + a dot.
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { HearthMapFrame } from '../../ui/hearth-hud'
 import { hudMapBox } from '../../ui/hearth-hud-layer'
 import type { HudSize } from '../../ui/hud-flag'
@@ -17,7 +17,7 @@ import type { Fog } from './explored'
 import type { Waymark } from './waymarks'
 import { GATE, GREG, PLOT_R } from './plot'
 import { TILE_M, type WildsWorld } from './wilds-world'
-import { plotPlate, PLOT_MPP } from './plate'
+import { plotPlate, PLOT_MPP, plateRev, plateReady } from './plate'
 import { composeTilePicture, mapSettlementsRev } from './tile-picture'
 import type { CompassPose } from '../shared/game-hud'
 import { D, type Frame } from './cluster'
@@ -61,6 +61,7 @@ export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waym
   const cv = useRef<HTMLCanvasElement>(null)
   const comps = useRef(new Map<string, HTMLCanvasElement>())
   const sigs = useRef(new Map<string, string>())
+  const platePending = useRef(false), prvRef = useRef(0), [prv, setPrv] = useState(0)   // M44 part 3: lazy plates (plate.ts atherPlateLazy)
   const ver = useRef(0)
   const clusterRef = useRef(cluster); clusterRef.current = cluster
 
@@ -68,22 +69,25 @@ export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waym
   // (the fog is one continent grid; `tileOff` is the anchor tile's centre in continent coords), its waymarks
   useEffect(() => {
     if (zone !== 'wilds') return
-    const keep = new Set<string>()
+    const keep = new Set<string>(); let missing = false
     const here = pose.current ? world.tileAtPoint(pose.current.x, pose.current.z)?.W.meta.name : undefined
     for (const [name, W] of world.loaded) {
       keep.add(name)
       // the fog moves only where you walk: only YOUR tile recomposes on a fog change; the rest when their borders,
       // pins or the loaded set change (a full redraw of nine tiles every quarter-second would stutter)
-      const sig = `${wrev}|${regionsByTile.get(name)?.map(r => r.infected ? 1 : 0).join('') ?? ''}|${waymarks.length}|${mapSettlementsRev()}${name === here ? `|${fog?.rev ?? 0}` : ''}`
+      const sig = `${plateReady(name) ? 'P' : 'p'}|${wrev}|${regionsByTile.get(name)?.map(r => r.infected ? 1 : 0).join('') ?? ''}|${waymarks.length}|${mapSettlementsRev()}${name === here ? `|${fog?.rev ?? 0}` : ''}`
       if (sigs.current.get(name) === sig && comps.current.has(name)) continue
       sigs.current.set(name, sig)
       const c = comps.current.get(name) ?? document.createElement('canvas'); comps.current.set(name, c)
       const t = world.byName.get(name)!
-      composeTilePicture(c, W, { px: COMP, regions: regionsByTile.get(name) ?? [], fog, tileOff, ox: t.tx * TILE_M, oz: t.ty * TILE_M, waymarks })
+      if (!composeTilePicture(c, W, { px: COMP, regions: regionsByTile.get(name) ?? [], fog, tileOff, ox: t.tx * TILE_M, oz: t.ty * TILE_M, waymarks, lazy: true })) missing = true
     }
+    platePending.current = missing
     for (const n of [...comps.current.keys()]) if (!keep.has(n)) { comps.current.delete(n); sigs.current.delete(n) }
     ver.current++
-  }, [zone, world, wrev, fog, fog?.rev, tileOff, waymarks, regionsByTile, pose])
+  }, [zone, world, wrev, fog, fog?.rev, tileOff, waymarks, regionsByTile, pose, prv])
+  // M44 part 3: a new tile's plate is built a slice at a time (plate.ts); recompose when one lands
+  useEffect(() => { const t = setInterval(() => { if (platePending.current && plateRev() !== prvRef.current) { prvRef.current = plateRev(); setPrv(prvRef.current) } }, 150); return () => clearInterval(t) }, [])
 
   // per frame: crop round the keeper (Wilds) or draw the garden (plot), then the keeper
   useEffect(() => {

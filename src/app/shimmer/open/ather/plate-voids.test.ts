@@ -1,5 +1,5 @@
 // M41 slice 3: the cloud voids on the maps (plate.ts paints W.voided). Run: npx tsx src/app/shimmer/open/ather/plate-voids.test.ts
-import { atherPlatePixels, VOID_RGB, VOID_LIP_RGB } from './plate'
+import { atherPlatePixels, platePixelSteps, VOID_RGB, VOID_LIP_RGB } from './plate'
 import type { Wilds } from './wilds'
 let pass = 0
 const fails: string[] = []
@@ -18,6 +18,9 @@ ok(near(at(P, -11, 0), VOID_LIP_RGB), `void edge is the pale lip (${at(P, -11, 0
 ok(!near(at(P, 40, 0), VOID_RGB) && at(P, 40, 0).join() === at(Q, 40, 0).join(), 'land outside the void unchanged')
 ok(at(P, 0, 0).join() !== at(Q, 0, 0).join(), 'without voids the same spot is land')
 ok(atherPlatePixels(W0).px.every((v, k) => v === Q.px[k]), 'no voided field: plate identical (deterministic, untouched)')
+// M44 part 3: the sliced plate (minimap) yields many times and lands on the same pixels as the all-at-once plate
+{ const g = platePixelSteps(W); let n = 0, r = g.next(); while (!r.done) { n++; r = g.next() }
+  ok(n >= 10 && r.value.px.every((v, k) => v === P.px[k]), `sliced plate: ${n} slices, identical pixels`) }
 console.log(`plate-voids: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  FAIL', f)
 if (fails.length) process.exit(1)

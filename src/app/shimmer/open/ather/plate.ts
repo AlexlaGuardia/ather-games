@@ -30,16 +30,23 @@ export const ATHER_HUE: Record<BiomeId, [number, number, number]> = {
   4: [176, 150, 196],   // rock
 }
 
-export function atherPlatePixels(W: Wilds, mpp = PLATE_MPP): { w: number; h: number; px: Uint8ClampedArray } {
+type PlatePx = { w: number; h: number; px: Uint8ClampedArray }
+/** The plate, all at once (tests, the fold map). */
+export function atherPlatePixels(W: Wilds, mpp = PLATE_MPP): PlatePx {
+  const g = platePixelSteps(W, mpp); let r = g.next(); while (!r.done) r = g.next(); return r.value
+}
+/** M44 part 3: the same plate as a generator that yields every few rows, so the minimap can build a new tile's plate across
+ *  frames instead of in one ~150 ms block right after a tile crossing. Identical pixels (atherPlatePixels drains it). */
+export function* platePixelSteps(W: Wilds, mpp = PLATE_MPP): Generator<void, PlatePx, void> {
   const sx = W.meta.sizeX, sz = W.meta.sizeZ, w = Math.round(sx / mpp), h = Math.round(sz / mpp)
   const px = new Uint8ClampedArray(w * h * 4)
   const X = (i: number) => -sx / 2 + (i + 0.5) * mpp, Z = (j: number) => -sz / 2 + (j + 0.5) * mpp
   const hgt = new Float32Array(w * h)
-  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) hgt[j * w + i] = W.heightAt(X(i), Z(j))
+  for (let j = 0; j < h; j++) { for (let i = 0; i < w; i++) hgt[j * w + i] = W.heightAt(X(i), Z(j)); if (j % 24 === 23) yield }
   const H = (i: number, j: number) => hgt[Math.min(h - 1, Math.max(0, j)) * w + Math.min(w - 1, Math.max(0, i))]
   const wy = W.meta.waterY
   const biomeOf = new Uint8Array(w * h)
-  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) biomeOf[j * w + i] = W.biomeAt(X(i), Z(j))
+  for (let j = 0; j < h; j++) { for (let i = 0; i < w; i++) biomeOf[j * w + i] = W.biomeAt(X(i), Z(j)); if (j % 32 === 31) yield }
   const B = (i: number, j: number) => biomeOf[Math.min(h - 1, Math.max(0, j)) * w + Math.min(w - 1, Math.max(0, i))]
   // M41 s3: which plate pixels sit on a void cell (wilds.ts W.voided, one flag per mesh cell), so the maps show the breaks
   const vd = W.voided, cell = W.meta.cell, cx = W.meta.nx - 1
@@ -51,6 +58,7 @@ export function atherPlatePixels(W: Wilds, mpp = PLATE_MPP): { w: number; h: num
   const VP = (i: number, j: number) => (voidPx ? voidPx[Math.min(h - 1, Math.max(0, j)) * w + Math.min(w - 1, Math.max(0, i))] : 0)
   const S = 3   // the light reads the slope over ±S px (12 m): a tile's relief is gentle, a 1-px slope is noise
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    if (i === 0 && j % 24 === 23) yield
     const y = H(i, j), b = B(i, j)
     let [r, g, bl] = ATHER_HUE[b as BiomeId]
     if (VP(i, j)) {
@@ -89,6 +97,7 @@ export function atherPlatePixels(W: Wilds, mpp = PLATE_MPP): { w: number; h: num
     }
   }
   const trees = [...W.trees].sort((a, b) => a.z - b.z)
+  yield
   for (const t of trees) {   // shadows first, so a crown never sits under its neighbour's shadow
     const rr = Math.max(2, t.r / mpp * 1.6)   // crowns overlap into one canopy (1-px crowns read as salt and pepper)
     paint((t.x + sx / 2) / mpp + rr * 0.45, (t.z + sz / 2) / mpp + rr * 0.45, rr, d => 0.95 + d * 0.05)
@@ -112,12 +121,46 @@ export function atherPlateCanvas(W: Wilds): HTMLCanvasElement {
   return c
 }
 const cache = new Map<string, HTMLCanvasElement>()
+const toCanvas = ({ w, h, px }: PlatePx) => {
+  const c = document.createElement('canvas'); c.width = w; c.height = h
+  const ctx = c.getContext('2d')!, img = ctx.createImageData(w, h); img.data.set(px); ctx.putImageData(img, 0, 0); return c
+}
+const keep = (name: string, c: HTMLCanvasElement) => {
+  cache.set(name, c)
+  while (cache.size > 12) cache.delete(cache.keys().next().value!)   // a roaming keeper keeps ~12 MB of plates, not 67
+}
 export function atherPlate(W: Wilds): HTMLCanvasElement {
   let c = cache.get(W.meta.name)
   if (c) { cache.delete(W.meta.name); cache.set(W.meta.name, c); return c }   // most recent last
-  c = atherPlateCanvas(W); cache.set(W.meta.name, c)
-  while (cache.size > 12) cache.delete(cache.keys().next().value!)   // a roaming keeper keeps ~12 MB of plates, not 67
-  return c
+  const g = building.get(W.meta.name)
+  if (g) { building.delete(W.meta.name); let r = g.next(); while (!r.done) r = g.next(); c = toCanvas(r.value) }   // half-built: finish it now
+  else c = atherPlateCanvas(W)
+  keep(W.meta.name, c); return c
+}
+// ── M44 part 3: the minimap's plates, built a slice at a time (~6 ms a timer tick) so a tile crossing never pays for three whole
+//    plates in one frame. atherPlateLazy returns null until the plate is ready; plateRev() bumps when one finishes.
+const building = new Map<string, Generator<void, PlatePx, void>>()
+let rev = 0, timer: ReturnType<typeof setTimeout> | null = null
+export const plateRev = () => rev
+export const plateReady = (name: string) => cache.has(name)
+const SLICE_MS = 6
+function pump() {
+  timer = null
+  const t0 = performance.now()
+  for (const [name, g] of building) {
+    for (;;) {
+      const r = g.next()
+      if (r.done) { building.delete(name); keep(name, toCanvas(r.value)); rev++; break }
+      if (performance.now() - t0 > SLICE_MS) break
+    }
+    if (performance.now() - t0 > SLICE_MS) break
+  }
+  if (building.size) timer = setTimeout(pump, 16)
+}
+export function atherPlateLazy(W: Wilds): HTMLCanvasElement | null {
+  const c = cache.get(W.meta.name); if (c) return c
+  if (!building.has(W.meta.name)) { building.set(W.meta.name, platePixelSteps(W)); if (!timer) timer = setTimeout(pump, 0) }
+  return null
 }
 
 // ── THE HOME PLOT'S PLATE (Alex 11-15: "next up maybe the homeplots map") ─────────────────────────────────────────

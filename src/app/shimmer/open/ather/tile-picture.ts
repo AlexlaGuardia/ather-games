@@ -3,7 +3,7 @@
 // Browser-only (canvas). `tileOff` = the anchor tile's centre in continent coords (the fog's grid is continent-wide);
 // (ox, oz) = this tile's centre in Wilds world coords.
 
-import { atherPlate } from './plate'
+import { atherPlate, atherPlateLazy } from './plate'
 import { ATHER_CLOUD, drawCloud } from '../../ui/map-kit'
 import { FOG_CELL, cellOrigin, type Fog } from './explored'
 import { GREG_WAYMARK, type Waymark } from './waymarks'
@@ -18,12 +18,15 @@ export function setMapSettlements(s: readonly { x: number; z: number }[]) { if (
 export const mapSettlementsRev = () => settleRev
 export function composeTilePicture(c: HTMLCanvasElement, W: Wilds, o: {
   px: number; regions: Region[]; fog: Fog | null; tileOff: { x: number; z: number }; ox: number; oz: number; waymarks: Waymark[]
-}) {
+  /** M44 part 3 (minimap): don't build a missing plate now; draw a plain ground and let the caller recompose when plateRev bumps */
+  lazy?: boolean
+}): boolean {
   const N = o.px
   c.width = N; c.height = N
   const ctx = c.getContext('2d')!, sx = W.meta.sizeX, sz = W.meta.sizeZ, k = N / sx
   ctx.imageSmoothingEnabled = true
-  ctx.drawImage(atherPlate(W), 0, 0, N, N)
+  const plate = o.lazy ? atherPlateLazy(W) : atherPlate(W)
+  if (plate) ctx.drawImage(plate, 0, 0, N, N); else { ctx.fillStyle = '#c3d8a0'; ctx.fillRect(0, 0, N, N) }   // a plain meadow until the plate lands
   const P = (x: number, z: number): [number, number] => [(x + sx / 2) * k, (z + sz / 2) * (N / sz)]
   if (o.regions.length > 1) for (const r of o.regions) {
     ctx.beginPath(); r.poly.forEach((p, i) => { const [x, y] = P(p.x, p.z); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y) }); ctx.closePath()
@@ -44,4 +47,5 @@ export function composeTilePicture(c: HTMLCanvasElement, W: Wilds, o: {
   for (const w of o.waymarks) if (w.tile === W.meta.name) pin(w.x, w.z, '#6fd3c4', 8)
   // a settlement: the warm burrow-tan the compass gives it (page.tsx marks), larger than a pin, under the walked fog's reveal
   for (const s of mapSettlements) { const lx = s.x - o.ox, lz = s.z - o.oz; if (Math.abs(lx) <= sx / 2 && Math.abs(lz) <= sz / 2) pin(lx, lz, '#d9c39a', 16) }
+  return !!plate
 }
