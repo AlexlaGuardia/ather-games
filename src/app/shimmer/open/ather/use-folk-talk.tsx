@@ -11,7 +11,8 @@ import { SEASON } from './network'
 import { folkOf, stillHome, bring, recruit, loadTrust, saveTrust, wantsLeft } from './settlement-folk'
 import { loadVillage, saveVillage, VILLAGE_CAP } from './moglins'
 import { folkTalk, folkStart, helloFor, type FolkTalkState } from './folk-talk'
-import { folkSpots, nearestSpot } from './folk-spots'
+import { nearestSpot } from './folk-spots'
+import { builtFolkSpots } from './settlement-lots'   // M39 s3: where a Moglin is DRAWN (trade Moglins at their doors); talk must agree
 import { keeperNow } from './network-scene'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
 
@@ -26,7 +27,7 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
     const v = loadVillage(), t = loadTrust(); setVillage(v); setTrust(t)
     // M19: the talk opens on the Moglin NEAREST the keeper (they stand on the green: folk-spots.ts), not the first in the list
     const all = folkOf(s, SEASON), home = stillHome(all, v), ids = new Set(home.map(f => f.id))
-    const n = nearestSpot(folkSpots(s, all.map(f => f.id)).filter(p => ids.has(p.id)), keeperNow.x, keeperNow.z)
+    const n = nearestSpot(builtFolkSpots(s, all, SEASON).filter(p => ids.has(p.id)), keeperNow.x, keeperNow.z)
     setSt(n ? helloFor(n.id) : folkStart(home))   // M40: helloFor marks the Moglin heard (a repeat talk = its alternate line)
   }, [s])
   // the node must not be rebuilt on every inventory tick (TalkChoices resets the pick to the first answer when the node changes):
@@ -55,7 +56,7 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
   const f = st ? folk.find(x => x.id === st.fid) : undefined
   // the bubble + the talk camera sit on THAT Moglin (its spot, the ground asked now); a Moglin no longer home (just recruited)
   // or none at all: the settlement's own anchor
-  const spot = s && f ? folkSpots(s, folk.map(x => x.id)).find(p => p.id === f.id) : undefined
+  const spot = s && f ? builtFolkSpots(s, folk, SEASON).find(p => p.id === f.id) : undefined
   const home = stillHome(folk, village).some(x => x.id === f?.id)
   const at = s ? (spot && home ? { x: spot.x, z: spot.z, y: ground(spot.x, spot.z) } : { x: s.x, z: s.z, y: ground(s.x, s.z) }) : null
   const head = spot && home ? MOGLIN_HEIGHT.chibi : 1.3
