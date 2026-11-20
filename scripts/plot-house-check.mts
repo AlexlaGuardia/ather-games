@@ -106,14 +106,17 @@ try {
   await tap('[data-tool="window"]'); await sleep(300); await tapW(X0, Z0 + 1.5)
   const wins = Object.entries((await savedFull()).walls).filter(([, w]) => w.kind === 'window').map(([k]) => k)
   ok(wins.length === 1 && wins[0] === `v,${X0},${Z0 + 1}`, `6. Window: a tap on the side wall makes one window (${wins.join(' ')})`)
-  await tap('[data-tool="paint"]'); await sleep(300); await tap('[data-wall-mat="dawnwood"]'); await sleep(300)
-  const d0 = await p.evaluate(() => ((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{}').slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, s) => t + (s?.id === 'dawnwood_plank' ? s.n : 0), 0))
+  // M37 slice 5 (11-20) changed paint: wood + brick walls keep their set colour, only stucco takes paint (plot-materials-check
+  // covers stucco + patterns). Here: a goldwood wall refuses paint and costs nothing; a tapped floor paints the whole room.
+  await tap('[data-tool="paint"]'); await sleep(300); await tap('[data-swatch="#4c6b97"]'); await sleep(300)
+  const bag = () => p.evaluate(() => ((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{}').slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, s) => t + (s?.n ?? 0), 0))
+  const d0 = await bag()
   await tapW(X1, Z0 + 1.5)
-  const f3 = await savedFull(), d1 = await p.evaluate(() => ((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{}').slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, s) => t + (s?.id === 'dawnwood_plank' ? s.n : 0), 0))
-  ok(f3.walls[`v,${X1},${Z0 + 1}`]?.mat === 'dawnwood' && d0 - d1 === 1, `7. Paint: a tapped wall turns Dawnwood for one plank (${f3.walls[`v,${X1},${Z0 + 1}`]?.mat}, ${d0 - d1})`)
+  const f3 = await savedFull(), w7 = f3.walls[`v,${X1},${Z0 + 1}`]
+  ok(w7?.mat === 'goldwood' && !w7?.tint && (await bag()) === d0, `7. Paint: a tapped wood wall keeps its set colour, nothing spent (${JSON.stringify(w7)})`)
   await tapW((X0 + X1) / 2, (Z0 + Z1) / 2)
-  const fl = Object.values((await savedFull()).floors)
-  ok(fl.length === 20 && fl.every(m => m === 'dawnwood'), `   a tapped floor paints the whole room (${fl.length} cells)`)
+  const fl = Object.values((await savedFull()).floors ?? {}) as any[]
+  ok(fl.length === 20 && fl.every(f => f?.col === '#4c6b97'), `   a tapped floor paints the whole room (${fl.length} cells)`)
   await shot('house-5-door-window-paint')
   await tap('[data-act="walls-down"]'); await poll(async () => (await walls())?.down === true); await shot('house-6-down-painted')
   await tap('[data-act="land"]'); ok(await poll(async () => (await walls())?.down === false), '   leaving plan mode puts them back up')
