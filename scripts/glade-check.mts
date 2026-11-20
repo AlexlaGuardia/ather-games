@@ -12,7 +12,11 @@
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { GLADE_GREEN, MOONWELL, SCALE_AT, atWater } from '../src/app/shimmer/open/ather/moonwell'
-import { GLADE_LOTS, gladeSpots, onLot, LOT_D, gladeFolk } from '../src/app/shimmer/open/ather/moonwell-glade'
+import { GLADE_LOTS, gladeSpots, onLot, LOT_D, gladeFolk, GLADE_STATION_LINES } from '../src/app/shimmer/open/ather/moonwell-glade'
+import { setGladeBlueprint, gladeLotBoxes, jettyBoxes } from '../src/app/shimmer/open/ather/glade-lots'
+import { parseHouse } from '../src/app/shimmer/open/ather/plot-blueprint'
+import { readFileSync, existsSync } from 'fs'
+import { fromShore } from '../src/app/shimmer/open/ather/moonwell'
 import { GLADE } from '../src/app/shimmer/open/ather/relief'
 import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -21,7 +25,25 @@ mkdirSync(out, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
+// M39: lots with Alex's blueprints (world/house-blueprints/glade-<lot>.json, the files prod reads) put their Moglin at the door
+const withBp = GLADE_LOTS.map(l => l.id).filter(l => { const f = `world/house-blueprints/glade-${l}.json`; if (!existsSync(f)) return false; setGladeBlueprint(l, parseHouse(JSON.parse(readFileSync(f, 'utf8')))); return true })
+console.log(`blueprints on: ${withBp.join(', ') || 'none'}`)
 const plan = gladeSpots(GLADE_LOTS.map(l => `moonwell:${l.id}`))
+// a walking route round the walls: BFS on a 0.5 m grid over the Glade's solids (body radius), the pond kept out
+const SOLID = [...gladeLotBoxes(0), ...jettyBoxes(-1)].filter(b => b.y0 <= 1.7 && b.y1 > 0.05)
+const freeAt = (x: number, z: number) => fromShore(x, z) > 0.4 && !SOLID.some(b => x + 0.4 > b.x0 && x - 0.4 < b.x1 && z + 0.4 > b.z0 && z - 0.4 < b.z1)
+function route(from: { x: number; z: number }, to: { x: number; z: number }): { x: number; z: number }[] | null {
+  const C = 0.5, key = (i: number, j: number) => `${i},${j}`, at = (p: { x: number; z: number }) => [Math.round(p.x / C), Math.round(p.z / C)]
+  const [si, sj] = at(from), [ti, tj] = at(to), prev = new Map<string, string | null>([[key(si, sj), null]]), q: [number, number][] = [[si, sj]]
+  while (q.length) {
+    const [i, j] = q.shift()!
+    if (Math.hypot(i - ti, j - tj) * C < 1.6) { const out: { x: number; z: number }[] = []; let k: string | null = key(i, j); while (k) { const [a, b] = k.split(',').map(Number); out.unshift({ x: a * C, z: b * C }); k = prev.get(k)! } return out }
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) { const n = key(i + di, j + dj); if (prev.has(n) || Math.hypot((i + di) * C - GLADE_GREEN.x, (j + dj) * C - GLADE_GREEN.z) > 48 || !freeAt((i + di) * C, (j + dj) * C)) continue; prev.set(n, key(i, j)); q.push([i + di, j + dj]) }
+  }
+  return null
+}
+// keep only the turns
+const turns = (pts: { x: number; z: number }[]) => pts.filter((p, k) => k === 0 || k === pts.length - 1 || Math.abs(Math.atan2(pts[k + 1].z - p.z, pts[k + 1].x - p.x) - Math.atan2(p.z - pts[k - 1].z, p.x - pts[k - 1].x)) > 0.01)
 
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 try {
@@ -56,15 +78,32 @@ try {
   ok(deep < lo - 1, `3. the pond is a bowl under the water (feet ${deep.toFixed(2)} at its middle, floor ${lo.toFixed(2)})`)
   const mw = await p.evaluate(() => (window as any).__rinquest?.moonwell?.()) as { rx?: number; rz?: number } | null
   ok(!!mw && mw.rx === MOONWELL.rx && mw.rz === MOONWELL.rz && atWater(SCALE_AT.x, SCALE_AT.z), `   the deployed pond is ${MOONWELL.rx * 2} x ${MOONWELL.rz * 2} m and the scale's bank is at the water (${JSON.stringify(mw)})`)
-  // 4. on foot: from the green's centre, face each Moglin, hold W until within 2.5 m (or 60 s)
+  // 4. on foot: from the green's centre to each Moglin by a route round the walls (a door lot may open into a courtyard);
+  //    real W, faced at each turn (tp at the keeper's OWN spot = face only)
+  ok(withBp.every(l => true) && await poll(async () => { const b = await p.evaluate(() => (window as any).__glade?.blueprints?.() ?? []) as string[]; return withBp.every(l => b.includes(l)) }, 30000), `   the lots with Alex's blueprints stand them (${withBp.join(', ')})`)
   for (const q of plan) {
-    const yaw = Math.atan2(-(q.x - GLADE_GREEN.x), -(q.z - GLADE_GREEN.z))   // yaw 0 looks -z
-    await tp(GLADE_GREEN.x, GLADE_GREEN.z, yaw); if (!phone) { await p.mouse.click(550, 340); await sleep(300) }
-    await p.keyboard.down('KeyW')
-    const reached = await poll(async () => { const s = await st(); return Math.hypot(s.x - q.x, s.z - q.z) < 2.5 }, 60000)
-    await p.keyboard.up('KeyW')
+    const r = route({ x: GLADE_GREEN.x, z: GLADE_GREEN.z }, q)
+    if (!r) { ok(false, `4. a route on foot to ${q.id.split(':')[1]} exists`); continue }
+    await tp(GLADE_GREEN.x, GLADE_GREEN.z, 0); if (!phone) { await p.mouse.click(550, 340); await sleep(300) }
+    let stuck = false
+    for (const w of turns(r).slice(1)) {
+      const s0 = await st(); await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, y), s0.x, s0.z, Math.atan2(-(w.x - s0.x), -(w.z - s0.z)))
+      await p.keyboard.down('KeyW')
+      const got = await poll(async () => { const s1 = await st(); return Math.hypot(s1.x - w.x, s1.z - w.z) < 0.7 }, 40000)
+      await p.keyboard.up('KeyW')
+      if (!got) { stuck = true; break }
+    }
     const s = await st()
-    ok(reached, `4. walked from the green up to ${q.id.split(':')[1]} on foot (${Math.hypot(s.x - q.x, s.z - q.z).toFixed(1)} m off)`)
+    ok(!stuck && Math.hypot(s.x - q.x, s.z - q.z) < 2.5, `4. walked from the green to ${q.id.split(':')[1]} on foot by ${turns(r).length - 1} legs (${Math.hypot(s.x - q.x, s.z - q.z).toFixed(1)} m off)`)
+    // talk: the first E is the station line, a second talk the alternate (lark, SIGNED 40bf1c6)
+    const k = q.id.split(':')[1], lines = GLADE_STATION_LINES[k]
+    await p.keyboard.press('KeyE'); const b1 = await poll(() => p.evaluate(() => !!document.querySelector('[data-talk-bubble]')), 8000)
+    const t1 = await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')
+    await p.keyboard.press('Escape'); await poll(() => p.evaluate(() => !document.querySelector('[data-talk-bubble]')), 8000); await sleep(500)
+    await p.keyboard.press('KeyE'); await poll(() => p.evaluate(() => !!document.querySelector('[data-talk-bubble]')), 8000)
+    const t2 = await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')
+    await p.keyboard.press('Escape'); await sleep(500)
+    ok(b1 && t1.includes(lines.main) && t2.includes(lines.alt), `   ${k}: first talk = the station line, the next = the alternate (${t1.slice(0, 40)}... / ${t2.slice(0, 40)}...)`)
   }
   // 5. five distinct hellos (the deployed data: gladeFolk's dreams)
   const hellos = gladeFolk().map(f => f.dream)

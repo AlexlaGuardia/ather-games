@@ -81,9 +81,13 @@ export function onLot(id: string, ahead: number, side = 0): { x: number; z: numb
   return { x: l.x + fx * ahead - fz * side, z: l.z + fz * ahead + fx * side }
 }
 /** Where the five stand: at the FRONT of their own lot, facing the green (a keeper on the green sees all five). */
+// M39: a lot that stands Alex's BLUEPRINT puts its Moglin at the building's own front door (glade-lots.ts registers the spot:
+// the blockout's front-of-lot spot sat inside every 13 x 8 blueprint or in one of its walls).
+const spotOverride = new Map<string, { x: number; z: number }>()
+export function setLotSpot(lot: string, p: { x: number; z: number } | null) { if (p) spotOverride.set(lot, p); else spotOverride.delete(lot) }
 export function gladeSpots(ids: readonly string[]): { id: string; x: number; z: number; yaw: number }[] {
   return ids.map(id => {
-    const k = id.split(':').pop() ?? id, p = lotAt(k) ? onLot(k, LOT_D / 2 - 1.2) : { x: GLADE_GREEN.x, z: GLADE_GREEN.z }
+    const k = id.split(':').pop() ?? id, p = spotOverride.get(k) ?? (lotAt(k) ? onLot(k, LOT_D / 2 - 1.2) : { x: GLADE_GREEN.x, z: GLADE_GREEN.z })
     return { id, x: p.x, z: p.z, yaw: Math.atan2(GLADE_GREEN.x - p.x, GLADE_GREEN.z - p.z) }
   })
 }
@@ -91,6 +95,24 @@ export function gladeSpots(ids: readonly string[]): { id: string; x: number; z: 
 export const FOLK_RING = GLADE_GREEN.r
 
 export const isGlade = (homeOrId: string) => homeOrId === GLADE_ID || homeOrId.startsWith(`${GLADE_ID}:`)
+
+/** M40: each of the five talks about THEIR station (what they make, what they want, your matching room). @lark, SIGNED by
+ *  Alex 11-19 (athernyx 40bf1c6, CANON/game/glade-station-lines.md), verbatim. The first talk is `main`, a repeat talk the
+ *  `alt`. ⚠ OPEN for Alex: Sax says 'Stonemason room' as signed, but the build strip names that room the Stonery (the signed
+ *  file's own note says the lines follow the UI label). Checks import these, never retype them. */
+export const GLADE_STATION_LINES: Readonly<Record<string, { main: string; alt: string }>> = {
+  fennel: { main: "Table's long and the hearth is lit. Bring crops, rinn, honey-like things. A Cooking room on your plot gets you your own.", alt: 'Everybody eats here at evening. Your plot could hold a table like this one. Start with the Cooking room.' },
+  hazel: { main: 'Planks, goldwood first, then cord and sap. I make tables and chests. Build a Carpentry room and you get your own bench.', alt: 'A crooked stack makes a crooked table. Stack them square. The Carpentry room runs on the same rule.' },
+  sax: { main: 'Cooled-cloud stone, and crystal for the good work. I cut paving and low walls. Your plot can have a Stonemason room.', alt: 'Ground stays where I put it. Build a Stonemason room and yours will too.' },
+  yarrow: { main: 'Herbs, bark, raw shards, and brews once you make them. Jars and catalysts here. Your plot can have an Alchemy room.', alt: 'I will not brew for you. Build an Alchemy room and the work is your hands.' },
+  mallow: { main: 'Bring me what the list asks. I pay Marks, and the list changes every week. This is where it all closes up.', alt: 'Check the list before you gather. It will not be the same list as last week.' },
+}
+/** a Glade Moglin's hello: its station line (main on first meeting, alt after), or null for anyone else */
+export function gladeHello(folkId: string, heardBefore: boolean): string | null {
+  if (!isGlade(folkId)) return null
+  const l = GLADE_STATION_LINES[folkId.split(':').pop() ?? '']
+  return l ? (heardBefore ? l.alt : l.main) : null
+}
 
 /** Greg's home on the pond's north-east shore, his bench between it and the green (facing the green), and the jetty out
  *  from the shore into the pond. Metres from the green's centre. */

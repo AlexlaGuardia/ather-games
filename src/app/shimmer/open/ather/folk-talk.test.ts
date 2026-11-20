@@ -1,5 +1,7 @@
 // folk-talk.ts: a settlement Moglin's conversation is one screen per answer, lark's lines only, game logic via the acts.
 import { folkTalk, folkStart, ASK, FOLK_NO_ROOM, FOLK_EMPTY, giveLabel, goodsText, type FolkTalkState } from './folk-talk'
+import { helloFor, _resetHeard } from './folk-talk'
+import { GLADE_STATION_LINES } from './moonwell-glade'
 import { folkOf, freshTrust, bring, stillHome } from './settlement-folk'
 import { talkLine, DREAMS } from './folk-lines'
 import type { Settlement } from './network'
@@ -58,4 +60,12 @@ h.options[h.options.length - 1].pick(); ok(log.pop() === 'bye', 'goodbye closes'
 const bad = /\b(duty|assign|staff|hire|your moglins|it)\b/i
 ok(![...Object.values(ASK), FOLK_NO_ROOM, FOLK_EMPTY].some(x => bad.test(x)), 'copy law: no duty/assign/staff/hire/it/your Moglins in the placeholders')
 void stillHome; void DREAMS
+// M40: a Glade Moglin's hello is its station line (lark, SIGNED 40bf1c6): the first talk the main line, a repeat the alternate
+{ _resetHeard()
+  const g = { id: 'moonwell:hazel', name: 'Hazel', home: 'moonwell', profession: 'carpenter', employed: true, wants: [{ id: 'goldwood_plank', n: 6 }], dream: 'dream', grades: { craft: 4, yield: 3, trade: 3 } } as unknown as Folk
+  const c = ctx({ home: [g], folk: [g] })
+  const first = folkTalk(c, helloFor(g.id), acts).line, again = folkTalk(c, helloFor(g.id), acts).line
+  ok(first === GLADE_STATION_LINES.hazel.main && again === GLADE_STATION_LINES.hazel.alt, `Glade: the first talk is the station line, a repeat the alternate (${first.slice(0, 30)} / ${again.slice(0, 30)})`)
+  const o = { ...g, id: 's1-0:x', home: 's1-0' } as Folk
+  ok(folkTalk(ctx({ home: [o], folk: [o] }), helloFor(o.id), acts).line === 'dream', 'anyone outside the Glade still says their dream') }
 console.log(`folk-talk: ${pass} ok, ${fail} fail`); process.exit(fail ? 1 : 0)

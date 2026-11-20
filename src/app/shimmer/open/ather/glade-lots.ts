@@ -4,9 +4,10 @@
 // the trades: characters/moonwell-folk.md). PURE: the scene (glade-lots.tsx) draws these parts and the walker
 // (dynamic-solids.ts) stands against the same parts, so what you see is what you bump.
 // A part is in its LOT's frame: `ahead` m toward the green from the lot's centre, `side` m to its right; w across, d deep, h tall.
-import { onLot, lotAt, GLADE_LOTS, gladeJetty } from './moonwell-glade'
+import { onLot, lotAt, GLADE_LOTS, gladeJetty, setLotSpot } from './moonwell-glade'
 import type { Box } from '../terrain-world'
 import { placeBlueprint, fitsPad, type HouseBlueprint } from './plot-blueprint'
+import { findRooms } from './plot-walls'
 
 export interface Part { ahead: number; side: number; w: number; d: number; h: number; y0?: number; color: string; solid?: boolean; turn?: number }
 const WOOD = '#9a6a3c', PLANK = '#d2a157', STONE = '#9aa3ad', DARK = '#6d5038', HERB = '#6fa857', CLOTH = '#d9806a', JAR = '#b7d8e6', HEARTH = '#8a4b32'
@@ -83,7 +84,9 @@ export const gladeBlueprint = (lot: string) => blueprints.get(lot) ?? null
 export function setGladeBlueprint(lot: string, bp: HouseBlueprint | null) {
   if (bp && !fitsPad(bp, (lotAt(lot)?.w ?? 0), (lotAt(lot)?.d ?? 0))) bp = null   // oversize: refused, the blockout stays (never over the green)
   if (bp) blueprints.set(lot, bp); else blueprints.delete(lot)
+  setLotSpot(lot, bp ? doorSpot(bp, lotPad(lot, 0)) : null)
   bpVersion++
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('glade-blueprints'))   // the folk re-place
 }
 /** where a lot's blueprint stands (its pad's centre, facing the green, on the Glade floor) */
 export function lotPad(lot: string, y: number) { const l = lotAt(lot)!; return { x: l.x, z: l.z, yaw: l.yaw, y } }
@@ -92,4 +95,23 @@ export function gladeLotBoxes(groundY: number): Box[] {
   const out: Box[] = []
   for (const l of GLADE_LOTS) { const bp = blueprints.get(l.id); if (bp) out.push(...placeBlueprint(bp, lotPad(l.id, groundY)).boxes) }
   return [...out, ...stationBoxes(groundY).filter(b => !b._lot || !blueprints.has(b._lot))]
+}
+
+/** where a blueprint lot's Moglin stands: 1.2 m out from the building's FRONT-MOST outside door (the door with a room on one
+ *  side and open ground on the other, nearest the green), on the open side; no outside door = 1.2 m in front of the footprint */
+export function doorSpot(bp: HouseBlueprint, pad: { x: number; z: number; yaw: number; y: number }): { x: number; z: number } {
+  const rooms = findRooms(bp.walls), inRoom = (i: number, j: number) => rooms.some(r => r.cells.some(([a, b]) => a === i && b === j))
+  const place = placeBlueprint(bp, pad), out: { u: number; v: number }[] = []
+  for (const [k, w] of Object.entries(bp.walls)) {
+    if (w.kind !== 'door') continue
+    const [o, a, b] = k.split(','), i = +a, j = +b
+    if (o === 'h') { const r1 = inRoom(i, j - 1), r2 = inRoom(i, j); if (r1 !== r2) out.push({ u: i + 0.5, v: r2 ? j - 1.2 : j + 1.2 }) }
+    else { const r1 = inRoom(i - 1, j), r2 = inRoom(i, j); if (r1 !== r2) out.push({ u: r2 ? i - 1.2 : i + 1.2, v: j + 0.5 }) }
+  }
+  if (!out.length) return place.toWorld(bp.w / 2, -1.2)
+  // a two-piece door gives two spots side by side: average them; pick the door nearest the front (smallest v)
+  out.sort((p, q) => p.v - q.v)
+  const front = out.filter(p => Math.abs(p.v - out[0].v) < 1.5 && Math.abs(p.u - out[0].u) < 1.5)
+  const u = front.reduce((t, p) => t + p.u, 0) / front.length, v = front.reduce((t, p) => t + p.v, 0) / front.length
+  return place.toWorld(u, v)
 }

@@ -6,7 +6,7 @@
 // All game logic stays in settlement-folk.ts (wantsLeft / trusted / bring / recruit); this file only arranges lines.
 // ★ @lark draft 11-18, awaiting Alex sign-off: the answer labels (ASK), the bring verb and the two stock lines below. The dream
 // stays the hello (lark: the only place a keeper ever hears a Moglin's dream). Checks import these, never retype them.
-import { isGlade, GLADE_STAYS } from './moonwell-glade'
+import { isGlade, GLADE_STAYS, gladeHello } from './moonwell-glade'
 import type { TalkNode } from '../shared/npc-talk'
 import { wantsLeft, trusted, type Folk, type Trust } from './settlement-folk'
 import { talkLine } from './folk-lines'
@@ -19,7 +19,12 @@ export const giveLabel = (n: number, id: string) => `Bring ${n} ${itemDef(id).na
 export const goodsText = (ws: { id: string; n: number }[]) => ws.map(w => `${w.n} ${itemDef(w.id).name}`).join(' and ')
 
 /** Where the talk is: whose bubble, which screen, and (after an answer) the line it said. */
-export interface FolkTalkState { fid: string; screen: 'hello' | 'needs' | 'said'; line?: string }
+export interface FolkTalkState { fid: string; screen: 'hello' | 'needs' | 'said'; line?: string; /** M40: this hello is a repeat (a Glade Moglin says its alternate) */ alt?: boolean }
+// M40: Glade Moglins heard this visit (a repeat talk gets the alternate line). Per page, not saved: a new visit starts fresh.
+const heard = new Set<string>()
+/** a hello state for `fid`, marking it heard (the NEXT hello is a repeat) */
+export function helloFor(fid: string): FolkTalkState { const alt = heard.has(fid); heard.add(fid); return { fid, screen: 'hello', alt } }
+export const _resetHeard = () => heard.clear()
 export interface FolkTalkCtx { folk: Folk[]; home: Folk[]; trust: Trust; have: (id: string) => number; room: number }
 export interface FolkTalkActs {
   go: (s: FolkTalkState) => void
@@ -28,7 +33,7 @@ export interface FolkTalkActs {
   bye: () => void
 }
 
-export const folkStart = (home: Folk[]): FolkTalkState => ({ fid: home[0]?.id ?? '', screen: 'hello' })
+export const folkStart = (home: Folk[]): FolkTalkState => (home[0] ? helloFor(home[0].id) : { fid: '', screen: 'hello' })
 
 /** The node for `st`. A Moglin that has just been recruited is no longer in `home`, so it is looked up in the full season list. */
 export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): TalkNode {
@@ -37,7 +42,7 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): 
   if (!f) return { line: FOLK_EMPTY, options: [bye] }
   const others = c.home.filter(x => x.id !== f.id)
   const at = c.home.findIndex(x => x.id === f.id), after = others.length ? (at < 0 ? others[0] : others.find((_, k) => k >= at) ?? others[0]) : null
-  const next = after ? { label: ASK.others, pick: () => act.go({ fid: after.id, screen: 'hello' }) } : null
+  const next = after ? { label: ASK.others, pick: () => act.go(helloFor(after.id)) } : null
   const homeNow = c.home.some(x => x.id === f.id)
   if (!homeNow) return { line: st.line ?? FOLK_EMPTY, options: [...(next ? [next] : []), bye] }   // just came home with the keeper
   const ok = trusted(f, c.trust)
@@ -62,5 +67,5 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): 
     }
   }
   if (st.screen === 'said') return { line: st.line ?? f.dream, options: [{ label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello' }) }, ...(next ? [next] : []), bye] }
-  return { line: f.dream, options: [...(f.employed && !ok ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, ...(next ? [next] : []), bye] }
+  return { line: gladeHello(f.id, !!st.alt) ?? f.dream, options: [...(f.employed && !ok ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, ...(next ? [next] : []), bye] }
 }

@@ -104,6 +104,8 @@ function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: 
   useEffect(() => { setMapSettlements(net.settlements) }, [net])   // the maps draw them (tile-picture.ts)
   const [near, setNear] = useState<string[]>([])
   const [villageRev, setVillageRev] = useState(0)
+  // M39: a Glade blueprint landing moves that lot's Moglin to the building's door: re-place the folk
+  useEffect(() => { const on = () => setVillageRev(n => n + 1); window.addEventListener('glade-blueprints', on); return () => window.removeEventListener('glade-blueprints', on) }, [])
   const acc = useRef(0)
   useFrame(({ camera }, dt) => {
     keeperNow.x = camera.position.x; keeperNow.z = camera.position.z
