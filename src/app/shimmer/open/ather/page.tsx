@@ -1072,7 +1072,9 @@ function AtherSliceGame() {
         camera={{ fov: 75, near: 0.05, far: 900, position: [THRESHOLD.x, 3, THRESHOLD.z] }}
         onClick={(e) => { if (!panel && !isTouch && !isBuilding()) (e.target as HTMLCanvasElement).requestPointerLock?.() }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
-        onCreated={({ gl }) => { canvasEl.current = gl.domElement }}
+        // M44 (profile dcff05b4): three's checkShaderErrors reads getProgramInfoLog/getShaderInfoLog after EVERY link, a SYNC
+        // GPU wait (up to 1.3 s in one arrival frame). Dev keeps the check so a broken shader still shouts.
+        onCreated={({ gl }) => { canvasEl.current = gl.domElement; gl.debug.checkShaderErrors = process.env.NODE_ENV !== 'production' }}
       >
         <OpenHands ref={handsApi} held={<HeldItem id={stance.kind === 'item' ? held : null} />} />
         <FpGun ref={gunApi} />

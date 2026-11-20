@@ -1402,7 +1402,7 @@ function ContinentRideGame() {
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#a9c6d6' }}>
       {R && (
-        <Canvas camera={{ fov: FOV, near: 0.1, far: 2500 }} gl={{ antialias: true, powerPreference: 'high-performance' }} onCreated={({ gl }) => { canvasEl.current = gl.domElement }}>
+        <Canvas camera={{ fov: FOV, near: 0.1, far: 2500 }} gl={{ antialias: true, powerPreference: 'high-performance' }} onCreated={({ gl }) => { canvasEl.current = gl.domElement; gl.debug.checkShaderErrors = process.env.NODE_ENV !== 'production' /* M44: no sync shader-log wait per link in prod */ }}>
           <VoxelDayNight />
           <FogRig />
           <Terrain R={R} focus={focus} />
