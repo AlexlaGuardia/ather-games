@@ -1,4 +1,6 @@
 // ── A WORKSHOP ROOM'S OWN STORE, PLAYED (2026-11-17, play / Jin 2 95f19652) ──────────────────────────────────────
+// M43 (11-20): the store is its own panel beside the station ([data-panel=station-store]) with a Pack / Keepstone toggle and per-item
+// +1 / +10 / All moves; there is no 'Stock from the bag' button any more, and a row only lists what the room accepts.
 // Alex 11-17: each room keeps its OWN inventory that takes only that room's materials. A keeper at the Rinnshop bench
 // stocks the room from the bag (the logs stay behind), cuts bait from the room's own mast, and takes a catch back out.
 // SETUP (stated): a Rinnshop already standing at (-100, 100) (seeded in open.works.v1 with doneAt in the past, so the
@@ -38,8 +40,10 @@ await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 18000
 const b = benchOf(ROOM)
 await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), b.x, b.z - 1.2); await sleep(1500); await shot('_f'); await shot('_f')
 await p.keyboard.press('e'); await sleep(900)
-res.bench = await p.evaluate(() => !!document.querySelector('[data-panel="bench"] [data-room-store="rinnshop"]')); await shot('rs-1-bench')
-res.stocked = await click('[data-act="stock-room"] button'); await sleep(700)
+res.bench = await p.evaluate(() => !!document.querySelector('[data-panel="bench"]') && !!document.querySelector('[data-panel="station-store"] [data-room-store="rinnshop"]'))
+res.rows = await p.evaluate(() => [...document.querySelectorAll('[data-src-list="pack"] [data-src-item]')].map(e => e.getAttribute('data-src-item')).sort()); await shot('rs-1-bench')
+res.stocked = await click('[data-src-item="mast"] [data-move="all"]'); await sleep(500)
+res.stocked2 = await click('[data-src-item="glowfin"] [data-move="all"]'); await sleep(700)
 res.afterStock = { bag: await bag(), store: await store() }; await shot('rs-2-stocked')
 res.cut = await click('[data-bait-from="mast"] button'); await sleep(700)
 res.afterCut = { bag: await bag(), store: await store() }
@@ -50,9 +54,11 @@ res.errs = errs
 console.log(JSON.stringify(res))
 type T = { bag: Record<string, number>; store: Record<string, number> }
 const s1 = res.afterStock as T, s2 = res.afterCut as T, s3 = res.afterTake as T
-const pass = res.bench === true
+const rows = res.rows as string[]
+const pass = res.bench === true && res.stocked === true && res.stocked2 === true
+  && rows.includes('mast') && rows.includes('glowfin') && !rows.includes('goldwood_log')
   && s1.store.mast === 3 && s1.store.glowfin === 2 && !s1.store.goldwood_log && s1.bag.goldwood_log === 10 && !s1.bag.mast && s1.bag.bait === 10
   && s2.store.mast === 2 && s2.bag.bait === 12
   && s3.bag.glowfin === 2 && !s3.store.glowfin && errs.length === 0
-console.log(pass ? 'PASS: Rinnshop store stocked from the bag (logs refused) → bait cut from the room\'s own mast → a catch taken back' : 'FAIL')
+console.log(pass ? 'PASS: Rinnshop store stocked from the bag (logs not even offered) → bait cut from the room\'s own mast → a catch taken back' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)
