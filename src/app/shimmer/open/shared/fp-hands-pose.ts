@@ -38,21 +38,21 @@ export const FP_DEFAULTS: Readonly<FpTune> = {
   X: 0.355, REST_Y: -0.415, Z: -0.56,    // rest: apart, height, distance
   PITCH: -1.4,             // rest tilt
   ROLL: 0.63,              // the cuffs turned outward (a hand's cuff hangs at -y; +roll swings it toward +x)
-  SCALE: 1.54,
+  SCALE: 2,
   DROP_Y: 0.4,             // how far a hand drops on its step at a full run: clean out of view below the frame
   SWING_Z: 0.005,          // the hand that stays up comes a touch forward
   STRIDE_M: 5,             // metres per full stride (two steps): each hand drops once per stride
   JUMP_Y_R: 0.355, JUMP_Y_L: 0.17, JUMP_SPREAD: 0.13, JUMP_PITCH: 0.24,
-  CAST_X: 0.345, CAST_Y: -0.12, CAST_PITCH: 0.68,
+  CAST_X: 0.365, CAST_Y: -0.11, CAST_PITCH: 0.84,
   // M45 (Alex 11-20: the voxel world's presented palm, "we want the mitt to turn" — tuned in /shimmer/dev/hands, Hold):
   // the right mitt's pose while a hotbar item is out (absolute, like rest), and the item floating over it (held-item.tsx)
-  HOLD_X: 0.25, HOLD_Y: -0.33, HOLD_Z: -0.56, HOLD_PITCH: -1.4, HOLD_ROLL: 0.63,
-  ITEM_UP: 0.075,          // metres above the mitt, in camera space (up the screen)
+  HOLD_X: 0.335, HOLD_Y: -0.405, HOLD_Z: -0.635, HOLD_PITCH: 1.89, HOLD_ROLL: -3.05,
+  ITEM_UP: 0.25,          // metres above the mitt, in camera space (up the screen)
   ITEM_FWD: 0,             // metres toward (+) / away (-) from the eye
-  ITEM_SIZE: 1,            // x the mini's own size
+  ITEM_SIZE: 0.63,            // x the mini's own size
   ITEM_TILT: 0.35,         // tipped toward the eye so its top reads
-  ITEM_SPIN: 0.9,          // radians a second about screen-up (the voxel rig's turn)
-  ITEM_BOB: 0.006,         // metres of slow bob
+  ITEM_SPIN: 0.25,          // radians a second about screen-up (the voxel rig's turn)
+  ITEM_BOB: 0.026,         // metres of slow bob
 }
 /** LIVE numbers: the defaults, overwritten by this browser's tune (loadFpTune). Read every frame, so a slider moves the hands. */
 export const FP = {
