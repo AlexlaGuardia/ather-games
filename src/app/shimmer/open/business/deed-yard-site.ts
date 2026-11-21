@@ -7,7 +7,6 @@
 import type { Region } from '../region'
 import { cachedPlan } from '../foot-solids'
 import type { Building } from '../towns/plan'
-import { doorByKey } from './doors'
 import { DEED_GRID, type DeedKind } from './deed-grid'
 
 export interface Yard {
@@ -85,8 +84,5 @@ export function yardBeside(R: Region, i: number, b: Building, kind: DeedKind = '
   return yard
 }
 
-/** THE keeper's shipyard yard: Kael's, at Rune Hold (doors.ts › front:shipyard). Null when this region has no shipyard. */
-export function shipyardYard(R: Region): Yard | null {
-  const d = doorByKey(R, 'front:shipyard'), i = R.meta.places.findIndex(p => p.id === 'rune-hold')
-  return d && i >= 0 ? yardBeside(R, i, d.b, 'shipyard', d.at) : null
-}
+// THE keeper's yards (Kael's + the bought ones) are listed in business/shipyards.ts › shipyardSites / shipyardYard (moved there in
+// M49 s3 so doors.ts can site a bought shipyard by its yard without an import cycle).

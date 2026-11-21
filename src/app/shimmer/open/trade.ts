@@ -52,6 +52,8 @@ export interface Ledger {
   scale?: number
   active: (Contract & { loaded: boolean; loadedAt: number }) | null
   owned: Record<Slot, Tier>           // highest tier owned per slot (owning III means II and I too)
+  /** the shipyards bought (business/shipyards.ts keys, M49 s3); Kael's is inherited and never listed */
+  shipyards?: string[]
 }
 export const NEW_LEDGER: Ledger = { marks: STARTING_MARKS, scale: LEDGER_SCALE, deeds: 0, active: null, owned: { core: 0, trim: 0, rune: 0 } }
 /** A saved ledger, read in: one from before the price ladder (Alex 11-15 raised every price) has its Marks multiplied up,

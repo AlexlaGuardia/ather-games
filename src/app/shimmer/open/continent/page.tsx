@@ -33,7 +33,8 @@ import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Tra
 import { pitstopsUnlocked, visitNear } from './pitstops'
 import { Towns } from '../towns/Towns'
 import { MarketView, DeedCard } from '../business/market-view'
-import { DeedYard, type DeedYardState } from './deed-yard'
+import { DeedYards, type DeedYardState } from './deed-yard'
+import { useIsOwner } from '@/app/_components/useIsOwner'
 import { extraGround } from '../foot-extras'
 import { useTycoon } from '../business/use-tycoon'
 import { ShopPanel } from '../business/shop-panel'
@@ -1123,6 +1124,10 @@ function ContinentRideGame() {
   const [deedReach, setDeedReach] = useState<string | null>(null)
   // M49 s1: the shipyard's yard (continent/deed-yard.tsx) tells the phone pill what E does there
   const [yardState, setYardState] = useState<DeedYardState>({ inYard: false, atBoard: false, action: null })
+  // M49 s3: ?own=all holds every shipyard (the OWNER's dev flag only; a player buys them, business/shipyards.ts)
+  const isOwner = useIsOwner()
+  const [ownAllFlag, setOwnAllFlag] = useState(false)
+  useEffect(() => { setOwnAllFlag(new URLSearchParams(location.search).get('own') === 'all') }, [])
   // ?tune=1: ] gives 100k Marks, to try the businesses without grinding contracts (the Ather's ?tune=1 convention)
   useEffect(() => {
     if (!new URLSearchParams(location.search).has('tune')) return
@@ -1476,7 +1481,7 @@ function ContinentRideGame() {
           <DoorFolk R={R} focus={focus} talking={talk?.key ?? null} />
           <RemoteKeepers peers={mp.peers} me={() => focus.current} />
           <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={openDoor} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} />
-          <DeedYard R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState}
+          <DeedYards R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState} owned={ledger.shipyards} ownAll={isOwner && ownAllFlag}
             enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} />
           <Posts R={R} />
           <Roadside R={R} />

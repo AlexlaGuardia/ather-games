@@ -9,7 +9,8 @@ import { createLoco, type LocoState } from '../shared/locomotion'
 import { setFootExtra } from '../foot-extras'
 import { FURNITURE } from '../ather/furniture'
 import { DEED_GRID, emptyDeed, place, type Footprint } from './deed-grid'
-import { shipyardYard, yardToWorld, yardToLocal } from './deed-yard-site'
+import { yardToWorld, yardToLocal } from './deed-yard-site'
+import { shipyardYard } from './shipyards'
 import { yardFloorY, yardGround, rampOf, rimBoxes, pieceBoxes, GATE_W, RAMP_RISE, DECK_LIFT } from './deed-yard-floor'
 const meta = JSON.parse(readFileSync('public/open/continent.json', 'utf8')) as RegionMeta
 const raw = gunzipSync(readFileSync('public/open/continent.bin.gz'))

@@ -12,8 +12,9 @@
 // ★ Copy stays plain and neutral: no keeper speaks here until lark writes them.
 import { useEffect, useState } from 'react'
 import { IdonyPanel, RunesmithPanel } from './smith-panel'
-import { FRONT_SHOPS } from './doors'
+import { FRONT_SHOPS, BOUGHT_SHIPYARD_NAME } from './doors'
 export { FRONT_SHOPS } from './doors'
+import { KAEL_SHIPYARD, ownsShipyard } from './shipyards'
 import { HearthFrame, H, hearthDisplay, HearthButton } from '../../ui/hearth'
 import { hudSay } from '../shared/game-hud'
 import type { Ledger } from '../trade'
@@ -55,6 +56,7 @@ export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
   if (shop.kind === 'gunshop') return <GunShopPanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (shop.kind === 'courseryard') return <CourserYardPanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (shop.kind === 'courserlot') return <CourserLotPanel town={town} ledger={ledger} setLedger={setLedger} onClose={onClose} />
+  if (shop.kind === 'shipyard' && town) return <BoughtShipyardPanel town={town} ledger={ledger} onClose={onClose} />   // M49 s3: front:shipyard:<town>
   if (shop.kind === 'shipyard') return <ShipyardPanel onClose={onClose} />
   if (stockOf(id).length) return <DecorShop id={id} ledger={ledger} setLedger={setLedger} onClose={onClose} />
   return (
@@ -247,6 +249,20 @@ function ShipyardPanel({ onClose }: { onClose: () => void }) {
         ) : (
           <p className="mt-3" data-chest="empty">Empty now. You have what Kael left.</p>
         )}
+      </div>
+    </HearthFrame>
+  )
+}
+
+/** A SHIPYARD A KEEPER CAN BUY (M49 s3, business/shipyards.ts): not Kael's. Plain copy, no keeper, no line (lark/Magii later).
+ *  Held: its yard beside it is the keeper's to furnish. Not held: not theirs (the buy lands in s3b). */
+function BoughtShipyardPanel({ town, ledger, onClose }: { town: string; ledger: Ledger; onClose: () => void }) {
+  const key = `${KAEL_SHIPYARD}:${town}`, own = ownsShipyard(ledger.shipyards, key)
+  return (
+    <HearthFrame title={BOUGHT_SHIPYARD_NAME} maxWidth={420} onClose={onClose} fixed dataPanel="bought-shipyard">
+      <div className="px-4 pt-3 pb-4 text-[14px] leading-snug" style={{ color: H.ink }} data-owned={own ? 'yes' : 'no'}>
+        {own ? <p>Yours. The yard beside it is yours to furnish: hold a piece and press E inside the fence.</p>
+          : <p>Not yours. The yard beside it stays shut.</p>}
       </div>
     </HearthFrame>
   )

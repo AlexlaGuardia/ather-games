@@ -4,7 +4,8 @@ import { gunzipSync } from 'node:zlib'
 import { makeRegion, type RegionMeta } from '../region'
 import { cachedPlan } from '../foot-solids'
 import { doorByKey } from './doors'
-import { shipyardYard, yardToWorld, yardToLocal, buildingAxes, yardRotY, YARD_GAP, GATE_MID } from './deed-yard-site'
+import { yardToWorld, yardToLocal, buildingAxes, yardRotY, YARD_GAP, GATE_MID } from './deed-yard-site'
+import { shipyardYard } from './shipyards'
 import { DEED_GRID } from './deed-grid'
 const meta = JSON.parse(readFileSync('public/open/continent.json', 'utf8')) as RegionMeta
 const raw = gunzipSync(readFileSync('public/open/continent.bin.gz'))

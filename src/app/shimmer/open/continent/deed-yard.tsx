@@ -8,7 +8,10 @@
 // Saved per GARDEN (the tycoon is garden-level too): localStorage gardenKey(DEED_YARD_KEY).
 // SLICE 2 (hub #15579): the yard comes BUILT with one level timber deck on posts (business/deed-yard-floor.ts), a ramp at the
 // gate; the deck, ramp, rim fence and every solid placed piece are registered with the walker (foot-extras.ts).
-// Mount (inside the Canvas): <DeedYard R={R} focus={focus} track={track} held={heldId} enabled={onFootAndNoMenu} onState={...} />
+// SLICE 3 (hub #15751): EVERY shipyard a keeper can hold has its own yard (business/shipyards.ts › shipyardSites: Kael's + one
+// bought shipyard per city), saved per shipyard (yardStoreBase). A yard is mounted only while the keeper is near it. One the
+// keeper does not hold is drawn FENCED SHUT (no gate gap, the walker cannot enter) and its board says it is not theirs.
+// Mount (inside the Canvas): <DeedYards R={R} focus={focus} track={track} held={heldId} enabled={onFootAndNoMenu} owned={ledger.shipyards} ownAll={devFlag} onState={...} />
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import dynamic from 'next/dynamic'
@@ -21,9 +24,9 @@ import { FURNITURE, isPiece } from '../ather/furniture'
 import { HOLD_MS } from '../shared/stance'
 import { hudSay } from '../shared/game-hud'
 import { FLOOR_H } from '../towns/plan'
-import { doorByKey } from '../business/doors'
 import { DEED_GRID, DEED_PALETTES, emptyDeed, parseDeed, place, pickUp, itemAt, placeRefusal, setPalette, paletteOf, cellAtLocal, pieceCentre, type DeedState, type Footprint } from '../business/deed-grid'
-import { shipyardYard, yardToWorld, yardToLocal, yardRotY, buildingAxes, GATE_MID, type Yard } from '../business/deed-yard-site'
+import { yardToWorld, yardToLocal, yardRotY, buildingAxes, GATE_MID, type Yard } from '../business/deed-yard-site'
+import { shipyardSites, ownsShipyard, yardStoreBase, type ShipyardSite } from '../business/shipyards'
 import { yardFloorY, rampOf, yardGround, rimBoxes, pieceBoxes, GATE_W, RAMP_RISE } from '../business/deed-yard-floor'
 import { setFootExtra } from '../foot-extras'
 import { bodyHits, type OBox } from '../foot-solids'
@@ -31,7 +34,6 @@ import { bodyHits, type OBox } from '../foot-solids'
 // the furniture's own box bodies (ather/workshop.tsx), loaded only when a yard has something in it
 const PieceBody = dynamic(() => import('../ather/workshop').then(m => m.PieceBody), { ssr: false })
 
-export const DEED_YARD_KEY = 'open.deed.shipyard.v1'
 const KIND = 'shipyard' as const
 const G = DEED_GRID[KIND]
 const fpOf = (id: string): Footprint | null => (FURNITURE[id] ? { w: FURNITURE[id].w, d: FURNITURE[id].d } : null)
@@ -40,10 +42,13 @@ const AIM = 1.4
 /** the look board's reach (m) */
 const BOARD_REACH = 1.8
 
-export function loadDeedYard(): DeedState {
-  try { const raw = localStorage.getItem(gardenKey(DEED_YARD_KEY)); return raw ? parseDeed(JSON.parse(raw), KIND, fpOf) : emptyDeed() } catch { return emptyDeed() }
+/** a yard is mounted while the keeper is within this of its middle (m), dropped past MOUNT_R + 40 */
+const MOUNT_R = 220
+
+export function loadDeedYard(base: string): DeedState {
+  try { const raw = localStorage.getItem(gardenKey(base)); return raw ? parseDeed(JSON.parse(raw), KIND, fpOf) : emptyDeed() } catch { return emptyDeed() }
 }
-function saveDeedYard(s: DeedState) { try { localStorage.setItem(gardenKey(DEED_YARD_KEY), JSON.stringify(s)) } catch { /* not remembered */ } }
+function saveDeedYard(base: string, s: DeedState) { try { localStorage.setItem(gardenKey(base), JSON.stringify(s)) } catch { /* not remembered */ } }
 
 export interface DeedYardState { inYard: boolean; atBoard: boolean; action: 'place' | 'pick up' | 'look' | null }
 
@@ -56,25 +61,66 @@ interface Props {
   /** on foot and no menu open */
   enabled: boolean
   onState?: (s: DeedYardState) => void
+  /** the shipyards the keeper has bought (Ledger.shipyards); Kael's is always theirs */
+  owned?: readonly string[]
+  /** the owner's dev flag (?own=all): every shipyard counts as held */
+  ownAll?: boolean
 }
 
-export function DeedYard({ R, focus, track, held, enabled, onState }: Props) {
-  const yard = useMemo(() => (R ? shipyardYard(R) : null), [R])
-  const house = useMemo(() => (R ? doorByKey(R, 'front:shipyard')?.b ?? null : null), [R])
+const IDLE: DeedYardState = { inYard: false, atBoard: false, action: null }
+type Probe = Record<string, unknown>
+type ProbeWin = { __deedYard?: Probe; __deedYards?: Record<string, Probe> & { sites?: () => unknown } }
+
+/** every shipyard's yard: mounts the ones near the keeper and passes the one it stands at up to the page */
+export function DeedYards({ R, owned, ownAll = false, onState, ...rest }: Props) {
+  const sites = useMemo(() => (R ? shipyardSites(R) : []), [R])
+  const [near, setNear] = useState<string[]>([])
+  const nearRef = useRef(near); nearRef.current = near
+  const frame = useRef(0)
+  useFrame(() => {
+    if (++frame.current % 30) return
+    const f = rest.focus.current; if (!f) return
+    const want = sites.filter(s => { const d = Math.hypot(f.x - s.yard.x, f.z - s.yard.z); return d < MOUNT_R || (d < MOUNT_R + 40 && nearRef.current.includes(s.key)) }).map(s => s.key)
+    if (want.join('|') !== nearRef.current.join('|')) setNear(want)
+  })
+  // each mounted yard reports its state; the page hears the one the keeper is in or at (else idle)
+  const states = useRef(new Map<string, DeedYardState>())
+  const lastUp = useRef('')
+  const report = (key: string, s: DeedYardState | null) => {
+    if (s) states.current.set(key, s); else states.current.delete(key)
+    const live = [...states.current.values()].find(q => q.inYard || q.atBoard) ?? IDLE
+    const k = `${live.inYard}|${live.atBoard}|${live.action}`
+    if (k !== lastUp.current) { lastUp.current = k; onState?.(live) }
+  }
+  const reportRef = useRef(report); reportRef.current = report
+  useEffect(() => {
+    const w = window as unknown as ProbeWin
+    w.__deedYards = Object.assign(w.__deedYards ?? {}, { sites: () => sites.map(s => ({ key: s.key, town: s.town, price: s.price, inherited: s.inherited, owned: ownsShipyard(owned, s.key, ownAll), x: s.yard.x, z: s.yard.z, clear: s.yard.clear, mounted: nearRef.current.includes(s.key) })) })
+  }, [sites, owned, ownAll])
+  return <>{sites.filter(s => near.includes(s.key)).map(s => (
+    <DeedYard key={s.key} R={R} site={s} own={ownsShipyard(owned, s.key, ownAll)} onReport={(st: DeedYardState | null) => reportRef.current(s.key, st)} {...rest} />
+  ))}</>
+}
+
+function DeedYard({ R, site, own, focus, track, held, enabled, onReport }: Omit<Props, 'onState' | 'owned' | 'ownAll'> & { site: ShipyardSite; own: boolean; onReport: (s: DeedYardState | null) => void }) {
+  const yard = site.yard, house = site.b, store = yardStoreBase(site.key)
+  const ownRef = useRef(own); ownRef.current = own
   const floor = useMemo(() => (R && yard ? yardFloorY(R, yard) : 0), [R, yard])
   const ramp = useMemo(() => (R && yard ? rampOf(R, yard, floor) : null), [R, yard, floor])
   const [deed, setDeed] = useState<DeedState>(emptyDeed)
   // the walker: deck + ramp as ground, the rim + the solid pieces as boxes (swapped whole when the yard changes)
   const boxes = useRef<OBox[]>([])
-  useEffect(() => { if (yard) boxes.current = [...rimBoxes(yard, floor), ...pieceBoxes(yard, floor, deed, id => FURNITURE[id] ?? null)] }, [yard, floor, deed])
+  useEffect(() => { if (yard) boxes.current = [...rimBoxes(yard, floor, !own), ...pieceBoxes(yard, floor, deed, id => FURNITURE[id] ?? null)] }, [yard, floor, deed, own])
   useEffect(() => {
     if (!R || !yard || !ramp) return
-    setFootExtra('deed-yard', { ground: yardGround(R, yard, floor, ramp), boxes: () => boxes.current })
-    return () => setFootExtra('deed-yard', null)
-  }, [R, yard, floor, ramp])
-  useEffect(() => setDeed(loadDeedYard()), [])
+    const fk = `deed-yard:${site.key}`
+    setFootExtra(fk, { ground: yardGround(R, yard, floor, ramp), boxes: () => boxes.current })
+    return () => setFootExtra(fk, null)
+  }, [R, yard, floor, ramp, site.key])
+  useEffect(() => setDeed(loadDeedYard(store)), [store])
+  useEffect(() => () => onReport(null), [])   // eslint-disable-line react-hooks/exhaustive-deps
   const deedRef = useRef(deed); deedRef.current = deed
-  const commit = (s: DeedState) => { deedRef.current = s; setDeed(s); saveDeedYard(s) }
+  const commit = (s: DeedState) => { deedRef.current = s; setDeed(s); saveDeedYard(store, s) }
   const rot = useRef(0)
   const heldRef = useRef(held); heldRef.current = held
   const enabledRef = useRef(enabled); enabledRef.current = enabled
@@ -111,6 +157,7 @@ export function DeedYard({ R, focus, track, held, enabled, onState }: Props) {
     hudSay(`${itemDef(r.id).name} back in your bag`, 'item')
   }
   act.current.look = () => {
+    if (!ownRef.current) { hudSay('Not yours. This shipyard is for sale.', 'info'); return }
     const s = setPalette(deedRef.current, deedRef.current.palette + 1); commit(s)
     hudSay(`Yard: ${paletteOf(s).name}`, 'info')
   }
@@ -124,7 +171,7 @@ export function DeedYard({ R, focus, track, held, enabled, onState }: Props) {
       if (e.code !== 'KeyE' || e.repeat || !enabledRef.current) return
       const a = aim.current
       if (a.atBoard) { act.current.look(); return }
-      if (!a.inYard) return
+      if (!a.inYard || !ownRef.current) return
       const id = heldRef.current
       if (id && isPiece(id)) { armed = true; turned = false; t = setTimeout(tick, HOLD_MS); return }
       act.current.pick()
@@ -140,11 +187,16 @@ export function DeedYard({ R, focus, track, held, enabled, onState }: Props) {
 
   // probe for scripted checks (scripts/deed-yard-check.mts)
   useEffect(() => {
-    (window as unknown as { __deedYard?: unknown }).__deedYard = {
+    const probe: Probe = {
+      key: () => site.key, own: () => ownRef.current,
       yard: () => yard, board: () => board, floor: () => floor, ramp: () => ramp, state: () => deedRef.current, aim: () => ({ ...aim.current, rot: rot.current }),
-      stored: () => { try { return localStorage.getItem(gardenKey(DEED_YARD_KEY)) } catch { return null } },
+      stored: () => { try { return localStorage.getItem(gardenKey(store)) } catch { return null } },
     }
-  }, [yard, board, floor, ramp])
+    const w = window as unknown as ProbeWin
+    w.__deedYards = Object.assign(w.__deedYards ?? {}, { [site.key]: probe })
+    if (site.inherited) w.__deedYard = probe   // slice 1-2 checks read Kael's here
+    return () => { if (w.__deedYards?.[site.key] === probe) delete w.__deedYards[site.key]; if (w.__deedYard === probe) delete w.__deedYard }
+  }, [yard, board, floor, ramp, site.key, site.inherited, store])
 
   // per frame: where the keeper aims; the ghost; the page's touch pill
   const ghost = useRef<THREE.Group>(null), ghostMat = useRef<THREE.MeshBasicMaterial>(null), grid = useRef<THREE.LineSegments>(null)
@@ -158,7 +210,7 @@ export function DeedYard({ R, focus, track, held, enabled, onState }: Props) {
     const ax = f.x - Math.sin(tr.yaw) * AIM, az = f.z - Math.cos(tr.yaw) * AIM, al = yardToLocal(yard, ax, az)
     const cell = inYard ? cellAtLocal(KIND, al.lx, al.lz) : null
     aim.current = { inYard, atBoard, cell }
-    const id = heldRef.current, holding = !!id && isPiece(id)
+    const id = heldRef.current, holding = !!id && isPiece(id) && ownRef.current
     // the grid shows while a piece is in hand near the yard
     if (grid.current) grid.current.visible = holding && Math.abs(me.lx) < G.w / 2 + 6 && Math.abs(me.lz) < G.d / 2 + 6
     if (ghost.current) {
@@ -173,18 +225,18 @@ export function DeedYard({ R, focus, track, held, enabled, onState }: Props) {
         if (ghostMat.current) ghostMat.current.color.set(placeRefusal(deedRef.current, KIND, fpOf, id, cell.cx, cell.cz, rot.current) ? '#e0604a' : '#7fe0a0')
       }
     }
-    const action: DeedYardState['action'] = !enabledRef.current ? null : atBoard ? 'look' : !inYard ? null
+    const action: DeedYardState['action'] = !enabledRef.current ? null : atBoard ? (ownRef.current ? 'look' : null) : !inYard || !ownRef.current ? null
       : holding ? (cell ? 'place' : null) : cell && itemAt(deedRef.current, fpOf, cell.cx, cell.cz) >= 0 ? 'pick up' : null
     const key = `${inYard}|${atBoard}|${action}`
-    if (key !== last.current) { last.current = key; onState?.({ inYard, atBoard, action }) }
+    if (key !== last.current) { last.current = key; onReport({ inYard, atBoard, action }) }
   })
 
-  if (!yard || !R) return null
+  if (!R) return null
   const pal = paletteOf(deed)
   return (
     <group>
       <Deck R={R} yard={yard} floor={floor} ramp={ramp} />
-      <Fence yard={yard} floor={floor} color={pal.color} accent={pal.accent} />
+      <Fence yard={yard} floor={floor} color={pal.color} accent={pal.accent} shut={!own} />
       {board && <LookBoard yard={yard} floor={floor} at={board} color={pal.color} accent={pal.accent} />}
       {house && <HouseTrim b={house} color={pal.color} accent={pal.accent} />}
       <GridLines yard={yard} floor={floor} gref={grid} />
@@ -206,7 +258,7 @@ function rail(a: THREE.Vector3, b: THREE.Vector3) {
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), b.clone().sub(a).normalize())
   return { m, L, q }
 }
-function Fence({ yard, floor, color, accent }: { yard: Yard; floor: number; color: string; accent: string }) {
+function Fence({ yard, floor, color, accent, shut }: { yard: Yard; floor: number; color: string; accent: string; shut: boolean }) {
   const parts = useMemo(() => {
     const posts: THREE.Vector3[] = [], rails: { m: THREE.Vector3; L: number; q: THREE.Quaternion }[] = []
     const corners: [number, number][] = [[-G.w / 2, -G.d / 2], [G.w / 2, -G.d / 2], [G.w / 2, G.d / 2], [-G.w / 2, G.d / 2]]
@@ -214,7 +266,7 @@ function Fence({ yard, floor, color, accent }: { yard: Yard; floor: number; colo
     const edgeId = [0, 3, 1, 2]
     for (let e = 0; e < 4; e++) {
       const [u0, v0] = corners[e], [u1, v1] = corners[(e + 1) % 4], L = Math.hypot(u1 - u0, v1 - v0), n = Math.round(L / 2)
-      const gap = edgeId[e] === yard.gate
+      const gap = edgeId[e] === yard.gate   // shut: gateposts stay, the rails run across (a closed gate)
       // post stations along the edge (s from -L/2 to L/2); at the gate the middle ones give way to two gateposts
       let ss = Array.from({ length: n + 1 }, (_, k) => -L / 2 + (k * L) / n)
       if (gap) ss = [...ss.filter(s => Math.abs(s) >= GATE_W / 2 + 0.3), -GATE_W / 2, GATE_W / 2].sort((a, b) => a - b)
@@ -222,11 +274,11 @@ function Fence({ yard, floor, color, accent }: { yard: Yard; floor: number; colo
       ss.forEach((s, k) => {
         const p = at(s)
         if (k < ss.length - 1) posts.push(p)   // the edge's last post is the next edge's first
-        if (k > 0 && !(gap && ss[k - 1] === -GATE_W / 2 && s === GATE_W / 2)) rails.push(rail(at(ss[k - 1]), p))
+        if (k > 0 && !(gap && !shut && ss[k - 1] === -GATE_W / 2 && s === GATE_W / 2)) rails.push(rail(at(ss[k - 1]), p))
       })
     }
     return { posts, rails }
-  }, [yard, floor])
+  }, [yard, floor, shut])
   return (
     <group>
       {parts.posts.map((p, k) => <mesh key={`p${k}`} position={[p.x, p.y + 0.6, p.z]}><boxGeometry args={[0.14, 1.2, 0.14]} /><meshLambertMaterial color={color} /></mesh>)}

@@ -65,15 +65,16 @@ function edgeBox(y: Yard, u0: number, v0: number, u1: number, v1: number, floor:
   return { cx: (a.x + b.x) / 2, cz: (a.z + b.z) / 2, ux, uz, vx: -uz, vz: ux, hu: L / 2 + RIM_T / 2, hv: RIM_T / 2, y0: floor - 40, y1: floor + RIM_H }
 }
 
-/** the fence on the rim as solid boxes: all four edges, the gate edge split around its gap */
-export function rimBoxes(y: Yard, floor: number): OBox[] {
+/** the fence on the rim as solid boxes: all four edges, the gate edge split around its gap; `shut` (a shipyard the keeper
+ *  does not hold, M49 s3) closes the gap too */
+export function rimBoxes(y: Yard, floor: number, shut = false): OBox[] {
   const G = DEED_GRID[y.kind], W = G.w / 2, D = G.d / 2, g = GATE_W / 2
   const edges: { k: 0 | 1 | 2 | 3; a: [number, number]; b: [number, number] }[] = [
     { k: 0, a: [-W, -D], b: [W, -D] }, { k: 1, a: [-W, D], b: [W, D] }, { k: 2, a: [-W, -D], b: [-W, D] }, { k: 3, a: [W, -D], b: [W, D] },
   ]
   const out: OBox[] = []
   for (const e of edges) {
-    if (e.k !== y.gate) { out.push(edgeBox(y, e.a[0], e.a[1], e.b[0], e.b[1], floor)); continue }
+    if (e.k !== y.gate || shut) { out.push(edgeBox(y, e.a[0], e.a[1], e.b[0], e.b[1], floor)); continue }
     const [mu, mv] = GATE_MID(G, e.k), du = e.b[0] - e.a[0], dv = e.b[1] - e.a[1], L = Math.hypot(du, dv), tu = du / L, tv = dv / L
     out.push(edgeBox(y, e.a[0], e.a[1], mu - tu * g, mv - tv * g, floor))
     out.push(edgeBox(y, mu + tu * g, mv + tv * g, e.b[0], e.b[1], floor))

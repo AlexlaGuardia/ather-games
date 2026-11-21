@@ -10,7 +10,11 @@
 //        one floor; a placed SOLID piece (the bench) stops real W; a shot from the gate
 //   PASS = all of that + 0 page errors. Hooks MOVE (__drive.footTp / look) and READ (__deedYard); the bag is SEEDED with the
 //   two pieces (localStorage, before the continent loads) because making furniture is the Ather's bench, not this slice.
-//   npx tsx scripts/deed-yard-check.mts [origin, default https://ather.games] [--out /tmp/deed-yard]
+//   S3 · (slice 3) --yard front:shipyard:<town> runs every leg at that BOUGHT shipyard's yard instead of Kael's: the keeper's
+//        ledger is SEEDED as holding it (the buy is s3b), the walker is set down beside it, and after the legs: Kael's yard store
+//        was never written (saved per shipyard), and a shipyard NOT held (--shut, default veradyn) is fenced shut: its board
+//        refuses (combo unchanged, nothing stored) and real W from outside its gate does not get in.
+//   npx tsx scripts/deed-yard-check.mts [origin, default https://ather.games] [--out /tmp/deed-yard] [--yard <key>] [--shut <town>]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'node:fs'
 import { FURNITURE } from '../src/app/shimmer/open/ather/furniture'
@@ -19,6 +23,7 @@ import { HOLD_MS } from '../src/app/shimmer/open/shared/stance'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = (process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : flag('--url', 'https://ather.games')).replace(/\/$/, '')
 const out = flag('--out', '/tmp/deed-yard')
+const YARD = flag('--yard', 'front:shipyard'), SHUT = flag('--shut', 'veradyn'), BOUGHT = YARD !== 'front:shipyard'
 mkdirSync(out, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const STOOL = 'goldwood_stool'
@@ -27,7 +32,7 @@ const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: pro
 const ctx = await br.createBrowserContext()
 const p = await ctx.newPage(); await p.setViewport({ width: 1000, height: 640 })
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
-const res: Record<string, unknown> = { url, wide: WIDE }
+const res: Record<string, unknown> = { url, wide: WIDE, yardKey: YARD }
 const t00 = Date.now(), say = (m: string) => console.log(`[${((Date.now() - t00) / 1000).toFixed(0)}s] ${m}`)
 const text = () => p.evaluate(() => (document.body?.innerText ?? '').replace(/\s*\n\s*/g, ' | ').slice(0, 900)).catch(() => '?')
 const poll = async (fn: () => Promise<boolean>, ms = 30000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(400) } return false }
@@ -46,7 +51,15 @@ const tapText = async (re: RegExp) => {
   if (!box) return false
   await p.mouse.click(box.x, box.y); return true
 }
-const Y = (f: string) => p.evaluate((fn: string) => (window as any).__deedYard?.[fn]?.() ?? null, f) as Promise<any>
+const Y = (f: string, key = YARD) => p.evaluate((fn: string, k: string) => (window as any).__deedYards?.[k]?.[fn]?.() ?? null, f, key) as Promise<any>
+// a yard mounts only while the keeper is near it: set the walker down beside it and wait for its probe
+const goToYard = async (key: string) => {
+  const site = await p.evaluate((k: string) => ((window as any).__deedYards?.sites?.() ?? []).find((q: any) => q.key === k) ?? null, key)
+  if (!site) await fail('travel', `no shipyard ${key} on this map: ${JSON.stringify(await p.evaluate(() => (window as any).__deedYards?.sites?.()))}`)
+  await p.evaluate((x: number, z: number) => (window as any).__drive.footTp(x, z, 0, -0.3), site.x, site.z + 14)
+  if (!await poll(async () => !!(await Y('yard', key)), 60000)) await fail('travel', `${key}'s yard did not mount beside it`)
+  return site
+}
 const bagN = (id: string) => p.evaluate((want: string) => {
   for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i)!; if (k.endsWith('open.inv.v1')) return (JSON.parse(localStorage.getItem(k)!).slots as any[]).reduce((a, s) => a + (s?.id === want ? s.n : 0), 0) }
   return -1
@@ -54,8 +67,9 @@ const bagN = (id: string) => p.evaluate((want: string) => {
 const resume = async () => { if (/click to resume/i.test(String(await text()))) { await p.mouse.click(500, 320); await sleep(800) } }
 const loadContinent = async () => {
   await p.goto(`${url}/shimmer/open/continent?hour=12`, { waitUntil: 'load', timeout: 240000 })
-  await p.waitForFunction(() => !!(window as any).__drive?.state && !!(window as any).__deedYard?.yard?.(), { timeout: 240000 }); await sleep(2500)
+  await p.waitForFunction(() => !!(window as any).__drive?.state && !!(window as any).__deedYards?.sites, { timeout: 240000 }); await sleep(2500)
   await p.keyboard.press('KeyW'); await sleep(500); await resume()
+  await goToYard(YARD)
 }
 // stand at yard-local (lx, lz) facing the yard's +z (deep), then wait for the aim to land in the grid
 const standAt = async (step: string, lx: number, lz: number, face: 'deep' | 'back' = 'deep') => {
@@ -98,9 +112,18 @@ const seeded = await p.evaluate((a: string, b: string) => {
   localStorage.setItem(k ?? 'open.inv.v1', JSON.stringify(inv)); return k ?? 'open.inv.v1 (new)'
 }, STOOL, WIDE)
 if (!seeded) await fail('seed', 'no keeper bag in localStorage after birth')
+if (BOUGHT) res.ledgerSeed = await p.evaluate((key: string) => {
+  // the keeper holds this shipyard (its ledger lists it, trade.ts › Ledger.shipyards); scale stamped so migrateLedger keeps Marks
+  let k: string | null = null
+  for (let i = 0; i < localStorage.length; i++) { const q = localStorage.key(i)!; if (q.endsWith('ather:trade:trial-ledger')) k = q }
+  const l = k ? JSON.parse(localStorage.getItem(k)!) : { marks: 1500, scale: 2, deeds: 0, active: null, owned: { core: 0, trim: 0, rune: 0 } }
+  l.shipyards = [key]; localStorage.setItem(k ?? 'ather:trade:trial-ledger', JSON.stringify(l)); return k ?? 'ather:trade:trial-ledger (new)'
+}, YARD)
 say('continent'); await loadContinent()
 const yard = await Y('yard'); res.seeded = seeded; res.yard = yard && { side: yard.side, x: +yard.x.toFixed(1), z: +yard.z.toFixed(1), gate: yard.gate, clear: yard.clear }
 if (!yard) await fail('yard', 'no shipyard yard on this map')
+if (!await Y('own')) await fail('yard', `${YARD} is not the keeper's (ledger seed ${res.ledgerSeed})`)
+if (!yard.clear) await fail('yard', `${YARD}'s yard is not clear of houses/lanes`)
 
 // 2 · stool in hand, E tap sets it
 say('place stool')
@@ -196,5 +219,33 @@ if (await bagN(STOOL) !== 3) await fail('pick', `bag should hold 3 stools again,
 const fy = await Y('yard')
 await p.evaluate((a, b, wy) => (window as any).__drive.footTp(a, b, wy, -0.3), fy.x + fy.az[0] * 8 + fy.ax[0] * 7, fy.z + fy.az[1] * 8 + fy.ax[1] * 7, Math.atan2(fy.az[0] * 8 + fy.ax[0] * 7, fy.az[1] * 8 + fy.ax[1] * 7))
 await sleep(2500); await p.screenshot({ path: `${out}/4-yard.png` })
+// S3 · saved per shipyard + a shipyard NOT held stays shut
+if (BOUGHT) {
+  say('per-shipyard store + shut yard')
+  const stores = await p.evaluate(() => { const o: Record<string, string> = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i)!; if (k.includes('open.deed.shipyard')) o[k] = localStorage.getItem(k)!.slice(0, 80) } return o })
+  res.stores = stores
+  if (Object.keys(stores).some(k => k.endsWith('open.deed.shipyard.v1'))) await fail('stores', `Kael's yard store was written by a run at ${YARD}: ${JSON.stringify(stores)}`)
+  if (!Object.keys(stores).some(k => k.endsWith(`open.deed.shipyard:${YARD.split(':')[2]}`))) await fail('stores', `no store for ${YARD}: ${JSON.stringify(stores)}`)
+  const sk = `front:shipyard:${SHUT}`
+  await goToYard(sk)
+  if (await Y('own', sk)) await fail('shut', `${sk} counts as held (only ${YARD} was seeded)`)
+  const sb = await Y('board', sk), sy = await Y('yard', sk), sp0 = (await Y('state', sk)).palette
+  await p.evaluate((a, b, wy) => (window as any).__drive.footTp(a, b, wy, -0.1), sb.x + sy.az[0] * 0.9, sb.z + sy.az[1] * 0.9, Math.atan2(sy.az[0], sy.az[1]))
+  if (!await poll(async () => !!(await Y('aim', sk))?.atBoard)) await fail('shut', `not at ${sk}'s board: ${JSON.stringify(await Y('aim', sk))}`)
+  await tapE()
+  const shutPal = (await Y('state', sk)).palette, shutStored = await Y('stored', sk), hud = String(await text())
+  res.shut = { key: sk, pal0: sp0, pal1: shutPal, stored: shutStored, said: /not yours/i.test(hud) }
+  if (shutPal !== sp0 || shutStored) await fail('shut', `the board of a shipyard not held changed its combo (${sp0} -> ${shutPal}) or stored ${shutStored}`)
+  if (!/not yours/i.test(hud)) await fail('shut', `E at a shut yard's board did not say it is not yours: ${hud.slice(0, 300)}`)
+  // real W from 1.5 m past its ramp's foot toward the middle: the closed gate stops it outside the fence
+  const rp = await Y('ramp', sk), ou = rp.mu + rp.out[0] * (rp.L + 1.5), ov = rp.mv + rp.out[1] * (rp.L + 1.5)
+  const gx = sy.x + sy.ax[0] * ou + sy.az[0] * ov, gz = sy.z + sy.ax[1] * ou + sy.az[1] * ov
+  await p.evaluate((a, b, w) => { (window as any).__drive.footTp(a, b, w, -0.15); (window as any).__drive.look(w, -0.15) }, gx, gz, Math.atan2(gx - sy.x, gz - sy.z)); await sleep(1500)
+  const why = await holdW(f => { const q = local(sy, f.x, f.z); return Math.abs(q.lx) < 5 && Math.abs(q.lz) < 3 }, 60000)
+  const f = await footAt(), l = local(sy, f.x, f.z)
+  res.shutGate = { why, lx: +l.lx.toFixed(2), lz: +l.lz.toFixed(2) }
+  if (Math.abs(l.lx) < 5.8 && Math.abs(l.lz) < 3.8) await fail('shut', `walked into a shut yard through its gate: ${l.lx.toFixed(2)}, ${l.lz.toFixed(2)}`)
+  await p.screenshot({ path: `${out}/6-shut.png` })
+}
 if (errs.length) await fail('errors', `${errs.length} page errors`)
-await done(true, 'PASS deed-yard: placed (tap), turned (hold), kept on reload, combo stepped + kept, picked up, 0 page errors')
+await done(true, BOUGHT ? `PASS deed-yard at ${YARD}: placed, turned, kept on reload, combo kept, picked up, own store (Kael's untouched), ${SHUT} shut + refused, 0 page errors` : 'PASS deed-yard: placed (tap), turned (hold), kept on reload, combo stepped + kept, picked up, 0 page errors')
