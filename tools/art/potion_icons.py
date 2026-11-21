@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Potion bag icons: 3 code-drawn SVGs (32x32) in public/open/icons/, in the waymark.svg idiom.
+"""Potion bag icons: code-drawn SVGs (32x32) in public/open/icons/, in the waymark.svg idiom.
 
 Run: python3 tools/art/potion_icons.py   (rewrites the 3 files)
 
@@ -36,6 +36,11 @@ ICONS = {
     'shard-tonic': ('Shard Tonic: mana shards boiled with goldwood bark.', bottle('#5ab8f0', '#8fe3ff', 'round')),
     'starlight-tincture': ('Starlight Tincture: gathering XP lifted.', bottle('#b8a4ff', '#c8b8ff', 'tall')),
     'ather-infusion': ('Ather Infusion: an Ather crystal steeped in old sap; mana flows back faster.', bottle('#3a8fdc', '#4aa3e6', 'flask')),
+    # M57 THE ALCHEMY SET's bottles (ather/alchemy-set.ts ALC_POTIONS; inventory.ts alcDef -> /open/icons/potion-<id>.svg), one per
+    # potion, every grade sharing it (the grade is in the name). Tinted per effect: health warm red-gold, mana blue, starlight violet.
+    'potion-health': ('Health Draught: golden dew and rinnscale dust; it heals.', bottle('#e0574a', '#ffb070', 'round')),
+    'potion-mana': ('Mana Draught: shard dust steeped with dewdrop gel; mana back.', bottle('#4a7fe0', '#8fb8ff', 'flask')),
+    'potion-wisdom': ('Starlight Tincture: gathering XP lifted.', bottle('#b8a4ff', '#c8b8ff', 'tall')),
 }
 
 if __name__ == '__main__':

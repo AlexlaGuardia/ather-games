@@ -176,7 +176,7 @@ const alcDef = (id: string): ItemDef | null => {
   if (isAlcPotion(id)) {
     const e = effectOf(id)!
     const does = 'heal' in e ? `Heals ${e.heal}.` : 'mana' in e ? `Restores ${e.mana} mana.` : `Gathering XP +${Math.round(e.xp * 100)}% for ${Math.round(e.ms / 60_000)} min.`
-    return { name, icon: '', stack: 20, kind: 'material', blurb: `Hold it and click to drink. ${does} Potency from the grade of what went in.` }
+    return { name, icon: `/open/icons/potion-${id.split(':')[1]}.svg`, stack: 20, kind: 'material', blurb: `Hold it and click to drink. ${does} Potency from the grade of what went in.` }   // tools/art/potion_icons.py
   }
   return { name, icon: '', stack: 99, kind: 'material', blurb: 'Part of a potion. Take it to the next alchemy station.' }
 }

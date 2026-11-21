@@ -19,4 +19,7 @@ ok(s.ok && s.ledger.marks === 130 && s.paid === 120 && bottlesIn(s.inv).find(r =
 const over = sellBottles({ marks: 10 } as never, inv, potionId('health', 'D'), 4)
 ok(!over.ok && over.why.includes('that many'), 'selling more than you hold changes nothing')
 ok(!sellBottles({ marks: 0 } as never, inv, 'goldwood_log', 1).ok && !sellBottles({ marks: 0 } as never, inv, potionId('health', 'D'), 0).ok, 'not a bottle / zero: refused')
+import { existsSync } from 'node:fs'
+import { itemDef } from '../shared/inventory'
+ok(ALC_POTION_ORDER.every(p => { const ic = itemDef(potionId(p, 'B')).icon; return !!ic && existsSync('public' + ic) }), 'every bottle has a bag icon on disk (tools/art/potion_icons.py)')
 console.log(`corkhouse: ${pass}/${pass + fail}`); if (fail) process.exit(1)

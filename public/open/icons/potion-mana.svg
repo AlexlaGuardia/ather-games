@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Mana Draught: shard dust steeped with dewdrop gel; mana back. Code-drawn filler. -->
+  <ellipse cx="16" cy="27.5" rx="9" ry="2" fill="#000" opacity=".25"/>
+  <circle cx="16" cy="20" r="9" fill="#8fb8ff" opacity=".18"/>
+  <path d="M13.5 7 L18.5 7 L18.5 13 L25 24 Q26 26.5 22 26.5 L10 26.5 Q6 26.5 7 24 L13.5 13 Z" fill="#e8f3ff" fill-opacity=".35" stroke="#5a6a7a" stroke-width=".9" stroke-linejoin="round"/>
+  <path d="M10.6 19 L21.4 19 L24 23.8 Q24.6 25.4 22 25.4 L10 25.4 Q7.4 25.4 8 23.8 Z" fill="#4a7fe0"/>
+  <path d="M12 21 q2 -1.4 4 0" fill="none" stroke="#fff" stroke-width=".8" opacity=".6"/>
+  <rect x="13.4" y="3.6" width="5.2" height="3.6" rx="1" fill="#a8763e" stroke="#6a4a2a" stroke-width=".7"/>
+  <path d="M13 9.6 L19 9.6" stroke="#7a6446" stroke-width="1.2"/>
+</svg>
