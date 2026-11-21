@@ -16,16 +16,20 @@
 // ⚖ OPT-IN until Alex signs off the look (BETA M58: "Alex looks first"): `?ground=layers` turns it on; without it every
 // overlay keeps its old offset (passed as `legacy`). Flip DEFAULT_ON once approved, then drop the legacy arguments.
 
-/** Bottom to top. Nyx: a town lane under a road, a road under its junction pad, the kerb and island over the pad.
- *  Ather: a worn path under the green it leads to. Marks (rings, rims) and blob shadows over everything. */
+/** Bottom to top. M58 (2) ribbons: a sidewalk (verge) under every edge/kerb strip (edge) under every surface, so where a side
+ *  road meets a main one its surface paints over the main road's kerb across the mouth (road-ribbon.ts). Nyx: a town lane
+ *  under a road, a road under its junction pad, the kerb and island over the pad. Ather: a worn path under the green it
+ *  leads to. Marks (rings, rims) and blob shadows over everything. */
 export const GROUND_LAYER = {
-  lane: 1, path: 1,
-  road: 2, green: 2,
-  junction: 3,
-  kerb: 4,
-  island: 5,
-  mark: 6,
-  shadow: 7,
+  verge: 1,
+  edge: 2,
+  lane: 3, path: 3,
+  road: 4, green: 4,
+  junction: 5,
+  kerb: 6,
+  island: 7,
+  mark: 8,
+  shadow: 9,
 } as const
 export type GroundLayer = keyof typeof GROUND_LAYER
 

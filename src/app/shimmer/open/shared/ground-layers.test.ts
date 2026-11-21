@@ -5,6 +5,7 @@ const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 ok(L.lane < L.road && L.road < L.junction && L.junction < L.kerb && L.kerb < L.island && L.island < L.mark && L.mark < L.shadow, 'Nyx order: lane < road < junction < kerb < island < mark < shadow')
 ok(L.path < L.green && L.green < L.mark, 'Ather order: path < green < mark')
+ok(L.verge < L.edge && L.edge < L.lane && L.edge < L.road && L.edge < L.path, 'ribbons: sidewalk < edge strip < every surface (a side road covers the main kerb at its mouth)')
 ok(Object.values(L).every(v => v > 0), 'every layer draws after the ground (renderOrder 0)')
 ok(groundLayersOn('?ground=layers') && !groundLayersOn('?ground=legacy') && !groundLayersOn(''), 'opt-in: ?ground=layers on, legacy/none off (until Alex signs off)')
 ok(groundOrder('road', true) === L.road && groundOrder('road', false) === 0, 'renderOrder only with the table on')

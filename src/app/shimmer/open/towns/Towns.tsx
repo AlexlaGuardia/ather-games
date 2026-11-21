@@ -21,7 +21,8 @@ import type { Port } from './gale-haven'
 import { STATION_COLS, STATION_ROWS, STATION } from '../../play3d/station-field'
 import type { StationSite } from './rune-hold-core'
 import { nearestRoad } from '../region'
-import { groundMat, groundOrder } from '../shared/ground-layers'
+import { groundMat, groundOrder, type GroundLayer } from '../shared/ground-layers'
+import { ribbonXZ, drape, ribbonsOn } from '../shared/road-ribbon'
 
 // ── looks per town, from canon + the concept shots Alex judged 11-15 (tools/art/gen_towns.py). Roman bones
 // (world/athernyx.md): pale stone, terracotta. Unlisted towns take the country default. ──
@@ -106,6 +107,34 @@ function facadeMaterial() {
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += facadeGlow;')
   }
   return { m, uniforms }
+}
+
+// M58 (2): lanes as continuous RIBBONS, three passes widest first (road-ribbon.ts): the sidewalk, the kerb strip, the
+// surface. OPT-IN ?roads=ribbon until Alex looks; the old per-lane strips below stay the default.
+const RIBBONS = ribbonsOn()
+const LANE_KERB = 0.3, LANE_WALK = 1.3
+const RIBBON_PASSES: readonly { layer: GroundLayer; col: string }[] = [
+  { layer: 'verge', col: '#d6cdb6' }, { layer: 'edge', col: '#a3936f' }, { layer: 'lane', col: '#c9b892' },
+]
+function laneRibbons(R: Region, plans: TownPlan[]) {
+  const verge: number[] = [], edge: number[] = [], surf: number[] = []
+  const y = (x: number, z: number) => R.heightAt(x, z) + 0.12
+  for (const pl of plans) {
+    for (const l of pl.lanes) {
+      const hw = l.width / 2
+      drape(ribbonXZ(l.pts, hw + LANE_KERB + LANE_WALK), y, verge); drape(ribbonXZ(l.pts, hw + LANE_KERB), y, edge); drape(ribbonXZ(l.pts, hw), y, surf)
+    }
+    // a walk is already a footway: a kerb, no sidewalk of its own
+    for (const l of pl.walks ?? []) { drape(ribbonXZ(l.pts, l.width / 2 + LANE_KERB), y, edge); drape(ribbonXZ(l.pts, l.width / 2), y, surf) }
+    if (pl.paving) {   // authored paving cells (Rune Hold) ride the surface pass, as before
+      const c = Math.cos(pl.paving.yaw), sn = Math.sin(pl.paving.yaw), h = 0.52
+      for (const [x, z] of pl.paving.pts) {
+        const q = [[-h, -h], [h, -h], [h, h], [-h, h]].map(([u, v]) => [x + u * c - v * sn, z + u * sn + v * c])
+        drape([q[0][0], q[0][1], q[2][0], q[2][1], q[1][0], q[1][1], q[0][0], q[0][1], q[3][0], q[3][1], q[2][0], q[2][1]], y, surf)
+      }
+    }
+  }
+  return [verge, edge, surf].map(pos => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return g })
 }
 
 function laneGeometry(R: Region, plans: TownPlan[]) {
@@ -424,8 +453,9 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
     shown.forEach(pl => { const s = styleOf(pl.place); pl.buildings.forEach((b, k) => all.push({ b, s, k, place: pl.place })) })
     return all
   }, [shown])
-  const lanes = useMemo(() => laneGeometry(R, shown), [R, shown])
-  useEffect(() => () => lanes.dispose(), [lanes])
+  const lanes = useMemo(() => (RIBBONS ? null : laneGeometry(R, shown)), [R, shown])
+  const ribbons = useMemo(() => (RIBBONS ? laneRibbons(R, shown) : null), [R, shown])
+  useEffect(() => () => { lanes?.dispose(); ribbons?.forEach(g => g.dispose()) }, [lanes, ribbons])
 
   const plinths = useRef<THREE.InstancedMesh>(null), walls = useRef<THREE.InstancedMesh>(null)
   const roofs = useRef<THREE.InstancedMesh>(null), chimneys = useRef<THREE.InstancedMesh>(null), caps = useRef<THREE.InstancedMesh>(null)
@@ -477,7 +507,8 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
 
   return (
     <>
-      <mesh geometry={lanes} renderOrder={groundOrder('lane')}><meshLambertMaterial color="#c9b892" side={THREE.DoubleSide} {...groundMat('lane', { factor: -2, units: 0 })} /></mesh>
+      {lanes && <mesh geometry={lanes} renderOrder={groundOrder('lane')}><meshLambertMaterial color="#c9b892" side={THREE.DoubleSide} {...groundMat('lane', { factor: -2, units: 0 })} /></mesh>}
+      {ribbons?.map((g, k) => <mesh key={RIBBON_PASSES[k].layer} geometry={g} renderOrder={groundOrder(RIBBON_PASSES[k].layer, true)}><meshLambertMaterial color={RIBBON_PASSES[k].col} side={THREE.DoubleSide} {...groundMat(RIBBON_PASSES[k].layer, undefined, true)} /></mesh>)}
       <instancedMesh key={`p${n}`} frustumCulled={false} ref={plinths} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
       <instancedMesh key={`w${n}`} frustumCulled={false} ref={walls} args={[undefined, undefined, n]} material={facade.m}><boxGeometry /></instancedMesh>
       <instancedMesh key={`r${n}`} frustumCulled={false} ref={roofs} args={[undefined, undefined, n]} geometry={roof}><meshLambertMaterial flatShading side={THREE.DoubleSide} /></instancedMesh>

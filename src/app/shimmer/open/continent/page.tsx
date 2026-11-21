@@ -79,6 +79,7 @@ import { touch, TOUCH_LOOK_SENS, isTouchOnly } from '../shared/touch'
 import { TouchControls, PHONE_ROW_TOP, type TouchAction } from '../shared/touch-controls'
 import { useMorelHints } from '../shared/morel-hints'   // BETA M33 S2: Morel's stuck hints on the errand
 import { groundMat, groundOrder, type GroundLayer } from '../shared/ground-layers'
+import { ribbonXZ, drape, ribbonsOn } from '../shared/road-ribbon'
 
 const STEP = 1 / 120
 const FOV = 64
@@ -277,6 +278,48 @@ function Roads({ R }: { R: Region }) {
         <mesh key={kind} geometry={g} renderOrder={groundOrder('road')}>
           <meshLambertMaterial color={ROAD_COL[kind as RegionRoad['kind']]} side={THREE.DoubleSide} {...groundMat('road', { factor: -2, units: -2 })} />
         </mesh>
+      ))}
+    </>
+  )
+}
+
+// ── M58 (2) ROAD RIBBONS (opt-in ?roads=ribbon until Alex looks; road-ribbon.ts). Each road is one continuous ribbon from
+// its densified centre line, run all the way into its junctions (the end caps fill the corners; pads still paint over
+// squares and roundabouts). Two passes: an edge strip a little wider, then the surface, so where a smaller road meets a
+// bigger one the bigger one's surface covers the smaller's edge across the mouth. The old drawer skipped centre-line points
+// another road already covered and stopped short of every pad, which is where its gaps came from; a ribbon needs neither,
+// because overlaps inside one layer cannot show (no depth write, one colour) and the kinds draw in a fixed width order. ──
+const ROAD_RIBBONS = ribbonsOn()
+const ROAD_EDGE = 0.5
+const KIND_RANK: Record<RegionRoad['kind'], number> = { trail: 0, pass: 1, road: 2, paved: 3 }   // wider kinds paint over narrower
+const shade = (hex: string, f: number) => { const c = new THREE.Color(hex); c.multiplyScalar(f); return `#${c.getHexString()}` }
+function RoadRibbons({ R }: { R: Region }) {
+  const geos = useMemo(() => {
+    const by = new Map<string, { edge: number[]; surf: number[] }>()
+    const surf = (x: number, z: number, id: string) => { const t = R.tunnelAt(x, z); return t && t.cover > 0.3 && t.tunnel.edge === id ? t.y : R.groundAt(x, z) }
+    for (const r of drivable(R)) {
+      const o = by.get(r.kind) ?? { edge: [], surf: [] }; by.set(r.kind, o)
+      const line: [number, number][] = []
+      for (let k = 0; k < r.pts.length - 1; k++) {
+        const [ax, az] = r.pts[k], [bx, bz] = r.pts[k + 1], n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 2.5))
+        for (let i = 0; i < n; i++) line.push([ax + (bx - ax) * i / n, az + (bz - az) * i / n])
+      }
+      line.push([r.pts[r.pts.length - 1][0], r.pts[r.pts.length - 1][1]])
+      const y = (x: number, z: number) => surf(x, z, r.id) + 0.07
+      drape(ribbonXZ(line, r.width / 2 + ROAD_EDGE), y, o.edge)
+      drape(ribbonXZ(line, r.width / 2), y, o.surf)
+    }
+    const mk = (pos: number[]) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return g }
+    return [...by.entries()].map(([kind, { edge, surf: s }]) => ({ kind: kind as RegionRoad['kind'], edge: mk(edge), surf: mk(s) }))
+  }, [R])
+  useEffect(() => () => geos.forEach(g => { g.edge.dispose(); g.surf.dispose() }), [geos])
+  return (
+    <>
+      {geos.map(({ kind, edge, surf }) => (
+        <group key={kind}>
+          <mesh geometry={edge} renderOrder={groundOrder('edge', true) + KIND_RANK[kind] * 0.01}><meshLambertMaterial color={shade(ROAD_COL[kind], 0.72)} side={THREE.DoubleSide} {...groundMat('edge', undefined, true)} /></mesh>
+          <mesh geometry={surf} renderOrder={groundOrder('road', true) + KIND_RANK[kind] * 0.01}><meshLambertMaterial color={ROAD_COL[kind]} side={THREE.DoubleSide} {...groundMat('road', undefined, true)} /></mesh>
+        </group>
       ))}
     </>
   )
@@ -1407,7 +1450,7 @@ function ContinentRideGame() {
           <VoxelDayNight />
           <FogRig />
           <Terrain R={R} focus={focus} />
-          <Roads R={R} />
+          {ROAD_RIBBONS ? <RoadRibbons R={R} /> : <Roads R={R} />}
           <Junctions R={R} />
           <Bridges R={R} />
           <Tunnels R={R} cave={cave} />
