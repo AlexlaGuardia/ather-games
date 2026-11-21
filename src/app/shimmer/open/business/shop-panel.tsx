@@ -12,9 +12,8 @@
 // ★ Copy stays plain and neutral: no keeper speaks here until lark writes them.
 import { useEffect, useState } from 'react'
 import { IdonyPanel, RunesmithPanel } from './smith-panel'
-import { FRONT_SHOPS, BOUGHT_SHIPYARD_NAME } from './doors'
+import { FRONT_SHOPS } from './doors'
 export { FRONT_SHOPS } from './doors'
-import { KAEL_SHIPYARD, ownsShipyard } from './shipyards'
 import { HearthFrame, H, hearthDisplay, HearthButton } from '../../ui/hearth'
 import { hudSay } from '../shared/game-hud'
 import type { Ledger } from '../trade'
@@ -58,7 +57,6 @@ export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
   if (shop.kind === 'gunshop') return <GunShopPanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (shop.kind === 'courseryard') return <CourserYardPanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (shop.kind === 'courserlot') return <CourserLotPanel town={town} ledger={ledger} setLedger={setLedger} onClose={onClose} />
-  if (shop.kind === 'shipyard' && town) return <BoughtShipyardPanel town={town} ledger={ledger} onClose={onClose} />   // M49 s3: front:shipyard:<town>
   if (shop.kind === 'shipyard') return <ShipyardPanel onClose={onClose} />
   if (stockOf(id).length) return <DecorShop id={id} ledger={ledger} setLedger={setLedger} onClose={onClose} />
   return (
@@ -219,11 +217,13 @@ function CorkhousePanel({ ledger, setLedger, onClose }: { ledger: Ledger; setLed
               <div key={r.id} data-cork-row={r.id} className="flex items-center gap-3 rounded-[12px] px-3 py-2" style={{ background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
                 {d.icon ? <img src={d.icon} alt="" width={36} height={36} /> : null}
                 <div className="min-w-0 flex-1">
-                  <div className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{d.name}<span style={{ color: H.inkSoft }}> · {r.n} in the bag</span></div>
-                  <div className="text-[12.5px] tabular-nums" style={{ color: H.inkSoft }}>{r.each.toLocaleString()} Marks each</div>
+                  <div className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{d.name}</div>
+                  <div className="text-[12.5px] tabular-nums" style={{ color: H.inkSoft }}>{r.n} in the bag · {r.each.toLocaleString()} each</div>
                 </div>
-                <span data-act="cork-sell-one"><HearthButton small onClick={() => sell(r.id, 1)}>Sell 1</HearthButton></span>
-                {r.n > 1 && <span data-act="cork-sell-all"><HearthButton small primary onClick={() => sell(r.id, r.n)}>All · {(r.each * r.n).toLocaleString()}</HearthButton></span>}
+                <div className="flex flex-wrap justify-end gap-1.5 shrink-0" style={{ maxWidth: '42%' }}>
+                  <span data-act="cork-sell-one"><HearthButton small onClick={() => sell(r.id, 1)}>Sell 1</HearthButton></span>
+                  {r.n > 1 && <span data-act="cork-sell-all"><HearthButton small primary onClick={() => sell(r.id, r.n)}>All · {(r.each * r.n).toLocaleString()}</HearthButton></span>}
+                </div>
               </div>
             )
           })}
@@ -292,20 +292,6 @@ function ShipyardPanel({ onClose }: { onClose: () => void }) {
         ) : (
           <p className="mt-3" data-chest="empty">Empty now. You have what Kael left.</p>
         )}
-      </div>
-    </HearthFrame>
-  )
-}
-
-/** A SHIPYARD A KEEPER CAN BUY (M49 s3, business/shipyards.ts): not Kael's. Plain copy, no keeper, no line (lark/Magii later).
- *  Held: its yard beside it is the keeper's to furnish. Not held: not theirs (the buy lands in s3b). */
-function BoughtShipyardPanel({ town, ledger, onClose }: { town: string; ledger: Ledger; onClose: () => void }) {
-  const key = `${KAEL_SHIPYARD}:${town}`, own = ownsShipyard(ledger.shipyards, key)
-  return (
-    <HearthFrame title={BOUGHT_SHIPYARD_NAME} maxWidth={420} onClose={onClose} fixed dataPanel="bought-shipyard">
-      <div className="px-4 pt-3 pb-4 text-[14px] leading-snug" style={{ color: H.ink }} data-owned={own ? 'yes' : 'no'}>
-        {own ? <p>Yours. The yard beside it is yours to furnish: hold a piece and press E inside the fence.</p>
-          : <p>Not yours. The yard beside it stays shut.</p>}
       </div>
     </HearthFrame>
   )
