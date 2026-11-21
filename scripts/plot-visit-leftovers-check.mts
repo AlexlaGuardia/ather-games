@@ -95,6 +95,7 @@ try {
   ok(await poll(async () => same(await drawn(b), ['a-mog']), 20000), `2. B draws A's carpenter at A's bench, not its own (${JSON.stringify(await drawn(b))})`)
   ok(await poll(async () => (await bed0(b)) === 'goldleaf', 10000), `2. B sees A's Goldleaf in bed 1 (${await bed0(b)})`)
   ok(!(await fennel(b)), "2. B's Fennel does not stand at A's Rinnshop")
+  { const now2 = await saves(b); if (now2 !== bSaves) { const x = bSaves.split('|'), y = now2.split('|'); ['works', 'village', 'farm'].forEach((k, i) => { if (x[i] !== y[i]) console.log(`   [${k} changed]\n     was ${x[i]?.slice(0, 400)}\n     now ${y[i]?.slice(0, 400)}`) }) } }
   ok(await saves(b) === bSaves, "2. B's own saves untouched")
 
   // 3 · home again
