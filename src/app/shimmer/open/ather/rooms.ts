@@ -21,6 +21,7 @@ import { adoptWork, adoptOut, stockJobs, type Work, type Station } from './stati
 import { adoptUpper, type Level } from './plot-floors'
 import { adoptCols, type Cols } from './plot-cols'
 import { adoptStairs, type Stairs } from './plot-stairs'
+import { adoptDecks, type Decks } from './plot-decks'
 import { adoptFound, floorAt } from './plot-found'
 import { cellMid, shaftBlocked } from './lift'
 import { adoptWalls, adoptRoof, adoptFloors, adoptPaid, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
@@ -82,7 +83,7 @@ export interface Room {
 export interface Chest { id: string; x: number; z: number; q: number; placedAt: number; crystal?: string }
 /** A piece of furniture or decor standing on the plot (furniture.ts). Picked up, it is the bag item `item` again. */
 export interface Piece { id: string; item: string; x: number; z: number; q: number; placedAt: number; /** M48: a lift's car level (lift.ts); absent = the ground */ lv?: number }
-export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[]; /** M54: ground-floor columns (plot-cols.ts) */ cols?: Cols; /** M56: ground-floor stairs (plot-stairs.ts) */ stairs?: Stairs; /** M55: the house's foundation height (plot-found.ts), 0 / 0.6 / 1.2 */ found?: number }
+export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[]; /** M54: ground-floor columns (plot-cols.ts) */ cols?: Cols; /** M56: ground-floor stairs (plot-stairs.ts) */ stairs?: Stairs; /** M56 (a): ground-floor open floor, patios (plot-decks.ts) */ decks?: Decks; /** M55: the house's foundation height (plot-found.ts), 0 / 0.6 / 1.2 */ found?: number }
 /** M37: is this rectangle in a drawn wall (plot-walls.ts)? */
 const inDrawnWall = (w: Works, r: { x0: number; x1: number; z0: number; z1: number }, pad = 0) => wallRects(w.walls ?? {}).some(b => r.x0 - pad < b.x1 && r.x1 + pad > b.x0 && r.z0 - pad < b.z1 && r.z1 + pad > b.z0)
 export const freshWorks = (): Works => ({ v: 1, rooms: [], chests: [], pieces: [] })
@@ -462,6 +463,7 @@ export function loadWorks(): Works {
       walls: adoptWalls(v.walls),   // M37 (11-19): the keeper's own walls
       ...(Object.keys(adoptCols(v.cols)).length ? { cols: adoptCols(v.cols) } : {}),   // M54: columns
       ...(Object.keys(adoptStairs(v.stairs)).length ? { stairs: adoptStairs(v.stairs) } : {}),   // M56: stairs
+      ...(Object.keys(adoptDecks(v.decks)).length ? { decks: adoptDecks(v.decks) } : {}),   // M56 (a): patios
       ...(adoptFound(v.found) ? { found: adoptFound(v.found) } : {}),   // M55: foundation
       roof: adoptRoof(v.roof),
       floors: adoptFloors(v.floors),

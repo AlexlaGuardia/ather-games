@@ -10,6 +10,7 @@
 //   a room's floor = 1 goldwood plank per m²       a room's roof = 1 stone brick per m²   (a drawn room's own area, not the eaves)
 import { draftCols, colNeeds, standCols } from './plot-cols'
 import { draftStairs, stairNeeds, standStairs } from './plot-stairs'
+import { draftDecks, deckNeeds, standDecks } from './plot-decks'
 import { adoptFound, plinthPerM2 } from './plot-found'
 import { findRooms, RAIL_FRAC, WALL_MATS, FLOOR_PATS, FLOOR_PER_M2, roomFloor, floorByKey, type Walls, type Paid, type Floors } from './plot-walls'
 import { payCost, haveFor } from './rooms'
@@ -104,7 +105,8 @@ export function billOfAll(w: Stacked & { found?: number }, inv: Inv, bank?: Bank
   const m = new Map<string, number>(); let pieces = 0, rooms = 0
   levelsOf(w).forEach((lv, k) => { const p = planNeeds(lv.walls, lv.paid, lv.floors, k === 0); pieces += p.pieces; rooms += p.rooms; for (const c of p.needs) add(m, c.id, c.n)
     pieces += draftCols(lv.cols); for (const c of colNeeds(lv.cols, PER_COL)) add(m, c.id, c.n)   // M54: columns, 2 m of their wall each
-    pieces += draftStairs(lv.stairs); for (const c of stairNeeds(lv.stairs)) add(m, c.id, c.n) })   // M56: stairs, a step's worth each
+    pieces += draftStairs(lv.stairs); for (const c of stairNeeds(lv.stairs)) add(m, c.id, c.n)   // M56: stairs, a step's worth each
+    pieces += draftDecks(lv.decks); for (const c of deckNeeds(lv.decks)) add(m, c.id, c.n) })   // M56 (a): open floor, a room floor's worth per m²
   const pl = plinthNeed(w); if (pl) add(m, STONE_BRICK, pl)   // M55: a new room on a raised house pays its plinth
   const ls = lines(m).map(c => { const have = haveFor(inv, bank, c.id); return { ...c, have, short: have < c.n, name: itemDef(c.id).name } })
   return { lines: ls, ok: ls.length > 0 && ls.every(l => !l.short), empty: ls.length === 0, pieces, rooms }
@@ -124,11 +126,11 @@ export function buildAll<T extends Stacked & { found?: number }>(w: T, inv: Inv,
     for (const c of r.spent) add(spent, c.id, c.n)
   }
   // M54: then every level's draft columns, paid as one list (billOfAll already checked the whole of it is on hand)
-  const cm = new Map<string, number>(); if (plinth) add(cm, STONE_BRICK, plinth); levelsOf(cur).forEach(lv => { for (const c of colNeeds(lv.cols, PER_COL)) add(cm, c.id, c.n); for (const c of stairNeeds(lv.stairs)) add(cm, c.id, c.n) })   // + M56 stairs
+  const cm = new Map<string, number>(); if (plinth) add(cm, STONE_BRICK, plinth); levelsOf(cur).forEach(lv => { for (const c of colNeeds(lv.cols, PER_COL)) add(cm, c.id, c.n); for (const c of stairNeeds(lv.stairs)) add(cm, c.id, c.n); for (const c of deckNeeds(lv.decks)) add(cm, c.id, c.n) })   // + M56 stairs + decks
   if (cm.size) {
     const need = lines(cm), pay = payCost(need, bag, bk); if (!pay) return { ok: false, why: 'Not enough on hand for the columns.' }
     bag = pay.inv; bk = pay.bank; for (const c of need) add(spent, c.id, c.n)
-    for (let k = 0; k < levelCount(cur); k++) { const lv = levelOf(cur, k); if (draftCols(lv.cols) || draftStairs(lv.stairs)) cur = withLevel(cur, k, { ...lv, cols: standCols(lv.cols), stairs: standStairs(lv.stairs) }) }
+    for (let k = 0; k < levelCount(cur); k++) { const lv = levelOf(cur, k); if (draftCols(lv.cols) || draftStairs(lv.stairs) || draftDecks(lv.decks)) cur = withLevel(cur, k, { ...lv, cols: standCols(lv.cols), stairs: standStairs(lv.stairs), ...(lv.decks ? { decks: standDecks(lv.decks) } : {}) }) }
   }
   return { ok: true, works: cur, inv: bag, bank: bk, spent: lines(spent) }
 }
