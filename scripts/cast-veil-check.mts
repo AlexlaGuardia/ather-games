@@ -33,12 +33,14 @@ ok(!!d && d.left > 2, `a decoy stands (${JSON.stringify(d)})`)
 // stand the Hollow 8 m out past the decoy along the aim (where the spawn put it, now a KNOWN start), so the closing is measured
 // (11-21 sweep: a slow run let the spawned Hollow reach the decoy before the start was read, so it could not close any further)
 const tgt = await p.evaluate(() => { const a = (window as any).__ather, c = a.combat(), s = a.state(), h = c.hollows[0]; if (h && c.decoy) { const ux = c.decoy.x - s.px, uz = c.decoy.z - s.pz, n = Math.hypot(ux, uz) || 1; h.x = c.decoy.x + ux / n * 8; h.z = c.decoy.z + uz / n * 8 } h.state = 'chase'; return { hx: h.x, hz: h.z, kx: s.px, kz: s.pz, dx: c.decoy.x, dz: c.decoy.z, st: h.state, clock: c.clock, until: c.decoy.until } })
-await sleep(3000)
+// let 1.5 s of COMBAT time pass, not wall time: the combat clock caps a frame at 1/20 s, so at headless ~2 fps a 3 s sleep was
+// ~0.3 s of sim and the Hollow moved 0.07 m (11-21 sweep); the decoy lasts 4 s of that clock
+await p.waitForFunction((c0: number) => ((window as any).__ather.combat().clock ?? 0) >= c0 + 1.5, { timeout: 90000 }, tgt.clock).catch(() => {})
 const after = await p.evaluate(() => { const c = (window as any).__ather.combat(); const h = c.hollows[0]; return h ? { x: h.x, z: h.z } : null })
 const dist = (a: { x: number; z: number }, x: number, z: number) => Math.hypot(a.x - x, a.z - z)
 ok(!!after && dist(after, tgt.dx, tgt.dz) < Math.hypot(tgt.hx - tgt.dx, tgt.hz - tgt.dz) - 0.3, `the Hollow closed on the decoy (${JSON.stringify({ after, start: tgt })})`)
 await sleep(3500)
-await p.waitForFunction(() => { const c = (window as any).__ather.combat(); return !c.decoy || c.decoy.until <= c.clock }, { timeout: 40000 }).catch(() => {})
+await p.waitForFunction(() => { const c = (window as any).__ather.combat(); return !c.decoy || c.decoy.until <= c.clock }, { timeout: 120000 }).catch(() => {})
 ok((await p.evaluate(() => { const c = (window as any).__ather.combat(); return !c.decoy || c.decoy.until <= c.clock })), 'the decoy expired')
 if (shot) await p.screenshot({ path: shot })
 ok(errors.length === 0, `0 page errors (${errors.slice(0, 2).join(' | ')})`)
