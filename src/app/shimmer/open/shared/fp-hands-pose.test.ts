@@ -109,4 +109,21 @@ ok(Math.abs(let_.R.x - still.R.x) < 0.005 && Math.abs(let_.R.roll - still.R.roll
   // the left hand never turns: its orientation still equals its angles
   ok(angleQ(stepFpHands(s2, base, 1 / 60).L.q, eulerQ(FP.PITCH, 0, -FP.ROLL)) < 1e-3, 'the left hand keeps its rest attitude')
 }
+// ── 11-21: HOLD_YAW, the twist (Alex flipped the glove with pitch + roll because the Hold had no twist axis) ─────────────
+{
+  ok(FP.HOLD_YAW === 0, 'twist ships at 0: today\'s pose unchanged')
+  // documented order: eulerQ(x, y, z) = qx(x) * qy(y) * qz(z) (three.js 'XYZ'), so the twist sits between tilt and roll
+  const mul = (a: Quat, b: Quat): Quat => [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0], a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]]
+  const ax = (i: 0 | 1 | 2, t: number): Quat => { const q: Quat = [0, 0, 0, Math.cos(t / 2)]; q[i] = Math.sin(t / 2); return q }
+  let worst = 0
+  for (const [p, y, r] of [[1.89, 0.7, -3.05], [-1.4, -2.2, 0.63], [0.3, 3.1, -0.9]]) worst = Math.max(worst, angleQ(eulerQ(p, y, r), mul(mul(ax(0, p), ax(1, y)), ax(2, r))))
+  ok(worst < 1e-6, `eulerQ composes X * Y * Z (worst ${worst.toExponential(1)} rad)`)
+  // with a twist set: rest is untouched (no yaw at rest) and the settled hold IS eulerQ(HOLD_PITCH, HOLD_YAW, HOLD_ROLL)
+  const saved = FP.HOLD_YAW; FP.HOLD_YAW = 0.9
+  const settle = (holding: boolean) => { const st = newFpState(); let q: Quat = st.R.q; for (let k = 0; k < 240; k++) q = [...stepFpHands(st, { ...base, now: k * 16.7, holding }, 1 / 60).R.q] as Quat; return q }
+  const dRest = angleQ(settle(false), eulerQ(FP.PITCH, 0, FP.ROLL)), dHold = angleQ(settle(true), eulerQ(FP.HOLD_PITCH, 0.9, FP.HOLD_ROLL))
+  ok(dRest < 1e-6 && dHold < 1e-4, `twist 0.9: rest unchanged (${dRest.toExponential(1)}), hold settles on the twisted attitude (${dHold.toExponential(1)})`)
+  ok(angleQ(holdTurn(FP.PITCH, FP.ROLL, 1), eulerQ(FP.HOLD_PITCH, 0.9, FP.HOLD_ROLL)) < 1e-6, 'holdTurn at w=1 = the twisted hold')
+  FP.HOLD_YAW = saved
+}
 console.log(`fp-hands-pose: ${pass} passed, ${fail} failed`); if (fail) process.exit(1)

@@ -36,12 +36,14 @@ export const angleQ = (a: Quat, b: Quat) => 2 * Math.acos(Math.min(1, Math.abs(a
 const smooth = (t: number) => t * t * (3 - 2 * t)
 /** which way round the Hold turn goes, fixed from the tuned rest + hold attitudes (their arc is ~178 deg, so the run / jump / cast
  *  offsets could otherwise tip the "shortest" side mid-blend and swing the glove the other way). Read per step: Alex tunes live. */
-const holdSide = (): 1 | -1 => { const a = eulerQ(FP.PITCH, 0, FP.ROLL), b = eulerQ(FP.HOLD_PITCH, 0, FP.HOLD_ROLL); return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3] < 0 ? -1 : 1 }
+const holdSide = (): 1 | -1 => { const a = eulerQ(FP.PITCH, 0, FP.ROLL), b = eulerQ(FP.HOLD_PITCH, FP.HOLD_YAW, FP.HOLD_ROLL); return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3] < 0 ? -1 : 1 }
 /** the right mitt's attitude `w` (0..1, already eased) of the way into the Hold, from the angles it would have at rest (run /
- *  jump / cast / chop offsets included): rest attitude slerped toward the same offsets on the Hold numbers, the fixed way round */
+ *  jump / cast / chop offsets included): rest attitude slerped toward the same offsets on the Hold numbers, the fixed way round.
+ *  HOLD_YAW (Alex 11-21: the twist the Hold lacked) is the hold attitude's Y angle, composed in the same XYZ order
+ *  (q = qx(pitch) * qy(yaw) * qz(roll)); the rest attitude has none, so yaw 0 = the pose before the twist existed. */
 export function holdTurn(pitch: number, roll: number, w: number): Quat {
   const a = eulerQ(pitch, 0, roll)
-  return w > 0 ? slerpQ(a, eulerQ(pitch + (FP.HOLD_PITCH - FP.PITCH), 0, roll + (FP.HOLD_ROLL - FP.ROLL)), w, holdSide()) : a
+  return w > 0 ? slerpQ(a, eulerQ(pitch + (FP.HOLD_PITCH - FP.PITCH), FP.HOLD_YAW, roll + (FP.HOLD_ROLL - FP.ROLL)), w, holdSide()) : a
 }
 export interface FpInput {
   now: number          // ms, the clock castAt / workAt are stamped on
@@ -61,7 +63,7 @@ export interface FpTune {
   DROP_Y: number; SWING_Z: number; STRIDE_M: number
   JUMP_Y_R: number; JUMP_Y_L: number; JUMP_SPREAD: number; JUMP_PITCH: number
   CAST_X: number; CAST_Y: number; CAST_PITCH: number
-  HOLD_X: number; HOLD_Y: number; HOLD_Z: number; HOLD_PITCH: number; HOLD_ROLL: number
+  HOLD_X: number; HOLD_Y: number; HOLD_Z: number; HOLD_PITCH: number; HOLD_ROLL: number; HOLD_YAW: number
   ITEM_UP: number; ITEM_FWD: number; ITEM_SIZE: number; ITEM_TILT: number; ITEM_SPIN: number; ITEM_BOB: number
 }
 // ★ ALEX'S TUNE (11-17, from /shimmer/dev/hands "Copy values"): these ARE the shipped hands. Change them in the tuner, not here.
@@ -79,6 +81,7 @@ export const FP_DEFAULTS: Readonly<FpTune> = {
   // M45 (Alex 11-20: the voxel world's presented palm, "we want the mitt to turn" — tuned in /shimmer/dev/hands, Hold):
   // the right mitt's pose while a hotbar item is out (absolute, like rest), and the item floating over it (held-item.tsx)
   HOLD_X: 0.335, HOLD_Y: -0.405, HOLD_Z: -0.635, HOLD_PITCH: 1.89, HOLD_ROLL: -3.05,
+  HOLD_YAW: 0,             // the twist about the glove's Y (11-21); 0 = no twist, today's pose
   ITEM_UP: 0.25,          // metres above the mitt, in camera space (up the screen)
   ITEM_FWD: 0,             // metres toward (+) / away (-) from the eye
   ITEM_SIZE: 0.63,            // x the mini's own size

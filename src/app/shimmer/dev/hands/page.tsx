@@ -14,7 +14,7 @@
  * 1100×700, so a glove can be kept clear of them.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OpenHands, type OpenHandsApi } from '../../open/shared/open-hands'
 import { FP, FP_DEFAULTS, setFpTune, resetFpTune, loadFpTune, type FpTune, type FpInput } from '../../open/shared/fp-hands-pose'
@@ -55,11 +55,12 @@ const GROUPS: { title: string; note: string; show: Preview; knobs: Knob[] }[] = 
     { k: 'HOLD_X', label: 'x', min: -0.2, max: 0.5, step: 0.005 },
     { k: 'HOLD_Y', label: 'height', min: -0.6, max: 0, step: 0.005 },
     { k: 'HOLD_Z', label: 'distance', min: -0.9, max: -0.3, step: 0.005 },
-    { k: 'HOLD_PITCH', label: 'tilt', min: -3.1, max: 3.1, step: 0.01 },
-    { k: 'HOLD_ROLL', label: 'roll (turn)', min: -3.1, max: 3.1, step: 0.01 },
+    { k: 'HOLD_PITCH', label: 'tilt', min: -Math.PI, max: Math.PI, step: 0.01 },
+    { k: 'HOLD_ROLL', label: 'roll (turn)', min: -Math.PI, max: Math.PI, step: 0.01 },
+    { k: 'HOLD_YAW', label: 'twist', min: -Math.PI, max: Math.PI, step: 0.01 },
   ] },
   { title: 'Held item', note: 'floating over the mitt', show: 'hold', knobs: [
-    { k: 'ITEM_UP', label: 'float up', min: -0.1, max: 0.25, step: 0.005 },
+    { k: 'ITEM_UP', label: 'float up', min: -0.1, max: 0.6, step: 0.005 },
     { k: 'ITEM_FWD', label: 'toward eye', min: -0.15, max: 0.15, step: 0.005 },
     { k: 'ITEM_SIZE', label: 'size', min: 0.3, max: 3, step: 0.01 },
     { k: 'ITEM_TILT', label: 'tip to eye', min: -1, max: 1.5, step: 0.01 },
@@ -74,14 +75,12 @@ const SAMPLES: { id: string; label: string }[] = [
 const chip: React.CSSProperties = { background: '#211f2b', border: '1px solid #38344a', color: '#ddd6ea', padding: '5px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }
 
 /** Feeds the hands a synthetic input for the preview, every frame. Cast holds mid-raise; Run runs at full speed. */
-function Driver({ api, preview, paused }: { api: React.RefObject<OpenHandsApi | null>; preview: Preview; paused: boolean }) {
-  // ?hold=0.5 pins the Hold weight (a frame mid-turn, for a strip; 11-21)
-  const holdW = useMemo(() => { if (typeof window === 'undefined') return undefined; const v = new URLSearchParams(window.location.search).get('hold'); return v === null || !Number.isFinite(+v) ? undefined : +v }, [])
+function Driver({ api, preview, paused, holdW }: { api: React.RefObject<OpenHandsApi | null>; preview: Preview; paused: boolean; holdW: number | null }) {
   useFrame((_, dt) => {
     const now = performance.now()
     const input: FpInput = {
       now, speed: preview === 'run' ? FP.RUN_SPEED : 0, airborne: preview === 'jump', hidden: preview === 'hidden',
-      castAt: preview === 'cast' ? now - FP.CAST_MS * 0.4 : -Infinity, working: false, holding: preview === 'hold', ...(preview === 'hold' && holdW !== undefined ? { holdW } : {}),
+      castAt: preview === 'cast' ? now - FP.CAST_MS * 0.4 : -Infinity, working: false, holding: preview === 'hold', ...(preview === 'hold' && holdW !== null ? { holdW } : {}),
     }
     api.current?.step(input, paused ? 0 : dt)
     api.current?.seat(preview === 'cast' ? 1 : 0)
@@ -97,6 +96,9 @@ export default function HandsTuner() {
   const [, bump] = useState(0)
   const [copied, setCopied] = useState(false)
   const [sample, setSample] = useState(SAMPLES[0].id)
+  // the Hold blend scrub (11-21): null = the mitt turns on its own; 0..1 pins the rest->hold turn there (?hold=0.5 seeds it)
+  const [holdW, setHoldW] = useState<number | null>(null)
+  useEffect(() => { const v = new URLSearchParams(window.location.search).get('hold'); if (v !== null && Number.isFinite(+v)) setHoldW(Math.max(0, Math.min(1, +v))) }, [])
   useEffect(() => { loadFpTune(); bump(n => n + 1) }, [])
   const values = () => JSON.stringify(Object.fromEntries(Object.keys(FP_DEFAULTS).map(k => [k, FP[k as keyof FpTune]])))
 
@@ -113,6 +115,18 @@ export default function HandsTuner() {
         </div>
         {preview === 'hold' && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
           {SAMPLES.map(x => <button key={x.id} data-sample={x.id} onClick={() => setSample(x.id)} style={{ ...chip, opacity: sample === x.id ? 1 : 0.45 }}>{x.label}</button>)}
+        </div>}
+        {preview === 'hold' && <div style={{ marginBottom: 10 }}>
+          <label style={{ display: 'grid', gridTemplateColumns: '92px 1fr 46px', gap: 6, alignItems: 'center', fontSize: 11 }}>
+            <span style={{ color: '#b5afc2' }}>hold blend</span>
+            <input type="range" data-knob="hold-blend" min={0} max={1} step={0.01} value={holdW ?? 1} onChange={e => setHoldW(Number(e.target.value))} />
+            <span style={{ fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: holdW === null ? '#8b8598' : '#e8b04a' }}>{holdW === null ? 'free' : holdW.toFixed(2)}</span>
+          </label>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+            <button style={{ ...chip, opacity: holdW === null ? 1 : 0.45 }} data-act="hold-free" onClick={() => setHoldW(null)}>Free turn</button>
+            <button style={chip} data-act="hold-reset-rot" title="tilt / roll / twist back to the rest pose's, so the turn starts from a natural base"
+              onClick={() => { setFpTune({ HOLD_PITCH: FP.PITCH, HOLD_ROLL: FP.ROLL, HOLD_YAW: 0 }); bump(n => n + 1) }}>Reset hold rotation</button>
+          </div>
         </div>}
         {GROUPS.map(g => (
           <section key={g.title} style={{ marginBottom: 12 }}>
@@ -144,7 +158,7 @@ export default function HandsTuner() {
           <mesh rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[400, 400]} /><meshStandardMaterial color="#86a35a" roughness={1} /></mesh>
           {[-6, -3, 3, 6].map(x => <mesh key={x} position={[x, 0.75, -12]}><boxGeometry args={[0.3, 1.5, 0.3]} /><meshStandardMaterial color="#8a6a3c" /></mesh>)}
           <OpenHands ref={api} held={<HeldItem id={preview === 'hold' ? sample : null} />} />
-          <Driver api={api} preview={preview} paused={paused} />
+          <Driver api={api} preview={preview} paused={paused} holdW={holdW} />
         </Canvas>
         {/* where the HUD's mana orb + Q/X chips sit at 1100x700 (bottom right), so a glove can stay clear of them */}
         <div style={{ position: 'absolute', right: 56, bottom: 24, width: 136, height: 136, borderRadius: '50%', border: '1px dashed rgba(60,40,90,0.6)', pointerEvents: 'none' }} />
