@@ -6,7 +6,8 @@
 // counting only pixels that are NOT grass in either frame (grass texture shimmers under any camera move and is not an
 // overlay; the first run measured exactly that and read as a result: 11-21 lesson). 20, not 48: a path's edge strip and its
 // centre differ by ~31 a channel, so a fight between them hid under 48. `still` = the same diff, 1 s apart, not moving.
-// Hot spots: Ather = two worn-path merges (4 paths at (-1489, 272), 3 at (509, -688): edge strip over centre strip) + the
+// Hot spots: Ather = two points on the long stretch where paths 8 + 12 run on top of each other (edge strip over centre
+// strip; picked clear of settlements, whose knolls fill the frame) + the
 // Glade path where it meets the green; Nyx = roundabout j22 (kerb + island over the ring), town squares j16 + j4 (pad over
 // road), each seen from out along one of its own arms.
 //   npx tsx scripts/ground-check.mts [--url https://ather.games] [--ground legacy|layers] [--max 0.004] [--out dir]
@@ -23,7 +24,7 @@ const W = 1100, H = 680, STEPS = 8, STEP = 0.02
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const errs: string[] = []
-const hideCard = (p: any) => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => /Click to play|Press any key|CLICK TO RESUME/i.test(d.textContent ?? '')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
+const hideCard = (p: any) => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => { const t = d.textContent ?? ''; return t.includes('Click to play') || (t.includes('THE DARTER') && t.includes('Press any key')) }); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 const grab = async (p: any) => { await hideCard(p); const png = await p.screenshot({ type: 'png' }); return sharp(png).removeAlpha().raw().toBuffer() }
 const grass = (r: number, g: number, b: number) => g > r + 12 && g > b + 12
 const diff = (a: Buffer, b: Buffer) => {
@@ -61,7 +62,7 @@ const res: { name: string; still: number; flip: number }[] = []
   const place = async (x: number, z: number, yaw: number, pitch: number) => { await p.evaluate((a: number, b: number, c: number, d: number) => { const g = (window as any).__ather; g.combat?.().hollows && (g.combat().hollows.length = 0); g.tp(a, b, c); g.look(c, d) }, x, z, yaw, pitch) }
   // the Glade first (the page starts at Greg's waymark), then travel to each path merge by waymark (network-shot's way)
   res.push(await measure(p, { name: 'ather-glade-path', x: GLADE_GREEN.x + 5, z: GLADE_GREEN.z + GLADE_GREEN.r + 8, tx: GLADE_GREEN.x, tz: GLADE_GREEN.z + GLADE_GREEN.r, d: 8 }, place))
-  for (const [name, x, z] of [['ather-merge-4', -1489, 272], ['ather-merge-3', 509, -688]] as const) {
+  for (const [name, x, z] of [['ather-shared-a', -5400, -1840], ['ather-shared-b', -5370, -2325]] as const) {
     const t = tiles.find(t => t.tx === Math.floor((x + 500) / 1000) && t.ty === Math.floor((z + 500) / 1000))
     if (!t) { errs.push(`no tile for ${name}`); continue }
     await p.evaluate((w: any) => (window as any).__ather.travel({ kind: 'waymark', w }), { id: 'gc', tile: t.name, x: x + 10 - t.tx * 1000, y: 0, z: z + 10 - t.ty * 1000, biome: 2, made: 0 })
