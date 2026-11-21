@@ -90,6 +90,15 @@ try {
   const idA = (await a.evaluate(() => localStorage.getItem('ather:mp:id')))!
   ok(await poll(async () => (await ev(a, '__mp', 'zone')) === `open:plot:${idA}` && (await ev(a, '__mp', 'status')) === 'live', 120000), `0. A hosts (${await ev(a, '__mp', 'zone')})`)
   const b = await open('B', MINE, PHONE)
+  if (process.argv.includes('--probe')) {
+    await b.goto(`${url}/shimmer/open/ather?hour=13&visit=${idA}&vn=Rin`, { waitUntil: 'load', timeout: 240000 })
+    for (let i = 0; i < 40; i++) {
+      const r = await b.evaluate(() => { const w = window as any; return { z: w.__mp?.zone?.(), s: w.__mp?.status?.(), party: w.__mp?.party?.(), v: w.__visit?.visiting?.(), net: w.__visit?.net?.(), log: w.__visit?.log?.(), zone: w.__ather?.state?.()?.zone } }).catch(e => String(e).slice(0, 80))
+      const ra = await a.evaluate(() => { const w = window as any; return { z: w.__mp?.zone?.(), peers: (w.__mp?.peers?.() ?? []).map((p: any) => p.id), net: w.__visit?.net?.() } })
+      console.log(i, JSON.stringify(r), '| A', JSON.stringify(ra)); await sleep(1000)
+    }
+    throw new Error('probe done')
+  }
   ok(await visit(b, idA), `0. B is on A's plot with the snapshot (${JSON.stringify(await ev(b, '__visit', 'net'))})`)
   const idB = (await b.evaluate(() => localStorage.getItem('ather:mp:id')))!
   const aSave = JSON.stringify(await store(a)), bSave = JSON.stringify(await store(b))
