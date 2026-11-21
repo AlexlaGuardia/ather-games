@@ -40,8 +40,9 @@ await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 24000
 // the Wilds: Greg's waymark is the Glade
 await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg&roads=${roads}`, { waitUntil: 'load', timeout: 240000 })
 await p.waitForFunction(() => (window as any).__ather?.zone?.() === 'wilds', { timeout: 240000 }); await sleep(6000)
-await shoot(p, 'glade', GLADE_GREEN.x, GLADE_GREEN.z + GLADE_GREEN.r + 4, GLADE_GREEN.x + 10, GLADE_GREEN.z + GLADE_GREEN.r + 24, 20, 16)
+// the seam first: the first Wilds shot after load came out with the tile's ground still unbuilt in every run (first-tile parse)
 await shoot(p, 'seam', -500, 290, -470, 300, 14, 12)
+await shoot(p, 'glade', GLADE_GREEN.x, GLADE_GREEN.z + GLADE_GREEN.r + 4, GLADE_GREEN.x + 10, GLADE_GREEN.z + GLADE_GREEN.r + 24, 20, 16)
 { // s1-2 (four paths in): travel by waymark beside it, then look from out along the open side
   const n = JSON.parse(readFileSync('public/open/wilds/network-s1.json', 'utf8')), s = n.settlements.find((q: { id: string }) => q.id === 's1-2')
   const t = tiles.find(t => t.tx === Math.floor((s.x + 500) / 1000) && t.ty === Math.floor((s.z + 500) / 1000))
