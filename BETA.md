@@ -167,6 +167,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - 11-21 07:2x Alex: "what if we let players pick from like 3 foundation heights" → already None / Low 0.6 / High 1.2 per house; Alex: fine as is
 - 11-21 08:0x Alex: "the mana skin could this be represented as a highlight of the health bar with its own number.. and when it pops sounds like a whip snapping" → triaged: **M59** (name to Magii: canon says 'shell')
 - 11-21 08:2x Alex: "the alchemist moglins.. stand near the alchemy table and provide a passive bonus depending on the grade on luck the participants may receive an extra potion when they brew" → M57: alchemists = passive extra-bottle chance by grade, per participant (routed to play)
+- 11-21 08:3x Alex: "near moon well it says speak with the folk press e just for being in the area" → not fixed: page.tsx:573 prompts on the whole settlement radius; routed to world (prompt only within ~3 m of a folk figure / talk anchor)
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
