@@ -16,7 +16,7 @@ const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 2
 await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))
 await p.goto(`${url}/shimmer/open/continent?hour=14&roads=${roads}`, { waitUntil: 'load', timeout: 240000 })
 await p.waitForFunction(() => !!(window as any).__drive?.footTp, { timeout: 240000 }); await sleep(4000)
-const hideCard = () => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => { const t = d.textContent ?? ''; return t.includes('THE DARTER') && t.includes('Press any key') }); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
+const hideCard = () => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => { const t = d.textContent ?? ''; return /the darter/i.test(t) && /press any key/i.test(t)   // the title is uppercased by CSS: match the text, not the look }); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 const js = await p.evaluate(async () => (await (await fetch('/open/continent.json')).json()).network.junctions as { id: string; x: number; z: number; r: number; arms: { ang: number }[] }[])
 const shots: string[] = []
 const view = async (name: string, x: number, z: number, tx: number, tz: number, pitch: number) => {
