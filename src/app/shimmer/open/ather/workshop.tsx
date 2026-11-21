@@ -41,7 +41,7 @@ import { levelOf, withLevel, levelCount, levelBase, canStack, floating, upperBox
 import { floorAt, liftOf, setHouseFound, houseFoundDelta, plinthBoxes, doorSteps, FOUND_OPTS, FOUND_NAME, type FoundH, type Lift } from './plot-found'
 import { stairBoxes, stairCellSet, toggleStair, dirOfYaw, type Stairs } from './plot-stairs'
 import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported, builtDeckCells, DECK_T, type Decks } from './plot-decks'
-import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols } from './plot-cols'
+import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, ALC_LIVE, type Job } from './furniture'
 import { AlchemyPanel } from './alchemy-panel'
 import { loadRuns, saveRuns, returnRun } from './alchemy-runs'
@@ -156,7 +156,7 @@ function BlueprintPicked() {
 function BlueprintBar() {
   const k = useBpPick(), w = useWorks()
   const [lot, setLot] = useState('hazel'), [busy, setBusy] = useState(false)
-  const bp = useMemo(() => (k && w.walls ? extractBlueprint(w.walls, w.floors, w.roof ?? 'gable', k, `glade-${lot}`, `${lot[0].toUpperCase()}${lot.slice(1)}'s workshop`, Date.now(), w.upper) : null), [k, w, lot])
+  const bp = useMemo(() => (k && w.walls ? extractBlueprint(w.walls, w.floors, w.roof ?? 'gable', k, `glade-${lot}`, `${lot[0].toUpperCase()}${lot.slice(1)}'s workshop`, Date.now(), w.upper, w.cols) : null), [k, w, lot])
   if (!bp) return <div data-bp-bar style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>Tap a wall of the building to save as a blueprint</div>
   const fits = fitsPad(bp, LOT_W, LOT_D)
   const save = async () => {
@@ -404,7 +404,7 @@ export function BlueprintBuilding({ walls, roof, floors, x, z, y, rotY }: { wall
 let wallsDown = false
 const setWallsDown = (v: boolean) => { wallsDown = v; wdEmit() }
 const useWallsDown = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => wallsDown, () => false)
-export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverride, unbuilt, roofed = true, slab = false, holes, lift }: { walls: Walls; roof: RoofStyle; floors?: Floors; unbuilt?: ReadonlySet<string>; /** M55 slice 2: each piece / room on its house's foundation */ lift?: LiftLookup; /** M56: cells left open in this level's floor + slab (stairs climb through) */ holes?: ReadonlySet<string>; /** M47: no roof here (a floor is above) */ roofed?: boolean; /** M47: an upper level: a slab under its built rooms, seen from below as the ceiling */ slab?: boolean; probe?: boolean; /** set by a page outside plan mode (dev/blueprints) */ down?: boolean }) {
+export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverride, unbuilt, roofed = true, slab = false, holes, lift, cols }: { walls: Walls; roof: RoofStyle; floors?: Floors; unbuilt?: ReadonlySet<string>; /** M54 (2): the level's columns (walls meet their faces) */ cols?: Cols; /** M55 slice 2: each piece / room on its house's foundation */ lift?: LiftLookup; /** M56: cells left open in this level's floor + slab (stairs climb through) */ holes?: ReadonlySet<string>; /** M47: no roof here (a floor is above) */ roofed?: boolean; /** M47: an upper level: a slab under its built rooms, seen from below as the ceiling */ slab?: boolean; probe?: boolean; /** set by a page outside plan mode (dev/blueprints) */ down?: boolean }) {
   const b = useBuildMode(), wd = useWallsDown(), down = downOverride ?? (wd && b)   // hooks always run; the override only picks
   useEffect(() => { if (!b && wallsDown) setWallsDown(false) }, [b])
   // runs by wood AND kind: a plain piece is floor to top, a door only its lintel, a window a sill + a head + a pane
@@ -417,13 +417,13 @@ export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverri
     <>
       {byMat.map(({ mat, kind, keys, draft, tint, up }) => {
         const top = down ? LOW_WALL : WALL_H, id = mat + tint + kind + draft + keys.length + (down ? 'd' : '') + up, g = draft ? DRAFT_LOOK : undefined   // a plan is a blue blueprint until it is built
-        const run = kind === 'rail' ? <WallRun mat={mat} tint={tint} keys={keys} h={Math.min(RAIL_H, top)} ghost={g} />   // M56 (c): a half wall
-          : kind === 'door' ? (top > DOOR_H ? <WallRun mat={mat} tint={tint} keys={keys} y0={DOOR_H} h={top - DOOR_H} ghost={g} /> : null)
-          : kind === 'window' ? <><WallRun mat={mat} tint={tint} keys={keys} h={Math.min(SILL, top)} ghost={g} />{top > WIN_TOP && <WallRun mat={mat} tint={tint} keys={keys} y0={WIN_TOP} h={top - WIN_TOP} ghost={g} />}</>
-          : <WallRun mat={mat} tint={tint} keys={keys} h={top} ghost={g} />
+        const run = kind === 'rail' ? <WallRun mat={mat} tint={tint} keys={keys} h={Math.min(RAIL_H, top)} ghost={g} cols={cols} />   // M56 (c): a half wall
+          : kind === 'door' ? (top > DOOR_H ? <WallRun mat={mat} tint={tint} keys={keys} y0={DOOR_H} h={top - DOOR_H} ghost={g} cols={cols} /> : null)
+          : kind === 'window' ? <><WallRun mat={mat} tint={tint} keys={keys} h={Math.min(SILL, top)} ghost={g} cols={cols} />{top > WIN_TOP && <WallRun mat={mat} tint={tint} keys={keys} y0={WIN_TOP} h={top - WIN_TOP} ghost={g} cols={cols} />}</>
+          : <WallRun mat={mat} tint={tint} keys={keys} h={top} ghost={g} cols={cols} />
         return <group key={id} position-y={up}>{run}</group>
       })}
-      {!down && panes.map(([up, keys]) => <group key={'pane' + up + keys.length} position-y={up}><WallRun mat="goldwood" keys={keys} y0={SILL} h={WIN_TOP - SILL} pane /></group>)}
+      {!down && panes.map(([up, keys]) => <group key={'pane' + up + keys.length} position-y={up}><WallRun mat="goldwood" keys={keys} y0={SILL} h={WIN_TOP - SILL} pane cols={cols} /></group>)}
       {rooms.filter(r => !unbuilt?.has(r.key)).map(r => <group key={r.key + (holes?.size ?? 0) + upOf(r)} position-y={upOf(r)}><RoomFloor room={r} floors={floors} holes={holes} /></group>)}
       {slab && rooms.filter(r => !unbuilt?.has(r.key)).map(r => <group key={'s' + r.key + upOf(r)} position-y={upOf(r)}><Slab cells={r.cells.filter(([i, j]) => !holes?.has(`${i},${j}`))} /></group>)}
       {!down && roofed && rooms.filter(r => !unbuilt?.has(r.key)).map(r => <group key={r.key + roof + upOf(r)} position-y={upOf(r)}><RoomRoof room={r} style={roof} walls={walls} /></group>)}
@@ -514,18 +514,18 @@ function brickTex(): THREE.CanvasTexture | null {
     }
   }, 1, 4)   // 4 repeats up a 3.2 m wall = 16 courses of 0.2 m
 }
-export function WallRun({ mat, tint, keys, ghost, h = WALL_H, y0 = 0, pane }: { mat: WallMat; tint?: string; keys: string[]; ghost?: string; h?: number; y0?: number; pane?: boolean }) {
+export function WallRun({ mat, tint, keys, ghost, h = WALL_H, y0 = 0, pane, cols }: { mat: WallMat; tint?: string; keys: string[]; ghost?: string; h?: number; y0?: number; pane?: boolean; /** M54 (2): ends at a column are cut back to its face */ cols?: Cols }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   useEffect(() => {
     const m = ref.current; if (!m) return
     const o = new THREE.Object3D()
     keys.forEach((k, n) => {
-      const r = edgeRect(k), thin = pane ? (WALL_T - 0.06) : 0, alongX = r.x1 - r.x0 > r.z1 - r.z0
+      const r = cols ? trimmedRect(k, cols) : edgeRect(k), thin = pane ? (WALL_T - 0.06) : 0, alongX = r.x1 - r.x0 > r.z1 - r.z0
       o.position.set((r.x0 + r.x1) / 2, GROUND_Y + y0 + h / 2 + (ghost ? 0.01 : 0), (r.z0 + r.z1) / 2)
       o.scale.set(r.x1 - r.x0 + (ghost ? 0.04 : 0) - (alongX ? 0 : thin), h + (ghost ? 0.02 : 0), r.z1 - r.z0 + (ghost ? 0.04 : 0) - (alongX ? thin : 0)); o.updateMatrix(); m.setMatrixAt(n, o.matrix)
     })
     m.count = keys.length; m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere()
-  }, [keys, ghost, h, y0, pane])
+  }, [keys, ghost, h, y0, pane, cols])
   return (
     <instancedMesh ref={ref} args={[WALL_GEO, undefined, Math.max(1, keys.length)]} frustumCulled={false}>
       {ghost ? <meshBasicMaterial color={ghost} transparent opacity={0.45} depthWrite={false} /> : pane ? <meshLambertMaterial color="#a9dcea" transparent opacity={0.45} depthWrite={false} /> : <WallMaterial mat={mat} tint={tint} />}
@@ -552,7 +552,7 @@ function HouseLevels({ w }: { w: Works }) {
         const guide = b && k < edit, rails = stairRails(w, k)
         return (
           <group key={k} position-y={levelBase(k)}>
-            {Object.keys(L.walls).length > 0 && <DrawnWalls walls={L.walls} roof={w.roof ?? 'gable'} floors={L.floors} unbuilt={unbuiltRooms(L.walls, L.paid)} probe={k === 0} roofed={k === last} slab={k > 0} down={guide ? true : undefined} holes={holes} lift={fl} />}
+            {Object.keys(L.walls).length > 0 && <DrawnWalls walls={L.walls} roof={w.roof ?? 'gable'} floors={L.floors} unbuilt={unbuiltRooms(L.walls, L.paid)} probe={k === 0} roofed={k === last} slab={k > 0} down={guide ? true : undefined} holes={holes} lift={fl} cols={L.cols} />}
             {hasCols && <DrawnCols cols={L.cols!} down={guide ? true : undefined} lift={fl} />}
             {hasStairs && <DrawnStairs stairs={L.stairs!} lift={fl} />}
             {hasDecks && <DrawnDecks decks={L.decks!} ground={k === 0} lift={fl} />}
@@ -620,8 +620,8 @@ function DrawnStairs({ stairs, lift }: { stairs: Stairs; lift?: LiftLookup }) {
   )
 }
 /** M54: the columns of one level: a 0.6 m square post per corner, a storey tall (low with the walls down); a draft is a blue ghost */
-function DrawnCols({ cols, down: downOverride, lift }: { cols: Cols; down?: boolean; lift?: LiftLookup }) {
-  const wd = useWallsDown(), down = downOverride ?? wd, h = down ? LOW_WALL : WALL_H
+export function DrawnCols({ cols, down: downOverride, lift }: { cols: Cols; down?: boolean; lift?: LiftLookup }) {
+  const wd = useWallsDown(), down = downOverride ?? wd, h = (down ? LOW_WALL : WALL_H) + COL_CAP   // M54 (2): a cap proud of the wall top
   return (
     <>
       {Object.entries(cols).map(([k, c]) => {

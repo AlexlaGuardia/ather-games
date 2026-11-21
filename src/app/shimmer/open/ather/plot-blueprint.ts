@@ -5,9 +5,10 @@
 // world/house-blueprints/<id>.json, read at runtime (no deploy). PURE.
 import { parseKey, adoptWalls, adoptRoof, adoptFloors, edgeEnds, edgeRect, findRooms, WALL_T, WALL_H, DOOR_H, type Walls, type Floors, type RoofStyle } from './plot-walls'
 import { adoptUpper, levelBase, SLAB_T, type Level } from './plot-floors'
+import { adoptCols, parseCol, COL_T, type Cols } from './plot-cols'
 import type { Box } from '../terrain-world'
 
-export interface HouseBlueprint { v: 1; id: string; name: string; w: number; d: number; walls: Walls; floors: Floors; roof: RoofStyle; saved: number; /** M47: the floors above the ground one (level 1, 2), re-based the same way; absent = one storey */ upper?: Level[] }
+export interface HouseBlueprint { v: 1; id: string; name: string; w: number; d: number; walls: Walls; floors: Floors; roof: RoofStyle; saved: number; /** M47: the floors above the ground one (level 1, 2), re-based the same way; absent = one storey */ upper?: Level[]; /** M54 (1): ground-floor columns on corners inside the footprint, re-based */ cols?: Cols }
 export const SAFE_HOUSE_ID = /^[a-z0-9][a-z0-9-]{0,47}$/
 export const MAX_BP_SIDE = 40, MAX_BP_PIECES = 400
 
@@ -21,7 +22,7 @@ export function connectedPieces(walls: Walls, start: string): string[] {
   return [...seen]
 }
 /** lift one building off a plot as a blueprint: its pieces + the painted floor cells inside its footprint, re-based to 0,0 */
-export function extractBlueprint(walls: Walls, floors: Floors | undefined, roof: RoofStyle, tapped: string, id: string, name: string, now = Date.now(), upper?: Level[]): HouseBlueprint | null {
+export function extractBlueprint(walls: Walls, floors: Floors | undefined, roof: RoofStyle, tapped: string, id: string, name: string, now = Date.now(), upper?: Level[], cols?: Cols): HouseBlueprint | null {
   const keys = connectedPieces(walls, tapped); if (keys.length < 1) return null
   let i0 = Infinity, j0 = Infinity, i1 = -Infinity, j1 = -Infinity
   for (const k of keys) for (const [x, z] of edgeEnds(k)) { i0 = Math.min(i0, x); j0 = Math.min(j0, z); i1 = Math.max(i1, x); j1 = Math.max(j1, z) }
@@ -29,15 +30,20 @@ export function extractBlueprint(walls: Walls, floors: Floors | undefined, roof:
   for (const k of keys) { const e = parseKey(k)!; out[`${e.o},${e.i - i0},${e.j - j0}`] = walls[k] }
   const fl: Record<string, Floors[string]> = {}
   for (const [c, m] of Object.entries(floors ?? {})) { const [a, b] = c.split(',').map(Number); if (a >= i0 && a < i1 && b >= j0 && b < j1) fl[`${a - i0},${b - j0}`] = m }
+  // M54 (1): columns on corners inside the footprint (its edge included), re-based; drafts stay behind (a blueprint is what stands)
+  const inFoot = (i: number, j: number) => i >= i0 && i <= i1 && j >= j0 && j <= j1
+  const colsIn = (cs: Cols | undefined) => { const o: Record<string, Cols[string]> = {}; for (const [k, c] of Object.entries(cs ?? {})) { const p = parseCol(k)!; if (!c.draft && inFoot(p.i, p.j)) o[`${p.i - i0},${p.j - j0}`] = c } return o }
+  const gc = colsIn(cols)
   const up: Level[] = []   // each upper level: the pieces whose corners lie inside the footprint, re-based, with the floor cells there
   for (const lv of upper ?? []) {
     const uw: Record<string, Walls[string]> = {}, uf: Record<string, Floors[string]> = {}
     for (const [k, w] of Object.entries(lv.walls)) { const e = parseKey(k)!; if (edgeEnds(k).every(([x, z]) => x >= i0 && x <= i1 && z >= j0 && z <= j1)) uw[`${e.o},${e.i - i0},${e.j - j0}`] = w }
     for (const [c, m] of Object.entries(lv.floors ?? {})) { const [a, b] = c.split(',').map(Number); if (a >= i0 && a < i1 && b >= j0 && b < j1) uf[`${a - i0},${b - j0}`] = m }
-    up.push({ walls: uw, floors: uf })
+    const uc = colsIn(lv.cols)
+    up.push({ walls: uw, floors: uf, ...(Object.keys(uc).length ? { cols: uc } : {}) })
   }
-  while (up.length && !Object.keys(up[up.length - 1].walls).length) up.pop()
-  return { v: 1, id, name, w: i1 - i0, d: j1 - j0, walls: out, floors: fl, roof, saved: now, ...(up.length ? { upper: up } : {}) }
+  while (up.length && !Object.keys(up[up.length - 1].walls).length && !Object.keys(up[up.length - 1].cols ?? {}).length) up.pop()
+  return { v: 1, id, name, w: i1 - i0, d: j1 - j0, walls: out, floors: fl, roof, saved: now, ...(up.length ? { upper: up } : {}), ...(Object.keys(gc).length ? { cols: gc } : {}) }
 }
 /** what is wrong with a would-be blueprint (empty = fine); the route and the loader both ask */
 export function houseProblems(v: unknown): string[] {
@@ -50,13 +56,16 @@ export function houseProblems(v: unknown): string[] {
   if (!ws.length || ws.length > MAX_BP_PIECES) out.push(`walls: 1-${MAX_BP_PIECES} pieces`)
   if (Object.keys(adoptWalls(b.walls)).length !== ws.length) out.push('walls: a piece is malformed')
   if (ws.some(k => edgeEnds(k).some(([x, z]) => x < 0 || z < 0 || x > b.w || z > b.d))) out.push('walls: a piece lies outside the footprint')
+  const cs = Object.keys(b.cols ?? {})   // M54 (1)
+  if (Object.keys(adoptCols(b.cols)).length !== cs.length) out.push('cols: a column is malformed')
+  if (cs.some(k => { const p = parseCol(k); return !p || p.i < 0 || p.j < 0 || p.i > b.w || p.j > b.d })) out.push('cols: a column lies outside the footprint')
   return out
 }
 /** a blueprint as stored, cleaned (null when it has problems) */
 export function parseHouse(v: unknown): HouseBlueprint | null {
   if (houseProblems(v).length) return null
   const b = v as HouseBlueprint
-  return { v: 1, id: b.id, name: b.name.trim(), w: b.w, d: b.d, walls: adoptWalls(b.walls), floors: adoptFloors(b.floors), roof: adoptRoof(b.roof), saved: Number.isFinite(b.saved) ? b.saved : 0, ...(adoptUpper(b.upper).length ? { upper: adoptUpper(b.upper) } : {}) }
+  return { v: 1, id: b.id, name: b.name.trim(), w: b.w, d: b.d, walls: adoptWalls(b.walls), floors: adoptFloors(b.floors), roof: adoptRoof(b.roof), saved: Number.isFinite(b.saved) ? b.saved : 0, ...(adoptUpper(b.upper).length ? { upper: adoptUpper(b.upper) } : {}), ...(Object.keys(adoptCols(b.cols)).length ? { cols: adoptCols(b.cols) } : {}) }
 }
 /** does it fit a pad (w across, d deep), either way round is NOT allowed: the front must face the green */
 export const fitsPad = (b: { w: number; d: number }, padW: number, padD: number) => b.w <= padW && b.d <= padD
@@ -78,9 +87,12 @@ export function placeBlueprint(b: HouseBlueprint, pad: { x: number; z: number; y
     for (let q = 0; q < n; q++) {
       const t = (q + 0.5) / n, u = alongU ? r.x0 + (r.x1 - r.x0) * t : (r.x0 + r.x1) / 2, v = alongU ? (r.z0 + r.z1) / 2 : r.z0 + (r.z1 - r.z0) * t
       const p = toWorld(u, v), h = Math.max(WALL_T, (alongU ? r.x1 - r.x0 : r.z1 - r.z0) / n) / 2
-      boxes.push({ x0: p.x - h, x1: p.x + h, z0: p.z - h, z1: p.z + h, y0: w.kind === 'door' ? pad.y + DOOR_H : pad.y - 0.5, y1: pad.y + 3.2 })
+      boxes.push({ x0: p.x - h, x1: p.x + h, z0: p.z - h, z1: p.z + h, y0: w.kind === 'door' ? pad.y + DOOR_H : pad.y - 0.5, y1: pad.y + WALL_H })   // M50 walls are WALL_H tall (this said 3.2)
     }
   }
+  // M54 (1): columns, one box each (a 0.6 m square turned by the yaw: its AABB is a hair wider, fine at a corner)
+  const colBox = (k: string, base: number, y0: number) => { const p = parseCol(k)!, o = toWorld(p.i, p.j), h = COL_T / 2 * (Math.abs(s) + Math.abs(c)); return { x0: o.x - h, x1: o.x + h, z0: o.z - h, z1: o.z + h, y0, y1: base + WALL_H } }
+  for (const [k, cl] of Object.entries(b.cols ?? {})) if (!cl.draft) boxes.push(colBox(k, pad.y, pad.y - 0.5))
   // M47 slice 2: the upper levels' solids, same rules as the plot's upperBoxes (a door only its lintel, a slab under each built room
   // cell, its top at the floor), sampled small because the yaw is not a quarter turn. Slab cells are sampled 2x2 and overlap a hair.
   ;(b.upper ?? []).forEach((lv, n) => {
@@ -94,6 +106,7 @@ export function placeBlueprint(b: HouseBlueprint, pad: { x: number; z: number; y
         boxes.push({ x0: p.x - h, x1: p.x + h, z0: p.z - h, z1: p.z + h, y0: w.kind === 'door' ? base + DOOR_H : base - SLAB_T, y1: base + WALL_H })
       }
     }
+    for (const [k, cl] of Object.entries(lv.cols ?? {})) if (!cl.draft) boxes.push(colBox(k, base, base - SLAB_T))
     const built: Walls = Object.fromEntries(Object.entries(lv.walls).filter(([, x]) => !x.draft))
     for (const room of findRooms(built)) for (const [i, j] of room.cells) for (const du of [0.25, 0.75]) for (const dv of [0.25, 0.75]) {
       const p = toWorld(i + du, j + dv)

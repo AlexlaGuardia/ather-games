@@ -1,9 +1,9 @@
 'use client'
 // ── M47 slice 2: a BLUEPRINT building drawn as stacked levels, the plot's own way (HouseLevels): ground walls, then each upper
 // level lifted by levelBase(k) with its slab, the roof only on the top level. Glade lots and settlement lots both stand this.
-// BlueprintBuilding (workshop.tsx) is the one-storey body; this adds `upper` and the ground level is the same walls.
+// BlueprintBuilding (workshop.tsx) is the one-storey body; this adds `upper` and the ground level is the same walls. M54 (1): + columns.
 import { useEffect } from 'react'
-import { DrawnWalls } from './workshop'
+import { DrawnWalls, DrawnCols } from './workshop'
 import { GROUND_Y } from './plot'
 import { levelBase } from './plot-floors'
 import type { HouseBlueprint } from './plot-blueprint'
@@ -17,10 +17,12 @@ export function BlueprintStack({ bp, x, z, y, rotY }: { bp: HouseBlueprint; x: n
   }, [bp.id, top, y])
   return (
     <group position={[x, y - GROUND_Y, z]} rotation-y={rotY}>
-      <DrawnWalls walls={bp.walls} roof={bp.roof} floors={bp.floors} probe={false} roofed={top === 0} />
+      <DrawnWalls walls={bp.walls} roof={bp.roof} floors={bp.floors} probe={false} roofed={top === 0} cols={bp.cols} />
+      {bp.cols && <DrawnCols cols={bp.cols} down={false} />}
       {up.map((l, n) => (
         <group key={n} position-y={levelBase(n + 1)}>
-          <DrawnWalls walls={l.walls} roof={bp.roof} floors={l.floors} probe={false} roofed={n === top - 1} slab />
+          <DrawnWalls walls={l.walls} roof={bp.roof} floors={l.floors} probe={false} roofed={n === top - 1} slab cols={l.cols} />
+          {l.cols && <DrawnCols cols={l.cols} down={false} />}
         </group>
       ))}
     </group>

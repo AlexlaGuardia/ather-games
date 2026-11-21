@@ -8,6 +8,8 @@ import type { Box } from '../terrain-world'
 import { WALL_T, WALL_H, WALL_MATS, isColour, paintable, edgeEnds, findRooms, type WallMat, type Walls } from './plot-walls'
 
 export const COL_T = WALL_T * 2   // 0.6 m: "twice as thick as the walls"
+/** M54 (2): a column stands this much proud of the wall top, so its cap reads (and its top never z-fights the wall's) */
+export const COL_CAP = 0.08
 export interface Col { mat: WallMat; tint?: string; draft?: true }
 export type Cols = Readonly<Record<string, Col>>
 export const colKey = (i: number, j: number) => `${i},${j}`
@@ -79,4 +81,14 @@ export function paintColumn(cols: Cols | undefined, k: string, colour: string): 
 export function colAt(cols: Cols | undefined, x: number, z: number, r = 0.55): string | null {
   const i = Math.round(x), j = Math.round(z), k = colKey(i, j)
   return cols?.[k] && Math.hypot(x - i, z - j) <= r ? k : null
+}
+
+/** M54 (2): a wall piece's footprint as DRAWN beside columns: an end where a column stands is cut back to the column's face, so the
+ *  wall meets the column instead of running through it (the solid box stays the full piece: the column covers the joint anyway). */
+export function trimmedRect(k: string, cols: Cols | undefined): { x0: number; x1: number; z0: number; z1: number } {
+  const [[ax, az], [bx, bz]] = edgeEnds(k), t = WALL_T / 2, h = COL_T / 2
+  const cutA = !!cols?.[`${ax},${az}`], cutB = !!cols?.[`${bx},${bz}`]
+  return ax === bx
+    ? { x0: ax - t, x1: ax + t, z0: cutA ? az + h : az - t, z1: cutB ? bz - h : bz + t }
+    : { x0: cutA ? ax + h : ax - t, x1: cutB ? bx - h : bx + t, z0: az - t, z1: az + t }
 }
