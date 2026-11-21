@@ -527,7 +527,8 @@ export function HearthLip({ face, vitals, mana, tools }: {
   return (
     <div className="flex items-center gap-3 px-2 py-1 rounded-[10px]" style={{ background: t.plate, boxShadow: face === 'full' ? 'inset 0 1px 3px rgba(58,39,22,.4)' : undefined }}>
       {vitals && <LipBar face={face} fillRef={hp} overRef={sh} txtRef={hpT} color="#b9543a" glyph="♥" pop={sk.pop} />}
-      {vitals && <span ref={shT} data-skin-num className="empty:hidden text-[10px] font-bold tabular-nums leading-none" style={{ ...hearthBody, color: t.plus }} />}
+      {/* M59: the skin's +N in a FIXED slot (fits +60), so it coming and going never resizes the health bar; only where the page opts in */}
+      {vitals?.current?.skin && <span ref={shT} data-skin-num className="text-[10px] font-bold tabular-nums leading-none -ml-1.5" style={{ ...hearthBody, color: t.plus, width: 20, flex: 'none' }} />}
       {mana && <LipBar face={face} fillRef={mp} txtRef={mpT} color="#7657b4" glyph="✦" />}
       {tools}
     </div>

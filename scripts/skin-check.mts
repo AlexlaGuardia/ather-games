@@ -38,12 +38,13 @@ const bar = () => p.evaluate(() => {
   const el = els.find(e => e.getBoundingClientRect().width > 0 || (e.parentElement?.getBoundingClientRect().width ?? 0) > 0) ?? null
   if (!el) return null
   const card = (el.closest('.w-52') ?? el.closest('.rounded-\\[10px\\]') ?? el.parentElement!.parentElement!) as HTMLElement, r = card.getBoundingClientRect()
-  return { w: el.style.width, skin: el.dataset.skin ?? null, text: card.innerText.replace(/\s+/g, ' ').trim(), pop: !!card.querySelector('[data-skin-pop]'), box: { x: r.x, y: r.y, width: r.width, height: r.height } }
+  return { trackW: +el.parentElement!.getBoundingClientRect().width.toFixed(1), w: el.style.width, skin: el.dataset.skin ?? null, text: card.innerText.replace(/\s+/g, ' ').trim(), pop: !!card.querySelector('[data-skin-pop]'), box: { x: r.x, y: r.y, width: r.width, height: r.height } }
 })
 const crop = async (name: string) => { const s = await bar(); const pad = 18
   if (s) await p.screenshot({ path: `${dir}/${tag}-${name}.png`, clip: { x: Math.max(0, s.box.x - pad), y: Math.max(0, s.box.y - pad - 20), width: Math.min(W, s.box.width + pad * 2), height: s.box.height + pad * 2 + 20, scale: 2 } })
   await p.screenshot({ path: `${dir}/${tag}-${name}-full.png` }) }
 const asked = () => p.evaluate(() => (window as any).__sfx?.asked?.() ?? {})
+const trackNone = (await bar())?.trackW ?? -1   // hp 100, no skin: the width the +N must not change
 // 1) Q drops Threshold; slide it under the keeper
 await p.keyboard.press('KeyQ'); await sleep(400)
 const placed = await p.evaluate(() => { const c = (window as any).__ather.combat(), f = c.fields?.[0], at = c.keeper.at; if (!f || !at) return null; f.x = at.x; f.z = at.z; f.until = (c.clock ?? 0) + 60; return { shell: f.shell, max: f.shellMax } })
@@ -53,6 +54,8 @@ await barIs("e => e.dataset.skin === 'on'"); await sleep(300)
 let s = await bar()
 ok(!!s && s.skin === 'on' && parseFloat(s.w) > 0 && /\+20/.test(s.text), `full: the highlight lies over the bar with +20 (${JSON.stringify(s && { w: s.w, skin: s.skin, text: s.text })})`)
 await crop('full')
+const trackFull = s?.trackW ?? -1
+ok(Math.abs(trackFull - trackNone) < 0.6, `the health bar keeps its width when the +N shows (hp 100: ${trackNone} -> ${trackFull})`)
 // 2) a Shambler at arm's length: its blows land on the skin, health untouched
 const hp0 = await p.evaluate(() => (window as any).__fight.hp())
 await p.evaluate(() => { const a = (window as any).__ather, c = a.combat(), at = c.keeper.at; c.hollows.length = 0; a.spawn(0, -1.5); const h = c.hollows.at(-1); h.x = at.x + 0.9; h.z = at.z - 0.5; h.state = 'chase' })
