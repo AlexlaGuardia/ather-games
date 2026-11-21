@@ -11,7 +11,8 @@ const res: Record<string, unknown> = {}
 const p = await b.newPage(); await p.setViewport({ width: 1280, height: 760 })
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e)))
 await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'domcontentloaded', timeout: 180000 })
-await p.evaluate(() => localStorage.removeItem('open.keymap.v1'))
+// a born keeper: an unborn one gets the birth gate (327ea639), which freezes the walker and keeps O for itself
+await p.evaluate(() => { localStorage.removeItem('open.keymap.v1'); localStorage.setItem('ather:shimmer:birthRune', 'star') })
 await p.reload({ waitUntil: 'load', timeout: 180000 })
 await p.waitForFunction('!!window.__ather?.state', { timeout: 180000 }); await sleep(3000)
 const cv = await p.$('canvas:not([data-map])'); const bb = await cv!.boundingBox()
