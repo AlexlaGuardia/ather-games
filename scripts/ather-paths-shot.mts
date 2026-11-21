@@ -4,8 +4,9 @@
 // screenshot (the fall in that time is centimetres), re-tp before every shot.
 //   spots: glade (the green, its path, the waymark) · seam (path 1 across the first-wilds/west tile seam at x = -500) ·
 //          junction (settlement s1-2, four paths in) · green (the cluster square: four garden paths meet at the centre gate)
-//   npx tsx scripts/ather-paths-shot.mts [--url https://ather.games] [--roads legacy|ribbon] [--out dir] [--parallel]
+//   npx tsx scripts/ather-paths-shot.mts [--url https://ather.games] [--roads legacy|ribbon] [--out dir] [--parallel] [--flicker]
 import puppeteer from 'puppeteer-core'
+import sharp from 'sharp'
 import { mkdirSync, readFileSync } from 'fs'
 import { GLADE_GREEN } from '../src/app/shimmer/open/ather/moonwell'
 import { clusterFrame } from '../src/app/shimmer/open/ather/cluster'
@@ -34,7 +35,23 @@ async function shoot(p: any, name: string, tx: number, tz: number, fx: number, f
   await hideCard(p); await place()
   await p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))
   await p.screenshot({ path: `${out}/${name}.png` }); shots.push(name)
+  if (process.argv.includes('--flicker')) {
+    // M58 flicker: the same fixed camera 1 s later; z-fighting overlays shimmer between frames, a settled ground does not.
+    // Changed = any channel moved > 24. Living things (folk, the beam, water) move too: read the diff image, not only the number.
+    await sleep(1000); await place()
+    await p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))
+    await p.screenshot({ path: `${out}/${name}-b.png` })
+    const [A, B] = await Promise.all([`${out}/${name}.png`, `${out}/${name}-b.png`].map(f => sharp(f).removeAlpha().raw().toBuffer({ resolveWithObject: true })))
+    const { width: w, height: h } = A.info, d = Buffer.alloc(w * h * 3); let changed = 0
+    for (let i = 0; i < w * h; i++) {
+      const m = Math.max(Math.abs(A.data[i * 3] - B.data[i * 3]), Math.abs(A.data[i * 3 + 1] - B.data[i * 3 + 1]), Math.abs(A.data[i * 3 + 2] - B.data[i * 3 + 2]))
+      if (m > 24) { changed++; d[i * 3] = 255 } else { const g = (A.data[i * 3] + A.data[i * 3 + 1] + A.data[i * 3 + 2]) / 9; d[i * 3] = d[i * 3 + 1] = d[i * 3 + 2] = g }
+    }
+    await sharp(d, { raw: { width: w, height: h, channels: 3 } }).png().toFile(`${out}/${name}-diff.png`)
+    flicker[name] = +(changed / (w * h) * 100).toFixed(3)
+  }
 }
+const flicker: Record<string, number> = {}
 const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: W, height: H })
 p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))
@@ -64,6 +81,6 @@ await shoot(p, 'glade', GLADE_GREEN.x, GLADE_GREEN.z + GLADE_GREEN.r + 4, GLADE_
     await shoot(p, 'junction', s.x, s.z, s.x + 40, s.z + 40, 34, 26)
   }
 }
-console.log(JSON.stringify({ url, roads, out, shots, errs }))
+console.log(JSON.stringify({ url, roads, out, shots, errs, ...(Object.keys(flicker).length ? { flickerPct: flicker } : {}) }))
 console.log(shots.length === 4 && !errs.length ? `PASS: 4 shots (roads=${roads}) in ${out}` : `FAIL: ${shots.length}/4 shots, ${errs.join('; ')}`)
 await br.close(); process.exit(shots.length === 4 && !errs.length ? 0 : 1)
