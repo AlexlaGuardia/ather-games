@@ -33,7 +33,8 @@ import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Tra
 import { pitstopsUnlocked, visitNear } from './pitstops'
 import { Towns } from '../towns/Towns'
 import { MarketView, DeedCard } from '../business/market-view'
-import { DeedYards, type DeedYardState } from './deed-yard'
+import { ShipyardPlots, type DeedYardState } from './shipyard-plot'
+import { inShipyardPlot } from '../business/shipyards'
 import { useIsOwner } from '@/app/_components/useIsOwner'
 import { extraGround } from '../foot-extras'
 import { useTycoon } from '../business/use-tycoon'
@@ -664,6 +665,7 @@ function treeBlock(R: Region, bi: number, bj: number) {
     if ((nearestRoad(R, x, z).d < 9 && !((R.tunnelAt(x, z)?.cover ?? 0) > TUNNEL_H + 4)) || nearPad(R, x, z, 5)) continue
     if (townDiscsOf(R).some(t => Math.hypot(t.x - x, t.z - z) < t.r)) continue
     out.push({ x, y, z, s: 0.8 + hash(i, j + 9) * 0.7 })
+    if (inShipyardPlot(R, x, z, 6)) continue   // M49 s4: no tree through a shipyard's terrace (or its landing)
   }
   return out
 }
@@ -1122,7 +1124,7 @@ function ContinentRideGame() {
   const tycoon = useTycoon(ledger, setLedger)
   const [deed, setDeed] = useState<string | null>(null)
   const [deedReach, setDeedReach] = useState<string | null>(null)
-  // M49 s1: the shipyard's yard (continent/deed-yard.tsx) tells the phone pill what E does there
+  // M49: the shipyard plot (continent/shipyard-plot.tsx) tells the phone pill what E does there
   const [yardState, setYardState] = useState<DeedYardState>({ inYard: false, atBoard: false, action: null })
   // M49 s3: ?own=all holds every shipyard (the OWNER's dev flag only; a player buys them, business/shipyards.ts)
   const isOwner = useIsOwner()
@@ -1481,7 +1483,7 @@ function ContinentRideGame() {
           <DoorFolk R={R} focus={focus} talking={talk?.key ?? null} />
           <RemoteKeepers peers={mp.peers} me={() => focus.current} />
           <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={openDoor} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} />
-          <DeedYards R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState} owned={ledger.shipyards} ownAll={isOwner && ownAllFlag}
+          <ShipyardPlots R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState} owned={ledger.shipyards} ownAll={isOwner && ownAllFlag}
             enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} />
           <Posts R={R} />
           <Roadside R={R} />

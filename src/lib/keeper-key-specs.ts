@@ -74,6 +74,7 @@ export const GARDEN_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'open.farm.v1',            worldTied: false },  // the Farm room's beds + composter charge (ather/farmroom.ts)
   { base: 'open.water.v1',           worldTied: false },  // the water tap's tanks: level + when (ather/water.ts)
   { base: 'open.bank.v1',             worldTied: false },  // the garden bank (ather/garden-bank.ts): every keeper on the account
-  { base: 'open.deed.shipyard.v1',    worldTied: false },  // Kael's shipyard yard deed: placed pieces + look (continent/deed-yard.tsx, M49 s1; registered s3)
-  { base: 'open.deed.shipyard:',      worldTied: false },  // a BOUGHT shipyard's yard deed, per town (business/shipyards.ts › yardStoreBase, M49 s3)
+  { base: 'open.deed.shipyard.v1',    worldTied: false },  // Kael's small yard (M49 s1-s3, retired s4: read once to hand its pieces back to the bag)
+  { base: 'open.deed.shipyard:',      worldTied: false },  // a BOUGHT shipyard's small yard (M49 s3, retired s4: read once to hand its pieces back)
+  { base: 'open.deed.plot:',          worldTied: false },  // a shipyard PLOT's deed, per shipyard (business/shipyards.ts › plotStoreBase, M49 s4)
 ]

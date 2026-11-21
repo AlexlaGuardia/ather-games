@@ -8,8 +8,9 @@
 // The grid is in LOCAL cells: (cx, cz), cx 0..w-1 across, cz 0..d-1 front to back, 1 m each, centred on the deed's origin.
 // A piece covers ceil(w) x ceil(d) cells of its footprint (swapped on an odd quarter turn), anchored at its lowest cell.
 
-export type DeedKind = 'shipyard' | 'shop'
-export const DEED_GRID: Record<DeedKind, { w: number; d: number }> = { shipyard: { w: 12, d: 8 }, shop: { w: 8, d: 6 } }
+export type DeedKind = 'shipyard' | 'shop' | 'plot'
+/** plot = a whole shipyard plot (M49 s4, business/shipyard-plots.ts); its built pieces block cells (placeRefusal's `blocked`) */
+export const DEED_GRID: Record<DeedKind, { w: number; d: number }> = { shipyard: { w: 12, d: 8 }, shop: { w: 8, d: 6 }, plot: { w: 100, d: 100 } }
 /** a deed holds at most this many placed things (the plot's MAX_PIECES is 60; a yard is smaller) */
 export const MAX_DEED_ITEMS = 40
 
@@ -38,21 +39,22 @@ export function cellsOf(fp: Footprint, cx: number, cz: number, rot: number): [nu
   return out
 }
 
-export type PlaceRefusal = 'out' | 'taken' | 'full' | null
+export type PlaceRefusal = 'out' | 'taken' | 'full' | 'built' | null
 /** why `id` cannot go at (cx, cz, rot), or null when it can. `fpOf` gives a piece's footprint (furniture.ts › FURNITURE). */
-export function placeRefusal(s: DeedState, kind: DeedKind, fpOf: (id: string) => Footprint | null, id: string, cx: number, cz: number, rot: number, ignore = -1): PlaceRefusal {
+export function placeRefusal(s: DeedState, kind: DeedKind, fpOf: (id: string) => Footprint | null, id: string, cx: number, cz: number, rot: number, ignore = -1, blocked?: (cx: number, cz: number) => boolean): PlaceRefusal {
   const fp = fpOf(id); if (!fp) return 'out'
   if (ignore < 0 && s.items.length >= MAX_DEED_ITEMS) return 'full'
   const g = DEED_GRID[kind], want = cellsOf(fp, cx, cz, rot)
   if (want.some(([x, z]) => x < 0 || z < 0 || x >= g.w || z >= g.d)) return 'out'
+  if (blocked && want.some(([x, z]) => blocked(x, z))) return 'built'
   const taken = new Set<string>()
   s.items.forEach((p, k) => { if (k === ignore) return; const f = fpOf(p.id); if (f) for (const [x, z] of cellsOf(f, p.cx, p.cz, p.rot)) taken.add(`${x},${z}`) })
   return want.some(([x, z]) => taken.has(`${x},${z}`)) ? 'taken' : null
 }
 
 /** place `id`; returns the new state, or the same state when refused (the caller reads placeRefusal for why) */
-export function place(s: DeedState, kind: DeedKind, fpOf: (id: string) => Footprint | null, id: string, cx: number, cz: number, rot: number): DeedState {
-  if (placeRefusal(s, kind, fpOf, id, cx, cz, rot)) return s
+export function place(s: DeedState, kind: DeedKind, fpOf: (id: string) => Footprint | null, id: string, cx: number, cz: number, rot: number, blocked?: (cx: number, cz: number) => boolean): DeedState {
+  if (placeRefusal(s, kind, fpOf, id, cx, cz, rot, -1, blocked)) return s
   return { ...s, items: [...s.items, { id, cx, cz, rot: ((rot % 4) + 4) % 4 }] }
 }
 
@@ -83,13 +85,13 @@ export function pieceCentre(kind: DeedKind, fp: Footprint, cx: number, cz: numbe
 }
 
 /** a saved deed, validated: anything malformed or off the grid is dropped, never thrown */
-export function parseDeed(raw: unknown, kind: DeedKind, fpOf: (id: string) => Footprint | null): DeedState {
+export function parseDeed(raw: unknown, kind: DeedKind, fpOf: (id: string) => Footprint | null, blocked?: (cx: number, cz: number) => boolean): DeedState {
   const r = raw as Partial<DeedState> | null
   if (!r || r.v !== 1 || !Array.isArray(r.items)) return emptyDeed()
   let s: DeedState = { ...emptyDeed(), palette: Number.isInteger(r.palette) ? setPalette(emptyDeed(), r.palette as number).palette : 0 }
   for (const p of r.items) {
     if (!p || typeof p.id !== 'string' || !Number.isInteger(p.cx) || !Number.isInteger(p.cz) || !Number.isInteger(p.rot)) continue
-    s = place(s, kind, fpOf, p.id, p.cx, p.cz, p.rot)
+    s = place(s, kind, fpOf, p.id, p.cx, p.cz, p.rot, blocked)
   }
   return s
 }

@@ -1,0 +1,355 @@
+'use client'
+// ── M49 s4: THE SHIPYARD PLOTS on the waking continent (docs/M49-shipyards.md; hub 11-21 #15797). ──────────────────────────
+// Every shipyard (Kael's above Rune Hold + one per city) is its own ~100 x 100 m fenced plot, built per its tier
+// (business/shipyard-plots.ts): one terraced floor with retaining walls, a gate onto a landing strip with a ramp down along the
+// fence, a landing pad, a garage block (a door per bay), a home, and a dock (tie-down mast + posts, or a berth: bollards + a
+// slipway into the water, Veradyn). All BLOCKOUT (art later). The rest of the plot is the keeper's DEED ground: they furnish it
+// from the HAND, M45 style (hold a piece, a ghost marks the cells, TAP E sets, HOLD E turns, empty hand E picks up), and the
+// look board at the gate steps the colour + material combo (fence, home trim, garage doors). Saved per shipyard
+// (shipyards.ts › plotStoreBase). A shipyard the keeper does not hold is drawn SHUT (gate + slipway closed) and its board
+// says it is not theirs. A plot mounts only while the keeper is near it.
+// Retired here: the s1-s3 small yard (12 x 8 beside a town building). Pieces left in one go back to the bag, once.
+// Mount (inside the Canvas): <ShipyardPlots R focus track held enabled owned={ledger.shipyards} ownAll={devFlag} onState />
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useFrame } from '@react-three/fiber'
+import dynamic from 'next/dynamic'
+import * as THREE from 'three'
+import type { Region } from '../region'
+import { gardenKey } from '@/lib/keeper-local'
+import { getInv, setInv } from '../shared/bag'
+import { take, give, itemDef } from '../shared/inventory'
+import { FURNITURE, isPiece } from '../ather/furniture'
+import { HOLD_MS } from '../shared/stance'
+import { hudSay } from '../shared/game-hud'
+import { DEED_GRID, DEED_PALETTES, emptyDeed, parseDeed, place, pickUp, itemAt, placeRefusal, setPalette, paletteOf, cellAtLocal, pieceCentre, type DeedState, type Footprint } from '../business/deed-grid'
+import { shipyardSites, ownsShipyard, plotStoreBase, oldYardStoreBase, type ShipyardSite } from '../business/shipyards'
+import { plotToWorld, plotToLocal, plotRotY, plotGround, plotBoxes, placedBoxes, blockedCells, PLOT, PLOT_GATE_W, LANDING_D, SLIP_W, RAMP_RISE, type PlotLayout, type PlotPiece } from '../business/shipyard-plots'
+import { setFootExtra } from '../foot-extras'
+import { bodyHits, type OBox } from '../foot-solids'
+
+const PieceBody = dynamic(() => import('../ather/workshop').then(m => m.PieceBody), { ssr: false })
+
+const KIND = 'plot' as const
+const G = DEED_GRID[KIND], H = PLOT / 2
+const fpOf = (id: string): Footprint | null => (FURNITURE[id] ? { w: FURNITURE[id].w, d: FURNITURE[id].d } : null)
+const AIM = 1.4, BOARD_REACH = 1.8
+/** a plot mounts while the keeper is within this of its middle (m), dropped past MOUNT_R + 60 */
+const MOUNT_R = 400
+
+function loadPlot(base: string, blocked: (cx: number, cz: number) => boolean): DeedState {
+  try { const raw = localStorage.getItem(gardenKey(base)); return raw ? parseDeed(JSON.parse(raw), KIND, fpOf, blocked) : emptyDeed() } catch { return emptyDeed() }
+}
+function savePlot(base: string, s: DeedState) { try { localStorage.setItem(gardenKey(base), JSON.stringify(s)) } catch { /* not remembered */ } }
+/** the retired small yards: every piece left in one goes back to the bag (what will not fit stays saved for next time) */
+function returnOldYards(keys: string[]) {
+  let back = 0
+  for (const key of keys) {
+    try {
+      const k = gardenKey(oldYardStoreBase(key)), raw = localStorage.getItem(k); if (!raw) continue
+      const old = JSON.parse(raw) as { items?: { id: string }[] }, items = Array.isArray(old.items) ? old.items : []
+      const left: { id: string }[] = []
+      let inv = getInv()
+      for (const p of items) { if (typeof p?.id !== 'string') continue; const g = give(inv, p.id, 1); if (g.left) left.push(p); else { inv = g.inv; back++ } }
+      setInv(inv)
+      if (left.length) localStorage.setItem(k, JSON.stringify({ ...old, items: left })); else localStorage.removeItem(k)
+    } catch { /* leave it for next time */ }
+  }
+  if (back) hudSay(`Your shipyard moved to its own plot: ${back} yard piece${back > 1 ? 's are' : ' is'} back in your bag.`, 'item', 6)
+}
+
+export interface DeedYardState { inYard: boolean; atBoard: boolean; action: 'place' | 'pick up' | 'look' | null }
+const IDLE: DeedYardState = { inYard: false, atBoard: false, action: null }
+type Probe = Record<string, unknown>
+type ProbeWin = { __shipyards?: Record<string, Probe> & { sites?: () => unknown } }
+
+interface Props {
+  R: Region | null
+  focus: React.RefObject<THREE.Vector3>
+  track: React.RefObject<{ x: number; z: number; yaw: number }>
+  held: string | null
+  enabled: boolean
+  onState?: (s: DeedYardState) => void
+  /** the shipyards the keeper has bought (Ledger.shipyards); Kael's is always theirs */
+  owned?: readonly string[]
+  /** the owner's dev flag (?own=all) */
+  ownAll?: boolean
+}
+
+export function ShipyardPlots({ R, owned, ownAll = false, onState, ...rest }: Props) {
+  const sites = useMemo(() => (R ? shipyardSites(R) : []), [R])
+  useEffect(() => { if (sites.length) returnOldYards(sites.map(s => s.key)) }, [sites])
+  const [near, setNear] = useState<string[]>([])
+  const nearRef = useRef(near); nearRef.current = near
+  const lastNear = useRef(-1)
+  useFrame(({ clock }) => {
+    const now = clock.getElapsedTime(); if (lastNear.current >= 0 && now - lastNear.current < 0.5) return
+    lastNear.current = now
+    const f = rest.focus.current; if (!f) return
+    const want = sites.filter(s => { const d = Math.hypot(f.x - s.plot.frame.x, f.z - s.plot.frame.z); return d < MOUNT_R || (d < MOUNT_R + 60 && nearRef.current.includes(s.key)) }).map(s => s.key)
+    if (want.join('|') !== nearRef.current.join('|')) setNear(want)
+  })
+  const states = useRef(new Map<string, DeedYardState>()), lastUp = useRef('')
+  const report = (key: string, s: DeedYardState | null) => {
+    if (s) states.current.set(key, s); else states.current.delete(key)
+    const live = [...states.current.values()].find(q => q.inYard || q.atBoard) ?? IDLE, k = `${live.inYard}|${live.atBoard}|${live.action}`
+    if (k !== lastUp.current) { lastUp.current = k; onState?.(live) }
+  }
+  const reportRef = useRef(report); reportRef.current = report
+  useEffect(() => {
+    const w = window as unknown as ProbeWin
+    w.__shipyards = Object.assign(w.__shipyards ?? {}, {
+      sites: () => sites.map(s => ({ key: s.key, town: s.town, price: s.price, inherited: s.inherited, owned: ownsShipyard(owned, s.key, ownAll), x: s.plot.frame.x, z: s.plot.frame.z, ax: s.plot.frame.ax, az: s.plot.frame.az, floor: s.plot.floor, ramp: s.plot.ramp, slip: s.plot.slip, tier: s.plot.tier, mounted: nearRef.current.includes(s.key) })),
+    })
+  }, [sites, owned, ownAll])
+  return <>{sites.filter(s => near.includes(s.key)).map(s => (
+    <Plot key={s.key} R={R} site={s} own={ownsShipyard(owned, s.key, ownAll)} onReport={(st: DeedYardState | null) => reportRef.current(s.key, st)} {...rest} />
+  ))}</>
+}
+
+function Plot({ R, site, own, focus, track, held, enabled, onReport }: Omit<Props, 'onState' | 'owned' | 'ownAll'> & { site: ShipyardSite; own: boolean; onReport: (s: DeedYardState | null) => void }) {
+  const L = site.plot, f = L.frame, floor = L.floor, store = plotStoreBase(site.key)
+  const blocked = useMemo(() => blockedCells(L), [L])
+  const board = useMemo(() => { const b = L.pieces.find(p => p.kind === 'board')!; return { lx: b.lx, lz: b.lz, ...plotToWorld(f, b.lx, b.lz) } }, [L, f])
+  const ownRef = useRef(own); ownRef.current = own
+  const [deed, setDeed] = useState<DeedState>(emptyDeed)
+  const boxes = useRef<OBox[]>([])
+  useEffect(() => { boxes.current = [...plotBoxes(L, !own), ...placedBoxes(L, deed, id => FURNITURE[id] ?? null)] }, [L, deed, own])
+  useEffect(() => {
+    const fk = `plot:${site.key}`
+    setFootExtra(fk, { ground: plotGround(L), boxes: () => boxes.current })
+    return () => setFootExtra(fk, null)
+  }, [L, site.key])
+  useEffect(() => setDeed(loadPlot(store, blocked)), [store, blocked])
+  useEffect(() => () => onReport(null), [])   // eslint-disable-line react-hooks/exhaustive-deps
+  const deedRef = useRef(deed); deedRef.current = deed
+  const commit = (s: DeedState) => { deedRef.current = s; setDeed(s); savePlot(store, s) }
+  const rot = useRef(0)
+  const heldRef = useRef(held); heldRef.current = held
+  const enabledRef = useRef(enabled); enabledRef.current = enabled
+  const aim = useRef<{ inYard: boolean; atBoard: boolean; cell: { cx: number; cz: number } | null }>({ inYard: false, atBoard: false, cell: null })
+
+  const act = useRef<{ place: () => void; turn: () => void; pick: () => void; look: () => void }>({ place() {}, turn() {}, pick() {}, look() {} })
+  act.current.place = () => {
+    const id = heldRef.current, c = aim.current.cell
+    if (!id || !isPiece(id) || !c) return
+    const why = placeRefusal(deedRef.current, KIND, fpOf, id, c.cx, c.cz, rot.current, -1, blocked)
+    if (why) { hudSay(why === 'full' ? 'The yard holds no more.' : why === 'taken' ? 'Something already stands there.' : why === 'built' ? 'The yard is built there.' : 'That reaches past the fence.', 'info'); return }
+    const next = place(deedRef.current, KIND, fpOf, id, c.cx, c.cz, rot.current, blocked), me = focus.current
+    if (me && placedBoxes(L, next, q => FURNITURE[q] ?? null).some(b => bodyHits(b, me.x, me.z, floor))) { hudSay('Step back: you are standing there.', 'info'); return }
+    const inv = take(getInv(), id, 1); if (!inv) return
+    setInv(inv); commit(next)
+    hudSay(`${FURNITURE[id].name} set in the yard`, 'item')
+  }
+  act.current.turn = () => { rot.current = (rot.current + 1) % 4 }
+  act.current.pick = () => {
+    const c = aim.current.cell; if (!c) return
+    const k = itemAt(deedRef.current, fpOf, c.cx, c.cz); if (k < 0) return
+    const r = pickUp(deedRef.current, k); if (!r.id) return
+    const g = give(getInv(), r.id, 1); if (g.left) { hudSay('Your bag is full.', 'info'); return }
+    setInv(g.inv); commit(r.state)
+    hudSay(`${itemDef(r.id).name} back in your bag`, 'item')
+  }
+  act.current.look = () => {
+    if (!ownRef.current) { hudSay('Not yours. This shipyard is for sale.', 'info'); return }
+    const s = setPalette(deedRef.current, deedRef.current.palette + 1); commit(s)
+    hudSay(`Yard: ${paletteOf(s).name}`, 'info')
+  }
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | null = null, turned = false, armed = false
+    const tick = () => { turned = true; act.current.turn(); t = setTimeout(tick, HOLD_MS) }
+    const down = (e: KeyboardEvent) => {
+      if (e.code === 'DeedTurn') { if (aim.current.inYard) act.current.turn(); return }
+      if (e.code !== 'KeyE' || e.repeat || !enabledRef.current) return
+      const a = aim.current
+      if (a.atBoard) { act.current.look(); return }
+      if (!a.inYard || !ownRef.current) return
+      const id = heldRef.current
+      if (id && isPiece(id)) { armed = true; turned = false; t = setTimeout(tick, HOLD_MS); return }
+      act.current.pick()
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyE' || !armed) return
+      armed = false; if (t) { clearTimeout(t); t = null }
+      if (!turned) act.current.place()
+    }
+    window.addEventListener('keydown', down); window.addEventListener('keyup', up)
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); if (t) clearTimeout(t) }
+  }, [])
+
+  // probe for scripted checks (scripts/shipyard-plot-check.mts)
+  useEffect(() => {
+    const probe: Probe = {
+      key: () => site.key, own: () => ownRef.current, plot: () => ({ frame: f, floor, ramp: L.ramp, slip: L.slip, tier: L.tier, wet: L.wet }),
+      pieces: () => L.pieces.map(p => ({ kind: p.kind, lx: p.lx, lz: p.lz, w: p.w, d: p.d })), board: () => board,
+      state: () => deedRef.current, aim: () => ({ ...aim.current, rot: rot.current }),
+      stored: () => { try { return localStorage.getItem(gardenKey(store)) } catch { return null } },
+      blocked: (cx: number, cz: number) => blocked(cx, cz),
+    }
+    const w = window as unknown as ProbeWin
+    w.__shipyards = Object.assign(w.__shipyards ?? {}, { [site.key]: probe })
+    return () => { if (w.__shipyards?.[site.key] === probe) delete w.__shipyards[site.key] }
+  }, [site.key, f, floor, L, board, store, blocked])
+
+  // per frame: the aim, the ghost, the local grid, the phone pill
+  const ghost = useRef<THREE.Group>(null), ghostMat = useRef<THREE.MeshBasicMaterial>(null), grid = useRef<THREE.Group>(null)
+  const last = useRef('')
+  useFrame(() => {
+    const me = focus.current, tr = track.current; if (!me || !tr) return
+    const l = plotToLocal(f, me.x, me.z)
+    const inYard = Math.abs(l.lx) < H + 0.3 && Math.abs(l.lz) < H + 0.3 && Math.abs(me.y - floor) < 2.5
+    const atBoard = Math.hypot(me.x - board.x, me.z - board.z) < BOARD_REACH
+    const ax = me.x - Math.sin(tr.yaw) * AIM, az = me.z - Math.cos(tr.yaw) * AIM, al = plotToLocal(f, ax, az)
+    const cell = inYard ? cellAtLocal(KIND, al.lx, al.lz) : null
+    aim.current = { inYard, atBoard, cell }
+    const id = heldRef.current, holding = !!id && isPiece(id) && ownRef.current
+    if (grid.current) {
+      grid.current.visible = holding && !!cell
+      if (cell) { const o = plotToWorld(f, cell.cx - 6 - H, cell.cz - 6 - H); grid.current.position.set(o.x, floor + 0.03, o.z) }
+    }
+    if (ghost.current) {
+      ghost.current.visible = holding && !!cell && enabledRef.current
+      if (ghost.current.visible && cell && id) {
+        const fp = fpOf(id)!, c = pieceCentre(KIND, fp, cell.cx, cell.cz, rot.current), w = plotToWorld(f, c.lx, c.lz), odd = rot.current % 2 === 1
+        ghost.current.position.set(w.x, floor + 0.02, w.z); ghost.current.rotation.y = plotRotY(f)
+        ghost.current.scale.set(Math.max(1, Math.ceil((odd ? fp.d : fp.w) - 1e-6)), 1, Math.max(1, Math.ceil((odd ? fp.w : fp.d) - 1e-6)))
+        if (ghostMat.current) ghostMat.current.color.set(placeRefusal(deedRef.current, KIND, fpOf, id, cell.cx, cell.cz, rot.current, -1, blocked) ? '#e0604a' : '#7fe0a0')
+      }
+    }
+    const action: DeedYardState['action'] = !enabledRef.current ? null : atBoard ? (ownRef.current ? 'look' : null) : !inYard || !ownRef.current ? null
+      : holding ? (cell ? 'place' : null) : cell && itemAt(deedRef.current, fpOf, cell.cx, cell.cz) >= 0 ? 'pick up' : null
+    const key = `${inYard}|${atBoard}|${action}`
+    if (key !== last.current) { last.current = key; onReport({ inYard, atBoard, action }) }
+  })
+
+  if (!R) return null
+  const pal = paletteOf(deed), ry = plotRotY(f)
+  return (
+    <group>
+      <Terrace L={L} />
+      <Fence L={L} color={pal.color} accent={pal.accent} shut={!own} />
+      <Landing L={L} />
+      {L.slip && <Slip L={L} />}
+      {L.pieces.map((p, k) => <Piece key={k} L={L} p={p} color={pal.color} accent={pal.accent} />)}
+      <group ref={grid} visible={false} rotation={[0, ry, 0]}><GridLines /></group>
+      <group ref={ghost} visible={false}>
+        <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[0.96, 0.96]} /><meshBasicMaterial ref={ghostMat} color="#7fe0a0" transparent opacity={0.45} depthWrite={false} /></mesh>
+      </group>
+      {deed.items.map((p, k) => {
+        const fp = fpOf(p.id); if (!fp) return null
+        const c = pieceCentre(KIND, fp, p.cx, p.cz, p.rot), w = plotToWorld(f, c.lx, c.lz)
+        return <group key={`${k}:${p.id}:${p.cx}:${p.cz}`} position={[w.x, floor, w.z]} rotation={[0, ry - p.rot * Math.PI / 2, 0]}><PieceBody item={p.id} /></group>
+      })}
+    </group>
+  )
+}
+
+// ── the built parts (blockout) ──
+const EARTH = '#8a7350', STONE = '#7b746a', DECK = '#7a5a3a', DECK_DK = '#5a4028', PAD = '#c9bfa8', PAD_RING = '#e8d27a', ROOF = '#5b3b2e', IRON = '#3f3a36'
+
+/** the levelled floor: a terrace at the floor, its sides the retaining walls down to the lowest ground (+ 1 m into it) */
+function Terrace({ L }: { L: PlotLayout }) {
+  const h = L.floor - L.base + 1, mats = useMemo(() => { const side = new THREE.MeshLambertMaterial({ color: STONE }), top = new THREE.MeshLambertMaterial({ color: EARTH }); return [side, side, top, side, side, side] }, [])
+  return <mesh position={[L.frame.x, L.floor - h / 2, L.frame.z]} rotation={[0, plotRotY(L.frame), 0]} material={mats}><boxGeometry args={[PLOT, h, PLOT]} /></mesh>
+}
+
+/** many boxes of one colour as ONE instanced mesh: [lx, lz, y (bottom), w, h, d, turned quarter?] in plot-local metres */
+function Boxes({ L, items, color }: { L: PlotLayout; items: [number, number, number, number, number, number, boolean?][]; color: string }) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  useEffect(() => {
+    const m = ref.current; if (!m) return
+    const o = new THREE.Object3D(), ry = plotRotY(L.frame)
+    items.forEach(([lx, lz, y, w, h, d, q], i) => { const p = plotToWorld(L.frame, lx, lz); o.position.set(p.x, y + h / 2, p.z); o.rotation.set(0, ry + (q ? Math.PI / 2 : 0), 0); o.scale.set(w, h, d); o.updateMatrix(); m.setMatrixAt(i, o.matrix) })
+    m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere()
+  }, [L, items])
+  return <instancedMesh ref={ref} args={[undefined, undefined, items.length]} frustumCulled={false}><boxGeometry args={[1, 1, 1]} /><meshLambertMaterial color={color} /></instancedMesh>
+}
+
+function Fence({ L, color, accent, shut }: { L: PlotLayout; color: string; accent: string; shut: boolean }) {
+  const { posts, rails } = useMemo(() => {
+    const posts: [number, number, number, number, number, number][] = [], rails: [number, number, number, number, number, number, boolean?][] = []
+    const y = L.floor, g = PLOT_GATE_W / 2, sl = L.slip
+    const gapAt = (edge: 'f' | 'b', u: number) => !shut && (edge === 'f' ? Math.abs(u) < g : !!sl && Math.abs(u - sl.lx) < SLIP_W / 2)
+    for (let u = -H; u < H; u += 5) for (const [edge, v] of [['f', -H], ['b', H]] as const) {
+      if (!gapAt(edge, u)) posts.push([u, v, y, 0.16, 1.4, 0.16])
+      // a rail panel to the next post unless the panel crosses a gap
+      const a = u, b = Math.min(u + 5, H)
+      const cut = (edge === 'f' ? [-g, g] : sl ? [sl.lx - SLIP_W / 2, sl.lx + SLIP_W / 2] : null)
+      const segs: [number, number][] = !shut && cut && b > cut[0] && a < cut[1] ? [[a, Math.max(a, cut[0])], [Math.min(b, cut[1]), b]] : [[a, b]]
+      for (const [s0, s1] of segs) if (s1 - s0 > 0.05) for (const hh of [0.5, 1.1]) rails.push([(s0 + s1) / 2, v, y + hh - 0.04, s1 - s0, 0.08, 0.07])
+    }
+    for (let v = -H; v < H; v += 5) for (const u of [-H, H]) {
+      posts.push([u, v, y, 0.16, 1.4, 0.16])
+      for (const hh of [0.5, 1.1]) rails.push([u, v + 2.5, y + hh - 0.04, 5, 0.08, 0.07, true])
+    }
+    posts.push([H, H, y, 0.16, 1.4, 0.16])
+    if (!shut) for (const s of [-g, g]) posts.push([s, -H, y, 0.3, 2.2, 0.3])   // gateposts
+    return { posts, rails }
+  }, [L, shut])
+  return <><Boxes L={L} items={posts} color={color} /><Boxes L={L} items={rails} color={accent} /></>
+}
+
+/** the gate's landing strip outside the front fence, and the ramp down along it; a rail on its drop side */
+function Landing({ L }: { L: PlotLayout }) {
+  const f = L.frame, g = PLOT_GATE_W / 2, zc = -H - LANDING_D / 2, ry = plotRotY(f)
+  const flat = plotToWorld(f, 0, zc)
+  const slope = useMemo(() => {
+    if (L.ramp.L < 0.05) return null
+    const dy = L.ramp.L * RAMP_RISE, len = Math.hypot(L.ramp.L, dy), m = plotToWorld(f, g + L.ramp.L / 2, zc)
+    return { m, len, e: new THREE.Euler(0, ry, -Math.atan2(dy, L.ramp.L), 'YZX'), dy }
+  }, [L, f, g, zc, ry])
+  const rail = useMemo(() => [[(-g + g + L.ramp.L) / 2, -H - LANDING_D, L.floor - L.ramp.L * RAMP_RISE / 2 - 0.2, PLOT_GATE_W + L.ramp.L, 1.2, 0.1]] as [number, number, number, number, number, number][], [L, g])
+  return (
+    <group>
+      <mesh position={[flat.x, L.floor - 0.08, flat.z]} rotation={[0, ry, 0]}><boxGeometry args={[PLOT_GATE_W, 0.16, LANDING_D]} /><meshLambertMaterial color={DECK} /></mesh>
+      {slope && <mesh position={[slope.m.x, L.floor - slope.dy / 2 - 0.08, slope.m.z]} rotation={slope.e}><boxGeometry args={[slope.len, 0.16, LANDING_D]} /><meshLambertMaterial color={DECK} /></mesh>}
+      <Boxes L={L} items={rail} color={DECK_DK} />
+    </group>
+  )
+}
+
+/** the slipway: from the back edge down into the water (berth plots) */
+function Slip({ L }: { L: PlotLayout }) {
+  const s = L.slip!, f = L.frame, ry = plotRotY(f), dy = s.L * RAMP_RISE, len = Math.hypot(s.L, dy), m = plotToWorld(f, s.lx, H + s.L / 2)
+  return <mesh position={[m.x, L.floor - dy / 2 - 0.1, m.z]} rotation={new THREE.Euler(0, ry - Math.PI / 2, -Math.atan2(dy, s.L), 'YZX')}><boxGeometry args={[len, 0.2, SLIP_W]} /><meshLambertMaterial color={STONE} /></mesh>
+}
+
+function Piece({ L, p, color, accent }: { L: PlotLayout; p: PlotPiece; color: string; accent: string }) {
+  const f = L.frame, w = plotToWorld(f, p.lx, p.lz), ry = plotRotY(f), y = L.floor
+  if (p.kind === 'home') return (
+    <group position={[w.x, y, w.z]} rotation={[0, ry, 0]}>
+      <mesh position={[0, p.h / 2, 0]}><boxGeometry args={[p.w, p.h, p.d]} /><meshLambertMaterial color="#b9a98c" /></mesh>
+      <mesh position={[0, p.h + 1.4, 0]} rotation={[0, Math.PI / 4, 0]} scale={[p.w / Math.SQRT2 / 1, 1, p.d / Math.SQRT2]}><coneGeometry args={[1.05, 2.8, 4]} /><meshLambertMaterial color={ROOF} /></mesh>
+      {/* the door faces the plot's middle (+x), trimmed in the yard's combo */}
+      <mesh position={[p.w / 2 + 0.03, 1.1, 0]}><boxGeometry args={[0.06, 2.2, 1.2]} /><meshLambertMaterial color={accent} /></mesh>
+      {[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, c], k) => <mesh key={k} position={[a * (p.w / 2 + 0.05), p.h / 2, c * (p.d / 2 + 0.05)]}><boxGeometry args={[0.24, p.h, 0.24]} /><meshLambertMaterial color={color} /></mesh>)}
+    </group>
+  )
+  if (p.kind === 'garage') return <mesh position={[w.x, y + p.h / 2, w.z]} rotation={[0, ry, 0]}><boxGeometry args={[p.w, p.h, p.d]} /><meshLambertMaterial color="#8f877a" /></mesh>
+  if (p.kind === 'bay') return <mesh position={[w.x, y + p.h / 2, w.z]} rotation={[0, ry, 0]}><boxGeometry args={[p.w, p.h, p.d]} /><meshLambertMaterial color={accent} /></mesh>
+  if (p.kind === 'pad') return (
+    <group position={[w.x, y, w.z]} rotation={[0, ry, 0]}>
+      <mesh position={[0, p.h / 2, 0]}><boxGeometry args={[p.w, p.h, p.d]} /><meshLambertMaterial color={PAD} /></mesh>
+      <mesh position={[0, p.h + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[p.w * 0.32, p.w * 0.36, 48]} /><meshBasicMaterial color={PAD_RING} /></mesh>
+    </group>
+  )
+  if (p.kind === 'mast') return <mesh position={[w.x, y + p.h / 2, w.z]}><cylinderGeometry args={[0.25, 0.4, p.h, 8]} /><meshLambertMaterial color={IRON} /></mesh>
+  if (p.kind === 'post' || p.kind === 'bollard') return <mesh position={[w.x, y + p.h / 2, w.z]}><cylinderGeometry args={[p.w / 2, p.w / 2, p.h, 8]} /><meshLambertMaterial color={IRON} /></mesh>
+  if (p.kind === 'board') return (
+    <group position={[w.x, y, w.z]} rotation={[0, ry, 0]}>
+      <mesh position={[0, 0.7, 0]}><boxGeometry args={[0.12, 1.4, 0.12]} /><meshLambertMaterial color={color} /></mesh>
+      <mesh position={[0, 1.35, 0]}><boxGeometry args={[0.9, 0.5, 0.06]} /><meshLambertMaterial color={accent} /></mesh>
+      {DEED_PALETTES.map((q, k) => <mesh key={k} position={[-0.3 + k * 0.2, 1.35, q.color === color ? 0.06 : 0.035]}><boxGeometry args={[0.14, 0.2, 0.02]} /><meshLambertMaterial color={q.color} /></mesh>)}
+    </group>
+  )
+  return null
+}
+
+/** a 12 x 12 cell grid (unit cells from the group's origin), shown around the aimed cell while a piece is in hand */
+function GridLines() {
+  const geo = useMemo(() => {
+    const pts: number[] = []
+    for (let i = 0; i <= 12; i++) { pts.push(i, 0, 0, i, 0, 12); pts.push(0, 0, i, 12, 0, i) }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); return g
+  }, [])
+  return <lineSegments geometry={geo}><lineBasicMaterial color="#f3e6c4" transparent opacity={0.5} depthWrite={false} /></lineSegments>
+}

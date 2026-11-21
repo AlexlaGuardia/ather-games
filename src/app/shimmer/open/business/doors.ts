@@ -10,7 +10,6 @@ import { shopDoorPoint } from '../towns/shop-door'
 import { marketFor, type Offer } from './market'
 import { SEATS, type Seat } from './letters'
 import { makeOfTown } from './courser-lot'
-import { yardBeside } from './deed-yard-site'
 
 export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple' | 'smokehouse' | 'shipyard' | 'trade-co' | 'gunshop' | 'courseryard' | 'courserlot' | 'corkhouse'
 export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: string }> = {
@@ -45,12 +44,6 @@ export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: 
   // No door line yet (none is signed). Buys: business/corkhouse.ts.
   corkhouse: { name: 'The Corkhouse', kind: 'corkhouse' },
 }
-
-/** M49 s3: the towns where a keeper can BUY a shipyard (business/shipyards.ts prices them). Kael's stays Rune Hold's. */
-export const BOUGHT_SHIPYARD_TOWNS = ['gale-haven', 'veradyn', 'citadel'] as const
-export type BoughtShipyardTown = typeof BOUGHT_SHIPYARD_TOWNS[number]
-/** placeholder door name for a bought shipyard (no line, no keeper: lark/Magii later) */
-export const BOUGHT_SHIPYARD_NAME = 'The shipyard'
 
 /** a door you can E: a market lot (key = lot id → the deed card) or a canon storefront (key = `front:<id>` → its panel) */
 export interface Door { key: string; b: Building; name: string; at: { x: number; y: number; z: number }; offer?: Offer }
@@ -133,27 +126,6 @@ function doorsOf(R: Region, townId: string): Door[] {
     if (ge && free.length) {
       const b = free.sort((p, q) => Math.hypot(p.x - ge.x, p.z - ge.z) - Math.hypot(q.x - ge.x, q.z - ge.z))[0]
       out.push({ key: 'front:trade-co', b, name: FRONT_SHOPS['trade-co'].name, at: shopDoorPoint(b) })
-    }
-  }
-  // THE BOUGHT SHIPYARDS (M49 s3, canon ather-rework §2 amended 11-20: keepers buy shipyards in different places, each its own
-  // price; lots are Jin's): one in each city, on the town's OUTSKIRTS, computed LAST so no other door moves. Of the free plain
-  // buildings, farthest from the heart first, the first whose yard (deed-yard-site.ts) lies clear of houses and lanes; if none
-  // does, the farthest (its yard reports clear: false and the check says so). Placeholder name until lark/Magii.
-  if (i >= 0 && (BOUGHT_SHIPYARD_TOWNS as readonly string[]).includes(townId)) {
-    const plan = cachedPlan(R, i), taken = new Set(out.map(d => d.b))
-    const at = plan.temple ?? { x: R.meta.places[i].x, z: R.meta.places[i].z }
-    const free = plan.buildings.filter(x => !x.front && !taken.has(x)).sort((p, q) => Math.hypot(q.x - at.x, q.z - at.z) - Math.hypot(p.x - at.x, p.z - at.z))
-    const b = free.slice(0, 12).find(x => yardBeside(R, i, x, 'shipyard', shopDoorPoint(x)).clear) ?? free[0]
-    if (b) out.push({ key: `front:shipyard:${townId}`, b, name: BOUGHT_SHIPYARD_NAME, at: shopDoorPoint(b) })
-  }
-  // THE CORKHOUSE: Rune Hold, BY THE SHIPYARD (canon): the free plain building nearest Kael's yard, computed AFTER every other door
-  // so none of them moves. Jin's placement; Alex can pick another.
-  if (i >= 0 && townId === 'rune-hold') {
-    const plan = cachedPlan(R, i), taken = new Set(out.map(d => d.b)), yard = out.find(d => d.key === 'front:shipyard')
-    const free = plan.buildings.filter(x => !x.front && !taken.has(x))
-    if (yard && free.length) {
-      const b = free.sort((p, q) => Math.hypot(p.x - yard.b.x, p.z - yard.b.z) - Math.hypot(q.x - yard.b.x, q.z - yard.b.z))[0]
-      out.push({ key: 'front:corkhouse', b, name: FRONT_SHOPS.corkhouse.name, at: shopDoorPoint(b) })
     }
   }
   return out
