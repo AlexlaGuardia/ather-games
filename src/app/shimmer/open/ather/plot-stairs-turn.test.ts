@@ -1,6 +1,6 @@
 // plot-stairs-turn.test (BETA M56 leftover, 11-21): a stair that turns a quarter at a landing half way up.
 // npx tsx src/app/shimmer/open/ather/plot-stairs-turn.test.ts
-import { STEPS, FLIGHT, RISE, WIDTH, LANDING_COST, stairCells, stairBoxes, toggleStair, adoptStairs, stairCellSet, stairNeeds, holeRails, arrivalDir, treads, type Stairs, type Dir, type Turn } from './plot-stairs'
+import { STEPS, FLIGHT, RISE, WIDTH, LANDING_COST, landingRails, stairCells, stairBoxes, toggleStair, adoptStairs, stairCellSet, stairNeeds, holeRails, arrivalDir, treads, type Stairs, type Dir, type Turn } from './plot-stairs'
 import { STOREY, withLevel, upperBoxes, floating, stairRails, type Stacked } from './plot-floors'
 import { findRooms, type Walls } from './plot-walls'
 import { terrainWorld } from '../terrain-world'
@@ -30,6 +30,11 @@ for (const d of [0, 1, 2, 3] as Dir[]) for (const t of ['l', 'r'] as Turn[]) {
   if (d === 0) ok(ad === (t === 'r' ? 1 : 3), `dir 0 ${t}: arrives ${t === 'r' ? 'east' : 'west'}`)
 }
 { const tr = treads({}); ok(tr.length === STEPS && tr.every((t, n) => t.top === n + 1 && t.b0 === 0 && t.b1 === WIDTH), 'a straight stair is unchanged: 12 rising treads') }
+for (const d of [0, 1, 2, 3] as Dir[]) for (const t of ['l', 'r'] as Turn[]) {
+  const cs = new Set(stairCells(5, 5, d, t).map(c => c.join())), rb = landingRails('5,5', { mat: 'goldwood', dir: d, turn: t }, 2)
+  ok(rb.length === FLIGHT + 2 && rb.every(b => { for (let x = Math.floor(b.x0 + 1e-6); x < b.x1 - 1e-6; x++) for (let z = Math.floor(b.z0 + 1e-6); z < b.z1 - 1e-6; z++) if (!cs.has(`${x},${z}`)) return false; return true }), `dir ${d} ${t}: the landing rails stand inside the stair's own cells (${rb.length})`)
+}
+ok(landingRails('5,5', { mat: 'goldwood', dir: 0 }, 2).length === 0, 'a straight stair has no landing rails')
 ok(stairCells(5, 5, 0).length === 12 && stairCells(5, 5, 0, undefined).join() === stairCells(5, 5, 0).join(), 'no turn = the straight footprint')
 
 // toggle + cost + adopt
@@ -77,8 +82,10 @@ const st: Stairs = { '1,7': { mat: 'goldwood', dir: 0, turn: 'r' } }   // flight
   const world = terrainWorld({ ground: () => 0, solids: () => bx, water: () => [] })
   const lc = createLoco(2, 0, 7.6)
   for (let t = 0; t < 60; t++) tickLocomotion(lc, input(), world)
-  for (let t = 0; t < 60 * 4 && lc.pz > 4.7; t++) tickLocomotion(lc, input({ mvX: 0, mvZ: -1, fwdX: 0, fwdZ: -1 }), world)
-  for (let t = 0; t < 40; t++) tickLocomotion(lc, input(), world)   // stop on the landing (a keeper lets go of forward, then turns)
+  // hold forward PAST the landing: the keeper overshoots into the far rail (measured on prod 11-21: without the rail it stopped on the
+  // lip and could not step up onto the turned flight), then turns
+  for (let t = 0; t < 60 * 4; t++) tickLocomotion(lc, input({ mvX: 0, mvZ: -1, fwdX: 0, fwdZ: -1 }), world)
+  ok(lc.pz > 3 + 0.25 + 0.25, `the far rail stops a keeper who overshoots the landing (z ${lc.pz.toFixed(2)}, the landing's far edge at 3)`)
   ok(Math.abs(lc.py - FLIGHT * RISE) < 0.3, `the keeper reaches the landing (feet ${lc.py.toFixed(2)}, landing ${(FLIGHT * RISE).toFixed(2)}) at z ${lc.pz.toFixed(2)}`)
   for (let t = 0; t < 60 * 6; t++) tickLocomotion(lc, input({ mvX: 1, mvZ: 0, fwdX: 1, fwdZ: 0, rightX: 0, rightZ: 1 }), world)
   ok(lc.py > STOREY - 0.3 && lc.px > 6, `turns and walks up to the floor above (feet ${lc.py.toFixed(2)}, storey ${STOREY}) at x ${lc.px.toFixed(2)}`)

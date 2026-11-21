@@ -136,10 +136,11 @@ try {
   await shot('leftovers-2-farm-inside')
   // 3b. climb: foot of the stair facing north to the landing, turn right in place, climb to floor 2
   await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, 0, y), SI + 1, SJ + 0.6, g0 + 0.6); await sleep(1500)
-  const base = (await st()).y
-  await holdW(async () => (await st()).z < SJ - 3.3, 15000)
+  const base = g0 + 0.6   // the house floor (the keeper was set down on a step)
+  await holdW(async () => false, 6000)   // hold W PAST the landing: an overshoot into the far guard rail, then turn
+
   const la = await st()
-  ok(Math.abs(la.y - base - STOREY / 2) < 0.3, `3b. the keeper climbs the first flight to the landing (feet +${(la.y - base).toFixed(2)} over the floor, half a storey ${(STOREY / 2).toFixed(2)})`)
+  ok(Math.abs(la.y - base - STOREY / 2) < 0.3, `3b. the keeper climbs the first flight to the landing (feet +${(la.y - base).toFixed(2)} over the floor, half a storey ${(STOREY / 2).toFixed(2)}; held against the far rail at z ${la.z.toFixed(2)}, edge ${SJ - 4})`)
   await sleep(600)
   await p.evaluate(() => { const a = (window as any).__ather.state(); (window as any).__ather.tp(a.px, a.pz, -Math.PI / 2, a.py) }); await sleep(500)
   await holdW(async () => (await st()).y > base + STOREY - 0.3, 15000)

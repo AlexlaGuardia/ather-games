@@ -39,7 +39,7 @@ import { shaftKeys, shaftHoles, liveLift, cellMid, shaftBlockers, SHAFT_WHY, isL
 import { LiftMesh, LiftInput } from './lift-view'
 import { levelOf, withLevel, levelCount, levelBase, canStack, floating, upperBoxes, stairRails, MAX_LEVELS, SLAB_T, type LiftLookup } from './plot-floors'
 import { floorAt, liftOf, setHouseFound, houseFoundDelta, plinthBoxes, doorSteps, roomLift, FOUND_OPTS, FOUND_NAME, type FoundH, type Lift } from './plot-found'
-import { stairBoxes, stairCellSet, toggleStair, dirOfYaw, type Stairs, type Turn } from './plot-stairs'
+import { stairBoxes, landingRails, stairCellSet, toggleStair, dirOfYaw, type Stairs, type Turn } from './plot-stairs'
 import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported, builtDeckCells, DECK_T, type Decks } from './plot-decks'
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, ALC_LIVE, type Job } from './furniture'
@@ -634,7 +634,7 @@ function useAimHouse(w: Works) {
 function DrawnStairs({ stairs, lift }: { stairs: Stairs; lift?: LiftLookup }) {
   return (
     <>
-      {Object.entries(stairs).map(([k, st]) => { const [si, sj] = k.split(',').map(Number), up = lift?.cell(si, sj) ?? 0; return stairBoxes(k, st, GROUND_Y + up).map((b, n) => {
+      {Object.entries(stairs).map(([k, st]) => { const [si, sj] = k.split(',').map(Number), up = lift?.cell(si, sj) ?? 0; return [...stairBoxes(k, st, GROUND_Y + up), ...landingRails(k, st, GROUND_Y + up)].map((b, n) => {   // M56: a turned stair's guard rails draw as the same blocks
         const y0 = GROUND_Y + up, h = b.y1 - y0   // each step a block from the floor to its tread (a solid stair, no gaps under it)
         return (
           <mesh key={k + n} data-stair={k} position={[(b.x0 + b.x1) / 2, y0 + h / 2 + (st.draft ? 0.01 : 0), (b.z0 + b.z1) / 2]} castShadow receiveShadow>

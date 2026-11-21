@@ -70,6 +70,23 @@ export function stairBoxes(k: string, s: Stair, base: number): Box[] {
     return { x0: Math.min(xa, xb), x1: Math.max(xa, xb), z0: Math.min(za, zb), z1: Math.max(za, zb), y0: base - 0.5, y1: base + t.top * RISE }
   })
 }
+/** a turned stair's GUARD (M56 landing turn): the landing stands half a storey up with open sides, so a rail runs along the
+ *  landing's far edge (on along the turned flight's far side) and along its side away from the turn; RAIL_T thick, inside the
+ *  stair's cells, RAIL_UP above the tread it runs beside. It also keeps a keeper who overshoots the landing off its edge (the
+ *  walker cannot step up from the very lip, measured 11-21). Straight stairs: none. */
+export const RAIL_T = 0.25, RAIL_UP = 1   // 0.25: a keeper pressed against it (BODY_R 0.3) stands 0.55 m in, past the 0.5 m by the slab edge where the turned flight's headroom pinches (measured: 3.4 stuck, 3.5 climbs)
+export function landingRails(k: string, s: Stair, base: number): Box[] {
+  if (!s.turn) return []
+  const p = parseStair(k)!, tr = treads(s), la = FLIGHT * TREAD, far = la + WIDTH, out: Box[] = []
+  const seg = (a0: number, a1: number, b0: number, b1: number, top: number) => {
+    const [xa, za] = toW(p.i, p.j, s.dir, a0, b0), [xb, zb] = toW(p.i, p.j, s.dir, a1, b1)
+    out.push({ x0: Math.min(xa, xb), x1: Math.max(xa, xb), z0: Math.min(za, zb), z1: Math.max(za, zb), y0: base - 0.5, y1: base + top * RISE + RAIL_UP })
+  }
+  for (const t of tr.slice(FLIGHT)) seg(far - RAIL_T, far, t.b0, t.b1, t.top)                        // the far edge: the landing, then each turned step
+  const side = s.turn === 'r' ? [0, RAIL_T] : [WIDTH - RAIL_T, WIDTH]                                // the landing's side away from the turn
+  seg(la, far - RAIL_T, side[0], side[1], FLIGHT)
+  return out
+}
 export function adoptStairs(v: unknown): Stairs {
   const out: Record<string, Stair> = {}
   if (v && typeof v === 'object') for (const [k, s] of Object.entries(v as Record<string, unknown>)) {

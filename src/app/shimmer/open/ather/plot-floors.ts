@@ -7,7 +7,7 @@
 import type { Box } from '../terrain-world'
 import { WALL_H, DOOR_H, RAIL_H, edgeRect, findRooms, parseKey, adoptWalls, adoptFloors, adoptPaid, type Walls, type WallMat, type Floors, type Paid, type Rect } from './plot-walls'
 import { adoptCols, colBoxes, colStandsOn, type Cols } from './plot-cols'
-import { adoptStairs, stairBoxes, stairCellSet, stairStandsOn, holeRails, type Stairs } from './plot-stairs'
+import { adoptStairs, stairBoxes, landingRails, stairCellSet, stairStandsOn, holeRails, type Stairs } from './plot-stairs'
 import { adoptDecks, deckBoxes, deckFloating, builtDeckCells, type Decks } from './plot-decks'
 
 export const SLAB_T = 0.2, STOREY = WALL_H + SLAB_T, MAX_LEVELS = 3
@@ -93,7 +93,7 @@ export function upperBoxes(w: Stacked, groundY: number, shaft?: ReadonlySet<stri
     out.push(...deckBoxes(lv[k].decks, base, false, lift ? C : undefined))   // M56 (a): balconies
   }
   // M56: every level's built stairs are solid steps from that level's floor (level 0's from the ground)
-  for (let k = 0; k < lv.length; k++) { const base = groundY + levelBase(k); for (const [key, st] of Object.entries(lv[k].stairs ?? {})) if (!st.draft) { const [i, j] = key.split(',').map(Number); out.push(...stairBoxes(key, st, base + C(i, j))) } }
+  for (let k = 0; k < lv.length; k++) { const base = groundY + levelBase(k); for (const [key, st] of Object.entries(lv[k].stairs ?? {})) if (!st.draft) { const [i, j] = key.split(',').map(Number); out.push(...stairBoxes(key, st, base + C(i, j)), ...landingRails(key, st, base + C(i, j))) } }
   return out
 }
 
