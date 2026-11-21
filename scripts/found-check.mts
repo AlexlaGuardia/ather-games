@@ -110,7 +110,7 @@ try {
   await tap('[data-tool="walls"]'); await sleep(400)
   await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), spot.x, spot.z)   // slice 2: the picker acts on the house in view
   await poll(() => p.evaluate(() => (document.querySelector('[data-found="0.6"]') as HTMLButtonElement | null)?.getAttribute('aria-pressed') === 'true'), 15000)
-  ok(await tap('[data-found="1.2"]') && await poll(async () => (await found()) === 1.2 && (await bricks()) === 40 - 32),   // the bag saves a beat after the works: poll both `3. High pays 16 more (${40 - (await bricks())} spent)`)
+  ok(await tap('[data-found="1.2"]') && await poll(async () => (await found()) === 1.2 && (await bricks()) === 40 - 32), `3. High pays 16 more (${40 - (await bricks())} spent)`)
   ok(await tap('[data-found="0"]') && await poll(async () => (await found()) === 0 && (await bricks()) === 40), `   None gives every brick back (${await bricks()})`)
   await tap('[data-found="0.6"]'); await poll(async () => (await found()) === 0.6)
   // 4. reload keeps it
