@@ -72,7 +72,7 @@ const st: Stairs = { '1,7': { mat: 'goldwood', dir: 0, turn: 'r' } }   // flight
   const house: Stacked = withLevel(withLevel({}, 0, { walls: room, paid: { [paidKey]: 80 }, stairs: st }), 1, { walls: room, paid: { [paidKey]: 80 } })
   const bx = upperBoxes(house, 0)
   const holes = stairCellSet(st), slabs = bx.filter(b => Math.abs(b.y1 - STOREY) < 1e-9 && b.x1 - b.x0 === 1 && b.z1 - b.z0 === 1)
-  ok(holes.size === 16 && slabs.length === 80 - 16 && slabs.every(b => !holes.has(`${b.x0},${b.z0}`)), `the slab above is open over the whole L (${slabs.length} slab cells, ${holes.size} open)`)
+  ok(holes.size === 19 && slabs.length === 80 - 19 && ['3,5', '4,5', '5,5'].every(c => holes.has(c)) && slabs.every(b => !holes.has(`${b.x0},${b.z0}`)), `the slab above is open over the whole L + a headroom row along the turned flight's near side (${slabs.length} slab cells, ${holes.size} open)`)
   ok(floating(house).length === 0, 'the house stands')
   // the railing round the hole leaves the arrival end open: the edges east of the top step (x 6, rows 3..4)
   const rails = holeRails(st, new Set(slabs.map(b => `${b.x0},${b.z0}`)), {}).map(r => r.key)
@@ -90,6 +90,16 @@ const st: Stairs = { '1,7': { mat: 'goldwood', dir: 0, turn: 'r' } }   // flight
   ok(Math.abs(lc.py - FLIGHT * RISE) < 0.3, `the keeper reaches the landing (feet ${lc.py.toFixed(2)}, landing ${(FLIGHT * RISE).toFixed(2)}) at z ${lc.pz.toFixed(2)}`)
   for (let t = 0; t < 60 * 6; t++) tickLocomotion(lc, input({ mvX: 1, mvZ: 0, fwdX: 1, fwdZ: 0, rightX: 0, rightZ: 1 }), world)
   ok(lc.py > STOREY - 0.3 && lc.px > 6, `turns and walks up to the floor above (feet ${lc.py.toFixed(2)}, storey ${STOREY}) at x ${lc.px.toFixed(2)}`)
+  // anywhere across the landing (prod 11-21: a keeper just off the first flight's top, on the NEAR side, could not step up): set down
+  // on it at each depth, turn right, climb
+  const stuck: string[] = []
+  for (let z = 3.55; z <= 4.96; z += 0.1) {
+    const k = createLoco(2, FLIGHT * RISE, z)
+    for (let t = 0; t < 30; t++) tickLocomotion(k, input(), world)
+    for (let t = 0; t < 60 * 6; t++) tickLocomotion(k, input({ mvX: 1, mvZ: 0, fwdX: 1, fwdZ: 0, rightX: 0, rightZ: 1 }), world)
+    if (!(k.py > STOREY - 0.3)) stuck.push(`z ${z.toFixed(2)}: feet ${k.py.toFixed(2)} x ${k.px.toFixed(2)}`)
+  }
+  ok(!stuck.length, `from anywhere across the landing a keeper turns right and climbs to the floor above${stuck.length ? ': stuck at ' + stuck.join('; ') : ''}`)
   // and back down: west to the landing, south to the ground
   for (let t = 0; t < 60 * 6 && lc.px > 2; t++) tickLocomotion(lc, input({ mvX: -1, mvZ: 0, fwdX: -1, fwdZ: 0, rightX: 0, rightZ: -1 }), world)
   for (let t = 0; t < 60 * 6; t++) tickLocomotion(lc, input({ mvX: 0, mvZ: 1, fwdX: 0, fwdZ: 1, rightX: -1, rightZ: 0 }), world)

@@ -98,7 +98,17 @@ export function adoptStairs(v: unknown): Stairs {
   return out
 }
 /** every cell any stair on this level covers ('i,j') */
-export const stairCellSet = (st: Stairs | undefined) => new Set(Object.entries(st ?? {}).flatMap(([k, s]) => { const p = parseStair(k)!; return stairCells(p.i, p.j, s.dir, s.turn).map(([a, b]) => `${a},${b}`) }))
+/** HEADROOM (M56 landing turn, prod 11-21): the turned flight climbs under the floor above from its first step (2.92 m: a head
+ *  reaches the slab), and a keeper who turns off the landing on its NEAR side (just off the first flight's top) walks along the slab
+ *  edge beside the turned flight and cannot step up (headroom pinches within 0.5 m of a slab edge). So the floor above opens one
+ *  more row along that side: these cells join the hole (slab open, railed upstairs) but carry no treads. Straight stairs: none. */
+export function headroomCells(i: number, j: number, dir: Dir, turn?: Turn): [number, number][] {
+  if (!turn) return []
+  const A = FLIGHT * TREAD - 1, Bs = turn === 'r' ? [WIDTH, WIDTH + 1, WIDTH + 2] : [-1, -2, -3]
+  return Bs.map(B => treadCells(i, j, dir, { a0: A, a1: A + 1, b0: B, b1: B + 1, top: 0 })[0])
+}
+/** every cell the hole above these stairs covers ('i,j'): each stair's footprint and its headroom */
+export const stairCellSet = (st: Stairs | undefined) => new Set(Object.entries(st ?? {}).flatMap(([k, s]) => { const p = parseStair(k)!; return [...stairCells(p.i, p.j, s.dir, s.turn), ...headroomCells(p.i, p.j, s.dir, s.turn)].map(([a, b]) => `${a},${b}`) }))
 
 export type StairChange = { ok: true; stairs: Stairs; said: string; refund?: { id: string; n: number } } | { ok: false; why: string }
 /** the Stairs tool's tap at cell (i, j): a tap on a stair's cells takes it away (a built one with its cost back); otherwise a
@@ -136,7 +146,7 @@ export function holeRails(st: Stairs | undefined, slab: ReadonlySet<string>, wal
     if (s.draft) continue
     const p = parseStair(k)!, [fx, fz] = F[arrivalDir(s)], cells = stairCells(p.i, p.j, s.dir, s.turn), tr = treads(s)
     const top = new Set(treadCells(p.i, p.j, s.dir, tr[tr.length - 1]).map(([a, b]) => `${a + fx},${b + fz}`))   // the cells the top step leads onto
-    for (const [a, b] of cells) for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    for (const [a, b] of [...cells, ...headroomCells(p.i, p.j, s.dir, s.turn)]) for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
       const n = `${a + di},${b + dj}`
       if (hole.has(n) || !slab.has(n) || (top.has(n) && di === fx && dj === fz)) continue
       const key = di ? `v,${a + Math.max(di, 0)},${b}` : `h,${a},${b + Math.max(dj, 0)}`
