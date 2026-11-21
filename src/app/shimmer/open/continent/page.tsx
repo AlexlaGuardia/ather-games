@@ -363,8 +363,10 @@ function Junctions({ R }: { R: Region }) {
   return (
     <>
       {parts.map(({ key, g, col, layer }) => (
-        <mesh key={key} geometry={g} renderOrder={groundOrder(layer)}>
-          <meshLambertMaterial color={col} side={THREE.DoubleSide} {...groundMat(layer, { factor: -3, units: -3 })} />
+        // with ribbons on, the pads MUST join the table too: a ribbon runs under the pad, and a pad still on its old offset
+        // fought it in shards (road-shot j7, 11-21)
+        <mesh key={key} geometry={g} renderOrder={groundOrder(layer, ROAD_RIBBONS || undefined)}>
+          <meshLambertMaterial color={col} side={THREE.DoubleSide} {...groundMat(layer, { factor: -3, units: -3 }, ROAD_RIBBONS || undefined)} />
         </mesh>
       ))}
     </>
