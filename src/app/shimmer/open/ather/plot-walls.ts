@@ -77,8 +77,9 @@ export function edgeEnds(k: string): [number, number][] {
   const e = parseKey(k)!; return e.o === 'h' ? [[e.i, e.j], [e.i + 1, e.j]] : [[e.i, e.j], [e.i, e.j + 1]]
 }
 /** solid boxes for the walker (y0 sits under the ground like a room's walls) */
-export const wallBoxes = (walls: Walls, groundY: number): Box[] =>
-  Object.entries(walls).filter(([, w]) => !w.draft).map(([k, w]) => { const r = edgeRect(k); return { ...r, y0: w.kind === 'door' ? groundY + DOOR_H : groundY - 0.5, y1: groundY + (w.kind === 'rail' ? RAIL_H : WALL_H) } })   // a door: only its lintel is solid; a railing stands RAIL_H
+/** `lift(k)` (M55 slice 2): extra height under piece k (its house's foundation); the solid still reaches down to the ground */
+export const wallBoxes = (walls: Walls, groundY: number, lift?: (k: string) => number): Box[] =>
+  Object.entries(walls).filter(([, w]) => !w.draft).map(([k, w]) => { const r = edgeRect(k), b = groundY + (lift?.(k) ?? 0); return { ...r, y0: w.kind === 'door' ? b + DOOR_H : groundY - 0.5, y1: b + (w.kind === 'rail' ? RAIL_H : WALL_H) } })   // a door: only its lintel is solid; a railing stands RAIL_H
 export const wallRects = (walls: Walls): Rect[] => Object.keys(walls).map(edgeRect)
 
 export type Verdict = { ok: true; add: string[]; cost: number } | { ok: false; why: string }

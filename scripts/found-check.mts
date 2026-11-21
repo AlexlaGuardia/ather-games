@@ -76,7 +76,8 @@ try {
   // settled = the lens has stopped moving (yaw home). Not 'aimed at the spot': since 57a58263 view() reports the REAL aim, which the
   // Paint lift shifts toward the camera, so an exact-position test never settles with Paint on.
   const settled = () => poll(async () => { const a = await view(); await sleep(500); const b = await view(); return Math.hypot(a.x - b.x, a.z - b.z) < 0.02 && Math.abs(a.yaw) < 0.01 && Math.abs(a.h - b.h) < 0.05 }, 60000)
-  const found = () => p.evaluate(() => JSON.parse(localStorage.getItem('open.works.v1') ?? '{}').found ?? 0)
+  // M55 slice 2: the house's own value (per cell), else the old plot-wide one
+  const found = () => p.evaluate((c: string) => { const w = JSON.parse(localStorage.getItem('open.works.v1') ?? '{}'); return w.foundCells?.[c] ?? w.found ?? 0 }, `${X0},${Z0}`)
   const bricks = () => p.evaluate(() => ((JSON.parse(localStorage.getItem('open.inv.v1') ?? '{}').slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, s) => t + (s?.id === 'stone_brick' ? s.n : 0), 0))
   await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500); await hideCard()
@@ -89,6 +90,7 @@ try {
   ok(await poll(() => p.evaluate(() => (window as any).__build?.on() === true)), 'E at the table, Plan: flying')
   await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), spot.x, spot.z)
   await tap('[data-tool="walls"]'); await sleep(400)
+  await poll(() => p.evaluate(() => !(document.querySelector('[data-found="0.6"]') as HTMLButtonElement | null)?.disabled), 15000)   // slice 2: the picker lights once the view is on a house
   ok(await tap('[data-found="0.6"]') && await poll(async () => (await found()) === 0.6), '1. Foundation: Low sets the house on 0.6 m')
   ok((await bricks()) === 40 - 16, `   it cost 16 Stone Brick for the 16 m² (${40 - (await bricks())})`)
   await shot('found-1-plan')

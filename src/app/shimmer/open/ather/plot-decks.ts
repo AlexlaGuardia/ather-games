@@ -95,8 +95,11 @@ export function deckNeeds(decks: Decks | undefined): { id: string; n: number }[]
 export const draftDecks = (d: Decks | undefined) => Object.values(d ?? {}).filter(x => x.draft).length
 export function standDecks(d: Decks | undefined): Decks { const out: Record<string, Deck> = {}; for (const [k, x] of Object.entries(d ?? {})) { const { draft: _d, ...rest } = x; void _d; out[k] = rest } return out }
 /** the walker's solids: one box per BUILT cell. Ground (`ground`): a patio from under the ground up DECK_T. Upper: a slab whose top is the floor. */
-export function deckBoxes(d: Decks | undefined, base: number, ground: boolean): Box[] {
-  return builtDeckCells(d).map(([i, j]) => ({ x0: i, x1: i + 1, z0: j, z1: j + 1, y0: ground ? base - 0.5 : base - DECK_SLAB_T, y1: ground ? base + DECK_T : base }))
+/** `lift(i, j)` (M55 slice 2): a ground patio riding a raised house stands flush with its floor (from the ground up); upstairs, the
+ *  house's foundation under that cell */
+export function deckBoxes(d: Decks | undefined, base: number, ground: boolean, lift?: (i: number, j: number) => number): Box[] {
+  return builtDeckCells(d).map(([i, j]) => { const h = lift?.(i, j) ?? 0
+    return ground ? { x0: i, x1: i + 1, z0: j, z1: j + 1, y0: base - 0.5, y1: base + (h || DECK_T) } : { x0: i, x1: i + 1, z0: j, z1: j + 1, y0: base + h - DECK_SLAB_T, y1: base + h } })
 }
 /** the deck cells of an upper level the level below no longer holds ('i,j'); empty = sound */
 export function deckFloating(below: Below, d: Decks | undefined): string[] {

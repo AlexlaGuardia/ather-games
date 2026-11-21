@@ -27,9 +27,9 @@ export function adoptCols(v: unknown): Cols {
 }
 
 /** the walker's solids: one box per BUILT column, from `base` (the level's floor) up a storey */
-export function colBoxes(cols: Cols | undefined, base: number): Box[] {
+export function colBoxes(cols: Cols | undefined, base: number, lift?: (i: number, j: number) => number): Box[] {
   const h = COL_T / 2, out: Box[] = []
-  for (const [k, c] of Object.entries(cols ?? {})) { if (c.draft) continue; const p = parseCol(k)!; out.push({ x0: p.i - h, x1: p.i + h, z0: p.j - h, z1: p.j + h, y0: base - 0.5, y1: base + WALL_H }) }
+  for (const [k, c] of Object.entries(cols ?? {})) { if (c.draft) continue; const p = parseCol(k)!, b = base + (lift?.(p.i, p.j) ?? 0); out.push({ x0: p.i - h, x1: p.i + h, z0: p.j - h, z1: p.j + h, y0: b - 0.5, y1: b + WALL_H }) }
   return out
 }
 

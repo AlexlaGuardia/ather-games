@@ -79,19 +79,21 @@ export function slabCells(lv: Level): [number, number][] {
 }
 /** the walker's solids for levels above the ground: each wall (a door only its lintel) and a slab box per cell, its top at the floor */
 /** `shaft`: holes left in the slabs, `i,j` (every level) or `i,j,k` (level k only: lift.ts shaftHoles) */
-export function upperBoxes(w: Stacked, groundY: number, shaft?: ReadonlySet<string>): Box[] {
-  const out: Box[] = [], lv = levelsOf(w)
+/** the foundation under the house (M55 slice 2, plot-found liftOf): per edge / cell / corner of the ground floor's grid */
+export interface LiftLookup { edge(k: string): number; cell(i: number, j: number): number; corner(i: number, j: number): number }
+export function upperBoxes(w: Stacked, groundY: number, shaft?: ReadonlySet<string>, lift?: LiftLookup): Box[] {
+  const out: Box[] = [], lv = levelsOf(w), E = (k: string) => lift?.edge(k) ?? 0, C = (i: number, j: number) => lift?.cell(i, j) ?? 0
   for (let k = 1; k < lv.length; k++) {
     const base = groundY + levelBase(k)
-    for (const [key, x] of Object.entries(lv[k].walls)) if (!x.draft) { const r: Rect = edgeRect(key); out.push({ ...r, y0: x.kind === 'door' ? base + DOOR_H : base - SLAB_T, y1: base + (x.kind === 'rail' ? RAIL_H : WALL_H) }) }
-    for (const h of stairRails(w, k)) { const r: Rect = edgeRect(h.key); out.push({ ...r, y0: base - SLAB_T, y1: base + RAIL_H }) }   // M56 (c): the railing round the stair hole
+    for (const [key, x] of Object.entries(lv[k].walls)) if (!x.draft) { const r: Rect = edgeRect(key), b = base + E(key); out.push({ ...r, y0: x.kind === 'door' ? b + DOOR_H : b - SLAB_T, y1: b + (x.kind === 'rail' ? RAIL_H : WALL_H) }) }
+    for (const h of stairRails(w, k)) { const r: Rect = edgeRect(h.key), b = base + E(h.key); out.push({ ...r, y0: b - SLAB_T, y1: b + RAIL_H }) }   // M56 (c): the railing round the stair hole
     const stairHole = stairCellSet(lv[k - 1].stairs)   // M56: the slab is open over the stairs that climb to it
-    for (const [i, j] of slabCells(lv[k])) if (!shaft?.has(`${i},${j}`) && !shaft?.has(`${i},${j},${k}`) && !stairHole.has(`${i},${j}`)) out.push({ x0: i, x1: i + 1, z0: j, z1: j + 1, y0: base - SLAB_T, y1: base })
-    out.push(...colBoxes(lv[k].cols, base))   // M54
-    out.push(...deckBoxes(lv[k].decks, base, false))   // M56 (a): balconies
+    for (const [i, j] of slabCells(lv[k])) if (!shaft?.has(`${i},${j}`) && !shaft?.has(`${i},${j},${k}`) && !stairHole.has(`${i},${j}`)) { const b = base + C(i, j); out.push({ x0: i, x1: i + 1, z0: j, z1: j + 1, y0: b - SLAB_T, y1: b }) }
+    out.push(...colBoxes(lv[k].cols, base, lift ? (i, j) => lift.corner(i, j) : undefined))   // M54
+    out.push(...deckBoxes(lv[k].decks, base, false, lift ? C : undefined))   // M56 (a): balconies
   }
   // M56: every level's built stairs are solid steps from that level's floor (level 0's from the ground)
-  for (let k = 0; k < lv.length; k++) { const base = groundY + levelBase(k); for (const [key, st] of Object.entries(lv[k].stairs ?? {})) if (!st.draft) out.push(...stairBoxes(key, st, base)) }
+  for (let k = 0; k < lv.length; k++) { const base = groundY + levelBase(k); for (const [key, st] of Object.entries(lv[k].stairs ?? {})) if (!st.draft) { const [i, j] = key.split(',').map(Number); out.push(...stairBoxes(key, st, base + C(i, j))) } }
   return out
 }
 

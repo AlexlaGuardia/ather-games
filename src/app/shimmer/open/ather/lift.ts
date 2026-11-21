@@ -6,7 +6,7 @@
 // stands at one level, `lv` on the Piece (saved; an old save has no lift at all). ride(target) sends the car (the keeper on
 // it rides along), call(level) brings it to you. Where the car is NOT, the shaft is shut by a gate (nobody falls in).
 // PURE state machine + the live runtime the walker reads (no three, no react).
-import { foundH } from './plot-found'
+import { floorAt } from './plot-found'
 import type { Box, Shape } from '../terrain-world'
 import type { Works, Piece } from './rooms'
 import { levelCount, levelsOf, levelBase, slabCells, SLAB_T } from './plot-floors'
@@ -92,10 +92,11 @@ export function cordAimed(p: Piece, carY: number, levels: number, o: [number, nu
 export function liftSolids(w: Works, groundY: number, ys: ReadonlyMap<string, number>): Box[] {
   const out: Box[] = []
   for (const p of liftsOf(w)) {
-    const lv = carLevel(w, p), rest = carBase(groundY, lv), y = ys.get(p.id) ?? rest
+    const g = floorAt(w, groundY, p.x, p.z)   // M55 slice 2: each lift on its own house's foundation
+    const lv = carLevel(w, p), rest = carBase(g, lv), y = ys.get(p.id) ?? rest
     const cell = { x0: Math.floor(p.x) + CELL_INSET, x1: Math.floor(p.x) + 1 - CELL_INSET, z0: Math.floor(p.z) + CELL_INSET, z1: Math.floor(p.z) + 1 - CELL_INSET }
     out.push({ ...cell, y0: y - SLAB_T, y1: y })
-    if (Math.abs(y - rest) < 0.02) for (let k = 0; k < liftLevels(w, p); k++) if (k !== lv) out.push({ ...cell, y0: k === 0 ? groundY - 0.5 : carBase(groundY, k) - SLAB_T, y1: carBase(groundY, k) + GATE_H })
+    if (Math.abs(y - rest) < 0.02) for (let k = 0; k < liftLevels(w, p); k++) if (k !== lv) out.push({ ...cell, y0: k === 0 ? g - 0.5 : carBase(g, k) - SLAB_T, y1: carBase(g, k) + GATE_H })
   }
   return out
 }
@@ -113,17 +114,17 @@ export const liveLiftBoxes = (x0: number, z0: number, x1: number, z1: number): B
 export const withLifts = (shape: Shape): Shape => ({ ...shape, solids: (x0, y0, z0, x1, y1, z1) => { const base = shape.solids(x0, y0, z0, x1, y1, z1), lift = liveLiftBoxes(x0, z0, x1, z1); return lift.length ? [...base, ...lift] : base } })
 /** every frame (the walker): advance the cars, and carry the keeper who stands on one */
 export function liftCarry(lc: LocoState, dt: number, ground: number) {
-  const w = liveLift.get?.(), groundY = ground + (w ? foundH(w) : 0)   // M55: a lift stands on the house's foundation
+  const w = liveLift.get?.(), groundY = ground   // the plot's ground; each lift adds its house's foundation (floorAt, M55 slice 2)
   liveLift.loco = lc; liveLift.groundY = groundY
   if (!w) return
   const lifts = liftsOf(w), ids = new Set(lifts.map(p => p.id))
   for (const id of [...liveLift.ys.keys()]) if (!ids.has(id)) liveLift.ys.delete(id)
-  for (const p of lifts) { const to = carBase(groundY, carLevel(w, p)); liveLift.ys.set(p.id, stepCar(liveLift.ys.get(p.id) ?? to, to, dt)) }
+  for (const p of lifts) { const to = carBase(floorAt(w, groundY, p.x, p.z), carLevel(w, p)); liveLift.ys.set(p.id, stepCar(liveLift.ys.get(p.id) ?? to, to, dt)) }
   const r = liveLift.rider; if (!r) return
   const p = lifts.find(x => x.id === r), y = liveLift.ys.get(r)
   if (!p || y == null || Math.abs(lc.px - p.x) > 0.75 || Math.abs(lc.pz - p.z) > 0.75) { liveLift.rider = null; return }
   lc.py = y; lc.vy = 0; lc.airborne = false
-  if (Math.abs(y - carBase(groundY, carLevel(w, p))) < 0.001) liveLift.rider = null
+  if (Math.abs(y - carBase(floorAt(w, groundY, p.x, p.z), carLevel(w, p))) < 0.001) liveLift.rider = null
 }
 /** the keeper stands on this car (cell and height) */
 export function onCar(p: Piece, lc: LocoState, y: number) { return Math.abs(lc.px - p.x) < 0.5 && Math.abs(lc.pz - p.z) < 0.5 && Math.abs(lc.py - y) < 0.45 }
@@ -132,7 +133,7 @@ export function rideNow(id: string): (level: number) => boolean {
   return level => {
     const w = liveLift.get?.(), set = liveLift.set; if (!w || !set) return false
     const p = w.pieces.find(x => x.id === id), next = ride(w, id, level); if (!p || !next) return false
-    const y = liveLift.ys.get(id) ?? carBase(liveLift.groundY, carLevel(w, p))
+    const y = liveLift.ys.get(id) ?? carBase(floorAt(w, liveLift.groundY, p.x, p.z), carLevel(w, p))
     liveLift.rider = liveLift.loco && onCar(p, liveLift.loco, y) ? id : null
     set(next); return true
   }
@@ -143,7 +144,7 @@ export function callNearest(): boolean {
   let best: Piece | null = null, bd = 2.2
   for (const p of liftsOf(w)) { const d = Math.hypot(p.x - lc.px, p.z - lc.pz); if (d < bd) { best = p; bd = d } }
   if (!best) return false
-  const k = levelAt(w, liveLift.groundY, lc.py), next = call(w, best.id, k)
+  const k = levelAt(w, floorAt(w, liveLift.groundY, best.x, best.z), lc.py), next = call(w, best.id, k)
   if (!next) return false
   liveLift.rider = null; set(next); return true
 }

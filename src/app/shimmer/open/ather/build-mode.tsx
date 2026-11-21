@@ -39,6 +39,8 @@ let planLift = 0
 export const setPlanLift = (h: number) => { planLift = h }
 /** M56: which way the lens faces (the Stairs tool climbs away from the camera) */
 export const buildYaw = () => cur.yaw
+/** where the plan lens looks (M55 slice 2: the Foundation picker acts on the house there) */
+export const buildAim = () => ({ x: aim.x, z: aim.z })
 export const useBuildMode = () => useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f) } }, () => on, () => false)
 /** Lift off from where the keeper stands, looking the way they look. */
 export function enterBuild(at: { x: number; z: number; yaw: number }) {

@@ -9,7 +9,7 @@
 // The page mounts five things (kept small on purpose, page.tsx is the hub's integration surface):
 //   useWorks() · workWalls(works) into plotShape · <WorkshopScene pose owned /> in the plot · nearWork() for E ·
 //   <WorkshopPanel near owned onClose /> + <PlacingBar /> (and usePlacingKeys()).
-import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { HearthFrame, HearthButton, Well, H, hearthDisplay } from '../../ui/hearth'
@@ -37,8 +37,8 @@ import { reconcile, paneFor, billOfAll, buildAll, PER_COL, STONE_BRICK } from '.
 import { getPlanLevel, setPlanLevel, usePlanLevel } from './plot-level'
 import { shaftKeys, shaftHoles, liveLift, cellMid, shaftBlockers, SHAFT_WHY, isLiftPiece } from './lift'
 import { LiftMesh, LiftInput } from './lift-view'
-import { levelOf, withLevel, levelCount, levelBase, canStack, floating, upperBoxes, stairRails, MAX_LEVELS, SLAB_T } from './plot-floors'
-import { floorAt, foundH, plinthBoxes, doorSteps, foundDelta, FOUND_OPTS, FOUND_NAME, type FoundH } from './plot-found'
+import { levelOf, withLevel, levelCount, levelBase, canStack, floating, upperBoxes, stairRails, MAX_LEVELS, SLAB_T, type LiftLookup } from './plot-floors'
+import { floorAt, liftOf, setHouseFound, houseFoundDelta, plinthBoxes, doorSteps, FOUND_OPTS, FOUND_NAME, type FoundH, type Lift } from './plot-found'
 import { stairBoxes, stairCellSet, toggleStair, dirOfYaw, type Stairs } from './plot-stairs'
 import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported, builtDeckCells, DECK_T, type Decks } from './plot-decks'
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols } from './plot-cols'
@@ -53,7 +53,7 @@ import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
 import { TOOL_DEFS } from '../../engine/tools'
-import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw, buildYaw, setPlanLift } from './build-mode'
+import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw, buildYaw, buildAim, setPlanLift } from './build-mode'
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
 import { advance, setFocus, cancelFocus, runProgress, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
@@ -87,8 +87,14 @@ export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER
 /** The live works (the page's village tick reads and writes through this store, so an open panel sees the product land). */
 export const currentWorks = () => getW()
 /** Every room's walls and every Keepstone, for the walker's plotShape. */
-export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(c => chestBox(c, floorAt(w, GROUND_Y, c.x, c.z))), ...pieceBoxes(w), ...wallBoxes(w.walls ?? {}, GROUND_Y + foundH(w)), ...colBoxes(w.cols, GROUND_Y + foundH(w)), ...upperBoxes(w, GROUND_Y + foundH(w), shaftHoles(w)), ...plinthBoxes(w, GROUND_Y), ...doorSteps(w, GROUND_Y), ...deckBoxes(w.decks, GROUND_Y, true)]   // M56 (a): patios sit on the plot's ground (not the raised house floor) · M55: the house stands on its foundation
+export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(c => chestBox(c, floorAt(w, GROUND_Y, c.x, c.z))), ...pieceBoxes(w), ...houseBoxes(w)]
 
+/** the keeper's own house pieces: every wall, column, upper floor, stair and patio stands on ITS house's foundation (M55 slice 2:
+ *  plot-found liftOf, per house), the plinth and the door steps under them */
+function houseBoxes(w: Works) {
+  const L = liftOf(w)
+  return [...wallBoxes(w.walls ?? {}, GROUND_Y, L.edge), ...colBoxes(w.cols, GROUND_Y, L.corner), ...upperBoxes(w, GROUND_Y, shaftHoles(w), L), ...plinthBoxes(w, GROUND_Y), ...doorSteps(w, GROUND_Y), ...deckBoxes(w.decks, GROUND_Y, true, L.floor)]
+}
 // ── M37 slice 1: YOUR OWN WALLS (plot-walls.ts; Alex 11-19 "like the sims ... walls a little thicker, like the rooms") ──
 // In plan mode, the Walls tool: drag along the metre grid, a ghost run shows (blue = it can stand, red = it cannot), let go
 // and it stands (a plank a metre). Erase drags it back down (every plank back). The walker meets them like a room's walls.
@@ -300,21 +306,23 @@ function DeckGhost() {
   return <group position-y={levelBase(lv) + 0.02}><DeckCellsMesh cells={d.cells} color={d.erase ? '#ff5a4a' : d.ok ? '#5aa0ff' : '#ff9a3a'} ghost /></group>
 }
 /** M56 (a): a level's open floor: the pattern on top; a patio stands DECK_T on the ground, a balcony has a slab under it (draft = blue) */
-function DrawnDecks({ decks, ground, lift }: { decks: Decks; ground: boolean; lift: number }) {
-  const groups = useMemo(() => { const g = new Map<string, { pat: FloorPat; col: string; draft: boolean; cells: [number, number][] }>(); for (const [k, d] of Object.entries(decks)) { const [i, j] = k.split(',').map(Number); const id = `${d.pat}|${d.col}|${d.draft ? 1 : 0}`; const e = g.get(id) ?? { pat: d.pat, col: d.col, draft: !!d.draft, cells: [] }; e.cells.push([i, j]); g.set(id, e) } return [...g] }, [decks])
-  const built = useMemo(() => Object.entries(decks).filter(([, d]) => !d.draft).map(([k]) => k.split(',').map(Number) as [number, number]), [decks])
+function DrawnDecks({ decks, ground, lift }: { decks: Decks; ground: boolean; lift?: Lift }) {
+  // each cell's surface: a ground patio DECK_T up, or flush with the raised house it touches (M55 slice 2); upstairs, its house's lift
+  const upOf = useCallback((i: number, j: number) => (ground ? (lift?.floor(i, j) || DECK_T) : (lift?.cell(i, j) ?? 0)), [ground, lift])
+  const groups = useMemo(() => { const g = new Map<string, { pat: FloorPat; col: string; draft: boolean; up: number; cells: [number, number][] }>(); for (const [k, d] of Object.entries(decks)) { const [i, j] = k.split(',').map(Number), up = d.draft ? (ground ? DECK_T : 0) : upOf(i, j); const id = `${d.pat}|${d.col}|${d.draft ? 1 : 0}|${up}`; const e = g.get(id) ?? { pat: d.pat, col: d.col, draft: !!d.draft, up, cells: [] }; e.cells.push([i, j]); g.set(id, e) } return [...g] }, [decks, ground, upOf])
+  const built = useMemo(() => { const m = new Map<number, [number, number][]>(); for (const [k, d] of Object.entries(decks)) { if (d.draft) continue; const [i, j] = k.split(',').map(Number), up = upOf(i, j), l = m.get(up) ?? []; l.push([i, j]); m.set(up, l) } return [...m] }, [decks, upOf])
   return (
-    <group position-y={lift}>
+    <>
       {groups.map(([id, e]) => e.draft
-        ? <group key={id + e.cells.length} position-y={ground ? DECK_T - 0.06 : 0.01}><DeckCellsMesh cells={e.cells} color={DRAFT_LOOK} ghost /></group>
-        : <group key={id + e.cells.length} position-y={ground ? DECK_T - 0.06 : 0}><FloorCells pat={e.pat} col={e.col} cells={e.cells} /></group>)}
-      {ground ? built.length > 0 && <DeckBase cells={built} /> : <Slab cells={built} />}
-    </group>
+        ? <group key={id + e.cells.length} position-y={(ground ? e.up - 0.06 : 0.01)}><DeckCellsMesh cells={e.cells} color={DRAFT_LOOK} ghost /></group>
+        : <group key={id + e.cells.length} position-y={ground ? e.up - 0.06 : e.up}><FloorCells pat={e.pat} col={e.col} cells={e.cells} /></group>)}
+      {built.map(([up, cells]) => ground ? <DeckBase key={'b' + up + cells.length} cells={cells} top={up} /> : <group key={'s' + up + cells.length} position-y={up}><Slab cells={cells} /></group>)}
+    </>
   )
 }
-/** the patio's body under its pattern: ground to DECK_T - 0.06 */
-function DeckBase({ cells }: { cells: [number, number][] }) {
-  const ref = useRef<THREE.InstancedMesh>(null), h = DECK_T - 0.06
+/** the patio's body under its pattern: the ground up to `top` - 0.06 (a riding patio stands its house's foundation tall) */
+function DeckBase({ cells, top }: { cells: [number, number][]; top: number }) {
+  const ref = useRef<THREE.InstancedMesh>(null), h = top - 0.06
   useEffect(() => {
     const m = ref.current; if (!m) return
     const o = new THREE.Object3D()
@@ -396,27 +404,29 @@ export function BlueprintBuilding({ walls, roof, floors, x, z, y, rotY }: { wall
 let wallsDown = false
 const setWallsDown = (v: boolean) => { wallsDown = v; wdEmit() }
 const useWallsDown = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => wallsDown, () => false)
-export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverride, unbuilt, roofed = true, slab = false, holes }: { walls: Walls; roof: RoofStyle; floors?: Floors; unbuilt?: ReadonlySet<string>; /** M56: cells left open in this level's floor + slab (stairs climb through) */ holes?: ReadonlySet<string>; /** M47: no roof here (a floor is above) */ roofed?: boolean; /** M47: an upper level: a slab under its built rooms, seen from below as the ceiling */ slab?: boolean; probe?: boolean; /** set by a page outside plan mode (dev/blueprints) */ down?: boolean }) {
+export function DrawnWalls({ walls, roof, floors, probe = true, down: downOverride, unbuilt, roofed = true, slab = false, holes, lift }: { walls: Walls; roof: RoofStyle; floors?: Floors; unbuilt?: ReadonlySet<string>; /** M55 slice 2: each piece / room on its house's foundation */ lift?: LiftLookup; /** M56: cells left open in this level's floor + slab (stairs climb through) */ holes?: ReadonlySet<string>; /** M47: no roof here (a floor is above) */ roofed?: boolean; /** M47: an upper level: a slab under its built rooms, seen from below as the ceiling */ slab?: boolean; probe?: boolean; /** set by a page outside plan mode (dev/blueprints) */ down?: boolean }) {
   const b = useBuildMode(), wd = useWallsDown(), down = downOverride ?? (wd && b)   // hooks always run; the override only picks
   useEffect(() => { if (!b && wallsDown) setWallsDown(false) }, [b])
   // runs by wood AND kind: a plain piece is floor to top, a door only its lintel, a window a sill + a head + a pane
-  const byMat = useMemo(() => { const m = new Map<string, string[]>(); for (const [k, w] of Object.entries(walls)) { const id = `${w.mat}|${w.kind ?? 'wall'}|${w.draft ? 'draft' : ''}|${w.tint ?? ''}`; const l = m.get(id) ?? []; l.push(k); m.set(id, l) } return [...m].map(([id, keys]) => { const [mat, kind, dr, tint] = id.split('|'); return { mat: mat as WallMat, kind, keys, draft: !!dr, tint: tint || undefined } }) }, [walls])
-  const panes = useMemo(() => Object.entries(walls).filter(([, w]) => w.kind === 'window' && !w.draft).map(([k]) => k), [walls])
+  const byMat = useMemo(() => { const m = new Map<string, string[]>(); for (const [k, w] of Object.entries(walls)) { const id = `${w.mat}|${w.kind ?? 'wall'}|${w.draft ? 'draft' : ''}|${w.tint ?? ''}|${lift?.edge(k) ?? 0}`; const l = m.get(id) ?? []; l.push(k); m.set(id, l) } return [...m].map(([id, keys]) => { const [mat, kind, dr, tint, up] = id.split('|'); return { mat: mat as WallMat, kind, keys, draft: !!dr, tint: tint || undefined, up: +up } }) }, [walls, lift])
+  const panes = useMemo(() => { const m = new Map<number, string[]>(); for (const [k, w] of Object.entries(walls)) if (w.kind === 'window' && !w.draft) { const u = lift?.edge(k) ?? 0, l = m.get(u) ?? []; l.push(k); m.set(u, l) } return [...m] }, [walls, lift])
+  const upOf = (r: PlotRoom) => lift?.cell(r.cells[0][0], r.cells[0][1]) ?? 0
   const rooms = useMemo(() => findRooms(walls), [walls])
   useEffect(() => { if (probe) (window as unknown as { __walls?: object }).__walls = { rooms: () => rooms.map(r => ({ cells: r.cells.length, rect: !!r.rect, built: !unbuilt?.has(r.key) })), down: () => down, roof: () => roof } }, [rooms, down, roof, probe, unbuilt])
   return (
     <>
-      {byMat.map(({ mat, kind, keys, draft, tint }) => {
-        const top = down ? LOW_WALL : WALL_H, id = mat + tint + kind + draft + keys.length + (down ? 'd' : ''), g = draft ? DRAFT_LOOK : undefined   // a plan is a blue blueprint until it is built
-        if (kind === 'rail') return <WallRun key={id} mat={mat} tint={tint} keys={keys} h={Math.min(RAIL_H, top)} ghost={g} />   // M56 (c): a half wall
-        if (kind === 'door') return top > DOOR_H ? <WallRun key={id} mat={mat} tint={tint} keys={keys} y0={DOOR_H} h={top - DOOR_H} ghost={g} /> : null
-        if (kind === 'window') return <React.Fragment key={id}><WallRun mat={mat} tint={tint} keys={keys} h={Math.min(SILL, top)} ghost={g} />{top > WIN_TOP && <WallRun mat={mat} tint={tint} keys={keys} y0={WIN_TOP} h={top - WIN_TOP} ghost={g} />}</React.Fragment>
-        return <WallRun key={id} mat={mat} tint={tint} keys={keys} h={top} ghost={g} />
+      {byMat.map(({ mat, kind, keys, draft, tint, up }) => {
+        const top = down ? LOW_WALL : WALL_H, id = mat + tint + kind + draft + keys.length + (down ? 'd' : '') + up, g = draft ? DRAFT_LOOK : undefined   // a plan is a blue blueprint until it is built
+        const run = kind === 'rail' ? <WallRun mat={mat} tint={tint} keys={keys} h={Math.min(RAIL_H, top)} ghost={g} />   // M56 (c): a half wall
+          : kind === 'door' ? (top > DOOR_H ? <WallRun mat={mat} tint={tint} keys={keys} y0={DOOR_H} h={top - DOOR_H} ghost={g} /> : null)
+          : kind === 'window' ? <><WallRun mat={mat} tint={tint} keys={keys} h={Math.min(SILL, top)} ghost={g} />{top > WIN_TOP && <WallRun mat={mat} tint={tint} keys={keys} y0={WIN_TOP} h={top - WIN_TOP} ghost={g} />}</>
+          : <WallRun mat={mat} tint={tint} keys={keys} h={top} ghost={g} />
+        return <group key={id} position-y={up}>{run}</group>
       })}
-      {!down && panes.length > 0 && <WallRun key={'pane' + panes.length} mat="goldwood" keys={panes} y0={SILL} h={WIN_TOP - SILL} pane />}
-      {rooms.filter(r => !unbuilt?.has(r.key)).map(r => <RoomFloor key={r.key + (holes?.size ?? 0)} room={r} floors={floors} holes={holes} />)}
-      {slab && <Slab cells={rooms.filter(r => !unbuilt?.has(r.key)).flatMap(r => r.cells).filter(([i, j]) => !holes?.has(`${i},${j}`))} />}
-      {!down && roofed && rooms.filter(r => !unbuilt?.has(r.key)).map(r => <RoomRoof key={r.key + roof} room={r} style={roof} walls={walls} />)}
+      {!down && panes.map(([up, keys]) => <group key={'pane' + up + keys.length} position-y={up}><WallRun mat="goldwood" keys={keys} y0={SILL} h={WIN_TOP - SILL} pane /></group>)}
+      {rooms.filter(r => !unbuilt?.has(r.key)).map(r => <group key={r.key + (holes?.size ?? 0) + upOf(r)} position-y={upOf(r)}><RoomFloor room={r} floors={floors} holes={holes} /></group>)}
+      {slab && rooms.filter(r => !unbuilt?.has(r.key)).map(r => <group key={'s' + r.key + upOf(r)} position-y={upOf(r)}><Slab cells={r.cells.filter(([i, j]) => !holes?.has(`${i},${j}`))} /></group>)}
+      {!down && roofed && rooms.filter(r => !unbuilt?.has(r.key)).map(r => <group key={r.key + roof + upOf(r)} position-y={upOf(r)}><RoomRoof room={r} style={roof} walls={walls} /></group>)}
     </>
   )
 }
@@ -530,7 +540,7 @@ function WallMaterial({ mat, tint }: { mat: WallMat; tint?: string }) {
 /** M47: every level of the house, each lifted by its storeys. In plan mode the Sims cutaway: levels ABOVE the one being edited are
  *  hidden, the level(s) below show as a faint low guide, and only the top shown level wears the roof. Out of plan mode: all of them. */
 function HouseLevels({ w }: { w: Works }) {
-  const b = useBuildMode(), edit = usePlanLevel(), n = levelCount(w), wd = useWallsDown()
+  const b = useBuildMode(), edit = usePlanLevel(), n = levelCount(w), wd = useWallsDown(), fl = useMemo(() => liftOf(w), [w])   // M55 slice 2: each house on its own foundation
   const last = b ? Math.min(edit, n - 1) : n - 1
   const shown = Array.from({ length: last + 1 }, (_, k) => k)
   useEffect(() => { (window as unknown as { __floors?: object }).__floors = { shown: () => shown, editing: () => (b ? edit : -1), count: () => n } }, [shown.join(','), b, edit, n])   // checks' probe
@@ -541,26 +551,29 @@ function HouseLevels({ w }: { w: Works }) {
         const holes = k > 0 ? stairCellSet(levelOf(w, k - 1).stairs) : undefined
         const guide = b && k < edit, rails = stairRails(w, k)
         return (
-          <group key={k} position-y={levelBase(k) + foundH(w)}>
-            {Object.keys(L.walls).length > 0 && <DrawnWalls walls={L.walls} roof={w.roof ?? 'gable'} floors={L.floors} unbuilt={unbuiltRooms(L.walls, L.paid)} probe={k === 0} roofed={k === last} slab={k > 0} down={guide ? true : undefined} holes={holes} />}
-            {hasCols && <DrawnCols cols={L.cols!} down={guide ? true : undefined} />}
-            {hasStairs && <DrawnStairs stairs={L.stairs!} />}
-            {hasDecks && <DrawnDecks decks={L.decks!} ground={k === 0} lift={k === 0 ? -foundH(w) : 0} />}
-            {rails.length > 0 && <StairRails rails={rails} down={guide || (b && wd)} />}
+          <group key={k} position-y={levelBase(k)}>
+            {Object.keys(L.walls).length > 0 && <DrawnWalls walls={L.walls} roof={w.roof ?? 'gable'} floors={L.floors} unbuilt={unbuiltRooms(L.walls, L.paid)} probe={k === 0} roofed={k === last} slab={k > 0} down={guide ? true : undefined} holes={holes} lift={fl} />}
+            {hasCols && <DrawnCols cols={L.cols!} down={guide ? true : undefined} lift={fl} />}
+            {hasStairs && <DrawnStairs stairs={L.stairs!} lift={fl} />}
+            {hasDecks && <DrawnDecks decks={L.decks!} ground={k === 0} lift={fl} />}
+            {rails.length > 0 && <StairRails rails={rails} down={guide || (b && wd)} lift={fl} />}
           </group>
         )
       })}
     </>
   )
 }
-/** M55: set the house's foundation. Raising it pays Stone Brick for the built footprint (the Keepstone first, the bag tops up);
- *  lowering gives the difference back to the bag. Nothing changes unless all of it is there. */
+/** M55: set ONE house's foundation (slice 2: the house the plan view is aimed at). Raising it pays Stone Brick for that house's
+ *  built footprint (the Keepstone first, the bag tops up); lowering gives the difference back to the bag. Nothing changes unless
+ *  all of it is there. */
 function setFoundation(h: FoundH) {
-  const w = currentWorks(), from = foundH(w); if (from === h) return
-  const d = foundDelta(w, from, h)
+  const w = currentWorks(), a = buildAim(), house = liftOf(w).houseAt(a.x, a.z)
+  if (!house) { hudSay('Aim the view at a house to set its foundation.', 'info'); return }
+  const from = house.h; if (from === h && house.cells.every(c => (w.foundCells ?? {})[c] === h)) return
+  const d = houseFoundDelta(house, from, h)
   if (d > 0) { const pay = payCost([{ id: STONE_BRICK, n: d }], getInv(), getB()); if (!pay) { hudSay(`${d} Stone Brick needed to raise the house, ${haveFor(getInv(), getB(), STONE_BRICK)} on hand.`, 'info'); return } setInv(pay.inv); if (pay.bank) setBank(pay.bank) }
   else if (d < 0) { const g = give(getInv(), STONE_BRICK, -d); if (g.left) { hudSay('Your bag is full: no room for the stone that comes back.', 'info'); return } setInv(g.inv) }
-  setWorks({ ...w, found: h }); hudSay(h ? `The house stands on a ${FOUND_NAME[h].toLowerCase()} foundation.` : 'The house is back on the ground.', 'info')
+  setWorks(setHouseFound(w, house, h)); hudSay(h ? `This house stands on a ${FOUND_NAME[h].toLowerCase()} foundation.` : 'This house is back on the ground.', 'info')
 }
 /** M55: the plinth under the built house and the steps at its doors (stone, the solids' own boxes) */
 function Plinth({ w }: { w: Works }) {
@@ -577,35 +590,44 @@ function Plinth({ w }: { w: Works }) {
   )
 }
 /** M56 (c): the railing round a stair hole upstairs (plot-floors stairRails): half-wall pieces in the stairs' material, part of the stairs */
-function StairRails({ rails, down }: { rails: { key: string; mat: WallMat }[]; down: boolean }) {
-  const byMat = useMemo(() => { const m = new Map<WallMat, string[]>(); for (const r of rails) { const l = m.get(r.mat) ?? []; l.push(r.key); m.set(r.mat, l) } return [...m] }, [rails])
-  return <>{byMat.map(([mat, keys]) => <WallRun key={mat + keys.length + (down ? 'd' : '')} mat={mat} keys={keys} h={down ? Math.min(RAIL_H, LOW_WALL) : RAIL_H} />)}</>
+function StairRails({ rails, down, lift }: { rails: { key: string; mat: WallMat }[]; down: boolean; lift?: LiftLookup }) {
+  const byMat = useMemo(() => { const m = new Map<string, string[]>(); for (const r of rails) { const id = `${r.mat}|${lift?.edge(r.key) ?? 0}`, l = m.get(id) ?? []; l.push(r.key); m.set(id, l) } return [...m].map(([id, keys]) => { const [mat, up] = id.split('|'); return { mat: mat as WallMat, up: +up, keys } }) }, [rails, lift])
+  return <>{byMat.map(({ mat, up, keys }) => <group key={mat + up + keys.length + (down ? 'd' : '')} position-y={up}><WallRun mat={mat} keys={keys} h={down ? Math.min(RAIL_H, LOW_WALL) : RAIL_H} /></group>)}</>
+}
+/** M55 slice 2: the house the plan view is aimed at (re-read a few times a second: the lens glides without a React render) */
+function useAimHouse(w: Works) {
+  const [hs, setHs] = useState<Lift['houses'][number] | null>(null)
+  useEffect(() => {
+    const read = () => { const a = buildAim(), h = liftOf(currentWorks()).houseAt(a.x, a.z); setHs(p => (p?.h === h?.h && p?.cells.join() === h?.cells.join() ? p : h)) }
+    read(); const t = setInterval(read, 400); return () => clearInterval(t)
+  }, [w])
+  return hs
 }
 /** M56: a level's stairs: one box per step from the floor up (drawn from the solids' own boxes, plot-stairs.ts); a draft is a blue ghost */
-function DrawnStairs({ stairs }: { stairs: Stairs }) {
+function DrawnStairs({ stairs, lift }: { stairs: Stairs; lift?: LiftLookup }) {
   return (
     <>
-      {Object.entries(stairs).map(([k, st]) => stairBoxes(k, st, GROUND_Y).map((b, n) => {
-        const y0 = GROUND_Y, h = b.y1 - y0   // each step a block from the floor to its tread (a solid stair, no gaps under it)
+      {Object.entries(stairs).map(([k, st]) => { const [si, sj] = k.split(',').map(Number), up = lift?.cell(si, sj) ?? 0; return stairBoxes(k, st, GROUND_Y + up).map((b, n) => {
+        const y0 = GROUND_Y + up, h = b.y1 - y0   // each step a block from the floor to its tread (a solid stair, no gaps under it)
         return (
           <mesh key={k + n} data-stair={k} position={[(b.x0 + b.x1) / 2, y0 + h / 2 + (st.draft ? 0.01 : 0), (b.z0 + b.z1) / 2]} castShadow receiveShadow>
             <boxGeometry args={[b.x1 - b.x0, h, b.z1 - b.z0]} />
             {st.draft ? <meshBasicMaterial color="#5aa0ff" transparent opacity={0.45} depthWrite={false} /> : <WallMaterial mat={st.mat} />}
           </mesh>
         )
-      }))}
+      }) })}
     </>
   )
 }
 /** M54: the columns of one level: a 0.6 m square post per corner, a storey tall (low with the walls down); a draft is a blue ghost */
-function DrawnCols({ cols, down: downOverride }: { cols: Cols; down?: boolean }) {
+function DrawnCols({ cols, down: downOverride, lift }: { cols: Cols; down?: boolean; lift?: LiftLookup }) {
   const wd = useWallsDown(), down = downOverride ?? wd, h = down ? LOW_WALL : WALL_H
   return (
     <>
       {Object.entries(cols).map(([k, c]) => {
         const p = parseCol(k)!
         return (
-          <mesh key={k} data-col={k} position={[p.i, GROUND_Y + h / 2 + (c.draft ? 0.01 : 0), p.j]} castShadow>
+          <mesh key={k} data-col={k} position={[p.i, GROUND_Y + (lift?.corner(p.i, p.j) ?? 0) + h / 2 + (c.draft ? 0.01 : 0), p.j]} castShadow>
             <boxGeometry args={[COL_T + (c.draft ? 0.04 : 0), h + (c.draft ? 0.02 : 0), COL_T + (c.draft ? 0.04 : 0)]} />
             {c.draft ? <meshBasicMaterial color="#5aa0ff" transparent opacity={0.45} depthWrite={false} /> : <WallMaterial mat={c.mat} tint={c.tint} />}
           </mesh>
@@ -665,7 +687,8 @@ function Catalog({ onPick }: { onPick: () => void }) {
 /** the Walls / Erase tools and the wood picker, in the build bar */
 function WallTools({ owned, cat, onCat }: { owned: React.MutableRefObject<ReadonlySet<string>>; cat: boolean; onCat: () => void }) {
   const t = useBuildTool(), mat = useWallMat(), rail = useWallRail(), pk = usePaint(), [pPat, pCol] = pk.split('|') as [FloorPat, string], inv = useInv(), down = useWallsDown(), w = useWorks(), roof = w.roof ?? 'gable', owner = useOwner()
-  useEffect(() => { setPlanLift(foundH(w)) }, [w])   // M55: drawing tools aim at the raised floor
+  const aimHouse = useAimHouse(w)
+  useEffect(() => { setPlanLift(aimHouse?.h ?? 0) }, [aimHouse])   // M55: drawing tools aim at the raised floor of the house in view
   useEffect(() => {
     if (t === 'look') return
     onBuildDraw(t === 'floor' ? deckHandler(() => owned.current) : t === 'stairs' ? stairsHandler(() => owned.current) : t === 'column' ? columnHandler(() => owned.current) : t === 'door' || t === 'window' || t === 'paint' || t === 'blueprint' ? tapToolHandler(t) : wallDrawHandler(() => owned.current, t === 'erase'))
@@ -696,7 +719,7 @@ function WallTools({ owned, cat, onCat }: { owned: React.MutableRefObject<Readon
         <button key={r} type="button" data-roof={r} aria-pressed={roof === r} style={{ ...btn(roof === r), height: 30, fontSize: 11 }} onClick={() => setWorks({ ...currentWorks(), roof: r })}>{r}</button>
       ))}
       {t !== 'look' && <span data-found-picker style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><span style={{ font: '700 10px system-ui', letterSpacing: '.1em', textTransform: 'uppercase', color: H.ink, opacity: 0.6 }}>Foundation</span>{FOUND_OPTS.map(h => (
-        <button key={h} type="button" data-found={h} aria-pressed={foundH(w) === h} style={{ ...btn(foundH(w) === h), height: 30, fontSize: 11 }} onClick={() => setFoundation(h)}>{FOUND_NAME[h]}</button>
+        <button key={h} type="button" data-found={h} aria-pressed={aimHouse?.h === h} disabled={!aimHouse} style={{ ...btn(aimHouse?.h === h), height: 30, fontSize: 11, opacity: aimHouse ? 1 : 0.4 }} onClick={() => setFoundation(h)}>{FOUND_NAME[h]}</button>
       ))}</span>}
     </div>
   )

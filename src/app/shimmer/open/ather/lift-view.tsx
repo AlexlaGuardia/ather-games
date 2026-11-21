@@ -7,7 +7,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Piece } from './rooms'
 import { GROUND_Y } from './plot'
-import { foundH } from './plot-found'
+import { floorAt } from './plot-found'
 import { STOREY } from './plot-floors'
 import { WALL_H } from './plot-walls'
 import { liveLift, carBase, carLevel, liftLevels, cordsOf, cordAimed, rideNow, CORD_LOW, CORD_HIGH, PANEL_Z } from './lift'
@@ -19,7 +19,7 @@ const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, numb
 /** posts up the whole shaft (the top of the highest level), the car on its cords, and the stone weight beside it */
 export function LiftMesh({ p }: { p: Piece }) {
   const w = useWorks(), n = liftLevels(w, p), car = useRef<THREE.Group>(null), weight = useRef<THREE.Mesh>(null)   // the floors its shaft reaches
-  const B = GROUND_Y + foundH(w)   // M55: the lift stands on the house's foundation
+  const B = floorAt(w, GROUND_Y, p.x, p.z)   // M55: the lift stands on its house's foundation (slice 2: per house)
   const top = B + (n - 1) * STOREY + WALL_H   // M50: a storey's walls, not a 3.2 literal
   useFrame(() => {
     const y = liveLift.ys.get(p.id) ?? carBase(B, carLevel(w, p)), span = (n - 1) * STOREY
@@ -70,7 +70,7 @@ export function LiftInput() {
       const o = ray.ray.origin, d = ray.ray.direction
       for (const p of w.pieces) {
         if (p.item !== 'lift') continue
-        const k = cordAimed(p, liveLift.ys.get(p.id) ?? carBase(GROUND_Y + foundH(w), carLevel(w, p)), liftLevels(w, p), [o.x, o.y, o.z], [d.x, d.y, d.z])
+        const k = cordAimed(p, liveLift.ys.get(p.id) ?? carBase(floorAt(w, GROUND_Y, p.x, p.z), carLevel(w, p)), liftLevels(w, p), [o.x, o.y, o.z], [d.x, d.y, d.z])
         if (k != null && rideNow(p.id)(k)) return
       }
     }

@@ -11,7 +11,7 @@
 import { draftCols, colNeeds, standCols } from './plot-cols'
 import { draftStairs, stairNeeds, standStairs } from './plot-stairs'
 import { draftDecks, deckNeeds, standDecks } from './plot-decks'
-import { adoptFound, plinthPerM2 } from './plot-found'
+import { liftOf, plinthPerM2 } from './plot-found'
 import { findRooms, RAIL_FRAC, WALL_MATS, FLOOR_PATS, FLOOR_PER_M2, roomFloor, floorByKey, type Walls, type Paid, type Floors } from './plot-walls'
 import { payCost, haveFor } from './rooms'
 import { give, itemDef, type Inv } from '../shared/inventory'
@@ -21,11 +21,11 @@ import { levelsOf, levelOf, levelCount, withLevel, type Stacked } from './plot-f
 export const STONE_BRICK = 'stone_brick', CRYSTAL_PANE = 'crystal_pane', FLOOR_ITEM = 'goldwood_plank'
 // M50: walls stand 1.5x taller (4.8 m), so a piece costs 1.5 planks; a list rounds UP per line (lines())
 export const AMOUNTS = { wallPerM: 1.5, panePerWindow: 1, floorPerM2: FLOOR_PER_M2, roofPerM2: 1 } as const
-/** M55: Stone Brick for the plinth under the ground floor's UNBUILT rooms when the house stands on a foundation */
-export function plinthNeed(w: Stacked & { found?: number }): number {
-  const h = adoptFound(w.found); if (!h) return 0
-  const paid = w.paid ?? {}
-  return findRooms(w.walls ?? {}).filter(r => !paid[r.key]).reduce((t, r) => t + r.cells.length, 0) * plinthPerM2(h)
+/** M55: Stone Brick for the plinth under the ground floor's UNBUILT rooms, at the height of the house each one joins (slice 2) */
+export function plinthNeed(w: Stacked & { found?: number; foundCells?: Readonly<Record<string, number>> }): number {
+  if (!w.found && !w.foundCells) return 0
+  const paid = w.paid ?? {}, L = liftOf(w)
+  return findRooms(w.walls ?? {}).filter(r => !paid[r.key]).reduce((t, r) => t + r.cells.reduce((u, [i, j]) => u + plinthPerM2(L.cell(i, j)), 0), 0)
 }
 /** M54: a column costs 2 m of its wall */
 export const PER_COL = 2 * AMOUNTS.wallPerM
@@ -101,7 +101,7 @@ export function paneFor(from: Walls, to: Walls, k: string, inv: Inv, bank?: Bank
 
 // ── M47 slice 1: the whole STACK. Level 0 is the house as before (floor + roof per room); every level above pays its SLAB
 // (the floor, planks / bricks per m²) and no roof of its own: the plain default, one number to change if Alex wants a roof bill.
-export function billOfAll(w: Stacked & { found?: number }, inv: Inv, bank?: Bank | null): { lines: Line[]; ok: boolean; empty: boolean; pieces: number; rooms: number } {
+export function billOfAll(w: Stacked & { found?: number; foundCells?: Readonly<Record<string, number>> }, inv: Inv, bank?: Bank | null): { lines: Line[]; ok: boolean; empty: boolean; pieces: number; rooms: number } {
   const m = new Map<string, number>(); let pieces = 0, rooms = 0
   levelsOf(w).forEach((lv, k) => { const p = planNeeds(lv.walls, lv.paid, lv.floors, k === 0); pieces += p.pieces; rooms += p.rooms; for (const c of p.needs) add(m, c.id, c.n)
     pieces += draftCols(lv.cols); for (const c of colNeeds(lv.cols, PER_COL)) add(m, c.id, c.n)   // M54: columns, 2 m of their wall each
@@ -113,7 +113,7 @@ export function billOfAll(w: Stacked & { found?: number }, inv: Inv, bank?: Bank
 }
 export type BuiltAll = { ok: true; works: Stacked; inv: Inv; bank: Bank | null; spent: Need[] } | { ok: false; why: string }
 /** Build spends EVERY level's draft: the whole list is checked first, then each level builds in turn (nothing is spent unless all of it is there) */
-export function buildAll<T extends Stacked & { found?: number }>(w: T, inv: Inv, bank?: Bank | null): { ok: true; works: T; inv: Inv; bank: Bank | null; spent: Need[] } | { ok: false; why: string } {
+export function buildAll<T extends Stacked & { found?: number; foundCells?: Readonly<Record<string, number>> }>(w: T, inv: Inv, bank?: Bank | null): { ok: true; works: T; inv: Inv; bank: Bank | null; spent: Need[] } | { ok: false; why: string } {
   const b = billOfAll(w, inv, bank)
   if (b.empty) return { ok: false, why: 'Nothing is planned.' }
   const short = b.lines.find(l => l.short); if (short) return { ok: false, why: `${short.n} ${short.name} needed, ${short.have} on hand.` }
