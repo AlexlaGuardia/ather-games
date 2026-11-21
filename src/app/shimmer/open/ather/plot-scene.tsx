@@ -13,6 +13,7 @@ import { P } from './palette'
 import { CloudPillows, CloudSea, HorizonRing } from '../shared/cloud-edge'
 import { plotEdgePuffs, plotFarPuffs, PLOT_SEA_Y } from './edge-clouds'
 import { GROUND, pushLayer, useGroundMaterial } from './ground-look'
+import { groundMat, groundOrder } from '../shared/ground-layers'
 
 function plotGeometry(): THREE.BufferGeometry {
   const pos: number[] = [], col: number[] = [], lay: number[] = []
@@ -120,8 +121,8 @@ export function PlotIsland({ owned, pages }: { owned: ReadonlySet<string>; pages
       <mesh geometry={geo} material={ground} />
       <lineSegments geometry={lines}><lineBasicMaterial color="#7f9a55" transparent opacity={0.45} /></lineSegments>
       <mesh position-y={-20} rotation-x={Math.PI}><coneGeometry args={[PLOT_R * 1.05, 34, 12, 2]} /><meshLambertMaterial color={P.under} flatShading /></mesh>
-      <mesh position={[THRESHOLD.x, plotHeightAt(THRESHOLD.x, THRESHOLD.z) + 0.03, THRESHOLD.z]} rotation-x={-Math.PI / 2}>
-        <ringGeometry args={[1.1, 1.45, 18]} /><meshBasicMaterial color="#efe0a8" />
+      <mesh position={[THRESHOLD.x, plotHeightAt(THRESHOLD.x, THRESHOLD.z) + 0.03, THRESHOLD.z]} rotation-x={-Math.PI / 2} renderOrder={groundOrder('mark')}>
+        <ringGeometry args={[1.1, 1.45, 18]} /><meshBasicMaterial color="#efe0a8" {...groundMat('mark')} />
       </mesh>
       <Gate />
       <Mist owned={owned} pages={pages} />

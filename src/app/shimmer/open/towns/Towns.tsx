@@ -21,6 +21,7 @@ import type { Port } from './gale-haven'
 import { STATION_COLS, STATION_ROWS, STATION } from '../../play3d/station-field'
 import type { StationSite } from './rune-hold-core'
 import { nearestRoad } from '../region'
+import { groundMat, groundOrder } from '../shared/ground-layers'
 
 // ── looks per town, from canon + the concept shots Alex judged 11-15 (tools/art/gen_towns.py). Roman bones
 // (world/athernyx.md): pale stone, terracotta. Unlisted towns take the country default. ──
@@ -476,7 +477,7 @@ export function Towns({ R, focus }: { R: Region; focus: React.MutableRefObject<T
 
   return (
     <>
-      <mesh geometry={lanes}><meshLambertMaterial color="#c9b892" side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-2} /></mesh>
+      <mesh geometry={lanes} renderOrder={groundOrder('lane')}><meshLambertMaterial color="#c9b892" side={THREE.DoubleSide} {...groundMat('lane', { factor: -2, units: 0 })} /></mesh>
       <instancedMesh key={`p${n}`} frustumCulled={false} ref={plinths} args={[undefined, undefined, n]}><boxGeometry /><meshLambertMaterial flatShading /></instancedMesh>
       <instancedMesh key={`w${n}`} frustumCulled={false} ref={walls} args={[undefined, undefined, n]} material={facade.m}><boxGeometry /></instancedMesh>
       <instancedMesh key={`r${n}`} frustumCulled={false} ref={roofs} args={[undefined, undefined, n]} geometry={roof}><meshLambertMaterial flatShading side={THREE.DoubleSide} /></instancedMesh>

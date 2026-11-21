@@ -78,6 +78,7 @@ import { TUNNEL_H, TUNNEL_WALK, boreAt, tunnelWall, bridgeRail, drivable, ferryL
 import { touch, TOUCH_LOOK_SENS, isTouchOnly } from '../shared/touch'
 import { TouchControls, PHONE_ROW_TOP, type TouchAction } from '../shared/touch-controls'
 import { useMorelHints } from '../shared/morel-hints'   // BETA M33 S2: Morel's stuck hints on the errand
+import { groundMat, groundOrder, type GroundLayer } from '../shared/ground-layers'
 
 const STEP = 1 / 120
 const FOV = 64
@@ -273,8 +274,8 @@ function Roads({ R }: { R: Region }) {
   return (
     <>
       {geos.map(({ kind, g }) => (
-        <mesh key={kind} geometry={g}>
-          <meshLambertMaterial color={ROAD_COL[kind as RegionRoad['kind']]} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} />
+        <mesh key={kind} geometry={g} renderOrder={groundOrder('road')}>
+          <meshLambertMaterial color={ROAD_COL[kind as RegionRoad['kind']]} side={THREE.DoubleSide} {...groundMat('road', { factor: -2, units: -2 })} />
         </mesh>
       ))}
     </>
@@ -286,7 +287,7 @@ function Roads({ R }: { R: Region }) {
 const SQUARE_COL = '#cfc6b2', ISLAND_COL = '#5d7a43', KERB_COL = '#ddd6c6'
 function Junctions({ R }: { R: Region }) {
   const parts = useMemo(() => {
-    const out: { key: string; g: THREE.BufferGeometry; col: string }[] = []
+    const out: { key: string; g: THREE.BufferGeometry; col: string; layer: GroundLayer }[] = []
     const ring = (j: RegionJunction, r0: number, r1: number, lift: number) => {
       const seg = Math.max(24, Math.ceil(2 * Math.PI * r1 / 2)), rings = Math.max(1, Math.ceil((r1 - r0) / 2))
       const pos: number[] = []
@@ -309,18 +310,18 @@ function Junctions({ R }: { R: Region }) {
       const top = j.arms.map(a => roads.find(r => r.id === a.edge)).filter(Boolean).sort((a, b) => b!.width - a!.width)[0]
       const col = j.kind === 'square' ? SQUARE_COL : ROAD_COL[top?.kind ?? 'road']
       if (j.island) {
-        out.push({ key: `${j.id}-ring`, g: ring(j, j.island, j.r, 0.09), col })
-        out.push({ key: `${j.id}-kerb`, g: ring(j, j.island - 0.6, j.island, 0.12), col: KERB_COL })
-        out.push({ key: `${j.id}-island`, g: ring(j, 0, j.island - 0.6, 0.1), col: ISLAND_COL })
-      } else out.push({ key: j.id, g: ring(j, 0, j.r, 0.09), col })
+        out.push({ key: `${j.id}-ring`, g: ring(j, j.island, j.r, 0.09), col, layer: 'junction' })
+        out.push({ key: `${j.id}-kerb`, g: ring(j, j.island - 0.6, j.island, 0.12), col: KERB_COL, layer: 'kerb' })
+        out.push({ key: `${j.id}-island`, g: ring(j, 0, j.island - 0.6, 0.1), col: ISLAND_COL, layer: 'island' })
+      } else out.push({ key: j.id, g: ring(j, 0, j.r, 0.09), col, layer: 'junction' })
     }
     return out
   }, [R])
   return (
     <>
-      {parts.map(({ key, g, col }) => (
-        <mesh key={key} geometry={g}>
-          <meshLambertMaterial color={col} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-3} polygonOffsetUnits={-3} />
+      {parts.map(({ key, g, col, layer }) => (
+        <mesh key={key} geometry={g} renderOrder={groundOrder(layer)}>
+          <meshLambertMaterial color={col} side={THREE.DoubleSide} {...groundMat(layer, { factor: -3, units: -3 })} />
         </mesh>
       ))}
     </>

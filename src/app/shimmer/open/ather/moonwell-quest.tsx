@@ -17,6 +17,7 @@ import { GLADE as GLADE_GROUND, WATER_DROP } from './relief'
 const RISE = shoreToward(GLADE_GREEN.x, GLADE_GREEN.z, -2.5)
 import { waitingAt, scaleOnBank, waitTick, RINQUEST_LINES, SHED_SCALE } from './rinquest'
 import { useQuest, questEvent, currentQuest } from './use-rinquest'
+import { groundMat, groundOrder } from '../shared/ground-layers'
 
 const POOL = '#bfe4ff', RIM = '#8d9aa6'
 
@@ -81,9 +82,9 @@ export function MoonwellPool({ ground, stowed }: { ground: (x: number, z: number
         <circleGeometry args={[1, 64]} />
         <meshBasicMaterial ref={glow} color={POOL} transparent opacity={0.8} />
       </mesh>
-      <mesh position={[MOONWELL.x, GLADE_GROUND.y + 0.04, MOONWELL.z]} rotation-x={-Math.PI / 2} scale={[MOONWELL.rx, MOONWELL.rz, 1]}>
+      <mesh position={[MOONWELL.x, GLADE_GROUND.y + 0.04, MOONWELL.z]} rotation-x={-Math.PI / 2} scale={[MOONWELL.rx, MOONWELL.rz, 1]} renderOrder={groundOrder('mark')}>
         <ringGeometry args={[1, 1.05, 64]} />
-        <meshLambertMaterial color={RIM} />
+        <meshLambertMaterial color={RIM} {...groundMat('mark')} />
       </mesh>
       <pointLight position={[RISE.x, y + 1.5, RISE.z]} color={POOL} intensity={1.2} distance={30} />
       {/* the rinn that rises (placeholder shape: a small silver body + tail) */}

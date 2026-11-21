@@ -9,6 +9,7 @@ import { parseHouse, placeBlueprint } from './plot-blueprint'
 import { BlueprintStack } from './blueprint-stack'
 import { GLADE as GROUND, WATER_DROP } from './relief'
 import { GREG_WAYMARK } from './waymarks'
+import { groundMat, groundOrder } from '../shared/ground-layers'
 
 const GREEN = '#a9cf7d', PATH = '#d9c9a2', PAD = '#cdb88e', DECK = '#a77b4f'
 
@@ -29,12 +30,12 @@ export function GladeLots() {
   return (
     <group>
       {/* the green */}
-      <mesh position={[GLADE_GREEN.x, y + 0.03, GLADE_GREEN.z]} rotation-x={-Math.PI / 2} receiveShadow>
-        <circleGeometry args={[GLADE_GREEN.r, 48]} /><meshLambertMaterial color={GREEN} />
+      <mesh position={[GLADE_GREEN.x, y + 0.03, GLADE_GREEN.z]} rotation-x={-Math.PI / 2} receiveShadow renderOrder={groundOrder('green')}>
+        <circleGeometry args={[GLADE_GREEN.r, 48]} /><meshLambertMaterial color={GREEN} {...groundMat('green')} />
       </mesh>
       {/* the path from the green's open end to the waymark */}
-      <mesh position={[GLADE_GREEN.x, y + 0.025, path.z]} rotation-x={-Math.PI / 2} receiveShadow>
-        <planeGeometry args={[3, path.len]} /><meshLambertMaterial color={PATH} />
+      <mesh position={[GLADE_GREEN.x, y + 0.025, path.z]} rotation-x={-Math.PI / 2} receiveShadow renderOrder={groundOrder('path')}>
+        <planeGeometry args={[3, path.len]} /><meshLambertMaterial color={PATH} {...groundMat('path')} />
       </mesh>
       {/* the five lots: a pad, and the trade's station on it */}
       {lots.map(l => (

@@ -13,6 +13,7 @@ import { MIDDLE_Y, type Frame } from './cluster'
 import { MEADOW_CELL, type Meadow } from './meadow'
 import { P } from './palette'
 import { GROUND, pushLayer, useGroundMaterial } from './ground-look'
+import { groundMat, groundOrder } from '../shared/ground-layers'
 
 const DIRT = new THREE.Color('#d9c79a'), DIRT_HI = new THREE.Color('#e6d6ad'), SQUARE = new THREE.Color('#b4d78c')
 
@@ -99,7 +100,7 @@ export function ClusterScene({ frame }: { frame: Frame }) {
       <mesh geometry={geo} material={ground} />
       <MeadowTrees m={m} />
       {/* where the paths meet: a pale ring in the middle of the square */}
-      <mesh position={[mid.x, MIDDLE_Y + 0.04, mid.z]} rotation-x={-Math.PI / 2}><ringGeometry args={[5, 6.2, 28]} /><meshBasicMaterial color="#efe0a8" /></mesh>
+      <mesh position={[mid.x, MIDDLE_Y + 0.04, mid.z]} rotation-x={-Math.PI / 2} renderOrder={groundOrder('mark')}><ringGeometry args={[5, 6.2, 28]} /><meshBasicMaterial color="#efe0a8" {...groundMat('mark')} /></mesh>
       {/* the cluster's underside: one stone root under the whole meadow, as each island has its own */}
       <mesh position={[mid.x, -34, mid.z]} rotation={[Math.PI, Math.PI / 4, 0]}><coneGeometry args={[span * 0.62, 60, 8, 2]} /><meshLambertMaterial color={P.under} flatShading /></mesh>
       {frame.mates.map(mt => (

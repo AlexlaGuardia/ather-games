@@ -17,6 +17,7 @@ import { SettlementBuildings } from './settlement-buildings'
 import { GLADE_ID } from './moonwell-glade'
 import { setMapSettlements } from './tile-picture'
 import { MoglinModel, furOf } from '../shared/moglin-model'
+import { groundMat, groundOrder } from '../shared/ground-layers'
 
 // ── the paths ────────────────────────────────────────────────────────────────────────────────────────────────────
 const PATH_COLOUR = new THREE.Color('#c8b285'), PATH_EDGE = new THREE.Color('#a99467')
@@ -49,7 +50,7 @@ export function TilePaths({ net, W, off }: { net: Network; W: Wilds; off: { x: n
     return g
   }, [net, W, off.x, off.z])
   if (!geo) return null
-  return <mesh geometry={geo}><meshLambertMaterial vertexColors polygonOffset polygonOffsetFactor={-4} polygonOffsetUnits={-4} side={THREE.DoubleSide} /></mesh>
+  return <mesh geometry={geo} renderOrder={groundOrder('path')}><meshLambertMaterial vertexColors side={THREE.DoubleSide} {...groundMat('path', { factor: -4, units: -4 })} /></mesh>
 }
 
 // ── a settlement: a grassy knoll dug with round doors, a well, a signpost, lanterns ────────────────────────────────
