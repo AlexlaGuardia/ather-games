@@ -85,16 +85,18 @@ cd "$REPO"
 
 # `next dev` appends its build dir's type globs to tsconfig.json on startup. In a shared
 # tree that means every lane leaves a diff another window could sweep into a commit, so
-# snapshot it and put it back on the way out.
+# put it back on the way out: from HEAD, NOT from a copy taken at start. (11-21: a devwin
+# started while tsconfig was already dirty restored THAT dirty copy on exit and re-dropped
+# the '.coord' exclude the hub had just put back. The committed file is the only clean one.)
 TSCONFIG="$REPO/tsconfig.json"
-TSBACKUP="$(mktemp)"
-cp "$TSCONFIG" "$TSBACKUP"
 restore_tsconfig() {
-  if ! cmp -s "$TSCONFIG" "$TSBACKUP"; then
-    cp "$TSBACKUP" "$TSCONFIG"
-    echo ">> restored tsconfig.json (next dev had added $DIST type globs)"
+  local head
+  head="$(mktemp)"
+  if git -C "$REPO" show HEAD:tsconfig.json > "$head" 2>/dev/null && ! cmp -s "$TSCONFIG" "$head"; then
+    cp "$head" "$TSCONFIG"
+    echo ">> restored tsconfig.json from HEAD (next dev had added $DIST type globs)"
   fi
-  rm -f "$TSBACKUP"
+  rm -f "$head"
 }
 trap restore_tsconfig EXIT INT TERM   # replaced below once the dev server is registered
 
