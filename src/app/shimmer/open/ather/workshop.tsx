@@ -44,6 +44,10 @@ import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported,
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, ALC_LIVE, type Job } from './furniture'
 import { AlchemyPanel } from './alchemy-panel'
+import { BrewingPanel } from './brewing-panel'
+import { useBrewing, openPartyBrew } from './party-brew-net'
+import { ALC_POTIONS as BREW_POTIONS, ALC_POTION_ORDER as BREW_ORDER } from './alchemy-set'
+import { openNet } from '../shared/open-mp'
 import { boonAt, assignSet, standAt, setRoom, boonLine, potionsGrade } from './alchemist-boon'
 import { loadRuns, saveRuns, returnRun } from './alchemy-runs'
 import { ROAST } from './cooking'
@@ -1957,6 +1961,7 @@ function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<str
   const w = useWorks(), p = w.pieces.find(x => x.id === id)
   // M57 s2: read at the moment a brew finishes here (the garden and the plot as they are then)
   const boonHere = useCallback(() => { const b = boonAt(loadVillage(), getW(), id); return { chance: b.chance, name: b.who?.name ?? '' } }, [id])
+  const brewing = useBrewing()   // M57 s3b
   if (!p) return null
   const f = FURNITURE[p.item], spill = spillIfRemoved(currentWater(), plumbingOf(w.pieces), p.item, farmNow())
   const turn = () => { const t = turnPiece(getW(), owned, id); if (t) setWorks(t); else hudSay('No room to turn it here.', 'info') }
@@ -1967,9 +1972,16 @@ function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<str
     if (!rr) { hudSay('No room in the bag for it and what it was working on.', 'info'); return }
     setWorks(r.works); setInv(rr.inv); saveRuns(rr.runs); onClose(); hudSay(`${f.name} · back in your bag.`, 'item', 3)
   }
+  if (f.alc && brewing && !brewing.poured) return <BrewingPanel station={f.alc} onClose={onClose} />   // M57 s3b: a brewing is open here
   if (f.alc) return (
     <AlchemyPanel pid={id} station={f.alc} onClose={onClose} boon={boonHere} footer={<>
       {f.alc === 'desk' && <AlchemistAtSet deskId={id} />}
+      {f.alc === 'desk' && openNet()?.party && (
+        <div data-brew-open style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', fontSize: 12 }}>
+          <span style={{ fontWeight: 700 }}>Brew with your party:</span>
+          {BREW_ORDER.map(p => <span key={p} data-act="brew-open" data-potion={p}><HearthButton small onClick={() => { if (openPartyBrew(p)) onClose() }}>{BREW_POTIONS[p].name}</HearthButton></span>)}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <span data-act="turn-piece"><HearthButton small onClick={turn}>Turn</HearthButton></span>
         <span data-act="pickup-piece"><HearthButton small onClick={pickUp}>Pick up</HearthButton></span>

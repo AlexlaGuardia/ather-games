@@ -1,5 +1,5 @@
 // party-brew.ts: a brewing's claims, dependency order, the curve, the split and the per-hand boon roll.
-import { openBrewing, join, claim, openSteps, pool, pourReady, pour, yieldMult, totalBottles, contribution, busy, MAX_HANDS, type Brewing } from './party-brew'
+import { openBrewing, join, claim, openSteps, pool, pourReady, pour, yieldMult, totalBottles, contribution, busy, MAX_HANDS, adoptBrewing, hostClaim, stepViews, isClaim, isGrant, isPour, type Brewing } from './party-brew'
 import { ALC_POTIONS, potionId } from './alchemy-set'
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  FAIL', m) } }
@@ -74,5 +74,36 @@ for (let n = 1; n <= MAX_HANDS; n++) ok(totalBottles(H.makes, n) >= n, `every ha
 // cap
 { let b = openBrewing('h', 'health')!; for (let i = 0; i < 10; i++) b = join(b, `g${i}`)
   ok(b.hands.length === MAX_HANDS, `hands cap at ${MAX_HANDS}`) }
+
+// ── slice 3b: the relay's pure half ──
+{ let b = openBrewing('host', 'health')!
+  ok(JSON.stringify(adoptBrewing(JSON.parse(JSON.stringify(b)))) === JSON.stringify(b), 'a brewing survives the relay round trip')
+  ok(adoptBrewing(null) === null && adoptBrewing({ ...b, potion: 'nope' }) === null && adoptBrewing({ ...b, hands: [] }) === null, 'junk brewings refused')
+  ok(adoptBrewing({ ...b, runs: { 9: { by: 'g', spent: [], start: 0, ms: 1 } } }) === null, 'a run on a step the recipe lacks is refused')
+  ok(adoptBrewing({ ...b, runs: { 0: { by: 'g', spent: [{ id: 'x', n: -1 }], start: 0, ms: 1 } } }) === null, 'a negative spend is refused')
+  ok(adoptBrewing({ ...b, hands: Array.from({ length: MAX_HANDS + 1 }, (_, i) => 'h' + i) }) === null, 'more hands than the cap refused')
+  // the host's answer: joins a new hand, says why not
+  const r0 = hostClaim(b, 'g1', 0, scale, 0)
+  ok(!('why' in r0) && r0.b.hands.join() === 'host,g1' && r0.spend[0].id === 'shimmerscale', 'a guest claim joins it and spends from its bag')
+  b = (r0 as { b: Brewing }).b
+  const why = (r: ReturnType<typeof hostClaim>) => ('why' in r ? r.why : '')
+  ok(why(hostClaim(b, 'g2', 0, scale, 1)).includes('Someone has'), 'a taken step: "someone has that step"')
+  ok(why(hostClaim(b, 'g1', 1, crops, 1)).includes('already working'), 'a busy hand: "already working a step"')
+  ok(why(hostClaim(b, 'g2', 2, bag, 1)).includes('earlier one'), 'a step not open yet: "needs an earlier one"')
+  ok(why(hostClaim(b, 'g2', 1, {}, 1)).includes('short'), 'a short bag: "short of what that step takes"')
+  ok(!('why' in hostClaim(b, 'g2', 1, crops, 1)), 'a free hand takes the other open step')
+  let full = b; for (let i = 0; i < 9; i++) full = join(full, 'x' + i)
+  ok(why(hostClaim(full, 'late', 1, crops, 1)).includes('full'), 'a full brewing: "full"')
+  ok(why(hostClaim({ ...b, poured: true }, 'g2', 1, crops, 1)).includes('poured'), 'a poured brewing takes no claims')
+  // the panel's view
+  const v = stepViews(b, 1)
+  ok(v[0].state === 'running' && v[0].by === 'g1' && v[0].frac! > 0 && v[0].frac! < 1, 'a claimed step runs, by whom, how far')
+  ok(v[1].state === 'open' && v[2].state === 'waiting' && v[3].state === 'waiting', 'open / waiting by dependency')
+  ok(stepViews(b, T(0) + 1)[0].state === 'done', 'a finished step reads done')
+  // message guards
+  ok(isClaim({ k: 1, have: {} }) && !isClaim({ k: 'a', have: {} }) && !isClaim({ k: 1 }), 'claim shape')
+  ok(isGrant({ k: 0, spend: [{ id: 'a', n: 1 }] }) && !isGrant({ k: 0, spend: [{ id: 'a', n: 0 }] }), 'grant shape')
+  ok(isPour({ bottle: 'p', n: 2, extra: 0 }) && !isPour({ bottle: 'p', n: 0, extra: 0 }) && !isPour({ bottle: 'p', n: 99, extra: 0 }), 'pour shape (1..30 bottles)')
+}
 
 console.log(`party-brew: ${pass} ok, ${fail} fail`); process.exit(fail ? 1 : 0)

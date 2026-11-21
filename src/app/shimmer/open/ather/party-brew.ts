@@ -110,3 +110,59 @@ export function pour(b: Brewing, now: number, chance = 0, rnd: () => number = Ma
   for (const h of hands) { extra[h] = chance > 0 && rnd() < chance ? 1 : 0; per[h] += extra[h] }
   return { b: { ...b, poured: true }, bottle, per, extra }
 }
+
+// ── slice 3b: over the relay. The HOST holds the brewing and is the only one that changes it; guests ask. ──────────────────────
+//   PB_STATE  host -> each guest in view: { b: Brewing | null, now: host clock }   (on change, and every STATE_MS for arrivals)
+//   PB_CLAIM  guest -> host: { k, have }   the guest's bag counts for that step (the host runs claim() on them)
+//   PB_GRANT  host -> guest: { k, spend }  the guest takes `spend` out of its own bag   ·   PB_DENY { k, why }
+//   PB_POUR   host -> each hand: { bottle, n, extra }  the guest's share lands in its own bag
+// Times inside a Brewing are the HOST's clock; a guest reads them through `offset` = host now - own now at the last state.
+export const PB_STATE = 'pb:state', PB_CLAIM = 'pb:claim', PB_GRANT = 'pb:grant', PB_DENY = 'pb:deny', PB_POUR = 'pb:pour'
+export const STATE_MS = 2000
+
+const okSpent = (x: unknown): x is { id: string; n: number }[] =>
+  Array.isArray(x) && x.length <= 12 && x.every(s => !!s && typeof s.id === 'string' && s.id.length <= 48 && Number.isInteger(s.n) && s.n > 0 && s.n <= 99)
+/** A brewing that came over the relay: the right shape, a known potion, runs on real steps, or null. */
+export function adoptBrewing(x: unknown): Brewing | null {
+  if (!x || typeof x !== 'object') return null
+  const b = x as Partial<Brewing>
+  if (typeof b.host !== 'string' || typeof b.potion !== 'string' || !ALC_POTIONS[b.potion]) return null
+  if (!Array.isArray(b.hands) || !b.hands.length || b.hands.length > MAX_HANDS || !b.hands.every(h => typeof h === 'string' && h.length <= 36)) return null
+  const steps = ALC_POTIONS[b.potion].steps, runs: Record<number, StepRun> = {}
+  for (const [k, r] of Object.entries(b.runs ?? {})) {
+    const i = Number(k)
+    if (!Number.isInteger(i) || !steps[i] || !r || typeof r.by !== 'string' || !okSpent(r.spent) || !Number.isFinite(r.start) || !Number.isFinite(r.ms)) return null
+    runs[i] = { by: r.by, spent: r.spent, start: r.start, ms: r.ms }
+  }
+  return { host: b.host, potion: b.potion, hands: [...b.hands], runs, ...(b.poured ? { poured: true } : {}) }
+}
+export const isClaim = (x: unknown): x is { k: number; have: Have } =>
+  !!x && typeof x === 'object' && Number.isInteger((x as { k?: unknown }).k) && !!(x as { have?: unknown }).have && typeof (x as { have: unknown }).have === 'object'
+export const isGrant = (x: unknown): x is { k: number; spend: { id: string; n: number }[] } =>
+  !!x && typeof x === 'object' && Number.isInteger((x as { k?: unknown }).k) && okSpent((x as { spend?: unknown }).spend ?? [])
+export const isPour = (x: unknown): x is { bottle: string; n: number; extra: number } =>
+  !!x && typeof x === 'object' && typeof (x as { bottle?: unknown }).bottle === 'string' && Number.isInteger((x as { n?: unknown }).n) && (x as { n: number }).n >= 1 && (x as { n: number }).n <= 30
+    && Number.isInteger((x as { extra?: unknown }).extra)
+
+/** The host's answer to a claim, pure: the brewing after (the hand joined if new) and what the hand spends, or why not. */
+export function hostClaim(b: Brewing, who: string, k: number, have: Have, now: number): { b: Brewing; spend: { id: string; n: number }[] } | { why: string } {
+  if (b.poured) return { why: 'This brewing has poured.' }
+  const j = join(b, who)
+  if (!j.hands.includes(who)) return { why: 'This brewing is full.' }
+  if (busy(j, who, now)) return { why: 'You are already working a step.' }
+  if (j.runs[k]) return { why: 'Someone has that step.' }
+  if (!openSteps(j, now).includes(k)) return { why: 'That step needs an earlier one finished first.' }
+  const c = claim(j, who, k, have, now)
+  return c ?? { why: 'You are short of what that step takes.' }
+}
+
+/** What the panel draws for one step: who has it, how far along, or whether it is open to take. */
+export type StepView = { k: number; state: 'done' | 'running' | 'open' | 'waiting'; by?: string; frac?: number; left?: number }
+export function stepViews(b: Brewing, now: number): StepView[] {
+  const open = new Set(openSteps(b, now))
+  return ALC_POTIONS[b.potion].steps.map((_, k) => {
+    const r = b.runs[k]
+    if (r) { const left = Math.max(0, r.start + r.ms - now); return left ? { k, state: 'running', by: r.by, left, frac: r.ms ? 1 - left / r.ms : 1 } : { k, state: 'done', by: r.by } }
+    return { k, state: open.has(k) ? 'open' : 'waiting' }
+  })
+}
