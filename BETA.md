@@ -166,6 +166,9 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
+- **ALCHEMY ON? (11-21, ask #2):** canon all ruled (athernyx a7987c1 + 61911e7). Flipping ALC_LIVE retires the old alchemy room in your save with a full refund to the bank (all or nothing); the 4 pieces are blockouts. Yes / no.
+- **SIGN Yarrow's bait-maker lines (11-21):** @lark draft athernyx 2e5fc0f, CANON/game/yarrow-baitmaker-lines-script.md (same keys as folk-lines.ts). Sign / reword; play wires them.
+
 - **M58 GROUND FLICKER (11-21, play 929da8f3 live, OFF by default):** the layer fix ships behind `?ground=layers`. Our headless checker (SwiftShader, full depth precision) cannot see the flicker at all, in either mode, so only your phone can judge. Open the spot where you saw it, then the same spot with `?ground=layers`: gone? -> play flips DEFAULT_ON (one line). And where was it (screenshot)?
 
 - **M20 death backpack (11-18, play `d4e43245`, live):** (1) ✅ SIGNED 11-19. Was: SIGN the 4 pack lines (@lark pass, `ather/death-pack.tsx` PACK_LINES): left 'Your pack lies where you fell. Go back for it soon.' / back 'You shoulder your pack. Everything is still there.' / some 'You take what fits. The rest waits in the pack.' / full 'Your bag is full. The pack waits.' (2) LOOK: the pack (leather box + a small warm mote over it); fall in the Wilds to see it. Hidden clock is 5 min, never shown.
