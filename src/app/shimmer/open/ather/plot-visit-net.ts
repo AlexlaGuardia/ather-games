@@ -5,7 +5,7 @@
 // GUEST (visiting, socket zone open:plot:<host>): asks the host every ASK_MS until the plot has arrived, assembles the parts and
 // hands the snapshot to the visit store (which the works store reads).
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { PV_WANT, PV_SNAP, packSnap, unpackSnap, chunk, Reassembly, isSnapPart, setVisitSnap, refusalCount, visitLog, SendQueue, PV_HOME, isHomeMsg, homeLine, HostWatch, endVisit, guestLifts, type Visit, type PlotSnap } from './plot-visit'
+import { PV_WANT, PV_SNAP, packSnap, unpackSnap, chunk, Reassembly, isSnapPart, setVisitSnap, refusalCount, visitLog, SendQueue, PV_HOME, isHomeMsg, homeLine, HostWatch, endVisit, guestLifts, GIVE_UP_ASKS, type Visit, type PlotSnap } from './plot-visit'
 
 type Relay = (kind: string, data: unknown, to?: string) => boolean
 type OnRelay = (f: (m: { from: string; kind: string; data: unknown }) => void) => () => void
@@ -97,7 +97,12 @@ export function usePlotVisitNet(o: { relay: Relay; onRelay: OnRelay; hosting: bo
   }, [host, have])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!host || have) return
-    const ask = () => { if (o.relay(PV_WANT, {}, host)) probe.asked++ }
+    let n = 0
+    const ask = () => {
+      if (!o.relay(PV_WANT, {}, host)) return
+      probe.asked++
+      if (++n > GIVE_UP_ASKS) { say.current(`Could not reach ${o.visit?.name ?? 'their'}'s plot. They may have left it.`); endVisit('timeout') }
+    }
     ask(); const t = setInterval(ask, ASK_MS)
     return () => clearInterval(t)
   }, [host, have, o.relay])

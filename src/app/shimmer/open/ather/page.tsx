@@ -154,7 +154,7 @@ type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'fennel' } | { 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
 /** M61: a mate's island alone on the Green (the frame nobody is linked into) */
 const SOLO_FRAME = clusterFrame(null, [])
-const VISIT_WAIT_MS = 15_000
+const VISIT_WAIT_MS = 45_000   // M61 s3: a backstop for a socket that never relays; the real give-up counts asks (plot-visit GIVE_UP_ASKS)
 /** M61: who you are visiting, and the way home (game-UI rule: text on a plate, never raw on the scene) */
 function VisitPill({ name, ready, onHome }: { name: string; ready: boolean; onHome: () => void }) {
   return (

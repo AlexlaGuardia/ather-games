@@ -226,6 +226,9 @@ export function homeLine(why: HomeWhy | 'host-left', name: string): string {
   return why === 'sent' ? `${name} sent you home.` : `${name} left their plot, so you head home.`
 }
 
+/** a guest gives up after this many asks that went out unanswered (~15 s at ASK_MS 1.5 s). Counted in asks, not wall-clock: a
+ *  first page load can stall its main thread for seconds, and a timer then fires before the host's answer is even read. */
+export const GIVE_UP_ASKS = 10
 /** a host missing from the socket's live peers (already 8 s without a keepalive, open-mp STALE_MS) this much longer = gone */
 export const HOST_GONE_MS = 2_000
 /** The guest's watch on the host: true once the host has been absent HOST_GONE_MS in a row. Any sighting resets it. */
