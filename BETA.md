@@ -174,6 +174,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - 11-21 08:4x Alex: "similar issue with the planning table.. only be able to interact with what the cursor is selecting.. moglins.. doors gates.. i do like the 3m range" → **M60**, routed to world
 - 11-21 08:5x Alex: hands dev tool hold stance had no clockwise-roll setting, so he flipped the glove; the slerp followed the flip → add HOLD_YAW twist, full ±PI ranges, ITEM_UP to 0.6, a hold-blend scrubber + reset-rotation button (sprites)
 - 11-21 09:1x Alex: "a map editor.. in the dev tools.. load a bare map and sculpt the land raising and lower using a brush plus a flatten tool and water" → NOT M38 (killed: in-game, on foot); a dev-tools page. Alex: edits the REAL Wilds + water = paint a level → **M62**, routed to world
+- 11-21 13:3x Alex: "a ship yard is basically ~100x100 plot with a landing zone ... garages that can store 4-12 coursers, and a ship dock some need water others just need somewhere to tie em down ..and last but not least a home of some kind mixed into it all" → spec on file docs/M49-shipyards.md (tier table = hub DEFAULT); M49 re-sliced s4 plot / s5 garages / s6 dock / s7 buy; world's 12x8 yard = superseded scale
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
