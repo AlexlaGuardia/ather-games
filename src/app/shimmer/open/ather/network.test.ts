@@ -21,7 +21,13 @@ const name = 'w0_1', before = tile(name), after = tile(name, clear)
 ok(after.trees.length < before.trees.length, `clearing: no tree was cleared on ${name} (${before.trees.length} → ${after.trees.length})`)
 const byId = new Map(before.trees.map(t => [t.id, t]))
 ok(after.trees.every(t => { const b = byId.get(t.id); return !!b && b.x === t.x && b.z === t.z }), 'clearing: a kept tree changed its id (a saved prune would find the wrong tree)')
-ok(after.crystals.length === before.crystals.length && after.crystals.every((c, k) => c.x === before.crystals[k].x && c.id === before.crystals[k].id), 'clearing: crystals moved')
+// crystals: every one that stays keeps its id and its spot (a saved fracture finds the right node). Since 938eaa8b an OUTCROP
+// crystal (id 'o<i>_<j>') needs its outcrop standing, and a path flattens the outcrops it crosses, so those few may go; no rock-cell
+// crystal ever does.
+const cById = new Map(before.crystals.map(c => [c.id, c])), afterIds = new Set(after.crystals.map(c => c.id))
+ok(after.crystals.every(c => { const b = cById.get(c.id); return !!b && b.x === c.x && b.z === c.z }), 'clearing: a kept crystal moved or changed its id')
+const gone = before.crystals.filter(c => !afterIds.has(c.id))
+ok(gone.every(c => /:o-?\d+_-?\d+$/.test(c.id) && pathDistance(net, c.x + 0, c.z + 1000) < 30), `clearing: only outcrop crystals beside a path may go (${gone.length} gone: ${gone.map(c => c.id).slice(0, 3).join(' ')})`)
 const off = { x: 0, z: 1000 }
 ok(after.trees.every(t => pathDistance(net, t.x + off.x, t.z + off.z) > 2.5), 'clearing: a tree still stands on the path')
 // paths cross dry ground (sampled on the loaded tile)

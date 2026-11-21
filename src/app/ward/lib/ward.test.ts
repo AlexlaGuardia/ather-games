@@ -260,7 +260,7 @@ function ok(name: string, cond: boolean) {
   const vyBefore = d.vy
   ok('darter creeps during the wind-up', !d.darted && vyBefore < 40)
   for (let i = 0; i < 12; i++) tick(w, 1 / 60) // cross the hang time
-  ok('darter snaps into a fast dive', d.darted && d.vy > vyBefore * 2)
+  ok('darter snaps into a fast dive', !!d.darted && d.vy > vyBefore * 2)
 }
 
 {

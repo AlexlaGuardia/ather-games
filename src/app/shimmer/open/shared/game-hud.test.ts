@@ -30,7 +30,12 @@ const FORBIDDEN = [
   /from ['"][./]*hud\/hotbar['"](?!.*type)/,      // a type import for entries is fine; the component is not
   /\bHearthCompass\b|\bHearthHotbar\b|\bHearthVitals\b|\bHearthHudLayer\b|\bManaGauge\b/,
 ]
-const game = pages.filter(p => !EXEMPT[p.slice(p.indexOf('open/'))])
+/** whole folders of benches: every page under one is a dev preview (a scene on a bare canvas, no keeper, no HUD by design) */
+const EXEMPT_DIRS: Record<string, string> = {
+  'open/preview/': 'dev previews (crystals, companions, shop-door, business, fallen-cap...): a look at one model or scene on a bare Canvas, not a place the game sends you',
+}
+const exempt = (rel: string) => !!EXEMPT[rel] || Object.keys(EXEMPT_DIRS).some(d => rel.startsWith(d))
+const game = pages.filter(p => !exempt(p.slice(p.indexOf('open/'))))
 ok(game.length >= 2, `wiring: found ${game.length} open-world pages (want the Ather + the continent at least)`)
 for (const p of game) {
   const src = readFileSync(p, 'utf8'), rel = p.slice(p.indexOf('open/'))
@@ -39,6 +44,7 @@ for (const p of game) {
 }
 // the exemptions must still exist (an exemption for a deleted file is a dead rule that reads as a live one)
 for (const k of Object.keys(EXEMPT)) ok(pages.some(p => p.endsWith(k)), `wiring: exemption ${k} names a page that no longer exists — drop it`)
+for (const d of Object.keys(EXEMPT_DIRS)) ok(pages.some(p => p.includes(d)), `wiring: folder exemption ${d} holds no page any more — drop it`)
 // the template itself carries the three things Alex asked for by name
 {
   const t = readFileSync(join(OPEN, 'shared/game-hud.tsx'), 'utf8')

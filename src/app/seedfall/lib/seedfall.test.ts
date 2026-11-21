@@ -12,6 +12,8 @@ import {
   FUEL_MAX,
   type World,
 } from './seedfall'
+/** read the state after a tick: TS narrows `.state` to what the test just assigned and cannot see tick() change it */
+const stateOf = (w: { state: string }): string => w.state
 
 let pass = 0
 let fail = 0
@@ -72,7 +74,7 @@ function calm(w: World) { w.wind = 0; w.windTarget = 0; w.windT = 999 }
   const b = w.branches[0]
   // sit in the limb's y-band, OFF the opening → crash
   w.y = b.y - 5; w.x = b.gapX > VW / 2 ? 6 : VW - 6; w.vx = 0; w.vy = 60
-  ok('under a branch limb = crash', tick(w, 0.05).crashed && w.state === 'crashed')
+  ok('under a branch limb = crash', tick(w, 0.05).crashed && stateOf(w) === 'crashed')
 
   const w2 = makeWorld(1); w2.state = 'playing'; calm(w2)
   const b2 = w2.branches[0]
@@ -89,7 +91,7 @@ function calm(w: World) { w.wind = 0; w.windTarget = 0; w.windT = 999 }
   w.skirl = { x: -13, dy: -122, side: 1, targetX: 200, state: 'sweep', t: 0 }
   let caught = false
   for (let i = 0; i < 200 && w.state === 'playing'; i++) { if (tick(w, 1 / 60).caught) caught = true }
-  ok('swoop snatches a seed in its dive line', caught && w.state === 'caught')
+  ok('swoop snatches a seed in its dive line', caught && stateOf(w) === 'caught')
 
   // dive aimed far from the seed → it crosses and peels off (a dodge)
   const w2 = makeWorld(1); w2.state = 'playing'; calm(w2); w2.x = 360
@@ -104,17 +106,17 @@ function calm(w: World) { w.wind = 0; w.windTarget = 0; w.windT = 999 }
   const w = makeWorld(1); w.state = 'playing'; calm(w)
   w.x = w.padX; w.y = DEPTH_GOAL - SEED_R - 1; w.vx = 0; w.vy = 20
   const ev = tick(w, 0.05)
-  ok('soft on-pad = landed', w.state === 'landed' && ev.landed)
+  ok('soft on-pad = landed', stateOf(w) === 'landed' && ev.landed)
   ok('a rating is given', ev.rating === 'perfect' || ev.rating === 'soft')
 
   const hot = makeWorld(1); hot.state = 'playing'; calm(hot)
   hot.x = hot.padX; hot.y = DEPTH_GOAL - SEED_R - 1; hot.vx = 0; hot.vy = 240
-  ok('hard landing = crashed', tick(hot, 0.05).crashed && hot.state === 'crashed')
+  ok('hard landing = crashed', tick(hot, 0.05).crashed && stateOf(hot) === 'crashed')
 
   const off = makeWorld(1); off.state = 'playing'; calm(off)
   off.x = off.padX < VW / 2 ? VW - SEED_R - 2 : SEED_R + 2
   off.y = DEPTH_GOAL - SEED_R - 1; off.vx = 0; off.vy = 30
-  ok('off-pad = crashed', tick(off, 0.05).crashed && off.state === 'crashed')
+  ok('off-pad = crashed', tick(off, 0.05).crashed && stateOf(off) === 'crashed')
 }
 
 // 9. depth grows the score; determinism
