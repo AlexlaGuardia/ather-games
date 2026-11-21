@@ -166,8 +166,6 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
-- **ALCHEMY ON: hub's call 11-21** (your cloud save has no alchemy room, so nothing is retired or refunded; one-line revert if you dislike it). Look at the 4 blockout pieces when you can.
-- **SIGN Yarrow's bait-maker lines (11-21):** @lark draft athernyx 2e5fc0f, CANON/game/yarrow-baitmaker-lines-script.md (same keys as folk-lines.ts). Sign / reword; play wires them.
 
 - **M58 GROUND FLICKER (11-21, play 929da8f3 live, OFF by default):** the layer fix ships behind `?ground=layers`. Our headless checker (SwiftShader, full depth precision) cannot see the flicker at all, in either mode, so only your phone can judge. Open the spot where you saw it, then the same spot with `?ground=layers`: gone? -> play flips DEFAULT_ON (one line). And where was it (screenshot)?
 
