@@ -46,6 +46,7 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
   const loco = useRef(born())
   const keys = useRef(new Set<string>())
   const look = useRef({ yaw: spawn.yaw, pitch: -0.05 })
+  const pinned = useRef(false)   // __ather.pin (check-only)
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => { keys.current.add(e.code); if (e.code === 'Space') e.preventDefault() }
@@ -67,6 +68,9 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
       tp: (x: number, z: number, yaw = look.current.yaw, y?: number) => { loco.current = createLoco(x, y ?? ground(x, z), z); look.current.yaw = yaw },
       ground: (x: number, z: number) => ground(x, z),   // read-only: the ground the walker stands on (wilds-cover-check)
       look: (yaw: number, pitch: number) => { look.current.yaw = yaw; look.current.pitch = pitch },
+      // check-only (M58 flicker shots): hold the keeper exactly where they are, no gravity / settle, so two frames 1 s apart
+      // share one camera. Nothing in the game calls it.
+      pin: (on: boolean) => { pinned.current = on },
     }
     return () => {
       window.removeEventListener('keydown', down); window.removeEventListener('keyup', up)
@@ -104,6 +108,7 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
     const r = Math.max(-1, Math.min(1, (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0) + tm.x))
     wish.set(0, 0, 0).addScaledVector(fwd, f).addScaledVector(right, r)
     if (wish.lengthSq() > 1) wish.normalize()
+    if (pinned.current) { camera.position.set(lc.px, eyeY(lc), lc.pz); camera.rotation.set(pitch, yaw, 0, 'YXZ'); return }
     tickLocomotion(lc, {
       mvX: wish.x, mvZ: wish.z, fwdX: fwd.x, fwdZ: fwd.z, rightX: right.x, rightZ: right.z,
       jumpKey: k.has('Space'), crouchKey: k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyC'), dt,

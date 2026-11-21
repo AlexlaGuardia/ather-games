@@ -33,12 +33,14 @@ async function shoot(p: any, name: string, tx: number, tz: number, fx: number, f
   await p.waitForFunction(() => { const g = (window as any).__groundPending; return !g || g() === 0 }, { timeout: 180000, polling: 500 }).catch(() => errs.push(`${name}: ground still building after 180 s`))
   await sleep(1500)
   await hideCard(p); await place()
+  const pin = (on: boolean) => p.evaluate((v: boolean) => (window as any).__ather.pin?.(v), on)
+  if (process.argv.includes('--flicker')) await pin(true)   // one camera for both frames (walker.tsx __ather.pin, check-only)
   await p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))
   await p.screenshot({ path: `${out}/${name}.png` }); shots.push(name)
   if (process.argv.includes('--flicker')) {
     // M58 flicker: the same fixed camera 1 s later; z-fighting overlays shimmer between frames, a settled ground does not.
     // Changed = any channel moved > 24. Living things (folk, the beam, water) move too: read the diff image, not only the number.
-    await sleep(1000); await place()
+    await sleep(1000)
     await p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))
     await p.screenshot({ path: `${out}/${name}-b.png` })
     const [A, B] = await Promise.all([`${out}/${name}.png`, `${out}/${name}-b.png`].map(f => sharp(f).removeAlpha().raw().toBuffer({ resolveWithObject: true })))
@@ -49,6 +51,7 @@ async function shoot(p: any, name: string, tx: number, tz: number, fx: number, f
     }
     await sharp(d, { raw: { width: w, height: h, channels: 3 } }).png().toFile(`${out}/${name}-diff.png`)
     flicker[name] = +(changed / (w * h) * 100).toFixed(3)
+    await pin(false)
   }
 }
 const flicker: Record<string, number> = {}
