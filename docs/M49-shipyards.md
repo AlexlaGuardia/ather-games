@@ -27,8 +27,8 @@ Every shipyard has, mixed together on that plot:
 | shipyard | where | price (Marks) | garage | dock | home |
 |---|---|---|---|---|---|
 | Kael's (inherited) | road above Rune Hold | free | 4 | tie-down | Kael's house |
-| Gale Haven | outskirts (water berth if its site touches water) | 250,000 | 8 | water berth | cabin |
-| Veradyn | outskirts | 300,000 | 8 | tie-down | house |
+| Gale Haven | by road e40, 390 m N of town (hub 11-21: dry site, less decking) | 250,000 | 8 | tie-down | cabin |
+| Veradyn | isle site 290 m from town, no road (isle city): reached by water or by air | 300,000 | 8 | water berth | house |
 | the Citadel | outskirts | 400,000 | 12 | tie-down | large house |
 
 ## What already exists (11-21)
