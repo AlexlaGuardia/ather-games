@@ -664,8 +664,8 @@ function treeBlock(R: Region, bi: number, bj: number) {
     if (Math.abs(R.heightAt(x + 4, z) - R.heightAt(x - 4, z)) > 5) continue
     if ((nearestRoad(R, x, z).d < 9 && !((R.tunnelAt(x, z)?.cover ?? 0) > TUNNEL_H + 4)) || nearPad(R, x, z, 5)) continue
     if (townDiscsOf(R).some(t => Math.hypot(t.x - x, t.z - z) < t.r)) continue
-    out.push({ x, y, z, s: 0.8 + hash(i, j + 9) * 0.7 })
     if (inShipyardPlot(R, x, z, 6)) continue   // M49 s4: no tree through a shipyard's terrace (or its landing)
+    out.push({ x, y, z, s: 0.8 + hash(i, j + 9) * 0.7 })
   }
   return out
 }

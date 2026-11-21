@@ -62,6 +62,20 @@ const hold = async (keys: string[], goal: (f: { x: number; y: number; z: number 
   for (const k of keys) await p.keyboard.up(k as any)
   await sleep(400); return why
 }
+/** hold, and on a stall look again and resume (up to 2 more times) as long as the last try MOVED: a render hitch on the box
+ *  outlasts the stall window; a wall does not move at all. Each stall leaves a shot. */
+let stallN = 0
+const walk = async (keys: string[], goal: (f: { x: number; y: number; z: number }) => boolean, maxMs: number, reaim: () => Promise<void>) => {
+  let why = '', tries = 0
+  for (; tries < 3; tries++) {
+    const a = await footAt(); why = await hold(keys, goal, maxMs)
+    if (why !== 'stalled') break
+    await p.screenshot({ path: `${out}/stall-${++stallN}.png` })
+    const b = await footAt(); if (Math.hypot(b.x - a.x, b.z - a.z) < 0.1) break
+    await reaim(); await sleep(1500)
+  }
+  return `${why}${tries ? ` (+${tries} resumes)` : ''}`
+}
 const tapE = async () => { await p.keyboard.down('KeyE'); await sleep(80); await p.keyboard.up('KeyE'); await sleep(900) }
 const resume = async () => { if (/click to resume/i.test(String(await text()))) { await p.mouse.click(500, 320); await sleep(800) } }
 const loadContinent = async () => {
@@ -114,12 +128,12 @@ for (const key of [KAEL, ...BOUGHT]) {
   say(`${id}: walk in`)
   const gate = toW(s, 0, -52)
   await look(yawTo(gate.x - (await footAt()).x, gate.z - (await footAt()).z)); await sleep(800)
-  const w1 = await hold(['KeyW'], f => toL(s, f.x, f.z).lx < 0.8, 150000)
+  const w1 = await walk(['KeyW'], f => toL(s, f.x, f.z).lx < 0.8, 150000, async () => { const q = await footAt(); await look(yawTo(gate.x - q.x, gate.z - q.z)) })
   const fa = await footAt(), la = toL(s, fa.x, fa.z)
   r.landing = { why: w1, lx: +la.lx.toFixed(2), lz: +la.lz.toFixed(2), feet: +fa.y.toFixed(2), floor: +s.floor.toFixed(2) }
   if (la.lx > 2 || Math.abs(fa.y - s.floor) > 0.3) await fail(`${id} ramp`, `did not climb the ramp to the gate: ${JSON.stringify(r.landing)}`)
   await look(yawTo(s.az[0], s.az[1])); await sleep(800)
-  const w2 = await hold(['KeyW'], f => toL(s, f.x, f.z).lz > -42, 90000)
+  const w2 = await walk(['KeyW'], f => toL(s, f.x, f.z).lz > -42, 90000, () => look(yawTo(s.az[0], s.az[1])))
   const fb = await footAt(), lb = toL(s, fb.x, fb.z)
   r.gate = { why: w2, lx: +lb.lx.toFixed(2), lz: +lb.lz.toFixed(2), feet: +fb.y.toFixed(2) }
   if (lb.lz < -48 || Math.abs(fb.y - s.floor) > 0.1) await fail(`${id} gate`, `did not walk in through the gate onto the floor: ${JSON.stringify(r.gate)}`)
@@ -128,6 +142,11 @@ for (const key of [KAEL, ...BOUGHT]) {
   const c = toW(s, 44, 44), m = toW(s, 0, -10)
   await tp(c.x, c.z, yawTo(m.x - c.x, m.z - c.z), -0.25); await sleep(4000)
   await p.screenshot({ path: `${out}/${id}-2-across.png` })
+  // and from the air: 70 m out past the front-left corner, 45 m up, looking at the plot's middle (the hub LOOKS at this one)
+  const air = toW(s, -70, -90)
+  await p.evaluate((q: number[]) => (window as any).__drive.shot(q), [air.x, s.floor + 45, air.z, s.x, s.floor, s.z]); await sleep(5000)
+  await p.screenshot({ path: `${out}/${id}-3-air.png` })
+  await p.evaluate(() => (window as any).__drive.shot(null))
   if (key === KAEL) {
     // 4 · a stool on deed ground: stand at (-10, -10) facing deep (clear of the pad, home, garage, gate way), tap E
     say('kael: place')
@@ -136,7 +155,7 @@ for (const key of [KAEL, ...BOUGHT]) {
     await p.keyboard.press('Digit1'); await sleep(700); await tapE()
     const st = await S(key, 'state'); r.placed = st?.items
     if (st?.items?.length !== 1 || st.items[0].id !== STOOL) await fail('kael place', `expected one stool set: ${JSON.stringify(st?.items)} | hud ${String(await text()).slice(0, 300)}`)
-    await p.screenshot({ path: `${out}/kael-3-stool.png` })
+    await p.screenshot({ path: `${out}/kael-4-stool.png` })
     // 5 · reload keeps it
     say('kael: reload'); const before = JSON.stringify(st.items)
     await loadContinent(); await goTo(KAEL)
@@ -148,11 +167,11 @@ for (const key of [KAEL, ...BOUGHT]) {
     say(`${id}: swim in`)
     const sea = toW(s, s.slip.lx, 50 + s.slip.L + 4), deep = toW(s, s.slip.lx, 40)
     await tp(sea.x, sea.z, yawTo(deep.x - sea.x, deep.z - sea.z), -0.1); await sleep(2500)
-    const w3 = await hold(['KeyW', 'Space'], f => toL(s, f.x, f.z).lz < 46, 180000)
+    const w3 = await walk(['KeyW', 'Space'], f => toL(s, f.x, f.z).lz < 46, 180000, async () => { const q = await footAt(); await look(yawTo(deep.x - q.x, deep.z - q.z), -0.1) })
     const fs = await footAt(), ls = toL(s, fs.x, fs.z)
     r.swimIn = { why: w3, lx: +ls.lx.toFixed(2), lz: +ls.lz.toFixed(2), feet: +fs.y.toFixed(2), floor: +s.floor.toFixed(2) }
     if (ls.lz > 48 || Math.abs(fs.y - s.floor) > 0.6) await fail(`${id} swim`, `a swimmer did not come up the slipway into the yard: ${JSON.stringify(r.swimIn)}`)
-    await p.screenshot({ path: `${out}/${id}-4-slip.png` })
+    await p.screenshot({ path: `${out}/${id}-5-slip.png` })
   }
 }
 if (errs.length) await fail('errors', `${errs.length} page errors: ${errs.slice(0, 3).join(' | ')}`)
