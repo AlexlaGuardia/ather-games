@@ -166,6 +166,8 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
+- **M58 GROUND FLICKER (11-21, play 929da8f3 live, OFF by default):** the layer fix ships behind `?ground=layers`. Our headless checker (SwiftShader, full depth precision) cannot see the flicker at all, in either mode, so only your phone can judge. Open the spot where you saw it, then the same spot with `?ground=layers`: gone? -> play flips DEFAULT_ON (one line). And where was it (screenshot)?
+
 - **M20 death backpack (11-18, play `d4e43245`, live):** (1) ✅ SIGNED 11-19. Was: SIGN the 4 pack lines (@lark pass, `ather/death-pack.tsx` PACK_LINES): left 'Your pack lies where you fell. Go back for it soon.' / back 'You shoulder your pack. Everything is still there.' / some 'You take what fits. The rest waits in the pack.' / full 'Your bag is full. The pack waits.' (2) LOOK: the pack (leather box + a small warm mote over it); fall in the Wilds to see it. Hidden clock is 5 min, never shown.
 
 - **M15 field casts (11-18):** these field moves have only PART of their effect in the open world (nothing invented): Healing Grove, Monsoon Veil, Exhale only heal; Overpressure's ward/shell do nothing; Monsoon Veil's hide does nothing; Threshold's shell HP does nothing (it eats Hollow spit); Cyclone Cage roots Hollows but doesn't block your shots. Fine for now, or do any of these need their full effect before beta?
