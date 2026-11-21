@@ -38,7 +38,7 @@ async function atherLook(p: any, sx: number, sz: number, tx: number, tz: number,
   }, sx, sz, tx, tz, ty, turn, EYE)
   await frames(p, 10)   // ten real frames (the HUD prompt refreshes on the frame loop; a SwiftShader Glade frame can take > 1 s)
 }
-const frames = (p: any, n: number) => p.evaluate((k: number) => new Promise<void>(r => { const f = () => (--k <= 0 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f) }), n)
+const frames = (p: any, n: number) => p.evaluate(`new Promise(r => { let k = ${n}; (function tick() { if (--k <= 0) r(0); else requestAnimationFrame(tick) })() })`)   // a string: tsx would wrap a named fn in __name, which the page lacks
 /** presence polls (up to 8 s); absence is read after the frames above have run */
 const shows = async (p: any, s: string) => { for (let t = 0; t < 8000; t += 400) { if (await text(p, s)) return true; await sleep(400) } return false }
 /** the three legs for one Ather target: from direction (ux, uz) out of the target, near side `r` */
