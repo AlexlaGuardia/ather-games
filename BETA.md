@@ -163,8 +163,11 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - 11-21 06:2x Alex: "the ground looks terrible both in the ather and nyx side.. when shapes overlap we get this ugly glitchy state where the overlapping parts fight for whos on top.. and then theres the incohesive shapes that make up roads and sidewalks .. do we need another tool or can we do better" → triaged: **M58** (no editor; a ground pass in code)
 - 11-21 06:4x Alex: new fp-hands values for holding items (27 keys, saved docs/handoff/hands-tune-2026-11-21.json) → routed to sprites as a quick one
 - 11-21 06:5x Alex: "the way the hand rotates from idle to hold looks unnatural" → cause: Euler lerp of pitch 3.3 rad + roll 3.7 rad (fp-hands-pose.ts:123); routed to sprites (quaternion slerp) after M56a. Open look call: held item sits behind the cast wheel bottom-right
+- 11-21 07:2x Alex: "what if we let players pick from like 3 foundation heights" → already None / Low 0.6 / High 1.2 per house; Alex: fine as is
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+
+- **ROAD RIBBONS DEFAULT? (11-21, M58 p2):** 6 elevated before/after shots on your phone (j7 tee, j22 roundabout, j4 Ashfeld square). Hub's take: ribbons clearly better (legacy road stops short of the square, ribbon runs in; kerbs + pavement). Yes -> play flips the default.
 
 
 - **M58 GROUND FLICKER (11-21, play 929da8f3 live, OFF by default):** the layer fix ships behind `?ground=layers`. Our headless checker (SwiftShader, full depth precision) cannot see the flicker at all, in either mode, so only your phone can judge. Open the spot where you saw it, then the same spot with `?ground=layers`: gone? -> play flips DEFAULT_ON (one line). And where was it (screenshot)?
