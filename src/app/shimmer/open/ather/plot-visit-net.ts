@@ -4,8 +4,8 @@
 // chunked, sent to that peer only, paced under the server's 20 relays/s.
 // GUEST (visiting, socket zone open:plot:<host>): asks the host every ASK_MS until the plot has arrived, assembles the parts and
 // hands the snapshot to the visit store (which the works store reads).
-import { useEffect, useRef } from 'react'
-import { PV_WANT, PV_SNAP, packSnap, unpackSnap, chunk, Reassembly, isSnapPart, setVisitSnap, refusalCount, visitLog, SendQueue, type Visit, type PlotSnap } from './plot-visit'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { PV_WANT, PV_SNAP, packSnap, unpackSnap, chunk, Reassembly, isSnapPart, setVisitSnap, refusalCount, visitLog, SendQueue, PV_HOME, isHomeMsg, homeLine, HostWatch, endVisit, guestLifts, type Visit, type PlotSnap } from './plot-visit'
 
 type Relay = (kind: string, data: unknown, to?: string) => boolean
 type OnRelay = (f: (m: { from: string; kind: string; data: unknown }) => void) => () => void
@@ -13,11 +13,18 @@ const ASK_MS = 1500
 /** one part every PACE_MS: ~16/s, under the server's 20/s refill with its burst of 30 left for everything else */
 const PACE_MS = 60
 
-const probe = { sent: 0, asked: 0, answered: 0, got: 0, v: 0, pushed: 0 }
+const probe = { sent: 0, asked: 0, answered: 0, got: 0, v: 0, pushed: 0, sentHome: 0 }
 /** a change on the host's plot goes out this long after the last write */
 const RESEND_MS = 900
 
-export function usePlotVisitNet(o: { relay: Relay; onRelay: OnRelay; hosting: boolean; visit: Visit | null; snapOf: () => PlotSnap; live: () => string[]; rev: unknown }) {
+/** slice 3: how often the guest looks for the host among the live peers, and the host refreshes its guest list */
+const WATCH_MS = 1000
+
+export function usePlotVisitNet(o: { relay: Relay; onRelay: OnRelay; hosting: boolean; visit: Visit | null; snapOf: () => PlotSnap; live: () => string[]; rev: unknown
+  say: (msg: string) => void }) {
+  const say = useRef(o.say); say.current = o.say
+  /** slice 3: the guests on the host's plot right now (ids that asked for it and are still live), for the Send home pill */
+  const [guestIds, setGuestIds] = useState<string[]>([])
   const snapOf = useRef(o.snapOf); snapOf.current = o.snapOf
   const live = useRef(o.live); live.current = o.live
   const cache = useRef<{ key: string; packed: string; v: number } | null>(null)
@@ -40,7 +47,17 @@ export function usePlotVisitNet(o: { relay: Relay; onRelay: OnRelay; hosting: bo
       const c = await packed(); q.enqueue(m.from, chunk(c.packed, c.v))
     })
     const t = setInterval(() => { const n = q.next(); if (n && o.relay(PV_SNAP, n.part, n.to)) probe.sent++ }, PACE_MS)
-    return () => { off(); clearInterval(t); guests.current.clear(); while (q.next()); }
+    // slice 3: keep the guest list true (a guest who went home or offline drops out of it and out of the queue)
+    const w = setInterval(() => {
+      const here = new Set(live.current())
+      for (const g of [...guests.current]) if (!here.has(g)) { guests.current.delete(g); q.drop(g) }
+      setGuestIds(prev => { const now = [...guests.current].sort(); return prev.length === now.length && prev.every((x, i) => x === now[i]) ? prev : now })
+    }, WATCH_MS)
+    return () => {
+      off(); clearInterval(t); clearInterval(w)
+      for (const g of guests.current) o.relay(PV_HOME, { why: 'left' }, g)   // slice 3: the host left the plot: guests head home
+      guests.current.clear(); while (q.next()); setGuestIds([])
+    }
   }, [o.hosting, o.relay, o.onRelay])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── host, slice 2: the plot changed -> every guest still here gets the new version (debounced: a wall drag is many writes) ──
@@ -62,13 +79,22 @@ export function usePlotVisitNet(o: { relay: Relay; onRelay: OnRelay; hosting: bo
     if (!host) return
     const re = new Reassembly()
     const off = o.onRelay(async m => {
-      if (m.kind !== PV_SNAP || m.from !== host || !isSnapPart(m.data)) return
+      if (m.kind === PV_SNAP ? (m.from !== host || !isSnapPart(m.data)) : m.kind !== PV_HOME) return
+      if (m.kind === PV_HOME && m.from === host && isHomeMsg(m.data)) { const v = o.visit; say.current(homeLine(m.data.why, v?.name ?? 'Your friend')); endVisit(m.data.why === 'sent' ? 'sent-home' : 'host-left'); return }
+      if (!isSnapPart(m.data)) return
       const packed = re.add(m.data); if (!packed) return
       const s = await unpackSnap(packed)
       if (s && setVisitSnap(host, m.data.v, s)) { probe.got++; probe.v = m.data.v }
     })
     return off
-  }, [host, o.onRelay])
+  }, [host, o.onRelay])   // eslint-disable-line react-hooks/exhaustive-deps
+  // slice 3: the host offline / gone from the plot without a word (tab shut, network) = home, once the plot had arrived
+  useEffect(() => {
+    if (!host || !have) return
+    const hw = new HostWatch(), name = o.visit?.name ?? 'Your friend'
+    const t = setInterval(() => { if (hw.tick(live.current().includes(host), performance.now())) { say.current(homeLine('host-left', name)); endVisit('host-left') } }, WATCH_MS)
+    return () => clearInterval(t)
+  }, [host, have])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!host || have) return
     const ask = () => { if (o.relay(PV_WANT, {}, host)) probe.asked++ }
@@ -76,10 +102,18 @@ export function usePlotVisitNet(o: { relay: Relay; onRelay: OnRelay; hosting: bo
     return () => clearInterval(t)
   }, [host, have, o.relay])
 
+  /** host: send one guest home (they leave on the message; the guest list drops them on the next watch) */
+  const sendHome = useCallback((id: string) => {
+    if (!guests.current.has(id) || !o.relay(PV_HOME, { why: 'sent' }, id)) return false
+    probe.sentHome++; guests.current.delete(id); queue.current.drop(id); setGuestIds(prev => prev.filter(x => x !== id)); return true
+  }, [o.relay])
+
   if (typeof window !== 'undefined') (window as unknown as { __visit?: unknown }).__visit = {
+    guests: () => [...guests.current], lifts: () => guestLifts(), sendHome,
     visiting: () => !!o.visit, host: () => o.visit?.host ?? null, name: () => o.visit?.name ?? null, hasSnap: () => !!o.visit?.snap,
     hosting: () => o.hosting, refusals: () => refusalCount(), net: () => ({ ...probe }), log: () => visitLog(),
     /** what arrived: wall / piece / level counts of the visited plot's snapshot */
     shown: () => { const w = o.visit?.snap?.works; return w ? { walls: Object.keys(w.walls ?? {}).length, pieces: w.pieces.map(x => x.item), upper: w.upper?.length ?? 0, upperWalls: (w.upper ?? []).map(l => Object.keys(l.walls ?? {}).length), owned: o.visit!.snap!.owned.length } : null },
   }
+  return { guests: guestIds, sendHome }
 }

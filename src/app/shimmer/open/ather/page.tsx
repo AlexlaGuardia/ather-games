@@ -165,6 +165,22 @@ function VisitPill({ name, ready, onHome }: { name: string; ready: boolean; onHo
     </div>
   )
 }
+/** M61 s3: the host's side: who is on your plot, and a way to send each one home */
+function GuestsPill({ guests, onSend }: { guests: { id: string; name: string }[]; onSend: (id: string) => void }) {
+  if (!guests.length) return null
+  return (
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[30] pointer-events-auto flex flex-wrap items-center justify-center gap-2 px-3 py-1 rounded-lg max-w-[92vw]"
+      style={{ background: 'linear-gradient(#f3e6c8, #e6d3ab)', border: '2px solid #6b4a2e', boxShadow: '0 1px 4px rgba(0,0,0,.45)', color: '#3a2716', font: '700 12px ui-sans-serif, system-ui, sans-serif' }} data-guests-pill>
+      <span>On your plot:</span>
+      {guests.map(g => (
+        <span key={g.id} className="flex items-center gap-1">
+          <span>{g.name}</span>
+          <button onClick={() => onSend(g.id)} className="hk-btn px-2 py-0.5 text-[11px]" data-act="send-home" data-guest={g.id}>Send home</button>
+        </span>
+      ))}
+    </div>
+  )
+}
 export default function AtherSlice() { return <OwnerReady><AtherSliceGame /></OwnerReady> }
 function AtherSliceGame() {
   const locked = useRef(false), frozen = useRef(false)
@@ -572,9 +588,11 @@ function AtherSliceGame() {
     () => (stanceRef.current.kind === 'weapon' ? heldRef.current : null))   // M27 slice 4: the party sees my gun
   const heightRef = useRef(ground); heightRef.current = ground
   const visitRev = useMemo(() => ({ works, owned: garden.owned }), [works, garden.owned])   // stable until the plot changes
-  usePlotVisitNet({ relay: mp.relay, onRelay: mp.onRelay, hosting: !!plotMp && !visitNow, visit: visitNow,
+  const plotNet = usePlotVisitNet({ relay: mp.relay, onRelay: mp.onRelay, hosting: !!plotMp && !visitNow, visit: visitNow,
     snapOf: (): PlotSnap => ({ works: currentWorks(), owned: [...garden.owned] }),
-    live: () => openNet()?.live() ?? [], rev: visitRev })   // M61 s2: a new works / owned = a re-send
+    live: () => openNet()?.live() ?? [], rev: visitRev,   // M61 s2: a new works / owned = a re-send
+    say: m => hudSay(m, 'info', 5) })   // s3: sent home / the host left
+  const guestsHere = plotNet.guests.map(id => ({ id, name: mp.peers.current.get(id)?.name || 'A friend' }))
   useEffect(() => { setLobbyZone(zone.kind === 'wilds' ? OPEN_WILDS : plotZone(visitNow ? visitNow.host : selfPlayerId())) }, [zone.kind, visitNow])
   // third person (V): your own keeper, the segmented doll (open/shared/third-person.tsx), driven from the tick below
   const thirdRef = useRef(false), dollDrive = useRef(newDrive()), camRef = useRef<Camera | null>(null)
@@ -1162,8 +1180,9 @@ function AtherSliceGame() {
       if (e.code === 'KeyE' && n) {
         if (n.kind === 'greg') setPanel({ kind: 'talk', step: 0 })
         else if (n.kind === 'fennel') setPanel({ kind: 'fennel', page: 0 })
+        else if (n.kind === 'work' && n.near.kind === 'piece' && currentWorks().pieces.some(x => x.id === (n.near as { id: string }).id && x.item === 'lift') && callNearest()) return   // M61 s3: a guest calls a mate's lift too (a local ride, never saved)
         else if (n.kind === 'work' && guestRefuses(m => hudSay(m, 'info', 4))) return   // M61: a guest opens no station, store or piece
-        else if (n.kind === 'work') { if (n.near.kind === 'piece' && currentWorks().pieces.some(x => x.id === (n.near as { id: string }).id && x.item === 'lift') && callNearest()) return; if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
+        else if (n.kind === 'work') { if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
         else if (n.kind === 'folk') setPanel({ kind: 'folk', s: n.s })
         else setPanel({ kind: 'map', view: 'ather', travel: true })   // Alex 11-20: the map opens on the side you stand on (the Ather here); an errand keeper's Rune Hold goal waits one Tab away
         return
@@ -1318,6 +1337,7 @@ function AtherSliceGame() {
       {zone.kind === 'plot' && <PlacingBar owned={owned} />}
       {zone.kind === 'plot' && !visitNow && <BuildBar owned={owned} />}
       {visitNow && <VisitPill name={visitNow.name} ready={!!visitNow.snap} onHome={() => endVisit()} />}
+      {!visitNow && <GuestsPill guests={guestsHere} onSend={id => { if (plotNet.sendHome(id)) hudSay('Sent home.', 'info', 3) }} />}
       <LookChip />
       {zone.kind === 'wilds' && held === BAIT && <ReelBar api={rinApi} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} inGarden={zone.kind === 'plot'} />}

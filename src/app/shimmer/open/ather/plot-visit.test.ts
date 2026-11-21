@@ -1,7 +1,7 @@
 // plot-visit.ts: zone naming, the chunked snapshot round trip (incl. upper levels), reassembly rules, the guest's read-only store.
 // Run: npx tsx src/app/shimmer/open/ather/plot-visit.test.ts
 import { plotZone, hostOfZone, packSnap, unpackSnap, chunk, Reassembly, isSnapPart, validSnap, CHUNK, MAX_PARTS, startVisit, endVisit,
-  setVisitSnap, currentVisit, isVisiting, guestRefuses, refusalCount, shownWorks, worksWritable, shownOwned, SendQueue, type PlotSnap } from './plot-visit'
+  setVisitSnap, currentVisit, isVisiting, guestRefuses, refusalCount, shownWorks, worksWritable, shownOwned, SendQueue, rideAsGuest, guestLifts, isHomeMsg, homeLine, HostWatch, HOST_GONE_MS, visitLog, type PlotSnap } from './plot-visit'
 import type { Works } from './rooms'
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  FAIL', m) } }
@@ -97,6 +97,41 @@ const snap: PlotSnap = { works, owned: ['0,0', '0,1', '1,0'] }
   const un = pk ? await unpackSnap(pk) : null
   ok(!!un && setVisitSnap('p_host0001', 10, un) && shownWorks(own).pieces.length === works.pieces.length + 1, 'a change on the host reaches the guest as a newer version')
   endVisit()
+
+  // ── slice 3: riding a mate's lift (a guest-only overlay), being sent home, the host gone ──
+  {
+    const lw = { ...works, pieces: [{ id: 'L1', item: 'lift', x: 2, z: 2, q: 0, placedAt: 0, lv: 0 }, { id: 'S1', item: 'goldwood_stool', x: 4, z: 4, q: 0, placedAt: 0 }] } as unknown as Works
+    const ownSave = JSON.stringify(own)
+    ok(!rideAsGuest(lw), 'riding while home does nothing (the host path saves through setWorks)')
+    startVisit('p_host0002', 'Rin'); setVisitSnap('p_host0002', 1, { works: lw, owned: [] })
+    const up = { ...lw, pieces: lw.pieces.map(p => p.id === 'L1' ? { ...p, lv: 1 } : p) }
+    ok(rideAsGuest(up) && shownWorks(own).pieces.find(p => p.id === 'L1')!.lv === 1, 'a guest rides the lift: the car shows at the new level')
+    ok(currentVisit()!.snap!.works.pieces.find(p => p.id === 'L1')!.lv === 0, 'the snapshot itself is untouched')
+    ok(JSON.stringify(own) === ownSave && !worksWritable(), "the guest's own save is untouched and the store still refuses")
+    ok(shownWorks(own) === shownWorks(own), 'a stable object per ride (no re-render loop)')
+    const sneaky = { ...up, pieces: [...up.pieces.map(p => p.id === 'S1' ? { ...p, x: 9 } : p), { id: 'X', item: 'lift', x: 1, z: 1, q: 0, placedAt: 0, lv: 2 }] } as unknown as Works
+    ok(!rideAsGuest(sneaky), 'nothing but a level on an existing lift is taken (a moved stool, a new lift: dropped)')
+    ok(shownWorks(own).pieces.length === 2 && shownWorks(own).pieces.find(p => p.id === 'S1')!.x === 4, 'the moved stool and the new lift never show')
+    ok(rideAsGuest(lw) && Object.keys(guestLifts()).length === 0 && shownWorks(own) === currentVisit()!.snap!.works, "riding back to the host's level clears the overlay")
+    rideAsGuest(up)
+    setVisitSnap('p_host0002', 2, { works: { ...lw, pieces: [...lw.pieces] }, owned: [] })
+    ok(guestLifts().L1 === 1 && shownWorks(own).pieces.find(p => p.id === 'L1')!.lv === 1, "a host change elsewhere keeps the guest's ride")
+    setVisitSnap('p_host0002', 3, { works: { ...lw, pieces: lw.pieces.map(p => p.id === 'L1' ? { ...p, lv: 2 } : p) }, owned: [] })
+    ok(!('L1' in guestLifts()) && shownWorks(own).pieces.find(p => p.id === 'L1')!.lv === 2, 'the host moving that car wins')
+    rideAsGuest(up); setVisitSnap('p_host0002', 4, { works: { ...lw, pieces: lw.pieces.filter(p => p.id !== 'L1') }, owned: [] })
+    ok(Object.keys(guestLifts()).length === 0, 'a lift the host picked up drops out of the overlay')
+    setVisitSnap('p_host0002', 5, { works: lw, owned: [] }); rideAsGuest(up); endVisit('sent-home')
+    ok(Object.keys(guestLifts()).length === 0 && visitLog().at(-1) === 'end:sent-home', 'going home clears the ride')
+    startVisit('p_host0002', 'Rin'); setVisitSnap('p_host0002', 1, { works: lw, owned: [] })
+    ok(shownWorks(own).pieces.find(p => p.id === 'L1')!.lv === 0, 'a new visit starts from the host\'s levels')
+    endVisit()
+    ok(isHomeMsg({ why: 'sent' }) && isHomeMsg({ why: 'left' }) && !isHomeMsg({ why: 'x' }) && !isHomeMsg(null) && !isHomeMsg('sent'), 'home message shape')
+    ok(homeLine('sent', 'Rin') === 'Rin sent you home.' && homeLine('host-left', 'Rin').includes('left their plot'), 'home lines')
+    const hw = new HostWatch()
+    ok(!hw.tick(true, 0) && !hw.tick(false, 1000) && !hw.tick(false, 1000 + HOST_GONE_MS - 1), 'a short absence is not gone')
+    ok(hw.tick(false, 1000 + HOST_GONE_MS), 'absent HOST_GONE_MS in a row = gone')
+    ok(!hw.tick(true, 5000) && !hw.tick(false, 5001) && !hw.tick(false, 5000 + HOST_GONE_MS), 'any sighting resets the clock')
+  }
 
   console.log(`plot-visit: ${pass}/${pass + fail}`)
   if (fail) process.exit(1)

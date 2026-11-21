@@ -66,7 +66,7 @@ import { MoglinCard } from './moglin-card-view'
 import { reportAway, addMade, type Made } from './away-report'
 import { MeleeAim, useHitWobble } from './melee-view'
 import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, type Village } from './moglins'
-import { shownWorks, worksWritable, subscribeVisit, isVisiting } from './plot-visit'
+import { shownWorks, worksWritable, subscribeVisit, isVisiting, rideAsGuest } from './plot-visit'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
 let works: Works | null = null
@@ -88,7 +88,7 @@ const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f
 /** M61: a guest never writes: not the host's plot (which is a snapshot) and not their own save from the host's state */
 export function setWorks(w: Works) { if (!worksWritable()) return; works = w; saveWorks(w); subs.forEach(f => f()); settleWater(w.pieces) }
 subscribeVisit(() => subs.forEach(f => f()))   // M61: going visiting / a new snapshot / home again redraws every reader
-liveLift.get = getW; liveLift.set = setWorks   // M48: the lift's runtime reads and writes the live works
+liveLift.get = getW; liveLift.set = w => { if (isVisiting()) rideAsGuest(w); else setWorks(w) }   // M48: the lift's runtime reads and writes the live works; M61 s3: a guest rides a mate's lift locally
 export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER)
 /** The live works (the page's village tick reads and writes through this store, so an open panel sees the product land). */
 export const currentWorks = () => getW()

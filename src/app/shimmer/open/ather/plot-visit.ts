@@ -12,7 +12,11 @@
 //   · while visiting, the guest's works store READS the host's plot and REFUSES every write (workshop.tsx setWorks), and the
 //     page refuses build, placing, pick-up and the station / store panels (guestRefuses). The guest's own save is never read
 //     into or written from the host's plot.
-// Slice 2 = live changes (the host re-sends on change, versioned); slice 3 = the lift, send-home, host offline.
+// Slice 2 = live changes (the host re-sends on change, versioned); slice 3 = the lift, send-home, host offline:
+//   · a guest RIDES the host's lift locally: the car levels a guest sets live in a guest-only overlay on the snapshot (never
+//     saved, never sent); the host moving that car (a new snapshot with a different level) wins and clears the overlay.
+//   · the host can send a guest home (PV_HOME 'sent'), and a host who leaves the plot says so (PV_HOME 'left'); a host not
+//     heard from at all (offline, tab shut, the socket's keepalive gone) sends the guest home after HOST_GONE_MS.
 // Pure apart from the tiny visit store at the bottom (no React import: the page wraps it).
 import type { Works } from './rooms'
 
@@ -104,6 +108,10 @@ export class Reassembly {
   progress() { return { v: this.v, got: this.got, n: this.n } }
 }
 
+/** slice 3: the guest's own car levels on the visited plot (piece id -> level), declared up here so the store can clear it */
+const liftLv = new Map<string, number>()
+let liftRev = 0
+
 // ── the visit store ────────────────────────────────────────────────────────────────────────────────────────────────────────
 /** Who you are visiting (null = home). `snap` is null until the host's plot has arrived. */
 export interface Visit { host: string; name: string; snap: PlotSnap | null; v: number }
@@ -113,13 +121,18 @@ const emit = () => subs.forEach(f => f())
 export const subscribeVisit = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export const currentVisit = () => visit
 export const isVisiting = () => visit !== null
-export function startVisit(host: string, name: string) { visit = { host, name: name || 'a friend', snap: null, v: -Infinity }; noteVisit('start:' + host); emit() }
+export function startVisit(host: string, name: string) { visit = { host, name: name || 'a friend', snap: null, v: -Infinity }; liftLv.clear(); noteVisit('start:' + host); emit() }
 /** a newer snapshot of the plot being visited (an older or foreign one is ignored) */
 export function setVisitSnap(host: string, v: number, snap: PlotSnap) {
   if (!visit || visit.host !== host || v <= visit.v) return false
+  const was = visit.snap?.works.pieces
+  for (const id of [...liftLv.keys()]) {   // slice 3: the host moved (or took away) a car the guest rode = the host's level wins
+    const a = was?.find(p => p.id === id), b = snap.works.pieces.find(p => p.id === id)
+    if (!b || (a?.lv ?? 0) !== (b.lv ?? 0)) liftLv.delete(id)
+  }
   visit = { ...visit, snap, v }; emit(); return true
 }
-export function endVisit(why = 'home') { if (!visit) return; visit = null; noteVisit('end:' + why); emit() }
+export function endVisit(why = 'home') { if (!visit) return; visit = null; liftLv.clear(); noteVisit('end:' + why); emit() }
 /** what happened to visits on this page, oldest first (a probe for the check: a timed-out visit is gone before a slow page answers) */
 const log: string[] = []
 export function noteVisit(e: string) { log.push(e); if (log.length > 40) log.shift() }
@@ -140,8 +153,14 @@ export const refusalCount = () => refusals
 /** what the plot shows: the host's works while visiting (an empty plot until the snapshot lands), else your own */
 export function shownWorks(own: Works): Works {
   if (!visit) return own
-  return visit.snap?.works ?? EMPTY_WORKS
+  const w = visit.snap?.works
+  if (!w) return EMPTY_WORKS
+  if (!liftLv.size) return w
+  if (shownCache?.base !== w || shownCache.rev !== liftRev)   // a stable object per (snapshot, ride): useSyncExternalStore reads it
+    shownCache = { base: w, rev: liftRev, works: { ...w, pieces: w.pieces.map(p => liftLv.has(p.id) ? { ...p, lv: liftLv.get(p.id)! } : p) } }
+  return shownCache.works
 }
+let shownCache: { base: Works; rev: number; works: Works } | null = null
 const EMPTY_WORKS: Works = { v: 1, rooms: [], chests: [], pieces: [] }
 /** may the works store be written? Never while visiting: nothing a guest does reaches the host's plot or their own save */
 export const worksWritable = () => visit === null
@@ -175,4 +194,46 @@ export class SendQueue {
   }
   drop(to: string) { this.q.delete(to); this.order = this.order.filter(x => x !== to) }
   size() { let n = 0; for (const l of this.q.values()) n += l.length; return n }
+}
+
+// ── slice 3: riding a mate's lift, being sent home, the host gone ─────────────────────────────────────────────────────────────
+/** The lift runtime's write while visiting (workshop.tsx routes liveLift.set here). Only the LEVEL of a lift piece already on the
+ *  host's plot is taken from `next`; every other change in it is dropped, so nothing a guest does reaches a store or a save.
+ *  Returns true when a car's level changed. */
+export function rideAsGuest(next: Works): boolean {
+  const base = visit?.snap?.works; if (!base) return false
+  let changed = false
+  for (const p of next.pieces) {
+    if (p.item !== 'lift') continue
+    const b = base.pieces.find(x => x.id === p.id); if (!b || b.item !== 'lift') continue
+    const lv = p.lv ?? 0, hostLv = b.lv ?? 0, cur = liftLv.get(p.id) ?? hostLv
+    if (lv === cur) continue
+    if (lv === hostLv) liftLv.delete(p.id); else liftLv.set(p.id, lv)
+    changed = true
+  }
+  if (changed) { liftRev++; noteVisit('ride'); emit() }
+  return changed
+}
+/** the guest's overlay, for the check */
+export const guestLifts = () => Object.fromEntries(liftLv)
+
+export const PV_HOME = 'pv:home'
+export type HomeWhy = 'sent' | 'left'
+export const isHomeMsg = (x: unknown): x is { why: HomeWhy } =>
+  !!x && typeof x === 'object' && ((x as { why?: unknown }).why === 'sent' || (x as { why?: unknown }).why === 'left')
+/** what the guest is told on the way home */
+export function homeLine(why: HomeWhy | 'host-left', name: string): string {
+  return why === 'sent' ? `${name} sent you home.` : `${name} left their plot, so you head home.`
+}
+
+/** a host missing from the socket's live peers (already 8 s without a keepalive, open-mp STALE_MS) this much longer = gone */
+export const HOST_GONE_MS = 2_000
+/** The guest's watch on the host: true once the host has been absent HOST_GONE_MS in a row. Any sighting resets it. */
+export class HostWatch {
+  private since: number | null = null
+  tick(hostLive: boolean, now: number): boolean {
+    if (hostLive) { this.since = null; return false }
+    if (this.since === null) this.since = now
+    return now - this.since >= HOST_GONE_MS
+  }
 }
