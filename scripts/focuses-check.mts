@@ -11,6 +11,7 @@ import { type Zone } from '../src/app/shimmer/open/ather/forestry'
 import { benchOf, type Room } from '../src/app/shimmer/open/ather/rooms'
 import { NODE_DEFS } from '../src/app/shimmer/world/resources'
 import { MANA_COST } from '../src/app/shimmer/open/ather/forestry'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/focuses')
 mkdirSync(out, { recursive: true })
@@ -49,6 +50,7 @@ await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 18000
 // 1. the benches: Carpentry → Goldwood Blade, Stonery → Mana Spike (real E at each bench)
 const bench = async (r: Room, focus: string) => {
   const at = benchOf(r); await tp(at.x, at.z - 1.2, 0)
+  await aimAt(p, at.x, at.z, 0.6)
   await p.keyboard.press('e'); await sleep(1000)
   const panel = await p.evaluate(() => !!document.querySelector('[data-panel="bench"]'))
   await click('[data-bench-tab="blades"],[data-bench-tab="spikes"]'); await sleep(300)   // bench tabs (11-20): tool focuses on their own tab

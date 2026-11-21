@@ -11,6 +11,7 @@
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { benchOf, type Room } from '../src/app/shimmer/open/ather/rooms'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/alchemy')
 mkdirSync(out, { recursive: true })
@@ -44,6 +45,7 @@ await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 18000
 const b = benchOf(ROOM)
 await A('tp', b.x, b.z - 1.4, Math.PI); await sleep(2000); await shot('ac-0-cauldron')   // facing the back wall: the cauldron
 await A('tp', b.x, b.z - 1.4, 0); await sleep(800)
+await aimAt(p, b.x, b.z, 0.6)
 await p.keyboard.press('e'); await sleep(900)
 res.cauldron = await p.evaluate(() => !!document.querySelector('[data-panel="bench"] [data-job="brew-shard_tonic"]'))
 await click('[data-job-pick="brew-shard_tonic"]'); await sleep(300)

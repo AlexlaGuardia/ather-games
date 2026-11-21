@@ -8,6 +8,7 @@
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { ALC_POTIONS } from '../src/app/shimmer/open/ather/alchemy-set'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/alchemy-set')
 mkdirSync(out, { recursive: true })
@@ -40,7 +41,7 @@ await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500)
 await tp(-128.6, 104.3, Math.PI / 6); await shot('ac-0-piece')
 // 1. E at the piece opens the MORTAR station (not the plain piece card), the grind step ready
-await tp(PIECE.x, PIECE.z + 1.3, 0); await p.keyboard.press('e'); await sleep(900)
+await tp(PIECE.x, PIECE.z + 1.3, 0); await aimAt(p, PIECE.x, PIECE.z, 0.5); await p.keyboard.press('e'); await sleep(900)
 res.station = await p.evaluate(() => document.querySelector('[data-panel="alchemy"] [data-alc-station]')?.getAttribute('data-alc-station') ?? null)
 res.plainCard = await p.evaluate(() => !!document.querySelector('[data-panel="piece"]'))
 res.canGrind = await p.evaluate(() => document.querySelector('[data-alc-step="health:0"]')?.getAttribute('data-can') ?? null)

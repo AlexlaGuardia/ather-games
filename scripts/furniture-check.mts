@@ -9,6 +9,7 @@
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { benchOf, type Room } from '../src/app/shimmer/open/ather/rooms'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/furniture')
 mkdirSync(out, { recursive: true })
@@ -40,6 +41,7 @@ await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 18000
 // 1. the carpentry bench: saw 2 logs into 4 planks, make a bench
 const b = benchOf(ROOM)
 await tp(b.x, b.z - 1.2, 0); await shot('fc-0-room')
+await aimAt(p, b.x, b.z, 0.6)
 await p.keyboard.press('e'); await sleep(900)
 res.bench = await p.evaluate(() => !!document.querySelector('[data-panel="bench"] [data-job="goldwood-plank"]'))
 await click('[data-job-pick="goldwood-plank"]'); await sleep(300)
@@ -67,7 +69,7 @@ await p.keyboard.press('e'); await sleep(1000)
 res.placed = (await pieces()).map(x => x.item); res.benchesInBag = (await bag()).goldwood_bench ?? 0
 await tp(-128.5, 104.5, Math.PI / 6); await shot('fc-4-placed')
 // 3. E at it: turn, then pick up
-{ const pc = ((await read('open.works.v1'))?.pieces ?? [])[0] as { x: number; z: number } | undefined; await tp(pc?.x ?? -130, (pc?.z ?? 100) + 1.3, 0) } await p.keyboard.press('e'); await sleep(900)
+{ const pc = ((await read('open.works.v1'))?.pieces ?? [])[0] as { x: number; z: number } | undefined; await tp(pc?.x ?? -130, (pc?.z ?? 100) + 1.3, 0); await aimAt(p, pc?.x ?? -130, pc?.z ?? 100, 0.5) } await p.keyboard.press('e'); await sleep(900)
 res.piecePanel = await p.evaluate(() => !!document.querySelector('[data-panel="piece"]'))
 await click('[data-act="turn-piece"] button'); await sleep(600)
 res.turnedQ = (await pieces())[0]?.q

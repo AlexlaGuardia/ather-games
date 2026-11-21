@@ -21,6 +21,7 @@ import { RINQUEST_LINES, RINQUEST_STEPS, RINQUEST_KEY } from '../src/app/shimmer
 import { fennelSpot } from '../src/app/shimmer/open/ather/fennel'
 import { SCALE_AT } from '../src/app/shimmer/open/ather/moonwell'
 import { RINNSHOP_LINE } from '../src/app/shimmer/open/business/skill-pointers'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -101,7 +102,7 @@ await p.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'load', ti
 ok(await poll(async () => ((await Q(p, 'quest')) as { state: string }).state === 'active', 30000), 'C. a standing Rinnshop starts the quest')
 ok(await poll(async () => ((await Q(p, 'journal')) as { id: string; title: string }[]).some(e => e.id === 'rinquest' && e.title === RINQUEST_STEPS[0].title), 10000), `C. the journal says '${RINQUEST_STEPS[0].title}'`)
 const fs = fennelSpot({ v: 1, rooms: [SHOP], chests: [], pieces: [] } as never)!
-const talkTo = async () => { await A(p, 'tp', fs.x - Math.sin(fs.yaw) * -1.6, fs.z - Math.cos(fs.yaw) * -1.6, fs.yaw + Math.PI); await sleep(2500); await p.keyboard.press('e') }
+const talkTo = async () => { await A(p, 'tp', fs.x - Math.sin(fs.yaw) * -1.6, fs.z - Math.cos(fs.yaw) * -1.6, fs.yaw + Math.PI); await sleep(2500); await aimAt(p, fs.x, fs.z, 0.8); await p.keyboard.press('e') }
 const bubble = () => p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')
 const pickAnswer = async (label: string) => {
   const ok2 = await p.evaluate((l: string) => { const e = [...document.querySelectorAll<HTMLElement>('[data-talk-option]')].find(x => (x.textContent ?? '').includes(l)); e?.click(); return !!e }, label)
@@ -150,6 +151,7 @@ ok(await poll(async () => ((await Q(p, 'quest')) as { step: number }).step === 3
 await p.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'load', timeout: 240000 }); await ready(p); await sleep(2500); await p.mouse.click(500, 350)
 const b = benchOf(SHOP)
 await A(p, 'tp', b.x, b.z - 1.4, 0); await sleep(2500)
+await aimAt(p, b.x, b.z, 0.6)
 await p.keyboard.press('e')
 ok(await poll(() => p.evaluate(() => { document.querySelector<HTMLElement>('[data-bench-tab="rinsticks"][aria-selected="false"]')?.click(); return !!document.querySelector('[data-panel="bench"] [data-rinquest-step="bind"] button:not([disabled])') }), 20000), 'F. E at the Rinnshop bench offers to bind the scale')
 await p.evaluate(() => document.querySelector<HTMLElement>('[data-rinquest-step="bind"] button')?.click())

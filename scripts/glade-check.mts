@@ -19,6 +19,7 @@ import { readFileSync, existsSync } from 'fs'
 import { fromShore } from '../src/app/shimmer/open/ather/moonwell'
 import { GLADE } from '../src/app/shimmer/open/ather/relief'
 import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/glade-check'), phone = process.argv.includes('--phone')
 mkdirSync(out, { recursive: true })
@@ -104,6 +105,7 @@ try {
     ok(!stuck && Math.hypot(s.x - q.x, s.z - q.z) < 2.5, `4. walked from the green to ${q.id.split(':')[1]} on foot by ${turns(r).length - 1} legs (${Math.hypot(s.x - q.x, s.z - q.z).toFixed(1)} m off)`)
     // talk: the first E is the station line, a second talk the alternate (lark, SIGNED 40bf1c6)
     const k = q.id.split(':')[1], lines = GLADE_STATION_LINES[k]
+    await aimAt(p, q.x, q.z, 0.4)   // M60: E only on what the crosshair is on
     await p.keyboard.press('KeyE'); const b1 = await poll(() => p.evaluate(() => !!document.querySelector('[data-talk-bubble]')), 8000)
     const t1 = await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')
     await p.keyboard.press('Escape'); await poll(() => p.evaluate(() => !document.querySelector('[data-talk-bubble]')), 8000); await sleep(500)

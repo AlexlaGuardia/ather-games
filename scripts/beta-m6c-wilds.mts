@@ -13,6 +13,7 @@ import { makeRegion, type RegionMeta } from '../src/app/shimmer/open/region'
 import { doorsCached } from '../src/app/shimmer/open/business/doors'
 import { shopDoorPoint } from '../src/app/shimmer/open/towns/shop-door'
 import { GATE } from '../src/app/shimmer/open/ather/plot'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m6c')
 mkdirSync(out, { recursive: true })
@@ -86,7 +87,7 @@ if (!lo?.kael) await done(false, 'FAIL: no arms from the chest')
 await p.goto(`${url}/shimmer/open/ather`, { waitUntil: 'load', timeout: 240000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(5000)
 await clickCanvas(); await sleep(1000)
-await p.evaluate((g: { x: number; z: number }) => (window as any).__ather.tp(g.x + 2, g.z - 2), GATE); await tick(4)
+await p.evaluate((g: { x: number; z: number }) => (window as any).__ather.tp(g.x + 2, g.z - 2), GATE); await tick(4); await aimAt(p, GATE.x, GATE.z, 1.4)
 for (let i = 0; i < 20 && (await A<string>('zone')) !== 'wilds'; i++) {
   await p.keyboard.press('KeyE'); await sleep(1500)
   // the fold map's stop is a BUTTON titled "Gregory's waymark" (beta-m5-errand's lookup); a text tap could land on its label

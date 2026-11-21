@@ -8,6 +8,7 @@
 import puppeteer from 'puppeteer-core'
 import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'
 import { GATE } from '../src/app/shimmer/open/ather/plot'
+import { aimAt } from './lib/aim.mts'
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 const URL = process.env.URL ?? 'https://ather.games'
 const br = await puppeteer.launch({ executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -34,6 +35,7 @@ if ((await p.evaluate(() => (window as any).__ather.zone())) === 'plot') {
   ok(!!e && e.where?.zone === 'ather' && Math.abs(e.where.x - GATE.x) < 0.5 && Math.abs(e.where.z - GATE.z) < 0.5, `plot: the errand line points at the gate (${JSON.stringify(e?.where)})`)
   ok(e?.active === 'errand', 'plot: the errand is the active line (beacon + trail on)')
   await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z), GATE.x + 1.2, GATE.z + 1.2); await wait(2500)
+  await aimAt(p, GATE.x, GATE.z, 1.4)
   await p.keyboard.press('KeyE')
   ok(await poll(async () => /Athernyx/.test(await p.evaluate(() => document.querySelector('[data-panel="fold-map"]')?.textContent ?? '')), 10000), 'plot: E at the gate opens the fold map on the ATHERNYX face')
   ok(!!(await p.$('[data-goal]')), 'plot: Rune Hold glows on it as the errand')
@@ -45,7 +47,7 @@ await poll(async () => !!(await p.evaluate(() => (window as any).__greg)), 12000
 { const e = await errand()
   ok(!!e && e.where?.zone === 'wilds' && Math.abs(e.where.x - GREG_WAYMARK.x) < 600 && Math.abs(e.where.z - GREG_WAYMARK.z) < 600, `Wilds: the errand line points at the Glade stone (${JSON.stringify(e?.where)})`)
   // walk to the stone the line names, E: the fold map on Athernyx with the goal lit
-  if (e?.where) { await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z), e.where.x + 1.2, e.where.z + 1.2); await wait(2500) } }
+  if (e?.where) { await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z), e.where.x + 1.2, e.where.z + 1.2); await wait(2500); await aimAt(p, e.where.x, e.where.z, 0.8) } }
 await p.keyboard.press('KeyE')
 ok(await poll(async () => /Athernyx/.test(await p.evaluate(() => document.querySelector('[data-panel="fold-map"]')?.textContent ?? '')), 10000), 'Wilds: E at the stone opens the fold map on the ATHERNYX face')
 ok(/your errand/.test(await p.evaluate(() => document.querySelector('[data-panel="fold-map"]')?.textContent ?? '')), "Wilds: Rune Hold's door reads 'your errand'")

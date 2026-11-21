@@ -8,6 +8,7 @@ import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { STARTER_CHEST, TABLE, KEEPSTONE_RECIPE } from '../src/app/shimmer/open/ather/rooms'
 import { CHEST_SLOTS } from '../src/app/shimmer/open/ather/garden-bank'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/bank')
 mkdirSync(out, { recursive: true })
@@ -50,6 +51,7 @@ res.afterMake = await bag(); await shot('bank-0-table')
 await click('[data-act="land"]'); await sleep(1200)
 // 2. the starter Keepstone: stand at its front (yaw 0 looks −z), E, put the bag away
 await tp(STARTER_CHEST.x, STARTER_CHEST.z + 1.3, 0); await shot('bank-1-keepstone')
+await aimAt(p, STARTER_CHEST.x, STARTER_CHEST.z, 0.5)
 await p.keyboard.press('e'); await sleep(900)
 res.bankPanel = await panel('bank'); res.capBefore = await capShown(); res.starterPickup = await p.evaluate(() => !!document.querySelector('[data-act="pickup-keepstone"]'))
 res.putAway = await click('[data-act="deposit-bag"] button'); await sleep(700)
@@ -74,6 +76,7 @@ if (await p.evaluate(() => (window as any).__build?.on() === true)) { await clic
 // 4. open the NEW one where it was set: stand at its front (yaw 0 looks −z), E: the cap shows two Keepstones' worth
 const k = placed[0] ?? { x: -100, z: 112 }
 await tp(k.x, k.z + 1.3, 0); await sleep(1500); await shot('bank-5-placed')
+await aimAt(p, k.x, k.z, 0.5)
 await p.keyboard.press('e'); await sleep(900)
 res.capAfter = await capShown(); await shot('bank-6-two')
 // 5. pick it back up: it returns to the bag, the bank keeps everything

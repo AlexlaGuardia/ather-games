@@ -10,6 +10,7 @@ import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { GATE } from '../src/app/shimmer/open/ather/plot'
 import { parseWilds, BIOME, type WildsMeta } from '../src/app/shimmer/open/ather/wilds'
 import type { Zone } from '../src/app/shimmer/open/ather/forestry'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m6b')
 mkdirSync(out, { recursive: true })
@@ -83,7 +84,7 @@ await p.keyboard.press('KeyJ'); await sleep(1500); seen.journal = await text(); 
 // gate leg below only if the keeper is still on the plot (a returning keeper, or M31 broken: then the run says so)
 for (let i = 0; i < 60 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds'; i++) await sleep(1000)
 const bornInWilds = (await p.evaluate(() => (window as any).__ather.zone())) === 'wilds'; res.bornInWilds = bornInWilds
-if (!bornInWilds) { await p.evaluate((g: { x: number; z: number }) => (window as any).__ather.tp(g.x + 2, g.z - 2), GATE); await tick(4) }
+if (!bornInWilds) { await p.evaluate((g: { x: number; z: number }) => (window as any).__ather.tp(g.x + 2, g.z - 2), GATE); await tick(4); await aimAt(p, GATE.x, GATE.z, 1.4) }
 for (let i = 0; i < 20 && (await A<string>('zone')) !== 'wilds'; i++) {
   await p.keyboard.press('KeyE'); await sleep(1500)
   if (i === 0) { seen.atGate = await text() }

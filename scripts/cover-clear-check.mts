@@ -10,6 +10,7 @@
 import puppeteer, { type Page } from 'puppeteer-core'
 import { footprint, pieceRect } from '../src/app/shimmer/open/ather/rooms'
 import { CLEAR_PAD } from '../src/app/shimmer/open/ather/cover-clear'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const out = flag('--out', '/tmp'), url = flag('--url', 'https://ather.games')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -56,6 +57,7 @@ try {
   res.roomInside2 = await inside(RF)
   res.total2 = await cover('total')
   // 3 · lift it through the panel: the tuft grows back with no reload
+  await aimAt(p, TABLE_P.x, TABLE_P.z, 0.5)
   await p.keyboard.press('KeyE')
   res.panel = await poll(async () => p.evaluate(() => !!document.querySelector('[data-panel="piece"]')), 20000)
   const b = await p.evaluate(() => { const e = document.querySelector<HTMLElement>('[data-act="pickup-piece"] button'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })

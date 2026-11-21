@@ -10,6 +10,7 @@
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { benchOf, type Room } from '../src/app/shimmer/open/ather/rooms'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/roomstore')
 mkdirSync(out, { recursive: true })
@@ -39,6 +40,7 @@ await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500)
 const b = benchOf(ROOM)
 await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), b.x, b.z - 1.2); await sleep(1500); await shot('_f'); await shot('_f')
+await aimAt(p, b.x, b.z, 0.6)
 await p.keyboard.press('e'); await sleep(900)
 res.bench = await p.evaluate(() => !!document.querySelector('[data-panel="bench"]') && !!document.querySelector('[data-panel="station-store"] [data-room-store="rinnshop"]'))
 res.rows = await p.evaluate(() => [...document.querySelectorAll('[data-src-list="pack"] [data-src-item]')].map(e => e.getAttribute('data-src-item')).sort()); await shot('rs-1-bench')

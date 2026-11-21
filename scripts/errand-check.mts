@@ -7,6 +7,7 @@ import { ANSWERS } from '../src/app/shimmer/open/ather/greg-talk'
 import { GREG } from '../src/app/shimmer/open/ather/plot'                  // the OLD plot anchor (kept: TABLE/rooms hang off it)
 import { gregSpot } from '../src/app/shimmer/open/ather/moonwell-glade'   // M30 part 2: where Greg sits now
 import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'   // the labels lark writes; a reword never stales the check
+import { aimAt } from './lib/aim.mts'
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 const URL = process.env.URL ?? 'https://ather.games'
 const br = await puppeteer.launch({ executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -37,6 +38,7 @@ const toGlade = async () => {
   await wait(10000)   // the tile streams in and the walker settles at the waymark; THEN walk to his bench
   await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z), g.x + (GREG_WAYMARK.x - g.x) / d * 1.6, g.z + (GREG_WAYMARK.z - g.z) / d * 1.6); await wait(2500)
   await p.mouse.click(480, 300); await wait(500)
+  await aimAt(p, g.x, g.z, 1.0)   // M60: E only on what the crosshair is on
   return up
 }
 ok(await toGlade(), 'in the Wilds, Greg is drawn at the Glade on the rig, sitting')

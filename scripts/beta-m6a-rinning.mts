@@ -15,6 +15,7 @@ import puppeteer from 'puppeteer-core'
 import { readFileSync, mkdirSync } from 'node:fs'
 import { GATE } from '../src/app/shimmer/open/ather/plot'
 import { parseWilds, BIOME, type WildsMeta } from '../src/app/shimmer/open/ather/wilds'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m6a'), phone = process.argv.includes('--phone')
 mkdirSync(out, { recursive: true })
@@ -93,6 +94,7 @@ const bornInWilds = (await p.evaluate(() => (window as any).__ather.zone())) ===
 if (!bornInWilds) {
   await p.evaluate((g: { x: number; z: number }) => (window as any).__ather.tp(g.x + 2, g.z - 2), GATE)   // the gate (plot.ts GATE = -68, 50); movement only
   await tick(4)
+  await aimAt(p, GATE.x, GATE.z, 1.4)
   if (phone) await tapText(/use$/i); else await p.keyboard.press('KeyE')
   await sleep(1500); seen.atGate = await text()
   const wm = await tapText(/Gregory.s waymark/)

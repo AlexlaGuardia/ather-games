@@ -9,6 +9,7 @@ import { ANSWERS } from '../src/app/shimmer/open/ather/greg-talk'
 import { tourStops, gloveWordFor, TOUR_ASK, TOUR_NEXT, TOUR_SKIP, TOUR_DONE } from '../src/app/shimmer/open/ather/greg-tour'
 import { gregSpot } from '../src/app/shimmer/open/ather/moonwell-glade'
 import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'
+import { aimAt } from './lib/aim.mts'
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 const URL = process.env.URL ?? 'https://ather.games'
 const br = await puppeteer.launch({ executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -41,6 +42,7 @@ const startTour = async (tag: string) => {
   let tries = 0
   for (; tries < 3; tries++) {   // E right after an arrival can land before the walker settles: try again, and SAY so
     await tp(S.x + 1.2, S.z + 1.2); await wait(2500)
+    await aimAt(p, S.x, S.z, 1.0)
     await p.keyboard.press('KeyE')
     if (await poll(async () => (await answers()).includes(TOUR_ASK), 10000)) break
   }

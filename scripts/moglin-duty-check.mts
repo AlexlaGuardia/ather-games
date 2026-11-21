@@ -8,6 +8,7 @@
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { benchOf, type Room } from '../src/app/shimmer/open/ather/rooms'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/moglin')
 mkdirSync(out, { recursive: true })
@@ -33,7 +34,7 @@ const store = async () => { const r: Record<string, number> = {}; for (const s o
 const shot = async (n: string) => { try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
 const click = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (b) await p.mouse.click(b.x, b.y); return !!b }
 const ready = async () => { await p.waitForFunction(() => !!(window as any).__ather?.village && typeof (window as any).__ather?.tp === 'function', { timeout: 180000 }); await sleep(2500) }
-const bench = async () => { const b = benchOf(ROOM); await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), b.x, b.z - 1.4); await sleep(1800); await p.keyboard.press('e'); await sleep(900) }
+const bench = async () => { const b = benchOf(ROOM); await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), b.x, b.z - 1.4); await sleep(1800); await aimAt(p, b.x, b.z, 0.6); await p.keyboard.press('e'); await sleep(900) }
 const res: Record<string, unknown> = { url }
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 }); await ready()
 // 1. at the hearth: Heath is offered; Work here

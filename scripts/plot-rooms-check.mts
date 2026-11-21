@@ -7,6 +7,7 @@
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { TABLE, ROOMS, benchOf, doorOf, type Room } from '../src/app/shimmer/open/ather/rooms'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/rooms'), fast = process.argv.includes('--fast')
 mkdirSync(out, { recursive: true })
@@ -59,6 +60,7 @@ if (r && !fast) {
   await tp(-87, 113, Math.PI / 4); await shot('rooms-5b-built-34')
   const b = benchOf(r)
   await tp(b.x, b.z - 1.2, 0); await shot('rooms-6-bench')
+  await aimAt(p, b.x, b.z, 0.6)
   await p.keyboard.press('e'); await sleep(900)
   res.benchPanel = await panel('bench'); await shot('rooms-7-bench-panel')
   const before = (await bag()).bait ?? 0

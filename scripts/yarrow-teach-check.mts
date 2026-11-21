@@ -16,6 +16,7 @@ import { parseHouse } from '../src/app/shimmer/open/ather/plot-blueprint'
 import { GLADE_GREEN } from '../src/app/shimmer/open/ather/moonwell'
 import { YARROW_TEACH, LISTEN, teachJars } from '../src/app/shimmer/open/ather/yarrow-teach'
 import { newInv, give, BAIT_FROM, BAIT_PAGE, YARROW_GIFT_BAIT, type Inv } from '../src/app/shimmer/open/shared/inventory'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), phone = process.argv.includes('--phone'), out = flag('--out', `/tmp/yarrow-teach-${phone ? 'phone' : 'desk'}`)
 mkdirSync(out, { recursive: true })
@@ -64,6 +65,7 @@ try {
 
   // 1. the beat opens
   // the first E can land before the walker takes keys (headless, 1-2 fps): press again until a bubble shows
+  await aimAt(p, Y.x, Y.z, 0.4)   // M60: E only on what the crosshair is on
   let up = false
   for (let k = 0; k < 4 && !up; k++) { await p.keyboard.press('KeyE'); up = await poll(async () => (await bubble()).text.length > 0, 8000) }
   let b = await bubble(); await shot('1-open')

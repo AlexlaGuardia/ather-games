@@ -14,6 +14,7 @@
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { benchOf, TABLE, type Room } from '../src/app/shimmer/open/ather/rooms'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/station')
 mkdirSync(out, { recursive: true })
@@ -52,6 +53,7 @@ async function session(w: number, h: number, touch = false) {
     await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500)
     const b = benchOf(ROOM)
     await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), b.x, b.z - 1.2); await sleep(1500); await hideCard()
+    await aimAt(p, b.x, b.z, 0.6)
     await p.keyboard.press('e'); await sleep(900)
   }
   return { p, read, shot, click, poll, bag, room, store, output, bankN, open, hideCard }
@@ -108,7 +110,7 @@ async function session(w: number, h: number, touch = false) {
   // M46 s1 (11-20): a Moglin's LUCK can add +1 output per run (moglin-skills.ts), so a run yields its base or base+1: 10 runs = 20..30
   const n1 = o2.goldwood_plank ?? 0
   ok(n1 >= 20 && n1 <= 30 && !o2.goldwood_bark, `   the 10 surplus logs became 20 planks (+ up to 10 luck), no bark yet (${JSON.stringify(o2)})`)
-  await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), benchOf(ROOM).x, benchOf(ROOM).z - 1.2); await sleep(1500); await s.hideCard(); await p.keyboard.press('e'); await sleep(900)
+  await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), benchOf(ROOM).x, benchOf(ROOM).z - 1.2); await sleep(1500); await s.hideCard(); await aimAt(p, benchOf(ROOM).x, benchOf(ROOM).z, 0.6); await p.keyboard.press('e'); await sleep(900)
   await s.shot('st-4-stockpile')
   // 4. focus planks, max
   ok(await s.click('[data-job-pick="goldwood-plank"]'), '4. pick planks')
@@ -127,7 +129,7 @@ async function session(w: number, h: number, touch = false) {
   const n4 = (o3.goldwood_plank ?? 0) - n1   // 30 focus runs: 60 planks + up to 30 luck
   ok(n4 >= 60 && n4 <= 90, `   planks ${n1} + 60 (+ up to 30 luck) = ${o3.goldwood_plank}, past the 30 cap`)
   ok(!(await s.room())?.work?.focus, '   the focus ended and the station is back on stockpile')
-  await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), benchOf(ROOM).x, benchOf(ROOM).z - 1.2); await sleep(1500); await s.hideCard(); await p.keyboard.press('e'); await sleep(900)
+  await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), benchOf(ROOM).x, benchOf(ROOM).z - 1.2); await sleep(1500); await s.hideCard(); await aimAt(p, benchOf(ROOM).x, benchOf(ROOM).z, 0.6); await p.keyboard.press('e'); await sleep(900)
   ok(await s.click('[data-act="collect-all"] button'), '   Collect all')
   await sleep(600)
   ok((await s.bag()).goldwood_plank === o3.goldwood_plank && !(await s.output()).goldwood_plank, `   all ${o3.goldwood_plank} planks in the bag, output empty (${JSON.stringify(await s.bag())})`)

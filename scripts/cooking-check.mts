@@ -17,6 +17,7 @@ import { makeRegion, type RegionMeta } from '../src/app/shimmer/open/region'
 import { doorsCached } from '../src/app/shimmer/open/business/doors'
 import { shopDoorPoint } from '../src/app/shimmer/open/towns/shop-door'
 import { SMOKEHOUSE_STOCK, healOf } from '../src/app/shimmer/open/ather/cooking'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/cooking')
 mkdirSync(out, { recursive: true })
@@ -48,6 +49,7 @@ await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500)
 const b = benchOf(ROOM)
 await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), b.x, b.z - 1.4); await sleep(2000); await shot('cc-0-hearth')
+await aimAt(p, b.x, b.z, 0.6)
 await p.keyboard.press('e'); await sleep(900)
 res.hearth = await p.evaluate(() => !!document.querySelector('[data-panel="bench"] [data-job="roast-roast_rinn"]'))
 await click('[data-job-pick="roast-roast_rinn"]'); await sleep(300)

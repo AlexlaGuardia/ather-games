@@ -13,6 +13,7 @@ import { mkdirSync } from 'fs'
 import { ALC_POTIONS, potionId, gradeFrom } from '../src/app/shimmer/open/ather/alchemy-set'
 import { BOON_CHANCE, boonLine } from '../src/app/shimmer/open/ather/alchemist-boon'
 import type { MoglinRecord } from '../src/app/shimmer/open/ather/moglins'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/alchemist-boon')
 mkdirSync(out, { recursive: true })
@@ -47,7 +48,7 @@ try {
   const click = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (b) await p.mouse.click(b.x, b.y); return !!b }
   const poll = async (fn: () => Promise<boolean>, ms = 15000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(300) } return false }
   const panelUp = () => p.evaluate(() => !!document.querySelector('[data-panel="alchemy"] [data-alc-station="desk"]'))
-  const openDesk = async () => { for (let k = 0; k < 4 && !(await panelUp()); k++) { await p.keyboard.press('e'); await poll(panelUp, 5000) } return panelUp() }
+  const openDesk = async () => { await aimAt(p, DESK.x, DESK.z, 0.5); for (let k = 0; k < 4 && !(await panelUp()); k++) { await p.keyboard.press('e'); await poll(panelUp, 5000) } return panelUp() }
   const closeDesk = async () => { await p.keyboard.press('Escape'); await poll(async () => !(await panelUp()), 5000); await sleep(400) }
   const roll = (n: number) => p.evaluate(v => { (window as any).__alcRoll = v }, n)
   const brew = async (r: number) => { await p.evaluate(run => localStorage.setItem('open.alchemy.v1', run), finished()); await roll(r); const b0 = await bottles(); await openDesk(); await poll(async () => (await bottles()) > b0, 8000); await sleep(500); return (await bottles()) - b0 }

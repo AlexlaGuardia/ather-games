@@ -7,6 +7,7 @@
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { CHEST_SLOTS } from '../src/app/shimmer/open/ather/garden-bank'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/foundks')
 mkdirSync(out, { recursive: true })
@@ -39,6 +40,7 @@ res.crystal = works?.chests?.[0]?.crystal; res.bagAfterSet = (await bag()).keeps
 // open it where it actually stands: at its front, yaw 0 looks -z
 const k = (works?.chests?.[0] ?? { x: -100, z: 112 }) as { x: number; z: number }
 await tp(k.x, k.z + 1.3, 0); await sleep(1500); await shot('fk-2-violet-open')
+await aimAt(p, k.x, k.z, 0.5)
 await p.keyboard.press('e'); await sleep(900)
 res.cap = await p.evaluate(() => Number(document.querySelector('[data-bank-cap]')?.getAttribute('data-bank-cap') ?? -1))
 res.pickedUp = await click('[data-act="pickup-keepstone"] button'); await sleep(800)

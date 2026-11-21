@@ -12,6 +12,7 @@ import { benchOf, KEEP_CLEAR, type Room } from '../src/app/shimmer/open/ather/ro
 import { planRun, runKeys, findRooms, type Walls } from '../src/app/shimmer/open/ather/plot-walls'
 import { cordsOf } from '../src/app/shimmer/open/ather/lift'
 import { STARTING_SQUARES, squareAt, sqId, GROUND_Y } from '../src/app/shimmer/open/ather/plot'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/lift')
 mkdirSync(out, { recursive: true })
@@ -73,6 +74,7 @@ try {
   // 1. craft a Lift at the Carpentry station
   const b = benchOf(ROOM)
   await tp(b.x, b.z - 1.2, 0)
+  await aimAt(p, b.x, b.z, 0.6)
   await p.keyboard.press('e'); await sleep(900)
   await click('[data-bench-tab="furniture"]'); await sleep(300)   // bench tabs (11-20): pieces live on their own tab
   await click('[data-job-pick="lift"]'); await sleep(300)

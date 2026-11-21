@@ -11,6 +11,7 @@ import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { TABLE, ROOMS, benchOf, footprint, type Room } from '../src/app/shimmer/open/ather/rooms'
 import { seedId, cropId, CHARGE_CAP } from '../src/app/shimmer/open/ather/farming'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/farm')
 mkdirSync(out, { recursive: true })
@@ -61,6 +62,7 @@ step('2. in, E at the s')
 // 2. in, E at the standing spot
 const b = benchOf(room)
 await tp(b.x, b.z - 1.2, 0)
+await aimAt(p, b.x, b.z, 0.6)
 await p.keyboard.press('e'); await sleep(900)
 res.panel = await p.evaluate(() => !!document.querySelector('[data-panel="farm"]'))
 res.beds = await p.evaluate(() => document.querySelectorAll('[data-bed]').length)

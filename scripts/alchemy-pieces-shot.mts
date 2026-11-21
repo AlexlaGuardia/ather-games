@@ -4,6 +4,7 @@
 // Fails only on a page error or a missing panel.   npx tsx scripts/alchemy-pieces-shot.mts [--url ...] [--out dir]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/alchemy-pieces')
 mkdirSync(out, { recursive: true })
@@ -25,7 +26,7 @@ const mid = -134 + 1.5 * 2.6
 await tp(mid, 106.5, 0); await p.evaluate(() => (window as any).__ather.look(0, -0.28)); await sleep(1500); await hideCard()
 await p.screenshot({ path: `${out}/alchemy-set.png` })
 // the Desk's panel: E at it lists every recipe's road
-await tp(PIECES[3].x, PIECES[3].z + 1.4, 0); await p.keyboard.press('e'); await sleep(1000); await hideCard()
+await tp(PIECES[3].x, PIECES[3].z + 1.4, 0); await aimAt(p, PIECES[3].x, PIECES[3].z, 0.5); await p.keyboard.press('e'); await sleep(1000); await hideCard()
 const recipes = await p.evaluate(() => [...document.querySelectorAll('[data-alc-recipe]')].map(e => e.textContent))
 await p.screenshot({ path: `${out}/alchemy-desk-panel.png` })
 console.log(JSON.stringify({ recipes, errs }))

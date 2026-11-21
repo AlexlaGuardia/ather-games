@@ -16,6 +16,7 @@ import { shopDoorPoint } from '../src/app/shimmer/open/towns/shop-door'
 import { TABLE, benchOf, type Room } from '../src/app/shimmer/open/ather/rooms'
 import { FURNITURE } from '../src/app/shimmer/open/ather/furniture'
 import { seedId } from '../src/app/shimmer/open/ather/farming'
+import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/water')
 mkdirSync(out, { recursive: true })
@@ -89,6 +90,7 @@ await sleep(Math.max(0, room.doneAt - Date.now()) + 3000)
 step('2. the Farm with no tap')
 const b = benchOf(room)
 await tp(b.x, b.z - 1.2, 0)
+await aimAt(p, b.x, b.z, 0.6)
 await p.keyboard.press('e'); await sleep(900)
 res.noTap = { panel: await p.evaluate(() => !!document.querySelector('[data-panel="farm"]')), taps: await attr('[data-water]', 'data-taps'), waterButtons: await p.evaluate(() => document.querySelectorAll('[data-water-bed]').length) }
 await click('[data-bed="5"] button'); await click(`[data-plant-seed="${seedId('ather_wheat')}"] button`)
@@ -109,7 +111,7 @@ res.placed = pieces.map(x => x.item).sort()
 await tp(-128.5, 106, Math.PI / 8); await shot('wt-2-tap-and-tank')
 
 step('4. fill, plant, water')
-await tp(b.x, b.z - 1.2, 0); await p.keyboard.press('e'); await sleep(900)
+await tp(b.x, b.z - 1.2, 0); await aimAt(p, b.x, b.z, 0.6); await p.keyboard.press('e'); await sleep(900)
 res.fresh = { water: await attr('[data-water]', 'data-water'), cap: await attr('[data-water]', 'data-water-cap'), taps: await attr('[data-water]', 'data-taps') }
 await skew(180_000)
 res.filled = await poll(async () => (await attr('[data-water]', 'data-water')) === '2', 10000) ? '2' : await attr('[data-water]', 'data-water')
