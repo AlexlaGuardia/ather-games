@@ -78,6 +78,7 @@ const tapOrClick = async (p: Page, sel: string) => { const b = await p.evaluate(
 async function useAt(p: Page, pc: { x: number; z: number }, panel: string) {
   for (let i = 0; i < 3; i++) {
     if (!(await isPhone(p))) { await p.keyboard.press('Escape'); await sleep(300) }   // on a phone Escape opens Options (not a phone input)
+    else while (await p.$('[data-panel] button[aria-label="close"]')) { await tapOrClick(p, '[data-panel] button[aria-label="close"]'); await sleep(400) }   // a phone closes a panel with its X
     await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), pc.x, pc.z + 1.5); await sleep(1500)
     await aimAt(p, pc.x, pc.z, 0.6)
     if (await isPhone(p)) { if (await poll(() => p.evaluate(() => !!document.querySelector('[data-touch="use"][data-touch-near]')), 6000)) await tapOrClick(p, '[data-touch="use"][data-touch-near]') }
