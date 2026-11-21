@@ -99,7 +99,7 @@ export const isPiece = (id: string) => id in FURNITURE
 export const stockOf = (front: string) => FURNITURE_ORDER.filter(id => FURNITURE[id].sold?.at === front)
 /** Each piece as a carpentry job: its recipe in, one piece out. */
 /** M57: the alchemy set stays off the carpentry bench until E at a piece opens its station (workshop.tsx); flip when wired. */
-export const ALC_LIVE = false
+export const ALC_LIVE = true   // FLIPPED 2026-11-21 (Alex via Magii: "turn alchemy on"; hub call). One-line revert.
 export const PIECE_JOBS: readonly Job[] = FURNITURE_ORDER.filter(id => FURNITURE[id].recipe.length > 0 && (ALC_LIVE || !FURNITURE[id].alc)).map(id => ({ id, label: FURNITURE[id].name, in: FURNITURE[id].recipe, out: { id, n: 1 } }))
 /** How many pieces a plot holds (a keeper furnishes, not fills). */
 export const MAX_PIECES = 60

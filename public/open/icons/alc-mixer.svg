@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The Cauldron Nook: a cauldron set into a long table, its brew glowing. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <rect x="3" y="15" width="26" height="3" rx="1" fill="#f0c773" stroke="#8a5f24" stroke-width=".8"/><rect x="4.5" y="18" width="2.4" height="9" rx="0.6" fill="#d9a957" stroke="#8a5f24" stroke-width=".8"/><rect x="25.1" y="18" width="2.4" height="9" rx="0.6" fill="#d9a957" stroke="#8a5f24" stroke-width=".8"/><path d="M13 15 L13 21 Q13 25 19 25 Q25 25 25 21 L25 15 Z" fill="#4e4a47" stroke="#26231f" stroke-width=".8"/><ellipse cx="19" cy="14.6" rx="6.4" ry="2" fill="#ff9a4a" stroke="#26231f" stroke-width=".6"/><rect x="5" y="12" width="2.4" height="3" rx="0.4" fill="#6f9a4a" stroke="#3f5f2a" stroke-width=".8"/><rect x="8.5" y="12" width="2.4" height="3" rx="0.4" fill="#6f9a4a" stroke="#3f5f2a" stroke-width=".8"/>
+</svg>

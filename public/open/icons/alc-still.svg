@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The Still: a glass flask over a lit burner, a copper coil beside it. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <rect x="7" y="18" width="18" height="9" rx="1.2" fill="#4e4a47" stroke="#26231f" stroke-width=".8"/><rect x="10" y="22" width="7" height="1.8" rx="0.5" fill="#8fe3ff" stroke="#2f7fa0" stroke-width=".8"/><circle cx="13" cy="12" r="5" fill="#cfe8f5" fill-opacity=".75" stroke="#6f8fa0" stroke-width=".8"/><rect x="12" y="4" width="2" height="4" rx="0.4" fill="#cfe8f5" stroke="#6f8fa0" stroke-width=".8"/><ellipse cx="21" cy="8" rx="3.4" ry="1.4" fill="none" stroke="#c08a4a" stroke-width="1.2"/><ellipse cx="21" cy="11" rx="3.4" ry="1.4" fill="none" stroke="#c08a4a" stroke-width="1.2"/><ellipse cx="21" cy="14" rx="3.4" ry="1.4" fill="none" stroke="#c08a4a" stroke-width="1.2"/><path d="M14 5 L21 6.6" stroke="#c08a4a" stroke-width="1.2"/>
+</svg>

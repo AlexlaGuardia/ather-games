@@ -5,6 +5,7 @@ import { POTIONS, BREW, STARLIGHT_XP as OPEN_STARLIGHT, OPEN_FLOW_MULT, drink, b
 import { POTION_DEFS } from '../../engine/alchemy'
 import { MANA_POTIONS, POTION_BUFFS, BUFF_DEFS, STARLIGHT_XP } from '../../engine/potion-effects'
 import { ROOMS, roomAccepts, freshWorks, craftAt, type Works, type Room } from './rooms'
+import { ALC_LIVE } from './furniture'
 import { OPEN_ITEMS, ITEM_GROUP, newInv, give, countOf } from '../shared/inventory'
 let pass = 0
 const fails: string[] = []
@@ -26,7 +27,9 @@ for (const [id, p] of Object.entries(POTIONS)) {
 ok(OPEN_STARLIGHT === STARLIGHT_XP, 'canon: Starlight XP differs from the engine')
 ok(OPEN_FLOW_MULT > 1 && OPEN_FLOW_MULT <= 3, 'tune: Ather Flow must be felt but keep mana a cost (see the file header)')
 ok(BREW.length === Object.keys(POTIONS).length && BREW.every(j => isPotion(j.out.id)), 'brew: a potion with no job, or a job that pours something else')
-ok(ROOMS.alchemy.open && roomAccepts('alchemy', 'shard_tonic') && roomAccepts('alchemy', 'raw_mana_shard') && !roomAccepts('alchemy', 'goldwood_log'), 'room: the alchemy room is shut or keeps the wrong things')
+// M57: once the alchemy SET is live the room is shut to new builds (rooms.ts); a room already standing still keeps its things
+ok(ROOMS.alchemy.open === !ALC_LIVE, 'room: the alchemy room closes exactly when the alchemy set goes live')
+ok(roomAccepts('alchemy', 'shard_tonic') && roomAccepts('alchemy', 'raw_mana_shard') && !roomAccepts('alchemy', 'goldwood_log'), 'room: the alchemy room is shut or keeps the wrong things')
 // the cauldron: shards from the store, bark from the bag
 const room: Room = { id: 'alchemy-1', kind: 'alchemy', x: 0, z: 0, q: 0, placedAt: 0, doneAt: 0, store: [{ id: 'raw_mana_shard', n: 3 }] }
 const W: Works = { ...freshWorks(), rooms: [room] }
