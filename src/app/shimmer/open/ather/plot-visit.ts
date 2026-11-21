@@ -36,7 +36,11 @@ export const CHUNK = 1500
 /** a plot bigger than this many parts is refused (≈ 300 KB deflated: far past any real house; a bound, not a target) */
 export const MAX_PARTS = 200
 
-export interface PlotSnap { works: Works; owned: string[] }
+/** M61 leftovers: what a guest needs to draw the host's Moglins at work (nothing else of the village crosses) */
+export interface SnapMoglin { id: string; profession: string; room?: string }
+/** `farm` / `water` are the host's farm + tank saves, adopted on the guest's side by farmroom.adoptFarm / water.adoptWater
+ *  (both already validate), so the beds and tanks on the host's plot show the host's crops, not the guest's. */
+export interface PlotSnap { works: Works; owned: string[]; moglins?: SnapMoglin[]; farm?: unknown; water?: unknown }
 export interface SnapPart { v: number; i: number; n: number; d: string }
 
 // ── the codec ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -61,7 +65,9 @@ export async function packSnap(s: PlotSnap): Promise<string> {
 export async function unpackSnap(packed: string): Promise<PlotSnap | null> {
   try {
     const raw = JSON.parse(new TextDecoder().decode(await pipe(unb64(packed), new DecompressionStream('deflate-raw'))))
-    return validSnap(raw) ? raw : null
+    if (!validSnap(raw)) return null
+    if (raw.moglins !== undefined) raw.moglins = cleanMoglins(raw.moglins)
+    return raw
   } catch { return null }
 }
 
@@ -73,6 +79,22 @@ export function validSnap(x: unknown): x is PlotSnap {
     && (w.upper === undefined || Array.isArray(w.upper))
     && Array.isArray(s.owned) && s.owned.every(o => typeof o === 'string')
 }
+
+/** the host's Moglins, junk dropped one by one (a bad entry never costs the whole plot); capped, like the village */
+export function cleanMoglins(x: unknown): SnapMoglin[] {
+  if (!Array.isArray(x)) return []
+  const out: SnapMoglin[] = []
+  for (const m of x.slice(0, 64)) {
+    if (!m || typeof m !== 'object') continue
+    const { id, profession, room } = m as Record<string, unknown>
+    if (typeof id !== 'string' || !id || id.length > 64 || typeof profession !== 'string' || profession.length > 32) continue
+    out.push(typeof room === 'string' && room.length <= 64 ? { id, profession, room } : { id, profession })
+  }
+  return out
+}
+/** the host side: only the three fields a guest draws with */
+export const snapMoglins = (ms: readonly { id: string; profession: string; room?: string }[]): SnapMoglin[] =>
+  ms.map(m => (m.room ? { id: m.id, profession: m.profession, room: m.room } : { id: m.id, profession: m.profession }))
 
 export function chunk(packed: string, v: number): SnapPart[] {
   const n = Math.max(1, Math.ceil(packed.length / CHUNK)), out: SnapPart[] = []
@@ -162,6 +184,12 @@ export function shownWorks(own: Works): Works {
 }
 let shownCache: { base: Works; rev: number; works: Works } | null = null
 const EMPTY_WORKS: Works = { v: 1, rooms: [], chests: [], pieces: [] }
+/** the host's Moglins while visiting (empty until the plot lands), null at home = draw your own village */
+export const shownMoglins = (): SnapMoglin[] | null => (visit ? (visit.snap?.moglins ?? NO_MOGLINS) : null)
+const NO_MOGLINS: SnapMoglin[] = []   // one object: useSyncExternalStore reads this
+/** the host's raw farm / water saves while visiting (undefined at home or before the plot lands); the stores adopt them */
+export const visitFarm = (): unknown => visit?.snap?.farm
+export const visitWater = (): unknown => visit?.snap?.water
 /** may the works store be written? Never while visiting: nothing a guest does reaches the host's plot or their own save */
 export const worksWritable = () => visit === null
 /** the squares the plot shows as owned: the host's while visiting */

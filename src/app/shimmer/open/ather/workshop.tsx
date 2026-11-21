@@ -65,8 +65,8 @@ import { TabGlyph } from './bench-glyphs'
 import { MoglinCard } from './moglin-card-view'
 import { reportAway, addMade, type Made } from './away-report'
 import { MeleeAim, useHitWobble } from './melee-view'
-import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, type Village } from './moglins'
-import { shownWorks, worksWritable, subscribeVisit, isVisiting, rideAsGuest } from './plot-visit'
+import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, type Village, type MoglinRecord } from './moglins'
+import { shownWorks, worksWritable, subscribeVisit, isVisiting, rideAsGuest, shownMoglins } from './plot-visit'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
 let works: Works | null = null
@@ -916,7 +916,7 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
       <Plinth w={w} />
       {stowed && <MeleeAim stowed={stowed} />}
       {w.pieces.some(x => x.item === 'lift') && <LiftInput />}
-      {!isVisiting() && <MoglinsAtWork w={w} />}
+      <MoglinsAtWork w={w} />
       <BlueprintPicked />
       <HouseLevels w={w} />
       <WallGhost />
@@ -929,21 +929,27 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
 // ── MOGLINS, SEEN (moglin-model.tsx; Alex 11-18 "add one to my garden so i can check em out") ───────────────────
 const GARB_OF: Partial<Record<string, MoglinGarb>> = { cook: 'apron', carpenter: 'toolbelt', alchemist: 'scarf', smith: 'toolbelt', stonemason: 'toolbelt', jeweler: 'scarf' }
 /** Every Moglin keeping a room stands at its bench, working (the village re-reads every few seconds: a panel assigns). */
+let moglinsDrawn: string[] = []
+if (typeof window !== 'undefined') (window as unknown as { __moglinsDrawn?: () => string[] }).__moglinsDrawn = () => [...moglinsDrawn]
 function MoglinsAtWork({ w }: { w: Works }) {
   const [v, setV] = useState(() => (typeof window === 'undefined' ? null : loadVillage()))
   useEffect(() => { const t = setInterval(() => setV(loadVillage()), 3000); return () => clearInterval(t) }, [])
-  if (!v) return null
+  const host = useSyncExternalStore(subscribeVisit, shownMoglins, () => null)   // M61: on a mate's plot, THEIR Moglins at work
+  const ms: readonly { id: string; profession: string; room?: string }[] | undefined = host ?? v?.moglins
+  if (!ms) return null
+  const drawn: string[] = []; moglinsDrawn = drawn   // probe: the ids the last render drew (plot-visit-leftovers-check)
   return (
     <>
-      {v.moglins.map(m => {
-        const s = m.profession === 'alchemist' ? standAt(w, m) : null   // M57 s2: an alchemist stands at its Desk, facing it
-        if (s) return (
+      {ms.map(m => {
+        const s = m.profession === 'alchemist' ? standAt(w, m as MoglinRecord) : null   // M57 s2: an alchemist stands at its Desk, facing it
+        if (s) { drawn.push(m.id); return (
           <group key={m.id} position={[s.x, GROUND_Y, s.z]} rotation-y={s.yaw}>
             <MoglinModel action="work" garb={GARB_OF[m.profession] ?? 'none'} tone={furOf(m.id)} seed={m.id.length} />
           </group>
-        )
+        ) }
         const r = m.room ? w.rooms.find(x => x.id === m.room) : undefined
         if (!r || !raised(r)) return null
+        drawn.push(m.id)
         const at = toWorld(r, 0, ROOMS[r.kind].d / 2 - 2.35)   // in front of the bench, facing it (local +z = the back wall)
         return (
           <group key={m.id} position={[at.x, GROUND_Y, at.z]} rotation-y={-r.q * Math.PI / 2}>

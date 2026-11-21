@@ -17,33 +17,52 @@ import { plumbingOf, capacityOf, wholeOf, msToNext, settle, stale, draw, freshWa
 import { loadFarmSave, saveFarmSave, freshFarmSave, plantAt, harvestAt, feedAt, seedsReach, dosesOf, roomLeft, msLeft, isArmed, BEDS, type FarmSave } from './farmroom'
 import { roomStore, ROOM_STORE_SLOTS, ROOM_KEEPS, stockRoomFromBag, takeFromRoom, toWorld, ROOMS, type Room, type Works, type StoreMove } from './rooms'
 import { GROUND_Y } from './plot'
+import { isVisiting, visitFarm, visitWater, subscribeVisit } from './plot-visit'
+import { adoptFarm } from './farmroom'
+import { adoptWater } from './water'
 
 // ── the store (one farm per garden) ───────────────────────────────────────────────────────────────────────────
 let sv: FarmSave | null = null
 const SERVER = freshFarmSave()
 const subs = new Set<() => void>()
-const getF = (): FarmSave => { if (!sv) sv = typeof window === 'undefined' ? SERVER : loadFarmSave(); return sv }
-export function setFarm(n: FarmSave) { sv = n; saveFarmSave(n); subs.forEach(f => f()) }
+const ownF = (): FarmSave => { if (!sv) sv = typeof window === 'undefined' ? SERVER : loadFarmSave(); return sv }
+// M61: on a mate's plot the beds show THEIR crops (the visit snapshot's farm, adopted once per snapshot); a guest never writes
+let hostF: { raw: unknown; f: FarmSave } | null = null
+const getF = (): FarmSave => {
+  if (!isVisiting()) return ownF()
+  const raw = visitFarm()
+  if (!hostF || hostF.raw !== raw) hostF = { raw, f: raw === undefined ? freshFarmSave() : adoptFarm(raw) }
+  return hostF.f
+}
+export function setFarm(n: FarmSave) { if (isVisiting()) return; sv = n; saveFarmSave(n); subs.forEach(f => f()) }
 export const currentFarm = getF
 export const useFarm = () => useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f) } }, getF, () => SERVER)
 
 let skew = 0
 export const farmNow = () => Date.now() + skew
-if (typeof window !== 'undefined') (window as unknown as { __farm: unknown }).__farm = { skew: (ms: number) => { skew += ms; subs.forEach(f => f()) }, now: () => farmNow() }
+if (typeof window !== 'undefined') (window as unknown as { __farm: unknown }).__farm = { skew: (ms: number) => { skew += ms; subs.forEach(f => f()) }, now: () => farmNow(), beds: () => getF().farm.beds.map(b => b?.crop ?? null) }
 const useNow = (everyMs: number) => { const [n, set] = useState(farmNow); useEffect(() => { const t = setInterval(() => set(farmNow()), everyMs); return () => clearInterval(t) }, [everyMs]); return n }
 
 // ── the water store (one per garden). Same clock as the farm, so __farm.skew fills the tanks too. ─────────────────
 let wsv: WaterSave | null = null
 const WSERVER = freshWater(0)
 const wsubs = new Set<() => void>()
-const getWater = (): WaterSave => { if (!wsv) wsv = typeof window === 'undefined' ? WSERVER : loadWater(farmNow()); return wsv }
-export function setWater(n: WaterSave) { wsv = n; saveWater(n); wsubs.forEach(f => f()) }
+const ownWater = (): WaterSave => { if (!wsv) wsv = typeof window === 'undefined' ? WSERVER : loadWater(farmNow()); return wsv }
+let hostW: { raw: unknown; w: WaterSave } | null = null
+const getWater = (): WaterSave => {   // M61: the host's tanks while visiting, as the farm above
+  if (!isVisiting()) return ownWater()
+  const raw = visitWater()
+  if (!hostW || hostW.raw !== raw) hostW = { raw, w: raw === undefined ? freshWater(farmNow()) : adoptWater(raw, farmNow()) }
+  return hostW.w
+}
+export function setWater(n: WaterSave) { if (isVisiting()) return; wsv = n; saveWater(n); wsubs.forEach(f => f()) }
+subscribeVisit(() => { hostF = hostW = null; subs.forEach(f => f()); wsubs.forEach(f => f()) })   // visiting / a new snapshot / home redraws
 export const currentWater = getWater
 export const useWater = () => useSyncExternalStore(f => { wsubs.add(f); return () => { wsubs.delete(f) } }, getWater, () => WSERVER)
 /** Call whenever the plot's pieces change (workshop setWorks): a tap set or picked up re-bases the level from now, so a new
  *  tap never back-fills and a lifted tank clamps once (ather/water.ts › settle). */
 export function settleWater(pieces: readonly { item: string }[]) {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined' || isVisiting()) return
   const pl = plumbingOf(pieces), cur = getWater()
   if (stale(cur, pl) || wholeOf(cur, pl, farmNow()) < Math.floor(cur.n + 1e-9)) setWater(settle(cur, pl, farmNow()))
 }

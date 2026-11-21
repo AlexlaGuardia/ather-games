@@ -1,7 +1,7 @@
 // plot-visit.ts: zone naming, the chunked snapshot round trip (incl. upper levels), reassembly rules, the guest's read-only store.
 // Run: npx tsx src/app/shimmer/open/ather/plot-visit.test.ts
 import { plotZone, hostOfZone, packSnap, unpackSnap, chunk, Reassembly, isSnapPart, validSnap, CHUNK, MAX_PARTS, startVisit, endVisit,
-  setVisitSnap, currentVisit, isVisiting, guestRefuses, refusalCount, shownWorks, worksWritable, shownOwned, SendQueue, rideAsGuest, guestLifts, isHomeMsg, homeLine, HostWatch, HOST_GONE_MS, visitLog, type PlotSnap } from './plot-visit'
+  setVisitSnap, currentVisit, isVisiting, guestRefuses, refusalCount, shownWorks, worksWritable, shownOwned, SendQueue, rideAsGuest, guestLifts, isHomeMsg, homeLine, HostWatch, HOST_GONE_MS, visitLog, cleanMoglins, snapMoglins, shownMoglins, visitFarm, visitWater, type PlotSnap } from './plot-visit'
 import type { Works } from './rooms'
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  FAIL', m) } }
@@ -131,6 +131,31 @@ const snap: PlotSnap = { works, owned: ['0,0', '0,1', '1,0'] }
     ok(!hw.tick(true, 0) && !hw.tick(false, 1000) && !hw.tick(false, 1000 + HOST_GONE_MS - 1), 'a short absence is not gone')
     ok(hw.tick(false, 1000 + HOST_GONE_MS), 'absent HOST_GONE_MS in a row = gone')
     ok(!hw.tick(true, 5000) && !hw.tick(false, 5001) && !hw.tick(false, 5000 + HOST_GONE_MS), 'any sighting resets the clock')
+  }
+
+  // ── leftovers: the host's Moglins, beds and tanks travel with the plot; the guest's own never show there ──
+  {
+    ok(shownMoglins() === null && visitFarm() === undefined && visitWater() === undefined, 'at home: your own village, farm and tanks')
+    const vill = [{ id: 'm1', name: 'Pip', profession: 'cook', room: 'r1', home: 'x', grades: {}, acc: 3 }, { id: 'm2', name: 'Sol', profession: 'alchemist', home: 'y' }]
+    const sm = snapMoglins(vill as never)
+    ok(JSON.stringify(sm) === '[{"id":"m1","profession":"cook","room":"r1"},{"id":"m2","profession":"alchemist"}]', 'the host sends only id / profession / room (no names, grades, skills)')
+    ok(cleanMoglins([{ id: 'a', profession: 'cook' }, null, { id: 5, profession: 'x' }, { id: 'b', profession: 'cook', room: 7 }, 'junk']).map(m => m.id + (m.room ?? '')).join() === 'a,b', 'junk Moglins dropped one by one (a bad room is just dropped)')
+    ok(cleanMoglins(Array.from({ length: 200 }, (_, i) => ({ id: 'q' + i, profession: 'cook' }))).length === 64 && cleanMoglins('x').length === 0, 'capped at 64, a non-array = none')
+    const farm = { v: 1, farm: { beds: [{ crop: 'goldleaf', grade: 'D', plantedAt: 1, watered: false }] }, starter: true }, water = { v: 1, n: 2 }
+    const full: PlotSnap = { works, owned: ['0,0'], moglins: sm, farm, water }
+    const re3 = new Reassembly(); let pk3: string | null = null
+    for (const p of chunk(await packSnap(full), 1)) pk3 = re3.add(p) ?? pk3
+    const back = pk3 ? await unpackSnap(pk3) : null
+    ok(!!back && JSON.stringify(back.moglins) === JSON.stringify(sm) && JSON.stringify(back.farm) === JSON.stringify(farm) && JSON.stringify(back.water) === JSON.stringify(water), 'Moglins, farm and water survive the chunked round trip')
+    startVisit('p_host0003', 'Fen')
+    ok(Array.isArray(shownMoglins()) && shownMoglins()!.length === 0 && shownMoglins() === shownMoglins(), "before the plot lands: no Moglins (one stable empty list, not the guest's own)")
+    setVisitSnap('p_host0003', 1, back!)
+    ok(shownMoglins()!.map(m => m.id).join() === 'm1,m2' && visitFarm() === back!.farm && visitWater() === back!.water, "visiting: the host's Moglins, farm and tanks")
+    const old = { works, owned: [] } as PlotSnap
+    setVisitSnap('p_host0003', 2, old)
+    ok(shownMoglins()!.length === 0 && visitFarm() === undefined, "an older host's snapshot without them = none (never the guest's own)")
+    endVisit()
+    ok(shownMoglins() === null, 'home again: your own')
   }
 
   console.log(`plot-visit: ${pass}/${pass + fail}`)

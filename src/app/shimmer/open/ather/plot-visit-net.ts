@@ -19,6 +19,8 @@ const RESEND_MS = 900
 
 /** slice 3: how often the guest looks for the host among the live peers, and the host refreshes its guest list */
 const WATCH_MS = 1000
+/** leftovers: how often the host checks the parts of its plot that live outside the works store */
+const POLL_MS = 4000
 
 export function usePlotVisitNet(o: { relay: Relay; onRelay: OnRelay; hosting: boolean; visit: Visit | null; snapOf: () => PlotSnap; live: () => string[]; rev: unknown
   say: (msg: string) => void }) {
@@ -59,8 +61,18 @@ export function usePlotVisitNet(o: { relay: Relay; onRelay: OnRelay; hosting: bo
       }
       setGuestIds(prev => { const now = [...guests.current].filter(g => here.has(g)).sort(); return prev.length === now.length && prev.every((x, i) => x === now[i]) ? prev : now })
     }, WATCH_MS)
+    // leftovers: the Moglins, beds and tanks change outside the works store (village tick, farm panel), so the host also looks
+    // every POLL_MS: a new pack = a new version for every guest in view (packed() re-packs only when the plot really changed)
+    let lastV = 0
+    const poll = setInterval(async () => {
+      const here = new Set(live.current()), to = [...guests.current].filter(g => here.has(g)); if (!to.length) return
+      const c = await packed(); if (!lastV) { lastV = c.v; return }
+      if (c.v === lastV) return
+      lastV = c.v; probe.pushed++
+      for (const g of to) q.enqueue(g, chunk(c.packed, c.v))
+    }, POLL_MS)
     return () => {
-      off(); clearInterval(t); clearInterval(w)
+      off(); clearInterval(t); clearInterval(w); clearInterval(poll)
       for (const g of guests.current) o.relay(PV_HOME, { why: 'left' }, g)   // slice 3: the host left the plot: guests head home
       guests.current.clear(); while (q.next()); setGuestIds([])
     }

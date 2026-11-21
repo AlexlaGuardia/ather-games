@@ -16,7 +16,7 @@
 
 import { OwnerReady } from '../shared/owner-ready'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { subscribeVisit, currentVisit, isVisiting, startVisit, endVisit, noteVisit, shownOwned, plotZone, guestRefuses, type PlotSnap } from './plot-visit'   // BETA M61
+import { subscribeVisit, currentVisit, isVisiting, startVisit, endVisit, noteVisit, shownOwned, plotZone, guestRefuses, snapMoglins, type PlotSnap } from './plot-visit'   // BETA M61
 import { usePlotVisitNet } from './plot-visit-net'
 import { useParty, storedParty } from '@/lib/party'
 import { selfPlayerId } from '../../play3d/multiplayer'
@@ -589,7 +589,7 @@ function AtherSliceGame() {
   const heightRef = useRef(ground); heightRef.current = ground
   const visitRev = useMemo(() => ({ works, owned: garden.owned }), [works, garden.owned])   // stable until the plot changes
   const plotNet = usePlotVisitNet({ relay: mp.relay, onRelay: mp.onRelay, hosting: !!plotMp && !visitNow, visit: visitNow,
-    snapOf: (): PlotSnap => ({ works: currentWorks(), owned: [...garden.owned] }),
+    snapOf: (): PlotSnap => ({ works: currentWorks(), owned: [...garden.owned], moglins: snapMoglins(loadVillage().moglins), farm: currentFarm(), water: currentWater() }),   // leftovers: the host's Moglins, beds + tanks
     live: () => openNet()?.live() ?? [], rev: visitRev,   // M61 s2: a new works / owned = a re-send
     say: m => hudSay(m, 'info', 5) })   // s3: sent home / the host left
   const guestsHere = plotNet.guests.map(id => ({ id, name: mp.peers.current.get(id)?.name || 'A friend' }))
@@ -738,7 +738,7 @@ function AtherSliceGame() {
       spread: () => spreadRef.current, skipDays, ownerAt: (x: number, z: number) => nodeOwner?.(x, z),
       chan: () => (chanRef.current ? { id: chanRef.current.w.id, done: chanRef.current.w.done, of: chanRef.current.w.chips.length } : null), prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mine: () => mineAimed(), crystal: () => { const c = cAimRef.current.crystal; return c ? { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z } : null }, mana: () => manaRef.current.cur,
       stance: () => stanceRef.current, speedMult: () => (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1) * frameStats(getLook()).speed,
-      village: () => loadVillage(), villageTick: () => runVillage(false),
+      village: () => loadVillage(), villageTick: () => runVillage(false), fennelAt: () => fennelRef.current,
       eat: () => eatHeld(), hp: () => vitalsRef.current.hp, drink: () => drinkHeld(), buffs: () => buffsRef.current, tools: () => toolsRef.current, setMana: (n: number) => { manaRef.current.cur = n },
       rin: () => rinApi.current?.view() ?? null, cast: () => castOrAnswer(), hold: (h: boolean | 'track') => { reelHold.current = h === 'track' ? (r: Reel) => (r.zone - r.bob) * 6 + (r.zoneV - r.bobV) * 1.6 > 0 : h },
     }
@@ -1118,7 +1118,7 @@ function AtherSliceGame() {
   // BETA M13: E in a settlement talks to ONE Moglin (folk-talk.ts); the settlement's heart is its anchor (no Moglin models are drawn yet)
   const folkTalk = useFolkTalk(panel?.kind === 'folk' ? panel.s : null, useCallback((x: number, z: number) => ww && ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : 0, [ww]), () => setPanel(null))
   // BETA M22: Fennel at the Rinnshop while the first-rinstick quest is open (fennel.tsx, use-rinquest.ts › fennelTalk)
-  const fennelAt = useMemo(() => (fennelHere(rinQuest) ? fennelSpot(works) : null), [rinQuest, works])
+  const fennelAt = useMemo(() => (!visitNow && fennelHere(rinQuest) ? fennelSpot(works) : null), [rinQuest, works, visitNow])   // M61: your Fennel stays on YOUR plot
   const fennelRef = useRef(fennelAt); fennelRef.current = fennelAt
   const fennelHead = useMemo(() => (fennelAt ? { x: fennelAt.x, y: plotHeightAt(fennelAt.x, fennelAt.z) + FENNEL_HEAD, z: fennelAt.z } : null), [fennelAt])
   const fennelNode = panel?.kind === 'fennel' ? fennelTalk(rinQuest, panel.page, inv, { goto: page => setPanel({ kind: 'fennel', page }), close: () => setPanel(null) }) : null
@@ -1262,9 +1262,9 @@ function AtherSliceGame() {
             safe={{ x: GLADE_GREEN.x, z: GLADE_GREEN.z, r: 50 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
         )}
         {folkTalk.node && folkTalk.bubbleAt && zone.kind === 'wilds' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} scene={(folkTalk.node as { scene?: string }).scene} />}
-        {zone.kind === 'plot' && tableVisit && (() => { const g = TABLE_STOP.at, p = poseRef.current; return (
+        {zone.kind === 'plot' && tableVisit && !visitNow && (() => {   /* M61: your Greg never stands at a mate's table */ const g = TABLE_STOP.at, p = poseRef.current; return (
           <group position={[g.x, plotHeightAt(g.x, g.z), g.z]} rotation-y={Math.atan2(p.x - g.x, p.z - g.z)}><FolkModel look={folkLook('gregory')} action={tourNode || talkNode ? 'talk' : 'idle'} /></group>) })()}
-        {(talkNode ?? tourNode) && (zone.kind === 'wilds' || tableVisit) && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} />}
+        {(talkNode ?? tourNode) && (zone.kind === 'wilds' || (tableVisit && !visitNow)) && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} />}
         {zone.kind === 'plot' && fennelAt && <Fennel spot={fennelAt} y={plotHeightAt(fennelAt.x, fennelAt.z)} talking={!!fennelNode} />}
         {fennelNode && fennelHead && zone.kind === 'plot' && <TalkBubble at={[fennelHead.x, fennelHead.y + 0.5, fennelHead.z]} name={FENNEL_NAME} line={fennelNode.line} />}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
