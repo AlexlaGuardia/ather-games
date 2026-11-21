@@ -47,11 +47,17 @@ export function usePlotVisitNet(o: { relay: Relay; onRelay: OnRelay; hosting: bo
       const c = await packed(); q.enqueue(m.from, chunk(c.packed, c.v))
     })
     const t = setInterval(() => { const n = q.next(); if (n && o.relay(PV_SNAP, n.part, n.to)) probe.sent++ }, PACE_MS)
-    // slice 3: keep the guest list true (a guest who went home or offline drops out of it and out of the queue)
-    const w = setInterval(() => {
+    // slice 3: the guest list = the guests heard from lately. One missing from the live peers (home, offline, or a phone that
+    // stalled past the keepalive) is only HIDDEN, never forgotten: a guest holding the plot never asks again, so dropping it
+    // for good on a blip would end its live updates for the rest of the visit. Back in view = the plot as it stands now.
+    const absent = new Set<string>()
+    const w = setInterval(async () => {
       const here = new Set(live.current())
-      for (const g of [...guests.current]) if (!here.has(g)) { guests.current.delete(g); q.drop(g) }
-      setGuestIds(prev => { const now = [...guests.current].sort(); return prev.length === now.length && prev.every((x, i) => x === now[i]) ? prev : now })
+      for (const g of guests.current) {
+        if (!here.has(g)) { if (!absent.has(g)) { absent.add(g); q.drop(g) } }
+        else if (absent.delete(g)) { const c = await packed(); q.enqueue(g, chunk(c.packed, c.v)) }
+      }
+      setGuestIds(prev => { const now = [...guests.current].filter(g => here.has(g)).sort(); return prev.length === now.length && prev.every((x, i) => x === now[i]) ? prev : now })
     }, WATCH_MS)
     return () => {
       off(); clearInterval(t); clearInterval(w)
@@ -64,11 +70,10 @@ export function usePlotVisitNet(o: { relay: Relay; onRelay: OnRelay; hosting: bo
   useEffect(() => {
     if (!o.hosting || !guests.current.size) return
     const t = setTimeout(async () => {
-      const here = new Set(live.current())
-      for (const g of [...guests.current]) if (!here.has(g)) { guests.current.delete(g); queue.current.drop(g) }
-      if (!guests.current.size) return
+      const here = new Set(live.current()), to = [...guests.current].filter(g => here.has(g))   // the absent catch up on return
+      if (!to.length) return
       const c = await packed(); probe.pushed++
-      for (const g of guests.current) queue.current.enqueue(g, chunk(c.packed, c.v))
+      for (const g of to) queue.current.enqueue(g, chunk(c.packed, c.v))
     }, RESEND_MS)
     return () => clearTimeout(t)
   }, [o.hosting, o.rev])   // eslint-disable-line react-hooks/exhaustive-deps

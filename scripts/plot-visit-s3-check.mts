@@ -120,6 +120,10 @@ try {
   for (let n = 0; n < 12; n++) { await sleep(1000); st = await state(b) }   // plot-visit-check's wait: a settle loop quits early on a stalled frame
   ok(Math.abs(st.py - (GROUND_Y + STOREY)) < 0.3, `3. B upstairs beside the shaft (feet ${st.py.toFixed(2)})`)
   const r0 = await ev(b, '__visit', 'refusals') as number
+  { // E is aimed (M60): look down the shaft at the car below, as a player would
+    const ey = st.py + (st.eye ?? 1.6), dx = CELL.x - st.px, dz = CELL.z - st.pz, dy = GROUND_Y + 1 - ey
+    await b.evaluate((yw, pt) => (window as any).__ather.look(yw, pt), Math.atan2(-dx, -dz), Math.atan2(dy, Math.hypot(dx, dz))); await sleep(800)
+  }
   await b.keyboard.press('e'); await sleep(900)
   ok(await poll(async () => ((await ev(b, '__visit', 'lifts')) as any)?.[LIFT.id] === 1, 15000), `3. E calls the car up to B (overlay ${JSON.stringify(await ev(b, '__visit', 'lifts'))})`)
   ok((await ev(b, '__visit', 'refusals')) === r0, '3. and nothing was refused')
