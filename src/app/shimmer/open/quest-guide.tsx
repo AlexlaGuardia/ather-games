@@ -9,17 +9,38 @@
 // direction reads at a glance. It hugs `ground`; where the ground under it is far from your feet (indoors: the Passage,
 // the bore), it runs at your own height instead, so it never climbs the mountain over your head.
 
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { guides, type Zone } from './shared/journal'
+import { guides, postEntries, setActive, type Zone } from './shared/journal'
+import { FADE_S, fadeStep } from './shared/quest-fade'
+import { GuideRoute, clear, maxRiseAlong, trailAhead, type RoadGraph, type RouteWorld } from './shared/gps-route'
 
 const TRAIL_REACH = 48, TRAIL_STEP = 1.6, MAX_DOTS = 3 * Math.ceil(TRAIL_REACH / TRAIL_STEP), MAX_BEACONS = 8
-const FACE_DEG = 18, FADE_S = 0.3
+const FACE_DEG = 18
 const EMBER = new THREE.Color('#ff9a4a'), GOLD = new THREE.Color('#e8cf8a')
 
-export function QuestGuide({ zone, ground, feetY }: { zone: Zone; ground: (x: number, z: number) => number; feetY?: () => number | null }) {
+// M63 s2 THE GPS TRAIL: the ACTIVE trail follows a walkable route (shared/gps-route.ts: roads on the continent where they
+// beat walking straight, else around slopes the walker cannot climb and around water). The plan is time-sliced (≤ 3 ms a
+// frame) and replans only on a new goal or a 10 m stray; until it lands the trail is the old straight line. Other trails
+// stay straight (one plan in flight at a time keeps the frame cost bounded).
+export function QuestGuide({ zone, ground, feetY, water, roads }: { zone: Zone; ground: (x: number, z: number) => number; feetY?: () => number | null; water?: (x: number, z: number) => boolean; roads?: RoadGraph | null }) {
   const { camera } = useThree()
+  const worldRef = useRef<RouteWorld>({ ground }); worldRef.current = { ground, water, roads }
+  const gps = useMemo(() => new GuideRoute(() => worldRef.current), [])
+  // CHECK-ONLY (scripts/quest-guide-check.mts): plant a quest at (x, z) in this zone and make it the active line, so a check
+  // can aim the trail across a ridge. The keeper's own journal is untouched (a separate source, struck on unmount).
+  useEffect(() => {
+    const w = window as unknown as { __questPlant?: (x: number, z: number) => void; __questStraight?: (x: number, z: number) => boolean }
+    w.__questPlant = (x, z) => { postEntries('quest-check', [{ id: 'quest-check', title: 'Check', note: '', where: { zone, x, z }, hand: 'keeper' }]); setActive('quest-check') }
+    // is the straight line from where you stand to (x, z) walkable? (the check hunts for one that is NOT: a ridge)
+    w.__questStraight = (x, z) => clear(worldRef.current, here.current[0], here.current[1], x, z)
+    return () => { delete w.__questPlant; delete w.__questStraight }
+  }, [zone])
+  const here = useRef<[number, number]>([0, 0])
+  // the active trail's opacity per frame with its dt (last 40): lets a check prove the FADE RATE at any frame rate
+  const fadeLog = useRef<[number, number][]>([])
+  const routeInfo = useRef<{ route: unknown; maxRise: number; straightClear: boolean }>({ route: null, maxRise: 0, straightClear: true })
   const dots = useRef<THREE.InstancedMesh>(null), beams = useRef<THREE.InstancedMesh>(null), rings = useRef<THREE.InstancedMesh>(null)
   const tmp = useMemo(() => ({ m: new THREE.Matrix4(), q: new THREE.Quaternion(), p: new THREE.Vector3(), s: new THREE.Vector3(), c: new THREE.Color(), flat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2) }), [])
   const add = { transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false } as const
@@ -38,28 +59,42 @@ export function QuestGuide({ zone, ground, feetY }: { zone: Zone; ground: (x: nu
     const { m, q, p, s, c, flat } = tmp
     const g = guides(zone), t = clock.elapsedTime
     const fx = camera.position.x, fz = camera.position.z
+    here.current[0] = fx; here.current[1] = fz
     const feet = feetY?.() ?? camera.position.y - 1.62
     let nd = 0
     camera.getWorldDirection(fwd); const fl = Math.hypot(fwd.x, fwd.z) || 1
-    const probe = { trailOpacity: 0, glareBearing: null as number | null, facing: false, pillars: 0 }
+    const probe = { trailOpacity: 0, glareBearing: null as number | null, facing: false, pillars: 0,
+      route: null as null | { mode: string; reached: boolean; pts: number; length: number; maxRise: number; straightClear: boolean }, routeBusy: false, sliceMs: 0, trail: [] as [number, number][], at: [fx, fz] as [number, number], fadeLog: fadeLog.current, fadeS: FADE_S }
     const am = g.markers.find(k => k.active) ?? g.trails.find(k => k.active)
     if (am) probe.glareBearing = ((Math.atan2(am.x - fx, -(am.z - fz)) * 180) / Math.PI + 360) % 360
+    // the active trail's route: one slice of planning this frame (measured for the probe)
+    const at = g.trails.find(k => k.active)
+    const s0 = performance.now()
+    const route = at ? gps.get(fx, fz, [at.x, at.z], t) : null
+    probe.sliceMs = performance.now() - s0; probe.routeBusy = gps.busy
+    if (route && routeInfo.current.route !== route) routeInfo.current = { route, maxRise: maxRiseAlong(ground, route.pts), straightClear: clear(worldRef.current, fx, fz, at!.x, at!.z) }
+    if (route) probe.route = { mode: route.mode, reached: route.reached, pts: route.pts.length, length: route.length, maxRise: routeInfo.current.maxRise, straightClear: routeInfo.current.straightClear }
     for (const tr of g.trails) {
       const dx = tr.x - fx, dz = tr.z - fz, dist = Math.hypot(dx, dz)
       const face = dist > 0.01 && Math.acos(Math.max(-1, Math.min(1, ((fwd.x / fl) * dx + (fwd.z / fl) * dz) / dist))) < (FACE_DEG * Math.PI) / 180
       let op = fades.current.get(tr.id) ?? 0
-      op = face ? Math.min(1, op + dt / FADE_S) : Math.max(0, op - dt / FADE_S)
+      op = fadeStep(op, face, dt)
       fades.current.set(tr.id, op)
-      if (tr.active) { probe.trailOpacity = op; probe.facing = face }
+      if (tr.active) { probe.trailOpacity = op; probe.facing = face; fadeLog.current.push([op, dt]); if (fadeLog.current.length > 40) fadeLog.current.shift() }
       if (dist < 2 || op <= 0) continue
       const ux = dx / dist, uz = dz / dist, reach = Math.min(TRAIL_REACH, dist - 1)
       c.copy(tr.active ? EMBER : GOLD).multiplyScalar(op * op * (3 - 2 * op))
       // the marks flow toward the target: their phase slides forward with time
       const phase = (t * 2.2) % TRAIL_STEP
-      for (let d = 1.4 + phase; d < reach && nd < MAX_DOTS; d += TRAIL_STEP) {
-        const x = fx + ux * d, z = fz + uz * d
+      // along the route when this is the routed trail and its plan has landed, else the straight line
+      const along = tr.active && route && route.pts.length > 1 ? trailAhead(route.pts, fx, fz, TRAIL_REACH, TRAIL_STEP, 1.4 + phase) : null
+      const rReach = along ? Math.min(TRAIL_REACH, 1.4 + phase + TRAIL_STEP * along.length) : reach
+      if (tr.active) probe.trail = along ? along.slice(0, 8) : []
+      for (let d = 1.4 + phase, n = 0; d < rReach && nd < MAX_DOTS; d += TRAIL_STEP, n++) {
+        if (along && n >= along.length) break
+        const x = along ? along[n][0] : fx + ux * d, z = along ? along[n][1] : fz + uz * d
         const gy = ground(x, z), y = Math.abs(gy - feet) > 4 ? feet : gy
-        const fade = Math.min(1, (reach - d) / 6) * Math.min(1, (d - 1.2) / 2)
+        const fade = Math.min(1, (rReach - d) / 6) * Math.min(1, (d - 1.2) / 2)
         p.set(x, y + 0.07, z); m.compose(p, flat, s.set(0.22 * fade + 0.02, 0.22 * fade + 0.02, 1)); dots.current?.setMatrixAt(nd, m)
         dots.current?.setColorAt(nd, c); nd++
       }

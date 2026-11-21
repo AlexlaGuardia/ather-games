@@ -20,6 +20,7 @@ import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, equipSlot, held
 import { itemDef } from '../shared/inventory'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
+import { roadGraph } from '../shared/gps-route'
 import { CompanionFollower } from '../shared/companion-follower'
 import { subscribeCompanion, takeJoined, perkLabel } from '../shared/companion'
 import { VesselShop, VesselCounter } from '../vessel-shop'
@@ -1116,6 +1117,8 @@ const ROAD_LABEL: Record<string, string> = { paved: 'Paved road', road: 'Road', 
 export default function ContinentRide() { return <OwnerReady><ContinentRideGame /></OwnerReady> }
 function ContinentRideGame() {
   const [R, setR] = useState<Region | null>(null)
+  // M63 s2: the roads the quest trail walks along (built once per region; ferry crossings dropped)
+  const questRoads = useMemo(() => (R ? roadGraph(R.meta.network) : null), [R])
   const [err, setErr] = useState<string | null>(null)
   const [hud, setHud] = useState<RideHud>({ x: 0, z: 0, yaw: 0, mph: 0, frac: 0, drift: false, air: 0, gearR: false, place: null, road: null, sign: null })
   const { build, setBuild } = useCourserBuild()
@@ -1472,7 +1475,7 @@ function ContinentRideGame() {
           {cave && <CavernView cave={cave} R={R} />}
           {cave && <GunRange cave={cave} />}
           {cave && <VesselCounter cave={cave} enabled={!vesselShop && !bagOpen && !showMap} onOpen={() => setVesselShop(true)} />}
-          {R && <QuestGuide zone="continent" ground={(x, z) => (cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z))} />}
+          {R && <QuestGuide zone="continent" ground={(x, z) => (cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z))} water={(x, z) => R.heightAt(x, z) < -0.15 && !R.deckAt(x, z)} roads={questRoads} />}
           {/* the Mana'mal companion walks with you on foot; in a vessel it rides along and steps out beside you after.
               The ground hint is the keeper's own height, so on a deck or a bridge it walks the deck, not the river */}
           {R && hud.foot && <CompanionFollower pose={track} ground={(x, z) => (cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z, focus.current.y))} />}

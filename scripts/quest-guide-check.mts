@@ -43,15 +43,24 @@ try {
   const away = await probe(p), gAway = await glare(p)
   ok(!!away && away.trailOpacity < 0.05 && !away.facing, `B. facing away: trailOpacity ${away?.trailOpacity}`)
   await look(p, b + 40)
-  await poll(async () => { const g = await glare(p); return !!g && Math.abs(g.rel - 40) < 4 }, 60000)
+  // turned 40 deg clockwise past the mark = the mark sits 40 deg to the LEFT of the notch (rel = bearing - heading = -40)
+  await poll(async () => { const g = await glare(p); return !!g && Math.abs(g.rel + 40) < 4 }, 60000)
   const gSide = await glare(p)
-  ok(!!gSide && Math.abs(gSide.rel - 40) < 4, `A. glare on the compass 40 deg off: rel ${gSide?.rel}`)
+  ok(!!gSide && Math.abs(gSide.rel + 40) < 4, `A. glare on the compass 40 deg off, on the left: rel ${gSide?.rel}`)
   await look(p, b); const samples: number[] = []
   await poll(async () => { const v = (await probe(p))?.trailOpacity ?? -1; samples.push(v); return v > 0.95 }, 60000)
   await poll(async () => { const g = await glare(p); return !!g && Math.abs(g.rel) < 4 }, 30000)
   const on = await probe(p), gOn = await glare(p)
   ok(!!on && on.trailOpacity > 0.95 && on.facing, `B. facing the mark: trailOpacity ${on?.trailOpacity}`)
-  ok(samples.some(v => v > 0.05 && v < 0.95), `B. a fade, not a pop: intermediate sample ${samples.find(v => v > 0.05 && v < 0.95)} (${samples.length} samples)`)
+  // A FADE, NOT A POP, proven per frame: sampling from outside cannot catch a 0.3 s fade on a ~1-3 fps headless page, so the
+  // probe logs [opacity, dt] each frame and the opacity may never rise faster than 1 per fadeS. (A pop = 0 -> 1 in a short
+  // frame.) Where the probe predates the log, fall back to an outside intermediate sample.
+  const log: [number, number][] | undefined = on?.fadeLog, fadeS: number = on?.fadeS ?? 0.3
+  if (log && log.length > 1) {
+    let worst = 0, rises = 0, mid = 0
+    for (let i = 1; i < log.length; i++) { const d = log[i][0] - log[i - 1][0], dt = Math.max(log[i][1], 1e-6); if (d > 1e-6) { rises++; worst = Math.max(worst, d / dt); if (log[i][0] < 0.999) mid++ } }
+    ok(rises > 0 && worst <= 1 / fadeS + 0.05, `B. a fade, not a pop: opacity rose over ${rises} frame(s), never faster than ${(1 / fadeS).toFixed(2)}/s (worst ${worst.toFixed(2)}/s; ${mid} mid-fade frame(s); frame dt ${log.map(l => l[1].toFixed(2)).slice(-6).join(',')})`)
+  } else ok(samples.some(v => v > 0.05 && v < 0.95), `B. a fade, not a pop: intermediate sample ${samples.find(v => v > 0.05 && v < 0.95)} (${samples.length} samples)`)
   ok(!!gOn && Math.abs(gOn.rel) < 4 && !!gAway && gOn.bright > gAway.bright && gOn.bright > 0.95, `A. glare at the notch and brighter facing it: ${gOn?.bright} vs ${gAway?.bright}`)
   ok(on?.pillars === 0, `C. no pillar without ?pillar=1 (${on?.pillars})`)
   // E. the GPS route: hunt a goal behind something you cannot walk straight over (only where s2 is deployed)

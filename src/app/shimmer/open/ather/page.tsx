@@ -1273,7 +1273,7 @@ function AtherSliceGame() {
         {(talkNode ?? tourNode) && (zone.kind === 'wilds' || (tableVisit && !visitNow)) && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} />}
         {zone.kind === 'plot' && fennelAt && <Fennel spot={fennelAt} y={plotHeightAt(fennelAt.x, fennelAt.z)} talking={!!fennelNode} />}
         {fennelNode && fennelHead && zone.kind === 'plot' && <TalkBubble at={[fennelHead.x, fennelHead.y + 0.5, fennelHead.z]} name={FENNEL_NAME} line={fennelNode.line} />}
-        <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} />
+        <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} water={zone.kind === 'wilds' ? rinWaterAt : undefined} />
         {world && fade === 0 && <CompanionFollower pose={poseRef} ground={ground} />}
         <GateRings gate={castGate} />
         {world && (
