@@ -116,7 +116,8 @@ try {
   ok(await poll(async () => Object.keys((await ev(b, '__visit', 'lifts')) as object ?? { x: 1 }).length === 0, 20000), '2. the floor-1 cord brings it back: the overlay clears')
   ok(await poll(async () => Math.abs((await state(b)).py - GROUND_Y) < 0.2, 60000), `2. B is back on the ground (feet ${(await state(b)).py.toFixed(2)})`)
   // 3 · E from upstairs calls the car (the guest's E used to be refused before callNearest)
-  await tp(b, CELL.x - 1.1, CELL.z, 0, GROUND_Y + STOREY + 0.8); st = await settle(b)
+  await tp(b, CELL.x - 1.1, CELL.z, 0, GROUND_Y + STOREY + 0.4)
+  for (let n = 0; n < 12; n++) { await sleep(1000); st = await state(b) }   // plot-visit-check's wait: a settle loop quits early on a stalled frame
   ok(Math.abs(st.py - (GROUND_Y + STOREY)) < 0.3, `3. B upstairs beside the shaft (feet ${st.py.toFixed(2)})`)
   const r0 = await ev(b, '__visit', 'refusals') as number
   await b.keyboard.press('e'); await sleep(900)
@@ -128,7 +129,7 @@ try {
   ok(await poll(async () => !!(await a.$(`[data-guests-pill] [data-guest="${idB}"]`)), 30000), `4. A's "On your plot" lists B (${await a.evaluate(() => document.querySelector('[data-guests-pill]')?.textContent ?? 'no pill')})`)
   ok(await tapSel(a, `[data-act="send-home"][data-guest="${idB}"]`, false), '4. A clicked Send home (real click)')
   ok(await poll(async () => ((await ev(b, '__visit', 'log')) as string[]).includes('end:sent-home'), 15000), `4. B was sent home (${JSON.stringify(await ev(b, '__visit', 'log'))})`)
-  ok(await poll(async () => (await ev(b, '__mp', 'zone')) === `open:plot:${idB}` && JSON.stringify(((await ev(b, '__ather', 'works')) as any)?.pieces?.map((x: any) => x.item)) === '["goldwood_stool"]', 20000), `4. B is on its own plot again (${await ev(b, '__mp', 'zone')})`)
+  ok(await poll(async () => (await ev(b, '__mp', 'zone')) === `open:plot:${idB}` && JSON.stringify(((await ev(b, '__ather', 'works')) as any)?.pieces) === '["goldwood_stool"]', 20000), `4. B is on its own plot again (${await ev(b, '__mp', 'zone')})`)
   ok(await poll(async () => !(await a.$('[data-guests-pill]')), 15000), "4. A's pill is gone (no guests)")
 
   // 5 · host offline
