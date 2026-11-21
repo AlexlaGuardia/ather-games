@@ -10,7 +10,7 @@ import { TABLE, STARTER_CHEST } from '../src/app/shimmer/open/ather/rooms'
 import { GATE } from '../src/app/shimmer/open/ather/plot'
 import { GLADE_ID } from '../src/app/shimmer/open/ather/moonwell-glade'
 import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'
-import { makeRegion, type RegionMeta } from '../src/app/shimmer/open/terrain-world'
+import { makeRegion, type RegionMeta } from '../src/app/shimmer/open/region'
 import { doorsCached } from '../src/app/shimmer/open/business/doors'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), phone = process.argv.includes('--phone')
