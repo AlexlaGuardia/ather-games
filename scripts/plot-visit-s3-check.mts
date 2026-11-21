@@ -78,10 +78,19 @@ async function clickCord(p: Page, level: number, cy: number) {
   const c = cordsOf(LIFT as any, cy, 2)[level]
   const st = await state(p), ey = st.py + (st.eye ?? 1.6), dx = c.x - st.px, dz = c.z - st.pz, dy = c.y0 + 0.3 - ey
   await p.evaluate((yw, pt) => (window as any).__ather.look(yw, pt), Math.atan2(-dx, -dz), Math.atan2(dy, Math.hypot(dx, dz)))
-  await sleep(800); await hideCard(p); await p.mouse.move(550, 380); await sleep(200); await p.mouse.click(550, 380)
+  await sleep(800); await hideCard(p)
+  if (PHONE) await tapCentre(p); else { await p.mouse.move(550, 380); await sleep(200); await p.mouse.click(550, 380) }
+}
+// phone: a real tap at the screen centre (where the aim points); overlays in the way step aside, as under a finger (lift-phone-check)
+async function tapCentre(p: Page) {
+  const x = 390 / 2, y = 844 / 2
+  await p.evaluate((px: number, py: number) => { for (const e of document.elementsFromPoint(px, py)) { if (e.tagName === 'CANVAS') break; (e as HTMLElement).style.pointerEvents = 'none'; (e as HTMLElement).dataset.pe = '1' } }, x, y)
+  await p.touchscreen.tap(x, y); await sleep(300)
+  await p.evaluate(() => document.querySelectorAll<HTMLElement>('[data-pe]').forEach(e => { e.style.pointerEvents = ''; delete e.dataset.pe }))
 }
 async function visit(b: Page, idA: string) {
   await load(b, `&visit=${idA}&vn=Rin`)
+  if (PHONE) { await b.touchscreen.tap(195, 844 - 200); await sleep(600) }   // past the touch intro (lift-phone-check)
   return poll(async () => (await ev(b, '__visit', 'hasSnap')) === true && (await ev(b, '__mp', 'zone')) === `open:plot:${idA}`, 60000)
 }
 
@@ -124,7 +133,11 @@ try {
     const ey = st.py + (st.eye ?? 1.6), dx = CELL.x - st.px, dz = CELL.z - st.pz, dy = GROUND_Y + 1 - ey
     await b.evaluate((yw, pt) => (window as any).__ather.look(yw, pt), Math.atan2(-dx, -dz), Math.atan2(dy, Math.hypot(dx, dz))); await sleep(800)
   }
-  await b.keyboard.press('e'); await sleep(900)
+  if (PHONE) {   // the phone's 'use' chip is its E
+    ok(await poll(() => b.evaluate(() => !!document.querySelector('[data-touch="use"][data-touch-near]')), 10000), '3. phone: the "use" chip shows by the shaft')
+    await tapSel(b, '[data-touch="use"][data-touch-near]', true)
+  } else await b.keyboard.press('e')
+  await sleep(900)
   ok(await poll(async () => ((await ev(b, '__visit', 'lifts')) as any)?.[LIFT.id] === 1, 15000), `3. E calls the car up to B (overlay ${JSON.stringify(await ev(b, '__visit', 'lifts'))})`)
   ok((await ev(b, '__visit', 'refusals')) === r0, '3. and nothing was refused')
   ok(JSON.stringify(await store(a)) === aSave && JSON.stringify(await store(b)) === bSave, '3. both saves still untouched')
