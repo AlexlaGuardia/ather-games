@@ -16,7 +16,7 @@ import { parseWilds, loadWilds, BIOME, type BiomeId, type Wilds, type Tree, type
 import type { Zone } from './forestry'
 import type { RoadField } from './network'
 import type { VoidField } from './wilds-voids'
-import { editsFor, ensureEdits } from './wilds-edits'
+import { editsFor, waterFor, ensureEdits } from './wilds-edits'
 
 export const TILE_M = 1000
 export const SEA_FLOOR = -20
@@ -108,6 +108,8 @@ export function makeWorld(index: TileIndex): WildsWorld {
         const ox = tx * TILE_M, oz = ty * TILE_M, t = at(tx, ty)
         const wy = t ? (loaded.get(t.name)?.meta.waterY ?? 0) : 0
         out.push({ x0: ox - TILE_M / 2, x1: ox + TILE_M / 2, z0: oz - TILE_M / 2, z1: oz + TILE_M / 2, y0: SEA_FLOOR - 40, y1: wy })
+        const pb = t && loaded.get(t.name)?.pondBoxes   // M62 s2: painted ponds
+        if (pb) for (const b of pb) if (b.x0 + ox <= x1 && b.x1 + ox >= x0 && b.z0 + oz <= z1 && b.z1 + oz >= z0) out.push({ ...b, x0: b.x0 + ox, x1: b.x1 + ox, z0: b.z0 + oz, z1: b.z1 + oz })
       }
       return out
     },
@@ -150,7 +152,7 @@ export function zonesOf(w: WildsWorld, name: string): (i: number, j: number) => 
   return (i, j) => m.get(`${i},${j}`) ?? 'meadows'
 }
 
-export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear, w.roads, w.voids, editsFor(n))): Promise<boolean> {
+export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear, w.roads, w.voids, editsFor(n), waterFor(n))): Promise<boolean> {
   await ensureEdits()   // BETA M62: the owner's terrain edits, fetched once before the first tile parses
   const want = new Set(wanted(w, x, z)), keep = new Set(wanted(w, x, z, 2))
   let changed = false

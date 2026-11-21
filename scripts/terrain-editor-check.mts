@@ -30,6 +30,8 @@ const fetchEditsFile = async (): Promise<{ tiles: Record<string, Record<string, 
 }
 const before = (await fetchEditsFile()).tiles ?? {}
 const orig: Record<string, Record<string, number>> = Object.fromEntries(ring.map(n => [n, before[n] ?? {}]))
+const beforeW = ((await fetchEditsFile()) as { water?: Record<string, Record<string, number>> }).water ?? {}
+const origW: Record<string, Record<string, number>> = Object.fromEntries(ring.map(n => [n, beforeW[n] ?? {}]))
 console.log(`tile ${TILE} (${T.tx},${T.ty}); ring ${ring.length} tiles; edits there before: ${ring.filter(n => before[n]).join(', ') || 'none'}`)
 
 const owner = await br.createBrowserContext()
@@ -56,7 +58,7 @@ try {
   await p.waitForFunction(`window.__terrain?.ready === true && window.__terrain?.tile === ${JSON.stringify(TILE)}`, { timeout: 240000, polling: 500 })
   // a dry, gentle spot for the ridge and one for the pad, read on the editor's own ground
   const spots = await p.evaluate(`(() => { const t = window.__terrain, out = []
-    for (let r = 0; r < 420 && out.length < 2; r += 20) for (let a = 0; a < 12 && out.length < 2; a++) {
+    for (let r = 0; r < 420 && out.length < 3; r += 20) for (let a = 0; a < 12 && out.length < 3; a++) {
       const x = 4 * Math.round(Math.cos(a / 12 * Math.PI * 2) * r / 4), z = 4 * Math.round(Math.sin(a / 12 * Math.PI * 2) * r / 4)   // on a grid vertex (cell 4 m)
       const h = t.heightAt(x, z); if (!(h > 3)) continue
       if (out.some(o => Math.hypot(o.x - x, o.z - z) < 140)) continue
@@ -64,8 +66,8 @@ try {
       if (g < 0.25) out.push({ x, z, h })
     }
     return out })()`) as { x: number; z: number; h: number }[]
-  ok(spots.length === 2, `found a ridge spot and a pad spot on dry land (${JSON.stringify(spots)})`)
-  const [R, P] = spots
+  ok(spots.length === 3, `found a ridge, a pad and a pond spot on dry land (${JSON.stringify(spots)})`)
+  const [R, P, Q] = spots
   const h0 = await p.evaluate(`window.__terrain.heightAt(${R.x}, ${R.z})`) as number
   // RIDGE: three raises along x, 10 ticks of 1 m each
   for (const dx of [-12, 0, 12]) await p.evaluate(`window.__terrain.stroke('raise', ${R.x + dx}, ${R.z}, 10, 1, 10)`)
@@ -88,12 +90,21 @@ try {
   ok(spread < 0.3, `the pad is flat in the editor (spread ${spread.toFixed(2)} m around ${padY.toFixed(1)})`)
   const ridgePts: [number, number][] = [[R.x, R.z], [R.x + 12, R.z], [R.x - 12, R.z], [R.x, R.z + 4], [R.x, R.z + 5], [R.x, R.z + 6]]
   const ridgeE = await p.evaluate(`${JSON.stringify(ridgePts)}.map(([x, z]) => window.__terrain.heightAt(x, z))`) as number[]
+  // POND (slice 2): carve a bowl 6 m deep, paint water at the old ground's height over r=18: a lake at that level, dry outside
+  const rimY = await p.evaluate(`window.__terrain.heightAt(${Q.x}, ${Q.z})`) as number
+  await p.evaluate(`window.__terrain.stroke('lower', ${Q.x}, ${Q.z}, 14, 1, 6)`)
+  await p.evaluate(`window.__terrain.water(${Q.x}, ${Q.z}, 18, ${rimY.toFixed(1)})`)
+  const lv = await p.evaluate(`window.__terrain.levelAt(${Q.x}, ${Q.z})`) as number | null
+  const floorY = await p.evaluate(`window.__terrain.heightAt(${Q.x}, ${Q.z})`) as number
+  ok(lv !== null && Math.abs(lv - +rimY.toFixed(1)) < 0.01 && lv - floorY > 4, `the pond: level ${lv} m over a bowl floor ${floorY.toFixed(1)} m`)
   await sleep(500); await p.screenshot({ path: `${out}/editor.png` })
   const saved = await p.evaluate('window.__terrain.save()')
   const dirtyLeft = await p.evaluate('window.__terrain.dirty()') as string[]
   ok(saved === true && dirtyLeft.length === 0, `save: ${saved}, nothing left unsaved`)
   const after = (await fetchEditsFile()).tiles ?? {}
   ok(Object.keys(after[TILE] ?? {}).length > 50, `the world file holds the tile's edits (${Object.keys(after[TILE] ?? {}).length} vertices)`)
+  const afterW = ((await fetchEditsFile()) as { water?: Record<string, Record<string, number>> }).water ?? {}
+  ok(Object.keys(afterW[TILE] ?? {}).length > 40, `...and its water (${Object.keys(afterW[TILE] ?? {}).length} cells)`)
 
   // ── C. the game walks on it ──
   const g = await owner.newPage(); await g.setViewport({ width: 800, height: 500 })
@@ -116,6 +127,15 @@ try {
   // the ridge's flank: steepest 1 m rise on the south side, read on the game's ground
   const flank = await g.evaluate(`(() => { let m = 0; for (let s = 2; s < 12; s += 0.5) { const a = window.__ather.ground(${wx + R.x}, ${wz + R.z} + s), b = window.__ather.ground(${wx + R.x}, ${wz + R.z} + s + 1); m = Math.max(m, Math.abs(a - b)) } return m })()`) as number
   ok(flank > MAX_WALK_GRADIENT, `the ridge's flank is steeper than the walker climbs (${flank.toFixed(2)} > ${MAX_WALK_GRADIENT}): it blocks`)
+  // the pond in the game: drop the keeper into its middle; it SWIMS (the walker's water boxes), at the painted level
+  await g.mouse.click(400, 250); await sleep(800)   // past the click-to-play card: the walker only ticks in play
+  await g.evaluate(`window.__ather.tp(${wx + Q.x}, ${wz + Q.z}, 0, ${(lv ?? 0) + 1})`)
+  let sw = { swimming: false, py: NaN }
+  for (let t = 0; t < 20 && !sw.swimming; t++) { await sleep(500); sw = await g.evaluate('window.__ather.state()') as typeof sw }
+  ok(!!sw.swimming, `the keeper swims in the pond (swimming ${sw.swimming}, feet ${sw.py?.toFixed?.(2)} m vs level ${lv} over floor ${floorY.toFixed(1)})`)
+  await g.evaluate(`window.__ather.tp(${wx + Q.x}, ${wz + Q.z + 26}, 0, undefined)`); await sleep(1500)
+  await g.evaluate('window.__ather.look(0, -0.45)'); await sleep(2500)
+  await g.screenshot({ path: `${out}/game-pond.png` })
   await g.evaluate(`window.__ather.tp(${wx + R.x}, ${wz + R.z + 14}, Math.PI, undefined)`); await sleep(2500)
   await g.screenshot({ path: `${out}/game-ridge.png` })
 } finally {
@@ -125,11 +145,11 @@ try {
     await p.goto(`${url}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 120000 })
     // ⚠ /owner 307s to the ABSOLUTE https://ather.games/room: stand on the target origin again, or a relative POST goes to prod
     await p.goto(`${url}/shimmer/open/wilds-edits`, { waitUntil: 'domcontentloaded', timeout: 120000 })
-    const res = await p.evaluate(async (o: Record<string, Record<string, number>>) => {
-      return [(await fetch('/shimmer/save-wilds-edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiles: o }) })).status]
-    }, orig)
-    const now = (await fetchEditsFile()).tiles ?? {}
-    ok(res.every(s => s === 200) && ring.every(n => JSON.stringify(now[n] ?? {}) === JSON.stringify(orig[n])), `restored the ${ring.length} ring tiles to their edits before the check (POST ${res.join(',')})`)
+    const res = await p.evaluate(async (o: Record<string, Record<string, number>>, w: Record<string, Record<string, number>>) => {
+      return [(await fetch('/shimmer/save-wilds-edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiles: o, water: w }) })).status]
+    }, orig, origW)
+    const nowF = await fetchEditsFile() as { tiles?: Record<string, Record<string, number>>; water?: Record<string, Record<string, number>> }, now = nowF.tiles ?? {}, nowW = nowF.water ?? {}
+    ok(res.every(s => s === 200) && ring.every(n => JSON.stringify(now[n] ?? {}) === JSON.stringify(orig[n]) && JSON.stringify(nowW[n] ?? {}) === JSON.stringify(origW[n])), `restored the ${ring.length} ring tiles to their edits before the check (POST ${res.join(',')})`)
   } catch (e) { ok(false, `RESTORE FAILED: ${String(e)} — fix world/wilds-edits.json by hand`) }
   await br.close()
 }

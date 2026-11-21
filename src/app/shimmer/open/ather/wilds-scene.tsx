@@ -219,6 +219,27 @@ export function WaymarkStone({ w, greg }: { w: Waymark; greg?: boolean }) {
   )
 }
 
+/** M62 s2: the owner's painted water (wilds-edits, parse › ponds): one flat quad per wet cell at that cell's own level, merged
+ *  into a single mesh per tile, the sea's look. Rebuilt only when the tile re-parses (a new Wilds object). */
+function Ponds({ W }: { W: Wilds }) {
+  const geo = useMemo(() => {
+    const cells = W.ponds; if (!cells?.length) return null
+    const { cell, sizeX, sizeZ } = W.meta, hx = sizeX / 2, hz = sizeZ / 2
+    const pos = new Float32Array(cells.length * 12), idx = new Uint32Array(cells.length * 6)
+    cells.forEach((c, n) => {
+      const x0 = -hx + c.i * cell, z0 = -hz + c.j * cell, x1 = x0 + cell, z1 = z0 + cell, y = c.y - 0.05, o = n * 12
+      pos.set([x0, y, z0, x1, y, z0, x1, y, z1, x0, y, z1], o)
+      idx.set([n * 4, n * 4 + 2, n * 4 + 1, n * 4, n * 4 + 3, n * 4 + 2], n * 6)
+    })
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(new THREE.BufferAttribute(idx, 1)); g.computeVertexNormals()
+    return g
+  }, [W])
+  useEffect(() => () => geo?.dispose(), [geo])
+  if (!geo) return null
+  return <mesh geometry={geo}><meshLambertMaterial color={P.water} transparent opacity={0.8} /></mesh>
+}
+
 /** `off` = this tile's world offset (the group it sits in); `focus` = the keeper, in world coords. */
 export function WildsScene({ W, waymarks, focus, off }: { W: Wilds; waymarks: Waymark[]; focus: Focus; off: { x: number; z: number } }) {
   const greg = { ...GREG_WAYMARK, y: W.heightAt(GREG_WAYMARK.x, GREG_WAYMARK.z) }
@@ -228,6 +249,7 @@ export function WildsScene({ W, waymarks, focus, off }: { W: Wilds; waymarks: Wa
       <mesh rotation-x={-Math.PI / 2} position-y={W.meta.waterY - 0.15}>
         <planeGeometry args={[W.meta.sizeX, W.meta.sizeZ]} /><meshLambertMaterial color={P.water} transparent opacity={0.8} />
       </mesh>
+      <Ponds W={W} />
       <Trees W={W} focus={focus} off={off} />
       <Crystals W={W} />
       {W.meta.name === GREG_WAYMARK.tile && <WaymarkStone w={greg} greg />}

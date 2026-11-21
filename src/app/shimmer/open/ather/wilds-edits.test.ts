@@ -1,7 +1,7 @@
 // BETA M62 (engine from M38): the Wilds edit layer. Run: npx tsx src/app/shimmer/open/ather/wilds-edits.test.ts
 import { readFileSync } from 'node:fs'
 import { parseWilds, type WildsMeta } from './wilds'
-import { applyBrush, mergeEdits, cleanTile, cleanEdits, falloff, EditHistory, EDIT_MAX_DM, type Edits, type BrushTile } from './wilds-edits'
+import { applyBrush, mergeEdits, cleanTile, cleanEdits, cleanWater, cleanWaters, falloff, EditHistory, paintWater, foldWater, ponds, waterDrops, EDIT_MAX_DM, type Edits, type BrushTile, type WaterMap } from './wilds-edits'
 import { terrainWorld, MAX_WALK_GRADIENT } from '../terrain-world'
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
@@ -77,6 +77,41 @@ ok(W.crystals.every(c => Math.abs(c.y - W.heightAt(c.x, c.z)) < 0.01), 'every cr
 // flatten with a light strength moves less than with a full one
 { const tgt = base.heightAt(px, pz) - 6, one = (s: number) => { const e: Edits = {}; mergeEdits(e, applyBrush(base.heightAt, [tile], e, { kind: 'flatten', x: px, z: pz, r: 8, s, target: tgt })); return Math.abs(e[meta.name][String(Math.round((pz + 500) / 4) * 251 + Math.round((px + 500) / 4))] ?? 0) }
   ok(one(0.2) < one(1) && one(0.2) > 0, `flatten scales with strength (${one(0.2)} < ${one(1)} dm)`) }
+
+// ── WATER (slice 2): carve a bowl, paint water at the rim's height = a lake at that level; outside the bowl it stays dry ──
+{ const e: Edits = {}; let X = base; const rim = base.heightAt(px, pz)
+  for (let n = 0; n < 6; n++) { mergeEdits(e, applyBrush(X.heightAt, [tile], e, { kind: 'lower', x: px, z: pz, r: 12, s: 1 })); X = parseWilds(meta, dm, bio, undefined, undefined, true, undefined, undefined, e[meta.name]) }
+  const wm: Record<string, WaterMap> = {}
+  foldWater(wm, paintWater([tile], px, pz, 20, rim), false)
+  const cellsPainted = Object.keys(wm[meta.name]).length
+  ok(cellsPainted > 60 && Object.values(wm[meta.name]).every(v => v === Math.round(rim * 10)), `paint: ${cellsPainted} cells inside r=20 hold the level ${rim.toFixed(1)} m`)
+  const L = parseWilds(meta, dm, bio, undefined, undefined, true, undefined, undefined, e[meta.name], wm[meta.name])
+  const wet = L.ponds ?? []
+  ok(wet.length > 10 && wet.length < cellsPainted, `only the carved bowl fills (${wet.length} wet of ${cellsPainted} painted)`)
+  ok(wet.every(c => Math.abs(c.y - rim) < 0.051), 'every wet cell sits at the painted level')
+  const centreWet = wet.some(c => Math.abs(-500 + (c.i + 0.5) * 4 - px) < 4 && Math.abs(-500 + (c.j + 0.5) * 4 - pz) < 4)
+  ok(centreWet, 'the bowl centre is wet')
+  const inside = (x: number, y: number, z: number) => L.shape.water(x, y, z, x, y, z).some(b => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1 && y >= b.y0 && y <= b.y1)
+  ok(inside(px, rim - 0.5, pz), 'the walker is IN water half a metre under the level at the centre (it swims)')
+  ok(!inside(px, rim + 0.5, pz), '...and not above the level')
+  ok(!inside(px + 18, base.heightAt(px + 18, pz) + 0.3, pz) || base.heightAt(px + 18, pz) < rim, 'a painted cell the ground stands above is dry')
+  ok((L.pondBoxes?.length ?? 0) < wet.length, `runs merge into fewer swim boxes (${L.pondBoxes?.length} boxes for ${wet.length} cells)`)
+  ok(L.h.every((v, i) => v === X.h[i]), 'water never moves the ground')
+  // dry it back out
+  foldWater(wm, paintWater([tile], px, pz, 30, null), true)
+  ok(!wm[meta.name], 'Dry over the whole pond removes the tile from the water file')
+  // two levels side by side: the higher pond's cells next to the lower ones are drops (slice 3 reads this)
+  const two: Record<string, WaterMap> = {}
+  foldWater(two, paintWater([tile], px - 6, pz, 6, rim + 3), false); foldWater(two, paintWater([tile], px + 6, pz, 6, rim), false)
+  const P2 = ponds(meta, X.h, two[meta.name]), drops = waterDrops(meta, P2.cells)
+  ok(drops.length > 0 && drops.every(d => d.from.y - d.to.y > 2.9), `two levels touching give drops (${drops.length}, each ~3 m)`)
+  ok(waterDrops(meta, ponds(meta, X.h, wm[meta.name] ?? {}).cells).length === 0, 'one level = no drops')
+  // a level of exactly 0.0 m is kept (stored as 0.1), never read as a removal
+  const z0: Record<string, WaterMap> = {}; foldWater(z0, paintWater([tile], px, pz, 4, 0), false)
+  ok(Object.values(z0[meta.name] ?? {}).every(v => v === 1) && Object.keys(z0[meta.name] ?? {}).length > 0, 'a 0.0 m level paints (as 0.1 m), it does not erase') }
+// the wire for water
+ok(cleanWater({ '5': 99999 })!['5'] === 4000 && cleanWater({ '62500': 3 }) === null && cleanWater({ x: 1 }) === null, 'water: clamped, out-of-range cells and junk refused')
+ok(JSON.stringify(cleanWaters({ water: { a: { '3': 12 }, '../b': { '1': 1 } } })) === '{"a":{"3":12}}', 'cleanWaters keeps good tiles only')
 
 // the wire
 ok(cleanTile({ '5': 9999 })!['5'] === EDIT_MAX_DM, 'a delta past the clamp is clamped')
