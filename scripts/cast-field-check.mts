@@ -3,6 +3,7 @@
 // "Cyclone Cage is not out here yet" and nothing was placed.
 //   npx tsx scripts/cast-field-check.mts [origin] [shot.png]
 import puppeteer from 'puppeteer-core'
+import { FIELD_TICK_MS } from '../src/app/shimmer/engine/field-effects'
 const origin = process.argv[2] ?? 'https://ather.games', shot = process.argv[3]
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const b = await puppeteer.launch({ protocolTimeout: 240000, executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -31,7 +32,10 @@ await p.keyboard.press('KeyX')
 await p.waitForFunction(() => ((window as any).__ather.combat().fields ?? []).length > 0, { timeout: 15000 }).catch(() => {})
 // stand the Hollow in the ring (the aim lands a few metres off where a spawned Hollow wanders to), then let a tick pass
 await p.evaluate(() => { const c = (window as any).__ather.combat(), f = c.fields?.[0], h = c.hollows[0]; if (f && h) { h.x = f.x; h.z = f.z; h.y = f.y } })
-await sleep(1500)
+// wait one field tick of COMBAT time, not wall time: the combat clock caps a frame at 1/20 s, so at headless ~2 fps it runs
+// ~10x slower than the wall and a fixed 1.5 s often held no tick at all (11-21 sweep: Hollow 0.1 m inside, fx null)
+{ const tick = FIELD_TICK_MS / 1000, c0 = await p.evaluate(() => (window as any).__ather.combat().clock ?? 0)
+  await p.waitForFunction((c0: number, t: number) => ((window as any).__ather.combat().clock ?? 0) >= c0 + t + 0.1, { timeout: 90000 }, c0, tick).catch(() => {}) }
 const r = await p.evaluate(() => { const c = (window as any).__ather.combat(); return { fields: (c.fields ?? []).length, f: (c.fields ?? []).map((f: any) => [f.x, f.z, f.r]), h: c.hollows.map((h: any) => [h.x, h.z]), eye: (() => { const a = (window as any).__ather; return a.pos?.() ?? null })(), fx: c.hollows.map((h: any) => h.fx ?? null) } })
 const msg = await p.evaluate(() => document.body.innerText.includes('not out here yet'))
 ok(!msg, 'no "not out here yet" refusal')
