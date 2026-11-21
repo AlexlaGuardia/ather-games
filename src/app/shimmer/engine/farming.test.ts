@@ -117,7 +117,7 @@ chk('an ordinary crop carries no element', elementForHerbItem('shimmerwheat_grai
   const inv = createInventory()
   addItems(inv, def.seedItemId, 2)
   const skills = createSkillSet()
-  const mana = createManaPool()
+  const mana = createManaPool(skills.mana.level)   // a real pool (the bare call gave NaN, which no mana gate ever refuses)
 
   skills.farming.level = def.minFarmingLevel - 1
   chk('one level short cannot plant', !canPlantCrop(def.id, inv, skills.farming.level, mana))
