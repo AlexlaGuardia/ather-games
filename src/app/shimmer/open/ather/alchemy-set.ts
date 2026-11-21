@@ -6,8 +6,12 @@
 //
 // ★ STATIONS RULED 2026-11-21 (Q1, athernyx 2cbbaca, game/alchemy.md › THE ALCHEMY SET): Alchemy Desk (a recipe starts and
 //   ends there) · Still (mixture -> extract) · Cauldron Nook (makes the mixture) · Crusher Table (WORKING name: items -> fine
-//   powders or gels). The chain: crush -> mix -> distil -> combine, each potion its own step list. Still PLACEHOLDER (Q2-Q3
-//   open, CANON_GAPS top): the intermediate + potion names, and the health potion itself. Every name lives in this file only.
+//   powders or gels). The chain: crush -> mix -> distil -> combine, each potion its own step list.
+// ★ NAMES RULED 2026-11-21 (Q2-Q3, athernyx 61911e7): the naming GRAMMAR (Crusher -> a Dust or a Gel, Nook -> a Steep, Still
+//   -> an Extract, Desk -> the potion by its class word), the first recipe (Rinnscale Dust + Goldleaf Steep -> Golden Dew
+//   Extract -> Health Draught) and the three starters (Health Draught, Mana Draught, Starlight Tincture). The other
+//   intermediates are named BY that grammar (what went in + its word). The Rinnscale Dust is ground from the build's
+//   Shimmerscale catch (the dust is canon's name, the input is Jin's). Every name lives in this file only.
 // ⚖ Jin's (canon 09-16): every step list, every number, potency, the grade maths. Canon's: a brewing, every hand a bottle,
 //   bottle-only, more-never-only (alchemy.md). Run: npx tsx src/app/shimmer/open/ather/alchemy-set.test.ts
 import { GRADES, type Grade } from './farming'
@@ -37,38 +41,40 @@ export interface Potion {
 
 /** The things a chain makes on the way (each is graded like a crop: `alc:<id>:<grade>`). */
 export const INTERMEDIATES: Readonly<Record<string, string>> = {
-  scale_powder: 'Scale Powder', dewdrop_gel: 'Dewdrop Gel', golden_mixture: 'Golden Mixture', golden_dew_extract: 'Golden Dew Extract',
-  shard_dust: 'Shard Dust', mana_mixture: 'Mana Mixture', sap_extract: 'Sap Extract', core_dust: 'Core Dust',
+  rinnscale_dust: 'Rinnscale Dust', goldleaf_steep: 'Goldleaf Steep', golden_dew_extract: 'Golden Dew Extract',
+  shard_dust: 'Shard Dust', dewdrop_gel: 'Dewdrop Gel', shard_steep: 'Shard Steep', starwillow_extract: 'Starwillow Extract', core_dust: 'Core Dust',
 }
 
 const S = 1000
 export const ALC_POTIONS: Readonly<Record<string, Potion>> = {
-  // Alex's own chain: crushed scales, Goldleaf + Dewdrop Vine mixed, distilled to Golden Dew Extract, combined. The vine goes
-  // through the Crusher first as a gel (the ruling's "powders or gels"; Jin's step list), so its grade still rides through.
+  // THE FIRST RECIPE, as ruled (Alex's chain): Rinnscale Dust + Goldleaf Steep (Goldleaf + Dewdrop Vine) -> Still -> Golden
+  // Dew Extract -> Desk -> Health Draught.
   health: {
-    name: 'Health Potion', blurb: 'Golden dew and scale powder. Drink it to heal.', makes: 2, effect: { heal: 40 },
+    name: 'Health Draught', blurb: 'Golden dew and rinnscale dust. Drink it to heal.', makes: 2, effect: { heal: 40 },
     steps: [
-      { at: 'crusher', in: [{ id: 'shimmerscale', n: 2 }], out: 'scale_powder', ms: 6 * S },
-      { at: 'crusher', in: [{ id: 'crop:dewdrop_vine', n: 2 }], out: 'dewdrop_gel', ms: 6 * S },
-      { at: 'nook', in: [{ id: 'crop:goldleaf', n: 2 }, { id: 'alc:dewdrop_gel', n: 1 }], out: 'golden_mixture', ms: 10 * S },
-      { at: 'still', in: [{ id: 'alc:golden_mixture', n: 1 }], out: 'golden_dew_extract', ms: 12 * S },
-      { at: 'desk', in: [{ id: 'alc:scale_powder', n: 1 }, { id: 'alc:golden_dew_extract', n: 1 }], out: 'health', ms: 8 * S },
+      { at: 'crusher', in: [{ id: 'shimmerscale', n: 2 }], out: 'rinnscale_dust', ms: 6 * S },
+      { at: 'nook', in: [{ id: 'crop:goldleaf', n: 2 }, { id: 'crop:dewdrop_vine', n: 2 }], out: 'goldleaf_steep', ms: 10 * S },
+      { at: 'still', in: [{ id: 'alc:goldleaf_steep', n: 1 }], out: 'golden_dew_extract', ms: 12 * S },
+      { at: 'desk', in: [{ id: 'alc:rinnscale_dust', n: 1 }, { id: 'alc:golden_dew_extract', n: 1 }], out: 'health', ms: 8 * S },
     ],
   },
   mana: {
-    name: 'Mana Potion', blurb: 'Shard dust folded into dewdrop. Drink it for mana.', makes: 2, effect: { mana: 65 },
+    // a starter (the canon first recipe; its page comes with the Desk). The vine is crushed to a GEL first (the Crusher's
+    // other product, ruled with the Dust).
+    name: 'Mana Draught', blurb: 'Shard dust steeped with dewdrop gel. Drink it for mana.', makes: 2, effect: { mana: 65 },
     steps: [
       { at: 'crusher', in: [{ id: 'raw_mana_shard', n: 3 }], out: 'shard_dust', ms: 6 * S },
-      { at: 'nook', in: [{ id: 'alc:shard_dust', n: 1 }, { id: 'crop:dewdrop_vine', n: 2 }], out: 'mana_mixture', ms: 10 * S },
-      { at: 'desk', in: [{ id: 'alc:mana_mixture', n: 1 }], out: 'mana', ms: 8 * S },
+      { at: 'crusher', in: [{ id: 'crop:dewdrop_vine', n: 2 }], out: 'dewdrop_gel', ms: 6 * S },
+      { at: 'nook', in: [{ id: 'alc:shard_dust', n: 1 }, { id: 'alc:dewdrop_gel', n: 1 }], out: 'shard_steep', ms: 10 * S },
+      { at: 'desk', in: [{ id: 'alc:shard_steep', n: 1 }], out: 'mana', ms: 8 * S },
     ],
   },
   wisdom: {
-    name: 'Wisdom Potion', blurb: 'Starwillow extract on core dust. Gathering teaches you more for a while.', makes: 2, effect: { xp: 0.25, ms: 8 * 60 * S },
+    name: 'Starlight Tincture', blurb: 'Starwillow extract on core dust. Gathering teaches you more for a while.', makes: 2, effect: { xp: 0.25, ms: 8 * 60 * S },
     steps: [
       { at: 'crusher', in: [{ id: 'pure_mana_core', n: 2 }], out: 'core_dust', ms: 6 * S },
-      { at: 'still', in: [{ id: 'starwillow_sap', n: 3 }], out: 'sap_extract', ms: 12 * S },
-      { at: 'desk', in: [{ id: 'alc:core_dust', n: 1 }, { id: 'alc:sap_extract', n: 1 }, { id: 'crop:goldleaf', n: 1 }], out: 'wisdom', ms: 8 * S },
+      { at: 'still', in: [{ id: 'starwillow_sap', n: 3 }], out: 'starwillow_extract', ms: 12 * S },
+      { at: 'desk', in: [{ id: 'alc:core_dust', n: 1 }, { id: 'alc:starwillow_extract', n: 1 }, { id: 'crop:goldleaf', n: 1 }], out: 'wisdom', ms: 8 * S },
     ],
   },
 }

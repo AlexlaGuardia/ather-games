@@ -50,7 +50,7 @@ res.started = await click('[data-alc-step="health:0"] [data-act="alc-start"] but
 res.afterStart = { bag: await bag(), run: Object.keys(await runs()) }
 res.bar = await p.evaluate(() => !!document.querySelector('[data-alc-run] [data-alc-bar]'))
 await shot('ac-2-running')
-res.ground = await poll(async () => Object.keys(await bag()).some(k => k.startsWith('alc:scale_powder')), GRIND_MS + 20000)
+res.ground = await poll(async () => Object.keys(await bag()).some(k => k.startsWith('alc:rinnscale_dust')), GRIND_MS + 20000)
 res.afterGrind = { bag: await bag(), run: Object.keys(await runs()) }
 await shot('ac-3-ground')
 // 3. start again, then Pick up mid-run: the piece AND the 2 scales come back, the run is gone
@@ -62,12 +62,12 @@ res.errs = errs
 console.log(JSON.stringify(res))
 const st = res.afterStart as { bag: Record<string, number>; run: string[] }, gr = res.afterGrind as { bag: Record<string, number>; run: string[] }
 const mid = res.midRun as { bag: Record<string, number>; run: string[] }, up = res.afterPickup as { bag: Record<string, number>; run: string[]; pieces: number }
-const powder = (b: Record<string, number>) => Object.entries(b).filter(([k]) => k.startsWith('alc:scale_powder')).reduce((a, [, n]) => a + n, 0)
+const powder = (b: Record<string, number>) => Object.entries(b).filter(([k]) => k.startsWith('alc:rinnscale_dust')).reduce((a, [, n]) => a + n, 0)
 const pass = res.station === 'crusher' && res.plainCard === false && res.canGrind === '1' && res.started === true && res.bar === true
   && st.bag.shimmerscale === 2 && st.run.includes(PIECE.id)
   && res.ground === true && powder(gr.bag) === 1 && !gr.run.includes(PIECE.id)
   && !mid.bag.shimmerscale && mid.run.includes(PIECE.id)
   && res.pickup === true && up.pieces === 0 && up.bag.alc_mortar === 1 && up.bag.shimmerscale === 2 && powder(up.bag) === 1 && !up.run.includes(PIECE.id)
   && errs.length === 0
-console.log(pass ? 'PASS: E at the Crusher Table opens its station → crush spends 2 scales, bar fills, Scale Powder lands → Pick up mid-run returns the piece + its scales' : 'FAIL')
+console.log(pass ? 'PASS: E at the Crusher Table opens its station → crush spends 2 scales, bar fills, Rinnscale Dust lands → Pick up mid-run returns the piece + its scales' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)

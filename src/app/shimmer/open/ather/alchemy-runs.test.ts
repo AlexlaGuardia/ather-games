@@ -6,9 +6,9 @@ let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
-const NOOK = ALC_POTIONS.health.steps.findIndex(x => x.at === 'nook')   // goldleaf + the vine's gel -> the mixture
+const NOOK = ALC_POTIONS.health.steps.findIndex(x => x.at === 'nook')   // goldleaf + dewdrop vine -> the Goldleaf Steep
 const T = 1_000_000, ms = ALC_POTIONS.health.steps[NOOK].ms
-const have = { 'crop:goldleaf:B': 3, 'alc:dewdrop_gel:B': 1 }
+const have = { 'crop:goldleaf:B': 3, 'crop:dewdrop_vine:B': 2 }
 const s = startRun({}, 'p1', 'health', NOOK, have, T)
 ok(!!s && s.spend.length === 2 && s.runs.p1.ms === ms, 'a step starts and says what to spend')
 ok(!!s && startRun(s.runs, 'p1', 'health', NOOK, have, T) === null, 'a busy piece takes no second run')
@@ -17,12 +17,12 @@ ok(startRun({}, 'p1', 'nope', 0, have, T) === null && startRun({}, 'p1', 'health
 ok(!!s && runFrac(s.runs.p1, T + ms / 2) === 0.5 && runLeft(s.runs.p1, T + ms / 2) === ms / 2, 'half way is half way')
 ok(!!s && collectRun(s.runs, 'p1', T + ms - 1) === null, 'not collected before it is done')
 const c = s && collectRun(s.runs, 'p1', T + ms)
-ok(!!c && c.got.id === 'alc:golden_mixture:B' && c.got.n === 1 && !c.runs.p1, 'done: a grade-B mixture, the piece free again')
+ok(!!c && c.got.id === 'alc:goldleaf_steep:B' && c.got.n === 1 && !c.runs.p1, 'done: a grade-B mixture, the piece free again')
 const d = s && dropRun(s.runs, 'p1')
 ok(!!d && d.back.length === 2 && !d.runs.p1, 'picking up a busy piece gives the inputs back')
 ok(dropRun({}, 'x').back.length === 0, 'an idle piece gives nothing back')
 const back = s && returnRun(s.runs, 'p1', newInv(0))
-ok(!!back && !back.runs.p1 && countOf(back.inv, 'crop:goldleaf:B') === 2 && countOf(back.inv, 'alc:dewdrop_gel:B') === 1, 'pick up a busy piece: the inputs land in the bag')
+ok(!!back && !back.runs.p1 && countOf(back.inv, 'crop:goldleaf:B') === 2 && countOf(back.inv, 'crop:dewdrop_vine:B') === 2, 'pick up a busy piece: the inputs land in the bag')
 const full: Inv = { ...newInv(0), slots: newInv(0).slots.map(() => ({ id: 'waymark', n: 999 })) }
 ok(!!s && returnRun(s.runs, 'p1', full) === null, 'a full bag refuses: the piece stays, the run keeps going')
 const bag0 = newInv(0), idle = returnRun({}, 'p1', bag0)
