@@ -8,7 +8,7 @@
 // ⚠ Folding needed Enchant in the voxel world. The open world has no runes yet, so starting a link takes only the
 //   keeper's own say-so here; joining has always been consent alone.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { HearthFrame, HearthButton, HearthLabel, H } from '../../ui/hearth'
 import { clusterMenu, type Invite, type Friend } from '../../voxel3d/cluster-menu'
 import type { ClusterView, Quarter as Q } from '@/lib/accounts/clusters'
@@ -25,6 +25,7 @@ async function getJson<T>(url: string): Promise<T | null> { try { const r = awai
 export function useCluster(owned: readonly string[]) {
   const [rem, setRem] = useState<Remote>(EMPTY)
   const [busy, setBusy] = useState<string | null>(null)
+  const lastRem = useRef('')
   const refresh = useCallback(async () => {
     const [c, g, f, who] = await Promise.all([
       getJson<{ cluster: ClusterView | null; quarter: Q | null; invites: Invite[] }>('/api/cluster'),
@@ -32,7 +33,11 @@ export function useCluster(owned: readonly string[]) {
       getJson<{ friends: Friend[] }>('/api/friends'),
       getJson<{ session: { user_id: string } | null }>('/api/auth/session'),
     ])
-    setRem({ view: c?.cluster ?? null, quarter: c?.quarter ?? null, invites: c?.invites ?? [], friends: f?.friends ?? [], gardens: g?.gardens ?? {}, signedIn: !!who?.session })
+    const next: Remote = { view: c?.cluster ?? null, quarter: c?.quarter ?? null, invites: c?.invites ?? [], friends: f?.friends ?? [], gardens: g?.gardens ?? {}, signedIn: !!who?.session }
+    // ★ M44 part 3: an unchanged poll keeps the SAME object. A fresh one re-ran the frame memo below, i.e. clusterFrame ->
+    // buildMeadow, every 30 s in every zone (a 0.5 s main-thread task in the Wilds walk profile, mid-stride).
+    const j = JSON.stringify(next)
+    if (j !== lastRem.current) { lastRem.current = j; setRem(next) }
   }, [])
   useEffect(() => { refresh(); const id = setInterval(refresh, 30000); return () => clearInterval(id) }, [refresh])
   // your garden, for your mates: uploaded when you stand in a cluster and it changes

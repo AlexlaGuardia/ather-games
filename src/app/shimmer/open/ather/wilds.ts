@@ -62,7 +62,26 @@ const hash = (a: number, b: number, s = 0) => {
 /** `clear(x, z)` in WORLD coords (tile-local + the tile's centre): no tree stands there (the path network: paths,
  *  settlements, the fair's ground). Ids are counted as if it stood, so a prune saved before the paths still finds its
  *  tree, and crystals still dodge it, so no crystal moved either. */
-export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt: (i: number, j: number) => Zone = () => 'meadows', clear?: (x: number, z: number) => boolean, relief = true, roads?: RoadField | null, voids?: VoidField | null): Wilds {
+type ParseArgs = [meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt?: (i: number, j: number) => Zone, clear?: (x: number, z: number) => boolean, relief?: boolean, roads?: RoadField | null, voids?: VoidField | null]
+export function parseWilds(...a: ParseArgs): Wilds {
+  const g = parseSteps(...a)
+  for (;;) { const r = g.next(); if (r.done) return r.value }
+}
+/** Yield to the browser's task queue without setTimeout's 4 ms nesting clamp (a MessageChannel round trip). */
+const yieldTask = () => new Promise<void>(res => { const ch = new MessageChannel(); ch.port1.onmessage = () => { ch.port1.close(); res() }; ch.port2.postMessage(0) })
+/** ★ M44 part 3: the SAME parse, cut into slices of ~`budgetMs` of main thread, so a tile streaming in while the keeper walks
+ *  never holds a frame (the parse was one 175-285 ms task per tile, three per crossing). Output is identical to parseWilds by
+ *  construction: both drain the one generator below, this one just lets frames run between its rows. */
+export async function parseWildsSliced(a: ParseArgs, budgetMs = 6): Promise<Wilds> {
+  const g = parseSteps(...a)
+  for (;;) {
+    const t0 = performance.now()
+    for (;;) { const r = g.next(); if (r.done) return r.value; if (performance.now() - t0 > budgetMs) break }
+    await yieldTask()
+  }
+}
+/** The parse, as a generator that yields after each row of its heavy loops (relief + void carve, voids, trees, crystals). */
+function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt: (i: number, j: number) => Zone = () => 'meadows', clear?: (x: number, z: number) => boolean, relief = true, roads?: RoadField | null, voids?: VoidField | null): Generator<void, Wilds, void> {
   const { nx, nz, cell, sizeX, sizeZ } = meta
   if (dm.length !== nx * nz) throw new Error(`wilds ${meta.name}: ${dm.length} heights, want ${nx * nz}`)
   if (biomes.length !== (nx - 1) * (nz - 1)) throw new Error(`wilds ${meta.name}: ${biomes.length} biome cells, want ${(nx - 1) * (nz - 1)}`)
@@ -76,12 +95,14 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
     const k = j * nx + i
     h[k] = relief ? relieve(-hx + i * cell + ox, -hz + j * cell + oz, raw[k], meta.waterY, clear, roads) : raw[k]
     if (voids) h[k] = voids.carve(-hx + i * cell + ox, -hz + j * cell + oz, h[k], meta.waterY)   // M41: the crust is gone between zones
+    if (i === nx - 1) yield
   }
   // a cell is void where its corners are carved most of the way down (wilds-scene draws it dark; no tree or crystal stands there)
   let voided: Uint8Array | undefined
   if (voids) {
     const floor = meta.waterY + 0.6 + 0.01
     for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
+      if (i === 0) yield
       if (h[j * nx + i] > floor && h[j * nx + i + 1] > floor && h[(j + 1) * nx + i] > floor && h[(j + 1) * nx + i + 1] > floor) continue
       const w = voids.weight(-hx + (i + 0.5) * cell + ox, -hz + (j + 0.5) * cell + oz)
       if (w > 0.35) { voided ??= new Uint8Array((nx - 1) * (nz - 1)); voided[j * (nx - 1) + i] = 1 }
@@ -119,6 +140,7 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
   const NODE_M = 200
   const slopeOf = (at: (x: number, z: number) => number, x: number, z: number) => Math.hypot(at(x + 1, z) - at(x - 1, z), at(x, z + 1) - at(x, z - 1)) / 2
   for (let j = 0; j < ch; j++) for (let i = 0; i < cw; i++) {
+    if (i === 0) yield
     const b = biomes[j * cw + i]
     const cx = -hx + (i + 0.5) * cell, cz = -hz + (j + 0.5) * cell
     const zone = zoneAt(Math.min(4, Math.floor((cx + hx) / NODE_M)), Math.min(4, Math.floor((cz + hz) / NODE_M)))
@@ -142,6 +164,7 @@ export function parseWilds(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, 
   const crystals: Crystal[] = []
   let cn = 0   // crystal ids count on the raw land, like trees (relief.ts never renumbers a saved fracture)
   for (let j = 0; j < ch; j++) for (let i = 0; i < cw; i++) {
+    if (i === 0) yield
     const b = biomes[j * cw + i]
     const cx = -hx + (i + 0.5) * cell, cz = -hz + (j + 0.5) * cell
     const zone = zoneAt(Math.min(4, Math.floor((cx + hx) / NODE_M)), Math.min(4, Math.floor((cz + hz) / NODE_M)))
@@ -214,7 +237,7 @@ export async function loadWilds(name: string, base = '/open/wilds', zoneAt?: (i:
     fetch(`${base}/${name}.bin`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.bin ${r.status}`); return r.arrayBuffer() }),
     fetch(`${base}/${name}.biome`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.biome ${r.status}`); return r.arrayBuffer() }),
   ])
-  return parseWilds(meta, new Int16Array(bin), new Uint8Array(bio), zoneAt, clear, true, roads, voids)
+  return parseWildsSliced([meta, new Int16Array(bin), new Uint8Array(bio), zoneAt, clear, true, roads, voids])
 }
 
 /** The tile's centre in CONTINENT world coordinates (continent.json: origin at the centre, 10 m per source px).
