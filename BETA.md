@@ -162,6 +162,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 - 11-21 06:2x Alex: "the ground looks terrible both in the ather and nyx side.. when shapes overlap we get this ugly glitchy state where the overlapping parts fight for whos on top.. and then theres the incohesive shapes that make up roads and sidewalks .. do we need another tool or can we do better" → triaged: **M58** (no editor; a ground pass in code)
 - 11-21 06:4x Alex: new fp-hands values for holding items (27 keys, saved docs/handoff/hands-tune-2026-11-21.json) → routed to sprites as a quick one
+- 11-21 06:5x Alex: "the way the hand rotates from idle to hold looks unnatural" → cause: Euler lerp of pitch 3.3 rad + roll 3.7 rad (fp-hands-pose.ts:123); routed to sprites (quaternion slerp) after M56a. Open look call: held item sits behind the cast wheel bottom-right
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
