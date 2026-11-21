@@ -46,6 +46,9 @@ export const setPlanLift = (h: number) => { planLift = h }
 export const buildYaw = () => cur.yaw
 /** where the plan lens looks (M55 slice 2: the Foundation picker acts on the house there) */
 export const buildAim = () => ({ x: aim.x, z: aim.z })
+/** the point you have framed: where the view is panned to, shown in the middle of the free band below the bar (the lens AIM sits
+ *  ahead of it by the Paint lift / the bar insets). 'The house in view' is the house HERE, not at the aim. */
+export const buildFocus = () => ({ x: cur.x, z: cur.z })
 export const useBuildMode = () => useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f) } }, () => on, () => false)
 /** Lift off from where the keeper stands, looking the way they look. */
 export function enterBuild(at: { x: number; z: number; yaw: number }) {

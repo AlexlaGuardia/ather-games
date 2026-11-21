@@ -53,7 +53,7 @@ import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
 import { TOOL_DEFS } from '../../engine/tools'
-import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw, buildYaw, buildAim, setPlanLift, setPlanInsets } from './build-mode'
+import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw, buildYaw, buildFocus, setPlanLift, setPlanInsets } from './build-mode'
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
 import { advance, setFocus, cancelFocus, runProgress, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
@@ -567,7 +567,7 @@ function HouseLevels({ w }: { w: Works }) {
  *  built footprint (the Keepstone first, the bag tops up); lowering gives the difference back to the bag. Nothing changes unless
  *  all of it is there. */
 function setFoundation(h: FoundH) {
-  const w = currentWorks(), a = buildAim(), house = liftOf(w).houseAt(a.x, a.z)
+  const w = currentWorks(), a = buildFocus(), house = liftOf(w).houseAt(a.x, a.z)
   if (!house) { hudSay('Aim the view at a house to set its foundation.', 'info'); return }
   const from = house.h; if (from === h && house.cells.every(c => (w.foundCells ?? {})[c] === h)) return
   const d = houseFoundDelta(house, from, h)
@@ -605,7 +605,7 @@ const usePhoneBar = () => useSyncExternalStore(f => { pbSubs.add(f); return () =
 function useAimHouse(w: Works) {
   const [hs, setHs] = useState<Lift['houses'][number] | null>(null)
   useEffect(() => {
-    const read = () => { const a = buildAim(), h = liftOf(currentWorks()).houseAt(a.x, a.z); setHs(p => (p?.h === h?.h && p?.cells.join() === h?.cells.join() ? p : h)) }
+    const read = () => { const a = buildFocus(), h = liftOf(currentWorks()).houseAt(a.x, a.z); setHs(p => (p?.h === h?.h && p?.cells.join() === h?.cells.join() ? p : h)) }
     read(); const t = setInterval(read, 400); return () => clearInterval(t)
   }, [w])
   return hs
