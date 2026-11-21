@@ -14,6 +14,10 @@
 import type { Box } from '../terrain-world'
 import { findRooms, connectedRooms, parseKey, WALL_T, type Walls, type Paid } from './plot-walls'
 import type { Decks } from './plot-decks'
+import { footprint, DOOR_W, type RoomKind } from './rooms'   // a cycle (rooms imports floorAt): both sides read the other only inside functions
+// ── PREFAB ROOMS (M55 leftover, 11-21): a prefab room (Works.rooms: the Rinnshop, Farm, Cooking room ...) is a HOUSE of its own for
+// the foundation: the picker sets it like a drawn house, it stores its height on the room (Room.found; none = the old plot-wide
+// value), its plinth is its footprint (walls included), everything inside it rides up (floorAt), its door gets steps outside.
 
 export const FOUND_OPTS = [0, 0.6, 1.2] as const
 export type FoundH = (typeof FOUND_OPTS)[number]
@@ -22,7 +26,8 @@ export const adoptFound = (v: unknown): FoundH => (FOUND_OPTS as readonly number
 /** bricks per m² of plinth: one per 0.6 m of height */
 export const plinthPerM2 = (h: number) => Math.round(h / 0.6)
 
-export interface Founded { walls?: Walls; paid?: Paid; found?: number; /** slice 2: per room cell 'i,j' */ foundCells?: Readonly<Record<string, number>>; decks?: Decks }
+export interface PrefabRoom { id: string; kind: RoomKind; x: number; z: number; q: number; found?: number }
+export interface Founded { walls?: Walls; paid?: Paid; found?: number; /** slice 2: per room cell 'i,j' */ foundCells?: Readonly<Record<string, number>>; decks?: Decks; /** the prefab rooms (Works.rooms) */ rooms?: readonly PrefabRoom[] }
 export function adoptFoundCells(v: unknown): Record<string, FoundH> {
   const out: Record<string, FoundH> = {}
   if (v && typeof v === 'object') for (const [k, h] of Object.entries(v as Record<string, unknown>)) if (/^-?\d+,-?\d+$/.test(k) && (FOUND_OPTS as readonly number[]).includes(h as number)) out[k] = h as FoundH
@@ -38,7 +43,12 @@ export function plinthCells(w: Founded): Set<string> {
 }
 /** the old plot-wide setting: what a house with no per-cell value stands on */
 export const foundH = (w: Founded) => adoptFound(w.found)
-export interface House { cells: string[]; built: string[]; h: FoundH }
+export interface House { cells: string[]; built: string[]; h: FoundH; /** a PREFAB room's house: its id and its footprint in m² (cells/built stay empty) */ room?: string; m2?: number }
+/** a prefab room's plinth: its footprint and the half wall round it */
+const prefabRect = (r: PrefabRoom) => { const f = footprint(r.kind, r.x, r.z, r.q), t = WALL_T / 2; return { x0: f.x0 - t, x1: f.x1 + t, z0: f.z0 - t, z1: f.z1 + t } }
+/** a prefab room's foundation: its own value, else the old plot-wide one */
+export const roomFound = (w: Founded, r: PrefabRoom): FoundH => (r.found === undefined ? foundH(w) : adoptFound(r.found))
+const anyFound = (w: Founded) => !!foundH(w) || !!w.foundCells || !!w.rooms?.some(r => r.found)
 export interface Lift {
   /** every house (connected ground rooms, drafts included), its cells, its BUILT cells (the plinth) and its height */
   houses: House[]
@@ -48,8 +58,10 @@ export interface Lift {
   floor(i: number, j: number): number
   edge(key: string): number
   corner(i: number, j: number): number
-  /** the house containing or nearest (x, z) within `reach` m (by built cell centres), else null */
+  /** the house containing or nearest (x, z) within `reach` m (by built cell centres; a prefab room by its footprint), else null */
   houseAt(x: number, z: number, reach?: number): House | null
+  /** the foundation under (x, z) when it is inside a prefab room (walls included), else null */
+  prefabAt(x: number, z: number): number | null
 }
 const liftCache = new WeakMap<object, Lift>()
 const edgeCellsOf = (k: string): [number, number][] => { const e = parseKey(k)!; return e.o === 'h' ? [[e.i, e.j - 1], [e.i, e.j]] : [[e.i - 1, e.j], [e.i, e.j]] }
@@ -79,6 +91,8 @@ export function liftOf(w: Founded): Lift {
     for (const c of comp) { const [i, j] = c.split(',').map(Number); for (const [di, dj] of N) { const n = `${i + di},${j + dj}`; if (built.has(n)) h = Math.max(h, planned.get(n) ?? 0) } }
     if (h) for (const c of comp) ride.set(c, h)
   }
+  const prefab = (w.rooms ?? []).map(r => { const f = footprint(r.kind, r.x, r.z, r.q); return { r, rect: prefabRect(r), h: roomFound(w, r), m2: (f.x1 - f.x0) * (f.z1 - f.z0) } })
+  for (const p of prefab) houses.push({ cells: [], built: [], h: p.h, room: p.r.id, m2: p.m2 })
   const cell = (i: number, j: number) => { const k = `${i},${j}`; return planned.get(k) ?? ride.get(k) ?? 0 }
   const floor = (i: number, j: number) => { const k = `${i},${j}`; return built.has(k) ? (planned.get(k) ?? 0) : (ride.get(k) ?? 0) }
   const lift: Lift = {
@@ -88,27 +102,33 @@ export function liftOf(w: Founded): Lift {
     houseAt(x, z, reach = 6) {
       let best: House | null = null, bd = reach
       for (const hs of houses) for (const c of hs.built) { const [i, j] = c.split(',').map(Number), d = Math.hypot(i + 0.5 - x, j + 0.5 - z); if (d < bd) { bd = d; best = hs } }
+      for (const p of prefab) { const R = p.rect, d = Math.hypot(Math.max(R.x0 - x, 0, x - R.x1), Math.max(R.z0 - z, 0, z - R.z1)); if (d < bd) { bd = d; best = houses.find(hs => hs.room === p.r.id)! } }
       return best
     },
+    prefabAt(x, z) { for (const p of prefab) if (x >= p.rect.x0 && x <= p.rect.x1 && z >= p.rect.z0 && z <= p.rect.z1) return p.h; return null },
   }
   liftCache.set(w, lift); return lift
 }
 /** the floor under (x, z): the ground, or the ground + its house's foundation inside a built ground-floor room (or a riding patio) */
 export function floorAt(w: Founded, groundY: number, x: number, z: number): number {
-  if (!foundH(w) && !w.foundCells) return groundY
-  return groundY + liftOf(w).floor(Math.floor(x), Math.floor(z))
+  if (!anyFound(w)) return groundY
+  const L = liftOf(w), p = L.prefabAt(x, z)
+  return groundY + (p ?? L.floor(Math.floor(x), Math.floor(z)))
 }
 /** set one house's foundation: every one of its cells (planned ones too) to `h` */
 export function setHouseFound<T extends Founded>(w: T, house: House, h: FoundH): T {
+  if (house.room) return { ...w, rooms: (w.rooms ?? []).map(r => (r.id === house.room ? { ...r, found: h } : r)) }
   const fc: Record<string, number> = { ...(w.foundCells ?? {}) }; for (const c of house.cells) fc[c] = h
   return { ...w, foundCells: fc }
 }
 /** what moving one house from `from` to `to` costs (+) or gives back (−) in Stone Brick, over its built footprint */
-export const houseFoundDelta = (house: House, from: number, to: number) => house.built.length * (plinthPerM2(to) - plinthPerM2(from))
+export const houseFoundDelta = (house: House, from: number, to: number) => (house.m2 ?? house.built.length) * (plinthPerM2(to) - plinthPerM2(from))
+/** a prefab room's lift (its walls, floor, bench and everything in it ride it) */
+export const roomLift = (w: Founded, r: PrefabRoom) => (anyFound(w) ? roomFound(w, r) : 0)
 
 /** the plinth's solids: a block under every built room cell, and under every built ground-floor wall (walls stand on its rim) */
 export function plinthBoxes(w: Founded, groundY: number): Box[] {
-  if (!foundH(w) && !w.foundCells) return []
+  if (!anyFound(w)) return []
   const L = liftOf(w), out: Box[] = [], t = WALL_T / 2
   for (const c of plinthCells(w)) { const [i, j] = c.split(',').map(Number), h = L.floor(i, j); if (h) out.push({ x0: i, x1: i + 1, z0: j, z1: j + 1, y0: groundY - 0.5, y1: groundY + h }) }
   for (const [k, x] of Object.entries(w.walls ?? {})) {
@@ -117,14 +137,31 @@ export function plinthBoxes(w: Founded, groundY: number): Box[] {
     const e = parseKey(k)!; const r = e.o === 'h' ? { x0: e.i - t, x1: e.i + 1 + t, z0: e.j - t, z1: e.j + t } : { x0: e.i - t, x1: e.i + t, z0: e.j - t, z1: e.j + 1 + t }
     out.push({ ...r, y0: groundY - 0.5, y1: groundY + h })
   }
+  for (const r of w.rooms ?? []) { const h = roomFound(w, r); if (h) out.push({ ...prefabRect(r), y0: groundY - 0.5, y1: groundY + h }) }
+  return out
+}
+const OUT: Record<number, [number, number]> = { 0: [0, -1], 1: [1, 0], 2: [0, 1], 3: [-1, 0] }   // a prefab room's front (its door) faces this way per quarter
+/** the steps down from a raised prefab room's door: n steps outside the front wall, DOOR_W wide, each under 0.5 m */
+export function prefabSteps(w: Founded, groundY: number): Box[] {
+  const out: Box[] = []
+  for (const r of w.rooms ?? []) {
+    const h = roomFound(w, r); if (!h) continue
+    const q = ((r.q % 4) + 4) % 4, [ox, oz] = OUT[q], f = footprint(r.kind, r.x, r.z, r.q), n = Math.ceil(h / 0.45) - 1
+    const fx = ox > 0 ? f.x1 : ox < 0 ? f.x0 : r.x, fz = oz > 0 ? f.z1 : oz < 0 ? f.z0 : r.z   // the door's middle on the front wall
+    for (let s = 0; s < n; s++) {
+      const top = groundY + h * (n - s) / (n + 1), d0 = WALL_T / 2 + s * STEP_DEPTH, d1 = d0 + STEP_DEPTH
+      if (ox) { const a = fx + ox * d0, b = fx + ox * d1; out.push({ x0: Math.min(a, b), x1: Math.max(a, b), z0: fz - DOOR_W / 2, z1: fz + DOOR_W / 2, y0: groundY - 0.5, y1: top }) }
+      else { const a = fz + oz * d0, b = fz + oz * d1; out.push({ x0: fx - DOOR_W / 2, x1: fx + DOOR_W / 2, z0: Math.min(a, b), z1: Math.max(a, b), y0: groundY - 0.5, y1: top }) }
+    }
+  }
   return out
 }
 export const STEP_DEPTH = 0.45
 /** the door steps: at every built ground-floor DOOR piece whose two sides stand at different heights (a house and the ground, or
  *  two rooms at different heights), n steps on the LOWER side, each under 0.5 m, from the low floor up to the high one */
 export function doorSteps(w: Founded, groundY: number): Box[] {
-  if (!foundH(w) && !w.foundCells) return []
-  const L = liftOf(w), out: Box[] = []
+  if (!anyFound(w)) return []
+  const L = liftOf(w), out: Box[] = prefabSteps(w, groundY)
   for (const [k, x] of Object.entries(w.walls ?? {})) {
     if (x.draft || x.kind !== 'door') continue
     const e = parseKey(k)!

@@ -38,8 +38,8 @@ import { getPlanLevel, setPlanLevel, usePlanLevel } from './plot-level'
 import { shaftKeys, shaftHoles, liveLift, cellMid, shaftBlockers, SHAFT_WHY, isLiftPiece } from './lift'
 import { LiftMesh, LiftInput } from './lift-view'
 import { levelOf, withLevel, levelCount, levelBase, canStack, floating, upperBoxes, stairRails, MAX_LEVELS, SLAB_T, type LiftLookup } from './plot-floors'
-import { floorAt, liftOf, setHouseFound, houseFoundDelta, plinthBoxes, doorSteps, FOUND_OPTS, FOUND_NAME, type FoundH, type Lift } from './plot-found'
-import { stairBoxes, stairCellSet, toggleStair, dirOfYaw, type Stairs } from './plot-stairs'
+import { floorAt, liftOf, setHouseFound, houseFoundDelta, plinthBoxes, doorSteps, roomLift, FOUND_OPTS, FOUND_NAME, type FoundH, type Lift } from './plot-found'
+import { stairBoxes, stairCellSet, toggleStair, dirOfYaw, type Stairs, type Turn } from './plot-stairs'
 import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported, builtDeckCells, DECK_T, type Decks } from './plot-decks'
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, ALC_LIVE, type Job } from './furniture'
@@ -97,7 +97,7 @@ export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER
 /** The live works (the page's village tick reads and writes through this store, so an open panel sees the product land). */
 export const currentWorks = () => getW()
 /** Every room's walls and every Keepstone, for the walker's plotShape. */
-export const workWalls = (w: Works) => [...w.rooms.flatMap(wallsOf), ...allChests(w).map(c => chestBox(c, floorAt(w, GROUND_Y, c.x, c.z))), ...pieceBoxes(w), ...houseBoxes(w)]
+export const workWalls = (w: Works) => [...w.rooms.flatMap(r => wallsOf(r, roomLift(w, r))), ...allChests(w).map(c => chestBox(c, floorAt(w, GROUND_Y, c.x, c.z))), ...pieceBoxes(w), ...houseBoxes(w)]
 
 /** the keeper's own house pieces: every wall, column, upper floor, stair and patio stands on ITS house's foundation (M55 slice 2:
  *  plot-found liftOf, per house), the plinth and the door steps under them */
@@ -120,6 +120,15 @@ const useWallMat = () => useSyncExternalStore(f => { wdSubs.add(f); return () =>
 let wallRail = false
 const setWallRail = (v: boolean) => { if (v !== wallRail) { wallRail = v; wdEmit() } }
 const useWallRail = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => wallRail, () => false)
+/** M56 landing turn: the Stairs tool's shape (straight, or a quarter turn left / right at a landing half way up) */
+let stairTurn: Turn | undefined
+const setStairTurn = (v: Turn | undefined) => { if (v !== stairTurn) { stairTurn = v; wdEmit() } }
+const useStairTurn = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => stairTurn, () => undefined)
+const STAIR_SHAPES: readonly [Turn | undefined, string][] = [[undefined, 'Straight'], ['l', 'Turn left'], ['r', 'Turn right']]
+function StairShape({ btn }: { btn: (on: boolean) => React.CSSProperties }) {
+  const turn = useStairTurn()
+  return <span data-stair-shape style={{ display: 'inline-flex', gap: 4, flex: '0 0 auto' }}>{STAIR_SHAPES.map(([t, name]) => <button key={name} type="button" data-stair-turn={t ?? 'none'} aria-pressed={turn === t} style={{ ...btn(turn === t), height: 30, fontSize: 11 }} onClick={() => setStairTurn(t)}>{name}</button>)}</span>
+}
 /** a corner is on held ground when any of the four squares around it is yours (a wall may run along your edge) */
 const heldCorner = (owned: ReadonlySet<string>) => (x: number, z: number) =>
   [[0.01, 0.01], [-0.01, 0.01], [0.01, -0.01], [-0.01, -0.01]].some(([dx, dz]) => { const s = squareAt(x + dx, z + dz); return !!s && owned.has(sqId(s.i, s.j)) })
@@ -367,7 +376,7 @@ function stairsHandler(owned: () => ReadonlySet<string>) {
       const held = heldCorner(owned())
       const cellOk = (a: number, b: number) => roomCells ? roomCells.has(`${a},${b}`) : held(a + 0.5, b + 0.5)
       if (lv + 1 >= MAX_LEVELS && !Object.values(L.stairs ?? {}).length) { hudSay('This is the top floor: nowhere for stairs to go.', 'info'); return }
-      const r = toggleStair(L.stairs, L.walls, i, j, dirOfYaw(buildYaw()), wallMat, cellOk)
+      const r = toggleStair(L.stairs, L.walls, i, j, dirOfYaw(buildYaw()), wallMat, cellOk, stairTurn)
       if (!r.ok) { hudSay(r.why, 'info'); return }
       if (r.refund) { const g = give(getInv(), r.refund.id, r.refund.n); if (g.left) { hudSay('Your bag is full: no room for what the stairs give back.', 'info'); return } setInv(g.inv) }
       setWorks(withLevel(w, lv, { ...L, stairs: r.stairs })); hudSay(r.said, 'info')
@@ -583,7 +592,8 @@ function setFoundation(h: FoundH) {
   const d = houseFoundDelta(house, from, h)
   if (d > 0) { const pay = payCost([{ id: STONE_BRICK, n: d }], getInv(), getB()); if (!pay) { hudSay(`${d} Stone Brick needed to raise the house, ${haveFor(getInv(), getB(), STONE_BRICK)} on hand.`, 'info'); return } setInv(pay.inv); if (pay.bank) setBank(pay.bank) }
   else if (d < 0) { const g = give(getInv(), STONE_BRICK, -d); if (g.left) { hudSay('Your bag is full: no room for the stone that comes back.', 'info'); return } setInv(g.inv) }
-  setWorks(setHouseFound(w, house, h)); hudSay(h ? `This house stands on a ${FOUND_NAME[h].toLowerCase()} foundation.` : 'This house is back on the ground.', 'info')
+  const pre = house.room ? w.rooms.find(r => r.id === house.room) : undefined, what = pre ? `Your ${ROOMS[pre.kind].name}` : 'This house'   // M55: a prefab room is a house of its own
+  setWorks(setHouseFound(w, house, h)); hudSay(h ? `${what} stands on a ${FOUND_NAME[h].toLowerCase()} foundation.` : `${what} is back on the ground.`, 'info')
 }
 /** M55: the plinth under the built house and the steps at its doors (stone, the solids' own boxes) */
 function Plinth({ w }: { w: Works }) {
@@ -615,7 +625,7 @@ const usePhoneBar = () => useSyncExternalStore(f => { pbSubs.add(f); return () =
 function useAimHouse(w: Works) {
   const [hs, setHs] = useState<Lift['houses'][number] | null>(null)
   useEffect(() => {
-    const read = () => { const a = buildFocus(), h = liftOf(currentWorks()).houseAt(a.x, a.z); setHs(p => (p?.h === h?.h && p?.cells.join() === h?.cells.join() ? p : h)) }
+    const read = () => { const a = buildFocus(), h = liftOf(currentWorks()).houseAt(a.x, a.z); setHs(p => (p?.h === h?.h && p?.room === h?.room && p?.cells.join() === h?.cells.join() ? p : h)) }
     read(); const t = setInterval(read, 400); return () => clearInterval(t)
   }, [w])
   return hs
@@ -739,6 +749,7 @@ function WallTools({ owned, cat, onCat }: { owned: React.MutableRefObject<Readon
         ) : (t === 'walls' || t === 'column' || t === 'stairs') ? (
           <div data-tool-options style={row}>
             {t === 'walls' && <span data-wall-kind style={{ display: 'inline-flex', gap: 4, flex: '0 0 auto' }}>{([false, true] as const).map(r => <button key={String(r)} type="button" data-wall-kind={r ? 'rail' : 'wall'} aria-pressed={rail === r} style={{ ...btn(rail === r), height: 30, fontSize: 11 }} onClick={() => setWallRail(r)}>{r ? 'Railing' : 'Full wall'}</button>)}</span>}
+            {t === 'stairs' && <StairShape btn={btn} />}
             {(t === 'walls' || t === 'column' || t === 'stairs') && WALL_MAT_ORDER.map(m => (
         <button key={m} type="button" data-wall-mat={m} title={`${WALL_MATS[m].name} · ${countOf(inv, WALL_MATS[m].item)} ${itemDef(WALL_MATS[m].item).name}`} onClick={() => { wallMat = m; wdEmit() }}
           style={{ ...btn(false), flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 5, textTransform: 'none', letterSpacing: 0, boxShadow: mat === m ? `inset 0 0 0 2px ${H.ink}` : `inset 0 0 0 1px ${H.rule}` }}>
@@ -764,6 +775,7 @@ function WallTools({ owned, cat, onCat }: { owned: React.MutableRefObject<Readon
       <button type="button" data-tool="walls" style={btn(t === 'walls')} onClick={() => { setPlacing(null); setBuildTool(t === 'walls' ? 'look' : 'walls') }}>Walls</button>
       <button type="button" data-tool="erase" style={btn(t === 'erase')} onClick={() => { setPlacing(null); setBuildTool(t === 'erase' ? 'look' : 'erase') }}>Erase</button>
       {t === 'walls' && <span data-wall-kind style={{ display: 'inline-flex', gap: 4 }}>{([false, true] as const).map(r => <button key={String(r)} type="button" data-wall-kind={r ? 'rail' : 'wall'} aria-pressed={rail === r} style={{ ...btn(rail === r), height: 30, fontSize: 11 }} onClick={() => setWallRail(r)}>{r ? 'Railing' : 'Full wall'}</button>)}</span>}
+      {t === 'stairs' && <StairShape btn={btn} />}
       {(['floor', 'column', 'stairs', 'door', 'window', 'paint'] as const).map(k => <button key={k} type="button" data-tool={k} style={btn(t === k)} onClick={() => { setPlacing(null); if (k === 'floor' && paintCol === '#dcd3c2') { paintCol = FLOOR_PATS[paintPat].color; wdEmit() } setBuildTool(t === k ? 'look' : k) }}>{k}</button>)}   {/* M56 (a): the picker's untouched default is stucco cream; open floor starts in its pattern's own colour */}
       {owner && <button type="button" data-tool="blueprint" style={btn(t === 'blueprint')} onClick={() => { setPlacing(null); setBpPick(null); setBuildTool(t === 'blueprint' ? 'look' : 'blueprint') }}>blueprint</button>}
       {(t === 'paint' || t === 'floor') && <div data-paint-picker style={{ display: 'grid', gap: 5, flexBasis: '100%', justifyItems: 'center' }}>
@@ -914,7 +926,7 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
   return (
     <>
       <PlanningTable />
-      {w.rooms.map(r => (raised(r) ? <RoomMesh key={r.id} r={r} /> : <Scaffold key={r.id} r={r} />))}
+      {w.rooms.map(r => { const up = roomLift(w, r); return raised(r) ? <RoomMesh key={r.id} r={r} lift={up} /> : <Scaffold key={r.id} r={r} lift={up} /> })}   {/* M55: a prefab room rides its own foundation */}
       {allChests(w).map(c => <Wobbly key={c.id} id={c.id} at={[c.x, floorAt(w, GROUND_Y, c.x, c.z), c.z]}><Keepstone c={c} pose={pose} y={floorAt(w, GROUND_Y, c.x, c.z)} /></Wobbly>)}
       {w.pieces.map(pc => <Wobbly key={pc.id} id={pc.id} at={[pc.x, floorAt(w, GROUND_Y, pc.x, pc.z), pc.z]}><PieceMesh p={pc} y={floorAt(w, GROUND_Y, pc.x, pc.z)} /></Wobbly>)}
       <Plinth w={w} />
@@ -947,7 +959,7 @@ function MoglinsAtWork({ w }: { w: Works }) {
       {ms.map(m => {
         const s = m.profession === 'alchemist' ? standAt(w, m as MoglinRecord) : null   // M57 s2: an alchemist stands at its Desk, facing it
         if (s) { drawn.push(m.id); return (
-          <group key={m.id} position={[s.x, GROUND_Y, s.z]} rotation-y={s.yaw}>
+          <group key={m.id} position={[s.x, floorAt(w, GROUND_Y, s.x, s.z), s.z]} rotation-y={s.yaw}>
             <MoglinModel action="work" garb={GARB_OF[m.profession] ?? 'none'} tone={furOf(m.id)} seed={m.id.length} />
           </group>
         ) }
@@ -956,7 +968,7 @@ function MoglinsAtWork({ w }: { w: Works }) {
         drawn.push(m.id)
         const at = toWorld(r, 0, ROOMS[r.kind].d / 2 - 2.35)   // in front of the bench, facing it (local +z = the back wall)
         return (
-          <group key={m.id} position={[at.x, GROUND_Y, at.z]} rotation-y={-r.q * Math.PI / 2}>
+          <group key={m.id} position={[at.x, floorAt(w, GROUND_Y, at.x, at.z), at.z]} rotation-y={-r.q * Math.PI / 2}>
             <MoglinModel action="work" garb={GARB_OF[m.profession] ?? 'none'} tone={furOf(m.id)} seed={m.id.length} />
           </group>
         )
@@ -978,12 +990,12 @@ function PlanningTable() {
 }
 
 /** The room as it stands: its walls (the same boxes the walker hits), a floor, a roof, the bench. */
-function RoomMesh({ r }: { r: Room }) {
+function RoomMesh({ r, lift = 0 }: { r: Room; lift?: number }) {
   const walls = useMemo(() => wallsOf(r), [r])
   const f = footprint(r.kind, r.x, r.z, r.q), b = benchOf(r)
   const cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2, sx = f.x1 - f.x0, sz = f.z1 - f.z0
   return (
-    <group>
+    <group position-y={lift} data-room-lift={lift}>
       <mesh position={[cx, GROUND_Y + 0.04, cz]}><boxGeometry args={[sx, 0.08, sz]} /><meshLambertMaterial color="#b98d5a" /></mesh>
       {walls.map((k, i) => (
         <mesh key={i} position={[(k.x0 + k.x1) / 2, GROUND_Y + WALL_H / 2, (k.z0 + k.z1) / 2]}>
@@ -1045,14 +1057,14 @@ function Bench({ r, x, z }: { r: Room; x: number; z: number }) {
 }
 
 /** Scaffolding: four poles, rails at each storey, and the walls rising inside them as the job goes on. */
-function Scaffold({ r }: { r: Room }) {
+function Scaffold({ r, lift = 0 }: { r: Room; lift?: number }) {
   const f = footprint(r.kind, r.x, r.z, r.q), walls = useMemo(() => wallsOf(r), [r])
   const rise = useRef<THREE.Group>(null)
   useFrame(() => { if (rise.current) rise.current.scale.y = Math.max(0.02, progress(r)) })
   const poles = [[f.x0, f.z0], [f.x1, f.z0], [f.x0, f.z1], [f.x1, f.z1]]
   const cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2, sx = f.x1 - f.x0, sz = f.z1 - f.z0
   return (
-    <group>
+    <group position-y={lift}>
       {poles.map(([x, z], k) => <mesh key={k} position={[x, GROUND_Y + 2, z]}><cylinderGeometry args={[0.08, 0.08, 4, 6]} /><meshLambertMaterial color="#a77b4a" /></mesh>)}
       {[1.2, 2.6, 3.9].map(h => (
         <group key={h}>

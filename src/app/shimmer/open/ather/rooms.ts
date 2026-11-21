@@ -71,6 +71,8 @@ export const WALL_H = 4.8, WALL_T = 0.3, DOOR_W = 2.2   // M50: 3.2 -> 4.8 (plot
 /** A placed room. `q` = quarter turns (0..3); the door is on the front (local −z at q 0, turning with it). */
 export interface Room {
   id: string; kind: RoomKind; x: number; z: number; q: number; placedAt: number; doneAt: number
+  /** M55 leftover: this prefab room's own foundation (plot-found), 0 / 0.6 / 1.2; absent = the old plot-wide Works.found */
+  found?: number
   /** the room's own store (ROOM_STORE_SLOTS, that room's materials only; Alex 11-17). Absent = empty. */
   store?: Stack[]
   /** M43: finished goods wait here (up to OUT_CAP of an item) until taken; `work` is the stockpile/focus state (station-queue.ts). Absent = none. */
@@ -159,8 +161,8 @@ export const raised = (r: Room, now = Date.now()) => now >= r.doneAt
 export const progress = (r: Room, now = Date.now()) => Math.max(0, Math.min(1, (now - r.placedAt) / Math.max(1, r.doneAt - r.placedAt)))
 
 /** The walls a walker collides with: back + two sides + the front either side of the door. Scaffolding is solid too. */
-export function wallsOf(r: Room): Box[] {
-  const f = footprint(r.kind, r.x, r.z, r.q), y0 = GROUND_Y - 0.5, y1 = GROUND_Y + WALL_H, t = WALL_T
+export function wallsOf(r: Room, lift = 0): Box[] {   // lift: the room's foundation (plot-found roomLift; M55)
+  const f = footprint(r.kind, r.x, r.z, r.q), y0 = GROUND_Y - 0.5, y1 = GROUND_Y + lift + WALL_H, t = WALL_T
   const q = r.q % 4, out: Box[] = []
   const xs = (x0: number, x1: number, z0: number, z1: number) => out.push({ x0, x1, y0, y1, z0, z1 })
   // the four sides in world terms; the door side is the one the front faces
@@ -181,8 +183,8 @@ export type WorkNear = { kind: 'table' } | { kind: 'bench'; room: Room } | { kin
 /** BETA M60: the same things nearWork reaches, as crosshair capsules (shared/aim-pick.ts): the planning table, every Keepstone,
  *  placed piece and bench, a raising room's door. `ground` = the plot ground's height. Heights generous: the aim decides. */
 export function workPickables(works: Works, ground: (x: number, z: number) => number, now = Date.now()): Pickable<WorkNear>[] {
-  const f0 = works.found ?? 0, out: Pickable<WorkNear>[] = []
-  const add = (x: number, z: number, r: number, h: number, item: WorkNear, lift = 0) => { const g = ground(x, z); out.push({ x, z, y0: g - 0.2, y1: g + f0 + lift + h + 0.2, r, item }) }
+  const out: Pickable<WorkNear>[] = []
+  const add = (x: number, z: number, r: number, h: number, item: WorkNear, lift = 0) => { const g = ground(x, z); out.push({ x, z, y0: g - 0.2, y1: floorAt(works, g, x, z) + lift + h + 0.2, r, item }) }   // M55: the floor it stands on (a house or prefab room's foundation)
   add(TABLE.x, TABLE.z, 1.1, 1.1, { kind: 'table' })
   for (const c of allChests(works)) add(c.x, c.z, 0.55, CHEST_H, { kind: 'chest', id: c.id })
   for (const p of works.pieces) { const f = FURNITURE[p.item]; if (f) add(p.x, p.z, Math.max(f.w, f.d) / 2, f.h, { kind: 'piece', id: p.id }, (p.lv ?? 0) * 3) }
@@ -470,7 +472,7 @@ export function loadWorks(): Works {
     const v = JSON.parse(localStorage.getItem(gardenKey(WORKS_KEY)) ?? 'null')
     if (v?.v === 1 && Array.isArray(v.rooms)) return {
       v: 1, rooms: v.rooms.filter((r: Room) => r && r.kind in ROOMS && Number.isFinite(r.x) && Number.isFinite(r.z))
-        .map((r: Room) => { const { out: _o, work: _q, ...rest } = r; void _o; void _q; return { ...rest, ...(r.store ? { store: adoptBank({ v: 1, stacks: r.store }).stacks } : {}), ...(adoptOut(r.out) ? { out: adoptOut(r.out) } : {}), ...(adoptWork(r.work) ? { work: adoptWork(r.work) } : {}) } as Room }),   // M43: an older save has no queue or output
+        .map((r: Room) => { const { out: _o, work: _q, found: _f, ...rest } = r; void _o; void _q; void _f; return { ...rest, ...(r.found === 0 || adoptFound(r.found) ? { found: adoptFound(r.found) } : {}), ...(r.store ? { store: adoptBank({ v: 1, stacks: r.store }).stacks } : {}), ...(adoptOut(r.out) ? { out: adoptOut(r.out) } : {}), ...(adoptWork(r.work) ? { work: adoptWork(r.work) } : {}) } as Room }),   // M43: an older save has no queue or output
       // chests arrived after rooms (11-17): an older save has none
       chests: Array.isArray(v.chests) ? v.chests.filter((c: Chest) => c && typeof c.id === 'string' && Number.isFinite(c.x) && Number.isFinite(c.z)) : [],
       // furniture arrived after Keepstones (11-17): an older save has none; a piece whose item is gone is dropped
