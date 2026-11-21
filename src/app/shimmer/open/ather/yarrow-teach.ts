@@ -31,3 +31,11 @@ export const YARROW_BARKS = {
 
 /** The (listen) answer that turns the beat's page. Build copy, Fennel's '(leave)' shape. */
 export const LISTEN = '(listen)'
+
+/** The two look-alike jars beside Yarrow (a Mast jar and a Bait jar on a crate, 1.1 m to Yarrow's right): Yarrow's lot stands
+ *  Alex's blueprint, which replaces the blockout counter, so the jars "Point at the other jar." needs ride with Yarrow's own
+ *  spot instead. `yaw` = the way Yarrow faces (gladeSpots). Code-drawn filler. */
+export function teachJars(spot: { x: number; z: number; yaw: number }) {
+  const rx = Math.cos(spot.yaw), rz = -Math.sin(spot.yaw), c = { x: spot.x + rx * 1.1, z: spot.z + rz * 1.1 }
+  return { crate: { ...c, yaw: spot.yaw, w: 0.9, d: 0.6, h: 0.55 }, jars: [-0.22, 0.22].map(t => ({ x: c.x + rx * t, z: c.z + rz * t, w: 0.3, h: 0.36 })) }
+}

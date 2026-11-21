@@ -3,7 +3,8 @@
 // and Greg's jetty. Shapes from glade-lots.ts (the walker bumps the same parts). Flat colours, Lambert, like the rooms.
 import { useEffect, useMemo, useState } from 'react'
 import { GLADE_GREEN } from './moonwell'
-import { GLADE_LOTS, lotAt, gladeJetty } from './moonwell-glade'
+import { GLADE_LOTS, lotAt, gladeJetty, gladeSpots } from './moonwell-glade'
+import { teachJars } from './yarrow-teach'
 import { STATIONS, partAt, setGladeBlueprint, gladeBlueprint, lotPad } from './glade-lots'
 import { parseHouse, placeBlueprint } from './plot-blueprint'
 import { BlueprintStack } from './blueprint-stack'
@@ -65,6 +66,13 @@ export function GladeLots() {
               <boxGeometry args={[p.w, p.h, p.d]} /><meshLambertMaterial color={p.color} />
             </mesh>
           ) })}
+          {/* Yarrow's teach-beat jars ride beside Yarrow when the blueprint replaced the blockout counter (yarrow-teach.ts) */}
+          {l.id === 'yarrow' && gladeBlueprint(l.id) && (() => { const t = teachJars(gladeSpots(['moonwell:yarrow'])[0]); return (
+            <group data-yarrow-jars>
+              <mesh position={[t.crate.x, y + t.crate.h / 2, t.crate.z]} rotation-y={t.crate.yaw} castShadow receiveShadow><boxGeometry args={[t.crate.w, t.crate.h, t.crate.d]} /><meshLambertMaterial color="#6d5038" /></mesh>
+              {t.jars.map((j, k) => <mesh key={k} position={[j.x, y + t.crate.h + j.h / 2, j.z]} rotation-y={t.crate.yaw} castShadow><boxGeometry args={[j.w, j.h, j.w]} /><meshLambertMaterial color="#b7d8e6" /></mesh>)}
+            </group>
+          ) })()}
         </group>
       ))}
       {/* Greg's jetty: a plank deck from the bank out over the water, on posts */}

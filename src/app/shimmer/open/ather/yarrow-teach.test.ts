@@ -1,7 +1,7 @@
 // Yarrow's bait teach beat (yarrow-teach.ts + folk-talk.ts) and the Bait Page (shared/inventory.ts): pure.
 // Run: npx tsx src/app/shimmer/open/ather/yarrow-teach.test.ts
 import { folkTalk, helloFor, _resetHeard, type FolkTalkState } from './folk-talk'
-import { YARROW_TEACH, YARROW_BARKS, LISTEN, WRONG, RIGHT } from './yarrow-teach'
+import { YARROW_TEACH, YARROW_BARKS, LISTEN, WRONG, RIGHT, teachJars } from './yarrow-teach'
 import { GLADE_STATION_LINES } from './moonwell-glade'
 import { freshTrust, type Folk } from './settlement-folk'
 import { newInv, give, take, countOf, makeBait, baitYield, readBaitPage, yarrowTeach, hasGift, BAIT_FROM, BAIT_PAGE, GIFT_BAIT_READ, GIFT_YARROW_TAUGHT, YARROW_GIFT_BAIT, SLOTS, isCatch, type Inv } from '../shared/inventory'
@@ -88,4 +88,9 @@ for (const a of ['pointed', 'silent'] as const) {
   const b0 = makeBaitAt(w, 'r1', t, 'mast'), b1 = makeBaitAt(w, 'r1', r, 'mast')
   ok(!!b0 && !!b1 && b0.made === BAIT_FROM.mast && b1.made === BAIT_FROM.mast + 1, `bench cut: ${b0?.made} -> ${b1?.made}`) }
 
+// the jars ride beside Yarrow: 1.1 m off the spot, square to the way Yarrow faces, two jars apart
+{ const sp = { x: 10, z: -4, yaw: 0.7 }, t = teachJars(sp), fx = Math.sin(sp.yaw), fz = Math.cos(sp.yaw)
+  const dx = t.crate.x - sp.x, dz = t.crate.z - sp.z
+  ok(Math.abs(Math.hypot(dx, dz) - 1.1) < 1e-9 && Math.abs(dx * fx + dz * fz) < 1e-9, 'jars: 1.1 m to the side of Yarrow, not in front')
+  ok(t.jars.length === 2 && Math.hypot(t.jars[0].x - t.jars[1].x, t.jars[0].z - t.jars[1].z) > t.jars[0].w, 'jars: two, apart') }
 console.log(`yarrow-teach: ${pass} ok, ${fail} fail`); process.exit(fail ? 1 : 0)
