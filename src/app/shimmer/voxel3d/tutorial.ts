@@ -34,6 +34,7 @@ import { keeperKey } from '@/lib/keeper-local'
 
 import type { ActionId } from '@/lib/input/actions'
 import { SCRIPT, type Beat, type Trigger } from './folk-lines'
+import { YARROW_LINES } from './yarrow-lines'
 import { FOLK_IDS, type FolkId } from './folk'
 import { fillHerbs } from './recipe-book'
 
@@ -144,7 +145,8 @@ export interface Hands {
   cauldronOnPlot?: boolean
 }
 
-const beats = (...t: Trigger[]): Beat[] => t.flatMap(k => [...SCRIPT[k]])
+/** Yarrow's re-ruled core lines (yarrow-lines.ts, unsigned) win over the generated copies of the old ones. */
+const beats = (...t: Trigger[]): Beat[] => t.flatMap(k => [...(YARROW_LINES[k] ?? SCRIPT[k])])
 /** Beats with Yarrow's two herb slots filled — the script keeps `<RIGHT>`/`<WRONG>` verbatim. */
 const filled = (bs: Beat[]): Beat[] => bs.map(b =>
   'scene' in b ? { scene: fillHerbs(b.scene) } : 'who' in b ? { who: b.who, text: fillHerbs(b.text) } : b)
