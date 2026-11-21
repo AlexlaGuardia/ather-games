@@ -10,6 +10,13 @@ import { BlueprintStack } from './blueprint-stack'
 import { GLADE as GROUND, WATER_DROP } from './relief'
 import { GREG_WAYMARK } from './waymarks'
 import { groundMat, groundOrder } from '../shared/ground-layers'
+import { ribbonXZ, drape, ribbonsOn } from '../shared/road-ribbon'
+import * as THREE from 'three'
+
+// M58 (2): ?roads=ribbon roots the path UNDER the green (from its centre) and gives it a round end at the waymark, both on the
+// layer table (path under green), so the green's edge paints over the path by order instead of 5 mm of depth (+3.0 vs +2.5 cm)
+const RIBBONS = ribbonsOn()
+const LAYERS = RIBBONS || undefined
 
 const GREEN = '#a9cf7d', PATH = '#d9c9a2', PAD = '#cdb88e', DECK = '#a77b4f'
 
@@ -27,16 +34,26 @@ export function GladeLots() {
   const lots = useMemo(() => GLADE_LOTS.map(l => lotAt(l.id)!), [])
   const jetty = useMemo(() => { const j = gladeJetty(); return { ...j, len: Math.hypot(j.x1 - j.x0, j.z1 - j.z0), yaw: Math.atan2(j.x1 - j.x0, j.z1 - j.z0) } }, [])
   const path = useMemo(() => { const z0 = GLADE_GREEN.z + GLADE_GREEN.r - 0.5, z1 = GREG_WAYMARK.z - 1; return { z: (z0 + z1) / 2, len: z1 - z0 } }, [])
+  const pathRibbon = useMemo(() => {
+    if (!RIBBONS) return null
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(drape(ribbonXZ([[GLADE_GREEN.x, GLADE_GREEN.z], [GLADE_GREEN.x, GREG_WAYMARK.z - 1]], 1.5), () => y + 0.025), 3))
+    g.computeVertexNormals(); return g
+  }, [y])
   return (
     <group>
       {/* the green */}
-      <mesh position={[GLADE_GREEN.x, y + 0.03, GLADE_GREEN.z]} rotation-x={-Math.PI / 2} receiveShadow renderOrder={groundOrder('green')}>
-        <circleGeometry args={[GLADE_GREEN.r, 48]} /><meshLambertMaterial color={GREEN} {...groundMat('green')} />
+      <mesh position={[GLADE_GREEN.x, y + 0.03, GLADE_GREEN.z]} rotation-x={-Math.PI / 2} receiveShadow renderOrder={groundOrder('green', LAYERS)}>
+        <circleGeometry args={[GLADE_GREEN.r, 48]} /><meshLambertMaterial color={GREEN} {...groundMat('green', undefined, LAYERS)} />
       </mesh>
       {/* the path from the green's open end to the waymark */}
-      <mesh position={[GLADE_GREEN.x, y + 0.025, path.z]} rotation-x={-Math.PI / 2} receiveShadow renderOrder={groundOrder('path')}>
-        <planeGeometry args={[3, path.len]} /><meshLambertMaterial color={PATH} {...groundMat('path')} />
-      </mesh>
+      {pathRibbon ? (
+        <mesh geometry={pathRibbon} receiveShadow renderOrder={groundOrder('path', true)}><meshLambertMaterial color={PATH} side={THREE.DoubleSide} {...groundMat('path', undefined, true)} /></mesh>
+      ) : (
+        <mesh position={[GLADE_GREEN.x, y + 0.025, path.z]} rotation-x={-Math.PI / 2} receiveShadow renderOrder={groundOrder('path')}>
+          <planeGeometry args={[3, path.len]} /><meshLambertMaterial color={PATH} {...groundMat('path')} />
+        </mesh>
+      )}
       {/* the five lots: a pad, and the trade's station on it */}
       {lots.map(l => (
         <group key={l.id}>

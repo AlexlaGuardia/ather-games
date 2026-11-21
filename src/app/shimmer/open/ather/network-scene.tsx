@@ -18,11 +18,31 @@ import { GLADE_ID } from './moonwell-glade'
 import { setMapSettlements } from './tile-picture'
 import { MoglinModel, furOf } from '../shared/moglin-model'
 import { groundMat, groundOrder } from '../shared/ground-layers'
+import { ribbonsOn } from '../shared/road-ribbon'
+import { tilePathRibbons } from './path-ribbons'
 
 // ── the paths ────────────────────────────────────────────────────────────────────────────────────────────────────
 const PATH_COLOUR = new THREE.Color('#c8b285'), PATH_EDGE = new THREE.Color('#a99467')
 /** One tile's path pieces as a ribbon draped on the ground, in the TILE's local frame (it sits in the tile's group). */
-export function TilePaths({ net, W, off }: { net: Network; W: Wilds; off: { x: number; z: number } }) {
+// M58 (2): ?roads=ribbon draws the paths as continuous ribbons (path-ribbons.ts): an edge pass under a surface pass, so
+// junctions read clean and a path never breaks at a tile seam; layered materials forced on with it (ground-layers.ts)
+const RIBBONS = ribbonsOn()
+const RIBBON_PASSES = [{ key: 'edge', layer: 'edge', col: '#a99467' }, { key: 'surf', layer: 'path', col: '#c8b285' }] as const
+function TilePathRibbons({ net, W, off }: { net: Network; W: Wilds; off: { x: number; z: number } }) {
+  const geos = useMemo(() => {
+    const r = tilePathRibbons(net, off, W.meta.sizeX / 2, W.meta.sizeZ / 2, W.heightAt)
+    if (!r) return null
+    return RIBBON_PASSES.map(p => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(r[p.key], 3)); g.computeVertexNormals(); return g })
+  }, [net, W, off.x, off.z])
+  useEffect(() => () => geos?.forEach(g => g.dispose()), [geos])
+  if (!geos) return null
+  return <>{RIBBON_PASSES.map((p, k) => <mesh key={p.key} geometry={geos[k]} renderOrder={groundOrder(p.layer, true)}><meshLambertMaterial color={p.col} side={THREE.DoubleSide} {...groundMat(p.layer, undefined, true)} /></mesh>)}</>
+}
+
+export function TilePaths(props: { net: Network; W: Wilds; off: { x: number; z: number } }) {
+  return RIBBONS ? <TilePathRibbons {...props} /> : <TilePathStrips {...props} />
+}
+function TilePathStrips({ net, W, off }: { net: Network; W: Wilds; off: { x: number; z: number } }) {
   const geo = useMemo(() => {
     const hx = W.meta.sizeX / 2, hz = W.meta.sizeZ / 2
     const lines = pathsIn(net, off.x - hx, off.z - hz, off.x + hx, off.z + hz, 2)
