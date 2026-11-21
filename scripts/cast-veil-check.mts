@@ -30,14 +30,13 @@ await p.waitForFunction(() => !!(window as any).__ather.combat().decoy, { timeou
 const d = await p.evaluate(() => { const c = (window as any).__ather.combat(); return c.decoy ? { x: c.decoy.x, z: c.decoy.z, left: c.decoy.until - c.clock } : null })
 ok(!(await p.evaluate(() => document.body.innerText.includes('not out here yet'))), 'no "not out here yet" refusal')
 ok(!!d && d.left > 2, `a decoy stands (${JSON.stringify(d)})`)
-// stand the Hollow halfway between the keeper and the decoy, so the closing is MEASURED from a known start AND only a decoy
-// pull closes it (chasing the keeper moves it AWAY from the decoy). 11-21 sweep: a slow run let the spawned Hollow reach the
-// decoy before the start was read, so it could not close any further.
-const tgt = await p.evaluate(() => { const a = (window as any).__ather, c = a.combat(), s = a.state(), h = c.hollows[0]; if (h && c.decoy) { h.x = (c.decoy.x + s.px) / 2; h.z = (c.decoy.z + s.pz) / 2 } h.state = 'chase'; return { hx: h.x, hz: h.z, kx: s.px, kz: s.pz, dx: c.decoy.x, dz: c.decoy.z } })
+// stand the Hollow 8 m out past the decoy along the aim (where the spawn put it, now a KNOWN start), so the closing is measured
+// (11-21 sweep: a slow run let the spawned Hollow reach the decoy before the start was read, so it could not close any further)
+const tgt = await p.evaluate(() => { const a = (window as any).__ather, c = a.combat(), s = a.state(), h = c.hollows[0]; if (h && c.decoy) { const ux = c.decoy.x - s.px, uz = c.decoy.z - s.pz, n = Math.hypot(ux, uz) || 1; h.x = c.decoy.x + ux / n * 8; h.z = c.decoy.z + uz / n * 8 } h.state = 'chase'; return { hx: h.x, hz: h.z, kx: s.px, kz: s.pz, dx: c.decoy.x, dz: c.decoy.z, st: h.state, clock: c.clock, until: c.decoy.until } })
 await sleep(3000)
 const after = await p.evaluate(() => { const c = (window as any).__ather.combat(); const h = c.hollows[0]; return h ? { x: h.x, z: h.z } : null })
 const dist = (a: { x: number; z: number }, x: number, z: number) => Math.hypot(a.x - x, a.z - z)
-ok(!!after && dist(after, tgt.dx, tgt.dz) < Math.hypot(tgt.hx - tgt.dx, tgt.hz - tgt.dz) - 0.3, `the Hollow closed on the decoy (${JSON.stringify(after)})`)
+ok(!!after && dist(after, tgt.dx, tgt.dz) < Math.hypot(tgt.hx - tgt.dx, tgt.hz - tgt.dz) - 0.3, `the Hollow closed on the decoy (${JSON.stringify({ after, start: tgt })})`)
 await sleep(3500)
 await p.waitForFunction(() => { const c = (window as any).__ather.combat(); return !c.decoy || c.decoy.until <= c.clock }, { timeout: 40000 }).catch(() => {})
 ok((await p.evaluate(() => { const c = (window as any).__ather.combat(); return !c.decoy || c.decoy.until <= c.clock })), 'the decoy expired')
