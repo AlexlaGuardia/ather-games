@@ -1,7 +1,7 @@
 // ── M57 THE ALCHEMY SET, PLAYED (2026-11-21, play / Jin play b7763e94) ─────────────────────────────────────────────
 // Alex 11-20: alchemy is a FURNITURE SET (alchemy-set.ts), not a room. E at a placed piece opens ITS station (the steps it
 // does across the potions), a step spends from the bag, runs with a live bar and drops its product in the bag; Pick up on a
-// busy piece gives the inputs back. SETUP (stated): a Mortar and Pestle Table already stands on open ground at (-130, 102.5)
+// busy piece gives the inputs back. SETUP (stated): a Crusher Table (item id alc_mortar) already stands on open ground at (-130, 102.5)
 // (seeded in open.works.v1: the bench recipe is gated ALC_LIVE=false until the names are ruled, so the check cannot craft it);
 // the bag holds 4 Shimmerscale. Hooks: movement + reading only.
 //   npx tsx scripts/alchemy-set-check.mts [--url http://localhost:3203] [--out dir]
@@ -63,11 +63,11 @@ console.log(JSON.stringify(res))
 const st = res.afterStart as { bag: Record<string, number>; run: string[] }, gr = res.afterGrind as { bag: Record<string, number>; run: string[] }
 const mid = res.midRun as { bag: Record<string, number>; run: string[] }, up = res.afterPickup as { bag: Record<string, number>; run: string[]; pieces: number }
 const powder = (b: Record<string, number>) => Object.entries(b).filter(([k]) => k.startsWith('alc:scale_powder')).reduce((a, [, n]) => a + n, 0)
-const pass = res.station === 'mortar' && res.plainCard === false && res.canGrind === '1' && res.started === true && res.bar === true
+const pass = res.station === 'crusher' && res.plainCard === false && res.canGrind === '1' && res.started === true && res.bar === true
   && st.bag.shimmerscale === 2 && st.run.includes(PIECE.id)
   && res.ground === true && powder(gr.bag) === 1 && !gr.run.includes(PIECE.id)
   && !mid.bag.shimmerscale && mid.run.includes(PIECE.id)
   && res.pickup === true && up.pieces === 0 && up.bag.alc_mortar === 1 && up.bag.shimmerscale === 2 && powder(up.bag) === 1 && !up.run.includes(PIECE.id)
   && errs.length === 0
-console.log(pass ? 'PASS: E at the Mortar opens its station → grind spends 2 scales, bar fills, Scale Powder lands → Pick up mid-run returns the piece + its scales' : 'FAIL')
+console.log(pass ? 'PASS: E at the Crusher Table opens its station → crush spends 2 scales, bar fills, Scale Powder lands → Pick up mid-run returns the piece + its scales' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)

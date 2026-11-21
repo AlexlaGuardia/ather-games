@@ -85,12 +85,13 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   water_tank: { name: 'Water Tank', blurb: 'A riveted iron tank. With a water tap on your plot, it holds six more water.', recipe: [], sold: { at: 'smithy', price: 1_200 }, w: 1.0, d: 1.0, h: 1.4, solid: true, wood: 'iron' },
   // ── M57 THE ALCHEMY SET (Alex 11-20: "the alchemy room was a mistake ... the only skill that is a furniture set"; "more
   //    advanced manatech"). Four pieces made at the carpentry bench (planks for the frame, mana shards/cores for the manatech),
-  //    so a keeper alone can set up a lab without the continent. Names are Alex's words, PLACEHOLDER until Magii rules
-  //    CANON_GAPS [OPEN] 'Alchemy as a MANATECH furniture set' (athernyx 711aa01). alchemy-set.ts owns the steps.
-  alc_mortar: { name: 'Mortar and Pestle Table', blurb: 'A stone bowl on a goldwood table, a mana-driven pestle over it. Grinds dry things to powder.', recipe: [{ id: 'goldwood_plank', n: 4 }, { id: 'stone_brick', n: 2 }, { id: 'raw_mana_shard', n: 3 }], w: 1.0, d: 0.7, h: 0.9, solid: true, wood: 'goldwood', alc: 'mortar', glow: '#8fe3ff' },
-  alc_still: { name: 'Distillation Machine', blurb: 'Glass coils over a mana-cell burner. A mixture goes in, a clear extract drips out.', recipe: [{ id: 'goldwood_plank', n: 3 }, { id: 'raw_mana_shard', n: 4 }, { id: 'pure_mana_core', n: 1 }], w: 0.9, d: 0.7, h: 1.6, solid: true, wood: 'iron', alc: 'still', glow: '#8fe3ff' },
-  alc_mixer: { name: 'Mixing Table', blurb: 'A long table with a cauldron set into it. Folds herbs together over the heat.', recipe: [{ id: 'goldwood_plank', n: 6 }, { id: 'stone_brick', n: 2 }, { id: 'raw_mana_shard', n: 2 }], w: 1.6, d: 0.8, h: 0.9, solid: true, wood: 'goldwood', alc: 'mixer', glow: '#ff9a4a' },
-  alc_desk: { name: 'Alchemy Desk', blurb: 'Racks of vials and a reading lens. The prepared parts are combined here and the potency read off them.', recipe: [{ id: 'shimmeroak_plank', n: 4 }, { id: 'goldwood_plank', n: 2 }, { id: 'pure_mana_core', n: 1 }], w: 1.4, d: 0.7, h: 1.2, solid: true, wood: 'shimmeroak', alc: 'desk', glow: '#c9a8ff' },
+  //    so a keeper alone can set up a lab without the continent. Station names RULED 11-21 (athernyx 2cbbaca; the Crusher Table
+  //    is a WORKING name). The item ids alc_mortar / alc_mixer are the pre-ruling ids, kept on purpose: ids are never shown,
+  //    and no save holds them yet. Blurbs = placeholders for @lark. alchemy-set.ts owns the steps.
+  alc_mortar: { name: 'Crusher Table', blurb: 'A stone bowl on a goldwood table, a mana-driven crusher over it. Things go in whole and come out as powder or gel.', recipe: [{ id: 'goldwood_plank', n: 4 }, { id: 'stone_brick', n: 2 }, { id: 'raw_mana_shard', n: 3 }], w: 1.0, d: 0.7, h: 0.9, solid: true, wood: 'goldwood', alc: 'crusher', glow: '#8fe3ff' },
+  alc_still: { name: 'Still', blurb: 'Glass coils over a mana-cell burner. A mixture goes in, a clear extract drips out.', recipe: [{ id: 'goldwood_plank', n: 3 }, { id: 'raw_mana_shard', n: 4 }, { id: 'pure_mana_core', n: 1 }], w: 0.9, d: 0.7, h: 1.6, solid: true, wood: 'iron', alc: 'still', glow: '#8fe3ff' },
+  alc_mixer: { name: 'Cauldron Nook', blurb: 'A cauldron set into a long table. Herbs and powders fold together over the heat into a mixture.', recipe: [{ id: 'goldwood_plank', n: 6 }, { id: 'stone_brick', n: 2 }, { id: 'raw_mana_shard', n: 2 }], w: 1.6, d: 0.8, h: 0.9, solid: true, wood: 'goldwood', alc: 'nook', glow: '#ff9a4a' },
+  alc_desk: { name: 'Alchemy Desk', blurb: 'Racks of vials and a reading lens. Every recipe starts here, and the prepared parts come back here to be combined.', recipe: [{ id: 'shimmeroak_plank', n: 4 }, { id: 'goldwood_plank', n: 2 }, { id: 'pure_mana_core', n: 1 }], w: 1.4, d: 0.7, h: 1.2, solid: true, wood: 'shimmeroak', alc: 'desk', glow: '#c9a8ff' },
 }
 export const FURNITURE_ORDER = Object.keys(FURNITURE)
 export const isPiece = (id: string) => id in FURNITURE

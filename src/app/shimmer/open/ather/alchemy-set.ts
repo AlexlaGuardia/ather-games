@@ -4,20 +4,23 @@
 // each potion's step chain, and POTENCY from the grades of what went in ("the higher the ingredients grade the higher the
 // potency"). No React, no bag: the panel spends and pays, this file says what a step takes and what it makes.
 //
-// ★ NAMES ARE PLACEHOLDERS until Magii rules CANON_GAPS [OPEN] "Alchemy as a MANATECH furniture set" (athernyx 711aa01):
-//   the station names are Alex's words, the intermediate + potion names are build stand-ins. Every name lives in this file only.
+// ★ STATIONS RULED 2026-11-21 (Q1, athernyx 2cbbaca, game/alchemy.md › THE ALCHEMY SET): Alchemy Desk (a recipe starts and
+//   ends there) · Still (mixture -> extract) · Cauldron Nook (makes the mixture) · Crusher Table (WORKING name: items -> fine
+//   powders or gels). The chain: crush -> mix -> distil -> combine, each potion its own step list. Still PLACEHOLDER (Q2-Q3
+//   open, CANON_GAPS top): the intermediate + potion names, and the health potion itself. Every name lives in this file only.
 // ⚖ Jin's (canon 09-16): every step list, every number, potency, the grade maths. Canon's: a brewing, every hand a bottle,
 //   bottle-only, more-never-only (alchemy.md). Run: npx tsx src/app/shimmer/open/ather/alchemy-set.test.ts
 import { GRADES, type Grade } from './farming'
 
-export type AlcStation = 'mortar' | 'still' | 'mixer' | 'desk'
+export type AlcStation = 'crusher' | 'still' | 'nook' | 'desk'
 export const ALC_STATIONS: Readonly<Record<AlcStation, { name: string; verb: string; blurb: string }>> = {
-  mortar: { name: 'Mortar and Pestle Table', verb: 'Grind', blurb: 'A mana-driven pestle grinds dry things to powder.' },
-  still:  { name: 'Distillation Machine', verb: 'Distil', blurb: 'Runs a mixture through glass coils into a clear extract.' },
-  mixer:  { name: 'Mixing Table', verb: 'Mix', blurb: 'A table with a cauldron set into it: folds herbs together over heat.' },
-  desk:   { name: 'Alchemy Desk', verb: 'Combine', blurb: 'Where the prepared parts become a potion, and its potency is read.' },
+  crusher: { name: 'Crusher Table', verb: 'Crush', blurb: 'Crushes what you feed it into a fine powder, or a gel.' },
+  nook:    { name: 'Cauldron Nook', verb: 'Mix', blurb: 'Folds herbs and powders together over the heat into a mixture.' },
+  still:   { name: 'Still', verb: 'Distil', blurb: 'Runs a mixture through glass coils into a clear extract.' },
+  desk:    { name: 'Alchemy Desk', verb: 'Combine', blurb: 'Every recipe starts here, and ends here: the prepared parts become a potion.' },
 }
-export const ALC_ORDER: readonly AlcStation[] = ['mortar', 'still', 'mixer', 'desk']
+/** The chain's order (crush -> mix -> distil -> combine), which is also the order the stations are listed in. */
+export const ALC_ORDER: readonly AlcStation[] = ['crusher', 'nook', 'still', 'desk']
 
 /** A slot a step takes: a plain bag id, a graded crop (`crop:<crop>`, any grade) or an earlier step's product (`alc:<id>`). */
 export interface Slot { id: string; n: number }
@@ -34,18 +37,20 @@ export interface Potion {
 
 /** The things a chain makes on the way (each is graded like a crop: `alc:<id>:<grade>`). */
 export const INTERMEDIATES: Readonly<Record<string, string>> = {
-  scale_powder: 'Scale Powder', golden_mixture: 'Golden Mixture', golden_dew_extract: 'Golden Dew Extract',
+  scale_powder: 'Scale Powder', dewdrop_gel: 'Dewdrop Gel', golden_mixture: 'Golden Mixture', golden_dew_extract: 'Golden Dew Extract',
   shard_dust: 'Shard Dust', mana_mixture: 'Mana Mixture', sap_extract: 'Sap Extract', core_dust: 'Core Dust',
 }
 
 const S = 1000
 export const ALC_POTIONS: Readonly<Record<string, Potion>> = {
-  // Alex's own chain, word for word: ground scales, Goldleaf + Dewdrop Vine mixed, distilled to Golden Dew Extract, combined.
+  // Alex's own chain: crushed scales, Goldleaf + Dewdrop Vine mixed, distilled to Golden Dew Extract, combined. The vine goes
+  // through the Crusher first as a gel (the ruling's "powders or gels"; Jin's step list), so its grade still rides through.
   health: {
     name: 'Health Potion', blurb: 'Golden dew and scale powder. Drink it to heal.', makes: 2, effect: { heal: 40 },
     steps: [
-      { at: 'mortar', in: [{ id: 'shimmerscale', n: 2 }], out: 'scale_powder', ms: 6 * S },
-      { at: 'mixer', in: [{ id: 'crop:goldleaf', n: 2 }, { id: 'crop:dewdrop_vine', n: 2 }], out: 'golden_mixture', ms: 10 * S },
+      { at: 'crusher', in: [{ id: 'shimmerscale', n: 2 }], out: 'scale_powder', ms: 6 * S },
+      { at: 'crusher', in: [{ id: 'crop:dewdrop_vine', n: 2 }], out: 'dewdrop_gel', ms: 6 * S },
+      { at: 'nook', in: [{ id: 'crop:goldleaf', n: 2 }, { id: 'alc:dewdrop_gel', n: 1 }], out: 'golden_mixture', ms: 10 * S },
       { at: 'still', in: [{ id: 'alc:golden_mixture', n: 1 }], out: 'golden_dew_extract', ms: 12 * S },
       { at: 'desk', in: [{ id: 'alc:scale_powder', n: 1 }, { id: 'alc:golden_dew_extract', n: 1 }], out: 'health', ms: 8 * S },
     ],
@@ -53,15 +58,15 @@ export const ALC_POTIONS: Readonly<Record<string, Potion>> = {
   mana: {
     name: 'Mana Potion', blurb: 'Shard dust folded into dewdrop. Drink it for mana.', makes: 2, effect: { mana: 65 },
     steps: [
-      { at: 'mortar', in: [{ id: 'raw_mana_shard', n: 3 }], out: 'shard_dust', ms: 6 * S },
-      { at: 'mixer', in: [{ id: 'alc:shard_dust', n: 1 }, { id: 'crop:dewdrop_vine', n: 2 }], out: 'mana_mixture', ms: 10 * S },
+      { at: 'crusher', in: [{ id: 'raw_mana_shard', n: 3 }], out: 'shard_dust', ms: 6 * S },
+      { at: 'nook', in: [{ id: 'alc:shard_dust', n: 1 }, { id: 'crop:dewdrop_vine', n: 2 }], out: 'mana_mixture', ms: 10 * S },
       { at: 'desk', in: [{ id: 'alc:mana_mixture', n: 1 }], out: 'mana', ms: 8 * S },
     ],
   },
   wisdom: {
     name: 'Wisdom Potion', blurb: 'Starwillow extract on core dust. Gathering teaches you more for a while.', makes: 2, effect: { xp: 0.25, ms: 8 * 60 * S },
     steps: [
-      { at: 'mortar', in: [{ id: 'pure_mana_core', n: 2 }], out: 'core_dust', ms: 6 * S },
+      { at: 'crusher', in: [{ id: 'pure_mana_core', n: 2 }], out: 'core_dust', ms: 6 * S },
       { at: 'still', in: [{ id: 'starwillow_sap', n: 3 }], out: 'sap_extract', ms: 12 * S },
       { at: 'desk', in: [{ id: 'alc:core_dust', n: 1 }, { id: 'alc:sap_extract', n: 1 }, { id: 'crop:goldleaf', n: 1 }], out: 'wisdom', ms: 8 * S },
     ],
@@ -159,3 +164,5 @@ export function nextStep(potion: string, have: Have): number {
 
 /** Every step done at a station, across every potion (what the station's panel lists). */
 export const stepsAt = (at: AlcStation) => ALC_POTION_ORDER.flatMap(p => ALC_POTIONS[p].steps.map((s, k) => ({ potion: p, k, step: s })).filter(x => x.step.at === at))
+/** A recipe as the Desk shows it when it opens one: each step's station in order, ending back at the Desk. */
+export const chainOf = (potion: string): AlcStation[] => ALC_POTIONS[potion].steps.map(s => s.at)

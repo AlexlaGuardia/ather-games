@@ -8,7 +8,7 @@ import { HearthFrame, HearthButton, H } from '../../ui/hearth'
 import { getInv, setInv, useInv } from '../shared/bag'
 import { give, take, itemDef, type Inv } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
-import { ALC_STATIONS, ALC_POTIONS, INTERMEDIATES, stepsAt, pickFor, gradeFrom, gradeOrNull, fills, type AlcStation, type Have } from './alchemy-set'
+import { ALC_STATIONS, ALC_POTIONS, ALC_POTION_ORDER, INTERMEDIATES, stepsAt, chainOf, pickFor, gradeFrom, gradeOrNull, fills, type AlcStation, type Have } from './alchemy-set'
 import { loadRuns, saveRuns, startRun, collectRun, runFrac, runLeft, type Runs } from './alchemy-runs'
 
 export const haveOf = (inv: Inv): Have => {
@@ -71,6 +71,17 @@ export function AlchemyPanel({ pid, station, onClose, footer }: { pid: string; s
               <span style={{ marginLeft: 'auto', fontSize: 12, color: H.inkSoft, fontVariantNumeric: 'tabular-nums' }}>{secs(runLeft(run, now))}</span>
             </div>
             <Bar frac={runFrac(run, now)} />
+          </div>
+        )}
+        {station === 'desk' && (
+          // the ruling: a recipe STARTS at the Desk. Opening one here shows its whole road, so the keeper knows where to walk.
+          <div data-alc-recipes style={{ display: 'grid', gap: 4, padding: '8px 10px', borderRadius: 12, background: 'rgba(201,168,255,.12)' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: H.inkSoft }}>Recipes</div>
+            {ALC_POTION_ORDER.map(p => (
+              <div key={p} data-alc-recipe={p} style={{ fontSize: 12, color: H.ink }}>
+                <b>{ALC_POTIONS[p].name}</b> <span style={{ color: H.inkSoft }}>· {chainOf(p).map(a => ALC_STATIONS[a].name).join(' → ')}</span>
+              </div>
+            ))}
           </div>
         )}
         <div style={{ display: 'grid', gap: 8 }}>

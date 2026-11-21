@@ -1,7 +1,7 @@
 // alchemy-set.ts. Run: npx tsx src/app/shimmer/open/ather/alchemy-set.test.ts
 import {
   ALC_POTIONS, ALC_POTION_ORDER, ALC_ORDER, INTERMEDIATES, POTENCY, gradeOf, gradeFrom, fills, pickFor, stepMakes, nextStep,
-  effectOf, isAlcPotion, alcName, stepsAt,
+  effectOf, isAlcPotion, alcName, stepsAt, chainOf, ALC_STATIONS,
 } from './alchemy-set'
 import { OPEN_ITEMS } from '../shared/inventory'
 import { CROPS } from './farming'
@@ -26,7 +26,12 @@ ok(ALC_ORDER.every(a => stepsAt(a).length > 0), 'every station has work to do')
 ok(['health', 'mana', 'wisdom'].every(p => p in ALC_POTIONS), 'the starter set: health, mana, an XP boost')
 // Alex's chain, word for word
 const h = ALC_POTIONS.health.steps.map(s => s.at).join()
-ok(h === 'mortar,mixer,still,desk', 'health: grind scales, mix goldleaf + dewdrop, distil, combine')
+ok(h === 'crusher,crusher,nook,still,desk', 'health: crush scales, crush the vine to a gel, mix with goldleaf, distil, combine')
+// the ruled chain order (2cbbaca): crush -> mix -> distil -> combine; no potion walks it backwards, every one ends at the Desk
+const RANK = { crusher: 0, nook: 1, still: 2, desk: 3 } as const
+ok(ALC_POTION_ORDER.every(p => chainOf(p).every((a, k, c) => !k || RANK[c[k - 1]] <= RANK[a])), 'every recipe walks the chain in order')
+ok(ALC_ORDER.join() === 'crusher,nook,still,desk' && ALC_ORDER.map(a => ALC_STATIONS[a].name).join() === 'Crusher Table,Cauldron Nook,Still,Alchemy Desk', 'the four ruled stations, in chain order')
+ok(stepsAt('crusher').some(x => x.step.out.endsWith('_gel')) && stepsAt('crusher').some(x => x.step.out.endsWith('_powder') || x.step.out.endsWith('_dust')), 'the Crusher makes powders AND gels')
 
 // grades
 ok(gradeOf('crop:goldleaf:B') === 'B' && gradeOf('goldleaf') === null && gradeOf('alc:scale_powder:S') === 'S', 'gradeOf')
@@ -45,7 +50,7 @@ const bag: Record<string, number> = { shimmerscale: 2, 'crop:goldleaf:A': 2, 'cr
 const spend = (s: { id: string; n: number }[]) => { for (const x of s) { bag[x.id] -= x.n; if (!bag[x.id]) delete bag[x.id] } }
 const give = (x: { id: string; n: number }) => { bag[x.id] = (bag[x.id] ?? 0) + x.n }
 ok(nextStep('health', bag) === 1 || nextStep('health', bag) === 0, 'health can start')
-for (let k = 0; k < 4; k++) {
+for (let k = 0; k < ALC_POTIONS.health.steps.length; k++) {
   const s = pickFor(ALC_POTIONS.health.steps[k], bag)
   ok(!!s, `health step ${k} can be filled`)
   if (!s) break
@@ -62,11 +67,12 @@ ok(isAlcPotion('potion:mana:B') && !isAlcPotion('potion:nope:B') && !isAlcPotion
 ok(alcName('alc:golden_dew_extract:B') === 'Golden Dew Extract · B' && alcName('potion:mana:S') === 'Mana Potion · S', 'names')
 
 // pickFor spends the best first, and refuses a short bag
-const best = pickFor(ALC_POTIONS.health.steps[1], { 'crop:goldleaf:D': 5, 'crop:goldleaf:S': 1, 'crop:dewdrop_vine:B': 2 })
+const NOOK = ALC_POTIONS.health.steps.findIndex(s => s.at === 'nook'), DESK = ALC_POTIONS.health.steps.length - 1
+const best = pickFor(ALC_POTIONS.health.steps[NOOK], { 'crop:goldleaf:D': 5, 'crop:goldleaf:S': 1, 'alc:dewdrop_gel:B': 1 })
 ok(!!best && best[0].id === 'crop:goldleaf:S' && best[0].n === 1 && best[1].id === 'crop:goldleaf:D', 'best grade spent first, topped up with the rest')
-ok(pickFor(ALC_POTIONS.health.steps[1], { 'crop:goldleaf:S': 1, 'crop:dewdrop_vine:B': 2 }) === null, 'a short bag cannot fill a step')
+ok(pickFor(ALC_POTIONS.health.steps[NOOK], { 'crop:goldleaf:S': 1, 'alc:dewdrop_gel:B': 1 }) === null, 'a short bag cannot fill a step')
 // a keeper holding the extract skips to the desk
-ok(nextStep('health', { 'alc:golden_dew_extract:B': 1, 'alc:scale_powder:C': 1 }) === 3, 'holding the parts goes straight to the desk')
+ok(nextStep('health', { 'alc:golden_dew_extract:B': 1, 'alc:scale_powder:C': 1 }) === DESK, 'holding the parts goes straight to the desk')
 ok(nextStep('health', {}) === -1, 'an empty bag cannot start')
 
 console.log(`alchemy-set: ${pass} pass, ${fails.length} fail`)
