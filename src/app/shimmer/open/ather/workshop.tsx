@@ -995,7 +995,7 @@ function RoomMesh({ r, lift = 0 }: { r: Room; lift?: number }) {
   const f = footprint(r.kind, r.x, r.z, r.q), b = benchOf(r)
   const cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2, sx = f.x1 - f.x0, sz = f.z1 - f.z0
   return (
-    <group position-y={lift} data-room-lift={lift}>
+    <group position-y={lift}>
       <mesh position={[cx, GROUND_Y + 0.04, cz]}><boxGeometry args={[sx, 0.08, sz]} /><meshLambertMaterial color="#b98d5a" /></mesh>
       {walls.map((k, i) => (
         <mesh key={i} position={[(k.x0 + k.x1) / 2, GROUND_Y + WALL_H / 2, (k.z0 + k.z1) / 2]}>
