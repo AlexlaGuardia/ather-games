@@ -22,8 +22,10 @@
 //   on the continent in the test). The grid's cell grows with the leg's length so a long leg stays inside it. Out of
 //   budget or no way through = the best partial path (`reached: false`) toward the goal, never nothing; if even that
 //   fails, a straight line (`mode: 'straight'`), so the guide always has something to draw.
-//   `GuideRoute` is the cache the frame loop holds (LIVE_BUDGET): it replans only when the goal moves or you stray off
-//   the line, never per frame and never on a timer.
+//   ★ RESUMABLE (hub 11-21: 60-160 ms on the box is 300-600 ms on a mid phone, and an idle callback still blocks once it
+//   runs): the planner is a generator (`planSteps`) that yields every YIELD_EVERY expansions. `GuideRoute` is what the
+//   frame loop holds: it replans only on a new goal or a stray (never per frame, never on a timer), steps the plan for
+//   at most SLICE_MS a frame, and keeps handing back the old route (or null = straight dots) until the new one lands.
 
 import { MAX_WALK_GRADIENT } from '../terrain-world'
 
@@ -95,7 +97,14 @@ const NB: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1
  * Over the land from a to b: A* on a coarse grid (8-way, an edge exists only if `clear`), then a smoother that takes the
  * longest clear shortcut. Returns the path and the expansions it spent.
  */
-export function terrainPath(w: RouteWorld, a: XZ, b: XZ, budget = DEFAULT_BUDGET): { pts: XZ[]; reached: boolean; spent: number; length: number } {
+export type Leg = { pts: XZ[]; reached: boolean; spent: number; length: number }
+export function terrainPath(w: RouteWorld, a: XZ, b: XZ, budget = DEFAULT_BUDGET): Leg { return drain(terrainSteps(w, a, b, budget)) }
+
+/** Run a resumable plan to the end in one go (tests, and anything off the frame loop). */
+export function drain<T>(g: Generator<void, T>): T { for (;;) { const r = g.next(); if (r.done) return r.value } }
+
+/** terrainPath, resumable: yields every YIELD_EVERY grid expansions (and between smoothing chords). */
+export function* terrainSteps(w: RouteWorld, a: XZ, b: XZ, budget = DEFAULT_BUDGET): Generator<void, Leg> {
   const dist = Math.hypot(b[0] - a[0], b[1] - a[1])
   if (dist < 1e-6) return { pts: [a, b], reached: true, spent: 0, length: 0 }
   if (clear(w, a[0], a[1], b[0], b[1])) return { pts: [a, b], reached: true, spent: 0, length: dist }
@@ -103,15 +112,15 @@ export function terrainPath(w: RouteWorld, a: XZ, b: XZ, budget = DEFAULT_BUDGET
   if (w.water?.(a[0], a[1])) {
     const dry = nearestDry(w, a)
     if (!dry) return { pts: [a], reached: false, spent: 0, length: 0 }
-    const rest = terrainPath(w, dry, b, budget)
+    const rest: Leg = yield* terrainSteps(w, dry, b, budget)
     const pts = [a, ...rest.pts]
     return { ...rest, pts, length: polyLength(pts) }
   }
   // the box round both ends grows when the way round lies outside it (a ridge longer than the trip)
-  let spent = 0, last: ReturnType<typeof gridPath> | null = null
+  let spent = 0, last: GridLeg | null = null
   for (const f of [0.6, 1.6, 4]) {
     if (spent >= budget) break
-    const r = gridPath(w, a, b, Math.max(40, dist * f), budget - spent)
+    const r: GridLeg = yield* gridSteps(w, a, b, Math.max(40, dist * f), budget - spent)
     spent += r.spent
     if (r.reached) return { ...r, spent }
     if (!last || r.left < last.left) last = r
@@ -128,7 +137,11 @@ function nearestDry(w: RouteWorld, a: XZ): XZ | null {
   return null
 }
 
-function gridPath(w: RouteWorld, a: XZ, b: XZ, margin: number, budget: number): { pts: XZ[]; reached: boolean; spent: number; length: number; left: number } {
+/** Grid expansions between yields on a 2 m grid. A big leg's cells are bigger and every `clear` between them samples
+ *  every metre, so the batch shrinks with the cell (64 / cell, at least 1): one batch stays ~0.1-0.3 ms on the box. */
+export const YIELD_EVERY = 32
+type GridLeg = Leg & { left: number }
+function* gridSteps(w: RouteWorld, a: XZ, b: XZ, margin: number, budget: number): Generator<void, GridLeg> {
   // the grid: a box round both ends with room to go round, cells sized so it stays ~≤ 160 across
   const x0 = Math.min(a[0], b[0]) - margin, z0 = Math.min(a[1], b[1]) - margin
   const spanX = Math.abs(b[0] - a[0]) + 2 * margin, spanZ = Math.abs(b[1] - a[1]) + 2 * margin
@@ -149,10 +162,12 @@ function gridPath(w: RouteWorld, a: XZ, b: XZ, margin: number, budget: number): 
     const k = j * nx + i; if (d < g[k]) { g[k] = d; heap.push(d + h(i, j), k) }
   }
   let spent = 0, end = -1, best = -1, bestH = Infinity
+  const every = Math.max(1, Math.round((YIELD_EVERY * 2) / cell))
   while (heap.size && spent < budget) {
     const k = heap.pop()
     if (shut[k]) continue
     shut[k] = 1; spent++
+    if (spent % every === 0) yield
     const i = k % nx, j = (k - i) / nx, hk = h(i, j)
     if (hk < bestH) { bestH = hk; best = k }
     if (Math.abs(i - gi) <= 1 && Math.abs(j - gj) <= 1 && clear(w, cx(i), cz(j), b[0], b[1])) { end = k; break }
@@ -172,21 +187,32 @@ function gridPath(w: RouteWorld, a: XZ, b: XZ, margin: number, budget: number): 
   const chain: XZ[] = []
   for (let k = last; k >= 0; k = prev[k]) { const i = k % nx; chain.unshift([cx(i), cz((k - i) / nx)]) }
   const raw: XZ[] = [a, ...chain]; if (reached) raw.push(b)
-  const pts = smooth(w, raw), e = pts[pts.length - 1]
+  const pts: XZ[] = yield* smoothSteps(w, raw), e = pts[pts.length - 1]
   return { pts, reached, spent, length: polyLength(pts), left: Math.hypot(e[0] - b[0], e[1] - b[1]) }
 }
 
 /** Take the farthest clear shortcut from each kept point (looks at most 24 ahead, so it stays bounded). */
-function smooth(w: RouteWorld, p: XZ[]): XZ[] {
+function* smoothSteps(w: RouteWorld, p: XZ[]): Generator<void, XZ[]> {
   if (p.length <= 2) return p
   const out: XZ[] = [p[0]]
   let i = 0
   while (i < p.length - 1) {
     let j = Math.min(p.length - 1, i + 24)
-    while (j > i + 1 && !clear(w, p[i][0], p[i][1], p[j][0], p[j][1])) j--
+    while (j > i + 1 && !clear(w, p[i][0], p[i][1], p[j][0], p[j][1])) { j--; yield }
     out.push(p[j]); i = j
   }
   return out
+}
+
+/** The steepest 1 m rise along a polyline (for probes/checks: what `clear` holds every off-road leg to). */
+export function maxRiseAlong(ground: (x: number, z: number) => number, pts: readonly XZ[]): number {
+  let worst = 0
+  for (let k = 1; k < pts.length; k++) {
+    const [ax, az] = pts[k - 1], [bx, bz] = pts[k], d = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(d / SAMPLE))
+    let ph = ground(ax, az)
+    for (let i = 1; i <= n; i++) { const h = ground(ax + (bx - ax) * i / n, az + (bz - az) * i / n); worst = Math.max(worst, Math.abs(h - ph) / Math.max(d / n, 1e-6)); ph = h }
+  }
+  return worst
 }
 
 export function polyLength(p: readonly XZ[]): number { let L = 0; for (let k = 1; k < p.length; k++) L += Math.hypot(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1]); return L }
@@ -194,7 +220,10 @@ export function polyLength(p: readonly XZ[]): number { let L = 0; for (let k = 1
 // ── roads ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 export interface RoadGraph {
   nodes: { id: string; x: number; z: number }[]
-  edges: { a: number; b: number; pts: XZ[]; len: number; cum: number[] }[]
+  /** box = [x0, z0, x1, z1]: lets nearestOnRoads skip an edge without walking its points */
+  edges: { a: number; b: number; pts: XZ[]; len: number; cum: number[]; box: [number, number, number, number] }[]
+  /** node -> the edges that touch it (built once, not per search) */
+  adj: number[][]
 }
 /** Build once from region.meta.network (or any {edges:{a,b,pts}, junctions:{id,x,z}}). Ferry edges are dropped: you
  *  cannot walk a ferry crossing. Edge pts are [x, z, y?] (the Atlas's order). */
@@ -210,16 +239,25 @@ export function roadGraph(net: { edges: { id?: string; a: string; b: string; pts
     if (a === undefined || b === undefined || e.pts.length < 2) continue
     const pts = e.pts.map(p => [p[0], p[1]] as XZ), cum = [0]
     for (let k = 1; k < pts.length; k++) cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]))
-    edges.push({ a, b, pts, len: cum[cum.length - 1], cum })
+    const box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity]
+    for (const [x, z] of pts) { box[0] = Math.min(box[0], x); box[1] = Math.min(box[1], z); box[2] = Math.max(box[2], x); box[3] = Math.max(box[3], z) }
+    edges.push({ a, b, pts, len: cum[cum.length - 1], cum, box })
   }
-  return edges.length ? { nodes, edges } : null
+  const adj: number[][] = nodes.map(() => [])
+  edges.forEach((e, i) => { adj[e.a].push(i); if (e.b !== e.a) adj[e.b].push(i) })
+  return edges.length ? { nodes, edges, adj } : null
 }
 
 interface RoadHit { e: number; s: number; x: number; z: number; d: number }
 /** The nearest point on each edge, the `n` closest edges first. */
 export function nearestOnRoads(G: RoadGraph, x: number, z: number, n = ROAD_TRIES): RoadHit[] {
   const hits: RoadHit[] = []
-  G.edges.forEach((e, ei) => {
+  // nearest boxes first; once n hits are in, an edge whose box is farther than the n-th hit cannot place
+  const boxD = (b: RoadGraph['edges'][number]['box']) => Math.hypot(Math.max(b[0] - x, 0, x - b[2]), Math.max(b[1] - z, 0, z - b[3]))
+  const order = G.edges.map((e, ei) => ({ ei, bd: boxD(e.box) })).sort((p, q) => p.bd - q.bd)
+  for (const { ei, bd } of order) {
+    if (hits.length >= n && bd > hits[n - 1].d) break
+    const e = G.edges[ei]
     let best: RoadHit | null = null
     for (let k = 1; k < e.pts.length; k++) {
       const [ax, az] = e.pts[k - 1], [bx, bz] = e.pts[k], dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz
@@ -227,9 +265,9 @@ export function nearestOnRoads(G: RoadGraph, x: number, z: number, n = ROAD_TRIE
       const px = ax + dx * t, pz = az + dz * t, d = Math.hypot(x - px, z - pz)
       if (!best || d < best.d) best = { e: ei, s: e.cum[k - 1] + t * (e.cum[k] - e.cum[k - 1]), x: px, z: pz, d }
     }
-    if (best) hits.push(best)
-  })
-  return hits.sort((p, q) => p.d - q.d).slice(0, n)
+    if (best) { hits.push(best); hits.sort((p, q) => p.d - q.d) }
+  }
+  return hits.slice(0, n)
 }
 
 /** Points of edge e between arc lengths s0 and s1 (either direction), ends included. */
@@ -253,8 +291,7 @@ export function roadPath(G: RoadGraph, A: RoadHit, B: RoadHit): { pts: XZ[]; len
   const heap = new Heap()
   dist[eA.a] = A.s; heap.push(A.s, eA.a)
   if (eA.len - A.s < dist[eA.b]) { dist[eA.b] = eA.len - A.s; heap.push(dist[eA.b], eA.b) }
-  const adj: number[][] = Array.from({ length: N }, () => [])
-  G.edges.forEach((e, i) => { adj[e.a].push(i); adj[e.b].push(i) })
+  const adj = G.adj
   while (heap.size) {
     const u = heap.pop(); if (done[u]) continue; done[u] = 1
     for (const ei of adj[u]) {
@@ -279,29 +316,34 @@ export function roadPath(G: RoadGraph, A: RoadHit, B: RoadHit): { pts: XZ[]; len
 }
 
 // ── the planner ──────────────────────────────────────────────────────────────────────────────────────────────────────
-export function planRoute(w: RouteWorld, start: XZ, goal: XZ, budget = DEFAULT_BUDGET): Route {
+export function planRoute(w: RouteWorld, start: XZ, goal: XZ, budget = DEFAULT_BUDGET): Route { return drain(planSteps(w, start, goal, budget)) }
+
+/** planRoute, resumable: step it with `.next()` under a deadline (GuideRoute does) and the frame never waits on it. */
+export function* planSteps(w: RouteWorld, start: XZ, goal: XZ, budget = DEFAULT_BUDGET): Generator<void, Route> {
   let spent = 0
-  const direct = terrainPath(w, start, goal, Math.max(1, Math.floor(budget / 2)))
+  const direct: Leg = yield* terrainSteps(w, start, goal, Math.max(1, Math.floor(budget / 2)))
   spent += direct.spent
   let best: Route | null = direct.reached ? { pts: direct.pts, length: direct.length, mode: 'terrain', reached: true, spent } : null
   let bestCost = best ? best.length : Infinity
   const G = w.roads
   if (G) {
-    const from = nearestOnRoads(G, start[0], start[1]), to = nearestOnRoads(G, goal[0], goal[1])
-    const legs = new Map<string, ReturnType<typeof terrainPath>>()
-    const leg = (p: XZ, q: XZ) => {
+    const from = nearestOnRoads(G, start[0], start[1]); yield
+    const to = nearestOnRoads(G, goal[0], goal[1]); yield
+    const legs = new Map<string, Leg>()
+    const leg = function* (p: XZ, q: XZ): Generator<void, Leg> {
       const key = `${p[0]},${p[1]}>${q[0]},${q[1]}`
       let r = legs.get(key)
-      if (!r) { r = Math.hypot(p[0] - q[0], p[1] - q[1]) <= ON_ROAD ? { pts: [p, q], reached: true, spent: 0, length: Math.hypot(p[0] - q[0], p[1] - q[1]) } : terrainPath(w, p, q, Math.max(1, Math.floor((budget - spent) / 4))); spent += r.spent; legs.set(key, r) }
+      if (!r) { r = Math.hypot(p[0] - q[0], p[1] - q[1]) <= ON_ROAD ? { pts: [p, q], reached: true, spent: 0, length: Math.hypot(p[0] - q[0], p[1] - q[1]) } : yield* terrainSteps(w, p, q, Math.max(1, Math.floor((budget - spent) / 4))); spent += r.spent; legs.set(key, r) }
       return r
     }
     // cheapest first by a lower bound, so the budget goes to the likely winners
-    const pairs = from.flatMap(A => to.map(B => ({ A, B, rp: roadPath(G, A, B) }))).filter(p => p.rp)
-      .map(p => ({ ...p, lb: p.A.d + p.B.d + p.rp!.len * ROAD_COST })).sort((p, q) => p.lb - q.lb)
+    const pairs: { A: RoadHit; B: RoadHit; rp: { pts: XZ[]; len: number } | null; lb: number }[] = []
+    for (const A of from) for (const B of to) { const rp = roadPath(G, A, B); if (rp) pairs.push({ A, B, rp, lb: A.d + B.d + rp.len * ROAD_COST }); yield }
+    pairs.sort((p, q) => p.lb - q.lb)
     for (const { A, B, rp, lb } of pairs) {
       if (lb >= bestCost || spent >= budget) break
-      const inLeg = leg(start, [A.x, A.z]); if (!inLeg.reached) continue
-      const outLeg = leg([B.x, B.z], goal); if (!outLeg.reached) continue
+      const inLeg: Leg = yield* leg(start, [A.x, A.z]); if (!inLeg.reached) continue
+      const outLeg: Leg = yield* leg([B.x, B.z], goal); if (!outLeg.reached) continue
       const cost = inLeg.length + rp!.len * ROAD_COST + outLeg.length
       if (cost < bestCost) {
         const pts = joinPts(inLeg.pts, rp!.pts, outLeg.pts)
@@ -335,11 +377,12 @@ export function project(pts: readonly XZ[], x: number, z: number): { d: number; 
   return { d: bd, s: bs }
 }
 
-/** Points every `step` metres along the route, from your nearest point on it, for `reach` metres: what the trail draws. */
-export function trailAhead(pts: readonly XZ[], x: number, z: number, reach: number, step: number): XZ[] {
+/** Points every `step` metres along the route, from your nearest point on it, for `reach` metres: what the trail draws.
+ *  `offset` = where the first point sits past your point (default one step; the trail's flow phase slides it). */
+export function trailAhead(pts: readonly XZ[], x: number, z: number, reach: number, step: number, offset = step): XZ[] {
   if (pts.length < 2) return []
   const { s } = project(pts, x, z), out: XZ[] = []
-  let acc = 0, k = 1, want = s + step
+  let acc = 0, k = 1, want = s + offset
   const stop = s + reach
   while (k < pts.length && want <= stop) {
     const L = Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1])
@@ -357,24 +400,44 @@ export const LIVE_BUDGET = 12000
 /** Never replan more often than this (s), however you move. */
 export const MIN_GAP_S = 0.5
 
+/** Per-frame slice (ms): the planner works at most this long in one `get`, then hands back the route it already had. */
+export const SLICE_MS = 2.5   // + at most one batch of overshoot: ≤ ~3-4 ms a frame (hub 11-21)
+
 export class GuideRoute {
+  /** The route to draw: the last one that LANDED. Null until the first plan lands (draw the straight dots meanwhile). */
   route: Route | null = null
+  /** A plan in flight, resumed a slice per frame. */
+  private job: { gen: Generator<void, Route>; goal: XZ } | null = null
   private goal: XZ | null = null
   private at = -Infinity
   plans = 0
-  constructor(private world: () => RouteWorld, private budget = LIVE_BUDGET) {}
-  /** The route from (x, z) to goal at time `now` (seconds): replans on a new goal or a stray. A partial route is NOT
-   *  retried on a timer: it spent its whole budget failing, so a timed retry is a hitch every few seconds for the same
-   *  answer. Walking STRAY_M off it is what changes the question. */
-  get(x: number, z: number, goal: XZ, now: number): Route {
+  /** slices spent on the plan in flight / the last landed one (for probes and tests) */
+  slices = 0
+  constructor(private world: () => RouteWorld, private budget = LIVE_BUDGET, private sliceMs = SLICE_MS, private clock: () => number = () => performance.now()) {}
+  /** Call once a frame. Starts a plan on a new goal or a stray (never on a timer: an unreachable goal spent its whole
+   *  budget failing, and walking STRAY_M off is what changes the question), works on it for at most `sliceMs`, and
+   *  returns what to draw: the route that last landed, or null before the first one (straight dots). A NEW GOAL drops
+   *  the old route at once (it leads somewhere else); a stray keeps showing it until the replan lands. */
+  get(x: number, z: number, goal: XZ, now: number): Route | null {
     const moved = !this.goal || Math.hypot(goal[0] - this.goal[0], goal[1] - this.goal[1]) > 0.5
-    const r = this.route
-    const stray = !!r && project(r.pts, x, z).d > STRAY_M
-    if (!r || moved || (stray && now - this.at >= MIN_GAP_S)) {
-      this.route = planRoute(this.world(), [x, z], goal, this.budget)
-      this.goal = [goal[0], goal[1]]; this.at = now; this.plans++
+    if (moved) { this.goal = [goal[0], goal[1]]; this.route = null; this.start(x, z, now) }
+    else if (!this.job && this.route && now - this.at >= MIN_GAP_S && project(this.route.pts, x, z).d > STRAY_M) this.start(x, z, now)
+    if (this.job) {
+      const t0 = this.clock()
+      this.slices++
+      for (;;) {
+        const r = this.job.gen.next()
+        if (r.done) { this.route = r.value; this.job = null; this.plans++; break }
+        if (this.clock() - t0 >= this.sliceMs) break
+      }
     }
-    return this.route!
+    return this.route
   }
-  reset() { this.route = null; this.goal = null }
+  /** True while a plan is in flight. */
+  get busy() { return !!this.job }
+  private start(x: number, z: number, now: number) {
+    this.job = { gen: planSteps(this.world(), [x, z], this.goal!, this.budget), goal: this.goal! }
+    this.at = now; this.slices = 0
+  }
+  reset() { this.route = null; this.goal = null; this.job = null }
 }

@@ -1,7 +1,7 @@
 // gps-route.ts (BETA M63 s2). Run: npx tsx src/app/shimmer/open/shared/gps-route.test.ts
 import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
-import { clear, planRoute, terrainPath, roadGraph, trailAhead, project, polyLength, GuideRoute, STRAY_M, MIN_GAP_S, ROAD_COST, LIVE_BUDGET, DEFAULT_BUDGET, type RouteWorld, type XZ, type RoadGraph } from './gps-route'
+import { clear, planRoute, planSteps, terrainPath, roadGraph, trailAhead, project, polyLength, GuideRoute, STRAY_M, MIN_GAP_S, ROAD_COST, LIVE_BUDGET, DEFAULT_BUDGET, type RouteWorld, type XZ, type RoadGraph } from './gps-route'
 import { MAX_WALK_GRADIENT } from '../terrain-world'
 import { makeRegion, type RegionMeta } from '../region'
 
@@ -125,24 +125,46 @@ const lineRoad = (pts: XZ[], extra?: { a: string; b: string; pts: XZ[] }[]): Roa
   ok(trailAhead(pts, 0, 0, 100, 2).length === 10, 'trailAhead: stops at the route end')
 }
 
-// 7. THE CACHE: plans once, replans on a stray / a new goal, never per frame
+// 7. THE CACHE: plans once, replans on a stray / a new goal, never per frame, never on a timer
 {
-  const ridge = (x: number, z: number) => Math.max(0, 30 - 3 * Math.abs(x) - 3 * Math.max(0, Math.abs(z) - 50))   // 3:1 on every face, ends taper by z = 60
-  const g = new GuideRoute(() => ({ ground: ridge }))
+  const ridge = (x: number, z: number) => Math.max(0, 30 - 3 * Math.abs(x) - 3 * Math.max(0, Math.abs(z) - 50))
+  const g = new GuideRoute(() => ({ ground: ridge }), LIVE_BUDGET, Infinity)   // unsliced: every get finishes its plan
   const goal: XZ = [40, 0]
   g.get(-40, 0, goal, 0)
   for (let f = 1; f < 60; f++) g.get(-40 + f * 0.05, 0, goal, f / 60)
   ok(g.plans === 1, `cache: one plan across a second of walking the line (${g.plans})`)
   const r0 = g.route!
-  g.get(-40, -STRAY_M - 20, goal, 1.01)     // stray, but inside the plan's own rhythm? (> MIN_GAP_S since the plan at 0)
+  g.get(-40, -STRAY_M - 20, goal, 1.01)
   ok(g.plans === 2 && g.route !== r0, `cache: straying ${STRAY_M + 20} m off replans (${g.plans})`)
   g.get(-40, -STRAY_M - 60, goal, 1.01 + MIN_GAP_S / 2)
   ok(g.plans === 2, 'cache: not twice inside MIN_GAP_S')
   g.get(-40, -STRAY_M - 60, [40, 30], 1.02 + MIN_GAP_S / 2)
   ok(g.plans === 3, 'cache: a new goal replans at once')
-  const m = new GuideRoute(() => ({ ground: (x, z) => Math.hypot(x - 60, z) < 15 ? 30 : 0 }))
+  const m = new GuideRoute(() => ({ ground: (x, z) => Math.hypot(x - 60, z) < 15 ? 30 : 0 }), LIVE_BUDGET, Infinity)
   m.get(0, 0, [60, 0], 0); for (let f = 1; f <= 600; f++) m.get(0, 0, [60, 0], f / 60)
   ok(!m.route!.reached && m.plans === 1, `cache: an unreachable goal is not re-planned on a timer (${m.plans} plans in 10 s)`)
+}
+
+// 7b. TIME-SLICED: a clock that says "out of time" after every step = the slowest phone imaginable. One step per frame.
+{
+  const ridge = (x: number, z: number) => Math.max(0, 30 - 3 * Math.abs(x) - 3 * Math.max(0, Math.abs(z) - 50))
+  let tick = 0
+  const g = new GuideRoute(() => ({ ground: ridge }), LIVE_BUDGET, 1, () => tick++)
+  const goal: XZ = [40, 0]
+  let frames = 0, first: ReturnType<GuideRoute['get']> = null
+  while (frames < 100000) { first = g.get(-40, 0, goal, frames / 60); frames++; if (first) break }
+  ok(frames > 5 && !!first, `slice: the plan lands over many frames, null (straight dots) until then (${frames} frames)`)
+  const sync = planRoute({ ground: ridge }, [-40, 0], goal, LIVE_BUDGET)
+  ok(JSON.stringify(first!.pts) === JSON.stringify(sync.pts), 'slice: the sliced plan is the same route as the one-go plan')
+  // a stray: the OLD route keeps showing while the replan runs, then the new one replaces it
+  const old = g.route!
+  const t = 10
+  let shown = g.get(-40, -STRAY_M - 30, goal, t), during = 0
+  ok(g.busy && shown === old, 'slice: during a replan the old route is still what draws')
+  for (let f = 1; f < 100000 && g.busy; f++) { shown = g.get(-40, -STRAY_M - 30, goal, t + f / 60); if (g.busy && shown === old) during++ }
+  ok(!g.busy && shown !== old && during > 3, `slice: the replan lands and replaces it (${during} frames on the old one)`)
+  // a NEW goal drops the old route at once (it leads somewhere else)
+  ok(g.get(-40, 0, [0, 90], t + 9999) === null || !g.busy, 'slice: a new goal draws straight dots until its plan lands')
 }
 
 // 8. THE REAL CONTINENT: the budget holds and a cross-country quest routes (timing is what the frame loop pays on a replan)
@@ -159,20 +181,48 @@ const lineRoad = (pts: XZ[], extra?: { a: string; b: string; pts: XZ[] }[]): Roa
   for (let k = 0; k + 1 < Math.min(places.length, 12); k += 2) trips.push([[places[k].x + 40, places[k].z + 25], [places[k + 1].x - 30, places[k + 1].z + 35]])
   let worst = 0, maxSpent = 0, roadsTaken = 0, reached = 0, slopeBad: string | null = null
   for (const [a, b] of trips) {
-    const t0 = performance.now(), r = planRoute(w, a, b, LIVE_BUDGET), ms = performance.now() - t0
+    const c0 = process.cpuUsage(), r = planRoute(w, a, b, LIVE_BUDGET), cu = process.cpuUsage(c0), ms = (cu.user + cu.system) / 1000
     worst = Math.max(worst, ms); maxSpent = Math.max(maxSpent, r.spent)
     if (r.mode === 'road') roadsTaken++
     if (r.reached) reached++
     if (r.mode === 'terrain' && r.reached && !slopeBad) slopeBad = walkable(w, r.pts)
     if (!r.reached) console.log(`  unreached: ${a.map(Math.round)} -> ${b.map(Math.round)} (${r.mode}, ${r.pts.length} pts, spent ${r.spent})`)
   }
+  // the frame loop's view: a 3 ms slice per frame on the slowest trip; no frame may stall on it
+  {
+    let worstFrame = 0, mostFrames = 0, landed = 0
+    const frameMs: number[] = []
+    for (const [a, b] of trips) {
+      const g = new GuideRoute(() => w)
+      let frames = 0
+      // CPU time, not wall: the box is shared (load 19-32 during a peer's build on 11-21 read a 3 ms slice as 368 ms wall)
+      for (; frames < 5000; frames++) { const c0 = process.cpuUsage(); g.get(a[0], a[1], b, frames / 60); const c = process.cpuUsage(c0), ms = (c.user + c.system) / 1000; frameMs.push(ms); worstFrame = Math.max(worstFrame, ms); if (!g.busy) break }
+      mostFrames = Math.max(mostFrames, frames + 1); if (!g.busy && g.route) landed++
+    }
+    const p99 = [...frameMs].sort((a, b) => a - b)[Math.floor(frameMs.length * 0.99)]
+    console.log(`continent slice: ${landed}/${trips.length} landed, slowest in ${mostFrames} frames, p99 frame ${p99.toFixed(1)} ms, worst ${worstFrame.toFixed(1)} ms (${frameMs.length} frames)`)
+    ok(landed === trips.length, 'continent slice: every plan lands')
+    // SLICE_MS + one batch (sized by cell); CPU time, so a loaded box cannot fail it
+    // A frame = SLICE_MS + at most ONE step past the deadline, so the bound worth asserting is the step, counted in ground
+    // samples (the planner's whole cost), not timed: on this shared 2-vCPU box the same step timed 6.8 ms one run and
+    // 0.5 ms the next (scheduler + GC). Profiled 11-21: ≤ ~3.3k samples a step at ~21 ns each = ~0.07 ms here.
+    let maxStep = 0
+    for (const [a, b] of trips) {
+      let calls = 0
+      const cw: RouteWorld = { ground: (x, z) => { calls++; return w.ground(x, z) }, water: (x, z) => { calls++; return w.water!(x, z) }, roads }
+      const gen = planSteps(cw, a, b, LIVE_BUDGET)
+      for (;;) { calls = 0; const r = gen.next(); maxStep = Math.max(maxStep, calls); if (r.done) break }
+    }
+    ok(maxStep <= 4000, `continent slice: no step does more than 4000 ground samples (${maxStep}): a frame overshoots its slice by ~0.1 ms, ~0.5 on a slow phone`)
+    ok(worstFrame < 25, `continent slice: no frame over 25 ms CPU, a gross guard only (${worstFrame.toFixed(1)} ms)`)
+  }
   console.log(`continent: ${trips.length} town-to-town trips, ${reached} reached, ${roadsTaken} by road, worst ${worst.toFixed(0)} ms`)
   ok(trips.length >= 4, 'continent: enough trips sampled')
   ok(roadsTaken >= Math.ceil(trips.length / 2), `continent: most town-to-town trips take the roads (${roadsTaken}/${trips.length})`)
   ok(!slopeBad, `continent: terrain routes stay walkable (${slopeBad})`)
   ok(maxSpent <= LIVE_BUDGET && LIVE_BUDGET <= DEFAULT_BUDGET, `continent: every plan inside LIVE_BUDGET (${maxSpent})`)
-  // loose on purpose: the box is shared and the budget above is the real bound (measured 11-21: 60-160 ms at LIVE_BUDGET)
-  ok(worst < 400, `continent: a live plan costs < 400 ms worst case (${worst.toFixed(0)} ms)`)
+  // loose on purpose: the box is shared and the budget above is the real bound (measured 11-21: 60-160 ms at LIVE_BUDGET); CPU time so a loaded box cannot fail it
+  ok(worst < 400, `continent: a live plan costs < 400 ms CPU worst case (${worst.toFixed(0)} ms)`)
 }
 
 console.log(`gps-route: ${pass} pass, ${fails.length} fail`)
