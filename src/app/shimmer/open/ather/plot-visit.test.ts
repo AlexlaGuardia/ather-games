@@ -1,7 +1,7 @@
 // plot-visit.ts: zone naming, the chunked snapshot round trip (incl. upper levels), reassembly rules, the guest's read-only store.
 // Run: npx tsx src/app/shimmer/open/ather/plot-visit.test.ts
 import { plotZone, hostOfZone, packSnap, unpackSnap, chunk, Reassembly, isSnapPart, validSnap, CHUNK, MAX_PARTS, startVisit, endVisit,
-  setVisitSnap, currentVisit, isVisiting, guestRefuses, refusalCount, shownWorks, worksWritable, shownOwned, type PlotSnap } from './plot-visit'
+  setVisitSnap, currentVisit, isVisiting, guestRefuses, refusalCount, shownWorks, worksWritable, shownOwned, SendQueue, type PlotSnap } from './plot-visit'
 import type { Works } from './rooms'
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  FAIL', m) } }
@@ -76,6 +76,27 @@ const snap: PlotSnap = { works, owned: ['0,0', '0,1', '1,0'] }
   ok(currentVisit()!.name === 'Mira', 'the visit names the host')
   endVisit()
   ok(!isVisiting() && worksWritable() && shownWorks(own) === own, 'home again: your own works, writable')
+
+  // ── slice 2: the host's send queue ──
+  const q = new SendQueue()
+  const v1 = chunk('a'.repeat(CHUNK * 3), 1), v2 = chunk('b'.repeat(CHUNK * 2), 2)
+  q.enqueue('g1', v1); q.enqueue('g2', v1)
+  const first = [q.next()!, q.next()!]
+  ok(first[0].to === 'g1' && first[1].to === 'g2', 'guests are served round-robin')
+  q.enqueue('g1', v1)
+  ok(q.size() === 4, 'the same version is not queued twice for a guest')
+  q.enqueue('g1', v2)
+  ok(q.size() === 4 && (() => { const seen: number[] = []; const qq = q; let n; while ((n = qq.next())) if (n.to === 'g1') seen.push(n.part.v); return seen.every(v => v === 2) && seen.length === 2 })(), "a newer version replaces the guest's older parts still queued")
+  q.enqueue('g3', v1); q.drop('g3')
+  ok(q.next() === null && q.size() === 0, 'a guest who left is dropped')
+  // a live change, end to end: the guest holds v9, the host re-packs a changed plot as v10, the guest's store shows it
+  startVisit('p_host0001', 'Mira'); setVisitSnap('p_host0001', 9, snap)
+  const changed: PlotSnap = { works: { ...works, pieces: [...works.pieces, { id: 'new', item: 'goldwood_stool', x: 1, z: 1, q: 0 } as never] }, owned: snap.owned }
+  const re2 = new Reassembly(); let pk: string | null = null
+  for (const p of chunk(await packSnap(changed), 10)) pk = re2.add(p) ?? pk
+  const un = pk ? await unpackSnap(pk) : null
+  ok(!!un && setVisitSnap('p_host0001', 10, un) && shownWorks(own).pieces.length === works.pieces.length + 1, 'a change on the host reaches the guest as a newer version')
+  endVisit()
 
   console.log(`plot-visit: ${pass}/${pass + fail}`)
   if (fail) process.exit(1)

@@ -149,3 +149,30 @@ export const worksWritable = () => visit === null
 export function shownOwned(own: readonly string[]): readonly string[] {
   return visit ? (visit.snap?.owned ?? []) : own
 }
+
+// ── slice 2: the host's ONE send queue (answers to PV_WANT and live re-sends share it, so the relay rate holds) ───────────────
+/** Parts waiting to go, one per tick. A newer version for a peer drops that peer's older parts still queued (a guest only ever
+ *  assembles the newest), and the same version is never queued twice for one peer. Peers are served round-robin. */
+export class SendQueue {
+  private q = new Map<string, SnapPart[]>()
+  private order: string[] = []
+  enqueue(to: string, parts: SnapPart[]) {
+    if (!parts.length) return
+    const cur = this.q.get(to)
+    if (cur?.length && cur[0].v >= parts[0].v) return
+    this.q.set(to, [...parts])
+    if (!this.order.includes(to)) this.order.push(to)
+  }
+  next(): { to: string; part: SnapPart } | null {
+    while (this.order.length) {
+      const to = this.order.shift()!, list = this.q.get(to)
+      if (!list?.length) { this.q.delete(to); continue }
+      const part = list.shift()!
+      if (list.length) this.order.push(to); else this.q.delete(to)
+      return { to, part }
+    }
+    return null
+  }
+  drop(to: string) { this.q.delete(to); this.order = this.order.filter(x => x !== to) }
+  size() { let n = 0; for (const l of this.q.values()) n += l.length; return n }
+}

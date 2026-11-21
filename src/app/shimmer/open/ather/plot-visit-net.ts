@@ -5,7 +5,7 @@
 // GUEST (visiting, socket zone open:plot:<host>): asks the host every ASK_MS until the plot has arrived, assembles the parts and
 // hands the snapshot to the visit store (which the works store reads).
 import { useEffect, useRef } from 'react'
-import { PV_WANT, PV_SNAP, packSnap, unpackSnap, chunk, Reassembly, isSnapPart, setVisitSnap, refusalCount, visitLog, type Visit, type PlotSnap } from './plot-visit'
+import { PV_WANT, PV_SNAP, packSnap, unpackSnap, chunk, Reassembly, isSnapPart, setVisitSnap, refusalCount, visitLog, SendQueue, type Visit, type PlotSnap } from './plot-visit'
 
 type Relay = (kind: string, data: unknown, to?: string) => boolean
 type OnRelay = (f: (m: { from: string; kind: string; data: unknown }) => void) => () => void
@@ -13,27 +13,48 @@ const ASK_MS = 1500
 /** one part every PACE_MS: ~16/s, under the server's 20/s refill with its burst of 30 left for everything else */
 const PACE_MS = 60
 
-const probe = { sent: 0, asked: 0, answered: 0, got: 0, v: 0 }
+const probe = { sent: 0, asked: 0, answered: 0, got: 0, v: 0, pushed: 0 }
+/** a change on the host's plot goes out this long after the last write */
+const RESEND_MS = 900
 
-export function usePlotVisitNet(o: { relay: Relay; onRelay: OnRelay; hosting: boolean; visit: Visit | null; snapOf: () => PlotSnap }) {
+export function usePlotVisitNet(o: { relay: Relay; onRelay: OnRelay; hosting: boolean; visit: Visit | null; snapOf: () => PlotSnap; live: () => string[]; rev: unknown }) {
   const snapOf = useRef(o.snapOf); snapOf.current = o.snapOf
+  const live = useRef(o.live); live.current = o.live
   const cache = useRef<{ key: string; packed: string; v: number } | null>(null)
+  const queue = useRef(new SendQueue())
+  const guests = useRef(new Set<string>())
+  /** the plot as it stands now, packed (re-packed only when it changed; a new pack = a new version) */
+  const packed = async () => {
+    const s = snapOf.current(), key = JSON.stringify(s)
+    if (!cache.current || cache.current.key !== key) cache.current = { key, packed: await packSnap(s), v: Math.max(Date.now(), (cache.current?.v ?? 0) + 1) }
+    return cache.current
+  }
 
-  // ── host ──
+  // ── host: answer PV_WANT, drain the one queue at PACE_MS ──
   useEffect(() => {
     if (!o.hosting) return
-    const timers: ReturnType<typeof setTimeout>[] = []
-    const busy = new Set<string>()
+    const q = queue.current
     const off = o.onRelay(async m => {
-      if (m.kind !== PV_WANT || busy.has(m.from)) return
-      busy.add(m.from); probe.answered++
-      const s = snapOf.current(), key = JSON.stringify(s)
-      if (!cache.current || cache.current.key !== key) cache.current = { key, packed: await packSnap(s), v: Date.now() }
-      const parts = chunk(cache.current.packed, cache.current.v)
-      parts.forEach((p, i) => timers.push(setTimeout(() => { if (o.relay(PV_SNAP, p, m.from)) probe.sent++; if (i === parts.length - 1) busy.delete(m.from) }, i * PACE_MS)))
+      if (m.kind !== PV_WANT) return
+      guests.current.add(m.from); probe.answered++
+      const c = await packed(); q.enqueue(m.from, chunk(c.packed, c.v))
     })
-    return () => { off(); timers.forEach(clearTimeout) }
-  }, [o.hosting, o.relay, o.onRelay])
+    const t = setInterval(() => { const n = q.next(); if (n && o.relay(PV_SNAP, n.part, n.to)) probe.sent++ }, PACE_MS)
+    return () => { off(); clearInterval(t); guests.current.clear(); while (q.next()); }
+  }, [o.hosting, o.relay, o.onRelay])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── host, slice 2: the plot changed -> every guest still here gets the new version (debounced: a wall drag is many writes) ──
+  useEffect(() => {
+    if (!o.hosting || !guests.current.size) return
+    const t = setTimeout(async () => {
+      const here = new Set(live.current())
+      for (const g of [...guests.current]) if (!here.has(g)) { guests.current.delete(g); queue.current.drop(g) }
+      if (!guests.current.size) return
+      const c = await packed(); probe.pushed++
+      for (const g of guests.current) queue.current.enqueue(g, chunk(c.packed, c.v))
+    }, RESEND_MS)
+    return () => clearTimeout(t)
+  }, [o.hosting, o.rev])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── guest ──
   const host = o.visit?.host ?? null, have = !!o.visit?.snap

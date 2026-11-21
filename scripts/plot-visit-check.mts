@@ -9,6 +9,7 @@
 //      B's stool), walls + upper level counts equal A's save; A sees B on its plot
 //   4. upstairs: B set down on the upper floor STAYS one storey up (the upper level is ground in B's walk world)
 //   5. read-only: B's E at A's table is refused (one line, no panel); A's save still holds the table; B's own save is untouched
+//   5b. live: A picks its table up (real E + click): B's view loses it within seconds (slice 2)
 //   6. a stranger: no party = the visit link is refused; another party = no plot reaches them, home in ~15 s, A never sees them
 //   7. B goes home (H, or the pill's Home button with --phone): B's own works again (the stool), socket back to open:plot:<B>
 //   8. 0 page errors
@@ -127,6 +128,17 @@ try {
   ok(!(await b.$('[data-panel="work"]')) && !(await b.$('[data-panel="piece"]')), '5. no panel opened')
   ok(JSON.stringify(await store(a)) === JSON.stringify(aSave), "5. A's save is unchanged (the table stands)")
   ok(JSON.stringify((await store(b))?.pieces?.map((x: any) => x.item)) === '["goldwood_stool"]', "5. B's own save is untouched (its stool, nothing of A's)")
+
+  // 5b · LIVE (slice 2): the host picks its table up (real E, real Pick up click); the guest's view loses it
+  await a.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), TABLE_AT.x - 1.3, TABLE_AT.z)
+  await sleep(2500)
+  let panelUp = false
+  for (let n = 0; n < 3 && !panelUp; n++) { await aimAt(a, TABLE_AT.x, TABLE_AT.z, 0.5); await a.keyboard.press('KeyE'); panelUp = await poll(async () => !!(await a.$('[data-act="pickup-piece"]')), 4000) }
+  ok(panelUp, '5b. A opened its table (E)')
+  const tClick = Date.now()
+  ok(await clickSel(a, '[data-act="pickup-piece"]') && await poll(async () => ((await store(a))?.pieces ?? []).length === 0, 8000), '5b. A picked its table up (real click)')
+  ok(await poll(async () => JSON.stringify(((await ev(b, '__ather', 'works')) as any).pieces) === '[]', 20000), `5b. B's view loses the table live (${((Date.now() - tClick) / 1000).toFixed(1)} s; host pushed ${((await ev(a, '__visit', 'net')) as any).pushed}x)`)
+  ok(JSON.stringify((await store(b))?.pieces?.map((x: any) => x.item)) === '["goldwood_stool"]', "5b. B's own save still untouched")
 
   // 6 · strangers
   const c = await open('C', null, MINE); await load(c, `&visit=${idA}&vn=Host`)

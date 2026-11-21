@@ -52,7 +52,7 @@ import { ClusterScene } from './cluster-scene'
 import { cycleLook, LookChip } from './ground-look'
 import { GroundCover, coverFromUrl } from './ground-cover'
 import { coverClear } from './cover-clear'
-import { useOpenMultiplayer, RemoteKeepers, OPEN_WILDS } from '../shared/open-mp'
+import { useOpenMultiplayer, RemoteKeepers, OPEN_WILDS, openNet } from '../shared/open-mp'
 import { OpenSocial } from '../shared/play-together'
 import { ClusterPanel, useCluster } from './cluster-panel'
 import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './cluster'
@@ -571,8 +571,10 @@ function AtherSliceGame() {
   const mp = useOpenMultiplayer(zone.kind === 'wilds' ? OPEN_WILDS : plotMp, () => { const p = poseRef.current, y = ground(p.x, p.z); return { x: p.x, y: Number.isFinite(y) ? y : 0, z: p.z, yaw: p.yaw } },
     () => (stanceRef.current.kind === 'weapon' ? heldRef.current : null))   // M27 slice 4: the party sees my gun
   const heightRef = useRef(ground); heightRef.current = ground
+  const visitRev = useMemo(() => ({ works, owned: garden.owned }), [works, garden.owned])   // stable until the plot changes
   usePlotVisitNet({ relay: mp.relay, onRelay: mp.onRelay, hosting: !!plotMp && !visitNow, visit: visitNow,
-    snapOf: (): PlotSnap => ({ works: currentWorks(), owned: [...garden.owned] }) })
+    snapOf: (): PlotSnap => ({ works: currentWorks(), owned: [...garden.owned] }),
+    live: () => openNet()?.live() ?? [], rev: visitRev })   // M61 s2: a new works / owned = a re-send
   useEffect(() => { setLobbyZone(zone.kind === 'wilds' ? OPEN_WILDS : plotZone(visitNow ? visitNow.host : selfPlayerId())) }, [zone.kind, visitNow])
   // third person (V): your own keeper, the segmented doll (open/shared/third-person.tsx), driven from the tick below
   const thirdRef = useRef(false), dollDrive = useRef(newDrive()), camRef = useRef<Camera | null>(null)
