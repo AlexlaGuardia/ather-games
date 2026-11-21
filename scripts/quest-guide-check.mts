@@ -2,6 +2,9 @@
 //   A. the active quest shows on the compass as a glare ([data-glare]) at its bearing, brighter facing it
 //   B. the trail (window.__questGuide.trailOpacity) is ~0 facing away, ~1 facing the mark, with an intermediate value on the way (a fade, not a pop)
 //   C. no world pillar without ?pillar=1 (probe.pillars 0); with it, >= 1
+//   E. (s2 GPS) a planted quest whose STRAIGHT line is not walkable (a ridge / a face / water): the route lands, every 1 m
+//      of it stays under the walker's climb (MAX_WALK_GRADIENT), it is not the straight line, and facing the glare the
+//      trail draws along it
 //   D. 0 page errors
 //   npx tsx scripts/quest-guide-check.mts [--base http://localhost:3204] [--shot path.png --phone]
 import puppeteer, { type Page } from 'puppeteer-core'
@@ -44,6 +47,31 @@ try {
   ok(samples.some(v => v > 0.05 && v < 0.95), `B. a fade, not a pop: intermediate sample ${samples.find(v => v > 0.05 && v < 0.95)}`)
   ok(!!gOn && Math.abs(gOn.rel) < 4 && !!gAway && gOn.bright > gAway.bright && gOn.bright > 0.95, `A. glare at the notch and brighter facing it: ${gOn?.bright} vs ${gAway?.bright}`)
   ok(on?.pillars === 0, `C. no pillar without ?pillar=1 (${on?.pillars})`)
+  // E. the GPS route: hunt a goal behind something you cannot walk straight over (only where s2 is deployed)
+  const hasS2 = await p.evaluate(() => typeof (window as any).__questPlant === 'function')
+  if (!hasS2) console.log('-  E. skipped: this build has no GPS route yet (window.__questPlant missing)')
+  const here = (await probe(p))?.at as [number, number]
+  let goal: [number, number] | null = null
+  if (hasS2) hunt: for (const r of [60, 90, 130, 180, 240]) for (let k = 0; k < 24; k++) {
+    const t = (k / 24) * Math.PI * 2, x = here[0] + Math.cos(t) * r, z = here[1] + Math.sin(t) * r
+    if (!(await p.evaluate((x: number, z: number) => (window as any).__questStraight(x, z), x, z))) { goal = [x, z]; break hunt }
+  }
+  if (hasS2) ok(!!goal, `E. found a goal whose straight line is not walkable from (${here?.map(v => v.toFixed(0))}): ${goal?.map(v => v.toFixed(0))}`)
+  if (goal) {
+    await p.evaluate((x: number, z: number) => (window as any).__questPlant(x, z), goal[0], goal[1])
+    let slice = 0
+    const landed = await poll(async () => { const q = await probe(p); slice = Math.max(slice, q?.sliceMs ?? 0); return !!q?.route && !q.routeBusy && !q.route.straightClear }, 180000)
+    const q = await probe(p), r = q?.route
+    ok(landed && !!r, `E. the route landed: ${JSON.stringify(r)}`)
+    ok(!!r && r.maxRise <= 1.035 + 1e-6, `E. never steeper than the walker climbs: max rise ${r?.maxRise?.toFixed(3)} per m (limit 1.035)`)
+    ok(!!r && r.pts > 2 && r.mode !== 'straight', `E. not the straight line: ${r?.pts} points, ${r?.mode}, reached ${r?.reached}`)
+    console.log(`   worst planning slice seen ${slice.toFixed(1)} ms (headless swiftshader wall clock)`)
+    const b2 = q!.glareBearing!
+    await look(p, b2); await sleep(2500)
+    const f = await probe(p)
+    ok(!!f && f.trailOpacity > 0.9 && f.trail.length > 2, `E. facing the glare the trail draws along the route (${f?.trail.length} dots, opacity ${f?.trailOpacity?.toFixed(2)})`)
+    if (shot) { await sleep(500); await p.screenshot({ path: shot.replace(/\.png$/, '-route.png') }) }
+  }
   if (shot) { await sleep(500); await p.screenshot({ path: shot }) }
   const p2 = await open('&pillar=1'); await sleep(1500)
   const pq = await probe(p2); ok(!!pq && pq.pillars >= 1, `C. ?pillar=1 brings the pillar back (${pq?.pillars})`)
