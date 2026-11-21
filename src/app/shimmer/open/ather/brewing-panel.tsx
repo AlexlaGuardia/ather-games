@@ -36,9 +36,11 @@ export function BrewingPanel({ station, onClose, nameOf = peerName }: { station:
               return (
                 <div key={v.k} data-brew-step={v.k} data-brew-state={v.state} style={{ display: 'grid', gap: 4, padding: '8px 10px', borderRadius: 12, background: here ? 'rgba(201,168,255,.14)' : 'rgba(58,39,22,.06)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: H.ink }}>{label}</div>
-                    <div style={{ fontSize: 11, color: H.inkSoft }}>at the {ALC_STATIONS[st.at].name}</div>
-                    <span style={{ marginLeft: 'auto', fontSize: 12, color: H.inkSoft }}>
+                    <div style={{ display: 'grid', gap: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: H.ink }}>{label}</div>
+                      <div style={{ fontSize: 11, color: H.inkSoft }}>at the {ALC_STATIONS[st.at].name}</div>
+                    </div>
+                    <span style={{ marginLeft: 'auto', fontSize: 12, color: H.inkSoft, textAlign: 'right', flexShrink: 0, maxWidth: '45%' }}>
                       {v.state === 'done' && `done by ${who(v.by)}`}
                       {v.state === 'running' && `${who(v.by)} · ${secs(v.left!)}`}
                       {v.state === 'waiting' && 'after an earlier step'}
