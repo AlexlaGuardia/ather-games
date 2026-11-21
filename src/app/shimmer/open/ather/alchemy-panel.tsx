@@ -10,6 +10,7 @@ import { give, take, itemDef, type Inv } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
 import { ALC_STATIONS, ALC_POTIONS, ALC_POTION_ORDER, INTERMEDIATES, stepsAt, chainOf, pickFor, gradeFrom, gradeOrNull, fills, type AlcStation, type Have } from './alchemy-set'
 import { loadRuns, saveRuns, startRun, collectRun, runFrac, runLeft, type Runs } from './alchemy-runs'
+import { extraBottles } from './alchemist-boon'
 
 export const haveOf = (inv: Inv): Have => {
   const h: Record<string, number> = {}
@@ -35,7 +36,9 @@ function nextLine(potion: string, k: number): string {
   return nxt >= 0 ? `Next: the ${ALC_STATIONS[p.steps[nxt].at].name}.` : ''
 }
 
-export function AlchemyPanel({ pid, station, onClose, footer }: { pid: string; station: AlcStation; onClose: () => void; footer?: ReactNode }) {
+/** M57 s2: `boon` = the best alchemist standing near this piece (alchemist-boon.ts), read when a brew FINISHES here. A check may
+ *  set window.__alcRoll (a number in [0,1)) to fix the roll; otherwise Math.random. */
+export function AlchemyPanel({ pid, station, onClose, footer, boon }: { pid: string; station: AlcStation; onClose: () => void; footer?: ReactNode; boon?: () => { chance: number; name: string } }) {
   const inv = useInv(), have = haveOf(inv), def = ALC_STATIONS[station]
   const [runs, setRuns] = useState<Runs>(() => loadRuns())
   const [now, setNow] = useState(() => Date.now())
@@ -45,11 +48,16 @@ export function AlchemyPanel({ pid, station, onClose, footer }: { pid: string; s
   useEffect(() => {
     if (!run || runLeft(run, now) > 0) return
     const c = collectRun(runs, pid, now); if (!c) return
-    const g = give(getInv(), c.got.id, c.got.n)
+    // the last step finishes a bottle: the alchemist at the set rolls once per participant (solo now) for ONE extra
+    const last = run.k === ALC_POTIONS[run.potion].steps.length - 1, b = last && boon ? boon() : null
+    const fixed = (window as unknown as { __alcRoll?: number }).__alcRoll
+    const extra = b && b.chance > 0 ? extraBottles(b.chance, 1, typeof fixed === 'number' ? () => fixed : Math.random) : 0
+    const got = { id: c.got.id, n: c.got.n + extra }
+    const g = give(getInv(), got.id, got.n)
     if (g.left) { hudSay('Your bag is full. Make room and come back for it.', 'info', 4); return }
     setInv(g.inv); setRuns(c.runs); saveRuns(c.runs)
-    hudSay(`${itemDef(c.got.id).name}${c.got.n > 1 ? ` × ${c.got.n}` : ''}. ${nextLine(run.potion, run.k)}`, 'item', 4)
-  }, [run, now, runs, pid])
+    hudSay(`${itemDef(got.id).name}${got.n > 1 ? ` × ${got.n}` : ''}.${extra ? ` One extra, thanks to ${b!.name}.` : ''} ${nextLine(run.potion, run.k)}`, 'item', 4)
+  }, [run, now, runs, pid, boon])
 
   const start = (potion: string, k: number) => {
     const s = startRun(loadRuns(), pid, potion, k, haveOf(getInv()), Date.now()); if (!s) return

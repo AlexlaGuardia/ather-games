@@ -44,6 +44,7 @@ import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported,
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, ALC_LIVE, type Job } from './furniture'
 import { AlchemyPanel } from './alchemy-panel'
+import { boonAt, assignSet, standAt, setRoom, boonLine, potionsGrade } from './alchemist-boon'
 import { loadRuns, saveRuns, returnRun } from './alchemy-runs'
 import { ROAST } from './cooking'
 import { FarmPanel, FarmInterior, FarmCrate, currentFarm, setFarm, currentWater, settleWater, farmNow } from './farm-room'
@@ -930,6 +931,12 @@ function MoglinsAtWork({ w }: { w: Works }) {
   return (
     <>
       {v.moglins.map(m => {
+        const s = m.profession === 'alchemist' ? standAt(w, m) : null   // M57 s2: an alchemist stands at its Desk, facing it
+        if (s) return (
+          <group key={m.id} position={[s.x, GROUND_Y, s.z]} rotation-y={s.yaw}>
+            <MoglinModel action="work" garb={GARB_OF[m.profession] ?? 'none'} tone={furOf(m.id)} seed={m.id.length} />
+          </group>
+        )
         const r = m.room ? w.rooms.find(x => x.id === m.room) : undefined
         if (!r || !raised(r)) return null
         const at = toWorld(r, 0, ROOMS[r.kind].d / 2 - 2.35)   // in front of the bench, facing it (local +z = the back wall)
@@ -1903,9 +1910,41 @@ function CraftList({ note, jobs, r, pick, setPick, empty }: { note: string; jobs
   )
 }
 
+/** M57 s2: WHO STANDS AT THIS DESK (alchemist-boon.ts). An alchemist from the garden stands here and gives a chance of an extra
+ *  bottle when a brew finishes near it; it never runs a station. Shown only when the garden has an alchemist. */
+function AlchemistAtSet({ deskId }: { deskId: string }) {
+  const [v, setV] = useState<Village>(() => loadVillage())
+  const alcs = v.moglins.filter(m => m.profession === 'alchemist')
+  if (!alcs.length) return null
+  const here = alcs.find(m => m.room === setRoom(deskId))
+  const put = (mid: string, desk: string | null) => {
+    const nv = assignSet(loadVillage(), getW(), mid, desk); if (!nv) { hudSay('Another alchemist already stands at this desk.', 'info'); return }
+    saveVillage(nv); setV(nv)
+  }
+  const row = (m: Village['moglins'][number], act: React.ReactNode) => (
+    <div key={m.id} data-alc-moglin={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, color: H.ink, fontWeight: 600 }}>{m.name} <span style={{ fontWeight: 400, color: H.inkSoft, fontSize: 12.5 }}>· {SKILL_LABEL.potions} {GRADE_NAME[potionsGrade(m)]}</span></div>
+        <div data-boon-line style={{ fontSize: 12.5, color: H.inkSoft }}>{boonLine(m)}</div>
+      </div>
+      {act}
+    </div>
+  )
+  return (
+    <div data-alc-set={deskId} style={{ marginBottom: 10 }}>
+      <div style={lab}>Alchemist at the set</div>
+      {here
+        ? row(here, <span data-act="alc-rest"><HearthButton small onClick={() => put(here.id, null)}>Rest</HearthButton></span>)
+        : alcs.map(m => row(m, <span data-act="alc-stand"><HearthButton small onClick={() => put(m.id, deskId)}>Stand here</HearthButton></span>))}
+    </div>
+  )
+}
+
 /** E at a piece of furniture: turn it, or pick it back up into the bag. */
 function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<string>; onClose: () => void }) {
   const w = useWorks(), p = w.pieces.find(x => x.id === id)
+  // M57 s2: read at the moment a brew finishes here (the garden and the plot as they are then)
+  const boonHere = useCallback(() => { const b = boonAt(loadVillage(), getW(), id); return { chance: b.chance, name: b.who?.name ?? '' } }, [id])
   if (!p) return null
   const f = FURNITURE[p.item], spill = spillIfRemoved(currentWater(), plumbingOf(w.pieces), p.item, farmNow())
   const turn = () => { const t = turnPiece(getW(), owned, id); if (t) setWorks(t); else hudSay('No room to turn it here.', 'info') }
@@ -1917,12 +1956,13 @@ function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<str
     setWorks(r.works); setInv(rr.inv); saveRuns(rr.runs); onClose(); hudSay(`${f.name} · back in your bag.`, 'item', 3)
   }
   if (f.alc) return (
-    <AlchemyPanel pid={id} station={f.alc} onClose={onClose} footer={
+    <AlchemyPanel pid={id} station={f.alc} onClose={onClose} boon={boonHere} footer={<>
+      {f.alc === 'desk' && <AlchemistAtSet deskId={id} />}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <span data-act="turn-piece"><HearthButton small onClick={turn}>Turn</HearthButton></span>
         <span data-act="pickup-piece"><HearthButton small onClick={pickUp}>Pick up</HearthButton></span>
       </div>
-    } />
+    </>} />
   )
   return (
     <HearthFrame title={f.name} maxWidth={420} onClose={onClose} fixed dataPanel="piece">
