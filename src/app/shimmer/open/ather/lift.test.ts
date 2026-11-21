@@ -2,7 +2,7 @@
 // The lift (ather/lift.ts, BETA M48 slice 1): a shaft spans every level (slab hole + a gate where the car is not), a cell with a
 // wall on ANY level is refused, the ride/call state machine, the walker's moving floor, the save round-trip, an old save has no lift.
 import { FURNITURE, PIECE_JOBS } from './furniture'
-import { freshWorks, canPlacePiece, placePiece, type Works } from './rooms'
+import { freshWorks, canPlacePiece, placePiece, workPickables, type Works } from './rooms'
 import { planRun, runKeys, findRooms, canLay, type Walls } from './plot-walls'
 import { withLevel, upperBoxes, levelBase, SLAB_T, STOREY } from './plot-floors'
 import { shaftTop, liftLevels, shaftHoles, shaftBlockers, SHAFT_WHY, ride, call, carLevel, shaftKeys, shaftBlocked, liftSolids, stepCar, cordsOf, cordAimed, levelAt, CAR_SPEED, GATE_H } from './lift'
@@ -100,6 +100,13 @@ ok(shaftKeys(w1).has('1,1') && shaftKeys(w1).size === 1, 'a lift claims one cell
   const clear = canLay({}, runKeys({ i: 3, j: 0 }, { i: 3, j: 3 }), 'goldwood', () => true, bl)   // x = 3, a cell away
   ok(clear.ok, 'a wall a cell away is fine')
   ok(shaftBlockers(base).length === 0, 'no lift: nothing blocked') }
+
+// M47 close-out: E reaches the lift from every floor its shaft serves (the aim capsule spans the shaft, not the car's level)
+{ const cap = (w: Works) => workPickables(w, () => 0).find(q => q.item.kind === 'piece')!
+  const c1 = cap(w1), feet2 = levelBase(1)
+  ok(c1.y0 <= 0 && c1.y1 >= feet2 + 1.5, `a 2-floor lift's capsule spans the ground to above floor 2's eye (${c1.y0.toFixed(2)}..${c1.y1.toFixed(2)}, floor 2 at ${feet2.toFixed(2)})`)
+  const c0 = cap({ ...w1, pieces: [{ ...w1.pieces[0], lv: 1 }] })
+  ok(Math.abs(c0.y1 - c1.y1) < 1e-9, 'the capsule does not move with the car (the car at floor 2 or the ground: the same shaft)') }
 
 if (fails.length) { console.log(`FAIL ${fails.length}:\n - ${fails.join('\n - ')}`); process.exit(1) }
 console.log(`lift.test: ${pass} pass, 0 fail`)

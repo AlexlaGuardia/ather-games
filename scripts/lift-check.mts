@@ -121,8 +121,10 @@ try {
   // 5. up by teleport (dev hook), call it from floor 2 with E
   await tp(lp.x - 1.1, lp.z, 0, GROUND_Y + STOREY + 0.8); st = await settle()
   ok(Math.abs(st.py - (GROUND_Y + STOREY)) < 0.25, `5. on floor 2 beside the shaft (feet ${st.py.toFixed(2)}), the car is below`)
+  // since M60 E answers only what the crosshair is on: face the shaft (+x) and look a little down into it (the car is a floor below)
+  await p.evaluate((yw: number) => (window as any).__ather.look(yw, -0.25), Math.atan2(-1, 0)); await sleep(600)
   await p.keyboard.press('e'); await sleep(900)
-  ok(await poll(async () => ((await lifts())[0]?.lv ?? 0) === 1, 15000), '   E at the shaft calls the car up to floor 2')
+  ok(await poll(async () => ((await lifts())[0]?.lv ?? 0) === 1, 15000), '   E at the shaft (crosshair on it) calls the car up to floor 2')
   await sleep(2500); await shot('lift-3-called')
   // 6. reload keeps it
   await p.reload({ waitUntil: 'load', timeout: 180000 }); await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500)

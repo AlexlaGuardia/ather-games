@@ -19,12 +19,12 @@ import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, baitYield, type Inv, ty
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
 import { FURNITURE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, keepstoneFor, ALC_LIVE, type Job } from './furniture'
 import { adoptWork, adoptOut, stockJobs, type Work, type Station } from './station-queue'
-import { adoptUpper, type Level } from './plot-floors'
+import { adoptUpper, levelBase, type Level } from './plot-floors'
 import { adoptCols, type Cols } from './plot-cols'
 import { adoptStairs, type Stairs } from './plot-stairs'
 import { adoptDecks, type Decks } from './plot-decks'
 import { adoptFound, adoptFoundCells, floorAt } from './plot-found'
-import { cellMid, shaftBlocked } from './lift'
+import { cellMid, shaftBlocked, shaftTop } from './lift'
 import { adoptWalls, adoptRoof, adoptFloors, adoptPaid, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
 
 export type RoomKind = 'rinnshop' | 'farm' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
@@ -187,7 +187,7 @@ export function workPickables(works: Works, ground: (x: number, z: number) => nu
   const add = (x: number, z: number, r: number, h: number, item: WorkNear, lift = 0) => { const g = ground(x, z); out.push({ x, z, y0: g - 0.2, y1: floorAt(works, g, x, z) + lift + h + 0.2, r, item }) }   // M55: the floor it stands on (a house or prefab room's foundation)
   add(TABLE.x, TABLE.z, 1.1, 1.1, { kind: 'table' })
   for (const c of allChests(works)) add(c.x, c.z, 0.55, CHEST_H, { kind: 'chest', id: c.id })
-  for (const p of works.pieces) { const f = FURNITURE[p.item]; if (f) add(p.x, p.z, Math.max(f.w, f.d) / 2, f.h, { kind: 'piece', id: p.id }, (p.lv ?? 0) * 3) }
+  for (const p of works.pieces) { const f = FURNITURE[p.item]; if (f) add(p.x, p.z, Math.max(f.w, f.d) / 2, f.shaft ? levelBase(shaftTop(works, p)) + f.h : f.h, { kind: 'piece', id: p.id }) }   // M47 close-out: a lift answers E from EVERY floor its shaft serves (it was the car's level only, x a stale 3 m storey: E on floor 2 could not call the car up)
   for (const r of works.rooms) {
     if (!raised(r, now)) { const d = doorOf(r); add(d.x, d.z, 1, 2.4, { kind: 'raising', room: r }); continue }
     const b = benchOf(r); add(b.x, b.z, 0.9, 1.1, { kind: 'bench', room: r })

@@ -53,7 +53,8 @@ try {
   last = 1e9
   for (let n = 0; n < 40; n++) { st = await p.evaluate(() => (window as any).__ather.state()); if (Math.abs(st.py - last) < 0.005) break; last = st.py; await sleep(1000) }
   ok(st.py < g.py + 1.0, `3b. dropped over the shaft, the keeper falls through to the ground floor: feet ${st.py.toFixed(2)} (ground ${g.py.toFixed(2)}, slab ${(g.py + 5.0).toFixed(2)})`)
-  if (process.argv.includes('--shot')) { await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, Math.PI, y), pl.toWorld(3, 2.5).x, pl.toWorld(3, 2.5).z, g.py + 5.8); await sleep(4000); await p.screenshot({ path: flag('--shot', '/tmp/bp-shaft.png') }); console.log('shot', flag('--shot', '')) }
+  if (process.argv.includes('--shot')) { const eye = pl.toWorld(4.4, 3.6), dx = sh.x - eye.x, dz = sh.z - eye.z   // on the slab beside the shaft, looking down into it
+    await p.evaluate((x: number, z: number, y: number, yaw: number) => { const g = (window as any).__ather; g.tp(x, z, yaw, y); g.look(yaw, -0.75); for (const el of document.querySelectorAll('div')) { const t = el.textContent ?? ''; if (t.includes('Click to play') && t.length < 900 && ![...el.children].some(c => (c.textContent ?? '').includes('Click to play') && c.tagName === 'DIV')) (el as HTMLElement).style.display = 'none' } }, eye.x, eye.z, g.py + 5.8, Math.atan2(-dx, -dz)); await sleep(4000); await p.screenshot({ path: flag('--shot', '/tmp/bp-shaft.png') }); console.log('shot', flag('--shot', '')) }
   ok(errs.length === 0, `4. 0 page errors${errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''}`)
 } finally { await br.close() }
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)
