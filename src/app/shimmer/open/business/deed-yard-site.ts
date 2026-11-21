@@ -68,7 +68,7 @@ export function yardBeside(R: Region, i: number, b: Building, kind: DeedKind = '
       const p = yardToWorld(y, u, v), h = R.heightAt(p.x, p.z)
       lo = Math.min(lo, h); hi = Math.max(hi, h)
       if (plan.buildings.some(o => o !== b && insideBuilding(o, p.x, p.z, MARGIN))) blocked++
-      else if (lanes.some(l => l.pts.some((q, k) => k > 0 && segDist(p.x, p.z, l.pts[k - 1][0], l.pts[k - 1][2], q[0], q[2]) < l.width / 2 + MARGIN))) blocked++
+      else if (lanes.some(l => l.pts.some((q, k) => k > 0 && segDist(p.x, p.z, l.pts[k - 1][0], l.pts[k - 1][1], q[0], q[1]) < l.width / 2 + MARGIN))) blocked++
       else if (R.tunnelAt(p.x, p.z) || R.deckAt(p.x, p.z)) blocked++
     }
     y.clear = blocked === 0

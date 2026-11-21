@@ -76,9 +76,12 @@ export function DeedYards({ R, owned, ownAll = false, onState, ...rest }: Props)
   const sites = useMemo(() => (R ? shipyardSites(R) : []), [R])
   const [near, setNear] = useState<string[]>([])
   const nearRef = useRef(near); nearRef.current = near
-  const frame = useRef(0)
-  useFrame(() => {
-    if (++frame.current % 30) return
+  // which yards are near: re-read every 0.5 s by the CLOCK (a frame count stalls for a minute while a far city builds under
+  // a slow GPU: s3 prod run 11-21), and on the first frame
+  const lastNear = useRef(-1)
+  useFrame(({ clock }) => {
+    const now = clock.getElapsedTime(); if (lastNear.current >= 0 && now - lastNear.current < 0.5) return
+    lastNear.current = now
     const f = rest.focus.current; if (!f) return
     const want = sites.filter(s => { const d = Math.hypot(f.x - s.yard.x, f.z - s.yard.z); return d < MOUNT_R || (d < MOUNT_R + 40 && nearRef.current.includes(s.key)) }).map(s => s.key)
     if (want.join('|') !== nearRef.current.join('|')) setNear(want)

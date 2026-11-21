@@ -57,7 +57,7 @@ const goToYard = async (key: string) => {
   const site = await p.evaluate((k: string) => ((window as any).__deedYards?.sites?.() ?? []).find((q: any) => q.key === k) ?? null, key)
   if (!site) await fail('travel', `no shipyard ${key} on this map: ${JSON.stringify(await p.evaluate(() => (window as any).__deedYards?.sites?.()))}`)
   await p.evaluate((x: number, z: number) => (window as any).__drive.footTp(x, z, 0, -0.3), site.x, site.z + 14)
-  if (!await poll(async () => !!(await Y('yard', key)), 60000)) await fail('travel', `${key}'s yard did not mount beside it`)
+  if (!await poll(async () => !!(await Y('yard', key)), 120000)) await fail('travel', `${key}'s yard did not mount beside it (sites: ${JSON.stringify(await p.evaluate(() => (window as any).__deedYards?.sites?.()))}, foot ${JSON.stringify(await footAt())})`)
   return site
 }
 const bagN = (id: string) => p.evaluate((want: string) => {
@@ -79,10 +79,14 @@ const standAt = async (step: string, lx: number, lz: number, face: 'deep' | 'bac
   await p.evaluate((a, b, w) => { (window as any).__drive.footTp(a, b, w, -0.35); (window as any).__drive.look(w, -0.35) }, x, z, yaw)
   const fl = await Y('floor')
   if (fl != null && !await poll(async () => Math.abs((await footAt()).y - fl) < 0.15, 8000)) await fail(step, `set down at ${lx},${lz} but not on the deck: feet ${(await footAt()).y.toFixed(2)}, floor ${fl.toFixed(2)}`)
-  if (!await poll(async () => { const a = await Y('aim'); return !!a?.inYard && !!a?.cell })) await fail(step, `not aimed into the yard at ${lx},${lz}: ${JSON.stringify(await Y('aim'))}`)
+  // the aim is re-read on the NEXT FRAME (deed-yard.tsx useFrame): wait for the cell this spot faces, not just any cell, or a
+  // slow frame (SwiftShader with a far town still building) leaves the previous spot's aim in place (s3 prod run, 11-21)
+  // (within a cell: the spots sit on cell edges, so float rounding picks either side; the legs' spots are 5 cells apart)
+  const want = { cx: lx + 6, cz: lz + 1.4 * s + 4 }
+  if (!await poll(async () => { const a = await Y('aim'); return !!a?.inYard && !!a?.cell && Math.abs(a.cell.cx + 0.5 - want.cx) <= 1 && Math.abs(a.cell.cz + 0.5 - want.cz) <= 1 }, 45000)) await fail(step, `not aimed at cell ${JSON.stringify(want)} from ${lx},${lz}: ${JSON.stringify(await Y('aim'))}`)
 }
 const footAt = () => p.evaluate(() => { const f = (window as any).__drive.foot(); return { x: f.px, y: f.py, z: f.pz } }) as Promise<{ x: number; y: number; z: number }>
-// hold real W until `goal` says arrived, or the walker STALLS (moved < 5 cm over 2.5 s), or maxMs. Timed holds lie under
+// hold real W until `goal` says arrived, or the walker STALLS (moved < 5 cm over 6 s), or maxMs. Timed holds lie under
 // SwiftShader (a dev build walks ~0.3 m/s there), so a walk ends on what the walker did, never on the clock.
 const holdW = async (goal: (f: { x: number; y: number; z: number }) => boolean, maxMs = 60000) => {
   await p.keyboard.down('KeyW')
@@ -90,7 +94,7 @@ const holdW = async (goal: (f: { x: number; y: number; z: number }) => boolean, 
   while (Date.now() - t0 < maxMs) {
     await sleep(300); const f = await footAt()
     if (goal(f)) { why = 'arrived'; break }
-    if (Math.hypot(f.x - last.x, f.z - last.z) > 0.05) { last = f; lastT = Date.now() } else if (Date.now() - lastT > 2500) { why = 'stalled'; break }
+    if (Math.hypot(f.x - last.x, f.z - last.z) > 0.05) { last = f; lastT = Date.now() } else if (Date.now() - lastT > 6000) { why = 'stalled'; break }   // 6 s: a far town under SwiftShader renders a frame every 1-2.5 s (s3 prod diag 11-21)
   }
   await p.keyboard.up('KeyW'); await sleep(400); return why
 }
