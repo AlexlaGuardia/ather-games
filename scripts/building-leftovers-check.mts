@@ -74,11 +74,13 @@ try {
   const saved = () => p.evaluate(() => JSON.parse(localStorage.getItem('open.works.v1') ?? '{}'))
   const hideCard = () => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
   const shot = async (n: string) => { await hideCard(); try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
-  const tap = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (!b) return false; await p.mouse.click(b.x, b.y); return true }
+  const tap = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'nearest', inline: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (!b) return false; await p.mouse.click(b.x, b.y); return true }
   const poll = async (fn: () => Promise<boolean>, ms = 10000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(250) } return false }
   const view = () => p.evaluate(() => (window as any).__build.view())
   const settled = () => poll(async () => { const a = await view(); await sleep(500); const b = await view(); return Math.hypot(a.x - b.x, a.z - b.z) < 0.02 && Math.abs(a.yaw) < 0.01 && Math.abs(a.h - b.h) < 0.05 }, 60000)
   const pickerOn = (h: string) => poll(() => p.evaluate((h: string) => !(document.querySelector(`[data-found="${h}"]`) as HTMLButtonElement | null)?.disabled, h), 15000)
+  // the phone bar keeps the Foundation picker behind its 'house' button (a tool tap closes it again)
+  const houseOpen = async () => { if (PHONE && await p.evaluate(() => document.querySelector('[data-act="house-settings"]')?.getAttribute('aria-pressed') !== 'true')) { await tap('[data-act="house-settings"]'); await sleep(400) } }
   const pressed = (h: string) => p.evaluate((h: string) => document.querySelector(`[data-found="${h}"]`)?.getAttribute('aria-pressed') === 'true', h)
   const press = async (x: number, y: number) => { await p.evaluate((px: number, py: number) => { for (const e of document.elementsFromPoint(px, py)) { if (e.tagName === 'CANVAS') break; (e as HTMLElement).style.pointerEvents = 'none'; (e as HTMLElement).dataset.pe = '1' } }, x, y); await p.mouse.move(x, y); await p.mouse.down(); await sleep(120); await p.mouse.move(x + 1, y + 1); await p.mouse.up(); await p.evaluate(() => document.querySelectorAll<HTMLElement>('[data-pe]').forEach(e => { e.style.pointerEvents = ''; delete e.dataset.pe })) }
   const st = () => p.evaluate(() => { const a = (window as any).__ather.state(); return { x: a.px as number, y: a.py as number, z: a.pz as number } })
@@ -94,13 +96,13 @@ try {
   ok(await poll(() => p.evaluate(() => (window as any).__build?.on() === true)), 'E at the table, Plan: flying')
   await tap('[data-tool="walls"]'); await sleep(400)
   // 1. house Low
-  await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), X0 + 5, Z0 + 4); await settled()
+  await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), X0 + 5, Z0 + 4); await settled(); await houseOpen()
   ok(await pickerOn('0.6') && await pressed('0'), '   aimed at the house: the picker shows None')
   const b0 = await count('stone_brick')
   ok(await tap('[data-found="0.6"]') && await poll(async () => (await saved()).foundCells?.[`${X0 + 1},${Z0 + 1}`] === 0.6), '1. Low raises the house to 0.6 m')
   ok(b0 - (await count('stone_brick')) === 80, `   for its 80 m² (${b0 - (await count('stone_brick'))} bricks)`)
   // 2. the Farm, High
-  await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), FARM.x, FARM.z); await settled()
+  await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), FARM.x, FARM.z); await settled(); await houseOpen()
   ok(await poll(() => pressed('0'), 8000), '   aimed at the Farm: the picker shows the Farm\'s None (the house\'s Low is not the Farm\'s)')
   const b1 = await count('stone_brick')
   ok(await tap('[data-found="1.2"]') && await poll(async () => (await saved()).rooms?.[0]?.found === 1.2), '2. High raises the prefab Farm to 1.2 m (its own value)')
