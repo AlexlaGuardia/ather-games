@@ -80,7 +80,7 @@ export function landingRails(k: string, s: Stair, base: number): Box[] {
   const p = parseStair(k)!, tr = treads(s), la = FLIGHT * TREAD, far = la + WIDTH, out: Box[] = []
   const seg = (a0: number, a1: number, b0: number, b1: number, top: number) => {
     const [xa, za] = toW(p.i, p.j, s.dir, a0, b0), [xb, zb] = toW(p.i, p.j, s.dir, a1, b1)
-    out.push({ x0: Math.min(xa, xb), x1: Math.max(xa, xb), z0: Math.min(za, zb), z1: Math.max(za, zb), y0: base - 0.5, y1: base + top * RISE + RAIL_UP })
+    out.push({ x0: Math.min(xa, xb), x1: Math.max(xa, xb), z0: Math.min(za, zb), z1: Math.max(za, zb), y0: base - 0.5, y1: base + Math.min(top * RISE + RAIL_UP, STAIR_STOREY) })   // capped at the floor above: up there the hole's own railing (holeRails) takes over
   }
   for (const t of tr.slice(FLIGHT)) seg(far - RAIL_T, far, t.b0, t.b1, t.top)                        // the far edge: the landing, then each turned step
   const side = s.turn === 'r' ? [0, RAIL_T] : [WIDTH - RAIL_T, WIDTH]                                // the landing's side away from the turn

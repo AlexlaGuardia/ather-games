@@ -35,6 +35,7 @@ for (const d of [0, 1, 2, 3] as Dir[]) for (const t of ['l', 'r'] as Turn[]) {
   ok(rb.length === FLIGHT + 2 && rb.every(b => { for (let x = Math.floor(b.x0 + 1e-6); x < b.x1 - 1e-6; x++) for (let z = Math.floor(b.z0 + 1e-6); z < b.z1 - 1e-6; z++) if (!cs.has(`${x},${z}`)) return false; return true }), `dir ${d} ${t}: the landing rails stand inside the stair's own cells (${rb.length})`)
 }
 ok(landingRails('5,5', { mat: 'goldwood', dir: 0 }, 2).length === 0, 'a straight stair has no landing rails')
+ok(landingRails('5,5', { mat: 'goldwood', dir: 0, turn: 'r' }, 2).every(b => b.y1 <= 2 + STOREY + 1e-9), 'no landing rail pokes up through the floor above (the hole railing takes over there)')
 ok(stairCells(5, 5, 0).length === 12 && stairCells(5, 5, 0, undefined).join() === stairCells(5, 5, 0).join(), 'no turn = the straight footprint')
 
 // toggle + cost + adopt
