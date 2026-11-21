@@ -1,7 +1,7 @@
 // ── M58 (2) ROAD RIBBONS, SEEN (2026-11-21, play / Jin play b7763e94) ──────────────────────────────────────────────
 // BEFORE/AFTER shots of the same views for Alex: run once with --roads legacy (today's drawer) and once with --roads ribbon.
 // Headless CAN judge shape (unlike flicker): gaps, notches and overlaps at joins are in the picture. Spots: tee j7, roundabout
-// j22, town square j4 (Ashfeld), and Ashfeld's lanes. Each from out along an arm, near (steep) and wide. No pass/fail: the
+// j22, town square j4 (Ashfeld), and one Ashfeld street, each from an ELEVATED pinned camera (~50 deg down). No pass/fail: the
 // shots ARE the proof; it fails only on a page error or a missing junction.
 //   npx tsx scripts/road-shot.mts [--url https://ather.games] [--roads legacy|ribbon] [--out dir]
 import puppeteer from 'puppeteer-core'
@@ -17,22 +17,25 @@ await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRun
 await p.goto(`${url}/shimmer/open/continent?hour=14&roads=${roads}`, { waitUntil: 'load', timeout: 240000 })
 await p.waitForFunction(() => !!(window as any).__drive?.footTp, { timeout: 240000 }); await sleep(4000)
 const hideCard = () => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => { const t = d.textContent ?? ''; return /the darter/i.test(t) && /press any key/i.test(t) /* the title is CSS-uppercased: match the text, not the look */ }); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
-const js = await p.evaluate(async () => (await (await fetch('/open/continent.json')).json()).network.junctions as { id: string; x: number; z: number; r: number; arms: { ang: number }[] }[])
+const js = await p.evaluate(async () => (await (await fetch('/open/continent.json')).json()).network.junctions as { id: string; x: number; z: number; r: number; y: number; arms: { ang: number }[] }[])
 const shots: string[] = []
-const view = async (name: string, x: number, z: number, tx: number, tz: number, pitch: number) => {
-  const yaw = Math.atan2(-(tx - x), -(tz - z))
-  await p.evaluate((a: number, b: number, c: number, d: number) => (window as any).__drive.footTp(a, b, c, d), x, z, yaw, pitch); await sleep(3500)
-  await hideCard(); const f = `${out}/${name}.png`; await p.screenshot({ path: f }); shots.push(f)
+// ELEVATED (hub 11-21: the first set's foot-level views showed grass and walls): walk there so the ground loads, then pin
+// the camera with the page's own shot hook (__drive.shot), `up` m above the target and `out` m back, ~50 deg down.
+const view = async (name: string, x: number, z: number, y: number, ang: number, up = 32, out = 27) => {
+  await p.evaluate((a: number, b: number) => (window as any).__drive.footTp(a + 2, b + 2, 0, -0.3), x, z); await sleep(3000)
+  const gy = Number.isFinite(y) ? y : await p.evaluate(() => (window as any).__drive.foot().y as number) - 0.05
+  await p.evaluate((q: number[]) => (window as any).__drive.shot(q), [x + Math.cos(ang) * out, gy + up, z + Math.sin(ang) * out, x, gy, z]); await sleep(2500)
+  await hideCard(); const f = `${out_}/${name}.png`; await p.screenshot({ path: f }); shots.push(f)
+  await p.evaluate(() => (window as any).__drive.shot(null))
 }
+const out_ = out
 for (const id of ['j7', 'j22', 'j4']) {
   const j = js.find(q => q.id === id); if (!j) { errs.push(`no junction ${id}`); continue }
-  // between two arms (so the camera sees where they meet), near and steep, then wide
-  const a = j.arms.length > 1 ? (j.arms[0].ang + j.arms[1].ang) / 2 : j.arms[0].ang + 0.6
-  for (const [tag, d, pitch] of [['near', j.r + 4, -0.75], ['wide', j.r + 22, -0.32]] as const)
-    await view(`${id}-${tag}`, j.x + Math.cos(a) * d, j.z + Math.sin(a) * d, j.x, j.z, pitch)
+  const a = j.arms.length > 1 ? Math.atan2(Math.sin(j.arms[0].ang) + Math.sin(j.arms[1].ang), Math.cos(j.arms[0].ang) + Math.cos(j.arms[1].ang)) : j.arms[0].ang + 0.6
+  await view(id, j.x, j.z, j.y, a + Math.PI / 4)
 }
-// Ashfeld's lanes: from the square's edge looking into the town
-await view('ashfeld-lanes', 241 + 30, -2100 + 30, 241, -2100, -0.4)
+// one Ashfeld street with its kerbs: the town just off its square (j4), closer in
+{ const j = js.find(q => q.id === 'j4'); if (j) await view('ashfeld-street', j.x - 45, j.z - 40, NaN, -2.2, 20, 16) }
 console.log(JSON.stringify({ url, roads, shots, errs }))
 console.log(errs.length ? `FAIL: ${errs.join('; ')}` : `PASS: ${shots.length} shots (roads=${roads}) in ${out}`)
 await br.close(); process.exit(errs.length ? 1 : 0)
