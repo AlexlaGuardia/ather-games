@@ -35,7 +35,7 @@ for (const id of ['j7', 'j22', 'j4']) {
   await view(id, j.x, j.z, j.y, a + Math.PI / 4)
 }
 // one Ashfeld street with its kerbs: the town just off its square (j4), closer in
-{ const j = js.find(q => q.id === 'j4'); if (j) await view('ashfeld-street', j.x - 45, j.z - 40, NaN, -2.2, 20, 16) }
+{ const j = js.find(q => q.id === 'j4'); if (j) { const a = j.arms[0].ang + Math.PI; await view('ashfeld-street', j.x + Math.cos(a) * 30, j.z + Math.sin(a) * 30, j.y, a + 1.2, 16, 12) } }   // 30 m into town from the square, at the square's height (a ground read off the square hit the river)
 console.log(JSON.stringify({ url, roads, shots, errs }))
 console.log(errs.length ? `FAIL: ${errs.join('; ')}` : `PASS: ${shots.length} shots (roads=${roads}) in ${out}`)
 await br.close(); process.exit(errs.length ? 1 : 0)
