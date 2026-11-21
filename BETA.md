@@ -167,6 +167,8 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
+- **M49 deed grid = the shipyard's YARD (hub's call 11-21, world b7e6b9b2):** canon says 'place things in, furnish what's built', but you deferred interiors 11-16 (shop-panel.tsx), so slice 1 puts the 12x8 m deed grid in the shipyard's fenced yard; the model is shape-agnostic, an interior grid can reuse it later. Object if you meant inside the building.
+
 - **ROAD RIBBONS DEFAULT? (11-21, M58 p2):** 6 elevated before/after shots on your phone (j7 tee, j22 roundabout, j4 Ashfeld square). Hub's take: ribbons clearly better (legacy road stops short of the square, ribbon runs in; kerbs + pavement). Yes -> play flips the default.
 
 
