@@ -70,7 +70,7 @@ try {
   // 4 · let go: holds ~3 s, gone by ~4 s (measured from the last click; a reload may run meanwhile)
   const t0 = Date.now()
   await sleep(2300)
-  { const g = await geo(p); ok(!!g && g.cx < g.w / 2 && g.h >= 50, `M51 desktop: bubble on the LEFT half, ~2x tall (${JSON.stringify(g)})`) }
+  { const g = await geo(p); ok(!!g && g.cx > g.w / 2 && g.h >= 50, `M51 desktop: bubble on the RIGHT half by the glove, ~2x tall (${JSON.stringify(g)})`) }
   ok(await drawn(), `4. still shown ${((Date.now() - t0) / 1000).toFixed(1)} s after release`)
   ok(await poll(async () => !(await drawn()), 6000), `4. gone after the hold (${((Date.now() - t0) / 1000).toFixed(1)} s)`)
   ok(Date.now() - t0 >= 3000, '4. not before ~3 s')
@@ -136,7 +136,7 @@ try {
   await ph.touchscreen.touchStart(fb.x, fb.y)
   const shownPh = await poll(() => ph.evaluate(() => !!document.querySelector('[data-morel-bubble]')), 20000)
   ok(shownPh, '9. phone: holding FIRE shows the bubble')
-  { const g = await geo(ph); ok(!!g && g.cx < g.w / 2 && g.h >= 50, `M51 phone: bubble on the LEFT half, ~2x tall (${JSON.stringify(g)})`) }
+  { const g = await geo(ph); ok(!!g && g.cx > g.w / 2 && g.h >= 50, `M51 phone: bubble on the RIGHT half by the glove, ~2x tall (${JSON.stringify(g)})`) }
   const hits = await ph.evaluate(() => {
     const b = document.querySelector('[data-morel-bubble]')?.getBoundingClientRect(); if (!b) return ['no bubble']
     const pad = 2, over = (r: DOMRect) => r.width > 0 && r.height > 0 && b.left < r.right - pad && b.right > r.left + pad && b.top < r.bottom - pad && b.bottom > r.top + pad
