@@ -14,7 +14,7 @@ import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { HearthFrame, HearthButton, Well, H, hearthDisplay } from '../../ui/hearth'
 import { getInv, setInv, useInv } from '../shared/bag'
-import { countOf, itemDef, give, makeBait, BAIT_FROM, HOTBAR, SLOTS, type Stack, type Inv } from '../shared/inventory'
+import { countOf, itemDef, give, makeBait, BAIT_FROM, baitYield, HOTBAR, SLOTS, type Stack, type Inv } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
 import { GROUND_Y, squareAt, sqId } from './plot'
 import { forestryLevel } from './forestry'
@@ -1546,7 +1546,7 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
               {foods.map(id => (
                 <div key={id} data-bait-from={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ flex: 1, fontSize: 13.5, color: H.ink }}>{itemDef(id).name} <span style={{ color: H.inkSoft }}>× {benchCount(r, inv, id)}</span></span>
-                  <HearthButton small onClick={() => { const m = makeBaitAt(getW(), r.id, getInv(), id); if (m) { setWorks(m.works); setInv(m.inv) } else hudSay('No room for the bait. Clear a slot in your bag.', 'info') }}>Make bait +{BAIT_FROM[id]}</HearthButton>
+                  <HearthButton small onClick={() => { const m = makeBaitAt(getW(), r.id, getInv(), id); if (m) { setWorks(m.works); setInv(m.inv) } else hudSay('No room for the bait. Clear a slot in your bag.', 'info') }}>Make bait +{baitYield(inv, id)}</HearthButton>
                 </div>
               ))}
             </div>

@@ -14,7 +14,7 @@
 import type { Box } from '../terrain-world'
 import { squareAt, sqId, GATE, GREG_PLOT_ANCHOR as GREG, THRESHOLD, PATH_START, GROUND_Y } from './plot'
 import { gardenKey } from '@/lib/keeper-local'
-import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, BAIT_FROM, type Inv, type Stack } from '../shared/inventory'
+import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, baitYield, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
 import { FURNITURE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, keepstoneFor, ALC_LIVE, type Job } from './furniture'
 import { adoptWork, adoptOut, stockJobs, type Work, type Station } from './station-queue'
@@ -342,7 +342,7 @@ export const benchCount = (r: Room, inv: Inv, id: string) => roomStore(r).stacks
 /** Cut ONE food into bait at the Rinnshop bench: from the room's store first, else the bag. The bait goes to the bag (you
  *  cast from your hands); if the bag is full it waits in the store. Null when there is nothing to cut or nowhere for it. */
 export function makeBaitAt(w: Works, roomId: string, inv: Inv, id: string): { works: Works; inv: Inv; made: number } | null {
-  const r = w.rooms.find(x => x.id === roomId), made = BAIT_FROM[id]
+  const r = w.rooms.find(x => x.id === roomId), made = baitYield(inv, id)   // +1 once the Bait Page is read
   if (!r || r.kind !== 'rinnshop' || !made) return null
   let store = roomStore(r), bag: Inv | null = inv
   const k = store.stacks.findIndex(s => s.id === id)

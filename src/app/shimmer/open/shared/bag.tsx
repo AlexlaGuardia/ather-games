@@ -10,7 +10,7 @@ import React, { useState, useSyncExternalStore } from 'react'
 import { HearthFrame, HearthLabel, Well, H, hearthDisplay } from '../../ui/hearth'
 import type { HotbarEntry } from '../../hud/hotbar'
 import { loadWaymarks } from '../ather/waymarks'
-import { HOTBAR, BAG, SLOTS, itemDef, loadInv, saveInv, move, split, quickMove, makeBait, BAIT_FROM, type Inv } from './inventory'
+import { HOTBAR, BAG, SLOTS, itemDef, loadInv, saveInv, move, split, quickMove, makeBait, BAIT_FROM, baitYield, readBaitPage, hasGift, BAIT_PAGE, GIFT_BAIT_READ, type Inv } from './inventory'
 
 // ── the store ────────────────────────────────────────────────────────────────────────────────────────────────
 let inv: Inv | null = null
@@ -107,7 +107,14 @@ export function BagBody({ sel }: { sel: number }) {
                 <button type="button" data-act="make-bait" className="ml-auto shrink-0 rounded-[10px] px-3 py-2 text-[13px] font-semibold"
                   style={{ ...hearthDisplay, color: H.ink, background: 'rgba(255,250,235,.85)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}
                   onClick={() => { const r = makeBait(i, shown.id); if (r) setInv(r.inv) }}>
-                  Make bait +{BAIT_FROM[shown.id]}
+                  Make bait +{baitYield(i, shown.id)}
+                </button>
+              ) : shown.id === BAIT_PAGE ? (
+                // Yarrow's page (inventory.ts › readBaitPage): read once, every bait cut after makes one more
+                <button type="button" data-act="read-page" disabled={hasGift(i, GIFT_BAIT_READ)} className="ml-auto shrink-0 rounded-[10px] px-3 py-2 text-[13px] font-semibold disabled:opacity-50"
+                  style={{ ...hearthDisplay, color: H.ink, background: 'rgba(255,250,235,.85)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}
+                  onClick={() => { const r = readBaitPage(i); if (r) setInv(r) }}>
+                  {hasGift(i, GIFT_BAIT_READ) ? 'Learned' : 'Read'}
                 </button>
               ) : null}
             </>

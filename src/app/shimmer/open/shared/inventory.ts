@@ -135,6 +135,31 @@ for (const [id, f] of Object.entries(DISHES)) { OPEN_ITEMS[id] = { name: f.name,
 //    clicked to drink (ather/page.tsx). Icons: tools/art/potion_icons.py.
 for (const [id, p] of Object.entries(POTIONS)) { OPEN_ITEMS[id] = { name: p.name, blurb: p.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 20, kind: 'material' }; ITEM_GROUP[id] = 'alchemy' }
 export const BAIT_FROM: Readonly<Record<string, number>> = { mast: 2, shimmerscale: 3, clickclaw: 3, glowfin: 3 }
+// YARROW'S BAIT PAGE (canon: CANON/game/yarrow-baitmaker-lines-script.md › C, SIGNED 11-21; build = hub 9bf57e68 #15615): Yarrow's
+//    teach beat hands the keeper a Mast (the look-alike, kept), a few Bait and this page. READING it once (the bag card) marks
+//    the bag; from then every bait cut, in the bag or at the Rinnshop bench, makes one more. Nothing is gated on it.
+//    Both marks ride in `gifts` because that record already survives every bag op and every reload (the 11-16 fix).
+export const BAIT_PAGE = 'bait_page'
+export const GIFT_YARROW_TAUGHT = 'yarrow_teach', GIFT_BAIT_READ = 'bait_page_read'
+export const YARROW_GIFT_BAIT = 3
+OPEN_ITEMS[BAIT_PAGE] = { name: 'Bait Page', blurb: 'A folded page from Yarrow. Read it once: every bait you cut after makes one more.', icon: '', stack: 1, kind: 'material' }
+export const hasGift = (inv: Inv, g: string) => (inv.gifts ?? []).includes(g)
+const withGift = (inv: Inv, g: string): Inv => (hasGift(inv, g) ? inv : { ...inv, gifts: [...(inv.gifts ?? []), g] })
+/** How much bait one `id` cuts into for this bag: the table, +1 once the Bait Page is read. 0 = not bait food. */
+export const baitYield = (inv: Inv, id: string) => (BAIT_FROM[id] ? BAIT_FROM[id] + (hasGift(inv, GIFT_BAIT_READ) ? 1 : 0) : 0)
+/** Read the Bait Page: null when the bag holds no page or it is already read. */
+export function readBaitPage(inv: Inv): Inv | null {
+  if (hasGift(inv, GIFT_BAIT_READ) || countOf(inv, BAIT_PAGE) < 1) return null
+  return withGift(inv, GIFT_BAIT_READ)
+}
+/** Yarrow's teach beat hands over the Mast, the Bait and the page, once. All or nothing: null when already taught or when
+ *  it would not all fit (the beat stays armed, so the page is never lost to a full bag). */
+export function yarrowTeach(inv: Inv): Inv | null {
+  if (hasGift(inv, GIFT_YARROW_TAUGHT)) return null
+  let out = inv
+  for (const [id, n] of [['mast', 1], ['bait', YARROW_GIFT_BAIT], [BAIT_PAGE, 1]] as const) { const r = give(out, id, n); if (r.left > 0) return null; out = r.inv }
+  return withGift(out, GIFT_YARROW_TAUGHT)
+}
 /** What the HUD says when the last bait is gone: where more comes from, so it is never a dead end. */
 export const NO_BAIT_LINE = 'No bait left. Make more in the bag from a small catch, or mast off a pruned tree.'
 // FARMING (ather/farming.ts): graded seeds and crops are ids, not table rows: `seed:<crop>:<grade>`, `crop:<crop>:<grade>`.
@@ -198,7 +223,7 @@ export function take(inv: Inv, id: string, n: number): Inv | null {
 }
 /** Cut ONE of `id` into bait (BAIT_FROM). Null when it is not bait food, the bag has none, or the bait would not fit. */
 export function makeBait(inv: Inv, id: string): { inv: Inv; made: number } | null {
-  const made = BAIT_FROM[id]; if (!made) return null
+  const made = baitYield(inv, id); if (!made) return null
   const less = take(inv, id, 1); if (!less) return null
   const r = give(less, 'bait', made)
   return r.left > 0 ? null : { inv: r.inv, made }

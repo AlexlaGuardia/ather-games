@@ -3,7 +3,8 @@
 // bubble (in the Canvas), the answers (on the HUD) and the camera focus. Recruit / bring go through settlement-folk.ts untouched.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getInv, setInv, useInv } from '../shared/bag'
-import { countOf, take } from '../shared/inventory'
+import { countOf, take, hasGift, yarrowTeach, GIFT_YARROW_TAUGHT, YARROW_GIFT_BAIT } from '../shared/inventory'
+import { useQuest, firstCatch } from './use-rinquest'
 import { hudSay } from '../shared/hud-say'
 import type { TalkNode } from '../shared/npc-talk'
 import type { Settlement } from './network'
@@ -20,6 +21,10 @@ import { MOGLIN_HEIGHT } from '../shared/moglin-model'
 export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number) => number, onClose: () => void) {
   const phone = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches   // M46 card sizing; page.tsx untouched
   const inv = useInv()
+  const quest = useQuest()
+  // Yarrow's teach beat is due once a rinstick has been held (rinquest `stick`; a keeper from before M22 closed the quest
+  // already) and the page has not been handed over yet
+  const canTeach = (!!quest.stick || quest.state === 'done') && !hasGift(inv, GIFT_YARROW_TAUGHT), hasCatch = !!firstCatch(inv)
   const [village, setVillage] = useState(() => loadVillage())
   const [trust, setTrust] = useState(() => loadTrust())
   const [st, setSt] = useState<FolkTalkState | null>(null)
@@ -39,8 +44,13 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
   const node: TalkNode | null = useMemo(() => {
     if (!s || !st) return null
     const home = stillHome(folk, village), room = VILLAGE_CAP[0] - village.moglins.length   // stage gating is play's: stage 0
-    const n = folkTalk({ folk, home, trust, have: id => countOf(invRef.current, id), room, homeName: s.name }, st, {
+    const n = folkTalk({ folk, home, trust, have: id => countOf(invRef.current, id), room, homeName: s.name, yarrow: { canTeach, hasCatch } }, st, {
       go: setSt, bye: onClose,
+      teach: () => {
+        const next = yarrowTeach(getInv())
+        if (!next) { hudSay('Clear a few slots in your bag first.', 'info'); return false }
+        setInv(next); hudSay(`Mast, Bait ×${YARROW_GIFT_BAIT}, Bait Page`, 'item'); return true
+      },
       give: (f, id, n) => {
         const left = wantsLeft(f, trust).find(w => w.id === id)?.n ?? 0, k = Math.min(left, n, countOf(getInv(), id)); if (k <= 0) return
         const next = take(getInv(), id, k); if (!next) return
@@ -56,7 +66,7 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
     // M46: the card rides on the node as a HUD panel above the answers (TalkChoices draws it; page.tsx needs no change)
     return n.card ? { ...n, panel: <MoglinCard card={n.card} id={st.fid} phone={phone} /> } : n
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, st, folk, village, trust, haveKey])
+  }, [s, st, folk, village, trust, haveKey, canTeach, hasCatch])
   const f = st ? folk.find(x => x.id === st.fid) : undefined
   // the bubble + the talk camera sit on THAT Moglin (its spot, the ground asked now); a Moglin no longer home (just recruited)
   // or none at all: the settlement's own anchor

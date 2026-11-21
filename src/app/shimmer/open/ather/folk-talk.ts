@@ -12,6 +12,7 @@ import { wantsLeft, trusted, type Folk, type Trust } from './settlement-folk'
 import { talkLine } from './folk-lines'
 import { itemDef } from '../shared/inventory'
 import { cardOf, type CardView } from './moglin-card'
+import { YARROW_TEACH, YARROW_BARKS, LISTEN } from './yarrow-teach'
 
 export const ASK = { needs: 'What do you need?', room: 'Would you keep a room for me?', others: 'Who else lives here?', back: 'Anything else?', bye: 'See you soon.', inspect: 'Inspect' }   // M46: 'Inspect' is Alex's word (11-20)
 export const FOLK_NO_ROOM = 'Your garden is full just now. Ask me again when there is a free room.'
@@ -20,20 +21,32 @@ export const giveLabel = (n: number, id: string) => `Bring ${n} ${itemDef(id).na
 export const goodsText = (ws: { id: string; n: number }[]) => ws.map(w => `${w.n} ${itemDef(w.id).name}`).join(' and ')
 
 /** Where the talk is: whose bubble, which screen, and (after an answer) the line it said. */
-export interface FolkTalkState { fid: string; screen: 'hello' | 'needs' | 'said' | 'card'; line?: string; /** M40: this hello is a repeat (a Glade Moglin says its alternate) */ alt?: boolean }
+export interface FolkTalkState { fid: string; screen: 'hello' | 'needs' | 'said' | 'card' | 'teach'; line?: string; /** M40: this hello is a repeat (a Glade Moglin says its alternate) */ alt?: boolean
+  /** how many times this Moglin was heard before this hello (Yarrow's third repeat line) */ rep?: number
+  /** Yarrow's teach beat: which page of it, and the answer given */ step?: number; answer?: 'pointed' | 'silent' }
 // M40: Glade Moglins heard this visit (a repeat talk gets the alternate line). Per page, not saved: a new visit starts fresh.
-const heard = new Set<string>()
+const heard = new Map<string, number>()
 /** a hello state for `fid`, marking it heard (the NEXT hello is a repeat) */
-export function helloFor(fid: string): FolkTalkState { const alt = heard.has(fid); heard.add(fid); return { fid, screen: 'hello', alt } }
+export function helloFor(fid: string): FolkTalkState { const rep = heard.get(fid) ?? 0; heard.set(fid, rep + 1); return { fid, screen: 'hello', alt: rep > 0, rep } }
 export const _resetHeard = () => heard.clear()
-export interface FolkTalkCtx { folk: Folk[]; home: Folk[]; trust: Trust; have: (id: string) => number; room: number; /** the card's home line (M46) */ homeName?: string }
-/** M46: a talk node may carry the Moglin's card (the HUD draws it above the answers) */
-export type FolkTalkNode = TalkNode & { card?: CardView }
+export interface FolkTalkCtx { folk: Folk[]; home: Folk[]; trust: Trust; have: (id: string) => number; room: number; /** the card's home line (M46) */ homeName?: string
+  /** Yarrow (the Glade bait-maker): the teach beat is due (a rinstick held, the page not yet handed), the keeper carries a catch */
+  yarrow?: { canTeach: boolean; hasCatch: boolean } }
+/** M46: a talk node may carry the Moglin's card (the HUD draws it above the answers); `scene` = a stage direction over the line */
+export type FolkTalkNode = TalkNode & { card?: CardView; scene?: string }
+export const isGladeYarrow = (fid: string) => isGlade(fid) && fid.split(':').pop() === 'yarrow'
+/** Yarrow's hello outside the teach beat: a catch in the bag gets B2; repeats go alt, B1, alt, B1 ... */
+export function yarrowHello(rep: number, hasCatch: boolean, base: string): string {
+  if (hasCatch) return YARROW_BARKS.catch
+  return rep >= 2 && rep % 2 === 0 ? YARROW_BARKS.jars : base
+}
 export interface FolkTalkActs {
   go: (s: FolkTalkState) => void
   give: (f: Folk, id: string, n: number) => void
   recruit: (f: Folk) => void        // saves the village; the talk then shows `line` via go()
   bye: () => void
+  /** Yarrow's teach beat hands over the Mast, the Bait and the page. False = it did not happen (a full bag): the beat stays armed. */
+  teach?: (answer: 'pointed' | 'silent') => boolean
 }
 
 export const folkStart = (home: Folk[]): FolkTalkState => (home[0] ? helloFor(home[0].id) : { fid: '', screen: 'hello' })
@@ -69,8 +82,23 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): 
       ],
     }
   }
+  if (st.screen === 'teach' && isGladeYarrow(f.id)) {
+    // ★ the beat (CANON/game/yarrow-baitmaker-lines-script.md › C): both answers reach the page; leaving mid-way re-arms it
+    const T = YARROW_TEACH, step = st.step ?? 0, to = (n: number, answer = st.answer) => act.go({ fid: f.id, screen: 'teach', step: n, answer })
+    if (step <= 0) return { scene: T.open.scene, line: T.open.line, options: [{ label: LISTEN, pick: () => to(1) }, bye] }
+    if (step === 1) {
+      const answer = (a: 'pointed' | 'silent') => ({ label: T.options[a], pick: () => { if (act.teach?.(a) ?? false) to(2, a) } })
+      return { scene: T.hand.scene, line: '', options: [answer('pointed'), answer('silent')] }
+    }
+    if (step === 2) return { line: st.answer === 'pointed' ? T.pointed : T.silent, options: [{ label: LISTEN, pick: () => to(3) }] }
+    if (step === 3) return { scene: T.page.scene, line: T.page.lines[0], options: [{ label: LISTEN, pick: () => to(4) }] }
+    return { line: T.page.lines[1], options: [{ label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello', alt: true, rep: 1 }) }, bye] }
+  }
   if (st.screen === 'said') return { line: st.line ?? f.dream, options: [{ label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello' }) }, ...(next ? [next] : []), bye] }
-  const hello = gladeHello(f.id, !!st.alt) ?? f.dream
+  // ★ Yarrow's teach beat replaces the hello on the first talk after a rinstick (closing the box leaves it armed)
+  if (st.screen === 'hello' && isGladeYarrow(f.id) && c.yarrow?.canTeach) return folkTalk(c, { fid: f.id, screen: 'teach', step: 0 }, act)
+  const base = gladeHello(f.id, !!st.alt) ?? f.dream
+  const hello = isGladeYarrow(f.id) ? yarrowHello(st.rep ?? (st.alt ? 1 : 0), !!c.yarrow?.hasCatch, base) : base
   const inspect = { label: ASK.inspect, pick: () => act.go({ fid: f.id, screen: 'card', alt: st.alt }) }
   if (st.screen === 'card') return { line: hello, card: cardOf(f, c.trust, c.homeName ?? f.home), options: [{ label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello', alt: st.alt }) }, bye] }
   return { line: hello, options: [...(f.employed && !ok ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, inspect, ...(next ? [next] : []), bye] }

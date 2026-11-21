@@ -1165,7 +1165,7 @@ function AtherSliceGame() {
             groundAt={ww ? (x: number, z: number) => biomeGround(ww.biomeAt(x, z)) : undefined}
             safe={{ x: GLADE_GREEN.x, z: GLADE_GREEN.z, r: 50 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
         )}
-        {folkTalk.node && folkTalk.bubbleAt && zone.kind === 'wilds' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} />}
+        {folkTalk.node && folkTalk.bubbleAt && zone.kind === 'wilds' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} scene={(folkTalk.node as { scene?: string }).scene} />}
         {zone.kind === 'plot' && tableVisit && (() => { const g = TABLE_STOP.at, p = poseRef.current; return (
           <group position={[g.x, plotHeightAt(g.x, g.z), g.z]} rotation-y={Math.atan2(p.x - g.x, p.z - g.z)}><FolkModel look={folkLook('gregory')} action={tourNode || talkNode ? 'talk' : 'idle'} /></group>) })()}
         {(talkNode ?? tourNode) && (zone.kind === 'wilds' || tableVisit) && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} />}

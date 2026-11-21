@@ -38,6 +38,9 @@ export const STATIONS: Readonly<Record<string, readonly Part[]>> = {
     ...[-3.4, 3.4].map(s => ({ ahead: 0.6, side: s, w: 1.3, d: 1.3, h: 0.7, color: DARK, solid: true })),
     { ahead: -3.1, side: 0, w: 4, d: 0.6, h: 1.9, color: DARK, solid: true },
     ...[-1.4, -0.4, 0.6, 1.6].map(s => ({ ahead: -2.75, side: s, w: 0.35, d: 0.35, h: 0.35, y0: 1.2, color: JAR })),
+    // the teach beat's two jars ON the counter, a jar of Mast and a jar of Bait, the same look on purpose (yarrow-teach.ts:
+    // "Point at the other jar." only reads if the look-alike is visible)
+    ...[-0.6, 0.6].map(s => ({ ahead: 0.6, side: s, w: 0.38, d: 0.38, h: 0.42, y0: 0.9, color: JAR })),
   ],
   // Mallow's shop: a counter facing the green under an awning, crates beside it
   mallow: [
