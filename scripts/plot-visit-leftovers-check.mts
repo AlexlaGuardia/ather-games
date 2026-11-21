@@ -55,7 +55,11 @@ const ev = (p: Page, obj: string, f: string) => p.evaluate((o: string, k: string
 const drawn = (p: Page) => p.evaluate(() => (window as any).__moglinsDrawn?.() ?? null) as Promise<string[] | null>
 const bed0 = async (p: Page) => ((await ev(p, '__farm', 'beds')) as (string | null)[] | undefined)?.[0] ?? null
 const fennel = async (p: Page) => !!(await ev(p, '__ather', 'fennelAt'))
-const saves = (p: Page) => p.evaluate(() => ['open.works.v1', 'open.village.v1', 'open.farm.v1'].map(k => localStorage.getItem(k)).join('|'))
+// works + farm exactly; the village by WHO works WHERE (its own tick moves acc / lastTick with real time, at home and at load)
+const saves = (p: Page) => p.evaluate(() => {
+  const v = JSON.parse(localStorage.getItem('open.village.v1') ?? 'null')
+  return [localStorage.getItem('open.works.v1'), JSON.stringify((v?.moglins ?? []).map((m: any) => [m.id, m.profession, m.room ?? null])), localStorage.getItem('open.farm.v1')].join('|')
+})
 async function open(tag: string, seed: Record<string, object>, phone = false): Promise<Page> {
   const p = await (await br.createBrowserContext()).newPage()
   await p.setViewport(phone ? { width: 390, height: 844, isMobile: true, hasTouch: true } : { width: 1000, height: 640 })
