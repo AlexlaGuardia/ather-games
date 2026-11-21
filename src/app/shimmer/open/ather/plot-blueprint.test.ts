@@ -1,7 +1,8 @@
 // Run: npx tsx src/app/shimmer/open/ather/plot-blueprint.test.ts
 // M39 slice 1: a blueprint is ONE drawn building re-based to 0,0; it round-trips; bad files are refused; it places centred on
 // a turned pad with its front toward the green, and the walker bumps its walls (not its doorway).
-import { connectedPieces, extractBlueprint, houseProblems, parseHouse, fitsPad, placeBlueprint } from './plot-blueprint'
+import { connectedPieces, extractBlueprint, houseProblems, parseHouse, fitsPad, placeBlueprint, bpShaft } from './plot-blueprint'
+import { levelBase } from './plot-floors'
 import { runKeys, toggleDoor, type Walls } from './plot-walls'
 import { terrainWorld } from '../terrain-world'
 let pass = 0; const fails: string[] = []
@@ -35,5 +36,29 @@ ok(Math.abs(pl2.group.rotY - Math.PI / 2) < 1e-9, 'the renderer group turns by t
 const W = terrainWorld({ ground: () => 10, water: () => [], solids: (x0: number, _y0: number, z0: number, x1: number, _y1: number, z1: number) => pl.boxes.filter(b => b.x0 <= x1 && b.x1 >= x0 && b.z0 <= z1 && b.z1 >= z0) })
 const door = pl.toWorld(3, 0), wall = pl.toWorld(5, 0)
 ok(W.bodyFree(door.x, door.z, 10) && !W.bodyFree(wall.x, wall.z, 10), 'the walker passes the doorway and is stopped by the wall beside it')
+
+// ── M47 close-out: a blueprint with a lift carries its SHAFT OPENING ──────────────────────────────────────────────────────────
+{
+  const g = loop(10, 10, 16, 15), u = loop(10, 10, 16, 15)   // a 6 x 5 house, the same room on floor 2 (built: paid by room key)
+  const lifts = [{ x: 12.5, z: 12.5, top: 1 }, { x: 14.5, z: 13.5, top: 2 }, { x: 40.5, z: 40.5, top: 1 }, { x: 11.5, z: 11.5, top: 0 }]
+  const b2 = extractBlueprint(g, {}, 'gable', 'h,10,10', 'glade-sax', 'Lift house', 1, [{ walls: u, floors: {} }], undefined, lifts)!
+  ok(JSON.stringify(b2.lifts) === JSON.stringify([{ i: 2, j: 2, top: 1 }, { i: 4, j: 3, top: 1 }]), `lifts re-based, top clamped to the kept levels, outside + top-0 dropped: ${JSON.stringify(b2.lifts)}`)
+  ok(houseProblems(b2).length === 0, `a lift blueprint is valid: ${houseProblems(b2).join('; ')}`)
+  const back = parseHouse(JSON.parse(JSON.stringify(b2)))!
+  ok(JSON.stringify(back.lifts) === JSON.stringify(b2.lifts), 'lifts survive the save round trip')
+  ok(bpShaft(back, 1).has('2,2') && bpShaft(back, 1).has('4,3') && bpShaft(back, 0).size === 0 && bpShaft(back, 2).size === 0, 'bpShaft: level 1 open over both shafts, ground + above the top closed')
+  const one = extractBlueprint(g, {}, 'gable', 'h,10,10', 'glade-sax', 'Bungalow', 1, undefined, undefined, lifts)!
+  ok(one.lifts === undefined, 'a one-storey blueprint carries no shaft (nothing to open)')
+  ok(parseHouse({ ...b2, lifts: undefined })!.lifts === undefined, 'an old blueprint (no lifts) loads with none')
+  for (const [bad, why] of [[[{ i: 9, j: 1, top: 1 }], 'outside the footprint'], [[{ i: 1, j: 1, top: 0 }], 'top 0'], [[{ i: 1, j: 1, top: 3 }], 'top above the last level'], [[{ i: 1.5, j: 1, top: 1 }], 'half a cell'], [[{ i: 1, j: 1, top: 1 }, { i: 1, j: 1, top: 1 }], 'two on one cell'], ['x', 'not a list']] as const)
+    ok(houseProblems({ ...b2, lifts: bad }).length > 0 && parseHouse({ ...b2, lifts: bad }) === null, `lifts refused: ${why}`)
+  // the walker: dropped from above the slab, it lands ON the slab beside the shaft and falls THROUGH the shaft to the ground
+  const pad = { x: 0, z: 0, yaw: 0, y: 10 }, pl2 = placeBlueprint(back, pad), slabTop = pad.y + levelBase(1)
+  const W2 = terrainWorld({ ground: () => 10, water: () => [], solids: (x0: number, _y0: number, z0: number, x1: number, _y1: number, z1: number) => pl2.boxes.filter(b => b.x0 <= x1 && b.x1 >= x0 && b.z0 <= z1 && b.z1 >= z0) })
+  const shaftAt = pl2.toWorld(2.5, 2.5), besideAt = pl2.toWorld(1.5, 1.5)
+  const slabUnder = (p: { x: number; z: number }) => pl2.boxes.some(b => b.x0 <= p.x && b.x1 >= p.x && b.z0 <= p.z && b.z1 >= p.z && Math.abs(b.y1 - slabTop) < 0.01)
+  ok(!slabUnder(shaftAt) && slabUnder(besideAt), `no slab box over the shaft cell, slab beside it (${slabUnder(shaftAt)} / ${slabUnder(besideAt)})`)
+  ok(W2.bodyFree(shaftAt.x, shaftAt.z, slabTop - 0.1) && !W2.bodyFree(besideAt.x, besideAt.z, slabTop - 0.1), 'a body fits up the open shaft through the slab line; beside it the slab is solid')
+}
 
 console.log(`plot-blueprint: ${pass} pass, ${fails.length} fail`); fails.forEach(f => console.log('  FAIL', f)); if (fails.length) process.exit(1)

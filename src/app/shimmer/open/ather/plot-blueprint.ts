@@ -4,11 +4,23 @@
 // footprint's z = 0 side: placed on a Glade lot, the front faces the green. Saved by the owner (save-house-blueprint) into
 // world/house-blueprints/<id>.json, read at runtime (no deploy). PURE.
 import { parseKey, adoptWalls, adoptRoof, adoptFloors, edgeEnds, edgeRect, findRooms, WALL_T, WALL_H, DOOR_H, type Walls, type Floors, type RoofStyle } from './plot-walls'
-import { adoptUpper, levelBase, SLAB_T, type Level } from './plot-floors'
+import { adoptUpper, levelBase, SLAB_T, MAX_LEVELS, type Level } from './plot-floors'
 import { adoptCols, parseCol, COL_T, type Cols } from './plot-cols'
 import type { Box } from '../terrain-world'
 
-export interface HouseBlueprint { v: 1; id: string; name: string; w: number; d: number; walls: Walls; floors: Floors; roof: RoofStyle; saved: number; /** M47: the floors above the ground one (level 1, 2), re-based the same way; absent = one storey */ upper?: Level[]; /** M54 (1): ground-floor columns on corners inside the footprint, re-based */ cols?: Cols }
+export interface HouseBlueprint { v: 1; id: string; name: string; w: number; d: number; walls: Walls; floors: Floors; roof: RoofStyle; saved: number; /** M47: the floors above the ground one (level 1, 2), re-based the same way; absent = one storey */ upper?: Level[]; /** M54 (1): ground-floor columns on corners inside the footprint, re-based */ cols?: Cols; /** M47 close-out: lift shafts, re-based cell + the highest level each rises through (1..); those slab cells stay open */ lifts?: BpLift[] }
+/** a lift shaft carried by a blueprint: its cell (re-based) and the top level its shaft opens (level 1..top have a hole) */
+export interface BpLift { i: number; j: number; top: number }
+export const MAX_BP_LIFTS = 8
+/** the cells ('i,j') left open in a blueprint's level k slab (k >= 1): every shaft that rises through it */
+export const bpShaft = (b: { lifts?: BpLift[] }, k: number): Set<string> => new Set((b.lifts ?? []).filter(l => k >= 1 && l.top >= k).map(l => `${l.i},${l.j}`))
+/** load-side: well-formed lifts (absent / junk = none) */
+export function adoptLifts(v: unknown): BpLift[] {
+  if (!Array.isArray(v)) return []
+  const out: BpLift[] = [], seen = new Set<string>()
+  for (const l of v.slice(0, MAX_BP_LIFTS)) { const { i, j, top } = (l ?? {}) as BpLift; if (![i, j, top].every(Number.isInteger) || i < 0 || j < 0 || top < 1 || top > MAX_LEVELS - 1 || seen.has(`${i},${j}`)) continue; seen.add(`${i},${j}`); out.push({ i, j, top }) }
+  return out
+}
 export const SAFE_HOUSE_ID = /^[a-z0-9][a-z0-9-]{0,47}$/
 export const MAX_BP_SIDE = 40, MAX_BP_PIECES = 400
 
@@ -22,7 +34,7 @@ export function connectedPieces(walls: Walls, start: string): string[] {
   return [...seen]
 }
 /** lift one building off a plot as a blueprint: its pieces + the painted floor cells inside its footprint, re-based to 0,0 */
-export function extractBlueprint(walls: Walls, floors: Floors | undefined, roof: RoofStyle, tapped: string, id: string, name: string, now = Date.now(), upper?: Level[], cols?: Cols): HouseBlueprint | null {
+export function extractBlueprint(walls: Walls, floors: Floors | undefined, roof: RoofStyle, tapped: string, id: string, name: string, now = Date.now(), upper?: Level[], cols?: Cols, lifts?: { x: number; z: number; top: number }[]): HouseBlueprint | null {
   const keys = connectedPieces(walls, tapped); if (keys.length < 1) return null
   let i0 = Infinity, j0 = Infinity, i1 = -Infinity, j1 = -Infinity
   for (const k of keys) for (const [x, z] of edgeEnds(k)) { i0 = Math.min(i0, x); j0 = Math.min(j0, z); i1 = Math.max(i1, x); j1 = Math.max(j1, z) }
@@ -43,7 +55,11 @@ export function extractBlueprint(walls: Walls, floors: Floors | undefined, roof:
     up.push({ walls: uw, floors: uf, ...(Object.keys(uc).length ? { cols: uc } : {}) })
   }
   while (up.length && !Object.keys(up[up.length - 1].walls).length && !Object.keys(up[up.length - 1].cols ?? {}).length) up.pop()
-  return { v: 1, id, name, w: i1 - i0, d: j1 - j0, walls: out, floors: fl, roof, saved: now, ...(up.length ? { upper: up } : {}), ...(Object.keys(gc).length ? { cols: gc } : {}) }
+  // M47 close-out: the lifts standing in the footprint carry their shaft opening (top clamped to the levels the blueprint keeps;
+  // a lift whose shaft opens nothing, e.g. a one-storey house, is dropped). The car itself is the plot's piece, not the blueprint's.
+  const lf: BpLift[] = []
+  for (const l of lifts ?? []) { const i = Math.floor(l.x), j = Math.floor(l.z), top = Math.min(l.top, up.length); if (i >= i0 && i < i1 && j >= j0 && j < j1 && top >= 1 && !lf.some(o => o.i === i - i0 && o.j === j - j0)) lf.push({ i: i - i0, j: j - j0, top }) }
+  return { v: 1, id, name, w: i1 - i0, d: j1 - j0, walls: out, floors: fl, roof, saved: now, ...(up.length ? { upper: up } : {}), ...(Object.keys(gc).length ? { cols: gc } : {}), ...(lf.length ? { lifts: lf.slice(0, MAX_BP_LIFTS) } : {}) }
 }
 /** what is wrong with a would-be blueprint (empty = fine); the route and the loader both ask */
 export function houseProblems(v: unknown): string[] {
@@ -59,13 +75,17 @@ export function houseProblems(v: unknown): string[] {
   const cs = Object.keys(b.cols ?? {})   // M54 (1)
   if (Object.keys(adoptCols(b.cols)).length !== cs.length) out.push('cols: a column is malformed')
   if (cs.some(k => { const p = parseCol(k); return !p || p.i < 0 || p.j < 0 || p.i > b.w || p.j > b.d })) out.push('cols: a column lies outside the footprint')
+  if (b.lifts !== undefined) {   // M47 close-out
+    if (!Array.isArray(b.lifts) || b.lifts.length > MAX_BP_LIFTS || adoptLifts(b.lifts).length !== b.lifts.length) out.push(`lifts: up to ${MAX_BP_LIFTS}, each a whole cell with top 1-${MAX_LEVELS - 1}, no two on one cell`)
+    else if (b.lifts.some(l => l.i >= b.w || l.j >= b.d)) out.push('lifts: a shaft lies outside the footprint')
+  }
   return out
 }
 /** a blueprint as stored, cleaned (null when it has problems) */
 export function parseHouse(v: unknown): HouseBlueprint | null {
   if (houseProblems(v).length) return null
   const b = v as HouseBlueprint
-  return { v: 1, id: b.id, name: b.name.trim(), w: b.w, d: b.d, walls: adoptWalls(b.walls), floors: adoptFloors(b.floors), roof: adoptRoof(b.roof), saved: Number.isFinite(b.saved) ? b.saved : 0, ...(adoptUpper(b.upper).length ? { upper: adoptUpper(b.upper) } : {}), ...(Object.keys(adoptCols(b.cols)).length ? { cols: adoptCols(b.cols) } : {}) }
+  return { v: 1, id: b.id, name: b.name.trim(), w: b.w, d: b.d, walls: adoptWalls(b.walls), floors: adoptFloors(b.floors), roof: adoptRoof(b.roof), saved: Number.isFinite(b.saved) ? b.saved : 0, ...(adoptUpper(b.upper).length ? { upper: adoptUpper(b.upper) } : {}), ...(Object.keys(adoptCols(b.cols)).length ? { cols: adoptCols(b.cols) } : {}), ...(adoptLifts(b.lifts).length ? { lifts: adoptLifts(b.lifts) } : {}) }
 }
 /** does it fit a pad (w across, d deep), either way round is NOT allowed: the front must face the green */
 export const fitsPad = (b: { w: number; d: number }, padW: number, padD: number) => b.w <= padW && b.d <= padD
@@ -96,7 +116,7 @@ export function placeBlueprint(b: HouseBlueprint, pad: { x: number; z: number; y
   // M47 slice 2: the upper levels' solids, same rules as the plot's upperBoxes (a door only its lintel, a slab under each built room
   // cell, its top at the floor), sampled small because the yaw is not a quarter turn. Slab cells are sampled 2x2 and overlap a hair.
   ;(b.upper ?? []).forEach((lv, n) => {
-    const base = pad.y + levelBase(n + 1)
+    const base = pad.y + levelBase(n + 1), shaft = bpShaft(b, n + 1)   // M47 close-out: the slab stays open over a lift shaft
     for (const [k, w] of Object.entries(lv.walls)) {
       if (w.draft) continue
       const r = edgeRect(k), alongU = r.x1 - r.x0 > r.z1 - r.z0, m = 4
@@ -108,7 +128,7 @@ export function placeBlueprint(b: HouseBlueprint, pad: { x: number; z: number; y
     }
     for (const [k, cl] of Object.entries(lv.cols ?? {})) if (!cl.draft) boxes.push(colBox(k, base, base - SLAB_T))
     const built: Walls = Object.fromEntries(Object.entries(lv.walls).filter(([, x]) => !x.draft))
-    for (const room of findRooms(built)) for (const [i, j] of room.cells) for (const du of [0.25, 0.75]) for (const dv of [0.25, 0.75]) {
+    for (const room of findRooms(built)) for (const [i, j] of room.cells) if (!shaft.has(`${i},${j}`)) for (const du of [0.25, 0.75]) for (const dv of [0.25, 0.75]) {
       const p = toWorld(i + du, j + dv)
       boxes.push({ x0: p.x - 0.36, x1: p.x + 0.36, z0: p.z - 0.36, z1: p.z + 0.36, y0: base - SLAB_T, y1: base })
     }

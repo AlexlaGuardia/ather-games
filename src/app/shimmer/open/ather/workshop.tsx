@@ -35,7 +35,7 @@ import {
 } from './garden-bank'
 import { reconcile, paneFor, billOfAll, buildAll, PER_COL, STONE_BRICK } from './plot-bom'
 import { getPlanLevel, setPlanLevel, usePlanLevel } from './plot-level'
-import { shaftKeys, shaftHoles, liveLift, cellMid, shaftBlockers, SHAFT_WHY, isLiftPiece } from './lift'
+import { shaftKeys, shaftHoles, liveLift, cellMid, shaftBlockers, SHAFT_WHY, isLiftPiece, liftsOf, shaftTop } from './lift'
 import { LiftMesh, LiftInput } from './lift-view'
 import { levelOf, withLevel, levelCount, levelBase, canStack, floating, upperBoxes, stairRails, MAX_LEVELS, SLAB_T, type LiftLookup } from './plot-floors'
 import { floorAt, liftOf, setHouseFound, houseFoundDelta, plinthBoxes, doorSteps, roomLift, FOUND_OPTS, FOUND_NAME, type FoundH, type Lift } from './plot-found'
@@ -175,7 +175,7 @@ function BlueprintPicked() {
 function BlueprintBar() {
   const k = useBpPick(), w = useWorks()
   const [lot, setLot] = useState('hazel'), [busy, setBusy] = useState(false)
-  const bp = useMemo(() => (k && w.walls ? extractBlueprint(w.walls, w.floors, w.roof ?? 'gable', k, `glade-${lot}`, `${lot[0].toUpperCase()}${lot.slice(1)}'s workshop`, Date.now(), w.upper, w.cols) : null), [k, w, lot])
+  const bp = useMemo(() => (k && w.walls ? extractBlueprint(w.walls, w.floors, w.roof ?? 'gable', k, `glade-${lot}`, `${lot[0].toUpperCase()}${lot.slice(1)}'s workshop`, Date.now(), w.upper, w.cols, liftsOf(w).map(p => ({ x: p.x, z: p.z, top: shaftTop(w, p) }))) : null), [k, w, lot])
   if (!bp) return <div data-bp-bar style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>Tap a wall of the building to save as a blueprint</div>
   const fits = fitsPad(bp, LOT_W, LOT_D)
   const save = async () => {
@@ -558,6 +558,8 @@ function WallMaterial({ mat, tint }: { mat: WallMat; tint?: string }) {
 }
 /** M47: every level of the house, each lifted by its storeys. In plan mode the Sims cutaway: levels ABOVE the one being edited are
  *  hidden, the level(s) below show as a faint low guide, and only the top shown level wears the roof. Out of plan mode: all of them. */
+/** the cells ('i,j') a lift shaft opens in level k's slab (lift.ts shaftHoles carries 'i,j,k') */
+const shaftCellsAt = (w: Works, k: number) => [...shaftHoles(w)].filter(h => h.endsWith(`,${k}`)).map(h => h.split(',').slice(0, 2).join(','))
 function HouseLevels({ w }: { w: Works }) {
   const b = useBuildMode(), edit = usePlanLevel(), n = levelCount(w), wd = useWallsDown(), fl = useMemo(() => liftOf(w), [w])   // M55 slice 2: each house on its own foundation
   const last = b ? Math.min(edit, n - 1) : n - 1
@@ -567,7 +569,7 @@ function HouseLevels({ w }: { w: Works }) {
     <>
       {shown.map(k => {
         const L = levelOf(w, k), hasCols = Object.keys(L.cols ?? {}).length > 0, hasStairs = Object.keys(L.stairs ?? {}).length > 0, hasDecks = Object.keys(L.decks ?? {}).length > 0; if (!Object.keys(L.walls).length && !hasCols && !hasStairs && !hasDecks) return null
-        const holes = k > 0 ? stairCellSet(levelOf(w, k - 1).stairs) : undefined
+        const holes = k > 0 ? new Set([...stairCellSet(levelOf(w, k - 1).stairs), ...shaftCellsAt(w, k)]) : undefined   // M47 close-out: the shaft is drawn open too (its solids always were)
         const guide = b && k < edit, rails = stairRails(w, k)
         return (
           <group key={k} position-y={levelBase(k)}>
