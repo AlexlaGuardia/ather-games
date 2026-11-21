@@ -11,7 +11,38 @@
 //
 // Run: npx tsx src/app/shimmer/open/shared/fp-hands-pose.test.ts
 
-export interface HandPose { x: number; y: number; z: number; pitch: number; roll: number }
+/** q = the hand's ORIENTATION as a quaternion [x, y, z, w], what the rig applies (11-21). pitch / roll stay as the readable
+ *  angles (= q whenever no Hold blend is running); the rig never reads them, because blending two angle pairs component by
+ *  component tumbles the glove (Alex 11-21: "the rotation from idle to HOLD looks unnatural": pitch -1.4 -> 1.89 and roll
+ *  0.63 -> -3.05 at once swung it through more than half a turn). Orientations blend by slerp on the shortest arc instead. */
+export type Quat = [number, number, number, number]
+export interface HandPose { x: number; y: number; z: number; pitch: number; roll: number; q: Quat }
+/** = three.js Euler(x, y, z, 'XYZ') -> quaternion: what `rotation.set(pitch, 0, roll)` meant */
+export function eulerQ(x: number, y: number, z: number): Quat {
+  const c1 = Math.cos(x / 2), c2 = Math.cos(y / 2), c3 = Math.cos(z / 2), s1 = Math.sin(x / 2), s2 = Math.sin(y / 2), s3 = Math.sin(z / 2)
+  return [s1 * c2 * c3 + c1 * s2 * s3, c1 * s2 * c3 - s1 * c2 * s3, c1 * c2 * s3 + s1 * s2 * c3, c1 * c2 * c3 - s1 * s2 * s3]
+}
+/** spherical blend a -> b by t. `side` picks the way round: omitted = the SHORTEST arc (b flipped when the two sit on opposite
+ *  hemispheres); +1 / -1 = b taken as given / negated, so a near-half-turn blend cannot change direction from frame to frame. */
+export function slerpQ(a: Quat, b: Quat, t: number, side?: 1 | -1): Quat {
+  let d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3], bb = b
+  if (side ? side < 0 : d < 0) { d = -d; bb = [-b[0], -b[1], -b[2], -b[3]] }
+  if (d > 0.9995 || d < -0.9995) { const r: Quat = [a[0] + (bb[0] - a[0]) * t, a[1] + (bb[1] - a[1]) * t, a[2] + (bb[2] - a[2]) * t, a[3] + (bb[3] - a[3]) * t]; const n = Math.hypot(...r); return [r[0] / n, r[1] / n, r[2] / n, r[3] / n] }
+  const th = Math.acos(Math.max(-1, Math.min(1, d))), sn = Math.sin(th), wa = Math.sin((1 - t) * th) / sn, wb = Math.sin(t * th) / sn
+  return [a[0] * wa + bb[0] * wb, a[1] * wa + bb[1] * wb, a[2] * wa + bb[2] * wb, a[3] * wa + bb[3] * wb]
+}
+/** the angle (radians) between two orientations */
+export const angleQ = (a: Quat, b: Quat) => 2 * Math.acos(Math.min(1, Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3])))
+const smooth = (t: number) => t * t * (3 - 2 * t)
+/** which way round the Hold turn goes, fixed from the tuned rest + hold attitudes (their arc is ~178 deg, so the run / jump / cast
+ *  offsets could otherwise tip the "shortest" side mid-blend and swing the glove the other way). Read per step: Alex tunes live. */
+const holdSide = (): 1 | -1 => { const a = eulerQ(FP.PITCH, 0, FP.ROLL), b = eulerQ(FP.HOLD_PITCH, 0, FP.HOLD_ROLL); return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3] < 0 ? -1 : 1 }
+/** the right mitt's attitude `w` (0..1, already eased) of the way into the Hold, from the angles it would have at rest (run /
+ *  jump / cast / chop offsets included): rest attitude slerped toward the same offsets on the Hold numbers, the fixed way round */
+export function holdTurn(pitch: number, roll: number, w: number): Quat {
+  const a = eulerQ(pitch, 0, roll)
+  return w > 0 ? slerpQ(a, eulerQ(pitch + (FP.HOLD_PITCH - FP.PITCH), 0, roll + (FP.HOLD_ROLL - FP.ROLL)), w, holdSide()) : a
+}
 export interface FpInput {
   now: number          // ms, the clock castAt / workAt are stamped on
   speed: number        // horizontal metres/second, from the walker
@@ -20,6 +51,7 @@ export interface FpInput {
   castAt: number       // ms of the last paid cast; -Infinity for never
   working: boolean     // a node is being worked (prune / prospect): the right hand chops
   holding?: boolean    // M45: a hotbar item is out (the item stance): the right mitt turns to present it
+  holdW?: number       // dev only (/shimmer/dev/hands ?hold=): pins the Hold weight 0..1, to look at a frame mid-turn
 }
 export interface FpState { phase: number; run: number; air: number; low: number; wasAir: boolean; landAt: number; chop: number; hold: number; R: HandPose; L: HandPose }
 
@@ -81,7 +113,7 @@ export function resetFpTune(): void { try { localStorage.removeItem(FP_TUNE_KEY)
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 const approach = (cur: number, to: number, rate: number, dt: number) => cur + (to - cur) * (1 - Math.exp(-rate * dt))
-const rest = (side: 1 | -1): HandPose => ({ x: side * FP.X, y: FP.REST_Y, z: FP.Z, pitch: FP.PITCH, roll: side * FP.ROLL })
+const rest = (side: 1 | -1): HandPose => ({ x: side * FP.X, y: FP.REST_Y, z: FP.Z, pitch: FP.PITCH, roll: side * FP.ROLL, q: eulerQ(FP.PITCH, 0, side * FP.ROLL) })
 export const newFpState = (): FpState => ({ phase: 0, run: 0, air: 0, low: 0, wasAir: false, landAt: -Infinity, chop: 0, hold: 0, R: rest(1), L: rest(-1) })
 /** How far the right mitt has turned to present (0..1), written each step by the rig; the held item grows in with it. */
 export const fpLive = { hold: 0 }
@@ -96,7 +128,7 @@ export function stepFpHands(s: FpState, i: FpInput, dt: number): { R: HandPose; 
   if (s.wasAir && !i.airborne) s.landAt = i.now
   s.wasAir = i.airborne
   if (i.working) s.chop += FP.CHOP_HZ * dt; else s.chop = 0
-  s.hold = approach(s.hold, i.holding ? 1 : 0, 9, dt)
+  s.hold = i.holdW !== undefined ? clamp01(i.holdW) : approach(s.hold, i.holding ? 1 : 0, 9, dt)
 
   const sw = Math.sin(s.phase)
   // alternating: the right hand rises while the left sinks, then the other way; up also means a little forward
@@ -111,18 +143,22 @@ export function stepFpHands(s: FpState, i: FpInput, dt: number): { R: HandPose; 
   const chop = i.working ? Math.abs(Math.sin(s.chop * Math.PI)) : 0
   const hide = -s.low * FP.HIDE_Y
 
-  const tR: HandPose = {
+  const tR: Omit<HandPose, 'q'> = {
     x: FP.X + s.air * FP.JUMP_SPREAD + cast * (FP.CAST_X - FP.X),
     y: FP.REST_Y - downR * FP.DROP_Y + s.air * FP.JUMP_Y_R + dip + cast * (FP.CAST_Y - FP.REST_Y) * (1 - s.air) + chop * 0.08 + hide,
     z: FP.Z - (1 - downR) * s.run * FP.SWING_Z,
     pitch: FP.PITCH + s.air * FP.JUMP_PITCH + cast * FP.CAST_PITCH - chop * FP.CHOP_PITCH,
     roll: FP.ROLL - s.air * 0.35 - cast * 0.8,   // a jump or a cast turns the glove upright toward the aim
   }
-  if (hold > 0) {   // presenting: the rest numbers give way to the Hold numbers (run / jump / cast / chop stay on top)
-    tR.x += hold * (FP.HOLD_X - FP.X); tR.y += hold * (FP.HOLD_Y - FP.REST_Y); tR.z += hold * (FP.HOLD_Z - FP.Z)
-    tR.pitch += hold * (FP.HOLD_PITCH - FP.PITCH); tR.roll += hold * (FP.HOLD_ROLL - FP.ROLL)
+  // presenting: the rest numbers give way to the Hold numbers (run / jump / cast / chop stay on top). The weight is EASED
+  // (smoothstep: no lurch at the start or the end); the position lerps, the ORIENTATION slerps from the rest attitude to the
+  // hold attitude on the shortest arc, so the glove turns the short way round instead of tumbling (11-21).
+  const h = smooth(hold), qR = holdTurn(tR.pitch, tR.roll, h)
+  if (h > 0) {
+    tR.x += h * (FP.HOLD_X - FP.X); tR.y += h * (FP.HOLD_Y - FP.REST_Y); tR.z += h * (FP.HOLD_Z - FP.Z)
+    tR.pitch += h * (FP.HOLD_PITCH - FP.PITCH); tR.roll += h * (FP.HOLD_ROLL - FP.ROLL)   // readable angles only: the rig applies qR
   }
-  const tL: HandPose = {
+  const tL: Omit<HandPose, 'q'> = {
     x: -FP.X - s.air * FP.JUMP_SPREAD,
     y: FP.REST_Y - downL * FP.DROP_Y + s.air * FP.JUMP_Y_L + dip + hide,
     z: FP.Z - (1 - downL) * s.run * FP.SWING_Z,
@@ -133,5 +169,7 @@ export function stepFpHands(s: FpState, i: FpInput, dt: number): { R: HandPose; 
     s.R[k] = approach(s.R[k], tR[k], FP.EASE, dt)
     s.L[k] = approach(s.L[k], tL[k], FP.EASE, dt)
   }
+  const e = 1 - Math.exp(-FP.EASE * dt)   // the same ease as every other output, on the sphere
+  s.R.q = slerpQ(s.R.q, qR, e); s.L.q = slerpQ(s.L.q, eulerQ(tL.pitch, 0, tL.roll), e)
   return { R: s.R, L: s.L }
 }

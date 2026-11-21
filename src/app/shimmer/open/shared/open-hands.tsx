@@ -74,7 +74,7 @@ export const OpenHands = forwardRef<OpenHandsApi, { held?: ReactNode }>(function
     (window as unknown as { __fpHands?: unknown }).__fpHands = () => { let c = ''; rig.R.traverse(o => { const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined; if (!c && m?.userData?.mitten) c = '#' + m.color.getHexString() }); return c }
   }, [rig])
   const st = useRef(newFpState())
-  const place = (o: THREE.Group, p: HandPose) => { o.position.set(p.x, p.y, p.z); o.rotation.set(p.pitch, 0, p.roll); o.scale.setScalar(FP.SCALE) }
+  const place = (o: THREE.Group, p: HandPose) => { o.position.set(p.x, p.y, p.z); o.quaternion.set(p.q[0], p.q[1], p.q[2], p.q[3]);   /* 11-21: the orientation, slerped (fp-hands-pose HandPose.q) */ o.scale.setScalar(FP.SCALE) }
   useImperativeHandle(ref, () => ({
     step: (i, dt) => {
       const { R, L } = stepFpHands(st.current, i, Math.min(dt, 0.1))

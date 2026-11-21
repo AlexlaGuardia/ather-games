@@ -1,6 +1,6 @@
 // fp-hands-pose.ts: Alex's shape. Both gloves in view at rest, cuffs pointed AWAY from each other; on a run they take turns
 // dropping out of view below the frame; a jump throws both up, the right higher.
-import { newFpState, stepFpHands, FP, type FpInput } from './fp-hands-pose'
+import { newFpState, stepFpHands, FP, eulerQ, angleQ, holdTurn, slerpQ, type FpInput, type Quat } from './fp-hands-pose'
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  FAIL', m) } }
 const base: FpInput = { now: 0, speed: 0, airborne: false, hidden: false, castAt: -Infinity, working: false }
@@ -62,4 +62,51 @@ const lowHeld = Math.min(...hr.slice(120).map(f => f.R.y)), lowBare = Math.min(.
 ok(lowHeld > lowBare + FP.DROP_Y * 0.5, `holding on a run: the presenting hand stays up (${lowHeld.toFixed(3)} vs bare ${lowBare.toFixed(3)})`)
 const let_ = run(120, k => ({ holding: k < 60 })).out.at(-1)!
 ok(Math.abs(let_.R.x - still.R.x) < 0.005 && Math.abs(let_.R.roll - still.R.roll) < 0.01, 'put away: back to rest')
+// ── 11-21: idle -> HOLD turns by the SHORTEST arc (Alex: "the rotation from idle to HOLD looks unnatural") ─────────────
+{
+  const qRest = eulerQ(FP.PITCH, 0, FP.ROLL), qHold = eulerQ(FP.HOLD_PITCH, 0, FP.HOLD_ROLL), arc = angleQ(qRest, qHold)
+  // endpoints: the rig shows exactly what rotation.set(pitch, 0, roll) showed, at rest and settled in the hold
+  const s0 = newFpState(); let q0: Quat = s0.R.q
+  for (let k = 0; k < 120; k++) q0 = [...stepFpHands(s0, { ...base, now: k * 16.7 }, 1 / 60).R.q] as Quat
+  ok(angleQ(q0, qRest) < 1e-6, `rest orientation unchanged (off by ${angleQ(q0, qRest).toExponential(1)} rad)`)
+  const s1 = newFpState(); let q1: Quat = s1.R.q, p1 = { x: 0, y: 0, z: 0 }
+  for (let k = 0; k < 240; k++) { const p = stepFpHands(s1, { ...base, now: k * 16.7, holding: true }, 1 / 60).R; q1 = [...p.q] as Quat; p1 = { x: p.x, y: p.y, z: p.z } }
+  ok(angleQ(q1, qHold) < 1e-4, `hold orientation unchanged (off by ${angleQ(q1, qHold).toExponential(1)} rad)`)
+  ok(Math.abs(p1.x - FP.HOLD_X) < 1e-4 && Math.abs(p1.y - FP.HOLD_Y) < 1e-4 && Math.abs(p1.z - FP.HOLD_Z) < 1e-4, 'hold position unchanged')
+  // the way there: the turn away from rest never exceeds the rest->hold arc, and only grows (no tumble, no swing back)
+  const s2 = newFpState(); const ang: number[] = []
+  for (let k = 0; k < 120; k++) ang.push(angleQ(stepFpHands(s2, { ...base, now: k * 16.7, holding: true }, 1 / 60).R.q, qRest))
+  const peak = Math.max(...ang), mono = ang.every((a, k) => k === 0 || a >= ang[k - 1] - 1e-6)
+  ok(peak <= arc + 1e-4 && mono, `the turn grows steadily to the ${arc.toFixed(2)} rad arc and never past it (peak ${peak.toFixed(3)}, steady ${mono})`)
+  // and back: putting it away retraces the same short way
+  const back: number[] = []; for (let k = 0; k < 120; k++) back.push(angleQ(stepFpHands(s2, { ...base, now: (120 + k) * 16.7 }, 1 / 60).R.q, qHold))
+  ok(Math.max(...back) <= arc + 1e-4, `putting it away turns back the short way too (peak ${Math.max(...back).toFixed(3)})`)
+  // control: the old blend (pitch and roll lerped as angles) swings further than the arc on the way: the bug was real
+  // control: the old blend (pitch and roll lerped as angles) TRAVELS much further than the arc: it wanders across axes on the way
+  const path = (f: (t: number) => Quat) => { let L = 0, prev = f(0); for (let n = 1; n <= 200; n++) { const q = f(n / 200); L += angleQ(prev, q); prev = q } return L }
+  const oldLen = path(t => eulerQ(FP.PITCH + t * (FP.HOLD_PITCH - FP.PITCH), 0, FP.ROLL + t * (FP.HOLD_ROLL - FP.ROLL)))
+  const s3 = newFpState(); let prevQ = s3.R.q, travelled = 0
+  for (let k = 0; k < 200; k++) { const q = [...stepFpHands(s3, { ...base, now: k * 16.7, holding: true }, 1 / 60).R.q] as Quat; travelled += angleQ(prevQ, q); prevQ = q }
+  ok(travelled <= arc * 1.02 && oldLen > arc + 0.5, `the glove now travels ${travelled.toFixed(2)} rad (= the ${arc.toFixed(2)} arc); the old angle blend travelled ${oldLen.toFixed(2)} rad`)
+  // no flip: holding through a run, a jump and a cast, no frame turns the glove more than a sliver
+  //   (a flip shows as a frame far faster than the two motions it is made of: the plain Hold turn, and the run/jump/cast alone)
+  const worstOf = (holding: (k: number) => boolean, busy: boolean) => { const st = newFpState(); let pq = st.R.q, w = 0
+    for (let k = 0; k < 360; k++) { const q = [...stepFpHands(st, { ...base, now: k * 16.7, holding: holding(k), ...(busy ? { speed: FP.RUN_SPEED, airborne: k > 60 && k < 90, castAt: k > 100 ? 100 * 16.7 : -Infinity } : {}) }, 1 / 60).R.q] as Quat; w = Math.max(w, angleQ(pq, q)); pq = q } return w }
+  const both = worstOf(k => k > 20, true), turn = worstOf(k => k > 20, false), moves = worstOf(() => false, true)
+  ok(both <= turn + moves + 0.01, `holding through a run, a jump and a cast: worst frame ${both.toFixed(3)} rad <= the Hold turn's ${turn.toFixed(3)} + the moves' ${moves.toFixed(3)} (no mid-blend flip)`)
+  // the way round is FIXED: sweep the pitch a run / jump / cast adds across its whole range; the half-way attitude never jumps
+  // to the other side of the near-half-turn (the per-frame "shortest arc" would switch sides somewhere in here)
+  let prevMid: Quat | null = null, mjump = 0
+  for (let dp = -1.2; dp <= 1.2; dp += 0.01) { const q = holdTurn(FP.PITCH + dp, FP.ROLL - 0.8 * Math.max(0, dp), 0.5); if (prevMid) mjump = Math.max(mjump, angleQ(prevMid, q)); prevMid = q }
+  ok(mjump < 0.05, `the half-way attitude moves smoothly with the offsets (largest step ${mjump.toFixed(3)} rad over 0.01 rad sweeps)`)
+  // slerpQ's `side`: a 200 deg turn about x; shortest-arc goes the 160 deg way, side = +1 keeps the 200 deg way (the fixed-direction
+  // guard for a retune whose rest + hold sit right at the half turn; with today's tune the sweep above never reaches that edge)
+  { const a = eulerQ(0, 0, 0), b = eulerQ(200 * Math.PI / 180, 0, 0), dir = (q: Quat) => Math.sign(q[0])
+    ok(dir(slerpQ(a, b, 0.5)) < 0 && dir(slerpQ(a, b, 0.5, 1)) > 0 && angleQ(slerpQ(a, b, 1, 1), b) < 1e-6, 'slerpQ: shortest arc by default, the given way round with side = +1') }
+  // the turn starts gently (eased weight): the first frame of holding barely turns the glove
+  const s5 = newFpState(); stepFpHands(s5, base, 1 / 60); const first = angleQ(stepFpHands(s5, { ...base, holding: true }, 1 / 60).R.q, qRest)
+  ok(first < 0.06, `the turn eases in: the first frame turns ${first.toFixed(3)} rad`)
+  // the left hand never turns: its orientation still equals its angles
+  ok(angleQ(stepFpHands(s2, base, 1 / 60).L.q, eulerQ(FP.PITCH, 0, -FP.ROLL)) < 1e-3, 'the left hand keeps its rest attitude')
+}
 console.log(`fp-hands-pose: ${pass} passed, ${fail} failed`); if (fail) process.exit(1)

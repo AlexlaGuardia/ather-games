@@ -14,7 +14,7 @@
  * 1100×700, so a glove can be kept clear of them.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OpenHands, type OpenHandsApi } from '../../open/shared/open-hands'
 import { FP, FP_DEFAULTS, setFpTune, resetFpTune, loadFpTune, type FpTune, type FpInput } from '../../open/shared/fp-hands-pose'
@@ -75,11 +75,13 @@ const chip: React.CSSProperties = { background: '#211f2b', border: '1px solid #3
 
 /** Feeds the hands a synthetic input for the preview, every frame. Cast holds mid-raise; Run runs at full speed. */
 function Driver({ api, preview, paused }: { api: React.RefObject<OpenHandsApi | null>; preview: Preview; paused: boolean }) {
+  // ?hold=0.5 pins the Hold weight (a frame mid-turn, for a strip; 11-21)
+  const holdW = useMemo(() => { if (typeof window === 'undefined') return undefined; const v = new URLSearchParams(window.location.search).get('hold'); return v === null || !Number.isFinite(+v) ? undefined : +v }, [])
   useFrame((_, dt) => {
     const now = performance.now()
     const input: FpInput = {
       now, speed: preview === 'run' ? FP.RUN_SPEED : 0, airborne: preview === 'jump', hidden: preview === 'hidden',
-      castAt: preview === 'cast' ? now - FP.CAST_MS * 0.4 : -Infinity, working: false, holding: preview === 'hold',
+      castAt: preview === 'cast' ? now - FP.CAST_MS * 0.4 : -Infinity, working: false, holding: preview === 'hold', ...(preview === 'hold' && holdW !== undefined ? { holdW } : {}),
     }
     api.current?.step(input, paused ? 0 : dt)
     api.current?.seat(preview === 'cast' ? 1 : 0)
@@ -90,6 +92,7 @@ function Driver({ api, preview, paused }: { api: React.RefObject<OpenHandsApi | 
 export default function HandsTuner() {
   const api = useRef<OpenHandsApi>(null)
   const [preview, setPreview] = useState<Preview>('rest')
+  useEffect(() => { if (new URLSearchParams(window.location.search).get('preview') === 'hold') setPreview('hold') }, [])   // ?preview=hold (11-21 strip)
   const [paused, setPaused] = useState(false)
   const [, bump] = useState(0)
   const [copied, setCopied] = useState(false)
