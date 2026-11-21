@@ -36,6 +36,7 @@ const PROF: Readonly<Record<Profession, { main: readonly Skill[]; craft?: Skill;
   alchemist: { main: ['potions'], craft: 'potions', yield: 'potions', first: 'craft' },
   smith: { main: ['metalwork'], craft: 'metalwork', yield: 'metalwork', first: 'yield' },
   jeweler: { main: ['masonry'], craft: 'masonry', yield: 'mining' },
+  rinnshop: { main: ['rinnshop'], craft: 'rinnshop', yield: 'rinnshop', first: 'craft' },   // the bait-maker (Yarrow, 11-21)
   shopkeeper: { main: [] },
 }
 

@@ -12,7 +12,9 @@ let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
 
-const CANON = '/root/athernyx/CANON/game/shimmer-quests-mainmap.md'
+// The script moved to the archive in the 11-21 revamp (the live file is a stub): this copy is the FROZEN record of what the
+// voxel3d glade speaks. Yarrow's re-ruled lines live in yarrow-lines.ts and override the four core keys.
+const CANON = '/root/athernyx/CANON/game/archive/pre-revamp-2026-11/shimmer-quests-mainmap.md'
 
 // The same two blocks the generator copies — see BLOCKS in scripts/folk-lines-gen.py.
 const BLOCKS: [string, string][] = [

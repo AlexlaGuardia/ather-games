@@ -7,7 +7,7 @@ folk-lines.test.ts parses the same block the same way and fails when the copy dr
 """
 import json, re, sys
 
-CANON = '/root/athernyx/CANON/game/shimmer-quests-mainmap.md'
+CANON = '/root/athernyx/CANON/game/archive/pre-revamp-2026-11/shimmer-quests-mainmap.md'   # archived 11-21 (the live file is a stub)
 
 # Every locked block this file copies, as (start marker, end marker). Beat 0½ is the Glade's first
 # walk; the return beat is Yarrow's counter (LOCKED 2026-09-22, Alex sign-off).

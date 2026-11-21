@@ -1,13 +1,14 @@
 // ── YARROW, THE BAIT-MAKER (re-ruled 2026-11-21) ─────────────────────────────────────────────────────────────────
-// ⚠ UNSIGNED: lark's draft, athernyx 2e5fc0f (CANON/game/yarrow-baitmaker-lines-script.md, section A), dispatched by the
+// SIGNED by Alex 2026-11-21 (athernyx b2facfe, sections A-C). lark's lines, athernyx 2e5fc0f (CANON/game/yarrow-baitmaker-lines-script.md, section A), dispatched by the
 // Magii seat after the 11-21 re-rule (characters/moonwell-folk.md › Yarrow: bait-maker of the Rinnshop, never casts,
-// neither brews nor buys brews). Transcribed VERBATIM. `SIGNED` flips to true only when Alex signs the set.
+// neither brews nor buys brews). Transcribed VERBATIM.
 // These OVERRIDE the generated folk-lines.ts copies of the four core keys (that file is a verbatim copy of the old,
-// now-archived apothecary script and is regenerated, so the new words live here, not there). The optional extra barks (B)
-// and the teach beat (C: keep as a bait beat, or retire all four teach keys) are Alex's call: not wired.
+// now-archived apothecary script and is regenerated, so the new words live here, not there). The live open world speaks
+// Yarrow through moonwell-glade.ts (GLADE_STATION_LINES) + folk-lines.ts DREAMS.rinnshop. B + C (the bait teach beat) are
+// signed too and wired in the open world in their own slice.
 import type { Beat, Trigger } from './folk-lines'
 
-export const SIGNED = false
+export const SIGNED = true
 
 export const YARROW_LINES: Partial<Record<Trigger, readonly Beat[]>> = {
   'folk:YARROW:greet': [

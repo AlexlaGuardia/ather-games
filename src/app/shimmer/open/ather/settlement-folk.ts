@@ -26,10 +26,10 @@ export const EMPLOYED_P = 0.6
 export const GRADE_ODDS: readonly [Grade, number][] = [[1, 30], [2, 30], [3, 22], [4, 13], [5, 5]]
 /** Which trades a biome's folk lean to (weights). Every trade can turn up anywhere; the biome only tilts the odds. */
 export const BIOME_TRADES: Readonly<Record<SettlementBiome, Partial<Record<Profession, number>>>> = {
-  shore:  { cook: 5, farmer: 2, carpenter: 1, stonemason: 1, alchemist: 2, smith: 1, jeweler: 1 },
-  meadow: { farmer: 5, cook: 3, carpenter: 2, stonemason: 1, alchemist: 2, smith: 1, jeweler: 1 },
-  woods:  { carpenter: 5, farmer: 2, cook: 2, stonemason: 1, alchemist: 3, smith: 1, jeweler: 1 },
-  rock:   { stonemason: 4, jeweler: 3, smith: 3, alchemist: 2, carpenter: 1, farmer: 1, cook: 1 },
+  shore:  { cook: 5, farmer: 2, carpenter: 1, stonemason: 1, alchemist: 2, smith: 1, jeweler: 1, rinnshop: 3 },   // the bait-maker leans to the water
+  meadow: { farmer: 5, cook: 3, carpenter: 2, stonemason: 1, alchemist: 2, smith: 1, jeweler: 1, rinnshop: 1 },
+  woods:  { carpenter: 5, farmer: 2, cook: 2, stonemason: 1, alchemist: 3, smith: 1, jeweler: 1, rinnshop: 1 },
+  rock:   { stonemason: 4, jeweler: 3, smith: 3, alchemist: 2, carpenter: 1, farmer: 1, cook: 1, rinnshop: 1 },
 }
 /** Personal names (canon law: CANON/game/shimmer-folds-settlements.md › Names, RULED 09-18): the free folk are SOFT PLANTS
  *  (burrs and thorns are collarer names), drawn from canon's free-folk pool, and no two living speakers share a name. */
@@ -64,7 +64,7 @@ function pick<T>(rnd: () => number, w: readonly [T, number][]): T {
 /** the legacy craft/yield grades, read back off the skills so the old fields never disagree with the new */
 const legacyGrades = (p: Profession, sk: Skills) => {
   const g: Partial<MoglinRecord['grades']> = {}
-  const r = ({ farmer: 'farm', cook: 'cooking', carpenter: 'carpentry', stonemason: 'stonemason', alchemist: 'alchemy', smith: 'smith', jeweler: 'stonemason' } as const)[p as 'farmer']
+  const r = ({ farmer: 'farm', cook: 'cooking', carpenter: 'carpentry', stonemason: 'stonemason', alchemist: 'alchemy', smith: 'smith', jeweler: 'stonemason', rinnshop: 'rinnshop' } as const)[p as 'farmer']
   if (r) { g.craft = sk[SKILL_OF_ROOM[r].craft]; g.yield = sk[SKILL_OF_ROOM[r].yield] }
   return g
 }

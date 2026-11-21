@@ -34,6 +34,15 @@ export const DREAMS: Readonly<Record<Profession, readonly string[]>> = {
     'I want a wall that stands longer than anyone remembers who built it.',
     'I\'d like a quiet yard and a big stone and a whole season.',
   ],
+  // the BAIT-MAKER (rinnshop; Yarrow's trade, re-ruled 11-21). @lark, SIGNED by Alex 11-21 (athernyx b68a655,
+  // CANON/game/yarrow-baitmaker-lines-script.md › Moglin card dreams), verbatim. Dream 1 is Yarrow's own Glade dream.
+  rinnshop: [
+    'I want a jar of bait so good the whole row asks what is in it.',
+    'I\'d like to ready a catch so well that the cook stops and says nothing.',
+    'Back home the Mast goes to the pot, and the bait gets the sweepings.',
+    'I want one shelf of jars, labelled in my own hand, that nobody tidies.',
+    'Our settlement has one bench for bait and four of us waiting at it.',
+  ],
   alchemist: [
     'I want to brew a Starbloom draught that glows in the bottle.',
     'I\'d like a cauldron nobody else borrows.',

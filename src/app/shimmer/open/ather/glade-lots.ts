@@ -10,7 +10,7 @@ import { placeBlueprint, fitsPad, type HouseBlueprint } from './plot-blueprint'
 import { findRooms } from './plot-walls'
 
 export interface Part { ahead: number; side: number; w: number; d: number; h: number; y0?: number; color: string; solid?: boolean; turn?: number }
-const WOOD = '#9a6a3c', PLANK = '#d2a157', STONE = '#9aa3ad', DARK = '#6d5038', HERB = '#6fa857', CLOTH = '#d9806a', JAR = '#b7d8e6', HEARTH = '#8a4b32'
+const WOOD = '#9a6a3c', PLANK = '#d2a157', STONE = '#9aa3ad', DARK = '#6d5038', CLOTH = '#d9806a', JAR = '#b7d8e6', HEARTH = '#8a4b32'
 export const STATIONS: Readonly<Record<string, readonly Part[]>> = {
   // the Glade kitchen at the head: a long table under a canopy, the hearth behind it (where the five eat together)
   fennel: [
@@ -31,9 +31,11 @@ export const STATIONS: Readonly<Record<string, readonly Part[]>> = {
     { ahead: 0.4, side: 0, w: 2.2, d: 2.2, h: 0.6, color: STONE, solid: true },
     ...[[-4.2, -2.8, 1.2], [-3, -2.8, 0.8], [-4.2, -1.6, 0.6], [3.6, -2.6, 1.6], [4.6, -2.6, 1], [3.6, -1.4, 0.5]].map(([s, a, h]) => ({ ahead: a, side: s, w: 1, d: 1, h, color: STONE, solid: true })),
   ],
-  // Yarrow's apothecary: three raised herb beds, a jar shelf along the back
+  // Yarrow's RINNSHOP (canon 11-21: the Glade apothecary lot is renamed; Yarrow is the bait-maker): a bait-cutting table and two
+  // bait tubs at the front, the jar shelf along the back ("Do not touch the jars"). Code-drawn filler.
   yarrow: [
-    ...[-3.6, 0, 3.6].map(s => ({ ahead: 0.6, side: s, w: 2.6, d: 1.3, h: 0.45, color: HERB, solid: true })),
+    { ahead: 0.6, side: 0, w: 3.2, d: 1.2, h: 0.9, color: PLANK, solid: true },
+    ...[-3.4, 3.4].map(s => ({ ahead: 0.6, side: s, w: 1.3, d: 1.3, h: 0.7, color: DARK, solid: true })),
     { ahead: -3.1, side: 0, w: 4, d: 0.6, h: 1.9, color: DARK, solid: true },
     ...[-1.4, -0.4, 0.6, 1.6].map(s => ({ ahead: -2.75, side: s, w: 0.35, d: 0.35, h: 0.35, y0: 1.2, color: JAR })),
   ],

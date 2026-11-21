@@ -10,7 +10,7 @@ ok(SKILLS.length === 9 && SKILLS.every(s => SKILL_LABEL[s]), 'nine labelled skil
 
 // spiky rolls
 const MAINS: Record<string, Skill> = { farmer: 'farming', cook: 'cooking', carpenter: 'woodworking', stonemason: 'masonry', alchemist: 'potions', smith: 'metalwork', jeweler: 'masonry' }
-const MAINLIST: Record<string, Skill[]> = { farmer: ['farming'], cook: ['cooking'], carpenter: ['woodworking', 'forestry'], stonemason: ['masonry', 'mining'], alchemist: ['potions'], smith: ['metalwork'], jeweler: ['masonry'] }
+const MAINLIST: Record<string, Skill[]> = { farmer: ['farming'], cook: ['cooking'], carpenter: ['woodworking', 'forestry'], stonemason: ['masonry', 'mining'], alchemist: ['potions'], smith: ['metalwork'], jeweler: ['masonry'], rinnshop: ['rinnshop'] }
 for (const p of PROFESSIONS) {
   let best = 0, sideSum = 0, sideN = 0, restSum = 0, restN = 0, inRange = true
   for (let i = 0; i < 2000; i++) {

@@ -14,7 +14,7 @@ ok(JSON.stringify(folkOf(GLADE, 1).map(f => f.id)) === JSON.stringify(folkOf(GLA
 ok(five.every(f => f.home === GLADE_ID && f.employed && f.wants.length > 0 && isGlade(f.id) && isGlade(f.home)), 'all settled with want-lists, all of the Glade')
 ok(five.every(f => f.wants.every(w => !!itemDef(w.id))), `every want is a real item (${five.flatMap(f => f.wants.map(w => w.id)).filter(id => !itemDef(id))})`)
 ok(five.every(f => !!f.dream), 'every one has a hello line')
-ok(five.find(f => f.name === 'Mallow')!.profession === 'shopkeeper' && GLADE_TRADE.yarrow === 'apothecary', "Mallow is the shopkeeper; Yarrow reads 'apothecary' in copy")
+ok(five.find(f => f.name === 'Mallow')!.profession === 'shopkeeper' && GLADE_TRADE.yarrow === 'bait-maker' && five.find(f => f.name === 'Yarrow')!.profession === 'rinnshop', "Mallow is the shopkeeper; Yarrow is the bait-maker (re-ruled 11-21), works the Rinnshop")
 const wk = 7 * 86_400_000
 ok(mallowWants(0)[0].id !== mallowWants(wk)[0].id && mallowWants(wk * MALLOW_POOL.length)[0].id === mallowWants(0)[0].id, "Mallow's list changes weekly and cycles")
 ok(GLADE.x === GLADE_GREEN.x && GLADE.z === GLADE_GREEN.z, 'the Glade sits on the green (M40 layout B)')

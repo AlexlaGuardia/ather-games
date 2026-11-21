@@ -20,7 +20,7 @@ export const GLADE_NAME = 'Moonwell Glade'
 export const GLADE: Settlement = { id: GLADE_ID, name: GLADE_NAME, x: GLADE_GREEN.x, z: GLADE_GREEN.z, biome: 'meadow' }
 
 /** Canon's own trade words, for player copy (the profession enum is ours; hub 11-19). */
-export const GLADE_TRADE: Readonly<Record<string, string>> = { hazel: 'carpenter', sax: 'stonemason', yarrow: 'apothecary', fennel: 'cook', mallow: 'shopkeeper' }
+export const GLADE_TRADE: Readonly<Record<string, string>> = { hazel: 'carpenter', sax: 'stonemason', yarrow: 'bait-maker', fennel: 'cook', mallow: 'shopkeeper' }
 
 /** Mallow's list CHANGES (canon); the cadence and what is on it are Jin's: one pick a week from this pool. */
 export const MALLOW_POOL: readonly { id: string; n: number }[] = [
@@ -40,7 +40,8 @@ export function gladeFolk(now = Date.now()): Folk[] {
   return [
     f('hazel', 'Hazel', 'carpenter', [{ id: 'goldwood_plank', n: 6 }, { id: 'amber_sap', n: 2 }], DREAMS.carpenter[0], [4, 3, 3]),
     f('sax', 'Sax', 'stonemason', [{ id: 'blankstone', n: 6 }, { id: 'raw_mana_shard', n: 2 }], DREAMS.stonemason[0], [3, 4, 2]),
-    f('yarrow', 'Yarrow', 'alchemist', [{ id: 'goldwood_bark', n: 4 }, { id: 'raw_mana_shard', n: 3 }], DREAMS.alchemist[0], [4, 2, 4]),
+    // re-ruled 11-21: the Rinnshop's bait-maker (wants = bait makings, lark's 'Scraps, meal, Mast'; the quantities are Jin's)
+    f('yarrow', 'Yarrow', 'rinnshop', [{ id: 'mast', n: 6 }, { id: 'shimmerscale', n: 2 }], DREAMS.rinnshop[0], [4, 2, 4]),
     f('fennel', 'Fennel', 'cook', [{ id: 'shimmerscale', n: 3 }, { id: 'mast', n: 4 }], DREAMS.cook[0], [3, 3, 3]),
     f('mallow', 'Mallow', 'shopkeeper', mallowWants(now), MALLOW_DREAM, [2, 3, 5]),
   ].filter(x => !away.has(x.id))
@@ -104,7 +105,10 @@ export const GLADE_STATION_LINES: Readonly<Record<string, { main: string; alt: s
   fennel: { main: "Table's long and the hearth is lit. Bring crops, rinn, honey-like things. A Cooking room on your plot gets you your own.", alt: 'Everybody eats here at evening. Your plot could hold a table like this one. Start with the Cooking room.' },
   hazel: { main: 'Planks, goldwood first, then cord and sap. I make tables and chests. Build a Carpentry room and you get your own bench.', alt: 'A crooked stack makes a crooked table. Stack them square. The Carpentry room runs on the same rule.' },
   sax: { main: 'Cooled-cloud stone, and crystal for the good work. I cut paving and low walls. Your plot can have a Stonery.', alt: 'Ground stays where I put it. Build a Stonery and yours will too.' },
-  yarrow: { main: 'Herbs, bark, raw shards, and brews once you make them. Jars and catalysts here. Your plot can have an Alchemy room.', alt: 'I will not brew for you. Build an Alchemy room and the work is your hands.' },
+  // Yarrow re-ruled 11-21 (bait-maker, never casts, neither brews nor buys brews): lark's bait-maker lines, SIGNED by Alex 11-21
+  // (athernyx b2facfe, CANON/game/yarrow-baitmaker-lines-script.md › A), verbatim: first meeting = greet + what Yarrow makes,
+  // a repeat = the ruled division of labour. (The 11-19 apothecary pair pointed at an Alchemy room, which no longer exists.)
+  yarrow: { main: 'Do not touch the jars. Good. You listen. Yarrow. Bait. Bait, made from your makings. One jar, one cast, then it is gone.', alt: 'I do not cast. Fennel gets you casting. I keep you baited.' },
   mallow: { main: 'Bring me what the list asks. I pay Marks, and the list changes every week. This is where it all closes up.', alt: 'Check the list before you gather. It will not be the same list as last week.' },
 }
 /** a Glade Moglin's hello: its station line (main on first meeting, alt after), or null for anyone else */
