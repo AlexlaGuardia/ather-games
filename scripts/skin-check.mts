@@ -46,7 +46,9 @@ const crop = async (name: string) => { const s = await bar(); const pad = 18
 const asked = () => p.evaluate(() => (window as any).__sfx?.asked?.() ?? {})
 const trackNone = (await bar())?.trackW ?? -1   // hp 100, no skin: the width the +N must not change
 // 1) Q drops Threshold; slide it under the keeper
-await p.keyboard.press('KeyQ'); await sleep(400)
+await p.keyboard.press('KeyQ')
+// poll for the field, not a fixed 400 ms: on the slower EliteDesk the cast lands later and every step after this read null (11-21 pm)
+await p.waitForFunction(() => ((window as any).__ather.combat().fields ?? []).length > 0, { timeout: 15000 }).catch(() => {})
 const placed = await p.evaluate(() => { const c = (window as any).__ather.combat(), f = c.fields?.[0], at = c.keeper.at; if (!f || !at) return null; f.x = at.x; f.z = at.z; f.until = (c.clock ?? 0) + 60; return { shell: f.shell, max: f.shellMax } })
 ok(!!placed && placed.shell === 20, `Threshold placed with a 20 Mana Skin (${JSON.stringify(placed)})`)
 const barIs = (fn: string) => p.waitForFunction(`(() => { const e = [...document.querySelectorAll('[data-shield]')].find(e => (e.parentElement?.getBoundingClientRect().width ?? 0) > 0); return !!e && (${fn})(e) })()`, { timeout: 60000, polling: 100 }).catch(() => {})
