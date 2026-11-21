@@ -23,6 +23,7 @@ import { itemDef } from '../shared/inventory'
 import { getInv, setInv, useInv } from '../shared/bag'
 import { buyDecor } from './decor-shop'
 import { buyBundle } from './smokehouse'
+import { bottlesIn, sellBottles } from './corkhouse'
 import { SMOKEHOUSE_STOCK } from '../ather/cooking'
 import { useLoadout, setLoadout, getLoadout, claimKaelsArms, slotOfGun } from '../shared/loadout'
 import { buyGun, GUN_PRICES, SHOP_GUNS } from './gun-shop'
@@ -53,6 +54,7 @@ export function ShopPanel({ id, ledger, setLedger, onClose, isTouch }: {
     </HearthFrame>
   )
   if (shop.kind === 'smokehouse') return <SmokehousePanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
+  if (shop.kind === 'corkhouse') return <CorkhousePanel ledger={ledger} setLedger={setLedger} onClose={onClose} />   // M57 s4
   if (shop.kind === 'gunshop') return <GunShopPanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (shop.kind === 'courseryard') return <CourserYardPanel ledger={ledger} setLedger={setLedger} onClose={onClose} />
   if (shop.kind === 'courserlot') return <CourserLotPanel town={town} ledger={ledger} setLedger={setLedger} onClose={onClose} />
@@ -193,6 +195,47 @@ function DecorShop({ id, ledger, setLedger, onClose }: { id: string; ledger: Led
 
 /** THE SMOKEHOUSE (RULED 11-17, world/cuisine.md): farmed meat by the bundle, for roasting at the keeper's Ather hearth (the
  *  cooking room). Stock + prices: ather/cooking.ts › SMOKEHOUSE_STOCK. */
+/** THE CORKHOUSE (M57 s4; RULED 11-21): the only counter that buys a keeper's bottles. One row per bottle in the bag (best price
+ *  first): sell one, or all of that kind. Bottles out and Marks in, both or neither (corkhouse.ts). */
+function CorkhousePanel({ ledger, setLedger, onClose }: { ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void }) {
+  const shop = FRONT_SHOPS.corkhouse, inv = useInv(), rows = bottlesIn(inv)
+  const [msg, setMsg] = useState<string | null>(null)
+  const sell = (id: string, n: number) => {
+    const r = sellBottles(ledger, getInv(), id, n), name = itemDef(id).name
+    if (!r.ok) { setMsg(r.why); return }
+    setLedger(r.ledger); setInv(r.inv)
+    const line = `${name}${n > 1 ? ` × ${n}` : ''} sold · +${r.paid.toLocaleString()} Marks`
+    setMsg(line); hudSay(line, 'item')
+  }
+  return (
+    <HearthFrame title={shop.name} maxWidth={500} onClose={onClose} fixed dataPanel="shop-panel">
+      <div className="px-4 pt-5 pb-4 text-[14px] leading-snug" style={{ color: H.ink }} data-shop="corkhouse">
+        <p className="text-[12.5px]" style={{ color: H.inkSoft }}>Bottles from your alchemy set sell here. A better grade fetches more.</p>
+        <div className="mt-3 grid gap-2">
+          {!rows.length && <div data-cork-empty className="text-[13px]" style={{ color: H.inkSoft }}>You carry no bottles. Brew some at your alchemy set and bring them through the gate.</div>}
+          {rows.map(r => {
+            const d = itemDef(r.id)
+            return (
+              <div key={r.id} data-cork-row={r.id} className="flex items-center gap-3 rounded-[12px] px-3 py-2" style={{ background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+                {d.icon ? <img src={d.icon} alt="" width={36} height={36} /> : null}
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{d.name}<span style={{ color: H.inkSoft }}> · {r.n} in the bag</span></div>
+                  <div className="text-[12.5px] tabular-nums" style={{ color: H.inkSoft }}>{r.each.toLocaleString()} Marks each</div>
+                </div>
+                <span data-act="cork-sell-one"><HearthButton small onClick={() => sell(r.id, 1)}>Sell 1</HearthButton></span>
+                {r.n > 1 && <span data-act="cork-sell-all"><HearthButton small primary onClick={() => sell(r.id, r.n)}>All · {(r.each * r.n).toLocaleString()}</HearthButton></span>}
+              </div>
+            )
+          })}
+        </div>
+        <div className="mt-3 flex items-center text-[12.5px]" style={{ color: H.inkSoft }}>
+          <span className="flex-1" data-shop-msg>{msg ?? ''}</span>
+          <span className="tabular-nums" data-purse>Purse · {Math.floor(ledger.marks).toLocaleString()} Marks</span>
+        </div>
+      </div>
+    </HearthFrame>
+  )
+}
 function SmokehousePanel({ ledger, setLedger, onClose }: { ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void }) {
   const shop = FRONT_SHOPS.smokehouse, inv = useInv()
   const [msg, setMsg] = useState<string | null>(null)

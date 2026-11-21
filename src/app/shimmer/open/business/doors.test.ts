@@ -65,6 +65,18 @@ for (const mk of Object.values(MAKES)) {
   ok(ls.length === 1 && ls[0].key === `front:courserlot:${mk.town}` && ls[0].name === 'The courser lot', `${mk.name}: one courser lot in ${mk.town}`)
   if (ls[0]) ok(doorsCached(R, mk.town).filter(d => d.b === ls[0].b).length === 1, `${mk.name}: the lot has its own building`)
 }
+// THE CORKHOUSE (RULED 11-21): Rune Hold only for now, by the shipyard (the free plain building nearest it), on its own building
+{ const ri = R.meta.places.findIndex(p => p.id === 'rune-hold'), rh = doorsCached(R, 'rune-hold')
+  const ck = all.filter(d => d.key === 'front:corkhouse'), yard = rh.find(d => d.key === 'front:shipyard')
+  ok(ck.length === 1 && rh.some(d => d.key === 'front:corkhouse'), `one Corkhouse, in Rune Hold (${ck.length})`)
+  if (ck.length && yard && ri >= 0) {
+    const taken = new Set(rh.filter(d => d.key !== 'front:corkhouse').map(d => d.b))
+    const free = cachedPlan(R, ri).buildings.filter(x => !x.front && !taken.has(x))
+    const dist = (b: { x: number; z: number }) => Math.hypot(b.x - yard.b.x, b.z - yard.b.z)
+    ok(free.every(b => dist(b) >= dist(ck[0].b)), `it is the free plain building nearest the shipyard (${dist(ck[0].b).toFixed(1)} m)`)
+    ok(rh.filter(d => d.b === ck[0].b).length === 1, 'no other door shares its building')
+  }
+}
 ok(all.filter(d => d.key.startsWith('front:courserlot:')).length === 4, 'four courser lots on the continent, no more')
 console.log(`doors: ${pass} pass, ${fail} fail (${all.length} doors)`)
 if (fail) process.exit(1)
