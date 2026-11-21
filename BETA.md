@@ -157,56 +157,24 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **Never waits on Alex:** a 🔒 row goes to the queue and the next row is taken. A row that fails twice is ⛔ blocked.
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
+## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+
+- *(empty)*
+
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
-- **PAINT BAR COVERS THE HOUSE (11-20, M37 s5).** With Paint active the plan bar (patterns + 12 swatches + roof row + hint) reaches mid-screen and hides the house at the default plan framing; a floor tap there lands on the bar (plot-house-check now pans first). Options: collapse the roof row under Paint, or frame the plan camera lower. Look call. Shot: edesk /tmp/plot-house/house-5-door-window-paint.png
-
-- **📌 PINNED IDEA (Alex 11-19, 'for another time'): AMMO THOUGHT BUBBLE.** A thought bubble beside the gun fades in while the
-  trigger is held, showing the rounds left; it turns RED on the last 7; after the trigger is released it holds ~3 s, then fades.
-  Replaces / complements the ammo chip. Not a row yet.
-
-- **CATALOG in plan mode: Jin's proposal (11-18, Alex asked "got any ideas"). Pick / change, then it becomes a row.**
-  Alex's brief: a CATALOG button in plan mode to browse every building piece; NOT a survival ladder of wall tiers but a RANGE OF
-  MATERIALS to match a keeper's taste; some need hard-to-get items.
-  1. **Grid = PIECE × MATERIAL.** Pieces down the side (wall, floor, roof, door, window, stair, fence, path, light, furniture);
-     materials across the top as swatches. Every material does the SAME job: no stats, no tiers, look only (your 09-27 law:
-     grade is worth and look, never power).
-  2. **Materials from what the world already has** (no new lore needed for v1): Goldwood, Shimmeroak, Starwillow, Dawnwood
-     planks/bark; Spinestone; salvaged ruin stone; Co. iron; crystal panes (raw → violet/storm/earth/water tints); rinn
-     pearlshell inlay. A new material family (thatch, clay, river stone…) = a Magii ask first.
-  3. **Hard to get = the material, never the shape.** A Dawnwood wall costs Dawnwood (level 10 trees); an Ather-crystal window
-     costs an Ather crystal (caverns, rare). So the catalog quietly sends you to every biome: building taste drives exploring.
-  4. **Locked cards still show.** Greyed with a one-line WHERE ("Dawnwood: the old giants of the Trails"), never hidden: the
-     catalog is also the world's shopping list. A material lights up (a small 'new' mark) the first time you gather it.
-  5. **Have / need on every card** (like the room cards today), Build lit when met; pays from the Keepstone first.
-  6. **RESKIN, not rebuild.** In plan mode tap a placed piece → swap its material from the same row; pay the new material,
-     the old one comes back. Taste can change without tearing a room down.
-  7. **Palettes.** Save a set (e.g. Shimmeroak + Spinestone + iron) and paint a whole room with it in one go.
-  **Jin's pick for v1:** 1 + 2 + 3 + 4 + 5 on the pieces that exist today (rooms' walls/floor/roof + the 15 furniture), then 6.
-  Palettes later. Open for you: which piece types first, and is reskin-refunds-the-old-material right?
-
-
 - **M20 death backpack (11-18, play `d4e43245`, live):** (1) ✅ SIGNED 11-19. Was: SIGN the 4 pack lines (@lark pass, `ather/death-pack.tsx` PACK_LINES): left 'Your pack lies where you fell. Go back for it soon.' / back 'You shoulder your pack. Everything is still there.' / some 'You take what fits. The rest waits in the pack.' / full 'Your bag is full. The pack waits.' (2) LOOK: the pack (leather box + a small warm mote over it); fall in the Wilds to see it. Hidden clock is 5 min, never shown.
-
-- **✅ ANSWERED 11-18 → Meltbore + every mining/utility-shaped move goes BACK TO THE DRAWING BOARD; Alex: "any tactical or signature moves should be designed for pvp first". Was:** **M15 Meltbore (11-18):** the channel cast now holds, bills mana per second and draws its beam, but does nothing to the world: canon has it boring through blocks and the Wilds have no borable blocks (and conjured walls can't be bored). Should a held Meltbore burn Hollows in its beam, or stay a pure utility until there is something to bore?
 
 - **M15 field casts (11-18):** these field moves have only PART of their effect in the open world (nothing invented): Healing Grove, Monsoon Veil, Exhale only heal; Overpressure's ward/shell do nothing; Monsoon Veil's hide does nothing; Threshold's shell HP does nothing (it eats Hollow spit); Cyclone Cage roots Hollows but doesn't block your shots. Fine for now, or do any of these need their full effect before beta?
 
 - **M6c (11-18, ⛔ for the hive) → Alex 11-18: "once I get home I'll do a thorough playtest".** the Wilds fight never ran headless (memory / swiftshader). While you try the new gun: go to the Wilds, does a Hollow come at you within a minute, and does it die? If none ever come, that is a real bug (the count drops 7→0 after arrival in headless runs).
 - **M13 look (11-18):** talk to Greg on your phone: bubble, camera turn, answer list. Placeholder lines ("Keeper.", "Go on", "About my ground") wait for lark.
 - **Lark copy pass (11-18), sign-off:** lark's drafts replace today's placeholders: Greg ("Now then, Keeper. Blue says hello." / And then? / Take the gems / My ground / See you, Greg.), the Shipyard + Kael's chest ("Open the chest", "Empty now. You have what Kael left."), the Co.'s contract board ("Contract board", hand it back, "That one's yours: …"). Yes / reword any. Held for Magii: a Citadel board saying goods come "from the Ather".
-- **✅ SIGNED 11-19 (Alex: all, swap "easy to like" -> "be easy company"; Glade placeholders MALLOW_DREAM + GLADE_STAYS signed too). Was: First-rinstick lines (11-19), sign-off:** lark's DRAFT script (athernyx 112926e, CANON/game/first-rinstick-script.md) is wired verbatim as placeholder: Fennel's opening/close/barks, the Moonwell prompts, the bank + bind toasts, the 4 quest-log notes + the done line. Slots with no script line (step titles, the catch-step note, 'Rinnshop stands' toast, RINNSHOP_LINE, noShop) keep the old placeholder. Sign off, or swap 'easy to like' for 'easy company' (lark's own note).
 - **Lark Moglin talk (11-18), sign-off:** in a settlement talk: Anything else? (was Go on) / See you soon. / Bring 2 Reed (was Give), garden full = "Your garden is full just now. Ask me again when there is a free room.", emptied settlement = "The houses are quiet now. Everyone here has found a garden." The Moglin's dream stays its hello (lark's call). Yes / reword.
 - **M17 (11-18), sign-off:** the STONERY is open now (its bench binds Spikes, Magii 5626aaf) with a PLACEHOLDER blurb for @lark: "Spikes are made here. Stonework comes later." Blades bind at the Carpentry bench. Balance: a focus works nodes up to its reach (worn 1, crafted tier k = k+1) at the node's own mana, double above: the Worn Blade now pays 10 on shimmeroak/starwillow/dawnwood (was 5) and the Worn Spike 14 on tier-2+ crystals (was 7). Yes / adjust.
 - **Lark continent counters (11-18), sign-off:** the keeper's answers at a runesmith ("Here. A letter to cut." / Goodbye.) and to Idony after her hush ("When you are free." / "The runesmith, please." / "I'll let you work."). Yes / reword. Idony's twin gets no answer until Magii rules her (name, voice, what she opens).
 - **Lark water tap + farmer (11-18), sign-off:** Water Tap "Sigils in an iron housing. It sips a little of the garden's mana and turns it into water. Holds one tank's worth." / Water Tank "A riveted iron tank. With a water tap on your plot, it holds six more water." / no tap: "No water tap on your plot yet. Rune Hold's Smithy sells one." / empty: "Out of water for now. The tap is still filling." / a farmer: "Waters your growing beds, up to N an hour. Planting and harvesting are yours." Yes / reword. Also look calls: tap + tank blockouts, the 20 per-crop icons.
 - **Co. clerk talks (11-18, play):** Alex's SIGNED office script (athernyx c953f92) is live as a conversation: greeting once per garden, then a flavour line per visit; board/take/refuse/pay/leave lines on the board. Only the keeper's answer labels are placeholders ("…", "The board.", "Goodbye."): yes / reword. Look call: the clerk's bubble sits over the door (no clerk model).
-
-- **✅ DONE 11-17 (`72889ef4`): on the Ather the smith/temple errand line's waymark points at the gate. Was:** **M5 friction (11-17, not a dead end):** after Greg's gems the journal says 'Go to the Redstair runesmith' but 'Nowhere to point yet' on the Ather side: no beacon to the gate, and Rune Hold sits on the map's Athernyx face (Tab flips). Proposal: on the Ather the errand's waymark points at the gate. Hub can do it (small).
-
-- **✅ ANSWERED 11-17 → M6d reframed (prices stay, first deed = mid-game, deeds get told). Was:** **M6d pacing (11-17):** a fresh keeper has 1,500 Marks; the cheapest of 47 deeds is 35,000 (a lone farm nets +20/min, ~29 h payback). Only first-hour earning = Co. courser contracts (~4-12k per 15 km run). So 'buy a business in the first hour' fails as priced (you raised prices 11-15). Pick: (a) a starter lot ~3-5k, (b) richer first contracts, or (c) the first deed is a mid-game goal and M6d leaves beta. Plus a journal line pointing at deeds either way.
-
-- **✅ LIVE 11-17 (`5b3edbad`, Alex approved lark's lines): 'Rin at the water' + 'Prospect a mana crystal' in the journal, struck once used. Was:** **Discovery pointers (11-17, M6a + M6b):** neither rinning nor prospecting is told anywhere (welcome card, journal, bag) before you stumble on it; prospecting's only pointer is the HUD prompt AT a node. Proposal: @lark drafts one journal line each (the game register), you sign off, hub wires them. Yes / or your own wording?
 
 - **Alex 11-17: a RINNING ROOM** (craft rinsticks, make bait, prepare catches for the cooking room). Canon mostly settled
   (rinsticks built from rinn; roast rinn at the hearth; workshop rooms + Moglin trade). Magii asked (CANON_GAPS 4a9a621): 6th room
@@ -216,26 +184,6 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
   read the bait pouch (a journal line or welcome-card line would fix it: wording = @lark); (2) 10 bait at birth and NO
   refill anywhere: where does more bait come from (Greg / Moglin / forage / Nyx shops)? Your call from 11-16, still open.
   Also likely: the continent's rinning (`nyx-rinning.tsx`) has the same mouse-only wiring on a phone (unchecked).
-
-- **✅ FIXED + LIVE 11-17 (`d8b72da4`, Alex approved via serb): M7 save loss.** History: (1) Born in the open world, then visit `/shimmer` → the
-  birth rune is DELETED and the gate reopens. The open world never writes `ather:epoch`, so `resetIfStale`
-  (`lib/ather-epoch.ts:97`, run by /shimmer, play3d, voxel3d) reads it as a pre-epoch character. Reachable: sign-in returns to
-  `/shimmer` by default (`lib/accounts/oauth.ts:32`), the games list and /room link there. (2) Anonymous → signed in on the
-  open world → birth gate again: `adoptAnonKeeperState` only runs on those three old pages, never site-wide.
-  Garden / pack / journal / deeds survive (unscoped keys); open-world progress never reaches the server.
-  **Jin's fix (needs your yes, it is a save migration):** the open world stamps the current epoch when a keeper is born there
-  (and on boot if a keeper exists and no epoch does), so those keepers count as current; and `SaveOwnerBoot` runs
-  `adoptAnonKeeperState` site-wide on sign-in, before the gate reads. Never call `resetIfStale` in the open world: that
-  would wipe every live keeper. Then `beta-m7-saves.mts` must PASS on prod.
-  **Alex 11-17 (phone), the direction:** a keeper made before sign-in is a new game; on sign-in, if the account already has a
-  save, a menu asks whether to ADD this keeper to the account's ROSTER. One garden file per account (email), several keepers in
-  it, swapped like loadouts, so a birth rune stops being a one-way door. Character creator revisited later. Canon asked
-  (CANON_GAPS f79b4da, multiple keepers per garden). Plan: (a) the epoch-stamp bug fix ships first (no design under which
-  /shimmer should delete a keeper); (b) the roster replaces the plain site-wide adoption; it is a new system, so it gets its
-  own GBOARD block + rows once Alex confirms what belongs to a keeper vs the garden.
-
-- **✅ ANSWERED 11-17 → M11.** Alex, on his phone: too much on-screen clutter from the MAP / PACK / OPTIONS / etc. buttons. Noted, not yet acted on
-  (he said continue). Proposal when he's back: one menu chip that opens the row, the rest hidden until tapped. Needs his yes on the shape.
 
 - **M2/M3 continent (11-17, `90e4226d`, live):** the phone tap row (MAP/OPTIONS/PACK/CAMERA/GARAGE/ROAD) moved down to
   y=180, under the status chip, so it sits lower over the road. The "thumb here to drive/move" hint now wraps to two lines (the
