@@ -83,6 +83,11 @@ function claimBudget(frameKey: number): number {
   return GROUND_BUDGET_MS - budget.used
 }
 
+/** Probe for shot scripts (M58, 11-21): ground pieces within draw range of the keeper not built yet, summed over every mounted
+ *  tile. On SwiftShader a tile's ground takes many seconds to come in (one piece a slow frame), so a shot waits for 0. */
+const pendingOf = new Set<() => number>()
+if (typeof window !== 'undefined') (window as unknown as { __groundPending?: () => number }).__groundPending = () => { let n = 0; for (const f of pendingOf) n += f(); return n }
+
 /** The ground pieces: frustum-culled by three, and hidden past the fog by distance from the keeper. */
 function Ground({ W, focus, off }: { W: Wilds; focus: Focus; off: { x: number; z: number } }) {
   const plan = useMemo(() => chunkPlan(W), [W])
@@ -107,6 +112,10 @@ function Ground({ W, focus, off }: { W: Wilds; focus: Focus; off: { x: number; z
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan])
   useEffect(() => { for (const m of built.current) if (m) m.material = mat }, [mat])
+  useEffect(() => {
+    const f = () => { const q = focus.current, lx = q.x - off.x, lz = q.z - off.z; let n = 0; plan.forEach((k, i) => { if (!built.current[i] && Math.hypot(k.cx - lx, k.cz - lz) - k.r < TREE_DRAW_R) n++ }); return n }
+    pendingOf.add(f); return () => { pendingOf.delete(f) }
+  }, [plan, focus, off])
   useFrame(state => {
     const f = focus.current, lx = f.x - off.x, lz = f.z - off.z
     const left = claimBudget(state.clock.elapsedTime)
