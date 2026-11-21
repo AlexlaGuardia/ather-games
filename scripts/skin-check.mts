@@ -2,7 +2,8 @@
 // slid under the keeper, a Shambler is set on them: its blows drain the skin (the highlight + its +N over the health bar), health
 // untouched; the skin is set low (cracks/flicker) then the next blow POPS it: the shatter + edge flash draw, the pop sound is
 // requested once (proposed = silent: counted by window.__sfx.asked), only the spill reaches health. Shots: full / low / popping.
-//   npx tsx scripts/skin-check.mts [origin] [--size WxH] [--tag name]
+//   npx tsx scripts/skin-check.mts [origin] [--size WxH] [--tag name] [--keys]
+//   --keys: a phone-size viewport driven by the keyboard (Q), for the bar's phone layout; the touch cast path is not this check's
 import puppeteer from 'puppeteer-core'
 const args = process.argv.slice(2), flag = (k: string) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined }
 const origin = args.find(a => a.startsWith('http')) ?? 'https://ather.games'
@@ -12,7 +13,7 @@ import { mkdirSync } from 'fs'; mkdirSync(dir, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const b = await puppeteer.launch({ protocolTimeout: 240000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const p = await (await b.createBrowserContext()).newPage()
-await p.setViewport({ width: W, height: H, ...(W < 600 ? { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {}) })
+await p.setViewport({ width: W, height: H, ...(W < 600 && !args.includes('--keys') ? { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {}) })
 const errors: string[] = []
 p.on('pageerror', e => errors.push(String(e)))
 const cerr: string[] = []; p.on('console', m => { if (m.type() === 'error') cerr.push(m.text().slice(0, 160)) })
@@ -27,7 +28,7 @@ await p.waitForFunction(() => (window as any).__ather?.zone?.() === 'wilds', { t
 await p.addStyleTag({ content: 'nextjs-portal{display:none!important}' }).catch(() => {})   // the dev overlay sits on the bar
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
-if (W >= 600) await p.mouse.click(W / 2, H / 2); else await p.touchscreen.tap(W / 2, H / 3)
+if (W >= 600 || args.includes('--keys')) await p.mouse.click(W / 2, H / 2); else await p.touchscreen.tap(W / 2, H / 3)
 await sleep(800)
 await p.waitForFunction(() => typeof (window as any).__ather?.look === 'function', { timeout: 60000 }); await p.evaluate(() => (window as any).__ather.look(0, -0.25)); await sleep(600)
 await p.evaluate(() => { (window as any).__ather.combat().hollows.length = 0 })
