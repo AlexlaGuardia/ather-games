@@ -46,10 +46,10 @@ try {
   const poll = async (fn: () => Promise<boolean>, ms = 10000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(250) } return false }
   const st = () => p.evaluate(() => { const a = (window as any).__ather.state(); return { x: a.px, z: a.pz } }) as Promise<{ x: number; z: number }>
   const bag = () => p.evaluate(() => JSON.parse(localStorage.getItem('open.inv.v1') ?? 'null')) as Promise<Inv>
-  const bubble = () => p.evaluate(() => ({ text: document.querySelector('[data-talk-bubble]')?.textContent ?? '', scene: document.querySelector('[data-talk-scene]')?.textContent ?? '', opts: [...document.querySelectorAll('[data-talk-option]')].map(b => b.textContent ?? '') })) as Promise<{ text: string; scene: string; opts: string[] }>
+  const bubble = () => p.evaluate(() => ({ text: document.querySelector('[data-talk-bubble]')?.textContent ?? '', scene: document.querySelector('[data-talk-scene]')?.textContent ?? '', opts: [...document.querySelectorAll('[data-talk-option]')].map(b => (b.textContent ?? '').replace(/^›/, '').trim()) })) as Promise<{ text: string; scene: string; opts: string[] }>
   const choose = async (label: string) => {
     const before = JSON.stringify(await bubble())
-    const hit = await p.evaluate((l: string) => { const b = [...document.querySelectorAll('[data-talk-option]')].find(x => x.textContent === l) as HTMLElement | undefined; if (!b) return false; b.click(); return true }, label)
+    const hit = await p.evaluate((l: string) => { const b = [...document.querySelectorAll('[data-talk-option]')].find(x => (x.textContent ?? '').replace(/^›/, '').trim() === l) as HTMLElement | undefined; if (!b) return false; b.click(); return true }, label)
     if (hit) await poll(async () => JSON.stringify(await bubble()) !== before, 6000)
     return hit
   }
