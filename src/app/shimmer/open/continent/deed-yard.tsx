@@ -5,8 +5,9 @@
 // the hotbar, a ghost marks the cells in front of you, TAP E sets it, HOLD E turns it a quarter every HOLD_MS. E with no piece
 // in hand, facing a placed one, picks it back up into the bag. E at the look board steps to the next colour + material combo
 // (business/deed-grid.ts › DEED_PALETTES), which recolours the fence and a trim on Kael's shipyard house.
-// Saved per GARDEN (the tycoon is garden-level too): localStorage gardenKey(DEED_YARD_KEY). Pieces are not solid to the
-// walker in slice 1 (no foot-solids hook yet): they stand level at the ground under their centre (the yard is not levelled).
+// Saved per GARDEN (the tycoon is garden-level too): localStorage gardenKey(DEED_YARD_KEY).
+// SLICE 2 (hub #15579): the yard comes BUILT with one level timber deck on posts (business/deed-yard-floor.ts), a ramp at the
+// gate; the deck, ramp, rim fence and every solid placed piece are registered with the walker (foot-extras.ts).
 // Mount (inside the Canvas): <DeedYard R={R} focus={focus} track={track} held={heldId} enabled={onFootAndNoMenu} onState={...} />
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
@@ -23,6 +24,9 @@ import { FLOOR_H } from '../towns/plan'
 import { doorByKey } from '../business/doors'
 import { DEED_GRID, DEED_PALETTES, emptyDeed, parseDeed, place, pickUp, itemAt, placeRefusal, setPalette, paletteOf, cellAtLocal, pieceCentre, type DeedState, type Footprint } from '../business/deed-grid'
 import { shipyardYard, yardToWorld, yardToLocal, yardRotY, buildingAxes, GATE_MID, type Yard } from '../business/deed-yard-site'
+import { yardFloorY, rampOf, yardGround, rimBoxes, pieceBoxes, GATE_W, RAMP_RISE } from '../business/deed-yard-floor'
+import { setFootExtra } from '../foot-extras'
+import { bodyHits, type OBox } from '../foot-solids'
 
 // the furniture's own box bodies (ather/workshop.tsx), loaded only when a yard has something in it
 const PieceBody = dynamic(() => import('../ather/workshop').then(m => m.PieceBody), { ssr: false })
@@ -35,8 +39,6 @@ const fpOf = (id: string): Footprint | null => (FURNITURE[id] ? { w: FURNITURE[i
 const AIM = 1.4
 /** the look board's reach (m) */
 const BOARD_REACH = 1.8
-/** gate gap width (m) */
-const GATE_W = 2
 
 export function loadDeedYard(): DeedState {
   try { const raw = localStorage.getItem(gardenKey(DEED_YARD_KEY)); return raw ? parseDeed(JSON.parse(raw), KIND, fpOf) : emptyDeed() } catch { return emptyDeed() }
@@ -59,7 +61,17 @@ interface Props {
 export function DeedYard({ R, focus, track, held, enabled, onState }: Props) {
   const yard = useMemo(() => (R ? shipyardYard(R) : null), [R])
   const house = useMemo(() => (R ? doorByKey(R, 'front:shipyard')?.b ?? null : null), [R])
+  const floor = useMemo(() => (R && yard ? yardFloorY(R, yard) : 0), [R, yard])
+  const ramp = useMemo(() => (R && yard ? rampOf(R, yard, floor) : null), [R, yard, floor])
   const [deed, setDeed] = useState<DeedState>(emptyDeed)
+  // the walker: deck + ramp as ground, the rim + the solid pieces as boxes (swapped whole when the yard changes)
+  const boxes = useRef<OBox[]>([])
+  useEffect(() => { if (yard) boxes.current = [...rimBoxes(yard, floor), ...pieceBoxes(yard, floor, deed, id => FURNITURE[id] ?? null)] }, [yard, floor, deed])
+  useEffect(() => {
+    if (!R || !yard || !ramp) return
+    setFootExtra('deed-yard', { ground: yardGround(R, yard, floor, ramp), boxes: () => boxes.current })
+    return () => setFootExtra('deed-yard', null)
+  }, [R, yard, floor, ramp])
   useEffect(() => setDeed(loadDeedYard()), [])
   const deedRef = useRef(deed); deedRef.current = deed
   const commit = (s: DeedState) => { deedRef.current = s; setDeed(s); saveDeedYard(s) }
@@ -82,9 +94,11 @@ export function DeedYard({ R, focus, track, held, enabled, onState }: Props) {
     if (!id || !isPiece(id) || !c) return
     const why = placeRefusal(deedRef.current, KIND, fpOf, id, c.cx, c.cz, rot.current)
     if (why) { hudSay(why === 'full' ? 'The yard holds no more.' : why === 'taken' ? 'Something already stands there.' : 'That reaches past the fence.', 'info'); return }
+    const next = place(deedRef.current, KIND, fpOf, id, c.cx, c.cz, rot.current), f = focus.current
+    if (yard && f && pieceBoxes(yard, floor, next, q => FURNITURE[q] ?? null).some(b => bodyHits(b, f.x, f.z, floor))) { hudSay('Step back: you are standing there.', 'info'); return }
     const inv = take(getInv(), id, 1); if (!inv) return
     setInv(inv)
-    commit(place(deedRef.current, KIND, fpOf, id, c.cx, c.cz, rot.current))
+    commit(next)
     hudSay(`${FURNITURE[id].name} set in the yard`, 'item')
   }
   act.current.turn = () => { rot.current = (rot.current + 1) % 4 }
@@ -127,10 +141,10 @@ export function DeedYard({ R, focus, track, held, enabled, onState }: Props) {
   // probe for scripted checks (scripts/deed-yard-check.mts)
   useEffect(() => {
     (window as unknown as { __deedYard?: unknown }).__deedYard = {
-      yard: () => yard, board: () => board, state: () => deedRef.current, aim: () => ({ ...aim.current, rot: rot.current }),
+      yard: () => yard, board: () => board, floor: () => floor, ramp: () => ramp, state: () => deedRef.current, aim: () => ({ ...aim.current, rot: rot.current }),
       stored: () => { try { return localStorage.getItem(gardenKey(DEED_YARD_KEY)) } catch { return null } },
     }
-  }, [yard, board])
+  }, [yard, board, floor, ramp])
 
   // per frame: where the keeper aims; the ghost; the page's touch pill
   const ghost = useRef<THREE.Group>(null), ghostMat = useRef<THREE.MeshBasicMaterial>(null), grid = useRef<THREE.LineSegments>(null)
@@ -153,7 +167,7 @@ export function DeedYard({ R, focus, track, held, enabled, onState }: Props) {
         const fp = fpOf(id)!, c = pieceCentre(KIND, fp, cell.cx, cell.cz, rot.current), w = yardToWorld(yard, c.lx, c.lz)
         const odd = rot.current % 2 === 1
         const cw = odd ? Math.ceil(fp.d - 1e-6) : Math.ceil(fp.w - 1e-6), cd = odd ? Math.ceil(fp.w - 1e-6) : Math.ceil(fp.d - 1e-6)
-        ghost.current.position.set(w.x, R.groundAt(w.x, w.z) + 0.02, w.z)
+        ghost.current.position.set(w.x, floor + 0.02, w.z)
         ghost.current.rotation.y = yardRotY(yard)
         ghost.current.scale.set(Math.max(1, cw), 1, Math.max(1, cd))
         if (ghostMat.current) ghostMat.current.color.set(placeRefusal(deedRef.current, KIND, fpOf, id, cell.cx, cell.cz, rot.current) ? '#e0604a' : '#7fe0a0')
@@ -169,17 +183,18 @@ export function DeedYard({ R, focus, track, held, enabled, onState }: Props) {
   const pal = paletteOf(deed)
   return (
     <group>
-      <Fence R={R} yard={yard} color={pal.color} accent={pal.accent} />
-      {board && <LookBoard R={R} yard={yard} at={board} color={pal.color} accent={pal.accent} />}
+      <Deck R={R} yard={yard} floor={floor} ramp={ramp} />
+      <Fence yard={yard} floor={floor} color={pal.color} accent={pal.accent} />
+      {board && <LookBoard yard={yard} floor={floor} at={board} color={pal.color} accent={pal.accent} />}
       {house && <HouseTrim b={house} color={pal.color} accent={pal.accent} />}
-      <GridLines R={R} yard={yard} gref={grid} />
+      <GridLines yard={yard} floor={floor} gref={grid} />
       <group ref={ghost} visible={false}>
         <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[0.96, 0.96]} /><meshBasicMaterial ref={ghostMat} color="#7fe0a0" transparent opacity={0.45} depthWrite={false} /></mesh>
       </group>
       {deed.items.map((p, k) => {
         const fp = fpOf(p.id); if (!fp) return null
         const c = pieceCentre(KIND, fp, p.cx, p.cz, p.rot), w = yardToWorld(yard, c.lx, c.lz)
-        return <group key={`${k}:${p.id}:${p.cx}:${p.cz}`} position={[w.x, R.groundAt(w.x, w.z), w.z]} rotation={[0, yardRotY(yard) - p.rot * Math.PI / 2, 0]}><PieceBody item={p.id} /></group>
+        return <group key={`${k}:${p.id}:${p.cx}:${p.cz}`} position={[w.x, floor, w.z]} rotation={[0, yardRotY(yard) - p.rot * Math.PI / 2, 0]}><PieceBody item={p.id} /></group>
       })}
     </group>
   )
@@ -191,7 +206,7 @@ function rail(a: THREE.Vector3, b: THREE.Vector3) {
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), b.clone().sub(a).normalize())
   return { m, L, q }
 }
-function Fence({ R, yard, color, accent }: { R: Region; yard: Yard; color: string; accent: string }) {
+function Fence({ yard, floor, color, accent }: { yard: Yard; floor: number; color: string; accent: string }) {
   const parts = useMemo(() => {
     const posts: THREE.Vector3[] = [], rails: { m: THREE.Vector3; L: number; q: THREE.Quaternion }[] = []
     const corners: [number, number][] = [[-G.w / 2, -G.d / 2], [G.w / 2, -G.d / 2], [G.w / 2, G.d / 2], [-G.w / 2, G.d / 2]]
@@ -203,7 +218,7 @@ function Fence({ R, yard, color, accent }: { R: Region; yard: Yard; color: strin
       // post stations along the edge (s from -L/2 to L/2); at the gate the middle ones give way to two gateposts
       let ss = Array.from({ length: n + 1 }, (_, k) => -L / 2 + (k * L) / n)
       if (gap) ss = [...ss.filter(s => Math.abs(s) >= GATE_W / 2 + 0.3), -GATE_W / 2, GATE_W / 2].sort((a, b) => a - b)
-      const at = (s: number) => { const t = s / L + 0.5, w = yardToWorld(yard, u0 + (u1 - u0) * t, v0 + (v1 - v0) * t); return new THREE.Vector3(w.x, R.groundAt(w.x, w.z), w.z) }
+      const at = (s: number) => { const t = s / L + 0.5, w = yardToWorld(yard, u0 + (u1 - u0) * t, v0 + (v1 - v0) * t); return new THREE.Vector3(w.x, floor, w.z) }
       ss.forEach((s, k) => {
         const p = at(s)
         if (k < ss.length - 1) posts.push(p)   // the edge's last post is the next edge's first
@@ -211,7 +226,7 @@ function Fence({ R, yard, color, accent }: { R: Region; yard: Yard; color: strin
       })
     }
     return { posts, rails }
-  }, [R, yard])
+  }, [yard, floor])
   return (
     <group>
       {parts.posts.map((p, k) => <mesh key={`p${k}`} position={[p.x, p.y + 0.6, p.z]}><boxGeometry args={[0.14, 1.2, 0.14]} /><meshLambertMaterial color={color} /></mesh>)}
@@ -222,8 +237,8 @@ function Fence({ R, yard, color, accent }: { R: Region; yard: Yard; color: strin
   )
 }
 
-function LookBoard({ R, yard, at, color, accent }: { R: Region; yard: Yard; at: { x: number; z: number }; color: string; accent: string }) {
-  const y = R.groundAt(at.x, at.z)
+function LookBoard({ yard, floor, at, color, accent }: { yard: Yard; floor: number; at: { x: number; z: number }; color: string; accent: string }) {
+  const y = floor
   return (
     <group position={[at.x, y, at.z]} rotation={[0, yardRotY(yard), 0]}>
       <mesh position={[0, 0.7, 0]}><boxGeometry args={[0.12, 1.4, 0.12]} /><meshLambertMaterial color={color} /></mesh>
@@ -237,14 +252,13 @@ function Swatches({ color }: { color: string }) {
   return <>{DEED_PALETTES.map((p, k) => <mesh key={k} position={[-0.3 + k * 0.2, 1.35, p.color === color ? 0.06 : 0.035]}><boxGeometry args={[0.14, 0.2, 0.02]} /><meshLambertMaterial color={p.color} /></mesh>)}</>
 }
 
-function GridLines({ R, yard, gref }: { R: Region; yard: Yard; gref: React.RefObject<THREE.LineSegments | null> }) {
+function GridLines({ yard, floor, gref }: { yard: Yard; floor: number; gref: React.RefObject<THREE.LineSegments | null> }) {
   const geo = useMemo(() => {
-    const pts: number[] = [], push = (u: number, v: number) => { const w = yardToWorld(yard, u, v); pts.push(w.x, R.groundAt(w.x, w.z) + 0.04, w.z) }
-    // each line in 1 m steps so it rides the slope
+    const pts: number[] = [], push = (u: number, v: number) => { const w = yardToWorld(yard, u, v); pts.push(w.x, floor + 0.03, w.z) }
     for (let i = 0; i <= G.w; i++) for (let j = 0; j < G.d; j++) { push(i - G.w / 2, j - G.d / 2); push(i - G.w / 2, j + 1 - G.d / 2) }
     for (let j = 0; j <= G.d; j++) for (let i = 0; i < G.w; i++) { push(i - G.w / 2, j - G.d / 2); push(i + 1 - G.w / 2, j - G.d / 2) }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); return g
-  }, [R, yard])
+  }, [yard, floor])
   return <lineSegments ref={gref} geometry={geo} visible={false}><lineBasicMaterial color="#f3e6c4" transparent opacity={0.5} depthWrite={false} /></lineSegments>
 }
 
@@ -260,6 +274,37 @@ function HouseTrim({ b, color, accent }: { b: { x: number; z: number; yaw: numbe
       <mesh position={[0, H - 0.15, -b.d / 2 - 0.05]}><boxGeometry args={[b.w + 0.1, 0.22, 0.06]} /><meshLambertMaterial color={accent} /></mesh>
       <mesh position={[b.w / 2 + 0.05, H - 0.15, 0]}><boxGeometry args={[0.06, 0.22, b.d + 0.1]} /><meshLambertMaterial color={accent} /></mesh>
       <mesh position={[-b.w / 2 - 0.05, H - 0.15, 0]}><boxGeometry args={[0.06, 0.22, b.d + 0.1]} /><meshLambertMaterial color={accent} /></mesh>
+    </group>
+  )
+}
+
+/** the BUILT floor: a timber deck at one height, posts down to the hill where it falls away, a ramp at the gate */
+const DECK = '#7a5a3a', DECK_DK = '#5a4028'
+function Deck({ R, yard, floor, ramp }: { R: Region; yard: Yard; floor: number; ramp: { mu: number; mv: number; out: [number, number]; L: number } | null }) {
+  const posts = useMemo(() => {
+    const out: { x: number; z: number; y0: number; h: number }[] = []
+    for (let i = 0; i <= G.w; i += 2) for (let j = 0; j <= G.d; j += 2) {
+      const w = yardToWorld(yard, Math.min(i, G.w - 0.15) - G.w / 2 + (i === 0 ? 0.15 : 0), Math.min(j, G.d - 0.15) - G.d / 2 + (j === 0 ? 0.15 : 0))
+      const g = R.heightAt(w.x, w.z), h = floor - 0.2 - g + 0.3   // sunk 0.3 m into the hill
+      if (h > 0.35) out.push({ x: w.x, z: w.z, y0: g - 0.3, h })
+    }
+    return out
+  }, [R, yard, floor])
+  const slope = useMemo(() => {
+    if (!ramp || ramp.L < 0.05) return null
+    const a = yardToWorld(yard, ramp.mu, ramp.mv), b = yardToWorld(yard, ramp.mu + ramp.out[0] * ramp.L, ramp.mv + ramp.out[1] * ramp.L)
+    const dx = b.x - a.x, dz = b.z - a.z, dy = -ramp.L * RAMP_RISE, h = Math.hypot(dx, dz)
+    // heading then pitch (Euler YZX: local +x pitched about z, then turned about y), so the slab never rolls
+    return { m: new THREE.Vector3((a.x + b.x) / 2, floor - 0.06 + dy / 2, (a.z + b.z) / 2), L: Math.hypot(h, dy), e: new THREE.Euler(0, Math.atan2(-dz, dx), Math.atan2(dy, h), 'YZX') }
+  }, [yard, floor, ramp])
+  const ry = yardRotY(yard)
+  return (
+    <group>
+      <mesh position={[yard.x, floor - 0.1, yard.z]} rotation={[0, ry, 0]}><boxGeometry args={[G.w + 0.2, 0.2, G.d + 0.2]} /><meshLambertMaterial color={DECK} /></mesh>
+      {/* plank seams every metre across, so the deck reads as boards */}
+      {Array.from({ length: G.w - 1 }, (_, k) => { const w = yardToWorld(yard, k + 1 - G.w / 2, 0); return <mesh key={k} position={[w.x, floor + 0.002, w.z]} rotation={[0, ry, 0]}><boxGeometry args={[0.04, 0.004, G.d]} /><meshBasicMaterial color={DECK_DK} /></mesh> })}
+      {posts.map((p, k) => <mesh key={k} position={[p.x, p.y0 + p.h / 2, p.z]} rotation={[0, ry, 0]}><boxGeometry args={[0.26, p.h, 0.26]} /><meshLambertMaterial color={DECK_DK} /></mesh>)}
+      {slope && <mesh position={slope.m} rotation={slope.e}><boxGeometry args={[slope.L, 0.12, GATE_W]} /><meshLambertMaterial color={DECK} /></mesh>}
     </group>
   )
 }

@@ -14,6 +14,7 @@ import { createLoco, tickLocomotion, type LocoState, type LocoInput, type LocoWo
 import { tunnelWall, type Region } from './region'
 import { caveContain, nearCave, type Cavern } from './cavern'
 import { townSolids, solidHit, prefetchTowns, pushOut, stationGround, type TownSolids } from './foot-solids'
+import { extraGround, extraHit } from './foot-extras'
 
 /** Water plane the page draws (Water: y = -0.15). Land under it is a river or the sea: the walker swims. */
 export const WATER_Y = -0.15
@@ -34,7 +35,8 @@ export function footWorld(R: Region, cave: Cavern | null = null): FootWorld {
     ground: (x, z) => {
       if (cave && Math.abs(hint.y - cave.y) < 4 && cave.nearFloor(x, z) && !R.tunnelAt(x, z)) return cave.y
       const g = R.groundAt(x, z, hint.y + 0.6)
-      return st ? Math.max(g, stationGround(st, x, z)) : g
+      // + anything registered in foot-extras.ts (M49: the shipyard yard's deck and gate ramp)
+      return Math.max(st ? Math.max(g, stationGround(st, x, z)) : g, extraGround(x, z))
     },
     solids: () => [],
     water: (x0, _y0, z0, x1, _y1, z1): readonly Box[] => {
@@ -44,7 +46,7 @@ export function footWorld(R: Region, cave: Cavern | null = null): FootWorld {
   })
   // houses and the Station's walls are turned boxes the Shape cannot hold: they gate bodyFree, which is every move the
   // walker makes (it moves x and z apart, so it slides along a wall at any angle) and every spot exitSpot tries
-  const world: LocoWorld = { ...base, bodyFree: (x, z, feetY) => base.bodyFree(x, z, feetY) && !solidHit(R, solids, x, z, feetY) }
+  const world: LocoWorld = { ...base, bodyFree: (x, z, feetY) => base.bodyFree(x, z, feetY) && !solidHit(R, solids, x, z, feetY) && !extraHit(x, z, feetY) }
   return { world, hint, cave, solids }
 }
 

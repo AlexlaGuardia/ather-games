@@ -6,6 +6,8 @@
 //   4 · reload: both pieces still stand, same cells, same turn
 //   5 · at the look board real E steps to the next colour + material combo; reload keeps it
 //   6 · empty hand (an empty hotbar slot), facing the stool, real E picks it up; the bag gets it back
+//   S2 · (slice 2) the yard's built deck: the walker WALKS IN through the gate (real W, from the ramp's foot) and stands on the
+//        one floor; a placed SOLID piece (the bench) stops real W; a shot from the gate
 //   PASS = all of that + 0 page errors. Hooks MOVE (__drive.footTp / look) and READ (__deedYard); the bag is SEEDED with the
 //   two pieces (localStorage, before the continent loads) because making furniture is the Ather's bench, not this slice.
 //   npx tsx scripts/deed-yard-check.mts [origin, default https://ather.games] [--out /tmp/deed-yard]
@@ -61,8 +63,24 @@ const standAt = async (step: string, lx: number, lz: number, face: 'deep' | 'bac
   const x = y.x + y.ax[0] * lx + y.az[0] * lz, z = y.z + y.ax[1] * lx + y.az[1] * lz
   const yaw = Math.atan2(-y.az[0] * s, -y.az[1] * s)   // forward = (-sin yaw, -cos yaw) on the continent
   await p.evaluate((a, b, w) => { (window as any).__drive.footTp(a, b, w, -0.35); (window as any).__drive.look(w, -0.35) }, x, z, yaw)
+  const fl = await Y('floor')
+  if (fl != null && !await poll(async () => Math.abs((await footAt()).y - fl) < 0.15, 8000)) await fail(step, `set down at ${lx},${lz} but not on the deck: feet ${(await footAt()).y.toFixed(2)}, floor ${fl.toFixed(2)}`)
   if (!await poll(async () => { const a = await Y('aim'); return !!a?.inYard && !!a?.cell })) await fail(step, `not aimed into the yard at ${lx},${lz}: ${JSON.stringify(await Y('aim'))}`)
 }
+const footAt = () => p.evaluate(() => { const f = (window as any).__drive.foot(); return { x: f.px, y: f.py, z: f.pz } }) as Promise<{ x: number; y: number; z: number }>
+// hold real W until `goal` says arrived, or the walker STALLS (moved < 5 cm over 2.5 s), or maxMs. Timed holds lie under
+// SwiftShader (a dev build walks ~0.3 m/s there), so a walk ends on what the walker did, never on the clock.
+const holdW = async (goal: (f: { x: number; y: number; z: number }) => boolean, maxMs = 60000) => {
+  await p.keyboard.down('KeyW')
+  const t0 = Date.now(); let last = await footAt(), lastT = Date.now(), why = 'timeout'
+  while (Date.now() - t0 < maxMs) {
+    await sleep(300); const f = await footAt()
+    if (goal(f)) { why = 'arrived'; break }
+    if (Math.hypot(f.x - last.x, f.z - last.z) > 0.05) { last = f; lastT = Date.now() } else if (Date.now() - lastT > 2500) { why = 'stalled'; break }
+  }
+  await p.keyboard.up('KeyW'); await sleep(400); return why
+}
+const local = (y: any, x: number, z: number) => { const dx = x - y.x, dz = z - y.z; return { lx: dx * y.ax[0] + dz * y.ax[1], lz: dx * y.az[0] + dz * y.az[1] } }
 const tapE = async () => { await p.keyboard.down('KeyE'); await sleep(80); await p.keyboard.up('KeyE'); await sleep(700) }
 
 // 1 · born, seed the two pieces, to the continent
@@ -108,9 +126,43 @@ if (rot1 !== (rot0 + 1) % 4) await fail('turn', `HOLD did not turn a quarter: ${
 await tapE()
 st = await Y('state'); res.afterWide = st.items
 const w = st.items.find((q: any) => q.id === WIDE)
-if (!w || w.rot !== rot1) await fail('wide', `wide piece not set turned (${rot1}): ${JSON.stringify(st.items)}`)
+if (!w || w.rot !== rot1) await fail('wide', `wide piece not set turned (${rot1}): ${JSON.stringify(st.items)} | aim ${JSON.stringify(await Y('aim'))} | hud: ${String(await text()).slice(0, 300)}`)
 await p.screenshot({ path: `${out}/2-wide.png` })
 
+// S2a · the bench blocks: stand 2.5 m from it on its row, facing it, real W for 3 s; the walker must stop short of it
+say('bench blocks')
+{
+  const yb = await Y('yard'), fl = await Y('floor'), bench = (await Y('state')).items.find((q: any) => q.id === WIDE)
+  const bl = { lx: bench.cx + 0.5 - 6, lz: bench.cz + 1 - 4 }   // a turned 2-cell bench covers (cx, cz) and (cx, cz+1): its middle
+  const sx = yb.x + yb.ax[0] * (bl.lx - 2.5) + yb.az[0] * bl.lz, sz = yb.z + yb.ax[1] * (bl.lx - 2.5) + yb.az[1] * bl.lz
+  const yawB = Math.atan2(-yb.ax[0], -yb.ax[1])
+  await p.evaluate((a, b, w) => { (window as any).__drive.footTp(a, b, w, -0.2); (window as any).__drive.look(w, -0.2) }, sx, sz, yawB); await sleep(1500)
+  const f0 = await footAt()
+  res.onFloor = { feet: +f0.y.toFixed(2), floor: +fl.toFixed(2) }
+  if (Math.abs(f0.y - fl) > 0.15) await fail('floor', `set down in the yard, feet ${f0.y.toFixed(2)} are not on the floor ${fl.toFixed(2)}`)
+  const startLx = local(yb, f0.x, f0.z).lx
+  const why = await holdW(f => local(yb, f.x, f.z).lx > bl.lx + 1, 60000)   // 'arrived' = it walked THROUGH the bench
+  const f1 = await footAt(), l1 = local(yb, f1.x, f1.z)
+  res.bench = { benchLx: bl.lx, startLx: +startLx.toFixed(2), stoppedLx: +l1.lx.toFixed(2), why }
+  if (why === 'arrived' || l1.lx > bl.lx - 0.3) await fail('bench', `walked into/through the bench: stopped at lx ${l1.lx.toFixed(2)}, bench middle ${bl.lx}`)
+  // and it really walked up to it (a walker that never moved would also 'stop short'): within a body + half a bench of its face
+  if (l1.lx < bl.lx - 1.2) await fail('bench', `stalled at lx ${l1.lx.toFixed(2)} before reaching the bench (middle ${bl.lx}): not proof it blocks`)
+}
+// S2b · in through the gate: from 1.5 m past the ramp's foot, facing the yard's middle, real W
+say('gate walk-in')
+{
+  const yg = await Y('yard'), fl = await Y('floor'), rp = await Y('ramp')
+  const ou = rp.mu + rp.out[0] * (rp.L + 1.5), ov = rp.mv + rp.out[1] * (rp.L + 1.5)
+  const gx = yg.x + yg.ax[0] * ou + yg.az[0] * ov, gz = yg.z + yg.ax[1] * ou + yg.az[1] * ov
+  const yawIn = Math.atan2(gx - yg.x, gz - yg.z)   // forward = (-sin, -cos): facing from the gate toward the middle
+  await p.evaluate((a, b, w) => { (window as any).__drive.footTp(a, b, w, -0.15); (window as any).__drive.look(w, -0.15) }, gx, gz, yawIn); await sleep(1500)
+  await p.screenshot({ path: `${out}/5-gate.png` })
+  const why = await holdW(f => { const q = local(yg, f.x, f.z); return Math.abs(q.lx) < 4 && Math.abs(q.lz) < 3.5 }, 90000)
+  const f = await footAt(), l = local(yg, f.x, f.z)
+  res.gate = { why, lx: +l.lx.toFixed(2), lz: +l.lz.toFixed(2), feet: +f.y.toFixed(2), floor: +fl.toFixed(2), rampL: +rp.L.toFixed(2) }
+  if (!(Math.abs(l.lx) < 6 && Math.abs(l.lz) < 4)) await fail('gate', `did not walk in through the gate: ended at ${l.lx.toFixed(2)}, ${l.lz.toFixed(2)}`)
+  if (Math.abs(f.y - fl) > 0.15) await fail('gate', `walked in but feet ${f.y.toFixed(2)} are not on the floor ${fl.toFixed(2)}`)
+}
 // 4 · reload keeps both
 say('reload 1'); const before = JSON.stringify(st.items)
 await loadContinent()

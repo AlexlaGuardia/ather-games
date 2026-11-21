@@ -34,6 +34,7 @@ import { pitstopsUnlocked, visitNear } from './pitstops'
 import { Towns } from '../towns/Towns'
 import { MarketView, DeedCard } from '../business/market-view'
 import { DeedYard, type DeedYardState } from './deed-yard'
+import { extraGround } from '../foot-extras'
 import { useTycoon } from '../business/use-tycoon'
 import { ShopPanel } from '../business/shop-panel'
 import { RunesmithPanel, IdonyPanel, commitImbue } from '../business/smith-panel'
@@ -854,7 +855,8 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
       shot: (q: [number, number, number, number, number, number] | null) => { shotCam.current = q },
       stance: () => continentStance.current, speedMult: () => loco.current?.speedMult ?? null,
       footTp: (x: number, z: number, yaw = 0, pitch = -0.08) => {
-        const y = cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z)
+        // on raised ground the town plan does not know (foot-extras.ts: the shipyard yard's deck) the walker lands ON it
+        const y = cave && cave.inside(x, z) ? cave.y : Math.max(R.groundAt(x, z), extraGround(x, z))
         loco.current = stepOut({ x, y: y + 0.05, z }, { vx: 0, vz: 0 }); view.current = { yaw, pitch }; mode.current = 'foot'
       },
     }
