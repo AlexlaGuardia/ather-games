@@ -63,8 +63,9 @@ try {
   if (!phone) { await p.mouse.click(550, 340); await sleep(400) }
 
   // 1. the beat opens
-  await p.keyboard.press('KeyE')
-  const up = await poll(async () => (await bubble()).text.length > 0, 10000)
+  // the first E can land before the walker takes keys (headless, 1-2 fps): press again until a bubble shows
+  let up = false
+  for (let k = 0; k < 4 && !up; k++) { await p.keyboard.press('KeyE'); up = await poll(async () => (await bubble()).text.length > 0, 8000) }
   let b = await bubble(); await shot('1-open')
   ok(up && b.text.includes(YARROW_TEACH.open.line) && b.scene === YARROW_TEACH.open.scene, `1. E on Yarrow opens the beat (${b.text.slice(0, 60)})`)
   ok(await choose(LISTEN), '   (listen)')
