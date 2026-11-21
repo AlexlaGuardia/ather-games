@@ -5,7 +5,7 @@
 // GUEST (visiting, socket zone open:plot:<host>): asks the host every ASK_MS until the plot has arrived, assembles the parts and
 // hands the snapshot to the visit store (which the works store reads).
 import { useEffect, useRef } from 'react'
-import { PV_WANT, PV_SNAP, packSnap, unpackSnap, chunk, Reassembly, isSnapPart, setVisitSnap, refusalCount, type Visit, type PlotSnap } from './plot-visit'
+import { PV_WANT, PV_SNAP, packSnap, unpackSnap, chunk, Reassembly, isSnapPart, setVisitSnap, refusalCount, visitLog, type Visit, type PlotSnap } from './plot-visit'
 
 type Relay = (kind: string, data: unknown, to?: string) => boolean
 type OnRelay = (f: (m: { from: string; kind: string; data: unknown }) => void) => () => void
@@ -57,7 +57,7 @@ export function usePlotVisitNet(o: { relay: Relay; onRelay: OnRelay; hosting: bo
 
   if (typeof window !== 'undefined') (window as unknown as { __visit?: unknown }).__visit = {
     visiting: () => !!o.visit, host: () => o.visit?.host ?? null, name: () => o.visit?.name ?? null, hasSnap: () => !!o.visit?.snap,
-    hosting: () => o.hosting, refusals: () => refusalCount(), net: () => ({ ...probe }),
+    hosting: () => o.hosting, refusals: () => refusalCount(), net: () => ({ ...probe }), log: () => visitLog(),
     /** what arrived: wall / piece / level counts of the visited plot's snapshot */
     shown: () => { const w = o.visit?.snap?.works; return w ? { walls: Object.keys(w.walls ?? {}).length, pieces: w.pieces.map(x => x.item), upper: w.upper?.length ?? 0, upperWalls: (w.upper ?? []).map(l => Object.keys(l.walls ?? {}).length), owned: o.visit!.snap!.owned.length } : null },
   }

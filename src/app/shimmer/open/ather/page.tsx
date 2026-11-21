@@ -16,7 +16,7 @@
 
 import { OwnerReady } from '../shared/owner-ready'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { subscribeVisit, currentVisit, isVisiting, startVisit, endVisit, shownOwned, plotZone, guestRefuses, type PlotSnap } from './plot-visit'   // BETA M61
+import { subscribeVisit, currentVisit, isVisiting, startVisit, endVisit, noteVisit, shownOwned, plotZone, guestRefuses, type PlotSnap } from './plot-visit'   // BETA M61
 import { usePlotVisitNet } from './plot-visit-net'
 import { useParty, storedParty } from '@/lib/party'
 import { selfPlayerId } from '../../play3d/multiplayer'
@@ -368,7 +368,7 @@ function AtherSliceGame() {
     // only a party mate visits (the party instance is the only door); a visit link without one says so and goes nowhere
     const go = (host: string, name: string) => {
       if (host === selfPlayerId()) return
-      if (!storedParty()) { hudSay('Join their party first: only party mates can visit a plot.', 'info', 5); return }
+      if (!storedParty()) { noteVisit('refused:no-party'); hudSay('Join their party first: only party mates can visit a plot.', 'info', 5); return }
       startVisit(host, name)
     }
     setVisitHandler(go)
@@ -383,7 +383,7 @@ function AtherSliceGame() {
   const visitReady = !!visitNow?.snap
   useEffect(() => {
     if (!visitHost || visitReady) return
-    const t = setTimeout(() => { const v = currentVisit(); if (v && !v.snap) { hudSay(`Could not reach ${v.name}'s plot. They may have left it.`, 'info', 5); endVisit() } }, VISIT_WAIT_MS)
+    const t = setTimeout(() => { const v = currentVisit(); if (v && !v.snap) { hudSay(`Could not reach ${v.name}'s plot. They may have left it.`, 'info', 5); endVisit('timeout') } }, VISIT_WAIT_MS)
     return () => clearTimeout(t)
   }, [visitHost, visitReady])
   // ── M41 CLOUD VOIDS: a fall costs time, never gore. Over the edge -> a short fade -> set down at the last crossing you used,
@@ -1315,7 +1315,7 @@ function AtherSliceGame() {
       {panel?.kind === 'work' && !visitNow && <WorkshopPanel near={panel.near} owned={owned} onClose={() => setPanel(null)} />}
       {zone.kind === 'plot' && <PlacingBar owned={owned} />}
       {zone.kind === 'plot' && !visitNow && <BuildBar owned={owned} />}
-      {visitNow && <VisitPill name={visitNow.name} ready={!!visitNow.snap} onHome={endVisit} />}
+      {visitNow && <VisitPill name={visitNow.name} ready={!!visitNow.snap} onHome={() => endVisit()} />}
       <LookChip />
       {zone.kind === 'wilds' && held === BAIT && <ReelBar api={rinApi} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} inGarden={zone.kind === 'plot'} />}

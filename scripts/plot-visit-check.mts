@@ -130,12 +130,13 @@ try {
 
   // 6 · strangers
   const c = await open('C', null, MINE); await load(c, `&visit=${idA}&vn=Host`)
-  ok((await ev(c, '__visit', 'visiting')) === false, '6. no party: the visit link is refused')
+  const log1 = await ev(c, '__visit', 'log') as string[]
+  ok(log1.includes('refused:no-party') && !log1.some(e => e.startsWith('start:')) && (await ev(c, '__visit', 'visiting')) === false, `6. no party: the visit link is refused (${log1})`)
   await c.evaluate((o: string) => localStorage.setItem('ather:mp:party', o), OTHER)
   await load(c, `&visit=${idA}&vn=Host`)
-  ok((await ev(c, '__visit', 'visiting')) === true, '6. another party: the visit starts…')
-  ok(await poll(async () => (await ev(c, '__visit', 'visiting')) === false, 25000), '6. …no plot reaches them, they are home again')
-  ok((await ev(c, '__visit', 'hasSnap')) === false || true, '6. (never got a snapshot)')
+  ok(((await ev(c, '__visit', 'log')) as string[]).includes(`start:${idA}`), '6. another party: the visit starts…')
+  ok(await poll(async () => ((await ev(c, '__visit', 'log')) as string[]).includes('end:timeout'), 25000), `6. …no plot reaches them, home on the timeout (${await ev(c, '__visit', 'log')})`)
+  ok(((await ev(c, '__visit', 'net')) as any).got === 0 && (await ev(c, '__visit', 'visiting')) === false, '6. never got a snapshot, not visiting')
   const idC = await c.evaluate(() => localStorage.getItem('ather:mp:id'))
   ok(!((await ev(a, '__mp', 'peers')) as { id: string }[] ?? []).some(q => q.id === idC), '6. A never saw the stranger')
 

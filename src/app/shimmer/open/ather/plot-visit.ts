@@ -113,13 +113,17 @@ const emit = () => subs.forEach(f => f())
 export const subscribeVisit = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export const currentVisit = () => visit
 export const isVisiting = () => visit !== null
-export function startVisit(host: string, name: string) { visit = { host, name: name || 'a friend', snap: null, v: -Infinity }; emit() }
+export function startVisit(host: string, name: string) { visit = { host, name: name || 'a friend', snap: null, v: -Infinity }; noteVisit('start:' + host); emit() }
 /** a newer snapshot of the plot being visited (an older or foreign one is ignored) */
 export function setVisitSnap(host: string, v: number, snap: PlotSnap) {
   if (!visit || visit.host !== host || v <= visit.v) return false
   visit = { ...visit, snap, v }; emit(); return true
 }
-export function endVisit() { if (!visit) return; visit = null; emit() }
+export function endVisit(why = 'home') { if (!visit) return; visit = null; noteVisit('end:' + why); emit() }
+/** what happened to visits on this page, oldest first (a probe for the check: a timed-out visit is gone before a slow page answers) */
+const log: string[] = []
+export function noteVisit(e: string) { log.push(e); if (log.length > 40) log.shift() }
+export const visitLog = () => [...log]
 
 /** Every write a guest might try on someone else's plot goes through this: true = refused (the caller stops), with one line said.
  *  `say` is injected so this file stays free of the HUD. */
