@@ -20,6 +20,7 @@ import { fromShore } from '../src/app/shimmer/open/ather/moonwell'
 import { GLADE } from '../src/app/shimmer/open/ather/relief'
 import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'
 import { aimAt } from './lib/aim.mts'
+import { newInv, GIFT_YARROW_TAUGHT } from '../src/app/shimmer/open/shared/inventory'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/glade-check'), phone = process.argv.includes('--phone')
 mkdirSync(out, { recursive: true })
@@ -52,7 +53,10 @@ try {
   await p.setViewport(phone ? { width: Number(flag('--w', '390')), height: Number(flag('--h', '844')), isMobile: true, hasTouch: true } : { width: 1100, height: 680 })
   const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
-  await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star') })
+  // Yarrow's teach beat (yarrow-teach-check covers it) runs first for a keeper who has held a rinstick and re-arms on leaving,
+  // which hides her station lines: this keeper has already been taught
+  const taught = JSON.stringify({ ...newInv(), gifts: [GIFT_YARROW_TAUGHT] })
+  await p.evaluateOnNewDocument((inv: string) => { localStorage.setItem('ather:shimmer:birthRune', 'star'); if (!localStorage.getItem('open.inv.v1')) localStorage.setItem('open.inv.v1', inv) }, taught)
   const poll = async (fn: () => Promise<boolean>, ms = 10000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(250) } return false }
   const st = () => p.evaluate(() => { const a = (window as any).__ather.state(); return { x: a.px, y: a.py, z: a.pz } }) as Promise<{ x: number; y: number; z: number }>
   const hideCard = () => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
