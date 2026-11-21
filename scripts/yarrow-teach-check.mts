@@ -14,7 +14,7 @@ import { GLADE_LOTS, gladeSpots } from '../src/app/shimmer/open/ather/moonwell-g
 import { setGladeBlueprint } from '../src/app/shimmer/open/ather/glade-lots'
 import { parseHouse } from '../src/app/shimmer/open/ather/plot-blueprint'
 import { GLADE_GREEN } from '../src/app/shimmer/open/ather/moonwell'
-import { YARROW_TEACH, LISTEN } from '../src/app/shimmer/open/ather/yarrow-teach'
+import { YARROW_TEACH, LISTEN, teachJars } from '../src/app/shimmer/open/ather/yarrow-teach'
 import { newInv, give, BAIT_FROM, BAIT_PAGE, YARROW_GIFT_BAIT, type Inv } from '../src/app/shimmer/open/shared/inventory'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), phone = process.argv.includes('--phone'), out = flag('--out', `/tmp/yarrow-teach-${phone ? 'phone' : 'desk'}`)
@@ -110,6 +110,11 @@ try {
   const bag3 = await bag()
   ok(count(bag3, 'bait') - count(bag2, 'bait') === BAIT_FROM.mast + 1 && count(bag3, 'mast') === count(bag2, 'mast') - 1, `   one Mast cut = ${count(bag3, 'bait') - count(bag2, 'bait')} bait (table ${BAIT_FROM.mast}, +1 learned)`)
   await shot('7-cut')
+  // 7. the look-alike jars beside Yarrow: a close shot (LOOK at it; no mesh probe exists)
+  await p.keyboard.press('Escape'); await sleep(500)
+  { const t = teachJars(Y), fx = Math.sin(Y.yaw), fz = Math.cos(Y.yaw), cx = t.crate.x + fx * 2.2, cz = t.crate.z + fz * 2.2
+    await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, y), cx, cz, Math.atan2(-(t.crate.x - cx), -(t.crate.z - cz)))
+    await sleep(3000); await shot('8-jars') }
   ok(errs.length === 0, `6. no page errors (${errs.join(' | ').slice(0, 200)})`)
 } finally { await br.close() }
 console.log(`\nyarrow-teach-check: ${fails ? `${fails} FAIL` : 'PASS'} · shots in ${out}`); process.exit(fails ? 1 : 0)
