@@ -99,6 +99,8 @@ try {
   await shot('6-page-card')
   await p.click('[data-act="read-page"]')
   ok(await poll(() => p.evaluate(() => document.querySelector('[data-act="read-page"]')?.textContent === 'Learned'), 5000), '   Read -> Learned')
+  // a second slot click while one is picked MOVES it: close and reopen the bag, then pick the Mast fresh
+  await p.keyboard.press('Escape'); await sleep(500); await p.keyboard.press('KeyI'); await poll(() => p.evaluate(() => !!document.querySelector('[data-slot]')), 8000)
   const bag2 = await bag()
   await p.click(`[data-slot="${slotOf(bag2, 'mast')}"]`); await sleep(400)
   const lab = await p.evaluate(() => document.querySelector('[data-act="make-bait"]')?.textContent ?? '')
