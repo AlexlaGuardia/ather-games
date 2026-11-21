@@ -23,7 +23,9 @@ async function shoot(p: any, name: string, tx: number, tz: number, fx: number, f
   const l = Math.hypot(tx - fx, tz - fz) || 1, ux = (tx - fx) / l, uz = (tz - fz) / l
   const x = tx - ux * back, z = tz - uz * back, yaw = Math.atan2(-ux, -uz), pitch = -Math.atan2(up, back)
   const place = () => p.evaluate((a: number, b: number, c: number, d: number, u: number) => { const g = (window as any).__ather; g.combat?.().hollows && (g.combat().hollows.length = 0); g.tp(a, b, c, g.ground(a, b) + u); g.look(c, d) }, x, z, yaw, pitch, up)
-  await place(); await sleep(3500)   // let near pieces build at this spot
+  // the Wilds ground builds nearest-first under a 4 ms/frame budget (M44); on SwiftShader 3.5 s left most of it unbuilt and
+  // the shot showed the page background where ground should be (and a depthWrite-off overlay with nothing behind it ghosts)
+  await place(); await sleep(Number(flag('--settle', '20000')))
   await hideCard(p); await place()
   await p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))
   await p.screenshot({ path: `${out}/${name}.png` }); shots.push(name)
