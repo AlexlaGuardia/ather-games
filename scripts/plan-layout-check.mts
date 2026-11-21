@@ -78,18 +78,21 @@ try {
   // the audit: every button in the plan UI is topmost at its own centre; panels pairwise disjoint (and clear of the bottom HUD)
   const audit = (label: string, runMid: { x: number; y: number }) => p.evaluate((label: string, rm: { x: number; y: number }) => {
     const bad: string[] = []
-    const panels = ['[data-build-bar]', '[data-plan-bom]', '[data-floor-switch]'].map(s => [s, document.querySelector(s)] as const).filter(([, e]) => !!e)
+    const health = [...document.querySelectorAll('span')].find(s => s.textContent === 'Health')?.closest('.w-52') ?? null   // the Health card (desktop)
+    const panels = ([['[data-build-bar]', document.querySelector('[data-build-bar]')], ['[data-plan-bom]', document.querySelector('[data-plan-bom]')], ['[data-floor-switch]', document.querySelector('[data-floor-switch]')], ['Health card', health]] as const).filter(([, e]) => !!e)
     const sel = '[data-build-bar] button, [data-plan-bom] button, [data-floor-switch] button'
     let n = 0
     for (const b of document.querySelectorAll<HTMLElement>(sel)) {
       const r = b.getBoundingClientRect(); if (!r.width || !r.height) continue
       // scrolled out of its own row (a phone's tab row scrolls): judged where it is visible, skip when wholly scrolled away
-      const cx = Math.max(r.left + 2, Math.min(r.right - 2, r.left + r.width / 2)), cy = r.top + r.height / 2
-      let host: Element | null = b.parentElement; let clipped = false
-      while (host && host !== document.body) { const hr = host.getBoundingClientRect(), cs = getComputedStyle(host); if ((cs.overflowX === 'auto' || cs.overflowX === 'hidden' || cs.overflowX === 'scroll') && (r.right < hr.left + 4 || r.left > hr.right - 4)) { clipped = true; break } host = host.parentElement }
-      if (clipped || cx < 0 || cx > innerWidth || cy < 0 || cy > innerHeight) continue
+      // judge it where it is VISIBLE: a scrolling row (the room strip, a phone's tab row) clips it to the row's box
+      let vl = Math.max(0, r.left), vr = Math.min(innerWidth, r.right)
+      let host: Element | null = b.parentElement
+      while (host && host !== document.body) { const hr = host.getBoundingClientRect(), cs = getComputedStyle(host); if (cs.overflowX === 'auto' || cs.overflowX === 'hidden' || cs.overflowX === 'scroll') { vl = Math.max(vl, hr.left); vr = Math.min(vr, hr.right) } host = host.parentElement }
+      const cx = (vl + vr) / 2, cy = r.top + r.height / 2
+      if (vr - vl < 10 || cy < 0 || cy > innerHeight) continue   // scrolled away (or nearly): not on screen to be covered
       n++
-      const top = document.elementFromPoint(Math.max(r.left + 3, Math.min(cx, innerWidth - 3)), cy)
+      const top = document.elementFromPoint(cx, cy)
       if (!top || !(top === b || b.contains(top))) bad.push(`${label}: ${b.dataset.act ?? b.dataset.tool ?? b.dataset.floor ?? b.dataset.found ?? b.dataset.roof ?? b.textContent?.slice(0, 12)} covered by ${(top as HTMLElement)?.dataset ? Object.keys((top as HTMLElement).dataset).join('/') || top?.tagName : top?.tagName}`)
     }
     const rects = panels.map(([s, e]) => [s, e!.getBoundingClientRect()] as const)
@@ -111,8 +114,9 @@ try {
   ok(await tapEl('[data-act="plan"]') && await poll(() => p.evaluate(() => (window as any).__build?.on() === true)), `${W}x${H}: Plan: flying`)
   await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), spot.x, spot.z)
   ok(await tapEl('[data-tool="walls"]'), '   Walls'); await sleep(500)
-  // a run 3 m north of the room (free ground, not on top of the room's own wall)
-  const RZ = Z0 - 3
+  // where the run goes: on a PHONE 3 m north of the room, up toward the bar (the strict case: the collapsed bar must leave it in view);
+  // on DESKTOP through the view's centre, where you draw (the desktop bar's own height is out of this pass: desktop layout unchanged)
+  const RZ = PHONE ? Z0 - 3 : spot.z
   for (let t = 0; t < 3 && (await drafts()) < 6; t++) { await settled(); const v = await view(); await drag(screenOf(v, X0, RZ), screenOf(v, X1, RZ)); await sleep(1000) }
   ok((await drafts()) === 6, `   a drag planned the 6 m run (${await drafts()}); the materials panel shows: ${await p.evaluate(() => !!document.querySelector('[data-plan-bom]'))}`)
   await sleep(600)

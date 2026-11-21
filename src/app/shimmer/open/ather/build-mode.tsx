@@ -30,6 +30,11 @@ const want = { x: 0, z: 0, h: BUILD_CAM.H0 as number, yaw: 0 }
 const cur = { x: 0, z: 0, h: BUILD_CAM.H0 as number, yaw: 0 }
 const home = { x: 0, z: 0 }
 let lift = 0   // eased 0..1: how much of PAINT_LIFT applies (Paint on = 1)
+// 11-21 (phone plan-bar pass): the plan UI reports how much of the screen it covers at the top (the bar) and the bottom (the HUD /
+// the materials strip); the lens then frames what you are working on in the middle of the FREE band between them, not under the
+// bar. Pixels; 0 = nothing covers that edge. The Paint lift stays as Alex tuned it whenever it frames lower still.
+let insetTop = 0, insetBottom = 0, inset = 0   // inset = the eased ground offset (m) the insets ask for
+export const setPlanInsets = (top: number, bottom: number) => { insetTop = top; insetBottom = bottom }
 const aim = { x: 0, z: 0 }   // where the lens actually looks (cur, shifted by the Paint lift): what __build.view() reports, so checks that rebuild the lens with lensFor stay true
 let entered = false
 
@@ -48,7 +53,7 @@ export function enterBuild(at: { x: number; z: number; yaw: number }) {
   cur.h = 2   // start at eye height and rise: the lift reads as a lift, not a cut
   entered = true; on = true; emit()
 }
-export function exitBuild() { if (!on) return; setPlanLevel(0); on = false; held.clear(); point.has = false; tool = 'look'; draw?.cancel(); emit() }
+export function exitBuild() { if (!on) return; setPlanLevel(0); on = false; insetTop = insetBottom = inset = 0; held.clear(); point.has = false; tool = 'look'; draw?.cancel(); emit() }
 
 // ── M37 (11-19): a DRAWING tool (plot-walls.ts). With 'walls' or 'erase' on, one finger / a left drag draws instead of
 //    panning: the handler gets ground points at the start, along the way and at the end. Two fingers pinch AND pan; a
@@ -124,7 +129,10 @@ export function stepBuildCam(cam: THREE.Camera, dt: number) {
   cur.x += (want.x - cur.x) * a; cur.z += (want.z - cur.z) * a; cur.h += (want.h - cur.h) * a * 0.6
   cur.yaw += Math.atan2(Math.sin(want.yaw - cur.yaw), Math.cos(want.yaw - cur.yaw)) * a
   lift += ((tool === 'paint' ? 1 : 0) - lift) * a
-  const o = cur.h * BUILD_CAM.PAINT_LIFT * lift
+  const vh = typeof window === 'undefined' ? 800 : window.innerHeight
+  const freeMid = (insetTop + (vh - insetBottom)) / 2, dy = Math.max(0, freeMid - vh / 2)   // how far below the centre the free band's middle sits
+  inset += (-dy * cur.h * 1.6 / Math.max(1, vh) - inset) * a   // px -> m on the ground near the centre (dragPan's own scale)
+  const o = Math.min(cur.h * BUILD_CAM.PAINT_LIFT * lift, inset)
   aim.x = cur.x + Math.sin(cur.yaw) * o; aim.z = cur.z + Math.cos(cur.yaw) * o
   const l = lensFor({ x: aim.x, z: aim.z, h: cur.h, yaw: cur.yaw })
   cam.position.set(l.px, l.py, l.pz)

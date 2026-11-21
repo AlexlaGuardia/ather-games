@@ -53,7 +53,7 @@ import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
 import { TOOL_DEFS } from '../../engine/tools'
-import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw, buildYaw, buildAim, setPlanLift } from './build-mode'
+import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw, buildYaw, buildAim, setPlanLift, setPlanInsets } from './build-mode'
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
 import { advance, setFocus, cancelFocus, runProgress, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
@@ -594,6 +594,13 @@ function StairRails({ rails, down, lift }: { rails: { key: string; mat: WallMat 
   const byMat = useMemo(() => { const m = new Map<string, string[]>(); for (const r of rails) { const id = `${r.mat}|${lift?.edge(r.key) ?? 0}`, l = m.get(id) ?? []; l.push(r.key); m.set(id, l) } return [...m].map(([id, keys]) => { const [mat, up] = id.split('|'); return { mat: mat as WallMat, up: +up, keys } }) }, [rails, lift])
   return <>{byMat.map(({ mat, up, keys }) => <group key={mat + up + keys.length + (down ? 'd' : '')} position-y={up}><WallRun mat={mat} keys={keys} h={down ? Math.min(RAIL_H, LOW_WALL) : RAIL_H} /></group>)}</>
 }
+/** phone layout for the plan bar (11-21): under 600 px the bar collapses to one row of tool tabs + the active tool's options, and
+ *  the materials list becomes a slim strip above the bottom HUD. 600 px and up is the desktop layout, unchanged. */
+const PHONE_BAR_W = 600
+let phoneBar = typeof window !== 'undefined' && window.innerWidth < PHONE_BAR_W
+const pbSubs = new Set<() => void>()
+if (typeof window !== 'undefined') window.addEventListener('resize', () => { const v = window.innerWidth < PHONE_BAR_W; if (v !== phoneBar) { phoneBar = v; pbSubs.forEach(f => f()) } })
+const usePhoneBar = () => useSyncExternalStore(f => { pbSubs.add(f); return () => { pbSubs.delete(f) } }, () => phoneBar, () => false)
 /** M55 slice 2: the house the plan view is aimed at (re-read a few times a second: the lens glides without a React render) */
 function useAimHouse(w: Works) {
   const [hs, setHs] = useState<Lift['houses'][number] | null>(null)
@@ -687,7 +694,7 @@ function Catalog({ onPick }: { onPick: () => void }) {
 /** the Walls / Erase tools and the wood picker, in the build bar */
 function WallTools({ owned, cat, onCat }: { owned: React.MutableRefObject<ReadonlySet<string>>; cat: boolean; onCat: () => void }) {
   const t = useBuildTool(), mat = useWallMat(), rail = useWallRail(), pk = usePaint(), [pPat, pCol] = pk.split('|') as [FloorPat, string], inv = useInv(), down = useWallsDown(), w = useWorks(), roof = w.roof ?? 'gable', owner = useOwner()
-  const aimHouse = useAimHouse(w)
+  const aimHouse = useAimHouse(w), phone = usePhoneBar(), [houseOpen, setHouseOpen] = useState(false)
   useEffect(() => { setPlanLift(aimHouse?.h ?? 0) }, [aimHouse])   // M55: drawing tools aim at the raised floor of the house in view
   useEffect(() => {
     if (t === 'look') return
@@ -695,6 +702,52 @@ function WallTools({ owned, cat, onCat }: { owned: React.MutableRefObject<Readon
     return () => onBuildDraw(null)
   }, [t, owned])
   const btn = (on: boolean): React.CSSProperties => ({ border: 0, borderRadius: 10, height: 34, padding: '0 10px', cursor: 'pointer', font: '700 12px system-ui', letterSpacing: '.06em', textTransform: 'uppercase', background: on ? H.ink : 'rgba(255,250,235,.7)', color: on ? '#fff' : H.ink, boxShadow: `inset 0 0 0 1px ${H.rule}` })
+  if (phone) {
+    // PHONE: one scrolling row of tool tabs, then only what the active tool needs; the house settings (walls down, roof,
+    // foundation) live behind their own 'house' tab so nothing piles up over the drawing
+    const row: React.CSSProperties = { display: 'flex', gap: 5, alignItems: 'center', overflowX: 'auto', flexWrap: 'nowrap', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', minWidth: 0 }
+    return (
+      <div data-wall-tools data-phone style={{ display: 'grid', gap: 5, padding: '5px 6px', borderRadius: 12, background: 'rgba(255,250,235,.86)', boxShadow: '0 2px 8px rgba(0,0,0,.2)', minWidth: 0 }}>
+        <div data-tool-tabs style={row} onClickCapture={e => { const el = (e.target as HTMLElement).closest('[data-tool],[data-act="wall-catalog"]'); if (el) setHouseOpen(false) }}>
+          <button type="button" data-act="wall-catalog" aria-pressed={cat} style={{ ...btn(cat), flex: '0 0 auto' }} onClick={onCat}>Catalog</button>
+          <button type="button" data-tool="walls" style={{ ...btn(t === 'walls'), flex: '0 0 auto' }} onClick={() => { setPlacing(null); setBuildTool(t === 'walls' ? 'look' : 'walls') }}>Walls</button>
+          <button type="button" data-tool="erase" style={{ ...btn(t === 'erase'), flex: '0 0 auto' }} onClick={() => { setPlacing(null); setBuildTool(t === 'erase' ? 'look' : 'erase') }}>Erase</button>
+          {(['floor', 'column', 'stairs', 'door', 'window', 'paint'] as const).map(k => <button key={k} type="button" data-tool={k} style={{ ...btn(t === k), flex: '0 0 auto' }} onClick={() => { setPlacing(null); if (k === 'floor' && paintCol === '#dcd3c2') { paintCol = FLOOR_PATS[paintPat].color; wdEmit() } setBuildTool(t === k ? 'look' : k) }}>{k}</button>)}
+          {owner && <button type="button" data-tool="blueprint" style={{ ...btn(t === 'blueprint'), flex: '0 0 auto' }} onClick={() => { setPlacing(null); setBpPick(null); setBuildTool(t === 'blueprint' ? 'look' : 'blueprint') }}>blueprint</button>}
+          <button type="button" data-act="house-settings" aria-pressed={houseOpen} style={{ ...btn(houseOpen), flex: '0 0 auto' }} onClick={() => setHouseOpen(o => !o)}>house</button>
+        </div>
+        {houseOpen ? (
+          <div data-tool-options data-house-options style={row}>
+            <button type="button" data-act="walls-down" aria-pressed={down} style={{ ...btn(down), flex: '0 0 auto' }} onClick={() => setWallsDown(!down)}>{down ? 'Walls up' : 'Walls down'}</button>
+            {ROOF_STYLES.map(r => (
+        <button key={r} type="button" data-roof={r} aria-pressed={roof === r} style={{ ...btn(roof === r), height: 30, fontSize: 11, flex: '0 0 auto' }} onClick={() => setWorks({ ...currentWorks(), roof: r })}>{r}</button>
+      ))}
+            {<span data-found-picker style={{ flex: '0 0 auto', display: 'inline-flex', gap: 4, alignItems: 'center' }}><span style={{ font: '700 10px system-ui', letterSpacing: '.1em', textTransform: 'uppercase', color: H.ink, opacity: 0.6 }}>Foundation</span>{FOUND_OPTS.map(h => (
+        <button key={h} type="button" data-found={h} aria-pressed={aimHouse?.h === h} disabled={!aimHouse} style={{ ...btn(aimHouse?.h === h), height: 30, fontSize: 11, opacity: aimHouse ? 1 : 0.4 }} onClick={() => setFoundation(h)}>{FOUND_NAME[h]}</button>
+      ))}</span>}
+          </div>
+        ) : (t === 'walls' || t === 'column' || t === 'stairs') ? (
+          <div data-tool-options style={row}>
+            {t === 'walls' && <span data-wall-kind style={{ display: 'inline-flex', gap: 4, flex: '0 0 auto' }}>{([false, true] as const).map(r => <button key={String(r)} type="button" data-wall-kind={r ? 'rail' : 'wall'} aria-pressed={rail === r} style={{ ...btn(rail === r), height: 30, fontSize: 11 }} onClick={() => setWallRail(r)}>{r ? 'Railing' : 'Full wall'}</button>)}</span>}
+            {(t === 'walls' || t === 'column' || t === 'stairs') && WALL_MAT_ORDER.map(m => (
+        <button key={m} type="button" data-wall-mat={m} title={`${WALL_MATS[m].name} · ${countOf(inv, WALL_MATS[m].item)} ${itemDef(WALL_MATS[m].item).name}`} onClick={() => { wallMat = m; wdEmit() }}
+          style={{ ...btn(false), flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 5, textTransform: 'none', letterSpacing: 0, boxShadow: mat === m ? `inset 0 0 0 2px ${H.ink}` : `inset 0 0 0 1px ${H.rule}` }}>
+          <i style={{ width: 14, height: 14, borderRadius: 3, background: WALL_MATS[m].color, display: 'inline-block' }} />{countOf(inv, WALL_MATS[m].item)}
+        </button>
+      ))}
+          </div>
+        ) : (t === 'paint' || t === 'floor') ? (
+          <div data-tool-options style={{ display: 'grid', gap: 5, minWidth: 0 }}>
+            {<div data-paint-picker style={{ display: 'grid', gap: 5, justifyItems: 'center', minWidth: 0 }}>
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'center' }}>{FLOOR_PAT_ORDER.map(f => <button key={f} type="button" data-floor-pat={f} aria-pressed={pPat === f} title={`${FLOOR_PATS[f].name} floor · ${itemDef(FLOOR_PATS[f].item).name} per m²`} style={{ ...btn(pPat === f), height: 30, fontSize: 11 }} onClick={() => { paintPat = f; paintCol = FLOOR_PATS[f].color; wdEmit() }}>{FLOOR_PATS[f].name}</button>)}</div>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'nowrap', alignItems: 'center', overflowX: 'auto', maxWidth: '100%', scrollbarWidth: 'none' }}>{SWATCHES.map(c => <button key={c} type="button" data-swatch={c} title={c} aria-label={`paint ${c}`} onClick={() => { paintCol = c; wdEmit() }} style={{ width: 20, height: 20, borderRadius: 5, border: 0, cursor: 'pointer', flex: 'none', background: c, boxShadow: pCol === c ? `inset 0 0 0 2px ${H.ink}, 0 0 0 1px #fff` : `inset 0 0 0 1px ${H.rule}` }} />)}
+        <input type="color" data-paint-custom aria-label="custom colour" value={isColour(pCol) ? pCol : '#dcd3c2'} onChange={e => { if (isColour(e.target.value)) { paintCol = e.target.value; wdEmit() } }} style={{ width: 28, height: 24, padding: 0, border: 0, background: 'none', cursor: 'pointer', flex: 'none' }} /></div>
+      </div>}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
   return (
     <div data-wall-tools style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', padding: '5px 8px', borderRadius: 12, background: 'rgba(255,250,235,.82)', boxShadow: '0 2px 8px rgba(0,0,0,.2)' }}>
       <button type="button" data-act="wall-catalog" aria-pressed={cat} style={btn(cat)} onClick={onCat}>Catalog</button>
@@ -1158,7 +1211,7 @@ export function WorkshopPanel({ near, owned, onClose }: { near: WorkNear; owned:
 // costs, a Build button lit once the bank + bag hold enough). Build lifts you too, with that thing on the pointer.
 // Costs pay from the Keepstone first (rooms.ts › payCost). Icons are placeholders until Alex draws them.
 type TablePick = 'keepstone' | RoomKind
-const TABLE_PICKS: readonly TablePick[] = ['keepstone', ...ROOM_ORDER]
+const TABLE_PICKS: readonly TablePick[] = ['keepstone', ...ROOM_ORDER.filter(k => !(k === 'alchemy' && ALC_LIVE))]   // the alchemy ROOM is retired once its furniture set is live (M57)
 const PICK_LOOK: Record<TablePick, { glyph: string; tint: string }> = {
   keepstone: { glyph: '◆', tint: '#8fc6e8' }, rinnshop: { glyph: '≈', tint: '#5aa9c8' }, farm: { glyph: '❀', tint: '#6fae4f' }, cooking: { glyph: '♨', tint: '#d9774a' },
   alchemy: { glyph: '⚗', tint: '#9a7ad8' }, smith: { glyph: '⚒', tint: '#77726c' }, carpentry: { glyph: '⌂', tint: '#b0884f' }, stonemason: { glyph: '▦', tint: '#a9a090' },
@@ -1299,8 +1352,17 @@ function FloorSwitch() {
 }
 /** M37 slice 4: the plan's BILL OF MATERIALS, in the plan-mode bar. Shows once something is planned: each part with
  *  have / need (the Keepstone and the bag count together), red when short, and Build (enabled only when it is all there). */
-function PlanBom() {
+/** desktop: how far up from the bottom the Health card reaches (the materials card sits clear above it); 92 px when none is found */
+const healthClear = () => {
+  if (typeof document === 'undefined') return 92
+  const plate = [...document.querySelectorAll('span')].find(s => s.textContent === 'Health')?.closest('.w-52')
+  const r = plate?.getBoundingClientRect()
+  return r && r.height ? Math.round(innerHeight - r.top + 10) : 92
+}
+function PlanBom({ slim = false }: { slim?: boolean }) {
   const w = useWorks(), inv = useInv(), bank = useBank()
+  const [lift, setLift] = useState(92)
+  useEffect(() => { if (slim) return; const f = () => setLift(healthClear()); f(); const t = setInterval(f, 500); return () => clearInterval(t) }, [slim])
   const bom = useMemo(() => billOfAll(w, inv, bank), [w, inv, bank])
   if (bom.empty) return null
   const build = () => {
@@ -1309,8 +1371,25 @@ function PlanBom() {
     setInv(r.inv); if (r.bank) setBank(r.bank); setWorks(r.works)
     hudSay('Built. The house stands.', 'item')
   }
+  if (slim) {
+    // PHONE (11-21): one slim line above the bottom HUD (rendered OUTSIDE the transformed build bar, so 'fixed' means the screen):
+    // what the plan is, the first thing short (or "all here"), and Build. The lines stay in the DOM for the checks.
+    const short = bom.lines.find(l => l.short)
+    return (
+      <div data-plan-bom data-ready={bom.ok} data-slim style={{ position: 'fixed', bottom: 'calc(108px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)', width: 'calc(100vw - 24px)', zIndex: 41, pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 10px', borderRadius: 12, background: 'rgba(255,250,235,.94)', boxShadow: '0 2px 8px rgba(0,0,0,.25)', color: H.ink }}>
+        <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 1 }}>
+          <span style={{ font: '700 10px system-ui', letterSpacing: '.1em', textTransform: 'uppercase', opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Plan · {bom.pieces} m{bom.rooms ? ` · ${bom.rooms} room${bom.rooms > 1 ? 's' : ''}` : ''}</span>
+          <span style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: short ? '#b5452c' : H.ink }}>{short ? `${Math.min(short.have, short.n)} / ${short.n} ${short.name}` : `Everything is here (${bom.lines.map(l => `${l.n} ${l.name}`).join(', ')})`}</span>
+          {bom.lines.map(l => <span key={l.id} data-bom-line={l.id} data-need={l.n} data-have={l.have} data-short={l.short} hidden />)}
+        </div>
+        <span data-act="build-plan" style={{ flex: '0 0 auto' }}><HearthButton primary disabled={!bom.ok} onClick={build}>Build</HearthButton></span>
+      </div>
+    )
+  }
   return (
-    <div data-plan-bom data-ready={bom.ok} style={{ position: 'fixed', bottom: 'calc(10px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)', width: 'min(400px, calc(100vw - 24px))', zIndex: 41, pointerEvents: 'auto', display: 'grid', gap: 4, padding: '8px 10px', borderRadius: 12, background: 'rgba(255,250,235,.92)', boxShadow: '0 2px 8px rgba(0,0,0,.2)', color: H.ink }}>
+    // DESKTOP (11-21): bottom-left above the Health card. It used to sit INSIDE the build bar, whose transform made 'fixed' mean the
+    // bar: the card landed across the bar's third row (walls down / roof / foundation) and over the middle of the drawing.
+    <div data-plan-bom data-ready={bom.ok} style={{ position: 'fixed', bottom: lift, left: 'calc(16px + env(safe-area-inset-left, 0px))', width: 'min(340px, calc(100vw - 32px))', zIndex: 41, pointerEvents: 'auto', display: 'grid', gap: 4, padding: '8px 10px', borderRadius: 12, background: 'rgba(255,250,235,.92)', boxShadow: '0 2px 8px rgba(0,0,0,.2)', color: H.ink }}>
       <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', opacity: 0.7 }}>Plan · {bom.pieces} m of wall{bom.rooms ? ` · ${bom.rooms} room${bom.rooms > 1 ? 's' : ''}` : ''} · materials</div>
       {bom.lines.map(l => (
         <div key={l.id} data-bom-line={l.id} data-need={l.n} data-have={l.have} data-short={l.short} style={{ display: 'flex', gap: 6, fontSize: 12.5, color: l.short ? '#b5452c' : H.ink }}>
@@ -1326,18 +1405,29 @@ function PlanBom() {
 }
 /** Flying (build-mode.tsx): the strip rides along at the top so you can pick the next thing without landing. */
 export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
-  const b = useBuildMode(), p = usePlacing(), tool = useBuildTool(), rail = useWallRail()
+  const b = useBuildMode(), p = usePlacing(), tool = useBuildTool(), rail = useWallRail(), phone = usePhoneBar()
   const [sel, setSel] = useState<TablePick | null>(null), [cat, setCat] = useState(false)
   const ownedRef = useRef(owned); ownedRef.current = owned
   const touchy = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
   // a mouse click on the ground places what is on the pointer
   useEffect(() => { if (!b) return; onBuildTap(() => { if (placing) confirmPlace(ownedRef.current) }); return () => onBuildTap(null) }, [b])
   useEffect(() => { if (!b) { setSel(null); setCat(false) } }, [b])
+  // 11-21: tell the plan lens how much the bar covers (top) and the HUD / materials strip (bottom), so the work is framed in the free band
+  useEffect(() => {
+    if (!b) return
+    const f = () => {
+      const bar = document.querySelector('[data-build-bar]')?.getBoundingClientRect(), bom = document.querySelector('[data-plan-bom][data-slim]')?.getBoundingClientRect()
+      setPlanInsets(bar ? Math.round(bar.bottom) : 0, bom ? Math.round(innerHeight - bom.top) : (phone ? 108 : 0))
+    }
+    f(); const t = setInterval(f, 300); return () => { clearInterval(t); setPlanInsets(0, 0) }
+  }, [b, phone])
   if (!b) return null
   return (
     <>
     <FloorSwitch />
-    <div data-build-bar style={{ position: 'fixed', top: typeof window !== 'undefined' && window.innerWidth < 600 ? 112 : 96, left: '50%', transform: 'translateX(-50%)', width: 'min(560px, calc(100vw - 24px))', zIndex: 41, pointerEvents: 'auto', display: 'grid', gap: 6 }}>
+    <PlanBom slim={phone} />
+    <div data-build-bar style={{ position: 'fixed', top: typeof window !== 'undefined' && window.innerWidth < 600 ? 112 : 96, left: '50%', transform: 'translateX(-50%)', width: 'min(560px, calc(100vw - 24px))', zIndex: 41, pointerEvents: 'none', display: 'grid', gap: 6 }}>
+      <style>{'[data-build-bar] > *:not([data-build-hint]) { pointer-events: auto }'}</style>   {/* the bar's gaps let a tap through to the drawing; its panels take it */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 8px', borderRadius: 14, background: 'rgba(255,250,235,.88)', boxShadow: '0 2px 10px rgba(0,0,0,.25)', minWidth: 0 }}>
         <button type="button" data-act="land" onClick={() => { setPlacing(null); exitBuild() }}
           style={{ flex: '0 0 auto', border: 0, borderRadius: 10, padding: '0 10px', height: 52, cursor: 'pointer', background: H.ink, color: '#fff', font: '700 12px system-ui', lineHeight: 1.15 }}>Back to<br />keeper</button>
@@ -1345,10 +1435,9 @@ export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
       </div>
       {cat && <Catalog onPick={() => setCat(false)} />}
       <WallTools owned={ownedRef} cat={cat} onCat={() => { setSel(null); setCat(c => !c) }} />
-      <PlanBom />
       {tool === 'blueprint' && <BlueprintBar />}
       {sel && <BuildCard k={sel} onBuilt={() => setSel(null)} />}
-      {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>{tool === 'walls' ? `Drag along the grid to draw ${rail ? 'a railing (1 m, a third the cost)' : 'a plan'} · it costs nothing until you Build · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · what was built comes back to the bag' : tool === 'floor' ? `Drag a rectangle of open floor in the picked pattern: a patio on the ground, a balcony upstairs (held by a wall, column or room under it, 1 m past at most) · drag from floor already down to take it up` : tool === 'column' ? 'Tap a grid corner for a column (pick its material) · tap a column to take it away' : tool === 'stairs' ? `Tap a cell: stairs climb one floor, away from you (${touchy ? 'turn the view' : 'Q / Z turns the view'} to turn them) · tap stairs to take them away` : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? `Pick a pattern and a colour, then tap a floor (the whole room) or a stucco wall · ${touchy ? 'long-press' : 'right-click'} paints everything connected. Wood and brick keep their own colour` : <>Pick something to build{touchy ? '' : ' · drag to move · wheel to zoom · WASD · Q Z turn'}</>}</div>}
+      {!p && !sel && <div data-build-hint style={{ justifySelf: 'center', fontSize: 11.5, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)', pointerEvents: 'none' }}>{tool === 'walls' ? `Drag along the grid to draw ${rail ? 'a railing (1 m, a third the cost)' : 'a plan'} · it costs nothing until you Build · ${touchy ? 'two fingers move the view' : 'right-drag or WASD moves the view'}` : tool === 'erase' ? 'Drag along a wall to take it down · what was built comes back to the bag' : tool === 'floor' ? `Drag a rectangle of open floor in the picked pattern: a patio on the ground, a balcony upstairs (held by a wall, column or room under it, 1 m past at most) · drag from floor already down to take it up` : tool === 'column' ? 'Tap a grid corner for a column (pick its material) · tap a column to take it away' : tool === 'stairs' ? `Tap a cell: stairs climb one floor, away from you (${touchy ? 'turn the view' : 'Q / Z turns the view'} to turn them) · tap stairs to take them away` : tool === 'door' ? 'Tap a wall for a 2 m doorway · tap a door to fill it in' : tool === 'window' ? 'Tap a wall for a window · tap it again to fill it in' : tool === 'paint' ? `Pick a pattern and a colour, then tap a floor (the whole room) or a stucco wall · ${touchy ? 'long-press' : 'right-click'} paints everything connected. Wood and brick keep their own colour` : <>Pick something to build{touchy ? '' : ' · drag to move · wheel to zoom · WASD · Q Z turn'}</>}</div>}
     </div>
     </>
   )
