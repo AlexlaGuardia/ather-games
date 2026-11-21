@@ -25,7 +25,9 @@ async function open(q: string) {
   await p.evaluateOnNewDocument(() => { try { localStorage.setItem('ather:shimmer:birthRune', 'star') } catch { /* private */ } })
   await p.goto(`${base}/shimmer/open/ather?hour=13&waymark=greg${q}`, { waitUntil: 'load', timeout: 240000 })
   await poll(() => p.evaluate(() => typeof (window as any).__ather?.look === 'function' && (window as any).__questGuide?.glareBearing != null).catch(() => false), 240000)
-  await sleep(2000); if (!phone) await p.mouse.click(550, 350); await sleep(500)
+  // desktop: click for pointer lock; phone: tap away the intro card (it covers the scene, so a phone shot of the trail
+  // showed the card, 11-21). The card dismisses on pointerdown anywhere.
+  await sleep(2000); if (!phone) await p.mouse.click(550, 350); else await p.touchscreen.tap(195, 300); await sleep(500)
   return p
 }
 const probe = (p: Page) => p.evaluate(() => { const q = (window as any).__questGuide; return q ? { ...q } : null })
