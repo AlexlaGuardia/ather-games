@@ -24,11 +24,16 @@ await p.evaluate(() => { const a = (window as any).__ather; a.combat().hollows.l
 await sleep(300)
 await p.evaluate(() => { const a = (window as any).__ather; a.spawn(0, -14) })
 await sleep(300)
-await p.keyboard.press('KeyX'); await sleep(500)
+await p.keyboard.press('KeyX')
+// poll for the decoy: on a slow headless box the cast lands well after a fixed 500 ms (11-21 sweep: run 2 read null)
+await p.waitForFunction(() => !!(window as any).__ather.combat().decoy, { timeout: 15000 }).catch(() => {})
 const d = await p.evaluate(() => { const c = (window as any).__ather.combat(); return c.decoy ? { x: c.decoy.x, z: c.decoy.z, left: c.decoy.until - c.clock } : null })
 ok(!(await p.evaluate(() => document.body.innerText.includes('not out here yet'))), 'no "not out here yet" refusal')
 ok(!!d && d.left > 2, `a decoy stands (${JSON.stringify(d)})`)
-const tgt = await p.evaluate(() => { const a = (window as any).__ather, c = a.combat(), s = a.state(), h = c.hollows[0]; h.state = 'chase'; return { hx: h.x, hz: h.z, kx: s.px, kz: s.pz, dx: c.decoy.x, dz: c.decoy.z } })
+// stand the Hollow halfway between the keeper and the decoy, so the closing is MEASURED from a known start AND only a decoy
+// pull closes it (chasing the keeper moves it AWAY from the decoy). 11-21 sweep: a slow run let the spawned Hollow reach the
+// decoy before the start was read, so it could not close any further.
+const tgt = await p.evaluate(() => { const a = (window as any).__ather, c = a.combat(), s = a.state(), h = c.hollows[0]; if (h && c.decoy) { h.x = (c.decoy.x + s.px) / 2; h.z = (c.decoy.z + s.pz) / 2 } h.state = 'chase'; return { hx: h.x, hz: h.z, kx: s.px, kz: s.pz, dx: c.decoy.x, dz: c.decoy.z } })
 await sleep(3000)
 const after = await p.evaluate(() => { const c = (window as any).__ather.combat(); const h = c.hollows[0]; return h ? { x: h.x, z: h.z } : null })
 const dist = (a: { x: number; z: number }, x: number, z: number) => Math.hypot(a.x - x, a.z - z)

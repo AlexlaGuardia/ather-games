@@ -26,7 +26,9 @@ await p.evaluate(() => { const a = (window as any).__ather; a.combat().hollows.l
 await sleep(300)
 const mana0 = await p.evaluate(() => (window as any).__ather.mana())
 const mana = await p.evaluate(() => (window as any).__casts.mana())
-await p.keyboard.press('KeyX'); await sleep(300)
+await p.keyboard.press('KeyX')
+// poll for the field: on a slow headless box it lands after a fixed 300 ms, the Hollow is never moved in (11-21 sweep, run 1)
+await p.waitForFunction(() => ((window as any).__ather.combat().fields ?? []).length > 0, { timeout: 15000 }).catch(() => {})
 // stand the Hollow in the ring (the aim lands a few metres off where a spawned Hollow wanders to), then let a tick pass
 await p.evaluate(() => { const c = (window as any).__ather.combat(), f = c.fields?.[0], h = c.hollows[0]; if (f && h) { h.x = f.x; h.z = f.z; h.y = f.y } })
 await sleep(1500)
