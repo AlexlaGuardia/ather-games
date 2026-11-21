@@ -2,7 +2,8 @@
 // Ather plot, then plays the Wilds (wakes Hollows, casts, draws and fires the gun, waymark trips home and back), then comes home.
 // Every 30 s: a forced GC (HeapProfiler.collectGarbage), then Runtime.getHeapUsage, so a sample is what the page RETAINS, not
 // garbage it has not swept yet. Prints every sample.
-//   npx tsx scripts/beta-m9-heap.mts [--url https://ather.games] [--min 15]
+//   npx tsx scripts/beta-m9-heap.mts [--url https://ather.games] [--min 15] [--plot-min N --wilds-min N] [--size 390x844]
+// --plot-min / --wilds-min set each phase's length on their own (default: --min split 40/60); --size sets the viewport (11-21, M9 re-run).
 // --settlement [--settle-min 5]: INSTEAD, the M19 leg (11-18): stand in a Wilds settlement with its Moglin rigs mounted
 // (__folk.drawn), short walks inside it, a sample every 30 s; PASS = after a 2-sample warm-up the last third is within 15%
 // of the first, the rigs stayed mounted, 0 page errors. The default run is unchanged.
@@ -17,7 +18,7 @@ const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); retu
 const url = flag('--url', 'https://ather.games'), MIN = Number(flag('--min', '15'))
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
-const p = await br.newPage(); await p.setViewport({ width: 800, height: 500 })
+const p = await br.newPage(); const [VW, VH] = flag('--size', '800x500').split('x').map(Number); await p.setViewport({ width: VW, height: VH })
 
 // A/B legs (M34 heap, 11-19): --nosound stubs the AudioContext out before the page loads (sfx.ts decodes + caches samples);
 // --nosheen sets window.__noBorrow (combat-layer.tsx: Hollows take no env map). Same walk, one suspect removed.
@@ -73,7 +74,10 @@ if (process.argv.includes('--settlement')) {
   console.log(ok ? 'PASS' : 'FAIL'); process.exit(ok ? 0 : 1)
 }
 await sample('plot')
-const slices = Math.max(6, Math.round(MIN * 2)), plotN = Math.round(slices * 0.4), wildsN = slices - plotN
+const slices = Math.max(6, Math.round(MIN * 2))
+const plotN = process.argv.includes('--plot-min') ? Math.max(3, Math.round(Number(flag('--plot-min', '0')) * 2)) : Math.round(slices * 0.4)
+const wildsN = process.argv.includes('--wilds-min') ? Math.max(6, Math.round(Number(flag('--wilds-min', '0')) * 2)) : slices - Math.round(slices * 0.4)
+console.log(`viewport ${VW}x${VH} · plot ${plotN} slices · wilds ${wildsN} slices (30 s each)`)
 // 1 · the plot: walking loops round the garden, back to the middle each loop
 for (let i = 0; i < plotN; i++) await slice('plot', async () => { await walkLoop(); await A('tp', 0, 8, i * 0.7) })
 // 2 · the Wilds: Greg's waymark, wake what is near, cast, shoot; every 4th slice a waymark trip home and back
