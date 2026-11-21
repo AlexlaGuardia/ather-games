@@ -14,7 +14,7 @@
 //
 // ★ PURE, like combat.ts (which steps it and routes rounds into it).
 
-import { spawnHollow, blowCost, type Combat, type Terrain } from './combat'
+import { spawnHollow, hurtKeeper, type Combat, type Terrain } from './combat'
 import type { WildsNode } from './nodes'
 
 export type Attack = 'slam' | 'lunge' | 'volley'
@@ -106,14 +106,8 @@ export function hitChampion(c: Combat, T: Terrain, ch: Champion, head: boolean, 
   c.champ = undefined
 }
 
-function hurt(c: Combat, amount: number) {
-  const k = c.keeper
-  if (k.hp <= 0) return
-  const cost = blowCost(k, amount)   // M29 frame: a Large keeper takes 10% less
-  k.hp = Math.max(0, k.hp - cost); k.sinceHurt = 0
-  c.events.push({ kind: 'hurt', amount: cost })
-  if (k.hp <= 0) c.events.push({ kind: 'down' })
-}
+/** M59: through the one hurt path (frame defence, then the Mana Skin, then health) */
+const hurt = (c: Combat, amount: number) => hurtKeeper(c, amount)
 
 function startAttack(c: Combat, ch: Champion, a: Attack, fx: number, fz: number) {
   ch.attack = a; ch.state = 'windup'; ch.t = windupOf(ch, a); ch.hitDone = false

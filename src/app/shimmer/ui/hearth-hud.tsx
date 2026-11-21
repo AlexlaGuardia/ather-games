@@ -170,13 +170,68 @@ export function HearthObjective({ face, value, anchor = 'center', style }: {
   )
 }
 
+// ── M59 THE MANA SKIN (name ruled athernyx ae322a9) ──────────────────────────────────────────
+// The open world's shield IS the Mana Skin: the shell of the field the keeper stands in (open/ather/combat.ts hurtKeeper).
+// Opt-in per page by `skin: true` on the vitals object, so every other shield (the mortal side's) draws as before. With it:
+// the layer over health is a bright highlight, under 25% of its size it flickers and shows cracks, and on `popAt` (a new
+// value = the skin just broke; a skin simply running out never sets it) the highlight shatters off the bar with a white
+// edge flash.
+export type SkinVitals = Vitals & { skin?: boolean; popAt?: number }
+const SKIN_BG = 'linear-gradient(180deg, rgba(240,252,255,.98), rgba(146,210,246,.94))'
+const SKIN_CSS = '@keyframes mskinShard{0%{transform:translate(0,0) rotate(0deg);opacity:1}100%{transform:translate(var(--dx),var(--dy)) rotate(var(--rot));opacity:0}}@keyframes mskinFlash{0%{opacity:1}100%{opacity:0}}'
+type SkinPopT = { key: number; w: number } | null
+/** one poll of the skin's look; returns a pop to draw when popAt moved since the last poll */
+function skinTick(v: SkinVitals, el: HTMLDivElement | null, st: { w: number; seen: number }): { w: number } | null {
+  if (!v.skin) return null
+  const w = Math.max(0, Math.min(1, v.shield / (v.hpMax || 1)))
+  if (el) {
+    const low = v.shield > 0 && v.shieldMax > 0 && v.shield < 0.25 * v.shieldMax
+    el.style.background = low ? `repeating-linear-gradient(118deg, transparent 0 5px, rgba(36,64,96,.6) 5px 6px), ${SKIN_BG}` : SKIN_BG
+    el.style.boxShadow = 'inset 0 0 3px rgba(255,255,255,.95), inset -1px 0 0 #fff'
+    el.style.opacity = low && Math.random() < 0.4 ? '0.3' : '1'
+    el.dataset.skin = low ? 'low' : w > 0 ? 'on' : 'off'
+  }
+  let pop: { w: number } | null = null
+  if (Number.isNaN(st.seen)) st.seen = v.popAt ?? 0
+  else if ((v.popAt ?? 0) > st.seen) { st.seen = v.popAt!; pop = { w: st.w || 0.1 } }
+  if (w > 0) st.w = Math.max(w, Math.min(1, v.shieldMax / (v.hpMax || 1)))   // shards spread over the skin's FULL size: a pop always comes off a sliver
+  return pop
+}
+/** the shatter: seven shards of the highlight fly up and off the bar, and a white flash round its edge */
+function SkinPop({ pop, r = 999 }: { pop: SkinPopT; r?: number }) {
+  if (!pop) return null
+  const n = 7
+  return (
+    <div key={pop.key} data-skin-pop className="absolute inset-0 pointer-events-none" style={{ overflow: 'visible' }}>
+      <style>{SKIN_CSS}</style>
+      {Array.from({ length: n }, (_, i) => (
+        <span key={i} style={{
+          position: 'absolute', left: `${((i + 0.5) / n) * pop.w * 100}%`, top: 0, width: 7, height: '100%', marginLeft: -3, background: SKIN_BG,
+          clipPath: i % 2 ? 'polygon(0 0, 100% 20%, 70% 100%, 10% 80%)' : 'polygon(20% 0, 100% 0, 80% 90%, 0 100%)',
+          animation: 'mskinShard 620ms cubic-bezier(.2,.7,.4,1) forwards',
+          ['--dx' as string]: `${(i - (n - 1) / 2) * 7 + (i % 3 - 1) * 3}px`, ['--dy' as string]: `${-(12 + ((i * 7) % 13))}px`, ['--rot' as string]: `${(i % 2 ? 1 : -1) * (50 + i * 23)}deg`,
+        } as React.CSSProperties} />
+      ))}
+      <span style={{ position: 'absolute', inset: -2, borderRadius: r, boxShadow: '0 0 0 2px #fff, 0 0 12px 4px rgba(255,255,255,.9)', animation: 'mskinFlash 300ms ease-out forwards' }} />
+    </div>
+  )
+}
+/** the pop state a bar draws: set by its poller on a pop, cleared once the shards are gone */
+function useSkinPop() {
+  const [pop, setPop] = useState<SkinPopT>(null)
+  const st = useRef({ w: 0, seen: NaN })
+  const fire = (p: { w: number } | null) => { if (!p) return; const key = performance.now(); setPop({ key, w: p.w }); setTimeout(() => { if (!(window as unknown as { __skinPopHold?: boolean }).__skinPopHold) setPop(q => q?.key === key ? null : q) }, 900) }   // __skinPopHold: a check freezing the shatter for its shot
+  return { pop, st: st.current, fire }
+}
+
 // ── bottom-left: health + shield ─────────────────────────────────────────────────────────────
 /** Drop-in for `voxel3d/resource-bars.tsx` `ResourceBars`, and it keeps every rule that file
  *  documents: ONE bar, both fills scaled to `hpMax`, the shield laid OVER health from the same left
  *  edge (the order a hit spends them), "+N" hidden at zero, refs polled at 10 Hz and written to the
  *  DOM, rounded for display only. Not self-positioned: the corner belongs to whoever owns it. */
-export function HearthVitals({ face, vitals }: { face: HudFace; vitals: React.RefObject<Vitals> }) {
+export function HearthVitals({ face, vitals }: { face: HudFace; vitals: React.RefObject<SkinVitals> }) {
   const t = HUD_FACES[face]
+  const sk = useSkinPop()
   const hpEl = useRef<HTMLDivElement>(null)
   const shEl = useRef<HTMLDivElement>(null)
   const hpTxt = useRef<HTMLSpanElement>(null)
@@ -193,9 +248,10 @@ export function HearthVitals({ face, vitals }: { face: HudFace; vitals: React.Re
         const s = v.shield > 0.5 ? `+${Math.round(v.shield)}` : ''
         if (shTxt.current.textContent !== s) shTxt.current.textContent = s
       }
+      sk.fire(skinTick(v, shEl.current, sk.st))
     }, 100)
     return () => clearInterval(id)
-  }, [vitals])
+  }, [vitals])   // eslint-disable-line react-hooks/exhaustive-deps -- sk is stable (ref + setState)
   return (
     <HudPlate face={face} className="w-52 pointer-events-none">
       <div className="px-3 py-2" style={hearthBody}>
@@ -204,12 +260,15 @@ export function HearthVitals({ face, vitals }: { face: HudFace; vitals: React.Re
           <span ref={shTxt} className="ml-auto text-[11px] font-bold tabular-nums" style={{ color: t.plus }} />
           <span ref={hpTxt} className="text-[12px] font-bold tabular-nums" style={{ color: t.text }}>0</span>
         </div>
-        <div className="relative mt-1.5 h-2.5 rounded-full overflow-hidden" style={{ background: t.track, boxShadow: 'inset 0 1px 2px rgba(0,0,0,.4)' }}>
+        <div className="relative mt-1.5">
+        <div className="relative h-2.5 rounded-full overflow-hidden" style={{ background: t.track, boxShadow: 'inset 0 1px 2px rgba(0,0,0,.4)' }}>
           <div ref={hpEl} className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-100"
                style={{ width: '100%', background: 'linear-gradient(180deg, #d9735a, #a8482f)' }} />
-          {/* The shield: sky, OVER the health, never beside it (see resource-bars.tsx). */}
-          <div ref={shEl} className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-100"
+          {/* The shield: sky, OVER the health, never beside it (see resource-bars.tsx). M59: the Mana Skin's look when skin. */}
+          <div ref={shEl} data-shield className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-100"
                style={{ width: '0%', background: 'rgba(125,177,210,.8)', boxShadow: 'inset -1px 0 0 rgba(235,245,255,.7)' }} />
+        </div>
+        <SkinPop pop={sk.pop} />
         </div>
       </div>
     </HudPlate>
@@ -404,8 +463,8 @@ export function hearthSocket(face: HudFace, active: boolean): React.CSSPropertie
 // fills against hpMax, the shield OVER the health; refs polled at 10 Hz and written to the DOM.
 
 /** One thin lip bar. `fill` is set by the poller through the returned ref. */
-function LipBar({ face, fillRef, overRef, txtRef, color, glyph }: {
-  face: HudFace; color: string; glyph: string
+function LipBar({ face, fillRef, overRef, txtRef, color, glyph, pop }: {
+  face: HudFace; color: string; glyph: string; pop?: SkinPopT
   fillRef: React.RefObject<HTMLDivElement | null>
   overRef?: React.RefObject<HTMLDivElement | null>
   txtRef: React.RefObject<HTMLSpanElement | null>
@@ -414,11 +473,14 @@ function LipBar({ face, fillRef, overRef, txtRef, color, glyph }: {
   return (
     <div className="flex-1 min-w-0 flex items-center gap-1.5">
       <span className="text-[11px] leading-none" style={{ color }}>{glyph}</span>
-      <div className="relative flex-1 h-2 rounded-full overflow-hidden" style={{ background: t.track, boxShadow: 'inset 0 1px 2px rgba(0,0,0,.4)' }}>
+      <div className="relative flex-1 h-2">
+      <div className="relative h-2 rounded-full overflow-hidden" style={{ background: t.track, boxShadow: 'inset 0 1px 2px rgba(0,0,0,.4)' }}>
         <div ref={fillRef} className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-100"
              style={{ width: '100%', background: color }} />
-        {overRef && <div ref={overRef} className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-100"
+        {overRef && <div ref={overRef} data-shield className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-100"
                          style={{ width: '0%', background: 'rgba(125,177,210,.85)', boxShadow: 'inset -1px 0 0 rgba(235,245,255,.7)' }} />}
+      </div>
+      <SkinPop pop={pop ?? null} />
       </div>
       <span ref={txtRef} className="text-[11px] font-bold tabular-nums leading-none" style={{ ...hearthBody, color: t.count, textShadow: t.countShadow, minWidth: 18 }} />
     </div>
@@ -433,13 +495,14 @@ function LipBar({ face, fillRef, overRef, txtRef, color, glyph }: {
 export function HearthLip({ face, vitals, mana, tools }: {
   face: HudFace
   /** Omitted = no health on the lip (the mortal side has no always-on health). */
-  vitals?: React.RefObject<Vitals>
+  vitals?: React.RefObject<SkinVitals>
   /** Pass on a phone (the orb is gone); omit where the orb still stands. */
   mana?: React.RefObject<{ cur: number; max: number; regen: number } | null>
   tools?: React.ReactNode
 }) {
   const t = HUD_FACES[face]
-  const hp = useRef<HTMLDivElement>(null), sh = useRef<HTMLDivElement>(null), hpT = useRef<HTMLSpanElement>(null)
+  const hp = useRef<HTMLDivElement>(null), sh = useRef<HTMLDivElement>(null), hpT = useRef<HTMLSpanElement>(null), shT = useRef<HTMLSpanElement>(null)
+  const sk = useSkinPop()
   const mp = useRef<HTMLDivElement>(null), mpT = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     const id = setInterval(() => {
@@ -449,6 +512,8 @@ export function HearthLip({ face, vitals, mana, tools }: {
         if (hp.current) hp.current.style.width = `${Math.max(0, (v.hp / max) * 100)}%`
         if (sh.current) sh.current.style.width = `${Math.max(0, Math.min(1, v.shield / max)) * 100}%`
         if (hpT.current) { const s = `${Math.round(v.hp)}`; if (hpT.current.textContent !== s) hpT.current.textContent = s }
+        if (shT.current) { const s = v.skin && v.shield > 0.5 ? `+${Math.round(v.shield)}` : ''; if (shT.current.textContent !== s) shT.current.textContent = s }   // M59: the skin's own number
+        sk.fire(skinTick(v, sh.current, sk.st))
       }
       const m = mana?.current
       if (m) {
@@ -458,10 +523,11 @@ export function HearthLip({ face, vitals, mana, tools }: {
       }
     }, 100)
     return () => clearInterval(id)
-  }, [vitals, mana])
+  }, [vitals, mana])   // eslint-disable-line react-hooks/exhaustive-deps -- sk is stable (ref + setState)
   return (
     <div className="flex items-center gap-3 px-2 py-1 rounded-[10px]" style={{ background: t.plate, boxShadow: face === 'full' ? 'inset 0 1px 3px rgba(58,39,22,.4)' : undefined }}>
-      {vitals && <LipBar face={face} fillRef={hp} overRef={sh} txtRef={hpT} color="#b9543a" glyph="♥" />}
+      {vitals && <LipBar face={face} fillRef={hp} overRef={sh} txtRef={hpT} color="#b9543a" glyph="♥" pop={sk.pop} />}
+      {vitals && <span ref={shT} data-skin-num className="empty:hidden text-[10px] font-bold tabular-nums leading-none" style={{ ...hearthBody, color: t.plus }} />}
       {mana && <LipBar face={face} fillRef={mp} txtRef={mpT} color="#7657b4" glyph="✦" />}
       {tools}
     </div>

@@ -141,7 +141,7 @@ import { beginWork, takeChip, workOf, chipGapMs, HOLD_RANGE, type Work, type Sta
 import { ChannelFocus, freshFocus, type FocusState } from './channel-fx'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { AtherMiniMap } from './minimap'
-import type { Vitals } from '../../engine/vitals'
+import type { SkinVitals } from '../../ui/hearth-hud'
 const aimDirV = new Vector3()   // M60: the camera's forward, reused every frame
 
 
@@ -240,7 +240,7 @@ function AtherSliceGame() {
   const poseRef = useRef<CompassPose>({ x: THRESHOLD.x, z: THRESHOLD.z, yaw: THRESHOLD.yaw })
   const marksRef = useRef<CompassMark[]>([])
   const journal = useJournal()   // re-marks the compass when a journal waymark is toggled
-  const vitalsRef = useRef<Vitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0 })
+  const vitalsRef = useRef<SkinVitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0, skin: true })   // M59: the shield drawn as the Mana Skin
   // ★ mana is real now: pruning from a distance spends it (forestry.ts › MANA_COST), it refills slowly (build: 1.5/s)
   const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 1.5 })
   const buffsRef = useRef<Buffs>({})   // potion buffs (ather/alchemy.ts), loaded per keeper on mount
@@ -276,7 +276,7 @@ function AtherSliceGame() {
   const stowedNow = useCallback(() => stanceRef.current.kind === 'stowed', [])   // M42: melee swings only with empty hands
   const [reloadTick, setReloadTick] = useState(0)
   const toolsRef = useRef<EquippedTools>(ensureBasicTools({})), skillsRef = useRef<SkillSet>(openSkills())
-  const onCombatHud = useCallback((h: CombatHud) => { vitalsRef.current = { hp: h.hp, hpMax: h.maxHp, shield: 0, shieldMax: 0 }; setChud(h) }, [])
+  const onCombatHud = useCallback((h: CombatHud) => { vitalsRef.current = { hp: h.hp, hpMax: h.maxHp, shield: h.skin ?? 0, shieldMax: h.skinMax ?? 0, skin: true, popAt: h.skinPopAt }; setChud(h) }, [])
   const [pitstops, setPitstops] = useState<Pitstop[]>([LANDING])
   const [reviveKey, setReviveKey] = useState(0)
   const rinQuest = useRinQuest(), rinQuestRef = useRef(rinQuest); rinQuestRef.current = rinQuest   // M22 the first rinstick (use-rinquest.ts)

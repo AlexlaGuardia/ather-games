@@ -57,6 +57,8 @@ export interface Keeper {
    *  `takes` scales what a hit costs (Large 0.9 = +10% defence). Unset = the baseline 1. The page sets both from the look. */
   hit?: number
   takes?: number
+  /** where the keeper's feet were on the last stepCombat (M59: which field's Mana Skin holds them when a blow lands) */
+  at?: { x: number; z: number }
 }
 /** what a blow of `amount` costs this keeper (rounded, never below 1 so a hit always registers) */
 export const blowCost = (k: Keeper, amount: number) => Math.max(1, Math.round(amount * (k.takes ?? 1)))
@@ -82,6 +84,9 @@ export const PICKUP_R = 1.4, MAGNET_R = 4.5
 export interface CombatField {
   id: number; moveId: string; x: number; y: number; z: number; r: number; until: number; nextTick: number
   dps: number; hps: number; cage: boolean; stopsShots: boolean; colour: string
+  /** M59 MANA SKIN (name ruled athernyx ae322a9): the field's shell (spec.fieldHp: Threshold 20, Overpressure 60). While the
+   *  keeper stands inside, every blow drains it before health (hurtKeeper). At 0 it POPS once and the field is gone. */
+  shell?: number; shellMax?: number; popped?: boolean
 }
 /** A raised terrain piece (terrain casts): grid cells (1 m, the engine's rounding), each `base` to `base + rise` m tall, until `until`. The numbers are castForMove's. */
 export interface CombatPiece {
@@ -127,6 +132,8 @@ export interface Combat {
 export type CombatEvent =
   | { kind: 'hit'; id: number; head: boolean; killed: boolean }
   | { kind: 'hurt'; amount: number }
+  | { kind: 'skin'; absorbed: number }
+  | { kind: 'skin-pop' }
   /** #1651 (host only): a Hollow's blow or spit reached ANOTHER keeper in the party; `dmg` is RAW (their frame applies there) */
   | { kind: 'hurt-other'; id: string; dmg: number }
   | { kind: 'pickup'; amount: number }
@@ -163,10 +170,53 @@ export function spawnHollow(c: Combat, T: Terrain, x: number, z: number, kind: H
 export function applyNetHurt(c: Combat, raw: number) {
   const k = c.keeper
   if (!(raw > 0) || raw > 50 || k.hp <= 0) return
-  const cost = blowCost(k, raw)
+  hurtKeeper(c, raw)
+}
+
+// ── M59 THE MANA SKIN ──────────────────────────────────────────────────────────────────────────────────────────────────
+/** The field whose Mana Skin holds the keeper right now: the one with the most shell left, among the live, unpopped fields
+ *  with a shell whose disc the keeper's feet stand in. None = blows go straight to health. */
+export function skinField(c: Combat): CombatField | null {
+  const at = c.keeper.at, now = c.clock ?? 0
+  if (!at || !c.fields?.length) return null
+  let best: CombatField | null = null
+  for (const f of c.fields) if ((f.shell ?? 0) > 0 && !f.popped && f.until > now && Math.hypot(at.x - f.x, at.z - f.z) <= f.r && (!best || f.shell! > best.shell!)) best = f
+  return best
+}
+/** What the HUD draws over the health bar: the skin holding the keeper and its full size (0 / 0 = none). */
+export function skinOf(c: Combat): { skin: number; skinMax: number } {
+  const f = skinField(c)
+  return f ? { skin: f.shell!, skinMax: f.shellMax ?? f.shell! } : { skin: 0, skinMax: 0 }
+}
+function popSkin(c: Combat, f: CombatField) {
+  f.shell = 0; f.popped = true; f.until = c.clock ?? 0   // "gone at the first hard blow": the field goes with its skin
+  c.events.push({ kind: 'skin-pop' })
+}
+/** THE one way a blow reaches the keeper. The frame's defence first (blowCost), then the Mana Skin holding them takes what
+ *  it can ({kind:'skin'}), popping once at 0 ({kind:'skin-pop'}); only the rest reaches health ({kind:'hurt'}, regen
+ *  delay restarts, {kind:'down'} at 0). A blow the skin swallows whole leaves health and its regen alone. */
+export function hurtKeeper(c: Combat, raw: number) {
+  const k = c.keeper
+  if (k.hp <= 0) return
+  let cost = blowCost(k, raw)
+  const f = skinField(c)
+  if (f) {
+    const absorbed = Math.min(f.shell!, cost)
+    f.shell! -= absorbed; cost -= absorbed
+    c.events.push({ kind: 'skin', absorbed })
+    if (f.shell! <= 0) popSkin(c, f)
+  }
+  if (cost <= 0) return
   k.hp = Math.max(0, k.hp - cost); k.sinceHurt = 0
   c.events.push({ kind: 'hurt', amount: cost })
   if (k.hp <= 0) c.events.push({ kind: 'down' })
+}
+/** The EMP (Meltbore's shieldStrip, Alex 11-18): pops the skin holding the keeper outright. ⚠ Nothing in the open world aims
+ *  a shieldStrip AT the keeper yet (Hollows carry no EMP); this is the hook for when something does. */
+export function stripSkin(c: Combat): boolean {
+  const f = skinField(c)
+  if (!f) return false
+  popSkin(c, f); return true
 }
 
 export function applyNetHit(c: Combat, id: number, dmg: number) {
@@ -245,6 +295,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   c.events = []
   c.clock = (c.clock ?? 0) + dt
   const k = c.keeper
+  k.at = { x: feet.x, z: feet.z }   // M59: the skin under the keeper is read from here (hurtKeeper)
   k.sinceShot += dt; k.sinceHurt += dt
   k.bloom = bloomAfterRest(c.gun, k.bloom, dt)
   if (k.reloading > 0) { k.reloading -= dt; if (k.reloading <= 0) { k.reloading = 0; k.ammo = c.gun.clip } }
@@ -346,10 +397,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
         mx = h.lx; mz = h.lz; speed = SHAMBLER.lungeSpeed
         if (!h.hitThisLunge && !unarmed && Math.hypot(feet.x - h.x, feet.z - h.z) < SHAMBLER.hitReach * (k.hit ?? 1) && Math.abs(feet.y - h.y) < 1.6 && k.hp > 0) {
           h.hitThisLunge = true
-          const cost = blowCost(k, SHAMBLER.damage)
-          k.hp = Math.max(0, k.hp - cost); k.sinceHurt = 0
-          c.events.push({ kind: 'hurt', amount: cost })
-          if (k.hp <= 0) c.events.push({ kind: 'down' })
+          hurtKeeper(c, SHAMBLER.damage)
         }
         if (!h.hitThisLunge && !unarmed && c.others) for (const o of c.others) if (Math.hypot(o.x - h.x, o.z - h.z) < SHAMBLER.hitReach && Math.abs(o.y - h.y) < 1.6) {
           h.hitThisLunge = true; c.events.push({ kind: 'hurt-other', id: o.id, dmg: SHAMBLER.damage }); break   // #1651: their frame applies on their side
@@ -398,10 +446,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     if (top !== null && p.y < top) { p.life = 0; continue }   // stopped by a raised piece
     const bx = p.x - feet.x, bz = p.z - feet.z, by = p.y - (feet.y + 0.9)
     if (k.hp > 0 && bx * bx + bz * bz < (FLOATER.spitR + 0.35 * (k.hit ?? 1)) ** 2 && Math.abs(by) < 1.0) {
-      const dmg = blowCost(k, p.dmg ?? FLOATER.damage)
-      p.life = 0; k.hp = Math.max(0, k.hp - dmg); k.sinceHurt = 0
-      c.events.push({ kind: 'hurt', amount: dmg })
-      if (k.hp <= 0) c.events.push({ kind: 'down' })
+      p.life = 0; hurtKeeper(c, p.dmg ?? FLOATER.damage)
     }
     if (p.life > 0 && c.others) for (const o of c.others) {   // #1651: a spit can reach a party mate
       const ox = p.x - o.x, oz = p.z - o.z, oy = p.y - (o.y + 0.9)

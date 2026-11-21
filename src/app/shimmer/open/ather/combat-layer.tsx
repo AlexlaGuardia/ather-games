@@ -10,7 +10,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { RANGE_GUNS } from '../shared/gunplay'
 import { weaponDef } from '../../engine/weapons'
-import { newCombat, stepCombat, applyNetHit, applyNetHurt, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, SHAMBLER, FLOATER, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
+import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, SHAMBLER, FLOATER, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
 import { live as liveSolids } from './dynamic-solids'
 import { runCast, stepFields, stepPieces, channelAim, type ChannelRun, type CastHit } from './combat-casts'
 import type { CastSpec } from '../../play3d/cast'
@@ -33,6 +33,8 @@ export interface CombatHud {
   firing?: boolean
   /** The node champion's bars, when one is up: bar 0..2 is the one being worn down. */
   champ: { bar: number; hp: number; barHp: number; bars: number; open: boolean } | null
+  /** M59 THE MANA SKIN: the shell of the field holding the keeper (0 / 0 = none), and when it last popped (performance.now()/1000) */
+  skin?: number; skinMax?: number; skinPopAt?: number
 }
 
 /** Seconds after the layer goes active before a champion may wake (the camera catches up to the walker). */
@@ -642,6 +644,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       const now = performance.now() / 1000
       for (const e of C.events) {
         if (e.kind === 'hurt') hud.current.hurtAt = now; if (e.kind === 'hit') hud.current.hitAt = now
+        if (e.kind === 'skin') sfx('mana-skin-tick')   // M59: a soft glassy tick per absorbed blow (proposed = silent until Alex's yay)
+        if (e.kind === 'skin-pop') { hud.current.skinPopAt = now; sfx('mana-skin-pop') }   // the whip-crack; the bar shatters off popAt
         if (e.kind === 'hurt-other') openNet()?.relay(HURT_KIND, encodeHurt(e.dmg), e.id)   // #1651: addressed to the guest it reached
         if (e.kind === 'hit' && e.killed) { const L = lastAt.current.get(e.id); if (L) dispersals.current.push({ ...L, at: performance.now() / 1000, colour: goopWorld.current.groundAt(L.x, L.z) }) }   // M34
         if (e.kind === 'hit') { const L = lastAt.current.get(e.id); sfx(e.killed ? 'hollow-disperse' : 'hollow-hit', L ? { at: { x: L.x, y: L.y + 0.8, z: L.z } } : {}) }   // M36
@@ -694,7 +698,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       hudT.current = 0.08
       const k = C.keeper
       const ch = C.champ
-      onHud({ ...hud.current, gun: C.gun.name, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0,
+      onHud({ ...hud.current, ...skinOf(C), gun: C.gun.name, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0,
         firing: armedRef.current && !frozen.current && (held.current || trigger.current || touch.fire),   // raw input; morel.ts adds a wall-clock grace per round
         champ: ch ? { bar: ch.bar, hp: ch.hp, barHp: CHAMP.barHp, bars: CHAMP.bars, open: ch.state !== 'rise' && ch.state !== 'submerge' && ch.state !== 'home' } : null })
       setAmmoFeed({ ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0, firing: armedRef.current && !frozen.current && (held.current || trigger.current || touch.fire) })

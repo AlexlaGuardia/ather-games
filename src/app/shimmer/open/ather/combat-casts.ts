@@ -10,8 +10,9 @@
 //                (FIELD_TICK_MS, engine/field-effects.ts) it does what the spec carries, and ONLY that:
 //                  fieldDps   damage to Hollows inside        fieldHps   heals the keeper standing inside
 //                  cage       Hollows inside are held (rooted)  fieldStopsShots  eats Hollow spit crossing it
-//                No open-world meaning, so not done: fieldShps (the keeper has no shield), fieldHp / ward (nothing here
-//                hits the field), hides (Hollows do not track by sight), surgeMult (Exhale's surge is the page's).
+//                  fieldHp    M59 MANA SKIN: the keeper standing inside wears it; blows drain it before health (combat.ts
+//                             hurtKeeper), it pops at 0 and the field goes. Overpressure's wardMend / flaw / backlash: not here.
+//                No open-world meaning, so not done: fieldShps (the keeper has no shield), hides (Hollows do not track by sight), surgeMult (Exhale's surge is the page's).
 //   terrain    — the spec's shape (wall / ring / block / ledge, engine/conjured-terrain.ts shapeCells) rises at the aim point, shapeHeight
 //                tiers (1 tier = 1 m here) tall, for areaSecs. Hollows cannot step into its cells and Hollow spit stops on it.
 //                Pillar Tomb also lays its statuses on the Hollow nearest the aim and rises around it. NOT done (no hook here):
@@ -133,7 +134,8 @@ export function runCast(c: Combat, T: Terrain, eye: V3, dir: V3, spec: CastSpec)
       const p = spec.castRange > 0 ? aimPoint(T, eye, dir, spec.castRange) : { x: eye.x, y: T.heightAt(eye.x, eye.z), z: eye.z }
       const r = Math.max(MIN_AREA_M, spec.areaSize) / 2, now = c.clock ?? 0
       const f: CombatField = { id: c.nextId++, moveId: spec.moveId, x: p.x, y: p.y, z: p.z, r, until: now + spec.areaSecs, nextTick: now,
-        dps: spec.fieldDps, hps: spec.fieldHps, cage: spec.cage, stopsShots: spec.fieldStopsShots, colour: spec.cage ? '#d8e0ff' : spec.fieldHps > 0 ? '#9be59b' : '#ffd9a0' }
+        dps: spec.fieldDps, hps: spec.fieldHps, cage: spec.cage, stopsShots: spec.fieldStopsShots, colour: spec.cage ? '#d8e0ff' : spec.fieldHps > 0 ? '#9be59b' : '#ffd9a0',
+        ...(spec.fieldHp > 0 ? { shell: spec.fieldHp, shellMax: spec.fieldHp } : {}) }   // M59: the Mana Skin a keeper inside wears
       c.fields = [...(c.fields ?? []), f]
       return { kind: 'area', ...p, r, hit: c.hollows.filter(h => h.hp > 0 && Math.hypot(h.x - p.x, h.z - p.z) <= r + 0.5).length }
     }

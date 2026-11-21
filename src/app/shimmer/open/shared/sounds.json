@@ -462,5 +462,24 @@
   "source": "synth",
   "bus": "sfx",
   "vol": 0.5
+ },
+ {
+  "id": "mana-skin-pop",
+  "area": "combat",
+  "status": "proposed",
+  "note": "",
+  "desc": "M59: your Mana Skin breaks: a whip-crack with glass falling off it (2D, the bar shatters with it)",
+  "source": "synth",
+  "bus": "sfx"
+ },
+ {
+  "id": "mana-skin-tick",
+  "area": "combat",
+  "status": "proposed",
+  "note": "",
+  "desc": "M59: a blow lands on your Mana Skin instead of you: one soft glassy tick",
+  "source": "synth",
+  "bus": "sfx",
+  "vol": 0.7
  }
 ]

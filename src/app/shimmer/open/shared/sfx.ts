@@ -192,6 +192,10 @@ const RECIPES: Record<string, (b: Bus) => void> = {
   'hollow-disperse': b => { puff(b, 'bandpass', 1800, 0.8, 0.12, 0.01, 0.55); puff(b, 'lowpass', 400, 0.7, 0.14, 0.005, 0.3); for (const [f, at] of [[520, 0.08], [760, 0.17], [430, 0.27], [640, 0.38]]) tone(b, 'sine', f, f * 1.6, 0.05, 0.003, 0.05, at) },   // falls apart: a hiss + bubbly pops
   'morel-chime': b => { tone(b, 'sine', 1319, 1319, 0.07, 0.004, 0.35); tone(b, 'sine', 2637, 2637, 0.02, 0.004, 0.2); tone(b, 'sine', 1976, 1976, 0.06, 0.004, 0.45, 0.09) },   // E6 then B6, glassy, small
   'gem-pulse': b => { tone(b, 'sine', 2350, 2200, 0.035, 0.002, 0.06) },   // one tiny glass tick: it rides every shot, so it must sit UNDER the gun
+  // M59 THE MANA SKIN (11-21, proposed): the pop = a whip-crack (a hard high snap + a falling crack) with glass falling off it;
+  // the tick = one soft glassy note per blow the skin swallows, small enough to ride a fight
+  'mana-skin-pop': b => { puff(b, 'highpass', 2800, 0.7, 0.55, 0.0006, 0.03); tone(b, 'square', 2600, 260, 0.1, 0.0005, 0.045); puff(b, 'bandpass', 4800, 2.5, 0.2, 0.001, 0.14, 0.008); for (const [f, at] of [[3300, 0.03], [2700, 0.07], [3900, 0.1], [2400, 0.15]]) tone(b, 'sine', f, f * 0.96, 0.05, 0.001, 0.09, at) },
+  'mana-skin-tick': b => { tone(b, 'sine', 2900, 2760, 0.07, 0.002, 0.1); tone(b, 'sine', 4350, 4300, 0.025, 0.002, 0.06) },
 }
 
 function run(id: string, o: PlayOpts) {
@@ -211,8 +215,10 @@ function run(id: string, o: PlayOpts) {
 /** Play a sound IN THE GAME. Only a `yay` sound makes noise; proposed and nay are silent. `at` = positional (3D); none = 2D. */
 /** probe for checks (sfx-check.mts): how many times each yay id was played this page */
 const played: Record<string, number> = {}
-if (typeof window !== 'undefined') (window as unknown as { __sfx?: object }).__sfx = { played: () => ({ ...played }) }
-export function play(id: string, opts: PlayOpts = {}) { if (statusOf(id) === 'yay') { played[id] = (played[id] ?? 0) + 1; run(id, opts) } }
+/** every request the game made, yay or not (M59: a check can count a PROPOSED sound, which stays silent, by this) */
+const asked: Record<string, number> = {}
+if (typeof window !== 'undefined') (window as unknown as { __sfx?: object }).__sfx = { played: () => ({ ...played }), asked: () => ({ ...asked }) }
+export function play(id: string, opts: PlayOpts = {}) { asked[id] = (asked[id] ?? 0) + 1; if (statusOf(id) === 'yay') { played[id] = (played[id] ?? 0) + 1; run(id, opts) } }
 /** The review page's play button: sounds regardless of status. Never call from the game. */
 export function audition(id: string) { run(id, {}) }
 
