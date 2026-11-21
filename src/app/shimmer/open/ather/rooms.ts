@@ -16,7 +16,7 @@ import { squareAt, sqId, GATE, GREG_PLOT_ANCHOR as GREG, THRESHOLD, PATH_START, 
 import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, BAIT_FROM, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
-import { FURNITURE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, keepstoneFor, type Job } from './furniture'
+import { FURNITURE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, keepstoneFor, ALC_LIVE, type Job } from './furniture'
 import { adoptWork, adoptOut, stockJobs, type Work, type Station } from './station-queue'
 import { adoptUpper, type Level } from './plot-floors'
 import { adoptCols, type Cols } from './plot-cols'
@@ -44,7 +44,9 @@ export const ROOMS: Readonly<Record<RoomKind, RoomDef>> = {
   rinnshop:   { name: 'Rinnshop',   blurb: 'Rinsticks are built here, bait is cut and catches readied for the hearth.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 16 }], raiseMs: 90_000, open: true },
   farm:       { name: 'Farm', blurb: 'Soil beds for crops, and a composter that eats what you give it and what the farm cannot hold.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 18 }], raiseMs: 100_000, open: true },
   cooking:    { name: 'Cooking room', blurb: 'A hearth that roasts your catch and the meat you bring home from the Smokehouse.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: true },
-  alchemy:    { name: 'Alchemy room', blurb: 'A cauldron that boils crystals, shards and saps into potions.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 120_000, open: true },
+  // M57 (Alex 11-20): alchemy is a FURNITURE SET (alchemy-set.ts), not a room. Closes when the set goes live; a room already
+  // raised is taken down and paid back by retireRooms (workshop.tsx runs it once on load while ALC_LIVE).
+  alchemy:    { name: 'Alchemy room', blurb: 'A cauldron that boils crystals, shards and saps into potions.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 120_000, open: !ALC_LIVE },
   smith:      { name: 'Smithy',     blurb: 'Works metal brought over from the continent. Drawn up, not ready to build yet.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: false },
   carpentry:  { name: 'Carpentry room', blurb: 'Saw logs, strip bark, tap sap, and make furniture for your plot.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: true },
   // OPEN 11-18 (BETA M17): its bench binds Spikes (ather/focuses.ts, Magii 5626aaf); its own stonework comes later. The blurb is a
@@ -423,6 +425,18 @@ export function pickUpPiece(works: Works, id: string, inv: Inv): { works: Works;
   if (!p) return null
   const r = give(inv, p.item, 1)
   return r.left > 0 ? null : { works: { ...works, pieces: works.pieces.filter(x => x.id !== id) }, inv: r.inv }
+}
+/** M57: take down every room of `kind` and pay it back into the garden bank: the logs it cost, its store and its finished
+ *  goods. ALL OR NOTHING: if the bank cannot take every stack, nothing moves and the rooms stand (null) until it can, so a
+ *  full bank never eats a keeper's things. No such room = the works unchanged and nothing refunded. */
+export function retireRooms(w: Works, b: Bank, cap: number, kind: RoomKind): { works: Works; bank: Bank; refunded: { id: string; n: number }[] } | null {
+  const gone = w.rooms.filter(r => r.kind === kind)
+  if (!gone.length) return { works: w, bank: b, refunded: [] }
+  const back: { id: string; n: number }[] = []
+  for (const r of gone) back.push(...ROOMS[kind].cost, ...(r.store ?? []), ...(r.out ?? []))
+  let bank = b
+  for (const x of back) { const p = putIn(bank, cap, x.id, x.n); if (p.left > 0) return null; bank = p.bank }
+  return { works: { ...w, rooms: w.rooms.filter(r => r.kind !== kind) }, bank, refunded: back }
 }
 /** Turn a standing piece a quarter, if it still fits where it stands. */
 export function turnPiece(works: Works, owned: ReadonlySet<string>, id: string): Works | null {

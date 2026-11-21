@@ -4,6 +4,7 @@
 // come back, the product is waiting. Run: npx tsx src/app/shimmer/open/ather/alchemy-runs.test.ts
 import { keeperKey } from '@/lib/keeper-local'
 import { ALC_POTIONS, pickFor, stepMakes, type Have } from './alchemy-set'
+import { give, type Inv } from '../shared/inventory'
 
 export interface Run { potion: string; k: number; spent: { id: string; n: number }[]; start: number; ms: number }
 export type Runs = Record<string, Run>   // piece id → its run
@@ -36,6 +37,15 @@ export function dropRun(runs: Runs, pid: string): { runs: Runs; back: { id: stri
   if (!r) return { runs, back: [] }
   const rest = { ...runs }; delete rest[pid]
   return { runs: rest, back: r.spent }
+}
+
+/** Pick up a piece with a run on it: its inputs go back into `inv`. ALL OR NOTHING: null if the bag cannot take every one
+ *  (the piece stays put, the run keeps going). No run = the bag and runs unchanged. */
+export function returnRun(runs: Runs, pid: string, inv: Inv): { runs: Runs; inv: Inv } | null {
+  const d = dropRun(runs, pid)
+  let bag = inv
+  for (const x of d.back) { const g = give(bag, x.id, x.n); if (g.left > 0) return null; bag = g.inv }
+  return { runs: d.runs, inv: bag }
 }
 
 export function adoptRuns(v: unknown): Runs {

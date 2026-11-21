@@ -25,7 +25,7 @@ import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
   WALL_H, KEEP_CLEAR, type Works, type Room, type RoomKind, type WorkNear,
-  stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, canPlacePiece, placePiece, pickUpPiece, turnPiece, type Piece,
+  stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, canPlacePiece, placePiece, pickUpPiece, turnPiece, retireRooms, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, payCost, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
@@ -41,7 +41,9 @@ import { levelOf, withLevel, levelCount, levelBase, canStack, floating, upperBox
 import { floorAt, foundH, plinthBoxes, doorSteps, foundDelta, FOUND_OPTS, FOUND_NAME, type FoundH } from './plot-found'
 import { stairBoxes, stairCellSet, toggleStair, dirOfYaw, type Stairs } from './plot-stairs'
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols } from './plot-cols'
-import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, type Job } from './furniture'
+import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, ALC_LIVE, type Job } from './furniture'
+import { AlchemyPanel } from './alchemy-panel'
+import { loadRuns, saveRuns, returnRun } from './alchemy-runs'
 import { ROAST } from './cooking'
 import { FarmPanel, FarmInterior, FarmCrate, currentFarm, setFarm, currentWater, settleWater, farmNow } from './farm-room'
 import { plumbingOf, spillIfRemoved } from './water'
@@ -67,7 +69,16 @@ import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, type 
 let works: Works | null = null
 const SERVER: Works = { v: 1, rooms: [], chests: [], pieces: [] }
 const subs = new Set<() => void>()
-const getW = (): Works => { if (!works) works = typeof window === 'undefined' ? SERVER : loadWorks(); return works }
+const getW = (): Works => { if (!works) { works = typeof window === 'undefined' ? SERVER : loadWorks(); if (ALC_LIVE && works !== SERVER) retireAlchemy() } return works }
+/** M57: once the alchemy set is live, an Alchemy room raised before it comes down and is paid back into the garden bank
+ *  (rooms.ts › retireRooms). A full bank leaves it standing until a later load. Plain store writes, no notify: this runs
+ *  inside the first read, before anything has subscribed. */
+function retireAlchemy() {
+  const r = retireRooms(works!, getB(), bankCap(chestsStanding(works!)), 'alchemy')
+  if (!r || !r.refunded.length) return
+  works = r.works; saveWorks(r.works); bank = r.bank; saveBank(r.bank)
+  setTimeout(() => hudSay('Alchemy is a set of furniture now. Your Alchemy room came down: its logs and everything in it are in the bank.', 'info', 7), 1500)
+}
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export function setWorks(w: Works) { works = w; saveWorks(w); subs.forEach(f => f()); settleWater(w.pieces) }
 liveLift.get = getW; liveLift.set = setWorks   // M48: the lift's runtime reads and writes the live works
@@ -710,8 +721,8 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
     <>
       <PlanningTable />
       {w.rooms.map(r => (raised(r) ? <RoomMesh key={r.id} r={r} /> : <Scaffold key={r.id} r={r} />))}
-      {allChests(w).map(c => <Wobbly key={c.id} id={c.id} at={[c.x, floorAt(w, GROUND_Y, c.x, c.z), c.z]}><Keepstone c={c} pose={pose} /></Wobbly>)}
-      {w.pieces.map(pc => <Wobbly key={pc.id} id={pc.id} at={[pc.x, floorAt(w, GROUND_Y, pc.x, pc.z), pc.z]}><PieceMesh p={pc} /></Wobbly>)}
+      {allChests(w).map(c => <Wobbly key={c.id} id={c.id} at={[c.x, floorAt(w, GROUND_Y, c.x, c.z), c.z]}><Keepstone c={c} pose={pose} y={floorAt(w, GROUND_Y, c.x, c.z)} /></Wobbly>)}
+      {w.pieces.map(pc => <Wobbly key={pc.id} id={pc.id} at={[pc.x, floorAt(w, GROUND_Y, pc.x, pc.z), pc.z]}><PieceMesh p={pc} y={floorAt(w, GROUND_Y, pc.x, pc.z)} /></Wobbly>)}
       <Plinth w={w} />
       {stowed && <MeleeAim stowed={stowed} />}
       {w.pieces.some(x => x.item === 'lift') && <LiftInput />}
@@ -886,7 +897,7 @@ const CRYSTAL_LIGHT: Record<string, string> = {
 const STONE = '#d3cab8', STONE_DK = '#aba291'
 /** THE KEEPSTONE (canon 5a20b8f): a Blankstone pedestal whose top opens and the set crystal's light rises from inside.
  *  The lid swings back as a keeper comes near and the light climbs out of the bowl; it settles shut when they leave. */
-function Keepstone({ c, pose }: { c: Chest; pose: React.MutableRefObject<Pose> }) {
+function Keepstone({ c, pose, y = GROUND_Y }: { c: Chest; pose: React.MutableRefObject<Pose>; y?: number }) {
   const lid = useRef<THREE.Group>(null), gem = useRef<THREE.Mesh>(null), shaft = useRef<THREE.Mesh>(null), shaftMat = useRef<THREE.MeshBasicMaterial>(null)
   const open = useRef(0), col = CRYSTAL_LIGHT[c.crystal ?? 'raw_mana_shard'] ?? CRYSTAL_LIGHT.raw_mana_shard
   useFrame((st, dt) => {
@@ -899,7 +910,7 @@ function Keepstone({ c, pose }: { c: Chest; pose: React.MutableRefObject<Pose> }
     if (shaftMat.current) shaftMat.current.opacity = 0.2 * o
   })
   return (
-    <group position={[c.x, GROUND_Y, c.z]} rotation-y={-c.q * Math.PI / 2}>
+    <group position={[c.x, y, c.z]} rotation-y={-c.q * Math.PI / 2}>
       <mesh position-y={0.08}><boxGeometry args={[CHEST_W, 0.16, CHEST_D]} /><meshLambertMaterial color={STONE_DK} /></mesh>
       <mesh position-y={0.5}><cylinderGeometry args={[0.3, 0.34, 0.7, 8]} /><meshLambertMaterial color={STONE} /></mesh>
       {/* the bowl the crystal sits in, and its glow */}
@@ -956,6 +967,11 @@ export function PieceBody({ item }: { item: string }) {
     case 'mana_cell_lamp': return <><Bx p={[0, 0.04, 0]} s={[0.4, 0.08, 0.4]} c="#a4793e" /><Bx p={[0, 0.6, 0]} s={[0.05, 1.1, 0.05]} c="#a4793e" /><mesh position-y={1.32}><cylinderGeometry args={[0.1, 0.1, 0.34, 8]} /><meshBasicMaterial color={f.glow} /></mesh>{[0, 1, 2, 3].map(k => <Bx key={k} p={[Math.sin(k * 1.571) * 0.13, 1.32, Math.cos(k * 1.571) * 0.13]} s={[0.025, 0.42, 0.025]} c="#a4793e" />)}<Bx p={[0, 1.54, 0]} s={[0.3, 0.04, 0.3]} c="#a4793e" /></>
     case 'water_tap': return <><Bx p={[0, 0.05, 0]} s={[0.7, 0.1, 0.7]} c={c} /><Bx p={[0, 0.7, 0]} s={[0.5, 1.2, 0.5]} c={c} /><Bx p={[0, 1.36, 0]} s={[0.6, 0.1, 0.6]} c="#77716b" />{[-0.15, 0, 0.15].map(x => <mesh key={x} position={[x, 1.0, 0.255]}><boxGeometry args={[0.08, 0.08, 0.02]} /><meshBasicMaterial color={f.glow} /></mesh>)}<Bx p={[0, 0.55, 0.36]} s={[0.1, 0.1, 0.24]} c="#77716b" /><Bx p={[0, 0.47, 0.46]} s={[0.1, 0.16, 0.08]} c="#77716b" /></>
     case 'water_tank': return <><mesh position-y={0.7}><cylinderGeometry args={[0.48, 0.48, 1.3, 14]} /><meshLambertMaterial color={c} /></mesh>{[0.15, 0.7, 1.25].map(y => <mesh key={y} position-y={y}><cylinderGeometry args={[0.5, 0.5, 0.06, 14]} /><meshLambertMaterial color="#77716b" /></mesh>)}<mesh position-y={1.36}><cylinderGeometry args={[0.42, 0.48, 0.08, 14]} /><meshLambertMaterial color="#77716b" /></mesh></>
+    // M57 the alchemy set: blockout manatech (wood frame, stone/iron/glass parts, a lit mana band on each)
+    case 'alc_mortar': return <><Bx p={[0, 0.72, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.68, 0.08)}<mesh position-y={0.86}><cylinderGeometry args={[0.24, 0.16, 0.2, 12]} /><meshLambertMaterial color="#bdb6a6" /></mesh><mesh position-y={0.965} rotation-x={-Math.PI / 2}><circleGeometry args={[0.2, 12]} /><meshLambertMaterial color="#8a8274" /></mesh><mesh position={[0.06, 1.08, 0]} rotation-z={0.35}><cylinderGeometry args={[0.04, 0.06, 0.42, 8]} /><meshLambertMaterial color="#77716b" /></mesh><mesh position={[0.11, 1.2, 0]} rotation-z={0.35}><cylinderGeometry args={[0.065, 0.065, 0.05, 10]} /><meshBasicMaterial color={f.glow} /></mesh></>
+    case 'alc_still': return <><Bx p={[0, 0.3, 0]} s={[f.w, 0.6, f.d]} c={c} /><mesh position={[0, 0.5, f.d / 2 + 0.005]}><boxGeometry args={[0.36, 0.12, 0.01]} /><meshBasicMaterial color={f.glow} /></mesh><mesh position={[-0.15, 0.86, 0]}><sphereGeometry args={[0.22, 12, 10]} /><meshLambertMaterial color="#cfe8f5" transparent opacity={0.6} /></mesh><mesh position={[-0.15, 1.12, 0]}><cylinderGeometry args={[0.04, 0.06, 0.16, 8]} /><meshLambertMaterial color="#cfe8f5" transparent opacity={0.6} /></mesh><mesh position={[0.18, 1.3, 0]} rotation-x={Math.PI / 2}><torusGeometry args={[0.14, 0.025, 6, 16]} /><meshLambertMaterial color="#c08a4a" /></mesh><mesh position={[0.18, 1.4, 0]} rotation-x={Math.PI / 2}><torusGeometry args={[0.14, 0.025, 6, 16]} /><meshLambertMaterial color="#c08a4a" /></mesh><Bx p={[0.02, 1.22, 0]} s={[0.3, 0.03, 0.03]} c="#c08a4a" /><mesh position={[0.3, 0.7, 0.12]}><cylinderGeometry args={[0.06, 0.06, 0.2, 8]} /><meshBasicMaterial color={f.glow} transparent opacity={0.85} /></mesh></>
+    case 'alc_mixer': return <><Bx p={[0, 0.76, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.72, 0.09)}<mesh position={[0.4, 0.88, 0]}><cylinderGeometry args={[0.3, 0.24, 0.36, 14]} /><meshLambertMaterial color="#4e4a47" /></mesh><mesh position={[0.4, 1.065, 0]} rotation-x={-Math.PI / 2}><circleGeometry args={[0.27, 14]} /><meshBasicMaterial color={f.glow} /></mesh><mesh position={[0.4, 0.5, 0]}><cylinderGeometry args={[0.12, 0.12, 0.1, 10]} /><meshBasicMaterial color="#8fe3ff" /></mesh>{[-0.55, -0.35, -0.15].map(x => <Bx key={x} p={[x, 0.85, 0.1]} s={[0.12, 0.1, 0.22]} c="#6f9a4a" />)}</>
+    case 'alc_desk': return <><Bx p={[0, 0.72, 0]} s={[f.w, 0.07, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.68, 0.08)}<Bx p={[0, 0.96, -f.d / 2 + 0.04]} s={[f.w, 0.48, 0.05]} c={c} /><Bx p={[0, 1.0, -f.d / 2 + 0.14]} s={[f.w - 0.1, 0.03, 0.18]} c={c} />{[-0.5, -0.3, -0.1, 0.1].map((x, k) => <mesh key={x} position={[x, 1.08, -f.d / 2 + 0.14]}><cylinderGeometry args={[0.04, 0.04, 0.13, 8]} /><meshBasicMaterial color={['#c9a8ff', '#8fe3ff', '#ff9a4a', '#9ae06a'][k]} /></mesh>)}<Bx p={[0.42, 0.88, 0.1]} s={[0.03, 0.26, 0.03]} c="#a4793e" /><mesh position={[0.42, 1.04, 0.1]}><torusGeometry args={[0.09, 0.015, 6, 16]} /><meshLambertMaterial color="#a4793e" /></mesh><mesh position={[0.42, 1.04, 0.1]}><circleGeometry args={[0.08, 14]} /><meshBasicMaterial color={f.glow} transparent opacity={0.45} side={THREE.DoubleSide} /></mesh></>
     default: return <Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={c} />
   }
 }
@@ -964,9 +980,10 @@ function Wobbly({ id, at, children }: { id: string; at?: [number, number, number
   const g = useHitWobble(id), [x, y, z] = at ?? [0, 0, 0]
   return <group position={[x, y, z]}><group ref={g}><group position={[-x, -y, -z]}>{children}</group></group></group>
 }
-function PieceMesh({ p }: { p: Piece }) {
+/** `y` = the floor under it (M55: on the plinth inside a raised house). Wobbly only pivots, it does not lift. */
+function PieceMesh({ p, y = GROUND_Y }: { p: Piece; y?: number }) {
   if (p.item === 'lift') return <LiftMesh p={p} />
-  return <group position={[p.x, GROUND_Y, p.z]} rotation-y={-p.q * Math.PI / 2}><PieceBody item={p.item} /></group>
+  return <group position={[p.x, y, p.z]} rotation-y={-p.q * Math.PI / 2}><PieceBody item={p.item} /></group>
 }
 /** The piece's ghost: the real piece, tinted, snapped to the quarter metre in front of the keeper. */
 function PieceGhost({ pose, owned, item, q }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; item: string; q: number }) {
@@ -1670,14 +1687,30 @@ function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<str
   const w = useWorks(), p = w.pieces.find(x => x.id === id)
   if (!p) return null
   const f = FURNITURE[p.item], spill = spillIfRemoved(currentWater(), plumbingOf(w.pieces), p.item, farmNow())
+  const turn = () => { const t = turnPiece(getW(), owned, id); if (t) setWorks(t); else hudSay('No room to turn it here.', 'info') }
+  const pickUp = () => {
+    const r = pickUpPiece(getW(), id, getInv())
+    if (!r) { hudSay('No room in the bag for it.', 'info'); return }
+    const rr = returnRun(loadRuns(), id, r.inv)   // M57: a busy alchemy piece gives its inputs back, all or nothing
+    if (!rr) { hudSay('No room in the bag for it and what it was working on.', 'info'); return }
+    setWorks(r.works); setInv(rr.inv); saveRuns(rr.runs); onClose(); hudSay(`${f.name} · back in your bag.`, 'item', 3)
+  }
+  if (f.alc) return (
+    <AlchemyPanel pid={id} station={f.alc} onClose={onClose} footer={
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <span data-act="turn-piece"><HearthButton small onClick={turn}>Turn</HearthButton></span>
+        <span data-act="pickup-piece"><HearthButton small onClick={pickUp}>Pick up</HearthButton></span>
+      </div>
+    } />
+  )
   return (
     <HearthFrame title={f.name} maxWidth={420} onClose={onClose} fixed dataPanel="piece">
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
         <div style={{ fontSize: 13, color: H.inkSoft }}>{f.blurb}</div>
         {spill > 0 && <div data-spill={spill} style={{ fontSize: 12.5, color: '#9a4a2a', fontWeight: 600 }}>Picking this up pours away {spill} water.</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <span data-act="turn-piece"><HearthButton onClick={() => { const t = turnPiece(getW(), owned, id); if (t) setWorks(t); else hudSay('No room to turn it here.', 'info') }}>Turn</HearthButton></span>
-          <span data-act="pickup-piece"><HearthButton primary onClick={() => { const r = pickUpPiece(getW(), id, getInv()); if (r) { setWorks(r.works); setInv(r.inv); onClose(); hudSay(`${f.name} · back in your bag.`, 'item', 3) } else hudSay('No room in the bag for it.', 'info') }}>Pick up</HearthButton></span>
+          <span data-act="turn-piece"><HearthButton onClick={turn}>Turn</HearthButton></span>
+          <span data-act="pickup-piece"><HearthButton primary onClick={pickUp}>Pick up</HearthButton></span>
         </div>
       </div>
     </HearthFrame>

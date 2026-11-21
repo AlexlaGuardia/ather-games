@@ -1,5 +1,5 @@
 // The workshop rooms core (rooms.ts). Run: npx tsx src/app/shimmer/open/ather/rooms.test.ts
-import { craftAt, jobRuns, canPlacePiece, placePiece, pickUpPiece, turnPiece, pieceBoxes, pieceRect, ROOM_STORE_SLOTS, ROOM_ACCEPTS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, loadWorks, saveWorks, ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, payCost, shortOf, haveFor, pickUpChest, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, type Works } from './rooms'
+import { craftAt, jobRuns, canPlacePiece, placePiece, pickUpPiece, turnPiece, pieceBoxes, pieceRect, ROOM_STORE_SLOTS, ROOM_ACCEPTS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, loadWorks, saveWorks, ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, payCost, shortOf, haveFor, pickUpChest, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, retireRooms, type Works } from './rooms'
 import { STARTING_SQUARES, squareAt, sqId, GATE, GREG, GROUND_Y } from './plot'
 import { REFINE, STONE_REFINE, PIECE_JOBS, FURNITURE } from './furniture'
 import { stockJobs } from './station-queue'
@@ -256,6 +256,21 @@ ok(!canPlaceChest(pc.works, owned, C.x + 1, C.z, 0, ks).ok, 'keepstone: set onto
 { // 11-20: every station keeps every INPUT of the jobs it works (focus draws from the store only; alchemy refused bark + glowfin)
   for (const k of ['carpentry', 'stonemason', 'cooking', 'alchemy'] as const)
     for (const j of stockJobs(k)) for (const c of j.in) ok(roomAccepts(k, c.id), `${k} refuses ${c.id}, an input of ${j.out.id}`)
+}
+
+// M57: retiring the alchemy room pays back its logs, its store and its finished goods, all or nothing
+{
+  const room = (id: string, kind: 'alchemy' | 'farm', extra = {}) => ({ id, kind, x: 0, z: 0, q: 0, placedAt: 0, doneAt: 0, ...extra })
+  const w0: Works = { ...freshWorks(), rooms: [room('a1', 'alchemy', { store: [{ id: 'amber_sap', n: 3 }], out: [{ id: 'raw_mana_shard', n: 2 }] }), room('f1', 'farm')] }
+  const r = retireRooms(w0, freshBank(), 48, 'alchemy')
+  ok(!!r && r.works.rooms.length === 1 && r.works.rooms[0].kind === 'farm', 'retire: only the alchemy room comes down')
+  ok(!!r && bankCount(r.bank, 'goldwood_log') === ROOMS.alchemy.cost[0].n && bankCount(r.bank, 'amber_sap') === 3 && bankCount(r.bank, 'raw_mana_shard') === 2, 'retire: logs + store + out land in the bank')
+  const two = retireRooms({ ...w0, rooms: [...w0.rooms, room('a2', 'alchemy')] }, freshBank(), 48, 'alchemy')
+  ok(!!two && bankCount(two.bank, 'goldwood_log') === 2 * ROOMS.alchemy.cost[0].n && two.works.rooms.length === 1, 'retire: two rooms, two refunds')
+  const none = retireRooms({ ...w0, rooms: [room('f1', 'farm')] }, freshBank(), 48, 'alchemy')
+  ok(!!none && none.refunded.length === 0 && none.works.rooms.length === 1, 'retire: no alchemy room, nothing changes')
+  let full = freshBank(); for (let k = 0; k < 48; k++) full = putIn(full, 48, k % 2 ? 'blankstone' : 'stone_brick', 999).bank
+  ok(retireRooms(w0, full, 48, 'alchemy') === null, 'retire: a full bank refuses, the room stands (nothing lost)')
 }
 
 if (fails.length) { console.error(`rooms: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
