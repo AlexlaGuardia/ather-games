@@ -36,14 +36,17 @@ async function atherLook(p: any, sx: number, sz: number, tx: number, tz: number,
     const dx = c - a, dz = d - b, yaw = Math.atan2(-dx, -dz) + (t ? Math.PI : 0), pitch = t ? -0.1 : Math.atan2(gt + e - (gs + eye), Math.hypot(dx, dz))
     g.tp(a, b, yaw); g.look(yaw, pitch)
   }, sx, sz, tx, tz, ty, turn, EYE)
-  await sleep(1200)
+  await frames(p, 10)   // ten real frames (the HUD prompt refreshes on the frame loop; a SwiftShader Glade frame can take > 1 s)
 }
+const frames = (p: any, n: number) => p.evaluate((k: number) => new Promise<void>(r => { const f = () => (--k <= 0 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f) }), n)
+/** presence polls (up to 8 s); absence is read after the frames above have run */
+const shows = async (p: any, s: string) => { for (let t = 0; t < 8000; t += 400) { if (await text(p, s)) return true; await sleep(400) } return false }
 /** the three legs for one Ather target: from direction (ux, uz) out of the target, near side `r` */
 async function atherLegs(p: any, name: string, prompt: string, tx: number, tz: number, r: number, ty: number, ux: number, uz: number) {
   const L = Math.hypot(ux, uz) || 1; ux /= L; uz /= L
   const near = r + 1.6, far = r + 3.6
   await atherLook(p, tx + ux * near, tz + uz * near, tx, tz, ty)
-  ok(await text(p, prompt), `${name}: crosshair on it ${near.toFixed(1)} m off its centre -> '${prompt}'`)
+  ok(await shows(p, prompt), `${name}: crosshair on it ${near.toFixed(1)} m off its centre -> '${prompt}'`)
   await atherLook(p, tx + ux * near, tz + uz * near, tx, tz, ty, true)
   ok(!(await text(p, prompt)), `${name}: same spot, turned round -> no prompt`)
   await atherLook(p, tx + ux * far, tz + uz * far, tx, tz, ty)
