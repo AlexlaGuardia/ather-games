@@ -37,8 +37,9 @@ const GrimoireEditor = dynamic(() => import('./editors/GrimoireEditor'))
 const WeatherEditor = dynamic(() => import('./editors/WeatherEditor'))
 const MeshBench = dynamic(() => import('./editors/MeshBench'))
 const DoctorPanel = dynamic(() => import('./editors/DoctorPanel'))
+const TerrainEditor = dynamic(() => import('./editors/TerrainEditor'))   // BETA M62: sculpt the real Wilds
 
-type EditorMode = 'index' | 'sprites' | 'player' | 'map' | 'battle' | 'items' | 'nodes' | 'banner' | 'furniture' | 'structures' | 'farming' | 'exchange' | 'encounters' | 'alchemy' | 'quests' | 'spinner' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'npcs' | 'daycycle' | 'mana' | 'puppet' | 'grimoire' | 'weather' | 'doctor' | 'meshbench'
+type EditorMode = 'index' | 'sprites' | 'player' | 'map' | 'battle' | 'items' | 'nodes' | 'banner' | 'furniture' | 'structures' | 'farming' | 'exchange' | 'encounters' | 'alchemy' | 'quests' | 'spinner' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'npcs' | 'daycycle' | 'mana' | 'puppet' | 'grimoire' | 'weather' | 'doctor' | 'meshbench' | 'terrain'
 
 // Component map — replaces 25 conditional renders
 const EDITOR_MAP: Record<Exclude<EditorMode, 'index'>, { component: ComponentType<any>; deployable: boolean }> = {
@@ -70,6 +71,7 @@ const EDITOR_MAP: Record<Exclude<EditorMode, 'index'>, { component: ComponentTyp
   weather:    { component: WeatherEditor,       deployable: true },
   doctor:     { component: DoctorPanel,         deployable: false },
   meshbench:  { component: MeshBench,           deployable: false },
+  terrain:    { component: TerrainEditor,       deployable: false },
 }
 
 const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; links?: { href: string; label: string }[] }[] = [
@@ -97,6 +99,7 @@ const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; li
     label: 'World',
     tabs: [
       { id: 'map', label: 'Map' },
+      { id: 'terrain', label: 'Terrain' },
       { id: 'structures', label: 'Structures' },
       { id: 'furniture', label: 'Objects' },
       { id: 'npcs', label: 'NPCs' },

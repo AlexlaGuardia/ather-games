@@ -6,7 +6,7 @@
  * drifted, so this file is a CACHE OF A COMPUTATION rather than a hand-kept list somebody has to
  * remember to update. `band-derive.ts` says why that distinction is the entire point.
  *
- * Derived against: voxel3d closure 344 files, play3d closure 275 files.
+ * Derived against: voxel3d closure 345 files, play3d closure 276 files.
  */
 export type Band = 'live' | 'legacy' | 'orphan' | 'tool' | 'opaque'
 
@@ -81,6 +81,8 @@ export const EDITOR_BANDS: EditorBand[] = [
     live: ["engine/spirit-index","spirits/spirit","sprites/palette","sprites/registry","sprites/sprite-data"], legacy: [], orphan: ["spirits/grimoire","sprites/variants"] },
   { id: "structures", file: "StructureBuilder.tsx", band: "orphan", deployable: false,
     live: [], legacy: ["engine/renderer","world/tiles"], orphan: ["world/structures"] },
+  { id: "terrain", file: "TerrainEditor.tsx", band: "tool", deployable: false,
+    live: [], legacy: [], orphan: [] },
   { id: "tools", file: "ToolsEditor.tsx", band: "live", deployable: true,
     live: ["engine/tools","sprites/items"], legacy: [], orphan: [] },
   { id: "weather", file: "WeatherEditor.tsx", band: "orphan", deployable: true,

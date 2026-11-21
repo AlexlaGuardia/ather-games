@@ -11,6 +11,7 @@ import { crystalFor, type CrystalKind } from './prospecting'
 import type { Box, Shape } from '../terrain-world'
 import type { VoidField } from './wilds-voids'
 import { relieve, outcropsIn, outcropRoll, inGlade } from './relief'
+import { addEdits, type TileEdits } from './wilds-edits'
 import type { RoadField } from './network'
 
 /** Biome ids, matched to export_wilds.py. What a biome is FOR: what you gather there, what a waymark there sends
@@ -62,7 +63,7 @@ const hash = (a: number, b: number, s = 0) => {
 /** `clear(x, z)` in WORLD coords (tile-local + the tile's centre): no tree stands there (the path network: paths,
  *  settlements, the fair's ground). Ids are counted as if it stood, so a prune saved before the paths still finds its
  *  tree, and crystals still dodge it, so no crystal moved either. */
-type ParseArgs = [meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt?: (i: number, j: number) => Zone, clear?: (x: number, z: number) => boolean, relief?: boolean, roads?: RoadField | null, voids?: VoidField | null]
+type ParseArgs = [meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt?: (i: number, j: number) => Zone, clear?: (x: number, z: number) => boolean, relief?: boolean, roads?: RoadField | null, voids?: VoidField | null, edits?: TileEdits | null]
 export function parseWilds(...a: ParseArgs): Wilds {
   const g = parseSteps(...a)
   for (;;) { const r = g.next(); if (r.done) return r.value }
@@ -81,7 +82,7 @@ export async function parseWildsSliced(a: ParseArgs, budgetMs = 6): Promise<Wild
   }
 }
 /** The parse, as a generator that yields after each row of its heavy loops (relief + void carve, voids, trees, crystals). */
-function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt: (i: number, j: number) => Zone = () => 'meadows', clear?: (x: number, z: number) => boolean, relief = true, roads?: RoadField | null, voids?: VoidField | null): Generator<void, Wilds, void> {
+function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt: (i: number, j: number) => Zone = () => 'meadows', clear?: (x: number, z: number) => boolean, relief = true, roads?: RoadField | null, voids?: VoidField | null, edits?: TileEdits | null): Generator<void, Wilds, void> {
   const { nx, nz, cell, sizeX, sizeZ } = meta
   if (dm.length !== nx * nz) throw new Error(`wilds ${meta.name}: ${dm.length} heights, want ${nx * nz}`)
   if (biomes.length !== (nx - 1) * (nz - 1)) throw new Error(`wilds ${meta.name}: ${biomes.length} biome cells, want ${(nx - 1) * (nz - 1)}`)
@@ -97,6 +98,9 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
     if (voids) h[k] = voids.carve(-hx + i * cell + ox, -hz + j * cell + oz, h[k], meta.waterY)   // M41: the crust is gone between zones
     if (i === nx - 1) yield
   }
+  // BETA M62: the owner's EDIT LAYER (wilds-edits.ts), after relief + carve: everything below (voids, trees, crystals, the walker,
+  // Hollows) stands on the edited ground; raw[] is untouched, so tree and crystal ids never move
+  addEdits(h, edits)
   // a cell is void where its corners are carved most of the way down (wilds-scene draws it dark; no tree or crystal stands there)
   let voided: Uint8Array | undefined
   if (voids) {
@@ -231,13 +235,13 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
 }
 
 /** Browser loader: the three files export_wilds.py writes. */
-export async function loadWilds(name: string, base = '/open/wilds', zoneAt?: (i: number, j: number) => Zone, clear?: (x: number, z: number) => boolean, roads?: RoadField | null, voids?: VoidField | null): Promise<Wilds> {
+export async function loadWilds(name: string, base = '/open/wilds', zoneAt?: (i: number, j: number) => Zone, clear?: (x: number, z: number) => boolean, roads?: RoadField | null, voids?: VoidField | null, edits?: TileEdits | null): Promise<Wilds> {
   const [meta, bin, bio] = await Promise.all([
     fetch(`${base}/${name}.json`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.json ${r.status}`); return r.json() as Promise<WildsMeta> }),
     fetch(`${base}/${name}.bin`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.bin ${r.status}`); return r.arrayBuffer() }),
     fetch(`${base}/${name}.biome`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.biome ${r.status}`); return r.arrayBuffer() }),
   ])
-  return parseWildsSliced([meta, new Int16Array(bin), new Uint8Array(bio), zoneAt, clear, true, roads, voids])
+  return parseWildsSliced([meta, new Int16Array(bin), new Uint8Array(bio), zoneAt, clear, true, roads, voids, edits])
 }
 
 /** The tile's centre in CONTINENT world coordinates (continent.json: origin at the centre, 10 m per source px).

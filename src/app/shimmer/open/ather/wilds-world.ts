@@ -16,6 +16,7 @@ import { parseWilds, loadWilds, BIOME, type BiomeId, type Wilds, type Tree, type
 import type { Zone } from './forestry'
 import type { RoadField } from './network'
 import type { VoidField } from './wilds-voids'
+import { editsFor, ensureEdits } from './wilds-edits'
 
 export const TILE_M = 1000
 export const SEA_FLOOR = -20
@@ -149,7 +150,8 @@ export function zonesOf(w: WildsWorld, name: string): (i: number, j: number) => 
   return (i, j) => m.get(`${i},${j}`) ?? 'meadows'
 }
 
-export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear, w.roads, w.voids)): Promise<boolean> {
+export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear, w.roads, w.voids, editsFor(n))): Promise<boolean> {
+  await ensureEdits()   // BETA M62: the owner's terrain edits, fetched once before the first tile parses
   const want = new Set(wanted(w, x, z)), keep = new Set(wanted(w, x, z, 2))
   let changed = false
   for (const name of [...w.loaded.keys()]) if (!keep.has(name)) { w.loaded.delete(name); changed = true }
