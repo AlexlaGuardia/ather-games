@@ -41,12 +41,12 @@ await p.mouse.click(500, 350); await sleep(800)
 const drawn = () => p.evaluate((id: string) => ((window as any).__folk?.drawn?.() ?? {})[id] as { id: string; x: number; z: number }[] | undefined, st.id)
 ok(await (async () => { for (let t = 0; t < 15000; t += 500) { if ((await drawn())?.length === folk.length) return true; await sleep(500) } return false })(), `${st.name}: ${folk.length} Moglins stand in it (${(await drawn())?.length})`)
 ok(((await p.evaluate(() => (window as any).__folk?.mapSettlements?.() ?? 0)) as number) === withGlade(net).settlements.length, 'the maps have every settlement to draw (the season\'s + Moonwell Glade, M30)')
-// hub #15623: E talks only within 3 m of a Moglin the keeper faces (folk-near.ts), so stand 2 m off the one nearest the centre, facing it
+// BETA M60: E acts only on what the crosshair is on within 3 m (shared/aim-pick.ts): stand 2 m off the Moglin nearest the centre, crosshair on it
 const prompt = () => p.evaluate(() => document.body.innerText.includes('talk to the folk'))
 await p.evaluate((x, z) => (window as any).__ather.tp(x + 30, z), st.x, st.z); await sleep(1500)
 ok(!(await prompt()), `${st.name}: no talk prompt 30 m in from the edge, away from every Moglin (was: anywhere in the settlement)`)
 { const s0 = nearestSpot(builtFolkSpots(st, folk, net.season), st.x, st.z)!, L = Math.hypot(st.x - s0.x, st.z - s0.z), ux = L > 0.1 ? (st.x - s0.x) / L : 0, uz = L > 0.1 ? (st.z - s0.z) / L : 1
-  await p.evaluate((x, z, y) => { const g = (window as any).__ather; g.tp(x, z, y); g.look(y, -0.1) }, s0.x + ux * 2, s0.z + uz * 2, Math.atan2(ux, uz)); await sleep(1500) }
+  await p.evaluate((x, z, y) => { const g = (window as any).__ather; g.tp(x, z, y); g.look(y, -Math.atan2(1.1, 2)) }, s0.x + ux * 2, s0.z + uz * 2, Math.atan2(ux, uz)); await sleep(1500) }
 ok(await prompt(), `${st.name}: the talk prompt shows 2 m from a Moglin, facing it`)
 const spots = builtFolkSpots(st, folk, net.season), kp = await p.evaluate(() => (window as any).__folk.keeper()) as { x: number; z: number }
 const nearest = nearestSpot(spots, kp.x, kp.z)!

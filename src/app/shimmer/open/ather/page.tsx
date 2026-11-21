@@ -23,7 +23,7 @@ import { OpenHands, type OpenHandsApi } from '../shared/open-hands'
 import { FpGun, ScopeRing, fpGunAds, ADS_TIGHT, type FpGunApi } from '../shared/fp-gun'
 import { RANGE_GUNS } from '../shared/gunplay'
 import { ThirdPersonBody, dollAction, pullBack, newDrive } from '../shared/third-person'
-import type { Camera, Scene, WebGLRenderer } from 'three'
+import { Vector3, type Camera, type Scene, type WebGLRenderer } from 'three'
 import { VoxelDayNight } from '../shared/day-night'
 import { terrainWorld } from '../terrain-world'
 import { withPieces } from './dynamic-solids'
@@ -40,7 +40,7 @@ import { WorkshopScene, WorkshopPanel, PlacingBar, BuildBar, usePlacingKeys, isP
 import { currentFarm, setFarm, currentWater, setWater, farmNow } from './farm-room'
 import { BuildPointer, stepBuildCam, useBuildMode, useBuildKeys, isBuilding, exitBuild } from './build-mode'
 import { tick as villageTick, loadVillage, saveVillage } from './moglins'
-import { nearWork, type WorkNear } from './rooms'
+import { workPickables, type WorkNear } from './rooms'
 import { callNearest, withLifts } from './lift'
 import { ClusterScene } from './cluster-scene'
 import { cycleLook, LookChip } from './ground-look'
@@ -81,7 +81,8 @@ import { useFolkTalk } from './use-folk-talk'
 import { useMeleeReady } from './melee-view'
 import { reportAway } from './away-report'
 import { TilePaths, Settlements, BigTop, folkDrawn } from './network-scene'
-import { folkInReach } from './folk-near'
+import { aimPick, lookDir, type Pickable } from '../shared/aim-pick'
+import { MOGLIN_HEIGHT } from '../shared/moglin-model'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud, type SightLink } from './combat-layer'
@@ -135,6 +136,7 @@ import { ChannelFocus, freshFocus, type FocusState } from './channel-fx'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { AtherMiniMap } from './minimap'
 import type { Vitals } from '../../engine/vitals'
+const aimDirV = new Vector3()   // M60: the camera's forward, reused every frame
 
 
 type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
@@ -555,24 +557,32 @@ function AtherSliceGame() {
     gateStepRef.current(lc, yaw, dt, heightRef.current)   // a standing Gate (shared/use-casts.ts): bills, and carries the keeper through an end
     poseRef.current = { x: lc.px, z: lc.pz, yaw }
     let n: Near = null
+    // BETA M60 (Alex 11-21): E acts only on what the CROSSHAIR is on, within 3 m of the keeper (shared/aim-pick.ts); each kind keeps
+    // its own E action. Every interactable is a capsule here; the camera's centre ray picks (the same on a phone).
+    const cam = camRef.current, from = { x: lc.px, z: lc.pz }
+    const eye = cam ? { x: cam.position.x, y: cam.position.y, z: cam.position.z } : { x: lc.px, y: lc.py + 1.6, z: lc.pz }
+    const dir = cam ? (() => { const v = cam.getWorldDirection(aimDirV); return { x: v.x, y: v.y, z: v.z } })() : lookDir(yaw, 0)
+    const g = heightRef.current
+    const cap = (x: number, z: number, r: number, h: number, item: Near): Pickable<Near> => { const y = g(x, z); return { x, z, y0: y - 0.2, y1: y + h, r, item } }
     if (zone.kind === 'plot') {
-      if (Math.hypot(GATE.x - lc.px, GATE.z - lc.pz) < REACH + 1.2) n = { kind: 'gate' }
-      else if (fennelRef.current && Math.hypot(fennelRef.current.x - lc.px, fennelRef.current.z - lc.pz) < REACH) n = { kind: 'fennel' }   // M22
-      else { const w = nearWork(worksRef.current, lc.px, lc.pz); if (w) n = { kind: 'work', near: w } }
+      const cands: Pickable<Near>[] = [cap(GATE.x, GATE.z, 1.4, 3.2, { kind: 'gate' })]
+      if (fennelRef.current) cands.push(cap(fennelRef.current.x, fennelRef.current.z, 0.45, 1.1, { kind: 'fennel' }))   // M22
+      for (const w of workPickables(worksRef.current, g)) cands.push({ ...w, item: { kind: 'work', near: w.item } })
+      n = aimPick(cands, eye, dir, from)
     } else {
-      const all = [{ w: GREG_WAYMARK, own: false }, ...waymarks.map(w => ({ w, own: true }))]
-      let wmD = Infinity
-      for (const { w, own } of all) { const o = ww?.byName.has(w.tile) ? ww.offsetOf(w.tile) : null; const d = o ? Math.hypot(w.x + o.x - lc.px, w.z + o.z - lc.pz) : Infinity; if (d < 2.6) { n = { kind: 'waymark', w, own }; wmD = d } }
-      // M30: Gregory at Moonwell Glade, ~3.5 m from the arrival waymark. The NEARER one takes E (11-19 overnight, beta-m5-errand:
-      // 'Greg always wins' left a keeper at the stone unable to open the fold map home).
-      { const gl = gregLive.current, gd = Math.hypot(gl.x - lc.px, gl.z - lc.pz)
-        if (gd < REACH && gd < wmD && !tourRef.current) n = { kind: 'greg' }
-        if (tourRef.current && !tourRef.current.talk && gd > 30) setTour(null) }   // M32: walked off = the tour is skipped
-      // a settlement's folk: E anywhere inside it talks to them (settlement-folk.ts / folk-panel.tsx); a waymark at your feet wins
+      const cands: Pickable<Near>[] = []
+      for (const { w, own } of [{ w: GREG_WAYMARK, own: false }, ...waymarks.map(w => ({ w, own: true }))]) { const o = ww?.byName.has(w.tile) ? ww.offsetOf(w.tile) : null; if (o) cands.push(cap(w.x + o.x, w.z + o.z, 0.55, 1.7, { kind: 'waymark', w, own })) }
+      // M30: Gregory at Moonwell Glade (a tour in progress keeps E for its own talk)
+      { const gl = gregLive.current
+        if (!tourRef.current) cands.push(cap(gl.x, gl.z, 0.45, 1.8, { kind: 'greg' }))
+        if (tourRef.current && !tourRef.current.talk && Math.hypot(gl.x - lc.px, gl.z - lc.pz) > 30) setTour(null) }   // M32: walked off = the tour is skipped
+      // a settlement's folk: each Moglin standing in it (nobody home = the settlement's own anchor, where the talk camera falls back)
       // ...but a node under the crosshair with hands stowed keeps E for the work (Alex 11-19: at Moonwell Glade the folk ate E, no mining)
       const workAim = (aimRef.current.tree || cAimRef.current.crystal) && stanceRef.current.kind === 'stowed'
-      // hub #15623 (Alex 11-21): only within FOLK_REACH of a figure the keeper faces (the anchor when nobody is home), not the whole radius
-      if (!n && !workAim && netRef.current) { const st = settlementAt(netRef.current, lc.px, lc.pz); if (st && folkInReach(folkDrawn.get(st.id), st, lc.px, lc.pz, yaw)) n = { kind: 'folk', s: st } }
+      if (!workAim && netRef.current) { const st = settlementAt(netRef.current, lc.px, lc.pz); if (st) { const figs = folkDrawn.get(st.id)
+        if (figs?.length) for (const f of figs) cands.push(cap(f.x, f.z, 0.4, MOGLIN_HEIGHT.chibi + 0.1, { kind: 'folk', s: st }))
+        else cands.push(cap(st.x, st.z, 0.8, 2, { kind: 'folk', s: st })) } }
+      n = aimPick(cands, eye, dir, from)
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
       const t = ww ? ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty) : undefined
       if (t && t.name !== hereRef.current) { hereRef.current = t.name; setHereTile(t.name); streamAt(lc.px, lc.pz) }

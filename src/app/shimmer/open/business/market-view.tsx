@@ -17,11 +17,11 @@ import { ShopDoor } from '../towns/shop-door'
 import { BIZ, MAX_OWNED, RESALE, rateOf, canBuy, type Owned, type Tycoon } from '../economy/tycoon'
 import { hudSay } from '../shared/game-hud'
 import { HearthFrame, H, hearthDisplay, HearthButton } from '../../ui/hearth'
+import { aimPick } from '../shared/aim-pick'
+const doorDirV = new THREE.Vector3()   // M60
 
 /** dress a town's doors while you are within this of its centre (the town kit's DETAIL is 450 from the edge) */
 const DRESS_REACH = 700
-/** reach of a door's step stone (towns/shop-door.tsx shopDoorPoint), on foot */
-const REACH = 2.4
 const WALK_OFF = 8
 
 export function MarketView({ R, focus, owned, enabled, onOpen, onReach, open, onWalkOff }: {
@@ -69,7 +69,14 @@ export function MarketView({ R, focus, owned, enabled, onOpen, onReach, open, on
     if (open) { const d = doorByKey(R, open); if (d && Math.hypot(p.x - d.at.x, p.z - d.at.z) > WALK_OFF) onWalkOff?.() }
     // in reach: the camera stands at eye height over the step stone
     let hit: Door | null = null
-    if (enabledRef.current) for (const d of doors) if (Math.hypot(p.x - d.at.x, p.z - d.at.z) < REACH && Math.abs(p.y - 1.6 - d.at.y) < 2) { hit = d; break }
+    // BETA M60 (Alex 11-21): only the door the CROSSHAIR is on, within 3 m (shared/aim-pick.ts). The capsule stands just inside the
+    // step stone, toward the building (where the door leaf is)
+    if (enabledRef.current) {
+      const cands = doors.filter(d => Math.abs(p.y - 1.6 - d.at.y) < 2).map(d => { const L = Math.hypot(d.b.x - d.at.x, d.b.z - d.at.z) || 1, k = Math.min(0.6, L) / L
+        return { x: d.at.x + (d.b.x - d.at.x) * k, z: d.at.z + (d.b.z - d.at.z) * k, y0: d.at.y - 0.2, y1: d.at.y + 2.4, r: 0.8, item: d } })
+      const v = camera.getWorldDirection(doorDirV)
+      hit = aimPick(cands, p, { x: v.x, y: v.y, z: v.z })
+    }
     if (hit !== reach.current) {
       reach.current = hit
       onReach?.(hit?.key ?? null)

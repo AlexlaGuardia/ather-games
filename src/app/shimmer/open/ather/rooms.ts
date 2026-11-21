@@ -11,6 +11,7 @@
 // works. Pieces can come later inside the same footprint.
 //
 // ★ PURE: no React, no three, no DOM except the guarded load/save. Plot-local metres (plot.ts frame).
+import type { Pickable } from '../shared/aim-pick'
 import type { Box } from '../terrain-world'
 import { squareAt, sqId, GATE, GREG_PLOT_ANCHOR as GREG, THRESHOLD, PATH_START, GROUND_Y } from './plot'
 import { gardenKey } from '@/lib/keeper-local'
@@ -177,6 +178,20 @@ export function wallsOf(r: Room): Box[] {
 
 /** The nearest thing the keeper can use with E, or null: the table, or a raised room's bench. */
 export type WorkNear = { kind: 'table' } | { kind: 'bench'; room: Room } | { kind: 'raising'; room: Room } | { kind: 'chest'; id: string } | { kind: 'piece'; id: string }
+/** BETA M60: the same things nearWork reaches, as crosshair capsules (shared/aim-pick.ts): the planning table, every Keepstone,
+ *  placed piece and bench, a raising room's door. `ground` = the plot ground's height. Heights generous: the aim decides. */
+export function workPickables(works: Works, ground: (x: number, z: number) => number, now = Date.now()): Pickable<WorkNear>[] {
+  const f0 = works.found ?? 0, out: Pickable<WorkNear>[] = []
+  const add = (x: number, z: number, r: number, h: number, item: WorkNear, lift = 0) => { const g = ground(x, z); out.push({ x, z, y0: g - 0.2, y1: g + f0 + lift + h + 0.2, r, item }) }
+  add(TABLE.x, TABLE.z, 1.1, 1.1, { kind: 'table' })
+  for (const c of allChests(works)) add(c.x, c.z, 0.55, CHEST_H, { kind: 'chest', id: c.id })
+  for (const p of works.pieces) { const f = FURNITURE[p.item]; if (f) add(p.x, p.z, Math.max(f.w, f.d) / 2, f.h, { kind: 'piece', id: p.id }, (p.lv ?? 0) * 3) }
+  for (const r of works.rooms) {
+    if (!raised(r, now)) { const d = doorOf(r); add(d.x, d.z, 1, 2.4, { kind: 'raising', room: r }); continue }
+    const b = benchOf(r); add(b.x, b.z, 0.9, 1.1, { kind: 'bench', room: r })
+  }
+  return out
+}
 export function nearWork(works: Works, x: number, z: number, now = Date.now()): WorkNear | null {
   if (Math.hypot(TABLE.x - x, TABLE.z - z) < TABLE_REACH) return { kind: 'table' }
   // a Keepstone and a bench can share a room: the nearer one answers E
