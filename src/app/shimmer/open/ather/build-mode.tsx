@@ -10,6 +10,8 @@
 //
 // This file knows nothing about rooms: workshop.tsx asks `buildPoint()` where the ghost goes and registers a tap
 // handler (`onBuildTap`). The page calls `stepBuildCam` from the walker's onTick, after the first-person camera is set.
+import { guestRefuses } from './plot-visit'
+import { hudSay } from '../shared/hud-say'
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import * as THREE from 'three'
 import { useFrame, useThree } from '@react-three/fiber'
@@ -52,6 +54,7 @@ export const buildFocus = () => ({ x: cur.x, z: cur.z })
 export const useBuildMode = () => useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f) } }, () => on, () => false)
 /** Lift off from where the keeper stands, looking the way they look. */
 export function enterBuild(at: { x: number; z: number; yaw: number }) {
+  if (guestRefuses(m => hudSay(m, 'info', 4))) return   // M61: a guest does not build on a mate's plot
   want.x = cur.x = home.x = at.x; want.z = cur.z = home.z = at.z; want.yaw = cur.yaw = at.yaw; want.h = BUILD_CAM.H0
   cur.h = 2   // start at eye height and rise: the lift reads as a lift, not a cut
   entered = true; on = true; emit()

@@ -15,7 +15,13 @@
 // touch-controls (stick, drag-look, jump/slide/fire, context taps that press the same keys this page handles).
 
 import { OwnerReady } from '../shared/owner-ready'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { subscribeVisit, currentVisit, isVisiting, startVisit, endVisit, shownOwned, plotZone, guestRefuses, type PlotSnap } from './plot-visit'   // BETA M61
+import { usePlotVisitNet } from './plot-visit-net'
+import { useParty, storedParty } from '@/lib/party'
+import { selfPlayerId } from '../../play3d/multiplayer'
+import { clusterFrame } from './cluster'
+import { setLobbyZone, setVisitHandler } from '../shared/play-together'
 import { Canvas } from '@react-three/fiber'
 import { ProgramKeeper } from './program-keeper-view'
 import { WarmProxies } from './warm-proxies'
@@ -146,6 +152,19 @@ type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean }
 type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'fennel' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement }
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
+/** M61: a mate's island alone on the Green (the frame nobody is linked into) */
+const SOLO_FRAME = clusterFrame(null, [])
+const VISIT_WAIT_MS = 15_000
+/** M61: who you are visiting, and the way home (game-UI rule: text on a plate, never raw on the scene) */
+function VisitPill({ name, ready, onHome }: { name: string; ready: boolean; onHome: () => void }) {
+  return (
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[30] pointer-events-auto flex items-center gap-2 px-3 py-1 rounded-lg"
+      style={{ background: 'linear-gradient(#f3e6c8, #e6d3ab)', border: '2px solid #6b4a2e', boxShadow: '0 1px 4px rgba(0,0,0,.45)', color: '#3a2716', font: '700 12px ui-sans-serif, system-ui, sans-serif' }} data-visit-pill>
+      <span>{ready ? `Visiting ${name}'s plot` : `Walking over to ${name}'s plot…`}</span>
+      <button onClick={onHome} className="hk-btn px-2 py-0.5 text-[11px]" data-act="visit-home">Home (H)</button>
+    </div>
+  )
+}
 export default function AtherSlice() { return <OwnerReady><AtherSliceGame /></OwnerReady> }
 function AtherSliceGame() {
   const locked = useRef(false), frozen = useRef(false)
@@ -214,6 +233,7 @@ function AtherSliceGame() {
   // THE GARDEN VILLAGE AT WORK (moglins.ts): on load the village catches up on the time you were away (capped at 12 h) and
   // says what it made; then it ticks every minute while you play. The product lands in each room's own store.
   const runVillage = useCallback((say: boolean) => {
+    if (isVisiting()) return {}   // M61: on a mate's plot your village waits (it catches up at home)
     const v = loadVillage()
     if (!v.moglins.some(m => m.room)) { saveVillage({ ...v, lastTick: Date.now() }); return {} }
     // the farm's own clock (farm-room.tsx › farmNow; equals Date.now() but for a check's skew), so a farmer tends on the
@@ -296,11 +316,15 @@ function AtherSliceGame() {
     return () => { clearInterval(t); window.removeEventListener('beforeunload', flush); flush() }
   }, [fog])
 
-  const owned = useMemo(() => new Set(garden.owned), [garden.owned])
+  // BETA M61 PLOT VISITS (plot-visit.ts): visiting a party mate's plot shows THEIR squares and works, read-only
+  const visitNow = useSyncExternalStore(subscribeVisit, currentVisit, () => null)
+  const owned = useMemo(() => new Set(shownOwned(garden.owned)), [garden.owned, visitNow])   // eslint-disable-line react-hooks/exhaustive-deps
   // GARDEN CLUSTERS (cluster.ts + meadow.ts, Alex 11-15, his sketch): alone, the plot as ever; linked, the meadow
   // round us all (the square, the paths, the hills) and my mates' plots (turned to face the square, fenced by their own
   // mist) become ground
-  const cl = useCluster(garden.owned)
+  const cl0 = useCluster(garden.owned)
+  // M61: on a mate's plot their island stands alone on the Green (your own cluster mates are not theirs)
+  const cl = useMemo(() => (visitNow ? { ...cl0, frame: SOLO_FRAME } : cl0), [cl0, visitNow])
   const clusterRef = useRef(cl.frame); clusterRef.current = cl.frame
   const works = useWorks()   // the workshop rooms (workshop.tsx): their walls are solid
   const worksRef = useRef(works); worksRef.current = works
@@ -332,6 +356,36 @@ function AtherSliceGame() {
     }, 380)
   }, [])
   const goHome = useCallback(() => arrive({ kind: 'plot' }, THRESHOLD), [arrive])
+  // M61: going visiting (or coming home) = a walk through the veil to the plot's threshold. Play together's Visit button calls the
+  // handler; ?visit=<host>&vn=<name> is how the continent page hands a visit over.
+  const visitHost = visitNow?.host ?? null, lastHost = useRef<string | null>(null)
+  useEffect(() => {
+    if (visitHost === lastHost.current) return
+    lastHost.current = visitHost
+    arrive({ kind: 'plot' }, THRESHOLD)
+  }, [visitHost, arrive])
+  useEffect(() => {
+    // only a party mate visits (the party instance is the only door); a visit link without one says so and goes nowhere
+    const go = (host: string, name: string) => {
+      if (host === selfPlayerId()) return
+      if (!storedParty()) { hudSay('Join their party first: only party mates can visit a plot.', 'info', 5); return }
+      startVisit(host, name)
+    }
+    setVisitHandler(go)
+    const q = new URLSearchParams(window.location.search), h = q.get('visit')
+    if (h) {
+      go(h, q.get('vn') ?? '')
+      const url = new URL(window.location.href); url.searchParams.delete('visit'); url.searchParams.delete('vn'); window.history.replaceState(null, '', url)
+    }
+    return () => { setVisitHandler(null); endVisit() }
+  }, [])
+  // no plot from the host in VISIT_WAIT_MS (they left their plot, went offline, or this is not their party) = home, with one line
+  const visitReady = !!visitNow?.snap
+  useEffect(() => {
+    if (!visitHost || visitReady) return
+    const t = setTimeout(() => { const v = currentVisit(); if (v && !v.snap) { hudSay(`Could not reach ${v.name}'s plot. They may have left it.`, 'info', 5); endVisit() } }, VISIT_WAIT_MS)
+    return () => clearTimeout(t)
+  }, [visitHost, visitReady])
   // ── M41 CLOUD VOIDS: a fall costs time, never gore. Over the edge -> a short fade -> set down at the last crossing you used,
   // else the last waymark (Greg's stone when you hold none).
   const voidsRef = useRef<VoidField | null>(null)
@@ -510,9 +564,16 @@ function AtherSliceGame() {
   const coverSkip = useCallback((x: number, z: number) => placedClear(x, z) || (cl.frame.linked && onPath(cl.frame, x, z)) || Math.hypot(x - GATE.x, z - GATE.z) < 5 || Math.hypot(x - GREG.x, z - GREG.z) < 2.5 || Math.hypot(x - THRESHOLD.x, z - THRESHOLD.z) < 2, [cl.frame, placedClear])
   const ground = useMemo(() => zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : ww ? ww.heightAt : () => 0, [zone, ww, cl.frame])
   // M27: others in the Wilds (shared/open-mp.tsx); the plot is personal, no socket. Feet on the ground the page knows.
-  const mp = useOpenMultiplayer(zone.kind === 'wilds' ? OPEN_WILDS : null, () => { const p = poseRef.current, y = ground(p.x, p.z); return { x: p.x, y: Number.isFinite(y) ? y : 0, z: p.z, yaw: p.yaw } },
+  // M61: on a plot IN A PARTY there is a socket now: your own plot = open:plot:<you> (you host), a mate's = open:plot:<them>.
+  // The party instance is the only way in (strangers never match into one); no party = no socket on the plot, as before.
+  const { party } = useParty()
+  const plotMp = zone.kind === 'plot' && party ? plotZone(visitNow ? visitNow.host : selfPlayerId()) : null
+  const mp = useOpenMultiplayer(zone.kind === 'wilds' ? OPEN_WILDS : plotMp, () => { const p = poseRef.current, y = ground(p.x, p.z); return { x: p.x, y: Number.isFinite(y) ? y : 0, z: p.z, yaw: p.yaw } },
     () => (stanceRef.current.kind === 'weapon' ? heldRef.current : null))   // M27 slice 4: the party sees my gun
   const heightRef = useRef(ground); heightRef.current = ground
+  usePlotVisitNet({ relay: mp.relay, onRelay: mp.onRelay, hosting: !!plotMp && !visitNow, visit: visitNow,
+    snapOf: (): PlotSnap => ({ works: currentWorks(), owned: [...garden.owned] }) })
+  useEffect(() => { setLobbyZone(zone.kind === 'wilds' ? OPEN_WILDS : plotZone(visitNow ? visitNow.host : selfPlayerId())) }, [zone.kind, visitNow])
   // third person (V): your own keeper, the segmented doll (open/shared/third-person.tsx), driven from the tick below
   const thirdRef = useRef(false), dollDrive = useRef(newDrive()), camRef = useRef<Camera | null>(null)
 
@@ -1099,6 +1160,7 @@ function AtherSliceGame() {
       if (e.code === 'KeyE' && n) {
         if (n.kind === 'greg') setPanel({ kind: 'talk', step: 0 })
         else if (n.kind === 'fennel') setPanel({ kind: 'fennel', page: 0 })
+        else if (n.kind === 'work' && guestRefuses(m => hudSay(m, 'info', 4))) return   // M61: a guest opens no station, store or piece
         else if (n.kind === 'work') { if (n.near.kind === 'piece' && currentWorks().pieces.some(x => x.id === (n.near as { id: string }).id && x.item === 'lift') && callNearest()) return; if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
         else if (n.kind === 'folk') setPanel({ kind: 'folk', s: n.s })
         else setPanel({ kind: 'map', view: 'ather', travel: true })   // Alex 11-20: the map opens on the side you stand on (the Ather here); an errand keeper's Rune Hold goal waits one Tab away
@@ -1114,6 +1176,7 @@ function AtherSliceGame() {
         setToast(back.left ? 'Waymark lifted, but your bag is full: it went back to the fold.' : 'Waymark lifted. It is back in your bag.')
       }
       if (e.code === 'KeyH' && zone.kind === 'wilds') goHome()
+      else if (e.code === 'KeyH' && currentVisit()) endVisit()   // M61: H on a mate's plot = home
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
@@ -1159,7 +1222,7 @@ function AtherSliceGame() {
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} linked={cl.frame.linked} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
-        {zone.kind === 'wilds' && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
+        {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
         {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
         {zone.kind === 'wilds' && <ChannelFocus focus={focusRef} />}
@@ -1249,9 +1312,10 @@ function AtherSliceGame() {
       {(talkNode ?? fennelNode ?? tourNode) && <TalkChoices node={(talkNode ?? fennelNode ?? tourNode)!} phone={hudSize === 'phone'} />}
       {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
-      {panel?.kind === 'work' && <WorkshopPanel near={panel.near} owned={owned} onClose={() => setPanel(null)} />}
+      {panel?.kind === 'work' && !visitNow && <WorkshopPanel near={panel.near} owned={owned} onClose={() => setPanel(null)} />}
       {zone.kind === 'plot' && <PlacingBar owned={owned} />}
-      {zone.kind === 'plot' && <BuildBar owned={owned} />}
+      {zone.kind === 'plot' && !visitNow && <BuildBar owned={owned} />}
+      {visitNow && <VisitPill name={visitNow.name} ready={!!visitNow.snap} onHome={endVisit} />}
       <LookChip />
       {zone.kind === 'wilds' && held === BAIT && <ReelBar api={rinApi} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} inGarden={zone.kind === 'plot'} />}

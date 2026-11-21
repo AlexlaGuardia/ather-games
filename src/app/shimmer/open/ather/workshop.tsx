@@ -66,12 +66,15 @@ import { MoglinCard } from './moglin-card-view'
 import { reportAway, addMade, type Made } from './away-report'
 import { MeleeAim, useHitWobble } from './melee-view'
 import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, type Village } from './moglins'
+import { shownWorks, worksWritable, subscribeVisit, isVisiting } from './plot-visit'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
 let works: Works | null = null
 const SERVER: Works = { v: 1, rooms: [], chests: [], pieces: [] }
 const subs = new Set<() => void>()
-const getW = (): Works => { if (!works) { works = typeof window === 'undefined' ? SERVER : loadWorks(); if (ALC_LIVE && works !== SERVER) retireAlchemy() } return works }
+const ownW = (): Works => { if (!works) { works = typeof window === 'undefined' ? SERVER : loadWorks(); if (ALC_LIVE && works !== SERVER) retireAlchemy() } return works }
+/** M61: what the plot shows: the host's works while visiting their plot (plot-visit.ts), else your own */
+const getW = (): Works => shownWorks(ownW())
 /** M57: once the alchemy set is live, an Alchemy room raised before it comes down and is paid back into the garden bank
  *  (rooms.ts › retireRooms). A full bank leaves it standing until a later load. Plain store writes, no notify: this runs
  *  inside the first read, before anything has subscribed. */
@@ -82,7 +85,9 @@ function retireAlchemy() {
   setTimeout(() => hudSay('Alchemy is a set of furniture now. Your Alchemy room came down: its logs and everything in it are in the bank.', 'info', 7), 1500)
 }
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
-export function setWorks(w: Works) { works = w; saveWorks(w); subs.forEach(f => f()); settleWater(w.pieces) }
+/** M61: a guest never writes: not the host's plot (which is a snapshot) and not their own save from the host's state */
+export function setWorks(w: Works) { if (!worksWritable()) return; works = w; saveWorks(w); subs.forEach(f => f()); settleWater(w.pieces) }
+subscribeVisit(() => subs.forEach(f => f()))   // M61: going visiting / a new snapshot / home again redraws every reader
 liveLift.get = getW; liveLift.set = setWorks   // M48: the lift's runtime reads and writes the live works
 export const useWorks = () => useSyncExternalStore(subscribe, getW, () => SERVER)
 /** The live works (the page's village tick reads and writes through this store, so an open panel sees the product land). */
@@ -794,7 +799,7 @@ type Placing = { kind: RoomKind; q: number } | { kind: 'chest'; item: string; q:
 let placing: Placing = null
 const ghost = { x: 0, z: 0 }
 const psubs = new Set<() => void>()
-const setPlacing = (p: Placing) => { placing = p; psubs.forEach(f => f()) }
+const setPlacing = (p: Placing) => { if (p && isVisiting()) return; placing = p; psubs.forEach(f => f()) }   // M61: nothing is placed on a mate's plot
 export const usePlacing = () => useSyncExternalStore(f => { psubs.add(f); return () => { psubs.delete(f) } }, () => placing, () => null)
 export const isPlacing = () => placing !== null
 /** M45: what the keeper holds drives a placing from the hand. `id` = the held furniture / Keepstone id, or null when the hand
@@ -911,7 +916,7 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
       <Plinth w={w} />
       {stowed && <MeleeAim stowed={stowed} />}
       {w.pieces.some(x => x.item === 'lift') && <LiftInput />}
-      <MoglinsAtWork w={w} />
+      {!isVisiting() && <MoglinsAtWork w={w} />}
       <BlueprintPicked />
       <HouseLevels w={w} />
       <WallGhost />
@@ -1471,6 +1476,7 @@ function workerOf(r: Room, v: Village): { moglin?: Village['moglins'][number]; s
  *  out of the store into the output (station-queue.ts: stockpile above the 30 reserve, capped at 30 a product). */
 let firstTick = true   // the first run per page load is the offline catch-up: what the Moglins made joins the 'while you were away' line
 export function stationTick(now = Date.now()) {
+  if (!worksWritable()) return   // M61: visiting a mate's plot: your stations wait (their clocks catch up at home)
   const first = firstTick; firstTick = false
   const w = getW(); if (!w.rooms.some(r => raised(r, now))) return
   const v = loadVillage(); let nw = w, changed = false

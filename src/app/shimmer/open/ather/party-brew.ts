@@ -51,7 +51,7 @@ export function made(b: Brewing, now: number): Record<number, { id: string; n: n
 }
 /** The intermediates in the shared pool: made by a finished step and not yet spent by a later one. */
 export function pool(b: Brewing, now: number): Have {
-  const have: Have = {}
+  const have: Record<string, number> = {}
   for (const m of Object.values(made(b, now))) if (isAlc(m.id)) have[m.id] = (have[m.id] ?? 0) + m.n
   for (const r of Object.values(b.runs)) for (const s of r.spent) if (isAlc(s.id) && s.id in have) have[s.id] -= s.n
   return have

@@ -1,0 +1,82 @@
+// plot-visit.ts: zone naming, the chunked snapshot round trip (incl. upper levels), reassembly rules, the guest's read-only store.
+// Run: npx tsx src/app/shimmer/open/ather/plot-visit.test.ts
+import { plotZone, hostOfZone, packSnap, unpackSnap, chunk, Reassembly, isSnapPart, validSnap, CHUNK, MAX_PARTS, startVisit, endVisit,
+  setVisitSnap, currentVisit, isVisiting, guestRefuses, refusalCount, shownWorks, worksWritable, shownOwned, type PlotSnap } from './plot-visit'
+import type { Works } from './rooms'
+let pass = 0, fail = 0
+const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  FAIL', m) } }
+
+// a big two-storey house: ground walls + floors + stairs + decks + cols + found, two upper levels, pieces, chests, rooms
+const walls: Record<string, string> = {}
+for (let x = 0; x < 40; x++) for (let z = 0; z < 40; z++) if (x % 4 === 0 || z % 4 === 0) walls[`${x},${z},${x % 2 ? 'n' : 'w'}`] = (x * z) % 3 ? 'oak' : 'stone'
+const level = (s: number) => ({ walls: Object.fromEntries(Object.entries(walls).filter((_, i) => i % s === 0)), floors: { '1,1': 'plank', '2,1': 'plank' }, stairs: { '3,3': 'n' }, decks: { '5,5': 1 } })
+const works = {
+  v: 1, walls, roof: 'gable', floors: { '0,0': 'plank' }, found: 0.6, foundCells: { '0,0': 0.6 }, cols: { '4,4': 'oak' }, stairs: { '2,2': 'e' }, decks: { '9,9': 1 },
+  upper: [level(2), level(3)],
+  rooms: [{ id: 'r1', kind: 'bench', x: 3, z: 4, rot: 0, built: 1 }],
+  chests: [{ id: 'c1', x: 1, z: 1, items: [] }],
+  pieces: Array.from({ length: 60 }, (_, i) => ({ id: 'p' + i, item: i % 2 ? 'lift' : 'alc-desk', x: i, z: i * 0.5, rot: i % 4, lv: i % 3 })),
+} as unknown as Works
+const snap: PlotSnap = { works, owned: ['0,0', '0,1', '1,0'] }
+
+;(async () => {
+  // ── zones ──
+  ok(plotZone('p_ab12cd34') === 'open:plot:p_ab12cd34', 'plot zone name')
+  ok(hostOfZone('open:plot:p_ab12cd34') === 'p_ab12cd34', 'host from zone')
+  ok(hostOfZone('open:wilds') === null && hostOfZone(null) === null && hostOfZone('open:plot:') === null, 'not a plot zone -> null')
+  ok(hostOfZone('open:plot:../x') === null, 'a junk id is refused')
+  ok(plotZone('p_ab12cd34').length <= 48, 'fits the server MAX_ZONE (48)')
+
+  // ── round trip incl. upper levels ──
+  const packed = await packSnap(snap)
+  const back = await unpackSnap(packed)
+  ok(!!back && JSON.stringify(back) === JSON.stringify(snap), 'snapshot round-trips exactly')
+  ok(!!back && back.works.upper!.length === 2 && Object.keys(back.works.upper![1].walls).length === Object.keys(level(3).walls).length, 'upper levels survive')
+  ok(packed.length < JSON.stringify(snap).length, `deflate shrinks it (${packed.length} < ${JSON.stringify(snap).length})`)
+
+  // ── chunks fit the relay ──
+  const parts = chunk(packed, 7)
+  ok(parts.length === Math.ceil(packed.length / CHUNK) && parts.length > 1, `chunked into ${parts.length} parts`)
+  const env = (p: object) => JSON.stringify({ type: 'relay', kind: 'pv:snap', data: p, to: 'p_ab12cd34' }).length
+  ok(parts.every(p => JSON.stringify(p).length < 2048 && env(p) < 2048), 'every part (and its relay envelope) < 2048 bytes')
+  ok(parts.every(isSnapPart), 'every part is well-formed')
+
+  // ── reassembly: shuffled + duplicated, old version ignored, new version restarts ──
+  const r = new Reassembly()
+  const shuffled = [...parts].reverse()
+  let got: string | null = null
+  for (const p of shuffled) { const g = r.add(p); if (g) got = g; r.add(p) }
+  ok(got === packed, 'shuffled + duplicated parts assemble to the packed string')
+  ok(r.add(parts[0]) === null, 'a finished version does not assemble twice')
+  ok(r.add({ ...parts[0], v: 3 }) === null && r.progress().v === 7, 'an older version is ignored')
+  const p2 = chunk(packed, 9)
+  ok(r.add(p2[0]) === null && r.progress().v === 9 && r.progress().got === 1, 'a newer version restarts the gather')
+  let got2: string | null = null
+  for (const p of p2.slice(1)) got2 = r.add(p) ?? got2
+  ok(got2 === packed, 'the newer version assembles')
+  ok(!isSnapPart({ v: 1, i: 5, n: 5, d: '' }) && !isSnapPart({ v: 1, i: 0, n: MAX_PARTS + 1, d: '' }) && !isSnapPart({ v: 1, i: 0, n: 1, d: 'x'.repeat(CHUNK + 1) }), 'bad parts refused')
+
+  // ── a bad payload never renders ──
+  ok(await unpackSnap('not base64 deflate!!') === null, 'garbage unpacks to null')
+  ok(!validSnap({ works: { rooms: [] }, owned: [] }) && !validSnap({ works: { rooms: [], chests: [], pieces: [] }, owned: [3] }), 'a partial works / bad owned is refused')
+  ok(await unpackSnap(await packSnap({ works: { v: 1 }, owned: [] } as unknown as PlotSnap)) === null, 'a packed partial works unpacks to null')
+
+  // ── the guest's read-only store ──
+  const own = { v: 1, rooms: [{ id: 'mine' }], chests: [], pieces: [] } as unknown as Works
+  ok(!isVisiting() && worksWritable() && shownWorks(own) === own && shownOwned(['a'])[0] === 'a', 'home: your own works, writable')
+  ok(!guestRefuses() && refusalCount() === 0, 'home: nothing refused')
+  startVisit('p_host0001', 'Mira')
+  ok(isVisiting() && !worksWritable(), 'visiting: the works store is not writable')
+  ok(shownWorks(own).rooms.length === 0 && shownOwned(['a']).length === 0, 'before the snapshot: an empty plot, never your own house')
+  ok(setVisitSnap('p_host0001', 9, snap) && shownWorks(own) === works && shownOwned(['a']).length === 3, 'snapshot in: the host plot is shown')
+  ok(!setVisitSnap('p_host0001', 8, { works: own, owned: [] }) && shownWorks(own) === works, 'an older snapshot is ignored')
+  ok(!setVisitSnap('p_other', 99, { works: own, owned: [] }) && shownWorks(own) === works, "another host's snapshot is ignored")
+  let said = ''
+  ok(guestRefuses(m => { said = m }) && refusalCount() === 1 && said.includes('Mira'), 'visiting: a write is refused, with one line naming the host')
+  ok(currentVisit()!.name === 'Mira', 'the visit names the host')
+  endVisit()
+  ok(!isVisiting() && worksWritable() && shownWorks(own) === own, 'home again: your own works, writable')
+
+  console.log(`plot-visit: ${pass}/${pass + fail}`)
+  if (fail) process.exit(1)
+})()

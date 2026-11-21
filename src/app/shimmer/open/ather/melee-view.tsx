@@ -6,6 +6,7 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
+import { guestRefuses } from './plot-visit'
 import { meleeTarget, strike, canSwing, breakTarget, MELEE_HITS, type Target, type Hits } from './melee'
 import { currentWorks, setWorks } from './workshop'
 import { getInv, setInv } from '../shared/bag'
@@ -32,6 +33,7 @@ export function swing(now = performance.now()): 'cooldown' | 'miss' | 'hit' | 'b
   const r = strike(live.hits, t.id, now)
   live.hits = r.hits; live.hitAt.set(t.id, now)
   if (!r.broke) return 'hit'
+  if (guestRefuses(m => hudSay(m, 'info', 4))) { live.target = null; emit(); return 'miss' }   // M61: a guest never takes from a mate's plot
   const name = nameOf(t), b = breakTarget(currentWorks(), t, getInv())
   if (!b) { hudSay('Your bag is full.', 'info'); return 'full' }
   setWorks(b.works); setInv(b.inv); live.target = null; emit()
