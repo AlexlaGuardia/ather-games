@@ -80,7 +80,8 @@ import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAI
 import { useFolkTalk } from './use-folk-talk'
 import { useMeleeReady } from './melee-view'
 import { reportAway } from './away-report'
-import { TilePaths, Settlements, BigTop } from './network-scene'
+import { TilePaths, Settlements, BigTop, folkDrawn } from './network-scene'
+import { folkInReach } from './folk-near'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud, type SightLink } from './combat-layer'
@@ -570,7 +571,8 @@ function AtherSliceGame() {
       // a settlement's folk: E anywhere inside it talks to them (settlement-folk.ts / folk-panel.tsx); a waymark at your feet wins
       // ...but a node under the crosshair with hands stowed keeps E for the work (Alex 11-19: at Moonwell Glade the folk ate E, no mining)
       const workAim = (aimRef.current.tree || cAimRef.current.crystal) && stanceRef.current.kind === 'stowed'
-      if (!n && !workAim && netRef.current) { const st = settlementAt(netRef.current, lc.px, lc.pz); if (st) n = { kind: 'folk', s: st } }
+      // hub #15623 (Alex 11-21): only within FOLK_REACH of a figure the keeper faces (the anchor when nobody is home), not the whole radius
+      if (!n && !workAim && netRef.current) { const st = settlementAt(netRef.current, lc.px, lc.pz); if (st && folkInReach(folkDrawn.get(st.id), st, lc.px, lc.pz, yaw)) n = { kind: 'folk', s: st } }
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
       const t = ww ? ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty) : undefined
       if (t && t.name !== hereRef.current) { hereRef.current = t.name; setHereTile(t.name); streamAt(lc.px, lc.pz) }
