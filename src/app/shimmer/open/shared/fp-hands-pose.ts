@@ -80,14 +80,15 @@ export const FP_DEFAULTS: Readonly<FpTune> = {
   CAST_X: 0.365, CAST_Y: -0.11, CAST_PITCH: 0.84,
   // M45 (Alex 11-20: the voxel world's presented palm, "we want the mitt to turn" — tuned in /shimmer/dev/hands, Hold):
   // the right mitt's pose while a hotbar item is out (absolute, like rest), and the item floating over it (held-item.tsx)
-  HOLD_X: 0.335, HOLD_Y: -0.405, HOLD_Z: -0.635, HOLD_PITCH: 1.89, HOLD_ROLL: -3.05,
-  HOLD_YAW: 0,             // the twist about the glove's Y (11-21); 0 = no twist, today's pose
-  ITEM_UP: 0.25,          // metres above the mitt, in camera space (up the screen)
+  // Alex 11-21 pm: the hold re-tuned from a natural base with the twist axis, so the glove is no longer flipped
+  HOLD_X: 0.335, HOLD_Y: -0.415, HOLD_Z: -0.635, HOLD_PITCH: -1.3616, HOLD_ROLL: 0.4184,
+  HOLD_YAW: 2.6984,        // the twist about the glove's Y (11-21)
+  ITEM_UP: 0.195,         // metres above the mitt, in camera space (up the screen)
   ITEM_FWD: 0,             // metres toward (+) / away (-) from the eye
   ITEM_SIZE: 0.63,            // x the mini's own size
   ITEM_TILT: 0.35,         // tipped toward the eye so its top reads
   ITEM_SPIN: 0.25,          // radians a second about screen-up (the voxel rig's turn)
-  ITEM_BOB: 0.026,         // metres of slow bob
+  ITEM_BOB: 0.016,         // metres of slow bob
 }
 /** LIVE numbers: the defaults, overwritten by this browser's tune (loadFpTune). Read every frame, so a slider moves the hands. */
 export const FP = {

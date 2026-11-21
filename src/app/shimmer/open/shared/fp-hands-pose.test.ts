@@ -64,7 +64,7 @@ const let_ = run(120, k => ({ holding: k < 60 })).out.at(-1)!
 ok(Math.abs(let_.R.x - still.R.x) < 0.005 && Math.abs(let_.R.roll - still.R.roll) < 0.01, 'put away: back to rest')
 // ── 11-21: idle -> HOLD turns by the SHORTEST arc (Alex: "the rotation from idle to HOLD looks unnatural") ─────────────
 {
-  const qRest = eulerQ(FP.PITCH, 0, FP.ROLL), qHold = eulerQ(FP.HOLD_PITCH, 0, FP.HOLD_ROLL), arc = angleQ(qRest, qHold)
+  const qRest = eulerQ(FP.PITCH, 0, FP.ROLL), qHold = eulerQ(FP.HOLD_PITCH, FP.HOLD_YAW, FP.HOLD_ROLL), arc = angleQ(qRest, qHold)
   // endpoints: the rig shows exactly what rotation.set(pitch, 0, roll) showed, at rest and settled in the hold
   const s0 = newFpState(); let q0: Quat = s0.R.q
   for (let k = 0; k < 120; k++) q0 = [...stepFpHands(s0, { ...base, now: k * 16.7 }, 1 / 60).R.q] as Quat
@@ -84,10 +84,13 @@ ok(Math.abs(let_.R.x - still.R.x) < 0.005 && Math.abs(let_.R.roll - still.R.roll
   // control: the old blend (pitch and roll lerped as angles) swings further than the arc on the way: the bug was real
   // control: the old blend (pitch and roll lerped as angles) TRAVELS much further than the arc: it wanders across axes on the way
   const path = (f: (t: number) => Quat) => { let L = 0, prev = f(0); for (let n = 1; n <= 200; n++) { const q = f(n / 200); L += angleQ(prev, q); prev = q } return L }
-  const oldLen = path(t => eulerQ(FP.PITCH + t * (FP.HOLD_PITCH - FP.PITCH), 0, FP.ROLL + t * (FP.HOLD_ROLL - FP.ROLL)))
+  // the control is pinned to the 11-21 am tune that showed the bug (rest -1.4/0.63, hold 1.89/-3.05, no twist): with the pm tune the
+  // angle blend happens to run near the short arc, which says nothing about whether the quaternion path is right
+  const [P0, R0, P1, R1] = [-1.4, 0.63, 1.89, -3.05], oldArc = angleQ(eulerQ(P0, 0, R0), eulerQ(P1, 0, R1))
+  const oldLen = path(t => eulerQ(P0 + t * (P1 - P0), 0, R0 + t * (R1 - R0)))
   const s3 = newFpState(); let prevQ = s3.R.q, travelled = 0
   for (let k = 0; k < 200; k++) { const q = [...stepFpHands(s3, { ...base, now: k * 16.7, holding: true }, 1 / 60).R.q] as Quat; travelled += angleQ(prevQ, q); prevQ = q }
-  ok(travelled <= arc * 1.02 && oldLen > arc + 0.5, `the glove now travels ${travelled.toFixed(2)} rad (= the ${arc.toFixed(2)} arc); the old angle blend travelled ${oldLen.toFixed(2)} rad`)
+  ok(travelled <= arc * 1.02 && oldLen > oldArc + 0.5, `the glove now travels ${travelled.toFixed(2)} rad (= the ${arc.toFixed(2)} arc); the old angle blend travelled ${oldLen.toFixed(2)} rad on a ${oldArc.toFixed(2)} arc`)
   // no flip: holding through a run, a jump and a cast, no frame turns the glove more than a sliver
   //   (a flip shows as a frame far faster than the two motions it is made of: the plain Hold turn, and the run/jump/cast alone)
   const worstOf = (holding: (k: number) => boolean, busy: boolean) => { const st = newFpState(); let pq = st.R.q, w = 0
@@ -111,7 +114,7 @@ ok(Math.abs(let_.R.x - still.R.x) < 0.005 && Math.abs(let_.R.roll - still.R.roll
 }
 // ── 11-21: HOLD_YAW, the twist (Alex flipped the glove with pitch + roll because the Hold had no twist axis) ─────────────
 {
-  ok(FP.HOLD_YAW === 0, 'twist ships at 0: today\'s pose unchanged')
+  // (11-21 pm: the twist ships at Alex's tuned value; the settled hold above is asserted against eulerQ(.., HOLD_YAW, ..))
   // documented order: eulerQ(x, y, z) = qx(x) * qy(y) * qz(z) (three.js 'XYZ'), so the twist sits between tilt and roll
   const mul = (a: Quat, b: Quat): Quat => [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0], a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]]
   const ax = (i: 0 | 1 | 2, t: number): Quat => { const q: Quat = [0, 0, 0, Math.cos(t / 2)]; q[i] = Math.sin(t / 2); return q }
