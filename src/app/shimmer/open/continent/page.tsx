@@ -33,6 +33,7 @@ import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Tra
 import { pitstopsUnlocked, visitNear } from './pitstops'
 import { Towns } from '../towns/Towns'
 import { MarketView, DeedCard } from '../business/market-view'
+import { DeedYard, type DeedYardState } from './deed-yard'
 import { useTycoon } from '../business/use-tycoon'
 import { ShopPanel } from '../business/shop-panel'
 import { RunesmithPanel, IdonyPanel, commitImbue } from '../business/smith-panel'
@@ -1100,7 +1101,7 @@ const ferryName = (id: string) => (id === 'veradyn-rinning' ? 'rinning boat to t
 const ferryFare = (id: string) => (id === 'veradyn-rinning' ? 14 : FERRY_FARE)
 
 /** The continent's keys for Options › Controls: the walk set plus the courser's. */
-const CONTINENT_KEYS: KeyRow[] = [...WALK_KEYS, ['R (on foot)', 'tap: draw · swap · reload — hold: stow'], ['R (driving)', 'back to the road'], ['↑ ↓ ← →', 'drive (alongside the bound keys)'], ['Left mouse', 'fire a held gun'], ['Right mouse', 'aim a held gun']]
+const CONTINENT_KEYS: KeyRow[] = [...WALK_KEYS, ['E (shipyard yard)', 'piece in hand: tap set · hold turn — empty hand: pick up — at the board: next look'], ['R (on foot)', 'tap: draw · swap · reload — hold: stow'], ['R (driving)', 'back to the road'], ['↑ ↓ ← →', 'drive (alongside the bound keys)'], ['Left mouse', 'fire a held gun'], ['Right mouse', 'aim a held gun']]
 
 const JUNCTION_LABEL: Record<string, string> = { square: 'Town square', roundabout: 'Roundabout', cross: 'Crossroads', stop4: 'Four-way', tee: 'Junction', merge: 'Junction' }
 const ROAD_LABEL: Record<string, string> = { paved: 'Paved road', road: 'Road', trail: 'Trail', pass: 'Mountain pass',
@@ -1118,6 +1119,8 @@ function ContinentRideGame() {
   const tycoon = useTycoon(ledger, setLedger)
   const [deed, setDeed] = useState<string | null>(null)
   const [deedReach, setDeedReach] = useState<string | null>(null)
+  // M49 s1: the shipyard's yard (continent/deed-yard.tsx) tells the phone pill what E does there
+  const [yardState, setYardState] = useState<DeedYardState>({ inYard: false, atBoard: false, action: null })
   // ?tune=1: ] gives 100k Marks, to try the businesses without grinding contracts (the Ather's ?tune=1 convention)
   useEffect(() => {
     if (!new URLSearchParams(location.search).has('tune')) return
@@ -1251,6 +1254,7 @@ function ContinentRideGame() {
   const touchActions: TouchAction[] = [
     ...(!hud.foot && ferryAt && !ferrying ? [{ code: 'KeyE', key: 'E', label: 'ferry', near: true }]
       : []),
+    ...(hud.foot && yardState.action && !deed ? [{ code: 'KeyE', key: 'E', label: yardState.action, near: true }, ...(yardState.action === 'place' ? [{ code: 'DeedTurn', key: 'E', label: 'turn' }] : [])] : []),
     ...(hud.foot && deedReach && !deed ? [{ code: 'KeyE', key: 'E', label: deedReach.startsWith('front:') || deedReach.startsWith('smith:') ? 'go in' : 'deed', near: true }] : []),
     ...(hud.prompt ? [{ code: 'KeyF', key: 'F', label: hud.foot ? 'get in' : 'get out', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
@@ -1470,6 +1474,8 @@ function ContinentRideGame() {
           <DoorFolk R={R} focus={focus} talking={talk?.key ?? null} />
           <RemoteKeepers peers={mp.peers} me={() => focus.current} />
           <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={openDoor} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} />
+          <DeedYard R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState}
+            enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} />
           <Posts R={R} />
           <Roadside R={R} />
           <Trees R={R} focus={focus} />
