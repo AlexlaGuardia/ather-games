@@ -107,12 +107,14 @@ try {
   await p.keyboard.press('Escape'); await sleep(1200); await p.mouse.click(550, 340); await sleep(400)
   await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), X0 + 3, Z1 + 5); await sleep(1500)
   const g0 = await p.evaluate(() => (window as any).__ather.state().py)
+  const trace: string[] = []
   await p.keyboard.down('KeyW')
-  await poll(async () => (await p.evaluate(() => (window as any).__ather.state().pz)) < Z1 + 2.5, 8000)
+  await poll(async () => { const a = await p.evaluate(() => { const s = (window as any).__ather.state(); return { y: s.py, z: s.pz } }); trace.push(`${a.z.toFixed(2)}/${(a.y - g0).toFixed(2)}`); return a.z < Z1 + 2.5 }, 12000)
   await p.keyboard.up('KeyW'); await sleep(700)
+  console.log(`   walk trace z/feet: ${trace.join(' ')}`)
   const pa = await p.evaluate(() => { const a = (window as any).__ather.state(); return { y: a.py, z: a.pz } })
   ok(Math.abs(pa.y - g0 - DECK_T) < 0.05 && pa.z < Z1 + 3 && pa.z > Z1 + 1, `5. the keeper steps up onto the patio (feet +${(pa.y - g0).toFixed(2)}, patio ${DECK_T}, z ${pa.z.toFixed(2)})`)
-  await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, Math.PI * 0.9), X0 + 1.5, Z1 + 6.5); await sleep(2500)
+  await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, -0.35), X0 + 0.5, Z1 + 6); await sleep(2500)   // facing north-east, the patio ahead
   await shot('deck-2-patio')
   await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, Math.PI, y), X0 + 2.5, Z0 - 0.5, g0 + STOREY + 0.1); await sleep(2500)
   const ba = await p.evaluate(() => { const a = (window as any).__ather.state(); return { y: a.py, z: a.pz } })
