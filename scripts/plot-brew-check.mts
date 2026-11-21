@@ -8,7 +8,10 @@
 //   pool, nothing out of its bag).  5. A takes the Desk.  6. the pour lands on its own: total = totalBottles(2, 2 hands) = 4,
 //   every hand >= 1, split by contribution (A 3, B 1 by the pure rule), each in its OWN bag.  7. 0 page errors.
 //   Hooks: __ather.tp|state|look|ground (movement + aim), __brew / __visit / __mp READ; real clicks + keys.
-//   npx tsx scripts/plot-brew-check.mts [--url https://ather.games]
+//   --offline (hub 11-21): B's tab closes right after the Desk step is taken, so B is AWAY at the pour; the host must keep B's
+//     share (owed) and pay it when B comes back (same browser, the visit link again), B acks, the host owes nothing.
+//   --phone: B plays at 390x844 by touch (the 'use' chip for E, taps on the panel) and the brewing panel is shot to --out.
+//   npx tsx scripts/plot-brew-check.mts [--url https://ather.games] [--phone] [--offline] [--out dir]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { KEEP_CLEAR } from '../src/app/shimmer/open/ather/rooms'
 import { STARTING_SQUARES, squareAt, sqId } from '../src/app/shimmer/open/ather/plot'
@@ -16,7 +19,9 @@ import { totalBottles } from '../src/app/shimmer/open/ather/party-brew'
 import { ALC_POTIONS } from '../src/app/shimmer/open/ather/alchemy-set'
 import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
-const url = flag('--url', 'https://ather.games')
+const url = flag('--url', 'https://ather.games'), PHONE = process.argv.includes('--phone'), OFFLINE = process.argv.includes('--offline'), OUT = flag('--out', '/tmp/plot-brew')
+import { mkdirSync } from 'fs'
+mkdirSync(OUT, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
@@ -49,36 +54,41 @@ const bag = async (p: Page) => { const r: Record<string, number> = {}; for (cons
 const bottles = async (p: Page) => Object.entries(await bag(p)).filter(([id]) => id.startsWith('potion:health:')).reduce((a, [, n]) => a + n, 0)
 const hideCard = (p: Page) => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 const click = async (p: Page, sel: string) => { const b = await p.evaluate((s: string) => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (!b) return false; await p.mouse.click(b.x, b.y); return true }
-async function open(tag: string, items: { id: string; n: number }[]): Promise<Page> {
-  const p = await (await br.createBrowserContext()).newPage()
-  await p.setViewport({ width: 1000, height: 680 })
+async function open(tag: string, items: { id: string; n: number }[], phone = false, ctx?: any): Promise<Page> {
+  const p = await (ctx ?? await br.createBrowserContext()).newPage()
+  await p.setViewport(phone ? { width: 390, height: 844, isMobile: true, hasTouch: true } : { width: 1000, height: 680 })
   p.on('pageerror', e => errs.push(`${tag}: ${String(e).slice(0, 180)}`))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.evaluateOnNewDocument((c: string, w: string, b: string) => {
-    if (sessionStorage.getItem('pbc')) return; sessionStorage.setItem('pbc', '1')
+    if (localStorage.getItem('pbc')) return; localStorage.setItem('pbc', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem('ather:mp:party', c)
     localStorage.setItem('open.works.v1', w); localStorage.setItem('open.inv.v1', b); localStorage.removeItem('open.brewing.v1')
   }, CODE, JSON.stringify(WORKS), JSON.stringify(bagOf(items)))
   return p
 }
+const isPhone = (p: Page) => p.evaluate(() => window.innerWidth < 500)
 async function load(p: Page, q = '') {
   await p.goto(`${url}/shimmer/open/ather?hour=13${q}`, { waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state && !!(window as any).__mp && !!(window as any).__visit && !!(window as any).__brew, { timeout: 240000, polling: 1000 })
   await sleep(2000); await hideCard(p)
+  if (await isPhone(p)) { await p.touchscreen.tap(195, 844 - 200); await sleep(600) }   // past the touch intro (lift-phone-check)
 }
+const tapOrClick = async (p: Page, sel: string) => { const b = await p.evaluate((s: string) => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (!b) return false; if (await isPhone(p)) await p.touchscreen.tap(b.x, b.y); else await p.mouse.click(b.x, b.y); return true }
 /** stand 1.5 m in front of a piece, aim at it, press E; wait for `panel` to open */
 async function useAt(p: Page, pc: { x: number; z: number }, panel: string) {
   for (let i = 0; i < 3; i++) {
     await p.keyboard.press('Escape'); await sleep(300)
     await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), pc.x, pc.z + 1.5); await sleep(1500)
-    await aimAt(p, pc.x, pc.z, 0.6); await p.keyboard.press('e')
+    await aimAt(p, pc.x, pc.z, 0.6)
+    if (await isPhone(p)) { if (await poll(() => p.evaluate(() => !!document.querySelector('[data-touch="use"][data-touch-near]')), 6000)) await tapOrClick(p, '[data-touch="use"][data-touch-near]') }
+    else await p.keyboard.press('e')
     if (await poll(async () => !!(await p.$(`[data-panel="${panel}"]`)), 6000)) return true
   }
   return false
 }
 async function take(p: Page, k: number) {
   return await poll(async () => !!(await p.$(`[data-brew-step="${k}"][data-brew-state="open"] [data-act="brew-take"] button:not([disabled])`)), 30000)
-    && await click(p, `[data-brew-step="${k}"] [data-act="brew-take"] button`)
+    && await tapOrClick(p, `[data-brew-step="${k}"] [data-act="brew-take"] button`)
 }
 const runBy = (p: Page, k: number) => p.evaluate((i: number) => (window as any).__brew?.shown()?.runs?.[i]?.by ?? null, k)
 
@@ -92,12 +102,18 @@ try {
   ok(await poll(async () => (await a.evaluate(() => (window as any).__brew.shown()?.potion)) === 'health', 8000), '1. a brewing of Health Draught is open on A')
 
   // 2 · B visits, takes the crush at the Crusher
-  const b = await open('B', [{ id: 'shimmerscale', n: 2 }])
+  const bCtx = await br.createBrowserContext()
+  let b = await open('B', [{ id: 'shimmerscale', n: 2 }], PHONE, bCtx)
   await load(b, `&visit=${idA}&vn=Ash`)
   ok(await poll(async () => (await ev(b, '__visit', 'hasSnap')) === true, 60000), '2. B is on A\'s plot')
   const idB = (await b.evaluate(() => localStorage.getItem('ather:mp:id')))!
   ok(await poll(async () => (await b.evaluate(() => (window as any).__brew.shown()?.potion)) === 'health', 20000), `2. B sees A's brewing (${JSON.stringify(await ev(b, '__brew', 'net'))})`)
   ok(await useAt(b, PIECES.crusher, 'brewing'), "2. B's E at A's Crusher opens the brewing panel")
+  if (PHONE) {
+    await sleep(800); try { await b.screenshot({ path: `${OUT}/brew-phone-panel.png` }) } catch { /* slow frame */ }
+    const fit = await b.evaluate(() => { const e = document.querySelector('[data-panel="brewing"]') as HTMLElement | null; const r = e?.getBoundingClientRect(); return r ? { l: r.left, r: r.right, w: window.innerWidth, scroll: document.documentElement.scrollWidth } : null })
+    ok(!!fit && fit.l >= 0 && fit.r <= fit.w + 1 && fit.scroll <= fit.w + 1, `2. phone: the brewing panel fits 390 wide, no sideways scroll (${JSON.stringify(fit)}), shot ${OUT}/brew-phone-panel.png`)
+  }
   ok(await take(b, 0), '2. B clicked Crush')
   ok(await poll(async () => (await runBy(a, 0)) === idB, 15000), "2. the host records B's crush")
   ok(await poll(async () => !(await bag(b)).shimmerscale, 10000), `2. B's Shimmerscale left B's bag (${JSON.stringify(await bag(b))})`)
@@ -114,8 +130,20 @@ try {
   ok(await useAt(a, PIECES.desk, 'brewing'), "5. A's E at its Desk now opens the brewing panel")
   ok(await take(a, 3), '5. A clicked the Desk step (when the dust and the extract were made)')
   // 6 · the pour
+  if (OFFLINE) { await b.close(); console.log('   B\'s tab closed before the pour') }
   ok(await poll(async () => (await a.evaluate(() => (window as any).__brew.shown()?.poured)) === true, 40000), '6. the brewing poured on its own')
-  ok(await poll(async () => (await bottles(b)) >= 1, 15000), `6. B got its bottle in its own bag (${await bottles(b)})`)
+  if (OFFLINE) {
+    const owed = await a.evaluate((id: string) => (window as any).__brew.owed()[id] ?? [], idB) as { n: number }[]
+    ok(owed.length === 1 && owed[0].n === 1, `6. offline: the host keeps B's share owed (${JSON.stringify(owed)})`)
+    b = await open('B', [], PHONE, bCtx); await load(b, `&visit=${idA}&vn=Ash`)
+    ok(await poll(async () => (await ev(b, '__visit', 'hasSnap')) === true, 60000), '6. offline: B came back to A\'s plot (same browser)')
+  }
+  ok(await poll(async () => (await bottles(b)) >= 1, 20000), `6. B got its bottle in its own bag (${await bottles(b)})`)
+  if (OFFLINE) {
+    ok(await poll(async () => !(await a.evaluate((id: string) => (window as any).__brew.owed()[id], idB)), 15000), '6. offline: B acked, the host owes nothing')
+    await sleep(6000)
+    ok(await bottles(b) === 1, `6. offline: re-sends never pay twice (B holds ${await bottles(b)})`)
+  }
   const nA = await bottles(a), nB = await bottles(b)
   ok(nA + nB === TOTAL && nA >= 1 && nB >= 1, `6. ${TOTAL} bottles poured, every hand at least one (A ${nA}, B ${nB})`)
   ok(nA === 3 && nB === 1, `6. split by contribution: A gave 4 crops + 2 steps, B 2 scale + 2 steps (A ${nA}, B ${nB})`)

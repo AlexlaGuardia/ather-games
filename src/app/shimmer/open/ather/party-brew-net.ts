@@ -15,7 +15,7 @@ import { ALC_POTIONS, type Have } from './alchemy-set'
 import { boonAt } from './alchemist-boon'
 import { loadVillage } from './moglins'
 import { currentVisit, isVisiting, subscribeVisit, type Visit } from './plot-visit'
-import { openBrewing, adoptBrewing, hostClaim, pourReady, pour, isClaim, isGrant, isPour, PB_STATE, PB_CLAIM, PB_GRANT, PB_DENY, PB_POUR, STATE_MS, type Brewing } from './party-brew'
+import { openBrewing, adoptBrewing, hostClaim, pourReady, pour, isClaim, isGrant, isPour, PB_STATE, PB_CLAIM, PB_GRANT, PB_DENY, PB_POUR, PB_ACK, STATE_MS, owe, acked, adoptOwed, isAck, takePour, type Brewing, type OwedBook } from './party-brew'
 import type { Works } from './rooms'
 
 type Relay = (kind: string, data: unknown, to?: string) => boolean
@@ -44,6 +44,12 @@ const emit = () => { ver++; subs.forEach(f => f()) }
 const loadHost = (): Brewing | null => { if (hostB === undefined) { try { hostB = adoptBrewing(JSON.parse(localStorage.getItem(keeperKey(KEY)) ?? 'null')) } catch { hostB = null } } return hostB }
 function setHost(b: Brewing | null) { hostB = b; try { localStorage.setItem(keeperKey(KEY), JSON.stringify(b)) } catch { /* private window */ } emit() }
 subscribeVisit(() => { if (!isVisiting()) guestB = null; emit() })
+// the host's owed book (hands away at a pour) and the guest's taken pour ids: both saved, so a reload on either side loses nothing
+const OWED_KEY = 'open.brewing.owed.v1', SEEN_KEY = 'open.brewing.seen.v1'
+const readJ = (k: string) => { try { return JSON.parse(localStorage.getItem(keeperKey(k)) ?? 'null') } catch { return null } }
+const writeJ = (k: string, v: unknown) => { try { localStorage.setItem(keeperKey(k), JSON.stringify(v)) } catch { /* private window */ } }
+const loadOwed = (): OwedBook => adoptOwed(readJ(OWED_KEY))
+const loadSeen = (): string[] => { const v = readJ(SEEN_KEY); return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [] }
 
 /** the brewing this page shows: the host's mirror while visiting, else your own */
 export const shownBrewing = (): Brewing | null => (isVisiting() ? guestB : (typeof window === 'undefined' ? null : loadHost()))
@@ -84,7 +90,7 @@ export function claimStep(k: number): void {
 }
 export const isPending = (k: number) => pending.has(k)
 
-const probe = { claims: 0, grants: 0, denies: 0, pours: 0, gotBottles: 0, states: 0 }
+const probe = { claims: 0, grants: 0, denies: 0, pours: 0, gotBottles: 0, states: 0, owedSent: 0, acks: 0 }
 
 // ── the hook ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 export function usePartyBrew(o: { relay: Relay; onRelay: OnRelay; hosting: boolean; visit: Visit | null; guests: string[]; works: () => Works }) {
@@ -97,7 +103,9 @@ export function usePartyBrew(o: { relay: Relay; onRelay: OnRelay; hosting: boole
     if (!o.hosting) return
     let lastSent = ''
     const state = (to?: string[]) => { const b = loadHost(), msg = { b, now: Date.now() }; for (const g of to ?? guests.current) o.relay(PB_STATE, msg, g) }
+    const sendOwed = (to: string[]) => { const book = loadOwed(); for (const g of to) for (const ow of book[g] ?? []) if (o.relay(PB_POUR, ow, g)) probe.owedSent++ }
     const off = o.onRelay(m => {
+      if (m.kind === PB_ACK && isAck(m.data)) { const book = loadOwed(), next = acked(book, m.from, m.data.pid); if (next !== book) { probe.acks++; writeJ(OWED_KEY, next) } return }
       if (m.kind !== PB_CLAIM || !isClaim(m.data)) return
       const b = loadHost(); probe.claims++
       if (!b) { o.relay(PB_DENY, { k: m.data.k, why: 'No brewing is open here.' }, m.from); return }
@@ -118,14 +126,16 @@ export function usePartyBrew(o: { relay: Relay; onRelay: OnRelay; hosting: boole
           probe.pours++
           const me = selfPlayerId(), mine = r.per[me] ?? 0
           if (mine) { const got = giveBottles(r.bottle, mine); hudSay(`${itemDef(r.bottle).name}${got > 1 ? ` × ${got}` : ''} from the brewing.${r.extra[me] ? ' One extra, thanks to your alchemist.' : ''}${got < mine ? ' Your bag was full for the rest.' : ''}`, 'item', 5) }
-          for (const h of r.b.hands) if (h !== me) o.relay(PB_POUR, { bottle: r.bottle, n: r.per[h], extra: r.extra[h] }, h)
+          // every other hand is OWED its share until it acks (away at the pour = paid on return)
+          const pid = `${me}-${now.toString(36)}`, book = owe(loadOwed(), r.per, r.extra, r.bottle, me, pid)
+          writeJ(OWED_KEY, book); sendOwed(r.b.hands.filter(h => h !== me))
           setHost(r.b); state()
         }
       }
       const key = JSON.stringify(loadHost())
       if (key !== lastSent) { lastSent = key; state() }
     }, 500)
-    const s = setInterval(() => state(), STATE_MS)   // a guest who just arrived gets the brewing
+    const s = setInterval(() => { state(); sendOwed(guests.current) }, STATE_MS)   // a guest who just arrived gets the brewing, and what it is owed
     return () => { off(); clearInterval(t); clearInterval(s) }
   }, [o.hosting, o.relay, o.onRelay])
 
@@ -149,6 +159,12 @@ export function usePartyBrew(o: { relay: Relay; onRelay: OnRelay; hosting: boole
         if (typeof d?.why === 'string') hudSay(d.why.slice(0, 120), 'info', 4)
         emit()
       } else if (m.kind === PB_POUR && isPour(m.data)) {
+        const pid = (m.data as { pid?: unknown }).pid
+        if (typeof pid !== 'string') return
+        const t = takePour(loadSeen(), pid)
+        o.relay(PB_ACK, { pid }, host)   // ack every copy: a lost ack only means one more re-send, never a second payment
+        if (!t.fresh) return
+        writeJ(SEEN_KEY, t.seen)
         const got = giveBottles(m.data.bottle, m.data.n); probe.gotBottles += got
         hudSay(`${itemDef(m.data.bottle).name}${got > 1 ? ` × ${got}` : ''} from the brewing.${m.data.extra ? ' One extra, thanks to their alchemist.' : ''}${got < m.data.n ? ' Your bag was full for the rest.' : ''}`, 'item', 5)
       }
@@ -157,6 +173,6 @@ export function usePartyBrew(o: { relay: Relay; onRelay: OnRelay; hosting: boole
   }, [host, o.onRelay])
 
   if (typeof window !== 'undefined') (window as unknown as { __brew?: unknown }).__brew = {
-    shown: () => shownBrewing(), now: () => brewNow(), self: () => selfPlayerId(), net: () => ({ ...probe }), pending: () => [...pending],
+    shown: () => shownBrewing(), now: () => brewNow(), owed: () => loadOwed(), self: () => selfPlayerId(), net: () => ({ ...probe }), pending: () => [...pending],
   }
 }

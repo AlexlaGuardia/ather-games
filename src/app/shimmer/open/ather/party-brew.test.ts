@@ -1,5 +1,5 @@
 // party-brew.ts: a brewing's claims, dependency order, the curve, the split and the per-hand boon roll.
-import { openBrewing, join, claim, openSteps, pool, pourReady, pour, yieldMult, totalBottles, contribution, busy, MAX_HANDS, adoptBrewing, hostClaim, stepViews, isClaim, isGrant, isPour, type Brewing } from './party-brew'
+import { openBrewing, join, claim, openSteps, pool, pourReady, pour, yieldMult, totalBottles, contribution, busy, MAX_HANDS, adoptBrewing, hostClaim, stepViews, isClaim, isGrant, isPour, owe, acked, adoptOwed, isAck, takePour, OWED_MAX, type Brewing } from './party-brew'
 import { ALC_POTIONS, potionId } from './alchemy-set'
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  FAIL', m) } }
@@ -104,6 +104,26 @@ for (let n = 1; n <= MAX_HANDS; n++) ok(totalBottles(H.makes, n) >= n, `every ha
   ok(isClaim({ k: 1, have: {} }) && !isClaim({ k: 'a', have: {} }) && !isClaim({ k: 1 }), 'claim shape')
   ok(isGrant({ k: 0, spend: [{ id: 'a', n: 1 }] }) && !isGrant({ k: 0, spend: [{ id: 'a', n: 0 }] }), 'grant shape')
   ok(isPour({ bottle: 'p', n: 2, extra: 0 }) && !isPour({ bottle: 'p', n: 0, extra: 0 }) && !isPour({ bottle: 'p', n: 99, extra: 0 }), 'pour shape (1..30 bottles)')
+}
+
+// ── a hand away at the pour keeps its bottles ──
+{ let book = owe({}, { host: 3, g1: 1, g2: 2 }, { host: 0, g1: 0, g2: 1 }, 'potion:health:D', 'host', 'p1')
+  ok(!book.host && book.g1[0].n === 1 && book.g2[0].extra === 1 && book.g2[0].pid === 'p1', 'every hand but the host is owed its share under the pour id')
+  book = owe(book, { host: 2, g1: 2 }, { host: 0, g1: 0 }, 'potion:mana:D', 'host', 'p2')
+  ok(book.g1.map(o => o.pid).join() === 'p1,p2', 'two pours owed, oldest first')
+  ok(acked(book, 'g2', 'p9') === book && acked(book, 'stranger', 'p1') === book, 'an unknown id or a stranger changes nothing')
+  book = acked(book, 'g1', 'p1')
+  ok(book.g1.map(o => o.pid).join() === 'p2' && !!book.g2, 'an ack clears only that pour for that hand')
+  book = acked(acked(book, 'g1', 'p2'), 'g2', 'p1')
+  ok(Object.keys(book).length === 0, 'all acked: owed nothing')
+  let big = {} as ReturnType<typeof owe>; for (let i = 0; i < 20; i++) big = owe(big, { host: 1, g: 1 }, {}, 'b', 'host', 'q' + i)
+  ok(big.g.length === OWED_MAX && big.g[0].pid === 'q' + (20 - OWED_MAX), `capped at ${OWED_MAX} per hand, newest kept`)
+  ok(JSON.stringify(adoptOwed(JSON.parse(JSON.stringify(big)))) === JSON.stringify(big) && Object.keys(adoptOwed({ g: [{ pid: 1 }], h: 'x' })).length === 0, 'the book survives a save; junk dropped')
+  ok(isAck({ pid: 'p1' }) && !isAck({ pid: 3 }) && !isAck(null), 'ack shape')
+  const t1 = takePour([], 'p1'), t2 = takePour(t1.seen, 'p1')
+  ok(t1.fresh && !t2.fresh && t2.seen.length === 1, 'a re-sent pour is paid once')
+  let seen: string[] = []; for (let i = 0; i < 50; i++) seen = takePour(seen, 'x' + i).seen
+  ok(seen.length === 40 && seen[39] === 'x49', 'the guest remembers the last 40 pour ids')
 }
 
 console.log(`party-brew: ${pass} ok, ${fail} fail`); process.exit(fail ? 1 : 0)

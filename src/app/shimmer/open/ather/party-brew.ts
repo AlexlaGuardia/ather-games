@@ -166,3 +166,40 @@ export function stepViews(b: Brewing, now: number): StepView[] {
     return { k, state: open.has(k) ? 'open' : 'waiting' }
   })
 }
+
+// ── a hand away at the pour keeps its bottles (hub 11-21): the host OWES each other hand its share until that hand ACKS it ──────
+//   PB_POUR carries a pour id; the guest gives the bottles once per id (it remembers the ids it took) and answers PB_ACK {pid};
+//   the host re-sends what it owes to every hand back in view, until the ack lands. Same rule as plot visits: hide, never forget.
+export const PB_ACK = 'pb:ack'
+export interface Owed { pid: string; bottle: string; n: number; extra: number }
+export type OwedBook = Record<string, Owed[]>   // hand -> what it is owed, oldest first
+export const OWED_MAX = 8   // per hand: a bound, not a target (eight pours unclaimed is a hand that is not coming back soon)
+/** After a pour: every hand but the host is owed its share under this pour's id. */
+export function owe(book: OwedBook, per: Record<string, number>, extra: Record<string, number>, bottle: string, host: string, pid: string): OwedBook {
+  const out: OwedBook = { ...book }
+  for (const [h, n] of Object.entries(per)) if (h !== host && n > 0) out[h] = [...(out[h] ?? []), { pid, bottle, n, extra: extra[h] ?? 0 }].slice(-OWED_MAX)
+  return out
+}
+/** A hand acked a pour: it is owed that one no longer (a stranger's or an unknown id changes nothing). */
+export function acked(book: OwedBook, who: string, pid: string): OwedBook {
+  const list = book[who]; if (!list?.some(o => o.pid === pid)) return book
+  const rest = list.filter(o => o.pid !== pid), out = { ...book }
+  if (rest.length) out[who] = rest; else delete out[who]
+  return out
+}
+export function adoptOwed(x: unknown): OwedBook {
+  const out: OwedBook = {}
+  if (!x || typeof x !== 'object') return out
+  for (const [h, list] of Object.entries(x as Record<string, unknown>)) {
+    if (!Array.isArray(list)) continue
+    const ok = list.filter((o): o is Owed => !!o && typeof o.pid === 'string' && isPour(o)).slice(-OWED_MAX)
+    if (ok.length) out[h] = ok
+  }
+  return out
+}
+export const isAck = (x: unknown): x is { pid: string } => !!x && typeof x === 'object' && typeof (x as { pid?: unknown }).pid === 'string' && (x as { pid: string }).pid.length <= 40
+/** The guest's side: has this pour id been taken already (a re-send after a lost ack must not pay twice)? Keeps the last 40. */
+export function takePour(seen: readonly string[], pid: string): { fresh: boolean; seen: string[] } {
+  if (seen.includes(pid)) return { fresh: false, seen: [...seen] }
+  return { fresh: true, seen: [...seen, pid].slice(-40) }
+}
