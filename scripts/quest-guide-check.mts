@@ -20,6 +20,9 @@ async function open(q: string) {
   const p = await (await br.createBrowserContext()).newPage()
   await p.setViewport(phone ? { width: 390, height: 844, isMobile: true, hasTouch: true } : { width: 1100, height: 700 })
   p.on('pageerror', e => errs.push(String(e).slice(0, 200))); await p.evaluateOnNewDocument('window.__name = (f) => f')
+  // a BORN keeper: without a birth the errand stage is 'none' and there is no quest to point at (the first run of this
+  // check, 11-21, failed A-C on prod and devwin alike for exactly that reason)
+  await p.evaluateOnNewDocument(() => { try { localStorage.setItem('ather:shimmer:birthRune', 'star') } catch { /* private */ } })
   await p.goto(`${base}/shimmer/open/ather?hour=13&waymark=greg${q}`, { waitUntil: 'load', timeout: 240000 })
   await poll(() => p.evaluate(() => typeof (window as any).__ather?.look === 'function' && (window as any).__questGuide?.glareBearing != null).catch(() => false), 240000)
   await sleep(2000); if (!phone) await p.mouse.click(550, 350); await sleep(500)
@@ -33,18 +36,22 @@ try {
   const q0 = await probe(p)
   ok(!!q0 && q0.glareBearing != null, `A. __questGuide probe present, active bearing ${q0?.glareBearing?.toFixed(1)}`)
   const b = q0?.glareBearing ?? 0
-  await look(p, b + 180); await sleep(1500)
+  // WAIT ON STATE, NOT SLEEPS: headless swiftshader runs ~1 fps on a dev server, so a fixed sleep reads a stale frame (the
+  // first devwin run, 11-21, read the compass 800 ms after a turn and saw the previous heading)
+  await look(p, b + 180)
+  await poll(async () => { const q = await probe(p), g = await glare(p); return !!q && q.trailOpacity < 0.05 && !!g && Math.abs(Math.abs(g.rel) - 180) < 30 }, 60000)
   const away = await probe(p), gAway = await glare(p)
   ok(!!away && away.trailOpacity < 0.05 && !away.facing, `B. facing away: trailOpacity ${away?.trailOpacity}`)
-  await look(p, b + 40); await sleep(800)
+  await look(p, b + 40)
+  await poll(async () => { const g = await glare(p); return !!g && Math.abs(g.rel - 40) < 4 }, 60000)
   const gSide = await glare(p)
   ok(!!gSide && Math.abs(gSide.rel - 40) < 4, `A. glare on the compass 40 deg off: rel ${gSide?.rel}`)
   await look(p, b); const samples: number[] = []
-  for (let i = 0; i < 40; i++) { samples.push((await probe(p))?.trailOpacity ?? -1); await sleep(40) }
-  await sleep(1000)
+  await poll(async () => { const v = (await probe(p))?.trailOpacity ?? -1; samples.push(v); return v > 0.95 }, 60000)
+  await poll(async () => { const g = await glare(p); return !!g && Math.abs(g.rel) < 4 }, 30000)
   const on = await probe(p), gOn = await glare(p)
   ok(!!on && on.trailOpacity > 0.95 && on.facing, `B. facing the mark: trailOpacity ${on?.trailOpacity}`)
-  ok(samples.some(v => v > 0.05 && v < 0.95), `B. a fade, not a pop: intermediate sample ${samples.find(v => v > 0.05 && v < 0.95)}`)
+  ok(samples.some(v => v > 0.05 && v < 0.95), `B. a fade, not a pop: intermediate sample ${samples.find(v => v > 0.05 && v < 0.95)} (${samples.length} samples)`)
   ok(!!gOn && Math.abs(gOn.rel) < 4 && !!gAway && gOn.bright > gAway.bright && gOn.bright > 0.95, `A. glare at the notch and brighter facing it: ${gOn?.bright} vs ${gAway?.bright}`)
   ok(on?.pillars === 0, `C. no pillar without ?pillar=1 (${on?.pillars})`)
   // E. the GPS route: hunt a goal behind something you cannot walk straight over (only where s2 is deployed)
@@ -67,7 +74,8 @@ try {
     ok(!!r && r.pts > 2 && r.mode !== 'straight', `E. not the straight line: ${r?.pts} points, ${r?.mode}, reached ${r?.reached}`)
     console.log(`   worst planning slice seen ${slice.toFixed(1)} ms (headless swiftshader wall clock)`)
     const b2 = q!.glareBearing!
-    await look(p, b2); await sleep(2500)
+    await look(p, b2)
+    await poll(async () => { const q = await probe(p); return !!q && q.trailOpacity > 0.9 && q.trail.length > 2 }, 60000)
     const f = await probe(p)
     ok(!!f && f.trailOpacity > 0.9 && f.trail.length > 2, `E. facing the glare the trail draws along the route (${f?.trail.length} dots, opacity ${f?.trailOpacity?.toFixed(2)})`)
     if (shot) { await sleep(500); await p.screenshot({ path: shot.replace(/\.png$/, '-route.png') }) }
