@@ -618,6 +618,9 @@ cmd_status() {
 # one lane's DOWN, not every lane's). A step every window must remember is a step one will forget, so it is a lock:
 #   coord browser up "<what>"   -> refuses (exit 1) while another window holds it; stale after 45 min
 #   coord browser down          -> releases (only the holder, or COORD_FORCE=1)
+#   A refusal exits 1 and says why on STDERR. ⚠ Gate on the EXIT, never through a pipe: `coord browser up x | tail -1 && run`
+#   runs anyway (a pipeline's status is tail's). Twice on 11-21 (play, sprites). Write: `coord browser up x && run`, or set
+#   -o pipefail. tools/coord-browser.test.sh proves both.
 # EliteDesk runs (tools/edesk-check.sh) do NOT take it: they are not on this box.
 BROWSER_FILE="$COORD_DIR/browser"
 cmd_browser() {
@@ -627,8 +630,8 @@ cmd_browser() {
   case "$op" in
     up)
       if [ -n "$holder" ] && [ "$holder" != "$WIN" ] && [ "${age:-0}" -lt 2700 ] && [ "${COORD_FORCE:-0}" != 1 ]; then
-        echo "box browser HELD by '$holder' ($(age_human "$age") ago): $(sed -n 's/^note=//p' "$BROWSER_FILE")"
-        echo "  wait for it (coord browser), run your prod check on the EliteDesk (tools/edesk-check.sh), or COORD_FORCE=1 if that window is gone"
+        echo "box browser HELD by '$holder' ($(age_human "$age") ago): $(sed -n 's/^note=//p' "$BROWSER_FILE")" >&2
+        echo "  wait for it (coord browser), run your prod check on the EliteDesk (tools/edesk-check.sh), or COORD_FORCE=1 if that window is gone" >&2
         return 1
       fi
       mkdir -p "$COORD_DIR"
@@ -636,7 +639,7 @@ cmd_browser() {
       echo "box browser UP for '$WIN': $*" ;;
     down)
       if [ -z "$holder" ]; then echo "box browser already free"; return 0; fi
-      if [ "$holder" != "$WIN" ] && [ "${COORD_FORCE:-0}" != 1 ]; then echo "refusing: held by '$holder', not '$WIN' (COORD_FORCE=1 if it is gone)"; return 1; fi
+      if [ "$holder" != "$WIN" ] && [ "${COORD_FORCE:-0}" != 1 ]; then echo "refusing: held by '$holder', not '$WIN' (COORD_FORCE=1 if it is gone)" >&2; return 1; fi
       rm -f "$BROWSER_FILE"; echo "box browser DOWN (was '$holder')" ;;
     *)
       if [ -n "$holder" ]; then echo "  held by $holder, $(age_human "$age") ago: $(sed -n 's/^note=//p' "$BROWSER_FILE")$([ "$age" -ge 2700 ] && echo '  ⚠ STALE')"; else echo "  free"; fi ;;
