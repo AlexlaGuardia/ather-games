@@ -54,7 +54,7 @@ try {
 
   await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(3000)
-  await p.evaluate((a, b, c) => (window as any).__ather.tp(a, b, c), DESK.x, DESK.z + 2.4, 0); await sleep(2500)
+  await p.evaluate((a, b, c) => (window as any).__ather.tp(a, b, c), DESK.x, DESK.z + 1.4, 0); await sleep(2500)
   // the seeded brew must not land before the boon is set: open with an unlucky roll is wrong, so stand the alchemist FIRST
   // with the run removed, then restore it
   await p.evaluate(() => localStorage.setItem('open.alchemy.v1', '{}'))
