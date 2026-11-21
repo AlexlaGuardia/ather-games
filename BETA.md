@@ -172,6 +172,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - 11-21 08:3x Alex: "near moon well it says speak with the folk press e just for being in the area" → not fixed: page.tsx:573 prompts on the whole settlement radius; routed to world (prompt only within ~3 m of a folk figure / talk anchor)
 - 11-21 08:4x Alex: "similar issue with the planning table.. only be able to interact with what the cursor is selecting.. moglins.. doors gates.. i do like the 3m range" → **M60**, routed to world
 - 11-21 08:5x Alex: hands dev tool hold stance had no clockwise-roll setting, so he flipped the glove; the slerp followed the flip → add HOLD_YAW twist, full ±PI ranges, ITEM_UP to 0.6, a hold-blend scrubber + reset-rotation button (sprites)
+- 11-21 09:1x Alex: "a map editor.. in the dev tools.. load a bare map and sculpt the land raising and lower using a brush plus a flatten tool and water" → NOT M38 (killed: in-game, on foot); a dev-tools page. Scoping with Alex next
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
