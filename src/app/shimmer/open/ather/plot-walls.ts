@@ -37,7 +37,13 @@ export const wallColour = (w: Wall): string => (w.mat === 'stucco' && w.tint ? w
 /** kind (slice 3): a plain wall, half of a 2 m DOOR (open from the floor to DOOR_H) or a WINDOW (a crystal pane SILL..WIN_TOP) */
 /** draft (M37 slice 4): a PLAN, not yet built: drawn for free, shown as a blueprint, not solid, spends nothing and refunds nothing.
  *  A piece with no `draft` is BUILT, so every wall saved before slice 4 stands as it did. */
-export interface Wall { mat: WallMat; tint?: string; kind?: 'door' | 'window'; draft?: true }
+/** M56 (c): kind 'rail' = a RAILING / half wall: RAIL_H tall, drawn with the Walls tool like any piece, any wall material, RAIL_FRAC of a
+ *  wall's cost. The walker cannot walk through it but the eye sees over it; it closes no room and holds up nothing above. */
+export interface Wall { mat: WallMat; tint?: string; kind?: 'door' | 'window' | 'rail'; draft?: true }
+export const RAIL_H = 1.0, RAIL_FRAC = 1 / 3
+export const isRail = (w: Wall | undefined) => w?.kind === 'rail'
+/** the pieces that make a room and carry weight: every piece but a railing */
+export const structural = (walls: Walls): Walls => { let any = false; for (const w of Object.values(walls)) if (w.kind === 'rail') { any = true; break } if (!any) return walls; const o: Record<string, Wall> = {}; for (const [k, w] of Object.entries(walls)) if (w.kind !== 'rail') o[k] = w; return o }
 const keep = (w: Wall, over: Partial<Wall>): Wall => ({ ...w, ...over })
 export const DOOR_H = 2.2, SILL = 1.0, WIN_TOP = 2.2
 export type Walls = Readonly<Record<string, Wall>>
@@ -72,7 +78,7 @@ export function edgeEnds(k: string): [number, number][] {
 }
 /** solid boxes for the walker (y0 sits under the ground like a room's walls) */
 export const wallBoxes = (walls: Walls, groundY: number): Box[] =>
-  Object.entries(walls).filter(([, w]) => !w.draft).map(([k, w]) => { const r = edgeRect(k); return { ...r, y0: w.kind === 'door' ? groundY + DOOR_H : groundY - 0.5, y1: groundY + WALL_H } })   // a door: only its lintel is solid
+  Object.entries(walls).filter(([, w]) => !w.draft).map(([k, w]) => { const r = edgeRect(k); return { ...r, y0: w.kind === 'door' ? groundY + DOOR_H : groundY - 0.5, y1: groundY + (w.kind === 'rail' ? RAIL_H : WALL_H) } })   // a door: only its lintel is solid; a railing stands RAIL_H
 export const wallRects = (walls: Walls): Rect[] => Object.keys(walls).map(edgeRect)
 
 export type Verdict = { ok: true; add: string[]; cost: number } | { ok: false; why: string }
@@ -103,27 +109,30 @@ export function lay(walls: Walls, inv: Inv, add: string[], mat: WallMat): { wall
   return { walls: next, inv: t }
 }
 /** M37 slice 4: draw a run as a PLAN: the new pieces are drafts, nothing leaves the bag (plot-bom.ts lists what building them takes) */
-export function planRun(walls: Walls, add: string[], mat: WallMat): Walls {
-  const next: Record<string, Wall> = { ...walls }; for (const k of add) next[k] = { mat, draft: true }; return next
+export function planRun(walls: Walls, add: string[], mat: WallMat, kind?: 'rail'): Walls {
+  const next: Record<string, Wall> = { ...walls }; for (const k of add) next[k] = { mat, ...(kind ? { kind } : {}), draft: true }; return next
 }
 /** take a run down: every standing piece under it comes down and its plank comes back (what the bag cannot hold stays up) */
 export function raze(walls: Walls, inv: Inv, keys: string[]): { walls: Walls; inv: Inv; down: number; full: boolean } {
   const next: Record<string, Wall> = { ...walls }
   let bag = inv, down = 0, full = false
+  const railOwed = new Map<WallMat, number>()   // M56 (c): a built railing gives back its third of a plank, paid out in whole planks below
   for (const k of keys) {
     const w = next[k]; if (!w) continue
     if (w.draft) { delete next[k]; down++; continue }   // a plan: nothing was spent, nothing comes back
+    if (w.kind === 'rail') { railOwed.set(w.mat, (railOwed.get(w.mat) ?? 0) + RAIL_FRAC); delete next[k]; down++; continue }
     let g = give(bag, WALL_MATS[w.mat].item, 1); if (g.left) { full = true; break }
     if (w.kind === 'window') { const gp = give(g.inv, 'crystal_pane', 1); if (gp.left) { full = true; break }; g = gp }   // a built window's pane comes back too
     bag = g.inv; delete next[k]; down++
   }
+  for (const [m, n] of railOwed) { const whole = Math.floor(n + 1e-9); if (!whole) continue; const g = give(bag, WALL_MATS[m].item, whole); bag = g.inv; if (g.left) full = true }
   return { walls: next, inv: bag, down, full }
 }
 /** load-side: keep only well-formed pieces of a known wood */
 export function adoptWalls(v: unknown): Walls {
   const out: Record<string, Wall> = {}
   if (v && typeof v === 'object') for (const [k, w] of Object.entries(v as Record<string, { mat?: string }>)) {
-    if (parseKey(k) && w && typeof w.mat === 'string' && w.mat in WALL_MATS) { const kd = (w as Wall).kind === 'door' || (w as Wall).kind === 'window' ? { kind: (w as Wall).kind } : {}; out[k] = { mat: w.mat as WallMat, ...(w.mat === 'stucco' && isColour((w as Wall).tint) ? { tint: (w as Wall).tint!.toLowerCase() } : {}), ...kd, ...((w as Wall).draft === true ? { draft: true as const } : {}) } }
+    if (parseKey(k) && w && typeof w.mat === 'string' && w.mat in WALL_MATS) { const kd = (w as Wall).kind === 'door' || (w as Wall).kind === 'window' || (w as Wall).kind === 'rail' ? { kind: (w as Wall).kind } : {}; out[k] = { mat: w.mat as WallMat, ...(w.mat === 'stucco' && isColour((w as Wall).tint) ? { tint: (w as Wall).tint!.toLowerCase() } : {}), ...kd, ...((w as Wall).draft === true ? { draft: true as const } : {}) } }
   }
   return out
 }
@@ -138,7 +147,8 @@ export const ROOF_OVER = 0.3, ROOF_PITCH = 0.72, LOW_WALL = 0.7   // eave overha
 export interface PlotRoom { cells: [number, number][]; rect: Rect | null; key: string }
 const crossKey = (i: number, j: number, di: number, dj: number) => (di ? `v,${i + Math.max(di, 0)},${j}` : `h,${i},${j + Math.max(dj, 0)}`)
 const STEPS: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-export function findRooms(walls: Walls): PlotRoom[] {
+export function findRooms(all: Walls): PlotRoom[] {
+  const walls = structural(all)   // M56 (c): a railing closes no room
   const keys = Object.keys(walls); if (keys.length < 4) return []
   let i0 = Infinity, j0 = Infinity, i1 = -Infinity, j1 = -Infinity
   for (const k of keys) for (const [x, z] of edgeEnds(k)) { i0 = Math.min(i0, x); j0 = Math.min(j0, z); i1 = Math.max(i1, x); j1 = Math.max(j1, z) }
@@ -217,6 +227,7 @@ export type Change = { ok: true; walls: Walls; said: string } | { ok: false; why
 /** a door takes 2 m: the tapped piece and a plain neighbour on its line. Tapping a door fills both halves back in. */
 export function toggleDoor(walls: Walls, k: string): Change {
   const w = walls[k]; if (!w) return { ok: false, why: 'Tap a wall to put a door in it.' }
+  if (w.kind === 'rail') return { ok: false, why: 'A railing has no door: walk round it.' }
   const next: Record<string, Wall> = { ...walls }
   if (w.kind === 'door') {
     next[k] = plain(w)
@@ -232,6 +243,7 @@ export function toggleDoor(walls: Walls, k: string): Change {
 export function toggleWindow(walls: Walls, k: string): Change {
   const w = walls[k]; if (!w) return { ok: false, why: 'Tap a wall to put a window in it.' }
   if (w.kind === 'door') return { ok: false, why: 'That is a doorway.' }
+  if (w.kind === 'rail') return { ok: false, why: 'A railing is too low for a window.' }
   return { ok: true, walls: { ...walls, [k]: w.kind === 'window' ? plain(w) : keep(w, { kind: 'window' }) }, said: w.kind === 'window' ? 'Window filled in.' : 'A window.' }
 }
 /** PAINT a wall (slice 5): only STUCCO takes it, any colour, free (a door's two halves go together). Wood and brick keep their

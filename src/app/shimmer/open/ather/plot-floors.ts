@@ -5,9 +5,9 @@
 // Support rule (nothing floats): a wall on level k must stand on a wall of level k-1 or on a cell of one of its rooms.
 // The roof sits on the TOP level only (the highest level with any wall). PURE: no three, no react.
 import type { Box } from '../terrain-world'
-import { WALL_H, DOOR_H, edgeRect, findRooms, parseKey, adoptWalls, adoptFloors, adoptPaid, type Walls, type Floors, type Paid, type Rect } from './plot-walls'
+import { WALL_H, DOOR_H, RAIL_H, edgeRect, findRooms, parseKey, adoptWalls, adoptFloors, adoptPaid, type Walls, type WallMat, type Floors, type Paid, type Rect } from './plot-walls'
 import { adoptCols, colBoxes, colStandsOn, type Cols } from './plot-cols'
-import { adoptStairs, stairBoxes, stairCellSet, stairStandsOn, type Stairs } from './plot-stairs'
+import { adoptStairs, stairBoxes, stairCellSet, stairStandsOn, holeRails, type Stairs } from './plot-stairs'
 
 export const SLAB_T = 0.2, STOREY = WALL_H + SLAB_T, MAX_LEVELS = 3
 /** the floor surface of level k above the plot's ground (level 0 = 0) */
@@ -45,7 +45,7 @@ export function adoptUpper(v: unknown): Level[] {
 const edgeCells = (k: string): [number, number][] => { const e = parseKey(k)!; return e.o === 'h' ? [[e.i, e.j - 1], [e.i, e.j]] : [[e.i - 1, e.j], [e.i, e.j]] }
 /** does a wall on the level above stand on `below`: a wall on that very edge, or a cell of one of its rooms on either side */
 export function standsOn(below: Walls, key: string): boolean {
-  if (below[key]) return true
+  if (below[key] && below[key].kind !== 'rail') return true   // M56 (c): a railing holds nothing up
   const rooms = findRooms(below); if (!rooms.length) return false
   const cells = new Set(rooms.flatMap(r => r.cells.map(([i, j]) => `${i},${j}`)))
   return edgeCells(key).some(([i, j]) => cells.has(`${i},${j}`))
@@ -66,7 +66,7 @@ export function floating(w: Stacked): string[] {
   return out
 }
 /** the highest level that has any wall: the roof goes there (and nowhere lower) */
-export const topLevel = (w: Stacked): number => { const lv = levelsOf(w); for (let k = lv.length - 1; k > 0; k--) if (Object.keys(lv[k].walls).length) return k; return 0 }   // columns alone carry no roof
+export const topLevel = (w: Stacked): number => { const lv = levelsOf(w); for (let k = lv.length - 1; k > 0; k--) if (Object.values(lv[k].walls).some(x => x.kind !== 'rail')) return k; return 0 }   // columns (or railings) alone carry no roof
 
 /** the cells of a level's BUILT rooms (rooms in `paid`): its slab, the floor above the room below */
 export function slabCells(lv: Level): [number, number][] {
@@ -79,7 +79,8 @@ export function upperBoxes(w: Stacked, groundY: number, shaft?: ReadonlySet<stri
   const out: Box[] = [], lv = levelsOf(w)
   for (let k = 1; k < lv.length; k++) {
     const base = groundY + levelBase(k)
-    for (const [key, x] of Object.entries(lv[k].walls)) if (!x.draft) { const r: Rect = edgeRect(key); out.push({ ...r, y0: x.kind === 'door' ? base + DOOR_H : base - SLAB_T, y1: base + WALL_H }) }
+    for (const [key, x] of Object.entries(lv[k].walls)) if (!x.draft) { const r: Rect = edgeRect(key); out.push({ ...r, y0: x.kind === 'door' ? base + DOOR_H : base - SLAB_T, y1: base + (x.kind === 'rail' ? RAIL_H : WALL_H) }) }
+    for (const h of stairRails(w, k)) { const r: Rect = edgeRect(h.key); out.push({ ...r, y0: base - SLAB_T, y1: base + RAIL_H }) }   // M56 (c): the railing round the stair hole
     const stairHole = stairCellSet(lv[k - 1].stairs)   // M56: the slab is open over the stairs that climb to it
     for (const [i, j] of slabCells(lv[k])) if (!shaft?.has(`${i},${j}`) && !shaft?.has(`${i},${j},${k}`) && !stairHole.has(`${i},${j}`)) out.push({ x0: i, x1: i + 1, z0: j, z1: j + 1, y0: base - SLAB_T, y1: base })
     out.push(...colBoxes(lv[k].cols, base))   // M54
@@ -87,4 +88,13 @@ export function upperBoxes(w: Stacked, groundY: number, shaft?: ReadonlySet<stri
   // M56: every level's built stairs are solid steps from that level's floor (level 0's from the ground)
   for (let k = 0; k < lv.length; k++) { const base = groundY + levelBase(k); for (const [key, st] of Object.entries(lv[k].stairs ?? {})) if (!st.draft) out.push(...stairBoxes(key, st, base)) }
   return out
+}
+
+/** M56 (c): the railing round each stair hole on level k (k >= 1): every edge of the hole that borders this level's slab, except
+ *  the arrival end the stairs climb out of, and except where a piece of this level already stands. Part of the stairs: no cost,
+ *  gone when they go. */
+export function stairRails(w: Stacked, k: number): { key: string; mat: WallMat }[] {
+  if (k < 1 || k >= levelCount(w)) return []
+  const lv = levelOf(w, k), slab = new Set(slabCells(lv).map(([i, j]) => `${i},${j}`))
+  return holeRails(levelOf(w, k - 1).stairs, slab, lv.walls)
 }

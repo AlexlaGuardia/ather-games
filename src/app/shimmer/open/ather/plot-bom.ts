@@ -6,12 +6,12 @@
 // against the bag + the Keepstone bank, and turns the draft into standing walls when everything is there. Parts are REFINED
 // items (planks: Carpentry; bricks and panes: Stonery, furniture.ts STONE_REFINE), never crafted wall pieces.
 // DEFAULTS (Jin's, simple on purpose; change a number here and the list, the Build button and the refund all follow):
-//   a wall piece = 1 plank of its wood per metre   a window = that plank + 1 crystal pane   a door = 2 m of plank wall, no extra
+//   a wall piece = 1 plank of its wood per metre (M56 (c): a railing RAIL_FRAC of that)   a window = that plank + 1 crystal pane   a door = 2 m of plank wall, no extra
 //   a room's floor = 1 goldwood plank per m²       a room's roof = 1 stone brick per m²   (a drawn room's own area, not the eaves)
 import { draftCols, colNeeds, standCols } from './plot-cols'
 import { draftStairs, stairNeeds, standStairs } from './plot-stairs'
 import { adoptFound, plinthPerM2 } from './plot-found'
-import { findRooms, WALL_MATS, FLOOR_PATS, FLOOR_PER_M2, roomFloor, floorByKey, type Walls, type Paid, type Floors } from './plot-walls'
+import { findRooms, RAIL_FRAC, WALL_MATS, FLOOR_PATS, FLOOR_PER_M2, roomFloor, floorByKey, type Walls, type Paid, type Floors } from './plot-walls'
 import { payCost, haveFor } from './rooms'
 import { give, itemDef, type Inv } from '../shared/inventory'
 import type { Bank } from './garden-bank'
@@ -43,7 +43,7 @@ export const roomCost = (m2: number, floorItem: string = FLOOR_ITEM, roofed = tr
  *  that is not yet in `paid`. Built things cost nothing here: they were paid for (or grandfathered). */
 export function planNeeds(walls: Walls, paid: Paid | undefined, floors?: Floors, roofed = true): { needs: Need[]; pieces: number; rooms: number } {
   const m = new Map<string, number>(); let pieces = 0
-  for (const w of Object.values(walls)) if (w.draft) { pieces++; add(m, WALL_MATS[w.mat].item, AMOUNTS.wallPerM); if (w.kind === 'window') add(m, CRYSTAL_PANE, AMOUNTS.panePerWindow) }
+  for (const w of Object.values(walls)) if (w.draft) { pieces++; add(m, WALL_MATS[w.mat].item, AMOUNTS.wallPerM * (w.kind === 'rail' ? RAIL_FRAC : 1)); if (w.kind === 'window') add(m, CRYSTAL_PANE, AMOUNTS.panePerWindow) }
   const rooms = findRooms(walls).filter(r => !(paid ?? {})[r.key])
   for (const r of rooms) for (const c of roomCost(r.cells.length, FLOOR_PATS[roomFloor(floors, r).pat].item, roofed)) add(m, c.id, c.n)   // the floor's pattern picks its base material
   return { needs: lines(m), pieces, rooms: rooms.length }

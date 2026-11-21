@@ -79,3 +79,23 @@ export function stairStandsOn(levelWalls: Walls, k: string, s: Stair): boolean {
   const cells = new Set(findRooms(levelWalls).flatMap(r => r.cells.map(([a, b]) => `${a},${b}`))), p = parseStair(k)!
   return stairCells(p.i, p.j, s.dir).every(([a, b]) => cells.has(`${a},${b}`))
 }
+
+/** M56 (c): the edges round the holes these stairs cut in the floor above (keys as plot-walls edges): an edge of a hole cell whose
+ *  other side is floor (`slab`, the level above's slab cells) and not hole, minus the arrival end (the edge the top step leads out
+ *  through) and minus any edge `walls` (that level's pieces) already holds. */
+export function holeRails(st: Stairs | undefined, slab: ReadonlySet<string>, walls: Walls): { key: string; mat: WallMat }[] {
+  const hole = stairCellSet(st), out: { key: string; mat: WallMat }[] = [], seen = new Set<string>()
+  for (const [k, s] of Object.entries(st ?? {})) {
+    if (s.draft) continue
+    const p = parseStair(k)!, [fx, fz] = F[s.dir], cells = stairCells(p.i, p.j, s.dir)
+    const top = new Set(cells.slice((RUN - 1) * WIDTH).map(([a, b]) => `${a + fx},${b + fz}`))   // the cells the top step leads onto
+    for (const [a, b] of cells) for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const n = `${a + di},${b + dj}`
+      if (hole.has(n) || !slab.has(n) || (top.has(n) && di === fx && dj === fz)) continue
+      const key = di ? `v,${a + Math.max(di, 0)},${b}` : `h,${a},${b + Math.max(dj, 0)}`
+      if (walls[key] || seen.has(key)) continue
+      seen.add(key); out.push({ key, mat: s.mat })
+    }
+  }
+  return out
+}
