@@ -10,7 +10,7 @@ import { gunzipSync } from 'node:zlib'
 import { makeRegion, type RegionMeta } from '../src/app/shimmer/open/region'
 import { cachedPlan } from '../src/app/shimmer/open/foot-solids'
 import { shopDoorPoint } from '../src/app/shimmer/open/towns/shop-door'
-import { TABLE } from '../src/app/shimmer/open/ather/rooms'
+import { heldUse, placesFromHand } from '../src/app/shimmer/open/ather/held-use'
 import { FURNITURE } from '../src/app/shimmer/open/ather/furniture'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/decor')
@@ -58,13 +58,10 @@ await p.keyboard.press('Escape'); await wait(600)
 res.exchange = await visit('citadel', 'grand-exchange'); await shot('dc-3-exchange')
 res.boughtLamp = await click('[data-decor-item="mana_cell_lamp"] button'); await wait(700)
 res.afterExchange = { marks: (await read('ather:trade:trial-ledger'))?.marks, bag: await bag() }
-// 3. home: the planning table's Furnish list offers both
-await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 240000 })
-await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await wait(2500)
-await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 4), TABLE.x + 1.6, TABLE.z + 1.6); await wait(2000); await shot('_f')
-await p.keyboard.press('e'); await wait(1000)
-res.furnish = await p.evaluate(() => [...document.querySelectorAll('[data-piece]')].map(e => e.getAttribute('data-piece')))
-await shot('dc-4-furnish')
+// 3. home: both place from the hand on the plot. The planning table's Furnish list is gone since M45 (d030f8cd, 11-20:
+// furniture places from the hand; m45-hand-check proves the ghost/E-set path in the browser), so the bought items must be
+// pieces the held-item table places, read from the same pure table the page uses.
+res.furnish = Object.keys((res.afterExchange as { bag: Record<string, number> }).bag).filter(id => placesFromHand(heldUse(id, 'plot'))).sort()
 res.errs = errs
 console.log(JSON.stringify(res))
 const a = res.afterSmithy as { marks: number; bag: Record<string, number> }, b2 = res.afterExchange as typeof a
@@ -72,5 +69,5 @@ const L = FURNITURE.iron_lantern.sold!.price, M = FURNITURE.mana_cell_lamp.sold!
 const pass = res.smithy === true && a.marks === 20_000 - L && a.bag.iron_lantern === 1
   && res.exchange === true && b2.marks === 20_000 - L - M && b2.bag.mana_cell_lamp === 1
   && JSON.stringify(res.furnish) === JSON.stringify(['iron_lantern', 'mana_cell_lamp']) && errs.length === 0
-console.log(pass ? 'PASS: Iron Lantern at the Smithy + Mana-cell Lamp at the Grand Exchange for Marks → both offered at the planning table' : 'FAIL')
+console.log(pass ? 'PASS: Iron Lantern at the Smithy + Mana-cell Lamp at the Grand Exchange for Marks → both place from the hand on the plot' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)
