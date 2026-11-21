@@ -15,6 +15,7 @@ import * as THREE from 'three'
 import { guides, type Zone } from './shared/journal'
 
 const TRAIL_REACH = 48, TRAIL_STEP = 1.6, MAX_DOTS = 3 * Math.ceil(TRAIL_REACH / TRAIL_STEP), MAX_BEACONS = 8
+const FACE_DEG = 18, FADE_S = 0.3
 const EMBER = new THREE.Color('#ff9a4a'), GOLD = new THREE.Color('#e8cf8a')
 
 export function QuestGuide({ zone, ground, feetY }: { zone: Zone; ground: (x: number, z: number) => number; feetY?: () => number | null }) {
@@ -30,17 +31,29 @@ export function QuestGuide({ zone, ground, feetY }: { zone: Zone; ground: (x: nu
   }), [])
   // a beam: an open cylinder, base at the origin, 1 m tall (scaled up)
   const beamGeo = useMemo(() => new THREE.CylinderGeometry(0.55, 0.9, 1, 12, 1, true).translate(0, 0.5, 0), [])
-  useFrame(({ clock }) => {
+  // the world pillar is OFF unless ?pillar=1 (A/B); the trail fades in only while the camera faces its mark
+  const pillar = useMemo(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('pillar') === '1', [])
+  const fades = useRef(new Map<string, number>()), fwd = useMemo(() => new THREE.Vector3(), [])
+  useFrame(({ clock }, dt) => {
     const { m, q, p, s, c, flat } = tmp
     const g = guides(zone), t = clock.elapsedTime
     const fx = camera.position.x, fz = camera.position.z
     const feet = feetY?.() ?? camera.position.y - 1.62
     let nd = 0
+    camera.getWorldDirection(fwd); const fl = Math.hypot(fwd.x, fwd.z) || 1
+    const probe = { trailOpacity: 0, glareBearing: null as number | null, facing: false, pillars: 0 }
+    const am = g.markers.find(k => k.active) ?? g.trails.find(k => k.active)
+    if (am) probe.glareBearing = ((Math.atan2(am.x - fx, -(am.z - fz)) * 180) / Math.PI + 360) % 360
     for (const tr of g.trails) {
       const dx = tr.x - fx, dz = tr.z - fz, dist = Math.hypot(dx, dz)
-      if (dist < 2) continue
+      const face = dist > 0.01 && Math.acos(Math.max(-1, Math.min(1, ((fwd.x / fl) * dx + (fwd.z / fl) * dz) / dist))) < (FACE_DEG * Math.PI) / 180
+      let op = fades.current.get(tr.id) ?? 0
+      op = face ? Math.min(1, op + dt / FADE_S) : Math.max(0, op - dt / FADE_S)
+      fades.current.set(tr.id, op)
+      if (tr.active) { probe.trailOpacity = op; probe.facing = face }
+      if (dist < 2 || op <= 0) continue
       const ux = dx / dist, uz = dz / dist, reach = Math.min(TRAIL_REACH, dist - 1)
-      c.copy(tr.active ? EMBER : GOLD)
+      c.copy(tr.active ? EMBER : GOLD).multiplyScalar(op * op * (3 - 2 * op))
       // the marks flow toward the target: their phase slides forward with time
       const phase = (t * 2.2) % TRAIL_STEP
       for (let d = 1.4 + phase; d < reach && nd < MAX_DOTS; d += TRAIL_STEP) {
@@ -52,8 +65,9 @@ export function QuestGuide({ zone, ground, feetY }: { zone: Zone; ground: (x: nu
       }
     }
     if (dots.current) { dots.current.count = nd; dots.current.instanceMatrix.needsUpdate = true; if (dots.current.instanceColor) dots.current.instanceColor.needsUpdate = true }
+    ;(window as unknown as { __questGuide?: unknown }).__questGuide = probe
     let nb = 0
-    for (const mk of g.markers.slice(0, MAX_BEACONS)) {
+    for (const mk of pillar ? g.markers.slice(0, MAX_BEACONS) : []) {
       const y = ground(mk.x, mk.z)
       c.copy(mk.active ? EMBER : GOLD)
       // arriving: the pillar thins and the ring shrinks away inside ~14 m, so standing at the mark is not standing in a light
@@ -64,6 +78,7 @@ export function QuestGuide({ zone, ground, feetY }: { zone: Zone; ground: (x: nu
       p.set(mk.x, y + 0.1, mk.z); m.compose(p, flat, s.set(r, r, 1)); rings.current?.setMatrixAt(nb, m); rings.current?.setColorAt(nb, c)
       nb++
     }
+    probe.pillars = nb
     for (const mesh of [beams.current, rings.current]) if (mesh) { mesh.count = nb; mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true }
   })
   return (

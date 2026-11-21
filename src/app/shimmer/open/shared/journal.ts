@@ -94,4 +94,4 @@ export function guides(zone: Zone) {
 }
 /** Compass marks for the template's `marks` ref (the active one in ember, the rest in ink). */
 export const questMarks = (zone: Zone) =>
-  guides(zone).markers.map(m => ({ x: m.x, z: m.z, color: m.active ? '#e0823f' : '#8a6a48', title: m.title }))
+  guides(zone).markers.map(m => ({ x: m.x, z: m.z, color: m.active ? '#e0823f' : '#8a6a48', title: m.title, glare: m.active || undefined }))

@@ -569,7 +569,7 @@ export const relDeg = (bearing: number, heading: number) => ((bearing - heading 
 export type CompassPose = { x: number; z: number; yaw: number }
 /** The compass strip's width per size (its plate adds the rim on each side). */
 export const compassWidth = (size: HudSize) => (size === 'phone' ? 190 : size === 'compact' ? 240 : 260)   // 260: centred on the screen at 1280 beside the top-left bar
-export type CompassMark = { x: number; z: number; color: string; title?: string }
+export type CompassMark = { x: number; z: number; color: string; title?: string; /** a sun-glint instead of a pip (the active quest): brightens as you face it */ glare?: boolean }
 const CARD: Record<number, string> = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' }
 
 /** A strip that slides under a fixed notch: 120° of view, a tick every 15°, cardinals in the display face (N in the
@@ -599,10 +599,22 @@ export function HearthCompass({ face, pose, marks, size = 'wide', top, centerX }
           const el = box.children[i] as HTMLDivElement, m = ms[i]
           if (!m) { el.style.display = 'none'; continue }
           const r = relDeg(bearingDeg(p.x, p.z, m.x, m.z), h), lim = FIELD / 2 - 3, inView = Math.abs(r) <= lim
-          el.style.display = 'block'; el.style.background = m.color; el.title = m.title ?? ''
-          el.style.boxShadow = `0 0 0 1.5px ${face === 'full' ? '#3a2716' : 'rgba(0,0,0,.6)'}`
+          el.style.display = 'block'; el.title = m.title ?? ''
           el.style.left = `${(W / 2 + Math.max(-lim, Math.min(lim, r)) * PPD).toFixed(1)}px`
-          el.style.opacity = inView ? '1' : '0.45'
+          if (m.glare) {
+            // the quest's GLARE: a warm radial glow with a small four-point star flare, brighter the nearer it sits to the notch
+            const bright = inView ? 0.55 + 0.45 * Math.max(0, 1 - Math.abs(r) / 25) : 0.3
+            if (!el.dataset.star) { el.dataset.star = '1'; el.innerHTML = '<i style="position:absolute;left:0;right:0;top:50%;height:1px;margin-top:-.5px;background:#fff3d6"></i><i style="position:absolute;top:0;bottom:0;left:50%;width:1px;margin-left:-.5px;background:#fff3d6"></i>' }
+            el.dataset.glare = '1'; el.dataset.rel = r.toFixed(1); el.dataset.bright = bright.toFixed(2)
+            el.style.width = '30px'; el.style.height = '30px'; el.style.margin = '-15px'; el.style.borderRadius = '30px'
+            el.style.background = 'radial-gradient(circle, #fff3d6 0%, #ffb866 18%, rgba(255,154,74,.55) 40%, rgba(255,154,74,0) 70%)'
+            el.style.boxShadow = 'none'; el.style.opacity = bright.toFixed(2)
+          } else {
+            if (el.dataset.glare) { delete el.dataset.glare; el.dataset.star = ''; el.innerHTML = ''; el.style.width = '9px'; el.style.height = '9px'; el.style.margin = '-4.5px'; el.style.borderRadius = '9px' }
+            el.style.background = m.color
+            el.style.boxShadow = `0 0 0 1.5px ${face === 'full' ? '#3a2716' : 'rgba(0,0,0,.6)'}`
+            el.style.opacity = inView ? '1' : '0.45'
+          }
         }
       }
     }
