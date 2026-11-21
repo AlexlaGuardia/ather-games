@@ -32,6 +32,8 @@ const before = (await fetchEditsFile()).tiles ?? {}
 const orig: Record<string, Record<string, number>> = Object.fromEntries(ring.map(n => [n, before[n] ?? {}]))
 const beforeW = ((await fetchEditsFile()) as { water?: Record<string, Record<string, number>> }).water ?? {}
 const origW: Record<string, Record<string, number>> = Object.fromEntries(ring.map(n => [n, beforeW[n] ?? {}]))
+const beforeF = ((await fetchEditsFile()) as { falls?: Record<string, Record<string, number>> }).falls ?? {}
+const origF: Record<string, Record<string, number>> = Object.fromEntries(ring.map(n => [n, beforeF[n] ?? {}]))
 console.log(`tile ${TILE} (${T.tx},${T.ty}); ring ${ring.length} tiles; edits there before: ${ring.filter(n => before[n]).join(', ') || 'none'}`)
 
 const owner = await br.createBrowserContext()
@@ -97,6 +99,13 @@ try {
   const lv = await p.evaluate(`window.__terrain.levelAt(${Q.x}, ${Q.z})`) as number | null
   const floorY = await p.evaluate(`window.__terrain.heightAt(${Q.x}, ${Q.z})`) as number
   ok(lv !== null && Math.abs(lv - +rimY.toFixed(1)) < 0.01 && lv - floorY > 4, `the pond: level ${lv} m over a bowl floor ${floorY.toFixed(1)} m`)
+  // FALLS (slice 3): an UPPER pond 2 m higher right beside the lake = an automatic fall; a waterfall LINE along the ridge crest
+  await p.evaluate(`window.__terrain.water(${Q.x + 24}, ${Q.z}, 10, ${(+rimY.toFixed(1) + 2).toFixed(1)})`)
+  await p.evaluate(`window.__terrain.fall([[${R.x - 10}, ${R.z}], [${R.x}, ${R.z}], [${R.x + 10}, ${R.z}]], 2)`)
+  const sh = await p.evaluate('window.__terrain.sheets()') as { auto: boolean; top: number; bottom: number }[]
+  const au = sh.filter(q => q.auto), li = sh.filter(q => !q.auto)
+  ok(au.length >= 1 && au.every(q => Math.abs(q.top - q.bottom - 2) < 0.05), `the upper pond spills into the lake: ${au.length} automatic sheet(s), each 2 m (${au.map(q => (q.top - q.bottom).toFixed(2)).join(',')})`)
+  ok(li.length >= 1 && li.every(q => q.top - q.bottom > 5), `the line on the crest falls to the foot: ${li.length} sheet(s), drops ${li.map(q => (q.top - q.bottom).toFixed(1)).join(',')} m`)
   await sleep(500); await p.screenshot({ path: `${out}/editor.png` })
   const saved = await p.evaluate('window.__terrain.save()')
   const dirtyLeft = await p.evaluate('window.__terrain.dirty()') as string[]
@@ -105,6 +114,8 @@ try {
   ok(Object.keys(after[TILE] ?? {}).length > 50, `the world file holds the tile's edits (${Object.keys(after[TILE] ?? {}).length} vertices)`)
   const afterW = ((await fetchEditsFile()) as { water?: Record<string, Record<string, number>> }).water ?? {}
   ok(Object.keys(afterW[TILE] ?? {}).length > 40, `...and its water (${Object.keys(afterW[TILE] ?? {}).length} cells)`)
+  const afterF = ((await fetchEditsFile()) as { falls?: Record<string, Record<string, number>> }).falls ?? {}
+  ok(Object.keys(afterF[TILE] ?? {}).length === 4, `...and its waterfall line (${Object.keys(afterF[TILE] ?? {}).length} entries: 3 points + width)`)
 
   // ── C. the game walks on it ──
   const g = await owner.newPage(); await g.setViewport({ width: 800, height: 500 })
@@ -129,10 +140,18 @@ try {
   ok(flank > MAX_WALK_GRADIENT, `the ridge's flank is steeper than the walker climbs (${flank.toFixed(2)} > ${MAX_WALK_GRADIENT}): it blocks`)
   // the pond in the game: drop the keeper into its middle; it SWIMS (the walker's water boxes), at the painted level
   await g.mouse.click(400, 250); await sleep(800)   // past the click-to-play card: the walker only ticks in play
-  await g.evaluate(`window.__ather.tp(${wx + Q.x}, ${wz + Q.z}, 0, ${(lv ?? 0) + 1})`)
+  await g.evaluate(`window.__ather.tp(${wx + Q.x}, ${wz + Q.z}, 0, ${(lv ?? 0) - 2})`)   // 2 m under the surface: chest + feet in = swimming (a drop from above can settle treading)
   let sw = { swimming: false, py: NaN }
   for (let t = 0; t < 20 && !sw.swimming; t++) { await sleep(500); sw = await g.evaluate('window.__ather.state()') as typeof sw }
   ok(!!sw.swimming, `the keeper swims in the pond (swimming ${sw.swimming}, feet ${sw.py?.toFixed?.(2)} m vs level ${lv} over floor ${floorY.toFixed(1)})`)
+  const fx = await g.evaluate(`window.__wildsFx?.[${JSON.stringify(TILE)}] ?? null`) as { sheets: number; auto: number; lines: number } | null
+  ok(!!fx && fx.auto === au.length && fx.lines === li.length, `the game draws the same falls: ${JSON.stringify(fx)} (editor auto ${au.length}, lines ${li.length})`)
+  await g.evaluate(`window.__ather.tp(${wx + Q.x + 16}, ${wz + Q.z + 20}, 0, undefined)`); await sleep(1500)
+  await g.evaluate('window.__ather.look(0, -0.3)'); await sleep(2500)
+  await g.screenshot({ path: `${out}/game-fall.png` })
+  await g.evaluate(`window.__ather.tp(${wx + R.x}, ${wz + R.z + 30}, 0, undefined)`); await sleep(1500)
+  await g.evaluate('window.__ather.look(0, -0.05)'); await sleep(2500)
+  await g.screenshot({ path: `${out}/game-line.png` })
   await g.evaluate(`window.__ather.tp(${wx + Q.x}, ${wz + Q.z + 26}, 0, undefined)`); await sleep(1500)
   await g.evaluate('window.__ather.look(0, -0.45)'); await sleep(2500)
   await g.screenshot({ path: `${out}/game-pond.png` })
@@ -145,11 +164,11 @@ try {
     await p.goto(`${url}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 120000 })
     // ⚠ /owner 307s to the ABSOLUTE https://ather.games/room: stand on the target origin again, or a relative POST goes to prod
     await p.goto(`${url}/shimmer/open/wilds-edits`, { waitUntil: 'domcontentloaded', timeout: 120000 })
-    const res = await p.evaluate(async (o: Record<string, Record<string, number>>, w: Record<string, Record<string, number>>) => {
-      return [(await fetch('/shimmer/save-wilds-edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiles: o, water: w }) })).status]
-    }, orig, origW)
-    const nowF = await fetchEditsFile() as { tiles?: Record<string, Record<string, number>>; water?: Record<string, Record<string, number>> }, now = nowF.tiles ?? {}, nowW = nowF.water ?? {}
-    ok(res.every(s => s === 200) && ring.every(n => JSON.stringify(now[n] ?? {}) === JSON.stringify(orig[n]) && JSON.stringify(nowW[n] ?? {}) === JSON.stringify(origW[n])), `restored the ${ring.length} ring tiles to their edits before the check (POST ${res.join(',')})`)
+    const res = await p.evaluate(async (o: Record<string, Record<string, number>>, w: Record<string, Record<string, number>>, f: Record<string, Record<string, number>>) => {
+      return [(await fetch('/shimmer/save-wilds-edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiles: o, water: w, falls: f }) })).status]
+    }, orig, origW, origF)
+    const nowF = await fetchEditsFile() as { tiles?: Record<string, Record<string, number>>; water?: Record<string, Record<string, number>> }, now = nowF.tiles ?? {}, nowW = nowF.water ?? {}, nowF2 = (nowF as { falls?: Record<string, Record<string, number>> }).falls ?? {}
+    ok(res.every(s => s === 200) && ring.every(n => JSON.stringify(now[n] ?? {}) === JSON.stringify(orig[n]) && JSON.stringify(nowW[n] ?? {}) === JSON.stringify(origW[n]) && JSON.stringify(nowF2[n] ?? {}) === JSON.stringify(origF[n])), `restored the ${ring.length} ring tiles to their edits before the check (POST ${res.join(',')})`)
   } catch (e) { ok(false, `RESTORE FAILED: ${String(e)} — fix world/wilds-edits.json by hand`) }
   await br.close()
 }

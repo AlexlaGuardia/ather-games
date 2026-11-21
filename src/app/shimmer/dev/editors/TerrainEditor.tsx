@@ -15,15 +15,15 @@ import { loadWilds, type WildsMeta } from '../../open/ather/wilds'
 import { loadIndex, makeWorld, zonesOf, tileOf, TILE_M, type WildsWorld } from '../../open/ather/wilds-world'
 import { loadNetwork, clearing, roadField } from '../../open/ather/network'
 import { makeVoids } from '../../open/ather/wilds-voids'
-import { applyBrush, mergeEdits, fetchLayer, saveTiles, EditHistory, BRUSHES, paintWater, foldWater, WATER_PREFIX, type Brush, type Edits, type BrushTile, type WaterMap } from '../../open/ather/wilds-edits'
+import { applyBrush, mergeEdits, fetchLayer, saveTiles, EditHistory, BRUSHES, paintWater, foldWater, WATER_PREFIX, FALLS_PREFIX, addFall, removeFallsNear, fallLines, fallSheets, ponds, type Brush, type Edits, type BrushTile, type WaterMap } from '../../open/ather/wilds-edits'
 
 interface Base { meta: WildsMeta; tx: number; ty: number; h: Float32Array; voided?: Uint8Array }
-type Tool = Brush | 'water' | 'dry'
-const TOOLS: Tool[] = [...BRUSHES, 'water', 'dry']
-const TOOL_KEY: Record<Tool, string> = { raise: 'Raise', lower: 'Lower', flatten: 'Flatten', smooth: 'Smooth', water: 'Water', dry: 'Dry' }
+type Tool = Brush | 'water' | 'dry' | 'falls'
+const TOOLS: Tool[] = [...BRUSHES, 'water', 'dry', 'falls']
+const TOOL_KEY: Record<Tool, string> = { raise: 'Raise', lower: 'Lower', flatten: 'Flatten', smooth: 'Smooth', water: 'Water', dry: 'Dry', falls: 'Falls' }
 // the editor keeps heights and water in ONE store (so one undo history covers both): '<tile>' = heights, 'water/<tile>' = water
-const wkey = (t: string) => WATER_PREFIX + t
-const tileOfKey = (k: string) => k.startsWith(WATER_PREFIX) ? k.slice(WATER_PREFIX.length) : k
+const wkey = (t: string) => WATER_PREFIX + t, fkey = (t: string) => FALLS_PREFIX + t
+const tileOfKey = (k: string) => k.startsWith(WATER_PREFIX) ? k.slice(WATER_PREFIX.length) : k.startsWith(FALLS_PREFIX) ? k.slice(FALLS_PREFIX.length) : k
 const TICK_MS = 50
 
 // hypsometric ramp (metres above the water line) -> rgb 0..1
@@ -44,6 +44,8 @@ export default function TerrainEditor() {
   const [brush, setBrush] = useState<Tool>('raise')
   const [level, setLevel] = useState<number | null>(null)   // water level (m, absolute); null = the first Water click picks ground + 1 m
   const [picking, setPicking] = useState(false)
+  const [fallW, setFallW] = useState(1.5)
+  const line = useRef<[number, number][] | null>(null)   // the waterfall line being drawn (tile-local)
   const [radius, setRadius] = useState(16)
   const [strength, setStrength] = useState(0.2)
   const [showEdits, setShowEdits] = useState(true)
@@ -60,7 +62,7 @@ export default function TerrainEditor() {
   const dirtyRef = useRef(new Set<string>())
   const canvas = useRef<HTMLCanvasElement>(null)
   const paint = useRef<{ x: number; z: number; target?: number; timer: number } | null>(null)
-  const opts = useRef({ brush, radius, strength, level, picking }); opts.current = { brush, radius, strength, level, picking }
+  const opts = useRef({ brush, radius, strength, level, picking, fallW }); opts.current = { brush, radius, strength, level, picking, fallW }
   const tileRef = useRef(tile); tileRef.current = tile
 
   // ── the world: index + network + voids, then the edits file ──
@@ -71,7 +73,7 @@ export default function TerrainEditor() {
       const w = makeWorld(idx); if (nw) { w.clear = clearing(nw); w.roads = roadField(nw) }
       w.voids = makeVoids(idx, nw ?? null)
       worldRef.current = w
-      const store: Edits = { ...layer.edits }; for (const [t, m] of Object.entries(layer.water)) store[wkey(t)] = { ...m }
+      const store: Edits = { ...layer.edits }; for (const [t, m] of Object.entries(layer.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(layer.falls)) store[fkey(t)] = { ...m }
       edits.current = store
       setTiles(idx.tiles.filter(t => t.land > 0.02).map(t => ({ name: t.name, tx: t.tx, ty: t.ty, land: t.land })).sort((a, b) => a.ty - b.ty || a.tx - b.tx))
       setStatus('')
@@ -143,12 +145,20 @@ export default function TerrainEditor() {
       const o = k * 4; px[o] = Math.min(255, r * 255); px[o + 1] = Math.min(255, g * 255); px[o + 2] = Math.min(255, b * 255); px[o + 3] = 255
     }
     ctx.putImageData(img, 0, 0)
+    // falls: every sheet the game will draw (auto from the ponds + the drawn lines), white; drawn lines get their points
+    const hAtL = (x: number, z: number) => { const fx = Math.min(nx - 1.001, Math.max(0, (x + B.meta.sizeX / 2) / cell)), fz = Math.min(nz - 1.001, Math.max(0, (z + B.meta.sizeZ / 2) / cell)), i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j; return (H[j * nx + i] * (1 - u) + H[j * nx + i + 1] * u) * (1 - v) + (H[(j + 1) * nx + i] * (1 - u) + H[(j + 1) * nx + i + 1] * u) * v }
+    const lines = fallLines(edits.current[fkey(tileRef.current)]), sheets = fallSheets(B.meta, H, hAtL, ponds(B.meta, H, Wm).cells, lines)
+    const P = (x: number, z: number): [number, number] => [(x + B.meta.sizeX / 2) / cell, (z + B.meta.sizeZ / 2) / cell]
+    ctx.lineCap = 'round'
+    for (const q of sheets) { ctx.strokeStyle = q.auto ? 'rgba(255,255,255,0.95)' : 'rgba(255,250,210,0.95)'; ctx.lineWidth = q.auto ? 1 : 1.5; ctx.beginPath(); ctx.moveTo(...P(q.ax, q.az)); ctx.lineTo(...P(q.bx, q.bz)); ctx.stroke() }
+    for (const L of lines) { ctx.fillStyle = 'rgba(255,240,170,0.9)'; for (const p of L.pts) { const [a, b] = P(p[0], p[1]); ctx.fillRect(a - 0.5, b - 0.5, 1, 1) } }
+    const cur = line.current; if (cur && cur.length > 1) { ctx.strokeStyle = 'rgba(255,220,120,1)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(...P(cur[0][0], cur[0][1])); for (const p of cur.slice(1)) ctx.lineTo(...P(p[0], p[1])); ctx.stroke() }
   }, [showEdits])
   useEffect(() => { if (ready) draw() }, [ready, rev, draw])
   const raf = useRef(0)
   const redraw = useCallback(() => { if (!raf.current) raf.current = requestAnimationFrame(() => { raf.current = 0; draw() }) }, [draw])
 
-  const allKeys = () => [...bases.current.keys()].flatMap(n => [n, wkey(n)])
+  const allKeys = () => [...bases.current.keys()].flatMap(n => [n, wkey(n), fkey(n)])
   const markDirty = (names: string[]) => { if (!names.length) return; for (const n of names) dirtyRef.current.add(n); setDirty([...dirtyRef.current]) }
 
   // ── the brush ──
@@ -160,7 +170,11 @@ export default function TerrainEditor() {
       const d = paintWater(brushTiles(), x, z, o.radius, lv), pre: Record<string, WaterMap> = {}
       for (const [t, m] of Object.entries(d)) pre[wkey(t)] = m
       markDirty(foldWater(edits.current, pre, o.brush === 'dry'))
-    } else {
+      if (o.brush === 'dry') for (const [name, B] of bases.current) {   // Dry also clears waterfall lines under the brush
+        const rm = removeFallsNear(edits.current[fkey(name)], x - B.tx * TILE_M, z - B.ty * TILE_M, o.radius)
+        if (Object.keys(rm).length) markDirty(mergeEdits(edits.current, { [fkey(name)]: rm }))
+      }
+    } else if (o.brush !== 'falls') {
       const d = applyBrush(heightAt, brushTiles(), edits.current, { kind: o.brush, x, z, r: o.radius, s: o.strength, target })
       markDirty(mergeEdits(edits.current, d))
     }
@@ -177,6 +191,7 @@ export default function TerrainEditor() {
     if (e.button !== 0 || !ready) return
     const p = toWorld(e); if (!p) return
     if (opts.current.picking) { setLevel(Math.round(heightAt(p.x, p.z) * 10) / 10); setPicking(false); return }
+    if (opts.current.brush === 'falls') { const b = bases.current.get(tileRef.current)!; ;(e.target as Element).setPointerCapture(e.pointerId); line.current = [[p.x - b.tx * TILE_M, p.z - b.ty * TILE_M]]; return }
     ;(e.target as Element).setPointerCapture(e.pointerId)
     hist.current.begin(edits.current, allKeys())
     let target = opts.current.brush === 'flatten' ? heightAt(p.x, p.z) : undefined
@@ -193,17 +208,25 @@ export default function TerrainEditor() {
     const B = bases.current.get(tileRef.current)
     setHover({ x: Math.round(p.x - (B ? B.tx * TILE_M : 0)), z: Math.round(p.z - (B ? B.ty * TILE_M : 0)), h: heightAt(p.x, p.z), d: 0 })
     if (paint.current) { paint.current.x = p.x; paint.current.z = p.z }
+    if (line.current && B) { const q: [number, number] = [p.x - B.tx * TILE_M, p.z - B.ty * TILE_M], l = line.current[line.current.length - 1]; if (Math.hypot(q[0] - l[0], q[1] - l[1]) >= 3) { line.current.push(q); redraw() } }
   }
-  const endStroke = () => { const q = paint.current; if (!q) return; clearInterval(q.timer); paint.current = null; hist.current.commit(); setRev(r => r + 1) }
+  const commitLine = (pts: [number, number][], w: number, name = tileRef.current) => {
+    const k = fkey(name), add = addFall(edits.current[k], pts, w); if (!Object.keys(add).length) return false
+    hist.current.begin(edits.current, [k]); markDirty(mergeEdits(edits.current, { [k]: add })); hist.current.commit(); setRev(r => r + 1); return true
+  }
+  const endStroke = () => {
+    if (line.current) { const pts = line.current; line.current = null; if (!commitLine(pts, opts.current.fallW)) redraw(); return }
+    const q = paint.current; if (!q) return; clearInterval(q.timer); paint.current = null; hist.current.commit(); setRev(r => r + 1) }
 
   const undo = useCallback(() => { markDirty(hist.current.undo(edits.current)); setRev(r => r + 1) }, [])
   const redo = useCallback(() => { markDirty(hist.current.redo(edits.current)); setRev(r => r + 1) }, [])
-  const resetTile = () => { hist.current.begin(edits.current, [tile, wkey(tile)]); delete edits.current[tile]; delete edits.current[wkey(tile)]; hist.current.commit(); markDirty([tile, wkey(tile)]); setRev(r => r + 1) }
+  const resetTile = () => { hist.current.begin(edits.current, [tile, wkey(tile), fkey(tile)]); delete edits.current[tile]; delete edits.current[wkey(tile)]; delete edits.current[fkey(tile)]; hist.current.commit(); markDirty([tile, wkey(tile), fkey(tile)]); setRev(r => r + 1) }
   const save = useCallback(async (): Promise<boolean> => {
     const names = [...dirtyRef.current]; if (!names.length) return true
     setStatus(`saving ${names.length} tile${names.length > 1 ? 's' : ''}…`)
-    const hs = names.filter(n => !n.startsWith(WATER_PREFIX)), ws = names.filter(n => n.startsWith(WATER_PREFIX))
-    const ok = await saveTiles(Object.fromEntries(hs.map(n => [n, edits.current[n] ?? {}])), Object.fromEntries(ws.map(n => [tileOfKey(n), edits.current[n] ?? {}])))
+    const ws = names.filter(n => n.startsWith(WATER_PREFIX)), fs = names.filter(n => n.startsWith(FALLS_PREFIX)), hs = names.filter(n => !ws.includes(n) && !fs.includes(n))
+    const pick = (l: string[]) => Object.fromEntries(l.map(n => [tileOfKey(n), edits.current[n] ?? {}]))
+    const ok = await saveTiles(pick(hs), pick(ws), pick(fs))
     if (ok) for (const n of names) dirtyRef.current.delete(n)
     setDirty([...dirtyRef.current])
     setStatus(ok ? `saved ${[...new Set(names.map(tileOfKey))].join(', ')} · live on the next Wilds load` : 'save FAILED (nothing written; try again)')
@@ -218,7 +241,7 @@ export default function TerrainEditor() {
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo() }
       else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo() }
       else if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); save() }
-      else if (!mod && e.key >= '1' && e.key <= '6') setBrush(TOOLS[+e.key - 1])
+      else if (!mod && e.key >= '1' && e.key <= '7') setBrush(TOOLS[+e.key - 1])
       else if (e.key === '[') setRadius(r => Math.max(4, r - 4))
       else if (e.key === ']') setRadius(r => Math.min(80, r + 4))
     }
@@ -256,6 +279,10 @@ export default function TerrainEditor() {
       },
       /** the water level painted at a point (m) or null */
       levelAt: (lx: number, lz: number) => { const b = B(); if (!b) return null; const { cell, sizeX, sizeZ, nx } = b.meta, i = Math.floor((lx + sizeX / 2) / cell), j = Math.floor((lz + sizeZ / 2) / cell), v = edits.current[wkey(tileRef.current)]?.[String(j * (nx - 1) + i)]; return v === undefined ? null : v / 10 },
+      /** draw a waterfall line (tile-local points) of width w */
+      fall: (pts: [number, number][], w: number) => commitLine(pts, w),
+      /** what the game will draw on this tile: sheets (auto from ponds + lines) */
+      sheets: () => { const b = B(); if (!b) return []; const nm = tileRef.current, E = edits.current[nm], H = Float32Array.from(b.h, (v, k) => v + (E?.[k] ?? 0) / 10), hAt = (x: number, z: number) => heightAt(b.tx * TILE_M + x, b.ty * TILE_M + z); return fallSheets(b.meta, H, hAt, ponds(b.meta, H, edits.current[wkey(nm)]).cells, fallLines(edits.current[fkey(nm)])).map(q => ({ auto: q.auto, top: q.top, bottom: q.bottom })) },
       undo, redo, save, dirty: () => [...dirtyRef.current],
     }
   }, [ready, tile, heightAt, brushTiles, undo, redo, save])
@@ -263,7 +290,7 @@ export default function TerrainEditor() {
   const cur = tiles.find(t => t.name === tile)
   const step = (dx: number, dy: number) => { const w = worldRef.current; if (!w || !cur) return; const t = w.at(cur.tx + dx, cur.ty + dy); if (t) setTile(t.name) }
   const B = bases.current.get(tile)
-  const nEdits = Object.keys(edits.current[tile] ?? {}).length, nWater = Object.keys(edits.current[wkey(tile)] ?? {}).length
+  const nEdits = Object.keys(edits.current[tile] ?? {}).length, nWater = Object.keys(edits.current[wkey(tile)] ?? {}).length, nFalls = fallLines(edits.current[fkey(tile)]).length
 
   const btn = 'px-2.5 py-1 rounded text-xs font-mono border transition-colors'
   const on = 'bg-amber-500/20 border-amber-400 text-amber-200', off = 'bg-white/5 border-white/15 text-white/60 hover:text-white'
@@ -288,7 +315,7 @@ export default function TerrainEditor() {
           <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1">Tile</div>
           <div className="flex gap-1 items-center">
             <select value={tile} onChange={e => setTile(e.target.value)} className="bg-black/40 border border-white/15 rounded px-2 py-1 font-mono text-xs flex-1">
-              {tiles.map(t => <option key={t.name} value={t.name}>{t.name} ({t.tx},{t.ty}) {Math.round(t.land * 100)}% land{dirty.includes(t.name) || dirty.includes(wkey(t.name)) ? ' •' : ''}</option>)}
+              {tiles.map(t => <option key={t.name} value={t.name}>{t.name} ({t.tx},{t.ty}) {Math.round(t.land * 100)}% land{dirty.some(d => tileOfKey(d) === t.name) ? ' •' : ''}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-3 gap-1 mt-1 w-28">
@@ -304,7 +331,9 @@ export default function TerrainEditor() {
             {TOOLS.map((b, i) => <button key={b} className={`${btn} ${brush === b ? on : off}`} onClick={() => setBrush(b)}>{i + 1} {TOOL_KEY[b]}</button>)}
           </div>
           {brush === 'flatten' && <div className="text-[11px] text-white/45 mt-1">levels to the height under your first click</div>}
-          {(brush === 'water' || brush === 'dry') && <div className="text-[11px] text-white/45 mt-1">{brush === 'water' ? 'paints water at the level below; it fills wherever the level stands above the ground (carve a bowl, paint = a lake)' : 'removes painted water'}</div>}
+          {(brush === 'water' || brush === 'dry') && <div className="text-[11px] text-white/45 mt-1">{brush === 'water' ? 'paints water at the level below; it fills wherever the level stands above the ground (carve a bowl, paint = a lake). A pond edge over lower water falls by itself.' : 'removes painted water and waterfall lines under the brush'}</div>}
+          {brush === 'falls' && <div className="text-[11px] text-white/45 mt-1">drag along a cliff edge: water springs out of it and falls to the lower side, onto painted water if there is some</div>}
+          {brush === 'falls' && <label className="flex flex-col gap-1 mt-2"><span className="text-[10px] uppercase tracking-[0.18em] text-white/40">Fall width <span className="tabular-nums text-white/80 normal-case tracking-normal">{fallW.toFixed(1)}</span></span><input type="range" min={0.4} max={6} step={0.1} value={fallW} onChange={e => setFallW(+e.target.value)} /></label>}
         </div>
 
         <div>
@@ -329,7 +358,7 @@ export default function TerrainEditor() {
         <div className="flex flex-wrap gap-1">
           <button className={`${btn} ${off}`} onClick={undo} disabled={!hist.current.canUndo}>Undo</button>
           <button className={`${btn} ${off}`} onClick={redo} disabled={!hist.current.canRedo}>Redo</button>
-          <button className={`${btn} ${off}`} onClick={resetTile} disabled={!nEdits && !nWater}>Reset tile</button>
+          <button className={`${btn} ${off}`} onClick={resetTile} disabled={!nEdits && !nWater && !nFalls}>Reset tile</button>
           <button className={`${btn} ${showEdits ? on : off}`} onClick={() => setShowEdits(v => !v)}>Tint edits</button>
         </div>
         <button onClick={save} disabled={!dirty.length}
@@ -338,7 +367,7 @@ export default function TerrainEditor() {
         </button>
 
         <div className="text-xs font-mono text-white/55 space-y-0.5 tabular-nums">
-          <div>{nEdits} edited vertices, {nWater} water cells on {tile}</div>
+          <div>{nEdits} edited vertices, {nWater} water cells, {nFalls} waterfall lines on {tile}</div>
           {hover && Number.isFinite(hover.h) && <div>({hover.x}, {hover.z}) · ground {hover.h.toFixed(1)} m{B && hover.h < B.meta.waterY ? ' · under the sea' : ''}</div>}
           <div className="text-white/35 pt-1">Hold to paint. Brushes cross onto the neighbouring tiles so seams meet. Saved edits are live on the next Wilds load (no build).</div>
         </div>

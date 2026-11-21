@@ -240,6 +240,88 @@ function Ponds({ W }: { W: Wilds }) {
   return <mesh geometry={geo}><meshLambertMaterial color={P.water} transparent opacity={0.8} /></mesh>
 }
 
+/** M62 s3: WATERFALLS (wilds-edits fallSheets via the parse: pond edges over lower water + the owner's waterfall lines). Per tile:
+ *  one mesh of falling sheets (lip at the top, slanting out to where the water lands; a scrolling streak shader), one mesh of foam
+ *  ellipses on the water at each landing (pulsing), and one Points cloud of spray rising off the landings. Probe: window.__wildsFx. */
+const SHEET_VS = `varying vec2 vUv; varying float vLen; attribute float len; void main() { vUv = uv; vLen = len; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`
+const SHEET_FS = `uniform float uTime; varying vec2 vUv; varying float vLen;
+float h(float x) { return fract(sin(x * 127.1) * 43758.5453); }
+void main() {
+  float col = floor(vUv.x * vLen * 1.5), j = h(col);
+  float s = fract(vUv.y * (2.0 + j) - uTime * (1.6 + j * 0.8) + j * 7.0);
+  float streak = smoothstep(0.0, 0.25, s) * (1.0 - smoothstep(0.55, 1.0, s));
+  float edge = smoothstep(0.0, 0.06, vUv.x) * smoothstep(1.0, 0.94, vUv.x);
+  vec3 c = mix(vec3(0.62, 0.80, 0.92), vec3(0.97, 0.99, 1.0), streak);
+  gl_FragColor = vec4(c, (0.5 + 0.4 * streak) * edge * (0.75 + 0.25 * vUv.y));
+}`
+const FOAM_VS = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`
+const FOAM_FS = `uniform float uTime; varying vec2 vUv;
+void main() {
+  float d = length(vUv * 2.0 - 1.0);
+  float ring = smoothstep(1.0, 0.75, d) * (0.55 + 0.3 * sin(uTime * 3.0 - d * 9.0));
+  gl_FragColor = vec4(vec3(0.96, 0.98, 1.0), ring * 0.8);
+}`
+function Waterfalls({ W }: { W: Wilds }) {
+  const built = useMemo(() => {
+    const S = W.sheets; if (!S?.length) return null
+    const sp: number[] = [], suv: number[] = [], sl: number[] = [], si: number[] = []
+    const fp: number[] = [], fuv: number[] = [], fi: number[] = []
+    const spray: { x: number; y: number; z: number; ux: number; uz: number; len: number; w: number }[] = []
+    for (const q of S) {
+      const len = Math.hypot(q.bx - q.ax, q.bz - q.az), lx = q.dx * q.land, lz = q.dz * q.land, o = 0.15   // lip, nudged off the rock
+      const n = sp.length / 3
+      sp.push(q.ax + q.dx * o, q.top, q.az + q.dz * o, q.bx + q.dx * o, q.top, q.bz + q.dz * o, q.bx + lx + q.dx * o, q.bottom, q.bz + lz + q.dz * o, q.ax + lx + q.dx * o, q.bottom, q.az + lz + q.dz * o)
+      // an end that meets another sheet's end does not fade (a drawn line's segments join as one curtain): u = 0.5 there
+      const joined = (x: number, z: number) => S.some(r => r !== q && (Math.hypot(r.ax - x, r.az - z) < 0.05 || Math.hypot(r.bx - x, r.bz - z) < 0.05))
+      const ua = joined(q.ax, q.az) ? 0.5 : 0, ub = joined(q.bx, q.bz) ? 0.5 : 1
+      suv.push(ua, 0, ub, 0, ub, 1, ua, 1); sl.push(len, len, len, len); si.push(n, n + 1, n + 2, n, n + 2, n + 3)
+      // the foam: an ellipse on the landing water, centred just out from where the sheet meets it
+      const ux = (q.bx - q.ax) / len, uz = (q.bz - q.az) / len, mx = (q.ax + q.bx) / 2 + lx + q.dx * (0.9 + q.w * 0.3), mz = (q.az + q.bz) / 2 + lz + q.dz * (0.9 + q.w * 0.3)
+      const hl = len / 2 + 1 + q.w * 0.6, hd = 1.3 + q.w * 0.5, y = q.bottom + 0.04, m = fp.length / 3
+      for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) fp.push(mx + ux * hl * a + q.dx * hd * b, y, mz + uz * hl * a + q.dz * hd * b)
+      fuv.push(0, 0, 1, 0, 1, 1, 0, 1); fi.push(m, m + 2, m + 1, m, m + 3, m + 2)
+      spray.push({ x: mx, y: q.bottom, z: mz, ux, uz, len, w: q.w })
+    }
+    const sheet = new THREE.BufferGeometry()
+    sheet.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); sheet.setAttribute('uv', new THREE.Float32BufferAttribute(suv, 2))
+    sheet.setAttribute('len', new THREE.Float32BufferAttribute(sl, 1)); sheet.setIndex(si)
+    const foam = new THREE.BufferGeometry()
+    foam.setAttribute('position', new THREE.Float32BufferAttribute(fp, 3)); foam.setAttribute('uv', new THREE.Float32BufferAttribute(fuv, 2)); foam.setIndex(fi)
+    // spray: particles spread along each landing, count by length x weight (capped per tile)
+    const parts: { bx: number; by: number; bz: number; ph: number; sp: number; dr: number; ux: number; uz: number }[] = []
+    for (const f of spray) { const n = Math.min(60, Math.round(f.len * 1.5 * f.w) + 6); for (let k = 0; k < n && parts.length < 900; k++) { const a = (Math.random() - 0.5) * (f.len + 1); parts.push({ bx: f.x + f.ux * a, by: f.y, bz: f.z + f.uz * a, ph: Math.random(), sp: 0.5 + Math.random() * 0.7, dr: 0.8 + f.w * 0.5, ux: Math.random() - 0.5, uz: Math.random() - 0.5 }) } }
+    const sprayGeo = new THREE.BufferGeometry(); sprayGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(parts.length * 3), 3))
+    return { sheet, foam, sprayGeo, parts, count: S.length }
+  }, [W])
+  const mats = useMemo(() => ({
+    sheet: new THREE.ShaderMaterial({ vertexShader: SHEET_VS, fragmentShader: SHEET_FS, uniforms: { uTime: { value: 0 } }, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+    foam: new THREE.ShaderMaterial({ vertexShader: FOAM_VS, fragmentShader: FOAM_FS, uniforms: { uTime: { value: 0 } }, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+    spray: new THREE.PointsMaterial({ color: '#f4f9ff', size: 0.35, transparent: true, opacity: 0.7, depthWrite: false }),
+  }), [])
+  useEffect(() => () => { built?.sheet.dispose(); built?.foam.dispose(); built?.sprayGeo.dispose() }, [built])
+  useEffect(() => () => { mats.sheet.dispose(); mats.foam.dispose(); mats.spray.dispose() }, [mats])
+  useEffect(() => {
+    const g = window as unknown as { __wildsFx?: Record<string, { sheets: number; auto: number; lines: number }> }
+    g.__wildsFx = { ...(g.__wildsFx ?? {}), [W.meta.name]: { sheets: built?.count ?? 0, auto: W.sheets?.filter(q => q.auto).length ?? 0, lines: W.sheets?.filter(q => !q.auto).length ?? 0 } }
+    return () => { if (g.__wildsFx) delete g.__wildsFx[W.meta.name] }
+  }, [built, W])
+  useFrame(({ clock }) => {
+    if (!built) return
+    const t = clock.elapsedTime; mats.sheet.uniforms.uTime.value = t; mats.foam.uniforms.uTime.value = t
+    const a = built.sprayGeo.getAttribute('position') as THREE.BufferAttribute, arr = a.array as Float32Array
+    built.parts.forEach((p, k) => { const u = (t * p.sp + p.ph) % 1; arr[k * 3] = p.bx + p.ux * u * p.dr; arr[k * 3 + 1] = p.by + Math.sin(u * Math.PI) * (0.8 + p.dr); arr[k * 3 + 2] = p.bz + p.uz * u * p.dr })
+    a.needsUpdate = true
+  })
+  if (!built) return null
+  return (
+    <>
+      <mesh geometry={built.sheet} material={mats.sheet} renderOrder={2} />
+      <mesh geometry={built.foam} material={mats.foam} renderOrder={3} />
+      <points geometry={built.sprayGeo} material={mats.spray} renderOrder={4} frustumCulled={false} />
+    </>
+  )
+}
+
 /** `off` = this tile's world offset (the group it sits in); `focus` = the keeper, in world coords. */
 export function WildsScene({ W, waymarks, focus, off }: { W: Wilds; waymarks: Waymark[]; focus: Focus; off: { x: number; z: number } }) {
   const greg = { ...GREG_WAYMARK, y: W.heightAt(GREG_WAYMARK.x, GREG_WAYMARK.z) }
@@ -250,6 +332,7 @@ export function WildsScene({ W, waymarks, focus, off }: { W: Wilds; waymarks: Wa
         <planeGeometry args={[W.meta.sizeX, W.meta.sizeZ]} /><meshLambertMaterial color={P.water} transparent opacity={0.8} />
       </mesh>
       <Ponds W={W} />
+      <Waterfalls W={W} />
       <Trees W={W} focus={focus} off={off} />
       <Crystals W={W} />
       {W.meta.name === GREG_WAYMARK.tile && <WaymarkStone w={greg} greg />}

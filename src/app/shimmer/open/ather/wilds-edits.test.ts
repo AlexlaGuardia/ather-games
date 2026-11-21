@@ -1,7 +1,7 @@
 // BETA M62 (engine from M38): the Wilds edit layer. Run: npx tsx src/app/shimmer/open/ather/wilds-edits.test.ts
 import { readFileSync } from 'node:fs'
 import { parseWilds, type WildsMeta } from './wilds'
-import { applyBrush, mergeEdits, cleanTile, cleanEdits, cleanWater, cleanWaters, falloff, EditHistory, paintWater, foldWater, ponds, waterDrops, EDIT_MAX_DM, type Edits, type BrushTile, type WaterMap } from './wilds-edits'
+import { applyBrush, mergeEdits, cleanTile, cleanEdits, cleanWater, cleanWaters, falloff, EditHistory, paintWater, foldWater, ponds, waterDrops, fallSheets, fallLines, addFall, removeFallsNear, cleanFalls, packPt, unpackPt, EDIT_MAX_DM, type Edits, type BrushTile, type WaterMap } from './wilds-edits'
 import { terrainWorld, MAX_WALK_GRADIENT } from '../terrain-world'
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
@@ -112,6 +112,37 @@ ok(W.crystals.every(c => Math.abs(c.y - W.heightAt(c.x, c.z)) < 0.01), 'every cr
 // the wire for water
 ok(cleanWater({ '5': 99999 })!['5'] === 4000 && cleanWater({ '62500': 3 }) === null && cleanWater({ x: 1 }) === null, 'water: clamped, out-of-range cells and junk refused')
 ok(JSON.stringify(cleanWaters({ water: { a: { '3': 12 }, '../b': { '1': 1 } } })) === '{"a":{"3":12}}', 'cleanWaters keeps good tiles only')
+
+// ── FALLS (slice 3) ──
+{ // a flat test grid: 11x11 vertices, 4 m cells, ground 0 everywhere except a 6 m step up for x < 0 (cells i < 5)
+  const M = { nx: 11, nz: 11, cell: 4, sizeX: 40, sizeZ: 40 }, H = new Float32Array(121)
+  for (let j = 0; j < 11; j++) for (let i = 0; i < 11; i++) H[j * 11 + i] = i <= 4 ? 6 : 0
+  const hAt = (x: number, z: number) => { const i = Math.round((x + 20) / 4); return i <= 4 ? 6 : 0 }
+  const cells = (pts: [number, number, number][]) => pts.map(([i, j, y]) => ({ i, j, y }))
+  // upper pond cells i=3 (level 7), lower pond i=4..5 level 1: i=3 -> i=4 is a 6 m drop between neighbours
+  const up = [0, 1, 2].map(j => [3, j, 7] as [number, number, number]), dn = [0, 1, 2].flatMap(j => [[4, j, 1], [5, j, 1]] as [number, number, number][])
+  const S = fallSheets(M, H, hAt, cells([...up, ...dn]), [])
+  ok(S.length === 1 && S[0].auto && S[0].top === 7 && S[0].bottom === 1 && S[0].dx === 1 && S[0].land === 0, `two ponds side by side: ONE merged sheet, 7 -> 1, falling +x (${JSON.stringify(S.map(x => [x.top, x.bottom, x.dx, x.land]))})`)
+  ok(Math.abs(S[0].ax - S[0].bx) < 1e-9 && Math.abs(S[0].az - S[0].bz) === 12 && S[0].ax === -20 + 4 * 4, 'the sheet runs along the shared edge, 3 cells (12 m) long, at x = the lip')
+  // across dry cliff: lower pond two cells further (i=6), cells i=4,5 dry and low -> lands 8 m out
+  const S2 = fallSheets(M, H, hAt, cells([...up, ...[0, 1, 2].map(j => [6, j, 1] as [number, number, number])]), [])
+  ok(S2.length === 1 && S2[0].land === 8, `a fall crosses 2 dry low cells to its water, landing 8 m out (${S2[0]?.land})`)
+  // ground higher than the lip in between = no fall
+  const H3 = Float32Array.from(H); for (let j = 0; j < 11; j++) H3[j * 11 + 5] = 9, H3[j * 11 + 6] = 9
+  ok(fallSheets(M, H3, hAt, cells([...up, ...[0, 1, 2].map(j => [7, j, 1] as [number, number, number])]), []).length === 0, 'a bank higher than the lip between them = no fall')
+  ok(fallSheets(M, H, hAt, cells(up), []).length === 0, 'a pond with no lower water = no fall (water does not run off onto dry ground)')
+  // a drawn line along the step's edge (x = -4) falls to the LOW side (+x), from the top to the foot
+  const line = addFall({}, [[-4.5, -10], [-4.5, 0], [-4.5, 10]], 2), Ls = fallLines(line)
+  ok(Ls.length === 1 && Ls[0].pts.length === 3 && Ls[0].w === 2, 'addFall + fallLines round trip (3 points, width 2)')
+  const SL = fallSheets(M, H, hAt, [], Ls)
+  ok(SL.length === 2 && SL.every(x => !x.auto && x.dx > 0.99 && x.top > 6 && x.bottom === 0), `the line: 2 segments, both fall +x from ~6 m to the foot (${JSON.stringify(SL.map(x => [x.dx.toFixed(2), x.top.toFixed(1), x.bottom]))})`)
+  const dnAll = Array.from({ length: 10 }, (_, j) => [[4, j, 1], [5, j, 1]] as [number, number, number][]).flat()
+  const SLw = fallSheets(M, H, hAt, cells(dnAll), Ls)
+  ok(SLw.every(x => x.bottom === 1), 'with painted water at the foot, the line lands on the water level')
+  const two = { ...line, ...addFall(line, [[10, 10], [14, 10]], 1) }
+  ok(fallLines(two).length === 2 && Object.keys(removeFallsNear(two, -4.5, 0, 2)).length === 4 && Object.values(removeFallsNear(two, -4.5, 0, 2)).every(v => v === 0), 'removeFallsNear deletes the line under the brush only')
+  ok(unpackPt(packPt(-499.5, 312)).join() === '-499.5,312', 'points pack at 0.5 m')
+  ok(cleanFalls({ '1.0': packPt(1, 2), '1.w': 20 }) !== null && cleanFalls({ 'x': 1 }) === null && cleanFalls({ '1.0': -3 }) === null, 'cleanFalls: good keys kept, junk refused') }
 
 // the wire
 ok(cleanTile({ '5': 9999 })!['5'] === EDIT_MAX_DM, 'a delta past the clamp is clamped')

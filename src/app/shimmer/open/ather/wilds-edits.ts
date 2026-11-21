@@ -168,6 +168,113 @@ export function waterDrops(meta: { nx: number; nz: number }, cells: PondCell[], 
   }
   return out
 }
+// ── FALLS (BETA M62 slice 3, Alex 11-21) ──
+// Two sources of a falling sheet: (1) AUTOMATIC, where a wet cell's edge drops onto LOWER water, next door or across up to
+// FALL_REACH dry cells of cliff (fallSheets reads the ponds); (2) a WATERFALL LINE the owner draws along a cliff edge (a spring
+// out of the rock), stored per tile as a sparse map so it rides the same store, undo and route as heights and water:
+//   '<id>.<n>' -> packed point n (tile-local, 0.5 m), '<id>.w' -> width (dm). A line falls to the LOWER side: onto painted water if
+// there is some, else onto the ground. Width = how heavy the curtain is (sheet thickness, spray, foam).
+export type FallMap = Record<string, number>
+export const FALLS_PREFIX = 'falls/'
+export const FALL_REACH = 4                              // cells (16 m) of dry cliff an auto fall may cross to find its water
+export interface FallLine { id: number; pts: [number, number][]; w: number }
+const PK = 8192, PO = 2048
+export const packPt = (x: number, z: number) => (Math.round(x * 2) + PO) * PK + (Math.round(z * 2) + PO)
+export const unpackPt = (v: number): [number, number] => [(Math.floor(v / PK) - PO) / 2, ((v % PK) - PO) / 2]
+export function fallLines(m: FallMap | null | undefined): FallLine[] {
+  if (!m) return []
+  const by = new Map<number, FallLine>()
+  for (const [k, v] of Object.entries(m)) {
+    const [a, b] = k.split('.'), id = +a; if (!Number.isInteger(id) || !Number.isFinite(v)) continue
+    const L = by.get(id) ?? { id, pts: [], w: 1 }; by.set(id, L)
+    if (b === 'w') L.w = Math.max(0.2, Math.min(8, v / 10))
+    else if (Number.isInteger(+b)) L.pts[+b] = unpackPt(v)
+  }
+  return [...by.values()].map(L => ({ ...L, pts: L.pts.filter(Boolean) })).filter(L => L.pts.length >= 2).sort((a, b) => a.id - b.id)
+}
+/** The entries that add one line (fold with mergeEdits). Points closer than 1 m are thinned. */
+export function addFall(m: FallMap | null | undefined, pts: [number, number][], w: number): FallMap {
+  const id = 1 + Math.max(0, ...Object.keys(m ?? {}).map(k => +k.split('.')[0]).filter(Number.isInteger))
+  const out: FallMap = {}, keep: [number, number][] = []
+  for (const p of pts) if (!keep.length || Math.hypot(p[0] - keep[keep.length - 1][0], p[1] - keep[keep.length - 1][1]) >= 1) keep.push(p)
+  if (keep.length < 2) return out
+  keep.slice(0, 64).forEach((p, n) => { out[`${id}.${n}`] = packPt(p[0], p[1]) })
+  out[`${id}.w`] = Math.round(Math.max(0.2, Math.min(8, w)) * 10)
+  return out
+}
+/** The entries (value 0 = delete) that remove every line with a point within r of (x, z). */
+export function removeFallsNear(m: FallMap | null | undefined, x: number, z: number, r: number): FallMap {
+  const out: FallMap = {}
+  for (const L of fallLines(m)) if (L.pts.some(p => Math.hypot(p[0] - x, p[1] - z) <= r)) for (const k of Object.keys(m!)) if (k.split('.')[0] === String(L.id)) out[k] = 0
+  return out
+}
+export function cleanFalls(d: unknown): FallMap | null {
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return null
+  const out: FallMap = {}
+  for (const [k, v] of Object.entries(d as Record<string, unknown>)) {
+    if (!/^\d{1,4}\.(\d{1,2}|w)$/.test(k) || typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v >= PK * PK) return null
+    if (v !== 0) out[k] = v
+  }
+  return out
+}
+
+/** A falling sheet, tile-local: the lip runs a -> b at `top`, the water falls toward (dx, dz) and lands at `bottom`, `land` metres
+ *  out from the lip (0 = straight down). `w` = curtain weight. */
+export interface Sheet { ax: number; az: number; bx: number; bz: number; top: number; bottom: number; dx: number; dz: number; land: number; w: number; auto: boolean }
+export function fallSheets(meta: { nx: number; nz: number; cell: number; sizeX: number; sizeZ: number }, h: Float32Array, heightAt: (x: number, z: number) => number, cells: PondCell[], lines: FallLine[], minDrop = 1): Sheet[] {
+  const { nx, nz, cell, sizeX, sizeZ } = meta, cx = nx - 1, cz = nz - 1, hx = sizeX / 2, hz = sizeZ / 2
+  const at = new Map(cells.map(c => [c.j * cx + c.i, c]))
+  const lo = (i: number, j: number) => Math.min(h[j * nx + i], h[j * nx + i + 1], h[(j + 1) * nx + i], h[(j + 1) * nx + i + 1])
+  const out: Sheet[] = []
+  // (1) automatic: per wet cell and direction, the first wet cell within reach that is lower, across nothing higher than the lip
+  type Edge = { top: number; bottom: number; land: number; d: number; i: number; j: number }
+  const edges: Edge[] = []
+  const DIRS: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+  for (const c of cells) DIRS.forEach(([di, dj], d) => {
+    for (let k = 1; k <= FALL_REACH; k++) {
+      const i = c.i + di * k, j = c.j + dj * k
+      if (i < 0 || j < 0 || i >= cx || j >= cz) return
+      const o = at.get(j * cx + i)
+      if (o) { if (c.y - o.y >= minDrop) edges.push({ top: c.y, bottom: o.y, land: (k - 1) * cell, d, i: c.i, j: c.j }); return }
+      if (lo(i, j) > c.y - minDrop) return                     // ground in the way: no fall this side
+    }
+  })
+  // merge runs: same direction, same lip line, same top/bottom/land, consecutive along the lip
+  const key = (e: Edge) => `${e.d}|${e.top}|${e.bottom}|${e.land}|${e.d < 2 ? e.i : e.j}`
+  const groups = new Map<string, Edge[]>()
+  for (const e of edges) { const g = groups.get(key(e)) ?? []; g.push(e); groups.set(key(e), g) }
+  for (const g of groups.values()) {
+    const d = g[0].d, along = (e: Edge) => d < 2 ? e.j : e.i
+    g.sort((a, b) => along(a) - along(b))
+    for (let n = 0; n < g.length;) {
+      let m = n; while (m + 1 < g.length && along(g[m + 1]) === along(g[m]) + 1) m++
+      const [di, dj] = DIRS[d], e0 = g[n], e1 = g[m]
+      const lipX = (i: number) => -hx + (di > 0 ? i + 1 : i) * cell, lipZ = (j: number) => -hz + (dj > 0 ? j + 1 : j) * cell
+      const a = d < 2 ? [lipX(e0.i), -hz + e0.j * cell] : [-hx + e0.i * cell, lipZ(e0.j)]
+      const b = d < 2 ? [lipX(e0.i), -hz + (e1.j + 1) * cell] : [-hx + (e1.i + 1) * cell, lipZ(e0.j)]
+      out.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], top: e0.top, bottom: e0.bottom, dx: di, dz: dj, land: e0.land, w: 1, auto: true })
+      n = m + 1
+    }
+  }
+  // (2) drawn lines: each segment falls to its lower side, onto painted water there if any, else the ground
+  const levelAt = (x: number, z: number) => { const i = Math.floor((x + hx) / cell), j = Math.floor((z + hz) / cell); return at.get(j * cx + i)?.y ?? null }
+  for (const L of lines) for (let n = 0; n + 1 < L.pts.length; n++) {
+    const [ax, az] = L.pts[n], [bx, bz] = L.pts[n + 1], len = Math.hypot(bx - ax, bz - az); if (len < 0.5) continue
+    const mx = (ax + bx) / 2, mz = (az + bz) / 2, px = -(bz - az) / len, pz = (bx - ax) / len
+    const s = heightAt(mx + px * 5, mz + pz * 5) <= heightAt(mx - px * 5, mz - pz * 5) ? 1 : -1, dx = px * s, dz = pz * s
+    const top = Math.max(heightAt(ax, az), heightAt(bx, bz), heightAt(mx, mz)) + 0.1
+    let bottom = top, land = 0
+    for (let r = 1; r <= 24; r += 1) {                          // walk out from the lip until the drop is found (water or the foot)
+      const x = mx + dx * r, z = mz + dz * r, g = heightAt(x, z), wl = levelAt(x, z), y = wl !== null && wl > g ? wl : g
+      if (!Number.isFinite(y)) break
+      if (y < bottom - 0.01) { bottom = y; land = r; if (wl !== null && wl > g) break }   // water catches the fall: it ends there
+      else if (r - land > 3) break
+    }
+    if (top - bottom >= minDrop) out.push({ ax, az, bx, bz, top, bottom, dx, dz, land: Math.max(0, land - 2), w: L.w, auto: false })
+  }
+  return out
+}
+
 export function cleanWater(d: unknown, nCells = 250 * 250): WaterMap | null {
   if (!d || typeof d !== 'object' || Array.isArray(d)) return null
   const out: WaterMap = {}
@@ -193,6 +300,7 @@ export function cleanTile(d: unknown, nVerts = 251 * 251): TileEdits | null {
 export const TILE_NAME = /^[A-Za-z0-9_-]{1,64}$/
 export function cleanEdits(j: unknown): Edits { return cleanMaps((j as { tiles?: unknown } | null)?.tiles, cleanTile) }
 export function cleanWaters(j: unknown): Record<string, WaterMap> { return cleanMaps((j as { water?: unknown } | null)?.water, cleanWater) }
+export function cleanFallss(j: unknown): Record<string, FallMap> { return cleanMaps((j as { falls?: unknown } | null)?.falls, cleanFalls) }
 function cleanMaps(tiles: unknown, clean: (d: unknown) => Record<string, number> | null): Record<string, Record<string, number>> {
   const next: Record<string, Record<string, number>> = {}
   if (tiles && typeof tiles === 'object') for (const [n, d] of Object.entries(tiles as Record<string, unknown>)) { const c = TILE_NAME.test(n) ? clean(d) : null; if (c && Object.keys(c).length) next[n] = c }
@@ -202,26 +310,28 @@ function cleanMaps(tiles: unknown, clean: (d: unknown) => Record<string, number>
 // ── the game's copy (browser): fetched once, before the first tile parses (wilds-world stream awaits ensureEdits) ──
 let EDITS: Edits = {}
 let WATER: Record<string, WaterMap> = {}
+let FALLS: Record<string, FallMap> = {}
 let loading: Promise<void> | null = null
 export const editsFor = (name: string): TileEdits | null => EDITS[name] ?? null
 export const waterFor = (name: string): WaterMap | null => WATER[name] ?? null
-export interface Layer { edits: Edits; water: Record<string, WaterMap> }
+export const fallsFor = (name: string): FallMap | null => FALLS[name] ?? null
+export interface Layer { edits: Edits; water: Record<string, WaterMap>; falls: Record<string, FallMap> }
 export async function fetchLayer(): Promise<Layer> {
   try {
     const r = await fetch('/shimmer/open/wilds-edits', { cache: 'no-store' })
-    if (!r.ok) return { edits: {}, water: {} }
-    const j = await r.json(); return { edits: cleanEdits(j), water: cleanWaters(j) }
-  } catch { return { edits: {}, water: {} } }   // no layer = the exported land, exactly
+    if (!r.ok) return { edits: {}, water: {}, falls: {} }
+    const j = await r.json(); return { edits: cleanEdits(j), water: cleanWaters(j), falls: cleanFallss(j) }
+  } catch { return { edits: {}, water: {}, falls: {} } }   // no layer = the exported land, exactly
 }
 export function ensureEdits(): Promise<void> {
   if (typeof fetch !== 'function' || typeof window === 'undefined') return Promise.resolve()   // node tests: no layer
-  return (loading ??= fetchLayer().then(l => { EDITS = l.edits; WATER = l.water }))
+  return (loading ??= fetchLayer().then(l => { EDITS = l.edits; WATER = l.water; FALLS = l.falls }))
 }
 /** Owner only (the route 403s anyone else). Saves each named tile's WHOLE height map and/or water map (empty = remove it) in ONE
  *  request, so the route does one read-modify-write (parallel per-tile POSTs raced: M62 check, 11-21). */
-export async function saveTiles(maps: Record<string, TileEdits>, water: Record<string, WaterMap> = {}): Promise<boolean> {
+export async function saveTiles(maps: Record<string, TileEdits>, water: Record<string, WaterMap> = {}, falls: Record<string, FallMap> = {}): Promise<boolean> {
   try {
-    const r = await fetch('/shimmer/save-wilds-edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiles: maps, water }) })
+    const r = await fetch('/shimmer/save-wilds-edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiles: maps, water, falls }) })
     return r.ok
   } catch { return false }
 }
