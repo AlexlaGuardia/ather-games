@@ -102,5 +102,5 @@ const pass = c.panel && c.made && s.panel && s.made && t1.forestry?.toolId === '
   && res.manaWorn === MANA_COST * 2 && res.manaBlade === MANA_COST
   && res.xpLine === `+${want} Forestry` && u?.toolId === 'goldwood_blade' && u.usesRemaining === t1.forestry.usesRemaining - 1
   && (res.afterBreak as { toolId: string })?.toolId === 'worn_blade' && res.woreLine === true && other.length === 0
-console.log(pass ? `PASS: blade + spike made at their benches → Shimmeroak ${res.manaWorn} mana worn vs ${res.manaBlade} with the blade → +${want} XP (×1.1) → one use worn → worn out, the Worn Blade back` : 'FAIL')
+console.log(pass ? `PASS: pruner + spike made at their benches → Shimmeroak ${res.manaWorn} mana worn vs ${res.manaBlade} with the pruner → +${want} XP (×1.1) → one use worn → worn out, the Worn Pruner back` : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)
