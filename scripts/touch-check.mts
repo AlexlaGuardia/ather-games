@@ -66,6 +66,8 @@ await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { time
 await new Promise(r => setTimeout(r, 4000))
 // draw first: guns are equipment since 11-18 (R / the 'draw' chip pulls the loadout's primary; fire does nothing stowed)
 { const d = await p.evaluate(() => { const e = document.querySelector<HTMLElement>('[data-touch="draw"]'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }); if (d) { await p.touchscreen.tap(d.x, d.y); await new Promise(r => setTimeout(r, 1200)) } }
+// wait for the gun to be OUT, not a fixed 1.2 s: at headless fps the draw can take longer, and a stowed gun fires nothing (11-22 sweep: ammo 12 -> 12, PASS on rerun)
+await p.waitForFunction(() => !!(window as any).__fpGun?.shown?.(), { timeout: 30000 }).catch(() => {})
 // fire: hold the fire button, the clip must drop
 const ammo = () => p.evaluate(() => (window as any).__ather.combat().keeper.ammo as number)
 const a0 = await ammo()

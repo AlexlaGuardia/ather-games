@@ -29,7 +29,7 @@ for (const [w, h] of [[844, 390], [390, 844]]) {
   const poll = async (fn: () => Promise<boolean>, ms = 8000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn()) return true; await sleep(150) } return false }
   // draw (the R key the page's tap row sends; every keeper is born owning the Repeater)
   await p.evaluate(() => { for (const t of ['keydown', 'keyup']) window.dispatchEvent(new KeyboardEvent(t, { code: 'KeyR', key: 'r', bubbles: true })) })
-  res.drawn = await poll(async () => (await G()).shown)
+  res.drawn = await poll(async () => (await G()).shown, 30000)   // 8 s was short at headless fps (11-22 sweep: 844x390 drawn=false, true on rerun)
   // the cluster: no two of these boxes overlap
   const boxes = await p.evaluate(() => {
     const pick = (sel: string) => [...document.querySelectorAll<HTMLElement>(sel)].map(e => { const r = e.getBoundingClientRect(); return { sel, x: r.x, y: r.y, w: r.width, h: r.height } }).filter(b => b.w > 0 && b.h > 0)
