@@ -60,10 +60,15 @@ const reel = async (hold: boolean | 'track' | 'none') => {
   let answered = false
   // the take is judged on REAL time: click every 250 ms and force a frame only every 8th pass (a screenshot a pass
   // makes each pass 1-2 s, the take window passes, and every click recasts: that drained all 10 bait on the first run)
+  // phone: answer as a thumb does, PRESS and keep holding; the clumsy reel stays held from that press, the others let go and
+  // wait out the release (the 30 ms poll writes the hold on each change, so a late release would undo the stand-in)
+  let thumb = false
   for (let k = 0; k < 200 && !answered; k++) {
-    await act(); await wait(250)
+    if (phone) { await fireDown(); thumb = true } else await act()
+    await wait(250)
     if (k % 8 === 0) await frame()
     answered = (await view())?.phase === 'reeling'
+    if (phone && !(answered && hold === true)) { await fireUp(); thumb = false; await wait(answered ? 400 : 60) }
   }
   console.log('   answered', answered, 'after', (await view())?.phase)
   if (!answered) return { answered, phase: (await view())?.phase }
@@ -72,7 +77,7 @@ const reel = async (hold: boolean | 'track' | 'none') => {
   // gives' / 'It fights'), or "no hint" and "no bar yet" share an answer; follow the zone while waiting (no hold = gone
   // before the bar draws)
   if (hold === true) { const bob0 = (await view())?.reel?.bob ?? 0; let bobMax = bob0
-    if (phone) await fireDown(); else await p.evaluate(() => (window as any).__rin.hold(true)); let ph = 'reeling'
+    if (phone) { if (!thumb) await fireDown() } else await p.evaluate(() => (window as any).__rin.hold(true)); let ph = 'reeling'
     for (let k = 0; k < 200 && ph !== 'landed' && ph !== 'gone' && ph !== 'idle'; k++) { await frame(); const v = await view(); ph = v?.phase; if (v?.reel) bobMax = Math.max(bobMax, v.reel.bob) }
     if (phone) await fireUp(); else await p.evaluate(() => (window as any).__rin.hold(false))
     return { answered, phase: ph, hint: 'not read', pulled: bobMax > bob0 + 0.05, bob0: +bob0.toFixed(2), bobMax: +bobMax.toFixed(2) } }
