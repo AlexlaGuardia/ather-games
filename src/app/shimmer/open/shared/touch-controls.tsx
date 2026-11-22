@@ -75,7 +75,7 @@ export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint
   const start = (e: React.PointerEvent) => {
     if (roles.current.size >= 4) return
     const left = e.clientX < window.innerWidth * 0.45
-    ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
+    try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId) } catch { /* best-effort, as in hold() */ }
     roles.current.set(e.pointerId, { kind: left ? 'stick' : 'look', ox: e.clientX, oy: e.clientY, lx: e.clientX, ly: e.clientY })
     if (left) setStick({ ox: e.clientX, oy: e.clientY, x: 0, y: 0 })
   }
@@ -101,7 +101,8 @@ export function TouchControls({ actions, showFire, holds = WALK_HOLDS, stickHint
   // A hold button: down while the finger is on it. Fire also looks while dragged.
   const hold = (id: string, onDown: () => void, onUp: () => void, looks = false) => ({
     onPointerDown: (e: React.PointerEvent) => {
-      e.stopPropagation(); (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
+      e.stopPropagation()
+      try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId) } catch { /* capture is best-effort: a pointer that is no longer active (InvalidStateError) must not swallow the hold (M80) */ }
       if (looks) roles.current.set(e.pointerId, { kind: 'fire', ox: e.clientX, oy: e.clientY, lx: e.clientX, ly: e.clientY })
       onDown(); setDown(d => ({ ...d, [id]: true }))
     },
