@@ -28,10 +28,12 @@ export const ACTION_DEFAULTS: Readonly<Record<string, HandAction>> = {
     { x: 0.38, y: -0.2, z: -0.44, pitch: -0.6, roll: 0.35, yaw: 0, ms: 150, hold: 40, ease: 'out' },        // back over the shoulder
     { x: 0.33, y: -0.36, z: -0.7, pitch: -1.75, roll: 0.55, yaw: 0, ms: 100, hold: 260, ease: 'in' },        // the flick out
   ] },
+  // in game it plays ONCE from the click and the hit lands ON the click (melee-view): keep the strike early, the whole swing
+  // inside the 420 ms swing cooldown (MELEE_CD_MS)
   'melee.swing': { id: 'melee.swing', item: 'melee', label: 'Melee · swing', keys: [
-    { x: 0.355, y: -0.415, z: -0.56, pitch: -1.4, roll: 0.63, yaw: 0, ms: 200, hold: 60, ease: 'inout' },   // ready
-    { x: 0.44, y: -0.3, z: -0.46, pitch: -1.1, roll: 1.05, yaw: 0, ms: 180, hold: 40, ease: 'out' },        // wind up, out to the right
-    { x: 0.06, y: -0.34, z: -0.76, pitch: -1.6, roll: -0.15, yaw: 0, ms: 110, hold: 120, ease: 'in' },       // the hit, across the middle
+    { x: 0.355, y: -0.415, z: -0.56, pitch: -1.4, roll: 0.63, yaw: 0, ms: 200, hold: 0, ease: 'inout' },    // ready
+    { x: 0.4, y: -0.32, z: -0.48, pitch: -1.15, roll: 1.0, yaw: 0, ms: 90, hold: 20, ease: 'out' },         // wind up, out to the right
+    { x: 0.08, y: -0.34, z: -0.74, pitch: -1.6, roll: -0.15, yaw: 0, ms: 80, hold: 110, ease: 'in' },        // the hit, across the middle
   ] },
 }
 export const ACTION_IDS = Object.keys(ACTION_DEFAULTS)

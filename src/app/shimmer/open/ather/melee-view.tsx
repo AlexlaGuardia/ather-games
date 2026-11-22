@@ -25,6 +25,10 @@ const nameOf = (t: Target) => {
   if (t.kind === 'piece') { const p = currentWorks().pieces.find(x => x.id === t.id); return p ? FURNITURE[p.item]?.name ?? 'It' : 'It' }
   const c = currentWorks().chests.find(x => x.id === t.id); return c ? itemDef(keepstoneFor(c.crystal)).name : 'The Keepstone'
 }
+/** M82 s3: performance.now() of the last swing that went (hit or miss; a cooldown press is not a swing): the hands play the
+ *  authored swing from it. -1e9 = never. */
+export const lastSwingAt = () => live.last
+
 /** one swing, now. Returns what happened (checks read it through __melee). */
 export function swing(now = performance.now()): 'cooldown' | 'miss' | 'hit' | 'broke' | 'full' {
   if (!canSwing(live.last, now)) return 'cooldown'

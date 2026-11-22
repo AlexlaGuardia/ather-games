@@ -98,6 +98,9 @@ ok(near(half.R.x, (none.R.x + target.x) / 2, 1e-6), 'w=0.5: halfway')
   ok(near(oneShot(A, 50 + 100)!.x, sampleAction(A, 150, false).x), 'oneShot samples the one-shot clock')
   const cast = ACTION_DEFAULTS['rinstick.cast'], flick = keyStart(cast, 2, false) + cast.keys[2].ms
   ok(flick <= 400, `the shipped cast's flick lands by 400 ms (the float leaves on the click): ${flick} ms`)
+  const sw = ACTION_DEFAULTS['melee.swing'], hit = keyStart(sw, 2, false) + sw.keys[2].ms
+  ok(hit <= 250, `the shipped swing's hit lands by 250 ms (the hit counts on the click): ${hit} ms`)
+  ok(actionDuration(sw, false) <= 420, `the whole swing fits the 420 ms swing cooldown: ${actionDuration(sw, false)} ms`)
 }
 
 console.log(`fp-actions: ${pass} passed, ${fail} failed`)
