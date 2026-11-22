@@ -190,6 +190,8 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - 11-22 09:0x Alex: "the fifth stat would be luck, that effects all the skills by 0-40% chance of a double drop (S=40, A=30, B=20, C=10, D=5, F=0)" → **M65** (hub defaults on the open bits, flagged to Alex), routed to sprites
 - 11-22 09:1x Alex: "the farming room is still bugged ..the stock from pack button hasnt been working" → bug, routed to world (before M49 s6)
 - 11-22 10:0x Alex (in the Character tab): "the vessels here should show more detail.. scroll sections.. sticky feel where it snaps.. weapons (or Armory) with a little stats window.. Vessels a description of the moves.. companion with an avatar.. scrollable grid of unlocked manamals (base ones grey until unlocked).. at the bottom the keepers with an option to edit (add, delete or rename)" → **M66**, s1 routed to play
+- 11-22 10:3x Alex: "in the rooms the tab that says \"Keeper\" should say \"Moglin\" ..the keeper is the player" → routed to world (label only)
+- 11-22 10:3x Alex: "the morel msgs.. on the top left if they could pulse a bit or something so they get the players attention.. its too missable as is" → routed to world (morel-hints.tsx: a short pulse/glow on arrival, then settle; no sound)
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
