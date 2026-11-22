@@ -25,7 +25,7 @@ import { buyBundle } from './smokehouse'
 import { bottlesIn, sellBottles } from './corkhouse'
 import { SMOKEHOUSE_STOCK } from '../ather/cooking'
 import { useLoadout, setLoadout, getLoadout, claimKaelsArms, slotOfGun } from '../shared/loadout'
-import { buyGun, buySigil, GUN_PRICES, SIGIL_PRICE, SIGIL_ITEM, buySight, stockOf, shopGunsOf, SIGHT_PRICES } from './gun-shop'
+import { buyGun, buySigil, GUN_PRICES, SIGIL_PRICE, SIGIL_ITEM, buySight, stockOf as gunStockOf, shopGunsOf, SIGHT_PRICES } from './gun-shop'   // furniture has its own stockOf
 import { ownedSights, sightName } from '../shared/gun-fit'   // M81 s3a
 import { RANGE_GUNS } from '../shared/gunplay'
 import { yardRows, buyPart, slotName, YARD_SLOTS } from './courser-yard'
@@ -324,8 +324,8 @@ function GunShopPanel({ town, ledger, setLedger, onClose }: { town: string; ledg
               </div>
             )
           })}
-          {stockOf(town).sights.length > 0 && <div className="mt-1 text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: H.inkFaint }}>Sights</div>}
-          {stockOf(town).sights.map(({ gun, sight }) => {   // M81 s3a: a sight is bought FOR a gun; the Character tab fits it
+          {gunStockOf(town).sights.length > 0 && <div className="mt-1 text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: H.inkFaint }}>Sights</div>}
+          {gunStockOf(town).sights.map(({ gun, sight }) => {   // M81 s3a: a sight is bought FOR a gun; the Character tab fits it
             const price = SIGHT_PRICES[sight], haveGun = l.guns.includes(gun), owned = haveGun && ownedSights(l, gun).includes(sight), short = !owned && ledger.marks < price
             const gunName = RANGE_GUNS.find(x => x.id === gun)?.name ?? gun
             return (

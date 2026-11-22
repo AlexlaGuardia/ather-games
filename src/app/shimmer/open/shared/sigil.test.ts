@@ -118,7 +118,7 @@ ok([...new Set(Object.values(STAT_OF))].every(s => STATS.has(s as TunedStat) || 
   ok(near(tuneGun(G, sig('barrier', 'manalic'), 'manalic').reloadMana, G.reloadMana), 'tuneGun: birth on 2nd does not')
   const en = tuneGun(G, sig('enchant'), 'enchant').reloadMana
   ok(near(en, G.reloadMana / 1.1 / 2), 'halving applies after the manaCost stat')
-  ok(near(tuneGun({ ...G, reloadMana: undefined }, sig('barrier')).reloadMana, ECON.reloadMana), 'no gun reloadMana: ECON.reloadMana')
+  ok(near(tuneGun({ ...G, reloadMana: undefined } as Omit<typeof G, 'reloadMana'> & { reloadMana?: number }, sig('barrier')).reloadMana, ECON.reloadMana), 'no gun reloadMana: ECON.reloadMana')
 }
 
 // ── clamps ──
