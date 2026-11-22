@@ -31,7 +31,7 @@ const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 const URL = process.env.URL ?? 'https://ather.games', phone = process.argv.includes('--phone')
 const br = await puppeteer.launch({ executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const p = await br.newPage()
-const errs: string[] = []; p.on('pageerror', e => errs.push(String(e)))
+const errs: string[] = []; p.on('pageerror', e => errs.push(String(e) + ' @ ' + String((e as Error).stack ?? '').split('\n').slice(1, 4).join(' / ')))
 // a fresh keeper's bag, written down so the check can find the bait's slot (11-18: guns left the bag)
 await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); { const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'waymark', n: 12 }; slots[1] = { id: 'bait', n: 10 }; localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] })) } localStorage.removeItem('open.skills.v1') })
 await p.setViewport(phone ? { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 1 } : { width: 560, height: 350 })
@@ -64,11 +64,11 @@ const reel = async (hold: boolean | 'track' | 'none') => {
   // wait out the release (the 30 ms poll writes the hold on each change, so a late release would undo the stand-in)
   let thumb = false
   for (let k = 0; k < 200 && !answered; k++) {
-    if (phone) { await fireDown(); thumb = true } else await act()
+    if (phone && hold === true) { await fireDown(); thumb = true } else await p.evaluate(() => (window as any).__rin.act())   // reel 1 proves FIRE answers; a touch release would undo the stand-in
     await wait(250)
     if (k % 8 === 0) await frame()
     answered = (await view())?.phase === 'reeling'
-    if (phone && !(answered && hold === true)) { await fireUp(); thumb = false; await wait(answered ? 400 : 60) }
+    if (thumb && !answered) { await fireUp(); thumb = false; await wait(60) }
   }
   console.log('   answered', answered, 'after', (await view())?.phase)
   if (!answered) return { answered, phase: (await view())?.phase }
