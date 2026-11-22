@@ -1,9 +1,10 @@
 // Check: THE TRAIL TO THE RUNESMITH IS CONTINUOUS (hub 11-19, the M5 friction row). A newborn holding Greg's gems (Star:
 // the Fire School runesmith at Redstair) is always pointed at the NEXT door:
 //   the Wilds   -> the errand line's trail points at the Glade's waymark stone (its fold map is the way on)
-//   the stone   -> E opens the fold map on the ATHERNYX face, Rune Hold glowing as 'your errand'
+//   the stone   -> E opens the fold map on the side you stand on (the Ather, Alex 11-20); ONE Tab away the Athernyx face,
+//                  Rune Hold glowing as 'your errand'
 //   Rune Hold   -> on the continent the line points at the school's door
-//   the plot    -> the line points at the gate, and E there opens the same Athernyx face
+//   the plot    -> the line points at the gate, and E there opens the same map (Ather face, the goal one Tab away)
 // Phone viewport. npx tsx scripts/trail-check.mts  (URL= to point elsewhere). Log to a FILE: slow on the box.
 import puppeteer from 'puppeteer-core'
 import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'
@@ -24,6 +25,14 @@ let fails = 0
 const ok = (c: boolean, m: string) => { console.log(c ? '  ok  ' : '  FAIL', m); if (!c) fails++ }
 const poll = async (fn: () => Promise<boolean>, ms = 30000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn()) return true; await wait(500) } return false }
 type Where = { zone: string; x: number; z: number } | null
+// Alex 11-20 (page.tsx: 'the map opens on the side you stand on (the Ather here); an errand keeper's Rune Hold goal waits one
+// Tab away'): E opens the Ather face, then ONE Tab must flip to Athernyx. Before, this check asserted the Athernyx face at once.
+const face = () => p.evaluate(() => document.querySelector('[data-panel="fold-map"]')?.textContent ?? '')
+const mapThenTab = async (where: string) => {
+  ok(await poll(async () => /The fold map · the Ather(?!nyx)/.test(await face()), 10000), `${where}: E opens the fold map on the Ather face (the side you stand on)`)
+  await p.keyboard.press('Tab')
+  ok(await poll(async () => /The fold map · Athernyx/.test(await face()), 5000), `${where}: one Tab flips it to the ATHERNYX face`)
+}
 const errand = () => p.evaluate(() => { const j = (window as any).__journal?.(); const e = j?.entries.find((x: any) => x.id === 'errand'); return e ? { title: e.title as string, where: e.where as Where, active: j.prefs.active as string | null } : null })
 
 await p.goto(`${URL}/shimmer/open/ather`, { waitUntil: 'load', timeout: 240000 })
@@ -37,7 +46,7 @@ if ((await p.evaluate(() => (window as any).__ather.zone())) === 'plot') {
   await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z), GATE.x + 1.2, GATE.z + 1.2); await wait(2500)
   await aimAt(p, GATE.x, GATE.z, 1.4)
   await p.keyboard.press('KeyE')
-  ok(await poll(async () => /Athernyx/.test(await p.evaluate(() => document.querySelector('[data-panel="fold-map"]')?.textContent ?? '')), 10000), 'plot: E at the gate opens the fold map on the ATHERNYX face')
+  await mapThenTab('plot: at the gate')
   ok(!!(await p.$('[data-goal]')), 'plot: Rune Hold glows on it as the errand')
   await p.keyboard.press('Escape'); await wait(800)
 }
@@ -49,7 +58,7 @@ await poll(async () => !!(await p.evaluate(() => (window as any).__greg)), 12000
   // walk to the stone the line names, E: the fold map on Athernyx with the goal lit
   if (e?.where) { await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z), e.where.x + 1.2, e.where.z + 1.2); await wait(2500); await aimAt(p, e.where.x, e.where.z, 0.8) } }
 await p.keyboard.press('KeyE')
-ok(await poll(async () => /Athernyx/.test(await p.evaluate(() => document.querySelector('[data-panel="fold-map"]')?.textContent ?? '')), 10000), 'Wilds: E at the stone opens the fold map on the ATHERNYX face')
+await mapThenTab('Wilds: at the stone')
 ok(/your errand/.test(await p.evaluate(() => document.querySelector('[data-panel="fold-map"]')?.textContent ?? '')), "Wilds: Rune Hold's door reads 'your errand'")
 await p.screenshot({ path: '/tmp/trail-map.png' })
 // ── Rune Hold: tap the glowing pin, the continent points at the school's door ────────────────────────────────────────
