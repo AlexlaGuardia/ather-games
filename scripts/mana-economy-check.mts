@@ -30,26 +30,28 @@ const mana = (p: any) => p.evaluate(() => (window as any).__casts.mana() as numb
 async function pause(p: any, where: string) {
   await p.waitForFunction(() => !!(window as any).__casts, { timeout: 180000 }); await sleep(1500)
   const m0 = await mana(p)
-  await p.keyboard.press('KeyQ')
-  const trace = await p.evaluate(async (m0: number) => {
-    const w = window as any, t0 = performance.now(), out: [number, number][] = []
-    let spentAt = -1
+  // a press can land before the keeper may cast (slow headless boot): press again until the bar drops, up to 4 tries
+  let spent = false
+  for (let i = 0; i < 4 && !spent; i++) { await p.keyboard.press('KeyQ'); spent = await p.waitForFunction((m0: number) => { const w = window as any; if (w.__casts.mana() < m0 - 5) { w.__spentT = performance.now(); return true } return false }, { timeout: 5000, polling: 50 }, m0).then(() => true, () => false) }
+  const trace = !spent ? [] : await p.evaluate(async (m0: number) => {
+    const w = window as any, t0 = w.__spentT as number, out: [number, number][] = []
     while (performance.now() - t0 < 12000) {
-      const m = w.__casts.mana(), t = performance.now() - t0
-      if (spentAt < 0 && m < m0 - 5) spentAt = t
-      if (spentAt >= 0) out.push([t - spentAt, m])
+      out.push([performance.now() - t0, w.__casts.mana()])
       await new Promise(r => setTimeout(r, 100))
     }
     return out
   }, m0) as [number, number][]
   ok(trace.length > 0, `${where}: Q spent mana (${m0.toFixed(1)} -> ${trace[0]?.[1]?.toFixed(1)})`)
   if (!trace.length) return
-  const inPause = trace.filter(([t]) => t < 2.8 * 1000).map(([, m]) => m), after = trace.filter(([t]) => t > 3.3 * 1000)
+  // margins either side of the 3 s line: the spend is stamped up to a frame late
+  const inPause = trace.filter(([t]) => t < 2.3 * 1000).map(([, m]) => m), after = trace.filter(([t]) => t > 4 * 1000)
   const spread = Math.max(...inPause) - Math.min(...inPause), last = after[after.length - 1]?.[1] ?? 0, atEnd = Math.max(...inPause)
   ok(spread < 0.05, `${where}: mana flat inside the 3 s pause (spread ${spread.toFixed(3)} over ${inPause.length} samples)`)
   ok(last > atEnd + 0.3, `${where}: mana climbs after the pause (${atEnd.toFixed(2)} -> ${last.toFixed(2)} by ${(after[after.length - 1]?.[0] / 1000).toFixed(1)} s)`)
   const rate = after.length > 2 ? (after[after.length - 1][1] - after[0][1]) / ((after[after.length - 1][0] - after[0][0]) / 1000) : 0
-  ok(rate > 0.05 && rate < 0.45, `${where}: refill rate ${rate.toFixed(2)}/s (dial 0.4; slow headless frames read lower, dt is clamped)`)
+  // only an upper bound means anything here: the refill runs on frame dt clamped at 0.1 s, so swiftshader's ~1 fps reads far
+  // below the dial (0.04-0.10/s measured 11-22). The 0.4/s itself is pinned by shared/vitals-economy.test.ts.
+  ok(rate > 0 && rate < 0.45, `${where}: refill no faster than the 0.4/s dial (read ${rate.toFixed(2)}/s; slow headless frames read lower)`)
 }
 { // the Ather plot: the pause, then the shared potion cooldown
   const { p, errs } = await page()
