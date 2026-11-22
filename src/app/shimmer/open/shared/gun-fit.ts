@@ -5,7 +5,9 @@
 //
 // ★ The DEFAULT fitting is the sight whose optic each gun aims through TODAY (both rails: the 2x scope), so loading a keeper from
 // before M81 changes nothing about how their gun aims; the gun's own stamped sight is one tap away.
-// Owned: every rail's starting set (gun-kit sightsFor: the gun's own + the open lens + the 2x) plus what a shop sells later (s3).
+// Owned (M81 s3, hub 11-22): FREE = the gun's own sight + the one it aims through today (the 2x); everything else is BOUGHT at a gun
+// shop for that gun (Loadout.fit[gun].owned). GRANDFATHERED: a sight fitted before s3 (any of the old free set, e.g. the open lens)
+// stays owned, so nobody loses what they had on.
 import { KIT_GUNS, KIT_SIGHTS, kitModel, sightsFor, type KitGunId, type KitSightId, type Model } from './gun-kit'
 import { opticOf, type OpticId } from './optics'
 import { RANGE_GUNS } from './gunplay'
@@ -20,8 +22,22 @@ export function defaultSight(gunId: KitGunId): KitSightId {
   return sightsFor(KIT_GUNS[gunId]).find(s => KIT_SIGHTS[s].optic === today) ?? KIT_GUNS[gunId].own
 }
 /** the sights this keeper may fit to this gun (s3's shop purchases add to it) */
-export function ownedSights(_l: Loadout, gunId: string): KitSightId[] {
-  return isKitGun(gunId) ? sightsFor(KIT_GUNS[gunId]) : []
+export function freeSights(gunId: KitGunId): KitSightId[] {
+  const own = KIT_GUNS[gunId].own, d = defaultSight(gunId)
+  return own === d ? [own] : [own, d]
+}
+export function ownedSights(l: Loadout, gunId: string): KitSightId[] {
+  if (!isKitGun(gunId)) return []
+  const f = l.fit?.[gunId], out = freeSights(gunId)
+  const add = (s: unknown) => { if (isSight(s) && !out.includes(s)) out.push(s) }
+  if (sightsFor(KIT_GUNS[gunId]).includes(f?.sight as KitSightId)) add(f?.sight)   // grandfathered: fitted from the old free set
+  for (const s of f?.owned ?? []) add(s)
+  return sightsFor(KIT_GUNS[gunId]).concat(Object.keys(KIT_SIGHTS) as KitSightId[]).filter((s, i, a) => a.indexOf(s) === i && out.includes(s))   // a stable order
+}
+/** a bought sight joins this gun's owned set */
+export function addOwnedSight(l: Loadout, gunId: KitGunId, sightId: KitSightId): Loadout {
+  const f = l.fit?.[gunId] ?? {}, owned = f.owned ?? []
+  return owned.includes(sightId) ? l : { ...l, fit: { ...l.fit, [gunId]: { ...f, owned: [...owned, sightId] } } }
 }
 /** the fitted sight, or null for a gun without a rail */
 export function fittedSight(l: Loadout, gunId: string): KitSightId | null {
@@ -35,7 +51,9 @@ export function fitSight(l: Loadout, gunId: string, sightId: string): FitResult 
   if (!isKitGun(gunId)) return { ok: false, why: 'no-rail' }
   if (!l.guns.includes(gunId)) return { ok: false, why: 'not-yours' }
   if (!isSight(sightId) || !ownedSights(l, gunId).includes(sightId)) return { ok: false, why: 'not-owned' }
-  return { ok: true, loadout: { ...l, fit: { ...l.fit, [gunId]: { ...l.fit?.[gunId], sight: sightId } } } }
+  // a grandfathered sight (fitted before s3, never bought) is written into owned as it comes off, so swapping never loses it
+  const cur = l.fit?.[gunId]?.sight, base = isSight(cur) && cur !== sightId && !freeSights(gunId).includes(cur) && ownedSights(l, gunId).includes(cur) ? addOwnedSight(l, gunId, cur) : l
+  return { ok: true, loadout: { ...base, fit: { ...base.fit, [gunId]: { ...base.fit?.[gunId], sight: sightId } } } }
 }
 // the drawn model, one object per (gun, sight): fp-gun keys its geometry on the model, so a fresh object each frame would rebuild it
 const cache = new Map<string, Model>()

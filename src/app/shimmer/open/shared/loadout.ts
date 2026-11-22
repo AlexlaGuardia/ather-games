@@ -33,7 +33,7 @@ export interface Loadout {
    *  before 11-18, whose 'owned' guns were the test stand-in: those are taken back on load (see load). */
   kael?: boolean
   /** M81 s2: what each gun is fitted with, by gun id (shared/gun-fit.ts). Absent = the gun's default fitting. Sigils join here (M93). */
-  fit?: Record<string, { sight?: string }>
+  fit?: Record<string, { sight?: string; owned?: string[] }>   // owned = sights BOUGHT for this gun (M81 s3)
 }
 
 /** Which slot a Slate goes in: the sidearm is the secondary, every long gun a primary. */
