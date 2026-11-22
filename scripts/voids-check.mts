@@ -52,8 +52,12 @@ const near = (s: { px: number; pz: number }, x: number, z: number, r: number) =>
 
 // into the Wilds at the neck's tile
 const T = tileOf(neck.x, neck.z)
-await A('travel', { kind: 'waymark', w: { id: 'voids-check', tile: T.name, x: neck.x - T.tx * 1000 - across.x * 30, y: 0, z: neck.z - T.ty * 1000 - across.z * 30, biome: 2, made: 0 } })
-ok(await poll(async () => (await A('zone')) === 'wilds', 120000), 'in the Wilds')
+for (let i = 0; i < 12 && (await A('zone')) !== 'wilds'; i++) {   // the travel hook can be refused while the page settles: retry (as minimap-voids-check; pass 6 found this one calling it once)
+  await A('travel', { kind: 'waymark', w: { id: 'voids-check', tile: T.name, x: neck.x - T.tx * 1000 - across.x * 30, y: 0, z: neck.z - T.ty * 1000 - across.z * 30, biome: 2, made: 0 } })
+  await poll(async () => (await A('zone')) === 'wilds', 15000)
+}
+ok((await A('zone')) === 'wilds', 'in the Wilds')
+if ((await A('zone')) !== 'wilds') { await br.close(); console.log('voids-check: FAIL (never reached the Wilds)'); process.exit(1) }
 await sleep(8000); await p.mouse.click(480, 300); await sleep(800)
 
 // 1. the ground: a lip, then the deep at the border; the neck is land
