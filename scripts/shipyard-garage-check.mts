@@ -169,9 +169,9 @@ if (!await fTo('foot')) await fTo('foot')   // out of the Darter (it stays in ba
 await p.evaluate((x: number, z: number, w: number) => { (window as any).__drive.footTp(x, z, w, -0.35); (window as any).__drive.look(w, -0.35) }, stand.x, stand.z, yawTo(b1.x - stand.x, b1.z - stand.z))
 if (!await poll(async () => (await S('garage'))?.aimBay === 1, 30000)) await fail('dray aim', `crosshair not on the Dray: ${JSON.stringify(await S('garage'))} seeded ${JSON.stringify(res.seeded)} after ${JSON.stringify(res.afterReload)} now ${JSON.stringify(await dump())}`)
 await shot('g5-dray-aimed')
-// the E prompt is a touch pill (the continent draws no desktop prompt for any yard action): checked on --phone; desktop goes
-// straight to the real E tap, whose effect (fleet + garage) is the proof
-if (PHONE && !await poll(async () => !!(await p.$('[data-touch="take out"]')), 30000)) await fail('dray prompt', `no 'take out' pill: ${String(await text()).slice(0, 300)}`)
+// the E prompt: a touch pill on --phone, the yard prompt (E · Take out) on desktop
+const promptSel = PHONE ? '[data-touch="take out"]' : '[data-yard-prompt="take out"]'
+if (!await poll(async () => !!(await p.$(promptSel)), 30000)) await fail('dray prompt', `no ${promptSel}: ${String(await text()).slice(0, 300)}`)
 await p.keyboard.down('KeyE'); await sleep(1500); await p.keyboard.up('KeyE'); await poll(async () => (await fleet())?.active === DRAY, 30000); await sleep(1500)
 const fl5 = await fleet(), c5 = await car(), g5 = await S('garage')
 res.takeOut = { fleet: fl5, carOffBay2: +Math.hypot(c5.x - b1.x, c5.z - b1.z).toFixed(2), garage: g5 }

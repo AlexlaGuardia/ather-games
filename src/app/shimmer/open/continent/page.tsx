@@ -749,6 +749,8 @@ export interface RideHud { x: number; z: number; yaw: number; mph: number; frac:
 // on foot: the walker's own feel numbers (open/hillside/page.tsx), and the get-in/get-out glide
 /** Where the Hallway lets you out when the asked-for door is not yours yet: the 08-12 public landing (gates.md). */
 const LANDING = 'rune-hold'
+/** the yard's E verbs as the desktop prompt reads them (place: a tap sets it, holding E turns it; the touch row has its own turn pill) */
+const YARD_PROMPT: Record<NonNullable<DeedYardState['action']>, string> = { 'take out': 'E · Take out', place: 'E · Place · hold E to turn', 'pick up': 'E · Pick up', look: 'E · Change the look' }
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
 interface DriverCtl { tp?: (x: number, z: number, yaw: number) => void; car?: () => { x: number; y: number; z: number; yaw: number; speed: number; foot: boolean } }
@@ -1559,6 +1561,13 @@ function ContinentRideGame() {
       )}
       {hud.foot && !ptrLocked && !isTouch && !showMap && !garage && !board && !bagOpen && !vesselShop && !deed && !optionsOpen && (
         <div style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translateX(-50%)', padding: '7px 16px', borderRadius: 999, background: 'rgba(12,16,20,0.66)', color: '#f4efe2', font: '600 12px system-ui', letterSpacing: '0.16em', textTransform: 'uppercase', pointerEvents: 'none' }}>Click to resume</div>
+      )}
+      {/* the yard's E verb on desktop (11-22: phones had it as a touch pill, desktops had nothing to say what to press);
+          stacked just above the F prompt so both read when the keeper stands by a car in a bay */}
+      {!isTouch && hud.foot && yardState.action && !deed && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && (
+        <div data-yard-prompt={yardState.action} style={{ position: 'absolute', left: '50%', top: hud.prompt ? 'calc(62% - 34px)' : '62%', transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', pointerEvents: 'none' }}>
+          {YARD_PROMPT[yardState.action]}
+        </div>
       )}
       {hud.prompt && !bagOpen && !vesselShop && !deed && !optionsOpen && (   // world prompts stay out from over a menu
         <div style={{ position: 'absolute', left: '50%', top: '62%', transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', pointerEvents: 'none' }}>
