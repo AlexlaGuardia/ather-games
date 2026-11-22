@@ -159,5 +159,5 @@ const pass = res.smithy === true && (res.stock as string[]).includes('water_tap'
   && res.waterButtonShown === true && res.watered === true && af.water === '1' && af.mark === true && af.saved === true
   && ['0', '1', '2'].includes(res.at212 as string) && res.at226 === true && fm.before.bed1?.crop === 'dewdrop_vine' && fm.before.bed1?.watered === false && fm.bed1?.watered === true && fm.others === 0 && fm.ready === true
   && res.phoneOverflow === false && errs.length === 0
-console.log(pass ? 'PASS: Water Tap + Water Tank bought at the Smithy for Marks → no tap, no water line on the Farm → both set from the table → 2 water after 3 min (cap 12) → a Goldleaf watered (1 spent, Watered) → ready at 226 s, still growing at 212 s (0.75 of 300 s) → a farmer waters the growing Dewdrop from the tanks → 0 page errors' : 'FAIL')
+console.log(pass ? 'PASS: Water Tap + Water Tank bought at the Smithy for Marks → no tap, no water line on the Farm → both set from the hand (M45) → 2 water after 3 min (cap 12) → a Goldleaf watered (1 spent, Watered) → ready at 226 s, still growing at 212 s (0.75 of 300 s) → a farmer waters the growing Dewdrop from the tanks → 0 page errors' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)
