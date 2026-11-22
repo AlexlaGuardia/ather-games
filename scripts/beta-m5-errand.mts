@@ -25,6 +25,7 @@ import { GATE, REACH } from '../src/app/shimmer/open/ather/plot'
 import { gregSpot } from '../src/app/shimmer/open/ather/moonwell-glade'   // M30 part 2: where Greg sits now (Moonwell Glade; M67: in the closed Glade)
 import { GLADE_GATE } from '../src/app/shimmer/open/ather/glade-cluster'   // M67: the Glade's one way out (to the Wilds' waymark stone)
 import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'   // the Wilds' arrival stone: still in the Wilds, no longer next to Greg
+import { aimAt } from './lib/aim.mts'   // M60: E acts only on what the crosshair is on
 import { ANSWERS } from '../src/app/shimmer/open/ather/greg-talk'   // the labels lark writes; a reword never stales the check
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m5')
@@ -118,6 +119,7 @@ if (!inGlade) await fail('M31: born at Moonwell (first frame in the closed Glade
 await sleep(4000); await p.mouse.click(500, 350); await sleep(500)   // the Glade needs no tile streamed in; the click takes pointer-lock focus
 const gl = gregSpot(); res.gladeGreg = `${gl.x.toFixed(0)},${gl.z.toFixed(0)}`
 await walkTo('Glade arrival -> Greg at Moonwell Glade', gl.x, gl.z, REACH * 0.8)
+await aimAt(p, gl.x, gl.z, 1.0)   // M60: the walk looks level (pitch 0); a player points the crosshair at Greg himself (as errand-check does)
 await p.keyboard.press('KeyE'); await sleep(1200)
 if (!(await poll(async () => !!(await p.$('[data-talk-choices]')), 8000))) { sees.atGreg = await text(); await shot('greg-noE'); await fail('greg: E starts his conversation', 'no talk after E at Greg') }
 await shot('greg-talk'); sees.gregTalk = await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')
