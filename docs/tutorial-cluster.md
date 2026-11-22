@@ -31,6 +31,13 @@ Through the gate -> the **"The Wilds" waypoint** = the FIRST SETTLEMENT on the p
 - **Infection map:** the map stays NULL until uncovered, then starts CLEAR; infection grows over time if neglected (not fully infected on arrival).
 - **Settlement editor:** per settlement, a 200x200 m flat area Alex edits, the map forms around it (extend the existing settlement/blueprint tool, M39).
 
+## Beat 3: after the champion -> your own garden (Alex 11-22)
+- Champion down, the Moglins are happy: they give a few **potions** + a **pack of collected stuff** (a variety of resource items the keeper will need soon, to get going; contents = Jin's call, pick from the next hour's needs).
+- Back at the Glade, Greg is waiting for the news: "they could use more keepers like you"; if you're up for the challenge he can **fold you your own garden**, paid in the grey matter "these Hollows are so conveniently dropping".
+- **100 grey matter** -> the garden's first gate + a small area to tend (the green + the initial square, as now). **More grey matter** -> bigger.
+- **Waymarks:** Greg offers them at ~**500 grey matter**, and gives **3 free**. They link to your garden and make exploring the Wilds easier.
+- **Player-placed waymarks** (Alex aside): let keepers place them ANYWHERE in the Wilds (new mechanic, its own row).
+
 ## Beat 1: Greg (Alex 11-22, outline, lark writes the lines)
 1. Spawn in Greg's garden, a marker on Greg.
 2. Greg welcomes them to the Ather, "although they have not come in the best of times". The Wilds get worse every day; he fears for the Moglin settlements and the spirits who call it home.
@@ -46,7 +53,8 @@ Through the gate -> the **"The Wilds" waypoint** = the FIRST SETTLEMENT on the p
 - Dev tool: extend the M62 map editor to edit this cluster's four gardens (Alex wants to author all four).
 - Garden / cluster naming by players (Alex aside, 11-22): later, separate row.
 - Where the hand gun is handed over.
-- Where the 100 grey matter -> own garden step sits relative to the champion.
+- Garden growth: grey matter per size step (100 = first gate + small area; the next steps?).
+- Where the existing grey matter fold/plot costs sit today (ather/plot.ts) vs this ladder.
 - Tess's starter gift (seeds? watering can?).
 
 ## Canon asks (Magii) — batch, send when the loop is laid out
