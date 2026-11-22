@@ -25,7 +25,7 @@ import { buyBundle } from './smokehouse'
 import { bottlesIn, sellBottles } from './corkhouse'
 import { SMOKEHOUSE_STOCK } from '../ather/cooking'
 import { useLoadout, setLoadout, getLoadout, claimKaelsArms, slotOfGun } from '../shared/loadout'
-import { buyGun, GUN_PRICES, SHOP_GUNS } from './gun-shop'
+import { buyGun, buySigil, GUN_PRICES, SHOP_GUNS, SIGIL_PRICE, SIGIL_ITEM } from './gun-shop'
 import { yardRows, buyPart, slotName, YARD_SLOTS } from './courser-yard'
 import { makeOfTown, modelsOfMake, buyCourser, DARTER_MODEL } from './courser-lot'
 import { useFleet, getFleet, setFleet } from '../shared/fleet'
@@ -322,6 +322,17 @@ function GunShopPanel({ ledger, setLedger, onClose }: { ledger: Ledger; setLedge
               </div>
             )
           })}
+          <div data-sigil-row className="flex items-center gap-3 rounded-[12px] px-3 py-2" style={{ background: 'rgba(255,250,235,.45)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+            <img src={itemDef(SIGIL_ITEM).icon} alt="" width={36} height={36} />
+            <div className="min-w-0 flex-1">
+              <div className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>Unattuned sigil</div>
+              <div className="text-[12.5px]" style={{ color: H.inkSoft }}>Unattuned sigil · {SIGIL_PRICE.toLocaleString()} Marks</div>
+            </div>
+            <span data-buy="sigil_blank" style={{ display: 'contents' }}><HearthButton small primary disabled={ledger.marks < SIGIL_PRICE} onClick={() => {
+              const r = buySigil(ledger, getInv())
+              if (r.ok) { setLedger(r.ledger); setInv(r.inv); const t = 'Unattuned sigil · in your bag.'; setMsg(t); hudSay(t, 'item') } else setMsg(r.why ?? null)
+            }}>{ledger.marks < SIGIL_PRICE ? 'Not enough Marks' : 'Buy'}</HearthButton></span>
+          </div>
         </div>
         <div className="mt-3 flex items-center text-[12.5px]" style={{ color: H.inkSoft }}>
           <span className="flex-1" data-shop-msg>{msg ?? ''}</span>

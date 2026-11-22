@@ -2,6 +2,7 @@
 // base guns are sold at a counter for Marks. Kael's Charred Rifle is NOT sold (it comes only from Kael's chest). No name,
 // no keeper: the UI says "The gun shop". Prices are build numbers (a keeper starts with 1500 Marks; the cheapest deed is 35000).
 import { RANGE_GUNS, type RangeGun } from '../shared/gunplay'
+import { give, type Inv } from '../shared/inventory'
 import { equip, slotOfGun, type Loadout } from '../shared/loadout'
 import type { Ledger } from '../trade'
 
@@ -19,4 +20,15 @@ export function buyGun(loadout: Loadout, ledger: Ledger, gunId: string): GunBuy 
   const slot = slotOfGun(g)
   if (next[slot] === null) next = equip(next, slot, gunId)
   return { ok: true, loadout: next, ledger: { ...ledger, marks: ledger.marks - price } }
+}
+
+/** M93 s2: a blank sigil sold at the counter (canon: bought unattuned at a gun shop). Marks; Jin's dial. */
+export const SIGIL_PRICE = 250
+export const SIGIL_ITEM = 'sigil_blank'
+export interface SigilBuy { ok: boolean; why?: string; ledger: Ledger; inv: Inv }
+export function buySigil(ledger: Ledger, inv: Inv): SigilBuy {
+  if (ledger.marks < SIGIL_PRICE) return { ok: false, why: `It costs ${SIGIL_PRICE.toLocaleString()} Marks. You have ${ledger.marks.toLocaleString()}.`, ledger, inv }
+  const g = give(inv, SIGIL_ITEM, 1)
+  if (g.left > 0) return { ok: false, why: 'No room in the bag.', ledger, inv }
+  return { ok: true, ledger: { ...ledger, marks: ledger.marks - SIGIL_PRICE }, inv: g.inv }
 }

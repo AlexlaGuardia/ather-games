@@ -2,7 +2,8 @@
 import { RANGE_GUNS, type RangeGun } from '../shared/gunplay'
 import { newLoadout, slotOfGun } from '../shared/loadout'
 import { NEW_LEDGER, type Ledger } from '../trade'
-import { buyGun, GUN_PRICES } from './gun-shop'
+import { give, countOf, newInv, SLOTS } from '../shared/inventory'
+import { buyGun, buySigil, GUN_PRICES, SIGIL_PRICE } from './gun-shop'
 
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  FAIL', m) } }
@@ -52,6 +53,21 @@ if (sec) { const bs = buyGun(base, L0, sec); ok(bs.ok && bs.loadout.secondary ==
 const bare = { ...base, secondary: null }
 const bs2 = buyGun({ ...bare, guns: [] }, L0, 'repeater')
 ok(bs2.ok && bs2.loadout.secondary === 'repeater', 'an empty secondary gets the sidearm')
+
+// M93 s2: the blank sigil
+{
+  const inv0 = newInv(), L = rich(1000)
+  const b = buySigil(L, inv0)
+  ok(b.ok && b.ledger.marks === 1000 - SIGIL_PRICE, 'sigil: Marks down by exactly the price')
+  ok(countOf(b.inv, 'sigil_blank') === 1, 'sigil: one lands in the bag')
+  const s = buySigil(rich(SIGIL_PRICE - 1), inv0)
+  ok(!s.ok && !!s.why && s.why.includes('Marks') && s.ledger.marks === SIGIL_PRICE - 1 && s.inv === inv0, 'sigil: short Marks refused, nothing changed')
+  let full = newInv(); for (let i = 0; i < SLOTS; i++) full = give(full, 'repeater', 1).inv
+  const f = buySigil(L, full)
+  ok(!f.ok && f.ledger.marks === 1000 && countOf(f.inv, 'sigil_blank') === 0, 'sigil: full bag refused, nothing changed')
+  const b2 = buySigil(b.ledger, b.inv)
+  ok(b2.ok && countOf(b2.inv, 'sigil_blank') === 2 && b2.ledger.marks === 1000 - 2 * SIGIL_PRICE, 'sigil: two buys stack to 2')
+}
 
 console.log(`gun-shop: ${pass} pass, ${fail} fail`)
 if (fail) process.exit(1)

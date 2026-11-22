@@ -25,6 +25,8 @@ export interface ItemDef {
 }
 export const OPEN_ITEMS: Record<string, ItemDef> = {
   repeater: { name: 'Repeater', blurb: 'A sidearm. Twelve to a clip, R reloads. Only the Wilds give it work.', icon: '/open/icons/repeater.svg', stack: 1, kind: 'gun' },
+  // TODO @lark: flavour line (M93 s2; the blurb is a plain functional placeholder)
+  sigil_blank: { name: 'Unattuned sigil', blurb: 'A blank sigil. Runes are cut into it at the Enchant Temple.', icon: '/open/icons/keepstone.svg', stack: 99, kind: 'material' },
   waymark: { name: 'Waymark', blurb: 'Plant it on open ground in the Wilds and the fold map can take you back. Lift it to carry it again.', icon: '/open/icons/waymark.svg', stack: 12, kind: 'placeable' },
 }
 /** Which skill an item comes from: the garden bank's tabs (ather/garden-bank.ts). Filled beside each table below, so a
