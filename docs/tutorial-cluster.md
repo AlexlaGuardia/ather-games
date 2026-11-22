@@ -37,7 +37,7 @@ Through the gate -> the **"The Wilds" waypoint** = the FIRST SETTLEMENT on the p
 3. Options split: **"Moglins?"** / **"Spirits?"**
    - Moglins: a quick description; the keeper can speak to some of the folk who live at the Glade.
    - Spirits: curious little creatures he has researched for a long time; he hands the keeper **the grimoire** ("I keep trying to grow what we know of them with this here, but there's always something getting in the way of my research"). Be careful in the Wilds; any help is appreciated.
-4. Both heard -> new option **"The Wilds?"**: he points the keeper to his three friends and the two Moglins in his plot; "once you have heard them out, come see me again".
+4. Both heard -> new option **"The Wilds?"**: he points the keeper to his three friends (Otto, Tess, Bonn) and Fennel, the Moglin on his plot; "once you have heard them out, come see me again".
 5. (next: Alex continues)
 
 ## Open questions
@@ -53,5 +53,5 @@ Through the gate -> the **"The Wilds" waypoint** = the FIRST SETTLEMENT on the p
 - **Otto, Tess, Bonn as the Glade's three garden-keepers.** Canon: they are the Spirit Tales leads (Bonn 11 at Bk1). Bonn fits: she is Gregory's keeper-ward, given "the old arrival plot", youngest keeper (characters/bonn.md:5,50). Otto lives at Forge Grove under Heslur; Tess at Goldleaf Acres under Maizie. When in the timeline is the game, and may Otto + Tess hold plots in the Glade (or their mentors)?
 - Fennel as Greg's one plot Moglin, giving bait daily (moonwell-folk.md:58-78: Fennel = cook, keeps the first-rinstick quest).
 - Moonwell Glade leaves the Wilds and becomes a closed four-garden cluster: allowed?
-- Greg's three friends: who are they (names, voices)?
+- (answered by Alex: the three are Otto, Tess, Bonn; see the first ask)
 - Greg as a long-time spirit researcher who hands newborns a grimoire: true? (grimoire exists in code: ather/plot.ts)
