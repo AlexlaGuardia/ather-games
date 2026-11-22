@@ -136,6 +136,11 @@ const DEVICE_KEYS = [
   'ather:device',                 // M12.5: this browser's id for the cloud-save write lease (open/cloud-sync.tsx)
   'ather:open:',                  // M12.5: this browser's sync record + its ONE conflict backup (lib/open-cloud-core.ts)
   'open.settings.v1',              // open-world settings: DEVICE
+  'open:sfx-buses.v1',            // shared/sfx.ts BUS_KEY: the sfx/ui/ambience/music faders UNDER the master
+                                  // volume, and the master lives in open.settings.v1 (DEVICE) one line up.
+                                  // A mix is set against these speakers/headphones, not earned by a keeper;
+                                  // splitting the faders per keeper from the master they multiply would
+                                  // give one desk two different loudnesses for the same slider.
   'open.keymap.v1',               // open-world key bindings: DEVICE (the hands, not the character)
   'open:hands-tune.v1',           // the first-person hands' tune from /shimmer/dev/hands: DEVICE (tuned against this screen)
   'ather.look2',                  // ground look: DEVICE
