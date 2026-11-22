@@ -46,8 +46,10 @@ async function charge(p: any, where: string, errs: string[]) {
   const early = tr.filter(([t]) => t < 0.8), last = tr[tr.length - 1]
   ok(early.length > 0 && early.every(([, s]) => s === 0), `${where}: nothing for the 1 s stall (${early.length} samples < 0.8 s, max ${Math.max(0, ...early.map(x => x[1])).toFixed(2)})`)
   ok(last[1] > 0.5, `${where}: then the skin climbs (${last[1].toFixed(1)} by ${last[0].toFixed(1)} s)`)
-  const spent = m0 - last[2]
-  ok(spent > 0 && Math.abs(last[1] / spent - 5) < 0.6, `${where}: 10 skin per 2 mana (skin ${last[1].toFixed(1)} for ${spent.toFixed(2)} mana, ratio ${(last[1] / spent).toFixed(2)}; the refill is paused while it spends)`)
+  // read the ratio where the skin first reaches the cap (or the end): past the cap nothing is spent, so 3 s later the refill
+  // resumes and would make the mana spent look smaller
+  const at = tr.find(([, sk]) => sk >= 49.99) ?? last, spent = m0 - at[2]
+  ok(spent > 0 && Math.abs(at[1] / spent - 5) < 0.6, `${where}: 10 skin per 2 mana (skin ${at[1].toFixed(1)} for ${spent.toFixed(2)} mana at ${at[0].toFixed(1)} s, ratio ${(at[1] / spent).toFixed(2)})`)
   await sleep(300); const r0 = await skin(p); await sleep(1500); const r1 = await skin(p)
   ok(Math.abs(r1 - r0) < 0.01, `${where}: letting go stops it (${r0.toFixed(2)} -> ${r1.toFixed(2)})`)
   // the cap: a scripted hold until it stops climbing (slow headless frames fill slowly: dt is clamped)
