@@ -14,7 +14,9 @@ export const ANSWERS = { more: 'And then?', take: 'Take the gems', ground: 'My g
 
 export interface GregTalkActs { ground: () => void; bye: () => void; goto: (step: number) => void
   /** BETA M32: 'Tell me about the Ather' starts his walking tour (greg-tour.ts). Absent = no tour answer. */
-  tour?: () => void }
+  tour?: () => void
+  /** M68 s2: his hello while the tutorial wants something (the pending bark); absent = GREG_HELLO */
+  hello?: string }
 
 /** The node at `step` of Greg's talk. Step 0 is where every conversation starts; steps 1+ walk the send-off lines. */
 export function gregTalk(errand: GregErrand, step: number, act: GregTalkActs): TalkNode {
@@ -33,6 +35,6 @@ export function gregTalk(errand: GregErrand, step: number, act: GregTalkActs): T
     }
   }
   // before the bracelet is lit his signed bark points the way (trigger greg:bark:errand); otherwise a plain hello
-  const line = (errand.stage === 'smith' || errand.stage === 'temple') && errand.where ? gregRepeat(errand.where) : GREG_HELLO
+  const line = (errand.stage === 'smith' || errand.stage === 'temple') && errand.where ? gregRepeat(errand.where) : (act.hello ?? GREG_HELLO)
   return { line, options: [ground, ...tour, bye] }
 }

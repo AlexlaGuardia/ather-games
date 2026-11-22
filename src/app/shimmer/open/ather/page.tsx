@@ -52,7 +52,8 @@ import {
 import { PlotScene } from './plot-scene'
 import { HeldItem } from './held-item'
 import { heldUse, placesFromHand, useLabel } from './held-use'
-import { WorkshopScene, WorkshopPanel, PlacingBar, BuildBar, usePlacingKeys, isPlacing, holdFromHand, useWorks, workWalls, workPrompt, currentWorks, setWorks } from './workshop'
+import { WorkshopScene, WorkshopPanel, PlacingBar, BuildBar, usePlacingKeys, isPlacing, holdFromHand, useWorks, workWalls, workPrompt, currentWorks, currentBank, setWorks } from './workshop'
+import { bankCount } from './garden-bank'
 import { currentFarm, setFarm, currentWater, setWater, farmNow } from './farm-room'
 import { BuildPointer, stepBuildCam, useBuildMode, useBuildKeys, isBuilding, exitBuild } from './build-mode'
 import { tick as villageTick, loadVillage, saveVillage } from './moglins'
@@ -69,6 +70,9 @@ import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
+import { tutStart, tutNode, grimoireGift, type TutCursor } from './glade-greg-talk'   // M68 s2
+import { loadTut, saveTut, gift as tutGift, allHeard, type Tut } from './glade-tutorial'
+import { line as gladeLine } from './glade-tutorial-lines'
 import { gregSpot, GLADE } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
 import { GladeLots } from './glade-lots-view'
 import { GladeCluster, gladeFolkDrawn } from './glade-cluster-view'   // M67 s1a: the closed Glade's keepers, Moglins, Greg's marker
@@ -797,7 +801,7 @@ function AtherSliceGame() {
       // CHECK-ONLY (glade-cluster-check): set the keeper down somewhere in the closed Glade (only while in it), to walk the last steps to the gate
       gladeAt: (x: number, z: number, yaw: number) => { if (zone.kind === 'glade') arrive({ kind: 'glade' }, { x, z, yaw }) },
       wildsLoaded: () => [...(wwRef.current?.loaded.keys() ?? [])],   // read-only probe (M9 wilds-release-check): the parsed Wilds tiles held now
-      open: (k: 'gate' | 'greg' | 'athernyx') => setPanel(k === 'greg' ? { kind: 'talk', step: 0 } : { kind: 'map', view: k === 'athernyx' ? 'athernyx' : 'ather', travel: true }),
+      open: (k: 'gate' | 'greg' | 'athernyx') => { if (k === 'greg') openGreg(); else setPanel({ kind: 'map', view: k === 'athernyx' ? 'athernyx' : 'ather', travel: true }) },
       travel: (d: Dest) => travel(d),
       grant: (grey = 0, pages = 0) => updateGarden({ ...garden, grey: garden.grey + grey, pages: garden.pages + pages }),
       resetGarden: () => updateGarden(freshGarden()),
@@ -1150,12 +1154,39 @@ function AtherSliceGame() {
     },
   }
   // BETA M13: E at Greg is a conversation (greg-talk.ts): his line in a bubble, one screen per answer; the camera turns to him
+  // M68 s2: a live tutorial keeper hears Greg's Beat 1 first (glade-greg-talk.ts), then his ordinary talk with the pending bark
+  //   as its hello until the four are heard. The tutorial is re-read at every E (a sign-in switches keeper).
+  const [tut, setTutState] = useState<Tut | null>(null)
+  const [tutC, setTutC] = useState<TutCursor | null>(null)
+  const setTut = (t: Tut) => { saveTut(t); setTutState(t) }
+  const openGreg = () => { const t = loadTut(); setTutState(t); setTutC(tutStart(t)); setPanel({ kind: 'talk', step: 0 }) }
+  /** Hub call (M68): ONE Grimoire Pedestal per keeper. One already crafted (the old recipe) or placed or banked counts. */
+  const ownsPedestal = () => countOf(getInv(), 'grimoire_pedestal') > 0 || currentWorks().pieces.some(p => p.item === 'grimoire_pedestal') || bankCount(currentBank(), 'grimoire_pedestal') > 0
   const talkStep = panel?.kind === 'talk' ? panel.step : -1
-  const talkNode = useMemo(() => talkStep < 0 ? null : gregTalk(gregErrand, talkStep, {
-    ground: () => setPanel({ kind: 'greg' }), bye: () => setPanel(null), goto: step => setPanel({ kind: 'talk', step }),
-    tour: () => { setPanel(null); setStops(tourStops()); setTour({ i: 0, talk: false }) },
+  const talkNode = useMemo(() => {
+    if (talkStep < 0) return null
+    if (tut && tutC) return tutNode(tut, tutC, {
+      set: setTut,
+      go: c => { setTutC(c); if (!c) setPanel(null) },
+      grimoire: () => {
+        const g = grimoireGift(tut.gifts.includes('grimoire'), ownsPedestal())
+        if (!g.record) return true
+        if (g.give) {
+          const r = give(getInv(), 'grimoire_pedestal', 1)
+          if (r.left) { hudSay('Your bag is full. Make room for the grimoire.', 'info'); return false }
+          setInv(r.inv); hudSay(`${FURNITURE.grimoire_pedestal.name} · in your bag`, 'item')
+        }
+        setTut(tutGift(tut, 'grimoire').t); return true
+      },
+    })
+    const pending = !!tut && tut.live && tut.greg.wilds && !allHeard(tut)
+    return gregTalk(gregErrand, talkStep, {
+      ground: () => setPanel({ kind: 'greg' }), bye: () => setPanel(null), goto: step => setPanel({ kind: 'talk', step }),
+      tour: () => { setPanel(null); setStops(tourStops()); setTour({ i: 0, talk: false }) },
+      hello: pending ? gladeLine('greg.b1.bark.pending') : undefined,
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [talkStep, errandStage, birth, given])
+  }, [talkStep, errandStage, birth, given, tut, tutC])
   const talkFocus = useRef<{ x: number; y: number; z: number } | null>(null)
   // M32 (Magii 944ad1d): Greg lights the starter glove with the birth's ruled word, only while its seat is empty
   function lightGlove() {
@@ -1258,7 +1289,7 @@ function AtherSliceGame() {
         hudSay(`${FAIR_NAME} · the troupe is still pitching. The season's games, contests and market open soon.`, 'info', 6); return
       }
       if (e.code === 'KeyE' && n) {
-        if (n.kind === 'greg') setPanel({ kind: 'talk', step: 0 })
+        if (n.kind === 'greg') openGreg()
         else if (n.kind === 'fennel') setPanel({ kind: 'fennel', page: 0 })
         else if (n.kind === 'anemonyx') meetToday(clock())   // M76 s2
         else if (n.kind === 'work' && n.near.kind === 'piece' && currentWorks().pieces.some(x => x.id === (n.near as { id: string }).id && x.item === 'lift') && callNearest()) return   // M61 s3: a guest calls a mate's lift too (a local ride, never saved)

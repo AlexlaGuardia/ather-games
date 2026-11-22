@@ -811,6 +811,8 @@ const SERVER_BANK: Bank = freshBank()
 const bsubs = new Set<() => void>()
 const getB = (): Bank => { if (!bank) bank = typeof window === 'undefined' ? SERVER_BANK : loadBank(); return bank }
 export function setBank(b: Bank) { bank = b; saveBank(b); bsubs.forEach(f => f()) }
+/** M68 s2: the garden bank now (the one-pedestal guard reads it outside React) */
+export const currentBank = () => getB()
 export const useBank = () => useSyncExternalStore(f => { bsubs.add(f); return () => { bsubs.delete(f) } }, getB, () => SERVER_BANK)
 
 // placing: which room, its turn, and where the ghost stands now (set by the scene each frame)
@@ -2111,12 +2113,16 @@ function BankPanel({ id, onClose }: { id: string; onClose: () => void }) {
  *  overlapped and the placing hint read through the buttons (phone pass 11-19, 360x780 + 390x844). */
 export function PlacingBar({ owned }: { owned: ReadonlySet<string> }) {
   const p = usePlacing()
+  const [reading, setReading] = useState(false)   // M68 s2: the grimoire is readable from the hand until its pedestal is placed
   if (!p) return null
+  const book = p.kind === 'piece' && p.item === 'grimoire_pedestal'
+  if (reading && book) return <GrimoirePanel onClose={() => setReading(false)} footer={null} />
   const btn: React.CSSProperties = { border: 0, borderRadius: 999, padding: '10px 16px', font: '700 13px system-ui', cursor: 'pointer', background: 'rgba(255,250,235,.95)', color: H.ink, boxShadow: '0 2px 8px rgba(0,0,0,.25)' }
   return (
     <div data-placing={p.kind} style={{ position: 'fixed', left: '50%', bottom: 'max(230px, 27vh)', transform: 'translateX(-50%)', display: 'flex', gap: 8, zIndex: 40, pointerEvents: 'auto' }}>
       <button type="button" data-act="turn" style={btn} onClick={() => setPlacing({ ...p, q: (p.q + 1) % 4 })}>{fromHand(p) ? 'Turn (hold E)' : 'Turn (R)'}</button>
       <button type="button" data-act="place" style={{ ...btn, background: '#e0823f', color: '#fff' }} onClick={() => confirmPlace(owned)}>Place (E)</button>
+      {book && <button type="button" data-act="read" style={btn} onClick={() => setReading(true)}>Read</button>}
       {!fromHand(p) && <button type="button" style={btn} onClick={() => setPlacing(null)}>Cancel (Esc)</button>}
     </div>
   )

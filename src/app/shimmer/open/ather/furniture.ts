@@ -56,6 +56,8 @@ export interface PieceDef {
   alc?: AlcStation
   /** M76: a SPIRIT piece: E opens the planter (plant a Mana Seed) or the grimoire on its pedestal */
   spirit?: 'planter' | 'pedestal'
+  /** M68 s2: GIVEN, never made or sold (the Grimoire Pedestal: Greg hands it in the tutorial, glade-greg-talk.ts) */
+  gift?: true
 }
 // Goldwood pieces first: goldwood is what a new keeper can prune (Forestry 1), so a first piece is never a locked door.
 export const FURNITURE: Readonly<Record<string, PieceDef>> = {
@@ -70,7 +72,7 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   //    seed already is blooms in it (spirit-seeds.ts). The GRIMOIRE PEDESTAL is where Greg's tablet rests in the garden. Plain
   //    nouns. Blurbs = placeholders for @lark.
   spirit_planter: { name: 'Spirit Planter', blurb: 'Starwillow branches woven round a bed of soft soil. A Mana Seed planted here blooms into the spirit it already is.', recipe: [{ id: 'starwillow_branch', n: 4 }, { id: 'starwillow_sap', n: 1 }], w: 0.9, d: 0.9, h: 0.6, solid: true, wood: 'starwillow', glow: '#ffe7a0', spirit: 'planter' },
-  grimoire_pedestal: { name: 'Grimoire Pedestal', blurb: 'A short stone stand with a slanted top. The grimoire rests here, and its pages are read here.', recipe: [{ id: 'stone_brick', n: 4 }, { id: 'shimmeroak_plank', n: 2 }], w: 0.7, d: 0.7, h: 1.1, solid: true, wood: 'stone', glow: '#ffd27a', spirit: 'pedestal' },
+  grimoire_pedestal: { name: 'Grimoire Pedestal', blurb: 'A short stone stand with a slanted top. The grimoire rests here, and its pages are read here.', recipe: [], gift: true, w: 0.7, d: 0.7, h: 1.1, solid: true, wood: 'stone', glow: '#ffd27a', spirit: 'pedestal' },   // M68 s2 (hub call): GREG hands it (Spirits?.3), one per keeper; the carpentry recipe is gone
   // M48 (11-20): the lift. Canon RULED-AFK (athernyx 29b26fa): cord + counterweight, wood and stone, no metal, no runes. Planks and
   //    Stone Brick (no cord item exists in the bag). Blurb = placeholder for @lark.
   lift: { name: 'Lift', blurb: 'A goldwood car on cords, a stone weight hung beside it. Pull the cord for a floor and up or down you go.', recipe: [{ id: 'goldwood_plank', n: 8 }, { id: 'stone_brick', n: 4 }], w: 1.0, d: 1.0, h: 2.0, solid: false, wood: 'goldwood', shaft: true },
