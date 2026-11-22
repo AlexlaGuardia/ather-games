@@ -4,7 +4,7 @@
 // Moglins (Fennel at her lot in Greg's garden, the rest on the friends' gardens; folk-spots.ts) and the marker over Greg
 // (a newborn's first heading). Greg himself is glade-greg.tsx on his bench (s1b-2). `gladeFolkDrawn` is who page.tsx lets
 // E talk to. Mount in the 'glade' zone only.
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type * as THREE from 'three'
 import { FolkModel, folkLook, FOLK_HEIGHT } from '../shared/folk-model'
@@ -12,6 +12,7 @@ import { MoglinModel, furOf } from '../shared/moglin-model'
 import { gladeKeepers, gregInGlade } from './glade-cluster'
 import { GLADE, gladeFolk } from './moonwell-glade'
 import { folkSpots, type Spot } from './folk-spots'
+import { gladeBlueprintVersion } from './glade-lots'
 
 const KEEPERS = gladeKeepers(), GREG = gregInGlade()
 /** the five as drawn right now (Fennel is away while the first-rinstick quest has her at the keeper's Rinnshop) */
@@ -30,13 +31,17 @@ function GregMarker({ ground }: { ground: (x: number, z: number) => number }) {
 }
 
 export function GladeCluster({ ground, marker = true }: { ground: (x: number, z: number) => number; marker?: boolean }) {
-  const FOLK = useMemo(() => folkSpots(GLADE, gladeFolk().map(f => f.id)), [])   // read at mount: a quest that starts shows on the next visit
+  // re-read when a lot's blueprint lands (glade-lots: a blueprint moves its Moglin to the door, setLotSpot): read only at mount,
+  // Fennel stood 5.6 m from where the tour + the talk put her (tour-check 11-22). Who is home is read at mount (next visit).
+  const [bpVer, setBpVer] = useState(gladeBlueprintVersion())
+  useFrame(() => { const v = gladeBlueprintVersion(); if (v !== bpVer) setBpVer(v) })
+  const FOLK = useMemo(() => folkSpots(GLADE, gladeFolk().map(f => f.id)), [bpVer])   // eslint-disable-line react-hooks/exhaustive-deps
   gladeFolkDrawn = FOLK
   // read-only probe (scripts/glade-cluster-check.mts): who the Glade draws and where
   useEffect(() => {
-    const w = window as unknown as { __glade?: unknown }
-    w.__glade = { keepers: KEEPERS, folk: FOLK, greg: GREG, marker }
-    return () => { delete w.__glade; gladeFolkDrawn = [] }
+    const w = window as unknown as { __glade?: Record<string, unknown> }   // shared with glade-lots-view's blueprint hook: merge
+    w.__glade = { ...(w.__glade ?? {}), keepers: KEEPERS, folk: FOLK, greg: GREG, marker }
+    return () => { if (w.__glade) { const { keepers: _k, folk: _f, greg: _g, marker: _m, ...rest } = w.__glade; void _k; void _f; void _g; void _m; if (Object.keys(rest).length) w.__glade = rest; else delete w.__glade }; gladeFolkDrawn = [] }
   }, [marker, FOLK])
   return (
     <>

@@ -1,6 +1,6 @@
 // Check: BETA M32 GREG'S TOUR (Alex 11-19), on a PHONE viewport. A born keeper (Star, first errand open) asks Greg 'Tell me
 // about the Ather' (his FIRST offer to a newborn): he gets up and WALKS the Glade (Magii fba7186: the Moonwell, each of the
-// five at home, the waymark), one bubble per stop, then the fade home to the keeper's planning TABLE: his last answer lights the
+// folk of Greg's garden at home; M67 s1b-2: in the closed Glade, no waymark stop), one bubble per stop, then the fade home to the keeper's planning TABLE: his last answer lights the
 // glove (Magii 944ad1d, the ruled word) and goes into the gems. Tour 2 SKIPS at its 2nd stop (straight to the table); tour 3
 // is Esc MID-WALK (no travel, back to his bench). Lines are @lark placeholders: imported, never retyped.
 // npx tsx scripts/tour-check.mts  (URL= to point elsewhere, e.g. http://localhost:3202). Log to a FILE: it is slow on the box.
@@ -8,7 +8,6 @@ import puppeteer from 'puppeteer-core'
 import { ANSWERS } from '../src/app/shimmer/open/ather/greg-talk'
 import { tourStops, gloveWordFor, TOUR_ASK, TOUR_NEXT, TOUR_SKIP, TOUR_DONE } from '../src/app/shimmer/open/ather/greg-tour'
 import { gregSpot } from '../src/app/shimmer/open/ather/moonwell-glade'
-import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'
 import { aimAt } from './lib/aim.mts'
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 const URL = process.env.URL ?? 'https://ather.games'
@@ -29,14 +28,15 @@ const tp = (x: number, z: number) => p.evaluate((x: number, z: number) => (windo
 await p.goto(`${URL}/shimmer/open/ather`, { waitUntil: 'load', timeout: 240000 })
 await p.waitForFunction(() => typeof (window as any).__ather?.tp === 'function', { timeout: 240000 }); await wait(2000)
 // get to the Glade (M31: a newborn may already be there; a reload lands on the plot)
-for (let i = 0; i < 40 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds'; i++) { await p.evaluate((w) => (window as any).__ather.travel({ kind: 'waymark', w }), GREG_WAYMARK as any); await wait(4000) }
+// M67 s1b-2: the Glade is the closed Glade zone now (the fold map's 'Moonwell Glade' stop = travel kind 'glade')
+for (let i = 0; i < 40 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'glade'; i++) { await p.evaluate(() => (window as any).__ather.travel({ kind: 'glade' })); await wait(4000) }
 ok(await poll(async () => !!(await greg()), 120000), 'Greg is drawn at the Glade')
 await wait(8000)
 await p.touchscreen.tap(195, 420); await wait(800)   // the phone's 'tap to start' card (a real newborn taps it at birth)
 const S = gregSpot(), stops = tourStops()
 // follow like a player: ~3.5 m behind Greg, on the far side from what he is walking to / showing
 const nearGreg = async () => { const g = await greg(); if (!g) return
-  const st = g.tour ? stops[g.tour.i] : null, L = st && st.zone === 'wilds' ? st.look : S, a = Math.atan2(g.x - L.x, g.z - L.z)
+  const st = g.tour ? stops[g.tour.i] : null, L = st && st.zone === 'glade' ? st.look : S, a = Math.atan2(g.x - L.x, g.z - L.z)
   await tp(g.x + Math.sin(a) * 3.5, g.z + Math.cos(a) * 3.5) }
 const startTour = async (tag: string) => {
   let tries = 0
@@ -55,8 +55,8 @@ const startTour = async (tag: string) => {
 
 const glove = () => p.evaluate(() => { try { return (JSON.parse(localStorage.getItem('open.loadout.v1') ?? '{}').vessels ?? []).find((v: any) => v.id === 'starter-glove')?.word ?? null } catch { return 'ERR' } })
 const zone = () => p.evaluate(() => (window as any).__ather.zone())
-const backToGlade = async () => { for (let i = 0; i < 40 && (await zone()) !== 'wilds'; i++) { await p.evaluate((w) => (window as any).__ather.travel({ kind: 'waymark', w }), GREG_WAYMARK as any); await wait(4000) } await poll(async () => !!(await greg()), 120000); await wait(6000) }
-const glade = stops.filter(x => x.zone === 'wilds'), table = stops.length - 1
+const backToGlade = async () => { for (let i = 0; i < 40 && (await zone()) !== 'glade'; i++) { await p.evaluate(() => (window as any).__ather.travel({ kind: 'glade' })); await wait(4000) } await poll(async () => !!(await greg()), 120000); await wait(6000) }
+const glade = stops.filter(x => x.zone === 'glade'), table = stops.length - 1
 ok(stops[table].id === 'table' && glade.length === stops.length - 1, `stops: ${stops.map(x => x.id).join(' ')}`)
 ok((await glove()) === null, 'a newborn\'s glove is empty before Greg')
 
@@ -67,15 +67,22 @@ if (await startTour('tour 1')) {
   ok(await poll(async () => (await greg())?.action === 'walk', 20000), 'tour 1: he WALKS (the rig strides)')
   for (let i = 0; i < glade.length; i++) {
     const at = await poll(async () => { await nearGreg(); const g = await greg(); return !!g?.tour?.talk && g.tour.i === i }, 600000)
-    const g = await greg(), d = g ? Math.hypot(g.x - stops[i].at.x, g.z - stops[i].at.z) : 99
-    ok(at && d < 0.05, `tour 1 stop ${i} (${stops[i].id}): he stands ON the stop (${d.toFixed(2)} m off) and talks`)
+    // the stop as the PAGE has it (blueprint doors move a Moglin: node has no blueprints), and it must stand beside that Moglin as drawn
+    const g = await greg() as any, ps = g?.stops?.[i] as { id: string; at: { x: number; z: number }; look: { x: number; z: number } } | undefined
+    const d = g && ps ? Math.hypot(g.x - ps.at.x, g.z - ps.at.z) : 99
+    ok(at && ps?.id === stops[i].id && d < 0.05, `tour 1 stop ${i} (${stops[i].id}): he stands ON the page's stop (${d.toFixed(2)} m off) and talks`)
+    if (ps && stops[i].id.startsWith('folk:')) {
+      const f = ((await p.evaluate(() => (window as any).__glade?.folk ?? [])) as { id: string; x: number; z: number }[]).find(q => q.id.endsWith(':' + stops[i].id.slice(5)))
+      const fd = f ? Math.hypot(f.x - ps.look.x, f.z - ps.look.z) : 99, gd = f ? Math.hypot(f.x - g.x, f.z - g.z) : 99
+      ok(fd < 0.05 && gd < 3, `tour 1 stop ${i}: he shows ${stops[i].id.slice(5)} where they are drawn (${fd.toFixed(2)} m) from beside them (${gd.toFixed(1)} m)`)
+    }
     ok(await poll(async () => (await bubble()).includes(stops[i].line), 8000), `tour 1 stop ${i}: his bubble is that stop's line`)
     const a = await answers()
     ok(a.join() === [TOUR_NEXT, TOUR_SKIP].join(), `tour 1 stop ${i}: answers ${a.join(' / ')}`)
     if (i === 1) await p.screenshot({ path: '/tmp/tour-folk.png' })
     await pick(TOUR_NEXT); await wait(1200)
   }
-  ok(await poll(async () => (await zone()) === 'plot', 30000), 'tour 1: after the waymark, the fade home to the plot')
+  ok(await poll(async () => (await zone()) === 'plot', 30000), 'tour 1: after the last Glade stop, the fade home to the plot')
   ok(await poll(async () => (await bubble()).includes(stops[table].line), 20000), 'tour 1: Greg at the planning table, his table line')
   ok((await answers()).join() === TOUR_DONE, `tour 1 table: the one answer is ${TOUR_DONE}`)
   await p.screenshot({ path: '/tmp/tour-table.png' })
@@ -106,7 +113,7 @@ if (await startTour('tour 3')) {
   ok(await poll(async () => (await greg())?.action === 'walk', 20000), 'tour 3: walking')
   await p.keyboard.press('Escape'); await wait(1000)
   ok((await greg())?.tour === null, 'tour 3: Esc mid-walk ends the tour')
-  ok(!(await p.$('[data-talk-choices]')) && (await zone()) === 'wilds', 'tour 3: no talk opens and no travel on an Esc')
+  ok(!(await p.$('[data-talk-choices]')) && (await zone()) === 'glade', 'tour 3: no talk opens and no travel on an Esc')
   ok(await poll(async () => { const g = await greg(); return g?.pose === 'sit' && Math.hypot(g.x - S.x, g.z - S.z) < 0.05 }, 600000), 'tour 3: he walks back to his bench and sits')
 }
 

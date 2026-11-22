@@ -28,7 +28,9 @@ export function GladeLots() {
     let alive = true
     for (const l of GLADE_LOTS) fetch(`/shimmer/open/house-blueprints?id=glade-${l.id}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null)).then(j => { const bp = j ? parseHouse(j) : null; if (alive && bp) { setGladeBlueprint(l.id, bp); setBpRev(n => n + 1) } }).catch(() => {})
-    ;(window as unknown as { __glade?: object }).__glade = { /* dev/check hook: stand a blueprint on a lot (visual + solids only, nothing saved) */ setBlueprint: (lot: string, j: unknown) => { const bp = j ? parseHouse(j) : null; setGladeBlueprint(lot, bp); setBpRev(n => n + 1); return !!bp }, blueprints: () => GLADE_LOTS.filter(l => !!gladeBlueprint(l.id)).map(l => l.id) }
+    // M67 s1b-2: the closed Glade's own probe (glade-cluster-view.tsx) shares this name now: MERGE, never replace
+    const gw = window as unknown as { __glade?: object }
+    gw.__glade = { ...(gw.__glade ?? {}), /* dev/check hook: stand a blueprint on a lot (visual + solids only, nothing saved) */ setBlueprint: (lot: string, j: unknown) => { const bp = j ? parseHouse(j) : null; setGladeBlueprint(lot, bp); setBpRev(n => n + 1); return !!bp }, blueprints: () => GLADE_LOTS.filter(l => !!gladeBlueprint(l.id)).map(l => l.id) }
     return () => { alive = false }
   }, [])
   const lots = useMemo(() => GLADE_LOTS.map(l => lotAt(l.id)!), [])

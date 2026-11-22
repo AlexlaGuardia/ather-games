@@ -17,7 +17,7 @@ import { stepWalk, startWalk, faceYaw, turnToward, TURN_RATE, type Walk, type Pt
 import { gregSpot } from './moonwell-glade'
 import { GladeHome } from './glade-home-view'
 import { gladeHome } from './glade-home'
-import { tourLeg } from './greg-tour'
+import { tourLeg, tourStops } from './greg-tour'
 
 export const BENCH_H = 0.48
 /** how near the keeper must come before Greg starts a stop's talk; past LAG he stops walking and waits for them */
@@ -74,7 +74,10 @@ export function GladeGreg({ loaded, tour = null, hold = false, keeper, onArrive,
   useEffect(() => {   // checks' hook (like __folk): READ where he stands (only set while he is drawn)
     if (y === null) return
     const W = window as unknown as { __greg?: unknown }
-    const pub = () => { const w = walk.current; W.__greg = { x: w.x, z: w.z, y: lastY.current, pose: modeRef.current === 'sit' ? 'sit' : 'stand', action: modeRef.current, look: 'gregory', tour: tour ? { ...tour, arrived: arrived.current } : null } }
+    const pub = () => { const w = walk.current; W.__greg = { x: w.x, z: w.z, y: lastY.current, pose: modeRef.current === 'sit' ? 'sit' : 'stand', action: modeRef.current, look: 'gregory', tour: tour ? { ...tour, arrived: arrived.current } : null,
+      // the tour's stops AS THIS PAGE HAS THEM (a lot standing Alex's blueprint moves its Moglin to the door, setLotSpot; a check that
+      // computes the stops in node has no blueprints and reads stops metres off: the sweep's 1.3-5.2 m 'Greg off his stops', 11-22)
+      stops: tourStops().map(t => ({ id: t.id, at: t.at, look: t.look, zone: t.zone })) } }
     pub(); const id = setInterval(pub, 250)
     return () => { clearInterval(id); delete W.__greg }
   }, [y === null, tour])   // eslint-disable-line react-hooks/exhaustive-deps
