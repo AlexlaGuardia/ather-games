@@ -195,6 +195,8 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
+- **Move card lines (11-22, @lark, play M66):** 52 rewrites of the canon move effect lines with no em dashes, same meaning (shared/move-cards.ts, uncommitted in play's tree; canon keeper-moves.ts untouched). E.g. Firewall 'A wall of flame thrown between you and a threat: escape, area-denial, cover.' OK -> play commits + ships with M66 s2. (Flame Barrage's 'burning birds' waits on Magii.)
+
 - **Newborn welcome card (11-21, lark draft):** a newborn now wakes facing Greg, but the card says "The gate ahead is the fold map". Lark opening: "You wake at Moonwell Glade in the Wilds. That's Gregory on the bench in front of you, and he sells the ground under the mist." Full phone + desktop text: docs/copy/newborn-welcome-card-2026-11-21.md. OK -> play pastes it.
 
 - **OWNER_KEY on the EliteDesk? (11-21, play sweep):** 11 prod checks (void/greg/infuse/move/map, the voxel3d set) need OWNER_KEY and the edesk has no .env. Copy the key there (they run off-box), or keep those 11 server-only?
