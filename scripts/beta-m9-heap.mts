@@ -106,7 +106,9 @@ for (let i = 0; i < wildsN; i++) {
 }
 // 3 · home again: the Wilds' memory should be given back
 await A('travel', { kind: 'home' }); await p.waitForFunction(() => (window as any).__ather.zone() === 'plot', { timeout: 60000 })
-for (let i = 0; i < 3; i++) await slice('home', walkLoop)
+// 11-22: home lasts past WILDS_RELEASE_MS (60 s: the Wilds' tiles are dropped then), and is judged on the samples after 70 s
+const homeT0 = Math.round((Date.now() - t0) / 1000)
+for (let i = 0; i < 5; i++) await slice('home', walkLoop)
 await br.close()
 
 const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
@@ -117,7 +119,7 @@ const judge = (phase: string, warm: number) => {
   return { first, last, ok: ratio <= 1.15 }
 }
 const plot = judge('plot', 1), wilds = judge('wilds', 2)
-const home = avg(samples.filter(s => s.phase === 'home').map(s => s.mb))
+const homeLate = samples.filter(s => s.phase === 'home' && s.t - homeT0 >= 70), home = avg((homeLate.length ? homeLate : samples.filter(s => s.phase === 'home')).map(s => s.mb))
 const back = home <= plot.last * 1.25
 console.log(`home after the Wilds: ${home.toFixed(1)} MB vs the plot's ${plot.last.toFixed(1)} MB (${back ? 'given back' : 'NOT given back'})`)
 console.log(`page errors: ${errs.length}${errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''}`)

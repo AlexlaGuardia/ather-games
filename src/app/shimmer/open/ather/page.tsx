@@ -84,7 +84,7 @@ import type { CastHit } from './combat-casts'
 import { useLoadout } from '../shared/loadout'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree, type Crystal } from './wilds'
-import { loadIndex, makeWorld, stream, tileOf, zonesOf, TILE_M, type WildsWorld } from './wilds-world'
+import { loadIndex, makeWorld, stream, releaseTo, tileOf, zonesOf, TILE_M, WILDS_RELEASE_MS, type WildsWorld } from './wilds-world'
 import { makeVoids, type VoidField } from './wilds-voids'
 import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
 import { useFolkTalk } from './use-folk-talk'
@@ -736,6 +736,7 @@ function AtherSliceGame() {
       // read-only probe (owner-race-check): the plot the page is DRAWING, from the live store
       works: () => { const w = currentWorks(); return { rooms: w.rooms.map(r => r.kind), pieces: w.pieces.map(p => p.item) } },
       zone: () => zone.kind,
+      wildsLoaded: () => [...(wwRef.current?.loaded.keys() ?? [])],   // read-only probe (M9 wilds-release-check): the parsed Wilds tiles held now
       open: (k: 'gate' | 'greg' | 'athernyx') => setPanel(k === 'greg' ? { kind: 'talk', step: 0 } : { kind: 'map', view: k === 'athernyx' ? 'athernyx' : 'ather', travel: true }),
       travel: (d: Dest) => travel(d),
       grant: (grey = 0, pages = 0) => updateGarden({ ...garden, grey: garden.grey + grey, pages: garden.pages + pages }),
@@ -1038,6 +1039,12 @@ function AtherSliceGame() {
   const { castSlot, gate: castGate, gateStep, closeGate, channel: castChannel, castQueue, castHud, surge, impulse, handsCastAt } = useCasts({ manaRef, vitalsRef, fightHere: () => zoneRef.current === 'wilds', flow: () => (buffOn(buffsRef.current, 'ather_flow') ? OPEN_FLOW_MULT : 1), gateHere: () => true })
   gateStepRef.current = gateStep
   useEffect(() => { closeGate() }, [zone.kind, closeGate])   // a Gate never leaves the zone
+  // M9 (11-22): a minute at home gives the Wilds' tiles back (back to the boot set round Greg's waymark); a hop back sooner keeps them
+  useEffect(() => {
+    if (zone.kind !== 'plot' || !ww) return
+    const id = setTimeout(() => { if (releaseTo(ww, GREG_WAYMARK.x, GREG_WAYMARK.z)) setWrev(ww.rev) }, WILDS_RELEASE_MS)
+    return () => clearTimeout(id)
+  }, [zone.kind, ww])
   const onCast = useCallback((sp: CastSpec, hit: CastHit | null) => {
     if (!hit) return
     const n = hit.hit

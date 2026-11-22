@@ -74,7 +74,9 @@ export function MoonwellPool({ ground, stowed }: { ground: (x: number, z: number
     if (r.done && questEvent({ kind: 'waited', at: 'moonwell' })) { W.t = 0; W.rise = 0; W.said = ''; bump(n => n + 1) }
   })
   // probe for rinquest-check (reading only)
-  useEffect(() => { (window as unknown as { __moonwell?: unknown }).__moonwell = { wait: () => w.current.t, rising: () => w.current.rise >= 0 } }, [])
+  // cleared on unmount (M9 11-22): the pool is Wilds-only, and a probe left on window kept the unmounted pool's whole closure
+  // scope alive at home (0.9 MB in the heap diff)
+  useEffect(() => { const g = window as unknown as { __moonwell?: unknown }; g.__moonwell = { wait: () => w.current.t, rising: () => w.current.rise >= 0 }; return () => { delete g.__moonwell } }, [])
   return (
     <group>
       {/* the pond (M40): a soft glowing ellipse at the water line, in Sax's rim of pale stone on the bank */}

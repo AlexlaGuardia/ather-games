@@ -162,6 +162,21 @@ export async function stream(w: WildsWorld, x: number, z: number, load: (name: s
   return changed
 }
 
+/** BETA M9 (11-22): give the Wilds' memory back at home. stream() only evicts while the keeper is IN the Wilds (it keeps a
+ *  5x5 ring), so after a trip the last ring of parsed tiles (heightfields, biome closures, parse data) stayed resident at home:
+ *  ~4.5 MB after 3 min, more after a long run. The page calls this a grace period after coming home: every tile outside
+ *  (x, z)'s ring of 9 is dropped, nothing is loaded. Called with the boot anchor (Greg's waymark), home ends where a fresh page
+ *  starts, so the usual way back stays as quick as a first trip. Returns true if anything was dropped (rev bumped). */
+export function releaseTo(w: WildsWorld, x: number, z: number): boolean {
+  const keep = new Set(wanted(w, x, z))
+  let changed = false
+  for (const name of [...w.loaded.keys()]) if (!keep.has(name)) { w.loaded.delete(name); changed = true }
+  if (changed) w.rev++
+  return changed
+}
+/** how long home must last before the Wilds' tiles go (a hop back inside it stays instant) */
+export const WILDS_RELEASE_MS = 60_000
+
 export async function loadIndex(base = '/open/wilds'): Promise<TileIndex> {
   const r = await fetch(`${base}/tiles.json`); if (!r.ok) throw new Error(`wilds index ${r.status}`)
   return r.json()
