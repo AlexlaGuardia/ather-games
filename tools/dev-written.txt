@@ -9,6 +9,8 @@
 # listed here, and on a path literal in a route that no row of that route covers.
 data     src/app/shimmer/save-sound-vote/route.ts      src/app/shimmer/open/shared/sounds.json
 data     src/app/shimmer/save-wilds-edit/route.ts      src/app/shimmer/world/wilds-edits.json
+data     src/app/shimmer/save-builder/route.ts     src/app/shimmer/world/wilds-edits.json
+data     src/app/shimmer/save-builder/route.ts     src/app/shimmer/world/builder/
 data     src/app/shimmer/save-heights/route.ts         src/app/shimmer/world/heightmaps.json
 data     src/app/shimmer/save-movement-style/route.ts  src/app/shimmer/data/movement-styles.json
 data     src/app/shimmer/save-durations/route.ts       src/app/shimmer/data/frame-durations.json
@@ -28,4 +30,5 @@ source   src/app/shimmer/save-sprite/route.ts          src/app/shimmer/save-spri
 source   src/app/api/shimmer/save-sprite/route.ts      src/app/shimmer/sprites/
 runtime  src/app/shimmer/save-battle-bg/route.ts       public/data/battle-bgs/
 runtime  src/app/vault/dev/save/route.ts               public/vault/authored-levels.json
+runtime  src/app/shimmer/save-builder/route.ts     data/builder/
 runtime  src/app/api/arcade/leaderboard/route.ts       data/leaderboards/

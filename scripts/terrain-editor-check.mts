@@ -5,6 +5,8 @@
 //   C. the game (fresh page, ?waymark=greg, tp onto that tile): its ground under the ridge and pad = the editor's heights
 //      (5 cm), the pad is flat, the ridge's flank is steeper than the walker may climb (terrain-world MAX_WALK_GRADIENT)
 //   D. ALWAYS (finally): the tile's edit maps go back to what they were before the check (it edits the live world file)
+// M83 s1a (11-22): Save now writes the World Builder DRAFT; the check PUBLISHES ('check: terrain-editor-check') and its restore
+//   ROLLS BACK to the version live before it + puts the owner's draft back (scripts/builder-check.mts proves the store itself).
 //   0 page errors on both pages.
 // SETUP (stated): OWNER_KEY from .env or env. Tile default w-4_-2 (far west, 99.8 % land, nothing staged there).
 //   npx tsx scripts/terrain-editor-check.mts [--url https://ather.games] [--tile w-4_-2] [--out dir]
@@ -37,6 +39,11 @@ const origF: Record<string, Record<string, number>> = Object.fromEntries(ring.ma
 console.log(`tile ${TILE} (${T.tx},${T.ty}); ring ${ring.length} tiles; edits there before: ${ring.filter(n => before[n]).join(', ') || 'none'}`)
 
 const owner = await br.createBrowserContext()
+interface BSnap { draft: unknown; index: { live: number | null } }
+const bcall = async (pg: import('puppeteer-core').Page, body?: Record<string, unknown>) => pg.evaluate(async (b?: Record<string, unknown>) => {
+  const r = b ? await fetch('/shimmer/save-builder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map: 'wilds', ...b }) }) : await fetch('/shimmer/save-builder?map=wilds', { cache: 'no-store' })
+  return r.ok ? r.json() : null }, body) as Promise<BSnap | null>
+let bStart: BSnap | null = null, published = false
 try {
   // ── A. the gate ──
   const anon = await br.createBrowserContext(), ap = await anon.newPage()
@@ -52,6 +59,9 @@ try {
   p.on('pageerror', e => errs.push('editor: ' + String(e).slice(0, 200)))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.goto(`${url}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 120000 })
+  await p.goto(`${url}/shimmer/open/wilds-edits`, { waitUntil: 'domcontentloaded', timeout: 120000 })
+  bStart = await bcall(p)
+  ok(!!bStart, `the builder store answers (live v${bStart?.index.live ?? '-'})`)
   const r3 = await p.goto(`${url}/shimmer/dev?mode=terrain`, { waitUntil: 'load', timeout: 240000 })
   ok(r3?.status() === 200, `owner: the editor page answers ${r3?.status()}`)
   await p.waitForSelector('select', { timeout: 120000 })
@@ -109,7 +119,9 @@ try {
   await sleep(500); await p.screenshot({ path: `${out}/editor.png` })
   const saved = await p.evaluate('window.__terrain.save()')
   const dirtyLeft = await p.evaluate('window.__terrain.dirty()') as string[]
-  ok(saved === true && dirtyLeft.length === 0, `save: ${saved}, nothing left unsaved`)
+  ok(saved === true && dirtyLeft.length === 0, `save (the draft): ${saved}, nothing left unsaved`)
+  const pub = await p.evaluate(`window.__terrain.publish('check: terrain-editor-check')`); published = pub === true
+  ok(published, `publish: ${pub}`)
   const after = (await fetchEditsFile()).tiles ?? {}
   ok(Object.keys(after[TILE] ?? {}).length > 50, `the world file holds the tile's edits (${Object.keys(after[TILE] ?? {}).length} vertices)`)
   const afterW = ((await fetchEditsFile()) as { water?: Record<string, Record<string, number>> }).water ?? {}
@@ -164,9 +176,11 @@ try {
     await p.goto(`${url}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 120000 })
     // ⚠ /owner 307s to the ABSOLUTE https://ather.games/room: stand on the target origin again, or a relative POST goes to prod
     await p.goto(`${url}/shimmer/open/wilds-edits`, { waitUntil: 'domcontentloaded', timeout: 120000 })
-    const res = await p.evaluate(async (o: Record<string, Record<string, number>>, w: Record<string, Record<string, number>>, f: Record<string, Record<string, number>>) => {
-      return [(await fetch('/shimmer/save-wilds-edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiles: o, water: w, falls: f }) })).status]
-    }, orig, origW, origF)
+    const res: number[] = []
+    if (published && bStart) res.push((await bcall(p, { action: 'rollback', v: bStart.index.live ?? 1 })) ? 200 : 500)
+    if (bStart) res.push((await bcall(p, { action: 'draft', layer: bStart.draft })) ? 200 : 500)
+    else res.push(await p.evaluate(async (o: Record<string, Record<string, number>>, w: Record<string, Record<string, number>>, f: Record<string, Record<string, number>>) =>
+      (await fetch('/shimmer/save-wilds-edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiles: o, water: w, falls: f }) })).status, orig, origW, origF))
     const nowF = await fetchEditsFile() as { tiles?: Record<string, Record<string, number>>; water?: Record<string, Record<string, number>> }, now = nowF.tiles ?? {}, nowW = nowF.water ?? {}, nowF2 = (nowF as { falls?: Record<string, Record<string, number>> }).falls ?? {}
     ok(res.every(s => s === 200) && ring.every(n => JSON.stringify(now[n] ?? {}) === JSON.stringify(orig[n]) && JSON.stringify(nowW[n] ?? {}) === JSON.stringify(origW[n]) && JSON.stringify(nowF2[n] ?? {}) === JSON.stringify(origF[n])), `restored the ${ring.length} ring tiles to their edits before the check (POST ${res.join(',')})`)
   } catch (e) { ok(false, `RESTORE FAILED: ${String(e)} — fix world/wilds-edits.json by hand`) }

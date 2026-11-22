@@ -15,7 +15,22 @@ import { loadWilds, type WildsMeta } from '../../open/ather/wilds'
 import { loadIndex, makeWorld, zonesOf, tileOf, TILE_M, type WildsWorld } from '../../open/ather/wilds-world'
 import { loadNetwork, clearing, roadField } from '../../open/ather/network'
 import { makeVoids } from '../../open/ather/wilds-voids'
-import { applyBrush, mergeEdits, fetchLayer, saveTiles, EditHistory, BRUSHES, paintWater, foldWater, WATER_PREFIX, FALLS_PREFIX, addFall, removeFallsNear, fallLines, fallSheets, ponds, type Brush, type Edits, type BrushTile, type WaterMap } from '../../open/ather/wilds-edits'
+import { applyBrush, mergeEdits, EditHistory, BRUSHES, paintWater, foldWater, WATER_PREFIX, FALLS_PREFIX, addFall, removeFallsNear, fallLines, fallSheets, ponds, type Brush, type Edits, type BrushTile, type WaterMap } from '../../open/ather/wilds-edits'
+
+import { AUTOSAVE_MS, savedAgo, type Layer, type Index } from '../../world/builder'
+
+// ── BETA M83 p1 s1a: the editor works on the World Builder DRAFT (world/builder.ts), never on the live layer. Save + autosave write
+// the draft; PUBLISH makes it a version and puts it live; the history rolls back to any version. Players see nothing until Publish.
+interface BSnap { draft: Layer; draftAt: number | null; index: Index; state: 'unpublished changes' | 'matches live' }
+const MAP = 'wilds'
+async function builderCall(body?: Record<string, unknown>): Promise<BSnap | null> {
+  try {
+    const r = body ? await fetch('/shimmer/save-builder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map: MAP, ...body }) })
+      : await fetch(`/shimmer/save-builder?map=${MAP}`, { cache: 'no-store' })
+    return r.ok ? await r.json() as BSnap : null
+  } catch { return null }
+}
+const isCheck = (n: string) => n.startsWith('check:')
 
 interface Base { meta: WildsMeta; tx: number; ty: number; h: Float32Array; voided?: Uint8Array }
 type Tool = Brush | 'water' | 'dry' | 'falls'
@@ -54,6 +69,11 @@ export default function TerrainEditor() {
   const [dirty, setDirty] = useState<string[]>([])
   const [rev, setRev] = useState(0)
   const [ready, setReady] = useState(false)
+  const [snapB, setSnapB] = useState<BSnap | null>(null)     // the builder's last answer: index (history), draft vs live
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [, setNow] = useState(0)                             // re-render the 'saved Ns ago' label
 
   const worldRef = useRef<WildsWorld | null>(null)
   const bases = useRef(new Map<string, Base>())
@@ -68,8 +88,11 @@ export default function TerrainEditor() {
   // ── the world: index + network + voids, then the edits file ──
   useEffect(() => {
     let dead = false
-    Promise.all([loadIndex(), loadNetwork(), fetchLayer()]).then(([idx, nw, layer]) => {
+    Promise.all([loadIndex(), loadNetwork(), builderCall()]).then(([idx, nw, b]) => {
       if (dead) return
+      if (!b) { setStatus('could not read the builder draft (owner only)'); return }
+      const layer = { edits: b.draft.tiles, water: b.draft.water, falls: b.draft.falls }
+      setSnapB(b); setSavedAt(b.draftAt)
       const w = makeWorld(idx); if (nw) { w.clear = clearing(nw); w.roads = roadField(nw) }
       w.voids = makeVoids(idx, nw ?? null)
       worldRef.current = w
@@ -221,17 +244,51 @@ export default function TerrainEditor() {
   const undo = useCallback(() => { markDirty(hist.current.undo(edits.current)); setRev(r => r + 1) }, [])
   const redo = useCallback(() => { markDirty(hist.current.redo(edits.current)); setRev(r => r + 1) }, [])
   const resetTile = () => { hist.current.begin(edits.current, [tile, wkey(tile), fkey(tile)]); delete edits.current[tile]; delete edits.current[wkey(tile)]; delete edits.current[fkey(tile)]; hist.current.commit(); markDirty([tile, wkey(tile), fkey(tile)]); setRev(r => r + 1) }
-  const save = useCallback(async (): Promise<boolean> => {
+  // the whole store as one layer (the draft is small and sparse: one request replaces it, so there is no per-tile race)
+  const layerOf = (): Layer => {
+    const L: Layer = { v: 1, tiles: {}, water: {}, falls: {} }
+    for (const [k, m] of Object.entries(edits.current)) {
+      if (!Object.keys(m).length) continue
+      if (k.startsWith(WATER_PREFIX)) L.water[tileOfKey(k)] = m; else if (k.startsWith(FALLS_PREFIX)) L.falls[tileOfKey(k)] = m; else L.tiles[k] = m
+    }
+    return L
+  }
+  const loadLayer = (L: Layer) => {
+    const store: Edits = { ...L.tiles }; for (const [t, m] of Object.entries(L.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(L.falls)) store[fkey(t)] = { ...m }
+    edits.current = store; hist.current = new EditHistory(); dirtyRef.current.clear(); setDirty([]); setRev(r => r + 1)
+  }
+  const save = useCallback(async (auto = false): Promise<boolean> => {
     const names = [...dirtyRef.current]; if (!names.length) return true
-    setStatus(`saving ${names.length} tile${names.length > 1 ? 's' : ''}…`)
-    const ws = names.filter(n => n.startsWith(WATER_PREFIX)), fs = names.filter(n => n.startsWith(FALLS_PREFIX)), hs = names.filter(n => !ws.includes(n) && !fs.includes(n))
-    const pick = (l: string[]) => Object.fromEntries(l.map(n => [tileOfKey(n), edits.current[n] ?? {}]))
-    const ok = await saveTiles(pick(hs), pick(ws), pick(fs))
-    if (ok) for (const n of names) dirtyRef.current.delete(n)
+    if (!auto) setStatus('saving the draft…')
+    const b = await builderCall({ action: 'draft', layer: layerOf() })
+    if (b) { for (const n of names) dirtyRef.current.delete(n); setSnapB(b); setSavedAt(b.draftAt ?? Date.now()) }
     setDirty([...dirtyRef.current])
-    setStatus(ok ? `saved ${[...new Set(names.map(tileOfKey))].join(', ')} · live on the next Wilds load` : 'save FAILED (nothing written; try again)')
-    return ok
+    setStatus(b ? (auto ? '' : 'draft saved · players see it after Publish') : 'save FAILED (nothing written; try again)')
+    return !!b
   }, [])
+  const publish = useCallback(async (msg?: string): Promise<boolean> => {
+    if (!(await save())) return false
+    setBusy(true); setStatus('publishing…')
+    const b = await builderCall({ action: 'publish', note: msg ?? note })
+    setBusy(false)
+    if (b) { setSnapB(b); setNote('') }
+    setStatus(b ? `published v${b.index.live} · live on the next Wilds load` : 'publish FAILED (live unchanged)')
+    return !!b
+  }, [save, note])
+  const rollback = useCallback(async (v: number): Promise<boolean> => {
+    setBusy(true); setStatus(`rolling back to v${v}…`)
+    const b = await builderCall({ action: 'rollback', v })
+    setBusy(false)
+    if (b) { setSnapB(b); setSavedAt(b.draftAt); loadLayer(b.draft) }
+    setStatus(b ? `rolled back to v${v} (now v${b.index.live}) · the draft is that version too` : 'rollback FAILED (live unchanged)')
+    return !!b
+  }, [])
+  // AUTOSAVE every minute while there are unsaved strokes; the label ticks every 5 s
+  useEffect(() => {
+    const a = setInterval(() => { if (dirtyRef.current.size && !paint.current) save(true) }, AUTOSAVE_MS)
+    const t = setInterval(() => setNow(Date.now()), 5000)
+    return () => { clearInterval(a); clearInterval(t) }
+  }, [save])
 
   // keys: 1-4 brush, [ ] radius, ctrl+z / ctrl+shift+z / ctrl+y, ctrl+s
   useEffect(() => {
@@ -284,8 +341,9 @@ export default function TerrainEditor() {
       /** what the game will draw on this tile: sheets (auto from ponds + lines) */
       sheets: () => { const b = B(); if (!b) return []; const nm = tileRef.current, E = edits.current[nm], H = Float32Array.from(b.h, (v, k) => v + (E?.[k] ?? 0) / 10), hAt = (x: number, z: number) => heightAt(b.tx * TILE_M + x, b.ty * TILE_M + z); return fallSheets(b.meta, H, hAt, ponds(b.meta, H, edits.current[wkey(nm)]).cells, fallLines(edits.current[fkey(nm)])).map(q => ({ auto: q.auto, top: q.top, bottom: q.bottom })) },
       undo, redo, save, dirty: () => [...dirtyRef.current],
+      publish, rollback, builder: () => snapB, savedAt: () => savedAt,
     }
-  }, [ready, tile, heightAt, brushTiles, undo, redo, save])
+  }, [ready, tile, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt])
 
   const cur = tiles.find(t => t.name === tile)
   const step = (dx: number, dy: number) => { const w = worldRef.current; if (!w || !cur) return; const t = w.at(cur.tx + dx, cur.ty + dy); if (t) setTile(t.name) }
@@ -361,15 +419,42 @@ export default function TerrainEditor() {
           <button className={`${btn} ${off}`} onClick={resetTile} disabled={!nEdits && !nWater && !nFalls}>Reset tile</button>
           <button className={`${btn} ${showEdits ? on : off}`} onClick={() => setShowEdits(v => !v)}>Tint edits</button>
         </div>
-        <button onClick={save} disabled={!dirty.length}
+        <button onClick={() => save()} disabled={!dirty.length}
           className={`px-3 py-2 rounded font-mono text-xs uppercase tracking-[0.15em] border ${dirty.length ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200' : 'bg-white/5 border-white/10 text-white/30'}`}>
-          {dirty.length ? `Save ${new Set(dirty.map(tileOfKey)).size} tile${new Set(dirty.map(tileOfKey)).size > 1 ? 's' : ''} (ctrl+s)` : 'Saved'}
+          {dirty.length ? `Save draft: ${new Set(dirty.map(tileOfKey)).size} tile${new Set(dirty.map(tileOfKey)).size > 1 ? 's' : ''} (ctrl+s)` : 'Draft saved'}
         </button>
+        <div className="text-[11px] font-mono text-white/45 tabular-nums" data-testid="saved-ago">
+          {savedAgo(savedAt, Date.now())} · autosave every {AUTOSAVE_MS / 1000} s · {dirty.length || snapB?.state !== 'matches live' ? 'unpublished changes' : 'matches live'}
+        </div>
+
+        <div className="border-t border-white/10 pt-3 flex flex-col gap-2">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Publish</div>
+          <input value={note} onChange={e => setNote(e.target.value)} maxLength={120} placeholder="what changed (optional)"
+            className="bg-black/40 border border-white/15 rounded px-2 py-1 font-mono text-xs" />
+          <button onClick={() => publish()} disabled={busy || (!dirty.length && snapB?.state === 'matches live')}
+            className={`px-3 py-2 rounded font-mono text-xs uppercase tracking-[0.15em] border ${!busy && (dirty.length || snapB?.state !== 'matches live') ? 'bg-sky-500/20 border-sky-400 text-sky-200' : 'bg-white/5 border-white/10 text-white/30'}`}>
+            Publish to players
+          </button>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 pt-1">History</div>
+          <div className="max-h-56 overflow-y-auto space-y-1" data-testid="history">
+            {!snapB?.index.versions.length && <div className="text-xs text-white/35">nothing published yet</div>}
+            {[...(snapB?.index.versions ?? [])].reverse().filter(v => !isCheck(v.note)).map(v => (
+              <div key={v.v} className="flex items-center gap-2 text-xs font-mono">
+                <span className={`tabular-nums ${v.v === snapB?.index.live ? 'text-emerald-300' : 'text-white/60'}`}>v{v.v}</span>
+                <span className="flex-1 truncate text-white/70" title={`${v.note} · ${v.size.verts} vertices, ${v.size.water} water cells`}>{v.note}</span>
+                <span className="text-white/35 tabular-nums">{new Date(v.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                {v.v === snapB?.index.live ? <span className="text-emerald-300/80 text-[10px] uppercase">live</span>
+                  : <button className={`${btn} ${off} !px-1.5 !py-0.5`} disabled={busy} onClick={() => rollback(v.v)}>Roll back</button>}
+              </div>
+            ))}
+            {!!snapB?.index.versions.filter(v => isCheck(v.note)).length && <div className="text-[10px] text-white/30">+ {snapB.index.versions.filter(v => isCheck(v.note)).length} check runs hidden</div>}
+          </div>
+        </div>
 
         <div className="text-xs font-mono text-white/55 space-y-0.5 tabular-nums">
           <div>{nEdits} edited vertices, {nWater} water cells, {nFalls} waterfall lines on {tile}</div>
           {hover && Number.isFinite(hover.h) && <div>({hover.x}, {hover.z}) · ground {hover.h.toFixed(1)} m{B && hover.h < B.meta.waterY ? ' · under the sea' : ''}</div>}
-          <div className="text-white/35 pt-1">Hold to paint. Brushes cross onto the neighbouring tiles so seams meet. Saved edits are live on the next Wilds load (no build).</div>
+          <div className="text-white/35 pt-1">Hold to paint. Brushes cross onto the neighbouring tiles so seams meet. You are editing the DRAFT: players see nothing until Publish (live on the next Wilds load, no build).</div>
         </div>
       </div>
     </div>
