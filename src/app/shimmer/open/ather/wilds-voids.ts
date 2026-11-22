@@ -13,7 +13,7 @@
 //   paths' corridors), so carving never changes a protected vertex.
 // PURE. No three, no React, no DOM, no fetch.
 
-import { gladeDist, ARRIVAL } from './relief'
+import { wildsFrontDist, ARRIVAL } from './relief'
 import { SETTLEMENT_CLEAR, FAIR_CLEAR, pathDistance, type Network } from './network'
 
 export const SQ = 200                 // the zone grid's square, metres
@@ -147,7 +147,7 @@ export function makeVoids(index: IndexLike, net: Network | null, extra: readonly
   const ramp = (d: number, r: readonly [number, number]) => d <= r[0] ? 0 : d >= r[1] ? 1 : smooth((d - r[0]) / (r[1] - r[0]))
   /** 1 = free to carve, 0 = protected (the Glade, a settlement or the fair's ground, the arrival, a path's corridor) */
   const free = (x: number, z: number): number => {
-    let f = ramp(gladeDist(x, z), PROTECT.glade)
+    let f = ramp(wildsFrontDist(x, z), PROTECT.glade)   // M67 s1b-2: the Glade's OLD Wilds footprint (relief.ts)
     if (f > 0) f = Math.min(f, ramp(Math.hypot(x - ARRIVAL.x, z - ARRIVAL.z), PROTECT.arrival))
     for (const e of extra) { if (f <= 0) return 0; f = Math.min(f, ramp(Math.hypot(x - e.x, z - e.z), PROTECT.arrival)) }
     if (f > 0 && net) {

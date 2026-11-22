@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { makeVoids, VOID_HALF, FALL_W, SQ, type IndexLike } from './wilds-voids'
 import { withGlade, SETTLEMENT_CLEAR, PATH_HALF, type Network } from './network'
-import { GLADE, gladeDist } from './relief'
+import { GLADE, WILDS_FRONT_SHIFT, wildsFrontDist } from './relief'
 import { GREG_WAYMARK } from './waymarks'
 let pass = 0
 const fails: string[] = []
@@ -71,8 +71,10 @@ let graphSeen = new Set<number>()
 // 4. nothing relief protects is void: the Glade, settlement discs + the fair, Greg's waymark, a corridor round every path
 {
   let bad = 0
-  for (let z = GLADE.gz - 80; z <= GLADE.gz + 80; z += 2) for (let x = GLADE.gx - 80; x <= GLADE.gx + 80; x += 2) if (gladeDist(x, z) <= 8 && V.weight(x, z) > 0) bad++
-  ok(bad === 0, `no void weight over the Glade (${bad} bad)`)
+  // M67 s1b-2: the Glade left the Wilds; its OLD footprint there (wildsFrontDist) stays void-free, so no void moved
+  const ox = GLADE.gx - WILDS_FRONT_SHIFT.x, oz = GLADE.gz - WILDS_FRONT_SHIFT.z
+  for (let z = oz - 80; z <= oz + 80; z += 2) for (let x = ox - 80; x <= ox + 80; x += 2) if (wildsFrontDist(x, z) <= 8 && V.weight(x, z) > 0) bad++
+  ok(bad === 0, `no void weight over the Glade's old Wilds footprint (${bad} bad)`)
   bad = 0
   for (const s of net.settlements) for (let a = 0; a < 360; a += 10) for (let r = 0; r <= SETTLEMENT_CLEAR; r += 4) if (V.weight(s.x + Math.cos(a * Math.PI / 180) * r, s.z + Math.sin(a * Math.PI / 180) * r) > 0) bad++
   ok(bad === 0, `no void weight on a settlement's disc (${bad} bad)`)

@@ -6,10 +6,15 @@
 //   it) at the SOUTH end of a round green; the five stand in a horseshoe round the green; the Moonwell is Greg's POND on the
 //   green's west side, ~41 x 49 m (an ellipse: rx across x, rz across z). Mock scale 0.25 m a pixel. `r` = the short radius,
 //   kept for callers that only need "about how big".
-import { GREG_WAYMARK } from './waymarks'
+// ★ M67 s1b-2 (hub 11-22): the Glade LEFT the Wilds. The whole layout now stands in GREG'S GARDEN in the closed Glade (zone
+//   'glade', glade-cluster.ts), in that zone's coords: GLADE_ANCHOR is where the Wilds waymark stood relative to the layout (the
+//   open south end of the green), set in Greg's owned block (glade-cluster.ts GLADE_OWNED) with the pond on the island's west
+//   edge and a clear walk south of it to the corner path. The Wilds keeps its own ground and Greg's waymark stone.
 
-/** the green: the Glade's heart, 13 m round, its south edge on the path to the waymark */
-export const GLADE_GREEN = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z - 30.75, r: 13 }
+/** the layout's anchor in the Glade zone: the open south end of the green (once the Wilds waymark) */
+export const GLADE_ANCHOR = { x: -75, z: 140 }
+/** the green: the Glade's heart, 13 m round, its south edge on the path to the anchor */
+export const GLADE_GREEN = { x: GLADE_ANCHOR.x, z: GLADE_ANCHOR.z - 30.75, r: 13 }
 export const MOONWELL = { x: GLADE_GREEN.x - 47.5, z: GLADE_GREEN.z + 1.25, rx: 20.5, rz: 24.5, r: 20.5 }
 /** the pond's radius toward (x, z): where the shore is along that bearing */
 export function shoreRadius(x: number, z: number): number {

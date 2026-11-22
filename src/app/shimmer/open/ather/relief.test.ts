@@ -5,7 +5,7 @@
 // Numbers absolute on purpose (measured 11-18 with HILL 16 m / 110 m, RIDGE 6 m: arrival occlusion 74-88 % at 80-230 m, raw 24-43 %).
 import { readFileSync } from 'node:fs'
 import { parseWilds, type WildsMeta, type Wilds } from './wilds'
-import { reliefRaw, reliefMask, relieve, ARRIVAL, GLADE, WATER_DROP, gladeDist, inGlade, pondDepthIn } from './relief'
+import { reliefRaw, reliefMask, relieve, ARRIVAL, GLADE, WATER_DROP, gladeDist, inGlade, pondDepthIn, gladeGround } from './relief'
 import { MOONWELL, GLADE_GREEN } from './moonwell'
 import { GLADE_LOTS, lotAt, onLot, gladeAt, GLADE_LAYOUT } from './moonwell-glade'
 import { GREG_WAYMARK } from './waymarks'
@@ -61,7 +61,7 @@ ok(sRel < 0.97, `...but not all of it (${(sRel * 100).toFixed(0)} %): a fight st
 //    strain, at the door; measured 0.36 where the Glade's fade meets the lower land east of it, raw is 0.18), and everything under the
 //    water line is untouched
 let flat = 0, under = 0
-ok(Math.abs(W.heightAt(ARRIVAL.x, ARRIVAL.z) - GLADE.y) < 0.05, `the waymark stands on the Glade's floor (${W.heightAt(ARRIVAL.x, ARRIVAL.z).toFixed(2)} vs ${GLADE.y})`)
+ok(Number.isFinite(W.heightAt(ARRIVAL.x, ARRIVAL.z)) && W.heightAt(ARRIVAL.x, ARRIVAL.z) > W.meta.waterY + 1, `the waymark stands on its own land, above the water (M67 s1b-2: the Glade's floor left the Wilds; ${W.heightAt(ARRIVAL.x, ARRIVAL.z).toFixed(2)})`)
 for (let k = 0; k < 64; k++) { const a = k * 0.3, d = (k % 8) * 2.0; const x = ARRIVAL.x + Math.cos(a) * d, z = ARRIVAL.z + Math.sin(a) * d; if (Math.hypot(W.heightAt(x + 0.5, z) - W.heightAt(x - 0.5, z), W.heightAt(x, z + 0.5) - W.heightAt(x, z - 0.5)) > MAX_WALK_GRADIENT / 2) flat++ }
 ok(flat === 0, `the arrival (14 m round the waymark) is calm ground: nothing steeper than half the walk gradient (${flat} steep)`)
 for (let k = 0; k < W.h.length; k++) { if (R0.h[k] <= W.meta.waterY + 1.5 && Math.abs(W.h[k] - R0.h[k]) > 1e-4) under++ }
@@ -127,10 +127,13 @@ ok(reliefRaw(123.4, -567.8) === reliefRaw(123.4, -567.8) && relieve(10, 10, 20, 
 
 // ── M40: the Glade's ground (layout B). The literals agree with moonwell.ts / moonwell-glade.ts; the green and every lot are
 // level; the pond is a bowl under the water line; trees/crystals keep off; outside the fade the land is untouched.
+// M67 s1b-2: the Glade is in the closed Glade zone now (its land is the garden's flat ground, glade-cluster.ts gladeZoneGround);
+// gladeGround is tested here as the function it is, over a lumpy land, so the fade's walkability stays proven.
 {
   ok(GLADE.gx === GLADE_GREEN.x && GLADE.gz === GLADE_GREEN.z && GLADE.pondX === MOONWELL.x && GLADE.pondZ === MOONWELL.z && GLADE.rx === MOONWELL.rx && GLADE.rz === MOONWELL.rz, 'relief.ts GLADE literals = moonwell.ts')
   const h = gladeAt(GLADE_LAYOUT.home); ok(GLADE.homeX === h.x && GLADE.homeZ === h.z, 'relief.ts home literal = moonwell-glade.ts')
-  const at = (x: number, z: number) => relieve(x, z, 20 + Math.sin(x * 0.07) * 3 + Math.cos(z * 0.05) * 2, 0)   // a lumpy raw land
+  const lumpy = (x: number, z: number) => 20 + Math.sin(x * 0.07) * 3 + Math.cos(z * 0.05) * 2
+  const at = (x: number, z: number) => gladeGround(x, z, lumpy(x, z))   // the Glade over a lumpy land
   const flat = (x: number, z: number) => Math.abs(at(x, z) - GLADE.y) < 1e-6
   ok(flat(GLADE.gx, GLADE.gz) && flat(GLADE.gx + 10, GLADE.gz - 5), 'the green is level at GLADE.y')
   for (const l of GLADE_LOTS) { const w = lotAt(l.id)!; let lv = true
@@ -140,7 +143,7 @@ ok(reliefRaw(123.4, -567.8) === reliefRaw(123.4, -567.8) && relieve(10, 10, 20, 
   ok(pondDepthIn(GLADE.pondX + GLADE.rx - 0.5, GLADE.pondZ) > 0 && pondDepthIn(GLADE.pondX + GLADE.rx + 0.5, GLADE.pondZ) < 0, 'the pond edge is the ellipse')
   ok(inGlade(GLADE.pondX, GLADE.pondZ) && inGlade(GLADE.gx, GLADE.gz) && !inGlade(GLADE.gx + 80, GLADE.gz), 'no tree/crystal on the green or in the pond; the Wilds beyond keep theirs')
   const far = { x: GLADE.gx + 80, z: GLADE.gz + 60 }
-  ok(gladeDist(far.x, far.z) > GLADE.fade && Math.abs(at(far.x, far.z) - relieve(far.x, far.z, 20 + Math.sin(far.x * 0.07) * 3 + Math.cos(far.z * 0.05) * 2, 0)) < 1e-9, 'beyond the fade the land is untouched')
+  ok(gladeDist(far.x, far.z) > GLADE.fade && Math.abs(at(far.x, far.z) - lumpy(far.x, far.z)) < 1e-9, 'beyond the fade the land is untouched')
   // the fade: no step steeper than the walk gradient between the Glade floor and the land
   let steep = 0; for (let d = 0; d < GLADE.fade + 4; d += 0.5) { const x = GLADE.gx + GLADE.lotsR + d; if (Math.abs(at(x + 0.5, GLADE.gz) - at(x, GLADE.gz)) / 0.5 > MAX_WALK_GRADIENT) steep++ }
   ok(steep === 0, `the Glade fades back to the land walkably (${steep} steep steps)`)

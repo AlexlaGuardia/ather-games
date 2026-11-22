@@ -2,14 +2,13 @@
 // ── MOONWELL GLADE, SEEN (BETA M40 part 2, layout B): the green, the path to the waymark, each lot's pad + station blockout,
 // and Greg's jetty. Shapes from glade-lots.ts (the walker bumps the same parts). Flat colours, Lambert, like the rooms.
 import { useEffect, useMemo, useState } from 'react'
-import { GLADE_GREEN } from './moonwell'
+import { GLADE_GREEN, GLADE_ANCHOR } from './moonwell'
 import { GLADE_LOTS, lotAt, gladeJetty, gladeSpots } from './moonwell-glade'
 import { teachJars } from './yarrow-teach'
 import { STATIONS, partAt, setGladeBlueprint, gladeBlueprint, lotPad } from './glade-lots'
 import { parseHouse, placeBlueprint } from './plot-blueprint'
 import { BlueprintStack } from './blueprint-stack'
 import { GLADE as GROUND, WATER_DROP } from './relief'
-import { GREG_WAYMARK } from './waymarks'
 import { groundMat, groundOrder } from '../shared/ground-layers'
 import { ribbonXZ, drape, ribbonsOn } from '../shared/road-ribbon'
 import * as THREE from 'three'
@@ -34,11 +33,11 @@ export function GladeLots() {
   }, [])
   const lots = useMemo(() => GLADE_LOTS.map(l => lotAt(l.id)!), [])
   const jetty = useMemo(() => { const j = gladeJetty(); return { ...j, len: Math.hypot(j.x1 - j.x0, j.z1 - j.z0), yaw: Math.atan2(j.x1 - j.x0, j.z1 - j.z0) } }, [])
-  const path = useMemo(() => { const z0 = GLADE_GREEN.z + GLADE_GREEN.r - 0.5, z1 = GREG_WAYMARK.z - 1; return { z: (z0 + z1) / 2, len: z1 - z0 } }, [])
+  const path = useMemo(() => { const z0 = GLADE_GREEN.z + GLADE_GREEN.r - 0.5, z1 = GLADE_ANCHOR.z - 1; return { z: (z0 + z1) / 2, len: z1 - z0 } }, [])
   const pathRibbon = useMemo(() => {
     if (!RIBBONS) return null
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(drape(ribbonXZ([[GLADE_GREEN.x, GLADE_GREEN.z], [GLADE_GREEN.x, GREG_WAYMARK.z - 1]], 1.5), () => y + 0.025), 3))
+    g.setAttribute('position', new THREE.Float32BufferAttribute(drape(ribbonXZ([[GLADE_GREEN.x, GLADE_GREEN.z], [GLADE_GREEN.x, GLADE_ANCHOR.z - 1]], 1.5), () => y + 0.025), 3))
     g.computeVertexNormals(); return g
   }, [y])
   return (

@@ -10,7 +10,7 @@ import { treeFor, TRUNK, type Zone, type TreeKind } from './forestry'
 import { crystalFor, type CrystalKind } from './prospecting'
 import type { Box, Shape } from '../terrain-world'
 import type { VoidField } from './wilds-voids'
-import { relieve, outcropsIn, outcropRoll, inGlade } from './relief'
+import { relieve, outcropsIn, outcropRoll } from './relief'
 import { addEdits, ponds as pondsOf, fallSheets, fallLines, type TileEdits, type WaterMap, type PondCell, type FallMap, type Sheet } from './wilds-edits'
 import type { RoadField } from './network'
 
@@ -163,7 +163,7 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
     const id = `${meta.name}:${stood.length}`; stood.push({ x, z })
     if (voids && voids.weight(x + ox, z + oz) > 0) continue   // M41: none on the lip of a cloud void
     if (voids && voids.weight(x + ox, z + oz) > 0) continue   // M41: none on the lip of a cloud void
-    if (clear?.(x + ox, z + oz) || inGlade(x + ox, z + oz)) continue   // M40: none on Moonwell Glade's green, lots or pond
+    if (clear?.(x + ox, z + oz)) continue   // (M40 kept them off Moonwell Glade; the Glade left the Wilds in M67 s1b-2)
     if (slopeOf(heightAt, x, z) > 0.9) continue   // an outcrop's flank holds no tree (its id still counted above)
     trees.push({ x, z, y, tall: (5 + hash(i, j, 4) * 5) * big, r: (1.6 + hash(i, j, 5) * 1.2) * big, kind: t.kind, id })
   }
@@ -184,7 +184,6 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
     if (stood.some(t => Math.abs(t.x - x) < 2.5 && Math.abs(t.z - z) < 2.5)) continue
     const y = heightAt(x, z), id = `${meta.name}:c${cn++}`
     if (voids && voids.weight(x + ox, z + oz) > 0) continue   // M41
-    if (inGlade(x + ox, z + oz)) continue   // M40: none on Moonwell Glade (after the id: no other crystal's id moves)
     crystals.push({ x, z, y, kind: c.kind, s: 0.8 + hash(i, j, 11) * 0.5, rot: hash(i, j, 12) * Math.PI * 2, id })
   }
   // ★ CRYSTALS ON THE OUTCROPS (Alex 11-18 playtest: "I didn't see any rocky nodes"). The map's rock cells are 6% of the land
@@ -203,7 +202,7 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
     // the outcrop must really stand here (the path / water / arrival masks flatten some away)
     let ring = 0
     for (let k = 0; k < 6; k++) ring += heightAt(lx + Math.cos(k * Math.PI / 3) * o.R * 1.6, lz + Math.sin(k * Math.PI / 3) * o.R * 1.6) / 6
-    if (heightAt(lx, lz) - ring < 1.5 || rawAt(x, z) < meta.waterY + 0.4 || inGlade(x + ox, z + oz) || (voids && voids.weight(x + ox, z + oz) > 0)) continue
+    if (heightAt(lx, lz) - ring < 1.5 || rawAt(x, z) < meta.waterY + 0.4 || (voids && voids.weight(x + ox, z + oz) > 0)) continue
     crystals.push({ x, z, y: heightAt(x, z), kind: c.kind, s: 0.8 + outcropRoll(o, 304) * 0.5, rot: outcropRoll(o, 305) * Math.PI * 2, id: `${meta.name}:o${o.i}_${o.j}` })
   }
 

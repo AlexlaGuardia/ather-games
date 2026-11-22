@@ -29,11 +29,13 @@ export function pieceBoxes(c: Combat | null, x0: number, z0: number, x1: number,
   return out
 }
 
-export function withPieces(shape: Shape, get: () => Combat | null = () => live.combat): Shape {
+/** `glade`: the closed Glade's solids (Greg's home, the lots' stations, the jetty) instead of the Wilds' settlements. M67 s1b-2:
+ *  the Glade's coords are the Glade ZONE's, so they must never be asked in the Wilds (they would stand in a field there). */
+export function withPieces(shape: Shape, get: () => Combat | null = () => live.combat, glade = false): Shape {
   return {
     ground: shape.ground, water: shape.water,
     solids(x0, y0, z0, x1, y1, z1) {
-      const base = shape.solids(x0, y0, z0, x1, y1, z1), extra = [...pieceBoxes(get(), x0, z0, x1, z1), ...gladeHomeBoxes(shape.ground, x0, z0, x1, z1), ...gladeSolids(x0, z0, x1, z1), ...settlementSolids(x0, z0, x1, z1)]
+      const base = shape.solids(x0, y0, z0, x1, y1, z1), extra = [...pieceBoxes(get(), x0, z0, x1, z1), ...(glade ? [...gladeHomeBoxes(shape.ground, x0, z0, x1, z1), ...gladeSolids(x0, z0, x1, z1)] : settlementSolids(x0, z0, x1, z1))]
       return extra.length ? [...base, ...extra] : base
     },
   }

@@ -53,8 +53,17 @@ export const ARRIVAL = { x: -300, z: 300 }, ARRIVAL_FLAT = 22, ARRIVAL_FADE = 30
 // Sizes are as tight as the plan allows (lotsR 31 still covers every lot's far corners, 30.7 m out): each metre of Glade
 // is a metre of the M16 relief gone from the arrival's view (measured on first-wilds: 80.6 % far ground hidden without the
 // Glade, 70.5 % with it at these sizes, 69.4 % at a looser 33/7/16).
-export const GLADE = { gx: -300, gz: 269.25, lotsR: 31, pondX: -347.5, pondZ: 270.5, rx: 20.5, rz: 24.5, bank: 3, homeX: -323.75, homeZ: 244.75, homeR: 7, y: 24, depth: 1.8, fade: 10 } as const
-export const WATER_DROP = 0.35
+// ★ M67 s1b-2 (hub 11-22): the Glade LEFT the Wilds. These literals are now the CLOSED GLADE's coords (zone 'glade', Greg's
+//   garden; moonwell.ts GLADE_ANCHOR), its floor the garden's flat ground (plot.ts: y 2), and the Wilds' relief no longer
+//   reads them (relieveBase returns the land). The plot island is one baked mesh that cannot be carved, so in the Glade the
+//   pond is a water plane laid just OVER the grass (WATER_DROP < 0) with the walkable ground sunk under it (gladeGround's
+//   bowl, read by page.tsx's glade ground): a keeper wades in, as they did in the Wilds' bowl.
+export const GLADE = { gx: -75, gz: 109.25, lotsR: 31, pondX: -122.5, pondZ: 110.5, rx: 20.5, rz: 24.5, bank: 3, homeX: -98.75, homeZ: 84.75, homeR: 7, y: 2, depth: 1.8, fade: 10 } as const
+export const WATER_DROP = -0.05
+/** Where the Glade's footprint sat in the Wilds before s1b-2 = GLADE shifted back by this. The void layout round the arrival
+ *  was cut around that footprint, so wilds-voids keeps reading it there (no void moves because the Glade left). */
+export const WILDS_FRONT_SHIFT = { x: 225, z: -160 }
+export const wildsFrontDist = (x: number, z: number) => gladeDist(x + WILDS_FRONT_SHIFT.x, z + WILDS_FRONT_SHIFT.z)
 /** past this the Glade never reaches (a 30 m hill beside it would want a 60 m bank: the bank is capped here) */
 export const GLADE_REACH = 60
 /** metres outside the Glade's level ground (<= 0 = on it): the green + lots disc, the pond and its bank, Greg's home */
@@ -172,13 +181,13 @@ function relieveBase(x: number, z: number, rawH: number, waterY: number, clear?:
     if (land < waterY + 1 && rawH > waterY + 1) land = waterY + 1
     // then meet the nearest path: its own height underfoot, a verge back to the land as wide as the gap needs
     const r = roads.near(x, z, ROAD_REACH)
-    if (!r) return gladeGround(x, z, land)
+    if (!r) return land
     const edge = r.hw + PATH_EDGE, gap = land - r.y, verge = Math.max(VERGE_MIN, Math.abs(gap) / BANK)
-    if (r.d >= edge + verge) return gladeGround(x, z, land)
-    return gladeGround(x, z, r.y + gap * smooth(Math.max(0, Math.min(1, (r.d - edge) / verge))))   // M40: the Glade wins over a path through it
+    if (r.d >= edge + verge) return land
+    return r.y + gap * smooth(Math.max(0, Math.min(1, (r.d - edge) / verge)))
   }
   const m = reliefMask(x, z, rawH, waterY, clear)
-  if (m <= 0) return gladeGround(x, z, rawH)
+  if (m <= 0) return rawH
   const h = rawH + reliefRaw(x, z) * m
-  return gladeGround(x, z, h < waterY + 1 ? Math.min(rawH, Math.max(h, waterY + 1)) : h)
+  return h < waterY + 1 ? Math.min(rawH, Math.max(h, waterY + 1)) : h
 }

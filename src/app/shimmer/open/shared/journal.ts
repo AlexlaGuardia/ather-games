@@ -11,7 +11,7 @@
 import { useSyncExternalStore } from 'react'
 import { gardenKey } from '@/lib/keeper-local'
 
-export type Zone = 'continent' | 'ather' | 'wilds'
+export type Zone = 'continent' | 'ather' | 'wilds' | 'glade'   // 'glade' = the closed Moonwell Glade (ather/glade-cluster.ts, M67)
 export interface JournalEntry {
   id: string
   /** short, the line on the page */

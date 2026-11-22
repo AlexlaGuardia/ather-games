@@ -1,16 +1,21 @@
 'use client'
 // THE CLOSED GLADE, DRAWN (BETA M67 s1a; ground + islands are page.tsx's PlotScene + ClusterScene on GLADE_FRAME). This file
-// draws who lives there: the four garden-keepers (Greg in his LOCKED look; Otto, Tess, Bonn as placeholder figures until
-// their looks lock), the five Glade Moglins on their gardens, and the marker over Greg (a newborn's first heading). Nothing
-// here talks yet (M68). Mount in the 'glade' zone only.
-import { useEffect, useRef } from 'react'
+// draws who lives there: the three friends (Otto, Tess, Bonn as placeholder figures until their looks lock), the five Glade
+// Moglins (Fennel at her lot in Greg's garden, the rest on the friends' gardens; folk-spots.ts) and the marker over Greg
+// (a newborn's first heading). Greg himself is glade-greg.tsx on his bench (s1b-2). `gladeFolkDrawn` is who page.tsx lets
+// E talk to. Mount in the 'glade' zone only.
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type * as THREE from 'three'
 import { FolkModel, folkLook, FOLK_HEIGHT } from '../shared/folk-model'
 import { MoglinModel, furOf } from '../shared/moglin-model'
-import { gladeKeepers, gladeClusterFolk, gregInGlade } from './glade-cluster'
+import { gladeKeepers, gregInGlade } from './glade-cluster'
+import { GLADE, gladeFolk } from './moonwell-glade'
+import { folkSpots, type Spot } from './folk-spots'
 
-const KEEPERS = gladeKeepers(), FOLK = gladeClusterFolk(), GREG = gregInGlade()
+const KEEPERS = gladeKeepers(), GREG = gregInGlade()
+/** the five as drawn right now (Fennel is away while the first-rinstick quest has her at the keeper's Rinnshop) */
+export let gladeFolkDrawn: Spot[] = []
 
 /** a slow-turning gold diamond over Greg's head, bobbing: the "go talk to him" marker */
 function GregMarker({ ground }: { ground: (x: number, z: number) => number }) {
@@ -25,17 +30,19 @@ function GregMarker({ ground }: { ground: (x: number, z: number) => number }) {
 }
 
 export function GladeCluster({ ground, marker = true }: { ground: (x: number, z: number) => number; marker?: boolean }) {
+  const FOLK = useMemo(() => folkSpots(GLADE, gladeFolk().map(f => f.id)), [])   // read at mount: a quest that starts shows on the next visit
+  gladeFolkDrawn = FOLK
   // read-only probe (scripts/glade-cluster-check.mts): who the Glade draws and where
   useEffect(() => {
     const w = window as unknown as { __glade?: unknown }
     w.__glade = { keepers: KEEPERS, folk: FOLK, greg: GREG, marker }
-    return () => { delete w.__glade }
-  }, [marker])
+    return () => { delete w.__glade; gladeFolkDrawn = [] }
+  }, [marker, FOLK])
   return (
     <>
       {KEEPERS.map(k => (
         <group key={k.id} position={[k.x, ground(k.x, k.z), k.z]} rotation-y={k.yaw} userData={{ gladeKeeper: k.id }}>
-          <FolkModel look={folkLook(k.id === 'greg' ? 'gregory' : `glade-${k.id}`)} action="idle" seed={k.x * 0.01} />
+          <FolkModel look={folkLook(`glade-${k.id}`)} action="idle" seed={k.x * 0.01} />
         </group>
       ))}
       {FOLK.map((f, i) => (

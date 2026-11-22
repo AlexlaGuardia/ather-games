@@ -37,8 +37,11 @@ export async function loadNetwork(season = SEASON, base = '/open/wilds'): Promis
   try { const r = await fetch(`${base}/network-s${season}.json`); return r.ok ? withGlade((await r.json()) as Network) : null } catch { return null }
 }
 
-/** Moonwell Glade (M30, moonwell-glade.ts) joins every season's settlements: fixed, at the Wilds' front door. */
-export const withGlade = (n: Network): Network => (n.settlements.some(s => s.id === GLADE.id) ? n : { ...n, settlements: [GLADE, ...n.settlements] })
+/** Moonwell Glade joined every season's settlements (M30) until M67 s1b-2 (hub 11-22) took it OUT of the Wilds into the
+ *  closed Glade (glade-cluster.ts): it is no longer a Wilds settlement (no node, no disc, no folk drawn there; the baked
+ *  networks never routed a road to it). Kept as the identity so every loader/check keeps one call site; a stray Glade
+ *  node in an old network file is dropped. */
+export const withGlade = (n: Network): Network => (n.settlements.some(s => s.id === GLADE.id) ? { ...n, settlements: n.settlements.filter(s => s.id !== GLADE.id) } : n)
 
 /** The settlement the keeper stands in, if any. */
 export function settlementAt(n: Network, x: number, z: number): Settlement | null {

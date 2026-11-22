@@ -2,8 +2,7 @@
 import { GLADE, GLADE_ID, gladeFolk, mallowWants, MALLOW_POOL, isGlade, GLADE_STAYS, GLADE_TRADE, GLADE_LOTS, lotAt, gladeSpots, gregSpot, newbornSpot, NEWBORN_GAP, gladeJetty, GLADE_LAYOUT, gladeAt, LOT_D } from './moonwell-glade'
 import { folkOf } from './settlement-folk'
 import { withGlade, settlementAt, type Network } from './network'
-import { MOONWELL, GLADE_GREEN, fromShore, atWater, SCALE_AT } from './moonwell'
-import { GREG_WAYMARK } from './waymarks'
+import { MOONWELL, GLADE_GREEN, GLADE_ANCHOR, fromShore, atWater, SCALE_AT } from './moonwell'
 import { gladeHome } from './glade-home'
 import { itemDef } from '../shared/inventory'
 let pass = 0; const fails: string[] = []
@@ -19,7 +18,7 @@ const wk = 7 * 86_400_000
 ok(mallowWants(0)[0].id !== mallowWants(wk)[0].id && mallowWants(wk * MALLOW_POOL.length)[0].id === mallowWants(0)[0].id, "Mallow's list changes weekly and cycles")
 ok(GLADE.x === GLADE_GREEN.x && GLADE.z === GLADE_GREEN.z, 'the Glade sits on the green (M40 layout B)')
 // ── M40 layout B (mock: docs/looks/moonwell-glade.html, 0.25 m a pixel)
-ok(GLADE_GREEN.x === GREG_WAYMARK.x && Math.abs(GREG_WAYMARK.z - GLADE_GREEN.z - 30.75) < 1e-9, 'the waymark stays put, at the green\'s open south end')
+ok(GLADE_GREEN.x === GLADE_ANCHOR.x && Math.abs(GLADE_ANCHOR.z - GLADE_GREEN.z - 30.75) < 1e-9, 'the anchor (once the waymark) is the green\'s open south end (s1b-2: in the closed Glade)')
 ok(MOONWELL.x < GLADE_GREEN.x - 40 && MOONWELL.rx === 20.5 && MOONWELL.rz === 24.5, 'the pond is ~41 x 49 m, west of the green')
 ok(fromShore(GLADE_GREEN.x, GLADE_GREEN.z) > GLADE_GREEN.r, 'the green is dry ground, clear of the pond')
 const order = GLADE_LOTS.map(l => l.id).join(',')
@@ -46,8 +45,8 @@ ok(atWater(SCALE_AT.x, SCALE_AT.z) && fromShore(SCALE_AT.x, SCALE_AT.z) > 0, 'th
 void gladeAt
 const net: Network = { v: 1, season: 1, settlements: [{ id: 's1-0', name: 'X', x: 900, z: 900 }], paths: [], fair: null }
 const g = withGlade(net)
-ok(g.settlements.length === 2 && g.settlements[0].id === GLADE_ID && withGlade(g).settlements.length === 2, 'the network gains the Glade once')
-ok(settlementAt(g, GLADE_GREEN.x, GLADE_GREEN.z + 5)?.id === GLADE_ID && GLADE_LOTS.every(l => settlementAt(g, lotAt(l.id)!.x, lotAt(l.id)!.z)?.id === GLADE_ID), 'the green and every lot = in Moonwell Glade')
+ok(g.settlements.length === 1 && !g.settlements.some(s => s.id === GLADE_ID), 'M67 s1b-2: a season network no longer gains the Glade (it left the Wilds)')
+{ const gn: Network = { ...net, settlements: [GLADE] }; ok(settlementAt(gn, GLADE_GREEN.x, GLADE_GREEN.z + 5)?.id === GLADE_ID && GLADE_LOTS.every(l => settlementAt(gn, lotAt(l.id)!.x, lotAt(l.id)!.z)?.id === GLADE_ID), 'the green and every lot = in Moonwell Glade (its talk anchor)') }
 ok(GLADE_STAYS.length > 0, 'the stay-home line exists (lark placeholder)')
 // M31 born beside Greg, keyed off HIS spot (11-22: M40 moved the pond and the old waymark spawn sat 57.7 m away)
 { const g = gregSpot(), n = newbornSpot(), d = Math.hypot(n.x - g.x, n.z - g.z)
@@ -56,5 +55,5 @@ ok(GLADE_STAYS.length > 0, 'the stay-home line exists (lark placeholder)')
   ok(off < 1e-6, `newborn faces Greg (${(off * 180 / Math.PI).toFixed(3)} deg off)`)
   ok(!atWater(n.x, n.z), 'newborn stands on dry ground, not in the pond')
   ok(Math.hypot(n.x - GLADE_GREEN.x, n.z - GLADE_GREEN.z) < Math.hypot(g.x - GLADE_GREEN.x, g.z - GLADE_GREEN.z), 'newborn is on the green side of his bench')
-  ok(Math.hypot(n.x - (GREG_WAYMARK.x + 2.2), n.z - (GREG_WAYMARK.z + 2.2)) > 10, 'not the old waymark spawn') }
+  void n }   // (the old Wilds waymark spawn check retired with M67 s1b-2: the newborn is in the closed Glade)
 console.log(`moonwell-glade: ${pass} pass, ${fails.length} fail`); fails.forEach(f => console.log('  FAIL', f)); if (fails.length) process.exit(1)

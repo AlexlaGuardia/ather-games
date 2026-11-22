@@ -11,7 +11,7 @@ import type { Pt } from '../shared/folk-path'
 import { aroundPath } from '../shared/folk-path'
 import type { Loadout } from '../shared/loadout'
 import { MOONWELL, GLADE_GREEN } from './moonwell'
-import { GREG_WAYMARK } from './waymarks'
+import { gladeClusterSpot } from './glade-cluster'
 import { gladeFolk, gladeSpots, GLADE_TRADE, GLADE_LOTS, gregSpot } from './moonwell-glade'
 import { TABLE } from './rooms'
 import { GREG_GLOVE_PICK } from '../../play3d/vessels'
@@ -24,7 +24,7 @@ export const TOUR_DONE = 'Thanks, Greg.'             // SIGNED by Alex 11-19: th
 export const GLOVE_GIVE = 'One more thing. Your glove. Here is its first word.'   // SIGNED by Alex 11-19: Greg's handover
 
 /** `meets` = the folk Greg introduces at this stop (BETA M33: being introduced = met, so Morel may carry their calls). */
-export interface TourStop { id: string; at: Pt; look: Pt; line: string; zone: 'wilds' | 'plot'; meets?: string }
+export interface TourStop { id: string; at: Pt; look: Pt; line: string; zone: 'glade' | 'plot'; meets?: string }
 
 /** a point `d` metres from `c` toward `p` */
 const toward = (c: Pt, p: Pt, d: number): Pt => { const a = Math.atan2(p.x - c.x, p.z - c.z); return { x: c.x + Math.sin(a) * d, z: c.z + Math.cos(a) * d } }
@@ -34,10 +34,14 @@ export const POOL_KEEP = Math.max(MOONWELL.rx, MOONWELL.rz) + 1.5
 /** a Glade folk's stop line (SIGNED by Alex 11-19) */
 export const folkLine = (name: string, trade: string) => `This is ${name}, our ${trade}. A garden needs one, and this one is the best.`
 
-/** The tour, in order: the Moonwell, each of the five present at the Glade (beside them, at their trade), the waymark stone,
- *  then the keeper's own planning table (on the plot). `folk` = who is home now (Fennel is away on her rinstick errand). */
+/** The tour, in order: the Moonwell, each of the five present IN GREG'S GARDEN (beside them, at their trade), then the
+ *  keeper's own planning table (on the plot). `folk` = who is home now (Fennel is away on her rinstick errand).
+ *  ★ M67 s1b-2 (the closed Glade, hub 11-22 'A'): the tour walks Greg's garden only. Sax, Yarrow, Mallow and Hazel live in the
+ *  friends' gardens 220-320 m off (glade-cluster.ts), too far for a walk-along, so they are met at their own gardens; and the
+ *  waymark stop is gone (the waymark stone stayed in the Wilds; the Glade's way out is the gate, whose line is M68's). */
 export function tourStops(folk: readonly { id: string; name: string }[] = gladeFolk()): TourStop[] {
-  const pool = { x: MOONWELL.x, z: MOONWELL.z }, wm = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z }, bench = gregSpot()
+  const pool = { x: MOONWELL.x, z: MOONWELL.z }, bench = gregSpot()
+  folk = folk.filter(f => !gladeClusterSpot(f.id))
   // M40 (layout B): Greg walks the GREEN clockwise from the kitchen at its head (GLADE_LOTS order), each Moglin at their lot
   const rank = (id: string) => { const k = GLADE_LOTS.findIndex(l => l.id === id.split(':').pop()); return k < 0 ? 99 : k }
   folk = [...folk].sort((a, b) => rank(a.id) - rank(b.id))
@@ -46,14 +50,12 @@ export function tourStops(folk: readonly { id: string; name: string }[] = gladeF
     const s = spots[k], inward = toward(s, green, 1.5)
     const side = { x: inward.x + Math.cos(s.yaw) * 1.7, z: inward.z - Math.sin(s.yaw) * 1.7 }   // well to the folk's side: a keeper behind him still sees them (0.9 hid Hazel)
     const k2 = f.id.split(':').pop() ?? f.id
-    return { id: `folk:${k2}`, at: side, look: { x: s.x, z: s.z }, line: folkLine(f.name, GLADE_TRADE[k2] ?? 'neighbour'), zone: 'wilds', meets: f.name }
+    return { id: `folk:${k2}`, at: side, look: { x: s.x, z: s.z }, line: folkLine(f.name, GLADE_TRADE[k2] ?? 'neighbour'), zone: 'glade', meets: f.name }
   })
   return [
-    { id: 'pool', at: toward(pool, bench, POOL_KEEP), look: pool, zone: 'wilds',
+    { id: 'pool', at: toward(pool, bench, POOL_KEEP), look: pool, zone: 'glade',
       line: 'This is the Moonwell, and the five who keep it. See what a garden can be.' },                     // SIGNED by Alex 11-19
     ...five,
-    { id: 'waymark', at: toward(wm, pool, 1.6), look: wm, zone: 'wilds',
-      line: 'The waymark stone. Touch it and the fold map opens: home, and anywhere you have set a stone.' },   // SIGNED by Alex 11-19
     { id: 'table', ...TABLE_STOP, zone: 'plot',
       line: 'And this is your corner of the Ather. Plan it here, at your table. More ground is bought at my door.' },   // SIGNED by Alex 11-19
   ]
@@ -64,7 +66,7 @@ export const TABLE_KEEPER = { x: TABLE.x + 1.2, z: TABLE.z + 3.6 }   // ~4.8 m o
 
 /** the walk from `from` to stop `i` (or back to the bench when `i` is past the last Glade stop), round the pool */
 export function tourLeg(from: Pt, i: number, stops: readonly TourStop[] = tourStops()): Pt[] {
-  const s = stops[i], to = s && s.zone === 'wilds' ? s.at : gregSpot()
+  const s = stops[i], to = s && s.zone === 'glade' ? s.at : gregSpot()
   return aroundPath(from, to, { x: MOONWELL.x, z: MOONWELL.z }, POOL_KEEP)
 }
 

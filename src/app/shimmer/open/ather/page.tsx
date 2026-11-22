@@ -63,11 +63,10 @@ import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
-import { gregSpot } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
-import { GLADE_GREEN } from './moonwell'   // M40: the Glade's green is the Wilds' safe heart (the five, the pond, the waymark)
+import { gregSpot, GLADE } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
 import { GladeLots } from './glade-lots-view'
-import { GladeCluster } from './glade-cluster-view'   // M67 s1a: the closed Glade's keepers, Moglins, Greg's marker
-import { GLADE_FRAME, GLADE_OWNED, GLADE_TILE, GLADE_ZONE_NAME, GLADE_GATE, gladeNewbornSpot, gladeWhere, gregInGlade } from './glade-cluster'   // M40: the green, the five's lots + stations, Greg's jetty
+import { GladeCluster, gladeFolkDrawn } from './glade-cluster-view'   // M67 s1a: the closed Glade's keepers, Moglins, Greg's marker
+import { GLADE_FRAME, GLADE_OWNED, GLADE_TILE, GLADE_ZONE_NAME, GLADE_GATE, gladeNewbornSpot, gladeWhere, gregInGlade, gladeZoneGround } from './glade-cluster'   // M40: the green, the five's lots + stations, Greg's jetty
 import { loadSpot, saveSpot, clearSpot, makeSpot, resumeFrom } from './last-spot'   // where you were (a reload in the Wilds resumes there)
 import { GladeGreg, type GregTourState, type GregLive } from './glade-greg'
 import { biomeGround } from './hollow-goop'   // M34: what a Hollow's sheen borrows
@@ -155,6 +154,8 @@ const aimDirV = new Vector3()   // M60: the camera's forward, reused every frame
 // M67 s1a: 'glade' = the closed tutorial cluster a newborn opens their eyes in (glade-cluster.ts); its one way out is the gate
 type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string } | { kind: 'glade' }
 type Spawn = { x: number; z: number; yaw: number }
+/** the Wilds' safe ground round the arrival: where the Glade's green stood until M67 s1b-2 (30.75 m north of Greg's waymark) */
+const WILDS_SAFE = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z - 30.75, r: 50 }
 const gregAt = gregSpot()   // BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
 type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation }
 type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'fennel' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement }
@@ -360,7 +361,7 @@ function AtherSliceGame() {
   const plotWorld = useMemo(() => terrainWorld(withLifts(cl.frame.linked
     ? plotShape(owned, [...mistWalls(owned), ...mateWalls(cl.frame), ...workWalls(works)], (x, z) => clusterGround(cl.frame, x, z))
     : plotShape(owned, [...mistWalls(owned), ...workWalls(works)]))), [owned, cl.frame, works])
-  const gladeWorld = useMemo(() => terrainWorld(plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)], (x, z) => clusterGround(GLADE_FRAME, x, z))), [])   // M67 s1a
+  const gladeWorld = useMemo(() => terrainWorld(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground: gladeZoneGround }, undefined, true)), [])   // M67 s1a; s1b-2: the pond's bowl + Greg's home, lots, jetty
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
   const fading = useRef(false)
@@ -614,7 +615,7 @@ function AtherSliceGame() {
   useEffect(() => setCover(coverFromUrl()), [])
   const placedClear = useMemo(() => coverClear(works), [works])   // M23: every placed room / piece / chest / the table clears its floor
   const coverSkip = useCallback((x: number, z: number) => placedClear(x, z) || (cl.frame.linked && onPath(cl.frame, x, z)) || Math.hypot(x - GATE.x, z - GATE.z) < 5 || Math.hypot(x - GREG.x, z - GREG.z) < 2.5 || Math.hypot(x - THRESHOLD.x, z - THRESHOLD.z) < 2, [cl.frame, placedClear])
-  const ground = useMemo(() => zone.kind === 'glade' ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(GLADE_FRAME, x, z)) : zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : ww ? ww.heightAt : () => 0, [zone, ww, cl.frame])
+  const ground = useMemo(() => zone.kind === 'glade' ? gladeZoneGround : zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : ww ? ww.heightAt : () => 0, [zone, ww, cl.frame])
   // M27: others in the Wilds (shared/open-mp.tsx); the plot is personal, no socket. Feet on the ground the page knows.
   // M61: on a plot IN A PARTY there is a socket now: your own plot = open:plot:<you> (you host), a mate's = open:plot:<them>.
   // The party instance is the only way in (strangers never match into one); no party = no socket on the plot, as before.
@@ -682,7 +683,14 @@ function AtherSliceGame() {
     const dir = cam ? (() => { const v = cam.getWorldDirection(aimDirV); return { x: v.x, y: v.y, z: v.z } })() : lookDir(yaw, 0)
     const g = heightRef.current
     const cap = (x: number, z: number, r: number, h: number, item: Near): Pickable<Near> => { const y = g(x, z); return { x, z, y0: y - 0.2, y1: y + h, r, item } }
-    if (zone.kind === 'glade') n = aimPick([cap(GLADE_GATE.x, GLADE_GATE.z, 1.4, 3.2, { kind: 'gate' })], eye, dir, from)   // M67 s1a: no talk yet (M68)
+    if (zone.kind === 'glade') {   // M67 s1a: the gate; s1b-2: Greg + the five talk here (they left the Wilds)
+      const cands: Pickable<Near>[] = [cap(GLADE_GATE.x, GLADE_GATE.z, 1.4, 3.2, { kind: 'gate' })]
+      const gl = gregLive.current
+      if (!tourRef.current) cands.push(cap(gl.x, gl.z, 0.45, 1.8, { kind: 'greg' }))
+      if (tourRef.current && !tourRef.current.talk && Math.hypot(gl.x - lc.px, gl.z - lc.pz) > 30) setTour(null)   // M32: walked off = the tour is skipped
+      for (const f of gladeFolkDrawn) cands.push(cap(f.x, f.z, 0.4, MOGLIN_HEIGHT.chibi + 0.1, { kind: 'folk', s: GLADE }))
+      n = aimPick(cands, eye, dir, from)
+    }
     else if (zone.kind === 'plot') {
       const cands: Pickable<Near>[] = [cap(GATE.x, GATE.z, 1.4, 3.2, { kind: 'gate' })]
       if (fennelRef.current) cands.push(cap(fennelRef.current.x, fennelRef.current.z, 0.45, 1.1, { kind: 'fennel' }))   // M22
@@ -691,10 +699,7 @@ function AtherSliceGame() {
     } else {
       const cands: Pickable<Near>[] = []
       for (const { w, own } of [{ w: GREG_WAYMARK, own: false }, ...waymarks.map(w => ({ w, own: true }))]) { const o = ww?.byName.has(w.tile) ? ww.offsetOf(w.tile) : null; if (o) cands.push(cap(w.x + o.x, w.z + o.z, 0.55, 1.7, { kind: 'waymark', w, own })) }
-      // M30: Gregory at Moonwell Glade (a tour in progress keeps E for its own talk)
-      { const gl = gregLive.current
-        if (!tourRef.current) cands.push(cap(gl.x, gl.z, 0.45, 1.8, { kind: 'greg' }))
-        if (tourRef.current && !tourRef.current.talk && Math.hypot(gl.x - lc.px, gl.z - lc.pz) > 30) setTour(null) }   // M32: walked off = the tour is skipped
+      // (M30's Gregory + the Glade's five stood here until M67 s1b-2 moved them into the closed Glade, above)
       // a settlement's folk: each Moglin standing in it (nobody home = the settlement's own anchor, where the talk camera falls back)
       // ...but a node under the crosshair with hands stowed keeps E for the work (Alex 11-19: at Moonwell Glade the folk ate E, no mining)
       const workAim = (aimRef.current.tree || cAimRef.current.crystal) && stanceRef.current.kind === 'stowed'
@@ -1073,7 +1078,7 @@ function AtherSliceGame() {
           ...(net?.fair ? [{ x: net.fair.x, z: net.fair.z, color: '#b37fd6', title: FAIR_NAME }] : []),
           ...waymarks.filter(w => ww?.byName.has(w.tile)).map(w => { const o = ww!.offsetOf(w.tile); return { x: w.x + o.x, z: w.z + o.z, color: '#6fd3c4', title: 'your waymark' } }),
         ]
-    marksRef.current = [...marksRef.current, ...(zone.kind === 'glade' ? [] : questMarks(zone.kind === 'plot' ? 'ather' : 'wilds'))]   // the journal's waymarks (pack.tsx)
+    marksRef.current = [...marksRef.current, ...questMarks(zone.kind === 'plot' ? 'ather' : zone.kind)]   // the journal's waymarks (pack.tsx); M67 s1b-2: the Glade has its own (the pool, Greg)
   }, [zone, nearNodes, waymarks, journal, ww, net])
   // THE FIRST ERRAND (business/errand.ts, Magii + Alex 11-16): Greg hands the birth letter's gems; the journal points to
   // the school's runesmith, then the Enchant Temple in the Citadel (those waymarks light on the continent page)
@@ -1102,12 +1107,13 @@ function AtherSliceGame() {
   // M32 trail (hub 11-19): the way on to the runesmith is continuous. On the plot it is the gate; in the Wilds it is the Glade's
   // waymark stone (both open the fold map, which then opens on Rune Hold for an errand keeper); on the continent, the door.
   const errandGate = useMemo(() => {
+    if (zone.kind === 'glade') return { x: GLADE_GATE.x, z: GLADE_GATE.z, zone: 'glade' as const }   // M67: the Glade's one way out
     if (zone.kind !== 'wilds') return { x: GATE.x, z: GATE.z, zone: 'ather' as const }
     if (!ww || !ww.byName.has(GREG_WAYMARK.tile)) return null
     const o = ww.offsetOf(GREG_WAYMARK.tile); return { x: GREG_WAYMARK.x + o.x, z: GREG_WAYMARK.z + o.z, zone: 'wilds' as const }
   }, [zone.kind, ww, wrev])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { postEntries('errand', errandEntries(errandStage, birth, { greg: { x: gregAt.x, z: gregAt.z }, gate: errandGate })) }, [errandStage, birth, errandGate])
-  useMorelHints({ stage: errandStage, zone: zone.kind === 'wilds' ? 'wilds' : 'ather', pos: () => poseRef.current,
+  useMorelHints({ stage: errandStage, zone: zone.kind === 'plot' ? 'ather' : zone.kind, pos: () => poseRef.current,
     busy: () => frozen.current || (!!chudRef.current && performance.now() / 1000 - chudRef.current.hurtAt < 10) })   // a fight is not 'stuck'
   // BETA M6a/M6b: the rinning + prospecting pointers, struck once used (re-read on every pack change: a catch/cut lands in it)
   useEffect(() => {
@@ -1142,7 +1148,7 @@ function AtherSliceGame() {
   const gl0 = gregLive.current   // M32: he may be standing anywhere on the Glade (tour); seated = his bench (M30)
   const gregHead = useMemo(() => zone.kind === 'plot'   // M32: on the plot he is only ever at the planning table (the tour's end)
     ? { x: TABLE_STOP.at.x, y: plotHeightAt(TABLE_STOP.at.x, TABLE_STOP.at.z) + 1.75, z: TABLE_STOP.at.z }
-    : { x: gl0.x, y: (ww && ww.tileAtPoint(gl0.x, gl0.z) ? ww.heightAt(gl0.x, gl0.z) : 0) + (gl0.seated ? 1.55 : 1.75), z: gl0.z },
+    : { x: gl0.x, y: (zone.kind === 'glade' ? gladeZoneGround(gl0.x, gl0.z) : 0) + (gl0.seated ? 1.55 : 1.75), z: gl0.z },   // M67 s1b-2: he lives in the Glade
     [zone.kind, ww, hereTile, gl0.x, gl0.z, gl0.seated, panel, tour])   // eslint-disable-line react-hooks/exhaustive-deps
   // BETA M32: a tour stop's talk (lines are @lark placeholders, greg-tour.ts). Skip at every stop; the last one ends it, and a
   // keeper still on the first errand goes straight into his send-off (the gems), where he stands.
@@ -1164,23 +1170,23 @@ function AtherSliceGame() {
   // to the table: the fade home, set down facing Greg; on the plot his talk opens at once (he is already there)
   useEffect(() => {
     if (!tour || tour.i !== tableIdx) return
-    if (zone.kind === 'wilds' && !tour.talk) {
+    if (zone.kind === 'glade' && !tour.talk) {   // M67 s1b-2: the tour's Glade stops are in the closed Glade now
       const k = TABLE_KEEPER, g = TABLE_STOP.at
       setTableVisit(true); arrive({ kind: 'plot' }, { x: k.x, z: k.z, yaw: Math.atan2(-(g.x - k.x), -(g.z - k.z)) })   // walker: forward = (-sin, -cos)
     } else if (zone.kind === 'plot' && !tour.talk) setTour({ i: tour.i, talk: true })
   }, [tour, tableIdx, zone.kind, arrive])
-  // the tour lives in the Wilds and at the table; anywhere else ends it. Greg leaves the table once his talk is over.
+  // the tour lives in the Glade and at the table; anywhere else ends it. Greg leaves the table once his talk is over.
   useEffect(() => { if (tourRef.current && zone.kind === 'plot' && tourRef.current.i !== tableIdx) setTour(null) }, [zone.kind, tableIdx])
   useEffect(() => { if (!tour && panel?.kind !== 'talk' && panel?.kind !== 'greg') setTableVisit(false) }, [tour, panel])
   // BETA M13: E in a settlement talks to ONE Moglin (folk-talk.ts); the settlement's heart is its anchor (no Moglin models are drawn yet)
-  const folkTalk = useFolkTalk(panel?.kind === 'folk' ? panel.s : null, useCallback((x: number, z: number) => ww && ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : 0, [ww]), () => setPanel(null))
+  const folkTalk = useFolkTalk(panel?.kind === 'folk' ? panel.s : null, useCallback((x: number, z: number) => zone.kind === 'glade' ? gladeZoneGround(x, z) : ww && ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : 0, [ww, zone.kind]), () => setPanel(null))
   // BETA M22: Fennel at the Rinnshop while the first-rinstick quest is open (fennel.tsx, use-rinquest.ts › fennelTalk)
   const fennelAt = useMemo(() => (!visitNow && fennelHere(rinQuest) ? fennelSpot(works) : null), [rinQuest, works, visitNow])   // M61: your Fennel stays on YOUR plot
   const fennelRef = useRef(fennelAt); fennelRef.current = fennelAt
   const fennelHead = useMemo(() => (fennelAt ? { x: fennelAt.x, y: plotHeightAt(fennelAt.x, fennelAt.z) + FENNEL_HEAD, z: fennelAt.z } : null), [fennelAt])
   const fennelNode = panel?.kind === 'fennel' ? fennelTalk(rinQuest, panel.page, inv, { goto: page => setPanel({ kind: 'fennel', page }), close: () => setPanel(null) }) : null
   useEffect(() => { const m = tour && tourNode ? stops[tour.i]?.meets : undefined; if (m) markMet(m) }, [tour, tourNode, stops])   // BETA M33: Greg's introduction = met
-  useEffect(() => { talkFocus.current = talkNode ? gregHead : tourNode && tour ? (() => { const L = stops[tour.i].look, ly = (stops[tour.i].zone === 'plot' ? plotHeightAt(L.x, L.z) : ww && ww.tileAtPoint(L.x, L.z) ? ww.heightAt(L.x, L.z) : 0) + 1.0
+  useEffect(() => { talkFocus.current = talkNode ? gregHead : tourNode && tour ? (() => { const L = stops[tour.i].look, ly = (stops[tour.i].zone === 'plot' ? plotHeightAt(L.x, L.z) : gladeZoneGround(L.x, L.z)) + 1.0
     // M32: between what he shows and his head (his side heavier: his bubble must stay on screen), so a phone frames both (aimed at the station alone, his bubble left the screen)
     return { x: L.x * 0.4 + gregHead.x * 0.6, y: ly * 0.4 + (gregHead.y + 0.6) * 0.6, z: L.z * 0.4 + gregHead.z * 0.6 } })() : fennelNode && fennelHead ? fennelHead : folkTalk.focus }, [talkNode, gregHead, tourNode, tour, stops, ww, fennelNode, fennelHead, folkTalk.focus])
   // the journal: the nearest infected node is the keeper's open line on this side (re-aimed as you move; unchanged posts are free)
@@ -1311,23 +1317,23 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && ww && <RinningFX ease={easeOf(toolsRef.current.rinning)} waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT && !!toolsRef.current.rinning} onCatch={onCatch} onGone={onGone} />}
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />{net && <TilePaths net={net} W={T} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />}</group> })}
         {ww && <DeathPack active={zone.kind === 'wilds'} />}
-        {zone.kind === 'wilds' && ww && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
-        {zone.kind === 'wilds' && ww && <GladeLots />}
-        {zone.kind === 'wilds' && ww && <GladeGreg loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} tour={tour} hold={panel?.kind === 'talk' || panel?.kind === 'greg'} keeper={poseRef} onArrive={onTourArrive} live={gregLive} />}
+        {zone.kind === 'wilds' && ww && <><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
+        {zone.kind === 'glade' && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><GladeLots /></>}   {/* M67 s1b-2: the Glade's backdrop in Greg's garden */}
+        {zone.kind === 'glade' && <GladeGreg loaded={(x, z) => { const y = gladeZoneGround(x, z); return Number.isFinite(y) ? y : null }} tour={tour} hold={panel?.kind === 'talk' || panel?.kind === 'greg'} keeper={poseRef} onArrive={onTourArrive} live={gregLive} />}
         {zone.kind === 'wilds' && ww && net && <Settlements net={net} loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
         {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
             groundAt={ww ? (x: number, z: number) => biomeGround(ww.biomeAt(x, z)) : undefined}
-            safe={{ x: GLADE_GREEN.x, z: GLADE_GREEN.z, r: 50 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} mana={manaRef.current} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
+            safe={WILDS_SAFE} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} mana={manaRef.current} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
         )}
-        {folkTalk.node && folkTalk.bubbleAt && zone.kind === 'wilds' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} scene={(folkTalk.node as { scene?: string }).scene} />}
+        {folkTalk.node && folkTalk.bubbleAt && zone.kind !== 'plot' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} scene={(folkTalk.node as { scene?: string }).scene} />}
         {zone.kind === 'plot' && tableVisit && !visitNow && (() => {   /* M61: your Greg never stands at a mate's table */ const g = TABLE_STOP.at, p = poseRef.current; return (
           <group position={[g.x, plotHeightAt(g.x, g.z), g.z]} rotation-y={Math.atan2(p.x - g.x, p.z - g.z)}><FolkModel look={folkLook('gregory')} action={tourNode || talkNode ? 'talk' : 'idle'} /></group>) })()}
-        {(talkNode ?? tourNode) && (zone.kind === 'wilds' || (tableVisit && !visitNow)) && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} />}
+        {(talkNode ?? tourNode) && (zone.kind === 'glade' || (tableVisit && !visitNow)) && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} />}
         {zone.kind === 'plot' && fennelAt && <Fennel spot={fennelAt} y={plotHeightAt(fennelAt.x, fennelAt.z)} talking={!!fennelNode} />}
         {fennelNode && fennelHead && zone.kind === 'plot' && <TalkBubble at={[fennelHead.x, fennelHead.y + 0.5, fennelHead.z]} name={FENNEL_NAME} line={fennelNode.line} />}
-        {zone.kind !== 'glade' && <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} water={zone.kind === 'wilds' ? rinWaterAt : undefined} />}
+        <QuestGuide zone={zone.kind === 'plot' ? 'ather' : zone.kind} ground={ground} water={zone.kind === 'wilds' ? rinWaterAt : undefined} />   {/* M67 s1b-2: the Glade's quest steps (the Moonwell wait, Greg) point here too */}
         {world && fade === 0 && <CompanionFollower pose={poseRef} ground={ground} />}
         <GateRings gate={castGate} />
         {world && (

@@ -1,11 +1,12 @@
-// ather/greg-tour.ts: the tour visits the Moonwell, each of the five at home (Magii fba7186), the waymark, then the keeper's
-// planning table; every Glade leg keeps out of the pool and Greg's house; the glove word is the ruled 09-28 column and never
+// ather/greg-tour.ts: the tour visits the Moonwell, each of the five at home IN GREG'S GARDEN (Magii fba7186; M67 s1b-2: the
+// closed Glade, where only Fennel lives in his garden and the waymark stayed in the Wilds), then the keeper's planning table; every Glade leg keeps out of the pool and Greg's house; the glove word is the ruled 09-28 column and never
 // overwrites an earned word (944ad1d).
 import { tourStops, tourLeg, giveGloveWord, gloveWordFor, POOL_KEEP, TABLE_STOP, TABLE_KEEPER, TOUR_ASK, TOUR_NEXT, TOUR_SKIP, TOUR_DONE } from './greg-tour'
 import { segClear, type Pt } from '../shared/folk-path'
 import { MOONWELL, fromShore } from './moonwell'
 import { gladeHome, HOME_R } from './glade-home'
 import { gregSpot, gladeFolk, gladeSpots } from './moonwell-glade'
+import { gladeClusterSpot } from './glade-cluster'
 import { TABLE } from './rooms'
 import { GREG_GLOVE_PICK } from '../../play3d/vessels'
 import { newLoadout } from '../shared/loadout'
@@ -15,13 +16,13 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.lo
 const pool = { x: MOONWELL.x, z: MOONWELL.z }, home = gladeHome()
 const five = [{ id: 'moonwell:hazel', name: 'Hazel' }, { id: 'moonwell:sax', name: 'Sax' }, { id: 'moonwell:yarrow', name: 'Yarrow' }, { id: 'moonwell:fennel', name: 'Fennel' }, { id: 'moonwell:mallow', name: 'Mallow' }]
 const s = tourStops(five)
-ok(s.map(x => x.id).join() === 'pool,folk:fennel,folk:hazel,folk:sax,folk:yarrow,folk:mallow,waymark,table', `the order (M40): pool, the green clockwise from the kitchen, waymark, table (${s.map(x => x.id).join()})`)
+ok(s.map(x => x.id).join() === 'pool,folk:fennel,table', `the order (s1b-2): pool, the folk of Greg's garden (Fennel), table (${s.map(x => x.id).join()})`)
 ok(s.filter(x => x.zone === 'plot').length === 1 && s[s.length - 1].zone === 'plot', 'one plot stop, and it is the last')
 ok(tourStops(five.filter(f => f.name !== 'Fennel')).every(x => x.id !== 'folk:fennel'), 'a folk away from home (Fennel on her errand) is not a stop')
-ok(tourStops().length === gladeFolk().length + 3, 'the default reads who is home now')
-const tourOrder = ['fennel', 'hazel', 'sax', 'yarrow', 'mallow'].map(k => five.find(f => f.id.endsWith(k))!)
+ok(tourStops().length === gladeFolk().filter(f => !gladeClusterSpot(f.id)).length + 2, 'the default reads who is home now (in Greg\'s garden)')
+const tourOrder = ['fennel'].map(k => five.find(f => f.id.endsWith(k))!)
 const spots = gladeSpots(tourOrder.map(f => f.id))
-for (const t of s.filter(x => x.zone === 'wilds')) {
+for (const t of s.filter(x => x.zone === 'glade')) {
   ok(fromShore(t.at.x, t.at.z) >= 0.5, `${t.id}: Greg stands out of the water`)
   ok(Math.hypot(t.at.x - home.x, t.at.z - home.z) >= HOME_R + 0.5, `${t.id}: Greg stands outside his house`)
   ok(Math.hypot(t.at.x - t.look.x, t.at.z - t.look.z) > 1, `${t.id}: what he shows is a step away from him`)
@@ -33,7 +34,7 @@ s.filter(x => x.id.startsWith('folk:')).forEach((t, k) => ok(t.look.x === spots[
 ok(Math.hypot(TABLE_STOP.at.x - TABLE.x, TABLE_STOP.at.z - TABLE.z) < 3 && Math.hypot(TABLE_KEEPER.x - TABLE_STOP.at.x, TABLE_KEEPER.z - TABLE_STOP.at.z) > 1.5, 'the table stop: Greg beside the table, the keeper a step off')
 // walk every Glade leg as the scene does: bench -> each Glade stop -> back to the bench
 let at: Pt = gregSpot(), legsOk = true
-const glade = s.filter(x => x.zone === 'wilds')
+const glade = s.filter(x => x.zone === 'glade')
 for (let i = 0; i <= glade.length; i++) {
   const leg = tourLeg(at, i, glade)
   let prev = at

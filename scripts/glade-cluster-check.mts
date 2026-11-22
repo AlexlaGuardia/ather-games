@@ -12,6 +12,8 @@
 //   6. an existing save stays where it was: a reload now resumes in the Wilds, not the Glade
 //   7. 0 page errors
 //   8. (s1b-1) the fold map's 'Moonwell Glade' stop, right under 'Your plot', sets an existing keeper down facing Greg
+//   s1b-2: 3 = the three friends + their Moglins, Greg on his bench, Fennel at her lot in his garden; 3b = Greg and Fennel talk
+//   in the Glade (the real prompt, check-only warp); 3c = the Moonwell is drawn there; 6b = none of it is left in the Wilds
 // Hooks READ only except __ather.gladeAt (the warp in 5). --phone = 390 x 844 with taps. --out <dir> = shots to LOOK at.
 //   npx tsx scripts/glade-cluster-check.mts [--url https://ather.games] [--phone] [--out dir]
 import { mkdirSync } from 'node:fs'
@@ -69,11 +71,26 @@ try {
   await shot(p, 'glade-spawn')
   // 3 · who is where
   const keepers = Object.fromEntries(G.keepers.map(k => [k.id, k])), folk = Object.fromEntries(G.folk.map(f => [f.id.split(':')[1], f]))
-  ok(['greg', 'otto', 'tess', 'bonn'].every(k => keepers[k]), `3. four garden-keepers drawn: ${G.keepers.map(k => k.name).join(', ')}`)
+  ok(['otto', 'tess', 'bonn'].every(k => keepers[k]) && !keepers.greg, `3. the three friends drawn (Greg is on his bench): ${G.keepers.map(k => k.name).join(', ')}`)
+  keepers.greg = G.greg
   const near = (a: Pl, b: Pl) => Math.hypot(a.x - b.x, a.z - b.z) < 8
-  const pairs: [string, string][] = [['fennel', 'greg'], ['sax', 'otto'], ['yarrow', 'tess'], ['mallow', 'tess'], ['hazel', 'bonn']]
+  const pairs: [string, string][] = [['sax', 'otto'], ['yarrow', 'tess'], ['mallow', 'tess'], ['hazel', 'bonn']]
   for (const [f, k] of pairs) ok(!!folk[f] && near(folk[f], keepers[k]), `3. ${f} is at ${keepers[k]?.name}'s garden`)
-  ok(G.keepers.every((a, i) => G.keepers.every((b, j) => i === j || Math.hypot(a.x - b.x, a.z - b.z) > 100)), '3. the four gardens stand apart (one each)')
+  // s1b-2: Fennel at her lot in Greg's garden (his block x -150..-30, z 70..150), within the Glade's layout round his bench
+  ok(!!folk.fennel && folk.fennel.x > -150 && folk.fennel.x < -30 && folk.fennel.z > 70 && folk.fennel.z < 150 && Math.hypot(folk.fennel.x - G.greg.x, folk.fennel.z - G.greg.z) < 40, `3. fennel is in Greg's garden, at her lot (${folk.fennel?.x.toFixed(1)},${folk.fennel?.z.toFixed(1)})`)
+  ok([G.greg, ...G.keepers].every((a, i, all) => all.every((b, j) => i === j || Math.hypot(a.x - b.x, a.z - b.z) > 100)), '3. the four gardens stand apart (one each)')
+  // 3b · s1b-2: the Glade's folk talk HERE now (they left the Wilds). Set down 2 m in front of Greg / Fennel, facing them: the prompt
+  const faceAt = async (t: Pl, dist: number) => { const x = t.x + Math.sin(t.yaw) * dist, z = t.z + Math.cos(t.yaw) * dist   // in front of them (figure yaw)
+    await A(p, 'gladeAt', x, z, Math.atan2(-(t.x - x), -(t.z - z))) }   // walker yaw: forward = (-sin, -cos), toward them
+  await faceAt(G.greg, 2)
+  ok(await poll(() => p.evaluate(() => /E · Gregory/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]')), 15000), "3b. Greg talks in the Glade: 'E · Gregory'")
+  await shot(p, 'glade-greg')
+  await faceAt(folk.fennel, 1.6)
+  ok(await poll(() => p.evaluate(() => /talk to the folk of Moonwell Glade/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]')), 15000), "3b. Fennel talks in the Glade: 'talk to the folk of Moonwell Glade'")
+  await shot(p, 'glade-fennel')
+  // 3c · the backdrop: the Moonwell is drawn (its probe) and its water stands in Greg's garden
+  ok(await poll(() => p.evaluate(() => !!(window as any).__moonwell), 10000), '3c. the Moonwell is drawn in the Glade')
+  await faceAt(G.greg, 5); await sleep(1500)   // back where a newborn wakes, so step 4's reload reads the spawn spot
   // 4 · a reload keeps them in the Glade, where they stood
   await sleep(4000)   // the spot saves every 3 s
   const before = await A(p, 'state') as { px: number; pz: number }
@@ -103,6 +120,9 @@ try {
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 })
   ok(await poll(async () => (await A(p, 'zone')) === 'wilds', 120000), `6. reload after the gate: the Wilds, where they were (zone ${await A(p, 'zone')})`)
   await sleep(3000)
+  // 6b · s1b-2: the Glade is gone from the Wilds: no Moonwell, no Glade Moglins drawn, no Glade on the season's map
+  { const w = await p.evaluate(() => ({ pool: !!(window as any).__moonwell, glade: !!(window as any).__glade, folk: Object.keys((window as any).__folk?.drawn?.() ?? {}) }))
+    ok(!w.pool && !w.glade && !w.folk.includes('moonwell'), `6b. the Wilds carry no Glade (pool ${w.pool}, glade ${w.glade}, folk ${w.folk.join(',') || '-'})`) }
   await shot(p, 'glade-out')
   // 8 · s1b-1: the Glade stays on the Ather map. The fold map (the gate's, opened by hook; the stop is a REAL tap) lists
   //     'Moonwell Glade' right under 'Your plot', and it sets an existing keeper down in Greg's garden facing him

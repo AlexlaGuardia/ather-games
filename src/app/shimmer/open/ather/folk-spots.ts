@@ -5,6 +5,7 @@
 // height there every time (M18 reshapes ground near paths), never a cached y. All inside the settlement's flat disc.
 import type { Settlement } from './network'
 import { GLADE_ID, gladeSpots } from './moonwell-glade'
+import { gladeClusterSpot } from './glade-cluster'
 
 /** the same hash network-scene.tsx uses for a settlement's doors and turn */
 export const h01 = (s: string, k: number) => { let h = 2166136261 ^ k; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return ((h >>> 0) % 10000) / 10000 }
@@ -14,7 +15,8 @@ export const MIN_GAP = 1.6
 export interface Spot { id: string; x: number; z: number; yaw: number }
 /** one spot per Moglin, in the green: radius 3.5-8 m round a point just behind the well, spread across the half facing out */
 export function folkSpots(s: Settlement, ids: readonly string[]): Spot[] {
-  if (s.id === GLADE_ID) return gladeSpots(ids)   // Moonwell Glade: a ring round the pool, not the knoll's green (M30)
+  // Moonwell Glade (M30; M67 s1b-2: in the closed Glade): Fennel at her lot in Greg's garden, the other four in the friends' gardens
+  if (s.id === GLADE_ID) return ids.map(id => { const c = gladeClusterSpot(id); return c ? { id, x: c.x, z: c.z, yaw: c.yaw } : gladeSpots([id])[0] })
   const turn = settlementTurn(s), c = Math.cos(turn), sn = Math.sin(turn)
   const out: Spot[] = []
   ids.forEach((id, k) => {

@@ -113,7 +113,7 @@ export function questEntries(q: RinQuest, moonwell?: { x: number; z: number }, f
   if (q.state === 'none') return []
   const s = currentStep(q)
   if (s) {
-    const where = (s.do.kind === 'wait' || s.do.kind === 'pickup') && moonwell ? { zone: 'wilds' as const, x: moonwell.x, z: moonwell.z }
+    const where = (s.do.kind === 'wait' || s.do.kind === 'pickup') && moonwell ? { zone: 'glade' as const, x: moonwell.x, z: moonwell.z }
       : s.id === 'meet' && fennel ? { zone: 'ather' as const, x: fennel.x, z: fennel.z } : null
     return [{ id: 'rinquest', hand: 'keeper', title: s.title, note: s.note, where }]
   }
