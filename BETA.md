@@ -249,7 +249,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
-- ~~**M68 + M70 tutorial lines:**~~ ✅ SIGNED by Alex 11-22 17:2x (athernyx sign commit). Spread word = Hollow ground (lark pick, default).
+- ~~**M68 + M70 tutorial lines:**~~ ✅ SIGNED by Alex 11-22 17:2x (athernyx sign commit). Spread word LOCKED by Alex via Magii c755de1: HOLLOW GROUND (reversible, legend Unseen / Clear / Hollow ground); THE GREYING = the season closing ring. All Glade tutorial gaps closed.
 
 - **M82 hands actions (11-22, LIVE):** a real cast and a real melee swing now play the poses you author in /shimmer/dev/hands?preview=actions (placeholders quickened so the flick/hit land on the click). Author the real loops when you like; look note: on the swing wind-up the mitt sits behind the mana orb. Also free now: the M91 idle "inspect/glance at hands" poses can be authored there.
 
