@@ -134,7 +134,11 @@ await p.keyboard.press('Escape'); await sleep(600)
 await journal('1-after-greg')
 // 3 · STEP gate: back to the plot (M67: the Glade's gate -> the Wilds' waymark stone + the fold map's Your plot stop), walk to the
 //     plot's gate, real E, fold map, the Rune Hold door
-await walkTo('Greg -> the Glade gate', GLADE_GATE.x, GLADE_GATE.z, REACH * 0.8)
+// the gate is ~170 m of walled garden from Greg's bench (glade-check proves the route on a BFS grid; at the edesk's 1-2 fps a real-W
+// trek never lands): the check-only warp __ather.gladeAt sets the keeper 2.4 m short of the gate facing it, as glade-cluster-check step 5
+// does; the E at the gate stays real
+{ const sx = GLADE_GATE.x + 2.4, sz = GLADE_GATE.z - 0.4; await A('gladeAt', sx, sz, Math.atan2(-(GLADE_GATE.x - sx), -(GLADE_GATE.z - sz))); await sleep(2500); legs.push('Greg -> the Glade gate: gladeAt warp (movement only; the walk is the unit test\'s)') }
+await aimAt(p, GLADE_GATE.x, GLADE_GATE.z, 1.0)
 await p.keyboard.press('KeyE'); await sleep(1500); await tick(3)
 if (!(await poll(async () => { await tick(2, 0); return (await A('zone')) === 'wilds' }, 120000))) await fail('Glade: the gate out', `zone ${await A('zone')} after E at the Glade gate`)
 legs.push("Glade -> Wilds: the Glade's gate (real E), set down on the waymark stone")
@@ -143,6 +147,7 @@ await sleep(3000); await p.mouse.click(500, 350); await sleep(500)
 // the crosshair can be on the stone (E acts only on what it is on, within reach)
 await A('tp', GREG_WAYMARK.x + 1.5, GREG_WAYMARK.z + 1.5); await tick(3)
 await walkTo('Wilds arrival -> waymark stone', GREG_WAYMARK.x, GREG_WAYMARK.z, REACH * 0.8)
+await aimAt(p, GREG_WAYMARK.x, GREG_WAYMARK.z, 0.9)   // M60: the crosshair on the stone
 await p.keyboard.press('KeyE'); await sleep(1500); await tick(3)
 sees.atWaymark = await text(); await shot('waymark-foldmap')
 if (!(await tapText(/^Your plot/))) await fail('Wilds: the way back to the plot', "no 'Your plot' stop on the fold map at the waymark stone")
