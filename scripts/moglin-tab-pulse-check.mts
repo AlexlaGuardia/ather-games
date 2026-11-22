@@ -84,7 +84,10 @@ try {
   console.error('pulse events', JSON.stringify(at.map(x => [x.id, x.s, Math.round(x.t)])))
   const on = at.find(x => x.s === '1:c'), off = at.find(x => x.s === '0:-' && on && x.id === on.id)
   ok(on?.anim === 'morel-pulse', `2. the pulse animation runs on arrival (${on?.anim})`)
-  ok(!!off && off.t - on!.t < 2500, `2. then it settles: class off, data-morel-pulse=0 after ${off ? ((off.t - on!.t) / 1000).toFixed(2) : '?'} s (< 2.5 s)`)
+  // bound DERIVED, both sides: game-hud.tsx clears the pulse at MOREL_PULSE_MS + 100 = 1.75 s; headless runs ~1 fps, so the timer
+  // can land up to one frame (<= 1 s) late, + 0.5 s slack = 3.25 s. Under 1.5 s = the 3 beats were cut short. (Phone measured 1.75-2.61.)
+  const gap = off ? off.t - on!.t : NaN
+  ok(gap >= 1500 && gap <= 3250, `2. then it settles: class off, data-morel-pulse=0 after ${off ? (gap / 1000).toFixed(2) : '?'} s (1.5-3.25 s)`)
   const log = await q.evaluate(() => (window as any).__pulseLog as string[])
   ok(log[0] === '1:c' && log.includes('0:-'), `2. seen in order: pulsing then settled (${log.join(' > ')})`)
   ok(errs.length === 0, `0 page errors${errs.length ? ': ' + errs.join(' / ') : ''}`)
