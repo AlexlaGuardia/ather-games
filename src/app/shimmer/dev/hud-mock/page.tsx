@@ -54,14 +54,14 @@ function Info({ v }: { v: V }) {
       <div className="text-white font-bold tracking-[.12em]">SHIMMER</div>
       <div className="text-white/50">⌂ room ❈ Rune Hold (play3d)</div>
       <div className="text-white/80">x 224 y 100 z 13</div>
-      <div><span className="text-white/40 tracking-[.14em]">FORE</span> <span className="text-white">Worn Blade</span> <span className="text-white/40 tracking-[.14em]">PROS</span> <span className="text-white">Worn Spike</span></div>
+      <div><span className="text-white/40 tracking-[.14em]">FORE</span> <span className="text-white">Worn Pruner</span> <span className="text-white/40 tracking-[.14em]">PROS</span> <span className="text-white">Worn Spike</span></div>
     </div>
   )
   const body = (tone: string, dim: string) => (
     <div className="px-3 py-2 leading-5" style={hearthBody}>
       <div className="text-[16px] font-semibold" style={{ ...hearthDisplay, color: tone }}>Shimmer</div>
       <div className="text-[12px]" style={{ color: dim }}>your garden · x 224, z 13</div>
-      <div className="text-[12px]" style={{ color: dim }}>fore <b style={{ color: tone }}>Worn Blade</b> · pros <b style={{ color: tone }}>Worn Spike</b></div>
+      <div className="text-[12px]" style={{ color: dim }}>fore <b style={{ color: tone }}>Worn Pruner</b> · pros <b style={{ color: tone }}>Worn Spike</b></div>
     </div>
   )
   if (v === 'light') return (

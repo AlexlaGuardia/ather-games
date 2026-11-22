@@ -1502,7 +1502,7 @@ export async function POST(req: NextRequest) {
 
       const skillOrder = ['forestry', 'prospecting', 'rinning']
       const skillToolComments: Record<string, string> = {
-        forestry: 'Forestry — Blades',
+        forestry: 'Forestry — Pruners',
         prospecting: 'Prospecting — Spikes',
         rinning: 'Rinning — Rinsticks',
       }

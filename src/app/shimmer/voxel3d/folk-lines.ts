@@ -47,8 +47,8 @@ export const SCRIPT = {
   ],
   "folk:HAZEL:lend": [
     { scene: "Hazel glances at the keeper's empty hands, then at the log waiting by the path." },
-    { who: "HAZEL", text: "No blade of your own yet. Fine. Take mine." },
-    { who: "HAZEL", text: "Hold it toward the wood and let it work. Bring it back square, blade and all." },
+    { who: "HAZEL", text: "No pruner of your own yet. Fine. Take mine." },
+    { who: "HAZEL", text: "Hold it toward the wood and let it work. Bring it back square, pruner and all." },
   ],
   "folk:HAZEL:give": [
     { who: "HAZEL", text: "What you get is tables. Shelves. A chest to keep your things dry. Whatever a pocket needs to feel like somebody lives there." },
@@ -58,13 +58,13 @@ export const SCRIPT = {
     { who: "HAZEL", text: "Measure it twice. The wood already knows the number, you are only catching up." },
   ],
   "folk:HAZEL:bark:owed": [
-    { who: "HAZEL", text: "Planks, square, and my blade back. In that order." },
+    { who: "HAZEL", text: "Planks, square, and my pruner back. In that order." },
   ],
   "folk:HAZEL:turn-in": [
     { scene: "Hazel runs a hand along the stack, corner to corner, and does not sigh." },
     { who: "HAZEL", text: "Square. Good. That is a keeper who measures twice." },
     { who: "HAZEL", text: "These will make something worth having." },
-    { who: "HAZEL", text: "My blade back now, if you please. It is mine, and I am not done with it." },
+    { who: "HAZEL", text: "My pruner back now, if you please. It is mine, and I am not done with it." },
   ],
   "folk:SAX:greet": [
     { scene: "Sax is carrying a stone that should take two people, and sets it down without a sound." },

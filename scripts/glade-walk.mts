@@ -93,10 +93,10 @@ try {
   await closeBox()
   s = await state()
   ok(s?.hazel === 'owed' && s.met.includes('hazel'), `Hazel owed, met (${JSON.stringify(s)})`)
-  ok(/Hazel's Blade/i.test(await corner()), `her blade is in the forestry slot (${await corner()})`)
+  ok(/Hazel's Pruner/i.test(await corner()), `her blade is in the forestry slot (${await corner()})`)
   ok(/Cut a log/.test(await objective()), `objective: ${await objective()}`)
   p = await talkTo('hazel')
-  ok(/my blade back/.test(p.text), 'owed bark while the stack is short')
+  ok(/my pruner back/.test(p.text), 'owed bark while the stack is short')
   await closeBox()
 
   // ── 3. the stack, square ───────────────────────────────────────────────────────────────────
@@ -105,7 +105,7 @@ try {
   await cmd('/give goldwood_plank 4')
   ok(/Bring Hazel/.test(await objective()), `four planks: ${await objective()}`)
   p = await talkTo('hazel')
-  ok(/Square. Good/.test(p.text) && /My blade back now/.test(p.text), 'turn-in lines')
+  ok(/Square. Good/.test(p.text) && /My pruner back now/.test(p.text), 'turn-in lines')
   await closeBox()
   s = await state()
   ok(s?.hazel === 'done', 'errand done')
@@ -198,7 +198,7 @@ try {
   await closeBox()
   s = await state()
   ok(s?.stage === 'done', 'folded')
-  ok(/Worn Blade/i.test(await corner()), `the bag arrives with the fold (${await corner()})`)
+  ok(/Worn Pruner/i.test(await corner()), `the bag arrives with the fold (${await corner()})`)
   ok((await objective()) === '', 'no objective once the gate is open')
   // ── ★ THE FOLD IS THE CROSSING (2026-09-16): Moonwell is an island and the fold puts the keeper on
   //    their own plot, in front of their seam, with the bag. Greg stays at Moonwell — the plot's seam

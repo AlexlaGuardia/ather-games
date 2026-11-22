@@ -23,7 +23,7 @@ export const TOOL_DEFS: Record<string, ToolDef> = {
   // no recipe, no bonus. They handle the low tier cleanly and STRUGGLE above it (soft mana penalty,
   // applied at the gather site) so there's incentive to craft the tiered tools below — but the basic
   // is always your backup, so you can never be locked out of gathering. ──
-  worn_blade:    { id: 'worn_blade',    name: 'Worn Blade',    skillId: 'forestry',    tier: 1, durability: 999999, xpBonus: 1, speedBonus: 1, recipe: [], basic: true },
+  worn_blade:    { id: 'worn_blade',    name: 'Worn Pruner',    skillId: 'forestry',    tier: 1, durability: 999999, xpBonus: 1, speedBonus: 1, recipe: [], basic: true },
   worn_spike:    { id: 'worn_spike',    name: 'Worn Spike',    skillId: 'prospecting', tier: 1, durability: 999999, xpBonus: 1, speedBonus: 1, recipe: [], basic: true },
   worn_rinstick: { id: 'worn_rinstick', name: 'Worn Rinstick', skillId: 'rinning',     tier: 1, durability: 999999, xpBonus: 1, speedBonus: 1, recipe: [], basic: true },
   // ── ★ HAZEL'S BLADE — LENT, NOT OWNED (2026-09-15, canon shimmer-quests-mainmap.md › Beat 0½) ──
@@ -32,21 +32,21 @@ export const TOOL_DEFS: Record<string, ToolDef> = {
   // the worn set has it: infinite, uncraftable, unrepairable, never listed as a next tier. It is
   // NOT in `BASIC_TOOL_ID`, so `ensureBasicTools` never hands it out — only Hazel does
   // (voxel3d/tutorial.ts `lend_blade` / `take_blade`).
-  hazels_blade:  { id: 'hazels_blade',  name: "Hazel's Blade", skillId: 'forestry',    tier: 1, durability: 999999, xpBonus: 1, speedBonus: 1, recipe: [], basic: true },
+  hazels_blade:  { id: 'hazels_blade',  name: "Hazel's Pruner", skillId: 'forestry',    tier: 1, durability: 999999, xpBonus: 1, speedBonus: 1, recipe: [], basic: true },
 
   // Forestry — Blades
   goldwood_blade: {
-    id: 'goldwood_blade', name: 'Goldwood Blade', skillId: 'forestry', tier: 1,
+    id: 'goldwood_blade', name: 'Goldwood Pruner', skillId: 'forestry', tier: 1,
     durability: 50, xpBonus: 1.1, speedBonus: 0.9,
     recipe: [{ itemId: 'goldwood_plank', count: 5 }, { itemId: 'goldwood_bark', count: 3 }],
   },
   shimmeroak_blade: {
-    id: 'shimmeroak_blade', name: 'Shimmeroak Blade', skillId: 'forestry', tier: 2,
+    id: 'shimmeroak_blade', name: 'Shimmeroak Pruner', skillId: 'forestry', tier: 2,
     durability: 100, xpBonus: 1.2, speedBonus: 0.85,
     recipe: [{ itemId: 'shimmeroak_plank', count: 8 }, { itemId: 'amber_sap', count: 4 }],
   },
   starwillow_blade: {
-    id: 'starwillow_blade', name: 'Starwillow Blade', skillId: 'forestry', tier: 3,
+    id: 'starwillow_blade', name: 'Starwillow Pruner', skillId: 'forestry', tier: 3,
     durability: 200, xpBonus: 1.35, speedBonus: 0.8,
     recipe: [{ itemId: 'starwillow_branch', count: 10 }, { itemId: 'starwillow_sap', count: 5 }],
   },

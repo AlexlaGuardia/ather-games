@@ -250,7 +250,7 @@ export function objectiveLabel(s: TutorialState, p: Progress): string {
       if (s.hazel === 'owed') {
         if (p.planks >= HAZEL_STACK) return 'Bring Hazel the stack'
         if (p.logs > 0) return "Mill planks at Hazel's sawmill"
-        return "Cut a log with Hazel's blade"
+        return "Cut a log with Hazel's pruner"
       }
       const left = FOLK_IDS.length - s.met.length
       return left === FOLK_IDS.length ? 'Knock on five doors' : `${left} door${left === 1 ? '' : 's'} left`

@@ -30,7 +30,7 @@ export const reachOf = (t: EquippedTool | undefined) => (crafted(t) ? (TOOL_DEFS
 export const manaFor = (t: EquippedTool | undefined, tier: number, base: number) => (tier > reachOf(t) ? base * PENALTY : base)
 /** the extra XP the focus's xpBonus adds on top of the node's own (the node's XP lands in pruneCommit / mineCommit) */
 export const bonusXp = (t: EquippedTool | undefined, xp: number) => Math.round(xp * (t?.xpBonus ?? 1)) - xp
-export const focusName = (t: EquippedTool | undefined, skill: FocusSkill) => (t ? TOOL_DEFS[t.toolId]?.name ?? '' : skill === 'forestry' ? 'Worn Blade' : 'Worn Spike')
+export const focusName = (t: EquippedTool | undefined, skill: FocusSkill) => (t ? TOOL_DEFS[t.toolId]?.name ?? '' : skill === 'forestry' ? 'Worn Pruner' : 'Worn Spike')
 
 export type Make = { ok: true; works: Works; inv: Inv; tools: EquippedTools } | { ok: false; why: string }
 /** Make + equip a focus at its bench: inputs from the room's store first, then the bag (like makeRinstick). Refused while a

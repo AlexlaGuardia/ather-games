@@ -8,7 +8,7 @@ import { BENCH, type FocusSkill } from './focuses'
 export type BenchTab = 'refine' | 'furniture' | 'blades' | 'spikes' | 'hearth' | 'cauldron' | 'bait' | 'rinsticks' | 'keeper'
 
 export const TAB_LABEL: Record<BenchTab, string> = {
-  refine: 'Refine', furniture: 'Furniture', blades: 'Blades', spikes: 'Spikes', hearth: 'Hearth', cauldron: 'Cauldron',
+  refine: 'Refine', furniture: 'Furniture', blades: 'Pruners', spikes: 'Spikes', hearth: 'Hearth', cauldron: 'Cauldron',
   bait: 'Bait', rinsticks: 'Rinsticks', keeper: 'Moglin',   // the keeper is the PLAYER; this tab is the room's Moglin (Alex 11-22)
 }
 

@@ -18,7 +18,7 @@ const SKILL_COLORS: Record<string, string> = {
 }
 
 const SKILL_TOOL_NAMES: Record<string, string> = {
-  forestry: 'Blades',
+  forestry: 'Pruners',
   prospecting: 'Spikes',
   rinning: 'Rinsticks',
 }

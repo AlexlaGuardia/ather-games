@@ -316,9 +316,9 @@ export const ITEMS: ItemDef[] = [
   { id: 'crystal_rinn', name: 'Crystal Rinn', type: 'resource', rarity: 'legendary', description: 'A Rinn made partly of crystallized mana. Like holding a wish.', stackable: true, maxStack: 5, sellPrice: 50, tradeable: true },
   // --- Gathering Tools ---
   // Forestry — Blades
-  { id: 'goldwood_blade', name: 'Goldwood Blade', type: 'tool', rarity: 'common', description: 'A simple blade carved from Goldwood. Cuts clean.', stackable: false, maxStack: 1, sellPrice: 12, tradeable: false },
-  { id: 'shimmeroak_blade', name: 'Shimmeroak Blade', type: 'tool', rarity: 'uncommon', description: 'Dense and sharp. The grain catches light as you swing.', stackable: false, maxStack: 1, sellPrice: 30, tradeable: false },
-  { id: 'starwillow_blade', name: 'Starwillow Blade', type: 'tool', rarity: 'rare', description: 'Bends slightly with each cut, never dulls. Glows at the edge.', stackable: false, maxStack: 1, sellPrice: 75, tradeable: false },
+  { id: 'goldwood_blade', name: 'Goldwood Pruner', type: 'tool', rarity: 'common', description: 'A simple pruner carved from Goldwood. Cuts clean.', stackable: false, maxStack: 1, sellPrice: 12, tradeable: false },
+  { id: 'shimmeroak_blade', name: 'Shimmeroak Pruner', type: 'tool', rarity: 'uncommon', description: 'Dense and sharp. The grain catches light as you swing.', stackable: false, maxStack: 1, sellPrice: 30, tradeable: false },
+  { id: 'starwillow_blade', name: 'Starwillow Pruner', type: 'tool', rarity: 'rare', description: 'Bends slightly with each cut, never dulls. Glows at the edge.', stackable: false, maxStack: 1, sellPrice: 75, tradeable: false },
   // Prospecting — Spikes
   { id: 'mana_spike', name: 'Mana Spike', type: 'tool', rarity: 'common', description: 'Crude crystalline pick. Gets the job done.', stackable: false, maxStack: 1, sellPrice: 15, tradeable: false },
   { id: 'crystal_spike', name: 'Crystal Spike', type: 'tool', rarity: 'uncommon', description: 'Resonates with nodes. Finds fault lines faster.', stackable: false, maxStack: 1, sellPrice: 35, tradeable: false },

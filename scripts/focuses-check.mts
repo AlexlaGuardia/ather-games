@@ -91,7 +91,7 @@ res.usesAfter = (await tools()).forestry
 await p.evaluate((bl: { toolId: string }) => { const t = JSON.parse(localStorage.getItem('open.tools.v1') ?? '{}'); localStorage.setItem('open.tools.v1', JSON.stringify({ ...t, forestry: { ...bl, usesRemaining: 1 } })); window.dispatchEvent(new Event('open:tools')) }, blade); await sleep(800)
 await pruneOut(oak2)
 res.afterBreak = (await tools()).forestry
-res.woreLine = /Goldwood Blade wore out/.test(await bodyText())
+res.woreLine = /Goldwood Pruner wore out/.test(await bodyText())
 await p.screenshot({ path: `${out}/focuses-end.png` }).catch(() => {})
 // (a leveled keeper's hydration mismatch, React #418, counted apart here at first, is FIXED: GameHud mounted-guard 11-18, hydration-check)
 const other = errs

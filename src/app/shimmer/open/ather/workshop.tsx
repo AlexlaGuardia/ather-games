@@ -1815,7 +1815,7 @@ function RinstickList({ r, inv }: { r: Room; inv: ReturnType<typeof useInv> }) {
 function FocusList({ r, inv, skill }: { r: Room; inv: ReturnType<typeof useInv>; skill: FocusSkill }) {
   const [tools, setTools] = useState(() => loadTools())
   const cur = tools[skill], curDef = cur ? TOOL_DEFS[cur.toolId] : undefined
-  const fam = skill === 'forestry' ? 'Blades' : 'Spikes', node = skill === 'forestry' ? 'tree' : 'crystal'
+  const fam = skill === 'forestry' ? 'Pruners' : 'Spikes', node = skill === 'forestry' ? 'tree' : 'crystal'
   return (
     <div data-focuses={skill}>
       <div style={lab}>{fam}</div>

@@ -44,13 +44,13 @@ ok(talkGreg(s).next === s, 'the bark changes nothing')
   s = t.next
 }
 const lent = { planks: 0, hasHazelsBlade: true }
-ok(objectiveLabel(s, { logs: 0, ...lent }) === "Cut a log with Hazel's blade", 'errand step 1: cut')
+ok(objectiveLabel(s, { logs: 0, ...lent }) === "Cut a log with Hazel's pruner", 'errand step 1: cut')
 ok(stageActions(s, { logs: 0, ...lent }).includes('world.mine'), 'cut hint is the mine action')
 ok(objectiveLabel(s, { logs: 1, ...lent }) === "Mill planks at Hazel's sawmill", 'errand step 2: mill')
 ok(objectiveLabel(s, { logs: 0, planks: HAZEL_STACK, hasHazelsBlade: true }) === 'Bring Hazel the stack', 'errand step 3: bring')
 {
   const t = talkFolk(s, 'hazel', lent)
-  ok(t.next === s && /my blade back/.test(said(t)), 'owed bark with no planks')
+  ok(t.next === s && /my pruner back/.test(said(t)), 'owed bark with no planks')
   const t2 = talkFolk(s, 'hazel', { planks: HAZEL_STACK - 1, hasHazelsBlade: true })
   ok(t2.next === s, 'a short stack is not square')
   const t3 = talkFolk(s, 'hazel', { planks: HAZEL_STACK, hasHazelsBlade: false })

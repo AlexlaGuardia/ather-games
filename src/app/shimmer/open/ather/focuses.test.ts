@@ -17,7 +17,7 @@ ok(reachOf(worn) === 1 && reachOf(undefined) === 1 && reachOf(gold) === 2 && rea
 ok(manaFor(worn, 1, 5) === 5 && manaFor(worn, 2, 5) === 5 * PENALTY && manaFor(worn, 4, 7) === 7 * PENALTY, 'penalty: the worn focus pays double above tier 1, its own cost on tier 1')
 ok(manaFor(gold, 2, 5) === 5 && manaFor(gold, 3, 5) === 10 && manaFor(star, 4, 5) === 5, 'penalty: a crafted focus works its reach cleanly, double above')
 ok(bonusXp(worn, 40) === 0 && bonusXp(gold, 40) === 4 && bonusXp(star, 40) === 14, 'xp: the bonus is the engine\'s xpBonus')
-ok(focusName(undefined, 'prospecting') === 'Worn Spike' && focusName(gold, 'forestry') === 'Goldwood Blade', 'names')
+ok(focusName(undefined, 'prospecting') === 'Worn Spike' && focusName(gold, 'forestry') === 'Goldwood Pruner', 'names')
 
 const carp: Room = { id: 'carpentry-1', kind: 'carpentry', x: 0, z: 0, q: 0, placedAt: 0, doneAt: 0, store: [{ id: 'goldwood_plank', n: 3 }] }
 const mason: Room = { id: 'stonemason-1', kind: 'stonemason', x: 9, z: 0, q: 0, placedAt: 0, doneAt: 0, store: [] }
@@ -40,7 +40,19 @@ ok(wearFocus(T0, 'forestry').tools === T0 && wearFocus(T0, 'forestry').broke ===
 const one = { ...T0, forestry: { ...gold, usesRemaining: 2 } }
 const w1 = wearFocus(one, 'forestry'), w2 = wearFocus(w1.tools, 'forestry')
 ok(w1.tools.forestry?.usesRemaining === 1 && w1.broke === null, 'wear: one node, one use')
-ok(w2.broke === 'Goldwood Blade' && w2.tools.forestry?.toolId === worn.toolId, 'wear: worn out did not hand the worn starter back')
+ok(w2.broke === 'Goldwood Pruner' && w2.tools.forestry?.toolId === worn.toolId, 'wear: worn out did not hand the worn starter back')
+
+// BETA M69 (Magii 43fef80 #5): the forestry tool is a PRUNER. Ids stay *_blade so saves keep their tool (no migration);
+// every name a player reads says pruner, never blade.
+import { ITEMS } from '../../sprites/items'
+import { TAB_LABEL } from './bench-tabs'
+const forestryTools = Object.values(TOOL_DEFS).filter(t => t.skillId === 'forestry')
+ok(forestryTools.length >= 5 && forestryTools.every(t => /Pruner/.test(t.name) && !/blade/i.test(t.name)), 'M69: a forestry tool name still says blade: ' + forestryTools.map(t => t.name).join(', '))
+ok(makeBasicTool('forestry')?.toolId === 'worn_blade' && TOOL_DEFS.worn_blade.name === 'Worn Pruner', 'M69: an old save\'s worn_blade must load as the Worn Pruner')
+ok(focusName(undefined, 'forestry') === 'Worn Pruner', 'M69: the empty forestry slot names the Worn Pruner')
+const forestryItems = ITEMS.filter(i => FOCUSES.forestry.includes(i.id))
+ok(forestryItems.length === 3 && forestryItems.every(i => /Pruner/.test(i.name) && !/blade/i.test(i.name + ' ' + i.description)), 'M69: a pruner item still reads blade')
+ok(TAB_LABEL.blades === 'Pruners', 'M69: the Carpentry bench tab still says Blades')
 
 console.log(`focuses: ${pass} pass, ${fails.length} fail`); for (const f of fails) console.log('  FAIL ' + f)
 process.exit(fails.length ? 1 : 0)
