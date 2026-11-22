@@ -135,3 +135,13 @@ export function gregSpot(): { x: number; z: number; yaw: number } {
   const p = gladeAt(GLADE_LAYOUT.greg)
   return { ...p, yaw: Math.atan2(GLADE_GREEN.x - p.x, GLADE_GREEN.z - p.z) }   // M40: he faces the green
 }
+
+/** BORN AT MOONWELL (M31): how far in front of Greg a newborn opens their eyes. */
+export const NEWBORN_GAP = 5
+/** Where a newborn keeper opens their eyes: NEWBORN_GAP m in front of Greg, on the green side of his bench (dry, open), turned
+ *  to FACE him. Read off gregSpot(), never a fixed waymark: M40 moved his pond and left the old waymark spawn 57.7 m away
+ *  (11-22 sweep), so a layout move must carry the newborn with him. yaw is the WALKER's: forward = (-sin yaw, -cos yaw). */
+export function newbornSpot(): { x: number; z: number; yaw: number } {
+  const g = gregSpot(), x = g.x + Math.sin(g.yaw) * NEWBORN_GAP, z = g.z + Math.cos(g.yaw) * NEWBORN_GAP
+  return { x, z, yaw: Math.atan2(-(g.x - x), -(g.z - z)) }
+}

@@ -63,7 +63,7 @@ import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
-import { gregSpot } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
+import { gregSpot, newbornSpot } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
 import { GLADE_GREEN } from './moonwell'   // M40: the Glade's green is the Wilds' safe heart (the five, the pond, the waymark)
 import { GladeLots } from './glade-lots-view'   // M40: the green, the five's lots + stations, Greg's jetty
 import { loadSpot, saveSpot, clearSpot, makeSpot, resumeFrom } from './last-spot'   // where you were (a reload in the Wilds resumes there)
@@ -571,9 +571,9 @@ function AtherSliceGame() {
   useEffect(() => {
     if (!bornPending || !ww) return
     setBornPending(false)
-    const o = ww.offsetOf(GREG_WAYMARK.tile), x = GREG_WAYMARK.x + o.x + 2.2, z = GREG_WAYMARK.z + o.z + 2.2
-    const yaw = Math.atan2(-(gregAt.x - x), -(gregAt.z - z))   // walker: forward = (-sin yaw, -cos yaw)
-    stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(GREG_WAYMARK.tile); arrive({ kind: 'wilds', tile: GREG_WAYMARK.tile }, { x, z, yaw }) })
+    // keyed off GREG (moonwell-glade.ts newbornSpot), not his waymark: M40 moved the pond and the waymark spawn sat 57.7 m off (11-22)
+    const { x, z, yaw } = newbornSpot()
+    stream(ww, x, z).then(() => { const tile = ww.tileAtPoint(x, z)?.W.meta.name ?? GREG_WAYMARK.tile; setWrev(ww.rev); setHereTile(tile); arrive({ kind: 'wilds', tile }, { x, z, yaw }) })
   }, [bornPending, ww, arrive])
 
   const world = useMemo(() => zone.kind === 'plot' ? plotWorld : ww ? terrainWorld(withPieces(ww.shape)) : null, [zone, ww, plotWorld])   // ww.shape reads the live tiles
