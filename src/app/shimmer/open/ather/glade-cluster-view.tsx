@@ -13,6 +13,7 @@ import { gladeKeepers, gregInGlade } from './glade-cluster'
 import { GLADE, gladeFolk } from './moonwell-glade'
 import { folkSpots, type Spot } from './folk-spots'
 import { gladeBlueprintVersion } from './glade-lots'
+import { keeperNow } from './network-scene'
 
 const KEEPERS = gladeKeepers(), GREG = gregInGlade()
 /** the five as drawn right now (Fennel is away while the first-rinstick quest has her at the keeper's Rinnshop) */
@@ -34,7 +35,12 @@ export function GladeCluster({ ground, marker = true }: { ground: (x: number, z:
   // re-read when a lot's blueprint lands (glade-lots: a blueprint moves its Moglin to the door, setLotSpot): read only at mount,
   // Fennel stood 5.6 m from where the tour + the talk put her (tour-check 11-22). Who is home is read at mount (next visit).
   const [bpVer, setBpVer] = useState(gladeBlueprintVersion())
-  useFrame(() => { const v = gladeBlueprintVersion(); if (v !== bpVer) setBpVer(v) })
+  useFrame(({ camera }) => {
+    // the talk opens on the Moglin NEAREST the keeper (use-folk-talk reads keeperNow); only the Wilds' SettlementFolk wrote it,
+    // so in the Glade it was stale and E on Yarrow/Sax/Mallow/Hazel opened Fennel (glade-check, yarrow-teach-check 11-22)
+    keeperNow.x = camera.position.x; keeperNow.z = camera.position.z
+    const v = gladeBlueprintVersion(); if (v !== bpVer) setBpVer(v)
+  })
   const FOLK = useMemo(() => folkSpots(GLADE, gladeFolk().map(f => f.id)), [bpVer])   // eslint-disable-line react-hooks/exhaustive-deps
   gladeFolkDrawn = FOLK
   // read-only probe (scripts/glade-cluster-check.mts): who the Glade draws and where
