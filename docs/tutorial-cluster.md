@@ -81,6 +81,13 @@ Through the gate -> the **"The Wilds" waypoint** = the FIRST SETTLEMENT on the p
 7. Champion + spreading grey: YES; the player-facing word for the spread = @lark.
 ANSWERED by Alex 11-22 (beat 5): grown adults; the Glade replaces the Rune Hold opening. Was OPEN: (2) Otto/Tess/Bonn are ~1070 years older by 1672: grown, ageless keepers with teaching gardens beside Greg's? And: does the Glade spawn REPLACE the Rune Hold opening (corner door, Kael's note, the fork) or start the Ather road AFTER the fork?
 
+## Magii rulings, round 2 (athernyx 74282e9, 11-22)
+- Otto/Tess/Bonn: grown, ageless adults in 1672 (Alkins are ageless).
+- Glade spawn replaces the Rune Hold opening (old step 1 is history; Veyra, the yard, the shop, the three ways stand).
+- The grandfather's note **IS Kael's note**. 'The Dig' + its flow are ours; Morel's ping line = @lark.
+- FLAG (a), needs Alex: Kael's SIGNED note says "Greg at the Spirit Corner will point you right", now stale. Magii proposes dropping "at the Spirit Corner".
+- FLAG (b), needs Alex: a Passage drive-through clashes with 11-14 "Coursers stay on the road; the market is on foot" (rune-hold.md:685). Magii recommends: the drive-through is a store front on the bore road; the cavern market stays on foot.
+
 ## Canon asks (Magii) — batch, send when the loop is laid out
 - **Otto, Tess, Bonn as the Glade's three garden-keepers.** Canon: they are the Spirit Tales leads (Bonn 11 at Bk1). Bonn fits: she is Gregory's keeper-ward, given "the old arrival plot", youngest keeper (characters/bonn.md:5,50). Otto lives at Forge Grove under Heslur; Tess at Goldleaf Acres under Maizie. When in the timeline is the game, and may Otto + Tess hold plots in the Glade (or their mentors)?
 - **The pruner**: Bonn's forestry tool. Today forestry uses blades (Worn Blade, shimmeroak_blade; blades bind at the Carpentry bench). Is 'pruner' a new canon tool, a rename of the blade, or the starter blade's name?
