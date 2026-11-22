@@ -72,6 +72,9 @@ const answered = await answerTake(); res.answered = answered
 const hintNow = async () => { await frame(); await frame(); return p.evaluate(() => document.querySelector('[data-reel-hint]')?.textContent ?? null) }
 res.touchOnly = await p.evaluate(() => matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches)
 res.hintBefore = await hintNow()
+// what the bar itself said and what the keeper's skills held at that moment, so a missing hint names its cause
+res.barBefore = await p.evaluate(() => [...document.querySelectorAll('div')].find(d => /It (gives|fights)/.test(d.textContent ?? '') && getComputedStyle(d).position === 'fixed')?.textContent ?? null)
+res.skillsBefore = await p.evaluate(() => Object.keys(localStorage).filter(k => k.includes('skills')).map(k => `${k}=${(localStorage.getItem(k) ?? '').slice(0, 160)}`))
 await p.evaluate(() => (window as any).__ather.hold(true))
 const phase = await reelOut('rinning-3-clumsy'); res.clumsy = phase
 await p.evaluate(() => (window as any).__ather.hold(false))
