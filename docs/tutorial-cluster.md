@@ -54,7 +54,7 @@ Through the gate -> the **"The Wilds" waypoint** = the FIRST SETTLEMENT on the p
 ## Nyx side rework (Alex 11-22: "not happy with the look and feel of nyx side") — its own plan
 - A hybrid: **grid building areas** for neighbourhoods + big buildings, attached to a **clean road infrastructure**: mostly two-lane roads, back roads + shortcuts, the longer routes opening into **four-lane highways**; the landscape is sculpted AROUND the roads.
 - Start with **empty plots**: no buildings yet, get the foundation right first.
-- **The Passage becomes a DRIVE-THROUGH**: a highlighted area, drive in -> a store-front page: main hero = the gun shop, a side panel for vessels, another "coming soon" for apparel.
+- **The Passage becomes a DRIVE-THROUGH**: a highlighted area, drive in and press E (Alex 11-22: "maybe drive in and interact with E") -> a store-front page: main hero = the gun shop, a side panel for vessels, another "coming soon" for apparel.
 
 ## Beat 1: Greg (Alex 11-22, outline, lark writes the lines)
 1. Spawn in Greg's garden, a marker on Greg.
