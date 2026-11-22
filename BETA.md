@@ -250,6 +250,8 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
+- **M81 s3 sights in shops (11-22, sprites):** only the Backbone + Charred Rifle have rails, so shop sights fit just those two. Add rails (= new models, look work) to Repeater / Spitter / Roar / Lance, or keep sights to the two kit guns for beta? Hub rec: keep to two for beta.
+
 - **M95 load screens (11-22, LIVE):** reload the Ather or open the Nyx continent to see one. Image + a tip on a plate; ATHER title on 2 of 5. Honest read: the tip plate works, the IMAGES are weak (blockout-looking in-engine shots; the one Nyx shot is mostly empty road). Want better art: (a) I stage proper hero angles (golden hour, spirits/folk in frame, no flat ground), or (b) wait for World Builder maps to look finished first? Also yay/nay the tips (docs/handoff/m95-load-tips.md).
 
 - **Plot corner hand test (11-22, LIVE 0ee87e4f):** in your home plot, place a room/chest in the corner where the gate USED to be. It should be allowed now (it was the old gate's keep-clear circle). The path line toward the Green and Greg's threshold still refuse on purpose.
