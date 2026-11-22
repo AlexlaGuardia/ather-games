@@ -506,6 +506,7 @@ function AtherSliceGame() {
 
   const travel = useCallback((d: Dest) => {
     if (d.kind === 'home') { goHome(); return }
+    if (d.kind === 'glade') { arrive({ kind: 'glade' }, gladeNewbornSpot()); return }   // M67 s1b: a visit lands where a newborn wakes, facing Greg
     if (d.kind === 'waymark') {
       if (!ww) { setToast('The Wilds are still loading.'); return }
       // a waymark is saved in its tile's own coords; the world is one space, so place it, load round it, then arrive

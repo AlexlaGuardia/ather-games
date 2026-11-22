@@ -11,6 +11,7 @@
 //      on the phone's Use button) takes them to the Wilds
 //   6. an existing save stays where it was: a reload now resumes in the Wilds, not the Glade
 //   7. 0 page errors
+//   8. (s1b-1) the fold map's 'Moonwell Glade' stop, right under 'Your plot', sets an existing keeper down facing Greg
 // Hooks READ only except __ather.gladeAt (the warp in 5). --phone = 390 x 844 with taps. --out <dir> = shots to LOOK at.
 //   npx tsx scripts/glade-cluster-check.mts [--url https://ather.games] [--phone] [--out dir]
 import { mkdirSync } from 'node:fs'
@@ -98,6 +99,22 @@ try {
   await p.reload({ waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 })
   ok(await poll(async () => (await A(p, 'zone')) === 'wilds', 120000), `6. reload after the gate: the Wilds, where they were (zone ${await A(p, 'zone')})`)
+  // 8 · s1b-1: the Glade stays on the Ather map. The fold map (the gate's, opened by hook; the stop is a REAL tap) lists
+  //     'Moonwell Glade' right under 'Your plot', and it sets an existing keeper down in Greg's garden facing him
+  await A(p, 'open', 'gate')
+  ok(await poll(() => p.evaluate(() => !!document.querySelector('[data-panel="fold-map"]')), 10000), '8. the fold map opens')
+  const order = await p.evaluate(() => [...document.querySelectorAll('[data-panel="fold-map"] button')].map(b => (b as HTMLElement).innerText.split('\n')[0].trim()).filter(t => /^(Your plot|Moonwell Glade)$/.test(t)))
+  ok(order.join('|') === 'Your plot|Moonwell Glade', `8. 'Moonwell Glade' sits right under 'Your plot' (${order.join(' > ')})`)
+  await shot(p, 'glade-foldmap')
+  { // scoped to the panel: the Wilds' own region label behind it also reads 'Moonwell Glade'
+    let btn = null; for (const e of await p.$$('[data-panel="fold-map"] button')) if (/^Moonwell Glade/.test(await e.evaluate(n => (n as HTMLElement).innerText.trim()))) { btn = e; break }
+    ok(!!btn, '8. the Moonwell Glade stop is a button in the fold map'); if (btn) { if (phone) await btn.tap(); else await btn.click() } }
+  ok(await poll(async () => (await A(p, 'zone')) === 'glade', 30000), `8. the stop lands in the Glade (zone ${await A(p, 'zone')})`)
+  await sleep(2500)
+  { const s8 = await A(p, 'state') as { px: number; pz: number; yaw: number }, g8 = G.greg, d8 = Math.hypot(g8.x - s8.px, g8.z - s8.pz)
+    const o8 = Math.acos(Math.max(-1, Math.min(1, (-Math.sin(s8.yaw) * (g8.x - s8.px) - Math.cos(s8.yaw) * (g8.z - s8.pz)) / Math.max(d8, 1e-6)))) * 180 / Math.PI
+    ok(d8 < 6 && o8 < 30, `8. in Greg's garden facing him (${d8.toFixed(1)} m, ${o8.toFixed(0)} deg)`) }
+  await shot(p, 'glade-visit')
   ok(errs.length === 0, `7. page errors: ${errs.length} ${errs.join(' | ')}`)
 } finally { await br.close() }
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)

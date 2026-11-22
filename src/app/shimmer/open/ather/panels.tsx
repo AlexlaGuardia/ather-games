@@ -19,6 +19,7 @@ import { GRID, sqId, ringOf, canBuy, RING_PAGES, GRIMOIRE_SIZE, type Garden } fr
 
 export type Dest =
   | { kind: 'home' }
+  | { kind: 'glade' }   // M67 s1b (Alex 11-22): the closed Glade stays on the Ather map, under your garden, for every keeper
   | { kind: 'waymark'; w: Waymark }
   | { kind: 'landing'; id: string; name: string }
 
@@ -153,6 +154,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={label}>Stops</div>
               {stop('Your plot', 'home', { kind: 'home' }, '#f2d88a')}
+              {stop('Moonwell Glade', "Gregory's garden", { kind: 'glade' }, '#9fd27a')}
               {stop("Gregory's waymark", 'the Wilds · meadow', { kind: 'waymark', w: GREG_WAYMARK }, '#e7c766')}
               {regions.length > 1 && (
                 <div style={{ display: 'flex', gap: 10, fontSize: 11, opacity: 0.8, margin: '2px 0 4px' }}>
