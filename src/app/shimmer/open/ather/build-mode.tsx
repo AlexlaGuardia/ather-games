@@ -98,7 +98,7 @@ export function useBuildKeys(placing: () => boolean) {
       // Esc with nothing on the pointer leaves; while placing, workshop's keys take Esc first (cancel the ghost)
       if (e.code === 'Escape' && !placing()) { exitBuild(); e.preventDefault(); e.stopImmediatePropagation(); return }
       // the page's own keys (E to talk, I bag, M map, C cluster…) stay quiet while you fly: nothing near you is reachable
-      if (['KeyE', 'KeyI', 'KeyJ', 'KeyP', 'KeyM', 'KeyC', 'KeyO', 'Tab', 'Space'].includes(e.code) && !placing()) { e.preventDefault(); e.stopImmediatePropagation() }
+      if (['KeyE', 'KeyI', 'KeyJ', 'KeyP', 'KeyU', 'KeyM', 'KeyC', 'KeyO', 'Tab', 'Space'].includes(e.code) && !placing()) { e.preventDefault(); e.stopImmediatePropagation() }
     }
     const up = (e: KeyboardEvent) => { held.delete(e.code) }
     const blur = () => held.clear()

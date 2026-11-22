@@ -11,13 +11,15 @@ import { HearthFrame, H, hearthDisplay } from '../ui/hearth'
 import { BagBody, bagHint } from './shared/bag'
 import { JournalBody } from './journal-panel'
 import { CharacterBody } from './character-panel'
+import { SkillsBody } from './skills-panel'
 import { setOptionsOpen } from './options'
 
-export type PackTab = 'journal' | 'bag' | 'character'
-export const PACK_TABS: PackTab[] = ['journal', 'bag', 'character']
-const NAME: Record<PackTab, string> = { journal: 'Journal', bag: 'Bag', character: 'Character' }
+export type PackTab = 'journal' | 'bag' | 'character' | 'skills'
+// skills (BETA M64, 11-22): a fourth tab, read-only, U opens it
+export const PACK_TABS: PackTab[] = ['journal', 'bag', 'character', 'skills']
+const NAME: Record<PackTab, string> = { journal: 'Journal', bag: 'Bag', character: 'Character', skills: 'Skills' }
 /** The keys that open the pack straight to a tab. */
-export const PACK_KEYS: Record<string, PackTab> = { KeyI: 'bag', KeyJ: 'journal', KeyP: 'character' }
+export const PACK_KEYS: Record<string, PackTab> = { KeyI: 'bag', KeyJ: 'journal', KeyP: 'character', KeyU: 'skills' }
 
 /** The tab icons: code-drawn, ink on the parchment. */
 export function TabIcon({ tab, size = 26 }: { tab: PackTab; size?: number }) {
@@ -32,6 +34,12 @@ export function TabIcon({ tab, size = 26 }: { tab: PackTab; size?: number }) {
     <svg width={size} height={size} viewBox="0 0 28 28" aria-hidden>
       <path d="M8 10.5h12l1.6 12.2a1.6 1.6 0 0 1-1.6 1.8H8a1.6 1.6 0 0 1-1.6-1.8z" {...s} fill="#c9a86b" />
       <path d="M10.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" {...s} /><path d="M11 15.5h6" {...s} strokeWidth={1.4} />
+    </svg>
+  )
+  if (tab === 'skills') return (
+    <svg width={size} height={size} viewBox="0 0 28 28" aria-hidden>
+      <path d="M5.5 23.5h17" {...s} />
+      <path d="M7.5 23.5v-5h3.5v5M12.3 23.5v-9h3.5v9M17 23.5V8.5h3.5v15" {...s} fill="#c9a86b" strokeWidth={1.5} />
     </svg>
   )
   return (
@@ -50,7 +58,7 @@ export function PackMenu({ tab, onTab, onClose, sel, isTouch }: {
   tab: PackTab; onTab: (t: PackTab) => void; onClose: () => void; sel: number; isTouch?: boolean
 }) {
   const at = PACK_TABS.indexOf(tab)
-  const prev = PACK_TABS[(at + 2) % 3], next = PACK_TABS[(at + 1) % 3]
+  const N = PACK_TABS.length, prev = PACK_TABS[(at + N - 1) % N], next = PACK_TABS[(at + 1) % N]
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.code === 'ArrowLeft') { e.preventDefault(); onTab(prev) }
@@ -84,11 +92,11 @@ export function PackMenu({ tab, onTab, onClose, sel, isTouch }: {
       {side(next, 'right')}
     </div>
   )
-  const hint = tab === 'bag' ? bagHint(isTouch) : tab === 'journal' ? (isTouch ? 'Tap a line to open it.' : 'Click a line to open it') : (isTouch ? 'Tap a slot to change it.' : 'Click a slot to change what you carry')
+  const hint = tab === 'bag' ? bagHint(isTouch) : tab === 'journal' ? (isTouch ? 'Tap a line to open it.' : 'Click a line to open it') : tab === 'skills' ? 'Each skill, its level, xp to the next.' : (isTouch ? 'Tap a slot to change it.' : 'Click a slot to change what you carry')
   return (
     <HearthFrame title={NAME[tab]} maxWidth={tab === 'bag' ? 560 : 520} onClose={onClose} fixed dataPanel={`pack-${tab}`} head={head}
-      footer={<span className="text-[12px]" style={hearthDisplay}>{hint}{isTouch ? '' : ' · ← → switch tabs · I J P'}</span>}>
-      {tab === 'bag' ? <BagBody sel={sel} /> : tab === 'journal' ? <JournalBody /> : <CharacterBody />}
+      footer={<span className="text-[12px]" style={hearthDisplay}>{hint}{isTouch ? '' : ' · ← → switch tabs · I J P U'}</span>}>
+      {tab === 'bag' ? <BagBody sel={sel} /> : tab === 'journal' ? <JournalBody /> : tab === 'skills' ? <SkillsBody /> : <CharacterBody />}
     </HearthFrame>
   )
 }
