@@ -2,14 +2,16 @@
 // Per target: (a) 2 m off, crosshair on it -> its prompt; (b) same spot, turned round -> no prompt; (c) crosshair on it but
 // past reach -> no prompt. Targets: the planning table + the starter Keepstone (a station) + the gate on the plot; a Moglin
 // at Moonwell Glade (and E opens the talk on it); a Rune Hold door on the continent (__market.reach). 0 page errors.
+// M67 s1b-3: Moonwell Glade stands in Greg's garden in the CLOSED Glade (zone 'glade') now: the keeper goes there by the real
+// __ather.travel({ kind: 'glade' }); the Moglins are read from __glade.folk (the old __folk.drawn().moonwell is gone), and the
+// target is stood at from IN FRONT of it (the way it faces: the old 'outward from the ring's centre' has no centre now that the
+// five stand in three gardens).
 //   npx tsx scripts/interact-check.mts [--url https://ather.games] [--phone]   (--phone = 390x844, touch)
 import puppeteer from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { gunzipSync } from 'zlib'
 import { TABLE, STARTER_CHEST } from '../src/app/shimmer/open/ather/rooms'
 import { GATE } from '../src/app/shimmer/open/ather/plot'
-import { GLADE_ID } from '../src/app/shimmer/open/ather/moonwell-glade'
-import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'
 import { makeRegion, type RegionMeta } from '../src/app/shimmer/open/region'
 import { doorsCached } from '../src/app/shimmer/open/business/doors'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -71,18 +73,19 @@ async function atherLegs(p: any, name: string, prompt: string, tx: number, tz: n
 // 2. Moonwell Glade: a Moglin, and E opens the talk on it
 {
   const p = await page()
-  await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
-  await p.waitForFunction(() => (window as any).__ather?.zone?.() === 'wilds', { timeout: 240000 }); await sleep(6000)
+  await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
+  await p.waitForFunction(() => typeof (window as any).__ather?.travel === 'function', { timeout: 240000 })
+  for (let i = 0; i < 40 && !(await p.evaluate(() => (window as any).__ather?.zone?.() === 'glade')); i++) { await p.evaluate(() => (window as any).__ather.travel({ kind: 'glade' })); await sleep(4000) }
+  await p.waitForFunction(() => (window as any).__ather?.zone?.() === 'glade' && !!(window as any).__ather?.ground, { timeout: 240000 }); await sleep(6000)
   if (!phone) { await p.mouse.click(550, 340); await sleep(600) }
-  let F: { id: string; x: number; z: number }[] = []
-  for (let t = 0; t < 30000; t += 1000) { F = await p.evaluate((id: string) => ((window as any).__folk?.drawn?.() ?? {})[id] ?? [], GLADE_ID); if (F.length) break; await sleep(1000) }
-  ok(F.length > 0, `Moonwell Glade: ${F.length} Moglins drawn`)
+  let F: { id: string; x: number; z: number; yaw: number }[] = []
+  for (let t = 0; t < 30000; t += 1000) { F = await p.evaluate(() => (window as any).__glade?.folk ?? []); if (F.length) break; await sleep(1000) }
+  ok(F.length > 0, `Moonwell Glade: ${F.length} Moglins drawn (in the closed Glade)`)
   if (F.length) {
-    const cx = F.reduce((a, f) => a + f.x, 0) / F.length, cz = F.reduce((a, f) => a + f.z, 0) / F.length
-    const m = F.slice().sort((a, b) => Math.hypot(b.x - GREG_WAYMARK.x, b.z - GREG_WAYMARK.z) - Math.hypot(a.x - GREG_WAYMARK.x, a.z - GREG_WAYMARK.z))[0]
-    await atherLegs(p, `Glade Moglin ${m.id}`, 'talk to the folk', m.x, m.z, 0.4, 0.5, m.x - cx, m.z - cz)
-    const L = Math.hypot(m.x - cx, m.z - cz) || 1
-    await atherLook(p, m.x + (m.x - cx) / L * 2, m.z + (m.z - cz) / L * 2, m.x, m.z, 0.5)
+    const m = F.find(f => f.id.endsWith(':fennel')) ?? F[0]   // Fennel stands at her lot in Greg's garden; any drawn Moglin would do
+    const fx = Math.sin(m.yaw), fz = Math.cos(m.yaw)   // figure yaw: forward = (sin, cos); stand where it is looking
+    await atherLegs(p, `Glade Moglin ${m.id}`, 'talk to the folk', m.x, m.z, 0.4, 0.5, fx, fz)
+    await atherLook(p, m.x + fx * 2, m.z + fz * 2, m.x, m.z, 0.5)
     await p.keyboard.press('KeyE'); await sleep(2500)
     const talk = await p.evaluate(() => (window as any).__folkTalk ?? null) as { on: string | null } | null
     ok(!!talk?.on, `E opens the folk talk on a Moglin (on=${talk?.on})`)

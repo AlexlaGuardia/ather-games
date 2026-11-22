@@ -6,7 +6,8 @@
 //      cast says the no-Rinnshop line and spends no bait
 //   C. (ruling 4½) a Rinnshop standing (seeded raised) -> the quest starts; FENNEL stands by its door, E talks: ask, agree
 //      -> the quest moves to the Moonwell and the journal says so
-//   D. the MOONWELL: at noon nothing counts ('come back at dusk'); at dusk holding bait nothing counts ('put it away'); hold
+//   D. the MOONWELL (M67 s1b-3: it stands in Greg's garden in the CLOSED Glade now, zone 'glade', not in the Wilds; the keeper goes
+//      there by the real __ather.travel({ kind: 'glade' }). B's cast stays in the Wilds on purpose: casting is a Wilds act): at noon nothing counts ('come back at dusk'); at dusk holding bait nothing counts ('put it away'); hold
 //      R to stow (the stance, hub's rule), sit still by the water -> a rinn comes up (the wait completes)
 //   E. walking over the bank takes the SHED SCALE
 //   F. the Rinnshop bench binds it: the worn rinstick in hand, the scale used, the quest still open
@@ -45,6 +46,13 @@ async function holdBaitInWilds(p: Page) {
   await sleep(3000); await p.mouse.click(500, 350); await sleep(800)
   const slot = (((await stored(p, 'open.inv.v1'))?.slots ?? []) as ({ id: string } | null)[]).findIndex(s => s?.id === 'bait')
   await p.keyboard.press(String(slot + 1)); await sleep(1200)
+}
+// the Moonwell is in the closed Glade now (zone 'glade'): go there the way a keeper does, by the real travel (home=1: no saved
+// Wilds spot to resume instead). Retried: the hook can fire before the page takes arrivals.
+async function toGlade(p: Page, hour: number) {
+  await p.goto(`${url}/shimmer/open/ather?hour=${hour}&home=1`, { waitUntil: 'load', timeout: 240000 })
+  await p.waitForFunction(() => typeof (window as any).__ather?.travel === 'function', { timeout: 240000 })
+  for (let i = 0; i < 40 && (await A(p, 'zone')) !== 'glade'; i++) { await A(p, 'travel', { kind: 'glade' }); await sleep(4000) }
 }
 const tapText = async (p: Page, re: RegExp) => {
   const box = await p.evaluate((src: string) => {
@@ -119,14 +127,14 @@ ok(jw.some(e => e.id === 'rinquest' && e.title === RINQUEST_STEPS[1].title), `C.
 // ── D: the Moonwell. Wrong hour first (nothing counts), then DUSK: holding bait (nothing counts), then hands empty + still ──
 const mw = (await Q(p, 'moonwell')) as { x: number; z: number; r: number }
 const sitBy = async () => { await A(p, 'tp', mw.x + mw.r + 1.2, mw.z, Math.PI / 2); await sleep(1500) }
-await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
-ok(await poll(async () => (await A(p, 'zone')) === 'wilds', 240000), '   in the Wilds (noon)')
+await toGlade(p, 13)
+ok(await poll(async () => (await A(p, 'zone')) === 'glade', 240000), '   in the closed Glade (noon)')
 await sleep(5000); await p.mouse.click(500, 350); await sitBy()
 ok(await poll(async () => ((await Q(p, 'said')) as string[]).includes(RINQUEST_LINES.waitTime), 20000), 'D. at noon the water says: come back at dusk')
 await sleep(15000)
 ok(((await Q(p, 'quest')) as { step: number }).step === 1, 'D. ...and 15 s of sitting at noon changes nothing')
-await p.goto(`${url}/shimmer/open/ather?hour=19&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
-ok(await poll(async () => (await A(p, 'zone')) === 'wilds', 240000), '   in the Wilds (dusk)')
+await toGlade(p, 19)
+ok(await poll(async () => (await A(p, 'zone')) === 'glade', 240000), '   in the closed Glade (dusk)')
 await sleep(5000); await p.mouse.click(500, 350)
 const baitSlot = (((await stored(p, 'open.inv.v1'))?.slots ?? []) as ({ id: string } | null)[]).findIndex(s => s?.id === 'bait')
 await p.keyboard.press(String(baitSlot + 1)); await sleep(800)
@@ -143,7 +151,7 @@ if (!waited) console.log('  diag:', JSON.stringify(await p.evaluate(() => { cons
 ok(waited, 'D. still, hands empty, at dusk by the water: a rinn comes up (the wait completes)')
 ok(((await Q(p, 'said')) as string[]).includes(RINQUEST_LINES.surfaced), 'D. ...and says so')
 
-// ── E: the scale on the bank ──
+// ── E: the scale on the bank (SCALE_AT is in the Glade's coords now; the keeper is still in the Glade from D) ──
 await A(p, 'tp', SCALE_AT.x, SCALE_AT.z); await sleep(1500)
 ok(await poll(async () => ((await Q(p, 'quest')) as { step: number }).step === 3, 20000) && (await countIn(p, 'shed_scale')) === 1, 'E. walking over the bank takes the shed scale')
 

@@ -4,8 +4,9 @@
 // EVERY errand step is a real input: E at Greg, the Take button, E at the gate + the fold map's Rune Hold door, E at the
 // runesmith + the Cut button, E at the Temple + Idony's counter + Imbue + the beat's buttons. Nothing is granted, no stage forced.
 // Hooks are used to READ (stage, bag, loadout, position, journal panel text) and for MOVEMENT only:
-//   leg A  born at Moonwell Glade (M31: the first frame is the Wilds, ~7 m from Greg), WALKED to Greg, and back to the waymark
-//          stone + the "Your plot" stop (real tap),
+//   leg A  born at Moonwell Glade (M31; M67 s1b-3: the first frame is the CLOSED Glade, zone 'glade', ~5 m from Greg), WALKED to
+//          Greg, then WALKED to the Glade's gate and out (real E) to the Wilds' waymark stone, and the "Your plot" stop there (real
+//          tap; the Glade has no plot stop of its own, its one way out is the gate),
 //          then plot -> the gate again (WALKED). (real W key, __ather.look aims the camera; tp only as a stuck fallback, logged)
 //   leg B  gate -> continent: the game's own fold-map door "Rune Hold" (real tap, page navigates; no hook)
 //   leg C  Rune Hold -> the runesmith door, and -> the Temple door: __drive.tp / footTp to the journal's waymark target (the door),
@@ -21,8 +22,9 @@ import { doorByKey } from '../src/app/shimmer/open/business/doors'
 import { SEATS, wordsFor, letterItem } from '../src/app/shimmer/open/business/letters'
 import { birthSeat } from '../src/app/shimmer/open/business/errand'
 import { GATE, REACH } from '../src/app/shimmer/open/ather/plot'
-import { gregSpot } from '../src/app/shimmer/open/ather/moonwell-glade'   // M30 part 2: where Greg sits now (Moonwell Glade, the Wilds)
-import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'
+import { gregSpot } from '../src/app/shimmer/open/ather/moonwell-glade'   // M30 part 2: where Greg sits now (Moonwell Glade; M67: in the closed Glade)
+import { GLADE_GATE } from '../src/app/shimmer/open/ather/glade-cluster'   // M67: the Glade's one way out (to the Wilds' waymark stone)
+import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'   // the Wilds' arrival stone: still in the Wilds, no longer next to Greg
 import { ANSWERS } from '../src/app/shimmer/open/ather/greg-talk'   // the labels lark writes; a reword never stales the check
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m5')
@@ -106,15 +108,16 @@ res.word = word?.name
 await journal('0-born')
 // 2 · STEP greg: walk to Greg, real E, real Take
 // ★ BETA M31 (11-19): a newborn opens their eyes at Moonwell Glade beside Greg, not on the plot. The old leg (plot -> gate ->
-// fold map -> Gregory's waymark) is gone from a new keeper's path; the first frame must already be the Wilds.
+// fold map -> Gregory's waymark) is gone from a new keeper's path; the first frame must already be beside Greg. M67 s1a/s1b-2: that
+// first frame is the CLOSED Glade (zone 'glade', Greg's garden), no longer the Wilds (was: 'the first frame is the Wilds').
 say('M31: born at Moonwell')
-const inWilds = await poll(async () => { await tick(2, 0); return (await A('zone')) === 'wilds' }, 120000)
+const inGlade = await poll(async () => { await tick(2, 0); return (await A('zone')) === 'glade' }, 120000)
 const s0 = await A('state') as { px: number; pz: number }; res.spawn = `${s0.px.toFixed(0)},${s0.pz.toFixed(0)}`
-legs.push('born at Moonwell Glade (M31): the first frame is the Wilds beside Greg')
-if (!inWilds) await fail('M31: born at Moonwell (first frame in the Wilds)', `zone ${await A('zone')} 120 s after Looks good`)
-await sleep(10000); await p.mouse.click(500, 350); await sleep(500)   // the tile streams in; the click takes pointer-lock focus
+legs.push('born at Moonwell Glade (M31, M67): the first frame is the closed Glade beside Greg')
+if (!inGlade) await fail('M31: born at Moonwell (first frame in the closed Glade)', `zone ${await A('zone')} 120 s after Looks good`)
+await sleep(4000); await p.mouse.click(500, 350); await sleep(500)   // the Glade needs no tile streamed in; the click takes pointer-lock focus
 const gl = gregSpot(); res.gladeGreg = `${gl.x.toFixed(0)},${gl.z.toFixed(0)}`
-await walkTo('Wilds arrival -> Greg at Moonwell Glade', gl.x, gl.z, REACH * 0.8)
+await walkTo('Glade arrival -> Greg at Moonwell Glade', gl.x, gl.z, REACH * 0.8)
 await p.keyboard.press('KeyE'); await sleep(1200)
 if (!(await poll(async () => !!(await p.$('[data-talk-choices]')), 8000))) { sees.atGreg = await text(); await shot('greg-noE'); await fail('greg: E starts his conversation', 'no talk after E at Greg') }
 await shot('greg-talk'); sees.gregTalk = await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')
@@ -127,8 +130,17 @@ const bg = await bag(); res.bagAfterGreg = bg.join(' ')
 if (!bg.includes('blankstonex1')) await fail('greg: take the gems', `bag after Take: ${bg.join(' ')}`)
 await p.keyboard.press('Escape'); await sleep(600)
 await journal('1-after-greg')
-// 3 · STEP gate: back to the plot (waymark stone + the fold map's Your plot stop), walk to the gate, real E, fold map, the Rune Hold door
-await walkTo('Greg -> waymark stone', GREG_WAYMARK.x, GREG_WAYMARK.z, REACH * 0.8)
+// 3 · STEP gate: back to the plot (M67: the Glade's gate -> the Wilds' waymark stone + the fold map's Your plot stop), walk to the
+//     plot's gate, real E, fold map, the Rune Hold door
+await walkTo('Greg -> the Glade gate', GLADE_GATE.x, GLADE_GATE.z, REACH * 0.8)
+await p.keyboard.press('KeyE'); await sleep(1500); await tick(3)
+if (!(await poll(async () => { await tick(2, 0); return (await A('zone')) === 'wilds' }, 120000))) await fail('Glade: the gate out', `zone ${await A('zone')} after E at the Glade gate`)
+legs.push("Glade -> Wilds: the Glade's gate (real E), set down on the waymark stone")
+await sleep(3000); await p.mouse.click(500, 350); await sleep(500)
+// the gate sets the keeper ON the stone: step 1.5 m off it (movement only, as the waymark travel did with +2.2) and walk the rest, so
+// the crosshair can be on the stone (E acts only on what it is on, within reach)
+await A('tp', GREG_WAYMARK.x + 1.5, GREG_WAYMARK.z + 1.5); await tick(3)
+await walkTo('Wilds arrival -> waymark stone', GREG_WAYMARK.x, GREG_WAYMARK.z, REACH * 0.8)
 await p.keyboard.press('KeyE'); await sleep(1500); await tick(3)
 sees.atWaymark = await text(); await shot('waymark-foldmap')
 if (!(await tapText(/^Your plot/))) await fail('Wilds: the way back to the plot', "no 'Your plot' stop on the fold map at the waymark stone")

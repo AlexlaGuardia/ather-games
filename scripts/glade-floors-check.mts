@@ -1,4 +1,6 @@
 // M47 slice 2 check (glade-floors-check): a BLUEPRINT with an upper floor draws and collides it.
+//   (M67 s1b-3: Hazel's lot now stands in GREG'S GARDEN in the closed Glade, zone 'glade' (Hazel herself lives in a friend's garden);
+//   the keeper gets there by the real __ather.travel({ kind: 'glade' }) instead of the Wilds waymark. The lot's floor is read live.)
 //   A test blueprint (6x5 ground room, a 4x3 room on floor 2) is stood on Hazel's lot through the dev hook __glade.setBlueprint
 //   (visual + solids only, nothing saved; Alex's authored glade-<lot>.json are untouched).
 //   1. the scene stands the blueprint with 2 levels (__bpStacks)
@@ -33,8 +35,10 @@ try {
   const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star') })
-  await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
-  await p.waitForFunction(() => !!(window as any).__ather?.state && !!(window as any).__glade, { timeout: 180000 }); await p.waitForFunction(() => (window as any).__glade.blueprints().includes('hazel'), { timeout: 60000 }).catch(() => {}); await sleep(1500)   // the lot's own fetch lands first, then ours stands over it
+  await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
+  await p.waitForFunction(() => typeof (window as any).__ather?.travel === 'function', { timeout: 180000 })
+  for (let i = 0; i < 40 && !(await p.evaluate(() => (window as any).__ather?.zone?.() === 'glade')); i++) { await p.evaluate(() => (window as any).__ather.travel({ kind: 'glade' })); await sleep(4000) }
+  await p.waitForFunction(() => (window as any).__ather?.zone?.() === 'glade' && !!(window as any).__ather?.state && !!(window as any).__glade, { timeout: 180000 }); await p.waitForFunction(() => (window as any).__glade.blueprints().includes('hazel'), { timeout: 60000 }).catch(() => {}); await sleep(1500)   // the lot's own fetch lands first, then ours stands over it
   const set = await p.evaluate((j: unknown) => (window as any).__glade.setBlueprint('hazel', j), bp as unknown)
   ok(set === true, `test blueprint stood on hazel's lot (${lot.id}), upper floor present`)
   await sleep(2500)

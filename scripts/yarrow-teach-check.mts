@@ -1,5 +1,7 @@
 // ── YARROW'S BAIT TEACH BEAT + THE BAIT PAGE, ON THE LIVE PAGE (play 9a25bc7e, hub #15615) ──────────────────────────────
-// A keeper who has HELD a rinstick (seeded: rinquest done + stick) and carries 2 Mast stands at Yarrow in the Glade:
+// A keeper who has HELD a rinstick (seeded: rinquest done + stick) and carries 2 Mast stands at Yarrow in the Glade
+// (M67 s1b-3: Yarrow now stands in her FRIEND'S garden (Tess's) in the closed Glade, zone 'glade', ~315 m from the green: the
+// keeper goes there by the real __ather.travel({ kind: 'glade' }), then is set down 2 m in front of her, facing her):
 //   1. E: the beat replaces the hello (open scene + line), (listen) -> the Mast in hand, the two answers
 //   2. 'Point at the other jar.' -> Yarrow's pointed line; the bag now holds +1 Mast (kept), +3 Bait, the Bait Page
 //   3. (listen) x2 -> the page scene + both page lines
@@ -9,11 +11,9 @@
 // Hooks: __ather.tp (stand + face only, stated) / __ather.state (read). Seeds: localStorage only (open.rinquest.v1, open.inv.v1).
 //   npx tsx scripts/yarrow-teach-check.mts [--url https://ather.games] [--out dir] [--phone]
 import puppeteer from 'puppeteer-core'
-import { mkdirSync, readFileSync, existsSync } from 'fs'
-import { GLADE_LOTS, gladeSpots } from '../src/app/shimmer/open/ather/moonwell-glade'
-import { setGladeBlueprint } from '../src/app/shimmer/open/ather/glade-lots'
-import { parseHouse } from '../src/app/shimmer/open/ather/plot-blueprint'
-import { GLADE_GREEN } from '../src/app/shimmer/open/ather/moonwell'
+import { mkdirSync } from 'fs'
+import { GLADE } from '../src/app/shimmer/open/ather/moonwell-glade'
+import { folkSpots } from '../src/app/shimmer/open/ather/folk-spots'
 import { YARROW_TEACH, LISTEN, teachJars } from '../src/app/shimmer/open/ather/yarrow-teach'
 import { newInv, give, BAIT_FROM, BAIT_PAGE, YARROW_GIFT_BAIT, type Inv } from '../src/app/shimmer/open/shared/inventory'
 import { aimAt } from './lib/aim.mts'
@@ -23,10 +23,10 @@ mkdirSync(out, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
-for (const l of GLADE_LOTS.map(l => l.id)) { const f = `world/house-blueprints/glade-${l}.json`; if (existsSync(f)) setGladeBlueprint(l, parseHouse(JSON.parse(readFileSync(f, 'utf8')))) }
-const Y = gladeSpots(['moonwell:yarrow'])[0]
-// stand 2 m from Yarrow toward the green, facing Yarrow
-const d = Math.hypot(GLADE_GREEN.x - Y.x, GLADE_GREEN.z - Y.z), at = { x: Y.x + (GLADE_GREEN.x - Y.x) / d * 2, z: Y.z + (GLADE_GREEN.z - Y.z) / d * 2 }
+const Y = folkSpots(GLADE, ['moonwell:yarrow'])[0]   // her spot in Tess's garden (s1b-2: the lots stay in Greg's garden, the Moglins live in the friends')
+// stand 2 m from Yarrow, in front of her (figure yaw: forward = (sin, cos); gladeSpots faced her toward the green, so this is the
+// same 'toward where she looks' stand as before), facing Yarrow
+const at = { x: Y.x + Math.sin(Y.yaw) * 2, z: Y.z + Math.cos(Y.yaw) * 2 }
 const face = Math.atan2(-(Y.x - at.x), -(Y.z - at.z))
 const seedInv: Inv = give(newInv(), 'mast', 2).inv
 const count = (i: Inv, id: string) => i.slots.reduce((a, s) => a + (s?.id === id ? s.n : 0), 0)
@@ -56,8 +56,11 @@ try {
   }
   const shot = async (n: string) => { try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
 
-  await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
+  await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
   ok(await poll(() => p.evaluate(() => !!(window as any).__ather?.state), 120000), 'the Ather page is up')
+  await p.waitForFunction(() => typeof (window as any).__ather?.travel === 'function', { timeout: 120000 })
+  for (let i = 0; i < 40 && !(await p.evaluate(() => (window as any).__ather?.zone?.() === 'glade')); i++) { await p.evaluate(() => (window as any).__ather.travel({ kind: 'glade' })); await sleep(4000) }
+  ok(await poll(() => p.evaluate(() => (window as any).__ather?.zone?.() === 'glade'), 120000), 'in the closed Glade (zone glade)')
   await sleep(4000)
   await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, y), at.x, at.z, face)
   await poll(async () => { const s = await st(); return Math.hypot(s.x - at.x, s.z - at.z) < 0.4 }, 15000); await sleep(1500)

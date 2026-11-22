@@ -2,6 +2,8 @@
 // mode: draw a 5 x 4 building with real drags, the Blueprint tool + a tap on one of its walls picks it (bar: 5 x 4 m, fits a
 // lot), pick a lot with NO saved blueprint (never overwrites Alex's), Save; it reads back from the public route; at the Glade
 // that lot stands the blueprint instead of its blockout. The test save is always set aside in a finally (DELETE).
+// (M67 s1b-3: the Glade is the closed Glade, zone 'glade', in Greg's garden; the lots stand there as backdrop and the keeper goes
+// by the real __ather.travel({ kind: 'glade' }), not the Wilds waymark. The lot is looked at from the green, in Glade coords.)
 //   set -a; . /root/ather-games/.env; set +a; npx tsx scripts/blueprint-check.mts [--url https://ather.games]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
@@ -97,8 +99,10 @@ try {
   ok(got?.w === 5 && got?.d === 4 && Object.keys(got.walls ?? {}).length === 18, `   it reads back from the public route (${got?.w}x${got?.d})`)
   // 3. the Glade stands it on that lot
   await tap('[data-act="land"]'); await sleep(800)
-  await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
-  ok(await poll(() => p.evaluate(() => (window as any).__ather?.zone?.() === 'wilds'), 240000), 'off to the Glade')
+  await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
+  await p.waitForFunction(() => typeof (window as any).__ather?.travel === 'function', { timeout: 240000 })
+  for (let i = 0; i < 40 && !(await p.evaluate(() => (window as any).__ather?.zone?.() === 'glade')); i++) { await p.evaluate(() => (window as any).__ather.travel({ kind: 'glade' })); await sleep(4000) }   // M67: the Glade is its own zone, not the Wilds' waymark
+  ok(await poll(() => p.evaluate(() => (window as any).__ather?.zone?.() === 'glade'), 240000), 'off to the Glade (zone glade)')
   ok(await poll(async () => ((await p.evaluate(() => (window as any).__glade?.blueprints?.() ?? [])) as string[]).includes(lot!), 30000), `3. ${lot}'s lot stands the blueprint instead of the blockout`)
   const l = lotAt(lot)!
   const face = Math.atan2(-(l.x - GLADE_GREEN.x), -(l.z - GLADE_GREEN.z))
