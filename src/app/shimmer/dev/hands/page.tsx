@@ -14,16 +14,18 @@
  * 1100×700, so a glove can be kept clear of them.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import * as THREE from 'three'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OpenHands, type OpenHandsApi } from '../../open/shared/open-hands'
+import { OpenHands, ORDER, type OpenHandsApi } from '../../open/shared/open-hands'
+import { ACTIONS, ACTION_IDS, EASES, POSE_FIELDS, loadActions, setAction, resetAction, exportAction, sampleAction, actionDuration, keyStart, type ActionKey, type Ease, type HandAction } from '../../open/shared/fp-actions'
 import { FP, FP_DEFAULTS, setFpTune, resetFpTune, loadFpTune, type FpTune, type FpInput } from '../../open/shared/fp-hands-pose'
 import { EYE_STAND } from '../../open/shared/locomotion'
 import { HeldItem } from '../../open/ather/held-item'
 
-type Preview = 'rest' | 'run' | 'jump' | 'cast' | 'hold' | 'hidden'
+type Preview = 'rest' | 'run' | 'jump' | 'cast' | 'hold' | 'hidden' | 'actions'
 const PREVIEWS: { id: Preview; label: string }[] = [
-  { id: 'rest', label: 'Rest' }, { id: 'run', label: 'Run' }, { id: 'jump', label: 'Jump' }, { id: 'cast', label: 'Cast' }, { id: 'hold', label: 'Hold' }, { id: 'hidden', label: 'Hidden' },
+  { id: 'rest', label: 'Rest' }, { id: 'run', label: 'Run' }, { id: 'jump', label: 'Jump' }, { id: 'cast', label: 'Cast' }, { id: 'hold', label: 'Hold' }, { id: 'hidden', label: 'Hidden' }, { id: 'actions', label: 'Actions' },
 ]
 type Knob = { k: keyof FpTune; label: string; min: number; max: number; step: number }
 const GROUPS: { title: string; note: string; show: Preview; knobs: Knob[] }[] = [
@@ -74,15 +76,29 @@ const SAMPLES: { id: string; label: string }[] = [
 ]
 const chip: React.CSSProperties = { background: '#211f2b', border: '1px solid #38344a', color: '#ddd6ea', padding: '5px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }
 
-/** Feeds the hands a synthetic input for the preview, every frame. Cast holds mid-raise; Run runs at full speed. */
-function Driver({ api, preview, paused, holdW }: { api: React.RefObject<OpenHandsApi | null>; preview: Preview; paused: boolean; holdW: number | null }) {
+/** M82: the action clock the Driver runs and the scrub bar reads (a ref, not state: it ticks every frame) */
+interface Clock { id: string; t: number; playing: boolean; scrub: HTMLInputElement | null; readout: HTMLSpanElement | null }
+
+/** Feeds the hands a synthetic input for the preview, every frame. Cast holds mid-raise; Run runs at full speed. Actions plays
+ *  the picked action as a loop (the right mitt only, like the game will). */
+function Driver({ api, preview, paused, holdW, clock }: { api: React.RefObject<OpenHandsApi | null>; preview: Preview; paused: boolean; holdW: number | null; clock: React.RefObject<Clock> }) {
   useFrame((_, dt) => {
-    const now = performance.now()
+    const now = performance.now(), c = clock.current
+    let actionR: FpInput['actionR']
+    if (preview === 'actions') {
+      const a = ACTIONS[c.id], dur = actionDuration(a)
+      if (c.playing && dur > 0) c.t = (c.t + dt * 1000) % dur
+      actionR = { ...sampleAction(a, c.t), w: 1 }
+      if (c.scrub) { c.scrub.max = String(dur); c.scrub.value = String(c.t) }
+      if (c.readout) c.readout.textContent = `${Math.round(c.t)} / ${Math.round(dur)} ms`
+    }
     const input: FpInput = {
       now, speed: preview === 'run' ? FP.RUN_SPEED : 0, airborne: preview === 'jump', hidden: preview === 'hidden',
       castAt: preview === 'cast' ? now - FP.CAST_MS * 0.4 : -Infinity, working: false, holding: preview === 'hold', ...(preview === 'hold' && holdW !== null ? { holdW } : {}),
+      ...(actionR ? { actionR } : {}),
     }
-    api.current?.step(input, paused ? 0 : dt)
+    // a paused or scrubbed action still has to LAND on the frame asked for: the mitt eases there at full step
+    api.current?.step(input, preview === 'actions' && !c.playing ? 0.1 : paused ? 0 : dt)
     api.current?.seat(preview === 'cast' ? 1 : 0)
   })
   return null
@@ -99,7 +115,9 @@ export default function HandsTuner() {
   // the Hold blend scrub (11-21): null = the mitt turns on its own; 0..1 pins the rest->hold turn there (?hold=0.5 seeds it)
   const [holdW, setHoldW] = useState<number | null>(null)
   useEffect(() => { const v = new URLSearchParams(window.location.search).get('hold'); if (v !== null && Number.isFinite(+v)) setHoldW(Math.max(0, Math.min(1, +v))) }, [])
-  useEffect(() => { loadFpTune(); bump(n => n + 1) }, [])
+  useEffect(() => { loadFpTune(); loadActions(); bump(n => n + 1) }, [])
+  const clock = useRef<Clock>({ id: ACTION_IDS[0], t: 0, playing: true, scrub: null, readout: null })
+  useEffect(() => { if (new URLSearchParams(window.location.search).get('preview') === 'actions') setPreview('actions') }, [])   // ?preview=actions
   const values = () => JSON.stringify(Object.fromEntries(Object.keys(FP_DEFAULTS).map(k => [k, FP[k as keyof FpTune]])))
 
   return (
@@ -150,6 +168,7 @@ export default function HandsTuner() {
         </div>
         <pre data-values style={{ marginTop: 8, fontSize: 9, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#8b8598' }}>{values()}</pre>
       </aside>
+      {preview === 'actions' && <ActionsPanel clock={clock} />}
       <div style={{ flex: 1, position: 'relative' }}>
         <Canvas camera={{ position: [0, EYE_STAND, 0], fov: 75, near: 0.05, far: 500 }} onCreated={({ camera }) => camera.lookAt(0, EYE_STAND, -10)}>
           <color attach="background" args={['#cfe3ef']} />
@@ -157,8 +176,8 @@ export default function HandsTuner() {
           <directionalLight position={[3, 6, 4]} intensity={1.1} />
           <mesh rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[400, 400]} /><meshStandardMaterial color="#86a35a" roughness={1} /></mesh>
           {[-6, -3, 3, 6].map(x => <mesh key={x} position={[x, 0.75, -12]}><boxGeometry args={[0.3, 1.5, 0.3]} /><meshStandardMaterial color="#8a6a3c" /></mesh>)}
-          <OpenHands ref={api} held={<HeldItem id={preview === 'hold' ? sample : null} />} />
-          <Driver api={api} preview={preview} paused={paused} holdW={holdW} />
+          <OpenHands ref={api} held={preview === 'actions' ? <ActionProp clock={clock} /> : <HeldItem id={preview === 'hold' ? sample : null} />} />
+          <Driver api={api} preview={preview} paused={paused} holdW={holdW} clock={clock} />
         </Canvas>
         {/* where the HUD's mana orb + Q/X chips sit at 1100x700 (bottom right), so a glove can stay clear of them */}
         <div style={{ position: 'absolute', right: 56, bottom: 24, width: 136, height: 136, borderRadius: '50%', border: '1px dashed rgba(60,40,90,0.6)', pointerEvents: 'none' }} />
@@ -166,5 +185,90 @@ export default function HandsTuner() {
         <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
       </div>
     </div>
+  )
+}
+
+/** M82: the rinstick in the mitt while its action plays (hand-local: the hand's +y points ahead at rest; the rig scales x2) */
+function ActionProp({ clock }: { clock: React.RefObject<Clock> }) {
+  const [item, setItem] = useState(ACTIONS[clock.current.id].item)
+  useFrame(() => { const it = ACTIONS[clock.current.id].item; if (it !== item) setItem(it) })
+  const mat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#9a8160', roughness: 0.8, transparent: true, opacity: 1 }), [])
+  if (item !== 'rinstick') return null
+  return <mesh material={mat} position={[0.01, 0.22, 0.02]} rotation={[0.12, 0, 0]} renderOrder={ORDER} frustumCulled={false}><cylinderGeometry args={[0.0035, 0.007, 0.46, 6]} /></mesh>
+}
+
+const KEY_KNOBS: { k: (typeof POSE_FIELDS)[number] | 'ms' | 'hold'; label: string; min: number; max: number; step: number }[] = [
+  { k: 'x', label: 'x', min: -0.3, max: 0.6, step: 0.005 },
+  { k: 'y', label: 'height', min: -0.7, max: 0.1, step: 0.005 },
+  { k: 'z', label: 'distance', min: -1, max: -0.2, step: 0.005 },
+  { k: 'pitch', label: 'tilt', min: -Math.PI, max: Math.PI, step: 0.01 },
+  { k: 'roll', label: 'roll', min: -Math.PI, max: Math.PI, step: 0.01 },
+  { k: 'yaw', label: 'twist', min: -Math.PI, max: Math.PI, step: 0.01 },
+  { k: 'ms', label: 'move (ms)', min: 0, max: 1500, step: 10 },
+  { k: 'hold', label: 'hold (ms)', min: 0, max: 1500, step: 10 },
+]
+
+/** M82: build an action as a loop of key poses: pick one, add / reorder / delete keys, play, step, scrub, export. Every edit
+ *  saves the draft to this browser (fp-actions ACTIONS_KEY), so a reload keeps it. */
+function ActionsPanel({ clock }: { clock: React.RefObject<Clock> }) {
+  const [id, setId] = useState(clock.current.id)
+  const [sel, setSel] = useState(0)
+  const [playing, setPlaying] = useState(clock.current.playing)
+  const [copied, setCopied] = useState(false)
+  const [, bump] = useState(0)
+  const a = ACTIONS[id], k = a.keys[Math.min(sel, a.keys.length - 1)]
+  const play = (on: boolean) => { clock.current.playing = on; setPlaying(on) }
+  /** stop on key i, just as it is reached (so the mitt shows that pose) */
+  const showKey = (i: number, act: HandAction = ACTIONS[id]) => { setSel(i); play(false); clock.current.t = keyStart(act, i) + act.keys[i].ms }
+  const save = (next: HandAction, focus = sel) => { setAction(next); bump(n => n + 1); showKey(Math.max(0, Math.min(focus, next.keys.length - 1)), ACTIONS[id]) }
+  const editKey = (patch: Partial<ActionKey>) => save({ ...a, keys: a.keys.map((x, i) => i === sel ? { ...x, ...patch } : x) })
+  const move = (d: -1 | 1) => { const j = sel + d; if (j < 0 || j >= a.keys.length) return; const ks = [...a.keys]; [ks[sel], ks[j]] = [ks[j], ks[sel]]; save({ ...a, keys: ks }, j) }
+  const add = () => { const ks = [...a.keys]; ks.splice(sel + 1, 0, { ...k }); save({ ...a, keys: ks }, sel + 1) }
+  const del = () => { if (a.keys.length <= 1) return; save({ ...a, keys: a.keys.filter((_, i) => i !== sel) }, sel - 1) }
+  const pick = (next: string) => { clock.current.id = next; clock.current.t = 0; setId(next); setSel(0); play(true) }
+
+  return (
+    <aside data-actions style={{ width: 300, overflowY: 'auto', padding: '10px 12px', borderRight: '1px solid #2c2a38', color: '#ddd6ea' }}>
+      <span className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#e8b04a' }}>Actions</span>
+      <span style={{ fontSize: 10, color: '#8b8598', marginLeft: 6 }}>the right mitt, a loop of poses</span>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
+        {ACTION_IDS.map(x => <button key={x} data-action={x} onClick={() => pick(x)} style={{ ...chip, opacity: id === x ? 1 : 0.45 }}>{ACTIONS[x].label}</button>)}
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+        <button data-act="play" style={{ ...chip, opacity: playing ? 1 : 0.6 }} onClick={() => play(!playing)}>{playing ? 'Pause' : 'Play'}</button>
+        <button data-act="step" style={chip} title="to the next key" onClick={() => showKey((sel + 1) % a.keys.length)}>Step</button>
+        <span ref={el => { clock.current.readout = el }} data-readout style={{ fontSize: 10, color: '#8b8598', fontVariantNumeric: 'tabular-nums' }} />
+      </div>
+      <input ref={el => { clock.current.scrub = el }} data-knob="scrub" type="range" min={0} step={1} defaultValue={0} style={{ width: '100%' }}
+        onChange={e => { play(false); clock.current.t = Number(e.target.value) }} />
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', margin: '8px 0' }}>
+        {a.keys.map((_, i) => <button key={i} data-key={i} onClick={() => showKey(i)} style={{ ...chip, padding: '4px 8px', opacity: i === sel ? 1 : 0.45 }}>{i + 1}</button>)}
+      </div>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+        <button data-act="add" style={chip} title="copy this key in after it" onClick={add}>+ Key</button>
+        <button data-act="up" style={chip} onClick={() => move(-1)}>◀</button>
+        <button data-act="down" style={chip} onClick={() => move(1)}>▶</button>
+        <button data-act="del" style={{ ...chip, opacity: a.keys.length > 1 ? 1 : 0.35 }} onClick={del}>Delete</button>
+      </div>
+      <span className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#c8b98a' }}>Key {Math.min(sel, a.keys.length - 1) + 1}</span>
+      {KEY_KNOBS.map(n => (
+        <label key={n.k} style={{ display: 'grid', gridTemplateColumns: '72px 1fr 46px', gap: 6, alignItems: 'center', fontSize: 11, marginTop: 4 }}>
+          <span style={{ color: '#b5afc2' }}>{n.label}</span>
+          <input type="range" data-keyknob={n.k} min={n.min} max={n.max} step={n.step} value={k[n.k]} onChange={e => editKey({ [n.k]: Number(e.target.value) })} />
+          <span style={{ fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{n.k === 'ms' || n.k === 'hold' ? k[n.k] : k[n.k].toFixed(3)}</span>
+        </label>
+      ))}
+      <label style={{ display: 'grid', gridTemplateColumns: '72px 1fr', gap: 6, alignItems: 'center', fontSize: 11, marginTop: 6 }}>
+        <span style={{ color: '#b5afc2' }}>ease in</span>
+        <select data-keyknob="ease" value={k.ease} onChange={e => editKey({ ease: e.target.value as Ease })} style={{ background: '#211f2b', color: '#ddd6ea', border: '1px solid #38344a', fontSize: 11 }}>
+          {EASES.map(x => <option key={x} value={x}>{x}</option>)}
+        </select>
+      </label>
+      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+        <button style={chip} data-act="export" onClick={() => { void navigator.clipboard?.writeText(exportAction(a)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }) }}>{copied ? 'Copied' : 'Copy action'}</button>
+        <button style={chip} data-act="reset" onClick={() => { resetAction(id); bump(n => n + 1); showKey(0, ACTIONS[id]) }}>Reset action</button>
+      </div>
+      <pre data-export style={{ marginTop: 8, fontSize: 9, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#8b8598' }}>{exportAction(a)}</pre>
+    </aside>
   )
 }

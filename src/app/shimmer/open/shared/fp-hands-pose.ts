@@ -54,6 +54,8 @@ export interface FpInput {
   working: boolean     // a node is being worked (prune / prospect): the right hand chops
   holding?: boolean    // M45: a hotbar item is out (the item stance): the right mitt turns to present it
   holdW?: number       // dev only (/shimmer/dev/hands ?hold=): pins the Hold weight 0..1, to look at a frame mid-turn
+  /** M82: an authored action (fp-actions.ts) drives the RIGHT mitt: its sampled pose, weighted w 0..1 over everything else */
+  actionR?: { x: number; y: number; z: number; pitch: number; roll: number; q: Quat; w: number }
 }
 export interface FpState { phase: number; run: number; air: number; low: number; wasAir: boolean; landAt: number; chop: number; hold: number; R: HandPose; L: HandPose }
 
@@ -162,6 +164,14 @@ export function stepFpHands(s: FpState, i: FpInput, dt: number): { R: HandPose; 
     tR.x += h * (FP.HOLD_X - FP.X); tR.y += h * (FP.HOLD_Y - FP.REST_Y); tR.z += h * (FP.HOLD_Z - FP.Z)
     tR.pitch += h * (FP.HOLD_PITCH - FP.PITCH); tR.roll += h * (FP.HOLD_ROLL - FP.ROLL)   // readable angles only: the rig applies qR
   }
+  // M82: an action takes the right mitt over (position lerps, orientation slerps), weighted so it can ease in and out
+  const aw = i.actionR ? clamp01(i.actionR.w) : 0
+  let qA = qR
+  if (aw > 0 && i.actionR) {
+    const A = i.actionR
+    for (const k of ['x', 'y', 'z', 'pitch', 'roll'] as const) tR[k] += aw * (A[k] - tR[k])
+    qA = slerpQ(qR, A.q, aw)
+  }
   const tL: Omit<HandPose, 'q'> = {
     x: -FP.X - s.air * FP.JUMP_SPREAD,
     y: FP.REST_Y - downL * FP.DROP_Y + s.air * FP.JUMP_Y_L + dip + hide,
@@ -174,6 +184,6 @@ export function stepFpHands(s: FpState, i: FpInput, dt: number): { R: HandPose; 
     s.L[k] = approach(s.L[k], tL[k], FP.EASE, dt)
   }
   const e = 1 - Math.exp(-FP.EASE * dt)   // the same ease as every other output, on the sphere
-  s.R.q = slerpQ(s.R.q, qR, e); s.L.q = slerpQ(s.L.q, eulerQ(tL.pitch, 0, tL.roll), e)
+  s.R.q = slerpQ(s.R.q, qA, e); s.L.q = slerpQ(s.L.q, eulerQ(tL.pitch, 0, tL.roll), e)
   return { R: s.R, L: s.L }
 }
