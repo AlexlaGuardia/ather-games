@@ -249,6 +249,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - 11-22 18:1x Alex: "when trying to place in the home plot the corner that the gate used to be in is still marking that the space is occupied" → triaged: bug, routed to world (stale gate footprint in the plot placement grid; fix = the occupancy mask follows where the gate is now)
 - 11-22 19:2x Alex (in the hands tuner): "the rinnstick and the hand can be moved independantly.. which makes it hard to get it right" → triaged: sprites, BEFORE M81 s3a (Alex is authoring now): in the tuner the rod must ride the hand (parented: move/rotate the hand = rod follows); the rod keeps only a small grip offset relative to the mitt, edited separately and off by default
 - 11-22 19:5x Alex: "here is the first of a few punch actions.. have it randomly choose one of them everytime it punches" + punch #1 JSON (4 keys) → saved docs/handoff/punch-actions-2026-11-22.json; routed to sprites: melee.swing becomes a pool of variants, random per punch (no same one twice in a row), #1 wired now, more append to the file
+- 11-22 20:3x Alex: "can we put one of each mana seed in my players pack so that i can look at the icons for each one" → routed to play (owner-only dev grant: one of every SEED_IDS seed into the owner keeper's bag, once, via an owner-gated action, never for players; seeds stay an event for everyone else)
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
