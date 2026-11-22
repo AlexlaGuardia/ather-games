@@ -81,6 +81,10 @@ try {
   // the gap itself is timed in the observer, so waiting here cannot hide a slow settle
   await poll(() => q.evaluate(() => { const a = (window as any).__pulseAt as { id: number; s: string }[]; const on = a.find(x => x.s === '1:c'); return !!on && a.some(x => x.id === on.id && x.s === '0:-') }), 8000)
   await shot(q, 'morel-pulse-settled')
+  // LOOK shot: a 1 fps screenshot cannot catch a 1.65 s pulse, so freeze one at a beat's peak (280 ms = 17%) on the live line
+  const froze = await q.evaluate(() => { const e = document.querySelector<HTMLElement>('[data-say="morel"] [data-morel-pulse]'); if (!e) return false
+    e.classList.add('morel-pulse'); e.style.animationDelay = '-280ms'; e.style.animationPlayState = 'paused'; document.querySelectorAll<HTMLElement>('div').forEach(d => { if (/Left thumb moves/.test(d.textContent ?? '') && !d.querySelector('[data-hud]')) d.style.visibility = 'hidden' }); return true })
+  if (froze) { await sleep(1200); await shot(q, 'morel-pulse-peak') }
   const at = await q.evaluate(() => (window as any).__pulseAt as { id: number; s: string; t: number; anim: string }[])
   console.error('pulse events', JSON.stringify(at.map(x => [x.id, x.s, Math.round(x.t)])))
   const on = at.find(x => x.s === '1:c'), off = at.find(x => x.s === '0:-' && on && x.id === on.id)
