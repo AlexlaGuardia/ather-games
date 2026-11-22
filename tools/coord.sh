@@ -406,6 +406,16 @@ cmd_build() {
     echo ">>   Override, only if you mean it: COORD_SHIP_UNTRACKED_PUBLIC=1 tools/coord.sh build \"msg\""
     exit 3
   fi
+
+  # 3. UNCOMMITTED DEV-PAGE SAVES (BETA M94, 2026-11-22, play). An owner dev page writes the WORKING TREE; this build ships
+  #    a snapshot of HEAD, so a vote/edit not yet committed is dropped without a word (Alex's rin-splash yay nearly was).
+  #    The file list + classes live in tools/dev-written.txt (data = refuse, source = warn); test: tools/dev-written.test.sh.
+  if [ "${COORD_BUILD_TREE:-0}" != "1" ] && [ "${COORD_SHIP_WITHOUT_DEV_SAVES:-0}" != "1" ]; then
+    if ! "$REPO/tools/dev-written-check.sh" "$REPO"; then
+      echo ">>   Override, only if you mean to drop them: COORD_SHIP_WITHOUT_DEV_SAVES=1 tools/coord.sh build \"msg\""
+      exit 3
+    fi
+  fi
   # ── ★★★ THE SHA THIS BUILD IS ACTUALLY BUILDING, PRINTED HERE (2026-09-08) ────────────────────
   # A near-miss the same afternoon: a build sat queued behind a live sweep, and by the time it
   # would have taken the lock the working tree had advanced onto a commit NO SWEEP HAD EVER SEEN.

@@ -1,0 +1,31 @@
+# BETA M94: every repo file an owner dev page WRITES through a save route, so `coord build` can catch a save that would vanish.
+# coord build ships a SNAPSHOT OF HEAD (11-18), and a dev page writes the WORKING TREE, so an uncommitted vote/edit is dropped by
+# the next build without a word (Alex's rin-splash yay nearly was, 11-22). tools/dev-written-check.sh reads this file.
+#   data     JSON written by a dev page and by nobody's hands: coord build REFUSES while one is uncommitted, naming it.
+#   source   .ts the old 2D editors write by regex AND lanes hand-edit: coord build only WARNS (a peer's WIP must not block
+#            every deploy, and a half-edit is not ours to commit).
+#   runtime  never shipped by a build: public/ is served from the repo at runtime; data/ is gitignored player data.
+# Format: <class> <route file> <path (a file, or a dir ending in /)>. tools/dev-written.test.sh fails on a writing route not
+# listed here, and on a path literal in a route that no row of that route covers.
+data     src/app/shimmer/save-sound-vote/route.ts      src/app/shimmer/open/shared/sounds.json
+data     src/app/shimmer/save-wilds-edit/route.ts      src/app/shimmer/world/wilds-edits.json
+data     src/app/shimmer/save-heights/route.ts         src/app/shimmer/world/heightmaps.json
+data     src/app/shimmer/save-movement-style/route.ts  src/app/shimmer/data/movement-styles.json
+data     src/app/shimmer/save-durations/route.ts       src/app/shimmer/data/frame-durations.json
+data     src/app/shimmer/save-blueprint/route.ts       src/app/shimmer/data/blueprints/
+data     src/app/shimmer/save-placement/route.ts       src/app/shimmer/data/blueprints/
+data     src/app/shimmer/save-structure/route.ts       src/app/shimmer/data/structures/
+data     src/app/shimmer/save-dialogue/route.ts        src/app/shimmer/data/dialogues/
+data     src/app/shimmer/save-house-blueprint/route.ts world/house-blueprints/
+source   src/app/shimmer/save-map/route.ts             src/app/shimmer/world/
+source   src/app/shimmer/save-npc/route.ts             src/app/shimmer/world/npcs.ts
+source   src/app/shimmer/save-npc/route.ts             src/app/shimmer/sprites/
+source   src/app/shimmer/save-sprite/route.ts          src/app/shimmer/sprites/
+source   src/app/shimmer/save-sprite/route.ts          src/app/shimmer/sprites/variants.ts
+source   src/app/shimmer/save-sprite/route.ts          src/app/shimmer/dev/editors/PlayerEditor.tsx
+source   src/app/shimmer/save-sprite/route.ts          src/app/shimmer/engine/spirit-index.ts
+source   src/app/shimmer/save-sprite/route.ts          src/app/shimmer/save-sprite/route.ts
+source   src/app/api/shimmer/save-sprite/route.ts      src/app/shimmer/sprites/
+runtime  src/app/shimmer/save-battle-bg/route.ts       public/data/battle-bgs/
+runtime  src/app/vault/dev/save/route.ts               public/vault/authored-levels.json
+runtime  src/app/api/arcade/leaderboard/route.ts       data/leaderboards/
