@@ -7,6 +7,15 @@
 import { useEffect, useState, type MutableRefObject } from 'react'
 import type { RinningApi } from './rinning-fx'
 import { PATTERN_TELL } from './reel'
+import { openSkills } from '../ather/forestry'
+import { isTouchOnly } from './touch'
+
+/** M77 (11-22): nothing on screen said the reel is a HOLD, and Alex lost every rinn before he found it ("once the control
+ *  was explained he got it instantly"). So the bar says it until the keeper's FIRST landed rinn, then never again. Rinning
+ *  XP comes only from a landed catch (ather/page.tsx + continent/nyx-rinning.tsx), and it is saved with the keeper's
+ *  skills, so "any rinning XP" is exactly "has landed one", per keeper, across reloads and both worlds. */
+export const reelHint = (touch: boolean) => (touch ? 'Hold FIRE to pull · let go to give' : 'Hold click to pull · let go to give')
+export function landedARinn(): boolean { const k = openSkills().rinning; return k.level > 1 || k.xp > 0 }
 
 export function ReelBar({ api }: { api: MutableRefObject<RinningApi | null> }) {
   const [v, setV] = useState<ReturnType<RinningApi['view']> | null>(null)
@@ -19,12 +28,14 @@ export function ReelBar({ api }: { api: MutableRefObject<RinningApi | null> }) {
   const r = v?.phase === 'reeling' ? v.reel : null
   if (!r) return null
   const fighting = r.zoneV < -0.02, strain = r.strain
+  const hint = landedARinn() ? null : reelHint(isTouchOnly())
   const pct = (x: number) => `${(x * 100).toFixed(2)}%`
   return (
     <div style={{ position: 'fixed', left: '50%', bottom: 150, transform: 'translateX(-50%)', width: 'min(380px, 84vw)', zIndex: 60, pointerEvents: 'none', font: '600 13px system-ui, sans-serif', color: '#f4ecd2', textShadow: '0 1px 2px #000' }}>
       <div style={{ textAlign: 'center', marginBottom: 6, letterSpacing: '0.08em', textTransform: 'uppercase', color: fighting ? '#ffd27a' : '#bdf0c8' }}>
         {fighting ? 'It fights · give' : 'It gives · take'}
       </div>
+      {hint && <div data-reel-hint style={{ textAlign: 'center', marginBottom: 6, fontWeight: 700, fontSize: 13, color: '#fff7e0' }}>{hint}</div>}
       {/* the track: far water ← → you */}
       <div style={{ position: 'relative', height: 22, borderRadius: 6, background: 'rgba(12,16,20,0.72)', border: '1px solid rgba(244,236,210,0.35)', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 3, background: '#e9f6ff', opacity: 0.6 }} />
