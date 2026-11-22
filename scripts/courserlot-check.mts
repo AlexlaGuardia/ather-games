@@ -54,8 +54,10 @@ res.marksAfter = (await ledger()).marks
 res.fleetAfterBuy = await fleet()
 res.again = await p.evaluate(() => !!document.querySelector<HTMLButtonElement>('[data-panel="courser-lot"] [data-buy="dray"] button')?.disabled)
 await p.evaluate(() => document.querySelector<HTMLElement>('[data-panel="courser-lot"] button[aria-label]')?.click()); await sleep(800)
-// back in the courser: park it beside the keeper (tp moves the CAR, the keeper stays on foot), F gets in, G = the garage
+// back in the courser: park it beside the keeper (tp moves the CAR, the keeper stays on foot), E gets in (M80), G = the garage
 await p.evaluate((x, z) => (window as any).__drive.tp(x, z, 0, 0), at.x + fx * 3.5, at.z + fz * 3.5); await sleep(2500)
+// M80 (11-22): E is the car now, and the door the crosshair is on keeps E (M60), so turn from the lot's door to the courser
+await p.evaluate((cx: number, cz: number) => { const w = window as any, f = w.__drive.foot(); w.__drive.footTp(f.px, f.pz, Math.atan2(-(cx - f.px), -(cz - f.pz)), -0.1) }, at.x + fx * 3.5, at.z + fz * 3.5); await sleep(1200)
 await p.keyboard.press('KeyE'); await sleep(2500)
 res.onFootAfterF = await p.evaluate(() => { const f = (window as any).__drive.foot; return typeof f === 'function' ? f() : f })
 await p.keyboard.press('KeyG'); await sleep(1500)
