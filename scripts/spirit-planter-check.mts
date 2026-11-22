@@ -92,7 +92,7 @@ await p.keyboard.press('e'); await sleep(900)
 res.afterSecond = seeds(await bag())
 res.promptAfter = await p.evaluate(() => document.body.innerText.includes('E · the Anemonyx'))
 // 6. phone
-await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true }); await sleep(1500)
+await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true }); await boot()   // a touch viewport remounts the page: reload into it
 await eAt(PEDESTAL.x, PEDESTAL.z, 0.9)
 res.phone = await p.evaluate(() => { const e = document.querySelector('[data-panel="grimoire"]'); if (!e) return null; const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, w: innerWidth } })
 await shot('sp-6-phone')
