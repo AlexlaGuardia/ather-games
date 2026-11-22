@@ -3,7 +3,7 @@
 // constructor (and strings as one bucket), plus two direct tallies for the ProgramKeeper suspect: shader-source strings
 // (contain gl_Position / gl_FragColor / SHADER_NAME / precision ...) and WebGLProgram objects. Self size, not retained: a
 // retained-size dominator pass on a 50 MB heap is slow, and self size by type already says WHICH kind of thing grew.
-//   npx tsx scripts/m9-heap-diff.mts [--url https://ather.games] [--size 390x844] [--wilds-min 3] [--top 15]
+//   npx tsx scripts/m9-heap-diff.mts [--url https://ather.games] [--size 390x844] [--wilds-min 3] [--top 15] [--trips]
 import puppeteer from 'puppeteer-core'
 import { createWriteStream, readFileSync, mkdirSync } from 'fs'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -66,7 +66,15 @@ const greg = { kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y
 for (let k = 0; k < 40 && (await A('zone')) !== 'wilds'; k++) { await A('travel', greg); await sleep(4000) }
 await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 120000 }); await sleep(4000)
 let i = 0
+// --trips (11-22, play): beta-m9-heap's one play difference: every 4th turn a waymark trip home and back (each under the 60 s
+// release, so nothing is dropped). Without it this diff read home at the plot's level while beta-m9-heap read +14 MB.
+const TRIPS = process.argv.includes('--trips'); let trips = 0, turn = 0
 await playFor(WMIN * 60000, async () => {   // same play as beta-m9-heap: wake a node's Hollows, cast, shoot, walk; keep the keeper standing
+  if (TRIPS && turn++ % 4 === 3) {
+    await A('travel', { kind: 'home' }); await p.waitForFunction(() => (window as any).__ather.zone() === 'plot', { timeout: 60000 }); await sleep(2000)
+    await A('travel', greg); await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 60000 }); await sleep(2000)
+    trips++; return
+  }
   const ns = await A('nodes') as { x: number; z: number }[] | undefined, n = ns?.[(i++ * 3) % Math.max(1, ns?.length ?? 1)]
   if (n) await A('tp', n.x + 22, n.z + 22, 0.8)
   await p.keyboard.press('KeyQ'); await sleep(400); await p.keyboard.press('KeyR'); await sleep(600)
@@ -74,6 +82,7 @@ await playFor(WMIN * 60000, async () => {   // same play as beta-m9-heap: wake a
   await A('setMana', 100); await walkLoop()
   await p.evaluate(() => { const c = (window as any).__ather.combat(); if (c?.keeper) c.keeper.hp = c.keeper.maxHp })
 })
+if (TRIPS) console.log(`waymark trips home and back: ${trips}`)
 const wilds = await snap('wilds')
 await A('travel', { kind: 'home' }); await p.waitForFunction(() => (window as any).__ather.zone() === 'plot', { timeout: 60000 })
 await playFor(HOME_S * 1000, walkLoop)
