@@ -54,3 +54,32 @@ if (process.argv.includes('--holders')) {
     console.log(`  ${(sz / 1048576).toFixed(2).padStart(6)} MB  ${nodeType(hI)}:${nodeName(hI).slice(0, 30)}  <=  ${path.slice(-9).join(' . ')}`)
   }
 }
+// --buckets [K]: the fair diff for a zone that REMOUNTS (11-22: the plot rebuilds its meshes on return, so "new ids" counts the
+// replacement as kept). Every node, in BOTH snapshots, is put in a bucket = its shortest root path's first K labelled hops
+// (array indices collapsed to [], synthetic roots skipped); self sizes are summed per bucket and the buckets diffed new - old.
+if (process.argv.includes('--buckets')) {
+  const K = Number(flag('--buckets', '6')) || 6
+  const bucketsOf = (S: any) => {
+    const nf: string[] = S.snapshot.meta.node_fields, N = nf.length, ntypes: string[] = S.snapshot.meta.node_types[0]
+    const ef: string[] = S.snapshot.meta.edge_fields, E = ef.length, etypes: string[] = S.snapshot.meta.edge_types[0]
+    const iT = nf.indexOf('type'), iS = nf.indexOf('self_size'), iEC = nf.indexOf('edge_count'), eT = ef.indexOf('type'), eN = ef.indexOf('name_or_index'), eTo = ef.indexOf('to_node')
+    const nodes: number[] = S.nodes, edges: number[] = S.edges, strs: string[] = S.strings, n = nodes.length / N
+    const fe = new Uint32Array(n + 1); for (let i = 0, e = 0; i < n; i++) { fe[i] = e; e += nodes[i * N + iEC] * E } fe[n] = edges.length
+    const lab = new Array<string>(n), depth = new Uint8Array(n), seen = new Uint8Array(n), q = new Int32Array(n); let h = 0, t = 0
+    q[t++] = 0; seen[0] = 1; lab[0] = ''
+    while (h < t) { const i = q[h++]; for (let e = fe[i]; e < fe[i + 1]; e += E) {
+      const et = etypes[edges[e + eT]]; if (et === 'weak' || et === 'shortcut') continue
+      const j = edges[e + eTo] / N; if (seen[j]) continue; seen[j] = 1; q[t++] = j
+      const synth = ntypes[nodes[i * N + iT]] === 'synthetic'
+      const l = et === 'element' || et === 'hidden' ? '[]' : (strs[edges[e + eN]] ?? '?').slice(0, 40)
+      if (synth || depth[i] >= K) { lab[j] = synth ? `(${l.slice(0, 30)})` : lab[i]; depth[j] = synth ? 0 : depth[i] } else { lab[j] = lab[i] ? `${lab[i]}.${l}` : l; depth[j] = depth[i] + 1 }
+    } }
+    const b = new Map<string, number>(); for (let i = 0; i < n; i++) if (seen[i]) b.set(lab[i], (b.get(lab[i]) ?? 0) + nodes[i * N + iS])
+    return b
+  }
+  const bo = bucketsOf(load(oldF)), bn = bucketsOf(s)
+  const rows = [...new Set([...bo.keys(), ...bn.keys()])].map(k => ({ k, d: (bn.get(k) ?? 0) - (bo.get(k) ?? 0) })).sort((a, b) => b.d - a.d)
+  console.log(`\nbuckets (first ${K} hops), new - old, biggest growth:`)
+  for (const r of rows.slice(0, TOP)) console.log(`  ${(r.d / 1048576).toFixed(2).padStart(6)} MB  ${r.k.slice(0, 170)}`)
+  console.log('biggest shrink:'); for (const r of rows.slice(-5).reverse()) console.log(`  ${(r.d / 1048576).toFixed(2).padStart(6)} MB  ${r.k.slice(0, 170)}`)
+}
