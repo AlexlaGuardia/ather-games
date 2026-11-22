@@ -100,11 +100,15 @@ await shot('wt-1-no-tap')
 await p.keyboard.press('Escape'); await sleep(600)
 
 step('3. set the tap and the tank')
+// ★ 11-22 (sweep pass 6, sprites): since M45 (d030f8cd, 11-20) a piece is set FROM THE HAND: hold it on the hotbar, E sets
+// it at the ghost; the planning table keeps rooms + plans only. The old flow clicked a table "Set" button that is gone, which
+// left the table panel open, so every later E read as 'E at the bed opens the planning table' and nothing got planted.
 for (const [item, x] of [['water_tap', -130], ['water_tank', -127.5]] as const) {
-  await tp(TABLE.x + 1.6, TABLE.z + 1.6, Math.PI / 4)
-  await p.keyboard.press('e'); await sleep(900)
-  res[`set_${item}`] = await click(`[data-piece="${item}"] button`); await sleep(800)
-  await tp(x, 102.5, 0); await p.keyboard.press('e'); await sleep(1000)
+  await tp(x, 102.5, 0)
+  const slot = (((await read('open.inv.v1'))?.slots ?? []) as ({ id: string } | null)[]).findIndex(v => v?.id === item)
+  await p.keyboard.press(`Digit${slot + 1}` as any); await sleep(900)
+  res[`set_${item}`] = slot >= 0 && slot < 8 && await p.evaluate(() => !!document.querySelector('[data-placing]'))
+  await p.keyboard.press('e'); await sleep(1000)
 }
 const pieces = ((await read('open.works.v1'))?.pieces ?? []) as { item: string }[]
 res.placed = pieces.map(x => x.item).sort()
@@ -122,7 +126,8 @@ res.after = { water: await attr('[data-water]', 'data-water'), mark: !!(await p.
 await shot('wt-3-watered')
 // ready at 0.75 x 5 min = 225 s, not at 220 s
 // (skew is computed from the bed's own plantedAt on the farm's clock: real seconds pass between steps, so a fixed skew drifts)
-const age = async () => p.evaluate(() => { const w = window as any, f = JSON.parse(localStorage.getItem('open.farm.v1') ?? 'null'); return w.__farm.now() - f.farm.beds[0].plantedAt })
+const age = async () => p.evaluate(() => { const w = window as any, f = JSON.parse(localStorage.getItem('open.farm.v1') ?? 'null'); const at = f?.farm?.beds?.[0]?.plantedAt; return typeof at === 'number' ? w.__farm.now() - at : NaN })
+if (!Number.isFinite(await age())) { res.errs = errs; console.log(JSON.stringify(res)); console.log('FAIL: bed 0 was never planted'); await br.close(); process.exit(1) }
 await skew(212_000 - await age()); await sleep(1300); res.at212 = await attr('[data-bed="0"]', 'data-phase')
 // unwatered, Goldleaf would need 300 s: at 212 s the watered bed must still be growing, at 226 s ready
 await skew(226_000 - await age()); res.at226 = await poll(async () => (await attr('[data-bed="0"]', 'data-phase')) === '3', 6000)
