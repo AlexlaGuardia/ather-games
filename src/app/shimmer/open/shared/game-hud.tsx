@@ -31,6 +31,7 @@ import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } fro
 import { HearthHudLayer, hudMapBox, Corner, toolReadout, type ToolFamily } from '../../ui/hearth-hud-layer'
 import { HearthCompass, compassWidth, HearthHotbar, HearthVitals, HearthClock, HudPlate, WELL, useHudSize, type CompassMark, type CompassPose } from '../../ui/hearth-hud'
 import { XpBar } from './xp-bar'
+import { PHONE_ROW_TOP } from './touch-controls'
 import { HUD_FACES } from '../../ui/hud-face'
 import { HEARTH_FONT_VARS } from '../../ui/hearth-fonts'
 import { hearthDisplay, hearthBody } from '../../ui/hearth'
@@ -105,6 +106,8 @@ function MorelText({ text, align }: { text: string; align: 'left' | 'center' }) 
 }
 function Messages({ style, align }: { style: React.CSSProperties; align: 'left' | 'center' }) {
   const lines = useLines()
+  // probe (phone-message-check): say a line from a check, the way the page would; it only ever writes this screen's own HUD
+  useEffect(() => { (window as unknown as { __hudSay?: typeof hudSay }).__hudSay = hudSay }, [])
   return (
     <div className={`pointer-events-none flex flex-col ${align === 'left' ? 'items-start' : 'items-center'} gap-0.5`} style={{ position: 'fixed', zIndex: 33, maxWidth: 'min(520px, 80vw)', ...style }} data-hud="messages">
       {lines.map(l => (
@@ -202,8 +205,8 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
   const readouts = T.current && S.current ? TOOL_FAMILIES.map(f => toolReadout(T.current!, S.current!, f, null)) : []
   const box = hudMapBox(size)
   const tray = trayBox(size)
-  const [vw, setVw] = React.useState(1280)
-  useEffect(() => { const f = () => setVw(window.innerWidth); f(); addEventListener('resize', f); return () => removeEventListener('resize', f) }, [])
+  const [vw, setVw] = React.useState(1280), [vh, setVh] = React.useState(800)
+  useEffect(() => { const f = () => { setVw(window.innerWidth); setVh(window.innerHeight) }; f(); addEventListener('resize', f); return () => removeEventListener('resize', f) }, [])
 
   // the bar's keys and wheel, once, for every page
   const selRef = useRef(sel); selRef.current = sel
@@ -258,7 +261,14 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
         {minimap}
         {/* a phone's right edge belongs to the thumbs below the map: the chips join into one line */}
         <StatusChips items={status.length ? [{ label: status.map(x => x.value !== undefined ? `${x.label} ${x.value}` : x.label).join(' · ') }] : []} top={statusTop} right={box.right} maxW={vw - box.right - 16 - 12} />
-        <Messages align="center" style={{ left: '50%', transform: 'translateX(-50%)', bottom: 118 }} />
+        {/* ★ THE LINE CLEARS THE THUMBS (Alex 11-22 playtest): at bottom:118 it grew UP into SLIDE / JUMP / FIRE / the DRAW pill
+            and the hotbar (phone-message-check, red at 390x844, 360x780, 844x390). The bottom of a phone is the thumbs'; the line
+            hangs from the TOP instead, newest at the bottom, growing down into open sky. Portrait: centred under the MENU row
+            (PHONE_ROW_TOP + one chip + air), well above the cluster. Landscape (the touch row's own `short` test): there is no
+            centre band (status chip above, hotbar below), so it takes the top-left beside the compass, desktop's corner. */}
+        {vh < 520 && vw > vh
+          ? <Messages align="left" style={{ left: 'max(16px, env(safe-area-inset-left))', top: 12, maxWidth: phoneCompassX - compassWidth('phone') / 2 - 16 - 12 }} />
+          : <Messages align="center" style={{ left: '50%', transform: 'translateX(-50%)', top: PHONE_ROW_TOP + 48 }} />}
       </div>
     )
   }
