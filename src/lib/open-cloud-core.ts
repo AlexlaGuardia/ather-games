@@ -27,7 +27,8 @@ export interface OpenDoc {
   retired?: { id: string; retired_at?: number; keys?: Record<string, string> }[]
 }
 export interface SyncRec { rev: number; hash: string }
-interface Roster { v: 1; keepers: { id: string; created_at: number }[]; active: string; pending?: string }
+interface Roster { v: 1; keepers: { id: string; created_at: number }[]; active: string; pending?: string; retired?: { id: string; at: number }[] }
+const RETIRED_CARRY_MS = 30 * 24 * 3600 * 1000   // keeper-roster.ts RETIRED_CARRY_MS (the server's tombstone window)
 
 function names(s: Storage): string[] {
   const out: string[] = []
@@ -40,6 +41,16 @@ function readRoster(s: Storage, owner: string): Roster | null {
     const r = JSON.parse(s.getItem(`u:${owner}:${ROSTER_BASE}`) ?? 'null') as Roster | null
     return r && r.v === 1 && Array.isArray(r.keepers) && r.keepers.some(k => k.id === r.active) ? r : null
   } catch { return null }
+}
+
+/** The `retired[]` a push must carry: the server's tombstones plus keepers this browser removed (M66 s3), never one that is
+ *  live again (the server 400s an id that is both). Without the local half a removal reads as "keeper vanished" and the
+ *  account copy stops syncing. */
+function retiredIds(roster: Roster, server: OpenDoc['retired'], now = Date.now()): { id: string }[] {
+  const live = new Set(roster.keepers.map(k => k.id)), out: string[] = []
+  for (const r of server ?? []) if (r && typeof r.id === 'string' && !live.has(r.id) && !out.includes(r.id)) out.push(r.id)
+  for (const t of roster.retired ?? []) if (t && typeof t.id === 'string' && now - t.at < RETIRED_CARRY_MS && !live.has(t.id) && !out.includes(t.id)) out.push(t.id)
+  return out.map(id => ({ id }))
 }
 
 /** Build the doc from this browser. Null when the roster is mid-swap (ensureRoster replays it first) or absent. */
@@ -67,7 +78,7 @@ export function collectDoc(s: Storage, owner: string, epoch: number, retired: Op
     garden: { keys: sorted(garden) },
     keepers: roster.keepers.map(k => ({ id: k.id, created_at: k.created_at, keys: sorted(k.id === roster.active ? live : parked.get(k.id) ?? {}) })),
     active: roster.active,
-    retired: (retired ?? []).map(r => ({ id: r.id })),             // carry every tombstone the server returned (doc §6)
+    retired: retiredIds(roster, retired),                          // every tombstone the server returned + this browser's removals (doc §6)
   }
 }
 

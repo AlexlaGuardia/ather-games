@@ -105,5 +105,15 @@ const D = new Mem(); D.setItem(`u:${U}:${ROSTER_BASE}`, JSON.stringify({ v: 1, k
 ok(collectDoc(D, U, E) === null, 'a roster mid-swap is not collected')
 ok(!hasData(collectDoc(new Mem(), U, E)), 'no roster, no data')
 
+// M66 s3: a keeper this browser removed rides retired[] (else the server 400s "keeper vanished"); never one that is live
+{
+  const R = new Mem(), now = Date.now()
+  R.setItem(`u:${U}:ather:roster.v1`, JSON.stringify({ v: 1, keepers: [{ id: 'k_a', created_at: 1 }], active: 'k_a',
+    retired: [{ id: 'k_gone', at: now - 1000 }, { id: 'k_old', at: now - 31 * 24 * 3600 * 1000 }, { id: 'k_a', at: now }] }))
+  R.setItem(`u:${U}:open.inv.v1`, '{}')
+  const d = collectDoc(R, U, E, [{ id: 'k_srv' }, { id: 'k_srv' }, { id: 'k_a' }])!   // k_gone is LOCAL only: the half this slice adds
+  ok(JSON.stringify(d.retired) === JSON.stringify([{ id: 'k_srv' }, { id: 'k_gone' }]), `retired = server + local, deduped, expired + live dropped (${JSON.stringify(d.retired)})`)
+}
+
 console.log(`open-cloud-core: ${pass} passed, ${fail} failed`)
 if (fail) process.exit(1)

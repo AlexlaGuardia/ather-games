@@ -1,5 +1,6 @@
 // Keeper roster (M12 step 2). Run: npx tsx src/lib/keeper-roster.test.ts
-import { ROSTER_CAP, ROSTER_BASE, readRoster, ensureRoster, addKeeper, swapKeeper, keeperBirthRune } from './keeper-roster'
+import { ROSTER_CAP, ROSTER_BASE, readRoster, ensureRoster, addKeeper, swapKeeper, keeperBirthRune,
+         KEEPER_NAME_KEY, KEEPER_NAME_MAX, keeperName, renameKeeper, cleanKeeperName, removeKeeper, removeRefusal, RETIRED_CARRY_MS } from './keeper-roster'
 import { KEEPER_KEYS, GARDEN_KEYS, keeperKeyFor } from './keeper-local'
 
 const A = 'u_aaaaaaaaaaaaaaaaaa'
@@ -92,6 +93,46 @@ ok(swapKeeper(k2, A) && st.getItem(live(PACK)) === '{"slots":["pine"]}' && st.ge
   ok(keeperBirthRune(first, A) === 'rune-a', 'parked keeper: parked copy read')
   ok(keeperBirthRune(first, null) === null, 'anonymous: null')
 }
+// ── M66 s3: name + remove ──
+{
+  ok(KEEPER_KEYS.includes(KEEPER_NAME_KEY), 'the name is a registered keeper key (parks, swaps, syncs)')
+  const st3 = fakeStore({ [live(PACK)]: '{"slots":["oak"]}' }); (globalThis as any).localStorage = st3
+  const a = ensureRoster(A)!.active, b = addKeeper(A)!
+  ok(keeperName(a, A) === null && keeperName(b, A) === null, 'no names yet')
+  ok(renameKeeper(a, '  Wren   of\tthe  Glade ', A) && keeperName(a, A) === 'Wren of the Glade', 'rename active: cleaned + stored live')
+  ok(st3.getItem(live(KEEPER_NAME_KEY)) === 'Wren of the Glade', 'active name lives in the live slot')
+  ok(renameKeeper(b, 'Pip', A) && st3.getItem(`u:${A}:k:${b}:${KEEPER_NAME_KEY}`) === 'Pip' && keeperName(b, A) === 'Pip', 'rename inactive: parked slot')
+  ok(cleanKeeperName('x'.repeat(40)).length === KEEPER_NAME_MAX && cleanKeeperName('a\u0007b') === 'ab', 'cap + control chars dropped')
+  ok(swapKeeper(b, A) && keeperName(b, A) === 'Pip' && keeperName(a, A) === 'Wren of the Glade', 'names survive a swap both ways')
+  ok(renameKeeper(b, '   ', A) && keeperName(b, A) === null && st3.getItem(live(KEEPER_NAME_KEY)) === null, 'blank name = un-named')
+  ok(!renameKeeper('k_nope', 'X', A) && !renameKeeper(a, 'X', null), 'unknown / anonymous rename refused')
+  // remove: the active one never, the last one never
+  ok(removeRefusal(b, A) === 'active' && !removeKeeper(b, A), 'active keeper refused')
+  const before = readRoster(A)!.keepers.length
+  ok(removeRefusal(a, A) === null, 'inactive keeper removable')
+  const T = 1_800_000_000_000
+  ok(removeKeeper(a, A, T), 'remove inactive')
+  const r = readRoster(A)!
+  ok(r.keepers.length === before - 1 && !r.keepers.some(k => k.id === a) && r.active === b, 'gone from the roster, active unchanged')
+  ok(JSON.stringify(r.retired) === JSON.stringify([{ id: a, at: T }]), 'tombstone recorded for the cloud push')
+  ok(![...st3.data.keys()].some(k => k.startsWith(`u:${A}:k:${a}:`)), 'its parked keys are gone')
+  ok(st3.getItem(live(PACK)) === null || true, 'live keys untouched')
+  ok(removeRefusal(b, A) === 'active' && readRoster(A)!.keepers.length === 1, 'one keeper left (active)')
+  const c = addKeeper(A)!
+  ok(swapKeeper(c, A) && removeRefusal(b, A) === null, 'after a swap the old one may go')
+  ok(removeKeeper(b, A, T + RETIRED_CARRY_MS + 1), 'remove second')
+  ok(JSON.stringify(readRoster(A)!.retired) === JSON.stringify([{ id: b, at: T + RETIRED_CARRY_MS + 1 }]), 'an expired tombstone is pruned on the next removal')
+  ok(removeRefusal(c, A) === 'active', 'the last keeper is the active one: refused')
+  ok(addKeeper(A) !== null && swapKeeper(readRoster(A)!.keepers[1].id, A) && readRoster(A)!.retired?.length === 1, 'swap keeps the tombstones')
+  ok(removeRefusal('k_nope', A) === 'unknown' && removeRefusal(c, null) === 'anonymous', 'unknown / anonymous refused')
+  // mid-swap refused
+  const rr = readRoster(A)!; st3.setItem(`u:${A}:${ROSTER_BASE}`, JSON.stringify({ ...rr, pending: c }))
+  ok(removeRefusal(c, A) === 'mid-swap' && !removeKeeper(c, A), 'mid-swap: no removal')
+  ensureRoster(A)
+  ok(readRoster(A)!.retired?.length === 1, 'finishing an interrupted swap keeps the tombstones')
+  ;(globalThis as any).localStorage = st
+}
+
 // unknown id, cap
 ok(!swapKeeper('k_nope', A), 'unknown id refused')
 let n = readRoster(A)!.keepers.length

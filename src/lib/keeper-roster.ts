@@ -31,7 +31,12 @@ import { BIRTH_KEY } from '@/app/shimmer/play3d/rune-inventory'
 export const ROSTER_CAP = 8
 
 export interface RosterKeeper { id: string; created_at: number }
-export interface Roster { v: 1; keepers: RosterKeeper[]; active: string; pending?: string }
+export interface Roster { v: 1; keepers: RosterKeeper[]; active: string; pending?: string; retired?: RetiredKeeper[] }
+/** A keeper this browser removed (M66 s3). The cloud refuses a push that drops a keeper unless it is listed in
+ *  `retired[]` ("keeper vanished", doc §6), so the roster remembers the id until the server's own 30-day window is past. */
+export interface RetiredKeeper { id: string; at: number }
+/** How long a local tombstone is carried: the server's RETIRED_KEEP_MS (it ignores an expired one, so longer is harmless). */
+export const RETIRED_CARRY_MS = 30 * 24 * 3600 * 1000
 
 /** The roster record's base. NOT a keeper key and NOT a garden key: it must never swap with a keeper. */
 export const ROSTER_BASE = 'ather:roster.v1'
@@ -128,7 +133,7 @@ export function ensureRoster(owner: string | null = saveOwner()): Roster | null 
     if (!r) return null
     if (r.pending) {
       applyParked(localStorage, owner, r.pending)
-      const done: Roster = { v: 1, keepers: r.keepers, active: r.pending }
+      const done: Roster = { v: 1, keepers: r.keepers, active: r.pending, ...(r.retired?.length ? { retired: r.retired } : {}) }
       writeRoster(owner, done)
       notifySwap()
       return done
@@ -188,7 +193,7 @@ export function swapKeeper(toId: string, owner: string | null = saveOwner()): bo
     // Stale parked copies of the keeper we left (bases it no longer had), now that the live write landed.
     for (const base of parkedKeys(s, owner, r.active).keys()) if (!live.has(base)) s.removeItem(pre + base)
     // 4. ACTIVE.
-    writeRoster(owner, { v: 1, keepers: r.keepers, active: toId })
+    writeRoster(owner, { v: 1, keepers: r.keepers, active: toId, ...(r.retired?.length ? { retired: r.retired } : {}) })
     notifySwap()
     return true
   } catch { return false }   // interrupted: the journal (if written) lets the next ensureRoster() finish it
@@ -204,4 +209,68 @@ export function keeperBirthRune(id: string, owner: string | null = saveOwner()):
     const k = r.active === id && !r.pending ? keeperKeyFor(base, owner) : parkedPrefix(owner, id) + base
     return localStorage.getItem(k) || null
   } catch { return null }
+}
+
+// ── NAME + REMOVE (BETA M66 s3, the Character tab's Keepers edit) ────────────────────────────────────────────────
+/** The keeper key holding the name the player gave a keeper. A keeper key, so it parks, swaps and syncs with the rest. */
+export const KEEPER_NAME_KEY = 'open.keeper.name.v1'
+/** Longest name kept. */
+export const KEEPER_NAME_MAX = 20
+
+/** Where a roster keeper's copy of `base` lives right now: live for the active one, parked for the others. */
+function slotOf(r: Roster, owner: string, id: string, base: string): string {
+  return r.active === id && !r.pending ? keeperKeyFor(base, owner) : parkedPrefix(owner, id) + base
+}
+
+/** Trim, fold runs of whitespace, drop control characters, cap at KEEPER_NAME_MAX. '' = no name. */
+export function cleanKeeperName(raw: string): string {
+  return raw.replace(/\s+/g, ' ').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, KEEPER_NAME_MAX).trim()
+}
+
+/** The name the player gave this keeper, or null. Pure read. */
+export function keeperName(id: string, owner: string | null = saveOwner()): string | null {
+  if (!owner) return null
+  try {
+    const r = readRoster(owner)
+    if (!r || !r.keepers.some(k => k.id === id)) return null
+    return localStorage.getItem(slotOf(r, owner, id, KEEPER_NAME_KEY)) || null
+  } catch { return null }
+}
+
+/** Name (or, with '' after cleaning, un-name) a keeper. True when stored. Never moves any other key. */
+export function renameKeeper(id: string, raw: string, owner: string | null = saveOwner()): boolean {
+  const r = ensureRoster(owner)
+  if (!owner || !r || r.pending || !r.keepers.some(k => k.id === id)) return false
+  try {
+    const name = cleanKeeperName(raw), k = slotOf(r, owner, id, KEEPER_NAME_KEY)
+    if (name) localStorage.setItem(k, name); else localStorage.removeItem(k)
+    return true
+  } catch { return false }
+}
+
+/** Why a keeper cannot be removed, or null when it can. The active keeper never can: swap first (Alex, M66). */
+export function removeRefusal(id: string, owner: string | null = saveOwner()): 'anonymous' | 'unknown' | 'active' | 'last' | 'mid-swap' | null {
+  if (!owner) return 'anonymous'
+  const r = readRoster(owner)
+  if (!r || !r.keepers.some(k => k.id === id)) return 'unknown'
+  if (r.pending) return 'mid-swap'
+  if (r.active === id) return 'active'
+  if (r.keepers.length < 2) return 'last'
+  return null
+}
+
+/**
+ * Remove an INACTIVE keeper. Order is the safety: the roster entry goes FIRST (with a tombstone, so the next cloud push
+ * lists it in `retired[]` and the server keeps its last data 30 days), the parked keys LAST, so a failure mid-way leaves
+ * at worst unlisted parked bytes, never a listed keeper with half a body. Live keys are never touched. True when removed.
+ */
+export function removeKeeper(id: string, owner: string | null = saveOwner(), now = Date.now()): boolean {
+  if (removeRefusal(id, owner) !== null) return false
+  const r = readRoster(owner)!
+  try {
+    const retired = [...(r.retired ?? []).filter(t => t.id !== id && now - t.at < RETIRED_CARRY_MS), { id, at: now }]
+    writeRoster(owner!, { v: 1, keepers: r.keepers.filter(k => k.id !== id), active: r.active, retired })
+  } catch { return false }
+  try { for (const base of parkedKeys(localStorage, owner!, id).keys()) localStorage.removeItem(parkedPrefix(owner!, id) + base) } catch { /* unlisted leftovers: harmless */ }
+  return true
 }

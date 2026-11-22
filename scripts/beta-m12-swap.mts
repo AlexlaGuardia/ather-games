@@ -137,7 +137,7 @@ await p.screenshot({ path: `${OUT}/2-two-keepers.png` })
 const B0 = await store(p)
 ok(keeperKeys(B0)[Object.keys(keeperKeys(B0)).find(k => k.endsWith('open.inv.v1')) ?? ''] !== Akeys[Object.keys(Akeys).find(k => k.endsWith('open.inv.v1')) ?? ''], 'B live pack differs from A pack')
 
-ok(await p.evaluate((id: string) => { const e = document.querySelector<HTMLElement>(`[data-keeper="${id}"]`); e?.click(); return !!e }, idA), 'tapped keeper A')
+ok(await p.evaluate((id: string) => { const e = document.querySelector<HTMLElement>(`[data-keeper="${id}"] [data-keeper-pick]`); e?.click(); return !!e }, idA), 'tapped keeper A')
 await sleep(1500)
 await p.waitForFunction(() => !!(window as any).__ather, { timeout: 240000 }).catch(() => {}); await sleep(6000)
 ok(!(await gateUp(p)), 'A is not sent through the birth gate')

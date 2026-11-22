@@ -94,7 +94,7 @@ export default function PrivacyPage() {
           </p>
           <p>
             In the open world, when you are signed in, a copy of your keepers and your garden is kept on our
-            server too: each keeper&apos;s rune, skills, gear and pack, and the garden&apos;s plot, storage,
+            server too: each keeper&apos;s name (if you give one), rune, skills, gear and pack, and the garden&apos;s plot, storage,
             journal and explored map. It lets you pick up on another device. Your settings and key bindings
             stay on each device. If two devices both changed while apart, the account copy wins and this
             browser keeps its own version as a backup; nothing is merged and nothing is thrown away. A keeper
