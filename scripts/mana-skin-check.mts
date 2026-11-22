@@ -54,10 +54,10 @@ async function charge(p: any, where: string, errs: string[]) {
   ok(Math.abs(r1 - r0) < 0.01, `${where}: letting go stops it (${r0.toFixed(2)} -> ${r1.toFixed(2)})`)
   // the cap: a scripted hold until it stops climbing (slow headless frames fill slowly: dt is clamped)
   await p.evaluate(() => (window as any).__skin.hold(true))
-  let s = 0; for (let i = 0; i < 90 && s < 49.9; i++) { await sleep(1000); s = await skin(p) }
+  let s = 0; for (let i = 0; i < 90 && s < 49.999; i++) { await sleep(1000); s = await skin(p) }
   const mc = await mana(p); await sleep(2000); const s2 = await skin(p), mc2 = await mana(p)
   await p.evaluate(() => (window as any).__skin.hold(null))
-  ok(s >= 49.9 && s2 <= 50.001 && mc2 >= mc - 0.01, `${where}: stops at the cap 50 and spends no more (skin ${s2.toFixed(2)}, mana ${mc.toFixed(2)} -> ${mc2.toFixed(2)})`)
+  ok(s >= 49.999 && s2 <= 50.001 && mc2 >= mc - 0.01, `${where}: stops at the cap 50 and spends no more (skin ${s2.toFixed(2)}, mana ${mc.toFixed(2)} -> ${mc2.toFixed(2)})`)
   const bar = await p.evaluate(() => !!document.querySelector('[data-hud] [data-skin], [data-skin]'))
   console.log(`  (health bar skin node present: ${bar})`)
   ok(errs.length === 0, `${where}: 0 page errors ${errs.slice(0, 2).join(' | ')}`)
