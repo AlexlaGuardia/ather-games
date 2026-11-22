@@ -179,6 +179,9 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - 11-21 13:4x Alex: "with the quest marker and trail.. what if the quest location was shown as a glare on the compass and then the trail.. improve the gps on it so it's not just point straight through mountains so that when the player looks right at the glare the trail fades in" → **M63**, routed to sprites
 - 11-21 18:1x Alex: new fp-hands values (28 keys, HOLD_YAW 2.698 so no more glove flip), saved docs/handoff/hands-tune-2026-11-21-pm.json → routed to sprites (shipped defaults + build)
 - 11-21 18:1x Alex: mana skin sounds APPROVED (mana-skin-pop + tick = yay on the sounds page) → M59 queue item cleared; committed + shipped with the hands build (sprites)
+- 11-22 07:0x Alex (playtest): "last night i reached lvl 4 forestry and now im back to 1" → PROGRESS LOSS, routed to sprites (diagnose first: local vs cloud save, which write lost it)
+- 11-22 07:0x Alex (playtest): "found a settlement and spoke to 2 of the moglins and it said they were coming to my garden but no sight of them yet" → routed to sprites with the forestry reset (may share a save cause)
+
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
