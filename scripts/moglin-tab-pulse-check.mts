@@ -64,10 +64,11 @@ try {
   const q = await page()
   await q.evaluateOnNewDocument(() => {
     localStorage.setItem('ather:shimmer:birthRune', 'star')
-    const w = window as any; w.__pulseLog = []; w.__pulseAt = []; const ids = new WeakMap<Element, number>(); let nid = 0   // read IN the observer: at headless ~1 fps the 1.65 s pulse (and the 4 s line) is over before a poll returns
-    new MutationObserver(() => { for (const e of document.querySelectorAll('[data-say="morel"] [data-morel-pulse]')) { const s = `${e.getAttribute('data-morel-pulse')}:${e.classList.contains('morel-pulse') ? 'c' : '-'}`
+    const w = window as any; w.__pulseLog = []; w.__pulseAt = []; const ids = new WeakMap<Element, number>(); let nid = 0; w.__live = new Map()   // 'gone' = a line unmounted (TTL, or a remount)   // read IN the observer: at headless ~1 fps the 1.65 s pulse (and the 4 s line) is over before a poll returns
+    new MutationObserver(() => { for (const [el, id] of w.__live as Map<Element, number>) if (!el.isConnected) { w.__live.delete(el); w.__pulseAt.push({ id, s: 'gone', t: performance.now(), anim: '' }) }
+      for (const e of document.querySelectorAll('[data-say="morel"] [data-morel-pulse]')) { const s = `${e.getAttribute('data-morel-pulse')}:${e.classList.contains('morel-pulse') ? 'c' : '-'}`
       // per ELEMENT (each line mounts its own): a deduped global log glued one line's pulse to a LATER line's settle (phone read 28 s)
-      if (!ids.has(e)) ids.set(e, ++nid)
+      if (!ids.has(e)) { ids.set(e, ++nid); w.__live.set(e, nid) }
       const id = ids.get(e), last = w.__pulseAt.filter((x: { id: number }) => x.id === id).at(-1)
       if (last?.s !== s) { w.__pulseAt.push({ id, s, t: performance.now(), anim: getComputedStyle(e).animationName }); if (w.__pulseLog.at(-1) !== s) w.__pulseLog.push(s) } } })
       .observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-morel-pulse', 'class'] })
