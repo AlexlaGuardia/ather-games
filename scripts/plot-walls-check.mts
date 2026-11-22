@@ -14,6 +14,7 @@ import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { TABLE, KEEP_CLEAR } from '../src/app/shimmer/open/ather/rooms'
 import { STARTING_SQUARES, squareAt, sqId } from '../src/app/shimmer/open/ather/plot'
+import { AMOUNTS } from '../src/app/shimmer/open/ather/plot-bom'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/plot-walls'), phone = process.argv.includes('--phone')
 mkdirSync(out, { recursive: true })
@@ -107,9 +108,11 @@ try {
   await drag(); await shot('walls-2-drawn')
   const s1 = await read()
   ok(s1.walls.length >= 3 && s1.draft === s1.walls.length && s1.planks === s0.planks, `1. a drag lays a DRAFT wall: ${s1.walls.length} pieces, ${s1.draft} draft, ${s0.planks - s1.planks} planks spent (none yet)`)
-  const bn = await bomNeed(); ok(!!bn && bn.need === s1.walls.length && bn.ready, `   the plan bar's list says ${s1.walls.length} goldwood planks and is ready (${JSON.stringify(bn)})`)
+  // M50: a wall piece is 1.5 planks (plot-bom.ts AMOUNTS.wallPerM), a list line rounds UP
+  const want = Math.ceil(s1.walls.length * AMOUNTS.wallPerM)
+  const bn = await bomNeed(); ok(!!bn && bn.need === want && bn.ready, `   the plan bar's list says ${want} goldwood planks for ${s1.walls.length} pieces and is ready (${JSON.stringify(bn)})`)
   ok(await tap('[data-act="build-plan"] button') && await poll(async () => (await read()).draft === 0), '   Build stands the run')
-  const s1b = await read(); ok(s1b.walls.length === s1.walls.length && s0.planks - s1b.planks === s1.walls.length, `   built: ${s1b.walls.length} pieces, exactly ${s0.planks - s1b.planks} planks spent`)
+  const s1b = await read(); ok(s1b.walls.length === s1.walls.length && s0.planks - s1b.planks === want, `   built: ${s1b.walls.length} pieces, exactly ${s0.planks - s1b.planks} planks spent (want ${want}, the list's number)`)
   const straight = s1.walls.every(k => k[0] === s1.walls[0][0]) && new Set(s1.walls.map(k => k[0] === 'h' ? k.split(',')[2] : k.split(',')[1])).size === 1
   ok(straight, `   it is one straight run (${s1.walls.slice(0, 4).join(' ')}…)`)
   ok(await tap('[data-tool="erase"]'), 'the Erase tool'); await sleep(400)
