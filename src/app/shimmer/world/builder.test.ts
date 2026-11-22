@@ -10,7 +10,7 @@ interface Disk { versions: Record<number, Layer>; live: Layer; draft: Layer | nu
 const apply = (d: Disk, p: Plan) => { for (const w of p.writes) { if (w.kind === 'version') d.versions[w.v] = w.layer; else if (w.kind === 'live') d.live = w.layer; else if (w.kind === 'draft') d.draft = w.layer; else d.index = w.index } }
 
 // maps
-ok(isBuilderMap('wilds') && !isBuilderMap('glade') && !isBuilderMap('../etc'), 'builder maps: wilds only in s1a, no path tricks')
+ok(isBuilderMap('wilds') && isBuilderMap('glade') && !isBuilderMap('nyx') && !isBuilderMap('../etc'), 'builder maps: wilds + glade (s2a), no path tricks')
 ok(versionFile(7) === 'v0007.json' && versionFile(1234) === 'v1234.json', 'version file names sort as text')
 
 // cleaning: junk dropped, same cleaners as the game

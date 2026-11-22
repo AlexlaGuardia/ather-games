@@ -13,7 +13,9 @@ import * as THREE from 'three'
 import { stepCam, lookCam, zoomCam, toggleTop, camOver, NO_KEYS, type Cam, type Keys } from './fly-cam'
 import { ramp } from './terrain-ramp'
 
-export interface FlyTile { name: string; ox: number; oz: number; nx: number; nz: number; cell: number; sizeX: number; sizeZ: number; h: Float32Array; waterY: number }
+export interface FlyTile { name: string; ox: number; oz: number; nx: number; nz: number; cell: number; sizeX: number; sizeZ: number; h: Float32Array; waterY: number
+  /** M83 s2a (the Glade): vertices that are not ground; a quad touching one is not drawn, so the islands float in the void */
+  voidV?: Uint8Array }
 interface Props {
   tiles: FlyTile[]
   /** the draft's height deltas per tile (dm), read live each rev */
@@ -43,7 +45,11 @@ function TileMesh({ t, deltas, rev, onDown, onMoveP }: { t: FlyTile; deltas: Pro
       const v = j * cols + i
       pos[v * 3] = t.ox - t.sizeX / 2 + Math.min(t.nx - 1, i * FLY_STRIDE) * t.cell
       pos[v * 3 + 2] = t.oz - t.sizeZ / 2 + Math.min(t.nz - 1, j * FLY_STRIDE) * t.cell
-      if (i < cols - 1 && j < rows - 1) idx.push(v, v + cols, v + 1, v + 1, v + cols, v + cols + 1)
+      if (i < cols - 1 && j < rows - 1) {
+        const V = t.voidV, kk = (ii: number, jj: number) => Math.min(t.nz - 1, jj * FLY_STRIDE) * t.nx + Math.min(t.nx - 1, ii * FLY_STRIDE)
+        if (V && (V[kk(i, j)] || V[kk(i + 1, j)] || V[kk(i, j + 1)] || V[kk(i + 1, j + 1)])) continue
+        idx.push(v, v + cols, v + 1, v + 1, v + cols, v + cols + 1)
+      }
     }
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setIndex(idx)
     return g
@@ -163,7 +169,8 @@ export default function BuilderFly(p: Props) {
       <directionalLight position={[-300, 600, -200]} intensity={1.1} />
       <Rig heightAt={p.heightAt} focus={p.focus} camRef={camRef} />
       {p.tiles.map(t => <TileMesh key={t.name} t={t} deltas={p.deltas} rev={p.rev} onDown={onDown} onMoveP={onMoveP} />)}
-      {p.tiles.length > 0 && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[p.focus.x, waterY, p.focus.z]}><planeGeometry args={[3200, 3200]} /><meshLambertMaterial color="#3d6f99" transparent opacity={0.75} /></mesh>}
+      {/* the Glade (tiles with void) has no sea: its islands float in the cloud */}
+      {p.tiles.length > 0 && !p.tiles.some(t => t.voidV) && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[p.focus.x, waterY, p.focus.z]}><planeGeometry args={[3200, 3200]} /><meshLambertMaterial color="#3d6f99" transparent opacity={0.75} /></mesh>}
       <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />
     </Canvas>
   )

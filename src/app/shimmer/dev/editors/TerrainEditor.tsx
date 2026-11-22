@@ -21,22 +21,29 @@ import { applyBrush, mergeEdits, EditHistory, BRUSHES, paintWater, foldWater, WA
 import { ramp } from './terrain-ramp'
 import type { FlyTile } from './BuilderFly'
 const BuilderFly = dynamic(() => import('./BuilderFly'), { ssr: false })   // M83 s1b: three only loads when Fly is opened
-import { AUTOSAVE_MS, savedAgo, type Layer, type Index } from '../../world/builder'
+import { AUTOSAVE_MS, savedAgo, type Layer, type Index, type BuilderMap } from '../../world/builder'
+import { GLADE_BRUSH_TILE, GLADE_LAYER_TILE, GLADE_WATER_Y, sampleGladeBase } from '../../world/glade-builder'
+import { gladeZoneGround } from '../../open/ather/glade-cluster'
 
 // ── BETA M83 p1 s1a: the editor works on the World Builder DRAFT (world/builder.ts), never on the live layer. Save + autosave write
 // the draft; PUBLISH makes it a version and puts it live; the history rolls back to any version. Players see nothing until Publish.
 interface BSnap { draft: Layer; draftAt: number | null; index: Index; state: 'unpublished changes' | 'matches live' }
-const MAP = 'wilds'
-async function builderCall(body?: Record<string, unknown>): Promise<BSnap | null> {
+// M83 s2a: which map. The Wilds = its exported tiles (pick one, the 3x3 ring parses); the Glade = ONE virtual tile sampled from
+// its ground function (world/glade-builder.ts), so everything below works on it unchanged.
+const MAP_NAME: Record<BuilderMap, string> = { wilds: 'the Wilds', glade: 'Moonwell Glade' }
+const GLADE_FOCUS = { x: -100, z: 110 }   // Fly opens over Greg's garden (the tile's centre is void, between the islands)
+async function builderCall(map: BuilderMap, body?: Record<string, unknown>): Promise<BSnap | null> {
   try {
-    const r = body ? await fetch('/shimmer/save-builder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map: MAP, ...body }) })
-      : await fetch(`/shimmer/save-builder?map=${MAP}`, { cache: 'no-store' })
+    const r = body ? await fetch('/shimmer/save-builder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map, ...body }) })
+      : await fetch(`/shimmer/save-builder?map=${map}`, { cache: 'no-store' })
     return r.ok ? await r.json() as BSnap : null
   } catch { return null }
 }
 const isCheck = (n: string) => n.startsWith('check:')
 
-interface Base { meta: WildsMeta; tx: number; ty: number; h: Float32Array; voided?: Uint8Array }
+/** ox, oz = the tile's centre in world coords (a Wilds tile: tx/ty * TILE_M; the Glade's tile: its own centre). `voidV` (Glade):
+ *  vertices that are NOT ground: heightAt answers NaN there, so the brush skips them, and Fly drops their triangles. */
+interface Base { meta: WildsMeta; tx: number; ty: number; ox: number; oz: number; h: Float32Array; voided?: Uint8Array; voidV?: Uint8Array }
 type Tool = Brush | 'water' | 'dry' | 'falls'
 const TOOLS: Tool[] = [...BRUSHES, 'water', 'dry', 'falls']
 const TOOL_KEY: Record<Tool, string> = { raise: 'Raise', lower: 'Lower', flatten: 'Flatten', smooth: 'Smooth', water: 'Water', dry: 'Dry', falls: 'Falls' }
@@ -45,10 +52,24 @@ const wkey = (t: string) => WATER_PREFIX + t, fkey = (t: string) => FALLS_PREFIX
 const tileOfKey = (k: string) => k.startsWith(WATER_PREFIX) ? k.slice(WATER_PREFIX.length) : k.startsWith(FALLS_PREFIX) ? k.slice(FALLS_PREFIX.length) : k
 const TICK_MS = 50
 
+// the map picker: switching maps remounts the editor (its own draft, history and undo), saving unsaved strokes on the way out
 export default function TerrainEditor() {
-  const [status, setStatus] = useState('loading the Wilds index…')
+  // read ?map= after mount (reading window in the state initialiser made the server render the Wilds and the client the Glade:
+  // a hydration error, caught by builder-glade-check)
+  const [map, setMap] = useState<BuilderMap | null>(null)
+  useEffect(() => { try { setMap(new URLSearchParams(window.location.search).get('map') === 'glade' ? 'glade' : 'wilds') } catch { setMap('wilds') } }, [])
+  const pick = (m: BuilderMap) => {
+    setMap(m)
+    try { const u = new URL(window.location.href); u.searchParams.set('map', m); window.history.replaceState(null, '', u) } catch { /* */ }
+  }
+  return map ? <MapEditor key={map} map={map} onMap={pick} /> : <div className="text-xs font-mono text-white/50">loading…</div>
+}
+
+function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => void }) {
+  const glade = map === 'glade'
+  const [status, setStatus] = useState(glade ? 'sampling the Glade…' : 'loading the Wilds index…')
   const [tiles, setTiles] = useState<{ name: string; tx: number; ty: number; land: number }[]>([])
-  const [tile, setTile] = useState('first-wilds')
+  const [tile, setTile] = useState(glade ? GLADE_LAYER_TILE : 'first-wilds')
   const [brush, setBrush] = useState<Tool>('raise')
   const [level, setLevel] = useState<number | null>(null)   // water level (m, absolute); null = the first Water click picks ground + 1 m
   const [picking, setPicking] = useState(false)
@@ -83,7 +104,22 @@ export default function TerrainEditor() {
   // ── the world: index + network + voids, then the edits file ──
   useEffect(() => {
     let dead = false
-    Promise.all([loadIndex(), loadNetwork(), builderCall()]).then(([idx, nw, b]) => {
+    if (glade) {   // M83 s2a: no index, no tiles to parse: sample the Glade's ground once, then the draft
+      builderCall('glade').then(b => {
+        if (dead) return
+        if (!b) { setStatus('could not read the builder draft (owner only)'); return }
+        const G = sampleGladeBase(gladeZoneGround), T = GLADE_BRUSH_TILE
+        const meta: WildsMeta = { name: T.name, cell: T.cell, nx: T.nx, nz: T.nz, sizeX: T.sizeX, sizeZ: T.sizeZ, waterY: GLADE_WATER_Y, source: { x0: 0, y0: 0, x1: 0, y1: 0, mPerPx: T.cell } }
+        bases.current.set(T.name, { meta, tx: 0, ty: 0, ox: T.ox, oz: T.oz, h: G.h, voided: G.voided, voidV: G.voidV })
+        setSnapB(b); setSavedAt(b.draftAt)
+        const store: Edits = { ...b.draft.tiles }; for (const [t, m] of Object.entries(b.draft.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(b.draft.falls)) store[fkey(t)] = { ...m }
+        edits.current = store
+        setTiles([{ name: T.name, tx: 0, ty: 0, land: 1 }])
+        setStatus(''); setReady(true); setRev(r => r + 1)
+      }).catch(err => setStatus(`failed to load: ${String(err)}`))
+      return () => { dead = true }
+    }
+    Promise.all([loadIndex(), loadNetwork(), builderCall('wilds')]).then(([idx, nw, b]) => {
       if (dead) return
       if (!b) { setStatus('could not read the builder draft (owner only)'); return }
       const layer = { edits: b.draft.tiles, water: b.draft.water, falls: b.draft.falls }
@@ -98,7 +134,7 @@ export default function TerrainEditor() {
       setRev(r => r + 1)
     }).catch(err => setStatus(`failed to load: ${String(err)}`))
     return () => { dead = true }
-  }, [])
+  }, [glade])
 
   // ── the tile + its neighbours, parsed bare (no edits) ──
   useEffect(() => {
@@ -113,7 +149,7 @@ export default function TerrainEditor() {
     Promise.all(need.map(async n => {
       const W = await loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear, w.roads, w.voids, null)
       const t = w.byName.get(n)!
-      bases.current.set(n, { meta: W.meta, tx: t.tx, ty: t.ty, h: W.h, voided: W.voided })
+      bases.current.set(n, { meta: W.meta, tx: t.tx, ty: t.ty, ox: t.tx * TILE_M, oz: t.ty * TILE_M, h: W.h, voided: W.voided })
     })).then(() => { if (!dead) { setStatus(''); setReady(true); setRev(r => r + 1) } })
       .catch(err => { if (!dead) setStatus(`parse failed: ${String(err)}`) })
     return () => { dead = true }
@@ -121,16 +157,25 @@ export default function TerrainEditor() {
 
   // ── the edited ground, in WORLD coords (what the brush reads) ──
   const heightAt = useCallback((x: number, z: number): number => {
-    const w = worldRef.current; if (!w) return NaN
-    const { tx, ty } = tileOf(x, z), t = w.at(tx, ty), B = t && bases.current.get(t.name)
+    let name: string, B: Base | undefined
+    if (glade) { name = GLADE_LAYER_TILE; B = bases.current.get(name) }
+    else {
+      const w = worldRef.current; if (!w) return NaN
+      const { tx, ty } = tileOf(x, z), t = w.at(tx, ty); if (!t) return NaN
+      name = t.name; B = bases.current.get(name)
+    }
     if (!B) return NaN
-    const { nx, nz, cell, sizeX, sizeZ } = B.meta, E = edits.current[t!.name]
-    const fx = Math.min(nx - 1 - 1e-6, Math.max(0, (x - tx * TILE_M + sizeX / 2) / cell)), fz = Math.min(nz - 1 - 1e-6, Math.max(0, (z - ty * TILE_M + sizeZ / 2) / cell))
+    const { nx, nz, cell, sizeX, sizeZ } = B.meta, E = edits.current[name]
+    const rx = (x - B.ox + sizeX / 2) / cell, rz = (z - B.oz + sizeZ / 2) / cell
+    if (B.voidV) {   // the Glade: off its tile, or at a vertex that is not ground, there is nothing to stand on or sculpt
+      if (!(rx >= 0 && rz >= 0 && rx <= nx - 1 && rz <= nz - 1) || B.voidV[Math.round(rz) * nx + Math.round(rx)]) return NaN
+    }
+    const fx = Math.min(nx - 1 - 1e-6, Math.max(0, rx)), fz = Math.min(nz - 1 - 1e-6, Math.max(0, rz))
     const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j
     const at = (ii: number, jj: number) => { const k = jj * nx + ii; return B.h[k] + (E?.[k] ?? 0) / 10 }
     return (at(i, j) * (1 - u) + at(i + 1, j) * u) * (1 - v) + (at(i, j + 1) * (1 - u) + at(i + 1, j + 1) * u) * v
-  }, [])
-  const brushTiles = useCallback((): BrushTile[] => [...bases.current.entries()].map(([name, B]) => ({ name, ox: B.tx * TILE_M, oz: B.ty * TILE_M, nx: B.meta.nx, nz: B.meta.nz, cell: B.meta.cell, sizeX: B.meta.sizeX, sizeZ: B.meta.sizeZ })), [])
+  }, [glade])
+  const brushTiles = useCallback((): BrushTile[] => [...bases.current.entries()].map(([name, B]) => ({ name, ox: B.ox, oz: B.oz, nx: B.meta.nx, nz: B.meta.nz, cell: B.meta.cell, sizeX: B.meta.sizeX, sizeZ: B.meta.sizeZ })), [])
 
   // ── draw: shaded relief + contour tint, water below the line, voids dark, edited ground tinted ──
   const draw = useCallback(() => {
@@ -189,7 +234,7 @@ export default function TerrainEditor() {
       for (const [t, m] of Object.entries(d)) pre[wkey(t)] = m
       markDirty(foldWater(edits.current, pre, o.brush === 'dry'))
       if (o.brush === 'dry') for (const [name, B] of bases.current) {   // Dry also clears waterfall lines under the brush
-        const rm = removeFallsNear(edits.current[fkey(name)], x - B.tx * TILE_M, z - B.ty * TILE_M, o.radius)
+        const rm = removeFallsNear(edits.current[fkey(name)], x - B.ox, z - B.oz, o.radius)
         if (Object.keys(rm).length) markDirty(mergeEdits(edits.current, { [fkey(name)]: rm }))
       }
     } else if (o.brush !== 'falls') {
@@ -203,7 +248,7 @@ export default function TerrainEditor() {
     const cv = canvas.current, B = bases.current.get(tileRef.current); if (!cv || !B) return null
     const rc = cv.getBoundingClientRect(), u = (e.clientX - rc.left) / rc.width, v = (e.clientY - rc.top) / rc.height
     if (u < 0 || u > 1 || v < 0 || v > 1) return null
-    return { u, v, x: B.tx * TILE_M - B.meta.sizeX / 2 + u * B.meta.sizeX, z: B.ty * TILE_M - B.meta.sizeZ / 2 + v * B.meta.sizeZ }
+    return { u, v, x: B.ox - B.meta.sizeX / 2 + u * B.meta.sizeX, z: B.oz - B.meta.sizeZ / 2 + v * B.meta.sizeZ }
   }
   const onDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || !ready) return
@@ -216,7 +261,7 @@ export default function TerrainEditor() {
     const p = { x: px, z: pz }
     if (!ready) return
     if (opts.current.picking) { setLevel(Math.round(heightAt(p.x, p.z) * 10) / 10); setPicking(false); return }
-    if (opts.current.brush === 'falls') { const b = bases.current.get(tileRef.current)!; line.current = [[p.x - b.tx * TILE_M, p.z - b.ty * TILE_M]]; return }
+    if (opts.current.brush === 'falls') { const b = bases.current.get(tileRef.current)!; line.current = [[p.x - b.ox, p.z - b.oz]]; return }
     hist.current.begin(edits.current, allKeys())
     let target = opts.current.brush === 'flatten' ? heightAt(p.x, p.z) : undefined
     if (opts.current.brush === 'water' && opts.current.level === null) { target = Math.round((heightAt(p.x, p.z) + 1) * 10) / 10; setLevel(target) }
@@ -234,9 +279,9 @@ export default function TerrainEditor() {
   const moveAt = (px: number, pz: number) => {
     const p = { x: px, z: pz }
     const B = bases.current.get(tileRef.current)
-    setHover({ x: Math.round(p.x - (B ? B.tx * TILE_M : 0)), z: Math.round(p.z - (B ? B.ty * TILE_M : 0)), h: heightAt(p.x, p.z), d: 0 })
+    setHover({ x: Math.round(p.x - (B ? B.ox : 0)), z: Math.round(p.z - (B ? B.oz : 0)), h: heightAt(p.x, p.z), d: 0 })
     if (paint.current) { paint.current.x = p.x; paint.current.z = p.z }
-    if (line.current && B) { const q: [number, number] = [p.x - B.tx * TILE_M, p.z - B.ty * TILE_M], l = line.current[line.current.length - 1]; if (Math.hypot(q[0] - l[0], q[1] - l[1]) >= 3) { line.current.push(q); redraw() } }
+    if (line.current && B) { const q: [number, number] = [p.x - B.ox, p.z - B.oz], l = line.current[line.current.length - 1]; if (Math.hypot(q[0] - l[0], q[1] - l[1]) >= 3) { line.current.push(q); redraw() } }
   }
   const commitLine = (pts: [number, number][], w: number, name = tileRef.current) => {
     const k = fkey(name), add = addFall(edits.current[k], pts, w); if (!Object.keys(add).length) return false
@@ -265,29 +310,29 @@ export default function TerrainEditor() {
   const save = useCallback(async (auto = false): Promise<boolean> => {
     const names = [...dirtyRef.current]; if (!names.length) return true
     if (!auto) setStatus('saving the draft…')
-    const b = await builderCall({ action: 'draft', layer: layerOf() })
+    const b = await builderCall(map, { action: 'draft', layer: layerOf() })
     if (b) { for (const n of names) dirtyRef.current.delete(n); setSnapB(b); setSavedAt(b.draftAt ?? Date.now()) }
     setDirty([...dirtyRef.current])
     setStatus(b ? (auto ? '' : 'draft saved · players see it after Publish') : 'save FAILED (nothing written; try again)')
     return !!b
-  }, [])
+  }, [map])
   const publish = useCallback(async (msg?: string): Promise<boolean> => {
     if (!(await save())) return false
     setBusy(true); setStatus('publishing…')
-    const b = await builderCall({ action: 'publish', note: msg ?? note })
+    const b = await builderCall(map, { action: 'publish', note: msg ?? note })
     setBusy(false)
     if (b) { setSnapB(b); setNote('') }
-    setStatus(b ? `published v${b.index.live} · live on the next Wilds load` : 'publish FAILED (live unchanged)')
+    setStatus(b ? `published v${b.index.live} · live on the next ${glade ? 'Glade' : 'Wilds'} load` : 'publish FAILED (live unchanged)')
     return !!b
-  }, [save, note])
+  }, [save, note, map, glade])
   const rollback = useCallback(async (v: number): Promise<boolean> => {
     setBusy(true); setStatus(`rolling back to v${v}…`)
-    const b = await builderCall({ action: 'rollback', v })
+    const b = await builderCall(map, { action: 'rollback', v })
     setBusy(false)
     if (b) { setSnapB(b); setSavedAt(b.draftAt); loadLayer(b.draft) }
     setStatus(b ? `rolled back to v${v} (now v${b.index.live}) · the draft is that version too` : 'rollback FAILED (live unchanged)')
     return !!b
-  }, [])
+  }, [map])
   // AUTOSAVE every minute while there are unsaved strokes; the label ticks every 5 s
   useEffect(() => {
     const a = setInterval(() => { if (dirtyRef.current.size && !paint.current) save(true) }, AUTOSAVE_MS)
@@ -314,6 +359,12 @@ export default function TerrainEditor() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [undo, redo, save])
+  // switching maps unmounts this editor: send its unsaved strokes as the draft on the way out (keepalive survives the unmount)
+  const layerRef = useRef(() => layerOf()); layerRef.current = () => layerOf()
+  useEffect(() => () => {
+    if (!dirtyRef.current.size) return
+    try { fetch('/shimmer/save-builder', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map, action: 'draft', layer: layerRef.current() }) }) } catch { /* */ }
+  }, [map])
   // never lose a sculpt to a closed tab
   useEffect(() => {
     if (!dirty.length) return
@@ -326,11 +377,11 @@ export default function TerrainEditor() {
   useEffect(() => {
     const B = () => bases.current.get(tileRef.current)
     ;(window as unknown as { __terrain?: unknown }).__terrain = {
-      ready, tile,
-      heightAt: (lx: number, lz: number) => { const b = B(); return b ? heightAt(b.tx * TILE_M + lx, b.ty * TILE_M + lz) : NaN },
+      ready, tile, map,
+      heightAt: (lx: number, lz: number) => { const b = B(); return b ? heightAt(b.ox + lx, b.oz + lz) : NaN },
       stroke: (kind: Brush, lx: number, lz: number, r: number, s: number, n = 1) => {
         const b = B(); if (!b) return false
-        const x = b.tx * TILE_M + lx, z = b.ty * TILE_M + lz, target = kind === 'flatten' ? heightAt(x, z) : undefined
+        const x = b.ox + lx, z = b.oz + lz, target = kind === 'flatten' ? heightAt(x, z) : undefined
         hist.current.begin(edits.current, allKeys())
         for (let i = 0; i < n; i++) markDirty(mergeEdits(edits.current, applyBrush(heightAt, brushTiles(), edits.current, { kind, x, z, r, s, target })))
         hist.current.commit(); setRev(v => v + 1); return true
@@ -339,7 +390,7 @@ export default function TerrainEditor() {
       water: (lx: number, lz: number, r: number, lv: number | null) => {
         const b = B(); if (!b) return false
         hist.current.begin(edits.current, allKeys())
-        const d = paintWater(brushTiles(), b.tx * TILE_M + lx, b.ty * TILE_M + lz, r, lv), pre: Record<string, WaterMap> = {}
+        const d = paintWater(brushTiles(), b.ox + lx, b.oz + lz, r, lv), pre: Record<string, WaterMap> = {}
         for (const [t, m] of Object.entries(d)) pre[wkey(t)] = m
         markDirty(foldWater(edits.current, pre, lv === null)); hist.current.commit(); setRev(v => v + 1); return true
       },
@@ -348,11 +399,11 @@ export default function TerrainEditor() {
       /** draw a waterfall line (tile-local points) of width w */
       fall: (pts: [number, number][], w: number) => commitLine(pts, w),
       /** what the game will draw on this tile: sheets (auto from ponds + lines) */
-      sheets: () => { const b = B(); if (!b) return []; const nm = tileRef.current, E = edits.current[nm], H = Float32Array.from(b.h, (v, k) => v + (E?.[k] ?? 0) / 10), hAt = (x: number, z: number) => heightAt(b.tx * TILE_M + x, b.ty * TILE_M + z); return fallSheets(b.meta, H, hAt, ponds(b.meta, H, edits.current[wkey(nm)]).cells, fallLines(edits.current[fkey(nm)])).map(q => ({ auto: q.auto, top: q.top, bottom: q.bottom })) },
+      sheets: () => { const b = B(); if (!b) return []; const nm = tileRef.current, E = edits.current[nm], H = Float32Array.from(b.h, (v, k) => v + (E?.[k] ?? 0) / 10), hAt = (x: number, z: number) => heightAt(b.ox + x, b.oz + z); return fallSheets(b.meta, H, hAt, ponds(b.meta, H, edits.current[wkey(nm)]).cells, fallLines(edits.current[fkey(nm)])).map(q => ({ auto: q.auto, top: q.top, bottom: q.bottom })) },
       undo, redo, save, dirty: () => [...dirtyRef.current],
       publish, rollback, builder: () => snapB, savedAt: () => savedAt,
     }
-  }, [ready, tile, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt])
+  }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt])
 
   const cur = tiles.find(t => t.name === tile)
   const step = (dx: number, dy: number) => { const w = worldRef.current; if (!w || !cur) return; const t = w.at(cur.tx + dx, cur.ty + dy); if (t) setTile(t.name) }
@@ -365,6 +416,8 @@ export default function TerrainEditor() {
     <div className="flex flex-col lg:flex-row gap-4 text-white/85">
       <div className="flex flex-col gap-2 w-full max-w-[760px]">
       <div className="flex gap-1 items-center">
+        {(['wilds', 'glade'] as const).map(m => <button key={m} className={`${btn} ${map === m ? on : off}`} onClick={() => map !== m && onMap(m)} data-testid={`map-${m}`}>{MAP_NAME[m]}</button>)}
+        <span className="w-3" />
         {(['2d', 'fly'] as const).map(v => <button key={v} className={`${btn} ${view === v ? on : off}`} onClick={() => setView(v)} data-testid={`view-${v}`}>{v === '2d' ? 'Map (top-down)' : 'Fly (3D)'}</button>)}
         {view === 'fly' && <button className={`${btn} ${off}`} onClick={() => setFull(true)} data-testid="fly-full">Fullscreen (F)</button>}
         {view === 'fly' && <span className="text-[11px] font-mono text-white/40 pl-2">WASD move · Space/C up/down · Shift fast · right-drag look · wheel zoom · T top-down · left-drag sculpt</span>}
@@ -385,8 +438,8 @@ export default function TerrainEditor() {
             </div>
           )}
           {/* the 3x3 ring only: bases caches every tile opened this session (builder-fly-check saw 18 meshes after two tiles) */}
-          <BuilderFly tiles={[...bases.current.entries()].filter(([, b]) => Math.abs(b.tx - B.tx) <= 1 && Math.abs(b.ty - B.ty) <= 1).map(([name, b]): FlyTile => ({ name, ox: b.tx * TILE_M, oz: b.ty * TILE_M, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY }))}
-            deltas={n => edits.current[n]} rev={rev} heightAt={heightAt} radius={radius} focus={{ x: B.tx * TILE_M, z: B.ty * TILE_M }}
+          <BuilderFly tiles={[...bases.current.entries()].filter(([, b]) => Math.abs(b.tx - B.tx) <= 1 && Math.abs(b.ty - B.ty) <= 1).map(([name, b]): FlyTile => ({ name, ox: b.ox, oz: b.oz, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY, voidV: b.voidV }))}
+            deltas={n => edits.current[n]} rev={rev} heightAt={heightAt} radius={radius} focus={glade ? GLADE_FOCUS : { x: B.ox, z: B.oz }}
             onBegin={beginAt} onMove={moveAt} onEnd={endStroke} />
         </div>
       )}
@@ -401,12 +454,12 @@ export default function TerrainEditor() {
           </svg>
         )}
         {(!ready || status) && <div className="absolute left-2 top-2 text-xs font-mono bg-black/70 px-2 py-1 rounded">{status || 'loading…'}</div>}
-        <div className="absolute right-2 bottom-2 text-[10px] font-mono text-white/50 bg-black/50 px-1.5 rounded">+x → · +z ↓ · 1 km</div>
+        <div className="absolute right-2 bottom-2 text-[10px] font-mono text-white/50 bg-black/50 px-1.5 rounded">{MAP_NAME[map]} · +x → · +z ↓ · 1 km</div>
       </div>
       </div>
 
       <div className="flex flex-col gap-3 min-w-[240px] text-sm">
-        <div>
+        {glade ? <div className="text-xs text-white/55"><div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1">Map</div>Moonwell Glade: Greg's garden, the three friends' gardens, the Green and the paths. Off the islands is void (you sculpt the land the Glade has).</div> : <div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1">Tile</div>
           <div className="flex gap-1 items-center">
             <select value={tile} onChange={e => setTile(e.target.value)} className="bg-black/40 border border-white/15 rounded px-2 py-1 font-mono text-xs flex-1">
@@ -418,7 +471,7 @@ export default function TerrainEditor() {
             <button className={`${btn} ${off}`} onClick={() => step(-1, 0)}>←</button><span /><button className={`${btn} ${off}`} onClick={() => step(1, 0)}>→</button>
             <span /><button className={`${btn} ${off}`} onClick={() => step(0, 1)}>↓</button><span />
           </div>
-        </div>
+        </div>}
 
         <div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1">Brush</div>
@@ -491,7 +544,7 @@ export default function TerrainEditor() {
         <div className="text-xs font-mono text-white/55 space-y-0.5 tabular-nums">
           <div>{nEdits} edited vertices, {nWater} water cells, {nFalls} waterfall lines on {tile}</div>
           {hover && Number.isFinite(hover.h) && <div>({hover.x}, {hover.z}) · ground {hover.h.toFixed(1)} m{B && hover.h < B.meta.waterY ? ' · under the sea' : ''}</div>}
-          <div className="text-white/35 pt-1">Hold to paint. Brushes cross onto the neighbouring tiles so seams meet. You are editing the DRAFT: players see nothing until Publish (live on the next Wilds load, no build).</div>
+          <div className="text-white/35 pt-1">Hold to paint. Brushes cross onto the neighbouring tiles so seams meet. You are editing the DRAFT: players see nothing until Publish (live on the next {glade ? 'Glade' : 'Wilds'} load, no build).</div>
         </div>
       </div>
     </div>

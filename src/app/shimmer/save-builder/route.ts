@@ -1,6 +1,6 @@
 // BETA M83 p1 s1a: THE WORLD BUILDER STORE's IO (the plan is pure: world/builder.ts). Owner only: the proxy 403s /shimmer/save-*
 // for every method, GET included, so a draft is never readable by the public.
-//   GET  ?map=wilds                        -> { draft, draftAt, live, index, state }
+//   GET  ?map=wilds|glade                      -> { draft, draftAt, live, index, state }
 //   POST { map, action: 'draft', layer }   -> autosave / Save: REPLACES the draft (data/builder/<map>/draft.json, runtime, never built)
 //   POST { map, action: 'publish', note? } -> the draft becomes a new version + the live layer
 //   POST { map, action: 'rollback', v }    -> version v becomes a new version + the live layer + the draft
@@ -14,7 +14,10 @@ import { isBuilderMap, cleanLayer, cleanIndex, planPublish, planRollback, versio
 
 export const dynamic = 'force-dynamic'
 const ROOT = process.cwd()
-const LIVE: Record<BuilderMap, string> = { wilds: join(ROOT, 'src/app/shimmer/world/wilds-edits.json') }
+const LIVE: Record<BuilderMap, string> = {
+  wilds: join(ROOT, 'src/app/shimmer/world/wilds-edits.json'),
+  glade: join(ROOT, 'src/app/shimmer/world/glade-edits.json'),   // M83 s2a: read by GET /shimmer/open/glade-edits (the game applies it in s2b)
+}
 const draftPath = (m: BuilderMap) => join(ROOT, 'data/builder', m, 'draft.json')
 const versionsDir = (m: BuilderMap) => join(ROOT, 'src/app/shimmer/world/builder', m)
 

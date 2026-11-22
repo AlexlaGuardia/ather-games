@@ -10,6 +10,7 @@
 data     src/app/shimmer/save-sound-vote/route.ts      src/app/shimmer/open/shared/sounds.json
 data     src/app/shimmer/save-wilds-edit/route.ts      src/app/shimmer/world/wilds-edits.json
 data     src/app/shimmer/save-builder/route.ts     src/app/shimmer/world/wilds-edits.json
+data     src/app/shimmer/save-builder/route.ts     src/app/shimmer/world/glade-edits.json
 data     src/app/shimmer/save-builder/route.ts     src/app/shimmer/world/builder/
 data     src/app/shimmer/save-heights/route.ts         src/app/shimmer/world/heightmaps.json
 data     src/app/shimmer/save-movement-style/route.ts  src/app/shimmer/data/movement-styles.json
