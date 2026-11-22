@@ -67,6 +67,7 @@ export default function TerrainEditor() {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [, setNow] = useState(0)                             // re-render the 'saved Ns ago' label
+  const [full, setFull] = useState(false)                      // M83 s1c: Fly fills the window (F toggles, Esc leaves): build for hours, not in a 400px box
   const [view, setView] = useState<'2d' | 'fly'>('2d')         // M83 s1b: the top-down map or the 3D free-fly view (same draft, same brush)
 
   const worldRef = useRef<WildsWorld | null>(null)
@@ -294,7 +295,9 @@ export default function TerrainEditor() {
     return () => { clearInterval(a); clearInterval(t) }
   }, [save])
 
-  // keys: 1-4 brush, [ ] radius, ctrl+z / ctrl+shift+z / ctrl+y, ctrl+s
+  const viewRef = useRef(view); viewRef.current = view
+  useEffect(() => { if (view !== 'fly') setFull(false) }, [view])
+  // keys: 1-7 brush, [ ] radius, F fullscreen fly, Esc leave it, ctrl+z / ctrl+shift+z / ctrl+y, ctrl+s
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement; if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA')) return
@@ -305,6 +308,8 @@ export default function TerrainEditor() {
       else if (!mod && e.key >= '1' && e.key <= '7') setBrush(TOOLS[+e.key - 1])
       else if (e.key === '[') setRadius(r => Math.max(4, r - 4))
       else if (e.key === ']') setRadius(r => Math.min(80, r + 4))
+      else if (!mod && e.code === 'KeyF' && !e.repeat && viewRef.current === 'fly') setFull(f => !f)
+      else if (e.key === 'Escape') setFull(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -361,10 +366,24 @@ export default function TerrainEditor() {
       <div className="flex flex-col gap-2 w-full max-w-[760px]">
       <div className="flex gap-1 items-center">
         {(['2d', 'fly'] as const).map(v => <button key={v} className={`${btn} ${view === v ? on : off}`} onClick={() => setView(v)} data-testid={`view-${v}`}>{v === '2d' ? 'Map (top-down)' : 'Fly (3D)'}</button>)}
+        {view === 'fly' && <button className={`${btn} ${off}`} onClick={() => setFull(true)} data-testid="fly-full">Fullscreen (F)</button>}
         {view === 'fly' && <span className="text-[11px] font-mono text-white/40 pl-2">WASD move · Space/C up/down · Shift fast · right-drag look · wheel zoom · T top-down · left-drag sculpt</span>}
       </div>
       {view === 'fly' && B && (
-        <div className="relative w-full aspect-[4/3] bg-black/40 rounded overflow-hidden select-none touch-none">
+        <div className={full ? 'fixed inset-0 z-[60] bg-black select-none touch-none' : 'relative w-full aspect-[4/3] bg-black/40 rounded overflow-hidden select-none touch-none'} data-testid="fly-frame" data-full={full ? '1' : '0'}>
+          {full && (
+            <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
+              <div className="flex gap-1 items-center rounded bg-black/70 border border-white/10 px-2 py-1.5">
+                {TOOLS.map((t, i) => <button key={t} className={`${btn} ${brush === t ? on : off}`} onClick={() => setBrush(t)}>{i + 1} {t[0].toUpperCase() + t.slice(1)}</button>)}
+                <span className="text-[11px] font-mono text-white/70 tabular-nums pl-2">radius {radius} m [ ]</span>
+                <button className={`${btn} ${off}`} onClick={undo}>Undo</button>
+                <button className={`${btn} ${off}`} onClick={() => setFull(false)} data-testid="fly-exit">Exit (Esc)</button>
+              </div>
+              <div className="w-fit rounded bg-black/70 border border-white/10 px-2 py-1 text-[11px] font-mono text-white/60 tabular-nums">
+                {dirty.length ? 'unsaved, autosave soon' : savedAgo(savedAt, Date.now())} · WASD · Space/C · Shift fast · right-drag look · wheel · T top-down · left-drag sculpt
+              </div>
+            </div>
+          )}
           {/* the 3x3 ring only: bases caches every tile opened this session (builder-fly-check saw 18 meshes after two tiles) */}
           <BuilderFly tiles={[...bases.current.entries()].filter(([, b]) => Math.abs(b.tx - B.tx) <= 1 && Math.abs(b.ty - B.ty) <= 1).map(([name, b]): FlyTile => ({ name, ox: b.tx * TILE_M, oz: b.ty * TILE_M, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY }))}
             deltas={n => edits.current[n]} rev={rev} heightAt={heightAt} radius={radius} focus={{ x: B.tx * TILE_M, z: B.ty * TILE_M }}

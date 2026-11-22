@@ -4,6 +4,7 @@
 //   B. WASD flies: holding W moves the camera; Space climbs
 //   C. T goes top-down (pitch ~ -90 deg), T again comes back
 //   D. a LEFT-DRAG on the 3D ground sculpts the SAME draft the 2D view edits (dirty, height up under the cursor)
+//   F. FULLSCREEN (s1c): F fills the window, a sculpt still lands, Esc returns to the column
 //   E. ALWAYS (finally): the owner's draft is put back exactly as it was (nothing is published by this check)
 //   0 page errors.
 // SETUP: OWNER_KEY from .env or env = runs on the BOX (take the browser lock: tools/coord.sh browser up). Tile default w-4_-2.
@@ -84,6 +85,19 @@ try {
   const dirty = await p.evaluate('window.__terrain.dirty()') as string[]
   ok(dirty.length > before, `a left-drag on the 3D ground sculpts the draft (dirty ${before} -> ${dirty.length}: ${dirty.slice(0, 3).join(',')})`)
   await p.screenshot({ path: `${out}/fly-sculpted.png` })
+  // ── F. fullscreen (s1c): F fills the window, the canvas follows, sculpting still lands, Esc leaves ──
+  await hold('KeyF', 50); await sleep(800)
+  const fs = await p.$eval('[data-testid="fly-frame"]', e => { const c = e.querySelector('canvas')!.getBoundingClientRect(); return { full: (e as HTMLElement).dataset.full, w: c.width, h: c.height, vw: innerWidth, vh: innerHeight } })
+  ok(fs.full === '1' && fs.w >= fs.vw - 2 && fs.h >= fs.vh - 2, `F: Fly fills the window (canvas ${Math.round(fs.w)}x${Math.round(fs.h)} of ${fs.vw}x${fs.vh})`)
+  const d0 = await p.evaluate('window.__terrain.stroke && window.__terrain.dirty().length') as number
+  await p.mouse.move(fs.vw / 2, fs.vh / 2 + 40); await sleep(400)
+  await p.mouse.down({ button: 'left' }); await sleep(1200); await p.mouse.up({ button: 'left' }); await sleep(600)
+  const hEd = await p.evaluate('window.__terrain.dirty().length') as number
+  ok(hEd >= d0 && hEd > 0, `a sculpt in fullscreen lands in the draft (dirty ${d0} -> ${hEd})`)
+  await p.screenshot({ path: `${out}/fly-full.png` })
+  await hold('Escape', 50); await sleep(500)
+  const fs2 = await p.$eval('[data-testid="fly-frame"]', e => { const c = e.querySelector('canvas')!.getBoundingClientRect(); return { full: (e as HTMLElement).dataset.full, w: c.width } })
+  ok(fs2.full === '0' && fs2.w < fs.w - 100, `Esc: back in the editor column (canvas ${Math.round(fs2.w)} px wide)`)
   await hold('KeyT', 50)
   const c4 = await cam()
   ok(c4.pitch > -1.4 && (c4 as any).top === false, `T again: back to the fly view (pitch ${c4.pitch.toFixed(2)} rad)`)

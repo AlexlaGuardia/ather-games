@@ -27,6 +27,8 @@ interface Props {
   onEnd: () => void
   onHover?: (x: number, z: number) => void
 }
+// sRGB -> linear (three's own SRGBToLinear is not exported from the package root at runtime, though the types say it is)
+const lin = (c: number) => { c = Math.min(1, c); return c < 0.04045 ? c * 0.0773993808 : Math.pow(c * 0.9478672986 + 0.0521327014, 2.4) }
 export const FLY_STRIDE = 2   // draw every 2nd grid vertex (8 m): 9 tiles x 126^2 verts; the brush still edits the full 4 m grid
 
 const KEYMAP: Record<string, keyof Keys> = { KeyW: 'f', KeyS: 'b', KeyA: 'l', KeyD: 'r', Space: 'up', KeyC: 'down', ShiftLeft: 'fast', ShiftRight: 'fast' }
@@ -57,7 +59,9 @@ function TileMesh({ t, deltas, rev, onDown, onMoveP }: { t: FlyTile; deltas: Pro
       P[v * 3 + 1] = y
       const [r, g, b] = y < t.waterY ? [0.30, 0.48, 0.66] : ramp(y - t.waterY)
       const tint = E?.[k] ? 1.12 : 1   // edited ground reads a touch brighter, like the 2D view's tint
-      C[v * 3] = r * tint; C[v * 3 + 1] = g * tint; C[v * 3 + 2] = b * tint
+      // M83 s1c: the ramp is sRGB (the 2D canvas paints it raw); three treats vertex colours as LINEAR and re-encodes on output,
+      // so raw values came out washed (pale hills, near-white peaks). Decode once here.
+      C[v * 3] = lin(r * tint); C[v * 3 + 1] = lin(g * tint); C[v * 3 + 2] = lin(b * tint)
     }
     pos.needsUpdate = true; col.needsUpdate = true
     geo.computeVertexNormals(); geo.computeBoundingSphere(); geo.computeBoundingBox()
