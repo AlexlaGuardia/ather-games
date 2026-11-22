@@ -1,8 +1,8 @@
 // ── M57 s2 THE ALCHEMIST AT THE SET, ON THE LIVE PAGE (play 9a25bc7e, hub #15616) ─────────────────────────────────────────
 // SETUP (stated, localStorage only): an Alchemy Desk stands on open ground at (-130, 102.5); the garden holds ONE recruited
-// alchemist (Potions rare = 25%); a Health Draught's LAST step (at the Desk) has already finished, waiting to be collected.
+// alchemist (since M65 s2 its LUCK sets the chance, 5% for this id); a Health Draught's LAST step (at the Desk) has already finished, waiting to be collected.
 // window.__alcRoll fixes the roll (the panel's own check hook; 0 = a lucky roll, 0.99 = an unlucky one).
-//   1. E at the Desk: the 'Alchemist at the set' row lists the alchemist with its line (+25% ...); Stand here -> it stands
+//   1. E at the Desk: the 'Alchemist at the set' row lists the alchemist with its line (+N% ..., its luck); Stand here -> it stands
 //   2. the finished brew lands with a LUCKY roll: makes + 1 bottles
 //   3. a second finished brew, UNLUCKY roll: makes only
 //   4. Rest, a third finished brew, LUCKY roll: makes only (no alchemist at the set = no boon)
@@ -11,7 +11,7 @@
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { ALC_POTIONS, potionId, gradeFrom } from '../src/app/shimmer/open/ather/alchemy-set'
-import { BOON_CHANCE, boonLine } from '../src/app/shimmer/open/ather/alchemist-boon'
+import { boonChance, boonLine } from '../src/app/shimmer/open/ather/alchemist-boon'
 import type { MoglinRecord } from '../src/app/shimmer/open/ather/moglins'
 import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -61,7 +61,8 @@ try {
   await p.evaluate(() => localStorage.setItem('open.alchemy.v1', '{}'))
   ok(await openDesk(), '1. E at the Desk opens its station')
   const line = await p.evaluate(() => document.querySelector('[data-alc-set] [data-boon-line]')?.textContent ?? '')
-  ok(line === boonLine(ALC) && BOON_CHANCE[5] === 0.25, `   the alchemist's row says what it does (${line})`)
+  ok(line === boonLine(ALC) && boonChance(ALC) > 0,   // M65 s2: the chance is the Moglin's LUCK (5% for this one), not the Potions grade's old 25%
+      `   the alchemist's row says what it does (${line})`)
   ok(await click('[data-alc-set] [data-act="alc-stand"] button'), '   Stand here')
   ok(await poll(async () => ((await read('open.village.v1'))?.moglins?.[0]?.room ?? '') === `set:${DESK.id}`, 5000), '   it stands at this Desk (saved)')
   await closeDesk()
