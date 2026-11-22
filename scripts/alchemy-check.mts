@@ -1,4 +1,10 @@
 // ── THE ALCHEMY ROOM, PLAYED (2026-11-17, play / Jin 30bbef32) ─────────────────────────────────────────────────────
+// ★ 11-22 (sweep pass 6, sprites): the ROOM is RETIRED. ALC_LIVE flipped 11-21 (ebb47e56): alchemy is a furniture set, and an
+// Alchemy room standing from before comes down on load and is paid back into the garden bank (workshop.tsx retireAlchemy ->
+// rooms.ts retireRooms). Brewing at a placed piece is alchemy-set-check's job now. This check keeps what is still true here:
+// (1) the seeded room is retired on load and its cost (24 Goldwood Log) + store (3 Raw Mana Shard) land in the bank, once;
+// (2) the drink half below, from a Shard Tonic seeded in the bag (bag slot 3) instead of one brewed at the room.
+// The history below is the room's, kept as it was.
 // The cauldron BOILS canon's brews (ather/alchemy.ts). A keeper brews a Shard Tonic at the alchemy room's cauldron (shards
 // from the room's store, bark from the bag), is refused at a full bar, drinks it at 20 mana (→ 85), drinks a Starlight
 // Tincture (the buff saves per keeper and survives a reload). SETUP (stated): an alchemy room standing at (-100, 100) with
@@ -11,7 +17,6 @@
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { benchOf, type Room } from '../src/app/shimmer/open/ather/rooms'
-import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/alchemy')
 mkdirSync(out, { recursive: true })
@@ -26,7 +31,7 @@ await p.evaluateOnNewDocument((room: Room) => {
   localStorage.setItem('ather:shimmer:birthRune', 'star')
   const slots: unknown[] = Array(32).fill(null)
   slots[0] = { id: 'repeater', n: 1 }; slots[1] = { id: 'waymark', n: 12 }; slots[2] = { id: 'bait', n: 10 }
-  slots[8] = { id: 'goldwood_bark', n: 2 }; slots[9] = { id: 'starlight_tincture', n: 1 }
+  slots[3] = { id: 'shard_tonic', n: 1 }; slots[9] = { id: 'starlight_tincture', n: 1 }
   localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
   localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [room], chests: [], pieces: [] }))
 }, ROOM)
@@ -34,28 +39,20 @@ const read = (k: string) => p.evaluate(key => JSON.parse(localStorage.getItem(ke
 const bag = async () => { const r: Record<string, number> = {}; for (const s of ((await read('open.inv.v1'))?.slots ?? []) as ({ id: string; n: number } | null)[]) if (s) r[s.id] = (r[s.id] ?? 0) + s.n; return r }
 const slotOf = async (id: string) => (((await read('open.inv.v1'))?.slots ?? []) as ({ id: string } | null)[]).findIndex(s => s?.id === id)
 const shot = async (n: string) => { try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
-const click = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (b) await p.mouse.click(b.x, b.y); return !!b }
 const A = (fn: string, ...a: unknown[]) => p.evaluate((f, args) => (window as any).__ather[f](...args), fn, a)
 const res: Record<string, unknown> = { url }
 const poll = async (fn: () => Promise<boolean>, ms = 90000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(500) } return false }
-const outOf = async () => { const r: Record<string, number> = {}; for (const s of ((await read('open.works.v1'))?.rooms?.[0]?.out ?? []) as ({ id: string; n: number } | null)[]) if (s) r[s.id] = (r[s.id] ?? 0) + s.n; return r }
+const bank = async () => { const r: Record<string, number> = {}; for (const s of ((await read('open.bank.v1'))?.stacks ?? []) as { id: string; n: number }[]) r[s.id] = (r[s.id] ?? 0) + s.n; return r }
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500)
-// 1. the cauldron
+// 1. the retired room: gone from the plot, paid back into the bank (once: a reload must not pay it twice)
 const b = benchOf(ROOM)
-await A('tp', b.x, b.z - 1.4, Math.PI); await sleep(2000); await shot('ac-0-cauldron')   // facing the back wall: the cauldron
-await A('tp', b.x, b.z - 1.4, 0); await sleep(800)
-await aimAt(p, b.x, b.z, 0.6)
-await p.keyboard.press('e'); await sleep(900)
-res.cauldron = await p.evaluate(() => !!document.querySelector('[data-panel="bench"] [data-job="brew-shard_tonic"]'))
-await click('[data-job-pick="brew-shard_tonic"]'); await sleep(300)
-res.lit = await p.evaluate(() => [...document.querySelectorAll('[data-src-item]')].filter(e => +e.getAttribute('data-need')! > 0).map(e => e.getAttribute('data-src-item')).sort())
-await click('[data-src-item="goldwood_bark"] [data-move="all"]'); await sleep(400)
-await click('[data-qty="1"]'); await sleep(200)
-res.focus = await click('[data-act="focus"] button')
-res.made = await poll(async () => ((await outOf()).shard_tonic ?? 0) === 1)
-await sleep(500); await click('[data-act="collect-all"] button'); await sleep(600)
-res.afterBrew = await bag(); res.store = ((await read('open.works.v1'))?.rooms?.[0]?.store ?? []).length; await shot('ac-1-brewed')
+await A('tp', b.x, b.z - 1.4, Math.PI); await sleep(2000); await shot('ac-0-retired')   // where the room stood: open ground
+res.made = await poll(async () => !(((await read('open.works.v1'))?.rooms ?? []) as Room[]).some(r => r.kind === 'alchemy'), 30000)
+res.bank = await bank()
+res.toast = await p.evaluate(() => document.body.innerText.includes('Alchemy is a set of furniture now'))
+await p.reload({ waitUntil: 'load', timeout: 180000 }); await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500)
+res.bankAfterReload = await bank()
 await p.keyboard.press('Escape'); await sleep(500)
 // 2. hold the tonic: refused at a full bar, then drunk at 20
 const slot = await slotOf('shard_tonic'); res.tonicSlot = slot
@@ -74,10 +71,10 @@ await p.reload({ waitUntil: 'load', timeout: 180000 }); await p.waitForFunction(
 res.buffsAfterReload = await A('buffs')
 res.errs = errs
 console.log(JSON.stringify(res))
-const r = res.afterBrew as Record<string, number>, bu = res.buffs as Record<string, number>, ba = res.buffsAfterReload as Record<string, number>
-const lit = res.lit as string[]   // the PACK panel lights what the job needs from the pack: bark only (the shards already sit in the store)
-const pass = res.cauldron === true && res.focus === true && res.made === true && lit.includes('goldwood_bark') && !lit.includes('raw_mana_shard') && r.shard_tonic === 1 && !r.goldwood_bark && res.store === 0
-  && res.fullDrink === 1 && Math.abs((res.mana as number) - 85) < 3 && res.afterDrink === 0
+const bu = res.buffs as Record<string, number>, ba = res.buffsAfterReload as Record<string, number>
+const bk = res.bank as Record<string, number>, bk2 = res.bankAfterReload as Record<string, number>
+const pass = res.made === true && bk.goldwood_log === 24 && bk.raw_mana_shard === 3 && bk2.goldwood_log === 24 && bk2.raw_mana_shard === 3
+  && res.tonicSlot === 3 && res.fullDrink === 1 && Math.abs((res.mana as number) - 85) < 3 && res.afterDrink === 0
   && bu?.starlight > Date.now() && res.afterTincture === 0 && ba?.starlight === bu.starlight && errs.length === 0
-console.log(pass ? 'PASS: Shard Tonic brewed (store + bag) → refused at a full bar → drunk at 20 (→ 85) → Starlight Tincture drunk, the buff survives a reload' : 'FAIL')
+console.log(pass ? 'PASS: the old Alchemy room retired on load (24 Goldwood Log + 3 Raw Mana Shard in the bank, not paid twice on reload) → Shard Tonic refused at a full bar → drunk at 20 (→ 85) → Starlight Tincture drunk, the buff survives a reload' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)
