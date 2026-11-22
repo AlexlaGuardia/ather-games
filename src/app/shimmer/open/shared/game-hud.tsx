@@ -84,6 +84,25 @@ function useLines(): Line[] {
 /** The message line: on the world, never on a plate (the held-label rule), newest at the bottom. */
 /** the glove's seat colour (open-hands C.seat): Morel's lines wear it (BETA M33) */
 const MOREL_GEM = '#7fb6d9'
+/** Alex 11-22 playtest: Morel's lines were too easy to miss. A NEW one beats 3 soft glow + scale pulses, then settles and the
+ *  class comes off (a line mounts once per id, so only new lines pulse). Reduced motion: no pulse at all. No sound here. */
+const MOREL_PULSE_MS = 1650
+const MOREL_PULSE_CSS = '@keyframes morel-pulse{0%,34%,67%,100%{transform:scale(1);text-shadow:0 1px 3px rgba(0,0,0,.95)}'
+  + '17%,50%,83%{transform:scale(1.07);text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 12px rgba(127,182,217,.95),0 0 22px rgba(127,182,217,.55)}}'
+  + `.morel-pulse{display:inline-block;animation:morel-pulse ${MOREL_PULSE_MS}ms ease-in-out 1}`
+  + '@media (prefers-reduced-motion: reduce){.morel-pulse{animation:none}}'
+function MorelText({ text, align }: { text: string; align: 'left' | 'center' }) {
+  const [pulse, setPulse] = React.useState(true)
+  useEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setPulse(false); return }
+    const t = setTimeout(() => setPulse(false), MOREL_PULSE_MS + 100); return () => clearTimeout(t)
+  }, [])
+  return (
+    <span className={pulse ? 'morel-pulse' : undefined} data-morel-pulse={pulse ? '1' : '0'} style={{ transformOrigin: align === 'left' ? 'left center' : 'center' }}>
+      <span style={{ color: MOREL_GEM, fontWeight: 800 }}>Morel:</span> {text}
+    </span>
+  )
+}
 function Messages({ style, align }: { style: React.CSSProperties; align: 'left' | 'center' }) {
   const lines = useLines()
   return (
@@ -93,9 +112,9 @@ function Messages({ style, align }: { style: React.CSSProperties; align: 'left' 
           ...(l.kind === 'zone' ? { ...hearthDisplay, fontSize: 20, fontWeight: 700, letterSpacing: '0.04em' } : { ...hearthBody, fontSize: l.kind === 'item' ? 14 : 13, fontWeight: l.kind === 'item' ? 800 : 600 }),
           color: l.kind === 'chat' ? '#cfe8ff' : '#fff6e4', textShadow: '0 1px 3px rgba(0,0,0,.95), 0 0 10px rgba(0,0,0,.45)',
           textAlign: align, lineHeight: 1.3, animation: 'gamehud-in .18s ease-out',
-        }} data-say={l.kind}>{l.kind === 'morel' ? <><span style={{ color: MOREL_GEM, fontWeight: 800 }}>Morel:</span> {l.text}</> : l.text}</div>
+        }} data-say={l.kind}>{l.kind === 'morel' ? <MorelText text={l.text} align={align} /> : l.text}</div>
       ))}
-      <style>{'@keyframes gamehud-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}'}</style>
+      <style>{'@keyframes gamehud-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}' + MOREL_PULSE_CSS}</style>
     </div>
   )
 }

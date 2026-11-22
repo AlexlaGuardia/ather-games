@@ -9,7 +9,7 @@ export type BenchTab = 'refine' | 'furniture' | 'blades' | 'spikes' | 'hearth' |
 
 export const TAB_LABEL: Record<BenchTab, string> = {
   refine: 'Refine', furniture: 'Furniture', blades: 'Blades', spikes: 'Spikes', hearth: 'Hearth', cauldron: 'Cauldron',
-  bait: 'Bait', rinsticks: 'Rinsticks', keeper: 'Keeper',
+  bait: 'Bait', rinsticks: 'Rinsticks', keeper: 'Moglin',   // the keeper is the PLAYER; this tab is the room's Moglin (Alex 11-22)
 }
 
 const FOCUS_TAB: Record<FocusSkill, BenchTab> = { forestry: 'blades', prospecting: 'spikes' }
