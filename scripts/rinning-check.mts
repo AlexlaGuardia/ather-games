@@ -69,11 +69,16 @@ const readBag = () => p.evaluate(() => (JSON.parse(localStorage.getItem('open.in
 const RINN = ['shimmerscale', 'clickclaw', 'glowfin', 'ribboneel', 'moonkoi', 'pearlshell', 'crystal_rinn']
 // 1 · clumsy: taking against every fight must lose it
 const answered = await answerTake(); res.answered = answered
-const hintNow = async () => { await frame(); await frame(); return p.evaluate(() => document.querySelector('[data-reel-hint]')?.textContent ?? null) }
+// the bar is React state fed from rAF, and headless draws a frame only when asked: wait for the BAR to be up (it always shows
+// 'It gives' / 'It fights') before reading whether the hint is on it, or "no hint" and "no bar yet" share an answer
+const barUp = () => p.evaluate(() => [...document.querySelectorAll('div')].some(d => /^It (gives|fights)/.test(d.textContent ?? '')))
+const hintNow = async () => { let up = false; for (let k = 0; k < 30 && !up; k++) { await frame(); await sleep(100); up = await barUp() } res.barSeen = up; return up ? p.evaluate(() => document.querySelector('[data-reel-hint]')?.textContent ?? null) : 'no bar' }
 res.touchOnly = await p.evaluate(() => matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches)
+// (follow the zone while reading: with no hold the bobber slides out and the rinn is gone before the bar has drawn, which
+// is the very thing M77 is about)
+await p.evaluate(() => (window as any).__ather.hold('track'))
 res.hintBefore = await hintNow()
 // what the bar itself said and what the keeper's skills held at that moment, so a missing hint names its cause
-res.barBefore = await p.evaluate(() => [...document.querySelectorAll('div')].find(d => /It (gives|fights)/.test(d.textContent ?? '') && getComputedStyle(d).position === 'fixed')?.textContent ?? null)
 res.skillsBefore = await p.evaluate(() => Object.keys(localStorage).filter(k => k.includes('skills')).map(k => `${k}=${(localStorage.getItem(k) ?? '').slice(0, 160)}`))
 await p.evaluate(() => (window as any).__ather.hold(true))
 const phase = await reelOut('rinning-3-clumsy'); res.clumsy = phase
@@ -93,7 +98,9 @@ res.bag = await readBag()
 await p.evaluate((s) => (window as any).__ather.look(s.yaw, s.pitch), spot); await frame()
 await p.evaluate(() => (window as any).__ather.cast()); await frame()
 const answered3 = await answerTake(); res.answered3 = answered3
+await p.evaluate(() => (window as any).__ather.hold('track'))
 res.hintAfter = answered3 ? await hintNow() : 'not answered'
+await p.evaluate(() => (window as any).__ather.hold(false))
 await frame('rinning-5-after-first')
 console.log(JSON.stringify(res))
 const hintOk = res.touchOnly === phone && res.hintBefore === WANT_HINT && answered3 && res.hintAfter === null

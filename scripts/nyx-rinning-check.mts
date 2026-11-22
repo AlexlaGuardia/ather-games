@@ -58,9 +58,13 @@ const reel = async (hold: boolean | 'track' | 'none') => {
   }
   console.log('   answered', answered, 'after', (await view())?.phase)
   if (!answered) return { answered, phase: (await view())?.phase }
-  await frame(); await frame()
-  const hint = await p.evaluate(() => document.querySelector('[data-reel-hint]')?.textContent ?? null)
-  if (hold === 'none') return { answered, phase: 'reeling', hint }
+  // M77: read the bar's hint while a stand-in follows the zone (no hold = gone before the bar draws), and wait for the BAR
+  // itself ('It gives' / 'It fights'), or "no hint" and "no bar yet" share an answer
+  await p.evaluate(() => (window as any).__rin.hold('track'))
+  let up = false
+  for (let k = 0; k < 30 && !up; k++) { await frame(); await wait(100); up = await p.evaluate(() => [...document.querySelectorAll('div')].some(d => /^It (gives|fights)/.test(d.textContent ?? ''))) }
+  const hint = up ? await p.evaluate(() => document.querySelector('[data-reel-hint]')?.textContent ?? null) : 'no bar'
+  if (hold === 'none') { await p.evaluate(() => (window as any).__rin.hold(false)); return { answered, phase: 'reeling', hint } }
   await p.evaluate((h) => (window as any).__rin.hold(h), hold)
   let ph = 'reeling'
   for (let k = 0; k < 200 && ph !== 'landed' && ph !== 'gone' && ph !== 'idle'; k++) { await frame(); ph = (await view())?.phase }
