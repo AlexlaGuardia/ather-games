@@ -9,6 +9,8 @@ import { aimAt } from './lib/aim.mts'
 import puppeteer, { type Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { parseWilds, type WildsMeta } from '../src/app/shimmer/open/ather/wilds'
+import { withGlade, clearing, roadField, SEASON, type Network } from '../src/app/shimmer/open/ather/network'
+import { makeVoids } from '../src/app/shimmer/open/ather/wilds-voids'
 import { type Zone } from '../src/app/shimmer/open/ather/forestry'
 import { xpForSkillLevel } from '../src/app/shimmer/engine/skills'
 import { NODE_DEFS } from '../src/app/shimmer/world/resources'
@@ -19,9 +21,12 @@ const out = flag('--out', '/tmp'), url = flag('--url', 'https://ather.games')
 const D = 'public/open/wilds/', idx = JSON.parse(readFileSync(D + 'tiles.json', 'utf8'))
 const zm = new Map<string, Zone>(idx.tiles.find((t: { name: string }) => t.name === 'first-wilds').nodes.map((n: { i: number; j: number; zone: Zone }) => [`${n.i},${n.j}`, n.zone]))
 const b = readFileSync(D + 'first-wilds.bin'), bio = readFileSync(D + 'first-wilds.biome')
-const W = parseWilds(JSON.parse(readFileSync(D + 'first-wilds.json', 'utf8')) as WildsMeta, new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)), new Uint8Array(bio), (i, j) => zm.get(`${i},${j}`) ?? 'meadows')
+// the trees THE PAGE stands: its path clearing, roads and M41 cloud voids (11-22 sweep: the raw tile put g1's stand spot on a
+// void lip, weight 0.59 >= FALL_W, so the keeper fell home before it could aim, and g2 no longer exists once voids carve)
+const NW = withGlade(JSON.parse(readFileSync(D + `network-s${SEASON}.json`, 'utf8')) as Network), VOIDS = makeVoids(idx, NW)
+const W = parseWilds(JSON.parse(readFileSync(D + 'first-wilds.json', 'utf8')) as WildsMeta, new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)), new Uint8Array(bio), (i, j) => zm.get(`${i},${j}`) ?? 'meadows', clearing(NW), true, roadField(NW), VOIDS)
 // two lone goldwoods with a clear line on their east side (forestry-check's rule)
-const lone = W.trees.filter(t => t.kind === 'goldwood' && !W.trees.some(o => o !== t && (Math.hypot(o.x - t.x, o.z - t.z) < 3 || (o.x > t.x && o.x < t.x + 15 && Math.abs(o.z - t.z) < 3))) && Math.abs(t.x) < 400 && Math.abs(t.z) < 400)
+const lone = W.trees.filter(t => t.kind === 'goldwood' && !W.trees.some(o => o !== t && (Math.hypot(o.x - t.x, o.z - t.z) < 3 || (o.x > t.x && o.x < t.x + 15 && Math.abs(o.z - t.z) < 3))) && Math.abs(t.x) < 400 && Math.abs(t.z) < 400 && VOIDS.weight(t.x + 6, t.z) === 0 && VOIDS.weight(t.x, t.z) === 0)   // stand (6 m east) + tree on whole ground
 const [g1, g2] = lone
 const XP = NODE_DEFS.goldwood.xp, NEED = xpForSkillLevel(1), SEED = NEED - 2 * XP + 1   // prune 1 lands at NEED-XP+1 (< NEED), prune 2 crosses
 const res: Record<string, unknown> = { g1: g1?.id, g2: g2?.id, need: NEED, seed: SEED }
