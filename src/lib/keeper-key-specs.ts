@@ -77,4 +77,5 @@ export const GARDEN_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'open.deed.shipyard.v1',    worldTied: false },  // Kael's small yard (M49 s1-s3, retired s4: read once to hand its pieces back to the bag)
   { base: 'open.deed.shipyard:',      worldTied: false },  // a BOUGHT shipyard's small yard (M49 s3, retired s4: read once to hand its pieces back)
   { base: 'open.deed.plot:',          worldTied: false },  // a shipyard PLOT's deed, per shipyard (business/shipyards.ts › plotStoreBase, M49 s4)
+  { base: 'open.garage:',             worldTied: false },  // a shipyard's GARAGE: which courser stands in which bay (business/shipyards.ts › garageStoreBase, M49 s5)
 ]

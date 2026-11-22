@@ -43,6 +43,11 @@ export const RAMP_RISE = 0.45
 /** the gate's LANDING: a strip this deep outside the front fence at floor height, the ramp running down it ALONG the fence
  *  (parallel to the road, inside the setback, so it never crosses the carriageway coursers drive) */
 export const LANDING_D = 4
+/** M49 s5: the COURSER ramp, the other way along the landing (toward -lx from the gate), gentle enough to drive: rise per
+ *  metre (the courser climbs to 0.6 before a face scrubs its speed; the road a gate faces is ~6 m off, so it cannot run out) */
+export const CAR_RISE = 0.2
+/** the garage: one BAY per courser, open at the front (-x face) so a courser drives in */
+export const BAY = 4, GARAGE_D = 8, GARAGE_H = 4.2, GWALL_T = 0.3
 const RIM_H = 1.4, RIM_T = 0.2
 
 interface Terrain { heightAt: (x: number, z: number) => number }
@@ -56,7 +61,7 @@ export function plotToLocal(f: PlotFrame, x: number, z: number) { const dx = x -
 export const plotRotY = (f: PlotFrame) => Math.atan2(-f.ax[1], f.ax[0])
 
 /** a built piece, plot-local (centre, size along lx/lz, height over the floor) */
-export interface PlotPiece { kind: 'home' | 'garage' | 'bay' | 'pad' | 'mast' | 'post' | 'bollard' | 'board'; lx: number; lz: number; w: number; d: number; h: number; solid: boolean }
+export interface PlotPiece { kind: 'home' | 'garage' | 'gwall' | 'bay' | 'pad' | 'mast' | 'post' | 'bollard' | 'board'; lx: number; lz: number; w: number; d: number; h: number; solid: boolean }
 
 export interface PlotLayout {
   frame: PlotFrame
@@ -65,6 +70,7 @@ export interface PlotLayout {
   /** the lowest ground under the plot: the retaining wall runs down to it */ base: number
   /** the gate ramp: out of the gate onto the landing strip (lz -50..-54), then down along it toward +lx from lx = +gate/2,
    *  `L` metres long (0 = the floor meets the ground there) */ ramp: { L: number }
+  /** s5: the courser ramp, down the landing toward -lx from lx = -gate/2, `L` metres long at CAR_RISE */ carRamp: { L: number }
   /** berth plots: the slipway at the back edge, from the floor down into the water; centre lx and length */ slip: { lx: number; L: number } | null
   pieces: PlotPiece[]
   /** how much of the plot stands over water (0..1) */ wet: number
@@ -115,14 +121,21 @@ export function plotLayout(R: Terrain & Roads, s: PlotSite): PlotLayout {
   let rL = 0
   for (let d = 0.5; d <= PLOT / 2; d += 0.5) { const p = plotToWorld(f, PLOT_GATE_W / 2 + d, -PLOT / 2 - LANDING_D / 2); rL = d; if (floor - d * RAMP_RISE <= R.heightAt(p.x, p.z)) break }
   const ramp = { L: rL }
+  let cL = 0
+  for (let d = 0.5; d <= PLOT / 2 - PLOT_GATE_W / 2; d += 0.5) { const p = plotToWorld(f, -PLOT_GATE_W / 2 - d, -PLOT / 2 - LANDING_D / 2); cL = d; if (floor - d * CAR_RISE <= R.heightAt(p.x, p.z)) break }
+  const carRamp = { L: cL }
   const pieces: PlotPiece[] = []
   // the home: front-left, set back from the fence
   const hm = H_HOME[tier.home]
   pieces.push({ kind: 'home', lx: -PLOT / 2 + 8 + hm.w / 2, lz: -PLOT / 2 + 8 + hm.d / 2, w: hm.w, d: hm.d, h: hm.h, solid: true })
-  // the garage block: along the right fence from the front, one 4 m bay per courser, doors facing in (-x)
-  const BAY = 4, GD = 8, gLen = tier.garage * BAY, gx = PLOT / 2 - 3 - GD / 2, gz0 = -PLOT / 2 + 8
-  pieces.push({ kind: 'garage', lx: gx, lz: gz0 + gLen / 2, w: GD, d: gLen, h: 4.2, solid: true })
-  for (let b = 0; b < tier.garage; b++) pieces.push({ kind: 'bay', lx: gx - GD / 2 - 0.05, lz: gz0 + BAY * (b + 0.5), w: 0.1, d: BAY - 0.6, h: 3.2, solid: false })
+  // the garage block: along the right fence from the front, one 4 m bay per courser, OPEN at the front (-x) so a courser
+  // drives in (s5): a back wall, a wall between bays and at each end, a roof. 'garage' = its footprint (the roof, the deed
+  // margin), 'gwall' = the walls (solid), 'bay' = the lintel over each opening (its lz = the bay's centre)
+  const GD = GARAGE_D, gLen = tier.garage * BAY, gx = PLOT / 2 - 3 - GD / 2, gz0 = -PLOT / 2 + 8
+  pieces.push({ kind: 'garage', lx: gx, lz: gz0 + gLen / 2, w: GD, d: gLen, h: GARAGE_H, solid: false })
+  pieces.push({ kind: 'gwall', lx: gx + GD / 2 - GWALL_T / 2, lz: gz0 + gLen / 2, w: GWALL_T, d: gLen, h: GARAGE_H, solid: true })
+  for (let b = 0; b <= tier.garage; b++) pieces.push({ kind: 'gwall', lx: gx, lz: gz0 + BAY * b, w: GD, d: GWALL_T, h: GARAGE_H, solid: true })
+  for (let b = 0; b < tier.garage; b++) pieces.push({ kind: 'bay', lx: gx - GD / 2 - 0.05, lz: gz0 + BAY * (b + 0.5), w: 0.1, d: BAY - GWALL_T, h: 0.6, solid: false })
   // the landing pad: the deep middle
   pieces.push({ kind: 'pad', lx: -6, lz: 16, w: 28, d: 28, h: 0.06, solid: false })
   // the dock: dry ground ties the ship down (a mast + four posts, back-left); a berth has bollards along the back fence
@@ -142,7 +155,7 @@ export function plotLayout(R: Terrain & Roads, s: PlotSite): PlotLayout {
   }
   // the look board, just inside the gate on its left
   pieces.push({ kind: 'board', lx: -PLOT_GATE_W / 2 - 2, lz: -PLOT / 2 + 1.5, w: 0.9, d: 0.12, h: 1.6, solid: true })
-  return { frame: f, tier, floor, base: lo, ramp, slip, pieces, wet: wetN / n }
+  return { frame: f, tier, floor, base: lo, ramp, carRamp, slip, pieces, wet: wetN / n }
 }
 
 // ── the deed ground: 1 m cells over the whole plot, minus what is built (a 1 m margin round each solid piece and the pad), the
@@ -164,7 +177,8 @@ export function plotGround(L: PlotLayout): (x: number, z: number) => number {
   return (x, z) => {
     const { lx, lz } = plotToLocal(f, x, z)
     if (Math.abs(lx) <= PLOT / 2 + 0.1 && Math.abs(lz) <= PLOT / 2 + 0.1) return L.floor
-    if (lz < -PLOT / 2 && lz >= -PLOT / 2 - LANDING_D && lx >= -PLOT_GATE_W / 2 && lx <= PLOT_GATE_W / 2 + L.ramp.L) return L.floor - Math.max(0, lx - PLOT_GATE_W / 2) * RAMP_RISE
+    if (lz < -PLOT / 2 && lz >= -PLOT / 2 - LANDING_D && lx >= -PLOT_GATE_W / 2 - L.carRamp.L && lx <= PLOT_GATE_W / 2 + L.ramp.L)
+      return L.floor - (lx > PLOT_GATE_W / 2 ? (lx - PLOT_GATE_W / 2) * RAMP_RISE : lx < -PLOT_GATE_W / 2 ? (-PLOT_GATE_W / 2 - lx) * CAR_RISE : 0)
     if (L.slip && Math.abs(lx - L.slip.lx) <= SLIP_W / 2 && lz > PLOT / 2 && lz < PLOT / 2 + L.slip.L) return L.floor - (lz - PLOT / 2) * RAMP_RISE
     return -Infinity
   }
@@ -182,9 +196,9 @@ export function plotBoxes(L: PlotLayout, shut = false): OBox[] {
     box(f, (-H - g) / 2, -H, (H - g) / 2, RIM_T / 2, y0, y1), box(f, (H + g) / 2, -H, (H - g) / 2, RIM_T / 2, y0, y1),
   ]
   out.push(box(f, -H, 0, RIM_T / 2, H, y0, y1), box(f, H, 0, RIM_T / 2, H, y0, y1))
-  // the landing's rails: its outer edge (the drop) and its closed -x end; the walker leaves by the ramp's foot
-  const rx0 = -g, rx1 = g + L.ramp.L, rz = -H - LANDING_D
-  out.push(box(f, (rx0 + rx1) / 2, rz, (rx1 - rx0) / 2, RIM_T / 2, L.floor - 40, L.floor + RIM_H), box(f, rx0, -H - LANDING_D / 2, RIM_T / 2, LANDING_D / 2, L.floor - 40, L.floor + RIM_H))
+  // the landing's rail: its outer edge (the drop), the whole strip; both ramps' feet are open (the walker's +lx, the
+  // courser's -lx: s5, the courser ramp replaced the closed -x end)
+  out.push(landingRail(L))
   if (L.slip && !shut) {
     const a = L.slip.lx - SLIP_W / 2, b = L.slip.lx + SLIP_W / 2
     out.push(box(f, (-H + a) / 2, H, (a + H) / 2, RIM_T / 2, y0, y1), box(f, (b + H) / 2, H, (H - b) / 2, RIM_T / 2, y0, y1))
@@ -192,6 +206,41 @@ export function plotBoxes(L: PlotLayout, shut = false): OBox[] {
   if (shut && L.slip) out.push(box(f, L.slip.lx, H + 0.4, SLIP_W / 2 + 0.3, RIM_T / 2, L.floor - 40, L.floor + RIM_H))
   for (const p of L.pieces) if (p.solid) out.push(box(f, p.lx, p.lz, p.w / 2, p.d / 2, L.floor - 0.1, L.floor + p.h))
   return out
+}
+
+function landingRail(L: PlotLayout): OBox {
+  const g = PLOT_GATE_W / 2, rx0 = -g - L.carRamp.L, rx1 = g + L.ramp.L
+  return box(L.frame, (rx0 + rx1) / 2, -PLOT / 2 - LANDING_D, (rx1 - rx0) / 2, RIM_T / 2, L.floor - 40, L.floor + RIM_H)
+}
+
+// ── s5: THE COURSER on the plot. Its ground is plotGround (the floor + both ramps); its walls are these boxes: the rim run
+// down to below the lowest ground (a courser below the terrace meets the retaining wall, not a 4 m step it creeps up), split
+// at the gate unless `shut`, the landing's rail and the solid pieces (the garage walls, the home, the mast...). ──
+export function plotCarBoxes(L: PlotLayout, shut = false): OBox[] {
+  const f = L.frame, H = PLOT / 2, y0 = L.base - 2, y1 = L.floor + RIM_H, g = PLOT_GATE_W / 2
+  const out: OBox[] = shut ? [box(f, 0, -H, H, RIM_T / 2, y0, y1)] : [box(f, (-H - g) / 2, -H, (H - g) / 2, RIM_T / 2, y0, y1), box(f, (H + g) / 2, -H, (H - g) / 2, RIM_T / 2, y0, y1)]
+  out.push(box(f, -H, 0, RIM_T / 2, H, y0, y1), box(f, H, 0, RIM_T / 2, H, y0, y1), box(f, 0, H, H, RIM_T / 2, y0, y1), landingRail(L))
+  for (const p of L.pieces) if (p.solid) out.push(box(f, p.lx, p.lz, p.w / 2, p.d / 2, L.floor - 0.1, L.floor + p.h))
+  return out
+}
+
+/** the garage's bays, plot-local: the inside of each (front opening to the back wall), centre + half sizes */
+export interface BayRect { k: number; lx: number; lz: number; hw: number; hd: number }
+export function bayRects(L: PlotLayout): BayRect[] {
+  const g = L.pieces.find(p => p.kind === 'garage')!, x0 = g.lx - g.w / 2, x1 = g.lx + g.w / 2 - GWALL_T
+  return L.pieces.filter(p => p.kind === 'bay').map((p, k) => ({ k, lx: (x0 + x1) / 2, lz: p.lz, hw: (x1 - x0) / 2, hd: (BAY - GWALL_T) / 2 }))
+}
+/** which bay a courser at (x, z) stands in (its centre at least `inset` m inside the opening), -1 = none */
+export function bayAt(L: PlotLayout, x: number, z: number, y = L.floor, inset = 1.2): number {
+  if (Math.abs(y - L.floor) > 1.5) return -1
+  const { lx, lz } = plotToLocal(L.frame, x, z)
+  for (const b of bayRects(L)) if (lx > b.lx - b.hw + inset && lx < b.lx + b.hw && Math.abs(lz - b.lz) < b.hd) return b.k
+  return -1
+}
+/** where a courser stands parked in bay k (nose in, toward +lx), world */
+export function bayPose(L: PlotLayout, k: number): { x: number; z: number; yaw: number } {
+  const b = bayRects(L)[k], c = plotToWorld(L.frame, b.lx + 0.4, b.lz)
+  return { x: c.x, z: c.z, yaw: Math.atan2(-L.frame.ax[0], -L.frame.ax[1]) }
 }
 
 /** the keeper's PLACED things (deed-grid.ts, kind 'plot') as walker boxes on the floor; non-solid ones (a stool) are left out */
