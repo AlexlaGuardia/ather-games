@@ -44,6 +44,18 @@ Through the gate -> the **"The Wilds" waypoint** = the FIRST SETTLEMENT on the p
 - **Fennel's quest** pops up when the keeper builds the Rinnshop, if not already done.
 - **Tess's gift:** a strong variety of starter seeds, including **1 random grade-A seed**.
 
+## Beat 5: from the Ather to Nyx (Alex 11-22)
+- **The game centres on the Ather.** Otto, Tess, Bonn are grown adults now (Alex answers Magii's open #2).
+- The Glade spawn REPLACES the Rune Hold opening (Alex answers Magii's open: centre the game on the Ather).
+- **Trigger:** after the keeper's first DEATH, the game waits until the backpack is recovered or despawns, then **Morel pings** about the **grandfather's note** they still haven't read (in the inventory the whole time; reading it any earlier starts the questline too).
+- The note starts **"The Dig"** questline: points to the nearest gate; in the gate's panel the **flip-the-map button pulses** to get the keeper to swap to the Nyx side.
+- Nyx map: like the Ather side, a clickable list on the right of every city visited; **Rune Hold** is there by default, pulsing; click it -> travel to Rune Hold.
+
+## Nyx side rework (Alex 11-22: "not happy with the look and feel of nyx side") — its own plan
+- A hybrid: **grid building areas** for neighbourhoods + big buildings, attached to a **clean road infrastructure**: mostly two-lane roads, back roads + shortcuts, the longer routes opening into **four-lane highways**; the landscape is sculpted AROUND the roads.
+- Start with **empty plots**: no buildings yet, get the foundation right first.
+- **The Passage becomes a DRIVE-THROUGH**: a highlighted area, drive in -> a store-front page: main hero = the gun shop, a side panel for vessels, another "coming soon" for apparel.
+
 ## Beat 1: Greg (Alex 11-22, outline, lark writes the lines)
 1. Spawn in Greg's garden, a marker on Greg.
 2. Greg welcomes them to the Ather, "although they have not come in the best of times". The Wilds get worse every day; he fears for the Moglin settlements and the spirits who call it home.
@@ -67,7 +79,7 @@ Through the gate -> the **"The Wilds" waypoint** = the FIRST SETTLEMENT on the p
 5. **Pruner = the forestry tool.** Bonn gives the starter pruner; blade tiers become PRUNER tiers (a rename across the build).
 6. Grey matter fold + waymarks: YES (waymarks canon: gates.md:17,106). AMENDS 11-18: **no garden until Greg folds the first for 100 GM**; the grimoire 10/15/25 tiers still gate the growth cells after.
 7. Champion + spreading grey: YES; the player-facing word for the spread = @lark.
-OPEN (asked Alex): (2) Otto/Tess/Bonn are ~1070 years older by 1672: grown, ageless keepers with teaching gardens beside Greg's? And: does the Glade spawn REPLACE the Rune Hold opening (corner door, Kael's note, the fork) or start the Ather road AFTER the fork?
+ANSWERED by Alex 11-22 (beat 5): grown adults; the Glade replaces the Rune Hold opening. Was OPEN: (2) Otto/Tess/Bonn are ~1070 years older by 1672: grown, ageless keepers with teaching gardens beside Greg's? And: does the Glade spawn REPLACE the Rune Hold opening (corner door, Kael's note, the fork) or start the Ather road AFTER the fork?
 
 ## Canon asks (Magii) — batch, send when the loop is laid out
 - **Otto, Tess, Bonn as the Glade's three garden-keepers.** Canon: they are the Spirit Tales leads (Bonn 11 at Bk1). Bonn fits: she is Gregory's keeper-ward, given "the old arrival plot", youngest keeper (characters/bonn.md:5,50). Otto lives at Forge Grove under Heslur; Tess at Goldleaf Acres under Maizie. When in the timeline is the game, and may Otto + Tess hold plots in the Glade (or their mentors)?
