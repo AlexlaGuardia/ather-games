@@ -31,7 +31,6 @@ export const layerSize = (l: Layer) => {
   const n = (m: Record<string, Record<string, number>>) => Object.values(m).reduce((a, d) => a + Object.keys(d).length, 0)
   return { tiles: Object.keys(l.tiles).length, verts: n(l.tiles), water: n(l.water), falls: n(l.falls) }
 }
-const isEmpty = (l: Layer) => { const s = layerSize(l); return !s.verts && !s.water && !s.falls }
 /** order-independent equality (JSON key order must not make two equal layers differ) */
 export function sameLayer(a: Layer, b: Layer): boolean {
   const canon = (l: Layer) => JSON.stringify(['tiles', 'water', 'falls'].map(p => {
@@ -60,13 +59,14 @@ const note = (s: unknown, dflt: string) => (typeof s === 'string' && s.trim() ? 
 export type Write = { kind: 'version'; v: number; layer: Layer } | { kind: 'live'; layer: Layer } | { kind: 'draft'; layer: Layer } | { kind: 'index'; index: Index }
 export interface Plan { index: Index; writes: Write[] }
 
-/** PUBLISH the draft. The first publish of a map whose live layer already holds edits (M62 sculpted the Wilds before the builder
- *  existed) records that live layer as v1 'as shipped before the builder', so rolling back to the pre-builder world is one click. */
+/** PUBLISH the draft. A map's FIRST publish records the live layer as it stood as v1 'as shipped before the builder' (M62 edits,
+ *  or EMPTY = the exported land), so rolling back to the pre-builder world is always one click. ★ Even when empty: builder-check's
+ *  first prod run (11-22) found that skipping an empty v1 made the first publish v1 itself, so there was no version to roll back to. */
 export function planPublish(idx: Index, draft: Layer, live: Layer, at: string, msg?: unknown): Plan {
   const index: Index = { ...idx, versions: [...idx.versions] }
   const writes: Write[] = []
   let n = index.versions.at(-1)?.v ?? 0
-  if (!index.versions.length && !isEmpty(live)) {
+  if (!index.versions.length) {
     n += 1; const v0: Version = { v: n, at, note: 'as shipped before the builder', size: layerSize(live) }
     index.versions.push(v0); writes.push({ kind: 'version', v: n, layer: live })
   }

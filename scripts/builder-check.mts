@@ -9,6 +9,9 @@
 //   E. ALWAYS (finally): roll back if the check published, and put the owner's own draft back exactly as it was
 //   0 page errors. The half-land rule (version -> live -> index, live written atomically) is proven in world/builder.test.ts.
 // Versions this check publishes carry the note 'check: builder-check' (the editor's history hides them; they stay in the files).
+// ★ AFTER A RUN: the prod tree holds new files under world/builder/wilds/ (+ wilds-edits.json if it was absent), class 'data', so
+//   coord build REFUSES until they are committed (M94). Commit them by pathspec (they are the honest history), or, on a fresh map,
+//   move them out to return to exactly the pre-check state (11-22 first run did that, then re-ran on a clean map).
 // SETUP (stated): OWNER_KEY from .env or env, so it runs on the BOX (the edesk has no OWNER_KEY): take the browser lock first.
 // Tile default w-4_-2 (far west, nothing staged there; terrain-editor-check's tile).
 //   npx tsx scripts/builder-check.mts [--url https://ather.games] [--tile w-4_-2] [--out dir]

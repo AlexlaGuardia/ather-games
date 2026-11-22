@@ -35,10 +35,14 @@ ok(disk.index.live === 2 && sameLayer(disk.live, hill) && sameLayer(disk.version
 ok(disk.index.versions[1].note === 'a hill by the road', 'note trimmed')
 ok(disk.index.versions[1].size.verts === 2 && disk.index.versions[1].size.water === 1, 'version records its size')
 
-// first publish over an EMPTY live layer: no v1 placeholder
+// first publish over an EMPTY live layer: v1 is STILL recorded (empty = the exported land), so a rollback to it exists
+// (builder-check's first prod run, 11-22: without it the first publish WAS v1 and "roll back to v1" kept the hill)
 const p0 = planPublish(emptyIndex('wilds'), hill, EMPTY_LAYER, T)
-ok(p0.index.versions.length === 1 && p0.index.versions[0].v === 1 && p0.index.versions[0].note === 'publish', 'empty live: the first publish is v1, default note')
-ok(planPublish(emptyIndex('wilds'), hill, EMPTY_LAYER, T, 'x'.repeat(500)).index.versions[0].note.length === NOTE_MAX, 'note capped')
+ok(p0.index.versions.length === 2 && layerSize((p0.writes[0] as { layer: Layer }).layer).verts === 0 && p0.index.versions[1].note === 'publish' && p0.index.live === 2, 'empty live: v1 = the empty pre-builder layer, the draft is v2 (default note)')
+const d0: Disk = { versions: {}, live: EMPTY_LAYER, draft: hill, index: emptyIndex('wilds') }; apply(d0, p0)
+apply(d0, planRollback(d0.index, 1, d0.versions[1], T)!)
+ok(layerSize(d0.live).verts === 0 && layerSize(d0.draft!).verts === 0, 'empty live: roll back to v1 = the hill is gone')
+ok(planPublish(emptyIndex('wilds'), hill, EMPTY_LAYER, T, 'x'.repeat(500)).index.versions[1].note.length === NOTE_MAX, 'note capped')
 
 // ★ HALF-LAND: whatever prefix of the writes completes, the live layer is always a WHOLE layer (old or new), never a mix, and the
 //   index never points at a version file that was not written
