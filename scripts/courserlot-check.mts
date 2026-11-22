@@ -58,7 +58,9 @@ await p.evaluate(() => document.querySelector<HTMLElement>('[data-panel="courser
 await p.evaluate((x, z) => (window as any).__drive.tp(x, z, 0, 0), at.x + fx * 3.5, at.z + fz * 3.5); await sleep(2500)
 // M80 (11-22): E is the car now, and the door the crosshair is on keeps E (M60), so turn from the lot's door to the courser
 // and step OFF the step stone toward it (standing on the step = inside the door's pick capsule = E opens the door)
-await p.evaluate((cx: number, cz: number) => { const w = window as any, f = w.__drive.foot(), dx = cx - f.px, dz = cz - f.pz, L = Math.hypot(dx, dz) || 1, k = Math.min(1.4, L - 1.2) / L; w.__drive.footTp(f.px + dx * k, f.pz + dz * k, Math.atan2(-dx, -dz), -0.1) }, at.x + fx * 3.5, at.z + fz * 3.5); await sleep(1500)
+await p.evaluate((cx: number, cz: number) => { const w = window as any, f = w.__drive.foot(), dx = cx - f.px, dz = cz - f.pz, L = Math.hypot(dx, dz) || 1, k = Math.min(1.4, L - 1.2) / L; w.__drive.footTp(f.px + dx * k, f.pz + dz * k, Math.atan2(-dx, -dz), -0.1) }, at.x + fx * 3.5, at.z + fz * 3.5)
+// the door pick reads the camera in its own frame, and the desk continent runs ~1 fps headless: wait for the door to leave reach
+res.doorLeft = await poll(async () => (await p.evaluate(() => (window as any).__market?.reach?.() ?? null)) === null, 15000)
 res.beforeE = await p.evaluate(() => { const w = window as any, f = w.__drive.foot(), c = w.__drive.state(); return { dist: Math.hypot(c.x - f.px, c.z - f.pz), dy: c.y - f.py, door: w.__market?.reach?.() ?? null, doorDist: (() => { const k = w.__market?.reach?.(); const d = k && w.__market.doors().find((q: any) => q.key === k); return d ? Math.hypot(d.at.x - f.px, d.at.z - f.pz) : null })(), lotOpen: !!document.querySelector('[data-panel="courser-lot"]') } })
 await p.keyboard.press('KeyE'); await sleep(2500)
 res.lotOpenAfterE = await p.evaluate(() => !!document.querySelector('[data-panel="courser-lot"]'))
