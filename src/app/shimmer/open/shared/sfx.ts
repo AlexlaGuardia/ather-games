@@ -194,6 +194,7 @@ const RECIPES: Record<string, (b: Bus) => void> = {
   'gem-pulse': b => { tone(b, 'sine', 2350, 2200, 0.035, 0.002, 0.06) },   // one tiny glass tick: it rides every shot, so it must sit UNDER the gun
   // M59 THE MANA SKIN (11-21, proposed): the pop = a whip-crack (a hard high snap + a falling crack) with glass falling off it;
   // the tick = one soft glassy note per blow the skin swallows, small enough to ride a fight
+  'rin-splash': b => { puff(b, 'lowpass', 900, 0.9, 0.5, 0.002, 0.12); puff(b, 'bandpass', 2600, 1.4, 0.3, 0.004, 0.22, 0.02); tone(b, 'sine', 220, 90, 0.12, 0.002, 0.1) },   // M90: a wet slap and spray (proposed)
   'mana-skin-pop': b => { puff(b, 'highpass', 2800, 0.7, 0.55, 0.0006, 0.03); tone(b, 'square', 2600, 260, 0.1, 0.0005, 0.045); puff(b, 'bandpass', 4800, 2.5, 0.2, 0.001, 0.14, 0.008); for (const [f, at] of [[3300, 0.03], [2700, 0.07], [3900, 0.1], [2400, 0.15]]) tone(b, 'sine', f, f * 0.96, 0.05, 0.001, 0.09, at) },
   'mana-skin-tick': b => { tone(b, 'sine', 2900, 2760, 0.07, 0.002, 0.1); tone(b, 'sine', 4350, 4300, 0.025, 0.002, 0.06) },
 }

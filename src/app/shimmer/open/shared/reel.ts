@@ -55,9 +55,12 @@ const DRIFT = [0, 0.085, 0.07, 0.058, 0.048]
 const SPEED_K = [0, 1, 1.15, 1.3, 1.45]
 const HALF_W = [0, 0.17, 0.15, 0.13, 0.115]
 /** the bobber: HOLD climbs, LET GO slides back, with weight */
-export const BOB_ACCEL = 2.4, BOB_DRAG = 3.2
+/** M90 (Alex 11-22): 20% slower than the 11-16 2.4 (top speed ACCEL/DRAG 0.75 -> 0.6 bar/s); drag unchanged */
+export const BOB_ACCEL = 1.92, BOB_DRAG = 3.2
 /** how long the bobber may sit at or past the zone's edge before the rinn is gone (s) */
 export const STRAIN_S = 0.35
+/** M90: a strain-out is a SPLASH (strain resets, the rinn stays on); this many and it is gone */
+export const SPLASHES = 3
 /** how close (fraction of the half-width) to the edge counts as touching it */
 const EDGE = 0.97
 /** M88: how far (bar) the zone's far edge may pull off the wall while a bobber rests on the wall without that counting as an edge */
@@ -75,6 +78,8 @@ export interface Reel {
   bobV: number
   /** 0..1 of STRAIN_S: how long the line has been at the edge */
   strain: number
+  /** M90: splashes so far (a strain-out each); SPLASHES and it is gone. Optional so an older saved reel reads as 0 */
+  splashes?: number
   leg: number
   legLeft: number
   legSpeed: number
@@ -87,7 +92,7 @@ export interface Reel {
 export function newReel(pattern: Pattern, tier: number, rng: () => number, ease = 1): Reel {
   const legs = LEGS[pattern], leg = Math.floor(rng() * legs.length)
   const half = HALF_W[tier] * ease
-  return { pattern, tier, zone: 0.22, half, zoneV: 0, bob: 0.22, bobV: 0, strain: 0, leg, legLeft: legs[leg].dur * (0.7 + rng() * 0.6),
+  return { pattern, tier, zone: 0.22, half, zoneV: 0, bob: 0.22, bobV: 0, strain: 0, splashes: 0, leg, legLeft: legs[leg].dur * (0.7 + rng() * 0.6),
     legSpeed: legs[leg].speed * (0.85 + rng() * 0.3), progress: 0, state: 'on', t: 0 }
 }
 
@@ -123,7 +128,10 @@ export function stepReel(r: Reel, dt: number, holding: boolean, rng: () => numbe
   const atWall = n.bob <= n.zone && (n.zone - n.half <= 1e-6 || (n.bob <= 1e-6 && n.zone - n.half <= WALL_GRACE))
   const off = atWall ? 0 : Math.abs(n.bob - n.zone) / n.half
   n.strain = off >= EDGE ? n.strain + dt / STRAIN_S : Math.max(0, n.strain - 2 * dt / STRAIN_S)
-  if (n.strain >= 1) { n.state = 'gone'; return n }
+  if (n.strain >= 1) {   // M90: a splash, not the end: the third one is
+    n.splashes = (n.splashes ?? 0) + 1; n.strain = 0
+    if (n.splashes >= SPLASHES) { n.state = 'gone'; return n }
+  }
   n.progress = Math.max(0, Math.min(1, (n.zone - 0.22) / (1 - n.half - 0.22)))
   if (n.zone + n.half >= 1) { n.zone = 1 - n.half; n.progress = 1; n.state = 'landed' }
   return n

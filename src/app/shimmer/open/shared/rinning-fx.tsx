@@ -11,6 +11,7 @@ import { useRef, type MutableRefObject } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { newReel, stepReel, landed, gone, CAST_RANGE, type Reel, type Rinn } from './reel'
+import { play as sfx } from './sfx'   // M90: rin-splash (proposed = silent until Alex's yay)
 import { newCast, phaseAt, passed, answer as answerCast, riseProgress, type RinCast } from '../../engine/rin-cast'
 
 export type RinPhase = 'idle' | 'casting' | 'waiting' | 'rising' | 'taking' | 'reeling' | 'landed' | 'gone'
@@ -57,8 +58,8 @@ export function RinningFX({ waterY, isWater, roll, rarer, ease, api, holding, ou
   const lineGeo = useRef(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]))
   const lineObj = useRef<THREE.Line | null>(null)
   if (!lineObj.current) lineObj.current = new THREE.Line(lineGeo.current, new THREE.LineBasicMaterial({ color: '#f4efe0' }))
-  const s = useRef<{ phase: RinPhase; t0: number; target: THREE.Vector3; goneAt: THREE.Vector3; cast: RinCast | null; reel: Reel | null; rinn: Rinn | null; aim: THREE.Vector3 | null; wasTaking: boolean; splashT: number }>(
-    { phase: 'idle', t0: 0, target: new THREE.Vector3(), goneAt: new THREE.Vector3(), cast: null, reel: null, rinn: null, aim: null, wasTaking: false, splashT: -9 })
+  const s = useRef<{ phase: RinPhase; t0: number; target: THREE.Vector3; goneAt: THREE.Vector3; cast: RinCast | null; reel: Reel | null; rinn: Rinn | null; aim: THREE.Vector3 | null; wasTaking: boolean; splashAt: THREE.Vector3; splashT: number }>(
+    { phase: 'idle', t0: 0, target: new THREE.Vector3(), goneAt: new THREE.Vector3(), cast: null, reel: null, rinn: null, aim: null, wasTaking: false, splashT: -9, splashAt: new THREE.Vector3(NaN, 0, 0) })
   const lastReel = useRef(0)
   const tmp = useRef({ o: new THREE.Vector3(), d: new THREE.Vector3(), tip: new THREE.Vector3(), hand: new THREE.Vector3() })
 
@@ -75,7 +76,7 @@ export function RinningFX({ waterY, isWater, roll, rarer, ease, api, holding, ou
       st.cast = caughtUp(st.cast, Date.now())
       if (!answerCast(st.cast, Date.now())) return false
       st.rinn = roll(st.target.x, st.target.z)
-      st.reel = newReel(st.rinn.pattern, st.rinn.tier, Math.random, ease ?? 1); st.phase = 'reeling'; st.splashT = performance.now(); lastReel.current = performance.now()
+      st.reel = newReel(st.rinn.pattern, st.rinn.tier, Math.random, ease ?? 1); st.phase = 'reeling'; st.splashT = performance.now(); st.splashAt.set(NaN, 0, 0); lastReel.current = performance.now()
       return true
     },
     cancel() { const st = s.current; st.phase = 'idle'; st.cast = null; st.reel = null },
@@ -122,12 +123,15 @@ export function RinningFX({ waterY, isWater, roll, rarer, ease, api, holding, ou
       // the reel runs on REAL time in small steps, so a slow frame rate (a heavy scene on a laptop GPU, or a headless
       // check that draws a frame only when asked) reels at the same pace, not slower
       const el = Math.min(1, (now - (lastReel.current || now)) / 1000); lastReel.current = now
+      const splashed0 = st.reel.splashes ?? 0
       for (let k = 0, n = Math.ceil(el / 0.05); k < n && st.reel.state === 'on'; k++) { const h = holding.current; st.reel = stepReel(st.reel, el / n, typeof h === 'function' ? h(st.reel) : h, Math.random) }
+      const splashedNow = (st.reel.splashes ?? 0) > splashed0 && st.reel.state === 'on'   // M90: a strain-out the rinn shrugged off
       const shore = new THREE.Vector3(T.o.x, WATER_Y, T.o.z).lerp(st.target, 0.12)
       const fighting = st.reel.zoneV < -0.02
       fp = st.target.clone().lerp(shore, st.reel.progress)
       fp.y = WATER_Y - (fighting ? 0.12 + Math.abs(Math.sin(now / 70)) * 0.08 : 0.03)
       if (fighting) { fp.x += Math.sin(now / 90) * 0.15; fp.z += Math.cos(now / 110) * 0.15 }
+      if (splashedNow) { st.splashT = now; st.splashAt.copy(fp); sfx('rin-splash', { at: { x: fp.x, y: fp.y, z: fp.z } }) }   // M90: a splash at the float + a sound; the bar flashes itself
       if (landed(st.reel)) { st.phase = 'landed'; st.t0 = now; if (st.rinn) onCatch(st.rinn) }
       else if (gone(st.reel)) { st.phase = 'gone'; st.t0 = now; st.goneAt.copy(fp); st.splashT = now; if (st.rinn) onGone?.(st.rinn) }
     } else if (st.phase === 'gone') {
@@ -160,7 +164,9 @@ export function RinningFX({ waterY, isWater, roll, rarer, ease, api, holding, ou
     if (splash.current) {
       const u = (now - st.splashT) / 600
       splash.current.visible = u >= 0 && u < 1 && !!fp
-      if (splash.current.visible) { splash.current.position.set(st.target.x, WATER_Y + 0.04, st.target.z); const k = 0.3 + u * 1.4; splash.current.scale.set(k, k, 1); (splash.current.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - u) }
+      // M90: a reel splash rings where the float was; every other splash (cast landing, gone) rings at the target
+      const at = st.phase === 'reeling' && Number.isFinite(st.splashAt.x) ? st.splashAt : st.target
+      if (splash.current.visible) { splash.current.position.set(at.x, WATER_Y + 0.04, at.z); const k = 0.3 + u * 1.4; splash.current.scale.set(k, k, 1); (splash.current.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - u) }
     }
   })
 

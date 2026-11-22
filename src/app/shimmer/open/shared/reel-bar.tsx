@@ -4,9 +4,9 @@
 // you (hold = take, let go = give). Keep the bobber inside the zone; the zone's rim goes red as the line strains, and a
 // rinn held at the edge too long is gone. The line under it says the kind's habit, so a keeper learns to read it.
 
-import { useEffect, useState, type MutableRefObject } from 'react'
+import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { RinningApi } from './rinning-fx'
-import { PATTERN_TELL } from './reel'
+import { PATTERN_TELL, SPLASHES } from './reel'
 import { openSkills } from '../ather/forestry'
 import { isTouchOnly } from './touch'
 
@@ -26,7 +26,13 @@ export function ReelBar({ api }: { api: MutableRefObject<RinningApi | null> }) {
     return () => cancelAnimationFrame(id)
   }, [api])
   const r = v?.phase === 'reeling' ? v.reel : null
+  // M90: a splash flashes the bar for a moment (the reel's splash count went up)
+  const seen = useRef(0), flashUntil = useRef(0)
+  const sp = r?.splashes ?? 0
+  if (sp > seen.current) flashUntil.current = performance.now() + 450
+  seen.current = r ? sp : 0
   if (!r) return null
+  const flashing = performance.now() < flashUntil.current
   const fighting = r.zoneV < -0.02, strain = r.strain
   const hint = landedARinn() ? null : reelHint(isTouchOnly())
   const pct = (x: number) => `${(x * 100).toFixed(2)}%`
@@ -37,7 +43,11 @@ export function ReelBar({ api }: { api: MutableRefObject<RinningApi | null> }) {
       </div>
       {hint && <div data-reel-hint style={{ textAlign: 'center', marginBottom: 6, fontWeight: 700, fontSize: 13, color: '#fff7e0' }}>{hint}</div>}
       {/* the track: far water ← → you */}
-      <div style={{ position: 'relative', height: 22, borderRadius: 6, background: 'rgba(12,16,20,0.72)', border: '1px solid rgba(244,236,210,0.35)', overflow: 'hidden' }}>
+      {/* M90: splashes left before it is gone, one pip each */}
+      <div data-reel-splashes={SPLASHES - sp} style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 5 }}>
+        {Array.from({ length: SPLASHES }, (_, i) => <span key={i} data-pip={i < SPLASHES - sp ? 'left' : 'spent'} style={{ width: 9, height: 9, borderRadius: 5, border: '1px solid rgba(233,246,255,0.8)', background: i < SPLASHES - sp ? '#9fd8f0' : 'transparent', opacity: i < SPLASHES - sp ? 1 : 0.45 }} />)}
+      </div>
+      <div data-reel-flash={flashing ? '1' : '0'} style={{ position: 'relative', height: 22, borderRadius: 6, background: flashing ? 'rgba(233,246,255,0.55)' : 'rgba(12,16,20,0.72)', border: '1px solid rgba(244,236,210,0.35)', overflow: 'hidden', transition: 'background 120ms' }}>
         <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 3, background: '#e9f6ff', opacity: 0.6 }} />
         {/* the zone: the rinn */}
         <div style={{ position: 'absolute', top: 2, bottom: 2, left: pct(r.zone - r.half), width: pct(r.half * 2), borderRadius: 4,
