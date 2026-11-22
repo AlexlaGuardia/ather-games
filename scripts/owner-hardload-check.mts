@@ -45,6 +45,7 @@ p.on('request', r => {
   setTimeout(() => void r.respond({ status: 200, contentType: 'application/json',
     body: JSON.stringify({ session: { user_id: USER, username: 'hardload', character_id: null, avatar: null } }) }), 4000)
 })
+await p.evaluateOnNewDocument('window.__name = (f) => f')   // tsx wraps the seed's inner arrow in __name(), absent in the page
 // seed ONCE per tab (a sessionStorage flag), so the reload in step 3 keeps whatever the game saved
 await p.evaluateOnNewDocument((sk: string, user: string, lvl: number) => {
   if (sessionStorage.getItem('hardload-seeded')) return
