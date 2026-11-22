@@ -1,6 +1,6 @@
 // BETA M92 (Alex 11-22): the sounds page declutter. PENDING (proposed, unvoted) is the working list at the top; NAY rows carry
 // Remove / Try again; APPROVED (yay) folds into a collapsed list at the bottom. Pure, so the page and the route share it.
-type Voted = { id: string; status: 'proposed' | 'yay' | 'nay' }
+type Voted = { id: string; status: string }   // string, not the union: the route reads raw JSON rows
 
 export function sections<T extends Voted>(rows: T[]) {
   return { pending: rows.filter(r => r.status === 'proposed'), nay: rows.filter(r => r.status === 'nay'), approved: rows.filter(r => r.status === 'yay') }
