@@ -32,6 +32,8 @@ export interface Loadout {
   /** Kael's chest at the shipyard has been opened (the Charred Rifle + the Repeater handed over). Absent on saves from
    *  before 11-18, whose 'owned' guns were the test stand-in: those are taken back on load (see load). */
   kael?: boolean
+  /** M81 s2: what each gun is fitted with, by gun id (shared/gun-fit.ts). Absent = the gun's default fitting. Sigils join here (M93). */
+  fit?: Record<string, { sight?: string }>
 }
 
 /** Which slot a Slate goes in: the sidearm is the secondary, every long gun a primary. */

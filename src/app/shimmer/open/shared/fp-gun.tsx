@@ -30,6 +30,8 @@ import { box, type Part, type Model } from './gun-kit'
 import { MARKS, TINTS, drawMark, markGlow, defaultLook, type SightLook } from './sight-marks'
 import { getSightLooks, lookFor } from './sight-looks'
 import type { RangeGun } from './gunplay'
+import { fittedModel, fittedSight } from './gun-fit'
+import { getLoadout } from './loadout'
 
 // ── the tune (metres / radians, the viewmodel's own frame: the camera's) ──
 // ★ TUNABLE LIKE THE HANDS (Alex 11-18: "a similar dev tool for the guns like we made for the hands so I can tweak it later"):
@@ -121,7 +123,8 @@ const CHARRED: Model = { ...MODELS.LONGBARREL, parts: [...MODELS.LONGBARREL.part
 // M81 blockout preview (/shimmer/dev/gun-kit ONLY; nothing in the game calls it): a gun id drawn with a kit model (gun-kit.ts) instead
 let preview: Record<string, Model> = {}, previewStamp = 0
 export function previewGunModel(id: string, m: Model | null): void { if (m) preview = { ...preview, [id]: m }; else { const { [id]: _, ...rest } = preview; preview = rest } previewStamp++ }
-export const modelOf = (g: Pick<RangeGun, 'id' | 'slot'>): Model => preview[g.id] ?? (g.id === 'charred-rifle' ? CHARRED : MODELS[g.slot] ?? MODELS.LONGBARREL)
+// M81 s2: a kit gun (Backbone, Charred Rifle) draws its kit model with the keeper's FITTED sight (gun-fit.ts, saved in the loadout)
+export const modelOf = (g: Pick<RangeGun, 'id' | 'slot'>): Model => preview[g.id] ?? fittedModel(getLoadout(), g.id) ?? (g.id === 'charred-rifle' ? CHARRED : MODELS[g.slot] ?? MODELS.LONGBARREL)
 /** the optic in hand: a model that carries its own sight (a kit model) names it; else the gun's */
 const opticIn = (m: Model, g: RangeGun): Optic => (m.optic ? OPTICS[m.optic] : opticOf(g))
 
@@ -228,7 +231,8 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
       selectGunTune(i.gun.id)   // this gun's own tune (per gun since 11-19)
       const m = modelOf(i.gun), o = opticIn(m, i.gun)
       // (re)build when the gun changes
-      const key = `${i.gun.id}:${o.id}${preview[i.gun.id] ? `:p${previewStamp}` : ''}`
+      const fs = preview[i.gun.id] ? null : fittedSight(getLoadout(), i.gun.id)   // M81 s2: two sights can share an optic (hood / lens)
+      const key = `${i.gun.id}:${o.id}${preview[i.gun.id] ? `:p${previewStamp}` : fs ? `:s${fs}` : ''}`
       if (rig.key !== key) {
         if (rig.model) { rig.held.remove(rig.model); rig.model.traverse(x => { if (x instanceof THREE.Mesh) x.geometry.dispose() }) }
         rig.model = buildModel(m, i.gun.color, o, mats); rig.held.add(rig.model); rig.key = key

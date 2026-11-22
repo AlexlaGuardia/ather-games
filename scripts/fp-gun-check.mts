@@ -73,7 +73,7 @@ await p.click('[data-sight="charred-rifle"] [data-tint="mana"]').catch(() => {})
 await p.screenshot({ path: `${out}/5-sight-menu.png` })
 res.savedLook = await p.evaluate(() => { const k = Object.keys(localStorage).find(x => x.endsWith('open.sights.v1')); return k ? JSON.parse(localStorage.getItem(k)!)['charred-rifle'] ?? null : null })
 await p.keyboard.press('Escape'); await sleep(700); await p.mouse.click(640, 380); await sleep(600)
-await tapR(); await poll(async () => (await G())?.key === 'charred-rifle:scope2')
+await tapR(); await poll(async () => (await G())?.key === 'charred-rifle:scope2:sscope2')   // M81 s2: a kit gun's key carries its fitted sight (default: the 2x)
 await p.mouse.down({ button: 'right' }); await poll(async () => ((await G())?.ads ?? 0) >= 0.99)
 res.recut = await G(); await poll(ring, 4000)   // the ring is DOM: it renders a frame after the sights reach full
 res.ringMark = await p.evaluate(() => document.querySelector('[data-hud="scope"]')?.getAttribute('data-mark') ?? null)
@@ -85,7 +85,7 @@ const d = res.drawn as any, ar = res.aimedRifle as any, sw = res.swapped as any,
 const pass = !!st && !st.shown
   && (res.sound as any)?.ctx >= 1 && (res.sound as any)?.osc > 0 && (res.sound as any)?.src > 0
   && res.freeHandsStowed === true && res.freeHandsDrawnWithGun === false && res.freeHandsMidJump === false
-  && d?.shown && d.key === 'charred-rifle:scope2' && d.optic === 'scope2' && d.glow >= 0.15 && d.glow <= 0.5
+  && d?.shown && d.key === 'charred-rifle:scope2:sscope2' && d.optic === 'scope2' && d.glow >= 0.15 && d.glow <= 0.5
   && !!res.adsReached && ar?.ads >= 0.99 && !!res.ringRifle && ar.shown === false
   && !!res.adsLeft && !!res.ringGone
   && sw?.key === 'repeater:reddot' && rp?.ads >= 0.99 && !res.ringRepeater && rp.shown === true

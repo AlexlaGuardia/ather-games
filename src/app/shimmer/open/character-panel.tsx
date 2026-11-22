@@ -13,7 +13,9 @@ import { useState } from 'react'
 import { H, hearthDisplay, Well, HearthButton } from '../ui/hearth'
 import { RANGE_GUNS } from './shared/gunplay'
 import { useLoadout, setLoadout, equip, gunsFor, vesselsFor, type OwnedVessel } from './shared/loadout'
-import { opticOf } from './shared/optics'
+import { fittedSight, fitSight, ownedSights, sightName } from './shared/gun-fit'   // M81 s2
+import { KIT_SIGHTS } from './shared/gun-kit'
+import { opticOf, OPTICS } from './shared/optics'
 import { MARKS, TINTS, type MarkId, type TintId, type Stroke } from './shared/sight-marks'
 import { useSightLooks, setSightLook, lookFor } from './shared/sight-looks'
 import { useBirth } from './birth-gate'
@@ -85,6 +87,7 @@ function Slot({ id, open, onOpen }: { id: SlotId; open: boolean; onOpen: () => v
             <button type="button" onClick={() => pick(null)} className="rounded-[9px] px-2 py-1.5 text-left text-[13px]" style={{ color: H.inkSoft }}>Leave this slot empty</button>
           )}
           {options.length === 0 && <div className="px-2 py-1 text-[13px] italic" style={{ color: H.inkFaint }}>Nothing you own fits here yet.</div>}
+          {gun && <FitPick gunId={gun.id} />}
           {gun && <SightPick gunId={gun.id} slot={gun.slot} />}
         </div>
       )}
@@ -107,7 +110,8 @@ function MarkGlyph({ id, hex, size = 26 }: { id: MarkId; hex: string; size?: num
 /** THE SIGHT (canon world/manalic-weapons.md › Sights, RULED 11-18): the etched mark in this gun's crystal lens, cut and tinted to the
  *  keeper's choosing. Look, never power: nothing here touches a number that fires. Plain labels until @lark. */
 function SightPick({ gunId, slot }: { gunId: string; slot: string }) {
-  const looks = useSightLooks(), o = opticOf({ slot }), lk = lookFor(looks, gunId, o.scoped)
+  const l = useLoadout(), fs = fittedSight(l, gunId)   // M81 s2: a fitted sight names the optic the gun aims through
+  const looks = useSightLooks(), o = fs ? OPTICS[KIT_SIGHTS[fs].optic] : opticOf({ slot }), lk = lookFor(looks, gunId, o.scoped)
   return (
     <div data-sight={gunId} className="mt-1 rounded-[9px] px-2 py-2" style={{ boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
       <div className="text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: H.inkFaint }}>Sight · {o.mag}×</div>
@@ -125,6 +129,27 @@ function SightPick({ gunId, slot }: { gunId: string; slot: string }) {
           <button key={t} type="button" data-tint={t} aria-label={TINTS[t].name} title={TINTS[t].name} onClick={() => setSightLook(gunId, { ...lk, tint: t })}
             className="w-7 h-7 rounded-full"
             style={{ background: TINTS[t].hex, boxShadow: t === lk.tint ? `0 0 0 2px #fff, 0 0 0 4px ${H.ember}` : `inset 0 0 0 1px rgba(0,0,0,.25)` }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** M81 s2: THE FITTING. A gun with a rail (gun-kit.ts: Backbone, Charred Rifle) takes any sight the keeper owns, saved per gun
+ *  in the loadout (gun-fit.ts); the gun in hand and its aim change at once. Plain labels (the kit's names) until @lark. */
+function FitPick({ gunId }: { gunId: string }) {
+  const l = useLoadout(), owned = ownedSights(l, gunId), on = fittedSight(l, gunId)
+  if (!owned.length) return null
+  return (
+    <div data-fit={gunId} className="mt-1 rounded-[9px] px-2 py-2" style={{ boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+      <div className="text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: H.inkFaint }}>Fitted sight</div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {owned.map(sid => (
+          <button key={sid} type="button" data-fit-sight={sid} aria-pressed={sid === on} onClick={() => { const r = fitSight(l, gunId, sid); if (r.ok) setLoadout(r.loadout) }}
+            className="rounded-[8px] px-2.5 py-1.5 text-[13px] font-semibold"
+            style={{ color: H.ink, background: sid === on ? 'rgba(255,250,235,.9)' : 'rgba(255,250,235,.35)', boxShadow: sid === on ? `0 0 0 2px ${H.ember}` : `inset 0 0 0 1px ${H.rule}` }}>
+            {sightName(sid)}
+          </button>
         ))}
       </div>
     </div>
@@ -186,6 +211,7 @@ function Section({ id, title, last, children }: { id: string; title: string; las
 
 /** M66 Armory: a small stats window for a worn gun, every number straight off its RANGE_GUNS row (range = speed x life). */
 function GunStats({ id }: { id: string }) {
+  const l = useLoadout(), fs = fittedSight(l, id)   // M81 s2: the Armory shows the fitted gun
   const g = RANGE_GUNS.find(x => x.id === id); if (!g) return null
   const fire = g.burst > 1 ? `${g.burst}-round burst` : g.pellets > 1 ? `${g.pellets} pellets` : g.auto ? 'full auto' : 'semi-auto'
   const cells: [string, string, string][] = [
@@ -196,7 +222,8 @@ function GunStats({ id }: { id: string }) {
   return (
     <div data-gun-stats={id} data-damage={g.damage} data-crit={g.crit} data-clip={g.clip} data-reload={g.reloadTime}
       className="mt-1.5 rounded-[10px] px-3 py-2 grid grid-cols-3 gap-x-3 gap-y-1.5" style={{ background: 'rgba(255,250,235,.5)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
-      <div className="col-span-3 text-[12px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{cap(g.name)}</div>
+      <div className="col-span-3 text-[12px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{cap(g.name)}
+        {fs && <span data-stat-sight={fs} className="ml-2 text-[11px] font-normal" style={{ color: H.inkSoft }}>· {sightName(fs)}</span>}</div>
       {cells.map(([k, l, v]) => (
         <div key={k} data-stat={k}>
           <div className="text-[10.5px] font-bold uppercase tracking-[.12em]" style={{ color: H.inkFaint }}>{l}</div>
