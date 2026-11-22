@@ -128,6 +128,16 @@ function doorsOf(R: Region, townId: string): Door[] {
       out.push({ key: 'front:trade-co', b, name: FRONT_SHOPS['trade-co'].name, at: shopDoorPoint(b) })
     }
   }
+  // THE CORKHOUSE: Rune Hold, BY THE SHIPYARD (canon): the free plain building nearest Kael's yard, computed AFTER every other door
+  // so none of them moves. Jin's placement; Alex can pick another. (M49 s4 8f828e9e deleted this with the bought-shipyard block; restored 11-22.)
+  if (i >= 0 && townId === 'rune-hold') {
+    const plan = cachedPlan(R, i), taken = new Set(out.map(d => d.b)), yard = out.find(d => d.key === 'front:shipyard')
+    const free = plan.buildings.filter(x => !x.front && !taken.has(x))
+    if (yard && free.length) {
+      const b = free.sort((p, q) => Math.hypot(p.x - yard.b.x, p.z - yard.b.z) - Math.hypot(q.x - yard.b.x, q.z - yard.b.z))[0]
+      out.push({ key: 'front:corkhouse', b, name: FRONT_SHOPS.corkhouse.name, at: shopDoorPoint(b) })
+    }
+  }
   return out
 }
 const doorCache = new WeakMap<Region, Map<string, Door[]>>()
