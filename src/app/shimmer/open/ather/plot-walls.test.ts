@@ -1,15 +1,16 @@
 // Run: npx tsx src/app/shimmer/open/ather/plot-walls.test.ts
 // Plot walls (ather/plot-walls.ts, BETA M37 slice 1). The pins: a drag is a straight run of 1 m pieces; an L closes with
-// no gap (the overrun); a wall is as thick and tall as a room's; laying costs a plank a metre and erasing gives every one
-// back; standing pieces are free to re-draw; ground you do not hold, the keep-clear rings and a room refuse; a saved plot
+// no gap (the overrun); a wall is as thick and tall as a room's; building costs 1.5 planks a piece (M50) and erasing gives every
+// one back; standing pieces are free to re-draw; ground you do not hold, the keep-clear rings and a room refuse; a saved plot
 // round-trips; the walker cannot cross a drawn wall.
 import {
-  snapCorner, straighten, runKeys, edgeRect, edgeEnds, wallBoxes, canLay, lay, raze, adoptWalls, WALL_T, WALL_H, MAX_RUN, WALL_MATS, WOOD_ORDER, type Walls,
+  snapCorner, straighten, runKeys, edgeRect, edgeEnds, wallBoxes, canLay, planRun, raze, adoptWalls, WALL_T, WALL_H, MAX_RUN, WALL_MATS, WOOD_ORDER, type Walls,
   findRooms, roofMesh, adoptRoof, ROOF_PITCH,
   pieceAt, toggleDoor, toggleWindow, paintWall, paintFloor, setFloor, floorOf, adoptFloors, roomAt, DOOR_H,
   connectedPaintable, paintConnected, connectedRooms,
 } from './plot-walls'
 import { WALL_T as ROOM_T, WALL_H as ROOM_H } from './rooms'
+import { buildPlan } from './plot-bom'   // 11-22: walls are built the real way (draft + Build); the old direct lay() is gone
 import { newInv, give, countOf } from '../shared/inventory'
 import { terrainWorld, type Shape } from '../terrain-world'
 let pass = 0
@@ -36,8 +37,8 @@ let inv = give(newInv(0), 'goldwood_plank', 10).inv
 let walls: Walls = {}
 { const v = canLay(walls, runKeys({ i: 0, j: 0 }, { i: 4, j: 0 }), 'goldwood', held, none, inv)
   ok(v.ok && v.add.length === 4 && v.cost === 4, 'a 4 m run asks 4 planks')
-  if (v.ok) { const r = lay(walls, inv, v.add, 'goldwood')!; walls = r.walls; inv = r.inv }
-  ok(Object.keys(walls).length === 4 && countOf(inv, 'goldwood_plank') === 6, `laid: 4 pieces, 6 planks left (${countOf(inv, 'goldwood_plank')})`) }
+  if (v.ok) { const r = buildPlan(planRun(walls, v.add, 'goldwood'), {}, inv, null); if (r.ok) { walls = r.walls; inv = r.inv } }
+  ok(Object.keys(walls).length === 4 && countOf(inv, 'goldwood_plank') === 4, `built: 4 pieces, 6 planks spent, 4 left (${countOf(inv, 'goldwood_plank')})`) }
 { const v = canLay(walls, runKeys({ i: 2, j: 0 }, { i: 6, j: 0 }), 'goldwood', held, none, inv)
   ok(v.ok && v.add.length === 2, 'drawing over standing pieces only pays for the new ones') }
 { const v = canLay(walls, runKeys({ i: 0, j: 0 }, { i: 4, j: 0 }), 'goldwood', held, none, inv)
@@ -53,9 +54,9 @@ let walls: Walls = {}
 { const v = canLay(walls, runKeys({ i: 0, j: 5 }, { i: 3, j: 5 }), 'goldwood', held, { rects: [{ r: { x0: 1, x1: 2, z0: 4, z1: 6 }, why: 'In your Kitchen.' }], circles: [] }, inv)
   ok(!v.ok && v.why === 'In your Kitchen.', 'a room / chest / piece in the way refuses with its own line') }
 { const r = raze(walls, inv, runKeys({ i: 1, j: 0 }, { i: 3, j: 0 }))
-  ok(r.down === 2 && Object.keys(r.walls).length === 2 && countOf(r.inv, 'goldwood_plank') === 8, 'erasing 2 m gives 2 planks back')
-  const all = raze(r.walls, r.inv, runKeys({ i: 0, j: 0 }, { i: 10, j: 0 }))
-  ok(all.down === 2 && Object.keys(all.walls).length === 0 && countOf(all.inv, 'goldwood_plank') === 10, 'every plank comes back: none lost to a lay + raze') }
+  ok(r.down === 2 && Object.keys(r.walls).length === 2 && countOf(r.inv, 'goldwood_plank') === 7, `erasing 2 m gives back the 3 planks they cost (${countOf(r.inv, 'goldwood_plank')})`)
+  const all = raze(r.walls, r.inv, runKeys({ i: 0, j: 0 }, { i: 10, j: 0 }), r.carry)
+  ok(all.down === 2 && Object.keys(all.walls).length === 0 && countOf(all.inv, 'goldwood_plank') === 10, 'every plank comes back: none lost to a build + raze') }
 { const saved = JSON.parse(JSON.stringify({ ...walls, 'x,1,1': { mat: 'goldwood' }, 'h,9,9': { mat: 'iron' } }))
   const back = adoptWalls(saved)
   ok(Object.keys(back).length === 4 && !back['x,1,1'] && !back['h,9,9'], 'a saved plot round-trips; junk keys and unknown woods are dropped')

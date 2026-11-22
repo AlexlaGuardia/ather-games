@@ -3,7 +3,7 @@
 // planks per metre by wood, a pane per window, floor planks + roof bricks per room m²; Build needs every line (bag + bank),
 // spends exactly it and stands the walls; erasing a built piece refunds, a draft refunds nothing; a save from before slice 4
 // (no draft, no paid) loads as BUILT and its rooms count as paid; the Stonery's jobs make the new parts from existing items.
-import { planRun, runKeys, raze, wallBoxes, adoptWalls, adoptPaid, findRooms, toggleWindow, toggleDoor, paintWall, paintFloor, type Walls } from './plot-walls'
+import { planRun, runKeys, raze, wallBoxes, adoptWalls, adoptPaid, adoptCarry, findRooms, toggleWindow, toggleDoor, paintWall, paintFloor, type Walls } from './plot-walls'
 import { billOf, buildPlan, planNeeds, reconcile, paneFor, STONE_BRICK, CRYSTAL_PANE, AMOUNTS } from './plot-bom'
 import { STONE_REFINE, REFINE } from './furniture'
 import { newInv, give, countOf, itemDef } from '../shared/inventory'
@@ -48,9 +48,10 @@ const W = (n: number) => Math.ceil(n * AMOUNTS.wallPerM - 1e-9)
     ok(wallBoxes(r.walls, 0).length === 18, 'built walls are solid')
     ok(billOf(r.walls, r.paid, r.inv, r.bank).empty, 'once built, the list is empty')
     // erase refunds a built piece
-    const z = raze(r.walls, r.inv, runKeys({ i: 0, j: 0 }, { i: 2, j: 0 })); ok(z.down === 2 && countOf(z.inv, 'goldwood_plank') === 2, 'erasing a built piece refunds its plank')
+    // 11-22: a built piece gives back what it was charged (1.5 planks since M50), not a flat 1: two pieces = 3 planks
+    const z = raze(r.walls, r.inv, runKeys({ i: 0, j: 0 }, { i: 2, j: 0 })); ok(z.down === 2 && countOf(z.inv, 'goldwood_plank') === 2 * AMOUNTS.wallPerM, `erasing 2 built pieces refunds what they cost (${countOf(z.inv, 'goldwood_plank')})`)
     // ...and a room that no longer closes gives its floor and roof back
-    const rc = reconcile(z.walls, r.paid, z.inv); ok(Object.keys(rc.paid).length === 0 && countOf(rc.inv, 'goldwood_plank') === 22 && countOf(rc.inv, STONE_BRICK) === 20, 'a broken room refunds its floor planks and roof bricks')
+    const rc = reconcile(z.walls, r.paid, z.inv); ok(Object.keys(rc.paid).length === 0 && countOf(rc.inv, 'goldwood_plank') === 2 * AMOUNTS.wallPerM + 20 && countOf(rc.inv, STONE_BRICK) === 20, 'a broken room refunds its floor planks and roof bricks')
     const still = reconcile(r.walls, r.paid, r.inv); ok(Object.keys(still.paid).length === 1 && still.back.length === 0, 'a standing room refunds nothing') }
   const no = buildPlan(plan, {}, give(newInv(0), 'goldwood_plank', 38).inv, freshBank()); ok(!no.ok, 'short: Build spends nothing and says so') }
 // a draft refunds nothing
@@ -61,7 +62,7 @@ const W = (n: number) => Math.ceil(n * AMOUNTS.wallPerM - 1e-9)
     const none = paneFor(built, w.walls, 'h,0,0', newInv(0), freshBank()); ok('why' in none, 'a window in a built wall needs a pane on hand')
     const inv = give(newInv(0), CRYSTAL_PANE, 1).inv, pay = paneFor(built, w.walls, 'h,0,0', inv, freshBank()); ok(!('why' in pay) && countOf(pay.inv, CRYSTAL_PANE) === 0, 'the pane is spent at the cut')
     const back = toggleWindow(w.walls, 'h,0,0'); if (back.ok) { const g = paneFor(w.walls, back.walls, 'h,0,0', newInv(0), null); ok(!('why' in g) && countOf(g.inv, CRYSTAL_PANE) === 1, 'filling the window in returns the pane') }
-    const z = raze(w.walls, newInv(0), ['h,0,0']); ok(countOf(z.inv, CRYSTAL_PANE) === 1 && countOf(z.inv, 'goldwood_plank') === 1, 'erasing a built window returns plank and pane') } else ok(false, 'toggleWindow') }
+    const z = raze(w.walls, newInv(0), ['h,0,0']); ok(countOf(z.inv, CRYSTAL_PANE) === 1 && countOf(z.inv, 'goldwood_plank') === 1 && (z.carry.goldwood_plank ?? 0) === 0.5, 'erasing a built window (pre-fix piece: the rate) returns its pane, 1 plank and carries the half') } else ok(false, 'toggleWindow') }
 // paint: a plan repaints free
 { const st = planRun({}, ['h,0,0'], 'stucco'), p = paintWall(st, 'h,0,0', '#336699'); ok('walls' in p && p.walls['h,0,0'].tint === '#336699' && p.walls['h,0,0'].draft === true, 'a planned stucco wall paints free and stays a plan') }
 // slice 5: brick / stucco walls and floor patterns on the list
@@ -91,6 +92,32 @@ for (const j of STONE_REFINE) {
 }
 ok(STONE_REFINE.some(j => j.out.id === 'stucco' && j.in[0].id === 'blankstone') && itemDef('stucco').name === 'Stucco', 'the Stonery mixes Stucco from blankstone')
 ok(itemDef(STONE_BRICK).name === 'Stone Brick' && itemDef(CRYSTAL_PANE).name === 'Crystal Pane', 'plain names, no proper names')
+// ── 11-22: EXACT REFUNDS (raze gave a flat 1 plank a piece while M50 charged 1.5: a keeper lost a third of every wall) ──────
+{ const run = (n: number) => planRun({}, runKeys({ i: 0, j: 10 }, { i: n, j: 10 }), 'goldwood')
+  const roundTrip = (n: number) => {
+    const inv0 = give(newInv(0), 'goldwood_plank', 40).inv, b = buildPlan(run(n), {}, inv0, null)
+    if (!b.ok) return null
+    const spent = 40 - countOf(b.inv, 'goldwood_plank'), z = raze(b.walls, b.inv, Object.keys(b.walls))
+    return { spent, back: countOf(z.inv, 'goldwood_plank') - countOf(b.inv, 'goldwood_plank'), carry: z.carry, paid: Object.values(b.walls).reduce((t, w) => t + (w.paid ?? 0), 0) }
+  }
+  const r12 = roundTrip(12); ok(!!r12 && r12.spent === 18 && r12.back === 18 && !Object.keys(r12.carry).length, `build 12 / erase 12: 18 spent, 18 back (${JSON.stringify(r12)})`)
+  const r1 = roundTrip(1); ok(!!r1 && r1.spent === 2 && r1.back === 2, `build 1 / erase 1: gives back what it charged, 2 (${JSON.stringify(r1)})`)
+  for (const n of [1, 2, 3, 5, 7, 11]) { const r = roundTrip(n); ok(!!r && r.back === r.spent && Math.abs(r.paid - r.spent) < 1e-9, `build ${n} / erase ${n}: back ${r?.back} = spent ${r?.spent}, the pieces' paid adds up`) }
+  // erase one piece at a time: the halves are CARRIED, never floored away
+  { const b = buildPlan(run(12), {}, give(newInv(0), 'goldwood_plank', 40).inv, null)
+    if (b.ok) { let walls = b.walls, inv = b.inv, carry: Record<string, number> = {}
+      for (const k of Object.keys(b.walls)) { const z = raze(walls, inv, [k], carry); walls = z.walls; inv = z.inv; carry = z.carry }
+      ok(countOf(inv, 'goldwood_plank') === 40 && !Object.keys(carry).length, `piece by piece, all 18 come back (${countOf(inv, 'goldwood_plank')} planks, carry ${JSON.stringify(carry)})`) } }
+  // a pre-fix piece (no paid) gives back the rate, fractions carried
+  { const old = adoptWalls({ 'h,0,0': { mat: 'goldwood' }, 'h,1,0': { mat: 'goldwood' } })
+    const a = raze(old, newInv(0), ['h,0,0']); ok(countOf(a.inv, 'goldwood_plank') === 1 && a.carry.goldwood_plank === 0.5, 'a pre-fix piece: 1 now, the half carried')
+    const b2 = raze(a.walls, a.inv, ['h,1,0'], a.carry); ok(countOf(b2.inv, 'goldwood_plank') === 3 && !b2.carry.goldwood_plank, 'the next piece completes it: 3 for 2 pieces') }
+  // paid survives a save round trip; a draft never carries one
+  { const w = adoptWalls(JSON.parse(JSON.stringify({ 'h,0,0': { mat: 'goldwood', paid: 2 }, 'h,1,0': { mat: 'goldwood', draft: true, paid: 9 } })))
+    ok(w['h,0,0'].paid === 2 && w['h,1,0'].paid === undefined, 'paid survives the save; a draft carries none') }
+  ok(JSON.stringify(adoptCarry({ goldwood_plank: 0.5, x: 2, y: -1, z: 'a' })) === '{"goldwood_plank":0.5}', 'carry loads only real fractions')
+}
+
 console.log(`plot-bom: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)

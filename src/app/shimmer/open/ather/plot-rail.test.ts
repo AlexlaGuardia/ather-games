@@ -39,11 +39,13 @@ ok(RAIL_H > 0.5 && RAIL_H < WALL_H, `a railing (${RAIL_H} m) is over the 0.5 m s
   const inv = give(newInv(0), 'goldwood_plank', 10).inv
   const r = buildAll({ walls: planRun({}, runKeys({ i: 0, j: 0 }, { i: 6, j: 0 }), 'goldwood', 'rail') }, inv)
   ok(r.ok && countOf(r.inv, 'goldwood_plank') === 10 - railN && Object.values(r.works.walls ?? {}).every(x => x.kind === 'rail' && !x.draft), 'Build stands the railing and spends its list')
-  // raze gives back what it cost, never more
-  // a wall comes down for 1 plank a metre (raze), a railing for a third of that: same ratio as the bill, never more than was paid
-  if (r.ok) { const d = raze(r.works.walls ?? {}, r.inv, Object.keys(r.works.walls ?? {})), back = countOf(d.inv, 'goldwood_plank') - countOf(r.inv, 'goldwood_plank'); ok(d.down === 6 && back === Math.floor(6 * RAIL_FRAC) && back <= railN, `taking 6 m down gives ${back} planks back (a third of a wall's refund, paid ${railN})`) }
+  // raze gives back EXACTLY what it cost (11-22: it gave a third of a FLAT plank a metre while M50 charged a third of 1.5)
+  if (r.ok) { const d = raze(r.works.walls ?? {}, r.inv, Object.keys(r.works.walls ?? {})), back = countOf(d.inv, 'goldwood_plank') - countOf(r.inv, 'goldwood_plank'); ok(d.down === 6 && back === railN && !Object.keys(d.carry).length, `railing round trip: 6 m down gives back the ${railN} planks it cost (${back})`) }
+  // a railing built before the fix (no paid): the rate, half a plank, carried rather than lost or minted
   const d1 = raze({ 'h,0,0': { mat: 'goldwood', kind: 'rail' } }, newInv(0), ['h,0,0'])
-  ok(d1.down === 1 && countOf(d1.inv, 'goldwood_plank') === 0, 'one metre down gives back no whole plank (no plank minting)')
+  ok(d1.down === 1 && countOf(d1.inv, 'goldwood_plank') === 0 && Math.abs((d1.carry.goldwood_plank ?? 0) - AMOUNTS.wallPerM * RAIL_FRAC) < 1e-9, 'one pre-fix metre down: no whole plank yet, its half carried (no minting, no loss)')
+  const d2 = raze({ 'h,1,0': { mat: 'goldwood', kind: 'rail' } }, d1.inv, ['h,1,0'], d1.carry)
+  ok(countOf(d2.inv, 'goldwood_plank') === 1 && !d2.carry.goldwood_plank, 'the second metre completes the plank')
 }
 // a railing closes no room, carries nothing, has no door or window
 {

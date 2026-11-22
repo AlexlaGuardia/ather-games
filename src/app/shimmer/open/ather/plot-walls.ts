@@ -39,8 +39,16 @@ export const wallColour = (w: Wall): string => (w.mat === 'stucco' && w.tint ? w
  *  A piece with no `draft` is BUILT, so every wall saved before slice 4 stands as it did. */
 /** M56 (c): kind 'rail' = a RAILING / half wall: RAIL_H tall, drawn with the Walls tool like any piece, any wall material, RAIL_FRAC of a
  *  wall's cost. The walker cannot walk through it but the eye sees over it; it closes no room and holds up nothing above. */
-export interface Wall { mat: WallMat; tint?: string; kind?: 'door' | 'window' | 'rail'; draft?: true }
+export interface Wall { mat: WallMat; tint?: string; kind?: 'door' | 'window' | 'rail'; draft?: true
+  /** what Build charged for this piece, in planks of its wood (11-22 fix: raze gives back exactly this). Its share of the bill's
+   *  line, with the line's round-up on its last piece, so a run's pieces add up to what the list spent. Absent = built before
+   *  the fix: the rate (wallRate) comes back. */
+  paid?: number }
 export const RAIL_H = 1.0, RAIL_FRAC = 1 / 3
+/** M50: walls stand 1.5x taller (4.8 m), so a piece costs 1.5 planks of its wood (plot-bom AMOUNTS.wallPerM reads this) */
+export const WALL_PER_M = 1.5
+/** a piece's planks at the bill's rate: a railing RAIL_FRAC of a wall */
+export const wallRate = (w: Pick<Wall, 'kind'>) => WALL_PER_M * (w.kind === 'rail' ? RAIL_FRAC : 1)
 export const isRail = (w: Wall | undefined) => w?.kind === 'rail'
 /** the pieces that make a room and carry weight: every piece but a railing */
 export const structural = (walls: Walls): Walls => { let any = false; for (const w of Object.values(walls)) if (w.kind === 'rail') { any = true; break } if (!any) return walls; const o: Record<string, Wall> = {}; for (const [k, w] of Object.entries(walls)) if (w.kind !== 'rail') o[k] = w; return o }
@@ -103,37 +111,42 @@ export function canLay(walls: Walls, keys: string[], mat: WallMat, held: (x: num
   if (inv && countOf(inv, item) < add.length) return { ok: false, why: `${add.length} ${itemDef(item).name} needed, ${countOf(inv, item)} in the bag.` }
   return { ok: true, add, cost: add.length }
 }
-/** lay the run: the new pieces stand, their planks leave the bag */
-export function lay(walls: Walls, inv: Inv, add: string[], mat: WallMat): { walls: Walls; inv: Inv } | null {
-  const t = take(inv, WALL_MATS[mat].item, add.length); if (!t) return null
-  const next: Record<string, Wall> = { ...walls }; for (const k of add) next[k] = { mat }
-  return { walls: next, inv: t }
-}
 /** M37 slice 4: draw a run as a PLAN: the new pieces are drafts, nothing leaves the bag (plot-bom.ts lists what building them takes) */
 export function planRun(walls: Walls, add: string[], mat: WallMat, kind?: 'rail'): Walls {
   const next: Record<string, Wall> = { ...walls }; for (const k of add) next[k] = { mat, ...(kind ? { kind } : {}), draft: true }; return next
 }
-/** take a run down: every standing piece under it comes down and its plank comes back (what the bag cannot hold stays up) */
-export function raze(walls: Walls, inv: Inv, keys: string[]): { walls: Walls; inv: Inv; down: number; full: boolean } {
-  const next: Record<string, Wall> = { ...walls }
+/** Take a run down: every standing piece under it comes down and gives back EXACTLY what it was paid (Wall.paid; the rate for
+ *  a piece built before that was stored). Whole planks go to the bag as they come due; the fraction left over is CARRIED in
+ *  `carry` (item -> 0..1, kept in the works) for the next take-down, never floored away. A built window's pane comes back too.
+ *  What the bag cannot hold stays up. (11-22: this gave a flat 1 plank a piece while M50 charged 1.5: a keeper lost a third.) */
+export function raze(walls: Walls, inv: Inv, keys: string[], carry: Readonly<Record<string, number>> = {}): { walls: Walls; inv: Inv; down: number; full: boolean; carry: Record<string, number> } {
+  const next: Record<string, Wall> = { ...walls }, owed: Record<string, number> = { ...carry }
   let bag = inv, down = 0, full = false
-  const railOwed = new Map<WallMat, number>()   // M56 (c): a built railing gives back its third of a plank, paid out in whole planks below
   for (const k of keys) {
     const w = next[k]; if (!w) continue
     if (w.draft) { delete next[k]; down++; continue }   // a plan: nothing was spent, nothing comes back
-    if (w.kind === 'rail') { railOwed.set(w.mat, (railOwed.get(w.mat) ?? 0) + RAIL_FRAC); delete next[k]; down++; continue }
-    let g = give(bag, WALL_MATS[w.mat].item, 1); if (g.left) { full = true; break }
-    if (w.kind === 'window') { const gp = give(g.inv, 'crystal_pane', 1); if (gp.left) { full = true; break }; g = gp }   // a built window's pane comes back too
-    bag = g.inv; delete next[k]; down++
+    const item = WALL_MATS[w.mat].item, before = owed[item] ?? 0, after = before + (w.paid ?? wallRate(w))
+    const whole = Math.floor(after + 1e-9) - Math.floor(before + 1e-9)   // the planks this piece completes
+    let b = bag
+    if (whole > 0) { const g = give(b, item, whole); if (g.left) { full = true; break } b = g.inv }
+    if (w.kind === 'window') { const gp = give(b, 'crystal_pane', 1); if (gp.left) { full = true; break } b = gp.inv }
+    bag = b; owed[item] = after; delete next[k]; down++
   }
-  for (const [m, n] of railOwed) { const whole = Math.floor(n + 1e-9); if (!whole) continue; const g = give(bag, WALL_MATS[m].item, whole); bag = g.inv; if (g.left) full = true }
-  return { walls: next, inv: bag, down, full }
+  const left: Record<string, number> = {}
+  for (const [id, n] of Object.entries(owed)) { const f = n - Math.floor(n + 1e-9); if (f > 1e-9) left[id] = f }
+  return { walls: next, inv: bag, down, full, carry: left }
+}
+/** load-side: the carried fractions (item -> 0..1) */
+export function adoptCarry(v: unknown): Record<string, number> {
+  const out: Record<string, number> = {}
+  if (v && typeof v === 'object') for (const [k, n] of Object.entries(v as Record<string, unknown>)) if (typeof n === 'number' && n > 0 && n < 1) out[k] = n
+  return out
 }
 /** load-side: keep only well-formed pieces of a known wood */
 export function adoptWalls(v: unknown): Walls {
   const out: Record<string, Wall> = {}
   if (v && typeof v === 'object') for (const [k, w] of Object.entries(v as Record<string, { mat?: string }>)) {
-    if (parseKey(k) && w && typeof w.mat === 'string' && w.mat in WALL_MATS) { const kd = (w as Wall).kind === 'door' || (w as Wall).kind === 'window' || (w as Wall).kind === 'rail' ? { kind: (w as Wall).kind } : {}; out[k] = { mat: w.mat as WallMat, ...(w.mat === 'stucco' && isColour((w as Wall).tint) ? { tint: (w as Wall).tint!.toLowerCase() } : {}), ...kd, ...((w as Wall).draft === true ? { draft: true as const } : {}) } }
+    if (parseKey(k) && w && typeof w.mat === 'string' && w.mat in WALL_MATS) { const kd = (w as Wall).kind === 'door' || (w as Wall).kind === 'window' || (w as Wall).kind === 'rail' ? { kind: (w as Wall).kind } : {}; out[k] = { mat: w.mat as WallMat, ...(w.mat === 'stucco' && isColour((w as Wall).tint) ? { tint: (w as Wall).tint!.toLowerCase() } : {}), ...kd, ...(typeof (w as Wall).paid === 'number' && (w as Wall).paid! > 0 && Number.isFinite((w as Wall).paid) && (w as Wall).draft !== true ? { paid: (w as Wall).paid } : {}), ...((w as Wall).draft === true ? { draft: true as const } : {}) } }
   }
   return out
 }

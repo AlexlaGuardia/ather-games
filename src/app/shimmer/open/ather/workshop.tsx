@@ -397,10 +397,10 @@ function wallDrawHandler(owned: () => ReadonlySet<string>, erase: boolean) {
       const w = currentWorks(), keys = runKeys(a, b); if (!keys.length) return
       const lv = getPlanLevel(), L = levelOf(w, lv)
       if (erase) {
-        const r = raze(L.walls, getInv(), keys); if (!r.down) return
+        const r = raze(L.walls, getInv(), keys, w.wallCarry); if (!r.down) return
         if (floating(withLevel(w, lv, { ...L, walls: r.walls })).length) { hudSay('Take the floor above down first: it stands on that wall.', 'info'); return }   // M47: nothing floats
         const rc = reconcile(r.walls, L.paid, r.inv, L.floors, lv === 0)   // a built room that no longer closes gives its floor (and roof) back too
-        setWorks(withLevel(w, lv, { ...L, walls: r.walls, paid: rc.paid })); setInv(rc.inv)
+        setWorks({ ...withLevel(w, lv, { ...L, walls: r.walls, paid: rc.paid }), wallCarry: r.carry }); setInv(rc.inv)   // 11-22: the leftover fraction rides to the next take-down
         hudSay(`${r.down} m of wall down, what was built comes back to your bag.${r.full ? ' Your bag is full: the rest stays up.' : ''}`, 'item')
         return
       }

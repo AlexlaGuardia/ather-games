@@ -12,7 +12,7 @@ import { draftCols, colNeeds, standCols } from './plot-cols'
 import { draftStairs, stairNeeds, standStairs } from './plot-stairs'
 import { draftDecks, deckNeeds, standDecks } from './plot-decks'
 import { liftOf, plinthPerM2 } from './plot-found'
-import { findRooms, RAIL_FRAC, WALL_MATS, FLOOR_PATS, FLOOR_PER_M2, roomFloor, floorByKey, type Walls, type Paid, type Floors } from './plot-walls'
+import { findRooms, RAIL_FRAC, WALL_PER_M, wallRate, WALL_MATS, FLOOR_PATS, FLOOR_PER_M2, roomFloor, floorByKey, type Walls, type Paid, type Floors } from './plot-walls'
 import { payCost, haveFor } from './rooms'
 import { give, itemDef, type Inv } from '../shared/inventory'
 import type { Bank } from './garden-bank'
@@ -20,7 +20,7 @@ import { levelsOf, levelOf, levelCount, withLevel, type Stacked } from './plot-f
 
 export const STONE_BRICK = 'stone_brick', CRYSTAL_PANE = 'crystal_pane', FLOOR_ITEM = 'goldwood_plank'
 // M50: walls stand 1.5x taller (4.8 m), so a piece costs 1.5 planks; a list rounds UP per line (lines())
-export const AMOUNTS = { wallPerM: 1.5, panePerWindow: 1, floorPerM2: FLOOR_PER_M2, roofPerM2: 1 } as const
+export const AMOUNTS = { wallPerM: WALL_PER_M, panePerWindow: 1, floorPerM2: FLOOR_PER_M2, roofPerM2: 1 } as const
 /** M55: Stone Brick for the plinth under the ground floor's UNBUILT rooms, at the height of the house each one joins (slice 2) */
 export function plinthNeed(w: Stacked & { found?: number; foundCells?: Readonly<Record<string, number>> }): number {
   if (!w.found && !w.foundCells) return 0
@@ -79,8 +79,18 @@ export function buildPlan(walls: Walls, paid: Paid | undefined, inv: Inv, bank?:
   const short = p.needs.find(c => haveFor(rc.inv, bank, c.id) < c.n)
   if (short) return { ok: false, why: `${short.n} ${itemDef(short.id).name} needed, ${haveFor(rc.inv, bank, short.id)} on hand.` }
   const pay = payCost(p.needs, rc.inv, bank); if (!pay) return { ok: false, why: 'Not enough on hand.' }
+  // 11-22: each draft piece records what it was charged (Wall.paid), so a take-down gives back exactly that. A piece's share is
+  // its rate; a line rounds UP, and that round-up goes on the line's last piece, so the pieces add up to what the list spent
+  // (rooms' floor and roof lines are whole m², so any fraction in a line is the walls').
+  const exact = new Map<string, number>(), lastOf = new Map<string, string>()
+  for (const [k, w] of Object.entries(walls)) if (w.draft) { const it = WALL_MATS[w.mat].item; exact.set(it, (exact.get(it) ?? 0) + wallRate(w)); lastOf.set(it, k) }
   const out: Record<string, Walls[string]> = {}
-  for (const [k, w] of Object.entries(walls)) { const { draft: _d, ...rest } = w; void _d; out[k] = rest }
+  for (const [k, w] of Object.entries(walls)) {
+    const { draft: _d, ...rest } = w; void _d
+    if (!w.draft) { out[k] = rest; continue }
+    const it = WALL_MATS[w.mat].item, e = exact.get(it)!, up = lastOf.get(it) === k ? Math.ceil(e - 1e-9) - e : 0
+    out[k] = { ...rest, paid: wallRate(w) + Math.max(0, up) }
+  }
   const np: Record<string, number> = { ...rc.paid }; for (const r of findRooms(out)) np[r.key] = r.cells.length
   return { ok: true, walls: out, paid: np, inv: pay.inv, bank: pay.bank, spent: p.needs }
 }
