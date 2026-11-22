@@ -121,10 +121,21 @@ export default function BuilderFly(p: Props) {
     window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up)
     return () => { window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up) }
   }, [])
-  // test hook (scripts/builder-check.mts): the camera, a scripted fly, and "is anything but terrain drawn?"
+  // test hook (scripts/builder-fly-check.mts): the camera, a scripted fly, and "is anything but terrain drawn?"
+  const sceneRef = useRef<THREE.Scene | null>(null)
   useEffect(() => {
     ;(window as unknown as { __builderFly?: unknown }).__builderFly = {
       cam: () => camRef.current,
+      /** every mesh in the scene by geometry kind: terrain tiles, the sea plane, the brush ring, and anything else (want none) */
+      scene: () => {
+        const n = { tiles: 0, sea: 0, ring: 0, other: [] as string[] }
+        sceneRef.current?.traverse(o => {
+          if (!(o as THREE.Mesh).isMesh) return
+          const t = (o as THREE.Mesh).geometry?.type
+          if (t === 'BufferGeometry') n.tiles++; else if (t === 'PlaneGeometry') n.sea++; else if (t === 'RingGeometry') n.ring++; else n.other.push(t ?? o.type)
+        })
+        return n
+      },
       setCam: (c: Partial<Cam>) => { if (camRef.current) camRef.current = { ...camRef.current, ...c } },
       top: () => { if (camRef.current) camRef.current = toggleTop(camRef.current, pr.current.heightAt) },
     }
@@ -143,7 +154,7 @@ export default function BuilderFly(p: Props) {
   const waterY = p.tiles[0]?.waterY ?? 0
   return (
     <Canvas camera={{ fov: 60, near: 0.5, far: 6000 }} gl={{ antialias: true }} onPointerLeave={() => { hover.current = null }} data-testid="builder-fly"
-      onCreated={({ scene }) => { scene.background = new THREE.Color('#9fc4dd'); scene.fog = new THREE.Fog('#9fc4dd', 1500, 5000) }}>
+      onCreated={({ scene }) => { sceneRef.current = scene; scene.background = new THREE.Color('#9fc4dd'); scene.fog = new THREE.Fog('#9fc4dd', 1500, 5000) }}>
       <hemisphereLight args={['#ffffff', '#5a6b4a', 0.9]} />
       <directionalLight position={[-300, 600, -200]} intensity={1.1} />
       <Rig heightAt={p.heightAt} focus={p.focus} camRef={camRef} />
