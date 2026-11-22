@@ -91,7 +91,7 @@ try {
   await shot(q, 'morel-pulse-settled')
   // LOOK shot: a 1 fps screenshot cannot catch a 1.65 s pulse (and the 4 s line is often gone by then), so a static CLONE of the
   // message line, taken the moment it arrived, outside React, data attrs stripped (the asserts never see it), frozen at a beat's peak
-  if (cloned) { await q.evaluate(() => document.querySelectorAll<HTMLElement>('div').forEach(d => { if (/Left thumb moves/.test(d.textContent ?? '') && !d.querySelector('#look-clone')) d.style.visibility = 'hidden' })); await sleep(1200); await shot(q, 'morel-pulse-peak'); await q.evaluate(() => document.getElementById('look-clone')?.remove()) }
+  if (cloned) { await hideCard(q); await sleep(1200); await shot(q, 'morel-pulse-peak'); await q.evaluate(() => document.getElementById('look-clone')?.remove()) }
   const at = await q.evaluate(() => (window as any).__pulseAt as { id: number; s: string; t: number; anim: string }[])
   console.error('pulse events', JSON.stringify(at.map(x => [x.id, x.s, Math.round(x.t)])))
   const on = at.find(x => x.s === '1:c'), off = at.find(x => x.s === '0:-' && on && x.id === on.id)
