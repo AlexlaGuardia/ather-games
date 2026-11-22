@@ -101,6 +101,15 @@ function applyParked(s: Storage, owner: string, toId: string): void {
   for (const base of live.keys()) if (!target.has(base)) s.removeItem(keeperKeyFor(base, owner))
 }
 
+/** Fired on `window` when the ACTIVE keeper's live keys were just replaced (a swap, or ensureRoster finishing an
+ *  interrupted one). A store holding a keeper value in memory must drop it and re-read: the bytes under its key are now
+ *  another keeper's, and writing its stale copy back would hand one keeper's progress to the other (11-22). */
+export const KEEPER_SWAP_EVENT = 'ather:keeper-swap'
+function notifySwap(): void {
+  if (typeof window === 'undefined') return
+  try { window.dispatchEvent(new CustomEvent(KEEPER_SWAP_EVENT)) } catch { /* no CustomEvent */ }
+}
+
 /**
  * The account's roster, created on first read: ONE keeper = whatever is live today, active. No data moves.
  * Also finishes an interrupted swap. Null for anonymous. A corrupt record is left alone (null), never overwritten.
@@ -121,6 +130,7 @@ export function ensureRoster(owner: string | null = saveOwner()): Roster | null 
       applyParked(localStorage, owner, r.pending)
       const done: Roster = { v: 1, keepers: r.keepers, active: r.pending }
       writeRoster(owner, done)
+      notifySwap()
       return done
     }
     return r
@@ -179,6 +189,7 @@ export function swapKeeper(toId: string, owner: string | null = saveOwner()): bo
     for (const base of parkedKeys(s, owner, r.active).keys()) if (!live.has(base)) s.removeItem(pre + base)
     // 4. ACTIVE.
     writeRoster(owner, { v: 1, keepers: r.keepers, active: toId })
+    notifySwap()
     return true
   } catch { return false }   // interrupted: the journal (if written) lets the next ensureRoster() finish it
 }

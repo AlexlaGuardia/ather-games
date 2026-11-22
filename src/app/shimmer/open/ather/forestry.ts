@@ -22,6 +22,7 @@
 import { NODE_DEFS } from '../../world/resources'
 import { createSkillSet, addSkillXP, skillSetToSave, skillSetFromSave, type SkillSet, type SkillId } from '../../engine/skills'
 import { keeperKey, gardenKey } from '@/lib/keeper-local'
+import { ownerSlot } from '../shared/owner-store'
 import { emitXp } from '../shared/xp-feed'
 
 export type Zone = 'meadows' | 'thicket' | 'springs' | 'trails' | 'arid' | 'caverns'
@@ -65,33 +66,48 @@ const subs = new Set<() => void>()
 const bump = () => { rev++; subs.forEach(f => f()) }
 export const subscribeForestry = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export const forestryRev = () => rev
+// ★ LAZY + OWNER-AWARE (11-22: an eager read here, at module evaluation, ran before the account was known, read the anonymous
+//   slot as level 1 and the first prune wrote that over Alex's level 6). shared/owner-store.ts: read once the owner is known,
+//   re-read when the owner or the active keeper changes, write only to the slot the value came from.
+const skillSlot = ownerSlot(() => keeperKey(SKILL_KEY), () => { skills = createSkillSet(); bump() })
+const pruneSlot = ownerSlot(() => gardenKey(PRUNE_KEY), () => { pruned = {}; bump() })
+function load(): void {
+  if (skillSlot.due()) {
+    skills = createSkillSet()
+    try { const s = JSON.parse(localStorage.getItem(keeperKey(SKILL_KEY)) ?? 'null'); if (Array.isArray(s)) skills = skillSetFromSave(s) } catch { /* fresh */ }
+  }
+  if (pruneSlot.due()) {
+    pruned = {}
+    try { const p = JSON.parse(localStorage.getItem(gardenKey(PRUNE_KEY)) ?? 'null'); if (p && typeof p === 'object' && !Array.isArray(p)) pruned = p } catch { /* fresh */ }
+  }
+}
 if (typeof window !== 'undefined') {
   // a tree whose timer ran out redraws whole: every 10 s, if any prune has expired since the last look, tell the scene
-  setInterval(() => { const now = Date.now(); if (Object.values(pruned).some(t => t <= now)) { save(now); bump() } }, 10_000)
-  try { const s = JSON.parse(localStorage.getItem(keeperKey(SKILL_KEY)) ?? 'null'); if (Array.isArray(s)) skills = skillSetFromSave(s) } catch { /* fresh */ }
-  try { const p = JSON.parse(localStorage.getItem(gardenKey(PRUNE_KEY)) ?? 'null'); if (p && typeof p === 'object') pruned = p } catch { /* fresh */ }
+  setInterval(() => { load(); const now = Date.now(); if (Object.values(pruned).some(t => t <= now)) { save(now); bump() } }, 10_000)
 }
 const save = (now = Date.now()) => {
-  try { localStorage.setItem(keeperKey(SKILL_KEY), JSON.stringify(skillSetToSave(skills))) } catch { /* private window */ }
+  load()
+  if (skillSlot.writable()) try { localStorage.setItem(keeperKey(SKILL_KEY), JSON.stringify(skillSetToSave(skills))) } catch { /* private window */ }
   for (const k of Object.keys(pruned)) if (pruned[k] <= now) delete pruned[k]   // the SAME clock prune used (a test's, or the real one)
-  try { localStorage.setItem(gardenKey(PRUNE_KEY), JSON.stringify(pruned)) } catch { /* private window */ }
+  if (pruneSlot.writable()) try { localStorage.setItem(gardenKey(PRUNE_KEY), JSON.stringify(pruned)) } catch { /* private window */ }
 }
-export const forestryLevel = () => skills.forestry.level
+export const forestryLevel = () => { load(); return skills.forestry.level }
 /** Any open-world skill's level, and XP granted to it (saved with Forestry's: one open-world skill set). Rinning uses it. */
-export const openLevel = (id: SkillId) => skills[id].level
+export const openLevel = (id: SkillId) => { load(); return skills[id].level }
 /** Gathering XP multiplier: a Starlight Tincture lifts it (ather/alchemy.ts; the page sets it while the buff runs). */
 let xpMult = 1
 export const setOpenXpMult = (m: number) => { xpMult = m > 0 ? m : 1 }
 const scaled = (xp: number) => Math.round(xp * xpMult)
 export function addOpenXp(id: SkillId, xp: number): number | null {
+  load()
   const n = scaled(xp), r = addSkillXP(skills[id], n); save(); bump()
   emitXp(skills[id], n, r.leveled)   // the HUD's XP bar (M21)
   return r.leveled ? r.newLevel : null
 }
 /** The open world's skill set (the HUD's tool sockets read it; addSkillXP mutates it in place, so a ref to it stays live). */
-export const openSkills = () => skills
+export const openSkills = () => { load(); return skills }
 /** ms until this tree has regrown, or 0. */
-export const regrowIn = (id: string, now = Date.now()) => Math.max(0, (pruned[id] ?? 0) - now)
+export const regrowIn = (id: string, now = Date.now()) => { load(); return Math.max(0, (pruned[id] ?? 0) - now) }
 export const isPruned = (id: string, now = Date.now()) => regrowIn(id, now) > 0
 
 export const PRUNE_RANGE = 10
@@ -148,6 +164,7 @@ export function prunePlan(kind: TreeKind, rand: () => number = Math.random): { i
 /** The tree is done: XP lands on Forestry and it regrows on the table's timer. */
 export function pruneCommit(kind: TreeKind, id: string, now = Date.now()): { xp: number; levelUp: number | null } {
   const def = NODE_DEFS[kind]
+  load()
   const n = scaled(def.xp), r = addSkillXP(skills.forestry, n)   // mutates the skill in place (engine/skills.ts)
   pruned[id] = now + def.respawnMs
   save(now); bump()
@@ -156,9 +173,10 @@ export function pruneCommit(kind: TreeKind, id: string, now = Date.now()): { xp:
 }
 
 /** Test hook: set any open-world skill's level (prospecting.test, rinning checks). */
-export function _setOpenLevel(id: SkillId, level: number) { skills = { ...skills, [id]: { ...skills[id], level } }; bump() }
+export function _setOpenLevel(id: SkillId, level: number) { load(); skills = { ...skills, [id]: { ...skills[id], level } }; bump() }
 /** Test hook: a clean slate (no storage). */
 export function _resetForestry(level = 1) {
+  load()
   skills = createSkillSet()
   if (level > 1) skills = { ...skills, forestry: { ...skills.forestry, level } }
   pruned = {}; bump()

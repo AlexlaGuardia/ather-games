@@ -23,6 +23,7 @@ import type { SkillId } from '../../engine/skills'
 import { PERK_INFO, PERK_MAX_BONUS, type BeastPerk } from '../../beasts/beast'
 import { openLevel, subscribeForestry } from '../ather/forestry'
 import { gardenKey } from '@/lib/keeper-local'
+import { ownerSlot } from './owner-store'
 
 export type CompanionId =
   | 'dustwhisker' | 'drifthorn' | 'glowmite' | 'embermole' | 'sporeling'
@@ -80,7 +81,19 @@ let rev = 0
 let joined: CompanionId[] = []   // met since the page last asked (for its toast)
 const subs = new Set<() => void>()
 const bump = () => { rev++; subs.forEach(f => f()) }
-const save = () => { try { localStorage.setItem(gardenKey(KEY), JSON.stringify(st)) } catch { /* private window */ } }
+// ★ LAZY + OWNER-AWARE (11-22, same defect as forestry.ts: an eager read at module evaluation read the anonymous garden).
+const fresh = (): Saved => ({ active: null, met: [], sentHome: false })
+const slot = ownerSlot(() => gardenKey(KEY), () => { st = fresh(); joined = []; bump() })
+function load(): void {
+  if (!slot.due()) return
+  let s: Partial<Saved> | null = null
+  try { s = JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? 'null') } catch { /* fresh */ }
+  if (s && typeof s === 'object' && Array.isArray(s.met)) {
+    const ids = new Set(COMPANIONS.map(c => c.id))
+    st = { met: s.met.filter((x: CompanionId) => ids.has(x)), active: s.active && ids.has(s.active) ? s.active : null, sentHome: !!s.sentHome }
+  } else st = fresh()
+}
+const save = () => { load(); if (slot.writable()) try { localStorage.setItem(gardenKey(KEY), JSON.stringify(st)) } catch { /* private window */ } }
 export const subscribeCompanion = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export const companionRev = () => rev
 
@@ -92,6 +105,7 @@ export function unlockedBy(levelOf: (s: SkillId) => number): CompanionDef[] {
 /** Meet any newly unlocked companion. The first one you ever meet starts walking with you; a TRUE Mana'mal steps in
  *  for its own skill's lesser companion if that is the one out. Returns who joined. */
 export function checkJoins(levelOf: (s: SkillId) => number = openLevel): CompanionId[] {
+  load()
   const fresh = unlockedBy(levelOf).filter(c => !st.met.includes(c.id))
   if (!fresh.length) return []
   for (const c of fresh) {
@@ -106,10 +120,11 @@ export function checkJoins(levelOf: (s: SkillId) => number = openLevel): Compani
 /** Who joined since the last call (the page turns it into a toast), cleared on read. */
 export function takeJoined(): CompanionDef[] { const j = joined.map(companionDef); joined = []; return j }
 
-export const metCompanions = () => st.met.map(companionDef)
-export const activeCompanion = (): CompanionDef | null => (st.active ? companionDef(st.active) : null)
+export const metCompanions = () => { load(); return st.met.map(companionDef) }
+export const activeCompanion = (): CompanionDef | null => { load(); return st.active ? companionDef(st.active) : null }
 /** Walk with this one, or `null` to send the companion home. */
 export function setCompanion(id: CompanionId | null) {
+  load()
   if (id && !st.met.includes(id)) return
   st.active = id; st.sentHome = id === null
   save(); bump()
@@ -128,16 +143,9 @@ export function perkBonus(skill: SkillId, rand: () => number = Math.random): str
 }
 
 if (typeof window !== 'undefined') {
-  try {
-    const s = JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? 'null')
-    if (s && typeof s === 'object' && Array.isArray(s.met)) {
-      const ids = new Set(COMPANIONS.map(c => c.id))
-      st = { met: s.met.filter((x: CompanionId) => ids.has(x)), active: ids.has(s.active) ? s.active : null, sentHome: !!s.sentHome }
-    }
-  } catch { /* fresh */ }
-  checkJoins()
+  // no read here (see load()): the first checkJoins comes from forestry's bump once the owner is known and skills load
   subscribeForestry(() => { checkJoins() })
 }
 
 /** Test hook. */
-export function _resetCompanion() { st = { active: null, met: [], sentHome: false }; joined = []; bump() }
+export function _resetCompanion() { load(); st = { active: null, met: [], sentHome: false }; joined = []; bump() }

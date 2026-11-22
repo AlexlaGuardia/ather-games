@@ -27,6 +27,7 @@ import { NODE_DEFS } from '../../world/resources'
 import { addOpenXp, openLevel, type Zone } from './forestry'
 import { perkFires, activeCompanion, perkLabel, GEM_DROP_CHANCE, GEM_ITEM } from '../shared/companion'
 import { gardenKey } from '@/lib/keeper-local'
+import { ownerSlot } from '../shared/owner-store'
 import { KEEPSTONE_FIND, keepstoneFor } from './furniture'
 
 /** what stands on the rock. `egg` = a Wooded Trails element node: which element is only known when it shatters. */
@@ -82,15 +83,22 @@ const subs = new Set<() => void>()
 const bump = () => { rev++; subs.forEach(f => f()) }
 export const subscribeProspecting = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export const prospectingRev = () => rev
+// ★ LAZY + OWNER-AWARE (11-22, same defect as forestry.ts: an eager read at module evaluation read the anonymous garden).
+const minedSlot = ownerSlot(() => gardenKey(MINED_KEY), () => { mined = {}; bump() })
+function load(): void {
+  if (!minedSlot.due()) return
+  mined = {}
+  try { const m = JSON.parse(localStorage.getItem(gardenKey(MINED_KEY)) ?? 'null'); if (m && typeof m === 'object' && !Array.isArray(m)) mined = m } catch { /* fresh */ }
+}
 const save = (now = Date.now()) => {
+  load()
   for (const k of Object.keys(mined)) if (mined[k] <= now) delete mined[k]
-  try { localStorage.setItem(gardenKey(MINED_KEY), JSON.stringify(mined)) } catch { /* private window */ }
+  if (minedSlot.writable()) try { localStorage.setItem(gardenKey(MINED_KEY), JSON.stringify(mined)) } catch { /* private window */ }
 }
 if (typeof window !== 'undefined') {
-  setInterval(() => { const now = Date.now(); if (Object.values(mined).some(t => t <= now)) { save(now); bump() } }, 10_000)
-  try { const m = JSON.parse(localStorage.getItem(gardenKey(MINED_KEY)) ?? 'null'); if (m && typeof m === 'object') mined = m } catch { /* fresh */ }
+  setInterval(() => { load(); const now = Date.now(); if (Object.values(mined).some(t => t <= now)) { save(now); bump() } }, 10_000)
 }
-export const regrowIn = (id: string, now = Date.now()) => Math.max(0, (mined[id] ?? 0) - now)
+export const regrowIn = (id: string, now = Date.now()) => { load(); return Math.max(0, (mined[id] ?? 0) - now) }
 export const isMined = (id: string, now = Date.now()) => regrowIn(id, now) > 0
 
 /** What working this node would say, without doing it (the prompt reads this). */
@@ -135,10 +143,11 @@ export function minePlan(kind: CrystalKind, rand: () => number = Math.random): {
 export function mineCommit(kind: CrystalKind, id: string, now = Date.now()): { xp: number; levelUp: number | null } {
   const tier = TIER[kind]
   const levelUp = addOpenXp('prospecting', XP[tier])
+  load()
   mined[id] = now + RESPAWN_MS[tier]
   save(now); bump()
   return { xp: XP[tier], levelUp }
 }
 
 /** Test hook: a clean slate of mined nodes (skills live in forestry.ts › _resetForestry). */
-export function _resetProspecting() { mined = {}; bump() }
+export function _resetProspecting() { load(); mined = {}; bump() }
