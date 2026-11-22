@@ -24,7 +24,7 @@ const weak = (e: number) => { const t = etypes[edges[e + eT]]; return t === 'wea
 const parent = new Int32Array(n).fill(-1), pedge = new Int32Array(n).fill(-1), seen = new Uint8Array(n)
 const q = new Int32Array(n); let h = 0, t = 0; q[t++] = 0; seen[0] = 1
 while (h < t) { const i = q[h++]; for (let e = firstEdge[i]; e < firstEdge[i + 1]; e += E) { if (weak(e)) continue; const j = edges[e + eTo] / N; if (!seen[j]) { seen[j] = 1; parent[j] = i; pedge[j] = e; q[t++] = j } } }
-const groups = new Map<string, { size: number; count: number }>()
+const groups = new Map<string, { size: number; count: number; holder: number }>()
 let newTotal = 0, unreached = 0
 for (let i = 0; i < n; i++) {
   if (oldIds.has(nodes[i * N + iI])) continue
@@ -33,14 +33,24 @@ for (let i = 0; i < n; i++) {
   newTotal += size
   if (!seen[i]) { unreached += size; continue }
   // climb: collect hops until a node that EXISTED in the old snapshot (the long-lived holder) or HOPS reached
-  const hops: string[] = []; let j = i, holder = ''
+  const hops: string[] = []; let j = i, holder = '', hIdx = -1
   for (let k = 0; k < 12 && parent[j] >= 0; k++) {
     const pj = parent[j]; hops.unshift(edgeLabel(pedge[j]))
-    if (oldIds.has(nodes[pj * N + iI]) || pj === 0) { holder = `${nodeType(pj)}:${nodeName(pj).slice(0, 50)}`; break }
+    if (oldIds.has(nodes[pj * N + iI]) || pj === 0) { holder = `${nodeType(pj)}:${nodeName(pj).slice(0, 50)}`; hIdx = pj; break }
     j = pj
   }
   const key = `${holder} . ${hops.slice(0, HOPS).join('.')}  <${ty}:${nm.slice(0, 30)}>`
-  const g = groups.get(key) ?? { size: 0, count: 0 }; g.size += size; g.count++; groups.set(key, g)
+  const g = groups.get(key) ?? { size: 0, count: 0, holder: hIdx }; g.size += size; g.count++; groups.set(key, g)
 }
 console.log(`new nodes${ONLY ? ` (${ONLY})` : ''}: ${(newTotal / 1048576).toFixed(2)} MB self · unreachable by strong edges ${(unreached / 1048576).toFixed(2)} MB`)
-for (const [k, g] of [...groups].sort((a, b) => b[1].size - a[1].size).slice(0, TOP)) console.log(`  ${(g.size / 1048576).toFixed(2).padStart(6)} MB ${String(g.count).padStart(7)}  ${k}`)
+const top = [...groups].sort((a, b) => b[1].size - a[1].size)
+for (const [k, g] of top.slice(0, TOP)) console.log(`  ${(g.size / 1048576).toFixed(2).padStart(6)} MB ${String(g.count).padStart(7)}  ${k}`)
+// --holders: each distinct long-lived holder of the top groups, its total, and its own path from the root (who keeps the keeper)
+if (process.argv.includes('--holders')) {
+  const byH = new Map<number, number>(); for (const [, g] of top) if (g.holder >= 0) byH.set(g.holder, (byH.get(g.holder) ?? 0) + g.size)
+  console.log('\nlong-lived holders (new self size they keep) and their path from the root:')
+  for (const [hI, sz] of [...byH].sort((a, b) => b[1] - a[1]).slice(0, 6)) {
+    const path: string[] = []; for (let j = hI, k = 0; k < 16 && parent[j] >= 0; k++) { path.unshift(`${edgeLabel(pedge[j])}{${nodeType(parent[j])}:${nodeName(parent[j]).slice(0, 24)}}`); j = parent[j] }
+    console.log(`  ${(sz / 1048576).toFixed(2).padStart(6)} MB  ${nodeType(hI)}:${nodeName(hI).slice(0, 30)}  <=  ${path.slice(-9).join(' . ')}`)
+  }
+}
