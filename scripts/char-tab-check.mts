@@ -1,8 +1,8 @@
 // ── Check for the pack's CHARACTER tab as snap sections (BETA M66 s1, 2026-11-22, play lane) ─────────────────────────
 // Seeds a loadout (two guns, a blank bracelet = the birth tactical, a glove with a word), opens the pack's Character tab,
 // and asserts: the four sections are there in order; after each fling the scroll rests on a section top (or the end);
-// every Armory stats window equals the gun's RANGE_GUNS row; every worn vessel's move shows canon's effect line
-// (keeper-moves.ts) word for word; the frame fits the viewport; 0 page errors. Shot to --out.
+// every Armory stats window equals the gun's RANGE_GUNS row; every worn vessel's move shows its card line (shared/move-cards.ts,
+// lark's no-em-dash reading of canon's effect; else keeper-moves.ts word for word); the frame fits the viewport; 0 page errors. Shot to --out.
 // s2 (11-22): seeds two met companions (one out); the Companion grid shows every COMPANIONS id once, exactly the met ones in
 // colour (data-unlocked=1, enabled) and the rest grey + disabled, the avatar names the one out; tapping the other met one moves
 // the avatar to it and writes the save.
@@ -11,6 +11,7 @@ import puppeteer from 'puppeteer-core'
 import { RANGE_GUNS } from '../src/app/shimmer/open/shared/gunplay'
 import { KEEPER_MOVES } from '../src/app/shimmer/play3d/keeper-moves'
 import { COMPANIONS } from '../src/app/shimmer/open/shared/companion'
+import { moveCardLine } from '../src/app/shimmer/open/shared/move-cards'
 const MET = ['dustwhisker', 'glowmite'], COMP = { active: 'dustwhisker', met: MET, sentHome: false }
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const out = flag('--out', '/tmp'), url = flag('--url', 'https://ather.games'), phone = process.argv.includes('--phone')
@@ -81,7 +82,8 @@ for (const s of stats) { const g = RANGE_GUNS.find(x => x.id === s.id); if (!g) 
 const sig = moves.find(m => m.slot === 'signature'), tac = moves.find(m => m.slot === 'tactical')
 if (sig?.move !== glove.id) bad.push(`glove shows ${sig?.move}, want ${glove.id}`)
 if (!tac?.move) bad.push('blank bracelet shows no birth tactical')
-for (const m of moves) { if (!m.move) continue; const k = KEEPER_MOVES.find(x => x.id === m.move); if (!k || m.text.trim() !== k.effect.trim()) bad.push(`${m.slot} ${m.move} text missing or not canon's`) }
+for (const m of moves) { if (!m.move) continue; const k = KEEPER_MOVES.find(x => x.id === m.move); if (!k || m.text.trim() !== moveCardLine(k.id, k.effect).trim()) bad.push(`${m.slot} ${m.move} text missing or not its card line`)
+  else if (m.text.includes('—')) bad.push(`${m.slot} ${m.move} shows an em dash`) }
 if (!String(res.snap).includes('y')) bad.push(`scroll-snap-type ${res.snap}`)
 if (flings.some(f => f.at === null)) bad.push(`a fling rested between sections: ${JSON.stringify(flings)}`)
 if (!flings.some(f => f.at !== 'armory')) bad.push('the scroll never moved off Armory')

@@ -20,6 +20,7 @@ import { useBirth } from './birth-gate'
 import { RUNES, ELEMENTS } from '../play3d/birth/runes.data'
 import { RuneMark } from '../play3d/birth/RuneMark'
 import { CompanionSlot } from './companion-slot'
+import { moveCardLine } from './shared/move-cards'
 import { KeepersSection } from './keepers-section'
 import { castMoves } from './shared/casting'
 import { KEEPER_MOVES } from '../play3d/keeper-moves'
@@ -227,7 +228,7 @@ function VesselMoves() {
             </div>
             {move ? <>
               <div className="text-[16px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{move.name}{!v!.word && <span className="text-[12px] font-normal" style={{ color: H.inkFaint }}> · birth</span>}</div>
-              <p data-move-text className="text-[13px] leading-[19px]" style={{ color: H.inkSoft }}>{move.effect}</p>
+              <p data-move-text className="text-[13px] leading-[19px]" style={{ color: H.inkSoft }}>{moveCardLine(move.id, move.effect)}</p>
             </> : <div className="text-[13px] italic" style={{ color: H.inkFaint }}>{slot === 'signature' ? 'No word written yet' : 'Nothing to cast'}</div>}
           </div>
         )
