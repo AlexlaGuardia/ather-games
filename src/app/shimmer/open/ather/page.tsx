@@ -360,13 +360,17 @@ function AtherSliceGame() {
 
   const fading = useRef(false)
   const rendererRef = useRef<{ gl: WebGLRenderer; scene: Scene; camera: Camera } | null>(null)
-  const arrive = useCallback((z: Zone, s: Spawn) => {
-    if (fading.current) return
+  // M67 s1b fix (hub 11-22, glade-cluster-check red on edesk): a second arrive() while the veil is still up was DROPPED with no
+  // word, so the Glade's gate pressed in the last moments of an earlier arrival did nothing. `wait` queues it behind that veil
+  // (latest one wins) instead; the fall and the spawn-type arrivals keep the old drop, so they never stack an extra fade.
+  const queued = useRef<{ z: Zone; s: Spawn } | null>(null)
+  const arrive = useCallback((z: Zone, s: Spawn, wait = false) => {
+    if (fading.current) { if (wait) queued.current = { z, s }; return }
     fading.current = true; setFade(1); setPanel(null); exitBuild()
     setTimeout(() => {
       setZone(z); setSpawn(s); setEpoch(e => e + 1)
       // M44: let the new zone mount, WARM its shaders behind the veil, then lift; capped so it never traps
-      const lift = () => { setFade(0); fading.current = false }
+      const lift = () => { setFade(0); fading.current = false; const q = queued.current; if (q) { queued.current = null; arriveRef.current(q.z, q.s) } }
       const r = rendererRef.current
       if (!r) { lift(); return }
       let done = false; const once = () => { if (!done) { done = true; lift() } }
@@ -379,6 +383,7 @@ function AtherSliceGame() {
       }))
     }, 380)
   }, [])
+  const arriveRef = useRef(arrive); arriveRef.current = arrive
   const goHome = useCallback(() => arrive({ kind: 'plot' }, THRESHOLD), [arrive])
   // M61: going visiting (or coming home) = a walk through the veil to the plot's threshold. Play together's Visit button calls the
   // handler; ?visit=<host>&vn=<name> is how the continent page hands a visit over.
@@ -563,12 +568,15 @@ function AtherSliceGame() {
   useEffect(() => {
     if (zone.kind === 'plot') { if (epoch > 0) clearSpot(); return }
     const glade = zone.kind === 'glade'   // M67 s1a: the closed Glade keeps a spot too, so a reload wakes you in it
+    // M67 s1b fix: write the arrival point NOW. The tick below only saves once the veil is down (up to ~2.5 s) and then every
+    // 3 s, so a reload in the first seconds after the Glade's gate read the OLD spot and woke the keeper back in the Glade.
+    saveSpot(makeSpot(glade ? GLADE_TILE : hereTileRef.current, spawn.x, spawn.z, spawn.yaw))
     const save = () => { if (fadeRef.current === 0) { const p = poseRef.current; saveSpot(makeSpot(glade ? GLADE_TILE : hereTileRef.current, p.x, p.z, p.yaw)) } }
     const hide = () => { if (document.visibilityState === 'hidden') save() }
     const t = setInterval(save, 3000)
     window.addEventListener('pagehide', save); document.addEventListener('visibilitychange', hide)
     return () => { clearInterval(t); window.removeEventListener('pagehide', save); document.removeEventListener('visibilitychange', hide) }
-  }, [zone, epoch])
+  }, [zone, epoch])   // eslint-disable-line react-hooks/exhaustive-deps -- spawn changes with every arrival (epoch)
 
   // BORN AT MOONWELL (BETA M31, Alex 11-19: 'the start loses new keepers'). A keeper born on this page (the rune chosen)
   // opens their eyes at Moonwell Glade beside Greg, not on the plot: set down at his waymark (~6.6 m from his bench) behind
@@ -584,11 +592,14 @@ function AtherSliceGame() {
     arrive({ kind: 'glade' }, gladeNewbornSpot())
   }, [bornPending, arrive])
   // M67 s1a: the Glade's gate (open from the start) is its one way out: straight through to the Wilds at Greg's waymark
+  // M67 s1b fix: pressed before the Wilds have loaded, the gate WAITS for them (one pending exit) instead of asking for a retry
+  const [gatePending, setGatePending] = useState(false)
   const leaveGlade = useCallback(() => {
-    if (!ww) { hudSay('The Wilds are still on their way. Try the gate again in a moment.', 'info', 3); return }
+    if (!ww) { setGatePending(true); hudSay('The gate opens onto the Wilds...', 'info', 3); return }
     const o = ww.offsetOf(GREG_WAYMARK.tile), x = GREG_WAYMARK.x + o.x, z = GREG_WAYMARK.z + o.z
-    stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(GREG_WAYMARK.tile); arrive({ kind: 'wilds', tile: GREG_WAYMARK.tile }, { x, z, yaw: Math.PI * 0.75 }); hudSay('The Wilds', 'zone') })
+    stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(GREG_WAYMARK.tile); arrive({ kind: 'wilds', tile: GREG_WAYMARK.tile }, { x, z, yaw: Math.PI * 0.75 }, true); hudSay('The Wilds', 'zone') })
   }, [ww, arrive])
+  useEffect(() => { if (gatePending && ww) { setGatePending(false); if (zone.kind === 'glade') leaveGlade() } }, [gatePending, ww, zone, leaveGlade])
   const gladeFall = useCallback(() => arrive({ kind: 'glade' }, gladeNewbornSpot()), [arrive])
 
   const world = useMemo(() => zone.kind === 'plot' ? plotWorld : zone.kind === 'glade' ? gladeWorld : ww ? terrainWorld(withPieces(ww.shape)) : null, [zone, ww, plotWorld, gladeWorld])   // ww.shape reads the live tiles

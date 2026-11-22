@@ -92,13 +92,18 @@ try {
   await shot(p, 'glade-gate')
   if (phone) { const b = await p.$('[data-touch="use"][data-touch-near]'); if (b) await b.tap(); else ok(false, '5. the Use button is there to tap') }
   else await p.keyboard.press('KeyE')
-  ok(await poll(async () => (await A(p, 'zone')) === 'wilds', 90000), `5. through the gate: the Wilds (zone ${await A(p, 'zone')})`)
-  await sleep(4000)
-  await shot(p, 'glade-out')
-  // 6 · an existing save: from now on a reload resumes in the Wilds, not the Glade
+  // the zone is polled every frame, and the reload below fires on the SAME frame it flips, while the veil is still up
+  const through = await p.waitForFunction(() => (window as any).__ather?.zone?.() === 'wilds', { polling: 'raf', timeout: 90000 }).then(() => true, () => false)
+  ok(through, `5. through the gate: the Wilds (zone ${await A(p, 'zone')})`)
+  // 6 · an existing save: from now on a reload resumes in the Wilds, not the Glade. Reloaded the moment the zone flips, under
+  //     the veil, on purpose: the spot used to be written only once the veil was down (the 3 s tick, and pagehide), and on the
+  //     edesk the Wilds' shader warm-up kept the veil up for seconds, so a reload woke the keeper back in the Glade (hub 11-22).
+  //     The arrival itself must write the spot.
   await p.reload({ waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 })
   ok(await poll(async () => (await A(p, 'zone')) === 'wilds', 120000), `6. reload after the gate: the Wilds, where they were (zone ${await A(p, 'zone')})`)
+  await sleep(3000)
+  await shot(p, 'glade-out')
   // 8 · s1b-1: the Glade stays on the Ather map. The fold map (the gate's, opened by hook; the stop is a REAL tap) lists
   //     'Moonwell Glade' right under 'Your plot', and it sets an existing keeper down in Greg's garden facing him
   await A(p, 'open', 'gate')
