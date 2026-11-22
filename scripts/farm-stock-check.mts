@@ -33,9 +33,15 @@ const farmSave = () => read('open.farm.v1') as Promise<{ farm: { beds: ({ crop: 
 const hideCard = () => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => /Click to play|Tap to start|Tap to drive/i.test(d.textContent ?? '')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 const shot = async (n: string) => { await hideCard(); try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
 const tp = async (x: number, z: number, yaw: number) => { await p.evaluate((a, b, c) => (window as any).__ather.tp(a, b, c), x, z, yaw); await sleep(1500) }
-const click = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (b) await p.mouse.click(b.x, b.y); await sleep(350); return !!b }
+const click = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (b) { if (phone) await p.touchscreen.tap(b.x, b.y); else await p.mouse.click(b.x, b.y) } await sleep(350); return !!b }
 const attr = (sel: string, a: string) => p.evaluate((s, n) => document.querySelector(s)?.getAttribute(n) ?? null, sel, a)
 const skew = (ms: number) => p.evaluate(m => (window as any).__farm.skew(m), ms)
+// E: a key on desktop; on the phone the 'use' chip (data-touch="use", shown when something is near) is TAPPED
+const useE = async () => {
+  if (!phone) { await p.keyboard.press('e'); await sleep(900); return }
+  for (let t = 0; t < 20; t++) { if (await p.evaluate(() => !!document.querySelector('[data-touch="use"][data-touch-near]'))) break; await sleep(500) }
+  await click('[data-touch="use"]'); await sleep(900)
+}
 const res: Record<string, unknown> = { url }
 const step = (n: string) => console.error(`[${new Date().toISOString().slice(11, 19)}] ${n}`)
 
@@ -44,13 +50,13 @@ await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 18000
 step('1. build it at th')
 // 1. build it at the table
 await tp(TABLE.x + 1.6, TABLE.z + 1.6, Math.PI / 4)
-await p.keyboard.press('e'); await sleep(900)
+await useE()
 res.pickOnTable = await p.evaluate(() => !!document.querySelector('[data-pick="farm"]'))
 res.build = (await click('[data-pick="farm"]')) && (await sleep(400), await click('[data-build-card="farm"] [data-act="build"] button')); await sleep(1200)
 await p.evaluate(() => (window as any).__build.to(-100, 100)); await sleep(2500)
 const mid = await p.evaluate(() => { const r = document.querySelector('canvas')!.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })
 await p.mouse.move(mid.x - 3, mid.y); await sleep(300); await p.mouse.move(mid.x, mid.y); await sleep(800)
-await p.mouse.click(mid.x, mid.y); await sleep(1200); await click('[data-act="land"]'); await sleep(800)
+if (phone) await p.touchscreen.tap(mid.x, mid.y); else await p.mouse.click(mid.x, mid.y); await sleep(1200); await click('[data-act="land"]'); await sleep(800)
 const w0 = await read('open.works.v1')
 if (!w0?.rooms?.length) { await shot('stock-0-noroom'); console.log(JSON.stringify({ ...res, works: w0, errs }, null, 1)); console.log('FAIL: the Farm was never placed (pick/build/land step)'); await br.close(); process.exit(1) }
 const room: Room = w0.rooms[0]
@@ -64,7 +70,7 @@ step('2. in, E at the s')
 const b = benchOf(room)
 await tp(b.x, b.z - 1.2, 0)
 await aimAt(p, b.x, b.z, 0.6)
-await p.keyboard.press('e'); await sleep(900)
+await useE()
 res.panel = await p.evaluate(() => !!document.querySelector('[data-panel="farm"]'))
 res.beds = await p.evaluate(() => document.querySelectorAll('[data-bed]').length)
 const SV = seedId('violetbloom'), CG = cropId('goldleaf'), SR = seedId('rootvine')
@@ -82,7 +88,7 @@ await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 18000
 const st2 = await store()
 res.reloaded = { sv: st2[SV] ?? 0, cg: st2[CG] ?? 0, sr: st2[SR] ?? 0 }
 await tp(b.x, b.z - 1.2, 0); await aimAt(p, b.x, b.z, 0.6)
-await p.keyboard.press('e'); await sleep(900)
+await useE()
 res.panelSlots = await p.evaluate(() => document.querySelectorAll('[data-room-store="farm"] [data-room-slot]').length)
 await shot('stock-3-reloaded')
 res.overflow = await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
