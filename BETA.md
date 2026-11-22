@@ -245,6 +245,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - 11-22 16:3x Alex: rin-splash sound "approved"; "can we do something so the sounds list isnt so cluttered ..a list at the bottom that hold approved sounds and then the songs that get a nay you can remove them or try again reseting the nay" → **M92**
 - 11-22 16:5x Alex: "is there a way we can get some better load screen images ..maybe the title Ather in a few and all of them can have tips for the game at the bottom.. some more sarcastic than others" → triaged: **M95** (art via the generated path, tips via @lark)
 - 11-22 17:0x lark (M95 pass): first-play overlay ather/page.tsx ~1450 still says "F plants a waymark" (F = Mana Skin since M80; a held waymark plants on click/E); plus the help overlay still says "Gregory, at Moonwell Glade in the Wilds" → triaged: lark rewrites both lines, the page.tsx owner wires them (stale-copy fix)
+- 11-22 17:1x Magii RULED-AFK e3a3e78 (from lark's M95 frictions): Health Draught heals the KEEPER; 'fold map' is canon; 'Ather Infusion' -> 'Ather Tonic' → routed: rename to play's worker (ids stay)
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
