@@ -76,7 +76,10 @@ try {
   ok(await poll(() => q.evaluate(() => (window as any).__ather?.zone?.() === 'wilds' && !!(window as any).__morelHints), 240000), '2. in the Wilds on the errand, hints mounted')
   ok(await poll(() => q.evaluate(() => !!document.querySelector('[data-say="morel"] .morel-pulse[data-morel-pulse="1"]')), 120000), '2. a new Morel line arrives WITH the pulse (class + data-morel-pulse=1)')
   await shot(q, 'morel-pulse-on')
-  await sleep(3000); await shot(q, 'morel-pulse-settled')
+  // wait for the FIRST pulsing line's own settle (a slow headless phone frame can hold the 1.75 s timer past a fixed sleep);
+  // the gap itself is timed in the observer, so waiting here cannot hide a slow settle
+  await poll(() => q.evaluate(() => { const a = (window as any).__pulseAt as { id: number; s: string }[]; const on = a.find(x => x.s === '1:c'); return !!on && a.some(x => x.id === on.id && x.s === '0:-') }), 8000)
+  await shot(q, 'morel-pulse-settled')
   const at = await q.evaluate(() => (window as any).__pulseAt as { id: number; s: string; t: number; anim: string }[])
   console.error('pulse events', JSON.stringify(at.map(x => [x.id, x.s, Math.round(x.t)])))
   const on = at.find(x => x.s === '1:c'), off = at.find(x => x.s === '0:-' && on && x.id === on.id)
