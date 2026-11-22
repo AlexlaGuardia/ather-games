@@ -18,20 +18,20 @@ export const STAT_TINT: Record<StatGrade, string> = { S: '#f2c14e', A: '#b58cf0'
 /** The pentagon: five axes clockwise from the top, three guide rings, the filled shape at each axis's reach, and the
  *  axis name + grade letter outside each point. A hidden axis sits at the centre and reads '?'. */
 function Radar({ card, phone }: { card: CardView; phone: boolean }) {
-  const R = 52, size = phone ? 210 : 190
+  const R = 46, size = phone ? 182 : 168   // side by side with the scores (11-22 shot: stacked, the card grew ~130 px and the talk bubble covered it)
   const at = (i: number, r: number) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / card.radar.length; return [Math.cos(a) * r, Math.sin(a) * r] as const }
   const ring = (f: number) => card.radar.map((_, i) => at(i, R * f).join(',')).join(' ')
   const shape = card.radar.map((a, i) => at(i, R * (a.grade ? Math.max(0.06, a.reach) : 0)).join(',')).join(' ')
   return (
-    <svg data-card-radar viewBox="-100 -84 200 172" width={size} height={size * 0.86} style={{ display: 'block', margin: '4px auto 0' }}>
+    <svg data-card-radar viewBox="-124 -80 248 166" width={size} height={size * 166 / 248} style={{ display: 'block', flex: 'none', overflow: 'visible' }}>
       {[1 / 3, 2 / 3, 1].map(f => <polygon key={f} points={ring(f)} fill="none" stroke="rgba(243,227,195,.16)" strokeWidth={0.8} />)}
       {card.radar.map((_, i) => { const [x, y] = at(i, R); return <line key={i} x1={0} y1={0} x2={x} y2={y} stroke="rgba(243,227,195,.14)" strokeWidth={0.8} /> })}
       <polygon points={shape} fill="rgba(242,193,78,.22)" stroke="#f2c14e" strokeWidth={1.4} strokeLinejoin="round" />
       {card.radar.map((a, i) => {
-        const [x, y] = at(i, R + 17), anchor = Math.abs(x) < 4 ? 'middle' : x > 0 ? 'start' : 'end'
+        const [x, y] = at(i, R + 12), anchor = Math.abs(x) < 4 ? 'middle' : x > 0 ? 'start' : 'end'
         return (
           <g key={a.stat} data-card-axis={a.stat} data-card-axis-grade={a.grade ?? '?'}>
-            <text x={x} y={y - 3} textAnchor={anchor} fontSize={9.5} fontWeight={600} letterSpacing="0.08em" fill="rgba(243,227,195,.75)"
+            <text x={x} y={y - 3} textAnchor={anchor} fontSize={10} fontWeight={600} letterSpacing="0.04em" fill="rgba(243,227,195,.75)"
               style={{ textTransform: 'uppercase' }}>{a.label}</text>
             <text x={x} y={y + 10} textAnchor={anchor} fontSize={13} fontWeight={800} fill={a.grade ? STAT_TINT[a.grade] : DIM}>
               {a.grade ?? '?'}{a.stat === 'luck' && card.luckPct !== null ? <tspan fontSize={9} fontWeight={600} fill="rgba(243,227,195,.6)"> {card.luckPct}%</tspan> : null}
@@ -72,9 +72,10 @@ export function MoglinCard({ card, id, phone }: { card: CardView; id: string; ph
           <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.home}</div>
         </div>
       </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
       <Radar card={card} phone={phone} />
-      <div data-card-scores style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', columnGap: 10, rowGap: phone ? 3 : 2, marginTop: 4,
-        fontSize: phone ? 10.5 : 10, fontVariantNumeric: 'tabular-nums' }}>
+      <div data-card-scores style={{ display: 'grid', gridTemplateColumns: '1fr', rowGap: phone ? 2 : 1, flex: 1, minWidth: 0,
+        fontSize: phone ? 10.5 : 10, lineHeight: 1.25, fontVariantNumeric: 'tabular-nums' }}>
         {card.scores.map(x => (
           <div key={x.skill} data-card-score={x.skill} data-score={x.score ?? ''}
             style={{ display: 'flex', justifyContent: 'space-between', gap: 4, opacity: x.score === null ? 0.5 : 0.85 }}>
@@ -82,6 +83,7 @@ export function MoglinCard({ card, id, phone }: { card: CardView; id: string; ph
             <span style={{ fontWeight: 700, color: x.score === null ? DIM : '#f3e3c3' }}>{x.score ?? '?'}</span>
           </div>
         ))}
+      </div>
       </div>
     </div>
   )
