@@ -1,11 +1,10 @@
 // BETA M92: the sounds page declutter, on the real page with the owner cookie. Pending on top, Nay rows Try again / Remove,
 // Approved collapsed at the bottom with Un-approve; every move survives a reload (it is written to sounds.json via the route).
 // ⚠ IT WRITES THE REAL sounds.json (the route writes the file the server runs from), so it snapshots the file first and puts it
-// back byte-for-byte at the end, then asserts git sees no change. Run it on THIS box (needs OWNER_KEY + the file):
+// back byte-for-byte at the end, then asserts the bytes match (not git: Alex's own votes may sit uncommitted in it). Run it on THIS box (needs OWNER_KEY + the file):
 //   set -a; . ./.env; set +a; npx tsx scripts/sounds-page-check.mts [--url https://ather.games]
 import puppeteer from 'puppeteer-core'
 import { readFileSync, writeFileSync } from 'fs'
-import { execSync } from 'child_process'
 
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const URL0 = flag('--url', 'https://ather.games'), FILE = 'src/app/shimmer/open/shared/sounds.json'
@@ -56,8 +55,7 @@ try {
 } finally {
   await browser.close()
   writeFileSync(FILE, snap)
-  const diff = execSync(`git diff --stat -- ${FILE}`).toString().trim()
-  ok(diff === '', `sounds.json restored byte-for-byte${diff ? ' — ' + diff : ''}`)
+  ok(readFileSync(FILE).equals(snap), 'sounds.json restored byte-for-byte to its state before the run')
 }
 console.log(fails ? `FAIL: ${fails} assert(s) red` : 'PASS: M92 sounds page: pending top, nay Try again/Remove, approved collapsed + Un-approve, all survive reload; file restored')
 process.exit(fails ? 1 : 0)
