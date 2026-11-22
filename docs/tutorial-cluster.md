@@ -60,6 +60,15 @@ Through the gate -> the **"The Wilds" waypoint** = the FIRST SETTLEMENT on the p
 - Garden growth: grey matter per size step (100 = first gate + small area; the next steps?).
 - Where the existing grey matter fold/plot costs sit today (ather/plot.ts) vs this ladder.
 
+## Magii rulings (RULED-AFK, athernyx 43fef80, 11-22)
+1. Closed Glade cluster: YES, Greg's; nobody joins it.
+3. Grimoire: YES, already canon (ather-story:62).
+4. Fennel: YES. The other four Glade Moglins stay at the Glade: **Sax -> Otto's, Hazel -> Bonn's, Yarrow + Mallow -> Tess's** (placement ours to move).
+5. **Pruner = the forestry tool.** Bonn gives the starter pruner; blade tiers become PRUNER tiers (a rename across the build).
+6. Grey matter fold + waymarks: YES (waymarks canon: gates.md:17,106). AMENDS 11-18: **no garden until Greg folds the first for 100 GM**; the grimoire 10/15/25 tiers still gate the growth cells after.
+7. Champion + spreading grey: YES; the player-facing word for the spread = @lark.
+OPEN (asked Alex): (2) Otto/Tess/Bonn are ~1070 years older by 1672: grown, ageless keepers with teaching gardens beside Greg's? And: does the Glade spawn REPLACE the Rune Hold opening (corner door, Kael's note, the fork) or start the Ather road AFTER the fork?
+
 ## Canon asks (Magii) — batch, send when the loop is laid out
 - **Otto, Tess, Bonn as the Glade's three garden-keepers.** Canon: they are the Spirit Tales leads (Bonn 11 at Bk1). Bonn fits: she is Gregory's keeper-ward, given "the old arrival plot", youngest keeper (characters/bonn.md:5,50). Otto lives at Forge Grove under Heslur; Tess at Goldleaf Acres under Maizie. When in the timeline is the game, and may Otto + Tess hold plots in the Glade (or their mentors)?
 - **The pruner**: Bonn's forestry tool. Today forestry uses blades (Worn Blade, shimmeroak_blade; blades bind at the Carpentry bench). Is 'pruner' a new canon tool, a rename of the blade, or the starter blade's name?
