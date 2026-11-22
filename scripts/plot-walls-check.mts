@@ -68,7 +68,10 @@ try {
   const settled = () => poll(async () => { const v = await p.evaluate(() => (window as any).__build.view()); await sleep(500); const w = await p.evaluate(() => (window as any).__build.view()); return Math.hypot(v.x - spot!.x, v.z - spot!.z) < 0.2 && Math.abs(Math.atan2(Math.sin(v.yaw), Math.cos(v.yaw))) < 0.01 && Math.abs(v.h - w.h) < 0.05 && Math.abs(v.x - w.x) < 0.02 }, 60000)
   const drag = async () => {
     await settled()
-    const y = Math.round(Hh * 0.5), x0 = Math.round(W * 0.4), x1 = Math.round(W * 0.6)
+    // below the plan bar: its panels take the pointer, and since M55 (11-21 Foundation row) the bar reaches past mid-screen on
+    // desk (bottom ~344 of 680), so a drag at Hh/2 landed on the bar and drew nothing (11-22 sweep pass 6). The hint passes taps through.
+    const barBottom = await p.evaluate(() => { let b = 0; document.querySelectorAll('[data-build-bar] > *:not([data-build-hint]), [data-plan-bom]').forEach(e => { const r = e.getBoundingClientRect(); if (r.height > 0) b = Math.max(b, r.bottom) }); return b })
+    const y = Math.round(Math.min(Hh - 200, Math.max(Hh * 0.5, barBottom + 30))), x0 = Math.round(W * 0.4), x1 = Math.round(W * 0.6)
     if (phone) {
       const c = await p.target().createCDPSession()
       await c.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y }] })
