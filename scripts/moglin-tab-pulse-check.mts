@@ -23,7 +23,7 @@ const VIEW = phone ? { width: 390, height: 844, isMobile: true, hasTouch: true }
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const errs: string[] = []
 const page = async () => { const p = await (await br.createBrowserContext()).newPage(); await p.setViewport(VIEW); p.on('pageerror', e => errs.push(String(e).slice(0, 200))); await p.evaluateOnNewDocument('window.__name = (f) => f'); return p }
-const hideCard = (p: Page) => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => /Click to play|Tap to start|Tap to drive/i.test(d.textContent ?? '')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
+const hideCard = (p: Page) => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => /Click to play|Tap to start|Tap to drive|Left thumb moves/i.test(d.textContent ?? '')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 const shot = async (p: Page, n: string) => { await hideCard(p); try { await p.screenshot({ path: `${out}/${n}${phone ? '-phone' : ''}.png` }) } catch { /* slow frame */ } }
 const click = async (p: Page, sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (b) { if (phone) await p.touchscreen.tap(b.x, b.y); else await p.mouse.click(b.x, b.y) } await sleep(350); return !!b }
 // E held across a frame on desktop (headless ~1 fps), the 'use' chip tapped on the phone; retried until `want` shows
@@ -64,8 +64,12 @@ try {
   const q = await page()
   await q.evaluateOnNewDocument(() => {
     localStorage.setItem('ather:shimmer:birthRune', 'star')
-    const w = window as any; w.__pulseLog = []; w.__pulseAt = []   // read IN the observer: at headless ~1 fps the 1.65 s pulse (and the 4 s line) is over before a poll returns
-    new MutationObserver(() => { for (const e of document.querySelectorAll('[data-say="morel"] [data-morel-pulse]')) { const s = `${e.getAttribute('data-morel-pulse')}:${e.classList.contains('morel-pulse') ? 'c' : '-'}`; if (w.__pulseLog.at(-1) !== s) { w.__pulseLog.push(s); w.__pulseAt.push({ s, t: performance.now(), anim: getComputedStyle(e).animationName }) } } })
+    const w = window as any; w.__pulseLog = []; w.__pulseAt = []; const ids = new WeakMap<Element, number>()   // read IN the observer: at headless ~1 fps the 1.65 s pulse (and the 4 s line) is over before a poll returns
+    new MutationObserver(() => { for (const e of document.querySelectorAll('[data-say="morel"] [data-morel-pulse]')) { const s = `${e.getAttribute('data-morel-pulse')}:${e.classList.contains('morel-pulse') ? 'c' : '-'}`
+      // per ELEMENT (each line mounts its own): a deduped global log glued one line's pulse to a LATER line's settle (phone read 28 s)
+      if (!ids.has(e)) ids.set(e, ids.size + 1)
+      const id = ids.get(e), last = w.__pulseAt.filter((x: { id: number }) => x.id === id).at(-1)
+      if (last?.s !== s) { w.__pulseAt.push({ id, s, t: performance.now(), anim: getComputedStyle(e).animationName }); if (w.__pulseLog.at(-1) !== s) w.__pulseLog.push(s) } } })
       .observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-morel-pulse', 'class'] })
   })
   await q.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg&morel=fast`, { waitUntil: 'load', timeout: 240000 })
@@ -73,8 +77,9 @@ try {
   ok(await poll(() => q.evaluate(() => !!document.querySelector('[data-say="morel"] .morel-pulse[data-morel-pulse="1"]')), 120000), '2. a new Morel line arrives WITH the pulse (class + data-morel-pulse=1)')
   await shot(q, 'morel-pulse-on')
   await sleep(3000); await shot(q, 'morel-pulse-settled')
-  const at = await q.evaluate(() => (window as any).__pulseAt as { s: string; t: number; anim: string }[])
-  const on = at.find(x => x.s === '1:c'), off = at.find(x => x.s === '0:-' && on && x.t > on.t)
+  const at = await q.evaluate(() => (window as any).__pulseAt as { id: number; s: string; t: number; anim: string }[])
+  console.error('pulse events', JSON.stringify(at.map(x => [x.id, x.s, Math.round(x.t)])))
+  const on = at.find(x => x.s === '1:c'), off = at.find(x => x.s === '0:-' && on && x.id === on.id)
   ok(on?.anim === 'morel-pulse', `2. the pulse animation runs on arrival (${on?.anim})`)
   ok(!!off && off.t - on!.t < 2500, `2. then it settles: class off, data-morel-pulse=0 after ${off ? ((off.t - on!.t) / 1000).toFixed(2) : '?'} s (< 2.5 s)`)
   const log = await q.evaluate(() => (window as any).__pulseLog as string[])
