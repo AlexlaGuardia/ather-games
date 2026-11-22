@@ -72,8 +72,14 @@ function Driver({ api, gunId, aiming }: { api: React.RefObject<FpGunApi | null>;
   return null
 }
 
+// the URL is read only in the browser: the page renders client-side after mount, so the server's HTML can never disagree with it
 export default function GunKit() {
-  const q = typeof window === 'undefined' ? new URLSearchParams() : new URLSearchParams(window.location.search)
+  const [q, setQ] = useState<URLSearchParams | null>(null)
+  useEffect(() => { setQ(new URLSearchParams(window.location.search)) }, [])
+  return q ? <Kit q={q} /> : <div style={{ height: '100dvh', background: '#14131a' }} />
+}
+
+function Kit({ q }: { q: URLSearchParams }) {
   const [view, setView] = useState<View>((q.get('view') as View) || 'sheet')
   const [gunId, setGunId] = useState<KitGunId>((q.get('gun') as KitGunId) in KIT_GUNS ? (q.get('gun') as KitGunId) : 'backbone')
   const [sightId, setSightId] = useState<KitSightId>((q.get('sight') as KitSightId) in KIT_SIGHTS ? (q.get('sight') as KitSightId) : KIT_GUNS[gunId].own)
@@ -107,7 +113,7 @@ export default function GunKit() {
       </aside>
       <div style={{ flex: 1, minWidth: 300, position: 'relative' }}>
         {view === 'sheet' && (
-          <Bench zoom={250}>
+          <Bench zoom={285}>
             {GUN_IDS.map((id, r) => sightsFor(KIT_GUNS[id]).map((s, c) => (
               <group key={`${id}-${s}`} position={[(c - 1) * 1.15, (0.5 - r) * 0.55, 0]} rotation={SIDE(0.3)}><GunMesh m={kitModel(id, s)} color={colorOf(id)} /></group>
             )))}
