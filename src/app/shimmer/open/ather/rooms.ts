@@ -61,10 +61,17 @@ export const ROOM_ORDER: readonly RoomKind[] = ['rinnshop', 'farm', 'cooking', '
 export const TABLE = { x: GREG.x + 6, z: GREG.z - 10 }
 export const TABLE_REACH = 2.6
 export const BENCH_REACH = 2.4
-/** Ground kept clear of rooms: the gate and its threshold, Greg, the table, where a cluster's path leaves. */
+/** The cluster path's own ground on the plot: circles along its line from PATH_START out over the corner, which is the way it
+ *  leaves (meadow.ts gardenPath: straight off the corner toward the Green, the island's south-west diagonal), PATH_W wide + 1 m. */
+export const PATH_KEEP_R = 4
+const PATH_KEEP = [0, 4, 8, 12, 16].map(t => ({ x: PATH_START.x - t * Math.SQRT1_2, z: PATH_START.z + t * Math.SQRT1_2, r: PATH_KEEP_R }))
+/** Ground kept clear of rooms, walls and pieces: the gate (where it stands NOW: the Green's centre since M52), the threshold you
+ *  arrive on, Greg's anchor, the table, and the path's line. ★ 11-22 Alex bug: the corner where the gate USED to stand read as
+ *  taken, because the path start still kept a 10 m disc that was sized for the old corner gate beside it (-146, 128); it now
+ *  keeps only the path's own line, so the old gate's ground builds. */
 export const KEEP_CLEAR: readonly { x: number; z: number; r: number }[] = [
   { x: GATE.x, z: GATE.z, r: 9 }, { x: THRESHOLD.x, z: THRESHOLD.z, r: 6 }, { x: GREG.x, z: GREG.z, r: 4 },
-  { x: TABLE.x, z: TABLE.z, r: 4 }, { x: PATH_START.x, z: PATH_START.z, r: 10 },
+  { x: TABLE.x, z: TABLE.z, r: 4 }, ...PATH_KEEP,
 ]
 export const WALL_H = 4.8, WALL_T = 0.3, DOOR_W = 2.2   // M50: 3.2 -> 4.8 (plot-walls.ts WALL_H is the same family)
 

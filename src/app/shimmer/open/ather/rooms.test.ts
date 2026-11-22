@@ -1,6 +1,6 @@
 // The workshop rooms core (rooms.ts). Run: npx tsx src/app/shimmer/open/ather/rooms.test.ts
 import { craftAt, jobRuns, canPlacePiece, placePiece, pickUpPiece, turnPiece, pieceBoxes, pieceRect, ROOM_STORE_SLOTS, ROOM_ACCEPTS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, loadWorks, saveWorks, ROOMS, ROOM_ORDER, TABLE, KEEP_CLEAR, STARTER_CHEST, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, payCost, shortOf, haveFor, pickUpChest, canPlaceChest, placeChest, chestsStanding, chestBox, freshWorks, footprint, toWorld, benchOf, doorOf, canPlace, place, raised, progress, wallsOf, nearWork, retireRooms, type Works } from './rooms'
-import { STARTING_SQUARES, squareAt, sqId, GATE, GREG, GROUND_Y } from './plot'
+import { STARTING_SQUARES, squareAt, sqId, GATE, GREG, GROUND_Y, GRID_HALF, THRESHOLD, PATH_START } from './plot'
 import { REFINE, STONE_REFINE, PIECE_JOBS, FURNITURE } from './furniture'
 import { stockJobs } from './station-queue'
 import { freshBank, putIn, bankCount, bankTake } from './garden-bank'
@@ -27,6 +27,16 @@ ok(!canPlace(freshWorks(), owned, 'rinnshop', -92, 100, 0, rich).ok, 'place: a r
 ok(!canPlace(freshWorks(), owned, 'rinnshop', GREG.x, GREG.z + 1, 0, rich).ok, 'place: built on Gregory')
 ok(!canPlace(freshWorks(), owned, 'rinnshop', GATE.x + 4, GATE.z, 0, rich).ok, 'place: built in the gate')
 ok(KEEP_CLEAR.every(k => !canPlace(freshWorks(), owned, 'rinnshop', k.x, k.z, 0, rich).ok), 'place: some keep-clear centre took a room')
+// 11-22 Alex bug: the corner where the gate USED to stand (before M52 moved it to the Green) must build; the gate's keep-clear
+// follows where it stands now; the arrival threshold and the path's line still refuse
+{
+  const OLD_GATE = { x: -GRID_HALF + 4, z: GRID_HALF - 22 }
+  ok(KEEP_CLEAR.some(k => k.x === GATE.x && k.z === GATE.z) && !KEEP_CLEAR.some(k => Math.hypot(k.x - OLD_GATE.x, k.z - OLD_GATE.z) < 6), 'keep-clear: follows the gate where it stands now, nothing left at the old corner gate')
+  ok(canPlace(freshWorks(), owned, 'rinnshop', OLD_GATE.x + 4.5, OLD_GATE.z, 0, rich).ok, `place: a room on the OLD gate's corner was refused (${canPlace(freshWorks(), owned, 'rinnshop', OLD_GATE.x + 4.5, OLD_GATE.z, 0, rich).why})`)
+  ok(canPlaceChest(freshWorks(), owned, OLD_GATE.x + 1, OLD_GATE.z, 0).ok, 'place: a chest on the old gate spot was refused')
+  ok(!canPlace(freshWorks(), owned, 'rinnshop', THRESHOLD.x, THRESHOLD.z, 0, rich).ok, 'place: built on the arrival threshold')
+  for (const t of [0, 6, 12]) ok(!canPlace(freshWorks(), owned, 'rinnshop', PATH_START.x - t * Math.SQRT1_2 + 2, PATH_START.z + t * Math.SQRT1_2 - 2, 0, rich).ok, `place: built across the path's line (${t} m out from its start)`)
+}
 ok(!canPlace(freshWorks(), owned, 'smith', P.x, P.z, 0, rich).ok, 'place: a not-ready room was buildable (it is a coming-soon card)')
 ok(!canPlace(freshWorks(), owned, 'rinnshop', P.x, P.z, 0, newInv(12)).ok, 'place: built without the logs')
 const placed = place(freshWorks(), owned, rich, 'rinnshop', P.x, P.z, 1, 1000)!
