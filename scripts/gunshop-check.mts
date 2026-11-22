@@ -7,6 +7,7 @@ import { gunzipSync } from 'node:zlib'
 import { makeRegion, type RegionMeta } from '../src/app/shimmer/open/region'
 import { doorsCached } from '../src/app/shimmer/open/business/doors'
 import { shopDoorPoint } from '../src/app/shimmer/open/towns/shop-door'
+import { SIGIL_PRICE } from '../src/app/shimmer/open/business/gun-shop'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/gunshop')
 mkdirSync(out, { recursive: true })
@@ -67,6 +68,15 @@ const lo = await loadout(); res.guns = lo?.guns
 res.msg = await p.evaluate(() => document.querySelector('[data-panel="gun-shop"] [data-shop-msg]')?.textContent ?? '')
 // a second buy is refused: the button now reads Yours and is disabled
 res.again = await p.evaluate(() => { const bt = document.querySelector<HTMLButtonElement>('[data-panel="gun-shop"] [data-buy="spitter"] button'); return { disabled: !!bt?.disabled, text: bt?.textContent } })
+// M93 s2: the Unattuned sigil row under the guns: buying it takes SIGIL_PRICE and puts one in the bag
+const bagCount = (id: string) => p.evaluate((id) => { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i)!; if (k.endsWith('open.inv.v1')) return ((JSON.parse(localStorage.getItem(k)!).slots ?? []) as ({ id: string; n: number } | null)[]).reduce((t, x) => t + (x?.id === id ? x.n : 0), 0) } return 0 }, id)
+res.sigilRow = await p.evaluate(() => !!document.querySelector('[data-panel="gun-shop"] [data-buy="sigil_blank"] button'))
+res.sigilsBefore = await bagCount('sigil_blank')
+res.sigilBuy = await p.evaluate(() => { const bt = document.querySelector<HTMLButtonElement>('[data-panel="gun-shop"] [data-buy="sigil_blank"] button'); if (!bt || bt.disabled) return false; bt.click(); return true })
+await sleep(1000)
+res.marksAfterSigil = await purse(); res.sigilsAfter = await bagCount('sigil_blank')
+await p.evaluate(() => document.querySelector('[data-panel="gun-shop"] [data-buy="sigil_blank"]')?.scrollIntoView({ block: 'center' })); await sleep(300)
+await p.screenshot({ path: `${out}/gunshop-sigil.png` })
 // 3 · P: the Character tab offers the Spitter in a slot
 await p.keyboard.press('Escape'); await sleep(500)
 await p.keyboard.press('KeyP'); await sleep(1500)
@@ -80,4 +90,5 @@ res.mapMarks = await p.evaluate(() => document.querySelector('[data-map="base"]'
 const pass = !!res.reach && !!res.panel && res.title && /The gun shop/.test(String(res.title)) && (res.rows as string[]).length === 5 && !(res.rows as string[]).includes('charred-rifle')
   && res.marksBefore === 1500 && res.buy === true && res.marksAfter === 1500 - PRICE && Array.isArray(res.guns) && (res.guns as string[]).includes('spitter')
   && (res.again as any).disabled === true && !!res.optionShown && errs.length === 0
+  && res.sigilRow === true && res.sigilBuy === true && res.marksAfterSigil === 1500 - PRICE - SIGIL_PRICE && (res.sigilsAfter as number) === (res.sigilsBefore as number) + 1
 await done(pass, pass ? 'PASS' : 'FAIL')
