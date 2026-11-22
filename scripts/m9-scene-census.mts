@@ -12,12 +12,12 @@ const p = await br.newPage(); await p.setViewport({ width: VW, height: VH })
 await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 const A = (fn: string, ...a: unknown[]) => p.evaluate((f: string, args: unknown[]) => (window as any).__ather[f](...args), fn, a)
-type Row = { path: string; obj: string; geo?: string }
+type Row = { path: string; obj: string; geo?: string; mat?: string; col?: string; inst?: boolean; n?: number; key?: string; mapImg?: string | null }
 const census = async (label: string) => {
-  const rows = await p.evaluate(() => ((window as any).__programOwners?.() ?? []) as { path: string; obj: string; geo?: string }[]) as Row[]
+  const rows = await p.evaluate(() => ((window as any).__programOwners?.() ?? []) as unknown[]) as Row[]
   // the path with its leaf (the mesh itself) cut, so N siblings under one group count as N under one key
   const m = new Map<string, number>()
-  for (const r of rows) { const k = r.path.replace(/[^/]*\/$/, '') + ` [${r.obj}]`; m.set(k, (m.get(k) ?? 0) + 1) }
+  for (const r of rows) { const k = r.path.replace(/[^/]*\/$/, '') + ` [${r.obj}${r.inst ? ' x' + r.n : ''} ${r.geo} ${r.mat} #${r.col ?? '-'}${r.mapImg ? ' map ' + r.mapImg : ''}]`; m.set(k, (m.get(k) ?? 0) + 1) }
   const tiles = await p.evaluate(() => ((window as any).__ather?.wildsLoaded?.() ?? []).length).catch(() => -1)
   console.log(`census ${label}: ${rows.length} drawn meshes · Wilds tiles held ${tiles}`)
   return m
