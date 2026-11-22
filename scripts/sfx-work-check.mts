@@ -50,7 +50,7 @@ try {
   const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 1100, height: 680 })
   const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
-  await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); for (const k of ['open.pruned.v1', 'open.mined.v1', 'open.skills.v1', 'open.inv.v1']) localStorage.removeItem(k) })
+  await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }));   /* M68 s3a: past the tutorial, so the worn pruner + spike are lit */  for (const k of ['open.pruned.v1', 'open.mined.v1', 'open.skills.v1', 'open.inv.v1']) localStorage.removeItem(k) })
   const A = (expr: string) => p.evaluate(`(window.__ather && (${expr}))`) as Promise<any>
   const P = () => p.evaluate(() => (window as any).__sfx?.played?.() ?? {}) as Promise<Record<string, number>>
   const n = async (id: string) => (await P())[id] ?? 0

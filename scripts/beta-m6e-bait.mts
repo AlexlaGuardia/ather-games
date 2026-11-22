@@ -25,7 +25,7 @@ const p = await (await br.createBrowserContext()).newPage(); await p.setViewport
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 await p.evaluateOnNewDocument(() => {
   if (sessionStorage.getItem('m6e')) return; sessionStorage.setItem('m6e', '1')   // set up once, never on a reload
-  localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.removeItem('open.pruned.v1'); localStorage.removeItem('open.skills.v1')
+  localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }));   /* M68 s3a: past the tutorial, so the worn pruner + spike are lit */  localStorage.removeItem('open.pruned.v1'); localStorage.removeItem('open.skills.v1')
   const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'repeater', n: 1 }; slots[1] = { id: 'waymark', n: 12 }
   localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))   // out of bait, nothing landed
 })

@@ -85,6 +85,10 @@ export function questLine(t: Tut): { title: 'quest.b1.title' | 'quest.b2.title';
   return { title: 'quest.b2.title', step: 'quest.b2.step' }
 }
 
+/** Tool sockets start EMPTY for a live tutorial keeper (Magii 846719a): the worn spike is lit by Otto, the worn pruner by Bonn.
+ *  A legacy keeper (born before the tutorial) keeps theirs. Read by rinsticks.ts › loadTools; only BASIC tools are ever held back. */
+export const socketLit = (t: Tut, skill: 'forestry' | 'prospecting') => !t.live || t.gifts.includes(skill === 'forestry' ? 'pruner' : 'spike')
+
 // ── Tess: the starter seeds, one of them grade-A ─────────────────────────────────────────────────────────────────
 export const TESS_SEEDS: readonly { crop: CropId; n: number }[] = [{ crop: 'goldleaf', n: 3 }, { crop: 'ather_wheat', n: 3 }, { crop: 'dewdrop_vine', n: 2 }]
 /** The packet as bag stacks: `roll` in [0,1) picks which ONE seed of the eight is grade-A ("I won't say which"). */

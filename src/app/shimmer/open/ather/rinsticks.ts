@@ -9,6 +9,7 @@
 //   costs the stick nothing (the line never parts). Worn out → the worn starter is back in hand, never empty-handed.
 // ★ A rinstick is EQUIPPED, not a bag item: the keeper holds bait and the rinstick comes out (rinning.ts). Saved per keeper
 //   (open.tools.v1, keeper-key-specs), with the forestry/prospecting focuses riding the same record for when they upgrade.
+import { loadTut, socketLit } from './glade-tutorial'
 import { TOOL_DEFS, ensureBasicTools, makeBasicTool, type EquippedTool, type EquippedTools } from '../../engine/tools'
 import { keeperKey } from '@/lib/keeper-local'
 import { countOf, take, type Inv } from '../shared/inventory'
@@ -66,6 +67,10 @@ export function loadTools(): EquippedTools {
       if (t && TOOL_DEFS[t.toolId]?.skillId === k && Number.isFinite(t.usesRemaining) && t.usesRemaining > 0) out[k] = t
   } catch { /* fresh */ }
   ensureBasicTools(out)
+  // M68 s3a: a live tutorial keeper's spike + pruner sockets start EMPTY (Otto / Bonn light them, glade-friend-talk.ts);
+  // only a WORN tool is held back, never a crafted one already in the save
+  const tut = loadTut()
+  for (const k of ['forestry', 'prospecting'] as const) if (!socketLit(tut, k) && out[k] && TOOL_DEFS[out[k]!.toolId]?.basic) delete out[k]
   // M22: the WORN rinstick is earned (rinquest.ts); a better one already in the save is never taken
   if (!hasStick(loadQuest()) && out.rinning && TOOL_DEFS[out.rinning.toolId]?.basic) delete out.rinning
   return out

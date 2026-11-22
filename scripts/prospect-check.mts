@@ -37,7 +37,7 @@ const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: '/u
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const p = await br.newPage(); await p.setViewport({ width: 1000, height: 640 })
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e)))
-await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); for (const k of ['open.inv.v1', 'open.skills.v1', 'open.mined.v1']) localStorage.removeItem(k) })
+await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }));   /* M68 s3a: past the tutorial, so the worn pruner + spike are lit */  for (const k of ['open.inv.v1', 'open.skills.v1', 'open.mined.v1']) localStorage.removeItem(k) })
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 })
 await p.waitForFunction(() => !!(window as any).__ather?.mine, { timeout: 180000 }); await sleep(2000)
 // __ather.mine exists at mount but the Wilds index/network/tiles load after it: a travel sent before they land only toasts
