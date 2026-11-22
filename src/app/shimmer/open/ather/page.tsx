@@ -707,7 +707,11 @@ function AtherSliceGame() {
     hudT.current -= dt
     if (hudT.current <= 0) {
       hudT.current = 0.12
-      const p = tourRef.current?.talk ? null   // M32: Greg is talking at a stop; E answers him, nothing else
+      // M67 fix (hub 11-22): no E prompt (nor the phone's Use button, which is built from it) while the veil is up: the keys are
+      // ignored under it (`if (panel || fade) return`), so a prompt there promised a press that did nothing. On a slow GPU the
+      // veil after an arrival lasts seconds; the gate's E pressed in that window was the edesk's 'through the gate' red.
+      const p = fadeRef.current ? null
+        : tourRef.current?.talk ? null   // M32: Greg is talking at a stop; E answers him, nothing else
         : n?.kind === 'gate' ? (zone.kind === 'glade' ? 'E · the gate (the Wilds)' : 'E · the gate (fold map)')
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
         : n?.kind === 'fennel' ? 'E · Fennel'
