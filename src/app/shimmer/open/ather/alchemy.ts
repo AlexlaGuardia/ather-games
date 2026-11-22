@@ -46,7 +46,7 @@ export const POTIONS: Readonly<Record<string, PotionRow>> = {
     recipe: [{ id: 'starwillow_sap', n: 3 }, { id: 'pure_mana_core', n: 2 }, { id: 'glowfin', n: 2 }], makes: 1, buff: { id: 'starlight', ms: 8 * 60_000 },
   },
   ather_infusion: {
-    name: 'Ather Infusion', blurb: 'An Ather crystal steeped in old sap. Drink it and your mana comes back twice as fast, for 3 minutes.',
+    name: 'Ather Tonic', blurb: 'An Ather crystal steeped in old sap. Drink it and your mana comes back twice as fast, for 3 minutes.',
     recipe: [{ id: 'ather_crystal', n: 1 }, { id: 'crystallized_sap', n: 2 }, { id: 'pure_mana_core', n: 3 }], makes: 1, buff: { id: 'ather_flow', ms: 10 * 60_000 },
   },
 }

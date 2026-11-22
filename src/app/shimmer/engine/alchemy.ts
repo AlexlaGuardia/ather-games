@@ -129,7 +129,7 @@ export const POTION_DEFS: Record<string, PotionDef> = {
 
   // Tier 4 — Master
   ather_infusion: {
-    id: 'ather_infusion', name: 'Ather Infusion', tier: 4,
+    id: 'ather_infusion', name: 'Ather Tonic', tier: 4,
     minAlchemyLevel: 20, manaCost: 50, xpGrant: 150, resultCount: 1,
     recipe: [{ itemId: 'ather_crystal', count: 1 }, { itemId: 'crystallized_sap', count: 2 }, { itemId: 'pure_mana_core', count: 3 }],
   },
