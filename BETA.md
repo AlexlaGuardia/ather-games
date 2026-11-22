@@ -187,6 +187,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - 11-22 07:1x Alex: "we need a new tab in the inventory for skills i dont have a way to view them" → **M64**, routed to play
 - 11-22 08:5x Alex: Moglin cards = a stat RADAR, not a skill list: Core (Forestry, Mining), Dexterity (Rinning, Woodworking, Masonry), Patience (Cooking, Metalwork, Farming), Talent (overall bonus); stat grade S6 A5 B4 C3 D2 F0 sets its skills, Talent grade adds S4 A3 B2 C2 D1 F0 to stats above B; each skill 0-10. "five stats" but 4 named → hub asked Alex for the 5th + C value + where Alchemy/Mana sit; then row
 - 11-22 09:0x Alex: "the fifth stat would be luck, that effects all the skills by 0-40% chance of a double drop (S=40, A=30, B=20, C=10, D=5, F=0)" → **M65** (hub defaults on the open bits, flagged to Alex), routed to sprites
+- 11-22 09:1x Alex: "the farming room is still bugged ..the stock from pack button hasnt been working" → bug, routed to world (before M49 s6)
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
