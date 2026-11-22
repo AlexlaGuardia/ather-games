@@ -1,3 +1,5 @@
+// ⚠ SUPERSEDED by scripts/glade-cluster-check.mts (BETA M67 s1a, 11-22): a newborn now opens their eyes in the CLOSED Glade
+// (zone 'glade', Greg's garden), so step 2 below (expects the Wilds) fails by design. Kept for its history; run the new check.
 // ── BORN AT MOONWELL, PLAYED (BETA M31, play / Jin 2 16e8df5e, 11-19) ───────────────────────────────────────────────────
 // Alex 11-19 at the Redstair runesmith: "the start loses new keepers". A first-time keeper opens their eyes at Moonwell
 // Glade beside Greg, not on the plot. In the real page, a fresh profile:

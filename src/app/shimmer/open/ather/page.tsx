@@ -63,9 +63,11 @@ import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
-import { gregSpot, newbornSpot } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
+import { gregSpot } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
 import { GLADE_GREEN } from './moonwell'   // M40: the Glade's green is the Wilds' safe heart (the five, the pond, the waymark)
-import { GladeLots } from './glade-lots-view'   // M40: the green, the five's lots + stations, Greg's jetty
+import { GladeLots } from './glade-lots-view'
+import { GladeCluster } from './glade-cluster-view'   // M67 s1a: the closed Glade's keepers, Moglins, Greg's marker
+import { GLADE_FRAME, GLADE_OWNED, GLADE_TILE, GLADE_ZONE_NAME, GLADE_GATE, gladeNewbornSpot, gladeWhere, gregInGlade } from './glade-cluster'   // M40: the green, the five's lots + stations, Greg's jetty
 import { loadSpot, saveSpot, clearSpot, makeSpot, resumeFrom } from './last-spot'   // where you were (a reload in the Wilds resumes there)
 import { GladeGreg, type GregTourState, type GregLive } from './glade-greg'
 import { biomeGround } from './hollow-goop'   // M34: what a Hollow's sheen borrows
@@ -149,7 +151,8 @@ import type { SkinVitals } from '../../ui/hearth-hud'
 const aimDirV = new Vector3()   // M60: the camera's forward, reused every frame
 
 
-type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string }
+// M67 s1a: 'glade' = the closed tutorial cluster a newborn opens their eyes in (glade-cluster.ts); its one way out is the gate
+type Zone = { kind: 'plot' } | { kind: 'wilds'; tile: string } | { kind: 'glade' }
 type Spawn = { x: number; z: number; yaw: number }
 const gregAt = gregSpot()   // BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
 type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation }
@@ -352,6 +355,7 @@ function AtherSliceGame() {
   const plotWorld = useMemo(() => terrainWorld(withLifts(cl.frame.linked
     ? plotShape(owned, [...mistWalls(owned), ...mateWalls(cl.frame), ...workWalls(works)], (x, z) => clusterGround(cl.frame, x, z))
     : plotShape(owned, [...mistWalls(owned), ...workWalls(works)]))), [owned, cl.frame, works])
+  const gladeWorld = useMemo(() => terrainWorld(plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)], (x, z) => clusterGround(GLADE_FRAME, x, z))), [])   // M67 s1a
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
   const fading = useRef(false)
@@ -538,6 +542,9 @@ function AtherSliceGame() {
   // void (tile unknown) or never lands lifts it.
   const [resuming, setResuming] = useState(false)
   useLayoutEffect(() => {
+    // M67 s1a: a keeper who left off in the closed Glade wakes there (its spot carries GLADE_TILE, never a Wilds tile)
+    const gs = resumeFrom(window.location.search, loadSpot(), n => n === GLADE_TILE)
+    if (gs) { landed.current = true; arrive({ kind: 'glade' }, { x: gs.x, z: gs.z, yaw: gs.yaw }); return }
     if (!resumeFrom(window.location.search, loadSpot(), () => true)) return
     setResuming(true)
     const cap = setTimeout(() => setResuming(false), 20000)
@@ -546,7 +553,7 @@ function AtherSliceGame() {
   useEffect(() => {
     if (landed.current || !ww) return
     const sp = resumeFrom(window.location.search, loadSpot(), n => !!ww.byName.get(n))
-    if (!sp) { setResuming(false); return }
+    if (!sp || sp.tile === GLADE_TILE) { setResuming(false); return }
     landed.current = true
     stream(ww, sp.x, sp.z).then(() => { setWrev(ww.rev); setHereTile(sp.tile); arrive({ kind: 'wilds', tile: sp.tile }, { x: sp.x, z: sp.z, yaw: sp.yaw }); setResuming(false) })
   }, [ww, arrive])
@@ -554,8 +561,8 @@ function AtherSliceGame() {
   const fadeRef = useRef(fade); fadeRef.current = fade
   useEffect(() => {
     if (zone.kind === 'plot') { if (epoch > 0) clearSpot(); return }
-    if (zone.kind !== 'wilds') return
-    const save = () => { if (fadeRef.current === 0) { const p = poseRef.current; saveSpot(makeSpot(hereTileRef.current, p.x, p.z, p.yaw)) } }
+    const glade = zone.kind === 'glade'   // M67 s1a: the closed Glade keeps a spot too, so a reload wakes you in it
+    const save = () => { if (fadeRef.current === 0) { const p = poseRef.current; saveSpot(makeSpot(glade ? GLADE_TILE : hereTileRef.current, p.x, p.z, p.yaw)) } }
     const hide = () => { if (document.visibilityState === 'hidden') save() }
     const t = setInterval(save, 3000)
     window.addEventListener('pagehide', save); document.addEventListener('visibilitychange', hide)
@@ -569,20 +576,27 @@ function AtherSliceGame() {
   const [bornPending, setBornPending] = useState(false)
   useEffect(() => { const on = () => setBornPending(true); window.addEventListener(BORN_EVENT, on); return () => window.removeEventListener(BORN_EVENT, on) }, [])
   useEffect(() => {
-    if (!bornPending || !ww) return
+    if (!bornPending) return
     setBornPending(false)
-    // keyed off GREG (moonwell-glade.ts newbornSpot), not his waymark: M40 moved the pond and the waymark spawn sat 57.7 m off (11-22)
-    const { x, z, yaw } = newbornSpot()
-    stream(ww, x, z).then(() => { const tile = ww.tileAtPoint(x, z)?.W.meta.name ?? GREG_WAYMARK.tile; setWrev(ww.rev); setHereTile(tile); arrive({ kind: 'wilds', tile }, { x, z, yaw }) })
-  }, [bornPending, ww, arrive])
+    // ★ M67 s1a (Alex 11-22, docs/tutorial-cluster.md): a newborn opens their eyes in the CLOSED Glade, in Greg's garden, facing
+    // him (glade-cluster.ts gladeNewbornSpot), no longer at Moonwell in the open Wilds. The Glade needs no streaming.
+    arrive({ kind: 'glade' }, gladeNewbornSpot())
+  }, [bornPending, arrive])
+  // M67 s1a: the Glade's gate (open from the start) is its one way out: straight through to the Wilds at Greg's waymark
+  const leaveGlade = useCallback(() => {
+    if (!ww) { hudSay('The Wilds are still on their way. Try the gate again in a moment.', 'info', 3); return }
+    const o = ww.offsetOf(GREG_WAYMARK.tile), x = GREG_WAYMARK.x + o.x, z = GREG_WAYMARK.z + o.z
+    stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(GREG_WAYMARK.tile); arrive({ kind: 'wilds', tile: GREG_WAYMARK.tile }, { x, z, yaw: Math.PI * 0.75 }); hudSay('The Wilds', 'zone') })
+  }, [ww, arrive])
+  const gladeFall = useCallback(() => arrive({ kind: 'glade' }, gladeNewbornSpot()), [arrive])
 
-  const world = useMemo(() => zone.kind === 'plot' ? plotWorld : ww ? terrainWorld(withPieces(ww.shape)) : null, [zone, ww, plotWorld])   // ww.shape reads the live tiles
+  const world = useMemo(() => zone.kind === 'plot' ? plotWorld : zone.kind === 'glade' ? gladeWorld : ww ? terrainWorld(withPieces(ww.shape)) : null, [zone, ww, plotWorld, gladeWorld])   // ww.shape reads the live tiles
   // ground cover preview (ground-cover.tsx, ?cover=): nothing on a path, the gate's pad or at Greg's feet
   const [cover, setCover] = useState<'none' | 'tufts' | 'meadow' | 'lush'>('meadow')
   useEffect(() => setCover(coverFromUrl()), [])
   const placedClear = useMemo(() => coverClear(works), [works])   // M23: every placed room / piece / chest / the table clears its floor
   const coverSkip = useCallback((x: number, z: number) => placedClear(x, z) || (cl.frame.linked && onPath(cl.frame, x, z)) || Math.hypot(x - GATE.x, z - GATE.z) < 5 || Math.hypot(x - GREG.x, z - GREG.z) < 2.5 || Math.hypot(x - THRESHOLD.x, z - THRESHOLD.z) < 2, [cl.frame, placedClear])
-  const ground = useMemo(() => zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : ww ? ww.heightAt : () => 0, [zone, ww, cl.frame])
+  const ground = useMemo(() => zone.kind === 'glade' ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(GLADE_FRAME, x, z)) : zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : ww ? ww.heightAt : () => 0, [zone, ww, cl.frame])
   // M27: others in the Wilds (shared/open-mp.tsx); the plot is personal, no socket. Feet on the ground the page knows.
   // M61: on a plot IN A PARTY there is a socket now: your own plot = open:plot:<you> (you host), a mate's = open:plot:<them>.
   // The party instance is the only way in (strangers never match into one); no party = no socket on the plot, as before.
@@ -650,7 +664,8 @@ function AtherSliceGame() {
     const dir = cam ? (() => { const v = cam.getWorldDirection(aimDirV); return { x: v.x, y: v.y, z: v.z } })() : lookDir(yaw, 0)
     const g = heightRef.current
     const cap = (x: number, z: number, r: number, h: number, item: Near): Pickable<Near> => { const y = g(x, z); return { x, z, y0: y - 0.2, y1: y + h, r, item } }
-    if (zone.kind === 'plot') {
+    if (zone.kind === 'glade') n = aimPick([cap(GLADE_GATE.x, GLADE_GATE.z, 1.4, 3.2, { kind: 'gate' })], eye, dir, from)   // M67 s1a: no talk yet (M68)
+    else if (zone.kind === 'plot') {
       const cands: Pickable<Near>[] = [cap(GATE.x, GATE.z, 1.4, 3.2, { kind: 'gate' })]
       if (fennelRef.current) cands.push(cap(fennelRef.current.x, fennelRef.current.z, 0.45, 1.1, { kind: 'fennel' }))   // M22
       for (const w of workPickables(worksRef.current, g)) cands.push({ ...w, item: { kind: 'work', near: w.item } })
@@ -681,7 +696,7 @@ function AtherSliceGame() {
     if (hudT.current <= 0) {
       hudT.current = 0.12
       const p = tourRef.current?.talk ? null   // M32: Greg is talking at a stop; E answers him, nothing else
-        : n?.kind === 'gate' ? 'E · the gate (fold map)'
+        : n?.kind === 'gate' ? (zone.kind === 'glade' ? 'E · the gate (the Wilds)' : 'E · the gate (fold map)')
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
         : n?.kind === 'fennel' ? 'E · Fennel'
         : n?.kind === 'work' ? workPrompt(n.near)
@@ -707,6 +722,7 @@ function AtherSliceGame() {
           if (place) where = st ? `${st.name} · free Moglins` : FAIR_NAME
         }
       }
+      else if (zone.kind === 'glade') where = gladeWhere(lc.px, lc.pz)
       else if (!squareAt(lc.px, lc.pz)) {
         // off your own grid: in a linked cluster that is somewhere real (a friend's plot, the Green, the valley, a path).
         // Names RULED 2026-11-15 (CANON_GAPS › Garden clusters come BACK): the Green, the valley.
@@ -736,6 +752,8 @@ function AtherSliceGame() {
       // read-only probe (owner-race-check): the plot the page is DRAWING, from the live store
       works: () => { const w = currentWorks(); return { rooms: w.rooms.map(r => r.kind), pieces: w.pieces.map(p => p.item) } },
       zone: () => zone.kind,
+      // CHECK-ONLY (glade-cluster-check): set the keeper down somewhere in the closed Glade (only while in it), to walk the last steps to the gate
+      gladeAt: (x: number, z: number, yaw: number) => { if (zone.kind === 'glade') arrive({ kind: 'glade' }, { x, z, yaw }) },
       wildsLoaded: () => [...(wwRef.current?.loaded.keys() ?? [])],   // read-only probe (M9 wilds-release-check): the parsed Wilds tiles held now
       open: (k: 'gate' | 'greg' | 'athernyx') => setPanel(k === 'greg' ? { kind: 'talk', step: 0 } : { kind: 'map', view: k === 'athernyx' ? 'athernyx' : 'ather', travel: true }),
       travel: (d: Dest) => travel(d),
@@ -748,7 +766,7 @@ function AtherSliceGame() {
       eat: () => eatHeld(), hp: () => vitalsRef.current.hp, drink: () => drinkHeld(), buffs: () => buffsRef.current, tools: () => toolsRef.current, setMana: (n: number) => { manaRef.current.cur = n },
       rin: () => rinApi.current?.view() ?? null, cast: () => castOrAnswer(), hold: (h: boolean | 'track') => { reelHold.current = h === 'track' ? (r: Reel) => (r.zone - r.bob) * 6 + (r.zoneV - r.bobV) * 1.6 > 0 : h },
     }
-  }, [zone, travel, garden, updateGarden, skipDays, nodeOwner])
+  }, [zone, travel, garden, updateGarden, skipDays, nodeOwner, arrive])
 
   const plantHere = useCallback(() => {
     if (zone.kind !== 'wilds' || !ww) return
@@ -774,7 +792,7 @@ function AtherSliceGame() {
   const heldRef = useRef(held); heldRef.current = held
   // M45: what E does with it (held-use.ts). Furniture / a Keepstone in hand stands its ghost in front of you on the plot
   // (workshop holdFromHand: E taps set it, an E hold turns it); it goes when a panel, the planner or a fade is up.
-  const heldUseNow = heldUse(held, zone.kind === 'plot' ? 'plot' : 'wilds')
+  const heldUseNow = zone.kind === 'glade' ? null : heldUse(held, zone.kind === 'plot' ? 'plot' : 'wilds')   // M67: nothing placed or cast in the Glade (not your ground)
   useEffect(() => { holdFromHand(placesFromHand(heldUseNow) && !panel && !building && !fade ? held : null) }, [held, heldUseNow, panel, building, fade])
   useEffect(() => { (window as unknown as { __held?: unknown }).__held = () => ({ id: heldRef.current, use: heldUse(heldRef.current, zoneRef0.current === 'wilds' ? 'wilds' : 'plot') }) }, [])
   // ── forestry from a distance (forestry.ts + forestry-fx.tsx): stowed, click (or E) a tree within 10 m; the Forestry
@@ -1017,7 +1035,9 @@ function AtherSliceGame() {
   }, [])
   // compass marks: what the keeper might be heading for, by zone
   useEffect(() => {
-    marksRef.current = zone.kind === 'plot'
+    marksRef.current = zone.kind === 'glade'
+      ? [{ x: gregInGlade().x, z: gregInGlade().z, color: '#f2cf63', title: 'Gregory' }, { x: GLADE_GATE.x, z: GLADE_GATE.z, color: '#e7c766', title: 'the gate' }]
+      : zone.kind === 'plot'
       ? [{ x: GATE.x, z: GATE.z, color: '#e7c766', title: 'the gate' }]
       : [
           // ★ NO NODE MARKS (Alex 11-18: "the nodes really dont even need to be on the map.. as long as the section gets an
@@ -1028,7 +1048,7 @@ function AtherSliceGame() {
           ...(net?.fair ? [{ x: net.fair.x, z: net.fair.z, color: '#b37fd6', title: FAIR_NAME }] : []),
           ...waymarks.filter(w => ww?.byName.has(w.tile)).map(w => { const o = ww!.offsetOf(w.tile); return { x: w.x + o.x, z: w.z + o.z, color: '#6fd3c4', title: 'your waymark' } }),
         ]
-    marksRef.current = [...marksRef.current, ...questMarks(zone.kind === 'plot' ? 'ather' : 'wilds')]   // the journal's waymarks (pack.tsx)
+    marksRef.current = [...marksRef.current, ...(zone.kind === 'glade' ? [] : questMarks(zone.kind === 'plot' ? 'ather' : 'wilds'))]   // the journal's waymarks (pack.tsx)
   }, [zone, nearNodes, waymarks, journal, ww, net])
   // THE FIRST ERRAND (business/errand.ts, Magii + Alex 11-16): Greg hands the birth letter's gems; the journal points to
   // the school's runesmith, then the Enchant Temple in the Citadel (those waymarks light on the continent page)
@@ -1062,7 +1082,7 @@ function AtherSliceGame() {
     const o = ww.offsetOf(GREG_WAYMARK.tile); return { x: GREG_WAYMARK.x + o.x, z: GREG_WAYMARK.z + o.z, zone: 'wilds' as const }
   }, [zone.kind, ww, wrev])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { postEntries('errand', errandEntries(errandStage, birth, { greg: { x: gregAt.x, z: gregAt.z }, gate: errandGate })) }, [errandStage, birth, errandGate])
-  useMorelHints({ stage: errandStage, zone: zone.kind === 'plot' ? 'ather' : 'wilds', pos: () => poseRef.current,
+  useMorelHints({ stage: errandStage, zone: zone.kind === 'wilds' ? 'wilds' : 'ather', pos: () => poseRef.current,
     busy: () => frozen.current || (!!chudRef.current && performance.now() / 1000 - chudRef.current.hurtAt < 10) })   // a fight is not 'stuck'
   // BETA M6a/M6b: the rinning + prospecting pointers, struck once used (re-read on every pack change: a catch/cut lands in it)
   useEffect(() => {
@@ -1151,7 +1171,7 @@ function AtherSliceGame() {
     post(); const id = setInterval(post, 3000); return () => clearInterval(id)
   }, [nodes])
   // entering somewhere says so on the message line: the zone, and crossing a node border
-  const zoneName0 = zone.kind === 'plot' ? 'Your plot' : 'The Wilds'
+  const zoneName0 = zone.kind === 'plot' ? 'Your plot' : zone.kind === 'glade' ? GLADE_ZONE_NAME : 'The Wilds'
   useEffect(() => { hudSay(zoneName0, 'zone') }, [zoneName0])
   const groundKind = hud.where.includes('infected') ? 'Infected ground' : hud.where.includes('cleared') ? 'Cleared ground' : null
   const lastGround = useRef<string | null>(null)
@@ -1180,7 +1200,7 @@ function AtherSliceGame() {
       const n = near.current
       // M45: E uses what is in hand first (a placing from the hand is caught earlier, by workshop's usePlacingKeys)
       if (e.code === 'KeyE' && !e.repeat) {
-        const u = heldUse(heldRef.current, zone.kind === 'plot' ? 'plot' : 'wilds')
+        const u = zone.kind === 'glade' ? null : heldUse(heldRef.current, zone.kind === 'plot' ? 'plot' : 'wilds')
         if (u === 'eat') { eatHeld(); return }
         if (u === 'drink') { drinkHeld(); return }
         if (u === 'plant') { plantHere(); return }
@@ -1197,10 +1217,11 @@ function AtherSliceGame() {
         else if (n.kind === 'work' && guestRefuses(m => hudSay(m, 'info', 4))) return   // M61: a guest opens no station, store or piece
         else if (n.kind === 'work') { if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
         else if (n.kind === 'folk') setPanel({ kind: 'folk', s: n.s })
+        else if (n.kind === 'gate' && zone.kind === 'glade') leaveGlade()
         else setPanel({ kind: 'map', view: 'ather', travel: true })   // Alex 11-20: the map opens on the side you stand on (the Ather here); an errand keeper's Rune Hold goal waits one Tab away
         return
       }
-      if (e.code === 'KeyF') plantHere()
+      if (e.code === 'KeyF' && zone.kind !== 'glade') plantHere()
       if (!e.repeat && e.code === CAST_KEY.tactical) castSlot('tactical')
       if (!e.repeat && e.code === CAST_KEY.signature) castSlot('signature')
 
@@ -1214,9 +1235,9 @@ function AtherSliceGame() {
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [panel, fade, zone, waymarks, ww, goHome, tune, skipDays, allNodes, plantHere, castSlot, errandToHold, eatHeld, drinkHeld])
+  }, [panel, fade, zone, waymarks, ww, goHome, leaveGlade, tune, skipDays, allNodes, plantHere, castSlot, errandToHold, eatHeld, drinkHeld])
 
-  const zoneName = zone.kind === 'plot' ? 'Your plot' : 'The Wilds'
+  const zoneName = zone.kind === 'plot' ? 'Your plot' : zone.kind === 'glade' ? GLADE_ZONE_NAME : 'The Wilds'
   // Phone taps: only what applies here and now, each the key this page already handles.
   const meleeReady = useMeleeReady()
   const touchActions: TouchAction[] = [
@@ -1256,6 +1277,7 @@ function AtherSliceGame() {
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} linked={cl.frame.linked} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
+        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked /><ClusterScene frame={GLADE_FRAME} /><GladeCluster ground={ground} /></>}   {/* M67 s1a */}
         {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
         {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
@@ -1280,14 +1302,14 @@ function AtherSliceGame() {
         {(talkNode ?? tourNode) && (zone.kind === 'wilds' || (tableVisit && !visitNow)) && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} />}
         {zone.kind === 'plot' && fennelAt && <Fennel spot={fennelAt} y={plotHeightAt(fennelAt.x, fennelAt.z)} talking={!!fennelNode} />}
         {fennelNode && fennelHead && zone.kind === 'plot' && <TalkBubble at={[fennelHead.x, fennelHead.y + 0.5, fennelHead.z]} name={FENNEL_NAME} line={fennelNode.line} />}
-        <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} water={zone.kind === 'wilds' ? rinWaterAt : undefined} />
+        {zone.kind !== 'glade' && <QuestGuide zone={zone.kind === 'plot' ? 'ather' : 'wilds'} ground={ground} water={zone.kind === 'wilds' ? rinWaterAt : undefined} />}
         {world && fade === 0 && <CompanionFollower pose={poseRef} ground={ground} />}
         <GateRings gate={castGate} />
         {world && (
           <Walker
             key={epoch} world={world} ground={ground} spawn={spawn} locked={locked} frozen={frozen} focus={talkFocus}
-            fallY={zone.kind === 'plot' ? FALL_Y : -60}
-            onFall={goHome}
+            fallY={zone.kind !== 'wilds' ? FALL_Y : -60}
+            onFall={zone.kind === 'glade' ? gladeFall : goHome}
             onTick={onTick}
           />
         )}
@@ -1297,7 +1319,7 @@ function AtherSliceGame() {
         // never dimmed in the Ather (Alex 11-17: 'the hotbar stays greyed out and doesnt highlight'): the plot uses the bar now
         // (Keepstones, furniture, bait), and HearthHotbar drops the selected slot's light while dimmed (selected = i === sel && !dimmed)
         dimmed={false} input={!panel && !fade && !optionsOpen && !building}
-        minimap={ww && <AtherMiniMap size={hudSize} zone={zone.kind} world={ww} wrev={wrev} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regionsByTile={regionsByTile} cluster={cl.frame}
+        minimap={ww && zone.kind !== 'glade' && <AtherMiniMap size={hudSize} zone={zone.kind} world={ww} wrev={wrev} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regionsByTile={regionsByTile} cluster={cl.frame}
           owned={owned} onExpand={() => setPanel({ kind: 'map', view: 'ather', travel: false })} />}
         status={[
           { label: hud.where },
