@@ -73,7 +73,8 @@ const made = (o.roast_rinn ?? 0) + (s.roast_rinn ?? 0) - before   // made WHILE 
 const checks: [boolean, string][] = [
   [JSON.stringify(res.offered) === '["heath-check"]', 'Heath offered at the hearth'],
   [res.here === 'heath-check', 'Heath put to work'],
-  [/Cooking (fair|good|fine|gifted|rare)/.test(res.duty as string) && /stockpile/.test(res.duty as string), `duty row names the room's skill (${res.duty})`],
+  [/Cooking (10|[0-9])\/10/.test(res.duty as string)   // M65 s2 (11-22): the row shows the Moglin's 0-10 skill score, no longer a grade word
+    && /stockpile/.test(res.duty as string), `duty row names the room's skill (${res.duty})`],
   [res.wound === true, 'station clock wound back 2 h'],
   [o.roast_rinn >= 10 && o.roast_rinn <= 20 && made >= 1, `roasts in the hearth's output (${o.roast_rinn})`],
   [s.shimmerscale === 30, `the 30-raw reserve kept (${s.shimmerscale})`],
