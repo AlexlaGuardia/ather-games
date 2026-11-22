@@ -12,6 +12,7 @@ import { RANGE_GUNS } from '../shared/gunplay'
 import { weaponDef } from '../../engine/weapons'
 import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, SHAMBLER, FLOATER, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
 import { live as liveSolids } from './dynamic-solids'
+import { noteCombat } from '../shared/idle-mode'
 import { runCast, stepFields, stepPieces, channelAim, type ChannelRun, type CastHit } from './combat-casts'
 import type { CastSpec } from '../../play3d/cast'
 import { touch } from '../shared/touch'
@@ -651,6 +652,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     if (C.events.length) {
       const now = performance.now() / 1000
       for (const e of C.events) {
+        if (e.kind === 'hurt' || e.kind === 'hit') noteCombat()   // M91: no idle camera / napping follower mid-fight
         if (e.kind === 'hurt') hud.current.hurtAt = now; if (e.kind === 'hit') hud.current.hitAt = now
         if (e.kind === 'skin') sfx('mana-skin-tick')   // M59: a soft glassy tick per absorbed blow (proposed = silent until Alex's yay)
         if (e.kind === 'skin-pop') { hud.current.skinPopAt = now; sfx('mana-skin-pop') }   // the whip-crack; the bar shatters off popAt

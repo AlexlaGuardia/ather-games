@@ -14,7 +14,8 @@ import { createLoco, tickLocomotion, eyeY, WALK_SPEED, SPEED_CAP, type LocoWorld
 import { tickFeet } from '../shared/sfx'
 import { liftCarry } from './lift'
 import { GROUND_Y } from './plot'
-import { touch, TOUCH_LOOK_SENS } from '../shared/touch'
+import { touch, TOUCH_LOOK_SENS, isTouchOnly } from '../shared/touch'
+import { tickIdleCam, installIdleInput } from '../shared/idle-mode'
 import { getSettings, useSettings, pixelRatioCap } from '../shared/settings'
 
 const SENS = 0.0022
@@ -59,6 +60,7 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
       look.current.pitch = Math.max(-1.5, Math.min(1.5, look.current.pitch - e.movementY * k * (st.invertY ? -1 : 1)))
     }
     const blur = () => keys.current.clear()
+    const offIdle = installIdleInput()
     window.addEventListener('keydown', down); window.addEventListener('keyup', up)
     window.addEventListener('mousemove', move); window.addEventListener('blur', blur)
     // Probe + teleport for scripted shots and tests on prod.
@@ -73,6 +75,7 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
       pin: (on: boolean) => { pinned.current = on },
     }
     return () => {
+      offIdle()
       window.removeEventListener('keydown', down); window.removeEventListener('keyup', up)
       window.removeEventListener('mousemove', move); window.removeEventListener('blur', blur)
     }
@@ -94,6 +97,8 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
       look.current.pitch = Math.max(-1.5, Math.min(1.5, look.current.pitch - touch.look.dy * k * (st.invertY ? -1 : 1)))
     }
     touch.look.dx = 0; touch.look.dy = 0
+    // M91: after ~25 s of nothing the view drifts about; any input hands it back exactly (shared/idle-mode.ts). Not while talking, in a menu, or unlocked.
+    tickIdleCam(dt, look.current, frozen.current || (!locked.current && !isTouchOnly()) || !!focus?.current)
     const fc = focus?.current
     if (fc) {   // turn to the NPC: yaw 0 looks down -z, so the yaw to (dx, dz) is atan2(-dx, -dz); ease, shortest way round
       const dx = fc.x - lc.px, dz = fc.z - lc.pz, dy = fc.y - eyeY(lc)

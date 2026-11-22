@@ -35,6 +35,7 @@ import type { SkinVitals } from '../../ui/hearth-hud'
 import type { Vitals } from '../../engine/vitals'
 import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Track } from './map'
 import { pitstopsUnlocked, visitNear } from './pitstops'
+import { tickIdleCam, installIdleInput } from '../shared/idle-mode'
 import { Towns } from '../towns/Towns'
 import { MarketView, DeedCard } from '../business/market-view'
 import { ShipyardPlots, parkedCourserSpot, type DeedYardState, type CarLink } from './shipyard-plot'
@@ -847,6 +848,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
     }
     const click = () => { if (mode.current === 'foot' && document.pointerLockElement !== gl.domElement) lock() }
     window.addEventListener('keydown', down); window.addEventListener('keyup', up); window.addEventListener('blur', blur)
+    const offIdle = installIdleInput()
     window.addEventListener('mousemove', move); gl.domElement.addEventListener('click', click)
     ;(window as unknown as { __drive: unknown }).__drive = {
       tune: () => tuneRef.current,   // the live drive feel (M14 lots: a bought model changes it)
@@ -899,6 +901,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
     const pk = parkedCourserSpot(R, getFleet().active)
     if (pk) { place(pk.x, pk.z, pk.yaw); car.current.y = pk.y }
     return () => {
+      offIdle()
       window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur)
       window.removeEventListener('mousemove', move); gl.domElement.removeEventListener('click', click)
     }
@@ -938,6 +941,8 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
     if (c.y < -0.6 && !onFoot) { place(safe.current.x, safe.current.z, safe.current.yaw); c = car.current }
     // the walker: same tick as /shimmer/open, on the region's ground at the walker's own height
     const lc = loco.current
+    // M91: ~25 s of nothing on foot and the view drifts about, the follower naps; any input hands it back exactly. Never while driving, in a menu (mouse free) or talking.
+    tickIdleCam(frameDt, view.current, !(onFoot && lc) || !!talkFocus?.current || (!isTouchOnly() && document.pointerLockElement !== gl.domElement))
     if (onFoot && lc) {
       if (touch.look.dx || touch.look.dy) {
         const st = getSettings(), ts = TOUCH_LOOK_SENS * st.touchSens * rangeLookScale(st.fov)
