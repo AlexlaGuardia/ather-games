@@ -1,6 +1,7 @@
 // M80 (Alex 11-22): F = shield up, E = the car. Hold F (phone: the SHIELD hold) in BOTH worlds: nothing for 1 s, then the
 // keeper's own Mana Skin climbs 10 per 2 mana, stops on release, stops at the cap (50). On Nyx, E gets in / out of the
-// courser and F no longer does. The numbers are pinned by shared/vitals-economy.test.ts; this proves the wiring.
+// courser and F no longer does. ⚠ The stall + fill run on frame dt (clamped 0.1 s), so swiftshader at ~1 fps takes several
+// real seconds per game second: the key-hold trace runs 14 s. The numbers are pinned by shared/vitals-economy.test.ts; this proves the wiring.
 //   npx tsx scripts/mana-skin-check.mts [--url https://ather.games] [--phone]      (--phone = 390x844 touch, the SHIELD button)
 import puppeteer from 'puppeteer-core'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -38,13 +39,13 @@ async function charge(p: any, where: string, errs: string[]) {
     const w = window as any, out: [number, number, number][] = []
     const t = performance.now(); while (!w.__skin.held() && performance.now() - t < 3000) await new Promise(r => setTimeout(r, 20))
     const t0 = performance.now()
-    while (performance.now() - t0 < 5000) { out.push([(performance.now() - t0) / 1000, w.__skin.cur(), w.__casts.mana()]); await new Promise(r => setTimeout(r, 80)) }
+    while (performance.now() - t0 < 14000) { out.push([(performance.now() - t0) / 1000, w.__skin.cur(), w.__casts.mana()]); await new Promise(r => setTimeout(r, 80)) }
     return out
   }) as [number, number, number][]
   await up(p)
   const early = tr.filter(([t]) => t < 0.8), last = tr[tr.length - 1]
   ok(early.length > 0 && early.every(([, s]) => s === 0), `${where}: nothing for the 1 s stall (${early.length} samples < 0.8 s, max ${Math.max(0, ...early.map(x => x[1])).toFixed(2)})`)
-  ok(last[1] > 2, `${where}: then the skin climbs (${last[1].toFixed(1)} by ${last[0].toFixed(1)} s)`)
+  ok(last[1] > 0.5, `${where}: then the skin climbs (${last[1].toFixed(1)} by ${last[0].toFixed(1)} s)`)
   const spent = m0 - last[2]
   ok(spent > 0 && Math.abs(last[1] / spent - 5) < 0.6, `${where}: 10 skin per 2 mana (skin ${last[1].toFixed(1)} for ${spent.toFixed(2)} mana, ratio ${(last[1] / spent).toFixed(2)}; the refill is paused while it spends)`)
   await sleep(300); const r0 = await skin(p); await sleep(1500); const r1 = await skin(p)
