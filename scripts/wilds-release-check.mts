@@ -23,6 +23,7 @@ const farMark = { kind: 'waymark', w: { id: 'm9-far', tile: far.name, x: far.nod
 
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const p = await br.newPage(); await p.setViewport({ width: VW, height: VH })
+await p.evaluateOnNewDocument('window.__name = (f) => f')   // tsx wraps named functions in __name(): without this the rAF logger throws and the frame numbers read 0
 await p.evaluateOnNewDocument(() => {
   localStorage.setItem('ather:shimmer:birthRune', 'star')
   const w = window as any; w.__fr = []; let last = performance.now()
