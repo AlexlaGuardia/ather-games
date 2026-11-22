@@ -1,6 +1,6 @@
 // ── WORLD BUILDER FLY VIEW, PLAYED (BETA M83 p1 s1b, world lane, 11-22) ──────────────────────────────────────────────────────────
 // Alex 11-22: "fly around and build for hours.. zoom in and out without any nodes". The owner opens the terrain editor, clicks Fly (3D):
-//   A. the scene holds ONLY terrain: 9 tile meshes (the tile + its ring), the sea plane, the brush ring; nothing else (no nodes/props)
+//   A. the scene holds ONLY terrain: the tile + its ring (9 inland; NOT every tile the editor cached: 18 after two tiles, fixed), the sea plane, the brush ring; nothing else (no nodes/props)
 //   B. WASD flies: holding W moves the camera; Space climbs
 //   C. T goes top-down (pitch ~ -90 deg), T again comes back
 //   D. a LEFT-DRAG on the 3D ground sculpts the SAME draft the 2D view edits (dirty, height up under the cursor)
@@ -18,6 +18,9 @@ if (!KEY) { console.log('no OWNER_KEY (env or .env)'); process.exit(2) }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
+const tiles = JSON.parse(readFileSync('public/open/wilds/tiles.json', 'utf8')).tiles as { name: string; tx: number; ty: number }[]
+const T = tiles.find(t => t.name === TILE); if (!T) { console.log(`no tile ${TILE}`); process.exit(2) }
+const RING = tiles.filter(t => Math.abs(t.tx - T.tx) <= 1 && Math.abs(t.ty - T.ty) <= 1).length   // 9 inland, fewer on the map edge
 interface Cam { x: number; y: number; z: number; yaw: number; pitch: number }
 
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -49,7 +52,7 @@ try {
   await p.waitForFunction('typeof window.__builderFly?.scene === "function" && window.__builderFly.scene().tiles > 0', { timeout: 120000, polling: 500 })
   await sleep(2000)
   const sc = await p.evaluate('window.__builderFly.scene()') as { tiles: number; sea: number; ring: number; other: string[] }
-  ok(sc.tiles === 9 && sc.sea === 1 && sc.ring === 1 && sc.other.length === 0, `ONLY terrain: ${JSON.stringify(sc)} (want 9 tiles, 1 sea, 1 ring, no other)`)
+  ok(sc.tiles === RING && sc.sea === 1 && sc.ring === 1 && sc.other.length === 0, `ONLY terrain: ${JSON.stringify(sc)} (want ${RING} tiles = the ring, 1 sea, 1 ring, no other)`)
   await p.screenshot({ path: `${out}/fly-start.png` })
 
   // ── B. fly ──

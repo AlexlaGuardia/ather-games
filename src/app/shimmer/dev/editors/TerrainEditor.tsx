@@ -365,7 +365,8 @@ export default function TerrainEditor() {
       </div>
       {view === 'fly' && B && (
         <div className="relative w-full aspect-[4/3] bg-black/40 rounded overflow-hidden select-none touch-none">
-          <BuilderFly tiles={[...bases.current.entries()].map(([name, b]): FlyTile => ({ name, ox: b.tx * TILE_M, oz: b.ty * TILE_M, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY }))}
+          {/* the 3x3 ring only: bases caches every tile opened this session (builder-fly-check saw 18 meshes after two tiles) */}
+          <BuilderFly tiles={[...bases.current.entries()].filter(([, b]) => Math.abs(b.tx - B.tx) <= 1 && Math.abs(b.ty - B.ty) <= 1).map(([name, b]): FlyTile => ({ name, ox: b.tx * TILE_M, oz: b.ty * TILE_M, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY }))}
             deltas={n => edits.current[n]} rev={rev} heightAt={heightAt} radius={radius} focus={{ x: B.tx * TILE_M, z: B.ty * TILE_M }}
             onBegin={beginAt} onMove={moveAt} onEnd={endStroke} />
         </div>
