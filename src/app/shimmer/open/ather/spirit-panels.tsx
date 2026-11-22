@@ -137,7 +137,7 @@ export function GrimoirePanel({ onClose, footer }: { onClose: () => void; footer
               <span style={{ fontWeight: 700 }}>{open! + 1}. {nameOf(page.species)}{page.stage === 'bonded' ? ' 🎗' : ''}</span>
               <span style={lab}>{page.stage === 'bonded' ? 'Bonded' : 'Seen'}</span>
             </div>
-            {card && <div style={{ fontSize: 12.5, color: H.inkSoft }}>Like a {card.analog}. {card.quirk.charAt(0).toUpperCase() + card.quirk.slice(1)}.</div>}
+            {card && <div style={{ fontSize: 12.5, color: H.inkSoft }}>Like {/^[aeiou]/i.test(card.analog) ? 'an' : 'a'} {card.analog}. {card.quirk.charAt(0).toUpperCase() + card.quirk.slice(1)}.</div>}
             {card && page.stage === 'bonded' && card.entry && <div style={{ fontSize: 13 }}>{card.entry}</div>}
           </div>
         )}
