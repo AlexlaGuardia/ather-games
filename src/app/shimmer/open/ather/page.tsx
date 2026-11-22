@@ -15,6 +15,7 @@
 // touch-controls (stick, drag-look, jump/slide/fire, context taps that press the same keys this page handles).
 
 import { OwnerReady } from '../shared/owner-ready'
+import { LoadScreen } from '../shared/load-screen'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { subscribeVisit, currentVisit, isVisiting, startVisit, endVisit, noteVisit, shownOwned, plotZone, guestRefuses, snapMoglins, type PlotSnap } from './plot-visit'   // BETA M61
 import { usePlotVisitNet } from './plot-visit-net'
@@ -1429,6 +1430,7 @@ function AtherSliceGame() {
       <OpenSocial />   {/* M27: presence + invites + the Play together panel */}
       <BirthGate />
       {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={litSlot(stance, inv)} isTouch={isTouch} />}
+      {resuming && <LoadScreen side="ather" />}
       <div data-veil={resuming ? 'resume' : 'fade'} style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: resuming ? 1 : fade, transition: resuming ? 'none' : 'opacity 0.35s', pointerEvents: 'none' }} />
       {isTouch && !panel && !building && (
         <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} holds={SKIN_HOLDS} />

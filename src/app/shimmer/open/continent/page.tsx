@@ -9,6 +9,7 @@
 // show sky. Houses and trees are placeholder geometry: towns read as towns, nothing more is claimed.
 // Desktop only for now (keys). ?region=<name> picks another exported region.
 
+import { LoadScreen } from '../shared/load-screen'
 import { frameStats } from '../shared/keeper-look'
 import { getLook } from '../shared/look-store'
 import { OwnerReady } from '../shared/owner-ready'
@@ -1572,7 +1573,7 @@ function ContinentRideGame() {
           onAccept={c => { const r = accept(ledger, c, courser.crates); if (r.ok) { setLedger(r.ledger); setDeed(null); setTalk(null); flash(`${CO_BARK.taken} ${GOODS[c.good].name} to ${placeName(c.to)}.`) } else setBoardMsg(refusalLine(!!ledger.active)) }}
           onAbandon={() => setLedger(abandon(ledger))} onClose={() => { if (talk) hudSay(byeLine(!!ledger.active), 'info'); setDeed(null); setTalk(null); setBoardMsg(null) }} />
       )}
-      {!R && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#1d2a33', font: '600 14px system-ui' }}>{err ?? 'Loading the continent…'}</div>}
+      {!R && (err ? <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#1d2a33', font: '600 14px system-ui' }}>{err}</div> : <LoadScreen side="nyx" label="Loading the continent…" />)}
 
       {hud.foot && (
         <div style={{ position: 'absolute', left: '50%', top: '50%', width: 4, height: 4, margin: -2, borderRadius: 2, background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
