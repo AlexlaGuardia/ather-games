@@ -12,8 +12,8 @@ import { mkdirSync } from 'fs'
 import * as THREE from 'three'
 import { AMOUNTS } from '../src/app/shimmer/open/ather/plot-bom'
 // M50 made a wall piece cost AMOUNTS.wallPerM (1.5) planks, not 1: every plank number below derives from it (the check said 38 / 2 / 3 until pass 6)
-const W = AMOUNTS.wallPerM, WALLS = Math.ceil(18 * W), NEED = WALLS + 20, BAG = NEED + 2
-const R1 = Math.floor(2 * W), R2 = Math.floor(3 * W + (2 * W - R1))   // raze pays whole planks, the fraction carries to the next take-down
+const WPM = AMOUNTS.wallPerM, WALLS = Math.ceil(18 * WPM), NEED = WALLS + 20, BAG = NEED + 2
+const R1 = Math.floor(2 * WPM), R2 = Math.floor(3 * WPM + (2 * WPM - R1))   // raze pays whole planks, the fraction carries to the next take-down
 import { TABLE, KEEP_CLEAR } from '../src/app/shimmer/open/ather/rooms'
 import { STARTING_SQUARES, squareAt, sqId, GROUND_Y } from '../src/app/shimmer/open/ather/plot'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
