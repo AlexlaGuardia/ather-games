@@ -25,7 +25,8 @@ import * as THREE from 'three'
 import { useThree } from '@react-three/fiber'
 import { buildHand, tintMittens, ORDER, SEAT_COLOR } from './open-hands'
 import { gemGlow } from './morel'   // M33: the gem on the gun hand pulses as the rounds change
-import { opticOf, throughScope, type Optic } from './optics'
+import { OPTICS, opticOf, throughScope, type Optic } from './optics'
+import { box, type Part, type Model } from './gun-kit'
 import { MARKS, TINTS, drawMark, markGlow, defaultLook, type SightLook } from './sight-marks'
 import { getSightLooks, lookFor } from './sight-looks'
 import type { RangeGun } from './gunplay'
@@ -98,9 +99,6 @@ export function resetGunTune(): void { delete tuned[curGun]; try { localStorage.
 export const ADS_TIGHT = 0.6     // past this the cone is the sights' (gunplay ads)
 
 // ── the models ──
-type Part = { o: [number, number, number]; s: [number, number, number]; c: 'body' | 'dark' | 'metal' | 'ember' }
-type Model = { parts: Part[]; grip: [number, number, number]; fore: [number, number, number]; top: number; sightZ: number }
-const box = (o: Part['o'], s: Part['s'], c: Part['c'] = 'body'): Part => ({ o, s, c })
 const MODELS: Record<string, Model> = {
   // the sidearm: slide over a frame, a short barrel, the grip raked back
   SIDEARM: { parts: [box([0, 0.02, -0.07], [0.034, 0.034, 0.2]), box([0, -0.005, -0.06], [0.03, 0.022, 0.17], 'dark'), box([0, 0.02, -0.185], [0.016, 0.016, 0.03], 'metal'), box([0, -0.07, 0.01], [0.03, 0.11, 0.045], 'dark')],
@@ -120,10 +118,15 @@ const MODELS: Record<string, Model> = {
 }
 // Kael's Charred Rifle: a long barrel, burnt dark, with the charge seam lit along it (canon 11-15: single fire, short charge-up)
 const CHARRED: Model = { ...MODELS.LONGBARREL, parts: [...MODELS.LONGBARREL.parts, box([0.026, 0.01, -0.2], [0.004, 0.012, 0.3], 'ember')] }
-export const modelOf = (g: Pick<RangeGun, 'id' | 'slot'>): Model => (g.id === 'charred-rifle' ? CHARRED : MODELS[g.slot] ?? MODELS.LONGBARREL)
+// M81 blockout preview (/shimmer/dev/gun-kit ONLY; nothing in the game calls it): a gun id drawn with a kit model (gun-kit.ts) instead
+let preview: Record<string, Model> = {}, previewStamp = 0
+export function previewGunModel(id: string, m: Model | null): void { if (m) preview = { ...preview, [id]: m }; else { const { [id]: _, ...rest } = preview; preview = rest } previewStamp++ }
+export const modelOf = (g: Pick<RangeGun, 'id' | 'slot'>): Model => preview[g.id] ?? (g.id === 'charred-rifle' ? CHARRED : MODELS[g.slot] ?? MODELS.LONGBARREL)
+/** the optic in hand: a model that carries its own sight (a kit model) names it; else the gun's */
+const opticIn = (m: Model, g: RangeGun): Optic => (m.optic ? OPTICS[m.optic] : opticOf(g))
 
 /** The sight line in the gun's own frame: centre of the optic's glass (where the dot is), above the receiver. */
-export const sightOf = (m: Model, o: Optic) => ({ y: m.top + (o.scoped ? 0.032 : 0.028), z: m.sightZ })
+export const sightOf = (m: Model, o: Optic) => ({ y: m.eye ?? m.top + (o.scoped ? 0.032 : 0.028), z: m.sightZ })
 /** Where the gun group sits so its sight lies on the camera axis ADS_DIST ahead: the dot is dead centre by construction. */
 export const adsPos = (m: Model, o: Optic) => { const s = sightOf(m, o); return [0, -s.y * VM.S, -VM.ADS_DIST - s.z * VM.S] as const }
 
@@ -138,13 +141,20 @@ const publish = () => {
 }
 export const fpGunAds = () => ({ t: adsT, optic })
 
-function buildModel(m: Model, color: string, o: Optic, mats: Record<Part['c'] | 'glass' | 'dot', THREE.Material>): THREE.Group {
+function buildModel(m: Model, color: string, o: Optic, mats: Record<Part['c'], THREE.Material>): THREE.Group {
   const g = new THREE.Group()
   const add = (geo: THREE.BufferGeometry, mat: THREE.Material, p: [number, number, number], r?: [number, number, number]) => {
     const mesh = new THREE.Mesh(geo, mat); mesh.position.set(...p); if (r) mesh.rotation.set(...r); mesh.renderOrder = ORDER; mesh.frustumCulled = false; g.add(mesh)
   }
   ;(mats.body as THREE.MeshStandardMaterial).color.set(color)
-  for (const p of m.parts) add(new THREE.BoxGeometry(...p.s), mats[p.c], p.o)
+  const HALF: [number, number, number] = [Math.PI / 2, 0, 0]
+  for (const p of m.parts) {
+    if (p.shape === 'cyl' || p.shape === 'tube') add(new THREE.CylinderGeometry(p.s[0] / 2, p.s[0] / 2, p.s[2], 14, 1, p.shape === 'tube'), mats[p.c], p.o, HALF)
+    else if (p.shape === 'disc') add(p.c === 'dot' ? new THREE.PlaneGeometry(p.s[0], p.s[1]) : new THREE.CircleGeometry(p.s[0] / 2, 16), mats[p.c], p.o)
+    else add(new THREE.BoxGeometry(...p.s), mats[p.c], p.o)
+  }
+  g.scale.setScalar(VM.S)
+  if (m.eye != null) return g   // a kit model carries its own sight on its rail (gun-kit.ts)
   const s = sightOf(m, o)
   add(new THREE.BoxGeometry(0.022, 0.012, 0.05), mats.dark, [0, m.top + 0.004, s.z])   // the mount
   if (!o.scoped) {
@@ -185,7 +195,7 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
       ember: std('#ff7a2e', { emissive: new THREE.Color('#ff7a2e'), emissiveIntensity: 1.2 }),
       glass: new THREE.MeshBasicMaterial({ color: '#cfe8f2', transparent: true, opacity: 0.16, depthWrite: false }),   // ground Ather crystal
       dot: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending }),   // the etching (map set per look)
-    } as Record<Part['c'] | 'glass' | 'dot', THREE.Material>
+    } as Record<Part['c'], THREE.Material>
   }, [])
   const rig = useMemo(() => {
     const root = new THREE.Group(), held = new THREE.Group()
@@ -216,9 +226,9 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
       const d = Math.min(dt, 0.1), s = st.current
       if (!i.gun) { adsT = Math.max(0, adsT - d / VM.ADS_OUT); optic = null; glow = 0; publish(); rig.root.visible = false; return }
       selectGunTune(i.gun.id)   // this gun's own tune (per gun since 11-19)
-      const m = modelOf(i.gun), o = opticOf(i.gun)
+      const m = modelOf(i.gun), o = opticIn(m, i.gun)
       // (re)build when the gun changes
-      const key = `${i.gun.id}:${o.id}`
+      const key = `${i.gun.id}:${o.id}${preview[i.gun.id] ? `:p${previewStamp}` : ''}`
       if (rig.key !== key) {
         if (rig.model) { rig.held.remove(rig.model); rig.model.traverse(x => { if (x instanceof THREE.Mesh) x.geometry.dispose() }) }
         rig.model = buildModel(m, i.gun.color, o, mats); rig.held.add(rig.model); rig.key = key

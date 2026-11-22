@@ -195,6 +195,14 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['gun', 'weapon', 'first person', 'viewmodel', 'tune', 'aim', 'ads', 'recoil', 'sights', 'hands'],
   },
   {
+    path: '/shimmer/dev/gun-kit',
+    title: 'The Gun Kit',
+    blurb: 'The reworked Backbone and Charred Rifle on rails, with swappable sights, side on and in hand (M81 blockout).',
+    group: 'glass',
+    era: 'live',
+    keywords: ['gun', 'rail', 'sight', 'scope', 'backbone', 'charred', 'blockout', 'm81', 'model'],
+  },
+  {
     path: '/shimmer/dev/break',
     title: 'The Chips',
     blurb: 'Every bucket breaking side by side, so the feel can be judged instead of argued.',
