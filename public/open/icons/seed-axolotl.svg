@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Mana Seed (axolotl): plump translucent-gold teardrop; tell = three tiny frill-fronds each side near the top. Code-drawn filler (tools/art/seed_icons.py). -->
+  <defs><radialGradient id="g" cx=".42" cy=".62" r=".62"><stop offset="0" stop-color="#fff6c8"/><stop offset=".55" stop-color="#f6cf62"/><stop offset="1" stop-color="#e0a93a"/></radialGradient></defs>
+  <ellipse cx="16" cy="28.4" rx="9" ry="1.8" fill="#000" opacity=".22"/>
+  <circle cx="16" cy="17" r="12" fill="#ffe9a0" opacity=".2"/>
+  <path d="M12.4 11.6 L9.0 10.2" fill="none" stroke="#d09a30" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.6 11.6 L23.0 10.2" fill="none" stroke="#d09a30" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.2 14 L6.799999999999999 12.6" fill="none" stroke="#d09a30" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M21.8 14 L25.2 12.6" fill="none" stroke="#d09a30" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.4 16.6 L5.0 15.200000000000001" fill="none" stroke="#d09a30" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M23.6 16.6 L27.0 15.200000000000001" fill="none" stroke="#d09a30" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M16 4.5 C17.6 9.5 25 12.5 25 19 C25 24 21 26.6 16 26.6 C11 26.6 7 24 7 19 C7 12.5 14.4 9.5 16 4.5 Z" fill="url(#g)" fill-opacity=".92" stroke="#a8741c" stroke-width=".8" stroke-linejoin="round"/>
+  <ellipse cx="16" cy="19.4" rx="4.6" ry="4.2" fill="#fff1b8" opacity=".5"/>
+  <path d="M10.6 16.6 Q11 13.6 13.4 11.6" fill="none" stroke="#fffbe6" stroke-width="1.2" stroke-linecap="round" opacity=".85"/>
+  
+</svg>
