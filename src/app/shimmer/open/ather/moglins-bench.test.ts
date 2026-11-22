@@ -25,7 +25,7 @@ ok(!Object.keys(t.made).length && count(t.works, 'k', 'shimmerscale') === 60, 'v
 ok(stockJobs('cooking') === ROAST && stockJobs('alchemy') === BREW, 'cooking / alchemy are not stockpile rooms')
 // the stockpile with a fair cook, 1 h: 60 stocked keeps the 30 reserve; 30 surplus roasts into the OUTPUT at 8 s a roast / speed 1
 const st0 = { store: sc(60), out: undefined as undefined, work: { cur: 0, last: T0 } }
-const a = advance(st0, T0 + H, moglinSpeed(1), stockJobs('cooking'))
+const a = advance(st0, T0 + H, moglinSpeed(0), stockJobs('cooking'))
 const outN = (a.station.out ?? []).reduce((n, x) => n + (x.id === 'roast_rinn' ? x.n : 0), 0)
 ok(outN === OUT_CAP && count({ ...W, rooms: [room('k', 'cooking', a.station.store)] }, 'k', 'shimmerscale') === RESERVE, 'cook stockpile: reserve kept / 30 roasted')
 // input conservation across BOTH tickers on the same store+time: every scale gone is a roast made, none eaten twice
@@ -33,10 +33,10 @@ const both = tick(V, { ...W, rooms: [room('k', 'cooking', a.station.store as Roo
 const left = count(both.works, 'k', 'shimmerscale') + outN
 ok(left === 60, 'a scale was eaten twice (village + station)')
 // a focus is the only way past the reserve, and the village tick leaves it alone too
-const f = advance(setFocus(st0, 'roast-roast_rinn', 99, T0), T0 + 10 * H, moglinSpeed(5), stockJobs('cooking'))
+const f = advance(setFocus(st0, 'roast-roast_rinn', 99, T0), T0 + 10 * H, moglinSpeed(10), stockJobs('cooking'))
 ok((f.station.store ?? []).length === 0 && (f.station.out ?? []).reduce((n, x) => n + x.n, 0) === 60, 'cook focus: all 60 scales roasted once')
 // pace is the CRAFT grade: rare cook is x2 a fair one (station speed)
-ok(moglinSpeed(5) === 2 * moglinSpeed(1), 'pace: craft grade')
+ok(moglinSpeed(10) === 2 * moglinSpeed(0), 'pace: craft score')
 // the alchemist brews a Shard Tonic through the stockpile too
 const A = [{ id: 'raw_mana_shard', n: 36 }, { id: 'goldwood_bark', n: 34 }]
 const ab = advance({ store: A, work: { cur: 0, last: T0 } }, T0 + 5 * H, 1, stockJobs('alchemy'))

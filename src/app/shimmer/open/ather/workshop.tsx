@@ -48,7 +48,7 @@ import { BrewingPanel } from './brewing-panel'
 import { useBrewing, openPartyBrew } from './party-brew-net'
 import { ALC_POTIONS as BREW_POTIONS, ALC_POTION_ORDER as BREW_ORDER } from './alchemy-set'
 import { openNet } from '../shared/open-mp'
-import { boonAt, assignSet, standAt, setRoom, boonLine, potionsGrade } from './alchemist-boon'
+import { boonAt, assignSet, standAt, setRoom, boonLine } from './alchemist-boon'
 import { loadRuns, saveRuns, returnRun } from './alchemy-runs'
 import { ROAST } from './cooking'
 import { FarmPanel, FarmInterior, FarmCrate, currentFarm, setFarm, currentWater, settleWater, farmNow } from './farm-room'
@@ -62,14 +62,15 @@ import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
 import { advance, setFocus, cancelFocus, runProgress, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
-import { skillIn, luckOf, skillsOf, SKILL_OF_ROOM, SKILL_LABEL } from './moglin-skills'
+import { SKILL_OF_ROOM, SKILL_LABEL } from './moglin-skills'
+import { scoreIn, luckChance, skillScore, statsOf, STAT_LABEL } from './moglin-stats'
 import { recordCard } from './moglin-card'
 import { benchTabs, TAB_LABEL, tabOfFocus, type BenchTab } from './bench-tabs'
 import { TabGlyph } from './bench-glyphs'
 import { MoglinCard } from './moglin-card-view'
 import { reportAway, addMade, type Made } from './away-report'
 import { MeleeAim, useHitWobble } from './melee-view'
-import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, GRADE_NAME, type Village, type MoglinRecord } from './moglins'
+import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, type Village, type MoglinRecord } from './moglins'
 import { shownWorks, worksWritable, subscribeVisit, isVisiting, rideAsGuest, shownMoglins } from './plot-visit'
 
 // ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1491,10 +1492,10 @@ function touchWork(roomId: string) {
   const w = getW(), r = w.rooms.find(x => x.id === roomId); if (!r) return
   setWorks(setStation(w, roomId, touch(stationOf(r), Date.now())))
 }
-/** Who works a room and how fast: its Moglin (its CRAFT grade), else the keeper while the panel is open (a focus only), else nobody (0). */
+/** Who works a room and how fast: its Moglin (its CRAFT score, M65), else the keeper while the panel is open (a focus only), else nobody (0). */
 function workerOf(r: Room, v: Village): { moglin?: Village['moglins'][number]; speed: number } {
   const m = v.moglins.find(x => x.room === r.id && WORKS_IN[x.profession].includes(r.kind))
-  return m ? { moglin: m, speed: moglinSpeed(skillIn(m, r.kind, 'craft')) } : { speed: openBench === r.id ? 1 : 0 }
+  return m ? { moglin: m, speed: moglinSpeed(scoreIn(m, r.kind, 'craft')) } : { speed: openBench === r.id ? 1 : 0 }
 }
 /** Run every station to now. Offline catch-up is the same call: `last` is a timestamp, the Moglin's hours since are worked
  *  out of the store into the output (station-queue.ts: stockpile above the 30 reserve, capped at 30 a product). */
@@ -1509,7 +1510,7 @@ export function stationTick(now = Date.now()) {
     if (!raised(r, now)) continue
     const { moglin, speed } = workerOf(r, v)
     if (!moglin && (speed <= 0 || !(r.work?.focus || r.work?.run))) continue   // the keeper only ever works a focus
-    const a = advance(stationOf(r), now, speed, moglin ? stockJobs(r.kind) : [], moglin ? { grade: luckOf(moglin), rnd: Math.random } : undefined)
+    const a = advance(stationOf(r), now, speed, moglin ? stockJobs(r.kind) : [], moglin ? { chance: luckChance(moglin), rnd: Math.random } : undefined)
     if (a.active || !r.work) { nw = setStation(nw, r.id, a.station); changed = true }   // an idle Moglin saves nothing (the panel re-starts its clock when the stock changes)
     if (first && moglin) addMade(away, a.made)
   }
@@ -1860,9 +1861,9 @@ function MoglinDuty({ r }: { r: Room }) {
     const nv = assign(loadVillage(), getW(), id, room); if (!nv) { hudSay('Their trade does not suit this room.', 'info'); return }
     saveVillage(nv); setV(nv); touchWork(r.id)
   }
-  // M46: the skills THIS room reads (its craft + idle-yield skill, once when they are the same), not the old craft/yield/trade grades
-  const grades = (m: Village['moglins'][number]) => { const sk = skillsOf(m), u = SKILL_OF_ROOM[r.kind]
-    return [...new Set([u.craft, u.yield])].map(k => `${SKILL_LABEL[k]} ${GRADE_NAME[sk[k]]}`).join(' · ') }
+  // M65 s2: the SCORES (0-10) of the skills THIS room reads (its craft + idle-yield skill, once when they are the same)
+  const grades = (m: Village['moglins'][number]) => { const st = statsOf(m), u = SKILL_OF_ROOM[r.kind]
+    return [...new Set([u.craft, u.yield])].map(k => `${SKILL_LABEL[k]} ${skillScore(st, k)}/10`).join(' · ') }
   if (!here && !fits.length && !v.moglins.length) return null
   return (
     <div data-moglin-duty={r.kind}>
@@ -1954,7 +1955,7 @@ function AlchemistAtSet({ deskId }: { deskId: string }) {
   const row = (m: Village['moglins'][number], act: React.ReactNode) => (
     <div key={m.id} data-alc-moglin={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, color: H.ink, fontWeight: 600 }}>{m.name} <span style={{ fontWeight: 400, color: H.inkSoft, fontSize: 12.5 }}>· {SKILL_LABEL.potions} {GRADE_NAME[potionsGrade(m)]}</span></div>
+        <div style={{ fontSize: 14, color: H.ink, fontWeight: 600 }}>{m.name} <span style={{ fontWeight: 400, color: H.inkSoft, fontSize: 12.5 }}>· {STAT_LABEL.luck} {statsOf(m).luck}</span></div>
         <div data-boon-line style={{ fontSize: 12.5, color: H.inkSoft }}>{boonLine(m)}</div>
       </div>
       {act}

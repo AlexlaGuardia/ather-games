@@ -36,9 +36,15 @@ const none = { rects: [], circles: [] }
 let inv = give(newInv(0), 'goldwood_plank', 10).inv
 let walls: Walls = {}
 { const v = canLay(walls, runKeys({ i: 0, j: 0 }, { i: 4, j: 0 }), 'goldwood', held, none, inv)
-  ok(v.ok && v.add.length === 4 && v.cost === 4, 'a 4 m run asks 4 planks')
+  ok(v.ok && v.add.length === 4 && v.cost === 6, `a 4 m run asks 6 planks at the bill's 1.5 a metre (${v.ok && v.cost})`)
   if (v.ok) { const r = buildPlan(planRun(walls, v.add, 'goldwood'), {}, inv, null); if (r.ok) { walls = r.walls; inv = r.inv } }
   ok(Object.keys(walls).length === 4 && countOf(inv, 'goldwood_plank') === 4, `built: 4 pieces, 6 planks spent, 4 left (${countOf(inv, 'goldwood_plank')})`) }
+// the bag check at the BOM rate (11-22: it compared pieces to planks 1:1, so a 4 m run passed with 4 planks and then could not be paid)
+{ const p = (n: number) => give(newInv(0), 'goldwood_plank', n).inv, run4 = runKeys({ i: 0, j: 10 }, { i: 4, j: 10 }), run1 = runKeys({ i: 0, j: 11 }, { i: 1, j: 11 })
+  ok(canLay({}, run4, 'goldwood', held, none, p(6)).ok && !canLay({}, run4, 'goldwood', held, none, p(5)).ok, '4 m: 6 planks lay it, 5 do not')
+  const one = canLay({}, run1, 'goldwood', held, none, p(2)); ok(one.ok && one.cost === 2 && !canLay({}, run1, 'goldwood', held, none, p(1)).ok, '1 m rounds up to 2 (what M50 charges)')
+  const rail = canLay({}, runKeys({ i: 0, j: 12 }, { i: 3, j: 12 }), 'goldwood', held, none, p(2), 'rail'); ok(rail.ok && rail.cost === 2, `a 3 m railing: 1.5 -> 2 planks (${rail.ok && rail.cost})`)
+  const rail6 = canLay({}, runKeys({ i: 0, j: 13 }, { i: 6, j: 13 }), 'goldwood', held, none, p(3), 'rail'); ok(rail6.ok && rail6.cost === 3, 'a 6 m railing: exactly 3') }
 { const v = canLay(walls, runKeys({ i: 2, j: 0 }, { i: 6, j: 0 }), 'goldwood', held, none, inv)
   ok(v.ok && v.add.length === 2, 'drawing over standing pieces only pays for the new ones') }
 { const v = canLay(walls, runKeys({ i: 0, j: 0 }, { i: 4, j: 0 }), 'goldwood', held, none, inv)

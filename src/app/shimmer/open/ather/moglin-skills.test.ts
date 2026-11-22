@@ -1,5 +1,5 @@
 // Moglin skills (M46 slice 1). Run: npx tsx src/app/shimmer/open/ather/moglin-skills.test.ts
-import { SKILLS, SKILL_LABEL, SKILL_OF_ROOM, rollSkills, rngOf, migrateSkills, skillIn, luckBonus, LUCK_CHANCE, type Skills, type Skill } from './moglin-skills'
+import { SKILLS, SKILL_LABEL, SKILL_OF_ROOM, rollSkills, rngOf, migrateSkills, skillIn, type Skills, type Skill } from './moglin-skills'
 import { adoptVillage, PROFESSIONS, type MoglinRecord } from './moglins'
 import { advance } from './station-queue'
 let pass = 0
@@ -54,18 +54,12 @@ ok(skillIn(rec, 'stonemason', 'craft') === 1 && skillIn(rec, 'stonemason', 'yiel
 ok(Object.keys(SKILL_OF_ROOM).length === 7, 'every room kind mapped')
 ok(skillIn(old('z', 'farmer', 1, 4), 'farm', 'yield') === 4, 'legacy record routes through migration')
 
-// luck
-for (const g of [1, 2, 3, 4, 5] as const) {
-  const r = rngOf(`luck${g}`); let hit = 0; const N = 20000
-  for (let i = 0; i < N; i++) hit += luckBonus(g, r)
-  ok(Math.abs(hit / N - LUCK_CHANCE[g]) <= 0.015, `luck ${g}: ${(hit / N * 100).toFixed(2)}% vs ${LUCK_CHANCE[g] * 100}%`)
-}
-// station wiring: always-lucky adds one per run, none leaves it unchanged
+// station wiring (M65 s2: Luck DOUBLES a run; the odds are tested in moglin-stats.test): always-lucky doubles, none is unchanged
 import { REFINE } from './furniture'
 const job = REFINE[0], st = { store: job.in.map(c => ({ id: c.id, n: c.n * 40 })) }
-const w0 = { cur: 0, last: 0 }, base = advance({ ...st, work: w0 }, 60_000, 1, [job], undefined), lucky = advance({ ...st, work: w0 }, 60_000, 1, [job], { grade: 5, rnd: () => 0 }), unlucky = advance({ ...st, work: w0 }, 60_000, 1, [job], { grade: 5, rnd: () => 0.99 })
+const w0 = { cur: 0, last: 0 }, base = advance({ ...st, work: w0 }, 60_000, 1, [job], undefined), lucky = advance({ ...st, work: w0 }, 60_000, 1, [job], { chance: 0.4, rnd: () => 0 }), unlucky = advance({ ...st, work: w0 }, 60_000, 1, [job], { chance: 0.4, rnd: () => 0.99 })
 const tot = (r: typeof base) => r.made.reduce((x, y) => x + y.n, 0)
 ok(tot(base) > 0 && tot(unlucky) === tot(base), 'no luck hit = unchanged output')
-ok(tot(lucky) > tot(base), `lucky runs bring extra (${tot(lucky)} vs ${tot(base)})`)
+ok(tot(lucky) === 2 * tot(base), `lucky runs drop double (${tot(lucky)} vs ${tot(base)})`)
 console.log(`${pass} passed, ${fails.length} failed`); for (const f of fails) console.log('FAIL', f)
 if (fails.length) process.exit(1)

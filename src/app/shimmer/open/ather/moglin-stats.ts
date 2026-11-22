@@ -2,13 +2,14 @@
 // Five stats, each graded S/A/B/C/D/F: CORE, DEXTERITY, PATIENCE (each covers a set of skills), TALENT (a bonus to every
 // stat graded B or better) and LUCK (a double-drop chance on all its skills). A skill's SCORE (0-10) = the points of the
 // stat it sits under + Talent's bonus when that stat is B or better.
-// Slice 1 is DATA + DISPLAY only: nothing in play reads a score or the luck % yet (s2 wires them into gathering and rooms,
-// replacing the alchemist extra-bottle rule). The M46 nine skills (moglin-skills.ts) stay what rooms read until then.
+// Slice 1 was DATA + DISPLAY; slice 2 (bottom of this file) makes the score + luck what rooms read, replacing the M46 grade
+// reads and the alchemist extra-bottle curve. The M46 nine grades stay as the roll's BIAS (rollStats).
 // Old saves need no migration: a Moglin's stats are DERIVED on read, deterministically from its id and biased by its M46
 // skill grades, so a reload never rerolls and an older record (grades only) still gets a full card.
 // ★ PURE: no React, no DOM.
 import type { MoglinRecord } from './moglins'
-import { SKILLS, SKILL_LABEL, rngOf, skillsOf, luckOf, type Skill } from './moglin-skills'
+import { SKILLS, SKILL_LABEL, SKILL_OF_ROOM, rngOf, skillsOf, luckOf, type Skill } from './moglin-skills'
+import type { RoomKind } from './rooms'
 
 export type Stat = 'core' | 'dexterity' | 'patience' | 'talent' | 'luck'
 /** the radar's axes, clockwise from the top */
@@ -87,3 +88,17 @@ export function statView(m: Rec): { axes: StatAxis[]; scores: ScoreRow[]; luckPc
     luckPct: luckPct(st),
   }
 }
+
+// ── SLICE 2 (Alex 11-22 via hub 7f25d6a2): the score and the luck are what PLAY reads ─────────────────────────────────────
+// A room reads the Moglin's 0-10 SCORE in the skill it uses there (SKILL_OF_ROOM), not the M46 1-5 grade. The curves keep
+// today's balance at the middle: score 5 (a B stat + a C talent) pays what an M46 'fine' (3) did, 0 pays a 'fair' (1),
+// 10 pays a 'rare' (5). LUCK replaces both the M46 +1-per-run luck and the M57 alchemist extra-bottle curve: one chance,
+// LUCK_PCT, to DOUBLE what a run / an item / a bottle drops. Nothing adds a second chance on top (no stacking).
+/** the M46 grade a score stands in for (0 -> 1, 5 -> 3, 10 -> 5), continuous */
+export const gradeEquiv = (score: number) => 1 + 0.4 * Math.max(0, Math.min(SCORE_MAX, score))
+/** a Moglin's score in the skill `roomKind`'s craft (bench pace) or yield (idle product) reads */
+export const scoreIn = (m: Rec, roomKind: RoomKind, use: 'craft' | 'yield'): number => skillScore(statsOf(m), SKILL_OF_ROOM[roomKind][use])
+/** a Moglin's double-drop chance, 0..1 */
+export const luckChance = (m: Rec): number => luckPct(statsOf(m)) / 100
+/** one roll: does this drop come out doubled? `rnd` in [0,1). */
+export const doubles = (chance: number, rnd: () => number): boolean => chance > 0 && rnd() < chance

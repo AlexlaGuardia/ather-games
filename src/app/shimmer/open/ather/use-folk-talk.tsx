@@ -82,7 +82,8 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
     node,
     name: f?.name ?? s?.name ?? '',
     focus: node && at ? { x: at.x, y: at.y + head * 0.8, z: at.z } : null,
-    bubbleAt: node && at ? [at.x, at.y + head + 1.1, at.z] as [number, number, number] : null,
+    // M65: no bubble while the Moglin's CARD is open (its line is the hello again; at 800x500 the bubble sat on the card's top)
+    bubbleAt: node && at && st?.screen !== 'card' ? [at.x, at.y + head + 1.1, at.z] as [number, number, number] : null,
     /** which Moglin the talk is on (checks read it) */
     on: spot && home ? spot.id : null,
   }

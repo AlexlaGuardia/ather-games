@@ -4,6 +4,13 @@ import {
   skillScore, luckPct, rollStats, statsOf, statView, rankOf, type Stats, type StatGrade,
 } from './moglin-stats'
 import { SKILLS, rollSkills, rngOf } from './moglin-skills'
+import { gradeEquiv, scoreIn, luckChance, doubles } from './moglin-stats'
+import { PER_HOUR, luckyExtras, tick as village, type Village } from './moglins'
+import { advance, moglinSpeed } from './station-queue'
+import { REFINE } from './furniture'
+import { freshWorks, place, type Works } from './rooms'
+import { STARTING_SQUARES } from './plot'
+import { give, newInv } from '../shared/inventory'
 import { cardOf, recordCard } from './moglin-card'
 import { freshTrust, type Folk } from './settlement-folk'
 import type { MoglinRecord, Profession } from './moglins'
@@ -97,6 +104,46 @@ const half = cardOf(hoop, { v: 1, given: { [hoop.id]: { goldwood_log: 3 } } } as
 ok(!half.full && half.radar.find(x => x.stat === 'talent')!.grade === null && half.radar.find(x => x.stat === 'luck')!.grade === null, 'part-trusted: Talent + Luck still hidden')
 ok(half.radar.some(x => x.grade !== null), 'part-trusted: the stats of its lit skills show')
 ok(half.scores.every(x => x.score === null), 'part-trusted: scores wait for the full card')
+
+// ── SLICE 2: what play reads ───────────────────────────────────────────────────────────────────────────────────────────
+{
+  // score -> effect: a mid score pays today's mid grade; the ends pay the old ends
+  ok(gradeEquiv(0) === 1 && gradeEquiv(5) === 3 && gradeEquiv(10) === 5, 'gradeEquiv: 0->1, 5->3 (old fine), 10->5')
+  ok(PER_HOUR(0) === 3 && PER_HOUR(5) === 5 && PER_HOUR(10) === 7, `yield: 3 / 5 / 7 an hour (${PER_HOUR(0)}, ${PER_HOUR(5)}, ${PER_HOUR(10)})`)
+  ok(moglinSpeed(0) === 1 && moglinSpeed(5) === 1.5 && moglinSpeed(10) === 2, 'pace: x1 / x1.5 / x2')
+  ok([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].every(k => PER_HOUR(k) < PER_HOUR(k + 1) && moglinSpeed(k) < moglinSpeed(k + 1)), 'every score point is felt (strictly rising)')
+  // a room reads the score of ITS skill: a carpenter's carpentry yield = forestry under Core, craft = woodworking under Dex
+  const m = rec('carp-s2', 'carpenter'), s = statsOf(m)
+  ok(scoreIn(m, 'carpentry', 'yield') === skillScore(s, 'forestry') && scoreIn(m, 'carpentry', 'craft') === skillScore(s, 'woodworking'), 'scoreIn reads the room skill\'s score')
+  ok(scoreIn(m, 'alchemy', 'craft') === skillScore(s, 'potions') && scoreIn(m, 'smith', 'yield') === skillScore(s, 'metalwork'), 'scoreIn: alchemy / smith')
+  // ★ luck odds: each grade's double-drop rate over N seeded rolls lands on LUCK_PCT
+  const N = 40000
+  for (const g of STAT_GRADES) {
+    const c = LUCK_PCT[g] / 100, r = rngOf(`luck-odds-${g}`)
+    let hit = 0; for (let i = 0; i < N; i++) if (doubles(c, r)) hit++
+    ok(Math.abs(hit / N - c) <= 0.01, `luck ${g}: ${(hit / N * 100).toFixed(2)}% vs ${LUCK_PCT[g]}%`)
+    const x = luckyExtras(N, c, rngOf(`luck-x-${g}`))
+    ok(Math.abs(x / N - c) <= 0.01, `luckyExtras ${g}: ${(x / N * 100).toFixed(2)}% extra vs ${LUCK_PCT[g]}%`)
+  }
+  ok(!doubles(0, () => 0), 'luck 0 never doubles, even on a zero roll')
+  ok(luckChance(m) === LUCK_PCT[s.luck] / 100, 'luckChance = the Luck stat\'s %')
+  // ★ a station run: lucky = exactly double (never +1 AND double: the M46 +1 is gone)
+  const job = REFINE[0], st0 = { store: job.in.map(c => ({ id: c.id, n: c.n * 40 })), work: { cur: 0, last: 0 } }
+  const tot = (r: ReturnType<typeof advance>) => r.made.reduce((a, y) => a + y.n, 0)
+  const base = tot(advance(st0, 60_000, 1, [job])), lucky = tot(advance(st0, 60_000, 1, [job], { chance: 0.4, rnd: () => 0 })), dud = tot(advance(st0, 60_000, 1, [job], { chance: 0.4, rnd: () => 0.5 }))
+  ok(base > 0 && lucky === 2 * base && dud === base, `station: lucky ${lucky} = 2 x ${base}, unlucky ${dud}`)
+  ok(tot(advance(st0, 60_000, 1, [job], { chance: 0, rnd: () => 0 })) === base, 'station: Luck F never doubles')
+  // the village tick: a carpenter's deadfall, every item rolling (always-lucky doubles, never-lucky is the clock's count)
+  let lk: MoglinRecord | null = null
+  for (let i = 0; i < 300 && !lk; i++) { const c = rec(`lk${i}`, 'carpenter'); if (luckChance(c) > 0) lk = c }
+  const owned = new Set<string>(STARTING_SQUARES)
+  const pl = place(freshWorks(), owned, give(newInv(12), 'goldwood_log', 40).inv, 'carpentry', -100, 110, 0, 0)!
+  const W: Works = { ...pl.works, rooms: pl.works.rooms.map(r => ({ ...r, doneAt: 0 })) }
+  const V: Village = { v: 1, moglins: [{ ...lk!, room: W.rooms[0].id, acc: 0 }], lastTick: 0 }
+  const H = 3_600_000, ph = Math.floor(2 * PER_HOUR(scoreIn(lk!, 'carpentry', 'yield')))
+  const never = village(V, W, 2 * H, undefined, () => 0.999).made.deadfall ?? 0, always = village(V, W, 2 * H, undefined, () => 0).made.deadfall ?? 0
+  ok(never === ph && always === 2 * ph, `tick: deadfall ${never} plain, ${always} always-lucky (2 h at score ${scoreIn(lk!, 'carpentry', 'yield')})`)
+}
 
 console.log(`moglin-stats: ${pass} pass, ${fail} fail`)
 process.exit(fail ? 1 : 0)

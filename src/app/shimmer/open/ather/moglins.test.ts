@@ -1,4 +1,5 @@
 // The garden village's Moglins, plot side (moglins.ts). Run: npx tsx src/app/shimmer/open/ather/moglins.test.ts
+import { scoreIn } from './moglin-stats'
 import { freshVillage, welcome, farewell, assign, tick, adoptVillage, PER_HOUR, MAX_TICK_MS, VILLAGE_CAP, WORKS_IN, PROFESSIONS, type MoglinRecord, type Village } from './moglins'
 import { freshWorks, place, roomStore, ROOM_ACCEPTS, ROOM_STORE_SLOTS, type Works, type Room } from './rooms'
 import { STARTING_SQUARES } from './plot'
@@ -7,6 +8,7 @@ let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const H = 3_600_000
+const NOLUCK = () => 0.999
 const mog = (id: string, profession: MoglinRecord['profession'], y: 1 | 2 | 3 | 4 | 5 = 1): MoglinRecord =>
   ({ id, name: id, home: 'tuckbank', grades: { craft: 1, yield: y, trade: 1 }, dream: '', profession, recruitedAt: 0 })
 const count = (r: Room | undefined, id: string) => (r ? roomStore(r).stacks.reduce((a, s) => a + (s.id === id ? s.n : 0), 0) : 0)
@@ -34,26 +36,28 @@ ok(assign(freshVillage(0).moglins.length === 0 ? welcome(freshVillage(0), mog('x
 ok(PROFESSIONS.every(p => WORKS_IN[p].every(k => k in ROOM_ACCEPTS)), 'assign: a trade works a room that does not exist')
 
 // the carpenter: deadfall at its yield grade, into the carpentry store
-const t1 = tick(v, W, 2 * H)
-ok(count(t1.works.rooms.find(r => r.id === carpId), 'deadfall') === 2 * PER_HOUR(3) && t1.made.deadfall === 10, 'carpenter: wrong deadfall for 2 h at yield 3')
+// M65 s2: the rate is the carpenter's forestry SCORE (PER_HOUR(score)); NOLUCK keeps the counts exact (luck is tested in moglin-stats.test)
+const PH = PER_HOUR(scoreIn(v.moglins.find(m => m.id === 'm1')!, 'carpentry', 'yield'))
+const t1 = tick(v, W, 2 * H, undefined, NOLUCK)
+ok(count(t1.works.rooms.find(r => r.id === carpId), 'deadfall') === Math.floor(2 * PH) && t1.made.deadfall === Math.floor(2 * PH), `carpenter: wrong deadfall for 2 h at ${PH}/h`)
 ok(count(W.rooms[0], 'deadfall') === 0, 'tick: mutated the works it was given')
 // fractions carry: four 15-minute ticks = one hour
 let vv = v, ww = W
-for (let k = 1; k <= 4; k++) { const t = tick(vv, ww, k * H / 4); vv = t.village; ww = t.works }
-ok(count(ww.rooms.find(r => r.id === carpId), 'deadfall') === PER_HOUR(3), 'carpenter: fractions lost between short ticks')
+for (let k = 1; k <= 4; k++) { const t = tick(vv, ww, k * H / 4, undefined, NOLUCK); vv = t.village; ww = t.works }
+ok(count(ww.rooms.find(r => r.id === carpId), 'deadfall') === Math.floor(PH), 'carpenter: fractions lost between short ticks')
 // a week away is not a week of product
-const far = tick(v, W, 7 * 24 * H)
-ok(count(far.works.rooms.find(r => r.id === carpId), 'deadfall') <= Math.ceil(PER_HOUR(3) * MAX_TICK_MS / H), 'carpenter: a week away paid a week')
+const far = tick(v, W, 7 * 24 * H, undefined, NOLUCK)
+ok(count(far.works.rooms.find(r => r.id === carpId), 'deadfall') <= Math.ceil(PH * MAX_TICK_MS / H), 'carpenter: a week away paid a week')
 // a full store: nothing past ROOM_STORE_SLOTS, nothing lost from it
 const stuffed: Works = { ...W, rooms: W.rooms.map(r => (r.id === carpId ? { ...r, store: Array.from({ length: ROOM_STORE_SLOTS }, () => ({ id: 'goldwood_plank', n: 99 })) } : r)) }
-const tf = tick(v, stuffed, 2 * H)
+const tf = tick(v, stuffed, 2 * H, undefined, NOLUCK)
 ok(roomStore(tf.works.rooms.find(r => r.id === carpId)!).stacks.length === ROOM_STORE_SLOTS && !tf.made.deadfall, 'carpenter: deadfall forced into a full store')
 
 // the smith: gathers nothing; burns the carpenter's deadfall into charcoal (trade from the carpentry store)
 v = assign(v, W, 'm2', 'smith-1')!
-const lone = tick({ ...v, moglins: v.moglins.filter(m => m.id === 'm2') }, W, 3 * H)
+const lone = tick({ ...v, moglins: v.moglins.filter(m => m.id === 'm2') }, W, 3 * H, undefined, NOLUCK)
 ok(!lone.made.charcoal && count(lone.works.rooms.find(r => r.id === 'smith-1'), 'charcoal') === 0, 'smith: made charcoal with no carpenter / no deadfall')
-const both = tick(v, W, 3 * H)
+const both = tick(v, W, 3 * H, undefined, NOLUCK)
 const carp = both.works.rooms.find(r => r.id === carpId), sm = both.works.rooms.find(r => r.id === 'smith-1')
 ok((both.made.charcoal ?? 0) > 0 && count(sm, 'charcoal') === both.made.charcoal, 'smith: no charcoal with a carpenter bringing deadfall')
 ok(count(carp, 'deadfall') + count(sm, 'charcoal') === both.made.deadfall, 'smith: deadfall was not conserved into charcoal (made from nothing, or lost)')

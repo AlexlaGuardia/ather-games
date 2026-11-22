@@ -94,7 +94,7 @@ export type Verdict = { ok: true; add: string[]; cost: number } | { ok: false; w
 /** What the plot asks of a new run. `blocked` = the rooms', chests' and furniture's rectangles + named keep-clear
  *  circles; `held(x, z)` = is that point on ground the keeper holds. Pieces already standing are skipped (free). */
 export function canLay(walls: Walls, keys: string[], mat: WallMat, held: (x: number, z: number) => boolean,
-  blocked: { rects: { r: Rect; why: string }[]; circles: readonly { x: number; z: number; r: number }[] }, inv?: Inv): Verdict {
+  blocked: { rects: { r: Rect; why: string }[]; circles: readonly { x: number; z: number; r: number }[] }, inv?: Inv, kind?: 'rail'): Verdict {
   const add = keys.filter(k => !walls[k])
   if (!add.length) return { ok: false, why: keys.length ? 'That wall is already up.' : 'Drag to draw a wall.' }
   if (Object.keys(walls).length + add.length > MAX_WALLS) return { ok: false, why: `${MAX_WALLS} metres of wall already stand. Take some down first.` }
@@ -108,8 +108,10 @@ export function canLay(walls: Walls, keys: string[], mat: WallMat, held: (x: num
     for (const b of blocked.rects) if (r.x0 < b.r.x1 && r.x1 > b.r.x0 && r.z0 < b.r.z1 && r.z1 > b.r.z0) return { ok: false, why: b.why }
   }
   const item = WALL_MATS[mat].item
-  if (inv && countOf(inv, item) < add.length) return { ok: false, why: `${add.length} ${itemDef(item).name} needed, ${countOf(inv, item)} in the bag.` }
-  return { ok: true, add, cost: add.length }
+  // 11-22: at the BILL's rate (wallRate: 1.5 a metre, a railing a third), a run rounding up like plot-bom; was 1:1 pieces to planks
+  const need = Math.ceil(add.length * wallRate({ kind }) - 1e-9)
+  if (inv && countOf(inv, item) < need) return { ok: false, why: `${need} ${itemDef(item).name} needed, ${countOf(inv, item)} in the bag.` }
+  return { ok: true, add, cost: need }
 }
 /** M37 slice 4: draw a run as a PLAN: the new pieces are drafts, nothing leaves the bag (plot-bom.ts lists what building them takes) */
 export function planRun(walls: Walls, add: string[], mat: WallMat, kind?: 'rail'): Walls {

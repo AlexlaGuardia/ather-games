@@ -57,9 +57,9 @@ ok(n(r.station.out, 'goldwood_plank') === 14 && n(r.station.store, 'goldwood_log
 r = advance(touch(logs(40), T0), T0 + 12 * HOUR, 1, carp)
 ok(n(r.station.out, 'goldwood_plank') === 20 && n(r.station.store, 'goldwood_log') === 30, '12 h away: bounded by the 10-log surplus')
 // pace
-ok(moglinSpeed(1) === 1 && moglinSpeed(5) === 2, 'moglin pace: fair x1, rare x2')
-r = advance(touch(logs(40), T0), T0 + 8000, moglinSpeed(5), carp)
-ok(n(r.station.out, 'goldwood_plank') === 4, 'a rare Moglin makes two runs in 8 s')
+ok(moglinSpeed(0) === 1 && moglinSpeed(5) === 1.5 && moglinSpeed(10) === 2, 'moglin pace by score: 0 x1, 5 x1.5 (old fine), 10 x2')
+r = advance(touch(logs(40), T0), T0 + 8000, moglinSpeed(10), carp)
+ok(n(r.station.out, 'goldwood_plank') === 4, 'a score-10 Moglin makes two runs in 8 s')
 // nobody working (speed 0): nothing taken, the clock moves, nothing banked
 r = advance(touch(logs(40), T0), T0 + 5 * HOUR, 0, carp)
 ok(!r.made.length && n(r.station.store, 'goldwood_log') === 40 && r.station.work!.last === T0 + 5 * HOUR, 'unstaffed: nothing taken, no time banked')

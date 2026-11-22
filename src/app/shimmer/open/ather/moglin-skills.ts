@@ -87,7 +87,4 @@ export const luckOf = (m: Legacy & { luck?: Grade }): Grade => (okGrade(m.luck) 
 /** ★ ANY Moglin, ANY room: the grade it brings to `roomKind`'s craft (bench pace) or yield (idle product) */
 export const skillIn = (m: Legacy & { skills?: Skills }, roomKind: RoomKind, use: 'craft' | 'yield'): Grade => skillsOf(m)[SKILL_OF_ROOM[roomKind][use]]
 
-/** per-run chance of +1 output, by luck grade */
-export const LUCK_CHANCE: Record<Grade, number> = { 1: 0.02, 2: 0.04, 3: 0.06, 4: 0.09, 5: 0.13 }
-/** +1 output on a lucky run. `rnd` in [0,1). Pure. */
-export const luckBonus = (luck: Grade, rnd: () => number): 0 | 1 => (rnd() < LUCK_CHANCE[luck] ? 1 : 0)
+// (M46's per-run +1 luck, LUCK_CHANCE / luckBonus, is gone: M65 s2's Luck double-drop in moglin-stats.ts replaced it.)

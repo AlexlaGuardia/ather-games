@@ -98,6 +98,7 @@ for (const m of [emp, free]) {
     const luckAxis = c.axes.find(a => a[0] === 'luck')
     ok(c.full === want.full && (want.luckPct === null ? !/%/.test(luckAxis?.[2] ?? '') : (luckAxis?.[2] ?? '').includes(`${want.luckPct}%`)), `${m.name}: ${want.full ? `full card, luck ${want.luckPct}%` : 'trade only, luck hidden'} (${luckAxis?.[2]})`)
     ok(c.canvas, `${m.name}: chibi portrait drawn`)
+    ok(!(await p.evaluate(() => !!document.querySelector('[data-talk-bubble]'))), `${m.name}: no talk bubble over the open card (M65 s2)`)
     ok(c.box.top >= 0 && c.box.left >= 0 && c.box.right <= c.vw && c.box.bottom <= c.vh, `${m.name}: card inside the ${c.vw}x${c.vh} view (${JSON.stringify(c.box)})`)
     if (shots) await p.screenshot({ path: `${shots}/card-${m.employed ? 'emp' : 'free'}${phone ? '-phone' : ''}.png` })
   }

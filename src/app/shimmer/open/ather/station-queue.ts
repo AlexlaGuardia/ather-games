@@ -14,8 +14,7 @@ import { REFINE, STONE_REFINE, PIECE_JOBS, type Job } from './furniture'
 import { ROAST } from './cooking'
 import { BREW } from './alchemy'
 import type { Stack } from '../shared/inventory'
-import { luckBonus } from './moglin-skills'
-import type { Grade } from './moglins'
+import { gradeEquiv, doubles } from './moglin-stats'
 
 export const OUT_CAP = 30
 export const RESERVE = 30
@@ -47,8 +46,8 @@ export function itemMs(j: Job): number {
 }
 /** one RUN (the job once: it may make several items) */
 export const runMs = (j: Job) => itemMs(j) * j.out.n
-/** a Moglin's pace by its CRAFT grade 1..5: fair = x1, rare = x2 */
-export const moglinSpeed = (craft: number) => 1 + 0.25 * (Math.max(1, Math.min(5, craft)) - 1)
+/** a Moglin's pace by its CRAFT score 0..10 (M65 s2): 0 = x1, 5 = x1.5 (the old 'fine'), 10 = x2 */
+export const moglinSpeed = (score: number) => 1 + 0.25 * (gradeEquiv(score) - 1)
 
 const have = (stacks: readonly Stack[] | undefined, id: string) => (stacks ?? []).reduce((a, s) => a + (s.id === id ? s.n : 0), 0)
 const BIG = 1e9
@@ -114,7 +113,7 @@ function takeRun(stacks: readonly Stack[], j: Job): Stack[] | null {
 
 /** Move the station to `now` at `speed` (0 = nobody works it: the clock moves on, nothing is banked, no input is taken).
  *  `stock` = the jobs to stockpile (empty = focus only: the keeper's own work). Pure. `active` = there is work state worth saving. */
-export function advance(s: Station, now: number, speed: number, stock: readonly Job[], luck?: { grade: Grade; rnd: () => number }): { station: Station; made: Stack[]; status: Status; active: boolean } {
+export function advance(s: Station, now: number, speed: number, stock: readonly Job[], luck?: { chance: number; rnd: () => number }): { station: Station; made: Stack[]; status: Status; active: boolean } {
   const w: Work = s.work ? { ...s.work, run: s.work.run && { ...s.work.run }, focus: s.work.focus && { ...s.work.focus } } : { cur: 0, last: now }
   let store = s.store ?? [], out = s.out ?? []
   let budget = speed > 0 ? Math.max(0, now - w.last) * speed : 0
@@ -139,7 +138,7 @@ export function advance(s: Station, now: number, speed: number, stock: readonly 
     const need = runMs(j) - w.run.t
     if (budget >= need) {
       budget -= need
-      const n = j.out.n + (luck ? luckBonus(luck.grade, luck.rnd) : 0)   // M46: a lucky run brings one extra
+      const n = j.out.n * (luck && doubles(luck.chance, luck.rnd) ? 2 : 1)   // M65 s2: a lucky run drops DOUBLE (its Luck %)
       out = putIn({ v: 1, stacks: out }, BIG, j.out.id, n).bank.stacks
       const m = made.find(x => x.id === j.out.id); if (m) m.n += n; else made.push({ id: j.out.id, n })
       if (w.run.f && w.focus?.job === j.id) { w.focus.left--; if (w.focus.left <= 0) w.focus = undefined }
