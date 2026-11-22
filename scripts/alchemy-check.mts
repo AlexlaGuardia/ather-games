@@ -59,6 +59,7 @@ const slot = await slotOf('shard_tonic'); res.tonicSlot = slot
 // hold it: press its key until the stance says that slot is in hand (a key pressed while the arrival veil is up is ignored, M67)
 res.held = await poll(async () => { const st = await A('stance'); if (st?.kind === 'item' && st.slot === slot) return true; await p.keyboard.press(String(slot + 1) as any); await sleep(400); return false }, 20000)
 res.stance = await A('stance')
+await shot('ac-1-held')
 await A('setMana', 100); await A('drink'); await sleep(300)
 res.fullDrink = (await bag()).shard_tonic ?? 0
 await A('setMana', 20); await A('drink'); await sleep(300)
