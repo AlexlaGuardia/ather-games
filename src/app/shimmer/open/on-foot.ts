@@ -77,7 +77,7 @@ export function exitSpot(fw: FootWorld, R: Region, car: { x: number; y: number; 
   fw.hint.y = car.y
   for (const [side, along] of tries) {
     const x = car.x + rx * side + fx * along, z = car.z + rz * side + fz * along
-    const y = Math.max(R.groundAt(x, z, car.y + 0.6), extraGround(x, z))   // a shipyard's floor (M49 s5: out of a car parked in a bay)
+    const y = R.groundAt(x, z, car.y + 0.6)
     if (!Number.isFinite(y) || Math.abs(y - car.y) > 1.3 || y < WATER_Y + 0.2) continue
     const t = R.tunnelAt(x, z)
     if (t && t.cover > 2 && Math.abs(t.off) > t.tunnel.width / 2 + 0.6) continue      // the walkway, not the wall

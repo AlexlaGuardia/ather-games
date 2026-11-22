@@ -42,8 +42,6 @@ export function ownsShipyard(owned: readonly string[] | undefined, key: string, 
 const idOf = (key: string) => (key === KAEL_SHIPYARD ? 'kael' : key.slice(KAEL_SHIPYARD.length + 1))
 /** where a shipyard plot's deed is saved (a garden key base, family 'open.deed.plot:') */
 export const plotStoreBase = (key: string) => `open.deed.plot:${idOf(key)}`
-/** where a shipyard's GARAGE is saved (s5: which courser stands in which bay; business/garage-bays.ts), keeper-scoped */
-export const garageStoreBase = (key: string) => `open.garage:${idOf(key)}`
 /** where the s1-s3 small yard (12 x 8 beside a town building, retired in s4) was saved: its pieces go back to the bag */
 export const oldYardStoreBase = (key: string) => (key === KAEL_SHIPYARD ? 'open.deed.shipyard.v1' : `open.deed.shipyard:${idOf(key)}`)
 

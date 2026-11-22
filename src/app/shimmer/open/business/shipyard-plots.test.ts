@@ -50,13 +50,13 @@ for (const site of SHIPYARD_PLOTS) {
   }
   // 3 · the tier: every piece present, inside the fence, the solid ones not overlapping
   const tier = SHIPYARD_TIERS[site.key], kinds = (k: string) => L.pieces.filter(p => p.kind === k)
-  ok(kinds('home').length === 1 && kinds('garage').length === 1 && kinds('gwall').length === tier.garage + 2 && kinds('pad').length === 1 && kinds('board').length === 1, `${t}: a home, a garage block (back wall + a wall either side of every bay), a pad, a look board`)
+  ok(kinds('home').length === 1 && kinds('garage').length === 1 && kinds('pad').length === 1 && kinds('board').length === 1, `${t}: a home, a garage block, a pad, a look board`)
   ok(kinds('bay').length === tier.garage, `${t}: ${tier.garage} garage bays (has ${kinds('bay').length})`)
   ok(tier.dock === 'tie-down' ? kinds('mast').length === 1 && kinds('post').length === 4 && !L.slip : !!L.slip && kinds('bollard').length > 3, `${t}: the dock is a ${tier.dock}`)
   ok(L.pieces.every(p => Math.abs(p.lx) + p.w / 2 <= H && Math.abs(p.lz) + p.d / 2 <= H), `${t}: every piece inside the fence`)
   const solids = L.pieces.filter(p => p.solid || p.kind === 'pad')
   let overlap = ''
-  for (let i = 0; i < solids.length; i++) for (let j = i + 1; j < solids.length; j++) { const a = solids[i], b = solids[j]; if (a.kind === 'gwall' && b.kind === 'gwall') continue; if (Math.abs(a.lx - b.lx) < (a.w + b.w) / 2 && Math.abs(a.lz - b.lz) < (a.d + b.d) / 2) overlap = `${a.kind}/${b.kind}` }
+  for (let i = 0; i < solids.length; i++) for (let j = i + 1; j < solids.length; j++) { const a = solids[i], b = solids[j]; if (Math.abs(a.lx - b.lx) < (a.w + b.w) / 2 && Math.abs(a.lz - b.lz) < (a.d + b.d) / 2) overlap = `${a.kind}/${b.kind}` }
   ok(!overlap, `${t}: no two built pieces overlap ${overlap}`)
   // 4 · the deed ground: most of the plot is placeable, built ground is not
   const blockedAt = blockedCells(L)
