@@ -23,11 +23,12 @@ import { HOLD_MS } from '../shared/stance'
 import { hudSay } from '../shared/game-hud'
 import { DEED_GRID, DEED_PALETTES, emptyDeed, parseDeed, place, pickUp, itemAt, placeRefusal, setPalette, paletteOf, cellAtLocal, pieceCentre, type DeedState, type Footprint } from '../business/deed-grid'
 import { shipyardSites, ownsShipyard, plotStoreBase, oldYardStoreBase, garageStoreBase, type ShipyardSite } from '../business/shipyards'
-import { plotToWorld, plotToLocal, plotRotY, plotGround, plotBoxes, plotCarBoxes, placedBoxes, blockedCells, bayAt, bayPose, PLOT, PLOT_GATE_W, LANDING_D, SLIP_W, RAMP_RISE, CAR_RISE, type PlotLayout, type PlotPiece } from '../business/shipyard-plots'
+import { plotToWorld, plotToLocal, plotRotY, plotGround, plotBoxes, plotCarBoxes, placedBoxes, blockedCells, bayAt, bayPose, dockedShip, SHIP, TIE_MAST, SHIP_AT, PLOT, PLOT_GATE_W, LANDING_D, SLIP_W, RAMP_RISE, CAR_RISE, type PlotLayout, type PlotPiece } from '../business/shipyard-plots'
 import { sanitizeGarage, garageStep, takeOutRefusal, emptyGarage, applyGarageEvent, type GarageState, type GarageEvent } from '../business/garage-bays'
 import { modelById } from '../business/courser-lot'
 import { buildCourser } from '../courser-model'
 import { getFleet } from '../shared/fleet'
+import { ShipHull } from '../../play3d/StationScene'
 import { aimPick, PICK_REACH, type Pickable } from '../shared/aim-pick'
 import { setFootExtra } from '../foot-extras'
 import { bodyHits, type OBox } from '../foot-solids'
@@ -243,6 +244,8 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport, car }: Omit
   useEffect(() => {
     const probe: Probe = {
       key: () => site.key, own: () => ownRef.current, plot: () => ({ frame: f, floor, ramp: L.ramp, slip: L.slip, tier: L.tier, wet: L.wet }),
+      // s6: the ship at this yard's dock (null = an empty dock) and its piece, for shipyard-dock-check
+      ship: () => { const sp = L.pieces.find(q => q.kind === 'ship'); return sp ? { ...dockedShip(site.key)!, lx: sp.lx, lz: sp.lz, ...plotToWorld(f, sp.lx, sp.lz) } : null },
       pieces: () => L.pieces.map(p => ({ kind: p.kind, lx: p.lx, lz: p.lz, w: p.w, d: p.d })), board: () => board,
       state: () => deedRef.current, aim: () => ({ ...aim.current, rot: rot.current }),
       stored: () => { try { return localStorage.getItem(gardenKey(store)) } catch { return null } },
@@ -331,7 +334,7 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport, car }: Omit
 }
 
 // ── the built parts (blockout) ──
-const EARTH = '#8a7350', STONE = '#7b746a', DECK = '#7a5a3a', DECK_DK = '#5a4028', PAD = '#c9bfa8', PAD_RING = '#e8d27a', ROOF = '#5b3b2e', IRON = '#3f3a36'
+const EARTH = '#8a7350', STONE = '#7b746a', DECK = '#7a5a3a', DECK_DK = '#5a4028', PAD = '#c9bfa8', PAD_RING = '#e8d27a', ROOF = '#5b3b2e', IRON = '#3f3a36', ROPE = '#8a7a5c'
 
 /** the levelled floor: a terrace at the floor, its sides the retaining walls down to the lowest ground (+ 1 m into it) */
 function Terrace({ L }: { L: PlotLayout }) {
@@ -400,6 +403,31 @@ function Landing({ L }: { L: PlotLayout }) {
   )
 }
 
+/** a rope between two points (plot-local metres, y up), a thin box laid along it */
+function Rope({ a, b }: { a: [number, number, number]; b: [number, number, number] }) {
+  const { pos, q, len } = useMemo(() => {
+    const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = B.clone().sub(A)
+    return { pos: A.clone().add(B).multiplyScalar(0.5), q: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize()), len: d.length() }
+  }, [a, b])
+  return <mesh position={pos} quaternion={q}><boxGeometry args={[0.07, len, 0.07]} /><meshLambertMaterial color={ROPE} /></mesh>
+}
+/** M49 s6: the keeper's ship at its yard's tie-down, on its struts between the four posts, bow to the mast. Kael's is BROKEN:
+ *  the lift-runes cold, a list to port, a line from every post and one from the masthead to the bow. Blockout (play3d's
+ *  ShipHull); the real look is a design brief nobody has written yet. */
+function DockedShip({ L, p }: { L: PlotLayout; p: PlotPiece }) {
+  const f = L.frame, w = plotToWorld(f, p.lx, p.lz), ry = plotRotY(f)
+  const g = SHIP.lift + 2.3, half = SHIP.w / 2   // the gunwale's height and half-beam
+  // posts sit at ±8 round the square's centre, which is SHIP_AT forward of the ship's centre; the mast TIE_MAST forward of it
+  const post = (a: number, b: number): [number, number, number] => [a, 1.15, b - SHIP_AT]
+  return (
+    <group position={[w.x, L.floor, w.z]} rotation={[0, ry, 0]}>
+      <group rotation={[0, 0, -0.05]}><ShipHull cx={0} cz={0} w={SHIP.w} len={SHIP.len} lift={SHIP.lift} struts dark /></group>
+      {[[-8, -8], [8, -8], [8, 8], [-8, 8]].map(([a, b], k) => <Rope key={k} a={post(a, b)} b={[Math.sign(a) * half, g, Math.sign(b) * (SHIP.len / 2 - 2)]} />)}
+      <Rope a={[0, 13.6, -TIE_MAST - SHIP_AT]} b={[0, SHIP.lift + 2.2, -SHIP.d / 2]} />
+    </group>
+  )
+}
+
 /** the slipway: from the back edge down into the water (berth plots) */
 function Slip({ L }: { L: PlotLayout }) {
   const s = L.slip!, f = L.frame, ry = plotRotY(f), dy = s.L * RAMP_RISE, len = Math.hypot(s.L, dy), m = plotToWorld(f, s.lx, H + s.L / 2)
@@ -432,6 +460,7 @@ function Piece({ L, p, color, accent }: { L: PlotLayout; p: PlotPiece; color: st
       <mesh position={[0, p.h + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[p.w * 0.32, p.w * 0.36, 48]} /><meshBasicMaterial color={PAD_RING} /></mesh>
     </group>
   )
+  if (p.kind === 'ship') return <DockedShip L={L} p={p} />
   if (p.kind === 'mast') return <mesh position={[w.x, y + p.h / 2, w.z]}><cylinderGeometry args={[0.25, 0.4, p.h, 8]} /><meshLambertMaterial color={IRON} /></mesh>
   if (p.kind === 'post' || p.kind === 'bollard') return <mesh position={[w.x, y + p.h / 2, w.z]}><cylinderGeometry args={[p.w / 2, p.w / 2, p.h, 8]} /><meshLambertMaterial color={IRON} /></mesh>
   if (p.kind === 'board') return (

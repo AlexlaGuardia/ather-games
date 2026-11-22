@@ -13,6 +13,21 @@ import type { OBox } from '../foot-solids'
 import { pieceCentre, type DeedState } from './deed-grid'
 
 export type DockKind = 'tie-down' | 'berth'
+
+// ── s6 THE DOCK: whose ship lies at which yard (docs/M49-shipyards.md › s6, hub 7f25d6a2 11-22) ──
+// Canon gives a keeper ONE ship so far: Kael's, BROKEN, at the inherited yard (repairing it is the game's long goal,
+// ather-rework-2026-11.md §7¾); sky ships are not for sale yet (prices.ts skyShip). A bought yard's dock stays empty until
+// a ship the keeper owns is added HERE. Tie-down only for now: no ship rides a berth yet.
+export interface DockedShip { id: string; broken: boolean }
+export const DOCKED_SHIPS: Record<string, DockedShip> = {
+  'front:shipyard': { id: 'kael', broken: true },
+}
+export const dockedShip = (key: string): DockedShip | null => DOCKED_SHIPS[key] ?? null
+/** the ship's blockout (play3d ShipHull at w 7 / len 15 on its struts): its footprint for the walker + deed (hull, the
+ *  bow/stern tapers to ±8.7, deck house to ~6 m) */
+export const SHIP = { w: 7, len: 15, d: 17.4, h: 6, lift: 1.2 } as const
+/** the mast this far toward the bow from the post square's centre; the ship's centre this far astern of it */
+export const TIE_MAST = 10, SHIP_AT = 0.5
 export type HomeKind = 'kael' | 'cabin' | 'house' | 'large'
 export interface ShipyardTier { garage: 4 | 8 | 12; dock: DockKind; home: HomeKind; price: number }
 
@@ -61,7 +76,7 @@ export function plotToLocal(f: PlotFrame, x: number, z: number) { const dx = x -
 export const plotRotY = (f: PlotFrame) => Math.atan2(-f.ax[1], f.ax[0])
 
 /** a built piece, plot-local (centre, size along lx/lz, height over the floor) */
-export interface PlotPiece { kind: 'home' | 'garage' | 'gwall' | 'bay' | 'pad' | 'mast' | 'post' | 'bollard' | 'board'; lx: number; lz: number; w: number; d: number; h: number; solid: boolean }
+export interface PlotPiece { kind: 'home' | 'garage' | 'gwall' | 'bay' | 'pad' | 'mast' | 'post' | 'bollard' | 'board' | 'ship'; lx: number; lz: number; w: number; d: number; h: number; solid: boolean }
 
 export interface PlotLayout {
   frame: PlotFrame
@@ -141,9 +156,12 @@ export function plotLayout(R: Terrain & Roads, s: PlotSite): PlotLayout {
   // the dock: dry ground ties the ship down (a mast + four posts, back-left); a berth has bollards along the back fence
   let slip: PlotLayout['slip'] = null
   if (tier.dock === 'tie-down') {
+    // s6: the mast stands at the HEAD of the post square (an airship's mooring mast holds the bow), so the ship lies between
+    // the four posts with its bow to the mast; an empty tie-down keeps the same mast + posts
     const cx = -PLOT / 2 + 18, cz = PLOT / 2 - 18
-    pieces.push({ kind: 'mast', lx: cx, lz: cz, w: 0.8, d: 0.8, h: 14, solid: true })
+    pieces.push({ kind: 'mast', lx: cx, lz: cz - TIE_MAST, w: 0.8, d: 0.8, h: 14, solid: true })
     for (const [a, b] of [[-8, -8], [8, -8], [8, 8], [-8, 8]]) pieces.push({ kind: 'post', lx: cx + a, lz: cz + b, w: 0.5, d: 0.5, h: 1.2, solid: true })
+    if (DOCKED_SHIPS[s.key]) pieces.push({ kind: 'ship', lx: cx, lz: cz + SHIP_AT, w: SHIP.w, d: SHIP.d, h: SHIP.h, solid: true })
   } else {
     // the slipway runs out from the back edge until it meets the bed (flush, so a swimmer walks straight onto it), at least
     // to below the water line; capped at 40 m

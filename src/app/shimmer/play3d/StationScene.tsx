@@ -120,7 +120,7 @@ function Pad({ n, x, z, r }: { n: number; x: number; z: number; r: number }) {
  * its long axis along z. `struts` = standing at a berth; without them it is in flight (the town's view of the
  * port shows one rising). Exported so Rune Hold's skyline draws the same ship the berths hold.
  */
-export function ShipHull({ cx, cz, w, len, lift = 1.2, struts = true }: { cx: number; cz: number; w: number; len: number; lift?: number; struts?: boolean }) {
+export function ShipHull({ cx, cz, w, len, lift = 1.2, struts = true, dark = false }: { cx: number; cz: number; w: number; len: number; lift?: number; struts?: boolean; dark?: boolean }) {
   const parts = useMemo(() => {
     const out: Inst[] = []
     if (struts) for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) out.push({ x: cx + dx * (w / 2 - 1), y: lift / 2, z: cz + dz * (len / 2 - 2), sx: 0.35, sy: lift, sz: 0.35, c: ST.hullDark })
@@ -152,8 +152,13 @@ export function ShipHull({ cx, cz, w, len, lift = 1.2, struts = true }: { cx: nu
   return (
     <group>
       <Instances items={parts} />
-      <Instances items={runes} emissive={0.9} glow={ST.rune} cast={false} />
-      <pointLight position={[cx, lift + 1.2, cz]} color={ST.rune} intensity={6} distance={10} decay={1.6} />
+      {/* `dark` (M49 s6, Kael's broken ship at his yard): the lift-runes are cold, no glow, no light */}
+      {dark
+        ? <Instances items={runes.map(r => ({ ...r, c: ST.hullDark }))} />
+        : <>
+          <Instances items={runes} emissive={0.9} glow={ST.rune} cast={false} />
+          <pointLight position={[cx, lift + 1.2, cz]} color={ST.rune} intensity={6} distance={10} decay={1.6} />
+        </>}
     </group>
   )
 }

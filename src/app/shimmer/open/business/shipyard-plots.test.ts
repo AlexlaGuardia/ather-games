@@ -6,7 +6,7 @@ import { townRadius } from '../towns/plan'
 import { footWorld, tickFoot, WATER_Y } from '../on-foot'
 import { createLoco, type LocoState } from '../shared/locomotion'
 import { setFootExtra } from '../foot-extras'
-import { SHIPYARD_PLOTS, SHIPYARD_TIERS, plotLayout, plotToWorld, plotToLocal, plotGround, plotBoxes, blockedCells, PLOT, PLOT_GATE_W, LANDING_D, RAMP_RISE, type PlotLayout } from './shipyard-plots'
+import { SHIPYARD_PLOTS, SHIPYARD_TIERS, dockedShip, plotLayout, plotToWorld, plotToLocal, plotGround, plotBoxes, blockedCells, PLOT, PLOT_GATE_W, LANDING_D, RAMP_RISE, type PlotLayout } from './shipyard-plots'
 import { bodyHits } from '../foot-solids'
 import { DEED_GRID } from './deed-grid'
 
@@ -54,6 +54,19 @@ for (const site of SHIPYARD_PLOTS) {
   ok(kinds('bay').length === tier.garage, `${t}: ${tier.garage} garage bays (has ${kinds('bay').length})`)
   ok(tier.dock === 'tie-down' ? kinds('mast').length === 1 && kinds('post').length === 4 && !L.slip : !!L.slip && kinds('bollard').length > 3, `${t}: the dock is a ${tier.dock}`)
   ok(L.pieces.every(p => Math.abs(p.lx) + p.w / 2 <= H && Math.abs(p.lz) + p.d / 2 <= H), `${t}: every piece inside the fence`)
+  // s6 · the dock: Kael's broken ship lies at his tie-down, between the four posts, bow short of the mast; a bought yard's dock is empty
+  const ship = kinds('ship'), docked = dockedShip(site.key)
+  ok(ship.length === (docked ? 1 : 0) && (site.key === 'front:shipyard') === !!docked, `${t}: ${docked ? 'its ship lies at the dock' : 'the dock is empty'} (${ship.length} ship pieces)`)
+  if (docked) {
+    const sh = ship[0], posts = kinds('post'), mast = kinds('mast')[0]
+    const pxs = posts.map(q => q.lx), pzs = posts.map(q => q.lz)
+    ok(tier.dock === 'tie-down' && docked.broken && docked.id === 'kael', `${t}: the docked ship is Kael's, broken, at a tie-down`)
+    ok(sh.lx - sh.w / 2 > Math.min(...pxs) && sh.lx + sh.w / 2 < Math.max(...pxs), `${t}: the ship lies between the posts (beam ${(sh.lx - sh.w / 2).toFixed(1)}..${(sh.lx + sh.w / 2).toFixed(1)}, posts ${Math.min(...pxs)}..${Math.max(...pxs)})`)
+    ok(sh.lz - sh.d / 2 > mast.lz + mast.d / 2 && sh.lz - sh.d / 2 - (mast.lz + mast.d / 2) < 3, `${t}: the bow sits just short of the mast (gap ${(sh.lz - sh.d / 2 - mast.lz - mast.d / 2).toFixed(1)} m)`)
+    ok(Math.abs((Math.min(...pzs) + Math.max(...pzs)) / 2 - sh.lz) < 1, `${t}: the ship sits mid-square, posts fore and aft`)
+    const mid = plotToWorld(f, sh.lx, sh.lz), beside = plotToWorld(f, sh.lx + sh.w / 2 + 1.5, sh.lz)
+    ok(plotBoxes(L).some(b => bodyHits(b, mid.x, mid.z, L.floor)) && !plotBoxes(L).some(b => bodyHits(b, beside.x, beside.z, L.floor)), `${t}: the hull is solid to the walker, the ground beside it is not`)
+  }
   const solids = L.pieces.filter(p => p.solid || p.kind === 'pad')
   let overlap = ''
   for (let i = 0; i < solids.length; i++) for (let j = i + 1; j < solids.length; j++) { const a = solids[i], b = solids[j]; if (a.kind === 'gwall' && b.kind === 'gwall') continue; if (Math.abs(a.lx - b.lx) < (a.w + b.w) / 2 && Math.abs(a.lz - b.lz) < (a.d + b.d) / 2) overlap = `${a.kind}/${b.kind}` }
