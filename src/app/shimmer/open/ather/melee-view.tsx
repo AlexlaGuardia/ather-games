@@ -14,8 +14,11 @@ import { hudSay } from '../shared/hud-say'
 import { itemDef } from '../shared/inventory'
 import { isBuilding } from './build-mode'
 import { FURNITURE, keepstoneFor } from './furniture'
+import { pickSwing, strikeMs, swingPool, type HandAction } from '../shared/fp-actions'   // M82: the punch pool
 
-const live = { target: null as Target | null, hits: null as Hits | null, last: -1e9, hitAt: new Map<string, number>(), subs: new Set<() => void>() }
+const live = { target: null as Target | null, hits: null as Hits | null, last: -1e9, hitAt: new Map<string, number>(), subs: new Set<() => void>(),
+  // M82 punch pool: the punch this swing plays, and the blow it owes (it lands on the punch's strike key, not on the click)
+  swingIdx: -1, swingAction: null as HandAction | null, pending: null as { at: number; target: Target } | null }
 const emit = () => live.subs.forEach(f => f())
 /** is there something in reach to hit right now (the phone shows its 'hit' button only then) */
 export function useMeleeReady(): boolean {
@@ -28,12 +31,27 @@ const nameOf = (t: Target) => {
 /** M82 s3: performance.now() of the last swing that went (hit or miss; a cooldown press is not a swing): the hands play the
  *  authored swing from it. -1e9 = never. */
 export const lastSwingAt = () => live.last
+/** the punch the last swing picked (fp-actions pickSwing), for the hands */
+export const lastSwingAction = () => live.swingAction
 
-/** one swing, now. Returns what happened (checks read it through __melee). */
-export function swing(now = performance.now()): 'cooldown' | 'miss' | 'hit' | 'broke' | 'full' {
+/** one swing, now: picks a punch from the pool and owes its blow to whatever is aimed at, landing on the punch's strike key.
+ *  Returns 'cooldown', 'miss' (nothing in reach) or 'hit' (a blow is on its way); checks read it through __melee. */
+export function swing(now = performance.now()): 'cooldown' | 'miss' | 'hit' {
   if (!canSwing(live.last, now)) return 'cooldown'
+  if (live.pending) land(live.pending.target, now)   // a blow still owed lands first: a fast second punch never eats the first
+  live.pending = null
   live.last = now
+  const pk = pickSwing(live.swingIdx); live.swingIdx = pk.i; live.swingAction = pk.action
   const t = live.target; if (!t) return 'miss'
+  const ms = strikeMs(pk.action)
+  live.pending = { at: now + ms, target: t }
+  // the blow lands on REAL time, not on a drawn frame (a hidden tab or a headless check draws none; MeleeAim settles it too)
+  if (typeof window !== 'undefined') window.setTimeout(() => settleBlow(), ms + 1)
+  return 'hit'
+}
+/** the blow owed by the last swing, if its strike key has landed by `now` (MeleeAim calls this every frame) */
+export function settleBlow(now = performance.now()) { const p = live.pending; if (p && now >= p.at) { live.pending = null; land(p.target, now) } }
+function land(t: Target, now: number): 'hit' | 'broke' | 'full' | 'miss' {
   const r = strike(live.hits, t.id, now)
   live.hits = r.hits; live.hitAt.set(t.id, now)
   if (!r.broke) return 'hit'
@@ -62,6 +80,7 @@ export function MeleeAim({ stowed }: { stowed: () => boolean }) {
   const { camera } = useThree()
   const o = useRef(new THREE.Vector3()), d = useRef(new THREE.Vector3())
   useFrame(() => {
+    settleBlow()   // M82: a punch's blow lands on its strike key
     let t: Target | null = null
     if (stowed() && !isBuilding() && !document.querySelector('[data-panel]')) {
       camera.getWorldPosition(o.current); camera.getWorldDirection(d.current)
@@ -74,7 +93,7 @@ export function MeleeAim({ stowed }: { stowed: () => boolean }) {
     const key = (e: KeyboardEvent) => { if (e.code === 'Melee' && stowed()) swing() }   // the phone's 'hit' button
     window.addEventListener('mousedown', down); window.addEventListener('keydown', key)
     const g = window as unknown as { __melee?: unknown }
-    g.__melee = { target: () => live.target, hits: () => live.hits, swing: () => swing(), need: MELEE_HITS }   // read-only probes for melee-check (swing = the same call the button makes)
+    g.__melee = { target: () => live.target, hits: () => live.hits, swing: () => swing(), need: MELEE_HITS, punch: () => live.swingIdx, pool: () => swingPool().length, pending: () => !!live.pending }   // read-only probes for melee-check (swing = the same call the button makes)
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('keydown', key); live.target = null; emit() }
   }, [stowed])
   return null

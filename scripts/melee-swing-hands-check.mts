@@ -35,9 +35,19 @@ const R = () => p.evaluate(() => (window as any).__openHands.R()) as Promise<{ x
 for (let i = 0; i < 4; i++) { await frame(); await sleep(150) }
 check('stowed', (await p.evaluate(() => (window as any).__ather.stance?.().kind)) === 'stowed')
 const rest = await R()
-const at = Date.now(), first = await p.evaluate(() => (window as any).__melee.swing())
-const second = await p.evaluate(() => (window as any).__melee.swing())
+// M82 punch POOL (Alex 11-22): the seeded draft is not one of his punches, so it joins the pool as the LAST punch; swing until a
+// swing picks it (each pick is random, never the same twice in a row), then watch that one
+const pool = await p.evaluate(() => (window as any).__melee.pool()) as number
+check('the pool holds his punches + the draft', pool >= 2, `${pool} punches`)
+let at = 0, first = '', second = '', tries = 0, picks: number[] = []
+for (; tries < 24; tries++) {
+  at = Date.now(); first = await p.evaluate(() => (window as any).__melee.swing()); second = await p.evaluate(() => (window as any).__melee.swing())
+  const k = await p.evaluate(() => (window as any).__melee.punch()) as number; picks.push(k)
+  if (k === pool - 1) break
+  await sleep(1300)   // past his punch (620 ms) + the hand-back
+}
 check('a swing goes, a press inside the cooldown does not', first !== 'cooldown' && second === 'cooldown', `${first}, then ${second}`)
+check('the swing picks from the pool, never the same twice in a row', picks.every((k, i) => i === 0 || k !== picks[i - 1]) && picks.at(-1) === pool - 1, `picks ${picks.join(',')}`)
 const ys: [number, number][] = []
 for (let i = 0; i < 40 && Date.now() - at < 8000; i++) { await frame(i === 1 ? '1-swing-windup' : '_frame'); ys.push([Date.now() - at, (await R()).y]) }
 const peak = Math.max(...ys.map(([, y]) => y))

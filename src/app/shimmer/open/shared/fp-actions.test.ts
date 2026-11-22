@@ -2,6 +2,8 @@
 // between them, wraps when looping and clamps as a one-shot; the draft survives a reload and junk never loads; and the pose
 // stepper hands the right mitt to an action at weight 1 and leaves it alone at weight 0.
 //   npx tsx src/app/shimmer/open/shared/fp-actions.test.ts
+import { readFileSync } from 'node:fs'
+import { MELEE_POOL, strikeKey, strikeMs, pickSwing, swingPool } from './fp-actions'
 import { ACTION_DEFAULTS, ACTION_IDS, ACTIONS, ACTIONS_KEY, oneShot, FADE_MS, sampleAction, actionDuration, keyStart, cleanAction, loadActions, setAction, resetAction, exportAction, type HandAction } from './fp-actions'
 import { newFpState, stepFpHands, angleQ, eulerQ, type FpInput } from './fp-hands-pose'
 
@@ -98,9 +100,44 @@ ok(near(half.R.x, (none.R.x + target.x) / 2, 1e-6), 'w=0.5: halfway')
   ok(near(oneShot(A, 50 + 100)!.x, sampleAction(A, 150, false).x), 'oneShot samples the one-shot clock')
   const cast = ACTION_DEFAULTS['rinstick.cast'], flick = keyStart(cast, 2, false) + cast.keys[2].ms
   ok(flick <= 400, `the shipped cast's flick lands by 400 ms (the float leaves on the click): ${flick} ms`)
-  const sw = ACTION_DEFAULTS['melee.swing'], hit = keyStart(sw, 2, false) + sw.keys[2].ms
-  ok(hit <= 250, `the shipped swing's hit lands by 250 ms (the hit counts on the click): ${hit} ms`)
-  ok(actionDuration(sw, false) <= 420, `the whole swing fits the 420 ms swing cooldown: ${actionDuration(sw, false)} ms`)
+  // ── the PUNCH POOL (Alex 11-22): his variants from docs/handoff/punch-actions-2026-11-22.json, read at build time ──
+  const file = JSON.parse(readFileSync(new URL('../../../../../docs/handoff/punch-actions-2026-11-22.json', import.meta.url), 'utf8')) as { variants: { keys: unknown[] }[] }
+  ok(MELEE_POOL.length === file.variants.length && file.variants.length >= 1, `the pool is every variant in the file (${MELEE_POOL.length} / ${file.variants.length})`)
+  ok(MELEE_POOL.every((v, i) => v.keys.length === file.variants[i].keys.length), 'each variant keeps its keys')
+  ok(JSON.stringify(ACTION_DEFAULTS['melee.swing'].keys) === JSON.stringify(MELEE_POOL[0].keys), 'the tuner opens on punch #1')
+  for (const v of MELEE_POOL) {
+    const k = strikeKey(v), t = strikeMs(v)
+    ok(v.keys.every(x => x.z >= v.keys[k].z) && t > 0 && t < 600, `${v.label}: strikes on key ${k + 1} (the farthest forward) at ${t} ms (melee-check waits 600)`)
+  }
+  ok(strikeKey({ ...MELEE_POOL[0], strike: 0 }) === 0, 'a variant can name its strike key')
+  // hub 11-22 on punch #4: yaw 3.138 -> -3.1416 between keys (the same pose either side of pi). The rig turns the mitt by the
+  // SLERPED quaternion (shortest arc), never the lerped Euler number, so it must not spin: along every move, the mitt's turn stays
+  // on the short arc between the two keys (angle(k0,mid) + angle(mid,k1) = angle(k0,k1)).
+  for (const v of MELEE_POOL) for (let i = 1; i < v.keys.length; i++) {
+    const t0 = keyStart(v, i, false), m = v.keys[i].ms; if (m <= 0) continue
+    const q0 = sampleAction(v, t0, false).q, q1 = sampleAction(v, t0 + m, false).q, qm = sampleAction(v, t0 + m / 2, false).q
+    const direct = angleQ(q0, q1), via = angleQ(q0, qm) + angleQ(qm, q1)
+    ok(via <= direct + 1e-3 && direct < Math.PI, `${v.label} key ${i}->${i + 1}: turns the short way (${direct.toFixed(3)} rad, via mid ${via.toFixed(3)})`)
+  }
+  ok(strikeMs({ ...A, keys: [key(0, 100, 50), key(1, 200, 0), { ...key(2, 100, 100), z: -0.9 }] }) === 50 + 200 + 0 + 100, 'strikeMs = one-shot time to the strike key reached')
+  // never the same punch twice in a row (2+ variants), and every variant comes up
+  {
+    let prev = -1, repeats = 0; const seen = new Set<number>(); let seed = 7
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 }
+    for (let n = 0; n < 300; n++) { const p = pickSwing(prev, rnd); if (p.i === prev) repeats++; seen.add(p.i); prev = p.i }
+    ok(MELEE_POOL.length < 2 || repeats === 0, `no punch twice in a row over 300 picks (${repeats})`)
+    ok(seen.size === swingPool().length, `every punch comes up (${seen.size} / ${swingPool().length})`)
+  }
+  // a tuner draft that is not in the pool joins it (Alex sees a new punch in game); one that IS a pool punch does not double it
+  {
+    const before = swingPool().length
+    ACTIONS['melee.swing'] = { ...MELEE_POOL[0], keys: MELEE_POOL[0].keys.map(k => ({ ...k })) }
+    ok(swingPool().length === MELEE_POOL.length, 'a draft equal to a pool punch does not double it')
+    ACTIONS['melee.swing'] = { ...MELEE_POOL[0], keys: [...MELEE_POOL[0].keys.map(k => ({ ...k })), key(0.1, 100, 0)] }
+    ok(swingPool().length === MELEE_POOL.length + 1, 'a new draft joins the pool')
+    ACTIONS['melee.swing'] = { ...ACTION_DEFAULTS['melee.swing'], keys: ACTION_DEFAULTS['melee.swing'].keys.map(k => ({ ...k })) }
+    ok(swingPool().length === before || swingPool().length === MELEE_POOL.length, 'back to the pool')
+  }
 }
 
 console.log(`fp-actions: ${pass} passed, ${fail} failed`)

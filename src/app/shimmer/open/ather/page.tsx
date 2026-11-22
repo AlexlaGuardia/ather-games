@@ -100,7 +100,7 @@ import { loadIndex, makeWorld, stream, releaseTo, tileOf, zonesOf, TILE_M, WILDS
 import { makeVoids, type VoidField } from './wilds-voids'
 import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
 import { useFolkTalk } from './use-folk-talk'
-import { useMeleeReady, lastSwingAt } from './melee-view'
+import { useMeleeReady, lastSwingAt, lastSwingAction } from './melee-view'
 import { reportAway } from './away-report'
 import { TilePaths, Settlements, BigTop, folkDrawn } from './network-scene'
 import { aimPick, lookDir, type Pickable } from '../shared/aim-pick'
@@ -668,7 +668,7 @@ function AtherSliceGame() {
       handsApi.current?.step({ now, speed, airborne: lc.airborne, hidden: frozen.current || stanceRef.current.kind === 'weapon' || third || isBuilding(),
         castAt: handsCastAt.current, working, holding: stanceRef.current.kind === 'item' && !!h && !rodOutRef.current,   // M45: the mitt turns to present (not the rinstick: it is held, not shown)
         actionR: rodOutRef.current ? oneShot(ACTIONS['rinstick.cast'], now - (rinApi.current?.castAt() ?? -Infinity))   // M82 s2: a cast plays the authored cast
-          : stanceRef.current.kind === 'stowed' ? oneShot(ACTIONS['melee.swing'], now - lastSwingAt()) : undefined }, dt)   // M82 s3: and a swing the swing
+          : stanceRef.current.kind === 'stowed' ? oneShot(lastSwingAction() ?? ACTIONS['melee.swing'], now - lastSwingAt()) : undefined }, dt)   // M82 s3: and a swing the swing
       handsApi.current?.seat(now - handsCastAt.current < 640 ? 1 : 0)
       { // the held gun: out only with a gun drawn, first person, nothing owning the screen
         const sg = sightRef.current, gun = stanceRef.current.kind === 'weapon' && !third && !frozen.current && !isBuilding() ? RANGE_GUNS.find(g => g.id === h) ?? null : null

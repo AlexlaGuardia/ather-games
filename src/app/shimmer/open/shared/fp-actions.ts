@@ -10,12 +10,15 @@
 //   Not looping (a one-shot, like the cast in game): the first key's move starts from the first key itself (no move), and
 //   time past the end stays on the last key.
 import { eulerQ, slerpQ, type Quat } from './fp-hands-pose'
+// ★ Alex's punches, read AT BUILD TIME from the handoff file (hub 11-22: "read the file, not a copy, so later ones just land"):
+// a new variant = one more entry in its variants[] (the tuner's Copy action pastes straight in)
+import PUNCHES from '../../../../../docs/handoff/punch-actions-2026-11-22.json'
 
 export type Ease = 'linear' | 'in' | 'out' | 'inout'
 export const EASES: Ease[] = ['linear', 'in', 'out', 'inout']
 export interface ActionKey { x: number; y: number; z: number; pitch: number; roll: number; yaw: number; ms: number; hold: number; ease: Ease }
 export type ActionItem = 'rinstick' | 'melee'
-export interface HandAction { id: string; item: ActionItem; label: string; keys: ActionKey[] }
+export interface HandAction { id: string; item: ActionItem; label: string; keys: ActionKey[]; /** the key the blow lands on (default: the one reaching farthest forward) */ strike?: number }
 export interface ActionPose { x: number; y: number; z: number; pitch: number; roll: number; yaw: number; q: Quat }
 
 export const POSE_FIELDS = ['x', 'y', 'z', 'pitch', 'roll', 'yaw'] as const
@@ -28,13 +31,8 @@ export const ACTION_DEFAULTS: Readonly<Record<string, HandAction>> = {
     { x: 0.38, y: -0.2, z: -0.44, pitch: -0.6, roll: 0.35, yaw: 0, ms: 150, hold: 40, ease: 'out' },        // back over the shoulder
     { x: 0.33, y: -0.36, z: -0.7, pitch: -1.75, roll: 0.55, yaw: 0, ms: 100, hold: 260, ease: 'in' },        // the flick out
   ] },
-  // in game it plays ONCE from the click and the hit lands ON the click (melee-view): keep the strike early, the whole swing
-  // inside the 420 ms swing cooldown (MELEE_CD_MS)
-  'melee.swing': { id: 'melee.swing', item: 'melee', label: 'Melee · swing', keys: [
-    { x: 0.355, y: -0.415, z: -0.56, pitch: -1.4, roll: 0.63, yaw: 0, ms: 200, hold: 0, ease: 'inout' },    // ready
-    { x: 0.4, y: -0.32, z: -0.48, pitch: -1.15, roll: 1.0, yaw: 0, ms: 90, hold: 20, ease: 'out' },         // wind up, out to the right
-    { x: 0.08, y: -0.34, z: -0.74, pitch: -1.6, roll: -0.15, yaw: 0, ms: 80, hold: 110, ease: 'in' },        // the hit, across the middle
-  ] },
+  // the swing the tuner opens on = Alex's punch #1 (the game plays the whole POOL below, one at random per punch)
+  'melee.swing': { id: 'melee.swing', item: 'melee', label: 'Melee · swing', keys: [] },
 }
 export const ACTION_IDS = Object.keys(ACTION_DEFAULTS)
 
@@ -118,4 +116,34 @@ export function oneShot(a: HandAction, t: number): (ActionPose & { w: number }) 
   const dur = actionDuration(a, false)
   if (t >= dur + FADE_MS) return undefined
   return { ...sampleAction(a, t, false), w: t <= dur ? 1 : 1 - (t - dur) / FADE_MS }
+}
+
+// ── THE PUNCH POOL (Alex 11-22): every real punch picks one of his authored variants, never the same twice in a row ──
+const SWING_BASE: HandAction = { id: 'melee.swing', item: 'melee', label: 'Melee · swing', keys: [
+  { x: 0.355, y: -0.415, z: -0.56, pitch: -1.4, roll: 0.63, yaw: 0, ms: 200, hold: 0, ease: 'inout' },
+  { x: 0.08, y: -0.34, z: -0.74, pitch: -1.6, roll: -0.15, yaw: 0, ms: 80, hold: 110, ease: 'in' },
+] }
+const rawPool = ((PUNCHES as { variants?: unknown[] }).variants ?? [])
+export const MELEE_POOL: HandAction[] = (rawPool.length ? rawPool : [SWING_BASE]).map((v, i) => ({ ...cleanAction(v, SWING_BASE), label: `Melee · punch ${i + 1}` }))
+;(ACTION_DEFAULTS as Record<string, HandAction>)['melee.swing'] = { ...MELEE_POOL[0], label: 'Melee · swing' }
+ACTIONS['melee.swing'] = copyOf(ACTION_DEFAULTS['melee.swing'])
+/** the key a blow lands on: `strike` if the variant names one, else the key reaching farthest forward (the punch's extension) */
+export function strikeKey(a: HandAction): number {
+  if (typeof a.strike === 'number' && a.strike >= 0 && a.strike < a.keys.length) return a.strike
+  let best = 0; a.keys.forEach((k, i) => { if (k.z < a.keys[best].z) best = i }); return best
+}
+/** ms from the click to the blow landing, played as a one-shot (melee-view applies the hit then) */
+export const strikeMs = (a: HandAction) => { const i = strikeKey(a); return keyStart(a, i, false) + (i === 0 ? 0 : a.keys[i].ms) }
+const sameKeys = (a: HandAction, b: HandAction) => JSON.stringify(a.keys) === JSON.stringify(b.keys)
+/** the punches this browser plays: the pool, plus a tuner draft that is not one of them yet (so Alex sees a new one in game) */
+export function swingPool(): HandAction[] {
+  const d = ACTIONS['melee.swing']
+  return d && d.keys.length && !MELEE_POOL.some(v => sameKeys(v, d)) ? [...MELEE_POOL, d] : MELEE_POOL
+}
+/** pick the next punch: random, never the same as the last once there are 2+ */
+export function pickSwing(prev: number, rand: () => number = Math.random): { i: number; action: HandAction } {
+  const pool = swingPool()
+  let i = Math.floor(rand() * pool.length) % pool.length
+  if (pool.length > 1 && i === prev) i = (i + 1 + Math.floor(rand() * (pool.length - 1))) % pool.length
+  return { i, action: pool[i] }
 }
