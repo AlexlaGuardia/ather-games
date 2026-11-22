@@ -1,7 +1,8 @@
 // shared/fp-gun.tsx + sight-marks.ts: aiming puts EVERY gun's sight line dead on the camera axis (so the etched mark sits at screen
 // centre with no HUD crosshair), and the etching lights only while mana runs through a drawn gun (canon: never a free light).
 //   npx tsx src/app/shimmer/open/shared/fp-gun.test.ts
-import { modelOf, sightOf, adsPos, VM } from './fp-gun'
+import { modelOf, sightOf, adsPos, VM, defaultsFor, selectGunTune, GUN_DEFAULTS, GUN_TUNE_KEYS } from './fp-gun'
+import { readFileSync } from 'node:fs'
 import { opticOf } from './optics'
 import { RANGE_GUNS } from './gunplay'
 import { MARKS, TINTS, markGlow, MARK_IDLE, MARK_FLARE_MS, defaultLook, isLook } from './sight-marks'
@@ -39,6 +40,15 @@ ok(defaultLook(false).mark === 'dot' && defaultLook(true).mark === 'cross', 'def
 ok(Object.values(MARKS).every(k => k.strokes.length > 0), 'every cut has something etched')
 ok(isLook({ mark: 'ring', tint: 'mana' }) && !isLook({ mark: 'laser', tint: 'mana' }) && !isLook({ mark: 'ring', tint: 'neon' }) && !isLook(null), 'a stored look is checked before it is trusted')
 ok(Object.values(TINTS).every(t => /^#[0-9a-f]{6}$/i.test(t.hex)), 'every tint is a colour')
+
+// Alex's 11-22 per-gun hands (SPITTER + BACKBONE) are the SHIPPED numbers: every key of the handoff file, read from the file itself
+{ const tune = JSON.parse(readFileSync(new URL('../../../../../docs/handoff/gun-hands-tune-2026-11-22.json', import.meta.url), 'utf8')) as Record<string, Record<string, number>>
+  for (const g of ['spitter', 'backbone']) {
+    ok(GUN_TUNE_KEYS.every(k => defaultsFor(g)[k] === tune[g][k]) && Object.keys(tune[g]).length === GUN_TUNE_KEYS.length, `${g}: every hands key ships as Alex tuned it`)
+    selectGunTune(g); ok(GUN_TUNE_KEYS.every(k => VM[k] === tune[g][k]), `${g}: in hand, the live numbers are his`)
+  }
+  ok(defaultsFor('backbone').KICK_DECAY !== defaultsFor('spitter').KICK_DECAY && defaultsFor('repeater').S === 1.18, 'each gun keeps its own tune (the Repeater untouched)')
+  ok(GUN_TUNE_KEYS.every(k => defaultsFor('breacher')[k] === GUN_DEFAULTS[k]), 'an untuned gun stays on the base') }
 
 console.log(`fp-gun: ${pass} pass, ${fail} fail`)
 if (fail) process.exit(1)

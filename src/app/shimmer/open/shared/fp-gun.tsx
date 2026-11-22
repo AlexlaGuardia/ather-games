@@ -64,6 +64,12 @@ export const GUN_BAKED: Readonly<Record<string, Partial<GunTune>>> = {
   repeater: { S: 1.18, HIP_X: 0.07, HIP_Y: -0.125, HIP_Z: -0.365, ADS_DIST: 0.155, ADS_IN: 0.13, ADS_OUT: 0.13, BOB: 0.008, BOB_ADS: 0.19,
     KICK_Z: 0.066, KICK_PITCH: 0.255, KICK_DECAY: 25, HAND: 0.94,
     R_DX: 0.026, R_DY: 0.036, R_DZ: 0.042, R_PITCH: -0.91, R_ROLL: -0.36, L_DX: -0.008, L_DY: 0.018, L_DZ: 0.036, L_PITCH: -0.58, L_ROLL: -0.69 },
+  // Alex 11-22, the SPITTER (docs/handoff/gun-hands-tune-2026-11-22.json, all 23 keys)
+  spitter: { S: 1.2, HIP_X: 0.13, HIP_Y: -0.19, HIP_Z: -0.385, ADS_DIST: 0.295, ADS_IN: 0.15, ADS_OUT: 0.11, BOB: 0.012, BOB_ADS: 0.15, KICK_Z: 0.034, KICK_PITCH: 0.01, KICK_DECAY: 40,
+    HAND: 0.64, R_DX: -0.004, R_DY: 0.018, R_DZ: 0.034, R_PITCH: -1.07, R_ROLL: -1.23, L_DX: -0.022, L_DY: -0.07, L_DZ: 0.12, L_PITCH: -2.11, L_ROLL: -0.36 },
+  // Alex 11-22, the BACKBONE (same file, all 23 keys): a heavy kick that comes home slowly
+  backbone: { S: 1.2, HIP_X: 0.145, HIP_Y: -0.175, HIP_Z: -0.355, ADS_DIST: 0.34, ADS_IN: 0.15, ADS_OUT: 0.11, BOB: 0.006, BOB_ADS: 0.12, KICK_Z: 0.162, KICK_PITCH: 0.255, KICK_DECAY: 2,
+    HAND: 0.85, R_DX: 0.002, R_DY: 0.044, R_DZ: 0.08, R_PITCH: -1.12, R_ROLL: 0.8, L_DX: -0.012, L_DY: -0.032, L_DZ: -0.032, L_PITCH: 1.34, L_ROLL: -2.17 },
 }
 /** LIVE numbers for the gun in hand: defaults, then the gun's baked tune, then this browser's tune for that gun. */
 export const VM: GunTune = { ...GUN_DEFAULTS }
