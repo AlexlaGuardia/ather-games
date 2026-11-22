@@ -57,7 +57,8 @@ await p.evaluate(() => document.querySelector<HTMLElement>('[data-panel="courser
 // back in the courser: park it beside the keeper (tp moves the CAR, the keeper stays on foot), E gets in (M80), G = the garage
 await p.evaluate((x, z) => (window as any).__drive.tp(x, z, 0, 0), at.x + fx * 3.5, at.z + fz * 3.5); await sleep(2500)
 // M80 (11-22): E is the car now, and the door the crosshair is on keeps E (M60), so turn from the lot's door to the courser
-await p.evaluate((cx: number, cz: number) => { const w = window as any, f = w.__drive.foot(); w.__drive.footTp(f.px, f.pz, Math.atan2(-(cx - f.px), -(cz - f.pz)), -0.1) }, at.x + fx * 3.5, at.z + fz * 3.5); await sleep(1200)
+// and step OFF the step stone toward it (standing on the step = inside the door's pick capsule = E opens the door)
+await p.evaluate((cx: number, cz: number) => { const w = window as any, f = w.__drive.foot(), dx = cx - f.px, dz = cz - f.pz, L = Math.hypot(dx, dz) || 1, k = Math.min(1.4, L - 1.2) / L; w.__drive.footTp(f.px + dx * k, f.pz + dz * k, Math.atan2(-dx, -dz), -0.1) }, at.x + fx * 3.5, at.z + fz * 3.5); await sleep(1500)
 res.beforeE = await p.evaluate(() => { const w = window as any, f = w.__drive.foot(), c = w.__drive.state(); return { dist: Math.hypot(c.x - f.px, c.z - f.pz), dy: c.y - f.py, door: w.__market?.reach?.() ?? null, lotOpen: !!document.querySelector('[data-panel="courser-lot"]') } })
 await p.keyboard.press('KeyE'); await sleep(2500)
 res.onFootAfterF = await p.evaluate(() => { const f = (window as any).__drive.foot; return typeof f === 'function' ? f() : f })
