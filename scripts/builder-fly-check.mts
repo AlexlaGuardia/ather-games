@@ -89,11 +89,13 @@ try {
   await hold('KeyF', 50); await sleep(800)
   const fs = await p.$eval('[data-testid="fly-frame"]', e => { const c = e.querySelector('canvas')!.getBoundingClientRect(); return { full: (e as HTMLElement).dataset.full, w: c.width, h: c.height, vw: innerWidth, vh: innerHeight } })
   ok(fs.full === '1' && fs.w >= fs.vw - 2 && fs.h >= fs.vh - 2, `F: Fly fills the window (canvas ${Math.round(fs.w)}x${Math.round(fs.h)} of ${fs.vw}x${fs.vh})`)
-  const d0 = await p.evaluate('window.__terrain.stroke && window.__terrain.dirty().length') as number
+  // save first so dirty is 0: then ONLY the fullscreen drag can dirty it (the finally block restores the owner's draft)
+  await p.evaluate('window.__terrain.save()'); await p.waitForFunction('window.__terrain.dirty().length === 0', { timeout: 60000, polling: 500 })
+  const d0 = await p.evaluate('window.__terrain.dirty().length') as number
   await p.mouse.move(fs.vw / 2, fs.vh / 2 + 40); await sleep(400)
   await p.mouse.down({ button: 'left' }); await sleep(1200); await p.mouse.up({ button: 'left' }); await sleep(600)
   const hEd = await p.evaluate('window.__terrain.dirty().length') as number
-  ok(hEd >= d0 && hEd > 0, `a sculpt in fullscreen lands in the draft (dirty ${d0} -> ${hEd})`)
+  ok(d0 === 0 && hEd > 0, `a sculpt in fullscreen lands in the draft (dirty ${d0} -> ${hEd})`)
   await p.screenshot({ path: `${out}/fly-full.png` })
   await hold('Escape', 50); await sleep(500)
   const fs2 = await p.$eval('[data-testid="fly-frame"]', e => { const c = e.querySelector('canvas')!.getBoundingClientRect(); return { full: (e as HTMLElement).dataset.full, w: c.width } })
