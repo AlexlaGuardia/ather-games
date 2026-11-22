@@ -53,13 +53,12 @@ res.bank = await bank()
 res.toast = await p.evaluate(() => document.body.innerText.includes('Alchemy is a set of furniture now'))
 await p.reload({ waitUntil: 'load', timeout: 180000 }); await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500)
 res.bankAfterReload = await bank()
-await p.keyboard.press('Escape'); await sleep(500)
 // 2. hold the tonic: refused at a full bar, then drunk at 20
 const slot = await slotOf('shard_tonic'); res.tonicSlot = slot
 // hold it: press its key until the stance says that slot is in hand (a key pressed while the arrival veil is up is ignored, M67)
 res.held = await poll(async () => { const st = await A('stance'); if (st?.kind === 'item' && st.slot === slot) return true; await p.keyboard.press(String(slot + 1) as any); await sleep(400); return false }, 20000)
 res.stance = await A('stance')
-await shot('ac-1-held')
+await shot('ac-1-held')   // (an Escape here, left from the room's panel, opened Options and the hotbar took no keys)
 await A('setMana', 100); await A('drink'); await sleep(300)
 res.fullDrink = (await bag()).shard_tonic ?? 0
 await A('setMana', 20); await A('drink'); await sleep(300)
