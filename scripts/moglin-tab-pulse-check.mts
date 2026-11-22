@@ -76,15 +76,22 @@ try {
   await q.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg&morel=fast`, { waitUntil: 'load', timeout: 240000 })
   ok(await poll(() => q.evaluate(() => (window as any).__ather?.zone?.() === 'wilds' && !!(window as any).__morelHints), 240000), '2. in the Wilds on the errand, hints mounted')
   ok(await poll(() => q.evaluate(() => !!document.querySelector('[data-say="morel"] .morel-pulse[data-morel-pulse="1"]')), 120000), '2. a new Morel line arrives WITH the pulse (class + data-morel-pulse=1)')
+  const cloned = await q.evaluate(() => {
+    const box = document.querySelector<HTMLElement>('[data-hud="messages"]'), line = box?.querySelector<HTMLElement>('[data-say="morel"]'); if (!box || !line) return false
+    const c = box.cloneNode(false) as HTMLElement, r = box.getBoundingClientRect(); c.id = 'look-clone'
+    c.style.cssText += `;left:${r.left}px;top:${r.top}px;bottom:auto;transform:none;z-index:40`
+    c.appendChild(line.cloneNode(true)); const st = box.querySelector('style'); if (st) c.appendChild(st.cloneNode(true))
+    c.querySelectorAll('*').forEach(e => [...e.attributes].filter(a => a.name.startsWith('data-')).forEach(a => e.removeAttribute(a.name))); c.removeAttribute('data-hud')
+    const sp = c.querySelector<HTMLElement>('span[style*="transform-origin"]'); if (sp) { sp.className = 'morel-pulse'; sp.style.animationDelay = '-280ms'; sp.style.animationPlayState = 'paused' }
+    document.body.appendChild(c); return !!sp })
   await shot(q, 'morel-pulse-on')
   // wait for the FIRST pulsing line's own settle (a slow headless phone frame can hold the 1.75 s timer past a fixed sleep);
   // the gap itself is timed in the observer, so waiting here cannot hide a slow settle
   await poll(() => q.evaluate(() => { const a = (window as any).__pulseAt as { id: number; s: string }[]; const on = a.find(x => x.s === '1:c'); return !!on && a.some(x => x.id === on.id && x.s === '0:-') }), 8000)
   await shot(q, 'morel-pulse-settled')
-  // LOOK shot: a 1 fps screenshot cannot catch a 1.65 s pulse, so freeze one at a beat's peak (280 ms = 17%) on the live line
-  const froze = await q.evaluate(() => { const e = document.querySelector<HTMLElement>('[data-say="morel"] [data-morel-pulse]'); if (!e) return false
-    e.classList.add('morel-pulse'); e.style.animationDelay = '-280ms'; e.style.animationPlayState = 'paused'; document.querySelectorAll<HTMLElement>('div').forEach(d => { if (/Left thumb moves/.test(d.textContent ?? '') && !d.querySelector('[data-hud]')) d.style.visibility = 'hidden' }); return true })
-  if (froze) { await sleep(1200); await shot(q, 'morel-pulse-peak') }
+  // LOOK shot: a 1 fps screenshot cannot catch a 1.65 s pulse (and the 4 s line is often gone by then), so a static CLONE of the
+  // message line, taken the moment it arrived, outside React, data attrs stripped (the asserts never see it), frozen at a beat's peak
+  if (cloned) { await q.evaluate(() => document.querySelectorAll<HTMLElement>('div').forEach(d => { if (/Left thumb moves/.test(d.textContent ?? '') && !d.querySelector('#look-clone')) d.style.visibility = 'hidden' })); await sleep(1200); await shot(q, 'morel-pulse-peak'); await q.evaluate(() => document.getElementById('look-clone')?.remove()) }
   const at = await q.evaluate(() => (window as any).__pulseAt as { id: number; s: string; t: number; anim: string }[])
   console.error('pulse events', JSON.stringify(at.map(x => [x.id, x.s, Math.round(x.t)])))
   const on = at.find(x => x.s === '1:c'), off = at.find(x => x.s === '0:-' && on && x.id === on.id)
