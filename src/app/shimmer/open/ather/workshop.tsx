@@ -44,6 +44,8 @@ import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported,
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, ALC_LIVE, type Job } from './furniture'
 import { AlchemyPanel } from './alchemy-panel'
+import { PlanterPanel, GrimoirePanel, liftPlanter, useBook } from './spirit-panels'
+import { BLOOM_MS } from './spirit-seeds'
 import { BrewingPanel } from './brewing-panel'
 import { useBrewing, openPartyBrew } from './party-brew-net'
 import { ALC_POTIONS as BREW_POTIONS, ALC_POTION_ORDER as BREW_ORDER } from './alchemy-set'
@@ -1169,14 +1171,32 @@ function ChestGhost({ pose, owned, q, item }: { pose: React.MutableRefObject<Pos
 
 const WOODS: Record<string, string> = { goldwood: '#d9a957', shimmeroak: '#a77a52', starwillow: '#c8d2e8', dawnwood: '#c9774a', iron: '#4e4a47', stone: '#bdb6a6' }
 const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, number]; c: string }) => <mesh position={p}><boxGeometry args={s} /><meshLambertMaterial color={c} /></mesh>
+/** M76: the spirit planter: woven starwillow round soft soil; a sprout that grows with the seed; a gold glow once it bloomed. */
+function SpiritPlanterBody({ id }: { id?: string }) {
+  const f = FURNITURE.spirit_planter, c = WOODS.starwillow, b = useBook(), pot = id ? b.pots[id] : undefined
+  const orb = useRef<THREE.Mesh>(null), sprout = useRef<THREE.Group>(null)
+  useFrame(({ clock }) => {
+    if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06
+    if (sprout.current && pot && !pot.bloomed) { const g = Math.max(0.15, Math.min(1, (Date.now() - pot.at) / BLOOM_MS)); sprout.current.scale.setScalar(g) }
+  })
+  return <>
+    {[0, 1, 2, 3].map(k => <Bx key={k} p={[0, 0.1 + k * 0.13, 0]} s={[f.w - (k % 2) * 0.04, 0.09, f.d - (k % 2) * 0.04]} c={k % 2 ? '#aab6d0' : c} />)}
+    <Bx p={[0, 0.5, 0]} s={[f.w - 0.12, 0.05, f.d - 0.12]} c="#4a3524" />
+    {[-1, 1].flatMap(a => [-1, 1].map(z => <mesh key={`${a}${z}`} position={[a * (f.w / 2 - 0.04), 0.62, z * (f.d / 2 - 0.04)]}><sphereGeometry args={[0.035, 6, 5]} /><meshBasicMaterial color="#eaf2ff" /></mesh>))}
+    {pot && !pot.bloomed && <group ref={sprout} position={[0, 0.52, 0]}><mesh position-y={0.12}><cylinderGeometry args={[0.015, 0.02, 0.24, 5]} /><meshLambertMaterial color="#9ad06a" /></mesh><mesh position={[0.05, 0.22, 0]} rotation-z={-0.8}><sphereGeometry args={[0.05, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh><mesh position={[-0.05, 0.18, 0]} rotation-z={0.8}><sphereGeometry args={[0.045, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh></group>}
+    {pot?.bloomed && <><mesh ref={orb} position-y={1.0}><sphereGeometry args={[0.16, 14, 10]} /><meshBasicMaterial color={f.glow} transparent opacity={0.85} /></mesh><pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} /></>}
+  </>
+}
 /** One piece, built from boxes in its wood's colour. Blockout look like the rooms. */
-export function PieceBody({ item }: { item: string }) {
+export function PieceBody({ item, id }: { item: string; id?: string }) {
   const f = FURNITURE[item], c = WOODS[f.wood], dk = '#6b4a2a'
   const legs = (w: number, d: number, h: number, t = 0.07) => [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b], k) => <Bx key={k} p={[a * (w / 2 - t), h / 2, b * (d / 2 - t)]} s={[t, h, t]} c={c} />)
   switch (item) {
     case 'goldwood_stool': return <><Bx p={[0, 0.45, 0]} s={[0.46, 0.07, 0.46]} c={c} />{legs(0.4, 0.4, 0.42)}</>
     case 'goldwood_bench': return <><Bx p={[0, 0.45, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d, 0.42, 0.09)}</>
     case 'goldwood_table': return <><Bx p={[0, 0.76, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.72, 0.09)}</>
+    case 'spirit_planter': return <SpiritPlanterBody id={id} />
+    case 'grimoire_pedestal': return <><Bx p={[0, 0.05, 0]} s={[f.w, 0.1, f.d]} c={c} /><Bx p={[0, 0.5, 0]} s={[0.3, 0.8, 0.3]} c={c} /><mesh position={[0, 0.95, 0]} rotation-x={-0.5}><boxGeometry args={[0.6, 0.06, 0.45]} /><meshLambertMaterial color={c} /></mesh><mesh position={[0, 0.99, 0.02]} rotation-x={-0.5}><boxGeometry args={[0.44, 0.02, 0.32]} /><meshBasicMaterial color="#2a2533" /></mesh><mesh position={[0, 1.0, 0.025]} rotation-x={-Math.PI / 2 - 0.5}><planeGeometry args={[0.36, 0.24]} /><meshBasicMaterial color={f.glow} transparent opacity={0.55} /></mesh></>
     case 'planter_box': return <><Bx p={[0, 0.25, 0]} s={[f.w, 0.5, f.d]} c={c} /><Bx p={[0, 0.48, 0]} s={[f.w - 0.12, 0.06, f.d - 0.12]} c="#5a3d25" /><Bx p={[0, 0.27, 0]} s={[f.w + 0.02, 0.12, f.d + 0.02]} c="#8a6a3a" /></>
     case 'shimmeroak_shelf': return <><Bx p={[-f.w / 2 + 0.04, f.h / 2, 0]} s={[0.07, f.h, f.d]} c={c} /><Bx p={[f.w / 2 - 0.04, f.h / 2, 0]} s={[0.07, f.h, f.d]} c={c} />{[0.1, 0.6, 1.1, 1.56].map(y => <Bx key={y} p={[0, y, 0]} s={[f.w, 0.05, f.d]} c={c} />)}<Bx p={[0, f.h / 2, -f.d / 2 + 0.02]} s={[f.w, f.h, 0.03]} c={dk} /></>
     case 'starwillow_arch': return <><Bx p={[-f.w / 2 + 0.08, f.h / 2, 0]} s={[0.12, f.h, 0.12]} c={c} /><Bx p={[f.w / 2 - 0.08, f.h / 2, 0]} s={[0.12, f.h, 0.12]} c={c} /><Bx p={[0, f.h - 0.06, 0]} s={[f.w, 0.12, 0.14]} c={c} />{[-0.7, 0, 0.7].map(x => <mesh key={x} position={[x, f.h + 0.04, 0]}><sphereGeometry args={[0.07, 8, 6]} /><meshBasicMaterial color="#eaf2ff" /></mesh>)}</>
@@ -1205,7 +1225,7 @@ function Wobbly({ id, at, children }: { id: string; at?: [number, number, number
 /** `y` = the floor under it (M55: on the plinth inside a raised house). Wobbly only pivots, it does not lift. */
 function PieceMesh({ p, y = GROUND_Y }: { p: Piece; y?: number }) {
   if (p.item === 'lift') return <LiftMesh p={p} />
-  return <group position={[p.x, y, p.z]} rotation-y={-p.q * Math.PI / 2}><PieceBody item={p.item} /></group>
+  return <group position={[p.x, y, p.z]} rotation-y={-p.q * Math.PI / 2}><PieceBody item={p.item} id={p.id} /></group>
 }
 /** The piece's ghost: the real piece, tinted, snapped to the quarter metre in front of the keeper. */
 function PieceGhost({ pose, owned, item, q }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; item: string; q: number }) {
@@ -1981,12 +2001,21 @@ function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<str
   const f = FURNITURE[p.item], spill = spillIfRemoved(currentWater(), plumbingOf(w.pieces), p.item, farmNow())
   const turn = () => { const t = turnPiece(getW(), owned, id); if (t) setWorks(t); else hudSay('No room to turn it here.', 'info') }
   const pickUp = () => {
+    if (f.spirit === 'planter' && !liftPlanter(id)) return   // M76: a spirit lives here = stays; a growing seed back to the bag
     const r = pickUpPiece(getW(), id, getInv())
     if (!r) { hudSay('No room in the bag for it.', 'info'); return }
     const rr = returnRun(loadRuns(), id, r.inv)   // M57: a busy alchemy piece gives its inputs back, all or nothing
     if (!rr) { hudSay('No room in the bag for it and what it was working on.', 'info'); return }
     setWorks(r.works); setInv(rr.inv); saveRuns(rr.runs); onClose(); hudSay(`${f.name} · back in your bag.`, 'item', 3)
   }
+  const spiritFooter = (
+    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+      <span data-act="turn-piece"><HearthButton small onClick={turn}>Turn</HearthButton></span>
+      <span data-act="pickup-piece"><HearthButton small onClick={pickUp}>Pick up</HearthButton></span>
+    </div>
+  )
+  if (f.spirit === 'planter') return <PlanterPanel pieceId={id} onClose={onClose} footer={spiritFooter} />   // M76
+  if (f.spirit === 'pedestal') return <GrimoirePanel onClose={onClose} footer={spiritFooter} />            // M76
   if (f.alc && brewing && !brewing.poured) return <BrewingPanel station={f.alc} onClose={onClose} />   // M57 s3b: a brewing is open here
   if (f.alc) return (
     <AlchemyPanel pid={id} station={f.alc} onClose={onClose} boon={boonHere} footer={<>

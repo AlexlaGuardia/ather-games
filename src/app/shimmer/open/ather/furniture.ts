@@ -54,6 +54,8 @@ export interface PieceDef {
   shaft?: boolean
   /** M57: an ALCHEMY station (alchemy-set.ts): E opens its steps instead of the plain piece card */
   alc?: AlcStation
+  /** M76: a SPIRIT piece: E opens the planter (plant a Mana Seed) or the grimoire on its pedestal */
+  spirit?: 'planter' | 'pedestal'
 }
 // Goldwood pieces first: goldwood is what a new keeper can prune (Forestry 1), so a first piece is never a locked door.
 export const FURNITURE: Readonly<Record<string, PieceDef>> = {
@@ -64,6 +66,11 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   shimmeroak_shelf: { name: 'Shimmeroak Shelf', blurb: 'Rippled grain that catches the light on every board.', recipe: [{ id: 'shimmeroak_plank', n: 4 }], w: 1.2, d: 0.4, h: 1.6, solid: true, wood: 'shimmeroak' },
   starwillow_arch: { name: 'Starwillow Arch', blurb: 'Bent branches, tips faintly lit. Walk under it on the way home.', recipe: [{ id: 'starwillow_branch', n: 6 }], w: 2.2, d: 0.5, h: 2.6, solid: false, wood: 'starwillow' },
   dawnwood_chair: { name: 'Dawnwood Chair', blurb: 'Ancient wood that holds warmth. Sit in it once and you will keep it.', recipe: [{ id: 'dawnwood_plank', n: 4 }], w: 0.6, d: 0.6, h: 1.0, solid: false, wood: 'dawnwood' },
+  // M76 (Alex 11-22; Magii 68808f3): the SPIRIT PLANTER (Starwillow, canon Ather tree) takes one Mana Seed and the spirit that
+  //    seed already is blooms in it (spirit-seeds.ts). The GRIMOIRE PEDESTAL is where Greg's tablet rests in the garden. Plain
+  //    nouns. Blurbs = placeholders for @lark.
+  spirit_planter: { name: 'Spirit Planter', blurb: 'Starwillow branches woven round a bed of soft soil. A Mana Seed planted here blooms into the spirit it already is.', recipe: [{ id: 'starwillow_branch', n: 4 }, { id: 'starwillow_sap', n: 1 }], w: 0.9, d: 0.9, h: 0.6, solid: true, wood: 'starwillow', glow: '#ffe7a0', spirit: 'planter' },
+  grimoire_pedestal: { name: 'Grimoire Pedestal', blurb: 'A short stone stand with a slanted top. The grimoire rests here, and its pages are read here.', recipe: [{ id: 'stone_brick', n: 4 }, { id: 'shimmeroak_plank', n: 2 }], w: 0.7, d: 0.7, h: 1.1, solid: true, wood: 'stone', glow: '#ffd27a', spirit: 'pedestal' },
   // M48 (11-20): the lift. Canon RULED-AFK (athernyx 29b26fa): cord + counterweight, wood and stone, no metal, no runes. Planks and
   //    Stone Brick (no cord item exists in the bag). Blurb = placeholder for @lark.
   lift: { name: 'Lift', blurb: 'A goldwood car on cords, a stone weight hung beside it. Pull the cord for a floor and up or down you go.', recipe: [{ id: 'goldwood_plank', n: 8 }, { id: 'stone_brick', n: 4 }], w: 1.0, d: 1.0, h: 2.0, solid: false, wood: 'goldwood', shaft: true },

@@ -9,6 +9,7 @@
 import { NYX_RINN } from '../continent/rinning-nyx'
 import { keeperKey } from '@/lib/keeper-local'
 import { FURNITURE, KEEPSTONES } from '../ather/furniture'
+import { SEED_IDS, SEED_NAME, SEED_BLURB, seedIcon } from '../ather/seed-items'
 import { MEATS, DISHES } from '../ather/cooking'
 import { POTIONS } from '../ather/alchemy'
 import { CROPS, GRADES, seedId, cropId, parseGraded } from '../ather/farming'
@@ -129,6 +130,9 @@ for (const [id, k] of Object.entries(KEEPSTONES)) OPEN_ITEMS[id] = { name: k.nam
 // FURNITURE + DECOR (Alex 11-17): items made in the carpentry room, set on the plot (ather/furniture.ts holds the recipes,
 //    sizes and blurbs; the blurbs await @lark). Icons: public/open/icons/<id with dashes>.svg (tools/art/furniture_icons.py).
 for (const [id, f] of Object.entries(FURNITURE)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 10, kind: 'placeable' }; ITEM_GROUP[id] = 'decor' }
+// MANA SEEDS (M76, ather/spirit-seeds.ts): ten rows, one per species, every one NAMED just 'Mana Seed'; only the icon hints.
+//    An event, not a resource: no recipe, no shop, no drop table. The Anemonyx brings them.
+for (const id of SEED_IDS) { OPEN_ITEMS[id] = { name: SEED_NAME, blurb: SEED_BLURB, icon: seedIcon(id), stack: 10, kind: 'material' }; ITEM_GROUP[id] = 'farming' }
 // COOKING (2026-11-17, ather/cooking.ts): Smokehouse meat (RULED 11-17) and the hearth's roasts (ruled 09-15). Raw meat is a
 //    material; a dish is held and clicked to eat (ather/page.tsx). Icons: tools/art/food_icons.py.
 for (const [id, f] of Object.entries(MEATS)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
