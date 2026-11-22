@@ -8,6 +8,7 @@ import puppeteer from 'puppeteer-core'
 import { createWriteStream, readFileSync, mkdirSync } from 'fs'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), WMIN = Number(flag('--wilds-min', '3')), TOP = Number(flag('--top', '15'))
+const HOME_S = Number(flag('--home-sec', '90'))   // 11-22: past WILDS_RELEASE_MS (60 s), so the home snapshot is after the release
 const [VW, VH] = flag('--size', '390x844').split('x').map(Number)
 const dir = flag('--out', '/tmp/m9-heap-diff'); mkdirSync(dir, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -45,7 +46,8 @@ const snap = async (label: string): Promise<Agg> => {
     if (isStr && size > 200 && SHADER.test(name)) { agg.shaderStr.size += size; agg.shaderStr.count++ }
     if ((t === 'object' || t === 'native') && name === 'WebGLProgram') agg.programs++
   }
-  console.log(`snapshot ${label}: usedSize ${(used / 1048576).toFixed(1)} MB · snapshot self total ${(agg.total / 1048576).toFixed(1)} MB · shader-source strings ${agg.shaderStr.count} = ${(agg.shaderStr.size / 1048576).toFixed(2)} MB · WebGLProgram ${agg.programs}`)
+  const nTiles = await p.evaluate(() => ((window as any).__ather?.wildsLoaded?.() ?? []).length).catch(() => -1)
+  console.log(`snapshot ${label}: Wilds tiles held ${nTiles} · usedSize ${(used / 1048576).toFixed(1)} MB · snapshot self total ${(agg.total / 1048576).toFixed(1)} MB · shader-source strings ${agg.shaderStr.count} = ${(agg.shaderStr.size / 1048576).toFixed(2)} MB · WebGLProgram ${agg.programs}`)
   return agg
 }
 const diff = (a: Agg, b: Agg, title: string) => {
@@ -74,7 +76,7 @@ await playFor(WMIN * 60000, async () => {   // same play as beta-m9-heap: wake a
 })
 const wilds = await snap('wilds')
 await A('travel', { kind: 'home' }); await p.waitForFunction(() => (window as any).__ather.zone() === 'plot', { timeout: 60000 })
-await playFor(60000, walkLoop)
+await playFor(HOME_S * 1000, walkLoop)
 const home = await snap('home')
 await br.close()
 diff(plot, home, 'HOME minus PLOT (what the Wilds left behind)')
