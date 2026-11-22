@@ -58,6 +58,7 @@ await p.evaluate(() => document.querySelector<HTMLElement>('[data-panel="courser
 await p.evaluate((x, z) => (window as any).__drive.tp(x, z, 0, 0), at.x + fx * 3.5, at.z + fz * 3.5); await sleep(2500)
 // M80 (11-22): E is the car now, and the door the crosshair is on keeps E (M60), so turn from the lot's door to the courser
 await p.evaluate((cx: number, cz: number) => { const w = window as any, f = w.__drive.foot(); w.__drive.footTp(f.px, f.pz, Math.atan2(-(cx - f.px), -(cz - f.pz)), -0.1) }, at.x + fx * 3.5, at.z + fz * 3.5); await sleep(1200)
+res.beforeE = await p.evaluate(() => { const w = window as any, f = w.__drive.foot(), c = w.__drive.state(); return { dist: Math.hypot(c.x - f.px, c.z - f.pz), dy: c.y - f.py, door: w.__market?.reach?.() ?? null, lotOpen: !!document.querySelector('[data-panel="courser-lot"]') } })
 await p.keyboard.press('KeyE'); await sleep(2500)
 res.onFootAfterF = await p.evaluate(() => { const f = (window as any).__drive.foot; return typeof f === 'function' ? f() : f })
 await p.keyboard.press('KeyG'); await sleep(1500)
