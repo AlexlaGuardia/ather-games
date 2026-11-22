@@ -25,8 +25,8 @@ const poll = async (f: () => Promise<boolean>, ms = 60000) => { for (let t = 0; 
 const A = (p: Page, fn: string, ...args: unknown[]) => p.evaluate((f: string, a: unknown[]) => (window as any).__ather?.[f]?.(...a), fn, args)
 const tapText = async (p: Page, text: string) => {
   const box = await p.evaluate((t: string) => {
-    for (const e of document.querySelectorAll<HTMLElement>('button')) {
-      if ((e.innerText ?? '').trim() !== t) continue
+    for (const e of document.querySelectorAll<HTMLElement>('[data-talk-option]')) {
+      if ((e.textContent ?? '').replace(/^\s*›\s*/, '').trim() !== t) continue   // the option's › marker is in its text
       const r = e.getBoundingClientRect(); if (r.width < 4 || r.height < 4) continue
       return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
     }
