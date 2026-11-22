@@ -2,7 +2,7 @@
 // give() fills the HOTBAR first, so a keeper's seeds and crops sit there; the farm's button skipped the hotbar and said
 // nothing. This check builds the Farm (as farm-check), then with farm goods in the HOTBAR and the BAG presses
 // "Stock from the bag": the store rises by exactly those goods, the pack drops by them (logs/tools stay), and after a
-// RELOAD the store still holds them and the panel shows them. --phone runs it at 390x844 touch. 0 page errors.
+// RELOAD the store still holds them and the panel shows them. --phone builds at desktop size, reloads at 390x844 touch and works the panel by taps. 0 page errors.
 // SETUP (stated): bag = 20 goldwood logs (build costs 18), hotbar slots 2-3 = 5 Violetbloom seed + 3 Goldleaf crop,
 // bag slot 10 = 2 Rootvine seed. A fresh anonymous browser: never a real keeper's save.
 //   npx tsx scripts/farm-stock-check.mts [--url http://localhost:3201] [--out dir] [--phone]
@@ -16,7 +16,7 @@ const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/farm
 mkdirSync(out, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
-const p = await (await br.createBrowserContext()).newPage(); await p.setViewport(phone ? { width: 390, height: 844, isMobile: true, hasTouch: true } : { width: 1100, height: 700 })
+const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 1100, height: 700 })   // --phone: the Farm is BUILT at desktop size, then the page reloads as a phone (step 2)
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 await p.evaluateOnNewDocument('window.__name = (f) => f')
 await p.evaluateOnNewDocument((SEED_V: string, CROP_G: string, SEED_R: string) => {
@@ -33,12 +33,13 @@ const farmSave = () => read('open.farm.v1') as Promise<{ farm: { beds: ({ crop: 
 const hideCard = () => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => /Click to play|Tap to start|Tap to drive/i.test(d.textContent ?? '')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 const shot = async (n: string) => { await hideCard(); try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
 const tp = async (x: number, z: number, yaw: number) => { await p.evaluate((a, b, c) => (window as any).__ather.tp(a, b, c), x, z, yaw); await sleep(1500) }
-const click = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (b) { if (phone) await p.touchscreen.tap(b.x, b.y); else await p.mouse.click(b.x, b.y) } await sleep(350); return !!b }
+const click = async (sel: string) => { const b = await p.evaluate(s => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, sel); if (b) { if (asPhone) await p.touchscreen.tap(b.x, b.y); else await p.mouse.click(b.x, b.y) } await sleep(350); return !!b }
 const attr = (sel: string, a: string) => p.evaluate((s, n) => document.querySelector(s)?.getAttribute(n) ?? null, sel, a)
 const skew = (ms: number) => p.evaluate(m => (window as any).__farm.skew(m), ms)
 // E: a key on desktop; on the phone the 'use' chip (data-touch="use", shown when something is near) is TAPPED
+let asPhone = false
 const useE = async () => {
-  if (!phone) { await p.keyboard.press('e'); await sleep(900); return }
+  if (!asPhone) { await p.keyboard.press('e'); await sleep(900); return }
   for (let t = 0; t < 20; t++) { if (await p.evaluate(() => !!document.querySelector('[data-touch="use"][data-touch-near]'))) break; await sleep(500) }
   await click('[data-touch="use"]'); await sleep(900)
 }
@@ -56,7 +57,7 @@ res.build = (await click('[data-pick="farm"]')) && (await sleep(400), await clic
 await p.evaluate(() => (window as any).__build.to(-100, 100)); await sleep(2500)
 const mid = await p.evaluate(() => { const r = document.querySelector('canvas')!.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })
 await p.mouse.move(mid.x - 3, mid.y); await sleep(300); await p.mouse.move(mid.x, mid.y); await sleep(800)
-if (phone) await p.touchscreen.tap(mid.x, mid.y); else await p.mouse.click(mid.x, mid.y); await sleep(1200); await click('[data-act="land"]'); await sleep(800)
+await p.mouse.click(mid.x, mid.y); await sleep(1200); await click('[data-act="land"]'); await sleep(800)
 const w0 = await read('open.works.v1')
 if (!w0?.rooms?.length) { await shot('stock-0-noroom'); console.log(JSON.stringify({ ...res, works: w0, errs }, null, 1)); console.log('FAIL: the Farm was never placed (pick/build/land step)'); await br.close(); process.exit(1) }
 const room: Room = w0.rooms[0]
@@ -65,6 +66,10 @@ res.logsAfter = (await bag()).goldwood_log ?? 0
 res.starter = { flag: (await farmSave())?.starter, store: await store() }
 await tp(room.x, room.z + 14, 0); 
 await sleep(Math.max(0, room.doneAt - Date.now()) + 3000)
+if (phone) {   // the phone: reload at 390x844 touch so the HUD comes up as a phone's (the 'use' chip), then work the panel by taps
+  await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true }); asPhone = true
+  await p.reload({ waitUntil: 'load', timeout: 180000 }); await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500); await hideCard()
+}
 step('2. in, E at the s')
 // 2. in, E at the standing spot
 const b = benchOf(room)
