@@ -56,7 +56,9 @@ res.bankAfterReload = await bank()
 await p.keyboard.press('Escape'); await sleep(500)
 // 2. hold the tonic: refused at a full bar, then drunk at 20
 const slot = await slotOf('shard_tonic'); res.tonicSlot = slot
-await p.keyboard.press(String(slot + 1)); await sleep(500)
+// hold it: press its key until the stance says that slot is in hand (a key pressed while the arrival veil is up is ignored, M67)
+res.held = await poll(async () => { const st = await A('stance'); if (st?.kind === 'item' && st.slot === slot) return true; await p.keyboard.press(String(slot + 1) as any); await sleep(400); return false }, 20000)
+res.stance = await A('stance')
 await A('setMana', 100); await A('drink'); await sleep(300)
 res.fullDrink = (await bag()).shard_tonic ?? 0
 await A('setMana', 20); await A('drink'); await sleep(300)
@@ -74,7 +76,7 @@ console.log(JSON.stringify(res))
 const bu = res.buffs as Record<string, number>, ba = res.buffsAfterReload as Record<string, number>
 const bk = res.bank as Record<string, number>, bk2 = res.bankAfterReload as Record<string, number>
 const pass = res.made === true && bk.goldwood_log === 24 && bk.raw_mana_shard === 3 && bk2.goldwood_log === 24 && bk2.raw_mana_shard === 3
-  && res.tonicSlot === 3 && res.fullDrink === 1 && Math.abs((res.mana as number) - 85) < 3 && res.afterDrink === 0
+  && res.tonicSlot === 3 && res.held === true && res.fullDrink === 1 && Math.abs((res.mana as number) - 85) < 3 && res.afterDrink === 0
   && bu?.starlight > Date.now() && res.afterTincture === 0 && ba?.starlight === bu.starlight && errs.length === 0
 console.log(pass ? 'PASS: the old Alchemy room retired on load (24 Goldwood Log + 3 Raw Mana Shard in the bank, not paid twice on reload) → Shard Tonic refused at a full bar → drunk at 20 (→ 85) → Starlight Tincture drunk, the buff survives a reload' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)
