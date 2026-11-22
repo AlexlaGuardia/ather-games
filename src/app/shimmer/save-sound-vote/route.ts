@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { safeWriteFile as writeFile } from '../lib/backup'
+import { removeNay } from '../dev/sounds/sections'
 
 const FILE = join(process.cwd(), 'src/app/shimmer/open/shared/sounds.json')
 const STATUSES = ['proposed', 'yay', 'nay']
@@ -31,6 +32,20 @@ export async function POST(req: NextRequest) {
     if (typeof body.note === 'string') row.note = body.note.slice(0, 300)
     await writeFile(FILE, JSON.stringify(all, null, 1) + '\n')
     return NextResponse.json({ ok: true, id: row.id, status: row.status, live: 'at the next deploy (coord build)' })
+  } catch (e: unknown) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 })
+  }
+}
+
+/** DELETE {id}: REMOVE a NAY'd sound's row (BETA M92). The game then falls back to silent for it. Refuses a yay/proposed row. */
+export async function DELETE(req: NextRequest) {
+  try {
+    const body = await req.json() as { id?: unknown }
+    if (typeof body.id !== 'string') return NextResponse.json({ error: 'need id' }, { status: 400 })
+    const all = await rows(), r = removeNay(all, body.id)
+    if (!r.ok) return NextResponse.json({ error: r.why }, { status: 400 })
+    await writeFile(FILE, JSON.stringify(r.rows, null, 1) + '\n')
+    return NextResponse.json({ ok: true, id: body.id, removed: true, live: 'at the next deploy (coord build)' })
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 })
   }
