@@ -67,6 +67,7 @@ export const GARDEN_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'open.companion.v1',        worldTied: false },  // the Moglins
   { base: 'open.works.v1',            worldTied: false },  // the workshop rooms (ather/rooms.ts)
   { base: 'ather.grimoire.v1',        worldTied: false },  // M76: the grimoire's pages, the spirit planters' pots, the Anemonyx visits met (ather/grimoire-book.ts)
+  { base: 'open.tutorial.v1',         worldTied: false },  // M68: the Glade tutorial: Greg's chain, the four heard, gifts given once, Fennel's jar day (ather/glade-tutorial.ts)
   { base: 'open.tools.v1',            worldTied: false },  // a keeper's equipped tools: rinsticks (ather/rinsticks.ts)
   { base: 'open.buffs.v1',            worldTied: false },  // a keeper's potion buffs, until-times (ather/alchemy.ts)
   { base: 'open.deeds-told.v1',      worldTied: false },
