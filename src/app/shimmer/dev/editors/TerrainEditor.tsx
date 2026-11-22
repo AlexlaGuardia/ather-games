@@ -11,12 +11,16 @@
 // the neighbours, so a stroke on an edge raises both sides of the seam and the saved tiles meet.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { loadWilds, type WildsMeta } from '../../open/ather/wilds'
 import { loadIndex, makeWorld, zonesOf, tileOf, TILE_M, type WildsWorld } from '../../open/ather/wilds-world'
 import { loadNetwork, clearing, roadField } from '../../open/ather/network'
 import { makeVoids } from '../../open/ather/wilds-voids'
 import { applyBrush, mergeEdits, EditHistory, BRUSHES, paintWater, foldWater, WATER_PREFIX, FALLS_PREFIX, addFall, removeFallsNear, fallLines, fallSheets, ponds, type Brush, type Edits, type BrushTile, type WaterMap } from '../../open/ather/wilds-edits'
 
+import { ramp } from './terrain-ramp'
+import type { FlyTile } from './BuilderFly'
+const BuilderFly = dynamic(() => import('./BuilderFly'), { ssr: false })   // M83 s1b: three only loads when Fly is opened
 import { AUTOSAVE_MS, savedAgo, type Layer, type Index } from '../../world/builder'
 
 // ── BETA M83 p1 s1a: the editor works on the World Builder DRAFT (world/builder.ts), never on the live layer. Save + autosave write
@@ -41,17 +45,6 @@ const wkey = (t: string) => WATER_PREFIX + t, fkey = (t: string) => FALLS_PREFIX
 const tileOfKey = (k: string) => k.startsWith(WATER_PREFIX) ? k.slice(WATER_PREFIX.length) : k.startsWith(FALLS_PREFIX) ? k.slice(FALLS_PREFIX.length) : k
 const TICK_MS = 50
 
-// hypsometric ramp (metres above the water line) -> rgb 0..1
-const RAMP: [number, number, number, number][] = [[0, 0.86, 0.80, 0.60], [1.5, 0.52, 0.66, 0.36], [20, 0.40, 0.56, 0.30], [55, 0.56, 0.52, 0.38], [110, 0.60, 0.58, 0.56], [180, 0.95, 0.95, 0.95]]
-function ramp(m: number): [number, number, number] {
-  if (m <= RAMP[0][0]) return [RAMP[0][1], RAMP[0][2], RAMP[0][3]]
-  for (let i = 1; i < RAMP.length; i++) if (m <= RAMP[i][0]) {
-    const a = RAMP[i - 1], b = RAMP[i], t = (m - a[0]) / (b[0] - a[0])
-    return [a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t]
-  }
-  const l = RAMP[RAMP.length - 1]; return [l[1], l[2], l[3]]
-}
-
 export default function TerrainEditor() {
   const [status, setStatus] = useState('loading the Wilds index…')
   const [tiles, setTiles] = useState<{ name: string; tx: number; ty: number; land: number }[]>([])
@@ -74,6 +67,7 @@ export default function TerrainEditor() {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [, setNow] = useState(0)                             // re-render the 'saved Ns ago' label
+  const [view, setView] = useState<'2d' | 'fly'>('2d')         // M83 s1b: the top-down map or the 3D free-fly view (same draft, same brush)
 
   const worldRef = useRef<WildsWorld | null>(null)
   const bases = useRef(new Map<string, Base>())
@@ -213,9 +207,15 @@ export default function TerrainEditor() {
   const onDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || !ready) return
     const p = toWorld(e); if (!p) return
-    if (opts.current.picking) { setLevel(Math.round(heightAt(p.x, p.z) * 10) / 10); setPicking(false); return }
-    if (opts.current.brush === 'falls') { const b = bases.current.get(tileRef.current)!; ;(e.target as Element).setPointerCapture(e.pointerId); line.current = [[p.x - b.tx * TILE_M, p.z - b.ty * TILE_M]]; return }
     ;(e.target as Element).setPointerCapture(e.pointerId)
+    beginAt(p.x, p.z)
+  }
+  // ── the brush in WORLD coords: the 2D canvas and the 3D fly view (raycast) both drive these ──
+  const beginAt = (px: number, pz: number) => {
+    const p = { x: px, z: pz }
+    if (!ready) return
+    if (opts.current.picking) { setLevel(Math.round(heightAt(p.x, p.z) * 10) / 10); setPicking(false); return }
+    if (opts.current.brush === 'falls') { const b = bases.current.get(tileRef.current)!; line.current = [[p.x - b.tx * TILE_M, p.z - b.ty * TILE_M]]; return }
     hist.current.begin(edits.current, allKeys())
     let target = opts.current.brush === 'flatten' ? heightAt(p.x, p.z) : undefined
     if (opts.current.brush === 'water' && opts.current.level === null) { target = Math.round((heightAt(p.x, p.z) + 1) * 10) / 10; setLevel(target) }
@@ -228,6 +228,10 @@ export default function TerrainEditor() {
     const p = toWorld(e)
     if (!p) { setCursor(null); setHover(null); return }
     setCursor({ u: p.u, v: p.v })
+    moveAt(p.x, p.z)
+  }
+  const moveAt = (px: number, pz: number) => {
+    const p = { x: px, z: pz }
     const B = bases.current.get(tileRef.current)
     setHover({ x: Math.round(p.x - (B ? B.tx * TILE_M : 0)), z: Math.round(p.z - (B ? B.ty * TILE_M : 0)), h: heightAt(p.x, p.z), d: 0 })
     if (paint.current) { paint.current.x = p.x; paint.current.z = p.z }
@@ -354,7 +358,19 @@ export default function TerrainEditor() {
   const on = 'bg-amber-500/20 border-amber-400 text-amber-200', off = 'bg-white/5 border-white/15 text-white/60 hover:text-white'
   return (
     <div className="flex flex-col lg:flex-row gap-4 text-white/85">
-      <div className="relative w-full max-w-[760px] aspect-square bg-black/40 rounded overflow-hidden select-none touch-none">
+      <div className="flex flex-col gap-2 w-full max-w-[760px]">
+      <div className="flex gap-1 items-center">
+        {(['2d', 'fly'] as const).map(v => <button key={v} className={`${btn} ${view === v ? on : off}`} onClick={() => setView(v)} data-testid={`view-${v}`}>{v === '2d' ? 'Map (top-down)' : 'Fly (3D)'}</button>)}
+        {view === 'fly' && <span className="text-[11px] font-mono text-white/40 pl-2">WASD move · Space/C up/down · Shift fast · right-drag look · wheel zoom · T top-down · left-drag sculpt</span>}
+      </div>
+      {view === 'fly' && B && (
+        <div className="relative w-full aspect-[4/3] bg-black/40 rounded overflow-hidden select-none touch-none">
+          <BuilderFly tiles={[...bases.current.entries()].map(([name, b]): FlyTile => ({ name, ox: b.tx * TILE_M, oz: b.ty * TILE_M, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY }))}
+            deltas={n => edits.current[n]} rev={rev} heightAt={heightAt} radius={radius} focus={{ x: B.tx * TILE_M, z: B.ty * TILE_M }}
+            onBegin={beginAt} onMove={moveAt} onEnd={endStroke} />
+        </div>
+      )}
+      <div className={`relative w-full aspect-square bg-black/40 rounded overflow-hidden select-none touch-none ${view === 'fly' ? 'hidden' : ''}`}>
         <canvas ref={canvas} className="w-full h-full block" style={{ cursor: 'none' }}
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={endStroke} onPointerCancel={endStroke}
           onPointerLeave={() => { setCursor(null); setHover(null) }} data-testid="terrain-canvas" />
@@ -366,6 +382,7 @@ export default function TerrainEditor() {
         )}
         {(!ready || status) && <div className="absolute left-2 top-2 text-xs font-mono bg-black/70 px-2 py-1 rounded">{status || 'loading…'}</div>}
         <div className="absolute right-2 bottom-2 text-[10px] font-mono text-white/50 bg-black/50 px-1.5 rounded">+x → · +z ↓ · 1 km</div>
+      </div>
       </div>
 
       <div className="flex flex-col gap-3 min-w-[240px] text-sm">
