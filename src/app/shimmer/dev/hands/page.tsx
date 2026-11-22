@@ -14,10 +14,10 @@
  * 1100×700, so a glove can be kept clear of them.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import * as THREE from 'three'
+import { useEffect, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OpenHands, ORDER, type OpenHandsApi } from '../../open/shared/open-hands'
+import { OpenHands, type OpenHandsApi } from '../../open/shared/open-hands'
+import { HeldRod } from '../../open/shared/held-rod'
 import { ACTIONS, ACTION_IDS, EASES, POSE_FIELDS, loadActions, setAction, resetAction, exportAction, sampleAction, actionDuration, keyStart, type ActionKey, type Ease, type HandAction } from '../../open/shared/fp-actions'
 import { FP, FP_DEFAULTS, setFpTune, resetFpTune, loadFpTune, type FpTune, type FpInput } from '../../open/shared/fp-hands-pose'
 import { EYE_STAND } from '../../open/shared/locomotion'
@@ -188,13 +188,11 @@ export default function HandsTuner() {
   )
 }
 
-/** M82: the rinstick in the mitt while its action plays (hand-local: the hand's +y points ahead at rest; the rig scales x2) */
+/** M82: the rinstick in the mitt while its action plays, the same prop the game draws */
 function ActionProp({ clock }: { clock: React.RefObject<Clock> }) {
   const [item, setItem] = useState(ACTIONS[clock.current.id].item)
   useFrame(() => { const it = ACTIONS[clock.current.id].item; if (it !== item) setItem(it) })
-  const mat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#9a8160', roughness: 0.8, transparent: true, opacity: 1 }), [])
-  if (item !== 'rinstick') return null
-  return <mesh material={mat} position={[0.01, 0.22, 0.02]} rotation={[0.12, 0, 0]} renderOrder={ORDER} frustumCulled={false}><cylinderGeometry args={[0.0035, 0.007, 0.46, 6]} /></mesh>
+  return item === 'rinstick' ? <HeldRod /> : null   // the game's own rod (open/shared/held-rod.tsx)
 }
 
 const KEY_KNOBS: { k: (typeof POSE_FIELDS)[number] | 'ms' | 'hold'; label: string; min: number; max: number; step: number }[] = [

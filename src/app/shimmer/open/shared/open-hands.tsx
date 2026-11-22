@@ -22,6 +22,7 @@ import { useEffect, useImperativeHandle, useMemo, useRef, forwardRef, type React
 import * as THREE from 'three'
 import { useThree, createPortal } from '@react-three/fiber'
 import { newFpState, stepFpHands, loadFpTune, FP, fpLive, type FpInput, type HandPose } from './fp-hands-pose'
+import { loadActions } from './fp-actions'
 
 export const ORDER = 1000
 const C = { glove: '#6e4a2c', cuff: '#b9a582', cord: '#7a5a35', seat: '#7fb6d9', bracelet: '#8a6a3c' }
@@ -91,6 +92,7 @@ export const OpenHands = forwardRef<OpenHandsApi, { held?: ReactNode }>(function
   }), [camera, rig, seatMat])
   useEffect(() => {
     loadFpTune()   // this browser's tune from /shimmer/dev/hands, if any
+    loadActions()  // M82: and its drafted actions (fp-actions.ts)
     ;(window as unknown as { __openHands?: unknown }).__openHands = { R: () => ({ ...st.current.R }), L: () => ({ ...st.current.L }), air: () => st.current.air, visible: () => rig.root.visible }
     return () => { rig.root.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); (o.material as THREE.Material).dispose() } }) }
   }, [rig])

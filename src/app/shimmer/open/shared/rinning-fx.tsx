@@ -11,6 +11,7 @@ import { useRef, type MutableRefObject } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { newReel, stepReel, landed, gone, CAST_RANGE, type Reel, type Rinn } from './reel'
+import { heldRodTip } from './held-rod'
 import { play as sfx } from './sfx'   // M90: rin-splash (proposed = silent until Alex's yay)
 import { newCast, phaseAt, passed, answer as answerCast, riseProgress, type RinCast } from '../../engine/rin-cast'
 
@@ -23,6 +24,8 @@ export interface RinningApi {
   answer(): boolean
   cancel(): void
   view(): RinView
+  /** M82 s2: performance.now() of the last cast that left (the hands play the cast action from it); -Infinity for none */
+  castAt(): number
 }
 const CAST_S = 0.7
 /** the phases a new cast may start from */
@@ -63,11 +66,12 @@ export function RinningFX({ waterY, isWater, roll, rarer, ease, api, holding, ou
   const lastReel = useRef(0)
   const tmp = useRef({ o: new THREE.Vector3(), d: new THREE.Vector3(), tip: new THREE.Vector3(), hand: new THREE.Vector3() })
 
+  const castAt = useRef(-Infinity)
   api.current = {
     cast() {
       const st = s.current
       if (!out || !st.aim || !READY(st.phase)) return false
-      st.phase = 'casting'; st.t0 = performance.now(); st.target.copy(st.aim); st.reel = null; st.rinn = null
+      st.phase = 'casting'; st.t0 = performance.now(); castAt.current = st.t0; st.target.copy(st.aim); st.reel = null; st.rinn = null
       return true
     },
     answer() {
@@ -80,6 +84,7 @@ export function RinningFX({ waterY, isWater, roll, rarer, ease, api, holding, ou
       return true
     },
     cancel() { const st = s.current; st.phase = 'idle'; st.cast = null; st.reel = null },
+    castAt() { return castAt.current },
     view() { const st = s.current; return { phase: st.phase, reel: st.reel, rinn: st.rinn, aim: st.aim ? { x: st.aim.x, y: st.aim.y, z: st.aim.z } : null } },
   }
 
@@ -101,9 +106,11 @@ export function RinningFX({ waterY, isWater, roll, rarer, ease, api, holding, ou
     // of the screen like a fence post)
     T.hand.copy(T.o).addScaledVector(T.d, 0.32).addScaledVector(right, 0.26).add(new THREE.Vector3(0, -0.3, 0))
     T.tip.copy(T.o).addScaledVector(T.d, 0.95).addScaledVector(right, 0.42).add(new THREE.Vector3(0, -0.02, 0))
+    // M82 s2: a rinstick in the right mitt (held-rod.tsx) is THE rod: the line leaves its tip and the camera rod stands down
+    const inHand = out && heldRodTip(T.tip)
     if (rod.current) {
-      rod.current.visible = out
-      if (out) { const mid = T.hand.clone().lerp(T.tip, 0.5), len = T.hand.distanceTo(T.tip); rod.current.position.copy(mid); rod.current.scale.set(1, len, 1); rod.current.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), T.tip.clone().sub(T.hand).normalize()) }
+      rod.current.visible = out && !inHand
+      if (out && !inHand) { const mid = T.hand.clone().lerp(T.tip, 0.5), len = T.hand.distanceTo(T.tip); rod.current.position.copy(mid); rod.current.scale.set(1, len, 1); rod.current.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), T.tip.clone().sub(T.hand).normalize()) }
     }
     if (aimRing.current) { aimRing.current.visible = !!st.aim && READY(st.phase); if (st.aim) aimRing.current.position.set(st.aim.x, WATER_Y + 0.03, st.aim.z) }
     if (!out && st.phase !== 'idle') { st.phase = 'idle'; st.cast = null; st.reel = null }   // stowed: the line comes in

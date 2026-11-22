@@ -22,10 +22,11 @@ export const POSE_FIELDS = ['x', 'y', 'z', 'pitch', 'roll', 'yaw'] as const
 
 /** the shipped motions (right mitt, camera space, metres / radians / ms). Change them in the tuner, then paste them here. */
 export const ACTION_DEFAULTS: Readonly<Record<string, HandAction>> = {
+  // in game it plays ONCE from the click (key 1's move is skipped), and the float leaves on the click: keep the flick early
   'rinstick.cast': { id: 'rinstick.cast', item: 'rinstick', label: 'Rinstick · cast', keys: [
-    { x: 0.355, y: -0.415, z: -0.56, pitch: -1.4, roll: 0.63, yaw: 0, ms: 260, hold: 120, ease: 'inout' },   // ready
-    { x: 0.38, y: -0.2, z: -0.44, pitch: -0.6, roll: 0.35, yaw: 0, ms: 320, hold: 80, ease: 'out' },        // back over the shoulder
-    { x: 0.3, y: -0.32, z: -0.74, pitch: -1.9, roll: 0.5, yaw: 0, ms: 140, hold: 260, ease: 'in' },          // the flick out
+    { x: 0.355, y: -0.415, z: -0.56, pitch: -1.4, roll: 0.63, yaw: 0, ms: 260, hold: 0, ease: 'inout' },     // ready
+    { x: 0.38, y: -0.2, z: -0.44, pitch: -0.6, roll: 0.35, yaw: 0, ms: 150, hold: 40, ease: 'out' },        // back over the shoulder
+    { x: 0.33, y: -0.36, z: -0.7, pitch: -1.75, roll: 0.55, yaw: 0, ms: 100, hold: 260, ease: 'in' },        // the flick out
   ] },
   'melee.swing': { id: 'melee.swing', item: 'melee', label: 'Melee · swing', keys: [
     { x: 0.355, y: -0.415, z: -0.56, pitch: -1.4, roll: 0.63, yaw: 0, ms: 200, hold: 60, ease: 'inout' },   // ready
@@ -106,3 +107,13 @@ export function resetAction(id: string): void {
 }
 /** the export: one action, as JSON to paste */
 export const exportAction = (a: HandAction) => JSON.stringify({ id: a.id, keys: a.keys })
+
+/** M82 s2: an action played ONCE from `t` = 0 (ms since it started), as the pose stepper's actionR: full weight through the
+ *  action, then it hands the mitt back over FADE_MS; undefined before it starts and once it is done. */
+export const FADE_MS = 220
+export function oneShot(a: HandAction, t: number): (ActionPose & { w: number }) | undefined {
+  if (!(t >= 0)) return undefined
+  const dur = actionDuration(a, false)
+  if (t >= dur + FADE_MS) return undefined
+  return { ...sampleAction(a, t, false), w: t <= dur ? 1 : 1 - (t - dur) / FADE_MS }
+}

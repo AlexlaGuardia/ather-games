@@ -30,6 +30,8 @@ import { Canvas } from '@react-three/fiber'
 import { ProgramKeeper } from './program-keeper-view'
 import { WarmProxies } from './warm-proxies'
 import { OpenHands, type OpenHandsApi } from '../shared/open-hands'
+import { HeldRod } from '../shared/held-rod'   // M82 s2: the rinstick in the mitt
+import { ACTIONS, oneShot } from '../shared/fp-actions'
 import { FpGun, ScopeRing, fpGunAds, ADS_TIGHT, type FpGunApi } from '../shared/fp-gun'
 import { RANGE_GUNS } from '../shared/gunplay'
 import { ThirdPersonBody, dollAction, pullBack, newDrive } from '../shared/third-person'
@@ -237,6 +239,7 @@ function AtherSliceGame() {
   const [hud, setHud] = useState({ verb: 'idle', where: 'your plot' })
   const pos = useRef({ x: THRESHOLD.x, z: THRESHOLD.z, grounded: true, swimming: false })
   const handsApi = useRef<OpenHandsApi>(null)
+  const rodOutRef = useRef(false)   // M82 s2: the rinstick is out in the mitt (set at render, read by the walker tick)
   // THE GUN IN HAND + ITS SIGHTS (Alex 11-18; shared/fp-gun.tsx): drawn whenever R has a gun out (the gloves hold it now), right-click
   // aims (combat-layer sets `aiming`), the cone tightens past ADS_TIGHT, and recoil + the etched mark's flare read firedAt / charge
   const gunApi = useRef<FpGunApi>(null)
@@ -652,7 +655,8 @@ function AtherSliceGame() {
       const speed = Math.hypot(lc.hvx, lc.hvz), working = !!chanRef.current || !!fxRef.current?.busy() || !!cFxRef.current?.busy()
       // the first-person hands (hidden in third person: the doll's own hands are what you see)
       handsApi.current?.step({ now, speed, airborne: lc.airborne, hidden: frozen.current || stanceRef.current.kind === 'weapon' || third || isBuilding(),
-        castAt: handsCastAt.current, working, holding: stanceRef.current.kind === 'item' && !!h }, dt)   // M45: the mitt turns to present
+        castAt: handsCastAt.current, working, holding: stanceRef.current.kind === 'item' && !!h && !rodOutRef.current,   // M45: the mitt turns to present (not the rinstick: it is held, not shown)
+        actionR: rodOutRef.current ? oneShot(ACTIONS['rinstick.cast'], now - (rinApi.current?.castAt() ?? -Infinity)) : undefined }, dt)   // M82 s2: a cast plays the authored cast
       handsApi.current?.seat(now - handsCastAt.current < 640 ? 1 : 0)
       { // the held gun: out only with a gun drawn, first person, nothing owning the screen
         const sg = sightRef.current, gun = stanceRef.current.kind === 'weapon' && !third && !frozen.current && !isBuilding() ? RANGE_GUNS.find(g => g.id === h) ?? null : null
@@ -1275,6 +1279,7 @@ function AtherSliceGame() {
   const zoneName = zone.kind === 'plot' ? 'Your plot' : zone.kind === 'glade' ? GLADE_ZONE_NAME : 'The Wilds'
   // Phone taps: only what applies here and now, each the key this page already handles.
   const meleeReady = useMeleeReady()
+  const rodOut = zone.kind === 'wilds' && !!ww && held === BAIT && !!toolsRef.current.rinning; rodOutRef.current = rodOut   // M82 s2: exactly when RinningFX is out
   const touchActions: TouchAction[] = [
     ...(useLabel(heldUseNow) ? [{ code: 'KeyE', key: 'E', label: useLabel(heldUseNow)!, near: true }]   // M45: the Use button for what is in hand
       : prompt ? [{ code: 'KeyE', key: 'E', label: prompt.startsWith('E · Gregory') ? 'Gregory' : 'use', near: true }] : []),
@@ -1303,7 +1308,7 @@ function AtherSliceGame() {
       >
         <ProgramKeeper />
         {zone.kind === 'wilds' && <WarmProxies key={epoch} />}   {/* M44: late-mounting shader variants, compiled behind the arrival veil */}
-        <OpenHands ref={handsApi} held={<HeldItem id={stance.kind === 'item' ? held : null} />} />
+        <OpenHands ref={handsApi} held={rodOut ? <HeldRod /> : <HeldItem id={stance.kind === 'item' ? held : null} />} />
         <FpGun ref={gunApi} />
         <ThirdPersonBody drive={dollDrive} camRef={camRef} />
         {zone.kind === 'plot' && <BuildPointer />}

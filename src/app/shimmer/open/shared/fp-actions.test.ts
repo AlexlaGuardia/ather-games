@@ -2,7 +2,7 @@
 // between them, wraps when looping and clamps as a one-shot; the draft survives a reload and junk never loads; and the pose
 // stepper hands the right mitt to an action at weight 1 and leaves it alone at weight 0.
 //   npx tsx src/app/shimmer/open/shared/fp-actions.test.ts
-import { ACTION_DEFAULTS, ACTION_IDS, ACTIONS, ACTIONS_KEY, sampleAction, actionDuration, keyStart, cleanAction, loadActions, setAction, resetAction, exportAction, type HandAction } from './fp-actions'
+import { ACTION_DEFAULTS, ACTION_IDS, ACTIONS, ACTIONS_KEY, oneShot, FADE_MS, sampleAction, actionDuration, keyStart, cleanAction, loadActions, setAction, resetAction, exportAction, type HandAction } from './fp-actions'
 import { newFpState, stepFpHands, angleQ, eulerQ, type FpInput } from './fp-hands-pose'
 
 let pass = 0, fail = 0
@@ -85,6 +85,20 @@ ok(near(off.R.x, none.R.x) && near(off.R.y, none.R.y) && angleQ(off.R.q, none.R.
 ok(near(on.L.x, none.L.x) && near(on.L.y, none.L.y), 'the left hand is never touched')
 const half = run(0.5)
 ok(near(half.R.x, (none.R.x + target.x) / 2, 1e-6), 'w=0.5: halfway')
+
+// ── oneShot (M82 s2): the game's cast plays once from the click, full weight, then hands the mitt back ──
+{
+
+  const d = actionDuration(A, false)
+  ok(oneShot(A, -1) === undefined && oneShot(A, -Infinity) === undefined && oneShot(A, NaN) === undefined, 'oneShot: nothing before the cast')
+  ok(oneShot(A, 0)?.w === 1 && near(oneShot(A, 0)!.x, 0), 'oneShot: starts ON key 1 at full weight')
+  ok(oneShot(A, d)?.w === 1 && near(oneShot(A, d)!.x, 2), 'oneShot: ends on the last key at full weight')
+  ok(near(oneShot(A, d + FADE_MS / 2)!.w, 0.5), 'oneShot: half faded halfway through the fade')
+  ok(oneShot(A, d + FADE_MS) === undefined, 'oneShot: gone once faded')
+  ok(near(oneShot(A, 50 + 100)!.x, sampleAction(A, 150, false).x), 'oneShot samples the one-shot clock')
+  const cast = ACTION_DEFAULTS['rinstick.cast'], flick = keyStart(cast, 2, false) + cast.keys[2].ms
+  ok(flick <= 400, `the shipped cast's flick lands by 400 ms (the float leaves on the click): ${flick} ms`)
+}
 
 console.log(`fp-actions: ${pass} passed, ${fail} failed`)
 if (fail) process.exit(1)
