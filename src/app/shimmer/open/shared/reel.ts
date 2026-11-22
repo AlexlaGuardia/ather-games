@@ -60,6 +60,8 @@ export const BOB_ACCEL = 2.4, BOB_DRAG = 3.2
 export const STRAIN_S = 0.35
 /** how close (fraction of the half-width) to the edge counts as touching it */
 const EDGE = 0.97
+/** M88: how far (bar) the zone's far edge may pull off the wall while a bobber rests on the wall without that counting as an edge */
+const WALL_GRACE = 0.04
 
 export interface Reel {
   pattern: Pattern
@@ -114,7 +116,12 @@ export function stepReel(r: Reel, dt: number, holding: boolean, rng: () => numbe
   if (n.bob < 0) { n.bob = 0; n.bobV = Math.max(0, n.bobV) }
   if (n.bob > 1) { n.bob = 1; n.bobV = Math.min(0, n.bobV) }
   // the edge: at or past it strains the line; inside it eases back twice as fast
-  const off = Math.abs(n.bob - n.zone) / n.half
+  // ★ M88 (Alex 11-22): the far wall is open water, not an edge. A zone pinned there with the bobber at or beyond its far
+  // side (let go, resting at 0) is INSIDE: before this it read off = 1.0 and the rinn was gone with nothing to do.
+  // A bobber resting ON the wall also gets a short grace while the zone pulls off it (WALL_GRACE of bar), so the turn from
+  // fighting to coming in is a cue to take line, not an instant strain.
+  const atWall = n.bob <= n.zone && (n.zone - n.half <= 1e-6 || (n.bob <= 1e-6 && n.zone - n.half <= WALL_GRACE))
+  const off = atWall ? 0 : Math.abs(n.bob - n.zone) / n.half
   n.strain = off >= EDGE ? n.strain + dt / STRAIN_S : Math.max(0, n.strain - 2 * dt / STRAIN_S)
   if (n.strain >= 1) { n.state = 'gone'; return n }
   n.progress = Math.max(0, Math.min(1, (n.zone - 0.22) / (1 - n.half - 0.22)))

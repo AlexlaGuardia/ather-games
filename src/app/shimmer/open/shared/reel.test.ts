@@ -49,5 +49,35 @@ ok(eased > mean4, `ease: a better rinstick landed no more tier 4 (${(eased * 100
   ok(gone(s), `edge: held past the edge for ${STRAIN_S} s and it did not get away`)
 }
 
+// ── M88 (Alex 11-22 playtest): the far wall is open water, never an edge ──────────────────────────────────────────────
+// A rinn run out to the far end pins its zone there (left edge at 0); a keeper who lets go rests the bobber at 0. That is
+// NOT touching the zone's edge: before M88 it read off = 1.0 and the rinn was gone 0.35 s later with nothing to do.
+{ let r: Reel = { ...newReel('steady', 1, rng), zone: 0.17, half: 0.17, zoneV: -0.2, bob: 0, bobV: 0 }
+  const hold = () => ({ ...r, leg: 1, legLeft: 5 })   // steady's fight leg the whole time: it runs out and stays pinned at the wall
+  for (let t = 0; t < 3; t += 1 / 60) { r = stepReel(hold(), 1 / 60, false, rng); if (r.state !== 'on') break }
+  ok(r.state === 'on' && r.strain === 0, `M88: zone pinned at the far wall + bobber resting at 0 for 3 s = no strain, still on (state ${r.state}, strain ${r.strain.toFixed(2)})`)
+}
+// the row's keeper (M88): hold while the zone is above the bobber, let go while it is below. Lands every pattern at tier 1.
+// (With a person's fifth-of-a-second lag a sign-only keeper oscillates out of the zone on the bobber's weight: that is
+// the designed skill, and `keen` above, which also reads the zone's motion, lands them. Measured 11-22.)
+// The discriminating one: a keeper who reads the bar but LETS GO whenever the rinn has run out to the wall (the bobber
+// comes to rest on it). Before M88 that lost roller 16/40, sulker 8/40, darter 8/40 at tier 1; now it must land them.
+{ const keeper = (pattern: Pattern, tier: number, sd: number, ctl: (r: Reel) => boolean) => {
+    seed = sd; let r = newReel(pattern, tier, rng)
+    for (let t = 0; t < 60 && r.state === 'on'; t += 1 / 60) r = stepReel(r, 1 / 60, ctl(r), rng)
+    return r.state
+  }
+  const sign = (r: Reel) => r.zone > r.bob
+  const restsAtWall = (r: Reel) => r.zone - r.half < 0.02 ? false : (r.zone - r.bob) * 6 + (r.zoneV - r.bobV) * 1.6 > 0
+  const rate: Record<string, string> = {}
+  for (const tier of [1, 2, 3, 4]) for (const pt of PATTERNS) {
+    let a = 0, b = 0
+    for (let k = 0; k < 40; k++) { if (keeper(pt, tier, 500 + k * 7, sign) === 'landed') a++; if (keeper(pt, tier, 500 + k * 7, restsAtWall) === 'landed') b++ }
+    rate[`${pt}@${tier}`] = `sign ${a} wall ${b}`
+    if (tier === 1) { ok(a === 40, `M88: the read-the-bar keeper lands every ${pt} at tier 1 (${a}/40)`); ok(b >= 38, `M88: resting on the far wall no longer loses ${pt} at tier 1 (${b}/40)`) }
+  }
+  if (process.env.REEL_RATES) console.log(JSON.stringify(rate))
+}
+
 if (fails.length) { console.error(`reel: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`reel: ${pass}/0`)
