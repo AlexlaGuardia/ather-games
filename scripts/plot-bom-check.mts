@@ -94,10 +94,10 @@ try {
   ok(w1?.rooms[0].built === false, '   the room is not built (no floor, no roof yet)')
   await shot('bom-1-short')
   // 2. SETUP: top the test guest's own bag up to the list, reload
-  await p.evaluate(() => {
-    const inv = JSON.parse(localStorage.getItem('open.inv.v1')!); inv.slots[8] = { id: 'goldwood_plank', n: BAG }; inv.slots[9] = { id: 'stone_brick', n: 20 }
+  await p.evaluate((bag: number) => {
+    const inv = JSON.parse(localStorage.getItem('open.inv.v1')!); inv.slots[8] = { id: 'goldwood_plank', n: bag }; inv.slots[9] = { id: 'stone_brick', n: 20 }
     localStorage.setItem('open.inv.v1', JSON.stringify(inv))
-  })
+  }, BAG)
   await p.reload({ waitUntil: 'load', timeout: 180000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500); await hideCard()
   const d2 = await draftCount(); ok(d2.draft === 18, `2. the plan survives a reload as a draft (${d2.draft} of ${d2.total})`)
