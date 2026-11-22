@@ -34,10 +34,10 @@ import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Tra
 import { pitstopsUnlocked, visitNear } from './pitstops'
 import { Towns } from '../towns/Towns'
 import { MarketView, DeedCard } from '../business/market-view'
-import { ShipyardPlots, type DeedYardState } from './shipyard-plot'
+import { ShipyardPlots, parkedCourserSpot, type DeedYardState, type CarLink } from './shipyard-plot'
 import { inShipyardPlot } from '../business/shipyards'
 import { useIsOwner } from '@/app/_components/useIsOwner'
-import { extraGround } from '../foot-extras'
+import { extraGround, extraCarGround, carPush } from '../foot-extras'
 import { useTycoon } from '../business/use-tycoon'
 import { ShopPanel } from '../business/shop-panel'
 import { RunesmithPanel, IdonyPanel, commitImbue } from '../business/smith-panel'
@@ -751,8 +751,11 @@ export interface RideHud { x: number; z: number; yaw: number; mph: number; frac:
 const LANDING = 'rune-hold'
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
-function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus }: { talkFocus?: React.MutableRefObject<{ x: number; y: number; z: number } | null>; castFx: { surge: React.MutableRefObject<{ until: number; mult: number }>; impulse: React.MutableRefObject<CastSpec | null>; gateStep: (lc: Parameters<ReturnType<typeof useCasts>['gateStep']>[0], yaw: number, dt: number, groundAt: (x: number, z: number) => number) => void }; track: React.MutableRefObject<Track>; R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<{ tp?: (x: number, z: number, yaw: number) => void }> }) {
+interface DriverCtl { tp?: (x: number, z: number, yaw: number) => void; car?: () => { x: number; y: number; z: number; yaw: number; speed: number; foot: boolean } }
+function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus }: { talkFocus?: React.MutableRefObject<{ x: number; y: number; z: number } | null>; castFx: { surge: React.MutableRefObject<{ until: number; mult: number }>; impulse: React.MutableRefObject<CastSpec | null>; gateStep: (lc: Parameters<ReturnType<typeof useCasts>['gateStep']>[0], yaw: number, dt: number, groundAt: (x: number, z: number) => number) => void }; track: React.MutableRefObject<Track>; R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<DriverCtl> }) {
   const { camera, gl } = useThree()
+  // M49 s5: the courser's ground = the region's, raised where a shipyard plot stands (its floor + ramps: foot-extras.ts)
+  const cg = (x: number, z: number, y?: number) => Math.max(R.groundAt(x, z, y), extraCarGround(x, z))
   const spawn = useMemo(() => {
     const road = R.meta.roads.find(r => r.from === 'ashfeld' && r.to === 'millbrook') ?? R.meta.roads[0]
     const [ax, az] = road.pts[1], [bx, bz] = road.pts[3]
@@ -807,10 +810,11 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
   }
 
   ctl.current.tp = (x: number, z: number, yaw: number) => place(x, z, yaw)
+  ctl.current.car = () => { const c = car.current; return { x: c.x, y: c.y, z: c.z, yaw: c.yaw, speed: Math.hypot(c.vx, c.vz), foot: mode.current === 'foot' } }
   const place = (x: number, z: number, yaw: number, speed = 0) => {
     // a spot inside a bore is ON ITS FLOOR (a teleport or an R-respawn there put the car on the summit above it)
     const bore = R.tunnelAt(x, z), hint = bore && bore.cover > 2 ? bore.y : undefined
-    const gnd = (gx: number, gz: number) => R.groundAt(gx, gz, hint)
+    const gnd = (gx: number, gz: number) => cg(gx, gz, hint)
     const c = createCourser(x, z, yaw, gnd); c.vx = -Math.sin(yaw) * speed; c.vz = -Math.cos(yaw) * speed
     car.current = c; camPos.set(x + Math.sin(yaw) * 8, gnd(x, z) + 3, z + Math.cos(yaw) * 8)
   }
@@ -885,6 +889,9 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
       }
       const u = new URL(window.location.href); u.searchParams.delete('at'); window.history.replaceState(null, '', u)
     }
+    // M49 s5: a courser parked in a shipyard's garage waits in its bay (the plot mounts later: stand it on the floor now)
+    const pk = parkedCourserSpot(R, getFleet().active)
+    if (pk) { place(pk.x, pk.z, pk.yaw); car.current.y = pk.y }
     return () => {
       window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur)
       window.removeEventListener('mousemove', move); gl.domElement.removeEventListener('click', click)
@@ -914,8 +921,9 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
       acc.current -= STEP
       // the ground the car is ON: told its own height, so under a hill it drives the bore's floor, not the summit
       const cc = c
-      tickCourser(c, { throttle, steer, handbrake, dt: STEP, surface }, (x, z) => R.groundAt(x, z, cc.y), tuneRef.current)
+      tickCourser(c, { throttle, steer, handbrake, dt: STEP, surface }, (x, z) => cg(x, z, cc.y), tuneRef.current)
       tunnelWall(R, c) || bridgeRail(R, c) || roadRail(R, c)
+      carPush(c)   // M49 s5: a shipyard's fence, retaining walls and garage walls
       const lx = R.meta.sizeX / 2 - 3, lz = R.meta.sizeZ / 2 - 3
       if (Math.abs(c.x) > lx) { c.x = Math.sign(c.x) * lx; c.vx *= -0.3 }
       if (Math.abs(c.z) > lz) { c.z = Math.sign(c.z) * lz; c.vz *= -0.3 }
@@ -972,7 +980,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
       const fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw), rx = Math.cos(c.yaw), rz = -Math.sin(c.yaw)
       let pitch = 0, roll = 0
       if (!c.airborne) {
-        const g = (x: number, z: number) => R.groundAt(x, z, c.y)     // the surface the car is ON (a deck, not the river)
+        const g = (x: number, z: number) => cg(x, z, c.y)     // the surface the car is ON (a deck, not the river; a shipyard's floor)
         pitch = Math.atan2(g(c.x + fx * 1.3, c.z + fz * 1.3) - g(c.x - fx * 1.3, c.z - fz * 1.3), 2.6)
         roll = Math.atan2(g(c.x + rx * 0.9, c.z + rz * 0.9) - g(c.x - rx * 0.9, c.z - rz * 0.9), 1.8)
       } else pitch = Math.atan2(c.vy, Math.max(4, Math.hypot(c.vx, c.vz))) * 0.6
@@ -1232,7 +1240,13 @@ function ContinentRideGame() {
   }, [ledger.active, R, hud.x, hud.z, hud.yaw])
   // ── SHELLBACK FERRIES (canon: Shellbacks pull ferries across rivers). Stop at a landing, E, pay the fare, and the
   // ferry carries you to the far landing. The crossing itself is a fade for now: the ferry's look is a brief for later.
-  const ctl = useRef<{ tp?: (x: number, z: number, yaw: number) => void }>({})
+  const ctl = useRef<DriverCtl>({})
+  // M49 s5: the shipyard garages read the courser and switch which one is driven
+  const carLink = useMemo<CarLink>(() => ({
+    pose: () => ctl.current.car?.() ?? null,
+    active: () => getFleet().active,
+    take: (id, x, z, yaw) => { const f = pickCourser(getFleet(), id); if (f) setFleet(f); ctl.current.tp?.(x, z, yaw) },
+  }), [])
   const [ferrying, setFerrying] = useState(false)
   const ferryAt = useMemo(() => (R && hud.mph < 4 ? ferryLanding(R, hud.x, hud.z, 14) : null), [R, hud.x, hud.z, hud.mph])
   const ferryRef = useRef(ferryAt); ferryRef.current = ferryAt
@@ -1486,7 +1500,7 @@ function ContinentRideGame() {
           <DoorFolk R={R} focus={focus} talking={talk?.key ?? null} />
           <RemoteKeepers peers={mp.peers} me={() => focus.current} />
           <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={openDoor} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} />
-          <ShipyardPlots R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState} owned={ledger.shipyards} ownAll={isOwner && ownAllFlag}
+          <ShipyardPlots R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState} owned={ledger.shipyards} ownAll={isOwner && ownAllFlag} car={carLink}
             enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} />
           <Posts R={R} />
           <Roadside R={R} />

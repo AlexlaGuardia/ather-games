@@ -11,7 +11,7 @@
 // Retired here: the s1-s3 small yard (12 x 8 beside a town building). Pieces left in one go back to the bag, once.
 // Mount (inside the Canvas): <ShipyardPlots R focus track held enabled owned={ledger.shipyards} ownAll={devFlag} onState />
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import dynamic from 'next/dynamic'
 import * as THREE from 'three'
 import type { Region } from '../region'
@@ -22,8 +22,13 @@ import { FURNITURE, isPiece } from '../ather/furniture'
 import { HOLD_MS } from '../shared/stance'
 import { hudSay } from '../shared/game-hud'
 import { DEED_GRID, DEED_PALETTES, emptyDeed, parseDeed, place, pickUp, itemAt, placeRefusal, setPalette, paletteOf, cellAtLocal, pieceCentre, type DeedState, type Footprint } from '../business/deed-grid'
-import { shipyardSites, ownsShipyard, plotStoreBase, oldYardStoreBase, type ShipyardSite } from '../business/shipyards'
-import { plotToWorld, plotToLocal, plotRotY, plotGround, plotBoxes, placedBoxes, blockedCells, PLOT, PLOT_GATE_W, LANDING_D, SLIP_W, RAMP_RISE, type PlotLayout, type PlotPiece } from '../business/shipyard-plots'
+import { shipyardSites, ownsShipyard, plotStoreBase, oldYardStoreBase, garageStoreBase, type ShipyardSite } from '../business/shipyards'
+import { plotToWorld, plotToLocal, plotRotY, plotGround, plotBoxes, plotCarBoxes, placedBoxes, blockedCells, bayAt, bayPose, PLOT, PLOT_GATE_W, LANDING_D, SLIP_W, RAMP_RISE, CAR_RISE, type PlotLayout, type PlotPiece } from '../business/shipyard-plots'
+import { sanitizeGarage, garageStep, takeOutRefusal, emptyGarage, type GarageState } from '../business/garage-bays'
+import { modelById } from '../business/courser-lot'
+import { buildCourser } from '../courser-model'
+import { getFleet } from '../shared/fleet'
+import { aimPick, PICK_REACH, type Pickable } from '../shared/aim-pick'
 import { setFootExtra } from '../foot-extras'
 import { bodyHits, type OBox } from '../foot-solids'
 
@@ -57,7 +62,7 @@ function returnOldYards(keys: string[]) {
   if (back) hudSay(`Your shipyard moved to its own plot: ${back} yard piece${back > 1 ? 's are' : ' is'} back in your bag.`, 'item', 6)
 }
 
-export interface DeedYardState { inYard: boolean; atBoard: boolean; action: 'place' | 'pick up' | 'look' | null }
+export interface DeedYardState { inYard: boolean; atBoard: boolean; action: 'place' | 'pick up' | 'look' | 'take out' | null }
 const IDLE: DeedYardState = { inYard: false, atBoard: false, action: null }
 type Probe = Record<string, unknown>
 type ProbeWin = { __shipyards?: Record<string, Probe> & { sites?: () => unknown } }
@@ -73,7 +78,31 @@ interface Props {
   owned?: readonly string[]
   /** the owner's dev flag (?own=all) */
   ownAll?: boolean
+  /** s5: the courser (the continent's Driver): where it is, which one is driven, and the switch a garage makes */
+  car?: CarLink
 }
+export interface CarLink {
+  pose: () => { x: number; y: number; z: number; yaw: number; speed: number; foot: boolean } | null
+  active: () => string
+  /** make courser `id` the driven one and stand it at (x, z, yaw) */
+  take: (id: string, x: number, z: number, yaw: number) => void
+}
+const garageKeyOf = (base: string) => gardenKey(base)
+function loadGarage(base: string, cap: number): GarageState {
+  try { const raw = localStorage.getItem(garageKeyOf(base)); return sanitizeGarage(raw ? JSON.parse(raw) : null, cap, getFleet().owned) } catch { return emptyGarage(cap) }
+}
+function saveGarage(base: string, g: GarageState) { try { localStorage.setItem(garageKeyOf(base), JSON.stringify(g)) } catch { /* not remembered */ } }
+/** M49 s5: where the courser `active` waits, if a garage holds it (the continent puts the car back in its bay on load,
+ *  not on the road): its bay pose + the plot's floor, or null */
+export function parkedCourserSpot(R: Region, active: string): { x: number; y: number; z: number; yaw: number } | null {
+  for (const s of shipyardSites(R)) {
+    const k = loadGarage(garageStoreBase(s.key), s.plot.tier.garage).bays.indexOf(active)
+    if (k >= 0) return { ...bayPose(s.plot, k), y: s.plot.floor }
+  }
+  return null
+}
+/** a parked courser as a walker + courser wall (its body, a little generous) */
+const PARKED_HALF = { w: 1.0, l: 2.2, h: 1.6 }
 
 export function ShipyardPlots({ R, owned, ownAll = false, onState, ...rest }: Props) {
   const sites = useMemo(() => (R ? shipyardSites(R) : []), [R])
@@ -106,17 +135,32 @@ export function ShipyardPlots({ R, owned, ownAll = false, onState, ...rest }: Pr
   ))}</>
 }
 
-function Plot({ R, site, own, focus, track, held, enabled, onReport }: Omit<Props, 'onState' | 'owned' | 'ownAll'> & { site: ShipyardSite; own: boolean; onReport: (s: DeedYardState | null) => void }) {
+function Plot({ R, site, own, focus, track, held, enabled, onReport, car }: Omit<Props, 'onState' | 'owned' | 'ownAll'> & { site: ShipyardSite; own: boolean; onReport: (s: DeedYardState | null) => void }) {
   const L = site.plot, f = L.frame, floor = L.floor, store = plotStoreBase(site.key)
   const blocked = useMemo(() => blockedCells(L), [L])
   const board = useMemo(() => { const b = L.pieces.find(p => p.kind === 'board')!; return { lx: b.lx, lz: b.lz, ...plotToWorld(f, b.lx, b.lz) } }, [L, f])
   const ownRef = useRef(own); ownRef.current = own
   const [deed, setDeed] = useState<DeedState>(emptyDeed)
-  const boxes = useRef<OBox[]>([])
-  useEffect(() => { boxes.current = [...plotBoxes(L, !own), ...placedBoxes(L, deed, id => FURNITURE[id] ?? null)] }, [L, deed, own])
+  const boxes = useRef<OBox[]>([]), carBoxes = useRef<OBox[]>([])
+  // s5: the garage (which courser stands in which bay), saved per shipyard
+  const gStore = garageStoreBase(site.key), cap = L.tier.garage
+  const [garage, setGarage] = useState<GarageState>(() => emptyGarage(cap))
+  useEffect(() => setGarage(loadGarage(gStore, cap)), [gStore, cap])
+  const garageRef = useRef(garage); garageRef.current = garage
+  const commitGarage = (g: GarageState) => { garageRef.current = g; setGarage(g); saveGarage(gStore, g) }
+  const carRef = useRef(car); carRef.current = car
+  const [active, setActive] = useState<string>(() => car?.active() ?? '')
+  /** the OTHER coursers standing in bays (the driven one is the live car): bay, id, pose */
+  const parked = useMemo(() => garage.bays.flatMap((id, k) => (id && id !== active ? [{ k, id, ...bayPose(L, k) }] : [])), [garage, active, L])
   useEffect(() => {
-    const fk = `plot:${site.key}`
-    setFootExtra(fk, { ground: plotGround(L), boxes: () => boxes.current })
+    const solid = parked.map(p => ({ cx: p.x, cz: p.z, ux: L.frame.ax[0], uz: L.frame.ax[1], vx: L.frame.az[0], vz: L.frame.az[1], hu: PARKED_HALF.l, hv: PARKED_HALF.w, y0: floor - 0.1, y1: floor + PARKED_HALF.h }))
+    const placed = placedBoxes(L, deed, id => FURNITURE[id] ?? null)
+    boxes.current = [...plotBoxes(L, !own), ...placed, ...solid]
+    carBoxes.current = [...plotCarBoxes(L, !own), ...placed, ...solid]
+  }, [L, deed, own, parked, floor])
+  useEffect(() => {
+    const fk = `plot:${site.key}`, g = plotGround(L)
+    setFootExtra(fk, { ground: g, boxes: () => boxes.current, carGround: g, carBoxes: () => carBoxes.current })
     return () => setFootExtra(fk, null)
   }, [L, site.key])
   useEffect(() => setDeed(loadPlot(store, blocked)), [store, blocked])
@@ -126,9 +170,19 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport }: Omit<Prop
   const rot = useRef(0)
   const heldRef = useRef(held); heldRef.current = held
   const enabledRef = useRef(enabled); enabledRef.current = enabled
-  const aim = useRef<{ inYard: boolean; atBoard: boolean; cell: { cx: number; cz: number } | null }>({ inYard: false, atBoard: false, cell: null })
+  const aim = useRef<{ inYard: boolean; atBoard: boolean; cell: { cx: number; cz: number } | null; bay: number }>({ inYard: false, atBoard: false, cell: null, bay: -1 })
+  const carBay = useRef(-1)
+  const { camera } = useThree()
 
-  const act = useRef<{ place: () => void; turn: () => void; pick: () => void; look: () => void }>({ place() {}, turn() {}, pick() {}, look() {} })
+  const act = useRef<{ place: () => void; turn: () => void; pick: () => void; look: () => void; take: () => void }>({ place() {}, turn() {}, pick() {}, look() {}, take() {} })
+  act.current.take = () => {
+    const k = aim.current.bay, c = carRef.current; if (k < 0 || !c) return
+    const g = garageRef.current, act0 = c.active(), why = takeOutRefusal(g, k, act0, carBay.current >= 0 && g.bays[carBay.current] === act0)
+    if (why) { hudSay(why === 'loose' ? `Park the ${modelById(act0).name} in a bay here first.` : 'Nothing to take out.', 'info'); return }
+    const id = g.bays[k]!, p = bayPose(L, k)
+    c.take(id, p.x, p.z, p.yaw); setActive(id)
+    hudSay(`The ${modelById(id).name} is yours to drive.`, 'item')
+  }
   act.current.place = () => {
     const id = heldRef.current, c = aim.current.cell
     if (!id || !isPiece(id) || !c) return
@@ -161,6 +215,7 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport }: Omit<Prop
       if (e.code === 'DeedTurn') { if (aim.current.inYard) act.current.turn(); return }
       if (e.code !== 'KeyE' || e.repeat || !enabledRef.current) return
       const a = aim.current
+      if (a.bay >= 0) { act.current.take(); return }
       if (a.atBoard) { act.current.look(); return }
       if (!a.inYard || !ownRef.current) return
       const id = heldRef.current
@@ -184,23 +239,45 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport }: Omit<Prop
       state: () => deedRef.current, aim: () => ({ ...aim.current, rot: rot.current }),
       stored: () => { try { return localStorage.getItem(gardenKey(store)) } catch { return null } },
       blocked: (cx: number, cz: number) => blocked(cx, cz),
+      garage: () => ({ bays: garageRef.current.bays.slice(), carBay: carBay.current, aimBay: aim.current.bay, active: carRef.current?.active() ?? null, stored: (() => { try { return localStorage.getItem(garageKeyOf(gStore)) } catch { return null } })() }),
+      bayPose: (k: number) => bayPose(L, k), carRamp: () => L.carRamp,
     }
     const w = window as unknown as ProbeWin
     w.__shipyards = Object.assign(w.__shipyards ?? {}, { [site.key]: probe })
     return () => { if (w.__shipyards?.[site.key] === probe) delete w.__shipyards[site.key] }
-  }, [site.key, f, floor, L, board, store, blocked])
+  }, [site.key, f, floor, L, board, store, blocked, gStore])
 
   // per frame: the aim, the ghost, the local grid, the phone pill
   const ghost = useRef<THREE.Group>(null), ghostMat = useRef<THREE.MeshBasicMaterial>(null), grid = useRef<THREE.Group>(null)
   const last = useRef('')
-  useFrame(() => {
+  const lastG = useRef(0)
+  useFrame(({ clock }) => {
     const me = focus.current, tr = track.current; if (!me || !tr) return
+    // s5: the garage reads the courser four times a second (a park is a stop, not a frame)
+    const c = carRef.current, cp = c?.pose()
+    if (c && cp && clock.getElapsedTime() - lastG.current > 0.25) {
+      lastG.current = clock.getElapsedTime()
+      const a = c.active(); if (a !== active) setActive(a)
+      carBay.current = bayAt(L, cp.x, cp.z, cp.y)
+      if (ownRef.current) {
+        const r = garageStep(garageRef.current, a, carBay.current, cp.speed < 0.6)
+        if (r.ev) { commitGarage(r.g); hudSay(r.ev.kind === 'parked' ? `The ${modelById(r.ev.id).name} parked in bay ${r.ev.bay + 1}` : `The ${modelById(r.ev.id).name} out of bay ${r.ev.bay + 1}`, 'info') }
+      }
+    }
+    // on foot: E takes out the courser the crosshair is on (M60's one rule: within 3 m, under the crosshair)
+    let bay = -1
+    if (cp?.foot && ownRef.current && parked.length) {
+      const cands: Pickable<number>[] = parked.map(p => ({ x: p.x, z: p.z, y0: floor, y1: floor + PARKED_HALF.h, r: 1.6, item: p.k }))
+      const dir = camera.getWorldDirection(new THREE.Vector3())
+      bay = aimPick(cands, camera.position, dir, me, PICK_REACH + 1.2) ?? -1
+    }
+    aim.current.bay = bay
     const l = plotToLocal(f, me.x, me.z)
     const inYard = Math.abs(l.lx) < H + 0.3 && Math.abs(l.lz) < H + 0.3 && Math.abs(me.y - floor) < 2.5
     const atBoard = Math.hypot(me.x - board.x, me.z - board.z) < BOARD_REACH
     const ax = me.x - Math.sin(tr.yaw) * AIM, az = me.z - Math.cos(tr.yaw) * AIM, al = plotToLocal(f, ax, az)
     const cell = inYard ? cellAtLocal(KIND, al.lx, al.lz) : null
-    aim.current = { inYard, atBoard, cell }
+    aim.current = { inYard, atBoard, cell, bay }
     const id = heldRef.current, holding = !!id && isPiece(id) && ownRef.current
     if (grid.current) {
       grid.current.visible = holding && !!cell
@@ -215,7 +292,7 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport }: Omit<Prop
         if (ghostMat.current) ghostMat.current.color.set(placeRefusal(deedRef.current, KIND, fpOf, id, cell.cx, cell.cz, rot.current, -1, blocked) ? '#e0604a' : '#7fe0a0')
       }
     }
-    const action: DeedYardState['action'] = !enabledRef.current ? null : atBoard ? (ownRef.current ? 'look' : null) : !inYard || !ownRef.current ? null
+    const action: DeedYardState['action'] = !enabledRef.current ? null : bay >= 0 ? 'take out' : atBoard ? (ownRef.current ? 'look' : null) : !inYard || !ownRef.current ? null
       : holding ? (cell ? 'place' : null) : cell && itemAt(deedRef.current, fpOf, cell.cx, cell.cz) >= 0 ? 'pick up' : null
     const key = `${inYard}|${atBoard}|${action}`
     if (key !== last.current) { last.current = key; onReport({ inYard, atBoard, action }) }
@@ -230,6 +307,8 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport }: Omit<Prop
       <Landing L={L} />
       {L.slip && <Slip L={L} />}
       {L.pieces.map((p, k) => <Piece key={k} L={L} p={p} color={pal.color} accent={pal.accent} />)}
+      <GarageRoof L={L} />
+      {parked.map(p => <ParkedCourser key={`${p.k}:${p.id}`} id={p.id} x={p.x} y={floor} z={p.z} yaw={p.yaw} />)}
       <group ref={grid} visible={false} rotation={[0, ry, 0]}><GridLines /></group>
       <group ref={ghost} visible={false}>
         <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[0.96, 0.96]} /><meshBasicMaterial ref={ghostMat} color="#7fe0a0" transparent opacity={0.45} depthWrite={false} /></mesh>
@@ -297,11 +376,17 @@ function Landing({ L }: { L: PlotLayout }) {
     const dy = L.ramp.L * RAMP_RISE, len = Math.hypot(L.ramp.L, dy), m = plotToWorld(f, g + L.ramp.L / 2, zc)
     return { m, len, e: new THREE.Euler(0, ry, -Math.atan2(dy, L.ramp.L), 'YZX'), dy }
   }, [L, f, g, zc, ry])
-  const rail = useMemo(() => [[(-g + g + L.ramp.L) / 2, -H - LANDING_D, L.floor - L.ramp.L * RAMP_RISE / 2 - 0.2, PLOT_GATE_W + L.ramp.L, 1.2, 0.1]] as [number, number, number, number, number, number][], [L, g])
+  const carSlope = useMemo(() => {
+    if (L.carRamp.L < 0.05) return null
+    const dy = L.carRamp.L * CAR_RISE, len = Math.hypot(L.carRamp.L, dy), m = plotToWorld(f, -g - L.carRamp.L / 2, zc)
+    return { m, len, e: new THREE.Euler(0, ry, Math.atan2(dy, L.carRamp.L), 'YZX'), dy }
+  }, [L, f, g, zc, ry])
+  const rail = useMemo(() => [[(L.ramp.L - L.carRamp.L) / 2, -H - LANDING_D, L.floor - Math.max(L.ramp.L * RAMP_RISE, L.carRamp.L * CAR_RISE) / 2 - 0.2, PLOT_GATE_W + L.ramp.L + L.carRamp.L, 1.2, 0.1]] as [number, number, number, number, number, number][], [L])
   return (
     <group>
       <mesh position={[flat.x, L.floor - 0.08, flat.z]} rotation={[0, ry, 0]}><boxGeometry args={[PLOT_GATE_W, 0.16, LANDING_D]} /><meshLambertMaterial color={DECK} /></mesh>
       {slope && <mesh position={[slope.m.x, L.floor - slope.dy / 2 - 0.08, slope.m.z]} rotation={slope.e}><boxGeometry args={[slope.len, 0.16, LANDING_D]} /><meshLambertMaterial color={DECK} /></mesh>}
+      {carSlope && <mesh position={[carSlope.m.x, L.floor - carSlope.dy / 2 - 0.08, carSlope.m.z]} rotation={carSlope.e}><boxGeometry args={[carSlope.len, 0.16, LANDING_D]} /><meshLambertMaterial color={DECK} /></mesh>}
       <Boxes L={L} items={rail} color={DECK_DK} />
     </group>
   )
@@ -324,8 +409,15 @@ function Piece({ L, p, color, accent }: { L: PlotLayout; p: PlotPiece; color: st
       {[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, c], k) => <mesh key={k} position={[a * (p.w / 2 + 0.05), p.h / 2, c * (p.d / 2 + 0.05)]}><boxGeometry args={[0.24, p.h, 0.24]} /><meshLambertMaterial color={color} /></mesh>)}
     </group>
   )
-  if (p.kind === 'garage') return <mesh position={[w.x, y + p.h / 2, w.z]} rotation={[0, ry, 0]}><boxGeometry args={[p.w, p.h, p.d]} /><meshLambertMaterial color="#8f877a" /></mesh>
-  if (p.kind === 'bay') return <mesh position={[w.x, y + p.h / 2, w.z]} rotation={[0, ry, 0]}><boxGeometry args={[p.w, p.h, p.d]} /><meshLambertMaterial color={accent} /></mesh>
+  if (p.kind === 'garage') return null   // its roof: GarageRoof; its walls: the 'gwall' pieces
+  if (p.kind === 'gwall') return <mesh position={[w.x, y + p.h / 2, w.z]} rotation={[0, ry, 0]}><boxGeometry args={[p.w, p.h, p.d]} /><meshLambertMaterial color="#8f877a" /></mesh>
+  // the bay's lintel over its opening (the yard's trim colour) + its painted floor line
+  if (p.kind === 'bay') return (
+    <group position={[w.x, y, w.z]} rotation={[0, ry, 0]}>
+      <mesh position={[0, GARAGE_LINTEL_Y + p.h / 2, 0]}><boxGeometry args={[0.3, p.h, p.d]} /><meshLambertMaterial color={accent} /></mesh>
+      <mesh position={[0.3, 0.02, 0]}><boxGeometry args={[0.4, 0.02, p.d - 0.4]} /><meshBasicMaterial color={PAD_RING} /></mesh>
+    </group>
+  )
   if (p.kind === 'pad') return (
     <group position={[w.x, y, w.z]} rotation={[0, ry, 0]}>
       <mesh position={[0, p.h / 2, 0]}><boxGeometry args={[p.w, p.h, p.d]} /><meshLambertMaterial color={PAD} /></mesh>
@@ -342,6 +434,19 @@ function Piece({ L, p, color, accent }: { L: PlotLayout; p: PlotPiece; color: st
     </group>
   )
   return null
+}
+
+const GARAGE_LINTEL_Y = 3.6
+/** the garage's roof slab over its footprint (the walls carry it; the bays stay open under it) */
+function GarageRoof({ L }: { L: PlotLayout }) {
+  const g = L.pieces.find(p => p.kind === 'garage'); if (!g) return null
+  const w = plotToWorld(L.frame, g.lx, g.lz)
+  return <mesh position={[w.x, L.floor + g.h + 0.15, w.z]} rotation={[0, plotRotY(L.frame), 0]}><boxGeometry args={[g.w + 0.6, 0.3, g.d + 0.6]} /><meshLambertMaterial color={ROOF} /></mesh>
+}
+/** another of the keeper's coursers, standing in its bay */
+function ParkedCourser({ id, x, y, z, yaw }: { id: string; x: number; y: number; z: number; yaw: number }) {
+  const root = useMemo(() => buildCourser(modelById(id).look).root, [id])
+  return <primitive object={root} position={[x, y, z]} rotation={[0, yaw, 0]} />
 }
 
 /** a 12 x 12 cell grid (unit cells from the group's origin), shown around the aimed cell while a piece is in hand */
