@@ -247,6 +247,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - 11-22 17:0x lark (M95 pass): first-play overlay ather/page.tsx ~1450 still says "F plants a waymark" (F = Mana Skin since M80; a held waymark plants on click/E); plus the help overlay still says "Gregory, at Moonwell Glade in the Wilds" → triaged: lark rewrites both lines, the page.tsx owner wires them (stale-copy fix)
 - 11-22 17:1x Magii RULED-AFK e3a3e78 (from lark's M95 frictions): Health Draught heals the KEEPER; 'fold map' is canon; 'Ather Infusion' -> 'Ather Tonic' → routed: rename to play's worker (ids stay)
 - 11-22 18:1x Alex: "when trying to place in the home plot the corner that the gate used to be in is still marking that the space is occupied" → triaged: bug, routed to world (stale gate footprint in the plot placement grid; fix = the occupancy mask follows where the gate is now)
+- 11-22 19:2x Alex (in the hands tuner): "the rinnstick and the hand can be moved independantly.. which makes it hard to get it right" → triaged: sprites, BEFORE M81 s3a (Alex is authoring now): in the tuner the rod must ride the hand (parented: move/rotate the hand = rod follows); the rod keeps only a small grip offset relative to the mitt, edited separately and off by default
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
