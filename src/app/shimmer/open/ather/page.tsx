@@ -21,6 +21,9 @@ import { usePlotVisitNet } from './plot-visit-net'
 import { usePartyBrew } from './party-brew-net'   // M57 s3b
 import { BrewingPanel } from './brewing-panel'
 import { FURNITURE } from './furniture'
+import { AnemonyxIfHere, anemonyxPick, anemonyxHere, meetToday } from './anemonyx-view'   // M76 s2
+import { useBook } from './spirit-panels'
+import { seenCount } from './grimoire-book'
 import type { AlcStation } from './alchemy-set'
 import { useParty, storedParty } from '@/lib/party'
 import { selfPlayerId } from '../../play3d/multiplayer'
@@ -162,7 +165,7 @@ type Spawn = { x: number; z: number; yaw: number }
 const WILDS_SAFE = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z - 30.75, r: 50 }
 const gregAt = gregSpot()   // BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
 type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation }
-type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'fennel' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement }
+type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'fennel' } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement }
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
 /** M61: a mate's island alone on the Green (the frame nobody is linked into) */
@@ -218,6 +221,7 @@ function AtherSliceGame() {
   const [fog, setFog] = useState<Fog | null>(null)
   const [waymarks, setWaymarks] = useState<Waymark[]>([])
   const [garden, setGarden] = useState<Garden>(freshGarden)
+  const book = useBook(), pagesNow = garden.pages + seenCount(book)   // M76: bloomed spirits fill the grimoire; garden.pages = older grants
   const [panel, setPanel] = useState<Panel>(null)
   // M36 (Alex 11-19 'yes wire the page.tsx sfx hooks'): a panel opening / closing swishes; any button tap ticks. Only yay sounds play.
   const panelWas = useRef(false)
@@ -702,6 +706,7 @@ function AtherSliceGame() {
     else if (zone.kind === 'plot') {
       const cands: Pickable<Near>[] = [cap(GATE.x, GATE.z, 1.4, 3.2, { kind: 'gate' })]
       if (fennelRef.current) cands.push(cap(fennelRef.current.x, fennelRef.current.z, 0.45, 1.1, { kind: 'fennel' }))   // M22
+      if (anemonyxHere(clock())) cands.push(anemonyxPick<Near>({ kind: 'anemonyx' }))   // M76 s2: her day at the Green's edge
       for (const w of workPickables(worksRef.current, g)) cands.push({ ...w, item: { kind: 'work', near: w.item } })
       n = aimPick(cands, eye, dir, from)
     } else {
@@ -734,6 +739,7 @@ function AtherSliceGame() {
         : n?.kind === 'gate' ? (zone.kind === 'glade' ? 'E · the gate (the Wilds)' : 'E · the gate (fold map)')
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
         : n?.kind === 'fennel' ? 'E · Fennel'
+        : n?.kind === 'anemonyx' ? 'E · the Anemonyx'
         : n?.kind === 'work' ? workPrompt(n.near)
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
         : n?.kind === 'folk' ? `E · talk to the folk of ${n.s.name}`
@@ -773,11 +779,11 @@ function AtherSliceGame() {
   }, [zone, waymarks, ww, fog, tileOff, streamAt, voidFall])
 
   const buy = useCallback((i: number, j: number) => {
-    const v = canBuy(owned, i, j, garden.pages, garden.grey)
+    const v = canBuy(owned, i, j, pagesNow, garden.grey)
     if (!v.ok) { setToast(v.why); return }
     updateGarden({ ...garden, owned: [...garden.owned, sqId(i, j)], grey: garden.grey - v.cost })
     setToast(`Ground opened. ${garden.grey - v.cost} grey matter left.`)
-  }, [owned, garden, updateGarden])
+  }, [owned, garden, pagesNow, updateGarden])
 
   // Probes for scripted shots and for testing the economy before the Hollows land.
   useEffect(() => {
@@ -1253,6 +1259,7 @@ function AtherSliceGame() {
       if (e.code === 'KeyE' && n) {
         if (n.kind === 'greg') setPanel({ kind: 'talk', step: 0 })
         else if (n.kind === 'fennel') setPanel({ kind: 'fennel', page: 0 })
+        else if (n.kind === 'anemonyx') meetToday(clock())   // M76 s2
         else if (n.kind === 'work' && n.near.kind === 'piece' && currentWorks().pieces.some(x => x.id === (n.near as { id: string }).id && x.item === 'lift') && callNearest()) return   // M61 s3: a guest calls a mate's lift too (a local ride, never saved)
         else if (n.kind === 'work' && n.near.kind === 'piece' && isVisiting() && (() => { const pc = currentWorks().pieces.find(x => x.id === (n.near as { id: string }).id), st = pc && FURNITURE[pc.item]?.alc; if (st) setPanel({ kind: 'brew', station: st }); return !!st })()) return   // M57 s3b: a guest takes brewing steps at a mate's alchemy set
         else if (n.kind === 'work' && guestRefuses(m => hudSay(m, 'info', 4))) return   // M61: a guest opens no station, store or piece
@@ -1314,7 +1321,8 @@ function AtherSliceGame() {
         <ThirdPersonBody drive={dollDrive} camRef={camRef} />
         {zone.kind === 'plot' && <BuildPointer />}
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && ww ? (x, z) => ww.canopyAt(x, z) * 0.7 : undefined} />
-        {zone.kind === 'plot' && <PlotScene owned={owned} pages={garden.pages} linked={cl.frame.linked} />}
+        {zone.kind === 'plot' && <PlotScene owned={owned} pages={pagesNow} linked={cl.frame.linked} />}
+        {zone.kind === 'plot' && <AnemonyxIfHere clock={clock} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
         {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked /><ClusterScene frame={GLADE_FRAME} /><GladeCluster ground={ground} /></>}   {/* M67 s1a */}
@@ -1366,7 +1374,7 @@ function AtherSliceGame() {
           ...(zone.kind === 'wilds' && chud ? [{ label: chud.gun.charAt(0) + chud.gun.slice(1).toLowerCase(), value: chud.reloading ? 'reloading' : `${chud.ammo} / ${chud.clip}` }] : []),
           ...(potionCool > 0 ? [{ label: 'Potion', value: `${potionCool} s` }] : []),   // M78: the shared cooldown
           { label: 'Grey matter', value: garden.grey, accent: true },
-          { label: 'Grimoire', value: garden.pages },
+          { label: 'Grimoire', value: pagesNow },
           ...(tune && spread ? [{ label: `Tune · day ${Math.floor((clock() - spread.epoch) / GAME_DAY_MS)}`, value: `${allNodes.length - spread.clean.length}/${allNodes.length} grey · [ clear all · ] +1d · ⇧] +5d`, accent: true }] : []),
         ]} />
       <ScopeRing />
@@ -1407,7 +1415,7 @@ function AtherSliceGame() {
       )}
       {folkTalk.node && <TalkChoices node={folkTalk.node} phone={hudSize === 'phone'} />}
       {(talkNode ?? fennelNode ?? tourNode) && <TalkChoices node={(talkNode ?? fennelNode ?? tourNode)!} phone={hudSize === 'phone'} />}
-      {panel?.kind === 'greg' && <GregPanel garden={garden} onBuy={buy} onClose={() => setPanel(null)} />}
+      {panel?.kind === 'greg' && <GregPanel garden={{ ...garden, pages: pagesNow }} onBuy={buy} onClose={() => setPanel(null)} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       {panel?.kind === 'brew' && <BrewingPanel station={panel.station} onClose={() => setPanel(null)} />}
       {panel?.kind === 'work' && !visitNow && <WorkshopPanel near={panel.near} owned={owned} onClose={() => setPanel(null)} />}

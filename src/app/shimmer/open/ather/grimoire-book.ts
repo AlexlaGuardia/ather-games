@@ -14,7 +14,7 @@ import { isSeed } from './seed-items'
 export type Stage = 'seen' | 'bonded'
 export interface Page { species: Species; stage: Stage; at: number }
 /** The book + the garden's spirit state that lives with it: the planters' pots and the Anemonyx visits already met. */
-export interface Book { v: 1; pages: Page[]; pots: Pots; met: number[] }
+export interface Book { v: 1; pages: Page[]; pots: Pots; met: number[]; /** the absolute game day this book began (the Anemonyx counts her visits from it) */ since?: number }
 export const freshBook = (): Book => ({ v: 1, pages: [], pots: {}, met: [] })
 
 /** A species seen for the first time takes the next page; seeing it again changes nothing. */
@@ -38,7 +38,8 @@ export function parseBook(v: unknown): Book {
   const pots: Record<string, Pots[string]> = {}
   for (const [id, p] of Object.entries(o.pots ?? {})) if (p && isSeed(p.seed) && typeof p.at === 'number') pots[id] = p.bloomed ? { seed: p.seed, at: p.at, bloomed: true } : { seed: p.seed, at: p.at }
   const met = Array.isArray(o.met) ? o.met.filter((k): k is number => Number.isInteger(k)) : []
-  return { v: 1, pages, pots, met }
+  const since = Number.isInteger(o.since) ? o.since : undefined
+  return since === undefined ? { v: 1, pages, pots, met } : { v: 1, pages, pots, met, since }
 }
 export function loadBook(): Book {
   try { return parseBook(JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? 'null')) } catch { return freshBook() }

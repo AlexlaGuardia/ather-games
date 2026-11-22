@@ -22,6 +22,8 @@ function current(): Book {
   if (!book) book = typeof window === 'undefined' ? freshBook() : loadBook()
   return book
 }
+/** The current book (loaded once). */
+export const getBook = () => current()
 export function setBook(b: Book) { book = b; saveBook(b); bump() }
 /** Bloom every due pot into its page. Returns the species that just bloomed (for a HUD line). */
 export function ripenBook(now = Date.now()): Species[] {
