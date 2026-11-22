@@ -14,6 +14,7 @@ import { beginChannel, channelTick, type ChannelRun } from '../ather/combat-cast
 import { useBirth } from '../birth-gate'
 import { useLoadout } from './loadout'
 import { hudSay, type Mana } from './game-hud'
+import { manaTick } from './vitals-economy'
 
 export interface CastChip { key: string; name: string | null; cool: number; tooDear: boolean }
 interface VitalsLike { hp: number; hpMax: number }
@@ -123,7 +124,7 @@ export function useCasts(o: {
     const tick = () => {
       const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now
       const m = manaRef.current
-      if (m.cur < m.max) m.cur = Math.min(m.max, m.cur + m.regen * (oRef.current.flow?.() ?? 1) * dt)   // the refill
+      manaTick(m, now / 1000, dt, oRef.current.flow?.() ?? 1)   // the refill (M78: pauses ECON.manaPause s after any spend, shared/vitals-economy.ts)
       const ch = channel.current
       if (ch) {
         const r = channelTick(ch, dt, m.cur, ch.keyDown)

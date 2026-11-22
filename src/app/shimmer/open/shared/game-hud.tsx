@@ -49,7 +49,7 @@ const BROWSE_MS = 2500
 
 export type { CompassMark, CompassPose }
 export { hudSay }
-export type Mana = { cur: number; max: number; regen: number }
+export type Mana = { cur: number; max: number; regen: number; seen?: number; spentAt?: number }   // seen/spentAt = the refill clock (shared/vitals-economy.ts › manaTick)
 export type Status = { label: string; value?: string | number; accent?: boolean }
 
 export function useGameHudSize(touch: boolean): HudSize {

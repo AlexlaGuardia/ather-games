@@ -16,6 +16,7 @@
 import { canFire, spreadDeg, bloomAfterShot, bloomAfterRest, weaponDef, type WeaponDef } from '../../engine/weapons'
 import { stepChampion, hitChampion, CHAMP, type Champion } from './champion'
 import { easeRemote } from '../shared/fight-share'   // M28: a non-host's Hollows ease to the host's snapshot
+import { ECON, payReload } from '../shared/vitals-economy'
 
 export interface Terrain {
   heightAt: (x: number, z: number) => number
@@ -65,7 +66,8 @@ export const blowCost = (k: Keeper, amount: number) => Math.max(1, Math.round(am
 export const AMP_MULT = 1.3
 
 export const KEEPER_HP = 100
-export const REGEN_DELAY = 5, REGEN_RATE = 8
+/** M78: the dials live in shared/vitals-economy.ts (was 8/s) */
+export const REGEN_DELAY = ECON.hpDelay, REGEN_RATE = ECON.hpRegen
 /** Shambler tuning (build pacing, Jin). Three Repeater body shots or two to the head. */
 export const SHAMBLER = {
   hp: 30, wanderSpeed: 0.55, chaseSpeed: 1.7, notice: 24, forget: 40,
@@ -105,6 +107,8 @@ export function solidTop(c: Combat, x: number, z: number): number | null {
 export interface CombatDecoy { x: number; z: number; y: number; until: number; moveId: string }
 export interface Combat {
   hollows: Hollow[]; rounds: Round[]; drops: Drop[]; spits: Spit[]
+  /** M78: the keeper's mana bar (the page's manaRef object). A reload pays ECON.reloadMana from it; unset = reloads are free. */
+  mana?: { cur: number }
   /** BETA M28 shared fights: a NON-HOST in a party. The host runs the Hollows (fight-share.ts snapshots); here they only
    *  ease to the host's word: no AI, no spawning, no spit; a round that hits one flashes it and queues the hit in `netHits`
    *  (slice 3 sends them to the host), and never changes its hp (the host decides that). */
@@ -138,6 +142,7 @@ export type CombatEvent =
   | { kind: 'hurt-other'; id: string; dmg: number }
   | { kind: 'pickup'; amount: number }
   | { kind: 'fired' }
+  | { kind: 'reload-dry' }
   | { kind: 'down' }
   | { kind: 'champ-wake'; nodeId: string }
   | { kind: 'champ-break'; nodeId: string; bar: number }
@@ -269,6 +274,7 @@ export function fire(c: Combat, eye: { x: number; y: number; z: number }, aim: {
 export function reload(c: Combat) {
   const k = c.keeper
   if (k.reloading > 0 || k.ammo >= c.gun.clip) return
+  if (!payReload(c.mana)) { c.events.push({ kind: 'reload-dry' }); return }   // M78: a reload spends mana; short = no reload
   k.reloading = c.gun.reloadTime
 }
 

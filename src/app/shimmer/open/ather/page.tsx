@@ -146,6 +146,7 @@ import { minePlan, mineCommit, mineCheck, CRYSTAL_NAME, CRYSTAL_ITEM, TIER as CR
 import { beginWork, takeChip, workOf, chipGapMs, HOLD_RANGE, type Work, type Stack as ChipStack } from './channel'
 import { ChannelFocus, freshFocus, type FocusState } from './channel-fx'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
+import { ECON, potionCdLeft, potionWaitLine, RELOAD_DRY_LINE } from '../shared/vitals-economy'
 import { AtherMiniMap } from './minimap'
 import type { SkinVitals } from '../../ui/hearth-hud'
 const aimDirV = new Vector3()   // M60: the camera's forward, reused every frame
@@ -248,8 +249,12 @@ function AtherSliceGame() {
   const marksRef = useRef<CompassMark[]>([])
   const journal = useJournal()   // re-marks the compass when a journal waymark is toggled
   const vitalsRef = useRef<SkinVitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0, skin: true })   // M59: the shield drawn as the Mana Skin
-  // ★ mana is real now: pruning from a distance spends it (forestry.ts › MANA_COST), it refills slowly (build: 1.5/s)
-  const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 1.5 })
+  // ★ mana is real now: pruning from a distance spends it (forestry.ts › MANA_COST), it refills slowly (M78: 0.4/s, paused 3 s after any spend; shared/vitals-economy.ts)
+  const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: ECON.manaRegen })
+  const drankAt = useRef<number | null>(null)   // M78: the one potion cooldown every bottle shares (seconds, performance clock)
+  const [potionCool, setPotionCool] = useState(0)   // whole seconds left, for the status chip
+  useEffect(() => { if (potionCool <= 0) return; const t = setTimeout(() => setPotionCool(Math.ceil(potionCdLeft(drankAt.current, performance.now() / 1000))), 1000); return () => clearTimeout(t) }, [potionCool])
+  const dryAt = useRef(-99)   // M78: the last 'not enough mana to reload' line (said at most every 2 s)
   const buffsRef = useRef<Buffs>({})   // potion buffs (ather/alchemy.ts), loaded per keeper on mount
   useEffect(() => { buffsRef.current = loadBuffs(); toolsRef.current = loadTools() }, [])   // per keeper, after mount (localStorage)
   useEffect(() => { const on = () => { toolsRef.current = loadTools() }; window.addEventListener(TOOLS_EVENT, on); return () => window.removeEventListener(TOOLS_EVENT, on) }, [])   // a rinstick made at the Rinnshop
@@ -492,6 +497,7 @@ function AtherSliceGame() {
     let got = 0
     for (const e of evs) {
       if (e.kind === 'pickup') { got += e.amount; sfx('pickup-grey-matter') }
+      if (e.kind === 'reload-dry') { const t = performance.now() / 1000; if (t - dryAt.current > 2) { dryAt.current = t; hudSay(RELOAD_DRY_LINE, 'info') } }   // M78
       if (e.kind === 'champ-wake') setToast('Something heaves up out of the grey.')
       if (e.kind === 'champ-break') setToast(e.bar === 0 ? 'It sinks into the ooze, and more come crawling out.' : 'It sinks again. When it rises it moves wrong, wild.')
       if (e.kind === 'champ-down') {
@@ -936,7 +942,9 @@ function AtherSliceGame() {
   const drinkHeld = useCallback(() => {
     const id = heldRef.current
     if (!isPotion(id)) return
-    const d = drink(id, manaRef.current, buffsRef.current)
+    const left = potionCdLeft(drankAt.current, performance.now() / 1000)
+    if (left > 0) { hudSay(potionWaitLine(left), 'info'); return }   // M78: one 15 s cooldown for every bottle
+    const d = drink(id, manaRef.current, buffsRef.current, Date.now(), vitalsRef.current.hpMax)
     if (!d.ok) { if (d.why) hudSay(d.why, 'info'); return }
     if (d.heal !== undefined) {   // M57 health potion: the same rules as a roast (Wilds only, not at full health, not while down)
       if (zoneRef0.current !== 'wilds') { hudSay('Save it for the Wilds. It heals you mid-fight.', 'info'); return }
@@ -949,6 +957,7 @@ function AtherSliceGame() {
     if (d.heal !== undefined) eatQueue.current.push(d.heal)
     if (d.mana !== undefined) manaRef.current.cur = d.mana
     if (d.buffs !== buffsRef.current) { buffsRef.current = d.buffs; saveBuffs(d.buffs) }
+    drankAt.current = performance.now() / 1000; setPotionCool(ECON.potionCd)
     hudSay(d.line, 'item')
   }, [])
   const castOrAnswer = useCallback(() => {
@@ -1310,7 +1319,7 @@ function AtherSliceGame() {
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
             groundAt={ww ? (x: number, z: number) => biomeGround(ww.biomeAt(x, z)) : undefined}
-            safe={{ x: GLADE_GREEN.x, z: GLADE_GREEN.z, r: 50 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
+            safe={{ x: GLADE_GREEN.x, z: GLADE_GREEN.z, r: 50 }} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} mana={manaRef.current} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
         )}
         {folkTalk.node && folkTalk.bubbleAt && zone.kind === 'wilds' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} scene={(folkTalk.node as { scene?: string }).scene} />}
         {zone.kind === 'plot' && tableVisit && !visitNow && (() => {   /* M61: your Greg never stands at a mate's table */ const g = TABLE_STOP.at, p = poseRef.current; return (
@@ -1340,6 +1349,7 @@ function AtherSliceGame() {
         status={[
           { label: hud.where },
           ...(zone.kind === 'wilds' && chud ? [{ label: chud.gun.charAt(0) + chud.gun.slice(1).toLowerCase(), value: chud.reloading ? 'reloading' : `${chud.ammo} / ${chud.clip}` }] : []),
+          ...(potionCool > 0 ? [{ label: 'Potion', value: `${potionCool} s` }] : []),   // M78: the shared cooldown
           { label: 'Grey matter', value: garden.grey, accent: true },
           { label: 'Grimoire', value: garden.pages },
           ...(tune && spread ? [{ label: `Tune · day ${Math.floor((clock() - spread.epoch) / GAME_DAY_MS)}`, value: `${allNodes.length - spread.clean.length}/${allNodes.length} grey · [ clear all · ] +1d · ⇧] +5d`, accent: true }] : []),

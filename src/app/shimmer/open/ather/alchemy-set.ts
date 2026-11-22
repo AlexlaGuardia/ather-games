@@ -15,6 +15,7 @@
 // ⚖ Jin's (canon 09-16): every step list, every number, potency, the grade maths. Canon's: a brewing, every hand a bottle,
 //   bottle-only, more-never-only (alchemy.md). Run: npx tsx src/app/shimmer/open/ather/alchemy-set.test.ts
 import { GRADES, type Grade } from './farming'
+import { draughtHeal } from '../shared/vitals-economy'
 
 export type AlcStation = 'crusher' | 'still' | 'nook' | 'desk'
 export const ALC_STATIONS: Readonly<Record<AlcStation, { name: string; verb: string; blurb: string }>> = {
@@ -126,7 +127,7 @@ export function effectOf(id: string): { heal: number } | { mana: number } | { xp
   if (!isAlcPotion(id)) return null
   const p = ALC_POTIONS[id.split(':')[1]], m = POTENCY[gradeOf(id)!]
   const e = p.effect
-  if ('heal' in e) return { heal: Math.round(e.heal * m) }
+  if ('heal' in e) return { heal: draughtHeal(gradeOf(id)!, 100) }   // M78: a chunk of max HP by grade (D 25% .. S 75%), shown at the base 100 HP; drink() scales by the keeper's real max
   if ('mana' in e) return { mana: Math.round(e.mana * m) }
   // the XP boost's strength is fixed (one Wisdom buff, alchemy.ts) and potency makes it LAST longer: a D runs 8 min, an S 14
   return { xp: e.xp, ms: Math.round(e.ms * m) }

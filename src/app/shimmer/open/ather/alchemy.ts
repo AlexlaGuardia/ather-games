@@ -6,7 +6,7 @@
 // brew from). The open world brews the ones it can reach: every input below is a bag row the Wilds already give.
 //   · SHARD TONIC   — mana back at once (engine/potion-effects.ts › MANA_POTIONS: 65).
 //   · STARLIGHT TINCTURE — Starlight: gathering XP ×1.5 for 8 min (BUFF_DEFS.starlight, STARLIGHT_XP).
-//   · ATHER INFUSION — Ather Flow: mana regen lifted for 10 min (BUFF_DEFS.ather_flow).
+//   · ATHER INFUSION — Ather Flow: mana regen x2 for 3 min in the open world (M78, shared/vitals-economy.ts; canon BUFF_DEFS says 10).
 // ★ WHY ATHER FLOW IS ×2 HERE, NOT THE ENGINE'S ×10: ATHER_REGEN was tuned against play3d's 1 mana a MINUTE ("a felt trickle").
 //   The open world refills 1.5 a SECOND (page.tsx manaRef); ×10 would be 15/s, a bar every seven seconds, which deletes mana as
 //   a cost. ×2 is felt (a full bar in ~33 s instead of ~67 s) and keeps casts a choice. Open-world tuning, not a canon fact.
@@ -15,7 +15,8 @@
 //   so the copy cannot drift silently (PATTERNS: never trust a hand-kept mirror; make it a checked one).
 import type { Job } from './furniture'
 import { keeperKey } from '@/lib/keeper-local'
-import { isAlcPotion, effectOf, alcName } from './alchemy-set'
+import { isAlcPotion, effectOf, alcName, gradeOf } from './alchemy-set'
+import { ECON, draughtHeal } from '../shared/vitals-economy'
 
 export type BuffId = 'starlight' | 'ather_flow' | 'wisdom'
 export interface PotionRow {
@@ -32,7 +33,9 @@ export interface PotionRow {
 export const STARLIGHT_XP = 1.5
 /** M57: the alchemy set's XP potion (alchemy-set.ts › wisdom): +25%, its grade sets how long */
 export const WISDOM_XP = 1.25
-export const OPEN_FLOW_MULT = 2
+/** M78: both Ather Flow numbers are the open world's own dials (shared/vitals-economy.ts): x2 for 3 min */
+export const OPEN_FLOW_MULT = ECON.flowMult
+const OPEN_FLOW_MS = ECON.flowMs
 export const POTIONS: Readonly<Record<string, PotionRow>> = {
   shard_tonic: {
     name: 'Shard Tonic', blurb: 'Mana shards boiled down with goldwood bark. Hold it and click to drink. Restores 65 mana.',
@@ -43,7 +46,7 @@ export const POTIONS: Readonly<Record<string, PotionRow>> = {
     recipe: [{ id: 'starwillow_sap', n: 3 }, { id: 'pure_mana_core', n: 2 }, { id: 'glowfin', n: 2 }], makes: 1, buff: { id: 'starlight', ms: 8 * 60_000 },
   },
   ather_infusion: {
-    name: 'Ather Infusion', blurb: 'An Ather crystal steeped in old sap. Drink it and your mana comes back twice as fast, for 10 minutes.',
+    name: 'Ather Infusion', blurb: 'An Ather crystal steeped in old sap. Drink it and your mana comes back twice as fast, for 3 minutes.',
     recipe: [{ id: 'ather_crystal', n: 1 }, { id: 'crystallized_sap', n: 2 }, { id: 'pure_mana_core', n: 3 }], makes: 1, buff: { id: 'ather_flow', ms: 10 * 60_000 },
   },
 }
@@ -62,14 +65,15 @@ export const withBuff = (b: Buffs, id: BuffId, ms: number, now = Date.now()): Bu
 
 export type Drink = { ok: true; mana?: number; heal?: number; buffs: Buffs; line: string } | { ok: false; why: string }
 /** What drinking `id` does now. Refuses a tonic at a full bar (it would be wasted). The page spends the bottle on ok. */
-export function drink(id: string, mana: { cur: number; max: number }, buffs: Buffs, now = Date.now()): Drink {
+/** `hpMax` = the keeper's max health (a Health Draught heals a share of it, M78). */
+export function drink(id: string, mana: { cur: number; max: number }, buffs: Buffs, now = Date.now(), hpMax = 100): Drink {
   if (isAlcPotion(id)) {   // M57: a graded bottle from the alchemy set; its grade is already in the numbers (effectOf)
     const e = effectOf(id)!, name = alcName(id)!
     if ('mana' in e) {
       if (mana.cur >= mana.max - 0.5) return { ok: false, why: 'Your mana is full. Keep it for a cast.' }
       return { ok: true, mana: Math.min(mana.max, mana.cur + e.mana), buffs, line: `${name} · +${Math.round(Math.min(e.mana, mana.max - mana.cur))} mana` }
     }
-    if ('heal' in e) return { ok: true, heal: e.heal, buffs, line: `${name} · +${e.heal}` }   // the page checks the Wilds + health first
+    if ('heal' in e) { const h = draughtHeal(gradeOf(id)!, hpMax); return { ok: true, heal: h, buffs, line: `${name} · +${h}` } }   // the page checks the Wilds + health first
     return { ok: true, buffs: withBuff(buffs, 'wisdom', e.ms, now), line: `${name} · Wisdom for ${Math.round(e.ms / 60_000)} min` }
   }
   const p = POTIONS[id]
@@ -78,7 +82,7 @@ export function drink(id: string, mana: { cur: number; max: number }, buffs: Buf
     if (mana.cur >= mana.max - 0.5) return { ok: false, why: 'Your mana is full. Keep it for a cast.' }
     return { ok: true, mana: Math.min(mana.max, mana.cur + p.mana), buffs, line: `${p.name} · +${Math.round(Math.min(p.mana, mana.max - mana.cur))} mana` }
   }
-  if (p.buff) return { ok: true, buffs: withBuff(buffs, p.buff.id, p.buff.ms, now), line: `${p.name} · ${BUFF_NAME[p.buff.id]} for ${Math.round(p.buff.ms / 60_000)} min` }
+  if (p.buff) { const ms = p.buff.id === 'ather_flow' ? OPEN_FLOW_MS : p.buff.ms; return { ok: true, buffs: withBuff(buffs, p.buff.id, ms, now), line: `${p.name} · ${BUFF_NAME[p.buff.id]} for ${Math.round(ms / 60_000)} min` } }
   return { ok: false, why: '' }
 }
 

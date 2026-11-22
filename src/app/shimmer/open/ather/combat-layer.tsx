@@ -420,10 +420,12 @@ function CastFlash({ fx }: { fx: React.MutableRefObject<LiveFx[]> }) {
  *  flare) and how far a charge has built (0..1, the Charred Rifle). */
 export interface SightLink { aiming: boolean; ads: boolean; firedAt: number; charge: number }
 
-export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats, sight, channel, groundAt }: {
+export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats, sight, channel, groundAt, mana }: {
   T: Terrain
   /** M34: the biome colour under a point (sRGB hex): what a Hollow's sheen borrows, and the colour its dispersal blooms */
   groundAt?: (x: number, z: number) => string
+  /** M78: the keeper's mana bar; a reload pays from it (shared/vitals-economy.ts). Unset = free reloads. */
+  mana?: { cur: number }
   locked: React.MutableRefObject<boolean>
   frozen: React.MutableRefObject<boolean>
   active: boolean
@@ -524,7 +526,9 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     const k = c.current.keeper
     onHudRef.current({ ...hud.current, gun: c.current.gun.name, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: c.current.gun.clip, reloading: false, champ: null })
   }, [reviveKey])
-  useEffect(() => { if (reloadTick) reload(c.current) }, [reloadTick])
+  // M78: a refused reload (short of mana) is said at once; stepCombat clears c.events each frame, so it never waits for the flush
+  const sayDry = (C: Combat, n0: number) => { if (C.events.slice(n0).some(e => e.kind === 'reload-dry')) onEventsRef.current([{ kind: 'reload-dry' }]) }
+  useEffect(() => { if (reloadTick) { const C = c.current; C.mana = mana; const n0 = C.events.length; reload(C); sayDry(C, n0) } }, [reloadTick])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const down = (e: MouseEvent) => {
       if (e.button === 0 && locked.current && !frozen.current) { trigger.current = true; held.current = true }
@@ -549,6 +553,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   useFrame((_, rawDt) => {
     if (!active) return
     const dt = Math.min(rawDt, 1 / 20), C = c.current
+    C.mana = mana   // M78: reloads pay from the keeper's bar (the page's manaRef object, stable)
     { const f = frameStats(getLook()); C.keeper.hit = f.hit; C.keeper.takes = f.damage }   // M29: the keeper's FRAME
     const feet = { x: camera.position.x, y: camera.position.y - EYE, z: camera.position.z }
     popT.current -= dt
@@ -600,10 +605,11 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     // a round out, through the sights' cone when aiming; the held gun reads when it left (recoil, the mark's flare)
     // ★ every shot SPEAKS (Alex 11-19: a breath / sizzle / discharge per gun, shared/gun-sound.ts); an empty pull sputters
     const shoot = () => {
-      const wasReloading = C.keeper.reloading > 0
+      const wasReloading = C.keeper.reloading > 0, n0 = C.events.length
       if (fire(C, camera.position, aim, !!sight?.current.ads)) { playShot(C.gun.id); if (sight) sight.current.firedAt = performance.now() }
       else if (C.keeper.ammo <= 0) playEmpty()
       if (!wasReloading && C.keeper.reloading > 0) playReload()   // the shot that emptied the clip (or the empty pull) started a reload
+      sayDry(C, n0)
     }
     if (charging.current >= 0) {
       charging.current -= dt

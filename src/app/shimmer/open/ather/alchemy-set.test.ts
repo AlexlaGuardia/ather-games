@@ -63,7 +63,7 @@ for (let k = 0; k < ALC_POTIONS.health.steps.length; k++) {
 }
 ok(bag['potion:health:A'] === 2 && Object.keys(bag).length === 1, `the chain pours 2 grade-A health, nothing left over (${JSON.stringify(bag)})`)
 const eA = effectOf('potion:health:A'), eD = effectOf('potion:health:D')
-ok(!!eA && !!eD && 'heal' in eA && 'heal' in eD && eA.heal === 60 && eD.heal === 40, 'potency: grade A heals 60, grade D 40')
+ok(!!eA && !!eD && 'heal' in eA && 'heal' in eD && eA.heal === 60 && eD.heal === 25, 'potency: grade A heals 60, grade D 25 (M78: % of max HP by grade, shared/vitals-economy.ts)')
 ok(Object.values(POTENCY).every((v, i, a) => i === 0 || v > a[i - 1]), 'potency climbs with every grade')
 const w = effectOf('potion:wisdom:S')
 const wD = effectOf('potion:wisdom:D')

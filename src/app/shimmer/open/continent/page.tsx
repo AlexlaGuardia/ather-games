@@ -29,6 +29,7 @@ import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen, WALK_KEYS,
 import { getSettings, useSettings, pixelRatioCap } from '../shared/settings'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { GameHud, useGameHudSize, openMapBox, hudSay, type CompassPose, type Mana } from '../shared/game-hud'
+import { ECON } from '../shared/vitals-economy'
 import type { Vitals } from '../../engine/vitals'
 import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Track } from './map'
 import { pitstopsUnlocked, visitNear } from './pitstops'
@@ -1358,7 +1359,7 @@ function ContinentRideGame() {
   const lastPlace = useRef<string | null>(null)
   useEffect(() => { if (hud.place && hud.place !== lastPlace.current) hudSay(`Approaching ${hud.place}`, 'zone'); lastPlace.current = hud.place ?? null }, [hud.place])
   const vitalsRef = useRef<Vitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0 })
-  const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: 1.5 })
+  const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: ECON.manaRegen })
   // Q / X on foot (BETA M15b): the same shared hook as the Ather. No fight here yet, so a fight cast resolves against nothing.
   const casts = useCasts({ manaRef, vitalsRef, fightHere: () => false, gateHere: () => true })
   useEffect(() => {
