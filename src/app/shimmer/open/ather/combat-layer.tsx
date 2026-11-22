@@ -420,12 +420,14 @@ function CastFlash({ fx }: { fx: React.MutableRefObject<LiveFx[]> }) {
  *  flare) and how far a charge has built (0..1, the Charred Rifle). */
 export interface SightLink { aiming: boolean; ads: boolean; firedAt: number; charge: number }
 
-export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats, sight, channel, groundAt, mana }: {
+export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats, sight, channel, groundAt, mana, skin }: {
   T: Terrain
   /** M34: the biome colour under a point (sRGB hex): what a Hollow's sheen borrows, and the colour its dispersal blooms */
   groundAt?: (x: number, z: number) => string
   /** M78: the keeper's mana bar; a reload pays from it (shared/vitals-economy.ts). Unset = free reloads. */
   mana?: { cur: number }
+  /** M80: the keeper's own Mana Skin pool (hold F); blows drain it after a field's skin */
+  skin?: { cur: number }
   locked: React.MutableRefObject<boolean>
   frozen: React.MutableRefObject<boolean>
   active: boolean
@@ -553,7 +555,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   useFrame((_, rawDt) => {
     if (!active) return
     const dt = Math.min(rawDt, 1 / 20), C = c.current
-    C.mana = mana   // M78: reloads pay from the keeper's bar (the page's manaRef object, stable)
+    C.mana = mana; C.skin = skin   // M78 / M80: reloads pay from the keeper's bar (the page's manaRef object, stable)
     { const f = frameStats(getLook()); C.keeper.hit = f.hit; C.keeper.takes = f.damage }   // M29: the keeper's FRAME
     const feet = { x: camera.position.x, y: camera.position.y - EYE, z: camera.position.z }
     popT.current -= dt

@@ -56,7 +56,7 @@ res.again = await p.evaluate(() => !!document.querySelector<HTMLButtonElement>('
 await p.evaluate(() => document.querySelector<HTMLElement>('[data-panel="courser-lot"] button[aria-label]')?.click()); await sleep(800)
 // back in the courser: park it beside the keeper (tp moves the CAR, the keeper stays on foot), F gets in, G = the garage
 await p.evaluate((x, z) => (window as any).__drive.tp(x, z, 0, 0), at.x + fx * 3.5, at.z + fz * 3.5); await sleep(2500)
-await p.keyboard.press('KeyF'); await sleep(2500)
+await p.keyboard.press('KeyE'); await sleep(2500)
 res.onFootAfterF = await p.evaluate(() => { const f = (window as any).__drive.foot; return typeof f === 'function' ? f() : f })
 await p.keyboard.press('KeyG'); await sleep(1500)
 res.garagePanel = !!(await p.$('[data-panel="garage"]'))

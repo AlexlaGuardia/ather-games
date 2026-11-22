@@ -16,7 +16,7 @@ await p.reload({ waitUntil: 'load', timeout: 180000 })
 await p.waitForFunction('!!window.__drive && !!window.__range', { timeout: 180000 })
 // ★ 11-18: a fresh keeper now arrives stopped in Ashfeld, where E from the seat opens the Co. board. A keeper walks to the
 // counter, so GET OUT first (F, the real exit) and only then step to the counter; footTp alone left the seat's E live.
-await sleep(3000); await p.mouse.click(640, 380).catch(() => {}); await sleep(500); await p.keyboard.press('KeyF'); await sleep(2500)
+await sleep(3000); await p.mouse.click(640, 380).catch(() => {}); await sleep(500); await p.keyboard.press('KeyE'); await sleep(2500)
 // the counter: the 'vessels' prop, from the cave via the range probe's shop (same cave) — stand 1.4 m off it
 const counter = await p.evaluate(() => { const c = (window as any).__vesselCounter; return c ? c() : null }) as any
 res.counterFound = !!counter

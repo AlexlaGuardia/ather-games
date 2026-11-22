@@ -25,6 +25,14 @@ export const ECON = {
   potionCd: 15,
   /** mana one reload costs, any gun (gunplay.ts › reloadMana 11/14/12 stays play3d's number; it would be ~30 s of refill here) */
   reloadMana: 3,
+  /** M80 hold F: the keeper's own Mana Skin. Most skin a charge holds */
+  skinCap: 50,
+  /** skin bought per mana (Alex: 2 mana per 10 skin) */
+  skinPerMana: 5,
+  /** seconds F must be held before the skin starts filling */
+  skinStall: 1,
+  /** skin per second while filling (the row names none: 20/s fills the cap in 2.5 s for 10 mana; Alex tunes) */
+  skinRate: 20,
 } as const
 
 /** The refill clock rides on the mana object itself: `seen` = the bar after the last tick, `spentAt` = when it last went DOWN. */
@@ -54,3 +62,17 @@ export function payReload(pool: { cur: number } | undefined): boolean {
   return true
 }
 export const RELOAD_DRY_LINE = 'Not enough mana to reload. Rest, or head home.'
+
+/** M80: one charge in progress. `heldFor` = seconds F has been down (0 = up). */
+export type SkinCharge = { heldFor: number }
+/** One tick of hold-F: nothing for `skinStall` s, then the skin climbs at `skinRate`, paid at `skinPerMana`, to the cap.
+ *  Letting go resets the stall; an empty bar stops it (the spend shows as a spend, so the M78 refill pauses). */
+export function skinStep(ch: SkinCharge, held: boolean, dt: number, mana: { cur: number }, skin: { cur: number }, cap: number = ECON.skinCap): void {
+  if (!held) { ch.heldFor = 0; return }
+  ch.heldFor += dt
+  const filling = Math.min(dt, ch.heldFor - ECON.skinStall)
+  if (filling <= 0) return
+  const add = Math.min(ECON.skinRate * filling, cap - skin.cur, mana.cur * ECON.skinPerMana)
+  if (add <= 0) return
+  skin.cur += add; mana.cur = Math.max(0, mana.cur - add / ECON.skinPerMana)
+}

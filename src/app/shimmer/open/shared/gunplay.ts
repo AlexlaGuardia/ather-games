@@ -8,6 +8,7 @@
 // folds them into engine/weapons.ts. ⚠ Nothing in this file edits a weapons.ts value.
 
 import { WEAPONS, canFire, spreadDeg, bloomAfterShot, bloomAfterRest, coneDirection, type WeaponDef } from '../../engine/weapons'
+import { payReload } from './vitals-economy'
 
 export interface RangeGun extends WeaponDef {
   /** rounds per trigger pull, fireCd apart is the BURST gap below; 1 = single */
@@ -66,12 +67,16 @@ export interface Round {
 export interface GunState {
   gun: RangeGun; ammo: number; reloading: number; sinceShot: number; bloom: number
   burstLeft: number; burstT: number; wasDown: boolean
+  /** M80: the keeper's mana bar; a reload pays ECON.reloadMana from it (unset = free). `dry` counts refused reloads. */
+  mana?: { cur: number }
+  dry?: number
 }
 export const holdGun = (gun: RangeGun): GunState =>
   ({ gun, ammo: gun.clip, reloading: 0, sinceShot: 99, bloom: 0, burstLeft: 0, burstT: 0, wasDown: false })
 
 export function reloadGun(g: GunState) {
   if (g.reloading > 0 || g.ammo >= g.gun.clip) return
+  if (!payReload(g.mana)) { g.dry = (g.dry ?? 0) + 1; g.burstLeft = 0; return }   // M80: reloads cost mana everywhere (M78 dial)
   g.reloading = g.gun.reloadTime; g.burstLeft = 0
 }
 

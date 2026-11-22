@@ -8,7 +8,7 @@
 //     to Athernyx, where the gate steps you out to a place on the continent. Walk off the edge and the fold brings
 //     you back to the threshold.
 //   · THE WILDS — the continent's land in the Ather's state (world/ather.md 09-07), one 1 km tile cut from the same
-//     height map the coursers drive. F plants a waymark where you stand; standing at one, E opens the fold map too.
+//     height map the coursers drive. A held waymark plants where you stand (click / E); standing at one, E opens the fold map too.
 //
 // The Ather revamp (no holds, Hollows + grey matter, the grimoire's tiers) is Alex's direction, logged [OPEN] in
 // CANON_GAPS for Magii; UI copy stays plain until it is authored. Desktop: pointer lock + keys. Phone (11-15): shared/
@@ -146,6 +146,8 @@ import { beginWork, takeChip, workOf, chipGapMs, HOLD_RANGE, type Work, type Sta
 import { ChannelFocus, freshFocus, type FocusState } from './channel-fx'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { ECON, potionCdLeft, potionWaitLine, RELOAD_DRY_LINE } from '../shared/vitals-economy'
+import { useSkinCharge, type SkinPool } from '../shared/use-skin-charge'
+import { SKIN_HOLDS } from '../shared/touch-controls'
 import { AtherMiniMap } from './minimap'
 import type { SkinVitals } from '../../ui/hearth-hud'
 const aimDirV = new Vector3()   // M60: the camera's forward, reused every frame
@@ -252,6 +254,7 @@ function AtherSliceGame() {
   const vitalsRef = useRef<SkinVitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0, skin: true })   // M59: the shield drawn as the Mana Skin
   // ★ mana is real now: pruning from a distance spends it (forestry.ts › MANA_COST), it refills slowly (M78: 0.4/s, paused 3 s after any spend; shared/vitals-economy.ts)
   const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: ECON.manaRegen })
+  const skinRef = useRef<SkinPool>({ cur: 0 })   // M80: hold F charges the keeper's own Mana Skin (shared/use-skin-charge.ts)
   const drankAt = useRef<number | null>(null)   // M78: the one potion cooldown every bottle shares (seconds, performance clock)
   const [potionCool, setPotionCool] = useState(0)   // whole seconds left, for the status chip
   useEffect(() => { if (potionCool <= 0) return; const t = setTimeout(() => setPotionCool(Math.ceil(potionCdLeft(drankAt.current, performance.now() / 1000))), 1000); return () => clearTimeout(t) }, [potionCool])
@@ -1087,6 +1090,8 @@ function AtherSliceGame() {
   const zoneRef = useRef(zone.kind); zoneRef.current = zone.kind; zoneRef0.current = zone.kind
   // Q / X + mana refill + the cast chips: ONE shared hook (shared/use-casts.ts), the same on the continent
   const { castSlot, gate: castGate, gateStep, closeGate, channel: castChannel, castQueue, castHud, surge, impulse, handsCastAt } = useCasts({ manaRef, vitalsRef, fightHere: () => zoneRef.current === 'wilds', flow: () => (buffOn(buffsRef.current, 'ather_flow') ? OPEN_FLOW_MULT : 1), gateHere: () => true })
+  // M80: hold F charges the keeper's own skin, anywhere on foot; the combat layer draws it in the Wilds, this hook elsewhere
+  useSkinCharge({ mana: manaRef, skin: skinRef, active: () => !frozen.current, vitals: vitalsRef, drawn: () => zoneRef.current !== 'wilds' })
   gateStepRef.current = gateStep
   useEffect(() => { closeGate() }, [zone.kind, closeGate])   // a Gate never leaves the zone
   // M9 (11-22): a minute at home gives the Wilds' tiles back (back to the boot set round Greg's waymark); a hop back sooner keeps them
@@ -1252,7 +1257,6 @@ function AtherSliceGame() {
         else setPanel({ kind: 'map', view: 'ather', travel: true })   // Alex 11-20: the map opens on the side you stand on (the Ather here); an errand keeper's Rune Hold goal waits one Tab away
         return
       }
-      if (e.code === 'KeyF' && zone.kind !== 'glade') plantHere()
       if (!e.repeat && e.code === CAST_KEY.tactical) castSlot('tactical')
       if (!e.repeat && e.code === CAST_KEY.signature) castSlot('signature')
 
@@ -1283,7 +1287,6 @@ function AtherSliceGame() {
     ...(stance.kind !== 'stowed' ? [{ code: 'Stow', key: 'R', label: 'stow' }] : []),
     ...(zone.kind === 'plot' && stance.kind === 'stowed' && meleeReady ? [{ code: 'Melee', key: '✊', label: 'hit', near: true }] : []),   // M42: three hits pop it into the bag
     ...(zone.kind === 'wilds' ? [
-      { code: 'KeyF', key: 'F', label: 'waymark' },
       { code: 'KeyR', key: 'R', label: stance.kind === 'weapon' ? 'swap · reload' : 'draw', near: true },
       { code: 'KeyH', key: 'H', label: 'home' },
     ] : []),
@@ -1325,7 +1328,7 @@ function AtherSliceGame() {
         {terrain && (
           <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
             groundAt={ww ? (x: number, z: number) => biomeGround(ww.biomeAt(x, z)) : undefined}
-            safe={WILDS_SAFE} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} mana={manaRef.current} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
+            safe={WILDS_SAFE} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} mana={manaRef.current} skin={skinRef.current} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
         )}
         {folkTalk.node && folkTalk.bubbleAt && zone.kind !== 'plot' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} scene={(folkTalk.node as { scene?: string }).scene} />}
         {zone.kind === 'plot' && tableVisit && !visitNow && (() => {   /* M61: your Greg never stands at a mate's table */ const g = TABLE_STOP.at, p = poseRef.current; return (
@@ -1414,7 +1417,7 @@ function AtherSliceGame() {
       {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={litSlot(stance, inv)} isTouch={isTouch} />}
       <div data-veil={resuming ? 'resume' : 'fade'} style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: resuming ? 1 : fade, transition: resuming ? 'none' : 'opacity 0.35s', pointerEvents: 'none' }} />
       {isTouch && !panel && !building && (
-        <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} />
+        <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} holds={SKIN_HOLDS} />
       )}
       {isTouch && !introSeen && !panel && !building && (
         <div onPointerDown={() => setIntroSeen(true)} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: 16, zIndex: 30, background: 'rgba(5,6,14,0.35)' }}>

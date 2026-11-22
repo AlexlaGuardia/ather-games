@@ -30,6 +30,8 @@ import { getSettings, useSettings, pixelRatioCap } from '../shared/settings'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { GameHud, useGameHudSize, openMapBox, hudSay, type CompassPose, type Mana } from '../shared/game-hud'
 import { ECON } from '../shared/vitals-economy'
+import { useSkinCharge, type SkinPool } from '../shared/use-skin-charge'
+import type { SkinVitals } from '../../ui/hearth-hud'
 import type { Vitals } from '../../engine/vitals'
 import { ContinentMap, ContinentMiniMap, makeMapState, reveal, persist, type Track } from './map'
 import { pitstopsUnlocked, visitNear } from './pitstops'
@@ -82,7 +84,7 @@ import { eyeY, WALK_SPEED, SPEED_CAP, type LocoState } from '../shared/locomotio
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
 import { TUNNEL_H, TUNNEL_WALK, boreAt, tunnelWall, bridgeRail, drivable, ferryLanding, guardrails, loadRegion, roadRail, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
 import { touch, TOUCH_LOOK_SENS, isTouchOnly } from '../shared/touch'
-import { TouchControls, PHONE_ROW_TOP, type TouchAction } from '../shared/touch-controls'
+import { TouchControls, PHONE_ROW_TOP, SKIN_HOLDS, type TouchAction } from '../shared/touch-controls'
 import { useMorelHints } from '../shared/morel-hints'   // BETA M33 S2: Morel's stuck hints on the errand
 import { groundMat, groundOrder, type GroundLayer } from '../shared/ground-layers'
 import { ribbonXZ, drape, ribbonsOn } from '../shared/road-ribbon'
@@ -754,7 +756,7 @@ const LANDING = 'rune-hold'
 const YARD_PROMPT: Record<NonNullable<DeedYardState['action']>, string> = { 'take out': 'E · Take out', place: 'E · Place · hold E to turn', 'pick up': 'E · Pick up', look: 'E · Change the look' }
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
-interface DriverCtl { tp?: (x: number, z: number, yaw: number) => void; car?: () => { x: number; y: number; z: number; yaw: number; speed: number; foot: boolean } }
+interface DriverCtl { /** M80: another E target holds the key right now (a ferry while driving, the yard / a deed on foot): E leaves the car alone */ eTaken?: () => boolean; tp?: (x: number, z: number, yaw: number) => void; car?: () => { x: number; y: number; z: number; yaw: number; speed: number; foot: boolean } }
 function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus }: { talkFocus?: React.MutableRefObject<{ x: number; y: number; z: number } | null>; castFx: { surge: React.MutableRefObject<{ until: number; mult: number }>; impulse: React.MutableRefObject<CastSpec | null>; gateStep: (lc: Parameters<ReturnType<typeof useCasts>['gateStep']>[0], yaw: number, dt: number, groundAt: (x: number, z: number) => number) => void }; track: React.MutableRefObject<Track>; R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<DriverCtl> }) {
   const { camera, gl } = useThree()
   // M49 s5: the courser's ground = the region's, raised where a shipyard plot stands (its floor + ramps: foot-extras.ts)
@@ -790,6 +792,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
   const startGlide = () => { glide.current = { t: 0, pos: camera.position.clone(), quat: camera.quaternion.clone() } }
   const seat = () => {
     const c = car.current
+    if (ctl.current.eTaken?.()) return   // M80: E is shared; the nearer target (ferry / yard / deed) wins
     if (mode.current === 'drive') {
       if (Math.hypot(c.vx, c.vz) > EXIT_MAX_SPEED || c.airborne) return
       const spot = exitSpot(fw, R, c)
@@ -826,7 +829,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
     const down = (e: KeyboardEvent) => {
       if (getBirth() === null) return   // the birth ritual has the keys (its arrows must not roll the courser)
       keys.current.add(e.code)
-      if (e.code === 'KeyF' && !e.repeat) seat()
+      if (e.code === 'KeyE' && !e.repeat) seat()   // M80: E gets in / out (F holds the mana skin now)
       if (e.code === 'KeyK' && !e.repeat) cycleLook()   // the ground look (dev, desktop): tiles + toon / toon / flat
       // R at the WHEEL is back to the road (recovery); on foot R is the stance (the page's handler, shared/stance.ts)
       if (e.code === 'KeyR' && mode.current === 'drive') place(safe.current.x, safe.current.z, safe.current.yaw)
@@ -1081,7 +1084,8 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
         sign = room ? `${room.label} · ${room.detail}` : sign
       }
       const reach = loco.current && canEnter(loco.current, c)
-      const prompt = onFoot ? (reach ? 'F · Get in' : null) : Math.hypot(c.vx, c.vz) < 1.5 && !c.airborne ? 'F · Get out' : null
+      const taken = !!ctl.current.eTaken?.()
+      const prompt = taken ? null : onFoot ? (reach ? 'E · Get in' : null) : Math.hypot(c.vx, c.vz) < 1.5 && !c.airborne ? 'E · Get out' : null
       onHud({ foot: onFoot, prompt, x: c.x, z: c.z, yaw: c.yaw, mph: Math.hypot(fwd, lat) * 2.23694, frac: Math.abs(fwd) / tuneRef.current.top, drift: c.drift || (slipAngle(c) > 0.26 && !c.airborne), air: c.airborne ? c.airT : 0, gearR: fwd < -0.5,
         sign, place: near, road: nr.junction && JUNCTION_LABEL[nr.junction.kind] ? `j:${nr.junction.kind}` : nr.d < (nr.road?.width ?? 7) / 2 + 1 ? nr.road!.kind : null })
     }
@@ -1253,6 +1257,10 @@ function ContinentRideGame() {
   const [ferrying, setFerrying] = useState(false)
   const ferryAt = useMemo(() => (R && hud.mph < 4 ? ferryLanding(R, hud.x, hud.z, 14) : null), [R, hud.x, hud.z, hud.mph])
   const ferryRef = useRef(ferryAt); ferryRef.current = ferryAt
+  // M80: E is shared between the car and the page's own E targets; the page tells the Driver when one of them has it
+  const yardActRef = useRef(yardState.action); yardActRef.current = yardState.action
+  const deedReachRef = useRef(deedReach); deedReachRef.current = deedReach
+  ctl.current.eTaken = () => (!footRef.current && !!ferryRef.current) || (footRef.current && (!!yardActRef.current || !!deedReachRef.current))
   const ledgerRef = useRef(ledger); ledgerRef.current = ledger
   const takeFerry = useCallback(() => {
     const f = ferryRef.current; if (!f || ferrying) return
@@ -1285,7 +1293,7 @@ function ContinentRideGame() {
       : []),
     ...(hud.foot && yardState.action && !deed ? [{ code: 'KeyE', key: 'E', label: yardState.action, near: true }, ...(yardState.action === 'place' ? [{ code: 'DeedTurn', key: 'E', label: 'turn' }] : [])] : []),
     ...(hud.foot && deedReach && !deed ? [{ code: 'KeyE', key: 'E', label: deedReach.startsWith('front:') || deedReach.startsWith('smith:') ? 'go in' : 'deed', near: true }] : []),
-    ...(hud.prompt ? [{ code: 'KeyF', key: 'F', label: hud.foot ? 'get in' : 'get out', near: true }] : []),
+    ...(hud.prompt ? [{ code: 'KeyE', key: 'E', label: hud.foot ? 'get in' : 'get out', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
     { code: 'KeyO', key: 'O', label: 'options' },
     { code: 'KeyI', key: 'I', label: 'pack' },
@@ -1358,7 +1366,8 @@ function ContinentRideGame() {
   // approaching a place speaks on the message line (was a banner)
   const lastPlace = useRef<string | null>(null)
   useEffect(() => { if (hud.place && hud.place !== lastPlace.current) hudSay(`Approaching ${hud.place}`, 'zone'); lastPlace.current = hud.place ?? null }, [hud.place])
-  const vitalsRef = useRef<Vitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0 })
+  const vitalsRef = useRef<SkinVitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0, skin: true })   // M80: the shield drawn as the Mana Skin (hold F)
+  const skinRef = useRef<SkinPool>({ cur: 0 })
   const manaRef = useRef<Mana>({ cur: 100, max: 100, regen: ECON.manaRegen })
   // Q / X on foot (BETA M15b): the same shared hook as the Ather. No fight here yet, so a fight cast resolves against nothing.
   const casts = useCasts({ manaRef, vitalsRef, fightHere: () => false, gateHere: () => true })
@@ -1416,6 +1425,9 @@ function ContinentRideGame() {
   const [vesselShop, setVesselShop] = useState(false)   // the Passage's vessel counter (vessel-shop.tsx)
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.code === 'Escape') setVesselShop(false) }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
   const optionsOpen = useOptionsOpen()   // Options (options.tsx): O, Esc once the mouse is free, the pack's gear
+  // M80: hold F (phone: SHIELD) charges the keeper's own Mana Skin, on foot and out of every menu
+  const skinOk = useRef(false); skinOk.current = !!hud.foot && !bagOpen && !vesselShop && !deed && !optionsOpen && !showMap && !garage && !ferrying
+  useSkinCharge({ mana: manaRef, skin: skinRef, active: () => skinOk.current, vitals: vitalsRef })
   useOptionsKeys(showMap || garage || !!board || bagOpen || vesselShop || !!deed)
   useMenuLock(showMap || garage || !!board || bagOpen || vesselShop || !!deed || optionsOpen, getCanvas)
   useMorelHints({ stage: errStage, zone: 'continent', pos: () => ({ x: focus.current.x, z: focus.current.z }),
@@ -1490,7 +1502,7 @@ function ContinentRideGame() {
           <Bridges R={R} />
           <Tunnels R={R} cave={cave} />
           {cave && <CavernView cave={cave} R={R} />}
-          {cave && <GunRange cave={cave} />}
+          {cave && <GunRange cave={cave} mana={manaRef.current} />}
           {cave && <VesselCounter cave={cave} enabled={!vesselShop && !bagOpen && !showMap} onOpen={() => setVesselShop(true)} />}
           {R && <QuestGuide zone="continent" ground={(x, z) => (cave && cave.inside(x, z) ? cave.y : R.groundAt(x, z))} water={(x, z) => R.heightAt(x, z) < -0.15 && !R.deckAt(x, z)} roads={questRoads} />}
           {/* the Mana'mal companion walks with you on foot; in a vessel it rides along and steps out beside you after.
@@ -1518,7 +1530,7 @@ function ContinentRideGame() {
       <SpeedStreaks frac={hud.frac} />
       {isTouch && started && !showMap && !garage && !board && !ferrying && (
         <TouchControls showFire={!!hud.foot && (gunHud.holding || rin.baitHeld)} actions={touchActions}
-          holds={hud.foot ? (gunHud.holding ? [{ code: AIM_CODE, label: 'aim' }, { code: 'ShiftLeft', label: 'slide' }, { code: 'Space', label: 'jump' }] : undefined) : [{ code: 'Space', label: 'drift' }]}
+          holds={hud.foot ? (gunHud.holding ? [{ code: AIM_CODE, label: 'aim' }, { code: 'ShiftLeft', label: 'slide' }, { code: 'Space', label: 'jump' }, { code: 'KeyF', label: 'shield' }] : SKIN_HOLDS) : [{ code: 'Space', label: 'drift' }]}
           stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hudSize === 'phone' ? PHONE_ROW_TOP : hud.foot ? 48 : 148 }} />
       )}
       {started && <GameHud size={hudSize} pose={track as React.RefObject<CompassPose>} marks={questMarksRef} vitals={vitalsRef} mana={manaRef} casts={casts.castHud} entries={gunHud.holding ? gunHud.entries : hotbarEntries(inv)} sel={slot} onSelect={setSlot} onEquip={gunHud.holding ? undefined : (i: number) => setStance(st => equipSlot(st, i, getInv()))}

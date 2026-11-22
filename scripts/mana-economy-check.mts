@@ -83,7 +83,7 @@ async function pause(p: any, where: string) {
   await p.goto(`${url}/shimmer/open/continent?hour=14`, { waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction(() => !!(window as any).__drive?.foot, { timeout: 240000 }); await sleep(2000)
   await p.mouse.click(phone ? 195 : 550, phone ? 300 : 350).catch(() => {}); await sleep(400)
-  await p.keyboard.press('KeyF'); await sleep(2500)
+  await p.keyboard.press('KeyE'); await sleep(2500)
   await p.evaluate(() => (window as any).__drive.footTp(244, 31, 0)); await sleep(2500)
   await pause(p, 'continent on foot')
   ok(errs.length === 0, `continent: 0 page errors ${errs.slice(0, 2).join(' | ')}`)

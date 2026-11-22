@@ -20,7 +20,7 @@ export const ACTIONS: Action[] = [
   { code: 'KeyW', label: 'forward · throttle' }, { code: 'KeyS', label: 'back · brake' },
   { code: 'KeyA', label: 'left · steer left' }, { code: 'KeyD', label: 'right · steer right' },
   { code: 'Space', label: 'jump · climb · drift' }, { code: 'ShiftLeft', label: 'slide' },
-  { code: 'KeyE', label: 'use · talk · take' }, { code: 'KeyF', label: 'get in / out · plant a waymark' },
+  { code: 'KeyE', label: 'use · talk · take · get in / out' }, { code: 'KeyF', label: 'hold: charge your mana skin' },
   { code: 'KeyL', label: 'lift your waymark' }, { code: 'KeyR', label: 'draw · swap · hold to stow · back to the road' },
   { code: 'KeyH', label: 'home (the Wilds)' }, { code: 'KeyM', label: 'map' },
   { code: 'KeyI', label: 'bag' }, { code: 'KeyJ', label: 'journal' }, { code: 'KeyP', label: 'character' }, { code: 'KeyU', label: 'skills' },

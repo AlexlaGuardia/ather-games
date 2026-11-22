@@ -1,6 +1,7 @@
 // M78 mana + health economy. Run: npx tsx src/app/shimmer/open/shared/vitals-economy.test.ts
-import { ECON, manaTick, draughtHeal, potionCdLeft, payReload, type ManaPool } from './vitals-economy'
-import { newCombat, stepCombat, hurtKeeper, reload } from '../ather/combat'
+import { ECON, manaTick, draughtHeal, potionCdLeft, payReload, skinStep, type ManaPool } from './vitals-economy'
+import { holdGun, reloadGun, RANGE_GUNS } from './gunplay'
+import { newCombat, stepCombat, hurtKeeper, reload, skinOf } from '../ather/combat'
 import { drink } from '../ather/alchemy'
 import { effectOf, potionId } from '../ather/alchemy-set'
 let fail = 0
@@ -63,6 +64,32 @@ ok(potionCdLeft(100, 115) === 0, 'ready at 15 s')
   const c2 = newCombat(1); c2.mana = { cur: 1 }; c2.keeper.ammo = 0; c2.events = []; reload(c2)
   ok(c2.keeper.reloading === 0 && c2.events.some(e => e.kind === 'reload-dry'), 'combat reload short of mana refuses with an event')
   const c3 = newCombat(1); c3.keeper.ammo = 0; reload(c3); ok(c3.keeper.reloading > 0, 'no pool on the combat = free (old behaviour)') }
+
+
+// M80 hold F: the keeper's own Mana Skin
+{ const ch = { heldFor: 0 }, mana = { cur: 100 }, skin = { cur: 0 }
+  const hold = (secs: number, held = true) => { for (let t = 0; t < secs - 1e-9; t += 0.05) skinStep(ch, held, 0.05, mana, skin) }
+  hold(0.95); ok(skin.cur === 0 && mana.cur === 100, `nothing for the 1 s stall (skin ${skin.cur})`)
+  hold(0.55); ok(skin.cur > 5 && skin.cur < 15, `then it climbs (skin ${skin.cur.toFixed(1)} at 1.5 s)`)
+  ok(near(100 - mana.cur, skin.cur / 5, 1e-6), `10 skin per 2 mana (spent ${(100 - mana.cur).toFixed(2)} for ${skin.cur.toFixed(1)})`)
+  hold(5); ok(near(skin.cur, ECON.skinCap) && near(mana.cur, 100 - ECON.skinCap / 5), `stops at the cap (skin ${skin.cur}, mana ${mana.cur})`)
+  hold(0.1, false); const s0 = skin.cur; skin.cur = 20; hold(0.5); ok(skin.cur === 20, 'letting go resets the stall'); void s0
+  const m2 = { cur: 1 }, k2 = { cur: 0 }, c2 = { heldFor: 0 }; for (let t = 0; t < 4; t += 0.05) skinStep(c2, true, 0.05, m2, k2)
+  ok(near(k2.cur, 5) && m2.cur < 1e-9, `no mana = no more charge (skin ${k2.cur}, mana ${m2.cur})`) }
+// a charge is a spend for the M78 refill pause
+{ const m: ManaPool = { cur: 50, max: 100, regen: ECON.manaRegen }, sk = { cur: 0 }, ch = { heldFor: 0 }
+  manaTick(m, 0, 0.05); let t = 0
+  for (; t < 2; t += 0.05) { skinStep(ch, true, 0.05, m, sk); manaTick(m, t, 0.05) }
+  const after = m.cur; for (let u = 0; u < 2.5; u += 0.05) { t += 0.05; manaTick(m, t, 0.05) }
+  ok(near(m.cur, after), 'charging the skin pauses the refill like any spend') }
+// combat: the keeper's own skin takes a blow after any field skin and pops at 0
+{ const c = newCombat(1); c.skin = { cur: 20 }; c.events = []
+  ok(skinOf(c).skin === 20 && skinOf(c).skinMax === ECON.skinCap, 'skinOf shows the keeper skin on the health bar')
+  hurtKeeper(c, 14); ok(c.keeper.hp === 100 && near(c.skin.cur, 6), `a blow lands on the skin first (hp ${c.keeper.hp}, skin ${c.skin.cur})`)
+  c.events = []; hurtKeeper(c, 14); ok(c.skin.cur === 0 && c.keeper.hp === 92 && c.events.some(e => e.kind === 'skin-pop'), `it pops at 0 and the rest reaches health (hp ${c.keeper.hp})`) }
+// the range: reloads cost mana there too
+{ const g = { ...holdGun(RANGE_GUNS[0]), mana: { cur: 4 } }; g.ammo = 0; reloadGun(g); ok(g.reloading > 0 && near(g.mana.cur, 1), 'a range reload pays 3 mana')
+  const g2 = { ...holdGun(RANGE_GUNS[0]), mana: { cur: 1 } }; g2.ammo = 0; reloadGun(g2); ok(g2.reloading === 0 && g2.dry === 1, 'short = refused, counted for the line') }
 
 console.log(fail ? `vitals-economy: ${fail} FAILED` : 'vitals-economy: all pass')
 process.exit(fail ? 1 : 0)

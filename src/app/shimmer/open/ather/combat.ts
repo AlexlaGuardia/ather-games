@@ -109,6 +109,9 @@ export interface Combat {
   hollows: Hollow[]; rounds: Round[]; drops: Drop[]; spits: Spit[]
   /** M78: the keeper's mana bar (the page's manaRef object). A reload pays ECON.reloadMana from it; unset = reloads are free. */
   mana?: { cur: number }
+  /** M80: the keeper's OWN Mana Skin, charged by holding F (shared/use-skin-charge.ts). Takes a blow after any field's skin;
+   *  pops at 0 like it. Unset = none. */
+  skin?: { cur: number }
   /** BETA M28 shared fights: a NON-HOST in a party. The host runs the Hollows (fight-share.ts snapshots); here they only
    *  ease to the host's word: no AI, no spawning, no spit; a round that hits one flashes it and queues the hit in `netHits`
    *  (slice 3 sends them to the host), and never changes its hp (the host decides that). */
@@ -191,7 +194,8 @@ export function skinField(c: Combat): CombatField | null {
 /** What the HUD draws over the health bar: the skin holding the keeper and its full size (0 / 0 = none). */
 export function skinOf(c: Combat): { skin: number; skinMax: number } {
   const f = skinField(c)
-  return f ? { skin: f.shell!, skinMax: f.shellMax ?? f.shell! } : { skin: 0, skinMax: 0 }
+  if (f) return { skin: f.shell!, skinMax: f.shellMax ?? f.shell! }
+  return c.skin && c.skin.cur > 0 ? { skin: c.skin.cur, skinMax: ECON.skinCap } : { skin: 0, skinMax: 0 }   // M80: the keeper's own
 }
 function popSkin(c: Combat, f: CombatField) {
   f.shell = 0; f.popped = true; f.until = c.clock ?? 0   // "gone at the first hard blow": the field goes with its skin
@@ -210,6 +214,13 @@ export function hurtKeeper(c: Combat, raw: number) {
     f.shell! -= absorbed; cost -= absorbed
     c.events.push({ kind: 'skin', absorbed })
     if (f.shell! <= 0) popSkin(c, f)
+  }
+  const own = c.skin
+  if (cost > 0 && own && own.cur > 0) {   // M80: the keeper's own skin (hold F) takes what is left
+    const absorbed = Math.min(own.cur, cost)
+    own.cur -= absorbed; cost -= absorbed
+    c.events.push({ kind: 'skin', absorbed })
+    if (own.cur <= 1e-6) { own.cur = 0; c.events.push({ kind: 'skin-pop' }) }
   }
   if (cost <= 0) return
   k.hp = Math.max(0, k.hp - cost); k.sinceHurt = 0

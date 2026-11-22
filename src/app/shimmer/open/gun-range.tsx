@@ -18,6 +18,7 @@ import { caveRoomAt } from './cavern'
 import { gunForSlate, holdGun, stepGun, reloadGun, hitscan, stepPlates, PLATE, type GunState, type Round, type Target, type RangeGun } from './shared/gunplay'
 import { Tracers, type TracerShot } from './shared/tracers'
 import { hudSay } from './shared/game-hud'
+import { RELOAD_DRY_LINE } from './shared/vitals-economy'
 import { touch } from './shared/touch'
 import { postEntries } from './shared/journal'
 
@@ -109,10 +110,13 @@ const VM_HIP = new THREE.Vector3(0.15, -0.14, -0.44), VM_ADS = new THREE.Vector3
 const REACH = 1.9            // metres from a rack to take its gun
 const TALLY_QUIET = 1.4      // seconds of no fire before the lane reads the string out
 
-export function GunRange({ cave }: { cave: Cavern }) {
+/** `mana` (M80): the keeper's bar; range reloads cost mana like the Wilds' (unset = free). */
+export function GunRange({ cave, mana }: { cave: Cavern; mana?: { cur: number } }) {
   const { camera, gl } = useThree()
   const shop = cave.gunShop
   const gun = useRef<GunState | null>(null)
+  const dryAt = useRef(-99)
+  const sayDry = () => { const t = performance.now() / 1000; if (t - dryAt.current > 2) { dryAt.current = t; hudSay(RELOAD_DRY_LINE, 'info') } }   // M80, at most every 2 s
   const rounds = useRef<Round[]>([])          // the sim's rounds: only their DIRECTIONS are read (hit-scan)
   const shots = useMemo<TracerShot[]>(() => [], [])
   const flash = useRef<THREE.Group>(null), flashT = useRef(0)
@@ -130,7 +134,7 @@ export function GunRange({ cave }: { cave: Cavern }) {
 
   const take = (slate: string) => {
     const g = gunForSlate(slate); if (!g) return
-    gun.current = holdGun(g); tally.current = { shots: 0, hits: 0, heads: 0, best: 0, quiet: 0 }
+    gun.current = { ...holdGun(g), mana }; tally.current = { shots: 0, hits: 0, heads: 0, best: 0, quiet: 0 }
     setHud({ gun: g, ammo: g.clip, reloading: false })
     hudSay(`${cap(g.name)} · ${g.slot.toLowerCase()} · ${g.burst > 1 ? `${g.burst}-round burst` : g.pellets > 1 ? `${g.pellets} pellets` : g.auto ? 'full auto' : 'semi-auto'} · hold to fire, right-click aims, R reloads`, 'item')
   }
@@ -178,7 +182,7 @@ export function GunRange({ cave }: { cave: Cavern }) {
         if (gun.current?.gun.slot === near.current) putBack('swapped out')
         else take(near.current)
       }
-      if (e.code === 'KeyR' && gun.current) { reloadGun(gun.current); setHud({ reloading: gun.current.reloading > 0 }) }
+      if (e.code === 'KeyR' && gun.current) { const d0 = gun.current.dry ?? 0; reloadGun(gun.current); if ((gun.current.dry ?? 0) > d0) sayDry(); setHud({ reloading: gun.current.reloading > 0 }) }
     }
     window.addEventListener('mousedown', down); window.addEventListener('mouseup', up); window.addEventListener('keydown', key); window.addEventListener('contextmenu', noMenu)
     // probes for a scripted check on prod
@@ -229,7 +233,9 @@ export function GunRange({ cave }: { cave: Cavern }) {
       adsT = Math.max(0, Math.min(1, adsT + (aiming ? dt / 0.15 : -dt / 0.11)))
       adsFov = ADS_FOV_OF[g.gun.slot] ?? 50
       const before = rounds.current.length
+      const dry0 = g.dry ?? 0
       const fired = stepGun(g, dt, trigger.current || touch.fire, eye, aim, rand, rounds.current, adsT > 0.6)
+      if ((g.dry ?? 0) > dry0) sayDry()   // M80: a reload the keeper cannot pay for
       // ★ HIT-SCAN: every round (each pellet) lands NOW along its own cone direction; the tracer is its light, drawn
       // from the barrel (where the held gun's muzzle is this frame) to the point it already hit
       const muzzle = muzzleWorld(g.gun)

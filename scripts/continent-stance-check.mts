@@ -17,7 +17,7 @@ const st = () => p.evaluate(() => JSON.stringify((window as any).__drive.stance(
 const res: Record<string, string> = {}
 // on foot in Rune Hold's square (the stance only runs on foot), then the same presses as the Ather check
 await p.mouse.click(500, 320).catch(() => {}); await sleep(400)
-await p.keyboard.press('KeyF'); await sleep(2500)   // 11-18: F gets out (X no longer does); the stance only runs on foot
+await p.keyboard.press('KeyE'); await sleep(2500)   // M80 11-22: E gets out (F holds the mana skin now); the stance only runs on foot
 await p.evaluate(() => { const d = (window as any).__drive; d.footTp(244, 31, 0) }); await sleep(3000)
 res.boot = await st()
 await p.keyboard.down('KeyR'); await sleep(80); await p.keyboard.up('KeyR'); await sleep(300); res.tap1 = await st()      // draws

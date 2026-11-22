@@ -42,6 +42,8 @@ const CHIP: React.CSSProperties = { ...ring(40), width: 'auto', minWidth: 40, pa
 
 export interface TouchHold { code: string; label: string }
 const WALK_HOLDS: TouchHold[] = [{ code: 'ShiftLeft', label: 'slide' }, { code: 'Space', label: 'jump' }]
+/** M80: on foot in both worlds, SHIELD is held like F (shared/use-skin-charge.ts reads touch.held) */
+export const SKIN_HOLDS: TouchHold[] = [...WALK_HOLDS, { code: 'KeyF', label: 'shield' }]
 
 /** `holds`: the hold-buttons beside fire, top to bottom (default: the walker's slide + jump). The continent passes
  *  its handbrake while driving. `stickHint`: the faint words where the left thumb goes. */

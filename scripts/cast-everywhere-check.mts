@@ -51,7 +51,7 @@ async function press(p: any, where: string, errs: string[], K: 'Q' | 'X') {
   await p.keyboard.press('KeyQ'); await sleep(300)   // at the wheel: refused, spends nothing
   const m = await p.evaluate(() => (window as any).__casts?.mana?.() ?? 100)
   ok(m >= 99, `continent driving: Q refused (mana ${m.toFixed ? m.toFixed(0) : m})`)
-  await p.keyboard.press('KeyF'); await sleep(2500)
+  await p.keyboard.press('KeyE'); await sleep(2500)
   await p.evaluate(() => (window as any).__drive.footTp(244, 31, 0)); await sleep(2500)
   await press(p, 'continent on foot', errs, 'Q')
   await press(p, 'continent on foot', errs, 'X')

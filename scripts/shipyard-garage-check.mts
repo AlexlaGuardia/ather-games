@@ -49,7 +49,7 @@ const site = () => p.evaluate(() => ((window as any).__shipyards?.sites?.() ?? [
 const car = () => p.evaluate(() => (window as any).__drive.state()) as Promise<any>
 const footState = () => p.evaluate(() => (window as any).__drive.foot()) as Promise<any>
 /** F (in/out of the courser) is read in a game frame, about one a second headless: hold it across a frame, then wait on the mode */
-const fTo = async (mode: 'foot' | 'drive') => { await p.keyboard.down('KeyF'); await sleep(1500); await p.keyboard.up('KeyF'); return poll(async () => (await footState())?.mode === mode, 30000) }
+const fTo = async (mode: 'foot' | 'drive') => { await p.keyboard.down('KeyE'); await sleep(1500); await p.keyboard.up('KeyE'); return poll(async () => (await footState())?.mode === mode, 30000) }
 const fleet = () => p.evaluate(() => { for (let i = 0; i < localStorage.length; i++) { const q = localStorage.key(i)!; if (q.endsWith('open.fleet.v1')) return JSON.parse(localStorage.getItem(q)!) } return null })
 const toW = (s: any, lx: number, lz: number) => ({ x: s.x + s.ax[0] * lx + s.az[0] * lz, z: s.z + s.ax[1] * lx + s.az[1] * lz })
 const toL = (s: any, x: number, z: number) => { const dx = x - s.x, dz = z - s.z; return { lx: dx * s.ax[0] + dz * s.ax[1], lz: dx * s.az[0] + dz * s.az[1] } }
