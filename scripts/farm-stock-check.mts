@@ -51,7 +51,9 @@ await p.evaluate(() => (window as any).__build.to(-100, 100)); await sleep(2500)
 const mid = await p.evaluate(() => { const r = document.querySelector('canvas')!.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })
 await p.mouse.move(mid.x - 3, mid.y); await sleep(300); await p.mouse.move(mid.x, mid.y); await sleep(800)
 await p.mouse.click(mid.x, mid.y); await sleep(1200); await click('[data-act="land"]'); await sleep(800)
-const room: Room = (await read('open.works.v1')).rooms[0]
+const w0 = await read('open.works.v1')
+if (!w0?.rooms?.length) { await shot('stock-0-noroom'); console.log(JSON.stringify({ ...res, works: w0, errs }, null, 1)); console.log('FAIL: the Farm was never placed (pick/build/land step)'); await br.close(); process.exit(1) }
+const room: Room = w0.rooms[0]
 res.room = { kind: room?.kind, x: room?.x, z: room?.z }
 res.logsAfter = (await bag()).goldwood_log ?? 0
 res.starter = { flag: (await farmSave())?.starter, store: await store() }
