@@ -4,12 +4,15 @@
 // first the CLUMSY way (holding the whole time) which must LOSE it (bait spent, nothing in the bag), then with a stand-in
 // keeper that follows the zone (`hold('track')`, asked every reel step), which must LAND one. Then reads the bag. ⚠ Headless draws a frame only when asked: the script forces
 // frames with screenshots; the take is answered by polling (the take is judged on real time, not on frames).
-//   npx tsx scripts/rinning-check.mts [--out dir]
+// ★ M77 (11-22): the reel bar says 'Hold click to pull · let go to give' (phone: 'Hold FIRE ...') until the keeper's FIRST
+// landed rinn and never after: asserted on reel 1 (before any catch) and on a third answered take after the landing.
+//   npx tsx scripts/rinning-check.mts [--out dir] [--phone]   (--phone: 390x844 touch-only, wants the FIRE wording)
 import puppeteer from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { parseWilds, BIOME, type WildsMeta } from '../src/app/shimmer/open/ather/wilds'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
-const out = flag('--out', '/tmp'), url = flag('--url', 'https://ather.games')
+const out = flag('--out', '/tmp'), url = flag('--url', 'https://ather.games'), phone = process.argv.includes('--phone')
+const WANT_HINT = phone ? 'Hold FIRE to pull · let go to give' : 'Hold click to pull · let go to give'
 const D = 'public/open/wilds/', b = readFileSync(D + 'first-wilds.bin'), bio = readFileSync(D + 'first-wilds.biome')
 const W = parseWilds(JSON.parse(readFileSync(D + 'first-wilds.json', 'utf8')) as WildsMeta, new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)), new Uint8Array(bio))
 // a dry spot with deep-enough water 7 m off in some direction, and no tree trunk underfoot
@@ -26,7 +29,7 @@ for (let z = -400; z < 400 && !spot; z += 6) for (let x = -400; x < 400 && !spot
 if (!spot) { console.log('no shore found'); process.exit(1) }
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-const p = await br.newPage(); await p.setViewport({ width: 1000, height: 640 })
+const p = await br.newPage(); await p.setViewport(phone ? { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 1 } : { width: 1000, height: 640 })
 // a fresh keeper's bag, written down so the check can find the bait's slot (11-18: guns left the bag)
 await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); { const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'waymark', n: 12 }; slots[1] = { id: 'bait', n: 10 }; localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] })) } localStorage.removeItem('open.skills.v1') })
 // arrive IN the Wilds and wait until the page says so: a travel sent before the Wilds index/tiles land only toasts 'still
@@ -66,6 +69,9 @@ const readBag = () => p.evaluate(() => (JSON.parse(localStorage.getItem('open.in
 const RINN = ['shimmerscale', 'clickclaw', 'glowfin', 'ribboneel', 'moonkoi', 'pearlshell', 'crystal_rinn']
 // 1 · clumsy: taking against every fight must lose it
 const answered = await answerTake(); res.answered = answered
+const hintNow = async () => { await frame(); await frame(); return p.evaluate(() => document.querySelector('[data-reel-hint]')?.textContent ?? null) }
+res.touchOnly = await p.evaluate(() => matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches)
+res.hintBefore = await hintNow()
 await p.evaluate(() => (window as any).__ather.hold(true))
 const phase = await reelOut('rinning-3-clumsy'); res.clumsy = phase
 await p.evaluate(() => (window as any).__ather.hold(false))
@@ -80,11 +86,19 @@ const phase2 = await reelOut('rinning-4-track'); res.tracked = phase2
 await p.evaluate(() => (window as any).__ather.hold(false))
 await sleep(1500)
 res.bag = await readBag()
+// 3 · M77: after the first landed rinn the hint is gone for good (answer one more take and read the bar)
+await p.evaluate((s) => (window as any).__ather.look(s.yaw, s.pitch), spot); await frame()
+await p.evaluate(() => (window as any).__ather.cast()); await frame()
+const answered3 = await answerTake(); res.answered3 = answered3
+res.hintAfter = answered3 ? await hintNow() : 'not answered'
+await frame('rinning-5-after-first')
 console.log(JSON.stringify(res))
+const hintOk = res.touchOnly === phone && res.hintBefore === WANT_HINT && answered3 && res.hintAfter === null
+console.log(hintOk ? '  ok  ' : '  FAIL', `M77 hint: before first catch ${JSON.stringify(res.hintBefore)} (want ${JSON.stringify(WANT_HINT)}), after ${JSON.stringify(res.hintAfter)} (want null), touch-only ${res.touchOnly}`)
 const bag = res.bag as string[]
 // bait is judged RELATIVE (11-19): answerTake re-presses cast until the take is caught, and at 1-2 fps a take can lapse first,
 // so that press casts again (one more bait). 'exactly 9 then 8' failed on that alone with every rinning step passing.
 const baitOf = (b: string[]) => Number((b.find(x => x.startsWith('baitx')) ?? 'baitx0').slice(5))
 const pass = res.aimed === true && answered && phase === 'gone' && baitOf(bag1) <= 9 && baitOf(bag1) >= 1 && !bag1.some(x => RINN.some(r => x.startsWith(r + 'x')))
-  && answered2 && phase2 === 'landed' && baitOf(bag) < baitOf(bag1) && bag.some(x => RINN.some(r => x.startsWith(r + 'x')))
+  && answered2 && phase2 === 'landed' && baitOf(bag) < baitOf(bag1) && bag.some(x => RINN.some(r => x.startsWith(r + 'x'))) && hintOk
 console.log(pass ? 'PASS' : 'FAIL'); await br.close(); process.exit(pass ? 0 : 1)

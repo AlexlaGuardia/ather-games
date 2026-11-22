@@ -2,6 +2,7 @@
 // shore near Gale Haven: pick the bait (3), cast at the water, answer the take, then reel twice like the Wilds check:
 // held the whole way (clumsy) must LOSE it, the zone-tracking stand-in must LAND one. ⚠ headless draws a frame only when
 // asked, so the loop forces frames with screenshots. npx tsx scripts/nyx-rinning-check.mts (URL= to point elsewhere)
+// ★ M77 (11-22): the reel bar's 'Hold click to pull · let go to give' shows before the first landed rinn and never after.
 import puppeteer from 'puppeteer-core'
 import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
@@ -44,7 +45,7 @@ await p.keyboard.press(`Digit${await p.evaluate(() => (((JSON.parse(localStorage
 const view = () => p.evaluate(() => (window as any).__rin.view())
 ok(!!(await view())?.aim, 'bait in hand, aimed at open water')
 const bag = () => p.evaluate(() => (JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots as ({ id: string; n: number } | null)[]).filter(Boolean).map(s => `${s!.id}x${s!.n}`))
-const reel = async (hold: boolean | 'track') => {
+const reel = async (hold: boolean | 'track' | 'none') => {
   await p.evaluate(() => (window as any).__rin.act()); await frame()
   console.log('   cast', JSON.stringify(await view()).slice(0, 120))
   let answered = false
@@ -57,11 +58,14 @@ const reel = async (hold: boolean | 'track') => {
   }
   console.log('   answered', answered, 'after', (await view())?.phase)
   if (!answered) return { answered, phase: (await view())?.phase }
+  await frame(); await frame()
+  const hint = await p.evaluate(() => document.querySelector('[data-reel-hint]')?.textContent ?? null)
+  if (hold === 'none') return { answered, phase: 'reeling', hint }
   await p.evaluate((h) => (window as any).__rin.hold(h), hold)
   let ph = 'reeling'
   for (let k = 0; k < 200 && ph !== 'landed' && ph !== 'gone' && ph !== 'idle'; k++) { await frame(); ph = (await view())?.phase }
   await p.evaluate(() => (window as any).__rin.hold(false))
-  return { answered, phase: ph }
+  return { answered, phase: ph, hint }
 }
 const r1 = await reel(true)
 const b1 = await bag()
@@ -73,6 +77,11 @@ await frame('/tmp/nyx-rin-landed.png')
 const b2 = await bag()
 ok(r2.answered && r2.phase === 'landed', `the tracking keeper lands one (${JSON.stringify(r2)})`)
 ok(b2.includes('baitx8') && b2.some(x => NYX_RINN.some(r => x.startsWith(r.id + 'x'))), `a mortal rinn in the bag (${b2.join(' ')})`)
+const HINT = 'Hold click to pull · let go to give'
+ok(r1.hint === HINT, `M77: the bar says how to reel before the first catch (${JSON.stringify(r1.hint)})`)
+await p.evaluate((s) => (window as any).__drive.footTp(s.x, s.z, s.yaw, s.pitch), spot); await wait(1500); await frame()
+const r3 = await reel('none')
+ok(r3.answered && r3.hint === null, `M77: after the first landed rinn the hint is gone (${JSON.stringify(r3)})`)
 ok(errs.length === 0, `no page errors${errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''}`)
 await br.close()
 console.log(fails ? `nyx-rinning-check: ${fails} FAIL` : 'nyx-rinning-check: PASS')
