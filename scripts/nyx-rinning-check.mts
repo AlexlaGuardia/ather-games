@@ -33,7 +33,7 @@ const br = await puppeteer.launch({ executablePath: '/usr/bin/chromium-browser',
 const p = await br.newPage()
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e) + ' @ ' + String((e as Error).stack ?? '').split('\n').slice(1, 4).join(' / ')))
 // a fresh keeper's bag, written down so the check can find the bait's slot (11-18: guns left the bag)
-await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); { const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'waymark', n: 12 }; slots[1] = { id: 'bait', n: 10 }; localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] })) } localStorage.removeItem('open.skills.v1') })
+await p.evaluateOnNewDocument(() => { try { localStorage.setItem('ather:shimmer:birthRune', 'star'); { const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'waymark', n: 12 }; slots[1] = { id: 'bait', n: 10 }; localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] })) } localStorage.removeItem('open.skills.v1')  } catch { /* a storage-less frame (the phone emulation opens one): seed the page only */ } })
 await p.setViewport(phone ? { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 1 } : { width: 560, height: 350 })
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(c ? '  ok  ' : '  FAIL', m); if (!c) fails++ }
