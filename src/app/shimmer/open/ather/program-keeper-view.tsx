@@ -17,6 +17,8 @@ export function ProgramKeeper() {
       } })
       return out
     }
+    const mm = window as unknown as { __glMemory?: () => unknown }
+    if (!mm.__glMemory) mm.__glMemory = () => ({ ...gl.info.memory, programs: (gl.info.programs ?? []).length })   // read-only probe (M9 leak check): live geometries/textures in the renderer
     if (!w.__programs) w.__programs = () => ((gl.info.programs ?? []) as unknown as { name: string; cacheKey: string }[]).map(q => ({ name: q.name, key: q.cacheKey }))   // read-only probe (M44 warm-up diag)
   })
   return null

@@ -115,6 +115,9 @@ function MistGroup({ pts, sale, ring }: { pts: { x: number; y: number; z: number
 export function PlotIsland({ owned, pages }: { owned: ReadonlySet<string>; pages: number }) {
   const geo = useMemo(plotGeometry, [])
   const lines = useMemo(gridLines, [])
+  // M9 (11-22): both go to <mesh geometry={...}> as props, which R3F never disposes. PlotIsland remounts on every return home,
+  // so each trip left the old island (~40k verts) and grid in the renderer's binding cache: ~2 MB a trip, 63 MB after 34
+  useEffect(() => () => { geo.dispose(); lines.dispose() }, [geo, lines])
   const ground = useGroundMaterial()
   return (
     <>

@@ -69,6 +69,9 @@ function TilePathStrips({ net, W, off }: { net: Network; W: Wilds; off: { x: num
     g.setIndex(idx); g.computeVertexNormals()
     return g
   }, [net, W, off.x, off.z])
+  // M9 (11-22): a geometry passed as a prop is never disposed by R3F; every Wilds arrival remounts each tile's paths, so
+  // without this the renderer's binding cache kept every old copy (the heap diff's --trips run: ~35 per trip)
+  useEffect(() => () => geo?.dispose(), [geo])
   if (!geo) return null
   return <mesh geometry={geo} renderOrder={groundOrder('path')}><meshLambertMaterial vertexColors side={THREE.DoubleSide} {...groundMat('path', { factor: -4, units: -4 })} /></mesh>
 }
@@ -182,6 +185,7 @@ function Tent({ r, wall, peak, panels = 24 }: { r: number; wall: number; peak: n
     wall: striped(new THREE.CylinderGeometry(r, r, wall, panels * 2, 1, true), panels),
     roof: striped(new THREE.ConeGeometry(r * 1.08, peak - wall, panels * 2, 1, true), panels),
   }), [r, wall, peak, panels])
+  useEffect(() => () => { g.wall.dispose(); g.roof.dispose() }, [g])   // M9: prop geometry, R3F never disposes it
   return (
     <group>
       <mesh geometry={g.wall} position-y={wall / 2}><meshLambertMaterial vertexColors side={THREE.DoubleSide} /></mesh>
