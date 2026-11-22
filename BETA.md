@@ -182,6 +182,8 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
+- **Newborn welcome card (11-21, lark draft):** a newborn now wakes facing Greg, but the card says "The gate ahead is the fold map". Lark opening: "You wake at Moonwell Glade in the Wilds. That's Gregory on the bench in front of you, and he sells the ground under the mist." Full phone + desktop text: docs/copy/newborn-welcome-card-2026-11-21.md. OK -> play pastes it.
+
 - **OWNER_KEY on the EliteDesk? (11-21, play sweep):** 11 prod checks (void/greg/infuse/move/map, the voxel3d set) need OWNER_KEY and the edesk has no .env. Copy the key there (they run off-box), or keep those 11 server-only?
 
 - **M58 Ather path ribbons vs legacy (11-21):** ribbons = even bands + edge strip, no seam gap, clean 3-way joins; legacy = more organic wobble. Flip default? Side-by-sides /root/cortex/watch/m58-ather-shots/fixed/{ribbon,legacy}/{glade,seam,junction,green}.png (grass texture verified identical; flicker diff: ribbons show zero path/ground change at seam/junction/glade)
