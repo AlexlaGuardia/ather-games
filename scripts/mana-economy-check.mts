@@ -47,7 +47,7 @@ async function pause(p: any, where: string) {
   const inPause = trace.filter(([t]) => t < 2.3 * 1000).map(([, m]) => m), after = trace.filter(([t]) => t > 4 * 1000)
   const spread = Math.max(...inPause) - Math.min(...inPause), last = after[after.length - 1]?.[1] ?? 0, atEnd = Math.max(...inPause)
   ok(spread < 0.05, `${where}: mana flat inside the 3 s pause (spread ${spread.toFixed(3)} over ${inPause.length} samples)`)
-  ok(last > atEnd + 0.3, `${where}: mana climbs after the pause (${atEnd.toFixed(2)} -> ${last.toFixed(2)} by ${(after[after.length - 1]?.[0] / 1000).toFixed(1)} s)`)
+  ok(last > atEnd + 0.1, `${where}: mana climbs after the pause (${atEnd.toFixed(2)} -> ${last.toFixed(2)} by ${(after[after.length - 1]?.[0] / 1000).toFixed(1)} s)`)
   const rate = after.length > 2 ? (after[after.length - 1][1] - after[0][1]) / ((after[after.length - 1][0] - after[0][0]) / 1000) : 0
   // only an upper bound means anything here: the refill runs on frame dt clamped at 0.1 s, so swiftshader's ~1 fps reads far
   // below the dial (0.04-0.10/s measured 11-22). The 0.4/s itself is pinned by shared/vitals-economy.test.ts.
