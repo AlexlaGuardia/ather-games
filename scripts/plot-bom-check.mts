@@ -1,5 +1,5 @@
 // M37 slice 4 check (plot-bom-check): a drawn plan is a DRAFT with a bill of materials; Build needs it all.
-//   1. draw a 5x4 room with a SHORT bag: 18 draft pieces, list = 38 goldwood planks + 20 stone bricks, have < need, Build disabled,
+//   1. draw a 5x4 room with a SHORT bag: 18 draft pieces, list = 18 x wallPerM + 20 floor goldwood planks + 20 stone bricks, have < need, Build disabled,
 //      nothing spent, room not built (no floor / roof)
 //   2. SETUP (stated): the test guest's own localStorage bag is topped up to the list, then reload: the draft survives, Build lights
 //   3. Build: bag spent exactly, walls built (no draft), room built, list gone; reload keeps it
@@ -10,6 +10,10 @@
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import * as THREE from 'three'
+import { AMOUNTS } from '../src/app/shimmer/open/ather/plot-bom'
+// M50 made a wall piece cost AMOUNTS.wallPerM (1.5) planks, not 1: every plank number below derives from it (the check said 38 / 2 / 3 until pass 6)
+const W = AMOUNTS.wallPerM, WALLS = Math.ceil(18 * W), NEED = WALLS + 20, BAG = NEED + 2
+const R1 = Math.floor(2 * W), R2 = Math.floor(3 * W + (2 * W - R1))   // raze pays whole planks, the fraction carries to the next take-down
 import { TABLE, KEEP_CLEAR } from '../src/app/shimmer/open/ather/rooms'
 import { STARTING_SQUARES, squareAt, sqId, GROUND_Y } from '../src/app/shimmer/open/ather/plot'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -84,14 +88,14 @@ try {
   ok(!!w1 && w1.rooms.length === 1 && w1.rooms[0].cells === 20, `1. four sides close one 5x4 room (${JSON.stringify(w1?.rooms)})`)
   ok(d1.total === 18 && d1.draft === 18 && d1.paid === 0, `   18 pieces, all draft, none paid (${JSON.stringify(d1)})`)
   ok(p0 === await planks(), `   drawing spent nothing (${p0} planks before and after)`)
-  ok(!!b1 && b1.lines.goldwood_plank?.need === 38 && b1.lines.stone_brick?.need === 20 && Object.keys(b1.lines).length === 2, `   the list: 38 goldwood planks + 20 stone bricks (${JSON.stringify(b1?.lines)})`)
-  ok(!!b1 && b1.lines.goldwood_plank.have === 5 && b1.lines.stone_brick.have === 0 && b1.lines.goldwood_plank.short && b1.lines.stone_brick.short, '   have / need: 5 of 38 planks, 0 of 20 bricks, both short (red)')
+  ok(!!b1 && b1.lines.goldwood_plank?.need === NEED && b1.lines.stone_brick?.need === 20 && Object.keys(b1.lines).length === 2, `   the list: ${NEED} goldwood planks + 20 stone bricks (${JSON.stringify(b1?.lines)})`)
+  ok(!!b1 && b1.lines.goldwood_plank.have === 5 && b1.lines.stone_brick.have === 0 && b1.lines.goldwood_plank.short && b1.lines.stone_brick.short, `   have / need: 5 of ${NEED} planks, 0 of 20 bricks, both short (red)`)
   ok(!!b1 && b1.disabled && !b1.ready, '   Build is disabled while short')
   ok(w1?.rooms[0].built === false, '   the room is not built (no floor, no roof yet)')
   await shot('bom-1-short')
   // 2. SETUP: top the test guest's own bag up to the list, reload
   await p.evaluate(() => {
-    const inv = JSON.parse(localStorage.getItem('open.inv.v1')!); inv.slots[8] = { id: 'goldwood_plank', n: 40 }; inv.slots[9] = { id: 'stone_brick', n: 20 }
+    const inv = JSON.parse(localStorage.getItem('open.inv.v1')!); inv.slots[8] = { id: 'goldwood_plank', n: BAG }; inv.slots[9] = { id: 'stone_brick', n: 20 }
     localStorage.setItem('open.inv.v1', JSON.stringify(inv))
   })
   await p.reload({ waitUntil: 'load', timeout: 180000 })
@@ -99,13 +103,13 @@ try {
   const d2 = await draftCount(); ok(d2.draft === 18, `2. the plan survives a reload as a draft (${d2.draft} of ${d2.total})`)
   ok(await enterPlan(), '   Plan again')
   ok(await poll(async () => (await bom())?.ready === true, 15000), '   with the parts in the bag the list is met and Build lights')
-  const b2 = await bom(); ok(!!b2 && !b2.disabled && b2.lines.goldwood_plank.have === 40 && b2.lines.stone_brick.have === 20, `   have / need now 40/38 planks and 20/20 bricks (${JSON.stringify(b2?.lines)})`)
+  const b2 = await bom(); ok(!!b2 && !b2.disabled && b2.lines.goldwood_plank.have === BAG && b2.lines.stone_brick.have === 20, `   have / need now ${BAG}/${NEED} planks and 20/20 bricks (${JSON.stringify(b2?.lines)})`)
   await shot('bom-2-ready')
   // 3. Build
   ok(await tap('[data-act="build-plan"] button'), '3. tap Build')
   ok(await poll(async () => (await draftCount()).draft === 0), '   every piece is built (no draft)')
   const d3 = await draftCount(); ok(d3.total === 18 && d3.paid === 1, `   18 pieces stand and the room is paid (${JSON.stringify(d3)})`)
-  ok((await planks()) === 2 && (await count('stone_brick')) === 0, `   the list was spent exactly: 40-38 = 2 planks, 0 bricks (${await planks()}, ${await count('stone_brick')})`)
+  ok((await planks()) === 2 && (await count('stone_brick')) === 0, `   the list was spent exactly: ${BAG}-${NEED} = 2 planks, 0 bricks (${await planks()}, ${await count('stone_brick')})`)
   ok(await poll(async () => (await walls())?.rooms[0]?.built === true), '   the room is built (floor + roof stand)')
   ok(await poll(async () => (await bom()) === null), '   the list is gone once built')
   await shot('bom-3-built')
@@ -117,11 +121,11 @@ try {
   const e0 = await planks()
   await dragW(X0 + 1, Z0, X0 + 3, Z0)
   // opening the top wall also stops the room closing, so its floor planks and roof bricks come back with the 2 pieces
-  ok(await poll(async () => (await planks()) - e0 === 2 + 20), `4. erasing 2 built metres refunds 2 planks, and the opened room its 20 floor planks (${(await planks()) - e0})`)
+  ok(await poll(async () => (await planks()) - e0 === R1 + 20), `4. erasing 2 built metres refunds ${R1} planks, and the opened room its 20 floor planks (${(await planks()) - e0})`)
   const e1 = await planks()
   ok((await count('stone_brick')) === 20, `   and its roof: 20 bricks (${await count('stone_brick')})`)
   await dragW(X0, Z0, X1, Z0)   // the rest of the top wall: 3 more pieces, nothing more to refund but their planks
-  ok(await poll(async () => (await planks()) - e1 === 3), `   the other 3 pieces: 3 planks, no second floor refund (${(await planks()) - e1})`)
+  ok(await poll(async () => (await planks()) - e1 === R2), `   the other 3 pieces: ${R2} planks (the half carried), no second floor refund (${(await planks()) - e1})`)
   ok((await draftCount()).paid === 0, '   the room is no longer recorded as built')
   await shot('bom-4-erased')
   // 5. grandfather: strip draft + paid from what is saved, as a pre-slice-4 save would be; re-draw nothing
