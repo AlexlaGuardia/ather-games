@@ -45,13 +45,13 @@ try {
   const g = await p.evaluate(() => (window as any).__ather.state()) as { py: number }
   await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, 0, y), c.x, c.z, g.py + 5.0 + 0.8); await sleep(1500)
   let last = 1e9, st: any = null
-  for (let n = 0; n < 40; n++) { st = await p.evaluate(() => (window as any).__ather.state()); if (Math.abs(st.py - last) < 0.005) break; last = st.py; await sleep(1000) }
+  for (let n = 0; n < 40; n++) { st = await p.evaluate(() => (window as any).__ather.state()); if (st.py < g.py + 5.0 + 0.75 && Math.abs(st.py - last) < 0.005) break; last = st.py; await sleep(1000) }   // settled only once it has LEFT the tp height (11-22: a keeper held at the drop height under a veil read as settled, 29.80)
   ok(Math.abs(st.py - (g.py + 5.0)) < 0.25, `2. standing on the blueprint's upper slab: feet ${st.py.toFixed(2)} vs ${(g.py + 5.0).toFixed(2)} (ground ${g.py.toFixed(2)} + one storey)`)
   ok(JSON.stringify(stack?.holes) === '[1]', `3a. the upper slab is drawn with the shaft open (holes per upper level ${JSON.stringify(stack?.holes)}, want [1])`)
   const sh = pl.toWorld(2.5, 2.5)
   await p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, 0, y), sh.x, sh.z, g.py + 5.0 + 0.8); await sleep(1500)
   last = 1e9
-  for (let n = 0; n < 40; n++) { st = await p.evaluate(() => (window as any).__ather.state()); if (Math.abs(st.py - last) < 0.005) break; last = st.py; await sleep(1000) }
+  for (let n = 0; n < 40; n++) { st = await p.evaluate(() => (window as any).__ather.state()); if (st.py < g.py + 5.0 + 0.75 && Math.abs(st.py - last) < 0.005) break; last = st.py; await sleep(1000) }   // settled only once it has LEFT the tp height (11-22: a keeper held at the drop height under a veil read as settled, 29.80)
   ok(st.py < g.py + 1.0, `3b. dropped over the shaft, the keeper falls through to the ground floor: feet ${st.py.toFixed(2)} (ground ${g.py.toFixed(2)}, slab ${(g.py + 5.0).toFixed(2)})`)
   if (process.argv.includes('--shot')) { const eye = pl.toWorld(4.4, 3.6), dx = sh.x - eye.x, dz = sh.z - eye.z   // on the slab beside the shaft, looking down into it
     await p.evaluate((x: number, z: number, y: number, yaw: number) => { const g = (window as any).__ather; g.tp(x, z, yaw, y); g.look(yaw, -0.75) }, eye.x, eye.z, g.py + 5.8, Math.atan2(-dx, -dz))
