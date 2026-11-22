@@ -1517,7 +1517,7 @@ function ContinentRideGame() {
       {rin.bar}
       <SpeedStreaks frac={hud.frac} />
       {isTouch && started && !showMap && !garage && !board && !ferrying && (
-        <TouchControls showFire={!!hud.foot && gunHud.holding} actions={touchActions}
+        <TouchControls showFire={!!hud.foot && (gunHud.holding || rin.baitHeld)} actions={touchActions}
           holds={hud.foot ? (gunHud.holding ? [{ code: AIM_CODE, label: 'aim' }, { code: 'ShiftLeft', label: 'slide' }, { code: 'Space', label: 'jump' }] : undefined) : [{ code: 'Space', label: 'drift' }]}
           stickHint={hud.foot ? 'thumb here to move' : 'thumb here to drive'} row={{ side: 'left', top: hudSize === 'phone' ? PHONE_ROW_TOP : hud.foot ? 48 : 148 }} />
       )}

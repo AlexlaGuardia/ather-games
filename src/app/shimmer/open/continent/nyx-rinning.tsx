@@ -21,6 +21,7 @@ import type { Rinn, Reel } from '../shared/reel'
 import { getInv, setInv } from '../shared/bag'
 import { give, take, countOf, NO_BAIT_LINE } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
+import { touch } from '../shared/touch'
 import { addOpenXp, openLevel } from '../ather/forestry'
 import { BAIT } from '../ather/rinning'
 import { perkBonus } from '../shared/companion'
@@ -70,6 +71,19 @@ export function useNyxRinning(R: Region | null, held: string | null, active: boo
     window.addEventListener('mousedown', down); window.addEventListener('mouseup', up)
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up) }
   }, [act])
+  // PHONE (BETA M79, 11-22): the FIRE button is the click, as in the Wilds (ather/page.tsx, M6a): with bait in hand it casts,
+  // answers the take and is the reel's hold. Polled on a timer, not rAF, so a tap shorter than a frame still counts.
+  const baitHeld = active && held === BAIT
+  useEffect(() => {
+    if (!baitHeld) return
+    let was = touch.fire
+    const id = setInterval(() => {
+      const f = touch.fire; if (f === was) return
+      was = f; holding.current = f
+      if (f) act()
+    }, 30)
+    return () => { clearInterval(id); holding.current = false }
+  }, [baitHeld, act])
 
   const prompt = useCallback((): string | null => {
     if (!outRef.current) return null
@@ -87,5 +101,5 @@ export function useNyxRinning(R: Region | null, held: string | null, active: boo
   const bar = out ? <ReelBar api={api} /> : null
   /** for a scripted check: true / false, or 'track' (a stand-in keeper that follows the zone) */
   const hold = useCallback((h: boolean | 'track') => { holding.current = h === 'track' ? (r: Reel) => (r.zone - r.bob) * 6 + (r.zoneV - r.bobV) * 1.6 > 0 : h }, [])
-  return { fx, bar, prompt, api, hold, act }
+  return { fx, bar, prompt, api, hold, act, baitHeld }
 }
