@@ -60,11 +60,15 @@ try {
   ok(/bench by the pool at Moonwell Glade/i.test(jt), "3. journal: 'Gregory sits on the bench by the pool at Moonwell Glade.'")
   ok(!/just through the gate/i.test(jt), "3. journal: no 'just through the gate'")
   await p.keyboard.press('KeyJ'); await sleep(600)
-  // 4 · a returning keeper loads on the plot
+  // 4 · a returning keeper is not re-born, and a refresh in the Wilds keeps them where they stood ('Where you were', Alex
+  // 11-19 0c3fbede, after this check was written: it used to expect the plot)
+  const before = await p.evaluate(() => { const s = (window as any).__ather.state(); return { x: s.px as number, z: s.pz as number } })
   await p.reload({ waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(8000)
   ok(!(await p.evaluate(() => !!document.querySelector('[data-panel="birth"]'))), '4. reload: no birth gate (born already)')
-  ok((await A(p, 'zone')) === 'plot', `4. reload: a returning keeper loads on the plot (zone ${await A(p, 'zone')})`)
+  const after = await p.evaluate(() => { const A = (window as any).__ather, s = A.state(); return { zone: A.zone() as string, x: s.px as number, z: s.pz as number } })
+  const moved = Math.hypot(after.x - before.x, after.z - before.z)
+  ok(after.zone === 'wilds' && moved < 3, `4. reload: resumes in the Wilds where they stood (zone ${after.zone}, ${moved.toFixed(1)} m off)`)
   ok(errs.length === 0, `5. page errors: ${errs.length} ${errs.join(' | ')}`)
 } finally { await br.close() }
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)

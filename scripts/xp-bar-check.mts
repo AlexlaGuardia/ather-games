@@ -5,6 +5,7 @@
 // Phone (touch) at 390x844 and 360x780: the bar's box clears the compass and the minimap and stays on screen.
 // The bar's state is read IN the page (waitForFunction polling on mutation), never by a sleep: this box runs 1-2 fps.
 //   npx tsx scripts/xp-bar-check.mts [--url https://ather.games] [--out dir]
+import { aimAt } from './lib/aim.mts'
 import puppeteer, { type Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { parseWilds, type WildsMeta } from '../src/app/shimmer/open/ather/wilds'
@@ -62,7 +63,8 @@ const barWhen = (p: Page, cond: string, timeout = 180000) => p.waitForFunction((
 const frame = async (p: Page, name = '_frame') => { try { await p.screenshot({ path: `${out}/${name}.png` }) } catch { /* slow frame */ } }
 const pruneAt = async (p: Page, t: { x: number; z: number; id: string }) => {
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), t.x + 6, t.z)
-  for (let i = 0; i < 40 && (await p.evaluate(() => (window as any).__ather.aim())) !== t.id; i++) { await frame(p); await sleep(500) }
+  // M60: E/prune acts only on what the crosshair is on, so LOOK at the node (lib/aim.mts), not just stand near it (11-22 sweep: never aimed)
+  for (let i = 0; i < 40 && (await p.evaluate(() => (window as any).__ather.aim())) !== t.id; i++) { await aimAt(p, t.x, t.z, 0.7); await frame(p); await sleep(500) }
   res[`aim_${t.id}`] = await p.evaluate(() => (window as any).__ather.aim())
   if (res[`aim_${t.id}`] !== t.id) throw new Error(`never aimed ${t.id}`)
   await p.evaluate(() => (window as any).__ather.prune())
