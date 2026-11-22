@@ -58,8 +58,13 @@ const reel = async (hold: boolean | 'track' | 'none') => {
   }
   console.log('   answered', answered, 'after', (await view())?.phase)
   if (!answered) return { answered, phase: (await view())?.phase }
-  // M77: read the bar's hint while a stand-in follows the zone (no hold = gone before the bar draws), and wait for the BAR
-  // itself ('It gives' / 'It fights'), or "no hint" and "no bar yet" share an answer
+  // M77: read the bar's hint on the tracking / hands-off reels only (the clumsy one holds from the first frame, as it always
+  // did: a stand-in tracking while slow frames draw the bar reels it most of the way in). Wait for the BAR itself ('It
+  // gives' / 'It fights'), or "no hint" and "no bar yet" share an answer; follow the zone while waiting (no hold = gone
+  // before the bar draws)
+  if (hold === true) { await p.evaluate(() => (window as any).__rin.hold(true)); let ph = 'reeling'
+    for (let k = 0; k < 200 && ph !== 'landed' && ph !== 'gone' && ph !== 'idle'; k++) { await frame(); ph = (await view())?.phase }
+    await p.evaluate(() => (window as any).__rin.hold(false)); return { answered, phase: ph, hint: 'not read' } }
   await p.evaluate(() => (window as any).__rin.hold('track'))
   let up = false
   for (let k = 0; k < 30 && !up; k++) { await frame(); await wait(100); up = await p.evaluate(() => [...document.querySelectorAll('div')].some(d => /^It (gives|fights)/.test(d.textContent ?? ''))) }
@@ -82,7 +87,7 @@ const b2 = await bag()
 ok(r2.answered && r2.phase === 'landed', `the tracking keeper lands one (${JSON.stringify(r2)})`)
 ok(b2.includes('baitx8') && b2.some(x => NYX_RINN.some(r => x.startsWith(r.id + 'x'))), `a mortal rinn in the bag (${b2.join(' ')})`)
 const HINT = 'Hold click to pull · let go to give'
-ok(r1.hint === HINT, `M77: the bar says how to reel before the first catch (${JSON.stringify(r1.hint)})`)
+ok(r2.hint === HINT, `M77: the bar says how to reel before the first catch (${JSON.stringify(r2.hint)})`)
 await p.evaluate((s) => (window as any).__drive.footTp(s.x, s.z, s.yaw, s.pitch), spot); await wait(1500); await frame()
 const r3 = await reel('none')
 ok(r3.answered && r3.hint === null, `M77: after the first landed rinn the hint is gone (${JSON.stringify(r3)})`)

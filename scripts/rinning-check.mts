@@ -74,11 +74,7 @@ const answered = await answerTake(); res.answered = answered
 const barUp = () => p.evaluate(() => [...document.querySelectorAll('div')].some(d => /^It (gives|fights)/.test(d.textContent ?? '')))
 const hintNow = async () => { let up = false; for (let k = 0; k < 30 && !up; k++) { await frame(); await sleep(100); up = await barUp() } res.barSeen = up; return up ? p.evaluate(() => document.querySelector('[data-reel-hint]')?.textContent ?? null) : 'no bar' }
 res.touchOnly = await p.evaluate(() => matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches)
-// (follow the zone while reading: with no hold the bobber slides out and the rinn is gone before the bar has drawn, which
-// is the very thing M77 is about)
-await p.evaluate(() => (window as any).__ather.hold('track'))
-res.hintBefore = await hintNow()
-// what the bar itself said and what the keeper's skills held at that moment, so a missing hint names its cause
+// the keeper's stored skills before any catch, so a missing hint names its cause
 res.skillsBefore = await p.evaluate(() => Object.keys(localStorage).filter(k => k.includes('skills')).map(k => `${k}=${(localStorage.getItem(k) ?? '').slice(0, 160)}`))
 await p.evaluate(() => (window as any).__ather.hold(true))
 const phase = await reelOut('rinning-3-clumsy'); res.clumsy = phase
@@ -89,7 +85,11 @@ const bag1 = await readBag(); res.bagAfterClumsy = bag1
 await p.evaluate((s) => (window as any).__ather.look(s.yaw, s.pitch), spot); await frame()
 await p.evaluate(() => (window as any).__ather.cast()); await frame()
 const answered2 = await answerTake(); res.answered2 = answered2
+// M77: the before-hint is read on THIS reel (still before the first catch) while the stand-in follows the zone: with no
+// hold the rinn is gone before the bar has drawn (the very thing M77 is about), and tracking on the clumsy reel while slow
+// frames draw the bar could reel that one in
 await p.evaluate(() => (window as any).__ather.hold('track'))
+res.hintBefore = await hintNow()
 const phase2 = await reelOut('rinning-4-track'); res.tracked = phase2
 await p.evaluate(() => (window as any).__ather.hold(false))
 await sleep(1500)
