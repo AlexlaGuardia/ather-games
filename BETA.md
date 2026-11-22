@@ -208,6 +208,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - 11-22 12:4x Alex: "the planter is craftable in the carpentry area with star willow wood.. and the grimiore is also furniture a pedistal with a tablet the player can interact with to see what they have gathered so far.. and mana seeds.. on the edges of the center green where the gate sits we have the anemonyx visit randomly every 5-10 ingame days if the player gets to it on the day it apears the anemonyx drops them a mana seed" → canon bits to Magii (CANON_GAPS [OPEN]: pedestal vs Greg's book, Anemonyx rarity, what blooms); build cut into a row once ruled; unblocks M71 growth
 - 11-22 12:5x Alex: "for the seeds.. they are all named mana seed, but the icon has a resemblance to the base spirit that will bloom from it giving that if you know you know feel" → folded into M76
 - 11-22 13:0x Alex: "it should be stay on the ather map buttons under the players garden and later under that we can add a friends button to visit online friends gardens" → M67 s1b unblocked; Friends visiting = later row
+- 11-22 13:2x Alex: "i have been trying to figure out the rinning minigame and i cant get it.. how do the controls work for it..?" → explained (one button: cast / answer the dip within 1.6 s / hold=take, let go=give, bobber has momentum, keep it in the zone). FINDING: the game never teaches it; candidate first-reel how-to (tie into Fennel's first-rinstick beat, M68). Triage pending Alex
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
