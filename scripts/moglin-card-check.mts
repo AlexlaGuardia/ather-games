@@ -51,7 +51,9 @@ const prompt = () => p.evaluate(() => document.body.innerText.includes('talk to 
   await p.evaluate((x, z, y) => { const g = (window as any).__ather; g.tp(x, z, y); g.look(y, -Math.atan2(1.1, 2)) }, s0.x + ux * 2, s0.z + uz * 2, Math.atan2(ux, uz)); await sleep(1500) }
 const spots = builtFolkSpots(st, folk, net.season), kp = await p.evaluate(() => (window as any).__folk.keeper()) as { x: number; z: number }
 const nearest = nearestSpot(spots, kp.x, kp.z)!
-await p.keyboard.press('KeyE'); await p.mouse.move(5, 5)   // the pointer off the answers (a hover moves the pick)
+// the pick settles a few frames after the tp + look (headless runs ~2 fps): wait for the prompt, then E until the talk opens
+for (let t = 0; t < 15000 && !(await prompt()); t += 500) await sleep(500)
+for (let k = 0; k < 4 && !(await p.$('[data-talk-choices]')); k++) { await p.keyboard.press('KeyE'); await p.mouse.move(5, 5); await sleep(2500) }   // pointer off the answers (a hover moves the pick)
 const bubble = () => p.evaluate(() => document.querySelector('[data-talk-bubble]')?.firstElementChild?.textContent ?? '')
 const nameOver = () => p.evaluate(() => document.querySelector('[data-talk-name]')?.textContent ?? '')
 const answers = () => p.evaluate(() => [...document.querySelectorAll('[data-talk-option]')].map(e => (e.textContent ?? '').replace('›', '').trim()))
