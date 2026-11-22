@@ -10,7 +10,7 @@ import { KeeperFigure } from './shared/keeper-figure-view'
 import { useLook } from './shared/look-store'
 import { OPT } from './shared/keeper-look'
 import { useState } from 'react'
-import { H, hearthDisplay, Well, HearthLabel, HearthButton } from '../ui/hearth'
+import { H, hearthDisplay, Well, HearthButton } from '../ui/hearth'
 import { RANGE_GUNS } from './shared/gunplay'
 import { useLoadout, setLoadout, equip, gunsFor, vesselsFor, type OwnedVessel } from './shared/loadout'
 import { opticOf } from './shared/optics'
@@ -21,6 +21,9 @@ import { RUNES, ELEMENTS } from '../play3d/birth/runes.data'
 import { RuneMark } from '../play3d/birth/RuneMark'
 import { CompanionSlot } from './companion-slot'
 import { KeepersSection } from './keepers-section'
+import { castMoves } from './shared/casting'
+import { KEEPER_MOVES } from '../play3d/keeper-moves'
+import { castForMove, NO_CAST } from '../play3d/cast'
 
 type SlotId = 'primary' | 'secondary' | 'tactical' | 'signature'
 const SLOT_LABEL: Record<SlotId, string> = { primary: 'Primary', secondary: 'Secondary', tactical: 'Tactical', signature: 'Signature' }
@@ -167,26 +170,101 @@ function LookCard() {
   )
 }
 
+/** M66 (Alex 11-22): one snap section. The frame's scroll body snaps (pack.tsx gives it `snap-y snap-mandatory`); each section
+ *  snaps at its top, and its header sticks while you read it. `last` is a screen tall so the last section can snap to the top too. */
+function Section({ id, title, last, children }: { id: string; title: string; last?: boolean; children: React.ReactNode }) {
+  return (
+    <section data-char-section={id} className="snap-start" style={last ? { minHeight: 'calc(78vh - 4px)' } : undefined}>
+      <div data-char-head={id} className="sticky top-0 z-10 -mx-4 px-4 pt-3 pb-2" style={{ background: H.paper, boxShadow: `0 1px 0 ${H.rule}` }}>
+        <span className="text-[13px] font-bold uppercase tracking-[.16em]" style={{ ...hearthDisplay, color: H.inkSoft }}>{title}</span>
+      </div>
+      <div className="pt-2 pb-5">{children}</div>
+    </section>
+  )
+}
+
+/** M66 Armory: a small stats window for a worn gun, every number straight off its RANGE_GUNS row (range = speed x life). */
+function GunStats({ id }: { id: string }) {
+  const g = RANGE_GUNS.find(x => x.id === id); if (!g) return null
+  const fire = g.burst > 1 ? `${g.burst}-round burst` : g.pellets > 1 ? `${g.pellets} pellets` : g.auto ? 'full auto' : 'semi-auto'
+  const cells: [string, string, string][] = [
+    ['damage', 'Damage', g.pellets > 1 ? `${g.damage} x${g.pellets}` : String(g.damage)], ['crit', 'Crit', String(g.crit)],
+    ['clip', 'Clip', String(g.clip)], ['reload', 'Reload', `${g.reloadTime} s`],
+    ['range', 'Range', `${Math.round(g.projSpeed * g.projLife)} m`], ['fire', 'Fire', fire],
+  ]
+  return (
+    <div data-gun-stats={id} data-damage={g.damage} data-crit={g.crit} data-clip={g.clip} data-reload={g.reloadTime}
+      className="mt-1.5 rounded-[10px] px-3 py-2 grid grid-cols-3 gap-x-3 gap-y-1.5" style={{ background: 'rgba(255,250,235,.5)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+      <div className="col-span-3 text-[12px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{cap(g.name)}</div>
+      {cells.map(([k, l, v]) => (
+        <div key={k} data-stat={k}>
+          <div className="text-[10.5px] font-bold uppercase tracking-[.12em]" style={{ color: H.inkFaint }}>{l}</div>
+          <div className="text-[14px] font-semibold tabular-nums" style={{ color: H.ink }}>{v}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** M66 Vessels: the move each worn vessel carries (casting.ts › castMoves, so a blank bracelet shows the birth tactical it
+ *  really casts), with canon's own line for it (keeper-moves.ts › effect) and the cast's cost off castForMove. */
+function VesselMoves() {
+  const l = useLoadout(), birth = useBirth(), moves = castMoves(l, birth)
+  const rows = (['tactical', 'signature'] as const).map(slot => {
+    const v = l.vessels.find(x => x.id === l[slot]) ?? null
+    return { slot, v, move: moves[slot] ? KEEPER_MOVES.find(m => m.id === moves[slot]) ?? null : null }
+  }).filter(r => r.v)
+  if (!rows.length) return null
+  return (
+    <div className="mt-2 flex flex-col gap-1.5">
+      {rows.map(({ slot, v, move }) => {
+        const spec = move ? castForMove(move.id) : NO_CAST, live = spec !== NO_CAST && spec.archetype !== 'unbuilt'
+        return (
+          <div key={slot} data-vessel-move={slot} data-move={move?.id ?? ''} className="rounded-[10px] px-3 py-2" style={{ background: 'rgba(255,250,235,.5)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+            <div className="flex items-baseline gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-[.14em]" style={{ color: H.inkFaint }}>{v!.label} · {slot === 'tactical' ? 'Q' : 'X'}</span>
+              {move && live && <span className="ml-auto text-[12px] tabular-nums" style={{ color: H.inkSoft }}>{spec.manaCost} mana · {Math.round(spec.cooldownMs / 100) / 10} s</span>}
+            </div>
+            {move ? <>
+              <div className="text-[16px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{move.name}{!v!.word && <span className="text-[12px] font-normal" style={{ color: H.inkFaint }}> · birth</span>}</div>
+              <p data-move-text className="text-[13px] leading-[19px]" style={{ color: H.inkSoft }}>{move.effect}</p>
+            </> : <div className="text-[13px] italic" style={{ color: H.inkFaint }}>{slot === 'signature' ? 'No word written yet' : 'Nothing to cast'}</div>}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function CharacterBody() {
   const [open, setOpen] = useState<SlotId | null>(null)
   const tap = (id: SlotId) => () => setOpen(o => (o === id ? null : id))
+  const l = useLoadout()
   return (
-    <div className="px-4 pt-7 pb-4">
-      <BornOf />
-      <LookCard />
-      <HearthLabel>Weapons</HearthLabel>
-      <div className="grid gap-2 mt-1.5 sm:grid-cols-2">
-        <Slot id="primary" open={open === 'primary'} onOpen={tap('primary')} />
-        <Slot id="secondary" open={open === 'secondary'} onOpen={tap('secondary')} />
-      </div>
-      <div className="mt-4"><HearthLabel>Vessels</HearthLabel></div>
-      <div className="grid gap-2 mt-1.5 sm:grid-cols-2">
-        <Slot id="tactical" open={open === 'tactical'} onOpen={tap('tactical')} />
-        <Slot id="signature" open={open === 'signature'} onOpen={tap('signature')} />
-      </div>
-      <div className="mt-4"><HearthLabel>Companion</HearthLabel></div>
-      <div className="mt-1.5"><CompanionSlot /></div>
-      <KeepersSection />
+    <div className="px-4 pb-4" data-char-column>
+      <Section id="armory" title="Armory">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Slot id="primary" open={open === 'primary'} onOpen={tap('primary')} />
+          <Slot id="secondary" open={open === 'secondary'} onOpen={tap('secondary')} />
+        </div>
+        {l.primary && <GunStats id={l.primary} />}
+        {l.secondary && <GunStats id={l.secondary} />}
+      </Section>
+      <Section id="vessels" title="Vessels">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Slot id="tactical" open={open === 'tactical'} onOpen={tap('tactical')} />
+          <Slot id="signature" open={open === 'signature'} onOpen={tap('signature')} />
+        </div>
+        <VesselMoves />
+      </Section>
+      {/* s2 (M66): the Mana'mal grid joins the companion here */}
+      <Section id="companion" title="Companion"><CompanionSlot /></Section>
+      {/* s3 (M66): roster edit (add / rename / delete) */}
+      <Section id="keepers" title="Keepers" last>
+        <BornOf />
+        <LookCard />
+        <KeepersSection />
+      </Section>
     </div>
   )
 }

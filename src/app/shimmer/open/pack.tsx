@@ -94,7 +94,7 @@ export function PackMenu({ tab, onTab, onClose, sel, isTouch }: {
   )
   const hint = tab === 'bag' ? bagHint(isTouch) : tab === 'journal' ? (isTouch ? 'Tap a line to open it.' : 'Click a line to open it') : tab === 'skills' ? 'Each skill, its level, xp to the next.' : (isTouch ? 'Tap a slot to change it.' : 'Click a slot to change what you carry')
   return (
-    <HearthFrame title={NAME[tab]} maxWidth={tab === 'bag' ? 560 : 520} onClose={onClose} fixed dataPanel={`pack-${tab}`} head={head}
+    <HearthFrame title={NAME[tab]} maxWidth={tab === 'bag' ? 560 : 520} onClose={onClose} fixed dataPanel={`pack-${tab}`} head={head} bodyClass={tab === 'character' ? 'snap-y snap-mandatory' : ''}
       footer={<span className="text-[12px]" style={hearthDisplay}>{hint}{isTouch ? '' : ' · ← → switch tabs · I J P U'}</span>}>
       {tab === 'bag' ? <BagBody sel={sel} /> : tab === 'journal' ? <JournalBody /> : tab === 'skills' ? <SkillsBody /> : <CharacterBody />}
     </HearthFrame>
