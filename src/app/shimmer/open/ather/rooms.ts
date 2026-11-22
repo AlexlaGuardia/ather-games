@@ -337,14 +337,22 @@ export function stockRoom(w: Works, roomId: string, inv: Inv, at: number): Store
   const slots = inv.slots.map((x, i) => (i !== at ? x : p.left > 0 ? { id: s.id, n: p.left } : null))
   return { works: setStore(w, roomId, p.bank), inv: { ...inv, slots }, moved }
 }
-/** Everything in the BAG (not the hotbar: what you hold stays in your hands) that this room keeps, into its store. */
-export function stockRoomFromBag(w: Works, roomId: string, inv: Inv): StoreMove {
+/** Everything in the BAG that this room keeps, into its store. By default the hotbar stays (what you hold stays in your
+ *  hands: the Rinnshop's bait). `hotbar: true` reaches it too, AFTER the bag: give() fills the hotbar first, so the farm's
+ *  seeds and crops usually sit there (11-22: the farm's button skipped them and did nothing, silently). Nothing moved =
+ *  a `why`, never silence. */
+export function stockRoomFromBag(w: Works, roomId: string, inv: Inv, opt: { hotbar?: boolean } = {}): StoreMove {
   let out: StoreMove = { works: w, inv, moved: 0 }
-  for (let at = HOTBAR; at < SLOTS; at++) {
+  let why = ''
+  const order = [...Array(SLOTS - HOTBAR).keys()].map(k => k + HOTBAR).concat(opt.hotbar ? [...Array(HOTBAR).keys()] : [])
+  for (const at of order) {
     const r = stockRoom(out.works, roomId, out.inv, at)
     if (r.moved) out = { works: r.works, inv: r.inv, moved: out.moved + r.moved }
+    else if ('why' in r && /full/.test(r.why)) why = r.why
   }
-  return out
+  if (out.moved) return out
+  const rm = w.rooms.find(x => x.id === roomId)
+  return { works: w, inv, moved: 0, why: why || (rm ? `Nothing in your pack the ${ROOMS[rm.kind].name} keeps (${ROOM_KEEPS[rm.kind]}).` : '') }
 }
 /** Store stack k → the bag; what the bag cannot take stays. */
 export function takeFromRoom(w: Works, roomId: string, k: number, inv: Inv): StoreMove {

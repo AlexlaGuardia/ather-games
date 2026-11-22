@@ -89,7 +89,7 @@ console.log(JSON.stringify(res, null, 1))
 const a = res.after as any, bf = res.before as any, rl = res.reloaded as any
 const pass = res.panel === true && res.button === true && bf.bag.sv === 5 && bf.bag.cg === 3 && bf.bag.sr === 2
   && a.store.sv === bf.store.sv + 5 && a.store.cg === bf.store.cg + 3 && a.store.sr === bf.store.sr + 2
-  && a.bag.sv === 0 && a.bag.cg === 0 && a.bag.sr === 0 && a.bag.logs === bf.bag.logs && a.bag.repeater === 1
+  && a.bag.sv === 0 && a.bag.cg === 0 && a.bag.sr === 0 && a.bag.logs === bf.bag.logs && a.bag.repeater === bf.bag.repeater
   && rl.sv === a.store.sv && rl.cg === a.store.cg && rl.sr === a.store.sr && (res.panelSlots as number) >= 6 && res.overflow === false && errs.length === 0
-console.log(pass ? `PASS${phone ? ' (phone 390x844)' : ''}: Farm built → hotbar + bag farm goods (5 Violetbloom seed, 3 Goldleaf, 2 Rootvine seed) → Stock from the bag moved all 10 into the store, pack dropped by them, logs + repeater stayed → reload: store kept them, panel shows ${res.panelSlots} stacks → 0 page errors` : 'FAIL')
+console.log(pass ? `PASS${phone ? ' (phone 390x844)' : ''}: Farm built → hotbar + bag farm goods (5 Violetbloom seed, 3 Goldleaf, 2 Rootvine seed) → Stock from the bag moved all 10 into the store, pack dropped by them, logs stayed → reload: store kept them, panel shows ${res.panelSlots} stacks → 0 page errors` : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)

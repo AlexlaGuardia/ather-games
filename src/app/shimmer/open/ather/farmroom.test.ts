@@ -2,8 +2,8 @@
 import { plantAt, harvestAt, feedAt, grantStarter, seedsReach, adoptFarm, freshFarmSave, STARTER, BEDS, dosesOf, msLeft } from './farmroom'
 import { CROPS, seedId, cropId, CHARGE_CAP, DOSE_COST, isArmed, type CropId } from './farming'
 import { existsSync } from 'node:fs'
-import { freshWorks, ROOM_STORE_SLOTS, type Works } from './rooms'
-import { newInv, give, countOf, itemDef, ITEM_GROUP } from '../shared/inventory'
+import { freshWorks, ROOM_STORE_SLOTS, stockRoomFromBag, type Works } from './rooms'
+import { newInv, give, countOf, itemDef, ITEM_GROUP, HOTBAR } from '../shared/inventory'
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  ✗', m) } }
 const T0 = 1_000_000
@@ -62,4 +62,20 @@ ok(msLeft({ crop: 'goldleaf', grade: 'D', plantedAt: T0, watered: false }, fresh
 
 // save adoption
 ok(adoptFarm(null).farm.beds.length === BEDS && adoptFarm({ v: 1, farm: { beds: [{ crop: 'nope', grade: 'D', plantedAt: 1 }], charge: 9999 }, starter: true }).farm.charge === CHARGE_CAP, 'adopt: bad bed dropped, charge capped')
+// STOCK FROM THE BAG (Alex 11-22: "the stock from pack button hasnt been working"). give() fills the HOTBAR first, so a
+// keeper's seeds and crops usually sit there; the farm's button must reach them (bag first, then the hotbar), and say why
+// when nothing moves instead of doing nothing.
+{
+  let inv = newInv(0)
+  inv = give(inv, seedId('goldleaf'), 4).inv            // lands in hotbar slot 0
+  inv = give(inv, cropId('ather_wheat'), 3).inv         // hotbar slot 1
+  inv.slots[HOTBAR + 2] = { id: seedId('dewdrop_vine'), n: 2 }
+  inv.slots[HOTBAR + 3] = { id: 'goldwood_log', n: 5 }
+  ok(inv.slots[0]?.id === seedId('goldleaf'), 'stock: precondition, give() put the seed in the hotbar')
+  const m = stockRoomFromBag(W(), room.id, inv, { hotbar: true })
+  ok(m.moved === 9 && stackOf(m.works, seedId('goldleaf')) === 4 && stackOf(m.works, cropId('ather_wheat')) === 3 && stackOf(m.works, seedId('dewdrop_vine')) === 2, 'stock: the farm left hotbar seeds/crops in the pack')
+  ok(countOf(m.inv, seedId('goldleaf')) === 0 && countOf(m.inv, cropId('ather_wheat')) === 0 && countOf(m.inv, 'goldwood_log') === 5, 'stock: the pack did not drop, or a log went in')
+  const none = stockRoomFromBag(W(), room.id, give(newInv(0), 'goldwood_log', 3).inv, { hotbar: true })
+  ok(none.moved === 0 && 'why' in none && none.why.length > 0, 'stock: nothing to move said nothing')
+}
 console.log(`farmroom: ${pass}/${fail}`); process.exit(fail ? 1 : 0)

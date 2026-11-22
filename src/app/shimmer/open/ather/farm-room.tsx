@@ -203,7 +203,7 @@ export function FarmPanel({ room, works, setWorks, onClose }: { room: Room; work
         <div data-room-store="farm">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ ...lab, flex: 1 }}>The store · {store.stacks.length} / {ROOM_STORE_SLOTS} · keeps {ROOM_KEEPS.farm}</div>
-            <span data-act="stock-room"><HearthButton small onClick={() => apply(stockRoomFromBag(works, r.id, getInv()))}>Stock from the bag</HearthButton></span>
+            <span data-act="stock-room"><HearthButton small onClick={() => apply(stockRoomFromBag(works, r.id, getInv(), { hotbar: true }))}>Stock from the bag</HearthButton></span>
           </div>
           {store.stacks.length ? (
             <div style={{ ...grid, marginTop: 6 }}>{store.stacks.map((st, k) => <Cell key={k} s={st} data-room-slot={k} onClick={() => apply(takeFromRoom(works, r.id, k, getInv()))} />)}</div>
