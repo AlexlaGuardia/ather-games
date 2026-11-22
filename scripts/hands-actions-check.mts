@@ -50,11 +50,12 @@ check('key 2 height edited into the export', Math.abs((await exp()).keys[1].y + 
 // ── step lands ON each key ──
 const keys = (await exp()).keys
 for (let i = 0; i < keys.length; i++) {
-  await click(`[data-key="${i}"]`); const r = await settled()
+  // poll ONTO the key: under software GL two reads can share a frame, so 'stopped moving' fires early (11-22)
+  await click(`[data-key="${i}"]`); let r = await settled(); for (let w = 0; w < 60 && !onKey(r, keys[i]); w++) { await sleep(250); r = await R() }
   check(`key ${i + 1} shown: the mitt sits on it`, onKey(r, keys[i]), `mitt (${r.x.toFixed(3)}, ${r.y.toFixed(3)}, ${r.z.toFixed(3)}) key (${keys[i].x}, ${keys[i].y}, ${keys[i].z})`)
   await shot(`cast-key${i + 1}`)
 }
-await click('[data-key="0"]'); await settled(); await click('[data-act="step"]'); const st = await settled()
+await click('[data-key="0"]'); await settled(); await click('[data-act="step"]'); let st = await settled(); for (let w = 0; w < 60 && !onKey(st, keys[1]); w++) { await sleep(250); st = await R() }
 check('Step goes to the next key', onKey(st, keys[1]))
 // ── scrub: mid-move between key 1 and key 2 is neither ──
 const t01 = Math.round(keys[0].ms + (keys as any)[0].hold + keys[1].ms / 2)
@@ -70,6 +71,23 @@ check('Play runs the loop', spread > 0.05, `y spread ${spread.toFixed(3)} over 3
 await open(); await click('[data-action="rinstick.cast"]')
 const after = await exp()
 check('reload keeps the draft', after.keys.length === 3 && Math.abs(after.keys[1].y + 0.12) < 1e-9, `keys ${after.keys.length}, key 2 y ${after.keys[1]?.y}`)
+// ── the GRIP (Alex 11-22): the rod rides the mitt; the grip moves the rod IN the mitt, once ──
+{
+  const tip = () => p.evaluate(() => (window as any).__heldRod?.tip?.() ?? null) as Promise<{ x: number; y: number; z: number } | null>
+  const d = (a: any, b: any) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
+  await click('[data-key="0"]'); await settled(); const t0 = await tip(), h0 = await R()
+  await click('[data-key="1"]'); await settled(); const t1 = await tip(), h1 = await R()
+  check('posing the hand carries the rod with it', !!t0 && !!t1 && d(t0, t1) > 0.05, `tip moved ${t0 && t1 ? d(t0, t1).toFixed(3) : '?'} m, hand ${d(h0, h1).toFixed(3)} m`)
+  check('the grip section starts collapsed', !(await p.$('[data-gripknob]')))
+  await click('[data-act="grip"]')
+  await setRange('[data-gripknob="tilt"]', 0.9); await sleep(600)
+  const t2 = await tip(), h2 = await R()
+  check('the grip moves the rod in the mitt, the hand stays', !!t2 && d(t1!, t2) > 0.05 && d(h1, h2) < 1e-3, `tip moved ${t2 ? d(t1!, t2).toFixed(3) : '?'} m, hand ${d(h1, h2).toFixed(4)} m`)
+  const saved = await p.evaluate(() => JSON.parse(localStorage.getItem('open:rod-grip.v1') ?? 'null'))
+  check('the grip saves to this browser', Math.abs((saved?.tilt ?? 99) - 0.9) <= 0.01, JSON.stringify(saved))   // the slider snaps to its 0.01 steps from -π
+  await shot('grip-tilted')
+  await click('[data-act="grip-reset"]'); await p.evaluate(() => localStorage.removeItem('open:rod-grip.v1'))
+}
 // ── melee swing loads and shows ──
 await click('[data-action="melee.swing"]'); const mk = (await exp()).keys
 check('melee swing loads', (await exp()).id === 'melee.swing' && mk.length >= 2)

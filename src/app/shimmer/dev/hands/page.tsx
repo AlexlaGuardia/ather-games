@@ -17,7 +17,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OpenHands, type OpenHandsApi } from '../../open/shared/open-hands'
-import { HeldRod } from '../../open/shared/held-rod'
+import { HeldRod, ROD, ROD_DEFAULTS, setRodGrip, resetRodGrip, loadRodGrip, type RodGrip } from '../../open/shared/held-rod'
 import { ACTIONS, ACTION_IDS, EASES, POSE_FIELDS, loadActions, setAction, resetAction, exportAction, sampleAction, actionDuration, keyStart, type ActionKey, type Ease, type HandAction } from '../../open/shared/fp-actions'
 import { FP, FP_DEFAULTS, setFpTune, resetFpTune, loadFpTune, type FpTune, type FpInput } from '../../open/shared/fp-hands-pose'
 import { EYE_STAND } from '../../open/shared/locomotion'
@@ -267,6 +267,46 @@ function ActionsPanel({ clock }: { clock: React.RefObject<Clock> }) {
         <button style={chip} data-act="reset" onClick={() => { resetAction(id); bump(n => n + 1); showKey(0, ACTIONS[id]) }}>Reset action</button>
       </div>
       <pre data-export style={{ marginTop: 8, fontSize: 9, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#8b8598' }}>{exportAction(a)}</pre>
+      {a.item === 'rinstick' && <GripSection />}
     </aside>
+  )
+}
+
+const GRIP_KNOBS: { k: keyof RodGrip; label: string; min: number; max: number; step: number }[] = [
+  { k: 'x', label: 'across', min: -0.15, max: 0.15, step: 0.002 },
+  { k: 'y', label: 'along', min: -0.15, max: 0.15, step: 0.002 },
+  { k: 'z', label: 'out', min: -0.15, max: 0.15, step: 0.002 },
+  { k: 'tilt', label: 'tilt', min: -Math.PI, max: Math.PI, step: 0.01 },
+  { k: 'turn', label: 'turn', min: -Math.PI, max: Math.PI, step: 0.01 },
+  { k: 'roll', label: 'roll', min: -Math.PI, max: Math.PI, step: 0.01 },
+  { k: 'len', label: 'length', min: 0.2, max: 0.8, step: 0.005 },
+]
+/** M82 (Alex 11-22): THE GRIP. Where the rinstick sits in the mitt, set ONCE here; the rod is the mitt's child, so every key after
+ *  only moves the hand and the rod rides it. Collapsed: normal posing never touches it. Saves to this browser (held-rod ROD_KEY). */
+function GripSection() {
+  const [open, setOpen] = useState(false), [copied, setCopied] = useState(false), [, bump] = useState(0)
+  useEffect(() => { loadRodGrip(); bump(n => n + 1) }, [])
+  const json = () => JSON.stringify(Object.fromEntries((Object.keys(ROD_DEFAULTS) as (keyof RodGrip)[]).map(k => [k, +ROD[k].toFixed(4)])))
+  return (
+    <section data-grip style={{ marginTop: 14, borderTop: '1px solid #2c2a38', paddingTop: 8 }}>
+      <button data-act="grip" onClick={() => setOpen(!open)} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
+        <span className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#c8b98a' }}>{open ? '▾' : '▸'} Grip</span>
+        <span style={{ fontSize: 10, color: '#8b8598', marginLeft: 6 }}>the rod in the mitt (set once)</span>
+      </button>
+      {open && <>
+        {GRIP_KNOBS.map(n => (
+          <label key={n.k} style={{ display: 'grid', gridTemplateColumns: '72px 1fr 46px', gap: 6, alignItems: 'center', fontSize: 11, marginTop: 4 }}>
+            <span style={{ color: '#b5afc2' }}>{n.label}</span>
+            <input type="range" data-gripknob={n.k} min={n.min} max={n.max} step={n.step} value={ROD[n.k]} onChange={e => { setRodGrip({ [n.k]: Number(e.target.value) }); bump(x => x + 1) }} />
+            <span style={{ fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: ROD[n.k] === ROD_DEFAULTS[n.k] ? '#8b8598' : '#e8b04a' }}>{ROD[n.k].toFixed(3)}</span>
+          </label>
+        ))}
+        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+          <button style={chip} data-act="grip-copy" onClick={() => { void navigator.clipboard?.writeText(json()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }) }}>{copied ? 'Copied' : 'Copy grip'}</button>
+          <button style={chip} data-act="grip-reset" onClick={() => { resetRodGrip(); bump(x => x + 1) }}>Reset grip</button>
+        </div>
+        <pre data-grip-values style={{ marginTop: 6, fontSize: 9, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#8b8598' }}>{json()}</pre>
+      </>}
+    </section>
   )
 }
