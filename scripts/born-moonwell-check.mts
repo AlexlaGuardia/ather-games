@@ -8,9 +8,10 @@
 //   5. 0 page errors
 // Hooks READ only (__ather.zone / state, __greg). Phone: --phone runs it at 390 x 844 with taps.
 //   npx tsx scripts/born-moonwell-check.mts [--url https://ather.games] [--phone]
+import { mkdirSync } from 'node:fs'
 import puppeteer, { type Page } from 'puppeteer-core'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
-const url = flag('--url', 'https://ather.games'), phone = process.argv.includes('--phone')
+const url = flag('--url', 'https://ather.games'), phone = process.argv.includes('--phone'), out = flag('--out', '')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
@@ -54,6 +55,7 @@ try {
   const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw), off = Math.acos(Math.max(-1, Math.min(1, (fx * (g.x - s.px) + fz * (g.z - s.pz)) / Math.max(d, 1e-6)))) * 180 / Math.PI
   ok(d < 10, `2. within 10 m of Greg: ${d.toFixed(1)} m (keeper ${s.px.toFixed(1)},${s.pz.toFixed(1)}; Greg ${g.x.toFixed(1)},${g.z.toFixed(1)})`)
   ok(off < 45, `2. facing Greg: ${off.toFixed(0)} deg off`)
+  if (out) { mkdirSync(out, { recursive: true }); await p.screenshot({ path: `${out}/born-${phone ? 'phone' : 'desk'}.png` }) }   // the first look, to LOOK at
   // 3 · the journal points at him (real J; the journal is a keyboard panel, so on phone read its entry text from the store page instead)
   await p.keyboard.press('KeyJ'); await sleep(1500)
   const jt = await p.evaluate(() => document.body.innerText)
