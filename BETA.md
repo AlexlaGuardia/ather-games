@@ -216,6 +216,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - 11-22 13:5x Alex: "a 3 second buffer on mana regen after use and then maybe drop it to .4 (with testing) and the flow pot doubles that for 60-300 seconds so mana is felt a bit more... the health im thinking .3 with health pot instant heals chunks like 25-75% health with like a 15 second cooldown on potions.. vessels that give better healing options for the heat of battle given the player has one of the healer birthstones" → **M78**
 - 11-22 14:0x Alex: "weapons use up like 3 mana on reloads as well so managing this is key to survival in the wilds and forces the player home or punish them for overextending" → hub found reloads cost NOTHING today (reloadMana data unread); folded into M78 (6)
 - 11-22 14:2x Alex: "on nyx side getting into the car should be with th E key the F key id like to use for shielding up the player uses up 2 mana per 10 shield recovered and theres a 1 second stall before it starts to charge up" → **M80** (hub defaults: hold F, cap 50 skin, both worlds, Ather F waymark dropped)
+- 11-22 14:3x Alex: per-gun hand values, SPITTER first (saved docs/handoff/gun-hands-tune-2026-11-22.json); more guns coming as he finishes tuning → batch, then one sprites slice (shipped defaults per gun + build)
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
