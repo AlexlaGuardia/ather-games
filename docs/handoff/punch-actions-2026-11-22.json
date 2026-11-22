@@ -1,5 +1,5 @@
 {
- "note": "Alex 11-22, authored in the hands tuner. Melee punch variants: the game picks one at random per punch. More coming.",
+ "note": "Alex 11-22, authored in the hands tuner. Melee punch variants: the game picks one at random per punch. More coming. Set of 4 complete for now (Alex 11-22).",
  "variants": [
   {
    "id": "melee.swing",
@@ -131,6 +131,55 @@
      "pitch": -0.971592653589793,
      "roll": 0.748407346410207,
      "yaw": 0.638407346410207,
+     "ms": 80,
+     "hold": 110,
+     "ease": "in"
+    },
+    {
+     "x": 0.295,
+     "y": -0.34,
+     "z": -0.46,
+     "pitch": -1.6,
+     "roll": -0.15,
+     "yaw": 0,
+     "ms": 80,
+     "hold": 110,
+     "ease": "in"
+    }
+   ]
+  },
+  {
+   "id": "melee.swing",
+   "keys": [
+    {
+     "x": 0.13,
+     "y": -0.62,
+     "z": -0.45,
+     "pitch": -1.4,
+     "roll": 0.138407346410207,
+     "yaw": 0,
+     "ms": 240,
+     "hold": 150,
+     "ease": "inout"
+    },
+    {
+     "x": 0.22,
+     "y": -0.66,
+     "z": -1,
+     "pitch": -0.301592653589793,
+     "roll": -0.471592653589793,
+     "yaw": 3.13840734641021,
+     "ms": 90,
+     "hold": 0,
+     "ease": "out"
+    },
+    {
+     "x": 0.05,
+     "y": -0.035,
+     "z": -0.95,
+     "pitch": 0.358407346410207,
+     "roll": -0.861592653589793,
+     "yaw": -3.14159265358979,
      "ms": 80,
      "hold": 110,
      "ease": "in"
