@@ -16,6 +16,8 @@ import { useSettings, setSettings, resetSettings, FOV_RANGE, RENDER_RANGE, SENS_
 import { keeperKey } from '@/lib/keeper-local'
 import { BIRTH_KEY } from '../play3d/rune-inventory'
 import { refreshBirth } from './birth-gate'
+import { getInv, setInv } from './shared/bag'
+import { oneOfEachSeed } from './shared/owner-grants'
 import { setPlayTogether } from './shared/play-together'
 import { ACTIONS, RESERVED, useKeymap, keyFor, keyName, setBinding, resetKeymap, setCapturing, installKeymap } from './shared/keymap'
 
@@ -83,6 +85,17 @@ function ForgetBirth({ onDone }: { onDone: () => void }) {
   )
 }
 
+/** Owner test lever (Alex 11-22): one of every Mana Seed into this keeper's bag, to look at the icons. Idempotent. */
+function SeedGrant() {
+  const [said, setSaid] = useState('')
+  return (
+    <OptionRow onClick={() => {
+      const r = oneOfEachSeed(getInv()); if (r.added) setInv(r.inv)
+      setSaid(r.added ? `+${r.added} in your bag${r.missed ? `, ${r.missed} no room` : ''}` : r.missed ? `bag full (${r.missed})` : 'you hold them all')
+    }} label="✿ One of each Mana Seed" tail={said || 'into my bag'} />
+  )
+}
+
 /** The keys this page answers, for the Controls tab. Each page passes its own. */
 export type KeyRow = [keys: string, what: string]
 /** What stays fixed (the rebindable keys are listed by Bindings). */
@@ -141,6 +154,7 @@ export function OpenOptions({ onClose, keys = WALK_KEYS, extraGame, inGarden = f
           <OptionRow href="/shimmer/dev" label="✧ Dev hub" tail="editors" />
           <OptionRow href="/shimmer/play3d/birth" label="✺ Choose a birth rune" tail="voxel" />
           <ForgetBirth onDone={onClose} />
+          <SeedGrant />
         </>}
       />
     </div>
