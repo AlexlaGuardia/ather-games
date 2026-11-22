@@ -1,0 +1,6 @@
+{
+ "note": "Alex 11-22, authored in the hands tuner. Melee punch variants: the game picks one at random per punch. More coming.",
+ "variants": [
+  {"id":"melee.swing","keys":[{"x":0.29,"y":-0.34,"z":-0.45,"pitch":-1.4,"roll":0.138407346410207,"yaw":0,"ms":240,"hold":150,"ease":"inout"},{"x":0.36,"y":0.02,"z":-0.385,"pitch":-0.801592653589793,"roll":-0.251592653589793,"yaw":0.528407346410207,"ms":90,"hold":0,"ease":"out"},{"x":0.02,"y":-0.09,"z":-0.93,"pitch":-1.03159265358979,"roll":0.308407346410207,"yaw":0.248407346410207,"ms":80,"hold":110,"ease":"in"},{"x":0.295,"y":-0.34,"z":-0.46,"pitch":-1.6,"roll":-0.15,"yaw":0,"ms":80,"hold":110,"ease":"in"}]}
+ ]
+}
