@@ -1,25 +1,45 @@
 'use client'
-// THE MOGLIN CARD on the HUD (BETA M46 slice 2): a chibi portrait, name, home, trade, nine skill pips + a luck charm, the
-// frame tinted by the best grade shown. Data is moglin-card.ts (pure, tested); this only draws it. Hidden rows (trust reveal,
-// slice 3) draw as dim '?' pips. Drawn ABOVE the talk answers (npc-talk TalkNode.panel), so page.tsx is untouched.
+// THE MOGLIN CARD on the HUD (BETA M46 slice 2; M65 s1 11-22: a five-stat RADAR, not a skill list): a chibi portrait, name,
+// home, trade, a pentagon radar (Core, Dexterity, Patience, Talent, Luck) with each axis's grade letter, and every skill's
+// 0-10 score listed small under it. The frame is tinted by the best M46 grade shown. Data is moglin-card.ts + moglin-stats.ts
+// (pure, tested); this only draws it. Hidden axes / scores (trust reveal) draw as '?'. Drawn ABOVE the talk answers.
 import { Canvas } from '@react-three/fiber'
 import { MoglinModel, furOf, MOGLIN_HEIGHT } from '../shared/moglin-model'
-import { GRADE_NAME, type Grade } from './moglins'
+import type { Grade } from './moglins'
 import type { CardView } from './moglin-card'
+import type { StatGrade } from './moglin-stats'
 
 /** grade tints: fair grey, good green, fine blue, gifted violet, rare gold (frame + pips) */
 export const GRADE_TINT: Record<Grade, string> = { 1: '#9aa0a6', 2: '#7fc47a', 3: '#6fa8e8', 4: '#b58cf0', 5: '#f2c14e' }
 const DIM = 'rgba(243,227,195,.22)'
+/** stat-grade tints, the same ladder as the M46 grades (S gold .. D grey), F a dull rust */
+export const STAT_TINT: Record<StatGrade, string> = { S: '#f2c14e', A: '#b58cf0', B: '#6fa8e8', C: '#7fc47a', D: '#9aa0a6', F: '#8a6a5a' }
 
-function Pips({ g, phone }: { g: Grade | null; phone: boolean }) {
-  const d = phone ? 7 : 6
+/** The pentagon: five axes clockwise from the top, three guide rings, the filled shape at each axis's reach, and the
+ *  axis name + grade letter outside each point. A hidden axis sits at the centre and reads '?'. */
+function Radar({ card, phone }: { card: CardView; phone: boolean }) {
+  const R = 52, size = phone ? 210 : 190
+  const at = (i: number, r: number) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / card.radar.length; return [Math.cos(a) * r, Math.sin(a) * r] as const }
+  const ring = (f: number) => card.radar.map((_, i) => at(i, R * f).join(',')).join(' ')
+  const shape = card.radar.map((a, i) => at(i, R * (a.grade ? Math.max(0.06, a.reach) : 0)).join(',')).join(' ')
   return (
-    <span style={{ display: 'inline-flex', gap: 2 }}>
-      {[1, 2, 3, 4, 5].map(i => (
-        <span key={i} style={{ width: d, height: d, borderRadius: 2,
-          background: g && i <= g ? GRADE_TINT[g] : 'transparent', boxShadow: `inset 0 0 0 1px ${g ? (i <= g ? GRADE_TINT[g] : 'rgba(243,227,195,.3)') : DIM}` }} />
-      ))}
-    </span>
+    <svg data-card-radar viewBox="-100 -84 200 172" width={size} height={size * 0.86} style={{ display: 'block', margin: '4px auto 0' }}>
+      {[1 / 3, 2 / 3, 1].map(f => <polygon key={f} points={ring(f)} fill="none" stroke="rgba(243,227,195,.16)" strokeWidth={0.8} />)}
+      {card.radar.map((_, i) => { const [x, y] = at(i, R); return <line key={i} x1={0} y1={0} x2={x} y2={y} stroke="rgba(243,227,195,.14)" strokeWidth={0.8} /> })}
+      <polygon points={shape} fill="rgba(242,193,78,.22)" stroke="#f2c14e" strokeWidth={1.4} strokeLinejoin="round" />
+      {card.radar.map((a, i) => {
+        const [x, y] = at(i, R + 17), anchor = Math.abs(x) < 4 ? 'middle' : x > 0 ? 'start' : 'end'
+        return (
+          <g key={a.stat} data-card-axis={a.stat} data-card-axis-grade={a.grade ?? '?'}>
+            <text x={x} y={y - 3} textAnchor={anchor} fontSize={9.5} fontWeight={600} letterSpacing="0.08em" fill="rgba(243,227,195,.75)"
+              style={{ textTransform: 'uppercase' }}>{a.label}</text>
+            <text x={x} y={y + 10} textAnchor={anchor} fontSize={13} fontWeight={800} fill={a.grade ? STAT_TINT[a.grade] : DIM}>
+              {a.grade ?? '?'}{a.stat === 'luck' && card.luckPct !== null ? <tspan fontSize={9} fontWeight={600} fill="rgba(243,227,195,.6)"> {card.luckPct}%</tspan> : null}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
   )
 }
 
@@ -51,19 +71,15 @@ export function MoglinCard({ card, id, phone }: { card: CardView; id: string; ph
           <div style={{ font: '600 10px system-ui', letterSpacing: '0.16em', textTransform: 'uppercase', color: tint, marginTop: 2 }}>{card.trade}</div>
           <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.home}</div>
         </div>
-        <div data-card-luck={card.luck ?? 0} title={card.luck ? `Luck: ${GRADE_NAME[card.luck]}` : 'Luck'}
-          style={{ marginLeft: 'auto', textAlign: 'center', flex: 'none' }}>
-          <div style={{ fontSize: 20, lineHeight: 1, color: card.luck ? GRADE_TINT[card.luck] : DIM }}>✿</div>
-          <div style={{ font: '600 9px system-ui', letterSpacing: '0.14em', textTransform: 'uppercase', opacity: card.luck ? 0.85 : 0.4, marginTop: 3 }}>
-            {card.luck ? GRADE_NAME[card.luck] : '?'}</div>
-        </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 12, rowGap: phone ? 5 : 3, marginTop: 9 }}>
-        {card.rows.map(r => (
-          <div key={r.skill} data-card-skill={r.skill} data-card-grade={r.grade ?? 0}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, opacity: r.grade ? 1 : 0.55 }}>
-            <span style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{r.label}</span>
-            {r.grade ? <Pips g={r.grade} phone={phone} /> : <span style={{ fontSize: 10, color: DIM, letterSpacing: '0.3em' }}>?????</span>}
+      <Radar card={card} phone={phone} />
+      <div data-card-scores style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', columnGap: 10, rowGap: phone ? 3 : 2, marginTop: 4,
+        fontSize: phone ? 10.5 : 10, fontVariantNumeric: 'tabular-nums' }}>
+        {card.scores.map(x => (
+          <div key={x.skill} data-card-score={x.skill} data-score={x.score ?? ''}
+            style={{ display: 'flex', justifyContent: 'space-between', gap: 4, opacity: x.score === null ? 0.5 : 0.85 }}>
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.label}</span>
+            <span style={{ fontWeight: 700, color: x.score === null ? DIM : '#f3e3c3' }}>{x.score ?? '?'}</span>
           </div>
         ))}
       </div>

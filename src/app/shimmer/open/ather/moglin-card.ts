@@ -6,6 +6,7 @@ import type { Grade, MoglinRecord, Profession } from './moglins'
 import { GLADE_NAME } from './moonwell-glade'
 import { SKILLS, SKILL_LABEL, skillsOf, luckOf, type Skill } from './moglin-skills'
 import { wantsLeft, type Folk, type Trust } from './settlement-folk'
+import { statView, type StatAxis, type ScoreRow } from './moglin-stats'
 
 export interface CardRow { skill: Skill; label: string; /** null = not revealed yet */ grade: Grade | null }
 export interface CardView {
@@ -17,6 +18,13 @@ export interface CardView {
   /** 0..1, how much of the card is lit */
   shown: number
   full: boolean
+  /** M65: the five-stat radar. `grade: null` = not revealed yet (trust). Core/Dexterity/Patience light with the first of
+   *  their skills; Talent and Luck once it trusts (Luck shows last, as the charm did). */
+  radar: (Omit<StatAxis, 'grade'> & { grade: StatAxis['grade'] | null })[]
+  /** M65: every skill's 0-10 score, null until the card is full (a score needs Talent, which shows last) */
+  scores: (Omit<ScoreRow, 'score'> & { score: number | null })[]
+  /** M65: Luck's double-drop chance (%), null until full */
+  luckPct: number | null
 }
 
 export const tradeLabel = (p: Profession) => p[0].toUpperCase() + p.slice(1)
@@ -38,7 +46,11 @@ export function cardOf(f: Folk, t: Trust, homeName: string): CardView {
   const lit = new Set(order.slice(0, n))
   const rows = SKILLS.map(s => ({ skill: s, label: SKILL_LABEL[s], grade: lit.has(s) ? skills[s] : null }))
   const best = rows.reduce<Grade | 0>((a, r) => (r.grade && r.grade > a ? r.grade : a), 0)
-  return { name: f.name, home: homeName, trade: tradeLabel(f.profession), rows, luck: full ? luckOf(f) : null, best, shown: full ? 1 : n / SKILLS.length, full }
+  const sv = statView(f)
+  const radar = sv.axes.map(a => ({ ...a, grade: full || ((a.stat === 'core' || a.stat === 'dexterity' || a.stat === 'patience') && sv.scores.some(x => x.stat === a.stat && lit.has(x.skill))) ? a.grade : null }))
+  const scores = sv.scores.map(x => ({ ...x, score: full ? x.score : null }))
+  return { name: f.name, home: homeName, trade: tradeLabel(f.profession), rows, luck: full ? luckOf(f) : null, best, shown: full ? 1 : n / SKILLS.length, full,
+    radar, scores, luckPct: full ? sv.luckPct : null }
 }
 
 /** A Moglin already in the keeper's garden (M46 'card for recruited Moglins'): it came because it trusts the keeper, so its
@@ -49,5 +61,7 @@ export function recordCard(m: MoglinRecord): CardView {
   const skills = skillsOf(m)
   const rows = SKILLS.map(s => ({ skill: s, label: SKILL_LABEL[s], grade: skills[s] }))
   const best = rows.reduce<Grade>((a, r) => (r.grade > a ? r.grade : a), 1)
-  return { name: m.name, home: homeOfRecord(m), trade: tradeLabel(m.profession), rows, luck: luckOf(m), best, shown: 1, full: true }
+  const sv = statView(m)
+  return { name: m.name, home: homeOfRecord(m), trade: tradeLabel(m.profession), rows, luck: luckOf(m), best, shown: 1, full: true,
+    radar: sv.axes, scores: sv.scores, luckPct: sv.luckPct }
 }

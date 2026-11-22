@@ -1,5 +1,7 @@
 // moglin-card-check (BETA M46 slices 2+3): in a settlement, talk to a Moglin, Inspect -> its CARD: chibi portrait, name, home,
-// trade, nine skill pips + luck. Untrusted (employed, nothing brought) = trade only; free (no hoop) = full card + luck. Back closes it.
+// trade, M65: a five-stat radar (Core, Dexterity, Patience, Talent, Luck) with grade letters + nine skill scores under it.
+// Untrusted (employed, nothing brought) = trade only, axes + scores '?'; free (no hoop) = full card (5 graded axes, 9 scores,
+// luck %). Back closes it. Every axis grade and score is compared with the pure card (moglin-card.ts › cardOf).
 //   npx tsx scripts/moglin-card-check.mts [--url https://ather.games] [--phone] [--shots <dir>]
 import puppeteer from 'puppeteer-core'
 import { readFileSync } from 'node:fs'
@@ -74,8 +76,9 @@ const hello = await answers()
 const goTo = async (m: typeof folk[0]) => { for (let k = 0; k < folk.length && await nameOver() !== m.name; k++) { if (!(await pick(ASK.others))) break } return await nameOver() === m.name }
 const card = () => p.evaluate(() => { const c = document.querySelector('[data-moglin-card]') as HTMLElement | null; if (!c) return null
   const r = c.getBoundingClientRect()
-  return { text: c.textContent ?? '', full: c.hasAttribute('data-card-full'), luck: Number(c.querySelector('[data-card-luck]')?.getAttribute('data-card-luck') ?? -1),
-    grades: [...c.querySelectorAll('[data-card-skill]')].map(e => [e.getAttribute('data-card-skill'), Number(e.getAttribute('data-card-grade'))] as [string, number]),
+  return { text: c.textContent ?? '', full: c.hasAttribute('data-card-full'), radar: !!c.querySelector('svg[data-card-radar]'),
+    axes: [...c.querySelectorAll('[data-card-axis]')].map(e => [e.getAttribute('data-card-axis'), e.getAttribute('data-card-axis-grade'), e.textContent ?? ''] as [string, string, string]),
+    scores: [...c.querySelectorAll('[data-card-score]')].map(e => [e.getAttribute('data-card-score'), e.getAttribute('data-score')] as [string, string]),
     canvas: !!c.querySelector('canvas'), box: { top: r.top, left: r.left, right: r.right, bottom: r.bottom }, vw: innerWidth, vh: innerHeight } })
 ok(hello.includes(ASK.inspect), `hello offers ${ASK.inspect} (${hello.join(' | ')})`)
 ok(!(await card()), 'no card before Inspect')
@@ -87,8 +90,11 @@ for (const m of [emp, free]) {
   ok(!!c, `${m.name}: the card opens`)
   if (c) {
     ok(c.text.includes(m.name) && c.text.includes(want.trade) && c.text.includes(st.name), `${m.name}: name, trade (${want.trade}), home (${st.name}) on the card`)
-    ok(c.grades.length === 9 && c.grades.every(([s, g]) => g === (want.rows.find(r => r.skill === s)!.grade ?? 0)), `${m.name}: nine rows match the pure card (${c.grades.map(([s, g]) => `${s}:${g}`).join(' ')})`)
-    ok(c.full === want.full && c.luck === (want.luck ?? 0), `${m.name}: ${want.full ? 'full card + luck' : 'trade only, luck hidden'} (luck ${c.luck})`)
+    ok(c.radar && c.axes.length === 5 && c.axes.map(a => a[0]).join() === 'core,dexterity,patience,talent,luck', `${m.name}: the radar draws 5 axes in order (${c.axes.map(a => a[0]).join(',')})`)
+    ok(c.axes.every(([s, g, t]) => g === (want.radar.find(a => a.stat === s)!.grade ?? '?') && t.toLowerCase().includes(s)), `${m.name}: every axis is labelled and its grade matches the pure card (${c.axes.map(([s, g]) => `${s}:${g}`).join(' ')})`)
+    ok(c.scores.length === 9 && c.scores.every(([s, v]) => v === String(want.scores.find(x => x.skill === s)!.score ?? '')), `${m.name}: nine scores match the pure card (${c.scores.map(([s, v]) => `${s}:${v || '?'}`).join(' ')})`)
+    const luckAxis = c.axes.find(a => a[0] === 'luck')
+    ok(c.full === want.full && (want.luckPct === null ? !/%/.test(luckAxis?.[2] ?? '') : (luckAxis?.[2] ?? '').includes(`${want.luckPct}%`)), `${m.name}: ${want.full ? `full card, luck ${want.luckPct}%` : 'trade only, luck hidden'} (${luckAxis?.[2]})`)
     ok(c.canvas, `${m.name}: chibi portrait drawn`)
     ok(c.box.top >= 0 && c.box.left >= 0 && c.box.right <= c.vw && c.box.bottom <= c.vh, `${m.name}: card inside the ${c.vw}x${c.vh} view (${JSON.stringify(c.box)})`)
     if (shots) await p.screenshot({ path: `${shots}/card-${m.employed ? 'emp' : 'free'}${phone ? '-phone' : ''}.png` })

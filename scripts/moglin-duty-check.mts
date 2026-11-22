@@ -61,7 +61,7 @@ await shot('md-2-away')
 await bench()
 await click('[data-bench-tab="keeper"]'); await sleep(400)   // bench tabs (11-20): the room keeper has its own tab
 res.inspect = await click('[data-moglin-here] [data-act="inspect"] button'); await sleep(900)
-res.card = await p.evaluate(() => { const c = document.querySelector('[data-moglin-card-for="heath-check"] [data-moglin-card]'); return c ? { full: c.hasAttribute('data-card-full'), lit: c.querySelectorAll('[data-card-skill]:not([data-card-grade="0"])').length, luck: +(c.querySelector('[data-card-luck]')?.getAttribute('data-card-luck') ?? 0) } : null })
+res.card = await p.evaluate(() => { const c = document.querySelector('[data-moglin-card-for="heath-check"] [data-moglin-card]'); return c ? { full: c.hasAttribute('data-card-full'), lit: c.querySelectorAll('[data-card-score]:not([data-score=""])').length, axes: c.querySelectorAll('[data-card-axis]:not([data-card-axis-grade="?"])').length } : null })
 await shot('md-3-card')
 res.offDuty = await click('[data-act="off-duty"] button'); await sleep(600)
 res.roomAfterOff = ((await read('open.village.v1'))?.moglins?.[0]?.room) ?? null
@@ -78,7 +78,7 @@ const checks: [boolean, string][] = [
   [o.roast_rinn >= 10 && o.roast_rinn <= 20 && made >= 1, `roasts in the hearth's output (${o.roast_rinn})`],
   [s.shimmerscale === 30, `the 30-raw reserve kept (${s.shimmerscale})`],
   [new RegExp(`made ${made} Roast Rinn`).test((res.toast as string) ?? ''), `the 'while you were away' line says ${made} Roast Rinn (${res.toast})`],
-  [res.inspect === true && !!res.card && (res.card as any).full && (res.card as any).lit === 9 && (res.card as any).luck >= 1, `M46: Inspect on a RECRUITED Moglin opens its full card, 9 skills + luck (${JSON.stringify(res.card)})`],
+  [res.inspect === true && !!res.card && (res.card as any).full && (res.card as any).lit === 9 && (res.card as any).axes === 5, `M46/M65: Inspect on a RECRUITED Moglin opens its full card, 9 skill scores + all 5 radar axes graded (${JSON.stringify(res.card)})`],
   [res.offDuty === true && res.roomAfterOff === null, 'Off duty clears the room'],
   [errs.length === 0, `0 page errors ${errs.join(' | ')}`],
 ]
