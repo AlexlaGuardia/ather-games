@@ -92,7 +92,9 @@ ANSWERED by Alex 11-22 (beat 5): grown adults; the Glade replaces the Rune Hold 
 1. **Passage drive-through = a TEMPORARY build state.** Later the drive-through area becomes the Passage ENTRANCE and the keeper walks the market.
 2. **Kael's note is now a PAGE FALLEN OUT OF HIS JOURNAL**: a rumour heard at the Fallen Cap (honey capale), off to ask Veyra along for once. No yard hand-over, no Greg in it. @lark drafting (game/kael-journal-page-script.md, UNSIGNED).
 3. **New chain:** Veyra said no to Kael (busy with Laz's just-claimed Starforge); he wouldn't tell her where. "You'll need a ship, get it running and you might track him down." Ship fixed -> Veyra or straight to Ashfeld, the Fallen Cap, villagers, one carries the lead. Veyra no longer names THE REACH in the tutorial.
-HELD (Magii asking Alex): Kael's SOS vs the Hask wreck; a villager saying "Nolmir" vs guardrail 3.
+- **Kael's journal page SIGNED by Alex** (athernyx b317812): game/kael-journal-page-script.md, item "a journal page", ready to wire.
+- The Fallen Cap villager names **LENNA** (the world the Long Errand crew fled); 1672 is a voyaging age.
+HELD (Magii asking Alex): where Kael's SOS sits vs the Hask wreck.
 
 ## Canon asks (Magii) — batch, send when the loop is laid out
 - **Otto, Tess, Bonn as the Glade's three garden-keepers.** Canon: they are the Spirit Tales leads (Bonn 11 at Bk1). Bonn fits: she is Gregory's keeper-ward, given "the old arrival plot", youngest keeper (characters/bonn.md:5,50). Otto lives at Forge Grove under Heslur; Tess at Goldleaf Acres under Maizie. When in the timeline is the game, and may Otto + Tess hold plots in the Glade (or their mentors)?
