@@ -2111,7 +2111,7 @@ function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<str
   const pickUp = () => {
     // M106 fix: piece-lift.ts, the same path as the third melee hit. A spirit lives here = stays; a growing seed rides along.
     const r = liftPiece(getW(), id, getInv(), getPots(), getBoxes())   // M113: a Planter Box's sapling rides along too
-    if (r === 'spirit') { hudSay('A spirit lives in this planter. It stays.', 'info'); return }
+    if (r === 'spirit') { hudSay('A spirit bloomed here.', 'info'); return }
     if (r === 'gone') return
     if (r === 'full') { hudSay('No room in the bag for it.', 'info'); return }
     const rr = returnRun(loadRuns(), id, r.inv)   // M57: a busy alchemy piece gives its inputs back, all or nothing
