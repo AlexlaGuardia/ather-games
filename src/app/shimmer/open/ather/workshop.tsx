@@ -47,6 +47,7 @@ import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, ALC_L
 import { AlchemyPanel } from './alchemy-panel'
 import { PlanterPanel, GrimoirePanel, liftPlanter, useBook, type BankStore } from './spirit-panels'
 import { BLOOM_MS } from './spirit-seeds'
+import { SpiritOnPlanter, useSpirits3d } from './spirit-model'
 import { BrewingPanel } from './brewing-panel'
 import { useBrewing, openPartyBrew } from './party-brew-net'
 import { ALC_POTIONS as BREW_POTIONS, ALC_POTION_ORDER as BREW_ORDER } from './alchemy-set'
@@ -1225,17 +1226,18 @@ const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, numb
 /** M76: the spirit planter: woven starwillow round soft soil; a sprout that grows with the seed; a gold glow once it bloomed. */
 function SpiritPlanterBody({ id }: { id?: string }) {
   const f = FURNITURE.spirit_planter, c = WOODS.starwillow, b = useBook(), pot = id ? b.pots[id] : undefined
-  const orb = useRef<THREE.Mesh>(null), sprout = useRef<THREE.Group>(null)
+  const orb = useRef<THREE.Mesh>(null), sprout = useRef<THREE.Group>(null), spirits3d = useSpirits3d()   // M102: owner + ?spirits=3d = the Vulnyx model
   useFrame(({ clock }) => {
     if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06
     if (sprout.current && pot && !pot.bloomed) { const g = Math.max(0.15, Math.min(1, (Date.now() - pot.at) / BLOOM_MS)); sprout.current.scale.setScalar(g) }
   })
+  const orbMesh = <mesh ref={orb} position-y={1.0}><sphereGeometry args={[0.16, 14, 10]} /><meshBasicMaterial color={f.glow} transparent opacity={0.85} /></mesh>
   return <>
     {[0, 1, 2, 3].map(k => <Bx key={k} p={[0, 0.1 + k * 0.13, 0]} s={[f.w - (k % 2) * 0.04, 0.09, f.d - (k % 2) * 0.04]} c={k % 2 ? '#aab6d0' : c} />)}
     <Bx p={[0, 0.5, 0]} s={[f.w - 0.12, 0.05, f.d - 0.12]} c="#4a3524" />
     {[-1, 1].flatMap(a => [-1, 1].map(z => <mesh key={`${a}${z}`} position={[a * (f.w / 2 - 0.04), 0.62, z * (f.d / 2 - 0.04)]}><sphereGeometry args={[0.035, 6, 5]} /><meshBasicMaterial color="#eaf2ff" /></mesh>))}
     {pot && !pot.bloomed && <group ref={sprout} position={[0, 0.52, 0]}><mesh position-y={0.12}><cylinderGeometry args={[0.015, 0.02, 0.24, 5]} /><meshLambertMaterial color="#9ad06a" /></mesh><mesh position={[0.05, 0.22, 0]} rotation-z={-0.8}><sphereGeometry args={[0.05, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh><mesh position={[-0.05, 0.18, 0]} rotation-z={0.8}><sphereGeometry args={[0.045, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh></group>}
-    {pot?.bloomed && <><mesh ref={orb} position-y={1.0}><sphereGeometry args={[0.16, 14, 10]} /><meshBasicMaterial color={f.glow} transparent opacity={0.85} /></mesh><pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} /></>}
+    {pot?.bloomed && <>{spirits3d ? <SpiritOnPlanter y={0.53} fallback={orbMesh} /> : orbMesh}<pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} /></>}
   </>
 }
 /** One piece, built from boxes in its wood's colour. Blockout look like the rooms. */
