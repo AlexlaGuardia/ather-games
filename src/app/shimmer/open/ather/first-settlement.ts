@@ -57,7 +57,7 @@ export function m70Down(t: Tut, nodeId: string): Tut {
 export function m70Quest(t: Tut): { title: string; step: string } | null {
   if (t.m70 === 'open') return { title: 'quest.m70.title', step: 'quest.m70.step' }
   if (t.m70 === 'down') return { title: 'quest.m70.title', step: 'quest.m70.done' }
-  if (t.m70 === 'thanked') return { title: 'quest.m70.title', step: 'quest.m70.after' }
+  if (t.m70 === 'thanked') return { title: 'quest.m70.after', step: 'quest.m70.after' }   // canon: its own quest-log line, not a Lamps Out step
   return null
 }
 

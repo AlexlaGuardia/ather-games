@@ -64,7 +64,7 @@ w = walk(t, 'chamomile')
 ok(w.shown.join('|') === txt(['settler.thanks.1', 'settler.thanks.2', 'settler.thanks.3', 'settler.thanks.4', 'settler.thanks.5']).join('|'), `the thanks in order (${w.shown.join('|')})`)
 ok(w.gave === 1 && w.t.m70 === 'thanked' && w.t.gifts.includes('m70pack'), 'the gift handed once, recorded')
 t = w.t
-ok(m70Quest(t)?.step === 'quest.m70.after', 'journal: Go back to Greg at the Glade.')
+ok(m70Quest(t)?.step === 'quest.m70.after' && m70Quest(t)?.title === 'quest.m70.after', 'journal: Go back to Greg at the Glade.')
 const again = walk(rt(t), 'chamomile')
 ok(again.gave === 0 && again.shown.join() === txt(['settler.after.bark']).join(), 'reload + talk again: no second gift')
 // a save mid-thanks (gift recorded, state somehow still down) never re-gifts
