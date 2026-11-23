@@ -8,7 +8,9 @@ import type { TalkNode } from '../shared/npc-talk'
 import { RUNESMITH_CUT, IDONY_HUSH, IDONY_AFTER, type Beat } from '../business/errand-lines'
 
 // @lark draft 11-18, awaiting Alex sign-off. Idony has just hushed the keeper, so her answers defer instead of pester.
-export const DOOR_ASK = { cut: 'Here. A letter to cut.', inscribe: 'When you are free.', letters: 'The runesmith, please.', bye: 'Goodbye.', byeTemple: "I'll let you work." }
+export const DOOR_ASK = { cut: 'Here. A letter to cut.', inscribe: 'When you are free.', letters: 'The runesmith, please.', bye: 'Goodbye.', byeTemple: "I'll let you work.",
+  /** M93 s3: PLACEHOLDER label (sprites), for @lark to replace; plain, pronoun-free (canon gives Idris none) */
+  idris: 'Idris, please.' }
 
 export interface DoorTalkActs { open: (deed: string) => void; bye: () => void }
 
@@ -18,13 +20,14 @@ export const smithTalk = (key: string, a: DoorTalkActs): TalkNode => ({
   options: [{ label: DOOR_ASK.cut, pick: () => a.open(key) }, { label: DOOR_ASK.bye, pick: a.bye }],
 })
 
-/** The Enchant Temple: Idony at her bench (hushed while the bracelet is unwritten, her after-line once it is). Her twin's
- *  counter (weapons and sigils) has nothing to open yet, so it is not an answer. */
+/** The Enchant Temple: Idony at her bench (hushed while the bracelet is unwritten, her after-line once it is). Her twin
+ *  Idris (Magii 6a20625) cuts letters into a gun's sigil (M93 s3, business/idris-panel.tsx). */
 export const templeTalk = (bracelet: boolean, a: DoorTalkActs): TalkNode => ({
   line: bracelet ? IDONY_AFTER : IDONY_HUSH,
   options: [
     { label: DOOR_ASK.inscribe, pick: () => a.open('idony') },
     { label: DOOR_ASK.letters, pick: () => a.open('smith:enchant') },
+    { label: DOOR_ASK.idris, pick: () => a.open('idris') },
     { label: DOOR_ASK.byeTemple, pick: a.bye },
   ],
 })

@@ -46,6 +46,7 @@ import { extraGround, extraCarGround, carPush } from '../foot-extras'
 import { useTycoon } from '../business/use-tycoon'
 import { ShopPanel } from '../business/shop-panel'
 import { RunesmithPanel, IdonyPanel, commitImbue } from '../business/smith-panel'
+import { IdrisPanel } from '../business/idris-panel'   // M93 s3
 import { TalkBubble, TalkChoices } from '../shared/npc-talk'
 import { smithTalk, templeTalk, beatTalk } from './door-talk'
 import { DoorFolk } from './door-folk-scene'
@@ -1555,8 +1556,9 @@ function ContinentRideGame() {
       {deed?.startsWith('smith:') && <RunesmithPanel seat={deed.slice(6) as Seat} ledger={ledger} setLedger={setLedger} onClose={() => { setDeed(null); setTalk(null) }} onBack={talk ? () => setDeed(null) : undefined} />}
       {deed === 'idony' && <IdonyPanel ledger={ledger} setLedger={setLedger} onClose={() => { setDeed(null); setTalk(null) }} onBack={talk ? () => setDeed(null) : undefined}
         onBeat={b => { setDeed(null); setTalk(t => (t ? { ...t, beat: { ...b, at: 0 } } : t)) }} />}
+      {deed === 'idris' && <IdrisPanel ledger={ledger} setLedger={setLedger} onClose={() => { setDeed(null); setTalk(null) }} onBack={talk ? () => setDeed(null) : undefined} />}
       {deed?.startsWith('front:') && !board && <ShopPanel id={deed.slice(6)} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} isTouch={isTouch} />}
-      {deed && deed !== 'idony' && !deed.startsWith('front:') && !deed.startsWith('smith:') && R && tycoon.t && (
+      {deed && deed !== 'idony' && deed !== 'idris' && !deed.startsWith('front:') && !deed.startsWith('smith:') && R && tycoon.t && (
         <DeedCard R={R} lotId={deed} t={tycoon.t} marks={ledger.marks} onClose={() => setDeed(null)}
           onBuy={o => { const r = tycoon.buy(o.lot.id, o.kind, o.lot.tier); if (r.ok) hudSay(`${o.name} is yours · −${o.price.toLocaleString()} Marks`, 'item'); return r }}
           onSell={o => { const r = tycoon.sell(o.lot.id); if (r.ok) { hudSay(`${o.name} sold · +${(r.refund ?? 0).toLocaleString()} Marks`, 'item'); setDeed(null) } return r }} />

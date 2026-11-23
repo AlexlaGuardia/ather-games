@@ -12,6 +12,7 @@
 // ★ Copy stays plain and neutral: no keeper speaks here until lark writes them.
 import { useEffect, useState } from 'react'
 import { IdonyPanel, RunesmithPanel } from './smith-panel'
+import { IdrisPanel } from './idris-panel'   // M93 s3
 import { FRONT_SHOPS } from './doors'
 export { FRONT_SHOPS } from './doors'
 import { HearthFrame, H, hearthDisplay, HearthButton } from '../../ui/hearth'
@@ -129,13 +130,14 @@ function StationPanel({ ledger, setLedger, onClose, isTouch }: { ledger: Ledger;
 /** THE ENCHANT TEMPLE (the Citadel, Magii + Alex 11-16): Idony inscribes vessels, her twin works weapons and sigils,
  *  and the Enchant seat's runesmith cuts the Enchant and Manalic letters (world/schools.md › THE EIGHT RUNESMITH SEATS). */
 function TemplePanel({ ledger, setLedger, onClose }: { ledger: Ledger; setLedger: (l: Ledger) => void; onClose: () => void }) {
-  const [at, setAt] = useState<'hall' | 'idony' | 'smith'>('hall')
+  const [at, setAt] = useState<'hall' | 'idony' | 'smith' | 'idris'>('hall')
   if (at === 'idony') return <IdonyPanel ledger={ledger} setLedger={setLedger} onClose={onClose} onBack={() => setAt('hall')} />
+  if (at === 'idris') return <IdrisPanel ledger={ledger} setLedger={setLedger} onClose={onClose} onBack={() => setAt('hall')} />
   if (at === 'smith') return <RunesmithPanel seat="enchant" ledger={ledger} setLedger={setLedger} onClose={onClose} onBack={() => setAt('hall')} />
   const counters: { who: string; what: string; go?: () => void }[] = [
     { who: 'Idony', what: 'Vessels inscribed', go: () => setAt('idony') },
     { who: 'The runesmith', what: 'Enchant and Manalic letters', go: () => setAt('smith') },
-    { who: 'Her twin', what: 'Weapons and sigils' },
+    { who: 'Idris', what: 'Weapons and sigils', go: () => setAt('idris') },   // M93 s3: Idony's twin (Magii 6a20625)
   ]
   return (
     <HearthFrame title="Enchant Temple" maxWidth={600} onClose={onClose} fixed dataPanel="shop-panel">
