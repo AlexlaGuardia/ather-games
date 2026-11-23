@@ -81,7 +81,9 @@ export function plotStage(w: Pick<Works, 'rooms'>, now = Date.now()): 0 | 1 | 2 
 }
 /** How many Moglins the garden can hold right now. */
 export const villageCap = (w: Pick<Works, 'rooms'>, now = Date.now()) => VILLAGE_CAP[plotStage(w, now)]
-export interface Village { v: 1; moglins: MoglinRecord[]; lastTick: number }
+/** `parted`: ids of Moglins the keeper asked home (Magii 559213d): they went home to kin, OFF the map, so their old settlement
+ *  never shows them again (settlement-folk › stillHome). Absent on an older save. */
+export interface Village { v: 1; moglins: MoglinRecord[]; lastTick: number; parted?: string[] }
 export const freshVillage = (now = Date.now()): Village => ({ v: 1, moglins: [], lastTick: now })
 
 /** Take a Moglin in (the hub's recruit step ends here). Refuses past the cap or a repeat. */
@@ -91,6 +93,13 @@ export function welcome(v: Village, m: MoglinRecord, stage = 0): Village | null 
 }
 /** Canon's consent law: a Moglin can leave. Its room is simply unworked; nothing in the store goes with it. */
 export const farewell = (v: Village, id: string): Village => ({ ...v, moglins: v.moglins.filter(m => m.id !== id) })
+/** RULED-AFK (Magii 559213d): the keeper ASKS a recruit to go home. A parting on good terms: no cost, no mood (hub). Its room
+ *  is simply left (farewell drops the record, room and all); it goes home to kin, off the map (`parted`). Null if not here. */
+export function partWith(v: Village, id: string): Village | null {
+  if (!v.moglins.some(m => m.id === id)) return null
+  const f = farewell(v, id)
+  return { ...f, parted: [...new Set([...(v.parted ?? []), id])] }
+}
 
 /** Put a Moglin to work in a room: its trade must fit, the room must stand, one Moglin to a room. Null when not. */
 export function assign(v: Village, w: Works, moglinId: string, roomId: string | null, now = Date.now()): Village | null {
@@ -199,7 +208,8 @@ export function adoptVillage(raw: unknown, now = Date.now()): Village {
   if (v?.v !== 1 || !Array.isArray(v.moglins)) return freshVillage(now)
   const moglins = v.moglins.filter((m): m is MoglinRecord => !!m && typeof m.id === 'string' && typeof m.name === 'string'
     && PROFESSIONS.includes(m.profession) && !!m.grades && GRADE_CATEGORIES.every(c => okGrade(m.grades[c])))
-  return { v: 1, moglins: moglins.map(withSkills), lastTick: Number.isFinite(v.lastTick) ? Math.min(v.lastTick!, now) : now }
+  const parted = Array.isArray(v.parted) ? [...new Set(v.parted.filter((x): x is string => typeof x === 'string'))] : []
+  return { v: 1, moglins: moglins.map(withSkills), lastTick: Number.isFinite(v.lastTick) ? Math.min(v.lastTick!, now) : now, ...(parted.length ? { parted } : {}) }
 }
 export function loadVillage(now = Date.now()): Village {
   try { return adoptVillage(JSON.parse(localStorage.getItem(gardenKey(VILLAGE_KEY)) ?? 'null'), now) } catch { return freshVillage(now) }

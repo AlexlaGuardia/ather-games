@@ -5,6 +5,7 @@
 import { TABLE, raised, type Works } from './rooms'
 import { standAt } from './alchemist-boon'
 import type { MoglinRecord } from './moglins'
+import type { TalkNode } from '../shared/npc-talk'
 
 /** Drawn at work (the same test MoglinsAtWork draws by): an alchemist at its Desk, or anyone keeping a raised room. */
 export function atWork(m: MoglinRecord, w: Works, now = Date.now()): boolean {
@@ -21,4 +22,22 @@ export function idleSpot(k: number, n: number): { x: number; z: number; yaw: num
   const a = (k - (n - 1) / 2) * IDLE_STEP
   const x = TABLE.x + Math.sin(a) * IDLE_R, z = TABLE.z + Math.cos(a) * IDLE_R
   return { x, z, yaw: Math.atan2(TABLE.x - x, TABLE.z - z) }
+}
+
+// ── E on an idle Moglin: say hello, or ask it home (RULED-AFK Magii 559213d; hub: no cost, no mood, ONE confirm step) ───────
+// Every word here is a placeholder for @lark (hub batches the farewell + confirm lines). Guard: a parting on good terms.
+export const IDLE_LINES = {
+  hello: (name: string) => `${name} is waiting for a room to keep.`,
+  askHome: 'Go home to your kin?',
+  confirm: "Are you sure? They'll go home to their kin.",
+  yes: 'Yes. Go well.',
+  no: 'No, stay.',
+  bye: 'Goodbye.',
+  gone: (name: string) => `${name} goes home to their kin. Glad of the time.`,
+}
+export type IdleScreen = 'hello' | 'confirm'
+export interface IdleActs { go: (s: IdleScreen | null) => void; part: () => void }
+export function idleTalk(m: Pick<MoglinRecord, 'name' | 'dream'>, screen: IdleScreen, act: IdleActs): TalkNode {
+  if (screen === 'confirm') return { line: IDLE_LINES.confirm, options: [{ label: IDLE_LINES.no, pick: () => act.go('hello') }, { label: IDLE_LINES.yes, pick: () => { act.part(); act.go(null) } }] }
+  return { line: m.dream ? `${IDLE_LINES.hello(m.name)} "${m.dream}"` : IDLE_LINES.hello(m.name), options: [{ label: IDLE_LINES.bye, pick: () => act.go(null) }, { label: IDLE_LINES.askHome, pick: () => act.go('confirm') }] }
 }

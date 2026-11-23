@@ -137,4 +137,4 @@ export function recruit(v: Village, f: Folk, t: Trust, stage = 0, now = Date.now
   return welcome(v, rec, stage)
 }
 /** The folk still living in a settlement: anyone already in the keeper's village has moved out. */
-export const stillHome = (folk: Folk[], v: Village) => folk.filter(f => !v.moglins.some(m => m.id === f.id))
+export const stillHome = (folk: Folk[], v: Village) => folk.filter(f => !v.moglins.some(m => m.id === f.id) && !(v.parted ?? []).includes(f.id))   // a parted Moglin went home to kin, off the map (Magii 559213d)
