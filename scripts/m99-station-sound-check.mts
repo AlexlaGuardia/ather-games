@@ -41,10 +41,10 @@ try {
 
   const a0 = await asked()
   await sleep(8200)
-  const a1 = await asked(), saw = (a1['work-carp-saw'] ?? 0) - (a0['work-carp-saw'] ?? 0)
-  ok(saw >= 2 && saw <= 4, `1. at the carpentry bench: the saw phrase asked on a ~3 s beat (${saw} in 8.2 s)`)
+  const a1 = await asked(), CARP_IDS = ['work-carp-saw', 'work-carp-plane'], saw = CARP_IDS.reduce((n, k) => n + (a1[k] ?? 0) - (a0[k] ?? 0), 0)
+  ok(saw >= 2 && saw <= 4, `1. at the carpentry bench: a carpentry phrase asked on a ~3 s beat (${saw} in 8.2 s)`)
   ok(!a1['work-mason-chisel'], `   the masonry bench 50 m off: not asked (${a1['work-mason-chisel'] ?? 0})`)
-  ok(!a1['work-carp-plane'], '   only the FIRST yay candidate (else the first) is asked per bench')
+  { const yays = CARP_IDS.filter(k => statusOf(k) === 'yay'); ok(CARP_IDS.every(k => !a1[k] || yays.includes(k) || (yays.length === 0 && k === CARP_IDS[0])), `   only yay'd phrases are asked (the pool; none yay'd = the first): ${CARP_IDS.map(k => k + '=' + (a1[k] ?? 0)).join(' ')}`) }
   let done = a1['work-done-wood'] ?? 0
   for (let t = 0; t < 20 && !done; t++) { await sleep(1000); done = (await asked())['work-done-wood'] ?? 0 }
   ok(done >= 1, `2. a plank run landed: the wood sting asked (${done})`)
@@ -53,10 +53,11 @@ try {
   ok(planks > 0, `   and the bench really made planks (${planks} in its output)`)
 
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), mb.x, mb.z - 2); await sleep(500)
-  const m0 = (await asked())['work-mason-chisel'] ?? 0
+  const mason = (a: Record<string, number>) => (a['work-mason-chisel'] ?? 0) + (a['work-mason-rasp'] ?? 0)
+  const m0 = mason(await asked())
   await sleep(6500)
-  const m1 = (await asked())['work-mason-chisel'] ?? 0
-  ok(m1 - m0 >= 1, `3. walked to the masonry bench: the chisel phrase starts (${m1 - m0} in 6.5 s)`)
+  const m1 = mason(await asked())
+  ok(m1 - m0 >= 1, `3. walked to the masonry bench: a masonry phrase starts (${m1 - m0} in 6.5 s)`)
 
   // 4. PLAYED follows the vote: a yay station id that was asked also played; a proposed / nay one never did
   const pl = await played(), ak = await asked()

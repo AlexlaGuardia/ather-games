@@ -1,6 +1,6 @@
 // Run: npx tsx src/app/shimmer/open/ather/station-sound.test.ts
 // M99: a bench's working phrase repeats only while it crafts, positional, a sting when a run lands, silent idle / far / unvoted.
-import { stationSounds, pickVoice, STATION_VOICE, PHRASE_MS, HEAR_M, type BenchSnap } from './station-sound'
+import { stationSounds, pickVoice, pickFromPool, MAX_RUN, STATION_VOICE, PHRASE_MS, HEAR_M, type BenchSnap } from './station-sound'
 import registry from '../shared/sounds.json'
 let pass = 0, fail = 0
 const ok = (c: unknown, m: string) => { if (c) pass++; else { fail++; console.log('FAIL', m) } }
@@ -52,6 +52,26 @@ ok(!STATION_VOICE.farm && !STATION_VOICE.cooking, 'only carpentry + masonry have
 }
 // a room taken down loses its slot
 { const due = new Map<string, number>([['gone', 5]]); stationSounds(due, [], 0, null, none); ok(!due.has('gone'), 'a removed room is forgotten') }
+
+// the pool (Alex yay'd both loops, hub 11-23): random among ALL yay'd, never the same one 3 times running
+{
+  const ids = ['a', 'b', 'c'], yayAB = (i: string) => i !== 'c'
+  const h: string[] = [], seq: string[] = []
+  for (let k = 0; k < 6; k++) seq.push(pickFromPool(ids, yayAB, h, () => 0)!)   // rnd 0 always wants 'a'
+  ok(seq.join('') === 'aabaab', `a rigged pick is forced off after ${MAX_RUN} in a row (got ${seq.join('')})`)
+  const h2: string[] = [], seen = new Set<string>()
+  for (let k = 0; k < 200; k++) seen.add(pickFromPool(ids, yayAB, h2)!)
+  ok(seen.has('a') && seen.has('b') && !seen.has('c'), 'both yay phrases are heard, the proposed one never')
+  let run = 1, maxRun = 1, prev = ''
+  const h3: string[] = []
+  for (let k = 0; k < 500; k++) { const x = pickFromPool(ids, yayAB, h3)!; run = x === prev ? run + 1 : 1; maxRun = Math.max(maxRun, run); prev = x }
+  ok(maxRun <= MAX_RUN, `500 random beats: longest run ${maxRun} <= ${MAX_RUN}`)
+  ok(pickFromPool(ids, i => i === 'b', [], () => 0) === 'b' && pickFromPool(ids, () => false, [], () => 0.9) === 'a', 'one yay: that one; none: the first (asked, silent)')
+  const hist = new Map<string, string[]>(), due = new Map<string, number>(), got: string[] = []
+  for (let t = 0; t <= 15000; t += 3000) got.push(...stationSounds(due, [carp(true)], t, null, all, hist, () => 0.99).map(s => s.id))
+  ok(got.includes('work-carp-saw') && got.includes('work-carp-plane') && !got.some((x, i) => i >= 2 && x === got[i - 1] && x === got[i - 2]), `in the driver: both carpentry loops, no triple (${got.join(' ')})`)
+  stationSounds(due, [], 16000, null, all, hist); ok(hist.size === 0, 'a removed room forgets its pool history')
+}
 
 console.log(`station-sound: ${pass} passed, ${fail} failed`)
 if (fail) process.exit(1)

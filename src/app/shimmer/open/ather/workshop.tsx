@@ -25,7 +25,7 @@ import { snapCorner, runKeys, canLay, planRun, raze, wallBoxes, edgeRect, findRo
 import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
-  WALL_H, keepClear, tableAt, TABLE_ITEM, type Works, type Room, type RoomKind, type WorkNear,
+  WALL_H, FRAME_H, FRAME_POST, DOOR_W, doorOf, benchBox, keepClear, tableAt, TABLE_ITEM, type Works, type Room, type RoomKind, type WorkNear,
   stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, pieceFloor, canPlacePiece, placePiece, pickUpPiece, turnPiece, retireRooms, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, payCost, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
@@ -143,7 +143,14 @@ const heldCorner = (owned: ReadonlySet<string>) => (x: number, z: number) =>
 /** what a new wall must keep clear of: rooms (whole footprint + a hand), Keepstones, furniture */
 function wallBlockers(w: Works) {
   const rects: { r: { x0: number; x1: number; z0: number; z1: number }; why: string }[] = []
-  for (const r of w.rooms) { const f = footprint(r.kind, r.x, r.z, r.q); rects.push({ r: { x0: f.x0 - 0.3, x1: f.x1 + 0.3, z0: f.z0 - 0.3, z1: f.z1 + 0.3 }, why: `In your ${ROOMS[r.kind].name}.` }) }
+  for (const r of w.rooms) {
+    if (r.shell) {   // M97: a shell room is built AROUND: walls keep off only its bench and door frame
+      const why = `In your ${ROOMS[r.kind].name}'s bench.`
+      rects.push({ r: benchBox(r), why }, ...wallsOf(r).map(k => ({ r: { x0: k.x0, x1: k.x1, z0: k.z0, z1: k.z1 }, why: `In your ${ROOMS[r.kind].name}'s door frame.` })))
+      continue
+    }
+    const f = footprint(r.kind, r.x, r.z, r.q); rects.push({ r: { x0: f.x0 - 0.3, x1: f.x1 + 0.3, z0: f.z0 - 0.3, z1: f.z1 + 0.3 }, why: `In your ${ROOMS[r.kind].name}.` })
+  }
   for (const c of allChests(w)) rects.push({ r: chestBox(c), why: 'A Keepstone is in the way.' })
   for (const p of w.pieces) rects.push({ r: pieceRect(p.item, p.x, p.z, p.q), why: isLiftPiece(p) ? SHAFT_WHY : 'Something already stands there.' })
   return { rects, circles: keepClear(w) }   // M96: the table's circle follows the table
@@ -1035,21 +1042,29 @@ function PlanningTableBody() {
 function RoomMesh({ r, lift = 0 }: { r: Room; lift?: number }) {
   const walls = useMemo(() => wallsOf(r), [r])
   const f = footprint(r.kind, r.x, r.z, r.q), b = benchOf(r)
-  const cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2, sx = f.x1 - f.x0, sz = f.z1 - f.z0
+  const cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2, sx = f.x1 - f.x0, sz = f.z1 - f.z0, hWall = r.shell ? FRAME_H : WALL_H
   return (
     <group position-y={lift}>
       <mesh position={[cx, GROUND_Y + 0.04, cz]}><boxGeometry args={[sx, 0.08, sz]} /><meshLambertMaterial color="#b98d5a" /></mesh>
       {walls.map((k, i) => (
-        <mesh key={i} position={[(k.x0 + k.x1) / 2, GROUND_Y + WALL_H / 2, (k.z0 + k.z1) / 2]}>
-          <boxGeometry args={[k.x1 - k.x0, WALL_H, k.z1 - k.z0]} /><meshLambertMaterial color={WALL} />
+        <mesh key={i} position={[(k.x0 + k.x1) / 2, GROUND_Y + hWall / 2, (k.z0 + k.z1) / 2]}>
+          <boxGeometry args={[k.x1 - k.x0, hWall, k.z1 - k.z0]} /><meshLambertMaterial color={r.shell ? WOOD : WALL} />
         </mesh>
       ))}
-      <mesh position={[cx, GROUND_Y + WALL_H + 0.12, cz]}><boxGeometry args={[sx + 0.8, 0.24, sz + 0.8]} /><meshLambertMaterial color={ROOF} /></mesh>
-      <mesh position={[cx, GROUND_Y + WALL_H + 0.7, cz]}><boxGeometry args={[sx * 0.6, 0.9, sz * 0.6]} /><meshLambertMaterial color={ROOF} /></mesh>
+      {r.shell ? <DoorLintel r={r} /> : <>   {/* M97: a shell has no roof */}
+        <mesh position={[cx, GROUND_Y + WALL_H + 0.12, cz]}><boxGeometry args={[sx + 0.8, 0.24, sz + 0.8]} /><meshLambertMaterial color={ROOF} /></mesh>
+        <mesh position={[cx, GROUND_Y + WALL_H + 0.7, cz]}><boxGeometry args={[sx * 0.6, 0.9, sz * 0.6]} /><meshLambertMaterial color={ROOF} /></mesh>
+      </>}
       <Bench r={r} x={b.x} z={b.z} />
       {r.kind === 'farm' && <FarmInterior r={r} />}
     </group>
   )
+}
+/** M97: the shell room's door frame lintel, across the top of its two posts (look only: above head height, not solid). */
+function DoorLintel({ r }: { r: Room }) {
+  const d = doorOf(r), along = r.q % 2 === 0
+  const len = DOOR_W + FRAME_POST * 2 + 0.2
+  return <mesh position={[d.x, GROUND_Y + FRAME_H - 0.12, d.z]}><boxGeometry args={along ? [len, 0.24, FRAME_POST + 0.06] : [FRAME_POST + 0.06, 0.24, len]} /><meshLambertMaterial color={WOOD} /></mesh>
 }
 function Bench({ r, x, z }: { r: Room; x: number; z: number }) {
   return (
@@ -1118,8 +1133,8 @@ function Scaffold({ r, lift = 0 }: { r: Room; lift?: number }) {
       ))}
       <group ref={rise} position-y={GROUND_Y}>
         {walls.map((k, i) => (
-          <mesh key={i} position={[(k.x0 + k.x1) / 2, WALL_H / 2, (k.z0 + k.z1) / 2]}>
-            <boxGeometry args={[k.x1 - k.x0, WALL_H, k.z1 - k.z0]} /><meshLambertMaterial color={WALL} />
+          <mesh key={i} position={[(k.x0 + k.x1) / 2, (r.shell ? FRAME_H : WALL_H) / 2, (k.z0 + k.z1) / 2]}>
+            <boxGeometry args={[k.x1 - k.x0, r.shell ? FRAME_H : WALL_H, k.z1 - k.z0]} /><meshLambertMaterial color={r.shell ? WOOD : WALL} />
           </mesh>
         ))}
       </group>
@@ -1565,6 +1580,7 @@ function workerOf(r: Room, v: Village): { moglin?: Village['moglins'][number]; s
 /** Run every station to now. Offline catch-up is the same call: `last` is a timestamp, the Moglin's hours since are worked
  *  out of the store into the output (station-queue.ts: stockpile above the 30 reserve, capped at 30 a product). */
 const benchDue = new Map<string, number>()   // M99: when each bench's next working phrase is due
+const benchHist = new Map<string, string[]>()   // M99: each bench's recent phrases (the pool never plays one 3 times running)
 let firstTick = true   // the first run per page load is the offline catch-up: what the Moglins made joins the 'while you were away' line
 export function stationTick(now = Date.now()) {
   if (!worksWritable()) return   // M61: visiting a mate's plot: your stations wait (their clocks catch up at home)
@@ -1584,7 +1600,7 @@ export function stationTick(now = Date.now()) {
   }
   // M99: the bench's working phrase while it crafts + a sting when a run lands (proposed ids stay silent until Alex's yay)
   const ear = lastPose?.current
-  for (const s of stationSounds(benchDue, benches, now, ear ? { x: ear.x, z: ear.z } : null, id => sfxStatus(id) === 'yay')) sfx(s.id, { at: s.at })
+  for (const s of stationSounds(benchDue, benches, now, ear ? { x: ear.x, z: ear.z } : null, id => sfxStatus(id) === 'yay', benchHist)) sfx(s.id, { at: s.at })
   if (changed) setWorks(nw)
   if (first && Object.keys(away).length) reportAway(away)
 }
