@@ -279,7 +279,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 - **Placeholder lines batch (11-23, @lark draft, athernyx 3e06c1c):** 9 lines: the Moglin go-home talk ("Home to my kin, then? It's been a good stay. You're sure?"), garden-full ("I'd come, but you've no room for me yet. Raise more rooms, then ask again."), Fennel's jar thanks, "Something else.", and the Temple option now "The sigil bench, please." (works before you've met Idris). File: athernyx CANON/game/shimmer-lines-placeholders-2026-11-23.md. Sign off? (with the Idris + goodbyes batch above)
 
-- ~~**Idris + tutorial goodbyes:**~~ ✅ SIGNED by Alex (Magii athernyx 7a25a8e); Idris pronoun-free. Wire next session.
+- ~~**Idris + tutorial goodbyes:**~~ ✅ SIGNED by Alex (Magii athernyx 7a25a8e); Idris pronoun-free. Wire next session. Magii 5b83a25: Idris is he/him (Idony's twin brother).
 
 - **M83 World Builder Fly view (11-22, LIVE):** /shimmer/dev?mode=builder, click Fly: W/S/A/D fly, Space climbs, wheel zooms, T = top-down and back, left-drag sculpts. Bare terrain only (no trees/nodes). Autosaves your draft; Publish to push live, history to roll back. Known: small viewport (fullscreen coming next), high ground looks pale.
 
