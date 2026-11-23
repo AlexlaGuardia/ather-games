@@ -626,33 +626,68 @@ cmd_status() {
 # ── THE BOX BROWSER LOCK (11-19, hub): one headless browser on THIS box at a time ─────────────────────────────────────
 # Was a dbr convention ("browser UP / DOWN"); sprites ran over play's open UP twice in one day, both honestly (it read
 # one lane's DOWN, not every lane's). A step every window must remember is a step one will forget, so it is a lock:
-#   coord browser up "<what>"   -> refuses (exit 1) while another window holds it; stale after 45 min
+#   ★ coord browser run "<what>" -- <cmd...>   -> THE ONE-CALL FORM (11-23). Takes the lock (refuses exit 1 like up),
+#       runs <cmd>, ALWAYS releases on exit (trap EXIT/INT/TERM), exits with <cmd>'s code. Records the wrapper's pid, so
+#       a SIGKILLed wrapper (no trap) leaves a holder whose pid is dead = stale at once, taken over by the next up/run.
+#       Why: all day 11-23 lanes took `up` in one Bash call and `down` in another, lost COORD_WIN between them, `down`
+#       was refused and the lock stranded up to 45 min. With run there is no second call to get wrong.
+#   coord browser up "<what>"   -> refuses (exit 1) while another window holds it; stale after 45 min (no pid recorded)
 #   coord browser down          -> releases (only the holder, or COORD_FORCE=1)
 #   A refusal exits 1 and says why on STDERR. ⚠ Gate on the EXIT, never through a pipe: `coord browser up x | tail -1 && run`
 #   runs anyway (a pipeline's status is tail's). Twice on 11-21 (play, sprites). Write: `coord browser up x && run`, or set
 #   -o pipefail. tools/coord-browser.test.sh proves both.
 # EliteDesk runs (tools/edesk-check.sh) do NOT take it: they are not on this box.
 BROWSER_FILE="$COORD_DIR/browser"
+# pid start time (field 22 of /proc/<pid>/stat) so a recycled pid never reads as the holder still alive
+pid_start() { [ -r "/proc/$1/stat" ] && sed 's/^.*) //' "/proc/$1/stat" 2>/dev/null | awk '{print $20}'; }
 cmd_browser() {
   local op="${1:-status}"; shift || true
-  local holder="" ts="" ep=0 age=0
-  if [ -f "$BROWSER_FILE" ]; then holder=$(sed -n 's/^owner=//p' "$BROWSER_FILE"); ts=$(sed -n 's/^ts=//p' "$BROWSER_FILE"); ep=$(iso_to_epoch "$ts"); age=$(( $(now_epoch) - ep )); fi
+  local holder="" ts="" ep=0 age=0 hpid="" hstart="" stale=0 why=""
+  if [ -f "$BROWSER_FILE" ]; then
+    holder=$(sed -n 's/^owner=//p' "$BROWSER_FILE"); ts=$(sed -n 's/^ts=//p' "$BROWSER_FILE"); ep=$(iso_to_epoch "$ts"); age=$(( $(now_epoch) - ep ))
+    hpid=$(sed -n 's/^pid=//p' "$BROWSER_FILE"); hstart=$(sed -n 's/^pidstart=//p' "$BROWSER_FILE")
+    if [ -n "$hpid" ]; then
+      # a pid-holder is alive exactly while its wrapper is; no age rule (a long live run is still a run)
+      if ! kill -0 "$hpid" 2>/dev/null || { [ -n "$hstart" ] && [ "$(pid_start "$hpid")" != "$hstart" ]; }; then stale=1; why="holder pid $hpid is dead"; fi
+    elif [ "${age:-0}" -ge 2700 ]; then stale=1; why="older than 45 min"; fi
+  fi
   case "$op" in
-    up)
-      if [ -n "$holder" ] && [ "$holder" != "$WIN" ] && [ "${age:-0}" -lt 2700 ] && [ "${COORD_FORCE:-0}" != 1 ]; then
-        echo "box browser HELD by '$holder' ($(age_human "$age") ago): $(sed -n 's/^note=//p' "$BROWSER_FILE")" >&2
+    up|_take)
+      # _take (from run) also refuses a live pid-holder of the SAME window: two runs never share the browser
+      if [ -n "$holder" ] && [ "$stale" = 0 ] && [ "${COORD_FORCE:-0}" != 1 ] \
+         && { [ "$holder" != "$WIN" ] || { [ "$op" = _take ] && [ -n "$hpid" ]; }; }; then
+        echo "box browser HELD by '$holder' ($(age_human "$age") ago$([ -n "$hpid" ] && echo ", pid $hpid alive")): $(sed -n 's/^note=//p' "$BROWSER_FILE")" >&2
         echo "  wait for it (coord browser), run your prod check on the EliteDesk (tools/edesk-check.sh), or COORD_FORCE=1 if that window is gone" >&2
         return 1
       fi
+      [ -n "$holder" ] && [ "$stale" = 1 ] && echo "box browser: taking over STALE holder '$holder' ($why)" >&2
       mkdir -p "$COORD_DIR"
-      printf 'owner=%s\nts=%s\nsession=%s\nnote=%s\n' "$WIN" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${SESSION:-}" "$*" > "$BROWSER_FILE.tmp" && mv "$BROWSER_FILE.tmp" "$BROWSER_FILE"
+      local mypid="" mystart=""
+      if [ "$op" = _take ]; then mypid="$$"; mystart="$(pid_start $$)"; fi
+      printf 'owner=%s\nts=%s\nsession=%s\nnote=%s\npid=%s\npidstart=%s\n' "$WIN" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${SESSION:-}" "$*" "$mypid" "$mystart" > "$BROWSER_FILE.tmp.$$" && mv "$BROWSER_FILE.tmp.$$" "$BROWSER_FILE"
       echo "box browser UP for '$WIN': $*" ;;
+    run)
+      local what="${1:-}"; shift || true
+      [ "${1:-}" = "--" ] && shift
+      if [ -z "$what" ] || [ $# -eq 0 ]; then echo 'usage: coord browser run "<what>" -- <cmd...>' >&2; return 2; fi
+      cmd_browser _take "$what" || return 1
+      local child="" rc=0
+      # release only if the file still names THIS wrapper (a COORD_FORCE takeover is not ours to delete)
+      _browser_release() { [ -f "$BROWSER_FILE" ] && [ "$(sed -n 's/^pid=//p' "$BROWSER_FILE")" = "$$" ] && rm -f "$BROWSER_FILE" && echo "box browser DOWN (run by '$WIN' ended)" >&2; return 0; }
+      trap '_browser_release' EXIT
+      trap '[ -n "$child" ] && kill -TERM "$child" 2>/dev/null; _browser_release; exit 130' INT
+      trap '[ -n "$child" ] && kill -TERM "$child" 2>/dev/null; _browser_release; exit 143' TERM
+      # child in the background + wait, so a signal to the wrapper runs its trap at once (not after the child exits)
+      "$@" <&0 & child=$!
+      wait "$child" || rc=$?
+      _browser_release; trap - EXIT INT TERM
+      return "$rc" ;;
     down)
       if [ -z "$holder" ]; then echo "box browser already free"; return 0; fi
-      if [ "$holder" != "$WIN" ] && [ "${COORD_FORCE:-0}" != 1 ]; then echo "refusing: held by '$holder', not '$WIN' (COORD_FORCE=1 if it is gone)" >&2; return 1; fi
-      rm -f "$BROWSER_FILE"; echo "box browser DOWN (was '$holder')" ;;
+      if [ "$holder" != "$WIN" ] && [ "$stale" = 0 ] && [ "${COORD_FORCE:-0}" != 1 ]; then echo "refusing: held by '$holder', not '$WIN' (COORD_FORCE=1 if it is gone)" >&2; return 1; fi
+      rm -f "$BROWSER_FILE"; echo "box browser DOWN (was '$holder'$([ "$stale" = 1 ] && echo ", stale: $why"))" ;;
     *)
-      if [ -n "$holder" ]; then echo "  held by $holder, $(age_human "$age") ago: $(sed -n 's/^note=//p' "$BROWSER_FILE")$([ "$age" -ge 2700 ] && echo '  ⚠ STALE')"; else echo "  free"; fi ;;
+      if [ -n "$holder" ]; then echo "  held by $holder, $(age_human "$age") ago$([ -n "$hpid" ] && echo " (run pid $hpid)"): $(sed -n 's/^note=//p' "$BROWSER_FILE")$([ "$stale" = 1 ] && echo "  ⚠ STALE ($why)")"; else echo "  free"; fi ;;
   esac
 }
 
@@ -666,5 +701,5 @@ case "${1:-status}" in
   status)  cmd_status; echo "--- box browser ---"; cmd_browser status ;;
   browser) shift; cmd_browser "$@" ;;
   reap)    cmd_reap ;;
-  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | reap | lock | unlock | browser up <what>|down}"; exit 1 ;;
+  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | reap | lock | unlock | browser run <what> -- <cmd...>|up <what>|down}"; exit 1 ;;
 esac
