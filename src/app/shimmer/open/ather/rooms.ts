@@ -25,6 +25,7 @@ import { adoptStairs, type Stairs } from './plot-stairs'
 import { adoptDecks, type Decks } from './plot-decks'
 import { adoptFound, adoptFoundCells, floorAt } from './plot-found'
 import { cellMid, shaftBlocked, shaftTop } from './lift'
+import { normQ, quad, quadBounds, quadsHit, rectQuad } from './build-prefs'
 import { adoptWalls, adoptCarry, adoptRoof, adoptFloors, adoptPaid, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
 
 export type RoomKind = 'rinnshop' | 'farm' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
@@ -237,8 +238,7 @@ export const allChests = (w: Works): Chest[] => [STARTER_CHEST, ...w.chests]
 /** Chests standing, the starter included: what the bank's cap is counted from. */
 export const chestsStanding = (w: Works) => 1 + w.chests.length
 export function chestBox(c: Pick<Chest, 'x' | 'z' | 'q'>, base: number = GROUND_Y): Box {   // base (M55): the floor it stands on
-  const [hw, hd] = c.q % 2 ? [CHEST_D / 2, CHEST_W / 2] : [CHEST_W / 2, CHEST_D / 2]
-  return { x0: c.x - hw, x1: c.x + hw, y0: base - 0.5, y1: base + CHEST_H, z0: c.z - hd, z1: c.z + hd }
+  return { ...quadBounds(c.x, c.z, CHEST_W, CHEST_D, c.q), y0: base - 0.5, y1: base + CHEST_H }   // M98: a fine-turned stone's axis box
 }
 export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: number, z: number, q: number, inv?: Inv, item = KEEPSTONE): PlaceVerdict {
   if (chestsStanding(works) >= MAX_CHESTS) return { ok: false, why: `${MAX_CHESTS} Keepstones already stand. That is all a plot holds.` }
@@ -267,7 +267,7 @@ export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: numbe
 export function placeChest(works: Works, owned: ReadonlySet<string>, inv: Inv, x: number, z: number, q: number, now = Date.now(), item = KEEPSTONE): { works: Works; inv: Inv; chest: Chest } | null {
   if (!canPlaceChest(works, owned, x, z, q, inv, item).ok) return null
   const out = take(inv, item, 1); if (!out) return null
-  const chest: Chest = { id: `chest-${now.toString(36)}`, x, z, q: ((q % 4) + 4) % 4, placedAt: now, crystal: KEEPSTONES[item].crystal }
+  const chest: Chest = { id: `chest-${now.toString(36)}`, x, z, q: normQ(q), placedAt: now, crystal: KEEPSTONES[item].crystal }
   return { works: { ...works, chests: [...works.chests, chest] }, inv: out, chest }
 }
 /** Lift a placed Keepstone back into the bag. The starter one stays; a full bag refuses. The bank keeps every stack
@@ -410,10 +410,14 @@ export function craftAt(w: Works, roomId: string, inv: Inv, job: Job): { works: 
 export const jobRuns = (r: Room, inv: Inv, job: Job) => Math.min(...job.in.map(c => Math.floor(benchCount(r, inv, c.id) / c.n)))
 
 // ── FURNITURE ON THE PLOT: set from the bag, picked back up (furniture.ts holds what each piece is) ────────────────
+/** The piece's axis box (M98: round a fine-turned piece; exact for quarter turns). The walker, the melee ray and cover use it. */
 export function pieceRect(item: string, x: number, z: number, q: number) {
-  const f = FURNITURE[item], [hw, hd] = q % 2 ? [f.d / 2, f.w / 2] : [f.w / 2, f.d / 2]
-  return { x0: x - hw, x1: x + hw, z0: z - hd, z1: z + hd }
+  const f = FURNITURE[item]
+  return quadBounds(x, z, f.w, f.d, q)
 }
+/** M98: the piece's true turned footprint, for overlap */
+export const pieceQuad = (item: string, x: number, z: number, q: number) => quad(x, z, FURNITURE[item].w, FURNITURE[item].d, q)
+const chestQuad = (c: Pick<Chest, 'x' | 'z' | 'q'>) => quad(c.x, c.z, CHEST_W, CHEST_D, c.q)
 /** The walker's boxes: solid pieces only (you walk through a stool or under an arch). */
 export const pieceBoxes = (w: Works): Box[] => w.pieces.filter(p => FURNITURE[p.item]?.solid).map(p => {
   const k = pieceRect(p.item, p.x, p.z, p.q)
@@ -423,7 +427,7 @@ export const pieceBoxes = (w: Works): Box[] => w.pieces.filter(p => FURNITURE[p.
 export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: string, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
   const f = FURNITURE[item]
   if (!f) return { ok: false, why: 'That is not furniture.' }
-  if (f.shaft) { x = cellMid(x); z = cellMid(z); if (shaftBlocked(works, x, z)) return { ok: false, why: 'A wall stands in that cell on one of the floors.' } }   // M48: a shaft takes the whole cell, every level
+  if (f.shaft) { x = cellMid(x); z = cellMid(z); q = Math.round(q); if (shaftBlocked(works, x, z)) return { ok: false, why: 'A wall stands in that cell on one of the floors.' } }   // M48: a shaft takes the whole cell, every level
   if (works.pieces.length >= MAX_PIECES) return { ok: false, why: `${MAX_PIECES} pieces already stand. Pick one up to make room.` }
   const k = pieceRect(item, x, z, q)
   for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
@@ -433,24 +437,24 @@ export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: st
     const px = Math.max(k.x0, Math.min(c.x, k.x1)), pz = Math.max(k.z0, Math.min(c.z, k.z1))
     if (Math.hypot(px - c.x, pz - c.z) < c.r) return { ok: false, why: 'Leave room around the gate, Gregory and the table.' }
   }
-  const pad = 0.15, hit = (b: { x0: number; x1: number; z0: number; z1: number }) => k.x0 - pad < b.x1 && k.x1 + pad > b.x0 && k.z0 - pad < b.z1 && k.z1 + pad > b.z0
+  const pad = 0.15, mine = pieceQuad(item, x, z, q), hit = (b: { x0: number; x1: number; z0: number; z1: number }) => quadsHit(mine, rectQuad(b), pad)   // M98: the turned footprint, not its axis box
   for (const r of works.rooms) {
     if (wallsOf(r).some(hit)) return { ok: false, why: `In the wall of your ${ROOMS[r.kind].name}.` }
     const d = doorOf(r), b = benchOf(r)
     if (Math.hypot(d.x - x, d.z - z) < 1.6) return { ok: false, why: 'That blocks the doorway.' }
     if (Math.hypot(b.x - x, b.z - z) < 1.6) return { ok: false, why: 'That crowds the bench.' }
   }
-  if (allChests(works).map(chestBox).some(hit)) return { ok: false, why: 'Too close to a Keepstone.' }
-  if (works.pieces.some(p => hit(pieceRect(p.item, p.x, p.z, p.q)))) return { ok: false, why: 'Something already stands there.' }
-  if (inDrawnWall(works, k, pad)) return { ok: false, why: 'In one of your walls.' }
+  if (allChests(works).some(c => quadsHit(mine, chestQuad(c), pad))) return { ok: false, why: 'Too close to a Keepstone.' }
+  if (works.pieces.some(p => FURNITURE[p.item] && quadsHit(mine, pieceQuad(p.item, p.x, p.z, p.q), pad))) return { ok: false, why: 'Something already stands there.' }
+  if (wallRects(works.walls ?? {}).some(hit)) return { ok: false, why: 'In one of your walls.' }
   if (inv && countOf(inv, item) < 1) return { ok: false, why: `No ${f.name} in the bag.` }
   return { ok: true }
 }
 export function placePiece(works: Works, owned: ReadonlySet<string>, inv: Inv, item: string, x: number, z: number, q: number, now = Date.now()): { works: Works; inv: Inv; piece: Piece } | null {
   if (!canPlacePiece(works, owned, item, x, z, q, inv).ok) return null
-  if (FURNITURE[item].shaft) { x = cellMid(x); z = cellMid(z) }
+  if (FURNITURE[item].shaft) { x = cellMid(x); z = cellMid(z); q = Math.round(q) }
   const out = take(inv, item, 1); if (!out) return null
-  const piece: Piece = { id: `piece-${now.toString(36)}-${works.pieces.length}`, item, x, z, q: ((q % 4) + 4) % 4, placedAt: now }
+  const piece: Piece = { id: `piece-${now.toString(36)}-${works.pieces.length}`, item, x, z, q: normQ(q), placedAt: now }
   return { works: { ...works, pieces: [...works.pieces, piece] }, inv: out, piece }
 }
 export function pickUpPiece(works: Works, id: string, inv: Inv): { works: Works; inv: Inv } | null {
@@ -475,7 +479,7 @@ export function retireRooms(w: Works, b: Bank, cap: number, kind: RoomKind): { w
 export function turnPiece(works: Works, owned: ReadonlySet<string>, id: string): Works | null {
   const p = works.pieces.find(x => x.id === id)
   if (!p) return null
-  const rest = { ...works, pieces: works.pieces.filter(x => x.id !== id) }, q = (p.q + 1) % 4
+  const rest = { ...works, pieces: works.pieces.filter(x => x.id !== id) }, q = normQ(p.q + 1)
   if (!canPlacePiece(rest, owned, p.item, p.x, p.z, q).ok) return null
   return { ...works, pieces: works.pieces.map(x => (x.id === id ? { ...x, q } : x)) }
 }

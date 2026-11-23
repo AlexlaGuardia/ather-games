@@ -10,6 +10,7 @@
 //   useWorks() · workWalls(works) into plotShape · <WorkshopScene pose owned /> in the plot · nearWork() for E ·
 //   <WorkshopPanel near owned onClose /> + <PlacingBar /> (and usePlacingKeys()).
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { getPrefs, setPrefs, subscribePrefs, nextSnap, nextStep, snapLabel, turnQ, DEFAULT_PREFS } from './build-prefs'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { HearthFrame, HearthButton, Well, H, hearthDisplay } from '../../ui/hearth'
@@ -838,10 +839,18 @@ export function holdFromHand(id: string | null) {
 }
 const fromHand = (p: Placing) => !!p && 'hand' in p && !!p.hand
 /** Where a ghost stands: under the pointer while flying (build-mode.tsx), else `ahead` metres in front of the keeper. */
-function ghostAt(p: Pose, ahead: number, snap: number) {
+function ghostAt(p: Pose, ahead: number, snap: number) {   // snap: steps per metre; 0 = freehand (M98)
   const b = buildPoint(), x = b ? b.x : p.x - Math.sin(p.yaw) * ahead, z = b ? b.z : p.z - Math.cos(p.yaw) * ahead
-  ghost.x = Math.round(x * snap) / snap; ghost.z = Math.round(z * snap) / snap
+  ghost.x = snap ? Math.round(x * snap) / snap : x; ghost.z = snap ? Math.round(z * snap) / snap : z
 }
+/** M98: furniture + Keepstones snap to the keeper's chosen grid (build-prefs.ts), rooms stay on the metre */
+const prefSnap = () => { const s = getPrefs().snap; return s ? 1 / s : 0 }
+/** one turn of what is being placed: rooms a quarter, furniture + Keepstones by the chosen step */
+const turnOnce = (p: NonNullable<Placing>): NonNullable<Placing> => ({ ...p, q: p.kind === 'piece' || p.kind === 'chest' ? turnQ(p.q, getPrefs().step) : (p.q + 1) % 4 }) as NonNullable<Placing>
+/** M98: cycle the snap (G) or the turn step (T); said on the HUD */
+function cycleSnap() { const p = getPrefs(), n = { ...p, snap: nextSnap(p.snap) }; setPrefs(n); hudSay(`Snap · ${snapLabel(n.snap)}`, 'info', 2) }
+function cycleStep() { const p = getPrefs(), n = { ...p, step: nextStep(p.step) }; setPrefs(n); hudSay(`Turn · ${n.step}°`, 'info', 2) }
+const useBuildPrefs = () => useSyncExternalStore(subscribePrefs, getPrefs, () => DEFAULT_PREFS)
 /** The keeper's pose as the scene last saw it (the table's Plan lifts off from here). */
 let lastPose: React.MutableRefObject<Pose> | null = null
 /** Lift into build mode, optionally with something on the pointer already. */
@@ -891,14 +900,19 @@ export function usePlacingKeys(owned: ReadonlySet<string>) {
     const stopE = () => { if (eDown) clearInterval(eDown.t); eDown = null }
     const down = (e: KeyboardEvent) => {
       if (!placing) return
+      const fine = placing.kind === 'piece' || placing.kind === 'chest'   // M98: snap + step are furniture / Keepstone settings
       if (fromHand(placing)) {
         if (e.code === 'KeyE') {
-          if (!e.repeat && !eDown) { const h = { turned: false, t: setInterval(() => { if (placing) { h.turned = true; setPlacing({ ...placing, q: (placing.q + 1) % 4 }) } }, HAND_TURN_MS) }; eDown = h }
+          if (!e.repeat && !eDown) { const h = { turned: false, t: setInterval(() => { if (placing) { h.turned = true; setPlacing(turnOnce(placing)) } }, HAND_TURN_MS) }; eDown = h }
         } else if (e.code === 'Enter') confirmPlace(ownedRef.current)
+        else if (e.code === 'KeyG' && !e.repeat) cycleSnap()
+        else if (e.code === 'KeyT' && !e.repeat) cycleStep()
         else return
         e.preventDefault(); e.stopImmediatePropagation(); return
       }
-      if (e.code === 'KeyR') setPlacing({ ...placing, q: (placing.q + 1) % 4 })
+      if (e.code === 'KeyR') setPlacing(turnOnce(placing))
+      else if (fine && e.code === 'KeyG' && !e.repeat) cycleSnap()
+      else if (fine && e.code === 'KeyT' && !e.repeat) cycleStep()
       else if (e.code === 'KeyE' || e.code === 'Enter') confirmPlace(ownedRef.current)
       else if (e.code === 'Escape') setPlacing(null)
       else return
@@ -1161,7 +1175,7 @@ function Keepstone({ c, pose, y = GROUND_Y }: { c: Chest; pose: React.MutableRef
 function ChestGhost({ pose, owned, q, item }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; q: number; item: string }) {
   const g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
   useFrame(() => {
-    ghostAt(pose.current, 1.8, 2)
+    ghostAt(pose.current, 1.8, prefSnap())
     g.current?.position.set(ghost.x, floorAt(getW(), GROUND_Y, ghost.x, ghost.z) + CHEST_H / 2, ghost.z)
     mat.current?.color.set(canPlaceChest(getW(), owned, ghost.x, ghost.z, q, getInv(), item).ok ? GHOST_OK : GHOST_BAD)
   })
@@ -1234,7 +1248,7 @@ function PieceMesh({ p, y = GROUND_Y }: { p: Piece; y?: number }) {
 function PieceGhost({ pose, owned, item, q }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; item: string; q: number }) {
   const f = FURNITURE[item], g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
   useFrame(() => {
-    ghostAt(pose.current, Math.max(f.w, f.d) / 2 + 1.2, 4)
+    ghostAt(pose.current, Math.max(f.w, f.d) / 2 + 1.2, prefSnap())
     g.current?.position.set(f.shaft ? cellMid(ghost.x) : ghost.x, floorAt(getW(), GROUND_Y, ghost.x, ghost.z), f.shaft ? cellMid(ghost.z) : ghost.z)
     mat.current?.color.set(canPlacePiece(getW(), owned, item, ghost.x, ghost.z, q, getInv()).ok ? GHOST_OK : GHOST_BAD)
   })
@@ -2115,13 +2129,17 @@ function BankPanel({ id, onClose }: { id: string; onClose: () => void }) {
 export function PlacingBar({ owned }: { owned: ReadonlySet<string> }) {
   const p = usePlacing()
   const [reading, setReading] = useState(false)   // M68 s2: the grimoire is readable from the hand until its pedestal is placed
+  const prefs = useBuildPrefs()
   if (!p) return null
+  const fine = p.kind === 'piece' || p.kind === 'chest'   // M98: snap + turn step chips
   const book = p.kind === 'piece' && p.item === 'grimoire_pedestal'
   if (reading && book) return <GrimoirePanel onClose={() => setReading(false)} footer={null} />
   const btn: React.CSSProperties = { border: 0, borderRadius: 999, padding: '10px 16px', font: '700 13px system-ui', cursor: 'pointer', background: 'rgba(255,250,235,.95)', color: H.ink, boxShadow: '0 2px 8px rgba(0,0,0,.25)' }
   return (
-    <div data-placing={p.kind} style={{ position: 'fixed', left: '50%', bottom: 'max(230px, 27vh)', transform: 'translateX(-50%)', display: 'flex', gap: 8, zIndex: 40, pointerEvents: 'auto' }}>
-      <button type="button" data-act="turn" style={btn} onClick={() => setPlacing({ ...p, q: (p.q + 1) % 4 })}>{fromHand(p) ? 'Turn (hold E)' : 'Turn (R)'}</button>
+    <div data-placing={p.kind} style={{ position: 'fixed', left: '50%', bottom: 'max(230px, 27vh)', transform: 'translateX(-50%)', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', width: 'max-content', maxWidth: 'calc(100vw - 32px)', gap: 8, zIndex: 40, pointerEvents: 'auto' }}>
+      <button type="button" data-act="turn" style={btn} onClick={() => setPlacing(turnOnce(p))}>{fromHand(p) ? 'Turn (hold E)' : 'Turn (R)'}</button>
+      {fine && <button type="button" data-act="snap" data-snap={prefs.snap} style={btn} onClick={cycleSnap}>Snap {snapLabel(prefs.snap)} (G)</button>}
+      {fine && <button type="button" data-act="step" data-step={prefs.step} style={btn} onClick={cycleStep}>{prefs.step}° (T)</button>}
       <button type="button" data-act="place" style={{ ...btn, background: '#e0823f', color: '#fff' }} onClick={() => confirmPlace(owned)}>Place (E)</button>
       {book && <button type="button" data-act="read" style={btn} onClick={() => setReading(true)}>Read</button>}
       {!fromHand(p) && <button type="button" style={btn} onClick={() => setPlacing(null)}>Cancel (Esc)</button>}
