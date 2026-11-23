@@ -6,6 +6,23 @@
   "neck": 0.035,
   "legs": 1.25
  },
+ "small-curved": {
+  "headW": 0.8,
+  "headH": 0.8,
+  "jaw": 0.14,
+  "torsoL": 0.81,
+  "torsoW": 1.05,
+  "torsoD": 0.97,
+  "scarf": 0.77,
+  "hand": 0.86,
+  "foot": 0.8,
+  "neck": 0.02,
+  "legs": 1.21,
+  "handX": -0.05,
+  "handY": -0.1,
+  "handZ": -0.045,
+  "footX": -0.06
+ },
  "medium-broad": {
   "headW": 0.79,
   "headH": 0.78,
@@ -20,6 +37,19 @@
   "legs": 1.5,
   "handX": 0.095,
   "handY": -0.065
+ },
+ "medium-curved": {
+  "headW": 0.8,
+  "headH": 0.8,
+  "torsoL": 0.88,
+  "scarf": 0.87,
+  "hand": 0.83,
+  "foot": 0.8,
+  "neck": 0.005,
+  "legs": 1.51,
+  "handX": -0.055,
+  "handY": -0.065,
+  "footX": -0.035
  },
  "large-broad": {
   "headW": 0.78,
@@ -36,5 +66,15 @@
   "handY": -0.11,
   "handZ": -0.085,
   "footX": 0.045
+ },
+ "large-curved": {
+  "torsoW": 1.11,
+  "torsoD": 1.2,
+  "scarf": 0.87,
+  "hand": 0.89,
+  "foot": 0.9,
+  "legs": 2,
+  "handY": -0.16,
+  "footX": -0.04
  }
 }
