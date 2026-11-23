@@ -445,7 +445,9 @@ export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: st
     if (Math.hypot(b.x - x, b.z - z) < 1.6) return { ok: false, why: 'That crowds the bench.' }
   }
   if (allChests(works).some(c => quadsHit(mine, chestQuad(c), pad))) return { ok: false, why: 'Too close to a Keepstone.' }
-  if (works.pieces.some(p => FURNITURE[p.item] && quadsHit(mine, pieceQuad(p.item, p.x, p.z, p.q), pad))) return { ok: false, why: 'Something already stands there.' }
+  // M98 s2: furniture may stand TOUCHING furniture (the anchor lands a row flush: bench to bench, a table pushed to a bench);
+  // only a real overlap refuses, with 5 mm of float slack. Walls and Keepstones keep their 0.15 m clearance.
+  if (works.pieces.some(p => FURNITURE[p.item] && quadsHit(mine, pieceQuad(p.item, p.x, p.z, p.q), -0.005))) return { ok: false, why: 'Something already stands there.' }
   if (wallRects(works.walls ?? {}).some(hit)) return { ok: false, why: 'In one of your walls.' }
   if (inv && countOf(inv, item) < 1) return { ok: false, why: `No ${f.name} in the bag.` }
   return { ok: true }

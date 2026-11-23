@@ -88,6 +88,11 @@ ok(near(flushAxis(0.1, 0.25, 0.25, 1, false), 0), 'anchor: same-depth row did no
 // a whole-q anchor on the world axes: outputs are clean numbers (no float dust from cos/sin)
 { const a: Anchor = { x: 0.13, z: 0, q: 1, w: 1.6, d: 0.5 }; const [x, z] = anchorSnap(0.2, 1.7, 0.5, a, 1.6, 0.5, 1)
   ok(x === 0.13 && z === 1.6, `anchor: whole-q anchor gave dust or the wrong flush (${x}, ${z})`) }
+// placing against the anchor: the flush neighbour of a 45 deg bench is ALLOWED (furniture may touch furniture), 2 cm into it is not
+{ const an: Anchor = { x: P.x, z: P.z, q: 0.5, w: 1.6, d: 0.5 }, [fx, fz] = anchorSnap(P.x, P.z, 1, an, 1.6, 0.5, 0.5)
+  ok(canPlacePiece(a.works, owned, 'goldwood_bench', fx, fz, 0.5, a.inv).ok, 'anchor: the flush neighbour was refused (piece clearance pad)')
+  const back = 0.02 * Math.SQRT1_2
+  ok(!canPlacePiece(a.works, owned, 'goldwood_bench', fx - back, fz - back, 0.5, a.inv).ok, 'anchor: a bench 2 cm into the anchor was allowed') }
 // the store: set, read, clear, subscribers told
 { let told = 0; const off = subscribeAnchor(() => told++)
   setAnchor({ x: 1, z: 2, q: 0.5, w: 1, d: 1 }); ok(getAnchor()?.q === 0.5, 'anchor: set did not stick'); setAnchor(null); ok(getAnchor() === null && told === 2, 'anchor: clear / notify'); off() }
