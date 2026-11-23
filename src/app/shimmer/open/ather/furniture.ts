@@ -56,6 +56,9 @@ export interface PieceDef {
   alc?: AlcStation
   /** M76: a SPIRIT piece: E opens the planter (plant a Mana Seed) or the grimoire on its pedestal */
   spirit?: 'planter' | 'pedestal'
+  /** BETA M98b: a free-build FLOOR SLAB (h = its thickness): walkable, set like furniture (snap / turn / anchor), and other
+   *  furniture may stand ON it (rooms.ts slabLift raises it by the slab's top). Slabs never overlap each other. */
+  slab?: true
   /** M68 s2: GIVEN, never made or sold (the Grimoire Pedestal: Greg hands it in the tutorial, glade-greg-talk.ts) */
   gift?: true
 }
@@ -75,6 +78,12 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   grimoire_pedestal: { name: 'Grimoire Pedestal', blurb: 'A short stone stand with a slanted top. The grimoire rests here, and its pages are read here.', recipe: [], gift: true, w: 0.7, d: 0.7, h: 1.1, solid: true, wood: 'stone', glow: '#ffd27a', spirit: 'pedestal' },   // M68 s2 (hub call): GREG hands it (Spirits?.3), one per keeper; the carpentry recipe is gone
   // M48 (11-20): the lift. Canon RULED-AFK (athernyx 29b26fa): cord + counterweight, wood and stone, no metal, no runes. Planks and
   //    Stone Brick (no cord item exists in the bag). Blurb = placeholder for @lark.
+  // M98b (Alex 11-23: "freehand place one slab and then snap on the rest to that one"): free-build floor slabs. A room
+  // floor's cost (1 plank or brick per m², plot-bom.ts). Blurbs are placeholders for @lark.
+  goldwood_slab: { name: 'Goldwood Floor Slab', blurb: 'A square metre of goldwood floor. Set it anywhere, at any angle.', recipe: [{ id: 'goldwood_plank', n: 1 }], w: 1, d: 1, h: 0.12, solid: true, wood: 'goldwood', slab: true },
+  goldwood_slab_wide: { name: 'Wide Goldwood Floor Slab', blurb: 'Four square metres of goldwood floor in one piece.', recipe: [{ id: 'goldwood_plank', n: 4 }], w: 2, d: 2, h: 0.12, solid: true, wood: 'goldwood', slab: true },
+  stone_slab: { name: 'Stone Floor Slab', blurb: 'A square metre of cut stone floor.', recipe: [{ id: 'stone_brick', n: 1 }], w: 1, d: 1, h: 0.12, solid: true, wood: 'stone', slab: true },
+  stone_slab_wide: { name: 'Wide Stone Floor Slab', blurb: 'Four square metres of cut stone floor in one piece.', recipe: [{ id: 'stone_brick', n: 4 }], w: 2, d: 2, h: 0.12, solid: true, wood: 'stone', slab: true },
   lift: { name: 'Lift', blurb: 'A goldwood car on cords, a stone weight hung beside it. Pull the cord for a floor and up or down you go.', recipe: [{ id: 'goldwood_plank', n: 8 }, { id: 'stone_brick', n: 4 }], w: 1.0, d: 1.0, h: 2.0, solid: false, wood: 'goldwood', shaft: true },
   // ── UNIQUE pieces, Nyx-side (Alex 11-17: "unique pieces are SOLD FOR MARKS by the carpenter + other Nyx-side shops";
   //    Magii c52ba1c: which shops stock decor is ours, no new names). Made of the continent's canon goods (game/economy.md:

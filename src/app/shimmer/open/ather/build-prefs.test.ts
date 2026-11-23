@@ -1,6 +1,6 @@
 // BETA M98 s1: snap sizes, turn steps, fine-turned footprints. Run: npx tsx src/app/shimmer/open/ather/build-prefs.test.ts
 import { SNAPS, TURN_STEPS, DEFAULT_PREFS, snapTo, normQ, turnQ, nextSnap, nextStep, quad, quadBounds, quadsHit, rectQuad, adoptPrefs, getPrefs, setPrefs, anchorSnap, flushAxis, getAnchor, setAnchor, subscribeAnchor, type Anchor } from './build-prefs'
-import { canPlacePiece, placePiece, pieceRect, pieceBoxes, freshWorks, chestBox, STARTER_CHEST } from './rooms'
+import { canPlacePiece, placePiece, pieceRect, pieceBoxes, freshWorks, chestBox, STARTER_CHEST, slabLift, pieceFloor } from './rooms'
 import { STARTING_SQUARES } from './plot'
 import { newInv, give } from '../shared/inventory'
 let pass = 0
@@ -93,6 +93,28 @@ ok(near(flushAxis(0.1, 0.25, 0.25, 1, false), 0), 'anchor: same-depth row did no
   ok(canPlacePiece(a.works, owned, 'goldwood_bench', fx, fz, 0.5, a.inv).ok, 'anchor: the flush neighbour was refused (piece clearance pad)')
   const back = 0.02 * Math.SQRT1_2
   ok(!canPlacePiece(a.works, owned, 'goldwood_bench', fx - back, fz - back, 0.5, a.inv).ok, 'anchor: a bench 2 cm into the anchor was allowed') }
+// ── M98b b1: floor slabs ──
+{ const sb = give(give(newInv(12), 'goldwood_slab_wide', 3).inv, 'goldwood_bench', 1).inv
+  const s1 = placePiece(freshWorks(), owned, sb, 'goldwood_slab_wide', P.x, P.z, 0.5, 1)!
+  ok(!!s1, 'slab: a 45 deg wide slab was refused on open ground')
+  const base = pieceFloor(freshWorks(), { item: 'goldwood_bench', x: P.x, z: P.z })
+  ok(near(slabLift(s1.works, P.x, P.z), 0.12) && near(pieceFloor(s1.works, { item: 'goldwood_bench', x: P.x, z: P.z }), base + 0.12), 'slab: a piece on it is not lifted by its top')
+  ok(near(pieceFloor(s1.works, { item: 'goldwood_slab_wide', x: P.x, z: P.z }), base), 'slab: a slab lifted itself')
+  ok(slabLift(s1.works, P.x + 0.95, P.z + 0.95) === 0, 'slab: a point in its axis box but off the turned slab was lifted')
+  const onIt = placePiece(s1.works, owned, s1.inv, 'goldwood_bench', P.x, P.z, 0.5, 2)
+  ok(!!onIt, 'slab: a bench could not stand on the slab')
+  const bb = pieceBoxes(onIt!.works).find((_, i, a) => i === a.length - 1)!
+  ok(near(bb.y1, base + 0.12 + 0.5), `slab: the bench's walker box did not ride the slab (${bb.y1})`)
+  ok(!canPlacePiece(s1.works, owned, 'goldwood_slab_wide', P.x + 0.3, P.z, 0.5, s1.inv).ok, 'slab: a slab overlapping a slab was allowed')
+  const an: Anchor = { x: P.x, z: P.z, q: 0.5, w: 2, d: 2 }, [fx, fz] = anchorSnap(P.x + 2, P.z + 2, 1, an, 2, 2, 0.5)
+  ok(canPlacePiece(s1.works, owned, 'goldwood_slab_wide', fx, fz, 0.5, s1.inv).ok, 'slab: the anchored flush neighbour slab was refused')
+  const sw = pieceBoxes(s1.works)[0]; ok(near(sw.y1, base + 0.12), 'slab: its walker top is not its thickness') }
+// M98b: over a SLAB anchor a piece stays ON it (edges in line), a slab ghost still lands flush beside it
+{ const a: Anchor = { x: 0, z: 0, q: 0, w: 2, d: 2, floor: true }
+  const [bx, bz] = anchorSnap(0.1, 0.2, 0.5, a, 1.6, 0.5, 0, true); ok(near(bx, 0.2) && near(bz, 0.25), `onto: bench over a slab anchor was not kept on it (${bx}, ${bz})`)
+  const [sx, sz] = anchorSnap(0.1, 0.2, 0.5, a, 2, 2, 0, false); ok(near(sx, 0) && near(Math.abs(sz), 2), `onto: a slab over a slab anchor did not land beside it (${sx}, ${sz})`)
+  const [ox] = anchorSnap(1.9, 0, 0.5, a, 1.6, 0.5, 0, true); ok(near(ox, 1.8), `onto: a bench off the slab anchor was not flush outside (${ox})`)
+  const [nx, nz] = anchorSnap(0.1, 0.2, 0.5, { ...a, floor: false }, 1.6, 0.5, 0, true); ok(near(Math.abs(nz), 1.25) || near(Math.abs(nx), 1.8), `onto: a non-floor anchor kept a piece on top (${nx}, ${nz})`) }
 // the store: set, read, clear, subscribers told
 { let told = 0; const off = subscribeAnchor(() => told++)
   setAnchor({ x: 1, z: 2, q: 0.5, w: 1, d: 1 }); ok(getAnchor()?.q === 0.5, 'anchor: set did not stick'); setAnchor(null); ok(getAnchor() === null && told === 2, 'anchor: clear / notify'); off() }

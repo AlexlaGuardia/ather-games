@@ -64,7 +64,7 @@ export function quadsHit(a: Quad, b: Quad, pad = 0): boolean {
 // edge in line with the anchor's edge along that face, stepping by the snap size from there. A ghost turned off the anchor's square (say 45 deg to it) snaps its
 // centre on the anchor's grid instead, since no edge can lie flush. Rooms and lifts never use it. Not saved: it is a tool
 // state for this visit, cleared by the chip or by a new freehand set.
-export interface Anchor { x: number; z: number; q: number; w: number; d: number }
+export interface Anchor { x: number; z: number; q: number; w: number; d: number; /** M98b: the anchor is a floor SLAB */ floor?: boolean }
 const dust = (v: number) => Math.round(v * 1e6) / 1e6
 /** on one local axis: `l` the ghost centre, `ah` / `ph` the anchor's and the ghost's half extents, `s` the snap size.
  *  `beside` = this is the axis the ghost stands off the anchor along: it lands touching the anchor's face, or whole snap
@@ -77,7 +77,8 @@ export function flushAxis(l: number, ah: number, ph: number, s: number, beside: 
   return line + Math.round((l - line) / s) * s
 }
 /** where a ghost centred at (x, z), w x d turned q, lands under snap size `s` with anchor `a` (null = the world grid) */
-export function anchorSnap(x: number, z: number, s: Snap, a: Anchor | null, w: number, d: number, q: number): [number, number] {
+/** `onto` (M98b) = the ghost stands ON a floor anchor (furniture on a slab): edges in line on both axes, never pushed off it */
+export function anchorSnap(x: number, z: number, s: Snap, a: Anchor | null, w: number, d: number, q: number, onto = false): [number, number] {
   if (!a || s === 0) return [snapTo(x, s), snapTo(z, s)]
   const ang = (normQ(a.q) * Math.PI) / 2, c = Math.cos(ang), sn = Math.sin(ang), dx = x - a.x, dz = z - a.z
   const lx0 = dx * c + dz * sn, lz0 = -dx * sn + dz * c, rel = normQ(q - a.q)
@@ -85,7 +86,8 @@ export function anchorSnap(x: number, z: number, s: Snap, a: Anchor | null, w: n
   if (Number.isInteger(rel)) {
     const [pw, pd] = rel % 2 ? [d, w] : [w, d], tx = a.w / 2 + pw / 2, tz = a.d / 2 + pd / 2
     const besideX = Math.abs(lx0) / tx >= Math.abs(lz0) / tz   // which face of the anchor the ghost is nearer standing off
-    lx = flushAxis(lx0, a.w / 2, pw / 2, s, besideX); lz = flushAxis(lz0, a.d / 2, pd / 2, s, !besideX)
+    const on = onto && !!a.floor && Math.abs(lx0) < tx && Math.abs(lz0) < tz   // over a floor anchor: stay on it
+    lx = flushAxis(lx0, a.w / 2, pw / 2, s, !on && besideX); lz = flushAxis(lz0, a.d / 2, pd / 2, s, !on && !besideX)
   } else { lx = Math.round(lx0 / s) * s; lz = Math.round(lz0 / s) * s }
   return [dust(a.x + lx * c - lz * sn), dust(a.z + lx * sn + lz * c)]
 }

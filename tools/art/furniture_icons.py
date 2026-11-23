@@ -94,6 +94,19 @@ PIECES = {
         + ''.join(f'<rect x="{x}" y="7.8" width="2.4" height="5" rx="1" fill="{c}" stroke="#3a2a40" stroke-width=".5"/>' for x, c in ((6, '#c9a8ff'), (10, '#8fe3ff'), (14, '#ff9a4a'), (18, '#9ae06a')))
         + '<circle cx="23" cy="12" r="2.6" fill="#c9a8ff" fill-opacity=".45" stroke="#a4793e" stroke-width=".9"/>'
         + '<path d="M23 14.6 L23 16" stroke="#a4793e" stroke-width=".9"/>'),
+    # M98b (BETA, world aa0cbd5d 11-23): free-build floor slabs, set like furniture (snap / turn / anchor)
+    'goldwood_slab': ('goldwood', 'A goldwood floor slab.', lambda h, m, d:
+        '<path d="M8 14 L24 14 L28 20 L4 20 Z" fill="' + h + '" stroke="' + d + '" stroke-width=".8"/>' + r(4, 20, 24, 3, m, d, 0.4)
+        + '<path d="M13 14 L11 20 M19 14 L21 20" stroke="' + d + '" stroke-width=".6"/>'),
+    'goldwood_slab_wide': ('goldwood', 'A wide goldwood floor slab.', lambda h, m, d:
+        '<path d="M7 10 L25 10 L30 20 L2 20 Z" fill="' + h + '" stroke="' + d + '" stroke-width=".8"/>' + r(2, 20, 28, 3, m, d, 0.4)
+        + '<path d="M11.5 10 L8.5 20 M16 10 L16 20 M20.5 10 L23.5 20 M4.5 15 L27.5 15" stroke="' + d + '" stroke-width=".6"/>'),
+    'stone_slab': ('stone', 'A stone floor slab.', lambda h, m, d:
+        '<path d="M8 14 L24 14 L28 20 L4 20 Z" fill="' + h + '" stroke="' + d + '" stroke-width=".8"/>' + r(4, 20, 24, 3, m, d, 0.4)
+        + '<path d="M16 14 L16 20 M6 17 L26 17" stroke="' + d + '" stroke-width=".6"/>'),
+    'stone_slab_wide': ('stone', 'A wide stone floor slab.', lambda h, m, d:
+        '<path d="M7 10 L25 10 L30 20 L2 20 Z" fill="' + h + '" stroke="' + d + '" stroke-width=".8"/>' + r(2, 20, 28, 3, m, d, 0.4)
+        + '<path d="M11.5 10 L8.5 20 M16 10 L16 20 M20.5 10 L23.5 20 M4.5 15 L27.5 15" stroke="' + d + '" stroke-width=".6"/>'),
 }
 for pid, (wood, note, body) in PIECES.items():
     with open(os.path.join(OUT, pid.replace('_', '-') + '.svg'), 'w') as f:

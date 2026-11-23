@@ -26,7 +26,7 @@ import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
   WALL_H, KEEP_CLEAR, type Works, type Room, type RoomKind, type WorkNear,
-  stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, canPlacePiece, placePiece, pickUpPiece, turnPiece, retireRooms, type Piece,
+  stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, pieceFloor, canPlacePiece, placePiece, pickUpPiece, turnPiece, retireRooms, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, payCost, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
@@ -845,15 +845,15 @@ function ghostAt(p: Pose, ahead: number, snap: number) {   // snap: steps per me
 }
 /** M98: furniture + Keepstones snap to the keeper's chosen grid (build-prefs.ts), rooms stay on the metre. s2: while an ANCHOR
  *  stands (the last thing set freehand) the grid runs in its frame and the ghost lands flush on it. `plain` = ignore it (lifts). */
-function ghostFine(p: Pose, ahead: number, w: number, d: number, q: number, plain = false) {
+function ghostFine(p: Pose, ahead: number, w: number, d: number, q: number, plain = false, onto = false) {
   ghostAt(p, ahead, 0)
-  const [x, z] = anchorSnap(ghost.x, ghost.z, getPrefs().snap, plain ? null : getAnchor(), w, d, q)
+  const [x, z] = anchorSnap(ghost.x, ghost.z, getPrefs().snap, plain ? null : getAnchor(), w, d, q, onto)
   ghost.x = x; ghost.z = z
 }
 /** s2: a piece or Keepstone set FREEHAND becomes the anchor the next ghosts snap to; true when it did */
-function anchorIfFree(q: number, w: number, d: number): boolean {
+function anchorIfFree(q: number, w: number, d: number, floor = false): boolean {
   if (getPrefs().snap !== 0) return false
-  setAnchor({ x: ghost.x, z: ghost.z, q, w, d }); return true
+  setAnchor({ x: ghost.x, z: ghost.z, q, w, d, floor }); return true
 }
 function clearAnchor() { setAnchor(null); hudSay('Anchor cleared · the grid is the world\'s again', 'info', 2) }
 const useAnchor = () => useSyncExternalStore(subscribeAnchor, getAnchor, () => null)
@@ -879,7 +879,7 @@ function confirmPlace(owned: ReadonlySet<string>) {
     const item = placing.item, c = placePiece(getW(), owned, getInv(), item, ghost.x, ghost.z, placing.q)
     if (!c) { const v = canPlacePiece(getW(), owned, item, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot set it there.' : v.why, 'info'); return }
     setInv(c.inv); setWorks(c.works)
-    const f = FURNITURE[item], an = !f.shaft && anchorIfFree(placing.q, f.w, f.d) ? ' · anchor set, pick a snap to line up on it' : ''
+    const f = FURNITURE[item], an = !f.shaft && anchorIfFree(placing.q, f.w, f.d, !!f.slab) ? ' · anchor set, pick a snap to line up on it' : ''
     // keep placing while more of the same are in the bag (a row of stools is one job, not five trips to the table)
     if (countOf(c.inv, item) > 0) hudSay(`${FURNITURE[item].name} set · ${countOf(c.inv, item)} more in the bag · ${placing.hand ? 'hold R to put it away' : 'Esc stops'}${an}`, 'item', 4)
     else { setPlacing(null); hudSay(`${FURNITURE[item].name} set.${an}`, 'item', 3) }
@@ -964,7 +964,7 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
       <PlanningTable />
       {w.rooms.map(r => { const up = roomLift(w, r); return raised(r) ? <RoomMesh key={r.id} r={r} lift={up} /> : <Scaffold key={r.id} r={r} lift={up} /> })}   {/* M55: a prefab room rides its own foundation */}
       {allChests(w).map(c => <Wobbly key={c.id} id={c.id} at={[c.x, floorAt(w, GROUND_Y, c.x, c.z), c.z]}><Keepstone c={c} pose={pose} y={floorAt(w, GROUND_Y, c.x, c.z)} /></Wobbly>)}
-      {w.pieces.map(pc => <Wobbly key={pc.id} id={pc.id} at={[pc.x, floorAt(w, GROUND_Y, pc.x, pc.z), pc.z]}><PieceMesh p={pc} y={floorAt(w, GROUND_Y, pc.x, pc.z)} /></Wobbly>)}
+      {w.pieces.map(pc => { const y = pieceFloor(w, pc); return <Wobbly key={pc.id} id={pc.id} at={[pc.x, y, pc.z]}><PieceMesh p={pc} y={y} /></Wobbly> })}
       <Plinth w={w} />
       {stowed && <MeleeAim stowed={stowed} />}
       {w.pieces.some(x => x.item === 'lift') && <LiftInput />}
@@ -1245,7 +1245,12 @@ export function PieceBody({ item, id }: { item: string; id?: string }) {
     case 'alc_still': return <><Bx p={[0, 0.3, 0]} s={[f.w, 0.6, f.d]} c={c} /><mesh position={[0, 0.5, f.d / 2 + 0.005]}><boxGeometry args={[0.36, 0.12, 0.01]} /><meshBasicMaterial color={f.glow} /></mesh><mesh position={[-0.15, 0.86, 0]}><sphereGeometry args={[0.22, 12, 10]} /><meshLambertMaterial color="#cfe8f5" transparent opacity={0.6} /></mesh><mesh position={[-0.15, 1.12, 0]}><cylinderGeometry args={[0.04, 0.06, 0.16, 8]} /><meshLambertMaterial color="#cfe8f5" transparent opacity={0.6} /></mesh><mesh position={[0.18, 1.3, 0]} rotation-x={Math.PI / 2}><torusGeometry args={[0.14, 0.025, 6, 16]} /><meshLambertMaterial color="#c08a4a" /></mesh><mesh position={[0.18, 1.4, 0]} rotation-x={Math.PI / 2}><torusGeometry args={[0.14, 0.025, 6, 16]} /><meshLambertMaterial color="#c08a4a" /></mesh><Bx p={[0.02, 1.22, 0]} s={[0.3, 0.03, 0.03]} c="#c08a4a" /><mesh position={[0.3, 0.7, 0.12]}><cylinderGeometry args={[0.06, 0.06, 0.2, 8]} /><meshBasicMaterial color={f.glow} transparent opacity={0.85} /></mesh></>
     case 'alc_mixer': return <><Bx p={[0, 0.76, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.72, 0.09)}<mesh position={[0.4, 0.88, 0]}><cylinderGeometry args={[0.3, 0.24, 0.36, 14]} /><meshLambertMaterial color="#4e4a47" /></mesh><mesh position={[0.4, 1.065, 0]} rotation-x={-Math.PI / 2}><circleGeometry args={[0.27, 14]} /><meshBasicMaterial color={f.glow} /></mesh><mesh position={[0.4, 0.5, 0]}><cylinderGeometry args={[0.12, 0.12, 0.1, 10]} /><meshBasicMaterial color="#8fe3ff" /></mesh>{[-0.55, -0.35, -0.15].map(x => <Bx key={x} p={[x, 0.85, 0.1]} s={[0.12, 0.1, 0.22]} c="#6f9a4a" />)}</>
     case 'alc_desk': return <><Bx p={[0, 0.72, 0]} s={[f.w, 0.07, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.68, 0.08)}<Bx p={[0, 0.96, -f.d / 2 + 0.04]} s={[f.w, 0.48, 0.05]} c={c} /><Bx p={[0, 1.0, -f.d / 2 + 0.14]} s={[f.w - 0.1, 0.03, 0.18]} c={c} />{[-0.5, -0.3, -0.1, 0.1].map((x, k) => <mesh key={x} position={[x, 1.08, -f.d / 2 + 0.14]}><cylinderGeometry args={[0.04, 0.04, 0.13, 8]} /><meshBasicMaterial color={['#c9a8ff', '#8fe3ff', '#ff9a4a', '#9ae06a'][k]} /></mesh>)}<Bx p={[0.42, 0.88, 0.1]} s={[0.03, 0.26, 0.03]} c="#a4793e" /><mesh position={[0.42, 1.04, 0.1]}><torusGeometry args={[0.09, 0.015, 6, 16]} /><meshLambertMaterial color="#a4793e" /></mesh><mesh position={[0.42, 1.04, 0.1]}><circleGeometry args={[0.08, 14]} /><meshBasicMaterial color={f.glow} transparent opacity={0.45} side={THREE.DoubleSide} /></mesh></>
-    default: return <Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={c} />
+    default:
+      // M98b floor slabs: a slab with a seam every metre (wood: planks run along w; stone: a flag grid)
+      if (f.slab) return <><Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={c} />
+        {Array.from({ length: Math.round(f.w * (f.wood === 'stone' ? 1 : 3)) - 1 }, (_, k) => { const n = Math.round(f.w * (f.wood === 'stone' ? 1 : 3)); return <Bx key={`x${k}`} p={[-f.w / 2 + (k + 1) * f.w / n, f.h + 0.003, 0]} s={[0.025, 0.006, f.d - 0.02]} c={f.wood === 'stone' ? '#8a8274' : dk} /> })}
+        {f.wood === 'stone' && Array.from({ length: Math.round(f.d) - 1 }, (_, k) => <Bx key={`z${k}`} p={[0, f.h + 0.003, -f.d / 2 + (k + 1)]} s={[f.w - 0.02, 0.006, 0.025]} c={f.wood === 'stone' ? '#8a8274' : dk} />)}</>
+      return <Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={c} />
   }
 }
 /** M42: a hit wobbles the thing about its own foot (melee-view.tsx) */
@@ -1262,8 +1267,8 @@ function PieceMesh({ p, y = GROUND_Y }: { p: Piece; y?: number }) {
 function PieceGhost({ pose, owned, item, q }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; item: string; q: number }) {
   const f = FURNITURE[item], g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
   useFrame(() => {
-    ghostFine(pose.current, Math.max(f.w, f.d) / 2 + 1.2, f.w, f.d, q, !!f.shaft)
-    g.current?.position.set(f.shaft ? cellMid(ghost.x) : ghost.x, floorAt(getW(), GROUND_Y, ghost.x, ghost.z), f.shaft ? cellMid(ghost.z) : ghost.z)
+    ghostFine(pose.current, Math.max(f.w, f.d) / 2 + 1.2, f.w, f.d, q, !!f.shaft, !f.slab)
+    g.current?.position.set(f.shaft ? cellMid(ghost.x) : ghost.x, pieceFloor(getW(), { item, x: ghost.x, z: ghost.z }), f.shaft ? cellMid(ghost.z) : ghost.z)
     mat.current?.color.set(canPlacePiece(getW(), owned, item, ghost.x, ghost.z, q, getInv()).ok ? GHOST_OK : GHOST_BAD)
   })
   return (

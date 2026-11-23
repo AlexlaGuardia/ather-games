@@ -195,7 +195,7 @@ export function workPickables(works: Works, ground: (x: number, z: number) => nu
   const add = (x: number, z: number, r: number, h: number, item: WorkNear, lift = 0) => { const g = ground(x, z); out.push({ x, z, y0: g - 0.2, y1: floorAt(works, g, x, z) + lift + h + 0.2, r, item }) }   // M55: the floor it stands on (a house or prefab room's foundation)
   add(TABLE.x, TABLE.z, 1.1, 1.1, { kind: 'table' })
   for (const c of allChests(works)) add(c.x, c.z, 0.55, CHEST_H, { kind: 'chest', id: c.id })
-  for (const p of works.pieces) { const f = FURNITURE[p.item]; if (f) add(p.x, p.z, Math.max(f.w, f.d) / 2, f.shaft ? levelBase(shaftTop(works, p)) + f.h : f.h, { kind: 'piece', id: p.id }) }   // M47 close-out: a lift answers E from EVERY floor its shaft serves (it was the car's level only, x a stale 3 m storey: E on floor 2 could not call the car up)
+  for (const p of works.pieces) { const f = FURNITURE[p.item]; if (f) add(p.x, p.z, Math.max(f.w, f.d) / 2, f.shaft ? levelBase(shaftTop(works, p)) + f.h : f.h, { kind: 'piece', id: p.id }, f.slab ? 0 : slabLift(works, p.x, p.z)) }   // M47 close-out: a lift answers E from EVERY floor its shaft serves (it was the car's level only, x a stale 3 m storey: E on floor 2 could not call the car up)
   for (const r of works.rooms) {
     if (!raised(r, now)) { const d = doorOf(r); add(d.x, d.z, 1, 2.4, { kind: 'raising', room: r }); continue }
     const b = benchOf(r); add(b.x, b.z, 0.9, 1.1, { kind: 'bench', room: r })
@@ -419,9 +419,24 @@ export function pieceRect(item: string, x: number, z: number, q: number) {
 export const pieceQuad = (item: string, x: number, z: number, q: number) => quad(x, z, FURNITURE[item].w, FURNITURE[item].d, q)
 const chestQuad = (c: Pick<Chest, 'x' | 'z' | 'q'>) => quad(c.x, c.z, CHEST_W, CHEST_D, c.q)
 /** The walker's boxes: solid pieces only (you walk through a stool or under an arch). */
+/** M98b: how high a floor SLAB lifts what stands at (x, z): the top of the slab under that point, else 0. Exact on the turned
+ *  footprint (point in quad), so a 45 deg slab lifts only what is really on it. */
+export function slabLift(w: Works, x: number, z: number): number {
+  let top = 0
+  for (const p of w.pieces) {
+    const f = FURNITURE[p.item]; if (!f?.slab || f.h <= top) continue
+    const q = pieceQuad(p.item, p.x, p.z, p.q)
+    let inside = true
+    for (let i = 0; i < 4 && inside; i++) { const [ax, az] = q[i], [bx, bz] = q[(i + 1) % 4]; if ((bx - ax) * (z - az) - (bz - az) * (x - ax) < -1e-9) inside = false }
+    if (inside) top = f.h
+  }
+  return top
+}
+/** M98b: the floor a PIECE stands on: the house foundation (M55), plus a slab under it unless it IS a slab */
+export const pieceFloor = (w: Works, p: { item: string; x: number; z: number }) => floorAt(w, GROUND_Y, p.x, p.z) + (FURNITURE[p.item]?.slab ? 0 : slabLift(w, p.x, p.z))
 export const pieceBoxes = (w: Works): Box[] => w.pieces.filter(p => FURNITURE[p.item]?.solid).map(p => {
   const k = pieceRect(p.item, p.x, p.z, p.q)
-  const b = floorAt(w, GROUND_Y, p.x, p.z)   // M55: inside the house it stands on the foundation
+  const b = pieceFloor(w, p)   // M55: inside the house it stands on the foundation; M98b: on a slab, on the slab
   return { ...k, y0: b - 0.5, y1: b + FURNITURE[p.item].h }
 })
 export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: string, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
@@ -447,7 +462,8 @@ export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: st
   if (allChests(works).some(c => quadsHit(mine, chestQuad(c), pad))) return { ok: false, why: 'Too close to a Keepstone.' }
   // M98 s2: furniture may stand TOUCHING furniture (the anchor lands a row flush: bench to bench, a table pushed to a bench);
   // only a real overlap refuses, with 5 mm of float slack. Walls and Keepstones keep their 0.15 m clearance.
-  if (works.pieces.some(p => FURNITURE[p.item] && quadsHit(mine, pieceQuad(p.item, p.x, p.z, p.q), -0.005))) return { ok: false, why: 'Something already stands there.' }
+  // M98b: a slab and a piece never clash (the piece stands ON it); slab against slab does.
+  if (works.pieces.some(p => FURNITURE[p.item] && !!FURNITURE[p.item].slab === !!f.slab && quadsHit(mine, pieceQuad(p.item, p.x, p.z, p.q), -0.005))) return { ok: false, why: 'Something already stands there.' }
   if (wallRects(works.walls ?? {}).some(hit)) return { ok: false, why: 'In one of your walls.' }
   if (inv && countOf(inv, item) < 1) return { ok: false, why: `No ${f.name} in the bag.` }
   return { ok: true }
