@@ -93,6 +93,9 @@ ok(await poll(() => p.evaluate(() => !document.querySelector('[data-panel="birth
 await sleep(2500); await tapText(p, /^Tap to start$/); await ready(p); await sleep(8000)
 ok(((await stored(p, RINQUEST_KEY)) as { state: string } | null)?.state === 'none', `B. the birth wrote the quest flag = none (${JSON.stringify(await stored(p, RINQUEST_KEY))})`)
 ok(!((await A(p, 'tools')) as Record<string, unknown>).rinning, 'B. a new keeper has NO rinstick')
+// M68 s3b: a LIVE tutorial keeper's quest starts at Fennel in the GLADE (glade-fennel-check); the Rinnshop start below is the
+// path a keeper from before the tutorial (live:false) still walks, so this keeper reads as one from here on (reload applies it)
+await p.evaluate(() => localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null })))
 // hub's catch: a new keeper's bag gets saved soon after birth; make sure it IS saved (10 bait), then reload
 if (!(await stored(p, 'open.inv.v1'))) await p.evaluate(() => { const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'waymark', n: 12 }; slots[1] = { id: 'bait', n: 10 }; localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] })) })
 await p.reload({ waitUntil: 'load', timeout: 240000 }); await ready(p); await sleep(3000)
