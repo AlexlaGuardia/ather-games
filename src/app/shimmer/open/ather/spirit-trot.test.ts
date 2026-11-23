@@ -206,6 +206,7 @@ for (const sp of ['fox', 'axolotl'] as const) for (const fps of [60, 4]) for (co
       const stopAt = 20 + walk, d = Math.hypot(p.x - k.x, p.z - k.z), d2 = Math.hypot(o.x - k.x, o.z - k.z)
       if (tt >= stopAt && backAt < 0 && d < 8) backAt = tt - stopAt
       if (tt >= stopAt + 30) { dP.push(d); dO.push(d2); modes.add(p.mode) }
+      if (tt >= stopAt + 30 && d < 0.9 && !bad) bad = `party ran through the keeper's feet (${d.toFixed(2)} m) t=${tt.toFixed(1)}`
     }
     ok(!bad, `${tag}: never in a blocker (${bad})`)
     // the way back is round the hedge (~35 m): the Vulnyx drifts at 1.7 x 1.3 m/s, the Manalotl ambles at 0.62 x 1.3 (her dial)

@@ -92,6 +92,12 @@ export const NEAR = {
   driftK: 1.3,      // x her dash on a drift-back leg (she hurries a little, never Follow's catch-up)
   slack: 1.25,      // past r * slack a beat is cut short (after beatMin) and she sets off back
   beatMin: 0.5,     // s of a beat she always keeps (no twitchy stop-start)
+  pass: 1,          // m: a run never passes nearer the keeper than this
+}
+/** distance from point k to the segment a-b */
+function segDist(a: { x: number; z: number }, b: { x: number; z: number }, k: { x: number; z: number }) {
+  const dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz, t = L2 > 0 ? Math.max(0, Math.min(1, ((k.x - a.x) * dx + (k.z - a.z) * dz) / L2)) : 0
+  return Math.hypot(a.x + dx * t - k.x, a.z + dz * t - k.z)
 }
 /** where the keeper is (world xz; yaw 0 looks down -z) */
 export type FollowTarget = () => { x: number; z: number; yaw: number }
@@ -185,6 +191,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
       const L = Math.hypot(to.x - pos.x, to.z - pos.z), cap = back ? N.leg * (i < 20 ? 1 : 0.5) : maxLeg
       if (!back && L < 0.8) continue
       if (L > cap) to = { x: pos.x + (to.x - pos.x) * cap / L, z: pos.z + (to.z - pos.z) * cap / L }
+      if (segDist(pos, to, k) < N.pass && dk >= N.pass) continue   // she runs round the keeper, never through their feet
       if (planLine(to, D.dash * (back ? N.driftK : rand(0.85, 1.1)))) return true
     }
     return back && planRound(k)
