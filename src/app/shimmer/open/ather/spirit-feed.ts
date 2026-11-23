@@ -9,6 +9,7 @@
 // localStorage. It only ever counts up; nothing reads `last` to punish a gap.
 // ⚠ M110 (later, NOT built): the per-spirit STAT record belongs beside this one, keyed by the same planter id (its own key,
 // e.g. 'ather.spiritStats.v1', in its own module), read by spirit-sheet.ts in place of the species base stats.
+import { gardenKey } from '@/lib/keeper-local'   // M109 s4: a garden key (the planters are the plot's), per account
 import { countOf, take, type Inv } from '../shared/inventory'
 import { GRADES } from './farming'
 
@@ -41,14 +42,14 @@ export function feed(inv: Inv, b: FedBook, id: string, now: number): { inv: Inv;
 const KEY = 'ather.spiritFed.v1'
 export function loadFed(): FedBook {
   try {
-    const v = JSON.parse(localStorage.getItem(KEY) ?? '{}')
+    const v = JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? '{}')
     if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
     const out: FedBook = {}
     for (const [k, f] of Object.entries(v as Record<string, Partial<Fed>>)) if (f && typeof f.n === 'number' && f.n > 0) out[k] = { n: f.n, last: Number(f.last) || 0, item: String(f.item ?? '') }
     return out
   } catch { return {} }
 }
-export function saveFed(b: FedBook) { try { localStorage.setItem(KEY, JSON.stringify(b)) } catch { /* private mode: this session only */ } }
+export function saveFed(b: FedBook) { try { localStorage.setItem(gardenKey(KEY), JSON.stringify(b)) } catch { /* private mode: this session only */ } }
 
 /** planter ids fed this moment: spirit-model.tsx takes one and plays her happy beat (cheer) */
 export const spiritCheer = new Set<string>()

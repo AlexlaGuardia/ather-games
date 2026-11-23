@@ -176,5 +176,68 @@ for (const sp of ['fox', 'axolotl'] as const) for (const fps of [60, 4]) for (co
   ok(start === 'follow' ? m === 'follow' : m !== 'follow' || false, `${tag}: after the call ${start === 'follow' ? 'back to following' : 'her own roam'} (${m})`)
 }
 
+// M109 s4 THE PARTY KEEPS NEAR: a bigger garden (40 x 30 m, the same bench/box near the planter, a room and a long hedge
+// across the middle with a gap). The keeper walks ~26 m off and stands: an in-party spirit (near) drifts back within
+// NEAR.r inside 25 s and then keeps loosely round them (mostly within r, with her own beats, not glued at Follow's slot);
+// the same spirit NOT in the party never tracks the keeper. A keeper walking a slow loop keeps her within reach. Every
+// step free of every blocker, at 60 and 4 fps, both species.
+{
+  const BIG = { x0: -8, x1: 32, z0: -15, z1: 15 }
+  const BB = [...BOXES.slice(0, 2), { x0: 18, x1: 22, z0: 6, z1: 10 }, { x0: 12, x1: 12.6, z0: -15, z1: 2 }]   // room + hedge (gap z 2..15)
+  const blockedB = (x: number, z: number) => !inBox(BIG, x, z, -PAD) || BB.some(b => inBox(b, x, z, PAD))
+  const badB = (p: { x: number; z: number; mode: string }) => ground(p.mode) && (BB.some(b => inBox(b, p.x, p.z, 0.05)) || inBox(PLANTER, p.x, p.z, 0.15) || !inBox(BIG, p.x, p.z))
+  const med = (a: number[]) => [...a].sort((x, y) => x - y)[a.length >> 1]
+  for (const sp of ['fox', 'axolotl'] as const) for (const fps of [60, 4]) for (const seed of [3, 17]) {
+    const D = { ...(SPIRIT_MODELS[sp]?.trot ?? {}) }, dt = 1 / fps, tag = `near ${sp} ${fps}fps seed ${seed}`
+    const mk = () => makeTrot({ home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked: blockedB, roam: { maxLeg: 4.5, away: 3 } }, seed, D)
+    const party = mk(), other = mk(), k = { x: 0, z: 3, yaw: 0 }
+    party.near(() => k)
+    ok(party.nearing() && !other.nearing(), `${tag}: nearing() reads the party`)
+    // 20 s with the keeper by the planter, then he walks to (24, -6) at 4 m/s (behind the hedge: she must go round by the gap)
+    const A = { x: 0, z: 3 }, B = { x: 24, z: -6 }, walk = Math.hypot(B.x - A.x, B.z - A.z) / 4
+    let bad = '', backAt = -1, tt = 0
+    const dP: number[] = [], dO: number[] = [], modes = new Set<string>()
+    for (let i = 0; i < (20 + walk + 90) * fps; i++) {
+      tt = i * dt
+      const w = clamp01((tt - 20) / walk); k.x = A.x + (B.x - A.x) * w; k.z = A.z + (B.z - A.z) * w
+      const p = party.step(dt), o = other.step(dt)
+      if (!bad && badB(p)) bad = `party ${p.mode} at ${p.x.toFixed(2)},${p.z.toFixed(2)} t=${tt.toFixed(1)}`
+      if (!bad && badB(o)) bad = `other ${o.mode} at ${o.x.toFixed(2)},${o.z.toFixed(2)} t=${tt.toFixed(1)}`
+      const stopAt = 20 + walk, d = Math.hypot(p.x - k.x, p.z - k.z), d2 = Math.hypot(o.x - k.x, o.z - k.z)
+      if (tt >= stopAt && backAt < 0 && d < 8) backAt = tt - stopAt
+      if (tt >= stopAt + 30) { dP.push(d); dO.push(d2); modes.add(p.mode) }
+    }
+    ok(!bad, `${tag}: never in a blocker (${bad})`)
+    // the way back is round the hedge (~35 m): the Vulnyx drifts at 1.7 x 1.3 m/s, the Manalotl ambles at 0.62 x 1.3 (her dial)
+    const lim = sp === 'fox' ? 25 : 60
+    ok(backAt >= 0 && backAt < lim, `${tag}: the party spirit is back within NEAR.r inside ${lim} s of the keeper stopping (${backAt.toFixed(1)} s)`)
+    const within = dP.filter(d => d < 8 * 1.25).length / dP.length
+    ok(within > 0.9, `${tag}: then keeps near (within r*slack ${(within * 100).toFixed(0)}% of the time)`)
+    ok(med(dP) > 2, `${tag}: loose company, not glued at Follow's slot (median ${med(dP).toFixed(2)} m)`)
+    ok(['look', 'trot'].every(m => modes.has(m)) && (modes.has('sit') || modes.has('sniff') || modes.has('tilt')), `${tag}: her own beats while near (${[...modes].join(',')})`)
+    ok(Math.min(...dO) > 8, `${tag}: the non-party spirit never tracks the keeper (nearest ${Math.min(...dO).toFixed(2)} m)`)
+    // let her out of the party: she roams by home again (home ~25 m off: she ends up nearer home than the keeper)
+    party.near(null)
+    let homeBy = 99
+    for (let i = 0; i < 300 * fps; i++) { const q = party.step(dt); homeBy = Math.min(homeBy, Math.hypot(q.x, q.z)) }
+    ok(!party.nearing() && homeBy < 3, `${tag}: let roam: back to her own roam round home (came within ${homeBy.toFixed(1)} m of home in 5 min)`)
+  }
+  // a keeper walking a slow loop (1.2 m/s, radius 6 round (6,-4)): she never falls more than 2r behind once caught up
+  for (const fps of [60, 4]) {
+    const dt = 1 / fps, tr = makeTrot({ home, rMin: 0.9, rMax: 1.5, blocked: blockedB, roam: { maxLeg: 4.5, away: 3 } }, 5), k = { x: 0, z: 0, yaw: 0 }
+    tr.near(() => k)
+    let worst = 0, bad = ''
+    for (let i = 0; i < 120 * fps; i++) {
+      const a = i * dt * 1.2 / 6; k.x = 6 + Math.cos(a) * 6 - 6; k.z = -4 + Math.sin(a) * 6
+      const p = tr.step(dt)
+      if (!bad && badB(p)) bad = `${p.mode} at ${p.x.toFixed(2)},${p.z.toFixed(2)}`
+      if (i * dt > 15) worst = Math.max(worst, Math.hypot(p.x - k.x, p.z - k.z))
+    }
+    ok(!bad, `near loop ${fps}fps: never in a blocker (${bad})`)
+    ok(worst < 16, `near loop ${fps}fps: keeps within 2r of a moving keeper (worst ${worst.toFixed(2)} m)`)
+  }
+}
+function clamp01(v: number) { return Math.max(0, Math.min(1, v)) }
+
 if (fails.length) { console.error(`spirit-trot: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`spirit-trot: ${pass}/0`)

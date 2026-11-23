@@ -5,6 +5,7 @@
 // spirit, asks one along / lets one roam, and CALLS ONE HOME (she comes to the keeper on her own legs: spirit-trot call()).
 // UI verbs: ask along / let roam / call. Never withdraw / deposit / store: nothing here holds a spirit, only a list of
 // planter ids (the same ids Follow and the fed record key on), kept in localStorage.
+import { gardenKey } from '@/lib/keeper-local'   // M109 s4: a garden key (the planters are the plot's), per account
 import { setFollowing, isFollowing } from './spirit-follow'
 
 export const PARTY_MAX = 8
@@ -13,11 +14,11 @@ let ids: string[] | null = null
 const subs = new Set<() => void>()
 function load(): string[] {
   if (ids) return ids
-  try { const v = JSON.parse(localStorage.getItem(KEY) ?? '[]'); ids = Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').slice(0, PARTY_MAX) : [] } catch { ids = [] }
+  try { const v = JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? '[]'); ids = Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').slice(0, PARTY_MAX) : [] } catch { ids = [] }
   return ids
 }
 function save(next: string[]) {
-  ids = next; try { localStorage.setItem(KEY, JSON.stringify(next)) } catch { /* private mode: this session only */ }
+  ids = next; try { localStorage.setItem(gardenKey(KEY), JSON.stringify(next)) } catch { /* private mode: this session only */ }
   for (const f of subs) f()
 }
 export const partyIds = (): readonly string[] => (typeof window === 'undefined' ? [] : load())

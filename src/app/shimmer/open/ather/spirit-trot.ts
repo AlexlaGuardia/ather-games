@@ -81,6 +81,18 @@ export const FOLLOW = {
   settle: 0.12,     // m from the slot that counts as there
   sitAfter: 4,      // s standing by before she sits
 }
+// ── M109 s4 THE PARTY KEEPS NEAR (Magii RULED 0aee8bd/9b4dfe8: the party = up to 8 the keeper has asked along; they keep
+// near the keeper in the garden; every other bloomed spirit roams the garden by temperament). Loose company, NOT Follow: she
+// keeps her own runs and beats (look / sniff / sit), only her runs are picked round the keeper instead of round her planter,
+// and when the keeper walks off she drifts back on a longer, quicker leg. ────────────────────────────────────────────────
+export const NEAR = {
+  r: 8,             // m: the loose radius round the keeper she wanders within (the check asserts against it)
+  keep: 1.6,        // m: a run never ends nearer the keeper than this (that close is Follow's job)
+  leg: 6,           // m: the longest drift-back leg (she re-reads where the keeper is after each)
+  driftK: 1.3,      // x her dash on a drift-back leg (she hurries a little, never Follow's catch-up)
+  slack: 1.25,      // past r * slack a beat is cut short (after beatMin) and she sets off back
+  beatMin: 0.5,     // s of a beat she always keeps (no twitchy stop-start)
+}
 /** where the keeper is (world xz; yaw 0 looks down -z) */
 export type FollowTarget = () => { x: number; z: number; yaw: number }
 
@@ -100,7 +112,9 @@ export type Trot = { step: (dt: number) => TrotPose; pose: () => TrotPose; beats
   cheer: (to: FollowTarget | null) => void; cheers: () => number
   /** M109 s3: called home from the grimoire: she walks to `to` (the keeper) on her own legs, settles by them, sits a moment,
    *  then is free again (her own roam, or back to following if she was) */
-  call: (to: FollowTarget) => void; calling: () => boolean }
+  call: (to: FollowTarget) => void; calling: () => boolean
+  /** M109 s4: in the party: she keeps near `to` (the keeper) in loose company, or null = her own roam round home */
+  near: (to: FollowTarget | null) => void; nearing: () => boolean }
 
 export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): Trot {
   const D: TrotDials = { ...TROT, ...dials, beat: { ...TROT.beat, ...dials?.beat } }
@@ -126,6 +140,9 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   let happyTo: FollowTarget | null = null, happyBase = 0, happyBack = false, happyN = -1, happyY = 0, cheerPending: { to: FollowTarget | null } | null = null, cheers = 0
   // M109 s3 call home: on her way to the keeper (the follow walk), and what she was following before (restored on arrival)
   let calling = false, callPrev: FollowTarget | null = null
+  // M109 s4 the party anchor: who she keeps near (null = not in the party)
+  let nearTo: FollowTarget | null = null
+  const dK = (k: { x: number; z: number }) => Math.hypot(pos.x - k.x, pos.z - k.z)
 
   const arcLen = (A0: number, A1: number, R0: number, R1: number) => { let L = 0, p = at(A0, R0); for (let i = 1; i <= 12; i++) { const q = at(lerp(A0, A1, i / 12), lerp(R0, R1, i / 12)); L += Math.hypot(q.x - p.x, q.z - p.z); p = q } return L }
   const arcFree = (A0: number, A1: number, R0: number, R1: number) => { const L = arcLen(A0, A1, R0, R1), n = Math.max(2, Math.ceil(L / 0.1)); for (let i = 1; i <= n; i++) { const q = at(lerp(A0, A1, i / n), lerp(R0, R1, i / n)); if (!free(q.x, q.z)) return false } return true }
@@ -157,6 +174,47 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     }
     return false
   }
+  /** M109 s4: a run picked round the keeper: within NEAR.r a wander to another spot round them (never nearer than keep);
+   *  past it a drift-back leg (capped at NEAR.leg, quicker) toward a spot on her side of them. Every leg must run free. */
+  function planNear(): boolean {
+    if (!nearTo) return false
+    const k = nearTo(), N = NEAR, dk = dK(k), back = dk > N.r, b = Math.atan2(pos.z - k.z, pos.x - k.x), maxLeg = roam?.maxLeg ?? 4.5
+    for (let i = 0; i < 28; i++) {
+      const a = back ? b + rand(-1, 1) * (i < 14 ? 0.9 : 2.2) : rand(0, TAU), r = rand(N.keep + 0.5, N.r * (back ? 0.6 : 0.85))
+      let to = { x: k.x + Math.cos(a) * r, z: k.z + Math.sin(a) * r }
+      const L = Math.hypot(to.x - pos.x, to.z - pos.z), cap = back ? N.leg * (i < 20 ? 1 : 0.5) : maxLeg
+      if (!back && L < 0.8) continue
+      if (L > cap) to = { x: pos.x + (to.x - pos.x) * cap / L, z: pos.z + (to.z - pos.z) * cap / L }
+      if (planLine(to, D.dash * (back ? N.driftK : rand(0.85, 1.1)))) return true
+    }
+    return back && planRound(k)
+  }
+  /** M109 s4: no straight leg gets her back (a hedge, a room between): a coarse grid search (0.7 m cells over the box round
+   *  her and the keeper) for a way round, then a leg to the furthest point along it she can run to straight. */
+  function planRound(k: { x: number; z: number }): boolean {
+    const c = 0.7, m = 12, x0 = Math.min(pos.x, k.x) - m, z0 = Math.min(pos.z, k.z) - m
+    const W = Math.min(160, Math.ceil((Math.max(pos.x, k.x) + m - x0) / c)), H = Math.min(160, Math.ceil((Math.max(pos.z, k.z) + m - z0) / c))
+    const cx = (i: number) => x0 + (i + 0.5) * c, cz = (j: number) => z0 + (j + 0.5) * c
+    const ok = new Int8Array(W * H)   // 0 unknown, 1 free, 2 blocked
+    const fr = (i: number, j: number) => { const n = j * W + i; if (!ok[n]) ok[n] = free(cx(i), cz(j)) ? 1 : 2; return ok[n] === 1 }
+    const si = clamp(Math.floor((pos.x - x0) / c), 0, W - 1), sj = clamp(Math.floor((pos.z - z0) / c), 0, H - 1), r2 = (NEAR.r * 0.6) ** 2
+    const from = new Int32Array(W * H).fill(-1), q = [sj * W + si]; from[q[0]] = q[0]
+    let goal = -1
+    for (let h = 0; h < q.length && goal < 0; h++) {
+      const n = q[h], i = n % W, j = (n / W) | 0
+      if ((cx(i) - k.x) ** 2 + (cz(j) - k.z) ** 2 < r2 && n !== q[0]) { goal = n; break }
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= W || b >= H) continue
+        const nn = b * W + a; if (from[nn] >= 0 || !fr(a, b) || (di && dj && !(fr(i + di, j) && fr(i, j + dj)))) continue
+        from[nn] = n; q.push(nn)
+      }
+    }
+    if (goal < 0) return false
+    const path: { x: number; z: number }[] = []
+    for (let n = goal; n !== q[0]; n = from[n]) path.unshift({ x: cx(n % W), z: cz((n / W) | 0) })
+    for (let i = path.length - 1; i >= 0; i--) { const p = path[i]; if (Math.hypot(p.x - pos.x, p.z - pos.z) <= NEAR.leg && planLine(p, D.dash * NEAR.driftK)) return true }
+    return false
+  }
   /** a short straight hop between two ring points (a chord that misses the planter): breaks up the circling near home */
   function planChord(): boolean {
     for (let k = 0; k < 10; k++) { const a = ang + (R() < 0.5 ? 1 : -1) * rand(0.5, 1.4); if (planLine(at(a, rand(nav.rMin + 0.1, nav.rMax)), D.speed * rand(1, 1.25))) return true }
@@ -177,6 +235,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   /** the next run from a standstill. true = she is off. */
   function move(): boolean {
     if (followTo) { fGo = false; fIdle = 0; go('follow', 0); return true }
+    if (nearTo && planNear()) return run()   // M109 s4: the party picks her runs round the keeper (else the plain roam below)
     const near = dHome(pos) <= nav.rMax + 0.25
     if (roam) {
       if (outFirst && planDash(roam.away)) { outFirst = false; return run() }
@@ -203,7 +262,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     if (runs >= 2 || R() < D.chain) {
       runs = 0; beats++
       const b = R()
-      if (nav.perch && dHome(pos) <= nav.rMax + 0.25 && b < 0.15 && planArc(nav.rMin)) { homing = true; return run() }
+      if (nav.perch && dHome(pos) <= nav.rMax + 0.25 && b < 0.15 && (!nearTo || dHome(nearTo()) < NEAR.r) && planArc(nav.rMin)) { homing = true; return run() }
       // the beat weights are per species (D.beat): the Vulnyx mostly alert look-rounds, a sniff, now and then a sit; the
       // Manalotl looks long, tilts her head, lies down. Sniff needs the roam (out on the grass), else its share is a sit.
       const W = D.beat, sum = W.look + W.sniff + W.sit + W.tilt, c = b * sum
@@ -218,9 +277,14 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     dt = Math.min(dt, 0.25); t += dt; sinceLand += dt   // a slow frame still covers real time (a phone at 4 fps trots at speed)
     let speed = 0, heading = yaw, wantSit = 0, sniff = 0, happyAir = 0
     if (cheerPending && mode !== 'hopDown' && mode !== 'hopUp') { const c = cheerPending; cheerPending = null; startHappy(c.to) }
+    // M109 s4: in the party and the keeper has walked off: a beat (or her perch) is cut short and she sets off back
+    if (nearTo && !followTo && t > NEAR.beatMin && (mode === 'check' || mode === 'look' || mode === 'sniff' || mode === 'sit' || mode === 'tilt')) {
+      const k = nearTo()
+      if (dK(k) > NEAR.r * NEAR.slack) { lookYaw = 0; tiltAt = 0; if (!move()) t = 0 }
+    }
     if (mode === 'perch') {
       wantSit = 1
-      if (t > dur || followTo) { if (landing()) go('hopDown', D.hopArc); else t = 0 }
+      if (t > dur || followTo || (nearTo && t > NEAR.beatMin && dHome(nearTo()) > NEAR.r)) { if (landing()) go('hopDown', D.hopArc); else t = 0 }
     } else if (mode === 'hopDown' || mode === 'hopUp') {
       const k = clamp(t / dur, 0, 1), top = nav.perch!.y, from = mode === 'hopDown' ? { x: home.x, z: home.z } : at(ang, rad), to = mode === 'hopDown' ? at(ang, rad) : { x: home.x, z: home.z }
       const y0 = mode === 'hopDown' ? top : 0, y1 = mode === 'hopDown' ? 0 : top, py = y
@@ -356,5 +420,6 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     calling = true; followTo = to; kPrev = null; kV = 0; outFirst = false; homing = false
     if (mode !== 'perch' && mode !== 'hopDown' && mode !== 'hopUp') { fGo = true; fIdle = 0; go('follow', 0) }   // on a perch: she hops down first
   }
-  return { step, pose: () => cur, beats: () => beats, homes: () => homes, follow, cheer, cheers: () => cheers, call, calling: () => calling }
+  function near(to: FollowTarget | null) { nearTo = to; if (to) outFirst = false }
+  return { step, pose: () => cur, beats: () => beats, homes: () => homes, follow, cheer, cheers: () => cheers, call, calling: () => calling, near, nearing: () => !!nearTo }
 }

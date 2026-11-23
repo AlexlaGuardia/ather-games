@@ -6,6 +6,7 @@
 //  - KEEPER: where the keeper stands, written by the page's frame loop; the follow trot reads it.
 //  - LIVE: where each drawn 3D spirit is this frame (by planter id), written by spirit-model.tsx; the page's E pick reads it.
 //    Empty unless the owner + ?spirits=3d models are mounted, so nobody else ever gets a spirit talk.
+import { gardenKey } from '@/lib/keeper-local'   // M109 s4: a garden key (the planters are the plot's), per account
 import type { Species } from '../../spirits/spirit'
 
 const KEY = 'ather.spiritFollow.v1'
@@ -13,7 +14,7 @@ let ids: string[] | null = null
 const subs = new Set<() => void>()
 function load(): string[] {
   if (ids) return ids
-  try { const v = JSON.parse(localStorage.getItem(KEY) ?? '[]'); ids = Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [] } catch { ids = [] }
+  try { const v = JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? '[]'); ids = Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [] } catch { ids = [] }
   return ids
 }
 export const followIds = (): readonly string[] => (typeof window === 'undefined' ? [] : load())
@@ -26,7 +27,7 @@ export function setFollowing(id: string, on: boolean): boolean {
   const cur = load()
   if (on && !cur.includes(id) && cur.length >= FOLLOW_MAX) return false
   const next = on ? [...cur.filter(x => x !== id), id] : cur.filter(x => x !== id)
-  ids = next; try { localStorage.setItem(KEY, JSON.stringify(next)) } catch { /* private mode: this session only */ }
+  ids = next; try { localStorage.setItem(gardenKey(KEY), JSON.stringify(next)) } catch { /* private mode: this session only */ }
   for (const f of subs) f()
   return true
 }
