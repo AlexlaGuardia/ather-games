@@ -7,11 +7,15 @@
 //     (Glowfin 1 -> 0), her own record. Reload: both records and the bag counts persist; the Vulnyx's Feed now reads Moonkoi.
 //  B. bag = waymarks only. E at the Vulnyx -> Feed: the plain refusal line on the HUD, the bag unchanged, no fed record,
 //     no happy beat.  0 page errors in both.
+//  M109 SIGNED LINES (sprites-M109lines): the Vulnyx is in the party (the Manalotl is not). E at her: the bubble is one of
+//  her signed lines (party-spirit-lines.ts: generic five + the Vulnyx pair, {name} = Vulnyx); E at the Manalotl (not in the
+//  party, not covered by the script): the bubble stays '…'. The fed note is the signed 'Vulnyx enjoys the Glowfin.'
 //   npx tsx scripts/m109-feed-check.mts [--url http://localhost:3202]      (OWNER_KEY from env or .env)
 import puppeteer, { type Page } from 'puppeteer-core'
 import { existsSync, readFileSync } from 'fs'
 import { BLOOM_MS } from '../src/app/shimmer/open/ather/spirit-seeds'
 import { aimAt } from './lib/aim.mts'
+import { talkPool, fedLine, FEED_NONE } from '../src/app/shimmer/open/ather/party-spirit-lines'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games')
 const KEY = process.env.OWNER_KEY || (existsSync('.env') ? /OWNER_KEY=(.+)/.exec(readFileSync('.env', 'utf8'))?.[1]?.trim() : undefined)
@@ -19,7 +23,8 @@ if (!KEY) { console.error('no OWNER_KEY (env or .env)'); process.exit(2) }
 const P = { x: -130, z: 102.5 }
 const PIECES = [{ id: 'vx-check', item: 'spirit_planter', x: P.x, z: P.z, q: 0, placedAt: 1 }, { id: 'mx-check', item: 'spirit_planter', x: P.x - 2.6, z: P.z + 1.0, q: 0, placedAt: 1 }]
 const POTS = (at: number) => ({ 'vx-check': { seed: 'mana_seed_fox', at, bloomed: true }, 'mx-check': { seed: 'mana_seed_axolotl', at, bloomed: true } })
-const NONE_LINE = 'No spirit food in your bag.'
+const NONE_LINE = FEED_NONE   // the signed §3a Main: 'No spirit food in your bag.'
+const VX_LINES = talkPool('fox').map(l => l.replace('{name}', 'Vulnyx'))
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 let fails = 0
@@ -39,6 +44,7 @@ async function run(bag: [string, number][]) {
     localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [], chests: [], pieces }))
     localStorage.setItem('ather.grimoire.v1', JSON.stringify({ v: 1, pages: [{ species: 'fox', stage: 'seen', at: 1 }], pots, met: [] }))
     localStorage.removeItem('ather.spiritFed.v1'); localStorage.removeItem('ather.spiritFollow.v1')
+    localStorage.setItem('ather.spiritParty.v1', JSON.stringify(['vx-check']))   // M109 lines: the Vulnyx is in the party
   }, PIECES, POTS(Date.now() - BLOOM_MS - 60000), bag)
   await p.goto(`${url}/shimmer/open/ather?hour=14&spirits=3d`, { waitUntil: 'load', timeout: 180000 })
   await ready(p)
@@ -64,6 +70,7 @@ async function talkTo(p: Page, sp: string) {
   }
   return []
 }
+const bubble = (p: Page) => p.evaluate(() => document.querySelector('[data-talk-bubble] > div')?.textContent ?? '') as Promise<string>
 const pick = (p: Page, label: string) => p.evaluate((l) => { const b = [...document.querySelectorAll('[data-talk-option]')].find(x => (x.textContent ?? '').replace('›', '').trim().startsWith(l)) as HTMLButtonElement | undefined; b?.click(); return !!b }, label)   // the selected answer carries a '›'
 /** pick Feed and watch her for 3 s (per animation frame): did she go 'happy', how many cheers, peak hop above her pre-feed y */
 async function feedAndWatch(p: Page, sp: string) {
@@ -81,13 +88,17 @@ const a = await run([['waymark', 12], ['glowfin', 2], ['moonkoi', 1]])
 if (a) {
   const o = await talkTo(a.p, 'fox')
   ok(o.length === 3 && o[0].t.startsWith('Feed') && !o[0].off && o[0].tag === 'Glowfin', `A Vulnyx: Feed pickable, tagged with the food it gives (${JSON.stringify(o)})`)
+  const said = await bubble(a.p)
+  ok(VX_LINES.includes(said), `A Vulnyx (party): the bubble is a signed Vulnyx line ("${said}")`)
   const w = await feedAndWatch(a.p, 'fox'), i1 = await inv(a.p), f1 = await fed(a.p)
   ok(i1.glowfin === 1 && i1.moonkoi === 1, `A Vulnyx fed: Glowfin 2 -> ${i1.glowfin}, Moonkoi ${i1.moonkoi} (one item consumed)`)
   ok(w.happy && w.cheers === 1 && w.yMax > 0.05, `A Vulnyx reacts: the happy beat (seen ${w.happy}, cheers +${w.cheers}, peak hop ${w.yMax.toFixed(3)} m)`)
   ok(f1['vx-check']?.n === 1 && f1['vx-check']?.item === 'glowfin', `A Vulnyx: fed record ${JSON.stringify(f1['vx-check'])}`)
-  ok(w.hud.some(x => x.includes('Vulnyx') && x.includes('Glowfin')), `A HUD note after the feed (${w.hud.slice(-2).join(' | ')})`)
+  ok(w.hud.some(x => x.includes(fedLine('fox', 'Glowfin'))), `A the signed fed note "${fedLine('fox', 'Glowfin')}" on the HUD after the feed (${w.hud.slice(-2).join(' | ')})`)
   const o2 = await talkTo(a.p, 'axolotl')
   ok(o2[0]?.tag === 'Glowfin', `A Manalotl: Feed tagged Glowfin (${o2[0]?.tag})`)
+  const said2 = await bubble(a.p)
+  ok(said2 === '…', `A Manalotl (not in the party, not in the script): the bubble stays '…' ("${said2}")`)
   const w2 = await feedAndWatch(a.p, 'axolotl'), i2 = await inv(a.p), f2 = await fed(a.p)
   ok(!i2.glowfin && i2.moonkoi === 1 && w2.happy && w2.cheers === 1, `A Manalotl fed: Glowfin -> ${i2.glowfin ?? 0}, happy ${w2.happy}, cheers +${w2.cheers}, peak ${w2.yMax.toFixed(3)} m`)
   ok(f2['mx-check']?.n === 1 && f2['vx-check']?.n === 1, `A per-spirit records ${JSON.stringify(f2)}`)

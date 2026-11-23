@@ -20,15 +20,10 @@ import { hudSay } from '../shared/hud-say'
 import { getInv, setInv, useInv } from '../shared/bag'
 import { itemDef } from '../shared/inventory'
 import { feed, foodIn, loadFed, saveFed, spiritCheer } from './spirit-feed'
-import { askAlong } from './spirit-party'
+import { askAlong, inParty } from './spirit-party'
+import { FEED_NONE, fedLine, followRefuseLine, talkLine } from './party-spirit-lines'   // M109: the SIGNED lines (canon script, word for word)
 import { PARTY_FULL_LINE } from './spirit-roster'
 
-/** a 4th Follow while FOLLOW_MAX (3) already walk with the keeper: refused with this line */
-const FOLLOW_FULL_LINE = '…'   // TODO @lark: the refusal line (three spirits already walk with you)
-/** M109 s2: Feed with no spirit food in the bag. Functional UI words (the 'No waymarks in your bag.' pattern): TODO @lark */
-const FEED_NONE_LINE = 'No spirit food in your bag.'
-/** M109 s2: the HUD note after a feed (functional label, the item-toast pattern): TODO @lark */
-const fedLine = (spirit: string, food: string) => `${spirit} · ${food}`
 
 export type SpiritTalkState = { id: string; screen: 'talk' | 'panel' }
 
@@ -39,28 +34,32 @@ export function useSpiritTalk(st: SpiritTalkState | null, set: (s: SpiritTalkSta
   const live = useMemo(() => (st ? spiritLive.get(st.id) ?? null : null), [st?.id])
   const food = foodIn(useInv())   // what Feed would give (shown as the answer's tag), or null
   useEffect(() => { spiritHeld.id = st && live ? st.id : null; return () => { spiritHeld.id = null } }, [st, live])
-  useEffect(() => { if (st && !live) set(null) }, [st, live, set])   // her model is gone (flag off, planter lifted): nothing to talk to
+  useEffect(() => { if (st && !live) set(null) }, [st, live, set])
+  // M109 signed: E on a PARTY spirit draws one line (generic five + her species' pair) per talk. A garden spirit not in the
+  // party is not covered by the script: she keeps the '…'.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const said = useMemo(() => (st && live ? (inParty(st.id) ? talkLine(live.sp) : '…') : ''), [st?.id, live])   // her model is gone (flag off, planter lifted): nothing to talk to
   const node: TalkNode | null = useMemo(() => {
     if (!st || st.screen !== 'talk' || !live) return null
     const id = st.id
     return {
-      line: '…',   // TODO @lark: a spirit's talk line (none written; canon gives spirits no speech here)
+      line: said,
       options: [
         { label: 'Feed', tag: food ? itemDef(food).name : undefined, pick: () => {
           const r = feed(getInv(), loadFed(), id, Date.now())
-          if (!r) { hudSay(FEED_NONE_LINE, 'info', 4); set(null); return }   // nothing taken
+          if (!r) { hudSay(FEED_NONE, 'info', 4); set(null); return }   // nothing taken
           setInv(r.inv); saveFed(r.book); spiritCheer.add(id)
-          hudSay(fedLine(SPECIES_NAMES[live.sp], itemDef(r.item).name), 'item', 4); set(null)
+          hudSay(fedLine(live.sp, itemDef(r.item).name), 'item', 4); set(null)
         } },
         following ? { label: 'Stay', pick: () => { setFollowing(id, false); set(null) } } : { label: 'Follow', pick: () => {
           // M109 s3: the ones who come along are from the party (up to 3 of the 8): Follow asks her along first
           if (!askAlong(id)) hudSay(PARTY_FULL_LINE, 'info', 4)
-          else if (!setFollowing(id, true)) hudSay(FOLLOW_FULL_LINE, 'info', 4)
+          else if (!setFollowing(id, true)) hudSay(followRefuseLine(live.sp), 'info', 4)
           set(null) } },
         { label: 'Open', pick: () => set({ id, screen: 'panel' }) },
       ],
     }
-  }, [st, live, following, set, food])
+  }, [st, live, following, set, food, said])
   const panel = st && st.screen === 'panel' && live ? <SpiritPanel sp={live.sp} id={live.id} phone={phone} onClose={() => set(null)} /> : null
   return {
     node, panel,
