@@ -1,0 +1,1 @@
+{"v":1,"tiles":{},"water":{},"falls":{},"zones":[{"id":"zc-e","x0":-290,"z0":292,"x1":-282,"z1":298,"h":0,"tag":{"kind":"shop","ref":"smokehouse","name":"The Smokehouse","front":"e"},"prev":{},"build":[{"id":"zc-wall","item":"goldwood_panel_wide","x":4,"z":3,"q":0}]}]}
