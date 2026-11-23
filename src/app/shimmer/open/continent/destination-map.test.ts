@@ -1,6 +1,6 @@
 // M108: the destination map's data (destination-map.ts) against canon's strings and the REAL continent. npx tsx this file.
 import { readFileSync } from 'node:fs'
-import { DESTINATIONS, landingZones, zoneHref, shipGateOpen, shipGateFlag, SHIP_GATE_OWNER_OVERRIDE } from './destination-map'
+import { DESTINATIONS, landingZones, zoneHref, shipGateOpen, shipGateFlag, shipGateOverride } from './destination-map'
 
 let n = 0, fails = 0
 const ok = (c: boolean, m: string) => { n++; if (!c) { fails++; console.log('  FAIL', m) } }
@@ -29,13 +29,14 @@ for (const d of ['starforge', 'hask'] as const) {
 // href keeps the page's other flags, replaces an old at
 ok(zoneHref('veradyn', '?ship=gate&at=rune-hold') === '/shimmer/open/continent?ship=gate&at=veradyn', 'href keeps ?ship=gate, replaces at')
 
-// the gate: flag AND owner; the owner override bypasses the (not yet built) repair
-ok(shipGateFlag('?ship=gate') && !shipGateFlag('?ship=1') && !shipGateFlag(''), 'flag reads only ship=gate')
-ok(SHIP_GATE_OWNER_OVERRIDE, 'the owner override is on while the shell is owner-only')
-ok(shipGateOpen({ flag: true, owner: true, repaired: false }), 'owner + flag opens before the repair flag (override)')
-ok(shipGateOpen({ flag: true, owner: true, repaired: true }), 'owner + flag + repair flag opens')
-ok(!shipGateOpen({ flag: true, owner: false, repaired: true }), 'non-owner + flag: no gate, even repaired')
-ok(!shipGateOpen({ flag: false, owner: true, repaired: false }), 'owner without flag: no gate')
+// the gate: flag AND owner, then the repair record (M108 s2); ?ship=open = the owner's test override
+ok(shipGateFlag('?ship=gate') && shipGateFlag('?ship=open') && !shipGateFlag('?ship=1') && !shipGateFlag(''), 'flag reads ship=gate or ship=open only')
+ok(shipGateOverride('?ship=open') && !shipGateOverride('?ship=gate') && !shipGateOverride(''), 'the override reads only ship=open')
+ok(!shipGateOpen({ flag: true, owner: true, repaired: false }), 'owner + flag, stage 1 NOT done: the map stays shut (follows the record)')
+ok(shipGateOpen({ flag: true, owner: true, repaired: false, override: true }), 'owner + ?ship=open opens before stage 1 (the test override)')
+ok(shipGateOpen({ flag: true, owner: true, repaired: true }), 'owner + flag + stage 1 done opens')
+ok(!shipGateOpen({ flag: true, owner: false, repaired: true, override: true }), 'non-owner + flag: no gate, even repaired / overridden')
+ok(!shipGateOpen({ flag: false, owner: true, repaired: false, override: true }), 'owner without flag: no gate')
 ok(!shipGateOpen({ flag: false, owner: true, repaired: true }), 'repaired but no flag: still owner-only shell')
 
 console.log(`destination-map: ${n - fails}/${n} pass`)

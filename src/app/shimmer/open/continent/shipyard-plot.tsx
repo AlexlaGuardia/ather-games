@@ -83,7 +83,7 @@ interface Props {
   ownAll?: boolean
   /** s5: the courser (the continent's Driver): where it is, which one is driven, and the switch a garage makes */
   car?: CarLink
-  /** M108: E at the docked ship opens the destination map (destination-map.ts › shipGateOpen; owner-only ?ship=gate) */
+  /** M108: E at the docked ship does something (owner + ?ship=gate): page.tsx › onShip picks map / fit the housing / not ready */
   shipGate?: boolean
   onShip?: () => void
 }

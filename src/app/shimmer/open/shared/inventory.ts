@@ -9,6 +9,7 @@
 import { KAEL_INVITE, GIFT_KAEL_INVITE, KAEL_PAGE, GIFT_KAEL_PAGE } from './opening-chain'
 import { KAEL_PAGE_NAME, KAEL_PAGE_BLURB } from './kael-page-lines'
 import { KAEL_INVITE_NAME, KAEL_INVITE_BLURB } from './kael-invite-lines'
+import { CELL_HOUSING, GIFT_CELL_HOUSING } from './ship-repair'
 import { NYX_RINN } from '../continent/rinning-nyx'
 import { keeperKey } from '@/lib/keeper-local'
 import { FURNITURE, KEEPSTONES } from '../ather/furniture'
@@ -169,6 +170,15 @@ export function givePage(inv: Inv): Inv | null {
   if (hasGift(inv, GIFT_KAEL_PAGE)) return null
   const r = give(inv, KAEL_PAGE, 1)
   return r.left > 0 ? null : withGift(r.inv, GIFT_KAEL_PAGE)
+}
+// THE CELL HOUSING (BETA M108 s2): Hollis builds it on Pay and hands it over once (GIFT_CELL_HOUSING); the keeper fits it at
+//    Kael's yard (E at Franky), which uses it up. Name + blurb = FUNCTIONAL labels for @lark (ship-repair.ts lists them).
+OPEN_ITEMS[CELL_HOUSING] = { name: 'a cell housing', blurb: "For Kael's ship. Fit it at his yard.", icon: '', stack: 1, kind: 'material' }
+/** Hand the housing once: null when it was already handed or the bag has no room (Pay is then refused, nothing taken). */
+export function giveHousing(inv: Inv): Inv | null {
+  if (hasGift(inv, GIFT_CELL_HOUSING)) return null
+  const r = give(inv, CELL_HOUSING, 1)
+  return r.left > 0 ? null : withGift(r.inv, GIFT_CELL_HOUSING)
 }
 const withGift = (inv: Inv, g: string): Inv => (hasGift(inv, g) ? inv : { ...inv, gifts: [...(inv.gifts ?? []), g] })
 /** How much bait one `id` cuts into for this bag: the table, +1 once the Bait Page is read. 0 = not bait food. */

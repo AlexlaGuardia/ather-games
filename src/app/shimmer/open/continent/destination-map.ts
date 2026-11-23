@@ -49,20 +49,21 @@ export function landingZones(d: DestId, places: readonly PlaceLike[], visited?: 
 }
 
 // ── THE REPAIR GATE ───────────────────────────────────────────────────────────────────────────────────────────────────
-// Canon: the destination map opens once Franky's repair stage 1 (the cell housing, Kael's ledger) is done. The flag read
-// today is M73's SHIP-REPAIR FLAG (shared/opening-chain-store.ts › getShipRepairFlag: Veyra sent the keeper to get the ship
-// running; hub 11-23), passed in by the page as `repaired`. TODO(M108 repair stage 1): when the ledger line -> Hollis's order
-// -> Marks + material -> side-quest part ships, `repaired` becomes "stage 1 done", not "the repair was asked for".
+// Canon: the destination map opens once Franky's repair stage 1 (the cell housing, Kael's ledger) is done. M108 s2: the page
+// passes `repaired` = shared/ship-repair-store.ts › getRepairStage1() (the housing paid for at Hollis AND fitted at the yard).
+// Before that, E at Franky says she is not ready (or fits the housing when the keeper carries it): ship-repair.ts › shipBoard.
 
-/** the owner-only build flag: ?ship=gate, AND the viewer is the owner (the gate ?spirits=3d uses, /api/owner) */
-export const SHIP_GATE_PARAM = 'ship', SHIP_GATE_VALUE = 'gate'
-export const shipGateFlag = (search: string) => new URLSearchParams(search).get(SHIP_GATE_PARAM) === SHIP_GATE_VALUE
+/** the owner-only build flag: ?ship=gate, AND the viewer is the owner (the gate ?spirits=3d uses, /api/owner).
+ *  ?ship=open = the same flag PLUS the owner's test override: the map opens whatever the repair record says. */
+export const SHIP_GATE_PARAM = 'ship', SHIP_GATE_VALUE = 'gate', SHIP_GATE_OVERRIDE_VALUE = 'open'
+const shipParam = (search: string) => new URLSearchParams(search).get(SHIP_GATE_PARAM)
+export const shipGateFlag = (search: string) => { const v = shipParam(search); return v === SHIP_GATE_VALUE || v === SHIP_GATE_OVERRIDE_VALUE }
+export const shipGateOverride = (search: string) => shipParam(search) === SHIP_GATE_OVERRIDE_VALUE
 
-/** Does boarding Franky open the destination map? While the shell is owner-only the whole gate needs the flag + owner.
- *  SHIP_GATE_OWNER_OVERRIDE: the flag also BYPASSES the repair flag, so the owner can test before the chain is played. When
- *  the shell goes public: drop flag/owner and the override, and require `repaired`. */
-export const SHIP_GATE_OWNER_OVERRIDE = true
-export function shipGateOpen(o: { flag: boolean; owner: boolean; repaired: boolean }): boolean {
+/** Does boarding Franky open the destination map? While the shell is owner-only the whole gate needs the flag + owner; then
+ *  it follows the repair record (`repaired` = stage 1 done) unless the owner asked for the override (?ship=open). When the
+ *  shell goes public: drop flag/owner/override and require `repaired`. */
+export function shipGateOpen(o: { flag: boolean; owner: boolean; repaired: boolean; override?: boolean }): boolean {
   if (!o.flag || !o.owner) return false
-  return SHIP_GATE_OWNER_OVERRIDE || o.repaired
+  return o.repaired || o.override === true
 }

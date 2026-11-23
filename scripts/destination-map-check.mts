@@ -76,7 +76,7 @@ const click = async (p: Page, sel: string) => { const ok = await p.evaluate((s: 
 if (only !== 'C') {
 // ── A · owner + flag ──
 say('A: owner keeper'); const A = await keeper(true)
-await continent(A, '&ship=gate')
+await continent(A, '&ship=open')   // M108 s2: the owner's test override (a fresh keeper has no stage 1)
 const verbA = await besideFranky(A); res.A = { verb: verbA }
 if (verbA !== 'board') await fail('A verb', `beside Franky the E verb should be 'board', got ${verbA}`)
 await tapE(A)
@@ -117,7 +117,7 @@ const href = await A.evaluate(() => location.href), f = await A.evaluate(() => {
 const dist = Math.hypot(f.x - RUNE.x, f.z - RUNE.z)
 res.A.arrive = { href, foot: { x: +f.x.toFixed(1), z: +f.z.toFixed(1) }, rune: { x: RUNE.x, z: RUNE.z }, dist: +dist.toFixed(1) }
 if (dist > 40) await fail('A arrive', `not at Rune Hold: ${JSON.stringify(res.A.arrive)}`)
-if (!/ship=gate/.test(href)) await fail('A arrive', 'the flag was dropped on the trip')
+if (!/ship=open/.test(href)) await fail('A arrive', 'the flag was dropped on the trip')
 // ── B · owner, no flag ──
 say('B: owner, no flag'); await continent(A, '')
 const verbB = await besideFranky(A); await tapE(A); res.B = { verb: verbB, open: await panelOpen(A) }

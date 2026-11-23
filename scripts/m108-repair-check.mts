@@ -8,8 +8,14 @@
 //   S · flag set, purse SHORT (1,000): the journal shows Kael's open line (word for word) + "Take Kael's page..."; E plays Unit 3
 //       word for word (3 lines + scenes, then the quote with the price chip); Pay is shown DISABLED; a forced click does nothing;
 //       purse unchanged, record quoted only; the entry has turned to "Earn the Marks..."; E again = the short bark.
-//   P · purse 10,000, reload: E = the counter (quote line + price), Pay -> purse 10,000 - price, toast, record stage1; reload ->
-//       stage1 still true, purse still deducted, Kael's line struck in the journal.
+//   R · (s2) still quoted, no housing, at Franky in Kael's yard: the E verb is 'board', E = "not ready" on the HUD, NO
+//       destination map, record unchanged.
+//   P · purse 10,000, reload: E = the counter (quote line + price), Pay -> purse 10,000 - price, toast "in your bag", record
+//       MADE but NOT stage1, the housing in the bag; reload -> still made / not stage1, purse still deducted, housing still in
+//       the bag, Kael's line NOT struck, the keeper's entry = "Fit the cell housing at Kael's yard." (s2 changed P6-P9)
+//   F · (s2) at Franky with the housing: the prompt reads "E · Fit the cell housing"; E -> record stage1, the housing used up,
+//       toast "fitted", no map on that E; reload -> stage 1 persists, housing still gone, Kael's line struck, the entry gone;
+//       E at Franky again -> the destination map opens with canon's three.
 //   G · owner WITHOUT ?ship=gate: the manatech door is not among the dressed doors.
 // PASS = all of that + 0 page errors.   npx tsx scripts/m108-repair-check.mts [--url https://ather.games] [--out /tmp/m108]
 import puppeteer, { type Page } from 'puppeteer-core'
@@ -20,7 +26,9 @@ import { doorsCached } from '../src/app/shimmer/open/business/doors'
 import { shopDoorPoint } from '../src/app/shimmer/open/towns/shop-door'
 import { NEW_LEDGER } from '../src/app/shimmer/open/trade'
 import { newChain } from '../src/app/shimmer/open/shared/opening-chain'
-import { CELL_HOUSING_PRICE, LABEL } from '../src/app/shimmer/open/shared/ship-repair'
+import { CELL_HOUSING_PRICE, CELL_HOUSING, LABEL } from '../src/app/shimmer/open/shared/ship-repair'
+import { DESTINATIONS } from '../src/app/shimmer/open/continent/destination-map'
+import { INV_KEY } from '../src/app/shimmer/open/shared/inventory'
 import { HOLLIS_FIRST, HOLLIS_QUOTE, HOLLIS_BARK, LEDGER_CELL_LINE, ENTRY_TAKE_PAGE, ENTRY_EARN_MARKS } from '../src/app/shimmer/open/shared/hollis-lines'
 
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -60,7 +68,27 @@ try {
     if (l) localStorage.setItem(lk, JSON.stringify(l))
   }, CHAIN_KEY, o.chain ?? null, LEDGER_KEY, o.marks === undefined ? null : { ...NEW_LEDGER, marks: o.marks })
   const marks = () => p.evaluate(k => JSON.parse(localStorage.getItem(k) ?? 'null')?.marks ?? null, LEDGER_KEY) as Promise<number | null>
-  const record = () => p.evaluate(k => JSON.parse(localStorage.getItem(k) ?? 'null'), REPAIR_KEY) as Promise<{ quoted: boolean; stage1: boolean } | null>
+  const record = () => p.evaluate(k => JSON.parse(localStorage.getItem(k) ?? 'null'), REPAIR_KEY) as Promise<{ quoted: boolean; made?: boolean; stage1: boolean } | null>
+  const housings = () => p.evaluate((k, id) => ((JSON.parse(localStorage.getItem(k) ?? 'null')?.slots ?? []) as ({ id: string; n: number } | null)[]).reduce((a, x) => a + (x?.id === id ? x.n : 0), 0), INV_KEY, CELL_HOUSING) as Promise<number>
+  const hudHas = (t: string, ms = 5000) => poll(async () => (await p.evaluate(() => document.body.innerText)).includes(t), ms)
+  const mapOpen = () => p.evaluate(() => !!document.querySelector('[data-panel="destination-map"]'))
+  // Franky at Kael's yard (the destination-map-check's spot: 1.5 m off her starboard beam, facing her); returns the E verb + its text
+  const KAEL = 'front:shipyard'
+  const toW = (s: any, lx: number, lz: number) => ({ x: s.x + s.ax[0] * lx + s.az[0] * lz, z: s.z + s.ax[1] * lx + s.az[1] * lz })
+  async function besideFranky() {
+    await p.waitForFunction(() => !!(window as any).__shipyards?.sites, { timeout: 120000 })
+    const s = (await p.evaluate(() => (window as any).__shipyards.sites()) as any[]).find(q => q.key === KAEL)
+    if (!s) return { verb: null, text: null }
+    const g = toW(s, 3 + s.ramp.L + 2.5, -52)
+    await p.evaluate((a, b) => { (window as any).__drive.footTp(a, b, 0, -0.2) }, g.x, g.z)
+    if (!await poll(async () => !!(await p.evaluate((k: string) => (window as any).__shipyards?.[k]?.ship?.(), KAEL)), 120000)) return { verb: null, text: null }
+    const ship = await p.evaluate((k: string) => (window as any).__shipyards[k].ship(), KAEL)
+    const at = toW(s, ship.lx + 3.5 + 1.5, ship.lz), mid = toW(s, ship.lx, ship.lz), yaw = Math.atan2(-(mid.x - at.x), -(mid.z - at.z))
+    await p.evaluate((a, b, w) => { (window as any).__drive.footTp(a, b, w, -0.1); (window as any).__drive.look(w, -0.1) }, at.x, at.z, yaw)
+    await poll(async () => !!(await p.evaluate(() => document.querySelector('[data-yard-prompt]'))), 8000)
+    return p.evaluate(() => { const e = document.querySelector('[data-yard-prompt]'); return { verb: e?.getAttribute('data-yard-prompt') ?? null, text: e?.textContent ?? null } })
+  }
+  const tapE = async () => { await p.keyboard.down('KeyE'); await sleep(80); await p.keyboard.up('KeyE'); await sleep(1500) }
   const bubble = () => p.evaluate(() => { const b = document.querySelector('[data-talk-bubble]'); if (!b) return null; const sc = b.querySelector('[data-talk-scene]')?.textContent ?? ''; return { scene: sc, line: (b.firstElementChild?.textContent ?? '').slice(sc.length), name: b.querySelector('[data-talk-name]')?.textContent ?? '' } }) as Promise<{ scene: string; line: string; name: string } | null>
   const opts = () => p.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-talk-option]')].map(e => ({ t: (e.textContent ?? '').replace(/^›/, '').replace(/short$/i, '').trim(), off: e.hasAttribute('data-talk-disabled') }))) as Promise<{ t: string; off: boolean }[]>
   const pick = (label: string) => p.evaluate(l => { const b = [...document.querySelectorAll<HTMLButtonElement>('[data-talk-option]')].find(e => (e.textContent ?? '').replace(/^›/, '').replace(/short$/i, '').trim() === l); b?.click(); return !!b }, label)
@@ -128,6 +156,17 @@ try {
   ok((await bubble())?.line === HOLLIS_BARK.short, `S12. the short bark ("${(await bubble())?.line}")`)
   await p.keyboard.press('Escape'); await sleep(600)
 
+  // ── R · (s2) quoted, no housing: Franky is not ready, no map ──
+  await continent('&ship=gate')
+  const fR = await besideFranky()
+  ok(fR.verb === 'board' && fR.text !== LABEL.fitPrompt, `R1. at Franky, no housing: the E verb is 'board' (${JSON.stringify(fR)})`)
+  await tapE()
+  ok(await hudHas(LABEL.notReady), `R2. E at Franky = "${LABEL.notReady}"`)
+  ok(!(await mapOpen()), 'R3. no destination map before the housing is fitted')
+  const rR = await record()
+  ok(!!rR && rR.quoted && !rR.made && !rR.stage1 && (await housings()) === 0, `R4. record unchanged, nothing in the bag (${JSON.stringify(rR)})`)
+  await p.screenshot({ path: `${out}/not-ready-390.png` })
+
   // ── P · enough Marks ──
   await seed({ marks: 10_000 })
   await continent('&ship=gate')
@@ -137,13 +176,35 @@ try {
   ok(bP?.line === HOLLIS_QUOTE[0].line && oP.some(o => o.t === LABEL.pay && !o.off), `P3. the counter: quote line + Pay enabled ("${bP?.line}")`)
   ok(await pick(LABEL.pay), 'P4. clicked Pay')
   ok(await poll(async () => (await marks()) === 10_000 - CELL_HOUSING_PRICE, 8000), `P5. purse 10,000 -> ${await marks()} (-${CELL_HOUSING_PRICE})`)
-  ok(!!(await record())?.stage1, 'P6. repair record: stage 1 done')
-  ok(await poll(async () => (await p.evaluate(() => document.body.innerText)).includes(LABEL.fitted), 5000), 'P7. the HUD says the housing is fitted')
+  const rP = await record()
+  ok(!!rP && rP.made === true && !rP.stage1 && (await poll(async () => (await housings()) === 1, 5000)), `P6. record MADE, stage 1 NOT yet; the housing in the bag (${JSON.stringify(rP)} · ${await housings()})`)
+  ok(await hudHas(LABEL.made), `P7. the HUD says "${LABEL.made}"`)
   await p.screenshot({ path: `${out}/paid-390.png` })
   await continent('&ship=gate')
-  ok(!!(await p.evaluate(() => (window as any).__repair?.stage1?.())) && (await marks()) === 10_000 - CELL_HOUSING_PRICE, 'P8. after reload: stage 1 persists, purse still deducted')
+  ok((await p.evaluate(() => (window as any).__repair?.state?.())) ?.made === true && !(await p.evaluate(() => (window as any).__repair?.stage1?.())) && (await marks()) === 10_000 - CELL_HOUSING_PRICE && (await housings()) === 1, 'P8. after reload: made persists, stage 1 not done, purse still deducted, housing still in the bag')
   const eP = await entries()
-  ok(!!eP.find(e => e.id === 'repair-cell-housing')?.struck && !eP.some(e => e.id === 'repair-cell-entry'), `P9. Kael's line struck, the keeper's entry gone (${JSON.stringify(eP.filter(e => e.id?.startsWith('repair')))})`)
+  ok(!eP.find(e => e.id === 'repair-cell-housing')?.struck && eP.find(e => e.id === 'repair-cell-entry')?.title === LABEL.fitEntry, `P9. Kael's line NOT struck yet, the keeper's entry = "${LABEL.fitEntry}" (${JSON.stringify(eP.filter(e => e.id?.startsWith('repair')))})`)
+
+  // ── F · (s2) fit it at the yard, then board ──
+  const fF = await besideFranky()
+  ok(fF.verb === 'board' && fF.text === LABEL.fitPrompt, `F1. at Franky with the housing: "${LABEL.fitPrompt}" (${JSON.stringify(fF)})`)
+  await tapE()
+  ok(await poll(async () => !!(await record())?.stage1, 5000), `F2. E = fitted: record stage 1 (${JSON.stringify(await record())})`)
+  ok((await poll(async () => (await housings()) === 0, 5000)) && await hudHas(LABEL.fitted), `F3. the housing used up (${await housings()}), HUD "${LABEL.fitted}"`)
+  ok(!(await mapOpen()), 'F4. the fitting E does not also open the map')
+  await p.screenshot({ path: `${out}/fitted-390.png` })
+  await continent('&ship=gate')
+  ok(!!(await p.evaluate(() => (window as any).__repair?.stage1?.())) && (await housings()) === 0, 'F5. after reload: stage 1 persists, the housing still gone')
+  const eF = await entries()
+  ok(!!eF.find(e => e.id === 'repair-cell-housing')?.struck && !eF.some(e => e.id === 'repair-cell-entry'), `F6. Kael's line struck, the keeper's entry gone (${JSON.stringify(eF.filter(e => e.id?.startsWith('repair')))})`)
+  const fB = await besideFranky()
+  ok(fB.verb === 'board' && fB.text !== LABEL.fitPrompt, `F7. at Franky, fitted: plain 'board' (${JSON.stringify(fB)})`)
+  await tapE()
+  ok(await poll(mapOpen, 5000), 'F8. E at Franky = the destination map opens (follows the record, ?ship=gate, no override)')
+  const list = await p.evaluate(() => [...document.querySelectorAll('[data-dest]')].map(e => e.textContent))
+  ok(JSON.stringify(list) === JSON.stringify(DESTINATIONS.map(d => d.label)), `F9. canon's three, word for word (${JSON.stringify(list)})`)
+  await p.screenshot({ path: `${out}/map-390.png` })
+  await p.keyboard.press('Escape'); await sleep(600)
 
   // ── G · owner, no ?ship=gate ──
   await continent('')
