@@ -208,6 +208,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-23 08:3x Alex: "veradyn will be its own map area that the player will unlock travel there through a later quest" → no road on the Nyx continent, on purpose. Parked: Veradyn map + its unlock quest (quest content = Magii/lark when it comes up).
 - 11-23 08:0x Alex: "spirits will walk in the wilds and in the garden and eventually in events they will race and etc" → CANON_GAPS [OPEN] (athernyx 20292d7) + dbr magii; row M107 (trot, owner-only, now); Wilds + races wait for the ruling.
 - 11-23 07:5x Alex: "this is a temp style that we can use just for the game.. the question is how will it look in game?" → minimal (no-mouth Hunyuan) = a TEMP, game-only spirit style, not the canon look. Sprites: put the game-ready Vulnyx in the live scene at a bloomed planter behind an owner-only flag, shots to Alex.
 - 11-23 07:4x Alex, after seeing v2 + last night's three again: "I kinda liked the no mouth one" → the Hunyuan game-ready Vulnyx (f92e09f4, vulnyx-gameready.glb) is the favourite, not code-built v2. Brief check: 'she HAS a face (bright clever eyes, a sly warm read)', no mouth required. Pending: as-is or tweaks; then the other 9 by the same free image-to-3D path, one at a time.
@@ -292,7 +293,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 - **Planter rework M106 (11-23, LIVE):** E at a planter lists seeds from your bag AND the garden bank; Tend once per game day (½ day sooner each); blooms end of day 3 untended. Planter turning while placing = R / hold E / the bar's Turn. Try planting the seeds you couldn't this morning.
 
-- **Builder POI + roads overlay (11-23, LIVE 5b4d7ad6):** press O in the builder (or the button, also in Fly fullscreen). Found by it: **Veradyn (Nyx city + stop) has NO road**, nearest road 2.19 km away: intended, or draw it one?
+- **Builder POI + roads overlay (11-23, LIVE 5b4d7ad6):** press O in the builder (or the button, also in Fly fullscreen). Found by it: Veradyn has no road. ✅ Alex 11-23: INTENDED: Veradyn becomes its own map area, travel unlocked by a later quest (no road on the continent).
 
 - **Void look v2 (11-23, LIVE 31ff95f6):** per Alex 06:4x: a 32 m pit, void floor at the bottom, 7 fog layers to just under the rim, a real fall (~1.3 s to black, set down at the neck). Shots docs/looks/voids-v2-2026-11-23-{rim,side,top}.png. Known: faint steps where fog meets the far wall; ~18% frame cost in SwiftShader (phone unmeasured). Feel it on your phone. Old v1 note: **(11-23, LIVE d88c7482):** matte black floor, 4 black fog planes thinning upward, sparse purple flecks. Before/after: docs/looks/voids-2026-11-23-{before,after}.png. Hub read: the black reads, but from the side it is a flat black slab, the near rim is a hard edge, and the depth/fog barely shows. Look on your phone: more fog / softer rim / more or fewer flecks? (dials HAZE_LAYERS, uGlim in void-look.tsx)
 
