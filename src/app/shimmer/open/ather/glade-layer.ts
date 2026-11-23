@@ -11,16 +11,19 @@
 import * as THREE from 'three'
 import { gladeZoneGround } from './glade-cluster'
 import { cleanEdits, cleanWaters, ponds, type PondCell, type TileEdits, type WaterMap } from './wilds-edits'
+import { publishedZones } from './zone-parts'
+import type { Zone } from '../../world/builder-zones'
 import { gladeDeltaAt, sampleGladeBase, GLADE_BRUSH_TILE, GLADE_LAYER_TILE, GLADE_N } from '../../world/glade-builder'
 
-export interface GladeLayer { edits: TileEdits | null; water: WaterMap | null }
+/** M84 s3: `zones` = the published building zones that have a build (zone-parts.ts draws them, with collision); absent = none */
+export interface GladeLayer { edits: TileEdits | null; water: WaterMap | null; zones?: Zone[] }
 export const NO_GLADE_LAYER: GladeLayer = { edits: null, water: null }
-export const gladeLayerEmpty = (l: GladeLayer) => !l.edits && !l.water
+export const gladeLayerEmpty = (l: GladeLayer) => !l.edits && !l.water && !l.zones?.length
 
 /** the layer out of the route's JSON (same shape as the Wilds layer, one tile named 'glade'); junk = no layer */
 export function parseGladeLayer(j: unknown): GladeLayer {
-  const e = cleanEdits(j)[GLADE_LAYER_TILE], w = cleanWaters(j)[GLADE_LAYER_TILE]
-  return { edits: e && Object.keys(e).length ? e : null, water: w && Object.keys(w).length ? w : null }
+  const e = cleanEdits(j)[GLADE_LAYER_TILE], w = cleanWaters(j)[GLADE_LAYER_TILE], z = publishedZones(j)
+  return { edits: e && Object.keys(e).length ? e : null, water: w && Object.keys(w).length ? w : null, ...(z.length ? { zones: z } : {}) }
 }
 
 export async function fetchGladeLayer(): Promise<GladeLayer> {

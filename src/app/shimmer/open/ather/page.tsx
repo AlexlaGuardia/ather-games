@@ -80,6 +80,8 @@ import { GladeCluster, gladeFolkDrawn } from './glade-cluster-view'   // M67 s1a
 import { GLADE_FRAME, GLADE_OWNED, GLADE_TILE, GLADE_ZONE_NAME, GLADE_GATE, gladeNewbornSpot, gladeWhere, gregInGlade, gladeKeepers } from './glade-cluster'   // M40: the green, the five's lots + stations, Greg's jetty
 import { gladeLayerGround, gladeLift } from './glade-layer'
 import { useGladeLayer, GladeWater } from './glade-layer-view'   // M83 s2b: the Glade's published builder layer
+import { zoneParts, zonePartBoxes, withZoneParts } from './zone-parts'   // M84 s3: published zone builds (drawn + solid)
+import { ZonePartsView } from './zone-parts-view'
 import { loadSpot, saveSpot, clearSpot, makeSpot, resumeFrom } from './last-spot'   // where you were (a reload in the Wilds resumes there)
 import { GladeGreg, type GregTourState, type GregLive } from './glade-greg'
 import { biomeGround } from './hollow-goop'   // M34: what a Hollow's sheen borrows
@@ -396,7 +398,8 @@ function AtherSliceGame() {
   const gladeLayer = useGladeLayer(zone.kind === 'glade')   // M83 s2b: refetched on each Glade entry, so a publish shows next visit
   const gladeZoneGround = useMemo(() => gladeLayerGround(gladeLayer.edits), [gladeLayer])
   const gladeMeshLift = useMemo(() => gladeLift(gladeLayer.edits), [gladeLayer])
-  const gladeWorld = useMemo(() => terrainWorld(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground: gladeZoneGround }, undefined, true)), [gladeZoneGround])   // M67 s1a; s1b-2: the pond's bowl + Greg's home, lots, jetty
+  const gladeParts = useMemo(() => zoneParts(gladeLayer.zones ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround])   // M84 s3
+  const gladeWorld = useMemo(() => terrainWorld(withZoneParts(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground: gladeZoneGround }, undefined, true), zonePartBoxes(gladeParts))), [gladeZoneGround, gladeParts])   // M67 s1a; s1b-2: the pond's bowl + Greg's home, lots, jetty
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
   const fading = useRef(false)
@@ -1448,7 +1451,7 @@ function AtherSliceGame() {
         {zone.kind === 'plot' && <AnemonyxIfHere clock={clock} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
-        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={GLADE_FRAME} lift={gladeMeshLift} /><GladeCluster ground={ground} /><GladeWater layer={gladeLayer} /></>}   {/* M67 s1a */}
+        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={GLADE_FRAME} lift={gladeMeshLift} /><GladeCluster ground={ground} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /></>}   {/* M67 s1a */}
         {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
         {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}

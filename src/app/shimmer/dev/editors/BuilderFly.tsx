@@ -18,6 +18,8 @@ import * as THREE from 'three'
 import { stepCam, lookCam, zoomCam, toggleTop, camOver, NO_KEYS, type Cam, type Keys } from './fly-cam'
 import { ramp } from './terrain-ramp'
 import { resample, POI_COLOR, ROAD_COLOR, type Overlay } from './builder-pois'
+import { ZonePartsView } from '../../open/ather/zone-parts-view'   // M84 s3: each zone's build, the game's own PieceBody
+import type { ZonePart } from '../../open/ather/zone-parts'
 
 export interface FlyTile { name: string; ox: number; oz: number; nx: number; nz: number; cell: number; sizeX: number; sizeZ: number; h: Float32Array; waterY: number
   /** M83 s2a (the Glade): vertices that are not ground; a quad touching one is not drawn, so the islands float in the void */
@@ -41,6 +43,8 @@ interface Props {
   onLock?: (locked: boolean) => void
   /** M105: the POI + roads overlay (already cut to the ring), draped on the ground; undefined = nothing drawn */
   overlay?: Overlay
+  /** M84 s3: the zones' builds in world coords (zone-parts.ts over the draft), drawn read-only */
+  parts?: readonly ZonePart[]
 }
 // sRGB -> linear (three's own SRGBToLinear is not exported from the package root at runtime, though the types say it is)
 const lin = (c: number) => { c = Math.min(1, c); return c < 0.04045 ? c * 0.0773993808 : Math.pow(c * 0.9478672986 + 0.0521327014, 2.4) }
@@ -242,9 +246,12 @@ export default function BuilderFly(p: Props) {
       centre: () => ((window as unknown as { __flyCentre?: () => unknown }).__flyCentre?.() ?? null),
       /** every mesh in the scene by geometry kind: terrain tiles, the sea plane, the brush ring, and anything else (want none) */
       scene: () => {
-        const n = { tiles: 0, sea: 0, ring: 0, other: [] as string[] }
+        const n = { tiles: 0, sea: 0, ring: 0, other: [] as string[], parts: 0, partMeshes: 0 }
+        const inParts = new Set<THREE.Object3D>()   // M84 s3: the zone builds are the owner's own parts, not nodes: counted apart
+        sceneRef.current?.getObjectByName('zone-parts')?.traverse(o => { inParts.add(o); if (o.userData?.zonePart) n.parts++ })
         sceneRef.current?.traverse(o => {
           if (!(o as THREE.Mesh).isMesh) return
+          if (inParts.has(o)) { n.partMeshes++; return }
           const t = (o as THREE.Mesh).geometry?.type
           if (t === 'BufferGeometry') n.tiles++; else if (t === 'PlaneGeometry') n.sea++; else if (t === 'RingGeometry') n.ring++; else n.other.push(t ?? o.type)
         })
@@ -285,6 +292,7 @@ export default function BuilderFly(p: Props) {
       {p.tiles.length > 0 && !p.tiles.some(t => t.noSea) && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[p.focus.x, waterY, p.focus.z]}><planeGeometry args={[3200, 3200]} /><meshLambertMaterial color="#3d6f99" transparent opacity={0.75} /></mesh>}
       <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />
       {p.overlay && <OverlayLayer overlay={p.overlay} heightAt={p.heightAt} rev={p.rev} />}
+      {p.parts && <ZonePartsView parts={p.parts} />}
     </Canvas>
     {locked && <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none" data-testid="fly-crosshair">
       <div className="absolute left-1/2 top-1/2 w-5 h-0.5 -translate-x-1/2 -translate-y-1/2 bg-white/90 mix-blend-difference" />

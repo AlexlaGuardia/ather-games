@@ -34,6 +34,7 @@ import { loadRegion, type Region } from '../../open/region'
 import { wildsOverlay, gladeOverlay, nyxOverlay, poisIn, roadsIn, POI_COLOR, ROAD_COLOR, EMPTY_OVERLAY, type Overlay } from './builder-pois'
 import { GLADE_TILE_CENTER, GLADE_SIZE } from '../../world/glade-builder'
 import { NYX_TILE_M } from '../../world/nyx-builder'
+import { zoneParts } from '../../open/ather/zone-parts'   // M84 s3: Fly shows each zone's build
 import { flattenZone, normRect, bigEnough, overlapping, zoneAt, newZoneId, zoneOverlay, zoneLabel, ZONE_KINDS, KIND_LABEL, ZONE_BLEND_M, type Zone, type ZoneKind, type ZoneTag } from '../../world/builder-zones'
 import { choicesFor, type Choice } from './zone-choices'
 import { ZoneBuilder } from './ZoneBuilder'   // M84 s2: build on a zone
@@ -313,6 +314,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     const at = (ii: number, jj: number) => { const k = jj * nx + ii; return B.h[k] + (E?.[k] ?? 0) / 10 }
     return (at(i, j) * (1 - u) + at(i + 1, j) * u) * (1 - v) + (at(i, j + 1) * (1 - u) + at(i + 1, j + 1) * u) * v
   }, [glade])   // nyx reads gridRef (set before ready)
+  // M84 s3: the zones' builds in Fly (world coords, on the draft's ground), read-only; rebuilt when the zones or the ground change
+  const flyParts = useMemo(() => (view === 'fly' ? zoneParts(zones, heightAt) : []), [view, zones, heightAt, rev])
   const brushTiles = useCallback((): BrushTile[] => [...bases.current.entries()].map(([name, B]) => ({ name, ox: B.ox, oz: B.oz, nx: B.meta.nx, nz: B.meta.nz, cell: B.meta.cell, sizeX: B.meta.sizeX, sizeZ: B.meta.sizeZ })), [])
 
   // ── draw: shaded relief + contour tint, water below the line, voids dark, edited ground tinted ──
@@ -681,7 +684,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
           {/* the 3x3 ring only: bases caches every tile opened this session (builder-fly-check saw 18 meshes after two tiles) */}
           <BuilderFly tiles={[...bases.current.entries()].filter(([, b]) => Math.abs(b.tx - B.tx) <= 1 && Math.abs(b.ty - B.ty) <= 1).map(([name, b]): FlyTile => ({ name, ox: b.ox, oz: b.oz, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY, voidV: b.voidV, noSea: glade }))}
             deltas={n => edits.current[n]} rev={rev} heightAt={heightAt} radius={radius} focus={glade ? GLADE_FOCUS : { x: B.ox, z: B.oz }}
-            onBegin={beginAt} onMove={moveAt} onEnd={endStroke} lockLook={lockLook} onLock={setLocked} overlay={flyOv} />
+            onBegin={beginAt} onMove={moveAt} onEnd={endStroke} lockLook={lockLook} onLock={setLocked} overlay={flyOv} parts={flyParts} />
           {!full && <div className="absolute left-2 bottom-2 rounded bg-black/60 px-2 py-1 text-[11px] font-mono text-white/75 tabular-nums pointer-events-none" data-testid="fly-hud">
             {TOOL_KEY[brush]} · strength {strength.toFixed(2)} m/tick (- =) · radius {radius} m ([ ]){lockLook ? (locked ? ' · Esc frees the mouse' : ' · click to lock the mouse') : ''}
           </div>}
