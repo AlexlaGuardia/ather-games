@@ -17,7 +17,7 @@ import { SQ, GRID_HALF, PLOT_R, insideIsland, plotHeightAt, sqId, squareAt } fro
 
 export const PLATE_MPP = 2          // metres per plate pixel (a 1 km tile = 500 px)
 export const CONTOUR = 4            // metres between contour lines
-/** M41 s3: the cloud voids on the maps, the world's pressed-cloud dark (wilds-scene VOID_DARK #4a5870), with a pale lip */
+/** M41 s3: the cloud voids on the maps, the world's pressed-cloud dark (the 3D void went matte near-black 11-23, void-look.tsx; the map keeps this readable dark), with a pale lip */
 export const VOID_RGB: [number, number, number] = [74, 88, 112]
 export const VOID_LIP_RGB: [number, number, number] = [196, 204, 222]
 

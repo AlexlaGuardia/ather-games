@@ -12,13 +12,12 @@ import { Crystals } from './crystal-nodes'
 import { P } from './palette'
 import { GROUND, useGroundMaterial } from './ground-look'
 import { DAY } from '../shared/sky-palette'
+import { VoidHaze, VOID_FLOOR, voidShare, RIM_DARK, RIM_UNTILED } from './void-look'
 
 /** The tile's ground, cut into CHUNKS×CHUNKS pieces so the renderer can skip what the camera cannot see and what the
  *  fog has swallowed (Alex 11-16 lag: one 375k-vertex mesh per tile drew whole, four tiles a frame). Flat-shaded,
  *  colour per triangle, so a piece is still its own unindexed triangles. */
 const CHUNKS = 8
-/** M41: a cloud void's floor, the plot edge's pressed-cloud dark (a look call for Alex) */
-const VOID_DARK = new THREE.Color('#4a5870')
 type ChunkPlan = { i0: number; i1: number; j0: number; j1: number; cx: number; cz: number; r: number }
 function chunkPlan(W: Wilds): ChunkPlan[] {
   const { nx, nz, cell, sizeX, sizeZ } = W.meta
@@ -45,18 +44,21 @@ function chunkGeometry(W: Wilds, { i0, i1, j0, j1 }: ChunkPlan): THREE.BufferGeo
     const x0 = i * cell - hx, z0 = j * cell - hz, x1 = x0 + cell, z1 = z0 + cell
     const y00 = vh(i, j), y10 = vh(i + 1, j), y01 = vh(i, j + 1), y11 = vh(i + 1, j + 1)
     const tris = [[x0, y00, z0, x1, y11, z1, x1, y10, z0], [x0, y00, z0, x0, y01, z1, x1, y11, z1]]
+    const vd = W.voided, isVoid = !!vd?.[j * (nx - 1) + i]
+    const rim = vd && !isVoid ? voidShare(vd, nx - 1, W.meta.nz - 1, i, j) : 0   // the 11-23 void look: the lip rolls into the dark
     for (let t = 0; t < 2; t++) {
       const n = ((i * 7 + j * 13 + t * 5) % 11) / 11
-      if (W.voided?.[j * (nx - 1) + i]) c.copy(VOID_DARK).offsetHSL(0, 0, (n - 0.5) * 0.05)
+      if (isVoid) c.copy(VOID_FLOOR).offsetHSL(0, 0, (n - 0.5) * 0.008)   // M41 + the 11-23 void look: matte near-black
       else if (b === BIOME.water) c.copy(P.bed)
       else if (b === BIOME.shore) c.copy(P.shore)
       else if (b === BIOME.rock) c.copy(P.rock)
       else if (b === BIOME.woods) c.copy(P.woods).lerp(P.woodsHi, n * 0.5)
       else c.copy(P.grass).lerp(P.grassHi, n * 0.45).lerp(P.gold, ((i * 3 + j) % 17) / 17 * 0.15)
+      if (rim > 0) c.lerp(VOID_FLOOR, Math.min(RIM_DARK, rim * 1.8))
       const tri = tris[t]
       for (let k = 0; k < 9; k++) pos[o + k] = tri[k]
       for (let k = 0; k < 3; k++) { col[o + k * 3] = c.r; col[o + k * 3 + 1] = c.g; col[o + k * 3 + 2] = c.b }
-      const L = W.voided?.[j * (nx - 1) + i] ? GROUND.stone : b === BIOME.water || b === BIOME.shore ? GROUND.sand : b === BIOME.rock ? GROUND.stone : b === BIOME.woods ? GROUND.loam : GROUND.grass
+      const L = isVoid || rim > RIM_UNTILED ? GROUND.void : b === BIOME.water || b === BIOME.shore ? GROUND.sand : b === BIOME.rock ? GROUND.stone : b === BIOME.woods ? GROUND.loam : GROUND.grass
       lay[o / 3] = L; lay[o / 3 + 1] = L; lay[o / 3 + 2] = L
       o += 9
     }
@@ -337,6 +339,7 @@ export function WildsScene({ W, waymarks, focus, off }: { W: Wilds; waymarks: Wa
   return (
     <>
       <Ground W={W} focus={focus} off={off} />
+      <VoidHaze W={W} off={off} />
       <mesh rotation-x={-Math.PI / 2} position-y={W.meta.waterY - 0.15}>
         <planeGeometry args={[W.meta.sizeX, W.meta.sizeZ]} /><meshLambertMaterial color={P.water} transparent opacity={0.8} />
       </mesh>

@@ -22,7 +22,8 @@ import { MAT } from '../../voxel/depth'
 export type Look = 'flat' | 'toon' | 'tiles'
 export const LOOKS: Look[] = ['flat', 'toon', 'tiles']
 /** Which tile a ground triangle wears (the `aLayer` attribute). */
-export const GROUND = { grass: 0, loam: 1, path: 2, stone: 3, sand: 4, soil: 5 } as const
+/** `void` (6, Alex 11-23): a Wilds cloud void's floor, untextured: no tile, just its matte near-black vertex colour (void-look.tsx) */
+export const GROUND = { grass: 0, loam: 1, path: 2, stone: 3, sand: 4, soil: 5, void: 6 } as const
 const LAYER_MATS = [MAT.TOPSOIL, MAT.FOREST_LOAM, MAT.PATH, MAT.STONE, MAT.SAND, MAT.SUBSOIL]
 const TILE_PX = 32
 export const TILE_M = 2
@@ -78,7 +79,7 @@ const V_BODY = '#include <project_vertex>\nvLayer = aLayer;\nvWPos = (modelMatri
 const F_DECL = '#include <common>\nuniform highp sampler2DArray uTiles;\nuniform float uUseTiles;\nuniform float uToon;\nuniform float uTileM;\nuniform float uTint;\nuniform vec3 uMean[6];\nflat varying float vLayer;\nvarying vec3 vWPos;\n'
 const F_TILE = [
   '#include <color_fragment>',
-  'if (uUseTiles > 0.5) {',
+  'if (uUseTiles > 0.5 && vLayer < 5.5) {',   // the void (6) wears no tile
   '  vec3 dx = dFdx(vWPos), dy = dFdy(vWPos);',
   '  vec3 gn = normalize(cross(dx, dy));',
   // tops project from above; a cliff skirt (a wall) projects from the side, so it is not a smear
