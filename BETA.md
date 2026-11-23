@@ -204,6 +204,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-23 05:3x Alex: "i keep looking for that creative mode.. im not seeing it yet" → the World Builder lives at ?mode=terrain (World > Terrain); ?mode=builder falls to the index and the index has NO builder card. Fix = alias builder→terrain + a 'World Builder' card (world lane, tiny, rides M83 s3 or next). Full creative build = M84.
 
 - 11-21 06:2x Alex: "the ground looks terrible both in the ather and nyx side.. when shapes overlap we get this ugly glitchy state where the overlapping parts fight for whos on top.. and then theres the incohesive shapes that make up roads and sidewalks .. do we need another tool or can we do better" → triaged: **M58** (no editor; a ground pass in code)
 - 11-21 06:4x Alex: new fp-hands values for holding items (27 keys, saved docs/handoff/hands-tune-2026-11-21.json) → routed to sprites as a quick one
@@ -281,7 +282,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 - ~~**Idris + tutorial goodbyes:**~~ ✅ SIGNED by Alex (Magii athernyx 7a25a8e); Idris pronoun-free. Wire next session. Magii 5b83a25: Idris is he/him (Idony's twin brother).
 
-- **M83 World Builder Fly view (11-22, LIVE):** /shimmer/dev?mode=builder, click Fly: W/S/A/D fly, Space climbs, wheel zooms, T = top-down and back, left-drag sculpts. Bare terrain only (no trees/nodes). Autosaves your draft; Publish to push live, history to roll back. Known: small viewport (fullscreen coming next), high ground looks pale.
+- **M83 World Builder Fly view (11-22, LIVE):** /shimmer/dev?mode=terrain (World > Terrain tab; ?mode=builder lands on the index, fix queued), click Fly: W/S/A/D fly, Space climbs, wheel zooms, T = top-down and back, left-drag sculpts. Bare terrain only (no trees/nodes). Autosaves your draft; Publish to push live, history to roll back. Known: small viewport (fullscreen coming next), high ground looks pale.
 
 - **M81 s3 sights in shops (11-22, sprites):** only the Backbone + Charred Rifle have rails, so shop sights fit just those two. Add rails (= new models, look work) to Repeater / Spitter / Roar / Lance, or keep sights to the two kit guns for beta? Hub rec: keep to two for beta.
 
