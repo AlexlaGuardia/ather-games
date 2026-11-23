@@ -28,20 +28,6 @@ await p.evaluateOnNewDocument((seed: string) => {
   localStorage.setItem('ather.grimoire.v1', JSON.stringify({ v: 1, pages: [], pots: {}, met: [] }))
 }, SEED)
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-let fails = 0
-const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
-const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
-const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: W, height: H, isMobile: true, hasTouch: true })
-const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
-await p.evaluateOnNewDocument((seed: string) => {
-  if (sessionStorage.getItem('pph')) return; sessionStorage.setItem('pph', '1')
-  localStorage.setItem('ather:shimmer:birthRune', 'star')
-  const slots: unknown[] = Array(32).fill(null)
-  slots[0] = { id: 'planter_box', n: 1 }; slots[1] = { id: 'spirit_planter', n: 1 }; slots[2] = { id: seed, n: 1 }
-  localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
-  localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [], chests: [], pieces: [] }))
-  localStorage.setItem('ather.grimoire.v1', JSON.stringify({ v: 1, pages: [], pots: {}, met: [] }))
-}, SEED)
 const read = (k: string) => p.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), k)
 const pieces = async () => ((await read('open.works.v1'))?.pieces ?? []) as { id: string; item: string; x: number; z: number }[]
 const bagN = async (id: string) => (((await read('open.inv.v1'))?.slots ?? []) as ({ id: string; n: number } | null)[]).reduce((a, s) => a + (s?.id === id ? s.n : 0), 0)
@@ -77,10 +63,10 @@ const useAt = async (x: number, z: number, ty: number) => {
 }
 
 if (owner) await p.goto(`${url}/owner?key=${encodeURIComponent(KEY!)}`, { waitUntil: 'load', timeout: 120000 })
-const who = await p.evaluate(async (u: string) => (await (await fetch(u + '/api/owner', { cache: 'no-store' })).json()).owner, url).catch(() => null)
-ok(who === owner, `[${tag}] /api/owner says owner=${who}`)
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500); await hideCard()
+const who = await p.evaluate(async () => (await (await fetch('/api/owner', { cache: 'no-store' })).json()).owner).catch(() => null)
+ok(who === owner, `[${tag}] /api/owner says owner=${who}`)
 await p.touchscreen.tap(W / 2, H - 200); await sleep(600)
 await tp(-136, 104, 0)
 const pl = await placeBySlot(0, 'spirit_planter')
