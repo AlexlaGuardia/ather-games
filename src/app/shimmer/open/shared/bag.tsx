@@ -11,6 +11,9 @@ import { HearthFrame, HearthLabel, Well, H, hearthDisplay } from '../../ui/heart
 import type { HotbarEntry } from '../../hud/hotbar'
 import { loadWaymarks } from '../ather/waymarks'
 import { HOTBAR, BAG, SLOTS, itemDef, loadInv, saveInv, move, split, quickMove, makeBait, BAIT_FROM, baitYield, readBaitPage, hasGift, BAIT_PAGE, GIFT_BAIT_READ, type Inv } from './inventory'
+import { KAEL_INVITE } from './opening-chain'
+import { KAEL_INVITE_TEXT } from './kael-invite-lines'
+import { chainRead } from './opening-chain-store'
 
 // ── the store ────────────────────────────────────────────────────────────────────────────────────────────────
 let inv: Inv | null = null
@@ -76,6 +79,7 @@ export function BagBody({ sel }: { sel: number }) {
   const i = useInv()
   const [picked, setPicked] = useState<number | null>(null)
   const [look, setLook] = useState<number | null>(null)
+  const [note, setNote] = useState(false)   // BETA M73: Kael's invite unfolded under the card
   const pick = (at: number) => {
     if (picked === null) { if (i.slots[at]) { setPicked(at); setLook(at) } else setLook(null); return }
     setInv(move(i, picked, at)); setPicked(null); setLook(at)
@@ -83,6 +87,7 @@ export function BagBody({ sel }: { sel: number }) {
   const common = { i, onPick: pick, onQuick: (at: number) => { setInv(quickMove(i, at)); setPicked(null) }, onSplit: (at: number) => { setInv(split(i, at)); setPicked(null) }, onDrop: (f: number, t: number) => { setInv(move(i, f, t)); setPicked(null) } }
   const shown = look !== null ? i.slots[look] : i.slots[sel]
   const d = shown ? itemDef(shown.id) : null
+  const noteOpen = note && shown?.id === KAEL_INVITE
   return (
     <>
       <div className="px-4 pt-7 pb-3">
@@ -116,10 +121,23 @@ export function BagBody({ sel }: { sel: number }) {
                   onClick={() => { const r = readBaitPage(i); if (r) setInv(r) }}>
                   {hasGift(i, GIFT_BAIT_READ) ? 'Learned' : 'Read'}
                 </button>
+              ) : shown.id === KAEL_INVITE ? (
+                // BETA M73 (opening-chain.ts): reading Kael's invite starts The Dig
+                <button type="button" data-act="read-invite" className="ml-auto shrink-0 rounded-[10px] px-3 py-2 text-[13px] font-semibold"
+                  style={{ ...hearthDisplay, color: H.ink, background: 'rgba(255,250,235,.85)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}
+                  onClick={() => { if (noteOpen) { setNote(false); return } setNote(true); chainRead() }}>
+                  {noteOpen ? 'Fold' : 'Read'}
+                </button>
               ) : null}
             </>
           ) : <div className="text-[12.5px]" style={{ color: H.inkFaint }}>Nothing picked. Choose a slot to see what is in it.</div>}
         </div>
+        {noteOpen && (
+          // Kael's hand: one block, no choices (kael-invite-script.md › For Jin)
+          <div data-invite-note className="mt-3 rounded-[6px] px-4 py-3" style={{ ...hearthDisplay, color: H.ink, fontStyle: 'italic', fontSize: 15, lineHeight: 1.45, background: '#fbf3df', boxShadow: '0 2px 6px rgba(74,45,24,.25), inset 0 0 0 1px rgba(74,45,24,.15)', transform: 'rotate(-0.6deg)' }}>
+            {KAEL_INVITE_TEXT.map((l, k) => <p key={k} data-invite-line style={{ margin: k ? '8px 0 0' : 0 }}>{l}</p>)}
+          </div>
+        )}
       </div>
     </>
   )

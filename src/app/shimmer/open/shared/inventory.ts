@@ -6,6 +6,8 @@
 //
 // Item names here are build vocabulary for things canon already has (the Repeater: engine/weapons.ts; waymarks:
 // gates.md). A new item is one row in OPEN_ITEMS.
+import { KAEL_INVITE, GIFT_KAEL_INVITE } from './opening-chain'
+import { KAEL_INVITE_NAME, KAEL_INVITE_BLURB } from './kael-invite-lines'
 import { NYX_RINN } from '../continent/rinning-nyx'
 import { keeperKey } from '@/lib/keeper-local'
 import { FURNITURE, KEEPSTONES } from '../ather/furniture'
@@ -150,6 +152,15 @@ export const GIFT_YARROW_TAUGHT = 'yarrow_teach', GIFT_BAIT_READ = 'bait_page_re
 export const YARROW_GIFT_BAIT = 3
 OPEN_ITEMS[BAIT_PAGE] = { name: 'Bait Page', blurb: 'A folded page from Yarrow. Read it once: every bait you cut after makes one more.', icon: '', stack: 1, kind: 'material' }
 export const hasGift = (inv: Inv, g: string) => (inv.gifts ?? []).includes(g)
+// KAEL'S INVITE (BETA M73, opening-chain.ts): the note the keeper carries from the start. Handed once (GIFT_KAEL_INVITE) by the
+//    chain's store, never by newInv: an old keeper already past Kael's yard is not handed one (the old-save rule).
+OPEN_ITEMS[KAEL_INVITE] = { name: KAEL_INVITE_NAME, blurb: KAEL_INVITE_BLURB, icon: '', stack: 1, kind: 'material' }
+/** Hand the note once: null when it was already handed (read or not) or the bag has no room (the store retries later). */
+export function giveInvite(inv: Inv): Inv | null {
+  if (hasGift(inv, GIFT_KAEL_INVITE)) return null
+  const r = give(inv, KAEL_INVITE, 1)
+  return r.left > 0 ? null : withGift(r.inv, GIFT_KAEL_INVITE)
+}
 const withGift = (inv: Inv, g: string): Inv => (hasGift(inv, g) ? inv : { ...inv, gifts: [...(inv.gifts ?? []), g] })
 /** How much bait one `id` cuts into for this bag: the table, +1 once the Bait Page is read. 0 = not bait food. */
 export const baitYield = (inv: Inv, id: string) => (BAIT_FROM[id] ? BAIT_FROM[id] + (hasGift(inv, GIFT_BAIT_READ) ? 1 : 0) : 0)

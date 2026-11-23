@@ -20,4 +20,15 @@ export const MOREL_HINTS = {
 /** S3 folk pings: Morel REPORTS a call, never quotes it (lark: Fennel's own voice waits for the meeting). */
 export const MOREL_PING = {
   fennel_rinstick: 'Fennel says come by when you have a minute.',
+  // ★ SIGNED (Alex 11-22, "main"): CANON/game/morel-dig-ping-script.md §1. BETA M73 (opening-chain.ts): after the first death,
+  // once the pack is recovered or gone, while the note is unread. Once ever.
+  unreadNote: 'That note in your pack is still folded. Most keepers have opened theirs by now.',
+} as const
+
+/** ★ SIGNED (Alex 11-22, "yea keep both"): morel-dig-ping-script.md §2 + §3. BETA M73. */
+export const MOREL_NUDGE = {
+  unreadNote: 'The note is still waiting in your pack.',
+} as const
+export const MOREL_DIG_HINT = {
+  digFlip: 'Keepers who set out on a note turn the map over here. The button is in this panel.',
 } as const

@@ -79,7 +79,14 @@ function FogLayer({ fog, W }: { fog: Fog; W: Wilds }) {
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
 }
 
-export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [], onClose, onFlip, area, goal }: {
+// BETA M73: The Dig's pulse (the flip button, then Rune Hold's door): an ember ring that breathes
+const DIG_PULSE_CSS = '@keyframes dig-pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,154,74,0)}50%{box-shadow:0 0 0 4px rgba(255,154,74,.55),0 0 14px rgba(255,154,74,.7)}}'
+
+export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [], onClose, onFlip, area, goal, flipPulse, digGoal }: {
+  /** BETA M73 The Dig: the Flip map button pulses until the keeper turns the map over (opening-chain.ts › flipPulse) */
+  flipPulse?: boolean
+  /** BETA M73 The Dig: `goal` (Rune Hold) is The Dig's, not the errand's: its pin + door pulse, the door keeps its own sub */
+  digGoal?: boolean
   /** BETA M32 trail: the pitstop the keeper's errand runs through (Rune Hold for the runesmith): its pin glows, its door says so */
   goal?: string
   view: 'ather' | 'athernyx'; travel: boolean; W: Wilds | null; fog: Fog | null; waymarks: Waymark[]
@@ -111,10 +118,11 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
   const cols = typeof window !== 'undefined' && window.innerWidth < 560 ? 'minmax(0,1fr)' : 'minmax(0,1fr) 200px'
   return (
     <HearthFrame title={view === 'ather' ? 'The fold map · the Ather' : 'The fold map · Athernyx'} maxWidth={820} onClose={onClose} fixed dataPanel="fold-map">
+      {(flipPulse || digGoal) && <style>{DIG_PULSE_CSS}</style>}
       <div style={{ padding: '26px 16px 14px', fontSize: 13 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 10 }}>
           <div style={label}>{travel ? 'Click a stop to travel · ' : ''}Tab flips · Esc closes</div>
-          <HearthButton small onClick={onFlip}>Flip map</HearthButton>
+          <span data-flip-pulse={flipPulse || undefined} style={{ borderRadius: 999, animation: flipPulse ? 'dig-pulse 1.4s ease-in-out infinite' : undefined }}><HearthButton small onClick={onFlip}>Flip map</HearthButton></span>
         </div>
         {view === 'ather' ? (
           <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 14 }}>
@@ -185,7 +193,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
               <div style={{ opacity: 0.75, fontSize: 12 }}>The same ground in its other state. Each city keeps a door off the hall; visit a city and its door opens to you. {LANDING.name}&apos;s is open from the start.</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={label}>Doors</div>
-                {pitstops.map(p => stop(p.name, p.id === goal ? 'your errand: the way to your runesmith' : p.id === LANDING.id ? 'the gate-landing' : 'city door', { kind: 'landing', id: p.id, name: p.name }, p.id === goal ? '#ff9a4a' : '#f2d88a'))}
+                {pitstops.map(p => { const b = stop(p.name, p.id === goal && !digGoal ? 'your errand: the way to your runesmith' : p.id === LANDING.id ? 'the gate-landing' : 'city door', { kind: 'landing', id: p.id, name: p.name }, p.id === goal ? '#ff9a4a' : '#f2d88a'); return digGoal && p.id === goal ? <div key={p.id} data-dig-door={p.id} style={{ borderRadius: 6, animation: 'dig-pulse 1.4s ease-in-out infinite' }}>{b}</div> : b })}
               </div>
             </div>
           </div>

@@ -21,7 +21,7 @@ let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 type Stack = { id: string; n: number } | null
 const total = (s: Stack[]) => s.reduce((a, x) => a + (x?.n ?? 0), 0)
-const bagOf = (items: [string, number][]) => { const slots: Stack[] = Array(SLOTS).fill(null); items.forEach(([id, n], i) => { slots[i] = { id, n } }); return { v: 1, slots, gifts: ['bait1'] } }
+const bagOf = (items: [string, number][]) => { const slots: Stack[] = Array(SLOTS).fill(null); items.forEach(([id, n], i) => { slots[i] = { id, n } }); return { v: 1, slots, gifts: ['bait1', 'kael_invite'] } }   // M73: the note already handed, so the totals stay the bag's
 const START: [string, number][] = [['waymark', 12], ['bait', 10], ['goldwood_log', 7]]   // 29 things
 
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })

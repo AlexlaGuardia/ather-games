@@ -124,7 +124,9 @@ import { markMet } from '../shared/met'
 import { useMorelHints } from '../shared/morel-hints'   // BETA M33 S2: stuck hints on the errand
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
 import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
-import { DeathPack, fallAndDrop } from './death-pack'
+import { DeathPack, fallAndDrop, packLying } from './death-pack'
+import { useOpeningChain, useChain, chainDeath, chainGateOpen, chainFlip } from '../shared/opening-chain-store'   // BETA M73: Ather to Nyx
+import { flipPulse, runeHoldPulse } from '../shared/opening-chain'
 import { CloudReefs, CloudDeck, HorizonRing } from '../shared/cloud-edge'
 import { wildsReefPuffs, deckSquares } from './edge-clouds'
 import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, equipSlot, heldOf, litSlot, settle, type Stance } from '../shared/stance'
@@ -545,6 +547,7 @@ function AtherSliceGame() {
       }
       if (e.kind === 'down') {
         { const p = pos.current; fallAndDrop(p.x, heightRef.current(p.x, p.z), p.z) }   // M20: the bag stays where they fell (death-pack.tsx)
+        chainDeath()   // M73: the first death arms Morel's ping (it waits for the pack; opening-chain.ts)
         setToast('The Hollows dragged you under. The fold caught you and set you down at home.')
         setTimeout(() => setReviveKey(k => k + 1), 400)
         arrive({ kind: 'plot' }, THRESHOLD)
@@ -1173,6 +1176,15 @@ function AtherSliceGame() {
     const o = ww.offsetOf(GREG_WAYMARK.tile); return { x: GREG_WAYMARK.x + o.x, z: GREG_WAYMARK.z + o.z, zone: 'wilds' as const }
   }, [zone.kind, ww, wrev])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { postEntries('errand', errandEntries(errandStage, birth, { greg: { x: gregAt.x, z: gregAt.z }, gate: errandGate })) }, [errandStage, birth, errandGate])
+  // BETA M73 the opening chain: the note handed once, Morel's ping after the first death + pack, the gate hint, the flip
+  useOpeningChain({ packLying, getInv, setInv })
+  const chain = useChain()
+  const mapOpen = panel?.kind === 'map' ? `${panel.travel ? 'gate' : 'look'}:${panel.view}` : ''
+  useEffect(() => {
+    if (!mapOpen) return
+    if (mapOpen.startsWith('gate:')) chainGateOpen()
+    if (mapOpen.endsWith(':athernyx')) chainFlip('athernyx')
+  }, [mapOpen])
   useMorelHints({ stage: errandStage, zone: zone.kind === 'plot' ? 'ather' : zone.kind, pos: () => poseRef.current,
     busy: () => frozen.current || (!!chudRef.current && performance.now() / 1000 - chudRef.current.hurtAt < 10) })   // a fight is not 'stuck'
   // BETA M6a/M6b: the rinning + prospecting pointers, struck once used (re-read on every pack change: a catch/cut lands in it)
@@ -1514,7 +1526,7 @@ function AtherSliceGame() {
           inWilds={zone.kind === 'wilds'} onTravel={travel} tile={hereTile} pitstops={pitstops}
           nodes={(nodesByTile.get(hereTile) ?? []).filter(n => infectedSet.has(n.id)).map(n => ({ ...n, x: n.x - hereOff.x, z: n.z - hereOff.z }))} regions={regions}
           area={ww ? { world: ww, regionsByTile, cx: hereOff.x, cz: hereOff.z, tileOff, nodes: nodes.filter(n => Math.abs(n.x - hereOff.x) < 1600 && Math.abs(n.z - hereOff.z) < 1600), here: { x: pos.current.x, z: pos.current.z } } : undefined}
-          onClose={() => setPanel(null)} goal={errandToHold ? LANDING.id : undefined} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
+          onClose={() => setPanel(null)} goal={errandToHold || runeHoldPulse(chain) ? LANDING.id : undefined} flipPulse={flipPulse(chain)} digGoal={runeHoldPulse(chain) && !errandToHold} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
       {folkTalk.node && <TalkChoices node={folkTalk.node} phone={hudSize === 'phone'} />}
       {(talkNode ?? fennelNode ?? friendTalkNode ?? gFennel.node ?? idleTalk.node ?? tourNode) && <TalkChoices node={(talkNode ?? fennelNode ?? friendTalkNode ?? gFennel.node ?? idleTalk.node ?? tourNode)!} phone={hudSize === 'phone'} />}

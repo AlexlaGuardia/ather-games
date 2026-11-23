@@ -10,7 +10,7 @@ import type * as THREE from 'three'
 import { keeperKey } from '@/lib/keeper-local'
 import { getInv, setInv } from '../shared/bag'
 import { hudSay } from '../shared/hud-say'
-import { dropPack, reclaim, parsePack, near, PACK_KEY, type Pack } from './backpack'
+import { dropPack, reclaim, parsePack, near, expired, PACK_KEY, type Pack } from './backpack'
 
 // ── the store ────────────────────────────────────────────────────────────────────────────────────────────────
 // ⚠ PLAYER COPY: @lark's pass 11-18 (only 'left' changed), AWAITING ALEX SIGN-OFF (BETA › Alex's queue). Keep the hidden clock
@@ -37,6 +37,10 @@ function write(p: Pack | null) {
 }
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 const usePack = () => useSyncExternalStore(subscribe, () => (typeof window === 'undefined' ? null : read()), () => null)
+
+/** A pack still lies in the Wilds and has not run out (BETA M73: Morel's ping waits for this to go false). Reads the clock
+ *  itself: the draw loop only clears an expired pack while the keeper is in the Wilds. */
+export function packLying(): boolean { const p = read(); return !!p && !expired(p, Date.now()) }
 
 /** The fall: the bag goes into a pack at (x, y, z); a pack already lying somewhere is replaced (one at a time). */
 export function fallAndDrop(x: number, y: number, z: number) {
