@@ -68,6 +68,8 @@
   "footX": 0.045
  },
  "large-curved": {
+  "headW": 0.74,
+  "headH": 0.72,
   "torsoW": 1.11,
   "torsoD": 1.2,
   "scarf": 0.87,
