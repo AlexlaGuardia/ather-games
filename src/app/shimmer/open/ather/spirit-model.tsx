@@ -31,7 +31,7 @@ export function useSpirits3d(): boolean {
 }
 
 // read-only probe for the check: how many Vulnyx models are mounted right now
-type Probe = { mounted: number; url: string; h: number; trot?: { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; beats: number } }
+type Probe = { mounted: number; url: string; h: number; trot?: { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; beats: number; homes: number } }
 const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Probe }; return (w.__spiritModel ??= { mounted: 0, url: VULNYX_URL, h: VULNYX_H }) }
 
 let grad: THREE.DataTexture | null = null
@@ -92,7 +92,7 @@ function Vulnyx({ nav }: { nav?: SpiritNav }) {
       const breath = ps.swing > 0 ? 0 : Math.sin(t * 2.2) * 0.015
       g.current.scale.set(ps.sx, ps.sy + breath, ps.sx)
       sw.value += (ps.swing - sw.value) * Math.min(1, dt * 6); lift.value = ps.lift
-      const pr = probe(); pr.trot = { x: ps.x, y: baseY + ps.y, z: ps.z, mode: ps.mode, home: nav!.home, rMin: nav!.rMin, rMax: nav!.rMax, beats: trot.beats() }
+      const pr = probe(); pr.trot = { x: ps.x, y: baseY + ps.y, z: ps.z, mode: ps.mode, home: nav!.home, rMin: nav!.rMin, rMax: nav!.rMax, beats: trot.beats(), homes: trot.homes() }
       return
     }
     g.current.position.y = Math.sin(t * 1.4) * 0.02

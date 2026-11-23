@@ -17,7 +17,7 @@ import { HearthFrame, HearthButton, Well, H, hearthDisplay } from '../../ui/hear
 import { getInv, setInv, useInv } from '../shared/bag'
 import { countOf, itemDef, give, makeBait, BAIT_FROM, baitYield, HOTBAR, SLOTS, type Stack, type Inv } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
-import { GROUND_Y, squareAt, sqId, loadGarden } from './plot'
+import { GROUND_Y, squareAt, sqId, loadGarden, plotHeightAt, GREG } from './plot'
 import { forestryLevel } from './forestry'
 import { connectedPieces, extractBlueprint, fitsPad } from './plot-blueprint'
 import { LOT_W, LOT_D, GLADE_LOTS } from './moonwell-glade'
@@ -1224,17 +1224,24 @@ function ChestGhost({ pose, owned, q, item }: { pose: React.MutableRefObject<Pos
 
 const WOODS: Record<string, string> = { goldwood: '#d9a957', shimmeroak: '#a77a52', starwillow: '#c8d2e8', dawnwood: '#c9774a', iron: '#4e4a47', stone: '#bdb6a6' }
 const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, number]; c: string }) => <mesh position={p}><boxGeometry args={s} /><meshLambertMaterial color={c} /></mesh>
-/** M107 s1 (owner + ?spirits=3d): where the planter's spirit may trot. Home = the planter; a ring 0.9..1.5 m round it (the
- *  planter's corners sit at 0.64 m); blocked = any wall/chest/piece box (bar the planter's own) padded by her half-width, or
- *  ground that is not your plot. Boxes are re-read when the works change, so a piece set down beside her is honoured. */
+/** M107 (owner + ?spirits=3d): where the planter's spirit may go. Home = the planter, its ring 0.9..1.5 m (the planter's
+ *  corners sit at 0.64 m) = the home beat. s2 (Magii RULED 11-23, athernyx 8b45c92: a bloomed spirit walks the whole garden):
+ *  straight darting legs anywhere on YOUR plot at her planter's own level. Blocked = any wall/chest/piece/house box (bar the
+ *  planter's own) and every room's footprint, padded by her half-width; Greg; ground that is not yours, not island, or not
+ *  the planter's floor (a deck, a raised house, the shore). Boxes are re-read when the works change. */
 const SPIRIT_PAD = 0.22
-let navBoxes: { w: Works; b: ReturnType<typeof workWalls> } | null = null
+let navBoxes: { w: Works; b: { x0: number; x1: number; z0: number; z1: number }[] } | null = null
 function planterNav(id: string): SpiritNav | null {
   const pc = getW().pieces.find(x => x.id === id); if (!pc) return null
-  const home = { x: pc.x, z: pc.z }, owned = new Set(loadGarden().owned)
-  const boxes = () => { const w = getW(); if (navBoxes?.w !== w) navBoxes = { w, b: workWalls(w).filter(b => !(home.x > b.x0 && home.x < b.x1 && home.z > b.z0 && home.z < b.z1)) }; return navBoxes.b }
-  return { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked: (x, z) => {
+  const home = { x: pc.x, z: pc.z }, owned = new Set(loadGarden().owned), floor0 = pieceFloor(getW(), pc)
+  const boxes = () => {
+    const w = getW()
+    if (navBoxes?.w !== w) navBoxes = { w, b: [...workWalls(w).filter(b => !(home.x > b.x0 && home.x < b.x1 && home.z > b.z0 && home.z < b.z1)), ...w.rooms.map(r => footprint(r.kind, r.x, r.z, r.q)), { x0: GREG.x - 0.5, x1: GREG.x + 0.5, z0: GREG.z - 0.5, z1: GREG.z + 0.5 }] }
+    return navBoxes.b
+  }
+  return { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, roam: { maxLeg: 4.5, away: 3 }, blocked: (x, z) => {
     const sq = squareAt(x, z); if (!sq || !owned.has(sqId(sq.i, sq.j))) return true
+    if (!(Math.abs(plotHeightAt(x, z) - GROUND_Y) < 0.05) || Math.abs(pieceFloor(getW(), { item: pc.item, x, z }) - floor0) > 0.02) return true
     return boxes().some(b => x > b.x0 - SPIRIT_PAD && x < b.x1 + SPIRIT_PAD && z > b.z0 - SPIRIT_PAD && z < b.z1 + SPIRIT_PAD)
   } }
 }

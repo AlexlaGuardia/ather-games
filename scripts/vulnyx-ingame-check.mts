@@ -9,6 +9,7 @@ import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { BLOOM_MS } from '../src/app/shimmer/open/ather/spirit-seeds'
 import { aimAt } from './lib/aim.mts'
+import { FURNITURE } from '../src/app/shimmer/open/ather/furniture'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), shots = flag('--shots', '')
 if (shots) mkdirSync(shots, { recursive: true })
@@ -16,6 +17,8 @@ const OWNER_KEY = process.env.OWNER_KEY
 if (!OWNER_KEY) { console.error('OWNER_KEY not set: set -a; . /root/ather-games/.env; set +a'); process.exit(2) }
 const P = { x: -130, z: 102.5 }
 const PLANTER = { id: 'vx-check', item: 'spirit_planter', x: P.x, z: P.z, q: 0, placedAt: 1 }
+// M107 s2: furniture near her planter, so the roam has real blockers to miss (checked below from FURNITURE's own sizes)
+const NEAR = [{ id: 'vx-bench', item: 'goldwood_bench', x: P.x + 2.4, z: P.z, q: 0, placedAt: 1 }, { id: 'vx-box', item: 'planter_box', x: P.x - 0.4, z: P.z - 3.2, q: 0, placedAt: 1 }]
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 let fails = 0
@@ -33,14 +36,14 @@ async function run(owner: boolean, withFlag: boolean, w = 390, h = 844, hour = 1
     const o = await p.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner))
     if (!o) { ok(false, 'owner cookie took'); await p.close(); return null }
   }
-  await p.evaluateOnNewDocument((piece: unknown, bloomAt: number) => {
+  await p.evaluateOnNewDocument((piece: unknown, bloomAt: number, near: unknown[]) => {
     if (sessionStorage.getItem('vxc')) return; sessionStorage.setItem('vxc', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star')
     const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'waymark', n: 12 }
     localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
-    localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [], chests: [], pieces: [piece] }))
+    localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [], chests: [], pieces: [piece, ...near] }))
     localStorage.setItem('ather.grimoire.v1', JSON.stringify({ v: 1, pages: [{ species: 'fox', stage: 'seen', at: bloomAt }], pots: { 'vx-check': { seed: 'mana_seed_fox', at: bloomAt, bloomed: true } }, met: [] }))
-  }, PLANTER, Date.now() - BLOOM_MS - 60000)
+  }, PLANTER, Date.now() - BLOOM_MS - 60000, NEAR)
   await p.goto(`${url}/shimmer/open/ather?hour=${hour}${withFlag ? '&spirits=3d' : ''}`, { waitUntil: 'load', timeout: 180000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 })
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 5, 0), P.x, P.z)
@@ -57,26 +60,33 @@ if (a) {
   ok(a.mounted >= 1, `A owner + ?spirits=3d: Vulnyx mounted on the bloomed planter (mounted=${a.mounted})`)
   ok(a.glb() === 200, `A glb /open/spirits/vulnyx.glb answered ${a.glb()}`)
   await look(a.p, 4.5)
-  // M107 s1: THE TROT. Sample her (window.__spiritModel.trot, world xz/y + mode) every 100 ms for 8 s: she moves, stays on
-  // her ring round the planter (never inside it, never past rMax), her y bobs while trotting, and she pauses at least once.
-  const samples = await a.p.evaluate(`new Promise(res => { const out = []; const t0 = performance.now(); const id = setInterval(() => { const tr = window.__spiritModel?.trot; if (tr) out.push({ ...tr, t: performance.now() - t0 }); if (performance.now() - t0 > 8000) { clearInterval(id); res(out) } }, 100) })`) as { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; t: number }[]
-  ok(samples.length > 20, `A trot probe sampled (${samples.length} samples over 8 s)`)
+  // M107 s1+s2: THE TROT, THEN THE ROAM. Sample her (window.__spiritModel.trot, world xz/y + mode) every 100 ms for 15 s:
+  // she moves, leaves her 1.5 m ring and reaches a spot > 3 m from the planter, is never inside the planter or a piece
+  // (rectangles from FURNITURE here, not from the nav under test), her y bobs while trotting, and she pauses at least once.
+  // Coming home + hopping up over a longer run is unit-tested (src/app/shimmer/open/ather/spirit-trot.test.ts).
+  const samples = await a.p.evaluate(`new Promise(res => { const out = []; const t0 = performance.now(); const id = setInterval(() => { const tr = window.__spiritModel?.trot; if (tr) out.push({ ...tr, t: performance.now() - t0 }); if (performance.now() - t0 > 15000) { clearInterval(id); res(out) } }, 100) })`) as { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; homes: number; t: number }[]
+  ok(samples.length > 40, `A trot probe sampled (${samples.length} samples over 15 s)`)
   if (samples.length) {
     const h = samples[0].home, r = (s: typeof samples[0]) => Math.hypot(s.x - h.x, s.z - h.z)
     const ground = samples.filter(s => !['perch', 'hopDown', 'hopUp'].includes(s.mode)), trots = samples.filter(s => s.mode === 'trot')
     let far = 0; for (const s of samples) for (const o of samples) far = Math.max(far, Math.hypot(s.x - o.x, s.z - o.z))
-    const rs = ground.map(r), ys = trots.map(s => s.y)
+    const ys = trots.map(s => s.y), rFar = Math.max(0, ...ground.map(r))
     ok(far > 0.5, `A she moves: ${far.toFixed(2)} m between the farthest two samples (home ${h.x},${h.z})`)
-    ok(samples.every(s => r(s) <= samples[0].rMax + 0.05) && ground.every(s => r(s) >= s.rMin - 0.05), `A she stays on her ring round the planter: r ${rs.length ? Math.min(...rs).toFixed(2) : '-'}..${Math.max(0, ...samples.map(r)).toFixed(2)} m (ring ${samples[0].rMin}..${samples[0].rMax}; the planter's corners 0.64)`)
+    ok(rFar > 3, `A she roams: leaves the ${samples[0].rMax} m ring and reaches ${rFar.toFixed(2)} m from the planter (> 3)`)
+    const rect = (pc: { item: string; x: number; z: number }, pad: number) => { const f = FURNITURE[pc.item]; return { x0: pc.x - f.w / 2 - pad, x1: pc.x + f.w / 2 + pad, z0: pc.z - f.d / 2 - pad, z1: pc.z + f.d / 2 + pad } }
+    const rs = [rect(PLANTER, 0.15), ...NEAR.map(n => rect(n, 0.05))], inside = ground.filter(s => rs.some(b => s.x > b.x0 && s.x < b.x1 && s.z > b.z0 && s.z < b.z1))
+    ok(!inside.length, `A never inside the planter or a piece (${ground.length} ground samples vs ${rs.length} rects)${inside.length ? ` ${inside[0].mode} at ${inside[0].x.toFixed(2)},${inside[0].z.toFixed(2)}` : ''}`)
     ok(ys.length > 3 && Math.max(...ys) - Math.min(...ys) > 0.02, `A y bobs while she trots: ${ys.length ? (Math.max(...ys) - Math.min(...ys)).toFixed(3) : '-'} m over ${ys.length} trot samples`)
-    const firstTrot = samples.findIndex(s => s.mode === 'trot'), paused = firstTrot >= 0 && samples.slice(firstTrot).some(s => ['check', 'look', 'sit', 'perch'].includes(s.mode))
-    ok(paused, `A she pauses at least once after trotting (modes seen: ${[...new Set(samples.map(s => s.mode))].join(',')})`)
+    const firstTrot = samples.findIndex(s => s.mode === 'trot'), paused = firstTrot >= 0 && samples.slice(firstTrot).some(s => ['check', 'look', 'sit', 'sniff', 'perch'].includes(s.mode))
+    ok(paused, `A she pauses at least once after trotting (modes seen: ${[...new Set(samples.map(s => s.mode))].join(',')}; homes ${samples.at(-1)!.homes})`)
   }
   const fps = await a.p.evaluate(`new Promise(res => { let n = 0; const t0 = performance.now(); function f() { n++; if (performance.now() - t0 < 5000) requestAnimationFrame(f); else res(n / 5) } requestAnimationFrame(f) })`) as number
   console.log(`   frame: ${fps.toFixed(2)} fps = ${(1000 / fps).toFixed(0)} ms/frame at 390x844 near the planter (SwiftShader, not a phone)`)
   if (shots) { await shot(a.p, 'phone-far'); await look(a.p, 1.9, 0.5); await shot(a.p, 'phone-near') }
-  // M107: a run of phone frames of the trot (for the 4-up strip + a short clip); she is ~1-1.5 m off the planter, so stand back
-  if (shots) { await look(a.p, 3.3, 0.6); await hideCard(a.p); for (let i = 0; i < 24; i++) { try { await a.p.screenshot({ path: `${shots}/trot-${String(i).padStart(2, '0')}.png` }) } catch { /* slow frame */ } } }
+
+  // M107 s2: the roam clip: a chase cam (the keeper is set 3.8 m behind-right of her each frame, looking at her)
+  if (shots) { await hideCard(a.p)
+    for (let i = 0; i < 36; i++) { await a.p.evaluate(`(() => { const g = window.__ather, t0 = window.__spiritModel?.trot; if (!t0) return; g.tp(t0.x + 1.2, t0.z + 3.6, 0); const s = g.state(), t = t0; const sx = s.px ?? s.x, sz = s.pz ?? s.z, dx = t.x - sx, dz = t.z - sz; g.look(Math.atan2(-dx, -dz), Math.atan2(g.ground(t.x, t.z) + 0.3 - (g.ground(sx, sz) + 1.6), Math.hypot(dx, dz))) })()`); try { await a.p.screenshot({ path: `${shots}/roam-${String(i).padStart(2, '0')}.png` }) } catch { /* slow frame */ } } }
   ok(a.errs.length === 0, `A 0 page errors ${a.errs.join(' | ')}`)
   await a.p.close()
 }
