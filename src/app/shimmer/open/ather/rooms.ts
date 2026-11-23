@@ -61,6 +61,17 @@ export const ROOM_ORDER: readonly RoomKind[] = ['rinnshop', 'farm', 'cooking', '
 /** The planning table: a fixture beside Greg on the start ground. */
 export const TABLE = { x: GREG.x + 6, z: GREG.z - 10 }
 export const TABLE_REACH = 2.6
+/** BETA M96 (Alex 11-23: "the planning table id like to be able to mele it to break it and place it somewhere else like other
+ *  items"): three hits pop the table into the bag as this item; set from the bag it is a placed PIECE like any furniture, and
+ *  everything the table does (E, the plan, its keep-clear, the idle Moglins' arc) follows it. One per keeper: never made or
+ *  sold, and a second cannot be set while one stands. A keeper who never moved it keeps the fixture at TABLE (no save change). */
+export const TABLE_ITEM = 'planning_table'
+/** Where the keeper's planning table stands now: the fixture (never moved), the placed piece, or null (it is in the bag). */
+export function tableAt(w: Pick<Works, 'tableMoved' | 'pieces'>): { x: number; z: number; q: number } | null {
+  if (!w.tableMoved) return { x: TABLE.x, z: TABLE.z, q: 0 }
+  const p = w.pieces.find(x => x.item === TABLE_ITEM)
+  return p ? { x: p.x, z: p.z, q: p.q } : null
+}
 export const BENCH_REACH = 2.4
 /** The cluster path's own ground on the plot: circles along its line from PATH_START out over the corner, which is the way it
  *  leaves (meadow.ts gardenPath: straight off the corner toward the Green, the island's south-west diagonal), PATH_W wide + 1 m. */
@@ -70,10 +81,17 @@ const PATH_KEEP = [0, 4, 8, 12, 16].map(t => ({ x: PATH_START.x - t * Math.SQRT1
  *  arrive on, Greg's anchor, the table, and the path's line. ★ 11-22 Alex bug: the corner where the gate USED to stand read as
  *  taken, because the path start still kept a 10 m disc that was sized for the old corner gate beside it (-146, 128); it now
  *  keeps only the path's own line, so the old gate's ground builds. */
-export const KEEP_CLEAR: readonly { x: number; z: number; r: number }[] = [
-  { x: GATE.x, z: GATE.z, r: 9 }, { x: THRESHOLD.x, z: THRESHOLD.z, r: 6 }, { x: GREG.x, z: GREG.z, r: 4 },
-  { x: TABLE.x, z: TABLE.z, r: 4 }, ...PATH_KEEP,
+const KEEP_FIXED: readonly { x: number; z: number; r: number }[] = [
+  { x: GATE.x, z: GATE.z, r: 9 }, { x: THRESHOLD.x, z: THRESHOLD.z, r: 6 }, { x: GREG.x, z: GREG.z, r: 4 }, ...PATH_KEEP,
 ]
+export const TABLE_KEEP_R = 4
+/** The table's never-moved keep-clear (an older caller's view); placement reads keepClear(works), which follows the table. */
+export const KEEP_CLEAR: readonly { x: number; z: number; r: number }[] = [...KEEP_FIXED, { x: TABLE.x, z: TABLE.z, r: TABLE_KEEP_R }]
+/** M96: the keep-clear as it stands: the fixed ground, plus the table's circle wherever the table is (none while it is in the bag). */
+export function keepClear(w: Pick<Works, 'tableMoved' | 'pieces'>): readonly { x: number; z: number; r: number }[] {
+  const t = tableAt(w)
+  return t ? [...KEEP_FIXED, { x: t.x, z: t.z, r: TABLE_KEEP_R }] : KEEP_FIXED
+}
 export const WALL_H = 4.8, WALL_T = 0.3, DOOR_W = 2.2   // M50: 3.2 -> 4.8 (plot-walls.ts WALL_H is the same family)
 
 /** A placed room. `q` = quarter turns (0..3); the door is on the front (local −z at q 0, turning with it). */
@@ -94,7 +112,7 @@ export interface Room {
 export interface Chest { id: string; x: number; z: number; q: number; placedAt: number; crystal?: string }
 /** A piece of furniture or decor standing on the plot (furniture.ts). Picked up, it is the bag item `item` again. */
 export interface Piece { id: string; item: string; x: number; z: number; q: number; placedAt: number; /** M48: a lift's car level (lift.ts); absent = the ground */ lv?: number }
-export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[]; /** M54: ground-floor columns (plot-cols.ts) */ cols?: Cols; /** M56: ground-floor stairs (plot-stairs.ts) */ stairs?: Stairs; /** M56 (a): ground-floor open floor, patios (plot-decks.ts) */ decks?: Decks; /** M55: the house's foundation height (plot-found.ts), 0 / 0.6 / 1.2 */ found?: number; /** M55 slice 2: per house, per room cell */ foundCells?: Record<string, number>; /** 11-22: a take-down's leftover fraction of a plank per item (plot-walls raze), carried to the next */ wallCarry?: Record<string, number> }
+export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[]; /** M54: ground-floor columns (plot-cols.ts) */ cols?: Cols; /** M56: ground-floor stairs (plot-stairs.ts) */ stairs?: Stairs; /** M56 (a): ground-floor open floor, patios (plot-decks.ts) */ decks?: Decks; /** M55: the house's foundation height (plot-found.ts), 0 / 0.6 / 1.2 */ found?: number; /** M96: the planning table has left its first spot (it is a placed piece now, or in the bag); see tableAt */ tableMoved?: true; /** M55 slice 2: per house, per room cell */ foundCells?: Record<string, number>; /** 11-22: a take-down's leftover fraction of a plank per item (plot-walls raze), carried to the next */ wallCarry?: Record<string, number> }
 /** M37: is this rectangle in a drawn wall (plot-walls.ts)? */
 const inDrawnWall = (w: Works, r: { x0: number; x1: number; z0: number; z1: number }, pad = 0) => wallRects(w.walls ?? {}).some(b => r.x0 - pad < b.x1 && r.x1 + pad > b.x0 && r.z0 - pad < b.z1 && r.z1 + pad > b.z0)
 export const freshWorks = (): Works => ({ v: 1, rooms: [], chests: [], pieces: [] })
@@ -146,7 +164,7 @@ export function canPlace(works: Works, owned: ReadonlySet<string>, kind: RoomKin
     const s = squareAt(Math.min(sx, f.x1 - 1e-3), Math.min(sz, f.z1 - 1e-3))
     if (!s || !owned.has(sqId(s.i, s.j))) return { ok: false, why: 'Build on ground you hold.' }
   }
-  for (const k of KEEP_CLEAR) {
+  for (const k of keepClear(works)) {
     const cx = Math.max(f.x0, Math.min(k.x, f.x1)), cz = Math.max(f.z0, Math.min(k.z, f.z1))
     if (Math.hypot(cx - k.x, cz - k.z) < k.r) return { ok: false, why: 'Leave room around the gate, Gregory and the table.' }
   }
@@ -193,9 +211,9 @@ export type WorkNear = { kind: 'table' } | { kind: 'bench'; room: Room } | { kin
 export function workPickables(works: Works, ground: (x: number, z: number) => number, now = Date.now()): Pickable<WorkNear>[] {
   const out: Pickable<WorkNear>[] = []
   const add = (x: number, z: number, r: number, h: number, item: WorkNear, lift = 0) => { const g = ground(x, z); out.push({ x, z, y0: g - 0.2, y1: floorAt(works, g, x, z) + lift + h + 0.2, r, item }) }   // M55: the floor it stands on (a house or prefab room's foundation)
-  add(TABLE.x, TABLE.z, 1.1, 1.1, { kind: 'table' })
+  const tb = tableAt(works); if (tb) add(tb.x, tb.z, 1.1, 1.1, { kind: 'table' }, works.tableMoved ? slabLift(works, tb.x, tb.z) : 0)   // M96: wherever it stands
   for (const c of allChests(works)) add(c.x, c.z, 0.55, CHEST_H, { kind: 'chest', id: c.id })
-  for (const p of works.pieces) { const f = FURNITURE[p.item]; if (f) add(p.x, p.z, Math.max(f.w, f.d) / 2, f.shaft ? levelBase(shaftTop(works, p)) + f.h : f.h, { kind: 'piece', id: p.id }, f.slab ? 0 : slabLift(works, p.x, p.z)) }   // M47 close-out: a lift answers E from EVERY floor its shaft serves (it was the car's level only, x a stale 3 m storey: E on floor 2 could not call the car up)
+  for (const p of works.pieces) { const f = FURNITURE[p.item]; if (f && p.item !== TABLE_ITEM) add(p.x, p.z, Math.max(f.w, f.d) / 2, f.shaft ? levelBase(shaftTop(works, p)) + f.h : f.h, { kind: 'piece', id: p.id }, f.slab ? 0 : slabLift(works, p.x, p.z)) }   // M47 close-out: a lift answers E from EVERY floor its shaft serves (it was the car's level only, x a stale 3 m storey: E on floor 2 could not call the car up)
   for (const r of works.rooms) {
     if (!raised(r, now)) { const d = doorOf(r); add(d.x, d.z, 1, 2.4, { kind: 'raising', room: r }); continue }
     const b = benchOf(r); add(b.x, b.z, 0.9, 1.1, { kind: 'bench', room: r })
@@ -203,13 +221,13 @@ export function workPickables(works: Works, ground: (x: number, z: number) => nu
   return out
 }
 export function nearWork(works: Works, x: number, z: number, now = Date.now()): WorkNear | null {
-  if (Math.hypot(TABLE.x - x, TABLE.z - z) < TABLE_REACH) return { kind: 'table' }
+  const tb = tableAt(works); if (tb && Math.hypot(tb.x - x, tb.z - z) < TABLE_REACH) return { kind: 'table' }   // M96: wherever it stands
   // a Keepstone and a bench can share a room: the nearer one answers E
   let best: WorkNear | null = null, bestD = Infinity
   for (const c of allChests(works)) { const d = Math.hypot(c.x - x, c.z - z); if (d < CHEST_REACH && d < bestD) { best = { kind: 'chest', id: c.id }; bestD = d } }
   for (const p of works.pieces) {
     const f = FURNITURE[p.item], d = Math.hypot(p.x - x, p.z - z)
-    if (f && d < Math.max(f.w, f.d) / 2 + 1 && d < bestD) { best = { kind: 'piece', id: p.id }; bestD = d }
+    if (f && p.item !== TABLE_ITEM && d < Math.max(f.w, f.d) / 2 + 1 && d < bestD) { best = { kind: 'piece', id: p.id }; bestD = d }
   }
   for (const r of works.rooms) {
     if (!raised(r, now)) { const d = doorOf(r); if (Math.hypot(d.x - x, d.z - z) < 3 && !best) return { kind: 'raising', room: r }; continue }
@@ -246,7 +264,7 @@ export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: numbe
   for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
     const s = squareAt(cx, cz); if (!s || !owned.has(sqId(s.i, s.j))) return { ok: false, why: 'Build on ground you hold.' }
   }
-  for (const c of KEEP_CLEAR) {
+  for (const c of keepClear(works)) {
     const px = Math.max(k.x0, Math.min(c.x, k.x1)), pz = Math.max(k.z0, Math.min(c.z, k.z1))
     if (Math.hypot(px - c.x, pz - c.z) < c.r) return { ok: false, why: 'Leave room around the gate, Gregory and the table.' }
   }
@@ -448,13 +466,14 @@ export const pieceBoxes = (w: Works): Box[] => w.pieces.filter(p => FURNITURE[p.
 export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: string, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
   const f = FURNITURE[item]
   if (!f) return { ok: false, why: 'That is not furniture.' }
+  if (item === TABLE_ITEM && tableAt(works)) return { ok: false, why: 'Your planning table already stands.' }   // M96: one per keeper
   if (f.shaft) { x = cellMid(x); z = cellMid(z); q = Math.round(q); if (shaftBlocked(works, x, z)) return { ok: false, why: 'A wall stands in that cell on one of the floors.' } }   // M48: a shaft takes the whole cell, every level
   if (works.pieces.length >= MAX_PIECES) return { ok: false, why: `${MAX_PIECES} pieces already stand. Pick one up to make room.` }
   const k = pieceRect(item, x, z, q)
   for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
     const s = squareAt(cx, cz); if (!s || !owned.has(sqId(s.i, s.j))) return { ok: false, why: 'Set it on ground you hold.' }
   }
-  for (const c of KEEP_CLEAR) {
+  for (const c of keepClear(works)) {
     const px = Math.max(k.x0, Math.min(c.x, k.x1)), pz = Math.max(k.z0, Math.min(c.z, k.z1))
     if (Math.hypot(px - c.x, pz - c.z) < c.r) return { ok: false, why: 'Leave room around the gate, Gregory and the table.' }
   }
@@ -530,6 +549,7 @@ export function loadWorks(): Works {
       floors: adoptFloors(v.floors),
       ...(adoptUpper(v.upper).length ? { upper: adoptUpper(v.upper) } : {}),   // M47: floors above the ground one
       paid: adoptPaid(v.paid, adoptWalls(v.walls)),
+      ...(v.tableMoved === true ? { tableMoved: true as const } : {}),   // M96: the planning table left its first spot
       ...(Object.keys(adoptCarry(v.wallCarry)).length ? { wallCarry: adoptCarry(v.wallCarry) } : {}),   // 11-22: exact wall refunds carry their fraction   // M37 slice 4: a save from before it has none, so every room standing counts as built
     }
   } catch { /* private window */ }

@@ -25,7 +25,7 @@ import { snapCorner, runKeys, canLay, planRun, raze, wallBoxes, edgeRect, findRo
 import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
-  WALL_H, KEEP_CLEAR, type Works, type Room, type RoomKind, type WorkNear,
+  WALL_H, keepClear, tableAt, TABLE_ITEM, type Works, type Room, type RoomKind, type WorkNear,
   stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, pieceFloor, canPlacePiece, placePiece, pickUpPiece, turnPiece, retireRooms, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, payCost, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
@@ -76,6 +76,7 @@ import { TabGlyph } from './bench-glyphs'
 import { MoglinCard } from './moglin-card-view'
 import { reportAway, addMade, type Made } from './away-report'
 import { MeleeAim, useHitWobble } from './melee-view'
+import { TABLE_HIT } from './melee'
 import { loadVillage, saveVillage, assign, dutyLine, WORKS_IN, type Village, type MoglinRecord } from './moglins'
 import { shownWorks, worksWritable, subscribeVisit, isVisiting, rideAsGuest, shownMoglins } from './plot-visit'
 
@@ -145,7 +146,7 @@ function wallBlockers(w: Works) {
   for (const r of w.rooms) { const f = footprint(r.kind, r.x, r.z, r.q); rects.push({ r: { x0: f.x0 - 0.3, x1: f.x1 + 0.3, z0: f.z0 - 0.3, z1: f.z1 + 0.3 }, why: `In your ${ROOMS[r.kind].name}.` }) }
   for (const c of allChests(w)) rects.push({ r: chestBox(c), why: 'A Keepstone is in the way.' })
   for (const p of w.pieces) rects.push({ r: pieceRect(p.item, p.x, p.z, p.q), why: isLiftPiece(p) ? SHAFT_WHY : 'Something already stands there.' })
-  return { rects, circles: KEEP_CLEAR }
+  return { rects, circles: keepClear(w) }   // M96: the table's circle follows the table
 }
 /** rooms the plan closes whose floor + roof are not built yet (they appear at Build) */
 const unbuiltRooms = (walls: Walls, paid: Works['paid']) => new Set(findRooms(walls).map(r => r.key).filter(k => !(paid ?? {})[k]))
@@ -869,7 +870,7 @@ const useBuildPrefs = () => useSyncExternalStore(subscribePrefs, getPrefs, () =>
 let lastPose: React.MutableRefObject<Pose> | null = null
 /** Lift into build mode, optionally with something on the pointer already. */
 function startBuild(p: Placing) {
-  const at = lastPose?.current ?? { x: TABLE.x, z: TABLE.z + 4, yaw: 0 }
+  const tb = tableAt(getW()) ?? TABLE, at = lastPose?.current ?? { x: tb.x, z: tb.z + 4, yaw: 0 }
   if (!isBuilding()) enterBuild(at)
   setPlacing(p)
 }
@@ -963,7 +964,7 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
   useEffect(() => { stationTick(); const t = setInterval(() => stationTick(), 1000); return () => clearInterval(t) }, [])
   return (
     <>
-      <PlanningTable />
+      {!w.tableMoved && <PlanningTable />}
       {w.rooms.map(r => { const up = roomLift(w, r); return raised(r) ? <RoomMesh key={r.id} r={r} lift={up} /> : <Scaffold key={r.id} r={r} lift={up} /> })}   {/* M55: a prefab room rides its own foundation */}
       {allChests(w).map(c => <Wobbly key={c.id} id={c.id} at={[c.x, floorAt(w, GROUND_Y, c.x, c.z), c.z]}><Keepstone c={c} pose={pose} y={floorAt(w, GROUND_Y, c.x, c.z)} /></Wobbly>)}
       {w.pieces.map(pc => { const y = pieceFloor(w, pc); return <Wobbly key={pc.id} id={pc.id} at={[pc.x, y, pc.z]}><PieceMesh p={pc} y={y} /></Wobbly> })}
@@ -1014,10 +1015,13 @@ function MoglinsAtWork({ w }: { w: Works }) {
     </>
   )
 }
+/** M96: the table at its first spot (never moved); once moved it is a piece and PieceBody draws the same body. Wobbles on a hit. */
 function PlanningTable() {
-  const y = GROUND_Y
+  return <Wobbly id={TABLE_HIT} at={[TABLE.x, GROUND_Y, TABLE.z]}><group position={[TABLE.x, GROUND_Y, TABLE.z]}><PlanningTableBody /></group></Wobbly>
+}
+function PlanningTableBody() {
   return (
-    <group position={[TABLE.x, y, TABLE.z]}>
+    <group>
       <mesh position-y={0.95}><boxGeometry args={[2.2, 0.12, 1.3]} /><meshLambertMaterial color={WOOD} /></mesh>
       {[[-1, -0.55], [1, -0.55], [-1, 0.55], [1, 0.55]].map(([x, z], k) => <mesh key={k} position={[x, 0.45, z]}><boxGeometry args={[0.12, 0.9, 0.12]} /><meshLambertMaterial color={WOOD} /></mesh>)}
       {/* the plan sheet: the ghost-blue of a room not built yet */}
@@ -1225,6 +1229,7 @@ export function PieceBody({ item, id }: { item: string; id?: string }) {
   const f = FURNITURE[item], c = WOODS[f.wood], dk = '#6b4a2a'
   const legs = (w: number, d: number, h: number, t = 0.07) => [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b], k) => <Bx key={k} p={[a * (w / 2 - t), h / 2, b * (d / 2 - t)]} s={[t, h, t]} c={c} />)
   switch (item) {
+    case TABLE_ITEM: return <PlanningTableBody />   // M96: the moved planning table
     case 'goldwood_stool': return <><Bx p={[0, 0.45, 0]} s={[0.46, 0.07, 0.46]} c={c} />{legs(0.4, 0.4, 0.42)}</>
     case 'goldwood_bench': return <><Bx p={[0, 0.45, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d, 0.42, 0.09)}</>
     case 'goldwood_table': return <><Bx p={[0, 0.76, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.72, 0.09)}</>

@@ -18,10 +18,10 @@ export const idleOf = (ms: readonly MoglinRecord[], w: Works, now = Date.now()) 
 /** How far out the arc stands from the table, and the spread between two Moglins along it (radians). */
 export const IDLE_R = 3.4, IDLE_STEP = 0.55
 /** The k-th of n idle Moglins: on an arc round the table's front (+z), centred, each turned to face the table. */
-export function idleSpot(k: number, n: number): { x: number; z: number; yaw: number } {
+export function idleSpot(k: number, n: number, at: { x: number; z: number } = TABLE): { x: number; z: number; yaw: number } {   // M96: at = where the table stands now (rooms.ts tableAt)
   const a = (k - (n - 1) / 2) * IDLE_STEP
-  const x = TABLE.x + Math.sin(a) * IDLE_R, z = TABLE.z + Math.cos(a) * IDLE_R
-  return { x, z, yaw: Math.atan2(TABLE.x - x, TABLE.z - z) }
+  const x = at.x + Math.sin(a) * IDLE_R, z = at.z + Math.cos(a) * IDLE_R
+  return { x, z, yaw: Math.atan2(at.x - x, at.z - z) }
 }
 
 // ── E on an idle Moglin: say hello, or ask it home (RULED-AFK Magii 559213d; hub: no cost, no mood, ONE confirm step) ───────

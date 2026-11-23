@@ -25,6 +25,7 @@ export function useMeleeReady(): boolean {
   return useSyncExternalStore(f => { live.subs.add(f); return () => { live.subs.delete(f) } }, () => !!live.target, () => false)
 }
 const nameOf = (t: Target) => {
+  if (t.kind === 'table') return 'The planning table'
   if (t.kind === 'piece') { const p = currentWorks().pieces.find(x => x.id === t.id); return p ? FURNITURE[p.item]?.name ?? 'It' : 'It' }
   const c = currentWorks().chests.find(x => x.id === t.id); return c ? itemDef(keepstoneFor(c.crystal)).name : 'The Keepstone'
 }

@@ -28,7 +28,7 @@ export function placedRects(w: Works): Rect[] {
     out.push(...wallRects(w.walls))
     for (const room of findRooms(w.walls)) { if (room.rect) out.push(room.rect); else for (const [i, j] of room.cells) out.push({ x0: i, x1: i + 1, z0: j, z1: j + 1 }) }
   }
-  out.push({ x0: TABLE.x - TABLE_HALF.hw, x1: TABLE.x + TABLE_HALF.hw, z0: TABLE.z - TABLE_HALF.hd, z1: TABLE.z + TABLE_HALF.hd })
+  if (!w.tableMoved) out.push({ x0: TABLE.x - TABLE_HALF.hw, x1: TABLE.x + TABLE_HALF.hw, z0: TABLE.z - TABLE_HALF.hd, z1: TABLE.z + TABLE_HALF.hd })   // M96: a moved table is a piece (above)
   return out
 }
 

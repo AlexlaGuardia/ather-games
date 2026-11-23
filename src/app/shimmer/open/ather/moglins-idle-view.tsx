@@ -9,7 +9,7 @@ import { hudSay } from '../shared/hud-say'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
 import { floorAt } from './plot-found'
 import { GROUND_Y } from './plot'
-import type { Works } from './rooms'
+import { tableAt, TABLE, type Works } from './rooms'
 import { idleOf, idleSpot, idleTalk, IDLE_LINES, type IdleScreen } from './moglins-idle'
 
 /** where each idle Moglin stands right now (page.tsx aims E at these), with its name and ground height */
@@ -21,7 +21,7 @@ export function IdleMoglins({ w }: { w: Works }) {
   const [v, setV] = useState<Village | null>(() => (typeof window === 'undefined' ? null : loadVillage()))
   useEffect(() => { const re = () => setV(loadVillage()), t = setInterval(re, 3000); window.addEventListener(VILLAGE_EVENT, re); return () => { clearInterval(t); window.removeEventListener(VILLAGE_EVENT, re) } }, [])
   const idle = v ? idleOf(v.moglins, w) : []
-  idleDrawn = idle.map((m, k) => { const p = idleSpot(k, idle.length); return { id: m.id, name: m.name, x: p.x, z: p.z, y: floorAt(w, GROUND_Y, p.x, p.z) } })
+  idleDrawn = idle.map((m, k) => { const p = idleSpot(k, idle.length, tableAt(w) ?? TABLE); return { id: m.id, name: m.name, x: p.x, z: p.z, y: floorAt(w, GROUND_Y, p.x, p.z) } })
   useEffect(() => () => { idleDrawn = [] }, [])
   useEffect(() => {   // probe (checks): the ids standing idle
     (window as unknown as { __moglinsIdle?: string[] }).__moglinsIdle = idle.map(m => m.id)
@@ -29,7 +29,7 @@ export function IdleMoglins({ w }: { w: Works }) {
   return (
     <>
       {idle.map((m, k) => {
-        const s = idleSpot(k, idle.length)
+        const s = idleSpot(k, idle.length, tableAt(w) ?? TABLE)
         return (
           <group key={m.id} position={[s.x, floorAt(w, GROUND_Y, s.x, s.z), s.z]} rotation-y={s.yaw} userData={{ moglinIdle: m.id }}>
             <MoglinModel action="idle" tone={furOf(m.id)} seed={m.id.length} />

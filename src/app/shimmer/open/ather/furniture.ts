@@ -81,6 +81,9 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   //    nouns. Blurbs = placeholders for @lark.
   spirit_planter: { name: 'Spirit Planter', blurb: 'Starwillow branches woven round a bed of soft soil. A Mana Seed planted here blooms into the spirit it already is.', recipe: [{ id: 'starwillow_branch', n: 4 }, { id: 'starwillow_sap', n: 1 }], w: 0.9, d: 0.9, h: 0.6, solid: true, wood: 'starwillow', glow: '#ffe7a0', spirit: 'planter' },
   grimoire_pedestal: { name: 'Grimoire Pedestal', blurb: 'A short stone stand with a slanted top. The grimoire rests here, and its pages are read here.', recipe: [], gift: true, w: 0.7, d: 0.7, h: 1.1, solid: true, wood: 'stone', glow: '#ffd27a', spirit: 'pedestal' },   // M68 s2 (hub call): GREG hands it (Spirits?.3), one per keeper; the carpentry recipe is gone
+  // BETA M96 (Alex 11-23): the PLANNING TABLE as a bag item. Three melee hits lift it off its spot; set it anywhere like any piece.
+  //    Never made or sold (recipe empty, gift): one per keeper, rooms.ts tableAt. Size = the fixture workshop.tsx draws. Blurb = @lark placeholder.
+  planning_table: { name: 'Planning Table', blurb: 'Where every room on the plot is planned. Set it where you like to think.', recipe: [], gift: true, w: 2.2, d: 1.3, h: 1.05, solid: true, wood: 'goldwood' },
   // M48 (11-20): the lift. Canon RULED-AFK (athernyx 29b26fa): cord + counterweight, wood and stone, no metal, no runes. Planks and
   //    Stone Brick (no cord item exists in the bag). Blurb = placeholder for @lark.
   // M98b (Alex 11-23: "freehand place one slab and then snap on the rest to that one"): free-build floor slabs. A room
