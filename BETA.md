@@ -280,7 +280,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **World Builder Fly (11-23, LIVE a2f36e26):** click Fly = pointer lock + crosshair (Esc frees; toggle in the Fly row for the old drag mode); hold left to sculpt where you look; `-`/`=` step strength 0.1-3 (max was 1), `[` `]` radius. Overview map under the tile view (click a tile to open it). Calls: mouse sensitivity OK? each vertex caps at ±60 m per edit: enough?
 - **M100 map pan + zoom (11-23, LIVE):** press M, drag / wheel / pinch, Reset view. Feel on your phone?
 
-- **Temple door line (11-23, @lark draft, athernyx 1de8615, shimmer-lines-idris-and-goodbyes.md Part 3, UNSIGNED):** knocking for Idris at the Enchant Temple; Idony answers. Replaces the placeholder 'Idris, please.' (continent/door-talk.ts). Yay / nay, then a lane wires it.
+- ~~**Temple door line:**~~ ✅ SIGNED 491f462 + LIVE 6ceec26e (idris-check 41 prod). Was: (11-23, @lark draft, athernyx 1de8615, shimmer-lines-idris-and-goodbyes.md Part 3, UNSIGNED):** knocking for Idris at the Enchant Temple; Idony answers. Replaces the placeholder 'Idris, please.' (continent/door-talk.ts). Yay / nay, then a lane wires it.
 
 - ~~**M97 room shells look list:**~~ ✅ Alex 11-23 (in world's window): "just the floor and the furniture inside, the walls and building around the rooms can go" -> s1b LIVE 80a397fa.
 
@@ -290,7 +290,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 - **M98 building feel (11-23, LIVE):** hold furniture/Keepstone/slab/panel: G = snap 1/0.5/0.25/Free, T = turn step 90/45/30/15. Place one piece with Free = it becomes the ANCHOR; the next snaps flush to it (Clear anchor chip). New at the carpentry bench: Goldwood/Stone Floor Slab 1x1 + Wide 2x2, Goldwood/Brick Wall Panel 1 m + Wide 2 m. Feel OK?
 
-- **Placeholder lines batch (11-23, @lark draft, athernyx 3e06c1c):** 9 lines: the Moglin go-home talk ("Home to my kin, then? It's been a good stay. You're sure?"), garden-full ("I'd come, but you've no room for me yet. Raise more rooms, then ask again."), Fennel's jar thanks, "Something else.", and the Temple option now "The sigil bench, please." (works before you've met Idris). File: athernyx CANON/game/shimmer-lines-placeholders-2026-11-23.md. Sign off? (with the Idris + goodbyes batch above)
+- ~~**Placeholder lines batch:**~~ ✅ SIGNED (Magii ef704e7) + LIVE 6ceec26e (items 1-3; item 4 superseded by the Temple door). Was: **(11-23, @lark draft, athernyx 3e06c1c):** 9 lines: the Moglin go-home talk ("Home to my kin, then? It's been a good stay. You're sure?"), garden-full ("I'd come, but you've no room for me yet. Raise more rooms, then ask again."), Fennel's jar thanks, "Something else.", and the Temple option now "The sigil bench, please." (works before you've met Idris). File: athernyx CANON/game/shimmer-lines-placeholders-2026-11-23.md. Sign off? (with the Idris + goodbyes batch above)
 
 - ~~**Idris + tutorial goodbyes:**~~ ✅ SIGNED by Alex (Magii athernyx 7a25a8e); Idris pronoun-free. Wire next session. Magii 5b83a25: Idris is he/him (Idony's twin brother).
 
