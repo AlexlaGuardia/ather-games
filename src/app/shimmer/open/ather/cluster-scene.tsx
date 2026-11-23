@@ -14,6 +14,8 @@ import { MEADOW_CELL, type Meadow } from './meadow'
 import { P } from './palette'
 import { GROUND, pushLayer, useGroundMaterial } from './ground-look'
 import { groundMat, groundOrder } from '../shared/ground-layers'
+import { liftGeometry } from './glade-layer'
+type Lift = (x: number, z: number) => number
 
 const DIRT = new THREE.Color('#d9c79a'), DIRT_HI = new THREE.Color('#e6d6ad'), SQUARE = new THREE.Color('#b4d78c')
 
@@ -60,20 +62,21 @@ function meadowGeometry(m: Meadow): THREE.BufferGeometry {
   return g
 }
 
-function MeadowTrees({ m }: { m: Meadow }) {
+function MeadowTrees({ m, lift }: { m: Meadow; lift?: Lift | null }) {
   const trunk = useRef<THREE.InstancedMesh>(null), crown = useRef<THREE.InstancedMesh>(null)
   useEffect(() => {
     if (!trunk.current || !crown.current) return   // no trees → rendered null → no refs
     const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color()
     m.trees.forEach((t, k) => {
-      p.set(t.x, t.y + 1.4, t.z); s.set(1, 2.8, 1); trunk.current!.setMatrixAt(k, mtx.compose(p, q, s))
-      p.set(t.x, t.y + 2.4 + t.tall / 2, t.z); s.set(t.r, t.tall, t.r); crown.current!.setMatrixAt(k, mtx.compose(p, q, s))
+      const ty = t.y + (lift ? lift(t.x, t.z) : 0)
+      p.set(t.x, ty + 1.4, t.z); s.set(1, 2.8, 1); trunk.current!.setMatrixAt(k, mtx.compose(p, q, s))
+      p.set(t.x, ty + 2.4 + t.tall / 2, t.z); s.set(t.r, t.tall, t.r); crown.current!.setMatrixAt(k, mtx.compose(p, q, s))
       c.set('#79ad5a').offsetHSL(((k * 0.07) % 0.05) - 0.025, 0, ((k * 0.11) % 0.1) - 0.05)
       crown.current!.setColorAt(k, c)
     })
     trunk.current!.instanceMatrix.needsUpdate = true; crown.current!.instanceMatrix.needsUpdate = true
     if (crown.current!.instanceColor) crown.current!.instanceColor.needsUpdate = true
-  }, [m])
+  }, [m, lift])
   if (m.trees.length === 0) return null
   // frustumCulled off: an InstancedMesh is culled by its base geometry's bounds at the origin
   return (
@@ -88,24 +91,26 @@ function MeadowTrees({ m }: { m: Meadow }) {
   )
 }
 
-export function ClusterScene({ frame }: { frame: Frame }) {
+export function ClusterScene({ frame, lift }: { frame: Frame; lift?: Lift | null }) {
   const m = frame.meadow
-  const geo = useMemo(() => (m ? meadowGeometry(m) : null), [m])
+  // M83 s2b: lift = the Glade builder layer's delta (glade-layer.ts), null everywhere else
+  const geo = useMemo(() => (m ? (lift ? liftGeometry(meadowGeometry(m), lift) : meadowGeometry(m)) : null), [m, lift])
   const ground = useGroundMaterial()
   useEffect(() => () => geo?.dispose(), [geo])
+  const places = useMemo(() => frame.mates.map(mt => ({ x: mt.x, z: mt.z, rot: mt.rot })), [frame])   // stable, or each render re-lifts
   if (!frame.linked || !frame.middle || !m || !geo) return null
   const mid = frame.middle, span = (m.n - 1) * MEADOW_CELL
   return (
     <>
       <mesh geometry={geo} material={ground} />
-      <MeadowTrees m={m} />
+      <MeadowTrees m={m} lift={lift} />
       {/* where the paths meet: a pale ring in the middle of the square */}
       <mesh position={[mid.x, MIDDLE_Y + 0.04, mid.z]} rotation-x={-Math.PI / 2} renderOrder={groundOrder('mark')}><ringGeometry args={[5, 6.2, 28]} /><meshBasicMaterial color="#efe0a8" {...groundMat('mark')} /></mesh>
       {/* the cluster's underside: one stone root under the whole meadow, as each island has its own */}
       <mesh position={[mid.x, -34, mid.z]} rotation={[Math.PI, Math.PI / 4, 0]}><coneGeometry args={[span * 0.62, 60, 8, 2]} /><meshLambertMaterial color={P.under} flatShading /></mesh>
-      {frame.mates.map(mt => (
+      {frame.mates.map((mt, n) => (
         <group key={mt.quarter} position={[mt.x, 0, mt.z]} rotation-y={mt.rot}>
-          <PlotIsland owned={new Set(mt.owned)} pages={0} />
+          <PlotIsland owned={new Set(mt.owned)} pages={0} lift={lift} place={lift ? places[n] : undefined} />
         </group>
       ))}
     </>

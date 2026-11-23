@@ -14,6 +14,8 @@ import { CloudPillows, CloudSea, HorizonRing } from '../shared/cloud-edge'
 import { plotEdgePuffs, plotFarPuffs, PLOT_SEA_Y } from './edge-clouds'
 import { GROUND, pushLayer, useGroundMaterial } from './ground-look'
 import { groundMat, groundOrder } from '../shared/ground-layers'
+import { liftGeometry, type Place } from './glade-layer'
+type Lift = (x: number, z: number) => number
 
 function plotGeometry(): THREE.BufferGeometry {
   const pos: number[] = [], col: number[] = [], lay: number[] = []
@@ -112,9 +114,10 @@ function MistGroup({ pts, sale, ring }: { pts: { x: number; y: number; z: number
 
 /** The island alone (ground, grid, underside, threshold, gate, Gregory, mist): your plot, or a cluster-mate's set at
  *  their place (ather/cluster-scene.tsx). The sky round it is PlotScene's, drawn once. */
-export function PlotIsland({ owned, pages }: { owned: ReadonlySet<string>; pages: number }) {
-  const geo = useMemo(plotGeometry, [])
-  const lines = useMemo(gridLines, [])
+export function PlotIsland({ owned, pages, lift, place }: { owned: ReadonlySet<string>; pages: number; lift?: Lift | null; place?: Place }) {
+  // M83 s2b: in the Glade the builder layer's delta displaces the baked island (glade-layer.ts); place = where a mate's island sits
+  const geo = useMemo(() => (lift ? liftGeometry(plotGeometry(), lift, place) : plotGeometry()), [lift, place])
+  const lines = useMemo(() => (lift ? liftGeometry(gridLines(), lift, place) : gridLines()), [lift, place])
   // M9 (11-22): both go to <mesh geometry={...}> as props, which R3F never disposes. PlotIsland remounts on every return home,
   // so each trip left the old island (~40k verts) and grid in the renderer's binding cache: ~2 MB a trip, 63 MB after 34
   useEffect(() => () => { geo.dispose(); lines.dispose() }, [geo, lines])
@@ -133,14 +136,14 @@ export function PlotIsland({ owned, pages }: { owned: ReadonlySet<string>; pages
   )
 }
 
-export function PlotScene({ owned, pages, linked = false }: { owned: ReadonlySet<string>; pages: number; linked?: boolean }) {
+export function PlotScene({ owned, pages, linked = false, lift }: { owned: ReadonlySet<string>; pages: number; linked?: boolean; lift?: Lift | null }) {
   // BETA M24: the island hangs IN the cloud-ocean (edge-clouds.ts): pillows banked round the rim and under it, loose puffs
   // out in the void, the sea below and the horizon ring. One instanced draw for every puff (was 34 separate meshes).
   // linked into a cluster the meadow meets the rim, so only the far puffs (cluster-scene's skirt is that edge)
   const puffs = useMemo(() => [...(linked ? [] : plotEdgePuffs()), ...plotFarPuffs()], [linked])
   return (
     <>
-      <PlotIsland owned={owned} pages={pages} />
+      <PlotIsland owned={owned} pages={pages} lift={lift} />
       <CloudSea y={PLOT_SEA_Y} r={1400} />
       <CloudPillows puffs={puffs} />
       <HorizonRing y={PLOT_SEA_Y + 20} />

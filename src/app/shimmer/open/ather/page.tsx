@@ -77,7 +77,9 @@ import { line as gladeLine } from './glade-tutorial-lines'
 import { gregSpot, GLADE } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
 import { GladeLots } from './glade-lots-view'
 import { GladeCluster, gladeFolkDrawn } from './glade-cluster-view'   // M67 s1a: the closed Glade's keepers, Moglins, Greg's marker
-import { GLADE_FRAME, GLADE_OWNED, GLADE_TILE, GLADE_ZONE_NAME, GLADE_GATE, gladeNewbornSpot, gladeWhere, gregInGlade, gladeZoneGround, gladeKeepers } from './glade-cluster'   // M40: the green, the five's lots + stations, Greg's jetty
+import { GLADE_FRAME, GLADE_OWNED, GLADE_TILE, GLADE_ZONE_NAME, GLADE_GATE, gladeNewbornSpot, gladeWhere, gregInGlade, gladeKeepers } from './glade-cluster'   // M40: the green, the five's lots + stations, Greg's jetty
+import { gladeLayerGround, gladeLift } from './glade-layer'
+import { useGladeLayer, GladeWater } from './glade-layer-view'   // M83 s2b: the Glade's published builder layer
 import { loadSpot, saveSpot, clearSpot, makeSpot, resumeFrom } from './last-spot'   // where you were (a reload in the Wilds resumes there)
 import { GladeGreg, type GregTourState, type GregLive } from './glade-greg'
 import { biomeGround } from './hollow-goop'   // M34: what a Hollow's sheen borrows
@@ -378,7 +380,10 @@ function AtherSliceGame() {
   const plotWorld = useMemo(() => terrainWorld(withLifts(cl.frame.linked
     ? plotShape(owned, [...mistWalls(owned), ...mateWalls(cl.frame), ...workWalls(works)], (x, z) => clusterGround(cl.frame, x, z))
     : plotShape(owned, [...mistWalls(owned), ...workWalls(works)]))), [owned, cl.frame, works])
-  const gladeWorld = useMemo(() => terrainWorld(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground: gladeZoneGround }, undefined, true)), [])   // M67 s1a; s1b-2: the pond's bowl + Greg's home, lots, jetty
+  const gladeLayer = useGladeLayer(zone.kind === 'glade')   // M83 s2b: refetched on each Glade entry, so a publish shows next visit
+  const gladeZoneGround = useMemo(() => gladeLayerGround(gladeLayer.edits), [gladeLayer])
+  const gladeMeshLift = useMemo(() => gladeLift(gladeLayer.edits), [gladeLayer])
+  const gladeWorld = useMemo(() => terrainWorld(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground: gladeZoneGround }, undefined, true)), [gladeZoneGround])   // M67 s1a; s1b-2: the pond's bowl + Greg's home, lots, jetty
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
   const fading = useRef(false)
@@ -632,7 +637,7 @@ function AtherSliceGame() {
   useEffect(() => setCover(coverFromUrl()), [])
   const placedClear = useMemo(() => coverClear(works), [works])   // M23: every placed room / piece / chest / the table clears its floor
   const coverSkip = useCallback((x: number, z: number) => placedClear(x, z) || (cl.frame.linked && onPath(cl.frame, x, z)) || Math.hypot(x - GATE.x, z - GATE.z) < 5 || Math.hypot(x - GREG.x, z - GREG.z) < 2.5 || Math.hypot(x - THRESHOLD.x, z - THRESHOLD.z) < 2, [cl.frame, placedClear])
-  const ground = useMemo(() => zone.kind === 'glade' ? gladeZoneGround : zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : ww ? ww.heightAt : () => 0, [zone, ww, cl.frame])
+  const ground = useMemo(() => zone.kind === 'glade' ? gladeZoneGround : zone.kind === 'plot' ? (cl.frame.linked ? (x: number, z: number) => Math.max(plotHeightAt(x, z), clusterGround(cl.frame, x, z)) : plotHeightAt) : ww ? ww.heightAt : () => 0, [zone, ww, cl.frame, gladeZoneGround])
   // M27: others in the Wilds (shared/open-mp.tsx); the plot is personal, no socket. Feet on the ground the page knows.
   // M61: on a plot IN A PARTY there is a socket now: your own plot = open:plot:<you> (you host), a mate's = open:plot:<them>.
   // The party instance is the only way in (strangers never match into one); no party = no socket on the plot, as before.
@@ -1254,7 +1259,7 @@ function AtherSliceGame() {
   useEffect(() => { if (tourRef.current && zone.kind === 'plot' && tourRef.current.i !== tableIdx) setTour(null) }, [zone.kind, tableIdx])
   useEffect(() => { if (!tour && panel?.kind !== 'talk' && panel?.kind !== 'greg') setTableVisit(false) }, [tour, panel])
   // BETA M13: E in a settlement talks to ONE Moglin (folk-talk.ts); the settlement's heart is its anchor (no Moglin models are drawn yet)
-  const folkTalk = useFolkTalk(panel?.kind === 'folk' ? panel.s : null, useCallback((x: number, z: number) => zone.kind === 'glade' ? gladeZoneGround(x, z) : ww && ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : 0, [ww, zone.kind]), () => setPanel(null))
+  const folkTalk = useFolkTalk(panel?.kind === 'folk' ? panel.s : null, useCallback((x: number, z: number) => zone.kind === 'glade' ? gladeZoneGround(x, z) : ww && ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : 0, [ww, zone.kind, gladeZoneGround]), () => setPanel(null))
   // BETA M22: Fennel at the Rinnshop while the first-rinstick quest is open (fennel.tsx, use-rinquest.ts › fennelTalk)
   const fennelAt = useMemo(() => (!visitNow && fennelHere(rinQuest) ? fennelSpot(works) : null), [rinQuest, works, visitNow])   // M61: your Fennel stays on YOUR plot
   const fennelRef = useRef(fennelAt); fennelRef.current = fennelAt
@@ -1385,7 +1390,7 @@ function AtherSliceGame() {
         {zone.kind === 'plot' && <AnemonyxIfHere clock={clock} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
-        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked /><ClusterScene frame={GLADE_FRAME} /><GladeCluster ground={ground} /></>}   {/* M67 s1a */}
+        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={GLADE_FRAME} lift={gladeMeshLift} /><GladeCluster ground={ground} /><GladeWater layer={gladeLayer} /></>}   {/* M67 s1a */}
         {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
         {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
