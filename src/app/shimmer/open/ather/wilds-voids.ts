@@ -15,6 +15,7 @@
 
 import { wildsFrontDist, ARRIVAL } from './relief'
 import { SETTLEMENT_CLEAR, FAIR_CLEAR, pathDistance, type Network } from './network'
+import { voidOverrides, type VoidEdits } from './void-edits'
 
 export const SQ = 200                 // the zone grid's square, metres
 export const VOID_HALF = 12           // half the void's width: the keeper cannot stand within this of a border (24 m across)
@@ -71,7 +72,8 @@ export function zoneGrid(index: IndexLike): Map<number, string> {
 
 interface Seg { v: boolean; line: number; lo: number; hi: number; a: number; b: number }   // v: a wall at x=line, spanning z lo..hi
 
-export function makeVoids(index: IndexLike, net: Network | null, extra: readonly { x: number; z: number }[] = []): VoidField {
+/** `ov` (M104): the owner's void brush layer (void-edits.ts), erase = crust holds, paint = void; applied pointwise over the generated field */
+export function makeVoids(index: IndexLike, net: Network | null, extra: readonly { x: number; z: number }[] = [], ov: VoidEdits | null = null): VoidField {
   const zones = zoneGrid(index)
   const cells: [number, number][] = []
   for (const t of index.tiles) for (const n of t.nodes) cells.push([t.tx * 5 + n.i - 2, t.ty * 5 + n.j - 2])
@@ -132,10 +134,11 @@ export function makeVoids(index: IndexLike, net: Network | null, extra: readonly
   const CB = 100, cbuck = new Map<number, Crossing[]>()
   const ck = (i: number, j: number) => i * 100003 + j
   for (const c of crossings) { const kk = ck(Math.floor(c.x / CB), Math.floor(c.z / CB)); const l = cbuck.get(kk); if (l) l.push(c); else cbuck.set(kk, [c]) }
+  const dead = new Set<Crossing>()   // M104: a crossing the owner painted over is no crossing (never a respawn point inside a void)
   const crossingNear = (x: number, z: number, r: number): Crossing | null => {
     let out: Crossing | null = null, bd = r
     const R = Math.ceil(r / CB)
-    for (let j = -R; j <= R; j++) for (let i = -R; i <= R; i++) for (const c of cbuck.get(ck(Math.floor(x / CB) + i, Math.floor(z / CB) + j)) ?? []) { const d = Math.hypot(c.x - x, c.z - z); if (d <= bd) { bd = d; out = c } }
+    for (let j = -R; j <= R; j++) for (let i = -R; i <= R; i++) for (const c of cbuck.get(ck(Math.floor(x / CB) + i, Math.floor(z / CB) + j)) ?? []) { if (dead.has(c)) continue; const d = Math.hypot(c.x - x, c.z - z); if (d <= bd) { bd = d; out = c } }
     return out
   }
 
@@ -179,14 +182,23 @@ export function makeVoids(index: IndexLike, net: Network | null, extra: readonly
     }
     return n
   }
-  const weight = (x: number, z: number): number => {
+  const gen = (x: number, z: number): number => {
     const b = band(x, z); if (b <= 0) return 0
     const f = free(x, z); if (f <= 0) return 0
     return b * f * (1 - neck(x, z))
   }
+  // M104: the owner's overrides. ERASE lifts the generated weight (the crust holds); PAINT adds void, but never on protected ground
+  const O = voidOverrides(ov)
+  const weight = !O ? gen : (x: number, z: number): number => {
+    const e = O.erase(x, z), p = O.paint(x, z)
+    const g = e >= 1 ? 0 : gen(x, z) * (1 - e)
+    return p > g ? Math.max(g, p * free(x, z)) : g
+  }
+  if (O) for (const c of crossings) if (weight(c.x, c.z) >= FALL_W) dead.add(c)
+  const shown = dead.size ? crossings.filter(c => !dead.has(c)) : crossings
   const carve = (x: number, z: number, land: number, waterY: number) => {
     const w = weight(x, z); if (w <= 0 || land <= waterY) return land
     return land - VOID_DEPTH * w * smooth((land - waterY) / VOID_SHORE)
   }
-  return { weight, protectedAt: (x, z) => free(x, z) < 1, isVoid: (x, z) => weight(x, z) >= FALL_W, crossings, crossingNear, regionAt, regions, carve }
+  return { weight, protectedAt: (x, z) => free(x, z) < 1, isVoid: (x, z) => weight(x, z) >= FALL_W, crossings: shown, crossingNear, regionAt, regions, carve }
 }

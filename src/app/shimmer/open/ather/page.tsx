@@ -100,6 +100,7 @@ import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pit
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree, type Crystal } from './wilds'
 import { loadIndex, makeWorld, stream, releaseTo, tileOf, zonesOf, TILE_M, WILDS_RELEASE_MS, type WildsWorld } from './wilds-world'
 import { makeVoids, FALL_LIP, type VoidField } from './wilds-voids'
+import { ensureEdits, voidEditsLive } from './wilds-edits'   // M104: the void brush layer
 import { startFall, stepFall, type FallState } from './void-fall'
 import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
 import { useFolkTalk } from './use-folk-talk'
@@ -334,7 +335,8 @@ function AtherSliceGame() {
     // the season's path network first (network.ts): no tree may stand on a path, so it must be known before a tile parses
     Promise.all([loadIndex(), loadNetwork()]).then(async ([idx, nw]) => {
       const w = makeWorld(idx); if (nw) { w.clear = clearing(nw); w.roads = roadField(nw); setNet(nw); netRef.current = nw }
-      w.voids = voidsRef.current = makeVoids(idx, nw ?? null)   // M41: the cloud voids between zones, carved as each tile parses
+      await ensureEdits()   // M104: the live layer BEFORE the voids (its void brush cells are applied over the generated field)
+      w.voids = voidsRef.current = makeVoids(idx, nw ?? null, [], voidEditsLive())   // M41: the cloud voids between zones, carved as each tile parses
       await stream(w, GREG_WAYMARK.x, GREG_WAYMARK.z); setWw(w); setWrev(w.rev)
     })
       .catch(e => setToast(`The Wilds would not load: ${e.message}`))

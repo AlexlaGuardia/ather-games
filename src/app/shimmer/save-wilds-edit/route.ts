@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
     const req0 = parse(await req.json())
     if (!req0) return NextResponse.json({ error: 'expected { tiles?: { <tile>: { <vertex>: dm } }, water?: { <tile>: { <cell>: level dm } } } or { tile, d }' }, { status: 400 })
     const res = await serial(async () => {
-      let data: { v: 1; tiles: Edits; water: Record<string, WaterMap>; falls: Record<string, FallMap> } = { v: 1, tiles: {}, water: {}, falls: {} }
-      try { const j = JSON.parse(await readFile(EDITS_FILE, 'utf-8')); if (j && typeof j.tiles === 'object') data = { v: 1, tiles: j.tiles, water: j.water && typeof j.water === 'object' ? j.water : {}, falls: j.falls && typeof j.falls === 'object' ? j.falls : {} } } catch { /* fresh file */ }
+      let data: { v: 1; tiles: Edits; water: Record<string, WaterMap>; falls: Record<string, FallMap>; voids?: Record<string, number> } = { v: 1, tiles: {}, water: {}, falls: {} }
+      try { const j = JSON.parse(await readFile(EDITS_FILE, 'utf-8')); if (j && typeof j.tiles === 'object') data = { v: 1, tiles: j.tiles, water: j.water && typeof j.water === 'object' ? j.water : {}, falls: j.falls && typeof j.falls === 'object' ? j.falls : {}, ...(j.voids && typeof j.voids === 'object' ? { voids: j.voids } : {}) } } catch { /* fresh file */ }   // M104: the builder's void brush layer rides along untouched
       const put = (into: Record<string, Record<string, number>>, from: Record<string, Record<string, number>>) => { for (const [t, d] of Object.entries(from)) { if (Object.keys(d).length) into[t] = d; else delete into[t] } }
       put(data.tiles, req0.tiles); put(data.water, req0.water); put(data.falls, req0.falls)
       await writeFile(EDITS_FILE, JSON.stringify(data) + '\n')

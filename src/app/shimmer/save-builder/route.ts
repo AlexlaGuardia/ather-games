@@ -2,7 +2,7 @@
 // for every method, GET included, so a draft is never readable by the public.
 //   GET  ?map=wilds|glade|nyx                     -> { draft, draftAt, live, index, state }
 //   POST { map, action: 'draft', layer }   -> autosave / Save: REPLACES the draft (data/builder/<map>/draft.json, runtime, never built)
-//   POST { map, action: 'publish', note? } -> the draft becomes a new version + the live layer
+//   POST { map, action: 'publish', note? } -> the draft becomes a new version + the live layer (M104: 409 if its voids seal a zone)
 //   POST { map, action: 'rollback', v }    -> version v becomes a new version + the live layer + the draft
 // Writes run in the plan's order (version -> live -> index) and are SERIALISED in this process (M62 lesson: parallel read-modify-
 // writes lost tiles). Every file write is atomic (safeWriteFile: tmp + rename) and backed up.
@@ -10,6 +10,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readFile, mkdir, stat } from 'fs/promises'
 import { join, dirname } from 'path'
 import { safeWriteFile as writeFile } from '../lib/backup'
+import { voidGuard } from '../world/void-guard'
+import { withGlade, SEASON, type Network } from '../open/ather/network'
+import type { IndexLike } from '../open/ather/wilds-voids'
 import { isBuilderMap, cleanLayer, cleanIndex, planPublish, planRollback, versionFile, draftState, EMPTY_LAYER, type BuilderMap, type Layer, type Index, type Plan } from '../world/builder'
 
 export const dynamic = 'force-dynamic'
@@ -69,6 +72,12 @@ export async function POST(req: NextRequest) {
       }
       if (body.action === 'publish') {
         const [d, live, index] = await Promise.all([readDraft(m), readLive(m), readIndex(m)])
+        if (m === 'wilds' && d.layer.voids) {   // M104: the void brush may not seal a zone off from Moonwell (409 names it; nothing written)
+          const [idx, nw] = await Promise.all([readJson(join(ROOT, 'public/open/wilds/tiles.json')), readJson(join(ROOT, `public/open/wilds/network-s${SEASON}.json`))])
+          if (!idx) return NextResponse.json({ error: 'Publish refused: could not read the Wilds tile index to check the voids' }, { status: 500 })
+          const why = voidGuard(idx as IndexLike, nw ? withGlade(nw as Network) : null, d.layer.voids)
+          if (why) return NextResponse.json({ error: why, refused: 'voids' }, { status: 409 })
+        }
         await run(m, planPublish(index, d.layer, live, at, body.note))
         if (d.at === null) await put(draftPath(m), d.layer)
         return NextResponse.json({ ok: true, ...(await snapshot(m)) })

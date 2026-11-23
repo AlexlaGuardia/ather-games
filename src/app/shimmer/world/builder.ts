@@ -17,26 +17,34 @@
 // Everything below is PURE (no fs, no fetch): builder.test.ts drives it; the route (save-builder) does the IO in the planned order.
 
 import { cleanEdits, cleanWaters, cleanFallss, type Edits, type WaterMap, type FallMap } from '../open/ather/wilds-edits'
+import { cleanVoids, type VoidEdits } from '../open/ather/void-edits'
 
 export const BUILDER_MAPS = ['wilds', 'glade', 'nyx'] as const   // s2a the Glade (world/glade-builder.ts: one virtual tile), s3 the Nyx continent (world/nyx-builder.ts: virtual 1 km tiles)
 export type BuilderMap = typeof BUILDER_MAPS[number]
 export const isBuilderMap = (m: unknown): m is BuilderMap => typeof m === 'string' && (BUILDER_MAPS as readonly string[]).includes(m)
 
-/** a map's edit layer, the same shape as world/wilds-edits.json */
-export interface Layer { v: 1; tiles: Edits; water: Record<string, WaterMap>; falls: Record<string, FallMap> }
+/** a map's edit layer, the same shape as world/wilds-edits.json. `voids` (M104, the Wilds' void brush: void-edits.ts) is only
+ *  present when it holds a cell, so a layer without void edits is byte-identical to the pre-M104 file */
+export interface Layer { v: 1; tiles: Edits; water: Record<string, WaterMap>; falls: Record<string, FallMap>; voids?: VoidEdits }
 export const EMPTY_LAYER: Layer = { v: 1, tiles: {}, water: {}, falls: {} }
 /** junk-proof: anything that is not a valid sparse map is dropped (the same cleaners the game uses) */
-export const cleanLayer = (j: unknown): Layer => ({ v: 1, tiles: cleanEdits(j), water: cleanWaters(j), falls: cleanFallss(j) })
+export const cleanLayer = (j: unknown): Layer => {
+  const L: Layer = { v: 1, tiles: cleanEdits(j), water: cleanWaters(j), falls: cleanFallss(j) }
+  const vo = cleanVoids(j); if (Object.keys(vo).length) L.voids = vo
+  return L
+}
 export const layerSize = (l: Layer) => {
   const n = (m: Record<string, Record<string, number>>) => Object.values(m).reduce((a, d) => a + Object.keys(d).length, 0)
-  return { tiles: Object.keys(l.tiles).length, verts: n(l.tiles), water: n(l.water), falls: n(l.falls) }
+  const s: { tiles: number; verts: number; water: number; falls: number; voids?: number } = { tiles: Object.keys(l.tiles).length, verts: n(l.tiles), water: n(l.water), falls: n(l.falls) }
+  const v = Object.keys(l.voids ?? {}).length; if (v) s.voids = v
+  return s
 }
 /** order-independent equality (JSON key order must not make two equal layers differ) */
 export function sameLayer(a: Layer, b: Layer): boolean {
-  const canon = (l: Layer) => JSON.stringify(['tiles', 'water', 'falls'].map(p => {
+  const canon = (l: Layer) => JSON.stringify([...['tiles', 'water', 'falls'].map(p => {
     const m = l[p as 'tiles'] as Record<string, Record<string, number>>
     return Object.keys(m).sort().map(t => [t, Object.keys(m[t]).sort((x, y) => +x - +y).map(k => [k, m[t][k]])])
-  }))
+  }), Object.keys(l.voids ?? {}).sort().map(k => [k, l.voids![k]])] as unknown[])
   return canon(a) === canon(b)
 }
 

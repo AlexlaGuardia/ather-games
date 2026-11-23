@@ -9,6 +9,8 @@
 //
 // ★ The brush math and the undo history below are PURE (no React, no three, no fetch): node tests drive them (wilds-edits.test.ts).
 
+import { cleanVoids, type VoidEdits } from './void-edits'
+
 export type TileEdits = Record<string, number>          // vertex k -> delta (dm)
 export type Edits = Record<string, TileEdits>           // tile name -> its edits
 export const EDIT_MAX_DM = 600                           // +-60 m: a brush can make a cliff, not a mountain range
@@ -311,21 +313,24 @@ function cleanMaps(tiles: unknown, clean: (d: unknown) => Record<string, number>
 let EDITS: Edits = {}
 let WATER: Record<string, WaterMap> = {}
 let FALLS: Record<string, FallMap> = {}
+let VOIDS: VoidEdits = {}
 let loading: Promise<void> | null = null
 export const editsFor = (name: string): TileEdits | null => EDITS[name] ?? null
 export const waterFor = (name: string): WaterMap | null => WATER[name] ?? null
 export const fallsFor = (name: string): FallMap | null => FALLS[name] ?? null
-export interface Layer { edits: Edits; water: Record<string, WaterMap>; falls: Record<string, FallMap> }
+/** M104: the owner's void brush layer (void-edits.ts); makeVoids takes it, so call after ensureEdits() */
+export const voidEditsLive = (): VoidEdits => VOIDS
+export interface Layer { edits: Edits; water: Record<string, WaterMap>; falls: Record<string, FallMap>; voids: VoidEdits }
 export async function fetchLayer(): Promise<Layer> {
   try {
     const r = await fetch('/shimmer/open/wilds-edits', { cache: 'no-store' })
-    if (!r.ok) return { edits: {}, water: {}, falls: {} }
-    const j = await r.json(); return { edits: cleanEdits(j), water: cleanWaters(j), falls: cleanFallss(j) }
-  } catch { return { edits: {}, water: {}, falls: {} } }   // no layer = the exported land, exactly
+    if (!r.ok) return { edits: {}, water: {}, falls: {}, voids: {} }
+    const j = await r.json(); return { edits: cleanEdits(j), water: cleanWaters(j), falls: cleanFallss(j), voids: cleanVoids(j) }
+  } catch { return { edits: {}, water: {}, falls: {}, voids: {} } }   // no layer = the exported land, exactly
 }
 export function ensureEdits(): Promise<void> {
   if (typeof fetch !== 'function' || typeof window === 'undefined') return Promise.resolve()   // node tests: no layer
-  return (loading ??= fetchLayer().then(l => { EDITS = l.edits; WATER = l.water; FALLS = l.falls }))
+  return (loading ??= fetchLayer().then(l => { EDITS = l.edits; WATER = l.water; FALLS = l.falls; VOIDS = l.voids }))
 }
 /** Owner only (the route 403s anyone else). Saves each named tile's WHOLE height map and/or water map (empty = remove it) in ONE
  *  request, so the route does one read-modify-write (parallel per-tile POSTs raced: M62 check, 11-21). */
