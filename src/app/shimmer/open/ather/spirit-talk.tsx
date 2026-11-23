@@ -19,6 +19,8 @@ import { hudSay } from '../shared/hud-say'
 import { getInv, setInv, useInv } from '../shared/bag'
 import { itemDef } from '../shared/inventory'
 import { feed, foodIn, loadFed, saveFed, spiritCheer } from './spirit-feed'
+import { askAlong } from './spirit-party'
+import { PARTY_FULL_LINE } from './spirit-roster'
 
 /** a 4th Follow while FOLLOW_MAX (3) already walk with the keeper: refused with this line */
 const FOLLOW_FULL_LINE = '…'   // TODO @lark: the refusal line (three spirits already walk with you)
@@ -49,7 +51,11 @@ export function useSpiritTalk(st: SpiritTalkState | null, set: (s: SpiritTalkSta
           setInv(r.inv); saveFed(r.book); spiritCheer.add(id)
           hudSay(fedLine(SPECIES_NAMES[live.sp], itemDef(r.item).name), 'item', 4); set(null)
         } },
-        following ? { label: 'Stay', pick: () => { setFollowing(id, false); set(null) } } : { label: 'Follow', pick: () => { if (!setFollowing(id, true)) hudSay(FOLLOW_FULL_LINE, 'info', 4); set(null) } },
+        following ? { label: 'Stay', pick: () => { setFollowing(id, false); set(null) } } : { label: 'Follow', pick: () => {
+          // M109 s3: the ones who come along are from the party (up to 3 of the 8): Follow asks her along first
+          if (!askAlong(id)) hudSay(PARTY_FULL_LINE, 'info', 4)
+          else if (!setFollowing(id, true)) hudSay(FOLLOW_FULL_LINE, 'info', 4)
+          set(null) } },
         { label: 'Open', pick: () => set({ id, screen: 'panel' }) },
       ],
     }

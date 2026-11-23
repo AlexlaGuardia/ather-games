@@ -15,6 +15,7 @@ import { SEED_NAME, seedIcon, speciesOf, plant, ripen, growth, liftPot, tend, ca
 import { GAME_DAY_MS } from './nodes'
 import { loadBook, saveBook, see, seenCount, freshBook, type Book } from './grimoire-book'
 import { GRIMOIRE_SIZE } from './plot'
+import { SpiritRoster } from './spirit-roster'
 
 // ── the book store (one per keeper; ripens every pot whose time has come on every read) ───────────────────────────
 let book: Book | null = null
@@ -176,6 +177,7 @@ export function GrimoirePanel({ onClose, footer }: { onClose: () => void; footer
             {card && page.stage === 'bonded' && card.entry && <div style={{ fontSize: 13 }}>{card.entry}</div>}
           </div>
         )}
+        <SpiritRoster onClose={onClose} />{/* M109 s3: the roster face (owner + ?spirits=3d) */}
         {footer}
       </div>
     </HearthFrame>

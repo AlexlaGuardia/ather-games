@@ -153,5 +153,28 @@ for (const sp of ['fox', 'axolotl'] as const) for (const fps of [60, 4]) {
   ok(seen[0] === 'hopDown' && seen.includes('happy') && tr.cheers() === 1, `happy mid perch-hop: waits for her feet (${seen.join('>')})`)
 }
 
+// M109 s3 CALL HOME: from her roam (and from her perch) she walks to a far keeper, never through a blocker, settles by them,
+// sits a moment, then is free (calling ends, not following); a call while she follows leaves her following after
+for (const sp of ['fox', 'axolotl'] as const) for (const fps of [60, 4]) for (const start of ['roam', 'perch', 'follow'] as const) {
+  const D = { ...(SPIRIT_MODELS[sp]?.trot ?? {}) }, dt = 1 / fps, tag = `call ${sp} ${fps}fps ${start}`
+  const nav: SpiritNav = { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked, roam: { maxLeg: 4.5, away: 3 } }
+  const tr = makeTrot(nav, 21, D), k = { x: -4.5, z: 5.2, yaw: 0 }, f2 = { x: 1, z: -3, yaw: 0 }
+  if (start === 'follow') tr.follow(() => f2)
+  if (start !== 'perch') for (let i = 0; i < 20 * fps && !(start === 'follow' ? tr.pose().mode === 'follow' : ground(tr.pose().mode)); i++) tr.step(dt)
+  tr.call(() => k)
+  let nearest = 99, bad = '', arrivedAt = -1, freeAt = -1
+  for (let i = 0; i < 60 * fps; i++) {
+    const p = tr.step(dt), d = Math.hypot(p.x - k.x, p.z - k.z); nearest = Math.min(nearest, d)
+    if (!bad && ground(p.mode) && (BOXES.some(b => inBox(b, p.x, p.z, 0.05)) || inBox(PLANTER, p.x, p.z, 0.15) || !inBox(PLOT, p.x, p.z))) bad = `${p.mode} at ${p.x.toFixed(2)},${p.z.toFixed(2)}`
+    if (arrivedAt < 0 && d < 2.2) arrivedAt = i * dt
+    if (freeAt < 0 && !tr.calling()) freeAt = i * dt
+  }
+  ok(nearest < 2.2 && arrivedAt >= 0 && arrivedAt < 25, `${tag}: walks to the keeper (nearest ${nearest.toFixed(2)} m at ${arrivedAt.toFixed(1)} s)`)
+  ok(!bad, `${tag}: never through a blocker (${bad})`)
+  ok(freeAt > arrivedAt, `${tag}: then free again (${freeAt.toFixed(1)} s)`)
+  const m = tr.pose().mode
+  ok(start === 'follow' ? m === 'follow' : m !== 'follow' || false, `${tag}: after the call ${start === 'follow' ? 'back to following' : 'her own roam'} (${m})`)
+}
+
 if (fails.length) { console.error(`spirit-trot: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`spirit-trot: ${pass}/0`)

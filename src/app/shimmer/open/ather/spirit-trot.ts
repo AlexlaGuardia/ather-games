@@ -97,7 +97,10 @@ export type Trot = { step: (dt: number) => TrotPose; pose: () => TrotPose; beats
   /** M109: walk with the keeper (a target), or null = back to her own roam */
   follow: (to: FollowTarget | null) => void
   /** M109 s2: she was fed: the happy beat (facing `to`, the keeper), then back to what she was doing (perch / follow / roam) */
-  cheer: (to: FollowTarget | null) => void; cheers: () => number }
+  cheer: (to: FollowTarget | null) => void; cheers: () => number
+  /** M109 s3: called home from the grimoire: she walks to `to` (the keeper) on her own legs, settles by them, sits a moment,
+   *  then is free again (her own roam, or back to following if she was) */
+  call: (to: FollowTarget) => void; calling: () => boolean }
 
 export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): Trot {
   const D: TrotDials = { ...TROT, ...dials, beat: { ...TROT.beat, ...dials?.beat } }
@@ -121,6 +124,8 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   // M109 s2 the happy beat: who she faces, where she hops from (the perch or the ground), which hop she is on, a cheer that
   // came mid perch-hop (starts when she lands), how many cheers so far (the probe)
   let happyTo: FollowTarget | null = null, happyBase = 0, happyBack = false, happyN = -1, happyY = 0, cheerPending: { to: FollowTarget | null } | null = null, cheers = 0
+  // M109 s3 call home: on her way to the keeper (the follow walk), and what she was following before (restored on arrival)
+  let calling = false, callPrev: FollowTarget | null = null
 
   const arcLen = (A0: number, A1: number, R0: number, R1: number) => { let L = 0, p = at(A0, R0); for (let i = 1; i <= 12; i++) { const q = at(lerp(A0, A1, i / 12), lerp(R0, R1, i / 12)); L += Math.hypot(q.x - p.x, q.z - p.z); p = q } return L }
   const arcFree = (A0: number, A1: number, R0: number, R1: number) => { const L = arcLen(A0, A1, R0, R1), n = Math.max(2, Math.ceil(L / 0.1)); for (let i = 1; i <= n; i++) { const q = at(lerp(A0, A1, i / n), lerp(R0, R1, i / n)); if (!free(q.x, q.z)) return false } return true }
@@ -278,6 +283,8 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
         fIdle += dt
         heading = Math.atan2(k.x - pos.x, k.z - pos.z)   // stood by: she watches the keeper
         if (fIdle > F.sitAfter) wantSit = 1
+        // M109 s3: called home and arrived: a moment sat by the keeper, then she is free again
+        if (calling && fIdle > 0.8) { calling = false; followTo = callPrev; callPrev = null; if (!followTo) { syncPolar(); go('sit', rand(...D.sitS)) } }
       }
     } else if (mode === 'happy') {
       // M109 s2: little hops on the spot, turned to the keeper; a squash on each landing (sinceLand), then back
@@ -330,6 +337,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   }
   let cur: TrotPose = { x: pos.x, z: pos.z, y, yaw, roll: 0, pitch: 0, sx: 1, sy: 1, swing: 0, lift: 0, mode, tilt: 0 }
   function follow(to: FollowTarget | null) {
+    calling = false; callPrev = null
     followTo = to; kPrev = null; kV = 0; outFirst = false
     if (to) { homing = false; if (mode !== 'perch' && mode !== 'hopDown' && mode !== 'hopUp') { fGo = false; fIdle = 0; go('follow', 0) } }
     else if (mode === 'follow') { syncPolar(); go('check', rand(...D.checkS)) }   // Stay: back to her own roam from where she stands
@@ -343,5 +351,10 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     if (mode === 'hopDown' || mode === 'hopUp') cheerPending = { to }   // mid perch-hop: the joy waits for her feet
     else startHappy(to)
   }
-  return { step, pose: () => cur, beats: () => beats, homes: () => homes, follow, cheer, cheers: () => cheers }
+  function call(to: FollowTarget) {
+    if (!calling) callPrev = followTo
+    calling = true; followTo = to; kPrev = null; kV = 0; outFirst = false; homing = false
+    if (mode !== 'perch' && mode !== 'hopDown' && mode !== 'hopUp') { fGo = true; fIdle = 0; go('follow', 0) }   // on a perch: she hops down first
+  }
+  return { step, pose: () => cur, beats: () => beats, homes: () => homes, follow, cheer, cheers: () => cheers, call, calling: () => calling }
 }
