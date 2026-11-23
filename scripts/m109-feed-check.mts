@@ -64,11 +64,11 @@ async function talkTo(p: Page, sp: string) {
   }
   return []
 }
-const pick = (p: Page, label: string) => p.evaluate((l) => { const b = [...document.querySelectorAll('[data-talk-option]')].find(x => (x.textContent ?? '').startsWith(l)) as HTMLButtonElement | undefined; b?.click(); return !!b }, label)
+const pick = (p: Page, label: string) => p.evaluate((l) => { const b = [...document.querySelectorAll('[data-talk-option]')].find(x => (x.textContent ?? '').replace('›', '').trim().startsWith(l)) as HTMLButtonElement | undefined; b?.click(); return !!b }, label)   // the selected answer carries a '›'
 /** pick Feed and watch her for 3 s (per animation frame): did she go 'happy', how many cheers, peak hop above her pre-feed y */
 async function feedAndWatch(p: Page, sp: string) {
   const before = await trotOf(p, sp)
-  await pick(p, 'Feed')
+  ok(await pick(p, 'Feed'), `${sp}: picked Feed`)
   const seen = await p.evaluate(`new Promise(res => { const t0 = performance.now(), sp = ${JSON.stringify(sp)}; let happy = false, peak = -9, base = null; const hud = new Set()
     function f() { for (const e of document.querySelectorAll('[data-say]')) hud.add(e.textContent ?? ''); const t = window.__spiritModel?.trots?.[sp]; if (t) { if (base === null) base = t.y; if (t.mode === 'happy') { happy = true; peak = Math.max(peak, t.y - base) } }
       if (performance.now() - t0 < 3000) requestAnimationFrame(f); else res({ happy, peak, hud: [...hud] }) } requestAnimationFrame(f) })`) as { happy: boolean; peak: number; hud: string[] }
