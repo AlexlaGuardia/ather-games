@@ -31,7 +31,11 @@ const hideCard = () => p.evaluate(() => { const hits = [...document.querySelecto
 const shot = async (n: string) => { await hideCard(); try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
 const tp = async (x: number, z: number, yaw: number, pitch = -0.15) => { await p.evaluate((a, b, c, d) => { const g = (window as any).__ather; g.tp(a, b, c); g.look(c, d) }, x, z, yaw, pitch); await sleep(1800) }
 const pos = async () => (await p.evaluate(() => (window as any).__ather.state())) as { px: number; pz: number }
-const walk = async (ms: number) => { await p.keyboard.down('KeyW'); await sleep(ms); await p.keyboard.up('KeyW'); await sleep(500) }
+// hold W until past z = goal, or stuck (no 5 cm of progress in 1.5 s), or 12 s: a headless frame rate makes a fixed hold walk 1.8 to 3 m
+const walk = async (goal: number) => {
+  await p.keyboard.down('KeyW'); const t0 = Date.now(); let last = (await pos()).pz, lastAt = Date.now()
+  while (Date.now() - t0 < 12000) { await sleep(250); const z = (await pos()).pz; if (z < goal) break; if (last - z > 0.05) { last = z; lastAt = Date.now() } else if (Date.now() - lastAt > 1500) break }
+  await p.keyboard.up('KeyW'); await sleep(500) }
 const pollUntil = async (f: () => Promise<boolean>, ms: number) => { const t = Date.now(); while (Date.now() - t < ms) { if (await f().catch(() => false)) return true; await sleep(250) } return false }
 await p.goto(`${url}/shimmer/open/ather?hour=14&home=1`, { waitUntil: 'load', timeout: 180000 })
 await p.waitForFunction(() => typeof (window as any).__ather?.tp === 'function', { timeout: 180000 }); await sleep(2500)
@@ -41,11 +45,11 @@ await tp(-110, 116, 0, -0.25); await shot('m97-0-shell-from-behind')
 await tp(-110, 98, 0, -0.2); await shot('m97-1-shell-front')
 // 2. the older room's back wall stops you
 await tp(-128, 110.5, 0)
-const o0 = await pos(); await walk(3500); const o1 = await pos()
+const o0 = await pos(); await walk(106.5); const o1 = await pos()
 ok(o1.pz > 108, `the older room keeps its back wall: stopped at z ${o1.pz.toFixed(2)} (from ${o0.pz.toFixed(2)})`)
 // 1. walk at the shell's back from outside (start z 110.5, facing -z): straight in
 await tp(-108, 110.5, 0)
-const s0 = await pos(); await walk(3500); const s1 = await pos()
+const s0 = await pos(); await walk(106.5); const s1 = await pos()
 ok(s1.pz < 108 && s1.pz < o1.pz - 0.5, `the shell has no back wall: walked from z ${s0.pz.toFixed(2)} to ${s1.pz.toFixed(2)} (in past 108)`)
 // 3. E at the shell's bench
 await tp(-110, 104.6, Math.PI)   // inside, facing the bench (+z)
