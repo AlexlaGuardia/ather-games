@@ -20,15 +20,17 @@ import { GLADE_ID } from './moonwell-glade'
 import { setMapSettlements } from './tile-picture'
 import { MoglinModel, furOf } from '../shared/moglin-model'
 import { groundMat, groundOrder } from '../shared/ground-layers'
-import { ribbonsOn } from '../shared/road-ribbon'
+import { atherRibbonsOn } from '../shared/road-ribbon'
 import { tilePathRibbons } from './path-ribbons'
 
 // ── the paths ────────────────────────────────────────────────────────────────────────────────────────────────────
 const PATH_COLOUR = new THREE.Color('#c8b285'), PATH_EDGE = new THREE.Color('#a99467')
 /** One tile's path pieces as a ribbon draped on the ground, in the TILE's local frame (it sits in the tile's group). */
-// M58 (2): ?roads=ribbon draws the paths as continuous ribbons (path-ribbons.ts): an edge pass under a surface pass, so
+// M58 (2): DEFAULT since 11-23 (?roads=legacy = the old strips) draws the paths as continuous ribbons (path-ribbons.ts): an edge pass under a surface pass, so
 // junctions read clean and a path never breaks at a tile seam; layered materials forced on with it (ground-layers.ts)
-const RIBBONS = ribbonsOn()
+const RIBBONS = atherRibbonsOn()
+// check-only: which Ather path drawing this page chose (scripts/ather-paths-shot.mts asserts it)
+if (typeof window !== 'undefined') (window as unknown as { __atherRoads?: string }).__atherRoads = RIBBONS ? 'ribbon' : 'legacy'
 const RIBBON_PASSES = [{ key: 'edge', layer: 'edge', col: '#a99467' }, { key: 'surf', layer: 'path', col: '#c8b285' }] as const
 function TilePathRibbons({ net, W, off }: { net: Network; W: Wilds; off: { x: number; z: number } }) {
   const geos = useMemo(() => {

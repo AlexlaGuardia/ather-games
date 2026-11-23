@@ -10,12 +10,12 @@ import { parseHouse, placeBlueprint } from './plot-blueprint'
 import { BlueprintStack } from './blueprint-stack'
 import { GLADE as GROUND, WATER_DROP } from './relief'
 import { groundMat, groundOrder } from '../shared/ground-layers'
-import { ribbonXZ, drape, ribbonsOn } from '../shared/road-ribbon'
+import { ribbonXZ, drape, atherRibbonsOn } from '../shared/road-ribbon'
 import * as THREE from 'three'
 
-// M58 (2): ?roads=ribbon roots the path UNDER the green (from its centre) and gives it a round end at the waymark, both on the
+// M58 (2): ribbons (DEFAULT since 11-23; ?roads=legacy = old) root the path UNDER the green (from its centre) and gives it a round end at the waymark, both on the
 // layer table (path under green), so the green's edge paints over the path by order instead of 5 mm of depth (+3.0 vs +2.5 cm)
-const RIBBONS = ribbonsOn()
+const RIBBONS = atherRibbonsOn()
 const LAYERS = RIBBONS || undefined
 
 const GREEN = '#a9cf7d', PATH = '#d9c9a2', PAD = '#cdb88e', DECK = '#a77b4f'

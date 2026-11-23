@@ -1,5 +1,5 @@
 // road-ribbon.ts. Run: npx tsx src/app/shimmer/open/shared/road-ribbon.test.ts
-import { ribbonXZ, discXZ, drape, coveredBy, triArea, ribbonsOn, MITRE_MAX_TURN, DISC_SEG, type P2 } from './road-ribbon'
+import { ribbonXZ, discXZ, drape, coveredBy, triArea, ribbonsOn, atherRibbonsOn, MITRE_MAX_TURN, DISC_SEG, type P2 } from './road-ribbon'
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -79,7 +79,8 @@ for (const [name, pts] of [['L', [[0, 0], [10, 0], [10, 10]]], ['hairpin', [[0, 
   ok(drape(t, (x) => (x > 9 ? -Infinity : 0)).length < flat.length, 'drape: a triangle touching -∞ is dropped')
 }
 ok(ribbonXZ([], 2).length === 0 && ribbonXZ([[1, 1]], 2).length / 6 === DISC_SEG && ribbonXZ([[0, 0], [0, 0], [4, 0]], 1, false).length / 6 === 2, 'degenerate input: empty, a dot, a repeated point')
-ok(ribbonsOn('?roads=ribbon') && !ribbonsOn('?roads=legacy') && !ribbonsOn(''), 'opt-in: ?roads=ribbon')
+ok(ribbonsOn('?roads=ribbon') && !ribbonsOn('?roads=legacy') && !ribbonsOn(''), 'Nyx opt-in: ?roads=ribbon, none = legacy')
+ok(atherRibbonsOn('') && atherRibbonsOn('?hour=13&waymark=greg') && atherRibbonsOn('?roads=ribbon') && !atherRibbonsOn('?roads=legacy'), 'Ather default (M58, Alex 11-23): no flag = ribbons, ?roads=legacy = the old strips')
 
 console.log(`road-ribbon: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { console.log(fails.join('\n')); process.exit(1) }

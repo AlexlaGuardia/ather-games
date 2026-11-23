@@ -14,7 +14,8 @@
 //   SURFACE paints over the main road's kerb across its mouth, and the main road's surface paints over the side road's end.
 //   Overlaps inside one pass are one colour on a layer that does not write depth, so they cannot show (or flicker).
 //
-// ⚖ OPT-IN until Alex looks (BETA M58: "default unchanged until Alex looks"): `?roads=ribbon`. It forces the layer table ON
+// ⚖ NYX: OPT-IN until Alex looks (`?roads=ribbon`, ribbonsOn). ATHER: DEFAULT since 11-23 (atherRibbonsOn; `?roads=legacy` =
+//   the old strips). Either way the ribbon meshes force the layer table ON
 //   for the ribbon meshes (the kerb trick needs the fixed draw order), whatever ?ground says.
 
 export type P2 = readonly [number, number, ...number[]]   // extra coordinates (a lane's height) are ignored
@@ -24,9 +25,17 @@ export const MITRE_MAX_TURN = Math.PI / 6
 export const DISC_SEG = 12
 
 const DEFAULT_ON = false
+/** NYX side (continent roads, town lanes): opt-in `?roads=ribbon`, still waiting on Alex's phone check with ?ground=layers. */
 export function ribbonsOn(search = typeof location === 'undefined' ? '' : location.search): boolean {
   const q = new URLSearchParams(search).get('roads')
   return q === 'ribbon' ? true : q === 'legacy' ? false : DEFAULT_ON
+}
+/** ATHER side (Wilds paths, the Glade path, cluster greens): ribbons are the DEFAULT (Alex 11-23, BETA M58); `?roads=legacy`
+ *  keeps the old strips reachable as a fallback. */
+export const ATHER_DEFAULT_ON = true
+export function atherRibbonsOn(search = typeof location === 'undefined' ? '' : location.search): boolean {
+  const q = new URLSearchParams(search).get('roads')
+  return q === 'ribbon' ? true : q === 'legacy' ? false : ATHER_DEFAULT_ON
 }
 
 /** Drop repeated points (a zero-length segment has no direction). */

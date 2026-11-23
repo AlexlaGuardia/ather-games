@@ -10,7 +10,7 @@
 // tile reaches ONE sample past its own square, so neighbours overlap instead of gapping (same layer, same colour, no depth
 // write: an overlap is invisible). Triangles are split before draping so the ribbon follows a crowned path, which is why the
 // old strip carried three points across (M18).
-// ⚖ OPT-IN `?roads=ribbon` (ribbonsOn), the same flag as the Nyx side; default unchanged until Alex looks.
+// ⚖ DEFAULT on the Ather side since 11-23 (atherRibbonsOn; `?roads=legacy` = the old strips). The Nyx side stays opt-in.
 import { ribbonXZ, drape } from '../shared/road-ribbon'
 import { pathsIn, PATH_HALF, type Network } from './network'
 

@@ -4,7 +4,9 @@
 // screenshot (the fall in that time is centimetres), re-tp before every shot.
 //   spots: glade (the green, its path, the waymark) · seam (path 1 across the first-wilds/west tile seam at x = -500) ·
 //          junction (settlement s1-2, four paths in) · green (the cluster square: four garden paths meet at the centre gate)
-//   npx tsx scripts/ather-paths-shot.mts [--url https://ather.games] [--roads legacy|ribbon] [--out dir] [--parallel] [--flicker]
+//   npx tsx scripts/ather-paths-shot.mts [--url https://ather.games] [--roads legacy|ribbon|default] [--size 390x844] [--out dir] [--parallel] [--flicker]
+// M58 flip (11-23): ribbons are the Ather DEFAULT. --roads default sends NO roads param (a fresh keeper's URL); every run asserts
+// the page drew what it should (window.__atherRoads, network-scene.tsx): default/ribbon -> 'ribbon', legacy -> 'legacy'.
 import puppeteer from 'puppeteer-core'
 import sharp from 'sharp'
 import { mkdirSync, readFileSync } from 'fs'
@@ -14,7 +16,8 @@ const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); retu
 const url = flag('--url', 'https://ather.games'), roads = flag('--roads', 'legacy'), out = flag('--out', `/tmp/ather-paths-${roads}`)
 mkdirSync(out, { recursive: true })
 const tiles = JSON.parse(readFileSync('public/open/wilds/tiles.json', 'utf8')).tiles as { name: string; tx: number; ty: number }[]
-const W = 1100, H = 680
+const [W, H] = flag('--size', '1100x680').split('x').map(Number)
+const RQ = roads === 'default' ? '' : `&roads=${roads}`, WANT = roads === 'legacy' ? 'legacy' : 'ribbon'
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const errs: string[] = [], shots: string[] = []
@@ -65,11 +68,11 @@ await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRun
 // (Alex plays tiles since 11-15) draws it. Hiding the extension makes three link synchronously. --parallel keeps it exposed.
 if (!process.argv.includes('--parallel')) await p.evaluateOnNewDocument(() => { for (const C of [WebGL2RenderingContext, WebGLRenderingContext]) { const g = C.prototype.getExtension; C.prototype.getExtension = function (this: WebGLRenderingContext, n: string) { return n === 'KHR_parallel_shader_compile' ? null : g.call(this, n) } } })
 // the cluster Green first: the page opens at home
-await p.goto(`${url}/shimmer/open/ather?hour=13&roads=${roads}`, { waitUntil: 'load', timeout: 240000 })
+await p.goto(`${url}/shimmer/open/ather?hour=13${RQ}`, { waitUntil: 'load', timeout: 240000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(5000)
 { const m = clusterFrame(null, []).middle!; await shoot(p, 'green', m.x, m.z, m.x + 20, m.z - 20, 22, 16) }
 // the Wilds: Greg's waymark is the Glade
-await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg&roads=${roads}`, { waitUntil: 'load', timeout: 240000 })
+await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg${RQ}`, { waitUntil: 'load', timeout: 240000 })
 await p.waitForFunction(() => (window as any).__ather?.zone?.() === 'wilds', { timeout: 240000 }); await sleep(6000)
 // the seam first: the first Wilds shot after load came out with the tile's ground still unbuilt in every run (first-tile parse)
 await shoot(p, 'seam', -500, 290, -470, 300, 14, 12)
@@ -84,6 +87,8 @@ await shoot(p, 'glade', GLADE_GREEN.x, GLADE_GREEN.z + GLADE_GREEN.r + 4, GLADE_
     await shoot(p, 'junction', s.x, s.z, s.x + 40, s.z + 40, 34, 26)
   }
 }
-console.log(JSON.stringify({ url, roads, out, shots, errs, ...(Object.keys(flicker).length ? { flickerPct: flicker } : {}) }))
-console.log(shots.length === 4 && !errs.length ? `PASS: 4 shots (roads=${roads}) in ${out}` : `FAIL: ${shots.length}/4 shots, ${errs.join('; ')}`)
+const drawn = await p.evaluate(() => (window as any).__atherRoads ?? null)
+if (drawn !== WANT) errs.push(`roads=${roads}: the page drew ${drawn}, want ${WANT}`)
+console.log(JSON.stringify({ url, roads, size: `${W}x${H}`, drawn, out, shots, errs, ...(Object.keys(flicker).length ? { flickerPct: flicker } : {}) }))
+console.log(shots.length === 4 && !errs.length ? `PASS: 4 shots (roads=${roads}, drawn ${drawn}, ${W}x${H}, 0 errors) in ${out}` : `FAIL: ${shots.length}/4 shots, ${errs.join('; ')}`)
 await br.close(); process.exit(shots.length === 4 && !errs.length ? 0 : 1)
