@@ -156,6 +156,10 @@ if (only.includes('C')) {
   await p.evaluate(() => (document.querySelector('[data-dig-door="rune-hold"] button') as HTMLButtonElement)?.click())
   ok(await poll(async () => p.evaluate(() => location.pathname.endsWith('/continent') && !!(window as any).__drive?.footTp && !!(window as any).__shipyards?.sites && !!(window as any).__market && !!(window as any).__chain), 240000), 'C: the Rune Hold door lands on the continent')
   await sleep(3000)
+  // the continent's HUD (and its message line) mounts only once the drive starts ("Press any key to drive", page.tsx
+  // `started`); a real keeper presses a key to move at all, so a key here, then the line has somewhere to be drawn
+  await p.keyboard.press('ShiftLeft'); await sleep(800)
+  ok(await poll(() => p.evaluate(() => !!document.querySelector('[data-hud="messages"]')), 10000), 'C: a key starts the drive: the continent HUD (the message line) is up')
   ok((await w.chain()).step === 'dig', 'C: at Rune Hold the chain is still on The Dig (the yard not reached)')
   const yard = ((await p.evaluate(() => (window as any).__shipyards.sites())) as any[]).find(s => s.key === 'front:shipyard')
   ok(!!yard && yard.inherited, "C: Kael's yard is a site above Rune Hold")
