@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A squared push stone (M110 s2). Code-drawn filler. -->
+  <ellipse cx="16" cy="28" rx="12" ry="2" fill="#000" opacity=".22"/>
+  <path d="M6 13 L16 9 L26 13 L26 25 L16 29 L6 25 Z" fill="#a9a090" stroke="#5e584c" stroke-width=".9"/><path d="M6 13 L16 17 L26 13 M16 17 L16 29" fill="none" stroke="#5e584c" stroke-width=".8"/><path d="M6 13 L16 9 L26 13 L16 17 Z" fill="#c4bcaa"/><path d="M16 17 L26 13 L26 25 L16 29 Z" fill="#8f877a"/>
+</svg>

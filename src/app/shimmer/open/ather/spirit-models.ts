@@ -40,7 +40,9 @@ export const SPIRIT_MODELS: Partial<Record<Species, SpiritLook>> = {
     skin: { emissive: '#ffd24a', emissiveI: 0.18 }, hull: { color: '#fff0b8', opacity: 0.38 },
     sway: { along: 'x', sign: 1, from: 0.25, to: 0.62, dir: 'z', amp: 0.07, ampRun: 0.05, hz: 1.7, hzRun: 6.3, lag: 0.06 },
     ears: true,
-    trot: { toyLean: { agi: 1.5 } },   // M110 s1: clever, quick, light on her feet: the AGI pieces draw her a little more
+    // M110 s1/s2 her MANNER at the training pieces (stands in for temperament until garden spirits carry one): clever, quick,
+    //    light on her feet = the hurdle and the ring draw her more, holding a gap still draws her less. Dial table, Jin's.
+    trot: { toyLean: { agi: 1.5, vig: 1.3, pwr: 1, grd: 0.7 } },
   },
   // Manalotl (look proof 5baffc0c): faces +z (eyes at z 0.58..0.65), head + frills z > 0.1, tail runs back along -z.
   // Tints = the proof render: rose emissive floor, pale-rose hull, frills rose-glow pulsing slowly; the gold rim is shared.
@@ -58,6 +60,7 @@ export const SPIRIT_MODELS: Partial<Record<Species, SpiritLook>> = {
       hopArc: 0.62, hopArcH: 0.16, sitY: 0.93, sitPitch: -0.08, sniffPitch: 0.14,   // "sit" = lies along the ground
       chain: 0.85, checkS: [0.8, 1.6],
       playV: 0.5, playH: 0.06,           // M110 s1: she flows across a training piece, a low bound
+      toyLean: { grd: 1.4, vig: 1, agi: 1, pwr: 0.8 },   // M110 s2 her manner: a steady, patient wall, she likes to hold the gap
       beat: { look: 0.36, sniff: 0.14, sit: 0.14, tilt: 0.36 },
       lookS: [2.2, 3.6], sniffS: [1.4, 2.4], sitS: [2.6, 4.2], tiltS: [1.8, 3.0],
       glance: 0.6, glanceHold: [0.9, 1.6], glanceMax: 0.6, tiltK: 3, lookTilt: 0.55,

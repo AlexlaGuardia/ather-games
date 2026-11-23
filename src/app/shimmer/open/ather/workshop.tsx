@@ -1242,7 +1242,8 @@ function planterNav(id: string): SpiritNav | null {
   }
   // M110 s1: the training pieces on her floor; she plays ACROSS a piece's depth (its local z, turned with the piece)
   const toys = () => getW().pieces.filter(t => FURNITURE[t.item]?.train && Math.abs(pieceFloor(getW(), t) - floor0) < 0.02)
-    .map(t => { const a = -t.q * Math.PI / 2; return { id: t.id, x: t.x, z: t.z, ax: Math.sin(a), az: Math.cos(a), stat: FURNITURE[t.item].train! } })
+    .map(t => { const a = -t.q * Math.PI / 2, f = FURNITURE[t.item], kind = f.play ?? 'leap'   // M110 s2: how she plays at it, and its measure
+      return { id: t.id, x: t.x, z: t.z, ax: Math.sin(a), az: Math.cos(a), stat: f.train!, kind, size: kind === 'shove' ? f.d / 2 : kind === 'guard' ? f.w / 2 - 0.3 : kind === 'laps' ? f.w / 2 - 0.15 : undefined } })
   return { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, roam: { maxLeg: 4.5, away: 3 }, toys, blocked: (x, z) => {
     const sq = squareAt(x, z); if (!sq || !owned.has(sqId(sq.i, sq.j))) return true
     if (!(Math.abs(plotHeightAt(x, z) - GROUND_Y) < 0.05) || Math.abs(pieceFloor(getW(), { item: pc.item, x, z }) - floor0) > 0.02) return true
@@ -1278,6 +1279,10 @@ export function PieceBody({ item, id }: { item: string; id?: string }) {
     case 'goldwood_stool': return <><Bx p={[0, 0.45, 0]} s={[0.46, 0.07, 0.46]} c={c} />{legs(0.4, 0.4, 0.42)}</>
     case 'goldwood_bench': return <><Bx p={[0, 0.45, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d, 0.42, 0.09)}</>
     case 'goldwood_hurdle': return <><Bx p={[-f.w / 2 + 0.04, f.h / 2, 0]} s={[0.07, f.h, 0.07]} c={c} /><Bx p={[f.w / 2 - 0.04, f.h / 2, 0]} s={[0.07, f.h, 0.07]} c={c} /><Bx p={[0, f.h - 0.05, 0]} s={[f.w, 0.06, 0.06]} c={c} /><Bx p={[0, f.h * 0.45, 0]} s={[f.w - 0.08, 0.04, 0.04]} c={dk} />{[-1, 1].map(a => <Bx key={a} p={[a * (f.w / 2 - 0.04), 0.02, 0]} s={[0.1, 0.04, f.d]} c={dk} />)}</>   // M110 s1
+    // M110 s2 the PWR / GRD / VIG pieces (code-drawn blockouts)
+    case 'push_stone': return <><Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={c} /><Bx p={[0, f.h + 0.004, 0]} s={[f.w - 0.08, 0.008, f.d - 0.08]} c="#d4cdbd" /><Bx p={[0, 0.03, 0]} s={[f.w + 0.04, 0.06, f.d + 0.04]} c="#8a8274" /></>
+    case 'guard_posts': return <>{[-1, 1].map(a => <group key={a}><Bx p={[a * (f.w / 2 - 0.1), 0.06, 0]} s={[0.22, 0.12, f.d]} c="#a4573f" /><Bx p={[a * (f.w / 2 - 0.1), f.h / 2 + 0.06, 0]} s={[0.12, f.h - 0.1, 0.12]} c={c} /><Bx p={[a * (f.w / 2 - 0.1), f.h + 0.02, 0]} s={[0.16, 0.05, 0.16]} c={dk} /></group>)}</>
+    case 'running_ring': return <>{Array.from({ length: 16 }, (_, k) => { const a = k / 16 * Math.PI * 2, r = f.w / 2 - 0.05; return <Bx key={k} p={[Math.cos(a) * r, f.h / 2, Math.sin(a) * r]} s={[0.07, f.h, 0.07]} c={k % 2 ? dk : c} /> })}</>
     case 'goldwood_table': return <><Bx p={[0, 0.76, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.72, 0.09)}</>
     case 'spirit_planter': return <SpiritPlanterBody id={id} />
     case 'grimoire_pedestal': return <><Bx p={[0, 0.05, 0]} s={[f.w, 0.1, f.d]} c={c} /><Bx p={[0, 0.5, 0]} s={[0.3, 0.8, 0.3]} c={c} /><mesh position={[0, 0.95, 0]} rotation-x={-0.5}><boxGeometry args={[0.6, 0.06, 0.45]} /><meshLambertMaterial color={c} /></mesh><mesh position={[0, 0.99, 0.02]} rotation-x={-0.5}><boxGeometry args={[0.44, 0.02, 0.32]} /><meshBasicMaterial color="#2a2533" /></mesh><mesh position={[0, 1.0, 0.025]} rotation-x={-Math.PI / 2 - 0.5}><planeGeometry args={[0.36, 0.24]} /><meshBasicMaterial color={f.glow} transparent opacity={0.55} /></mesh></>

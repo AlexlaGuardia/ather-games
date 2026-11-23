@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A ring of low bark-wrapped stakes (M110 s2). Code-drawn filler. -->
+  <ellipse cx="16" cy="20" rx="13" ry="7.5" fill="#000" opacity=".16"/>
+  <ellipse cx="16" cy="19" rx="12" ry="6.5" fill="none" stroke="#8a5f24" stroke-width="1.6" stroke-dasharray="2.4 1.6"/>
+  <g fill="#d9a957" stroke="#6b4a2a" stroke-width=".6"><rect x="3" y="16" width="2" height="4" rx=".5"/><rect x="27" y="16" width="2" height="4" rx=".5"/><rect x="15" y="10.5" width="2" height="4" rx=".5"/><rect x="15" y="23.5" width="2" height="4" rx=".5"/><rect x="6.5" y="11.8" width="2" height="4" rx=".5"/><rect x="23.5" y="11.8" width="2" height="4" rx=".5"/><rect x="6.5" y="21.8" width="2" height="4" rx=".5"/><rect x="23.5" y="21.8" width="2" height="4" rx=".5"/></g>
+</svg>

@@ -29,7 +29,13 @@ export type SpiritNav = {
   toys?: () => Toy[]
 }
 /** M110 s1: a training piece: where it stands, `ax/az` = the unit axis she plays ACROSS it (a hurdle: over the rail), its stat */
-export type Toy = { id: string; x: number; z: number; ax: number; az: number; stat: string }
+export type Toy = { id: string; x: number; z: number; ax: number; az: number; stat: string
+  /** M110 s2: HOW she plays at it (default 'leap'): leap = bounds across it (AGI hurdle); shove = lunges into it from one side,
+   *  leans in, backs off facing it (PWR); guard = a low wide sidestep across the gap between its posts, facing out (GRD);
+   *  laps = runs rings round it (VIG). `size` = the piece's play measure (shove: half its depth; guard: half the sidestep;
+   *  laps: the ring's radius). */
+  kind?: PlayKind; size?: number }
+export type PlayKind = 'leap' | 'shove' | 'guard' | 'laps'
 export type TrotMode = 'perch' | 'hopDown' | 'hopUp' | 'trot' | 'check' | 'look' | 'sit' | 'sniff' | 'tilt' | 'follow' | 'happy' | 'play'
 export type TrotPose = {
   x: number; z: number      // world
@@ -114,6 +120,10 @@ export const PLAY = {
   side: 0.75,       // m either side of the piece's centre she bounds between
   playS: [3.5, 5.5] as [number, number],   // s of play (she finishes the bound she is on)
   pause: 0.22,      // s she turns at each end
+  // M110 s2 the other three plays (x her playV, so the Manalotl stays a slow flow and the Vulnyx quick). Jin's.
+  shoveIn: 0.9, shoveOut: 0.4, shoveBack: 0.5, push: 0.5,   // lunge speed, back-off speed (facing it), m she backs off, s leaning in
+  guardV: 0.55, guardHold: 0.35, crouch: 0.86,              // sidestep speed, s held at each post, her height while braced
+  lapV: 1.15,                                                // speed round the ring (she ends at a lap's end once playS has run)
 }
 /** distance from point k to the segment a-b */
 function segDist(a: { x: number; z: number }, b: { x: number; z: number }, k: { x: number; z: number }) {
@@ -143,7 +153,9 @@ export type Trot = { step: (dt: number) => TrotPose; pose: () => TrotPose; beats
   /** M109 s4: in the party: she keeps near `to` (the keeper) in loose company, or null = her own roam round home */
   near: (to: FollowTarget | null) => void; nearing: () => boolean
   /** M110 s1: called when a play at a training piece FINISHES (toy id, its stat); plays() = how many so far, playing() = the toy id */
-  onPlayed: (f: ((id: string, stat: string) => void) | null) => void; plays: () => number; playing: () => string | null }
+  onPlayed: (f: ((id: string, stat: string) => void) | null) => void; plays: () => number; playing: () => string | null
+  /** M110 s2: how braced she is (0..1): the shove's lean into the stone, the guard's crouch */
+  braced: () => number }
 
 export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): Trot {
   const D: TrotDials = { ...TROT, ...dials, beat: { ...TROT.beat, ...dials?.beat }, toyLean: { ...TROT.toyLean, ...dials?.toyLean } }
@@ -175,6 +187,8 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   // turn pause left, how long since her last play (starts rested), plays so far, who hears a finished play
   let toy: Toy | null = null, toyA = { x: 0, z: 0 }, toyB = { x: 0, z: 0 }, toyEnd = 1, toyPause = 0, toyRest = PLAY.rest, plays = 0, playAir = 0, playPh = 0
   let played: ((id: string, stat: string) => void) | null = null
+  // M110 s2: the play's facing (shove / guard), the brace (0..1, shove lean + guard crouch), the lap (centre angle, swept, way round)
+  let toyFace = 0, brace = 0, lapA = 0, lapSwept = 0, lapDir = 1
   const dK = (k: { x: number; z: number }) => Math.hypot(pos.x - k.x, pos.z - k.z)
 
   const arcLen = (A0: number, A1: number, R0: number, R1: number) => { let L = 0, p = at(A0, R0); for (let i = 1; i <= 12; i++) { const q = at(lerp(A0, A1, i / 12), lerp(R0, R1, i / 12)); L += Math.hypot(q.x - p.x, q.z - p.z); p = q } return L }
@@ -259,14 +273,43 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     let c = R() * sum, i = 0; while (i < list.length - 1 && c > w[i]) { c -= w[i]; i++ }
     const t = list[i]
     if (R() >= Math.min(0.9, PLAY.chance * w[i])) return false
-    const e1 = { x: t.x + t.ax * PLAY.side, z: t.z + t.az * PLAY.side }, e2 = { x: t.x - t.ax * PLAY.side, z: t.z - t.az * PLAY.side }
-    const [A, B] = Math.hypot(e1.x - pos.x, e1.z - pos.z) <= Math.hypot(e2.x - pos.x, e2.z - pos.z) ? [e1, e2] : [e2, e1]
-    if (!free(B.x, B.z) || !lineFree(A, B)) return false
+    const ends = toyEnds(t); if (!ends) return false
+    const [A, B] = ends
     if (Math.hypot(A.x - pos.x, A.z - pos.z) < 0.05) { toy = t; toyA = A; toyB = B; return startPlay() }
     if (!planLine(A, D.dash)) return false
     toy = t; toyA = A; toyB = B; return true
   }
-  function startPlay() { toyEnd = 1; toyPause = 0; playAir = 0; go('play', rand(...PLAY.playS)); return true }
+  /** M110 s2: where a play at `t` starts (A, the nearer) and its other end (B), or null when the ground it needs is not free */
+  function toyEnds(t: Toy): [{ x: number; z: number }, { x: number; z: number }] | null {
+    const k = t.kind ?? 'leap', sz = t.size ?? 0.3
+    const near2 = (e1: { x: number; z: number }, e2: { x: number; z: number }) => Math.hypot(e1.x - pos.x, e1.z - pos.z) <= Math.hypot(e2.x - pos.x, e2.z - pos.z) ? [e1, e2] as const : [e2, e1] as const
+    const along = (u: number, v: number, d: number) => ({ x: t.x + u * d, z: t.z + v * d })
+    if (k === 'shove') {   // her side of it: she starts back off it and lunges to touching it (the stone itself is the box she leans on)
+      const sd = Math.sign((pos.x - t.x) * t.ax + (pos.z - t.z) * t.az) || 1
+      const A = along(t.ax * sd, t.az * sd, sz + 0.12 + PLAY.shoveBack), B = along(t.ax * sd, t.az * sd, sz + 0.12)
+      return free(A.x, A.z) ? [A, B] : null
+    }
+    if (k === 'laps') {   // the nearest point of the ring; the whole ring must be free
+      for (let i = 0; i < 16; i++) { const a = i / 16 * TAU; if (!free(t.x + Math.cos(a) * sz, t.z + Math.sin(a) * sz)) return null }
+      const a = Math.atan2(pos.z - t.z, pos.x - t.x), A = { x: t.x + Math.cos(a) * sz, z: t.z + Math.sin(a) * sz }
+      return [A, { x: 2 * t.x - A.x, z: 2 * t.z - A.z }]
+    }
+    // leap = across its depth (local z); guard = across the gap between its posts (local x = (az, -ax))
+    const [e1, e2] = k === 'guard' ? [along(t.az, -t.ax, sz), along(-t.az, t.ax, sz)] : [along(t.ax, t.az, PLAY.side), along(-t.ax, -t.az, PLAY.side)]
+    const [A, B] = near2(e1, e2)
+    return free(B.x, B.z) && lineFree(A, B) ? [A, B] : null
+  }
+  function startPlay() {
+    toyEnd = 1; toyPause = 0; playAir = 0; lapSwept = 0
+    if (toy) {
+      const c = toy, kd = c.kind ?? 'leap'
+      // shove: she faces the stone; guard: she faces OUT, away from the keeper (keeping the gap for him); laps: which way round
+      if (kd === 'shove') toyFace = Math.atan2(c.x - pos.x, c.z - pos.z)
+      if (kd === 'guard') { const k = nearTo?.() ?? home, sd = Math.sign((c.x - k.x) * c.ax + (c.z - k.z) * c.az) || 1; toyFace = Math.atan2(c.ax * sd, c.az * sd) }
+      if (kd === 'laps') { lapA = Math.atan2(pos.z - c.z, pos.x - c.x); lapDir = R() < 0.5 ? 1 : -1 }
+    }
+    go('play', rand(...PLAY.playS)); return true
+  }
   /** a short straight hop between two ring points (a chord that misses the planter): breaks up the circling near home */
   function planChord(): boolean {
     for (let k = 0; k < 10; k++) { const a = ang + (R() < 0.5 ? 1 : -1) * rand(0.5, 1.4); if (planLine(at(a, rand(nav.rMin + 0.1, nav.rMax)), D.speed * rand(1, 1.25))) return true }
@@ -420,19 +463,37 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
         else go('check', rand(...D.checkS))
       }
     } else if (mode === 'play' && toy) {
-      // M110 s1: bound across the piece, end to end: one leap per crossing (y peaks over the middle), a short turn at each end
-      const to = toyEnd ? toyB : toyA, from = toyEnd ? toyA : toyB, L = Math.hypot(to.x - from.x, to.z - from.z), d = Math.hypot(to.x - pos.x, to.z - pos.z)
-      const k = nearTo?.()
-      if (followTo || !nearTo || (k && dK(k) > NEAR.r * NEAR.slack)) { toy = null; syncPolar(); if (!move()) go('check', rand(...D.checkS)) }
-      else if (toyPause > 0) { toyPause -= dt; heading = Math.atan2(to.x - pos.x, to.z - pos.z); playAir = 0 }
+      // M110 s1/s2: play at the piece, its own way (toy.kind). Every kind ends where it may (an end / a lap's end) once t > dur.
+      const k = nearTo?.(), kd = toy.kind ?? 'leap'
+      const finish = () => { const done = toy!; toy = null; plays++; toyRest = 0; brace = 0; syncPolar(); played?.(done.id, done.stat); go('check', rand(...D.checkS)) }
+      if (followTo || !nearTo || (k && dK(k) > NEAR.r * NEAR.slack)) { toy = null; brace = 0; syncPolar(); if (!move()) go('check', rand(...D.checkS)) }
+      else if (kd === 'laps') {
+        // rings round it at a steady run, leaning into the turn; ends at the end of a lap once her play time has run
+        const r = toy.size ?? 1, w = D.playV * PLAY.lapV / r * dt
+        lapA += lapDir * w; lapSwept += w
+        pos = { x: toy.x + Math.cos(lapA) * r, z: toy.z + Math.sin(lapA) * r }
+        heading = Math.atan2(-Math.sin(lapA) * lapDir, Math.cos(lapA) * lapDir); speed = D.playV * PLAY.lapV
+        const before = playPh; playPh += speed * dt / D.stride; if (Math.floor(playPh) !== Math.floor(before)) sinceLand = 0
+        playAir = Math.sin(Math.PI * (playPh % 1)) * 0.5
+        if (t > dur && lapSwept >= TAU && Math.floor(lapSwept / TAU) > Math.floor((lapSwept - w) / TAU)) finish()   // at a lap's end
+      }
+      else if (toyPause > 0) {
+        toyPause -= dt; playAir = 0
+        heading = kd === 'shove' || kd === 'guard' ? toyFace : Math.atan2((toyEnd ? toyB : toyA).x - pos.x, (toyEnd ? toyB : toyA).z - pos.z)
+        if (kd === 'shove') brace = toyEnd === 0 ? Math.min(1, brace + dt * 6) : Math.max(0, brace - dt * 3)   // leaning in at the stone
+      }
       else {
-        const stp = Math.min(d, D.playV * dt)
-        if (d > 1e-4) { heading = Math.atan2(to.x - pos.x, to.z - pos.z); pos = { x: pos.x + (to.x - pos.x) * stp / d, z: pos.z + (to.z - pos.z) * stp / d } }
-        speed = D.playV; playPh = clamp(1 - (d - stp) / Math.max(L, 0.05), 0, 1); playAir = Math.sin(Math.PI * playPh)
+        const to = toyEnd ? toyB : toyA, from = toyEnd ? toyA : toyB, L = Math.hypot(to.x - from.x, to.z - from.z), d = Math.hypot(to.x - pos.x, to.z - pos.z)
+        const v = kd === 'shove' ? D.playV * (toyEnd ? PLAY.shoveIn : PLAY.shoveOut) : kd === 'guard' ? D.playV * PLAY.guardV : D.playV
+        const stp = Math.min(d, v * dt)
+        if (d > 1e-4) pos = { x: pos.x + (to.x - pos.x) * stp / d, z: pos.z + (to.z - pos.z) * stp / d }
+        speed = v; playPh = clamp(1 - (d - stp) / Math.max(L, 0.05), 0, 1)
+        if (kd === 'leap') { if (d > 1e-4) heading = Math.atan2(to.x - pos.x, to.z - pos.z); playAir = Math.sin(Math.PI * playPh) }
+        else { heading = toyFace; playAir = 0; brace = kd === 'guard' ? Math.min(1, brace + dt * 5) : Math.max(0, brace - dt * 3) }   // shove backs off FACING the stone; guard sidesteps facing out
         if (d - stp < 1e-3) {
           sinceLand = 0; playAir = 0
-          if (t > dur) { const done = toy; toy = null; plays++; toyRest = 0; syncPolar(); played?.(done.id, done.stat); go('check', rand(...D.checkS)) }
-          else { toyEnd = 1 - toyEnd; toyPause = PLAY.pause }
+          if (t > dur && (kd !== 'shove' || toyEnd === 0)) finish()   // a shove ends backed off (at A), never leaning in
+          else { toyEnd = 1 - toyEnd; toyPause = kd === 'shove' ? (toyEnd === 0 ? PLAY.push : PLAY.pause) : kd === 'guard' ? PLAY.guardHold : PLAY.pause }
         }
       }
     } else if (mode === 'play') { go('check', rand(...D.checkS))   // a play with no piece (cut elsewhere): back to her roam
@@ -457,18 +518,19 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
       air = Math.sin(Math.PI * (hopPh % 1))
       lift = Math.cos(Math.PI * (hopPh % 1)) * run01
       y = D.hopH * air * run01 ** 0.5
-    } else if (mode === 'play') { air = playAir; lift = playAir > 0 ? Math.cos(Math.PI * playPh) : 0; y = D.playH * playAir }
+    } else if (mode === 'play') { air = playAir; lift = playAir > 0 ? Math.cos(Math.PI * playPh) : 0; y = (toy?.kind ?? 'leap') === 'leap' ? D.playH * playAir : D.hopH * 0.5 * playAir }
     else if (mode === 'happy') { air = happyAir; lift = Math.cos(Math.PI * (Math.min(t / D.happyHop, D.happyHops) % 1)) * (happyAir > 0 ? 1 : 0); y = happyY }
     else if (mode !== 'hopDown' && mode !== 'hopUp') { lift *= Math.exp(-dt * 6); y = mode === 'perch' ? nav.perch!.y : 0 }
 
     yawPrev = yaw; yaw = yaw + wrap(heading - yaw) * (1 - Math.exp(-dt * D.turnK))
     const yawRate = wrap(yaw - yawPrev) / Math.max(dt, 1e-3)
     const sq = Math.exp(-sinceLand * D.squashK) * (mode === 'trot' || mode === 'play' || (mode === 'follow' && speed > 0) || sinceLand < 0.3 ? 1 : 0)
-    const sy = (1 + D.stretch * air - D.squash * sq) * lerp(1, D.sitY, sitK)
+    if (mode !== 'play') brace = Math.max(0, brace - dt * 4)
+    const sy = (1 + D.stretch * air - D.squash * sq) * lerp(1, D.sitY, sitK) * lerp(1, PLAY.crouch, brace)   // M110 s2: braced = low
     cur = {
       x: pos.x, z: pos.z, y, yaw: yaw + lookYaw + sniff * Math.sin(t * 5) * 0.12,
       roll: clamp(-yawRate * D.lean, -D.leanMax, D.leanMax) * (speed > 0 ? 1 : 0.3) + (mode === 'happy' ? Math.sin(t * Math.PI * 2 / D.happyHop / 2) * D.happyWig : 0),
-      pitch: (speed > 0 ? 0.05 + 0.06 * sq : 0) + D.sitPitch * sitK + sniff * (D.sniffPitch + Math.sin(t * 13) * 0.04),
+      pitch: (speed > 0 ? 0.05 + 0.06 * sq : 0) + D.sitPitch * sitK + (mode === 'play' && toy?.kind === 'shove' ? 0.18 * brace : 0) + sniff * (D.sniffPitch + Math.sin(t * 13) * 0.04),
       sx: 1 / Math.sqrt(Math.max(0.5, sy)), sy, swing: run01, lift, mode, tilt,
     }
     return cur
@@ -497,5 +559,5 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   }
   function near(to: FollowTarget | null) { nearTo = to; if (to) outFirst = false }
   return { step, pose: () => cur, beats: () => beats, homes: () => homes, follow, cheer, cheers: () => cheers, call, calling: () => calling, near, nearing: () => !!nearTo,
-    onPlayed: f => { played = f }, plays: () => plays, playing: () => (mode === 'play' && toy ? toy.id : null) }
+    onPlayed: f => { played = f }, plays: () => plays, playing: () => (mode === 'play' && toy ? toy.id : null), braced: () => brace }
 }

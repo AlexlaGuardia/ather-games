@@ -67,6 +67,9 @@ export interface PieceDef {
   /** M110 s1: a TRAINING piece: party spirits may play at it as they please (spirit-trot.ts PLAY), each play nudging this ONE
    *  stat toward the form cap (spirit-stats.ts). Owner + ?spirits=3d only for now: the bench hides it otherwise. */
   train?: 'pwr' | 'grd' | 'agi' | 'vig'
+  /** M110 s2: HOW she plays at a training piece (spirit-trot.ts Toy kind): leap across it / shove into it / guard the gap
+   *  between its posts / run laps round it. Absent = leap (the s1 hurdle). */
+  play?: 'leap' | 'shove' | 'guard' | 'laps'
   /** M68 s2: GIVEN, never made or sold (the Grimoire Pedestal: Greg hands it in the tutorial, glade-greg-talk.ts) */
   gift?: true
 }
@@ -86,6 +89,13 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   grimoire_pedestal: { name: 'Grimoire Pedestal', blurb: 'A short stone stand with a slanted top. The grimoire rests here, and its pages are read here.', recipe: [], gift: true, w: 0.7, d: 0.7, h: 1.1, solid: true, wood: 'stone', glow: '#ffd27a', spirit: 'pedestal' },   // M68 s2 (hub call): GREG hands it (Spirits?.3), one per keeper; the carpentry recipe is gone
   // M110 s1 (Magii RULED 3a77c87: training furniture, Jin's pieces/recipes): the AGI piece. Non-solid (she bounds across it,
   //    so does the keeper). Plain functional name, no canon name exists; name + blurb = placeholders for Magii / @lark.
+  // M110 s2: the other three, one stat each, from bag goods a keeper already makes (stone bricks from the Stonery, goldwood
+  //    planks + bark from the carpentry refine). Plain functional names, no canon name exists: placeholders for Magii / @lark.
+  //    PWR: a squared stone she shoves at (solid). GRD: two short posts, she holds the gap between them. VIG: a low ring of
+  //    stakes she runs laps round (flat, walk-over).
+  push_stone: { name: 'Push Stone', blurb: 'A squared block of cut stone, heavy enough to lean into.', recipe: [{ id: 'stone_brick', n: 4 }], w: 0.6, d: 0.6, h: 0.45, solid: true, wood: 'stone', train: 'pwr', play: 'shove' },
+  guard_posts: { name: 'Guard Posts', blurb: 'Two short goldwood posts on brick feet, a gap between them to hold.', recipe: [{ id: 'goldwood_plank', n: 2 }, { id: 'stone_brick', n: 2 }], w: 1.4, d: 0.25, h: 0.55, solid: false, wood: 'goldwood', train: 'grd', play: 'guard' },
+  running_ring: { name: 'Running Ring', blurb: 'A wide ring of low goldwood stakes, bark-wrapped. Round and round it goes.', recipe: [{ id: 'goldwood_plank', n: 2 }, { id: 'goldwood_bark', n: 2 }], w: 2.6, d: 2.6, h: 0.14, solid: false, wood: 'goldwood', train: 'vig', play: 'laps' },
   goldwood_hurdle: { name: 'Goldwood Hurdle', blurb: 'A low goldwood rail on two posts, just high enough to jump.', recipe: [{ id: 'goldwood_plank', n: 3 }], w: 1.2, d: 0.2, h: 0.35, solid: false, wood: 'goldwood', train: 'agi' },
   // BETA M96 (Alex 11-23): the PLANNING TABLE as a bag item. Three melee hits lift it off its spot; set it anywhere like any piece.
   //    Never made or sold (recipe empty, gift): one per keeper, rooms.ts tableAt. Size = the fixture workshop.tsx draws. Blurb = @lark placeholder.

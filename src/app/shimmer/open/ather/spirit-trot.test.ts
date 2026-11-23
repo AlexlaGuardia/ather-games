@@ -293,5 +293,68 @@ function clamp01(v: number) { return Math.max(0, Math.min(1, v)) }
   }
 }
 
+// ── M110 s2 THE OTHER THREE PIECES: a party spirit goes to each ON HER OWN and plays it ITS way, distinct from the hurdle's
+// bound: SHOVE (PWR) = lunges in to the stone from one side and backs off facing it, leaning in, never a leap; GUARD (GRD) =
+// a low braced sidestep across the gap between the posts, facing out (side-on to her motion); LAPS (VIG) = runs whole rings
+// round it at its radius. Each finished play carries the piece's stat; rest between plays; never in a blocker.
+{
+  const C = { x: -3, z: 3.5 }
+  const PIECES = [
+    { id: 'ps', ...C, ax: 0, az: 1, stat: 'pwr', kind: 'shove' as const, size: 0.3 },
+    { id: 'gp', ...C, ax: 0, az: 1, stat: 'grd', kind: 'guard' as const, size: 0.4 },
+    { id: 'rr', ...C, ax: 0, az: 1, stat: 'vig', kind: 'laps' as const, size: 1.15 },
+  ]
+  const wrapA = (a: number) => Math.atan2(Math.sin(a), Math.cos(a))
+  for (const P of PIECES) for (const [sp, dials] of [['fox', SPIRIT_MODELS.fox!.trot], ['axolotl', SPIRIT_MODELS.axolotl!.trot]] as const) for (const fps of [60, 4]) for (const seed of [1, 7, 42]) {
+    const tr = makeTrot({ home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked, roam: { maxLeg: 4.5, away: 3 }, toys: () => [P] }, seed, dials), dt = 1 / fps, k = { x: -2, z: 1.5, yaw: 0 }
+    tr.near(() => k)
+    const got: string[] = []; tr.onPlayed((id, stat) => got.push(`${id}:${stat}`))
+    let first = -1, bad = '', yMax = 0, brace = 0, pitch = 0, lastPlay = -99, gap = 999, wasPlaying = false, prev = tr.pose()
+    let dMin = 9, dMax = 0, offAxis = 0, sides = new Set<number>(), sideFlip = 0, side = 0, swept = 0, sweptMin = 99, lastA = 0
+    const sideOn: number[] = []
+    for (let i = 0; i < 240 * fps; i++) {
+      const p = tr.step(dt), tt = i * dt, rx = p.x - P.x, rz = p.z - P.z, d = Math.hypot(rx, rz)
+      if (p.mode === 'play') {
+        if (first < 0) first = tt
+        if (!wasPlaying) { side = 0; swept = 0; lastA = Math.atan2(prev.z - P.z, prev.x - P.x) }   // from where she stood when it began
+        yMax = Math.max(yMax, p.y); brace = Math.max(brace, tr.braced()); pitch = Math.max(pitch, p.pitch)
+        dMin = Math.min(dMin, d); dMax = Math.max(dMax, d)
+        if (P.kind === 'shove') { const sd = Math.sign(rz); if (side && sd !== side) sideFlip++; side = sd }
+        if (P.kind === 'guard') { offAxis = Math.max(offAxis, Math.abs(rz)); sides.add(Math.sign(rx))
+          const mv = Math.hypot(p.x - prev.x, p.z - prev.z); if (mv > 1e-4 && prev.mode === 'play') sideOn.push(Math.abs((Math.sin(p.yaw) * (p.x - prev.x) + Math.cos(p.yaw) * (p.z - prev.z)) / mv)) }
+      }
+      if (P.kind === 'laps' && (p.mode === 'play' || wasPlaying)) { const a = Math.atan2(rz, rx); swept += Math.abs(wrapA(a - lastA)); lastA = a }   // the step that ends it moved too
+      if (wasPlaying && p.mode !== 'play') { if (lastPlay > 0) gap = Math.min(gap, tt - lastPlay); lastPlay = tt; if (P.kind === 'laps' && tr.plays() > 0) sweptMin = Math.min(sweptMin, swept) }
+      wasPlaying = p.mode === 'play'; prev = p
+      if (!bad && ground(p.mode) && (BOXES.some(b => inBox(b, p.x, p.z, 0.05)) || !inBox(PLOT, p.x, p.z))) bad = `${p.mode} at ${p.x.toFixed(2)},${p.z.toFixed(2)}`
+    }
+    const tag = `${P.kind} ${sp} seed ${seed} @${fps}fps`, within = sp === 'fox' ? 90 : 150
+    ok(first >= 0 && first < within, `${tag}: goes to it on her own within ${within} s (first play at ${first.toFixed(1)} s)`)
+    ok(got.length >= 2 && got.every(g => g === `${P.id}:${P.stat}`) && tr.plays() === got.length, `${tag}: finished plays carry ITS stat ${P.stat} (${got.length}: ${got.slice(0, 2).join(',')})`)
+    ok(gap >= 20 - 0.01 || got.length < 2, `${tag}: never plays again within PLAY.rest (shortest gap ${gap.toFixed(1)} s)`)
+    ok(!bad, `${tag}: never in a blocker / off the plot: ${bad}`)
+    ok(yMax < (dials.playH ?? 0.2) * 0.7, `${tag}: no hurdle bound (peak ${yMax.toFixed(3)} m)`)
+    if (P.kind === 'shove') {
+      ok(sideFlip === 0 && dMin > P.size + 0.08 && dMin < P.size + 0.2 && dMax < P.size + 0.12 + 0.5 + 0.05, `${tag}: one side only, in to touching it and back off (${dMin.toFixed(2)}..${dMax.toFixed(2)} m, flips ${sideFlip})`)
+      ok(brace > 0.6 && pitch > 0.1, `${tag}: leans into it (brace ${brace.toFixed(2)}, pitch ${pitch.toFixed(2)})`)
+    }
+    if (P.kind === 'guard') {
+      const med = sideOn.sort((a, b) => a - b)[Math.floor(sideOn.length / 2)] ?? 1
+      ok(offAxis < 0.02 && sides.has(1) && sides.has(-1) && dMax < P.size + 0.02, `${tag}: sidesteps across the gap, post to post (off the line ${offAxis.toFixed(3)}, reach ${dMax.toFixed(2)})`)
+      ok(brace > 0.6 && med < 0.3, `${tag}: low and braced, side-on to her steps (brace ${brace.toFixed(2)}, median |fwd.move| ${med.toFixed(2)})`)
+    }
+    if (P.kind === 'laps') {
+      ok(Math.abs(dMin - P.size) < 0.02 && Math.abs(dMax - P.size) < 0.02, `${tag}: runs at the ring's radius (${dMin.toFixed(2)}..${dMax.toFixed(2)})`)
+      ok(sweptMin >= Math.PI * 2 - 0.05, `${tag}: a play is at least one whole lap (fewest ${(sweptMin / Math.PI / 2).toFixed(2)} laps)`)
+    }
+  }
+}
+// the species manner (the dial table): each leans somewhere, and they differ
+{
+  const fl = SPIRIT_MODELS.fox!.trot.toyLean!, ml = SPIRIT_MODELS.axolotl!.trot.toyLean!
+  ok(['pwr', 'grd', 'agi', 'vig'].every(k => (fl[k] ?? 1) > 0 && (ml[k] ?? 1) > 0), 'manner: every piece stays possible for both (no lean is 0, nothing forbidden)')
+  ok(fl.agi > ml.agi && ml.grd > fl.grd, `manner: the Vulnyx leans AGI, the Manalotl leans GRD (fox ${JSON.stringify(fl)}, axolotl ${JSON.stringify(ml)})`)
+}
+
 if (fails.length) { console.error(`spirit-trot: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`spirit-trot: ${pass}/0`)
