@@ -105,7 +105,8 @@ export interface Room {
   out?: Stack[]
   work?: Work
   /** BETA M97 s1 (Alex 11-23: "make them just the base with the important bits and let the player build around it"): a SHELL
-   *  room is its floor, a freestanding door frame and its working bits, no walls or roof; the keeper builds round it with the
+   *  room is its floor and the furniture inside (Alex 11-23 look call: "just the floor and the furniture inside, the walls and
+   *  building around the rooms can go"): no walls, roof, door frame or scaffolding; the keeper builds round it with the
    *  plot pieces. Every room placed since M97 is one; absent = an older room, kept as built (no migration). */
   shell?: true
 }
@@ -191,15 +192,10 @@ export const raised = (r: Room, now = Date.now()) => now >= r.doneAt
 export const progress = (r: Room, now = Date.now()) => Math.max(0, Math.min(1, (now - r.placedAt) / Math.max(1, r.doneAt - r.placedAt)))
 
 /** The walls a walker collides with: back + two sides + the front either side of the door. Scaffolding is solid too. */
-/** M97: a shell room's door frame: two posts either side of the doorway, FRAME_H tall (the lintel is look only, above head height). */
-export const FRAME_H = 3, FRAME_POST = 0.25
 /** M97: a shell room's working bench, as a ground box (the keeper's own walls keep off it). */
 export function benchBox(r: Room): Rect { const b = benchOf(r); return quadBounds(b.x, b.z, 2.4, 0.8, r.q) }
 export function wallsOf(r: Room, lift = 0): Box[] {   // lift: the room's foundation (plot-found roomLift; M55)
-  if (r.shell) {   // M97: no walls, only the door frame's two posts are solid
-    const y0 = GROUND_Y - 0.5, y1 = GROUND_Y + lift + FRAME_H, off = DOOR_W / 2 + FRAME_POST / 2, h = FRAME_POST / 2
-    return [-off, off].map(lx => { const c = toWorld(r, lx, -ROOMS[r.kind].d / 2); return { x0: c.x - h, x1: c.x + h, y0, y1, z0: c.z - h, z1: c.z + h } })
-  }
+  if (r.shell) return []   // M97 (Alex 11-23: "just the floor and the furniture inside"): no walls, no door frame
   const f = footprint(r.kind, r.x, r.z, r.q), y0 = GROUND_Y - 0.5, y1 = GROUND_Y + lift + WALL_H, t = WALL_T
   const q = r.q % 4, out: Box[] = []
   const xs = (x0: number, x1: number, z0: number, z1: number) => out.push({ x0, x1, y0, y1, z0, z1 })
@@ -285,7 +281,7 @@ export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: numbe
   for (const r of works.rooms) {
     if (wallsOf(r).some(b => k.x0 - pad < b.x1 && k.x1 + pad > b.x0 && k.z0 - pad < b.z1 && k.z1 + pad > b.z0)) return { ok: false, why: `In the wall of your ${ROOMS[r.kind].name}.` }
     const d = doorOf(r), b = benchOf(r)
-    if (Math.hypot(d.x - x, d.z - z) < 1.8) return { ok: false, why: 'That blocks the doorway.' }
+    if (!r.shell && Math.hypot(d.x - x, d.z - z) < 1.8) return { ok: false, why: 'That blocks the doorway.' }   // M97: a shell has no door
     if (Math.hypot(b.x - x, b.z - z) < 1.8) return { ok: false, why: 'That crowds the bench.' }
   }
   if (allChests(works).some(c => Math.hypot(c.x - x, c.z - z) < 1.4)) return { ok: false, why: 'Too close to another Keepstone.' }
@@ -493,7 +489,7 @@ export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: st
   for (const r of works.rooms) {
     if (wallsOf(r).some(hit)) return { ok: false, why: `In the wall of your ${ROOMS[r.kind].name}.` }
     const d = doorOf(r), b = benchOf(r)
-    if (Math.hypot(d.x - x, d.z - z) < 1.6) return { ok: false, why: 'That blocks the doorway.' }
+    if (!r.shell && Math.hypot(d.x - x, d.z - z) < 1.6) return { ok: false, why: 'That blocks the doorway.' }   // M97: a shell has no door
     if (Math.hypot(b.x - x, b.z - z) < 1.6) return { ok: false, why: 'That crowds the bench.' }
   }
   if (allChests(works).some(c => quadsHit(mine, chestQuad(c), pad))) return { ok: false, why: 'Too close to a Keepstone.' }

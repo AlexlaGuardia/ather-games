@@ -25,7 +25,7 @@ import { snapCorner, runKeys, canLay, planRun, raze, wallBoxes, edgeRect, findRo
 import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
-  WALL_H, FRAME_H, FRAME_POST, DOOR_W, doorOf, benchBox, keepClear, tableAt, TABLE_ITEM, type Works, type Room, type RoomKind, type WorkNear,
+  WALL_H, benchBox, keepClear, tableAt, TABLE_ITEM, type Works, type Room, type RoomKind, type WorkNear,
   stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, pieceFloor, canPlacePiece, placePiece, pickUpPiece, turnPiece, retireRooms, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, payCost, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
@@ -144,11 +144,7 @@ const heldCorner = (owned: ReadonlySet<string>) => (x: number, z: number) =>
 function wallBlockers(w: Works) {
   const rects: { r: { x0: number; x1: number; z0: number; z1: number }; why: string }[] = []
   for (const r of w.rooms) {
-    if (r.shell) {   // M97: a shell room is built AROUND: walls keep off only its bench and door frame
-      const why = `In your ${ROOMS[r.kind].name}'s bench.`
-      rects.push({ r: benchBox(r), why }, ...wallsOf(r).map(k => ({ r: { x0: k.x0, x1: k.x1, z0: k.z0, z1: k.z1 }, why: `In your ${ROOMS[r.kind].name}'s door frame.` })))
-      continue
-    }
+    if (r.shell) { rects.push({ r: benchBox(r), why: `In your ${ROOMS[r.kind].name}'s bench.` }); continue }   // M97: a shell is built AROUND: walls keep off only its bench
     const f = footprint(r.kind, r.x, r.z, r.q); rects.push({ r: { x0: f.x0 - 0.3, x1: f.x1 + 0.3, z0: f.z0 - 0.3, z1: f.z1 + 0.3 }, why: `In your ${ROOMS[r.kind].name}.` })
   }
   for (const c of allChests(w)) rects.push({ r: chestBox(c), why: 'A Keepstone is in the way.' })
@@ -972,7 +968,7 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
   return (
     <>
       {!w.tableMoved && <PlanningTable />}
-      {w.rooms.map(r => { const up = roomLift(w, r); return raised(r) ? <RoomMesh key={r.id} r={r} lift={up} /> : <Scaffold key={r.id} r={r} lift={up} /> })}   {/* M55: a prefab room rides its own foundation */}
+      {w.rooms.map(r => { const up = roomLift(w, r); return raised(r) ? <RoomMesh key={r.id} r={r} lift={up} /> : r.shell ? <ShellRising key={r.id} r={r} lift={up} /> : <Scaffold key={r.id} r={r} lift={up} /> })}   {/* M55: a prefab room rides its own foundation */}
       {allChests(w).map(c => <Wobbly key={c.id} id={c.id} at={[c.x, floorAt(w, GROUND_Y, c.x, c.z), c.z]}><Keepstone c={c} pose={pose} y={floorAt(w, GROUND_Y, c.x, c.z)} /></Wobbly>)}
       {w.pieces.map(pc => { const y = pieceFloor(w, pc); return <Wobbly key={pc.id} id={pc.id} at={[pc.x, y, pc.z]}><PieceMesh p={pc} y={y} /></Wobbly> })}
       <Plinth w={w} />
@@ -1042,16 +1038,16 @@ function PlanningTableBody() {
 function RoomMesh({ r, lift = 0 }: { r: Room; lift?: number }) {
   const walls = useMemo(() => wallsOf(r), [r])
   const f = footprint(r.kind, r.x, r.z, r.q), b = benchOf(r)
-  const cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2, sx = f.x1 - f.x0, sz = f.z1 - f.z0, hWall = r.shell ? FRAME_H : WALL_H
+  const cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2, sx = f.x1 - f.x0, sz = f.z1 - f.z0, hWall = WALL_H
   return (
     <group position-y={lift}>
       <mesh position={[cx, GROUND_Y + 0.04, cz]}><boxGeometry args={[sx, 0.08, sz]} /><meshLambertMaterial color="#b98d5a" /></mesh>
       {walls.map((k, i) => (
         <mesh key={i} position={[(k.x0 + k.x1) / 2, GROUND_Y + hWall / 2, (k.z0 + k.z1) / 2]}>
-          <boxGeometry args={[k.x1 - k.x0, hWall, k.z1 - k.z0]} /><meshLambertMaterial color={r.shell ? WOOD : WALL} />
+          <boxGeometry args={[k.x1 - k.x0, hWall, k.z1 - k.z0]} /><meshLambertMaterial color={WALL} />
         </mesh>
       ))}
-      {r.shell ? <DoorLintel r={r} /> : <>   {/* M97: a shell has no roof */}
+      {!r.shell && <>   {/* M97: a shell has no roof */}
         <mesh position={[cx, GROUND_Y + WALL_H + 0.12, cz]}><boxGeometry args={[sx + 0.8, 0.24, sz + 0.8]} /><meshLambertMaterial color={ROOF} /></mesh>
         <mesh position={[cx, GROUND_Y + WALL_H + 0.7, cz]}><boxGeometry args={[sx * 0.6, 0.9, sz * 0.6]} /><meshLambertMaterial color={ROOF} /></mesh>
       </>}
@@ -1059,12 +1055,6 @@ function RoomMesh({ r, lift = 0 }: { r: Room; lift?: number }) {
       {r.kind === 'farm' && <FarmInterior r={r} />}
     </group>
   )
-}
-/** M97: the shell room's door frame lintel, across the top of its two posts (look only: above head height, not solid). */
-function DoorLintel({ r }: { r: Room }) {
-  const d = doorOf(r), along = r.q % 2 === 0
-  const len = DOOR_W + FRAME_POST * 2 + 0.2
-  return <mesh position={[d.x, GROUND_Y + FRAME_H - 0.12, d.z]}><boxGeometry args={along ? [len, 0.24, FRAME_POST + 0.06] : [FRAME_POST + 0.06, 0.24, len]} /><meshLambertMaterial color={WOOD} /></mesh>
 }
 function Bench({ r, x, z }: { r: Room; x: number; z: number }) {
   return (
@@ -1113,6 +1103,13 @@ function Bench({ r, x, z }: { r: Room; x: number; z: number }) {
   )
 }
 
+/** M97: a shell going up has no scaffolding (Alex: "the walls and building around the rooms can go"): its floor and bench grow
+ *  up out of the ground as the job runs. */
+function ShellRising({ r, lift = 0 }: { r: Room; lift?: number }) {
+  const g = useRef<THREE.Group>(null)
+  useFrame(() => { if (g.current) g.current.scale.y = Math.max(0.02, progress(r)) })
+  return <group position-y={GROUND_Y + lift}><group ref={g}><group position-y={-GROUND_Y}><RoomMesh r={r} /></group></group></group>
+}
 /** Scaffolding: four poles, rails at each storey, and the walls rising inside them as the job goes on. */
 function Scaffold({ r, lift = 0 }: { r: Room; lift?: number }) {
   const f = footprint(r.kind, r.x, r.z, r.q), walls = useMemo(() => wallsOf(r), [r])
@@ -1133,8 +1130,8 @@ function Scaffold({ r, lift = 0 }: { r: Room; lift?: number }) {
       ))}
       <group ref={rise} position-y={GROUND_Y}>
         {walls.map((k, i) => (
-          <mesh key={i} position={[(k.x0 + k.x1) / 2, (r.shell ? FRAME_H : WALL_H) / 2, (k.z0 + k.z1) / 2]}>
-            <boxGeometry args={[k.x1 - k.x0, r.shell ? FRAME_H : WALL_H, k.z1 - k.z0]} /><meshLambertMaterial color={r.shell ? WOOD : WALL} />
+          <mesh key={i} position={[(k.x0 + k.x1) / 2, WALL_H / 2, (k.z0 + k.z1) / 2]}>
+            <boxGeometry args={[k.x1 - k.x0, WALL_H, k.z1 - k.z0]} /><meshLambertMaterial color={WALL} />
           </mesh>
         ))}
       </group>
