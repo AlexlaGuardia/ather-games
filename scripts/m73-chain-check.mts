@@ -156,8 +156,11 @@ if (only.includes('C')) {
   await p.evaluate(() => (document.querySelector('[data-dig-door="rune-hold"] button') as HTMLButtonElement)?.click())
   ok(await poll(async () => p.evaluate(() => location.pathname.endsWith('/continent') && !!(window as any).__drive?.footTp && !!(window as any).__shipyards?.sites && !!(window as any).__market && !!(window as any).__chain), 240000), 'C: the Rune Hold door lands on the continent')
   await sleep(3000)
-  // the continent's HUD (and its message line) mounts only once the drive starts ("Press any key to drive", page.tsx
-  // `started`); a real keeper presses a key to move at all, so a key here, then the line has somewhere to be drawn
+  // the start card ("You start on the road out of Ashfeld", page.tsx `started`) is for a first start on the road, never a
+  // door arrival: through Rune Hold's door the keeper stands in the square, so NO card, and the HUD is up before any key
+  ok(!(await p.evaluate(() => document.body.innerText.includes('You start on the road out of Ashfeld') || /Press any key to drive|Tap to drive/.test(document.body.innerText))), 'C: no start card after the Rune Hold door arrival')
+  ok(await poll(() => p.evaluate(() => !!document.querySelector('[data-hud="messages"]')), 10000), 'C: the door arrival starts the drive itself: the continent HUD is up before any key')
+  // (kept from before the fix: a key, harmless now) the line has somewhere to be drawn
   await p.keyboard.press('ShiftLeft'); await sleep(800)
   ok(await poll(() => p.evaluate(() => !!document.querySelector('[data-hud="messages"]')), 10000), 'C: a key starts the drive: the continent HUD (the message line) is up')
   ok((await w.chain()).step === 'dig', 'C: at Rune Hold the chain is still on The Dig (the yard not reached)')

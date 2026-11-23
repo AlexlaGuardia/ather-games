@@ -56,7 +56,7 @@ import { RunesmithPanel, IdonyPanel, commitImbue } from '../business/smith-panel
 import { IdrisPanel } from '../business/idris-panel'   // M93 s3
 import { TalkBubble, TalkChoices } from '../shared/npc-talk'
 import { HOLLIS_NAME, HOLLIS_FIRST, HOLLIS_QUOTE, HOLLIS_BARK, LEDGER_CELL_LINE, LEDGER_CELL_MARGIN, ENTRY_TAKE_PAGE, ENTRY_EARN_MARKS } from '../shared/hollis-lines'   // M108 s1
-import { repairStep, onQuote, payHousing, fitHousing, chargeCells, shipBoard, CELL_HOUSING, CELL_HOUSING_PRICE, RAW_SHARD, FIRST_CHARGE_SHARDS, LEDGER_CHARGE_LINE, LABEL as REPAIR_LABEL } from '../shared/ship-repair'
+import { repairStep, onQuote, payHousing, fitHousing, chargeCells, shipBoard, CELL_HOUSING, CELL_HOUSING_PRICE, RAW_SHARD, FIRST_CHARGE_SHARDS, LEDGER_CHARGE_LINE, LEDGER_CHARGE_MARGIN, LEDGER_FITTED_MARGIN, LABEL as REPAIR_LABEL } from '../shared/ship-repair'
 import { useRepair, getRepair, putRepair } from '../shared/ship-repair-store'
 import { smithTalk, templeTalk, beatTalk } from './door-talk'
 import { DoorFolk } from './door-folk-scene'
@@ -1284,9 +1284,9 @@ function ContinentRideGame() {
     const shop = R && step !== 'off' ? doorByKey(R, 'front:manatech') : undefined
     const where = shop ? { zone: 'continent' as const, x: shop.at.x, z: shop.at.z } : null
     postEntries('repair', step === 'off' ? [] : [
-      { id: 'repair-cell-housing', hand: 'kael', title: LEDGER_CELL_LINE, note: LEDGER_CELL_MARGIN, where, struck: step === 'stage1' || step === 'charged' },
+      { id: 'repair-cell-housing', hand: 'kael', title: LEDGER_CELL_LINE, note: step === 'stage1' || step === 'charged' ? LEDGER_FITTED_MARGIN : LEDGER_CELL_MARGIN, where, struck: step === 'stage1' || step === 'charged' },
       // M108 s3: the fit leaves the cells empty; Kael's ledger turns to its next line (canon 83b6870; wording = lark, placeholder)
-      ...(step === 'stage1' || step === 'charged' ? [{ id: 'repair-cell-charge', hand: 'kael' as const, title: LEDGER_CHARGE_LINE, note: '', where: null, struck: step === 'charged' }] : []),
+      ...(step === 'stage1' || step === 'charged' ? [{ id: 'repair-cell-charge', hand: 'kael' as const, title: LEDGER_CHARGE_LINE, note: LEDGER_CHARGE_MARGIN, where: null, struck: step === 'charged' }] : []),
       ...(step === 'stage1' ? [{ id: 'repair-charge-entry', hand: 'keeper' as const, title: shards >= FIRST_CHARGE_SHARDS ? REPAIR_LABEL.chargeEntryReady : REPAIR_LABEL.chargeEntry, note: `Raw Mana Shards ${Math.min(shards, FIRST_CHARGE_SHARDS)} / ${FIRST_CHARGE_SHARDS}`, where: null }] : []),
       ...(step === 'stage1' || step === 'charged' ? [] : [{ id: 'repair-cell-entry', hand: 'keeper' as const, title: step === 'open' ? ENTRY_TAKE_PAGE : step === 'made' ? REPAIR_LABEL.fitEntry : ENTRY_EARN_MARKS, note: REPAIR_LABEL.price, where }]),
     ])
@@ -1366,6 +1366,10 @@ function ContinentRideGame() {
     return () => window.removeEventListener('keydown', g)
   }, [])
   const [started, setStarted] = useState(false)
+  // the start card ("You start on the road out of Ashfeld") is for a real first start on the road. A door / travel arrival
+  // (?at=: the Hallway, Rune Hold's door in M73's chain, the map's pitstops) lands the keeper on foot in a town square,
+  // so the card would be wrong: the drive is already started. Read at mount, before the scene strips ?at= from the URL.
+  useEffect(() => { if (new URLSearchParams(window.location.search).has('at')) setStarted(true) }, [])
   const [isTouch, setIsTouch] = useState(false)
   useEffect(() => setIsTouch(isTouchOnly()), [])
   // a Mana'mal companion joins at a skill's 15 / 100 (shared/companion.ts): say so (rinning here can bring Embermole)

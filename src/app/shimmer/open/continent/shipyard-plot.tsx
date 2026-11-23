@@ -188,6 +188,8 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport, car, shipGa
   // M108: the docked ship (Franky at Kael's tie-down) as an E target, when the destination-map gate is open
   const shipPiece = useMemo(() => (dockedShip(site.key) ? L.pieces.find(q => q.kind === 'ship') ?? null : null), [L, site.key])
   const shipGateRef = useRef(shipGate); shipGateRef.current = shipGate
+  // her name plate on the hull (DOCKED_SHIPS › plate): the mounted mesh, for the probe (null until it is in the scene)
+  const plateRef = useRef<THREE.Mesh | null>(null)
   const onShipRef = useRef(onShip); onShipRef.current = onShip
   const carBay = useRef(-1)
   const { camera } = useThree()
@@ -257,6 +259,8 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport, car, shipGa
       // s6: the ship at this yard's dock (null = an empty dock) and its piece, for shipyard-dock-check
       ship: () => { const sp = L.pieces.find(q => q.kind === 'ship'); return sp ? { ...dockedShip(site.key)!, lx: sp.lx, lz: sp.lz, ...plotToWorld(f, sp.lx, sp.lz) } : null },
       pieces: () => L.pieces.map(p => ({ kind: p.kind, lx: p.lx, lz: p.lz, w: p.w, d: p.d })), board: () => board,
+      // the hull plate's text as the SCENE holds it (the mounted mesh's userData), null while no plate is drawn
+      plate: () => (plateRef.current?.parent ? (plateRef.current.userData.text as string) : null),
       state: () => deedRef.current, aim: () => ({ ...aim.current, rot: rot.current }),
       stored: () => { try { return localStorage.getItem(gardenKey(store)) } catch { return null } },
       blocked: (cx: number, cz: number) => blocked(cx, cz),
@@ -330,7 +334,7 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport, car, shipGa
       <Fence L={L} color={pal.color} accent={pal.accent} shut={!own} />
       <Landing L={L} />
       {L.slip && <Slip L={L} />}
-      {L.pieces.map((p, k) => <Piece key={k} L={L} p={p} color={pal.color} accent={pal.accent} />)}
+      {L.pieces.map((p, k) => <Piece key={k} L={L} p={p} color={pal.color} accent={pal.accent} plate={dockedShip(site.key)?.plate} plateRef={plateRef} />)}
       <GarageRoof L={L} />
       {parked.map(p => <ParkedCourser key={`${p.k}:${p.id}`} id={p.id} x={p.x} y={floor} z={p.z} yaw={p.yaw} />)}
       <group ref={grid} visible={false} rotation={[0, ry, 0]}><GridLines /></group>
@@ -427,14 +431,17 @@ function Rope({ a, b }: { a: [number, number, number]; b: [number, number, numbe
 /** M49 s6: the keeper's ship at its yard's tie-down, on its struts between the four posts, bow to the mast. Kael's is BROKEN:
  *  the lift-runes cold, a list to port, a line from every post and one from the masthead to the bow. Blockout (play3d's
  *  ShipHull); the real look is a design brief nobody has written yet. */
-function DockedShip({ L, p }: { L: PlotLayout; p: PlotPiece }) {
+function DockedShip({ L, p, plate, plateRef }: { L: PlotLayout; p: PlotPiece; plate?: string; plateRef?: React.Ref<THREE.Mesh> }) {
   const f = L.frame, w = plotToWorld(f, p.lx, p.lz), ry = plotRotY(f)
   const g = SHIP.lift + 2.3, half = SHIP.w / 2   // the gunwale's height and half-beam
   // posts sit at ±8 round the square's centre, which is SHIP_AT forward of the ship's centre; the mast TIE_MAST forward of it
   const post = (a: number, b: number): [number, number, number] => [a, 1.15, b - SHIP_AT]
   return (
     <group position={[w.x, L.floor, w.z]} rotation={[0, ry, 0]}>
-      <group rotation={[0, 0, -0.05]}><ShipHull cx={0} cz={0} w={SHIP.w} len={SHIP.len} lift={SHIP.lift} struts dark /></group>
+      <group rotation={[0, 0, -0.05]}>
+        <ShipHull cx={0} cz={0} w={SHIP.w} len={SHIP.len} lift={SHIP.lift} struts dark />
+        {plate && <HullPlate text={plate} y={SHIP.lift + 2.02} x={half} z={-SHIP.len / 2 + 3.2} plateRef={plateRef} />}
+      </group>
       {[[-8, -8], [8, -8], [8, 8], [-8, 8]].map(([a, b], k) => <Rope key={k} a={post(a, b)} b={[Math.sign(a) * half, g, Math.sign(b) * (SHIP.len / 2 - 2)]} />)}
       <Rope a={[0, 13.6, -TIE_MAST - SHIP_AT]} b={[0, SHIP.lift + 2.2, -SHIP.d / 2]} />
     </group>
@@ -447,7 +454,33 @@ function Slip({ L }: { L: PlotLayout }) {
   return <mesh position={[m.x, L.floor - dy / 2 - 0.1, m.z]} rotation={new THREE.Euler(0, ry - Math.PI / 2, -Math.atan2(dy, s.L), 'YZX')}><boxGeometry args={[len, 0.2, SLIP_W]} /><meshLambertMaterial color={STONE} /></mesh>
 }
 
-function Piece({ L, p, color, accent }: { L: PlotLayout; p: PlotPiece; color: string; accent: string }) {
+/** a ship's name plate, riveted to the hull band forward, port AND starboard (above the side runes), read from the yard
+ *  floor. Functional look (Alex judges later): a dark plate, a brass rim, the name in caps. One canvas texture per name. */
+const PLATE_TEX = new Map<string, THREE.CanvasTexture>()
+function plateTex(text: string) {
+  const had = PLATE_TEX.get(text); if (had) return had
+  const c = document.createElement('canvas'); c.width = 512; c.height = 96
+  const g = c.getContext('2d')!
+  g.fillStyle = '#b08a4a'; g.fillRect(0, 0, 512, 96)
+  g.fillStyle = '#23272b'; g.fillRect(6, 6, 500, 84)
+  g.fillStyle = '#e9d9a8'; g.font = '700 60px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'
+  g.fillText(text.split('').join(String.fromCharCode(8202)), 256, 52)
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4
+  PLATE_TEX.set(text, t); return t
+}
+function HullPlate({ text, x, y, z, plateRef }: { text: string; x: number; y: number; z: number; plateRef?: React.Ref<THREE.Mesh> }) {
+  const tex = useMemo(() => plateTex(text), [text])
+  const W = 2.6, H = 0.46
+  // the plate lies along the hull (local z); each face looks outboard, its text reading bow-to-stern from where you stand
+  return (
+    <>
+      <mesh ref={plateRef} name="ship-plate" userData={{ text }} position={[x + 0.03, y, z]} rotation={[0, Math.PI / 2, 0]}><planeGeometry args={[W, H]} /><meshBasicMaterial map={tex} toneMapped={false} /></mesh>
+      <mesh position={[-x - 0.03, y, z]} rotation={[0, -Math.PI / 2, 0]}><planeGeometry args={[W, H]} /><meshBasicMaterial map={tex} toneMapped={false} /></mesh>
+    </>
+  )
+}
+
+function Piece({ L, p, color, accent, plate, plateRef }: { L: PlotLayout; p: PlotPiece; color: string; accent: string; plate?: string; plateRef?: React.Ref<THREE.Mesh> }) {
   const f = L.frame, w = plotToWorld(f, p.lx, p.lz), ry = plotRotY(f), y = L.floor
   if (p.kind === 'home') return (
     <group position={[w.x, y, w.z]} rotation={[0, ry, 0]}>
@@ -473,7 +506,7 @@ function Piece({ L, p, color, accent }: { L: PlotLayout; p: PlotPiece; color: st
       <mesh position={[0, p.h + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[p.w * 0.32, p.w * 0.36, 48]} /><meshBasicMaterial color={PAD_RING} /></mesh>
     </group>
   )
-  if (p.kind === 'ship') return <DockedShip L={L} p={p} />
+  if (p.kind === 'ship') return <DockedShip L={L} p={p} plate={plate} plateRef={plateRef} />
   if (p.kind === 'mast') return <mesh position={[w.x, y + p.h / 2, w.z]}><cylinderGeometry args={[0.25, 0.4, p.h, 8]} /><meshLambertMaterial color={IRON} /></mesh>
   if (p.kind === 'post' || p.kind === 'bollard') return <mesh position={[w.x, y + p.h / 2, w.z]}><cylinderGeometry args={[p.w / 2, p.w / 2, p.h, 8]} /><meshLambertMaterial color={IRON} /></mesh>
   if (p.kind === 'board') return (

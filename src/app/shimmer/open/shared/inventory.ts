@@ -172,8 +172,8 @@ export function givePage(inv: Inv): Inv | null {
   return r.left > 0 ? null : withGift(r.inv, GIFT_KAEL_PAGE)
 }
 // THE CELL HOUSING (BETA M108 s2): Hollis builds it on Pay and hands it over once (GIFT_CELL_HOUSING); the keeper fits it at
-//    Kael's yard (E at Franky), which uses it up. Name + blurb = FUNCTIONAL labels for @lark (ship-repair.ts lists them).
-OPEN_ITEMS[CELL_HOUSING] = { name: 'a cell housing', blurb: "For Kael's ship. Fit it at his yard.", icon: '', stack: 1, kind: 'material' }
+//    Kael's yard (E at Franky), which uses it up. Name + blurb = ★ SIGNED (batch 11-23b › B MAIN; signed-lines-m108b.test.ts).
+OPEN_ITEMS[CELL_HOUSING] = { name: 'a cell housing', blurb: "For Franky. Fit it at Kael's yard.", icon: '', stack: 1, kind: 'material' }
 /** Hand the housing once: null when it was already handed or the bag has no room (Pay is then refused, nothing taken). */
 export function giveHousing(inv: Inv): Inv | null {
   if (hasGift(inv, GIFT_CELL_HOUSING)) return null

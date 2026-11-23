@@ -66,7 +66,10 @@ export type ShipBoard = 'map' | 'fit' | 'charge' | 'not-ready' | 'empty'
 export const shipBoard = (r: Repair, override = false, shards = 0): ShipBoard =>
   (r.charged || override ? 'map' : r.stage1 ? (shards >= FIRST_CHARGE_SHARDS ? 'charge' : 'empty') : r.made ? 'fit' : 'not-ready')
 
-/** FUNCTIONAL labels (build text, not lore; for @lark to replace): the price chip, the Pay answer, the leave answer, the toast */
+/** The player-facing labels. ★ SIGNED rows (Alex 11-23, athernyx CANON/game/shimmer-lines-batch-2026-11-23b.md › B, MAIN,
+ *  word for word; business/signed-lines-m108b.test.ts diffs them against the canon file): price, pay, leave, made, fitPrompt,
+ *  notReady, fitEntry, bagFull (+ the item's name and blurb in inventory.ts). The rest are still FUNCTIONAL placeholders
+ *  the batch does not cover (for @lark): next, fitted, chargePrompt, charged, empty, chargeEntryReady. */
 export const fmtMarks = (n: number) => `${n.toLocaleString('en-US')} Marks`
 export const LABEL = {
   price: `Cell housing · ${fmtMarks(CELL_HOUSING_PRICE)}`,
@@ -76,15 +79,18 @@ export const LABEL = {
   made: 'A cell housing · in your bag',
   fitted: 'Cell housing fitted · repair stage 1 done',
   fitPrompt: 'E · Fit the cell housing',
-  notReady: 'The ship is not ready to fly · the cell housing is not fitted',
+  notReady: "Franky can't fly yet · the cell housing is not fitted",
   fitEntry: "Fit the cell housing at Kael's yard.",
-  bagFull: 'No room in your bag for the cell housing',
+  bagFull: 'Your bag is full. Make room for the cell housing.',
   // M108 s3 (functional, for @lark)
   chargePrompt: 'E · Charge the cells',
   charged: 'Cells charged · first charge done',
   empty: `The ship is not ready to fly · the cells are empty (${FIRST_CHARGE_SHARDS} Raw Mana Shards)`,
-  chargeEntry: `Trade with a Digger Moglin in the Ather for ${FIRST_CHARGE_SHARDS} Raw Mana Shards.`,
+  chargeEntry: 'Trade a Digger Moglin for Raw Mana Shards.',   // ★ SIGNED (batch 11-23b › C, the keeper's entry)
   chargeEntryReady: "Charge the cells at Kael's yard.",
 } as const
-/** M108 s3: Kael's ledger, the next line (canon 83b6870 gives it; its WORDING is lark's: shipped as the placeholder, @lark) */
+/** M108 s3: Kael's ledger once the housing is fitted. ★ SIGNED (batch 11-23b › C MAIN, the open line trimmed to the seed by
+ *  Alex): the struck housing line's margin, the next open line and its margin. */
+export const LEDGER_FITTED_MARGIN = 'Fits. Huh.'
 export const LEDGER_CHARGE_LINE = 'Cells want filling. Ather mana, raw.'
+export const LEDGER_CHARGE_MARGIN = 'Empty cells. Should have checked first.'

@@ -103,6 +103,14 @@ try {
     await poll(async () => !!(await p.evaluate(() => document.querySelector('[data-yard-prompt]'))), 8000)
     return p.evaluate(() => { const e = document.querySelector('[data-yard-prompt]'); return { verb: e?.getAttribute('data-yard-prompt') ?? null, text: e?.textContent ?? null } })
   }
+  // the note under one journal entry (opened by its button), read off the page
+  const noteOf = async (id: string) => { await p.keyboard.press('KeyJ'); await sleep(1200)
+    await p.evaluate(i => { if (!document.querySelector(`[data-entry="${i}"] p`)) (document.querySelector(`[data-entry="${i}"] button`) as HTMLButtonElement | null)?.click() }, id); await sleep(500)
+    const t = await p.evaluate(i => (document.querySelector(`[data-entry="${i}"] p`) as HTMLElement | null)?.innerText.trim() ?? null, id)
+    await p.keyboard.press('KeyJ'); await sleep(600); return t }
+  // ★ SIGNED text (athernyx shimmer-lines-batch-2026-11-23b.md, Alex 11-23), pinned here AS TEXT so prod is checked against the
+  // signing itself, not against whatever the constant says today
+  const SIGNED = { notReady: "Franky can't fly yet · the cell housing is not fitted", chargeEntry: 'Trade a Digger Moglin for Raw Mana Shards.', fittedMargin: 'Fits. Huh.', chargeMargin: 'Empty cells. Should have checked first.', chargeLine: 'Cells want filling. Ather mana, raw.', plate: 'FRANKY' }
   const tapE = async () => { await p.keyboard.down('KeyE'); await sleep(80); await p.keyboard.up('KeyE'); await sleep(1500) }
   const bubble = () => p.evaluate(() => { const b = document.querySelector('[data-talk-bubble]'); if (!b) return null; const sc = b.querySelector('[data-talk-scene]')?.textContent ?? ''; return { scene: sc, line: (b.firstElementChild?.textContent ?? '').slice(sc.length), name: b.querySelector('[data-talk-name]')?.textContent ?? '' } }) as Promise<{ scene: string; line: string; name: string } | null>
   const opts = () => p.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-talk-option]')].map(e => ({ t: (e.textContent ?? '').replace(/^›/, '').replace(/short$/i, '').trim(), off: e.hasAttribute('data-talk-disabled') }))) as Promise<{ t: string; off: boolean }[]>
@@ -175,8 +183,10 @@ try {
   await continent('&ship=gate')
   const fR = await besideFranky()
   ok(fR.verb === 'board' && fR.text !== LABEL.fitPrompt, `R1. at Franky, no housing: the E verb is 'board' (${JSON.stringify(fR)})`)
+  const plate = await p.evaluate((k: string) => (window as any).__shipyards?.[k]?.plate?.() ?? null, KAEL)
+  ok(plate === SIGNED.plate, `R0. Franky's hull plate is in the scene at the yard and reads "${SIGNED.plate}" (${JSON.stringify(plate)})`)
   await tapE()
-  ok(await hudHas(LABEL.notReady), `R2. E at Franky = "${LABEL.notReady}"`)
+  ok(await hudHas(SIGNED.notReady), `R2. (SIGNED, was the placeholder "The ship is not ready to fly · ...") E at Franky = "${SIGNED.notReady}"`)
   ok(!(await mapOpen()), 'R3. no destination map before the housing is fitted')
   const rR = await record()
   ok(!!rR && rR.quoted && !rR.made && !rR.stage1 && (await housings()) === 0, `R4. record unchanged, nothing in the bag (${JSON.stringify(rR)})`)
@@ -212,7 +222,9 @@ try {
   ok(!!(await p.evaluate(() => (window as any).__repair?.stage1?.())) && (await housings()) === 0, 'F5. after reload: stage 1 persists, the housing still gone')
   const eF = await entries()
   ok(!!eF.find(e => e.id === 'repair-cell-housing')?.struck && !eF.some(e => e.id === 'repair-cell-entry'), `F6. Kael's line struck, the keeper's entry gone (${JSON.stringify(eF.filter(e => e.id?.startsWith('repair')))})`)
-  ok(!!eF.find(e => e.id === 'repair-cell-charge' && e.title === LEDGER_CHARGE_LINE && !e.struck) && eF.find(e => e.id === 'repair-charge-entry')?.title === LABEL.chargeEntry, `F7. (s3) Kael's next line "${LEDGER_CHARGE_LINE}" + the keeper's "${LABEL.chargeEntry}" (${JSON.stringify(eF.filter(e => e.id?.startsWith('repair')))})`)
+  ok(!!eF.find(e => e.id === 'repair-cell-charge' && e.title === LEDGER_CHARGE_LINE && !e.struck) && eF.find(e => e.id === 'repair-charge-entry')?.title === SIGNED.chargeEntry && LEDGER_CHARGE_LINE === SIGNED.chargeLine, `F7. (SIGNED, the entry was the placeholder "Trade with a Digger Moglin in the Ather for 3 ...") Kael's next line "${SIGNED.chargeLine}" + the keeper's "${SIGNED.chargeEntry}" (${JSON.stringify(eF.filter(e => e.id?.startsWith('repair')))})`)
+  const mH = await noteOf('repair-cell-housing'), mC = await noteOf('repair-cell-charge')
+  ok(mH === SIGNED.fittedMargin && mC === SIGNED.chargeMargin, `F7b. (SIGNED, new) the margins: struck housing line "${mH}", the open line "${mC}"`)
   const fB = await besideFranky()
   ok(fB.verb === 'board' && fB.text !== LABEL.fitPrompt && fB.text !== LABEL.chargePrompt, `F8. at Franky, fitted, no shards: plain 'board' (${JSON.stringify(fB)})`)
   await tapE()

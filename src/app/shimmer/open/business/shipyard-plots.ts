@@ -18,9 +18,11 @@ export type DockKind = 'tie-down' | 'berth'
 // Canon gives a keeper ONE ship so far: Kael's, BROKEN, at the inherited yard (repairing it is the game's long goal,
 // ather-rework-2026-11.md §7¾); sky ships are not for sale yet (prices.ts skyShip). A bought yard's dock stays empty until
 // a ship the keeper owns is added HERE. Tie-down only for now: no ship rides a berth yet.
-export interface DockedShip { id: string; broken: boolean }
+/** `plate` = the name on her hull plate, read at the yard (canon a2a7784: Kael's ship is FRANKY; batch 11-23b, SIGNED: the
+ *  keeper first reads her name on her hull plate) */
+export interface DockedShip { id: string; broken: boolean; plate?: string }
 export const DOCKED_SHIPS: Record<string, DockedShip> = {
-  'front:shipyard': { id: 'kael', broken: true },
+  'front:shipyard': { id: 'kael', broken: true, plate: 'FRANKY' },
 }
 export const dockedShip = (key: string): DockedShip | null => DOCKED_SHIPS[key] ?? null
 /** the ship's blockout (play3d ShipHull at w 7 / len 15 on its struts): its footprint for the walker + deed (hull, the
