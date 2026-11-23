@@ -10,7 +10,7 @@
 // clearing, road field, voids) but WITHOUT edits, kept as a base, and the edits are added on top live. The brush reaches into
 // the neighbours, so a stroke on an edge raises both sides of the seam and the saved tiles meet.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { loadWilds, type WildsMeta } from '../../open/ather/wilds'
 import { loadIndex, makeWorld, zonesOf, tileOf, TILE_M, type WildsWorld } from '../../open/ather/wilds-world'
@@ -24,7 +24,9 @@ const BuilderFly = dynamic(() => import('./BuilderFly'), { ssr: false })   // M8
 import { AUTOSAVE_MS, savedAgo, type Layer, type Index, type BuilderMap } from '../../world/builder'
 import { GLADE_BRUSH_TILE, GLADE_LAYER_TILE, GLADE_WATER_Y, sampleGladeBase } from '../../world/glade-builder'
 import { gladeZoneGround } from '../../open/ather/glade-cluster'
-import { NYX_REGION, NYX_WATER_Y, nyxBrushTile, nyxTiles, sampleNyxTile } from '../../world/nyx-builder'
+import { NYX_REGION, NYX_WATER_Y, nyxBrushTile, nyxTiles, sampleNyxTile, nyxN, nyxOrigin } from '../../world/nyx-builder'
+import BuilderOverview from './BuilderOverview'
+import type { OvTile, OvSource } from './builder-overview'
 import { loadRegion, type Region } from '../../open/region'
 
 // ── BETA M83 p1 s1a: the editor works on the World Builder DRAFT (world/builder.ts), never on the live layer. Save + autosave write
@@ -108,6 +110,10 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const paint = useRef<{ x: number; z: number; target?: number; timer: number } | null>(null)
   const opts = useRef({ brush, radius, strength, level, picking, fallW }); opts.current = { brush, radius, strength, level, picking, fallW }
   const tileRef = useRef(tile); tileRef.current = tile
+  // M83 overview: the Wilds' tiles nobody has opened yet are drawn from their raw exported heights (the .bin the parse reads,
+  // fetched once, shared with the browser cache), with the void field's carve; an opened tile draws from its parsed base
+  const rawRef = useRef(new Map<string, Int16Array>())
+  const [rawN, setRawN] = useState(0)
 
   // ── the world: index + network + voids, then the edits file ──
   useEffect(() => {
@@ -192,6 +198,36 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       .catch(err => { if (!dead) setStatus(`parse failed: ${String(err)}`) })
     return () => { dead = true }
   }, [tile, tiles])
+
+  // ── M83 overview: every Wilds tile's raw heights, a few at a time (glade/nyx have theirs in memory already) ──
+  useEffect(() => {
+    if (glade || nyx || !tiles.length) return
+    let dead = false
+    const todo = tiles.map(t => t.name).filter(n => !rawRef.current.has(n))
+    const worker = async () => {
+      for (let n = todo.shift(); n && !dead; n = todo.shift()) {
+        try { const r = await fetch(`/open/wilds/${n}.bin`); if (r.ok) { rawRef.current.set(n, new Int16Array(await r.arrayBuffer())); if (!dead) setRawN(c => c + 1) } } catch { /* drawn when opened */ }
+      }
+    }
+    for (let i = 0; i < 6; i++) worker()
+    return () => { dead = true }
+  }, [tiles, glade, nyx])
+  const ovTiles = useMemo((): OvTile[] => glade ? [{ name: GLADE_LAYER_TILE, tx: 0, ty: 0 }] : tiles, [glade, tiles])
+  const ovSource = useCallback((t: OvTile): OvSource | null => {
+    const B = bases.current.get(t.name)
+    if (B) {
+      const { nx, nz } = B.meta
+      return { nx, nz, at: (i, j) => (B.voidV?.[j * nx + i] || B.voided?.[Math.min(j, nz - 2) * (nx - 1) + Math.min(i, nx - 2)]) ? NaN : B.h[j * nx + i] }
+    }
+    if (nyx) {
+      const R = regionRef.current; if (!R) return null
+      const N = nyxN(R.meta), { i0, j0 } = nyxOrigin(R.meta, t.tx, t.ty), M = R.meta
+      return { nx: N, nz: N, at: (a, b) => { const i = i0 + a, j = j0 + b; return i >= 0 && j >= 0 && i < M.nx && j < M.nz ? R.h[j * M.nx + i] : NaN } }
+    }
+    const raw = rawRef.current.get(t.name); if (!raw) return null
+    const n = Math.round(Math.sqrt(raw.length)), cell = TILE_M / (n - 1), V = worldRef.current?.voids
+    return { nx: n, nz: n, at: (i, j) => V?.isVoid(t.tx * TILE_M - TILE_M / 2 + i * cell, t.ty * TILE_M - TILE_M / 2 + j * cell) ? NaN : raw[j * n + i] / 10 }
+  }, [nyx])
 
   // ── the edited ground, in WORLD coords (what the brush reads) ──
   const heightAt = useCallback((x: number, z: number): number => {
@@ -496,6 +532,10 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         {(!ready || status) && <div className="absolute left-2 top-2 text-xs font-mono bg-black/70 px-2 py-1 rounded">{status || 'loading…'}</div>}
         <div className="absolute right-2 bottom-2 text-[10px] font-mono text-white/50 bg-black/50 px-1.5 rounded">{MAP_NAME[map]} · +x → · +z ↓ · 1 km</div>
       </div>
+      {/* M83: the whole map, the open tile lit, click to open (Alex 11-23) */}
+      {(glade ? ready : tiles.length > 0) && <BuilderOverview tiles={ovTiles} tile={tile} onPick={n => n !== tile && setTile(n)} source={ovSource}
+        edits={n => edits.current[n]} waterY={glade ? GLADE_WATER_Y : nyx ? NYX_WATER_Y : 0} rev={rev + rawN} tint={showEdits}
+        px={glade ? 128 : 32} maxW={glade ? 300 : 560} note={!glade && !nyx && rawN < tiles.length ? `loading tiles ${rawN}/${tiles.length}…` : undefined} />}
       </div>
 
       <div className="flex flex-col gap-3 min-w-[240px] text-sm">
