@@ -46,11 +46,18 @@ function BenchFigure({ look, shape, bench, spin }: { look: Look; shape: Proporti
 }
 /** a short fingerprint of a built figure, so a check can see an option change the model (meshes, mouth meshes, torso shape) */
 function figureSig(k: ReturnType<typeof benchKeeper>) {
-  let meshes = 0, mouth = 0
-  k.group.traverse(o => { if ((o as THREE.Mesh).isMesh) { meshes++; if (o.userData.mouth) mouth++ } })
+  let meshes = 0, mouth = 0, mv = 0
+  k.group.traverse(o => {
+    if (!(o as THREE.Mesh).isMesh) return
+    meshes++; if (!o.userData.mouth) return
+    mouth++
+    const pos = (o as THREE.Mesh).geometry.attributes.position   // the mouth's own shape, so two 1-mesh mouths still differ
+    for (let i = 0; i < pos.count; i++) mv += Math.abs(pos.getX(i) * o.scale.x) + Math.abs(pos.getY(i) * o.scale.y) * 1.7
+    mv += Math.abs(o.position.x) * 3 + Math.abs(o.position.y) * 5 + o.rotation.z
+  })
   const torso = (k.group.getObjectByName('body')!.children[0] as THREE.Mesh).geometry.attributes.position
   let tz = 0; for (let i = 0; i < torso.count; i++) tz += Math.abs(torso.getZ(i)) + torso.getX(i) * 0.37
-  return `${meshes}|${mouth}|${tz.toFixed(3)}|${k.height.toFixed(3)}`
+  return `${meshes}|${mouth}|${mv.toFixed(4)}|${tz.toFixed(3)}|${k.height.toFixed(3)}`
 }
 
 export default function KeeperBodyBench() {
