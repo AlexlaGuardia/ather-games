@@ -7,11 +7,15 @@ import { KAEL_INVITE_NAME, KAEL_INVITE_BLURB, KAEL_INVITE_TEXT } from '../shared
 import { MOREL_PING, MOREL_NUDGE, MOREL_DIG_HINT } from '../shared/morel-lines'
 import { CHAIN_LINES } from '../shared/opening-chain-store'
 import { itemDef } from '../shared/inventory'
-import { KAEL_INVITE } from '../shared/opening-chain'
+import { KAEL_INVITE, KAEL_PAGE } from '../shared/opening-chain'
+import { KAEL_PAGE_NAME, KAEL_PAGE_BLURB, KAEL_PAGE_TEXT } from '../shared/kael-page-lines'
+import { VEYRA_UNIT1, VEYRA_PICK } from '../shared/veyra-lines'
 
 const INVITE = '/root/athernyx/CANON/game/kael-invite-script.md'
 const PING = '/root/athernyx/CANON/game/morel-dig-ping-script.md'
-if (!existsSync(INVITE) || !existsSync(PING)) { console.log('SKIP: athernyx canon not on this machine'); process.exit(0) }
+const PAGE = '/root/athernyx/CANON/game/kael-journal-page-script.md'
+const CHAIN = '/root/athernyx/CANON/game/ather-opening-chain-script.md'
+if (![INVITE, PING, PAGE, CHAIN].every(existsSync)) { console.log('SKIP: athernyx canon not on this machine'); process.exit(0) }
 let fails = 0, n = 0
 const ok = (c: boolean, m: string) => { n++; if (!c) { fails++; console.log(`✗ ${m}`) } }
 
@@ -37,6 +41,37 @@ for (const [k, g] of Object.entries(game)) ok(row.get(k) === g, `${k}: game "${g
 ok(row.size === 3 && alts.length === 2, `3 signed rows + 2 alts parsed (got ${row.size} + ${alts.length})`)
 ok(alts.every(a => !Object.values(CHAIN_LINES).includes(a)), 'no ping alt ships')
 ok(CHAIN_LINES.ping === MOREL_PING.unreadNote && CHAIN_LINES.nudge === MOREL_NUDGE.unreadNote && CHAIN_LINES.hint === MOREL_DIG_HINT.digFlip, 'the chain says the signed lines')
+
+// (C) M73 s3, Kael's journal page: the "## MAIN (62 words) — SIGNED" block, same shape as the invite (alts must not ship)
+const pg = readFileSync(PAGE, 'utf8')
+ok(/^\*\*SIGNED[^\n]*MAIN ships as written/m.test(pg), 'journal page script is SIGNED (main)')
+const pmain = pg.split(/^## /m).find(x => /^MAIN \(\d+ words\) — SIGNED/.test(x)) ?? ''
+const pparas = pmain.split('\n').filter(l => l.startsWith('>')).map(l => l.replace(/^>\s?/, '').trim()).filter(Boolean)
+ok(pparas.length === KAEL_PAGE_TEXT.length && pparas.length === 3, `page paragraphs: game ${KAEL_PAGE_TEXT.length} vs canon ${pparas.length}`)
+pparas.forEach((x, k) => ok(KAEL_PAGE_TEXT[k] === x, `page para ${k}: game "${KAEL_PAGE_TEXT[k]}" vs canon "${x}"`))
+const palts = pg.split(/^## /m).filter(x => /^ALT [AB]/.test(x)).flatMap(x => x.split('\n').filter(l => l.startsWith('>')).map(l => l.replace(/^>\s?/, '').trim()).filter(Boolean))
+ok(palts.length >= 6 && palts.every(a => !KAEL_PAGE_TEXT.includes(a)), `no page alt ships (${palts.length} alt paragraphs)`)
+const pname = pg.match(/Item name: `([^`]+)`/)?.[1], pblurb = pg.match(/Description line \(inventory\): \*([^*]+)\*/)?.[1]
+ok(KAEL_PAGE_NAME === pname && KAEL_PAGE_BLURB === pblurb, `page name/blurb: game "${KAEL_PAGE_NAME}"/"${KAEL_PAGE_BLURB}" vs canon "${pname}"/"${pblurb}"`)
+ok(itemDef(KAEL_PAGE).name === pname && itemDef(KAEL_PAGE).blurb === pblurb, 'the bag shows the page under its signed name + blurb')
+
+// (D) M73 s3, Veyra Unit 1 v2: the "## Unit 1 (v2, 2026-11-22)" section up to its counts. Her lines in script order, the
+// [SCENE] boxes in order, the two choices; the offered ALT last line must not ship.
+const ch = readFileSync(CHAIN, 'utf8')
+const v2 = ch.slice(ch.indexOf('## Unit 1 (v2, 2026-11-22)'), ch.indexOf('## Unit 1 (v2) — counts'))
+ok(v2.length > 200 && /SIGNED \(for now\)/.test(v2), 'Veyra Unit 1 v2 found and SIGNED (for now)')
+const vl = [...v2.matchAll(/^VEYRA: (.+)$/gm)].map(m => m[1].trim())
+const order = ['open', 'kaels', 'asked1', 'asked2', 'where1', 'where2', 'send', 'bark'] as const
+ok(vl.length === order.length, `Veyra lines: canon ${vl.length} vs game ${order.length}`)
+order.forEach((k, i) => ok(VEYRA_UNIT1[k].line === vl[i], `Veyra ${k}: game "${VEYRA_UNIT1[k].line}" vs canon "${vl[i]}"`))
+const sc = [...v2.matchAll(/^\[SCENE: (.+)\]$/gm)].map(m => m[1].trim())
+const gsc = order.map(k => VEYRA_UNIT1[k].scene).filter(Boolean)
+ok(JSON.stringify(sc) === JSON.stringify(gsc), `Veyra scene boxes word for word, in order (${sc.length} vs ${gsc.length})`)
+const chs = [...v2.slice(v2.indexOf('[trigger:')).matchAll(/^> (?!\*\*)(.+)$/gm)].map(m => m[1].trim())
+ok(JSON.stringify(chs) === JSON.stringify([VEYRA_PICK.asked, VEYRA_PICK.where]), `Veyra's choices word for word: ${JSON.stringify(chs)}`)
+const valt = v2.match(/ALT \(last line[^)]*\):\*\* VEYRA: (.+)$/m)?.[1]?.trim()
+ok(!!valt && Object.values(VEYRA_UNIT1).every(b => b.line !== valt), `the ALT last line does not ship ("${valt}")`)
+ok(/station:veyra-1:send[^\n]*Sets the ship-repair objective flag/.test(v2), 'the send trigger is the one that sets the ship-repair flag')
 
 console.log(`${n - fails}/${n} signed-line asserts${fails ? ` · ${fails} FAILED` : ' · word for word'}`)
 process.exit(fails ? 1 : 0)

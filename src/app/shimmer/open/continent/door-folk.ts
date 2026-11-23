@@ -9,7 +9,8 @@ import { FOLK_HEIGHT, FOLK_EYE_Y } from '../shared/folk-model'
 import type { Region } from '../region'
 
 /** The doors that open a conversation, not a panel (the same three continent/page.tsx openDoor routes to talk). */
-export const isTalkDoor = (key: string) => key.startsWith('smith:') || key === 'front:enchant-temple' || key === 'front:trade-co'
+// M73 s3: Veyra, the harbor-master, stands at the Travelers Station (she talks there while the opening chain has lines for her)
+export const isTalkDoor = (key: string) => key.startsWith('smith:') || key === 'front:enchant-temple' || key === 'front:trade-co' || key === 'front:station'
 /** Where the talker stands (m): BESIDE the door, not in it. The keeper walks up to the door to press E, so a talker in
  *  the doorway put the keeper (and the talk camera) inside their body (the first devwin shot, 11-18). OUT = a little in
  *  front of the wall, SIDE = to the door's left (from the street), clear of the doorway and the frame's lantern. */
@@ -23,8 +24,8 @@ export interface Talker { key: string; look: string; name: string; x: number; y:
 export function standOf(d: Pick<Door, 'key' | 'b' | 'at' | 'name'>): Talker {
   const dx = d.at.x - d.b.x, dz = d.at.z - d.b.z, l = Math.hypot(dx, dz) || 1
   const ux = dx / l, uz = dz / l, lx = -uz, lz = ux   // u: out of the building; l: along the wall
-  const look = d.key === 'front:enchant-temple' ? 'idony' : d.key === 'front:trade-co' ? 'co-clerk' : `runesmith-${d.key.slice('smith:'.length)}`
-  const name = d.key === 'front:enchant-temple' ? 'Idony' : d.key === 'front:trade-co' ? 'Clerk' : d.name
+  const look = d.key === 'front:enchant-temple' ? 'idony' : d.key === 'front:trade-co' ? 'co-clerk' : d.key === 'front:station' ? 'veyra' : `runesmith-${d.key.slice('smith:'.length)}`
+  const name = d.key === 'front:enchant-temple' ? 'Idony' : d.key === 'front:trade-co' ? 'Clerk' : d.key === 'front:station' ? 'Veyra' : d.name
   const x = d.at.x + ux * STAND_OUT + lx * STAND_SIDE, z = d.at.z + uz * STAND_OUT + lz * STAND_SIDE
   const kx = d.at.x + ux * KEEPER_OUT, kz = d.at.z + uz * KEEPER_OUT
   return { key: d.key, look, name, x, y: d.at.y, z, yaw: Math.atan2(kx - x, kz - z) }

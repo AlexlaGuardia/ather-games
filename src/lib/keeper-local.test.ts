@@ -149,6 +149,11 @@ const DEVICE_KEYS = [
   'shimmer:hands-tune',           // the Dev-tab hands tuner's arm offsets (play, 09-16). A pose
                                   // dialled in against THIS screen and THIS eye, like the bindings:
                                   // two keepers on one desktop want the same arm.
+  // registered 11-23 (play-M73b): all four were already read RAW (no keeperKey), so DEVICE names what they do today
+  'open.build.prefs.v1',          // build mode's UI prefs (ather/build-prefs.ts): DEVICE
+  'open:hands-actions.v1',        // first-person hands' action tune (shared/fp-actions.ts): DEVICE, like open:hands-tune.v1
+  'open:rod-grip.v1',             // held rod grip tune (shared/held-rod.tsx): DEVICE, tuned against this screen
+  'ather:shimmer:loadTipLast',    // the last load-screen tip shown (shared/load-screen.tsx): DEVICE
 ]
 function walk(dir: string): string[] {
   const out: string[] = []

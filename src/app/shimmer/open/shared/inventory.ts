@@ -6,7 +6,8 @@
 //
 // Item names here are build vocabulary for things canon already has (the Repeater: engine/weapons.ts; waymarks:
 // gates.md). A new item is one row in OPEN_ITEMS.
-import { KAEL_INVITE, GIFT_KAEL_INVITE } from './opening-chain'
+import { KAEL_INVITE, GIFT_KAEL_INVITE, KAEL_PAGE, GIFT_KAEL_PAGE } from './opening-chain'
+import { KAEL_PAGE_NAME, KAEL_PAGE_BLURB } from './kael-page-lines'
 import { KAEL_INVITE_NAME, KAEL_INVITE_BLURB } from './kael-invite-lines'
 import { NYX_RINN } from '../continent/rinning-nyx'
 import { keeperKey } from '@/lib/keeper-local'
@@ -160,6 +161,14 @@ export function giveInvite(inv: Inv): Inv | null {
   if (hasGift(inv, GIFT_KAEL_INVITE)) return null
   const r = give(inv, KAEL_INVITE, 1)
   return r.left > 0 ? null : withGift(r.inv, GIFT_KAEL_INVITE)
+}
+// KAEL'S JOURNAL PAGE (BETA M73 s3): found at Kael's yard, handed once (GIFT_KAEL_PAGE) by the chain's yard watcher.
+OPEN_ITEMS[KAEL_PAGE] = { name: KAEL_PAGE_NAME, blurb: KAEL_PAGE_BLURB, icon: '', stack: 1, kind: 'material' }
+/** Hand the page once: null when it was already handed or the bag has no room (the watcher retries). */
+export function givePage(inv: Inv): Inv | null {
+  if (hasGift(inv, GIFT_KAEL_PAGE)) return null
+  const r = give(inv, KAEL_PAGE, 1)
+  return r.left > 0 ? null : withGift(r.inv, GIFT_KAEL_PAGE)
 }
 const withGift = (inv: Inv, g: string): Inv => (hasGift(inv, g) ? inv : { ...inv, gifts: [...(inv.gifts ?? []), g] })
 /** How much bait one `id` cuts into for this bag: the table, +1 once the Bait Page is read. 0 = not bait food. */

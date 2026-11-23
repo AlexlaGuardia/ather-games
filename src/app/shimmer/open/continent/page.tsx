@@ -16,7 +16,11 @@ import { OwnerReady } from '../shared/owner-ready'
 import { GateRings } from '../shared/gate-rings'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMenuLock } from '../shared/menu-lock'
-import { useInv, hotbarEntries, getInv } from '../shared/bag'
+import { useInv, hotbarEntries, getInv, setInv } from '../shared/bag'
+import { useChainYard, getChain, chainVeyraSend } from '../shared/opening-chain-store'   // M73 s3
+import { veyraDue, veyraOpen, veyraOptions, veyraPick, type VeyraTalk } from '../shared/opening-chain'
+import { VEYRA_UNIT1, VEYRA_PICK, VEYRA_NAME } from '../shared/veyra-lines'
+import { inKaelYard } from './kael-yard'
 import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, equipSlot, heldOf, litSlot, settle, type Stance } from '../shared/stance'
 import { itemDef } from '../shared/inventory'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
@@ -45,6 +49,8 @@ import { useIsOwner } from '@/app/_components/useIsOwner'
 import { extraGround, extraCarGround, carPush } from '../foot-extras'
 import { useTycoon } from '../business/use-tycoon'
 import { ShopPanel } from '../business/shop-panel'
+import { DestinationMapPanel } from './destination-map-panel'
+import { shipGateFlag, shipGateOpen } from './destination-map'
 import { RunesmithPanel, IdonyPanel, commitImbue } from '../business/smith-panel'
 import { IdrisPanel } from '../business/idris-panel'   // M93 s3
 import { TalkBubble, TalkChoices } from '../shared/npc-talk'
@@ -757,7 +763,7 @@ export interface RideHud { x: number; z: number; yaw: number; mph: number; frac:
 /** Where the Hallway lets you out when the asked-for door is not yours yet: the 08-12 public landing (gates.md). */
 const LANDING = 'rune-hold'
 /** the yard's E verbs as the desktop prompt reads them (place: a tap sets it, holding E turns it; the touch row has its own turn pill) */
-const YARD_PROMPT: Record<NonNullable<DeedYardState['action']>, string> = { 'take out': 'E · Take out', place: 'E · Place · hold E to turn', 'pick up': 'E · Pick up', look: 'E · Change the look' }
+const YARD_PROMPT: Record<NonNullable<DeedYardState['action']>, string> = { 'take out': 'E · Take out', board: 'E · Board', place: 'E · Place · hold E to turn', 'pick up': 'E · Pick up', look: 'E · Change the look' }
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
 interface DriverCtl { /** M80: another E target holds the key right now (a ferry while driving, the yard / a deed on foot): E leaves the car alone */ eTaken?: () => boolean; tp?: (x: number, z: number, yaw: number) => void; car?: () => { x: number; y: number; z: number; yaw: number; speed: number; foot: boolean } }
@@ -1157,6 +1163,10 @@ function ContinentRideGame() {
   const isOwner = useIsOwner()
   const [ownAllFlag, setOwnAllFlag] = useState(false)
   useEffect(() => { setOwnAllFlag(new URLSearchParams(location.search).get('own') === 'all') }, [])
+  // M108: the destination-map gate at Franky (owner-only ?ship=gate; destination-map.ts › shipGateOpen)
+  const [shipFlag, setShipFlag] = useState(false)
+  useEffect(() => { setShipFlag(shipGateFlag(location.search)) }, [])
+  const shipGate = shipGateOpen({ flag: shipFlag, owner: isOwner })
   // ?tune=1: ] gives 100k Marks, to try the businesses without grinding contracts (the Ather's ?tune=1 convention)
   useEffect(() => {
     if (!new URLSearchParams(location.search).has('tune')) return
@@ -1330,12 +1340,16 @@ function ContinentRideGame() {
   // ── BETA M13 part 3: a runesmith's door and the Enchant Temple TALK first (door-talk.ts), the way Greg does on the Ather:
   // the counter's line in a bubble over its door, the camera turns to it, each answer opens ONE thing. Idony's imbue beat
   // plays in the same bubble. Other doors (shops, deeds, the Co.'s board) still open straight to their panel.
-  type Talk = { key: string; name: string; at: { x: number; y: number; z: number }; face?: { x: number; y: number; z: number }; beat?: { steps: Beat[]; at: number; vesselId: string; wordId: string }; greet?: number | null; visit?: number; asked?: 'idris' }
+  type Talk = { key: string; name: string; at: { x: number; y: number; z: number }; face?: { x: number; y: number; z: number }; beat?: { steps: Beat[]; at: number; vesselId: string; wordId: string }; greet?: number | null; visit?: number; asked?: 'idris'
+    /** M73 s3: Veyra at the Travelers Station (opening-chain.ts › VeyraTalk) */ veyra?: VeyraTalk }
   const [talk, setTalk] = useState<Talk | null>(null)
   const talkFocus = useRef<{ x: number; y: number; z: number } | null>(null)
   const openDoor = useCallback((key: string) => {
-    const d = R && (key.startsWith('smith:') || key === 'front:enchant-temple' || key === 'front:trade-co') ? doorByKey(R, key) : undefined
+    // M73 s3: the Travelers Station TALKS while Veyra has something for the keeper (Unit 1 v2, then her bark); else its panel
+    const due = key === 'front:station' ? veyraDue(getChain()) : null
+    const d = R && (key.startsWith('smith:') || key === 'front:enchant-temple' || key === 'front:trade-co' || due) ? doorByKey(R, key) : undefined
     if (!d) { setDeed(key); return }
+    if (due) { const st = standOf(d); setTalk({ key, name: VEYRA_NAME, at: headOf(st), face: faceOf(st), veyra: veyraOpen(due) }); return }
     // the Co. clerk (business/co-lines.ts, signed 11-18): the greeting once per garden, then a flavour line per visit
     let co: { greet: number | null; visit: number } = { greet: null, visit: 0 }
     if (key === 'front:trade-co') { const s = loadCoSeen(); co = { greet: s.greeted ? null : 0, visit: s.visits }; saveCoSeen({ ...s, visits: s.greeted ? s.visits + 1 : s.visits }) }
@@ -1358,6 +1372,15 @@ function ContinentRideGame() {
       })
     }
     if (deed) return null   // a counter's panel is open: the talk waits behind it
+    if (talk.veyra) {   // M73 s3: Veyra's lines word for word (veyra-lines.ts); the send line sets the ship-repair flag
+      const v = talk.veyra, b = VEYRA_UNIT1[v.at]
+      return { line: b.line, scene: b.scene, options: veyraOptions(v).map(p => ({ label: VEYRA_PICK[p], pick: () => {
+        const n = veyraPick(v, p)
+        if (n === 'done') { setTalk(null); if (v.at === 'bark') setDeed('front:station'); return }
+        if (n.at === 'send') chainVeyraSend()
+        setTalk(t => (t ? { ...t, veyra: n } : t))
+      } })) }
+    }
     if (talk.key === 'front:trade-co') return coTalk(talk.greet ?? null, talk.visit ?? 0, {
       next: () => setTalk(t => (t ? { ...t, greet: (t.greet ?? 0) + 1 } : t)),
       board: () => { const s = loadCoSeen(); if (!s.greeted) saveCoSeen({ ...s, greeted: true }); setTalk(t => (t ? { ...t, greet: null } : t)); setDeed('front:trade-co') },
@@ -1414,6 +1437,9 @@ function ContinentRideGame() {
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
   }, [showMap])
   const focus = useRef(new THREE.Vector3())
+  // M73 s3: standing in Kael's yard lands the chain's yard step and the journal page is found there (opening-chain-store.ts)
+  const yardR = useRef(R); yardR.current = R
+  useChainYard({ inYard: () => !!yardR.current && inKaelYard(yardR.current, focus.current.x, focus.current.z), getInv, setInv })
   // M27: others on the continent (shared/open-mp.tsx): where you stand (or your courser), facing as the walker/driver faces
   const mp = useOpenMultiplayer(OPEN_CONTINENT, () => ({ x: focus.current.x, y: focus.current.y, z: focus.current.z, yaw: track.current.yaw }),
     () => continentStance.current.kind === 'weapon' ? heldOf(continentStance.current, getInv()) : null)   // M27 slice 4: the party sees my gun
@@ -1528,7 +1554,7 @@ function ContinentRideGame() {
           <DoorFolk R={R} focus={focus} talking={talk?.key ?? null} />
           <RemoteKeepers peers={mp.peers} me={() => focus.current} />
           <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={openDoor} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} />
-          <ShipyardPlots R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState} owned={ledger.shipyards} ownAll={isOwner && ownAllFlag} car={carLink}
+          <ShipyardPlots R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState} owned={ledger.shipyards} ownAll={isOwner && ownAllFlag} car={carLink} shipGate={shipGate} onShip={() => setDeed('ship:franky')}
             enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} />
           <Posts R={R} />
           <Roadside R={R} />
@@ -1564,7 +1590,8 @@ function ContinentRideGame() {
         onBeat={b => { setDeed(null); setTalk(t => (t ? { ...t, beat: { ...b, at: 0 } } : t)) }} />}
       {deed === 'idris' && <IdrisPanel ledger={ledger} setLedger={setLedger} onClose={() => { setDeed(null); setTalk(null) }} onBack={talk ? () => setDeed(null) : undefined} />}
       {deed?.startsWith('front:') && !board && <ShopPanel id={deed.slice(6)} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} isTouch={isTouch} />}
-      {deed && deed !== 'idony' && deed !== 'idris' && !deed.startsWith('front:') && !deed.startsWith('smith:') && R && tycoon.t && (
+      {deed === 'ship:franky' && shipGate && R && <DestinationMapPanel places={R.meta.places} onClose={() => setDeed(null)} />}
+      {deed && deed !== 'idony' && deed !== 'idris' && !deed.startsWith('front:') && !deed.startsWith('smith:') && !deed.startsWith('ship:') && R && tycoon.t && (
         <DeedCard R={R} lotId={deed} t={tycoon.t} marks={ledger.marks} onClose={() => setDeed(null)}
           onBuy={o => { const r = tycoon.buy(o.lot.id, o.kind, o.lot.tier); if (r.ok) hudSay(`${o.name} is yours · −${o.price.toLocaleString()} Marks`, 'item'); return r }}
           onSell={o => { const r = tycoon.sell(o.lot.id); if (r.ok) { hudSay(`${o.name} sold · +${(r.refund ?? 0).toLocaleString()} Marks`, 'item'); setDeed(null) } return r }} />

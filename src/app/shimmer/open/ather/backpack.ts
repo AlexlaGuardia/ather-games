@@ -9,7 +9,7 @@
 // Pure; the store + look live in death-pack.tsx. Saved per keeper (open.pack.v1, KEEPER_KEY_SPECS).
 
 import { give, itemDef, SLOTS, type Inv, type Stack } from '../shared/inventory'
-import { KAEL_INVITE } from '../shared/opening-chain'
+import { KAEL_INVITE, KAEL_PAGE } from '../shared/opening-chain'
 
 export const PACK_LIFE_MS = 5 * 60 * 1000
 /** feet within this of the pack = touched (a keeper walking over it, not a precise click) */
@@ -19,7 +19,7 @@ export const PACK_KEY = 'open.pack.v1'
 export interface Pack { v: 1; x: number; y: number; z: number; at: number; items: Stack[] }
 
 // Kael's invite stays on the keeper too (BETA M73): it starts the opening chain, and Morel's ping speaks of it as in the pack
-const kept = (s: Stack) => { const k = itemDef(s.id).kind; return k === 'gun' || k === 'tool' || s.id === KAEL_INVITE }
+const kept = (s: Stack) => { const k = itemDef(s.id).kind; return k === 'gun' || k === 'tool' || s.id === KAEL_INVITE || s.id === KAEL_PAGE }
 
 /** The fall: what stays on the keeper (inv) and the pack left at (x, y, z). Null pack when there was nothing to carry. */
 export function dropPack(inv: Inv, x: number, y: number, z: number, now: number): { inv: Inv; pack: Pack | null } {

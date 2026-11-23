@@ -1,7 +1,7 @@
 // THE OPENING CHAIN (BETA M73), pure: each step, the once-only ping, the invite-early path, the old-save rule, the gate hint,
 // the flip + Rune Hold pulses, the note kept on a fall, the note handed once.   npx tsx src/app/shimmer/open/shared/opening-chain.test.ts
-import { newChain, parseChain, migrate, readInvite, onDeath, tick, onGateOpen, onFlip, flipPulse, runeHoldPulse, digActive, wantsInvite, NUDGE_MS, KAEL_INVITE, type Chain } from './opening-chain'
-import { newInv, giveInvite, countOf } from './inventory'
+import { newChain, parseChain, migrate, readInvite, onDeath, tick, onGateOpen, onFlip, flipPulse, runeHoldPulse, digActive, wantsInvite, NUDGE_MS, KAEL_INVITE, KAEL_PAGE, onYard, wantsPage, pageFound, readPage, shipRepair, onVeyraSend, veyraDue, veyraOpen, veyraOptions, veyraPick, type Chain, type VeyraTalk, type VeyraPick } from './opening-chain'
+import { newInv, giveInvite, givePage, countOf } from './inventory'
 import { dropPack } from '../ather/backpack'
 
 let fails = 0, n = 0
@@ -72,7 +72,7 @@ ok(JSON.stringify(young) === JSON.stringify(newChain()), 'old save not yet at th
 ok(!young.died, 'a death before the chain shipped is not counted: the ping waits for the next one')
 
 // ── parse: junk is null, never a half chain
-ok(parseChain(null) === null && parseChain({ v: 2 }) === null && parseChain({ v: 1, step: 'yard' }) === null, 'junk records parse to null')
+ok(parseChain(null) === null && parseChain({ v: 2 }) === null && parseChain({ v: 1, step: 'shipyard' }) === null, 'junk records parse to null (an unknown step; yard is a real step since s3)')
 const p = parseChain({ v: 1, step: 'dig', read: 'yes', pinged: true, pingAt: 'x' }) as Chain
 ok(p.read === false && p.pinged === true && p.pingAt === undefined, 'fields are coerced, not trusted')
 
@@ -86,6 +86,45 @@ const full = { ...inv0, slots: inv0.slots.map((s, k) => s ?? { id: `x${k}`, n: 9
 ok(giveInvite(full) === null, 'a full bag: not handed, not marked (retried later)')
 const fall = dropPack(inv1, 0, 0, 0, T0)
 ok(countOf(fall.inv, KAEL_INVITE) === 1 && !(fall.pack?.items ?? []).some(s => s.id === KAEL_INVITE), 'a fall keeps the note on the keeper, out of the pack')
+
+// ── s3: THE YARD -> THE PAGE -> VEYRA -> THE SHIP-REPAIR FLAG
+const dig = onFlip(readInvite(newChain()), 'athernyx')
+ok(runeHoldPulse(dig) && !shipRepair(dig) && veyraDue(dig) === null, 'on The Dig: Rune Hold pulses, no flag, Veyra has nothing yet')
+ok(readPage(dig) === dig && onVeyraSend(dig) === dig, 'before the yard: no page to read, no send')
+const yd = onYard(dig)
+ok(yd.step === 'yard' && !runeHoldPulse(yd) && !digActive(yd), 'the yard: step yard, the Rune Hold pulse ends')
+ok(wantsPage(yd) && !wantsPage(pageFound(yd)), 'the yard wants the page handed, once')
+ok(onYard(yd) === yd, 'standing in the yard again changes nothing')
+ok(readPage(yd) === yd, 'no page in hand: reading does nothing')
+ok(veyraDue(pageFound(yd)) === null, 'page found but unread: Veyra waits')
+ok(onVeyraSend(pageFound(yd)).step === 'yard' && !shipRepair(onVeyraSend(pageFound(yd))), 'page unread: no send, no flag')
+const rp = readPage(pageFound(yd))
+ok(rp.pageRead && veyraDue(rp) === 'unit1' && !shipRepair(rp), 'page read: Veyra Unit 1 is due, flag not yet set')
+const fl = onVeyraSend(rp)
+ok(fl.step === 'repair' && shipRepair(fl) && veyraDue(fl) === 'bark', 'the send: THE SHIP-REPAIR FLAG set, Veyra barks after')
+ok(onVeyraSend(fl) === fl && onYard(fl) === fl && readPage(fl) === fl, 'past the flag: nothing moves it back')
+const rl = parseChain(JSON.parse(JSON.stringify(fl)))!
+ok(rl.step === 'repair' && shipRepair(rl) && rl.page && rl.pageRead, 'the flag survives a reload (round-trip)')
+ok(parseChain({ ...fl, step: 'nope' }) === null, 'a bad step is no chain')
+const inv = onYard(newChain())
+ok(inv.step === 'yard' && tick(onDeath(inv), { packLying: false, now: T0 }).say === null, 'walked to the yard unread: the yard counts, no ping about the note')
+const past = migrate({ kaelChestOpen: true })
+ok(onYard(past) === past && !wantsPage(past) && veyraDue(past) === null && shipRepair(past), 'past keeper: no page, no Veyra, the flag reads set')
+const ipg = givePage(newInv())!
+ok(countOf(ipg, KAEL_PAGE) === 1 && givePage(ipg) === null, 'the page is handed once')
+ok(givePage(full) === null, 'a full bag: the page waits')
+ok(countOf(dropPack(ipg, 0, 0, 0, T0).inv, KAEL_PAGE) === 1, 'a fall keeps the page on the keeper')
+// Veyra's talk: both questions in either order, then the send; or one question + '…' -> the send
+const walk = (picks: VeyraPick[]) => { let t: VeyraTalk | 'done' = veyraOpen('unit1'); const seen: string[] = [t.at]; for (const p of picks) { if (t === 'done') break; t = veyraPick(t, p); seen.push(t === 'done' ? 'done' : t.at) } return seen.join(' ') }
+ok(walk(['next', 'asked', 'next', 'where', 'next', 'next', 'next']) === 'open kaels asked1 asked2 where1 where2 send done', 'asked then where, then the send')
+ok(walk(['next', 'where', 'next', 'asked', 'next', 'next', 'next']) === 'open kaels where1 where2 asked1 asked2 send done', 'where then asked, then the send')
+ok(walk(['next', 'asked', 'next', 'next', 'next']) === 'open kaels asked1 asked2 send done', 'only asked + …: the send after it')
+ok(walk(['next', 'where', 'next', 'next', 'next']) === 'open kaels where1 where2 send done', 'only where + …: the send after it')
+ok(JSON.stringify(veyraOptions({ at: 'kaels', asked: false, where: false })) === '["asked","where"]', 'the choice: the two questions only')
+ok(JSON.stringify(veyraOptions({ at: 'where2', asked: true, where: true })) === '["next"]', 'both asked: no question left, only …')
+const k: VeyraTalk = { at: 'kaels', asked: false, where: false }
+ok(veyraPick(k, 'next') === k, 'an option not offered does nothing')
+ok(veyraPick(veyraOpen('bark'), 'next') === 'done' && veyraOpen('bark').at === 'bark', 'the bark: one line, then done')
 
 console.log(`opening-chain: ${n - fails}/${n}${fails ? ` · ${fails} FAILED` : ' · pass'}`)
 process.exit(fails ? 1 : 0)

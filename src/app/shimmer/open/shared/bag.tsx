@@ -11,9 +11,10 @@ import { HearthFrame, HearthLabel, Well, H, hearthDisplay } from '../../ui/heart
 import type { HotbarEntry } from '../../hud/hotbar'
 import { loadWaymarks } from '../ather/waymarks'
 import { HOTBAR, BAG, SLOTS, itemDef, loadInv, saveInv, move, split, quickMove, makeBait, BAIT_FROM, baitYield, readBaitPage, hasGift, BAIT_PAGE, GIFT_BAIT_READ, type Inv } from './inventory'
-import { KAEL_INVITE } from './opening-chain'
+import { KAEL_INVITE, KAEL_PAGE } from './opening-chain'
 import { KAEL_INVITE_TEXT } from './kael-invite-lines'
-import { chainRead } from './opening-chain-store'
+import { KAEL_PAGE_TEXT } from './kael-page-lines'
+import { chainRead, chainReadPage } from './opening-chain-store'
 
 // ── the store ────────────────────────────────────────────────────────────────────────────────────────────────
 let inv: Inv | null = null
@@ -88,6 +89,7 @@ export function BagBody({ sel }: { sel: number }) {
   const shown = look !== null ? i.slots[look] : i.slots[sel]
   const d = shown ? itemDef(shown.id) : null
   const noteOpen = note && shown?.id === KAEL_INVITE
+  const pageOpen = note && shown?.id === KAEL_PAGE   // M73 s3: Kael's journal page, the same unfold
   return (
     <>
       <div className="px-4 pt-7 pb-3">
@@ -128,6 +130,13 @@ export function BagBody({ sel }: { sel: number }) {
                   onClick={() => { if (noteOpen) { setNote(false); return } setNote(true); chainRead() }}>
                   {noteOpen ? 'Fold' : 'Read'}
                 </button>
+              ) : shown.id === KAEL_PAGE ? (
+                // BETA M73 s3 (opening-chain.ts): reading Kael's journal page sends the keeper to Veyra
+                <button type="button" data-act="read-kael-page" className="ml-auto shrink-0 rounded-[10px] px-3 py-2 text-[13px] font-semibold"
+                  style={{ ...hearthDisplay, color: H.ink, background: 'rgba(255,250,235,.85)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}
+                  onClick={() => { if (pageOpen) { setNote(false); return } setNote(true); chainReadPage() }}>
+                  {pageOpen ? 'Fold' : 'Read'}
+                </button>
               ) : null}
             </>
           ) : <div className="text-[12.5px]" style={{ color: H.inkFaint }}>Nothing picked. Choose a slot to see what is in it.</div>}
@@ -136,6 +145,12 @@ export function BagBody({ sel }: { sel: number }) {
           // Kael's hand: one block, no choices (kael-invite-script.md › For Jin)
           <div data-invite-note className="mt-3 rounded-[6px] px-4 py-3" style={{ ...hearthDisplay, color: H.ink, fontStyle: 'italic', fontSize: 15, lineHeight: 1.45, background: '#fbf3df', boxShadow: '0 2px 6px rgba(74,45,24,.25), inset 0 0 0 1px rgba(74,45,24,.15)', transform: 'rotate(-0.6deg)' }}>
             {KAEL_INVITE_TEXT.map((l, k) => <p key={k} data-invite-line style={{ margin: k ? '8px 0 0' : 0 }}>{l}</p>)}
+          </div>
+        )}
+        {pageOpen && (
+          // Kael's hand: one block, no choices, not addressed to the keeper (kael-journal-page-script.md › For Jin)
+          <div data-kael-page className="mt-3 rounded-[6px] px-4 py-3" style={{ ...hearthDisplay, color: H.ink, fontStyle: 'italic', fontSize: 15, lineHeight: 1.45, background: '#fbf3df', boxShadow: '0 2px 6px rgba(74,45,24,.25), inset 0 0 0 1px rgba(74,45,24,.15)', transform: 'rotate(0.5deg)' }}>
+            {KAEL_PAGE_TEXT.map((l, k) => <p key={k} data-kael-page-line style={{ margin: k ? '8px 0 0' : 0 }}>{l}</p>)}
           </div>
         )}
       </div>
