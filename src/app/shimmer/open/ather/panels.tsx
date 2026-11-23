@@ -15,6 +15,7 @@ import { cellOrigin, FOG_CELL, walkedShare, isRevealed, type Fog } from './explo
 import { drawCloud, ATHER_CLOUD } from '../../ui/map-kit'
 import type { Pitstop } from '../continent/pitstops'
 import { HearthFrame, HearthButton, H } from '../../ui/hearth'
+import { PanZoomBox, PIN_KEEP } from '../../ui/pan-zoom-view'
 import { GRID, sqId, ringOf, canBuy, RING_PAGES, GRIMOIRE_SIZE, type Garden } from './plot'
 
 export type Dest =
@@ -32,7 +33,7 @@ export const LANDING: Pitstop = { id: 'rune-hold', name: 'Rune Hold', x: 255, z:
 const label: React.CSSProperties = { color: H.inkSoft, fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase' }
 const pin = (bg: string, size: number): React.CSSProperties => ({
   position: 'absolute', width: size, height: size, margin: -size / 2, borderRadius: size, background: bg,
-  boxShadow: '0 0 0 2px rgba(20,24,28,0.75)', border: 0, padding: 0, cursor: 'pointer',
+  boxShadow: '0 0 0 2px rgba(20,24,28,0.75)', border: 0, padding: 0, cursor: 'pointer', ...PIN_KEEP,   // M100: same size on screen at any zoom
 })
 
 /** The streamed Wilds round you (your tile and its neighbours, 3 km), each tile composed exactly as the minimap does. */
@@ -106,6 +107,8 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
       <span style={{ flex: 1 }}>{name}<br /><span style={{ opacity: 0.55, fontSize: 11 }}>{sub}</span></span>
     </button>
   )
+  // M100: on a phone the stops list goes under the map, so the map gets the whole width to pan + pinch in
+  const cols = typeof window !== 'undefined' && window.innerWidth < 560 ? 'minmax(0,1fr)' : 'minmax(0,1fr) 200px'
   return (
     <HearthFrame title={view === 'ather' ? 'The fold map · the Ather' : 'The fold map · Athernyx'} maxWidth={820} onClose={onClose} fixed dataPanel="fold-map">
       <div style={{ padding: '26px 16px 14px', fontSize: 13 }}>
@@ -114,8 +117,9 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
           <HearthButton small onClick={onFlip}>Flip map</HearthButton>
         </div>
         {view === 'ather' ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 200px', gap: 14 }}>
-            <div style={{ position: 'relative', aspectRatio: '1', width: 'min(100%, calc(92vh - 120px))', justifySelf: 'center', borderRadius: 8, overflow: 'hidden', background: '#334' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 14 }}>
+            {/* M100 (Alex 11-23): drag pans, wheel / pinch zooms about the pointer, Reset view brings the whole map back */}
+            <PanZoomBox key="ather" style={{ position: 'relative', aspectRatio: '1', width: 'min(100%, calc(92vh - 120px))', justifySelf: 'center', borderRadius: 8, background: '#334' }}>
               {area ? (() => {
                 // 3 km round your tile's centre: every pin in world coords
                 const span = 3 * TILE_M, ap = (x: number, z: number) => ({ left: `${((x - area.cx + span / 2) / span) * 100}%`, top: `${((z - area.cz + span / 2) / span) * 100}%` })
@@ -133,7 +137,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
                   </>
                 )
               })() : (<>
-              {W ? <PlateView W={W} /> : <img src={`/open/wilds/${tile}-map.png`} alt="" style={{ width: '100%', height: '100%', imageRendering: 'pixelated', display: 'block' }} />}
+              {W ? <PlateView W={W} /> : <img src={`/open/wilds/${tile}-map.png`} alt="" draggable={false} style={{ width: '100%', height: '100%', imageRendering: 'pixelated', display: 'block' }} />}
               {fog && W && <FogLayer fog={fog} W={W} />}
               <button title="Gregory's waymark" onClick={() => go({ kind: 'waymark', w: GREG_WAYMARK })} style={{ ...pin('#e7c766', 13), ...pct(GREG_WAYMARK.x, GREG_WAYMARK.z) }} />
               {waymarks.filter(w => w.tile === tile).map(w => (
@@ -150,7 +154,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
               )}
               {inWilds && <div style={{ ...pin('#ffffff', 8), cursor: 'default', ...pct(here.x, here.z) }} />}
               </>)}
-            </div>
+            </PanZoomBox>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={label}>Stops</div>
               {stop('Your plot', 'home', { kind: 'home' }, '#f2d88a')}
@@ -169,15 +173,15 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
           </div>
         ) : (
           <div>
-            <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden' }}>
-              <img src="/open/wilds/continent-relief.jpg" alt="" style={{ width: '100%', display: 'block' }} />
+            <PanZoomBox key="athernyx" style={{ borderRadius: 8 }}>
+              <img src="/open/wilds/continent-relief.jpg" alt="" draggable={false} style={{ width: '100%', display: 'block' }} />
               <div title="Your Wilds stand here" style={{ position: 'absolute', left: `${(src.x0 / 1168) * 100}%`, top: `${(src.y0 / 784) * 100}%`, width: `${((src.x1 - src.x0) / 1168) * 100}%`, height: `${((src.y1 - src.y0) / 784) * 100}%`, border: '2px solid #6fd3c4', boxShadow: '0 0 0 2px rgba(0,0,0,0.5)', pointerEvents: 'none' }} />
               {pitstops.map(p => (
                 <button key={p.id} title={`${p.name} · a door off the hall`} onClick={() => go({ kind: 'landing', id: p.id, name: p.name })} data-goal={p.id === goal || undefined}
                   style={{ ...pin(p.id === goal ? '#ff9a4a' : '#f2d88a', p.id === goal ? 18 : 13), left: `${((p.x + 5835) / 11670) * 100}%`, top: `${((p.z + 3915) / 7830) * 100}%`, ...(p.id === goal ? { boxShadow: '0 0 0 3px rgba(255,154,74,.45), 0 0 14px #ff9a4a' } : {}) }} />
               ))}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 200px', gap: 14, marginTop: 10, alignItems: 'start' }}>
+            </PanZoomBox>
+            <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 14, marginTop: 10, alignItems: 'start' }}>
               <div style={{ opacity: 0.75, fontSize: 12 }}>The same ground in its other state. Each city keeps a door off the hall; visit a city and its door opens to you. {LANDING.name}&apos;s is open from the start.</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={label}>Doors</div>

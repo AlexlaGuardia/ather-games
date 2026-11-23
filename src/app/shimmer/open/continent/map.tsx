@@ -17,7 +17,7 @@
 // The other side's tab is a VIEW, not a door: the same land in blocks, opened where you have walked the Wilds
 // (the world lane's fog, one grid in world coords). Looking is free; going is still Rune Hold's gate.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Region } from '../region'
 import { WATER_Y } from '../on-foot'
 import { emptySeen, isSeen, see, loadSeen, saveSeen, CELL, type Seen } from '../../voxel3d/discovery'
@@ -28,6 +28,7 @@ import { doorsCached } from '../business/doors'
 import { allPitstops, loadVisited, FIRST_PITSTOP } from './pitstops'
 import { screenHeading } from '../../voxel3d/map-heading'
 import { HearthFrame, H } from '../../ui/hearth'
+import { usePanZoom, ResetView, viewAttr } from '../../ui/pan-zoom-view'
 import { HearthMapFrame, MINIMAP_BOX, MINIMAP_BOX_PHONE, type MapBox } from '../../ui/hearth-hud'
 
 /** Metres per plate pixel. The source painting's own scale, so the plate is the Atlas's size (1168 × 784). */
@@ -274,8 +275,10 @@ export function ContinentMiniMap({ map, track, onExpand, box: boxIn }: { map: Co
 // ── the map, opened (M) ─────────────────────────────────────────────────────────────────────────────────────
 export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; track: React.RefObject<Track>; onClose: () => void }) {
   const base = useRef<HTMLCanvasElement>(null), marks = useRef<HTMLCanvasElement>(null)
-  const [pct, setPct] = useState(0)
   const [side, setSide] = useState<'nyx' | 'ather'>('nyx')
+  // M100 (Alex 11-23): drag pans, wheel / pinch zooms about the pointer. The view is applied in the DRAW, not as a CSS
+  // scale, so the plate magnifies while every mark, label and the keeper keep their size in real px.
+  const pz = usePanZoom(), view = pz.view
   // ★ DRAWN AT THE SIZE IT IS SHOWN. A fixed 2× plate was scaled down to fit the screen and its 12px labels came
   // out at 4px; so the canvas takes the displayed size × devicePixelRatio and every label is sized in real px.
   const [S, setS] = useState(1), [dpr, setDpr] = useState(1)
@@ -287,23 +290,37 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
     }
     fit(); window.addEventListener('resize', fit); return () => window.removeEventListener('resize', fit)
   }, [map])
-  useEffect(() => {
-    const c = base.current; if (!c) return
-    compose(map)
-    c.width = Math.round(map.plate.width * S); c.height = Math.round(map.plate.height * S)
-    const ctx = c.getContext('2d')!
+  // the picture per face, built once per open (composeAther makes a fresh canvas; a wheel tick only redraws)
+  const pic = useMemo(() => {
     if (side === 'ather') {
       // the other state of this land: you are not there, so no marker; only what you have walked, opened
       const fog = loadFog()
-      ctx.imageSmoothingEnabled = false
-      ctx.drawImage(composeAther(map, fog), 0, 0, c.width, c.height)
       let on = 0
       for (let i = 0; i < fog.bits.length; i++) { let b = fog.bits[i]; while (b) { on += b & 1; b >>= 1 } }
-      setPct((on / (fog.cw * fog.ch)) * 100)
+      return { img: composeAther(map, fog), pct: (on / (fog.cw * fog.ch)) * 100 }
+    }
+    compose(map)
+    let on = 0
+    for (let y = 0; y < map.seen.ch; y++) for (let x = 0; x < map.seen.cw; x++) if (isSeen(map.seen, x, y)) on++
+    return { img: map.comp, pct: (on / (map.seen.cw * map.seen.ch)) * 100 }
+  }, [map, side])
+  const pct = pic.pct
+  useEffect(() => {
+    const c = base.current; if (!c) return
+    const cw = Math.round(map.plate.width * S), ch = Math.round(map.plate.height * S)
+    if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch }
+    const ctx = c.getContext('2d')!
+    ctx.clearRect(0, 0, c.width, c.height)
+    // the view (CSS px of the box) in canvas px; T = world metres -> canvas px under the view
+    const q = c.width / Math.max(1, c.clientWidth), ox = view.x * q, oy = view.y * q, K = S * view.k
+    const T = (x: number, z: number): [number, number] => { const [px, py] = map.toPx(x, z); return [px * K + ox, py * K + oy] }
+    if (side === 'ather') {
+      ctx.imageSmoothingEnabled = false
+      ctx.drawImage(pic.img, ox, oy, c.width * view.k, c.height * view.k)
       // waymarks: passages the keeper planted (and Gregory's, given), a lit waystone each. Where fast travel will start.
       ctx.textBaseline = 'middle'
       for (const w of waymarksInWorld()) {
-        const [px, py] = map.toPx(w.x, w.z), x = px * S, y = py * S, r = (w.greg ? 6 : 5) * dpr
+        const [x, y] = T(w.x, w.z), r = (w.greg ? 6 : 5) * dpr
         ctx.save(); ctx.shadowColor = '#cdbcff'; ctx.shadowBlur = 10 * dpr
         ctx.fillStyle = w.greg ? '#f0d58a' : '#e4dcff'; ctx.strokeStyle = 'rgba(20,14,40,0.85)'; ctx.lineWidth = 1.5 * dpr
         ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r * 0.7, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r * 0.7, y); ctx.closePath()
@@ -313,31 +330,32 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
           ctx.strokeText("Gregory's waymark", x + 9 * dpr, y); ctx.fillStyle = '#f0d58a'; ctx.fillText("Gregory's waymark", x + 9 * dpr, y)
         }
       }
+      publishStops(c, T, q)
       return
     }
     ctx.imageSmoothingEnabled = true
-    ctx.drawImage(map.comp, 0, 0, c.width, c.height)
+    ctx.drawImage(pic.img, ox, oy, c.width * view.k, c.height * view.k)
     // names only where you have been: a label over parchment would tell you what the fog is for not telling
     ctx.textBaseline = 'middle'
     for (const p of map.R.meta.places) {
       if (!p.name || !placeSeen(map, p.x, p.z)) continue
-      const [x, y] = map.toPx(p.x, p.z)
+      const [x, y] = T(p.x, p.z)
       ctx.font = `${p.kind === 'city' ? 700 : 600} ${(p.kind === 'city' ? 16 : 13) * dpr}px Georgia, serif`
-      ctx.lineWidth = 3.5 * dpr; ctx.strokeStyle = 'rgba(236,226,198,0.9)'; ctx.strokeText(p.name, x * S + 7 * dpr, y * S)
-      ctx.fillStyle = '#2c1a0c'; ctx.fillText(p.name, x * S + 7 * dpr, y * S)
+      ctx.lineWidth = 3.5 * dpr; ctx.strokeStyle = 'rgba(236,226,198,0.9)'; ctx.strokeText(p.name, x + 7 * dpr, y)
+      ctx.fillStyle = '#2c1a0c'; ctx.fillText(p.name, x + 7 * dpr, y)
     }
     for (const sm of shopMarks(map)) {   // a gun shop: a small inked diamond, no name (the shop has none)
-      const [mx, my] = map.toPx(sm.x, sm.z), r = 3.2 * dpr
+      const [mx, my] = T(sm.x, sm.z), r = 3.2 * dpr
       ctx.save(); ctx.fillStyle = sm.kind === 'courseryard' ? '#8a5a2e' : sm.kind === 'courserlot' ? '#2c5a86' : '#4a4f57'; ctx.strokeStyle = 'rgba(236,226,198,0.95)'; ctx.lineWidth = 1.2 * dpr
       ctx.beginPath()
-      if (sm.kind === 'courseryard') ctx.rect(mx * S - r * 0.8, my * S - r * 0.8, r * 1.6, r * 1.6)   // a courser yard: a small rust square
-      else if (sm.kind === 'courserlot') { ctx.arc(mx * S, my * S, r * 1.1, 0, Math.PI * 2) }   // a courser lot: a ring-edged disc
-      else { ctx.moveTo(mx * S, my * S - r); ctx.lineTo(mx * S + r, my * S); ctx.lineTo(mx * S, my * S + r); ctx.lineTo(mx * S - r, my * S); ctx.closePath() }
+      if (sm.kind === 'courseryard') ctx.rect(mx - r * 0.8, my - r * 0.8, r * 1.6, r * 1.6)   // a courser yard: a small rust square
+      else if (sm.kind === 'courserlot') { ctx.arc(mx, my, r * 1.1, 0, Math.PI * 2) }   // a courser lot: a ring-edged disc
+      else { ctx.moveTo(mx, my - r); ctx.lineTo(mx + r, my); ctx.lineTo(mx, my + r); ctx.lineTo(mx - r, my); ctx.closePath() }
       ctx.fill(); ctx.stroke(); ctx.restore()
     }
     const g = gateOf(map)
     if (g) {
-      const [x, y] = map.toPx(g.x, g.z), gx = x * S + 12 * dpr, gy = y * S + 17 * dpr; gateRing(ctx, x * S, y * S, 4 * dpr)
+      const [x, y] = T(g.x, g.z), gx = x + 12 * dpr, gy = y + 17 * dpr; gateRing(ctx, x, y, 4 * dpr)
       ctx.font = `italic 600 ${12 * dpr}px Georgia, serif`; ctx.lineWidth = 3 * dpr; ctx.strokeStyle = 'rgba(236,226,198,0.9)'
       ctx.strokeText('gate to the Ather', gx, gy); ctx.fillStyle = '#5b3d8a'; ctx.fillText('gate to the Ather', gx, gy)
     }
@@ -346,22 +364,20 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
     const visited = loadVisited()
     for (const d of allPitstops(map.R.meta.places)) {
       if (d.id === FIRST_PITSTOP) continue
-      const [x, y] = map.toPx(d.x, d.z), open = visited.has(d.id)
-      if (open) gateRing(ctx, x * S, y * S, 3.4 * dpr)
+      const [x, y] = T(d.x, d.z), open = visited.has(d.id)
+      if (open) gateRing(ctx, x, y, 3.4 * dpr)
       else {   // a door to earn: an inked dashed ring, readable on parchment (the pale door ring vanished there)
         ctx.save(); ctx.strokeStyle = 'rgba(91,61,138,0.75)'; ctx.lineWidth = 1.6 * dpr; ctx.setLineDash([3 * dpr, 2.5 * dpr])
-        ctx.beginPath(); ctx.arc(x * S, y * S, 6 * dpr, 0, Math.PI * 2); ctx.stroke(); ctx.restore()
+        ctx.beginPath(); ctx.arc(x, y, 6 * dpr, 0, Math.PI * 2); ctx.stroke(); ctx.restore()
       }
       if (open) {
-        const gx = x * S + 10 * dpr, gy = y * S + 15 * dpr
+        const gx = x + 10 * dpr, gy = y + 15 * dpr
         ctx.font = `italic 600 ${11 * dpr}px Georgia, serif`; ctx.lineWidth = 3 * dpr; ctx.strokeStyle = 'rgba(236,226,198,0.9)'
         ctx.strokeText('pitstop', gx, gy); ctx.fillStyle = '#5b3d8a'; ctx.fillText('pitstop', gx, gy)
       }
     }
-    let on = 0
-    for (let y = 0; y < map.seen.ch; y++) for (let x = 0; x < map.seen.cw; x++) if (isSeen(map.seen, x, y)) on++
-    setPct((on / (map.seen.cw * map.seen.ch)) * 100)
-  }, [map, S, dpr, side])
+    publishStops(c, T, q)
+  }, [map, S, dpr, side, pic, view])
   useEffect(() => {
     const c = marks.current, b = base.current; if (!c || !b) return
     let id = 0
@@ -370,19 +386,27 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
       if (c.width !== b.width || c.height !== b.height) { c.width = b.width; c.height = b.height }
       const ctx = c.getContext('2d')!; ctx.clearRect(0, 0, c.width, c.height)
       const t = track.current; if (!t || side === 'ather') return
-      const [x, y] = map.toPx(t.x, t.z)
-      drawKeeper(ctx, x * S, y * S, trackHeading(t), 5 * dpr)
+      const [x, y] = map.toPx(t.x, t.z), q = c.width / Math.max(1, c.clientWidth)
+      drawKeeper(ctx, x * S * view.k + view.x * q, y * S * view.k + view.y * q, trackHeading(t), 5 * dpr)
     }
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)
-  }, [map, track, S, dpr, side])
+  }, [map, track, S, dpr, side, view])
+  /** M100: the stops a tap would take, in CSS px of the box under the current view (data-stops; the check taps them). */
+  const publishStops = (c: HTMLCanvasElement, T: (x: number, z: number) => [number, number], q: number) => {
+    const visited = loadVisited()
+    const list = side === 'ather' ? waymarksInWorld().map(w => ({ id: w.id, x: w.x, z: w.z }))
+      : allPitstops(map.R.meta.places).filter(d => d.id === FIRST_PITSTOP || visited.has(d.id)).map(d => ({ id: d.id, x: d.x, z: d.z }))
+    c.dataset.stops = JSON.stringify(list.map(d => { const [x, y] = T(d.x, d.z); return { id: d.id, x: +(x / q).toFixed(1), y: +(y / q).toFixed(1) } }))
+  }
   // ★ TAP A DOOR, STEP THROUGH (gates.md › THE HALLWAY: any door to any door, one act). Athernyx tab: an unlocked
   // pitstop (or Rune Hold) sets you down there. Ather tab: a waymark you bound sets you down at it in the Wilds
   // (world lane's ?waymark=, which refuses an unbound id).
   const tap = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const c = base.current; if (!c) return
     const r = c.getBoundingClientRect(), px = (e.clientX - r.left) * (c.width / r.width), py = (e.clientY - r.top) * (c.height / r.height)
-    const near = (x: number, z: number) => { const [mx, my] = map.toPx(x, z); return Math.hypot(mx * S - px, my * S - py) < 16 * dpr }
+    const q = c.width / Math.max(1, c.clientWidth)   // M100: the stop under the tap at any zoom (marks keep their px size, so does the hit radius)
+    const near = (x: number, z: number) => { const [mx, my] = map.toPx(x, z); return Math.hypot(mx * S * view.k + view.x * q - px, my * S * view.k + view.y * q - py) < 16 * dpr }
     let go: string | null = null
     if (side === 'ather') { const w = waymarksInWorld().find(w => near(w.x, w.z)); if (w) go = `/shimmer/open/ather?waymark=${encodeURIComponent(w.id)}` }
     else {
@@ -413,10 +437,12 @@ export function ContinentMap({ map, track, onClose }: { map: ContinentMapState; 
               onClick={() => { window.location.href = '/shimmer/open/ather' }} title="Drop a gate-rune where you stand and step through to your plot's threshold.">Step home · your plot</button>
           )}
         </div>
-        <div style={{ position: 'relative' }}>
-          <canvas ref={base} data-map="base" data-shop-marks={shopMarks(map).map(m => m.key).join(',')} onClick={tap} style={{ maxWidth: '86vw', maxHeight: '68vh', width: 'auto', height: 'auto', display: 'block', borderRadius: 8,
-            border: '3px solid #5a3d22', boxShadow: '0 0 0 1px #c9a86a55, 0 18px 50px rgba(0,0,0,0.6)' }} />
-          <canvas ref={marks} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', borderRadius: 8 }} />
+        {/* M100: the frame's border lives on the pan box (its clientWidth = the canvas's), so the view's px are the canvas's */}
+        <div ref={pz.ref} data-panzoom data-view={viewAttr(view)} style={{ position: 'relative', overflow: 'hidden', touchAction: 'none', cursor: view.k > 1 ? 'grab' : undefined, borderRadius: 8,
+          border: '3px solid #5a3d22', boxShadow: '0 0 0 1px #c9a86a55, 0 18px 50px rgba(0,0,0,0.6)' }}>
+          <canvas ref={base} data-map="base" data-shop-marks={shopMarks(map).map(m => m.key).join(',')} onClick={tap} style={{ maxWidth: '86vw', maxHeight: '68vh', width: 'auto', height: 'auto', display: 'block' }} />
+          <canvas ref={marks} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
+          <ResetView view={view} onReset={pz.reset} />
         </div>
         <div style={{ color: H.inkSoft, fontSize: 12, textAlign: 'center' }}>
           <span style={{ color: H.ink, fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{pct.toFixed(side === 'ather' ? 2 : 1)}%</span>{' '}
