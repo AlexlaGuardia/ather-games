@@ -13,6 +13,7 @@ import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
+import { makeTrot, type SpiritNav, type Trot } from './spirit-trot'
 
 export const VULNYX_URL = '/open/spirits/vulnyx.glb'
 /** World height of the model (the glb is 1 unit tall). Small and lithe: ~0.55 m, about a third of a keeper. */
@@ -30,16 +31,19 @@ export function useSpirits3d(): boolean {
 }
 
 // read-only probe for the check: how many Vulnyx models are mounted right now
-type Probe = { mounted: number; url: string; h: number }
+type Probe = { mounted: number; url: string; h: number; trot?: { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; beats: number } }
 const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Probe }; return (w.__spiritModel ??= { mounted: 0, url: VULNYX_URL, h: VULNYX_H }) }
 
 let grad: THREE.DataTexture | null = null
 const gradTex = () => { if (grad) return grad; grad = new THREE.DataTexture(new Uint8Array([110, 110, 110, 255, 185, 185, 185, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat); grad.minFilter = grad.magFilter = THREE.NearestFilter; grad.needsUpdate = true; return grad }
 
-function Vulnyx() {
+function Vulnyx({ nav }: { nav?: SpiritNav }) {
   const { scene } = useGLTF(VULNYX_URL)
   const g = useRef<THREE.Group>(null)
-  const time = useMemo(() => ({ value: 0 }), [])
+  const time = useMemo(() => ({ value: 0 }), []), sw = useMemo(() => ({ value: 0 }), []), lift = useMemo(() => ({ value: 0 }), [])
+  // M107: the procedural trot (spirit-trot.ts) when a nav is given; seeded by home so two planters never move in step
+  const trot = useMemo<Trot | null>(() => nav ? makeTrot(nav, Math.round(nav.home.x * 31 + nav.home.z * 17)) : null, [nav])
+  const tmp = useMemo(() => ({ v: new THREE.Vector3(), q: new THREE.Quaternion(), e: new THREE.Euler(0, 0, 0, 'YXZ') }), [])
   const parts = useMemo(() => {
     const body = scene.getObjectByName('body') as THREE.Mesh | undefined, eyes = scene.getObjectByName('eyes') as THREE.Mesh | undefined
     if (!body || !eyes) return null
@@ -58,9 +62,15 @@ function Vulnyx() {
     const eye = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false })
     // tail sway: the tail runs out along +x (bbox max.x 0.62); weight rises from x 0.25 to the tip
     for (const m of [skin, halo]) m.onBeforeCompile = sh => {
-      sh.uniforms.uT = time
-      sh.vertexShader = 'uniform float uT;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-        float tw = smoothstep(0.25, 0.62, position.x); transformed.z += sin(uT * 1.7 - position.x * 3.0) * 0.07 * tw * tw;`)
+      sh.uniforms.uT = time; sh.uniforms.uSw = sw; sh.uniforms.uLift = lift
+      // M107: running (uSw 0..1) whips the tail faster and wider and the tail lags the hop (uLift); the ear tips (top of the
+      // head, off the tail side) give a small flick, quicker when running. Weights by vertex position: no rig.
+      sh.vertexShader = 'uniform float uT; uniform float uSw; uniform float uLift;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        float tw = smoothstep(0.25, 0.62, position.x);
+        transformed.z += sin(uT * (1.7 + uSw * 6.3) - position.x * 3.0) * (0.07 + 0.05 * uSw) * tw * tw;
+        transformed.y -= uLift * 0.06 * tw * tw;
+        float ew = smoothstep(0.84, 0.99, position.y) * (1.0 - smoothstep(0.15, 0.3, position.x));
+        transformed.x += sin(uT * (2.3 + uSw * 7.0) + position.x * 9.0) * (0.012 + 0.014 * uSw) * ew;`)
       // the warm rim light of the picked render: a bright gold fresnel line on the toon body (not on the hull)
       if (m === skin) sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
         gl_FragColor.rgb += vec3(1.0, 0.86, 0.32) * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 3.0) * 0.45;`)
@@ -68,10 +78,23 @@ function Vulnyx() {
     return { body: lin(body.geometry), eyes: eyes.geometry,   // eyes stay raw: their orange reads brighter, as in the picked render
       skin, halo, eye, cx, cz }
   }, [scene, time])
-  useEffect(() => { const p = probe(); p.mounted++; return () => { p.mounted-- } }, [])
-  useFrame(({ clock }) => {
+  useEffect(() => { const p = probe(); p.mounted++; return () => { p.mounted--; if (!p.mounted) p.trot = undefined } }, [])
+  useFrame(({ clock }, dt) => {
     const t = clock.elapsedTime; time.value = t
     if (!g.current) return
+    if (trot && g.current.parent) {
+      // the pose is in WORLD xz + yaw; the planter piece may be turned, so read through the parent's transform
+      const ps = trot.step(dt), par = g.current.parent, { v, q, e } = tmp
+      par.updateWorldMatrix(true, false); par.getWorldPosition(v); const baseY = v.y
+      v.set(ps.x, baseY + ps.y, ps.z); par.worldToLocal(v); g.current.position.copy(v)
+      par.getWorldQuaternion(q); e.setFromQuaternion(q)
+      g.current.rotation.set(ps.pitch, ps.yaw - e.y, ps.roll, 'YXZ')
+      const breath = ps.swing > 0 ? 0 : Math.sin(t * 2.2) * 0.015
+      g.current.scale.set(ps.sx, ps.sy + breath, ps.sx)
+      sw.value += (ps.swing - sw.value) * Math.min(1, dt * 6); lift.value = ps.lift
+      const pr = probe(); pr.trot = { x: ps.x, y: baseY + ps.y, z: ps.z, mode: ps.mode, home: nav!.home, rMin: nav!.rMin, rMax: nav!.rMax, beats: trot.beats() }
+      return
+    }
     g.current.position.y = Math.sin(t * 1.4) * 0.02
     g.current.scale.set(1, 1 + Math.sin(t * 2.2) * 0.015, 1)   // breath
     g.current.rotation.y = Math.sin(t * 0.35) * 0.45            // a slow look round
@@ -88,7 +111,8 @@ function Vulnyx() {
   )
 }
 
-/** The model stood on a bloomed planter; `fallback` (the gold orb) shows while the glb loads. */
-export function SpiritOnPlanter({ y, fallback }: { y: number; fallback: ReactNode }) {
-  return <Suspense fallback={fallback}><group position-y={y}><Vulnyx /></group></Suspense>
+/** The model stood on a bloomed planter; `fallback` (the gold orb) shows while the glb loads. With `nav` (M107) she trots
+ *  round her home instead of standing still: the group sits at the ground and the perch height comes from `nav.perch`. */
+export function SpiritOnPlanter({ y, fallback, nav }: { y: number; fallback: ReactNode; nav?: SpiritNav }) {
+  return <Suspense fallback={fallback}><group position-y={nav ? 0 : y}><Vulnyx nav={nav} /></group></Suspense>
 }

@@ -17,7 +17,7 @@ import { HearthFrame, HearthButton, Well, H, hearthDisplay } from '../../ui/hear
 import { getInv, setInv, useInv } from '../shared/bag'
 import { countOf, itemDef, give, makeBait, BAIT_FROM, baitYield, HOTBAR, SLOTS, type Stack, type Inv } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
-import { GROUND_Y, squareAt, sqId } from './plot'
+import { GROUND_Y, squareAt, sqId, loadGarden } from './plot'
 import { forestryLevel } from './forestry'
 import { connectedPieces, extractBlueprint, fitsPad } from './plot-blueprint'
 import { LOT_W, LOT_D, GLADE_LOTS } from './moonwell-glade'
@@ -48,6 +48,7 @@ import { AlchemyPanel } from './alchemy-panel'
 import { PlanterPanel, GrimoirePanel, liftPlanter, useBook, type BankStore } from './spirit-panels'
 import { BLOOM_MS } from './spirit-seeds'
 import { SpiritOnPlanter, useSpirits3d } from './spirit-model'
+import type { SpiritNav } from './spirit-trot'
 import { BrewingPanel } from './brewing-panel'
 import { useBrewing, openPartyBrew } from './party-brew-net'
 import { ALC_POTIONS as BREW_POTIONS, ALC_POTION_ORDER as BREW_ORDER } from './alchemy-set'
@@ -1223,10 +1224,25 @@ function ChestGhost({ pose, owned, q, item }: { pose: React.MutableRefObject<Pos
 
 const WOODS: Record<string, string> = { goldwood: '#d9a957', shimmeroak: '#a77a52', starwillow: '#c8d2e8', dawnwood: '#c9774a', iron: '#4e4a47', stone: '#bdb6a6' }
 const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, number]; c: string }) => <mesh position={p}><boxGeometry args={s} /><meshLambertMaterial color={c} /></mesh>
+/** M107 s1 (owner + ?spirits=3d): where the planter's spirit may trot. Home = the planter; a ring 0.9..1.5 m round it (the
+ *  planter's corners sit at 0.64 m); blocked = any wall/chest/piece box (bar the planter's own) padded by her half-width, or
+ *  ground that is not your plot. Boxes are re-read when the works change, so a piece set down beside her is honoured. */
+const SPIRIT_PAD = 0.22
+let navBoxes: { w: Works; b: ReturnType<typeof workWalls> } | null = null
+function planterNav(id: string): SpiritNav | null {
+  const pc = getW().pieces.find(x => x.id === id); if (!pc) return null
+  const home = { x: pc.x, z: pc.z }, owned = new Set(loadGarden().owned)
+  const boxes = () => { const w = getW(); if (navBoxes?.w !== w) navBoxes = { w, b: workWalls(w).filter(b => !(home.x > b.x0 && home.x < b.x1 && home.z > b.z0 && home.z < b.z1)) }; return navBoxes.b }
+  return { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked: (x, z) => {
+    const sq = squareAt(x, z); if (!sq || !owned.has(sqId(sq.i, sq.j))) return true
+    return boxes().some(b => x > b.x0 - SPIRIT_PAD && x < b.x1 + SPIRIT_PAD && z > b.z0 - SPIRIT_PAD && z < b.z1 + SPIRIT_PAD)
+  } }
+}
 /** M76: the spirit planter: woven starwillow round soft soil; a sprout that grows with the seed; a gold glow once it bloomed. */
 function SpiritPlanterBody({ id }: { id?: string }) {
   const f = FURNITURE.spirit_planter, c = WOODS.starwillow, b = useBook(), pot = id ? b.pots[id] : undefined
   const orb = useRef<THREE.Mesh>(null), sprout = useRef<THREE.Group>(null), spirits3d = useSpirits3d()   // M102: owner + ?spirits=3d = the Vulnyx model
+  const nav = useMemo(() => (spirits3d && id ? planterNav(id) : null), [spirits3d, id])   // M107 s1: she trots round it
   useFrame(({ clock }) => {
     if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06
     if (sprout.current && pot && !pot.bloomed) { const g = Math.max(0.15, Math.min(1, (Date.now() - pot.at) / BLOOM_MS)); sprout.current.scale.setScalar(g) }
@@ -1237,7 +1253,7 @@ function SpiritPlanterBody({ id }: { id?: string }) {
     <Bx p={[0, 0.5, 0]} s={[f.w - 0.12, 0.05, f.d - 0.12]} c="#4a3524" />
     {[-1, 1].flatMap(a => [-1, 1].map(z => <mesh key={`${a}${z}`} position={[a * (f.w / 2 - 0.04), 0.62, z * (f.d / 2 - 0.04)]}><sphereGeometry args={[0.035, 6, 5]} /><meshBasicMaterial color="#eaf2ff" /></mesh>))}
     {pot && !pot.bloomed && <group ref={sprout} position={[0, 0.52, 0]}><mesh position-y={0.12}><cylinderGeometry args={[0.015, 0.02, 0.24, 5]} /><meshLambertMaterial color="#9ad06a" /></mesh><mesh position={[0.05, 0.22, 0]} rotation-z={-0.8}><sphereGeometry args={[0.05, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh><mesh position={[-0.05, 0.18, 0]} rotation-z={0.8}><sphereGeometry args={[0.045, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh></group>}
-    {pot?.bloomed && <>{spirits3d ? <SpiritOnPlanter y={0.53} fallback={orbMesh} /> : orbMesh}<pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} /></>}
+    {pot?.bloomed && <>{spirits3d ? <SpiritOnPlanter y={0.53} fallback={orbMesh} nav={nav ?? undefined} /> : orbMesh}<pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} /></>}
   </>
 }
 /** One piece, built from boxes in its wood's colour. Blockout look like the rooms. */

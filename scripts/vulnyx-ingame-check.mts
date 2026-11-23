@@ -57,9 +57,26 @@ if (a) {
   ok(a.mounted >= 1, `A owner + ?spirits=3d: Vulnyx mounted on the bloomed planter (mounted=${a.mounted})`)
   ok(a.glb() === 200, `A glb /open/spirits/vulnyx.glb answered ${a.glb()}`)
   await look(a.p, 4.5)
+  // M107 s1: THE TROT. Sample her (window.__spiritModel.trot, world xz/y + mode) every 100 ms for 8 s: she moves, stays on
+  // her ring round the planter (never inside it, never past rMax), her y bobs while trotting, and she pauses at least once.
+  const samples = await a.p.evaluate(`new Promise(res => { const out = []; const t0 = performance.now(); const id = setInterval(() => { const tr = window.__spiritModel?.trot; if (tr) out.push({ ...tr, t: performance.now() - t0 }); if (performance.now() - t0 > 8000) { clearInterval(id); res(out) } }, 100) })`) as { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; t: number }[]
+  ok(samples.length > 20, `A trot probe sampled (${samples.length} samples over 8 s)`)
+  if (samples.length) {
+    const h = samples[0].home, r = (s: typeof samples[0]) => Math.hypot(s.x - h.x, s.z - h.z)
+    const ground = samples.filter(s => !['perch', 'hopDown', 'hopUp'].includes(s.mode)), trots = samples.filter(s => s.mode === 'trot')
+    let far = 0; for (const s of samples) for (const o of samples) far = Math.max(far, Math.hypot(s.x - o.x, s.z - o.z))
+    const rs = ground.map(r), ys = trots.map(s => s.y)
+    ok(far > 0.5, `A she moves: ${far.toFixed(2)} m between the farthest two samples (home ${h.x},${h.z})`)
+    ok(samples.every(s => r(s) <= samples[0].rMax + 0.05) && ground.every(s => r(s) >= s.rMin - 0.05), `A she stays on her ring round the planter: r ${rs.length ? Math.min(...rs).toFixed(2) : '-'}..${Math.max(0, ...samples.map(r)).toFixed(2)} m (ring ${samples[0].rMin}..${samples[0].rMax}; the planter's corners 0.64)`)
+    ok(ys.length > 3 && Math.max(...ys) - Math.min(...ys) > 0.02, `A y bobs while she trots: ${ys.length ? (Math.max(...ys) - Math.min(...ys)).toFixed(3) : '-'} m over ${ys.length} trot samples`)
+    const firstTrot = samples.findIndex(s => s.mode === 'trot'), paused = firstTrot >= 0 && samples.slice(firstTrot).some(s => ['check', 'look', 'sit', 'perch'].includes(s.mode))
+    ok(paused, `A she pauses at least once after trotting (modes seen: ${[...new Set(samples.map(s => s.mode))].join(',')})`)
+  }
   const fps = await a.p.evaluate(`new Promise(res => { let n = 0; const t0 = performance.now(); function f() { n++; if (performance.now() - t0 < 5000) requestAnimationFrame(f); else res(n / 5) } requestAnimationFrame(f) })`) as number
   console.log(`   frame: ${fps.toFixed(2)} fps = ${(1000 / fps).toFixed(0)} ms/frame at 390x844 near the planter (SwiftShader, not a phone)`)
   if (shots) { await shot(a.p, 'phone-far'); await look(a.p, 1.9, 0.5); await shot(a.p, 'phone-near') }
+  // M107: a run of phone frames of the trot (for the 4-up strip + a short clip); she is ~1-1.5 m off the planter, so stand back
+  if (shots) { await look(a.p, 3.3, 0.6); await hideCard(a.p); for (let i = 0; i < 24; i++) { try { await a.p.screenshot({ path: `${shots}/trot-${String(i).padStart(2, '0')}.png` }) } catch { /* slow frame */ } } }
   ok(a.errs.length === 0, `A 0 page errors ${a.errs.join(' | ')}`)
   await a.p.close()
 }
