@@ -46,8 +46,9 @@ import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseC
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, ALC_LIVE, type Job } from './furniture'
 import { AlchemyPanel } from './alchemy-panel'
 import { PlanterPanel, GrimoirePanel, liftPlanter, useBook, type BankStore } from './spirit-panels'
-import { BLOOM_MS } from './spirit-seeds'
+import { BLOOM_MS, speciesOf } from './spirit-seeds'
 import { SpiritOnPlanter, useSpirits3d } from './spirit-model'
+import { spiritModelFor } from './spirit-models'
 import type { SpiritNav } from './spirit-trot'
 import { BrewingPanel } from './brewing-panel'
 import { useBrewing, openPartyBrew } from './party-brew-net'
@@ -1248,8 +1249,10 @@ function planterNav(id: string): SpiritNav | null {
 /** M76: the spirit planter: woven starwillow round soft soil; a sprout that grows with the seed; a gold glow once it bloomed. */
 function SpiritPlanterBody({ id }: { id?: string }) {
   const f = FURNITURE.spirit_planter, c = WOODS.starwillow, b = useBook(), pot = id ? b.pots[id] : undefined
-  const orb = useRef<THREE.Mesh>(null), sprout = useRef<THREE.Group>(null), spirits3d = useSpirits3d()   // M102: owner + ?spirits=3d = the Vulnyx model
-  const nav = useMemo(() => (spirits3d && id ? planterNav(id) : null), [spirits3d, id])   // M107 s1: she trots round it
+  const orb = useRef<THREE.Mesh>(null), sprout = useRef<THREE.Group>(null), spirits3d = useSpirits3d()   // M102: owner + ?spirits=3d = the spirit model
+  // M102 Manalotl wire-in: the bloomed pot's OWN species' model (spirit-models.ts), or the gold orb when it has none yet
+  const sp = pot?.bloomed ? speciesOf(pot.seed) : null, look = spirits3d ? spiritModelFor(sp) : null
+  const nav = useMemo(() => (look && id ? planterNav(id) : null), [look, id])   // M107 s1: she trots round it
   useFrame(({ clock }) => {
     if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06
     if (sprout.current && pot && !pot.bloomed) { const g = Math.max(0.15, Math.min(1, (Date.now() - pot.at) / BLOOM_MS)); sprout.current.scale.setScalar(g) }
@@ -1260,7 +1263,7 @@ function SpiritPlanterBody({ id }: { id?: string }) {
     <Bx p={[0, 0.5, 0]} s={[f.w - 0.12, 0.05, f.d - 0.12]} c="#4a3524" />
     {[-1, 1].flatMap(a => [-1, 1].map(z => <mesh key={`${a}${z}`} position={[a * (f.w / 2 - 0.04), 0.62, z * (f.d / 2 - 0.04)]}><sphereGeometry args={[0.035, 6, 5]} /><meshBasicMaterial color="#eaf2ff" /></mesh>))}
     {pot && !pot.bloomed && <group ref={sprout} position={[0, 0.52, 0]}><mesh position-y={0.12}><cylinderGeometry args={[0.015, 0.02, 0.24, 5]} /><meshLambertMaterial color="#9ad06a" /></mesh><mesh position={[0.05, 0.22, 0]} rotation-z={-0.8}><sphereGeometry args={[0.05, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh><mesh position={[-0.05, 0.18, 0]} rotation-z={0.8}><sphereGeometry args={[0.045, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh></group>}
-    {pot?.bloomed && <>{spirits3d ? <SpiritOnPlanter y={0.53} fallback={orbMesh} nav={nav ?? undefined} /> : orbMesh}<pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} /></>}
+    {pot?.bloomed && <>{look && sp ? <SpiritOnPlanter sp={sp} look={look} y={0.53} fallback={orbMesh} nav={nav ?? undefined} /> : orbMesh}<pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} /></>}
   </>
 }
 /** One piece, built from boxes in its wood's colour. Blockout look like the rooms. */

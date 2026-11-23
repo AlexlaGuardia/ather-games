@@ -26,7 +26,7 @@ export type SpiritNav = {
    *  stays as the home beat. Without `roam` she only circles home (s1). */
   roam?: { maxLeg: number; away: number }
 }
-export type TrotMode = 'perch' | 'hopDown' | 'hopUp' | 'trot' | 'check' | 'look' | 'sit' | 'sniff'
+export type TrotMode = 'perch' | 'hopDown' | 'hopUp' | 'trot' | 'check' | 'look' | 'sit' | 'sniff' | 'tilt'
 export type TrotPose = {
   x: number; z: number      // world
   y: number                 // lift above the ground under her (hop, perch)
@@ -36,6 +36,7 @@ export type TrotPose = {
   swing: number             // 0..1 how hard the tail/ears swing (running)
   lift: number              // vertical velocity-ish, -1..1 (the tail lags it)
   mode: TrotMode
+  tilt: number              // -1..1 head tilt (M102 Manalotl): spirit-model bends the head by it, or tips the body
 }
 
 // ── the dials (tuned for a 0.55 m fox spirit; quick and light) ─────────────────────────────────────────────────────
@@ -54,7 +55,17 @@ export const TROT = {
   hopArcH: 0.2,     // m above the higher end of that hop
   sitY: 0.88, sitPitch: -0.2,
   sniffPitch: 0.32, // nose to the ground
+  // M102 (Manalotl wire-in): the beats became dials too, so each species carries its own manner (spirit-models.ts).
+  chain: 0.62,      // chance a run ends in a real beat (else a quick alert stop and another run)
+  checkS: [0.3, 0.75] as [number, number],
+  beat: { look: 0.6, sniff: 0.22, sit: 0.18, tilt: 0 },   // beat weights
+  lookS: [1.2, 2.4] as [number, number], sniffS: [0.8, 1.5] as [number, number], sitS: [1.8, 3.2] as [number, number], tiltS: [1.8, 3.0] as [number, number],
+  glance: 0.15,     // s to flick to a new look angle (snappy)
+  glanceHold: [0.45, 0.9] as [number, number], glanceMax: 0.85,
+  tiltK: 4,         // head-tilt ease /s
+  lookTilt: 0,      // how much tilt a look-round carries
 }
+export type TrotDials = typeof TROT
 
 const TAU = Math.PI * 2
 const wrap = (a: number) => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI
@@ -67,7 +78,8 @@ function rng(seed: number) { let s = (seed * 2654435761) >>> 0 || 1; return () =
 
 export type Trot = { step: (dt: number) => TrotPose; pose: () => TrotPose; beats: () => number; homes: () => number }
 
-export function makeTrot(nav: SpiritNav, seed = 1): Trot {
+export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): Trot {
+  const D: TrotDials = { ...TROT, ...dials, beat: { ...TROT.beat, ...dials?.beat } }
   const R = rng(seed), { home, roam } = nav
   const rand = (a: number, b: number) => lerp(a, b, R())
   const at = (a: number, r: number) => ({ x: home.x + Math.cos(a) * r, z: home.z + Math.sin(a) * r })
@@ -78,9 +90,10 @@ export function makeTrot(nav: SpiritNav, seed = 1): Trot {
   let ang = R() * TAU, rad = nav.rMin + 0.1
   let mode: TrotMode = nav.perch ? 'perch' : 'look', t = 0, dur = nav.perch ? rand(1.0, 1.6) : 1
   let yaw = R() * TAU, yawPrev = yaw, lookYaw = 0, lookAt = 0, lookFrom = 0, lookT = 0, lookHold = 0.6
+  let tilt = 0, tiltAt = 0, tiltSwap = 0
   let hopPh = 0, sinceLand = 9, runs = 0, beats = 0, homes = 0, sitK = 0, homing = false, outFirst = !!roam
   // the current run: an ARC round home (polar a0,r0 -> a1,r1) or a straight LINE (p0 -> p1); length len, speed vRun
-  let kind: 'arc' | 'line' = 'arc', a0 = 0, a1 = 0, r0 = 0, r1 = 0, p0 = { x: 0, z: 0 }, p1 = { x: 0, z: 0 }, len = 1, s = 0, vRun = TROT.speed
+  let kind: 'arc' | 'line' = 'arc', a0 = 0, a1 = 0, r0 = 0, r1 = 0, p0 = { x: 0, z: 0 }, p1 = { x: 0, z: 0 }, len = 1, s = 0, vRun = D.speed
   let pos = nav.perch ? { x: home.x, z: home.z } : at(ang, rad), y = nav.perch?.y ?? 0, lift = 0
 
   const arcLen = (A0: number, A1: number, R0: number, R1: number) => { let L = 0, p = at(A0, R0); for (let i = 1; i <= 12; i++) { const q = at(lerp(A0, A1, i / 12), lerp(R0, R1, i / 12)); L += Math.hypot(q.x - p.x, q.z - p.z); p = q } return L }
@@ -94,7 +107,7 @@ export function makeTrot(nav: SpiritNav, seed = 1): Trot {
     for (let k = 0; k < 10; k++) {
       const d = (k % 2 ? -dir : dir) * rand(0.6, 2.0) * (k < 6 ? 1 : 0.5), r = toR ?? rand(nav.rMin, nav.rMax)
       if (!arcFree(ang, ang + d, rad, r)) continue
-      kind = 'arc'; a0 = ang; a1 = ang + d; r0 = rad; r1 = r; len = arcLen(a0, a1, r0, r1); s = 0; vRun = TROT.speed; return true
+      kind = 'arc'; a0 = ang; a1 = ang + d; r0 = rad; r1 = r; len = arcLen(a0, a1, r0, r1); s = 0; vRun = D.speed; return true
     }
     return false
   }
@@ -109,19 +122,19 @@ export function makeTrot(nav: SpiritNav, seed = 1): Trot {
       const h = (k < 12 ? yaw + rand(-1.3, 1.3) : rand(0, TAU)), L = rand(Math.min(1.8, roam.maxLeg), roam.maxLeg)
       const to = { x: pos.x + Math.sin(h) * L, z: pos.z + Math.cos(h) * L }
       if (dHome(to) < Math.max(away, nav.rMax + 0.2)) continue
-      if (planLine(to, TROT.dash * rand(0.85, 1.1))) return true
+      if (planLine(to, D.dash * rand(0.85, 1.1))) return true
     }
     return false
   }
   /** a short straight hop between two ring points (a chord that misses the planter): breaks up the circling near home */
   function planChord(): boolean {
-    for (let k = 0; k < 10; k++) { const a = ang + (R() < 0.5 ? 1 : -1) * rand(0.5, 1.4); if (planLine(at(a, rand(nav.rMin + 0.1, nav.rMax)), TROT.speed * rand(1, 1.25))) return true }
+    for (let k = 0; k < 10; k++) { const a = ang + (R() < 0.5 ? 1 : -1) * rand(0.5, 1.4); if (planLine(at(a, rand(nav.rMin + 0.1, nav.rMax)), D.speed * rand(1, 1.25))) return true }
     return false
   }
   /** head home: a straight line to the free ring point nearest her bearing, then (homing) hop up */
   function planHome(): boolean {
     const b = Math.atan2(pos.z - home.z, pos.x - home.x)
-    for (let k = 0; k < 16; k++) { const a = b + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35; if (planLine(at(a, nav.rMin), TROT.dash * 0.9)) return true }
+    for (let k = 0; k < 16; k++) { const a = b + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35; if (planLine(at(a, nav.rMin), D.dash * 0.9)) return true }
     return false
   }
   /** a landing point on the ring to hop down to from the perch */
@@ -129,7 +142,7 @@ export function makeTrot(nav: SpiritNav, seed = 1): Trot {
     for (let k = 0; k < 12; k++) { const a = R() * TAU, p = at(a, nav.rMin); if (free(p.x, p.z)) { ang = a; rad = nav.rMin; return true } }
     return false
   }
-  function go(m: TrotMode, d: number) { mode = m; t = 0; dur = d; if (m === 'look') { lookT = 0; lookFrom = lookYaw; lookAt = rand(-0.7, 0.7) } }
+  function go(m: TrotMode, d: number) { mode = m; t = 0; dur = d; if (m === 'look') { lookT = 0; lookFrom = lookYaw; lookAt = rand(-0.7, 0.7) } else if (m === 'tilt') { tiltAt = R() < 0.5 ? 1 : -1; tiltSwap = rand(0.4, 0.7) * d } }
   /** the next run from a standstill. true = she is off. */
   function move(): boolean {
     const near = dHome(pos) <= nav.rMax + 0.25
@@ -153,16 +166,19 @@ export function makeTrot(nav: SpiritNav, seed = 1): Trot {
   function afterRun() {
     // after a run: chain another (a quick alert stop first), or a real beat. Never more than two runs without a beat.
     runs++
-    if (homing && dHome(pos) <= nav.rMin + 0.25) { homing = false; homes++; return go('hopUp', TROT.hopArc) }
+    if (homing && dHome(pos) <= nav.rMin + 0.25) { homing = false; homes++; return go('hopUp', D.hopArc) }
     homing = false
-    if (runs >= 2 || R() < 0.62) {
+    if (runs >= 2 || R() < D.chain) {
       runs = 0; beats++
       const b = R()
       if (nav.perch && dHome(pos) <= nav.rMax + 0.25 && b < 0.15 && planArc(nav.rMin)) { homing = true; return run() }
-      // the Vulnyx: mostly alert look-rounds; a sniff out on the grass; now and then a sit
-      return b < 0.6 ? go('look', rand(1.2, 2.4)) : b < 0.82 && roam ? go('sniff', rand(0.8, 1.5)) : go('sit', rand(1.8, 3.2))
+      // the beat weights are per species (D.beat): the Vulnyx mostly alert look-rounds, a sniff, now and then a sit; the
+      // Manalotl looks long, tilts her head, lies down. Sniff needs the roam (out on the grass), else its share is a sit.
+      const W = D.beat, sum = W.look + W.sniff + W.sit + W.tilt, c = b * sum
+      return c < W.look ? go('look', rand(...D.lookS)) : c < W.look + W.sniff ? (roam ? go('sniff', rand(...D.sniffS)) : go('sit', rand(...D.sitS)))
+        : c < W.look + W.sniff + W.sit ? go('sit', rand(...D.sitS)) : go('tilt', rand(...D.tiltS))
     }
-    go('check', rand(0.3, 0.75))   // an alert stop: a beat of stillness between darts
+    go('check', rand(...D.checkS))   // an alert stop: a beat of stillness between darts
   }
   const idleThen = () => { if (!move()) t = 0 }
 
@@ -171,12 +187,12 @@ export function makeTrot(nav: SpiritNav, seed = 1): Trot {
     let speed = 0, heading = yaw, wantSit = 0, sniff = 0
     if (mode === 'perch') {
       wantSit = 1
-      if (t > dur) { if (landing()) go('hopDown', TROT.hopArc); else t = 0 }
+      if (t > dur) { if (landing()) go('hopDown', D.hopArc); else t = 0 }
     } else if (mode === 'hopDown' || mode === 'hopUp') {
       const k = clamp(t / dur, 0, 1), top = nav.perch!.y, from = mode === 'hopDown' ? { x: home.x, z: home.z } : at(ang, rad), to = mode === 'hopDown' ? at(ang, rad) : { x: home.x, z: home.z }
       const y0 = mode === 'hopDown' ? top : 0, y1 = mode === 'hopDown' ? 0 : top, py = y
       pos = { x: lerp(from.x, to.x, k), z: lerp(from.z, to.z, k) }
-      y = lerp(y0, y1, k) + Math.sin(Math.PI * k) * TROT.hopArcH
+      y = lerp(y0, y1, k) + Math.sin(Math.PI * k) * D.hopArcH
       lift = clamp((y - py) / Math.max(dt, 1e-3) / 2, -1, 1)
       heading = Math.atan2(to.x - from.x, to.z - from.z)
       if (k >= 1) { y = y1; sinceLand = 0; lift = 0; if (mode === 'hopDown') { if (!move()) go('look', 1.5) } else go('perch', rand(2.5, 4.5)) }
@@ -195,8 +211,8 @@ export function makeTrot(nav: SpiritNav, seed = 1): Trot {
     } else if (mode === 'look') {
       // snappy glances: hold, flick to a new angle in ~0.15 s, hold
       lookT += dt
-      if (lookT > lookHold) { lookT = 0; lookHold = rand(0.45, 0.9); lookFrom = lookYaw; lookAt = clamp(-Math.sign(lookAt || 1) * rand(0.3, 0.8), -0.85, 0.85) }
-      lookYaw = lerp(lookFrom, lookAt, ease(clamp(lookT / 0.15, 0, 1)))
+      if (lookT > lookHold) { lookT = 0; lookHold = rand(...D.glanceHold); lookFrom = lookYaw; lookAt = clamp(-Math.sign(lookAt || 1) * rand(0.3, 0.8), -D.glanceMax, D.glanceMax) }
+      lookYaw = lerp(lookFrom, lookAt, ease(clamp(lookT / D.glance, 0, 1)))
       if (t > dur) { lookYaw = 0; idleThen() }
     } else if (mode === 'sniff') {
       sniff = 1
@@ -204,33 +220,40 @@ export function makeTrot(nav: SpiritNav, seed = 1): Trot {
     } else if (mode === 'sit') {
       wantSit = 1
       if (t > dur) idleThen()
+    } else if (mode === 'tilt') {
+      // the head tilt (Manalotl canon: "eternal smile, wide eyes, head tilt"): over to one side, hold, maybe the other way
+      if (tiltSwap > 0 && t > tiltSwap) { tiltSwap = 0; if (R() < 0.5) tiltAt = -tiltAt }
+      if (t > dur) { tiltAt = 0; idleThen() }
     }
+    // tilt eases (slow, a curious beat, not a twitch); a look can carry a little of it (D.lookTilt) toward the glance side
+    const tiltWant = mode === 'tilt' ? tiltAt : mode === 'look' ? clamp(lookYaw / 0.6, -1, 1) * D.lookTilt : 0
+    tilt = lerp(tilt, tiltWant, 1 - Math.exp(-dt * D.tiltK))
     if (mode !== 'look') lookYaw *= Math.exp(-dt * 8)
     sitK = lerp(sitK, wantSit && (mode === 'sit' || mode === 'perch') ? 1 : 0, 1 - Math.exp(-dt * 7))
 
     // the hop-trot: phase advances with distance, so it slows and stops with her feet
     let air = 0
-    const run01 = clamp(speed / TROT.speed, 0, 1)
+    const run01 = clamp(speed / D.speed, 0, 1)
     if (mode === 'trot') {
-      const before = hopPh; hopPh += (speed * dt) / (TROT.stride * (vRun > TROT.speed ? 1.2 : 1))
+      const before = hopPh; hopPh += (speed * dt) / (D.stride * (vRun > D.speed ? 1.2 : 1))
       if (Math.floor(hopPh) !== Math.floor(before)) sinceLand = 0
       air = Math.sin(Math.PI * (hopPh % 1))
       lift = Math.cos(Math.PI * (hopPh % 1)) * run01
-      y = TROT.hopH * air * run01 ** 0.5
+      y = D.hopH * air * run01 ** 0.5
     } else if (mode !== 'hopDown' && mode !== 'hopUp') { lift *= Math.exp(-dt * 6); y = mode === 'perch' ? nav.perch!.y : 0 }
 
-    yawPrev = yaw; yaw = yaw + wrap(heading - yaw) * (1 - Math.exp(-dt * TROT.turnK))
+    yawPrev = yaw; yaw = yaw + wrap(heading - yaw) * (1 - Math.exp(-dt * D.turnK))
     const yawRate = wrap(yaw - yawPrev) / Math.max(dt, 1e-3)
-    const sq = Math.exp(-sinceLand * TROT.squashK) * (mode === 'trot' || sinceLand < 0.3 ? 1 : 0)
-    const sy = (1 + TROT.stretch * air - TROT.squash * sq) * lerp(1, TROT.sitY, sitK)
+    const sq = Math.exp(-sinceLand * D.squashK) * (mode === 'trot' || sinceLand < 0.3 ? 1 : 0)
+    const sy = (1 + D.stretch * air - D.squash * sq) * lerp(1, D.sitY, sitK)
     cur = {
       x: pos.x, z: pos.z, y, yaw: yaw + lookYaw + sniff * Math.sin(t * 5) * 0.12,
-      roll: clamp(-yawRate * TROT.lean, -TROT.leanMax, TROT.leanMax) * (speed > 0 ? 1 : 0.3),
-      pitch: (speed > 0 ? 0.05 + 0.06 * sq : 0) + TROT.sitPitch * sitK + sniff * (TROT.sniffPitch + Math.sin(t * 13) * 0.04),
-      sx: 1 / Math.sqrt(Math.max(0.5, sy)), sy, swing: run01, lift, mode,
+      roll: clamp(-yawRate * D.lean, -D.leanMax, D.leanMax) * (speed > 0 ? 1 : 0.3),
+      pitch: (speed > 0 ? 0.05 + 0.06 * sq : 0) + D.sitPitch * sitK + sniff * (D.sniffPitch + Math.sin(t * 13) * 0.04),
+      sx: 1 / Math.sqrt(Math.max(0.5, sy)), sy, swing: run01, lift, mode, tilt,
     }
     return cur
   }
-  let cur: TrotPose = { x: pos.x, z: pos.z, y, yaw, roll: 0, pitch: 0, sx: 1, sy: 1, swing: 0, lift: 0, mode }
+  let cur: TrotPose = { x: pos.x, z: pos.z, y, yaw, roll: 0, pitch: 0, sx: 1, sy: 1, swing: 0, lift: 0, mode, tilt: 0 }
   return { step, pose: () => cur, beats: () => beats, homes: () => homes }
 }
