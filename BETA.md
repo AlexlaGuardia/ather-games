@@ -253,6 +253,8 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
+- **Idris + tutorial goodbyes (11-23, @lark draft, athernyx 7854e21):** Idris (Idony's twin at the Enchant Temple, cuts runes into a gun sigil): 13 lines + 3 barks, e.g. "Idony's at the other bench. I'm her twin. Idris." Player goodbyes for Greg/Otto/Tess/Bonn/Fennel, e.g. "Save me a seat, Fennel." File: athernyx CANON/game/shimmer-lines-idris-and-goodbyes.md. Sign off?
+
 - **M83 World Builder Fly view (11-22, LIVE):** /shimmer/dev?mode=builder, click Fly: W/S/A/D fly, Space climbs, wheel zooms, T = top-down and back, left-drag sculpts. Bare terrain only (no trees/nodes). Autosaves your draft; Publish to push live, history to roll back. Known: small viewport (fullscreen coming next), high ground looks pale.
 
 - **M81 s3 sights in shops (11-22, sprites):** only the Backbone + Charred Rifle have rails, so shop sights fit just those two. Add rails (= new models, look work) to Repeater / Spitter / Roar / Lance, or keep sights to the two kit guns for beta? Hub rec: keep to two for beta.
