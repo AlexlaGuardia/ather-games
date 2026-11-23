@@ -5,7 +5,7 @@
 import * as THREE from 'three'
 import { buildKeeper } from '/root/ather-games/src/app/shimmer/open/shared/keeper-figure'
 import { OPT, type Look } from '/root/ather-games/src/app/shimmer/open/shared/keeper-look'
-import { proportionsFor } from '/root/ather-games/src/app/shimmer/open/shared/keeper-proportions'
+import { proportionsFor, type Proportions } from '/root/ather-games/src/app/shimmer/open/shared/keeper-proportions'
 
 /** ONE head size for every model: the mean of today's six saved sizes (headW 0.74-0.80 -> 0.785, headH 0.71-0.82 -> 0.772),
  *  rounded down a touch so the larger frames keep the smaller-head read Alex dialled in on the bench. */
@@ -18,8 +18,12 @@ export interface Face {
   lid: number; wing: number; lower: number   // upper-lid line thickness, how far it runs past the outer corner, lower lash line
   iris: number; hi: boolean                  // iris height as a share of the eye, a catch-light
   brow: { y: number; w: number; th: number; tilt: number; arch: number }
-  nose: 'dot' | 'wedge' | 'bridge'; mouthW: number; mouthY: number; mouth: 'line' | 'soft' | 'smirk'
+  nose: 'dot' | 'wedge' | 'bridge'; mouthW: number; mouthY: number; mouth: Mouth
 }
+/** M116b mouth options (Alex 11-23: "a few options for the MOUTHS"): adult, small, toon. 'line' / 'soft' / 'smirk' are the
+ *  sheet-1 mouths; the M-prefixed five are the options sheet. */
+export type Mouth = 'line' | 'soft' | 'smirk' | 'M1' | 'M2' | 'M3' | 'M4' | 'M5'
+export const MOUTHS: [Mouth, string][] = [['M1', '1  Neutral line'], ['M2', '2  Slight smile'], ['M3', '3  Soft full lips'], ['M4', '4  Smirk'], ['M5', '5  Closed calm']]
 export const FACES: Record<'A' | 'B' | 'C' | 'D', Face> = {
   A: { label: 'A  Soft almond', note: 'light chin taper, almond eyes, thin arched brows', jaw: 0.35, chin: 0.05,
     eyeX: 0.165, eyeY: 0.0, eyeW: 0.15, eyeH: 0.085, tilt: 0.06, lid: 0.022, wing: 0.01, lower: 0, iris: 0.95, hi: true,
@@ -153,11 +157,28 @@ function protoHead(g: THREE.Group, o: Look, H: number, f: Face) {
   if (f.mouth === 'line') decal(g, H, f, strip(mw, H * 0.016, -0.05), '#5a2f26', 0, my, 0.02)
   if (f.mouth === 'soft') decal(g, H, f, strip(mw, H * 0.016, -0.25), '#5a2f26', 0, my, 0.02)
   if (f.mouth === 'smirk') decal(g, H, f, strip(mw, H * 0.016, -0.3), '#5a2f26', H * 0.01, my, 0.02, 0.12)
+  drawMouth(g, H, f, skin)
+}
+/** lip colour: the skin pulled toward a muted rose (works on light and dark skin) */
+const lipOf = (skin: string, k: number) => '#' + new THREE.Color(skin).lerp(new THREE.Color('#8a3a34'), k).getHexString()
+function drawMouth(g: THREE.Group, H: number, f: Face, skin: string) {
+  const my = H * f.mouthY, mw = H * 0.1, LINE = '#4a2620'
+  if (f.mouth === 'M1') decal(g, H, f, strip(mw * 0.95, H * 0.017, -0.03), LINE, 0, my, 0.02)
+  if (f.mouth === 'M2') { decal(g, H, f, strip(mw, H * 0.017, -0.22), LINE, 0, my, 0.02); for (const s of [-1, 1]) decal(g, H, f, strip(H * 0.022, H * 0.01, -0.5), LINE, s * mw * 0.55, my + H * 0.006, 0.02, s * 0.9) }
+  if (f.mouth === 'M3') {   // a small closed mouth with an upper + fuller lower lip in a tint of the skin, ink line between
+    const up = new THREE.Shape(), w = mw * 0.55, h = H * 0.022
+    up.moveTo(-w, 0); up.bezierCurveTo(-w * 0.6, h * 0.6, -w * 0.25, h * 1.1, 0, h * 0.7); up.bezierCurveTo(w * 0.25, h * 1.1, w * 0.6, h * 0.6, w, 0); up.lineTo(-w, 0)
+    decal(g, H, f, new THREE.ShapeGeometry(up, 8), lipOf(skin, 0.45), 0, my, 0.018)
+    decal(g, H, f, SPH, lipOf(skin, 0.35), 0, my - H * 0.016, 0.018, 0, w * 0.8, H * 0.017)
+    decal(g, H, f, strip(w * 2.05, H * 0.011, -0.06), LINE, 0, my, 0.022)
+  }
+  if (f.mouth === 'M4') { decal(g, H, f, strip(mw * 0.9, H * 0.017, -0.12), LINE, H * 0.006, my, 0.02, 0.14); decal(g, H, f, strip(H * 0.026, H * 0.01, -0.5), LINE, mw * 0.5, my + H * 0.014, 0.02, 0.9) }
+  if (f.mouth === 'M5') { decal(g, H, f, strip(mw * 0.7, H * 0.014, -0.1), LINE, 0, my, 0.02); decal(g, H, f, strip(mw * 0.42, H * 0.012, -0.25), lipOf(skin, 0.3), 0, my - H * 0.03, 0.018) }
 }
 
 /** A keeper on today's body. face null = TODAY (the live builder, per-model head size); else the universal head + face f. */
-export function protoKeeper(o: Look, f: Face | null, universal = f !== null): THREE.Group {
-  const p = { ...proportionsFor(o) }
+export function protoKeeper(o: Look, f: Face | null, universal = f !== null, over?: Proportions): THREE.Group {
+  const p = over ? { ...over } : { ...proportionsFor(o) }
   if (universal) Object.assign(p, UNIVERSAL)
   if (f) p.jaw = f.jaw
   const k = buildKeeper(o, p)
