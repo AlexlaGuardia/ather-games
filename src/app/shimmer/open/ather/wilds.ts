@@ -9,7 +9,7 @@
 import { treeFor, TRUNK, type Zone, type TreeKind } from './forestry'
 import { crystalFor, type CrystalKind } from './prospecting'
 import type { Box, Shape } from '../terrain-world'
-import type { VoidField } from './wilds-voids'
+import { VOIDED_W, type VoidField } from './wilds-voids'
 import { relieve, outcropsIn, outcropRoll } from './relief'
 import { addEdits, ponds as pondsOf, fallSheets, fallLines, type TileEdits, type WaterMap, type PondCell, type FallMap, type Sheet } from './wilds-edits'
 import type { RoadField } from './network'
@@ -52,6 +52,8 @@ export interface Wilds {
   shape: Shape
   /** M41: per cell, 1 where the crust is gone (a cloud void: drawn dark, no tree or crystal). Absent when the tile has no voids. */
   voided?: Uint8Array
+  /** void v2: per VERTEX (nx * nz), how far the pit carve lowered the land here (0 off the void). wilds-scene darkens the cliff by it. */
+  voidDrop?: Float32Array
 }
 
 const TRUNK_R = 0.35
@@ -96,25 +98,34 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
   // RAW heights (the file) and the RELIEVED ones everyone stands on (relief.ts, BETA M16). The raw copy only decides which
   // trees and crystals count, so their saved ids (prunes, fractures) never move when the relief is tuned.
   const raw = new Float32Array(dm.length), h = new Float32Array(dm.length)
+  let voidDrop: Float32Array | undefined
   for (let k = 0; k < dm.length; k++) raw[k] = dm[k] / 10
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
     const k = j * nx + i
     h[k] = relief ? relieve(-hx + i * cell + ox, -hz + j * cell + oz, raw[k], meta.waterY, clear, roads) : raw[k]
-    if (voids) h[k] = voids.carve(-hx + i * cell + ox, -hz + j * cell + oz, h[k], meta.waterY)   // M41: the crust is gone between zones
+    if (voids) {   // M41: the crust is gone between zones (v2 11-23: a real pit, wilds-voids VOID_DEPTH)
+      const c = voids.carve(-hx + i * cell + ox, -hz + j * cell + oz, h[k], meta.waterY)
+      if (c < h[k]) { voidDrop ??= new Float32Array(dm.length); voidDrop[k] = h[k] - c }
+      h[k] = c
+    }
     if (i === nx - 1) yield
   }
+  const carved = voidDrop ? h.slice() : null   // the pit as carved, before the owner's edits (a raised cell is no longer void)
   // BETA M62: the owner's EDIT LAYER (wilds-edits.ts), after relief + carve: everything below (voids, trees, crystals, the walker,
   // Hollows) stands on the edited ground; raw[] is untouched, so tree and crystal ids never move
   addEdits(h, edits)
-  // a cell is void where its corners are carved most of the way down (wilds-scene draws it dark; no tree or crystal stands there)
+  // a cell is void where it sits in the deep (centre weight >= VOIDED_W) and no owner edit raised a corner back out of the pit
+  // (wilds-scene draws it dark; no tree or crystal stands there)
   let voided: Uint8Array | undefined
-  if (voids) {
-    const floor = meta.waterY + 0.6 + 0.01
+  if (voids && carved) {   // no carve anywhere on the tile = no pit = no void cells
     for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
       if (i === 0) yield
-      if (h[j * nx + i] > floor && h[j * nx + i + 1] > floor && h[(j + 1) * nx + i] > floor && h[(j + 1) * nx + i + 1] > floor) continue
+      const k = j * nx + i
+      const wy = meta.waterY   // a lake in the void is not dug out (VOID_SHORE) but its bed is still void floor, as in v1
+      if (!voidDrop![k] && !voidDrop![k + 1] && !voidDrop![k + nx] && !voidDrop![k + nx + 1] && h[k] > wy && h[k + 1] > wy && h[k + nx] > wy && h[k + nx + 1] > wy) continue
+      if (h[k] > carved[k] + 0.5 || h[k + 1] > carved[k + 1] + 0.5 || h[k + nx] > carved[k + nx] + 0.5 || h[k + nx + 1] > carved[k + nx + 1] + 0.5) continue
       const w = voids.weight(-hx + (i + 0.5) * cell + ox, -hz + (j + 0.5) * cell + oz)
-      if (w > 0.35) { voided ??= new Uint8Array((nx - 1) * (nz - 1)); voided[j * (nx - 1) + i] = 1 }
+      if (w >= VOIDED_W) { voided ??= new Uint8Array((nx - 1) * (nz - 1)); voided[j * (nx - 1) + i] = 1 }
     }
   }
   const sampler = (H: Float32Array) => (x: number, z: number): number => {
@@ -239,7 +250,7 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
   }
   // M62 s3: falling sheets, automatic (a pond edge over lower water) + the owner's waterfall lines; wilds-scene draws them
   const sheets = pond.cells.length || fallMap ? fallSheets(meta, h, heightAt, pond.cells, fallLines(fallMap)) : []
-  return { meta, h, biomes, heightAt, biomeAt, canopyAt, trees, crystals, shape, voided, ponds: pond.cells, pondBoxes: pond.boxes, sheets }
+  return { meta, h, biomes, heightAt, biomeAt, canopyAt, trees, crystals, shape, voided, voidDrop, ponds: pond.cells, pondBoxes: pond.boxes, sheets }
 }
 
 /** Browser loader: the three files export_wilds.py writes. */

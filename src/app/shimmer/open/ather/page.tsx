@@ -99,7 +99,8 @@ import { useLoadout } from '../shared/loadout'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree, type Crystal } from './wilds'
 import { loadIndex, makeWorld, stream, releaseTo, tileOf, zonesOf, TILE_M, WILDS_RELEASE_MS, type WildsWorld } from './wilds-world'
-import { makeVoids, type VoidField } from './wilds-voids'
+import { makeVoids, FALL_LIP, type VoidField } from './wilds-voids'
+import { startFall, stepFall, type FallState } from './void-fall'
 import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
 import { useFolkTalk } from './use-folk-talk'
 import { useMeleeReady, lastSwingAt, lastSwingAction } from './melee-view'
@@ -453,13 +454,21 @@ function AtherSliceGame() {
   const lastCross = useRef<{ x: number; z: number } | null>(null)
   const wwRef = useRef<WildsWorld | null>(null); wwRef.current = ww
   const wayRef = useRef<Waymark[]>([]); wayRef.current = waymarks
+  // void v2: the FALL before the cost (void-fall.ts). Over the lip, the page takes the body from the walker (sinkRef), it drops
+  // into the fog column under gravity while a black veil closes (voidDark), and only once the view is black does voidFall run.
+  const sinkRef = useRef<((lc: Loco, dt: number) => void) | null>(null)
+  const fallSt = useRef<FallState | null>(null), voidDark = useRef<HTMLDivElement | null>(null)
+  const setDark = (d: number) => { const el = voidDark.current; if (el) el.style.opacity = String(d) }
+  /** the arrival's veil is up (arrive() set it this frame): hand the body back, lift the black under the veil */
+  const endSink = () => { sinkRef.current = null; fallSt.current = null; setTimeout(() => setDark(0), 450) }
+  useEffect(() => { sinkRef.current = null; fallSt.current = null; setDark(0) }, [epoch])   // any arrival: the new body is the walker's
   const voidFall = useCallback(() => {
     const w = wwRef.current; if (!w || fading.current) return
     const way = wayRef.current[wayRef.current.length - 1], o = way ? w.offsetOf(way.tile) : { x: 0, z: 0 }
     const at = lastCross.current ?? (way ? { x: way.x + o.x + 2.2, z: way.z + o.z + 2.2 } : { x: GREG_WAYMARK.x + 2.2, z: GREG_WAYMARK.z + 2.2 })
     const { tx, ty } = tileOf(at.x, at.z), t = w.at(tx, ty); if (!t) return
     fading.current = true   // arrive() below takes it over once the tile is in
-    stream(w, at.x, at.z).then(() => { fading.current = false; setWrev(w.rev); setHereTile(t.name); arrive({ kind: 'wilds', tile: t.name }, { x: at.x, z: at.z, yaw: Math.PI * 0.75 }); setToast(lastCross.current ? 'You went over the edge. You are back at the last crossing.' : 'You went over the edge. You are back at your last waymark.') })
+    stream(w, at.x, at.z).then(() => { fading.current = false; setWrev(w.rev); setHereTile(t.name); arrive({ kind: 'wilds', tile: t.name }, { x: at.x, z: at.z, yaw: Math.PI * 0.75 }); endSink(); setToast(lastCross.current ? 'You went over the edge. You are back at the last crossing.' : 'You went over the edge. You are back at your last waymark.') })
   }, [arrive])
 
   // ── combat in the Wilds ──
@@ -666,8 +675,20 @@ function AtherSliceGame() {
     pos.current = { x: lc.px, z: lc.pz, grounded: !lc.airborne, swimming: lc.swimming }
     { const v = voidsRef.current   // M41: on a crossing = the place to come back to; in a void = over the edge
       if (v && zoneRef0.current === 'wilds') {
+        if (sinkRef.current) return   // falling: the sink owns the body (void v2)
         const c = v.crossingNear(lc.px, lc.pz, 7); if (c) lastCross.current = { x: c.x, z: c.z }
-        if (v.isVoid(lc.px, lc.pz)) { voidFall(); return }
+        if (!fading.current && v.weight(lc.px, lc.pz) >= FALL_LIP) {   // over the lip: fall into the fog, THEN the cost
+          const gx = v.weight(lc.px + 1, lc.pz) - v.weight(lc.px - 1, lc.pz), gz = v.weight(lc.px, lc.pz + 1) - v.weight(lc.px, lc.pz - 1), gl = Math.hypot(gx, gz)
+          const st = startFall({ px: lc.px, py: lc.py, pz: lc.pz }, lc.vy, lc.hvx, lc.hvz, gl > 1e-6 ? { x: gx / gl, z: gz / gl } : undefined); fallSt.current = st
+          let paid = false
+          sinkRef.current = (b, dt) => {
+            const d = stepFall(st, b, dt, heightRef.current)
+            b.vy = st.vy; b.hvx = st.hvx; b.hvz = st.hvz; b.airborne = true
+            setDark(d)
+            if (st.done && !paid) { paid = true; voidFall(); if (!fading.current) endSink() }   // voidFall bailed (no world): hand back
+          }
+          return
+        }
       } }
     stepChannel(lc.px, lc.pz)   // gathering by channel: the next chip, or let go
     { // the body, read once: posed against THIS frame's camera (the walker placed it just before calling us), off its own state
@@ -815,6 +836,7 @@ function AtherSliceGame() {
       zone: () => zone.kind,
       // CHECK-ONLY (glade-cluster-check): set the keeper down somewhere in the closed Glade (only while in it), to walk the last steps to the gate
       gladeAt: (x: number, z: number, yaw: number) => { if (zone.kind === 'glade') arrive({ kind: 'glade' }, { x, z, yaw }) },
+      falling: () => (fallSt.current ? { t: fallSt.current.t, done: fallSt.current.done } : null),   // read-only probe (void-fall-check): the fall into a void
       wildsLoaded: () => [...(wwRef.current?.loaded.keys() ?? [])],   // read-only probe (M9 wilds-release-check): the parsed Wilds tiles held now
       open: (k: 'gate' | 'greg' | 'athernyx') => { if (k === 'greg') openGreg(); else setPanel({ kind: 'map', view: k === 'athernyx' ? 'athernyx' : 'ather', travel: true }) },
       travel: (d: Dest) => travel(d),
@@ -1437,7 +1459,7 @@ function AtherSliceGame() {
             key={epoch} world={world} ground={ground} spawn={spawn} locked={locked} frozen={frozen} focus={talkFocus}
             fallY={zone.kind !== 'wilds' ? FALL_Y : -60}
             onFall={zone.kind === 'glade' ? gladeFall : goHome}
-            onTick={onTick}
+            onTick={onTick} sink={sinkRef}
           />
         )}
       </Canvas>
@@ -1509,6 +1531,7 @@ function AtherSliceGame() {
       <BirthGate />
       {panel?.kind === 'pack' && <PackMenu tab={panel.tab} onTab={t => setPanel({ kind: 'pack', tab: t })} onClose={() => setPanel(null)} sel={litSlot(stance, inv)} isTouch={isTouch} />}
       {resuming && <LoadScreen side="ather" />}
+      <div ref={voidDark} data-veil="void" style={{ position: 'absolute', inset: 0, background: '#000', opacity: 0, pointerEvents: 'none' }} />
       <div data-veil={resuming ? 'resume' : 'fade'} style={{ position: 'absolute', inset: 0, background: '#f6f1e4', opacity: resuming ? 1 : fade, transition: resuming ? 'none' : 'opacity 0.35s', pointerEvents: 'none' }} />
       {isTouch && !panel && !building && (
         <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} holds={SKIN_HOLDS} />

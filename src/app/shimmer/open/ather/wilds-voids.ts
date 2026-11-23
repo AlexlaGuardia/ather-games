@@ -40,7 +40,7 @@ export interface VoidField {
   regionAt(x: number, z: number): number
   /** region ids, and which zone each is */
   regions: { id: number; zone: string; squares: number }[]
-  /** the carved height: land -> the deep floor by weight (never raises ground) */
+  /** the carved height: land drops by VOID_DEPTH * weight (a pit, never raises ground; shallower on the shore, VOID_SHORE) */
   carve(x: number, z: number, land: number, waterY: number): number
 }
 export interface IndexLike { tiles: { tx: number; ty: number; nodes: { i: number; j: number; zone?: string }[] }[] }
@@ -48,8 +48,19 @@ export interface IndexLike { tiles: { tx: number; ty: number; nodes: { i: number
 const smooth = (t: number) => { const c = Math.max(0, Math.min(1, t)); return c * c * (3 - 2 * c) }
 const sqOf = (v: number) => Math.round(v / SQ)
 const key = (X: number, Z: number) => X * 100003 + Z
-/** the deep floor sits just above the water plane, so the dark void ground hides the sea plane under it */
+/** v1 (kept for callers): the deep floor sat just above the water plane. v2 carves a real pit instead (VOID_DEPTH) */
 export const VOID_FLOOR_ABOVE_WATER = 0.6
+/** ★ VOID v2 (Alex 11-23 06:4x: "carve out the area ... use the void as a floor ... fall inside and disappear"): the pit floor
+ *  sits this far below the land it was cut from, wherever that land stands, so from the rim you look DOWN into it. The lip is
+ *  VOID_FADE wide, so the wall is a cliff (steepest ~1.5 * VOID_DEPTH / VOID_FADE, far past MAX_WALK_GRADIENT): you can walk off
+ *  it, never up it. Land within VOID_SHORE of the water plane carves shallower, down to nothing at the water line, so a lake's
+ *  bed is not dug out under its water (the water plane is masked over the pit instead: wilds-scene). */
+export const VOID_DEPTH = 32
+export const VOID_SHORE = 6
+/** a keeper whose feet reach this weight is on the cliff (past the rolled-over lip, ~1.3 m down): the fall starts (void-fall.ts) */
+export const FALL_LIP = 0.12
+/** a mesh cell is drawn and mapped as void floor where its centre weight is at least this (the deep, ~the old footprint) */
+export const VOIDED_W = 0.85
 
 /** The zone grid off the tile index (absent nodes = no land there = no void to a neighbour). */
 export function zoneGrid(index: IndexLike): Map<number, string> {
@@ -174,9 +185,8 @@ export function makeVoids(index: IndexLike, net: Network | null, extra: readonly
     return b * f * (1 - neck(x, z))
   }
   const carve = (x: number, z: number, land: number, waterY: number) => {
-    const w = weight(x, z); if (w <= 0) return land
-    const floor = waterY + VOID_FLOOR_ABOVE_WATER
-    return land <= floor ? land : land + (floor - land) * w
+    const w = weight(x, z); if (w <= 0 || land <= waterY) return land
+    return land - VOID_DEPTH * w * smooth((land - waterY) / VOID_SHORE)
   }
   return { weight, protectedAt: (x, z) => free(x, z) < 1, isVoid: (x, z) => weight(x, z) >= FALL_W, crossings, crossingNear, regionAt, regions, carve }
 }

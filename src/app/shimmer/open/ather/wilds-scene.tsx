@@ -12,7 +12,8 @@ import { Crystals } from './crystal-nodes'
 import { P } from './palette'
 import { GROUND, useGroundMaterial } from './ground-look'
 import { DAY } from '../shared/sky-palette'
-import { VoidHaze, VOID_FLOOR, voidShare, RIM_DARK, RIM_UNTILED } from './void-look'
+import { VoidHaze, VOID_FLOOR, voidShare, RIM_DARK, RIM_UNTILED, CLIFF_BLACK } from './void-look'
+const CLIFF_UNTILED = 3   // metres of pit drop past which the cliff draws untextured (the void's matte black takes it)
 
 /** The tile's ground, cut into CHUNKS×CHUNKS pieces so the renderer can skip what the camera cannot see and what the
  *  fog has swallowed (Alex 11-16 lag: one 375k-vertex mesh per tile drew whole, four tiles a frame). Flat-shaded,
@@ -34,7 +35,7 @@ function chunkPlan(W: Wilds): ChunkPlan[] {
 function chunkGeometry(W: Wilds, { i0, i1, j0, j1 }: ChunkPlan): THREE.BufferGeometry {
   const { nx, cell, sizeX, sizeZ } = W.meta
   const hx = sizeX / 2, hz = sizeZ / 2
-  const c = new THREE.Color()
+  const c = new THREE.Color(), cv = new THREE.Color(), dr = W.voidDrop
   const vh = (i: number, j: number) => W.h[j * nx + i]
   const cells = (i1 - i0) * (j1 - j0)
   const pos = new Float32Array(cells * 18), col = new Float32Array(cells * 18), lay = new Float32Array(cells * 6)
@@ -44,6 +45,7 @@ function chunkGeometry(W: Wilds, { i0, i1, j0, j1 }: ChunkPlan): THREE.BufferGeo
     const x0 = i * cell - hx, z0 = j * cell - hz, x1 = x0 + cell, z1 = z0 + cell
     const y00 = vh(i, j), y10 = vh(i + 1, j), y01 = vh(i, j + 1), y11 = vh(i + 1, j + 1)
     const tris = [[x0, y00, z0, x1, y11, z1, x1, y10, z0], [x0, y00, z0, x0, y01, z1, x1, y11, z1]]
+    const k00 = j * nx + i, tvi = [[k00, k00 + nx + 1, k00 + 1], [k00, k00 + nx, k00 + nx + 1]]
     const vd = W.voided, isVoid = !!vd?.[j * (nx - 1) + i]
     const rim = vd && !isVoid ? voidShare(vd, nx - 1, W.meta.nz - 1, i, j) : 0   // the 11-23 void look: the lip rolls into the dark
     for (let t = 0; t < 2; t++) {
@@ -57,8 +59,15 @@ function chunkGeometry(W: Wilds, { i0, i1, j0, j1 }: ChunkPlan): THREE.BufferGeo
       if (rim > 0) c.lerp(VOID_FLOOR, Math.min(RIM_DARK, rim * 1.8))
       const tri = tris[t]
       for (let k = 0; k < 9; k++) pos[o + k] = tri[k]
-      for (let k = 0; k < 3; k++) { col[o + k * 3] = c.r; col[o + k * 3 + 1] = c.g; col[o + k * 3 + 2] = c.b }
-      const L = isVoid || rim > RIM_UNTILED ? GROUND.void : b === BIOME.water || b === BIOME.shore ? GROUND.sand : b === BIOME.rock ? GROUND.stone : b === BIOME.woods ? GROUND.loam : GROUND.grass
+      const vi = tvi[t]
+      for (let k = 0; k < 3; k++) {
+        // void v2: the cliff goes black with depth (per vertex, so the wall fades smoothly into the fog column, no band)
+        const dk = dr ? Math.min(1, dr[vi[k]] / CLIFF_BLACK) : 0
+        if (dk > 0) { cv.copy(c).lerp(VOID_FLOOR, Math.sqrt(dk)); col[o + k * 3] = cv.r; col[o + k * 3 + 1] = cv.g; col[o + k * 3 + 2] = cv.b }
+        else { col[o + k * 3] = c.r; col[o + k * 3 + 1] = c.g; col[o + k * 3 + 2] = c.b }
+      }
+      const cliff = dr ? (dr[tvi[t][0]] + dr[tvi[t][1]] + dr[tvi[t][2]]) / 3 > CLIFF_UNTILED : false   // void v2: no stretched tile on the wall
+      const L = isVoid || cliff || rim > RIM_UNTILED ? GROUND.void : b === BIOME.water || b === BIOME.shore ? GROUND.sand : b === BIOME.rock ? GROUND.stone : b === BIOME.woods ? GROUND.loam : GROUND.grass
       lay[o / 3] = L; lay[o / 3 + 1] = L; lay[o / 3 + 2] = L
       o += 9
     }
@@ -333,6 +342,35 @@ function Waterfalls({ W }: { W: Wilds }) {
   )
 }
 
+/** Void v2: 0 on every cell the pit carve lowered out of DRY land (the sea plane must not show at the bottom of a pit dug below
+ *  it), 255 elsewhere. Rows run +z to -z, as the plane's v does once it is laid flat (rotation-x -90deg). null = no pit. PURE. */
+export function waterMask(W: Wilds): Uint8Array | null {
+  const dr = W.voidDrop; if (!dr) return null
+  const { nx, nz, waterY } = W.meta, cx = nx - 1, cz = nz - 1, m = new Uint8Array(cx * cz * 4).fill(255)
+  for (let j = 0; j < cz; j++) for (let i = 0; i < cx; i++) {
+    const k = j * nx + i, ks = [k, k + 1, k + nx, k + nx + 1]
+    if (ks.some(q => dr[q] > 0) && ks.every(q => W.h[q] + dr[q] > waterY)) { const o = ((cz - 1 - j) * cx + i) * 4; m[o] = m[o + 1] = m[o + 2] = m[o + 3] = 0 }
+  }
+  return m
+}
+/** The tile's sea plane; masked over a pit (waterMask) by an alphaMap + alphaTest, still one quad and one draw. */
+function WaterPlane({ W }: { W: Wilds }) {
+  const tex = useMemo(() => {
+    const m = waterMask(W); if (!m) return null
+    const t = new THREE.DataTexture(m, W.meta.nx - 1, W.meta.nz - 1, THREE.RGBAFormat)
+    t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.needsUpdate = true
+    return t
+  }, [W])
+  useEffect(() => () => tex?.dispose(), [tex])
+  return (
+    <mesh rotation-x={-Math.PI / 2} position-y={W.meta.waterY - 0.15}>
+      <planeGeometry args={[W.meta.sizeX, W.meta.sizeZ]} />
+      {tex ? <meshLambertMaterial key="masked" color={P.water} transparent opacity={0.8} alphaMap={tex} alphaTest={0.5} />
+        : <meshLambertMaterial key="plain" color={P.water} transparent opacity={0.8} />}
+    </mesh>
+  )
+}
+
 /** `off` = this tile's world offset (the group it sits in); `focus` = the keeper, in world coords. */
 export function WildsScene({ W, waymarks, focus, off }: { W: Wilds; waymarks: Waymark[]; focus: Focus; off: { x: number; z: number } }) {
   const greg = { ...GREG_WAYMARK, y: W.heightAt(GREG_WAYMARK.x, GREG_WAYMARK.z) }
@@ -340,9 +378,7 @@ export function WildsScene({ W, waymarks, focus, off }: { W: Wilds; waymarks: Wa
     <>
       <Ground W={W} focus={focus} off={off} />
       <VoidHaze W={W} off={off} />
-      <mesh rotation-x={-Math.PI / 2} position-y={W.meta.waterY - 0.15}>
-        <planeGeometry args={[W.meta.sizeX, W.meta.sizeZ]} /><meshLambertMaterial color={P.water} transparent opacity={0.8} />
-      </mesh>
+      <WaterPlane W={W} />
       <Ponds W={W} />
       <Waterfalls W={W} />
       <Trees W={W} focus={focus} off={off} />

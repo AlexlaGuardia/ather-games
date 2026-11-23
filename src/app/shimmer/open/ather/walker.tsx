@@ -39,9 +39,12 @@ export interface WalkerProps {
   frozen: React.MutableRefObject<boolean>
   /** While set (talking to an NPC, BETA M13), the look eases to face this point; the keeper's own look takes over again after. */
   focus?: React.MutableRefObject<{ x: number; y: number; z: number } | null>
+  /** Void v2: while set, the page owns the body (a fall into a void, void-fall.ts): it moves lc in place of the walker's step,
+   *  the zone's fallY is not read, and the camera and onTick follow as usual. */
+  sink?: React.MutableRefObject<((lc: Loco, dt: number) => void) | null>
 }
 
-export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, frozen, focus }: WalkerProps) {
+export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, frozen, focus, sink }: WalkerProps) {
   const { camera, gl } = useThree()
   const born = () => createLoco(spawn.x, Math.max(ground(spawn.x, spawn.z), -1e3), spawn.z)
   const loco = useRef(born())
@@ -114,6 +117,8 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
     wish.set(0, 0, 0).addScaledVector(fwd, f).addScaledVector(right, r)
     if (wish.lengthSq() > 1) wish.normalize()
     if (pinned.current) { camera.position.set(lc.px, eyeY(lc), lc.pz); camera.rotation.set(pitch, yaw, 0, 'YXZ'); return }
+    const sk = sink?.current
+    if (sk) { sk(lc, dt); camera.position.set(lc.px, eyeY(lc), lc.pz); camera.rotation.set(pitch, yaw, 0, 'YXZ'); onTick(lc, yaw, dt); return }
     tickLocomotion(lc, {
       mvX: wish.x, mvZ: wish.z, fwdX: fwd.x, fwdZ: fwd.z, rightX: right.x, rightZ: right.z,
       jumpKey: k.has('Space'), crouchKey: k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyC'), dt,

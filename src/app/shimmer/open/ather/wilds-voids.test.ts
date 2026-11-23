@@ -3,7 +3,7 @@
 // Moonwell ON FOOT (a raster walk where a void cell is a wall), only through crossings; nothing the relief protects is touched;
 // the same answer twice.
 import { readFileSync } from 'node:fs'
-import { makeVoids, VOID_HALF, FALL_W, SQ, type IndexLike } from './wilds-voids'
+import { makeVoids, VOID_HALF, VOID_FADE, VOID_DEPTH, FALL_W, FALL_LIP, SQ, type IndexLike } from './wilds-voids'
 import { withGlade, SETTLEMENT_CLEAR, PATH_HALF, type Network } from './network'
 import { GLADE, WILDS_FRONT_SHIFT, wildsFrontDist } from './relief'
 import { GREG_WAYMARK } from './waymarks'
@@ -107,6 +107,49 @@ let graphSeen = new Set<number>()
   ok(tot > 50 && void_ === tot, `every unprotected border midpoint is void (${void_}/${tot})`)
   for (const c of V.crossings.filter(c => c.kind === 'neck')) ok(!V.isVoid(c.x, c.z), `neck ${c.a}-${c.b} is standable`)
   ok(VOID_HALF > 0, 'void width is positive')
+}
+
+// 7. VOID v2 (Alex 11-23 06:4x): the pit. A deep void point drops VOID_DEPTH below its land; the lip is a cliff (steeper than the
+// walker climbs); the shore carves shallower and a lake bed not at all; a neck and anywhere off the void are untouched; and the
+// earlier fall line (FALL_LIP, where the fall now starts) still seals no region on foot
+{
+  const deepPt = (() => { for (let z = -5200; z < 5200; z += SQ / 2) for (let x = -5200; x < 5200; x += SQ) {
+    const wx = Math.round(x / SQ - 0.5) * SQ + SQ / 2, wz = Math.round(z / SQ) * SQ
+    if (V.weight(wx, wz) === 1) return { x: wx, z: wz } } return null })()!
+  ok(!!deepPt, 'a full-weight void point')
+  ok(Math.abs(V.carve(deepPt.x, deepPt.z, 40, 0) - (40 - VOID_DEPTH)) < 1e-9, `deep void: floor ${VOID_DEPTH} m under its land (${V.carve(deepPt.x, deepPt.z, 40, 0)} from 40)`)
+  ok(VOID_DEPTH >= 25 && VOID_DEPTH <= 40, `pit depth dial in the asked 25-40 m (${VOID_DEPTH})`)
+  ok(V.carve(deepPt.x, deepPt.z, 3, 0) > 3 - VOID_DEPTH && V.carve(deepPt.x, deepPt.z, 3, 0) < 3, 'the shore carves shallower')
+  ok(V.carve(deepPt.x, deepPt.z, -2, 0) === -2, 'a lake bed under the water is not dug out')
+  for (const c of V.crossings.filter(c => c.kind === 'neck')) ok(V.carve(c.x, c.z, 30, 0) === 30, `neck ${c.a}-${c.b} keeps its ground`)
+  ok(V.carve(GREG_WAYMARK.x, GREG_WAYMARK.z, 30, 0) === 30, 'off the void: ground untouched')
+  // the lip: walk out from the deep point across its border; the steepest step is a cliff, past MAX_WALK_GRADIENT (1.035)
+  const ax = V.weight(deepPt.x + VOID_HALF + VOID_FADE + 2, deepPt.z) === 0 ? 1 : -1
+  let steep = 0, lipStart = NaN
+  for (let d = 0; d <= VOID_HALF + VOID_FADE + 2; d += 0.25) {
+    const a = V.carve(deepPt.x + ax * d, deepPt.z, 40, 0), b = V.carve(deepPt.x + ax * (d + 0.25), deepPt.z, 40, 0)
+    steep = Math.max(steep, Math.abs(b - a) / 0.25)
+    if (Number.isNaN(lipStart) && V.weight(deepPt.x + ax * d, deepPt.z) < FALL_LIP) lipStart = 40 - V.carve(deepPt.x + ax * d, deepPt.z, 40, 0)
+  }
+  ok(steep > 1.035 * 3, `the lip rolls over into a cliff (steepest gradient ${steep.toFixed(2)})`)
+  ok(lipStart > 0 && lipStart < 5, `the fall line sits just past the rolled-over lip (${lipStart.toFixed(2)} m down)`)
+  // on foot with the FALL_LIP line as the wall: still nothing sealed (same walk as 3, stricter wall)
+  const step = 8, ox = -5200, oz = -5200, n = Math.ceil(10400 / step)
+  const si = Math.round((GLADE.gx - ox) / step), sj = Math.round((GLADE.gz - oz) / step)
+  const walk = (wallFn: (x: number, z: number) => boolean) => {
+    const seen = new Uint8Array(n * n), st = [si + sj * n], R = new Set<number>(); seen[st[0]] = 1
+    while (st.length) {
+      const k = st.pop()!, i = k % n, j = (k - i) / n; R.add(V.regionAt(ox + i * step, oz + j * step))
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= n || b >= n || seen[a + b * n]) continue
+        const x = ox + a * step, z = oz + b * step; if (V.regionAt(x, z) < 0 || wallFn(x, z)) continue
+        seen[a + b * n] = 1; st.push(a + b * n)
+      }
+    }
+    return R
+  }
+  const base = walk(() => false), lip = walk((x, z) => V.weight(x, z) >= FALL_LIP)
+  ok([...base].every(r => lip.has(r)), `on foot with the fall starting at FALL_LIP: the voids seal nothing (base ${base.size}, reached ${lip.size})`)
 }
 
 // 6. determinism: a second build answers the same everywhere

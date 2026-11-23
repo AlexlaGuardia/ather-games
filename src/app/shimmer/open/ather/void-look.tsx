@@ -5,27 +5,40 @@
 // (game/shimmer-geography.md). What it looks like on screen is Jin's build: this file. Nothing here is walkable or scenery.
 //   the floor: wilds-scene paints voided cells VOID_FLOOR (matte near-black) on GROUND.void, which the ground shader leaves
 //              untextured (no stone tile, Lambert so no specular)
-//   the haze:  HAZE_LAYERS stacked planes over the void's cells only, black and thinning upward, so the floor and the lower
-//              wall are lost; sparse purple flecks ride the planes (deepest the most), so the glimmers sit at different
-//              depths and parallax as you move. ONE mesh per tile, one draw. All layers are black-over (premultiplied: src
-//              ONE, dst ONE_MINUS_SRC_ALPHA), and black-over commutes, so the unsorted layers inside one mesh are order-free.
-//              The lowest plane floats above the floor (no coplanar layer at ground level, M58).
+//   v2 (Alex 11-23 06:4x, "the only way it works is at the bottom of a pit"): wilds-voids carves a real pit VOID_DEPTH deep;
+//              the matte floor is its bottom, the cliff fades to black with depth (wilds-scene, W.voidDrop / CLIFF_BLACK), and
+//   the haze:  HAZE_LAYERS stacked planes FILL THE PIT (a fog column, floor to just under the rim), black and thinning upward,
+//              so from the rim you look down into darkness; sparse purple flecks ride the planes (deepest the most), so the
+//              glimmers sit at different depths and parallax as you move. ONE mesh per tile, one draw. All layers are black-over
+//              (premultiplied: src ONE, dst ONE_MINUS_SRC_ALPHA), and black-over commutes, so the unsorted layers inside one mesh
+//              are order-free. The lowest plane floats above the floor (no coplanar layer at ground level, M58).
 import { useEffect, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Wilds } from './wilds'
-import { VOID_FLOOR_ABOVE_WATER } from './wilds-voids'
 
 /** the void floor's matte near-black, a breath of violet in it */
 export const VOID_FLOOR = new THREE.Color('#0a0910')
-export const VOID_LOOK = 'matte-glimmer-fog-1'
-/** height above the void floor, the haze's black, the share of its cells that carry a glimmer */
-export const HAZE_LAYERS: readonly { y: number; a: number; fleck: number }[] = [
-  { y: 0.45, a: 0.42, fleck: 0.09 },
-  { y: 1.4, a: 0.3, fleck: 0.05 },
-  { y: 2.6, a: 0.18, fleck: 0.03 },
-  { y: 4.0, a: 0.09, fleck: 0.015 },
+export const VOID_LOOK = 'pit-fog-column-2'
+/** ★ VOID v2 (Alex 11-23 06:4x): a FOG COLUMN filling the pit (wilds-voids VOID_DEPTH) from the floor to just under the rim.
+ *  Each layer sits at `f` of the way up the column (layerY), its black alpha `a` (dense at the bottom, thinning upward: straight
+ *  down from the rim the seven compound to ~98% black, so no floor edge reads), and the share of its cells that carry a glimmer
+ *  (`fleck`, most at depth). */
+export const HAZE_LAYERS: readonly { f: number; a: number; fleck: number }[] = [
+  { f: 0, a: 0.78, fleck: 0.1 },
+  { f: 0.07, a: 0.6, fleck: 0.08 },
+  { f: 0.16, a: 0.46, fleck: 0.06 },
+  { f: 0.28, a: 0.34, fleck: 0.045 },
+  { f: 0.44, a: 0.24, fleck: 0.03 },
+  { f: 0.63, a: 0.15, fleck: 0.02 },
+  { f: 0.85, a: 0.08, fleck: 0.01 },
 ]
+/** the lowest layer floats this far over the pit floor (M58: never coplanar with the ground); the top stays this far under the rim */
+export const HAZE_BASE = 0.45, HAZE_TOP_GAP = 3.5
+/** layer k's height over the pit floor, in a pit `depth` deep */
+export const layerY = (k: number, depth: number) => HAZE_BASE + HAZE_LAYERS[k].f * Math.max(0, depth - HAZE_TOP_GAP - HAZE_BASE)
+/** the cliff is fully the void's black this far down (wilds-scene darkens the wall per vertex by W.voidDrop) */
+export const CLIFF_BLACK = 14
 /** A land cell's nearness to the void: the share of void among the 5x5 cells round it (0 far off, ~0.4 on the rim). wilds-scene
  *  darkens the lip by it, so land rolls into the dark instead of stopping at a cell edge. */
 export function voidShare(v: Uint8Array, cx: number, cz: number, i: number, j: number): number {
@@ -38,19 +51,20 @@ export const RIM_DARK = 0.85, RIM_UNTILED = 0.3
 /** the haze is laid on a grid of HAZE_STEP ground cells (8 m on a 4 m tile): few vertices, the alpha still feathers out */
 const HAZE_STEP = 2
 
-/** The haze planes over a tile's voided cells (local tile coords, like the ground). null when the tile has no void. */
+/** The fog column over a tile's pit (local tile coords, like the ground): every 8 m quad the carve lowered, seven layers. Each
+ *  vertex's floor is the land it was cut from minus the pit's local depth (the deepest drop within 16 m), so a layer runs flat
+ *  across the floor AND on out over the cliff, where the wall itself hides the part that is underground: the wall cuts each layer
+ *  off at its own height, no feather needed there. null when the tile has no pit. */
 export function hazeGeometry(W: Wilds): { geo: THREE.BufferGeometry; cells: number; deep: [number, number][] } | null {
-  const v = W.voided; if (!v) return null
-  const { nx, nz, cell, sizeX, sizeZ, waterY } = W.meta
+  const v = W.voided, dr = W.voidDrop, h = W.h; if (!dr || !h) return null
+  const { nx, nz, cell, sizeX, sizeZ } = W.meta
   const cx = nx - 1, cz = nz - 1, hx = sizeX / 2, hz = sizeZ / 2
-  const vox = (i: number, j: number) => (i >= 0 && j >= 0 && i < cx && j < cz && v[j * cx + i] ? 1 : 0)
-  // a ground vertex's voidness: the share of void in the 4x4 cells (16 m) round it, so the haze ramps in across the rim
-  // (from 8 m out on the land's lip to 8 m into the void) instead of stopping at a cell edge: the rim fades into the dark
-  const vAt = (i: number, j: number) => { let n = 0; for (let b = j - 2; b < j + 2; b++) for (let a = i - 2; a < i + 2; a++) n += vox(a, b); return n / 16 }
+  const vox = (i: number, j: number) => (v && i >= 0 && j >= 0 && i < cx && j < cz && v[j * cx + i] ? 1 : 0)
   const NI = Math.ceil(cx / HAZE_STEP), NJ = Math.ceil(cz / HAZE_STEP)
-  const vc = (I: number, J: number) => vAt(Math.min(cx, I * HAZE_STEP), Math.min(cz, J * HAZE_STEP))
+  const gi = (I: number) => Math.min(cx, I * HAZE_STEP), gj = (J: number) => Math.min(cz, J * HAZE_STEP)
+  const dAt = (I: number, J: number) => dr[gj(J) * nx + gi(I)]
   const keep: number[] = []
-  for (let J = 0; J < NJ; J++) for (let I = 0; I < NI; I++) if (vc(I, J) + vc(I + 1, J) + vc(I, J + 1) + vc(I + 1, J + 1) > 0) keep.push(J * NI + I)
+  for (let J = 0; J < NJ; J++) for (let I = 0; I < NI; I++) if (dAt(I, J) > 0 || dAt(I + 1, J) > 0 || dAt(I, J + 1) > 0 || dAt(I + 1, J + 1) > 0) keep.push(J * NI + I)
   if (!keep.length) return null
   // a few deep spots (local coords): cells whose 5x5 neighbourhood is all void, for checks to stand and look at
   const deep: [number, number][] = []
@@ -65,11 +79,17 @@ export function hazeGeometry(W: Wilds): { geo: THREE.BufferGeometry; cells: numb
   for (const q of keep) { const I = q % NI, J = (q / NI) | 0; quads.push(idOf(I, J), idOf(I + 1, J), idOf(I, J + 1), idOf(I + 1, J + 1)) }
   const L = HAZE_LAYERS.length, nv = corners.length
   const pos = new Float32Array(nv * L * 3), aV = new Float32Array(nv * L), aK = new Float32Array(nv * L)
-  const floor = waterY + VOID_FLOOR_ABOVE_WATER
-  for (let k = 0; k < L; k++) corners.forEach((c, n) => {
-    const I = c % (NI + 1), J = (c / (NI + 1)) | 0, i = Math.min(cx, I * HAZE_STEP), j = Math.min(cz, J * HAZE_STEP), o = k * nv + n
-    pos[o * 3] = i * cell - hx; pos[o * 3 + 1] = floor + HAZE_LAYERS[k].y; pos[o * 3 + 2] = j * cell - hz
-    aV[o] = vAt(i, j); aK[o] = k
+  const R = 4   // the pit's local depth: the deepest drop within R cells (16 m), so a cliff vertex knows the floor it overhangs
+  corners.forEach((c, n) => {
+    const I = c % (NI + 1), J = (c / (NI + 1)) | 0, i = gi(I), j = gj(J), k0 = j * nx + i
+    let depth = 0
+    for (let b = Math.max(0, j - R); b <= Math.min(cz, j + R); b++) for (let a = Math.max(0, i - R); a <= Math.min(cx, i + R); a++) depth = Math.max(depth, dr[b * nx + a])
+    const floor = h[k0] + dr[k0] - depth, feather = Math.min(1, dr[k0] / 2)
+    for (let k = 0; k < L; k++) {
+      const o = k * nv + n
+      pos[o * 3] = i * cell - hx; pos[o * 3 + 1] = floor + layerY(k, depth); pos[o * 3 + 2] = j * cell - hz
+      aV[o] = feather; aK[o] = k
+    }
   })
   const idx = new Uint32Array(quads.length / 4 * 6 * L)
   let w = 0
@@ -99,7 +119,7 @@ const HAZE_VS = [
   '}',
 ].join('\n')
 const HAZE_FS = [
-  'uniform float uTime;', 'uniform float uA[4];', 'uniform float uF[4];', 'uniform vec3 uGlim;',
+  'uniform float uTime;', 'uniform float uA[' + HAZE_LAYERS.length + '];', 'uniform float uF[' + HAZE_LAYERS.length + '];', 'uniform vec3 uGlim;',
   'varying float vV;', 'varying float vK;', 'varying vec2 vP;',
   '#include <fog_pars_fragment>',
   'float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }',
