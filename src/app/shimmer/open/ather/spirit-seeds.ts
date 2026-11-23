@@ -57,6 +57,14 @@ export function tend(pots: Pots, pieceId: string, now: number): Pots | null {
   if (!canTend(p, now)) return null
   return { ...pots, [pieceId]: { ...p, tends: [...(p.tends ?? []), gameDay(now)] } }
 }
+/** OWNER DEV ONLY (the planter panel shows it behind /api/owner): pull a growing pot's planting time back so it is
+ *  `ms` closer to its bloom ('now' = due this instant). Nothing else changes; ripen then blooms it the normal way. Null = refused. */
+export function hasten(pots: Pots, pieceId: string, now: number, ms: number | 'now'): Pots | null {
+  const p = pots[pieceId]
+  if (!p || p.bloomed || isCarried(pieceId)) return null
+  const by = ms === 'now' ? Math.max(0, bloomAt(p) - now) : Math.max(0, Math.min(ms, bloomAt(p) - now))
+  return { ...pots, [pieceId]: { ...p, at: p.at - by } }
+}
 /** Which day of its growing the pot is on (1-based, from its planting). */
 export const growDay = (p: Pot, now: number) => Math.max(1, Math.floor((now - p.at) / GAME_DAY_MS) + 1)
 /** Every pot whose time has come blooms; returns the new pots and the species that just bloomed, in planting order. */

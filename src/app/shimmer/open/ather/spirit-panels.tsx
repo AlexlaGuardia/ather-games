@@ -10,7 +10,7 @@ import { getInv, setInv, useInv } from '../shared/bag'
 import type { Bank } from './garden-bank'
 import { hudSay } from '../shared/hud-say'
 import { SPECIES_NAMES, type Species } from '../../spirits/spirit'
-import { SEED_NAME, seedIcon, speciesOf, plant, ripen, growth, settlePot, tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, type SeedId } from './spirit-seeds'
+import { SEED_NAME, seedIcon, speciesOf, plant, ripen, growth, settlePot, tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, hasten, type SeedId } from './spirit-seeds'
 import { GAME_DAY_MS } from './nodes'
 import { loadBook, saveBook, see, seenCount, freshBook, type Book } from './grimoire-book'
 import { GRIMOIRE_SIZE } from './plot'
@@ -74,9 +74,17 @@ export type BankStore = { use: () => Bank; get: () => Bank; set: (b: Bank) => vo
 /** Rough real time: "12 min", "2 h 5 min". */
 const realIn = (ms: number) => { const m = Math.max(0, Math.ceil(ms / 60000)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min` }
 
+// owner dev control (Bloom now / +1 day): the /api/owner gate the Options Dev tab uses; a player never sees the buttons
+let ownerP: Promise<boolean> | null = null
+function useOwner() {
+  const [o, setO] = useState(false)
+  useEffect(() => { let alive = true; (ownerP ??= fetch('/api/owner', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(j => !!j?.owner).catch(() => false)).then(v => { if (alive) setO(v) }); return () => { alive = false } }, [])
+  return o
+}
+
 /** E at a planter. M106: lists every Mana Seed on the plot (bag + the garden bank every chest opens onto); Tend replaces Turn. */
 export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: string; onClose: () => void; footer: React.ReactNode; bank: BankStore }) {
-  const b = useBook(), inv = useInv(), bk = bank.use(), m = useManifest()
+  const b = useBook(), inv = useInv(), bk = bank.use(), m = useManifest(), owner = useOwner()
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const t = setInterval(() => { setNow(Date.now()); const s = ripenBook(); if (s.length) hudSay(`A ${nameOf(s[0])} bloomed.`, 'item', 4) }, 1000); ripenBook(); return () => clearInterval(t) }, [])
   const pot = b.pots[pieceId]
@@ -93,6 +101,14 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
     setBook({ ...current(), pots: next }); setNow(t)
     const s = ripenBook(t)
     hudSay(s.length ? `A ${nameOf(s[0])} bloomed.` : 'Tended.', 'item', 3)   // TODO @lark
+  }
+  const doHasten = (ms: number | 'now') => {
+    if (!owner) return
+    const t = Date.now(), next = hasten(current().pots, pieceId, t, ms)
+    if (!next) return
+    setBook({ ...current(), pots: next }); setNow(t)
+    const s = ripenBook(t)
+    if (s.length) hudSay(`A ${nameOf(s[0])} bloomed.`, 'item', 3)
   }
   const sp = pot ? speciesOf(pot.seed) : null, card = sp && m ? m[nameOf(sp)] : null
   const growing = pot && !pot.bloomed ? pot : null
@@ -138,6 +154,10 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
           {growing && growing.v === 2 && (canTend(growing, now)
             ? <span data-act="tend-planter"><HearthButton small onClick={doTend}>Tend</HearthButton></span>
             : <span data-act="tend-planter" data-tended="1"><HearthButton small disabled onClick={doTend}>Tended today</HearthButton></span>)}
+          {growing && owner && <>
+            <span data-act="planter-day"><HearthButton small onClick={() => doHasten(GAME_DAY_MS)}>+1 day</HearthButton></span>
+            <span data-act="planter-bloom-now"><HearthButton small onClick={() => doHasten('now')}>Bloom now (owner dev)</HearthButton></span>
+          </>}
           {footer}
         </div>
       </div>

@@ -2,7 +2,7 @@
 // M76 s1: the seed decides the species (never the pot or a roll), one spirit per planter, the Anemonyx's 5-10 day visits
 // (there that day only, one seed per visit), the grimoire fills in discovery order and survives a save round-trip.
 import { SPECIES, SEED_IDS, seedOf, speciesOf, isSeed, plant, ripen, carryPot, settlePot, CARRIED, growth, BLOOM_MS, visitDay, visitOn, nextVisit, visitSeed, meetAnemonyx, VISIT_MIN_DAYS, VISIT_MAX_DAYS, SEED_NAME } from './spirit-seeds'
-import { tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, TEND_MS, LEGACY_BLOOM_MS } from './spirit-seeds'
+import { tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, TEND_MS, LEGACY_BLOOM_MS, hasten } from './spirit-seeds'
 import { GAME_DAY_MS } from './nodes'
 import { freshBank, putIn, bankCount, bankCap } from './garden-bank'
 import { give, countOf, SLOTS, type Inv } from '../shared/inventory'
@@ -117,6 +117,23 @@ ok(seenCount(parseBook(null)) === 0, 'null = fresh book')
   ok(takeSeed(inv, bank, seedOf('frog')) === null, 'a seed held nowhere: refused')
   inv = freshInv(); bank = freshBank()
   ok(seedsOnPlot(inv, bank).length === 0, 'nothing held: empty list')
+}
+
+// owner dev fast-forward: hasten pulls the planting time back; ripen then blooms it the normal way
+{
+  const t1 = 50 * GAME_DAY_MS, pots0 = plant({}, 'pz', seedOf('owl'), t1)!
+  const later = t1 + GAME_DAY_MS / 3
+  ok(ripen(pots0, later).bloomed.length === 0, 'hasten: not due before')
+  const h = hasten(pots0, 'pz', later, 'now')!
+  ok(h && bloomAt(h.pz) <= later && h.pz.seed === pots0.pz.seed && h.pz.tends === pots0.pz.tends, 'Bloom now: the pot is due this instant, seed + tends untouched')
+  const rr = ripen(h, later)
+  ok(rr.bloomed.length === 1 && rr.bloomed[0].species === 'owl' && rr.pots.pz.bloomed === true, 'Bloom now: ripen blooms it, its own seed')
+  const d = hasten(pots0, 'pz', later, GAME_DAY_MS)!
+  ok(d.pz.at === t1 - GAME_DAY_MS && ripen(d, later).bloomed.length === 0, '+1 day: one game day closer, not due yet')
+  const d3 = hasten(hasten(hasten(pots0, 'pz', later, GAME_DAY_MS)!, 'pz', later, GAME_DAY_MS)!, 'pz', later, GAME_DAY_MS)!
+  ok(bloomAt(d3.pz) === later && ripen(d3, later).bloomed.length === 1, '+1 day never overshoots past due; 3 steps = due')
+  ok(hasten(rr.pots, 'pz', later, 'now') === null && hasten({}, 'pz', later, 'now') === null, 'hasten: a bloomed or empty planter is refused')
+  ok(hasten(pots0, 'pz', later, 'now')!.pz.at < pots0.pz.at && pots0.pz.at === t1, 'hasten: input untouched')
 }
 
 console.log(`spirit-seeds: ${pass} pass, ${fail} fail`)
