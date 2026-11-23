@@ -209,11 +209,8 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 
 - 🌙 **Tonight, Alex testing at home (8 m = good start, 12:4x):** **Party company feel (11-23, M109 s4, owner ?spirits=3d):** ask spirits along in the grimoire, walk around the garden: the 8 m loose radius and drift-back pace OK? (Your old test party/fed/follow lists read empty once: keys moved.)
 
-- ~~**Cell housing price (11-23, M108 s1):**~~ ✅ Alex 12:4x: 6,000 'sounds right for now'.
 
-- ~~**Start card on a Rune Hold door arrival (11-23, M73):**~~ ✅ Alex 12:4x: fix it (hide for door arrivals) -> next play slice.
 
-- ~~**Kael's ship needs a NAME:**~~ ✅ **FRANKY** (Alex, Magii athernyx a2a7784): Kael named her for the late Frank; she has a VOICE like Morel's (Alkin manatech, her own personality, not Frank's mind); lines = lark, Alex signs.
 
 - **Vulnyx roam M107 (11-23, LIVE owner-only):** ather.games/shimmer/open/ather?spirits=3d with a bloomed planter. Feel on phone: more pauses? Then say 'ship to players' and the flag comes off.
 
@@ -227,19 +224,14 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **World Builder Fly (11-23, LIVE a2f36e26):** click Fly = pointer lock + crosshair (Esc frees; toggle in the Fly row for the old drag mode); hold left to sculpt where you look; `-`/`=` step strength 0.1-3 (max was 1), `[` `]` radius. Overview map under the tile view (click a tile to open it). Calls: mouse sensitivity OK? each vertex caps at ±60 m per edit: enough?
 - **M100 map pan + zoom (11-23, LIVE):** press M, drag / wheel / pinch, Reset view. Feel on your phone?
 
-- ~~**Temple door line:**~~ ✅ SIGNED 491f462 + LIVE 6ceec26e (idris-check 41 prod). Was: (11-23, @lark draft, athernyx 1de8615, shimmer-lines-idris-and-goodbyes.md Part 3, UNSIGNED):** knocking for Idris at the Enchant Temple; Idony answers. Replaces the placeholder 'Idris, please.' (continent/door-talk.ts). Yay / nay, then a lane wires it.
 
-- ~~**M97 room shells look list:**~~ ✅ Alex 11-23 (in world's window): "just the floor and the furniture inside, the walls and building around the rooms can go" -> s1b LIVE 80a397fa.
 
 - **M103 body bench (11-23, LIVE):** ather.games/shimmer/dev/keeper-body > Proportions. Pick one of the 6 models, move the 17 dials, Save. The bench shows it at once; to reach the GAME, tell me "saved" and a lane commits + builds. This is also where the "reads like a kid" fix lives (chin taper, eye size, head, torso length).
 
-- ~~**M99 station sounds vote:**~~ ✅ Alex voted 11-23 01:3x; play commits + builds.
 
 - **M98 building feel (11-23, LIVE):** hold furniture/Keepstone/slab/panel: G = snap 1/0.5/0.25/Free, T = turn step 90/45/30/15. Place one piece with Free = it becomes the ANCHOR; the next snaps flush to it (Clear anchor chip). New at the carpentry bench: Goldwood/Stone Floor Slab 1x1 + Wide 2x2, Goldwood/Brick Wall Panel 1 m + Wide 2 m. Feel OK?
 
-- ~~**Placeholder lines batch:**~~ ✅ SIGNED (Magii ef704e7) + LIVE 6ceec26e (items 1-3; item 4 superseded by the Temple door). Was: **(11-23, @lark draft, athernyx 3e06c1c):** 9 lines: the Moglin go-home talk ("Home to my kin, then? It's been a good stay. You're sure?"), garden-full ("I'd come, but you've no room for me yet. Raise more rooms, then ask again."), Fennel's jar thanks, "Something else.", and the Temple option now "The sigil bench, please." (works before you've met Idris). File: athernyx CANON/game/shimmer-lines-placeholders-2026-11-23.md. Sign off? (with the Idris + goodbyes batch above)
 
-- ~~**Idris + tutorial goodbyes:**~~ ✅ SIGNED by Alex (Magii athernyx 7a25a8e); Idris pronoun-free. Wire next session. Magii 5b83a25: Idris is he/him (Idony's twin brother).
 
 - **M83 World Builder Fly view (11-22, LIVE):** /shimmer/dev?mode=terrain (World > Terrain tab; ?mode=builder lands on the index, fix queued), click Fly: W/S/A/D fly, Space climbs, wheel zooms, T = top-down and back, left-drag sculpts. Bare terrain only (no trees/nodes). Autosaves your draft; Publish to push live, history to roll back. Known: small viewport (fullscreen coming next), high ground looks pale.
 
@@ -251,15 +243,12 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 
 - **M76 planters + grimoire + Mana Seeds (11-22, LIVE, blockouts):** craft a planter, plant a Mana Seed, its spirit blooms and takes a grimoire page; the Anemonyx surfaces at the Green's west edge on her visit day with one seed. Look calls: the seed icons' species tells, the Anemonyx blockout (a giant white cloud-flower on the meadow at -252,212), the planter + pedestal blockouts.
 
-- ~~**M68 + M70 tutorial lines:**~~ ✅ SIGNED by Alex 11-22 17:2x (athernyx sign commit). Spread word LOCKED by Alex via Magii c755de1: HOLLOW GROUND (reversible, legend Unseen / Clear / Hollow ground); THE GREYING = the season closing ring. All Glade tutorial gaps closed.
 
 - **M82 hands actions (11-22, LIVE):** a real cast and a real melee swing now play the poses you author in /shimmer/dev/hands?preview=actions (placeholders quickened so the flick/hit land on the click). Author the real loops when you like; look note: on the swing wind-up the mitt sits behind the mana orb. Also free now: the M91 idle "inspect/glance at hands" poses can be authored there.
 
 - **M91 follower room + idle (11-22, LIVE):** walk around the Ather and stop: the follower should hang back 3-6 m and not chase small steps. Stand still 25 s: the view drifts and looks around, the follower wanders, sits, naps; any key/mouse/touch hands the view straight back. Nap is a simple settle (no art). Feel OK? Numbers live at the top of shared/idle-mode.ts.
 - **M95 load-screen tips (11-22, @lark draft 675c1d31):** 30 tips (12 plain / 10 dry / 8 sarcastic), each checked against the code: docs/handoff/m95-load-tips.md. Yay/nay per line or "all good". Images + screen are being built against them.
 
-- ~~**M67 s1b: existing keepers and the Glade (11-22, world):**~~ ✅ answered 11-22: Glade button on the Ather map under your garden. when the Glade + its folk leave the Wilds for the new tutorial cluster, existing keepers lose Greg's door (plot ground), the tour and the M40 lots there. Can existing keepers VISIT the Glade (e.g. through any gate), or does the Glade stay in the Wilds for them too? s1a (newborns only) ships without this.
-- ~~**Move card lines (11-22, @lark, play M66):**~~ ✅ APPROVED by Alex 11-22 16:4x (52 lines, side-by-side page). 52 rewrites of the canon move effect lines with no em dashes, same meaning (shared/move-cards.ts, uncommitted in play's tree; canon keeper-moves.ts untouched). Read them in that file. OK -> play commits + ships with M66 s2. (Flame Barrage: Magii RULED-AFK b9e734e, "a burning flock", no birds.)
 
 - **Newborn welcome card (11-21, lark draft):** a newborn now wakes facing Greg, but the card says "The gate ahead is the fold map". Lark opening: "You wake at Moonwell Glade in the Wilds. That's Gregory on the bench in front of you, and he sells the ground under the mist." Full phone + desktop text: docs/copy/newborn-welcome-card-2026-11-21.md. OK -> play pastes it.
 
