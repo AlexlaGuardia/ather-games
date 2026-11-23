@@ -15,7 +15,9 @@ import dynamic from 'next/dynamic'
 import { loadWilds, type WildsMeta } from '../../open/ather/wilds'
 import { loadIndex, makeWorld, zonesOf, tileOf, TILE_M, type WildsWorld } from '../../open/ather/wilds-world'
 import { loadNetwork, clearing, roadField } from '../../open/ather/network'
-import { makeVoids } from '../../open/ather/wilds-voids'
+import { makeVoids, type IndexLike } from '../../open/ather/wilds-voids'
+import { paintVoids, cellKey, cellOf, VCELL, type VoidEdits } from '../../open/ather/void-edits'
+import type { Network } from '../../open/ather/network'
 import { applyBrush, mergeEdits, EditHistory, BRUSHES, paintWater, foldWater, WATER_PREFIX, FALLS_PREFIX, addFall, removeFallsNear, fallLines, fallSheets, ponds, type Brush, type Edits, type BrushTile, type WaterMap } from '../../open/ather/wilds-edits'
 
 import { ramp } from './terrain-ramp'
@@ -44,11 +46,16 @@ const LOAD_NAME: Record<BuilderMap, string> = { wilds: 'Wilds', glade: 'Glade', 
 /** the tile picker / ring's view of a tiled map (a WildsWorld has these; the Nyx continent builds its own) */
 type Grid = { at(tx: number, ty: number): { name: string; tx: number; ty: number } | undefined; byName: Map<string, { name: string; tx: number; ty: number }> }
 const GLADE_FOCUS = { x: -100, z: 110 }   // Fly opens over Greg's garden (the tile's centre is void, between the islands)
+/** the route's last refusal (M104: Publish refused, naming the zone a void edit seals) */
+const lastError = { msg: '' }
+const sigOf = (v: VoidEdits | undefined | null) => v ? Object.keys(v).sort().map(k => k + v[k]).join(',') : ''
 async function builderCall(map: BuilderMap, body?: Record<string, unknown>): Promise<BSnap | null> {
   try {
     const r = body ? await fetch('/shimmer/save-builder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map, ...body }) })
       : await fetch(`/shimmer/save-builder?map=${map}`, { cache: 'no-store' })
-    return r.ok ? await r.json() as BSnap : null
+    lastError.msg = ''
+    if (!r.ok) { try { const j = await r.json() as { error?: unknown }; lastError.msg = typeof j.error === 'string' ? j.error : '' } catch { /* */ } return null }
+    return await r.json() as BSnap
   } catch { return null }
 }
 const isCheck = (n: string) => n.startsWith('check:')
@@ -56,9 +63,12 @@ const isCheck = (n: string) => n.startsWith('check:')
 /** ox, oz = the tile's centre in world coords (a Wilds tile: tx/ty * TILE_M; the Glade's tile: its own centre). `voidV` (Glade):
  *  vertices that are NOT ground: heightAt answers NaN there, so the brush skips them, and Fly drops their triangles. */
 interface Base { meta: WildsMeta; tx: number; ty: number; ox: number; oz: number; h: Float32Array; voided?: Uint8Array; voidV?: Uint8Array }
-type Tool = Brush | 'water' | 'dry' | 'falls'
-const TOOLS: Tool[] = [...BRUSHES, 'water', 'dry', 'falls']
-const TOOL_KEY: Record<Tool, string> = { raise: 'Raise', lower: 'Lower', flatten: 'Flatten', smooth: 'Smooth', water: 'Water', dry: 'Dry', falls: 'Falls' }
+type Tool = Brush | 'water' | 'dry' | 'falls' | 'void'
+const TOOLS: Tool[] = [...BRUSHES, 'water', 'dry', 'falls', 'void']
+const TOOL_KEY: Record<Tool, string> = { raise: 'Raise', lower: 'Lower', flatten: 'Flatten', smooth: 'Smooth', water: 'Water', dry: 'Dry', falls: 'Falls', void: 'Void' }
+// M104: the void brush's cells live in the same store under one key (not a tile name: '/' never passes TILE_NAME), so one undo
+// history, dirty set, autosave and Publish cover them; the layer file carries them as `voids` (void-edits.ts)
+const VOIDS_KEY = 'voids/'
 // the editor keeps heights and water in ONE store (so one undo history covers both): '<tile>' = heights, 'water/<tile>' = water
 const wkey = (t: string) => WATER_PREFIX + t, fkey = (t: string) => FALLS_PREFIX + t
 const tileOfKey = (k: string) => k.startsWith(WATER_PREFIX) ? k.slice(WATER_PREFIX.length) : k.startsWith(FALLS_PREFIX) ? k.slice(FALLS_PREFIX.length) : k
@@ -86,6 +96,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const [level, setLevel] = useState<number | null>(null)   // water level (m, absolute); null = the first Water click picks ground + 1 m
   const [picking, setPicking] = useState(false)
   const [fallW, setFallW] = useState(1.5)
+  const [voidMode, setVoidMode] = useState<-1 | 1>(-1)   // M104: the void brush erases (-1, the crust holds) or paints (1)
   const line = useRef<[number, number][] | null>(null)   // the waterfall line being drawn (tile-local)
   const [radius, setRadius] = useState(16)
   const [strength, setStrength] = useState(0.2)
@@ -118,12 +129,17 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const dirtyRef = useRef(new Set<string>())
   const canvas = useRef<HTMLCanvasElement>(null)
   const paint = useRef<{ x: number; z: number; target?: number; timer: number } | null>(null)
-  const opts = useRef({ brush, radius, strength, level, picking, fallW }); opts.current = { brush, radius, strength, level, picking, fallW }
+  const opts = useRef({ brush, radius, strength, level, picking, fallW, voidMode }); opts.current = { brush, radius, strength, level, picking, fallW, voidMode }
   const tileRef = useRef(tile); tileRef.current = tile
   // M83 overview: the Wilds' tiles nobody has opened yet are drawn from their raw exported heights (the .bin the parse reads,
   // fetched once, shared with the browser cache), with the void field's carve; an opened tile draws from its parsed base
   const rawRef = useRef(new Map<string, Int16Array>())
   const [rawN, setRawN] = useState(0)
+  // M104: what the void field was built from, and the void cells it was built with; a change (stroke end, undo, rollback) rebuilds
+  // the field and re-parses the open tiles (the carve is baked into a parsed tile), so tile view, overview and Fly show the result
+  const voidSrc = useRef<{ idx: IndexLike; nw: Network | null } | null>(null)
+  const voidSig = useRef('')
+  const [voidRev, setVoidRev] = useState(0)
 
   // ── the world: index + network + voids, then the edits file ──
   useEffect(() => {
@@ -138,6 +154,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         setOvData(gladeOverlay())
         setSnapB(b); setSavedAt(b.draftAt)
         const store: Edits = { ...b.draft.tiles }; for (const [t, m] of Object.entries(b.draft.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(b.draft.falls)) store[fkey(t)] = { ...m }
+        if (b.draft.voids) store[VOIDS_KEY] = { ...b.draft.voids }
         edits.current = store
         setTiles([{ name: T.name, tx: 0, ty: 0, land: 1 }])
         setStatus(''); setReady(true); setRev(r => r + 1)
@@ -155,6 +172,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         gridRef.current = { byName, at: (tx, ty) => byName.get(`nyx_${tx}_${ty}`) }
         setSnapB(b); setSavedAt(b.draftAt)
         const store: Edits = { ...b.draft.tiles }; for (const [t, m] of Object.entries(b.draft.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(b.draft.falls)) store[fkey(t)] = { ...m }
+        if (b.draft.voids) store[VOIDS_KEY] = { ...b.draft.voids }
         edits.current = store
         const first = [...list].sort((a, c) => Math.hypot(a.tx, a.ty) - Math.hypot(c.tx, c.ty) || c.land - a.land)[0]
         setTiles(list)
@@ -169,10 +187,12 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       const layer = { edits: b.draft.tiles, water: b.draft.water, falls: b.draft.falls }
       setSnapB(b); setSavedAt(b.draftAt)
       const w = makeWorld(idx); if (nw) { w.clear = clearing(nw); w.roads = roadField(nw) }
-      w.voids = makeVoids(idx, nw ?? null)
+      w.voids = makeVoids(idx, nw ?? null, [], b.draft.voids ?? null)   // M104: the DRAFT's void brush cells over the generated voids
+      voidSrc.current = { idx, nw: nw ?? null }; voidSig.current = sigOf(b.draft.voids)
       setOvData(wildsOverlay(nw ?? null, w.voids.crossings))
       worldRef.current = w; gridRef.current = w
       const store: Edits = { ...layer.edits }; for (const [t, m] of Object.entries(layer.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(layer.falls)) store[fkey(t)] = { ...m }
+      if (b.draft.voids) store[VOIDS_KEY] = { ...b.draft.voids }
       edits.current = store
       setTiles(idx.tiles.filter(t => t.land > 0.02).map(t => ({ name: t.name, tx: t.tx, ty: t.ty, land: t.land })).sort((a, b) => a.ty - b.ty || a.tx - b.tx))
       setStatus('')
@@ -223,7 +243,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     })).then(() => { if (!dead) { setStatus(''); setReady(true); setRev(r => r + 1) } })
       .catch(err => { if (!dead) setStatus(`parse failed: ${String(err)}`) })
     return () => { dead = true }
-  }, [tile, tiles])
+  }, [tile, tiles, voidRev])
 
   // ── M83 overview: every Wilds tile's raw heights, a few at a time (glade/nyx have theirs in memory already) ──
   useEffect(() => {
@@ -308,6 +328,16 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       const o = k * 4; px[o] = Math.min(255, r * 255); px[o + 1] = Math.min(255, g * 255); px[o + 2] = Math.min(255, b * 255); px[o + 3] = 255
     }
     ctx.putImageData(img, 0, 0)
+    // M104: the void brush's cells on this tile (erase = green, the crust holds; paint = red, void); the carve shows after the stroke
+    const VO = edits.current[VOIDS_KEY]
+    if (VO && (showEdits || opts.current.brush === 'void')) {
+      const x0 = B.ox - B.meta.sizeX / 2, z0 = B.oz - B.meta.sizeZ / 2, s = VCELL / cell
+      for (let j = cellOf(z0); j <= cellOf(z0 + B.meta.sizeZ); j++) for (let i = cellOf(x0); i <= cellOf(x0 + B.meta.sizeX); i++) {
+        const v = VO[cellKey(i, j)]; if (!v) continue
+        ctx.fillStyle = v < 0 ? 'rgba(120,235,160,0.35)' : 'rgba(255,80,60,0.42)'
+        ctx.fillRect((i * VCELL - x0) / cell, (j * VCELL - z0) / cell, s, s)
+      }
+    }
     // falls: every sheet the game will draw (auto from the ponds + the drawn lines), white; drawn lines get their points
     const hAtL = (x: number, z: number) => { const fx = Math.min(nx - 1.001, Math.max(0, (x + B.meta.sizeX / 2) / cell)), fz = Math.min(nz - 1.001, Math.max(0, (z + B.meta.sizeZ / 2) / cell)), i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j; return (H[j * nx + i] * (1 - u) + H[j * nx + i + 1] * u) * (1 - v) + (H[(j + 1) * nx + i] * (1 - u) + H[(j + 1) * nx + i + 1] * u) * v }
     const lines = fallLines(edits.current[fkey(tileRef.current)]), sheets = fallSheets(B.meta, H, hAtL, ponds(B.meta, H, Wm).cells, lines)
@@ -321,7 +351,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const raf = useRef(0)
   const redraw = useCallback(() => { if (!raf.current) raf.current = requestAnimationFrame(() => { raf.current = 0; draw() }) }, [draw])
 
-  const allKeys = () => [...bases.current.keys()].flatMap(n => [n, wkey(n), fkey(n)])
+  const allKeys = () => [...bases.current.keys()].flatMap(n => [n, wkey(n), fkey(n)]).concat(VOIDS_KEY)
   const markDirty = (names: string[]) => { if (!names.length) return; for (const n of names) dirtyRef.current.add(n); setDirty([...dirtyRef.current]) }
 
   // ── the brush ──
@@ -337,12 +367,26 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         const rm = removeFallsNear(edits.current[fkey(name)], x - B.ox, z - B.oz, o.radius)
         if (Object.keys(rm).length) markDirty(mergeEdits(edits.current, { [fkey(name)]: rm }))
       }
+    } else if (o.brush === 'void') {
+      if (glade || nyx) return   // no voids on this map
+      markDirty(mergeEdits(edits.current, { [VOIDS_KEY]: paintVoids(edits.current[VOIDS_KEY], x, z, o.radius, o.voidMode) }))
     } else if (o.brush !== 'falls') {
       const d = applyBrush(heightAt, brushTiles(), edits.current, { kind: o.brush, x, z, r: o.radius, s: o.strength, target })
       markDirty(mergeEdits(edits.current, d))
     }
     redraw()
-  }, [heightAt, brushTiles, redraw])
+  }, [heightAt, brushTiles, redraw, glade, nyx])
+
+  // M104: rebuild the void field when the void cells changed (never mid-stroke: rev only moves on stroke end / undo / load)
+  useEffect(() => {
+    const w = worldRef.current, src = voidSrc.current; if (!w || !src || glade || nyx || paint.current) return
+    const ov = edits.current[VOIDS_KEY] as VoidEdits | undefined, sig = sigOf(ov)
+    if (sig === voidSig.current) return
+    voidSig.current = sig
+    w.voids = makeVoids(src.idx, src.nw, [], ov ?? null)
+    setOvData(wildsOverlay(src.nw, w.voids.crossings))
+    bases.current.clear(); setVoidRev(v => v + 1)
+  }, [rev, glade, nyx])
 
   const toWorld = (e: { clientX: number; clientY: number }) => {
     const cv = canvas.current, B = bases.current.get(tileRef.current); if (!cv || !B) return null
@@ -399,12 +443,13 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     const L: Layer = { v: 1, tiles: {}, water: {}, falls: {} }
     for (const [k, m] of Object.entries(edits.current)) {
       if (!Object.keys(m).length) continue
-      if (k.startsWith(WATER_PREFIX)) L.water[tileOfKey(k)] = m; else if (k.startsWith(FALLS_PREFIX)) L.falls[tileOfKey(k)] = m; else L.tiles[k] = m
+      if (k === VOIDS_KEY) L.voids = m; else if (k.startsWith(WATER_PREFIX)) L.water[tileOfKey(k)] = m; else if (k.startsWith(FALLS_PREFIX)) L.falls[tileOfKey(k)] = m; else L.tiles[k] = m
     }
     return L
   }
   const loadLayer = (L: Layer) => {
     const store: Edits = { ...L.tiles }; for (const [t, m] of Object.entries(L.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(L.falls)) store[fkey(t)] = { ...m }
+    if (L.voids) store[VOIDS_KEY] = { ...L.voids }
     edits.current = store; hist.current = new EditHistory(); dirtyRef.current.clear(); setDirty([]); setRev(r => r + 1)
   }
   const save = useCallback(async (auto = false): Promise<boolean> => {
@@ -422,7 +467,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     const b = await builderCall(map, { action: 'publish', note: msg ?? note })
     setBusy(false)
     if (b) { setSnapB(b); setNote('') }
-    setStatus(b ? `published v${b.index.live} · live on the next ${LOAD_NAME[map]} load` : 'publish FAILED (live unchanged)')
+    setStatus(b ? `published v${b.index.live} · live on the next ${LOAD_NAME[map]} load` : lastError.msg ? `${lastError.msg} (live unchanged)` : 'publish FAILED (live unchanged)')
     return !!b
   }, [save, note, map, glade])
   const rollback = useCallback(async (v: number): Promise<boolean> => {
@@ -442,7 +487,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
 
   const viewRef = useRef(view); viewRef.current = view
   useEffect(() => { if (view !== 'fly') setFull(false) }, [view])
-  // keys: 1-7 brush, [ ] radius, F fullscreen fly, Esc leave it, ctrl+z / ctrl+shift+z / ctrl+y, ctrl+s
+  // keys: 1-8 brush, V void erase/paint, [ ] radius, F fullscreen fly, Esc leave it, ctrl+z / ctrl+shift+z / ctrl+y, ctrl+s
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement; if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA')) return
@@ -450,7 +495,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo() }
       else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo() }
       else if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); save() }
-      else if (!mod && e.key >= '1' && e.key <= '7') setBrush(TOOLS[+e.key - 1])
+      else if (!mod && e.key >= '1' && e.key <= '8') setBrush(TOOLS[+e.key - 1])
+      else if (!mod && e.code === 'KeyV' && !e.repeat) setVoidMode(m => (m === -1 ? 1 : -1))   // M104: void brush erase / paint
       else if (!mod && (e.code === 'Minus' || e.code === 'NumpadSubtract')) setStrength(s => stepStrength(s, -1))   // M83: strength - / =
       else if (!mod && (e.code === 'Equal' || e.code === 'NumpadAdd')) setStrength(s => stepStrength(s, 1))
       else if (e.key === '[') setRadius(r => Math.max(4, r - 4))
@@ -508,10 +554,21 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       undo, redo, save, dirty: () => [...dirtyRef.current],
       publish, rollback, builder: () => snapB, savedAt: () => savedAt,
       strength, radius, brush, lockLook, setLockLook,
+      /** M104: the void brush at tile-local (lx, lz): mode -1 erase / 1 paint, one undo step; the field rebuilds + tiles re-parse */
+      voidStroke: (lx: number, lz: number, r: number, mode: -1 | 1) => {
+        const b = B(); if (!b || glade || nyx) return false
+        hist.current.begin(edits.current, allKeys())
+        markDirty(mergeEdits(edits.current, { [VOIDS_KEY]: paintVoids(edits.current[VOIDS_KEY], b.ox + lx, b.oz + lz, r, mode) }))
+        hist.current.commit(); setRev(v => v + 1); return true
+      },
+      /** the DRAFT's void field at tile-local (lx, lz) (the builder's own, edits applied) */
+      voidAt: (lx: number, lz: number) => { const b = B(), V = worldRef.current?.voids; if (!b || !V) return null; return { w: V.weight(b.ox + lx, b.oz + lz), isVoid: V.isVoid(b.ox + lx, b.oz + lz), crossings: V.crossings.length } },
+      voidCells: () => Object.keys(edits.current[VOIDS_KEY] ?? {}).length,
+      voidRev, status: () => status,
       /** M105: the overlay: on/off, toggle, and the data it draws (the game's own) */
       overlay: { on: showOv, set: setShowOv, data: () => ovData, doors: ovDoors },
     }
-  }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt, strength, radius, brush, lockLook, showOv, ovData, ovDoors])
+  }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt, strength, radius, brush, lockLook, showOv, ovData, ovDoors, voidRev, status, glade, nyx])
 
   // M105: the overlay cut to the open tile (tile view) and to its 3x3 ring (Fly); off = undefined, nothing drawn
   const Bt = bases.current.get(tile)
@@ -549,7 +606,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
           {full && (
             <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
               <div className="flex gap-1 items-center rounded bg-black/70 border border-white/10 px-2 py-1.5">
-                {TOOLS.map((t, i) => <button key={t} className={`${btn} ${brush === t ? on : off}`} onClick={() => setBrush(t)}>{i + 1} {t[0].toUpperCase() + t.slice(1)}</button>)}
+                {TOOLS.map((t, i) => <button key={t} className={`${btn} ${brush === t ? on : off}`} disabled={t === 'void' && (glade || nyx)} onClick={() => setBrush(t)}>{i + 1} {t[0].toUpperCase() + t.slice(1)}</button>)}
+                {brush === 'void' && <button className={`${btn} ${on}`} onClick={() => setVoidMode(m => (m === -1 ? 1 : -1))}>{voidMode === -1 ? 'Erase' : 'Paint'} (V)</button>}
                 <span className="text-[11px] font-mono text-white/70 tabular-nums pl-2">radius {radius} m [ ] · strength {strength.toFixed(2)} - =</span>
                 <button className={`${btn} ${off}`} onClick={undo}>Undo</button>
                 <button className={`${btn} ${showOv ? on : off}`} onClick={() => setShowOv(v => !v)}>POIs (O)</button>
@@ -617,8 +675,17 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         <div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1">Brush</div>
           <div className="flex flex-wrap gap-1">
-            {TOOLS.map((b, i) => <button key={b} className={`${btn} ${brush === b ? on : off}`} onClick={() => setBrush(b)}>{i + 1} {TOOL_KEY[b]}</button>)}
+            {TOOLS.map((b, i) => <button key={b} className={`${btn} ${brush === b ? on : off} disabled:opacity-35`} disabled={b === 'void' && (glade || nyx)} onClick={() => setBrush(b)} data-testid={`brush-${b}`}>{i + 1} {TOOL_KEY[b]}</button>)}
           </div>
+          {(glade || nyx) && <div className="text-[11px] text-white/40 mt-1" data-testid="void-note">Void brush: {glade ? 'the Glade' : 'the Nyx continent'} has no cloud voids; it works on the Wilds.</div>}
+          {brush === 'void' && !glade && !nyx && <div className="flex flex-col gap-1 mt-2" data-testid="void-panel">
+            <div className="flex gap-1">
+              <button className={`${btn} ${voidMode === -1 ? on : off}`} onClick={() => setVoidMode(-1)} data-testid="void-erase">Erase</button>
+              <button className={`${btn} ${voidMode === 1 ? on : off}`} onClick={() => setVoidMode(1)} data-testid="void-paint">Paint</button>
+              <span className="text-[11px] text-white/35 self-center">V toggles</span>
+            </div>
+            <div className="text-[11px] text-white/45">{voidMode === -1 ? 'erase: the crust holds there, Settle ground you can walk (a cooled neck). Green = erased.' : 'paint: the crust is gone, a void like the generated ones (never on a path, a settlement or the Glade). Red = painted.'} The ground updates when you let go. Publish refuses if a zone would be cut off from Moonwell.</div>
+          </div>}
           {brush === 'flatten' && <div className="text-[11px] text-white/45 mt-1">levels to the height under your first click</div>}
           {(brush === 'water' || brush === 'dry') && <div className="text-[11px] text-white/45 mt-1">{brush === 'water' ? 'paints water at the level below; it fills wherever the level stands above the ground (carve a bowl, paint = a lake). A pond edge over lower water falls by itself.' : 'removes painted water and waterfall lines under the brush'}</div>}
           {brush === 'falls' && <div className="text-[11px] text-white/45 mt-1">drag along a cliff edge: water springs out of it and falls to the lower side, onto painted water if there is some</div>}
