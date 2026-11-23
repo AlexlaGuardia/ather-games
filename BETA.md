@@ -271,6 +271,8 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
+- **Temple door line (11-23, @lark draft, athernyx 1de8615, shimmer-lines-idris-and-goodbyes.md Part 3, UNSIGNED):** knocking for Idris at the Enchant Temple; Idony answers. Replaces the placeholder 'Idris, please.' (continent/door-talk.ts). Yay / nay, then a lane wires it.
+
 - ~~**M97 room shells look list:**~~ ✅ Alex 11-23 (in world's window): "just the floor and the furniture inside, the walls and building around the rooms can go" -> s1b LIVE 80a397fa.
 
 - **M103 body bench (11-23, LIVE):** ather.games/shimmer/dev/keeper-body > Proportions. Pick one of the 6 models, move the 17 dials, Save. The bench shows it at once; to reach the GAME, tell me "saved" and a lane commits + builds. This is also where the "reads like a kid" fix lives (chin taper, eye size, head, torso length).
