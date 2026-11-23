@@ -415,12 +415,12 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   return (
     <div className="flex flex-col lg:flex-row gap-4 text-white/85">
       <div className="flex flex-col gap-2 w-full max-w-[760px]">
-      <div className="flex gap-1 items-center">
+      <div className="flex flex-wrap gap-1 items-center">{/* M83 s2b: wraps (the map buttons crowded the row) */}
         {(['wilds', 'glade'] as const).map(m => <button key={m} className={`${btn} ${map === m ? on : off}`} onClick={() => map !== m && onMap(m)} data-testid={`map-${m}`}>{MAP_NAME[m]}</button>)}
         <span className="w-3" />
         {(['2d', 'fly'] as const).map(v => <button key={v} className={`${btn} ${view === v ? on : off}`} onClick={() => setView(v)} data-testid={`view-${v}`}>{v === '2d' ? 'Map (top-down)' : 'Fly (3D)'}</button>)}
         {view === 'fly' && <button className={`${btn} ${off}`} onClick={() => setFull(true)} data-testid="fly-full">Fullscreen (F)</button>}
-        {view === 'fly' && <span className="text-[11px] font-mono text-white/40 pl-2">WASD move · Space/C up/down · Shift fast · right-drag look · wheel zoom · T top-down · left-drag sculpt</span>}
+        {view === 'fly' && <span className="basis-full text-[11px] font-mono text-white/40">WASD move · Space/C up/down · Shift fast · right-drag look · wheel zoom · T top-down · left-drag sculpt</span>}
       </div>
       {view === 'fly' && B && (
         <div className={full ? 'fixed inset-0 z-[60] bg-black select-none touch-none' : 'relative w-full aspect-[4/3] bg-black/40 rounded overflow-hidden select-none touch-none'} data-testid="fly-frame" data-full={full ? '1' : '0'}>
