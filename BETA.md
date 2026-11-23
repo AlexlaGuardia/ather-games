@@ -213,6 +213,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-23 12:4x Alex: "1. Yea good catch let's fix that ..2. Sounds right for now ..3. Your call but I'd like to pin the spirits stats for us to sit down and talk more about it once I'm home tonight ..4. Sorry all testing will have to wait until I'm home ...yea 8m sounds like a good start" → start card = play slice; price kept; stats pinned for tonight; feel tests tonight.
 - 11-23 10:4x Alex AMENDS M109: "the chord (instead of party) of 8 hang around the garden and three of those can join you to explore the ather wilds.. I like the idea of them helping in combat but as they please" → CHORD (8, garden) + 3 come along + combat by their own choice. To Magii (CANON_GAPS amendment).
 - 11-23 10:2x Alex: "making a party out of the three.. could the player use the grimoire to store bloomed spirits in game and manage the party from there; the party hangs around the garden (the party being 8 slots).. those 8 the player can speak to each with options like feed follow and open a panel that has the spirits avatar there a radar stat chart moves list" → row M109. Canon friction: glossary › Grimoire = roster + 'the means of calling one home', but 'NO spirit-bank, box or depot: a keeper knows spirits, never stores them' → CANON_GAPS [OPEN] for where non-party spirits are.
 - 11-23 08:4x Alex on Nyx + ships: agreed Nyx is thin; M73 opening chain next. On a flyable skyship: "I'm not on board for 3, I'm thinking it's just a gate to space maps" → DECIDED: NO flight system. A repaired ship = a GATE to space maps (board it, pick a destination, load the map; the Hask wreck is the first, its SOS = the destination-list question). Ship repair loop = canon ask to Magii.
@@ -295,13 +296,13 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
-- **Spirit stats above the cap (11-23, M110):** canon caps a base-form stat at 50, but some species START above it (fox AGI 52, firefly AGI 70, water-bear GRD 70; battle data). My pick: leave battle bases as they are; a stat already at/above the cap simply doesn't grow until she evolves (what's live). Alternative: clamp bases to 50 (changes battle balance). Say if you want the clamp.
+- 📌 **TONIGHT with Alex (pinned 12:4x: 'sit down and talk more about it once I'm home'):** **Spirit stats above the cap (11-23, M110):** canon caps a base-form stat at 50, but some species START above it (fox AGI 52, firefly AGI 70, water-bear GRD 70; battle data). My pick: leave battle bases as they are; a stat already at/above the cap simply doesn't grow until she evolves (what's live). Alternative: clamp bases to 50 (changes battle balance). Say if you want the clamp.
 
-- **Party company feel (11-23, M109 s4, owner ?spirits=3d):** ask spirits along in the grimoire, walk around the garden: the 8 m loose radius and drift-back pace OK? (Your old test party/fed/follow lists read empty once: keys moved.)
+- 🌙 **Tonight, Alex testing at home (8 m = good start, 12:4x):** **Party company feel (11-23, M109 s4, owner ?spirits=3d):** ask spirits along in the grimoire, walk around the garden: the 8 m loose radius and drift-back pace OK? (Your old test party/fed/follow lists read empty once: keys moved.)
 
-- **Cell housing price (11-23, M108 s1, owner ?ship=gate):** 6,000 Marks (dearest gun 4,500; new keeper starts at 1,500). Feels right as the first big goal, or lower? It's a dial.
+- ~~**Cell housing price (11-23, M108 s1):**~~ ✅ Alex 12:4x: 6,000 'sounds right for now'.
 
-- **Start card on a Rune Hold door arrival (11-23, M73):** arriving on the continent through the Rune Hold door still shows 'You start on the road out of Ashfeld ...', which is wrong for that arrival. Hide the card for door arrivals (build), or a new line for it (lark)? Default if silent: hide it.
+- ~~**Start card on a Rune Hold door arrival (11-23, M73):**~~ ✅ Alex 12:4x: fix it (hide for door arrivals) -> next play slice.
 
 - ~~**Kael's ship needs a NAME:**~~ ✅ **FRANKY** (Alex, Magii athernyx a2a7784): Kael named her for the late Frank; she has a VOICE like Morel's (Alkin manatech, her own personality, not Frank's mind); lines = lark, Alex signs.
 
