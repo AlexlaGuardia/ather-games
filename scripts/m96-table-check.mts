@@ -28,7 +28,8 @@ const tables = async () => (await works()).pieces.filter(x => x.item === 'planni
 const inBag = async () => ((await read('open.inv.v1'))?.slots ?? []).reduce((t: number, s: { id: string; n: number } | null) => t + (s?.id === 'planning_table' ? s.n : 0), 0) as number
 const hideCard = () => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 const shot = async (n: string) => { await hideCard(); try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
-const tp = async (x: number, z: number, yaw: number) => { await p.evaluate((a, b, c) => (window as any).__ather.tp(a, b, c), x, z, yaw); await sleep(1800) }
+// tp leaves the eye level (1.62 m), which passes OVER a 1.05 m table: look down at it the way a keeper does (walker __ather.look)
+const tp = async (x: number, z: number, yaw: number) => { await p.evaluate((a, b, c) => { const g = (window as any).__ather; g.tp(a, b, c); g.look(c, -0.4) }, x, z, yaw); await sleep(1800) }
 const pollUntil = async (f: () => Promise<boolean>, ms: number) => { const t = Date.now(); while (Date.now() - t < ms) { if (await f().catch(() => false)) return true; await sleep(250) } return false }
 const target = () => p.evaluate(() => (window as any).__melee?.target()?.id ?? null)
 const panel = () => p.evaluate(() => !!document.querySelector('[data-panel="planning-table"]'))
@@ -39,7 +40,7 @@ await boot()
 const T = { x: -112, z: 126 }
 await tp(T.x, T.z + 2.4, 0)
 await p.keyboard.press('e'); ok(await pollUntil(panel, 4000), 'never moved: E at the table opens it (no change for a keeper who never moved it)'); await closePanel()
-ok(await pollUntil(async () => (await target()) === 'table', 8000), `facing the table, a swing would land on it (${await target()})`)
+ok(!(await panel()), 'the panel closed'); ok(await pollUntil(async () => (await target()) === 'table', 8000), `facing the table, a swing would land on it (${await target()})`)
 await shot('m96-0-before')
 for (let i = 0; i < 3; i++) { await p.evaluate(() => (window as any).__melee.swing()); await sleep(700) }
 ok(await pollUntil(async () => (await works()).tableMoved === true, 4000), 'three hits: the save says the table left its spot')
