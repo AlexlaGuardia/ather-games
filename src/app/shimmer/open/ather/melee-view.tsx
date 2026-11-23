@@ -11,6 +11,7 @@ import { meleeTarget, strike, canSwing, breakTarget, MELEE_HITS, type Target, ty
 import { currentWorks, setWorks } from './workshop'
 import { getInv, setInv } from '../shared/bag'
 import { getPots, setPots } from './spirit-panels'
+import { getBoxes, setBoxes } from './planter-box-view'   // M113: a Planter Box's sapling rides along
 import { hudSay } from '../shared/hud-say'
 import { itemDef } from '../shared/inventory'
 import { isBuilding } from './build-mode'
@@ -58,12 +59,12 @@ function land(t: Target, now: number): 'hit' | 'broke' | 'full' | 'miss' {
   live.hits = r.hits; live.hitAt.set(t.id, now)
   if (!r.broke) return 'hit'
   if (guestRefuses(m => hudSay(m, 'info', 4))) { live.target = null; emit(); return 'miss' }   // M61: a guest never takes from a mate's plot
-  const name = nameOf(t), b = breakTarget(currentWorks(), t, getInv(), getPots())   // M106 fix: a planter's pot rides along
+  const name = nameOf(t), b = breakTarget(currentWorks(), t, getInv(), getPots(), getBoxes())   // M106 fix: a planter's pot rides along
   if (b === 'spirit') { hudSay('A spirit lives in this planter. It stays.', 'info'); return 'full' }
   if (!b) { hudSay('Your bag is full.', 'info'); return 'full' }
-  const carried = b.pots !== getPots()
-  setWorks(b.works); setInv(b.inv); setPots(b.pots); live.target = null; emit()
-  hudSay(carried ? `${name} · back in your bag. Its seed goes with it.` : `${name} · back in your bag`, 'item')
+  const carried = b.pots !== getPots(), sap = b.boxes !== getBoxes()
+  setWorks(b.works); setInv(b.inv); setPots(b.pots); setBoxes(b.boxes); live.target = null; emit()
+  hudSay(carried ? `${name} · back in your bag. Its seed goes with it.` : sap ? `${name} · back in your bag. Its sapling goes with it.` : `${name} · back in your bag`, 'item')
   return 'broke'
 }
 

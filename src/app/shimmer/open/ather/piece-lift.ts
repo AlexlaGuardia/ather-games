@@ -6,12 +6,14 @@
 import { pickUpPiece, type Works } from './rooms'
 import { FURNITURE } from './furniture'
 import { carryPot, type Pots } from './spirit-seeds'
+import { carryBox, PLANTER_BOX, type Boxes } from './planter-box'
 import type { Inv } from '../shared/inventory'
 
-export type Lift = { works: Works; inv: Inv; pots: Pots }
+// M113 s1: a Planter Box's sapling (planter-box.ts) rides along the same way: `boxes` in, `boxes` out (unchanged = same object).
+export type Lift = { works: Works; inv: Inv; pots: Pots; boxes: Boxes }
 /** Lift piece `id` into the bag with its pot. 'spirit' = a spirit lives in this planter (it stays); 'full' = no room in the
  *  bag; 'gone' = no such piece. Nothing changes unless it returns a Lift. */
-export function liftPiece(works: Works, id: string, inv: Inv, pots: Pots): Lift | 'spirit' | 'full' | 'gone' {
+export function liftPiece(works: Works, id: string, inv: Inv, pots: Pots, boxes: Boxes = {}): Lift | 'spirit' | 'full' | 'gone' {
   const p = works.pieces.find(x => x.id === id)
   if (!p) return 'gone'
   let next = pots
@@ -21,5 +23,5 @@ export function liftPiece(works: Works, id: string, inv: Inv, pots: Pots): Lift 
     next = c
   }
   const r = pickUpPiece(works, id, inv)
-  return r ? { works: r.works, inv: r.inv, pots: next } : 'full'
+  return r ? { works: r.works, inv: r.inv, pots: next, boxes: p.item === PLANTER_BOX ? carryBox(boxes, id) : boxes } : 'full'
 }

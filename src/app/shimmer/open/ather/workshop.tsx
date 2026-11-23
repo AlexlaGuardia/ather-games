@@ -47,6 +47,7 @@ import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, ALC_L
 import { AlchemyPanel } from './alchemy-panel'
 import { PlanterPanel, GrimoirePanel, getPots, setPots, settlePlanter, useBook, type BankStore } from './spirit-panels'
 import { liftPiece } from './piece-lift'
+import { getBoxes, setBoxes, settleSaplingBox, PottedSapling, SaplingBoxSection } from './planter-box-view'   // M113 s1
 import { BLOOM_MS, speciesOf } from './spirit-seeds'
 import { SpiritOnPlanter, useSpirits3d } from './spirit-model'
 import { spiritModelFor } from './spirit-models'
@@ -892,7 +893,8 @@ function confirmPlace(owned: ReadonlySet<string>) {
     if (!c) { const v = canPlacePiece(getW(), owned, item, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot set it there.' : v.why, 'info'); return }
     setInv(c.inv); setWorks(c.works)
     const f = FURNITURE[item], an0 = !f.shaft && anchorIfFree(placing.q, f.w, f.d, !!f.slab) ? ' · anchor set, pick a snap to line up on it' : ''
-    const an = (f.spirit === 'planter' && settlePlanter(c.piece.id) ? ' · its seed is back in the soil, still growing' : '') + an0   // M106 fix: a carried pot
+    const an = (f.spirit === 'planter' && settlePlanter(c.piece.id) ? ' · its seed is back in the soil, still growing' : '')
+      + (item === 'planter_box' && settleSaplingBox(c.piece.id) ? ' · its sapling is back in, still growing' : '') + an0   // M106 fix: a carried pot; M113: a carried sapling
     // keep placing while more of the same are in the bag (a row of stools is one job, not five trips to the table)
     if (countOf(c.inv, item) > 0) hudSay(`${FURNITURE[item].name} set · ${countOf(c.inv, item)} more in the bag · ${placing.hand ? 'hold R to put it away' : 'Esc stops'}${an}`, 'item', 4)
     else { setPlacing(null); hudSay(`${FURNITURE[item].name} set.${an}`, 'item', 3) }
@@ -1288,7 +1290,7 @@ export function PieceBody({ item, id }: { item: string; id?: string }) {
     case 'goldwood_table': return <><Bx p={[0, 0.76, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.72, 0.09)}</>
     case 'spirit_planter': return <SpiritPlanterBody id={id} />
     case 'grimoire_pedestal': return <><Bx p={[0, 0.05, 0]} s={[f.w, 0.1, f.d]} c={c} /><Bx p={[0, 0.5, 0]} s={[0.3, 0.8, 0.3]} c={c} /><mesh position={[0, 0.95, 0]} rotation-x={-0.5}><boxGeometry args={[0.6, 0.06, 0.45]} /><meshLambertMaterial color={c} /></mesh><mesh position={[0, 0.99, 0.02]} rotation-x={-0.5}><boxGeometry args={[0.44, 0.02, 0.32]} /><meshBasicMaterial color="#2a2533" /></mesh><mesh position={[0, 1.0, 0.025]} rotation-x={-Math.PI / 2 - 0.5}><planeGeometry args={[0.36, 0.24]} /><meshBasicMaterial color={f.glow} transparent opacity={0.55} /></mesh></>
-    case 'planter_box': return <><Bx p={[0, 0.25, 0]} s={[f.w, 0.5, f.d]} c={c} /><Bx p={[0, 0.48, 0]} s={[f.w - 0.12, 0.06, f.d - 0.12]} c="#5a3d25" /><Bx p={[0, 0.27, 0]} s={[f.w + 0.02, 0.12, f.d + 0.02]} c="#8a6a3a" /></>
+    case 'planter_box': return <><Bx p={[0, 0.25, 0]} s={[f.w, 0.5, f.d]} c={c} /><Bx p={[0, 0.48, 0]} s={[f.w - 0.12, 0.06, f.d - 0.12]} c="#5a3d25" /><Bx p={[0, 0.27, 0]} s={[f.w + 0.02, 0.12, f.d + 0.02]} c="#8a6a3a" /><PottedSapling id={id} top={0.51} /></>
     case 'shimmeroak_shelf': return <><Bx p={[-f.w / 2 + 0.04, f.h / 2, 0]} s={[0.07, f.h, f.d]} c={c} /><Bx p={[f.w / 2 - 0.04, f.h / 2, 0]} s={[0.07, f.h, f.d]} c={c} />{[0.1, 0.6, 1.1, 1.56].map(y => <Bx key={y} p={[0, y, 0]} s={[f.w, 0.05, f.d]} c={c} />)}<Bx p={[0, f.h / 2, -f.d / 2 + 0.02]} s={[f.w, f.h, 0.03]} c={dk} /></>
     case 'starwillow_arch': return <><Bx p={[-f.w / 2 + 0.08, f.h / 2, 0]} s={[0.12, f.h, 0.12]} c={c} /><Bx p={[f.w / 2 - 0.08, f.h / 2, 0]} s={[0.12, f.h, 0.12]} c={c} /><Bx p={[0, f.h - 0.06, 0]} s={[f.w, 0.12, 0.14]} c={c} />{[-0.7, 0, 0.7].map(x => <mesh key={x} position={[x, f.h + 0.04, 0]}><sphereGeometry args={[0.07, 8, 6]} /><meshBasicMaterial color="#eaf2ff" /></mesh>)}</>
     case 'dawnwood_chair': return <><Bx p={[0, 0.45, 0]} s={[0.52, 0.07, 0.52]} c={c} />{legs(0.48, 0.48, 0.42)}<Bx p={[0, 0.75, -0.23]} s={[0.52, 0.6, 0.06]} c={c} /></>
@@ -2108,15 +2110,15 @@ function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<str
   const turn = () => { const t = turnPiece(getW(), owned, id); if (t) setWorks(t); else hudSay('No room to turn it here.', 'info') }
   const pickUp = () => {
     // M106 fix: piece-lift.ts, the same path as the third melee hit. A spirit lives here = stays; a growing seed rides along.
-    const r = liftPiece(getW(), id, getInv(), getPots())
+    const r = liftPiece(getW(), id, getInv(), getPots(), getBoxes())   // M113: a Planter Box's sapling rides along too
     if (r === 'spirit') { hudSay('A spirit lives in this planter. It stays.', 'info'); return }
     if (r === 'gone') return
     if (r === 'full') { hudSay('No room in the bag for it.', 'info'); return }
     const rr = returnRun(loadRuns(), id, r.inv)   // M57: a busy alchemy piece gives its inputs back, all or nothing
     if (!rr) { hudSay('No room in the bag for it and what it was working on.', 'info'); return }
-    const carried = r.pots !== getPots()
-    setWorks(r.works); setInv(rr.inv); saveRuns(rr.runs); setPots(r.pots); onClose()
-    hudSay(carried ? `${f.name} · back in your bag. Its seed goes with it.` : `${f.name} · back in your bag.`, 'item', 3)
+    const carried = r.pots !== getPots(), sap = r.boxes !== getBoxes()
+    setWorks(r.works); setInv(rr.inv); saveRuns(rr.runs); setPots(r.pots); setBoxes(r.boxes); onClose()
+    hudSay(carried ? `${f.name} · back in your bag. Its seed goes with it.` : sap ? `${f.name} · back in your bag. Its sapling goes with it.` : `${f.name} · back in your bag.`, 'item', 3)
   }
   const spiritFooter = (
     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -2149,6 +2151,7 @@ function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<str
         <div style={{ fontSize: 13, color: H.inkSoft }}>{f.blurb}</div>
         {/* M106 fix (Alex 11-23, phone): he built two Planter Boxes (decor) and E gave only Turn / Pick up, no way to plant.
             The box points at the piece a Mana Seed grows in, its recipe read from the data. TODO @lark: placeholder line. */}
+        {p.item === 'planter_box' && <SaplingBoxSection pieceId={id} bank={PLANTER_BANK} />}{/* M113 s1: a sapling grows in the box (decor) */}
         {p.item === 'planter_box' && <div data-planter-hint style={{ fontSize: 12.5, color: H.ink, fontWeight: 600 }}>
           Mana Seeds grow in a {FURNITURE.spirit_planter.name}, not here: {FURNITURE.spirit_planter.recipe.map(c => `${c.n} ${itemDef(c.id).name}`).join(' + ')}, made at your Carpentry.
         </div>}

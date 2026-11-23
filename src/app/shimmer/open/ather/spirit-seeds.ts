@@ -61,7 +61,7 @@ export function tend(pots: Pots, pieceId: string, now: number): Pots | null {
 export const growDay = (p: Pot, now: number) => Math.max(1, Math.floor((now - p.at) / GAME_DAY_MS) + 1)
 /** Every pot whose time has come blooms; returns the new pots and the species that just bloomed, in planting order. */
 export function ripen(pots: Pots, now: number): { pots: Pots; bloomed: { pieceId: string; species: Species }[] } {
-  const due = Object.entries(pots).filter(([k, p]) => !isCarried(k) && !p.bloomed && now >= bloomAt(p))   // a carried pot blooms once set down.sort((a, b) => a[1].at - b[1].at)
+  const due = Object.entries(pots).filter(([k, p]) => !isCarried(k) && !p.bloomed && now >= bloomAt(p)).sort((a, b) => a[1].at - b[1].at)   // a carried pot blooms once set down
   if (!due.length) return { pots, bloomed: [] }
   const next: Record<string, Pot> = { ...pots }
   for (const [id, p] of due) next[id] = { ...p, bloomed: true }

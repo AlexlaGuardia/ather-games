@@ -10,6 +10,7 @@ import { FURNITURE } from './furniture'
 import { GROUND_Y } from './plot'
 import type { Inv } from '../shared/inventory'
 import { liftPiece } from './piece-lift'
+import type { Boxes } from './planter-box'
 import type { Pots } from './spirit-seeds'
 
 export const MELEE_HITS = 3
@@ -66,13 +67,13 @@ export function strike(h: Hits | null, id: string, now: number): { hits: Hits | 
 /** the third hit: the thing comes back to the bag, whole. null = the bag is full (nothing moves); 'spirit' = a spirit lives in
  *  this planter (it stays). A piece comes up through piece-lift.ts like the card's Pick up, so a growing planter keeps its seed
  *  (M106 fix: this path used to skip the pot and the seed was lost). */
-export function breakTarget(w: Works, t: Pick<Target, 'kind' | 'id'>, inv: Inv, pots: Pots): { works: Works; inv: Inv; pots: Pots } | 'spirit' | null {
+export function breakTarget(w: Works, t: Pick<Target, 'kind' | 'id'>, inv: Inv, pots: Pots, boxes: Boxes = {}): { works: Works; inv: Inv; pots: Pots; boxes: Boxes } | 'spirit' | null {
   if (t.kind === 'table') {   // M96: the fixture comes up as the bag item; the save remembers it left its spot
     if (w.tableMoved) return null
     const r = give(inv, TABLE_ITEM, 1)
-    return r.left > 0 ? null : { works: { ...w, tableMoved: true }, inv: r.inv, pots }
+    return r.left > 0 ? null : { works: { ...w, tableMoved: true }, inv: r.inv, pots, boxes }
   }
-  if (t.kind === 'piece') { const l = liftPiece(w, t.id, inv, pots); return l === 'spirit' ? 'spirit' : typeof l === 'string' ? null : l }
+  if (t.kind === 'piece') { const l = liftPiece(w, t.id, inv, pots, boxes); return l === 'spirit' ? 'spirit' : typeof l === 'string' ? null : l }   // M113: a Planter Box's sapling rides along too
   const c = pickUpChest(w, t.id, inv)
-  return c ? { ...c, pots } : null
+  return c ? { ...c, pots, boxes } : null
 }
