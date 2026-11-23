@@ -1,4 +1,5 @@
 // The first-rinstick quest (rinquest.ts + the gate in rinsticks.ts, BETA M22). Run: npx tsx src/app/shimmer/open/ather/rinquest.test.ts
+import { saveTut, gift, freshTut } from './glade-tutorial'
 import { migrate, fresh, onShop, doStep, currentStep, hasStick, noStickLine, questEntries, fennelHere, waitingAt, scaleOnBank, waitTick, SHED_SCALE, RINQUEST_STEPS, RINQUEST_LINES } from './rinquest'
 import { loadTools, wearRinstick, markBornWithoutStick, saveQuest } from './rinsticks'
 import { skillPointerEntries, RINNSHOP_LINE, RINNING_LINE } from '../business/skill-pointers'
@@ -74,6 +75,8 @@ ok(noStick.title === RINNSHOP_LINE.title && withStick.title === RINNING_LINE.tit
 mem.clear()
 ok(loadTools().rinning?.toolId === 'worn_rinstick', 'gate: an old save (no flag) lost its worn rinstick')
 markBornWithoutStick()
+ok(!loadTools().rinning && !loadTools().forestry && !loadTools().prospecting, 'gate: a tutorial newborn holds no basic tools before the friends (M68 s3a)')
+saveTut(gift(gift(freshTut(), 'spike').t, 'pruner').t)   // Otto + Bonn lit the sockets
 ok(!loadTools().rinning && !!loadTools().forestry && !!loadTools().prospecting, 'gate: a new keeper got the worn rinstick, or lost the blade/spike')
 // a better rinstick in the save is never taken, and wearing it out leaves an unearned keeper empty-handed
 mem.set('open.tools.v1', JSON.stringify({ rinning: { toolId: 'basic_rinstick', usesRemaining: 1, speedBonus: 1, xpBonus: 1.05 } }))

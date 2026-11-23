@@ -66,6 +66,10 @@ export function migrate(saved: unknown): RinQuest {
 /** The Rinnshop standing (raised) starts the quest; nothing else changes the state here. */
 export const onShop = (q: RinQuest, shopRaised: boolean): RinQuest => (q.state === 'none' && shopRaised ? { ...q, state: 'active', step: 0 } : q)
 
+/** M68 s3b: Fennel in the Glade starts the quest for a tutorial keeper, at its step 2 (the Moonwell wait): her gift .2-.3
+ *  ARE step 1's lines, so 'meet' is done. A quest already past 'meet' (or done) is left as it is. */
+export const startAtGlade = (q: RinQuest): RinQuest => (q.state === 'none' || (q.state === 'active' && q.step === 0) ? { v: 1, state: 'active', step: 1 } : q)
+
 export const currentStep = (q: RinQuest): QuestStep | null => (q.state === 'active' ? RINQUEST_STEPS[q.step] ?? null : null)
 
 /** Something the world saw happen. A step completes only on ITS event; anything else leaves the quest as it is. */

@@ -70,6 +70,11 @@ export function hearFriend(t: Tut, f: Friend): Tut {
 }
 /** A friend's first talk after Greg sent you = greet + gift; any later talk = their bark. */
 export const friendScreen = (t: Tut, f: Friend): 'greet' | 'bark' => (t.heard.includes(f) ? 'bark' : 'greet')
+/** M68 s3b: a tutorial keeper who has not yet had Fennel's first talk: the first-rinstick quest waits for HER (the Rinnshop
+ *  standing does not start it) and the farm room's starter packet is not given (Tess's packet is the one source; hub #16510). */
+export const fennelInGlade = (t: Tut) => t.live && !t.heard.includes('fennel')
+/** Hub #16510: the farm room's starter packet is off for every live tutorial keeper; legacy keepers unchanged. */
+export const farmStarterOn = (t: Tut) => !t.live
 /** The friend's gift, by the gardens table. */
 export const GIFT_OF: Readonly<Record<Friend, Gift>> = { otto: 'spike', bonn: 'pruner', tess: 'seeds', fennel: 'rinquest' }
 /** Give once: `fresh` false = already given (reload, a second talk, a legacy save). */

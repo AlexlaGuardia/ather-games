@@ -14,10 +14,12 @@ import { take, isCatch, SLOTS, type Inv } from '../shared/inventory'
 import type { TalkNode } from '../shared/npc-talk'
 import { currentWorks } from './workshop'
 import { raised } from './rooms'
-import { onShop, doStep, questEntries, currentStep, RINQUEST_LINES, type RinQuest, type QuestEvent } from './rinquest'
+import { onShop, startAtGlade, doStep, questEntries, currentStep, RINQUEST_LINES, type RinQuest, type QuestEvent } from './rinquest'
 import { loadQuest, saveQuest, TOOLS_EVENT } from './rinsticks'
 import { MOONWELL } from './moonwell'
 import { fennelSpot } from './fennel'
+import { fennelBye } from './glade-fennel-talk'   // lark bye.fennel
+import { loadTut, fennelInGlade } from './glade-tutorial'
 import { morelPing } from '../shared/morel-ping'   // BETA M33 S3: Fennel calls through the gem
 import { MOREL_PING } from '../shared/morel-lines'
 
@@ -58,7 +60,7 @@ export function questEvent(ev: QuestEvent): boolean {
 export const FENNEL_NAME = 'Fennel'
 export function fennelTalk(quest: RinQuest, page: number, inv: Inv, acts: { goto: (page: number) => void; close: () => void }): TalkNode {
   const d = currentStep(quest)?.do
-  const bye = { label: 'Goodbye, Fennel.', pick: acts.close }
+  const bye = { label: fennelBye, pick: acts.close }
   if (d?.kind === 'talk' && !d.needs) {
     if (page === 0) return { line: "A Rinnshop! Look at the shelves. Now all it needs is a stick. Here's the trouble. No stick, no catch. No catch, no stick. Unless one gives itself.", options: [{ label: 'How does one give itself?', pick: () => acts.goto(1) }, bye] }
     if (page === 1) return { line: 'Sit by the Moonwell when the light goes. Bring nothing. Sit still and be easy company.', options: [{ label: 'Anything I should bring?', pick: () => acts.goto(2) }, bye] }
@@ -68,7 +70,7 @@ export function fennelTalk(quest: RinQuest, page: number, inv: Inv, acts: { goto
     const c = firstCatch(inv)
     if (c) {
       if (page === 0) return { line: "Oh, look at you. First catch, and it's a good one. Somebody gave you that stick, so go easy on the water. Come back hungry.", options: [{ label: 'Thank you.', pick: () => acts.goto(1) }, { label: '(leave)', pick: () => acts.goto(2) }] }
-      const fin = { label: 'Goodbye, Fennel.', pick: () => { questEvent({ kind: 'talk', who: 'fennel', hasCatch: true }); acts.close() } }
+      const fin = { label: fennelBye, pick: () => { questEvent({ kind: 'talk', who: 'fennel', hasCatch: true }); acts.close() } }
       if (page === 1) return { line: "Don't thank me. Thank whoever left the scale. Then eat.", options: [{ label: '(leave)', pick: () => acts.goto(2) }] }
       return { line: "Pot's on. It's always on.", options: [fin] }
     }
@@ -78,6 +80,12 @@ export function fennelTalk(quest: RinQuest, page: number, inv: Inv, acts: { goto
   if (d?.kind === 'pickup') return { line: "Dusk, at the water, empty hands. It's not hard. It's only slow.", options: [bye] }
   if (d?.kind === 'bench') return { line: 'Got something shiny? Take it to the bench before it forgets what it\'s for.', options: [bye] }
   return { line: 'Back to the kitchen with me. Feed those spirits!', options: [bye] }
+}
+
+/** M68 s3b: Fennel's gift .3 in the Glade (glade-fennel-talk.ts) starts the quest at the Moonwell wait. */
+export function gladeStartQuest(): void {
+  const before = get(), n = startAtGlade(before)
+  if (n !== before) put(n)
 }
 
 export function useRinQuest() {
@@ -92,6 +100,7 @@ export function useRinQuest() {
     if (quest.state !== 'none') return
     const tick = () => {
       const shop = currentWorks().rooms.some(r => r.kind === 'rinnshop' && raised(r))
+      if (fennelInGlade(loadTut())) return   // M68 s3b: a tutorial keeper's quest starts at Fennel in the Glade, not at the Rinnshop
       const n = onShop(get(), shop)
       if (n !== get()) { put(n); hudSay(RINQUEST_LINES.started, 'info'); morelPing('rinquest', MOREL_PING.fennel_rinstick, FENNEL_NAME, true) }   // intro: her first call IS how you meet her (pending hub/Alex)   // the first Rinnshop: Fennel calls (her meeting's marker lights)
     }

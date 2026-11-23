@@ -10,7 +10,7 @@ import type { GregErrand } from './panels'
 import { TOUR_ASK } from './greg-tour'
 
 export const GREG_HELLO = 'Now then, Keeper. Blue says hello.'   // @lark draft 11-18, awaiting Alex sign-off: Greg's idle greeting
-export const ANSWERS = { more: 'And then?', take: 'Take the gems', ground: 'My ground', bye: 'See you, Greg.' }   // @lark draft 11-18, awaiting Alex sign-off (checks import these, never retype them)
+export const ANSWERS = { more: 'And then?', take: 'Take the gems', ground: 'My ground', bye: 'Back soon, Greg.' }   // @lark draft 11-18; bye = bye.greg (athernyx 7854e21, UNSIGNED), awaiting Alex sign-off (checks import these, never retype them)
 
 export interface GregTalkActs { ground: () => void; bye: () => void; goto: (step: number) => void
   /** BETA M32: 'Tell me about the Ather' starts his walking tour (greg-tour.ts). Absent = no tour answer. */

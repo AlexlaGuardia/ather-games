@@ -56,6 +56,7 @@ import { ROAST } from './cooking'
 import { FarmPanel, FarmInterior, FarmCrate, currentFarm, setFarm, currentWater, settleWater, farmNow } from './farm-room'
 import { plumbingOf, spillIfRemoved } from './water'
 import { grantStarter } from './farmroom'
+import { loadTut, farmStarterOn } from './glade-tutorial'   // M68 s3b: no starter packet for live tutorial keepers
 import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
@@ -873,7 +874,7 @@ function confirmPlace(owned: ReadonlySet<string>) {
   if (!r) { const v = canPlace(getW(), owned, placing.kind, ghost.x, ghost.z, placing.q, getInv(), getB()); hudSay(v.ok ? 'Cannot build there.' : v.why, 'info'); return }
   setInv(r.inv); if (r.bank) setBank(r.bank); setPlacing(null)
   // the first Farm of a garden comes with one starter packet of tier-1 seeds in its store (farmroom.ts), once
-  const st = r.room.kind === 'farm' ? grantStarter(currentFarm(), r.works, r.room.id) : null
+  const st = r.room.kind === 'farm' && farmStarterOn(loadTut()) ? grantStarter(currentFarm(), r.works, r.room.id) : null
   if (st) setFarm(st.sv)
   setWorks(st ? st.works : r.works)
   hudSay(`${ROOMS[r.room.kind].name} · the scaffolding is up. Ready in ${Math.round(ROOMS[r.room.kind].raiseMs / 1000)} s.${st?.given ? ' A packet of seeds waits in its store.' : ''}`, 'item', 5)

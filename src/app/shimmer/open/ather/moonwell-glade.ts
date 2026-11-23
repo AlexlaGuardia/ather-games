@@ -13,6 +13,7 @@ import type { Settlement } from './network'
 import type { Folk } from './settlement-folk'
 import { DREAMS } from './folk-lines'
 import { loadQuest } from './rinsticks'
+import { loadWorks, raised } from './rooms'
 
 export const GLADE_ID = 'moonwell'
 export const GLADE_NAME = 'Moonwell Glade'
@@ -52,9 +53,10 @@ export const MALLOW_DREAM = 'What does the world want today? Ask me again tomorr
 export const GLADE_STAYS = 'This is my home. Greg kept it when everything else was lost. But come back often.'
 
 /** Who is away from the Glade right now: Fennel, while the first-rinstick quest has her at the keeper's Rinnshop
- *  (rinquest: state 'active', the same test as fennelHere). Read at the call (a quest that starts is seen on the next Wilds visit). */
+ *  (rinquest: state 'active', the same test as fennelHere) AND a raised Rinnshop stands for her to stand at (fennel.tsx ›
+ *  fennelSpot; M68 s3b, hub #16510: a tutorial keeper's quest starts in the Glade, before any Rinnshop). Read at the call. */
 export function gladeAway(): Set<string> {
-  try { return loadQuest().state === 'active' ? new Set([`${GLADE_ID}:fennel`]) : new Set() } catch { return new Set() }
+  try { return loadQuest().state === 'active' && loadWorks().rooms.some(r => r.kind === 'rinnshop' && raised(r)) ? new Set([`${GLADE_ID}:fennel`]) : new Set() } catch { return new Set() }
 }
 
 // ── M40 LAYOUT B 'THE GREEN' (Alex 11-19, docs/looks/moonwell-glade.html; mock scale 0.25 m a pixel). Metres from the

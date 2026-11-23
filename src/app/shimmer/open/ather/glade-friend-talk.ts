@@ -16,7 +16,9 @@ export const GARDEN_FRIENDS: readonly GardenFriend[] = ['otto', 'tess', 'bonn']
 export const FRIEND_NAME: Readonly<Record<GardenFriend, string>> = { otto: 'Otto', tess: 'Tess', bonn: 'Bonn' }
 /** The script's line that hands the gift over (gift .1), 0-based. */
 export const GIFT_AT = 2
-export const friendBye = (f: GardenFriend) => `Goodbye, ${FRIEND_NAME[f]}.`   // placeholder for @lark
+/** lark, athernyx 7854e21 (CANON/game/shimmer-lines-idris-and-goodbyes.md bye.otto/.tess/.bonn), UNSIGNED */
+export const FRIEND_BYE: Readonly<Record<GardenFriend, string>> = { otto: 'Later, Otto.', tess: 'Bye for now, Tess.', bonn: 'See you around, Bonn.' }
+export const friendBye = (f: GardenFriend) => FRIEND_BYE[f]
 
 /** Decided ONCE when the talk opens (hearing the friend on the last line must not swap the script under the bubble):
  *  true = greet + gift (the first talk after Greg sent you), false = the bark (before Greg sends you, after, legacy). */
