@@ -216,6 +216,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-23 15:4x Alex: "i have a manalotl in the spirit planter but its going to take a while for it to bloom" / "add the owner fast-forward for blooming" → owner-only dev control, routed to play (no row: dev tool).
 - 11-23 15:3x Alex: "the void looks great by the way, much better than before" → void look v2 (31ff95f6) APPROVED; cleared from Alex's queue.
 - 11-23 14:4x Alex (what a SUPPLIER is): "suppliers can provide resources from nyx side in bulk directly to your garden or if the supplier deed is purchased the garden gets a weekly shipment of it.. a lot of the aesthetic materials would come from here like a variety of stone colors that make their own style of brick and maybe some building materials made out of mushroom parts since the mushrooms grow so large here" → row M115 + CANON_GAPS [OPEN] (athernyx a1fca62, dbr magii): goods crossing to the garden, who runs a supplier, the deed word, material names.
 - 11-23 14:3x Alex: "I would like to keep this all in one world editing dev tool that I have been calling creative mode" → DECIDED: every builder tool (terrain, void brush, overlay, zones, tags, build mode) lives in ONE tool named Creative mode (?mode=creative; terrain/builder stay aliases). Routed to world-M84s1.
