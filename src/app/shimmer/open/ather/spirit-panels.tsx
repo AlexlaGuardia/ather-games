@@ -98,7 +98,9 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
   const growing = pot && !pot.bloomed ? pot : null
   const due = growing ? bloomAt(growing) : 0
   // the bloom as a day of its growing (1-based from planting) and the real wait; the next tend opens with the next game day
-  const dueDay = growing ? Math.floor((due - growing.at) / GAME_DAY_MS) + 1 : 0
+  // untended = 'at the end of day 3'; tended d1 + d2 = 'at the start of day 3' (Alex's words); one tend = 'midway through day 3'
+  const span = growing ? (due - growing.at) / GAME_DAY_MS : 0, whole = Math.floor(span)
+  const when = span === whole ? (whole >= BLOOM_DAYS ? `at the end of day ${whole}` : `at the start of day ${whole + 1}`) : `midway through day ${whole + 1}`
   const nextTend = (gameDay(now) + 1) * GAME_DAY_MS - now
   return (
     <HearthFrame title="Spirit Planter" maxWidth={420} onClose={onClose} fixed dataPanel="planter">
@@ -121,7 +123,7 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
             </div>
             <div style={{ height: 8, borderRadius: 4, background: '#0002', overflow: 'hidden', marginTop: 6 }}><div style={{ width: `${growth(growing, now) * 100}%`, height: '100%', background: '#e8c25a' }} /></div>
             <div data-bloom-line style={{ fontSize: 12, color: H.inkSoft, marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
-              Blooms {growing.v === 2 ? `on day ${dueDay}${(due - growing.at) % GAME_DAY_MS === 0 ? ' (at its start)' : ''}, ` : ''}in about {realIn(due - now)}
+              Blooms {growing.v === 2 ? `${when}, ` : ''}in about {realIn(due - now)}
             </div>
             {growing.v === 2 && tendedToday(growing, now) && <div style={{ fontSize: 12, color: H.inkSoft }}>Next tend in about {realIn(nextTend)}</div>}
           </div>

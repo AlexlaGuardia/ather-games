@@ -137,7 +137,7 @@ const checks: Record<string, boolean> = {
   noTurn: res.turnInPanel === false,
   tend: (res.tendBefore as any)?.text === 'Tend' && (res.tendBefore as any)?.tended === null && (res.tends as any).first?.length === 1 && (res.tends as any).first[0] === (res.tends as any).today
     && (res.tendAfter as any)?.text === 'Tended today' && (res.tendAfter as any)?.disabled === true && (res.tends as any).second?.length === 1
-    && (res.tends as any).bloomAt === (res.tends as any).at + BLOOM_MS - TEND_MS && String(res.dayLine).includes('Day 1 of 3'),
+    && (res.tends as any).bloomAt === (res.tends as any).at + BLOOM_MS - TEND_MS && String(res.dayLine).includes('Day 1 of 3') && String(res.dayLine).includes('end of day 3'),
   fromBank: res.bankListed === '0/1' && res.bankPlanted === true && (res.afterBankPlant as any).bank === 0 && (res.afterBankPlant as any).pot?.seed === 'mana_seed_bat',
   phonePlanter: !!res.phonePlanter && (res.phonePlanter as any).l >= 0 && (res.phonePlanter as any).r <= (res.phonePlanter as any).w + 0.5 && (res.phonePlanter as any).tend === true,
   grimoire: g.open && g.count === '1' && g.p1 === 'owl' && g.s1 === 'seen' && g.p2 === 'empty' && g.slots === 10 && res.pageOpen === true,
