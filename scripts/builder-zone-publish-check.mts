@@ -78,11 +78,14 @@ async function keeper(tag: string): Promise<{ ctx: BrowserContext; kp: Page; A: 
   await sleep(3500)   // the layer fetch lands
   return { ctx, kp, A: Af }
 }
-/** stand 3 m south of the wall's centre facing it (yaw 0 = -z), hold W 2.5 s; the z where the keeper ends */
+/** stand 3 m south of the wall's centre facing it (yaw 0 = -z), hold W (up to 20 s); the z where the keeper ends */
 async function walkAtWall(k: { kp: Page; A: (fn: string, ...a: unknown[]) => Promise<unknown> }, wx: number, wz: number): Promise<number> {
   await k.A('gladeAt', wx, wz + 3, 0); await sleep(2000)
   await k.A('look', 0, -0.1)
-  await k.kp.keyboard.down('KeyW'); await sleep(2500); await k.kp.keyboard.up('KeyW'); await sleep(500)
+  // held until the keeper is 1.5 m past the wall's line, or 20 s (swiftshader frames are slow: the walk is slow too, 11-23 run 1)
+  await k.kp.keyboard.down('KeyW')
+  for (let t = 0; t < 40; t++) { await sleep(500); if (((await k.A('state')) as { pz: number }).pz < wz - 1.5) break }
+  await k.kp.keyboard.up('KeyW'); await sleep(500)
   return ((await k.A('state')) as { pz: number }).pz
 }
 const zp = (kp: Page) => kp.evaluate(() => ((window as any).__zoneParts?.() ?? null)) as Promise<{ key: string; item: string; x: number; z: number; q: number; y: number }[] | null>
@@ -116,7 +119,7 @@ try {
     const parts = await zp(k.kp)
     ok(Array.isArray(parts) && parts.length === 0, `before publish: the game draws no zone part (${parts?.length})`)
     const endZ = await walkAtWall(k, WW.x, WW.z)
-    ok(endZ < WW.z - 1, `control: with nothing published the walk passes the wall's spot (from z ${(WW.z + 3).toFixed(1)} to ${endZ.toFixed(2)})`)
+    ok(endZ < WW.z - 1.4, `control: with nothing published the walk passes the wall's spot (from z ${(WW.z + 3).toFixed(1)} to ${endZ.toFixed(2)})`)
     await k.ctx.close()
   }
 
@@ -145,7 +148,7 @@ try {
     const gy = await k.A('ground', WW.x, WW.z) as number
     ok(!!pw && Math.abs(pw.y - gy) < 0.05, `the wall stands on the ground (${pw?.y.toFixed(2)} vs ground ${gy?.toFixed?.(2)})`)
     const endZ = await walkAtWall(k, WW.x, WW.z)
-    ok(endZ > WW.z + 0.15 && endZ < WW.z + 3, `COLLISION: the same walk now stops at the wall (z ${endZ.toFixed(2)}, wall face ${(WW.z + 0.15).toFixed(2)})`)
+    ok(endZ > WW.z + 0.15 && endZ < WW.z + 1.2, `COLLISION: the same walk now stops at the wall (z ${endZ.toFixed(2)}, wall face ${(WW.z + 0.15).toFixed(2)})`)
     await k.A('look', 0.6, -0.35); await sleep(1200)
     await k.kp.screenshot({ path: `${out}/game-wall.png` })
     // E at the bench + a swing: nothing is taken, nothing breaks
