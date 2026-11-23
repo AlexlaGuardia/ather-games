@@ -50,6 +50,9 @@ try {
 
   // ── A. only terrain ──
   await p.click('[data-testid="view-fly"]')
+  // M83 (11-23): Fly opens with mouse-look ON (a click locks the pointer; builder-fly-lock-check proves that grammar). This check
+  // proves the drag-to-sculpt grammar, which is mouse-look OFF.
+  await p.click('[data-testid="fly-lock"]')
   await p.waitForFunction('typeof window.__builderFly?.scene === "function" && window.__builderFly.scene().tiles > 0', { timeout: 120000, polling: 500 })
   await sleep(2000)
   const sc = await p.evaluate('window.__builderFly.scene()') as { tiles: number; sea: number; ring: number; other: string[] }

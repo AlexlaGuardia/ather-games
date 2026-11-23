@@ -20,6 +20,7 @@ import { applyBrush, mergeEdits, EditHistory, BRUSHES, paintWater, foldWater, WA
 
 import { ramp } from './terrain-ramp'
 import type { FlyTile } from './BuilderFly'
+import { STRENGTH_MIN, STRENGTH_MAX, stepStrength } from './fly-cam'
 const BuilderFly = dynamic(() => import('./BuilderFly'), { ssr: false })   // M83 s1b: three only loads when Fly is opened
 import { AUTOSAVE_MS, savedAgo, type Layer, type Index, type BuilderMap } from '../../world/builder'
 import { GLADE_BRUSH_TILE, GLADE_LAYER_TILE, GLADE_WATER_Y, sampleGladeBase } from '../../world/glade-builder'
@@ -98,6 +99,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const [, setNow] = useState(0)                             // re-render the 'saved Ns ago' label
   const [full, setFull] = useState(false)                      // M83 s1c: Fly fills the window (F toggles, Esc leaves): build for hours, not in a 400px box
   const [view, setView] = useState<'2d' | 'fly'>('2d')         // M83 s1b: the top-down map or the 3D free-fly view (same draft, same brush)
+  const [lockLook, setLockLook] = useState(true)               // M83 (Alex 11-23): Fly click locks the pointer: mouse-look + centre crosshair brush
+  const [locked, setLocked] = useState(false)
 
   const worldRef = useRef<WildsWorld | null>(null)
   const gridRef = useRef<Grid | null>(null)       // the Wilds' world, or the Nyx continent's virtual tiles
@@ -425,6 +428,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo() }
       else if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); save() }
       else if (!mod && e.key >= '1' && e.key <= '7') setBrush(TOOLS[+e.key - 1])
+      else if (!mod && (e.code === 'Minus' || e.code === 'NumpadSubtract')) setStrength(s => stepStrength(s, -1))   // M83: strength - / =
+      else if (!mod && (e.code === 'Equal' || e.code === 'NumpadAdd')) setStrength(s => stepStrength(s, 1))
       else if (e.key === '[') setRadius(r => Math.max(4, r - 4))
       else if (e.key === ']') setRadius(r => Math.min(80, r + 4))
       else if (!mod && e.code === 'KeyF' && !e.repeat && viewRef.current === 'fly') setFull(f => !f)
@@ -478,8 +483,9 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       sheets: () => { const b = B(); if (!b) return []; const nm = tileRef.current, E = edits.current[nm], H = Float32Array.from(b.h, (v, k) => v + (E?.[k] ?? 0) / 10), hAt = (x: number, z: number) => heightAt(b.ox + x, b.oz + z); return fallSheets(b.meta, H, hAt, ponds(b.meta, H, edits.current[wkey(nm)]).cells, fallLines(edits.current[fkey(nm)])).map(q => ({ auto: q.auto, top: q.top, bottom: q.bottom })) },
       undo, redo, save, dirty: () => [...dirtyRef.current],
       publish, rollback, builder: () => snapB, savedAt: () => savedAt,
+      strength, radius, brush, lockLook, setLockLook,
     }
-  }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt])
+  }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt, strength, radius, brush, lockLook])
 
   const cur = tiles.find(t => t.name === tile)
   const step = (dx: number, dy: number) => { const w = gridRef.current; if (!w || !cur) return; const t = w.at(cur.tx + dx, cur.ty + dy); if (t) setTile(t.name) }
@@ -496,7 +502,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         <span className="w-3" />
         {(['2d', 'fly'] as const).map(v => <button key={v} className={`${btn} ${view === v ? on : off}`} onClick={() => setView(v)} data-testid={`view-${v}`}>{v === '2d' ? 'Map (top-down)' : 'Fly (3D)'}</button>)}
         {view === 'fly' && <button className={`${btn} ${off}`} onClick={() => setFull(true)} data-testid="fly-full">Fullscreen (F)</button>}
-        {view === 'fly' && <span className="basis-full text-[11px] font-mono text-white/40">WASD move · Space/C up/down · Shift fast · right-drag look · wheel zoom · T top-down · left-drag sculpt</span>}
+        {view === 'fly' && <button className={`${btn} ${lockLook ? on : off}`} onClick={() => setLockLook(v => !v)} data-testid="fly-lock" title="on: click the view to lock the mouse (look + crosshair brush, Esc frees it). off: left-drag sculpts at the pointer, right-drag looks">Mouse-look {lockLook ? 'on' : 'off'}</button>}
+        {view === 'fly' && <span className="basis-full text-[11px] font-mono text-white/40">{lockLook ? 'click the view: mouse looks, crosshair = brush, left = sculpt, Esc frees' : 'right-drag look · left-drag sculpt'} · WASD move · Space/C up/down · Shift fast · wheel zoom · T top-down · - = strength · [ ] radius</span>}
       </div>
       {view === 'fly' && B && (
         <div className={full ? 'fixed inset-0 z-[60] bg-black select-none touch-none' : 'relative w-full aspect-[4/3] bg-black/40 rounded overflow-hidden select-none touch-none'} data-testid="fly-frame" data-full={full ? '1' : '0'}>
@@ -504,19 +511,22 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
             <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
               <div className="flex gap-1 items-center rounded bg-black/70 border border-white/10 px-2 py-1.5">
                 {TOOLS.map((t, i) => <button key={t} className={`${btn} ${brush === t ? on : off}`} onClick={() => setBrush(t)}>{i + 1} {t[0].toUpperCase() + t.slice(1)}</button>)}
-                <span className="text-[11px] font-mono text-white/70 tabular-nums pl-2">radius {radius} m [ ]</span>
+                <span className="text-[11px] font-mono text-white/70 tabular-nums pl-2">radius {radius} m [ ] · strength {strength.toFixed(2)} - =</span>
                 <button className={`${btn} ${off}`} onClick={undo}>Undo</button>
                 <button className={`${btn} ${off}`} onClick={() => setFull(false)} data-testid="fly-exit">Exit (Esc)</button>
               </div>
               <div className="w-fit rounded bg-black/70 border border-white/10 px-2 py-1 text-[11px] font-mono text-white/60 tabular-nums">
-                {dirty.length ? 'unsaved, autosave soon' : savedAgo(savedAt, Date.now())} · WASD · Space/C · Shift fast · right-drag look · wheel · T top-down · left-drag sculpt
+                {dirty.length ? 'unsaved, autosave soon' : savedAgo(savedAt, Date.now())} · WASD · Space/C · Shift fast · wheel · T top-down · {lockLook ? (locked ? 'left sculpt at the crosshair · Esc frees the mouse' : 'click to lock the mouse') : 'right-drag look · left-drag sculpt'}
               </div>
             </div>
           )}
           {/* the 3x3 ring only: bases caches every tile opened this session (builder-fly-check saw 18 meshes after two tiles) */}
           <BuilderFly tiles={[...bases.current.entries()].filter(([, b]) => Math.abs(b.tx - B.tx) <= 1 && Math.abs(b.ty - B.ty) <= 1).map(([name, b]): FlyTile => ({ name, ox: b.ox, oz: b.oz, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY, voidV: b.voidV, noSea: glade }))}
             deltas={n => edits.current[n]} rev={rev} heightAt={heightAt} radius={radius} focus={glade ? GLADE_FOCUS : { x: B.ox, z: B.oz }}
-            onBegin={beginAt} onMove={moveAt} onEnd={endStroke} />
+            onBegin={beginAt} onMove={moveAt} onEnd={endStroke} lockLook={lockLook} onLock={setLocked} />
+          {!full && <div className="absolute left-2 bottom-2 rounded bg-black/60 px-2 py-1 text-[11px] font-mono text-white/75 tabular-nums pointer-events-none" data-testid="fly-hud">
+            {TOOL_KEY[brush]} · strength {strength.toFixed(2)} m/tick (- =) · radius {radius} m ([ ]){lockLook ? (locked ? ' · Esc frees the mouse' : ' · click to lock the mouse') : ''}
+          </div>}
         </div>
       )}
       <div className={`relative w-full aspect-square bg-black/40 rounded overflow-hidden select-none touch-none ${view === 'fly' ? 'hidden' : ''}`}>
@@ -579,8 +589,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
           <input type="range" min={4} max={80} step={1} value={radius} onChange={e => setRadius(+e.target.value)} />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-[0.18em] text-white/40">Strength <span className="tabular-nums text-white/80 normal-case tracking-normal">{strength.toFixed(2)} m/tick</span></span>
-          <input type="range" min={0.02} max={1} step={0.02} value={strength} onChange={e => setStrength(+e.target.value)} />
+          <span className="text-[10px] uppercase tracking-[0.18em] text-white/40">Strength <span className="tabular-nums text-white/80 normal-case tracking-normal">{strength.toFixed(2)} m/tick</span> <span className="normal-case tracking-normal text-white/30">- =</span></span>
+          <input type="range" min={STRENGTH_MIN} max={STRENGTH_MAX} step={0.01} value={strength} onChange={e => setStrength(+e.target.value)} />
         </label>
 
         <div className="flex flex-wrap gap-1">

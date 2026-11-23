@@ -63,3 +63,18 @@ export function camOver(x: number, z: number, ground: (x: number, z: number) => 
   const g = ground(x, z), h = (Number.isFinite(g) ? g : 0)
   return settle({ x, y: h + 90, z: z + 140, yaw: 0, pitch: -0.55, top: false }, ground)
 }
+
+// ── M83 (Alex 11-23, "changing the terrain dramatically takes a bit long"): the brush STRENGTH ladder, m per 50 ms tick at the
+// brush centre. The slider and the - / = hotkeys share it. Top raised 1 -> 3 (60 m/s held: the per-vertex clamp, EDIT_MAX_DM
+// +-60 m, is reached in about a second, so the cap is the edit layer's, not the brush's). Bottom raised 0.02 -> 0.1: edits are
+// stored in whole decimetres and each tick ROUNDS (clampDm), so 0.02 m/tick (0.2 dm) rounded to 0 every tick and did nothing at
+// all (builder-fly-lock-check measured +0.000 m); 0.1 is the smallest strength that moves the ground.
+export const STRENGTH_MIN = 0.1, STRENGTH_MAX = 3
+export const STRENGTH_STEPS = [0.1, 0.2, 0.35, 0.5, 0.75, 1, 1.5, 2, 3]
+/** the next rung up (dir 1) or down (-1) from s; a value between rungs goes to the neighbouring rung in that direction */
+export function stepStrength(s: number, dir: 1 | -1): number {
+  const L = STRENGTH_STEPS
+  if (dir > 0) return L.find(v => v > s + 1e-9) ?? L[L.length - 1]
+  for (let i = L.length - 1; i >= 0; i--) if (L[i] < s - 1e-9) return L[i]
+  return L[0]
+}

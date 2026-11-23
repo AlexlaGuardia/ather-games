@@ -6,8 +6,13 @@
 // The brush is the editor's own (onBegin / onMove / onEnd take WORLD coords from a raycast), so undo, autosave and Publish are shared.
 // Camera = fly-cam.ts (pure): WASD + Space/C, Shift fast, right-drag look, wheel dolly, T top-down. Desktop only (Alex 08: the 3D
 // editor stays desktop-only).
+// ── M83 (Alex 11-23, "lock the camera to the cursor"): MOUSE-LOOK, the worktable creative mode's grammar (worktable/creative.tsx).
+// With `lockLook` on, a left click on the view LOCKS the pointer and does nothing else; while locked the mouse turns the camera,
+// a crosshair sits in the middle, the brush target is the terrain under it (a ray from the screen centre), and LEFT held = sculpt
+// with the current brush. Esc (the browser's own exit) frees the pointer. With `lockLook` off the old grammar is untouched:
+// left-drag sculpts where the pointer is, right-drag looks.
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { stepCam, lookCam, zoomCam, toggleTop, camOver, NO_KEYS, type Cam, type Keys } from './fly-cam'
@@ -30,6 +35,9 @@ interface Props {
   onMove: (x: number, z: number) => void
   onEnd: () => void
   onHover?: (x: number, z: number) => void
+  /** M83: a click locks the pointer (mouse-look + centre crosshair brush); off = drag-to-sculpt at the pointer */
+  lockLook?: boolean
+  onLock?: (locked: boolean) => void
 }
 // sRGB -> linear (three's own SRGBToLinear is not exported from the package root at runtime, though the types say it is)
 const lin = (c: number) => { c = Math.min(1, c); return c < 0.04045 ? c * 0.0773993808 : Math.pow(c * 0.9478672986 + 0.0521327014, 2.4) }
@@ -74,7 +82,7 @@ function TileMesh({ t, deltas, rev, onDown, onMoveP }: { t: FlyTile; deltas: Pro
     pos.needsUpdate = true; col.needsUpdate = true
     geo.computeVertexNormals(); geo.computeBoundingSphere(); geo.computeBoundingBox()
   }, [geo, rev, t, deltas, cols, rows])
-  return <mesh geometry={geo} onPointerDown={onDown} onPointerMove={onMoveP}><meshLambertMaterial vertexColors /></mesh>
+  return <mesh geometry={geo} onPointerDown={onDown} onPointerMove={onMoveP} userData={{ terrain: true }}><meshLambertMaterial vertexColors /></mesh>
 }
 
 function Rig({ heightAt, focus, camRef }: { heightAt: Props['heightAt']; focus: Props['focus']; camRef: React.MutableRefObject<Cam | null> }) {
@@ -113,6 +121,49 @@ function Rig({ heightAt, focus, camRef }: { heightAt: Props['heightAt']; focus: 
   return null
 }
 
+// M83: pointer lock. Click = lock; locked: mouse turns the camera, the brush target is the terrain at the screen centre, left = sculpt.
+const CENTRE = new THREE.Vector2(0, 0)
+function Lock({ camRef, hover, painting, pr, setLocked }: { camRef: React.MutableRefObject<Cam | null>; hover: React.MutableRefObject<{ x: number; z: number } | null>; painting: React.MutableRefObject<boolean>; pr: React.MutableRefObject<Props>; setLocked: (v: boolean) => void }) {
+  const { gl, camera, scene, raycaster } = useThree()
+  const centreHit = useRef<() => { x: number; z: number } | null>(() => null)
+  centreHit.current = () => {
+    camera.updateMatrixWorld(); raycaster.setFromCamera(CENTRE, camera)
+    const terrain: THREE.Object3D[] = []; scene.traverse(o => { if (o.userData?.terrain) terrain.push(o) })
+    const h = raycaster.intersectObjects(terrain, false)[0]
+    return h ? { x: h.point.x, z: h.point.z } : null
+  }
+  useEffect(() => {
+    const el = gl.domElement
+    const isLocked = () => document.pointerLockElement === el
+    const change = () => { const l = isLocked(); setLocked(l); pr.current.onLock?.(l); if (!l) { hover.current = null; if (painting.current) { painting.current = false; pr.current.onEnd() } } }
+    const down = (e: PointerEvent) => {
+      if (e.button !== 0 || !pr.current.lockLook) return
+      if (!isLocked()) { try { const r = el.requestPointerLock() as unknown; if (r && typeof (r as Promise<void>).catch === 'function') (r as Promise<void>).catch(() => {}) } catch { /* cooldown after an Esc */ } return }
+      const p = centreHit.current(); if (!p) return
+      painting.current = true; hover.current = p; pr.current.onBegin(p.x, p.z)
+    }
+    const move = (e: MouseEvent) => { if (isLocked() && camRef.current) camRef.current = lookCam(camRef.current, e.movementX, e.movementY) }
+    // Esc frees: the browser does this itself for a real key; also here, so a synthetic Esc (a check, a remapped key) frees it too
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && isLocked()) document.exitPointerLock() }
+    el.addEventListener('pointerdown', down); document.addEventListener('mousemove', move); document.addEventListener('pointerlockchange', change); window.addEventListener('keydown', esc)
+    return () => {
+      el.removeEventListener('pointerdown', down); document.removeEventListener('mousemove', move); document.removeEventListener('pointerlockchange', change); window.removeEventListener('keydown', esc)
+      if (isLocked()) document.exitPointerLock()
+    }
+  }, [gl, camRef, hover, painting, pr, setLocked])
+  // lock turned off while locked: let go
+  const lockLook = pr.current.lockLook
+  useEffect(() => { if (!lockLook && document.pointerLockElement === gl.domElement) document.exitPointerLock() }, [lockLook, gl])
+  useFrame(() => {
+    if (document.pointerLockElement !== gl.domElement) return
+    const p = centreHit.current(); hover.current = p
+    if (p) { pr.current.onHover?.(p.x, p.z); if (painting.current) pr.current.onMove(p.x, p.z) }
+  })
+  // test hook: the terrain point under the crosshair right now
+  useEffect(() => { (window as unknown as { __flyCentre?: unknown }).__flyCentre = () => centreHit.current() }, [])
+  return null
+}
+
 function Cursor({ at, radius, heightAt }: { at: React.MutableRefObject<{ x: number; z: number } | null>; radius: number; heightAt: Props['heightAt'] }) {
   const ref = useRef<THREE.Mesh>(null)
   useFrame(() => {
@@ -128,6 +179,7 @@ export default function BuilderFly(p: Props) {
   const hover = useRef<{ x: number; z: number } | null>(null)
   const painting = useRef(false)
   const pr = useRef(p); pr.current = p
+  const [locked, setLocked] = useState(false)
   useEffect(() => {
     const up = () => { if (painting.current) { painting.current = false; pr.current.onEnd() } }
     window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up)
@@ -138,6 +190,9 @@ export default function BuilderFly(p: Props) {
   useEffect(() => {
     ;(window as unknown as { __builderFly?: unknown }).__builderFly = {
       cam: () => camRef.current,
+      /** M83: is the pointer locked to the view; the terrain point under the crosshair */
+      locked: () => !!document.pointerLockElement && document.pointerLockElement.tagName === 'CANVAS',
+      centre: () => ((window as unknown as { __flyCentre?: () => unknown }).__flyCentre?.() ?? null),
       /** every mesh in the scene by geometry kind: terrain tiles, the sea plane, the brush ring, and anything else (want none) */
       scene: () => {
         const n = { tiles: 0, sea: 0, ring: 0, other: [] as string[] }
@@ -154,26 +209,32 @@ export default function BuilderFly(p: Props) {
     return () => { delete (window as unknown as { __builderFly?: unknown }).__builderFly }
   }, [])
   const onDown = (e: ThreeEvent<PointerEvent>) => {
-    if (e.button !== 0) return
+    if (e.button !== 0 || pr.current.lockLook) return   // lock mode: the click locks (or, locked, the centre ray sculpts: Lock)
     e.stopPropagation(); painting.current = true; hover.current = { x: e.point.x, z: e.point.z }
     pr.current.onBegin(e.point.x, e.point.z)
   }
   const onMoveP = (e: ThreeEvent<PointerEvent>) => {
+    if (locked) return   // locked: the pointer does not move; the crosshair is the target
     hover.current = { x: e.point.x, z: e.point.z }
     pr.current.onHover?.(e.point.x, e.point.z)
     if (painting.current) pr.current.onMove(e.point.x, e.point.z)
   }
   const waterY = p.tiles[0]?.waterY ?? 0
-  return (
+  return (<>
     <Canvas camera={{ fov: 60, near: 0.5, far: 6000 }} gl={{ antialias: true }} onPointerLeave={() => { hover.current = null }} data-testid="builder-fly"
       onCreated={({ scene }) => { sceneRef.current = scene; scene.background = new THREE.Color('#9fc4dd'); scene.fog = new THREE.Fog('#9fc4dd', 1500, 5000) }}>
       <hemisphereLight args={['#ffffff', '#5a6b4a', 0.9]} />
       <directionalLight position={[-300, 600, -200]} intensity={1.1} />
       <Rig heightAt={p.heightAt} focus={p.focus} camRef={camRef} />
+      <Lock camRef={camRef} hover={hover} painting={painting} pr={pr} setLocked={setLocked} />
       {p.tiles.map(t => <TileMesh key={t.name} t={t} deltas={p.deltas} rev={p.rev} onDown={onDown} onMoveP={onMoveP} />)}
       {/* the Glade (tiles with void) has no sea: its islands float in the cloud */}
       {p.tiles.length > 0 && !p.tiles.some(t => t.noSea) && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[p.focus.x, waterY, p.focus.z]}><planeGeometry args={[3200, 3200]} /><meshLambertMaterial color="#3d6f99" transparent opacity={0.75} /></mesh>}
       <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />
     </Canvas>
-  )
+    {locked && <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none" data-testid="fly-crosshair">
+      <div className="absolute left-1/2 top-1/2 w-5 h-0.5 -translate-x-1/2 -translate-y-1/2 bg-white/90 mix-blend-difference" />
+      <div className="absolute left-1/2 top-1/2 w-0.5 h-5 -translate-x-1/2 -translate-y-1/2 bg-white/90 mix-blend-difference" />
+    </div>}
+  </>)
 }

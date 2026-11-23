@@ -1,5 +1,5 @@
 // BETA M83 p1 s1b: the builder's free-fly camera (pure). Run: npx tsx src/app/shimmer/dev/editors/fly-cam.test.ts
-import { stepCam, lookCam, zoomCam, toggleTop, camOver, forward, NO_KEYS, CLEAR, CEIL, PITCH_MAX, type Cam } from './fly-cam'
+import { stepCam, lookCam, zoomCam, toggleTop, camOver, forward, NO_KEYS, CLEAR, CEIL, PITCH_MAX, stepStrength, STRENGTH_STEPS, STRENGTH_MIN, STRENGTH_MAX, type Cam } from './fly-cam'
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 const flat = () => 10
@@ -46,6 +46,15 @@ ok(!back.top && near(back.y, c0.y) && near(back.pitch, c0.pitch) && back.x === t
 // start pose
 const s = camOver(100, 200, flat)
 ok(s.z > 200 && s.y > 10 && s.pitch < 0 && !s.top, 'start: south of the point, raised, looking down at it')
+
+// M83: the strength ladder (Fly's - / = hotkeys)
+ok(STRENGTH_STEPS[0] === STRENGTH_MIN && STRENGTH_STEPS[STRENGTH_STEPS.length - 1] === STRENGTH_MAX && STRENGTH_STEPS.every((v, i) => i === 0 || v > STRENGTH_STEPS[i - 1]), 'strength ladder: min..max, rising')
+ok(STRENGTH_MIN * 10 >= 1, `strength min ${STRENGTH_MIN}: at least 1 dm per tick, so the rounded edit moves`)
+ok(STRENGTH_MAX >= 3, `strength max ${STRENGTH_MAX} m/tick (60 m/s held: the +-60 m clamp in ~1 s)`)
+ok(stepStrength(0.2, 1) === 0.35 && stepStrength(0.2, -1) === 0.1, 'step up / down from a rung')
+ok(stepStrength(0.24, 1) === 0.35 && stepStrength(0.24, -1) === 0.2, 'between rungs: to the neighbour in that direction (a slider value)')
+ok(stepStrength(STRENGTH_MAX, 1) === STRENGTH_MAX && stepStrength(STRENGTH_MIN, -1) === STRENGTH_MIN, 'clamped at both ends')
+let s9 = STRENGTH_MIN; for (let i = 0; i < 20; i++) s9 = stepStrength(s9, 1); ok(s9 === STRENGTH_MAX, 'twenty ups reach the top')
 
 console.log(fails ? `\n${fails} FAILED` : '\nall pass')
 process.exit(fails ? 1 : 0)
