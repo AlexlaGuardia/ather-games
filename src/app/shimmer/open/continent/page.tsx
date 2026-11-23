@@ -49,8 +49,6 @@ import { useIsOwner } from '@/app/_components/useIsOwner'
 import { extraGround, extraCarGround, carPush } from '../foot-extras'
 import { useTycoon } from '../business/use-tycoon'
 import { ShopPanel } from '../business/shop-panel'
-import { DestinationMapPanel } from './destination-map-panel'
-import { shipGateFlag, shipGateOpen } from './destination-map'
 import { RunesmithPanel, IdonyPanel, commitImbue } from '../business/smith-panel'
 import { IdrisPanel } from '../business/idris-panel'   // M93 s3
 import { TalkBubble, TalkChoices } from '../shared/npc-talk'
@@ -763,7 +761,7 @@ export interface RideHud { x: number; z: number; yaw: number; mph: number; frac:
 /** Where the Hallway lets you out when the asked-for door is not yours yet: the 08-12 public landing (gates.md). */
 const LANDING = 'rune-hold'
 /** the yard's E verbs as the desktop prompt reads them (place: a tap sets it, holding E turns it; the touch row has its own turn pill) */
-const YARD_PROMPT: Record<NonNullable<DeedYardState['action']>, string> = { 'take out': 'E · Take out', board: 'E · Board', place: 'E · Place · hold E to turn', 'pick up': 'E · Pick up', look: 'E · Change the look' }
+const YARD_PROMPT: Record<NonNullable<DeedYardState['action']>, string> = { 'take out': 'E · Take out', place: 'E · Place · hold E to turn', 'pick up': 'E · Pick up', look: 'E · Change the look' }
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
 interface DriverCtl { /** M80: another E target holds the key right now (a ferry while driving, the yard / a deed on foot): E leaves the car alone */ eTaken?: () => boolean; tp?: (x: number, z: number, yaw: number) => void; car?: () => { x: number; y: number; z: number; yaw: number; speed: number; foot: boolean } }
@@ -1163,10 +1161,6 @@ function ContinentRideGame() {
   const isOwner = useIsOwner()
   const [ownAllFlag, setOwnAllFlag] = useState(false)
   useEffect(() => { setOwnAllFlag(new URLSearchParams(location.search).get('own') === 'all') }, [])
-  // M108: the destination-map gate at Franky (owner-only ?ship=gate; destination-map.ts › shipGateOpen)
-  const [shipFlag, setShipFlag] = useState(false)
-  useEffect(() => { setShipFlag(shipGateFlag(location.search)) }, [])
-  const shipGate = shipGateOpen({ flag: shipFlag, owner: isOwner })
   // ?tune=1: ] gives 100k Marks, to try the businesses without grinding contracts (the Ather's ?tune=1 convention)
   useEffect(() => {
     if (!new URLSearchParams(location.search).has('tune')) return
@@ -1554,7 +1548,7 @@ function ContinentRideGame() {
           <DoorFolk R={R} focus={focus} talking={talk?.key ?? null} />
           <RemoteKeepers peers={mp.peers} me={() => focus.current} />
           <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={openDoor} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} />
-          <ShipyardPlots R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState} owned={ledger.shipyards} ownAll={isOwner && ownAllFlag} car={carLink} shipGate={shipGate} onShip={() => setDeed('ship:franky')}
+          <ShipyardPlots R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState} owned={ledger.shipyards} ownAll={isOwner && ownAllFlag} car={carLink}
             enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} />
           <Posts R={R} />
           <Roadside R={R} />
@@ -1590,8 +1584,7 @@ function ContinentRideGame() {
         onBeat={b => { setDeed(null); setTalk(t => (t ? { ...t, beat: { ...b, at: 0 } } : t)) }} />}
       {deed === 'idris' && <IdrisPanel ledger={ledger} setLedger={setLedger} onClose={() => { setDeed(null); setTalk(null) }} onBack={talk ? () => setDeed(null) : undefined} />}
       {deed?.startsWith('front:') && !board && <ShopPanel id={deed.slice(6)} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} isTouch={isTouch} />}
-      {deed === 'ship:franky' && shipGate && R && <DestinationMapPanel places={R.meta.places} onClose={() => setDeed(null)} />}
-      {deed && deed !== 'idony' && deed !== 'idris' && !deed.startsWith('front:') && !deed.startsWith('smith:') && !deed.startsWith('ship:') && R && tycoon.t && (
+      {deed && deed !== 'idony' && deed !== 'idris' && !deed.startsWith('front:') && !deed.startsWith('smith:') && R && tycoon.t && (
         <DeedCard R={R} lotId={deed} t={tycoon.t} marks={ledger.marks} onClose={() => setDeed(null)}
           onBuy={o => { const r = tycoon.buy(o.lot.id, o.kind, o.lot.tier); if (r.ok) hudSay(`${o.name} is yours · −${o.price.toLocaleString()} Marks`, 'item'); return r }}
           onSell={o => { const r = tycoon.sell(o.lot.id); if (r.ok) { hudSay(`${o.name} sold · +${(r.refund ?? 0).toLocaleString()} Marks`, 'item'); setDeed(null) } return r }} />
