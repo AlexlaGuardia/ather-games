@@ -495,7 +495,7 @@
  {
   "id": "work-carp-saw",
   "area": "stations",
-  "status": "proposed",
+  "status": "yay",
   "note": "M99: station working sounds; awaiting Alex's vote (yay ONE loop per bench)",
   "desc": "Carpentry bench working (loop phrase, A): four saw strokes push / pull, two mallet taps. Repeats while it crafts, fades with distance",
   "source": "synth",
@@ -505,7 +505,7 @@
  {
   "id": "work-carp-plane",
   "area": "stations",
-  "status": "proposed",
+  "status": "yay",
   "note": "M99: station working sounds; awaiting Alex's vote (yay ONE loop per bench)",
   "desc": "Carpentry bench working (loop phrase, B): plane shavings, a soft creak, three light taps. Repeats while it crafts",
   "source": "synth",
@@ -515,7 +515,7 @@
  {
   "id": "work-mason-chisel",
   "area": "stations",
-  "status": "proposed",
+  "status": "yay",
   "note": "M99: station working sounds; awaiting Alex's vote (yay ONE loop per bench)",
   "desc": "Masonry bench working (loop phrase, A): chisel on stone four times, then a little grit falling. Repeats while it crafts",
   "source": "synth",
@@ -525,7 +525,7 @@
  {
   "id": "work-mason-rasp",
   "area": "stations",
-  "status": "proposed",
+  "status": "yay",
   "note": "M99: station working sounds; awaiting Alex's vote (yay ONE loop per bench)",
   "desc": "Masonry bench working (loop phrase, B): a stone rubbed smooth (two rasps), two set-down knocks. Repeats while it crafts",
   "source": "synth",
@@ -535,7 +535,7 @@
  {
   "id": "work-done-wood",
   "area": "stations",
-  "status": "proposed",
+  "status": "yay",
   "note": "M99: station working sounds; awaiting Alex's vote (yay ONE loop per bench)",
   "desc": "Carpentry run finished: a tok-tok and a small bright two-note",
   "source": "synth",
@@ -545,7 +545,7 @@
  {
   "id": "work-done-stone",
   "area": "stations",
-  "status": "proposed",
+  "status": "yay",
   "note": "M99: station working sounds; awaiting Alex's vote (yay ONE loop per bench)",
   "desc": "Masonry run finished: a stone set down and a small glassy two-note",
   "source": "synth",
