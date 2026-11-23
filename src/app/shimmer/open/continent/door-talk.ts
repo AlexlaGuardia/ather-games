@@ -9,10 +9,14 @@ import { RUNESMITH_CUT, IDONY_HUSH, IDONY_AFTER, type Beat } from '../business/e
 
 // @lark draft 11-18, awaiting Alex sign-off. Idony has just hushed the keeper, so her answers defer instead of pester.
 export const DOOR_ASK = { cut: 'Here. A letter to cut.', inscribe: 'When you are free.', letters: 'The runesmith, please.', bye: 'Goodbye.', byeTemple: "I'll let you work.",
-  /** M93 s3: PLACEHOLDER label (sprites), for @lark to replace (the signed Idris file, athernyx 7a25a8e, has no door ask). Idris is he/him (5b83a25). */
-  idris: 'Idris, please.' }
+  /** SIGNED (Alex, athernyx 491f462): shimmer-lines-idris-and-goodbyes.md Part 3, door.idris.ask (Main). */
+  idris: 'Is Idris in?' }
+/** SIGNED (Alex, athernyx 491f462): Part 3, door.idris.reply (Main). Idony's one bubble between the knock and Idris's panel. */
+export const DOOR_REPLY = { idris: "Across the room. He talks. I'm working." }
 
 export interface DoorTalkActs { open: (deed: string) => void; bye: () => void }
+/** The Temple adds one step: asking for Idris shows Idony's reply first (`ask('idris')`), then the panel. */
+export interface TempleActs extends DoorTalkActs { ask: (who: 'idris' | null) => void }
 
 /** A runesmith's counter: "Set it down. I'll cut it." Then the cut list, or goodbye. `key` = `smith:<seat>`. */
 export const smithTalk = (key: string, a: DoorTalkActs): TalkNode => ({
@@ -22,15 +26,18 @@ export const smithTalk = (key: string, a: DoorTalkActs): TalkNode => ({
 
 /** The Enchant Temple: Idony at her bench (hushed while the bracelet is unwritten, her after-line once it is). Her twin
  *  Idris (Magii 6a20625) cuts letters into a gun's sigil (M93 s3, business/idris-panel.tsx). */
-export const templeTalk = (bracelet: boolean, a: DoorTalkActs): TalkNode => ({
-  line: bracelet ? IDONY_AFTER : IDONY_HUSH,
-  options: [
-    { label: DOOR_ASK.inscribe, pick: () => a.open('idony') },
-    { label: DOOR_ASK.letters, pick: () => a.open('smith:enchant') },
-    { label: DOOR_ASK.idris, pick: () => a.open('idris') },
-    { label: DOOR_ASK.byeTemple, pick: a.bye },
-  ],
-})
+export const templeTalk = (bracelet: boolean, a: TempleActs, asked: 'idris' | null = null): TalkNode => asked === 'idris'
+  // her reply, then on (the beat's own pause label '…', no new line)
+  ? { line: DOOR_REPLY.idris, options: [{ label: '…', pick: () => a.open('idris') }] }
+  : {
+    line: bracelet ? IDONY_AFTER : IDONY_HUSH,
+    options: [
+      { label: DOOR_ASK.inscribe, pick: () => a.open('idony') },
+      { label: DOOR_ASK.letters, pick: () => a.open('smith:enchant') },
+      { label: DOOR_ASK.idris, pick: () => a.ask('idris') },
+      { label: DOOR_ASK.byeTemple, pick: a.bye },
+    ],
+  }
 
 /** One step of Idony's beat. The keeper's answer is the step's own action: saying the word (which writes it), the
  *  last step's 'Take the bracelet', or a pause ('…') to let her work. Same labels the panel's beat used. */

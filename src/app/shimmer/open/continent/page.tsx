@@ -1330,7 +1330,7 @@ function ContinentRideGame() {
   // ── BETA M13 part 3: a runesmith's door and the Enchant Temple TALK first (door-talk.ts), the way Greg does on the Ather:
   // the counter's line in a bubble over its door, the camera turns to it, each answer opens ONE thing. Idony's imbue beat
   // plays in the same bubble. Other doors (shops, deeds, the Co.'s board) still open straight to their panel.
-  type Talk = { key: string; name: string; at: { x: number; y: number; z: number }; face?: { x: number; y: number; z: number }; beat?: { steps: Beat[]; at: number; vesselId: string; wordId: string }; greet?: number | null; visit?: number }
+  type Talk = { key: string; name: string; at: { x: number; y: number; z: number }; face?: { x: number; y: number; z: number }; beat?: { steps: Beat[]; at: number; vesselId: string; wordId: string }; greet?: number | null; visit?: number; asked?: 'idris' }
   const [talk, setTalk] = useState<Talk | null>(null)
   const talkFocus = useRef<{ x: number; y: number; z: number } | null>(null)
   const openDoor = useCallback((key: string) => {
@@ -1348,7 +1348,8 @@ function ContinentRideGame() {
   const bracelet = !errLoadout.vessels.some(x => x.id === 'starter-bracelet' && x.word === null)
   const talkNode = useMemo(() => {
     if (!talk) return null
-    const acts = { open: (k: string) => { setTalk(t => (t ? { ...t, beat: undefined } : t)); setDeed(k) }, bye: () => setTalk(null) }
+    const acts = { open: (k: string) => { setTalk(t => (t ? { ...t, beat: undefined, asked: undefined } : t)); setDeed(k) }, bye: () => setTalk(null),
+      ask: (w: 'idris' | null) => setTalk(t => (t ? { ...t, asked: w ?? undefined } : t)) }
     if (talk.beat) {
       const b = talk.beat
       return beatTalk(b.steps, b.at, () => {
@@ -1362,7 +1363,7 @@ function ContinentRideGame() {
       board: () => { const s = loadCoSeen(); if (!s.greeted) saveCoSeen({ ...s, greeted: true }); setTalk(t => (t ? { ...t, greet: null } : t)); setDeed('front:trade-co') },
       bye: () => { hudSay(byeLine(!!ledger.active), 'info'); setTalk(null) },
     })
-    return talk.key === 'front:enchant-temple' ? templeTalk(bracelet, acts) : smithTalk(talk.key, acts)
+    return talk.key === 'front:enchant-temple' ? templeTalk(bracelet, acts, talk.asked ?? null) : smithTalk(talk.key, acts)
   }, [talk, deed, bracelet, ledger, setLedger])
   useEffect(() => { talkFocus.current = talkNode && talk ? talk.face ?? talk.at : null }, [talkNode, talk])
   useEffect(() => {   // Esc leaves the talk (the beat cannot be walked out of halfway: she is writing)

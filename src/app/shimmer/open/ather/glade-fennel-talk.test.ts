@@ -51,8 +51,8 @@ function talk(t0: Tut, opts: { stick?: boolean; bagFull?: boolean; day?: number;
   // again, same day: jar empty, nothing new
   const b = talk(rt(k.t), { q: k.q })
   ok(b.k.c!.mode === 'jar' && !b.k.c!.full && b.node().line === line('fennel.bait.empty'), 'same day: bait.empty')
-  ok(b.node().options[0].label === FENNEL_MORE, "bait.empty offers 'Something else.' first")
-  b.node().options[0].pick(); ok(b.k.folk === 1 && b.k.bait === 0, "'Something else.' opens her Moglin talk, no bait")
+  ok(b.node().options[0].label === FENNEL_MORE, "bait.empty offers FENNEL_MORE first")
+  b.node().options[0].pick(); ok(b.k.folk === 1 && b.k.bait === 0, 'FENNEL_MORE opens her Moglin talk, no bait')
   // the next day: jar ready, once
   const d = talk(rt(k.t), { q: k.q, day: DAY + 1 })
   ok(d.k.c!.full && d.node().line === line('fennel.bait.ready') && d.node().options[0].label === FENNEL_THANKS, 'next day: bait.ready')

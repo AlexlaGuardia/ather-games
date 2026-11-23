@@ -25,15 +25,15 @@ export function idleSpot(k: number, n: number, at: { x: number; z: number } = TA
 }
 
 // ── E on an idle Moglin: say hello, or ask it home (RULED-AFK Magii 559213d; hub: no cost, no mood, ONE confirm step) ───────
-// Every word here is a placeholder for @lark (hub batches the farewell + confirm lines). Guard: a parting on good terms.
+// IDLE_LINES = SIGNED (Alex, athernyx ef704e7: shimmer-lines-placeholders-2026-11-23.md item 1). Guard: a parting on good terms.
 export const IDLE_LINES = {
-  hello: (name: string) => `${name} is waiting for a room to keep.`,
-  askHome: 'Go home to your kin?',
-  confirm: "Are you sure? They'll go home to their kin.",
+  hello: (name: string) => `${name} waits by the table for a room to keep.`,
+  askHome: 'Would you rather be home with your kin?',
+  confirm: "Home to my kin, then? It's been a good stay. You're sure?",
   yes: 'Yes. Go well.',
   no: 'No, stay.',
-  bye: 'Goodbye.',
-  gone: (name: string) => `${name} goes home to their kin. Glad of the time.`,
+  bye: 'See you soon.',
+  gone: (name: string) => `${name} waves a paw and sets off home, glad of the time.`,
 }
 export type IdleScreen = 'hello' | 'confirm'
 export interface IdleActs { go: (s: IdleScreen | null) => void; part: () => void }

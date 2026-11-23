@@ -1,10 +1,10 @@
 // continent/door-talk.ts (M13 part 3): the counters talk first, with SIGNED lines only, each answer opens one thing
-import { smithTalk, templeTalk, beatTalk, DOOR_ASK } from './door-talk'
+import { smithTalk, templeTalk, beatTalk, DOOR_ASK, DOOR_REPLY } from './door-talk'
 import { RUNESMITH_CUT, IDONY_HUSH, IDONY_AFTER, idonyBeat } from '../business/errand-lines'
 let fails = 0, n = 0
 const ok = (c: boolean, m: string) => { n++; if (!c) { fails++; console.log('  FAIL', m) } }
-const opened: string[] = []; let byes = 0
-const acts = { open: (k: string) => { opened.push(k) }, bye: () => { byes++ } }
+const opened: string[] = []; let byes = 0; const asked: (string | null)[] = []
+const acts = { open: (k: string) => { opened.push(k) }, bye: () => { byes++ }, ask: (w: 'idris' | null) => { asked.push(w) } }
 const s = smithTalk('smith:star', acts)
 ok(s.line === RUNESMITH_CUT, "the runesmith's bubble is lark's signed cut line")
 ok(s.options.length === 2 && s.options[0].label === DOOR_ASK.cut && s.options[1].label === DOOR_ASK.bye, 'two answers: cut, goodbye')
@@ -15,7 +15,13 @@ const t = templeTalk(false, acts)
 t.options[0].pick(); ok(opened.at(-1) === 'idony', 'inscribe opens Idony\'s counter')
 t.options[1].pick(); ok(opened.at(-1) === 'smith:enchant', "the Temple's runesmith opens the Enchant seat's counter")
 ok(t.options.length === 4 && t.options[2].label === DOOR_ASK.idris, 'M93 s3: her twin Idris is an answer now')
-t.options[2].pick(); ok(opened.at(-1) === 'idris', "Idris's answer opens the sigil counter")
+const before = opened.length
+t.options[2].pick(); ok(asked.at(-1) === 'idris' && opened.length === before, "asking for Idris opens nothing yet: Idony answers first (signed 491f462)")
+const r = templeTalk(false, acts, 'idris')
+ok(DOOR_ASK.idris === 'Is Idris in?' && r.line === DOOR_REPLY.idris && r.line === "Across the room. He talks. I'm working.", `her reply is the signed line (${r.line})`)
+ok(r.options.length === 1 && r.options[0].label === '…', 'one pause to go on, no new line')
+r.options[0].pick(); ok(opened.at(-1) === 'idris', "after her reply, the sigil counter opens")
+ok(templeTalk(true, acts, 'idris').line === DOOR_REPLY.idris, 'the reply holds once the bracelet is written too')
 t.options[3].pick(); ok(byes === 2, 'the Temple goodbye leaves')
 const steps = idonyBeat('Ember', true)
 const labels = steps.map((_, i) => beatTalk(steps, i, () => {}).options[0].label)

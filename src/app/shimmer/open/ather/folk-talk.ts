@@ -15,7 +15,7 @@ import { cardOf, type CardView } from './moglin-card'
 import { YARROW_TEACH, YARROW_BARKS, LISTEN } from './yarrow-teach'
 
 export const ASK = { needs: 'What do you need?', room: 'Would you keep a room for me?', others: 'Who else lives here?', back: 'Anything else?', bye: 'See you soon.', inspect: 'Inspect' }   // M46: 'Inspect' is Alex's word (11-20)
-export const FOLK_NO_ROOM = 'Your garden can hold no more Moglins yet. Raise more rooms first.'   // interim, names the real rule (hub #16564); lark rewords
+export const FOLK_NO_ROOM = "I'd come, but you've no room for me yet. Raise more rooms, then ask again."   // SIGNED (Alex, athernyx ef704e7) placeholder batch item 2
 export const FOLK_EMPTY = 'The houses are quiet now. Everyone here has found a garden.'   // no speaker: reads as narration
 export const giveLabel = (n: number, id: string) => `Bring ${n} ${itemDef(id).name}`  // the bring answer: the same verb as lark's trustFirst ask
 export const goodsText = (ws: { id: string; n: number }[]) => ws.map(w => `${w.n} ${itemDef(w.id).name}`).join(' and ')

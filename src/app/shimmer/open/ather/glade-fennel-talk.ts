@@ -10,14 +10,14 @@
 // ★ PURE. Commits happen in a PICK, never on render; the first talk is decided ONCE at open (being heard on the last line
 //   must not swap the script under the bubble). Every grant is guarded by the tutorial's gift list, so leaving mid-script
 //   and replaying it hands nothing twice. A full bag refuses the jar and records nothing.
-// Answer labels FENNEL_THANKS / FENNEL_MORE = placeholders for @lark (hub batches them); fennelBye = lark's bye.fennel.
+// Answer labels FENNEL_THANKS / FENNEL_MORE = SIGNED (athernyx ef704e7 item 3); fennelBye = lark's bye.fennel.
 import type { TalkNode } from '../shared/npc-talk'
 import { ANSWERS } from './greg-talk'
 import { line } from './glade-tutorial-lines'
 import { gift, hearFriend, claimJar, jarFull, type Tut } from './glade-tutorial'
 
-export const FENNEL_THANKS = 'Thank you, Fennel.'   // placeholder for @lark
-export const FENNEL_MORE = 'Something else.'        // placeholder for @lark
+export const FENNEL_THANKS = "Thanks. I'll bring something good back."   // SIGNED (Alex, athernyx ef704e7) batch item 3
+export const FENNEL_MORE = 'How are you, Fennel?'   // SIGNED (Alex, athernyx ef704e7) batch item 3
 export const fennelBye = 'Save me a seat, Fennel.'  // lark bye.fennel, SIGNED by Alex (athernyx 7a25a8e) (the Rinnshop talk uses it too)
 
 export type FennelMode = 'folk' | 'first' | 'jar'

@@ -26,7 +26,7 @@ for (const n of [1, 2, 6]) {
   const act = { go: (s: IdleScreen | null) => { screen = s }, part: () => { parted++ } }
   const h = idleTalk(m, 'hello', act)
   ok(h.line.includes('Ash') && h.line.includes('to see the sea'), 'hello names them and their dream')
-  ok(h.options.map(o => o.label).join('|') === `${IDLE_LINES.bye}|${IDLE_LINES.askHome}`, 'hello: Goodbye first, then Go home to your kin?')
+  ok(h.options.map(o => o.label).join('|') === `${IDLE_LINES.bye}|${IDLE_LINES.askHome}`, 'hello: bye first, then askHome')
   h.options[1].pick(); ok(screen === 'confirm' && parted === 0, 'asking home opens the confirm, parts nobody yet')
   const c = idleTalk(m, 'confirm', act)
   ok(c.line === IDLE_LINES.confirm && c.options[0].label === IDLE_LINES.no, "confirm: 'No, stay.' is the first (default) answer")

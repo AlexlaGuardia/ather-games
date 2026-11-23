@@ -11,7 +11,7 @@ import { makeRegion, type RegionMeta } from '../src/app/shimmer/open/region'
 import { doorByKey } from '../src/app/shimmer/open/business/doors'
 import { letterItem } from '../src/app/shimmer/open/business/letters'
 import { newInv, give } from '../src/app/shimmer/open/shared/inventory'
-import { DOOR_ASK } from '../src/app/shimmer/open/continent/door-talk'
+import { DOOR_ASK, DOOR_REPLY } from '../src/app/shimmer/open/continent/door-talk'
 import { SIGIL_CUT_FEE } from '../src/app/shimmer/open/business/idris'
 import { IDRIS_LINES, IDRIS_SCENES, type IdrisLineId } from '../src/app/shimmer/open/business/idris-lines'
 const meta = JSON.parse(readFileSync('public/open/continent.json', 'utf8')) as RegionMeta
@@ -55,6 +55,14 @@ const openIdris = async () => {
   await goTo()
   ok(await poll(async () => (await answers()).includes(DOOR_ASK.idris), 15000), `the Temple's answers carry Idris: ${(await answers()).join(' / ')}`)
   await answer(DOOR_ASK.idris)
+  // SIGNED door exchange (athernyx 491f462 Part 3): keeper 'Is Idris in?' -> IDONY's one bubble, word for word, THEN the panel
+  const bubble = () => p.evaluate(() => { const b = document.querySelector<HTMLElement>('[data-talk-bubble]'); if (!b) return null
+    const name = (b.querySelector('[data-talk-name]')?.textContent ?? '').trim(); return { name, text: (b.textContent ?? '').replace(name, '').trim() } })
+  ok(await poll(async () => (await bubble())?.text === DOOR_REPLY.idris, 10000), `door.idris.reply word for word in Idony's bubble: ${JSON.stringify(await bubble())}`)
+  ok((await bubble())?.name === 'Idony', 'the reply is Idony\'s')
+  ok(!(await p.$('[data-panel="idris-panel"]')), 'the panel waits behind her reply')
+  ok(JSON.stringify(await answers()) === JSON.stringify(['…']), `one answer to go on: ${(await answers()).join(' / ')}`)
+  await answer('…')
   ok(await poll(async () => !!(await p.$('[data-panel="idris-panel"]')), 15000), "Idris's counter opens")
 }
 const startMarks = await marks()
