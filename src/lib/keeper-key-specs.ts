@@ -45,6 +45,7 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'open.sights.v1',          worldTied: false },  // each gun's etched sight mark + tint (canon: look, never power), 11-18
   { base: 'open.skills.v1',          worldTied: false },  // forestry skill XP
   { base: 'open.chain.v1',           worldTied: false },  // the opening chain, Ather to Nyx (BETA M73, 11-23): the note read, the first death, Morel's ping once
+  { base: 'open.repair.v1',          worldTied: false },  // Kael's ship repair (BETA M108, 11-23): the cell housing quoted at Hollis, stage 1 paid + fitted
 ]
 
 // ── THE GARDEN: what the account's plot owns, shared by every keeper on it (M12 step 1, 2026-11-17) ───────────

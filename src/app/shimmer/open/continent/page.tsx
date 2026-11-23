@@ -17,8 +17,8 @@ import { GateRings } from '../shared/gate-rings'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMenuLock } from '../shared/menu-lock'
 import { useInv, hotbarEntries, getInv, setInv } from '../shared/bag'
-import { useChainYard, getChain, chainVeyraSend } from '../shared/opening-chain-store'   // M73 s3
-import { veyraDue, veyraOpen, veyraOptions, veyraPick, type VeyraTalk } from '../shared/opening-chain'
+import { useChainYard, getChain, chainVeyraSend, useChain } from '../shared/opening-chain-store'   // M73 s3
+import { veyraDue, veyraOpen, veyraOptions, veyraPick, shipRepair, type VeyraTalk } from '../shared/opening-chain'
 import { VEYRA_UNIT1, VEYRA_PICK, VEYRA_NAME } from '../shared/veyra-lines'
 import { inKaelYard } from './kael-yard'
 import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, equipSlot, heldOf, litSlot, settle, type Stance } from '../shared/stance'
@@ -55,6 +55,9 @@ import { getShipRepairFlag } from '../shared/opening-chain-store'
 import { RunesmithPanel, IdonyPanel, commitImbue } from '../business/smith-panel'
 import { IdrisPanel } from '../business/idris-panel'   // M93 s3
 import { TalkBubble, TalkChoices } from '../shared/npc-talk'
+import { HOLLIS_NAME, HOLLIS_FIRST, HOLLIS_QUOTE, HOLLIS_BARK, LEDGER_CELL_LINE, LEDGER_CELL_MARGIN, ENTRY_TAKE_PAGE, ENTRY_EARN_MARKS } from '../shared/hollis-lines'   // M108 s1
+import { repairStep, onQuote, payHousing, CELL_HOUSING_PRICE, LABEL as REPAIR_LABEL } from '../shared/ship-repair'
+import { useRepair, getRepair, putRepair } from '../shared/ship-repair-store'
 import { smithTalk, templeTalk, beatTalk } from './door-talk'
 import { DoorFolk } from './door-folk-scene'
 import { standOf, headOf, faceOf } from './door-folk'
@@ -1169,6 +1172,11 @@ function ContinentRideGame() {
   const [shipFlag, setShipFlag] = useState(false), [shipRepaired, setShipRepaired] = useState(false)
   useEffect(() => { setShipFlag(shipGateFlag(location.search)); setShipRepaired(getShipRepairFlag()) }, [])
   const shipGate = shipGateOpen({ flag: shipFlag, owner: isOwner, repaired: shipRepaired })
+  // M108 s1: repair stage 1 (the cell housing at Hollis's manatech shop, shared/ship-repair.ts) rides the SAME owner-only flag
+  // until the side-quest part lands: no flag/owner = no shop door, no ledger line. Inside it, M73's ship-repair flag gates the order.
+  const manatechOn = shipFlag && isOwner
+  const hideDoor = useCallback((k: string) => k === 'front:manatech' && !manatechOn, [manatechOn])
+  const repair = useRepair(), chainNow = useChain()
   // ?tune=1: ] gives 100k Marks, to try the businesses without grinding contracts (the Ather's ?tune=1 convention)
   useEffect(() => {
     if (!new URLSearchParams(location.search).has('tune')) return
@@ -1254,6 +1262,16 @@ function ContinentRideGame() {
       note: `Co. haul, ${placeName(a.from)} to ${placeName(a.to)}, ${Math.round(a.km)} km by road. Pays ${a.pay} Marks and ${a.deeds} deed${a.deeds === 1 ? '' : 's'}. Goods spoil the longer they ride.`,
       where: { zone: 'continent', x: target.x, z: target.z } }] : [])
   }, [ledger.active, R])
+  // M108 s1: Kael's ledger, stage 1 (the cell housing), once M73's ship-repair flag is set; owner + ?ship=gate only for now
+  useEffect(() => {
+    const step = manatechOn ? repairStep(shipRepair(chainNow), repair) : 'off'
+    const shop = R && step !== 'off' ? doorByKey(R, 'front:manatech') : undefined
+    const where = shop ? { zone: 'continent' as const, x: shop.at.x, z: shop.at.z } : null
+    postEntries('repair', step === 'off' ? [] : [
+      { id: 'repair-cell-housing', hand: 'kael', title: LEDGER_CELL_LINE, note: LEDGER_CELL_MARGIN, where, struck: step === 'stage1' },
+      ...(step === 'stage1' ? [] : [{ id: 'repair-cell-entry', hand: 'keeper' as const, title: step === 'open' ? ENTRY_TAKE_PAGE : ENTRY_EARN_MARKS, note: REPAIR_LABEL.price, where }]),
+    ])
+  }, [R, manatechOn, repair, chainNow])
   const journal = useJournal()
   const questMarksRef = useRef<{ x: number; z: number; color: string; title?: string }[]>([])
   questMarksRef.current = useMemo(() => questMarks('continent'), [journal])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -1343,15 +1361,22 @@ function ContinentRideGame() {
   // the counter's line in a bubble over its door, the camera turns to it, each answer opens ONE thing. Idony's imbue beat
   // plays in the same bubble. Other doors (shops, deeds, the Co.'s board) still open straight to their panel.
   type Talk = { key: string; name: string; at: { x: number; y: number; z: number }; face?: { x: number; y: number; z: number }; beat?: { steps: Beat[]; at: number; vesselId: string; wordId: string }; greet?: number | null; visit?: number; asked?: 'idris'
-    /** M73 s3: Veyra at the Travelers Station (opening-chain.ts › VeyraTalk) */ veyra?: VeyraTalk }
+    /** M73 s3: Veyra at the Travelers Station (opening-chain.ts › VeyraTalk) */ veyra?: VeyraTalk
+    /** M108 s1: Hollis at the manatech shop. phase: first (Unit 3 shop:first, line i) · quote (shop:quote, line i) · counter (pay or leave) · short (refused) · idle (ambient) */
+    hollis?: { phase: 'first' | 'quote' | 'counter' | 'short' | 'idle'; i: number } }
   const [talk, setTalk] = useState<Talk | null>(null)
   const talkFocus = useRef<{ x: number; y: number; z: number } | null>(null)
   const openDoor = useCallback((key: string) => {
     // M73 s3: the Travelers Station TALKS while Veyra has something for the keeper (Unit 1 v2, then her bark); else its panel
     const due = key === 'front:station' ? veyraDue(getChain()) : null
-    const d = R && (key.startsWith('smith:') || key === 'front:enchant-temple' || key === 'front:trade-co' || due) ? doorByKey(R, key) : undefined
+    const d = R && (key.startsWith('smith:') || key === 'front:enchant-temple' || key === 'front:trade-co' || key === 'front:manatech' || due) ? doorByKey(R, key) : undefined
     if (!d) { setDeed(key); return }
     if (due) { const st = standOf(d); setTalk({ key, name: VEYRA_NAME, at: headOf(st), face: faceOf(st), veyra: veyraOpen(due) }); return }
+    if (key === 'front:manatech') {   // M108 s1: Hollis talks (the door is only reachable owner + ?ship=gate)
+      const step = repairStep(getShipRepairFlag(), getRepair()), st = standOf(d)
+      const phase = step === 'open' ? 'first' : step === 'quoted' ? (ledgerRef.current.marks >= CELL_HOUSING_PRICE ? 'counter' : 'short') : 'idle'
+      setTalk({ key, name: HOLLIS_NAME, at: headOf(st), face: faceOf(st), hollis: { phase, i: 0 } }); return
+    }
     // the Co. clerk (business/co-lines.ts, signed 11-18): the greeting once per garden, then a flavour line per visit
     let co: { greet: number | null; visit: number } = { greet: null, visit: 0 }
     if (key === 'front:trade-co') { const s = loadCoSeen(); co = { greet: s.greeted ? null : 0, visit: s.visits }; saveCoSeen({ ...s, visits: s.greeted ? s.visits + 1 : s.visits }) }
@@ -1383,13 +1408,33 @@ function ContinentRideGame() {
         setTalk(t => (t ? { ...t, veyra: n } : t))
       } })) }
     }
+    if (talk.hollis) {   // M108 s1: Hollis's lines word for word (hollis-lines.ts, SIGNED Unit 3); Pay / Leave / the price = functional labels
+      const h = talk.hollis, to = (n: typeof h) => setTalk(t => (t ? { ...t, hollis: n } : t)), bye = () => setTalk(null)
+      const price = <div data-repair-price style={{ justifySelf: 'center', padding: '4px 12px', borderRadius: 8, background: 'rgba(20,22,26,.78)', color: '#f3e3c3', font: '700 13px system-ui' }}>{REPAIR_LABEL.price}</div>
+      const pay = { label: REPAIR_LABEL.pay, disabled: ledgerRef.current.marks < CELL_HOUSING_PRICE, tag: ledgerRef.current.marks < CELL_HOUSING_PRICE ? 'short' : undefined, pick: () => {
+        const r = payHousing(getShipRepairFlag(), getRepair(), ledgerRef.current.marks)
+        if (!r.ok) { to({ phase: r.why === 'short' ? 'short' : 'idle', i: 0 }); return }
+        setLedger({ ...ledgerRef.current, marks: r.marks }); putRepair(r.repair); hudSay(REPAIR_LABEL.fitted, 'info', 6); bye()
+      } }
+      const leave = { label: REPAIR_LABEL.leave, pick: bye }
+      if (h.phase === 'first') { const b = HOLLIS_FIRST[h.i]
+        return { line: b.line, scene: b.scene, options: [{ label: REPAIR_LABEL.next, pick: () => {
+          if (h.i + 1 < HOLLIS_FIRST.length) { to({ phase: 'first', i: h.i + 1 }); return }
+          putRepair(onQuote(getShipRepairFlag(), getRepair())); to({ phase: 'quote', i: 0 })   // shop:quote fires: the price shows, the entry turns
+        } }] } }
+      if (h.phase === 'quote') return { line: HOLLIS_QUOTE[h.i].line, panel: price,
+        options: h.i + 1 < HOLLIS_QUOTE.length ? [{ label: REPAIR_LABEL.next, pick: () => to({ phase: 'quote', i: h.i + 1 }) }] : [pay, leave] }
+      if (h.phase === 'counter') return { line: HOLLIS_QUOTE[0].line, panel: price, options: [pay, leave] }
+      if (h.phase === 'short') return { line: HOLLIS_BARK.short, panel: price, options: [pay, { label: REPAIR_LABEL.next, pick: () => to({ phase: 'idle', i: 1 }) }] }
+      return { line: h.i === 1 ? HOLLIS_BARK.materials : HOLLIS_BARK.ambient, options: [leave] }
+    }
     if (talk.key === 'front:trade-co') return coTalk(talk.greet ?? null, talk.visit ?? 0, {
       next: () => setTalk(t => (t ? { ...t, greet: (t.greet ?? 0) + 1 } : t)),
       board: () => { const s = loadCoSeen(); if (!s.greeted) saveCoSeen({ ...s, greeted: true }); setTalk(t => (t ? { ...t, greet: null } : t)); setDeed('front:trade-co') },
       bye: () => { hudSay(byeLine(!!ledger.active), 'info'); setTalk(null) },
     })
     return talk.key === 'front:enchant-temple' ? templeTalk(bracelet, acts, talk.asked ?? null) : smithTalk(talk.key, acts)
-  }, [talk, deed, bracelet, ledger, setLedger])
+  }, [talk, deed, bracelet, ledger, setLedger, repair])
   useEffect(() => { talkFocus.current = talkNode && talk ? talk.face ?? talk.at : null }, [talkNode, talk])
   useEffect(() => {   // Esc leaves the talk (the beat cannot be walked out of halfway: she is writing)
     const k = (e: KeyboardEvent) => { if (e.code === 'Escape' && !deed) setTalk(t => (t?.beat ? t : null)) }
@@ -1555,7 +1600,7 @@ function ContinentRideGame() {
           <Towns R={R} focus={focus} />
           <DoorFolk R={R} focus={focus} talking={talk?.key ?? null} />
           <RemoteKeepers peers={mp.peers} me={() => focus.current} />
-          <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={openDoor} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} />
+          <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={openDoor} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} hide={hideDoor} />
           <ShipyardPlots R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState} owned={ledger.shipyards} ownAll={isOwner && ownAllFlag} car={carLink} shipGate={shipGate} onShip={() => setDeed('ship:franky')}
             enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} />
           <Posts R={R} />

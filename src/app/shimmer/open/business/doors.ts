@@ -11,7 +11,7 @@ import { marketFor, type Offer } from './market'
 import { SEATS, type Seat } from './letters'
 import { makeOfTown } from './courser-lot'
 
-export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple' | 'smokehouse' | 'shipyard' | 'trade-co' | 'gunshop' | 'courseryard' | 'courserlot' | 'corkhouse'
+export type ShopKind = 'tavern' | 'inn' | 'smithy' | 'cafe' | 'books' | 'station' | 'exchange' | 'temple' | 'smokehouse' | 'shipyard' | 'trade-co' | 'gunshop' | 'courseryard' | 'courserlot' | 'corkhouse' | 'manatech'
 export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: string }> = {
   'kindled-mug': { name: 'The Kindled Mug', kind: 'tavern', line: 'A tavern on the square.' },
   'forgelight-inn': { name: 'The Forgelight Inn', kind: 'inn', line: 'Iron fixtures and forge-warmed walls.' },
@@ -43,6 +43,10 @@ export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: 
   // one; the ONLY place a keeper sells bottles. The first stands in Rune Hold, by the shipyard; the rest are Jin's to place (later).
   // No door line yet (none is signed). Buys: business/corkhouse.ts.
   corkhouse: { name: 'The Corkhouse', kind: 'corkhouse' },
+  // THE MANATECH SHOP (BETA M108, canon glossary › Hollis, 1672: "the manatech shop in Rune Hold", builds parts and machines to
+  // order for Marks). Rune Hold only. Its door TALKS (Hollis, continent/page.tsx); no panel. OWNER-ONLY while the repair loop is
+  // unfinished: the door is in this list for everyone but MarketView hides it unless ?ship=gate + owner (page.tsx › manatechOn).
+  manatech: { name: 'The manatech shop', kind: 'manatech' },
 }
 
 /** a door you can E: a market lot (key = lot id → the deed card) or a canon storefront (key = `front:<id>` → its panel) */
@@ -136,6 +140,17 @@ function doorsOf(R: Region, townId: string): Door[] {
     if (yard && free.length) {
       const b = free.sort((p, q) => Math.hypot(p.x - yard.b.x, p.z - yard.b.z) - Math.hypot(q.x - yard.b.x, q.z - yard.b.z))[0]
       out.push({ key: 'front:corkhouse', b, name: FRONT_SHOPS.corkhouse.name, at: shopDoorPoint(b) })
+    }
+  }
+  // THE MANATECH SHOP (M108): Rune Hold, the free plain building NEAREST the town's heart (a shop on the street, not the edge),
+  // computed after every other door so none of them moves. Jin's placement; Alex can pick another.
+  if (i >= 0 && townId === 'rune-hold') {
+    const plan = cachedPlan(R, i), taken = new Set(out.map(d => d.b))
+    const free = plan.buildings.filter(x => !x.front && !taken.has(x))
+    if (free.length) {
+      const at = plan.temple ?? { x: R.meta.places[i].x, z: R.meta.places[i].z }
+      const b = free.sort((p, q) => Math.hypot(p.x - at.x, p.z - at.z) - Math.hypot(q.x - at.x, q.z - at.z))[0]
+      out.push({ key: 'front:manatech', b, name: FRONT_SHOPS.manatech.name, at: shopDoorPoint(b) })
     }
   }
   return out

@@ -24,7 +24,7 @@ const doorDirV = new THREE.Vector3()   // M60
 const DRESS_REACH = 700
 const WALK_OFF = 8
 
-export function MarketView({ R, focus, owned, enabled, onOpen, onReach, open, onWalkOff }: {
+export function MarketView({ R, focus, owned, enabled, onOpen, onReach, open, onWalkOff, hide }: {
   R: Region; focus: React.MutableRefObject<THREE.Vector3>; owned: Owned[]
   /** on foot and no menu over the world */
   enabled: boolean
@@ -35,6 +35,8 @@ export function MarketView({ R, focus, owned, enabled, onOpen, onReach, open, on
   /** the card/panel open right now: it closes when you walk off (> WALK_OFF from its door) */
   open?: string | null
   onWalkOff?: () => void
+  /** M108: doors not drawn or reachable right now (an owner-only door while its flag is off) */
+  hide?: (key: string) => boolean
 }) {
   const { camera } = useThree()
   const [near, setNear] = useState<string[]>([])
@@ -43,7 +45,7 @@ export function MarketView({ R, focus, owned, enabled, onOpen, onReach, open, on
   const acc = useRef(0)
   const enabledRef = useRef(enabled); enabledRef.current = enabled
   const ownedIds = useMemo(() => new Set(owned.map(o => o.lotId)), [owned])
-  const doors = useMemo(() => near.flatMap(id => doorsCached(R, id)), [R, near])
+  const doors = useMemo(() => near.flatMap(id => doorsCached(R, id)).filter(d => !hide?.(d.key)), [R, near, hide])
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.code === 'KeyE' && !e.repeat && enabledRef.current && reach.current) onOpen(reach.current.key) }
