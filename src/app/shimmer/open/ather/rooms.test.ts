@@ -58,7 +58,7 @@ ok(nearWork(W, b.x, b.z, 2000)?.kind !== 'bench', 'near: a bench worked before t
 for (let q = 0; q < 4; q++) {
   const f = footprint('rinnshop', 0, 0, q), w = f.x1 - f.x0, dd = f.z1 - f.z0
   ok(q % 2 ? w === ROOMS.rinnshop.d && dd === ROOMS.rinnshop.w : w === ROOMS.rinnshop.w && dd === ROOMS.rinnshop.d, `turn ${q}: footprint did not swap`)
-  const rr = { ...r, x: 0, z: 0, q }, bb = benchOf(rr), dr = doorOf(rr)
+  const rr = { ...r, x: 0, z: 0, q, shell: undefined }, bb = benchOf(rr), dr = doorOf(rr)   // an OLDER room (M97: new ones are shells, shell-rooms.test.ts)
   ok(bb.x > f.x0 && bb.x < f.x1 && bb.z > f.z0 && bb.z < f.z1, `turn ${q}: the bench is outside the room`)
   ok(Math.abs(dr.x - f.x0) < 1e-9 || Math.abs(dr.x - f.x1) < 1e-9 || Math.abs(dr.z - f.z0) < 1e-9 || Math.abs(dr.z - f.z1) < 1e-9, `turn ${q}: the door is not on a wall`)
   // walls: solid round the room except a gap at the door; the bench stands in the open

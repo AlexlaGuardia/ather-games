@@ -104,6 +104,10 @@ export interface Room {
   /** M43: finished goods wait here (up to OUT_CAP of an item) until taken; `work` is the stockpile/focus state (station-queue.ts). Absent = none. */
   out?: Stack[]
   work?: Work
+  /** BETA M97 s1 (Alex 11-23: "make them just the base with the important bits and let the player build around it"): a SHELL
+   *  room is its floor, a freestanding door frame and its working bits, no walls or roof; the keeper builds round it with the
+   *  plot pieces. Every room placed since M97 is one; absent = an older room, kept as built (no migration). */
+  shell?: true
 }
 /** A KEEPSTONE standing on the plot (canon 5a20b8f, ather-rework WORKSHOP ROOMS (6): a Blankstone pedestal whose top opens
  *  on a set crystal's light; never "chest" to a player). A door into the garden bank; each adds CHEST_SLOTS. The code and
@@ -180,14 +184,22 @@ export function canPlace(works: Works, owned: ReadonlySet<string>, kind: RoomKin
 export function place(works: Works, owned: ReadonlySet<string>, inv: Inv, kind: RoomKind, x: number, z: number, q: number, now = Date.now(), bank?: Bank | null): { works: Works; inv: Inv; bank: Bank | null; room: Room } | null {
   if (!canPlace(works, owned, kind, x, z, q, inv, bank).ok) return null
   const paid = payCost(ROOMS[kind].cost, inv, bank); if (!paid) return null
-  const room: Room = { id: `${kind}-${now.toString(36)}`, kind, x: Math.round(x), z: Math.round(z), q: ((q % 4) + 4) % 4, placedAt: now, doneAt: now + ROOMS[kind].raiseMs }
+  const room: Room = { id: `${kind}-${now.toString(36)}`, kind, x: Math.round(x), z: Math.round(z), q: ((q % 4) + 4) % 4, placedAt: now, doneAt: now + ROOMS[kind].raiseMs, shell: true }   // M97: every new room is a shell
   return { works: { ...works, rooms: [...works.rooms, room] }, inv: paid.inv, bank: paid.bank, room }
 }
 export const raised = (r: Room, now = Date.now()) => now >= r.doneAt
 export const progress = (r: Room, now = Date.now()) => Math.max(0, Math.min(1, (now - r.placedAt) / Math.max(1, r.doneAt - r.placedAt)))
 
 /** The walls a walker collides with: back + two sides + the front either side of the door. Scaffolding is solid too. */
+/** M97: a shell room's door frame: two posts either side of the doorway, FRAME_H tall (the lintel is look only, above head height). */
+export const FRAME_H = 3, FRAME_POST = 0.25
+/** M97: a shell room's working bench, as a ground box (the keeper's own walls keep off it). */
+export function benchBox(r: Room): Rect { const b = benchOf(r); return quadBounds(b.x, b.z, 2.4, 0.8, r.q) }
 export function wallsOf(r: Room, lift = 0): Box[] {   // lift: the room's foundation (plot-found roomLift; M55)
+  if (r.shell) {   // M97: no walls, only the door frame's two posts are solid
+    const y0 = GROUND_Y - 0.5, y1 = GROUND_Y + lift + FRAME_H, off = DOOR_W / 2 + FRAME_POST / 2, h = FRAME_POST / 2
+    return [-off, off].map(lx => { const c = toWorld(r, lx, -ROOMS[r.kind].d / 2); return { x0: c.x - h, x1: c.x + h, y0, y1, z0: c.z - h, z1: c.z + h } })
+  }
   const f = footprint(r.kind, r.x, r.z, r.q), y0 = GROUND_Y - 0.5, y1 = GROUND_Y + lift + WALL_H, t = WALL_T
   const q = r.q % 4, out: Box[] = []
   const xs = (x0: number, x1: number, z0: number, z1: number) => out.push({ x0, x1, y0, y1, z0, z1 })
