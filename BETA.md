@@ -269,7 +269,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
-- **M99 station sounds vote (11-23):** /shimmer/dev/sounds, area "stations": yay ONE loop per bench (carpentry: saw or plane; masonry: chisel or rasp) + the done-wood and done-stone stings. Plays in game from the next deploy after the vote is committed.
+- ~~**M99 station sounds vote:**~~ ✅ Alex voted 11-23 01:3x; play commits + builds.
 
 - **M98 building feel (11-23, LIVE):** hold furniture/Keepstone/slab/panel: G = snap 1/0.5/0.25/Free, T = turn step 90/45/30/15. Place one piece with Free = it becomes the ANCHOR; the next snaps flush to it (Clear anchor chip). New at the carpentry bench: Goldwood/Stone Floor Slab 1x1 + Wide 2x2, Goldwood/Brick Wall Panel 1 m + Wide 2 m. Feel OK?
 
