@@ -7,6 +7,7 @@
 // ★ @lark draft 11-18, awaiting Alex sign-off: the answer labels (ASK), the bring verb and the two stock lines below. The dream
 // stays the hello (lark: the only place a keeper ever hears a Moglin's dream). Checks import these, never retype them.
 import { DIGGER_LABEL } from './digger-trade'
+import { isBurr, BURRFOLK_BARKS, BURR_LABEL, type Burrfolk, type BarterKey } from './burrfolk'
 import { isGlade, GLADE_STAYS, gladeHello } from './moonwell-glade'
 import type { TalkNode } from '../shared/npc-talk'
 import { wantsLeft, trusted, type Folk, type Trust } from './settlement-folk'
@@ -22,7 +23,7 @@ export const giveLabel = (n: number, id: string) => `Bring ${n} ${itemDef(id).na
 export const goodsText = (ws: { id: string; n: number }[]) => ws.map(w => `${w.n} ${itemDef(w.id).name}`).join(' and ')
 
 /** Where the talk is: whose bubble, which screen, and (after an answer) the line it said. */
-export interface FolkTalkState { fid: string; screen: 'hello' | 'needs' | 'said' | 'card' | 'teach'; line?: string; /** M40: this hello is a repeat (a Glade Moglin says its alternate) */ alt?: boolean
+export interface FolkTalkState { fid: string; screen: 'hello' | 'needs' | 'said' | 'card' | 'teach' | 'stall'; line?: string; /** M40: this hello is a repeat (a Glade Moglin says its alternate) */ alt?: boolean
   /** how many times this Moglin was heard before this hello (Yarrow's third repeat line) */ rep?: number
   /** Yarrow's teach beat: which page of it, and the answer given */ step?: number; answer?: 'pointed' | 'silent' }
 // M40: Glade Moglins heard this visit (a repeat talk gets the alternate line). Per page, not saved: a new visit starts fresh.
@@ -32,7 +33,9 @@ export function helloFor(fid: string): FolkTalkState { const rep = heard.get(fid
 export const _resetHeard = () => heard.clear()
 export interface FolkTalkCtx { folk: Folk[]; home: Folk[]; trust: Trust; have: (id: string) => number; room: number; /** the card's home line (M46) */ homeName?: string
   /** Yarrow (the Glade bait-maker): the teach beat is due (a rinstick held, the page not yet handed), the keeper carries a catch */
-  yarrow?: { canTeach: boolean; hasCatch: boolean } }
+  yarrow?: { canTeach: boolean; hasCatch: boolean }
+  /** M112: the settlement's Burrfolk (its stall), never one of `folk` */
+  burr?: Burrfolk | null }
 /** M46: a talk node may carry the Moglin's card (the HUD draws it above the answers); `scene` = a stage direction over the line */
 export type FolkTalkNode = TalkNode & { card?: CardView; scene?: string }
 export const isGladeYarrow = (fid: string) => isGlade(fid) && fid.split(':').pop() === 'yarrow'
@@ -50,6 +53,8 @@ export interface FolkTalkActs {
   teach?: (answer: 'pointed' | 'silent') => boolean
   /** M108 s3: barter with a Digger (digger-trade.ts): planks for a shard. The hook applies it (or says why not). */
   trade?: (f: Folk) => void
+  /** M112: one swap at the Burrfolk's stall (burrfolk.ts › barter). The hook applies it (or says why not). */
+  barter?: (k: BarterKey) => void
 }
 
 export const folkStart = (home: Folk[]): FolkTalkState => (home[0] ? helloFor(home[0].id) : { fid: '', screen: 'hello' })
@@ -57,6 +62,7 @@ export const folkStart = (home: Folk[]): FolkTalkState => (home[0] ? helloFor(ho
 /** The node for `st`. A Moglin that has just been recruited is no longer in `home`, so it is looked up in the full season list. */
 export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): FolkTalkNode {
   const bye = { label: ASK.bye, pick: act.bye }
+  if (isBurr(st.fid) && c.burr && st.fid === c.burr.id) return burrTalk(c, c.burr, st, act)
   const f = c.folk.find(x => x.id === st.fid)
   if (!f) return { line: FOLK_EMPTY, options: [bye] }
   const others = c.home.filter(x => x.id !== f.id)
@@ -106,4 +112,16 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): 
   if (st.screen === 'card') return { line: hello, card: cardOf(f, c.trust, c.homeName ?? f.home), options: [{ label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello', alt: st.alt }) }, bye] }
   const trade = f.profession === 'digger' && act.trade ? [{ label: DIGGER_LABEL.trade, pick: () => act.trade!(f) }] : []   // M108 s3
   return { line: hello, options: [...trade, ...(f.employed && !ok ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, inspect, ...(next ? [next] : []), bye] }
+}
+
+/** M112: the Burrfolk's stall. Greet (signed bark), "Have a look" opens the stall (signed stall bark + one swap per stock row).
+ *  ★ No room ask, no needs, no card: a Burrfolk never follows (canon), so no answer here can reach recruit(). */
+export function burrTalk(c: FolkTalkCtx, b: Burrfolk, st: FolkTalkState, act: FolkTalkActs): FolkTalkNode {
+  const bye = { label: ASK.bye, pick: act.bye }
+  const first = c.home[0], others = first ? [{ label: ASK.others, pick: () => act.go(helloFor(first.id)) }] : []
+  if (st.screen === 'stall') return {
+    line: BURRFOLK_BARKS.stall,
+    options: [...b.stock.map(k => ({ label: BURR_LABEL.swap(k), pick: () => act.barter?.(k) })), { label: ASK.back, pick: () => act.go({ fid: b.id, screen: 'hello' }) }, bye],
+  }
+  return { line: BURRFOLK_BARKS.greet, options: [{ label: BURR_LABEL.look, pick: () => act.go({ fid: b.id, screen: 'stall' }) }, ...others, bye] }
 }

@@ -13,6 +13,7 @@ import { folkOf, stillHome } from './settlement-folk'
 import { loadVillage } from './moglins'
 import { type Spot } from './folk-spots'
 import { builtFolkSpots } from './settlement-lots'
+import { burrfolkOf, stallSpot } from './burrfolk'
 import { SettlementBuildings } from './settlement-buildings'
 import { GLADE_ID } from './moonwell-glade'
 import { setMapSettlements } from './tile-picture'
@@ -126,6 +127,8 @@ export const keeperNow = { x: 0, z: 0 }
 export const FOLK_DRAW_R = 110
 /** the Moglins drawn right now, world spots (checks + the talk read it): settlement id -> its home folk's spots */
 export const folkDrawn = new Map<string, Spot[]>()
+/** M112: the Burrfolk stalls drawn right now: settlement id -> the stall-keeper's spot + name (the page aims E at it; checks read it) */
+export const stallDrawn = new Map<string, Spot & { name: string }>()
 
 function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: number) => number | null }) {
   useEffect(() => { setMapSettlements(net.settlements) }, [net])   // the maps draw them (tile-picture.ts)
@@ -144,20 +147,22 @@ function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: 
   })
   const village = useMemo(() => loadVillage(), [villageRev])   // eslint-disable-line react-hooks/exhaustive-deps
   const drawn = useMemo(() => {
-    const out: { s: Settlement; spots: Spot[] }[] = []
+    const out: { s: Settlement; spots: Spot[]; stall: (Spot & { name: string }) | null }[] = []
     for (const id of near) {
       const s = net.settlements.find(x => x.id === id); if (!s) continue
       const all = folkOf(s, SEASON), home = new Set(stillHome(all, village).map(f => f.id))
-      out.push({ s, spots: builtFolkSpots(s, all, SEASON).filter(p => home.has(p.id)) })   // laid out over ALL, so a recruit never shuffles the rest
+      const b = burrfolkOf(s, SEASON, all)
+      out.push({ s, spots: builtFolkSpots(s, all, SEASON).filter(p => home.has(p.id)), stall: b ? { id: b.id, name: b.name, ...stallSpot(s) } : null })   // laid out over ALL, so a recruit never shuffles the rest
     }
     return out
   }, [near, net, village])
   const key = drawn.map(d => `${d.s.id}:${d.spots.map(p => `${p.id}@${p.x.toFixed(1)},${p.z.toFixed(1)}`).join('.')}`).join('|')   // M39: positions too (a blueprint moves a Moglin to its door with the same ids; the probe went stale)
   useEffect(() => {
     folkDrawn.clear(); for (const d of drawn) folkDrawn.set(d.s.id, d.spots)
-    ;(window as unknown as { __folk?: unknown }).__folk = { drawn: () => Object.fromEntries(folkDrawn), keeper: () => ({ ...keeperNow }), mapSettlements: () => net.settlements.length }
+    stallDrawn.clear(); for (const d of drawn) if (d.stall) stallDrawn.set(d.s.id, d.stall)
+    ;(window as unknown as { __folk?: unknown }).__folk = { drawn: () => Object.fromEntries(folkDrawn), stalls: () => Object.fromEntries(stallDrawn), keeper: () => ({ ...keeperNow }), mapSettlements: () => net.settlements.length }
   }, [key])   // eslint-disable-line react-hooks/exhaustive-deps
-  return <>{drawn.flatMap(d => d.spots.map((p, k) => {
+  return <>{drawn.map(d => { const p = d.stall, y = p ? loaded(p.x, p.z) : null; return p && y !== null ? <BurrStall key={p.id} x={p.x} y={y} z={p.z} yaw={p.yaw} id={p.id} /> : null })}{drawn.flatMap(d => d.spots.map((p, k) => {
     const y = loaded(p.x, p.z)   // the ground's height HERE, asked at draw (M18 reshapes ground near paths)
     return y === null ? null : (
       <group key={p.id} position={[p.x, y, p.z]} rotation-y={p.yaw}>
@@ -165,6 +170,25 @@ function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: 
       </group>
     )
   }))}</>
+}
+
+// ── M112: a Burrfolk's stall (canon: a plank on two stumps, the Moglin behind it with a pack nearly as big as they are,
+// bundles tied to bundles; batch 11-23b D1's scene). Blockout, built from primitives like the settlements.
+function BurrStall({ x, y, z, yaw, id }: { x: number; y: number; z: number; yaw: number; id: string }) {
+  return (
+    <group position={[x, y, z]} rotation-y={yaw}>
+      {[-0.75, 0.75].map(sx => <mesh key={sx} position={[sx, 0.3, 0.9]}><cylinderGeometry args={[0.22, 0.26, 0.6, 8]} /><meshLambertMaterial color="#7a5636" /></mesh>)}
+      <mesh position={[0, 0.65, 0.9]}><boxGeometry args={[2.1, 0.1, 0.6]} /><meshLambertMaterial color="#b89a6a" /></mesh>
+      {[[-0.5, '#c9a46a'], [0.05, '#8a5aa8'], [0.55, '#6f8f5a']].map(([bx, col]) => <mesh key={bx as number} position={[bx as number, 0.82, 0.9]}><boxGeometry args={[0.32, 0.24, 0.3]} /><meshLambertMaterial color={col as string} /></mesh>)}
+      <group position={[0, 0, -0.1]}>
+        <MoglinModel build="chibi" action="idle" tone={furOf(id)} seed={x * 0.01} />
+        {/* the pack: bundles tied to bundles, on its back */}
+        <mesh position={[0, 0.75, -0.5]}><sphereGeometry args={[0.55, 10, 8]} /><meshLambertMaterial color="#9b7a4e" flatShading /></mesh>
+        <mesh position={[0.25, 1.25, -0.55]}><sphereGeometry args={[0.32, 8, 6]} /><meshLambertMaterial color="#7d6a8f" flatShading /></mesh>
+        <mesh position={[-0.28, 1.15, -0.45]}><boxGeometry args={[0.36, 0.3, 0.3]} /><meshLambertMaterial color="#a6894f" /></mesh>
+      </group>
+    </group>
+  )
 }
 
 // ── the big top ──────────────────────────────────────────────────────────────────────────────────────────────────

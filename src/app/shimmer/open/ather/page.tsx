@@ -109,7 +109,7 @@ import { liveSpirits, setKeeperAt } from './spirit-follow'
 import { SPECIES_NAMES } from '../../spirits/spirit'
 import { useMeleeReady, lastSwingAt, lastSwingAction } from './melee-view'
 import { reportAway } from './away-report'
-import { TilePaths, Settlements, BigTop, folkDrawn } from './network-scene'
+import { TilePaths, Settlements, BigTop, folkDrawn, stallDrawn } from './network-scene'
 import { aimPick, lookDir, type Pickable } from '../shared/aim-pick'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
@@ -768,7 +768,8 @@ function AtherSliceGame() {
       const workAim = (aimRef.current.tree || cAimRef.current.crystal) && stanceRef.current.kind === 'stowed'
       if (!workAim && netRef.current) { const st = settlementAt(netRef.current, lc.px, lc.pz); if (st) { const figs = folkDrawn.get(st.id)
         if (figs?.length) for (const f of figs) cands.push(cap(f.x, f.z, 0.4, MOGLIN_HEIGHT.chibi + 0.1, { kind: 'folk', s: st }))
-        else cands.push(cap(st.x, st.z, 0.8, 2, { kind: 'folk', s: st })) } }
+        else cands.push(cap(st.x, st.z, 0.8, 2, { kind: 'folk', s: st }))
+        const stall = stallDrawn.get(st.id); if (stall) cands.push(cap(stall.x, stall.z, 0.6, MOGLIN_HEIGHT.chibi + 0.4, { kind: 'folk', s: st })) } }   // M112: the Burrfolk's stall (the talk opens on the nearest)
       n = aimPick(cands, eye, dir, from)
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
       const t = ww ? ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty) : undefined

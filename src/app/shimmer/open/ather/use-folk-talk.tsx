@@ -19,6 +19,7 @@ import { builtFolkSpots } from './settlement-lots'   // M39 s3: where a Moglin i
 import { keeperNow } from './network-scene'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
 import { diggerTrade, DIGGER_LABEL } from './digger-trade'
+import { burrfolkOf, stallSpot, barter, isBurr, BURR_LABEL, BURRFOLK_BARKS } from './burrfolk'
 
 export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number) => number, onClose: () => void) {
   const phone = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches   // M46 card sizing; page.tsx untouched
@@ -31,12 +32,14 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
   const [trust, setTrust] = useState(() => loadTrust())
   const [st, setSt] = useState<FolkTalkState | null>(null)
   const folk = useMemo(() => s ? folkOf(s, SEASON) : [], [s])
+  const burr = useMemo(() => s ? burrfolkOf(s, SEASON, folk) : null, [s, folk])   // M112: the settlement's stall (never one of folk)
   useEffect(() => {   // a new conversation: re-read the garden, start with the first Moglin still at home
     if (!s) { setSt(null); return }
     const v = loadVillage(), t = loadTrust(); setVillage(v); setTrust(t)
     // M19: the talk opens on the Moglin NEAREST the keeper (they stand on the green: folk-spots.ts), not the first in the list
     const all = folkOf(s, SEASON), home = stillHome(all, v), ids = new Set(home.map(f => f.id))
-    const n = nearestSpot(builtFolkSpots(s, all, SEASON).filter(p => ids.has(p.id)), keeperNow.x, keeperNow.z)
+    const b = burrfolkOf(s, SEASON, all), stall = b ? [{ id: b.id, ...stallSpot(s) }] : []   // M112: the stall is a talk target too
+    const n = nearestSpot([...builtFolkSpots(s, all, SEASON).filter(p => ids.has(p.id)), ...stall], keeperNow.x, keeperNow.z)
     setSt(n ? helloFor(n.id) : folkStart(home))   // M40: helloFor marks the Moglin heard (a repeat talk = its alternate line)
   }, [s])
   // the node must not be rebuilt on every inventory tick (TalkChoices resets the pick to the first answer when the node changes):
@@ -46,8 +49,14 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
   const node: TalkNode | null = useMemo(() => {
     if (!s || !st) return null
     const home = stillHome(folk, village), room = villageCap(currentWorks()) - village.moglins.length   // P1 11-23: cap by plot stage (raised rooms)
-    const n = folkTalk({ folk, home, trust, have: id => countOf(invRef.current, id), room, homeName: s.name, yarrow: { canTeach, hasCatch } }, st, {
-      go: setSt, bye: onClose,
+    const n = folkTalk({ folk, home, trust, have: id => countOf(invRef.current, id), room, homeName: s.name, yarrow: { canTeach, hasCatch }, burr }, st, {
+      go: setSt,
+      bye: () => { if (burr && st.fid === burr.id) hudSay(`${burr.name}: ${BURRFOLK_BARKS.leave}`, 'info', 4); onClose() },   // M112: signed leave bark
+      barter: k => {   // M112: one swap at the Burrfolk's stall (refused = nothing changes, a line says why). No coin moves.
+        const r = barter(getInv(), k)
+        if (!r.ok) { hudSay(r.why === 'short' ? BURR_LABEL.short(k) : BURR_LABEL.full(k), 'info', 4); return }
+        setInv(r.inv); hudSay(BURR_LABEL.done(k), 'item', 4)
+      },
       teach: () => {
         const next = yarrowTeach(getInv())
         if (!next) { hudSay('Clear a few slots in your bag first.', 'info'); return false }
@@ -73,12 +82,13 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
     // M46: the card rides on the node as a HUD panel above the answers (TalkChoices draws it; page.tsx needs no change)
     return n.card ? { ...n, panel: <MoglinCard card={n.card} id={st.fid} phone={phone} /> } : n
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, st, folk, village, trust, haveKey, canTeach, hasCatch])
+  }, [s, st, folk, burr, village, trust, haveKey, canTeach, hasCatch])
   const f = st ? folk.find(x => x.id === st.fid) : undefined
   // the bubble + the talk camera sit on THAT Moglin (its spot, the ground asked now); a Moglin no longer home (just recruited)
   // or none at all: the settlement's own anchor
-  const spot = s && f ? builtFolkSpots(s, folk, SEASON).find(p => p.id === f.id) : undefined
-  const home = stillHome(folk, village).some(x => x.id === f?.id)
+  const atBurr = !!s && !!burr && isBurr(st?.fid) && st?.fid === burr.id
+  const spot = atBurr && s && burr ? { id: burr.id, ...stallSpot(s) } : s && f ? builtFolkSpots(s, folk, SEASON).find(p => p.id === f.id) : undefined
+  const home = atBurr || stillHome(folk, village).some(x => x.id === f?.id)
   const at = s ? (spot && home ? { x: spot.x, z: spot.z, y: ground(spot.x, spot.z) } : { x: s.x, z: s.z, y: ground(s.x, s.z) }) : null
   const head = spot && home ? MOGLIN_HEIGHT.chibi : 1.3
   const onId = node && spot && home ? spot.id : null
@@ -87,7 +97,7 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
   }, [onId, node, at?.x, at?.z])   // eslint-disable-line react-hooks/exhaustive-deps
   return {
     node,
-    name: f?.name ?? s?.name ?? '',
+    name: atBurr && burr ? burr.name : f?.name ?? s?.name ?? '',
     focus: node && at ? { x: at.x, y: at.y + head * 0.8, z: at.z } : null,
     // M65: no bubble while the Moglin's CARD is open (its line is the hello again; at 800x500 the bubble sat on the card's top)
     bubbleAt: node && at && st?.screen !== 'card' ? [at.x, at.y + head + 1.1, at.z] as [number, number, number] : null,

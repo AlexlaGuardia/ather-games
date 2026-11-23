@@ -74,6 +74,16 @@ const legacyGrades = (p: Profession, sk: Skills) => {
   if (r) { g.craft = sk[SKILL_OF_ROOM[r].craft]; g.yield = sk[SKILL_OF_ROOM[r].yield] }
   return g
 }
+/** The season-wide shuffled order of the name pool (each settlement owns FOLK_MAX slots of it by its index). Exported for the
+ *  Burrfolk (burrfolk.ts), who take names from the slots no Moglin of the season is using, so names stay unique. */
+export function seasonNames(season: number): { names: string[]; order: number[] } {
+  const names = NAMES.filter(x => !CANON_NAMES.has(x.toLowerCase()))
+  const order = names.map((_, i) => i), shuf = rngOf(`folk-names:${season}`)
+  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(shuf() * (i + 1)); [order[i], order[j]] = [order[j], order[i]] }
+  return { names, order }
+}
+/** how many Moglins a (generated) settlement has this season: the first draw of its folk stream, exactly as folkOf draws it */
+export const folkCount = (sid: string, season: number) => FOLK_MIN + Math.floor(rngOf(`folk:${season}:${sid}`)() * (FOLK_MAX - FOLK_MIN + 1))
 /** The Moglins living in a settlement this season. Same inputs, same folk, on every device. */
 export function folkOf(s: Settlement, season: number): Folk[] {
   if (s.id === GLADE_ID) return gladeFolk()   // Moonwell Glade: the five, fixed, never re-rolled (moonwell-glade.ts, M30)
@@ -85,9 +95,7 @@ export function folkOf(s: Settlement, season: number): Folk[] {
   const out: Folk[] = []
   // One season-wide order of the pool; each settlement owns FOLK_MAX slots of it by its index (ids are `s<season>-<i>`), so no
   // two Moglins alive this season share a name across ALL settlements, not just within one (canon: two living speakers never do).
-  const names = NAMES.filter(x => !CANON_NAMES.has(x.toLowerCase()))
-  const order = names.map((_, i) => i), shuf = rngOf(`folk-names:${season}`)
-  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(shuf() * (i + 1)); [order[i], order[j]] = [order[j], order[i]] }
+  const { names, order } = seasonNames(season)
   const idx = Number(/-(\d+)$/.exec(s.id)?.[1] ?? 0)
   for (let k = 0; k < n; k++) {
     const name = names[order[(idx * FOLK_MAX + k) % order.length]]
