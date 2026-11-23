@@ -56,7 +56,7 @@ export function questEvent(ev: QuestEvent): boolean {
 }
 
 // ── Fennel's talk (shared/npc-talk.tsx shape). lark, athernyx 112926e, SIGNED by Alex 11-19 ('easy company' swap) (CANON/game/first-rinstick-script.md); slots the script has no line for keep their placeholder.
-// Placeholder still: the 'I'll go at dusk.' option, the Goodbye label, the 'catch' with-nothing-in-bag and fallback lines. `page` = which screen of the meeting; `close` ends the talk.
+// Placeholder still: the 'I'll go at dusk.' option, the 'catch' with-nothing-in-bag and fallback lines (the goodbye = SIGNED bye.fennel, 7a25a8e). `page` = which screen of the meeting; `close` ends the talk.
 export const FENNEL_NAME = 'Fennel'
 export function fennelTalk(quest: RinQuest, page: number, inv: Inv, acts: { goto: (page: number) => void; close: () => void }): TalkNode {
   const d = currentStep(quest)?.do

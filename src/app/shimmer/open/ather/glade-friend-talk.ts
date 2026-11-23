@@ -5,7 +5,7 @@
 //
 // ★ PURE. Commits happen in a PICK, never on render. Leaving mid-script replays it next time; the caller's gift guard
 //   (glade-tutorial.ts › gift) means nothing is handed twice. A full bag refuses the step and records nothing.
-// Answer labels: ANSWERS.more is greg-talk's (lark placeholder); the goodbye is a placeholder in the Fennel pattern (use-rinquest).
+// Answer labels: ANSWERS.more is greg-talk's (lark placeholder); the goodbye is lark's SIGNED bye.otto/.tess/.bonn (7a25a8e).
 import type { TalkNode } from '../shared/npc-talk'
 import { ANSWERS } from './greg-talk'
 import { line } from './glade-tutorial-lines'
@@ -16,7 +16,7 @@ export const GARDEN_FRIENDS: readonly GardenFriend[] = ['otto', 'tess', 'bonn']
 export const FRIEND_NAME: Readonly<Record<GardenFriend, string>> = { otto: 'Otto', tess: 'Tess', bonn: 'Bonn' }
 /** The script's line that hands the gift over (gift .1), 0-based. */
 export const GIFT_AT = 2
-/** lark, athernyx 7854e21 (CANON/game/shimmer-lines-idris-and-goodbyes.md bye.otto/.tess/.bonn), UNSIGNED */
+/** lark, SIGNED by Alex, athernyx 7a25a8e (CANON/game/shimmer-lines-idris-and-goodbyes.md bye.otto/.tess/.bonn) */
 export const FRIEND_BYE: Readonly<Record<GardenFriend, string>> = { otto: 'Later, Otto.', tess: 'Bye for now, Tess.', bonn: 'See you around, Bonn.' }
 export const friendBye = (f: GardenFriend) => FRIEND_BYE[f]
 

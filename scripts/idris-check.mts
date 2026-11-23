@@ -2,7 +2,7 @@
 // letters (Star, Manalic, Barrier) walks to the Temple, E, answers "Idris", meets Idris (lark's first-talk lines, once), picks
 // Star then Manalic, confirms, and the cut lands: Loadout.fit.repeater.sigil = [star, manalic], the blank and both letters spent,
 // 2 fees taken. The Charred Rifle is not offered (no socket). A second visit opens on greet.repeat; the 3rd slot takes Barrier
-// with no blank in the bag.
+// with no blank in the bag. Every Idris line and scene on screen is checked WORD FOR WORD against the signed text (athernyx 7a25a8e).
 //   npx tsx scripts/idris-check.mts  (URL= to point elsewhere). Writes /tmp/idris-<n>.png
 import puppeteer from 'puppeteer-core'
 import { readFileSync } from 'node:fs'
@@ -13,7 +13,7 @@ import { letterItem } from '../src/app/shimmer/open/business/letters'
 import { newInv, give } from '../src/app/shimmer/open/shared/inventory'
 import { DOOR_ASK } from '../src/app/shimmer/open/continent/door-talk'
 import { SIGIL_CUT_FEE } from '../src/app/shimmer/open/business/idris'
-import { IDRIS_LINES } from '../src/app/shimmer/open/business/idris-lines'
+import { IDRIS_LINES, IDRIS_SCENES, type IdrisLineId } from '../src/app/shimmer/open/business/idris-lines'
 const meta = JSON.parse(readFileSync('public/open/continent.json', 'utf8')) as RegionMeta
 const raw = gunzipSync(readFileSync('public/open/continent.bin.gz'))
 const R = makeRegion(meta, new Int16Array(raw.buffer, raw.byteOffset, raw.byteLength / 2))
@@ -58,11 +58,26 @@ const openIdris = async () => {
   ok(await poll(async () => !!(await p.$('[data-panel="idris-panel"]')), 15000), "Idris's counter opens")
 }
 const startMarks = await marks()
+// WORD FOR WORD (signed, athernyx 7a25a8e): every line on screen reads exactly 'Idris: <signed line>', every scene box exactly
+// the signed scene. The game strings = the canon file is idris-signed-lines.test.ts; this proves what the page renders.
+const exact = async (where: string) => {
+  const got = await p.evaluate(() => ({
+    lines: [...document.querySelectorAll<HTMLElement>('[data-panel="idris-panel"] [data-idris-line]')].map(e => [e.dataset.idrisLine!, (e.textContent ?? '').trim()]),
+    barks: [...document.querySelectorAll<HTMLElement>('[data-panel="idris-panel"] [data-idris-bark]')].map(e => [e.dataset.idrisBark!, (e.textContent ?? '').trim()]),
+    scenes: [...document.querySelectorAll<HTMLElement>('[data-panel="idris-panel"] [data-idris-scene]')].map(e => (e.textContent ?? '').trim()),
+  }))
+  const all = [...got.lines, ...got.barks] as [IdrisLineId, string][]
+  const bad = all.filter(([id, t]) => t !== `Idris: ${IDRIS_LINES[id]}`)
+  ok(all.length > 0 && bad.length === 0, `${where}: ${all.length} line(s) word for word${bad.length ? ' · OFF: ' + bad.map(([id, t]) => `${id}="${t}"`).join(' | ') : ': ' + all.map(([, t]) => `"${t}"`).join(' ')}`)
+  const sBad = got.scenes.filter(t => t !== IDRIS_SCENES.first && t !== IDRIS_SCENES.done)
+  ok(sBad.length === 0, `${where}: ${got.scenes.length} scene box(es) word for word${sBad.length ? ' · OFF: ' + sBad.join(' | ') : ''}`)
+}
 // 1) first talk
 await openIdris()
 const l1 = await lines()
 ok(['idris.greet.first.1', 'idris.greet.first.2', 'idris.greet.first.3', 'idris.offer'].every(id => l1.includes(id)), `first talk: lark's greet.first.1-3 + offer (${l1.join(', ')})`)
 ok(await p.evaluate((t) => (document.querySelector('[data-panel="idris-panel"]')?.textContent ?? '').includes(t), IDRIS_LINES['idris.greet.first.1']!), 'the first line shows as text, not its id')
+await exact('first talk')
 const guns = await p.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-idris-gun]')].map(e => e.dataset.idrisGun))
 ok(JSON.stringify(guns) === '["repeater"]', `only socketed guns offered (${guns.join(',')})`)
 await p.screenshot({ path: `/tmp/idris-${++shot}.png` })
@@ -73,18 +88,21 @@ ok(await p.evaluate(() => document.querySelector<HTMLElement>('[data-idris-lette
 await p.screenshot({ path: `/tmp/idris-${++shot}.png` })
 ok(await click('[data-idris-cut]'), 'Cut it pressed'); await wait(500)
 ok(!!(await p.$('[data-idris-confirm="star,manalic"] [data-idris-line="idris.confirm"]')), 'confirm: idris.confirm over the two picks in order')
+await exact('confirm')
 await p.screenshot({ path: `/tmp/idris-${++shot}.png` })
 ok(await click('[data-idris-do]'), 'confirmed'); await wait(1200)
 ok(JSON.stringify(await sigil()) === '["star","manalic"]', `the Repeater's sigil = ${JSON.stringify(await sigil())}`)
 ok((await bagHas('sigil_blank')) === 0 && (await bagHas(letterItem('star'))) === 0 && (await bagHas(letterItem('manalic'))) === 0 && (await bagHas(letterItem('barrier'))) === 1, 'the blank + both letters spent, Barrier kept')
 ok((await marks()) === startMarks - 2 * SIGIL_CUT_FEE, `two fees taken (${startMarks} -> ${await marks()})`)
 ok((await lines()).includes('idris.done') && !!(await p.$('[data-idris-scene]')), 'idris.done with its scene')
+await exact('done')
 await p.screenshot({ path: `/tmp/idris-${++shot}.png` })
 // 3) second visit: greet.repeat; the 3rd slot takes Barrier with no blank in the bag
 await p.evaluate(() => document.querySelector<HTMLElement>('[data-panel="idris-panel"] button[aria-label]')?.click()); await wait(800)
 await openIdris()
 const l2 = await lines()
 ok(l2.includes('idris.greet.repeat') && !l2.includes('idris.greet.first.1'), `second visit: greet.repeat (${l2.join(', ')})`)
+await exact('second visit')
 ok(await click('[data-idris-letter="barrier"]'), 'pick Barrier'); await wait(300)
 ok(await click('[data-idris-cut]'), 'Cut it'); await wait(400)
 ok(await click('[data-idris-do]'), 'confirmed'); await wait(1200)

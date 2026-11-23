@@ -1,7 +1,7 @@
 'use client'
 // IDRIS'S COUNTER at the Enchant Temple (BETA M93 s3, sprites lane). Pick a gun, pick runesmith LETTERS from the bag in order,
 // one cut sets them into the gun's sigil. Rules: business/idris.ts (pure). Every word Idris says is @lark's (idris-lines.ts);
-// the counter's own copy stays plain and pronoun-free (canon gives Idris none).
+// SIGNED (athernyx 7a25a8e). The counter's own copy stays plain; Idris is he/him (Idony's twin brother, canon 5b83a25).
 import { useState } from 'react'
 import { HearthFrame, H, hearthDisplay, HearthButton } from '../../ui/hearth'
 import { hudSay } from '../shared/game-hud'

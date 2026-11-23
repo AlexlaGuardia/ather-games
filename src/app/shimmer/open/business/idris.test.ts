@@ -87,7 +87,7 @@ const bag = (blanks: number, letters: Record<string, number> = { manalic: 1, sta
 }
 ok(JSON.stringify(sigilGuns(L0)) === '["repeater","backbone"]', 'sigilGuns drops the Charred Rifle')
 ok(sigilOf({ ...L0, fit: { repeater: { sigil: 'x' as unknown as string[] } } }, 'repeater').runes.length === 0, 'corrupt sigil reads empty')
-// every line lark wrote is present, no em dashes, pronoun-free (canon gives Idris none)
+// every signed line is present, no em dashes (word-for-word vs canon: idris-signed-lines.test.ts)
 for (const id of ['idris.greet.first.1', 'idris.greet.first.2', 'idris.greet.first.3', 'idris.greet.repeat', 'idris.offer', 'idris.noblank', 'idris.norunes', 'idris.confirm', 'idris.done', ...IDRIS_BARKS] as const) {
   ok(!!IDRIS_LINES[id] && idrisLine(id) !== id, `line ${id} present`)
   ok(!/—/.test(idrisLine(id)), `${id}: no em dash`)

@@ -18,7 +18,7 @@ import { gift, hearFriend, claimJar, jarFull, type Tut } from './glade-tutorial'
 
 export const FENNEL_THANKS = 'Thank you, Fennel.'   // placeholder for @lark
 export const FENNEL_MORE = 'Something else.'        // placeholder for @lark
-export const fennelBye = 'Save me a seat, Fennel.'  // lark bye.fennel, athernyx 7854e21, UNSIGNED (the Rinnshop talk uses it too)
+export const fennelBye = 'Save me a seat, Fennel.'  // lark bye.fennel, SIGNED by Alex (athernyx 7a25a8e) (the Rinnshop talk uses it too)
 
 export type FennelMode = 'folk' | 'first' | 'jar'
 /** `stick` and `full` are read at open, with the mode: what the talk walks never changes under the bubble. */

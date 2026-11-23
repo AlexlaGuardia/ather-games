@@ -1,5 +1,6 @@
 // IDRIS'S LINES (BETA M93 s3). Every word is @lark's, copied from athernyx CANON/game/shimmer-lines-idris-and-goodbyes.md
-// (7854e21, UNSIGNED until Alex signs). Idris is pronoun-free (canon gives none): keep the counter's copy that way too.
+// SIGNED by Alex (athernyx 7a25a8e), word for word; idris-signed-lines.test.ts diffs every line against the canon file.
+// Idris is Idony's twin BROTHER, he/him (canon 5b83a25). The signed lines name no pronoun; any copy that needs one uses he/him.
 // An id with no line shows the id itself, so a missing line is loud on screen rather than invented.
 export type IdrisLineId =
   | 'idris.greet.first.1' | 'idris.greet.first.2' | 'idris.greet.first.3' | 'idris.greet.repeat'

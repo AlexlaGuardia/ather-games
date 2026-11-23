@@ -9,7 +9,7 @@ import { RUNESMITH_CUT, IDONY_HUSH, IDONY_AFTER, type Beat } from '../business/e
 
 // @lark draft 11-18, awaiting Alex sign-off. Idony has just hushed the keeper, so her answers defer instead of pester.
 export const DOOR_ASK = { cut: 'Here. A letter to cut.', inscribe: 'When you are free.', letters: 'The runesmith, please.', bye: 'Goodbye.', byeTemple: "I'll let you work.",
-  /** M93 s3: PLACEHOLDER label (sprites), for @lark to replace; plain, pronoun-free (canon gives Idris none) */
+  /** M93 s3: PLACEHOLDER label (sprites), for @lark to replace (the signed Idris file, athernyx 7a25a8e, has no door ask). Idris is he/him (5b83a25). */
   idris: 'Idris, please.' }
 
 export interface DoorTalkActs { open: (deed: string) => void; bye: () => void }
