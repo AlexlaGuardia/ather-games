@@ -2,7 +2,7 @@
 // The continent is one exported region; the builder cuts it into virtual 1 km tiles on the Wilds' grid (world/nyx-builder.ts) and
 // the game adds the published layer to the region's heights on load (open/continent/nyx-layer.ts). End to end:
 //   A. non-owner: 403 on GET save-builder?map=nyx; the public layer GET /shimmer/open/nyx-edits answers 200
-//   B. owner opens ?mode=terrain&map=nyx: a continent tile opens; a raise on dry land makes a hill; Fly draws the 3x3 ring of
+//   B. owner opens ?mode=builder&map=nyx (the alias of mode=terrain): a continent tile opens; a raise on dry land makes a hill; Fly draws the 3x3 ring of
 //      terrain tiles + the sea plane and nothing else (no nodes)
 //   C. Save: the live Nyx layer is UNCHANGED (players see nothing until Publish); RELOAD restores the hill from the draft
 //   C2. while only the draft has the hill: a FRESH keeper on the continent stands on the BARE ground there (prod shows nothing)
@@ -51,7 +51,7 @@ async function openEditor() {
   const p = await owner.newPage(); await p.setViewport({ width: 1280, height: 900 })
   p.on('pageerror', e => errs.push('editor: ' + String(e).slice(0, 200)))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
-  const r = await p.goto(`${url}/shimmer/dev?mode=terrain&map=nyx`, { waitUntil: 'load', timeout: 240000 })
+  const r = await p.goto(`${url}/shimmer/dev?mode=builder&map=nyx`, { waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction('window.__terrain?.ready === true && window.__terrain?.map === "nyx"', { timeout: 240000, polling: 500 })
   return { p, status: r?.status() }
 }

@@ -99,7 +99,7 @@ const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; li
     label: 'World',
     tabs: [
       { id: 'map', label: 'Map' },
-      { id: 'terrain', label: 'Terrain' },
+      { id: 'terrain', label: 'World Builder' },   // M83: was 'Terrain' (Alex could not find the builder)
       { id: 'structures', label: 'Structures' },
       { id: 'furniture', label: 'Objects' },
       { id: 'npcs', label: 'NPCs' },
@@ -143,7 +143,9 @@ const ALL_TABS = TAB_GROUPS.flatMap(g => g.tabs)
 
 function EditorHub() {
   const searchParams = useSearchParams()
-  const initialMode = (searchParams.get('mode') as EditorMode) || 'index'
+  // M83 (Alex 11-23 'i keep looking for that creative mode'): ?mode=builder is the World Builder (the terrain editor)
+  const rawMode = searchParams.get('mode')
+  const initialMode = ((rawMode === 'builder' ? 'terrain' : rawMode) as EditorMode) || 'index'
   const [mode, setMode] = useState<EditorMode>(
     initialMode === 'index' || ALL_TABS.some(t => t.id === initialMode) ? initialMode : 'index'
   )
