@@ -119,9 +119,9 @@ try {
     await new Promise(r => setTimeout(r, 3000))   // the layer fetch lands
     await A('gladeAt', GREG.x, GREG.z, 0); await new Promise(r => setTimeout(r, 2500))
     const base = gladeZoneGround(GREG.x, GREG.z), want = hill - h0
-    const gy = await A('ground', GREG.x, GREG.z) as number, st = await A('state') as { x: number; y: number; z: number }
+    const gy = await A('ground', GREG.x, GREG.z) as number, st = await A('state') as { px: number; py: number; pz: number }
     ok(Number.isFinite(gy) && Math.abs((gy - base) - want) < 0.6, `the game's ground on Greg's garden: ${base.toFixed(2)} -> ${gy?.toFixed?.(2)} m (+${(gy - base).toFixed(2)}, the editor's hill +${want.toFixed(2)})`)
-    ok(Math.hypot(st.x - GREG.x, st.z - GREG.z) < 1.5 && Math.abs(st.y - gy) < 0.3, `the keeper stands ON the hill (feet ${st.y.toFixed(2)} m at ${st.x.toFixed(1)}, ${st.z.toFixed(1)})`)
+    ok(Math.hypot(st.px - GREG.x, st.pz - GREG.z) < 1.5 && Math.abs(st.py - gy) < 0.3, `the keeper stands ON the hill (feet ${st.py?.toFixed(2)} m at ${st.px?.toFixed(1)}, ${st.pz?.toFixed(1)})`)
     await A('look', Math.PI, -0.25); await new Promise(r => setTimeout(r, 1500))
     await kp.screenshot({ path: `${out}/game-on-hill.png` })
     await kc.close()
