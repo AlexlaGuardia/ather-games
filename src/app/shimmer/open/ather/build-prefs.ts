@@ -57,6 +57,44 @@ export function quadsHit(a: Quad, b: Quad, pad = 0): boolean {
   return true
 }
 
+// ── ANCHOR (BETA M98 s2; Alex 11-23: "freehand place one and then snap on the rest to that one") ─────────────────────────
+// A piece or Keepstone set FREEHAND (snap = Free) becomes the anchor: its centre, turn and footprint. While an anchor stands
+// and a grid snap is chosen, the next ghosts snap in the ANCHOR'S frame instead of the world's: the grid runs along its turn,
+// the ghost lands touching the anchor's nearest face (or whole snap steps out from it) with its
+// edge in line with the anchor's edge along that face, stepping by the snap size from there. A ghost turned off the anchor's square (say 45 deg to it) snaps its
+// centre on the anchor's grid instead, since no edge can lie flush. Rooms and lifts never use it. Not saved: it is a tool
+// state for this visit, cleared by the chip or by a new freehand set.
+export interface Anchor { x: number; z: number; q: number; w: number; d: number }
+const dust = (v: number) => Math.round(v * 1e6) / 1e6
+/** on one local axis: `l` the ghost centre, `ah` / `ph` the anchor's and the ghost's half extents, `s` the snap size.
+ *  `beside` = this is the axis the ghost stands off the anchor along: it lands touching the anchor's face, or whole snap
+ *  steps further out, never stepped back into it. Otherwise the ghost's edge lines up with the anchor's nearer edge, then
+ *  whole snap steps along (a row of same-depth pieces stays in line). */
+export function flushAxis(l: number, ah: number, ph: number, s: number, beside: boolean): number {
+  const side = l < 0 ? -1 : 1
+  if (beside) { const touch = ah + ph; return side * (touch + Math.max(0, Math.round((Math.abs(l) - touch) / s)) * s) }
+  const line = side * (ah - ph)
+  return line + Math.round((l - line) / s) * s
+}
+/** where a ghost centred at (x, z), w x d turned q, lands under snap size `s` with anchor `a` (null = the world grid) */
+export function anchorSnap(x: number, z: number, s: Snap, a: Anchor | null, w: number, d: number, q: number): [number, number] {
+  if (!a || s === 0) return [snapTo(x, s), snapTo(z, s)]
+  const ang = (normQ(a.q) * Math.PI) / 2, c = Math.cos(ang), sn = Math.sin(ang), dx = x - a.x, dz = z - a.z
+  const lx0 = dx * c + dz * sn, lz0 = -dx * sn + dz * c, rel = normQ(q - a.q)
+  let lx: number, lz: number
+  if (Number.isInteger(rel)) {
+    const [pw, pd] = rel % 2 ? [d, w] : [w, d], tx = a.w / 2 + pw / 2, tz = a.d / 2 + pd / 2
+    const besideX = Math.abs(lx0) / tx >= Math.abs(lz0) / tz   // which face of the anchor the ghost is nearer standing off
+    lx = flushAxis(lx0, a.w / 2, pw / 2, s, besideX); lz = flushAxis(lz0, a.d / 2, pd / 2, s, !besideX)
+  } else { lx = Math.round(lx0 / s) * s; lz = Math.round(lz0 / s) * s }
+  return [dust(a.x + lx * c - lz * sn), dust(a.z + lx * sn + lz * c)]
+}
+let anchor: Anchor | null = null
+const asubs = new Set<() => void>()
+export const getAnchor = () => anchor
+export function setAnchor(a: Anchor | null) { anchor = a; asubs.forEach(f => f()) }
+export const subscribeAnchor = (f: () => void) => { asubs.add(f); return () => { asubs.delete(f) } }
+
 // ── persisted per viewer (a UI preference, not save data): survives reloads, never blocks when storage is off ──────
 export const PREFS_KEY = 'open.build.prefs.v1'
 export function adoptPrefs(v: unknown): BuildPrefs {

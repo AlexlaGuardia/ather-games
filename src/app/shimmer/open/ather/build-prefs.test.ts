@@ -1,5 +1,5 @@
 // BETA M98 s1: snap sizes, turn steps, fine-turned footprints. Run: npx tsx src/app/shimmer/open/ather/build-prefs.test.ts
-import { SNAPS, TURN_STEPS, DEFAULT_PREFS, snapTo, normQ, turnQ, nextSnap, nextStep, quad, quadBounds, quadsHit, rectQuad, adoptPrefs, getPrefs, setPrefs } from './build-prefs'
+import { SNAPS, TURN_STEPS, DEFAULT_PREFS, snapTo, normQ, turnQ, nextSnap, nextStep, quad, quadBounds, quadsHit, rectQuad, adoptPrefs, getPrefs, setPrefs, anchorSnap, flushAxis, getAnchor, setAnchor, subscribeAnchor, type Anchor } from './build-prefs'
 import { canPlacePiece, placePiece, pieceRect, pieceBoxes, freshWorks, chestBox, STARTER_CHEST } from './rooms'
 import { STARTING_SQUARES } from './plot'
 import { newInv, give } from '../shared/inventory'
@@ -56,6 +56,41 @@ ok(JSON.stringify(adoptPrefs(null)) === JSON.stringify(DEFAULT_PREFS) && JSON.st
 ok(JSON.stringify(adoptPrefs({ snap: 0, step: 15 })) === JSON.stringify({ snap: 0, step: 15 }), 'prefs: a good pref was dropped')
 ok(DEFAULT_PREFS.snap === 0.25 && DEFAULT_PREFS.step === 90, 'prefs: the default changed how pieces set before M98')
 setPrefs({ snap: 0.5, step: 30 }); ok(getPrefs().snap === 0.5 && getPrefs().step === 30, 'prefs: set did not stick without storage')
+
+// ── M98 s2 ANCHOR ──
+// no anchor or freehand: exactly the world snap (s1 unchanged)
+{ const [x, z] = anchorSnap(3.37, -1.62, 0.5, null, 1, 1, 0); ok(x === 3.5 && z === -1.5, 'anchor: null anchor is not the world snap') }
+{ const a: Anchor = { x: 0.3, z: 0.7, q: 0.5, w: 1.6, d: 0.5 }; const [x, z] = anchorSnap(3.37, -1.62, 0, a, 1, 1, 0.5); ok(x === 3.37 && z === -1.62, 'anchor: freehand moved the point') }
+// flushAxis: a 1.6 bench anchor, a 1.0 piece, snap 1: beside it lands touching (0.8 + 0.5 = 1.3), not on a 0.2 lattice
+ok(near(flushAxis(1.35, 0.8, 0.5, 1, true), 1.3), 'anchor: touching on the right missed')
+ok(near(flushAxis(-1.25, 0.8, 0.5, 1, true), -1.3), 'anchor: touching on the left missed')
+ok(near(flushAxis(0.9, 0.8, 0.5, 1, true), 1.3), 'anchor: beside stepped back into the anchor')
+ok(near(flushAxis(2.4, 0.8, 0.5, 1, true), 2.3), 'anchor: a step out is not a snap step from touching')
+ok(near(flushAxis(0.31, 0.8, 0.5, 1, false), 0.3) && near(flushAxis(-0.4, 0.8, 0.5, 1, false), -0.3), 'anchor: edges in line missed')
+ok(near(flushAxis(0.1, 0.25, 0.25, 1, false), 0), 'anchor: same-depth row did not stay in line')
+// a 45 deg anchor (q 0.5): the next piece at the same turn lands touching along the anchor's own axis, in line, no overlap, no gap
+{ const a: Anchor = { x: 2, z: 3, q: 0.5, w: 1.6, d: 0.5 }, c = Math.SQRT1_2
+  const at = (l: number, m: number) => [a.x + l * c - m * c, a.z + l * c + m * c]   // anchor-local (l along, m across) to world
+  const loc = (x: number, z: number) => [(x - a.x) * c + (z - a.z) * c, -(x - a.x) * c + (z - a.z) * c]
+  const r1 = at(1.4, 0.07), [x, z] = anchorSnap(r1[0], r1[1], 0.25, a, 1.6, 0.5, 0.5), [lx, lz] = loc(x, z)
+  ok(near(lx, 1.6, 1e-6) && near(lz, 0, 1e-6), `anchor: 45 deg row neighbour not flush (${lx}, ${lz})`)
+  ok(!quadsHit(quad(a.x, a.z, a.w, a.d, a.q), quad(x, z, 1.6, 0.5, 0.5), -0.001), 'anchor: flush neighbour overlaps the anchor')
+  ok(quadsHit(quad(a.x, a.z, a.w, a.d, a.q), quad(x, z, 1.6, 0.5, 0.5), 0.001), 'anchor: flush neighbour leaves a gap')
+  // a ghost turned a quarter off the anchor swaps its extents (its 0.5 depth runs along the anchor's x: touching at 1.05)
+  const r2 = at(1.1, 0), [x2, z2] = anchorSnap(r2[0], r2[1], 0.25, a, 1.6, 0.5, 1.5), [lx2] = loc(x2, z2)
+  ok(near(lx2, 1.05, 1e-6), `anchor: quarter-turned ghost did not use its swapped extent (${lx2})`)
+  // a ghost at 15 deg to the anchor (q 0.5 + 1/6) snaps its centre on the anchor grid, no flush
+  const [x3, z3] = anchorSnap(r1[0], r1[1], 1, a, 1.6, 0.5, 0.5 + 1 / 6), [lx3, lz3] = loc(x3, z3)
+  ok(near(lx3, 1, 1e-6) && near(lz3, 0, 1e-6), `anchor: off-square ghost not on the anchor grid (${lx3}, ${lz3})`)
+  // in front of the anchor (across its depth): touching its long face, left edges in line
+  const r4 = at(-0.3, 0.9), [x4, z4] = anchorSnap(r4[0], r4[1], 0.5, a, 1, 1, 0.5), [lx4, lz4] = loc(x4, z4)
+  ok(near(lz4, 0.75, 1e-6) && near(lx4, -0.3, 1e-6), `anchor: in-front ghost not touching / in line (${lx4}, ${lz4})`) }
+// a whole-q anchor on the world axes: outputs are clean numbers (no float dust from cos/sin)
+{ const a: Anchor = { x: 0.13, z: 0, q: 1, w: 1.6, d: 0.5 }; const [x, z] = anchorSnap(0.2, 1.7, 0.5, a, 1.6, 0.5, 1)
+  ok(x === 0.13 && z === 1.6, `anchor: whole-q anchor gave dust or the wrong flush (${x}, ${z})`) }
+// the store: set, read, clear, subscribers told
+{ let told = 0; const off = subscribeAnchor(() => told++)
+  setAnchor({ x: 1, z: 2, q: 0.5, w: 1, d: 1 }); ok(getAnchor()?.q === 0.5, 'anchor: set did not stick'); setAnchor(null); ok(getAnchor() === null && told === 2, 'anchor: clear / notify'); off() }
 
 if (fails.length) { console.error(`build-prefs: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`build-prefs: ${pass}/0`)
