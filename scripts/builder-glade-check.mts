@@ -6,15 +6,18 @@
 //      out in the void edits nothing; a raise on Greg's garden makes a hill; Fly draws the Glade (terrain, NO sea plane, nothing else)
 //   C. Save: the live Glade layer is UNCHANGED (players see nothing until Publish); RELOAD restores the hill from the draft
 //   D. PUBLISH: a version, and the public glade-edits now carries the hill's vertices; ROLL BACK: live back byte-for-byte, history grew
+//   D2 (s2b). while the hill is LIVE: a FRESH keeper (no owner key) enters the Glade, warps onto Greg's garden and stands on the hill:
+//      the walker's ground there = gladeZoneGround + the published delta (= the editor's hill - its base), the keeper's feet on it
 //   E. the map buttons switch to the Wilds (its own draft) and the Wilds' draft + live layer never changed
 //   F. ALWAYS (finally): roll back if published, put the Glade's draft back. 0 page errors.
-// (The game reading the Glade layer is s2b. Autosave + the half-land order are proven by builder-check / builder.test.ts.)
+// (Autosave + the half-land order are proven by builder-check / builder.test.ts.)
 // ★ AFTER A RUN on a map with no history: new files under world/builder/glade/ + world/glade-edits.json, class 'data': coord build
 //   refuses until they are committed or moved out (M94). The check prints them.
 // SETUP: OWNER_KEY from .env or env (run on the BOX; take the browser lock).
 //   npx tsx scripts/builder-glade-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
 import { readFileSync, mkdirSync, existsSync } from 'node:fs'
+import { gladeZoneGround } from '../src/app/shimmer/open/ather/glade-cluster'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/builder-glade-check')
 mkdirSync(out, { recursive: true })
@@ -100,6 +103,29 @@ try {
   ok(published && (afterPub?.index.live ?? 0) > (liveV0 ?? 0), `PUBLISH: ok ${pubOk}, live v${liveV0 ?? '-'} -> v${afterPub?.index.live}`)
   const nPub = Object.keys(livePub.tiles?.glade ?? {}).length, nBefore = Object.keys(liveBefore.tiles?.glade ?? {}).length
   ok(nPub > nBefore, `the public glade-edits now carries the hill (${nBefore} -> ${nPub} vertices)`)
+
+  // ── D2 (s2b): the GAME stands a fresh keeper on the published hill ──
+  {
+    const kc = await br.createBrowserContext(), kp = await kc.newPage(); await kp.setViewport({ width: 1100, height: 760 })
+    kp.on('pageerror', e => errs.push('game: ' + String(e).slice(0, 200)))
+    await kp.evaluateOnNewDocument('window.__name = (f) => f')
+    await kp.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))
+    const A = (fn: string, ...a: unknown[]) => kp.evaluate((f: string, x: unknown[]) => (window as any).__ather?.[f]?.(...x), fn, a)
+    await kp.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
+    await kp.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await new Promise(r => setTimeout(r, 2000))
+    if ((await A('zone')) !== 'glade') await A('travel', { kind: 'glade' })
+    for (let i = 0; i < 60 && (await A('zone')) !== 'glade'; i++) await new Promise(r => setTimeout(r, 1000))
+    ok((await A('zone')) === 'glade', `fresh keeper: in the Glade (zone ${await A('zone')})`)
+    await new Promise(r => setTimeout(r, 3000))   // the layer fetch lands
+    await A('gladeAt', GREG.x, GREG.z, 0); await new Promise(r => setTimeout(r, 2500))
+    const base = gladeZoneGround(GREG.x, GREG.z), want = hill - h0
+    const gy = await A('ground', GREG.x, GREG.z) as number, st = await A('state') as { x: number; y: number; z: number }
+    ok(Number.isFinite(gy) && Math.abs((gy - base) - want) < 0.6, `the game's ground on Greg's garden: ${base.toFixed(2)} -> ${gy?.toFixed?.(2)} m (+${(gy - base).toFixed(2)}, the editor's hill +${want.toFixed(2)})`)
+    ok(Math.hypot(st.x - GREG.x, st.z - GREG.z) < 1.5 && Math.abs(st.y - gy) < 0.3, `the keeper stands ON the hill (feet ${st.y.toFixed(2)} m at ${st.x.toFixed(1)}, ${st.z.toFixed(1)})`)
+    await A('look', Math.PI, -0.25); await new Promise(r => setTimeout(r, 1500))
+    await kp.screenshot({ path: `${out}/game-on-hill.png` })
+    await kc.close()
+  }
   const back = liveV0 ?? 1
   const rbOk = await p.evaluate(`window.__terrain.rollback(${back})`)
   const afterRb = await bget('glade')
