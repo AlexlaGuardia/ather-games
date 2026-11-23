@@ -49,6 +49,7 @@ import { PlanterPanel, GrimoirePanel, getPots, setPots, settlePlanter, useBook, 
 import { liftPiece } from './piece-lift'
 import { getBoxes, setBoxes, settleSaplingBox, PottedSapling, SaplingBoxSection } from './planter-box-view'   // M113 s1
 import { BLOOM_MS, speciesOf } from './spirit-seeds'
+import { BLOOMED_SPIRIT_LINE, planterBoxHint } from './planter-lines'
 import { SpiritOnPlanter, useSpiritsDev } from './spirit-model'
 import { spiritModelFor } from './spirit-models'
 import type { SpiritNav } from './spirit-trot'
@@ -2112,7 +2113,7 @@ function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<str
   const pickUp = () => {
     // M106 fix: piece-lift.ts, the same path as the third melee hit. A spirit lives here = stays; a growing seed rides along.
     const r = liftPiece(getW(), id, getInv(), getPots(), getBoxes())   // M113: a Planter Box's sapling rides along too
-    if (r === 'spirit') { hudSay('A spirit bloomed here.', 'info'); return }
+    if (r === 'spirit') { hudSay(BLOOMED_SPIRIT_LINE, 'info'); return }
     if (r === 'gone') return
     if (r === 'full') { hudSay('No room in the bag for it.', 'info'); return }
     const rr = returnRun(loadRuns(), id, r.inv)   // M57: a busy alchemy piece gives its inputs back, all or nothing
@@ -2151,10 +2152,10 @@ function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<str
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
         <div style={{ fontSize: 13, color: H.inkSoft }}>{f.blurb}</div>
         {/* M106 fix (Alex 11-23, phone): he built two Planter Boxes (decor) and E gave only Turn / Pick up, no way to plant.
-            The box points at the piece a Mana Seed grows in, its recipe read from the data. TODO @lark: placeholder line. */}
+            The box points at the piece a Mana Seed grows in, its recipe read from the data. Line SIGNED: batch 11-23c › B. */}
         {p.item === 'planter_box' && <SaplingBoxSection pieceId={id} bank={PLANTER_BANK} />}{/* M113 s1: a sapling grows in the box (decor) */}
         {p.item === 'planter_box' && <div data-planter-hint style={{ fontSize: 12.5, color: H.ink, fontWeight: 600 }}>
-          Mana Seeds grow in a {FURNITURE.spirit_planter.name}, not here: {FURNITURE.spirit_planter.recipe.map(c => `${c.n} ${itemDef(c.id).name}`).join(' + ')}, made at your Carpentry.
+          {planterBoxHint(FURNITURE.spirit_planter.name, `${FURNITURE.spirit_planter.recipe.map(c => `${c.n} ${itemDef(c.id).name}`).join(' + ')}, made at your Carpentry.`)}
         </div>}
         {spill > 0 && <div data-spill={spill} style={{ fontSize: 12.5, color: '#9a4a2a', fontWeight: 600 }}>Picking this up pours away {spill} water.</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

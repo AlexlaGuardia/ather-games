@@ -13,6 +13,7 @@ import { getInv, setInv } from '../shared/bag'
 import { getPots, setPots } from './spirit-panels'
 import { getBoxes, setBoxes } from './planter-box-view'   // M113: a Planter Box's sapling rides along
 import { hudSay } from '../shared/hud-say'
+import { BLOOMED_SPIRIT_LINE } from './planter-lines'
 import { itemDef } from '../shared/inventory'
 import { isBuilding } from './build-mode'
 import { FURNITURE, keepstoneFor } from './furniture'
@@ -60,7 +61,7 @@ function land(t: Target, now: number): 'hit' | 'broke' | 'full' | 'miss' {
   if (!r.broke) return 'hit'
   if (guestRefuses(m => hudSay(m, 'info', 4))) { live.target = null; emit(); return 'miss' }   // M61: a guest never takes from a mate's plot
   const name = nameOf(t), b = breakTarget(currentWorks(), t, getInv(), getPots(), getBoxes())   // M106 fix: a planter's pot rides along
-  if (b === 'spirit') { hudSay('A spirit bloomed here.', 'info'); return 'full' }
+  if (b === 'spirit') { hudSay(BLOOMED_SPIRIT_LINE, 'info'); return 'full' }
   if (!b) { hudSay('Your bag is full.', 'info'); return 'full' }
   const carried = b.pots !== getPots(), sap = b.boxes !== getBoxes()
   setWorks(b.works); setInv(b.inv); setPots(b.pots); setBoxes(b.boxes); live.target = null; emit()

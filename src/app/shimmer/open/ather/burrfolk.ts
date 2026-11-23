@@ -81,14 +81,15 @@ export function barter(inv: Inv, key: BarterKey): { ok: true; inv: Inv } | { ok:
   return r.left > 0 ? { ok: false, why: 'full' } : { ok: true, inv: r.inv }
 }
 
-/** FUNCTIONAL labels (build text, for @lark to replace). The Burrfolk's spoken lines are SIGNED: BURRFOLK_BARKS below. */
+/** ★ SIGNED (Alex, athernyx b3dc505): CANON/game/shimmer-lines-batch-2026-11-23c.md › C, MAIN (lines-batch-23c.test.ts).
+ *  The Burrfolk's spoken lines are SIGNED too: BURRFOLK_BARKS below. */
 const nm = (id: string) => itemDef(id).name
 export const BURR_LABEL = {
   look: 'Have a look',
   swap: (k: BarterKey) => `Swap ${BARTER[k].want.n} ${nm(BARTER[k].want.id)} for ${BARTER[k].product.n} ${nm(BARTER[k].product.id)}`,
   done: (k: BarterKey) => `${nm(BARTER[k].product.id)} · in your bag`,
   short: (k: BarterKey) => `You need ${BARTER[k].want.n} ${nm(BARTER[k].want.id)} to swap`,
-  full: (k: BarterKey) => `No room in your bag for the ${nm(BARTER[k].product.id)}`,
+  full: (k: BarterKey) => `Your bag is full. Make room for the ${nm(BARTER[k].product.id)}.`,
 } as const
 
 /** ★ SIGNED (Alex, athernyx 2ac7da7): CANON/game/shimmer-lines-batch-2026-11-23b.md › D5, word for word (burrfolk.test.ts reads
