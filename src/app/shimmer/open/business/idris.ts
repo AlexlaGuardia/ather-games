@@ -7,11 +7,14 @@
 //     says letters, canon wins.)
 //   · The keeper picks up to the free slots, IN ORDER (lark: "These, in this order?"), then one cut does them all.
 //   · A gun's FIRST cut sets its sigil and consumes one Unattuned sigil (sigil_blank). A sigil with free slots takes more runes
-//     later without a new blank (re-cutting / clearing is an open gap: lark's gap 2, not built).
+//     later without a new blank.
+//   · RE-CUT (hub call 11-23, s4): a NEW blank REPLACES the old sigil. The old runes are gone (their letters do not come back);
+//     the picks start an empty sigil. Costs the blank + the fee per rune, like a first cut.
 //   · Every rune cut costs SIGIL_CUT_FEE Marks (the Temple cost, a dial). All or nothing.
 //   · Same-state, duplicate, cap and socketless refusals are sigil.ts canCut's, applied rune by rune in pick order.
-//   · Stored on Loadout.fit[gun].sigil = rune ids in cut order. Nothing reads it into the gun yet (M93 s4 = Armory + tuneGun).
-import { canCut, sigilSlots, SIGIL_CAP, RUNES, type Sigil } from '../shared/sigil'
+//   · Stored on Loadout.fit[gun].sigil = rune ids in cut order. shared/gun-sigil.ts armedGun tunes the gun in hand from it (s4).
+import { canCut, sigilSlots, blankSigil, SIGIL_CAP, RUNES, type Sigil } from '../shared/sigil'
+import { sigilOf } from '../shared/gun-sigil'
 import { countOf, take, type Inv } from '../shared/inventory'
 import { SIGIL_ITEM } from './gun-shop'
 import { letterItem } from './letters'
@@ -20,11 +23,7 @@ import type { Loadout } from '../shared/loadout'
 /** Marks per rune cut at Idris's counter (a dial) */
 export const SIGIL_CUT_FEE = 150
 
-/** the sigil on a gun, as sigil.ts reads it (empty when none has been set) */
-export function sigilOf(l: Loadout, gunId: string): Sigil {
-  const r = l.fit?.[gunId]?.sigil
-  return { gunId, runes: Array.isArray(r) ? r.filter(x => typeof x === 'string') : [] }
-}
+export { sigilOf }
 /** the owned guns that can take a sigil, in loadout order */
 export const sigilGuns = (l: Loadout): string[] => l.guns.filter(g => sigilSlots(g) >= 1)
 
@@ -34,11 +33,15 @@ export type IdrisCheck = { ok: true; blank: boolean; fee: number } | { ok: false
 /** the runes whose letters are in the bag (one row per rune, any count) */
 export const lettersHeld = (inv: Inv): string[] => RUNES.map(r => r.id).filter(id => countOf(inv, letterItem(id)) > 0)
 
-/** can Idris cut these runes (in this order) into this gun's sigil now? `blank` = this cut consumes a sigil_blank */
-export function idrisCanCut(l: Loadout, inv: Inv, marks: number, gunId: string, picks: readonly string[]): IdrisCheck {
+/** the sigil a cut starts from: the gun's own, or (re-cut) an empty one that replaces it */
+const startOf = (l: Loadout, gunId: string, recut: boolean): Sigil => recut ? blankSigil(gunId) : sigilOf(l, gunId)
+
+/** can Idris cut these runes (in this order) into this gun's sigil now? `blank` = this cut consumes a sigil_blank.
+ *  `recut` = a new blank replaces the gun's sigil (only offered on a gun that has one). */
+export function idrisCanCut(l: Loadout, inv: Inv, marks: number, gunId: string, picks: readonly string[], recut = false): IdrisCheck {
   if (!l.guns.includes(gunId)) return { ok: false, why: 'no-gun' }
   if (!picks.length) return { ok: false, why: 'none-picked' }
-  let s = sigilOf(l, gunId)
+  let s = startOf(l, gunId, recut)
   const need = new Map<string, number>()
   for (const id of picks) {
     const c = canCut(s, id)
@@ -47,7 +50,7 @@ export function idrisCanCut(l: Loadout, inv: Inv, marks: number, gunId: string, 
     if (countOf(inv, letterItem(id)) < need.get(id)!) return { ok: false, why: 'no-letter', at: id }
     s = { ...s, runes: [...s.runes, id] }
   }
-  const blank = sigilOf(l, gunId).runes.length === 0, fee = SIGIL_CUT_FEE * picks.length
+  const blank = startOf(l, gunId, recut).runes.length === 0, fee = SIGIL_CUT_FEE * picks.length
   if (blank && countOf(inv, SIGIL_ITEM) < 1) return { ok: false, why: 'no-blank' }
   if (marks < fee) return { ok: false, why: 'marks' }
   return { ok: true, blank, fee }
@@ -55,18 +58,18 @@ export function idrisCanCut(l: Loadout, inv: Inv, marks: number, gunId: string, 
 // the picker asks only "does the rune fit and is its letter here"; the blank and the Marks are the cut's, checked at Cut
 const withBlank = (inv: Inv): Inv => ({ ...inv, slots: [...inv.slots, { id: SIGIL_ITEM, n: 1 }] })
 /** can this ONE rune go next after `picks`? (the picker greys a row with this) */
-export const canPickNext = (l: Loadout, inv: Inv, gunId: string, picks: readonly string[], id: string): IdrisCheck =>
-  idrisCanCut(l, withBlank(inv), Infinity, gunId, [...picks, id])
+export const canPickNext = (l: Loadout, inv: Inv, gunId: string, picks: readonly string[], id: string, recut = false): IdrisCheck =>
+  idrisCanCut(l, withBlank(inv), Infinity, gunId, [...picks, id], recut)
 
 export type IdrisCut = { ok: true; loadout: Loadout; inv: Inv; marks: number; sigil: Sigil } | { ok: false; why: IdrisWhy; at?: string }
 /** cut them: the fee, the letters, the blank (first cut only) and the sigil, all or nothing */
-export function idrisCut(l: Loadout, inv: Inv, marks: number, gunId: string, picks: readonly string[]): IdrisCut {
-  const c = idrisCanCut(l, inv, marks, gunId, picks)
+export function idrisCut(l: Loadout, inv: Inv, marks: number, gunId: string, picks: readonly string[], recut = false): IdrisCut {
+  const c = idrisCanCut(l, inv, marks, gunId, picks, recut)
   if (!c.ok) return c
   let next: Inv | null = c.blank ? take(inv, SIGIL_ITEM, 1) : inv
   for (const id of picks) next = next && take(next, letterItem(id), 1)
   if (!next) return { ok: false, why: 'no-letter' }
-  const runes = [...sigilOf(l, gunId).runes, ...picks], f = l.fit?.[gunId] ?? {}
+  const runes = [...startOf(l, gunId, recut).runes, ...picks], f = l.fit?.[gunId] ?? {}
   return { ok: true, loadout: { ...l, fit: { ...l.fit, [gunId]: { ...f, sigil: runes } } }, inv: next, marks: marks - c.fee, sigil: { gunId, runes } }
 }
 

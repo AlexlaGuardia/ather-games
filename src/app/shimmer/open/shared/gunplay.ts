@@ -76,7 +76,7 @@ export const holdGun = (gun: RangeGun): GunState =>
 
 export function reloadGun(g: GunState) {
   if (g.reloading > 0 || g.ammo >= g.gun.clip) return
-  if (!payReload(g.mana)) { g.dry = (g.dry ?? 0) + 1; g.burstLeft = 0; return }   // M80: reloads cost mana everywhere (M78 dial)
+  if (!payReload(g.mana, (g.gun as { reloadPay?: number }).reloadPay)) { g.dry = (g.dry ?? 0) + 1; g.burstLeft = 0; return }   // M80: reloads cost mana everywhere (M78 dial)
   g.reloading = g.gun.reloadTime; g.burstLeft = 0
 }
 

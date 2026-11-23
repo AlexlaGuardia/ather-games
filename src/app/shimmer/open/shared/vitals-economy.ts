@@ -55,10 +55,11 @@ export const potionCdLeft = (lastAt: number | null, now: number) => (lastAt === 
 export const potionWaitLine = (left: number) => `Too soon for another. Wait ${Math.ceil(left)} s.`
 
 /** Can a reload be paid for? Spends on yes. `pool` absent = a host that has no mana (the range): free. */
-export function payReload(pool: { cur: number } | undefined): boolean {
+export function payReload(pool: { cur: number } | undefined, cost: number = ECON.reloadMana): boolean {
+  // M93 s4: `cost` = the gun's sigil-tuned reload mana (gun-sigil.ts armedGun › reloadPay); absent = the M78 dial
   if (!pool) return true
-  if (pool.cur < ECON.reloadMana) return false
-  pool.cur -= ECON.reloadMana
+  if (pool.cur < cost) return false
+  pool.cur -= cost
   return true
 }
 export const RELOAD_DRY_LINE = 'Not enough mana to reload. Rest, or head home.'

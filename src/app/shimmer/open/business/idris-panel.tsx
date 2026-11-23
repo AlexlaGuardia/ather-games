@@ -47,23 +47,28 @@ export function IdrisPanel({ ledger, setLedger, onClose, onBack }: { ledger: Led
   const [confirm, setConfirm] = useState(false)
   const [done, setDone] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
-  const sigil = gun ? sigilOf(loadout, gun) : null
+  // M93 s4 RE-CUT (hub call): a new blank replaces the gun's sigil; the old runes are gone. Offered only on a gun that has one.
+  const [recutOn, setRecut] = useState(false)
+  const own = gun ? sigilOf(loadout, gun) : null
+  const recut = recutOn && !!own && own.runes.length > 0
+  const sigil = own ? (recut ? { gunId: own.gunId, runes: [] as string[] } : own) : null
   const held = lettersHeld(inv)
   const free = sigil ? SIGIL_CAP - sigil.runes.length : 0
   const needsBlank = !!sigil && sigil.runes.length === 0
   // lark's branch: no blank for a first cut, or a blank and no letters, or the offer
-  const status: IdrisLineId | null = !gun || free === 0 ? null : needsBlank && countOf(inv, SIGIL_ITEM) < 1 ? 'idris.noblank' : held.length === 0 ? 'idris.norunes' : needsBlank ? 'idris.offer' : null
-  const check = gun && picks.length ? idrisCanCut(loadout, inv, ledger.marks, gun, picks) : null
-  const switchGun = (g: string) => { setPick(g); setPicks([]); setDone(false); setMsg(null) }
+  const status: IdrisLineId | null = !gun || free === 0 || recut ? null : needsBlank && countOf(inv, SIGIL_ITEM) < 1 ? 'idris.noblank' : held.length === 0 ? 'idris.norunes' : needsBlank ? 'idris.offer' : null
+  const check = gun && picks.length ? idrisCanCut(loadout, inv, ledger.marks, gun, picks, recut) : null
+  const switchGun = (g: string) => { setPick(g); setPicks([]); setDone(false); setMsg(null); setRecut(false) }
+  const toggleRecut = () => { setRecut(r => !r); setPicks([]); setDone(false); setMsg(null) }
   const toggle = (id: string) => { setDone(false); setMsg(null); setPicks(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]) }
 
   const commit = () => {
     if (!gun) return
-    const r = idrisCut(getLoadout(), getInv(), ledger.marks, gun, picks)
+    const r = idrisCut(getLoadout(), getInv(), ledger.marks, gun, picks, recut)
     setConfirm(false)
     if (!r.ok) { setMsg(whyText(r.why)); return }
-    setLoadout(r.loadout); setInv(r.inv); setLedger({ ...ledger, marks: r.marks }); setMsg(null); setDone(true)
-    hudSay(`${picks.map(runeName).join(' + ')} cut into the ${gunName(gun)}'s sigil · −${(SIGIL_CUT_FEE * picks.length).toLocaleString()} Marks`, 'item')
+    setLoadout(r.loadout); setInv(r.inv); setLedger({ ...ledger, marks: r.marks }); setMsg(null); setDone(true); setRecut(false)
+    hudSay(`${picks.map(runeName).join(' + ')} cut into ${recut ? 'a new sigil on the' : 'the'} ${gunName(gun)}${recut ? '' : "'s sigil"} · −${(SIGIL_CUT_FEE * picks.length).toLocaleString()} Marks`, 'item')
     setPicks([])
   }
 
@@ -81,7 +86,7 @@ export function IdrisPanel({ ledger, setLedger, onClose, onBack }: { ledger: Led
           <div className="absolute inset-0 z-20 grid place-items-center px-4" style={{ background: 'rgba(40,24,12,.30)' }} data-idris-confirm={picks.join(',')}>
             <div className="rounded-[14px] px-4 py-4 max-w-[420px] w-full" style={{ background: H.paperHi, boxShadow: '0 10px 24px rgba(0,0,0,.4)' }}>
               <Say id="idris.confirm" />
-              <p className="text-[12.5px] mt-2" style={{ color: H.inkSoft }}>{picks.map((r, i) => `${i + 1}. ${runeName(r)}`).join('  ')} · into the {gunName(gun)} · {(SIGIL_CUT_FEE * picks.length).toLocaleString()} Marks{needsBlank ? ' · uses one Unattuned sigil' : ''}</p>
+              <p className="text-[12.5px] mt-2" style={{ color: H.inkSoft }}>{picks.map((r, i) => `${i + 1}. ${runeName(r)}`).join('  ')} · into the {gunName(gun)} · {(SIGIL_CUT_FEE * picks.length).toLocaleString()} Marks{needsBlank ? ' · uses one Unattuned sigil' : ''}{recut ? ` · replaces the old sigil (${own!.runes.map(runeName).join(', ')} are lost)` : ''}</p>
               <div className="flex justify-end gap-2 mt-3">
                 <HearthButton small onClick={() => setConfirm(false)}>{IDRIS_CHOICES.wait}</HearthButton>
                 <span data-idris-do style={{ display: 'contents' }}><HearthButton small primary onClick={commit}>{IDRIS_CHOICES.cut}</HearthButton></span>
@@ -115,11 +120,17 @@ export function IdrisPanel({ ledger, setLedger, onClose, onBack }: { ledger: Led
                 )
               })}
               {needsBlank && <span className="text-[12px]" style={{ color: H.inkSoft }}>· {itemDef(SIGIL_ITEM).name}: {countOf(inv, SIGIL_ITEM)} in the bag</span>}
+              {own && own.runes.length > 0 && (
+                <button type="button" data-idris-recut={recut ? 'on' : 'off'} onClick={toggleRecut} className="ml-auto rounded-full px-2.5 py-0.5 text-[12px] font-semibold"
+                  style={{ ...hearthDisplay, background: recut ? H.ember : 'rgba(255,250,235,.5)', color: recut ? '#fff' : H.ink, boxShadow: `inset 0 0 0 1px ${H.rule}` }}
+                  title="A new Unattuned sigil replaces this one. Its runes are lost.">{recut ? 'Keep this sigil' : 'New sigil'}</button>
+              )}
             </div>
+            {recut && <p className="text-[12px] -mt-1 mb-2" style={{ color: H.rust }} data-idris-recut-note>A new Unattuned sigil replaces this one. Its runes are lost; the letters do not come back.</p>}
             {free > 0 && (
               <div className="grid gap-1.5 overflow-y-auto hearth-scroll" style={{ maxHeight: 'min(40vh, 360px)' }}>
                 {held.map(id => {
-                  const def = runeById(id), at = picks.indexOf(id), v = at >= 0 ? null : canPickNext(loadout, inv, gun, picks, id)
+                  const def = runeById(id), at = picks.indexOf(id), v = at >= 0 ? null : canPickNext(loadout, inv, gun, picks, id, recut)
                   const can = at >= 0 || (!!v?.ok && picks.length < free)
                   return (
                     <button key={id} type="button" disabled={!can} onClick={() => toggle(id)} data-idris-letter={id} data-picked={at >= 0 ? at + 1 : undefined}

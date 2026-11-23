@@ -93,5 +93,24 @@ for (const id of ['idris.greet.first.1', 'idris.greet.first.2', 'idris.greet.fir
   ok(!/—/.test(idrisLine(id)), `${id}: no em dash`)
 }
 
+// M93 s4 RE-CUT: a new blank replaces the sigil; old runes gone, letters not returned
+{
+  const one = idrisCut(L0, bag(1), 1000, 'repeater', ['manalic']); if (!one.ok) throw new Error('setup')
+  const L1 = one.loadout
+  const nb = idrisCanCut(L1, bag(0, { star: 1 }), 1000, 'repeater', ['star'], true)
+  ok(!nb.ok && nb.why === 'no-blank', 're-cut needs a new blank')
+  ok(idrisCanCut(L1, bag(0, { star: 1 }), 1000, 'repeater', ['star']).ok, 'adding to a sigil with room needs no blank')
+  const r = idrisCut(L1, bag(1, { star: 1, stone: 1 }), 1000, 'repeater', ['stone', 'star'], true)
+  ok(r.ok && JSON.stringify(r.sigil.runes) === '["stone","star"]', 're-cut: the picks start an empty sigil (stone fits though manalic was Solid)')
+  ok(r.ok && JSON.stringify(r.loadout.fit?.repeater?.sigil) === '["stone","star"]', 're-cut: stored replaces the old runes')
+  ok(r.ok && countOf(r.inv, SIGIL_ITEM) === 0 && countOf(r.inv, letterItem('manalic')) === 0, 're-cut: the blank is spent, the old letter does not come back')
+  ok(r.ok && r.marks === 1000 - 2 * SIGIL_CUT_FEE, 're-cut: fee per rune')
+  const full = idrisCut(L0, bag(1, { manalic: 1, star: 1, life: 1, barrier: 1 }), 9999, 'repeater', ['manalic', 'star', 'life']); if (!full.ok) throw new Error('setup2')
+  const capped = idrisCanCut(full.loadout, bag(1, { barrier: 1 }), 9999, 'repeater', ['barrier'])
+  ok(!capped.ok && capped.why === 'cap', 'a full sigil refuses more')
+  ok(idrisCanCut(full.loadout, bag(1, { barrier: 1 }), 9999, 'repeater', ['barrier'], true).ok, 'a full sigil can be re-cut')
+  ok(canPickNext(full.loadout, bag(0, { barrier: 1 }), 'repeater', [], 'barrier', true).ok && !canPickNext(full.loadout, bag(0, { barrier: 1 }), 'repeater', [], 'barrier').ok, 'picker follows re-cut')
+}
+
 console.log(`idris: ${pass} passed, ${fail} failed`)
 if (fail) process.exit(1)

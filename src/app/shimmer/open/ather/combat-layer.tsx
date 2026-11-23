@@ -9,6 +9,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { RANGE_GUNS } from '../shared/gunplay'
+import { armedGun, sigilKey } from '../shared/gun-sigil'   // M93 s4: the fitted sigil tunes the drawn gun
+import { useLoadout } from '../shared/loadout'
+import { useBirth } from '../birth-gate'
 import { weaponDef } from '../../engine/weapons'
 import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, SHAMBLER, FLOATER, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
 import { live as liveSolids } from './dynamic-solids'
@@ -509,12 +512,17 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   // the drawn gun: any range gun (gunplay.ts, which holds the Charred Rifle, Backbone, Roar too) or an engine weapon. A swap
   // takes the new gun's stats and a full clip; a charge in progress is dropped.
   const charging = useRef(-1)
+  // M93 s4: the gun's fitted sigil (Idris) tunes it. A new cut on the gun in hand re-tunes it in place (ammo kept); a swap
+  // takes the new gun with a full clip as before.
+  const loadout = useLoadout(), birth = useBirth(), tuneKey = gunId ? sigilKey(loadout, gunId, birth) : ''
   useEffect(() => {
     if (!gunId) return
-    const g = RANGE_GUNS.find(x => x.id === gunId) ?? weaponDef(gunId)
-    if (!g || c.current.gun.id === g.id) return
+    const row = RANGE_GUNS.find(x => x.id === gunId) ?? weaponDef(gunId)
+    if (!row) return
+    const g = armedGun(row, loadout, birth)
+    if (c.current.gun.id === g.id) { c.current.gun = g; return }
     c.current.gun = g; c.current.keeper.ammo = g.clip; c.current.keeper.reloading = 0; c.current.keeper.bloom = 0; charging.current = -1
-  }, [gunId])
+  }, [gunId, tuneKey])   // eslint-disable-line react-hooks/exhaustive-deps
   const ownerRef = useRef(ownerOf); ownerRef.current = ownerOf
   const spent = useRef(new Set<string>())   // cleared this visit: never re-woken before the page drops it
   // once the page's list has caught up (the cleared node dropped out, or the spread brought one back), forget the bridge

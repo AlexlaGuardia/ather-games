@@ -285,7 +285,7 @@ export function fire(c: Combat, eye: { x: number; y: number; z: number }, aim: {
 export function reload(c: Combat) {
   const k = c.keeper
   if (k.reloading > 0 || k.ammo >= c.gun.clip) return
-  if (!payReload(c.mana)) { c.events.push({ kind: 'reload-dry' }); return }   // M78: a reload spends mana; short = no reload
+  if (!payReload(c.mana, (c.gun as { reloadPay?: number }).reloadPay)) { c.events.push({ kind: 'reload-dry' }); return }   // M78: a reload spends mana; short = no reload
   k.reloading = c.gun.reloadTime
 }
 

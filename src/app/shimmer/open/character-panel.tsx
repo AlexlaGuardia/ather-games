@@ -14,6 +14,8 @@ import { H, hearthDisplay, Well, HearthButton } from '../ui/hearth'
 import { RANGE_GUNS } from './shared/gunplay'
 import { useLoadout, setLoadout, equip, gunsFor, vesselsFor, type OwnedVessel } from './shared/loadout'
 import { fittedSight, fitSight, ownedSights, sightName } from './shared/gun-fit'   // M81 s2
+import { armedGun, sigilOf, reloadPayOf } from './shared/gun-sigil'   // M93 s4: the Armory shows the sigil-tuned gun
+import { statLevels, statMult, type TunedStat } from './shared/sigil'
 import { KIT_SIGHTS } from './shared/gun-kit'
 import { opticOf, OPTICS } from './shared/optics'
 import { MARKS, TINTS, type MarkId, type TintId, type Stroke } from './shared/sight-marks'
@@ -209,14 +211,23 @@ function Section({ id, title, last, children }: { id: string; title: string; las
   )
 }
 
-/** M66 Armory: a small stats window for a worn gun, every number straight off its RANGE_GUNS row (range = speed x life). */
+/** M93 s4: what each tuned stat is called on the card, and whether the walker / guns act on it yet */
+const TUNED_LABEL: Record<TunedStat, string> = { velocity: 'Velocity', range: 'Range', recoil: 'Recoil', spread: 'Spread', handling: 'Handling',
+  reloadSpeed: 'Reload time', fireRate: 'Shot gap', manaCost: 'Reload mana', mobility: 'Mobility', heat: 'Heat' }
+const NOT_IN_PLAY: ReadonlySet<TunedStat> = new Set<TunedStat>(['mobility', 'heat'])
+
+/** M66 Armory: a small stats window for a worn gun, every number off its RANGE_GUNS row (range = speed x life), tuned by its
+ *  fitted sigil (M93 s4, gun-sigil.ts armedGun: the same tuning the gun fires with). */
 function GunStats({ id }: { id: string }) {
-  const l = useLoadout(), fs = fittedSight(l, id)   // M81 s2: the Armory shows the fitted gun
-  const g = RANGE_GUNS.find(x => x.id === id); if (!g) return null
+  const l = useLoadout(), fs = fittedSight(l, id), birth = useBirth()   // M81 s2: the Armory shows the fitted gun
+  const row = RANGE_GUNS.find(x => x.id === id); if (!row) return null
+  const g = armedGun(row, l, birth), sig = sigilOf(l, id), lv = g === row ? {} : statLevels(sig)
+  const mana = reloadPayOf(g)
+  const tuned = (Object.entries(lv) as [TunedStat, number][]).filter(([, v]) => v !== 0)
   const fire = g.burst > 1 ? `${g.burst}-round burst` : g.pellets > 1 ? `${g.pellets} pellets` : g.auto ? 'full auto' : 'semi-auto'
   const cells: [string, string, string][] = [
     ['damage', 'Damage', g.pellets > 1 ? `${g.damage} x${g.pellets}` : String(g.damage)], ['crit', 'Crit', String(g.crit)],
-    ['clip', 'Clip', String(g.clip)], ['reload', 'Reload', `${g.reloadTime} s`],
+    ['clip', 'Clip', String(g.clip)], ["reload", "Reload", `${+g.reloadTime.toFixed(2)} s`],
     ['range', 'Range', `${Math.round(g.projSpeed * g.projLife)} m`], ['fire', 'Fire', fire],
   ]
   return (
@@ -230,6 +241,21 @@ function GunStats({ id }: { id: string }) {
           <div className="text-[14px] font-semibold tabular-nums" style={{ color: H.ink }}>{v}</div>
         </div>
       ))}
+      {sig.runes.length > 0 && (
+        <div className="col-span-3 pt-1 mt-0.5" data-stat-sigil={sig.runes.join(',')} data-reload-mana={mana} style={{ borderTop: `1px solid ${H.rule}` }}>
+          <div className="text-[10.5px] font-bold uppercase tracking-[.12em]" style={{ color: H.inkFaint }}>
+            Sigil · {sig.runes.map(r => RUNES.find(x => x.id === r)?.name ?? r).join(' · ')}
+            <span className="ml-2 normal-case tracking-normal font-semibold tabular-nums" style={{ color: H.ink }}>{+mana.toFixed(1)} mana a reload{birth && sig.runes[0] === birth ? ' (your rune first)' : ''}</span>
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-[12px] tabular-nums">
+            {tuned.map(([k, v]) => {
+              const m = statMult(k, v), pct = Math.round((m - 1) * 100)
+              return <span key={k} data-tuned={k} data-mult={m.toFixed(3)} style={{ color: v > 0 ? H.moss : H.rust, opacity: NOT_IN_PLAY.has(k) ? 0.55 : 1 }}
+                title={NOT_IN_PLAY.has(k) ? 'not in play yet' : undefined}>{TUNED_LABEL[k]} {pct > 0 ? '+' : ''}{pct}%{NOT_IN_PLAY.has(k) ? ' (soon)' : ''}</span>
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
