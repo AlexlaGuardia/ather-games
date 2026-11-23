@@ -138,9 +138,11 @@ const opts = (p: Page) => p.evaluate(() => [...document.querySelectorAll('[data-
 const trotOf = (p: Page, sp: string) => p.evaluate((s) => { const t = (window as any).__spiritModel?.trots?.[s]; return t ? { x: t.x, z: t.z, y: t.y, h: t.h, mode: t.mode } : null }, sp) as Promise<{ x: number; z: number; y: number; h: number; mode: string } | null>
 async function talkTo(p: Page, sp: string): Promise<{ t: string; off: boolean }[]> {
   for (let k = 0; k < 8; k++) {
-    const t = await trotOf(p, sp); if (!t) { await sleep(500); continue }
-    const away = sp === 'axolotl' ? 1.1 : 1.5
-    await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), t.x, t.z + away)
+    let t = await trotOf(p, sp); if (!t) { await sleep(500); continue }
+    // a FOLLOWING spirit re-slots whenever the keeper moves, so never teleport beside her: the keeper stands, she settles
+    // by them (a player's case), then aim where she stands now
+    if (t.mode === 'follow') { await sleep(3000); t = (await trotOf(p, sp)) ?? t }
+    else await p.evaluate((x, z, away) => (window as any).__ather.tp(x, z + away, 0), t.x, t.z, sp === 'axolotl' ? 1.1 : 1.5)
     await aimAt(p, t.x, t.z, t.y - (await p.evaluate((x, z) => (window as any).__ather.ground(x, z), t.x, t.z) as number) + t.h * 0.5, 4)
     await p.keyboard.press('e'); await sleep(900)
     const o = await opts(p); if (o.length) return o

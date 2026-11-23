@@ -70,8 +70,8 @@ export type TrotDials = typeof TROT
 // ── M109 s1 FOLLOW (canon RULED 8b45c92: a keeper's spirits may walk with them anywhere in the Ather): she trails the keeper
 // at a short distance with her own trot. Not a species manner, so not a dial: every spirit keeps the same slot. ─────────
 export const FOLLOW = {
-  slot: 1.9,        // m from the keeper she settles at (behind/beside: wherever she already is round them)
-  far: 2.4,         // past this she sets off again
+  slot: 1.7,        // m from the keeper she settles at (behind/beside: wherever she already is round them)
+  far: 2.1,         // past this she sets off again
   keep: 1.2,        // never nearer than this (she never blocks the keeper's way): closer and she steps back out
   vMax: 9,          // m/s cap on the catch-up gait (the keeper sprints 6.5)
   catchK: 2.4,      // extra m/s per metre she is behind the slot
