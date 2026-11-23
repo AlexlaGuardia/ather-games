@@ -1,4 +1,11 @@
 {
+ "small-broad": {
+  "headW": 0.8,
+  "headH": 0.82,
+  "torsoL": 0.98,
+  "neck": 0.035,
+  "legs": 1.25
+ },
  "medium-broad": {
   "headW": 0.79,
   "headH": 0.78,
