@@ -122,6 +122,8 @@ try {
   ok(!!rS && rS.quoted && !rS.stage1, `S9. record = quoted, not stage 1 (${JSON.stringify(rS)})`)
   await leave()
   ok((await entries()).find(e => e.id === 'repair-cell-entry')?.title === ENTRY_EARN_MARKS, 'S10. the entry turned to "Earn the Marks..."')
+  // the talk camera turned to Hollis's face (beside the door), so the crosshair left the door: aim at it again, as a player would
+  ok(await toDoor(), 'S11. at the door again')
   ok(await talkE(), 'S11. E again')
   ok((await bubble())?.line === HOLLIS_BARK.short, `S12. the short bark ("${(await bubble())?.line}")`)
   await p.keyboard.press('Escape'); await sleep(600)
