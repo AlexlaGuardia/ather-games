@@ -16,6 +16,7 @@ import { ANSWERS } from '../src/app/shimmer/open/ather/greg-talk'   // the label
 import { line } from '../src/app/shimmer/open/ather/glade-tutorial-lines'
 import { fennelBye, FENNEL_MORE } from '../src/app/shimmer/open/ather/glade-fennel-talk'
 import { JAR_BAIT } from '../src/app/shimmer/open/ather/glade-tutorial'
+import { STARTING_BAIT } from '../src/app/shimmer/open/shared/inventory'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), phone = process.argv.includes('--phone')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -81,8 +82,8 @@ try {
     ok(await poll(() => p.evaluate(() => /E · Fennel/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]')), 15000), `${tag} the prompt 'E · Fennel'`)
     await pressE(p)
   }
-  await poll(() => p.evaluate(() => localStorage.getItem('open.inv.v1') !== null), 30000)   // a fresh bag (10 starting bait) is saved a beat after load
-  const b0 = await bait()
+  // a fresh bag lives in memory (STARTING_BAIT) and is first saved when something changes it: no saved bag = the starting bait
+  const b0 = (await p.evaluate(() => localStorage.getItem('open.inv.v1') !== null)) ? await bait() : STARTING_BAIT
   await openFennel('2.')
   const ids = ['fennel.b1.greet.1', 'fennel.b1.greet.2', 'fennel.b1.gift.1', 'fennel.b1.gift.2', 'fennel.b1.gift.3', 'fennel.b1.gift.4', 'fennel.b1.gift.5']
   const seen: string[] = []
