@@ -5,10 +5,12 @@
 //   1. keeper at the carpentry bench: work-carp-saw asked on a ~3 s beat (>= 2 in ~8 s, <= 4) · masonry (50 m off) asked 0
 //   2. a plank run lands within ~20 s: work-done-wood asked
 //   3. keeper walks (tp) to the masonry bench: work-mason-chisel starts being asked
-//   4. nothing played: every station id stays out of __sfx.played() (proposed = silent until Alex's yay) · 0 page errors
+//   4. __sfx.played() follows the vote: a yay id plays every time it is asked, a proposed / nay one never · 0 page errors
 //   npx tsx scripts/m99-station-sound-check.mts [--url https://ather.games]
 import puppeteer from 'puppeteer-core'
 import { benchOf, type Room } from '../src/app/shimmer/open/ather/rooms'
+import registry from '../src/app/shimmer/open/shared/sounds.json'
+const statusOf = (id: string) => (registry as { id: string; status: string }[]).find(r => r.id === id)?.status
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games')
 const CARP: Room = { id: 'carp-snd', kind: 'carpentry', x: -100, z: 100, q: 0, placedAt: 1, doneAt: 2, store: [{ id: 'goldwood_log', n: 60 }] }
@@ -42,7 +44,7 @@ try {
   const a1 = await asked(), saw = (a1['work-carp-saw'] ?? 0) - (a0['work-carp-saw'] ?? 0)
   ok(saw >= 2 && saw <= 4, `1. at the carpentry bench: the saw phrase asked on a ~3 s beat (${saw} in 8.2 s)`)
   ok(!a1['work-mason-chisel'], `   the masonry bench 50 m off: not asked (${a1['work-mason-chisel'] ?? 0})`)
-  ok(!a1['work-carp-plane'], '   only the FIRST candidate is asked while none is voted yay')
+  ok(!a1['work-carp-plane'], '   only the FIRST yay candidate (else the first) is asked per bench')
   let done = a1['work-done-wood'] ?? 0
   for (let t = 0; t < 20 && !done; t++) { await sleep(1000); done = (await asked())['work-done-wood'] ?? 0 }
   ok(done >= 1, `2. a plank run landed: the wood sting asked (${done})`)
@@ -56,8 +58,10 @@ try {
   const m1 = (await asked())['work-mason-chisel'] ?? 0
   ok(m1 - m0 >= 1, `3. walked to the masonry bench: the chisel phrase starts (${m1 - m0} in 6.5 s)`)
 
-  const pl = await played()
-  ok(!Object.keys(pl).some(k => k.startsWith('work-')), `4. nothing PLAYED: proposed = silent (${Object.keys(pl).filter(k => k.startsWith('work-')).join() || 'none'})`)
+  // 4. PLAYED follows the vote: a yay station id that was asked also played; a proposed / nay one never did
+  const pl = await played(), ak = await asked()
+  const wrong = Object.keys(ak).filter(k => k.startsWith('work-')).filter(k => (statusOf(k) === 'yay') !== ((pl[k] ?? 0) === ak[k]))
+  ok(wrong.length === 0, `4. played follows the vote (yay: ${Object.keys(pl).filter(k => k.startsWith('work-')).join() || 'none'}; mismatched: ${wrong.join() || 'none'})`)
   ok(errs.length === 0, `   0 page errors${errs.length ? ': ' + errs.join(' | ') : ''}`)
 } finally { await br.close() }
 console.log(fails ? `FAIL (${fails})` : 'PASS')
