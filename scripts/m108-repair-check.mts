@@ -226,7 +226,8 @@ try {
   const tx = Math.floor((st.x + 500) / 1000), tz = Math.floor((st.z + 500) / 1000)
   const tile = (JSON.parse(readFileSync('public/open/wilds/tiles.json', 'utf8')) as { tiles: { name: string; tx: number; ty: number }[] }).tiles.find(t => t.tx === tx && t.ty === tz)!
   console.log(`  digger: ${dig.name} at ${st.name} (${st.id})`)
-  const village = () => p.evaluate(() => localStorage.getItem('open.village.v1'))
+  // the garden village's MOGLINS (ids), read from the page's own store key; the record's lastTick moves on every load, so it is not compared
+  const village = () => p.evaluate(() => { const k = Object.keys(localStorage).find(x => x.endsWith('open.village.v1')); return JSON.stringify((JSON.parse(k ? localStorage.getItem(k) ?? 'null' : 'null')?.moglins ?? []).map((m: { id: string }) => m.id)) })
   async function toDigger() {
     await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
     await p.waitForFunction(() => !!(window as any).__ather?.travel, { timeout: 240000 }); await sleep(2000)
@@ -244,9 +245,9 @@ try {
     for (let k = 0; k < folk.length && (await bubble())?.name !== dig.name; k++) { if (!(await pick(ASK.others))) break; await sleep(800) }
     return (await bubble())?.name === dig.name
   }
-  const v0 = await village()
   ok(await toDigger(), `T1. in ${st.name}, talking to the Digger ${dig.name}`)
   ok((await opts()).some(o => o.t === DIGGER_LABEL.trade), `T2. the trade is offered: "${DIGGER_LABEL.trade}" (${JSON.stringify((await opts()).map(o => o.t))})`)
+  const v0 = await village()
   const bag0 = await p.evaluate(k => localStorage.getItem(k), INV_KEY)
   ok(await pick(DIGGER_LABEL.trade), 'T3. no planks: picked the trade')
   await sleep(1200)
@@ -257,7 +258,7 @@ try {
   for (let i = 0; i < FIRST_CHARGE_SHARDS; i++) { await pick(DIGGER_LABEL.trade); await sleep(1200) }
   ok(await poll(async () => (await countIn(RAW_SHARD)) === FIRST_CHARGE_SHARDS && (await countIn(DIGGER_TRADE.want.id)) === 0, 8000), `T6. three trades: ${await countIn(RAW_SHARD)} Raw Mana Shards in the bag, ${await countIn(DIGGER_TRADE.want.id)} planks left`)
   ok(await hudHas(DIGGER_LABEL.done), `T7. the HUD says "${DIGGER_LABEL.done}"`)
-  ok((await village()) === v0, 'T8. no Moglin leaves: the garden village unchanged')
+  ok((await village()) === v0, `T8. no Moglin leaves: the garden village's Moglins unchanged (${v0} -> ${await village()}); the Digger still home: ${(await bubble())?.name === dig.name || (await opts()).length > 0}`)
   await p.screenshot({ path: `${out}/digger-traded-390.png` })
   await p.keyboard.press('Escape'); await sleep(600)
 
