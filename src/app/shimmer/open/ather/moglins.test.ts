@@ -71,7 +71,6 @@ const back = adoptVillage({ v: 1, lastTick: 9e15, moglins: [...v.moglins, { id: 
 ok(back.moglins.length === 2 && back.lastTick === 1000, 'save: kept a bad Moglin, or trusted a future clock')
 ok(adoptVillage(null, 5).moglins.length === 0, 'save: null was not a fresh village')
 
-if (fails.length) { console.error(`moglins: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 // P1 11-23: the cap by plot stage = raised rooms (0-1 -> 2, 2+ -> 4, 4+ -> 6), both edges of each step
 {
   const rm = (n: number, done = 0) => ({ rooms: Array.from({ length: n }, (_, k) => ({ id: 'r' + k, doneAt: done })) as unknown as Works['rooms'] })
@@ -81,4 +80,5 @@ if (fails.length) { console.error(`moglins: ${pass} pass, ${fails.length} FAIL`)
   ok(villageCap(rm(4, 10), 5) === 2, 'stage: rooms still under scaffolding do not count')
   ok(plotStage(rm(2), 1) === 1 && STAGE_ROOMS.join() === '0,2,4', 'stage: the steps live in STAGE_ROOMS')
 }
+if (fails.length) { console.error(`moglins: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`moglins: ${pass}/0`)
