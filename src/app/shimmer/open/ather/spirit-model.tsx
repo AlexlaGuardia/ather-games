@@ -12,9 +12,10 @@
 // vertex shader (weight = how far along the tail axis a vertex sits). No rig: the glb has no skin or vertex groups.
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
-import { useFrame } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { makeTrot, type SpiritNav, type Trot } from './spirit-trot'
+import { isFollowing, keeperAt, spiritHeld, spiritLive, subscribeFollow } from './spirit-follow'   // M109 s1
 
 import { SPIRIT_MODELS, type SpiritLook } from './spirit-models'
 import type { Species } from '../../spirits/spirit'
@@ -42,7 +43,9 @@ const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Pr
 let grad: THREE.DataTexture | null = null
 const gradTex = () => { if (grad) return grad; grad = new THREE.DataTexture(new Uint8Array([110, 110, 110, 255, 185, 185, 185, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat); grad.minFilter = grad.magFilter = THREE.NearestFilter; grad.needsUpdate = true; return grad }
 
-function SpiritModel({ sp, look, nav }: { sp: Species; look: SpiritLook; nav?: SpiritNav }) {
+function SpiritModel({ sp, look, nav, id, avatar }: { sp: Species; look: SpiritLook; nav?: SpiritNav
+  /** M109: the planter's id (her follow state + the E pick are keyed on it) */ id?: string
+  /** M109: the spirit panel's turntable copy: not counted by the probe, not pickable */ avatar?: boolean }) {
   const { scene } = useGLTF(look.url)
   const g = useRef<THREE.Group>(null)
   const time = useMemo(() => ({ value: 0 }), []), sw = useMemo(() => ({ value: 0 }), []), lift = useMemo(() => ({ value: 0 }), []), tiltU = useMemo(() => ({ value: 0 }), [])
@@ -91,15 +94,22 @@ function SpiritModel({ sp, look, nav }: { sp: Species; look: SpiritLook; nav?: S
     return { body: lin(body.geometry), eyes: eyes.geometry,   // eyes stay raw: their colours read brighter, as in the picked renders
       glowGeo: glowM ? lin(glowM.geometry) : null, skin, glow, halo, eye, cx, cz }
   }, [scene, time, look])
-  useEffect(() => { const p = probe(); p.mounted++; p.species[sp] = (p.species[sp] ?? 0) + 1
-    return () => { p.mounted--; p.species[sp]--; if (!p.species[sp]) delete p.trots[sp]; if (!p.species.fox) p.trot = undefined } }, [sp])
+  // M109 s1 FOLLOW: she walks with the keeper while her planter id is in the follow list (kept across reloads)
+  useEffect(() => {
+    if (!trot || !id) return
+    const sync = () => trot.follow(isFollowing(id) ? () => keeperAt : null)
+    sync(); const off = subscribeFollow(sync)
+    return () => { off(); spiritLive.delete(id) }
+  }, [trot, id])
+  useEffect(() => { if (avatar) return; const p = probe(); p.mounted++; p.species[sp] = (p.species[sp] ?? 0) + 1
+    return () => { p.mounted--; p.species[sp]--; if (!p.species[sp]) delete p.trots[sp]; if (!p.species.fox) p.trot = undefined } }, [sp, avatar])
   useFrame(({ clock }, dt) => {
     const t = clock.elapsedTime; time.value = t
     if (parts?.glow && look.glow) { const G = look.glow; parts.glow.emissiveIntensity = G.lo + (G.hi - G.lo) * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * G.hz)) }
     if (!g.current) return
     if (trot && g.current.parent) {
       // the pose is in WORLD xz + yaw; the planter piece may be turned, so read through the parent's transform
-      const ps = trot.step(dt), par = g.current.parent, { v, q, e } = tmp
+      const ps = id && spiritHeld.id === id ? trot.pose() : trot.step(dt), par = g.current.parent, { v, q, e } = tmp   // M109: held while talked to
       par.updateWorldMatrix(true, false); par.getWorldPosition(v); const baseY = v.y
       v.set(ps.x, baseY + ps.y, ps.z); par.worldToLocal(v); g.current.position.copy(v)
       par.getWorldQuaternion(q); e.setFromQuaternion(q)
@@ -113,6 +123,7 @@ function SpiritModel({ sp, look, nav }: { sp: Species; look: SpiritLook; nav?: S
       if (t - tmp.hAt > 0.5) { tmp.hAt = t; const s = tmp.bb.setFromObject(g.current); tmp.hWorld = s.max.y - s.min.y }
       const pr = probe(), tp: TrotProbe = { x: ps.x, y: baseY + ps.y, z: ps.z, mode: ps.mode, home: nav!.home, rMin: nav!.rMin, rMax: nav!.rMax, beats: trot.beats(), homes: trot.homes(), tilt: ps.tilt, h: look.h, hWorld: tmp.hWorld }
       pr.trots[sp] = tp; if (sp === 'fox') pr.trot = tp
+      if (id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + ps.y, z: ps.z, h: look.h, at: Date.now() })   // M109: the E pick reads it
       return
     }
     g.current.position.y = Math.sin(t * 1.4) * 0.02 * look.h / 0.55
@@ -139,6 +150,28 @@ function SpiritModel({ sp, look, nav }: { sp: Species; look: SpiritLook; nav?: S
 /** The species' model stood on a bloomed planter (null look = the caller shows the orb); `fallback` (the gold orb) shows
  *  while the glb loads. With `nav` (M107) it trots its own manner round home: the group sits at the ground and the perch
  *  height comes from `nav.perch`. */
-export function SpiritOnPlanter({ sp, look, y, fallback, nav }: { sp: Species; look: SpiritLook; y: number; fallback: ReactNode; nav?: SpiritNav }) {
-  return <Suspense fallback={fallback}><group position-y={nav ? 0 : y}><SpiritModel sp={sp} look={look} nav={nav} /></group></Suspense>
+export function SpiritOnPlanter({ sp, look, y, fallback, nav, id }: { sp: Species; look: SpiritLook; y: number; fallback: ReactNode; nav?: SpiritNav; id?: string }) {
+  return <Suspense fallback={fallback}><group position-y={nav ? 0 : y}><SpiritModel sp={sp} look={look} nav={nav} id={id} /></group></Suspense>
+}
+
+/** M109 s1: the spirit panel's AVATAR: her live model (the same SpiritModel, idle: bob + breath + look round) on a slow
+ *  turntable in its own small canvas. Framed by the species' height, so a heel-high Manalotl fills it like the Vulnyx. */
+function Turntable({ children }: { children: ReactNode }) {
+  const g = useRef<THREE.Group>(null)
+  useFrame((_, dt) => { if (g.current) g.current.rotation.y += dt * 0.5 })
+  return <group ref={g}>{children}</group>
+}
+export function SpiritAvatar({ sp, look, size }: { sp: Species; look: SpiritLook; size: number }) {
+  const h = look.h
+  return (
+    <div data-spirit-avatar={sp} style={{ width: size, height: size, borderRadius: 12, overflow: 'hidden', flex: 'none',
+      background: 'radial-gradient(circle at 50% 42%, rgba(255,236,190,.55), rgba(58,39,22,.18) 72%)' }}>
+      <Canvas dpr={[1, 1.5]} frameloop="always" gl={{ antialias: true, alpha: true }} camera={{ position: [0, h * 0.7, h * 2.4], fov: 32 }}
+        onCreated={({ camera }) => camera.lookAt(0, h * 0.45, 0)}>
+        <ambientLight intensity={0.9} />
+        <directionalLight position={[1.5, 3, 2.5]} intensity={1.3} />
+        <Suspense fallback={null}><Turntable><SpiritModel sp={sp} look={look} avatar /></Turntable></Suspense>
+      </Canvas>
+    </div>
+  )
 }

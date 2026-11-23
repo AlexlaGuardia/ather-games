@@ -8,7 +8,9 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Html } from '@react-three/drei'
 import { markMet } from './met'   // BETA M33: a first talk = met (Morel may carry their calls)
 
-export interface TalkOption { label: string; pick: () => void }
+export interface TalkOption { label: string; pick: () => void
+  /** M109: shown greyed and not pickable (a coming answer), with an optional small tag ('soon') */
+  disabled?: boolean; tag?: string }
 export interface TalkNode { line: string; options: TalkOption[]; /** optional HUD panel drawn above the answers (M46: a Moglin's card) */ panel?: ReactNode }
 
 /** In the scene (inside the Canvas): the NPC's name plate with the bubble above it. `at` = the point just over their head. */
@@ -35,14 +37,14 @@ export function TalkBubble({ at, name, line, scene }: { at: [number, number, num
 /** On the HUD (outside the Canvas): the keeper's answers. Arrows / W S move, E Enter Space pick, a tap picks. */
 export function TalkChoices({ node, phone }: { node: TalkNode; phone: boolean }) {
   const [sel, setSel] = useState(0)
-  useEffect(() => { setSel(0) }, [node])
+  useEffect(() => { setSel(Math.max(0, node.options.findIndex(o => !o.disabled))) }, [node])
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const n = node.options.length; if (!n) return
       if (e.code === 'ArrowDown' || e.code === 'KeyS') { e.preventDefault(); setSel(s => (s + 1) % n) }
       else if (e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); setSel(s => (s - 1 + n) % n) }
       else if ((e.code === 'KeyE' || e.code === 'Enter' || e.code === 'Space') && !e.repeat) {
-        e.preventDefault(); e.stopImmediatePropagation(); setSel(s => { node.options[Math.min(s, n - 1)]?.pick(); return s })
+        e.preventDefault(); e.stopImmediatePropagation(); setSel(s => { const o = node.options[Math.min(s, n - 1)]; if (o && !o.disabled) o.pick(); return s })
       }
     }
     window.addEventListener('keydown', key, true)
@@ -53,12 +55,14 @@ export function TalkChoices({ node, phone }: { node: TalkNode; phone: boolean })
       width: 'min(360px, calc(100vw - 32px))', display: 'grid', gap: 6, zIndex: 30 }}>
       {node.panel}
       {node.options.map((o, i) => (
-        <button key={i} type="button" data-talk-option={i} data-talk-sel={i === sel ? '' : undefined}
-          onPointerEnter={() => setSel(i)} onClick={() => o.pick()}
-          style={{ textAlign: 'left', border: 0, borderRadius: 10, padding: phone ? '11px 14px' : '8px 12px', cursor: 'pointer',
+        <button key={i} type="button" data-talk-option={i} data-talk-sel={i === sel ? '' : undefined} data-talk-disabled={o.disabled ? '' : undefined}
+          aria-disabled={o.disabled || undefined} onPointerEnter={() => setSel(i)} onClick={() => { if (!o.disabled) o.pick() }}
+          style={{ textAlign: 'left', border: 0, borderRadius: 10, padding: phone ? '11px 14px' : '8px 12px', cursor: o.disabled ? 'default' : 'pointer', opacity: o.disabled ? 0.5 : 1,
+            display: 'flex', alignItems: 'center',
             font: '600 13px system-ui', color: i === sel ? '#fff' : 'rgba(243,227,195,.82)',
             background: i === sel ? 'rgba(224,130,63,.92)' : 'rgba(20,22,26,.78)', boxShadow: i === sel ? '0 0 0 1.5px #f3b47c' : 'none' }}>
           <span style={{ display: 'inline-block', width: 16, opacity: i === sel ? 1 : 0 }}>›</span>{o.label}
+          {o.tag && <span data-talk-tag style={{ marginLeft: 'auto', font: '700 10px system-ui', letterSpacing: '0.14em', textTransform: 'uppercase', opacity: 0.8 }}>{o.tag}</span>}
         </button>
       ))}
       {!phone && <div style={{ textAlign: 'center', font: '600 10px system-ui', letterSpacing: '0.18em', color: 'rgba(243,227,195,.6)', textShadow: '0 1px 2px #000' }}>

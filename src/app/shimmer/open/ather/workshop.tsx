@@ -1263,7 +1263,7 @@ function SpiritPlanterBody({ id }: { id?: string }) {
     <Bx p={[0, 0.5, 0]} s={[f.w - 0.12, 0.05, f.d - 0.12]} c="#4a3524" />
     {[-1, 1].flatMap(a => [-1, 1].map(z => <mesh key={`${a}${z}`} position={[a * (f.w / 2 - 0.04), 0.62, z * (f.d / 2 - 0.04)]}><sphereGeometry args={[0.035, 6, 5]} /><meshBasicMaterial color="#eaf2ff" /></mesh>))}
     {pot && !pot.bloomed && <group ref={sprout} position={[0, 0.52, 0]}><mesh position-y={0.12}><cylinderGeometry args={[0.015, 0.02, 0.24, 5]} /><meshLambertMaterial color="#9ad06a" /></mesh><mesh position={[0.05, 0.22, 0]} rotation-z={-0.8}><sphereGeometry args={[0.05, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh><mesh position={[-0.05, 0.18, 0]} rotation-z={0.8}><sphereGeometry args={[0.045, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh></group>}
-    {pot?.bloomed && <>{look && sp ? <SpiritOnPlanter sp={sp} look={look} y={0.53} fallback={orbMesh} nav={nav ?? undefined} /> : orbMesh}<pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} /></>}
+    {pot?.bloomed && <>{look && sp ? <SpiritOnPlanter sp={sp} look={look} y={0.53} fallback={orbMesh} nav={nav ?? undefined} id={id} /> : orbMesh}<pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} /></>}
   </>
 }
 /** One piece, built from boxes in its wood's colour. Blockout look like the rooms. */

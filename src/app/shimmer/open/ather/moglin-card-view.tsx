@@ -3,6 +3,7 @@
 // home, trade, a pentagon radar (Core, Dexterity, Patience, Talent, Luck) with each axis's grade letter, and every skill's
 // 0-10 score listed small under it. The frame is tinted by the best M46 grade shown. Data is moglin-card.ts + moglin-stats.ts
 // (pure, tested); this only draws it. Hidden axes / scores (trust reveal) draw as '?'. Drawn ABOVE the talk answers.
+import type { ReactNode } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { MoglinModel, furOf, MOGLIN_HEIGHT } from '../shared/moglin-model'
 import type { Grade } from './moglins'
@@ -15,32 +16,41 @@ const DIM = 'rgba(243,227,195,.22)'
 /** stat-grade tints, the same ladder as the M46 grades (S gold .. D grey), F a dull rust */
 export const STAT_TINT: Record<StatGrade, string> = { S: '#f2c14e', A: '#b58cf0', B: '#6fa8e8', C: '#7fc47a', D: '#9aa0a6', F: '#8a6a5a' }
 
-/** The pentagon: five axes clockwise from the top, three guide rings, the filled shape at each axis's reach, and the
- *  axis name + grade letter outside each point. A hidden axis sits at the centre and reads '?'. */
-function Radar({ card, phone }: { card: CardView; phone: boolean }) {
+/** M109 s1: the radar, generic (any number of axes, any ink), so the SPIRIT PANEL draws the same chart as the Moglin card.
+ *  Axes clockwise from the top, three guide rings, the filled shape at each axis's reach, the axis name + its mark (a grade
+ *  letter, a number) outside each point. reach null = hidden (at the centre). `attr` names the data hooks
+ *  (data-<attr>-radar / -axis / -axis-grade). */
+export interface RadarAxis { key: string; label: string; reach: number | null; mark: string; tint: string; extra?: ReactNode }
+export const RADAR_INK_DARK = { label: 'rgba(243,227,195,.75)', ring: 'rgba(243,227,195,.16)', spoke: 'rgba(243,227,195,.14)' }
+export function StatRadar({ axes, phone, attr = 'radar', ink = RADAR_INK_DARK }: { axes: RadarAxis[]; phone: boolean; attr?: string
+  ink?: { label: string; ring: string; spoke: string } }) {
   const R = 46, size = phone ? 182 : 168   // side by side with the scores (11-22 shot: stacked, the card grew ~130 px and the talk bubble covered it)
-  const at = (i: number, r: number) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / card.radar.length; return [Math.cos(a) * r, Math.sin(a) * r] as const }
-  const ring = (f: number) => card.radar.map((_, i) => at(i, R * f).join(',')).join(' ')
-  const shape = card.radar.map((a, i) => at(i, R * (a.grade ? Math.max(0.06, a.reach) : 0)).join(',')).join(' ')
+  const at = (i: number, r: number) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / axes.length; return [Math.cos(a) * r, Math.sin(a) * r] as const }
+  const ring = (f: number) => axes.map((_, i) => at(i, R * f).join(',')).join(' ')
+  const shape = axes.map((a, i) => at(i, R * (a.reach !== null ? Math.max(0.06, a.reach) : 0)).join(',')).join(' ')
   return (
-    <svg data-card-radar viewBox="-124 -80 248 166" width={size} height={size * 166 / 248} style={{ display: 'block', flex: 'none', overflow: 'visible' }}>
-      {[1 / 3, 2 / 3, 1].map(f => <polygon key={f} points={ring(f)} fill="none" stroke="rgba(243,227,195,.16)" strokeWidth={0.8} />)}
-      {card.radar.map((_, i) => { const [x, y] = at(i, R); return <line key={i} x1={0} y1={0} x2={x} y2={y} stroke="rgba(243,227,195,.14)" strokeWidth={0.8} /> })}
+    <svg {...{ [`data-${attr}-radar`]: '' }} viewBox="-124 -80 248 166" width={size} height={size * 166 / 248} style={{ display: 'block', flex: 'none', overflow: 'visible' }}>
+      {[1 / 3, 2 / 3, 1].map(f => <polygon key={f} points={ring(f)} fill="none" stroke={ink.ring} strokeWidth={0.8} />)}
+      {axes.map((_, i) => { const [x, y] = at(i, R); return <line key={i} x1={0} y1={0} x2={x} y2={y} stroke={ink.spoke} strokeWidth={0.8} /> })}
       <polygon points={shape} fill="rgba(242,193,78,.22)" stroke="#f2c14e" strokeWidth={1.4} strokeLinejoin="round" />
-      {card.radar.map((a, i) => {
+      {axes.map((a, i) => {
         const [x, y] = at(i, R + 12), anchor = Math.abs(x) < 4 ? 'middle' : x > 0 ? 'start' : 'end'
         return (
-          <g key={a.stat} data-card-axis={a.stat} data-card-axis-grade={a.grade ?? '?'}>
-            <text x={x} y={y - 3} textAnchor={anchor} fontSize={10} fontWeight={600} letterSpacing="0.04em" fill="rgba(243,227,195,.75)"
+          <g key={a.key} {...{ [`data-${attr}-axis`]: a.key, [`data-${attr}-axis-grade`]: a.mark }}>
+            <text x={x} y={y - 3} textAnchor={anchor} fontSize={10} fontWeight={600} letterSpacing="0.04em" fill={ink.label}
               style={{ textTransform: 'uppercase' }}>{a.label}</text>
-            <text x={x} y={y + 10} textAnchor={anchor} fontSize={13} fontWeight={800} fill={a.grade ? STAT_TINT[a.grade] : DIM}>
-              {a.grade ?? '?'}{a.stat === 'luck' && card.luckPct !== null ? <tspan fontSize={9} fontWeight={600} fill="rgba(243,227,195,.6)"> {card.luckPct}%</tspan> : null}
-            </text>
+            <text x={x} y={y + 10} textAnchor={anchor} fontSize={13} fontWeight={800} fill={a.tint}>{a.mark}{a.extra}</text>
           </g>
         )
       })}
     </svg>
   )
+}
+/** The Moglin's pentagon (Core, Dexterity, Patience, Talent, Luck): a hidden axis sits at the centre and reads '?'. */
+function Radar({ card, phone }: { card: CardView; phone: boolean }) {
+  return <StatRadar phone={phone} attr="card" axes={card.radar.map(a => ({ key: a.stat, label: a.label, reach: a.grade ? a.reach : null, mark: a.grade ?? '?',
+    tint: a.grade ? STAT_TINT[a.grade] : DIM,
+    extra: a.stat === 'luck' && card.luckPct !== null ? <tspan fontSize={9} fontWeight={600} fill="rgba(243,227,195,.6)"> {card.luckPct}%</tspan> : null }))} />
 }
 
 function Portrait({ id, size }: { id: string; size: number }) {

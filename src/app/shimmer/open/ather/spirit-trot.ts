@@ -26,7 +26,7 @@ export type SpiritNav = {
    *  stays as the home beat. Without `roam` she only circles home (s1). */
   roam?: { maxLeg: number; away: number }
 }
-export type TrotMode = 'perch' | 'hopDown' | 'hopUp' | 'trot' | 'check' | 'look' | 'sit' | 'sniff' | 'tilt'
+export type TrotMode = 'perch' | 'hopDown' | 'hopUp' | 'trot' | 'check' | 'look' | 'sit' | 'sniff' | 'tilt' | 'follow'
 export type TrotPose = {
   x: number; z: number      // world
   y: number                 // lift above the ground under her (hop, perch)
@@ -67,6 +67,20 @@ export const TROT = {
 }
 export type TrotDials = typeof TROT
 
+// ── M109 s1 FOLLOW (canon RULED 8b45c92: a keeper's spirits may walk with them anywhere in the Ather): she trails the keeper
+// at a short distance with her own trot. Not a species manner, so not a dial: every spirit keeps the same slot. ─────────
+export const FOLLOW = {
+  slot: 1.9,        // m from the keeper she settles at (behind/beside: wherever she already is round them)
+  far: 2.4,         // past this she sets off again
+  keep: 1.2,        // never nearer than this (she never blocks the keeper's way): closer and she steps back out
+  vMax: 9,          // m/s cap on the catch-up gait (the keeper sprints 6.5)
+  catchK: 2.4,      // extra m/s per metre she is behind the slot
+  settle: 0.12,     // m from the slot that counts as there
+  sitAfter: 4,      // s standing by before she sits
+}
+/** where the keeper is (world xz; yaw 0 looks down -z) */
+export type FollowTarget = () => { x: number; z: number; yaw: number }
+
 const TAU = Math.PI * 2
 const wrap = (a: number) => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
@@ -76,7 +90,9 @@ const ease = (t: number) => t * t * (3 - 2 * t)
 /** A seeded little rng so two spirits on two planters do not move in lockstep. */
 function rng(seed: number) { let s = (seed * 2654435761) >>> 0 || 1; return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return ((s >>> 0) % 1e6) / 1e6 } }
 
-export type Trot = { step: (dt: number) => TrotPose; pose: () => TrotPose; beats: () => number; homes: () => number }
+export type Trot = { step: (dt: number) => TrotPose; pose: () => TrotPose; beats: () => number; homes: () => number
+  /** M109: walk with the keeper (a target), or null = back to her own roam */
+  follow: (to: FollowTarget | null) => void }
 
 export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): Trot {
   const D: TrotDials = { ...TROT, ...dials, beat: { ...TROT.beat, ...dials?.beat } }
@@ -95,6 +111,8 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   // the current run: an ARC round home (polar a0,r0 -> a1,r1) or a straight LINE (p0 -> p1); length len, speed vRun
   let kind: 'arc' | 'line' = 'arc', a0 = 0, a1 = 0, r0 = 0, r1 = 0, p0 = { x: 0, z: 0 }, p1 = { x: 0, z: 0 }, len = 1, s = 0, vRun = D.speed
   let pos = nav.perch ? { x: home.x, z: home.z } : at(ang, rad), y = nav.perch?.y ?? 0, lift = 0
+  // M109 follow: the target, the keeper's smoothed speed, whether she is on her way to the slot, how long she has stood by
+  let followTo: FollowTarget | null = null, kPrev: { x: number; z: number } | null = null, kV = 0, fGo = false, fIdle = 0
 
   const arcLen = (A0: number, A1: number, R0: number, R1: number) => { let L = 0, p = at(A0, R0); for (let i = 1; i <= 12; i++) { const q = at(lerp(A0, A1, i / 12), lerp(R0, R1, i / 12)); L += Math.hypot(q.x - p.x, q.z - p.z); p = q } return L }
   const arcFree = (A0: number, A1: number, R0: number, R1: number) => { const L = arcLen(A0, A1, R0, R1), n = Math.max(2, Math.ceil(L / 0.1)); for (let i = 1; i <= n; i++) { const q = at(lerp(A0, A1, i / n), lerp(R0, R1, i / n)); if (!free(q.x, q.z)) return false } return true }
@@ -145,6 +163,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   function go(m: TrotMode, d: number) { mode = m; t = 0; dur = d; if (m === 'look') { lookT = 0; lookFrom = lookYaw; lookAt = rand(-0.7, 0.7) } else if (m === 'tilt') { tiltAt = R() < 0.5 ? 1 : -1; tiltSwap = rand(0.4, 0.7) * d } }
   /** the next run from a standstill. true = she is off. */
   function move(): boolean {
+    if (followTo) { fGo = false; fIdle = 0; go('follow', 0); return true }
     const near = dHome(pos) <= nav.rMax + 0.25
     if (roam) {
       if (outFirst && planDash(roam.away)) { outFirst = false; return run() }
@@ -187,7 +206,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     let speed = 0, heading = yaw, wantSit = 0, sniff = 0
     if (mode === 'perch') {
       wantSit = 1
-      if (t > dur) { if (landing()) go('hopDown', D.hopArc); else t = 0 }
+      if (t > dur || followTo) { if (landing()) go('hopDown', D.hopArc); else t = 0 }
     } else if (mode === 'hopDown' || mode === 'hopUp') {
       const k = clamp(t / dur, 0, 1), top = nav.perch!.y, from = mode === 'hopDown' ? { x: home.x, z: home.z } : at(ang, rad), to = mode === 'hopDown' ? at(ang, rad) : { x: home.x, z: home.z }
       const y0 = mode === 'hopDown' ? top : 0, y1 = mode === 'hopDown' ? 0 : top, py = y
@@ -220,6 +239,37 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     } else if (mode === 'sit') {
       wantSit = 1
       if (t > dur) idleThen()
+    } else if (mode === 'follow' && followTo) {
+      // M109: trail the keeper. The slot = FOLLOW.slot from the keeper on the side she is already on (so she trails behind
+      // a walking keeper and stands beside a still one), turned round the keeper to the first free spot. Off she goes past
+      // `far` (or nearer than `keep`), with a catch-up gait that adds the keeper's own speed; every step must land free.
+      const k = followTo(), F = FOLLOW
+      if (kPrev) { const kv = Math.hypot(k.x - kPrev.x, k.z - kPrev.z) / Math.max(dt, 1e-3); if (kv < 30) kV = lerp(kV, kv, 1 - Math.exp(-dt * 5)) }
+      kPrev = { x: k.x, z: k.z }
+      const d = Math.hypot(pos.x - k.x, pos.z - k.z)
+      if (!fGo && (d > F.far || d < F.keep)) fGo = true
+      if (fGo) {
+        const b = d > 0.05 ? Math.atan2(pos.z - k.z, pos.x - k.x) : Math.atan2(Math.cos(k.yaw), Math.sin(k.yaw))
+        let goal: { x: number; z: number } | null = null
+        for (let i = 0; i < 13 && !goal; i++) { const a = b + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.45, g = { x: k.x + Math.cos(a) * F.slot, z: k.z + Math.sin(a) * F.slot }; if (free(g.x, g.z)) goal = g }
+        const tg = goal ?? { x: k.x, z: k.z }, gd = Math.hypot(tg.x - pos.x, tg.z - pos.z)
+        if (goal && gd < F.settle) fGo = false
+        else {
+          const v = clamp(D.speed * 0.8 + kV + Math.max(0, d - F.slot) * F.catchK, D.speed * 0.5, F.vMax), stp = Math.min(gd - (goal ? 0 : F.slot), v * dt)
+          const h0 = Math.atan2(tg.x - pos.x, tg.z - pos.z)
+          let moved = false
+          if (stp > 1e-4) for (let i = 0; i < 9 && !moved; i++) {
+            const h = h0 + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.4, nx = pos.x + Math.sin(h) * stp, nz = pos.z + Math.cos(h) * stp
+            if (free(nx, nz) && (i === 0 || Math.hypot(nx - k.x, nz - k.z) >= Math.min(d, F.keep))) { pos = { x: nx, z: nz }; heading = h; speed = v; vRun = v; moved = true }
+          }
+          if (!moved && !goal) fGo = false
+        }
+        fIdle = 0
+      } else {
+        fIdle += dt
+        heading = Math.atan2(k.x - pos.x, k.z - pos.z)   // stood by: she watches the keeper
+        if (fIdle > F.sitAfter) wantSit = 1
+      }
     } else if (mode === 'tilt') {
       // the head tilt (Manalotl canon: "eternal smile, wide eyes, head tilt"): over to one side, hold, maybe the other way
       if (tiltSwap > 0 && t > tiltSwap) { tiltSwap = 0; if (R() < 0.5) tiltAt = -tiltAt }
@@ -229,13 +279,14 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     const tiltWant = mode === 'tilt' ? tiltAt : mode === 'look' ? clamp(lookYaw / 0.6, -1, 1) * D.lookTilt : 0
     tilt = lerp(tilt, tiltWant, 1 - Math.exp(-dt * D.tiltK))
     if (mode !== 'look') lookYaw *= Math.exp(-dt * 8)
-    sitK = lerp(sitK, wantSit && (mode === 'sit' || mode === 'perch') ? 1 : 0, 1 - Math.exp(-dt * 7))
+    sitK = lerp(sitK, wantSit && (mode === 'sit' || mode === 'perch' || mode === 'follow') ? 1 : 0, 1 - Math.exp(-dt * 7))
 
     // the hop-trot: phase advances with distance, so it slows and stops with her feet
     let air = 0
     const run01 = clamp(speed / D.speed, 0, 1)
-    if (mode === 'trot') {
-      const before = hopPh; hopPh += (speed * dt) / (D.stride * (vRun > D.speed ? 1.2 : 1))
+    if (mode === 'trot' || (mode === 'follow' && speed > 0)) {
+      // M109: a catch-up past her dash lengthens the stride (bounds, not a frantic patter); a plain trot never gets there
+      const before = hopPh; hopPh += (speed * dt) / (D.stride * (vRun > D.speed ? 1.2 : 1) * Math.max(1, speed / (D.dash * 1.2)))
       if (Math.floor(hopPh) !== Math.floor(before)) sinceLand = 0
       air = Math.sin(Math.PI * (hopPh % 1))
       lift = Math.cos(Math.PI * (hopPh % 1)) * run01
@@ -244,7 +295,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
 
     yawPrev = yaw; yaw = yaw + wrap(heading - yaw) * (1 - Math.exp(-dt * D.turnK))
     const yawRate = wrap(yaw - yawPrev) / Math.max(dt, 1e-3)
-    const sq = Math.exp(-sinceLand * D.squashK) * (mode === 'trot' || sinceLand < 0.3 ? 1 : 0)
+    const sq = Math.exp(-sinceLand * D.squashK) * (mode === 'trot' || (mode === 'follow' && speed > 0) || sinceLand < 0.3 ? 1 : 0)
     const sy = (1 + D.stretch * air - D.squash * sq) * lerp(1, D.sitY, sitK)
     cur = {
       x: pos.x, z: pos.z, y, yaw: yaw + lookYaw + sniff * Math.sin(t * 5) * 0.12,
@@ -255,5 +306,10 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     return cur
   }
   let cur: TrotPose = { x: pos.x, z: pos.z, y, yaw, roll: 0, pitch: 0, sx: 1, sy: 1, swing: 0, lift: 0, mode, tilt: 0 }
-  return { step, pose: () => cur, beats: () => beats, homes: () => homes }
+  function follow(to: FollowTarget | null) {
+    followTo = to; kPrev = null; kV = 0; outFirst = false
+    if (to) { homing = false; if (mode !== 'perch' && mode !== 'hopDown' && mode !== 'hopUp') { fGo = false; fIdle = 0; go('follow', 0) } }
+    else if (mode === 'follow') { syncPolar(); go('check', rand(...D.checkS)) }   // Stay: back to her own roam from where she stands
+  }
+  return { step, pose: () => cur, beats: () => beats, homes: () => homes, follow }
 }

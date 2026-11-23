@@ -74,5 +74,47 @@ for (const fps of [60, 4]) for (const seed of [1, 7, 42, 99]) {
   ok(!v.modes.has('tilt') && v.tiltMax === 0, `vulnyx seed ${seed} @${fps}fps: never tilts (${v.tiltMax})`)
 }
 
+// M109 s1 FOLLOW: a keeper walks a loop round the plot (straight legs at the 4.2 m/s walk, a stop, a turn back past the
+// bench, a sprint leg at 6.5): she leaves home, then stays within 3 m of the keeper after the first catch-up, is never in a
+// blocker / the planter / off the plot, never nearer than 1 m (she never blocks), and Stay sends her back to her own roam.
+for (const fps of [60, 4]) for (const species of ['fox', 'axolotl'] as const) for (const seed of [3, 11]) {
+  const nav: SpiritNav = { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked, roam: { maxLeg: 4.5, away: 3 } }
+  const tr = makeTrot(nav, seed, SPIRIT_MODELS[species]!.trot), dt = 1 / fps, tag = `follow ${species} seed ${seed} @${fps}fps`
+  const legs = [{ x: -1.5, z: 3.8, v: 0 }, { x: 4.5, z: 4.5, v: 4.2 }, { x: 4.5, z: 4.5, v: 0, wait: 2 }, { x: -4, z: -4, v: 4.2 }, { x: 4.5, z: -5, v: 6.5 }, { x: 4, z: 1.2, v: 4.2 }, { x: -3, z: 1.5, v: 4.2 }]
+  const k = { x: legs[0].x, z: legs[0].z, yaw: 0 }
+  for (let i = 0; i < 3 * fps; i++) tr.step(dt)   // she is on her own beats first
+  tr.follow(() => k)
+  let li = 1, wait = 0, t = 0, maxD = 0, minD = 99, bad = '', settled = false, prev = tr.pose(), jump = 0
+  while (li < legs.length && t < 60) {
+    const L = legs[li]
+    if (L.v === 0) { wait += dt; if (wait >= (L.wait ?? 0)) { wait = 0; li++ } }
+    else { const dx = L.x - k.x, dz = L.z - k.z, d = Math.hypot(dx, dz), s = Math.min(d, L.v * dt); if (d > 1e-6) { k.x += dx / d * s; k.z += dz / d * s; k.yaw = Math.atan2(-dx, -dz) } if (d <= s + 1e-6) li++ }
+    const p = tr.step(dt); t += dt
+    const d = Math.hypot(p.x - k.x, p.z - k.z)
+    if (!settled && p.mode === 'follow' && d < 3) settled = true
+    if (settled) { maxD = Math.max(maxD, d); minD = Math.min(minD, d) }
+    if (!bad && ground(p.mode) && (BOXES.some(b => inBox(b, p.x, p.z, 0.05)) || inBox(PLANTER, p.x, p.z, 0.15) || !inBox(PLOT, p.x, p.z))) bad = `${p.mode} at ${p.x.toFixed(2)},${p.z.toFixed(2)} t=${t.toFixed(1)}`
+    jump = Math.max(jump, Math.hypot(p.x - prev.x, p.z - prev.z) / dt); prev = p
+  }
+  ok(settled, `${tag}: reaches the keeper`)
+  ok(maxD < 3, `${tag}: stays within 3 m of the walking keeper (max ${maxD.toFixed(2)})`)
+  ok(minD > 1.0, `${tag}: never nearer than 1 m (min ${minD.toFixed(2)})`)
+  ok(!bad, `${tag}: inside a blocker / the planter / off the plot: ${bad}`)
+  ok(jump < 10, `${tag}: no teleport (max ${jump.toFixed(2)} m/s)`)
+  // the keeper stands: she settles by them and stays put (no jitter round the slot)
+  let moved = 0; prev = tr.pose(); for (let i = 0; i < 5 * fps; i++) { const p = tr.step(dt); if (i > 2 * fps) moved += Math.hypot(p.x - prev.x, p.z - prev.z); prev = p }
+  ok(moved < 0.05, `${tag}: stands by a still keeper (${moved.toFixed(3)} m drift over 3 s)`)
+  // Stay: back to her own roam (she leaves the follow mode and moves off on her own beats)
+  tr.follow(null); const modes = new Set<string>(); let away = 0; const s0 = tr.pose()
+  for (let i = 0; i < 60 * fps; i++) { const p = tr.step(dt); modes.add(p.mode); away = Math.max(away, Math.hypot(p.x - s0.x, p.z - s0.z)); if (!bad && ground(p.mode) && (BOXES.some(b => inBox(b, p.x, p.z, 0.05)) || inBox(PLANTER, p.x, p.z, 0.15) || !inBox(PLOT, p.x, p.z))) bad = `after Stay ${p.mode} at ${p.x.toFixed(2)},${p.z.toFixed(2)}` }
+  ok(!modes.has('follow') && modes.has('trot') && away > 1, `${tag}: Stay returns her to roaming (${[...modes].join(',')}; moved ${away.toFixed(2)} m)`)
+  ok(!bad, `${tag}: ${bad}`)
+}
+// follow set while she is on her perch: she hops down first, then follows
+{ const nav: SpiritNav = { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked, roam: { maxLeg: 4.5, away: 3 } }
+  const tr = makeTrot(nav, 5), k = { x: 3.5, z: 3.5, yaw: 0 }; tr.follow(() => k); const seen: string[] = []
+  for (let i = 0; i < 6 * 60; i++) { const m = tr.step(1 / 60).mode; if (seen.at(-1) !== m) seen.push(m) }
+  const p = tr.pose(); ok(seen.indexOf('hopDown') === seen.indexOf('perch') + 1 && seen.indexOf('hopDown') < seen.indexOf('follow') && p.mode === 'follow' && Math.hypot(p.x - k.x, p.z - k.z) < 3, `follow from the perch: hops down, then follows (${seen.join('>')}, ${Math.hypot(p.x - k.x, p.z - k.z).toFixed(2)} m)`) }
+
 if (fails.length) { console.error(`spirit-trot: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`spirit-trot: ${pass}/0`)

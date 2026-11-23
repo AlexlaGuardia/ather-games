@@ -8,14 +8,21 @@
 //  (owl seed, no model yet). A also asserts: 2 models mounted (fox 1 + axolotl 1, the owl planter keeps the orb), the
 //  manalotl glb 200, each model's measured world height near its registry height (0.55 / 0.15 m), the Manalotl moves and
 //  is slower than the Vulnyx, never inside a planter or piece. --shots also writes both-in-frame spirits-phone / spirits-desk.
+// M109 s1 (sprites-M109): TALK + FOLLOW + THE SPIRIT PANEL (run F, owner + flag, 390x844). For the Vulnyx and the Manalotl:
+//  E at her = three answers Feed (greyed, 'soon') / Follow / Open; Follow + ~10 s of the keeper walking a loop on the plot
+//  (stepped per animation frame at the 4.2 m/s walk, the same dt clamp as her trot): she stays within 3 m, never inside a
+//  planter or piece; a reload keeps her following; Stay returns her to roaming; Open = the Hearth panel with the avatar
+//  canvas, the radar = SPECIES_STATS_V2 and the moves = spiritSheet (born knowing + BASE_LEARNSET). 0 page errors. B and C:
+//  E aimed at the planter never gives a spirit talk. --panel-shot <png> (default docs/looks/spirit-panel-2026-11-23.png).
 //   set -a; . /root/ather-games/.env; set +a; npx tsx scripts/vulnyx-ingame-check.mts [--url http://localhost:3202] [--shots dir]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { BLOOM_MS } from '../src/app/shimmer/open/ather/spirit-seeds'
 import { aimAt } from './lib/aim.mts'
 import { FURNITURE } from '../src/app/shimmer/open/ather/furniture'
+import { spiritSheet } from '../src/app/shimmer/open/ather/spirit-sheet'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
-const url = flag('--url', 'https://ather.games'), shots = flag('--shots', '')
+const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), panelShot = flag('--panel-shot', 'docs/looks/spirit-panel-2026-11-23.png')
 if (shots) mkdirSync(shots, { recursive: true })
 const OWNER_KEY = process.env.OWNER_KEY
 if (!OWNER_KEY) { console.error('OWNER_KEY not set: set -a; . /root/ather-games/.env; set +a'); process.exit(2) }
@@ -124,12 +131,90 @@ if (a) {
   ok(a.errs.length === 0, `A 0 page errors ${a.errs.join(' | ')}`)
   await a.p.close()
 }
+
+// F. M109 s1: talk + follow + the spirit panel (owner + flag, phone)
+const RECTS = [PLANTER, ...NEAR].map(pc => { const f = FURNITURE[pc.item], pad = 0.05; return { x0: pc.x - f.w / 2 - pad, x1: pc.x + f.w / 2 + pad, z0: pc.z - f.d / 2 - pad, z1: pc.z + f.d / 2 + pad } })
+const opts = (p: Page) => p.evaluate(() => [...document.querySelectorAll('[data-talk-option]')].map(b => ({ t: (b.textContent ?? '').replace('›', '').trim(), off: b.hasAttribute('data-talk-disabled') }))) as Promise<{ t: string; off: boolean }[]>
+const trotOf = (p: Page, sp: string) => p.evaluate((s) => { const t = (window as any).__spiritModel?.trots?.[s]; return t ? { x: t.x, z: t.z, y: t.y, h: t.h, mode: t.mode } : null }, sp) as Promise<{ x: number; z: number; y: number; h: number; mode: string } | null>
+async function talkTo(p: Page, sp: string): Promise<{ t: string; off: boolean }[]> {
+  for (let k = 0; k < 8; k++) {
+    const t = await trotOf(p, sp); if (!t) { await sleep(500); continue }
+    const away = sp === 'axolotl' ? 1.1 : 1.5
+    await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), t.x, t.z + away)
+    await aimAt(p, t.x, t.z, t.y - (await p.evaluate((x, z) => (window as any).__ather.ground(x, z), t.x, t.z) as number) + t.h * 0.5, 4)
+    await p.keyboard.press('e'); await sleep(900)
+    const o = await opts(p); if (o.length) return o
+    await p.keyboard.press('Escape'); await sleep(400)
+  }
+  return []
+}
+const pick = (p: Page, label: string) => p.evaluate((l) => { const b = [...document.querySelectorAll('[data-talk-option]')].find(x => (x.textContent ?? '').includes(l)) as HTMLButtonElement | undefined; b?.click(); return !!b }, label)
+/** walk the keeper a loop for `secs` (stepped per frame), sampling every following spirit; returns per-species max distance + inside hits */
+async function walk(p: Page, secs: number, sps: string[]) {
+  const path = [[P.x - 4, P.z + 4.5], [P.x + 5, P.z + 4.5], [P.x + 5, P.z + 7.5], [P.x - 4, P.z + 7.5]]
+  await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), path[0][0], path[0][1]); await sleep(2500)
+  return p.evaluate(`new Promise(res => { const path = ${JSON.stringify(path)}, sps = ${JSON.stringify(sps)}, out = {}; for (const s of sps) out[s] = []
+    let i = 1, x = path[0][0], z = path[0][1], last = performance.now(); const t0 = last
+    function f() { const now = performance.now(), dt = Math.min(0.25, (now - last) / 1000); last = now
+      let step = 4.2 * dt; while (step > 0) { const [tx, tz] = path[i % path.length], dx = tx - x, dz = tz - z, d = Math.hypot(dx, dz); if (d <= step) { x = tx; z = tz; step -= d; i++ } else { x += dx / d * step; z += dz / d * step; step = 0; window.__ather.tp(x, z, Math.atan2(-dx, -dz)) } }
+      const g = window.__ather.state(), kx = g.px ?? g.x, kz = g.pz ?? g.z
+      for (const s of sps) { const t = window.__spiritModel?.trots?.[s]; if (t) out[s].push({ d: Math.hypot(t.x - kx, t.z - kz), x: t.x, z: t.z, mode: t.mode, t: now - t0 }) }
+      if (now - t0 < ${secs * 1000}) requestAnimationFrame(f); else res(out) }
+    requestAnimationFrame(f) })`) as Promise<Record<string, { d: number; x: number; z: number; mode: string; t: number }[]>>
+}
+const f = await run(true, true)
+if (f) {
+  for (const sp of ['fox', 'axolotl']) {
+    const name = sp === 'fox' ? 'Vulnyx' : 'Manalotl'
+    const o = await talkTo(f.p, sp)
+    ok(o.length === 3 && o[0].t.startsWith('Feed') && o[0].off && o[0].t.toLowerCase().includes('soon') && o[1].t === 'Follow' && !o[1].off && o[2].t === 'Open' && !o[2].off,
+      `F ${name}: E = Feed (greyed, soon) / Follow / Open (${JSON.stringify(o)})`)
+    ok(await pick(f.p, 'Follow'), `F ${name}: picked Follow`); await sleep(600)
+    const w = await walk(f.p, 10, [sp]), ss = (w[sp] ?? []).filter(x => x.t > 3000)   // first 3 s = her catch-up to the loop's start
+    const maxD = Math.max(0, ...ss.map(x => x.d)), inside = ss.filter(x => RECTS.some(b => x.x > b.x0 && x.x < b.x1 && x.z > b.z0 && x.z < b.z1))
+    ok(ss.length > 5 && ss.every(x => x.mode === 'follow') && maxD < 3, `F ${name}: follows the walking keeper, within 3 m over ${((ss.at(-1)?.t ?? 0) - (ss[0]?.t ?? 0)) / 1000 | 0} s (max ${maxD.toFixed(2)} m, ${ss.length} frames)`)
+    ok(!inside.length, `F ${name}: never inside a planter or piece while following${inside.length ? ` (${inside[0].x.toFixed(2)},${inside[0].z.toFixed(2)})` : ''}`)
+  }
+  // a reload keeps both following
+  await f.p.reload({ waitUntil: 'load', timeout: 180000 }); await f.p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 })
+  await f.p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), P.x - 1, P.z + 5)
+  let modes: (string | undefined)[] = []
+  for (let i = 0; i < 40; i++) { await sleep(500); modes = [(await trotOf(f.p, 'fox'))?.mode, (await trotOf(f.p, 'axolotl'))?.mode]; if (modes.every(m => m === 'follow')) break }
+  ok(modes.every(m => m === 'follow'), `F follow persists across a reload (modes ${modes.join(',')})`)
+  const want = (sp: 'fox' | 'axolotl') => spiritSheet(sp)
+  for (const sp of ['fox', 'axolotl'] as const) {
+    const name = sp === 'fox' ? 'Vulnyx' : 'Manalotl'
+    const o = await talkTo(f.p, sp)
+    ok(o.map(x => x.t.replace(/soon$/i, '').trim()).join('/') === 'Feed/Stay/Open', `F ${name}: while she follows the answer reads Stay (${o.map(x => x.t).join('/')})`)
+    await pick(f.p, 'Stay'); let m = ''
+    for (let i = 0; i < 10; i++) { await sleep(500); m = (await trotOf(f.p, sp))?.mode ?? ''; if (m && m !== 'follow') break }
+    ok(m !== '' && m !== 'follow', `F ${name}: Stay returns her to roaming (mode ${m})`)
+    await talkTo(f.p, sp); await pick(f.p, 'Open'); await sleep(2500)
+    const pn = await f.p.evaluate(() => { const r = document.querySelector('[data-panel="spirit"]'); if (!r) return null
+      return { name: r.querySelector('[data-spirit-name]')?.getAttribute('data-spirit-name'), canvas: !!r.querySelector('[data-spirit-avatar] canvas'),
+        axes: Object.fromEntries([...r.querySelectorAll('[data-spirit-axis]')].map(g => [g.getAttribute('data-spirit-axis'), Number(g.getAttribute('data-spirit-axis-grade'))])),
+        moves: [...r.querySelectorAll('[data-spirit-move]')].map(e => e.getAttribute('data-spirit-move')), empty: !!r.querySelector('[data-spirit-moves-empty]'),
+        box: (() => { const b = r.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom } })() } }) as null | { name: string; canvas: boolean; axes: Record<string, number>; moves: string[]; empty: boolean; box: { l: number; r: number; t: number; b: number } }
+    const sh = want(sp)
+    ok(!!pn && pn.name === sh.name && pn.canvas, `F ${name}: Open = the spirit panel, named ${pn?.name}, avatar canvas ${pn?.canvas}`)
+    ok(!!pn && sh.axes.every(a => pn.axes[a.stat] === a.value) && Object.keys(pn.axes).length === 6, `F ${name}: radar = SPECIES_STATS_V2 ${JSON.stringify(pn?.axes)}`)
+    ok(!!pn && (sh.moves.length ? JSON.stringify(pn.moves) === JSON.stringify(sh.moves.map(x => x.id)) : pn.empty), `F ${name}: moves = the data (${pn?.moves.join(',')})`)
+    ok(!!pn && pn.box.l >= 0 && pn.box.r <= 390 && pn.box.t >= 0 && pn.box.b <= 844, `F ${name}: the panel fits 390x844 (${JSON.stringify(pn?.box)})`)
+    if (sp === 'fox' && panelShot) { await hideCard(f.p); await sleep(1500); try { await f.p.screenshot({ path: panelShot }); console.log(`   panel shot: ${panelShot}`) } catch { ok(false, 'panel shot') } }
+    await f.p.keyboard.press('Escape'); await sleep(600)
+  }
+  ok(f.errs.length === 0, `F 0 page errors ${f.errs.join(' | ')}`)
+  await f.p.close()
+}
+// no talk without the flag / the owner: E aimed at the planter never shows the spirit answers
+const noTalk = async (p: Page) => { await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), P.x, P.z + 1.6); await aimAt(p, P.x, P.z, 0.7); await p.keyboard.press('e'); await sleep(900)
+  const o = await opts(p); await p.keyboard.press('Escape'); return !o.some(x => x.t === 'Follow' || x.t === 'Stay') }
 // B. owner, no flag
 const b = await run(true, false)
-if (b) { ok(b.mounted === 0, `B owner, no flag: nothing mounted (mounted=${b.mounted})`); ok(b.errs.length === 0, `B 0 page errors ${b.errs.join(' | ')}`); await b.p.close() }
+if (b) { ok(b.mounted === 0, `B owner, no flag: nothing mounted (mounted=${b.mounted})`); ok(await noTalk(b.p), 'B owner, no flag: no spirit talk'); ok(b.errs.length === 0, `B 0 page errors ${b.errs.join(' | ')}`); await b.p.close() }
 // C. not owner + flag
 const c = await run(false, true)
-if (c) { ok(c.mounted === 0, `C not owner + ?spirits=3d: nothing mounted (mounted=${c.mounted})`); ok(c.errs.length === 0, `C 0 page errors ${c.errs.join(' | ')}`); await c.p.close() }
+if (c) { ok(c.mounted === 0, `C not owner + ?spirits=3d: nothing mounted (mounted=${c.mounted})`); ok(await noTalk(c.p), 'C not owner + ?spirits=3d: no spirit talk'); ok(c.errs.length === 0, `C 0 page errors ${c.errs.join(' | ')}`); await c.p.close() }
 if (shots) {
   const d = await run(true, true, 1280, 800)
   if (d) { await look(d.p, 3.2, 0.8); await shot(d.p, 'desk'); await frameBoth(d.p, 2.4); await shot(d.p, 'spirits-desk'); await d.p.close() }
