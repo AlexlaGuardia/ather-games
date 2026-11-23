@@ -17,6 +17,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { stepCam, lookCam, zoomCam, toggleTop, camOver, NO_KEYS, type Cam, type Keys } from './fly-cam'
 import { ramp } from './terrain-ramp'
+import { resample, POI_COLOR, ROAD_COLOR, type Overlay } from './builder-pois'
 
 export interface FlyTile { name: string; ox: number; oz: number; nx: number; nz: number; cell: number; sizeX: number; sizeZ: number; h: Float32Array; waterY: number
   /** M83 s2a (the Glade): vertices that are not ground; a quad touching one is not drawn, so the islands float in the void */
@@ -38,6 +39,8 @@ interface Props {
   /** M83: a click locks the pointer (mouse-look + centre crosshair brush); off = drag-to-sculpt at the pointer */
   lockLook?: boolean
   onLock?: (locked: boolean) => void
+  /** M105: the POI + roads overlay (already cut to the ring), draped on the ground; undefined = nothing drawn */
+  overlay?: Overlay
 }
 // sRGB -> linear (three's own SRGBToLinear is not exported from the package root at runtime, though the types say it is)
 const lin = (c: number) => { c = Math.min(1, c); return c < 0.04045 ? c * 0.0773993808 : Math.pow(c * 0.9478672986 + 0.0521327014, 2.4) }
@@ -174,6 +177,50 @@ function Cursor({ at, radius, heightAt }: { at: React.MutableRefObject<{ x: numb
   return <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} renderOrder={2}><ringGeometry args={[0.92, 1, 48]} /><meshBasicMaterial color="#fbbf24" transparent opacity={0.9} depthTest={false} /></mesh>
 }
 
+// ── M105: the overlay in 3D. Roads = lines draped on the ground (every 8 m takes the terrain height + 2 m), POIs = a 30 m pin with
+// a label on top that keeps its screen size (readable from the air). Drawn over the terrain (no depth test): it is an overlay.
+// Lines and sprites are not meshes, so the scene() hook's mesh counts (builder-fly-check) are unchanged.
+const ROAD_UP = 2, PIN_H = 30
+function labelTex(text: string, color: string): { tex: THREE.CanvasTexture; aspect: number } {
+  const c = document.createElement('canvas'), g = c.getContext('2d')!, F = 28
+  g.font = `600 ${F}px ui-monospace, monospace`
+  const w = Math.ceil(g.measureText(text).width) + 22; c.width = w; c.height = F + 14
+  g.font = `600 ${F}px ui-monospace, monospace`; g.fillStyle = 'rgba(0,0,0,0.72)'; g.fillRect(0, 0, w, c.height)
+  g.fillStyle = color; g.fillRect(0, 0, 6, c.height)
+  g.fillStyle = '#ffffff'; g.textBaseline = 'middle'; g.fillText(text, 14, c.height / 2 + 1)
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace
+  return { tex, aspect: w / c.height }
+}
+function OverlayLayer({ overlay, heightAt, rev }: { overlay: Overlay; heightAt: Props['heightAt']; rev: number }) {
+  const group = useMemo(() => new THREE.Group(), [])
+  useEffect(() => {
+    const made: { dispose(): void }[] = []
+    const roadMat = new THREE.LineBasicMaterial({ color: ROAD_COLOR, depthTest: false, transparent: true, opacity: 0.95 }); made.push(roadMat)
+    for (const r of overlay.roads) {
+      let run: number[] = []
+      const flush = () => {
+        if (run.length >= 6) { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(run, 3)); made.push(g); const l = new THREE.Line(g, roadMat); l.renderOrder = 3; l.userData.overlay = 'road'; group.add(l) }
+        run = []
+      }
+      for (const [x, z] of resample(r.pts, 8)) { const h = heightAt(x, z); if (Number.isFinite(h)) run.push(x, h + ROAD_UP, z); else flush() }
+      flush()
+    }
+    for (const p of overlay.pois) {
+      const h = heightAt(p.x, p.z); if (!Number.isFinite(h)) continue
+      const col = POI_COLOR[p.kind]
+      const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.Float32BufferAttribute([p.x, h, p.z, p.x, h + PIN_H, p.z], 3)); made.push(pg)
+      const pm = new THREE.LineBasicMaterial({ color: col, depthTest: false }); made.push(pm)
+      const pin = new THREE.Line(pg, pm); pin.renderOrder = 3; pin.userData.overlay = 'pin'; group.add(pin)
+      const { tex, aspect } = labelTex(p.name, col); made.push(tex)
+      const sm = new THREE.SpriteMaterial({ map: tex, depthTest: false, sizeAttenuation: false }); made.push(sm)
+      const sp = new THREE.Sprite(sm); sp.center.set(0, 0); sp.scale.set(0.032 * aspect, 0.032, 1); sp.position.set(p.x, h + PIN_H, p.z); sp.renderOrder = 4
+      sp.userData.overlay = 'label'; sp.userData.poi = { kind: p.kind, name: p.name, x: p.x, z: p.z, y: h }; group.add(sp)
+    }
+    return () => { group.clear(); for (const m of made) m.dispose() }
+  }, [overlay, heightAt, rev, group])
+  return <primitive object={group} />
+}
+
 export default function BuilderFly(p: Props) {
   const camRef = useRef<Cam | null>(null)
   const hover = useRef<{ x: number; z: number } | null>(null)
@@ -201,6 +248,12 @@ export default function BuilderFly(p: Props) {
           const t = (o as THREE.Mesh).geometry?.type
           if (t === 'BufferGeometry') n.tiles++; else if (t === 'PlaneGeometry') n.sea++; else if (t === 'RingGeometry') n.ring++; else n.other.push(t ?? o.type)
         })
+        return n
+      },
+      /** M105: the overlay drawn in the scene: road lines, POI pins, labels (each label's POI + the ground height it sits on) */
+      overlay: () => {
+        const n = { roads: 0, pins: 0, labels: [] as { kind: string; name: string; x: number; z: number; y: number }[] }
+        sceneRef.current?.traverse(o => { const k = o.userData?.overlay; if (k === 'road') n.roads++; else if (k === 'pin') n.pins++; else if (k === 'label') n.labels.push(o.userData.poi) })
         return n
       },
       setCam: (c: Partial<Cam>) => { if (camRef.current) camRef.current = { ...camRef.current, ...c } },
@@ -231,6 +284,7 @@ export default function BuilderFly(p: Props) {
       {/* the Glade (tiles with void) has no sea: its islands float in the cloud */}
       {p.tiles.length > 0 && !p.tiles.some(t => t.noSea) && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[p.focus.x, waterY, p.focus.z]}><planeGeometry args={[3200, 3200]} /><meshLambertMaterial color="#3d6f99" transparent opacity={0.75} /></mesh>}
       <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />
+      {p.overlay && <OverlayLayer overlay={p.overlay} heightAt={p.heightAt} rev={p.rev} />}
     </Canvas>
     {locked && <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none" data-testid="fly-crosshair">
       <div className="absolute left-1/2 top-1/2 w-5 h-0.5 -translate-x-1/2 -translate-y-1/2 bg-white/90 mix-blend-difference" />

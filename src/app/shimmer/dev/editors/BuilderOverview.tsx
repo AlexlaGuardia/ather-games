@@ -4,6 +4,7 @@
 // the tile view sculpts + the draft's edits; the open tile outlined; click a tile to open it. Redrawn when the tile changes and
 // after each stroke / undo (rev), not per brush tick. Pure half: builder-overview.ts.
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { POI_COLOR, ROAD_COLOR, OVERVIEW_LABEL, type Overlay } from './builder-pois'
 import { overviewLayout, overviewHeights, overviewRGBA, tileAtPixel, tileBox, type OvTile, type OvSource } from './builder-overview'
 
 export interface OverviewProps {
@@ -19,9 +20,11 @@ export interface OverviewProps {
   tint?: boolean
   maxW?: number
   note?: string
+  /** M105: the POI + roads overlay in world coords. `c0` = the world centre of tile (0, 0), `tileM` = a tile's side (m) */
+  overlay?: { data: Overlay; c0: { x: number; z: number }; tileM: number }
 }
 
-export default function BuilderOverview({ tiles, tile, onPick, source, edits, waterY, rev, px = 32, tint = true, maxW = 520, note }: OverviewProps) {
+export default function BuilderOverview({ tiles, tile, onPick, source, edits, waterY, rev, px = 32, tint = true, maxW = 520, note, overlay }: OverviewProps) {
   const cv = useRef<HTMLCanvasElement>(null)
   const L = useMemo(() => overviewLayout(tiles, px), [tiles, px])
   const [hover, setHover] = useState<OvTile | null>(null)
@@ -81,6 +84,22 @@ export default function BuilderOverview({ tiles, tile, onPick, source, edits, wa
           {hb && <rect x={hb.x} y={hb.y} width={hb.w} height={hb.h} fill="white" fillOpacity={0.12} stroke="white" strokeOpacity={0.6} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
           {box && <rect x={box.x} y={box.y} width={box.w} height={box.h} fill="#fbbf24" fillOpacity={0.12} stroke="#fbbf24" strokeWidth={2.5} vectorEffect="non-scaling-stroke" data-testid="overview-lit" />}
         </svg>
+        {overlay && (() => {
+          // world coords straight in: the box is the tile grid's extent, so a marker sits where the game puts it
+          const T = overlay.tileM, X0 = overlay.c0.x + (L.tx0 - 0.5) * T, Z0 = overlay.c0.z + (L.ty0 - 0.5) * T, W = L.cols * T, H = L.rows * T
+          const m = T / (Math.min(maxW, L.w * 8) / L.cols)   // metres per screen px (about)
+          return (
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`${X0} ${Z0} ${W} ${H}`} preserveAspectRatio="none" data-testid="ov-overview">
+              {overlay.data.roads.map((r, k) => <polyline key={k} points={r.pts.map(q => `${q[0]},${q[1]}`).join(' ')} fill="none" stroke={ROAD_COLOR} strokeOpacity={0.85} strokeWidth={1.2} vectorEffect="non-scaling-stroke" strokeDasharray={r.kind === 'ferry' ? '3 2' : undefined} data-road={r.kind} />)}
+              {overlay.data.pois.map((p, k) => (
+                <g key={k} data-poi={p.kind} data-name={p.name} data-x={p.x} data-z={p.z}>
+                  <circle cx={p.x} cy={p.z} r={2.6 * m} fill={POI_COLOR[p.kind]} stroke="black" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+                  {OVERVIEW_LABEL.has(p.kind) && <text x={p.x + 4 * m} y={p.z + 3 * m} fontSize={9 * m} fill="white" stroke="black" strokeWidth={2.5 * m} paintOrder="stroke" fontFamily="ui-monospace, monospace">{p.name}</text>}
+                </g>
+              ))}
+            </svg>
+          )
+        })()}
       </div>
       {note && <div className="text-[10px] font-mono text-white/30">{note}</div>}
     </div>

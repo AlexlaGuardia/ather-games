@@ -29,6 +29,9 @@ import { NYX_REGION, NYX_WATER_Y, nyxBrushTile, nyxTiles, sampleNyxTile, nyxN, n
 import BuilderOverview from './BuilderOverview'
 import type { OvTile, OvSource } from './builder-overview'
 import { loadRegion, type Region } from '../../open/region'
+import { wildsOverlay, gladeOverlay, nyxOverlay, poisIn, roadsIn, POI_COLOR, ROAD_COLOR, EMPTY_OVERLAY, type Overlay } from './builder-pois'
+import { GLADE_TILE_CENTER, GLADE_SIZE } from '../../world/glade-builder'
+import { NYX_TILE_M } from '../../world/nyx-builder'
 
 // ── BETA M83 p1 s1a: the editor works on the World Builder DRAFT (world/builder.ts), never on the live layer. Save + autosave write
 // the draft; PUBLISH makes it a version and puts it live; the history rolls back to any version. Players see nothing until Publish.
@@ -101,6 +104,10 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const [view, setView] = useState<'2d' | 'fly'>('2d')         // M83 s1b: the top-down map or the 3D free-fly view (same draft, same brush)
   const [lockLook, setLockLook] = useState(true)               // M83 (Alex 11-23): Fly click locks the pointer: mouse-look + centre crosshair brush
   const [locked, setLocked] = useState(false)
+  // M105 (Alex 11-23): the POI + roads overlay, read-only, from the data the game reads (builder-pois.ts). O toggles it.
+  const [showOv, setShowOv] = useState(false)
+  const [ovData, setOvData] = useState<Overlay>(EMPTY_OVERLAY)
+  const [ovDoors, setOvDoors] = useState(false)   // nyx: the shop doors are worked out (town plans) the first time the overlay opens
 
   const worldRef = useRef<WildsWorld | null>(null)
   const gridRef = useRef<Grid | null>(null)       // the Wilds' world, or the Nyx continent's virtual tiles
@@ -128,6 +135,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         const G = sampleGladeBase(gladeZoneGround), T = GLADE_BRUSH_TILE
         const meta: WildsMeta = { name: T.name, cell: T.cell, nx: T.nx, nz: T.nz, sizeX: T.sizeX, sizeZ: T.sizeZ, waterY: GLADE_WATER_Y, source: { x0: 0, y0: 0, x1: 0, y1: 0, mPerPx: T.cell } }
         bases.current.set(T.name, { meta, tx: 0, ty: 0, ox: T.ox, oz: T.oz, h: G.h, voided: G.voided, voidV: G.voidV })
+        setOvData(gladeOverlay())
         setSnapB(b); setSavedAt(b.draftAt)
         const store: Edits = { ...b.draft.tiles }; for (const [t, m] of Object.entries(b.draft.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(b.draft.falls)) store[fkey(t)] = { ...m }
         edits.current = store
@@ -141,6 +149,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         if (dead) return
         if (!b) { setStatus('could not read the builder draft (owner only)'); return }
         regionRef.current = R
+        setOvData(nyxOverlay(R.meta))
         const list = nyxTiles(R.meta, R.h).filter(t => t.land > 0.02)
         const byName = new Map(list.map(t => [t.name, t]))
         gridRef.current = { byName, at: (tx, ty) => byName.get(`nyx_${tx}_${ty}`) }
@@ -161,6 +170,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       setSnapB(b); setSavedAt(b.draftAt)
       const w = makeWorld(idx); if (nw) { w.clear = clearing(nw); w.roads = roadField(nw) }
       w.voids = makeVoids(idx, nw ?? null)
+      setOvData(wildsOverlay(nw ?? null, w.voids.crossings))
       worldRef.current = w; gridRef.current = w
       const store: Edits = { ...layer.edits }; for (const [t, m] of Object.entries(layer.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(layer.falls)) store[fkey(t)] = { ...m }
       edits.current = store
@@ -170,6 +180,19 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     }).catch(err => setStatus(`failed to load: ${String(err)}`))
     return () => { dead = true }
   }, [glade, nyx])
+
+  // M105: the continent's shop doors come from each town's plan (business/doors.ts, the game's own): only once the overlay is opened
+  useEffect(() => {
+    const R = regionRef.current
+    if (!nyx || !showOv || ovDoors || !R) return
+    let dead = false
+    import('../../open/business/doors').then(m => {
+      if (dead) return
+      const safe = (id: string) => { try { return m.doorsCached(R, id) } catch { return [] } }
+      setOvData(nyxOverlay(R.meta, safe)); setOvDoors(true)
+    }).catch(() => { /* places + roads still drawn */ })
+    return () => { dead = true }
+  }, [nyx, showOv, ovDoors, rev])
 
   // ── the tile + its neighbours, parsed bare (no edits) ──
   useEffect(() => {
@@ -433,6 +456,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       else if (e.key === '[') setRadius(r => Math.max(4, r - 4))
       else if (e.key === ']') setRadius(r => Math.min(80, r + 4))
       else if (!mod && e.code === 'KeyF' && !e.repeat && viewRef.current === 'fly') setFull(f => !f)
+      else if (!mod && e.code === 'KeyO' && !e.repeat) setShowOv(v => !v)   // M105: the POI + roads overlay
       else if (e.key === 'Escape') setFull(false)
     }
     window.addEventListener('keydown', onKey)
@@ -484,9 +508,23 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       undo, redo, save, dirty: () => [...dirtyRef.current],
       publish, rollback, builder: () => snapB, savedAt: () => savedAt,
       strength, radius, brush, lockLook, setLockLook,
+      /** M105: the overlay: on/off, toggle, and the data it draws (the game's own) */
+      overlay: { on: showOv, set: setShowOv, data: () => ovData, doors: ovDoors },
     }
-  }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt, strength, radius, brush, lockLook])
+  }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt, strength, radius, brush, lockLook, showOv, ovData, ovDoors])
 
+  // M105: the overlay cut to the open tile (tile view) and to its 3x3 ring (Fly); off = undefined, nothing drawn
+  const Bt = bases.current.get(tile)
+  const tileOv = useMemo((): Overlay | null => {
+    if (!showOv || !Bt) return null
+    const x0 = Bt.ox - Bt.meta.sizeX / 2, z0 = Bt.oz - Bt.meta.sizeZ / 2, x1 = x0 + Bt.meta.sizeX, z1 = z0 + Bt.meta.sizeZ
+    return { pois: poisIn(ovData, x0, z0, x1, z1), roads: roadsIn(ovData, x0, z0, x1, z1) }
+  }, [showOv, Bt, ovData])
+  const flyOv = useMemo((): Overlay | undefined => {
+    if (!showOv || !Bt) return undefined
+    const S = Bt.meta.sizeX, x0 = Bt.ox - S * 1.5, z0 = Bt.oz - Bt.meta.sizeZ * 1.5, x1 = Bt.ox + S * 1.5, z1 = Bt.oz + Bt.meta.sizeZ * 1.5
+    return { pois: poisIn(ovData, x0, z0, x1, z1), roads: roadsIn(ovData, x0, z0, x1, z1) }
+  }, [showOv, Bt, ovData])
   const cur = tiles.find(t => t.name === tile)
   const step = (dx: number, dy: number) => { const w = gridRef.current; if (!w || !cur) return; const t = w.at(cur.tx + dx, cur.ty + dy); if (t) setTile(t.name) }
   const B = bases.current.get(tile)
@@ -501,6 +539,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         {(['wilds', 'glade', 'nyx'] as const).map(m => <button key={m} className={`${btn} ${map === m ? on : off}`} onClick={() => map !== m && onMap(m)} data-testid={`map-${m}`}>{MAP_NAME[m]}</button>)}
         <span className="w-3" />
         {(['2d', 'fly'] as const).map(v => <button key={v} className={`${btn} ${view === v ? on : off}`} onClick={() => setView(v)} data-testid={`view-${v}`}>{v === '2d' ? 'Map (top-down)' : 'Fly (3D)'}</button>)}
+        <button className={`${btn} ${showOv ? on : off}`} onClick={() => setShowOv(v => !v)} data-testid="overlay-toggle" title="POIs + roads, where the game puts them (read-only)">POIs + roads (O)</button>
         {view === 'fly' && <button className={`${btn} ${off}`} onClick={() => setFull(true)} data-testid="fly-full">Fullscreen (F)</button>}
         {view === 'fly' && <button className={`${btn} ${lockLook ? on : off}`} onClick={() => setLockLook(v => !v)} data-testid="fly-lock" title="on: click the view to lock the mouse (look + crosshair brush, Esc frees it). off: left-drag sculpts at the pointer, right-drag looks">Mouse-look {lockLook ? 'on' : 'off'}</button>}
         {view === 'fly' && <span className="basis-full text-[11px] font-mono text-white/40">{lockLook ? 'click the view: mouse looks, crosshair = brush, left = sculpt, Esc frees' : 'right-drag look · left-drag sculpt'} · WASD move · Space/C up/down · Shift fast · wheel zoom · T top-down · - = strength · [ ] radius</span>}
@@ -513,6 +552,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
                 {TOOLS.map((t, i) => <button key={t} className={`${btn} ${brush === t ? on : off}`} onClick={() => setBrush(t)}>{i + 1} {t[0].toUpperCase() + t.slice(1)}</button>)}
                 <span className="text-[11px] font-mono text-white/70 tabular-nums pl-2">radius {radius} m [ ] · strength {strength.toFixed(2)} - =</span>
                 <button className={`${btn} ${off}`} onClick={undo}>Undo</button>
+                <button className={`${btn} ${showOv ? on : off}`} onClick={() => setShowOv(v => !v)}>POIs (O)</button>
                 <button className={`${btn} ${off}`} onClick={() => setFull(false)} data-testid="fly-exit">Exit (Esc)</button>
               </div>
               <div className="w-fit rounded bg-black/70 border border-white/10 px-2 py-1 text-[11px] font-mono text-white/60 tabular-nums">
@@ -523,7 +563,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
           {/* the 3x3 ring only: bases caches every tile opened this session (builder-fly-check saw 18 meshes after two tiles) */}
           <BuilderFly tiles={[...bases.current.entries()].filter(([, b]) => Math.abs(b.tx - B.tx) <= 1 && Math.abs(b.ty - B.ty) <= 1).map(([name, b]): FlyTile => ({ name, ox: b.ox, oz: b.oz, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY, voidV: b.voidV, noSea: glade }))}
             deltas={n => edits.current[n]} rev={rev} heightAt={heightAt} radius={radius} focus={glade ? GLADE_FOCUS : { x: B.ox, z: B.oz }}
-            onBegin={beginAt} onMove={moveAt} onEnd={endStroke} lockLook={lockLook} onLock={setLocked} />
+            onBegin={beginAt} onMove={moveAt} onEnd={endStroke} lockLook={lockLook} onLock={setLocked} overlay={flyOv} />
           {!full && <div className="absolute left-2 bottom-2 rounded bg-black/60 px-2 py-1 text-[11px] font-mono text-white/75 tabular-nums pointer-events-none" data-testid="fly-hud">
             {TOOL_KEY[brush]} · strength {strength.toFixed(2)} m/tick (- =) · radius {radius} m ([ ]){lockLook ? (locked ? ' · Esc frees the mouse' : ' · click to lock the mouse') : ''}
           </div>}
@@ -539,12 +579,23 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
             <circle cx={cursor.u} cy={cursor.v} r={0.0025} fill="white" />
           </svg>
         )}
+        {showOv && tileOv && B && (
+          <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`${B.ox - B.meta.sizeX / 2} ${B.oz - B.meta.sizeZ / 2} ${B.meta.sizeX} ${B.meta.sizeZ}`} preserveAspectRatio="none" data-testid="ov-tile">
+            {tileOv.roads.map((r, k) => <polyline key={k} points={r.pts.map(q => `${q[0]},${q[1]}`).join(' ')} fill="none" stroke={ROAD_COLOR} strokeOpacity={0.9} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeDasharray={r.kind === 'ferry' ? '6 4' : undefined} data-road={r.kind} />)}
+            {tileOv.pois.map((p, k) => { const m = B.meta.sizeX / 760; return (
+              <g key={k} data-poi={p.kind} data-name={p.name} data-x={p.x} data-z={p.z}>
+                <circle cx={p.x} cy={p.z} r={5 * m} fill={POI_COLOR[p.kind]} stroke="black" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+                <text x={p.x + 8 * m} y={p.z + 4 * m} fontSize={12 * m} fill="white" stroke="black" strokeWidth={3 * m} paintOrder="stroke" fontFamily="ui-monospace, monospace">{p.name}</text>
+              </g>) })}
+          </svg>
+        )}
         {(!ready || status) && <div className="absolute left-2 top-2 text-xs font-mono bg-black/70 px-2 py-1 rounded">{status || 'loading…'}</div>}
         <div className="absolute right-2 bottom-2 text-[10px] font-mono text-white/50 bg-black/50 px-1.5 rounded">{MAP_NAME[map]} · +x → · +z ↓ · 1 km</div>
       </div>
       {/* M83: the whole map, the open tile lit, click to open (Alex 11-23) */}
       {(glade ? ready : tiles.length > 0) && <BuilderOverview tiles={ovTiles} tile={tile} onPick={n => n !== tile && setTile(n)} source={ovSource}
         edits={n => edits.current[n]} waterY={glade ? GLADE_WATER_Y : nyx ? NYX_WATER_Y : 0} rev={rev + rawN} tint={showEdits}
+        overlay={showOv ? { data: ovData, c0: glade ? GLADE_TILE_CENTER : { x: 0, z: 0 }, tileM: glade ? GLADE_SIZE : nyx ? NYX_TILE_M : TILE_M } : undefined}
         px={glade ? 128 : 32} maxW={glade ? 300 : 560} note={!glade && !nyx && rawN < tiles.length ? `loading tiles ${rawN}/${tiles.length}…` : undefined} />}
       </div>
 
