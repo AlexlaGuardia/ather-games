@@ -138,7 +138,8 @@ import { useRinQuest, fennelTalk, FENNEL_NAME } from './use-rinquest'
 import { noStickLine, hasStick, fennelHere } from './rinquest'
 import { Fennel, fennelSpot, FENNEL_HEAD } from './fennel'
 import { useGladeFennel, FENNEL_FOLK_ID } from './glade-fennel-view'
-import { IdleMoglins } from './moglins-idle-view'   // P1 11-23   // M68 s3b: Fennel's talk in the Glade
+import { IdleMoglins, idleDrawn, useIdleTalk } from './moglins-idle-view'   // P1 11-23
+import type { IdleScreen } from './moglins-idle'   // M68 s3b: Fennel's talk in the Glade
 import type { FennelCursor } from './glade-fennel-talk'
 import { MoonwellPool } from './moonwell-quest'
 import { frameStats } from '../shared/keeper-look'
@@ -175,8 +176,8 @@ type Spawn = { x: number; z: number; yaw: number }
 /** the Wilds' safe ground round the arrival: where the Glade's green stood until M67 s1b-2 (30.75 m north of Greg's waymark) */
 const WILDS_SAFE = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z - 30.75, r: 50 }
 const gregAt = gregSpot()   // BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
-type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor }
-type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement }
+type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } }
+type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement }
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
 /** M61: a mate's island alone on the Green (the frame nobody is linked into) */
@@ -722,6 +723,7 @@ function AtherSliceGame() {
     else if (zone.kind === 'plot') {
       const cands: Pickable<Near>[] = [cap(GATE.x, GATE.z, 1.4, 3.2, { kind: 'gate' })]
       if (fennelRef.current) cands.push(cap(fennelRef.current.x, fennelRef.current.z, 0.45, 1.1, { kind: 'fennel' }))   // M22
+      if (!visitNow) for (const m of idleDrawn) cands.push(cap(m.x, m.z, 0.4, MOGLIN_HEIGHT.chibi + 0.1, { kind: 'idlemog', id: m.id, name: m.name }))   // P1: E on a recruit waiting for a room
       if (anemonyxHere(clock())) cands.push(anemonyxPick<Near>({ kind: 'anemonyx' }))   // M76 s2: her day at the Green's edge
       for (const w of workPickables(worksRef.current, g)) cands.push({ ...w, item: { kind: 'work', near: w.item } })
       n = aimPick(cands, eye, dir, from)
@@ -755,6 +757,7 @@ function AtherSliceGame() {
         : n?.kind === 'gate' ? (zone.kind === 'glade' ? 'E · the gate (the Wilds)' : 'E · the gate (fold map)')
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
         : n?.kind === 'fennel' || n?.kind === 'gfennel' ? 'E · Fennel'
+        : n?.kind === 'idlemog' ? `E · ${n.name}`
         : n?.kind === 'friend' ? `E · ${FRIEND_NAME[n.f]}`
         : n?.kind === 'anemonyx' ? 'E · the Anemonyx'
         : n?.kind === 'work' ? workPrompt(n.near)
@@ -1221,6 +1224,7 @@ function AtherSliceGame() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [friendC, tut])
   const gFennel = useGladeFennel(panel?.kind === 'gfennel' ? panel.c : null, c => setPanel(c ? { kind: 'gfennel', c } : null), () => setPanel({ kind: 'folk', s: GLADE }), gladeZoneGround)   // M68 s3b
+  const idleTalk = useIdleTalk(panel?.kind === 'idlemog' ? panel.c : null, c => setPanel(c ? { kind: 'idlemog', c } : null))   // P1
   const friendAt = friendC ? GLADE_FRIENDS_AT.find(k => k.id === friendC.f) ?? null : null
   const friendHead = friendAt && zone.kind === 'glade' ? { x: friendAt.x, y: gladeZoneGround(friendAt.x, friendAt.z) + 1.75, z: friendAt.z } : null
   const talkFocus = useRef<{ x: number; y: number; z: number } | null>(null)
@@ -1272,7 +1276,7 @@ function AtherSliceGame() {
   useEffect(() => { const m = tour && tourNode ? stops[tour.i]?.meets : undefined; if (m) markMet(m) }, [tour, tourNode, stops])   // BETA M33: Greg's introduction = met
   useEffect(() => { talkFocus.current = talkNode ? gregHead : tourNode && tour ? (() => { const L = stops[tour.i].look, ly = (stops[tour.i].zone === 'plot' ? plotHeightAt(L.x, L.z) : gladeZoneGround(L.x, L.z)) + 1.0
     // M32: between what he shows and his head (his side heavier: his bubble must stay on screen), so a phone frames both (aimed at the station alone, his bubble left the screen)
-    return { x: L.x * 0.4 + gregHead.x * 0.6, y: ly * 0.4 + (gregHead.y + 0.6) * 0.6, z: L.z * 0.4 + gregHead.z * 0.6 } })() : fennelNode && fennelHead ? fennelHead : friendTalkNode && friendHead ? friendHead : gFennel.node && gFennel.head ? gFennel.head : folkTalk.focus }, [talkNode, gregHead, tourNode, tour, stops, ww, fennelNode, fennelHead, folkTalk.focus, friendTalkNode, friendHead?.x, friendHead?.z, gFennel.node, gFennel.head?.x, gFennel.head?.z])   // eslint-disable-line react-hooks/exhaustive-deps
+    return { x: L.x * 0.4 + gregHead.x * 0.6, y: ly * 0.4 + (gregHead.y + 0.6) * 0.6, z: L.z * 0.4 + gregHead.z * 0.6 } })() : fennelNode && fennelHead ? fennelHead : friendTalkNode && friendHead ? friendHead : gFennel.node && gFennel.head ? gFennel.head : idleTalk.node && idleTalk.head ? idleTalk.head : folkTalk.focus }, [talkNode, gregHead, tourNode, tour, stops, ww, fennelNode, fennelHead, folkTalk.focus, friendTalkNode, friendHead?.x, friendHead?.z, gFennel.node, gFennel.head?.x, gFennel.head?.z, idleTalk.node, idleTalk.head?.x])   // eslint-disable-line react-hooks/exhaustive-deps
   // the journal: the nearest infected node is the keeper's open line on this side (re-aimed as you move; unchanged posts are free)
   useEffect(() => {
     const post = () => {
@@ -1329,6 +1333,7 @@ function AtherSliceGame() {
         else if (n.kind === 'friend') openFriend(n.f)
         else if (n.kind === 'fennel') setPanel({ kind: 'fennel', page: 0 })
         else if (n.kind === 'gfennel') gFennel.open()   // M68 s3b
+        else if (n.kind === 'idlemog') setPanel({ kind: 'idlemog', c: { id: n.id, screen: 'hello' } })   // P1: the go-home talk
         else if (n.kind === 'anemonyx') meetToday(clock())   // M76 s2
         else if (n.kind === 'work' && n.near.kind === 'piece' && currentWorks().pieces.some(x => x.id === (n.near as { id: string }).id && x.item === 'lift') && callNearest()) return   // M61 s3: a guest calls a mate's lift too (a local ride, never saved)
         else if (n.kind === 'work' && n.near.kind === 'piece' && isVisiting() && (() => { const pc = currentWorks().pieces.find(x => x.id === (n.near as { id: string }).id), st = pc && FURNITURE[pc.item]?.alc; if (st) setPanel({ kind: 'brew', station: st }); return !!st })()) return   // M57 s3b: a guest takes brewing steps at a mate's alchemy set
@@ -1420,6 +1425,7 @@ function AtherSliceGame() {
         {(talkNode ?? tourNode) && (zone.kind === 'glade' || (tableVisit && !visitNow)) && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} />}
         {zone.kind === 'plot' && fennelAt && <Fennel spot={fennelAt} y={plotHeightAt(fennelAt.x, fennelAt.z)} talking={!!fennelNode} />}
         {zone.kind === 'plot' && !visitNow && <IdleMoglins w={works} />}   {/* P1 11-23: recruits with no room wait by the planning table */}
+        {idleTalk.node && idleTalk.head && zone.kind === 'plot' && <TalkBubble at={[idleTalk.head.x, idleTalk.head.y + 0.5, idleTalk.head.z]} name={idleTalk.name} line={idleTalk.node.line} />}
         {friendTalkNode && friendHead && friendC && <TalkBubble at={[friendHead.x, friendHead.y + 0.5, friendHead.z]} name={FRIEND_NAME[friendC.f]} line={friendTalkNode.line} />}   {/* M68 s3a */}
         {gFennel.node && gFennel.head && zone.kind === 'glade' && <TalkBubble at={[gFennel.head.x, gFennel.head.y + 0.5, gFennel.head.z]} name="Fennel" line={gFennel.node.line} />}   {/* M68 s3b */}
         {fennelNode && fennelHead && zone.kind === 'plot' && <TalkBubble at={[fennelHead.x, fennelHead.y + 0.5, fennelHead.z]} name={FENNEL_NAME} line={fennelNode.line} />}
@@ -1487,7 +1493,7 @@ function AtherSliceGame() {
           onClose={() => setPanel(null)} goal={errandToHold ? LANDING.id : undefined} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
       {folkTalk.node && <TalkChoices node={folkTalk.node} phone={hudSize === 'phone'} />}
-      {(talkNode ?? fennelNode ?? friendTalkNode ?? gFennel.node ?? tourNode) && <TalkChoices node={(talkNode ?? fennelNode ?? friendTalkNode ?? gFennel.node ?? tourNode)!} phone={hudSize === 'phone'} />}
+      {(talkNode ?? fennelNode ?? friendTalkNode ?? gFennel.node ?? idleTalk.node ?? tourNode) && <TalkChoices node={(talkNode ?? fennelNode ?? friendTalkNode ?? gFennel.node ?? idleTalk.node ?? tourNode)!} phone={hudSize === 'phone'} />}
       {panel?.kind === 'greg' && <GregPanel garden={{ ...garden, pages: pagesNow }} onBuy={buy} onClose={() => setPanel(null)} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       {panel?.kind === 'brew' && <BrewingPanel station={panel.station} onClose={() => setPanel(null)} />}
