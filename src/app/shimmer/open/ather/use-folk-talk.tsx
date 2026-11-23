@@ -10,7 +10,8 @@ import type { TalkNode } from '../shared/npc-talk'
 import type { Settlement } from './network'
 import { SEASON } from './network'
 import { folkOf, stillHome, bring, recruit, loadTrust, saveTrust, wantsLeft } from './settlement-folk'
-import { loadVillage, saveVillage, VILLAGE_CAP } from './moglins'
+import { loadVillage, saveVillage, villageCap, plotStage } from './moglins'
+import { currentWorks } from './workshop'
 import { folkTalk, folkStart, helloFor, type FolkTalkState } from './folk-talk'
 import { MoglinCard } from './moglin-card-view'
 import { nearestSpot } from './folk-spots'
@@ -43,7 +44,7 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
   const haveKey = folk.flatMap(f => f.wants).map(w => countOf(inv, w.id)).join(',')
   const node: TalkNode | null = useMemo(() => {
     if (!s || !st) return null
-    const home = stillHome(folk, village), room = VILLAGE_CAP[0] - village.moglins.length   // stage gating is play's: stage 0
+    const home = stillHome(folk, village), room = villageCap(currentWorks()) - village.moglins.length   // P1 11-23: cap by plot stage (raised rooms)
     const n = folkTalk({ folk, home, trust, have: id => countOf(invRef.current, id), room, homeName: s.name, yarrow: { canTeach, hasCatch } }, st, {
       go: setSt, bye: onClose,
       teach: () => {
@@ -58,7 +59,7 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
         setSt({ fid: f.id, screen: 'needs' })
       },
       recruit: f => {
-        const v = recruit(village, f, trust, 0, Date.now(), s.name); if (!v) return
+        const v = recruit(village, f, trust, plotStage(currentWorks()), Date.now(), s.name); if (!v) return
         saveVillage(v); setVillage(v)
         hudSay(`${f.name} is coming to your garden`, 'item', 5)
       },

@@ -1,6 +1,6 @@
 // The garden village's Moglins, plot side (moglins.ts). Run: npx tsx src/app/shimmer/open/ather/moglins.test.ts
 import { scoreIn } from './moglin-stats'
-import { freshVillage, welcome, farewell, assign, tick, adoptVillage, PER_HOUR, MAX_TICK_MS, VILLAGE_CAP, WORKS_IN, PROFESSIONS, type MoglinRecord, type Village } from './moglins'
+import { freshVillage, welcome, farewell, assign, tick, adoptVillage, PER_HOUR, MAX_TICK_MS, VILLAGE_CAP, villageCap, plotStage, STAGE_ROOMS, WORKS_IN, PROFESSIONS, type MoglinRecord, type Village } from './moglins'
 import { freshWorks, place, roomStore, ROOM_ACCEPTS, ROOM_STORE_SLOTS, type Works, type Room } from './rooms'
 import { STARTING_SQUARES } from './plot'
 import { newInv, give } from '../shared/inventory'
@@ -72,4 +72,13 @@ ok(back.moglins.length === 2 && back.lastTick === 1000, 'save: kept a bad Moglin
 ok(adoptVillage(null, 5).moglins.length === 0, 'save: null was not a fresh village')
 
 if (fails.length) { console.error(`moglins: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
+// P1 11-23: the cap by plot stage = raised rooms (0-1 -> 2, 2+ -> 4, 4+ -> 6), both edges of each step
+{
+  const rm = (n: number, done = 0) => ({ rooms: Array.from({ length: n }, (_, k) => ({ id: 'r' + k, doneAt: done })) as unknown as Works['rooms'] })
+  ok(villageCap(rm(0), 1) === 2 && villageCap(rm(1), 1) === 2, 'stage: 0-1 raised rooms hold 2')
+  ok(villageCap(rm(2), 1) === 4 && villageCap(rm(3), 1) === 4, 'stage: 2-3 raised rooms hold 4')
+  ok(villageCap(rm(4), 1) === 6 && villageCap(rm(9), 1) === 6, 'stage: 4+ raised rooms hold 6')
+  ok(villageCap(rm(4, 10), 5) === 2, 'stage: rooms still under scaffolding do not count')
+  ok(plotStage(rm(2), 1) === 1 && STAGE_ROOMS.join() === '0,2,4', 'stage: the steps live in STAGE_ROOMS')
+}
 console.log(`moglins: ${pass}/0`)

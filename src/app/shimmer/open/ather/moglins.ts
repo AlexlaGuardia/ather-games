@@ -72,6 +72,15 @@ export interface MoglinRecord {
 
 /** Village cap by plot stage (canon 2 / 4 / 6; what gates each step is Jin's, not built yet: stage 0 for now). */
 export const VILLAGE_CAP = [2, 4, 6] as const
+/** P1 11-23 (hub #16564): the plot STAGE, until a real one exists, = how many rooms stand (raised): stage s needs STAGE_ROOMS[s]
+ *  (0-1 rooms = stage 0 = 2 Moglins, 2+ = stage 1 = 4, 4+ = stage 2 = 6). Every room kind counts. The one place the steps live. */
+export const STAGE_ROOMS = [0, 2, 4] as const
+export function plotStage(w: Pick<Works, 'rooms'>, now = Date.now()): 0 | 1 | 2 {
+  const n = w.rooms.filter(r => now >= r.doneAt).length
+  return n >= STAGE_ROOMS[2] ? 2 : n >= STAGE_ROOMS[1] ? 1 : 0
+}
+/** How many Moglins the garden can hold right now. */
+export const villageCap = (w: Pick<Works, 'rooms'>, now = Date.now()) => VILLAGE_CAP[plotStage(w, now)]
 export interface Village { v: 1; moglins: MoglinRecord[]; lastTick: number }
 export const freshVillage = (now = Date.now()): Village => ({ v: 1, moglins: [], lastTick: now })
 
