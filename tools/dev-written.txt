@@ -35,3 +35,4 @@ runtime  src/app/shimmer/save-battle-bg/route.ts       public/data/battle-bgs/
 runtime  src/app/vault/dev/save/route.ts               public/vault/authored-levels.json
 runtime  src/app/shimmer/save-builder/route.ts     data/builder/
 runtime  src/app/api/arcade/leaderboard/route.ts       data/leaderboards/
+runtime  src/app/shimmer/save-keeper-bench/route.ts  data/keeper-bench.json

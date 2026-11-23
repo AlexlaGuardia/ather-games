@@ -10,17 +10,23 @@
  * DEPLOY (the bench itself reads the file live, so save + reload shows the saved shape at once). Floating limbs stay
  * (Alex 11-23), so "arms" and "legs" are hand / foot size + placement and how high the torso floats.
  *
+ * TRY-ON (BETA M116c, Alex 11-23 "add it to the char dev tool for me to mess with later"): per model, a Face set, the
+ * sheet's 5 Mouths and, on the Curved models, the 3 female Torso shapes (bench-looks.ts). BENCH ONLY: they show on this
+ * turntable and save to data/keeper-bench.json (/shimmer/save-keeper-bench); no keeper in the game sees them.
+ *
  * DOLL VS RAYMAN: the 11-17 placeholder comparison, kept behind its tab (doll-vs-rayman.tsx).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Canvas, useFrame } from '@react-three/fiber'
+import type * as THREE from 'three'
 import { OrbitControls } from '@react-three/drei'
 import { KeeperFigure } from '../../open/shared/keeper-figure-view'
-import { buildKeeper } from '../../open/shared/keeper-figure'
+import { poseKeeper } from '../../open/shared/keeper-figure'
 import { DEFAULT_LOOK, OPT, type Look } from '../../open/shared/keeper-look'
 import { DIALS, DEFAULT_PROPORTIONS, MODELS, MODEL_LABEL, parseFile, type DialKey, type Proportions } from '../../open/shared/keeper-proportions'
 import { DollVsRayman } from './doll-vs-rayman'
+import { BENCH_MOUTHS, BENCH_TORSOS, DEFAULT_BENCH, benchKeeper, isCurved, parseBenchFile, sameBench, type BenchLook } from './bench-looks'
 
 const chip: React.CSSProperties = { background: '#211f2b', border: '1px solid #38344a', color: '#ddd6ea', padding: '5px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }
 const BACKDROPS = [
@@ -29,6 +35,23 @@ const BACKDROPS = [
 ]
 const fmt = (d: typeof DIALS[number], v: number) => d.kind === 'spacing' && d.key !== 'legs' ? `${v >= 0 ? '+' : ''}${v.toFixed(3)}` : v.toFixed(2)
 const same = (a: Proportions, b: Proportions) => DIALS.every(d => a[d.key] === b[d.key])
+
+/** the bench's own figure: the shipped builder + the try-on options (benchKeeper); turns and floats like KeeperFigure */
+function BenchFigure({ look, shape, bench, spin }: { look: Look; shape: Proportions; bench: BenchLook; spin: number }) {
+  const body = useMemo(() => benchKeeper(look, shape, bench), [look, shape, bench])
+  useEffect(() => () => { body.group.clear() }, [body])
+  const host = useRef<THREE.Group>(null), t = useRef(0)
+  useFrame((_, dt) => { t.current += Math.min(dt, 0.1); if (host.current && spin) host.current.rotation.y += dt * spin; poseKeeper(body, t.current, 0) })
+  return <group ref={host}><primitive object={body.group} /></group>
+}
+/** a short fingerprint of a built figure, so a check can see an option change the model (meshes, mouth meshes, torso shape) */
+function figureSig(k: ReturnType<typeof benchKeeper>) {
+  let meshes = 0, mouth = 0
+  k.group.traverse(o => { if ((o as THREE.Mesh).isMesh) { meshes++; if (o.userData.mouth) mouth++ } })
+  const torso = (k.group.getObjectByName('body')!.children[0] as THREE.Mesh).geometry.attributes.position
+  let tz = 0; for (let i = 0; i < torso.count; i++) tz += Math.abs(torso.getZ(i)) + torso.getX(i) * 0.37
+  return `${meshes}|${mouth}|${tz.toFixed(3)}|${k.height.toFixed(3)}`
+}
 
 export default function KeeperBodyBench() {
   const [tab, setTab] = useState<'proportions' | 'doll'>('proportions')
@@ -53,32 +76,60 @@ function ProportionsBench() {
   const [eyes, setEyes] = useState(2)   // Round: the eye-size dial reads best on whites + pupils
   const [bd, setBd] = useState(BACKDROPS[0])
   const [status, setStatus] = useState('loading the saved file...')
+  const [benchAll, setBenchAll] = useState<Record<string, BenchLook> | null>(null)
+  const [benchEdits, setBenchEdits] = useState<Record<string, BenchLook>>({})
 
   useEffect(() => {
     fetch('/shimmer/save-keeper-proportions', { cache: 'no-store' }).then(r => r.json())
       .then(j => { setSavedAll(parseFile(j.models)); setStatus('') })
       .catch(e => { setSavedAll(parseFile({})); setStatus(`could not read the file (${e}): showing today's body`) })
+    fetch('/shimmer/save-keeper-bench', { cache: 'no-store' }).then(r => r.json())
+      .then(j => setBenchAll(parseBenchFile(j.models)))
+      .catch(() => setBenchAll(parseBenchFile({})))
   }, [])
 
   const saved = savedAll?.[model] ?? DEFAULT_PROPORTIONS
   const cur = edits[model] ?? saved
-  const dirty = !same(cur, saved)
+  const benchSaved = benchAll?.[model] ?? DEFAULT_BENCH
+  const bench = benchEdits[model] ?? benchSaved
+  const benchDirty = !sameBench(bench, benchSaved)
+  const pick = (k: keyof BenchLook, v: number) => setBenchEdits(e => ({ ...e, [model]: { ...(e[model] ?? benchSaved), [k]: v } }))
+  const dialsDirty = !same(cur, saved)
+  const dirty = dialsDirty || benchDirty
   const set = useCallback((k: DialKey, v: number) => setEdits(e => ({ ...e, [model]: { ...(e[model] ?? saved), [k]: v } })), [model, saved])
   const [fi, ti] = model.split('-')
   const look: Look = useMemo(() => ({ ...DEFAULT_LOOK, frame: ['small', 'medium', 'large'].indexOf(fi), torso: ['broad', 'curved'].indexOf(ti), eyes }), [fi, ti, eyes])
-  const metrics = useMemo(() => { const k = buildKeeper(look, cur); const m = { height: k.height, headY: k.headY }; k.group.clear(); return m }, [look, cur])
+  const metrics = useMemo(() => { const k = benchKeeper(look, cur, bench); const m = { height: k.height, headY: k.headY, sig: figureSig(k) }; k.group.clear(); return m }, [look, cur, bench])
 
   const save = async () => {
     setStatus('saving...')
     try {
-      const r = await fetch('/shimmer/save-keeper-proportions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, dials: cur }) })
-      const j = await r.json()
-      if (!r.ok || !j.ok) throw new Error(j.error ?? `HTTP ${r.status}`)
-      setSavedAll(a => ({ ...(a ?? {}), [model]: j.dials }))
-      setEdits(e => { const n = { ...e }; delete n[model]; return n })
-      setStatus(`saved ${MODEL_LABEL(model)}. In the game at the next deploy.`)
+      if (dialsDirty) {
+        const r = await fetch('/shimmer/save-keeper-proportions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, dials: cur }) })
+        const j = await r.json()
+        if (!r.ok || !j.ok) throw new Error(j.error ?? `HTTP ${r.status}`)
+        setSavedAll(a => ({ ...(a ?? {}), [model]: j.dials }))
+        setEdits(e => { const n = { ...e }; delete n[model]; return n })
+      }
+      if (benchDirty) {
+        const r = await fetch('/shimmer/save-keeper-bench', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, bench }) })
+        const j = await r.json()
+        if (!r.ok || !j.ok) throw new Error(j.error ?? `HTTP ${r.status}`)
+        setBenchAll(a => ({ ...(a ?? {}), [model]: j.bench }))
+        setBenchEdits(e => { const n = { ...e }; delete n[model]; return n })
+      }
+      setStatus(`saved ${MODEL_LABEL(model)}.${dialsDirty ? ' Dials in the game at the next deploy.' : ''}${benchDirty ? ' Try-on kept on this bench only.' : ''}`)
     } catch (e) { setStatus(`save failed: ${e instanceof Error ? e.message : e}`) }
   }
+
+  const picker = (k: keyof BenchLook, label: string, opts: readonly string[]) => (
+    <div key={k} data-picker={k} style={{ padding: '3px 0' }}>
+      <span className="gx-label" style={{ fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: bench[k] ? '#e8d49a' : '#9a94a8' }}>{label}</span>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
+        {opts.map((o, i) => <button key={o} data-pick={`${k}-${i}`} data-on={bench[k] === i ? '1' : '0'} onClick={() => pick(k, i)} style={{ ...chip, padding: '3px 7px', opacity: bench[k] === i ? 1 : 0.45 }}>{o}</button>)}
+      </div>
+    </div>
+  )
 
   const row = (d: typeof DIALS[number]) => (
     <div key={d.key} style={{ display: 'grid', gridTemplateColumns: '108px 1fr 52px 22px', gap: 6, alignItems: 'center', padding: '3px 0' }} title={d.note}>
@@ -96,7 +147,7 @@ function ProportionsBench() {
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '8px 12px' }}>
           {MODELS.map(m => (
             <button key={m} data-model={m} onClick={() => setModel(m)} style={{ ...chip, opacity: model === m ? 1 : 0.45 }}>
-              {MODEL_LABEL(m)}{edits[m] && savedAll && !same(edits[m], savedAll[m]) ? ' •' : ''}
+              {MODEL_LABEL(m)}{(edits[m] && savedAll && !same(edits[m], savedAll[m])) || (benchEdits[m] && benchAll && !sameBench(benchEdits[m], benchAll[m])) ? ' •' : ''}
             </button>
           ))}
         </div>
@@ -107,7 +158,7 @@ function ProportionsBench() {
             <directionalLight position={[3, 6, 4]} intensity={1.2} />
             <directionalLight position={[-2, 2, 5]} intensity={0.35} />
             <mesh rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[40, 40]} /><meshStandardMaterial color={bd.ground} roughness={1} /></mesh>
-            <group position={[compare ? 0.42 : 0, 0, 0]}><KeeperFigure look={look} shape={cur} spin={spin ? 0.5 : 0} /></group>
+            <group position={[compare ? 0.42 : 0, 0, 0]}><BenchFigure look={look} shape={cur} bench={bench} spin={spin ? 0.5 : 0} /></group>
             {compare && <group position={[-0.62, 0, 0]}><KeeperFigure look={look} shape={DEFAULT_PROPORTIONS} spin={spin ? 0.5 : 0} /></group>}
             <OrbitControls target={[0, 0.75, 0]} maxPolarAngle={Math.PI / 2 - 0.02} />
           </Canvas>
@@ -118,7 +169,7 @@ function ProportionsBench() {
           <button data-act="compare" onClick={() => setCompare(!compare)} style={{ ...chip, opacity: compare ? 1 : 0.45 }}>Beside today</button>
           <button onClick={() => setEyes((eyes + 1) % OPT.eyes.length)} style={chip}>Eyes: {OPT.eyes[eyes]}</button>
           {BACKDROPS.map(b => <button key={b.id} onClick={() => setBd(b)} style={{ ...chip, opacity: bd.id === b.id ? 1 : 0.4 }}>{b.label}</button>)}
-          <span data-metrics style={{ fontSize: 10, color: '#8b8598', alignSelf: 'center', fontVariantNumeric: 'tabular-nums' }} data-head-y={metrics.headY.toFixed(4)} data-height={metrics.height.toFixed(4)}>
+          <span data-metrics style={{ fontSize: 10, color: '#8b8598', alignSelf: 'center', fontVariantNumeric: 'tabular-nums' }} data-head-y={metrics.headY.toFixed(4)} data-height={metrics.height.toFixed(4)} data-sig={metrics.sig}>
             height {metrics.height.toFixed(2)} m · head at {metrics.headY.toFixed(2)} m
           </span>
         </div>
@@ -128,9 +179,17 @@ function ProportionsBench() {
           <span className="gx-title" style={{ fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c8b98a' }}>{MODEL_LABEL(model)}</span>
           <span style={{ flex: 1 }} />
           <button data-act="reset-model" onClick={() => setEdits(e => ({ ...e, [model]: { ...DEFAULT_PROPORTIONS } }))} style={chip} title="every dial back to today's body (save to keep it)">Reset all</button>
-          <button data-act="save" onClick={save} disabled={!dirty || !savedAll} style={{ ...chip, background: dirty ? '#3c5a3a' : '#211f2b', opacity: dirty ? 1 : 0.4 }}>Save</button>
+          <button data-act="save" onClick={save} disabled={!dirty || !savedAll || !benchAll} style={{ ...chip, background: dirty ? '#3c5a3a' : '#211f2b', opacity: dirty ? 1 : 0.4 }}>Save</button>
         </div>
         <div data-status style={{ fontSize: 11, color: status.startsWith('save failed') || status.startsWith('could not') ? '#e88' : '#9ac49a', minHeight: 16 }}>{status || (dirty ? 'unsaved changes' : '')}</div>
+        <h2 className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', color: '#7f7a8c', margin: '10px 0 2px' }}>TRY-ON (BENCH ONLY)</h2>
+        {picker('face', 'Face', OPT.face)}
+        {picker('mouth', 'Mouth', BENCH_MOUTHS)}
+        {isCurved(model) ? picker('torso', 'Torso shape', BENCH_TORSOS.map(t => t.label))
+          : <div style={{ fontSize: 10, color: '#6f6a7c', padding: '3px 0' }}>Torso shapes: on the Curved models</div>}
+        {bench.torso > 0 && <div data-torso-note style={{ fontSize: 10, color: '#c8b98a', padding: '2px 0' }}>
+          {BENCH_TORSOS[bench.torso].label} sets {Object.entries(BENCH_TORSOS[bench.torso].dials).map(([k, v]) => `${DIALS.find(d => d.key === k)?.label.toLowerCase()} ${v}`).join(', ')} over the sliders
+        </div>}
         <h2 className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', color: '#7f7a8c', margin: '10px 0 2px' }}>SIZE</h2>
         {DIALS.filter(d => d.kind === 'size').map(row)}
         <h2 className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', color: '#7f7a8c', margin: '12px 0 2px' }}>SPACING</h2>

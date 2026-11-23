@@ -156,6 +156,7 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
     if (brows !== 'None') flat(g, BOX, hair, [ex, ey + H * 0.18, ez + H * 0.02], [H * 0.16, H * (brows === 'Bold' ? 0.045 : 0.025), H * 0.02], [0, 0, s * 0.08])
   }
   put(g, SPH, '#d9a47c', [0, hy - H * 0.08, H * 0.5], [H * 0.05, H * 0.05, H * 0.05], null, false)
+  const m0 = g.children.length   // M116c: the Mouth row's meshes are tagged userData.mouth (the body bench swaps them)
   const my = hy - H * 0.17, mouth = OPT.mouth[o.mouth]
   if (mouth === 'Smile') arc(H * 0.06, my + H * 0.01, H * 0.09, 0.18, Math.PI * 0.7, Math.PI * 1.15)
   if (mouth === 'Grin') { ball(0, my - H * 0.01, H * 0.11, H * 0.05, '#ffffff', 0.0); arc(0, my + H * 0.02, H * 0.12, 0.16, Math.PI, Math.PI) }
@@ -163,6 +164,7 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
   if (mouth === 'Flat') flat(g, BOX, INKC, [0, my, ez + H * 0.03], [H * 0.12, H * 0.022, H * 0.02])
   if (mouth === 'Open') ball(0, my - H * 0.01, H * 0.045, H * 0.06, '#5a2a22')
   if (mouth === 'Cat') for (const s of [-1, 1]) arc(s * H * 0.04, my + H * 0.015, H * 0.04, 0.22, Math.PI, Math.PI)
+  for (const c of g.children.slice(m0)) c.userData.mouth = true
 }
 
 /** Idle float for the limbs: the hands bob and drift, the head bobs a touch; `walk` 0..1 swings the hands and lifts the feet.
