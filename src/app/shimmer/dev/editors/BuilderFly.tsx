@@ -15,7 +15,9 @@ import { ramp } from './terrain-ramp'
 
 export interface FlyTile { name: string; ox: number; oz: number; nx: number; nz: number; cell: number; sizeX: number; sizeZ: number; h: Float32Array; waterY: number
   /** M83 s2a (the Glade): vertices that are not ground; a quad touching one is not drawn, so the islands float in the void */
-  voidV?: Uint8Array }
+  voidV?: Uint8Array
+  /** the Glade: no sea plane (the Nyx continent's edge tiles have void past the region but keep their sea) */
+  noSea?: boolean }
 interface Props {
   tiles: FlyTile[]
   /** the draft's height deltas per tile (dm), read live each rev */
@@ -170,7 +172,7 @@ export default function BuilderFly(p: Props) {
       <Rig heightAt={p.heightAt} focus={p.focus} camRef={camRef} />
       {p.tiles.map(t => <TileMesh key={t.name} t={t} deltas={p.deltas} rev={p.rev} onDown={onDown} onMoveP={onMoveP} />)}
       {/* the Glade (tiles with void) has no sea: its islands float in the cloud */}
-      {p.tiles.length > 0 && !p.tiles.some(t => t.voidV) && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[p.focus.x, waterY, p.focus.z]}><planeGeometry args={[3200, 3200]} /><meshLambertMaterial color="#3d6f99" transparent opacity={0.75} /></mesh>}
+      {p.tiles.length > 0 && !p.tiles.some(t => t.noSea) && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[p.focus.x, waterY, p.focus.z]}><planeGeometry args={[3200, 3200]} /><meshLambertMaterial color="#3d6f99" transparent opacity={0.75} /></mesh>}
       <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />
     </Canvas>
   )

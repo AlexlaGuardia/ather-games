@@ -85,6 +85,7 @@ import { GunRange, useGunHud, rangeHolds, rangeFov, rangeLookScale, AIM_CODE } f
 import { footWorld, tickFoot, exitSpot, canEnter, stepOut, EXIT_MAX_SPEED } from '../on-foot'
 import { eyeY, WALK_SPEED, SPEED_CAP, type LocoState } from '../shared/locomotion'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
+import { applyPublishedNyxLayer } from './nyx-layer'   // M83 s3: the World Builder's published continent edits
 import { TUNNEL_H, TUNNEL_WALK, boreAt, tunnelWall, bridgeRail, drivable, ferryLanding, guardrails, loadRegion, roadRail, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
 import { touch, TOUCH_LOOK_SENS, isTouchOnly } from '../shared/touch'
 import { TouchControls, PHONE_ROW_TOP, SKIN_HOLDS, type TouchAction } from '../shared/touch-controls'
@@ -853,6 +854,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
     const offIdle = installIdleInput()
     window.addEventListener('mousemove', move); gl.domElement.addEventListener('click', click)
     ;(window as unknown as { __drive: unknown }).__drive = {
+      ground: (x: number, z: number) => R.heightAt(x, z),   // M83 s3: the terrain (with the builder's published layer), for builder-nyx-check
       tune: () => tuneRef.current,   // the live drive feel (M14 lots: a bought model changes it)
       state: () => ({ ...car.current, ...bodySpeeds(car.current), slip: slipAngle(car.current), road: nearestRoad(R, car.current.x, car.current.z).d }),
       tp: (x: number, z: number, yaw = 0, speed = 0) => place(x, z, yaw, speed),
@@ -1487,7 +1489,10 @@ function ContinentRideGame() {
   }, [])
   useEffect(() => {
     const name = new URLSearchParams(window.location.search).get('region') ?? 'continent'
-    loadRegion(name).then(r => {
+    loadRegion(name).then(async r => {
+      // M83 s3: the World Builder's published edits go into the height grid before anything reads it (continent/nyx-layer.ts)
+      const moved = await applyPublishedNyxLayer(r)
+      ;(window as unknown as { __nyxLayer?: number }).__nyxLayer = moved
       // the rinning boat to Veradyn's isles joins the network's ferries (towns/veradyn.ts); the exported map stays as is
       const vf = veradynFerry(r)
       if (vf && r.meta.network && !(r.meta.network.ferries ?? []).some(f => f.id === vf.id)) r.meta.network.ferries = [...(r.meta.network.ferries ?? []), vf]

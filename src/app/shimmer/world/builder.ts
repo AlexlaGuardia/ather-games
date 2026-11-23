@@ -18,7 +18,7 @@
 
 import { cleanEdits, cleanWaters, cleanFallss, type Edits, type WaterMap, type FallMap } from '../open/ather/wilds-edits'
 
-export const BUILDER_MAPS = ['wilds', 'glade'] as const   // s2a the Glade (world/glade-builder.ts: one virtual tile), s3 the Nyx continent
+export const BUILDER_MAPS = ['wilds', 'glade', 'nyx'] as const   // s2a the Glade (world/glade-builder.ts: one virtual tile), s3 the Nyx continent (world/nyx-builder.ts: virtual 1 km tiles)
 export type BuilderMap = typeof BUILDER_MAPS[number]
 export const isBuilderMap = (m: unknown): m is BuilderMap => typeof m === 'string' && (BUILDER_MAPS as readonly string[]).includes(m)
 

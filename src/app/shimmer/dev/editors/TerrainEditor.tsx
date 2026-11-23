@@ -24,13 +24,19 @@ const BuilderFly = dynamic(() => import('./BuilderFly'), { ssr: false })   // M8
 import { AUTOSAVE_MS, savedAgo, type Layer, type Index, type BuilderMap } from '../../world/builder'
 import { GLADE_BRUSH_TILE, GLADE_LAYER_TILE, GLADE_WATER_Y, sampleGladeBase } from '../../world/glade-builder'
 import { gladeZoneGround } from '../../open/ather/glade-cluster'
+import { NYX_REGION, NYX_WATER_Y, nyxBrushTile, nyxTiles, sampleNyxTile } from '../../world/nyx-builder'
+import { loadRegion, type Region } from '../../open/region'
 
 // ── BETA M83 p1 s1a: the editor works on the World Builder DRAFT (world/builder.ts), never on the live layer. Save + autosave write
 // the draft; PUBLISH makes it a version and puts it live; the history rolls back to any version. Players see nothing until Publish.
 interface BSnap { draft: Layer; draftAt: number | null; index: Index; state: 'unpublished changes' | 'matches live' }
 // M83 s2a: which map. The Wilds = its exported tiles (pick one, the 3x3 ring parses); the Glade = ONE virtual tile sampled from
 // its ground function (world/glade-builder.ts), so everything below works on it unchanged.
-const MAP_NAME: Record<BuilderMap, string> = { wilds: 'the Wilds', glade: 'Moonwell Glade' }
+// M83 s3: the Nyx continent = virtual 1 km tiles cut from its one exported region (world/nyx-builder.ts), on the Wilds' tile grid.
+const MAP_NAME: Record<BuilderMap, string> = { wilds: 'the Wilds', glade: 'Moonwell Glade', nyx: 'Nyx continent' }
+const LOAD_NAME: Record<BuilderMap, string> = { wilds: 'Wilds', glade: 'Glade', nyx: 'continent' }
+/** the tile picker / ring's view of a tiled map (a WildsWorld has these; the Nyx continent builds its own) */
+type Grid = { at(tx: number, ty: number): { name: string; tx: number; ty: number } | undefined; byName: Map<string, { name: string; tx: number; ty: number }> }
 const GLADE_FOCUS = { x: -100, z: 110 }   // Fly opens over Greg's garden (the tile's centre is void, between the islands)
 async function builderCall(map: BuilderMap, body?: Record<string, unknown>): Promise<BSnap | null> {
   try {
@@ -57,7 +63,7 @@ export default function TerrainEditor() {
   // read ?map= after mount (reading window in the state initialiser made the server render the Wilds and the client the Glade:
   // a hydration error, caught by builder-glade-check)
   const [map, setMap] = useState<BuilderMap | null>(null)
-  useEffect(() => { try { setMap(new URLSearchParams(window.location.search).get('map') === 'glade' ? 'glade' : 'wilds') } catch { setMap('wilds') } }, [])
+  useEffect(() => { try { const q = new URLSearchParams(window.location.search).get('map'); setMap(q === 'glade' || q === 'nyx' ? q : 'wilds') } catch { setMap('wilds') } }, [])
   const pick = (m: BuilderMap) => {
     setMap(m)
     try { const u = new URL(window.location.href); u.searchParams.set('map', m); window.history.replaceState(null, '', u) } catch { /* */ }
@@ -66,8 +72,8 @@ export default function TerrainEditor() {
 }
 
 function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => void }) {
-  const glade = map === 'glade'
-  const [status, setStatus] = useState(glade ? 'sampling the Glade…' : 'loading the Wilds index…')
+  const glade = map === 'glade', nyx = map === 'nyx'
+  const [status, setStatus] = useState(glade ? 'sampling the Glade…' : nyx ? 'loading the continent…' : 'loading the Wilds index…')
   const [tiles, setTiles] = useState<{ name: string; tx: number; ty: number; land: number }[]>([])
   const [tile, setTile] = useState(glade ? GLADE_LAYER_TILE : 'first-wilds')
   const [brush, setBrush] = useState<Tool>('raise')
@@ -92,6 +98,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const [view, setView] = useState<'2d' | 'fly'>('2d')         // M83 s1b: the top-down map or the 3D free-fly view (same draft, same brush)
 
   const worldRef = useRef<WildsWorld | null>(null)
+  const gridRef = useRef<Grid | null>(null)       // the Wilds' world, or the Nyx continent's virtual tiles
+  const regionRef = useRef<Region | null>(null)   // M83 s3: the continent's height grid (bare: the published layer is NOT applied)
   const bases = useRef(new Map<string, Base>())
   const edits = useRef<Edits>({})
   const hist = useRef(new EditHistory())
@@ -119,6 +127,24 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       }).catch(err => setStatus(`failed to load: ${String(err)}`))
       return () => { dead = true }
     }
+    if (nyx) {   // M83 s3: the continent's one region, cut into virtual 1 km tiles; open on the land tile nearest the centre
+      Promise.all([loadRegion(NYX_REGION), builderCall('nyx')]).then(([R, b]) => {
+        if (dead) return
+        if (!b) { setStatus('could not read the builder draft (owner only)'); return }
+        regionRef.current = R
+        const list = nyxTiles(R.meta, R.h).filter(t => t.land > 0.02)
+        const byName = new Map(list.map(t => [t.name, t]))
+        gridRef.current = { byName, at: (tx, ty) => byName.get(`nyx_${tx}_${ty}`) }
+        setSnapB(b); setSavedAt(b.draftAt)
+        const store: Edits = { ...b.draft.tiles }; for (const [t, m] of Object.entries(b.draft.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(b.draft.falls)) store[fkey(t)] = { ...m }
+        edits.current = store
+        const first = [...list].sort((a, c) => Math.hypot(a.tx, a.ty) - Math.hypot(c.tx, c.ty) || c.land - a.land)[0]
+        setTiles(list)
+        if (first) setTile(first.name)
+        setStatus(''); setRev(r => r + 1)
+      }).catch(err => setStatus(`failed to load: ${String(err)}`))
+      return () => { dead = true }
+    }
     Promise.all([loadIndex(), loadNetwork(), builderCall('wilds')]).then(([idx, nw, b]) => {
       if (dead) return
       if (!b) { setStatus('could not read the builder draft (owner only)'); return }
@@ -126,7 +152,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       setSnapB(b); setSavedAt(b.draftAt)
       const w = makeWorld(idx); if (nw) { w.clear = clearing(nw); w.roads = roadField(nw) }
       w.voids = makeVoids(idx, nw ?? null)
-      worldRef.current = w
+      worldRef.current = w; gridRef.current = w
       const store: Edits = { ...layer.edits }; for (const [t, m] of Object.entries(layer.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(layer.falls)) store[fkey(t)] = { ...m }
       edits.current = store
       setTiles(idx.tiles.filter(t => t.land > 0.02).map(t => ({ name: t.name, tx: t.tx, ty: t.ty, land: t.land })).sort((a, b) => a.ty - b.ty || a.tx - b.tx))
@@ -134,12 +160,24 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       setRev(r => r + 1)
     }).catch(err => setStatus(`failed to load: ${String(err)}`))
     return () => { dead = true }
-  }, [glade])
+  }, [glade, nyx])
 
   // ── the tile + its neighbours, parsed bare (no edits) ──
   useEffect(() => {
-    const w = worldRef.current; if (!w) return
+    const w = gridRef.current; if (!w) return
     const c = w.byName.get(tile); if (!c) { setStatus(`no tile ${tile}`); return }
+    const R = regionRef.current
+    if (nyx && R) {   // M83 s3: a continent tile is a straight copy of region vertices, no parse
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const t = w.at(c.tx + dx, c.ty + dy); if (!t || bases.current.has(t.name)) continue
+        const T = nyxBrushTile(R.meta, t.tx, t.ty), S = sampleNyxTile(R.meta, R.h, t.tx, t.ty)
+        const meta: WildsMeta = { name: T.name, cell: T.cell, nx: T.nx, nz: T.nz, sizeX: T.sizeX, sizeZ: T.sizeZ, waterY: NYX_WATER_Y, source: { x0: 0, y0: 0, x1: 0, y1: 0, mPerPx: T.cell } }
+        bases.current.set(t.name, { meta, tx: t.tx, ty: t.ty, ox: T.ox, oz: T.oz, h: S.h, voided: S.voided, voidV: S.voidV })
+      }
+      setStatus(''); setReady(true); setRev(r => r + 1)
+      return
+    }
+    const W0 = worldRef.current; if (!W0) return
     let dead = false
     setReady(false)
     const want: string[] = []
@@ -147,8 +185,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     const need = want.filter(n => !bases.current.has(n))
     if (need.length) setStatus(`parsing ${need.length} tile${need.length > 1 ? 's' : ''}…`)
     Promise.all(need.map(async n => {
-      const W = await loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear, w.roads, w.voids, null)
-      const t = w.byName.get(n)!
+      const W = await loadWilds(n, '/open/wilds', zonesOf(W0, n), W0.clear, W0.roads, W0.voids, null)
+      const t = W0.byName.get(n)!
       bases.current.set(n, { meta: W.meta, tx: t.tx, ty: t.ty, ox: t.tx * TILE_M, oz: t.ty * TILE_M, h: W.h, voided: W.voided })
     })).then(() => { if (!dead) { setStatus(''); setReady(true); setRev(r => r + 1) } })
       .catch(err => { if (!dead) setStatus(`parse failed: ${String(err)}`) })
@@ -160,7 +198,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     let name: string, B: Base | undefined
     if (glade) { name = GLADE_LAYER_TILE; B = bases.current.get(name) }
     else {
-      const w = worldRef.current; if (!w) return NaN
+      const w = gridRef.current; if (!w) return NaN
       const { tx, ty } = tileOf(x, z), t = w.at(tx, ty); if (!t) return NaN
       name = t.name; B = bases.current.get(name)
     }
@@ -174,7 +212,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j
     const at = (ii: number, jj: number) => { const k = jj * nx + ii; return B.h[k] + (E?.[k] ?? 0) / 10 }
     return (at(i, j) * (1 - u) + at(i + 1, j) * u) * (1 - v) + (at(i, j + 1) * (1 - u) + at(i + 1, j + 1) * u) * v
-  }, [glade])
+  }, [glade])   // nyx reads gridRef (set before ready)
   const brushTiles = useCallback((): BrushTile[] => [...bases.current.entries()].map(([name, B]) => ({ name, ox: B.ox, oz: B.oz, nx: B.meta.nx, nz: B.meta.nz, cell: B.meta.cell, sizeX: B.meta.sizeX, sizeZ: B.meta.sizeZ })), [])
 
   // ── draw: shaded relief + contour tint, water below the line, voids dark, edited ground tinted ──
@@ -322,7 +360,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     const b = await builderCall(map, { action: 'publish', note: msg ?? note })
     setBusy(false)
     if (b) { setSnapB(b); setNote('') }
-    setStatus(b ? `published v${b.index.live} · live on the next ${glade ? 'Glade' : 'Wilds'} load` : 'publish FAILED (live unchanged)')
+    setStatus(b ? `published v${b.index.live} · live on the next ${LOAD_NAME[map]} load` : 'publish FAILED (live unchanged)')
     return !!b
   }, [save, note, map, glade])
   const rollback = useCallback(async (v: number): Promise<boolean> => {
@@ -379,6 +417,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     ;(window as unknown as { __terrain?: unknown }).__terrain = {
       ready, tile, map,
       heightAt: (lx: number, lz: number) => { const b = B(); return b ? heightAt(b.ox + lx, b.oz + lz) : NaN },
+      /** the open tile's centre in world coords (M83 s3: the check maps tile-local to the continent's world xz) */
+      origin: () => { const b = B(); return b ? { x: b.ox, z: b.oz } : null },
       stroke: (kind: Brush, lx: number, lz: number, r: number, s: number, n = 1) => {
         const b = B(); if (!b) return false
         const x = b.ox + lx, z = b.oz + lz, target = kind === 'flatten' ? heightAt(x, z) : undefined
@@ -406,7 +446,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt])
 
   const cur = tiles.find(t => t.name === tile)
-  const step = (dx: number, dy: number) => { const w = worldRef.current; if (!w || !cur) return; const t = w.at(cur.tx + dx, cur.ty + dy); if (t) setTile(t.name) }
+  const step = (dx: number, dy: number) => { const w = gridRef.current; if (!w || !cur) return; const t = w.at(cur.tx + dx, cur.ty + dy); if (t) setTile(t.name) }
   const B = bases.current.get(tile)
   const nEdits = Object.keys(edits.current[tile] ?? {}).length, nWater = Object.keys(edits.current[wkey(tile)] ?? {}).length, nFalls = fallLines(edits.current[fkey(tile)]).length
 
@@ -416,7 +456,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     <div className="flex flex-col lg:flex-row gap-4 text-white/85">
       <div className="flex flex-col gap-2 w-full max-w-[760px]">
       <div className="flex flex-wrap gap-1 items-center">{/* M83 s2b: wraps (the map buttons crowded the row) */}
-        {(['wilds', 'glade'] as const).map(m => <button key={m} className={`${btn} ${map === m ? on : off}`} onClick={() => map !== m && onMap(m)} data-testid={`map-${m}`}>{MAP_NAME[m]}</button>)}
+        {(['wilds', 'glade', 'nyx'] as const).map(m => <button key={m} className={`${btn} ${map === m ? on : off}`} onClick={() => map !== m && onMap(m)} data-testid={`map-${m}`}>{MAP_NAME[m]}</button>)}
         <span className="w-3" />
         {(['2d', 'fly'] as const).map(v => <button key={v} className={`${btn} ${view === v ? on : off}`} onClick={() => setView(v)} data-testid={`view-${v}`}>{v === '2d' ? 'Map (top-down)' : 'Fly (3D)'}</button>)}
         {view === 'fly' && <button className={`${btn} ${off}`} onClick={() => setFull(true)} data-testid="fly-full">Fullscreen (F)</button>}
@@ -438,7 +478,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
             </div>
           )}
           {/* the 3x3 ring only: bases caches every tile opened this session (builder-fly-check saw 18 meshes after two tiles) */}
-          <BuilderFly tiles={[...bases.current.entries()].filter(([, b]) => Math.abs(b.tx - B.tx) <= 1 && Math.abs(b.ty - B.ty) <= 1).map(([name, b]): FlyTile => ({ name, ox: b.ox, oz: b.oz, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY, voidV: b.voidV }))}
+          <BuilderFly tiles={[...bases.current.entries()].filter(([, b]) => Math.abs(b.tx - B.tx) <= 1 && Math.abs(b.ty - B.ty) <= 1).map(([name, b]): FlyTile => ({ name, ox: b.ox, oz: b.oz, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY, voidV: b.voidV, noSea: glade }))}
             deltas={n => edits.current[n]} rev={rev} heightAt={heightAt} radius={radius} focus={glade ? GLADE_FOCUS : { x: B.ox, z: B.oz }}
             onBegin={beginAt} onMove={moveAt} onEnd={endStroke} />
         </div>
@@ -544,7 +584,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         <div className="text-xs font-mono text-white/55 space-y-0.5 tabular-nums">
           <div>{nEdits} edited vertices, {nWater} water cells, {nFalls} waterfall lines on {tile}</div>
           {hover && Number.isFinite(hover.h) && <div>({hover.x}, {hover.z}) · ground {hover.h.toFixed(1)} m{B && hover.h < B.meta.waterY ? ' · under the sea' : ''}</div>}
-          <div className="text-white/35 pt-1">Hold to paint. Brushes cross onto the neighbouring tiles so seams meet. You are editing the DRAFT: players see nothing until Publish (live on the next {glade ? 'Glade' : 'Wilds'} load, no build).</div>
+          <div className="text-white/35 pt-1">Hold to paint. Brushes cross onto the neighbouring tiles so seams meet. You are editing the DRAFT: players see nothing until Publish (live on the next {LOAD_NAME[map]} load, no build).</div>
         </div>
       </div>
     </div>
