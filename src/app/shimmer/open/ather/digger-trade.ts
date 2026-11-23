@@ -22,5 +22,5 @@ export const DIGGER_LABEL = {
   trade: `Trade ${DIGGER_TRADE.want.n} ${itemDef(DIGGER_TRADE.want.id).name} for ${DIGGER_TRADE.product.n} ${itemDef(DIGGER_TRADE.product.id).name}`,
   done: `${itemDef(DIGGER_TRADE.product.id).name} · in your bag`,
   short: `You need ${DIGGER_TRADE.want.n} ${itemDef(DIGGER_TRADE.want.id).name} to trade`,
-  full: 'No room in your bag for the shard',
+  full: 'Your bag is full. Make room for the shards.',   // SIGNED pattern (batch 11-23c b3dc505, Magii #17067)
 } as const

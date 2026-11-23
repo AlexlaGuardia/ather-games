@@ -1,5 +1,5 @@
 // BETA M108 s3: the Digger's trade. npx tsx src/app/shimmer/open/ather/digger-trade.test.ts
-import { diggerTrade, DIGGER_TRADE } from './digger-trade'
+import { diggerTrade, DIGGER_TRADE, DIGGER_LABEL } from './digger-trade'
 import { newInv, give, countOf, SLOTS, type Inv } from '../shared/inventory'
 import { folkOf, DIGGER_SURE } from './settlement-folk'
 import { PROFESSIONS, WORKS_IN } from './moglins'
@@ -8,6 +8,7 @@ let fails = 0, n = 0
 const ok = (c: boolean, m: string) => { n++; if (!c) { fails++; console.log(`✗ ${m}`) } }
 const bag = (o: Record<string, number>): Inv => Object.entries(o).reduce((i, [id, k]) => give(i, id, k).inv, { ...newInv(0), slots: Array(SLOTS).fill(null) } as Inv)
 const P = DIGGER_TRADE.want.id, S = DIGGER_TRADE.product.id
+ok(DIGGER_LABEL.full === 'Your bag is full. Make room for the shards.', 'bag-full = the signed pattern (batch 11-23c, Magii #17067)')
 ok(P === 'goldwood_plank' && S === 'raw_mana_shard', 'canon table: Goldwood Plank in, Raw Mana Shard out')
 const none = bag({}), r0 = diggerTrade(none)
 ok(!r0.ok && r0.why === 'short', 'no planks = refused (short)')

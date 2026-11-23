@@ -107,6 +107,7 @@ export const GLADE_LINES: Readonly<Record<string, Line>> = {
   "quest.b1.title": {"who": null, "text": "Meet the Glade"},
   "quest.b2.title": {"who": null, "text": "A Favour for Greg"},
   "quest.m70.title": {"who": null, "text": "Lamps Out"},
+  "quest.m70.after": {"who": null, "text": "Go back to Greg at the Glade."},
   "quest.m70side.title": {"who": null, "text": "A Proper Batch"},
 }
 /** A line's text by id; throws on a missing id so a canon rename is loud, never a blank bubble. */

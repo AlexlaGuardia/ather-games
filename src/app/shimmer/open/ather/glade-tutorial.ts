@@ -12,9 +12,15 @@ import { seedId, type CropId } from './farming'
 
 export type Friend = 'otto' | 'tess' | 'bonn' | 'fennel'
 export const FRIENDS: readonly Friend[] = ['otto', 'tess', 'bonn', 'fennel']
-export type Gift = 'grimoire' | 'spike' | 'pruner' | 'seeds' | 'bait' | 'rinquest'
+export type Gift = 'grimoire' | 'spike' | 'pruner' | 'seeds' | 'bait' | 'rinquest' | 'm70pack'
+/** the Glade's gifts (a legacy keeper counts these as given); M70's pack is the settlement's, every keeper earns it */
 export const GIFTS: readonly Gift[] = ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest']
+const GIFT_IDS: readonly Gift[] = [...GIFTS, 'm70pack']
 export type Beat2 = 'none' | 'asked' | 'accepted'
+/** M70 s1 (first-settlement.ts): Lamps Out. none = not told · open = Chamomile asked (the big one stands) · down = it fell ·
+ *  thanked = Chamomile's thanks heard and the gift handed (once). */
+export type M70 = 'none' | 'open' | 'down' | 'thanked'
+const M70S: readonly M70[] = ['none', 'open', 'down', 'thanked']
 export interface Tut {
   v: 1
   /** false = a keeper born before the tutorial existed: everything reads as done, nothing is re-gifted */
@@ -25,10 +31,13 @@ export interface Tut {
   b2: Beat2
   /** the in-game day Fennel's jar was last emptied by this keeper (null = never) */
   baitDay: number | null
+  /** M70 s1: the first settlement's quest + the node its big one guards (picked when Chamomile asks) */
+  m70: M70
+  m70node: string | null
 }
-export const freshTut = (): Tut => ({ v: 1, live: true, greg: { welcome: false, moglins: false, spirits: false, wilds: false }, heard: [], gifts: [], b2: 'none', baitDay: null })
+export const freshTut = (): Tut => ({ v: 1, live: true, greg: { welcome: false, moglins: false, spirits: false, wilds: false }, heard: [], gifts: [], b2: 'none', baitDay: null, m70: 'none', m70node: null })
 /** What an older save becomes: the whole tutorial done, every gift counted as given (they already hold their tools). */
-export const legacyTut = (): Tut => ({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: [...FRIENDS], gifts: [...GIFTS], b2: 'accepted', baitDay: null })
+export const legacyTut = (): Tut => ({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: [...FRIENDS], gifts: [...GIFTS], b2: 'accepted', baitDay: null, m70: 'none', m70node: null })
 
 // ── Greg ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 /** Which screen Greg opens on. `hub` lists the open choices (The Wilds? only once Moglins? and Spirits? are both heard). */
@@ -131,9 +140,11 @@ export function parseTut(v: unknown): Tut | null {
     v: 1, live: o.live !== false,
     greg: { welcome: bool(g.welcome), moglins: bool(g.moglins), spirits: bool(g.spirits), wilds: bool(g.wilds) },
     heard: Array.isArray(o.heard) ? [...new Set(o.heard.filter((f): f is Friend => FRIENDS.includes(f)))] : [],   // save order kept
-    gifts: Array.isArray(o.gifts) ? [...new Set(o.gifts.filter((x): x is Gift => GIFTS.includes(x)))] : [],
+    gifts: Array.isArray(o.gifts) ? [...new Set(o.gifts.filter((x): x is Gift => GIFT_IDS.includes(x)))] : [],
     b2: o.b2 === 'asked' || o.b2 === 'accepted' ? o.b2 : 'none',
     baitDay: Number.isInteger(o.baitDay) ? o.baitDay! : null,
+    m70: M70S.includes(o.m70 as M70) ? o.m70! : 'none',
+    m70node: typeof o.m70node === 'string' ? o.m70node : null,
   }
 }
 /** No save yet: a keeper who has already played (any garden/works save) is a LEGACY keeper; a brand-new one starts fresh. */

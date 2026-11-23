@@ -3,8 +3,8 @@
 // settlement (the Glade-tutorial settlement, Angelica's) and points the keeper to the camp; the camp = the Burrfolk's home
 // ground in the Wilds (its place + layout + stock = Jin's). Lines: batch 11-23b › D1-D4, SIGNED (Alex), the MAIN text, word for
 // word (gleaner.test.ts reads the canon file).
-// ★ Magii #16993 (11-23): players meet Gleaner only when M70 (the first settlement) ships. Until then Gleaner stands OWNER-ONLY
-//   at the Glade-side edge of the Wilds, for testing (GLEANER_POST; the page gates it on /api/owner). The camp is for everyone.
+// ★ Magii #16993 (11-23): players meet Gleaner only when M70 (the first settlement) ships. M70 s1 shipped it: GLEANER_POST is
+//   the stall in the first settlement round the arrival (first-settlement.ts), on for every keeper. The camp is for everyone.
 // ★ Canon gives Gleaner no pronoun yet: keep every build text and comment here pronoun-free.
 // PURE: folk-talk.ts arranges nothing here; use-folk-talk.tsx applies the swap; network-scene.tsx draws the post + the camp.
 import type { Settlement } from './network'

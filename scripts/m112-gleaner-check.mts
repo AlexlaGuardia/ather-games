@@ -1,7 +1,7 @@
 // BETA M112 s2: Gleaner + the Burrfolk camp on prod at 390x844. npx tsx scripts/m112-gleaner-check.mts [--url ...] [--out ...]
 // Canon: shimmer-folds-settlements.md › THE BURRFOLK; lines batch 11-23b › D1-D4 (SIGNED), pinned below AS TEXT.
 // Magii #16993: players meet Gleaner only when M70 ships; until then the post is OWNER-ONLY. Two contexts:
-//   P (player) · C the camp is drawn + named · PP1 no Gleaner post
+//   P (player) · C the camp is drawn + named · PP1 Gleaner at the post (M70 s1 moved it from owner-only to the first settlement)
 //   O (owner)  · C the camp · OP1 Gleaner at the post · OG greet/answers/never follows (D1, D4) · OB barter (D2, one swap,
 //                no Marks) · OD1 the camp POINTER (D3) after the first swap · OL leave = camp.repeat
 import puppeteer, { type Page } from 'puppeteer-core'
@@ -87,7 +87,7 @@ try {
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z), POST.x, POST.z); await sleep(4000)
   const postOn = await poll(async () => (await p.evaluate(() => (window as any).__folk?.gleanerPost?.())) === true, owner ? 20000 : 6000)
   const st = await stalls()
-  if (!owner) { ok(!postOn && !st[POST.id], `PP1. a player sees no Gleaner (post ${postOn}, stall ${JSON.stringify(st[POST.id] ?? null)})`) }
+  if (!owner) { ok(postOn && st[POST.id]?.name === 'Gleaner', `PP1. M70 s1: a player sees Gleaner at the first settlement (post ${postOn}, stall ${JSON.stringify(st[POST.id] ?? null)})`) }
   else {
     ok(postOn && st[POST.id]?.name === 'Gleaner', `OP1. the owner sees Gleaner at the post (${JSON.stringify(st[POST.id] ?? null)})`)
     await p.evaluate((k, id, n) => { const inv = JSON.parse(localStorage.getItem(k) ?? 'null') ?? { v: 1, slots: Array(32).fill(null) }; const i = inv.slots.findIndex((x: unknown) => !x); inv.slots[i] = { id, n }; localStorage.setItem(k, JSON.stringify(inv)) }, INV_KEY, row.want.id, row.want.n + 1)

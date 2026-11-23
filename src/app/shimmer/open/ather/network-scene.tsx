@@ -15,6 +15,8 @@ import { type Spot } from './folk-spots'
 import { builtFolkSpots } from './settlement-lots'
 import { burrfolkOf, stallSpot } from './burrfolk'
 import { GLEANER_POST, BURR_CAMP, CAMP_LABEL, campStalls } from './gleaner'
+import { SETTLERS, LAMPS, lampsLit } from './first-settlement'
+import { loadTut } from './glade-tutorial'
 import { SettlementBuildings } from './settlement-buildings'
 import { GLADE_ID } from './moonwell-glade'
 import { setMapSettlements } from './tile-picture'
@@ -134,16 +136,10 @@ export const folkDrawn = new Map<string, Spot[]>()
 /** M112: the Burrfolk stalls drawn right now: settlement id -> the stall-keeper's spot + name (the page aims E at it; checks read it) */
 export const stallDrawn = new Map<string, Spot & { name: string }>()
 
-/** M112 s2 (Magii #16993): Gleaner's post stands for the OWNER only until M70 ships (the /api/owner cookie, as spirit-model.tsx).
- *  `on` is read by the page's E pick every frame; the draw re-renders when the check lands. */
-export const gleanerPost = { on: false }
-let ownerP: Promise<boolean> | null = null
-const ownerCheck = () => (ownerP ??= fetch('/api/owner', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { owner: false })).then(d => !!d.owner).catch(() => false))
-function useGleanerPost(): boolean {
-  const [on, setOn] = useState(gleanerPost.on)
-  useEffect(() => { let alive = true; ownerCheck().then(v => { gleanerPost.on = v; if (alive) setOn(v) }); return () => { alive = false } }, [])
-  return on
-}
+/** M112 s2 (Magii #16993): Gleaner's post stood for the OWNER only until M70. M70 s1 ships the first settlement, and the post
+ *  is its stall (shimmer-folds-settlements.md: Gleaner at the first settlement): on for every keeper. `on` is read by the E pick. */
+export const gleanerPost = { on: true }
+const useGleanerPost = () => gleanerPost.on
 
 function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: number) => number | null }) {
   const postOn = useGleanerPost()
@@ -292,3 +288,31 @@ export function BigTop({ fair, y }: { fair: Fair; y: number }) {
   )
 }
 export { FAIR_NAME }
+
+// ── M70 s1: THE FIRST SETTLEMENT (first-settlement.ts says where): Chamomile, Borage, Feverfew, Angelica round the arrival, and
+// lamps along the two paths, dark while the big one stands, lit once it is down (the tutorial save, re-read once a second). ──
+/** what the settlement draws right now (the check reads it): y = ground at the middle, null = not loaded */
+export const settlementDrawn: { y: number | null; lit: boolean } = { y: null, lit: false }
+export function FirstSettlement({ loaded }: { loaded: (x: number, z: number) => number | null }) {
+  const [st, setSt] = useState<{ y: number | null; lit: boolean }>({ y: null, lit: false })
+  const acc = useRef(1)
+  useFrame((_, dt) => {
+    acc.current += dt; if (acc.current < 1) return; acc.current = 0
+    const y = loaded(SETTLERS[0].x, SETTLERS[0].z), lit = lampsLit(loadTut())
+    settlementDrawn.y = y; settlementDrawn.lit = lit
+    setSt(cur => (cur.y === y && cur.lit === lit ? cur : { y, lit }))
+  })
+  useEffect(() => { (window as unknown as { __settlement?: unknown }).__settlement = () => ({ ...settlementDrawn, settlers: SETTLERS.map(s => s.id), lamps: LAMPS.length }) }, [])
+  if (st.y === null) return null
+  return <>
+    {SETTLERS.map((p, k) => { const y = loaded(p.x, p.z); return y === null ? null : (
+      <group key={p.id} position={[p.x, y, p.z]} rotation-y={p.yaw}>
+        <MoglinModel build="chibi" action="idle" tone={furOf(`m70:${p.id}`)} seed={k * 2.3} />
+      </group>) })}
+    {LAMPS.map((l, k) => { const y = loaded(l.x, l.z); return y === null ? null : (
+      <group key={k} position={[l.x, y, l.z]}>
+        <mesh position={[0, 0.9, 0]}><cylinderGeometry args={[0.06, 0.08, 1.8, 6]} /><meshLambertMaterial color="#5b4630" /></mesh>
+        <mesh position={[0, 1.95, 0]}><boxGeometry args={[0.3, 0.34, 0.3]} /><meshLambertMaterial color={st.lit ? '#ffd27a' : '#4a4a48'} emissive={st.lit ? '#ffb347' : '#000000'} emissiveIntensity={st.lit ? 1.2 : 0} /></mesh>
+      </group>) })}
+  </>
+}
