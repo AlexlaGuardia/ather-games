@@ -19,7 +19,7 @@ import { GLADE_LOTS, lotAt } from '../../open/ather/moonwell-glade'
 import type { RegionMeta } from '../../open/region'
 import { isPitstop } from '../../open/continent/pitstops'
 
-export type PoiKind = 'settlement' | 'fair' | 'arrival' | 'neck' | 'crossing' | 'moonwell' | 'gate' | 'garden' | 'folk' | 'lot' | 'stop' | 'place' | 'shop'
+export type PoiKind = 'settlement' | 'fair' | 'arrival' | 'neck' | 'crossing' | 'moonwell' | 'gate' | 'garden' | 'folk' | 'lot' | 'stop' | 'place' | 'shop' | 'zone'   // zone: M84 s1 building zones (world/builder-zones.ts), drawn on this overlay
 export interface Poi { kind: PoiKind; name: string; x: number; z: number }
 export interface OvRoad { kind: string; pts: [number, number][] }
 export interface Overlay { pois: Poi[]; roads: OvRoad[] }
@@ -28,10 +28,10 @@ export const EMPTY_OVERLAY: Overlay = { pois: [], roads: [] }
 /** marker colour per kind (one legend for the three views) */
 export const POI_COLOR: Record<PoiKind, string> = {
   settlement: '#fbbf24', fair: '#f472b6', arrival: '#a78bfa', neck: '#67e8f9', crossing: '#22d3ee', moonwell: '#60a5fa', gate: '#f87171',
-  garden: '#86efac', folk: '#fde68a', lot: '#fcd34d', stop: '#fb923c', place: '#fde68a', shop: '#c4b5fd',
+  garden: '#86efac', folk: '#fde68a', lot: '#fcd34d', stop: '#fb923c', place: '#fde68a', shop: '#c4b5fd', zone: '#e879f9',
 }
 /** kinds that get a label in the overview (the rest are dots there: the overview is ~32 px a tile) */
-export const OVERVIEW_LABEL: ReadonlySet<PoiKind> = new Set(['settlement', 'fair', 'arrival', 'moonwell', 'gate', 'garden', 'stop', 'place'])
+export const OVERVIEW_LABEL: ReadonlySet<PoiKind> = new Set(['settlement', 'fair', 'arrival', 'moonwell', 'gate', 'garden', 'stop', 'place', 'zone'])
 export const ROAD_COLOR = '#fef3c7'
 
 /** the Wilds: the network (null = no network baked: no settlements, fair or paths) + the void field's crossings */

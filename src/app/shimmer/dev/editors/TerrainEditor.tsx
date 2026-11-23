@@ -34,6 +34,8 @@ import { loadRegion, type Region } from '../../open/region'
 import { wildsOverlay, gladeOverlay, nyxOverlay, poisIn, roadsIn, POI_COLOR, ROAD_COLOR, EMPTY_OVERLAY, type Overlay } from './builder-pois'
 import { GLADE_TILE_CENTER, GLADE_SIZE } from '../../world/glade-builder'
 import { NYX_TILE_M } from '../../world/nyx-builder'
+import { flattenZone, normRect, bigEnough, overlapping, zoneAt, newZoneId, zoneOverlay, zoneLabel, ZONE_KINDS, KIND_LABEL, ZONE_BLEND_M, type Zone, type ZoneKind, type ZoneTag } from '../../world/builder-zones'
+import { choicesFor, type Choice } from './zone-choices'
 
 // ── BETA M83 p1 s1a: the editor works on the World Builder DRAFT (world/builder.ts), never on the live layer. Save + autosave write
 // the draft; PUBLISH makes it a version and puts it live; the history rolls back to any version. Players see nothing until Publish.
@@ -63,9 +65,11 @@ const isCheck = (n: string) => n.startsWith('check:')
 /** ox, oz = the tile's centre in world coords (a Wilds tile: tx/ty * TILE_M; the Glade's tile: its own centre). `voidV` (Glade):
  *  vertices that are NOT ground: heightAt answers NaN there, so the brush skips them, and Fly drops their triangles. */
 interface Base { meta: WildsMeta; tx: number; ty: number; ox: number; oz: number; h: Float32Array; voided?: Uint8Array; voidV?: Uint8Array }
-type Tool = Brush | 'water' | 'dry' | 'falls' | 'void'
-const TOOLS: Tool[] = [...BRUSHES, 'water', 'dry', 'falls', 'void']
-const TOOL_KEY: Record<Tool, string> = { raise: 'Raise', lower: 'Lower', flatten: 'Flatten', smooth: 'Smooth', water: 'Water', dry: 'Dry', falls: 'Falls', void: 'Void' }
+type Tool = Brush | 'water' | 'dry' | 'falls' | 'void' | 'zone'
+const TOOLS: Tool[] = [...BRUSHES, 'water', 'dry', 'falls', 'void', 'zone']
+const TOOL_KEY: Record<Tool, string> = { raise: 'Raise', lower: 'Lower', flatten: 'Flatten', smooth: 'Smooth', water: 'Water', dry: 'Dry', falls: 'Falls', void: 'Void', zone: 'Zone' }
+// M84 s1: the building zones live beside the edits; a change marks this key dirty so autosave / Save send them
+const ZONES_KEY = 'zones/'
 // M104: the void brush's cells live in the same store under one key (not a tile name: '/' never passes TILE_NAME), so one undo
 // history, dirty set, autosave and Publish cover them; the layer file carries them as `voids` (void-edits.ts)
 const VOIDS_KEY = 'voids/'
@@ -119,6 +123,16 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const [showOv, setShowOv] = useState(false)
   const [ovData, setOvData] = useState<Overlay>(EMPTY_OVERLAY)
   const [ovDoors, setOvDoors] = useState(false)   // nyx: the shop doors are worked out (town plans) the first time the overlay opens
+  // M84 s1 + M114: building zones (world/builder-zones.ts). The flatten is baked into the edits; `zones` is the list + their tags.
+  const [zones, setZonesS] = useState<Zone[]>([])
+  const zonesRef = useRef<Zone[]>([])
+  const setZones = (z: Zone[]) => { zonesRef.current = z; setZonesS(z) }
+  const [selZone, setSelZone] = useState<string | null>(null)   // the zone whose tag popup is open
+  const zoneDrag = useRef<{ ax: number; az: number; bx: number; bz: number } | null>(null)
+  const [zoneBox, setZoneBox] = useState<{ x0: number; z0: number; x1: number; z1: number } | null>(null)   // the rectangle being dragged
+  const [zoneNet, setZoneNet] = useState<Network | null>(null)   // the Wilds' season network: its Moglins fill the Home list
+  // M84 s1: the zones (a marker named by the tag + the rectangle) ride on the M105 overlay, in all three views
+  const ovAll = useMemo((): Overlay => { if (!zones.length) return ovData; const z = zoneOverlay(zones); return { pois: [...ovData.pois, ...z.pois], roads: [...ovData.roads, ...z.roads] } }, [ovData, zones])
 
   const worldRef = useRef<WildsWorld | null>(null)
   const gridRef = useRef<Grid | null>(null)       // the Wilds' world, or the Nyx continent's virtual tiles
@@ -155,7 +169,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         setSnapB(b); setSavedAt(b.draftAt)
         const store: Edits = { ...b.draft.tiles }; for (const [t, m] of Object.entries(b.draft.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(b.draft.falls)) store[fkey(t)] = { ...m }
         if (b.draft.voids) store[VOIDS_KEY] = { ...b.draft.voids }
-        edits.current = store
+        edits.current = store; setZones(b.draft.zones ?? [])
         setTiles([{ name: T.name, tx: 0, ty: 0, land: 1 }])
         setStatus(''); setReady(true); setRev(r => r + 1)
       }).catch(err => setStatus(`failed to load: ${String(err)}`))
@@ -173,7 +187,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         setSnapB(b); setSavedAt(b.draftAt)
         const store: Edits = { ...b.draft.tiles }; for (const [t, m] of Object.entries(b.draft.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(b.draft.falls)) store[fkey(t)] = { ...m }
         if (b.draft.voids) store[VOIDS_KEY] = { ...b.draft.voids }
-        edits.current = store
+        edits.current = store; setZones(b.draft.zones ?? [])
         const first = [...list].sort((a, c) => Math.hypot(a.tx, a.ty) - Math.hypot(c.tx, c.ty) || c.land - a.land)[0]
         setTiles(list)
         if (first) setTile(first.name)
@@ -193,7 +207,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       worldRef.current = w; gridRef.current = w
       const store: Edits = { ...layer.edits }; for (const [t, m] of Object.entries(layer.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(layer.falls)) store[fkey(t)] = { ...m }
       if (b.draft.voids) store[VOIDS_KEY] = { ...b.draft.voids }
-      edits.current = store
+      edits.current = store; setZones(b.draft.zones ?? []); setZoneNet(nw ?? null)
       setTiles(idx.tiles.filter(t => t.land > 0.02).map(t => ({ name: t.name, tx: t.tx, ty: t.ty, land: t.land })).sort((a, b) => a.ty - b.ty || a.tx - b.tx))
       setStatus('')
       setRev(r => r + 1)
@@ -370,7 +384,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     } else if (o.brush === 'void') {
       if (glade || nyx) return   // no voids on this map
       markDirty(mergeEdits(edits.current, { [VOIDS_KEY]: paintVoids(edits.current[VOIDS_KEY], x, z, o.radius, o.voidMode) }))
-    } else if (o.brush !== 'falls') {
+    } else if (o.brush !== 'falls' && o.brush !== 'zone') {
       const d = applyBrush(heightAt, brushTiles(), edits.current, { kind: o.brush, x, z, r: o.radius, s: o.strength, target })
       markDirty(mergeEdits(edits.current, d))
     }
@@ -406,6 +420,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     if (!ready) return
     if (opts.current.picking) { setLevel(Math.round(heightAt(p.x, p.z) * 10) / 10); setPicking(false); return }
     if (opts.current.brush === 'falls') { const b = bases.current.get(tileRef.current)!; line.current = [[p.x - b.ox, p.z - b.oz]]; return }
+    if (opts.current.brush === 'zone') { zoneDrag.current = { ax: p.x, az: p.z, bx: p.x, bz: p.z }; setZoneBox(null); return }   // M84 s1: drag a rectangle
     hist.current.begin(edits.current, allKeys())
     let target = opts.current.brush === 'flatten' ? heightAt(p.x, p.z) : undefined
     if (opts.current.brush === 'water' && opts.current.level === null) { target = Math.round((heightAt(p.x, p.z) + 1) * 10) / 10; setLevel(target) }
@@ -425,6 +440,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     const B = bases.current.get(tileRef.current)
     setHover({ x: Math.round(p.x - (B ? B.ox : 0)), z: Math.round(p.z - (B ? B.oz : 0)), h: heightAt(p.x, p.z), d: 0 })
     if (paint.current) { paint.current.x = p.x; paint.current.z = p.z }
+    const zd = zoneDrag.current; if (zd) { zd.bx = p.x; zd.bz = p.z; setZoneBox(normRect(zd.ax, zd.az, zd.bx, zd.bz)) }
     if (line.current && B) { const q: [number, number] = [p.x - B.ox, p.z - B.oz], l = line.current[line.current.length - 1]; if (Math.hypot(q[0] - l[0], q[1] - l[1]) >= 3) { line.current.push(q); redraw() } }
   }
   const commitLine = (pts: [number, number][], w: number, name = tileRef.current) => {
@@ -432,9 +448,40 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     hist.current.begin(edits.current, [k]); markDirty(mergeEdits(edits.current, { [k]: add })); hist.current.commit(); setRev(r => r + 1); return true
   }
   const endStroke = () => {
+    const zd = zoneDrag.current
+    if (zd) { zoneDrag.current = null; setZoneBox(null); endZoneDrag(zd); return }
     if (line.current) { const pts = line.current; line.current = null; if (!commitLine(pts, opts.current.fallW)) redraw(); return }
     const q = paint.current; if (!q) return; clearInterval(q.timer); paint.current = null; hist.current.commit(); setRev(r => r + 1) }
 
+  // ── M84 s1: zones. A drag makes one (flattened to the ground under the first click, blended out ZONE_BLEND_M); a click selects
+  // one (its tag popup). Zones are not in the undo history (it resets on a zone change, so an older undo can never rewrite a
+  // zone's ground); Delete is the undo: it writes back the deltas the zone replaced. ──
+  const createZone = (ax: number, az: number, bx: number, bz: number): Zone | null => {
+    const r = normRect(ax, az, bx, bz), h = heightAt(ax, az)
+    if (!bigEnough(r)) return null
+    if (!Number.isFinite(h)) { setStatus('a zone starts on ground (the first click was off the land)'); return null }
+    const hit = overlapping(zonesRef.current, r)
+    if (hit) { setStatus(`zones cannot overlap (with ${zoneLabel(hit)}, ${ZONE_BLEND_M} m edge included)`); return null }
+    const { d, prev } = flattenZone(brushTiles(), heightAt, edits.current, r, Math.round(h * 10) / 10)
+    const z: Zone = { id: newZoneId(zonesRef.current), ...r, h: Math.round(h * 10) / 10, tag: null, prev }
+    markDirty([...mergeEdits(edits.current, d), ZONES_KEY]); hist.current = new EditHistory()
+    setZones([...zonesRef.current, z]); setSelZone(z.id); setStatus(''); setRev(v => v + 1)
+    return z
+  }
+  const endZoneDrag = (zd: { ax: number; az: number; bx: number; bz: number }) => {
+    if (bigEnough(normRect(zd.ax, zd.az, zd.bx, zd.bz))) { createZone(zd.ax, zd.az, zd.bx, zd.bz); return }
+    const z = zoneAt(zonesRef.current, zd.ax, zd.az); setSelZone(z ? z.id : null)
+  }
+  const deleteZone = (id: string): boolean => {
+    const z = zonesRef.current.find(q => q.id === id); if (!z) return false
+    markDirty([...mergeEdits(edits.current, z.prev), ZONES_KEY]); hist.current = new EditHistory()
+    setZones(zonesRef.current.filter(q => q.id !== id)); setSelZone(null); setRev(v => v + 1)
+    return true
+  }
+  const tagZone = (id: string, tag: ZoneTag | null) => {
+    if (!zonesRef.current.some(q => q.id === id)) return false
+    setZones(zonesRef.current.map(q => q.id === id ? { ...q, tag } : q)); markDirty([ZONES_KEY]); return true
+  }
   const undo = useCallback(() => { markDirty(hist.current.undo(edits.current)); setRev(r => r + 1) }, [])
   const redo = useCallback(() => { markDirty(hist.current.redo(edits.current)); setRev(r => r + 1) }, [])
   const resetTile = () => { hist.current.begin(edits.current, [tile, wkey(tile), fkey(tile)]); delete edits.current[tile]; delete edits.current[wkey(tile)]; delete edits.current[fkey(tile)]; hist.current.commit(); markDirty([tile, wkey(tile), fkey(tile)]); setRev(r => r + 1) }
@@ -445,12 +492,13 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       if (!Object.keys(m).length) continue
       if (k === VOIDS_KEY) L.voids = m; else if (k.startsWith(WATER_PREFIX)) L.water[tileOfKey(k)] = m; else if (k.startsWith(FALLS_PREFIX)) L.falls[tileOfKey(k)] = m; else L.tiles[k] = m
     }
+    if (zonesRef.current.length) L.zones = zonesRef.current
     return L
   }
   const loadLayer = (L: Layer) => {
     const store: Edits = { ...L.tiles }; for (const [t, m] of Object.entries(L.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(L.falls)) store[fkey(t)] = { ...m }
     if (L.voids) store[VOIDS_KEY] = { ...L.voids }
-    edits.current = store; hist.current = new EditHistory(); dirtyRef.current.clear(); setDirty([]); setRev(r => r + 1)
+    edits.current = store; setZones(L.zones ?? []); setSelZone(null); hist.current = new EditHistory(); dirtyRef.current.clear(); setDirty([]); setRev(r => r + 1)
   }
   const save = useCallback(async (auto = false): Promise<boolean> => {
     const names = [...dirtyRef.current]; if (!names.length) return true
@@ -495,7 +543,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo() }
       else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo() }
       else if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); save() }
-      else if (!mod && e.key >= '1' && e.key <= '8') setBrush(TOOLS[+e.key - 1])
+      else if (!mod && e.key >= '1' && e.key <= '9') setBrush(TOOLS[+e.key - 1])
       else if (!mod && e.code === 'KeyV' && !e.repeat) setVoidMode(m => (m === -1 ? 1 : -1))   // M104: void brush erase / paint
       else if (!mod && (e.code === 'Minus' || e.code === 'NumpadSubtract')) setStrength(s => stepStrength(s, -1))   // M83: strength - / =
       else if (!mod && (e.code === 'Equal' || e.code === 'NumpadAdd')) setStrength(s => stepStrength(s, 1))
@@ -566,22 +614,25 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       voidCells: () => Object.keys(edits.current[VOIDS_KEY] ?? {}).length,
       voidRev, status: () => status,
       /** M105: the overlay: on/off, toggle, and the data it draws (the game's own) */
-      overlay: { on: showOv, set: setShowOv, data: () => ovData, doors: ovDoors },
+      overlay: { on: showOv, set: setShowOv, data: () => ovAll, doors: ovDoors },
+      /** M84 s1: the zones (tile-local helpers for the check), the open popup, and the actions the popup drives */
+      zones: () => zonesRef.current.map(z => ({ id: z.id, x0: z.x0, z0: z.z0, x1: z.x1, z1: z.z1, h: z.h, tag: z.tag, n: Object.values(z.prev).reduce((a, m) => a + Object.keys(m).length, 0) })),
+      selZone, deleteZone, tagZone, setBrush,
     }
-  }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt, strength, radius, brush, lockLook, showOv, ovData, ovDoors, voidRev, status, glade, nyx])
+  }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt, strength, radius, brush, lockLook, showOv, ovAll, ovDoors, voidRev, status, glade, nyx, selZone])
 
   // M105: the overlay cut to the open tile (tile view) and to its 3x3 ring (Fly); off = undefined, nothing drawn
   const Bt = bases.current.get(tile)
   const tileOv = useMemo((): Overlay | null => {
     if (!showOv || !Bt) return null
     const x0 = Bt.ox - Bt.meta.sizeX / 2, z0 = Bt.oz - Bt.meta.sizeZ / 2, x1 = x0 + Bt.meta.sizeX, z1 = z0 + Bt.meta.sizeZ
-    return { pois: poisIn(ovData, x0, z0, x1, z1), roads: roadsIn(ovData, x0, z0, x1, z1) }
-  }, [showOv, Bt, ovData])
+    return { pois: poisIn(ovAll, x0, z0, x1, z1), roads: roadsIn(ovAll, x0, z0, x1, z1) }
+  }, [showOv, Bt, ovAll])
   const flyOv = useMemo((): Overlay | undefined => {
     if (!showOv || !Bt) return undefined
     const S = Bt.meta.sizeX, x0 = Bt.ox - S * 1.5, z0 = Bt.oz - Bt.meta.sizeZ * 1.5, x1 = Bt.ox + S * 1.5, z1 = Bt.oz + Bt.meta.sizeZ * 1.5
-    return { pois: poisIn(ovData, x0, z0, x1, z1), roads: roadsIn(ovData, x0, z0, x1, z1) }
-  }, [showOv, Bt, ovData])
+    return { pois: poisIn(ovAll, x0, z0, x1, z1), roads: roadsIn(ovAll, x0, z0, x1, z1) }
+  }, [showOv, Bt, ovAll])
   const cur = tiles.find(t => t.name === tile)
   const step = (dx: number, dy: number) => { const w = gridRef.current; if (!w || !cur) return; const t = w.at(cur.tx + dx, cur.ty + dy); if (t) setTile(t.name) }
   const B = bases.current.get(tile)
@@ -647,13 +698,19 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
               </g>) })}
           </svg>
         )}
+        {B && (brush === 'zone' || zoneBox) && (
+          <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`${B.ox - B.meta.sizeX / 2} ${B.oz - B.meta.sizeZ / 2} ${B.meta.sizeX} ${B.meta.sizeZ}`} preserveAspectRatio="none" data-testid="zone-tile">
+            {zones.map(z => <rect key={z.id} x={z.x0} y={z.z0} width={z.x1 - z.x0} height={z.z1 - z.z0} fill={z.id === selZone ? 'rgba(232,121,249,0.25)' : 'rgba(232,121,249,0.10)'} stroke="#e879f9" strokeWidth={z.id === selZone ? 2 : 1} vectorEffect="non-scaling-stroke" data-zone={z.id} />)}
+            {zoneBox && <rect x={zoneBox.x0} y={zoneBox.z0} width={zoneBox.x1 - zoneBox.x0} height={zoneBox.z1 - zoneBox.z0} fill="rgba(255,255,255,0.12)" stroke="white" strokeDasharray="4 3" strokeWidth={1.5} vectorEffect="non-scaling-stroke" data-testid="zone-drag" />}
+          </svg>
+        )}
         {(!ready || status) && <div className="absolute left-2 top-2 text-xs font-mono bg-black/70 px-2 py-1 rounded">{status || 'loading…'}</div>}
         <div className="absolute right-2 bottom-2 text-[10px] font-mono text-white/50 bg-black/50 px-1.5 rounded">{MAP_NAME[map]} · +x → · +z ↓ · 1 km</div>
       </div>
       {/* M83: the whole map, the open tile lit, click to open (Alex 11-23) */}
       {(glade ? ready : tiles.length > 0) && <BuilderOverview tiles={ovTiles} tile={tile} onPick={n => n !== tile && setTile(n)} source={ovSource}
         edits={n => edits.current[n]} waterY={glade ? GLADE_WATER_Y : nyx ? NYX_WATER_Y : 0} rev={rev + rawN} tint={showEdits}
-        overlay={showOv ? { data: ovData, c0: glade ? GLADE_TILE_CENTER : { x: 0, z: 0 }, tileM: glade ? GLADE_SIZE : nyx ? NYX_TILE_M : TILE_M } : undefined}
+        overlay={showOv ? { data: ovAll, c0: glade ? GLADE_TILE_CENTER : { x: 0, z: 0 }, tileM: glade ? GLADE_SIZE : nyx ? NYX_TILE_M : TILE_M } : undefined}
         px={glade ? 128 : 32} maxW={glade ? 300 : 560} note={!glade && !nyx && rawN < tiles.length ? `loading tiles ${rawN}/${tiles.length}…` : undefined} />}
       </div>
 
@@ -687,6 +744,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
             <div className="text-[11px] text-white/45">{voidMode === -1 ? 'erase: the crust holds there, Settle ground you can walk (a cooled neck). Green = erased.' : 'paint: the crust is gone, a void like the generated ones (never on a path, a settlement or the Glade). Red = painted.'} The ground updates when you let go. Publish refuses if a zone would be cut off from Moonwell.</div>
           </div>}
           {brush === 'flatten' && <div className="text-[11px] text-white/45 mt-1">levels to the height under your first click</div>}
+          {brush === 'zone' && <div className="text-[11px] text-white/45 mt-1" data-testid="zone-hint">drag a building zone: the ground inside levels to the height under your first click, the edge blends over {ZONE_BLEND_M} m. Click a zone to tag or delete it. Delete puts the ground back (undo does not reach past a zone). {zones.length} zone{zones.length === 1 ? '' : 's'} on this map.</div>}
           {(brush === 'water' || brush === 'dry') && <div className="text-[11px] text-white/45 mt-1">{brush === 'water' ? 'paints water at the level below; it fills wherever the level stands above the ground (carve a bowl, paint = a lake). A pond edge over lower water falls by itself.' : 'removes painted water and waterfall lines under the brush'}</div>}
           {brush === 'falls' && <div className="text-[11px] text-white/45 mt-1">drag along a cliff edge: water springs out of it and falls to the lower side, onto painted water if there is some</div>}
           {brush === 'falls' && <label className="flex flex-col gap-1 mt-2"><span className="text-[10px] uppercase tracking-[0.18em] text-white/40">Fall width <span className="tabular-nums text-white/80 normal-case tracking-normal">{fallW.toFixed(1)}</span></span><input type="range" min={0.4} max={6} step={0.1} value={fallW} onChange={e => setFallW(+e.target.value)} /></label>}
@@ -753,6 +811,45 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
           <div>{nEdits} edited vertices, {nWater} water cells, {nFalls} waterfall lines on {tile}</div>
           {hover && Number.isFinite(hover.h) && <div>({hover.x}, {hover.z}) · ground {hover.h.toFixed(1)} m{B && hover.h < B.meta.waterY ? ' · under the sea' : ''}</div>}
           <div className="text-white/35 pt-1">Hold to paint. Brushes cross onto the neighbouring tiles so seams meet. You are editing the DRAFT: players see nothing until Publish (live on the next {LOAD_NAME[map]} load, no build).</div>
+        </div>
+      </div>
+      {selZone && zones.some(z => z.id === selZone) && <ZonePopup zone={zones.find(z => z.id === selZone)!} map={map} net={zoneNet} onNeedNet={() => { if (!zoneNet) loadNetwork().then(n => setZoneNet(n)).catch(() => { /* the Glade's folk still listed */ }) }}
+        onTag={t => tagZone(selZone, t)} onDelete={() => deleteZone(selZone)} onClose={() => setSelZone(null)} />}
+    </div>
+  )
+}
+
+// ── M114: the tag popup. Opens when a zone is made (and on a click on one): Home / Shop / Supplier / Other; the first three pick
+// from a list of what already exists (zone-choices.ts). Other = a building that stays locked and empty inside. ──
+function ZonePopup({ zone, map, net, onNeedNet, onTag, onDelete, onClose }: { zone: Zone; map: BuilderMap; net: Network | null; onNeedNet: () => void; onTag: (t: ZoneTag | null) => void; onDelete: () => void; onClose: () => void }) {
+  const kind = zone.tag?.kind ?? null
+  useEffect(() => { if (kind === 'home' && map !== 'glade') onNeedNet() }, [kind, map])   // eslint-disable-line react-hooks/exhaustive-deps
+  const list: Choice[] = useMemo(() => kind ? choicesFor(kind, map, net) : [], [kind, map, net])
+  const pickKind = (k: ZoneKind) => onTag(k === 'other' ? { kind: k } : { kind: k })
+  const pick = (ref: string) => { if (!kind) return; const c = list.find(x => x.ref === ref); onTag(c ? { kind, ref: c.ref, name: c.name } : { kind }) }
+  const btn = 'px-2.5 py-1 rounded text-xs font-mono border transition-colors'
+  const on = 'bg-fuchsia-500/25 border-fuchsia-400 text-fuchsia-100', off = 'bg-white/5 border-white/15 text-white/70 hover:text-white'
+  const ASK: Record<Exclude<ZoneKind, 'other'>, string> = { home: 'Who lives here', shop: 'Which shop', supplier: 'Which supplier' }
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40" onPointerDown={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="w-[340px] rounded-lg bg-zinc-900 border border-fuchsia-400/40 p-4 flex flex-col gap-3 text-white/85 shadow-xl" data-testid="zone-popup" data-zone={zone.id}>
+        <div className="text-[10px] uppercase tracking-[0.18em] text-white/45">Building zone · {Math.round(zone.x1 - zone.x0)} × {Math.round(zone.z1 - zone.z0)} m · ground {zone.h.toFixed(1)} m</div>
+        <div className="text-sm">What is this building?</div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {ZONE_KINDS.map(k => <button key={k} className={`${btn} ${kind === k ? on : off}`} onClick={() => pickKind(k)} data-testid={`zone-kind-${k}`}>{k === 'other' ? 'Other (locked, empty)' : KIND_LABEL[k]}</button>)}
+        </div>
+        {kind && kind !== 'other' && <label className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-[0.18em] text-white/45">{ASK[kind]}</span>
+          <select value={zone.tag?.ref ?? ''} onChange={e => pick(e.target.value)} data-testid="zone-choice" className="bg-black/40 border border-white/15 rounded px-2 py-1 font-mono text-xs">
+            <option value="">{list.length ? 'pick one…' : 'loading…'}</option>
+            {list.map(c => <option key={c.ref} value={c.ref}>{c.name}</option>)}
+          </select>
+        </label>}
+        {kind === 'other' && <div className="text-[11px] text-white/50">Its door stays locked and there is nothing inside.</div>}
+        <div className="text-[11px] font-mono text-white/45" data-testid="zone-label">{zoneLabel(zone)}</div>
+        <div className="flex gap-1.5 justify-between pt-1">
+          <button className={`${btn} bg-red-500/15 border-red-400/60 text-red-200`} onClick={onDelete} data-testid="zone-delete">Delete zone</button>
+          <button className={`${btn} ${off}`} onClick={onClose} data-testid="zone-done">Done</button>
         </div>
       </div>
     </div>
