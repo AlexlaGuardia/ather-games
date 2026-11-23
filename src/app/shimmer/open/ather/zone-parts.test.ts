@@ -23,7 +23,8 @@ const layer = {
 }
 const wallItem = 'goldwood_panel_wide'
 const zs = publishedZones(layer)
-ok(zs.length === 1 && zs[0].id === 'za', 'only zones WITH a build are published builds')
+ok(zs.length === 1 && zs[0].id === 'za', 'only zones WITH a build (or a tag, M114 s2) are published; untagged + no build = dropped')
+ok(publishedZones({ zones: [{ id: 'zt', x0: 0, z0: 0, x1: 10, z1: 10, h: 1, tag: { kind: 'other' }, prev: {} }] }).length === 1, 'M114 s2: a tagged zone with no build is published (its E point)')
 ok(zs[0].build!.length === 4, 'junk parts dropped (unknown item), real ones kept')
 ok(zs[0].tag?.kind === 'other', 'the tag rides along in the published data')
 ok(publishedZones(null).length === 0 && publishedZones({ zones: 'x' }).length === 0, 'junk layer = no zones')

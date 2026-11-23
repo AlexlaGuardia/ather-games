@@ -8,7 +8,7 @@
 //   · withZoneParts: a terrain Shape whose solids() also returns those boxes (the dynamic-solids.ts withPieces pattern).
 // The parts belong to the MAP, not to the keeper: they are never in the keeper's Works, so E pickup (nearWork) and the melee ray
 // (the keeper's own pieces) never see them. Nothing to break, nothing to pick up. Only Publish changes them.
-// The tag (M114) rides along untouched in the layer; the game does not read it yet.
+// The tag (M114) rides along in the layer; zone-tags.ts gives each tagged zone its E point (M114 s2).
 import { FURNITURE } from './furniture'
 import { slabLift, panelChain, pieceRect, type Works, type Piece } from './rooms'
 import { isWholeQ } from './build-prefs'
@@ -18,8 +18,8 @@ import type { Box, Shape } from '../terrain-world'
 /** one published part in world coords; `y` = the floor it stands on */
 export interface ZonePart { key: string; zone: string; item: string; x: number; z: number; q: number; y: number }
 
-/** the published zones out of a live layer's JSON (junk-proof: builder-zones cleanZones), only those with a build */
-export const publishedZones = (j: unknown): Zone[] => cleanZones(j).filter(z => z.build?.length)
+/** the published zones out of a live layer's JSON (junk-proof: builder-zones cleanZones), only those with a build or (M114 s2) a tag */
+export const publishedZones = (j: unknown): Zone[] => cleanZones(j).filter(z => z.build?.length || z.tag)
 
 const worksOf = (ps: readonly { id: string; item: string; x: number; z: number; q: number }[]): Works =>
   ({ v: 1, rooms: [], chests: [], pieces: ps.map(p => ({ id: p.id, item: p.item, x: p.x, z: p.z, q: p.q, placedAt: 0 }) as Piece) })

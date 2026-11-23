@@ -82,6 +82,9 @@ import { gladeLayerGround, gladeLift } from './glade-layer'
 import { useGladeLayer, GladeWater } from './glade-layer-view'   // M83 s2b: the Glade's published builder layer
 import { zoneParts, zonePartBoxes, withZoneParts } from './zone-parts'   // M84 s3: published zone builds (drawn + solid)
 import { ZonePartsView } from './zone-parts-view'
+import { zoneDoor, zoneUse, zonePrompt, zoneSay, homeTalk, type ZoneUse } from './zone-tags'   // M114 s2: a published zone's tag = one E point
+import { ShopPanel } from '../business/shop-panel'   // M114 s2: a Shop zone opens its storefront's own panel
+import { useLedger } from '../trade-ui'
 import { loadSpot, saveSpot, clearSpot, makeSpot, resumeFrom } from './last-spot'   // where you were (a reload in the Wilds resumes there)
 import { GladeGreg, type GregTourState, type GregLive } from './glade-greg'
 import { biomeGround } from './hollow-goop'   // M34: what a Hollow's sheen borrows
@@ -186,8 +189,8 @@ type Spawn = { x: number; z: number; yaw: number }
 /** the Wilds' safe ground round the arrival: where the Glade's green stood until M67 s1b-2 (30.75 m north of Greg's waymark) */
 const WILDS_SAFE = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z - 30.75, r: 50 }
 const gregAt = gregSpot()   // BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
-type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState }
-type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement } | { kind: 'spirit'; id: string; name: string }
+type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState } | { kind: 'shop'; id: string }
+type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement } | { kind: 'spirit'; id: string; name: string } | { kind: 'zone'; u: ZoneUse }
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
 /** M61: a mate's island alone on the Green (the frame nobody is linked into) */
@@ -399,6 +402,9 @@ function AtherSliceGame() {
   const gladeZoneGround = useMemo(() => gladeLayerGround(gladeLayer.edits), [gladeLayer])
   const gladeMeshLift = useMemo(() => gladeLift(gladeLayer.edits), [gladeLayer])
   const gladeParts = useMemo(() => zoneParts(gladeLayer.zones ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround])   // M84 s3
+  // M114 s2: each tagged zone's ONE E point (zone-tags.ts: front edge; locked / shop panel / home label + talk / supplier line)
+  const gladeDoors = useMemo(() => (gladeLayer.zones ?? []).flatMap(z => { const u = zoneUse(z); return u ? [{ id: z.id, ...zoneDoor(z), u }] : [] }), [gladeLayer])
+  const gladeDoorsRef = useRef(gladeDoors); gladeDoorsRef.current = gladeDoors
   const gladeWorld = useMemo(() => terrainWorld(withZoneParts(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground: gladeZoneGround }, undefined, true), zonePartBoxes(gladeParts))), [gladeZoneGround, gladeParts])   // M67 s1a; s1b-2: the pond's bowl + Greg's home, lots, jetty
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
@@ -752,6 +758,7 @@ function AtherSliceGame() {
       for (const k of GLADE_FRIENDS_AT) cands.push(cap(k.x, k.z, 0.45, 1.8, { kind: 'friend', f: k.id }))   // M68 s3a
       if (tourRef.current && !tourRef.current.talk && Math.hypot(gl.x - lc.px, gl.z - lc.pz) > 30) setTour(null)   // M32: walked off = the tour is skipped
       for (const f of gladeFolkDrawn) cands.push(cap(f.x, f.z, 0.4, MOGLIN_HEIGHT.chibi + 0.1, f.id === FENNEL_FOLK_ID ? { kind: 'gfennel' } : { kind: 'folk', s: GLADE }))   // M68 s3b
+      for (const d of gladeDoorsRef.current) { const y = g(d.x, d.z); if (Number.isFinite(y)) cands.push(cap(d.x, d.z, 0.6, 2.4, { kind: 'zone', u: d.u })) }   // M114 s2
       n = aimPick(cands, eye, dir, from)
     }
     else if (zone.kind === 'plot') {
@@ -801,6 +808,7 @@ function AtherSliceGame() {
         : n?.kind === 'work' ? workPrompt(n.near)
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
         : n?.kind === 'folk' ? `E · talk to the folk of ${n.s.name}`
+        : n?.kind === 'zone' ? zonePrompt(n.u)   // M114 s2
         : atFairDoor(lc.px, lc.pz) ? 'E · the Thistledown Fair'
         : rinPrompt() ?? (cAimRef.current.crystal && cAimRef.current.dist < aimRef.current.dist ? crystalPrompt() : treePrompt())
       setPrompt(p)
@@ -854,6 +862,7 @@ function AtherSliceGame() {
       zone: () => zone.kind,
       // CHECK-ONLY (glade-cluster-check): set the keeper down somewhere in the closed Glade (only while in it), to walk the last steps to the gate
       gladeAt: (x: number, z: number, yaw: number) => { if (zone.kind === 'glade') arrive({ kind: 'glade' }, { x, z, yaw }) },
+      zoneDoors: () => gladeDoorsRef.current, near: () => near.current, panel: () => panelRef.current?.kind ?? null,   // read-only probes (M114 s2 zone-tags-check): the tagged zones' E points, what E would act on
       falling: () => (fallSt.current ? { t: fallSt.current.t, done: fallSt.current.done } : null),   // read-only probe (void-fall-check): the fall into a void
       wildsLoaded: () => [...(wwRef.current?.loaded.keys() ?? [])],   // read-only probe (M9 wilds-release-check): the parsed Wilds tiles held now
       open: (k: 'gate' | 'greg' | 'athernyx') => { if (k === 'greg') openGreg(); else setPanel({ kind: 'map', view: k === 'athernyx' ? 'athernyx' : 'ather', travel: true }) },
@@ -1272,6 +1281,7 @@ function AtherSliceGame() {
     give: g => friendGive(tut, g),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [friendC, tut])
+  const [ledger, setLedger] = useLedger()   // M114 s2: a Shop zone's panel buys with the keeper's purse (the continent's own hook)
   const gFennel = useGladeFennel(panel?.kind === 'gfennel' ? panel.c : null, c => setPanel(c ? { kind: 'gfennel', c } : null), () => setPanel({ kind: 'folk', s: GLADE }), gladeZoneGround)   // M68 s3b
   const spiritTalk = useSpiritTalk(panel?.kind === 'spirit' ? panel.c : null, useCallback((c: SpiritTalkState | null) => setPanel(c ? { kind: 'spirit', c } : null), []), hudSize === 'phone')   // M109 s1
   const idleTalk = useIdleTalk(panel?.kind === 'idlemog' ? panel.c : null, c => setPanel(c ? { kind: 'idlemog', c } : null))   // P1
@@ -1392,6 +1402,14 @@ function AtherSliceGame() {
         else if (n.kind === 'work') { if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
         else if (n.kind === 'folk') setPanel({ kind: 'folk', s: n.s })
         else if (n.kind === 'gate' && zone.kind === 'glade') leaveGlade()
+        else if (n.kind === 'zone') {   // M114 s2: a tagged zone's E point
+          const u = n.u, line = zoneSay(u); if (line) hudSay(line, 'info', 4)
+          if (u.kind === 'shop') setPanel({ kind: 'shop', id: u.id })
+          else if (u.kind === 'home') {
+            const t = homeTalk(u.ref, { greg: !tourRef.current, friends: GLADE_FRIENDS_AT.map(k => k.id), fennel: FENNEL_FOLK_ID, folk: gladeFolkDrawn.map(f => f.id) })
+            if (t?.kind === 'greg') openGreg(); else if (t?.kind === 'friend') openFriend(t.f as GardenFriend); else if (t?.kind === 'fennel') gFennel.open(); else if (t?.kind === 'folk') setPanel({ kind: 'folk', s: GLADE })
+          }
+        }
         else setPanel({ kind: 'map', view: 'ather', travel: true })   // Alex 11-20: the map opens on the side you stand on (the Ather here); an errand keeper's Rune Hold goal waits one Tab away
         return
       }
@@ -1550,6 +1568,7 @@ function AtherSliceGame() {
       {spiritTalk.panel}
       {panel?.kind === 'greg' && <GregPanel garden={{ ...garden, pages: pagesNow }} onBuy={buy} onClose={() => setPanel(null)} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
+      {panel?.kind === 'shop' && <ShopPanel id={panel.id} ledger={ledger} setLedger={setLedger} onClose={() => setPanel(null)} isTouch={isTouch} />}   {/* M114 s2: a Shop zone */}
       {panel?.kind === 'brew' && <BrewingPanel station={panel.station} onClose={() => setPanel(null)} />}
       {panel?.kind === 'work' && !visitNow && <WorkshopPanel near={panel.near} owned={owned} onClose={() => setPanel(null)} />}
       {zone.kind === 'plot' && <PlacingBar owned={owned} />}
