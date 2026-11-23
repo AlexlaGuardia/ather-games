@@ -5,6 +5,7 @@
 // caller can move them. Materials are shared by colour across every figure built (a crowd of keepers costs no extra programs).
 import * as THREE from 'three'
 import { OPT, type Look } from './keeper-look'
+import { proportionsFor, type Proportions } from './keeper-proportions'
 
 const grad = (() => {
   const t = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.RedFormat)
@@ -20,6 +21,23 @@ const EGG = [
   [[0, 0], [0.07, 0.03], [0.13, 0.15], [0.19, 0.42], [0.24, 0.74], [0.22, 0.92], [0.12, 1]],   // Broad
   [[0, 0], [0.16, 0.06], [0.2, 0.25], [0.17, 0.52], [0.19, 0.76], [0.18, 0.92], [0.09, 1]],    // Curved
 ].map(pts => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), 24))
+/** M103 chin taper: the head sphere with its lower half drawn in toward a chin (jaw 0 = the plain sphere, SPH itself) */
+const JAWS = new Map<number, THREE.BufferGeometry>()
+function headGeo(jaw: number) {
+  const k = Math.round(jaw * 100) / 100
+  if (k <= 0) return SPH
+  let g = JAWS.get(k)
+  if (!g) {
+    g = new THREE.SphereGeometry(1, 20, 14); const pos = g.attributes.position
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i); if (y >= 0) continue
+      const t = -y, f = 1 - k * 0.42 * Math.pow(t, 1.4)
+      pos.setXYZ(i, pos.getX(i) * f, y * (1 + k * 0.1), pos.getZ(i) * (1 - k * 0.22 * Math.pow(t, 1.4)))
+    }
+    g.computeVertexNormals(); JAWS.set(k, g)
+  }
+  return g
+}
 const ARCS = new Map<string, THREE.TorusGeometry>()
 const arcGeo = (thick: number, span: number) => { const k = `${thick}|${span.toFixed(4)}`; let g = ARCS.get(k); if (!g) { g = new THREE.TorusGeometry(1, thick, 6, 18, span); ARCS.set(k, g) } return g }
 
@@ -45,35 +63,38 @@ function flat(g: THREE.Object3D, geo: THREE.BufferGeometry, color: string, pos: 
 export interface KeeperBody { group: THREE.Group; height: number; headY: number }
 
 /** Build a keeper. The group's origin is between the feet; `height` is the crown, `headY` the head's centre. */
-export function buildKeeper(o: Look): KeeperBody {
+export function buildKeeper(o: Look, p: Proportions = proportionsFor(o)): KeeperBody {
   const g = new THREE.Group()
   const wide = [0.88, 1, 1.16][o.frame] ?? 1, tall = [0.9, 1, 1.1][o.frame] ?? 1
   const H = 0.5, B = 0.62 * tall, L = 0.55 * tall
   const skin = OPT.skin[o.skin], hair = OPT.hair[o.hair], top = OPT.topColor[o.topColor], acc = OPT.accent[o.accent], sc = OPT.scarf[o.scarf]
   // FLOATING LIMBS (Alex's doodle 11-18): an inverted-egg torso with no arms, a scarf over the shoulders with a tail down
   // one side, mitten hands hovering out at hip height, flat pebble feet well below, a big round head floating above.
-  const base = L * 0.62, TB = B * 1.08, topY = base + TB, Hf = H * 1.15
+  // M103: every term below is today's body times a dial at 1 (or plus a dial at 0), so the defaults change nothing
+  const tw = wide * p.torsoW, base = L * 0.62 * p.legs, TB = B * 1.08 * p.torsoL, topY = base + TB, Hf = H * 1.15, sf = p.scarf
   const body = new THREE.Group(); body.name = 'body'; g.add(body)
-  put(body, EGG[o.torso] ?? EGG[0], top, [0, base, 0], [wide, TB, wide * 0.8])
+  put(body, EGG[o.torso] ?? EGG[0], top, [0, base, 0], [tw, TB, wide * 0.8 * p.torsoD])
   for (const s of [-1, 1] as const) {
-    put(g, SPH, acc, [s * (0.29 * wide + 0.09), base + TB * 0.32, 0.03], [0.075, 0.1, 0.06], [0, 0, -s * 0.25], true, s < 0 ? 'hand-r' : 'hand-l')
-    put(g, SPH, acc, [s * 0.17 * wide, 0.045, 0.06], [0.11, 0.045, 0.15], [0, s * 0.25, 0], true, s < 0 ? 'foot-r' : 'foot-l')
+    put(g, SPH, acc, [s * (0.29 * tw + 0.09 + p.handX), base + TB * 0.32 + p.handY, 0.03 + p.handZ], [0.075 * p.hand, 0.1 * p.hand, 0.06 * p.hand], [0, 0, -s * 0.25], true, s < 0 ? 'hand-r' : 'hand-l')
+    put(g, SPH, acc, [s * (0.17 * wide + p.footX), 0.045 * p.foot, 0.06], [0.11 * p.foot, 0.045 * p.foot, 0.15 * p.foot], [0, s * 0.25, 0], true, s < 0 ? 'foot-r' : 'foot-l')
   }
-  put(body, SCARF_RING, sc, [0, topY - 0.03, 0], [0.17 * wide, 0.17 * wide, 0.16], [Math.PI / 2, 0, 0])
-  put(body, BOX, sc, [0.15 * wide, topY - 0.24, 0.15 * wide], [0.09, 0.38, 0.035], [0.12, 0, 0.42])
-  const hy = topY + Hf * 0.5 + 0.07
+  put(body, SCARF_RING, sc, [0, topY - 0.03, 0], [0.17 * tw * sf, 0.17 * tw * sf, 0.16 * sf], [Math.PI / 2, 0, 0])
+  put(body, BOX, sc, [0.15 * tw, topY - 0.24 * sf, 0.15 * tw], [0.09 * sf, 0.38 * sf, 0.035 * sf], [0.12, 0, 0.42])
+  const hy = topY + Hf * 0.5 * p.headH + 0.07 + p.neck
   const head = new THREE.Group(); head.name = 'head'; head.position.set(0, hy, 0); g.add(head)
-  headAndFace(head, o, Hf, hair, skin)
-  return { group: g, height: hy + Hf * 0.6, headY: hy }
+  // head width / height scale the head group, so hair + face + ears keep their places on it
+  if (p.headW !== 1 || p.headH !== 1) head.scale.set(p.headW, p.headH, p.headW)
+  headAndFace(head, o, Hf, hair, skin, p)
+  return { group: g, height: hy + Hf * 0.6 * p.headH, headY: hy }
 }
 
 /** The head + hair v3 + face, built round (0,0,0) = the head's centre (the mock's hy, moved onto the head group). */
-function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: string) {
-  const hy = 0
-  put(g, SPH, skin, [0, hy, 0], [H * 0.5, H * 0.55, H * 0.5])
+function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: string, p: Proportions) {
+  const hy = 0, ea = p.ear, ei = p.eye
+  put(g, headGeo(p.jaw), skin, [0, hy, 0], [H * 0.5, H * 0.55, H * 0.5])
   // the ears: Round = the mock's small round ones; Pointed (canon's default, Magii 11-19) = a small leaf tipped up and back
-  if (OPT.ears[o.ears] === 'Pointed') for (const s of [-1, 1]) put(g, EAR, skin, [s * H * 0.49, hy + H * 0.02, -H * 0.02], [H * 0.09, H * 0.2, H * 0.05], [-0.35, 0, s * -0.55])
-  else for (const s of [-1, 1]) put(g, SPH, skin, [s * H * 0.5, hy, 0], [H * 0.08, H * 0.12, H * 0.06])
+  if (OPT.ears[o.ears] === 'Pointed') for (const s of [-1, 1]) put(g, EAR, skin, [s * H * 0.49, hy + H * 0.02, -H * 0.02], [H * 0.09 * ea, H * 0.2 * ea, H * 0.05 * ea], [-0.35, 0, s * -0.55])
+  else for (const s of [-1, 1]) put(g, SPH, skin, [s * H * 0.5, hy, 0], [H * 0.08 * ea, H * 0.12 * ea, H * 0.06 * ea])
   // ── HAIR v3 (Alex 11-19: the cap + blobs read bald / helmet-like): LOCKS, tapered petals rooted on the scalp, standing a
   //    little proud so the outline breaks; a small cap underneath fills the gaps. A style = which locks.
   const hs = OPT.hairStyle[o.hairStyle], R = H * 0.5
@@ -115,12 +136,12 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
   for (const s of [-1, 1]) {
     const ex = s * H * 0.17
     const kind = eyes === 'Wink' ? (s < 0 ? 'Round' : 'Happy') : eyes
-    if (kind === 'Lines') flat(g, BOX, INKC, [ex * 0.8, ey + H * 0.03, ez + H * 0.02], [H * 0.035, H * 0.16, H * 0.02])
-    else if (kind === 'Dots') ball(ex * 0.85, ey + H * 0.02, H * 0.045, H * 0.05)
+    if (kind === 'Lines') flat(g, BOX, INKC, [ex * 0.8, ey + H * 0.03, ez + H * 0.02], [H * 0.035 * ei, H * 0.16 * ei, H * 0.02])
+    else if (kind === 'Dots') ball(ex * 0.85, ey + H * 0.02, H * 0.045 * ei, H * 0.05 * ei)
     else if (kind === 'Sleepy') { flat(g, BOX, INKC, [ex, ey, ez + H * 0.02], [H * 0.13, H * 0.025, H * 0.02]); arc(ex, ey - H * 0.01, H * 0.065, 0.2, Math.PI, Math.PI) }
     else if (kind === 'Happy') arc(ex, ey - H * 0.03, H * 0.07, 0.22, Math.PI, 0)
     else {
-      const big = kind === 'Bright' ? 1.2 : kind === 'Wide' ? 1.3 : 1, pupil = kind === 'Wide' ? 0.55 : 1
+      const big = (kind === 'Bright' ? 1.2 : kind === 'Wide' ? 1.3 : 1) * ei, pupil = kind === 'Wide' ? 0.55 : 1
       ball(ex, ey, H * 0.11 * big, H * 0.14 * big, '#ffffff', -0.02)
       ball(ex, ey - H * 0.01, H * 0.065 * big * pupil, H * 0.09 * big * pupil)
       if (kind === 'Bright') ball(ex + H * 0.02, ey + H * 0.03, H * 0.02, H * 0.02, '#ffffff', 0.06)

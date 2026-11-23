@@ -8,6 +8,7 @@
 # Format: <class> <route file> <path (a file, or a dir ending in /)>. tools/dev-written.test.sh fails on a writing route not
 # listed here, and on a path literal in a route that no row of that route covers.
 data     src/app/shimmer/save-sound-vote/route.ts      src/app/shimmer/open/shared/sounds.json
+data     src/app/shimmer/save-keeper-proportions/route.ts src/app/shimmer/open/shared/keeper-proportions.json
 data     src/app/shimmer/save-wilds-edit/route.ts      src/app/shimmer/world/wilds-edits.json
 data     src/app/shimmer/save-builder/route.ts     src/app/shimmer/world/wilds-edits.json
 data     src/app/shimmer/save-builder/route.ts     src/app/shimmer/world/glade-edits.json

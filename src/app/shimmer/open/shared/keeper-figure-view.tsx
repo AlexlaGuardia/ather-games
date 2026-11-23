@@ -8,12 +8,15 @@ import type * as THREE from 'three'
 import { buildKeeper, poseKeeper } from './keeper-figure'
 import { gunProp } from './held-gun-prop'   // M27 slice 4: a peer's held gun on the right hand
 import type { Look } from './keeper-look'
+import type { Proportions } from './keeper-proportions'
 import type { DollDrive } from './keeper-doll'
 
-export function KeeperFigure({ look, drive, spin = 0, yaw = 0, gun = null }: { look: Look; drive?: React.MutableRefObject<DollDrive>; spin?: number; yaw?: number
+export function KeeperFigure({ look, drive, spin = 0, yaw = 0, gun = null, shape }: { look: Look; drive?: React.MutableRefObject<DollDrive>; spin?: number; yaw?: number
+  /** BETA M103: proportions to build with instead of the shipped ones (the body bench's live sliders) */
+  shape?: Proportions
   /** BETA M27 slice 4: a gun id held in the right hand (a remote keeper's), null = hands empty */
   gun?: string | null }) {
-  const body = useMemo(() => buildKeeper(look), [look])
+  const body = useMemo(() => shape ? buildKeeper(look, shape) : buildKeeper(look), [look, shape])
   // the gun rides the BODY, following 'hand-r' each frame (the hand mesh is scaled to a mitten: a child would shrink with it)
   const prop = useRef<THREE.Group | null>(null)
   useEffect(() => {
