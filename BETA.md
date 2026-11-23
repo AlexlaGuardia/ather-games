@@ -259,6 +259,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - 11-23 00:2x Alex: station sounds for carpentry + masonry so a running station is heard, and the player learns no Moglin = stand there yourself ("which im on the fence about") → triaged: **M99** (play, via the M92 sounds page); the leash question goes to Alex with a rec
 - 11-23 00:3x Alex: "when i click M the map that pops up id like to be able to grab it to move it or scroll to magnify" → triaged: **M100** (next free member)
 - 11-23 00:4x Alex: "i asked a few moglins to join my garden but im not seeing them here.. plus now i need a carpenter and i found one but he says my garden is full" → triaged: BUG (P1, Alex blocked): recruited Moglins not appearing in his garden + capacity counts them anyway; routed to play
+- 11-23 00:5x Alex: "the rates for the armed composter should be tweaked.. it can be abused.. the chance to give a seed of a higher grade should be more like 45%.. ill play test it" → routed to play: SEED_UPGRADE_RATE 0.9 -> 0.45 (farming.ts:42), tests follow the constant; Alex playtests
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
