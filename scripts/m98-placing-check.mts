@@ -52,6 +52,8 @@ res.persisted = [await chip('snap', 'snap'), await chip('step', 'step')]
 // 4. G -> 1 m (Free -> 1), set straight: whole metres
 await p.keyboard.press('g'); await sleep(300)
 res.snap1 = await chip('snap', 'snap')
+await sleep(2000)   // the ghost re-snaps on its next frame; swiftshader frames are slow
+await shot('m98-3-ghost1m')
 await p.keyboard.press('e'); await sleep(1000)
 const b = (await pieces()).find(x => x !== undefined && (x.x !== a?.x || x.z !== a?.z)); res.second = b
 res.errs = errs
