@@ -36,6 +36,9 @@ import { GLADE_TILE_CENTER, GLADE_SIZE } from '../../world/glade-builder'
 import { NYX_TILE_M } from '../../world/nyx-builder'
 import { flattenZone, normRect, bigEnough, overlapping, zoneAt, newZoneId, zoneOverlay, zoneLabel, ZONE_KINDS, KIND_LABEL, ZONE_BLEND_M, type Zone, type ZoneKind, type ZoneTag } from '../../world/builder-zones'
 import { choicesFor, type Choice } from './zone-choices'
+import { ZoneBuilder } from './ZoneBuilder'   // M84 s2: build on a zone
+import { FURNITURE } from '../../open/ather/furniture'
+import { quad } from '../../open/ather/build-prefs'
 
 // ── BETA M83 p1 s1a: the editor works on the World Builder DRAFT (world/builder.ts), never on the live layer. Save + autosave write
 // the draft; PUBLISH makes it a version and puts it live; the history rolls back to any version. Players see nothing until Publish.
@@ -128,6 +131,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const zonesRef = useRef<Zone[]>([])
   const setZones = (z: Zone[]) => { zonesRef.current = z; setZonesS(z) }
   const [selZone, setSelZone] = useState<string | null>(null)   // the zone whose tag popup is open
+  const [buildZone, setBuildZone] = useState<string | null>(null)   // M84 s2: the zone whose build is open
   const zoneDrag = useRef<{ ax: number; az: number; bx: number; bz: number } | null>(null)
   const [zoneBox, setZoneBox] = useState<{ x0: number; z0: number; x1: number; z1: number } | null>(null)   // the rectangle being dragged
   const [zoneNet, setZoneNet] = useState<Network | null>(null)   // the Wilds' season network: its Moglins fill the Home list
@@ -482,6 +486,11 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     if (!zonesRef.current.some(q => q.id === id)) return false
     setZones(zonesRef.current.map(q => q.id === id ? { ...q, tag } : q)); markDirty([ZONES_KEY]); return true
   }
+  // M84 s2: the zone's build changed (ZoneBuilder): it rides with the zone, so the zones key autosaves it
+  const buildOnZone = (z: Zone) => {
+    if (!zonesRef.current.some(q => q.id === z.id)) return false
+    setZones(zonesRef.current.map(q => q.id === z.id ? z : q)); markDirty([ZONES_KEY]); return true
+  }
   const undo = useCallback(() => { markDirty(hist.current.undo(edits.current)); setRev(r => r + 1) }, [])
   const redo = useCallback(() => { markDirty(hist.current.redo(edits.current)); setRev(r => r + 1) }, [])
   const resetTile = () => { hist.current.begin(edits.current, [tile, wkey(tile), fkey(tile)]); delete edits.current[tile]; delete edits.current[wkey(tile)]; delete edits.current[fkey(tile)]; hist.current.commit(); markDirty([tile, wkey(tile), fkey(tile)]); setRev(r => r + 1) }
@@ -616,7 +625,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       /** M105: the overlay: on/off, toggle, and the data it draws (the game's own) */
       overlay: { on: showOv, set: setShowOv, data: () => ovAll, doors: ovDoors },
       /** M84 s1: the zones (tile-local helpers for the check), the open popup, and the actions the popup drives */
-      zones: () => zonesRef.current.map(z => ({ id: z.id, x0: z.x0, z0: z.z0, x1: z.x1, z1: z.z1, h: z.h, tag: z.tag, n: Object.values(z.prev).reduce((a, m) => a + Object.keys(m).length, 0) })),
+      zones: () => zonesRef.current.map(z => ({ id: z.id, x0: z.x0, z0: z.z0, x1: z.x1, z1: z.z1, h: z.h, tag: z.tag, n: Object.values(z.prev).reduce((a, m) => a + Object.keys(m).length, 0), build: z.build ?? [] })),
       selZone, deleteZone, tagZone, setBrush,
     }
   }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt, strength, radius, brush, lockLook, showOv, ovAll, ovDoors, voidRev, status, glade, nyx, selZone])
@@ -701,6 +710,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         {B && (brush === 'zone' || zoneBox) && (
           <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`${B.ox - B.meta.sizeX / 2} ${B.oz - B.meta.sizeZ / 2} ${B.meta.sizeX} ${B.meta.sizeZ}`} preserveAspectRatio="none" data-testid="zone-tile">
             {zones.map(z => <rect key={z.id} x={z.x0} y={z.z0} width={z.x1 - z.x0} height={z.z1 - z.z0} fill={z.id === selZone ? 'rgba(232,121,249,0.25)' : 'rgba(232,121,249,0.10)'} stroke="#e879f9" strokeWidth={z.id === selZone ? 2 : 1} vectorEffect="non-scaling-stroke" data-zone={z.id} />)}
+            {zones.flatMap(z => (z.build ?? []).map(p => { const f = FURNITURE[p.item]; return f ? <polygon key={`${z.id}/${p.id}`} points={quad(z.x0 + p.x, z.z0 + p.z, f.w, f.d, p.q).map(([x, y]) => `${x},${y}`).join(' ')} fill={f.panel ? '#a8794e' : f.slab ? '#d8c39a' : '#7fa6c4'} data-zone-part={p.id} /> : null }))}
             {zoneBox && <rect x={zoneBox.x0} y={zoneBox.z0} width={zoneBox.x1 - zoneBox.x0} height={zoneBox.z1 - zoneBox.z0} fill="rgba(255,255,255,0.12)" stroke="white" strokeDasharray="4 3" strokeWidth={1.5} vectorEffect="non-scaling-stroke" data-testid="zone-drag" />}
           </svg>
         )}
@@ -814,14 +824,15 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         </div>
       </div>
       {selZone && zones.some(z => z.id === selZone) && <ZonePopup zone={zones.find(z => z.id === selZone)!} map={map} net={zoneNet} onNeedNet={() => { if (!zoneNet) loadNetwork().then(n => setZoneNet(n)).catch(() => { /* the Glade's folk still listed */ }) }}
-        onTag={t => tagZone(selZone, t)} onDelete={() => deleteZone(selZone)} onClose={() => setSelZone(null)} />}
+        onTag={t => tagZone(selZone, t)} onDelete={() => deleteZone(selZone)} onClose={() => setSelZone(null)} onBuild={() => { setBuildZone(selZone); setSelZone(null) }} />}
+      {buildZone && zones.some(z => z.id === buildZone) && <ZoneBuilder zone={zones.find(z => z.id === buildZone)!} onChange={buildOnZone} onClose={() => setBuildZone(null)} />}
     </div>
   )
 }
 
 // ── M114: the tag popup. Opens when a zone is made (and on a click on one): Home / Shop / Supplier / Other; the first three pick
 // from a list of what already exists (zone-choices.ts). Other = a building that stays locked and empty inside. ──
-function ZonePopup({ zone, map, net, onNeedNet, onTag, onDelete, onClose }: { zone: Zone; map: BuilderMap; net: Network | null; onNeedNet: () => void; onTag: (t: ZoneTag | null) => void; onDelete: () => void; onClose: () => void }) {
+function ZonePopup({ zone, map, net, onNeedNet, onTag, onDelete, onClose, onBuild }: { zone: Zone; map: BuilderMap; net: Network | null; onNeedNet: () => void; onTag: (t: ZoneTag | null) => void; onDelete: () => void; onClose: () => void; onBuild: () => void }) {
   const kind = zone.tag?.kind ?? null
   useEffect(() => { if (kind === 'home' && map !== 'glade') onNeedNet() }, [kind, map])   // eslint-disable-line react-hooks/exhaustive-deps
   const list: Choice[] = useMemo(() => kind ? choicesFor(kind, map, net) : [], [kind, map, net])
@@ -849,6 +860,7 @@ function ZonePopup({ zone, map, net, onNeedNet, onTag, onDelete, onClose }: { zo
         <div className="text-[11px] font-mono text-white/45" data-testid="zone-label">{zoneLabel(zone)}</div>
         <div className="flex gap-1.5 justify-between pt-1">
           <button className={`${btn} bg-red-500/15 border-red-400/60 text-red-200`} onClick={onDelete} data-testid="zone-delete">Delete zone</button>
+          <button className={`${btn} ${on}`} onClick={onBuild} data-testid="zone-build-open">Build{zone.build?.length ? ` (${zone.build.length})` : ''}</button>
           <button className={`${btn} ${off}`} onClick={onClose} data-testid="zone-done">Done</button>
         </div>
       </div>

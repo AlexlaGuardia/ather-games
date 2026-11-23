@@ -12,12 +12,16 @@
 //     it only; the game does not read it yet.
 import type { BrushTile, Edits, TileEdits } from '../open/ather/wilds-edits'
 import { EDIT_MAX_DM } from '../open/ather/wilds-edits'
+import { FURNITURE } from '../open/ather/furniture'
 
 export type ZoneKind = 'home' | 'shop' | 'supplier' | 'other'
 export const ZONE_KINDS: readonly ZoneKind[] = ['home', 'shop', 'supplier', 'other']
 /** `ref` = the chosen entry's id in its list (folk id, shop id, good id); `name` = what the list showed (kept for the overlay) */
 export interface ZoneTag { kind: ZoneKind; ref?: string; name?: string }
-export interface Zone { id: string; x0: number; z0: number; x1: number; z1: number; h: number; tag: ZoneTag | null; prev: Record<string, TileEdits> }
+/** M84 s2: one building part set in the zone (a furniture.ts item: wall panel, floor slab, furniture). x, z are ZONE-LOCAL metres
+ *  from the zone's (x0, z0) corner, so the build travels with the zone; q = turns in quarters (0..4, sixths of a quarter = 15 deg). */
+export interface ZonePiece { id: string; item: string; x: number; z: number; q: number }
+export interface Zone { id: string; x0: number; z0: number; x1: number; z1: number; h: number; tag: ZoneTag | null; prev: Record<string, TileEdits>; /** M84 s2: what is built on it (absent = nothing) */ build?: ZonePiece[] }
 
 export const ZONE_BLEND_M = 8       // the edge blends back to the land over this many metres
 export const ZONE_MIN_M = 4         // a drag shorter than this on either side is a click (select), not a zone
@@ -115,6 +119,22 @@ export function cleanTag(t: unknown): ZoneTag | null {
   if (tag.kind !== 'other') { const ref = str(o.ref), name = str(o.name); if (ref) tag.ref = ref; if (name) tag.name = name }
   return tag
 }
+export const ZONE_PIECES_MAX = 400   // = plot-blueprint MAX_BP_PIECES
+const qNorm = (q: number) => { const k = Math.round(q * 6); return (((k % 24) + 24) % 24) / 6 }   // = build-prefs normQ
+/** M84 s2: the zone's build, junk-proof: known items, finite coords inside the zone (+1 m slack), unique ids; [] = nothing */
+export function cleanBuild(v: unknown, w: number, d: number): ZonePiece[] {
+  if (!Array.isArray(v)) return []
+  const out: ZonePiece[] = []
+  for (const p of v.slice(0, ZONE_PIECES_MAX)) {
+    const o = p as Partial<ZonePiece> | null
+    if (!o || typeof o !== 'object') continue
+    const id = str(o.id), item = str(o.item)
+    if (!id || !item || !Object.prototype.hasOwnProperty.call(FURNITURE, item) || out.some(q => q.id === id) || ![o.x, o.z, o.q].every(num)) continue
+    if (o.x! < -1 || o.x! > w + 1 || o.z! < -1 || o.z! > d + 1) continue
+    out.push({ id, item, x: Math.round(o.x! * 1000) / 1000, z: Math.round(o.z! * 1000) / 1000, q: qNorm(o.q!) })
+  }
+  return out
+}
 export function cleanZones(j: unknown): Zone[] {
   const a = (j as { zones?: unknown } | null)?.zones
   if (!Array.isArray(a)) return []
@@ -125,7 +145,8 @@ export function cleanZones(j: unknown): Zone[] {
     const id = str(o.id), prev = cleanPrev(o.prev)
     if (!id || !prev || out.some(q => q.id === id) || ![o.x0, o.z0, o.x1, o.z1, o.h].every(num)) continue
     const r = normRect(o.x0!, o.z0!, o.x1!, o.z1!)
-    out.push({ id, ...r, h: r1(o.h!), tag: cleanTag(o.tag), prev })
+    const build = cleanBuild(o.build, r.x1 - r.x0, r.z1 - r.z0)
+    out.push({ id, ...r, h: r1(o.h!), tag: cleanTag(o.tag), prev, ...(build.length ? { build } : {}) })
   }
   return out
 }

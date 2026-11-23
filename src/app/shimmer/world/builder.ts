@@ -47,7 +47,7 @@ export function sameLayer(a: Layer, b: Layer): boolean {
   const canon = (l: Layer) => JSON.stringify([...['tiles', 'water', 'falls'].map(p => {
     const m = l[p as 'tiles'] as Record<string, Record<string, number>>
     return Object.keys(m).sort().map(t => [t, Object.keys(m[t]).sort((x, y) => +x - +y).map(k => [k, m[t][k]])])
-  }), Object.keys(l.voids ?? {}).sort().map(k => [k, l.voids![k]]), [...(l.zones ?? [])].sort((a, b) => a.id < b.id ? -1 : 1).map(z => [z.id, z.x0, z.z0, z.x1, z.z1, z.h, z.tag?.kind ?? null, z.tag?.ref ?? null, z.tag?.name ?? null])] as unknown[])
+  }), Object.keys(l.voids ?? {}).sort().map(k => [k, l.voids![k]]), [...(l.zones ?? [])].sort((a, b) => a.id < b.id ? -1 : 1).map(z => [z.id, z.x0, z.z0, z.x1, z.z1, z.h, z.tag?.kind ?? null, z.tag?.ref ?? null, z.tag?.name ?? null, (z.build ?? []).map(p => [p.id, p.item, p.x, p.z, p.q])])] as unknown[])
   return canon(a) === canon(b)
 }
 

@@ -473,17 +473,21 @@ export const pieceBoxes = (w: Works): Box[] => w.pieces.filter(p => FURNITURE[p.
   const ks = f.panel && !isWholeQ(p.q) ? panelChain(p.x, p.z, f.w, f.d, p.q) : [pieceRect(p.item, p.x, p.z, p.q)]
   return ks.map(k => ({ x0: k.x0, x1: k.x1, z0: k.z0, z1: k.z1, y0: b - 0.5, y1: b + f.h }))
 })
-export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: string, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
+/** M84 s2: a SITE other than the home plot (a Creative-mode building zone): `inside` replaces the held-ground check, and the
+ *  plot's own fixtures (gate, Gregory, the table's keep-clear ring, the starter Keepstone) are not there. Every other rule holds. */
+export interface PieceSite { inside: (x: number, z: number) => boolean }
+export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: string, x: number, z: number, q: number, inv?: Inv, site?: PieceSite): PlaceVerdict {
   const f = FURNITURE[item]
   if (!f) return { ok: false, why: 'That is not furniture.' }
-  if (item === TABLE_ITEM && tableAt(works)) return { ok: false, why: 'Your planning table already stands.' }   // M96: one per keeper
+  if (!site && item === TABLE_ITEM && tableAt(works)) return { ok: false, why: 'Your planning table already stands.' }   // M96: one per keeper
   if (f.shaft) { x = cellMid(x); z = cellMid(z); q = Math.round(q); if (shaftBlocked(works, x, z)) return { ok: false, why: 'A wall stands in that cell on one of the floors.' } }   // M48: a shaft takes the whole cell, every level
   if (works.pieces.length >= MAX_PIECES) return { ok: false, why: `${MAX_PIECES} pieces already stand. Pick one up to make room.` }
   const k = pieceRect(item, x, z, q)
   for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
+    if (site) { if (!site.inside(cx, cz)) return { ok: false, why: 'Keep it inside the zone.' }; continue }
     const s = squareAt(cx, cz); if (!s || !owned.has(sqId(s.i, s.j))) return { ok: false, why: 'Set it on ground you hold.' }
   }
-  for (const c of keepClear(works)) {
+  if (!site) for (const c of keepClear(works)) {
     const px = Math.max(k.x0, Math.min(c.x, k.x1)), pz = Math.max(k.z0, Math.min(c.z, k.z1))
     if (Math.hypot(px - c.x, pz - c.z) < c.r) return { ok: false, why: 'Leave room around the gate, Gregory and the table.' }
   }
@@ -494,7 +498,7 @@ export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: st
     if (!r.shell && Math.hypot(d.x - x, d.z - z) < 1.6) return { ok: false, why: 'That blocks the doorway.' }   // M97: a shell has no door
     if (Math.hypot(b.x - x, b.z - z) < 1.6) return { ok: false, why: 'That crowds the bench.' }
   }
-  if (allChests(works).some(c => quadsHit(mine, chestQuad(c), pad))) return { ok: false, why: 'Too close to a Keepstone.' }
+  if (!site && allChests(works).some(c => quadsHit(mine, chestQuad(c), pad))) return { ok: false, why: 'Too close to a Keepstone.' }
   // M98 s2: furniture may stand TOUCHING furniture (the anchor lands a row flush: bench to bench, a table pushed to a bench);
   // only a real overlap refuses, with 5 mm of float slack. Walls and Keepstones keep their 0.15 m clearance.
   // M98b: a slab and a piece never clash (the piece stands ON it); slab against slab does.
