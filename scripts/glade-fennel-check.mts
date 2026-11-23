@@ -11,6 +11,7 @@
 //   6. 0 page errors
 //   npx tsx scripts/glade-fennel-check.mts [--url https://ather.games] [--phone]
 import puppeteer, { type Page } from 'puppeteer-core'
+import { aimAt } from './lib/aim.mts'   // M60: E only on what the crosshair is on (a chibi is under a level ray)
 import { ANSWERS } from '../src/app/shimmer/open/ather/greg-talk'   // the labels lark writes; a reword never stales the check
 import { line } from '../src/app/shimmer/open/ather/glade-tutorial-lines'
 import { fennelBye, FENNEL_MORE } from '../src/app/shimmer/open/ather/glade-fennel-talk'
@@ -73,7 +74,7 @@ try {
   const faceAt = async (t: Pl, dist: number) => { const x = t.x + Math.sin(t.yaw) * dist, z = t.z + Math.cos(t.yaw) * dist
     await A(p, 'gladeAt', x, z, Math.atan2(-(t.x - x), -(t.z - z))) }
   const openFennel = async (tag: string) => {
-    await faceAt(f0, 1.8)
+    await faceAt(f0, 1.8); await sleep(2500); await aimAt(p, f0.x, f0.z, 0.6)
     ok(await poll(() => p.evaluate(() => /E · Fennel/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]')), 15000), `${tag} the prompt 'E · Fennel'`)
     await pressE(p)
   }
