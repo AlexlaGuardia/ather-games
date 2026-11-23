@@ -75,7 +75,9 @@ try {
       const hit = await poll(async () => (await bubble()).includes(L(lid)), 10000)
       if (hit) seen.push(lid)
       const last = lid === ids[ids.length - 1]
-      await tapText(p, last ? friendBye(id as 'otto') : MORE); await sleep(700)
+      if (last && hit) ok(await tapText(p, friendBye(id as 'otto')), `2. ${name}: the signed goodbye '${friendBye(id as 'otto')}' shows word for word, pressed`)
+      else await tapText(p, last ? friendBye(id as 'otto') : MORE)
+      await sleep(700)
     }
     return seen
   }
