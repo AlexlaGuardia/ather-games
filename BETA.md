@@ -186,6 +186,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-23 17:1x Alex (multiple choice): M107 ship spirit trot to players + more pauses · M58 ribbons DEFAULT · M104 erased void grows trees + nodes like normal · M65 defaults = TALK TONIGHT (with spirit stats). Faces: 'not picking one, OPTIONS for character creation; like the new eyes + brows; need mouth options; female torso needs work' → M116 creator Face row LIVE 815dae8f; mouths/torso sheet sent.
 
 - 11-23 16:4x Alex: "I meant close in Size but can I see some previews of the new faces" → M116: sizes only unified (small), NEW adult faces wanted; first sheet to Alex asap.
 - 11-23 16:4x Alex: "I think the heads are already pretty close" → M116 re-aimed: keep today's head as the base; options = one universal size + adult feature variants on it (sheet with a 'today' column).
@@ -204,6 +205,8 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - 11-23 08:4x Alex on Nyx + ships: agreed Nyx is thin; M73 opening chain next. On a flyable skyship: "I'm not on board for 3, I'm thinking it's just a gate to space maps" → DECIDED: NO flight system. A repaired ship = a GATE to space maps (board it, pick a destination, load the map; the Hask wreck is the first, its SOS = the destination-list question). Ship repair loop = canon ask to Magii.
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+- 📌 **TONIGHT talk (11-23):** spirit stats above the cap + M65 Moglin-card defaults (Talent C=1, B-or-better bar, Alchemy under Patience).
+- **M116 pick (11-23):** mouths 1-5 + female torso T1/T2/T3 from docs/looks/keeper-heads-2026-11-23/mouths-and-torso.png; new keepers start Classic or a face set?
 
 - 📌 **TONIGHT with Alex (pinned 12:4x: 'sit down and talk more about it once I'm home'):** **Spirit stats above the cap (11-23, M110):** canon caps a base-form stat at 50, but some species START above it (fox AGI 52, firefly AGI 70, water-bear GRD 70; battle data). My pick: leave battle bases as they are; a stat already at/above the cap simply doesn't grow until she evolves (what's live). Alternative: clamp bases to 50 (changes battle balance). Say if you want the clamp.
 
