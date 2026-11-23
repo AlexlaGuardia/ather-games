@@ -21,6 +21,9 @@ export const OPT = {
   // Magii RULED-AFK 11-19 (athernyx 0bd797a, keepers.md › The player keeper): Alkin have SMALL POINTED ears, often half hidden
   // by hair (helga.md); offer Round / Pointed, default Pointed. Builds now; Alex nods in the morning.
   ears: ['Round', 'Pointed'],
+  // M116 (Alex 11-23): face sets = the options sheet's adult eyes + brows on one universal head (keeper-faces.ts). Classic =
+  // today's head, drawn from the Eyes / Brows rows, so an old keeper keeps its face until it is changed.
+  face: ['Classic', 'Soft', 'Keen', 'Calm', 'Strong'],
   topColor: CLOTH,
   accent: CLOTH,
   scarf: SCARF,
@@ -29,7 +32,7 @@ export type LookKey = keyof typeof OPT
 /** the creator's rows, in order, with their labels (the mock's) */
 export const ROWS: readonly { key: LookKey; label: string; swatch: boolean }[] = [
   { key: 'frame', label: 'Frame', swatch: false }, { key: 'torso', label: 'Torso', swatch: false }, { key: 'skin', label: 'Skin', swatch: true },
-  { key: 'hairStyle', label: 'Hair', swatch: false }, { key: 'hair', label: 'Hair colour', swatch: true }, { key: 'eyes', label: 'Eyes', swatch: false },
+  { key: 'hairStyle', label: 'Hair', swatch: false }, { key: 'hair', label: 'Hair colour', swatch: true }, { key: 'face', label: 'Face', swatch: false }, { key: 'eyes', label: 'Eyes', swatch: false },
   { key: 'brows', label: 'Brows', swatch: false }, { key: 'mouth', label: 'Mouth', swatch: false }, { key: 'ears', label: 'Ears', swatch: false }, { key: 'topColor', label: 'Body colour', swatch: true },
   { key: 'accent', label: 'Hands and feet', swatch: true }, { key: 'scarf', label: 'Scarf', swatch: true },
 ]
@@ -37,7 +40,7 @@ export const FRAME_NOTE = ['A smaller hitbox and +5% move speed.', 'The baseline
 
 export type Look = { v: 1 } & Record<LookKey, number>
 /** the mock's starting keeper */
-export const DEFAULT_LOOK: Look = { v: 1, frame: 1, torso: 0, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, mouth: 0, ears: 1, topColor: 0, accent: 5, scarf: 0 }
+export const DEFAULT_LOOK: Look = { v: 1, frame: 1, torso: 0, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, mouth: 0, ears: 1, topColor: 0, accent: 5, scarf: 0, face: 0 }
 
 // ── the ONE PvP choice ──
 /** what FRAME does in play: `hit` scales the keeper's hitbox (radius + reach tests), `speed` the walk/run, `damage` what a hit
@@ -69,11 +72,14 @@ export function randomLook(l: Look, rnd: () => number = Math.random): Look {
 }
 
 /** Packed for presence (M27: a remote keeper draws your look): one short string, one digit/letter per row in ROWS order. */
-export const packLook = (l: Look) => ROWS.map(r => l[r.key].toString(36)).join('')
+/** ★ the pack order is FROZEN (a remote reads it): the rows as they were, then each new row appended (M116 'face'), so a
+ *  pack from a client one row behind still reads (the missing tail takes its default). */
+export const PACK_KEYS: readonly LookKey[] = ['frame', 'torso', 'skin', 'hairStyle', 'hair', 'eyes', 'brows', 'mouth', 'ears', 'topColor', 'accent', 'scarf', 'face']
+export const packLook = (l: Look) => PACK_KEYS.map(k => l[k].toString(36)).join('')
 export function unpackLook(s: unknown): Look | null {
-  if (typeof s !== 'string' || s.length !== ROWS.length) return null
+  if (typeof s !== 'string' || s.length < PACK_KEYS.length - 1 || s.length > PACK_KEYS.length) return null
   const o: Record<string, number> = { v: 1 }
-  ROWS.forEach((r, i) => { o[r.key] = parseInt(s[i], 36) })
+  PACK_KEYS.forEach((k, i) => { if (i < s.length) o[k] = parseInt(s[i], 36) })
   return parseLook(o)
 }
 export const LOOK_KEY = 'open.look.v1'

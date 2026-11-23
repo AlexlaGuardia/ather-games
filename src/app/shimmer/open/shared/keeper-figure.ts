@@ -6,6 +6,7 @@
 import * as THREE from 'three'
 import { OPT, type Look } from './keeper-look'
 import { proportionsFor, type Proportions } from './keeper-proportions'
+import { faceSet, faceHeadGeo, drawFaceSet, UNIVERSAL_HEAD } from './keeper-faces'
 
 const grad = (() => {
   const t = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.RedFormat)
@@ -63,8 +64,10 @@ function flat(g: THREE.Object3D, geo: THREE.BufferGeometry, color: string, pos: 
 export interface KeeperBody { group: THREE.Group; height: number; headY: number }
 
 /** Build a keeper. The group's origin is between the feet; `height` is the crown, `headY` the head's centre. */
-export function buildKeeper(o: Look, p: Proportions = proportionsFor(o)): KeeperBody {
+export function buildKeeper(o: Look, p0: Proportions = proportionsFor(o)): KeeperBody {
   const g = new THREE.Group()
+  // M116: a face set (Look.face 1-4) wears the ONE universal head size and its own chin; Classic (0) keeps the model's dials
+  const fs = faceSet(o.face), p = fs ? { ...p0, ...UNIVERSAL_HEAD, jaw: fs.jaw } : p0
   const wide = [0.88, 1, 1.16][o.frame] ?? 1, tall = [0.9, 1, 1.1][o.frame] ?? 1
   const H = 0.5, B = 0.62 * tall, L = 0.55 * tall
   const skin = OPT.skin[o.skin], hair = OPT.hair[o.hair], top = OPT.topColor[o.topColor], acc = OPT.accent[o.accent], sc = OPT.scarf[o.scarf]
@@ -80,7 +83,8 @@ export function buildKeeper(o: Look, p: Proportions = proportionsFor(o)): Keeper
   }
   put(body, SCARF_RING, sc, [0, topY - 0.03, 0], [0.17 * tw * sf, 0.17 * tw * sf, 0.16 * sf], [Math.PI / 2, 0, 0])
   put(body, BOX, sc, [0.15 * tw, topY - 0.24 * sf, 0.15 * tw], [0.09 * sf, 0.38 * sf, 0.035 * sf], [0.12, 0, 0.42])
-  const hy = topY + Hf * 0.5 * p.headH + 0.07 + p.neck
+  // a face set's longer chin is absorbed by lifting the head, so the neck gap stays the model's
+  const hy = topY + Hf * 0.5 * p.headH + 0.07 + p.neck + (fs ? Hf * 0.55 * fs.chin * p.headH * 0.6 : 0)
   const head = new THREE.Group(); head.name = 'head'; head.position.set(0, hy, 0); g.add(head)
   // head width / height scale the head group, so hair + face + ears keep their places on it
   if (p.headW !== 1 || p.headH !== 1) head.scale.set(p.headW, p.headH, p.headW)
@@ -91,7 +95,8 @@ export function buildKeeper(o: Look, p: Proportions = proportionsFor(o)): Keeper
 /** The head + hair v3 + face, built round (0,0,0) = the head's centre (the mock's hy, moved onto the head group). */
 function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: string, p: Proportions) {
   const hy = 0, ea = p.ear, ei = p.eye
-  put(g, headGeo(p.jaw), skin, [0, hy, 0], [H * 0.5, H * 0.55, H * 0.5])
+  const fs = faceSet(o.face)
+  put(g, fs ? faceHeadGeo(fs.jaw, fs.chin) : headGeo(p.jaw), skin, [0, hy, 0], [H * 0.5, H * 0.55, H * 0.5])
   // the ears: Round = the mock's small round ones; Pointed (canon's default, Magii 11-19) = a small leaf tipped up and back
   if (OPT.ears[o.ears] === 'Pointed') for (const s of [-1, 1]) put(g, EAR, skin, [s * H * 0.49, hy + H * 0.02, -H * 0.02], [H * 0.09 * ea, H * 0.2 * ea, H * 0.05 * ea], [-0.35, 0, s * -0.55])
   else for (const s of [-1, 1]) put(g, SPH, skin, [s * H * 0.5, hy, 0], [H * 0.08 * ea, H * 0.12 * ea, H * 0.06 * ea])
@@ -133,7 +138,8 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
   const INKC = '#1c1712', ey = hy + H * 0.02, ez = H * 0.47, eyes = OPT.eyes[o.eyes]
   const arc = (x: number, y: number, r: number, thick: number, span: number, rotZ: number, color = INKC) => flat(g, arcGeo(thick, span), color, [x, y, ez + H * 0.03], [r, r, r], [0, 0, rotZ])
   const ball = (x: number, y: number, sx: number, sy: number, color = INKC, dz = 0.03) => flat(g, SPH, color, [x, y, ez + H * dz], [sx, sy, H * 0.03])
-  for (const s of [-1, 1]) {
+  if (fs) drawFaceSet(g, o.face, H, hair, OPT.brows[o.brows] !== 'None')
+  else for (const s of [-1, 1]) {
     const ex = s * H * 0.17
     const kind = eyes === 'Wink' ? (s < 0 ? 'Round' : 'Happy') : eyes
     if (kind === 'Lines') flat(g, BOX, INKC, [ex * 0.8, ey + H * 0.03, ez + H * 0.02], [H * 0.035 * ei, H * 0.16 * ei, H * 0.02])
