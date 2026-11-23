@@ -28,15 +28,17 @@ import { scoreIn, luckChance, gradeEquiv, doubles } from './moglin-stats'
 
 /** Canon's trades (ather-rework › Needs: "a farmer + a cook, then a carpenter + a stonemason, then specialists: alchemist,
  *  smith, jeweler, and more trades as they are ruled"). A new trade is canon's to rule, then one row here. */
-export type Profession = 'farmer' | 'cook' | 'carpenter' | 'stonemason' | 'alchemist' | 'smith' | 'jeweler' | 'rinnshop' | 'shopkeeper'   // shopkeeper: Moonwell's Mallow, talk + trust only, never a village job (hub 11-19)
+export type Profession = 'farmer' | 'cook' | 'carpenter' | 'stonemason' | 'alchemist' | 'smith' | 'jeweler' | 'rinnshop' | 'digger' | 'shopkeeper'   // shopkeeper: Moonwell's Mallow, talk + trust only, never a village job (hub 11-19)
 // rinnshop = the BAIT-MAKER (canon 11-21, characters/moonwell-folk.md › Yarrow: bait-maker of the Rinnshop, never casts, neither
 // brews nor buys brews). The enum word is the room it works; the trade word players read is 'bait-maker'.
-export const PROFESSIONS: readonly Profession[] = ['farmer', 'cook', 'carpenter', 'stonemason', 'alchemist', 'smith', 'jeweler', 'rinnshop']
+// digger (M108 s3): canon's trades table (shimmer-folds-settlements.md › Trades: Goldwood Plank in, Raw Mana Shard out, Marl's
+// trade). Recruitable, no room work yet (hub 11-23); in a settlement it barters (digger-trade.ts).
+export const PROFESSIONS: readonly Profession[] = ['farmer', 'cook', 'carpenter', 'stonemason', 'alchemist', 'smith', 'jeweler', 'rinnshop', 'digger']
 /** Which rooms a trade can work. The cook pairs with the Rinnshop too (catches readied for the hearth; a Moglin never
  *  rins, canon 8d3ada7). The farmer keeps the Farm room (it waters, never plants or harvests: see THE FARMER above); the jeweler shares the Stonery's bench. */
 export const WORKS_IN: Readonly<Record<Profession, readonly RoomKind[]>> = {
   farmer: ['farm'], cook: ['cooking', 'rinnshop'], carpenter: ['carpentry'], stonemason: ['stonemason'],
-  alchemist: ['alchemy'], smith: ['smith'], jeweler: ['stonemason'], rinnshop: ['rinnshop'], shopkeeper: [],
+  alchemist: ['alchemy'], smith: ['smith'], jeweler: ['stonemason'], rinnshop: ['rinnshop'], digger: [], shopkeeper: [],
 }
 
 /** GRADE CATEGORIES (Jin's; canon: fixed, never trained up, the Moglin's own gifts). 1 (fair) .. 5 (rare).

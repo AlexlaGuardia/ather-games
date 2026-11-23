@@ -10,7 +10,12 @@
 //      -> made        paid in full (no credit): the shop builds the housing and hands it over (bag item CELL_HOUSING)
 //      -> stage1      M108 s2: E at Franky in the yard with the housing = the keeper fits it (canon: "the shop builds, the keeper
 //                     fits it at the yard"), the item is used up, STAGE 1 DONE (the destination-map gate's read)
-// Old records already stage1 (s1 paid = fitted in one step) stay done; parseRepair reads them as made too.
+//      -> charged     M108 s3 (Magii [RULED] 83b6870, ather-rework §7⅞): the fitted housing leaves the cells EMPTY; Kael's ledger
+//                     turns to its next line; the keeper trades with a DIGGER Moglin in the Ather (canon trades table: Goldwood
+//                     Plank in, Raw Mana Shard out; ather/digger-trade.ts) and E at Franky with FIRST_CHARGE_SHARDS of them =
+//                     the cells' FIRST CHARGE. ★ The destination-map gate reads `charged` now (was stage1).
+// Old records already stage1 (s1 paid = fitted in one step) stay done; parseRepair reads them as made too. A stage1 record
+// from before s3 is fitted but NOT charged (canon: the fit leaves the cells empty), so it now needs the charge.
 // PURE (no React, no storage): the store is ship-repair-store.ts. Lines: hollis-lines.ts (SIGNED).
 
 export const REPAIR_KEY = 'open.repair.v1'
@@ -22,18 +27,22 @@ export const CELL_HOUSING = 'cell_housing'
 export const GIFT_CELL_HOUSING = 'cell_housing_made'
 /** a rare material the keeper must bring with the Marks (canon: SOME orders). Stage 1 needs none; set a bag id to require one. */
 export const CELL_HOUSING_MATERIAL: string | null = null
+/** M108 s3: the cells' first charge (Jin's dial, hub 11-23): Raw Mana Shards spent at Franky */
+export const RAW_SHARD = 'raw_mana_shard'
+export const FIRST_CHARGE_SHARDS = 3
 
-export interface Repair { v: 1; quoted: boolean; made: boolean; stage1: boolean }
-export const newRepair = (): Repair => ({ v: 1, quoted: false, made: false, stage1: false })
+export interface Repair { v: 1; quoted: boolean; made: boolean; stage1: boolean; /** M108 s3: the cells' first charge */ charged: boolean }
+export const newRepair = (): Repair => ({ v: 1, quoted: false, made: false, stage1: false, charged: false })
 export function parseRepair(raw: unknown): Repair {
   const r = raw as Repair | null
   if (!r || r.v !== 1) return newRepair()
+  const charged = r.charged === true && r.stage1 === true
   const stage1 = r.stage1 === true
-  return { v: 1, quoted: r.quoted === true || stage1, made: r.made === true || stage1, stage1 }
+  return { v: 1, quoted: r.quoted === true || stage1, made: r.made === true || stage1, stage1, charged }
 }
 
-export type RepairStep = 'off' | 'open' | 'quoted' | 'made' | 'stage1'
-export const repairStep = (flag: boolean, r: Repair): RepairStep => (r.stage1 ? 'stage1' : r.made ? 'made' : !flag ? 'off' : r.quoted ? 'quoted' : 'open')
+export type RepairStep = 'off' | 'open' | 'quoted' | 'made' | 'stage1' | 'charged'
+export const repairStep = (flag: boolean, r: Repair): RepairStep => (r.charged ? 'charged' : r.stage1 ? 'stage1' : r.made ? 'made' : !flag ? 'off' : r.quoted ? 'quoted' : 'open')
 
 /** the quote fired (shop:quote): only while the order is open */
 export const onQuote = (flag: boolean, r: Repair): Repair => (repairStep(flag, r) === 'open' ? { ...r, quoted: true } : r)
@@ -48,9 +57,14 @@ export function payHousing(flag: boolean, r: Repair, marks: number): { ok: true;
 /** M108 s2: fit the housing at the yard. Refused (null) unless it was made and is not fitted yet. */
 export const fitHousing = (r: Repair): Repair | null => (r.made && !r.stage1 ? { ...r, stage1: true } : null)
 
-/** What E at Franky does (owner + ?ship=gate): open the map, fit the housing, or say she is not ready. `override` = ?ship=open. */
-export type ShipBoard = 'map' | 'fit' | 'not-ready'
-export const shipBoard = (r: Repair, override = false): ShipBoard => (r.stage1 || override ? 'map' : r.made ? 'fit' : 'not-ready')
+/** M108 s3: charge the cells at the yard. Refused (null) unless fitted, not charged yet, and the keeper carries the shards. */
+export const chargeCells = (r: Repair, shards: number): Repair | null => (r.stage1 && !r.charged && shards >= FIRST_CHARGE_SHARDS ? { ...r, charged: true } : null)
+
+/** What E at Franky does (owner + ?ship=gate): open the map, fit the housing, charge the cells, or say she is not ready
+ *  (`notReady` / `empty`). `override` = ?ship=open. s3: the map opens only once the cells are charged. */
+export type ShipBoard = 'map' | 'fit' | 'charge' | 'not-ready' | 'empty'
+export const shipBoard = (r: Repair, override = false, shards = 0): ShipBoard =>
+  (r.charged || override ? 'map' : r.stage1 ? (shards >= FIRST_CHARGE_SHARDS ? 'charge' : 'empty') : r.made ? 'fit' : 'not-ready')
 
 /** FUNCTIONAL labels (build text, not lore; for @lark to replace): the price chip, the Pay answer, the leave answer, the toast */
 export const fmtMarks = (n: number) => `${n.toLocaleString('en-US')} Marks`
@@ -65,4 +79,12 @@ export const LABEL = {
   notReady: 'The ship is not ready to fly · the cell housing is not fitted',
   fitEntry: "Fit the cell housing at Kael's yard.",
   bagFull: 'No room in your bag for the cell housing',
+  // M108 s3 (functional, for @lark)
+  chargePrompt: 'E · Charge the cells',
+  charged: 'Cells charged · first charge done',
+  empty: `The ship is not ready to fly · the cells are empty (${FIRST_CHARGE_SHARDS} Raw Mana Shards)`,
+  chargeEntry: `Trade with a Digger Moglin in the Ather for ${FIRST_CHARGE_SHARDS} Raw Mana Shards.`,
+  chargeEntryReady: "Charge the cells at Kael's yard.",
 } as const
+/** M108 s3: Kael's ledger, the next line (canon 83b6870 gives it; its WORDING is lark's: shipped as the placeholder, @lark) */
+export const LEDGER_CHARGE_LINE = 'Cells want filling. Ather mana, raw.'

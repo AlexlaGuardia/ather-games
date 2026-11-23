@@ -16,6 +16,15 @@
 //   F · (s2) at Franky with the housing: the prompt reads "E · Fit the cell housing"; E -> record stage1, the housing used up,
 //       toast "fitted", no map on that E; reload -> stage 1 persists, housing still gone, Kael's line struck, the entry gone;
 //       E at Franky again -> the destination map opens with canon's three.
+//       ★ s3 RE-MEANT F7-F9 (were "fitted: plain board, E = the map, canon's three"): the fit leaves the cells EMPTY (canon
+//       83b6870), so now: Kael's ledger shows its next line (LEDGER_CHARGE_LINE) + the keeper's "Trade with a Digger..." entry;
+//       E at Franky = the "cells are empty" line, NO map. The map asserts moved to C (after the first charge).
+//   T · (s3) the Digger's trade, in the Ather (Bryonydell, the first settlement on the opening path, DIGGER_SURE): talk to the
+//       Digger, NO planks: the trade answer is offered, picking it is REFUSED (bag unchanged, the "need" line); with 6 Goldwood
+//       Plank: three trades -> 3 Raw Mana Shards in the bag, 0 planks; no Moglin leaves (the village unchanged).
+//   C · (s3) at Franky with 3 shards: the prompt reads "E · Charge the cells"; E -> record charged, the shards used up, toast,
+//       no map on that E; reload -> charged persists, Kael's charge line struck, the entry gone; E -> the destination map with
+//       canon's three (?ship=gate, no override).
 //   G · owner WITHOUT ?ship=gate: the manatech door is not among the dressed doors.
 // PASS = all of that + 0 page errors.   npx tsx scripts/m108-repair-check.mts [--url https://ather.games] [--out /tmp/m108]
 import puppeteer, { type Page } from 'puppeteer-core'
@@ -26,7 +35,12 @@ import { doorsCached } from '../src/app/shimmer/open/business/doors'
 import { shopDoorPoint } from '../src/app/shimmer/open/towns/shop-door'
 import { NEW_LEDGER } from '../src/app/shimmer/open/trade'
 import { newChain } from '../src/app/shimmer/open/shared/opening-chain'
-import { CELL_HOUSING_PRICE, CELL_HOUSING, LABEL } from '../src/app/shimmer/open/shared/ship-repair'
+import { CELL_HOUSING_PRICE, CELL_HOUSING, LABEL, RAW_SHARD, FIRST_CHARGE_SHARDS, LEDGER_CHARGE_LINE } from '../src/app/shimmer/open/shared/ship-repair'
+import { folkOf, DIGGER_SURE } from '../src/app/shimmer/open/ather/settlement-folk'
+import { builtFolkSpots } from '../src/app/shimmer/open/ather/settlement-lots'
+import { DIGGER_LABEL, DIGGER_TRADE } from '../src/app/shimmer/open/ather/digger-trade'
+import { ASK } from '../src/app/shimmer/open/ather/folk-talk'
+import type { Network } from '../src/app/shimmer/open/ather/network'
 import { DESTINATIONS } from '../src/app/shimmer/open/continent/destination-map'
 import { INV_KEY } from '../src/app/shimmer/open/shared/inventory'
 import { HOLLIS_FIRST, HOLLIS_QUOTE, HOLLIS_BARK, LEDGER_CELL_LINE, ENTRY_TAKE_PAGE, ENTRY_EARN_MARKS } from '../src/app/shimmer/open/shared/hollis-lines'
@@ -69,6 +83,7 @@ try {
   }, CHAIN_KEY, o.chain ?? null, LEDGER_KEY, o.marks === undefined ? null : { ...NEW_LEDGER, marks: o.marks })
   const marks = () => p.evaluate(k => JSON.parse(localStorage.getItem(k) ?? 'null')?.marks ?? null, LEDGER_KEY) as Promise<number | null>
   const record = () => p.evaluate(k => JSON.parse(localStorage.getItem(k) ?? 'null'), REPAIR_KEY) as Promise<{ quoted: boolean; made?: boolean; stage1: boolean } | null>
+  const countIn = (id: string) => p.evaluate((k, i) => ((JSON.parse(localStorage.getItem(k) ?? 'null')?.slots ?? []) as ({ id: string; n: number } | null)[]).reduce((a, x) => a + (x?.id === i ? x.n : 0), 0), INV_KEY, id) as Promise<number>
   const housings = () => p.evaluate((k, id) => ((JSON.parse(localStorage.getItem(k) ?? 'null')?.slots ?? []) as ({ id: string; n: number } | null)[]).reduce((a, x) => a + (x?.id === id ? x.n : 0), 0), INV_KEY, CELL_HOUSING) as Promise<number>
   const hudHas = (t: string, ms = 5000) => poll(async () => (await p.evaluate(() => document.body.innerText)).includes(t), ms)
   const mapOpen = () => p.evaluate(() => !!document.querySelector('[data-panel="destination-map"]'))
@@ -197,12 +212,75 @@ try {
   ok(!!(await p.evaluate(() => (window as any).__repair?.stage1?.())) && (await housings()) === 0, 'F5. after reload: stage 1 persists, the housing still gone')
   const eF = await entries()
   ok(!!eF.find(e => e.id === 'repair-cell-housing')?.struck && !eF.some(e => e.id === 'repair-cell-entry'), `F6. Kael's line struck, the keeper's entry gone (${JSON.stringify(eF.filter(e => e.id?.startsWith('repair')))})`)
+  ok(!!eF.find(e => e.id === 'repair-cell-charge' && e.title === LEDGER_CHARGE_LINE && !e.struck) && eF.find(e => e.id === 'repair-charge-entry')?.title === LABEL.chargeEntry, `F7. (s3) Kael's next line "${LEDGER_CHARGE_LINE}" + the keeper's "${LABEL.chargeEntry}" (${JSON.stringify(eF.filter(e => e.id?.startsWith('repair')))})`)
   const fB = await besideFranky()
-  ok(fB.verb === 'board' && fB.text !== LABEL.fitPrompt, `F7. at Franky, fitted: plain 'board' (${JSON.stringify(fB)})`)
+  ok(fB.verb === 'board' && fB.text !== LABEL.fitPrompt && fB.text !== LABEL.chargePrompt, `F8. at Franky, fitted, no shards: plain 'board' (${JSON.stringify(fB)})`)
   await tapE()
-  ok(await poll(mapOpen, 5000), 'F8. E at Franky = the destination map opens (follows the record, ?ship=gate, no override)')
+  ok(await hudHas(LABEL.empty) && !(await mapOpen()), `F9. (s3 RE-MEANT) E at Franky without the charge = "${LABEL.empty}", NO destination map`)
+  ok((await record())?.charged !== true, 'F10. record not charged')
+
+  // ── T · (s3) the Digger's trade in the Ather ──
+  const net = JSON.parse(readFileSync('public/open/wilds/network-s1.json', 'utf8')) as Network
+  const st = net.settlements.find(x => x.id === DIGGER_SURE[0])!, folk = folkOf(st, net.season), dig = folk.find(f => f.profession === 'digger')!
+  const spot = builtFolkSpots(st, folk, net.season).find(q => q.id === dig.id)!
+  const tx = Math.floor((st.x + 500) / 1000), tz = Math.floor((st.z + 500) / 1000)
+  const tile = (JSON.parse(readFileSync('public/open/wilds/tiles.json', 'utf8')) as { tiles: { name: string; tx: number; ty: number }[] }).tiles.find(t => t.tx === tx && t.ty === tz)!
+  console.log(`  digger: ${dig.name} at ${st.name} (${st.id})`)
+  const village = () => p.evaluate(() => localStorage.getItem('open.village.v1'))
+  async function toDigger() {
+    await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
+    await p.waitForFunction(() => !!(window as any).__ather?.travel, { timeout: 240000 }); await sleep(2000)
+    for (let i = 0; i < 40 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds'; i++) {
+      await p.evaluate((T, x, z) => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'm108-check', tile: T, x, y: 0, z, biome: 2, made: 0 } }), tile.name, st.x - tx * 1000, st.z - tz * 1000)
+      await sleep(4000)
+    }
+    await sleep(8000)
+    await p.evaluate((x, z) => (window as any).__ather.tp(x, z), st.x, st.z); await sleep(4000)
+    await p.mouse.click(200, 420); await sleep(800)
+    const L = Math.hypot(st.x - spot.x, st.z - spot.z), ux = L > 0.1 ? (st.x - spot.x) / L : 0, uz = L > 0.1 ? (st.z - spot.z) / L : 1
+    await p.evaluate((x, z, y) => { const g = (window as any).__ather; g.tp(x, z, y); g.look(y, -Math.atan2(1.1, 2)) }, spot.x + ux * 2, spot.z + uz * 2, Math.atan2(ux, uz)); await sleep(1500)
+    await p.keyboard.press('KeyE'); await p.mouse.move(5, 5)
+    if (!await poll(async () => !!(await p.$('[data-talk-choices]')), 15000)) return false
+    for (let k = 0; k < folk.length && (await bubble())?.name !== dig.name; k++) { if (!(await pick(ASK.others))) break; await sleep(800) }
+    return (await bubble())?.name === dig.name
+  }
+  const v0 = await village()
+  ok(await toDigger(), `T1. in ${st.name}, talking to the Digger ${dig.name}`)
+  ok((await opts()).some(o => o.t === DIGGER_LABEL.trade), `T2. the trade is offered: "${DIGGER_LABEL.trade}" (${JSON.stringify((await opts()).map(o => o.t))})`)
+  const bag0 = await p.evaluate(k => localStorage.getItem(k), INV_KEY)
+  ok(await pick(DIGGER_LABEL.trade), 'T3. no planks: picked the trade')
+  await sleep(1200)
+  ok(await hudHas(DIGGER_LABEL.short) && (await p.evaluate(k => localStorage.getItem(k), INV_KEY)) === bag0 && (await countIn(RAW_SHARD)) === 0, `T4. refused: "${DIGGER_LABEL.short}", the bag unchanged, no shard`)
+  await p.screenshot({ path: `${out}/digger-refused-390.png` })
+  await p.evaluate((k, id) => { const inv = JSON.parse(localStorage.getItem(k)!); const i = inv.slots.findIndex((x: unknown) => !x); inv.slots[i] = { id, n: 6 }; localStorage.setItem(k, JSON.stringify(inv)) }, INV_KEY, DIGGER_TRADE.want.id)
+  ok(await toDigger(), 'T5. back at the Digger with 6 Goldwood Plank')
+  for (let i = 0; i < FIRST_CHARGE_SHARDS; i++) { await pick(DIGGER_LABEL.trade); await sleep(1200) }
+  ok(await poll(async () => (await countIn(RAW_SHARD)) === FIRST_CHARGE_SHARDS && (await countIn(DIGGER_TRADE.want.id)) === 0, 8000), `T6. three trades: ${await countIn(RAW_SHARD)} Raw Mana Shards in the bag, ${await countIn(DIGGER_TRADE.want.id)} planks left`)
+  ok(await hudHas(DIGGER_LABEL.done), `T7. the HUD says "${DIGGER_LABEL.done}"`)
+  ok((await village()) === v0, 'T8. no Moglin leaves: the garden village unchanged')
+  await p.screenshot({ path: `${out}/digger-traded-390.png` })
+  await p.keyboard.press('Escape'); await sleep(600)
+
+  // ── C · (s3) the first charge at Franky, then board ──
+  await continent('&ship=gate')
+  ok((await entries()).find(e => e.id === 'repair-charge-entry')?.title === LABEL.chargeEntryReady, `C1. the entry turned to "${LABEL.chargeEntryReady}"`)
+  const fC = await besideFranky()
+  ok(fC.verb === 'board' && fC.text === LABEL.chargePrompt, `C2. at Franky with the shards: "${LABEL.chargePrompt}" (${JSON.stringify(fC)})`)
+  await tapE()
+  ok(await poll(async () => !!(await record())?.charged, 5000), `C3. E = the first charge: record charged (${JSON.stringify(await record())})`)
+  ok((await poll(async () => (await countIn(RAW_SHARD)) === 0, 5000)) && await hudHas(LABEL.charged), `C4. the shards used up (${await countIn(RAW_SHARD)}), HUD "${LABEL.charged}"`)
+  ok(!(await mapOpen()), 'C5. the charging E does not also open the map')
+  await p.screenshot({ path: `${out}/charged-390.png` })
+  await continent('&ship=gate')
+  ok(!!(await p.evaluate(() => (window as any).__repair?.charged?.())) && (await countIn(RAW_SHARD)) === 0, 'C6. after reload: the first charge persists, the shards still gone')
+  const eC = await entries()
+  ok(!!eC.find(e => e.id === 'repair-cell-charge')?.struck && !eC.some(e => e.id === 'repair-charge-entry'), `C7. Kael's charge line struck, the entry gone (${JSON.stringify(eC.filter(e => e.id?.startsWith('repair')))})`)
+  const fM = await besideFranky()
+  ok(fM.verb === 'board' && fM.text !== LABEL.chargePrompt, `C8. at Franky, charged: plain 'board' (${JSON.stringify(fM)})`)
+  await tapE()
+  ok(await poll(mapOpen, 5000), 'C9. E at Franky = the destination map opens (follows the record, ?ship=gate, no override)')
   const list = await p.evaluate(() => [...document.querySelectorAll('[data-dest]')].map(e => e.textContent))
-  ok(JSON.stringify(list) === JSON.stringify(DESTINATIONS.map(d => d.label)), `F9. canon's three, word for word (${JSON.stringify(list)})`)
+  ok(JSON.stringify(list) === JSON.stringify(DESTINATIONS.map(d => d.label)), `C10. canon's three, word for word (${JSON.stringify(list)})`)
   await p.screenshot({ path: `${out}/map-390.png` })
   await p.keyboard.press('Escape'); await sleep(600)
 

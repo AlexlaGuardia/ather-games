@@ -61,7 +61,7 @@ export const shipGateFlag = (search: string) => { const v = shipParam(search); r
 export const shipGateOverride = (search: string) => shipParam(search) === SHIP_GATE_OVERRIDE_VALUE
 
 /** Does boarding Franky open the destination map? While the shell is owner-only the whole gate needs the flag + owner; then
- *  it follows the repair record (`repaired` = stage 1 done) unless the owner asked for the override (?ship=open). When the
+ *  it follows the repair record (`repaired` = M108 s3: the cells' FIRST CHARGE done; was stage 1) unless the owner asked for the override (?ship=open). When the
  *  shell goes public: drop flag/owner/override and require `repaired`. */
 export function shipGateOpen(o: { flag: boolean; owner: boolean; repaired: boolean; override?: boolean }): boolean {
   if (!o.flag || !o.owner) return false

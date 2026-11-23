@@ -41,6 +41,12 @@ export const CANON_POOL = ['Cress', 'Dill', 'Chervil', 'Comfrey', 'Clover', 'Ver
   'Bluebell', 'Speedwell', 'Valerian', 'Agrimony', 'Pennyroyal', 'Cicely', 'Celandine', 'Feverfew', 'Bergamot', 'Rosemary', 'Caraway',
   'Anise', 'Lilac', 'Poppy', 'Iris', 'Lupin', 'Heather', 'Myrtle', 'Laurel', 'Chicory', 'Marigold', 'Woodruff']
 const NAMES = CANON_POOL
+/** M108 s3 (hub 11-23): the DIGGER (canon trades table, Marl's trade) rolls on its OWN seeded stream per slot, so adding the
+ *  trade did not reshuffle any other Moglin's season (their trades, dreams, wants are the same draws as before). A rock
+ *  settlement leans to it. DIGGER_SURE = the first settlement on the opening path (Greg's shortest road, s1-10 Bryonydell):
+ *  it always has one, so the cells' first charge (ship-repair.ts) never waits on a lucky roll. */
+export const DIGGER_P: Readonly<Record<SettlementBiome, number>> = { shore: 0.08, meadow: 0.08, woods: 0.08, rock: 0.1 }
+export const DIGGER_SURE: readonly string[] = ['s1-10']
 export const CANON_NAMES = new Set(['hazel', 'saxifrage', 'sax', 'yarrow', 'fennel', 'mallow', 'burdock', 'vetch', 'sorrel', 'hemlock',
   'marl', 'teasel', 'sedge', 'brack', 'thistle', 'jimbo', 'marra', 'pell', 'wend', 'pertle', 'grust', 'vane', 'heslur', 'tansy', 'nettle', 'tuckbank', 'thistledown', 'downbarrow', 'snagbarrows', 'gorsejacks', 'cinchfist', 'greg', 'gregory'])
 
@@ -85,7 +91,8 @@ export function folkOf(s: Settlement, season: number): Folk[] {
   const idx = Number(/-(\d+)$/.exec(s.id)?.[1] ?? 0)
   for (let k = 0; k < n; k++) {
     const name = names[order[(idx * FOLK_MAX + k) % order.length]]
-    const profession = pick(rnd, trades)
+    const drawnTrade = pick(rnd, trades)
+    const profession: Profession = rngOf(`digger:${season}:${s.id}:${k}`)() < DIGGER_P[biome] ? 'digger' : drawnTrade
     const drawn = { craft: pick(rnd, GRADE_ODDS), yield: pick(rnd, GRADE_ODDS), trade: pick(rnd, GRADE_ODDS) }   // kept so the season's other rolls do not shift
     const { skills, luck } = rollSkills(profession, rngOf(`skills:${season}:${s.id}:${k}`))   // M46: its own seeded stream
     const grades = { ...drawn, ...legacyGrades(profession, skills) }
@@ -102,6 +109,10 @@ export function folkOf(s: Settlement, season: number): Folk[] {
       }
     }
     out.push({ id: `${season}:${s.id}:${k}`, name, home: s.id, profession, grades, dream, employed, wants, skills, luck })
+  }
+  if (DIGGER_SURE.includes(s.id) && out.length && !out.some(f => f.profession === 'digger')) {   // the guaranteed one: the LAST slot
+    const k = out.length - 1, f = out[k], { skills, luck } = rollSkills('digger', rngOf(`skills:${season}:${s.id}:${k}:digger`))
+    out[k] = { ...f, profession: 'digger', skills, luck, grades: { ...f.grades, ...legacyGrades('digger', skills) }, dream: DREAMS.digger[0] }
   }
   return out
 }

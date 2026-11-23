@@ -22,7 +22,7 @@ import { veyraDue, veyraOpen, veyraOptions, veyraPick, shipRepair, type VeyraTal
 import { VEYRA_UNIT1, VEYRA_PICK, VEYRA_NAME } from '../shared/veyra-lines'
 import { inKaelYard } from './kael-yard'
 import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, equipSlot, heldOf, litSlot, settle, type Stance } from '../shared/stance'
-import { itemDef, giveHousing, take } from '../shared/inventory'
+import { itemDef, giveHousing, take, countOf } from '../shared/inventory'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { roadGraph } from '../shared/gps-route'
@@ -56,7 +56,7 @@ import { RunesmithPanel, IdonyPanel, commitImbue } from '../business/smith-panel
 import { IdrisPanel } from '../business/idris-panel'   // M93 s3
 import { TalkBubble, TalkChoices } from '../shared/npc-talk'
 import { HOLLIS_NAME, HOLLIS_FIRST, HOLLIS_QUOTE, HOLLIS_BARK, LEDGER_CELL_LINE, LEDGER_CELL_MARGIN, ENTRY_TAKE_PAGE, ENTRY_EARN_MARKS } from '../shared/hollis-lines'   // M108 s1
-import { repairStep, onQuote, payHousing, fitHousing, shipBoard, CELL_HOUSING, CELL_HOUSING_PRICE, LABEL as REPAIR_LABEL } from '../shared/ship-repair'
+import { repairStep, onQuote, payHousing, fitHousing, chargeCells, shipBoard, CELL_HOUSING, CELL_HOUSING_PRICE, RAW_SHARD, FIRST_CHARGE_SHARDS, LEDGER_CHARGE_LINE, LABEL as REPAIR_LABEL } from '../shared/ship-repair'
 import { useRepair, getRepair, putRepair } from '../shared/ship-repair-store'
 import { smithTalk, templeTalk, beatTalk } from './door-talk'
 import { DoorFolk } from './door-folk-scene'
@@ -1178,16 +1178,20 @@ function ContinentRideGame() {
   const manatechOn = shipFlag && isOwner
   const hideDoor = useCallback((k: string) => k === 'front:manatech' && !manatechOn, [manatechOn])
   const repair = useRepair(), chainNow = useChain()
-  const shipGate = shipGateOpen({ flag: shipFlag, owner: isOwner, repaired: repair.stage1, override: shipOverride })
-  const shipFit = shipOn && shipBoard(repair, shipOverride) === 'fit'
-  /** E at Franky: the map (stage 1 done / override), fit the housing she is waiting for, or "not ready" (no map) */
+  const shards = countOf(useInv(), RAW_SHARD)   // M108 s3: the first charge's shards (traded from a Digger in the Ather)
+  // ★ M108 s3: the map opens once the cells hold their FIRST CHARGE (was: once the housing was fitted)
+  const shipGate = shipGateOpen({ flag: shipFlag, owner: isOwner, repaired: repair.charged, override: shipOverride })
+  const shipAct = shipOn ? shipBoard(repair, shipOverride, shards) : null
+  /** E at Franky: the map (charged / override), fit the housing, charge the cells, or "not ready" (no map) */
   const onShip = useCallback(() => {
-    const r = getRepair(), act = shipBoard(r, shipOverride)
+    const r = getRepair(), act = shipBoard(r, shipOverride, countOf(getInv(), RAW_SHARD))
     if (act === 'map') { setDeed('ship:franky'); return }
     if (act === 'fit') { const n = fitHousing(r); if (!n) return
       putRepair(n); const inv = take(getInv(), CELL_HOUSING, 1); if (inv) setInv(inv)
       hudSay(REPAIR_LABEL.fitted, 'info', 6); return }
-    hudSay(REPAIR_LABEL.notReady, 'info', 5)
+    if (act === 'charge') { const inv = take(getInv(), RAW_SHARD, FIRST_CHARGE_SHARDS), n = chargeCells(r, FIRST_CHARGE_SHARDS); if (!inv || !n) return
+      setInv(inv); putRepair(n); hudSay(REPAIR_LABEL.charged, 'info', 6); return }
+    hudSay(act === 'empty' ? REPAIR_LABEL.empty : REPAIR_LABEL.notReady, 'info', 5)
   }, [shipOverride])
   // ?tune=1: ] gives 100k Marks, to try the businesses without grinding contracts (the Ather's ?tune=1 convention)
   useEffect(() => {
@@ -1280,10 +1284,13 @@ function ContinentRideGame() {
     const shop = R && step !== 'off' ? doorByKey(R, 'front:manatech') : undefined
     const where = shop ? { zone: 'continent' as const, x: shop.at.x, z: shop.at.z } : null
     postEntries('repair', step === 'off' ? [] : [
-      { id: 'repair-cell-housing', hand: 'kael', title: LEDGER_CELL_LINE, note: LEDGER_CELL_MARGIN, where, struck: step === 'stage1' },
-      ...(step === 'stage1' ? [] : [{ id: 'repair-cell-entry', hand: 'keeper' as const, title: step === 'open' ? ENTRY_TAKE_PAGE : step === 'made' ? REPAIR_LABEL.fitEntry : ENTRY_EARN_MARKS, note: REPAIR_LABEL.price, where }]),
+      { id: 'repair-cell-housing', hand: 'kael', title: LEDGER_CELL_LINE, note: LEDGER_CELL_MARGIN, where, struck: step === 'stage1' || step === 'charged' },
+      // M108 s3: the fit leaves the cells empty; Kael's ledger turns to its next line (canon 83b6870; wording = lark, placeholder)
+      ...(step === 'stage1' || step === 'charged' ? [{ id: 'repair-cell-charge', hand: 'kael' as const, title: LEDGER_CHARGE_LINE, note: '', where: null, struck: step === 'charged' }] : []),
+      ...(step === 'stage1' ? [{ id: 'repair-charge-entry', hand: 'keeper' as const, title: shards >= FIRST_CHARGE_SHARDS ? REPAIR_LABEL.chargeEntryReady : REPAIR_LABEL.chargeEntry, note: `Raw Mana Shards ${Math.min(shards, FIRST_CHARGE_SHARDS)} / ${FIRST_CHARGE_SHARDS}`, where: null }] : []),
+      ...(step === 'stage1' || step === 'charged' ? [] : [{ id: 'repair-cell-entry', hand: 'keeper' as const, title: step === 'open' ? ENTRY_TAKE_PAGE : step === 'made' ? REPAIR_LABEL.fitEntry : ENTRY_EARN_MARKS, note: REPAIR_LABEL.price, where }]),
     ])
-  }, [R, manatechOn, repair, chainNow])
+  }, [R, manatechOn, repair, chainNow, Math.min(shards, FIRST_CHARGE_SHARDS)])   // eslint-disable-line react-hooks/exhaustive-deps
   const journal = useJournal()
   const questMarksRef = useRef<{ x: number; z: number; color: string; title?: string }[]>([])
   questMarksRef.current = useMemo(() => questMarks('continent'), [journal])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -1342,7 +1349,7 @@ function ContinentRideGame() {
   const touchActions: TouchAction[] = [
     ...(!hud.foot && ferryAt && !ferrying ? [{ code: 'KeyE', key: 'E', label: 'ferry', near: true }]
       : []),
-    ...(hud.foot && yardState.action && !deed ? [{ code: 'KeyE', key: 'E', label: yardState.action === 'board' && shipFit ? 'fit' : yardState.action, near: true }, ...(yardState.action === 'place' ? [{ code: 'DeedTurn', key: 'E', label: 'turn' }] : [])] : []),
+    ...(hud.foot && yardState.action && !deed ? [{ code: 'KeyE', key: 'E', label: yardState.action === 'board' && shipAct === 'fit' ? 'fit' : yardState.action === 'board' && shipAct === 'charge' ? 'charge' : yardState.action, near: true }, ...(yardState.action === 'place' ? [{ code: 'DeedTurn', key: 'E', label: 'turn' }] : [])] : []),
     ...(hud.foot && deedReach && !deed ? [{ code: 'KeyE', key: 'E', label: deedReach.startsWith('front:') || deedReach.startsWith('smith:') ? 'go in' : 'deed', near: true }] : []),
     ...(hud.prompt ? [{ code: 'KeyE', key: 'E', label: hud.foot ? 'get in' : 'get out', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
@@ -1682,7 +1689,7 @@ function ContinentRideGame() {
           stacked just above the F prompt so both read when the keeper stands by a car in a bay */}
       {!isTouch && hud.foot && yardState.action && !deed && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && (
         <div data-yard-prompt={yardState.action} style={{ position: 'absolute', left: '50%', top: hud.prompt ? 'calc(62% - 34px)' : '62%', transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', pointerEvents: 'none' }}>
-          {yardState.action === 'board' && shipFit ? REPAIR_LABEL.fitPrompt : YARD_PROMPT[yardState.action]}
+          {yardState.action === 'board' && shipAct === 'fit' ? REPAIR_LABEL.fitPrompt : yardState.action === 'board' && shipAct === 'charge' ? REPAIR_LABEL.chargePrompt : YARD_PROMPT[yardState.action]}
         </div>
       )}
       {hud.prompt && !bagOpen && !vesselShop && !deed && !optionsOpen && (   // world prompts stay out from over a menu

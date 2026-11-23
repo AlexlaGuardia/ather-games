@@ -1,7 +1,7 @@
 'use client'
 // KAEL'S SHIP REPAIR, the store (BETA M108 stage 1). Rules: ship-repair.ts (pure, tested). Saved per keeper (REPAIR_KEY in
 // KEEPER_KEY_SPECS), so it rides keeper swaps and the cloud like the chain.
-//   ★ getRepairStage1()   the destination-map gate reads THIS when the shell goes public (destination-map.ts › shipGateOpen)
+//   ★ getRepairCharged()  (M108 s3; was getRepairStage1) the destination-map gate reads THIS when the shell goes public (destination-map.ts › shipGateOpen)
 // Checks READ window.__repair; they never write through it.
 import { useSyncExternalStore } from 'react'
 import { keeperKey } from '@/lib/keeper-local'
@@ -23,6 +23,8 @@ export function putRepair(r: Repair) {
 export const getRepair = get
 /** ★ STAGE 1 DONE: the cell housing is paid for and fitted */
 export const getRepairStage1 = () => get().stage1
+/** ★ M108 s3: the cells' FIRST CHARGE done: what the destination-map gate reads now */
+export const getRepairCharged = () => get().charged
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export const useRepair = () => useSyncExternalStore(subscribe, get, () => SERVER)
-function installProbe() { (window as unknown as { __repair?: unknown }).__repair = { state: () => ({ ...get() }), stage1: () => get().stage1 } }
+function installProbe() { (window as unknown as { __repair?: unknown }).__repair = { state: () => ({ ...get() }), stage1: () => get().stage1, charged: () => get().charged } }

@@ -5,7 +5,9 @@
 import type { Profession } from './moglins'
 
 export const DREAMS: Readonly<Record<Profession, readonly string[]>> = {
-  shopkeeper: [],   // Moonwell's Mallow only, whose dream is set in moonwell-glade.ts (a lark placeholder)
+  shopkeeper: [],
+  // M108 s3: FUNCTIONAL placeholder (build text, not lark's): the Digger's card line until @lark writes its dreams
+  digger: ['I dig. Bring me Goldwood Plank for shoring and I will trade you Raw Mana Shards.'],   // Moonwell's Mallow only, whose dream is set in moonwell-glade.ts (a lark placeholder)
   farmer: [
     'I want to grow one Ather Lily, just once, and sit beside it.',
     'Our settlement eats what I grow and never asks what I\'d like to grow.',

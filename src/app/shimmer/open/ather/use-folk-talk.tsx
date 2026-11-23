@@ -18,6 +18,7 @@ import { nearestSpot } from './folk-spots'
 import { builtFolkSpots } from './settlement-lots'   // M39 s3: where a Moglin is DRAWN (trade Moglins at their doors); talk must agree
 import { keeperNow } from './network-scene'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
+import { diggerTrade, DIGGER_LABEL } from './digger-trade'
 
 export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number) => number, onClose: () => void) {
   const phone = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches   // M46 card sizing; page.tsx untouched
@@ -57,6 +58,11 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
         const next = take(getInv(), id, k); if (!next) return
         const r = bring(trust, f, id, k); setInv(next); saveTrust(r.trust); setTrust(r.trust)
         setSt({ fid: f.id, screen: 'needs' })
+      },
+      trade: () => {   // M108 s3: the Digger's barter (refused = nothing changes, a line says why)
+        const r = diggerTrade(getInv())
+        if (!r.ok) { hudSay(r.why === 'short' ? DIGGER_LABEL.short : DIGGER_LABEL.full, 'info', 4); return }
+        setInv(r.inv); hudSay(DIGGER_LABEL.done, 'item', 4)
       },
       recruit: f => {
         const v = recruit(village, f, trust, plotStage(currentWorks()), Date.now(), s.name); if (!v) return

@@ -1,5 +1,5 @@
 // settlement-folk.ts: each season's Moglins per settlement, biome-tilted trades, fixed grades, and trust earned by trade.
-import { folkOf, wantsLeft, trusted, bring, recruit, stillHome, freshTrust, CANON_NAMES, CANON_POOL, FOLK_MIN, FOLK_MAX, BIOME_TRADES } from './settlement-folk'
+import { folkOf, wantsLeft, trusted, bring, recruit, stillHome, freshTrust, CANON_NAMES, CANON_POOL, FOLK_MIN, FOLK_MAX, BIOME_TRADES, DIGGER_P } from './settlement-folk'
 import { freshVillage, PROFESSIONS, VILLAGE_CAP } from './moglins'
 import { SETTLEMENT_GATHERS, type Settlement, type SettlementBiome } from './network'
 import { OPEN_ITEMS } from '../shared/inventory'
@@ -27,7 +27,7 @@ ok(many.flat().every(f => PROFESSIONS.includes(f.profession)), 'every trade is a
 const all = (b: SettlementBiome) => Array.from({ length: 200 }, (_, k) => folkOf(S(`t-${b}-${k}`, b), 1)).flat()
 const share = (fs: ReturnType<typeof all>, p: string[]) => fs.filter(f => p.includes(f.profession)).length / fs.length
 ok(share(all('rock'), ['stonemason', 'jeweler', 'smith']) > 0.5 && share(all('shore'), ['cook']) > 0.25, `rock leans stone (${share(all('rock'), ['stonemason', 'jeweler', 'smith']).toFixed(2)}), shore leans cook (${share(all('shore'), ['cook']).toFixed(2)})`)
-ok(Object.values(BIOME_TRADES).every(w => PROFESSIONS.every(p => (w[p] ?? 0) > 0)), 'every trade can turn up in every biome (the biome only tilts)')
+ok(Object.entries(BIOME_TRADES).every(([b, w]) => PROFESSIONS.every(p => (p === 'digger' ? DIGGER_P[b as SettlementBiome] : w[p] ?? 0) > 0)), 'every trade can turn up in every biome (the biome only tilts; M108 s3: the digger rolls on its own stream, DIGGER_P)')
 // the hoop: employed folk want goods from OTHER biomes; free folk want nothing
 const fl = many.flat()
 ok(fl.some(f => f.employed) && fl.some(f => !f.employed), 'some have a job, some do not')

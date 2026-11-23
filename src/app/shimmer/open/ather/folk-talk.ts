@@ -6,6 +6,7 @@
 // All game logic stays in settlement-folk.ts (wantsLeft / trusted / bring / recruit); this file only arranges lines.
 // ★ @lark draft 11-18, awaiting Alex sign-off: the answer labels (ASK), the bring verb and the two stock lines below. The dream
 // stays the hello (lark: the only place a keeper ever hears a Moglin's dream). Checks import these, never retype them.
+import { DIGGER_LABEL } from './digger-trade'
 import { isGlade, GLADE_STAYS, gladeHello } from './moonwell-glade'
 import type { TalkNode } from '../shared/npc-talk'
 import { wantsLeft, trusted, type Folk, type Trust } from './settlement-folk'
@@ -47,6 +48,8 @@ export interface FolkTalkActs {
   bye: () => void
   /** Yarrow's teach beat hands over the Mast, the Bait and the page. False = it did not happen (a full bag): the beat stays armed. */
   teach?: (answer: 'pointed' | 'silent') => boolean
+  /** M108 s3: barter with a Digger (digger-trade.ts): planks for a shard. The hook applies it (or says why not). */
+  trade?: (f: Folk) => void
 }
 
 export const folkStart = (home: Folk[]): FolkTalkState => (home[0] ? helloFor(home[0].id) : { fid: '', screen: 'hello' })
@@ -101,5 +104,6 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): 
   const hello = isGladeYarrow(f.id) ? yarrowHello(st.rep ?? (st.alt ? 1 : 0), !!c.yarrow?.hasCatch, base) : base
   const inspect = { label: ASK.inspect, pick: () => act.go({ fid: f.id, screen: 'card', alt: st.alt }) }
   if (st.screen === 'card') return { line: hello, card: cardOf(f, c.trust, c.homeName ?? f.home), options: [{ label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello', alt: st.alt }) }, bye] }
-  return { line: hello, options: [...(f.employed && !ok ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, inspect, ...(next ? [next] : []), bye] }
+  const trade = f.profession === 'digger' && act.trade ? [{ label: DIGGER_LABEL.trade, pick: () => act.trade!(f) }] : []   // M108 s3
+  return { line: hello, options: [...trade, ...(f.employed && !ok ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, inspect, ...(next ? [next] : []), bye] }
 }
