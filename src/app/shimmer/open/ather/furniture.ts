@@ -59,6 +59,11 @@ export interface PieceDef {
   /** BETA M98b: a free-build FLOOR SLAB (h = its thickness): walkable, set like furniture (snap / turn / anchor), and other
    *  furniture may stand ON it (rooms.ts slabLift raises it by the slab's top). Slabs never overlap each other. */
   slab?: true
+  /** BETA M98b b2: a free-build WALL PANEL (w long, d = the wall's thickness, h = its height): set like furniture (snap / turn /
+   *  anchor, so a run of panels lines up at any angle). Solid to the walker as a chain of small boxes when turned off the axes
+   *  (rooms.ts pieceBoxes), never one fat axis box. `tint` = its colour when it is not a wood's (brick). */
+  panel?: true
+  tint?: string
   /** M68 s2: GIVEN, never made or sold (the Grimoire Pedestal: Greg hands it in the tutorial, glade-greg-talk.ts) */
   gift?: true
 }
@@ -84,6 +89,12 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   goldwood_slab_wide: { name: 'Wide Goldwood Floor Slab', blurb: 'Four square metres of goldwood floor in one piece.', recipe: [{ id: 'goldwood_plank', n: 4 }], w: 2, d: 2, h: 0.12, solid: true, wood: 'goldwood', slab: true },
   stone_slab: { name: 'Stone Floor Slab', blurb: 'A square metre of cut stone floor.', recipe: [{ id: 'stone_brick', n: 1 }], w: 1, d: 1, h: 0.12, solid: true, wood: 'stone', slab: true },
   stone_slab_wide: { name: 'Wide Stone Floor Slab', blurb: 'Four square metres of cut stone floor in one piece.', recipe: [{ id: 'stone_brick', n: 4 }], w: 2, d: 2, h: 0.12, solid: true, wood: 'stone', slab: true },
+  // M98b b2: free-build wall panels. Size = a drawn wall's (plot-walls WALL_T 0.3 x WALL_H 4.8; build-prefs.test asserts it, this
+  // file may not import). Cost = a drawn wall's 1.5 per metre, rounded up per panel. Blurbs are placeholders for @lark.
+  goldwood_panel: { name: 'Goldwood Wall Panel', blurb: 'A metre of goldwood wall that stands on its own, at any angle.', recipe: [{ id: 'goldwood_plank', n: 2 }], w: 1, d: 0.3, h: 4.8, solid: true, wood: 'goldwood', panel: true },
+  goldwood_panel_wide: { name: 'Wide Goldwood Wall Panel', blurb: 'Two metres of goldwood wall in one piece.', recipe: [{ id: 'goldwood_plank', n: 3 }], w: 2, d: 0.3, h: 4.8, solid: true, wood: 'goldwood', panel: true },
+  brick_panel: { name: 'Brick Wall Panel', blurb: 'A metre of brick wall that stands on its own, at any angle.', recipe: [{ id: 'stone_brick', n: 2 }], w: 1, d: 0.3, h: 4.8, solid: true, wood: 'stone', panel: true, tint: '#a4573f' },
+  brick_panel_wide: { name: 'Wide Brick Wall Panel', blurb: 'Two metres of brick wall in one piece.', recipe: [{ id: 'stone_brick', n: 3 }], w: 2, d: 0.3, h: 4.8, solid: true, wood: 'stone', panel: true, tint: '#a4573f' },
   lift: { name: 'Lift', blurb: 'A goldwood car on cords, a stone weight hung beside it. Pull the cord for a floor and up or down you go.', recipe: [{ id: 'goldwood_plank', n: 8 }, { id: 'stone_brick', n: 4 }], w: 1.0, d: 1.0, h: 2.0, solid: false, wood: 'goldwood', shaft: true },
   // ── UNIQUE pieces, Nyx-side (Alex 11-17: "unique pieces are SOLD FOR MARKS by the carpenter + other Nyx-side shops";
   //    Magii c52ba1c: which shops stock decor is ours, no new names). Made of the continent's canon goods (game/economy.md:

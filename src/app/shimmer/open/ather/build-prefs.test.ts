@@ -1,6 +1,8 @@
 // BETA M98 s1: snap sizes, turn steps, fine-turned footprints. Run: npx tsx src/app/shimmer/open/ather/build-prefs.test.ts
 import { SNAPS, TURN_STEPS, DEFAULT_PREFS, snapTo, normQ, turnQ, nextSnap, nextStep, quad, quadBounds, quadsHit, rectQuad, adoptPrefs, getPrefs, setPrefs, anchorSnap, flushAxis, getAnchor, setAnchor, subscribeAnchor, type Anchor } from './build-prefs'
-import { canPlacePiece, placePiece, pieceRect, pieceBoxes, freshWorks, chestBox, STARTER_CHEST, slabLift, pieceFloor } from './rooms'
+import { canPlacePiece, placePiece, pieceRect, pieceBoxes, freshWorks, chestBox, STARTER_CHEST, slabLift, pieceFloor, panelChain } from './rooms'
+import { WALL_T, WALL_H } from './plot-walls'
+import { FURNITURE } from './furniture'
 import { STARTING_SQUARES } from './plot'
 import { newInv, give } from '../shared/inventory'
 let pass = 0
@@ -115,6 +117,27 @@ ok(near(flushAxis(0.1, 0.25, 0.25, 1, false), 0), 'anchor: same-depth row did no
   const [sx, sz] = anchorSnap(0.1, 0.2, 0.5, a, 2, 2, 0, false); ok(near(sx, 0) && near(Math.abs(sz), 2), `onto: a slab over a slab anchor did not land beside it (${sx}, ${sz})`)
   const [ox] = anchorSnap(1.9, 0, 0.5, a, 1.6, 0.5, 0, true); ok(near(ox, 1.8), `onto: a bench off the slab anchor was not flush outside (${ox})`)
   const [nx, nz] = anchorSnap(0.1, 0.2, 0.5, { ...a, floor: false }, 1.6, 0.5, 0, true); ok(near(Math.abs(nz), 1.25) || near(Math.abs(nx), 1.8), `onto: a non-floor anchor kept a piece on top (${nx}, ${nz})`) }
+// ── M98b b2: wall panels ──
+for (const id of ['goldwood_panel', 'goldwood_panel_wide', 'brick_panel', 'brick_panel_wide']) ok(FURNITURE[id]?.panel === true && FURNITURE[id].d === WALL_T && FURNITURE[id].h === WALL_H, `panel: ${id} is not a drawn wall's size`)
+{ const pb = give(give(newInv(12), 'goldwood_panel_wide', 3).inv, 'goldwood_slab_wide', 1).inv
+  const w45 = placePiece(freshWorks(), owned, pb, 'goldwood_panel_wide', P.x, P.z, 0.5, 1)!
+  ok(!!w45, 'panel: a 45 deg wide panel was refused on open ground')
+  const bx = pieceBoxes(w45.works), inBox = (x: number, z: number) => bx.some(b => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1)
+  ok(bx.length === 7, `panel: a 2 m panel at 45 deg is not a chain of 7 boxes (${bx.length})`)
+  ok(bx.every(b => near(b.y1 - b.y0, WALL_H + 0.5)), 'panel: the chain is not wall height')
+  ok(inBox(P.x, P.z) && inBox(P.x + 0.65, P.z + 0.65) && inBox(P.x - 0.65, P.z - 0.65), 'panel: a point on the 45 deg panel is not blocked')
+  ok(!inBox(P.x + 0.6, P.z - 0.6) && !inBox(P.x - 0.6, P.z + 0.6), 'panel: the walker is blocked off the panel (one fat axis box)')
+  const sq = placePiece(freshWorks(), owned, pb, 'goldwood_panel_wide', P.x, P.z, 1, 1)!, sb = pieceBoxes(sq.works)
+  ok(sb.length === 1 && near(sb[0].x1 - sb[0].x0, WALL_T) && near(sb[0].z1 - sb[0].z0, 2), 'panel: a square-turned panel is not its one exact box')
+  ok(panelChain(0, 0, 1, 0.3, 0.5).length === 4 && panelChain(0, 0, 0.3, 0.3, 0.5).length === 1, 'panel: chain length')
+  // a run: the next panel anchored on the first lands flush along its axis and may be set
+  const an: Anchor = { x: P.x, z: P.z, q: 0.5, w: 2, d: WALL_T }, [fx, fz] = anchorSnap(P.x + 1.5, P.z + 1.4, 0.5, an, 2, WALL_T, 0.5)
+  const c = Math.SQRT1_2, lx = (fx - P.x) * c + (fz - P.z) * c, lz = -(fx - P.x) * c + (fz - P.z) * c
+  ok(near(lx, 2, 1e-6) && near(lz, 0, 1e-6), `panel: the run's next panel is not flush in line (${lx}, ${lz})`)
+  ok(canPlacePiece(w45.works, owned, 'goldwood_panel_wide', fx, fz, 0.5, w45.inv).ok, 'panel: the flush next panel was refused')
+  // on a slab: allowed, and lifted by it
+  const sl = placePiece(freshWorks(), owned, pb, 'goldwood_slab_wide', P.x, P.z, 0.5, 1)!, onS = placePiece(sl.works, owned, sl.inv, 'goldwood_panel_wide', P.x, P.z, 0.5, 2)
+  ok(!!onS && pieceBoxes(onS.works).filter(b => near(b.y1 - b.y0, WALL_H + 0.5)).every(b => near(b.y0, pieceFloor(freshWorks(), { item: 'goldwood_slab', x: P.x, z: P.z }) + 0.12 - 0.5)), 'panel: a panel on a slab does not stand on it') }
 // the store: set, read, clear, subscribers told
 { let told = 0; const off = subscribeAnchor(() => told++)
   setAnchor({ x: 1, z: 2, q: 0.5, w: 1, d: 1 }); ok(getAnchor()?.q === 0.5, 'anchor: set did not stick'); setAnchor(null); ok(getAnchor() === null && told === 2, 'anchor: clear / notify'); off() }

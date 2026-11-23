@@ -107,6 +107,19 @@ PIECES = {
     'stone_slab_wide': ('stone', 'A wide stone floor slab.', lambda h, m, d:
         '<path d="M7 10 L25 10 L30 20 L2 20 Z" fill="' + h + '" stroke="' + d + '" stroke-width=".8"/>' + r(2, 20, 28, 3, m, d, 0.4)
         + '<path d="M11.5 10 L8.5 20 M16 10 L16 20 M20.5 10 L23.5 20 M4.5 15 L27.5 15" stroke="' + d + '" stroke-width=".6"/>'),
+    # M98b b2: free-build wall panels
+    'goldwood_panel': ('goldwood', 'A goldwood wall panel.', lambda h, m, d:
+        r(10, 4, 12, 22, m, d, 0.4) + r(9.4, 24, 13.2, 2.4, d, d, 0.3) + r(9.4, 3.4, 13.2, 1.6, d, d, 0.3)
+        + '<path d="M14 5 L14 24 M18 5 L18 24" stroke="' + d + '" stroke-width=".6"/>'),
+    'goldwood_panel_wide': ('goldwood', 'A wide goldwood wall panel.', lambda h, m, d:
+        r(4, 6, 24, 20, m, d, 0.4) + r(3.4, 24, 25.2, 2.4, d, d, 0.3) + r(3.4, 5.4, 25.2, 1.6, d, d, 0.3)
+        + '<path d="M8 7 L8 24 M12 7 L12 24 M16 7 L16 24 M20 7 L20 24 M24 7 L24 24" stroke="' + d + '" stroke-width=".6"/>'),
+    'brick_panel': ('stone', 'A brick wall panel.', lambda h, m, d:
+        r(10, 4, 12, 22, '#a4573f', '#5e2f22', 0.4) + r(9.4, 24, 13.2, 2.4, '#7a3f2e', '#5e2f22', 0.3)
+        + ''.join(f'<path d="M10 {y} L22 {y}" stroke="#5e2f22" stroke-width=".5"/>' for y in (8, 12, 16, 20))),
+    'brick_panel_wide': ('stone', 'A wide brick wall panel.', lambda h, m, d:
+        r(4, 6, 24, 20, '#a4573f', '#5e2f22', 0.4) + r(3.4, 24, 25.2, 2.4, '#7a3f2e', '#5e2f22', 0.3)
+        + ''.join(f'<path d="M4 {y} L28 {y}" stroke="#5e2f22" stroke-width=".5"/>' for y in (10, 14, 18, 22))),
 }
 for pid, (wood, note, body) in PIECES.items():
     with open(os.path.join(OUT, pid.replace('_', '-') + '.svg'), 'w') as f:

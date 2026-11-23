@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A wide goldwood wall panel. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <rect x="4" y="6" width="24" height="20" rx="0.4" fill="#d9a957" stroke="#8a5f24" stroke-width=".8"/><rect x="3.4" y="24" width="25.2" height="2.4" rx="0.3" fill="#8a5f24" stroke="#8a5f24" stroke-width=".8"/><rect x="3.4" y="5.4" width="25.2" height="1.6" rx="0.3" fill="#8a5f24" stroke="#8a5f24" stroke-width=".8"/><path d="M8 7 L8 24 M12 7 L12 24 M16 7 L16 24 M20 7 L20 24 M24 7 L24 24" stroke="#8a5f24" stroke-width=".6"/>
+</svg>

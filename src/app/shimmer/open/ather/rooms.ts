@@ -25,7 +25,7 @@ import { adoptStairs, type Stairs } from './plot-stairs'
 import { adoptDecks, type Decks } from './plot-decks'
 import { adoptFound, adoptFoundCells, floorAt } from './plot-found'
 import { cellMid, shaftBlocked, shaftTop } from './lift'
-import { normQ, quad, quadBounds, quadsHit, rectQuad } from './build-prefs'
+import { normQ, quad, quadBounds, quadsHit, rectQuad, isWholeQ, type Rect } from './build-prefs'
 import { adoptWalls, adoptCarry, adoptRoof, adoptFloors, adoptPaid, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
 
 export type RoomKind = 'rinnshop' | 'farm' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
@@ -434,10 +434,16 @@ export function slabLift(w: Works, x: number, z: number): number {
 }
 /** M98b: the floor a PIECE stands on: the house foundation (M55), plus a slab under it unless it IS a slab */
 export const pieceFloor = (w: Works, p: { item: string; x: number; z: number }) => floorAt(w, GROUND_Y, p.x, p.z) + (FURNITURE[p.item]?.slab ? 0 : slabLift(w, p.x, p.z))
-export const pieceBoxes = (w: Works): Box[] => w.pieces.filter(p => FURNITURE[p.item]?.solid).map(p => {
-  const k = pieceRect(p.item, p.x, p.z, p.q)
-  const b = pieceFloor(w, p)   // M55: inside the house it stands on the foundation; M98b: on a slab, on the slab
-  return { ...k, y0: b - 0.5, y1: b + FURNITURE[p.item].h }
+/** M98b b2: a wall panel turned off the axes, as a chain of small boxes along its length (each the axis box of a d x d square
+ *  on the panel's centre line), so a 45 deg panel blocks a 0.3 m-thick line, not the 1.4 m square its one axis box would. */
+export function panelChain(x: number, z: number, w: number, d: number, q: number): Rect[] {
+  const n = Math.max(1, Math.ceil(w / d)), a = (normQ(q) * Math.PI) / 2, c = Math.cos(a), s = Math.sin(a), step = (w - d) / Math.max(1, n - 1)
+  return Array.from({ length: n }, (_, i) => { const l = n === 1 ? 0 : -w / 2 + d / 2 + i * step; return quadBounds(x + l * c, z + l * s, d, d, q) })
+}
+export const pieceBoxes = (w: Works): Box[] => w.pieces.filter(p => FURNITURE[p.item]?.solid).flatMap(p => {
+  const f = FURNITURE[p.item], b = pieceFloor(w, p)   // M55: inside the house it stands on the foundation; M98b: on a slab, on the slab
+  const ks = f.panel && !isWholeQ(p.q) ? panelChain(p.x, p.z, f.w, f.d, p.q) : [pieceRect(p.item, p.x, p.z, p.q)]
+  return ks.map(k => ({ x0: k.x0, x1: k.x1, z0: k.z0, z1: k.z1, y0: b - 0.5, y1: b + f.h }))
 })
 export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: string, x: number, z: number, q: number, inv?: Inv): PlaceVerdict {
   const f = FURNITURE[item]
