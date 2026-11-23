@@ -197,7 +197,7 @@ for (const sp of ['fox', 'axolotl'] as const) for (const fps of [60, 4]) for (co
     const A = { x: 0, z: 3 }, B = { x: 24, z: -6 }, walk = Math.hypot(B.x - A.x, B.z - A.z) / 4
     let bad = '', backAt = -1, tt = 0
     const dP: number[] = [], dO: number[] = [], modes = new Set<string>()
-    for (let i = 0; i < (20 + walk + 90) * fps; i++) {
+    for (let i = 0; i < (20 + walk + 120) * fps; i++) {   // M107 ship: she pauses about half the time now (was 90 s)
       tt = i * dt
       const w = clamp01((tt - 20) / walk); k.x = A.x + (B.x - A.x) * w; k.z = A.z + (B.z - A.z) * w
       const p = party.step(dt), o = other.step(dt)
@@ -220,8 +220,8 @@ for (const sp of ['fox', 'axolotl'] as const) for (const fps of [60, 4]) for (co
     // let her out of the party: she roams by home again (home ~25 m off: she ends up nearer home than the keeper)
     party.near(null)
     let homeBy = 99
-    for (let i = 0; i < 300 * fps; i++) { const q = party.step(dt); homeBy = Math.min(homeBy, Math.hypot(q.x, q.z)) }
-    ok(!party.nearing() && homeBy < 3, `${tag}: let roam: back to her own roam round home (came within ${homeBy.toFixed(1)} m of home in 5 min)`)
+    for (let i = 0; i < 600 * fps; i++) { const q = party.step(dt); homeBy = Math.min(homeBy, Math.hypot(q.x, q.z)) }
+    ok(!party.nearing() && homeBy < 3, `${tag}: let roam: back to her own roam round home (came within ${homeBy.toFixed(1)} m of home in 10 min; M107 ship: half her time is pauses now, was 5 min)`)
   }
   // a keeper walking a slow loop (1.2 m/s, radius 6 round (6,-4)): she never falls more than 2r behind once caught up
   for (const fps of [60, 4]) {
@@ -328,7 +328,7 @@ function clamp01(v: number) { return Math.max(0, Math.min(1, v)) }
       wasPlaying = p.mode === 'play'; prev = p
       if (!bad && ground(p.mode) && (BOXES.some(b => inBox(b, p.x, p.z, 0.05)) || !inBox(PLOT, p.x, p.z))) bad = `${p.mode} at ${p.x.toFixed(2)},${p.z.toFixed(2)}`
     }
-    const tag = `${P.kind} ${sp} seed ${seed} @${fps}fps`, within = sp === 'fox' ? 90 : 150
+    const tag = `${P.kind} ${sp} seed ${seed} @${fps}fps`, within = sp === 'fox' ? 120 : 200   // M107 ship: was 90 / 150 before the calmer idle mix
     ok(first >= 0 && first < within, `${tag}: goes to it on her own within ${within} s (first play at ${first.toFixed(1)} s)`)
     ok(got.length >= 2 && got.every(g => g === `${P.id}:${P.stat}`) && tr.plays() === got.length, `${tag}: finished plays carry ITS stat ${P.stat} (${got.length}: ${got.slice(0, 2).join(',')})`)
     ok(gap >= 20 - 0.01 || got.length < 2, `${tag}: never plays again within PLAY.rest (shortest gap ${gap.toFixed(1)} s)`)
@@ -354,6 +354,25 @@ function clamp01(v: number) { return Math.max(0, Math.min(1, v)) }
   const fl = SPIRIT_MODELS.fox!.trot.toyLean!, ml = SPIRIT_MODELS.axolotl!.trot.toyLean!
   ok(['pwr', 'grd', 'agi', 'vig'].every(k => (fl[k] ?? 1) > 0 && (ml[k] ?? 1) > 0), 'manner: every piece stays possible for both (no lean is 0, nothing forbidden)')
   ok(fl.agi > ml.agi && ml.grd > fl.grd, `manner: the Vulnyx leans AGI, the Manalotl leans GRD (fox ${JSON.stringify(fl)}, axolotl ${JSON.stringify(ml)})`)
+}
+
+// M107 ship (Alex 11-23: "more pauses", then out to every keeper): she is CALM. Over 10 min in the stand-in garden, off the
+// perch she stands still (a check / look / sniff / sit / tilt) about half the time, and a moving bout (a run of trot, hops
+// and all, between two stops) is short. Before this the Vulnyx stood ~37% / the Manalotl ~26% of her ground time.
+for (const sp of ['fox', 'axolotl'] as const) for (const fps of [60, 4]) for (const seed of [1, 7, 42, 99]) {
+  const nav: SpiritNav = { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked, roam: { maxLeg: 4.5, away: 3 } }
+  const tr = makeTrot(nav, seed, SPIRIT_MODELS[sp]!.trot), dt = 1 / fps, MOVE = new Set(['trot', 'hopDown', 'hopUp'])
+  let still = 0, grnd = 0, bout = 0, bouts: number[] = []
+  for (let i = 0; i < 600 * fps; i++) {
+    const m = tr.step(dt).mode
+    if (MOVE.has(m)) bout += dt; else if (bout > 0) { bouts.push(bout); bout = 0 }
+    if (m !== 'perch') { grnd += dt; if (!MOVE.has(m)) still += dt }
+  }
+  const share = still / grnd, mean = bouts.reduce((a, b) => a + b, 0) / Math.max(1, bouts.length), tag = `calm ${sp} seed ${seed} @${fps}fps`
+  ok(share >= 0.44 && share <= 0.66, `${tag}: off the perch she is still about half the time (${(share * 100).toFixed(0)}%, want 44..66%)`)
+  const boutMax = sp === 'fox' ? 2.6 : 5.5
+  ok(mean <= boutMax, `${tag}: short moving bouts (mean ${mean.toFixed(2)} s, want <= ${boutMax})`)
+  if (process.env.CALM_PRINT) console.log(tag, (share * 100).toFixed(1), mean.toFixed(2))
 }
 
 if (fails.length) { console.error(`spirit-trot: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

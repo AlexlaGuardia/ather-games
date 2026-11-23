@@ -49,7 +49,7 @@ import { PlanterPanel, GrimoirePanel, getPots, setPots, settlePlanter, useBook, 
 import { liftPiece } from './piece-lift'
 import { getBoxes, setBoxes, settleSaplingBox, PottedSapling, SaplingBoxSection } from './planter-box-view'   // M113 s1
 import { BLOOM_MS, speciesOf } from './spirit-seeds'
-import { SpiritOnPlanter, useSpirits3d } from './spirit-model'
+import { SpiritOnPlanter, useSpiritsDev } from './spirit-model'
 import { spiritModelFor } from './spirit-models'
 import type { SpiritNav } from './spirit-trot'
 import { BrewingPanel } from './brewing-panel'
@@ -1229,14 +1229,14 @@ function ChestGhost({ pose, owned, q, item }: { pose: React.MutableRefObject<Pos
 
 const WOODS: Record<string, string> = { goldwood: '#d9a957', shimmeroak: '#a77a52', starwillow: '#c8d2e8', dawnwood: '#c9774a', iron: '#4e4a47', stone: '#bdb6a6' }
 const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, number]; c: string }) => <mesh position={p}><boxGeometry args={s} /><meshLambertMaterial color={c} /></mesh>
-/** M107 (owner + ?spirits=3d): where the planter's spirit may go. Home = the planter, its ring 0.9..1.5 m (the planter's
+/** M107 (every keeper since the M107 ship; training toys owner + ?spirits=3d): where the planter's spirit may go. Home = the planter, its ring 0.9..1.5 m (the planter's
  *  corners sit at 0.64 m) = the home beat. s2 (Magii RULED 11-23, athernyx 8b45c92: a bloomed spirit walks the whole garden):
  *  straight darting legs anywhere on YOUR plot at her planter's own level. Blocked = any wall/chest/piece/house box (bar the
  *  planter's own) and every room's footprint, padded by her half-width; Greg; ground that is not yours, not island, or not
  *  the planter's floor (a deck, a raised house, the shore). Boxes are re-read when the works change. */
 const SPIRIT_PAD = 0.22
 let navBoxes: { w: Works; b: { x0: number; x1: number; z0: number; z1: number }[] } | null = null
-function planterNav(id: string): SpiritNav | null {
+function planterNav(id: string, dev = false): SpiritNav | null {
   const pc = getW().pieces.find(x => x.id === id); if (!pc) return null
   const home = { x: pc.x, z: pc.z }, owned = new Set(loadGarden().owned), floor0 = pieceFloor(getW(), pc)
   const boxes = () => {
@@ -1248,7 +1248,7 @@ function planterNav(id: string): SpiritNav | null {
   const toys = () => getW().pieces.filter(t => FURNITURE[t.item]?.train && Math.abs(pieceFloor(getW(), t) - floor0) < 0.02)
     .map(t => { const a = -t.q * Math.PI / 2, f = FURNITURE[t.item], kind = f.play ?? 'leap'   // M110 s2: how she plays at it, and its measure
       return { id: t.id, x: t.x, z: t.z, ax: Math.sin(a), az: Math.cos(a), stat: f.train!, kind, size: kind === 'shove' ? f.d / 2 : kind === 'guard' ? f.w / 2 - 0.3 : kind === 'laps' ? f.w / 2 - 0.15 : undefined } })
-  return { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, roam: { maxLeg: 4.5, away: 3 }, toys, blocked: (x, z) => {
+  return { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, roam: { maxLeg: 4.5, away: 3 }, toys: dev ? toys : undefined, blocked: (x, z) => {
     const sq = squareAt(x, z); if (!sq || !owned.has(sqId(sq.i, sq.j))) return true
     if (!(Math.abs(plotHeightAt(x, z) - GROUND_Y) < 0.05) || Math.abs(pieceFloor(getW(), { item: pc.item, x, z }) - floor0) > 0.02) return true
     return boxes().some(b => x > b.x0 - SPIRIT_PAD && x < b.x1 + SPIRIT_PAD && z > b.z0 - SPIRIT_PAD && z < b.z1 + SPIRIT_PAD)
@@ -1257,10 +1257,11 @@ function planterNav(id: string): SpiritNav | null {
 /** M76: the spirit planter: woven starwillow round soft soil; a sprout that grows with the seed; a gold glow once it bloomed. */
 function SpiritPlanterBody({ id }: { id?: string }) {
   const f = FURNITURE.spirit_planter, c = WOODS.starwillow, b = useBook(), pot = id ? b.pots[id] : undefined
-  const orb = useRef<THREE.Mesh>(null), sprout = useRef<THREE.Group>(null), spirits3d = useSpirits3d()   // M102: owner + ?spirits=3d = the spirit model
-  // M102 Manalotl wire-in: the bloomed pot's OWN species' model (spirit-models.ts), or the gold orb when it has none yet
-  const sp = pot?.bloomed ? speciesOf(pot.seed) : null, look = spirits3d ? spiritModelFor(sp) : null
-  const nav = useMemo(() => (look && id ? planterNav(id) : null), [look, id])   // M107 s1: she trots round it
+  const orb = useRef<THREE.Mesh>(null), sprout = useRef<THREE.Group>(null), dev = useSpiritsDev()   // M107 ship: owner + ?spirits=3d = talk/party/training only
+  // M102 Manalotl wire-in: the bloomed pot's OWN species' model (spirit-models.ts), or the gold orb when it has none yet.
+  // M107 ship (Alex 11-23): the model + her roam are for every keeper now.
+  const sp = pot?.bloomed ? speciesOf(pot.seed) : null, look = spiritModelFor(sp)
+  const nav = useMemo(() => (look && id ? planterNav(id, dev) : null), [look, id, dev])   // M107: she roams the garden
   useFrame(({ clock }) => {
     if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06
     if (sprout.current && pot && !pot.bloomed) { const g = Math.max(0.15, Math.min(1, (Date.now() - pot.at) / BLOOM_MS)); sprout.current.scale.setScalar(g) }
@@ -1271,7 +1272,7 @@ function SpiritPlanterBody({ id }: { id?: string }) {
     <Bx p={[0, 0.5, 0]} s={[f.w - 0.12, 0.05, f.d - 0.12]} c="#4a3524" />
     {[-1, 1].flatMap(a => [-1, 1].map(z => <mesh key={`${a}${z}`} position={[a * (f.w / 2 - 0.04), 0.62, z * (f.d / 2 - 0.04)]}><sphereGeometry args={[0.035, 6, 5]} /><meshBasicMaterial color="#eaf2ff" /></mesh>))}
     {pot && !pot.bloomed && <group ref={sprout} position={[0, 0.52, 0]}><mesh position-y={0.12}><cylinderGeometry args={[0.015, 0.02, 0.24, 5]} /><meshLambertMaterial color="#9ad06a" /></mesh><mesh position={[0.05, 0.22, 0]} rotation-z={-0.8}><sphereGeometry args={[0.05, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh><mesh position={[-0.05, 0.18, 0]} rotation-z={0.8}><sphereGeometry args={[0.045, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh></group>}
-    {pot?.bloomed && <>{look && sp ? <SpiritOnPlanter sp={sp} look={look} y={0.53} fallback={orbMesh} nav={nav ?? undefined} id={id} /> : orbMesh}<pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} /></>}
+    {pot?.bloomed && <>{look && sp ? <SpiritOnPlanter sp={sp} look={look} y={0.53} fallback={orbMesh} nav={nav ?? undefined} id={id} dev={dev} /> : orbMesh}<pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} /></>}
   </>
 }
 /** One piece, built from boxes in its wood's colour. Blockout look like the rooms. */
@@ -1678,7 +1679,7 @@ function TabRail({ tabs, on, go }: { tabs: BenchTab[]; on: BenchTab; go: (t: Ben
 
 function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
   const inv = useInv(), w = useWorks(), def = ROOMS[room.kind], bankNow = useBank(), narrow = useNarrow()
-  const spirits3d = useSpirits3d()   // M110 s1: training pieces are owner + ?spirits=3d only for now
+  const spirits3d = useSpiritsDev()   // M110 s1: training pieces are owner + ?spirits=3d only for now
   const r = w.rooms.find(x => x.id === room.id) ?? room   // the live room (its store moves under the panel)
   const [pick, setPick] = useState<Pick>({ job: null, qty: 10 })
   const tabs = benchTabs(r.kind)

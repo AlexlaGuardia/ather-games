@@ -1,6 +1,6 @@
 // M102 (sprites, 2026-11-23): THE SPIRIT MODEL REGISTRY, PER SPECIES. Alex 11-23 OK'd the Manalotl look ("the manalotl
 // looks good"), so the "Vulnyx stands in for all" rule ends: a bloomed planter shows ITS OWN species' model when one is
-// listed here and the gold orb otherwise. Still owner-only behind ?spirits=3d (spirit-model.tsx owns the gate).
+// listed here and the gold orb otherwise. For every keeper since the M107 ship (talk/party/training stay owner + ?spirits=3d).
 //
 // ★ PURE data (no three, no React). Each entry: the glb, its world height (the glb is 1 unit tall), the look (toon skin
 // emissive, the translucent hull, an optional glowing PART with a slow pulse), the shader sway rules (which way the tail
@@ -58,11 +58,11 @@ export const SPIRIT_MODELS: Partial<Record<Species, SpiritLook>> = {
       stride: 0.12, hopH: 0.012, stretch: 0.025, squash: 0.05, squashK: 10,   // she flows, barely a hop
       lean: 0.04, leanMax: 0.12, turnK: 3.5,
       hopArc: 0.62, hopArcH: 0.16, sitY: 0.93, sitPitch: -0.08, sniffPitch: 0.14,   // "sit" = lies along the ground
-      chain: 0.85, checkS: [0.8, 1.6],
+      chain: 0.97, checkS: [1.0, 2.0], legMax: 2,   // M107 ship: calmer (Alex 11-23 "more pauses"), short slow legs
       playV: 0.5, playH: 0.06,           // M110 s1: she flows across a training piece, a low bound
       toyLean: { grd: 1.4, vig: 1, agi: 1, pwr: 0.8 },   // M110 s2 her manner: a steady, patient wall, she likes to hold the gap
       beat: { look: 0.36, sniff: 0.14, sit: 0.14, tilt: 0.36 },
-      lookS: [2.2, 3.6], sniffS: [1.4, 2.4], sitS: [2.6, 4.2], tiltS: [1.8, 3.0],
+      lookS: [4.0, 6.5], sniffS: [2.4, 3.8], sitS: [5.5, 8.5], tiltS: [3.2, 5.2],
       glance: 0.6, glanceHold: [0.9, 1.6], glanceMax: 0.6, tiltK: 3, lookTilt: 0.55,
       happyHops: 3, happyHop: 0.45, happyH: 0.035, happyWig: 0.1,   // M109 s2 fed: three soft bobs, not bounces (she flows)
     },

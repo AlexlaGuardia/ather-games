@@ -27,11 +27,13 @@ export const VULNYX_URL = SPIRIT_MODELS.fox!.url
 /** World height of the model (the glb is 1 unit tall). Small and lithe: ~0.55 m, about a third of a keeper. */
 export const VULNYX_H = SPIRIT_MODELS.fox!.h
 
-// ── the gate: ?spirits=3d AND the owner (cached once per page) ─────────────────────────────────────────────────────
+// ── the gate. M107 ship (Alex 11-23): the MODELS and their roam/trot are for EVERY keeper now (no gate). What stays
+// owner + ?spirits=3d is the rest that grew on top: E-talk (Feed / Follow / Open panel), the party + the grimoire roster
+// face, the training pieces and their plays. useSpiritsDev() is that gate (cached once per page). ───────────────────────
 let ownerP: Promise<boolean> | null = null
 const ownerCheck = () => (ownerP ??= fetch('/api/owner', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { owner: false })).then(d => !!d.owner).catch(() => false))
 const flagOn = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('spirits') === '3d'
-export function useSpirits3d(): boolean {
+export function useSpiritsDev(): boolean {
   const [on, setOn] = useState(false)
   useEffect(() => { if (!flagOn()) return; let alive = true; ownerCheck().then(v => { if (alive) setOn(v) }); return () => { alive = false } }, [])
   return on
@@ -46,7 +48,8 @@ const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Pr
 let grad: THREE.DataTexture | null = null
 const gradTex = () => { if (grad) return grad; grad = new THREE.DataTexture(new Uint8Array([110, 110, 110, 255, 185, 185, 185, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat); grad.minFilter = grad.magFilter = THREE.NearestFilter; grad.needsUpdate = true; return grad }
 
-function SpiritModel({ sp, look, nav, id, avatar }: { sp: Species; look: SpiritLook; nav?: SpiritNav
+function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: SpiritLook; nav?: SpiritNav
+  /** M107 ship: owner + ?spirits=3d: she can be talked to, follow, keep with the party, play at training pieces */ dev?: boolean
   /** M109: the planter's id (her follow state + the E pick are keyed on it) */ id?: string
   /** M109: the spirit panel's turntable copy: not counted by the probe, not pickable */ avatar?: boolean }) {
   const { scene } = useGLTF(look.url)
@@ -99,23 +102,23 @@ function SpiritModel({ sp, look, nav, id, avatar }: { sp: Species; look: SpiritL
   }, [scene, time, look])
   // M109 s1 FOLLOW: she walks with the keeper while her planter id is in the follow list (kept across reloads)
   useEffect(() => {
-    if (!trot || !id) return
+    if (!trot || !id || !dev) return
     const sync = () => trot.follow(isFollowing(id) ? () => keeperAt : null)
     sync(); const off = subscribeFollow(sync)
     return () => { off(); spiritLive.delete(id) }
-  }, [trot, id])
+  }, [trot, id, dev])
   // M109 s4 THE PARTY KEEPS NEAR: while her planter id is in the party she picks her runs round the keeper (loose company)
   useEffect(() => {
-    if (!trot || !id) return
+    if (!trot || !id || !dev) return
     const sync = () => trot.near(inParty(id) ? () => keeperAt : null)
     sync(); return subscribeParty(sync)
-  }, [trot, id])
+  }, [trot, id, dev])
   // M110 s1 TRAINING: a play she chose and finished at a training piece adds its small gain to HER stat record (planter id)
   useEffect(() => {
-    if (!trot || !id) return
+    if (!trot || !id || !dev) return
     trot.onPlayed((_toy, stat) => { if (isTrainStat(stat)) trainPlay(id, sp, stat) })
     return () => trot.onPlayed(null)
-  }, [trot, id, sp])
+  }, [trot, id, sp, dev])
   useEffect(() => { if (avatar) return; const p = probe(); p.mounted++; p.species[sp] = (p.species[sp] ?? 0) + 1
     return () => { p.mounted--; p.species[sp]--; if (!p.species[sp]) delete p.trots[sp]; if (!p.species.fox) p.trot = undefined } }, [sp, avatar])
   useFrame(({ clock }, dt) => {
@@ -124,8 +127,8 @@ function SpiritModel({ sp, look, nav, id, avatar }: { sp: Species; look: SpiritL
     if (!g.current) return
     if (trot && g.current.parent) {
       // the pose is in WORLD xz + yaw; the planter piece may be turned, so read through the parent's transform
-      if (id && spiritCheer.delete(id)) trot.cheer(() => keeperAt)   // M109 s2: fed
-      if (id && spiritCall.delete(id)) trot.call(() => keeperAt)   // M109 s3: called home
+      if (dev && id && spiritCheer.delete(id)) trot.cheer(() => keeperAt)   // M109 s2: fed
+      if (dev && id && spiritCall.delete(id)) trot.call(() => keeperAt)   // M109 s3: called home
       const ps = id && spiritHeld.id === id ? trot.pose() : trot.step(dt), par = g.current.parent, { v, q, e } = tmp   // M109: held while talked to
       par.updateWorldMatrix(true, false); par.getWorldPosition(v); const baseY = v.y
       v.set(ps.x, baseY + ps.y, ps.z); par.worldToLocal(v); g.current.position.copy(v)
@@ -143,7 +146,7 @@ function SpiritModel({ sp, look, nav, id, avatar }: { sp: Species; look: SpiritL
         braceMax: Math.max(pr.trots[sp]?.braceMax ?? 0, trot.braced()),   // M110 s2: the shove's lean / the guard's crouch, at its deepest
         yMax: ps.mode === 'happy' ? Math.max(pr.trots[sp]?.mode === 'happy' ? pr.trots[sp].yMax : 0, ps.y) : (pr.trots[sp]?.yMax ?? 0) }   // M109 s2: the happy beat's peak hop
       pr.trots[sp] = tp; if (sp === 'fox') pr.trot = tp
-      if (id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + ps.y, z: ps.z, h: look.h, at: Date.now() })   // M109: the E pick reads it
+      if (dev && id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + ps.y, z: ps.z, h: look.h, at: Date.now() })   // M109: the E pick reads it
       return
     }
     g.current.position.y = Math.sin(t * 1.4) * 0.02 * look.h / 0.55
@@ -170,8 +173,8 @@ function SpiritModel({ sp, look, nav, id, avatar }: { sp: Species; look: SpiritL
 /** The species' model stood on a bloomed planter (null look = the caller shows the orb); `fallback` (the gold orb) shows
  *  while the glb loads. With `nav` (M107) it trots its own manner round home: the group sits at the ground and the perch
  *  height comes from `nav.perch`. */
-export function SpiritOnPlanter({ sp, look, y, fallback, nav, id }: { sp: Species; look: SpiritLook; y: number; fallback: ReactNode; nav?: SpiritNav; id?: string }) {
-  return <Suspense fallback={fallback}><group position-y={nav ? 0 : y}><SpiritModel sp={sp} look={look} nav={nav} id={id} /></group></Suspense>
+export function SpiritOnPlanter({ sp, look, y, fallback, nav, id, dev }: { sp: Species; look: SpiritLook; y: number; fallback: ReactNode; nav?: SpiritNav; id?: string; dev?: boolean }) {
+  return <Suspense fallback={fallback}><group position-y={nav ? 0 : y}><SpiritModel sp={sp} look={look} nav={nav} id={id} dev={dev} /></group></Suspense>
 }
 
 /** M109 s1: the spirit panel's AVATAR: her live model (the same SpiritModel, idle: bob + breath + look round) on a slow

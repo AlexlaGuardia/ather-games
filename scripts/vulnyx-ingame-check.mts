@@ -2,7 +2,7 @@
 // SETUP (stated): a Spirit Planter at (-130, 102.5) whose pot already BLOOMED (seeded in open.works.v1 + the book's pots).
 //  A. owner cookie + ?spirits=3d: window.__spiritModel.mounted >= 1 (the group named 'spirit-model-vulnyx' is in the scene),
 //     the glb answers 200, 0 page errors, frame time at 390x844 noted (SwiftShader, not a phone).
-//  B. owner, NO flag: nothing mounted (the orb, as today).   C. NOT owner + ?spirits=3d: nothing mounted.
+//  B. owner, NO flag / C. NOT owner + ?spirits=3d: since the M107 ship the models are drawn (2), but no spirit talk.
 //  --shots <dir>: phone far / phone near / desktop / night (hour 21) from the owner + flag run.
 // M102 Manalotl wire-in (sprites-manalotl): PER SPECIES. Two more bloomed planters: a Manalotl (axolotl seed) and an Athowl
 //  (owl seed, no model yet). A also asserts: 2 models mounted (fox 1 + axolotl 1, the owl planter keeps the orb), the
@@ -214,10 +214,11 @@ const noTalk = async (p: Page) => { await p.evaluate((x, z) => (window as any)._
   const o = await opts(p); await p.keyboard.press('Escape'); return !o.some(x => x.t === 'Follow' || x.t === 'Stay') }
 // B. owner, no flag
 const b = await run(true, false)
-if (b) { ok(b.mounted === 0, `B owner, no flag: nothing mounted (mounted=${b.mounted})`); ok(await noTalk(b.p), 'B owner, no flag: no spirit talk'); ok(b.errs.length === 0, `B 0 page errors ${b.errs.join(' | ')}`); await b.p.close() }
+// M107 ship (Alex 11-23): the models + roam are for every keeper now; only talk/party/training stay owner + flag
+if (b) { ok(b.mounted === 2, `B owner, no flag: the models are drawn for everyone since the M107 ship (mounted=${b.mounted})`); ok(await noTalk(b.p), 'B owner, no flag: no spirit talk'); ok(b.errs.length === 0, `B 0 page errors ${b.errs.join(' | ')}`); await b.p.close() }
 // C. not owner + flag
 const c = await run(false, true)
-if (c) { ok(c.mounted === 0, `C not owner + ?spirits=3d: nothing mounted (mounted=${c.mounted})`); ok(await noTalk(c.p), 'C not owner + ?spirits=3d: no spirit talk'); ok(c.errs.length === 0, `C 0 page errors ${c.errs.join(' | ')}`); await c.p.close() }
+if (c) { ok(c.mounted === 2, `C not owner + ?spirits=3d: the models are drawn (M107 ship) (mounted=${c.mounted})`); ok(await noTalk(c.p), 'C not owner + ?spirits=3d: no spirit talk'); ok(c.errs.length === 0, `C 0 page errors ${c.errs.join(' | ')}`); await c.p.close() }
 if (shots) {
   const d = await run(true, true, 1280, 800)
   if (d) { await look(d.p, 3.2, 0.8); await shot(d.p, 'desk'); await frameBoth(d.p, 2.4); await shot(d.p, 'spirits-desk'); await d.p.close() }

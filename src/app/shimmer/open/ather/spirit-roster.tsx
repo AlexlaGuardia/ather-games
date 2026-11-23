@@ -9,7 +9,7 @@ import { SPECIES_NAMES } from '../../spirits/spirit'
 import { hudSay } from '../shared/hud-say'
 import { speciesOf } from './spirit-seeds'
 import { useBook } from './spirit-panels'
-import { useSpirits3d } from './spirit-model'
+import { useSpiritsDev } from './spirit-model'
 import { PARTY_MAX, askAlong, letRoam, partyIds, spiritCall, subscribeParty } from './spirit-party'
 import { followIds, liveSpirits, subscribeFollow } from './spirit-follow'
 import { PARTY_UI, PARTY_FULL_LINE, calledLine } from './party-spirit-lines'
@@ -20,7 +20,7 @@ const L = PARTY_UI
 
 const EMPTY: readonly string[] = []
 export function SpiritRoster({ onClose }: { onClose: () => void }) {
-  const on = useSpirits3d()
+  const on = useSpiritsDev()
   const book = useBook()
   const party = useSyncExternalStore(subscribeParty, partyIds, () => EMPTY)
   const follow = useSyncExternalStore(subscribeFollow, followIds, () => EMPTY)

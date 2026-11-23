@@ -66,10 +66,14 @@ export const TROT = {
   sitY: 0.88, sitPitch: -0.2,
   sniffPitch: 0.32, // nose to the ground
   // M102 (Manalotl wire-in): the beats became dials too, so each species carries its own manner (spirit-models.ts).
-  chain: 0.62,      // chance a run ends in a real beat (else a quick alert stop and another run)
-  checkS: [0.3, 0.75] as [number, number],
-  beat: { look: 0.6, sniff: 0.22, sit: 0.18, tilt: 0 },   // beat weights
-  lookS: [1.2, 2.4] as [number, number], sniffS: [0.8, 1.5] as [number, number], sitS: [1.8, 3.2] as [number, number], tiltS: [1.8, 3.0] as [number, number],
+  // M107 ship (Alex 11-23 "more pauses"): she was on the move ~85% of the time. Now CALM: a run mostly ends in a real beat,
+  // the beats last longer and a roam leg is shorter, so off the perch she is still about half the time (spirit-trot.test.ts
+  // pins the band). The idle mix is these dials: chain (how often a run ends in a beat), the beat lengths, legMax.
+  chain: 0.9,       // chance a run ends in a real beat (else a quick alert stop and another run)
+  checkS: [0.5, 1.0] as [number, number],
+  beat: { look: 0.5, sniff: 0.25, sit: 0.25, tilt: 0 },   // beat weights
+  lookS: [2.0, 3.6] as [number, number], sniffS: [1.4, 2.4] as [number, number], sitS: [3.0, 5.0] as [number, number], tiltS: [1.8, 3.0] as [number, number],
+  legMax: 3,        // m, the longest roam dart (the plot's roam.maxLeg caps it too); the first run out from home keeps the plot's
   glance: 0.15,     // s to flick to a new look angle (snappy)
   glanceHold: [0.45, 0.9] as [number, number], glanceMax: 0.85,
   tiltK: 4,         // head-tilt ease /s
@@ -171,6 +175,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   let yaw = R() * TAU, yawPrev = yaw, lookYaw = 0, lookAt = 0, lookFrom = 0, lookT = 0, lookHold = 0.6
   let tilt = 0, tiltAt = 0, tiltSwap = 0
   let hopPh = 0, sinceLand = 9, runs = 0, beats = 0, homes = 0, sitK = 0, homing = false, outFirst = !!roam
+  let homeLeg = false, homeAgain = 0   // M107 ship: the run just planned was a cut leg home; carry on home after the beat (2 = to hop up)
   // the current run: an ARC round home (polar a0,r0 -> a1,r1) or a straight LINE (p0 -> p1); length len, speed vRun
   let kind: 'arc' | 'line' = 'arc', a0 = 0, a1 = 0, r0 = 0, r1 = 0, p0 = { x: 0, z: 0 }, p1 = { x: 0, z: 0 }, len = 1, s = 0, vRun = D.speed
   let pos = nav.perch ? { x: home.x, z: home.z } : at(ang, rad), y = nav.perch?.y ?? 0, lift = 0
@@ -214,7 +219,8 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   function planDash(away = 0): boolean {
     if (!roam) return false
     for (let k = 0; k < 24; k++) {
-      const h = (k < 12 ? yaw + rand(-1.3, 1.3) : rand(0, TAU)), L = rand(Math.min(1.8, roam.maxLeg), roam.maxLeg)
+      const cap = away > 0 ? roam.maxLeg : Math.min(roam.maxLeg, D.legMax)   // M107 ship: shorter bouts
+      const h = (k < 12 ? yaw + rand(-1.3, 1.3) : rand(0, TAU)), L = rand(Math.min(1.8, cap), cap)
       const to = { x: pos.x + Math.sin(h) * L, z: pos.z + Math.cos(h) * L }
       if (dHome(to) < Math.max(away, nav.rMax + 0.2)) continue
       if (planLine(to, D.dash * rand(0.85, 1.1))) return true
@@ -318,7 +324,15 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   /** head home: a straight line to the free ring point nearest her bearing, then (homing) hop up */
   function planHome(): boolean {
     const b = Math.atan2(pos.z - home.z, pos.x - home.x)
-    for (let k = 0; k < 16; k++) { const a = b + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35; if (planLine(at(a, nav.rMin), D.dash * 0.9)) return true }
+    for (let k = 0; k < 16; k++) {
+      const a = b + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35, p = at(a, nav.rMin), L = Math.hypot(p.x - pos.x, p.z - pos.z)
+      // M107 ship: a long way home goes in legs of at most legMax, a beat between them (more pauses, shorter bouts)
+      // (the cut keeps >= 1 m still to go, so the last leg always ends ON the ring, never a long hop up from short of it)
+      const c = Math.min(D.legMax, L - 1), cut = L > D.legMax
+      if (cut && !(free(p.x, p.z) && lineFree(pos, p))) continue   // cut only a way home that is clear all the way
+      const to = cut ? { x: pos.x + (p.x - pos.x) * c / L, z: pos.z + (p.z - pos.z) * c / L } : p
+      if (planLine(to, D.dash * 0.9)) { homeLeg = cut; return true }
+    }
     return false
   }
   /** a landing point on the ring to hop down to from the perch */
@@ -329,12 +343,14 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   function go(m: TrotMode, d: number) { mode = m; t = 0; dur = d; if (m === 'look') { lookT = 0; lookFrom = lookYaw; lookAt = rand(-0.7, 0.7) } else if (m === 'tilt') { tiltAt = R() < 0.5 ? 1 : -1; tiltSwap = rand(0.4, 0.7) * d } }
   /** the next run from a standstill. true = she is off. */
   function move(): boolean {
-    toy = null
+    toy = null; homeLeg = false
     if (followTo) { fGo = false; fIdle = 0; go('follow', 0); return true }
     if (nearTo && planToy()) return mode === 'play' ? true : run()   // M110 s1: a training piece, her choice, sometimes
     if (nearTo && planNear()) return run()   // M109 s4: the party picks her runs round the keeper (else the plain roam below)
     const near = dHome(pos) <= nav.rMax + 0.25
     if (roam) {
+      // M107 ship: a long way home cut into legs: after the beat she carries on home (still meaning to hop up, if she did)
+      if (homeAgain) { const h = homeAgain === 2; homeAgain = 0; if (planHome()) { homing = h; return run() } }
       if (outFirst && planDash(roam.away)) { outFirst = false; return run() }
       if (!near) {
         // the further out she is, the likelier she heads home (to hop up, or for a lap of the ring)
@@ -357,7 +373,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     if (toy && Math.hypot(pos.x - toyA.x, pos.z - toyA.z) < 0.15) { runs = 0; beats++; startPlay(); return }   // M110 s1: at the piece
     toy = null
     if (homing && dHome(pos) <= nav.rMin + 0.25) { homing = false; homes++; return go('hopUp', D.hopArc) }
-    homing = false
+    homeAgain = homeLeg ? (homing ? 2 : 1) : 0; homing = false
     if (runs >= 2 || R() < D.chain) {
       runs = 0; beats++
       const b = R()
