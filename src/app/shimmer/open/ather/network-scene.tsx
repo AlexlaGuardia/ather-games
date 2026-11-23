@@ -14,6 +14,7 @@ import { loadVillage } from './moglins'
 import { type Spot } from './folk-spots'
 import { builtFolkSpots } from './settlement-lots'
 import { burrfolkOf, stallSpot } from './burrfolk'
+import { GLEANER_POST, BURR_CAMP, CAMP_LABEL, campStalls } from './gleaner'
 import { SettlementBuildings } from './settlement-buildings'
 import { GLADE_ID } from './moonwell-glade'
 import { setMapSettlements } from './tile-picture'
@@ -117,6 +118,7 @@ export function Settlements({ net, loaded }: { net: Network; loaded: (x: number,
     {net.settlements.map(s => { const y = loaded(s.x, s.z); return y === null || s.id === GLADE_ID ? null : <SettlementModel key={s.id} s={s} y={y} /> })}   {/* the Glade is the pool + Greg's home, not a knoll (moonwell-glade.ts) */}
     <SettlementBuildings net={net} loaded={loaded} />
     <SettlementFolk net={net} loaded={loaded} />
+    <BurrCamp loaded={loaded} />
   </>
 }
 
@@ -130,7 +132,20 @@ export const folkDrawn = new Map<string, Spot[]>()
 /** M112: the Burrfolk stalls drawn right now: settlement id -> the stall-keeper's spot + name (the page aims E at it; checks read it) */
 export const stallDrawn = new Map<string, Spot & { name: string }>()
 
+/** M112 s2 (Magii #16993): Gleaner's post stands for the OWNER only until M70 ships (the /api/owner cookie, as spirit-model.tsx).
+ *  `on` is read by the page's E pick every frame; the draw re-renders when the check lands. */
+export const gleanerPost = { on: false }
+let ownerP: Promise<boolean> | null = null
+const ownerCheck = () => (ownerP ??= fetch('/api/owner', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { owner: false })).then(d => !!d.owner).catch(() => false))
+function useGleanerPost(): boolean {
+  const [on, setOn] = useState(gleanerPost.on)
+  useEffect(() => { let alive = true; ownerCheck().then(v => { gleanerPost.on = v; if (alive) setOn(v) }); return () => { alive = false } }, [])
+  return on
+}
+
 function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: number) => number | null }) {
+  const postOn = useGleanerPost()
+  const places = useMemo(() => (postOn ? [...net.settlements, GLEANER_POST] : net.settlements), [net, postOn])
   useEffect(() => { setMapSettlements(net.settlements) }, [net])   // the maps draw them (tile-picture.ts)
   const [near, setNear] = useState<string[]>([])
   const [villageRev, setVillageRev] = useState(0)
@@ -141,7 +156,7 @@ function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: 
     keeperNow.x = camera.position.x; keeperNow.z = camera.position.z
     acc.current += dt; if (acc.current < 1) return
     acc.current = 0
-    const ids = net.settlements.filter(s => Math.hypot(s.x - camera.position.x, s.z - camera.position.z) < FOLK_DRAW_R && loaded(s.x, s.z) !== null).map(s => s.id)
+    const ids = places.filter(s => Math.hypot(s.x - camera.position.x, s.z - camera.position.z) < FOLK_DRAW_R && loaded(s.x, s.z) !== null).map(s => s.id)
     setNear(cur => (cur.join() === ids.join() ? cur : ids))
     setVillageRev(v => v + 1)   // a recruit happens in the talk: re-read who is still home once a second
   })
@@ -149,18 +164,18 @@ function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: 
   const drawn = useMemo(() => {
     const out: { s: Settlement; spots: Spot[]; stall: (Spot & { name: string }) | null }[] = []
     for (const id of near) {
-      const s = net.settlements.find(x => x.id === id); if (!s) continue
+      const s = places.find(x => x.id === id); if (!s) continue
       const all = folkOf(s, SEASON), home = new Set(stillHome(all, village).map(f => f.id))
       const b = burrfolkOf(s, SEASON, all)
       out.push({ s, spots: builtFolkSpots(s, all, SEASON).filter(p => home.has(p.id)), stall: b ? { id: b.id, name: b.name, ...stallSpot(s) } : null })   // laid out over ALL, so a recruit never shuffles the rest
     }
     return out
-  }, [near, net, village])
+  }, [near, places, village])
   const key = drawn.map(d => `${d.s.id}:${d.spots.map(p => `${p.id}@${p.x.toFixed(1)},${p.z.toFixed(1)}`).join('.')}`).join('|')   // M39: positions too (a blueprint moves a Moglin to its door with the same ids; the probe went stale)
   useEffect(() => {
     folkDrawn.clear(); for (const d of drawn) folkDrawn.set(d.s.id, d.spots)
     stallDrawn.clear(); for (const d of drawn) if (d.stall) stallDrawn.set(d.s.id, d.stall)
-    ;(window as unknown as { __folk?: unknown }).__folk = { drawn: () => Object.fromEntries(folkDrawn), stalls: () => Object.fromEntries(stallDrawn), keeper: () => ({ ...keeperNow }), mapSettlements: () => net.settlements.length }
+    ;(window as unknown as { __folk?: unknown }).__folk = { drawn: () => Object.fromEntries(folkDrawn), stalls: () => Object.fromEntries(stallDrawn), camp: () => ({ ...BURR_CAMP, label: CAMP_LABEL, stalls: campStalls().length, drawn: campDrawn.y }), gleanerPost: () => gleanerPost.on, keeper: () => ({ ...keeperNow }), mapSettlements: () => net.settlements.length }
   }, [key])   // eslint-disable-line react-hooks/exhaustive-deps
   return <>{drawn.map(d => { const p = d.stall, y = p ? loaded(p.x, p.z) : null; return p && y !== null ? <BurrStall key={p.id} x={p.x} y={y} z={p.z} yaw={p.yaw} id={p.id} /> : null })}{drawn.flatMap(d => d.spots.map((p, k) => {
     const y = loaded(p.x, p.z)   // the ground's height HERE, asked at draw (M18 reshapes ground near paths)
@@ -189,6 +204,24 @@ function BurrStall({ x, y, z, yaw, id }: { x: number; y: number; z: number; yaw:
       </group>
     </group>
   )
+}
+
+// ── M112 s2: THE BURRFOLK CAMP (gleaner.ts says where): three stalls round a heap of packs, for every keeper. Blockout. ──
+/** the camp as drawn right now (y = the ground under its middle; null = its tile is not loaded) */
+export const campDrawn: { y: number | null } = { y: null }
+function BurrCamp({ loaded }: { loaded: (x: number, z: number) => number | null }) {
+  const [y, setY] = useState<number | null>(null)
+  const acc = useRef(1)
+  useFrame((_, dt) => { acc.current += dt; if (acc.current < 1) return; acc.current = 0; const v = loaded(BURR_CAMP.x, BURR_CAMP.z); campDrawn.y = v; setY(cur => (cur === v ? cur : v)) })
+  if (y === null) return null
+  return <>
+    <group position={[BURR_CAMP.x, y, BURR_CAMP.z]}>
+      {/* the heap of packs in the middle: bundles tied to bundles */}
+      {[[0, 0.5, 0, 0.9, '#9b7a4e'], [0.8, 0.4, 0.5, 0.6, '#7d6a8f'], [-0.7, 0.35, 0.6, 0.55, '#a6894f'], [0.2, 1.2, 0.1, 0.5, '#6f8f5a']].map(([x, yy, z, r, c], k) =>
+        <mesh key={k} position={[x as number, yy as number, z as number]}><sphereGeometry args={[r as number, 10, 8]} /><meshLambertMaterial color={c as string} flatShading /></mesh>)}
+    </group>
+    {campStalls().map(s => { const gy = loaded(s.x, s.z); return gy === null ? null : <BurrStall key={s.id} x={s.x} y={gy} z={s.z} yaw={s.yaw} id={s.id} /> })}
+  </>
 }
 
 // ── the big top ──────────────────────────────────────────────────────────────────────────────────────────────────

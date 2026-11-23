@@ -20,6 +20,7 @@ import { keeperNow } from './network-scene'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
 import { diggerTrade, DIGGER_LABEL } from './digger-trade'
 import { burrfolkOf, stallSpot, barter, isBurr, BURR_LABEL, BURRFOLK_BARKS } from './burrfolk'
+import { isGleaner, gleanerMem, afterSwap, gleanerLeave } from './gleaner'
 
 export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number) => number, onClose: () => void) {
   const phone = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches   // M46 card sizing; page.tsx untouched
@@ -51,11 +52,15 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
     const home = stillHome(folk, village), room = villageCap(currentWorks()) - village.moglins.length   // P1 11-23: cap by plot stage (raised rooms)
     const n = folkTalk({ folk, home, trust, have: id => countOf(invRef.current, id), room, homeName: s.name, yarrow: { canTeach, hasCatch }, burr }, st, {
       go: setSt,
-      bye: () => { if (burr && st.fid === burr.id) hudSay(`${burr.name}: ${BURRFOLK_BARKS.leave}`, 'info', 4); onClose() },   // M112: signed leave bark
+      bye: () => {   // M112: signed leave bark (Gleaner: the camp bark, once the camp is told)
+        if (burr && st.fid === burr.id) { const l = isGleaner(burr.id) ? gleanerLeave(gleanerMem) : BURRFOLK_BARKS.leave; if (l) hudSay(`${burr.name}: ${l}`, 'info', 4) }
+        onClose()
+      },
       barter: k => {   // M112: one swap at the Burrfolk's stall (refused = nothing changes, a line says why). No coin moves.
         const r = barter(getInv(), k)
         if (!r.ok) { hudSay(r.why === 'short' ? BURR_LABEL.short(k) : BURR_LABEL.full(k), 'info', 4); return }
         setInv(r.inv); hudSay(BURR_LABEL.done(k), 'item', 4)
+        if (burr && isGleaner(burr.id)) { const l = afterSwap(gleanerMem); if (l) setSt({ fid: burr.id, screen: 'said', line: l, rep: st.rep, alt: st.alt }) }   // D3: the first swap tells of the camp
       },
       teach: () => {
         const next = yarrowTeach(getInv())

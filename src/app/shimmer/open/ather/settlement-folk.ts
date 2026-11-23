@@ -17,6 +17,7 @@ import { SETTLEMENT_GATHERS, type Settlement, type SettlementBiome } from './net
 import { welcome, type MoglinRecord, type Profession, type Grade, type Village } from './moglins'
 import { rngOf, rollSkills, SKILL_OF_ROOM, type Skills } from './moglin-skills'
 import { DREAMS } from './folk-lines'
+import { GLEANER_POST } from './gleaner'
 import { GLADE_ID, gladeFolk } from './moonwell-glade'
 
 export const FOLK_MIN = 3, FOLK_MAX = 5
@@ -84,8 +85,37 @@ export function seasonNames(season: number): { names: string[]; order: number[] 
 }
 /** how many Moglins a (generated) settlement has this season: the first draw of its folk stream, exactly as folkOf draws it */
 export const folkCount = (sid: string, season: number) => FOLK_MIN + Math.floor(rngOf(`folk:${season}:${sid}`)() * (FOLK_MAX - FOLK_MIN + 1))
+/** canon (shimmer-folds-settlements.md › Names, ⛔ Reserved): authored Moglins' names, never generated. The first settlement's
+ *  four (2026-11-22) sit IN the pool, so the name order still holds them; seasonRoster() swaps them out at draw time. Gleaner
+ *  (the first settlement's Burrfolk, 11-23) is reserved too. CANON_NAMES above is the older list, filtered BEFORE the shuffle;
+ *  these are filtered AFTER it on purpose, so no Moglin whose name was not reserved changed name (a reshuffle would rename
+ *  every keeper's met folk, and could hand a home Moglin the name of one already recruited). */
+export const RESERVED_NAMES: ReadonlySet<string> = new Set(['Angelica', 'Chamomile', 'Borage', 'Feverfew', 'Gleaner'])
+/** the most settlements a season generates (network-s<n>.json: s<n>-0 .. s<n>-10; ather-rework §3 "11 x up to 5"). Name slots
+ *  past these are never a Moglin's: the spares a reserved name is swapped for come from them first. */
+export const SEASON_SETTLEMENTS = 11
+/** The season's names, settled once: `slot(j)` = the name the Moglin in name-order slot j goes by (a reserved name swapped for
+ *  a spare one), `free` = the slots no Moglin holds, reserved names out, swaps out, in slot order (the Burrfolk's, burrfolk.ts).
+ *  Swaps take spares from the END of the free list, so the Burrfolk at the low indexes keep the names they had. */
+const rosters = new Map<number, { slot: (j: number) => string; free: string[] }>()
+export function seasonRoster(season: number): { slot: (j: number) => string; free: string[] } {
+  const hit = rosters.get(season); if (hit) return hit
+  const { names, order } = seasonNames(season), spare: string[] = [], reservedSlots: number[] = []
+  for (let j = 0; j < order.length; j++) {
+    const i = Math.floor(j / FOLK_MAX), k = j % FOLK_MAX, nm = names[order[j]]
+    const held = i < SEASON_SETTLEMENTS && k < folkCount(`s${season}-${i}`, season)
+    if (held) { if (RESERVED_NAMES.has(nm)) reservedSlots.push(j) } else if (!RESERVED_NAMES.has(nm)) spare.push(nm)
+  }
+  const swap = new Map<number, string>()
+  // pool 60 - at most 55 held = >= 5 spare slots; a held reserved name frees its own spare need, so there is always a spare
+  // (settlement-folk.test proves it over many seasons). Belt and braces: none left = the slot keeps its draw.
+  reservedSlots.forEach(j => { const nm = spare.pop(); if (nm) swap.set(j, nm) })
+  const r = { slot: (j: number) => swap.get(j) ?? names[order[j % order.length]], free: spare }
+  rosters.set(season, r); return r
+}
 /** The Moglins living in a settlement this season. Same inputs, same folk, on every device. */
 export function folkOf(s: Settlement, season: number): Folk[] {
+  if (s.id === GLEANER_POST.id) return []   // M112 s2: Gleaner's post is a stall, not a settlement (no folk)
   if (s.id === GLADE_ID) return gladeFolk()   // Moonwell Glade: the five, fixed, never re-rolled (moonwell-glade.ts, M30)
   const rnd = rngOf(`folk:${season}:${s.id}`)
   const biome: SettlementBiome = s.biome ?? 'meadow'
@@ -95,10 +125,10 @@ export function folkOf(s: Settlement, season: number): Folk[] {
   const out: Folk[] = []
   // One season-wide order of the pool; each settlement owns FOLK_MAX slots of it by its index (ids are `s<season>-<i>`), so no
   // two Moglins alive this season share a name across ALL settlements, not just within one (canon: two living speakers never do).
-  const { names, order } = seasonNames(season)
+  const roster = seasonRoster(season)   // reserved names (canon) swapped for spare ones; every other name as drawn before
   const idx = Number(/-(\d+)$/.exec(s.id)?.[1] ?? 0)
   for (let k = 0; k < n; k++) {
-    const name = names[order[(idx * FOLK_MAX + k) % order.length]]
+    const name = roster.slot((idx * FOLK_MAX + k) % seasonNames(season).order.length)
     const drawnTrade = pick(rnd, trades)
     const profession: Profession = rngOf(`digger:${season}:${s.id}:${k}`)() < DIGGER_P[biome] ? 'digger' : drawnTrade
     const drawn = { craft: pick(rnd, GRADE_ODDS), yield: pick(rnd, GRADE_ODDS), trade: pick(rnd, GRADE_ODDS) }   // kept so the season's other rolls do not shift

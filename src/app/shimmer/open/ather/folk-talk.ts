@@ -8,6 +8,7 @@
 // stays the hello (lark: the only place a keeper ever hears a Moglin's dream). Checks import these, never retype them.
 import { DIGGER_LABEL } from './digger-trade'
 import { isBurr, BURRFOLK_BARKS, BURR_LABEL, type Burrfolk, type BarterKey } from './burrfolk'
+import { isGleaner, gleanerTalk, gleanerMem } from './gleaner'
 import { isGlade, GLADE_STAYS, gladeHello } from './moonwell-glade'
 import type { TalkNode } from '../shared/npc-talk'
 import { wantsLeft, trusted, type Folk, type Trust } from './settlement-folk'
@@ -117,6 +118,10 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): 
 /** M112: the Burrfolk's stall. Greet (signed bark), "Have a look" opens the stall (signed stall bark + one swap per stock row).
  *  ★ No room ask, no needs, no card: a Burrfolk never follows (canon), so no answer here can reach recruit(). */
 export function burrTalk(c: FolkTalkCtx, b: Burrfolk, st: FolkTalkState, act: FolkTalkActs): FolkTalkNode {
+  if (isGleaner(b.id)) return gleanerTalk(b, st.screen === 'stall' || st.screen === 'said' ? st.screen : 'hello', st.line, st.rep ?? 0, gleanerMem, {   // M112 s2: Gleaner's own signed lines (D1-D4)
+    go: (screen, line) => act.go({ fid: b.id, screen, line, rep: st.rep, alt: st.alt }),   // same visit: Back is not a second visit
+    barter: k => act.barter?.(k), bye: act.bye,
+  }, { swap: BURR_LABEL.swap, back: ASK.back, bye: ASK.bye, room: ASK.room })
   const bye = { label: ASK.bye, pick: act.bye }
   const first = c.home[0], others = first ? [{ label: ASK.others, pick: () => act.go(helloFor(first.id)) }] : []
   if (st.screen === 'stall') return {

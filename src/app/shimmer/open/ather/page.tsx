@@ -109,7 +109,8 @@ import { liveSpirits, setKeeperAt } from './spirit-follow'
 import { SPECIES_NAMES } from '../../spirits/spirit'
 import { useMeleeReady, lastSwingAt, lastSwingAction } from './melee-view'
 import { reportAway } from './away-report'
-import { TilePaths, Settlements, BigTop, folkDrawn, stallDrawn } from './network-scene'
+import { TilePaths, Settlements, BigTop, folkDrawn, stallDrawn, gleanerPost } from './network-scene'
+import { GLEANER_POST, GLEANER_POST_R, BURR_CAMP, CAMP_LABEL } from './gleaner'   // M112 s2
 import { aimPick, lookDir, type Pickable } from '../shared/aim-pick'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
@@ -770,6 +771,7 @@ function AtherSliceGame() {
         if (figs?.length) for (const f of figs) cands.push(cap(f.x, f.z, 0.4, MOGLIN_HEIGHT.chibi + 0.1, { kind: 'folk', s: st }))
         else cands.push(cap(st.x, st.z, 0.8, 2, { kind: 'folk', s: st }))
         const stall = stallDrawn.get(st.id); if (stall) cands.push(cap(stall.x, stall.z, 0.6, MOGLIN_HEIGHT.chibi + 0.4, { kind: 'folk', s: st })) } }   // M112: the Burrfolk's stall (the talk opens on the nearest)
+      if (!workAim && gleanerPost.on && Math.hypot(lc.px - GLEANER_POST.x, lc.pz - GLEANER_POST.z) < GLEANER_POST_R) { const g = stallDrawn.get(GLEANER_POST.id); if (g) cands.push(cap(g.x, g.z, 0.6, MOGLIN_HEIGHT.chibi + 0.4, { kind: 'folk', s: GLEANER_POST })) }   // M112 s2: Gleaner (owner-only post)
       n = aimPick(cands, eye, dir, from)
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
       const t = ww ? ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty) : undefined
@@ -810,10 +812,11 @@ function AtherSliceGame() {
         const nw = netRef.current
         if (nw) {
           const st = settlementAt(nw, lc.px, lc.pz), fr = nearFair(nw, lc.px, lc.pz)
-          const place = st ? st.name : fr ? FAIR_NAME : null
-          if (place && place !== placeRef.current) hudSay(st ? `${st.name} · a free Moglin settlement` : `${FAIR_NAME} · this season's pitch`, 'zone')
+          const camp = !st && !fr && Math.hypot(lc.px - BURR_CAMP.x, lc.pz - BURR_CAMP.z) < BURR_CAMP.r * 2   // M112 s2: the Burrfolk camp
+          const place = st ? st.name : fr ? FAIR_NAME : camp ? CAMP_LABEL : null
+          if (place && place !== placeRef.current) hudSay(st ? `${st.name} · a free Moglin settlement` : fr ? `${FAIR_NAME} · this season's pitch` : CAMP_LABEL, 'zone')
           placeRef.current = place
-          if (place) where = st ? `${st.name} · free Moglins` : FAIR_NAME
+          if (place) where = st ? `${st.name} · free Moglins` : place
         }
       }
       else if (zone.kind === 'glade') where = gladeWhere(lc.px, lc.pz)

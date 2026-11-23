@@ -11,9 +11,10 @@
 import { countOf, give, take, itemDef, type Inv } from '../shared/inventory'
 import type { Settlement, SettlementBiome } from './network'
 import type { Profession } from './moglins'
-import { folkOf, seasonNames, folkCount, FOLK_MAX, type Folk } from './settlement-folk'
+import { folkOf, seasonRoster, RESERVED_NAMES, type Folk } from './settlement-folk'
 import { GLADE_ID } from './moonwell-glade'
 import { settlementTurn } from './folk-spots'
+import { GLEANER_POST, gleanerOf } from './gleaner'
 
 /** Canon's trades table (shimmer-folds-settlements.md › Trades), the rows whose goods are plain bag items. Cook, Apothecary,
  *  Well-minder and Brewer trade graded crops / potions (`crop:x:A`): their rows wait on a graded barter (s2+). Rates = Jin's. */
@@ -32,7 +33,7 @@ export const BIOME_STALL: Readonly<Record<SettlementBiome, BarterKey>> = { woods
 export const PROFESSION_STALL: Partial<Record<Profession, BarterKey>> = { carpenter: 'carpenter', stonemason: 'stonery', jeweler: 'stonery', rinnshop: 'rinner', digger: 'digger' }
 export const STALL_ROWS = 2
 /** canon: reserved, never generated (the first settlement's four + Gleaner, the first settlement's Burrfolk) */
-export const BURR_RESERVED = new Set(['Angelica', 'Chamomile', 'Borage', 'Feverfew', 'Gleaner'])
+export const BURR_RESERVED = RESERVED_NAMES
 
 export interface Burrfolk { id: string; name: string; home: string; stock: BarterKey[] }
 /** the speaker label when the season's pool has no free name left (canon's word for the kind) */
@@ -47,22 +48,14 @@ export function stallStock(s: Settlement, folk: readonly Folk[]): BarterKey[] {
   return out.slice(0, STALL_ROWS)
 }
 
-/** The season's free name slots: every slot of the season's name order no Moglin of any settlement holds (settlement i owns
- *  slots i*FOLK_MAX .. +FOLK_MAX-1 and uses the first folkCount of them), minus the reserved names. Generous on purpose: it
- *  counts every slot index the pool has, so a settlement that does not exist only costs a name, never shares one. */
-export function freeNames(season: number): string[] {
-  const { names, order } = seasonNames(season), out: string[] = []
-  for (let j = 0; j < order.length; j++) {
-    const i = Math.floor(j / FOLK_MAX), k = j % FOLK_MAX
-    if (k < folkCount(`s${season}-${i}`, season)) continue
-    const nm = names[order[j]]; if (!BURR_RESERVED.has(nm)) out.push(nm)
-  }
-  return out
-}
+/** The season's free names: every slot of the season's name order no Moglin of any settlement holds, minus the reserved names
+ *  and the spares handed to folk whose drawn name was reserved (settlement-folk.ts › seasonRoster owns the bookkeeping). */
+export function freeNames(season: number): string[] { return seasonRoster(season).free }
 
 /** The Burrfolk keeping the stall in a settlement this season (none in the Glade: Gleaner is s2). Same on every device. */
 export function burrfolkOf(s: Settlement, season: number, folk: readonly Folk[] = folkOf(s, season)): Burrfolk | null {
   if (s.id === GLADE_ID) return null
+  if (s.id === GLEANER_POST.id) return gleanerOf()   // s2: Gleaner (owner-only post until M70 ships: gleaner.ts)
   const idx = Number(/-(\d+)$/.exec(s.id)?.[1] ?? 0), free = freeNames(season)
   // a season whose folk use nearly the whole pool leaves fewer free names than stalls: those stall-keepers go by their kind's
   // name (canon's word) rather than share a living speaker's (canon: two living speakers never share a name). Pool = Magii's.
@@ -74,6 +67,7 @@ export function burrfolkOf(s: Settlement, season: number, folk: readonly Folk[] 
  *  out past where the folk stand (folk-spots.ts: local z <= 9), well inside the lots' ring (settlement-lots.ts: >= 20 m). */
 export const STALL_LOCAL = { x: -8, z: 12.5 }
 export function stallSpot(s: Settlement): { x: number; z: number; yaw: number } {
+  if (s.id === GLEANER_POST.id) return { x: s.x, z: s.z, yaw: Math.atan2(-300 - s.x, 300 - s.z) }   // the post IS the stall, facing the arrival
   const turn = settlementTurn(s), c = Math.cos(turn), sn = Math.sin(turn), { x: lx, z: lz } = STALL_LOCAL
   return { x: s.x + lx * c + lz * sn, z: s.z - lx * sn + lz * c, yaw: turn }   // faces out from the knoll, as the folk do
 }
