@@ -66,9 +66,10 @@ try {
   }
   async function toStall(s: Settlement) {
     await p.evaluate((x, z) => (window as any).__ather.tp(x, z), s.x, s.z); await sleep(4000)
+    await poll(async () => !!(await stalls())[s.id], 30000)
     await p.mouse.click(200, 420); await sleep(800)
     const sp = stallSpot(s), fx = Math.sin(sp.yaw), fz = Math.cos(sp.yaw)   // stand 2.2 m in front of the plank, facing it
-    await p.evaluate((x, z, y) => { const g = (window as any).__ather; g.tp(x, z, y); g.look(y, -Math.atan2(1.1, 2.2)) }, sp.x + fx * 2.2, sp.z + fz * 2.2, Math.atan2(-fx, -fz)); await sleep(1500)
+    await p.evaluate((x, z, y) => { const g = (window as any).__ather; g.tp(x, z, y); g.look(y, -Math.atan2(1.1, 2.2)) }, sp.x + fx * 2.2, sp.z + fz * 2.2, Math.atan2(fx, fz)); await sleep(1500)   // camera yaw looks along -(sin, cos): this faces the stall
     await p.keyboard.press('KeyE'); await p.mouse.move(5, 5)
     return poll(async () => !!(await p.$('[data-talk-choices]')), 15000)
   }
@@ -83,7 +84,8 @@ try {
   ok(sB, `S2. ${B2.name}: a Burrfolk stall, kept by ${bB.name} (${JSON.stringify((await stalls())[B2.id] ?? null)})`)
   ok(bA.name !== bB.name, 'S3. two stalls, two names')
 
-  // ── G · the greet; never a room ask ──
+  // ── G · the greet; never a room ask (a fresh arrival at A: a 2 km tp back leaves A's ground + folk unstreamed) ──
+  await enterWilds(A)
   ok(await toStall(A), `G1. E at ${A.name}'s stall opens a talk`)
   const g = await bubble()
   ok(g?.name === bA.name && g.line === SIGNED.greet, `G2. on ${bA.name}, greet = the signed bark (${JSON.stringify(g)})`)
