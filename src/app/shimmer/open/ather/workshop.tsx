@@ -2141,6 +2141,11 @@ function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<str
     <HearthFrame title={f.name} maxWidth={420} onClose={onClose} fixed dataPanel="piece">
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
         <div style={{ fontSize: 13, color: H.inkSoft }}>{f.blurb}</div>
+        {/* M106 fix (Alex 11-23, phone): he built two Planter Boxes (decor) and E gave only Turn / Pick up, no way to plant.
+            The box points at the piece a Mana Seed grows in, its recipe read from the data. TODO @lark: placeholder line. */}
+        {p.item === 'planter_box' && <div data-planter-hint style={{ fontSize: 12.5, color: H.ink, fontWeight: 600 }}>
+          Mana Seeds grow in a {FURNITURE.spirit_planter.name}, not here: {FURNITURE.spirit_planter.recipe.map(c => `${c.n} ${itemDef(c.id).name}`).join(' + ')}, made at your Carpentry.
+        </div>}
         {spill > 0 && <div data-spill={spill} style={{ fontSize: 12.5, color: '#9a4a2a', fontWeight: 600 }}>Picking this up pours away {spill} water.</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <span data-act="turn-piece"><HearthButton onClick={turn}>Turn</HearthButton></span>
