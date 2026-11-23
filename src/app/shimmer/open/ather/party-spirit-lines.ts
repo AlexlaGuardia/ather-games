@@ -36,6 +36,14 @@ export const FEED_NONE = 'No spirit food in your bag.'
 /** §3b Main: the HUD note after a feed */
 export const FEED_DONE = '{name} enjoys the {food}.'
 
+/** batch 11-23b §A (athernyx CANON/game/shimmer-lines-batch-2026-11-23b.md, SIGNED 2026-11-23: MAIN ships, except the full line,
+ *  which is the Alt): the grimoire roster's party face. These are the KEEPER's panel words, never a spirit's. */
+export const PARTY_UI = { party: 'Party', ask: 'Ask along', roam: 'Let roam', call: 'Call', inParty: 'Along', roaming: 'Roaming', withYou: 'With you', none: 'No spirits have bloomed yet.' } as const
+/** §A `PARTY_FULL_LINE` (the signed Alt): Ask along while the party already holds PARTY_MAX (8) */
+export const PARTY_FULL_LINE = 'Your party has all eight. Let one roam to ask another.'
+/** §A called toast (Main): HUD after Call on a spirit */
+export const CALLED_TOAST = '{name} · coming'
+
 const fill = (t: string, v: Record<string, string>) => t.replace(/\{(\w+)\}/g, (m, k) => v[k] ?? m)
 export const spiritName = (sp: Species) => SPECIES_NAMES[sp]
 /** every talk line this species may draw: the generic five plus its own pair */
@@ -44,3 +52,4 @@ export const talkPool = (sp: Species): string[] => [...TALK_GENERIC, ...(TALK_SP
 export const talkLine = (sp: Species, r = Math.random()) => { const p = talkPool(sp); return fill(p[Math.min(p.length - 1, Math.floor(r * p.length))], { name: spiritName(sp) }) }
 export const followRefuseLine = (sp: Species) => fill(FOLLOW_REFUSE, { name: spiritName(sp) })
 export const fedLine = (sp: Species, food: string) => fill(FEED_DONE, { name: spiritName(sp), food })
+export const calledLine = (name: string) => fill(CALLED_TOAST, { name })

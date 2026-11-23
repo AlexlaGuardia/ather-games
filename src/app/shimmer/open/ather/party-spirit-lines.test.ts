@@ -5,7 +5,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { SPECIES_NAMES, type Species } from '../../spirits/spirit'
-import { TALK_GENERIC, TALK_SPECIES, FOLLOW_REFUSE, FEED_NONE, FEED_DONE, talkLine, talkPool, fedLine, followRefuseLine } from './party-spirit-lines'
+import { TALK_GENERIC, TALK_SPECIES, FOLLOW_REFUSE, FEED_NONE, FEED_DONE, talkLine, talkPool, fedLine, followRefuseLine, PARTY_UI, PARTY_FULL_LINE, CALLED_TOAST, calledLine } from './party-spirit-lines'
 
 const SCRIPT = '/root/athernyx/CANON/game/party-spirit-lines-script.md'
 if (!existsSync(SCRIPT)) { console.log('SKIP: athernyx canon not on this machine'); process.exit(0) }
@@ -61,6 +61,39 @@ ok(alts3.length === 4 && alts3.every(Boolean), `§3 alts parsed (${alts3.filter(
 const data = readFileSync(join(__dirname, 'party-spirit-lines.ts'), 'utf8'), talk = readFileSync(join(__dirname, 'spirit-talk.tsx'), 'utf8')
 for (const a of [...alts2, ...tints, ...alts3]) ok(!!a && !data.includes(a) && !talk.includes(a), `alt does not ship: "${a}"`)
 ok(/from '\.\/party-spirit-lines'/.test(talk) && !/FOLLOW_FULL_LINE|FEED_NONE_LINE|TODO @lark/.test(talk), 'spirit-talk.tsx speaks the signed lines (no placeholders left)')
+
+// BATCH 11-23b §A (party UI): Main ships, except PARTY_FULL_LINE = the Alt (the seat's change 1). Parse the signed table.
+const BATCH = '/root/athernyx/CANON/game/shimmer-lines-batch-2026-11-23b.md'
+const bdoc = existsSync(BATCH) ? readFileSync(BATCH, 'utf8') : ''
+ok(/SIGNED 2026-11-23 by Alex[^\n]*MAIN ships[^\n]*`PARTY_FULL_LINE` = the \*\*Alt\*\*/.test(bdoc), 'batch 11-23b is SIGNED: Main ships, PARTY_FULL_LINE = the Alt')
+const secA = bdoc.slice(bdoc.indexOf('## A. Party UI'), bdoc.indexOf('## B.'))
+const clean = (c: string) => c.replace(/\*\(kept\)\*/g, '').replace(/\*\*/g, '').replace(/^✅ SHIPS: /, '').trim()
+const rows = new Map<string, { cur: string, main: string, alt: string }>()
+for (const line of secA.split('\n')) {
+  const c = line.split('|').slice(1, -1).map(x => x.trim()); if (c.length !== 4 || c[0] === 'key' || /^-+$/.test(c[0])) continue
+  rows.set(c[0].replace(/`/g, ''), { cur: c[1], main: c[2], alt: c[3] })
+}
+ok(rows.size === 10, `§A rows parsed: ${rows.size}`)
+const KEYS: Record<string, keyof typeof PARTY_UI> = { party: 'party', ask: 'ask', roam: 'roam', call: 'call', inParty: 'inParty', roaming: 'roaming', withYou: 'withYou', empty: 'none' }
+for (const [ck, gk] of Object.entries(KEYS)) { const m = rows.get(ck)?.main; ok(!!m && PARTY_UI[gk] === clean(m), `label ${ck}: game "${PARTY_UI[gk]}" vs canon Main "${m && clean(m)}"`) }
+ok(Object.keys(PARTY_UI).length === Object.keys(KEYS).length, 'no label ships that the table does not sign')
+const full = rows.get('PARTY_FULL_LINE'), fullAlt = full ? clean(full.alt) : ''
+const seatFull = bdoc.match(/`PARTY_FULL_LINE` = the \*\*Alt\*\* \(\*"([^"]+)"\*/)?.[1]
+ok(!!full && /^✅ SHIPS: /.test(full.alt.replace(/\*\*/g, '')) && /^~~.*~~$/.test(full.main), 'full line: the table ships the Alt and strikes Main')
+ok(PARTY_FULL_LINE === fullAlt && PARTY_FULL_LINE === seatFull, `full line: game "${PARTY_FULL_LINE}" vs canon Alt "${fullAlt}" / seat "${seatFull}"`)
+const fullMain = full?.main.replace(/~~/g, '').trim() ?? ''
+const toast = rows.get('called toast')
+const toastMain = toast ? clean(toast.main).replace(/`/g, '').replace(/<Spirit>/g, '{name}') : ''
+ok(CALLED_TOAST === toastMain, `called toast: game "${CALLED_TOAST}" vs canon Main "${toastMain}"`)
+ok(calledLine('Vulnyx') === 'Vulnyx · coming', `called toast filled: "${calledLine('Vulnyx')}"`)
+// "all eight" is a number in words: it must agree with the party cap
+const capSrc = readFileSync(join(__dirname, 'spirit-party.ts'), 'utf8').match(/export const PARTY_MAX = (\d+)/)?.[1]
+ok(capSrc === '8' && /all eight/.test(PARTY_FULL_LINE), `the full line's "eight" is PARTY_MAX (${capSrc})`)
+// the alts / old placeholders / the struck Main do not ship; the roster takes its words from the data file
+const roster = readFileSync(join(__dirname, 'spirit-roster.tsx'), 'utf8')
+const notShip = [fullMain, clean(rows.get('empty')?.alt ?? ''), 'In party', 'Your party is full', '· called']
+for (const a of notShip) ok(!!a && !data.includes(a) && !roster.includes(a), `does not ship: "${a}"`)
+ok(/from '\.\/party-spirit-lines'/.test(roster) && !/TODO @lark/.test(roster) && !/'Ask along'|'Let roam'/.test(roster), 'spirit-roster.tsx speaks the signed labels (no inline copies)')
 
 console.log(`${n - fails}/${n} signed-line asserts${fails ? ` · ${fails} FAILED` : ' · word for word'}`)
 process.exit(fails ? 1 : 0)

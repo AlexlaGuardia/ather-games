@@ -21,7 +21,7 @@ const PIECES = [{ id: 'vx-check', item: 'spirit_planter', x: P.x, z: P.z, q: 0, 
 const OTHERS = ['water-bear', 'turtle', 'owl', 'frog', 'firefly', 'rabbit', 'hummingbird', 'bat']
 const POTS = (at: number) => ({ 'vx-check': { seed: 'mana_seed_fox', at, bloomed: true }, 'mx-check': { seed: 'mana_seed_axolotl', at: at + 1, bloomed: true },
   ...Object.fromEntries(OTHERS.map((s, i) => [`pc-${s}`, { seed: `mana_seed_${s}`, at: at + 2 + i, bloomed: true }])) })
-const FULL_LINE = 'Your party is full (8).'
+const FULL_LINE = 'Your party has all eight. Let one roam to ask another.'   // lark batch 11-23b §A, SIGNED (the Alt)
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 let fails = 0

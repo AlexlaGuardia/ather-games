@@ -2,7 +2,7 @@
 // M109 s3 (sprites, 2026-11-23, owner + ?spirits=3d only): THE GRIMOIRE'S ROSTER FACE. Sees every bloomed spirit (every
 // bloomed planter in the book), and per spirit: ask along / let roam (the PARTY, up to 8, spirit-party.ts) and call (she
 // comes to the keeper on her own legs). Manages, never stores (glossary > Grimoire; Magii RULED 9b4dfe8): no verb here holds
-// a spirit anywhere. Words on this face are functional UI labels (TODO @lark: a pass over them).
+// a spirit anywhere. Words on this face are functional UI labels, SIGNED in lark batch 11-23b §A (athernyx 2ac7da7).
 import { useSyncExternalStore } from 'react'
 import { HearthButton, H } from '../../ui/hearth'
 import { SPECIES_NAMES } from '../../spirits/spirit'
@@ -12,11 +12,11 @@ import { useBook } from './spirit-panels'
 import { useSpirits3d } from './spirit-model'
 import { PARTY_MAX, askAlong, letRoam, partyIds, spiritCall, subscribeParty } from './spirit-party'
 import { followIds, liveSpirits, subscribeFollow } from './spirit-follow'
+import { PARTY_UI, PARTY_FULL_LINE, calledLine } from './party-spirit-lines'
 
-/** TODO @lark (functional placeholders) */
-export const PARTY_FULL_LINE = `Your party is full (${PARTY_MAX}).`
-const L = { party: 'Party', ask: 'Ask along', roam: 'Let roam', call: 'Call', inParty: 'In party', roaming: 'Roaming', withYou: 'With you', none: 'No spirits have bloomed yet.' }
-const calledLine = (name: string) => `${name} · called`
+/** the signed words (batch 11-23b §A) live in party-spirit-lines.ts; re-exported for spirit-talk's E-on-her ask */
+export { PARTY_FULL_LINE }
+const L = PARTY_UI
 
 const EMPTY: readonly string[] = []
 export function SpiritRoster({ onClose }: { onClose: () => void }) {
