@@ -39,14 +39,14 @@ const rooms = ((await read('open.works.v1'))?.rooms ?? []) as { id: string; shel
 ok(rooms.length === 2 && rooms.find(r => r.id === SHELL.id)?.shell === true, 'setup: the shell room and the older room loaded')
 await tp(-110, 116, 0, -0.25); await shot('m97-0-shell-from-behind')
 await tp(-110, 98, 0, -0.2); await shot('m97-1-shell-front')
-// 1. walk at the shell's back from outside (start z 110.5, facing -z): straight in
-await tp(-108, 110.5, 0)
-const s0 = await pos(); await walk(3500); const s1 = await pos()
-ok(s1.pz < 107, `the shell has no back wall: walked from z ${s0.pz.toFixed(2)} to ${s1.pz.toFixed(2)} (in past 108)`)
 // 2. the older room's back wall stops you
 await tp(-128, 110.5, 0)
 const o0 = await pos(); await walk(3500); const o1 = await pos()
 ok(o1.pz > 108, `the older room keeps its back wall: stopped at z ${o1.pz.toFixed(2)} (from ${o0.pz.toFixed(2)})`)
+// 1. walk at the shell's back from outside (start z 110.5, facing -z): straight in
+await tp(-108, 110.5, 0)
+const s0 = await pos(); await walk(3500); const s1 = await pos()
+ok(s1.pz < 108 && s1.pz < o1.pz - 0.5, `the shell has no back wall: walked from z ${s0.pz.toFixed(2)} to ${s1.pz.toFixed(2)} (in past 108)`)
 // 3. E at the shell's bench
 await tp(-110, 104.6, Math.PI)   // inside, facing the bench (+z)
 await p.keyboard.press('e')
