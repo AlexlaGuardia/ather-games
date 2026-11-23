@@ -39,6 +39,8 @@ const KIND = 'plot' as const
 const G = DEED_GRID[KIND], H = PLOT / 2
 const fpOf = (id: string): Footprint | null => (FURNITURE[id] ? { w: FURNITURE[id].w, d: FURNITURE[id].d } : null)
 const AIM = 1.4, BOARD_REACH = 1.8
+/** M108: how far out from the hull's footprint E still boards the ship (m) */
+const SHIP_REACH = 2.5
 /** a plot mounts while the keeper is within this of its middle (m), dropped past MOUNT_R + 60 */
 const MOUNT_R = 400
 
@@ -63,7 +65,7 @@ function returnOldYards(keys: string[]) {
   if (back) hudSay(`Your shipyard moved to its own plot: ${back} yard piece${back > 1 ? 's are' : ' is'} back in your bag.`, 'item', 6)
 }
 
-export interface DeedYardState { inYard: boolean; atBoard: boolean; action: 'place' | 'pick up' | 'look' | 'take out' | null }
+export interface DeedYardState { inYard: boolean; atBoard: boolean; action: 'place' | 'pick up' | 'look' | 'take out' | 'board' | null }
 const IDLE: DeedYardState = { inYard: false, atBoard: false, action: null }
 type Probe = Record<string, unknown>
 type ProbeWin = { __shipyards?: Record<string, Probe> & { sites?: () => unknown } }
@@ -81,6 +83,9 @@ interface Props {
   ownAll?: boolean
   /** s5: the courser (the continent's Driver): where it is, which one is driven, and the switch a garage makes */
   car?: CarLink
+  /** M108: E at the docked ship opens the destination map (destination-map.ts › shipGateOpen; owner-only ?ship=gate) */
+  shipGate?: boolean
+  onShip?: () => void
 }
 export interface CarLink {
   pose: () => { x: number; y: number; z: number; yaw: number; speed: number; foot: boolean } | null
@@ -136,7 +141,7 @@ export function ShipyardPlots({ R, owned, ownAll = false, onState, ...rest }: Pr
   ))}</>
 }
 
-function Plot({ R, site, own, focus, track, held, enabled, onReport, car }: Omit<Props, 'onState' | 'owned' | 'ownAll'> & { site: ShipyardSite; own: boolean; onReport: (s: DeedYardState | null) => void }) {
+function Plot({ R, site, own, focus, track, held, enabled, onReport, car, shipGate = false, onShip }: Omit<Props, 'onState' | 'owned' | 'ownAll'> & { site: ShipyardSite; own: boolean; onReport: (s: DeedYardState | null) => void }) {
   const L = site.plot, f = L.frame, floor = L.floor, store = plotStoreBase(site.key)
   const blocked = useMemo(() => blockedCells(L), [L])
   const board = useMemo(() => { const b = L.pieces.find(p => p.kind === 'board')!; return { lx: b.lx, lz: b.lz, ...plotToWorld(f, b.lx, b.lz) } }, [L, f])
@@ -179,7 +184,11 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport, car }: Omit
   const rot = useRef(0)
   const heldRef = useRef(held); heldRef.current = held
   const enabledRef = useRef(enabled); enabledRef.current = enabled
-  const aim = useRef<{ inYard: boolean; atBoard: boolean; cell: { cx: number; cz: number } | null; bay: number }>({ inYard: false, atBoard: false, cell: null, bay: -1 })
+  const aim = useRef<{ inYard: boolean; atBoard: boolean; cell: { cx: number; cz: number } | null; bay: number; atShip?: boolean }>({ inYard: false, atBoard: false, cell: null, bay: -1 })
+  // M108: the docked ship (Franky at Kael's tie-down) as an E target, when the destination-map gate is open
+  const shipPiece = useMemo(() => (dockedShip(site.key) ? L.pieces.find(q => q.kind === 'ship') ?? null : null), [L, site.key])
+  const shipGateRef = useRef(shipGate); shipGateRef.current = shipGate
+  const onShipRef = useRef(onShip); onShipRef.current = onShip
   const carBay = useRef(-1)
   const { camera } = useThree()
 
@@ -226,6 +235,7 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport, car }: Omit
       const a = aim.current
       if (a.bay >= 0) { act.current.take(); return }
       if (a.atBoard) { act.current.look(); return }
+      if (a.atShip) { onShipRef.current?.(); return }
       if (!a.inYard || !ownRef.current) return
       const id = heldRef.current
       if (id && isPiece(id)) { armed = true; turned = false; t = setTimeout(tick, HOLD_MS); return }
@@ -288,7 +298,10 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport, car }: Omit
     const atBoard = Math.hypot(me.x - board.x, me.z - board.z) < BOARD_REACH
     const ax = me.x - Math.sin(tr.yaw) * AIM, az = me.z - Math.cos(tr.yaw) * AIM, al = plotToLocal(f, ax, az)
     const cell = inYard ? cellAtLocal(KIND, al.lx, al.lz) : null
-    aim.current = { inYard, atBoard, cell, bay }
+    // M108: beside the hull (its footprint + SHIP_REACH, plot-local; the ship lies along local z), on the yard floor
+    const sl = shipPiece && shipGateRef.current && ownRef.current ? plotToLocal(f, me.x, me.z) : null
+    const atShip = !!sl && !!shipPiece && Math.abs(sl.lx - shipPiece.lx) < SHIP.w / 2 + SHIP_REACH && Math.abs(sl.lz - shipPiece.lz) < SHIP.d / 2 + SHIP_REACH && Math.abs(me.y - floor) < 2.5
+    aim.current = { inYard, atBoard, cell, bay, atShip }
     const id = heldRef.current, holding = !!id && isPiece(id) && ownRef.current
     if (grid.current) {
       grid.current.visible = holding && !!cell
@@ -303,7 +316,7 @@ function Plot({ R, site, own, focus, track, held, enabled, onReport, car }: Omit
         if (ghostMat.current) ghostMat.current.color.set(placeRefusal(deedRef.current, KIND, fpOf, id, cell.cx, cell.cz, rot.current, -1, blocked) ? '#e0604a' : '#7fe0a0')
       }
     }
-    const action: DeedYardState['action'] = !enabledRef.current ? null : bay >= 0 ? 'take out' : atBoard ? (ownRef.current ? 'look' : null) : !inYard || !ownRef.current ? null
+    const action: DeedYardState['action'] = !enabledRef.current ? null : bay >= 0 ? 'take out' : atBoard ? (ownRef.current ? 'look' : null) : atShip ? 'board' : !inYard || !ownRef.current ? null
       : holding ? (cell ? 'place' : null) : cell && itemAt(deedRef.current, fpOf, cell.cx, cell.cz) >= 0 ? 'pick up' : null
     const key = `${inYard}|${atBoard}|${action}`
     if (key !== last.current) { last.current = key; onReport({ inYard, atBoard, action }) }
