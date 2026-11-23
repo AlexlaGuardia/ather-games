@@ -16,6 +16,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { makeTrot, type SpiritNav, type Trot } from './spirit-trot'
 import { isFollowing, keeperAt, spiritHeld, spiritLive, subscribeFollow } from './spirit-follow'   // M109 s1
+import { spiritCheer } from './spirit-feed'   // M109 s2: fed = her happy beat
 
 import { SPIRIT_MODELS, type SpiritLook } from './spirit-models'
 import type { Species } from '../../spirits/spirit'
@@ -36,7 +37,7 @@ export function useSpirits3d(): boolean {
 
 // read-only probe for the check: how many spirit models are mounted right now (all, and by species). `trot` = the Vulnyx's
 // pose (the M107 asserts read it), `trots[species]` = each species' latest pose.
-type TrotProbe = { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; beats: number; homes: number; tilt: number; h: number; hWorld?: number }
+type TrotProbe = { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; beats: number; homes: number; tilt: number; h: number; hWorld?: number; cheers: number; yMax: number }
 type Probe = { mounted: number; url: string; h: number; species: Record<string, number>; trot?: TrotProbe; trots: Record<string, TrotProbe> }
 const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Probe }; return (w.__spiritModel ??= { mounted: 0, url: VULNYX_URL, h: VULNYX_H, species: {}, trots: {} }) }
 
@@ -109,6 +110,7 @@ function SpiritModel({ sp, look, nav, id, avatar }: { sp: Species; look: SpiritL
     if (!g.current) return
     if (trot && g.current.parent) {
       // the pose is in WORLD xz + yaw; the planter piece may be turned, so read through the parent's transform
+      if (id && spiritCheer.delete(id)) trot.cheer(() => keeperAt)   // M109 s2: fed
       const ps = id && spiritHeld.id === id ? trot.pose() : trot.step(dt), par = g.current.parent, { v, q, e } = tmp   // M109: held while talked to
       par.updateWorldMatrix(true, false); par.getWorldPosition(v); const baseY = v.y
       v.set(ps.x, baseY + ps.y, ps.z); par.worldToLocal(v); g.current.position.copy(v)
@@ -121,7 +123,8 @@ function SpiritModel({ sp, look, nav, id, avatar }: { sp: Species; look: SpiritL
       sw.value += (ps.swing - sw.value) * Math.min(1, dt * 6); lift.value = ps.lift
       // the measured world height (the drawn meshes' box, hull included) for the check, twice a second
       if (t - tmp.hAt > 0.5) { tmp.hAt = t; const s = tmp.bb.setFromObject(g.current); tmp.hWorld = s.max.y - s.min.y }
-      const pr = probe(), tp: TrotProbe = { x: ps.x, y: baseY + ps.y, z: ps.z, mode: ps.mode, home: nav!.home, rMin: nav!.rMin, rMax: nav!.rMax, beats: trot.beats(), homes: trot.homes(), tilt: ps.tilt, h: look.h, hWorld: tmp.hWorld }
+      const pr = probe(), tp: TrotProbe = { x: ps.x, y: baseY + ps.y, z: ps.z, mode: ps.mode, home: nav!.home, rMin: nav!.rMin, rMax: nav!.rMax, beats: trot.beats(), homes: trot.homes(), tilt: ps.tilt, h: look.h, hWorld: tmp.hWorld, cheers: trot.cheers(),
+        yMax: ps.mode === 'happy' ? Math.max(pr.trots[sp]?.mode === 'happy' ? pr.trots[sp].yMax : 0, ps.y) : (pr.trots[sp]?.yMax ?? 0) }   // M109 s2: the happy beat's peak hop
       pr.trots[sp] = tp; if (sp === 'fox') pr.trot = tp
       if (id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + ps.y, z: ps.z, h: look.h, at: Date.now() })   // M109: the E pick reads it
       return

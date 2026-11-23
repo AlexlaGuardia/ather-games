@@ -116,5 +116,42 @@ for (const fps of [60, 4]) for (const species of ['fox', 'axolotl'] as const) fo
   for (let i = 0; i < 6 * 60; i++) { const m = tr.step(1 / 60).mode; if (seen.at(-1) !== m) seen.push(m) }
   const p = tr.pose(); ok(seen.indexOf('hopDown') === seen.indexOf('perch') + 1 && seen.indexOf('hopDown') < seen.indexOf('follow') && p.mode === 'follow' && Math.hypot(p.x - k.x, p.z - k.z) < 3, `follow from the perch: hops down, then follows (${seen.join('>')}, ${Math.hypot(p.x - k.x, p.z - k.z).toFixed(2)} m)`) }
 
+// M109 s2 FED: cheer() = the happy beat: on the spot (no xz drift), hops off the ground, faces the keeper, then back to what
+// she was doing (roam / follow / perch), for both species, at 60 and 4 fps; mid perch-hop it waits for her feet
+for (const sp of ['fox', 'axolotl'] as const) for (const fps of [60, 4]) {
+  const D = { ...(SPIRIT_MODELS[sp]?.trot ?? {}) }, dt = 1 / fps, tag = `happy ${sp} ${fps}fps`
+  const H = (D as { happyH?: number }).happyH ?? 0.12
+  for (const where of ['roam', 'follow', 'perch'] as const) {
+    const nav: SpiritNav = { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked, roam: { maxLeg: 4.5, away: 3 } }
+    const tr = makeTrot(nav, 11, D), k = { x: 2.5, z: 2.2, yaw: 0 }
+    if (where === 'follow') tr.follow(() => k)
+    // settle into the state: roam = out of the perch and on the ground; follow = following; perch = sat on the perch at start
+    if (where !== 'perch') for (let i = 0; i < 20 * fps && !(where === 'follow' ? tr.pose().mode === 'follow' : ground(tr.pose().mode) && tr.pose().mode !== 'trot'); i++) tr.step(dt)
+    const before = tr.pose(), c0 = tr.cheers()
+    tr.cheer(() => k)
+    let maxY = 0, drift = 0, seenHappy = false, facing = 0, after = ''
+    for (let i = 0; i < 3 * fps; i++) {
+      const p = tr.step(dt)
+      if (p.mode === 'happy') { seenHappy = true; maxY = Math.max(maxY, p.y - (where === 'perch' ? 0.53 : 0)); drift = Math.max(drift, Math.hypot(p.x - before.x, p.z - before.z))
+        const want = Math.atan2(k.x - p.x, k.z - p.z); facing = Math.abs(Math.atan2(Math.sin(want - p.yaw), Math.cos(want - p.yaw))) }
+      else if (seenHappy && !after) after = p.mode
+    }
+    ok(tr.cheers() === c0 + 1 && seenHappy, `${tag} ${where}: fed = one happy beat (${tr.cheers() - c0})`)
+    ok(maxY > H * 0.6 && maxY < H * 1.2, `${tag} ${where}: little hops (${maxY.toFixed(3)} m, dial ${H})`)
+    ok(drift < 0.01, `${tag} ${where}: on the spot (${drift.toFixed(3)} m)`)
+    ok(facing < 0.35, `${tag} ${where}: turned to the keeper by the end (${facing.toFixed(2)} rad)`)
+    const back = where === 'perch' ? after === 'perch' : where === 'follow' ? after === 'follow' : after !== '' && after !== 'happy' && after !== 'follow'
+    ok(back, `${tag} ${where}: then back to her own (${after})`)
+  }
+}
+{ // a cheer mid perch-hop waits for her to land
+  const nav: SpiritNav = { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked, roam: { maxLeg: 4.5, away: 3 } }
+  const tr = makeTrot(nav, 3); let i = 0
+  for (; i < 30 * 60 && tr.pose().mode !== 'hopDown'; i++) tr.step(1 / 60)
+  tr.cheer(null); const seen: string[] = []
+  for (let j = 0; j < 4 * 60; j++) { const m = tr.step(1 / 60).mode; if (seen.at(-1) !== m) seen.push(m) }
+  ok(seen[0] === 'hopDown' && seen.includes('happy') && tr.cheers() === 1, `happy mid perch-hop: waits for her feet (${seen.join('>')})`)
+}
+
 if (fails.length) { console.error(`spirit-trot: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`spirit-trot: ${pass}/0`)

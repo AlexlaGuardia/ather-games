@@ -26,7 +26,7 @@ export type SpiritNav = {
    *  stays as the home beat. Without `roam` she only circles home (s1). */
   roam?: { maxLeg: number; away: number }
 }
-export type TrotMode = 'perch' | 'hopDown' | 'hopUp' | 'trot' | 'check' | 'look' | 'sit' | 'sniff' | 'tilt' | 'follow'
+export type TrotMode = 'perch' | 'hopDown' | 'hopUp' | 'trot' | 'check' | 'look' | 'sit' | 'sniff' | 'tilt' | 'follow' | 'happy'
 export type TrotPose = {
   x: number; z: number      // world
   y: number                 // lift above the ground under her (hop, perch)
@@ -64,6 +64,9 @@ export const TROT = {
   glanceHold: [0.45, 0.9] as [number, number], glanceMax: 0.85,
   tiltK: 4,         // head-tilt ease /s
   lookTilt: 0,      // how much tilt a look-round carries
+  // M109 s2 FED: the happy beat after the keeper feeds her (cheer()): a few little hops on the spot, facing the keeper, a
+  // wiggle. Pure joy, no reward loop: it changes nothing about how she roams or follows afterwards.
+  happyHops: 4, happyHop: 0.3, happyH: 0.12, happyWig: 0.14,
 }
 export type TrotDials = typeof TROT
 
@@ -92,7 +95,9 @@ function rng(seed: number) { let s = (seed * 2654435761) >>> 0 || 1; return () =
 
 export type Trot = { step: (dt: number) => TrotPose; pose: () => TrotPose; beats: () => number; homes: () => number
   /** M109: walk with the keeper (a target), or null = back to her own roam */
-  follow: (to: FollowTarget | null) => void }
+  follow: (to: FollowTarget | null) => void
+  /** M109 s2: she was fed: the happy beat (facing `to`, the keeper), then back to what she was doing (perch / follow / roam) */
+  cheer: (to: FollowTarget | null) => void; cheers: () => number }
 
 export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): Trot {
   const D: TrotDials = { ...TROT, ...dials, beat: { ...TROT.beat, ...dials?.beat } }
@@ -113,6 +118,9 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   let pos = nav.perch ? { x: home.x, z: home.z } : at(ang, rad), y = nav.perch?.y ?? 0, lift = 0
   // M109 follow: the target, the keeper's smoothed speed, whether she is on her way to the slot, how long she has stood by
   let followTo: FollowTarget | null = null, kPrev: { x: number; z: number } | null = null, kV = 0, fGo = false, fIdle = 0
+  // M109 s2 the happy beat: who she faces, where she hops from (the perch or the ground), which hop she is on, a cheer that
+  // came mid perch-hop (starts when she lands), how many cheers so far (the probe)
+  let happyTo: FollowTarget | null = null, happyBase = 0, happyBack = false, happyN = -1, happyY = 0, cheerPending: { to: FollowTarget | null } | null = null, cheers = 0
 
   const arcLen = (A0: number, A1: number, R0: number, R1: number) => { let L = 0, p = at(A0, R0); for (let i = 1; i <= 12; i++) { const q = at(lerp(A0, A1, i / 12), lerp(R0, R1, i / 12)); L += Math.hypot(q.x - p.x, q.z - p.z); p = q } return L }
   const arcFree = (A0: number, A1: number, R0: number, R1: number) => { const L = arcLen(A0, A1, R0, R1), n = Math.max(2, Math.ceil(L / 0.1)); for (let i = 1; i <= n; i++) { const q = at(lerp(A0, A1, i / n), lerp(R0, R1, i / n)); if (!free(q.x, q.z)) return false } return true }
@@ -203,7 +211,8 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
 
   function step(dt: number): TrotPose {
     dt = Math.min(dt, 0.25); t += dt; sinceLand += dt   // a slow frame still covers real time (a phone at 4 fps trots at speed)
-    let speed = 0, heading = yaw, wantSit = 0, sniff = 0
+    let speed = 0, heading = yaw, wantSit = 0, sniff = 0, happyAir = 0
+    if (cheerPending && mode !== 'hopDown' && mode !== 'hopUp') { const c = cheerPending; cheerPending = null; startHappy(c.to) }
     if (mode === 'perch') {
       wantSit = 1
       if (t > dur || followTo) { if (landing()) go('hopDown', D.hopArc); else t = 0 }
@@ -270,6 +279,19 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
         heading = Math.atan2(k.x - pos.x, k.z - pos.z)   // stood by: she watches the keeper
         if (fIdle > F.sitAfter) wantSit = 1
       }
+    } else if (mode === 'happy') {
+      // M109 s2: little hops on the spot, turned to the keeper; a squash on each landing (sinceLand), then back
+      if (happyTo) { const k = happyTo(); if (Math.hypot(k.x - pos.x, k.z - pos.z) > 0.05) heading = Math.atan2(k.x - pos.x, k.z - pos.z) }
+      const ph = Math.min(t / D.happyHop, D.happyHops), n = Math.floor(ph)
+      if (n !== happyN) { if (happyN >= 0) sinceLand = 0; happyN = n }
+      happyAir = ph >= D.happyHops ? 0 : Math.sin(Math.PI * (ph % 1))
+      happyY = happyBase + D.happyH * happyAir
+      if (t > dur) {
+        happyY = happyBase
+        if (happyBack) go('perch', rand(2.5, 4.5))
+        else if (followTo) { fGo = false; fIdle = 0; go('follow', 0) }
+        else go('check', rand(...D.checkS))
+      }
     } else if (mode === 'tilt') {
       // the head tilt (Manalotl canon: "eternal smile, wide eyes, head tilt"): over to one side, hold, maybe the other way
       if (tiltSwap > 0 && t > tiltSwap) { tiltSwap = 0; if (R() < 0.5) tiltAt = -tiltAt }
@@ -291,7 +313,8 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
       air = Math.sin(Math.PI * (hopPh % 1))
       lift = Math.cos(Math.PI * (hopPh % 1)) * run01
       y = D.hopH * air * run01 ** 0.5
-    } else if (mode !== 'hopDown' && mode !== 'hopUp') { lift *= Math.exp(-dt * 6); y = mode === 'perch' ? nav.perch!.y : 0 }
+    } else if (mode === 'happy') { air = happyAir; lift = Math.cos(Math.PI * (Math.min(t / D.happyHop, D.happyHops) % 1)) * (happyAir > 0 ? 1 : 0); y = happyY }
+    else if (mode !== 'hopDown' && mode !== 'hopUp') { lift *= Math.exp(-dt * 6); y = mode === 'perch' ? nav.perch!.y : 0 }
 
     yawPrev = yaw; yaw = yaw + wrap(heading - yaw) * (1 - Math.exp(-dt * D.turnK))
     const yawRate = wrap(yaw - yawPrev) / Math.max(dt, 1e-3)
@@ -299,7 +322,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     const sy = (1 + D.stretch * air - D.squash * sq) * lerp(1, D.sitY, sitK)
     cur = {
       x: pos.x, z: pos.z, y, yaw: yaw + lookYaw + sniff * Math.sin(t * 5) * 0.12,
-      roll: clamp(-yawRate * D.lean, -D.leanMax, D.leanMax) * (speed > 0 ? 1 : 0.3),
+      roll: clamp(-yawRate * D.lean, -D.leanMax, D.leanMax) * (speed > 0 ? 1 : 0.3) + (mode === 'happy' ? Math.sin(t * Math.PI * 2 / D.happyHop / 2) * D.happyWig : 0),
       pitch: (speed > 0 ? 0.05 + 0.06 * sq : 0) + D.sitPitch * sitK + sniff * (D.sniffPitch + Math.sin(t * 13) * 0.04),
       sx: 1 / Math.sqrt(Math.max(0.5, sy)), sy, swing: run01, lift, mode, tilt,
     }
@@ -311,5 +334,14 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     if (to) { homing = false; if (mode !== 'perch' && mode !== 'hopDown' && mode !== 'hopUp') { fGo = false; fIdle = 0; go('follow', 0) } }
     else if (mode === 'follow') { syncPolar(); go('check', rand(...D.checkS)) }   // Stay: back to her own roam from where she stands
   }
-  return { step, pose: () => cur, beats: () => beats, homes: () => homes, follow }
+  function startHappy(to: FollowTarget | null) {
+    happyTo = to; happyBack = mode === 'perch'; happyBase = happyBack ? nav.perch!.y : 0; happyN = -1; happyY = happyBase
+    if (mode === 'trot') syncPolar()   // a run cut short: her ring param catches up with where she stands
+    cheers++; go('happy', D.happyHop * D.happyHops + 0.15)
+  }
+  function cheer(to: FollowTarget | null) {
+    if (mode === 'hopDown' || mode === 'hopUp') cheerPending = { to }   // mid perch-hop: the joy waits for her feet
+    else startHappy(to)
+  }
+  return { step, pose: () => cur, beats: () => beats, homes: () => homes, follow, cheer, cheers: () => cheers }
 }

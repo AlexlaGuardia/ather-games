@@ -169,8 +169,9 @@ if (f) {
   for (const sp of ['fox', 'axolotl']) {
     const name = sp === 'fox' ? 'Vulnyx' : 'Manalotl'
     const o = await talkTo(f.p, sp)
-    ok(o.length === 3 && o[0].t.startsWith('Feed') && o[0].off && o[0].t.toLowerCase().includes('soon') && o[1].t === 'Follow' && !o[1].off && o[2].t === 'Open' && !o[2].off,
-      `F ${name}: E = Feed (greyed, soon) / Follow / Open (${JSON.stringify(o)})`)
+    // M109 s2: Feed is live (no longer greyed 'soon'); this bag holds no spirit food, so it carries no food tag (m109-feed-check.mts)
+    ok(o.length === 3 && o[0].t === 'Feed' && !o[0].off && o[1].t === 'Follow' && !o[1].off && o[2].t === 'Open' && !o[2].off,
+      `F ${name}: E = Feed / Follow / Open (${JSON.stringify(o)})`)
     ok(await pick(f.p, 'Follow'), `F ${name}: picked Follow`); await sleep(600)
     const w = await walk(f.p, 10, [sp]), ss = (w[sp] ?? []).filter(x => x.t > 3000)   // first 3 s = her catch-up to the loop's start
     const maxD = Math.max(0, ...ss.map(x => x.d)), inside = ss.filter(x => RECTS.some(b => x.x > b.x0 && x.x < b.x1 && x.z > b.z0 && x.z < b.z1))

@@ -60,6 +60,7 @@ export const SPIRIT_MODELS: Partial<Record<Species, SpiritLook>> = {
       beat: { look: 0.36, sniff: 0.14, sit: 0.14, tilt: 0.36 },
       lookS: [2.2, 3.6], sniffS: [1.4, 2.4], sitS: [2.6, 4.2], tiltS: [1.8, 3.0],
       glance: 0.6, glanceHold: [0.9, 1.6], glanceMax: 0.6, tiltK: 3, lookTilt: 0.55,
+      happyHops: 3, happyHop: 0.45, happyH: 0.035, happyWig: 0.1,   // M109 s2 fed: three soft bobs, not bounces (she flows)
     },
   },
 }
