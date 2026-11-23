@@ -217,6 +217,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-23 16:4x Alex: "I think the heads are already pretty close" → M116 re-aimed: keep today's head as the base; options = one universal size + adult feature variants on it (sheet with a 'today' column).
 - 11-23 16:3x Alex: "maybe we also give the players head another go with the free modeler we used on the spirits we take the size of the head and make it a universal size for all and then if we can get some better options in the facial features that don't look so kidish and more adult like" → row M116 (sprites: proto sheet first, Alex picks).
 - 11-23 15:4x Alex: "i have a manalotl in the spirit planter but its going to take a while for it to bloom" / "add the owner fast-forward for blooming" → owner-only dev control, routed to play (no row: dev tool).
 - 11-23 15:3x Alex: "the void looks great by the way, much better than before" → void look v2 (31ff95f6) APPROVED; cleared from Alex's queue.
