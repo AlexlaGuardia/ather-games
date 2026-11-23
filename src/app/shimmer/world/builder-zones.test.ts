@@ -58,6 +58,7 @@ ok(!('zones' in cleanLayer({ v: 1, tiles: {}, water: {}, falls: {} })), 'no zone
 ok(cleanZones({ zones: [{ id: 'x', x0: 0, z0: 0, x1: 'a', z1: 1, h: 1, prev: {} }, { id: 'y', x0: 0, z0: 0, x1: 9, z1: 9, h: 1, prev: { t: { '1': 9.5 } } }, 7] }).length === 0, 'junk zones dropped (bad number, fractional prev, not an object)')
 ok(!sameLayer(L, { ...L, zones: [{ ...tagged, tag: { kind: 'other' } }] }) && sameLayer(L, back), 'a re-tag is an unpublished change; the round trip is the same layer')
 ok(layerSize(L).zones === 1, 'layerSize counts zones')
+ok(!sameLayer(L, { ...L, zones: [{ ...tagged, tag: { ...tagged.tag!, front: 'e' } }] }), 'M114 s3: a new front edge is an unpublished change')
 
 // the dropdowns: existing data only
 const homes = gladeHomes()

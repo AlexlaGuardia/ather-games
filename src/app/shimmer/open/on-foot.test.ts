@@ -180,6 +180,16 @@ if (['rune-hold', 'citadel'].every(id => meta.places.some(p => p.id === id))) {
   console.log(`  solid towns: ${tried} houses, ${arrived} reached, ${slid} slid; Station step-outs ${spots}; ${per.toFixed(3)} ms/tick in Citadel`)
 }
 
+// ★ M84 s3b: a published zone build's boxes stop the walker (footWorld's 3rd param = zone-parts.ts zonePartBoxes), and nothing else
+{
+  const e = net.edges.find(q => q.kind === 'road' && q.pts.length > 12 && !(net.tunnels ?? []).some(t => t.edge === q.id))!
+  const [x, z] = e.pts[Math.floor(e.pts.length / 2)], y = R.groundAt(x, z)
+  const wall = { x0: x - 3, x1: x + 3, z0: z - 0.1, z1: z + 0.1, y0: y - 0.5, y1: y + 3 }
+  const withWall = footWorld(R, null, [wall])
+  ok(fw.world.bodyFree(x, z, y + 0.05), `zone box: the spot is free without the box`)
+  ok(!withWall.world.bodyFree(x, z, y + 0.05), `zone box: the walker cannot stand inside a published wall`)
+  ok(withWall.world.bodyFree(x + 6, z + 6, R.groundAt(x + 6, z + 6) + 0.05) === fw.world.bodyFree(x + 6, z + 6, R.groundAt(x + 6, z + 6) + 0.05), 'zone box: away from it, nothing changes')
+}
 console.log(`on-foot[${NAME}]: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  ✗ ' + f)
 process.exit(fails.length ? 1 : 0)

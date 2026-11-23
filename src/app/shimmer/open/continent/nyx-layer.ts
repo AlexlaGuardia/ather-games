@@ -7,14 +7,18 @@
 import { cleanEdits } from '../ather/wilds-edits'
 import { applyNyxLayer, NYX_REGION } from '../../world/nyx-builder'
 import type { Region } from '../region'
+import { publishedZones } from '../ather/zone-parts'
+import type { Zone } from '../../world/builder-zones'
 
 /** Apply the published layer to a just-loaded region (only the Nyx continent export; any other ?region= is left alone).
- *  Returns how many vertices moved (0 = nothing published, or not the continent). */
-export async function applyPublishedNyxLayer(R: Region): Promise<number> {
-  if (R.meta.name !== NYX_REGION) return 0
+ *  `moved` = how many vertices moved (0 = nothing published, or not the continent). M84 s3b: `zones` = the published building
+ *  zones with a build or a tag (zone-parts.ts publishedZones; continent/nyx-zones.tsx reads them), [] when none. */
+export async function applyPublishedNyxLayer(R: Region): Promise<{ moved: number; zones: Zone[] }> {
+  if (R.meta.name !== NYX_REGION) return { moved: 0, zones: [] }
   try {
     const r = await fetch('/shimmer/open/nyx-edits', { cache: 'no-store' })
-    if (!r.ok) return 0
-    return applyNyxLayer(R.meta, R.h, cleanEdits(await r.json()))
-  } catch { return 0 }
+    if (!r.ok) return { moved: 0, zones: [] }
+    const j = await r.json()
+    return { moved: applyNyxLayer(R.meta, R.h, cleanEdits(j)), zones: publishedZones(j) }
+  } catch { return { moved: 0, zones: [] } }
 }

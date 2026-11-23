@@ -15,6 +15,7 @@ import { tunnelWall, type Region } from './region'
 import { caveContain, nearCave, type Cavern } from './cavern'
 import { townSolids, solidHit, prefetchTowns, pushOut, stationGround, type TownSolids } from './foot-solids'
 import { extraGround, extraHit } from './foot-extras'
+import { withZoneParts } from './ather/zone-parts'
 
 /** Water plane the page draws (Water: y = -0.15). Land under it is a river or the sea: the walker swims. */
 export const WATER_Y = -0.15
@@ -26,10 +27,11 @@ export const EXIT_MAX_SPEED = 9
 
 export interface FootWorld { world: LocoWorld; hint: { y: number }; cave: Cavern | null; solids: TownSolids }
 
-export function footWorld(R: Region, cave: Cavern | null = null): FootWorld {
+/** `boxes` (M84 s3b): the published zone builds' walker boxes (ather/zone-parts.ts zonePartBoxes), added to the shape's solids */
+export function footWorld(R: Region, cave: Cavern | null = null, boxes: readonly Box[] = []): FootWorld {
   const hint = { y: 0 }
   const solids = townSolids(R), st = solids.station
-  const base = terrainWorld({
+  const base = terrainWorld(withZoneParts({
     // the Passage market's floor where the walker is down in it, else the region's layered ground (raised, at Rune Hold,
     // by the Station's terrace and its stair: foot-solids.ts › stationGround)
     ground: (x, z) => {
@@ -43,7 +45,7 @@ export function footWorld(R: Region, cave: Cavern | null = null): FootWorld {
       const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2
       return R.heightAt(cx, cz) < WATER_Y ? [{ x0: x0 - 1, y0: -80, z0: z0 - 1, x1: x1 + 1, y1: WATER_Y, z1: z1 + 1 }] : []
     },
-  })
+  }, boxes))
   // houses and the Station's walls are turned boxes the Shape cannot hold: they gate bodyFree, which is every move the
   // walker makes (it moves x and z apart, so it slides along a wall at any angle) and every spot exitSpot tries
   const world: LocoWorld = { ...base, bodyFree: (x, z, feetY) => base.bodyFree(x, z, feetY) && !solidHit(R, solids, x, z, feetY) && !extraHit(x, z, feetY) }

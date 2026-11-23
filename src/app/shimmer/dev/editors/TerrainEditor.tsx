@@ -35,7 +35,7 @@ import { wildsOverlay, gladeOverlay, nyxOverlay, poisIn, roadsIn, POI_COLOR, ROA
 import { GLADE_TILE_CENTER, GLADE_SIZE } from '../../world/glade-builder'
 import { NYX_TILE_M } from '../../world/nyx-builder'
 import { zoneParts } from '../../open/ather/zone-parts'   // M84 s3: Fly shows each zone's build
-import { flattenZone, normRect, bigEnough, overlapping, zoneAt, newZoneId, zoneOverlay, zoneLabel, ZONE_KINDS, KIND_LABEL, ZONE_BLEND_M, type Zone, type ZoneKind, type ZoneTag } from '../../world/builder-zones'
+import { flattenZone, normRect, bigEnough, overlapping, zoneAt, newZoneId, zoneOverlay, zoneLabel, ZONE_KINDS, KIND_LABEL, ZONE_FRONTS, FRONT_LABEL, ZONE_BLEND_M, type Zone, type ZoneKind, type ZoneTag, type ZoneFront } from '../../world/builder-zones'
 import { choicesFor, type Choice } from './zone-choices'
 import { ZoneBuilder } from './ZoneBuilder'   // M84 s2: build on a zone
 import { FURNITURE } from '../../open/ather/furniture'
@@ -839,8 +839,10 @@ function ZonePopup({ zone, map, net, onNeedNet, onTag, onDelete, onClose, onBuil
   const kind = zone.tag?.kind ?? null
   useEffect(() => { if (kind === 'home' && map !== 'glade') onNeedNet() }, [kind, map])   // eslint-disable-line react-hooks/exhaustive-deps
   const list: Choice[] = useMemo(() => kind ? choicesFor(kind, map, net) : [], [kind, map, net])
-  const pickKind = (k: ZoneKind) => onTag(k === 'other' ? { kind: k } : { kind: k })
-  const pick = (ref: string) => { if (!kind) return; const c = list.find(x => x.ref === ref); onTag(c ? { kind, ref: c.ref, name: c.name } : { kind }) }
+  const front = zone.tag?.front, keep = front ? { front } : {}   // M114 s3: the picked front edge survives a kind / entry change
+  const pickKind = (k: ZoneKind) => onTag({ kind: k, ...keep })
+  const pick = (ref: string) => { if (!kind) return; const c = list.find(x => x.ref === ref); onTag(c ? { kind, ref: c.ref, name: c.name, ...keep } : { kind, ...keep }) }
+  const pickFront = (f: ZoneFront) => { if (zone.tag) onTag({ ...zone.tag, front: f === 's' ? undefined : f }) }
   const btn = 'px-2.5 py-1 rounded text-xs font-mono border transition-colors'
   const on = 'bg-fuchsia-500/25 border-fuchsia-400 text-fuchsia-100', off = 'bg-white/5 border-white/15 text-white/70 hover:text-white'
   const ASK: Record<Exclude<ZoneKind, 'other'>, string> = { home: 'Who lives here', shop: 'Which shop', supplier: 'Which supplier' }
@@ -860,6 +862,10 @@ function ZonePopup({ zone, map, net, onNeedNet, onTag, onDelete, onClose, onBuil
           </select>
         </label>}
         {kind === 'other' && <div className="text-[11px] text-white/50">Its door stays locked and there is nothing inside.</div>}
+        {kind && <div className="flex items-center gap-1.5" data-testid="zone-front">
+          <span className="text-[10px] uppercase tracking-[0.18em] text-white/45 mr-1">Front edge</span>
+          {ZONE_FRONTS.map(f => <button key={f} className={`${btn} ${(front ?? 's') === f ? on : off}`} onClick={() => pickFront(f)} data-testid={`zone-front-${f}`}>{FRONT_LABEL[f]}</button>)}
+        </div>}
         <div className="text-[11px] font-mono text-white/45" data-testid="zone-label">{zoneLabel(zone)}</div>
         <div className="flex gap-1.5 justify-between pt-1">
           <button className={`${btn} bg-red-500/15 border-red-400/60 text-red-200`} onClick={onDelete} data-testid="zone-delete">Delete zone</button>

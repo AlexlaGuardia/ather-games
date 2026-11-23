@@ -17,7 +17,12 @@ import { FURNITURE } from '../open/ather/furniture'
 export type ZoneKind = 'home' | 'shop' | 'supplier' | 'other'
 export const ZONE_KINDS: readonly ZoneKind[] = ['home', 'shop', 'supplier', 'other']
 /** `ref` = the chosen entry's id in its list (folk id, shop id, good id); `name` = what the list showed (kept for the overlay) */
-export interface ZoneTag { kind: ZoneKind; ref?: string; name?: string }
+/** M114 s3: which edge of the zone is its FRONT (the game's E point sits at its middle). N = -z, E = +x, S = +z, W = -x, as the
+ *  top-down plan draws them (z grows down the page). Absent = 's' (+z), the s2 default, so an old zone keeps its E point. */
+export type ZoneFront = 'n' | 'e' | 's' | 'w'
+export const ZONE_FRONTS: readonly ZoneFront[] = ['n', 'e', 's', 'w']
+export const FRONT_LABEL: Record<ZoneFront, string> = { n: 'N', e: 'E', s: 'S', w: 'W' }
+export interface ZoneTag { kind: ZoneKind; ref?: string; name?: string; /** M114 s3: absent = 's' (+z) */ front?: ZoneFront }
 /** M84 s2: one building part set in the zone (a furniture.ts item: wall panel, floor slab, furniture). x, z are ZONE-LOCAL metres
  *  from the zone's (x0, z0) corner, so the build travels with the zone; q = turns in quarters (0..4, sixths of a quarter = 15 deg). */
 export interface ZonePiece { id: string; item: string; x: number; z: number; q: number }
@@ -117,6 +122,7 @@ export function cleanTag(t: unknown): ZoneTag | null {
   if (!o || typeof o !== 'object' || !ZONE_KINDS.includes(o.kind as ZoneKind)) return null
   const tag: ZoneTag = { kind: o.kind as ZoneKind }
   if (tag.kind !== 'other') { const ref = str(o.ref), name = str(o.name); if (ref) tag.ref = ref; if (name) tag.name = name }
+  if (ZONE_FRONTS.includes(o.front as ZoneFront) && o.front !== 's') tag.front = o.front   // M114 s3: the default is never stored
   return tag
 }
 export const ZONE_PIECES_MAX = 400   // = plot-blueprint MAX_BP_PIECES

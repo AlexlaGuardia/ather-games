@@ -80,7 +80,7 @@ import { GladeCluster, gladeFolkDrawn } from './glade-cluster-view'   // M67 s1a
 import { GLADE_FRAME, GLADE_OWNED, GLADE_TILE, GLADE_ZONE_NAME, GLADE_GATE, gladeNewbornSpot, gladeWhere, gregInGlade, gladeKeepers } from './glade-cluster'   // M40: the green, the five's lots + stations, Greg's jetty
 import { gladeLayerGround, gladeLift } from './glade-layer'
 import { useGladeLayer, GladeWater } from './glade-layer-view'   // M83 s2b: the Glade's published builder layer
-import { zoneParts, zonePartBoxes, withZoneParts } from './zone-parts'   // M84 s3: published zone builds (drawn + solid)
+import { zoneParts, zonePartBoxes, withZoneParts, publishedZones } from './zone-parts'   // M84 s3: published zone builds (drawn + solid)
 import { ZonePartsView } from './zone-parts-view'
 import { zoneDoor, zoneUse, zonePrompt, zoneSay, homeTalk, type ZoneUse } from './zone-tags'   // M114 s2: a published zone's tag = one E point
 import { ShopPanel } from '../business/shop-panel'   // M114 s2: a Shop zone opens its storefront's own panel
@@ -105,7 +105,7 @@ import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pit
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree, type Crystal } from './wilds'
 import { loadIndex, makeWorld, stream, releaseTo, tileOf, zonesOf, TILE_M, WILDS_RELEASE_MS, type WildsWorld } from './wilds-world'
 import { makeVoids, FALL_LIP, type VoidField } from './wilds-voids'
-import { ensureEdits, voidEditsLive } from './wilds-edits'   // M104: the void brush layer
+import { ensureEdits, voidEditsLive, zonesJsonLive } from './wilds-edits'   // M104: the void brush layer
 import { startFall, stepFall, type FallState } from './void-fall'
 import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
 import { useFolkTalk } from './use-folk-talk'
@@ -114,6 +114,7 @@ import { liveSpirits, setKeeperAt } from './spirit-follow'
 import { SPECIES_NAMES } from '../../spirits/spirit'
 import { useMeleeReady, lastSwingAt, lastSwingAction } from './melee-view'
 import { reportAway } from './away-report'
+import { folkOf } from './settlement-folk'   // M84 s3b: a Wilds Home zone's resident -> their settlement's talk
 import { TilePaths, Settlements, BigTop, folkDrawn, stallDrawn, gleanerPost } from './network-scene'
 import { GLEANER_POST, GLEANER_POST_R, BURR_CAMP, CAMP_LABEL } from './gleaner'   // M112 s2
 import { aimPick, lookDir, type Pickable } from '../shared/aim-pick'
@@ -662,7 +663,16 @@ function AtherSliceGame() {
   useEffect(() => { if (gatePending && ww) { setGatePending(false); if (zone.kind === 'glade') leaveGlade() } }, [gatePending, ww, zone, leaveGlade])
   const gladeFall = useCallback(() => arrive({ kind: 'glade' }, gladeNewbornSpot()), [arrive])
 
-  const world = useMemo(() => zone.kind === 'plot' ? plotWorld : zone.kind === 'glade' ? gladeWorld : ww ? terrainWorld(withPieces(ww.shape)) : null, [zone, ww, plotWorld, gladeWorld])   // ww.shape reads the live tiles
+  // M84 s3b: the Wilds read published zone builds + tags the way the Glade does (zone-parts.ts / zone-tags.ts). The layer came with
+  // ensureEdits (before ww exists); a part stands only once its tile is loaded (heightAt is -Infinity off the loaded land), so the
+  // parts re-derive as tiles stream (wrev) and only re-key the world when the set of placed parts actually changes
+  const wildsZones = useMemo(() => ww ? publishedZones(zonesJsonLive()) : [], [ww])
+  const wildsPartsNow = useMemo(() => ww && wildsZones.length ? zoneParts(wildsZones, ww.heightAt) : [], [ww, wrev, wildsZones])   // eslint-disable-line react-hooks/exhaustive-deps
+  const wildsPartsSig = wildsPartsNow.map(p => `${p.key}@${p.y.toFixed(2)}`).join()
+  const wildsParts = useMemo(() => wildsPartsNow, [wildsPartsSig])   // eslint-disable-line react-hooks/exhaustive-deps
+  const wildsDoors = useMemo(() => wildsZones.flatMap(z => { const u = zoneUse(z); return u ? [{ id: z.id, ...zoneDoor(z), u }] : [] }), [wildsZones])
+  const wildsDoorsRef = useRef(wildsDoors); wildsDoorsRef.current = wildsDoors
+  const world = useMemo(() => zone.kind === 'plot' ? plotWorld : zone.kind === 'glade' ? gladeWorld : ww ? terrainWorld(withZoneParts(withPieces(ww.shape), zonePartBoxes(wildsParts))) : null, [zone, ww, plotWorld, gladeWorld, wildsParts])   // ww.shape reads the live tiles
   // ground cover preview (ground-cover.tsx, ?cover=): nothing on a path, the gate's pad or at Greg's feet
   const [cover, setCover] = useState<'none' | 'tufts' | 'meadow' | 'lush'>('meadow')
   useEffect(() => setCover(coverFromUrl()), [])
@@ -782,6 +792,7 @@ function AtherSliceGame() {
         else cands.push(cap(st.x, st.z, 0.8, 2, { kind: 'folk', s: st }))
         const stall = stallDrawn.get(st.id); if (stall) cands.push(cap(stall.x, stall.z, 0.6, MOGLIN_HEIGHT.chibi + 0.4, { kind: 'folk', s: st })) } }   // M112: the Burrfolk's stall (the talk opens on the nearest)
       if (!workAim && gleanerPost.on && Math.hypot(lc.px - GLEANER_POST.x, lc.pz - GLEANER_POST.z) < GLEANER_POST_R) { const g = stallDrawn.get(GLEANER_POST.id); if (g) cands.push(cap(g.x, g.z, 0.6, MOGLIN_HEIGHT.chibi + 0.4, { kind: 'folk', s: GLEANER_POST })) }   // M112 s2: Gleaner (owner-only post)
+      for (const d of wildsDoorsRef.current) { const y = g(d.x, d.z); if (Number.isFinite(y)) cands.push(cap(d.x, d.z, 0.6, 2.4, { kind: 'zone', u: d.u })) }   // M84 s3b: a tagged zone's E point (only where its tile is loaded)
       n = aimPick(cands, eye, dir, from)
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
       const t = ww ? ww.at(tileOf(lc.px, lc.pz).tx, tileOf(lc.px, lc.pz).ty) : undefined
@@ -862,7 +873,7 @@ function AtherSliceGame() {
       zone: () => zone.kind,
       // CHECK-ONLY (glade-cluster-check): set the keeper down somewhere in the closed Glade (only while in it), to walk the last steps to the gate
       gladeAt: (x: number, z: number, yaw: number) => { if (zone.kind === 'glade') arrive({ kind: 'glade' }, { x, z, yaw }) },
-      zoneDoors: () => gladeDoorsRef.current, near: () => near.current, panel: () => panelRef.current?.kind ?? null,   // read-only probes (M114 s2 zone-tags-check): the tagged zones' E points, what E would act on
+      zoneDoors: () => zoneRef0.current === 'wilds' ? wildsDoorsRef.current : gladeDoorsRef.current, near: () => near.current, panel: () => panelRef.current?.kind ?? null,   // read-only probes (M114 s2 zone-tags-check): the tagged zones' E points, what E would act on
       falling: () => (fallSt.current ? { t: fallSt.current.t, done: fallSt.current.done } : null),   // read-only probe (void-fall-check): the fall into a void
       wildsLoaded: () => [...(wwRef.current?.loaded.keys() ?? [])],   // read-only probe (M9 wilds-release-check): the parsed Wilds tiles held now
       open: (k: 'gate' | 'greg' | 'athernyx') => { if (k === 'greg') openGreg(); else setPanel({ kind: 'map', view: k === 'athernyx' ? 'athernyx' : 'ather', travel: true }) },
@@ -1405,6 +1416,10 @@ function AtherSliceGame() {
         else if (n.kind === 'zone') {   // M114 s2: a tagged zone's E point
           const u = n.u, line = zoneSay(u); if (line) hudSay(line, 'info', 4)
           if (u.kind === 'shop') setPanel({ kind: 'shop', id: u.id })
+          else if (u.kind === 'home' && zone.kind === 'wilds') {   // M84 s3b: a Wilds resident = a settlement's Moglin: that settlement's talk
+            const net = netRef.current, st = net && u.ref ? net.settlements.find(s => folkOf(s, net.season).some(f => f.id === u.ref)) : undefined
+            if (st) setPanel({ kind: 'folk', s: st })
+          }
           else if (u.kind === 'home') {
             const t = homeTalk(u.ref, { greg: !tourRef.current, friends: GLADE_FRIENDS_AT.map(k => k.id), fennel: FENNEL_FOLK_ID, folk: gladeFolkDrawn.map(f => f.id) })
             if (t?.kind === 'greg') openGreg(); else if (t?.kind === 'friend') openFriend(t.f as GardenFriend); else if (t?.kind === 'fennel') gFennel.open(); else if (t?.kind === 'folk') setPanel({ kind: 'folk', s: GLADE })
@@ -1460,6 +1475,7 @@ function AtherSliceGame() {
       >
         <ProgramKeeper />
         {zone.kind === 'wilds' && <WarmProxies key={epoch} />}   {/* M44: late-mounting shader variants, compiled behind the arrival veil */}
+        {zone.kind === 'wilds' && <ZonePartsView parts={wildsParts} />}   {/* M84 s3b */}
         <OpenHands ref={handsApi} held={rodOut ? <HeldRod /> : <HeldItem id={stance.kind === 'item' ? held : null} />} />
         <FpGun ref={gunApi} />
         <ThirdPersonBody drive={dollDrive} camRef={camRef} />

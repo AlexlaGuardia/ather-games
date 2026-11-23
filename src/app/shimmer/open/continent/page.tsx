@@ -96,6 +96,10 @@ import { footWorld, tickFoot, exitSpot, canEnter, stepOut, EXIT_MAX_SPEED } from
 import { eyeY, WALK_SPEED, SPEED_CAP, type LocoState } from '../shared/locomotion'
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
 import { applyPublishedNyxLayer } from './nyx-layer'   // M83 s3: the World Builder's published continent edits
+import { NyxZones } from './nyx-zones'   // M84 s3b + M114 s3: published zone builds + tags on the continent
+import { zoneParts, zonePartBoxes, type ZonePart } from '../ather/zone-parts'
+import type { Zone } from '../../world/builder-zones'
+import type { Box } from '../terrain-world'
 import { TUNNEL_H, TUNNEL_WALK, boreAt, tunnelWall, bridgeRail, drivable, ferryLanding, guardrails, loadRegion, roadRail, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
 import { touch, TOUCH_LOOK_SENS, isTouchOnly } from '../shared/touch'
 import { TouchControls, PHONE_ROW_TOP, SKIN_HOLDS, type TouchAction } from '../shared/touch-controls'
@@ -771,7 +775,7 @@ const YARD_PROMPT: Record<NonNullable<DeedYardState['action']>, string> = { 'tak
 const FOOT_FOV = 75, FOOT_FOV_KICK = 8, SENS = 0.0022, SEAT_GLIDE = 0.38
 
 interface DriverCtl { /** M80: another E target holds the key right now (a ferry while driving, the yard / a deed on foot): E leaves the car alone */ eTaken?: () => boolean; tp?: (x: number, z: number, yaw: number) => void; car?: () => { x: number; y: number; z: number; yaw: number; speed: number; foot: boolean } }
-function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus }: { talkFocus?: React.MutableRefObject<{ x: number; y: number; z: number } | null>; castFx: { surge: React.MutableRefObject<{ until: number; mult: number }>; impulse: React.MutableRefObject<CastSpec | null>; gateStep: (lc: Parameters<ReturnType<typeof useCasts>['gateStep']>[0], yaw: number, dt: number, groundAt: (x: number, z: number) => number) => void }; track: React.MutableRefObject<Track>; R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<DriverCtl> }) {
+function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus, zoneBoxes }: { zoneBoxes?: readonly Box[]; talkFocus?: React.MutableRefObject<{ x: number; y: number; z: number } | null>; castFx: { surge: React.MutableRefObject<{ until: number; mult: number }>; impulse: React.MutableRefObject<CastSpec | null>; gateStep: (lc: Parameters<ReturnType<typeof useCasts>['gateStep']>[0], yaw: number, dt: number, groundAt: (x: number, z: number) => number) => void }; track: React.MutableRefObject<Track>; R: Region; cave: Cavern | null; onHud: (h: RideHud) => void; focus: React.MutableRefObject<THREE.Vector3>; tuneRef: React.MutableRefObject<CourserTune>; ctl: React.MutableRefObject<DriverCtl> }) {
   const { camera, gl } = useThree()
   // M49 s5: the courser's ground = the region's, raised where a shipyard plot stands (its floor + ramps: foot-extras.ts)
   const cg = (x: number, z: number, y?: number) => Math.max(R.groundAt(x, z, y), extraCarGround(x, z))
@@ -795,7 +799,7 @@ function Driver({ R, cave, onHud, focus, tuneRef, ctl, track, castFx, talkFocus 
   const shake = useRef(0)
   // ── ON FOOT (Alex 11-14): F steps out of the courser and back in, the camera GLIDING between the chase pose and the
   // eye in SEAT_GLIDE seconds (never a cut), the courser parked on its handbrake where you left it ──
-  const fw = useMemo(() => footWorld(R, cave), [R, cave])
+  const fw = useMemo(() => footWorld(R, cave, zoneBoxes), [R, cave, zoneBoxes])   // M84 s3b: + the published zone builds
   const mode = useRef<'drive' | 'foot'>('drive')
   const loco = useRef<LocoState | null>(null)
   const view = useRef({ yaw: 0, pitch: -0.08 })
@@ -1161,6 +1165,13 @@ function ContinentRideGame() {
   const tycoon = useTycoon(ledger, setLedger)
   const [deed, setDeed] = useState<string | null>(null)
   const [deedReach, setDeedReach] = useState<string | null>(null)
+  // M84 s3b + M114 s3: the published building zones (nyx-layer.ts, with the region): their parts stand on the region's ground,
+  // their boxes stop the walker (the Driver's footWorld), their tags give E points (nyx-zones.tsx)
+  const [nyxZones, setNyxZones] = useState<Zone[]>([])
+  const [zoneReach, setZoneReach] = useState<string | null>(null)
+  const nyxParts = useMemo<ZonePart[]>(() => R && nyxZones.length ? zoneParts(nyxZones, (x, z) => R.groundAt(x, z)) : [], [R, nyxZones])
+  const nyxBoxes = useMemo(() => zonePartBoxes(nyxParts), [nyxParts])
+  const openZoneShop = useCallback((id: string) => setDeed(`zone:${id}`), [])
   // M49: the shipyard plot (continent/shipyard-plot.tsx) tells the phone pill what E does there
   const [yardState, setYardState] = useState<DeedYardState>({ inYard: false, atBoard: false, action: null })
   // M49 s3: ?own=all holds every shipyard (the OWNER's dev flag only; a player buys them, business/shipyards.ts)
@@ -1350,6 +1361,7 @@ function ContinentRideGame() {
     ...(!hud.foot && ferryAt && !ferrying ? [{ code: 'KeyE', key: 'E', label: 'ferry', near: true }]
       : []),
     ...(hud.foot && yardState.action && !deed ? [{ code: 'KeyE', key: 'E', label: yardState.action === 'board' && shipAct === 'fit' ? 'fit' : yardState.action === 'board' && shipAct === 'charge' ? 'charge' : yardState.action, near: true }, ...(yardState.action === 'place' ? [{ code: 'DeedTurn', key: 'E', label: 'turn' }] : [])] : []),
+    ...(hud.foot && zoneReach && !deed ? [{ code: 'KeyE', key: 'E', label: zoneReach === 'shop' ? 'go in' : 'door', near: true }] : []),   // M114 s3
     ...(hud.foot && deedReach && !deed ? [{ code: 'KeyE', key: 'E', label: deedReach.startsWith('front:') || deedReach.startsWith('smith:') ? 'go in' : 'deed', near: true }] : []),
     ...(hud.prompt ? [{ code: 'KeyE', key: 'E', label: hud.foot ? 'get in' : 'get out', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
@@ -1591,8 +1603,9 @@ function ContinentRideGame() {
     const name = new URLSearchParams(window.location.search).get('region') ?? 'continent'
     loadRegion(name).then(async r => {
       // M83 s3: the World Builder's published edits go into the height grid before anything reads it (continent/nyx-layer.ts)
-      const moved = await applyPublishedNyxLayer(r)
+      const { moved, zones } = await applyPublishedNyxLayer(r)
       ;(window as unknown as { __nyxLayer?: number }).__nyxLayer = moved
+      setNyxZones(zones)   // M84 s3b
       // the rinning boat to Veradyn's isles joins the network's ferries (towns/veradyn.ts); the exported map stays as is
       const vf = veradynFerry(r)
       if (vf && r.meta.network && !(r.meta.network.ferries ?? []).some(f => f.id === vf.id)) r.meta.network.ferries = [...(r.meta.network.ferries ?? []), vf]
@@ -1626,13 +1639,15 @@ function ContinentRideGame() {
           <Towns R={R} focus={focus} />
           <DoorFolk R={R} focus={focus} talking={talk?.key ?? null} />
           <RemoteKeepers peers={mp.peers} me={() => focus.current} />
+          <NyxZones zones={nyxZones} parts={nyxParts} ground={(x, z) => R.groundAt(x, z)} open={deed} onShop={openZoneShop} onReach={u => setZoneReach(u?.kind ?? null)} onWalkOff={() => setDeed(null)}
+            enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} />   {/* M84 s3b + M114 s3 */}
           <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={openDoor} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} hide={hideDoor} />
           <ShipyardPlots R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState} owned={ledger.shipyards} ownAll={isOwner && ownAllFlag} car={carLink} shipGate={shipOn} onShip={onShip}
             enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} />
           <Posts R={R} />
           <Roadside R={R} />
           <Trees R={R} focus={focus} />
-          <Driver castFx={casts} R={R} cave={cave} onHud={setHud} focus={focus} tuneRef={tuneRef} ctl={ctl} track={track} talkFocus={talkFocus} />
+          <Driver castFx={casts} R={R} cave={cave} onHud={setHud} focus={focus} tuneRef={tuneRef} ctl={ctl} track={track} talkFocus={talkFocus} zoneBoxes={nyxBoxes} />
           {talk && talkNode && <TalkBubble at={[talk.at.x, talk.at.y, talk.at.z]} name={talk.name} line={talkNode.line} scene={(talkNode as { scene?: string }).scene} />}
           <GateRings gate={casts.gate} />
         </Canvas>
@@ -1663,6 +1678,7 @@ function ContinentRideGame() {
         onBeat={b => { setDeed(null); setTalk(t => (t ? { ...t, beat: { ...b, at: 0 } } : t)) }} />}
       {deed === 'idris' && <IdrisPanel ledger={ledger} setLedger={setLedger} onClose={() => { setDeed(null); setTalk(null) }} onBack={talk ? () => setDeed(null) : undefined} />}
       {deed?.startsWith('front:') && !board && <ShopPanel id={deed.slice(6)} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} isTouch={isTouch} />}
+      {deed?.startsWith('zone:') && <ShopPanel id={deed.slice(5)} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} isTouch={isTouch} />}   {/* M114 s3: a Shop zone's storefront panel */}
       {deed === 'ship:franky' && shipGate && R && <DestinationMapPanel places={R.meta.places} onClose={() => setDeed(null)} />}
       {deed && deed !== 'idony' && deed !== 'idris' && !deed.startsWith('front:') && !deed.startsWith('smith:') && !deed.startsWith('ship:') && R && tycoon.t && (
         <DeedCard R={R} lotId={deed} t={tycoon.t} marks={ledger.marks} onClose={() => setDeed(null)}
