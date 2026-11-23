@@ -26,18 +26,18 @@ ok(!!OPEN_ITEMS[TABLE_ITEM], 'it has a bag row')
 const [o, d] = aim(TABLE.x, TABLE.z + 2.2, TABLE.x, TABLE.z)
 const t = meleeTarget(w0, o, d)
 ok(t?.kind === 'table' && t.id === TABLE_HIT, `a swing at the table lands on it (${t?.kind})`)
-const b = breakTarget(w0, { kind: 'table', id: TABLE_HIT }, newInv())
+const b0 = breakTarget(w0, { kind: 'table', id: TABLE_HIT }, newInv(), {}), b = b0 === 'spirit' ? null : b0
 ok(!!b && b.works.tableMoved === true && countOf(b.inv, TABLE_ITEM) === 1, 'broken: 1 planning table in the bag, the save remembers')
 const w1 = b!.works, inv1 = b!.inv
 ok(tableAt(w1) === null && nearWork(w1, TABLE.x + 1, TABLE.z) === null, 'in the bag: nothing to E at the old spot')
 ok(!workPickables(w1, () => GROUND_Y).some(p => p.item.kind === 'table'), 'in the bag: no table pickable')
 ok(!hasKeep(w1, TABLE.x, TABLE.z), 'in the bag: the old keep-clear is gone')
 ok(meleeTarget(w1, o, d)?.kind !== 'table', 'in the bag: a swing finds no table')
-ok(breakTarget(w1, { kind: 'table', id: TABLE_HIT }, inv1) === null, 'a moved table cannot be broken out of thin air (no second table)')
+ok(breakTarget(w1, { kind: 'table', id: TABLE_HIT }, inv1, {}) === null, 'a moved table cannot be broken out of thin air (no second table)')
 ok(!placedRects(w1).some(r => Math.abs((r.x0 + r.x1) / 2 - TABLE.x) < 1e-9 && Math.abs((r.z0 + r.z1) / 2 - TABLE.z) < 1e-9), 'in the bag: the grass grows back on the old spot')
 ok(canPlacePiece(w1, owned, 'goldwood_stool', TABLE.x, TABLE.z, 0).ok, 'the old spot is placeable after')
 let full = newInv(); for (let i = 0; i < 64; i++) full = give(full, 'goldwood_log', 999).inv
-ok(breakTarget(w0, { kind: 'table', id: TABLE_HIT }, full) === null, 'a full bag: the table stays')
+ok(breakTarget(w0, { kind: 'table', id: TABLE_HIT }, full, {}) === null, 'a full bag: the table stays')
 
 // set it somewhere else: it works there
 const at = { x: -100, z: 100 }

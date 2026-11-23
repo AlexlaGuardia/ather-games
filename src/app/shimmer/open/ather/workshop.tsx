@@ -26,7 +26,7 @@ import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
   WALL_H, benchBox, keepClear, tableAt, TABLE_ITEM, type Works, type Room, type RoomKind, type WorkNear,
-  stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, pieceFloor, canPlacePiece, placePiece, pickUpPiece, turnPiece, retireRooms, type Piece,
+  stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, pieceFloor, canPlacePiece, placePiece, turnPiece, retireRooms, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, payCost, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
@@ -45,7 +45,8 @@ import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported,
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, ALC_LIVE, type Job } from './furniture'
 import { AlchemyPanel } from './alchemy-panel'
-import { PlanterPanel, GrimoirePanel, liftPlanter, useBook, type BankStore } from './spirit-panels'
+import { PlanterPanel, GrimoirePanel, getPots, setPots, settlePlanter, useBook, type BankStore } from './spirit-panels'
+import { liftPiece } from './piece-lift'
 import { BLOOM_MS, speciesOf } from './spirit-seeds'
 import { SpiritOnPlanter, useSpirits3d } from './spirit-model'
 import { spiritModelFor } from './spirit-models'
@@ -890,7 +891,8 @@ function confirmPlace(owned: ReadonlySet<string>) {
     const item = placing.item, c = placePiece(getW(), owned, getInv(), item, ghost.x, ghost.z, placing.q)
     if (!c) { const v = canPlacePiece(getW(), owned, item, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot set it there.' : v.why, 'info'); return }
     setInv(c.inv); setWorks(c.works)
-    const f = FURNITURE[item], an = !f.shaft && anchorIfFree(placing.q, f.w, f.d, !!f.slab) ? ' · anchor set, pick a snap to line up on it' : ''
+    const f = FURNITURE[item], an0 = !f.shaft && anchorIfFree(placing.q, f.w, f.d, !!f.slab) ? ' · anchor set, pick a snap to line up on it' : ''
+    const an = (f.spirit === 'planter' && settlePlanter(c.piece.id) ? ' · its seed is back in the soil, still growing' : '') + an0   // M106 fix: a carried pot
     // keep placing while more of the same are in the bag (a row of stools is one job, not five trips to the table)
     if (countOf(c.inv, item) > 0) hudSay(`${FURNITURE[item].name} set · ${countOf(c.inv, item)} more in the bag · ${placing.hand ? 'hold R to put it away' : 'Esc stops'}${an}`, 'item', 4)
     else { setPlacing(null); hudSay(`${FURNITURE[item].name} set.${an}`, 'item', 3) }
@@ -2105,12 +2107,16 @@ function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<str
   const f = FURNITURE[p.item], spill = spillIfRemoved(currentWater(), plumbingOf(w.pieces), p.item, farmNow())
   const turn = () => { const t = turnPiece(getW(), owned, id); if (t) setWorks(t); else hudSay('No room to turn it here.', 'info') }
   const pickUp = () => {
-    if (f.spirit === 'planter' && !liftPlanter(id)) return   // M76: a spirit lives here = stays; a growing seed back to the bag
-    const r = pickUpPiece(getW(), id, getInv())
-    if (!r) { hudSay('No room in the bag for it.', 'info'); return }
+    // M106 fix: piece-lift.ts, the same path as the third melee hit. A spirit lives here = stays; a growing seed rides along.
+    const r = liftPiece(getW(), id, getInv(), getPots())
+    if (r === 'spirit') { hudSay('A spirit lives in this planter. It stays.', 'info'); return }
+    if (r === 'gone') return
+    if (r === 'full') { hudSay('No room in the bag for it.', 'info'); return }
     const rr = returnRun(loadRuns(), id, r.inv)   // M57: a busy alchemy piece gives its inputs back, all or nothing
     if (!rr) { hudSay('No room in the bag for it and what it was working on.', 'info'); return }
-    setWorks(r.works); setInv(rr.inv); saveRuns(rr.runs); onClose(); hudSay(`${f.name} · back in your bag.`, 'item', 3)
+    const carried = r.pots !== getPots()
+    setWorks(r.works); setInv(rr.inv); saveRuns(rr.runs); setPots(r.pots); onClose()
+    hudSay(carried ? `${f.name} · back in your bag. Its seed goes with it.` : `${f.name} · back in your bag.`, 'item', 3)
   }
   const spiritFooter = (
     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

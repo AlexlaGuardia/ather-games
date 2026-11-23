@@ -4,11 +4,13 @@
 // short cooldown. Armed right-click stays the sights (combat-layer). Only the keeper's own plot (the works this page holds).
 // PURE: no React, no three, no DOM.
 import type { Works } from './rooms'
-import { pickUpPiece, pickUpChest, pieceRect, chestBox, CHEST_H, TABLE, TABLE_ITEM } from './rooms'
+import { pickUpChest, pieceRect, chestBox, CHEST_H, TABLE, TABLE_ITEM } from './rooms'
 import { give } from '../shared/inventory'
 import { FURNITURE } from './furniture'
 import { GROUND_Y } from './plot'
 import type { Inv } from '../shared/inventory'
+import { liftPiece } from './piece-lift'
+import type { Pots } from './spirit-seeds'
 
 export const MELEE_HITS = 3
 export const MELEE_REACH = 2.6     // metres from the eye: a hand's reach, shorter than any tool
@@ -61,12 +63,16 @@ export function strike(h: Hits | null, id: string, now: number): { hits: Hits | 
   const n = h && h.id === id && now - h.at <= MELEE_RESET_MS ? h.n + 1 : 1
   return n >= MELEE_HITS ? { hits: null, n, broke: true } : { hits: { id, n, at: now }, n, broke: false }
 }
-/** the third hit: the thing comes back to the bag, whole. null = the bag is full (nothing moves). */
-export function breakTarget(w: Works, t: Pick<Target, 'kind' | 'id'>, inv: Inv): { works: Works; inv: Inv } | null {
+/** the third hit: the thing comes back to the bag, whole. null = the bag is full (nothing moves); 'spirit' = a spirit lives in
+ *  this planter (it stays). A piece comes up through piece-lift.ts like the card's Pick up, so a growing planter keeps its seed
+ *  (M106 fix: this path used to skip the pot and the seed was lost). */
+export function breakTarget(w: Works, t: Pick<Target, 'kind' | 'id'>, inv: Inv, pots: Pots): { works: Works; inv: Inv; pots: Pots } | 'spirit' | null {
   if (t.kind === 'table') {   // M96: the fixture comes up as the bag item; the save remembers it left its spot
     if (w.tableMoved) return null
     const r = give(inv, TABLE_ITEM, 1)
-    return r.left > 0 ? null : { works: { ...w, tableMoved: true }, inv: r.inv }
+    return r.left > 0 ? null : { works: { ...w, tableMoved: true }, inv: r.inv, pots }
   }
-  return t.kind === 'piece' ? pickUpPiece(w, t.id, inv) : pickUpChest(w, t.id, inv)
+  if (t.kind === 'piece') { const l = liftPiece(w, t.id, inv, pots); return l === 'spirit' ? 'spirit' : typeof l === 'string' ? null : l }
+  const c = pickUpChest(w, t.id, inv)
+  return c ? { ...c, pots } : null
 }

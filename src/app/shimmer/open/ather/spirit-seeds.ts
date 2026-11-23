@@ -61,7 +61,7 @@ export function tend(pots: Pots, pieceId: string, now: number): Pots | null {
 export const growDay = (p: Pot, now: number) => Math.max(1, Math.floor((now - p.at) / GAME_DAY_MS) + 1)
 /** Every pot whose time has come blooms; returns the new pots and the species that just bloomed, in planting order. */
 export function ripen(pots: Pots, now: number): { pots: Pots; bloomed: { pieceId: string; species: Species }[] } {
-  const due = Object.entries(pots).filter(([, p]) => !p.bloomed && now >= bloomAt(p)).sort((a, b) => a[1].at - b[1].at)
+  const due = Object.entries(pots).filter(([k, p]) => !isCarried(k) && !p.bloomed && now >= bloomAt(p))   // a carried pot blooms once set down.sort((a, b) => a[1].at - b[1].at)
   if (!due.length) return { pots, bloomed: [] }
   const next: Record<string, Pot> = { ...pots }
   for (const [id, p] of due) next[id] = { ...p, bloomed: true }
@@ -81,13 +81,29 @@ export function takeSeed(inv: Inv, bank: Bank, id: SeedId): { inv: Inv; bank: Ba
   return b ? { inv, bank: b, from: 'bank' } : null
 }
 
-/** Picking a planter up: an empty one comes up freely; a growing seed comes back to the bag; a spirit lives there = no. */
-export function liftPot(pots: Pots, pieceId: string): { pots: Pots; seed: SeedId | null } | null {
+// M106 fix (11-23): a growing pot TRAVELS with its planter. Picking a planter up (E 'Pick up' or three melee hits, both through
+// piece-lift.ts) moves its pot under CARRIED + the old piece id, seed, planting time and tends untouched; the next Spirit Planter
+// set down takes the oldest carried pot. So a lift never loses a seed or its growth day. (Before: E gave the seed back to the
+// bag and lost its days; melee skipped the pot entirely and the seed was lost.)
+/** The pots key prefix of a pot riding in the bag with its lifted planter. */
+export const CARRIED = 'carried:'
+export const isCarried = (key: string) => key.startsWith(CARRIED)
+/** Picking a planter up: an empty one comes up freely (pots unchanged); a growing pot is carried with it; a spirit lives
+ *  there = no (null). */
+export function carryPot(pots: Pots, pieceId: string): Pots | null {
   const p = pots[pieceId]
-  if (!p) return { pots, seed: null }
+  if (!p) return pots
   if (p.bloomed) return null
   const { [pieceId]: _gone, ...rest } = pots
-  return { pots: rest, seed: p.seed }
+  return { ...rest, [CARRIED + pieceId]: p }
+}
+/** A Spirit Planter just set down at `pieceId`: it takes the oldest carried pot (unchanged). None carried = pots unchanged. */
+export function settlePot(pots: Pots, pieceId: string): Pots {
+  if (pots[pieceId]) return pots
+  const c = Object.entries(pots).filter(([k]) => isCarried(k)).sort((a, b) => a[1].at - b[1].at || (a[0] < b[0] ? -1 : 1))[0]
+  if (!c) return pots
+  const { [c[0]]: _gone, ...rest } = pots
+  return { ...rest, [pieceId]: c[1] }
 }
 
 // ── the Anemonyx at the green's edge ────────────────────────────────────────────────────────────────────────────────

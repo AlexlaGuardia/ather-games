@@ -1,7 +1,7 @@
 // Run: npx tsx src/app/shimmer/open/ather/spirit-seeds.test.ts
 // M76 s1: the seed decides the species (never the pot or a roll), one spirit per planter, the Anemonyx's 5-10 day visits
 // (there that day only, one seed per visit), the grimoire fills in discovery order and survives a save round-trip.
-import { SPECIES, SEED_IDS, seedOf, speciesOf, isSeed, plant, ripen, liftPot, growth, BLOOM_MS, visitDay, visitOn, nextVisit, visitSeed, meetAnemonyx, VISIT_MIN_DAYS, VISIT_MAX_DAYS, SEED_NAME } from './spirit-seeds'
+import { SPECIES, SEED_IDS, seedOf, speciesOf, isSeed, plant, ripen, carryPot, settlePot, CARRIED, growth, BLOOM_MS, visitDay, visitOn, nextVisit, visitSeed, meetAnemonyx, VISIT_MIN_DAYS, VISIT_MAX_DAYS, SEED_NAME } from './spirit-seeds'
 import { tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, TEND_MS, LEGACY_BLOOM_MS } from './spirit-seeds'
 import { GAME_DAY_MS } from './nodes'
 import { freshBank, putIn, bankCount, bankCap } from './garden-bank'
@@ -26,11 +26,19 @@ ok(Math.abs(growth(pots.p1, t0 + BLOOM_MS / 2) - 0.5) < 1e-9, 'growth is the sha
 const r = ripen(pots, t0 + BLOOM_MS + 20)
 ok(r.bloomed.map(b => b.species).join() === 'owl,fox', 'each pot blooms ITS seed, in planting order')
 ok(ripen(r.pots, t0 + 10 * BLOOM_MS).bloomed.length === 0, 'a bloom happens once')
-ok(liftPot(r.pots, 'p1') === null, 'a planter a spirit lives in cannot be picked up')
+ok(carryPot(r.pots, 'p1') === null, 'a planter a spirit lives in cannot be picked up')
 const grow = plant({}, 'p3', seedOf('bat'), t0)!
-const lifted = liftPot(grow, 'p3')!
-ok(lifted.seed === seedOf('bat') && !lifted.pots.p3, 'a growing seed comes back to the bag')
-ok(liftPot({}, 'pX')!.seed === null, 'an empty planter lifts freely')
+const carried = carryPot(grow, 'p3')!
+ok(!carried.p3 && carried[CARRIED + 'p3'] === grow.p3, 'a growing pot is carried with its planter, unchanged')
+ok(ripen(carried, t0 + 10 * BLOOM_MS).bloomed.length === 0, 'a carried pot does not bloom in the bag')
+const resettled = settlePot(carried, 'p9')
+ok(resettled.p9 === grow.p3 && Object.keys(resettled).length === 1, 'the next planter set down takes it back: seed, planting time intact')
+ok(ripen(resettled, t0 + BLOOM_MS).bloomed[0]?.species === 'bat', 'set down, it blooms on its own day')
+const empty = {}
+ok(carryPot(empty, 'pX') === empty && settlePot(empty, 'pY') === empty, 'an empty planter lifts freely; nothing carried = nothing settles')
+const two = { ...carryPot(plant({}, 'a', seedOf('owl'), t0 + 5)!, 'a')!, ...carryPot(plant({}, 'b', seedOf('fox'), t0)!, 'b')! }
+ok(settlePot(two, 'n1').n1?.seed === seedOf('fox'), 'the oldest carried pot settles first')
+ok(settlePot(resettled, 'p9') === resettled, 'a planter that already holds a pot takes nothing')
 
 // the Anemonyx: gaps 5-10 days, there that day only, one seed per visit, same days on every reload
 for (const salt of ['keeper-a', 'keeper-b', 'x']) {

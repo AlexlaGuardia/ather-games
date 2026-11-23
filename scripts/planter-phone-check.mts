@@ -104,7 +104,44 @@ const pots = (await read('ather.grimoire.v1'))?.pots ?? {}
 ok(!!pl.piece && pots[pl.piece.id]?.seed === SEED && (await bagN(SEED)) === 0, `5. a tap on the seed plants it: pot ${JSON.stringify(pl.piece ? pots[pl.piece.id] ?? null : null)}, bag ${await bagN(SEED)}`)
 ok(await p.evaluate(() => !!document.querySelector('[data-planter="growing"]')), '   the panel turns to Growing')
 await shot('pph-5-planted')
+// 7-9. M106 melee fix (world-meleeplanter, 11-23): three melee hits pick the GROWING planter up (the phone's real 'hit' button);
+//   the pot rides along (not lost, not bloomed); placed again by touch, the new planter holds the SAME pot: seed, planting
+//   time, tends, so the same growth day. (Before: melee skipped the pot, so the seed was lost.)
+const potBefore = pl.piece ? (await read('ather.grimoire.v1'))?.pots?.[pl.piece.id] ?? null : null
+await tap('[data-panel="planter"] [aria-label="Close"], [data-panel="planter"] button[title="Close"]'); await p.keyboard.press('Escape'); await sleep(600)
+let melee = { target: false, gone: false, inBag: 0, carried: null as unknown, seedsInBag: -1 }
+if (pl.piece) {
+  const st = await p.evaluate(() => (window as any).__ather.state()), sx = st.px ?? st.x, sz = st.pz ?? st.z, d = Math.hypot(pl.piece.x - sx, pl.piece.z - sz)
+  if (d > 2 || d < 1.2) { const ux = (sx - pl.piece.x) / (d || 1), uz = (sz - pl.piece.z) / (d || 1); await tp(pl.piece.x + ux * 1.6, pl.piece.z + uz * 1.6, 0) }
+  await aim(pl.piece.x, pl.piece.z, 0.3)
+  const id = pl.piece.id
+  melee.target = await poll(async () => p.evaluate((i: string) => (window as any).__melee?.target()?.id === i && !!document.querySelector('[data-touch="hit"]'), id), 8000)
+  for (let k = 0; k < 3 && melee.target; k++) { await tap('[data-touch="hit"]'); await sleep(150) }
+  melee.gone = await poll(async () => !(await pieces()).some(x => x.id === id), 5000)
+  melee.inBag = await bagN('spirit_planter'); melee.seedsInBag = await bagN(SEED)
+  melee.carried = (await read('ather.grimoire.v1'))?.pots?.['carried:' + id] ?? null
+  await shot('pph-7-melee-lifted')
+}
+ok(melee.target, "7. aimed at the growing planter, the phone shows its 'hit' button")
+ok(melee.gone && melee.inBag === 1, `   three hits: the planter is off the plot and back in the bag (${melee.inBag})`)
+ok(!!potBefore && JSON.stringify(melee.carried) === JSON.stringify(potBefore), `8. its pot rides along unchanged, not lost (${JSON.stringify(melee.carried)})`)
+// 9. place it again by touch: the new planter takes the same pot
+const slot = (((await read('open.inv.v1'))?.slots ?? []) as ({ id: string } | null)[]).findIndex(x => x?.id === 'spirit_planter')
+await tp(-133, 106, 0)
+const again = slot >= 0 && slot < 8 ? await placeBySlot(slot, 'spirit_planter') : { bar: false, piece: null }
+const potAfter = again.piece ? (await read('ather.grimoire.v1'))?.pots?.[again.piece.id] ?? null : null
+const left = Object.keys((await read('ather.grimoire.v1'))?.pots ?? {}).filter(k => k.startsWith('carried:')).length
+ok(!!again.piece && again.piece.id !== pl.piece?.id, `9. placed again by touch (slot ${slot + 1}, ${again.piece ? again.piece.id : 'none'})`)
+ok(!!potBefore && JSON.stringify(potAfter) === JSON.stringify(potBefore) && left === 0, `   it holds the SAME pot: seed ${potAfter?.seed}, planted at ${potAfter?.at} (was ${potBefore?.at}), tends ${JSON.stringify(potAfter?.tends)}; carried left ${left}`)
+let grow = { open: false, day: '' }
+if (again.piece) {
+  await useAt(again.piece.x, again.piece.z, 0.4)
+  await poll(async () => p.evaluate(() => !!document.querySelector('[data-planter="growing"]')), 5000)
+  grow = await p.evaluate(() => { const e = document.querySelector('[data-planter="growing"]'); return { open: !!e, day: (e?.closest('[data-panel="planter"]') ?? e)?.textContent?.match(/Day \d+ of \d+/)?.[0] ?? '' } })
+  await shot('pph-9-replanted')
+}
+ok(grow.open && grow.day === 'Day 1 of 3', `   its panel shows it still Growing, on its own day ("${grow.day}")`)
 ok(errs.length === 0, `6. 0 page errors${errs.length ? `: ${errs.join(' | ')}` : ''}`)
 await br.close()
-console.log(fails ? `FAIL (${fails})` : 'PASS: by touch at 390, a Planter Box points at the Spirit Planter + its recipe; a Spirit Planter placed by hand lists the bag seed and one tap plants it')
+console.log(fails ? `FAIL (${fails})` : 'PASS: by touch at 390, a Planter Box points at the Spirit Planter + its recipe; a Spirit Planter placed by hand lists the bag seed and one tap plants it; three melee hits lift the growing planter with its pot and, placed again, it holds the same seed on the same day')
 process.exit(fails ? 1 : 0)

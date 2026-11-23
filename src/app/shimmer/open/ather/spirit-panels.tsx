@@ -7,11 +7,10 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { HearthFrame, HearthButton, Well, H } from '../../ui/hearth'
 import { getInv, setInv, useInv } from '../shared/bag'
-import { give } from '../shared/inventory'
 import type { Bank } from './garden-bank'
 import { hudSay } from '../shared/hud-say'
 import { SPECIES_NAMES, type Species } from '../../spirits/spirit'
-import { SEED_NAME, seedIcon, speciesOf, plant, ripen, growth, liftPot, tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, type SeedId } from './spirit-seeds'
+import { SEED_NAME, seedIcon, speciesOf, plant, ripen, growth, settlePot, tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, type SeedId } from './spirit-seeds'
 import { GAME_DAY_MS } from './nodes'
 import { loadBook, saveBook, see, seenCount, freshBook, type Book } from './grimoire-book'
 import { GRIMOIRE_SIZE } from './plot'
@@ -42,16 +41,16 @@ export function useBook(): Book {
 }
 /** Pages the plot tiers count (plot.ts › RING_PAGES). */
 export const bookPages = () => seenCount(current())
-/** Picking a planter up: refuses one a spirit lives in; a growing seed goes back to the bag. Null = refuse (with a line). */
-export function liftPlanter(pieceId: string): boolean {
-  const b = current(), r = liftPot(b.pots, pieceId)
-  if (!r) { hudSay('A spirit lives in this planter. It stays.', 'info'); return false }
-  if (r.seed) {
-    const g = give(getInv(), r.seed, 1)
-    if (g.left) { hudSay('No room in the bag for the seed.', 'info'); return false }
-    setInv(g.inv)
-  }
-  if (r.pots !== b.pots) setBook({ ...b, pots: r.pots })
+/** M106 fix: the planters' pots, for a pickup (piece-lift.ts › liftPiece) to carry a growing pot with its planter. */
+export const getPots = () => current().pots
+/** Save the pots a pickup returned (unchanged = no write). */
+export function setPots(pots: Book['pots']) { const b = current(); if (pots !== b.pots) setBook({ ...b, pots }) }
+/** A Spirit Planter was just set down: it takes the oldest pot carried in the bag (seed, planting time, tends intact).
+ *  True = a carried seed went back into the ground here. */
+export function settlePlanter(pieceId: string): boolean {
+  const b = current(), next = settlePot(b.pots, pieceId)
+  if (next === b.pots) return false
+  setBook({ ...b, pots: next })
   return true
 }
 export const potOf = (pieceId: string) => current().pots[pieceId]

@@ -30,11 +30,11 @@ r = strike({ id: 's1', n: 2, at: 0 }, 'k1', 100); ok(r.n === 1, 'a new target st
 ok(!canSwing(1000, 1000 + MELEE_CD_MS - 1) && canSwing(1000, 1000 + MELEE_CD_MS), 'swing cooldown')
 
 // refund
-{ const inv = newInv(), b = breakTarget(w, { kind: 'piece', id: 's1' }, inv)
-  ok(!!b && b.works.pieces.length === 0 && countOf(b.inv, 'goldwood_stool') === 1, 'a broken stool comes back to the bag whole')
-  const c = breakTarget(w, { kind: 'chest', id: 'k1' }, inv)
-  ok(!!c && c.works.chests.length === 0 && c.works.pieces.length === 1, 'a broken placed Keepstone comes back, the rest stands')
+{ const inv = newInv(), b = breakTarget(w, { kind: 'piece', id: 's1' }, inv, {})
+  ok(!!b && b !== 'spirit' && b.works.pieces.length === 0 && countOf(b.inv, 'goldwood_stool') === 1, 'a broken stool comes back to the bag whole')
+  const c = breakTarget(w, { kind: 'chest', id: 'k1' }, inv, {})
+  ok(!!c && c !== 'spirit' && c.works.chests.length === 0 && c.works.pieces.length === 1, 'a broken placed Keepstone comes back, the rest stands')
   let full = newInv(); for (let i = 0; i < 64; i++) full = give(full, 'goldwood_log', 999).inv
-  ok(breakTarget(w, { kind: 'piece', id: 's1' }, full) === null, 'a full bag: nothing moves') }
+  ok(breakTarget(w, { kind: 'piece', id: 's1' }, full, {}) === null, 'a full bag: nothing moves') }
 
 console.log(`melee: ${pass} pass, ${fails.length} fail`); for (const f of fails) console.log('  FAIL', f); if (fails.length) process.exit(1)
