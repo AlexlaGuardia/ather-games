@@ -7,10 +7,12 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { HearthFrame, HearthButton, Well, H } from '../../ui/hearth'
 import { getInv, setInv, useInv } from '../shared/bag'
-import { countOf, give, take } from '../shared/inventory'
+import { give } from '../shared/inventory'
+import type { Bank } from './garden-bank'
 import { hudSay } from '../shared/hud-say'
 import { SPECIES_NAMES, type Species } from '../../spirits/spirit'
-import { SEED_IDS, SEED_NAME, seedIcon, speciesOf, plant, ripen, growth, liftPot, BLOOM_MS, type SeedId } from './spirit-seeds'
+import { SEED_NAME, seedIcon, speciesOf, plant, ripen, growth, liftPot, tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, type SeedId } from './spirit-seeds'
+import { GAME_DAY_MS } from './nodes'
 import { loadBook, saveBook, see, seenCount, freshBook, type Book } from './grimoire-book'
 import { GRIMOIRE_SIZE } from './plot'
 
@@ -67,35 +69,61 @@ function useManifest() {
 const nameOf = (s: Species) => SPECIES_NAMES[s]
 const lab: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: H.inkSoft }
 
-/** E at a planter. */
-export function PlanterPanel({ pieceId, onClose, footer }: { pieceId: string; onClose: () => void; footer: React.ReactNode }) {
-  const b = useBook(), inv = useInv(), m = useManifest()
+/** The garden bank's store, handed in by workshop.tsx (it owns it; importing it here would be a cycle). */
+export type BankStore = { use: () => Bank; get: () => Bank; set: (b: Bank) => void }
+/** Rough real time: "12 min", "2 h 5 min". */
+const realIn = (ms: number) => { const m = Math.max(0, Math.ceil(ms / 60000)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min` }
+
+/** E at a planter. M106: lists every Mana Seed on the plot (bag + the garden bank every chest opens onto); Tend replaces Turn. */
+export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: string; onClose: () => void; footer: React.ReactNode; bank: BankStore }) {
+  const b = useBook(), inv = useInv(), bk = bank.use(), m = useManifest()
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const t = setInterval(() => { setNow(Date.now()); const s = ripenBook(); if (s.length) hudSay(`A ${nameOf(s[0])} bloomed.`, 'item', 4) }, 1000); ripenBook(); return () => clearInterval(t) }, [])
   const pot = b.pots[pieceId]
-  const seeds = SEED_IDS.filter(id => countOf(inv, id) > 0)
+  const seeds = seedsOnPlot(inv, bk)
   const doPlant = (id: SeedId) => {
-    const next = plant(current().pots, pieceId, id, Date.now()), i = take(getInv(), id, 1)
-    if (!next || !i) return
-    setInv(i); setBook({ ...current(), pots: next }); hudSay('Planted. Give it time.', 'item', 3)
+    const next = plant(current().pots, pieceId, id, Date.now()), t = takeSeed(getInv(), bank.get(), id)
+    if (!next || !t) return
+    if (t.from === 'bag') setInv(t.inv); else bank.set(t.bank)
+    setBook({ ...current(), pots: next }); hudSay('Planted. Give it time.', 'item', 3)
+  }
+  const doTend = () => {
+    const t = Date.now(), next = tend(current().pots, pieceId, t)
+    if (!next) { hudSay('Tended today already.', 'info'); return }   // TODO @lark
+    setBook({ ...current(), pots: next }); setNow(t)
+    const s = ripenBook(t)
+    hudSay(s.length ? `A ${nameOf(s[0])} bloomed.` : 'Tended.', 'item', 3)   // TODO @lark
   }
   const sp = pot ? speciesOf(pot.seed) : null, card = sp && m ? m[nameOf(sp)] : null
+  const growing = pot && !pot.bloomed ? pot : null
+  const due = growing ? bloomAt(growing) : 0
+  // the bloom as a day of its growing (1-based from planting) and the real wait; the next tend opens with the next game day
+  const dueDay = growing ? Math.floor((due - growing.at) / GAME_DAY_MS) + 1 : 0
+  const nextTend = (gameDay(now) + 1) * GAME_DAY_MS - now
   return (
     <HearthFrame title="Spirit Planter" maxWidth={420} onClose={onClose} fixed dataPanel="planter">
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
         {!pot && (seeds.length
           ? <><div style={lab}>Plant a seed</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {seeds.map(id => <button key={id} data-act="plant-seed" data-seed={id} onClick={() => doPlant(id)} title={SEED_NAME} style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer' }}>
-                  <Well size={52}><img src={seedIcon(id)} alt={SEED_NAME} width={36} height={36} /></Well>
+                {seeds.map(s => <button key={s.id} data-act="plant-seed" data-seed={s.id} data-bag={s.bag} data-bank={s.bank} onClick={() => doPlant(s.id)} title={SEED_NAME} style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', position: 'relative' }}>
+                  <Well size={52}><img src={seedIcon(s.id)} alt={SEED_NAME} width={36} height={36} /></Well>
+                  <span style={{ position: 'absolute', right: 3, bottom: 1, fontSize: 11, fontWeight: 700, color: H.ink, fontVariantNumeric: 'tabular-nums' }}>{s.bag + s.bank}</span>
                 </button>)}
               </div></>
           : <div data-planter="empty" style={{ fontSize: 13, color: H.inkSoft }}>Empty. A Mana Seed would grow here, if you had one.</div>)}
-        {pot && !pot.bloomed && (
-          <div data-planter="growing" data-growth={growth(pot, now).toFixed(2)}>
-            <div style={lab}>Growing</div>
-            <div style={{ height: 8, borderRadius: 4, background: '#0002', overflow: 'hidden', marginTop: 6 }}><div style={{ width: `${growth(pot, now) * 100}%`, height: '100%', background: '#e8c25a' }} /></div>
-            <div style={{ fontSize: 12, color: H.inkSoft, marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>{Math.max(0, Math.ceil((pot.at + BLOOM_MS - now) / 60000))} min</div>
+        {growing && (
+          <div data-planter="growing" data-growth={growth(growing, now).toFixed(2)} data-day={growDay(growing, now)} data-bloom-at={due} data-tends={growing.tends?.length ?? 0}>
+            {/* TODO @lark: the growing lines below are placeholders */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={lab}>Growing</span>
+              <span style={{ fontSize: 12, color: H.inkSoft, fontVariantNumeric: 'tabular-nums' }}>Day {Math.min(growDay(growing, now), BLOOM_DAYS)} of {BLOOM_DAYS}</span>
+            </div>
+            <div style={{ height: 8, borderRadius: 4, background: '#0002', overflow: 'hidden', marginTop: 6 }}><div style={{ width: `${growth(growing, now) * 100}%`, height: '100%', background: '#e8c25a' }} /></div>
+            <div data-bloom-line style={{ fontSize: 12, color: H.inkSoft, marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
+              Blooms {growing.v === 2 ? `on day ${dueDay}${(due - growing.at) % GAME_DAY_MS === 0 ? ' (at its start)' : ''}, ` : ''}in about {realIn(due - now)}
+            </div>
+            {growing.v === 2 && tendedToday(growing, now) && <div style={{ fontSize: 12, color: H.inkSoft }}>Next tend in about {realIn(nextTend)}</div>}
           </div>
         )}
         {pot?.bloomed && sp && (
@@ -104,7 +132,12 @@ export function PlanterPanel({ pieceId, onClose, footer }: { pieceId: string; on
             <div><div style={{ fontWeight: 700 }}>{nameOf(sp)}</div><div style={{ fontSize: 12.5, color: H.inkSoft }}>It bloomed here, and here it stays.</div></div>
           </div>
         )}
-        {footer}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+          {growing && growing.v === 2 && (canTend(growing, now)
+            ? <span data-act="tend-planter"><HearthButton small onClick={doTend}>Tend</HearthButton></span>
+            : <span data-act="tend-planter" data-tended="1"><HearthButton small disabled onClick={doTend}>Tended today</HearthButton></span>)}
+          {footer}
+        </div>
       </div>
     </HearthFrame>
   )

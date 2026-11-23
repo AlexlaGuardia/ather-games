@@ -14,30 +14,73 @@
 // ★ PURE. No React, no storage (grimoire-book.ts + the page own the saves).
 import type { Species } from '../../spirits/spirit'
 import { GAME_DAY_MS } from './nodes'
-import { SPECIES, seedOf, speciesOf, type SeedId } from './seed-items'
+import { SPECIES, SEED_IDS, seedOf, speciesOf, type SeedId } from './seed-items'
+import { countOf, take, type Inv } from '../shared/inventory'
+import { bankCount, bankTake, type Bank } from './garden-bank'
 export * from './seed-items'
 
 // ── the planter ─────────────────────────────────────────────────────────────────────────────────────────────────────
-/** How long a planted seed takes to bloom: a quarter of a game day (16 real minutes). Dial. */
-export const BLOOM_MS = GAME_DAY_MS / 4
-/** What one planter holds: nothing, a seed growing, or the spirit that bloomed from it (it stays: one spirit per planter). */
-export type Pot = { seed: SeedId; at: number; bloomed?: true }
+// M106 (Alex 11-23): growth is counted in GAME DAYS, and the planter's Turn became TEND. "if you tend for the first two days
+// the seed blooms at the start of the 3rd day not the end". Untended: plant + BLOOM_DAYS. Each tend (once per game day per
+// planter, the calendar day = floor(now / GAME_DAY_MS), the Anemonyx's calendar) pulls the bloom TEND_MS earlier, so tending
+// on day 1 and day 2 = plant + 2 days. A tend that puts the bloom in the past = it blooms now (ripen sees it due).
+/** Game days a seed takes to bloom untended. Dial. */
+export const BLOOM_DAYS = 3
+/** Untended bloom time (3 game days = 192 real minutes). */
+export const BLOOM_MS = BLOOM_DAYS * GAME_DAY_MS
+/** What one tend takes off the wait: half a game day. Dial. */
+export const TEND_MS = GAME_DAY_MS / 2
+/** M76's rule, kept ONLY for pots planted before M106 (no `v`): a quarter of a game day, so a save that was due still blooms. */
+export const LEGACY_BLOOM_MS = GAME_DAY_MS / 4
+/** What one planter holds: nothing, a seed growing, or the spirit that bloomed from it (it stays: one spirit per planter).
+ *  `v: 2` = planted under the day rule (M106); `tends` = the game days it was tended on. No `v` = an M76 pot (16-min rule). */
+export type Pot = { seed: SeedId; at: number; bloomed?: true; v?: 2; tends?: number[] }
 export type Pots = Readonly<Record<string, Pot>>
+/** The game-day calendar (anemonyx-view.tsx counts the same days). */
+export const gameDay = (t: number) => Math.floor(t / GAME_DAY_MS)
 
 export function plant(pots: Pots, pieceId: string, seed: SeedId, now: number): Pots | null {
   if (pots[pieceId]) return null
-  return { ...pots, [pieceId]: { seed, at: now } }
+  return { ...pots, [pieceId]: { seed, at: now, v: 2, tends: [] } }
 }
+/** When this pot blooms (its planting time + the wait, less what the tends took off). */
+export const bloomAt = (p: Pot) => p.v === 2 ? p.at + BLOOM_MS - (p.tends?.length ?? 0) * TEND_MS : p.at + LEGACY_BLOOM_MS
 /** 0..1 of the way to the bloom. */
-export const growth = (p: Pot, now: number) => (p.bloomed ? 1 : Math.max(0, Math.min(1, (now - p.at) / BLOOM_MS)))
+export const growth = (p: Pot, now: number) => (p.bloomed ? 1 : Math.max(0, Math.min(1, (now - p.at) / Math.max(1, bloomAt(p) - p.at))))
+/** Tended already this game day? */
+export const tendedToday = (p: Pot, now: number) => !!p.tends?.includes(gameDay(now))
+/** Can this pot take a tend now: growing, under the day rule, not yet due, not tended today. */
+export const canTend = (p: Pot | undefined, now: number): p is Pot => !!p && !p.bloomed && p.v === 2 && bloomAt(p) > now && !tendedToday(p, now)
+/** Tend a planter: once per game day. Null = refused (empty, bloomed, an old pot, or tended today already). */
+export function tend(pots: Pots, pieceId: string, now: number): Pots | null {
+  const p = pots[pieceId]
+  if (!canTend(p, now)) return null
+  return { ...pots, [pieceId]: { ...p, tends: [...(p.tends ?? []), gameDay(now)] } }
+}
+/** Which day of its growing the pot is on (1-based, from its planting). */
+export const growDay = (p: Pot, now: number) => Math.max(1, Math.floor((now - p.at) / GAME_DAY_MS) + 1)
 /** Every pot whose time has come blooms; returns the new pots and the species that just bloomed, in planting order. */
 export function ripen(pots: Pots, now: number): { pots: Pots; bloomed: { pieceId: string; species: Species }[] } {
-  const due = Object.entries(pots).filter(([, p]) => !p.bloomed && now - p.at >= BLOOM_MS).sort((a, b) => a[1].at - b[1].at)
+  const due = Object.entries(pots).filter(([, p]) => !p.bloomed && now >= bloomAt(p)).sort((a, b) => a[1].at - b[1].at)
   if (!due.length) return { pots, bloomed: [] }
   const next: Record<string, Pot> = { ...pots }
   for (const [id, p] of due) next[id] = { ...p, bloomed: true }
   return { pots: next, bloomed: due.map(([pieceId, p]) => ({ pieceId, species: speciesOf(p.seed) })) }
 }
+
+// ── the seeds on the plot (M106): the bag and the garden bank (every chest is a door into that one pool) ───────────────
+/** Every Mana Seed the keeper holds on the plot, grouped by seed: how many in the bag, how many in the bank. */
+export function seedsOnPlot(inv: Inv, bank: Bank): { id: SeedId; bag: number; bank: number }[] {
+  return SEED_IDS.map(id => ({ id, bag: countOf(inv, id), bank: bankCount(bank, id) })).filter(s => s.bag + s.bank > 0)
+}
+/** Take one seed: from the bag first, else from the bank (through the bank's own bankTake). Null = none anywhere. */
+export function takeSeed(inv: Inv, bank: Bank, id: SeedId): { inv: Inv; bank: Bank; from: 'bag' | 'bank' } | null {
+  const i = take(inv, id, 1)
+  if (i) return { inv: i, bank, from: 'bag' }
+  const b = bankTake(bank, id, 1)
+  return b ? { inv, bank: b, from: 'bank' } : null
+}
+
 /** Picking a planter up: an empty one comes up freely; a growing seed comes back to the bag; a spirit lives there = no. */
 export function liftPot(pots: Pots, pieceId: string): { pots: Pots; seed: SeedId | null } | null {
   const p = pots[pieceId]

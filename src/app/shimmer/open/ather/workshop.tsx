@@ -45,7 +45,7 @@ import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported,
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, ALC_LIVE, type Job } from './furniture'
 import { AlchemyPanel } from './alchemy-panel'
-import { PlanterPanel, GrimoirePanel, liftPlanter, useBook } from './spirit-panels'
+import { PlanterPanel, GrimoirePanel, liftPlanter, useBook, type BankStore } from './spirit-panels'
 import { BLOOM_MS } from './spirit-seeds'
 import { BrewingPanel } from './brewing-panel'
 import { useBrewing, openPartyBrew } from './party-brew-net'
@@ -822,6 +822,8 @@ export function setBank(b: Bank) { bank = b; saveBank(b); bsubs.forEach(f => f()
 /** M68 s2: the garden bank now (the one-pedestal guard reads it outside React) */
 export const currentBank = () => getB()
 export const useBank = () => useSyncExternalStore(f => { bsubs.add(f); return () => { bsubs.delete(f) } }, getB, () => SERVER_BANK)
+/** M106: the planter takes a seed from the bank through this same store (spirit-panels.tsx cannot import it: a cycle). */
+const PLANTER_BANK: BankStore = { use: useBank, get: getB, set: setBank }
 
 // placing: which room, its turn, and where the ghost stands now (set by the scene each frame)
 // `hand` (M45): the thing came from the HOTBAR (held in hand), not from a menu. It follows the stance: stow or swap and the
@@ -2078,7 +2080,8 @@ function PiecePanel({ id, owned, onClose }: { id: string; owned: ReadonlySet<str
       <span data-act="pickup-piece"><HearthButton small onClick={pickUp}>Pick up</HearthButton></span>
     </div>
   )
-  if (f.spirit === 'planter') return <PlanterPanel pieceId={id} onClose={onClose} footer={spiritFooter} />   // M76
+  // M106 (Alex 11-23): the planter's Turn became TEND (inside PlanterPanel); turning it stays a placing act (R / E hold / the bar's Turn)
+  if (f.spirit === 'planter') return <PlanterPanel pieceId={id} onClose={onClose} bank={PLANTER_BANK} footer={<span data-act="pickup-piece"><HearthButton small onClick={pickUp}>Pick up</HearthButton></span>} />   // M76
   if (f.spirit === 'pedestal') return <GrimoirePanel onClose={onClose} footer={spiritFooter} />            // M76
   if (f.alc && brewing && !brewing.poured) return <BrewingPanel station={f.alc} onClose={onClose} />   // M57 s3b: a brewing is open here
   if (f.alc) return (

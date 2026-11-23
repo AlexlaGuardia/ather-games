@@ -9,10 +9,14 @@
 //  3. E at the pedestal: the grimoire panel; its page 1 + count == the save.  4. Pick up on the planter refuses (a spirit lives there).
 //  5. the Anemonyx: the prompt 'E · the Anemonyx' at the Green's west edge; E = one Mana Seed in the bag, visit marked met;
 //     a second E gives nothing.  6. phone 390x844: the grimoire panel fits.
+// M106 (play-M106, 11-23): a 2nd planter + one bat seed held ONLY in the garden bank (every chest opens onto it): the panel
+//  lists it (bag 0, bank 1) and it plants from there (bank -1). The planter's footer has Tend (no Turn): one tend = the pot
+//  records today's game day; the button turns 'Tended today' (disabled) and a 2nd press records nothing. Phone: the
+//  planter panel fits 390 wide with Tend on it.
 //   npx tsx scripts/spirit-planter-check.mts [--url http://localhost:3203] [--out dir]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
-import { BLOOM_MS, visitOn } from '../src/app/shimmer/open/ather/spirit-seeds'
+import { BLOOM_MS, TEND_MS, gameDay, visitOn } from '../src/app/shimmer/open/ather/spirit-seeds'
 import { GAME_DAY_MS } from '../src/app/shimmer/open/ather/nodes'
 import { GATE } from '../src/app/shimmer/open/ather/plot'
 import { MIDDLE_HALF } from '../src/app/shimmer/open/ather/cluster'
@@ -22,6 +26,7 @@ const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/spir
 mkdirSync(out, { recursive: true })
 const ANEMONYX = { x: GATE.x - MIDDLE_HALF - 8, z: GATE.z, r: 6 }   // anemonyx-view.tsx › ANEMONYX (a .tsx with three imports)
 const PLANTER = { id: 'sp-check', item: 'spirit_planter', x: -130, z: 102.5, q: 0, placedAt: 1 }
+const PLANTER2 = { id: 'sp-check2', item: 'spirit_planter', x: -134, z: 102.5, q: 0, placedAt: 1 }
 const PEDESTAL = { id: 'gp-check', item: 'grimoire_pedestal', x: -126, z: 102.5, q: 0, placedAt: 1 }
 // a book start day that makes today a visit day (anonymous keeper: salt = 'anemonyx:<since>')
 const today = Math.floor(Date.now() / GAME_DAY_MS)
@@ -40,7 +45,8 @@ await p.evaluateOnNewDocument((pieces: unknown[], key: string, since: number) =>
   localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
   localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [], chests: [], pieces }))
   localStorage.setItem(key, JSON.stringify({ v: 1, pages: [], pots: {}, met: [], since }))
-}, [PLANTER, PEDESTAL], KEY, since)
+  localStorage.setItem('open.bank.v1', JSON.stringify({ v: 1, stacks: [{ id: 'mana_seed_bat', n: 1 }] }))   // M106: a seed only in the bank
+}, [PLANTER, PLANTER2, PEDESTAL], KEY, since)
 const read = (k: string) => p.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), k)
 const bag = async () => { const r: Record<string, number> = {}; for (const s of ((await read('open.inv.v1'))?.slots ?? []) as ({ id: string; n: number } | null)[]) if (s) r[s.id] = (r[s.id] ?? 0) + s.n; return r }
 const seeds = (b: Record<string, number>) => Object.entries(b).filter(([k]) => k.startsWith('mana_seed_')).reduce((a, [, n]) => a + n, 0)
@@ -57,11 +63,28 @@ await boot()
 await eAt(PLANTER.x, PLANTER.z, 0.4)
 res.planterPanel = await p.evaluate(() => !!document.querySelector('[data-panel="planter"]'))
 res.plainCard = await p.evaluate(() => !!document.querySelector('[data-panel="piece"]'))
+res.list = await p.evaluate(() => [...document.querySelectorAll('[data-act="plant-seed"]')].map(e => `${e.getAttribute('data-seed')}:${e.getAttribute('data-bag')}/${e.getAttribute('data-bank')}`).sort().join())
 await shot('sp-1-empty')
 res.planted = await click('[data-act="plant-seed"][data-seed="mana_seed_owl"]'); await sleep(600)
 res.growing = await p.evaluate(() => !!document.querySelector('[data-planter="growing"]'))
 res.afterPlant = { seeds: seeds(await bag()), pot: (await read(KEY))?.pots?.[PLANTER.id] ?? null }
+// M106: Tend, not Turn; a 2nd tend the same game day is refused
+res.turnInPanel = await p.evaluate(() => !!document.querySelector('[data-panel="planter"] [data-act="turn-piece"]') || [...document.querySelectorAll('[data-panel="planter"] button')].some(b => b.textContent?.trim() === 'Turn'))
+res.tendBefore = await p.evaluate(() => { const e = document.querySelector('[data-act="tend-planter"]'); return e ? { tended: e.getAttribute('data-tended'), text: e.textContent?.trim() } : null })
+res.dayLine = await p.evaluate(() => document.querySelector('[data-planter="growing"]')?.textContent ?? '')
+await click('[data-act="tend-planter"] button'); await sleep(700)
+const tend1 = (await read(KEY))?.pots?.[PLANTER.id]
+res.tendAfter = await p.evaluate(() => { const e = document.querySelector('[data-act="tend-planter"]'); return e ? { tended: e.getAttribute('data-tended'), text: e.textContent?.trim(), disabled: !!e.querySelector('button')?.disabled } : null })
+await click('[data-act="tend-planter"] button'); await sleep(700)
+const tend2 = (await read(KEY))?.pots?.[PLANTER.id]
+res.tends = { first: tend1?.tends ?? null, second: tend2?.tends ?? null, today: gameDay(Date.now()), bloomAt: Number(await p.evaluate(() => document.querySelector('[data-planter="growing"]')?.getAttribute('data-bloom-at'))), at: tend1?.at }
 await shot('sp-2-growing'); await closeAll()
+// M106: a seed held only in the bank plants from there
+await eAt(PLANTER2.x, PLANTER2.z, 0.4)
+res.bankListed = await p.evaluate(() => { const e = document.querySelector('[data-act="plant-seed"][data-seed="mana_seed_bat"]'); return e ? `${e.getAttribute('data-bag')}/${e.getAttribute('data-bank')}` : null })
+res.bankPlanted = await click('[data-act="plant-seed"][data-seed="mana_seed_bat"]'); await sleep(700)
+res.afterBankPlant = { bank: (((await read('open.bank.v1'))?.stacks ?? []) as { id: string; n: number }[]).filter(s => s.id === 'mana_seed_bat').reduce((a, s) => a + s.n, 0), pot: (await read(KEY))?.pots?.[PLANTER2.id] ?? null }
+await shot('sp-2b-from-bank'); await closeAll()
 // 2. move the planting back past the bloom time, reload
 await p.evaluate((key: string, id: string, back: number) => { const b = JSON.parse(localStorage.getItem(key)!); b.pots[id].at -= back; localStorage.setItem(key, JSON.stringify(b)) }, KEY, PLANTER.id, BLOOM_MS + 1000)
 await boot()
@@ -93,6 +116,9 @@ res.afterSecond = seeds(await bag())
 res.promptAfter = await p.evaluate(() => document.body.innerText.includes('E · the Anemonyx'))
 // 6. phone
 await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true }); await boot()   // a touch viewport remounts the page: reload into it
+await eAt(PLANTER2.x, PLANTER2.z, 0.4)
+res.phonePlanter = await p.evaluate(() => { const e = document.querySelector('[data-panel="planter"]'); if (!e) return null; const r = e.getBoundingClientRect(), t = document.querySelector('[data-act="tend-planter"] button')?.getBoundingClientRect(); return { l: r.left, r: r.right, w: innerWidth, tend: !!t && t.right <= innerWidth && t.left >= 0 } })
+await shot('sp-6-phone-planter'); await closeAll()
 await eAt(PEDESTAL.x, PEDESTAL.z, 0.9)
 res.phone = await p.evaluate(() => { const e = document.querySelector('[data-panel="grimoire"]'); if (!e) return null; const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, w: innerWidth } })
 await shot('sp-6-phone')
@@ -106,7 +132,14 @@ const checks: Record<string, boolean> = {
   planterPanel: res.planterPanel === true && res.plainCard === false,
   plant: res.planted === true && res.growing === true && ap.seeds === 0 && ap.pot?.seed === 'mana_seed_owl',
   bloom: res.bloomed === 'owl' && !!bk && bk.length === 1 && bk[0].species === 'owl' && bk[0].stage === 'seen',
-  pickupRefused: res.piecesAfterPickup === 2,
+  pickupRefused: res.piecesAfterPickup === 3,
+  listsBagAndBank: res.list === 'mana_seed_bat:0/1,mana_seed_owl:1/0',
+  noTurn: res.turnInPanel === false,
+  tend: (res.tendBefore as any)?.text === 'Tend' && (res.tendBefore as any)?.tended === null && (res.tends as any).first?.length === 1 && (res.tends as any).first[0] === (res.tends as any).today
+    && (res.tendAfter as any)?.text === 'Tended today' && (res.tendAfter as any)?.disabled === true && (res.tends as any).second?.length === 1
+    && (res.tends as any).bloomAt === (res.tends as any).at + BLOOM_MS - TEND_MS && String(res.dayLine).includes('Day 1 of 3'),
+  fromBank: res.bankListed === '0/1' && res.bankPlanted === true && (res.afterBankPlant as any).bank === 0 && (res.afterBankPlant as any).pot?.seed === 'mana_seed_bat',
+  phonePlanter: !!res.phonePlanter && (res.phonePlanter as any).l >= 0 && (res.phonePlanter as any).r <= (res.phonePlanter as any).w + 0.5 && (res.phonePlanter as any).tend === true,
   grimoire: g.open && g.count === '1' && g.p1 === 'owl' && g.s1 === 'seen' && g.p2 === 'empty' && g.slots === 10 && res.pageOpen === true,
   anemonyx: res.prompt === true && m.seeds === seedsBefore + 1 && (m.met?.length ?? 0) === 1 && res.afterSecond === seedsBefore + 1 && res.promptAfter === false,
   phone: !!ph && ph.l >= 0 && ph.r <= ph.w + 0.5,
@@ -114,5 +147,5 @@ const checks: Record<string, boolean> = {
 }
 const pass = Object.values(checks).every(Boolean)
 console.log(JSON.stringify(checks))
-console.log(pass ? 'PASS: plant a Mana Seed -> its own species blooms + takes grimoire page 1 (SEEN) == save; pedestal shows it; a spirit-filled planter stays; the Anemonyx gives one seed on her day; phone fits' : 'FAIL')
+console.log(pass ? 'PASS: M106 a bank-only seed lists + plants from the bank (bank -1), Tend once per game day (2nd refused), no Turn on the planter, phone planter fits; plant a Mana Seed -> its own species blooms + takes grimoire page 1 (SEEN) == save; pedestal shows it; a spirit-filled planter stays; the Anemonyx gives one seed on her day; phone fits' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)

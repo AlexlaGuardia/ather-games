@@ -36,7 +36,11 @@ export function parseBook(v: unknown): Book {
   if (!o || typeof o !== 'object') return freshBook()
   const pages = Array.isArray(o.pages) ? o.pages.filter((p): p is Page => !!p && typeof p.species === 'string' && (p.stage === 'seen' || p.stage === 'bonded')) : []
   const pots: Record<string, Pots[string]> = {}
-  for (const [id, p] of Object.entries(o.pots ?? {})) if (p && isSeed(p.seed) && typeof p.at === 'number') pots[id] = p.bloomed ? { seed: p.seed, at: p.at, bloomed: true } : { seed: p.seed, at: p.at }
+  for (const [id, p] of Object.entries(o.pots ?? {})) if (p && isSeed(p.seed) && typeof p.at === 'number') {
+    // M106: v 2 = the day rule, with the game days it was tended on; no v = an M76 pot (keeps its 16-min promise)
+    const day = p.v === 2 ? { v: 2 as const, tends: Array.isArray(p.tends) ? p.tends.filter((d: unknown): d is number => typeof d === 'number' && Number.isInteger(d)) : [] } : {}
+    pots[id] = p.bloomed ? { seed: p.seed, at: p.at, ...day, bloomed: true } : { seed: p.seed, at: p.at, ...day }
+  }
   const met = Array.isArray(o.met) ? o.met.filter((k): k is number => Number.isInteger(k)) : []
   const since = Number.isInteger(o.since) ? o.since : undefined
   return since === undefined ? { v: 1, pages, pots, met } : { v: 1, pages, pots, met, since }
