@@ -151,25 +151,39 @@ try {
     await sleep(6000)
     await kp.mouse.click(550, 380); await sleep(800)
     const yaw = Math.atan2(-P.ax, -P.az)
-    await A('tp', P.x - P.ax * 30, P.z - P.az * 30, yaw)
-    await poll(async () => (await kp.evaluate(() => (window as any).__groundPending?.() ?? 0)) === 0, 120000)
-    await sleep(2500)
-    const gP = await A('ground', P.x, P.z) as number, gRim = await A('ground', P.x - P.ax * 30, P.z - P.az * 30) as number
-    ok(Math.abs(gP - gRim) < 6, `D. the game's ground at P ${gP.toFixed(1)} m = the rim's ${gRim.toFixed(1)} m (no pit)`)
-    await kp.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'F24' }))); await A('look', yaw, -0.2)
-    await kp.keyboard.down('KeyW')
-    let fell = false, crossed = false, last = { x: 0, z: 0 }
-    const t0 = Date.now()
-    while (Date.now() - t0 < 60000) {
-      const s = await kp.evaluate(() => { const st = (window as any).__ather.state(); return { x: st.px, z: st.pz, f: !!(window as any).__ather.falling?.() } })
-      last = s; if (s.f) fell = true
-      const along = (s.x - P.x) * P.ax + (s.z - P.z) * P.az
-      if (along > 26) { crossed = true; break }
-      await sleep(120)
+    // a tree may grow on the erased ground now (it is ground): try a few lanes across, side by side, until one is clear of trunks
+    let fell = false, crossed = false, last = { x: 0, z: 0 }, lane = 0
+    const bx = P.az, bz = P.ax   // sideways along the strip
+    for (const off of [0, 9, -9, 18, -18]) {
+      lane = off
+      await A('tp', P.x - P.ax * 24 + bx * off, P.z - P.az * 24 + bz * off, yaw)   // just outside the generated lip (VOID_HALF + VOID_FADE = 22)
+      await poll(async () => (await kp.evaluate(() => (window as any).__groundPending?.() ?? 0)) === 0, 120000)
+      await sleep(2000)
+      if (off === 0) {
+        const gP = await A('ground', P.x, P.z) as number, gRim = await A('ground', P.x - P.ax * 30, P.z - P.az * 30) as number
+        ok(Math.abs(gP - gRim) < 6, `D. the game's ground at P ${gP.toFixed(1)} m = the rim's ${gRim.toFixed(1)} m (no pit)`)
+      }
+      await kp.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'F24' }))); await A('look', yaw, -0.2)
+      await kp.keyboard.down('KeyW')
+      const t0 = Date.now(); let lastAlong = -99, still = Date.now(), side = 0
+      while (Date.now() - t0 < 150000) {   // the box renders a few fps in SwiftShader: the walk is slow
+        const s = await kp.evaluate(() => { const st = (window as any).__ather.state(); return { x: st.px, z: st.pz, f: !!(window as any).__ather.falling?.() } })
+        last = s; if (s.f) fell = true
+        const along = (s.x - P.x) * P.ax + (s.z - P.z) * P.az
+        if (along > 23) { crossed = true; break }   // past the far lip
+        if (along > lastAlong + 0.5) { lastAlong = along; still = Date.now() }   // progress: 0.5 m in 8 s, or it is blocked
+        if (Date.now() - still > 8000) {   // blocked (a trunk): step round it like a player would, then on
+          if (++side > 6) break
+          const k = side % 2 ? 'KeyA' : 'KeyD'; await kp.keyboard.up('KeyW'); await kp.keyboard.down(k); await sleep(900 * Math.ceil(side / 2)); await kp.keyboard.up(k); await kp.keyboard.down('KeyW'); still = Date.now()
+        }
+        await sleep(120)
+      }
+      await kp.keyboard.up('KeyW')
+      console.log(`   lane ${off} m: ${((last.x - P.x) * P.ax + (last.z - P.z) * P.az).toFixed(1)} m past P after ${((Date.now() - t0) / 1000).toFixed(0)} s, ${side} sidesteps`)
+      if (crossed || fell) break
     }
-    await kp.keyboard.up('KeyW')
     await kp.screenshot({ path: `${out}/3-keeper-crossed.png` })
-    ok(!fell && crossed, `D. the keeper walked across where the void was: fell ${fell}, ended at (${last.x.toFixed(1)}, ${last.z.toFixed(1)}), ${((last.x - P.x) * P.ax + (last.z - P.z) * P.az).toFixed(1)} m past P`)
+    ok(!fell && crossed, `D. the keeper walked across where the void was (lane ${lane} m): fell ${fell}, ended at (${last.x.toFixed(1)}, ${last.z.toFixed(1)}), ${((last.x - P.x) * P.ax + (last.z - P.z) * P.az).toFixed(1)} m past P`)
     await kc.close()
   }
 
