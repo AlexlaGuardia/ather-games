@@ -278,6 +278,8 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 
+- **Void look (11-23, LIVE d88c7482):** matte black floor, 4 black fog planes thinning upward, sparse purple flecks. Before/after: docs/looks/voids-2026-11-23-{before,after}.png. Hub read: the black reads, but from the side it is a flat black slab, the near rim is a hard edge, and the depth/fog barely shows. Look on your phone: more fog / softer rim / more or fewer flecks? (dials HAZE_LAYERS, uGlim in void-look.tsx)
+
 - **World Builder Fly (11-23, LIVE a2f36e26):** click Fly = pointer lock + crosshair (Esc frees; toggle in the Fly row for the old drag mode); hold left to sculpt where you look; `-`/`=` step strength 0.1-3 (max was 1), `[` `]` radius. Overview map under the tile view (click a tile to open it). Calls: mouse sensitivity OK? each vertex caps at ±60 m per edit: enough?
 - **M100 map pan + zoom (11-23, LIVE):** press M, drag / wheel / pinch, Reset view. Feel on your phone?
 
