@@ -137,7 +137,8 @@ import { loadTools, saveTools, easeOf, xpOf, wearRinstick, TOOLS_EVENT } from '.
 import { useRinQuest, fennelTalk, FENNEL_NAME } from './use-rinquest'
 import { noStickLine, hasStick, fennelHere } from './rinquest'
 import { Fennel, fennelSpot, FENNEL_HEAD } from './fennel'
-import { useGladeFennel, FENNEL_FOLK_ID } from './glade-fennel-view'   // M68 s3b: Fennel's talk in the Glade
+import { useGladeFennel, FENNEL_FOLK_ID } from './glade-fennel-view'
+import { IdleMoglins } from './moglins-idle-view'   // P1 11-23   // M68 s3b: Fennel's talk in the Glade
 import type { FennelCursor } from './glade-fennel-talk'
 import { MoonwellPool } from './moonwell-quest'
 import { frameStats } from '../shared/keeper-look'
@@ -1418,6 +1419,7 @@ function AtherSliceGame() {
           <group position={[g.x, plotHeightAt(g.x, g.z), g.z]} rotation-y={Math.atan2(p.x - g.x, p.z - g.z)}><FolkModel look={folkLook('gregory')} action={tourNode || talkNode ? 'talk' : 'idle'} /></group>) })()}
         {(talkNode ?? tourNode) && (zone.kind === 'glade' || (tableVisit && !visitNow)) && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} />}
         {zone.kind === 'plot' && fennelAt && <Fennel spot={fennelAt} y={plotHeightAt(fennelAt.x, fennelAt.z)} talking={!!fennelNode} />}
+        {zone.kind === 'plot' && !visitNow && <IdleMoglins w={works} />}   {/* P1 11-23: recruits with no room wait by the planning table */}
         {friendTalkNode && friendHead && friendC && <TalkBubble at={[friendHead.x, friendHead.y + 0.5, friendHead.z]} name={FRIEND_NAME[friendC.f]} line={friendTalkNode.line} />}   {/* M68 s3a */}
         {gFennel.node && gFennel.head && zone.kind === 'glade' && <TalkBubble at={[gFennel.head.x, gFennel.head.y + 0.5, gFennel.head.z]} name="Fennel" line={gFennel.node.line} />}   {/* M68 s3b */}
         {fennelNode && fennelHead && zone.kind === 'plot' && <TalkBubble at={[fennelHead.x, fennelHead.y + 0.5, fennelHead.z]} name={FENNEL_NAME} line={fennelNode.line} />}
