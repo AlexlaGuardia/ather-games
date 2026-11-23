@@ -11,7 +11,7 @@ import { adsFov, adsLookScale } from '../shared/optics'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { createLoco, tickLocomotion, eyeY, WALK_SPEED, SPEED_CAP, type LocoWorld } from '../shared/locomotion'
-import { tickFeet } from '../shared/sfx'
+import { tickFeet, setListener } from '../shared/sfx'
 import { liftCarry } from './lift'
 import { GROUND_Y } from './plot'
 import { touch, TOUCH_LOOK_SENS, isTouchOnly } from '../shared/touch'
@@ -124,6 +124,7 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
 
     camera.position.set(lc.px, eyeY(lc), lc.pz)
     camera.rotation.set(pitch, yaw, 0, 'YXZ')
+    setListener({ x: lc.px, y: eyeY(lc), z: lc.pz }, { x: fwd.x, y: 0, z: fwd.z })   // M99: positional sounds hear from the keeper (nothing set it before: every `at` panned from the world origin)
     const speed = Math.hypot(lc.hvx, lc.hvz), cam = camera as THREE.PerspectiveCamera
     const st = getSettings()
     const fov = st.fov + (st.speedFov ? FOV_KICK : 0) * Math.min(1, Math.max(0, (speed - WALK_SPEED) / (SPEED_CAP - WALK_SPEED)))

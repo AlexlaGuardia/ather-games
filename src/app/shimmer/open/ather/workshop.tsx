@@ -58,6 +58,8 @@ import { FarmPanel, FarmInterior, FarmCrate, currentFarm, setFarm, currentWater,
 import { plumbingOf, spillIfRemoved } from './water'
 import { grantStarter } from './farmroom'
 import { loadTut, farmStarterOn } from './glade-tutorial'   // M68 s3b: no starter packet for live tutorial keepers
+import { STATION_VOICE, stationSounds, type BenchSnap } from './station-sound'   // M99: bench working sounds
+import { play as sfx, statusOf as sfxStatus } from '../shared/sfx'
 import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
@@ -1557,6 +1559,7 @@ function workerOf(r: Room, v: Village): { moglin?: Village['moglins'][number]; s
 }
 /** Run every station to now. Offline catch-up is the same call: `last` is a timestamp, the Moglin's hours since are worked
  *  out of the store into the output (station-queue.ts: stockpile above the 30 reserve, capped at 30 a product). */
+const benchDue = new Map<string, number>()   // M99: when each bench's next working phrase is due
 let firstTick = true   // the first run per page load is the offline catch-up: what the Moglins made joins the 'while you were away' line
 export function stationTick(now = Date.now()) {
   if (!worksWritable()) return   // M61: visiting a mate's plot: your stations wait (their clocks catch up at home)
@@ -1564,6 +1567,7 @@ export function stationTick(now = Date.now()) {
   const w = getW(); if (!w.rooms.some(r => raised(r, now))) return
   const v = loadVillage(); let nw = w, changed = false
   const away: Made = {}
+  const benches: BenchSnap[] = []
   for (const r of w.rooms) {
     if (!raised(r, now)) continue
     const { moglin, speed } = workerOf(r, v)
@@ -1571,7 +1575,11 @@ export function stationTick(now = Date.now()) {
     const a = advance(stationOf(r), now, speed, moglin ? stockJobs(r.kind) : [], moglin ? { chance: luckChance(moglin), rnd: Math.random } : undefined)
     if (a.active || !r.work) { nw = setStation(nw, r.id, a.station); changed = true }   // an idle Moglin saves nothing (the panel re-starts its clock when the stock changes)
     if (first && moglin) addMade(away, a.made)
+    if (STATION_VOICE[r.kind]) benches.push({ id: r.id, kind: r.kind, working: speed > 0 && !!a.station.work?.run, made: !first && a.made.length > 0, at: { x: r.x, y: GROUND_Y + 1.2, z: r.z } })
   }
+  // M99: the bench's working phrase while it crafts + a sting when a run lands (proposed ids stay silent until Alex's yay)
+  const ear = lastPose?.current
+  for (const s of stationSounds(benchDue, benches, now, ear ? { x: ear.x, z: ear.z } : null, id => sfxStatus(id) === 'yay')) sfx(s.id, { at: s.at })
   if (changed) setWorks(nw)
   if (first && Object.keys(away).length) reportAway(away)
 }
