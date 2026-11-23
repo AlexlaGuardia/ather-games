@@ -72,7 +72,7 @@ export function useChainYard(o: { inYard: () => boolean; getInv: () => Inv; setI
       if (ref.current.inYard()) c = onYard(c)
       if (wantsPage(c)) {
         const inv = givePage(ref.current.getInv())
-        if (inv) { ref.current.setInv(inv); c = pageFound(c); hudSay(PAGE_FOUND, 'info', 6)   // a toast, not 'item' (the selected-slot line any door in reach replaces) }
+        if (inv) { ref.current.setInv(inv); c = pageFound(c); hudSay(PAGE_FOUND, 'info', 6) }   // a toast, not 'item' (the selected-slot line any door in reach replaces)
       }
       put(c)
     }, 1000)
