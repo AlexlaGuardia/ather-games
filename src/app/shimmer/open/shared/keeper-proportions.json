@@ -1,1 +1,33 @@
-{}
+{
+ "medium-broad": {
+  "headW": 0.79,
+  "headH": 0.78,
+  "eye": 0.77,
+  "torsoL": 0.93,
+  "torsoW": 0.95,
+  "torsoD": 1.1,
+  "scarf": 0.91,
+  "hand": 0.97,
+  "foot": 0.95,
+  "neck": 0.015,
+  "legs": 1.5,
+  "handX": 0.095,
+  "handY": -0.065
+ },
+ "large-broad": {
+  "headW": 0.78,
+  "headH": 0.71,
+  "torsoL": 1.12,
+  "torsoW": 1.28,
+  "torsoD": 1.37,
+  "scarf": 0.88,
+  "hand": 1.17,
+  "foot": 1.33,
+  "neck": 0.04,
+  "legs": 2,
+  "handX": 0.03,
+  "handY": -0.11,
+  "handZ": -0.085,
+  "footX": 0.045
+ }
+}
