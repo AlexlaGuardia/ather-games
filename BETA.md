@@ -204,6 +204,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-23 05:4x Alex (in the builder): "if i had a reference image under the map im editing so i can see the whole thing with the slice im viewing highlighted" → overview map of the WHOLE map under the tile editor, current tile highlighted (click a tile to jump = natural). Routed to world with the builder-link fix as one slice.
 - 11-23 05:3x Alex: "i keep looking for that creative mode.. im not seeing it yet" → the World Builder lives at ?mode=terrain (World > Terrain); ?mode=builder falls to the index and the index has NO builder card. Fix = alias builder→terrain + a 'World Builder' card (world lane, tiny, rides M83 s3 or next). Full creative build = M84.
 
 - 11-21 06:2x Alex: "the ground looks terrible both in the ather and nyx side.. when shapes overlap we get this ugly glitchy state where the overlapping parts fight for whos on top.. and then theres the incohesive shapes that make up roads and sidewalks .. do we need another tool or can we do better" → triaged: **M58** (no editor; a ground pass in code)
