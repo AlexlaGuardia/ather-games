@@ -32,7 +32,7 @@ ok(KEEP_CLEAR.every(k => !canPlace(freshWorks(), owned, 'rinnshop', k.x, k.z, 0,
 {
   const OLD_GATE = { x: -GRID_HALF + 4, z: GRID_HALF - 22 }
   ok(KEEP_CLEAR.some(k => k.x === GATE.x && k.z === GATE.z) && !KEEP_CLEAR.some(k => Math.hypot(k.x - OLD_GATE.x, k.z - OLD_GATE.z) < 6), 'keep-clear: follows the gate where it stands now, nothing left at the old corner gate')
-  ok(canPlace(freshWorks(), owned, 'rinnshop', OLD_GATE.x + 4.5, OLD_GATE.z, 0, rich).ok, `place: a room on the OLD gate's corner was refused (${canPlace(freshWorks(), owned, 'rinnshop', OLD_GATE.x + 4.5, OLD_GATE.z, 0, rich).why})`)
+  ok(canPlace(freshWorks(), owned, 'rinnshop', OLD_GATE.x + 4.5, OLD_GATE.z, 0, rich).ok, `place: a room on the OLD gate's corner was refused (${(canPlace(freshWorks(), owned, 'rinnshop', OLD_GATE.x + 4.5, OLD_GATE.z, 0, rich) as { why?: string }).why})`)
   ok(canPlaceChest(freshWorks(), owned, OLD_GATE.x + 1, OLD_GATE.z, 0).ok, 'place: a chest on the old gate spot was refused')
   ok(!canPlace(freshWorks(), owned, 'rinnshop', THRESHOLD.x, THRESHOLD.z, 0, rich).ok, 'place: built on the arrival threshold')
   for (const t of [0, 6, 12]) ok(!canPlace(freshWorks(), owned, 'rinnshop', PATH_START.x - t * Math.SQRT1_2 + 2, PATH_START.z + t * Math.SQRT1_2 - 2, 0, rich).ok, `place: built across the path's line (${t} m out from its start)`)
