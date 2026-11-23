@@ -81,6 +81,7 @@ try {
     ok(await poll(() => p.evaluate(() => /E · Fennel/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]')), 15000), `${tag} the prompt 'E · Fennel'`)
     await pressE(p)
   }
+  await poll(() => p.evaluate(() => localStorage.getItem('open.inv.v1') !== null), 30000)   // a fresh bag (10 starting bait) is saved a beat after load
   const b0 = await bait()
   await openFennel('2.')
   const ids = ['fennel.b1.greet.1', 'fennel.b1.greet.2', 'fennel.b1.gift.1', 'fennel.b1.gift.2', 'fennel.b1.gift.3', 'fennel.b1.gift.4', 'fennel.b1.gift.5']
