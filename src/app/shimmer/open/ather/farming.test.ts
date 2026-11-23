@@ -93,7 +93,7 @@ const armedFarm = (f: Farm, items = DOSE_COST): Farm => compost(f, [{ id: 'junk'
     if (r.ok) for (const x of r.seeds) { total += x.n; if (x.id.endsWith(':C')) up += x.n }
   }
   const rate = up / total
-  ok(total === 1000 * SEEDS_BACK && rate > 0.85 && rate < 0.95, `rate: upgrade rate ${rate.toFixed(3)} not about ${SEED_UPGRADE_RATE}`)
+  ok(total === 1000 * SEEDS_BACK && Math.abs(rate - SEED_UPGRADE_RATE) < 0.05, `rate: upgrade rate ${rate.toFixed(3)} not about ${SEED_UPGRADE_RATE}`)
   // armed state is read live: unarmed farm, a bed one armed-tick short is not ready, once armed it is
   const live = planted('goldleaf'), tt = CROPS.goldleaf.growMs * ARMED_GROWTH_MULT
   ok(!harvest(live, 0, T0 + tt, () => 0).ok && harvest(armedFarm(live), 0, T0 + tt, () => 0).ok, 'armed: evaluated live at harvest')
