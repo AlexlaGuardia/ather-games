@@ -74,7 +74,10 @@ try {
   const faceAt = async (t: Pl, dist: number) => { const x = t.x + Math.sin(t.yaw) * dist, z = t.z + Math.cos(t.yaw) * dist
     await A(p, 'gladeAt', x, z, Math.atan2(-(t.x - x), -(t.z - z))) }
   const openFennel = async (tag: string) => {
-    await faceAt(f0, 1.8); await sleep(2500); await aimAt(p, f0.x, f0.z, 0.6)
+    // re-read where she stands NOW: her lot's blueprint lands after mount and moves her to the door (~5 m; glade-cluster-view)
+    let f = await fennel(); for (let k = 0; k < 20; k++) { await sleep(500); const g = await fennel(); if (g && f && g.x === f.x && g.z === f.z && k >= 6) break; f = g }
+    if (!f) return
+    await faceAt(f, 1.8); await sleep(2500); await aimAt(p, f.x, f.z, 0.6)
     ok(await poll(() => p.evaluate(() => /E · Fennel/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]')), 15000), `${tag} the prompt 'E · Fennel'`)
     await pressE(p)
   }
