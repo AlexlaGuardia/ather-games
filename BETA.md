@@ -206,6 +206,7 @@ backdrop): taps fire on click now. 360×780 passes. Still open in M2/M3: the con
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-23 06:3x Alex: "i love these mana seeds i was thinking more coloration but the way they are now is perfect to start" → seed icons KEEP as is (more colour = a later pass, not a row). Asked where the spirit models are (M102).
 - 11-23 06:0x Alex (builder): "a toggle to see an overlay of where all the POIs and roads will be so i can toggle it on and see if it matches up and then untoggle to clear the clutter" → row M105.
 - 11-23 05:5x Alex (builder): "if i raise the ground there does that clear a void or can we get an eraser to remove the lines that are marked for it.. most of them are okay its just a few areas that the voids dont make too much sense" → raising does NOT clear (the carve overrides height). New row M104 (void brush).
 - 11-23 05:5x Alex (builder): "lock the camera to the cursor and add a hot key for intensity.. if i want to change the terrain dramatically it takes a bit long" → Fly mouse-look (crosshair = brush target, the worktable creative grammar) + the STRENGTH control in Fly (Alex 05:5x: "i found the strength its just not there for the fly mode"; the tile view has it) + a hotkey for it. World hold-over slice after the overview map.
