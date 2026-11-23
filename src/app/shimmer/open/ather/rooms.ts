@@ -175,7 +175,9 @@ export function canPlace(works: Works, owned: ReadonlySet<string>, kind: RoomKin
   }
   for (const o of works.rooms) {
     const g = footprint(o.kind, o.x, o.z, o.q)
-    if (f.x0 < g.x1 + 1 && f.x1 > g.x0 - 1 && f.z0 < g.z1 + 1 && f.z1 > g.z0 - 1) return { ok: false, why: `Too close to your ${ROOMS[o.kind].name}.` }
+    // M97 s2 (Alex 11-23: "the player could place multiple next to each other"): rooms may stand FLUSH, edge to edge; only a
+    // real overlap refuses (5 mm of float slack, the same rule as furniture). Was a 1 m gap.
+    if (f.x0 < g.x1 - 0.005 && f.x1 > g.x0 + 0.005 && f.z0 < g.z1 - 0.005 && f.z1 > g.z0 + 0.005) return { ok: false, why: `That overlaps your ${ROOMS[o.kind].name}.` }
   }
   if (inDrawnWall(works, f)) return { ok: false, why: 'Your own walls are in the way.' }
   if (inv) { const short = shortOf(def.cost, inv, bank); if (short) return { ok: false, why: `Needs ${short.n} ${short.id.replace(/_/g, ' ')} (you have ${haveFor(inv, bank, short.id)}).` } }

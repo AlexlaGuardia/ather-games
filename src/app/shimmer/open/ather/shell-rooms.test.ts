@@ -24,6 +24,12 @@ ok(canPlacePiece(w, owned, 'goldwood_stool', d.x, d.z, 0).ok, 'no door: the old 
 ok(nearWork(w, benchOf(r).x, benchOf(r).z, r.doneAt + 1)?.kind === 'bench', 'the bench still works')
 // an older room keeps its walls
 ok(wallsOf({ ...r, shell: undefined }).length === 5, 'an older room (no shell flag) keeps its five walls')
+// M97 s2: rooms flush side by side (rinnshop 8 x 6 at P; carpentry 8 x 6 beside it)
+const flush = place(w, owned, pl!.inv, 'carpentry', P.x - 8, P.z, 0, 2000)
+ok(!!flush, 'a second room stands FLUSH against the first (edge to edge)')
+ok(!!flush && nearWork(flush.works, benchOf(flush.room).x, benchOf(flush.room).z, flush.room.doneAt + 1)?.kind === 'bench' && nearWork(flush.works, benchOf(r).x, benchOf(r).z, flush.room.doneAt + 1)?.kind === 'bench', 'both flush rooms work')
+ok(!place(w, owned, pl!.inv, 'carpentry', P.x - 7.5, P.z, 0, 2000), 'half a metre of overlap still refuses')
+ok(!place(w, owned, pl!.inv, 'carpentry', P.x - 4, P.z + 3, 0, 2000), 'a real overlap refuses')
 // survives reload
 const store = new Map<string, string>(); (globalThis as unknown as { localStorage: unknown }).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v) }, removeItem: (k: string) => { store.delete(k) } }
 saveWorks(w); ok(loadWorks().rooms[0]?.shell === true, 'the shell flag survives reload')
