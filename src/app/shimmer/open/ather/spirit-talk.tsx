@@ -6,13 +6,14 @@
 // (glossary > Grimoire): Follow is only "this one walks with me", kept in spirit-follow.ts.
 // The spirit panel: Carved Hearth frame, her live model on a turntable, the species' base stats on the Moglin-card radar,
 // the moves the data gives her species (spirit-sheet.ts says where each comes from).
-import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { TalkNode } from '../shared/npc-talk'
 import { HearthFrame, H } from '../../ui/hearth'
 import { StatRadar } from './moglin-card-view'
 import { SpiritAvatar } from './spirit-model'
 import { spiritModelFor } from './spirit-models'
 import { spiritSheet } from './spirit-sheet'
+import { loadStats, subscribeStats } from './spirit-stats'   // M110 s1: her trained stats
 import { isFollowing, setFollowing, spiritHeld, spiritLive, subscribeFollow } from './spirit-follow'
 import { SPECIES_NAMES } from '../../spirits/spirit'
 import { hudSay } from '../shared/hud-say'
@@ -60,7 +61,7 @@ export function useSpiritTalk(st: SpiritTalkState | null, set: (s: SpiritTalkSta
       ],
     }
   }, [st, live, following, set, food])
-  const panel = st && st.screen === 'panel' && live ? <SpiritPanel sp={live.sp} phone={phone} onClose={() => set(null)} /> : null
+  const panel = st && st.screen === 'panel' && live ? <SpiritPanel sp={live.sp} id={live.id} phone={phone} onClose={() => set(null)} /> : null
   return {
     node, panel,
     name: live ? SPECIES_NAMES[live.sp] : '',
@@ -68,8 +69,10 @@ export function useSpiritTalk(st: SpiritTalkState | null, set: (s: SpiritTalkSta
   }
 }
 
-export function SpiritPanel({ sp, phone, onClose }: { sp: Parameters<typeof spiritSheet>[0]; phone: boolean; onClose: () => void }) {
-  const sheet = useMemo(() => spiritSheet(sp), [sp]), look = spiritModelFor(sp)
+export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof spiritSheet>[0]; /** M110: her planter id (the stat record) */ id?: string; phone: boolean; onClose: () => void }) {
+  const [statsV, setStatsV] = useState(0)
+  useEffect(() => subscribeStats(() => setStatsV(v => v + 1)), [])   // M110 s1: a play while the panel is open shows at once
+  const sheet = useMemo(() => spiritSheet(sp, id ? loadStats()[id] : undefined), [sp, id, statsV]), look = spiritModelFor(sp)
   const ink = { label: H.inkSoft, ring: 'rgba(58,39,22,.2)', spoke: 'rgba(58,39,22,.16)' }
   return (
     <HearthFrame title={sheet.name} maxWidth={420} onClose={onClose} fixed dataPanel="spirit">

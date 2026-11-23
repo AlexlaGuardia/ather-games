@@ -7,8 +7,8 @@
 //  - feeding a wild spirit never makes it yours: only the keeper's own garden spirits (bloomed planters) can be talked to.
 // The FED record: per planter id (the same id Follow keys on), { n: times fed, last: ms, item: what she had last }, in
 // localStorage. It only ever counts up; nothing reads `last` to punish a gap.
-// ⚠ M110 (later, NOT built): the per-spirit STAT record belongs beside this one, keyed by the same planter id (its own key,
-// e.g. 'ather.spiritStats.v1', in its own module), read by spirit-sheet.ts in place of the species base stats.
+// M110 s1: the per-spirit STAT record lives beside this one, keyed by the same planter id: spirit-stats.ts ('ather.spiritStats.v1'),
+// read by spirit-sheet.ts on top of the species base stats.
 import { gardenKey } from '@/lib/keeper-local'   // M109 s4: a garden key (the planters are the plot's), per account
 import { countOf, take, type Inv } from '../shared/inventory'
 import { GRADES } from './farming'

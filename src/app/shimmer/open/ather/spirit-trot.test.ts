@@ -240,5 +240,58 @@ for (const sp of ['fox', 'axolotl'] as const) for (const fps of [60, 4]) for (co
 }
 function clamp01(v: number) { return Math.max(0, Math.min(1, v)) }
 
+// ── M110 s1 PLAY AT A TRAINING PIECE: a party spirit with a hurdle near the keeper goes to it ON HER OWN within a minute,
+// bounds across it (both sides, over the middle, higher than her trot hop), finishes plays with the piece's stat, never more
+// often than PLAY.rest allows, never inside a blocker; a non-party spirit never plays; Follow cuts a play (no gain).
+{
+  const HURDLE = { id: 'h1', x: -3, z: 3.5, ax: 0, az: 1, stat: 'agi' }   // rail runs along x, she plays across it in z (open ground: a piece behind the bench is reached only when a straight leg is clear)
+  for (const [sp, dials] of [['fox', SPIRIT_MODELS.fox!.trot], ['axolotl', SPIRIT_MODELS.axolotl!.trot]] as const) for (const fps of [60, 4]) for (const seed of [1, 7, 42]) {
+    const nav: SpiritNav = { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked, roam: { maxLeg: 4.5, away: 3 }, toys: () => [HURDLE] }
+    const tr = makeTrot(nav, seed, dials), dt = 1 / fps, k = { x: -2, z: 1.5, yaw: 0 }
+    tr.near(() => k)
+    const got: string[] = []; tr.onPlayed((id, stat) => got.push(`${id}:${stat}`))
+    let first = -1, bad = '', yMax = 0, sides = new Set<number>(), lastPlay = -99, gap = 999, wasPlaying = false
+    for (let i = 0; i < 240 * fps; i++) {
+      const p = tr.step(dt), tt = i * dt
+      if (p.mode === 'play') {
+        if (first < 0) first = tt
+        yMax = Math.max(yMax, p.y); sides.add(Math.sign(p.z - HURDLE.z))
+        if (Math.abs(p.x - HURDLE.x) > 0.05) bad ||= `play off the axis x=${p.x.toFixed(2)}`
+      }
+      if (wasPlaying && p.mode !== 'play') { if (lastPlay > 0) gap = Math.min(gap, tt - lastPlay); lastPlay = tt }
+      wasPlaying = p.mode === 'play'
+      if (!bad && ground(p.mode) && (BOXES.some(b => inBox(b, p.x, p.z, 0.05)) || !inBox(PLOT, p.x, p.z))) bad = `${p.mode} at ${p.x.toFixed(2)},${p.z.toFixed(2)}`
+    }
+    const tag = `play ${sp} seed ${seed} @${fps}fps`
+    const within = sp === 'fox' ? 60 : 120   // the Manalotl ambles: ~8 s legs, so a quarter as many picks a minute
+    ok(first >= 0 && first < within, `${tag}: goes to the hurdle on her own within ${within} s (first play at ${first.toFixed(1)} s)`)
+    ok(got.length >= 2 && got.every(g => g === 'h1:agi') && tr.plays() === got.length, `${tag}: finished plays carry the piece's stat (${got.length}: ${got.slice(0, 2).join(',')})`)
+    ok(sides.has(1) && sides.has(-1), `${tag}: bounds across it, both sides`)
+    ok(yMax > (dials.hopH ?? 0.05) * 1.5, `${tag}: the bound is higher than her trot hop (${yMax.toFixed(3)} m)`)
+    ok(gap >= 20 - 0.01 || got.length < 2, `${tag}: never plays again within PLAY.rest (shortest gap ${gap.toFixed(1)} s)`)
+    ok(!bad, `${tag}: never in a blocker / off the plot: ${bad}`)
+  }
+  // not in the party: the hurdle is never chosen
+  for (const seed of [1, 7, 42]) {
+    const tr = makeTrot({ home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked, roam: { maxLeg: 4.5, away: 3 }, toys: () => [HURDLE] }, seed)
+    let played = false; for (let i = 0; i < 180 * 30; i++) if (tr.step(1 / 30).mode === 'play') played = true
+    ok(!played && tr.plays() === 0, `play: a non-party spirit never plays (seed ${seed})`)
+  }
+  // Follow mid-play: the play stops, no gain
+  {
+    const tr = makeTrot({ home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked, roam: { maxLeg: 4.5, away: 3 }, toys: () => [HURDLE] }, 7), k = { x: -2, z: 1.5, yaw: 0 }
+    tr.near(() => k); let n = 0; tr.onPlayed(() => n++)
+    let i = 0; for (; i < 120 * 30 && tr.step(1 / 30).mode !== 'play'; i++);
+    tr.follow(() => k); let stillPlay = false; for (let j = 0; j < 30 * 10; j++) if (tr.step(1 / 30).mode === 'play') stillPlay = true
+    ok(i < 120 * 30 && !stillPlay && n === 0, `play: Follow cuts a play, no gain (playing at ${(i / 30).toFixed(1)} s, gains ${n})`)
+  }
+  // no piece in reach of the keeper (> NEAR.r): never chosen
+  {
+    const far = { ...HURDLE, x: 12.5, z: 5.5 }, tr = makeTrot({ home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, blocked, roam: { maxLeg: 4.5, away: 3 }, toys: () => [far] }, 7), k = { x: -3, z: -4, yaw: 0 }
+    tr.near(() => k); let played = false; for (let i = 0; i < 120 * 30; i++) if (tr.step(1 / 30).mode === 'play') played = true
+    ok(!played, 'play: a piece further than NEAR.r from the keeper is never chosen')
+  }
+}
+
 if (fails.length) { console.error(`spirit-trot: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`spirit-trot: ${pass}/0`)

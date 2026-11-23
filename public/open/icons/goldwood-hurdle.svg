@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A low hurdle: a rail on two posts (M110 s1). Code-drawn filler. -->
+  <ellipse cx="16" cy="28" rx="12" ry="2" fill="#000" opacity=".22"/>
+  <rect x="5" y="12" width="2.8" height="15" rx="0.6" fill="#d9a957" stroke="#8a5f24" stroke-width=".8"/><rect x="24.2" y="12" width="2.8" height="15" rx="0.6" fill="#d9a957" stroke="#8a5f24" stroke-width=".8"/><rect x="3" y="11" width="26" height="3.2" rx="1.2" fill="#f0c773" stroke="#8a5f24" stroke-width=".8"/><rect x="7" y="19" width="18" height="1.6" rx="0.6" fill="#c2924a" stroke="#8a5f24" stroke-width=".6"/><rect x="3.4" y="25.6" width="6" height="1.6" rx="0.5" fill="#c2924a" stroke="#8a5f24" stroke-width=".6"/><rect x="22.6" y="25.6" width="6" height="1.6" rx="0.5" fill="#c2924a" stroke="#8a5f24" stroke-width=".6"/>
+</svg>

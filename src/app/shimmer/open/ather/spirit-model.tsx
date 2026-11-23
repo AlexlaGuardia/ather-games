@@ -18,6 +18,7 @@ import { makeTrot, type SpiritNav, type Trot } from './spirit-trot'
 import { isFollowing, keeperAt, spiritHeld, spiritLive, subscribeFollow } from './spirit-follow'   // M109 s1
 import { spiritCheer } from './spirit-feed'   // M109 s2: fed = her happy beat
 import { inParty, spiritCall, subscribeParty } from './spirit-party'   // M109 s3: called home from the grimoire; s4: the party keeps near
+import { isTrainStat, trainPlay } from './spirit-stats'   // M110 s1: a finished play at a training piece = a small gain
 
 import { SPIRIT_MODELS, type SpiritLook } from './spirit-models'
 import type { Species } from '../../spirits/spirit'
@@ -38,7 +39,7 @@ export function useSpirits3d(): boolean {
 
 // read-only probe for the check: how many spirit models are mounted right now (all, and by species). `trot` = the Vulnyx's
 // pose (the M107 asserts read it), `trots[species]` = each species' latest pose.
-type TrotProbe = { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; beats: number; homes: number; tilt: number; h: number; hWorld?: number; cheers: number; yMax: number; calling: boolean; near: boolean }
+type TrotProbe = { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; beats: number; homes: number; tilt: number; h: number; hWorld?: number; cheers: number; yMax: number; calling: boolean; near: boolean; plays: number; playing: string | null; playYMax: number }
 type Probe = { mounted: number; url: string; h: number; species: Record<string, number>; trot?: TrotProbe; trots: Record<string, TrotProbe> }
 const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Probe }; return (w.__spiritModel ??= { mounted: 0, url: VULNYX_URL, h: VULNYX_H, species: {}, trots: {} }) }
 
@@ -109,6 +110,12 @@ function SpiritModel({ sp, look, nav, id, avatar }: { sp: Species; look: SpiritL
     const sync = () => trot.near(inParty(id) ? () => keeperAt : null)
     sync(); return subscribeParty(sync)
   }, [trot, id])
+  // M110 s1 TRAINING: a play she chose and finished at a training piece adds its small gain to HER stat record (planter id)
+  useEffect(() => {
+    if (!trot || !id) return
+    trot.onPlayed((_toy, stat) => { if (isTrainStat(stat)) trainPlay(id, sp, stat) })
+    return () => trot.onPlayed(null)
+  }, [trot, id, sp])
   useEffect(() => { if (avatar) return; const p = probe(); p.mounted++; p.species[sp] = (p.species[sp] ?? 0) + 1
     return () => { p.mounted--; p.species[sp]--; if (!p.species[sp]) delete p.trots[sp]; if (!p.species.fox) p.trot = undefined } }, [sp, avatar])
   useFrame(({ clock }, dt) => {
@@ -131,7 +138,8 @@ function SpiritModel({ sp, look, nav, id, avatar }: { sp: Species; look: SpiritL
       sw.value += (ps.swing - sw.value) * Math.min(1, dt * 6); lift.value = ps.lift
       // the measured world height (the drawn meshes' box, hull included) for the check, twice a second
       if (t - tmp.hAt > 0.5) { tmp.hAt = t; const s = tmp.bb.setFromObject(g.current); tmp.hWorld = s.max.y - s.min.y }
-      const pr = probe(), tp: TrotProbe = { x: ps.x, y: baseY + ps.y, z: ps.z, mode: ps.mode, home: nav!.home, rMin: nav!.rMin, rMax: nav!.rMax, beats: trot.beats(), homes: trot.homes(), tilt: ps.tilt, h: look.h, hWorld: tmp.hWorld, cheers: trot.cheers(), calling: trot.calling(), near: trot.nearing(),
+      const pr = probe(), tp: TrotProbe = { x: ps.x, y: baseY + ps.y, z: ps.z, mode: ps.mode, home: nav!.home, rMin: nav!.rMin, rMax: nav!.rMax, beats: trot.beats(), homes: trot.homes(), tilt: ps.tilt, h: look.h, hWorld: tmp.hWorld, cheers: trot.cheers(), calling: trot.calling(), near: trot.nearing(), plays: trot.plays(), playing: trot.playing(),
+        playYMax: ps.mode === 'play' ? Math.max(pr.trots[sp]?.playYMax ?? 0, ps.y) : (pr.trots[sp]?.playYMax ?? 0),   // M110 s1: the bound's peak
         yMax: ps.mode === 'happy' ? Math.max(pr.trots[sp]?.mode === 'happy' ? pr.trots[sp].yMax : 0, ps.y) : (pr.trots[sp]?.yMax ?? 0) }   // M109 s2: the happy beat's peak hop
       pr.trots[sp] = tp; if (sp === 'fox') pr.trot = tp
       if (id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + ps.y, z: ps.z, h: look.h, at: Date.now() })   // M109: the E pick reads it

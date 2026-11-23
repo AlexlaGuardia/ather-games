@@ -72,6 +72,7 @@ export const GARDEN_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'ather.spiritFollow.v1',    worldTied: false },  // M109 s1: the planter ids of the spirits walking with the keeper, max 3 (ather/spirit-follow.ts)
   { base: 'ather.spiritFed.v1',       worldTied: false },  // M109 s2: each planter's fed record, counts up only (ather/spirit-feed.ts)
   { base: 'ather.spiritParty.v1',     worldTied: false },  // M109 s3: the party, the planter ids of up to 8 asked along (ather/spirit-party.ts)
+  { base: 'ather.spiritStats.v1',     worldTied: false },  // M110 s1: each planter's stat gains from play at training furniture, never past the form cap (ather/spirit-stats.ts)
   { base: 'open.tutorial.v1',         worldTied: false },  // M68: the Glade tutorial: Greg's chain, the four heard, gifts given once, Fennel's jar day (ather/glade-tutorial.ts)
   { base: 'open.tools.v1',            worldTied: false },  // a keeper's equipped tools: rinsticks (ather/rinsticks.ts)
   { base: 'open.buffs.v1',            worldTied: false },  // a keeper's potion buffs, until-times (ather/alchemy.ts)

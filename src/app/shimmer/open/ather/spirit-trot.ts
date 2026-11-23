@@ -25,8 +25,12 @@ export type SpiritNav = {
    *  anywhere `blocked` allows, each leg up to maxLeg metres; `away` = how far from home the first spot out must be. The ring
    *  stays as the home beat. Without `roam` she only circles home (s1). */
   roam?: { maxLeg: number; away: number }
+  /** M110 s1: the training pieces on the plot (re-read at each pick). A PARTY spirit may choose one as a beat on her own. */
+  toys?: () => Toy[]
 }
-export type TrotMode = 'perch' | 'hopDown' | 'hopUp' | 'trot' | 'check' | 'look' | 'sit' | 'sniff' | 'tilt' | 'follow' | 'happy'
+/** M110 s1: a training piece: where it stands, `ax/az` = the unit axis she plays ACROSS it (a hurdle: over the rail), its stat */
+export type Toy = { id: string; x: number; z: number; ax: number; az: number; stat: string }
+export type TrotMode = 'perch' | 'hopDown' | 'hopUp' | 'trot' | 'check' | 'look' | 'sit' | 'sniff' | 'tilt' | 'follow' | 'happy' | 'play'
 export type TrotPose = {
   x: number; z: number      // world
   y: number                 // lift above the ground under her (hop, perch)
@@ -67,6 +71,10 @@ export const TROT = {
   // M109 s2 FED: the happy beat after the keeper feeds her (cheer()): a few little hops on the spot, facing the keeper, a
   // wiggle. Pure joy, no reward loop: it changes nothing about how she roams or follows afterwards.
   happyHops: 4, happyHop: 0.3, happyH: 0.12, happyWig: 0.14,
+  // M110 s1: how much each training stat's pieces draw her (x PLAY.chance when she picks a run). The garden spirit carries no
+  // temperament yet (spirit-sheet.ts), so the lean is the species' MANNER: 1 = no lean. Jin's.
+  toyLean: { pwr: 1, grd: 1, agi: 1, vig: 1 } as Record<string, number>,
+  playV: 1.3, playH: 0.2,   // M110 s1: m/s across a training piece, and the bound's height over it
 }
 export type TrotDials = typeof TROT
 
@@ -94,6 +102,19 @@ export const NEAR = {
   beatMin: 0.5,     // s of a beat she always keeps (no twitchy stop-start)
   pass: 1,          // m: a run never passes nearer the keeper than this
 }
+// ── M110 s1 PLAY AT A TRAINING PIECE (canon RULED 3a77c87: party spirits use it AS THEY PLEASE; play, never drill). When a party
+// spirit picks her next run she MAY choose a piece near the keeper instead (a weighted chance, never forced; a rest after each
+// play so it stays one beat among her others), runs to one side of it and bounds back and forth across it for a few seconds.
+// A finished play calls onPlayed (spirit-stats.ts adds the gain). Walked off, called, fed or asked to follow = the play just
+// stops, no gain and nothing lost. ────────────────────────────────────────────────────────────────────────────────────────
+export const PLAY = {
+  chance: 0.4,      // chance a run picked in the party goes to a piece (x the species' toyLean), when one is in reach
+  rest: 20,         // s after a play before she picks a piece again
+  reach: 12,        // m: pieces further from her than this are not considered
+  side: 0.75,       // m either side of the piece's centre she bounds between
+  playS: [3.5, 5.5] as [number, number],   // s of play (she finishes the bound she is on)
+  pause: 0.22,      // s she turns at each end
+}
 /** distance from point k to the segment a-b */
 function segDist(a: { x: number; z: number }, b: { x: number; z: number }, k: { x: number; z: number }) {
   const dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz, t = L2 > 0 ? Math.max(0, Math.min(1, ((k.x - a.x) * dx + (k.z - a.z) * dz) / L2)) : 0
@@ -120,10 +141,12 @@ export type Trot = { step: (dt: number) => TrotPose; pose: () => TrotPose; beats
    *  then is free again (her own roam, or back to following if she was) */
   call: (to: FollowTarget) => void; calling: () => boolean
   /** M109 s4: in the party: she keeps near `to` (the keeper) in loose company, or null = her own roam round home */
-  near: (to: FollowTarget | null) => void; nearing: () => boolean }
+  near: (to: FollowTarget | null) => void; nearing: () => boolean
+  /** M110 s1: called when a play at a training piece FINISHES (toy id, its stat); plays() = how many so far, playing() = the toy id */
+  onPlayed: (f: ((id: string, stat: string) => void) | null) => void; plays: () => number; playing: () => string | null }
 
 export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): Trot {
-  const D: TrotDials = { ...TROT, ...dials, beat: { ...TROT.beat, ...dials?.beat } }
+  const D: TrotDials = { ...TROT, ...dials, beat: { ...TROT.beat, ...dials?.beat }, toyLean: { ...TROT.toyLean, ...dials?.toyLean } }
   const R = rng(seed), { home, roam } = nav
   const rand = (a: number, b: number) => lerp(a, b, R())
   const at = (a: number, r: number) => ({ x: home.x + Math.cos(a) * r, z: home.z + Math.sin(a) * r })
@@ -148,6 +171,10 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   let calling = false, callPrev: FollowTarget | null = null
   // M109 s4 the party anchor: who she keeps near (null = not in the party)
   let nearTo: FollowTarget | null = null
+  // M110 s1 play: the piece she is heading to / playing at, the two ends she bounds between, which end she is going to, the
+  // turn pause left, how long since her last play (starts rested), plays so far, who hears a finished play
+  let toy: Toy | null = null, toyA = { x: 0, z: 0 }, toyB = { x: 0, z: 0 }, toyEnd = 1, toyPause = 0, toyRest = PLAY.rest, plays = 0, playAir = 0, playPh = 0
+  let played: ((id: string, stat: string) => void) | null = null
   const dK = (k: { x: number; z: number }) => Math.hypot(pos.x - k.x, pos.z - k.z)
 
   const arcLen = (A0: number, A1: number, R0: number, R1: number) => { let L = 0, p = at(A0, R0); for (let i = 1; i <= 12; i++) { const q = at(lerp(A0, A1, i / 12), lerp(R0, R1, i / 12)); L += Math.hypot(q.x - p.x, q.z - p.z); p = q } return L }
@@ -222,6 +249,24 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     for (let i = path.length - 1; i >= 0; i--) { const p = path[i]; if (Math.hypot(p.x - pos.x, p.z - pos.z) <= NEAR.leg && planLine(p, D.dash * NEAR.driftK)) return true }
     return false
   }
+  /** M110 s1: maybe a training piece instead of a plain run: one in reach (of her, and within NEAR.r of the keeper), weighted
+   *  by her toyLean, its two ends free and the bound between them clear. A run to the nearer end; the play starts on arrival. */
+  function planToy(): boolean {
+    if (!nav.toys || !nearTo || toyRest < PLAY.rest) return false
+    const k = nearTo(), list = nav.toys().filter(t => Math.hypot(t.x - pos.x, t.z - pos.z) <= PLAY.reach && Math.hypot(t.x - k.x, t.z - k.z) <= NEAR.r)
+    if (!list.length) return false
+    const w = list.map(t => D.toyLean[t.stat] ?? 1), sum = w.reduce((a, b) => a + b, 0)
+    let c = R() * sum, i = 0; while (i < list.length - 1 && c > w[i]) { c -= w[i]; i++ }
+    const t = list[i]
+    if (R() >= Math.min(0.9, PLAY.chance * w[i])) return false
+    const e1 = { x: t.x + t.ax * PLAY.side, z: t.z + t.az * PLAY.side }, e2 = { x: t.x - t.ax * PLAY.side, z: t.z - t.az * PLAY.side }
+    const [A, B] = Math.hypot(e1.x - pos.x, e1.z - pos.z) <= Math.hypot(e2.x - pos.x, e2.z - pos.z) ? [e1, e2] : [e2, e1]
+    if (!free(B.x, B.z) || !lineFree(A, B)) return false
+    if (Math.hypot(A.x - pos.x, A.z - pos.z) < 0.05) { toy = t; toyA = A; toyB = B; return startPlay() }
+    if (!planLine(A, D.dash)) return false
+    toy = t; toyA = A; toyB = B; return true
+  }
+  function startPlay() { toyEnd = 1; toyPause = 0; playAir = 0; go('play', rand(...PLAY.playS)); return true }
   /** a short straight hop between two ring points (a chord that misses the planter): breaks up the circling near home */
   function planChord(): boolean {
     for (let k = 0; k < 10; k++) { const a = ang + (R() < 0.5 ? 1 : -1) * rand(0.5, 1.4); if (planLine(at(a, rand(nav.rMin + 0.1, nav.rMax)), D.speed * rand(1, 1.25))) return true }
@@ -241,7 +286,9 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   function go(m: TrotMode, d: number) { mode = m; t = 0; dur = d; if (m === 'look') { lookT = 0; lookFrom = lookYaw; lookAt = rand(-0.7, 0.7) } else if (m === 'tilt') { tiltAt = R() < 0.5 ? 1 : -1; tiltSwap = rand(0.4, 0.7) * d } }
   /** the next run from a standstill. true = she is off. */
   function move(): boolean {
+    toy = null
     if (followTo) { fGo = false; fIdle = 0; go('follow', 0); return true }
+    if (nearTo && planToy()) return mode === 'play' ? true : run()   // M110 s1: a training piece, her choice, sometimes
     if (nearTo && planNear()) return run()   // M109 s4: the party picks her runs round the keeper (else the plain roam below)
     const near = dHome(pos) <= nav.rMax + 0.25
     if (roam) {
@@ -264,6 +311,8 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   function afterRun() {
     // after a run: chain another (a quick alert stop first), or a real beat. Never more than two runs without a beat.
     runs++
+    if (toy && Math.hypot(pos.x - toyA.x, pos.z - toyA.z) < 0.15) { runs = 0; beats++; startPlay(); return }   // M110 s1: at the piece
+    toy = null
     if (homing && dHome(pos) <= nav.rMin + 0.25) { homing = false; homes++; return go('hopUp', D.hopArc) }
     homing = false
     if (runs >= 2 || R() < D.chain) {
@@ -281,7 +330,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   const idleThen = () => { if (!move()) t = 0 }
 
   function step(dt: number): TrotPose {
-    dt = Math.min(dt, 0.25); t += dt; sinceLand += dt   // a slow frame still covers real time (a phone at 4 fps trots at speed)
+    dt = Math.min(dt, 0.25); t += dt; sinceLand += dt; toyRest += dt   // a slow frame still covers real time (a phone at 4 fps trots at speed)
     let speed = 0, heading = yaw, wantSit = 0, sniff = 0, happyAir = 0
     if (cheerPending && mode !== 'hopDown' && mode !== 'hopUp') { const c = cheerPending; cheerPending = null; startHappy(c.to) }
     // M109 s4: in the party and the keeper has walked off: a beat (or her perch) is cut short and she sets off back
@@ -370,6 +419,23 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
         else if (followTo) { fGo = false; fIdle = 0; go('follow', 0) }
         else go('check', rand(...D.checkS))
       }
+    } else if (mode === 'play' && toy) {
+      // M110 s1: bound across the piece, end to end: one leap per crossing (y peaks over the middle), a short turn at each end
+      const to = toyEnd ? toyB : toyA, from = toyEnd ? toyA : toyB, L = Math.hypot(to.x - from.x, to.z - from.z), d = Math.hypot(to.x - pos.x, to.z - pos.z)
+      const k = nearTo?.()
+      if (followTo || !nearTo || (k && dK(k) > NEAR.r * NEAR.slack)) { toy = null; syncPolar(); if (!move()) go('check', rand(...D.checkS)) }
+      else if (toyPause > 0) { toyPause -= dt; heading = Math.atan2(to.x - pos.x, to.z - pos.z); playAir = 0 }
+      else {
+        const stp = Math.min(d, D.playV * dt)
+        if (d > 1e-4) { heading = Math.atan2(to.x - pos.x, to.z - pos.z); pos = { x: pos.x + (to.x - pos.x) * stp / d, z: pos.z + (to.z - pos.z) * stp / d } }
+        speed = D.playV; playPh = clamp(1 - (d - stp) / Math.max(L, 0.05), 0, 1); playAir = Math.sin(Math.PI * playPh)
+        if (d - stp < 1e-3) {
+          sinceLand = 0; playAir = 0
+          if (t > dur) { const done = toy; toy = null; plays++; toyRest = 0; syncPolar(); played?.(done.id, done.stat); go('check', rand(...D.checkS)) }
+          else { toyEnd = 1 - toyEnd; toyPause = PLAY.pause }
+        }
+      }
+    } else if (mode === 'play') { go('check', rand(...D.checkS))   // a play with no piece (cut elsewhere): back to her roam
     } else if (mode === 'tilt') {
       // the head tilt (Manalotl canon: "eternal smile, wide eyes, head tilt"): over to one side, hold, maybe the other way
       if (tiltSwap > 0 && t > tiltSwap) { tiltSwap = 0; if (R() < 0.5) tiltAt = -tiltAt }
@@ -391,12 +457,13 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
       air = Math.sin(Math.PI * (hopPh % 1))
       lift = Math.cos(Math.PI * (hopPh % 1)) * run01
       y = D.hopH * air * run01 ** 0.5
-    } else if (mode === 'happy') { air = happyAir; lift = Math.cos(Math.PI * (Math.min(t / D.happyHop, D.happyHops) % 1)) * (happyAir > 0 ? 1 : 0); y = happyY }
+    } else if (mode === 'play') { air = playAir; lift = playAir > 0 ? Math.cos(Math.PI * playPh) : 0; y = D.playH * playAir }
+    else if (mode === 'happy') { air = happyAir; lift = Math.cos(Math.PI * (Math.min(t / D.happyHop, D.happyHops) % 1)) * (happyAir > 0 ? 1 : 0); y = happyY }
     else if (mode !== 'hopDown' && mode !== 'hopUp') { lift *= Math.exp(-dt * 6); y = mode === 'perch' ? nav.perch!.y : 0 }
 
     yawPrev = yaw; yaw = yaw + wrap(heading - yaw) * (1 - Math.exp(-dt * D.turnK))
     const yawRate = wrap(yaw - yawPrev) / Math.max(dt, 1e-3)
-    const sq = Math.exp(-sinceLand * D.squashK) * (mode === 'trot' || (mode === 'follow' && speed > 0) || sinceLand < 0.3 ? 1 : 0)
+    const sq = Math.exp(-sinceLand * D.squashK) * (mode === 'trot' || mode === 'play' || (mode === 'follow' && speed > 0) || sinceLand < 0.3 ? 1 : 0)
     const sy = (1 + D.stretch * air - D.squash * sq) * lerp(1, D.sitY, sitK)
     cur = {
       x: pos.x, z: pos.z, y, yaw: yaw + lookYaw + sniff * Math.sin(t * 5) * 0.12,
@@ -408,6 +475,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   }
   let cur: TrotPose = { x: pos.x, z: pos.z, y, yaw, roll: 0, pitch: 0, sx: 1, sy: 1, swing: 0, lift: 0, mode, tilt: 0 }
   function follow(to: FollowTarget | null) {
+    if (to) toy = null
     calling = false; callPrev = null
     followTo = to; kPrev = null; kV = 0; outFirst = false
     if (to) { homing = false; if (mode !== 'perch' && mode !== 'hopDown' && mode !== 'hopUp') { fGo = false; fIdle = 0; go('follow', 0) } }
@@ -415,7 +483,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   }
   function startHappy(to: FollowTarget | null) {
     happyTo = to; happyBack = mode === 'perch'; happyBase = happyBack ? nav.perch!.y : 0; happyN = -1; happyY = happyBase
-    if (mode === 'trot') syncPolar()   // a run cut short: her ring param catches up with where she stands
+    toy = null; if (mode === 'trot' || mode === 'play') syncPolar()   // a run (or a play) cut short: her ring param catches up with where she stands
     cheers++; go('happy', D.happyHop * D.happyHops + 0.15)
   }
   function cheer(to: FollowTarget | null) {
@@ -424,9 +492,10 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   }
   function call(to: FollowTarget) {
     if (!calling) callPrev = followTo
-    calling = true; followTo = to; kPrev = null; kV = 0; outFirst = false; homing = false
+    toy = null; calling = true; followTo = to; kPrev = null; kV = 0; outFirst = false; homing = false
     if (mode !== 'perch' && mode !== 'hopDown' && mode !== 'hopUp') { fGo = true; fIdle = 0; go('follow', 0) }   // on a perch: she hops down first
   }
   function near(to: FollowTarget | null) { nearTo = to; if (to) outFirst = false }
-  return { step, pose: () => cur, beats: () => beats, homes: () => homes, follow, cheer, cheers: () => cheers, call, calling: () => calling, near, nearing: () => !!nearTo }
+  return { step, pose: () => cur, beats: () => beats, homes: () => homes, follow, cheer, cheers: () => cheers, call, calling: () => calling, near, nearing: () => !!nearTo,
+    onPlayed: f => { played = f }, plays: () => plays, playing: () => (mode === 'play' && toy ? toy.id : null) }
 }
