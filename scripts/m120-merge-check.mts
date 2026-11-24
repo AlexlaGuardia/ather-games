@@ -102,10 +102,17 @@ try {
       await C(`A.spend(${JSON.stringify(n.id)})`)   // the page drops its this-visit clears when the node list reloads (a tp can do that)
       const dr = await C(`return A.drained(${ox}, ${oz})`)
       const m2 = await C('return C.merges ?? 0') as number
+      await C(`A.spend(${JSON.stringify(n.id)})`)
       const ids2 = await put([[ox, oz], [ox + 0.8, oz]])
-      await sleep(6000)
+      // hold the clear for the whole window (the page drops this-visit clears whenever its node list reloads) and watch the
+      // ground under both: if it ever read drained the run proves nothing, so say so instead of passing or failing on it
+      let everDrained = false
+      for (let t = 0; t < 20; t++) {
+        everDrained ||= await C(`A.spend(${JSON.stringify(n.id)}); return C.hollows.filter(h => ${JSON.stringify(ids2)}.includes(h.id)).some(h => C.drained?.(h.x, h.z) !== false)`) as boolean
+        await sleep(300)
+      }
       const got2 = await mine(ids2), m3 = await C('return C.merges ?? 0') as number
-      ok(dr === false && got2.length === 2 && got2.every(h => h.mass === 1) && m3 === m2, `3. off drained ground (drained ${dr}) two touching crawlers stayed two: ${JSON.stringify(got2.map(h => ({ id: h.id, mass: h.mass })))}`)
+      ok(dr === false && !everDrained && got2.length === 2 && got2.every(h => h.mass === 1) && m3 === m2, `3. off drained ground (drained ${dr}, ever drained in the window: ${everDrained}) two touching crawlers stayed two: ${JSON.stringify(got2.map(h => ({ id: h.id, mass: h.mass })))}`)
     }
   }
   await clear()
