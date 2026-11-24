@@ -195,6 +195,9 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 05:5x Alex: "can we give the spirits and the manamal specific positions around the player so they arent stacked ontop of each other" (today: every follower settles at one 1.7 m slot, spirit-trot.ts:95)
+- 11-24 05:5x Alex: followers "should join in on the idle skits where the player has been idle and the camera starts moving on its own" (shared/idle-mode.ts)
+- 11-24 05:5x Alex: "take them into the wilds to defeat some hollows are they battle ready?" (today: party spirits beside the keeper GROW from his kills, page.tsx:598, but do not fight)
 - 11-24 05:4x Alex: "i wonder for four friends exploring together would this be laggy.. i expect the number and difficulty of mobs to increase the more keepers are in a chord.. four friends would have about 12 spirits and manamals between them and the mobs would get about 3x as dense" -> M125
 - 11-24 05:3x Alex: "theres something off about that" (planter #2 slots) -> planters = SPIRIT BEDS, work like storage boxes: every spirit bloomed in a bed is recorded (maybe 28 limit), max 8 beds per garden, each bed has ONE featured spirit that hangs around the garden and can be asked to join. (-> RULED ce34508, row M124)
 - 11-24 04:4x alex (played the night build): "the hollows feel much better now and a little more challenging this is good" -> M120 s1 feel ✅. "spirits look good" -> M117/M118 looks ok. Signs lark batch aa22eef -> Magii.
