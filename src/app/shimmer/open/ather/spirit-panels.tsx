@@ -10,7 +10,7 @@ import { getInv, setInv, useInv } from '../shared/bag'
 import type { Bank } from './garden-bank'
 import { hudSay } from '../shared/hud-say'
 import { SPECIES_NAMES, type Species } from '../../spirits/spirit'
-import { SEED_NAME, seedIcon, speciesOf, plant, ripen, growth, settlePot, tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, hasten, growingIn, spiritsAt, type SeedId } from './spirit-seeds'
+import { SEED_NAME, seedIcon, speciesOf, plant, ripen, growth, settlePot, tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, hasten, growingIn, spiritsAt, featuredAt, withFeatured, BED_RECORD_MAX, type SeedId } from './spirit-seeds'
 import { GAME_DAY_MS } from './nodes'
 import { loadBook, saveBook, see, seenCount, freshBook, type Book } from './grimoire-book'
 import { GRIMOIRE_SIZE } from './plot'
@@ -90,6 +90,9 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
   // M122 (RULED 756fdbb): a bloomed planter is free for the next seed. `growing` = the seed in it now; `home` = the spirits
   // who bloomed here (they stay theirs: party, follow and the garden roam are untouched)
   const growing = growingIn(b.pots, pieceId), home = spiritsAt(b.pots, pieceId)
+  // M124 s1 (RULED ce34508): the bed's record (cap BED_RECORD_MAX) + its ONE featured spirit (stays near, drawn)
+  const feat = featuredAt(b.pots, b.featured, pieceId), full = home.length >= BED_RECORD_MAX
+  const doFeature = (k: string) => { const c = current(), f = withFeatured(c.pots, c.featured, k); if (f) setBook({ ...c, featured: f }) }
   const seeds = seedsOnPlot(inv, bk)
   const doPlant = (id: SeedId) => {
     const next = plant(current().pots, pieceId, id, Date.now()), t = takeSeed(getInv(), bank.get(), id)
@@ -119,9 +122,10 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
   const when = span === whole ? (whole >= BLOOM_DAYS ? `at the end of day ${whole}` : `at the start of day ${whole + 1}`) : `midway through day ${whole + 1}`
   const nextTend = (gameDay(now) + 1) * GAME_DAY_MS - now
   return (
-    <HearthFrame title="Spirit Planter" maxWidth={420} onClose={onClose} fixed dataPanel="planter">
+    <HearthFrame title="Spirit Bed" maxWidth={420} onClose={onClose} fixed dataPanel="planter">
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
-        {!growing && (seeds.length
+        {!growing && full && <div data-planter="full" style={{ fontSize: 13, color: H.inkSoft }}>This bed's record is full.</div>}{/* TODO @lark: M124 placeholder */}
+        {!growing && !full && (seeds.length
           ? <><div style={lab}>Plant a seed</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {seeds.map(s => <button key={s.id} data-act="plant-seed" data-seed={s.id} data-bag={s.bag} data-bank={s.bank} onClick={() => doPlant(s.id)} title={SEED_NAME} style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', position: 'relative' }}>
@@ -144,11 +148,16 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
             {growing.v === 2 && tendedToday(growing, now) && <div style={{ fontSize: 12, color: H.inkSoft }}>Next tend in about {realIn(nextTend)}</div>}
           </div>
         )}
-        {home.map(k => { const sp = speciesOf(b.pots[k].seed), card = m ? m[nameOf(sp)] : null
-          return <div key={k} data-planter="bloomed" data-spirit={k} data-species={sp} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <Well size={72}>{card ? <img src={card.img} alt="" width={60} height={60} style={{ objectFit: 'contain' }} /> : null}</Well>
-            <div><div style={{ fontWeight: 700 }}>{nameOf(sp)}</div><div style={{ fontSize: 12.5, color: H.inkSoft }}>It bloomed here, and here it stays.</div></div>
-          </div> })}
+        {home.length > 0 && <div data-bed-record={home.length} style={{ ...lab, display: 'flex', justifyContent: 'space-between' }}><span>Bloomed here</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{home.length} / {BED_RECORD_MAX}</span></div>}
+        {home.length > 0 && <div style={{ display: 'grid', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+          {home.map(k => { const sp = speciesOf(b.pots[k].seed), card = m ? m[nameOf(sp)] : null, on = k === feat, w = on ? 72 : 44
+            // TODO @lark (M124 placeholders): the featured / unfeatured lines and the 'Feature' verb (care-not-leash: an ask)
+            return <div key={k} data-planter="bloomed" data-spirit={k} data-species={sp} data-featured={on ? '1' : '0'} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <Well size={w}>{card ? <img src={card.img} alt="" width={w - 12} height={w - 12} style={{ objectFit: 'contain' }} /> : null}</Well>
+              <div style={{ flex: 1 }}><div style={{ fontWeight: 700 }}>{nameOf(sp)}</div><div style={{ fontSize: 12.5, color: H.inkSoft }}>{on ? 'Featured. It stays near this bed.' : 'Out in the garden.'}</div></div>
+              {!on && <span data-act="feature-spirit"><HearthButton small onClick={() => doFeature(k)}>Feature</HearthButton></span>}
+            </div> })}
+        </div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
           {growing && growing.v === 2 && (canTend(growing, now)
             ? <span data-act="tend-planter"><HearthButton small onClick={doTend}>Tend</HearthButton></span>

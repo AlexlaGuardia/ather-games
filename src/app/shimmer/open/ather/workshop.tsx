@@ -49,7 +49,9 @@ import { loadAssign, mayUse } from './train-assign'   // M118 s2: the keeper's a
 import { PlanterPanel, GrimoirePanel, getPots, setPots, settlePlanter, useBook, type BankStore } from './spirit-panels'
 import { liftPiece } from './piece-lift'
 import { getBoxes, setBoxes, settleSaplingBox, PottedSapling, SaplingBoxSection } from './planter-box-view'   // M113 s1
-import { BLOOM_MS, speciesOf, homeOf, growingIn, spiritsAt } from './spirit-seeds'
+import { BLOOM_MS, speciesOf, homeOf, growingIn, spiritsAt, shownAt } from './spirit-seeds'
+import { partyIds, calledIds, subscribeParty } from './spirit-party'   // M124 s1: who is drawn at a bed
+import { followIds, subscribeFollow } from './spirit-follow'
 import { BLOOMED_SPIRIT_LINE, planterBoxHint } from './planter-lines'
 import { SpiritOnPlanter, useSpiritsDev } from './spirit-model'
 import { spiritModelFor } from './spirit-models'
@@ -1270,11 +1272,17 @@ function planterNav(id: string, dev = false, r = 0.3): SpiritNav | null {
     return n.b.some(b => footDist(b, x, z) < r) || footBlocked(n.feet, x, z, r, toy)
   } }
 }
+const NONE: readonly string[] = [], NONE_SET: ReadonlySet<string> = new Set()
 /** M76: the spirit planter: woven starwillow round soft soil; a sprout that grows with the seed; a gold glow once it bloomed. */
 function SpiritPlanterBody({ id }: { id?: string }) {
   const f = FURNITURE.spirit_planter, c = WOODS.starwillow, b = useBook()
   // M122 (RULED 756fdbb): the seed growing here (any slot) and every spirit whose home this planter is
   const pot = id ? growingIn(b.pots, id) : undefined, home = useMemo(() => (id ? spiritsAt(b.pots, id) : []), [b.pots, id])
+  // M124 s1 (RULED ce34508): only the bed's featured spirit is drawn, plus any the keeper has with them (party / follow /
+  // called home); the rest live free in the garden out of sight
+  const party = useSyncExternalStore(subscribeParty, partyIds, () => NONE), follow = useSyncExternalStore(subscribeFollow, followIds, () => NONE)
+  const called = useSyncExternalStore(subscribeParty, calledIds, () => NONE_SET)
+  const shown = useMemo(() => (id ? shownAt(b.pots, b.featured, id, new Set([...party, ...follow, ...called])) : []), [b.pots, b.featured, id, party, follow, called])
   const sprout = useRef<THREE.Group>(null)
   useFrame(() => {
     if (sprout.current && pot) { const g = Math.max(0.15, Math.min(1, (Date.now() - pot.at) / BLOOM_MS)); sprout.current.scale.setScalar(g) }
@@ -1284,7 +1292,7 @@ function SpiritPlanterBody({ id }: { id?: string }) {
     <Bx p={[0, 0.5, 0]} s={[f.w - 0.12, 0.05, f.d - 0.12]} c="#4a3524" />
     {[-1, 1].flatMap(a => [-1, 1].map(z => <mesh key={`${a}${z}`} position={[a * (f.w / 2 - 0.04), 0.62, z * (f.d / 2 - 0.04)]}><sphereGeometry args={[0.035, 6, 5]} /><meshBasicMaterial color="#eaf2ff" /></mesh>))}
     {pot && <group ref={sprout} position={[0, 0.52, 0]}><mesh position-y={0.12}><cylinderGeometry args={[0.015, 0.02, 0.24, 5]} /><meshLambertMaterial color="#9ad06a" /></mesh><mesh position={[0.05, 0.22, 0]} rotation-z={-0.8}><sphereGeometry args={[0.05, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh><mesh position={[-0.05, 0.18, 0]} rotation-z={0.8}><sphereGeometry args={[0.045, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh></group>}
-    {home.map(k => <PlanterSpirit key={k} id={k} />)}
+    {shown.map(k => <PlanterSpirit key={k} id={k} />)}
     {home.length > 0 && <pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} />}
   </>
 }

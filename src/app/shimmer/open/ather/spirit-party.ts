@@ -44,3 +44,8 @@ export const subscribeParty = (f: () => void) => { subs.add(f); return () => { s
 
 /** planter ids called home this moment: spirit-model.tsx takes one and she walks to the keeper (trot.call) */
 export const spiritCall = new Set<string>()
+// M124 s1: a spirit out of sight (not her bed's featured one, not in the party) is not drawn. Calling her home draws her
+// at her bed for this session and she walks to the keeper the same way (no new mechanism, RULED ce34508 item 2).
+let called: ReadonlySet<string> = new Set()   // replaced (never mutated) so a store snapshot sees the change
+export const calledIds = (): ReadonlySet<string> => called
+export function callHome(id: string) { spiritCall.add(id); if (!called.has(id)) { called = new Set([...called, id]); for (const f of subs) f() } }

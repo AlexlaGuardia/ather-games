@@ -17,7 +17,7 @@ import { squareAt, sqId, GATE, GREG_PLOT_ANCHOR as GREG, THRESHOLD, PATH_START, 
 import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, baitYield, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
-import { FURNITURE, PIECE_JOBS, MAX_PIECES, KEEPSTONES, keepstoneFor, ALC_LIVE, type Job } from './furniture'
+import { FURNITURE, BEDS_MAX, PIECE_JOBS, MAX_PIECES, KEEPSTONES, keepstoneFor, ALC_LIVE, type Job } from './furniture'
 import { adoptWork, adoptOut, stockJobs, type Work, type Station } from './station-queue'
 import { adoptUpper, levelBase, type Level } from './plot-floors'
 import { adoptCols, type Cols } from './plot-cols'
@@ -481,6 +481,8 @@ export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: st
   if (!f) return { ok: false, why: 'That is not furniture.' }
   if (!site && item === TABLE_ITEM && tableAt(works)) return { ok: false, why: 'Your planning table already stands.' }   // M96: one per keeper
   if (f.shaft) { x = cellMid(x); z = cellMid(z); q = Math.round(q); if (shaftBlocked(works, x, z)) return { ok: false, why: 'A wall stands in that cell on one of the floors.' } }   // M48: a shaft takes the whole cell, every level
+  // M124 s1 (RULED ce34508): at most BEDS_MAX spirit beds stand in a garden; a 9th is refused (TODO @lark: placeholder line)
+  if (!site && f.spirit === 'planter' && works.pieces.filter(p => FURNITURE[p.item]?.spirit === 'planter').length >= BEDS_MAX) return { ok: false, why: `${BEDS_MAX} spirit beds already stand in this garden.` }
   if (works.pieces.length >= MAX_PIECES) return { ok: false, why: `${MAX_PIECES} pieces already stand. Pick one up to make room.` }
   const k = pieceRect(item, x, z, q)
   for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {

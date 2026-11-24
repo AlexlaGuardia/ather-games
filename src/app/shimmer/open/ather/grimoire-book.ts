@@ -14,7 +14,7 @@ import { isSeed } from './seed-items'
 export type Stage = 'seen' | 'bonded'
 export interface Page { species: Species; stage: Stage; at: number }
 /** The book + the garden's spirit state that lives with it: the planters' pots and the Anemonyx visits already met. */
-export interface Book { v: 1; pages: Page[]; pots: Pots; met: number[]; /** the absolute game day this book began (the Anemonyx counts her visits from it) */ since?: number }
+export interface Book { v: 1; pages: Page[]; pots: Pots; met: number[]; /** the absolute game day this book began (the Anemonyx counts her visits from it) */ since?: number; /** M124: each spirit bed's featured spirit (bed piece id -> spirit pots key) */ featured?: Record<string, string> }
 export const freshBook = (): Book => ({ v: 1, pages: [], pots: {}, met: [] })
 
 /** A species seen for the first time takes the next page; seeing it again changes nothing. */
@@ -43,7 +43,11 @@ export function parseBook(v: unknown): Book {
   }
   const met = Array.isArray(o.met) ? o.met.filter((k): k is number => Number.isInteger(k)) : []
   const since = Number.isInteger(o.since) ? o.since : undefined
-  return since === undefined ? { v: 1, pages, pots, met } : { v: 1, pages, pots, met, since }
+  // M124: the featured spirit per bed (a stale or foreign entry is harmless: featuredAt falls back to the first bloomed)
+  const featured: Record<string, string> = {}
+  if (o.featured && typeof o.featured === 'object') for (const [bed, k] of Object.entries(o.featured)) if (typeof k === 'string') featured[bed] = k
+  const b: Book = since === undefined ? { v: 1, pages, pots, met } : { v: 1, pages, pots, met, since }
+  return Object.keys(featured).length ? { ...b, featured } : b
 }
 export function loadBook(): Book {
   try { return parseBook(JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? 'null')) } catch { return freshBook() }

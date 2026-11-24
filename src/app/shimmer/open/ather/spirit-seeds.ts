@@ -57,9 +57,32 @@ export const growingKey = (pots: Pots, pieceId: string): string | null =>
   Object.keys(pots).find(k => !isCarried(k) && homeOf(k) === pieceId && !pots[k].bloomed) ?? null
 /** The seed growing in planter `pieceId`, if any. */
 export const growingIn = (pots: Pots, pieceId: string): Pot | undefined => { const k = growingKey(pots, pieceId); return k ? pots[k] : undefined }
-/** Plant a seed: refused (null) only while a seed is already GROWING here. A bloomed planter takes the next free slot key. */
+// M124 s1 (RULED athernyx ce34508 + glossary 'Spirit bed'): the Spirit Planter IS the spirit bed. A bed = where a spirit
+// bloomed + the RECORD of every spirit that bloomed there (`spiritsAt`, the same M122 keys: nobody is moved or renamed, so
+// old saves need no rewrite), capped at BED_RECORD_MAX. ONE featured spirit per bed stays near it, drawn; the rest live free
+// in the garden out of sight (the render cap is a camera fact). A garden holds furniture.ts BEDS_MAX beds.
+export const BED_RECORD_MAX = 28
+/** The featured spirit of bed `pieceId`: the keeper's pick while she still calls it home, else the first bloomed there. */
+export const featuredAt = (pots: Pots, featured: Readonly<Record<string, string>> | undefined, pieceId: string): string | null => {
+  const home = spiritsAt(pots, pieceId), f = featured?.[pieceId]
+  return f && home.includes(f) ? f : home[0] ?? null
+}
+/** The spirits DRAWN at bed `pieceId`: its featured one, plus any the keeper has with them (`near` = the party, the ones
+ *  following and any just called home). Every other spirit of the bed lives free in the garden, out of sight. */
+export const shownAt = (pots: Pots, featured: Readonly<Record<string, string>> | undefined, pieceId: string, near: ReadonlySet<string>): string[] => {
+  const f = featuredAt(pots, featured, pieceId)
+  return spiritsAt(pots, pieceId).filter(k => k === f || near.has(k))
+}
+/** Feature `key` at her own bed (pure). Null = refused (no bloomed spirit by that key). */
+export function withFeatured(pots: Pots, featured: Readonly<Record<string, string>> | undefined, key: string): Record<string, string> | null {
+  const p = pots[key]
+  if (!p?.bloomed || isCarried(key)) return null
+  return { ...(featured ?? {}), [homeOf(key)]: key }
+}
+/** Plant a seed: refused (null) while a seed is already GROWING here, or the bed's record is full (BED_RECORD_MAX).
+ *  A bloomed bed takes the next free slot key. */
 export function plant(pots: Pots, pieceId: string, seed: SeedId, now: number): Pots | null {
-  if (growingKey(pots, pieceId)) return null
+  if (growingKey(pots, pieceId) || spiritsAt(pots, pieceId).length >= BED_RECORD_MAX) return null
   let key = pieceId
   for (let n = 2; pots[key]; n++) key = `${pieceId}#${n}`
   return { ...pots, [key]: { seed, at: now, v: 2, tends: [] } }

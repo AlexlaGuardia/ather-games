@@ -85,7 +85,7 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   // M76 (Alex 11-22; Magii 68808f3): the SPIRIT PLANTER (Starwillow, canon Ather tree) takes one Mana Seed and the spirit that
   //    seed already is blooms in it (spirit-seeds.ts). The GRIMOIRE PEDESTAL is where Greg's tablet rests in the garden. Plain
   //    nouns. Blurbs = placeholders for @lark.
-  spirit_planter: { name: 'Spirit Planter', blurb: 'Starwillow branches woven round a bed of soft soil. A Mana Seed planted here blooms into the spirit it already is.', recipe: [{ id: 'starwillow_branch', n: 4 }, { id: 'starwillow_sap', n: 1 }], w: 0.9, d: 0.9, h: 0.6, solid: true, wood: 'starwillow', glow: '#ffe7a0', spirit: 'planter' },
+  spirit_planter: { name: 'Spirit Bed', blurb: 'Starwillow branches woven round a bed of soft soil. A Mana Seed planted here blooms into the spirit it already is.', recipe: [{ id: 'starwillow_branch', n: 4 }, { id: 'starwillow_sap', n: 1 }], w: 0.9, d: 0.9, h: 0.6, solid: true, wood: 'starwillow', glow: '#ffe7a0', spirit: 'planter' },
   grimoire_pedestal: { name: 'Grimoire Pedestal', blurb: 'A short stone stand with a slanted top. The grimoire rests here, and its pages are read here.', recipe: [], gift: true, w: 0.7, d: 0.7, h: 1.1, solid: true, wood: 'stone', glow: '#ffd27a', spirit: 'pedestal' },   // M68 s2 (hub call): GREG hands it (Spirits?.3), one per keeper; the carpentry recipe is gone
   // M110 s1 (Magii RULED 3a77c87: training furniture, Jin's pieces/recipes): the AGI piece. Non-solid (she bounds across it,
   //    so does the keeper). Plain functional name, no canon name exists; name + blurb = placeholders for Magii / @lark.
@@ -151,6 +151,8 @@ export const ALC_LIVE = true   // FLIPPED 2026-11-21 (Alex via Magii: "turn alch
 export const PIECE_JOBS: readonly Job[] = FURNITURE_ORDER.filter(id => FURNITURE[id].recipe.length > 0 && (ALC_LIVE || !FURNITURE[id].alc)).map(id => ({ id, label: FURNITURE[id].name, in: FURNITURE[id].recipe, out: { id, n: 1 } }))
 /** How many pieces a plot holds (a keeper furnishes, not fills). */
 export const MAX_PIECES = 60
+/** M124 s1 (RULED athernyx ce34508): at most this many spirit beds (the spirit_planter item) stand in one garden */
+export const BEDS_MAX = 8
 
 // ── THE KEEPSTONE FAMILY (canon 5a20b8f, ather-rework WORKSHOP ROOMS (6)): the basic one sets a raw mana shard and is made
 //    at the planning table; UNIQUE Keepstones are FOUND in the world with a higher crystal set in them: LOOK ONLY, never
