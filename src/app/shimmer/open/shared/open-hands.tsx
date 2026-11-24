@@ -29,7 +29,7 @@ const C = { glove: '#6e4a2c', cuff: '#b9a582', cord: '#7a5a35', seat: '#7fb6d9',
 /** the glove's seat = the gem (M33: Morel's colour too, game-hud MOREL_GEM) */
 export const SEAT_COLOR = C.seat
 
-export interface OpenHandsApi { step: (i: FpInput, dt: number) => void; seat: (lit: number) => void }
+export interface OpenHandsApi { step: (i: FpInput, dt: number) => void; seat: (lit: number) => void; /** where the right mitten is, in the world, as posed this frame (M136's tether) */ right: (out: THREE.Vector3) => THREE.Vector3 }
 
 export function buildHand(side: 1 | -1, seatMat: THREE.MeshStandardMaterial | null, mitten: string = C.glove): THREE.Group {
   const g = new THREE.Group()
@@ -88,6 +88,7 @@ export const OpenHands = forwardRef<OpenHandsApi, { held?: ReactNode }>(function
       rig.root.visible = !i.hidden
       place(rig.R, R); place(rig.L, L)
     },
+    right: out => { rig.R.updateWorldMatrix(true, false); return rig.R.getWorldPosition(out) },
     seat: lit => { seatMat.emissiveIntensity = 0.3 + 1.6 * Math.max(lit, gemGlow(performance.now() / 1000)) },
   }), [camera, rig, seatMat])
   useEffect(() => {

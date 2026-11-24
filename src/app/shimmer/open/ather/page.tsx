@@ -191,10 +191,11 @@ import { ProspectingFX, crystalCentre, type CrystalAim, type ProspectFx } from '
 import { CompanionFollower } from '../shared/companion-follower'
 import { subscribeCompanion, takeJoined, perkLabel, perkBonus } from '../shared/companion'
 import { minePlan, mineCommit, mineCheck, CRYSTAL_NAME, CRYSTAL_ITEM, TIER as CRYSTAL_TIER, type CrystalKind } from './prospecting'
-import { beginWork, stepWork, finishWork, saveWork, workOf, manaLeft, manaShown, type Work, type Stack as ChipStack } from './channel'
+import { beginWork, stepWork, finishWork, saveWork, workOf, manaLeft, manaShown, type Work } from './channel'
 import { TREE_DIAL, CRYSTAL_DIAL, HOLD_RANGE, PULSE_GAP_MS, manaNeed } from './gather-dials'
 import { GatherBar, type GatherView } from './gather-bar'
-import { ChannelFocus, freshFocus, type FocusState } from './channel-fx'
+import { ChannelFocus, focusAt, freshFocus, type FocusState } from './channel-fx'
+import { GatherTether, type TetherApi } from './gather-tether'
 import { GameHud, useGameHudSize, hudSay, type CompassMark, type CompassPose, type Mana } from '../shared/game-hud'
 import { ECON, potionCdLeft, potionWaitLine, RELOAD_DRY_LINE } from '../shared/vitals-economy'
 import { useSkinCharge, type SkinPool } from '../shared/use-skin-charge'
@@ -788,7 +789,7 @@ function AtherSliceGame() {
   const guestsHere = plotNet.guests.map(id => ({ id, name: mp.peers.current.get(id)?.name || 'A friend' }))
   useEffect(() => { setLobbyZone(zone.kind === 'wilds' ? OPEN_WILDS : plotZone(visitNow ? visitNow.host : selfPlayerId())) }, [zone.kind, visitNow])
   // third person (V): your own keeper, the segmented doll (open/shared/third-person.tsx), driven from the tick below
-  const thirdRef = useRef(false), dollDrive = useRef(newDrive()), camRef = useRef<Camera | null>(null)
+  const thirdRef = useRef(false), dollDrive = useRef(newDrive()), camRef = useRef<Camera | null>(null), tetherHand = useRef(new Vector3()), tetherTo = useRef(new Vector3())
 
   const gateStepRef = useRef<(lc: Loco, yaw: number, dt: number, g: (x: number, z: number) => number) => void>(() => {})
   const onTick = useCallback((lc: Loco, yaw: number, dt: number) => {
@@ -830,6 +831,9 @@ function AtherSliceGame() {
       const d = dollDrive.current, a = dollAction({ speed, airborne: lc.airborne, working, castAgoMs: now - handsCastAt.current, gun: stanceRef.current.kind === 'weapon' })
       d.action = a.action; d.rate = a.rate; d.x = lc.px; d.y = lc.py; d.z = lc.pz; d.yaw = yaw + Math.PI; d.visible = third || isBuilding()
       if (third && camRef.current) pullBack(camRef.current, heightRef.current, lc.py)
+      const tc = chanRef.current, hand = third ? d.handR : handsApi.current?.right(tetherHand.current)   // M136: the light runs from the right hand to the focus
+      if (tc && hand && camRef.current && focusRef.current.node && (tc.node === 'tree' ? fxRef : cFxRef).current?.busy()) tetherRef.current?.step(hand, focusAt(focusRef.current, camRef.current.position, now, tetherTo.current), tc.node, now)
+      else tetherRef.current?.off()
       if (isBuilding() && camRef.current) stepBuildCam(camRef.current, dt)   // the flying planner owns the lens
     }
     { const b = buffsRef.current, t = Date.now()   // a potion buff that has run out says so, once, and leaves the save
@@ -976,7 +980,7 @@ function AtherSliceGame() {
       grant: (grey = 0, pages = 0) => updateGarden({ ...garden, grey: garden.grey + grey, pages: garden.pages + pages }),
       resetGarden: () => updateGarden(freshGarden()),
       spread: () => spreadRef.current, skipDays, ownerAt: (x: number, z: number) => nodeOwner?.(x, z),
-      chan: () => (chanRef.current ? { id: chanRef.current.w.id, done: chanRef.current.w.p, of: 1 } : null), gather: () => gatherView(), prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mine: () => mineAimed(), crystal: () => { const c = cAimRef.current.crystal; return c ? { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z } : null }, mana: () => manaRef.current.cur,
+      chan: () => (chanRef.current ? { id: chanRef.current.w.id, done: chanRef.current.w.p, of: 1 } : null), gather: () => gatherView(), tether: () => tetherRef.current?.now() ?? null, prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mine: () => mineAimed(), crystal: () => { const c = cAimRef.current.crystal; return c ? { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z } : null }, mana: () => manaRef.current.cur,
       stance: () => stanceRef.current, speedMult: () => (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1) * frameStats(getLook()).speed,
       village: () => loadVillage(), villageTick: () => runVillage(false), fennelAt: () => fennelRef.current,
       eat: () => eatHeld(), hp: () => vitalsRef.current.hp, drink: () => drinkHeld(), buffs: () => buffsRef.current, tools: () => toolsRef.current, setMana: (n: number) => { manaRef.current.cur = n },
@@ -1041,11 +1045,12 @@ function AtherSliceGame() {
   //    tree / crystal in reach → the right focus hangs at the node and drains mana per second by itself. E / click again, out
   //    of reach, a weapon drawn or a dry bar lets go and the node keeps its progress till its reset (timed from the first
   //    touch); all of the roll and the XP land at the end.
-  type Chan = ({ node: 'tree'; t: Tree } | { node: 'crystal'; c: Crystal }) & { w: Work; at: number; nextAt: number; savedAt: number; fell: ChipStack[] | null }
-  const chanRef = useRef<Chan | null>(null), focusRef = useRef<FocusState>(freshFocus())
+  type Chan = ({ node: 'tree'; t: Tree } | { node: 'crystal'; c: Crystal }) & { w: Work; at: number; nextAt: number; savedAt: number }
+  const tetherRef = useRef<TetherApi | null>(null), chanRef = useRef<Chan | null>(null), focusRef = useRef<FocusState>(freshFocus())
   const stopChannel = useCallback((why?: string) => {
     if (!chanRef.current) return
     chanRef.current = null; focusRef.current = { ...focusRef.current, node: null }
+    fxRef.current?.stop(); cFxRef.current?.stop(); tetherRef.current?.off()   // the light is gone with the work (Alex 11-24)
     saveWork()
     if (why) setToast(why)
   }, [])
@@ -1067,7 +1072,7 @@ function AtherSliceGame() {
     if (manaRef.current.cur < Math.min(1, manaLeft(treeDial(t), rung('tree'), workOf('tree', t.id)))) { setToast('Out of mana.'); return }
     stopChannel()
     const w = beginWork('tree', t.id, () => { const d = prunePlan(t.kind); const perk = perkBonus('forestry'); if (perk) d[0].n += 1; return { drops: d, extra: perk } }, treeDial(t).respawnMs)
-    chanRef.current = { w, node: 'tree', t, at: performance.now(), nextAt: 0, savedAt: performance.now(), fell: null }
+    chanRef.current = { w, node: 'tree', t, at: performance.now(), nextAt: 0, savedAt: performance.now() }
   }, [zone.kind, stopChannel])
   const mineAimed = useCallback(() => {
     const c = cAimRef.current.crystal
@@ -1079,14 +1084,14 @@ function AtherSliceGame() {
     if (manaRef.current.cur < Math.min(1, manaLeft(crystalDial(c), rung('crystal'), workOf('crystal', c.id)))) { setToast('Out of mana.'); return }
     stopChannel()
     const w = beginWork('crystal', c.id, () => { const p = minePlan(c.kind); return { drops: p.drops, extra: p } }, crystalDial(c).respawnMs)
-    chanRef.current = { w, node: 'crystal', c, at: performance.now(), nextAt: 0, savedAt: performance.now(), fell: null }
+    chanRef.current = { w, node: 'crystal', c, at: performance.now(), nextAt: 0, savedAt: performance.now() }
   }, [zone.kind, stopChannel])
-  /** the light at the node: one pulse of the fx; the one running when the node gives way throws the drops */
+  /** the light at the node: one pulse of the fx */
   const pulse = (ch: Chan) => {
-    const gap = () => { ch.nextAt = performance.now() + PULSE_GAP_MS; const f = ch.fell ?? []; ch.fell = null; return f }
+    const gap = () => { ch.nextAt = performance.now() + PULSE_GAP_MS }
     focusRef.current.pulseAt = performance.now()
-    if (ch.node === 'tree') { if (fxRef.current?.start(ch.t, gap, () => {})) startShake(ch.t.id) }
-    else cFxRef.current?.start(ch.c, () => { const d = gap(); if (!d.length) return null; const ex = ch.w.extra as { found: Exclude<CrystalKind, 'egg'> }; return { found: ex.found, n: Math.max(1, d.find(x => x.id === CRYSTAL_ITEM[ex.found])?.n ?? 1) } }, () => {})
+    if (ch.node === 'tree') { if (fxRef.current?.start(ch.t, gap)) startShake(ch.t.id) }
+    else cFxRef.current?.start(ch.c, gap)
   }
   const knock = (ch: Chan, last: boolean) => {   // M36: the knock of the work; the end is the snip / the glassy ring
     if (ch.node === 'tree') sfx(last ? 'hit-prune-tree' : 'hit-axe-tree', { at: { x: ch.t.x, y: 1, z: ch.t.z } })
@@ -1128,7 +1133,8 @@ function AtherSliceGame() {
     const ex = ch.w.extra as { found?: string; perk?: string } | string | undefined
     const perk = typeof ex === 'string' ? ex : ex?.perk
     const egg = ch.node === 'crystal' && ch.c.kind === 'egg' && typeof ex === 'object' && ex?.found ? `It was ${CRYSTAL_NAME[ex.found as keyof typeof CRYSTAL_NAME].toLowerCase().replace(' crystal', '')}! ` : ''
-    ch.fell = ch.w.drops; if (fx && !fx.busy()) pulse(ch)   // the drops fly off the node with the pulse that is running, or one now
+    if (ch.node === 'tree') fxRef.current?.drop(ch.t, ch.w.drops)   // off the node now: no pulse is started (or waited for) at the end
+    else { const found = (ch.w.extra as { found: Exclude<CrystalKind, 'egg'> }).found; cFxRef.current?.burst(ch.c, { found, n: Math.max(1, ch.w.drops.find(x => x.id === CRYSTAL_ITEM[found])?.n ?? 1) }) }
     stopChannel(`${egg}${perk ? `${perk}! ` : ''}${names.join(' · ')} · +${x.xp} ${skill}${x.levelUp ? `. ${skill} ${x.levelUp}!` : ''}`)
   }, [stopChannel])
   /** what the bar shows: the node being worked, else the aimed node if it is part done (null = no bar) */
@@ -1702,7 +1708,7 @@ function AtherSliceGame() {
         {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
         {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
-        {zone.kind === 'wilds' && <ChannelFocus focus={focusRef} />}
+        {zone.kind === 'wilds' && <><ChannelFocus focus={focusRef} /><GatherTether ref={tetherRef} /></>}
         {zone.kind === 'wilds' && ww && <ProspectingFX ww={ww} aim={cAimRef} fx={cFxRef} ground={ground} mineable={c => mineCheck(c.kind, c.id).ok} />}
         {zone.kind === 'wilds' && ww && <RinningFX ease={easeOf(toolsRef.current.rinning)} waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT && !!toolsRef.current.rinning} onCatch={onCatch} onGone={onGone} />}
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} infected={infectedSet} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />{net && <TilePaths net={net} W={T} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />}</group> })}

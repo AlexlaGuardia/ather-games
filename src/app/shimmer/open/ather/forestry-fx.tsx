@@ -4,8 +4,8 @@
 //
 //   AIM     — a ray from the eye through the crosshair, against every tree near the keeper (trunk as a cylinder, crown as
 //             an ellipsoid, crownOf in forestry.ts, the SAME numbers the scene draws). The hit tree wears a gold ring.
-//   CHANNEL — mana runs from the blade in your hand to the crown as a stream of motes (canon: a focus channels, the light
-//             cuts, nothing is swung), the crown shivers (wilds-scene sways it), leaves come down.
+//   CHANNEL — a pulse of the work: the crown shivers (wilds-scene sways it), leaves come down. The stream of motes itself
+//             (hand to focus) is gather-tether.tsx. Canon: a focus channels, the light cuts, nothing is swung.
 //   DROPS   — when the cut lands: the logs (and a sapling, if one fell) pop out of the crown, fall, settle a breath on the
 //             ground, then fly to the keeper. The bag already has them (forestry.ts paid at the cut); this is the arrival.
 //
@@ -20,12 +20,16 @@ import { crownOf, TRUNK, PRUNE_RANGE } from './forestry'
 
 export interface Aim { tree: Tree | null; dist: number }
 export interface ForestryFx {
-  /** Run the channel at `tree`; `cut()` is called when the light lands and returns what fell (ids and counts). */
-  start(tree: Tree, cut: () => { id: string; n: number }[], arrived: () => void): boolean
+  /** One pulse of the work at `tree`; `ended()` when it has run its length (a stop never calls it). */
+  start(tree: Tree, ended: () => void): boolean
+  /** The work is over, this frame: no pulse outlives it. */
+  stop(): void
+  /** What fell flies off the crown now. */
+  drop(tree: Tree, got: { id: string; n: number }[]): void
   busy(): boolean
 }
 export const CHANNEL_MS = 900
-const MOTES = 16, LEAVES = 14, MAX_DROPS = 8
+const LEAVES = 14, MAX_DROPS = 8
 
 /** Ray (origin o, unit dir d) against a vertical cylinder at (cx, cz) radius r between y0..y1: the distance, or Infinity. */
 function rayCyl(o: THREE.Vector3, d: THREE.Vector3, cx: number, cz: number, r: number, y0: number, y1: number): number {
@@ -60,19 +64,34 @@ export function ForestryFX({ ww, aim, fx, ground }: {
   ground: (x: number, z: number) => number
 }) {
   const { camera } = useThree()
-  const ring = useRef<THREE.Mesh>(null), motes = useRef<THREE.InstancedMesh>(null), leaves = useRef<THREE.InstancedMesh>(null)
+  const ring = useRef<THREE.Mesh>(null), leaves = useRef<THREE.InstancedMesh>(null)
   const logs = useRef<THREE.InstancedMesh>(null), saps = useRef<THREE.InstancedMesh>(null)
-  const ch = useRef<{ tree: Tree; t0: number; cut: () => { id: string; n: number }[]; arrived: () => void; done: boolean } | null>(null)
-  const drops = useRef<Drop[]>([]), arrivedCb = useRef<(() => void) | null>(null)
+  const ch = useRef<{ tree: Tree; t0: number; ended: () => void; done: boolean } | null>(null)
+  const drops = useRef<Drop[]>([])
   const lf = useRef<{ p: THREE.Vector3; v: THREE.Vector3; t: number }[]>([])
   const tmp = useRef({ o: new THREE.Vector3(), d: new THREE.Vector3(), m: new THREE.Matrix4(), q: new THREE.Quaternion(), s: new THREE.Vector3(), p: new THREE.Vector3(), e: new THREE.Euler() })
 
   fx.current = {
     busy: () => !!ch.current && !ch.current.done,
-    start(tree, cut, arrived) {
+    start(tree, ended) {
       if (ch.current && !ch.current.done) return false
-      ch.current = { tree, t0: performance.now(), cut, arrived, done: false }
+      ch.current = { tree, t0: performance.now(), ended, done: false }
       return true
+    },
+    stop() { if (ch.current) ch.current.done = true },
+    drop(tree, got) {
+      const cr = crownOf(tree)
+      for (const g of got) {
+        const look = DROP_LOOK[g.id], sapling = !look
+        for (let n = 0; n < g.n && drops.current.length < MAX_DROPS; n++) {
+          const a = Math.random() * Math.PI * 2, out = 1.2 + Math.random() * 1.6
+          drops.current.push({
+            p: new THREE.Vector3(tree.x, cr.cy - cr.hh * 0.6, tree.z), v: new THREE.Vector3(Math.cos(a) * out, 2.2 + Math.random() * 1.6, Math.sin(a) * out),
+            spin: new THREE.Vector3(Math.random() * 6 - 3, Math.random() * 6 - 3, Math.random() * 6 - 3), rot: new THREE.Euler(Math.random() * 3, Math.random() * 3, 0),
+            phase: 'fly', t: 0, sapling, color: new THREE.Color(sapling ? '#7fbf5a' : look.color),
+          })
+        }
+      }
     },
   }
 
@@ -94,43 +113,13 @@ export function ForestryFX({ ww, aim, fx, ground }: {
       if (shown) { ring.current.position.set(shown.x, shown.y + 0.08, shown.z); const k = 1 + Math.sin(now / 180) * 0.06; ring.current.scale.set(k * (TRUNK[shown.kind] + 0.9), k * (TRUNK[shown.kind] + 0.9), 1) }
     }
 
-    // ── the channel: motes from the blade (low right of the eye) to the crown
-    const c = ch.current, mm = motes.current
-    if (mm) {
-      mm.count = 0
-      if (c && !c.done) {
-        const u = (now - c.t0) / CHANNEL_MS, cr = crownOf(c.tree)
-        const right = new THREE.Vector3().crossVectors(T.d, camera.up).normalize()
-        const from = T.o.clone().addScaledVector(T.d, 0.7).addScaledVector(right, 0.28).add(new THREE.Vector3(0, -0.32, 0))
-        const to = new THREE.Vector3(c.tree.x, cr.cy - cr.hh * 0.4, c.tree.z)
-        for (let i = 0; i < MOTES; i++) {
-          const f = ((i / MOTES) + u * 1.8) % 1, lift = Math.sin(f * Math.PI) * 0.6
-          T.p.lerpVectors(from, to, f).add(new THREE.Vector3(Math.sin(i * 2.1 + now / 90) * 0.08, lift + Math.cos(i * 1.7 + now / 110) * 0.08, 0))
-          const sc = 0.07 + 0.05 * Math.sin(f * Math.PI)
-          mm.setMatrixAt(i, T.m.compose(T.p, T.q.setFromEuler(T.e.set(now / 200 + i, now / 300, 0)), T.s.set(sc, sc, sc)))
-        }
-        mm.count = MOTES; mm.instanceMatrix.needsUpdate = true
-        // leaves start to come down as the light bites
-        if (lf.current.length < LEAVES && Math.random() < 0.35) lf.current.push({ p: new THREE.Vector3(c.tree.x + (Math.random() - 0.5) * cr.r * 1.4, cr.cy - cr.hh * 0.3, c.tree.z + (Math.random() - 0.5) * cr.r * 1.4), v: new THREE.Vector3((Math.random() - 0.5) * 0.6, -0.4 - Math.random() * 0.6, (Math.random() - 0.5) * 0.6), t: 0 })
-        if (u >= 1) {
-          c.done = true
-          // the cut: what fell comes out of the crown
-          const got = c.cut(), cr2 = crownOf(c.tree)
-          arrivedCb.current = c.arrived
-          for (const g of got) {
-            const look = DROP_LOOK[g.id], sapling = !look
-            for (let n = 0; n < g.n && drops.current.length < MAX_DROPS; n++) {
-              const a = Math.random() * Math.PI * 2, out = 1.2 + Math.random() * 1.6
-              drops.current.push({
-                p: new THREE.Vector3(c.tree.x, cr2.cy - cr2.hh * 0.6, c.tree.z), v: new THREE.Vector3(Math.cos(a) * out, 2.2 + Math.random() * 1.6, Math.sin(a) * out),
-                spin: new THREE.Vector3(Math.random() * 6 - 3, Math.random() * 6 - 3, Math.random() * 6 - 3), rot: new THREE.Euler(Math.random() * 3, Math.random() * 3, 0),
-                phase: 'fly', t: 0, sapling, color: new THREE.Color(sapling ? '#7fbf5a' : look.color),
-              })
-            }
-          }
-          if (!got.length) c.arrived()
-        }
-      }
+    // ── the pulse
+    const c = ch.current
+    if (c && !c.done) {
+      const cr = crownOf(c.tree)
+      // leaves start to come down as the light bites
+      if (lf.current.length < LEAVES && Math.random() < 0.35) lf.current.push({ p: new THREE.Vector3(c.tree.x + (Math.random() - 0.5) * cr.r * 1.4, cr.cy - cr.hh * 0.3, c.tree.z + (Math.random() - 0.5) * cr.r * 1.4), v: new THREE.Vector3((Math.random() - 0.5) * 0.6, -0.4 - Math.random() * 0.6, (Math.random() - 0.5) * 0.6), t: 0 })
+      if (now - c.t0 >= CHANNEL_MS) { c.done = true; c.ended() }
     }
 
     // ── leaves: flutter down, gone after a few seconds
@@ -161,9 +150,7 @@ export function ForestryFX({ ww, aim, fx, ground }: {
         d.p.lerpVectors(d.from, keeper, e).y += Math.sin(u * Math.PI) * 0.9
       }
     }
-    const before = drops.current.length
     drops.current = drops.current.filter(d => !(d.phase === 'home' && d.t >= 0.45))
-    if (before && !drops.current.length && arrivedCb.current) { arrivedCb.current(); arrivedCb.current = null }
     const lg = logs.current, sp = saps.current
     if (lg && sp) {
       let nl = 0, ns = 0
@@ -185,9 +172,6 @@ export function ForestryFX({ ww, aim, fx, ground }: {
       <mesh ref={ring} rotation-x={-Math.PI / 2} visible={false}>
         <ringGeometry args={[0.82, 1, 32]} /><meshBasicMaterial color="#f3dc8a" transparent opacity={0.85} depthWrite={false} />
       </mesh>
-      <instancedMesh ref={motes} args={[undefined, undefined, MOTES]} frustumCulled={false}>
-        <octahedronGeometry args={[1, 0]} /><meshBasicMaterial color="#f6e7a6" />
-      </instancedMesh>
       <instancedMesh ref={leaves} args={[undefined, undefined, LEAVES]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} /><meshLambertMaterial color="#c9c25e" />
       </instancedMesh>

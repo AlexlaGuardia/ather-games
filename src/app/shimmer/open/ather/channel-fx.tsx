@@ -18,6 +18,14 @@ export interface FocusState {
 }
 export const freshFocus = (): FocusState => ({ node: null, x: 0, y: 0, z: 0, pulseAt: -1e9 })
 const PULSE_MS = 420
+/** Where the focus hangs this frame (the tool's end of gather-tether.tsx too). */
+export function focusAt(f: FocusState, eye: THREE.Vector3, now: number, out: THREE.Vector3): THREE.Vector3 {
+  const kick = Math.sin(Math.min(1, Math.max(0, (now - f.pulseAt) / PULSE_MS)) * Math.PI)
+  const dx = eye.x - f.x, dz = eye.z - f.z, d = Math.hypot(dx, dz) || 1
+  // a tree's focus stands off the trunk toward the keeper and a little to its RIGHT, so it reads against the bark, not on it
+  const back = f.node === 'tree' ? 0.85 + kick * 0.3 : 0, side = f.node === 'tree' ? 0.75 : 0
+  return out.set(f.x + (dx / d) * back + (dz / d) * side, f.y + Math.sin(now / 420) * 0.06 + (f.node === 'crystal' ? kick * 0.18 : 0), f.z + (dz / d) * back - (dx / d) * side)
+}
 
 export function ChannelFocus({ focus }: { focus: MutableRefObject<FocusState> }) {
   const { camera } = useThree()
@@ -34,11 +42,8 @@ export function ChannelFocus({ focus }: { focus: MutableRefObject<FocusState> })
     const kick = Math.sin(Math.min(1, (now - f.pulseAt) / PULSE_MS) * Math.PI) * (p > 0 ? 1 : 0)
     // hang a touch toward the keeper from the work point, bob gently, face the keeper's side
     camera.getWorldPosition(tmp.current)
-    const dx = tmp.current.x - f.x, dz = tmp.current.z - f.z, d = Math.hypot(dx, dz) || 1
-    // a tree's focus stands off the trunk toward the keeper and a little to its RIGHT, so it reads against the bark, not on it
-    const back = f.node === 'tree' ? 0.85 + kick * 0.3 : 0, side = f.node === 'tree' ? 0.75 : 0
-    grp.position.set(f.x + (dx / d) * back + (dz / d) * side, f.y + Math.sin(now / 420) * 0.06 + (f.node === 'crystal' ? kick * 0.18 : 0), f.z + (dz / d) * back - (dx / d) * side)
-    grp.rotation.set(0, Math.atan2(dx, dz), 0)
+    if (f.node) focusAt(f, tmp.current, now, grp.position)
+    grp.rotation.set(0, Math.atan2(tmp.current.x - f.x, tmp.current.z - f.z), 0)
     grp.scale.setScalar(appear.current * 1.5 * (1 + p * 0.18))
     if (blade.current) { blade.current.visible = f.node === 'tree'; blade.current.rotation.z = -0.5 + kick * 0.35 }
     if (spike.current) { spike.current.visible = f.node === 'crystal'; spike.current.rotation.y = now / 700 }
@@ -46,7 +51,7 @@ export function ChannelFocus({ focus }: { focus: MutableRefObject<FocusState> })
     if (glowB.current) glowB.current.color.setRGB(1.0 * lit + 0.2, 0.82 * lit + 0.12, 0.42 * lit)
     if (glowS.current) glowS.current.color.setRGB(0.55 * lit + 0.2, 0.85 * lit + 0.1, 1.0 * lit + 0.05)
     if (ring.current) {
-      ring.current.visible = p > 0
+      ring.current.visible = p > 0 && !!f.node
       const s = 0.3 + (1 - p) * 1.4; ring.current.scale.set(s, s, s)
       ;(ring.current.material as THREE.MeshBasicMaterial).opacity = p * 0.8
       ;(ring.current.material as THREE.MeshBasicMaterial).color.set(f.node === 'tree' ? '#ffd98a' : '#9fe6ff')

@@ -4,7 +4,7 @@
 // `spin` turns it slowly (the creator's preview). The limbs float on their own (poseKeeper).
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import type * as THREE from 'three'
+import * as THREE from 'three'
 import { buildKeeper, poseKeeper } from './keeper-figure'
 import { gunProp } from './held-gun-prop'   // M27 slice 4: a peer's held gun on the right hand
 import type { Look } from './keeper-look'
@@ -36,6 +36,7 @@ export function KeeperFigure({ look, drive, spin = 0, yaw = 0, gun = null, shape
       h.visible = d.visible; if (!d.visible) return
       h.position.set(d.x, d.y, d.z); h.rotation.set(0, d.yaw, 0)
       poseKeeper(body, t.current, d.action === 'run' ? 1 : d.action === 'walk' ? 0.6 : 0)
+      d.handR = body.group.getObjectByName('hand-r')?.getWorldPosition(d.handR ?? new THREE.Vector3())   // M136: the gather tether starts here
     } else {
       if (spin) h.rotation.y += dt * spin
       poseKeeper(body, t.current, 0)

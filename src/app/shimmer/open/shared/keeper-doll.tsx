@@ -38,7 +38,7 @@ function apply(r: Refs, p: KeeperPose) {
 
 /** One keeper. `fps` steps the clock (0 = smooth); `phase` offsets it so two dolls never move in lockstep by accident. */
 /** What the game feeds a doll every frame (no React state: a ref the walker writes in its tick). Feet at y. */
-export interface DollDrive { action: KeeperAction; rate: number; x: number; y: number; z: number; yaw: number; visible: boolean }
+export interface DollDrive { action: KeeperAction; rate: number; x: number; y: number; z: number; yaw: number; visible: boolean; /** where the figure's right hand is, in the world (written by keeper-figure-view; the gather tether) */ handR?: import('three').Vector3 }
 
 export function KeeperDoll({ action, limbs = true, fps = 0, speed = 1, phase = 0, drive }: { action: KeeperAction; limbs?: boolean; fps?: number; speed?: number; phase?: number; drive?: React.MutableRefObject<DollDrive> }) {
   const r = useRef<Partial<Refs>>({})
