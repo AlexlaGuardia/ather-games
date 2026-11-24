@@ -207,6 +207,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 15:4x Alex: "rigs too and lets start working on the rest of the base spirits if we can" -> M132 + M102 rigs flip for all (same play slice as the M127 flip); M102 other 8 forms START (sprites lane, next free agent spot)
 - 11-24 15:4x Alex: "flip it for everyone" (hub had asked: spirit fighting + Hollows chasing spirits live for everyone?) -> M127 flip for all
 - 11-24 15:4x Alex (playing): "yea i love the new rig i saw them moving around and they look great tbh and i saw them in action getting the hollows attention but not overly in the way or anything which is good.. but i did notice them have issues in the garden with doors and leaving the plot" -> rig look OK (M102 / M132), M127 chase feel OK (flip for all NOT said); M126 bug = garden doors + leaving the plot
 - 11-24 15:3x Alex (playing): "the trio or duo in my case cant leave the plot although i did see they joined me in the wilds" -> bug, M126 (play, after M102w; cause not found yet)
