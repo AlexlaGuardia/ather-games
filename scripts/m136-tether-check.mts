@@ -40,7 +40,7 @@ const go = async (s: Spot) => {
   }
   return false
 }
-const begin = async (s: Spot) => { await look(s); await A(s.node === 'tree' ? 'prune()' : 'mine()') }
+const begin = async (s: Spot) => { for (let i = 0; i < 12; i++) { await look(s); await frame(); await frame(); if ((s.node === 'tree' ? await A('aim()') : (await A<{ id: string } | null>('crystal()'))?.id) !== s.id) continue; await A(s.node === 'tree' ? 'prune()' : 'mine()'); return } }
 /** run it and end it `how`; every frame on record */
 const ran = async (s: Spot, how: string, end: (() => Promise<unknown>) | null, name: string) => {
   await rec(); await begin(s)
@@ -71,7 +71,7 @@ try {
   for (const s of spots) {
     ok(await go(s), `${s.node} ${s.id} under the crosshair`)
     await setMana(100); ends(s, await ran(s, 'let go', () => A(s.node === 'tree' ? 'prune()' : 'mine()'), `1-${s.node}`), false)
-    await setMana(1.2); await ran(s, 'dry', null, '')
+    await setMana(2); await ran(s, 'dry', null, '')
     await setMana(100); await look(s)
     let drew = ''
     await ran(s, 'something drawn', async () => { for (const k of ['1', '2', '3']) { await p.keyboard.press(k); await frame(); drew = await A<string>('stance()?.kind'); if (drew !== 'stowed') return } }, '')
