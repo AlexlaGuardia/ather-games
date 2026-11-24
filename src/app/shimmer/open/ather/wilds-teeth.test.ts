@@ -128,7 +128,7 @@ const landAt = (off: number) => {
 {
   const seeds = Array.from({ length: 200 }, (_, i) => 1001 + i * 13)
   const pack = summarise(seeds.slice(0, 60).map(s => packFight(s, ['shambler', 'shambler', 'shambler', 'floater'], groupPack)))
-  const champ = summarise(seeds.map(championFight))
+  const champ = summarise(seeds.map(s => championFight(s)))
   console.log(`  sim pack 3S+1F: ${JSON.stringify(pack)}\n  sim champion  : ${JSON.stringify(champ)}`)
   ok(pack.died === 0 && pack.cleared === pack.n, 'a newcomer died to a single pack')
   ok(pack.secs > 7, `a pack is no longer a 5 s walkover (${pack.secs} s)`)

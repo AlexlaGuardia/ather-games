@@ -44,9 +44,10 @@ try {
   await poll(async () => (await C('return C.hollows.length')) >= 6, 30000)
   const hs = await C('return C.hollows.map(h => ({ id: h.id, kind: h.kind, pack: h.pack, maxHp: h.maxHp, x: h.x, z: h.z, st: h.state }))') as { id: number; kind: string; pack?: number; maxHp: number; x: number; z: number; st: string }[]
   const packs = new Map<number, typeof hs>(); for (const h of hs) if (h.pack) packs.set(h.pack, [...(packs.get(h.pack) ?? []), h])
-  ok(hs.length >= 6 && hs.every(h => !!h.pack), `1. ${hs.length} strays, all in packs (${hs.filter(h => !h.pack).length} loose)`)
+  // M120 s2: a crawler brood is loose strays by design (they pool instead): only shamblers/floaters must be in packs
+  ok(hs.length >= 6 && hs.filter(h => h.kind !== 'crawler').every(h => !!h.pack), `1. ${hs.length} strays, shamblers/floaters all in packs (${hs.filter(h => h.kind !== 'crawler' && !h.pack).length} loose; ${hs.filter(h => h.kind === 'crawler').length} crawlers)`)
   ok([...packs.values()].some(ms => ms.length >= 3), `   ${packs.size} packs, sizes ${[...packs.values()].map(ms => ms.length).join(',')}`)
-  ok(hs.every(h => h.maxHp === (h.kind === 'floater' ? 30 : 45)), `   HP raised: ${[...new Set(hs.map(h => `${h.kind} ${h.maxHp}`))].join(', ')}`)
+  ok(hs.every(h => h.kind === 'crawler' ? h.maxHp % 35 === 0 : h.maxHp === (h.kind === 'floater' ? 30 : 45)), `   HP raised: ${[...new Set(hs.map(h => `${h.kind} ${h.maxHp}`))].join(', ')}`)
   // ── 2. a pack moves together (the biggest wandering pack, ~15 s of sim) ──
   {
     const [pid] = [...packs.entries()].sort((a, b) => b[1].length - a[1].length)[0]

@@ -22,18 +22,18 @@ export function hostOf(me: string, peerIds: readonly string[]): string {
   return h
 }
 
-const KINDS: HollowKind[] = ['shambler', 'floater']
+const KINDS: HollowKind[] = ['shambler', 'floater', 'crawler']
 const STATES: HollowState[] = ['wander', 'chase', 'windup', 'lunge', 'recover', 'stagger', 'charge']
 const r1 = (v: number) => Math.round(v * 10) / 10
-/** one Hollow on the wire: [id, kind, x, z, yaw, hp, maxHp, state] */
-export type SnapRow = [number, number, number, number, number, number, number, number]
+/** one Hollow on the wire: [id, kind, x, z, yaw, hp, maxHp, state, mass?] (M120 s2: a crawler's mass, so a guest draws its size) */
+export type SnapRow = [number, number, number, number, number, number, number, number] | [number, number, number, number, number, number, number, number, number]
 export interface Snap { h: SnapRow[] }
 
 /** The host's view, nearest first, capped. */
 export function encodeSnap(c: Combat, at: { x: number; z: number }): Snap {
   const near = c.hollows.filter(h => h.hp > 0 && Math.hypot(h.x - at.x, h.z - at.z) < SNAP_R)
     .sort((a, b) => Math.hypot(a.x - at.x, a.z - at.z) - Math.hypot(b.x - at.x, b.z - at.z)).slice(0, SNAP_MAX)
-  return { h: near.map(h => [h.id, Math.max(0, KINDS.indexOf(h.kind)), r1(h.x), r1(h.z), r1(h.yaw), Math.ceil(h.hp), h.maxHp, Math.max(0, STATES.indexOf(h.state))]) }
+  return { h: near.map(h => [h.id, Math.max(0, KINDS.indexOf(h.kind)), r1(h.x), r1(h.z), r1(h.yaw), Math.ceil(h.hp), h.maxHp, Math.max(0, STATES.indexOf(h.state)), ...(h.kind === 'crawler' ? [h.mass ?? 1] : [])] as SnapRow) }
 }
 
 /** A remote Hollow carries where the host last said it was; stepCombat (remote) eases it there. */
@@ -53,6 +53,7 @@ export function applySnap(c: Combat, T: Terrain, s: Snap) {
       h = { id, kind, x, y: T.heightAt(x, z), z, yaw, hp, maxHp, state, t: 0, wx: x, wz: z, lx: 0, lz: 0, hitFlash: 0, hitThisLunge: false }
     }
     h.kind = kind; h.hp = hp; h.maxHp = maxHp; h.state = state
+    if (kind === 'crawler') h.mass = typeof row[8] === 'number' ? row[8] : 1
     h.nx = x; h.nz = z; h.nyaw = yaw
     next.push(h)
   }

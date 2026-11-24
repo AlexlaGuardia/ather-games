@@ -2,7 +2,7 @@
 // "newcomer" keeper on flat open ground: hip-fires the Repeater at a human tap rate with a little aim error, backs off a
 // shambler that gets close, strafes otherwise, and steps out of a champion's tell. No React, no three: it drives
 // combat.ts / champion.ts exactly as the scene does. Numbers, not a pass/fail: wilds-teeth.test.ts asserts on them.
-import { newCombat, spawnHollow, stepCombat, fire, BODY_Y, type Combat, type Terrain, type HollowKind } from './combat'
+import { newCombat, spawnHollow, stepCombat, fire, BODY_Y, CRAWLER, crawlerScale, type Combat, type Terrain, type HollowKind } from './combat'
 import { wakeChampion, champVulnerable, tellOf, CHAMP } from './champion'
 
 export const FLAT: Terrain = { heightAt: () => 0, walkable: () => true }
@@ -17,7 +17,7 @@ function botStep(c: Combat, feet: { x: number; y: number; z: number }, t: number
   let near: { x: number; y: number; z: number; d: number; shambler: boolean } | null = null
   for (const h of c.hollows) {
     const d = Math.hypot(h.x - feet.x, h.z - feet.z)
-    if (!near || d < near.d) near = { x: h.x, y: h.kind === 'floater' ? h.y : h.y + BODY_Y, z: h.z, d, shambler: h.kind === 'shambler' }
+    if (!near || d < near.d) near = { x: h.x, y: h.kind === 'floater' ? h.y : h.kind === 'crawler' ? h.y + CRAWLER.bodyY * crawlerScale(h.mass) : h.y + BODY_Y, z: h.z, d, shambler: h.kind !== 'floater' }
   }
   // what to shoot: adds that are close first, else the champion when it can be hurt, else the nearest Hollow
   let aimAt: { x: number; y: number; z: number } | null = near
@@ -60,8 +60,9 @@ function run(c: Combat, feet: { x: number; y: number; z: number }, done: () => b
 
 /** A pack fight: `kinds` spawned in a loose clump ~22 m out, all already on the keeper. `group` (M120) ties them into
  *  one pack when the build has packs; null = the old loose strays. */
-export function packFight(seed: number, kinds: HollowKind[], group?: (c: Combat, ids: number[]) => void): FightResult {
+export function packFight(seed: number, kinds: HollowKind[], group?: (c: Combat, ids: number[]) => void, drained = false): FightResult {
   const c = newCombat(seed), feet = { x: 0, y: 0, z: 0 }
+  if (drained) c.drained = () => true   // M120 s2: all of it drained ground, so crawlers pool (the worst case)
   const ids: number[] = []
   kinds.forEach((k, i) => {
     const a = 0.3 + i * 0.5, h = spawnHollow(c, FLAT, Math.cos(a) * 2 + 22, Math.sin(a) * 2, k)
@@ -72,9 +73,11 @@ export function packFight(seed: number, kinds: HollowKind[], group?: (c: Combat,
 }
 
 /** The first-settlement champion (Lamps Out's node fight): three bars, two waves, the adds included. */
-export function championFight(seed: number): FightResult {
+export function championFight(seed: number, crawlers = 0): FightResult {
   const c = newCombat(seed), feet = { x: 0, y: 0, z: 16 }
   wakeChampion(c, FLAT, { id: 'sim:0', tile: 't', biome: 0, x: 0, z: 0, i: 0, j: 0 } as Parameters<typeof wakeChampion>[2])
+  // M120 s2: a brood of crawlers already on the node's drained ground when it wakes: they pool and join the fight
+  if (crawlers) { c.drained = () => true; for (let i = 0; i < crawlers; i++) { const h = spawnHollow(c, FLAT, -10 + i * 1.2, -6, 'crawler'); h.state = 'chase' } }
   return run(c, feet, () => !c.champ && c.hollows.length === 0, seed)
 }
 

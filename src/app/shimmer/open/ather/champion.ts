@@ -99,7 +99,7 @@ export function hitChampion(c: Combat, T: Terrain, ch: Champion, head: boolean, 
       let x = ch.nx + Math.cos(a) * r, z = ch.nz + Math.sin(a) * r
       if (!T.walkable(x, z)) { x = ch.nx + Math.cos(a) * 6; z = ch.nz + Math.sin(a) * 6 }
       const h = spawnHollow(c, T, x, z, k < ns ? 'shambler' : 'floater')
-      h.state = 'chase'; h.hp = h.maxHp = WAVE_HP[h.kind]
+      h.state = 'chase'; h.hp = h.maxHp = WAVE_HP[h.kind as keyof typeof WAVE_HP]
     }
     c.events.push({ kind: 'champ-break', nodeId: ch.nodeId, bar: ch.bar })
     ch.state = 'submerge'; ch.t = CHAMP.submerge; ch.attack = null; ch.queue = []

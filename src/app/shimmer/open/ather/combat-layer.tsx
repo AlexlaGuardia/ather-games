@@ -13,7 +13,7 @@ import { armedGun, sigilKey } from '../shared/gun-sigil'   // M93 s4: the fitted
 import { useLoadout } from '../shared/loadout'
 import { useBirth } from '../birth-gate'
 import { weaponDef } from '../../engine/weapons'
-import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, SHAMBLER, FLOATER, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
+import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, SHAMBLER, FLOATER, CRAWLER, crawlerScale, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
 import { live as liveSolids } from './dynamic-solids'
 import { noteCombat } from '../shared/idle-mode'
 import { runCast, stepFields, stepPieces, channelAim, type ChannelRun, type CastHit } from './combat-casts'
@@ -120,6 +120,8 @@ function Sheds({ c, id, mat, top }: { c: React.MutableRefObject<Combat>; id: num
  *  mesh, posed every frame from the sim's state. The TELL: through the wind-up it gathers in toward its core and rises, then
  *  the lunge falls forward onto you. A hit knocks it back and flings a lump (no flash: Alex dropped it, 11-19). The floater is
  *  the same substance in the caster's amount: no legs, dense only at the reach, and its spit charge is the same gather-and-rise. */
+/** M120 s2: the scale each crawler's body was last DRAWN at, by id (checks read it: __ather.drawnScale) */
+const DRAWN_SCALE = new Map<number, number>()
 function SproutBody({ c, id, kind, world }: { c: React.MutableRefObject<Combat>; id: number; kind: HollowKind; world: React.MutableRefObject<GoopWorld> }) {
   const g = useRef<THREE.Group>(null), im = useRef<THREE.InstancedMesh>(null), puddle = useRef<THREE.MeshBasicMaterial>(null)
   const mat = useGoop(c, id, world)
@@ -129,8 +131,9 @@ function SproutBody({ c, id, kind, world }: { c: React.MutableRefObject<Combat>;
   useFrame(({ clock }, dt) => {
     const h = c.current.hollows.find(k => k.id === id), M = im.current; if (!h || !g.current || !M) return
     g.current.position.set(h.x, h.y, h.z); g.current.rotation.y = h.yaw
+    if (h.kind === 'crawler') { g.current.scale.setScalar(crawlerScale(h.mass)); DRAWN_SCALE.set(id, g.current.scale.x) }   // M120 s2: a pooled one is bigger (log taper)
     const e = 1 - Math.exp(-dt * 14), s = st.current
-    const tellTo = h.state === 'windup' ? 1 - h.t / SHAMBLER.windup : h.state === 'charge' ? 1 - h.t / FLOATER.charge : 0
+    const tellTo = h.state === 'windup' ? 1 - h.t / (h.kind === 'crawler' ? CRAWLER.windup : SHAMBLER.windup) : h.state === 'charge' ? 1 - h.t / FLOATER.charge : 0
     s.tell += (Math.max(0, Math.min(1, tellTo)) - s.tell) * (tellTo > s.tell ? 1 : e)   // the gather is read straight off the sim; the let-go eases
     s.fall += ((h.state === 'lunge' ? 1 : 0) - s.fall) * e
     s.walk += ((h.state === 'chase' ? 1 : h.state === 'wander' ? 0.45 : 0) - s.walk) * e
@@ -554,10 +557,12 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     const g = window as unknown as { __ather?: Record<string, unknown> }
     g.__ather = { ...(g.__ather ?? {}), combat: () => c.current, calls: () => gl.info.render.calls,   // M34: draw calls per frame (hollow-look-check)
       dispersing: () => dispersals.current.map(d => ({ ...d })), dispersed: () => ({ ...DISPERSE_SEEN }),   // M34: in flight / what was drawn (hollow-look-check)
-      spawn: (dx = 0, dz = -10, kind: 'shambler' | 'floater' = 'shambler') => {
+      spawn: (dx = 0, dz = -10, kind: HollowKind = 'shambler') => {
       const f = camera.getWorldDirection(new THREE.Vector3()); const x = camera.position.x + f.x * -dz + dx, z = camera.position.z + f.z * -dz
       spawnHollow(c.current, T, x, z, kind)
-    }, camAim: () => { const f = camera.getWorldDirection(new THREE.Vector3()); return { x: f.x, y: f.y, z: f.z, cx: camera.position.x, cy: camera.position.y, cz: camera.position.z } }, nodes: () => nodesRef.current, walls: (x0: number, z0: number, x1: number, z1: number) => T.structures ? [...T.structures(x0, z0, x1, z1)] : [], fall: () => { c.current.keeper.hp = 0; onEventsRef.current([{ kind: 'down' }]) }, wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
+    }, camAim: () => { const f = camera.getWorldDirection(new THREE.Vector3()); return { x: f.x, y: f.y, z: f.z, cx: camera.position.x, cy: camera.position.y, cz: camera.position.z } }, nodes: () => nodesRef.current, walls: (x0: number, z0: number, x1: number, z1: number) => T.structures ? [...T.structures(x0, z0, x1, z1)] : [], fall: () => { c.current.keeper.hp = 0; onEventsRef.current([{ kind: 'down' }]) }, drained: (x: number, z: number) => c.current.drained?.(x, z) ?? null, owner: (x: number, z: number) => ownerRef.current?.(x, z) ?? null,
+      spend: (id: string) => { spent.current.add(id) }, drawnScale: (id: number) => DRAWN_SCALE.get(id) ?? null,   // M120 s2 checks: clear a node for THIS visit only (nothing saved)
+      wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('contextmenu', menu) }
   }, [locked, frozen, camera, T, gl])
 
@@ -609,6 +614,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       const near = nodesRef.current.some(n => !spent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < STRAY_R)
       const own = ownerRef.current
       const infested = own ? (x: number, z: number) => { const id = own(x, z); return !id || (!spent.current.has(id) && nodesRef.current.some(n => n.id === id)) } : undefined
+      C.drained = infested ?? (() => true)   // M120 s2: crawlers pool only on drained ground (cleared country stays apart)
       populate(C, T, feet.x, feet.z, C.champ ? 0 : near ? 11 : 7, safe, infested)
     }
     // a CHARGED gun (the Charred Rifle): the pull starts a short charge, the round leaves when it ends (still aimed by the eye)

@@ -16,12 +16,13 @@ export interface Sprout { lumps: Lump[]; pivots: Record<Exclude<Bone, 'root'>, T
 
 /** the board's option A numbers (docs/looks/hollows.html) */
 const A = { h: 1.0, w: 1.0, leg: 0.42, arm: 0.55, armDrop: 0.95, coreY: 0.85, hunch: 0.15 }
-export const DENSITY: Record<HollowKind, number> = { shambler: 0.6, floater: 0.3 }
+export const DENSITY: Record<HollowKind, number> = { shambler: 0.6, floater: 0.3, crawler: 0.8 }
 /** the walker's head-lump sits on the sim's HEAD_Y (1.55) */
 export const WALKER_HEAD = 1.55
 
 /** the lumps of one Hollow of `kind`, in its LOCAL space (feet on y=0 for walkers; a floater is centred on its body, y=0) */
 export function sprout(kind: HollowKind): Sprout {
+  if (kind === 'crawler') return crawlerSprout()
   const density = DENSITY[kind], floats = kind === 'floater'
   const H0 = A.h * (0.82 + density * 0.18), W = A.w * (0.55 + density * 0.55)
   const legH0 = floats ? 0 : A.leg * H0, core0 = floats ? 0.1 : A.coreY * H0, head0 = core0 + 0.52 * H0
@@ -56,6 +57,27 @@ export function sprout(kind: HollowKind): Sprout {
     add(b, 0, -L * 0.92 * A.armDrop, 0.08 * k, th * 1.35, th * 1.5, th * 1.35)
   }
   return { lumps, pivots, core: coreY, head: headY, floats }
+}
+
+/** M120 s2 the MERGING Hollow at mass 1 (canon c01931e: low, plated, many-legged; the drawn size grows with its mass on the
+ *  page, combat.ts crawlerScale). Flat overlapping plate-lumps down the back (combat.ts CRAWLER.bodyY 0.35 is its middle), a
+ *  low front lump that only tilts (no face), and three short legs a side hung on the leg bones so the stride scuttles them. */
+function crawlerSprout(): Sprout {
+  const lumps: Lump[] = []
+  let seed = 0
+  const add = (bone: Bone, x: number, y: number, z: number, sx: number, sy: number, sz: number) => lumps.push({ bone, x, y, z, sx, sy, sz, seed: seed++ })
+  add('root', 0, 0.36, 0, 0.2, 0.18, 0.2)                                   // the seed
+  for (let i = 0; i < 4; i++) { const z = 0.42 - i * 0.28, w = 0.42 - Math.abs(i - 1.3) * 0.06
+    add('root', 0, 0.36 + (i === 1 ? 0.05 : 0), z, w, 0.16, 0.2) }          // the plates
+  add('head', 0, 0, 0, 0.16, 0.12, 0.15)
+  for (const b of ['legL', 'legR'] as const) { const sx = b === 'legL' ? -1 : 1
+    for (let i = 0; i < 3; i++) add(b, sx * 0.12, -0.12, 0.3 - i * 0.3, 0.16, 0.05, 0.05) }
+  const pivots = {
+    head: new THREE.Vector3(0, 0.34, 0.62),
+    legL: new THREE.Vector3(-0.34, 0.24, 0), legR: new THREE.Vector3(0.34, 0.24, 0),
+    armL: new THREE.Vector3(-0.3, 0.3, 0.4), armR: new THREE.Vector3(0.3, 0.3, 0.4),
+  }
+  return { lumps, pivots, core: 0.36, head: 0.34, floats: false }
 }
 
 /** what the body is doing this frame. `tell` 0..1 = through the wind-up (gathers in, rises); `fall` 0..1 = the lunge falling

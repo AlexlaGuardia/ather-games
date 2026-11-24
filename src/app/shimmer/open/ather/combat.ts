@@ -27,7 +27,8 @@ export interface Terrain {
   structures?: Structures
 }
 
-export type HollowKind = 'shambler' | 'floater'
+/** M120 s2: 'crawler' = the MERGING Hollow (a build word; its in-world name is @lark's). Low, plated, many-legged. */
+export type HollowKind = 'shambler' | 'floater' | 'crawler'
 export type HollowState = 'wander' | 'chase' | 'windup' | 'lunge' | 'recover' | 'stagger' | 'charge'
 export interface Hollow {
   id: number; kind: HollowKind
@@ -46,6 +47,8 @@ export interface Hollow {
   pack?: number; px?: number; pz?: number
   /** M120 floater: zips left before it holds, the spot it is zipping to, shots left in the burst */
   zips?: number; zx?: number; zz?: number; shots?: number
+  /** M120 s2 crawler: how many bodies have pooled into this one (1 = never merged); its strength and hp are the sum */
+  mass?: number
 }
 /** M120: a pack's shared heading (where its members drift while nobody has noticed the keeper) */
 export interface Pack { wx: number; wz: number; t: number }
@@ -99,6 +102,31 @@ export const FLOATER = {
 /** M120: Hollows come in PACKS (Alex 11-24 'move in groups'): `min`..`max` to a pack, at most `floaters` floaters each, a
  *  loose formation `spread` m round the pack's heading; one member noticing the keeper sets the whole pack on them. */
 export const PACK = { min: 3, max: 5, floaters: 1, spread: 3.5, roam: 12, catchUp: 1.7 }
+/** M120 s2: THE MERGING HOLLOW (canon c01931e: grey that meets grey POOLS; two of this kind that touch become one larger body,
+ *  mass and strength ADDED, without end; only on drained ground; a compacted-mana round still disperses it, however big).
+ *  Build calls (Jin): it forms in broods of 2-3 strays that drift toward each other on drained ground (`seekR`) and pool on
+ *  touch. hp and damage ADD with mass; speed falls as mass^-speedExp; the body grows on a tapered (log) scale so a big one stays
+ *  readable; it flinches less the bigger it is. A round DISPERSES it like any Hollow (hp to 0, it ends; no split, so a merge only
+ *  ever lowers the entity count). populate counts a crawler by its MASS, so pooling never pulls in fresh spawns. */
+export const CRAWLER = {
+  hp: 35, damage: 8, wanderSpeed: 0.8, chaseSpeed: 2.5, notice: 20, forget: 36,
+  lungeRange: 1.9, windup: 0.5, lungeSpeed: 6, lungeTime: 0.3, recover: 1.2, hitReach: 1.0, stagger: 0.24,
+  radius: 0.5, bodyY: 0.35, bodyR: 0.5, height: 0.7,
+  seekR: 14, touch: 0.25, speedExp: 0.3, scaleK: 0.55, scaleMax: 4, share: 0.22, brood: [2, 3] as [number, number],
+}
+/** the drawn (and hit) size of a crawler of `mass`: 1 at mass 1, then a log taper (2 -> 1.38, 4 -> 1.76, 8 -> 2.14, capped) */
+export const crawlerScale = (mass = 1) => Math.min(CRAWLER.scaleMax, 1 + CRAWLER.scaleK * Math.log(Math.max(1, mass)))
+/** a walker's live tuning: the shambler's dials, or a crawler's scaled by its mass */
+export function walkerOf(h: Hollow) {
+  if (h.kind !== 'crawler') return SHAMBLER
+  const m = Math.max(1, h.mass ?? 1), s = crawlerScale(m), slow = Math.pow(m, -CRAWLER.speedExp)
+  return { ...CRAWLER, wanderSpeed: CRAWLER.wanderSpeed * slow, chaseSpeed: CRAWLER.chaseSpeed * slow, damage: CRAWLER.damage * m,
+    lungeRange: CRAWLER.lungeRange * s, hitReach: CRAWLER.hitReach * s, radius: CRAWLER.radius * s, stagger: CRAWLER.stagger / m }
+}
+/** what a body counts for against populate's target (a crawler: its mass) */
+export const weightOf = (h: Hollow) => h.kind === 'crawler' ? Math.max(1, h.mass ?? 1) : 1
+/** grey matter a dispersed Hollow leaves */
+const dropOf = (c: Combat, h: Hollow) => (h.kind === 'floater' ? 2 : h.kind === 'crawler' ? Math.min(8, Math.max(1, h.mass ?? 1)) : 1) + Math.floor(rnd(c) * 3)
 export const HEAD_Y = 1.55, HEAD_R = 0.26, BODY_Y = 0.85, BODY_R = 0.44
 export const PICKUP_R = 1.4, MAGNET_R = 4.5
 
@@ -159,6 +187,10 @@ export interface Combat {
   wallHits?: number
   /** M120: floater shots that landed and splashed so far (checks read it; events clear every step) */
   splashes?: number
+  /** M120 s2: is this DRAINED (Hollow) ground? Crawlers pool only there. Unset = nowhere (the page sets it from the node map). */
+  drained?: (x: number, z: number) => boolean
+  /** M120 s2: crawler merges so far (checks read it; events clear every step) */
+  merges?: number
   /** M120: the packs, by id (a pack with no member left is dropped on the next step) */
   packs?: Record<number, Pack>
 }
@@ -180,6 +212,8 @@ export type CombatEvent =
   | { kind: 'impact'; x: number; y: number; z: number; by: 'round' | 'spit' }
   /** M120: a floater's shot landed (ground or wall) and splashed here, FLOATER.splashR round */
   | { kind: 'splash'; x: number; y: number; z: number; hurt: boolean }
+  /** M120 s2: crawler `gone` pooled into crawler `id`, which is now `mass` strong */
+  | { kind: 'merge'; id: number; gone: number; mass: number; x: number; z: number }
 
 export function newCombat(seed = 1, gunId = 'repeater'): Combat {
   const gun = weaponDef(gunId)!
@@ -191,11 +225,13 @@ export function newCombat(seed = 1, gunId = 'repeater'): Combat {
 
 const rnd = (c: Combat) => { c.seed = (c.seed * 1664525 + 1013904223) >>> 0; return c.seed / 4294967296 }
 
+const HP0: Record<HollowKind, number> = { get shambler() { return SHAMBLER.hp }, get floater() { return FLOATER.hp }, get crawler() { return CRAWLER.hp } }
 export function spawnHollow(c: Combat, T: Terrain, x: number, z: number, kind: HollowKind = 'shambler'): Hollow {
   const h: Hollow = {
     id: c.nextId++, kind, x, y: T.heightAt(x, z) + (kind === 'floater' ? FLOATER.hover : 0), z, yaw: rnd(c) * Math.PI * 2,
-    hp: kind === 'floater' ? FLOATER.hp : SHAMBLER.hp, maxHp: kind === 'floater' ? FLOATER.hp : SHAMBLER.hp, state: 'wander', t: 0, wx: x, wz: z, lx: 0, lz: 0, hitFlash: 0, hitThisLunge: false,
+    hp: HP0[kind], maxHp: HP0[kind], state: 'wander', t: 0, wx: x, wz: z, lx: 0, lz: 0, hitFlash: 0, hitThisLunge: false,
   }
+  if (kind === 'crawler') h.mass = 1
   c.hollows.push(h)
   return h
 }
@@ -269,7 +305,32 @@ export function applyNetHit(c: Combat, id: number, dmg: number) {
   const h = c.hollows.find(o => o.id === id)
   if (!h || h.hp <= 0 || !(dmg > 0) || dmg > 200) return
   h.hp -= dmg * (fxOn(h, 'vulnerable') ? FX.vulnerableMult : 1); h.hitFlash = 0.12
-  if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = SHAMBLER.stagger }
+  if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = h.kind === 'floater' ? SHAMBLER.stagger : walkerOf(h).stagger }
+}
+
+const bodyR = (h: Hollow) => h.kind === 'crawler' ? CRAWLER.radius * crawlerScale(h.mass) : SHAMBLER.radius
+/** M120 s2: pool every touching pair of crawlers standing on drained ground. One pass, so a chain of three pools over two steps. */
+export function mergeCrawlers(c: Combat, T: Terrain) {
+  if (!c.drained) return
+  const cs = c.hollows.filter(h => h.kind === 'crawler' && h.hp > 0)
+  if (cs.length < 2) return
+  const gone = new Set<number>()
+  for (let a = 0; a < cs.length; a++) for (let b = a + 1; b < cs.length; b++) {
+    const A = cs[a], B = cs[b]
+    if (gone.has(A.id) || gone.has(B.id)) continue
+    if (Math.hypot(B.x - A.x, B.z - A.z) > bodyR(A) + bodyR(B) + CRAWLER.touch) continue
+    if (!c.drained(A.x, A.z) || !c.drained(B.x, B.z)) continue
+    const ma = Math.max(1, A.mass ?? 1), mb = Math.max(1, B.mass ?? 1)
+    const [K, L] = ma >= mb ? [A, B] : [B, A], m = ma + mb
+    const x = (A.x * ma + B.x * mb) / m, z = (A.z * ma + B.z * mb) / m
+    if (T.walkable(x, z)) { K.x = x; K.z = z; K.y = T.heightAt(x, z) }
+    K.mass = m; K.hp += L.hp; K.maxHp += L.maxHp
+    if (L.state !== 'wander' && K.state === 'wander') K.state = 'chase'   // an alerted half keeps the whole on the keeper
+    K.pack = undefined; gone.add(L.id)
+    c.merges = (c.merges ?? 0) + 1
+    c.events.push({ kind: 'merge', id: K.id, gone: L.id, mass: m, x: K.x, z: K.z })
+  }
+  if (gone.size) c.hollows = c.hollows.filter(h => !gone.has(h.id))
 }
 
 /** M120: tie these Hollows into one pack: a shared heading where they stand now, each a loose slot round it. */
@@ -287,11 +348,21 @@ export function populate(c: Combat, T: Terrain, kx: number, kz: number, target: 
   c.hollows = c.hollows.filter(h => Math.hypot(h.x - kx, h.z - kz) < 130)
   const may = (x: number, z: number) => T.walkable(x, z) && Number.isFinite(T.heightAt(x, z)) && !(safe && Math.hypot(x - safe.x, z - safe.z) < safe.r)
     && !(infested && !infested(x, z))   // cleared ground stays quiet (nodes.ts › ownerOf)
-  for (let tries = 0; c.hollows.length < target && tries < 24; tries++) {
+  let have = c.hollows.reduce((a, h) => a + weightOf(h), 0)   // M120 s2: a pooled crawler counts by its mass
+  for (let tries = 0; have < target && tries < 24; tries++) {
     const a = rnd(c) * Math.PI * 2, r = 55 + rnd(c) * 45
     const x = kx + Math.cos(a) * r, z = kz + Math.sin(a) * r
     if (!may(x, z)) continue
-    const want = Math.min(target - c.hollows.length, PACK.min + Math.floor(rnd(c) * (PACK.max - PACK.min + 1)))
+    if (target - have >= CRAWLER.brood[0] && rnd(c) < CRAWLER.share) {   // M120 s2: a brood of crawlers, loose strays a few m apart
+      const n = Math.min(target - have, CRAWLER.brood[0] + Math.floor(rnd(c) * (CRAWLER.brood[1] - CRAWLER.brood[0] + 1)))
+      for (let m = 0, mt = 0; m < n && mt < n * 4; mt++) {
+        const ma = rnd(c) * Math.PI * 2, mr = m ? 4 + rnd(c) * 6 : 0, bx = x + Math.cos(ma) * mr, bz = z + Math.sin(ma) * mr
+        if (!may(bx, bz)) continue
+        spawnHollow(c, T, bx, bz, 'crawler'); m++; have++
+      }
+      continue
+    }
+    const want = Math.min(target - have, PACK.min + Math.floor(rnd(c) * (PACK.max - PACK.min + 1)))
     const ids: number[] = []
     let floaters = 0
     for (let m = 0, mt = 0; ids.length < want && mt < want * 4; mt++, m++) {
@@ -302,6 +373,7 @@ export function populate(c: Combat, T: Terrain, kx: number, kz: number, target: 
       if (kind === 'floater') floaters++
       ids.push(spawnHollow(c, T, mx, mz, kind).id)
     }
+    have += ids.length
     groupPack(c, ids)
   }
 }
@@ -416,6 +488,11 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
         if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y, h.z) < 0.5 * 0.5) { best = { h, head: false }; break }
         continue
       }
+      if (h.kind === 'crawler') {   // M120 s2: low and plated, no head to aim for; the body grows with its mass
+        const sc = crawlerScale(h.mass), br = CRAWLER.bodyR * sc
+        if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + CRAWLER.bodyY * sc, h.z) < br * br * 1.3) { best = { h, head: false }; break }
+        continue
+      }
       if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + HEAD_Y, h.z) < HEAD_R * HEAD_R) { best = { h, head: true }; break }
       if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + BODY_Y, h.z) < BODY_R * BODY_R * 1.6) best = { h, head: false }
     }
@@ -430,10 +507,10 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
       const h = best.h
       const mult = (fxOn(h, 'vulnerable') ? FX.vulnerableMult : 1) * ((k.ampUntil ?? 0) > (c.clock ?? 0) ? AMP_MULT : 1)
       h.hp -= (best.head ? r.crit : r.dmg) * mult; h.hitFlash = 0.12; r.life = 0
-      if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = SHAMBLER.stagger }
+      if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = h.kind === 'floater' ? SHAMBLER.stagger : walkerOf(h).stagger }
       const killed = h.hp <= 0
       c.events.push({ kind: 'hit', id: h.id, head: best.head, killed })
-      if (killed) c.drops.push({ id: c.nextId++, x: h.x, y: T.heightAt(h.x, h.z), z: h.z, amount: (h.kind === 'floater' ? 2 : 1) + Math.floor(rnd(c) * 3), age: 0 })
+      if (killed) c.drops.push({ id: c.nextId++, x: h.x, y: T.heightAt(h.x, h.z), z: h.z, amount: dropOf(c, h), age: 0 })
     }
     if (wall && r.life > 0) { r.life = 0; impact(c, wall, 'round') }
   }
@@ -442,7 +519,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   // above already pushed both (11-19, sprites' prod find: it was swept here silently, no kill event, no grey matter).
   for (const h of c.hollows) if (h.hp <= 0 && !c.events.some(e => e.kind === 'hit' && e.id === h.id && e.killed)) {
     c.events.push({ kind: 'hit', id: h.id, head: false, killed: true })
-    c.drops.push({ id: c.nextId++, x: h.x, y: T.heightAt(h.x, h.z), z: h.z, amount: (h.kind === 'floater' ? 2 : 1) + Math.floor(rnd(c) * 3), age: 0 })
+    c.drops.push({ id: c.nextId++, x: h.x, y: T.heightAt(h.x, h.z), z: h.z, amount: dropOf(c, h), age: 0 })
   }
   c.hollows = c.hollows.filter(h => h.hp > 0)
 
@@ -477,52 +554,59 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     if (blind && (h.state === 'chase' || h.state === 'windup')) { h.state = 'wander'; h.t = 0 }
     if (unarmed && h.state === 'windup') { h.state = 'chase' }
     let speed = 0, mx = 0, mz = 0
+    const W = walkerOf(h)
     switch (h.state) {
       case 'wander': {
-        if (alive && !blind && (d < SHAMBLER.notice || (h.pack && roused.has(h.pack) && d < SHAMBLER.forget))) { h.state = 'chase'; break }
+        if (alive && !blind && (d < W.notice || (h.pack && roused.has(h.pack) && d < W.forget))) { h.state = 'chase'; break }
+        // M120 s2: a crawler on drained ground drifts toward the nearest of its kind (to pool with it)
+        if (h.kind === 'crawler' && c.drained?.(h.x, h.z)) {
+          let o: Hollow | null = null, od = CRAWLER.seekR
+          for (const q of c.hollows) if (q !== h && q.kind === 'crawler' && q.hp > 0) { const qd = Math.hypot(q.x - h.x, q.z - h.z); if (qd < od) { od = qd; o = q } }
+          if (o) { mx = o.x - h.x; mz = o.z - h.z; speed = W.wanderSpeed * 1.4; break }
+        }
         const slot = packSlot(c, h)
         if (slot) {   // M120: drift with the pack, in a loose slot round its heading; a straggler catches up
           if (slot.far < 0.6) break
-          mx = slot.x - h.x; mz = slot.z - h.z; speed = SHAMBLER.wanderSpeed * (slot.far > 3 ? PACK.catchUp : 1)
+          mx = slot.x - h.x; mz = slot.z - h.z; speed = W.wanderSpeed * (slot.far > 3 ? PACK.catchUp : 1)
           break
         }
         if (h.t <= 0 || Math.hypot(h.wx - h.x, h.wz - h.z) < 1) {
           h.wx = h.x + (rnd(c) - 0.5) * 16; h.wz = h.z + (rnd(c) - 0.5) * 16; h.t = 3 + rnd(c) * 4
         }
-        mx = h.wx - h.x; mz = h.wz - h.z; speed = SHAMBLER.wanderSpeed
+        mx = h.wx - h.x; mz = h.wz - h.z; speed = W.wanderSpeed
         break
       }
       case 'chase':
-        if (d > SHAMBLER.forget || !alive) { h.state = 'wander'; h.t = 0; break }
-        if (d < SHAMBLER.lungeRange && !unarmed) { h.state = 'windup'; h.t = SHAMBLER.windup; h.lx = dx / d; h.lz = dz / d; break }
-        mx = dx; mz = dz; speed = SHAMBLER.chaseSpeed * (0.8 + 0.35 * Math.sin(h.id * 1.7 + h.x * 0.3))   // the stagger
+        if (d > W.forget || !alive) { h.state = 'wander'; h.t = 0; break }
+        if (d < W.lungeRange && !unarmed) { h.state = 'windup'; h.t = W.windup; h.lx = dx / d; h.lz = dz / d; break }
+        mx = dx; mz = dz; speed = W.chaseSpeed * (0.8 + 0.35 * Math.sin(h.id * 1.7 + h.x * 0.3))   // the stagger
         // M120: a pack comes in as a loose ARC, not single file: each member leans to its own side until it is close
         if (h.pack && d > 5) { const side = Math.sign(h.px ?? 0) * Math.min(1, Math.hypot(h.px ?? 0, h.pz ?? 0) / PACK.spread) * Math.min(0.6, (d - 5) / 10); mx += -dz * side; mz += dx * side }
         break
       case 'windup':
         h.yaw = Math.atan2(h.lx, h.lz)
-        if (h.t <= 0) { h.state = 'lunge'; h.t = SHAMBLER.lungeTime; h.hitThisLunge = false }
+        if (h.t <= 0) { h.state = 'lunge'; h.t = W.lungeTime; h.hitThisLunge = false }
         break
       case 'lunge':
-        mx = h.lx; mz = h.lz; speed = SHAMBLER.lungeSpeed
-        if (!h.hitThisLunge && !unarmed && Math.hypot(feet.x - h.x, feet.z - h.z) < SHAMBLER.hitReach * (k.hit ?? 1) && Math.abs(feet.y - h.y) < 1.6 && k.hp > 0 && sees(T, h.x, h.y + BODY_Y, h.z, feet.x, feet.y + 0.9, feet.z)) {
+        mx = h.lx; mz = h.lz; speed = W.lungeSpeed
+        if (!h.hitThisLunge && !unarmed && Math.hypot(feet.x - h.x, feet.z - h.z) < W.hitReach * (k.hit ?? 1) && Math.abs(feet.y - h.y) < 1.6 && k.hp > 0 && sees(T, h.x, h.y + BODY_Y, h.z, feet.x, feet.y + 0.9, feet.z)) {
           h.hitThisLunge = true
-          hurtKeeper(c, SHAMBLER.damage)
+          hurtKeeper(c, W.damage)
         }
-        if (!h.hitThisLunge && !unarmed && c.others) for (const o of c.others) if (Math.hypot(o.x - h.x, o.z - h.z) < SHAMBLER.hitReach && Math.abs(o.y - h.y) < 1.6) {
-          h.hitThisLunge = true; c.events.push({ kind: 'hurt-other', id: o.id, dmg: SHAMBLER.damage }); break   // #1651: their frame applies on their side
+        if (!h.hitThisLunge && !unarmed && c.others) for (const o of c.others) if (Math.hypot(o.x - h.x, o.z - h.z) < W.hitReach && Math.abs(o.y - h.y) < 1.6) {
+          h.hitThisLunge = true; c.events.push({ kind: 'hurt-other', id: o.id, dmg: W.damage }); break   // #1651: their frame applies on their side
         }
-        if (h.t <= 0) { h.state = 'recover'; h.t = SHAMBLER.recover }
+        if (h.t <= 0) { h.state = 'recover'; h.t = W.recover }
         break
       case 'recover': case 'stagger':
-        if (h.t <= 0) h.state = d < SHAMBLER.notice ? 'chase' : 'wander'
+        if (h.t <= 0) h.state = d < W.notice ? 'chase' : 'wander'
         break
     }
     if (held) speed = 0
     else if (fxOn(h, 'slowed')) speed *= FX.slowMult
     if (speed > 0) {
       // M117 s3: round a structure, not through it (a lunge is committed: it stops at the wall instead)
-      const sfree = structFree(T, h, SHAMBLER.radius)
+      const sfree = structFree(T, h, W.radius)
       if (sfree && h.state !== 'lunge') { const v = steer(sfree, h.x, h.z, mx, mz, STEER_LOOK, (h.sm ??= {}), dt); if (v) { mx = v.x; mz = v.z } }
       const l = Math.hypot(mx, mz) || 1
       const nx = h.x + (mx / l) * speed * dt, nz = h.z + (mz / l) * speed * dt
@@ -539,12 +623,14 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   // a burn can finish one off between rounds: it drops like any other
   for (const h of c.hollows) if (h.hp <= 0) {
     c.events.push({ kind: 'hit', id: h.id, head: false, killed: true })
-    c.drops.push({ id: c.nextId++, x: h.x, y: T.heightAt(h.x, h.z), z: h.z, amount: (h.kind === 'floater' ? 2 : 1) + Math.floor(rnd(c) * 3), age: 0 })
+    c.drops.push({ id: c.nextId++, x: h.x, y: T.heightAt(h.x, h.z), z: h.z, amount: dropOf(c, h), age: 0 })
   }
   c.hollows = c.hollows.filter(h => h.hp > 0)
+  // M120 s2: crawlers that touch on drained ground POOL into one (mass, hp, strength add); the bigger keeps its id
+  if (!c.remote) mergeCrawlers(c, T)
   // keep a crowd from stacking into one body
   for (let a = 0; a < c.hollows.length; a++) for (let b = a + 1; b < c.hollows.length; b++) {
-    const A = c.hollows[a], B = c.hollows[b], dx = B.x - A.x, dz = B.z - A.z, d = Math.hypot(dx, dz), min = SHAMBLER.radius * 2
+    const A = c.hollows[a], B = c.hollows[b], dx = B.x - A.x, dz = B.z - A.z, d = Math.hypot(dx, dz), min = bodyR(A) + bodyR(B)
     if (d > 0.001 && d < min) { const p = (min - d) / 2 / d; A.x -= dx * p; A.z -= dz * p; B.x += dx * p; B.z += dz * p }
   }
 
