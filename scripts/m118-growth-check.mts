@@ -58,13 +58,10 @@ try {
   const opts = () => p.evaluate(() => [...document.querySelectorAll('[data-talk-option]')].map(b => (b.textContent ?? '').replace('›', '').trim())) as Promise<string[]>
   type Pan = { axes: Record<string, number>; growth: number | null; text: string; w: number; overflow: boolean }
   async function panel(): Promise<Pan | null> {
-    for (let k = 0; k < 10; k++) {
+    for (let k = 0; k < 25; k++) {
       const t = await p.evaluate(() => { const q = (window as any).__spiritModel?.trots?.fox; return q ? { x: q.x, z: q.z, y: q.y, h: q.h } : null }) as { x: number; z: number; y: number; h: number } | null
       if (!t) { await sleep(500); continue }
-      // she FOLLOWS (M126's formation): a tp to her sends her off to her new slot, so stay put, let her settle, aim where she is now
-      if (k === 0) { await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 1.5, 0), t.x, t.z) }
-      await sleep(1500)
-      const n = await p.evaluate(() => { const q = (window as any).__spiritModel?.trots?.fox; return q ? { x: q.x, z: q.z, y: q.y } : null }); if (n) Object.assign(t, n)
+      await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 1.5, 0), t.x, t.z)
       await aimAt(p, t.x, t.z, t.y - (await p.evaluate((x, z) => (window as any).__ather.ground(x, z), t.x, t.z) as number) + t.h * 0.5, 4)
       await p.keyboard.press('e'); await sleep(900)
       if ((await opts()).length) {
