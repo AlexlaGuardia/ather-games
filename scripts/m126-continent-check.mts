@@ -40,6 +40,7 @@ try {
     await walk(24); const g = (await rest(8))!
     const kd = Math.hypot(g.keeper.x - k.x, g.keeper.z - k.z), mv = Math.hypot(g.pos.manamal.x - q.x, g.pos.manamal.z - q.z)
     ok(kd > 0.8 && mv < 0.05, `3. the keeper steps ${kd.toFixed(2)} m: the Mana'mal stays (moved ${mv.toFixed(2)})`)
+    console.log(`idle skits on during the step: ${await p.evaluate(() => JSON.stringify({ on: (window as any).__skits?.on, idle: (window as any).__skits?.idle }))}; keeper yaw ${k.yaw.toFixed(2)} -> ${g.keeper.yaw.toFixed(2)}`)
   }
   ok(errs.length === 0, `4. 0 page errors (${errs.slice(0, 3).join(' | ')})`)
 } catch (e) { ok(false, `crashed: ${String(e).slice(0, 300)}`) }
