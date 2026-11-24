@@ -193,6 +193,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 05:3x Alex: "theres something off about that" (planter #2 slots) -> planters = SPIRIT BEDS, work like storage boxes: every spirit bloomed in a bed is recorded (maybe 28 limit), max 8 beds per garden, each bed has ONE featured spirit that hangs around the garden and can be asked to join. (hub: canon clash w/ 756fdbb 'never store'; name + storage = Magii; numbers = Jin; render cap is a real need)
 - 11-24 04:4x alex (played the night build): "the hollows feel much better now and a little more challenging this is good" -> M120 s1 feel ✅. "spirits look good" -> M117/M118 looks ok. Signs lark batch aa22eef -> Magii.
 - 11-24 04:4x alex: "on the map once a section has been discovered it can become infected (the first section where gregs waymark is at can start off infected for the story) but after that it should be rng ... starting off not infected" -> M121.
 - 11-24 04:4x alex: "im still not able to reuse the manalotl's planter" (ruled 756fdbb: a bloomed planter is FREE for the next seed) + "the crawlers look okay but ... they start off half that size" -> M122 fixes.
