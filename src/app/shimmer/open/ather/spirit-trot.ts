@@ -477,7 +477,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
         if (goal && gd < F.settle) fGo = false
         else {
           const behind = sl ? gd : Math.max(0, d - F.slot)
-          const v = clamp(D.speed * 0.8 + kV + behind * F.catchK, D.speed * 0.5, F.vMax) * (D.planted ? (1 - sitK) * clamp(Math.cos(wrap(Math.atan2(tg.x - pos.x, tg.z - pos.z) - yaw)), 0.3, 1) : 1), stp = Math.min(gd - (goal ? 0 : F.slot), v * dt)
+          const v = clamp(D.speed * 0.8 + kV + behind * F.catchK, D.speed * 0.5, F.vMax) * (D.planted && d >= F.keep + 0.2 ? (1 - sitK) * clamp(Math.cos(wrap(Math.atan2(tg.x - pos.x, tg.z - pos.z) - yaw)), 0.3, 1) : 1), stp = Math.min(gd - (goal ? 0 : F.slot), v * dt)
           const h0 = Math.atan2(tg.x - pos.x, tg.z - pos.z)
           let moved = false
           if (stp > 1e-4) for (let i = 0; i < 9 && !moved; i++) {
