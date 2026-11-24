@@ -47,9 +47,13 @@ try {
   console.log('in the Wilds')
   const C = (f: string) => p.evaluate(`(() => { const C = window.__ather.combat(); ${f} })()`) as Promise<any>
   // ── 1. packs, with the raised HP ──
-  // the first field whose strays are ALL inside the cull ring (130 m) of the walker: a top-up that ringed another spot loses the
-  // far ones 1.5 s of sim later, and a pack picked out of those is gone mid-measure. Taken at once: a crawler brood pools with time
-  await poll(async () => await C(`return C.hollows.length >= 6 && C.hollows.every(h => Math.hypot(h.x - window.__ather.state().px, h.z - window.__ather.state().pz) < 130)`), 60000)
+  // KNOWN (BETA M120 s3b): now and then the first top-up after the veil rings the OLD zone's spot (strays 105-130 m out, some culled
+  // 1.5 s of sim later, a pack picked from them gone mid-measure). A field not ringed on the walker (55-100 m + pack spread) is dropped
+  // ONCE, said out loud, and the next top-up is the one measured. Taken at once: a crawler brood pools with time
+  const six = () => poll(async () => (await C('return C.hollows.length')) >= 6, 30000)
+  await six()
+  const far = await C('const a = window.__ather.state(); return Math.max(0, ...C.hollows.map(h => Math.hypot(h.x - a.px, h.z - a.pz)))') as number
+  if (far > 112) { console.log(`   STALE RING: a stray ${far.toFixed(0)} m out; field dropped once`); await C('C.hollows.length = 0; C.packs = {}'); await six() }
   const hs = await C('return C.hollows.map(h => ({ id: h.id, kind: h.kind, pack: h.pack, maxHp: h.maxHp, x: h.x, z: h.z, st: h.state }))') as { id: number; kind: string; pack?: number; maxHp: number; x: number; z: number; st: string }[]
   console.log(`   first top-up: ${JSON.stringify(await p.evaluate(() => (window as any).__firstUp))}`)
   const packs = new Map<number, typeof hs>(); for (const h of hs) if (h.pack) packs.set(h.pack, [...(packs.get(h.pack) ?? []), h])
