@@ -12,11 +12,16 @@
 //
 // Props: the page's pose ref (where the keeper stands each frame) and its ground(x, z).
 
-import { useMemo, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { followStep, idleFollowStart, idleFollowStep, isIdle, FOLLOW, type IdleFollowState } from './idle-mode'
+import { idleFollowStart, idleFollowStep, isIdle, FOLLOW, type IdleFollowState } from './idle-mode'
 import { activeCompanion, subscribeCompanion, companionRev, type CompanionId } from './companion'
+import { joinFormation, leaveFormation, tickFormation, formationSlot, reportFormationPos, sharedBlocked, slotStep } from './follow-formation'   // M126 s1
+
+/** M126 s1: the Mana'mal's body in the formation (Gemdigger ~0.5 m nose to tail; the Glowmite / wisps a little less) */
+export const MANAMAL_R = 0.3
+const FORM_ID = 'manamal'
 
 export interface FollowPose { x: number; z: number; yaw: number }
 
@@ -34,16 +39,20 @@ export function CompanionFollower({ pose, ground }: { pose: React.MutableRefObje
 
 export function Follower({ id, pose, ground }: { id: CompanionId; pose: React.MutableRefObject<FollowPose>; ground: (x: number, z: number) => number }) {
   const g = useRef<THREE.Group>(null)
-  const s = useRef<{ x: number; z: number; yaw: number; speed: number; moving: boolean; still: number; t: number; nap: number; idle: IdleFollowState | null }>({ x: NaN, z: NaN, yaw: 0, speed: 0, moving: false, still: 0, t: 0, nap: 0, idle: null })
+  const s = useRef<{ x: number; z: number; yaw: number; speed: number; moving: boolean; still: number; t: number; nap: number; idle: IdleFollowState | null; kx: number; kz: number; kv: number }>({ x: NaN, z: NaN, yaw: 0, speed: 0, moving: false, still: 0, t: 0, nap: 0, idle: null, kx: NaN, kz: NaN, kv: 0 })
+  // M126 s1: it walks in the one formation (shared/follow-formation.ts): at heel, behind and to the right
+  useEffect(() => { joinFormation({ id: FORM_ID, kind: 'manamal', r: MANAMAL_R }); return () => leaveFormation(FORM_ID) }, [])
   useFrame((_, dtRaw) => {
     const dt = Math.min(0.05, dtRaw), p = pose.current, m = s.current, grp = g.current
     if (!grp) return
     m.t += dt
-    // M91: it keeps ROOM. Behind-right of the keeper at 4.5 m to arrive (and to catch up after a teleport); after that it
-    // only moves once the gap passes FOLLOW.START, ambles to a point on the line to where it stood, and settles (idle-mode.ts)
-    const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw), rx = -fz, rz = fx
-    const tx = p.x - fx * 4.2 + rx * 1.6, tz = p.z - fz * 4.2 + rz * 1.6
-    if (!Number.isFinite(m.x) || Math.hypot(p.x - m.x, p.z - m.z) > FOLLOW.TELEPORT) { m.x = tx; m.z = tz; m.yaw = p.yaw; m.speed = 0; m.moving = false; m.idle = null }
+    // M126 s1: its place is the formation's HEEL slot (was M91's own 4.2 m trail behind-right); it arrives there (and jumps
+    // there after a teleport), and walks to it with every step on free ground (the garden's blocked, where there is one)
+    tickFormation(p)
+    const slot = formationSlot(FORM_ID) ?? { x: p.x, z: p.z, face: p.yaw - Math.PI }
+    if (Number.isFinite(m.kx)) { const kv = Math.hypot(p.x - m.kx, p.z - m.kz) / Math.max(dt, 1e-3); if (kv < 30) m.kv += (kv - m.kv) * Math.min(1, dt * 5) }
+    m.kx = p.x; m.kz = p.z
+    if (!Number.isFinite(m.x) || Math.hypot(p.x - m.x, p.z - m.z) > FOLLOW.TELEPORT) { m.x = slot.x; m.z = slot.z; m.yaw = p.yaw; m.speed = 0; m.moving = false; m.idle = null }
     const px0 = m.x, pz0 = m.z
     if (isIdle()) {
       // the keeper is idling: wander near them, sit, nap
@@ -53,12 +62,13 @@ export function Follower({ id, pose, ground }: { id: CompanionId; pose: React.Mu
       m.moving = false
     } else {
       m.idle = null
-      const n = followStep({ x: m.x, z: m.z, speed: m.speed, moving: m.moving }, p.x, p.z, dt)
+      const n = slotStep({ x: m.x, z: m.z, speed: m.speed, moving: m.moving }, slot, m.kv, dt, sharedBlocked(p))
       m.x = n.x; m.z = n.z; m.speed = n.speed; m.moving = n.moving
     }
+    reportFormationPos(FORM_ID, m.x, m.z)
     const dx = m.x - px0, dz = m.z - pz0
     // face where it goes; at rest, face the way the keeper looks
-    const faceTo = m.speed > 0.3 && (dx || dz) ? Math.atan2(-dx, -dz) : p.yaw
+    const faceTo = m.speed > 0.3 && (dx || dz) ? Math.atan2(-dx, -dz) : slot.face + Math.PI   // M126: at rest, its slot's way (out, when the keeper stops); the nose is -z
     let dy = faceTo - m.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); m.yaw += dy * Math.min(1, dt * 5)
     m.still = m.speed < 0.15 ? m.still + dt : 0
     m.nap += ((m.idle?.phase === 'nap' ? 1 : 0) - m.nap) * Math.min(1, dt * 1.5)

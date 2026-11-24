@@ -23,6 +23,9 @@ import { isTrainStat, trainPlay } from './spirit-stats'   // M110 s1: a finished
 import { SPIRIT_MODELS, groundLift, lowPoints, type SpiritLook } from './spirit-models'
 import type { Species } from '../../spirits/spirit'
 import { slotOf } from './spirit-seeds'   // M122: a spirit's slot in her planter
+import { joinFormation, leaveFormation, tickFormation, formationSlot, reportFormationPos, inFormation } from '../shared/follow-formation'   // M126 s1
+import { bodyRadius } from './obstacles'
+import { GROWN } from '../../sprites/creature-size'
 
 export const VULNYX_URL = SPIRIT_MODELS.fox!.url
 /** World height of the model (the glb is 1 unit tall). Small and lithe: ~0.55 m, about a third of a keeper. */
@@ -103,10 +106,17 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
   // M109 s1 FOLLOW: she walks with the keeper while her planter id is in the follow list (kept across reloads)
   useEffect(() => {
     if (!trot || !id || !dev) return
-    const sync = () => trot.follow(isFollowing(id) ? () => keeperAt : null)
+    // M126 s1: a following spirit takes her place in the one formation (shared/follow-formation.ts), spaced by her body
+    const target = () => { tickFormation(keeperAt); return { x: keeperAt.x, z: keeperAt.z, yaw: keeperAt.yaw, slot: formationSlot(id) } }
+    const sync = () => {
+      const on = isFollowing(id)
+      if (on && nav) joinFormation({ id, kind: 'spirit', r: bodyRadius(GROWN[sp] ?? { height: 0.5 }), blocked: (x, z) => nav.blocked(x, z) })
+      else leaveFormation(id)
+      trot.follow(on ? target : null)
+    }
     sync(); const off = subscribeFollow(sync)
-    return () => { off(); spiritLive.delete(id) }
-  }, [trot, id, dev])
+    return () => { off(); spiritLive.delete(id); leaveFormation(id) }
+  }, [trot, id, dev, nav, sp])
   // M109 s4 THE PARTY KEEPS NEAR: while her planter id is in the party she picks her runs round the keeper (loose company)
   useEffect(() => {
     if (!trot || !id || !dev) return
@@ -155,6 +165,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
         yMax: ps.mode === 'happy' ? Math.max(pr.trots[sp]?.mode === 'happy' ? pr.trots[sp].yMax : 0, ps.y) : (pr.trots[sp]?.yMax ?? 0) }   // M109 s2: the happy beat's peak hop
       pr.trots[sp] = tp; if (sp === 'fox') pr.trot = tp
       if (dev && id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + ps.y, z: ps.z, h: look.h, at: Date.now() })   // M109: the E pick reads it
+      if (id && inFormation(id)) reportFormationPos(id, ps.x, ps.z)   // M126 s1: the probe's real spacing
       return
     }
     g.current.position.y = Math.sin(t * 1.4) * 0.02 * look.h / 0.55

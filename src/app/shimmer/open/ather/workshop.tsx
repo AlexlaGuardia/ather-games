@@ -1255,7 +1255,7 @@ function planterNav(id: string, dev = false, r = 0.3): SpiritNav | null {
     const w = getW(), c = navBoxes.get(r)
     if (c?.w === w) return c
     const solidPieces = new Set(pieceBoxes(w).map(b => `${b.x0},${b.z0},${b.x1},${b.z1}`))   // pieces are in the footprints, not here
-    const n = { w, b: [...workWalls(w).filter(b => !solidPieces.has(`${b.x0},${b.z0},${b.x1},${b.z1}`)), ...w.rooms.map(m => footprint(m.kind, m.x, m.z, m.q)), { x0: GREG.x - 0.5, x1: GREG.x + 0.5, z0: GREG.z - 0.5, z1: GREG.z + 0.5 }],
+    const n = { w, b: [...workWalls(w).filter(b => !solidPieces.has(`${b.x0},${b.z0},${b.x1},${b.z1}`) && b.y0 < GROUND_Y + 1 /* M126 s1: a box that starts overhead (a door's lintel) is not in her way: she walks through a doorway */), ...w.rooms.map(m => footprint(m.kind, m.x, m.z, m.q)), { x0: GREG.x - 0.5, x1: GREG.x + 0.5, z0: GREG.z - 0.5, z1: GREG.z + 0.5 }],
       feet: plotFootprints(w.pieces) }
     navBoxes.set(r, n); return n
   }

@@ -98,6 +98,7 @@ export const FOLLOW = {
   vMax: 9,          // m/s cap on the catch-up gait (the keeper sprints 6.5)
   catchK: 2.4,      // extra m/s per metre she is behind the slot
   settle: 0.12,     // m from the slot that counts as there
+  slotOff: 0.45,    // M126 s1: m from her formation slot before she sets off again
   sitAfter: 4,      // s standing by before she sits
 }
 // ── M109 s4 THE PARTY KEEPS NEAR (Magii RULED 0aee8bd/9b4dfe8: the party = up to 8 the keeper has asked along; they keep
@@ -136,7 +137,9 @@ function segDist(a: { x: number; z: number }, b: { x: number; z: number }, k: { 
   return Math.hypot(a.x + dx * t - k.x, a.z + dz * t - k.z)
 }
 /** where the keeper is (world xz; yaw 0 looks down -z) */
-export type FollowTarget = () => { x: number; z: number; yaw: number }
+/** M126 s1: `slot` = her place in the formation (shared/follow-formation.ts): where she walks to and, stood there, which way
+ *  she faces. No slot = the old ring round the keeper (a call home, the tests' bare keeper). */
+export type FollowTarget = () => { x: number; z: number; yaw: number; slot?: { x: number; z: number; face: number } | null }
 
 const TAU = Math.PI * 2
 const wrap = (a: number) => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI
@@ -450,15 +453,23 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
       if (kPrev) { const kv = Math.hypot(k.x - kPrev.x, k.z - kPrev.z) / Math.max(dt, 1e-3); if (kv < 30) kV = lerp(kV, kv, 1 - Math.exp(-dt * 5)) }
       kPrev = { x: k.x, z: k.z }
       const d = Math.hypot(pos.x - k.x, pos.z - k.z)
-      if (!fGo && (d > F.far || d < F.keep)) fGo = true
+      // M126 s1: a formation slot = her own place (she sets off once it is F.slotOff away); else the old shared ring
+      const sl = k.slot
+      if (!fGo && (sl ? Math.hypot(sl.x - pos.x, sl.z - pos.z) > F.slotOff : d > F.far || d < F.keep)) fGo = true
       if (fGo) {
-        const b = d > 0.05 ? Math.atan2(pos.z - k.z, pos.x - k.x) : Math.atan2(Math.cos(k.yaw), Math.sin(k.yaw))
         let goal: { x: number; z: number } | null = null
-        for (let i = 0; i < 13 && !goal; i++) { const a = b + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.45, g = { x: k.x + Math.cos(a) * F.slot, z: k.z + Math.sin(a) * F.slot }; if (free(g.x, g.z)) goal = g }
+        if (sl) {
+          // her slot, or the nearest free spot round it (the assigner already kept it clear of walls; her own nav is the say)
+          for (let i = 0; i < 17 && !goal; i++) { const r = i ? 0.15 * Math.ceil(i / 8) + 0.15 : 0, a = (i % 8) * Math.PI / 4, g = { x: sl.x + Math.cos(a) * r, z: sl.z + Math.sin(a) * r }; if (free(g.x, g.z)) goal = g }
+        } else {
+          const b = d > 0.05 ? Math.atan2(pos.z - k.z, pos.x - k.x) : Math.atan2(Math.cos(k.yaw), Math.sin(k.yaw))
+          for (let i = 0; i < 13 && !goal; i++) { const a = b + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.45, g = { x: k.x + Math.cos(a) * F.slot, z: k.z + Math.sin(a) * F.slot }; if (free(g.x, g.z)) goal = g }
+        }
         const tg = goal ?? { x: k.x, z: k.z }, gd = Math.hypot(tg.x - pos.x, tg.z - pos.z)
         if (goal && gd < F.settle) fGo = false
         else {
-          const v = clamp(D.speed * 0.8 + kV + Math.max(0, d - F.slot) * F.catchK, D.speed * 0.5, F.vMax), stp = Math.min(gd - (goal ? 0 : F.slot), v * dt)
+          const behind = sl ? gd : Math.max(0, d - F.slot)
+          const v = clamp(D.speed * 0.8 + kV + behind * F.catchK, D.speed * 0.5, F.vMax), stp = Math.min(gd - (goal ? 0 : F.slot), v * dt)
           const h0 = Math.atan2(tg.x - pos.x, tg.z - pos.z)
           let moved = false
           if (stp > 1e-4) for (let i = 0; i < 9 && !moved; i++) {
@@ -470,7 +481,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
         fIdle = 0
       } else {
         fIdle += dt
-        heading = Math.atan2(k.x - pos.x, k.z - pos.z)   // stood by: she watches the keeper
+        heading = k.slot ? k.slot.face : Math.atan2(k.x - pos.x, k.z - pos.z)   // stood by: she faces her slot's way (M126), else watches the keeper
         if (fIdle > F.sitAfter) wantSit = 1
         // M109 s3: called home and arrived: a moment sat by the keeper, then she is free again
         if (calling && fIdle > 0.8) { calling = false; followTo = callPrev; callPrev = null; if (!followTo) { syncPolar(); go('sit', rand(...D.sitS)) } }
