@@ -1,0 +1,112 @@
+{
+ "glb_bytes": 256148,
+ "live_bytes": 189520,
+ "bones": 24,
+ "verts": 3887,
+ "capped_loops": {
+  "found": 4,
+  "capped": 4,
+  "open_edges": 136,
+  "verts_added": 140
+ },
+ "rest_max_diff_units": {
+  "body": 2.8610229518832853e-08,
+  "eyes": 6.556510889765832e-09
+ },
+ "clips": {
+  "walk": {
+   "dur_s": 0.431,
+   "lowest_vertex_m": -0.0001,
+   "lowest_vertex_below_rest_m": -0.0001,
+   "edge_stretch_p99": 2.5,
+   "edge_stretch_max": 7.28,
+   "speed_mps": 0.55,
+   "leg_reach_ratio_max": 1.56,
+   "feet": {
+    "hl": {
+     "soles": 47,
+     "drift_mean_m": 0.0002,
+     "drift_max_m": 0.0004,
+     "y_spread_m": 0.0026,
+     "paw_lowest_m": -0.0001
+    },
+    "fl": {
+     "soles": 49,
+     "drift_mean_m": 0.0002,
+     "drift_max_m": 0.0004,
+     "y_spread_m": 0.0018,
+     "paw_lowest_m": 0.0028
+    },
+    "hr": {
+     "soles": 12,
+     "drift_mean_m": 0.0003,
+     "drift_max_m": 0.0009,
+     "y_spread_m": 0.0025,
+     "paw_lowest_m": 0.0007
+    },
+    "fr": {
+     "soles": 47,
+     "drift_mean_m": 0.0002,
+     "drift_max_m": 0.0004,
+     "y_spread_m": 0.0018,
+     "paw_lowest_m": 0.0015
+    }
+   },
+   "stance_travel_m": 0.147
+  },
+  "run": {
+   "dur_s": 0.262,
+   "lowest_vertex_m": -0.0017,
+   "lowest_vertex_below_rest_m": -0.0017,
+   "edge_stretch_p99": 3.11,
+   "edge_stretch_max": 8.78,
+   "speed_mps": 1.92,
+   "leg_reach_ratio_max": 1.73,
+   "feet": {
+    "hl": {
+     "soles": 47,
+     "drift_mean_m": 0.0013,
+     "drift_max_m": 0.0017,
+     "y_spread_m": 0.0044,
+     "paw_lowest_m": -0.0013
+    },
+    "hr": {
+     "soles": 12,
+     "drift_mean_m": 0.004,
+     "drift_max_m": 0.0045,
+     "y_spread_m": 0.0044,
+     "paw_lowest_m": 0.0005
+    },
+    "fl": {
+     "soles": 49,
+     "drift_mean_m": 0.0018,
+     "drift_max_m": 0.0018,
+     "y_spread_m": 0.0015,
+     "paw_lowest_m": -0.0017
+    },
+    "fr": {
+     "soles": 47,
+     "drift_mean_m": 0.0025,
+     "drift_max_m": 0.0028,
+     "y_spread_m": 0.0019,
+     "paw_lowest_m": 0.001
+    }
+   },
+   "stance_travel_m": 0.161
+  },
+  "idle": {
+   "dur_s": 4.8,
+   "lowest_vertex_m": -0.0,
+   "lowest_vertex_below_rest_m": -0.0,
+   "edge_stretch_p99": 2.26,
+   "edge_stretch_max": 5.45
+  },
+  "sit": {
+   "dur_s": 5.0,
+   "lowest_vertex_m": -0.0,
+   "lowest_vertex_below_rest_m": -0.0,
+   "edge_stretch_p99": 1.19,
+   "edge_stretch_max": 1.91
+  }
+ }
+}
