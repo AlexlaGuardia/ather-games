@@ -666,14 +666,13 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       }
       C.netHits = []
     }
-    if (!C.remote && topUpDue(popT.current, settled.current)) {
-      popT.current = 1.5
+    if (!C.remote && popT.current <= 0) {   // the ground reading never waits for the settle (only the strays do): crawlers pool from the first frame
       // strays thicken round an infected node; during a champion fight the waves are the only adds
       const near = nodesRef.current.some(n => !spent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < STRAY_R)
       const own = ownerRef.current
       const infested = own ? (x: number, z: number) => { const id = own(x, z); return !id || (!spent.current.has(id) && !probeSpent.current.has(id) && nodesRef.current.some(n => n.id === id)) } : undefined
       C.drained = infested ?? (() => true)   // M120 s2: crawlers pool only on drained ground (cleared country stays apart)
-      populate(C, T, feet.x, feet.z, C.champ ? 0 : near ? 11 : 7, safe, infested)
+      if (topUpDue(popT.current, settled.current)) { popT.current = 1.5; populate(C, T, feet.x, feet.z, C.champ ? 0 : near ? 11 : 7, safe, infested) }
     }
     // a CHARGED gun (the Charred Rifle): the pull starts a short charge, the round leaves when it ends (still aimed by the eye)
     const charge = (C.gun as { charge?: number }).charge ?? 0

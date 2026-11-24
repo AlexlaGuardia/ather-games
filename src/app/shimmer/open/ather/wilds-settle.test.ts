@@ -37,6 +37,12 @@ const seeds = Array.from({ length: 100 }, (_, i) => 3 + i * 7), off = (r: number
   const a = arrival(17, topUpDue).ring, b = arrival(17, p => p <= 0, 0).ring
   ok(a.length === b.length && a.every((d, i) => Math.abs(d - b[i]) < 1e-6), 'how many and where they ring is unchanged')
 }
-ok(/if \(!C\.remote && topUpDue\(popT\.current, settled\.current\)\)/.test(readFileSync(new URL('./combat-layer.tsx', import.meta.url), 'utf8')), 'combat-layer gates its top-up on it')
+{
+  const src = readFileSync(new URL('./combat-layer.tsx', import.meta.url), 'utf8'), gate = 'if (topUpDue(popT.current, settled.current)) { popT.current = 1.5; populate('
+  ok(src.split('populate(C,').length === 2 && src.includes(gate + 'C,'), 'combat-layer gates its top-up on it (its one populate call)')
+  // the ground reading (crawlers pool on it) does NOT wait for the settle: it was null for the first seconds on prod (aad114fd, m120-merge-check)
+  const at = src.indexOf('C.drained = infested'), open = src.lastIndexOf('if (!C.remote && popT.current <= 0) {', at)
+  ok(at > 0 && open > 0 && at < src.indexOf(gate) && !src.slice(open, at).includes('topUpDue'), 'C.drained is set before the gate')
+}
 console.log(`wilds-settle: ${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)
