@@ -81,6 +81,7 @@ try {
     await A('resetGarden'); await sleep(300); await A('grant', 60); await sleep(500)
     g = await greg()
     ok(g.line === FOLD_TEXT.offer && g.opts[0] === FOLD_TEXT.ask, `A. at the fold beat Greg offers the fold ('${g.line}' / ${g.opts.join(' / ')})`)
+    ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth && [...document.querySelectorAll<HTMLElement>('[data-talk-bubble], [data-talk-option]')].every(e => { const r = e.getBoundingClientRect(); return r.width === 0 || (r.right <= innerWidth + 0.5 && r.left >= -0.5 && e.scrollWidth <= e.clientWidth + 1) })), 'A. the offer fits 390')
     await pick(FOLD_TEXT.ask); await sleep(800)
     g = { line: (await (async () => { await poll(async () => (await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')).includes(FOLD_TEXT.short(60)), 6000); return p.evaluate(() => { const b = document.querySelector('[data-talk-bubble]'); const sc = b?.querySelector('[data-talk-scene]')?.textContent ?? ''; return (b?.firstElementChild?.textContent ?? '').slice(sc.length) }) })()) ?? '', opts: [] }
     ok(g.line === FOLD_TEXT.short(60), `A. at 60 grey matter Greg refuses with the reason ('${g.line}')`)
@@ -95,6 +96,7 @@ try {
     t = await store('open.tutorial.v1'); gd = await store('ather.garden.v1')
     ok(before === 130 && gd?.grey === before - FOLD_COST, `A. grey matter ${before} -> ${gd?.grey}: exactly ${FOLD_COST} spent`)
     ok(t?.folded === true, 'A. the folded flag is saved')
+    ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth && [...document.querySelectorAll<HTMLElement>('[data-talk-bubble], [data-talk-option]')].every(e => { const r = e.getBoundingClientRect(); return r.width === 0 || (r.right <= innerWidth + 0.5 && r.left >= -0.5 && e.scrollWidth <= e.clientWidth + 1) })), 'A. the done line fits 390')
     await p.screenshot({ path: `${out}/a-folded.png` })
     await pick(FOLD_TEXT.go)
     ok(await zoneIs('plot', 30000), `A. 'To my garden': the garden's gate opens, the plot loads (zone ${await A('zone')})`)
