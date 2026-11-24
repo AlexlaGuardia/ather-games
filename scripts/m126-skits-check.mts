@@ -25,7 +25,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 type V = { x: number; z: number }
-type F = { members: { id: string; kind: string }[]; pos: Record<string, V>; slots: Record<string, V> }
+type F = { stopped: boolean; keeper: V; members: { id: string; kind: string }[]; pos: Record<string, V>; slots: Record<string, V> }
 type S = { on: boolean; idle: boolean; hollowHeld: boolean; framed: number; plan: Record<string, { kind: string }>; lying: Record<string, number> }
 const br = await puppeteer.launch({ protocolTimeout: 600000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--mute-audio'] })
 try {
@@ -59,8 +59,10 @@ try {
   let r = await read()
   for (let t = 0; t < 60 && !(r.f && r.f.members.length === 4 && Object.keys(r.f.pos).length === 4); t++) { await sleep(500); r = await read() }
   ok(!!r.f && r.f.members.length === 4 && r.f.members.some(m => m.kind === 'manamal'), `1. the formation holds the Mana'mal + 3 spirits (${r.f?.members.map(m => m.id).join(',')})`)
-  let o0: Record<string, number> = { none: 99 }
-  for (let t = 0; t < 80; t++) { r = await read(); if (r.f && !r.s?.on) { base = r.f.slots; o0 = off(r.f); if (Object.values(o0).every(v => v < 0.65)) break } await sleep(250) }
+  // settled = the keeper stands where they were put (not the spawn), still, and everyone is in place
+  const kAt = (f: F | null) => f ? Math.hypot(f.keeper.x + 139, f.keeper.z - 94) : 99
+  let o0: Record<string, number> = { none: 99 }, kb = { x: 0, z: 0 }
+  for (let t = 0; t < 80; t++) { r = await read(); if (kAt(r.f) > 3) { await p.evaluate(() => (window as any).__ather?.tp?.(-139, 94, Math.PI)); await sleep(1000); continue } if (r.f && r.f.stopped && !r.s?.on) { base = r.f.slots; kb = r.f.keeper; o0 = off(r.f); if (Object.values(o0).every(v => v < 0.65)) break } await sleep(250) }
   ok(Object.values(o0).every(v => v < 0.65), `1. all in their slots before idling (${JSON.stringify(Object.fromEntries(Object.entries(o0).map(([k, v]) => [k, +v.toFixed(2)])))})`)
   ok(!r.s?.on, '1. no skits before idle')
   // 2. no input: wait for idle + skits
@@ -87,6 +89,8 @@ try {
   ok(best < 0.2, `3. the rendered camera came to face a follower (${bestId} off by ${best.toFixed(2)} rad)`)
   ok(!!r.s?.on, '3. still skitting with no input')
   // 4. input: back to their slots
+  const moved = r.f ? Math.hypot(r.f.keeper.x - kb.x, r.f.keeper.z - kb.z) : 99
+  ok(moved < 0.3 && kAt(r.f) < 3, `3. the keeper never moved, so the distances are the followers' own (${moved.toFixed(2)})`)
   const away = r.f ? Object.values(off(r.f)).filter(v => v > 1).length : 0
   ok(away > 0, `4. followers are away as the input comes (${away})`)
   await p.keyboard.press('ShiftLeft')
