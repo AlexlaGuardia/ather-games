@@ -86,17 +86,18 @@ const hideCard = (p: Page) => p.evaluate(() => { const h = [...document.querySel
 /** stand beside her (her side on, close) and take it the moment `clip` is fully on */
 async function still(p: Page, id: string, clip: string, name: string) {
   if (!shots) return
-  for (let i = 0; i < 400; i++) {
+  let took = 0
+  for (let i = 0; i < 240 && took < 4; i++) {
     const r = await p.evaluate((id: string) => { const r = (window as any).__spiritModel.rigs.get(id); if (!r) return null; const s = r.body.state(); return { x: r.x, z: r.z, yaw: r.yaw, w: s.w, mode: r.mode } }, id) as any
     if (r && r.w[clip] > 0.95 && !/perch|hop/.test(r.mode)) {
       await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), r.x + Math.cos(r.yaw) * 1.5 + Math.sin(r.yaw) * 0.4, r.z - Math.sin(r.yaw) * 1.5 + Math.cos(r.yaw) * 0.4)
       await sleep(250); const n = await p.evaluate((id: string) => { const r = (window as any).__spiritModel.rigs.get(id); return { x: r.x, z: r.z } }, id) as any
-      await aimAt(p, n.x, n.z, 0.15, 3); await hideCard(p); try { await p.screenshot({ path: `${shots}/${name}-390.png` }); console.log(`   still ${name}`) } catch { /* slow frame */ }
+      await aimAt(p, n.x, n.z, 0.15, 3); await hideCard(p); try { await p.screenshot({ path: `${shots}/${name}-390.png` }); took++ } catch { /* slow frame */ }
       if (await p.evaluate((a: [string, string]) => (window as any).__spiritModel.rigs.get(a[0])?.body.state().w[a[1]] > 0.8, [id, clip])) return
     }
     await sleep(250)
   }
-  console.log(`   (no still of ${name})`)
+  if (!took) console.log(`   (no still of ${name})`)
 }
 const pieces = BEDS(3), pots = { p0: pot('axolotl', 0), p1: pot('fox', 1), p2: pot('axolotl', 2) }
 const br = await launch()
