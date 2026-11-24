@@ -67,11 +67,9 @@ try {
     await p.evaluate(() => { const C = (window as any).__ather.combat(); C.keeper.hp = C.keeper.maxHp; C.keeper.ammo = C.gun.clip; C.keeper.reloading = 0 }); await sleep(600)
     const a0 = await p.evaluate(() => (window as any).__ather.combat().keeper.ammo) as number
     const box = await p.evaluate(() => { const e = document.querySelector('[data-touch="fire"]'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })
-    if (box) await p.touchscreen.touchStart(box.x, box.y)
-    await poll(async () => (await p.evaluate(() => (window as any).__ather.combat().keeper.ammo) as number) < a0, 6000)
-    if (box) await p.touchscreen.touchEnd()
-    let a1 = await p.evaluate(() => (window as any).__ather.combat().keeper.ammo) as number
-    if (a1 >= a0) { await sleep(1500); a1 = await p.evaluate(() => (window as any).__ather.combat().keeper.ammo) as number }   // a charge gun lets go on the release
+    // a pull inside a semi-auto gun's own cooldown (the draw, at a few frames a second) is spent without a shot, as on a phone: pull again
+    let a1 = a0
+    for (let n = 0; box && n < 6 && a1 >= a0; n++) { await p.touchscreen.touchStart(box.x, box.y); await sleep(1200); await p.touchscreen.touchEnd(); await sleep(1200); a1 = await p.evaluate(() => (window as any).__ather.combat().keeper.ammo) as number }
     ok(drawn && !!box && a1 < a0, `3. ${g.id}: drawn and fired in the Wilds (${await id()}, ammo ${a0} -> ${a1}${box ? '' : ', no fire button'})`)
   }
   await go(p); l = await lo(p); ok(ALL.every(g => l.guns.includes(g)) && l.guns.length === ALL.length && !!l.primary !== !!l.secondary, `4. a reload keeps the 6 (worn ${l.primary} / ${l.secondary})`)
