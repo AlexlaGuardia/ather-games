@@ -210,6 +210,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 16:4x Alex (lost settlement's waymark): "im thinking if the way mark is free with the settlement then gone with the place.." -> build has no free settlement waymark, so liftable stays (hub reading, told Alex) -> Magii; lark run allowed (2 lines)
 - 11-24 16:4x (agent find, not Alex): red unit tests at HEAD: moglins-farmer.test (6 FAIL seen by hub), spread-map.test legend vs canon file (1 FAIL) -> triage: cause unknown, next world slice after M128 s2
 - 11-24 Alex: "im trying not to divert our attention to nyx side just yet ... but i keep getting pulled by alot of the needs it fills.. for one weapons.. id like to use some of the other weapons but we have no way to purchase said weapons yet, not to mention sigils.. but for now id settle with just play testing the base guns maybe we can come up with some new ones to add in.. what if we just give me a dev button that adds all guns to my character?" -> M140 dev button; new guns = TALK (parked); Nyx side stays parked, M108 flip not queued
 - 11-24 Alex: "yea go with 60 / 120 / 200 good call" -> M139 (replaces 150/200/300)
