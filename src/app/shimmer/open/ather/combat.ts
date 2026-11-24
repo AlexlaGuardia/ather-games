@@ -42,7 +42,13 @@ export interface Hollow {
   fx?: Partial<Record<HollowFx, number>>
   /** M117 s3: which way round a structure it committed to (obstacles.ts steer) */
   sm?: SteerMem
+  /** M120: the pack it moves with (Combat.packs) and its loose slot in the formation round the pack's heading */
+  pack?: number; px?: number; pz?: number
+  /** M120 floater: zips left before it holds, the spot it is zipping to, shots left in the burst */
+  zips?: number; zx?: number; zz?: number; shots?: number
 }
+/** M120: a pack's shared heading (where its members drift while nobody has noticed the keeper) */
+export interface Pack { wx: number; wz: number; t: number }
 /** The engine's statuses that mean something to a Hollow (engine/statuses.ts; `revealed`, `silenced`, `sealed`,
  *  `shieldBroken` do not: a Hollow neither hides, casts, nor carries a shield). */
 export type HollowFx = 'rooted' | 'disarmed' | 'blinded' | 'slowed' | 'staggered' | 'vulnerable' | 'burning'
@@ -50,7 +56,9 @@ export const fxOn = (h: Hollow, k: HollowFx) => (h.fx?.[k] ?? 0) > 0
 /** what a cast status does to a Hollow (build; tune with play) */
 export const FX = { slowMult: 0.45, vulnerableMult: 1.3, burnDps: 5 } as const
 /** A floater's spit: slow enough to see coming and side-step. */
-export interface Spit { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg?: number }
+export interface Spit { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg?: number
+  /** M120: a floater's shot SPLASHES where it lands: this much to a keeper inside FLOATER.splashR of the landing (a direct hit pays `dmg` instead) */
+  splash?: number }
 export interface Round { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg: number; crit: number }
 export interface Drop { id: number; x: number; y: number; z: number; amount: number; age: number }
 
@@ -73,17 +81,24 @@ export const AMP_MULT = 1.3
 export const KEEPER_HP = 100
 /** M78: the dials live in shared/vitals-economy.ts (was 8/s) */
 export const REGEN_DELAY = ECON.hpDelay, REGEN_RATE = ECON.hpRegen
-/** Shambler tuning (build pacing, Jin). Three Repeater body shots or two to the head. */
+/** Shambler tuning (build pacing, Jin). M120 (Alex 11-24 'the wilds are tame'): hp 30 -> 45 = five Repeater body shots or three
+ *  to the head (sized for a keeper + a party); chase 1.7 -> 2.1 and wander 0.55 -> 0.7 ('a little bit faster'). */
 export const SHAMBLER = {
-  hp: 30, wanderSpeed: 0.55, chaseSpeed: 1.7, notice: 24, forget: 40,
+  hp: 45, wanderSpeed: 0.7, chaseSpeed: 2.1, notice: 24, forget: 40,
   lungeRange: 2.6, windup: 0.45, lungeSpeed: 6.5, lungeTime: 0.32, recover: 1.1,
   hitReach: 1.15, damage: 14, stagger: 0.28, radius: 0.42, height: 1.75,
 }
-/** The floater: the one Hollow that floats (design-briefs/hollows.md), the ranged form. Keeps its distance and spits. */
+/** The floater: the one Hollow that floats (design-briefs/hollows.md), the ranged form. Keeps its distance and spits.
+ *  M120 (Alex 11-24): it ZIPS 2-3 spots (zipSpeed, inside keepNear..keepFar), then HOLDS (`charge` = the tell) and fires a
+ *  burst of `shots` spits `shotGap` apart; each SPLASHES where it lands (splashR / splash). hp 20 -> 30, damage 10 -> 6 a shot (+3 splash on a near miss). */
 export const FLOATER = {
-  hp: 20, hover: 2.2, keepNear: 9, keepFar: 16, notice: 30, forget: 44, speed: 2.1,
-  charge: 0.75, recover: 2.2, spitSpeed: 11, spitLife: 3, spitR: 0.35, damage: 10, share: 0.25,
+  hp: 30, hover: 2.2, keepNear: 9, keepFar: 16, notice: 30, forget: 44, speed: 2.1,
+  charge: 0.7, recover: 1.8, spitSpeed: 11, spitLife: 3, spitR: 0.35, damage: 6, share: 0.25,
+  zipSpeed: 9, zipTime: 0.9, zipPause: 0.25, zipsMin: 2, zipsMax: 3, shots: 3, shotGap: 0.22, splashR: 1.6, splash: 3,
 }
+/** M120: Hollows come in PACKS (Alex 11-24 'move in groups'): `min`..`max` to a pack, at most `floaters` floaters each, a
+ *  loose formation `spread` m round the pack's heading; one member noticing the keeper sets the whole pack on them. */
+export const PACK = { min: 3, max: 5, floaters: 1, spread: 3.5, roam: 12, catchUp: 1.7 }
 export const HEAD_Y = 1.55, HEAD_R = 0.26, BODY_Y = 0.85, BODY_R = 0.44
 export const PICKUP_R = 1.4, MAGNET_R = 4.5
 
@@ -142,6 +157,10 @@ export interface Combat {
   events: CombatEvent[]
   /** M117 s3: shots (rounds + spits) stopped by a structure so far (checks read it; events clear every step) */
   wallHits?: number
+  /** M120: floater shots that landed and splashed so far (checks read it; events clear every step) */
+  splashes?: number
+  /** M120: the packs, by id (a pack with no member left is dropped on the next step) */
+  packs?: Record<number, Pack>
 }
 export type CombatEvent =
   | { kind: 'hit'; id: number; head: boolean; killed: boolean }
@@ -159,6 +178,8 @@ export type CombatEvent =
   | { kind: 'champ-down'; nodeId: string }
   /** M117 s3: a round or a spit hit a structure here (it stops; nobody behind it is hurt) */
   | { kind: 'impact'; x: number; y: number; z: number; by: 'round' | 'spit' }
+  /** M120: a floater's shot landed (ground or wall) and splashed here, FLOATER.splashR round */
+  | { kind: 'splash'; x: number; y: number; z: number; hurt: boolean }
 
 export function newCombat(seed = 1, gunId = 'repeater'): Combat {
   const gun = weaponDef(gunId)!
@@ -251,17 +272,63 @@ export function applyNetHit(c: Combat, id: number, dmg: number) {
   if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = SHAMBLER.stagger }
 }
 
-/** Keep a scatter of strays around the keeper: top up in a ring out of sight, cull the far ones. */
+/** M120: tie these Hollows into one pack: a shared heading where they stand now, each a loose slot round it. */
+export function groupPack(c: Combat, ids: number[]): number {
+  const hs = c.hollows.filter(h => ids.includes(h.id))
+  if (!hs.length) return 0
+  const id = c.nextId++, cx = hs.reduce((a, h) => a + h.x, 0) / hs.length, cz = hs.reduce((a, h) => a + h.z, 0) / hs.length
+  ;(c.packs ??= {})[id] = { wx: cx, wz: cz, t: 0 }
+  for (const h of hs) { h.pack = id; h.px = h.x - cx; h.pz = h.z - cz }
+  return id
+}
+
+/** Keep the Wilds peopled round the keeper: top up in a ring out of sight, in PACKS (M120), cull the far ones. */
 export function populate(c: Combat, T: Terrain, kx: number, kz: number, target: number, safe?: { x: number; z: number; r: number }, infested?: (x: number, z: number) => boolean) {
   c.hollows = c.hollows.filter(h => Math.hypot(h.x - kx, h.z - kz) < 130)
+  const may = (x: number, z: number) => T.walkable(x, z) && Number.isFinite(T.heightAt(x, z)) && !(safe && Math.hypot(x - safe.x, z - safe.z) < safe.r)
+    && !(infested && !infested(x, z))   // cleared ground stays quiet (nodes.ts › ownerOf)
   for (let tries = 0; c.hollows.length < target && tries < 24; tries++) {
     const a = rnd(c) * Math.PI * 2, r = 55 + rnd(c) * 45
     const x = kx + Math.cos(a) * r, z = kz + Math.sin(a) * r
-    if (!T.walkable(x, z) || !Number.isFinite(T.heightAt(x, z))) continue
-    if (safe && Math.hypot(x - safe.x, z - safe.z) < safe.r) continue
-    if (infested && !infested(x, z)) continue   // cleared ground stays quiet (nodes.ts › ownerOf)
-    spawnHollow(c, T, x, z, rnd(c) < FLOATER.share ? 'floater' : 'shambler')
+    if (!may(x, z)) continue
+    const want = Math.min(target - c.hollows.length, PACK.min + Math.floor(rnd(c) * (PACK.max - PACK.min + 1)))
+    const ids: number[] = []
+    let floaters = 0
+    for (let m = 0, mt = 0; ids.length < want && mt < want * 4; mt++, m++) {
+      const ma = rnd(c) * Math.PI * 2, mr = ids.length ? 1 + rnd(c) * PACK.spread : 0
+      const mx = x + Math.cos(ma) * mr, mz = z + Math.sin(ma) * mr
+      if (!may(mx, mz)) continue
+      const kind: HollowKind = floaters < PACK.floaters && rnd(c) < FLOATER.share ? 'floater' : 'shambler'
+      if (kind === 'floater') floaters++
+      ids.push(spawnHollow(c, T, mx, mz, kind).id)
+    }
+    groupPack(c, ids)
   }
+}
+
+/** M120: move each pack's heading on when its members reach it (or it goes stale); drop the packs with nobody left. */
+function stepPacks(c: Combat, T: Terrain, dt: number) {
+  if (!c.packs) return
+  for (const key in c.packs) {
+    const id = Number(key), P = c.packs[id], ms = c.hollows.filter(h => h.pack === id)
+    if (!ms.length) { delete c.packs[id]; continue }
+    P.t -= dt
+    const cx = ms.reduce((a, h) => a + h.x, 0) / ms.length, cz = ms.reduce((a, h) => a + h.z, 0) / ms.length
+    if (P.t <= 0 || Math.hypot(P.wx - cx, P.wz - cz) < 1.5) {
+      for (let k = 0; k < 6; k++) {
+        const wx = cx + (rnd(c) - 0.5) * 2 * PACK.roam, wz = cz + (rnd(c) - 0.5) * 2 * PACK.roam
+        if (T.walkable(wx, wz)) { P.wx = wx; P.wz = wz; break }
+      }
+      P.t = 5 + rnd(c) * 4
+    }
+  }
+}
+/** M120: where a pack member drifts while wandering (its slot round the heading), and how far it is from it. */
+function packSlot(c: Combat, h: Hollow): { x: number; z: number; far: number } | null {
+  const P = h.pack ? c.packs?.[h.pack] : undefined
+  if (!P) return null
+  const x = P.wx + (h.px ?? 0), z = P.wz + (h.pz ?? 0)
+  return { x, z, far: Math.hypot(x - h.x, z - h.z) }
 }
 
 /** Pull the trigger along an aim (unit vector). Returns false when the gun cannot fire. */
@@ -380,6 +447,10 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   c.hollows = c.hollows.filter(h => h.hp > 0)
 
   // hollows
+  if (!c.remote) stepPacks(c, T, dt)
+  // M120: a pack with one member on the keeper (chasing, winding up, spitting) has ALL its members on them
+  const roused = new Set<number>()
+  for (const h of c.hollows) if (h.pack && h.state !== 'wander') roused.add(h.pack)
   for (const h of c.hollows) {
     h.hitFlash = Math.max(0, h.hitFlash - dt); h.t -= dt
     if (c.remote) { easeRemote(h, dt); h.y = T.heightAt(h.x, h.z) + (h.kind === 'floater' ? FLOATER.hover : 0); continue }   // M28: the host's word
@@ -399,7 +470,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     const dx = tgt.x - h.x, dz = tgt.z - h.z, d = Math.hypot(dx, dz)
     if (h.kind === 'floater') {
       // a held, blinded or disarmed floater hangs where it is and spits nothing; a slowed one does all of it at half pace
-      if (!(held || blind || unarmed)) stepFloater(c, T, h, { x: tgt.x, y: ty, z: tgt.z }, d, dx, dz, fxOn(h, 'slowed') ? dt * FX.slowMult : dt, alive)
+      if (!(held || blind || unarmed)) stepFloater(c, T, h, { x: tgt.x, y: ty, z: tgt.z }, d, dx, dz, fxOn(h, 'slowed') ? dt * FX.slowMult : dt, alive, !!h.pack && roused.has(h.pack))
       continue
     }
     // blinded: it has lost you, and blunders about; disarmed: it will not wind up to lunge
@@ -407,17 +478,26 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     if (unarmed && h.state === 'windup') { h.state = 'chase' }
     let speed = 0, mx = 0, mz = 0
     switch (h.state) {
-      case 'wander':
-        if (d < SHAMBLER.notice && alive && !blind) { h.state = 'chase'; break }
+      case 'wander': {
+        if (alive && !blind && (d < SHAMBLER.notice || (h.pack && roused.has(h.pack) && d < SHAMBLER.forget))) { h.state = 'chase'; break }
+        const slot = packSlot(c, h)
+        if (slot) {   // M120: drift with the pack, in a loose slot round its heading; a straggler catches up
+          if (slot.far < 0.6) break
+          mx = slot.x - h.x; mz = slot.z - h.z; speed = SHAMBLER.wanderSpeed * (slot.far > 3 ? PACK.catchUp : 1)
+          break
+        }
         if (h.t <= 0 || Math.hypot(h.wx - h.x, h.wz - h.z) < 1) {
           h.wx = h.x + (rnd(c) - 0.5) * 16; h.wz = h.z + (rnd(c) - 0.5) * 16; h.t = 3 + rnd(c) * 4
         }
         mx = h.wx - h.x; mz = h.wz - h.z; speed = SHAMBLER.wanderSpeed
         break
+      }
       case 'chase':
         if (d > SHAMBLER.forget || !alive) { h.state = 'wander'; h.t = 0; break }
         if (d < SHAMBLER.lungeRange && !unarmed) { h.state = 'windup'; h.t = SHAMBLER.windup; h.lx = dx / d; h.lz = dz / d; break }
         mx = dx; mz = dz; speed = SHAMBLER.chaseSpeed * (0.8 + 0.35 * Math.sin(h.id * 1.7 + h.x * 0.3))   // the stagger
+        // M120: a pack comes in as a loose ARC, not single file: each member leans to its own side until it is close
+        if (h.pack && d > 5) { const side = Math.sign(h.px ?? 0) * Math.min(1, Math.hypot(h.px ?? 0, h.pz ?? 0) / PACK.spread) * Math.min(0.6, (d - 5) / 10); mx += -dz * side; mz += dx * side }
         break
       case 'windup':
         h.yaw = Math.atan2(h.lx, h.lz)
@@ -474,9 +554,9 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   for (const p of c.spits) {
     const px0 = p.x, py0 = p.y, pz0 = p.z
     p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= 2.5 * dt; p.life -= dt
-    if (throughGround(T, px0, py0, pz0, p.x, p.y, p.z)) { p.life = 0; continue }
+    if (throughGround(T, px0, py0, pz0, p.x, p.y, p.z)) { p.life = 0; if (p.splash) splash(c, T, p, { x: p.x, y: T.heightAt(p.x, p.z), z: p.z }, feet); continue }
     const wall = T.structures ? segmentHit(T.structures, px0, py0, pz0, p.x, p.y, p.z) : null
-    if (wall) { p.life = 0; impact(c, wall, 'spit'); continue }   // M117 s3: it splashes on the wall; the keeper behind is untouched
+    if (wall) { p.life = 0; impact(c, wall, 'spit'); if (p.splash) splash(c, T, p, wall, feet); continue }   // M117 s3: it splashes on the wall; the keeper behind is untouched
     const top = solidTop(c, p.x, p.z)
     if (top !== null && p.y < top) { p.life = 0; continue }   // stopped by a raised piece
     const bx = p.x - feet.x, bz = p.z - feet.z, by = p.y - (feet.y + 0.9)
@@ -513,49 +593,78 @@ export function structFree(T: Terrain, h: { x: number; z: number }, r: number, t
 }
 /** No structure between a and b (no structures = it always sees). */
 export const sees = (T: Terrain, ax: number, ay: number, az: number, bx: number, by: number, bz: number) => !T.structures || lineOfSight(T.structures, ax, ay, az, bx, by, bz)
+/** M120: a floater's shot lands at `at` and splashes: a keeper (or party mate) inside FLOATER.splashR that the landing
+ *  can SEE takes `p.splash` (a wall keeps the splash on its own side: the point is read a hand back along the flight). */
+function splash(c: Combat, T: Terrain, p: Spit, at: { x: number; y: number; z: number }, feet: { x: number; y: number; z: number }) {
+  const v = Math.hypot(p.vx, p.vy, p.vz) || 1, bx = at.x - (p.vx / v) * 0.15, by = at.y - (p.vy / v) * 0.15 + 0.05, bz = at.z - (p.vz / v) * 0.15
+  const reach = (o: { x: number; y: number; z: number }, r: number) => Math.hypot(o.x - at.x, o.z - at.z) < r && Math.abs(o.y - at.y) < 1.8 && sees(T, bx, by, bz, o.x, o.y + 0.9, o.z)
+  let hurt = false
+  if (c.keeper.hp > 0 && reach(feet, FLOATER.splashR * (c.keeper.hit ?? 1))) { hurtKeeper(c, p.splash ?? 0); hurt = true }
+  if (c.others) for (const o of c.others) if (reach(o, FLOATER.splashR)) c.events.push({ kind: 'hurt-other', id: o.id, dmg: p.splash ?? 0 })
+  c.splashes = (c.splashes ?? 0) + 1
+  c.events.push({ kind: 'splash', x: at.x, y: at.y, z: at.z, hurt })
+}
 function impact(c: Combat, at: { x: number; y: number; z: number }, by: 'round' | 'spit') {
   c.wallHits = (c.wallHits ?? 0) + 1
   c.events.push({ kind: 'impact', x: at.x, y: at.y, z: at.z, by })
 }
 
-function stepFloater(c: Combat, T: Terrain, h: Hollow, feet: { x: number; y: number; z: number }, d: number, dx: number, dz: number, dt: number, alive = c.keeper.hp > 0) {
+function stepFloater(c: Combat, T: Terrain, h: Hollow, feet: { x: number; y: number; z: number }, d: number, dx: number, dz: number, dt: number, alive = c.keeper.hp > 0, roused = false) {
   let mx = 0, mz = 0, speed = 0
   switch (h.state) {
-    case 'wander':
-      if (d < FLOATER.notice && alive) { h.state = 'chase'; h.t = 1 + rnd(c) * 1.5; break }
+    case 'wander': {
+      if ((d < FLOATER.notice || (roused && d < FLOATER.forget)) && alive) { h.state = 'chase'; h.t = 0.3 + rnd(c) * 0.5; h.zips = undefined; h.zx = undefined; break }
+      const slot = packSlot(c, h)
+      if (slot) { if (slot.far > 0.6) { mx = slot.x - h.x; mz = slot.z - h.z; speed = SHAMBLER.wanderSpeed * (slot.far > 3 ? PACK.catchUp : 1) } break }   // M120: with its pack
       if (h.t <= 0) { h.wx = h.x + (rnd(c) - 0.5) * 20; h.wz = h.z + (rnd(c) - 0.5) * 20; h.t = 4 + rnd(c) * 4 }
       mx = h.wx - h.x; mz = h.wz - h.z; speed = FLOATER.speed * 0.4
       break
-    case 'chase': {   // hold a band of distance, circling a little; spit when the timer runs out
+    }
+    case 'chase': {   // M120: ZIP 2-3 spots round the keeper (inside the keepNear..keepFar band), then hold and burst
       if (d > FLOATER.forget || !alive) { h.state = 'wander'; h.t = 0; break }
+      h.yaw = Math.atan2(dx, dz)
       // M117 s3: a wall between: no spit wasted on it; it comes round (and in) until it sees the keeper again
       const see = sees(T, h.x, h.y, h.z, feet.x, feet.y + 0.9, feet.z)
-      if (!see) { mx = dx; mz = dz } else if (d > FLOATER.keepFar) { mx = dx; mz = dz } else if (d < FLOATER.keepNear) { mx = -dx; mz = -dz } else { mx = -dz; mz = dx }
-      speed = FLOATER.speed
-      h.yaw = Math.atan2(dx, dz)
-      if (h.t <= 0 && see && d < FLOATER.keepFar + 4) { h.state = 'charge'; h.t = FLOATER.charge }
+      if (!see) { mx = dx; mz = dz; speed = FLOATER.speed; h.zx = undefined; break }
+      h.zips ??= FLOATER.zipsMin + Math.floor(rnd(c) * (FLOATER.zipsMax - FLOATER.zipsMin + 1))
+      if (h.zx === undefined || h.zz === undefined) {
+        if (h.t > 0) break   // the beat between zips: it hangs there
+        if (h.zips <= 0 && d < FLOATER.keepFar + 4) { h.state = 'charge'; h.t = FLOATER.charge; h.shots = FLOATER.shots; break }
+        if (h.zips <= 0) { mx = dx; mz = dz; speed = FLOATER.speed; break }   // out of range: drift in, then hold
+        // the next spot: round the keeper by 25-60 degrees, at a distance inside the band
+        const a = Math.atan2(h.x - feet.x, h.z - feet.z) + (rnd(c) < 0.5 ? -1 : 1) * (0.45 + rnd(c) * 0.6)
+        const r = FLOATER.keepNear + rnd(c) * (FLOATER.keepFar - FLOATER.keepNear)
+        h.zx = feet.x + Math.sin(a) * r; h.zz = feet.z + Math.cos(a) * r; h.t = FLOATER.zipTime
+        break
+      }
+      const zx = h.zx - h.x, zz = h.zz - h.z
+      if (Math.hypot(zx, zz) < 0.4 || h.t <= 0) { h.zx = h.zz = undefined; h.zips--; h.t = FLOATER.zipPause; break }
+      mx = zx; mz = zz; speed = FLOATER.zipSpeed
       break
     }
-    case 'charge':
+    case 'charge':   // the HOLD (its tell), then the burst: `shots` spits, each at where the keeper is now. Committed: it was
+      // seeing the keeper when it began to hold, so a keeper who ducks behind a wall mid-burst takes it on the wall (M117)
       h.yaw = Math.atan2(dx, dz)
       if (h.t <= 0) {
-        // aim at where the keeper is, from the floater's body; a slow arc
         const ty = feet.y + 0.9, sy = h.y, l = Math.hypot(dx, dz) || 1, flight = l / FLOATER.spitSpeed
-        c.spits.push({ x: h.x, y: sy, z: h.z, vx: (dx / l) * FLOATER.spitSpeed, vz: (dz / l) * FLOATER.spitSpeed, vy: (ty - sy) / flight + 1.25 * flight, life: FLOATER.spitLife })
-        h.state = 'recover'; h.t = FLOATER.recover
+        c.spits.push({ x: h.x, y: sy, z: h.z, vx: (dx / l) * FLOATER.spitSpeed, vz: (dz / l) * FLOATER.spitSpeed, vy: (ty - sy) / flight + 1.25 * flight, life: FLOATER.spitLife, dmg: FLOATER.damage, splash: FLOATER.splash })
+        h.shots = (h.shots ?? FLOATER.shots) - 1
+        if (h.shots > 0) h.t = FLOATER.shotGap
+        else { h.state = 'recover'; h.t = FLOATER.recover; h.zips = undefined }
       }
       break
     case 'recover': case 'stagger':
+      h.zx = h.zz = undefined
       mx = -dz; mz = dx; speed = FLOATER.speed * 0.5
-      if (h.t <= 0) { h.state = d < FLOATER.notice ? 'chase' : 'wander'; h.t = 0.5 + rnd(c) }
+      if (h.t <= 0) { h.state = d < FLOATER.notice ? 'chase' : 'wander'; h.t = 0.2 + rnd(c) * 0.4 }
       break
   }
   if (speed > 0) {
     // M117 s3: it floats at body height, so a building is in its way like any wall: round it
     const sfree = structFree(T, h, 0.5, FLOATER.hover + 0.5)
     if (sfree) { const v = steer(sfree, h.x, h.z, mx, mz, STEER_LOOK, (h.sm ??= {}), dt); if (v) { mx = v.x; mz = v.z } }
-    const l = Math.hypot(mx, mz) || 1
-    const nx = h.x + (mx / l) * speed * dt, nz = h.z + (mz / l) * speed * dt
+    const l = Math.hypot(mx, mz) || 1, step = Math.min(speed * dt, l)
+    const nx = h.x + (mx / l) * step, nz = h.z + (mz / l) * step
     const free = (x: number, z: number) => Number.isFinite(T.heightAt(x, z)) && (solidTop(c, h.x, h.z) !== null || solidTop(c, x, z) === null) && (!sfree || sfree(x, z))
     if (free(nx, nz)) { h.x = nx; h.z = nz }
     else if (sfree && free(nx, h.z)) h.x = nx   // slide along a wall's face

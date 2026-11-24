@@ -1,7 +1,7 @@
 // npx tsx src/app/shimmer/open/ather/obstacles.test.ts
 // M117 s3: the shared obstacle query + Hollows respecting buildings (steer round, shots stop on walls, cover can't be cheesed).
 import { bodyBlocked, segmentHit, lineOfSight, steer, type Structures } from './obstacles'
-import { newCombat, spawnHollow, stepCombat, FLOATER, type Terrain } from './combat'
+import { newCombat, spawnHollow, stepCombat, FLOATER, SHAMBLER, type Terrain } from './combat'
 import { wakeChampion, CHAMP } from './champion'
 import type { Box } from '../terrain-world'
 let pass = 0, fail = 0
@@ -89,7 +89,7 @@ ok(!lineOfSight(Q, 0, 1, -10, 0, 1, 0) && lineOfSight(Q, -8, 1, -10, -8, 1, 0), 
   const c2 = newCombat(9), h2 = spawnHollow(c2, T, 0, -3.5); h2.state = 'stagger'; h2.t = 99
   c2.rounds.push({ x: 0, y: 0.85, z: -1, vx: 0, vy: 0, vz: -150, life: 1, dmg: 10, crit: 20 })
   for (let i = 0; i < 3; i++) stepCombat(c2, T, { x: 0, y: 0, z: 0 }, 0.02)
-  ok(h2.hp < 30, `a Hollow just in front of the wall is still hit (hp ${h2.hp})`)
+  ok(h2.hp < SHAMBLER.hp, `a Hollow just in front of the wall is still hit (hp ${h2.hp})`)
 }
 
 // the champion walks round the house too, and its slam is taken by the wall

@@ -49,6 +49,9 @@ export const CHAMP = {
 export const PANIC_MIN_WINDUP = 0.55
 /** The waves a break summons: [shamblers, floaters], ringed round the node. */
 export const WAVES: [number, number][] = [[4, 0], [4, 2]]
+/** M120 (keeper rule, 09-24): the Wilds' Hollows got tougher (combat.ts SHAMBLER/FLOATER hp), but a champion's wave adds keep
+ *  the pre-M120 bodies, so the first-settlement champion stays a fight a newcomer wins (wilds-sim.ts measures it). */
+export const WAVE_HP = { shambler: 30, floater: 20 }
 
 const rnd = (c: Combat) => { c.seed = (c.seed * 1664525 + 1013904223) >>> 0; return c.seed / 4294967296 }
 
@@ -96,7 +99,7 @@ export function hitChampion(c: Combat, T: Terrain, ch: Champion, head: boolean, 
       let x = ch.nx + Math.cos(a) * r, z = ch.nz + Math.sin(a) * r
       if (!T.walkable(x, z)) { x = ch.nx + Math.cos(a) * 6; z = ch.nz + Math.sin(a) * 6 }
       const h = spawnHollow(c, T, x, z, k < ns ? 'shambler' : 'floater')
-      h.state = 'chase'
+      h.state = 'chase'; h.hp = h.maxHp = WAVE_HP[h.kind]
     }
     c.events.push({ kind: 'champ-break', nodeId: ch.nodeId, bar: ch.bar })
     ch.state = 'submerge'; ch.t = CHAMP.submerge; ch.attack = null; ch.queue = []

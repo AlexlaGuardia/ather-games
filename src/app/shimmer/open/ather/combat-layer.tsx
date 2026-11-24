@@ -663,6 +663,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
         if (e.kind === 'hurt' || e.kind === 'hit') noteCombat()   // M91: no idle camera / napping follower mid-fight
         if (e.kind === 'hurt') hud.current.hurtAt = now; if (e.kind === 'hit') hud.current.hitAt = now
         if (e.kind === 'impact' && e.by === 'spit') fx.current.push({ kind: 'area', x: e.x, y: e.y - 0.08, z: e.z, r: 0.45, hit: 0, at: now, from: { x: e.x, y: e.y, z: e.z }, colour: '#9a9aa2' })   // M117 s3: a spit splashes on the wall (placeholder look)
+        if (e.kind === 'splash') fx.current.push({ kind: 'area', x: e.x, y: e.y + 0.04, z: e.z, r: FLOATER.splashR, hit: 0, at: now, from: { x: e.x, y: e.y, z: e.z }, colour: '#9a9aa2' })   // M120: a floater's shot splashes where it lands (placeholder look, the wall ring's)
         if (e.kind === 'skin') sfx('mana-skin-tick')   // M59: a soft glassy tick per absorbed blow (proposed = silent until Alex's yay)
         if (e.kind === 'skin-pop') { hud.current.skinPopAt = now; sfx('mana-skin-pop') }   // the whip-crack; the bar shatters off popAt
         if (e.kind === 'hurt-other') openNet()?.relay(HURT_KIND, encodeHurt(e.dmg), e.id)   // #1651: addressed to the guest it reached
