@@ -42,7 +42,7 @@ const hideCard = (p: Page) => p.evaluate(() => { const hits = [...document.query
 async function run(owner: boolean, withFlag: boolean, w = 390, h = 844, hour = 14) {
   const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: w, height: h })
   const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
-  let glb = 0, mglb = 0; p.on('response', r => { if (r.url().includes('/open/spirits/vulnyx.glb')) glb = r.status(); if (r.url().includes('/open/spirits/manalotl.glb')) mglb = r.status() })
+  let glb = 0, mglb = 0, rglb = 0; p.on('response', r => { if (r.url().includes('/open/spirits/vulnyx-rigged.glb')) rglb = r.status(); if (r.url().includes('/open/spirits/vulnyx.glb')) glb = r.status(); if (r.url().includes('/open/spirits/manalotl.glb')) mglb = r.status() })
   if (owner) {
     // /owner redirects to siteOrigin (prod) even on a devwin, so hit it without following, then read /api/owner ON this origin
     await p.goto(`${new URL(url).origin}/owner?key=${encodeURIComponent(OWNER_KEY!)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
@@ -63,7 +63,7 @@ async function run(owner: boolean, withFlag: boolean, w = 390, h = 844, hour = 1
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 5, 0), P.x, P.z)
   await sleep(owner && withFlag ? 9000 : 6000)
   const mounted = await p.evaluate(() => (window as any).__spiritModel?.mounted ?? 0) as number
-  return { p, errs, glb: () => glb, mglb: () => mglb, mounted }
+  return { p, errs, glb: () => glb, mglb: () => mglb, rglb: () => rglb, mounted }
 }
 // M102: frame both spirits: wait (max 40 s) until they are within 2.6 m, then stand off their midpoint and look at it
 const frameBoth = async (p: Page, dist: number) => {
@@ -80,6 +80,7 @@ const a = await run(true, true)
 if (a) {
   ok(a.mounted >= 1, `A owner + ?spirits=3d: Vulnyx mounted on the bloomed planter (mounted=${a.mounted})`)
   ok(a.glb() === 200, `A glb /open/spirits/vulnyx.glb answered ${a.glb()}`)
+  ok(a.rglb() === 200, `A owner: the rigged Vulnyx glb answered ${a.rglb()}`)   // M102: the owner's Vulnyx is the rigged one
   // M102 Manalotl wire-in: per species
   const sm = await a.p.evaluate(() => ({ ...((window as any).__spiritModel?.species ?? {}) })) as Record<string, number>
   ok(a.mounted === 2 && sm.fox === 1 && sm.axolotl === 1 && !sm.owl, `A per species: Vulnyx + Manalotl mounted, the owl planter keeps the gold orb (mounted=${a.mounted} ${JSON.stringify(sm)})`)
@@ -102,7 +103,8 @@ if (a) {
     const rect = (pc: { item: string; x: number; z: number }, pad: number) => { const f = FURNITURE[pc.item]; return { x0: pc.x - f.w / 2 - pad, x1: pc.x + f.w / 2 + pad, z0: pc.z - f.d / 2 - pad, z1: pc.z + f.d / 2 + pad } }
     const rs = [rect(PLANTER, 0.15), ...NEAR.map(n => rect(n, 0.05))], inside = ground.filter(s => rs.some(b => s.x > b.x0 && s.x < b.x1 && s.z > b.z0 && s.z < b.z1))
     ok(!inside.length, `A never inside the planter or a piece (${ground.length} ground samples vs ${rs.length} rects)${inside.length ? ` ${inside[0].mode} at ${inside[0].x.toFixed(2)},${inside[0].z.toFixed(2)}` : ''}`)
-    ok(ys.length > 3 && Math.max(...ys) - Math.min(...ys) > 0.02, `A y bobs while she trots: ${ys.length ? (Math.max(...ys) - Math.min(...ys)).toFixed(3) : '-'} m over ${ys.length} trot samples`)
+    // ★ MOVED (M102): the owner's Vulnyx is rigged, her gallop carries the air, so her body no longer hops; the bob is asserted on the PLAYER's old one (run C)
+    ok(ys.length > 3 && Math.max(...ys) - Math.min(...ys) < 0.001, `A rigged: no hop fights the gait (y range ${ys.length ? (Math.max(...ys) - Math.min(...ys)).toFixed(4) : '-'} m over ${ys.length} trot samples; legs: m132-rig-check)`)
     const firstTrot = samples.findIndex(s => s.mode === 'trot'), paused = firstTrot >= 0 && samples.slice(firstTrot).some(s => ['check', 'look', 'sit', 'sniff', 'perch'].includes(s.mode))
     ok(paused, `A she pauses at least once after trotting (modes seen: ${[...new Set(samples.map(s => s.mode))].join(',')}; homes ${samples.at(-1)!.homes})`)
     // M102 Manalotl wire-in: the Manalotl over the same 15 s. Speed = path length / time while trotting, both spirits.
@@ -121,9 +123,9 @@ if (a) {
       // GROWN size (creature-size.ts GROWN, athernyx 2a8b028) and the game draws it. Vulnyx 0.70 tall; the Manalotl is sized by
       // her LENGTH, 0.90 m nose to tail (canon's number; at this model's proportions she then stands ~0.70 tall). +-10%,
       // the hull's 6% inside that.
-      const hv = Math.min(...samples.map(s => s.hWorld ?? 0).filter(h => h > 0)), hm = msamp.at(-1)!.hWorld ?? 0, lm = msamp.at(-1)!.len ?? 0, gv = GROWN.fox.height, gl = GROWN.axolotl.length!
+      const still = samples.filter(s => ['look', 'check', 'sniff', 'tilt'].includes(s.mode)).map(s => s.hWorld ?? 0).filter(h => h > 0), hv = Math.max(0, ...(still.length ? still : samples.map(s => s.hWorld ?? 0))), hm = msamp.at(-1)!.hWorld ?? 0, lm = msamp.at(-1)!.len ?? 0, gv = GROWN.fox.height, gl = GROWN.axolotl.length!
       { const by: Record<string, number[]> = {}; for (const s of samples) if (s.hWorld) (by[s.mode] ??= []).push(s.hWorld); console.log(`   Vulnyx measured height by mode: ${Object.entries(by).map(([m, v]) => `${m} ${Math.min(...v).toFixed(3)}-${Math.max(...v).toFixed(3)}`).join(', ')}`) }
-      // M126 s4: her LEVEL height = the smallest box over the run (a tipped trot / look pose only makes the box taller: 0.700-0.875)
+      // ★ MOVED (M102): was the smallest box over the run (the unrigged body only ever tips TALLER); a rigged gallop stretches LOWER, so her size is how tall she STANDS (0.717 with the hull; stopped, at her tallest)
       ok(hv > gv * 0.9 && hv < gv * 1.1, `A Vulnyx measured height ${hv.toFixed(3)} m (grown ${gv}, +-10%)`)
       ok(lm > gl * 0.9 && lm < gl * 1.1, `A Manalotl measured length ${lm.toFixed(3)} m nose to tail (grown ${gl}, +-10%); height ${hm.toFixed(3)} m`)
       // ground keep: the trot tips her round her feet; the lift that keeps her lowest point on the ground was applied (> 0)
@@ -162,18 +164,22 @@ async function talkTo(p: Page, sp: string): Promise<{ t: string; off: boolean }[
   return []
 }
 const pick = (p: Page, label: string) => p.evaluate((l) => { const b = [...document.querySelectorAll('[data-talk-option]')].find(x => (x.textContent ?? '').includes(l)) as HTMLButtonElement | undefined; b?.click(); return !!b }, label)
-/** walk the keeper a loop for `secs` (stepped per frame), sampling every following spirit; returns per-species max distance + inside hits */
+/** the keeper WALKS a loop for `secs` on the real walker (KeyW held, turned to the next corner each frame), sampling every
+ *  following spirit; ★ MOVED (M102): it was stepped by hand up to 1.05 m a frame at 7 fps, which no player can do (the walker's
+ *  own frame cap is 0.05 s). The same loop at 4.2 m/s, 60 fps, is in follow-formation.test.ts section 6. Same 3 m bound. */
 async function walk(p: Page, secs: number, sps: string[]) {
   const path = [[P.x - 4, P.z + 4.5], [P.x + 5, P.z + 4.5], [P.x + 5, P.z + 7.5], [P.x - 4, P.z + 7.5]]
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), path[0][0], path[0][1]); await sleep(2500)
-  return p.evaluate(`new Promise(res => { const path = ${JSON.stringify(path)}, sps = ${JSON.stringify(sps)}, out = {}; for (const s of sps) out[s] = []
-    let i = 1, x = path[0][0], z = path[0][1], last = performance.now(); const t0 = last
-    function f() { const now = performance.now(), dt = Math.min(0.25, (now - last) / 1000); last = now
-      let step = 4.2 * dt; while (step > 0) { const [tx, tz] = path[i % path.length], dx = tx - x, dz = tz - z, d = Math.hypot(dx, dz); if (d <= step) { x = tx; z = tz; step -= d; i++ } else { x += dx / d * step; z += dz / d * step; step = 0; window.__ather.tp(x, z, Math.atan2(-dx, -dz)) } }
-      const g = window.__ather.state(), fk = window.__formation?.keeper, kx = fk?.x ?? g.px ?? g.x, kz = fk?.z ?? g.pz ?? g.z   // M126 s4: the keeper she was given THIS frame (her own pose is last frame's against state(): at 7 fps that is up to 1 m of the keeper's step)
-      for (const s of sps) { const t = window.__spiritModel?.trots?.[s]; if (t) out[s].push({ d: Math.hypot(t.x - kx, t.z - kz), x: t.x, z: t.z, mode: t.mode, t: now - t0 }) }
+  await p.keyboard.down('KeyW')
+  const out = await p.evaluate(`new Promise(res => { const path = ${JSON.stringify(path)}, sps = ${JSON.stringify(sps)}, out = {}; for (const s of sps) out[s] = []
+    let i = 1; const t0 = performance.now()
+    function f() { const now = performance.now(), g = window.__ather.state(), fk = window.__formation?.keeper, kx = fk?.x ?? g.px ?? g.x, kz = fk?.z ?? g.pz ?? g.z, wx = g.px ?? g.x, wz = g.pz ?? g.z
+      if (Math.hypot(path[i % 4][0] - wx, path[i % 4][1] - wz) < 0.7) i++
+      window.__ather.look(Math.atan2(wx - path[i % 4][0], wz - path[i % 4][1]), -0.2)
+      for (const s of sps) { const t = window.__spiritModel?.trots?.[s]; if (t) out[s].push({ d: Math.hypot(t.x - kx, t.z - kz), x: t.x, z: t.z, mode: t.mode, t: now - t0, kx, kz }) }
       if (now - t0 < ${secs * 1000}) requestAnimationFrame(f); else res(out) }
-    requestAnimationFrame(f) })`) as Promise<Record<string, { d: number; x: number; z: number; mode: string; t: number }[]>>
+    requestAnimationFrame(f) })`) as Record<string, { d: number; x: number; z: number; mode: string; t: number; kx: number; kz: number }[]>
+  await p.keyboard.up('KeyW'); return out
 }
 const f = await run(true, true)
 if (f) {
@@ -185,6 +191,8 @@ if (f) {
       `F ${name}: E = Feed / Follow / Open (${JSON.stringify(o)})`)
     ok(await pick(f.p, 'Follow'), `F ${name}: picked Follow`); await sleep(600)
     const w = await walk(f.p, 10, [sp]), ss = (w[sp] ?? []).filter(x => x.t > 3000)   // first 3 s = her catch-up to the loop's start
+    let went = 0; for (let i = 1; i < ss.length; i++) went += Math.hypot(ss[i].kx - ss[i - 1].kx, ss[i].kz - ss[i - 1].kz)
+    ok(went > 5, `F ${name}: the keeper really walked (${went.toFixed(1)} m on the real walker)`)
     const maxD = Math.max(0, ...ss.map(x => x.d)), inside = ss.filter(x => RECTS.some(b => x.x > b.x0 && x.x < b.x1 && x.z > b.z0 && x.z < b.z1))
     ok(ss.length > 5 && ss.every(x => x.mode === 'follow') && maxD < 3, `F ${name}: follows the walking keeper, within 3 m over ${((ss.at(-1)?.t ?? 0) - (ss[0]?.t ?? 0)) / 1000 | 0} s (max ${maxD.toFixed(2)} m, ${ss.length} frames)`)
     ok(!inside.length, `F ${name}: never inside a planter or piece while following${inside.length ? ` (${inside[0].x.toFixed(2)},${inside[0].z.toFixed(2)})` : ''}`)
@@ -228,7 +236,10 @@ const b = await run(true, false)
 if (b) { ok(b.mounted === 2, `B owner, no flag: the models are drawn for everyone since the M107 ship (mounted=${b.mounted})`); ok(await talks(b.p), 'B owner, no flag: E at her = Feed / Follow / Open (every keeper, M123 s2)'); ok(b.errs.length === 0, `B 0 page errors ${b.errs.join(' | ')}`); await b.p.close() }
 // C. not owner + flag
 const c = await run(false, true)
-if (c) { ok(c.mounted === 2, `C not owner + ?spirits=3d: the models are drawn (M107 ship) (mounted=${c.mounted})`); ok(await talks(c.p), 'C not owner: E at her = Feed / Follow / Open (every keeper, M123 s2)'); ok(c.errs.length === 0, `C 0 page errors ${c.errs.join(' | ')}`); await c.p.close() }
+if (c) { ok(!c.rglb(), `C not owner: the rigged glb is never asked for (${c.rglb()})`)
+  const ys = await c.p.evaluate(`new Promise(res => { const o = [], t0 = performance.now(), id = setInterval(() => { const t = window.__spiritModel?.trot; if (t?.mode === 'trot') o.push(t.y); if (performance.now() - t0 > 15000) { clearInterval(id); res(o) } }, 100) })`) as number[]
+  ok(ys.length > 3 && Math.max(...ys) - Math.min(...ys) > 0.02, `C not owner: the old Vulnyx's y bobs while she trots: ${ys.length ? (Math.max(...ys) - Math.min(...ys)).toFixed(3) : '-'} m over ${ys.length} samples`)
+  ok(c.mounted === 2, `C not owner + ?spirits=3d: the models are drawn (M107 ship) (mounted=${c.mounted})`); ok(await talks(c.p), 'C not owner: E at her = Feed / Follow / Open (every keeper, M123 s2)'); ok(c.errs.length === 0, `C 0 page errors ${c.errs.join(' | ')}`); await c.p.close() }
 if (shots) {
   const d = await run(true, true, 1280, 800)
   if (d) { await look(d.p, 3.2, 0.8); await shot(d.p, 'desk'); await frameBoth(d.p, 2.4); await shot(d.p, 'spirits-desk'); await d.p.close() }
