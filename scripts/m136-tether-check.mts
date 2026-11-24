@@ -8,14 +8,16 @@ import { loneTree, loneRaw } from './lib/lone-tree.mts'
 import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m136t'); mkdirSync(out, { recursive: true })
-const tree = loneTree('goldwood', 12), crystal = loneRaw()
+// the long one (30 mana and up, worn) for every way of letting go; the Goldwood (5) for the yield
+const tree = loneTree('shimmeroak', 7), gold = loneTree('goldwood', 12), crystal = loneRaw()
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(c ? '  ok  ' : '  FAIL', m); if (!c) fails++ }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
-const p = await br.newPage(); await p.setViewport({ width: 390, height: 844 })
+const p = await br.newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true })
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 await p.evaluateOnNewDocument(() => {
+  const mm = window.matchMedia.bind(window); window.matchMedia = q => (/coarse/.test(q) ? { ...mm('all'), matches: true, addEventListener() {}, removeEventListener() {} } as any : /any-pointer: fine/.test(q) ? { ...mm('all'), matches: false, addEventListener() {}, removeEventListener() {} } as any : mm(q))   // a phone
   localStorage.setItem('ather:shimmer:birthRune', 'star')
   localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }))
   for (const k of ['open.pruned.v1', 'open.mined.v1', 'open.gather.v1', 'open.skills.v1', 'open.inv.v1', 'open.tools.v1']) localStorage.removeItem(k)
@@ -28,8 +30,8 @@ interface F { chan: boolean; t: { from: number[]; to: number[]; motes: number[][
 const rec = () => p.evaluate(`(() => { window.__rec = []; window.__recOn = true; const tick = () => { if (!window.__recOn) return; const a = window.__ather; window.__rec.push({ chan: !!a.chan(), t: a.tether(), k: a.state() }); requestAnimationFrame(tick) }; requestAnimationFrame(tick) })()`)
 const stop = () => p.evaluate(`(() => { window.__recOn = false; return window.__rec })()`) as Promise<F[]>
 const setMana = (n: number) => p.evaluate(v => (window as any).__ather.setMana(v), n)
-interface Spot { id: string; x: number; z: number; y: number; sx: number; sz: number; node: 'tree' | 'crystal' }
-const spots: Spot[] = [{ id: tree.id, x: tree.x, z: tree.z, y: tree.y, sx: tree.x + 5, sz: tree.z, node: 'tree' }, { id: crystal.id, x: crystal.x, z: crystal.z, y: crystal.y, sx: crystal.x + 4, sz: crystal.z, node: 'crystal' }]
+interface Spot { id: string; x: number; z: number; y: number; sx: number; sz: number; node: 'tree' | 'crystal'; only?: boolean }
+const spots: Spot[] = [{ id: tree.id, x: tree.x, z: tree.z, y: tree.y, sx: tree.x + 5, sz: tree.z, node: 'tree' }, { id: gold.id, x: gold.x, z: gold.z, y: gold.y, sx: gold.x + 5, sz: gold.z, node: 'tree', only: true }, { id: crystal.id, x: crystal.x, z: crystal.z, y: crystal.y, sx: crystal.x + 4, sz: crystal.z, node: 'crystal' }]
 const look = (s: Spot) => aimAt(p, s.x, s.z, s.node === 'tree' ? 1 : 0.5)
 const go = async (s: Spot) => {
   for (let k = 0; k < 8; k++) {
@@ -70,8 +72,9 @@ try {
   await p.waitForFunction(() => !!(window as any).__ather?.state && !!(window as any).__ather?.tether, { timeout: 120000, polling: 1000 }); await sleep(2500)
   for (const s of spots) {
     ok(await go(s), `${s.node} ${s.id} under the crosshair`)
+    if (!s.only) {
     await setMana(100); ends(s, await ran(s, 'let go', () => A(s.node === 'tree' ? 'prune()' : 'mine()'), `1-${s.node}`), false)
-    await setMana(2); await ran(s, 'dry', null, '')
+    await setMana(4); await ran(s, 'dry', null, '')
     await setMana(100); await look(s)
     let drew = ''
     await ran(s, 'something drawn', async () => { for (const k of ['1', '2', '3']) { await p.keyboard.press(k); await frame(); drew = await A<string>('stance()?.kind'); if (drew !== 'stowed') return } }, '')
@@ -79,7 +82,10 @@ try {
     for (let i = 0; i < 4 && await A('stance()?.kind') !== 'stowed'; i++) { await p.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Stow', key: 'Stow' }))`); await sleep(600); await frame() }
     await setMana(100); await p.keyboard.press('v'); await sleep(500); await frame()
     ends(s, await ran(s, 'let go (third person)', () => A(s.node === 'tree' ? 'prune()' : 'mine()'), `2-${s.node}-third`), true)
-    await p.keyboard.press('v'); await sleep(500); await frame(); await setMana(100)
+    await p.keyboard.press('v'); await sleep(500); await frame()
+    }
+    if (s.id === tree.id) continue
+    await setMana(100)
     await ran(s, 'yield', null, `3-${s.node}`)
     ok(!!(await p.evaluate((k, id) => JSON.parse(localStorage.getItem(k) ?? '{}')[id], s.node === 'tree' ? 'open.pruned.v1' : 'open.mined.v1', s.id)), `${s.node}: it did yield`)
   }
