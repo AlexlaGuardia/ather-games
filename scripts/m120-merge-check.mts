@@ -91,12 +91,14 @@ try {
     for (const r of [12, 18, 25, 8]) for (let k = 0; k < 8 && !spot; k++) {
       const x = n.x + Math.cos(k * 0.785) * r, z = n.z + Math.sin(k * 0.785) * r
       const q = await C(`return { own: A.owner(${x}, ${z}), dr: A.drained(${x}, ${z}) }`) as { own: string | null; dr: boolean | null }
-      if (q.own === n.id && q.dr === false) spot = { x, z }
+      const q2 = await C(`return A.drained(${x + 0.8}, ${z})`)
+      if (q.own === n.id && q.dr === false && q2 === false) spot = { x, z }
     }
     ok(!!spot, `   node ${n.id} cleared for this visit; its ground reads NOT drained at ${spot?.x.toFixed(0)},${spot?.z.toFixed(0)}`)
     if (spot) {
+      // the keeper stands near (tp may land a little off on rough ground); the crawlers go on the checked spot itself
       await p.evaluate((x, z) => (window as any).__ather.tp(x, z), spot.x - 7, spot.z); await sleep(3000); await clear()
-      const s2 = await stt(), ox = s2.x + 7, oz = s2.z
+      const ox = spot.x, oz = spot.z
       const dr = await C(`return A.drained(${ox}, ${oz})`)
       const m2 = await C('return C.merges ?? 0') as number
       const ids2 = await put([[ox, oz], [ox + 0.8, oz]])
