@@ -1,13 +1,17 @@
 // ── BETA M120 slice 3: THE FLOATER'S (Flit's) INSECT LOOK, ON THE LIVE PAGE ───────────────────────────────────────────
 // A fresh profile out in the Wilds (m120-wilds-teeth-check's route), then, read off the REAL drawn mesh (__ather.flit):
 //   1. a floater draws the new body (26 lumps), no emissive, two of them share one geometry (and one material on one ground)
-//   2. hit sphere unchanged: a round 0.42 m off its middle hits, 0.62 m off misses
+//   2. s3c hit area (Alex 11-24 'bigger hit area'; MOVED from '0.42 m off hits, 0.62 m off misses' all round): 0.42 m still hits,
+//      0.62 m over its back still misses; a wing tip, the tail and (tell) the raised wing HIT; past the tip, between wing and
+//      tail, and the place the wing was before the tell MISS. The points are poseFlit's own drawn lumps.
 //   3. fighting for real: the wings move in a zip, and hold still between zips
 //   4. before EACH of two bursts the tell pose is fully drawn (wings up, the tail curled under) at the first shot
 //   5. stills: zip, hold, tell (the sim pinned in that state 6 m (and 14 m) ahead of the camera, so the shot is of that state)
 //   6. 390x844, 0 page errors
 //   npx tsx scripts/m120-flit-look-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
+import * as THREE from 'three'
+import { FLIT, flitMats, poseFlit } from '../src/app/shimmer/open/ather/flit-body'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -57,15 +61,27 @@ try {
     ok(!!a && a.emissive === 0 && !a.emissiveMap, '   no emissive')
     ok(!!a && !!b && a.geo === b.geo, '   two floaters share one geometry'); console.log(`   same material too: ${a?.mat === b?.mat}`)
     ok(!!a && Math.max(...[1, 3, 5].map(k => parseInt(a.colour.slice(k, k + 2), 16))) - Math.min(...[1, 3, 5].map(k => parseInt(a.colour.slice(k, k + 2), 16))) <= 4, `   the goop grey, no hue (${a?.colour})`) }
-  // ── 2 ── the round flies along the body's own drift, so its drift cannot move it off the line
-  const shot = async (off: number) => {
+  // ── 2 ── each round crosses the point in one step (fired along the body's own side / front, or straight down), so its drift cannot move it off
+  const pose = (tell: number) => { const m = flitMats(); poseFlit({ t: 0.4, zip: 0, tell, bank: 0, kick: 0, knock: 0 }, m); return m }
+  const on = (m: THREE.Matrix4, k = 0) => { const v = new THREE.Vector3().setFromMatrixPosition(m).addScaledVector(new THREE.Vector3().setFromMatrixColumn(m, 0), k); return [v.x, v.y, v.z] as [number, number, number] }
+  // q = the point, body local (+z = its facing); d = the round's direction, body local
+  const shot = async (q: [number, number, number], d: [number, number, number], tell = false) => {
     const [hx, hz] = ahead(9)
-    await C(`C.hollows.length = 0; C.rounds.length = 0; const h = ${body(hx, hz, s.y + 2.2, 'recover', 99)}; C.hollows.push(h); window.__fl = h`); await frames(3)
-    await C(`const h = window.__fl, kx = ${s.x} - h.x, kz = ${s.z} - h.z, l = Math.hypot(kx, kz), ux = -kz / l, uz = kx / l; C.rounds.push({ x: h.x - ux * 1.2, y: h.y + ${off}, z: h.z - uz * 1.2, vx: ux * 120, vy: 0, vz: uz * 120, life: 1, dmg: 5, crit: 5 })`)
-    await frames(6); return await C('return window.__fl.hp < 9999') as boolean
+    await C(`C.hollows.length = 0; C.rounds.length = 0; C.spits.length = 0; const h = ${body(hx, hz, s.y + 2.2, tell ? 'charge' : 'recover', tell ? 0.2 : 99)}; h.shots = 3; C.hollows.push(h); window.__fl = h
+      const k = () => { if (window.__fl !== h) return; ${tell ? "h.state = 'charge'; h.t = 0.2" : "h.state = 'recover'; h.t = 99"}; requestAnimationFrame(k) }; k()`); await frames(8)
+    await C(`const h = window.__fl, c = Math.cos(h.yaw), n = Math.sin(h.yaw), W = v => [v[0] * c + v[2] * n, v[1], -v[0] * n + v[2] * c], q = W(${JSON.stringify(q)}), d = W(${JSON.stringify(d)})
+      C.rounds.push({ x: h.x + q[0] - d[0] * 1.2, y: h.y + q[1] - d[1] * 1.2, z: h.z + q[2] - d[2] * 1.2, vx: d[0] * 150, vy: d[1] * 150, vz: d[2] * 150, life: 0.03, dmg: 5, crit: 5 })`)
+    await frames(6); const r = await C('const r = window.__fl.hp < 9999; window.__fl = null; return r') as boolean
+    await C('C.hollows.length = 0'); return r
   }
-  { const hit = [await shot(0.42), await shot(-0.42)], miss = [await shot(0.62), await shot(-0.62)]
-    ok(hit.every(Boolean) && miss.every(m => !m), `2. hit sphere unchanged: 0.42 m off hits (${hit}), 0.62 m off misses (hit: ${miss})`) }
+  { const H = pose(0), T = pose(1), X: [number, number, number] = [1, 0, 0], D: [number, number, number] = [0, -1, 0], tail = on(H[FLIT.abd + FLIT.abdN - 1])
+    const wing = on(H[FLIT.wings + 1], 0.8), wingL = on(H[FLIT.wings], 0.8), up = on(T[FLIT.wings + 1], 0.8), f = (a: number[]) => a.map(v => v.toFixed(2)).join(' ')
+    ok((await shot([0, 0.42, 0], X)) && (await shot([0, -0.42, 0], X)), '2. the core: 0.42 m off its middle hits')
+    ok(await shot(wing, D), `   a wing tip hits (${f(wing)})`); ok(await shot(wingL, D), `   the other wing tip hits (${f(wingL)})`)
+    ok(await shot(tail, X), `   the tail's end hits (${f(tail)})`)
+    ok(await shot(up, X, true), `   tell: the raised wing hits (${f(up)})`)
+    ok(!(await shot([0, 0.62, 0], X)), '   0.62 m over its back misses'); ok(!(await shot([1.1, 0, 0], D)), '   1.1 m out, past the wing tip, misses')
+    ok(!(await shot([0.55, 0, -0.85], D)), '   between wing and tail misses'); ok(!(await shot([wing[0], 0, wing[2]], D, true)), '   tell: where the wing WAS misses') }
   // ── 3 + 4 ── a real fight, two bursts
   { const [hx, hz] = ahead(13)
     await C(`C.hollows.length = 0; C.spits.length = 0; C.hollows.push(${body(hx, hz, s.y + 2.2)})
