@@ -1,7 +1,7 @@
 // ── Prod check for Wilds forestry (2026-11-15, world): zones grow the Ather's four trees and E prunes one ───────────
 // Picks a real goldwood + shimmeroak off the start tile (the same parser the page runs). From 6 m it aims at the goldwood
 // and prunes through the click's own path (__ather.prune): logs land in the bag, a timer in open.pruned.v1, mana is spent.
-// From 14 m nothing is aimed. A shimmeroak refuses at Forestry 1. Screenshots to --out.   npx tsx scripts/forestry-check.mts [--out dir]
+// From 14 m nothing is aimed. A shimmeroak takes a Forestry 1 keeper (M136: no level gate). Screenshots to --out.   npx tsx scripts/forestry-check.mts [--out dir]
 import puppeteer from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { parseWilds, type WildsMeta } from '../src/app/shimmer/open/ather/wilds'
@@ -48,14 +48,14 @@ res.afterGold = await p.evaluate(() => ({ pruned: Object.keys(JSON.parse(localSt
 // out of reach: 14 m off, nothing is aimed
 await aimFrom(gold, 14)
 res.aimFar = await p.evaluate(() => (window as any).__ather.aim())
-// the gate: a shimmeroak at Forestry 1 refuses
+// M136: no level gate, a shimmeroak at Forestry 1 is worked (it leaves a record: its reset timer runs)
 await aimFrom(oak, 5)
 res.aimOak = await p.evaluate(() => (window as any).__ather.aim())
-await p.evaluate(() => (window as any).__ather.prune()); await sleep(2000)
-res.afterOak = await p.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('open.pruned.v1') ?? '{}')))
+await p.evaluate(() => (window as any).__ather.prune())
+res.afterOak = await p.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('open.gather.v1') ?? '{}')))
 console.log(JSON.stringify(res))
 const a = res.afterGold as { pruned: string[]; inv: string[] }
 // the mana check allows for the refill over the ~4 s between the two readings
 const pass = res.aimGold === gold.id && a.pruned.includes(gold.id) && a.inv.some(x => x.startsWith('goldwood_log')) && !a.inv.some(x => x.startsWith('worn_blade'))   /* tools live in the sockets now (stance, 11-15), never the bag */
-  && (res.manaSpent as number) > -2 && res.aimFar === null && res.aimOak === oak.id && !(res.afterOak as string[]).includes(oak.id)
+  && (res.manaSpent as number) > -2 && res.aimFar === null && res.aimOak === oak.id && (res.afterOak as string[]).includes(`tree:${oak.id}`)
 console.log(pass ? 'PASS' : 'FAIL'); await br.close(); process.exit(pass ? 0 : 1)

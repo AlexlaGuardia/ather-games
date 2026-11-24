@@ -2,7 +2,7 @@
 // Reads every streamed tile off disk with its zone layer, so the placement guards judge the real continent.
 import { readFileSync, existsSync } from 'fs'
 import { parseWilds, type WildsMeta } from './wilds'
-import { crystalFor, mine, mineCheck, isMined, _resetProspecting, CRYSTAL_KINDS, CRYSTAL_ITEM, BLANKSTONE, TIER, GATE, XP, RESPAWN_MS, ELEMENTS, type CrystalKind } from './prospecting'
+import { crystalFor, mine, mineCheck, isMined, _resetProspecting, CRYSTAL_KINDS, CRYSTAL_ITEM, BLANKSTONE, TIER, XP, RESPAWN_MS, ELEMENTS, type CrystalKind } from './prospecting'
 import { _resetForestry, _setOpenLevel, openLevel, type Zone } from './forestry'
 import { itemDef } from '../shared/inventory'
 
@@ -55,27 +55,26 @@ ok(wet === 0, `${wet} crystals under the water line`)
 // ── working a node ───────────────────────────────────────────────────────────────────────────────────────────
 _resetForestry(); _resetProspecting()
 const T0 = 1_000_000
-ok(openLevel('prospecting') === 1 && mineCheck('raw', 'a', 1, T0).ok, 'level 1 cannot work raw mana')
-ok(!mineCheck('violet', 'b', 3, T0).ok && mineCheck('violet', 'b', 4, T0).ok, 'the element gate is not 4')
-ok(!mineCheck('pure', 'b', 6, T0).ok && !mineCheck('ather', 'b', 9, T0).ok && mineCheck('ather', 'b', 10, T0).ok, 'the pure / ather gates are not 7 / 10')
+ok(openLevel('prospecting') === 1 && mineCheck('raw', 'a', T0).ok, 'level 1 cannot work raw mana')
+ok(CRYSTAL_KINDS.every(k => mineCheck(k, 'b', T0).ok), 'M136: level 1 is refused a crystal (the level gates are dropped)')
 const r1 = mine('raw', 'n1', rng, T0)
 ok(r1.ok && r1.drops.some(d => d.id === BLANKSTONE && d.n >= 1) && r1.drops.some(d => d.id === 'raw_mana_shard' && d.n >= 1 && d.n <= 3), 'raw: no blankstone, or shards off 1–3')
 ok(r1.ok && r1.xp === XP[1], 'raw: XP is not canon\'s 20')
 ok(isMined('n1', T0 + 1) && !isMined('n1', T0 + RESPAWN_MS[1] + 1), 'raw: does not grow back on canon\'s 2 min')
 ok(!mine('raw', 'n1', rng, T0 + 1000).ok, 'a fractured node gave twice')
-ok(!mine('violet', 'n2', rng, T0).ok, 'a level 1 keeper worked an element node')
+ok(mine('violet', 'n2', rng, T0).ok, 'M136: a level 1 keeper could not work an element node')
 _setOpenLevel('prospecting', 10)
 const found = new Set<string>()
 for (let i = 0; i < 200; i++) { const r = mine('egg', `e${i}`, rng, T0); if (r.ok) found.add(r.found) }
 ok(ELEMENTS.every(e => found.has(e)) && !found.has('egg'), `the egg: hatched ${[...found]} (want all four elements, never 'egg')`)
 const a = mine('ather', 'ath', rng, T0)
-ok(a.ok && a.drops.some(d => d.id === 'ather_crystal') && a.xp === 400 && !mineCheck('ather', 'ath', 10, T0 + RESPAWN_MS[4] - 1000).ok, 'ather: wrong drop, XP or its 45 min')
+ok(a.ok && a.drops.some(d => d.id === 'ather_crystal') && a.xp === 400 && !mineCheck('ather', 'ath', T0 + RESPAWN_MS[4] - 1000).ok, 'ather: wrong drop, XP or its 45 min')
 // every drop has a bag row with a name and an icon on disk
 for (const id of [BLANKSTONE, ...Object.values(CRYSTAL_ITEM)]) {
   const d = itemDef(id)
   ok(d.name !== id.replace(/_/g, ' ') && !!d.icon && existsSync('public' + d.icon), `bag: ${id} has no row or no icon`)
 }
-ok(CRYSTAL_KINDS.every(k => GATE[TIER[k]] >= 1), 'a kind without a tier')
+ok(CRYSTAL_KINDS.every(k => TIER[k] >= 1), 'a kind without a tier')
 // found UNIQUE Keepstones (canon 5a20b8f): a rare dig from a crystal node, never from raw; ather is the likeliest
 {
   const { KEEPSTONE_FIND, KEEPSTONES } = require('./furniture') as typeof import('./furniture')

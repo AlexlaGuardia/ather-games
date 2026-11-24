@@ -2,9 +2,9 @@
 // focuses, not implements; design-briefs/shimmer-gathering-focuses.md: the tier IS the material) get the way rinsticks.ts gave
 // rinning its ladder. Names, recipes, durability, xpBonus = the engine's (engine/tools.ts › TOOL_DEFS), untouched.
 //
-// ★ WHAT A TIER DOES (Alex 07-05, the soft-penalty model): a focus works nodes up to its REACH at the node's own mana cost; a node
-//   ABOVE its reach costs DOUBLE mana (it still works: a struggle, never a wall). Reach: the worn starter = tier 1, a crafted tier k
-//   = k + 1, so the Goldwood Blade works shimmeroak cleanly and the Starwillow Blade works dawnwood. Plus the focus's xpBonus.
+// ★ WHAT A TIER DOES (M136, Alex 11-24; it replaced the double-mana penalty): a RUNG. The worn starter and the first crafted tier
+//   are rung 1 (the first crafted tier only adds its xpBonus), the second rung 2, the third rung 3. gather-dials.ts says what a
+//   node takes at each rung: a struggle one rung low, out of reach on regen alone two low. Plus the focus's xpBonus.
 //   Each node finished wears it one use; worn out = the worn starter back in hand, never empty-handed.
 // ★ WHICH BENCH: RULED-AFK 11-18 (Magii, athernyx 5626aaf, "a focus binds where its material is worked"): blades at the
 //   CARPENTRY bench, spikes at the STONEMASON bench (the Stonery). One constant, BENCH.
@@ -21,13 +21,12 @@ export const FOCUSES: Record<FocusSkill, readonly string[]> = {
 // RULED-AFK 11-18 (Magii, athernyx 5626aaf): a focus binds where its material is worked. ⚠ The Stonery is drawn up, not
 // buildable yet (rooms.ts open:false): until it opens, no keeper can make a spike.
 export const BENCH: Record<FocusSkill, RoomKind> = { forestry: 'carpentry', prospecting: 'stonemason' }
-export const PENALTY = 2
 
 const crafted = (t: EquippedTool | undefined) => !!t && !TOOL_DEFS[t.toolId]?.basic
-/** the highest node tier this focus works cleanly */
-export const reachOf = (t: EquippedTool | undefined) => (crafted(t) ? (TOOL_DEFS[t!.toolId]?.tier ?? 0) + 1 : 1)
-/** the mana a node of `tier` costs with this focus: its own cost up to the reach, double above it */
-export const manaFor = (t: EquippedTool | undefined, tier: number, base: number) => (tier > reachOf(t) ? base * PENALTY : base)
+/** the focus's rung on the gather ladder (gather-dials.ts): 1, 2 or 3 */
+export const rungOf = (t: EquippedTool | undefined) => (crafted(t) ? Math.max(1, TOOL_DEFS[t!.toolId]?.tier ?? 1) : 1)
+/** the highest node tier this focus works at the node's own mana: rung 1 opens tiers 1 and 2, each rung after one more */
+export const reachOf = (t: EquippedTool | undefined) => rungOf(t) + 1
 /** the extra XP the focus's xpBonus adds on top of the node's own (the node's XP lands in pruneCommit / mineCommit) */
 export const bonusXp = (t: EquippedTool | undefined, xp: number) => Math.round(xp * (t?.xpBonus ?? 1)) - xp
 export const focusName = (t: EquippedTool | undefined, skill: FocusSkill) => (t ? TOOL_DEFS[t.toolId]?.name ?? '' : skill === 'forestry' ? 'Worn Pruner' : 'Worn Spike')

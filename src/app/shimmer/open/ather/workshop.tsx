@@ -1983,7 +1983,7 @@ function FocusList({ r, inv, skill }: { r: Room; inv: ReturnType<typeof useInv>;
     <div data-focuses={skill}>
       <div style={lab}>{fam}</div>
       <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }} data-focus-held={cur?.toolId ?? ''}>
-        In hand: {focusName(cur, skill)}{curDef && !curDef.basic ? ` · ${cur!.usesRemaining} uses left` : ' · never wears out'}. Works a tier {reachOf(cur)} {node} or lower at its own mana; anything higher costs double.
+        In hand: {focusName(cur, skill)}{curDef && !curDef.basic ? ` · ${cur!.usesRemaining} uses left` : ' · never wears out'}. Works a tier {reachOf(cur)} {node} or lower at its own mana; anything higher costs far more.
       </div>
       <div style={{ display: 'grid', gap: 6 }}>
         {FOCUSES[skill].map(id => {

@@ -18,13 +18,13 @@
 //   Grade is never power (09-27): it is worth and look.
 //
 // Same verb as forestry: weapon STOWED, click a node within PROSPECT_RANGE, the Prospecting focus (engine/tools.ts: the
-// Worn Spike, every keeper's) channels MANA_COST mana and the node fractures. Level gates, XP and respawn are canon's
-// table (1 / 4 / 7 / 10 · 20 / 60 / 150 / 400 · 2 / 10 / 20 / 45 min); a fractured node grows back.
+// Worn Spike, every keeper's) channels mana per second (M136) and the node fractures. XP and respawn are canon's table
+// (20 / 60 / 150 / 400 · 2 / 10 / 20 / 45 min); NO level gate (M136, Alex 11-24); a fractured node grows back.
 //
 // ★ PURE but for the guarded localStorage load/save and a tiny subscribe store (as forestry.ts).
 
-import { NODE_DEFS } from '../../world/resources'
-import { addOpenXp, openLevel, type Zone } from './forestry'
+import { CRYSTAL_DIAL } from './gather-dials'
+import { addOpenXp, type Zone } from './forestry'
 import { perkFires, activeCompanion, perkLabel, GEM_DROP_CHANCE, GEM_ITEM } from '../shared/companion'
 import { gardenKey } from '@/lib/keeper-local'
 import { ownerSlot } from '../shared/owner-store'
@@ -40,12 +40,10 @@ export const CRYSTAL_NAME: Record<CrystalKind, string> = {
   egg: 'Hidden Crystal', pure: 'Pure Mana Core', ather: 'Ather Crystal',
 }
 export const TIER: Record<CrystalKind, 1 | 2 | 3 | 4> = { raw: 1, violet: 2, storm: 2, earth: 2, water: 2, egg: 2, pure: 3, ather: 4 }
-/** canon's ladder: level gate, XP, respawn (game/shimmer-skilling.md › Prospecting) */
-export const GATE = [0, 1, 4, 7, 10] as const
+/** canon's ladder: XP, respawn (game/shimmer-skilling.md › Prospecting) */
 export const XP = [0, 20, 60, 150, 400] as const
-export const RESPAWN_MS = [0, 2, 10, 20, 45].map(m => m * 60_000)
+export const RESPAWN_MS = CRYSTAL_DIAL.map(d => d.respawnMs)
 export const PROSPECT_RANGE = 10
-export const MANA_COST = NODE_DEFS.raw_mana_node.manaCost   // 7: the node table's prospecting cost
 
 /** the bag ids (world/resources.ts › NODE_DEFS drops) and the base stone */
 export const BLANKSTONE = 'blankstone'
@@ -102,9 +100,7 @@ export const regrowIn = (id: string, now = Date.now()) => { load(); return Math.
 export const isMined = (id: string, now = Date.now()) => regrowIn(id, now) > 0
 
 /** What working this node would say, without doing it (the prompt reads this). */
-export function mineCheck(kind: CrystalKind, id: string, level = openLevel('prospecting'), now = Date.now()): { ok: true } | { ok: false; why: string } {
-  const gate = GATE[TIER[kind]]
-  if (level < gate) return { ok: false, why: `Prospecting ${gate} to work ${CRYSTAL_NAME[kind]} (you are ${level}).` }
+export function mineCheck(kind: CrystalKind, id: string, now = Date.now()): { ok: true } | { ok: false; why: string } {
   const left = regrowIn(id, now)
   if (left > 0) return { ok: false, why: `${CRYSTAL_NAME[kind]}, growing back (${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')}).` }
   return { ok: true }
@@ -118,12 +114,12 @@ export type MineVerdict =
 
 /** Fracture a node: blankstone always (1–2), its crystal (raw: 1–3 shards), the egg reveals its element. */
 export function mine(kind: CrystalKind, id: string, rand: () => number = Math.random, now = Date.now()): MineVerdict {
-  const c = mineCheck(kind, id, openLevel('prospecting'), now)
+  const c = mineCheck(kind, id, now)
   if (!c.ok) return c
   const p = minePlan(kind, rand)
   return { ok: true, ...p, ...mineCommit(kind, id, now) }
 }
-/** What a node gives (rolled, nothing changes): the channel deals this out a chip at a time (channel.ts). */
+/** What a node gives (rolled, nothing changes): rolled at the first touch, paid whole at the end (channel.ts). */
 export function minePlan(kind: CrystalKind, rand: () => number = Math.random): { drops: { id: string; n: number }[]; found: Exclude<CrystalKind, 'egg'>; perk?: string } {
   const found: Exclude<CrystalKind, 'egg'> = kind === 'egg' ? ELEMENTS[Math.min(3, Math.floor(rand() * 4))] : kind
   const tier = TIER[kind]
@@ -139,12 +135,12 @@ export function minePlan(kind: CrystalKind, rand: () => number = Math.random): {
   if (rand() < (KEEPSTONE_FIND[CRYSTAL_ITEM[found]] ?? 0)) drops.push({ id: keepstoneFor(CRYSTAL_ITEM[found]), n: 1 })
   return { drops, found, perk }
 }
-/** The node is done: XP lands on Prospecting and it grows back on its tier's timer. */
-export function mineCommit(kind: CrystalKind, id: string, now = Date.now()): { xp: number; levelUp: number | null } {
+/** The node is done: XP lands on Prospecting and it stays spent till `until` (M136: this cycle's reset, counted from the first touch). */
+export function mineCommit(kind: CrystalKind, id: string, now = Date.now(), until = now + RESPAWN_MS[TIER[kind]]): { xp: number; levelUp: number | null } {
   const tier = TIER[kind]
   const levelUp = addOpenXp('prospecting', XP[tier])
   load()
-  mined[id] = now + RESPAWN_MS[tier]
+  mined[id] = until
   save(now); bump()
   return { xp: XP[tier], levelUp }
 }

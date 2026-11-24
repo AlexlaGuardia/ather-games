@@ -10,16 +10,17 @@
 // ★ PRUNING FROM A DISTANCE (Alex 11-15: "click a tree from about 10 blocks out and use mana to prune a tree from a
 // distance and then the tree could drop a few logs and a small chance for a sapling"): with the weapon STOWED
 // (shared/stance.ts) click a tree within PRUNE_RANGE and the Forestry socket's tool works it (engine/tools.ts: Greg's
-// Worn Blade, canon's tier-0 focus, "you prune; the light cuts"), MANA_COST mana channels down the
-// stream (forestry-fx.tsx draws it), and the tree drops 2–4 LOGS and, rarely, a SAPLING. Logs, not planks: the voxel
+// Worn Blade, canon's tier-0 focus, "you prune; the light cuts"), mana channels down the stream per second (M136,
+// channel.ts + gather-dials.ts; forestry-fx.tsx draws it), and the tree drops 2–4 LOGS and, rarely, a SAPLING. Logs, not planks: the voxel
 // world's 08-13 ruling (tree-node.ts) made a log's whole job to be refined into planks / bark / sap, so the tree pays the
 // raw wood. Sapling odds are SMALL on purpose: tree-node's 35 % is for FELLING (the tree is gone); a pruned tree regrows
 // in minutes, so a 35 % sapling would be a sapling farm. The node table (world/resources.ts › NODE_DEFS) still sets the
-// level gate (1/4/7/10), the XP and the regrow; Forestry XP rides engine/skills.ts (canon's curve).
+// XP; mana and regrow are gather-dials.ts; there is NO level gate (M136, Alex 11-24); Forestry XP rides engine/skills.ts (canon's curve).
 //
 // ★ PURE but for the guarded localStorage load/save and a tiny subscribe store.
 
 import { NODE_DEFS } from '../../world/resources'
+import { TREE_DIAL } from './gather-dials'
 import { createSkillSet, addSkillXP, skillSetToSave, skillSetFromSave, type SkillSet, type SkillId } from '../../engine/skills'
 import { keeperKey, gardenKey } from '@/lib/keeper-local'
 import { ownerSlot } from '../shared/owner-store'
@@ -111,7 +112,6 @@ export const regrowIn = (id: string, now = Date.now()) => { load(); return Math.
 export const isPruned = (id: string, now = Date.now()) => regrowIn(id, now) > 0
 
 export const PRUNE_RANGE = 10
-export const MANA_COST = NODE_DEFS.goldwood.manaCost   // 5: the node table's forestry cost (every tier the same)
 /** Sapling odds per prune (build; tree-node.ts's felling odds are 0.35 / 0.28 / … and a pruned tree comes back). */
 export const SAPLING_CHANCE: Record<TreeKind, number> = { goldwood: 0.08, shimmeroak: 0.06, starwillow: 0.05, dawnwood: 0.04 }
 /** Mast per prune (BETA M6e; canon 017be29: any pruned Ather tree): bait's floor for a keeper out of bait with nothing landed. 2 bait each, ~3 prunes = a few casts. */
@@ -139,9 +139,7 @@ export function startShake(id: string, now = Date.now()) { shaking = { id, t0: n
 export const shakeOf = (id: string, now = Date.now()) => (shaking && shaking.id === id && now - shaking.t0 < SHAKE_MS ? (now - shaking.t0) / SHAKE_MS : -1)
 
 /** What pruning would say, without doing it (the prompt reads this). */
-export function pruneCheck(kind: TreeKind, id: string, level = forestryLevel(), now = Date.now()): { ok: true } | { ok: false; why: string } {
-  const def = NODE_DEFS[kind]
-  if (level < def.minLevel) return { ok: false, why: `Forestry ${def.minLevel} to prune ${TREE_NAME[kind]} (you are ${level}).` }
+export function pruneCheck(kind: TreeKind, id: string, now = Date.now()): { ok: true } | { ok: false; why: string } {
   const left = regrowIn(id, now)
   if (left > 0) return { ok: false, why: `${TREE_NAME[kind]}, regrowing (${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')}).` }
   return { ok: true }
@@ -149,24 +147,24 @@ export function pruneCheck(kind: TreeKind, id: string, level = forestryLevel(), 
 
 /** Prune: the node table pays (every drop rolls its chance), XP lands on Forestry, the tree regrows on the table's timer. */
 export function prune(kind: TreeKind, id: string, rand: () => number = Math.random, now = Date.now()): PruneVerdict {
-  const c = pruneCheck(kind, id, forestryLevel(), now)
+  const c = pruneCheck(kind, id, now)
   if (!c.ok) return c
   const drops = prunePlan(kind, rand)
   return { ok: true, drops, ...pruneCommit(kind, id, now) }
 }
-/** What a tree gives (rolled, nothing changes): the channel deals this out a chip at a time (channel.ts). */
+/** What a tree gives (rolled, nothing changes): rolled at the first touch, paid whole at the end (channel.ts). */
 export function prunePlan(kind: TreeKind, rand: () => number = Math.random): { id: string; n: number }[] {
   const drops = [{ id: logItem(kind), n: 2 + Math.floor(rand() * 3) }]
   if (rand() < SAPLING_CHANCE[kind]) drops.push({ id: saplingItem(kind), n: 1 })
   if (rand() < MAST_CHANCE) drops.push({ id: 'mast', n: 1 })   // bait's floor (inventory.ts › BAIT_FROM)
   return drops
 }
-/** The tree is done: XP lands on Forestry and it regrows on the table's timer. */
-export function pruneCommit(kind: TreeKind, id: string, now = Date.now()): { xp: number; levelUp: number | null } {
+/** The tree is done: XP lands on Forestry and it stays spent till `until` (M136: this cycle's reset, counted from the first touch). */
+export function pruneCommit(kind: TreeKind, id: string, now = Date.now(), until = now + TREE_DIAL[kind].respawnMs): { xp: number; levelUp: number | null } {
   const def = NODE_DEFS[kind]
   load()
   const n = scaled(def.xp), r = addSkillXP(skills.forestry, n)   // mutates the skill in place (engine/skills.ts)
-  pruned[id] = now + def.respawnMs
+  pruned[id] = until
   save(now); bump()
   emitXp(skills.forestry, n, r.leveled)   // the HUD's XP bar (M21)
   return { xp: def.xp, levelUp: r.leveled ? r.newLevel : null }

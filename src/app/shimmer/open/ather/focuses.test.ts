@@ -1,7 +1,7 @@
 // Run: npx tsx src/app/shimmer/open/ather/focuses.test.ts
-// Blades + spikes (ather/focuses.ts, BETA M17): the engine's ladder at its bench, the soft penalty (double mana above the reach),
+// Blades + spikes (ather/focuses.ts, BETA M17): the engine's ladder at its bench, the rungs (M136; costs per node are channel.test's),
 // the xpBonus, wear per node, and the worn starter back when a focus wears out.
-import { FOCUSES, BENCH, PENALTY, reachOf, manaFor, bonusXp, makeFocus, wearFocus, focusName } from './focuses'
+import { FOCUSES, BENCH, rungOf, reachOf, bonusXp, makeFocus, wearFocus, focusName } from './focuses'
 import { TOOL_DEFS, ensureBasicTools, makeBasicTool } from '../../engine/tools'
 import { freshWorks, type Works, type Room } from './rooms'
 import { newInv, give, countOf, OPEN_ITEMS, type Inv } from '../shared/inventory'
@@ -13,9 +13,8 @@ const bag = (...xs: [string, number][]) => xs.reduce<Inv>((a, [id, n]) => give(a
 ok(Object.entries(FOCUSES).every(([s, ids]) => ids.length === 3 && ids.every((id, i) => TOOL_DEFS[id]?.skillId === s && TOOL_DEFS[id].tier === i + 1 && !TOOL_DEFS[id].basic)), 'ladder: not the engine\'s three tiers per family')
 ok(Object.values(FOCUSES).flat().every(id => TOOL_DEFS[id].recipe.every(c => !!OPEN_ITEMS[c.itemId])), 'reach: a recipe needs something the open world never gives')
 const worn = makeBasicTool('forestry')!, gold = { toolId: 'goldwood_blade', usesRemaining: 50, xpBonus: 1.1 }, star = { toolId: 'starwillow_blade', usesRemaining: 9, xpBonus: 1.35 }
-ok(reachOf(worn) === 1 && reachOf(undefined) === 1 && reachOf(gold) === 2 && reachOf(star) === 4, 'reach: worn 1, a crafted tier k reaches k + 1')
-ok(manaFor(worn, 1, 5) === 5 && manaFor(worn, 2, 5) === 5 * PENALTY && manaFor(worn, 4, 7) === 7 * PENALTY, 'penalty: the worn focus pays double above tier 1, its own cost on tier 1')
-ok(manaFor(gold, 2, 5) === 5 && manaFor(gold, 3, 5) === 10 && manaFor(star, 4, 5) === 5, 'penalty: a crafted focus works its reach cleanly, double above')
+ok(rungOf(worn) === 1 && rungOf(undefined) === 1 && rungOf(gold) === 1 && rungOf(star) === 3, 'rung: worn and Goldwood 1, Starwillow 3 (M136)')
+ok(reachOf(worn) === 2 && reachOf(gold) === 2 && reachOf(star) === 4, 'reach: rung 1 works tiers 1 and 2 cleanly, each rung one more (M136)')
 ok(bonusXp(worn, 40) === 0 && bonusXp(gold, 40) === 4 && bonusXp(star, 40) === 14, 'xp: the bonus is the engine\'s xpBonus')
 ok(focusName(undefined, 'prospecting') === 'Worn Spike' && focusName(gold, 'forestry') === 'Goldwood Pruner', 'names')
 

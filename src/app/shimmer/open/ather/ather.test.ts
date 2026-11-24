@@ -14,7 +14,7 @@ import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVE
 import { placeNodes, nodeAdjacency, ownerOf, nodeRegions, polyArea, NODE_CLEAR_OF, GAME_DAY_MS, SUB } from './nodes'
 import { clearAt, freshSpread, infectedIds } from './spread'
 import { readGarden, gardenText } from './garden-snapshot'
-import { treeFor, prune, forestryLevel, _resetForestry, SAPLING_CHANCE, MAST_CHANCE, PRUNE_RANGE, MANA_COST, type Zone } from './forestry'
+import { treeFor, prune, forestryLevel, _resetForestry, SAPLING_CHANCE, MAST_CHANCE, PRUNE_RANGE, type Zone } from './forestry'
 import { clusterFrame, clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow, D, MIDDLE_HALF, type Quarter } from './cluster'
 import { pathDist, PATH_W, meadowHeightAt } from './meadow'
 import { makeWorld, stream, tileOf, TILE_M, SEA_FLOOR, type TileIndex } from './wilds-world'
@@ -653,7 +653,7 @@ const worldDone = (async () => {
   if (aridTile) ok(tileOf(aridTile.name).trees.length === 0, `forestry: trees in the badlands tile ${aridTile.name}`)
   const trailsTile = index.tiles.map(t => ({ t, n: t.nodes.filter(n => (n as { zone?: string }).zone === 'trails').length })).sort((a, b) => b.n - a.n)[0].t
   ok(tileOf(trailsTile.name).trees.some(t => t.kind === 'dawnwood'), `forestry: no dawnwood on the foothills tile ${trailsTile.name}`)
-  // pruning: the node table pays, Forestry gates the tiers, a pruned tree waits out its regrow
+  // pruning: the node table pays, no level gate (M136), a pruned tree waits out its regrow
   _resetForestry(1)
   const now = 1_000_000
   const g = prune('goldwood', 'test:g0', () => 0, now)
@@ -666,13 +666,13 @@ const worldDone = (async () => {
   // BETA M6e: mast is bait's floor (a keeper out of bait with nothing landed): a roll of 0 pays one, a high roll none
   ok(g.ok && g.drops.some(d => d.id === 'mast' && d.n === 1) && hi.ok && !hi.drops.some(d => d.id === 'mast'), 'prune: mast did not drop under its chance (or dropped over it)')
   ok(MAST_CHANCE >= 0.2 && MAST_CHANCE <= 0.5, 'prune: mast is too rare to be a floor or common enough to farm')
-  ok(PRUNE_RANGE === 10 && MANA_COST > 0, 'prune: the reach is not 10 m or pruning is free')
+  ok(PRUNE_RANGE === 10, 'prune: the reach is not 10 m')   // M136: what it costs is channel.test's table
   ok(!prune('goldwood', 'test:g0', () => 0, now + 1000).ok, 'prune: a pruned goldwood pruned again before it regrew')
   ok(prune('goldwood', 'test:g0', () => 0, now + 3 * 60_000).ok, 'prune: a goldwood never regrew')
   const s0 = prune('shimmeroak', 'test:s0', () => 0, now)
-  ok(!s0.ok && /Forestry 4/.test(s0.why), 'prune: a shimmeroak gave to Forestry 1')
+  ok(s0.ok, 'prune: a shimmeroak refused Forestry 1 (M136: no level gate)')
   for (let k = 1; k < 13; k++) prune('goldwood', `test:g${k}`, () => 0, now)   // + test:g0 twice + test:hi = 14 prunes
-  ok(forestryLevel() === 4 && prune('shimmeroak', 'test:s0', () => 0, now).ok, `prune: 14 goldwood prunes did not open Shimmeroak (Forestry ${forestryLevel()})`)
+  ok(forestryLevel() === 4 && !prune('shimmeroak', 'test:s0', () => 0, now).ok, `prune: the XP of 14 goldwoods + a shimmeroak is not Forestry 4 (${forestryLevel()}), or the spent shimmeroak gave again`)
   _resetForestry(1)
 }
 

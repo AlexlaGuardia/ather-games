@@ -23,7 +23,7 @@ const res: Record<string, unknown> = { gold: gold?.id, oak: oak?.id }
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const p = await br.newPage(); await p.setViewport({ width: 1100, height: 680 })
-await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }));   /* M68 s3a: past the tutorial, so the worn pruner + spike are lit */  localStorage.removeItem('open.pruned.v1'); localStorage.removeItem('open.skills.v1'); localStorage.removeItem('open.inv.v1') })
+await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }));   /* M68 s3a: past the tutorial, so the worn pruner + spike are lit */  localStorage.removeItem('open.pruned.v1'); localStorage.removeItem('open.gather.v1'); localStorage.removeItem('open.skills.v1'); localStorage.removeItem('open.inv.v1') })
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 120000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 120000 }); await sleep(2000)
 await p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))
@@ -61,8 +61,8 @@ try { await p.screenshot({ path: `${out}/ch-2-done.png` }) } catch { /* slow fra
 console.log(JSON.stringify(res))
 const s = res.started as { id: string; done: number; of: number } | null, o = res.oneFrame as { chan: typeof s; pruned: boolean }
 const wo = res.walkedOff as { chan: typeof s; logs: number; pruned: boolean }, r = res.resumed as typeof s, f = res.finished as typeof wo
-const pass = res.aim === gold.id && s?.id === gold.id && s.done === 0 && s.of >= 3
-  && !o.pruned && !!o.chan && wo.chan === null && !wo.pruned && wo.logs >= 1
-  && r?.id === gold.id && r.done >= 1 && r.done < r.of && r.of === s.of && f.chan === null && f.pruned && f.logs >= 2 && f.logs <= 5
-console.log(pass ? 'PASS: E on a goldwood → the channel chips it → walking off lets go (tree not spent, logs kept) → E resumes the SAME work → the last chip prunes it' : 'FAIL')
+const pass = res.aim === gold.id && s?.id === gold.id && s.done === 0 && s.of === 1
+  && !o.pruned && !!o.chan && wo.chan === null && !wo.pruned && wo.logs === 0   /* M136: nothing drops before the end */
+  && r?.id === gold.id && r.done > 0 && r.done < r.of && r.of === s.of && f.chan === null && f.pruned && f.logs >= 2 && f.logs <= 4
+console.log(pass ? 'PASS: E on a goldwood → it drains into it → walking off lets go (tree not spent, progress kept, nothing dropped) → E resumes the SAME work → the end pays it all' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)

@@ -1,8 +1,8 @@
 // BETA M17: BLADES + SPIKES. On the live Ather page with real E: the Carpentry bench makes a Goldwood Blade, the Stonery's bench a
-// Mana Spike (both equipped, open.tools.v1). In the Wilds, a tier-2 Shimmeroak's prompt costs DOUBLE with the Worn Blade and its
-// own cost with the Goldwood Blade (reach 2); pruning it pays the blade's xpBonus on top of the tree's XP and wears the blade one
+// Mana Spike (both equipped, open.tools.v1). In the Wilds, a Shimmeroak's prompt says its own mana with the Worn
+// Pruner AND with the Goldwood Pruner (M136: both rung 1), less with a Shimmeroak Pruner (better than needed); pruning it pays the blade's xpBonus on top of the tree's XP and wears the blade one
 // use; a blade on its last use wears out and the Worn Blade is back. SETUP (stated, not played): the two rooms stand raised, the
-// bag holds the recipes, Forestry is level 4 (the Shimmeroak gate).
+// bag holds the recipes, Forestry is level 4 (no gate since M136).
 //   npx tsx scripts/focuses-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
 import { readFileSync, mkdirSync } from 'fs'
@@ -10,7 +10,7 @@ import { parseWilds, type WildsMeta } from '../src/app/shimmer/open/ather/wilds'
 import { type Zone } from '../src/app/shimmer/open/ather/forestry'
 import { benchOf, type Room } from '../src/app/shimmer/open/ather/rooms'
 import { NODE_DEFS } from '../src/app/shimmer/world/resources'
-import { MANA_COST } from '../src/app/shimmer/open/ather/forestry'
+import { TREE_DIAL, BETTER } from '../src/app/shimmer/open/ather/gather-dials'
 import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/focuses')
@@ -74,7 +74,9 @@ res.manaBlade = await promptMana(oak)
 const blade = t1.forestry
 await p.evaluate(() => { localStorage.removeItem('open.tools.v1'); window.dispatchEvent(new Event('open:tools')) }); await sleep(800)
 res.manaWorn = await promptMana(oak)
-await p.evaluate((bl: unknown) => { const t = JSON.parse(localStorage.getItem('open.tools.v1') ?? '{}'); localStorage.setItem('open.tools.v1', JSON.stringify({ ...t, forestry: bl })); window.dispatchEvent(new Event('open:tools')) }, blade); await sleep(800)
+const hand = async (bl: unknown) => { await p.evaluate((x: unknown) => { const t = JSON.parse(localStorage.getItem('open.tools.v1') ?? '{}'); localStorage.setItem('open.tools.v1', JSON.stringify({ ...t, forestry: x })); window.dispatchEvent(new Event('open:tools')) }, bl); await sleep(800) }
+await hand({ ...blade, toolId: 'shimmeroak_blade' }); res.manaBetter = await promptMana(oak)
+await hand(blade)
 // 3. prune it with the blade: XP = the tree's + the blade's bonus, and one use worn
 const chan = () => p.evaluate(() => (window as any).__ather.chan?.() ?? null)
 const pruneOut = async (t: { x: number; z: number }) => {
@@ -99,8 +101,8 @@ res.errs = other
 console.log(JSON.stringify(res, null, 1))
 const c = res.carpentry as { panel: boolean; made: boolean }, s = res.stonery as typeof c, u = res.usesAfter as { toolId: string; usesRemaining: number }
 const pass = c.panel && c.made && s.panel && s.made && t1.forestry?.toolId === 'goldwood_blade' && t1.prospecting?.toolId === 'mana_spike'
-  && res.manaWorn === MANA_COST * 2 && res.manaBlade === MANA_COST
+  && res.manaWorn === TREE_DIAL.shimmeroak.mana && res.manaBlade === TREE_DIAL.shimmeroak.mana && res.manaBetter === Math.round(TREE_DIAL.shimmeroak.mana * BETTER)
   && res.xpLine === `+${want} Forestry` && u?.toolId === 'goldwood_blade' && u.usesRemaining === t1.forestry.usesRemaining - 1
   && (res.afterBreak as { toolId: string })?.toolId === 'worn_blade' && res.woreLine === true && other.length === 0
-console.log(pass ? `PASS: pruner + spike made at their benches → Shimmeroak ${res.manaWorn} mana worn vs ${res.manaBlade} with the pruner → +${want} XP (×1.1) → one use worn → worn out, the Worn Pruner back` : 'FAIL')
+console.log(pass ? `PASS: pruner + spike made at their benches → Shimmeroak ${res.manaWorn} mana worn, ${res.manaBlade} Goldwood, ${res.manaBetter} Shimmeroak pruner → +${want} XP (×1.1) → one use worn → worn out, the Worn Pruner back` : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)
