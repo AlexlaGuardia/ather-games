@@ -52,8 +52,9 @@ async function page(seed: Seed) {
 try {
   // ── C · a fresh folded keeper ──
   {
-    const { p, A, bubble, pick, store, greg, closeTalk, go } = await page({ tut: TUT(true) })
+    const { p, A, bubble, pick, store, greg, closeTalk, go, zoneIs } = await page({ tut: TUT(true) })
     await go()
+    await A('travel', { kind: 'glade' }); ok(await zoneIs('glade', 60000), 'C. at Greg in the Glade (his bubble is drawn there)'); await sleep(4000)
     ok((await A('wmBag')) === 3, `C. a new bag holds 3 waymarks (${await A('wmBag')})`)
     await A('grant', 600); await sleep(600)
     const g0 = (await store('ather.garden.v1'))?.grey
