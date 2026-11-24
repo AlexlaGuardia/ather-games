@@ -14,6 +14,8 @@ import { MOONWELL, GLADE_GREEN } from './moonwell'
 import { gladeClusterSpot } from './glade-cluster'
 import { gladeFolk, gladeSpots, GLADE_TRADE, GLADE_LOTS, gregSpot } from './moonwell-glade'
 import { TABLE } from './rooms'
+import { bodyBlocked, clearSpot, routeAround, gladeStructures } from './obstacles'
+import { GLADE } from './relief'
 import { GREG_GLOVE_PICK } from '../../play3d/vessels'
 import { KEEPER_MOVES } from '../../play3d/keeper-moves'
 
@@ -30,6 +32,11 @@ export interface TourStop { id: string; at: Pt; look: Pt; line: string; zone: 'g
 const toward = (c: Pt, p: Pt, d: number): Pt => { const a = Math.atan2(p.x - c.x, p.z - c.z); return { x: c.x + Math.sin(a) * d, z: c.z + Math.cos(a) * d } }
 /** how wide Greg keeps of the pond's centre while walking (its LONG radius + a stride: the whole ellipse sits inside; M40) */
 export const POOL_KEEP = Math.max(MOONWELL.rx, MOONWELL.rz) + 1.5
+
+/** M117 s2: Greg's body (a keeper-sized person) and where he may stand in the Glade: out of the pond's walking ring and clear
+ *  of every structure (his home, the lots' stations and blueprint houses), by the shared obstacles.ts query */
+export const GREG_R = 0.35
+export const gregFree = (x: number, z: number) => Math.hypot(x - MOONWELL.x, z - MOONWELL.z) >= POOL_KEEP - 0.05 && !bodyBlocked(gladeStructures, x, GLADE.y, z, GREG_R)
 
 /** a Glade folk's stop line (SIGNED by Alex 11-19) */
 export const folkLine = (name: string, trade: string) => `This is ${name}, our ${trade}. A garden needs one, and this one is the best.`
@@ -52,8 +59,10 @@ export function tourStops(folk: readonly { id: string; name: string }[] = gladeF
     const k2 = f.id.split(':').pop() ?? f.id
     return { id: `folk:${k2}`, at: side, look: { x: s.x, z: s.z }, line: folkLine(f.name, GLADE_TRADE[k2] ?? 'neighbour'), zone: 'glade', meets: f.name }
   })
+  // M117 s2: a stand point inside a structure (a blueprint house landing on a lot) moves out to the nearest clear spot
+  for (const f of five) f.at = clearSpot(gregFree, f.at)
   return [
-    { id: 'pool', at: toward(pool, bench, POOL_KEEP), look: pool, zone: 'glade',
+    { id: 'pool', at: clearSpot(gregFree, toward(pool, bench, POOL_KEEP)), look: pool, zone: 'glade',
       line: 'This is the Moonwell, and the five who keep it. See what a garden can be.' },                     // SIGNED by Alex 11-19
     ...five,
     { id: 'table', ...TABLE_STOP, zone: 'plot',
@@ -64,10 +73,11 @@ export function tourStops(folk: readonly { id: string; name: string }[] = gladeF
 export const TABLE_STOP = { at: { x: TABLE.x + 1.6, z: TABLE.z - 1.2 }, look: { x: TABLE.x, z: TABLE.z } }
 export const TABLE_KEEPER = { x: TABLE.x + 1.2, z: TABLE.z + 3.6 }   // ~4.8 m off Greg: on a phone both he and the table fit
 
-/** the walk from `from` to stop `i` (or back to the bench when `i` is past the last Glade stop), round the pool */
+/** the walk from `from` to stop `i` (or back to the bench when `i` is past the last Glade stop), round the pool AND (M117 s2)
+ *  round every structure: planned on gregFree (obstacles.ts routeAround); the old pool-only arc is the fallback */
 export function tourLeg(from: Pt, i: number, stops: readonly TourStop[] = tourStops()): Pt[] {
   const s = stops[i], to = s && s.zone === 'glade' ? s.at : gregSpot()
-  return aroundPath(from, to, { x: MOONWELL.x, z: MOONWELL.z }, POOL_KEEP)
+  return routeAround(gregFree, from, to) ?? aroundPath(from, to, { x: MOONWELL.x, z: MOONWELL.z }, POOL_KEEP)
 }
 
 /** the first glove word for this birth (the ruled 09-28 column), and its display name */

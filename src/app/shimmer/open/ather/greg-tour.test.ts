@@ -1,7 +1,7 @@
 // ather/greg-tour.ts: the tour visits the Moonwell, each of the five at home IN GREG'S GARDEN (Magii fba7186; M67 s1b-2: the
 // closed Glade, where only Fennel lives in his garden and the waymark stayed in the Wilds), then the keeper's planning table; every Glade leg keeps out of the pool and Greg's house; the glove word is the ruled 09-28 column and never
 // overwrites an earned word (944ad1d).
-import { tourStops, tourLeg, giveGloveWord, gloveWordFor, POOL_KEEP, TABLE_STOP, TABLE_KEEPER, TOUR_ASK, TOUR_NEXT, TOUR_SKIP, TOUR_DONE } from './greg-tour'
+import { tourStops, tourLeg, gregFree, GREG_R, giveGloveWord, gloveWordFor, POOL_KEEP, TABLE_STOP, TABLE_KEEPER, TOUR_ASK, TOUR_NEXT, TOUR_SKIP, TOUR_DONE } from './greg-tour'
 import { segClear, type Pt } from '../shared/folk-path'
 import { MOONWELL, fromShore } from './moonwell'
 import { gladeHome, HOME_R } from './glade-home'
@@ -10,6 +10,12 @@ import { gladeClusterSpot } from './glade-cluster'
 import { TABLE } from './rooms'
 import { GREG_GLOVE_PICK } from '../../play3d/vessels'
 import { newLoadout } from '../shared/loadout'
+import { bodyBlocked, gladeStructures } from './obstacles'
+import { aroundPath } from '../shared/folk-path'
+import { GLADE } from './relief'
+import { readFileSync } from 'fs'
+import { parseHouse } from './plot-blueprint'
+import { setGladeBlueprint, gladeBlueprint } from './glade-lots'
 
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  FAIL', m) } }
@@ -60,6 +66,35 @@ ok(gloveWordFor(null) === null && gloveWordFor('nope') === null, 'no birth / unk
   ok(giveGloveWord(r!.loadout, 'star') === null, 'given once: a second ask does nothing')
   const earned = { ...l, vessels: l.vessels.map(v => v.id === 'starter-glove' ? { ...v, word: 'gate' } : v) }
   ok(giveGloveWord(earned, 'star') === null, 'an earned word in the glove is never overwritten') }
+
+// M117 s2: with the live Glade's blueprint houses standing (world/house-blueprints, as prod serves them), not only the blockouts
+for (const id of ['fennel', 'hazel', 'mallow', 'sax', 'yarrow']) { const bp = parseHouse(JSON.parse(readFileSync(`world/house-blueprints/glade-${id}.json`, 'utf8'))); if (bp) setGladeBlueprint(id, bp) }
+ok(!!gladeBlueprint('fennel'), 'the Glade blueprints load (Fennel\'s house stands)')
+{ const glade = tourStops(five).filter(x => x.zone === 'glade') // M117 s2: every Glade leg (bench -> each stop -> bench) never puts Greg's body centre in a structure, and (off the bench)
+  // keeps his body clear of them; the old pool-only arc is measured beside it
+  const inside = (x: number, z: number) => bodyBlocked(gladeStructures, x, GLADE.y, z, 0.001)
+  const walk = (legOf: (from: Pt, i: number) => Pt[]) => {
+    let p: Pt = gregSpot(), n = 0, ins = 0, tight = 0, closeMin = Infinity
+    for (let i = 0; i <= glade.length; i++) {
+      let prev = p
+      for (const q of legOf(p, i)) {
+        const L = Math.hypot(q.x - prev.x, q.z - prev.z), m = Math.max(1, Math.ceil(L / 0.05))
+        for (let u = 1; u <= m; u++) { const x = prev.x + (q.x - prev.x) * u / m, z = prev.z + (q.z - prev.z) * u / m; n++
+          if (inside(x, z)) ins++
+          const nearBench = Math.hypot(x - gregSpot().x, z - gregSpot().z) < 1.5
+          if (!nearBench && !gregFree(x, z) && Math.hypot(x - MOONWELL.x, z - MOONWELL.z) >= POOL_KEEP - 0.05) tight++ }
+        prev = q
+      }
+      p = prev
+    }
+    return { n, ins, tight }
+  }
+  const now = walk((f, i) => tourLeg(f, i, glade)), old = walk((f, i) => { const t = glade[i], to = t ? t.at : gregSpot(); return aroundPath(f, to, pool, POOL_KEEP) })
+  console.log(`   M117 s2 legs: routed ${now.n} samples, ${now.ins} inside, ${now.tight} within his body of a wall; the old arc ${old.ins} inside, ${old.tight} within`)
+  ok(now.ins === 0, `M117 s2: no Glade leg puts his body centre in a structure (${now.ins}/${now.n})`)
+  ok(now.tight === 0, `M117 s2: off the bench his whole body (${GREG_R} m) stays clear of every structure (${now.tight})`)
+  for (const t of glade) ok(gregFree(t.at.x, t.at.z), `M117 s2: ${t.id}'s stand point is clear of every structure`)
+}
 
 console.log(`greg-tour: ${pass} pass, ${fail} fail`)
 if (fail) process.exit(1)

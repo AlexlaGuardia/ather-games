@@ -8,6 +8,9 @@
 import type { Box } from '../terrain-world'
 import { settlementSolids } from './settlement-lots'
 import { FURNITURE } from './furniture'
+import { gladeHomeBoxes } from './glade-home'
+import { gladeLotBoxes, jettyBoxes, gladeBlueprintVersion } from './glade-lots'
+import { GLADE, WATER_DROP } from './relief'
 
 /** The boxes that may touch the ground rectangle [x0,x1] x [z0,z1] (extra boxes are fine; missing ones are a hole). */
 export type Structures = (x0: number, z0: number, x1: number, z1: number) => readonly Box[]
@@ -143,4 +146,81 @@ export function centreClear(feet: readonly PieceFoot[], x: number, z: number): n
   let m = Infinity
   for (const f of feet) for (const b of f.train ? f.parts : [f.rect]) m = Math.min(m, footDist(b, x, z))
   return m
+}
+
+// ── M117 s2: a ROUTE round structures (Greg's tour) + the closed Glade's structures ─────────────────────────────────────────
+// A walker that follows a polyline (folk-path stepWalk) can not steer as it goes, so its legs are PLANNED on the same `free`
+// test the steerers use: a coarse grid search between the two ends, then the path pulled straight wherever a straight line
+// stays free. Pure. Tested in obstacles.test.ts + greg-tour.test.ts.
+
+/** the nearest spot to `p` a body may stand on (rings of `step` out to `max`), or `p` itself when it is free / none is */
+export function clearSpot(free: (x: number, z: number) => boolean, p: { x: number; z: number }, step = 0.25, max = 6): { x: number; z: number } {
+  if (free(p.x, p.z)) return p
+  for (let r = step; r <= max + 1e-9; r += step) {
+    const n = Math.max(8, Math.ceil((2 * Math.PI * r) / step))
+    for (let k = 0; k < n; k++) { const a = (k / n) * 2 * Math.PI, q = { x: p.x + Math.cos(a) * r, z: p.z + Math.sin(a) * r }; if (free(q.x, q.z)) return q }
+  }
+  return p
+}
+/** is every spot along a→b (every `step` m, the ends excluded) free? */
+export function lineFree(free: (x: number, z: number) => boolean, a: { x: number; z: number }, b: { x: number; z: number }, step = 0.1): boolean {
+  const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / step))
+  for (let i = 1; i < n; i++) if (!free(a.x + (b.x - a.x) * i / n, a.z + (b.z - a.z) * i / n)) return false
+  return true
+}
+/** points from a to b (ending exactly at b) whose every straight piece stays free; null = no way round within `margin` m of
+ *  the two ends' box. A start or an end that is not free itself (a bench against a wall) is left / reached straight. */
+export function routeAround(free: (x: number, z: number) => boolean, a: { x: number; z: number }, b: { x: number; z: number }, cell = 0.5, margin = 14): { x: number; z: number }[] | null {
+  if (lineFree(free, a, b)) return [b]
+  const x0 = Math.min(a.x, b.x) - margin, z0 = Math.min(a.z, b.z) - margin
+  const W = Math.min(400, Math.ceil((Math.max(a.x, b.x) + margin - x0) / cell)), H = Math.min(400, Math.ceil((Math.max(a.z, b.z) + margin - z0) / cell))
+  const cx = (i: number) => x0 + (i + 0.5) * cell, cz = (j: number) => z0 + (j + 0.5) * cell
+  const ci = (x: number) => Math.max(0, Math.min(W - 1, Math.floor((x - x0) / cell))), cj = (z: number) => Math.max(0, Math.min(H - 1, Math.floor((z - z0) / cell)))
+  const st = new Int8Array(W * H), fr = (i: number, j: number) => { const n = j * W + i; if (!st[n]) st[n] = free(cx(i), cz(j)) ? 1 : 2; return st[n] === 1 }
+  // the first / last grid cell: the free cell nearest each end that it can reach straight
+  const endCell = (p: { x: number; z: number }) => {
+    let best = -1, bd = Infinity
+    for (let dj = -4; dj <= 4; dj++) for (let di = -4; di <= 4; di++) {
+      const i = ci(p.x) + di, j = cj(p.z) + dj; if (i < 0 || j < 0 || i >= W || j >= H || !fr(i, j)) continue
+      const d = Math.hypot(cx(i) - p.x, cz(j) - p.z); if (d < bd && lineFree(free, p, { x: cx(i), z: cz(j) })) { bd = d; best = j * W + i }
+    }
+    return best
+  }
+  const s0 = endCell(a), g0 = endCell(b); if (s0 < 0 || g0 < 0) return null
+  const dist = new Float64Array(W * H).fill(Infinity), from = new Int32Array(W * H).fill(-1), open: number[] = [s0]
+  dist[s0] = 0
+  const hx = (n: number) => Math.hypot(cx(n % W) - cx(g0 % W), cz((n / W) | 0) - cz((g0 / W) | 0))
+  while (open.length) {   // A* on a plain array (the grids are small: a few thousand cells)
+    let bi = 0; for (let k = 1; k < open.length; k++) if (dist[open[k]] + hx(open[k]) < dist[open[bi]] + hx(open[bi])) bi = k
+    const n = open[bi]; open[bi] = open[open.length - 1]; open.pop()
+    if (n === g0) break
+    const i = n % W, j = (n / W) | 0
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const u = i + di, v = j + dj; if (u < 0 || v < 0 || u >= W || v >= H || !fr(u, v)) continue
+      if (di && dj && !(fr(i + di, j) && fr(i, j + dj))) continue   // no corner cutting
+      const m = v * W + u, d = dist[n] + (di && dj ? Math.SQRT2 : 1) * cell
+      if (d < dist[m]) { if (dist[m] === Infinity) open.push(m); dist[m] = d; from[m] = n }
+    }
+  }
+  if (dist[g0] === Infinity) return null
+  const cells: { x: number; z: number }[] = []
+  for (let n = g0; n !== s0; n = from[n]) cells.unshift({ x: cx(n % W), z: cz((n / W) | 0) })
+  cells.unshift({ x: cx(s0 % W), z: cz((s0 / W) | 0) })
+  const pts = [a, ...cells, b], out: { x: number; z: number }[] = []
+  // pull it straight: from each kept point, jump to the furthest point the line to which stays free
+  let k = 0
+  while (k < pts.length - 1) {
+    let j = pts.length - 1
+    while (j > k + 1 && !lineFree(free, pts[k], pts[j])) j--
+    out.push(pts[j]); k = j
+  }
+  return out
+}
+
+/** the closed Glade's structures (its own zone coords; never ask them in the Wilds): Greg's home, the lots' stations and
+ *  blueprint houses, the jetty (low: stepped onto). The same boxes the keeper's walker meets (dynamic-solids.ts). */
+let gladeBoxes: Box[] | null = null, gladeBoxVer = -1
+export const gladeStructures: Structures = (x0, z0, x1, z1) => {
+  if (!gladeBoxes || gladeBoxVer !== gladeBlueprintVersion()) { gladeBoxes = [...gladeLotBoxes(GLADE.y), ...jettyBoxes(GLADE.y - WATER_DROP)]; gladeBoxVer = gladeBlueprintVersion() }
+  return [...gladeHomeBoxes(() => GLADE.y, x0, z0, x1, z1), ...gladeBoxes.filter(b => b.x0 <= x1 && b.x1 >= x0 && b.z0 <= z1 && b.z1 >= z0)]
 }

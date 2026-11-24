@@ -1,6 +1,6 @@
 // npx tsx src/app/shimmer/open/ather/obstacles.test.ts
 // M117 s3: the shared obstacle query + Hollows respecting buildings (steer round, shots stop on walls, cover can't be cheesed).
-import { bodyBlocked, segmentHit, lineOfSight, steer, bodyRadius, plotFootprints, footBlocked, footDist, centreIn, centreClear, type Structures } from './obstacles'
+import { bodyBlocked, segmentHit, lineOfSight, steer, bodyRadius, plotFootprints, routeAround, clearSpot, footBlocked, footDist, centreIn, centreClear, type Structures } from './obstacles'
 import { makeTrot, type Toy } from './spirit-trot'
 import { FURNITURE } from './furniture'
 import { GROWN } from '../../sprites/creature-size'
@@ -175,6 +175,19 @@ ok(!lineOfSight(Q, 0, 1, -10, 0, 1, 0) && lineOfSight(Q, -8, 1, -10, -8, 1, 0), 
     for (const x of played) allPlayed.add(x); ok(played.size > 0, `trot ${sp} seed ${seed}: she still reaches and plays a training piece (${[...played].join(',')})`)
   }
   ok(allPlayed.has('rr') && allPlayed.has('ps') && allPlayed.has('hu'), `the ring (inside its posts), the stone and the hurdle are all still played (${[...allPlayed].join(',')})`)
+}
+
+{ // M117 s2: routeAround: a walker's planned leg round a house never enters it, ends exactly at the goal, and is straight when clear
+  const free = (x: number, z: number) => !bodyBlocked(Q, x, 0, z, 0.35)
+  const a = { x: 0, z: -12 }, b = { x: 1, z: 2 }, r = routeAround(free, a, b)!
+  let prev = a, ins = 0, tight = 0, L = 0
+  for (const q of r) { const m = Math.ceil(Math.hypot(q.x - prev.x, q.z - prev.z) / 0.05); L += Math.hypot(q.x - prev.x, q.z - prev.z)
+    for (let u = 1; u <= m; u++) { const x = prev.x + (q.x - prev.x) * u / m, z = prev.z + (q.z - prev.z) * u / m; if (inHouse(x, z)) ins++; if (!free(x, z)) tight++ } prev = q }
+  ok(!!r && ins === 0 && tight === 0, `routeAround: the leg round the house never enters it nor brushes it (${ins}, ${tight}; ${r.length} points)`)
+  ok(r[r.length - 1] === b && L < 14.2 + 12 + 4, `routeAround: ends at the goal, a short way round (${L.toFixed(1)} m)`)
+  ok(routeAround(free, { x: -8, z: -12 }, { x: -8, z: 2 })!.length === 1, 'routeAround: a clear line is one straight leg')
+  ok(routeAround(() => false, a, b) === null, 'routeAround: no way at all = null (the caller falls back)')
+  const c = clearSpot(free, { x: 0, z: -5 }); ok(free(c.x, c.z) && Math.hypot(c.x, c.z + 5) < 1.6, `clearSpot: a stand point in the house moves to the nearest clear spot (${c.x.toFixed(2)},${c.z.toFixed(2)})`)
 }
 
 console.log(`${pass} pass, ${fail} fail`)

@@ -78,7 +78,7 @@ export function GladeGreg({ loaded, tour = null, hold = false, keeper, onArrive,
       // the tour's stops AS THIS PAGE HAS THEM (a lot standing Alex's blueprint moves its Moglin to the door, setLotSpot; a check that
       // computes the stops in node has no blueprints and reads stops metres off: the sweep's 1.3-5.2 m 'Greg off his stops', 11-22)
       stops: tourStops().map(t => ({ id: t.id, at: t.at, look: t.look, zone: t.zone })) } }
-    pub(); const id = setInterval(pub, 250)
+    pub(); const id = setInterval(pub, 100)   // M117 s2: 100 ms (the walls check samples his path at that rate)
     return () => { clearInterval(id); delete W.__greg }
   }, [y === null, tour])   // eslint-disable-line react-hooks/exhaustive-deps
   if (y === null) return null
