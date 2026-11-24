@@ -74,8 +74,10 @@ try {
   ok(r.s?.plan?.[mmId]?.kind === 'roam' && new Set(Object.values(r.s?.plan ?? {}).map(s => s.kind)).size >= 2, `2. distinct moments (${kinds.join(', ')})`)
   // 3. watch the skits for 22 s
   let maxOff: Record<string, number> = {}, lieMax = 0, walked = 0, shotDone = false, best = 9, bestId = ''
-  const rests: V[] = []; let mmPrev: V | null = null
-  for (let t = 0; t < 600 && !(t > 44 && best < 0.2 && lieMax > 0.8 && rests.length >= 2 && shotDone); t++) {
+  // M126 s3b: its slot is now 3.5 m out, inside the 3-6 m band, so where it STARTED counted as a rest and one short walk ended
+  // the watch. The start is no rest now (two points it WALKED to), and the watch runs on until it has walked its 3 m (same bar).
+  const rests: V[] = [], start: V = r.f?.slots[mmId] ?? { x: 0, z: 0 }; let mmPrev: V | null = null
+  for (let t = 0; t < 600 && !(t > 44 && best < 0.2 && lieMax > 0.8 && rests.length >= 2 && walked > 3 && shotDone); t++) {
     await sleep(500); r = await read(); if (!r.f || !r.s) continue
     for (const [id, v] of Object.entries(off(r.f))) maxOff[id] = Math.max(maxOff[id] ?? 0, v)
     lieMax = Math.max(lieMax, r.s.lying[mmId] ?? 0); 
@@ -87,7 +89,7 @@ try {
     const q = r.f.pos[mmId], ph = r.s.slots[mmId]?.roam?.phase
     if (q) { if (mmPrev) walked += Math.hypot(q.x - mmPrev.x, q.z - mmPrev.z)
       const dk = Math.hypot(q.x - r.f.keeper.x, q.z - r.f.keeper.z)
-      if ((ph === 'sit' || ph === 'nap') && dk > 2.8 && dk < 6.2 && mmPrev && Math.hypot(q.x - mmPrev.x, q.z - mmPrev.z) < 0.02 && rests.every(v => Math.hypot(v.x - q.x, v.z - q.z) > 0.5)) rests.push(q)
+      if ((ph === 'sit' || ph === 'nap') && dk > 2.8 && dk < 6.2 && mmPrev && Math.hypot(q.x - mmPrev.x, q.z - mmPrev.z) < 0.02 && Math.hypot(q.x - start.x, q.z - start.z) > 0.5 && rests.every(v => Math.hypot(v.x - q.x, v.z - q.z) > 0.5)) rests.push(q)
       mmPrev = q }
   }
   ok(rests.length >= 2 && walked > 3, `3. the Mana'mal walked between points 3-6 m from the keeper (${walked.toFixed(1)} m; rests ${rests.map(v => Math.hypot(v.x - kb.x, v.z - kb.z).toFixed(1)).join(', ')})`)
