@@ -202,6 +202,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 11:4x Alex (TALK, not a row yet): "tools and how the durability works on them and if they should even have a durability.. what if all the tools from stations were one time upgrades and then the metal worker could give upgrades on the edge/tip of the pick and pruner.. and this could have a durability that the metal working room can repair with the right materials ..maybe a repair all option for ease.. although those are the only 2 that need repairs"
 - 11-24 11:1x Alex: "maybe we get the sprites lane up to start rigging either the body parts so the spirits will be able to run around and move better or continue with the rest of the base spirits first" -> M132 (hub: rig first, then M102's other 8)
 - 11-24 08:4x Alex: "retire the bond signatures or what if in the spirit panel the player is able to select the bonded move.. and even have it grow with them somehow" -> RULED 731a647 bonded move, M127 s3b
 - 11-24 08:3x Alex: "on the spirit moves let's make them canon so the books don't veer too far from the game" -> relayed to Magii (flip is theirs); M127 s3 unlocks when 6f401fc reads RULED
