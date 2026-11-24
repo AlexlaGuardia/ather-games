@@ -16,6 +16,7 @@ import { liftCarry } from './lift'
 import { GROUND_Y } from './plot'
 import { touch, TOUCH_LOOK_SENS, isTouchOnly } from '../shared/touch'
 import { tickIdleCam, installIdleInput } from '../shared/idle-mode'
+import { skitAim } from '../shared/idle-skits'   // M126 s2: the idle camera frames a follower now and then
 import { getSettings, useSettings, pixelRatioCap } from '../shared/settings'
 
 const SENS = 0.0022
@@ -101,7 +102,7 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
     }
     touch.look.dx = 0; touch.look.dy = 0
     // M91: after ~25 s of nothing the view drifts about; any input hands it back exactly (shared/idle-mode.ts). Not while talking, in a menu, or unlocked.
-    tickIdleCam(dt, look.current, frozen.current || (!locked.current && !isTouchOnly()) || !!focus?.current)
+    tickIdleCam(dt, look.current, frozen.current || (!locked.current && !isTouchOnly()) || !!focus?.current, Math.random, () => skitAim(lc.px, lc.pz))
     const fc = focus?.current
     if (fc) {   // turn to the NPC: yaw 0 looks down -z, so the yaw to (dx, dz) is atan2(-dx, -dz); ease, shortest way round
       const dx = fc.x - lc.px, dz = fc.z - lc.pz, dy = fc.y - eyeY(lc)

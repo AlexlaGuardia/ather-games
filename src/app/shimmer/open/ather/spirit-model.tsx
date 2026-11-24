@@ -24,6 +24,7 @@ import { SPIRIT_MODELS, groundLift, lowPoints, type SpiritLook } from './spirit-
 import type { Species } from '../../spirits/spirit'
 import { slotOf } from './spirit-seeds'   // M122: a spirit's slot in her planter
 import { joinFormation, leaveFormation, tickFormation, formationSlot, reportFormationPos, inFormation } from '../shared/follow-formation'   // M126 s1
+import { skitSlot } from '../shared/idle-skits'   // M126 s2
 import { bodyRadius } from './obstacles'
 import { GROWN } from '../../sprites/creature-size'
 
@@ -107,7 +108,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
   useEffect(() => {
     if (!trot || !id || !dev) return
     // M126 s1: a following spirit takes her place in the one formation (shared/follow-formation.ts), spaced by her body
-    const target = () => { tickFormation(keeperAt); return { x: keeperAt.x, z: keeperAt.z, yaw: keeperAt.yaw, slot: formationSlot(id) } }
+    const target = () => { tickFormation(keeperAt); return { x: keeperAt.x, z: keeperAt.z, yaw: keeperAt.yaw, slot: skitSlot(id, keeperAt) ?? formationSlot(id) } }   // M126 s2: idle = her skit's spot
     const sync = () => {
       const on = isFollowing(id)
       if (on && nav) joinFormation({ id, kind: 'spirit', r: bodyRadius(GROWN[sp] ?? { height: 0.5 }), blocked: (x, z) => nav.blocked(x, z) })

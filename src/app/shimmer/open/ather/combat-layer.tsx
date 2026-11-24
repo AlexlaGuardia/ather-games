@@ -16,6 +16,7 @@ import { weaponDef } from '../../engine/weapons'
 import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, SHAMBLER, FLOATER, CRAWLER, crawlerScale, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
 import { live as liveSolids } from './dynamic-solids'
 import { noteCombat } from '../shared/idle-mode'
+import { noteHollowNear, SKIT } from '../shared/idle-skits'   // M126 s2
 import { runCast, stepFields, stepPieces, channelAim, type ChannelRun, type CastHit } from './combat-casts'
 import type { CastSpec } from '../../play3d/cast'
 import { touch } from '../shared/touch'
@@ -660,6 +661,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       eats.current = []
     }
     stepCombat(C, T, feet, dt)
+    if (C.hollows.some(h => Math.hypot(h.x - feet.x, h.z - feet.z) < SKIT.hollowR)) noteHollowNear()   // M126 s2: Hollows about = no idle skits
     // slice 3: the host tells the party about every new drop (its kills and guests' kills alike); each keeper lays its own.
     // Becoming host (or starting to share) marks what already lies there, so old drops are never re-sent.
     { const N = net.current, n = openNet()

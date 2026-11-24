@@ -61,16 +61,20 @@ export const IDLE_AFTER = 25   // seconds with no key / mouse / touch
 export const IDLE_ACTIONS = ['look-around'] as const
 export type IdleAction = typeof IDLE_ACTIONS[number]
 export interface View { yaw: number; pitch: number }
-export interface IdleCamState { idle: boolean; quiet: number; seq: number; base: View; off: View; goal: View; hold: number; action: IdleAction }
-export const idleCamFresh = (seq = 0): IdleCamState => ({ idle: false, quiet: 0, seq, base: { yaw: 0, pitch: 0 }, off: { yaw: 0, pitch: 0 }, goal: { yaw: 0, pitch: 0 }, hold: 0, action: 'look-around' })
+export interface IdleCamState { idle: boolean; quiet: number; seq: number; base: View; off: View; goal: View; hold: number; action: IdleAction; n: number }
+export const idleCamFresh = (seq = 0): IdleCamState => ({ idle: false, quiet: 0, seq, base: { yaw: 0, pitch: 0 }, off: { yaw: 0, pitch: 0 }, goal: { yaw: 0, pitch: 0 }, hold: 0, action: 'look-around', n: 0 })
 
 const PITCH_LO = -0.3, PITCH_HI = 0.2
+/** M126 s2: the glances that turn to FRAME A FOLLOWER (the 2nd, 5th, 8th ...), held a little longer, looking a touch down */
+export const FRAME = { every: 3, hold: [4, 6] as [number, number], pitch: -0.18 }
+export const framesFollower = (n: number) => n % FRAME.every === 1
 /**
  * One frame. `seq` is a counter the window bumps on every input; `blocked` is combat / a menu / driving.
  * Returns the next state plus `apply`: the view to write into the camera driver this frame (null = leave the player's own).
  * Input or a block while idle returns the stored base, so the keeper gets the exact view they left, same frame.
+ * M126 s2: `aim` = the yaw to a follower (shared/idle-skits.ts skitAim); a framing glance turns to it (null = a plain glance).
  */
-export function idleCamStep(s: IdleCamState, dt: number, seq: number, blocked: boolean, look: View, rand: () => number): { state: IdleCamState; apply: View | null } {
+export function idleCamStep(s: IdleCamState, dt: number, seq: number, blocked: boolean, look: View, rand: () => number, aim?: () => number | null): { state: IdleCamState; apply: View | null } {
   if (seq !== s.seq || blocked) {
     const apply = s.idle ? { yaw: s.base.yaw, pitch: s.base.pitch } : null
     return { state: { ...idleCamFresh(seq) }, apply }
@@ -79,17 +83,24 @@ export function idleCamStep(s: IdleCamState, dt: number, seq: number, blocked: b
     const quiet = s.quiet + dt
     if (quiet < IDLE_AFTER) return { state: { ...s, quiet }, apply: null }
     const base = { yaw: look.yaw, pitch: look.pitch }
-    return { state: { ...s, idle: true, quiet, base, off: { yaw: 0, pitch: 0 }, goal: { yaw: 0, pitch: 0 }, hold: 0, action: IDLE_ACTIONS[0] }, apply: null }
+    return { state: { ...s, idle: true, quiet, base, off: { yaw: 0, pitch: 0 }, goal: { yaw: 0, pitch: 0 }, hold: 0, action: IDLE_ACTIONS[0], n: 0 }, apply: null }
   }
-  let { hold, goal } = s
+  let { hold, goal, n } = s
   hold -= dt
   if (hold <= 0) {   // a new glance: somewhere within ~70 degrees either side, a little up or down, then rest on it
-    hold = 2.5 + rand() * 3.5
-    goal = { yaw: (rand() * 2 - 1) * 1.2, pitch: Math.max(PITCH_LO - s.base.pitch, Math.min(PITCH_HI - s.base.pitch, (rand() * 2 - 1) * 0.2)) }
+    const to = framesFollower(n) && aim ? aim() : null
+    n++
+    if (to !== null && to !== undefined && Number.isFinite(to)) {   // M126 s2: turn (the short way) to frame a follower
+      hold = FRAME.hold[0] + rand() * (FRAME.hold[1] - FRAME.hold[0])
+      goal = { yaw: Math.atan2(Math.sin(to - s.base.yaw), Math.cos(to - s.base.yaw)), pitch: Math.max(PITCH_LO - s.base.pitch, Math.min(PITCH_HI - s.base.pitch, FRAME.pitch - s.base.pitch)) }
+    } else {
+      hold = 2.5 + rand() * 3.5
+      goal = { yaw: (rand() * 2 - 1) * 1.2, pitch: Math.max(PITCH_LO - s.base.pitch, Math.min(PITCH_HI - s.base.pitch, (rand() * 2 - 1) * 0.2)) }
+    }
   }
   const k = Math.min(1, dt * 0.9)
   const off = { yaw: s.off.yaw + (goal.yaw - s.off.yaw) * k, pitch: s.off.pitch + (goal.pitch - s.off.pitch) * k }
-  return { state: { ...s, hold, goal, off }, apply: { yaw: s.base.yaw + off.yaw, pitch: s.base.pitch + off.pitch } }
+  return { state: { ...s, hold, goal, off, n }, apply: { yaw: s.base.yaw + off.yaw, pitch: s.base.pitch + off.pitch } }
 }
 
 // ── 4. the store: one per page ─────────────────────────────────────────────────────────────────────────────────
@@ -100,9 +111,9 @@ export const noteInput = () => { seq++ }
 export const noteCombat = () => { combatUntil = clock + 8; seq++ }
 export const isIdle = () => cam.idle
 /** the camera drivers call this once per frame with their own view; it rewrites `look` while idle and restores it on input */
-export function tickIdleCam(dt: number, look: View, blocked: boolean, rand: () => number = Math.random): boolean {
+export function tickIdleCam(dt: number, look: View, blocked: boolean, rand: () => number = Math.random, aim?: () => number | null): boolean {
   clock += dt
-  const r = idleCamStep(cam, dt, seq, blocked || clock < combatUntil, look, rand)
+  const r = idleCamStep(cam, dt, seq, blocked || clock < combatUntil, look, rand, aim)
   cam = r.state
   if (r.apply) { look.yaw = r.apply.yaw; look.pitch = r.apply.pitch }
   return cam.idle

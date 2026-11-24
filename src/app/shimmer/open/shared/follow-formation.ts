@@ -195,6 +195,9 @@ let tickedAt = -1
 export function joinFormation(m: Member) { roster.set(m.id, m) }
 export function leaveFormation(id: string) { roster.delete(id); pos.delete(id); delete live.last().slots[id] }
 export const inFormation = (id: string) => roster.has(id)
+/** M126 s2: who walks in it, and where each really stands (the idle skits read both) */
+export const formationMembers = (): Member[] => [...roster.values()]
+export const formationPos = (id: string): Vec | undefined => pos.get(id)
 /** Step the formation from where the keeper stands. Every follower calls it each frame; the first call in a frame (4 ms)
  *  does the work, so whoever draws first (a spirit or the Mana'mal) drives it and no page needs wiring. */
 export function tickFormation(k: Keeper, now = typeof performance !== 'undefined' ? performance.now() : Date.now()): Assigned {

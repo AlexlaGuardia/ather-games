@@ -139,7 +139,7 @@ function segDist(a: { x: number; z: number }, b: { x: number; z: number }, k: { 
 /** where the keeper is (world xz; yaw 0 looks down -z) */
 /** M126 s1: `slot` = her place in the formation (shared/follow-formation.ts): where she walks to and, stood there, which way
  *  she faces. No slot = the old ring round the keeper (a call home, the tests' bare keeper). */
-export type FollowTarget = () => { x: number; z: number; yaw: number; slot?: { x: number; z: number; face: number } | null }
+export type FollowTarget = () => { x: number; z: number; yaw: number; slot?: { x: number; z: number; face: number; act?: 'sniff' | 'lie' } | null }
 
 const TAU = Math.PI * 2
 const wrap = (a: number) => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI
@@ -483,6 +483,9 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
         fIdle += dt
         heading = k.slot ? k.slot.face : Math.atan2(k.x - pos.x, k.z - pos.z)   // stood by: she faces her slot's way (M126), else watches the keeper
         if (fIdle > F.sitAfter) wantSit = 1
+        // M126 s2: an idle skit's spot (shared/idle-skits.ts): nose down a while, look up, nose down again; or lie = sit at once
+        if (k.slot?.act === 'sniff' && fIdle % 3 < 1.9) sniff = 1
+        if (k.slot?.act === 'lie') wantSit = 1
         // M109 s3: called home and arrived: a moment sat by the keeper, then she is free again
         if (calling && fIdle > 0.8) { calling = false; followTo = callPrev; callPrev = null; if (!followTo) { syncPolar(); go('sit', rand(...D.sitS)) } }
       }
