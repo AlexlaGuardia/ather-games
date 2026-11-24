@@ -19,7 +19,7 @@ export interface GregTalkActs {
   tour?: () => void
   /** M68 s2: his hello while the tutorial wants something (the pending bark); absent = GREG_HELLO */
   hello?: string
-  /** M71 s2: 'Buy a waymark' (a folded keeper only); absent = no buy answer */
+  /** M71 s2: 'Buy more reach' (a folded keeper only); absent = no buy answer */
   buy?: { label: string; pick: () => void }
   /** M123 s1: 'Spirits?' hands a pedestal-less keeper the grimoire (glade-greg-talk.ts pedestalOwed); absent = no answer */
   grimoire?: { label: string; pick: () => void }

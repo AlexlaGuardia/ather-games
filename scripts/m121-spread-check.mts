@@ -1,16 +1,16 @@
 // BETA M121: DISCOVERED GROUND CAN TURN GREY BY CHANCE, on prod, 390x844, non-owner. npx tsx scripts/m121-spread-check.mts [--url ...] [--out ...]
 //   A fresh profile (born -> the gate): the first section (Greg's stone) reads Hollow ground + infected; every other discovered
-//     section reads Clear
+//     section reads Charted (M121 s2), its region is drawn Charted on the fold map, the legend has the four words, nothing overflows 390
 //   B the roll: game days skipped one by one on a copy of A's save with a fixed seed -> some clear sections turn, none in its
 //     grace days, never more than the cap per day, never the first section's kind of exempt one; the same save run again gives
 //     the same sections on the same days; another seed gives a different result; a 3000-day absence turns at most the cap
-//   C a pre-M121 save (no grey, no rule) loads with every section as the old rule showed it, its cleared list unchanged, twice
+//   C a pre-M121 save (no grey, no rule) loads with every section as the old rule showed it (what it showed Clear without a clear reads Charted), its cleared list unchanged, twice
 //   D a waymark on cleared ground: the roll turns it -> Hollow ground + DARK + travel refused; cleared again -> Clear + lit + travels
 //   0 page errors
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync, readFileSync } from 'node:fs'
 import { SETTLEMENT } from '../src/app/shimmer/open/ather/first-settlement'
-import { SECTION_RULE, PRE_M121_GROW_MS } from '../src/app/shimmer/open/ather/spread-map'
+import { SECTION_RULE, PRE_M121_GROW_MS, LEGEND, AREA_STATES } from '../src/app/shimmer/open/ather/spread-map'
 import { GAME_DAY_MS as D } from '../src/app/shimmer/open/ather/nodes'
 import { STARTING_SQUARES } from '../src/app/shimmer/open/ather/plot'
 import { LAYOUT } from '../src/app/shimmer/open/ather/garden-snapshot'
@@ -75,12 +75,36 @@ try {
       ok((await SM('state', n.id)) === 'unseen', `A. ${n.id} Unseen before`)
       await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), n.x, n.z + 12)
       const got = await poll(async () => (await SM('state', n.id)) !== 'unseen', 30000)
-      ok(got && (await SM('state', n.id)) === 'clear', `A. ${n.id} discovered: Clear (${await SM('state', n.id)})`)
+      ok(got && (await SM('state', n.id)) === 'charted', `A. ${n.id} discovered: Charted (${await SM('state', n.id)})`)
     }
     const other = ((await SM('seen')) as string[]).filter(id => id !== FIRST.id)
     const states = await Promise.all(other.map(id => SM('state', id)))
-    ok(other.length >= OTHERS.length && states.every(s => s === 'clear'), `A. every other discovered section Clear (${other.length})`)
-    await A('open', 'gate'); await sleep(1500); await p.screenshot({ path: `${out}/a-map.png` }); await p.keyboard.press('Escape')
+    ok(other.length >= OTHERS.length && states.every(s => s === 'charted'), `A. every other discovered section Charted (${other.length})`)
+    await SM('seen'); await A('wmClear', OTHERS[0].id); await sleep(1500)   // one section cleared: all four states on the map
+    ok((await SM('state', OTHERS[0].id)) === 'clear', `A. ${OTHERS[0].id} cleared: Clear`)
+    await A('open', 'gate'); await sleep(2500)
+    const map = await p.evaluate(() => {
+      const L = document.querySelector<HTMLElement>('[data-spread-legend]'); if (!L) return null
+      const sw = [...L.querySelectorAll<HTMLElement>('[data-legend-state]')]
+      const panel = L.closest<HTMLElement>('[data-panel]') ?? document.body
+      const out = [...panel.querySelectorAll<HTMLElement>('div, span, button')].filter(e => { const r = e.getBoundingClientRect(); return (e.textContent ?? '').trim() && r.width > 0 && (r.right > innerWidth + 0.5 || r.left < -0.5) }).length
+      return { states: sw.map(s => s.dataset.legendState), words: sw.map(s => s.innerText.replace(/·/g, '').trim()), looks: new Set(sw.map(s => { const c = getComputedStyle(s.querySelector('span')!); return `${c.backgroundImage}|${c.borderTopStyle}|${c.borderTopColor}` })).size, out, wide: document.documentElement.scrollWidth - innerWidth, legendWide: L.scrollWidth - L.clientWidth }
+    })
+    ok(!!map && map.words.join(' · ') === LEGEND().join(' · ') && map.states.join() === AREA_STATES.join(), `A. the legend: ${map?.words.join(' · ')}`)
+    ok(map?.looks === 4, `A. four different swatches (${map?.looks})`)
+    ok(!!map && map.out === 0 && map.wide <= 0 && map.legendWide <= 0, `A. no text overflows 390 (${JSON.stringify(map)})`)
+    await p.evaluate(() => document.querySelector('[data-spread-legend]')?.scrollIntoView({ block: 'center' })); await p.screenshot({ path: `${out}/a-legend.png` })
+    await p.evaluate(() => document.querySelector('[data-panel] canvas')?.scrollIntoView({ block: 'start' })); await p.screenshot({ path: `${out}/a-map.png` }); await p.keyboard.press('Escape')
+    // the map's own pixels: one section's ground on the fold map while Charted, then once cleared
+    const paint = async (n: { x: number; z: number }) => {
+      await A('open', 'gate'); await sleep(2500)
+      const c = await p.evaluate((x, z) => { const cv = document.querySelector<HTMLCanvasElement>('[data-panel] canvas'); if (!cv || cv.width !== 1500) return null; const d = cv.getContext('2d')!.getImageData(Math.round((x / 1000 + 1.5) * 500) - 4, Math.round((z / 1000 + 1.5) * 500) - 4, 8, 8).data; let r = 0, g = 0, b = 0; for (let k = 0; k < d.length; k += 4) { r += d[k]; g += d[k + 1]; b += d[k + 2] } return [r, g, b].map(v => Math.round(v / 64)) }, n.x, n.z)
+      await p.keyboard.press('Escape'); await sleep(800); return c
+    }
+    const asCharted = await paint(OTHERS[1]), st1 = await SM('state', OTHERS[1].id)
+    await A('wmClear', OTHERS[1].id); await sleep(5000)
+    const asClear = await paint(OTHERS[1]), st2 = await SM('state', OTHERS[1].id)
+    ok(st1 === 'charted' && st2 === 'clear' && !!asCharted && !!asClear && asCharted[0] - asCharted[1] >= asClear[0] - asClear[1] + 6, `A. the map paints Charted ground its own colour (Charted ${asCharted}, Clear ${asClear})`)
     const m = await store(MAP)
     ok(!!m?.rule && Object.keys(m.grey).join() === FIRST.id, `A. saved: rule + the one grey section (${JSON.stringify(m?.rule)}, ${Object.keys(m?.grey ?? {})})`)
     snap = await p.evaluate(() => Object.fromEntries(Object.entries(localStorage))) as Store
@@ -124,13 +148,13 @@ try {
     const now = Date.now(), ids = fw.slice(0, 8).map(n => n.id), seen: Record<string, number> = {}
     ids.forEach((id, i) => { seen[id] = i % 2 ? now - PRE_M121_GROW_MS - 3600e3 : now - 3600e3 })
     const clean = [ids[1], ids[4]].sort()   // one long-untended but cleared, one fresh and cleared
-    const want = ids.map((id, i) => (i % 2 && !clean.includes(id) ? 'hollow' : 'clear')).join()
+    const want = ids.map((id, i) => (clean.includes(id) ? 'clear' : i % 2 ? 'hollow' : 'charted')).join()
     const { p, A, SM, store, load, toWilds } = await page({ ...seeded(), 'open.tutorial.v1': JSON.stringify({ ...JSON.parse(seeded()['open.tutorial.v1']), m70: 'none' }), [MAP]: JSON.stringify({ v: 1, seen, first: true }), [LEDGER]: JSON.stringify({ v: 2, epoch: now - 400 * D, at: now - 100 * D, clean }) })
     await load(); await toWilds(); await sleep(5000)
     const read = async () => (await Promise.all(ids.map(id => SM('state', id)))).join()
     ok((await read()) === want, `C. pre-M121 save: every section unchanged (${await read()})`)
     ok(((await store(LEDGER)).clean as string[]).join() === clean.join(), `C. ...its cleared ground is untouched (${(await store(LEDGER)).clean})`)
-    ok((await SM('state', FIRST.id)) === 'clear' && (await SM('state', fw[9].id)) === 'unseen', 'C. ...the first section is not re-infected, unseen stays unseen')
+    ok((await SM('state', FIRST.id)) === 'charted' && (await SM('state', fw[9].id)) === 'unseen', 'C. ...the first section is not re-infected, unseen stays unseen')
     await load(); await toWilds(); await sleep(5000)
     ok((await read()) === want && !!(await store(MAP)).rule, 'C. a second load: the same, the rule now running')
     ok((await A('zone')) === 'wilds', 'C. in the Wilds'); await p.close()
@@ -139,7 +163,7 @@ try {
   {
     const { p, A, SM, load, toWilds } = await page(seeded())
     await load(); await toWilds()
-    ok((await SM('state', FIRST.id)) === 'clear', `D. a keeper whose big one already fell: the first section is not re-infected (${await SM('state', FIRST.id)})`)
+    ok((await SM('state', FIRST.id)) === 'charted', `D. a keeper whose big one already fell: the first section is not re-infected (${await SM('state', FIRST.id)})`)
     await A('wmGoto', FAR.x, FAR.z); await sleep(6000)
     const node = await A('wmClearHere'); await sleep(1500)
     const r = await A('wmPlant'), w = (await A('wm'))[0]

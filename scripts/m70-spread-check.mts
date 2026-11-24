@@ -1,8 +1,8 @@
 // BETA M70 s2: the SPREAD MAP on prod, 390x844, a FRESH profile. npx tsx scripts/m70-spread-check.mts [--url ...] [--out ...]
 // Canon: CANON/game/shimmer-quest-glade-tutorial.md › the spread, as the player sees it (SIGNED). Lines compared with the canon
 // file's own text, read here. The opening (born -> the gate) is the s1 check's.
-//   1 the fold map's legend reads 'Unseen · Clear · Hollow ground'; spread.map.first (Chamomile) on the first open, never again
-//   2 a far area is Unseen before the keeper goes there, Clear once they stand in it
+//   1 the fold map's legend reads the four signed words (batch 11-24d: Unseen · Charted · Clear · Hollow ground); spread.map.first (Chamomile) on the first open, never again
+//   2 a far area is Unseen before the keeper goes there, Charted once they stand in it
 //   (M121: the FIRST section, the settlement's, reads Hollow ground on arrival: the story's)
 //   3 the settlement's big one down -> its area Clear + 'This ground is clear.'
 //   4 skipped game days (__ather.skipDays) -> the far area turns by M121's daily roll: Hollow ground + the grow toast with its place name
@@ -97,7 +97,7 @@ try {
   // ── 1 · the legend + the first look ──
   await A('open', 'gate'); await sleep(1500)
   const legend = await p.evaluate(() => (document.querySelector('[data-spread-legend]') as HTMLElement | null)?.innerText.replace(/\s+/g, ' ').trim() ?? null)
-  ok(legend === L('spread.map.legend'), `1. legend word for word: "${legend}"`)
+  ok(legend === /signed words unchanged: \*\*([^*]+)\*\*/.exec(readFileSync('/root/athernyx/CANON/game/shimmer-lines-batch-2026-11-24d.md', 'utf8'))?.[1], `1. legend word for word: "${legend}"`)
   const firstSay = `Chamomile: ${L('spread.map.first')}`
   ok(await poll(async () => (await p.evaluate(() => document.body.innerText)).includes(L('spread.map.first')), 6000), `1. spread.map.first on the first open ("${firstSay}")`)
   await p.screenshot({ path: `${out}/s2-1-map-390.png` })
@@ -108,7 +108,7 @@ try {
   // ── 2 · unseen -> clear ──
   ok((await SM('state', FAR.id)) === 'unseen', `2. ${FAR.id} is Unseen before the keeper goes there (${await SM('state', FAR.id)})`)
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), FAR.x, FAR.z + 45)
-  ok(await poll(async () => (await SM('state', FAR.id)) === 'clear', 30000), `2. stood in it: Clear (${await SM('state', FAR.id)}; here ${await SM('here')})`)
+  ok(await poll(async () => (await SM('state', FAR.id)) === 'charted', 30000), `2. stood in it: Charted (${await SM('state', FAR.id)}; here ${await SM('here')})`)
   // ── 3 · the big one down -> Clear + toast ──
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 18, 0), BIG.x, BIG.z)
   ok(await poll(() => p.evaluate(() => !!(window as any).__ather.combat().champ), 60000), `3. ${BIG.id}'s champion wakes`)

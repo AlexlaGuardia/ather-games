@@ -7,6 +7,7 @@
 //     lift removes it (bag +1); reload keeps it gone.
 //   B (a keeper Greg has NOT folded a garden for): in the Wilds the plant refuses, saying why.
 //   0 page errors throughout.
+import { PLANT_WHY } from '../src/app/shimmer/open/ather/waymarks'
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'node:fs'
 import { STARTING_SQUARES } from '../src/app/shimmer/open/ather/plot'
@@ -65,7 +66,7 @@ try {
     }
     ok(!!here, `A. stood on infected ground (${here ? `${Math.round(here.x)},${Math.round(here.z)}` : 'none found'})`)
     const r1 = await A('wmPlant')
-    ok(r1?.ok === false && /grey/.test(r1.why), `A. infected ground refuses, with the reason ('${r1?.why}')`)
+    ok(r1?.ok === false && r1.why === PLANT_WHY.grey, `A. infected ground refuses, with the reason ('${r1?.why}')`)
     ok((await A('wm')).length === 0 && (await bagWaymarks()) === bag0, 'A. refused: nothing planted, nothing spent')
     await p.screenshot({ path: `${out}/a-refused.png` })
     const cleared = await A('wmClearHere'); await sleep(1500)
@@ -115,7 +116,7 @@ try {
     const n = ((await A('wmNodes')) as { x: number; z: number; d: number }[]).find(k => k.d > 100)
     if (n) { await A('wmGoto', n.x, n.z); await sleep(4500) }
     const r = await A('wmPlant')
-    ok(r?.ok === false && /folded/.test(r.why), `B. no garden to lead home to: refused ('${r?.why}')`)
+    ok(r?.ok === false && r.why === PLANT_WHY.unfolded, `B. no garden to lead home to: refused ('${r?.why}')`)
     ok((await A('wm')).length === 0, 'B. nothing planted')
     await p.screenshot({ path: `${out}/b-prefold.png` })
     await p.close()

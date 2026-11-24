@@ -1,9 +1,9 @@
 // Run: npx tsx src/app/shimmer/open/ather/spread-map.test.ts
-// BETA M70 s2 + M121: the spread map's three states, the first section grey on a fresh save only, the daily roll (seeded, grace,
+// BETA M70 s2 + M121: the spread map's four states, the first section grey on a fresh save only, the daily roll (seeded, grace,
 // cap per catch-up, share ceiling, exempt sections), a pre-M121 save keeps every state, a champion clears, the save round-trips,
 // and the four signed spread.* lines are the canon file's text word for word.
 import { readFileSync } from 'node:fs'
-import { freshMap, areaState, uncover, tend, firstLook, changes, parseMap, startRule, rollSections, sectionRoll, dayOf, LEGEND, growLine, clearLine, firstLine, SECTION_RULE as R, PRE_M121_GROW_MS, type SpreadMap } from './spread-map'
+import { AREA_STATES, STATE_LOOK, freshMap, areaState, uncover, tend, firstLook, changes, parseMap, startRule, rollSections, sectionRoll, dayOf, LEGEND, growLine, clearLine, firstLine, SECTION_RULE as R, PRE_M121_GROW_MS, type SpreadMap } from './spread-map'
 import { clearAt, freshSpread, infectedIds } from './spread'
 import { GAME_DAY_MS as D, ownerOf, type WildsNode } from './nodes'
 import { SETTLEMENT, pickTarget } from './first-settlement'
@@ -11,7 +11,7 @@ let pass = 0, fail = 0
 const ok = (c: unknown, m: string) => { if (c) pass++; else { fail++; console.log('FAIL', m) } }
 const canon = readFileSync('/root/athernyx/CANON/game/shimmer-quest-glade-tutorial.md', 'utf8')
 const cl = (id: string) => canon.split('\n').find(l => l.startsWith(`- \`${id}\``))!.replace(/^- `[^`]+`\s*(\[[^\]]*\]\s*)?/, '').replace(/^[A-Z]+:\s*/, '')
-ok(LEGEND().join(' · ') === cl('spread.map.legend') && LEGEND().join() === 'Unseen,Clear,Hollow ground', `legend word for word (${LEGEND().join(' · ')})`)
+ok(LEGEND().filter(w => w !== 'Charted').join(' · ') === cl('spread.map.legend') && LEGEND().join() === 'Unseen,Charted,Clear,Hollow ground', `legend word for word (${LEGEND().join(' · ')})`)
 ok(growLine('Mana Springs') === cl('spread.hud.grow').replace('{PLACE}', 'Mana Springs') && growLine('X') === 'Hollow ground is spreading near X.', 'grow toast, {PLACE} filled')
 ok(clearLine() === cl('spread.hud.clear'), 'clear toast')
 ok(firstLine() === cl('spread.map.first'), 'first-look line (Chamomile)')
@@ -24,21 +24,29 @@ let m = start()
 ok(areaState(m, 'home', true) === 'unseen', 'unvisited = Unseen, even the first section')
 m = uncover(m, 'home', t0)
 ok(areaState(m, 'home', true) === 'hollow', 'fresh: the first section is Hollow ground')
-for (const id of ['a', 'b', 'c']) { m = uncover(m, id, t0); ok(areaState(m, id, true) === 'clear' && areaState(m, id, false) === 'clear', `fresh: ${id} is Clear when discovered`) }
+for (const id of ['a', 'b', 'c']) { m = uncover(m, id, t0); ok(areaState(m, id, true) === 'charted' && areaState(m, id, false) === 'clear', `fresh: ${id} is Charted when discovered, Clear once cleared`) }
 ok(uncover(m, 'a', t0 + 5 * D) === m, 'walking through again does not tend it')
 ok(startRule(m, { fresh: true, firstId: 'a', infected: yes, now: t0 + D, seed: 9 }) === m, 'the rule starts once: a reload neither re-seeds nor re-greys')
 m = tend(m, 'home', t0 + 1)
 ok(areaState(m, 'home', false) === 'clear' && m.grey.home === undefined, 'its champion down: Clear')
-ok(areaState(startRule(parseMap(JSON.parse(JSON.stringify(m))), { fresh: true, firstId: 'home', infected: yes, now: t0 + 9 * D, seed: 1 }), 'home', true) === 'clear', 'a cleared first section is never re-infected by a reload')
+ok(areaState(startRule(parseMap(JSON.parse(JSON.stringify(m))), { fresh: true, firstId: 'home', infected: yes, now: t0 + 9 * D, seed: 1 }), 'home', true) === 'charted', 'a cleared first section is never turned Hollow ground by a reload')
+
+// M121 s2: the toasts follow the four states; Unseen -> Charted says nothing
+{ const c = (p: string, n: string) => { const r = changes({ a: p as never }, { a: n as never }); return `${r.grew.length}${r.cleared.length}` }
+  ok(c('charted', 'hollow') === '10' && c('clear', 'hollow') === '10', 'Charted or Clear turning Hollow ground: the grow toast')
+  ok(c('charted', 'clear') === '01' && c('hollow', 'clear') === '01', 'cleared from Charted or Hollow ground: the clear toast')
+  ok(c('unseen', 'charted') === '00' && c('charted', 'charted') === '00' && Object.keys(changes({}, { a: 'charted' }).grew).length === 0, 'discovering ground: no toast') }
+// M121 s2: the four looks tell apart (fill + line + dash), one table for both maps and the legend
+ok(AREA_STATES.length === 4 && new Set(AREA_STATES.map(s => STATE_LOOK[s].fill)).size === 4 && new Set(AREA_STATES.map(s => STATE_LOOK[s].line)).size === 4, 'four states, four fills, four lines')
 
 // ── a pre-M121 save: every section unchanged, nothing rolled for the time before ──
 {
   const old = { v: 1, seen: { tired: t0 - PRE_M121_GROW_MS, edge: t0 - PRE_M121_GROW_MS + 1, kept: t0 - 400 * D, home: t0 - 1 }, first: true }
   const inf = (id: string) => id !== 'kept'
-  const was = (id: string) => (t0 - (old.seen as Record<string, number>)[id] >= PRE_M121_GROW_MS && inf(id) ? 'hollow' : 'clear')   // the old rule, written out
+  const was = (id: string) => (t0 - (old.seen as Record<string, number>)[id] >= PRE_M121_GROW_MS && inf(id) ? 'hollow' : inf(id) ? 'charted' : 'clear')   // the old rule, written out (M121 s2: what it showed Clear without a clear is Charted)
   const n = startRule(parseMap(old), { fresh: false, firstId: 'home', infected: inf, now: t0, seed: 3 })
   for (const id of Object.keys(old.seen)) ok(areaState(n, id, inf(id)) === was(id), `old save: ${id} stays ${was(id)} (${areaState(n, id, inf(id))})`)
-  ok(areaState(n, 'home', true) === 'clear' && areaState(n, 'new', true) === 'unseen', 'old save: the first section is not re-infected; unseen stays unseen')
+  ok(areaState(n, 'home', true) === 'charted' && areaState(n, 'new', true) === 'unseen', 'old save: the first section is not re-infected; unseen stays unseen')
   ok(n.first && JSON.stringify(n.seen) === JSON.stringify(old.seen), 'old save: seen + first kept')
   const r = rollSections(n, ['kept', 'offmap'], NONE, t0 + 1)
   ok(!r.turned.length && r.clean.join() === 'kept,offmap', 'old save: no missed day is rolled on load, the cleared list is kept')

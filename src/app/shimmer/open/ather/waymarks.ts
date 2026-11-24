@@ -32,6 +32,14 @@ export const MIN_SPACING = 60          // metres between two waymarks on one til
 export const GREG_WAYMARK: Waymark = { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: BIOME.meadow, made: 0 }
 export const MAX_WAYMARKS = 12
 
+/** ★ SIGNED by Alex 2026-11-24 (athernyx c1d5903): shimmer-lines-batch-2026-11-24b.md › B1 + B2, MAIN word for word
+ *  (lines-batch-24b.test.ts): the three refusals when planting, and the fold map's hint. */
+export const PLANT_WHY = {
+  grey: 'The grey still holds this ground. Clear it, then plant here.',
+  notKept: "Plant a waymark on ground you cleared, or in a settlement that's kept.",
+  unfolded: 'A waymark leads home, and you have no garden yet. Greg can fold you one.',
+} as const
+export const PLANT_HINT = 'Plant one on ground you cleared, or inside a settlement.'
 export type PlantVerdict = { ok: true } | { ok: false; why: string }
 
 /** M75: what the ground under the keeper is to the spread (combat's nearest-node ownership): a node's ground whose grey was
@@ -46,13 +54,13 @@ export type WildsGround = 'cleared' | 'infected' | null
  *  no waymark to plant (M71 s1: pre-fold "home" is the Glade). `folded` / `ground` are optional so an older caller reads as
  *  folded with no cleared ground (the 11-18 settlement-only rule). */
 export function canPlant(list: readonly Waymark[], at: { tile: string; x: number; z: number; biome: BiomeId; grounded: boolean; swimming: boolean; settlement: string | null; ground?: WildsGround; folded?: boolean }): PlantVerdict {
-  if (at.folded === false) return { ok: false, why: 'A waymark leads home to your garden, and Gregory has not folded you one yet.' }
+  if (at.folded === false) return { ok: false, why: PLANT_WHY.unfolded }
   if (!at.grounded || at.swimming) return { ok: false, why: 'A waymark binds ground. Stand on it.' }
   if (at.biome === BIOME.water) return { ok: false, why: 'Water will not hold a binding.' }
   // ★ ONLY ON KEPT GROUND: a settlement, or ground you cleared (M75). Infected ground still refuses (the place is not kept).
   if (!at.settlement && at.ground !== 'cleared') return { ok: false, why: at.ground === 'infected'
-    ? 'The grey still holds this ground. Clear it, then bind it.'
-    : 'A waymark only binds kept ground: ground you cleared, or a settlement.' }
+    ? PLANT_WHY.grey
+    : PLANT_WHY.notKept }
   if (at.settlement && list.some(w => w.settlement === at.settlement)) return { ok: false, why: 'You already hold a waymark in this settlement.' }
   if (list.length >= MAX_WAYMARKS) return { ok: false, why: `You hold ${MAX_WAYMARKS} waymarks, as many as the fold will carry. Lift one first.` }
   const same = list.filter(w => w.biome === at.biome)
@@ -77,7 +85,7 @@ export function isLit(w: Waymark, infected: ReadonlySet<string>): boolean {
   if (w.settlement || !w.node) return true
   return !infected.has(w.node)
 }
-/** Placeholder lines (@lark): the refusal when a keeper steps toward a dark waymark, and the fold map's word for one. */
+/** ★ SIGNED by Alex 2026-11-24 (athernyx c1d5903): shimmer-lines-batch-2026-11-24b.md › B2: the refusal when a keeper steps toward a dark waymark, and the fold map's word for one. */
 export const DARK_WHY = 'The grey took that ground back. Its waymark is dark until you clear it again.'
 export const UNLIT_LABEL = 'unlit'
 /** Whether the fold may carry the keeper to this waymark now. */

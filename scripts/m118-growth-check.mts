@@ -11,6 +11,7 @@
 //  5. 0 page errors.
 //   npx tsx scripts/m118-growth-check.mts [--url http://localhost:3202]      (OWNER_KEY from env or .env; run on the box)
 import puppeteer from 'puppeteer-core'
+import { TRAIN_UI } from '../src/app/shimmer/open/ather/training-lines'
 import { existsSync, readFileSync } from 'fs'
 import { BLOOM_MS } from '../src/app/shimmer/open/ather/spirit-seeds'
 import { SPECIES_BASE, expNeed, grownStat } from '../src/app/shimmer/open/ather/spirit-growth'
@@ -88,6 +89,7 @@ try {
   ok(!!p1 && STATS.every(k => Number.isFinite(p1.axes[k])), '1 the M110 save loaded: no NaN')
   ok(p1?.growth === 0, `1 the growth bar is there and empty (${p1?.growth})`)
   ok(!!p1 && noLevel(p1.text) && /Growth/.test(p1.text), `1 panel text: 'Growth', no level number (${JSON.stringify(p1?.text.replace(/\s+/g, ' ').slice(0, 160))})`)
+  ok(!!p1 && p1.text.includes(TRAIN_UI.none), `1 no training piece placed: '${TRAIN_UI.none}'`)
   ok(!!p1 && !p1.overflow && p1.w <= 390, `1 the panel fits 390 wide (${p1?.w.toFixed(0)} px)`)
   // 2-3. the Wilds
   await p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))

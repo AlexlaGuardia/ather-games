@@ -1,7 +1,7 @@
 // BETA M71 s2: WAYMARK PRICING, on prod, 390x844. npx tsx scripts/m71-waymark-price-check.mts [--url ...] [--out ...]
 // Magii 43fef80 #6: a NEW bag starts with 3 free waymarks; Greg sells more at 500 grey matter (garden-fold.ts WAYMARK_PRICE),
 // only to a folded keeper; under the price refuses with the shortfall; spends exactly the price. Old keepers keep every waymark.
-//   C (a fresh FOLDED keeper, no bag, no garden save): 3 in the bag; 600 granted; Greg 'Buy a waymark' -> 4, grey 100 (exactly
+//   C (a fresh FOLDED keeper, no bag, no garden save): 3 in the bag; 600 granted; Greg 'Buy more reach' -> 4, grey 100 (exactly
 //     500); again at 100 -> refused, the shortfall line, still 4 / 100; reload keeps 4 / 100.
 //   D (old saves): a saved bag holding 9 loads with 9; a garden save with no bag gets the old 12.
 //   E (UNFOLDED): Greg offers no buy.   0 page errors.
@@ -49,6 +49,8 @@ async function page(seed: Seed) {
   return { p, A, bubble, opts, pick, store, greg, closeTalk, zoneIs, go }
 }
 
+/** the talk's bubble and answers stay inside 390 and nothing is clipped */
+const fits = (p: Page) => p.evaluate(() => document.documentElement.scrollWidth <= innerWidth && [...document.querySelectorAll<HTMLElement>('[data-talk-bubble], [data-talk-option]')].every(e => { const r = e.getBoundingClientRect(); return r.width === 0 || (r.right <= innerWidth + 0.5 && r.left >= -0.5 && e.scrollWidth <= e.clientWidth + 1) }))
 try {
   // ── C · a fresh folded keeper ──
   {
@@ -62,6 +64,8 @@ try {
     ok(g.opts.includes(FOLD_TEXT.buyAsk), `C. Greg offers '${FOLD_TEXT.buyAsk}' (${g.opts.join(' / ')})`)
     await pick(FOLD_TEXT.buyAsk)
     ok(await poll(async () => (await bubble()) === FOLD_TEXT.buyDone, 8000), `C. the buy goes through ('${await bubble()}')`)
+    ok(await poll(async () => (await p.evaluate(() => document.body.innerText)).includes(FOLD_TEXT.buyBag(100)), 4000), `C. the HUD says '${FOLD_TEXT.buyBag(100)}'`)
+    ok(await fits(p), 'C. the bubble and the answers fit 390')
     let gd = await store('ather.garden.v1')
     ok((await A('wmBag')) === 4 && g0 === 600 && gd?.grey === g0 - WAYMARK_PRICE, `C. 3 -> ${await A('wmBag')} waymarks, grey ${g0} -> ${gd?.grey} (exactly ${WAYMARK_PRICE})`)
     await p.screenshot({ path: `${out}/c-bought.png` })

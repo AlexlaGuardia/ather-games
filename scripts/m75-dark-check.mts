@@ -6,6 +6,7 @@
 //   the spread ledger loses that node's clean mark, exactly what a well-up does) -> travel refused with the reason, keeper stays
 //   home; the fold map lists it unlit; reload keeps it planted + dark, bag unchanged; the node is cleared (wmClear) -> travel ok;
 //   reload keeps it lit; 0 page errors.
+import { DARK_WHY, PLANT_HINT, UNLIT_LABEL } from '../src/app/shimmer/open/ather/waymarks'
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'node:fs'
 import { STARTING_SQUARES } from '../src/app/shimmer/open/ather/plot'
@@ -37,7 +38,7 @@ async function page(seed: (layout: number, squares: string[]) => void) {
   return { p, A, store, bagWaymarks, zoneIs, load, toWilds }
 }
 
-const DARK = /The grey took that ground back/
+const DARK = { test: (t: string) => t.includes(DARK_WHY) }
 try {
   const { p, A, bagWaymarks, zoneIs, load, toWilds } = await page((layout, owned) => {
     if (sessionStorage.getItem('seeded')) return
@@ -83,7 +84,8 @@ try {
   ok((await A('wm')).length === 1 && (await bagWaymarks()) === bag, 'dark: still planted, nothing refunded or spent')
   await A('open', 'gate'); await sleep(1500)
   const stop = await p.evaluate((id: string) => { const b = document.querySelector(`[data-waymark-stop="${id}"]`) as HTMLElement | null; return b ? { lit: b.dataset.lit, t: b.innerText } : null }, w.id)
-  ok(!!stop && stop.lit === '0' && /unlit/.test(stop.t), `fold map: listed, unlit (${JSON.stringify(stop)})`)
+  ok(!!stop && stop.lit === '0' && stop.t.includes(UNLIT_LABEL), `fold map: listed, unlit (${JSON.stringify(stop)})`)
+  ok((await text()).includes(PLANT_HINT), `fold map: '${PLANT_HINT}'`)
   await p.screenshot({ path: `${out}/dark-foldmap.png` })
   await p.keyboard.press('Escape'); await sleep(800)
   // reload keeps it planted + dark

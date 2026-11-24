@@ -4,7 +4,7 @@
 // onto a place "not walked to, not kept, not owned"). So: anywhere on KEPT ground = a settlement or ground the keeper CLEARED;
 // never on ground the grey still holds; never before Greg folds a garden for it to lead home to (M71 s1).
 import { existsSync, readFileSync } from 'node:fs'
-import { canPlant, plant, lift, groundOf, parseWaymarks, waymarksInWorld, GREG_WAYMARK, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
+import { PLANT_WHY, canPlant, plant, lift, groundOf, parseWaymarks, waymarksInWorld, GREG_WAYMARK, MIN_SPACING, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { BIOME } from './wilds'
 let pass = 0, fail = 0
 const ok = (c: unknown, m: string) => { if (c) pass++; else { fail++; console.log('FAIL', m) } }
@@ -20,7 +20,7 @@ ok(v0.ok, 'cleared ground outside any settlement takes a waymark (Alex 11-22: an
 const inf = canPlant(none, at(0, 0, { ground: 'infected' }))
 ok(!inf.ok && /grey/.test(inf.why), `infected ground refuses, with the reason (${!inf.ok && inf.why})`)
 const unk = canPlant(none, at(0, 0, { ground: null }))
-ok(!unk.ok && /kept ground/.test(unk.why), 'ground no node owns (spread not loaded) refuses: not known to be kept')
+ok(!unk.ok && unk.why === PLANT_WHY.notKept, 'ground no node owns (spread not loaded) refuses: not known to be kept')
 ok(canPlant(none, at(0, 0, { ground: null, settlement: 's1' })).ok, 'a settlement is kept ground (the 11-18 rule still holds)')
 ok(canPlant(none, at(0, 0, { ground: 'infected', settlement: 's1' })).ok, 'a settlement is kept by its folk even on a grey node')
 // older callers (no ground / folded fields) read as folded with no cleared ground = the 11-18 settlement-only rule
@@ -29,7 +29,7 @@ ok(canPlant(none, { tile: 't', x: 0, z: 0, biome: BIOME.woods, grounded: true, s
 
 // ── it links back to the garden: nothing to link to before the fold ──
 const pre = canPlant(none, at(0, 0, { folded: false }))
-ok(!pre.ok && /folded/.test(pre.why), `a keeper Greg has not folded a garden for cannot plant (${!pre.ok && pre.why})`)
+ok(!pre.ok && pre.why === PLANT_WHY.unfolded, `a keeper Greg has not folded a garden for cannot plant (${!pre.ok && pre.why})`)
 ok(!canPlant(none, at(0, 0, { folded: false, settlement: 's1' })).ok, 'not even inside a settlement before the fold')
 
 // ── the standing rules still apply on cleared ground ──

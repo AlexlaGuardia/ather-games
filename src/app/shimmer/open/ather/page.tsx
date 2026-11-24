@@ -117,6 +117,7 @@ import { liveSpirits, setKeeperAt, followIds } from './spirit-follow'
 import { inParty } from './spirit-party'   // M118 s1: party spirits walking with the keeper grow from her fights
 import { fightExp } from './spirit-stats'
 import { GROWTH, grownLine } from './spirit-growth'
+import { TRAIN_UI } from './training-lines'
 import { speciesOf } from './seed-items'
 import { SPECIES_NAMES } from '../../spirits/spirit'
 import { useMeleeReady, lastSwingAt, lastSwingAction } from './melee-view'
@@ -569,12 +570,12 @@ function AtherSliceGame() {
   const nodesRef0 = useRef<WildsNode[]>([]); nodesRef0.current = nodes   // M70 s1: Chamomile's ask aims at the nearest
   // each loaded tile's borders in its LOCAL coords (the minimap composes per tile; the fold map shows the tile you are in)
   const regionsByTile = useMemo(() => {
-    const m = new Map<string, { id: string; poly: { x: number; z: number }[]; infected: boolean; seen: boolean }[]>()
+    const m = new Map<string, { id: string; poly: { x: number; z: number }[]; state: AreaState }[]>()
     if (!ww) return m
     for (const name of ww.loaded.keys()) {
       const t = ww.byName.get(name)!, ox = t.tx * TILE_M, oz = t.ty * TILE_M
       const local = (nodesByTile.get(name) ?? []).map(n => ({ ...n, x: n.x - ox, z: n.z - oz }))
-      m.set(name, nodeRegions(local, TILE_M, TILE_M).map(r => { const s = areaState(smap, r.id, infectedSet.has(r.id)); return { ...r, infected: s === 'hollow', seen: s !== 'unseen' } }))   // M70 s2: the spread map's three states
+      m.set(name, nodeRegions(local, TILE_M, TILE_M).map(r => ({ ...r, state: areaState(smap, r.id, infectedSet.has(r.id)) })))   // M70 s2, M121 s2: the spread map's four states
     }
     return m
   }, [ww, wrev, nodesByTile, infectedSet, smap, smapTick]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -611,7 +612,7 @@ function AtherSliceGame() {
     const exp = evs.reduce((n, e) => n + (e.kind === 'hit' && e.killed ? GROWTH.KILL_EXP : e.kind === 'champ-down' ? GROWTH.CHAMP_EXP : 0), 0)
     if (exp > 0) {
       const beside = followIds().filter(inParty), grew = fightExp(beside, exp)
-      if (grew.length) { const pots = getPots(); setToast(grew.map(id => { const p = pots[id]; return grownLine(p ? SPECIES_NAMES[speciesOf(p.seed)] : 'Your spirit') }).join(' ')) }
+      if (grew.length) { const pots = getPots(); setToast(grew.map(id => { const p = pots[id]; return grownLine(p ? SPECIES_NAMES[speciesOf(p.seed)] : TRAIN_UI.unknown) }).join(' ')) }
     }
     for (const e of evs) {
       if (e.kind === 'pickup') { got += e.amount; sfx('pickup-grey-matter') }
@@ -1350,7 +1351,7 @@ function AtherSliceGame() {
   /** M71 s2: a bought waymark: into the bag first (a full bag refuses, nothing spent), then the garden's grey */
   const buyWaymark = (grey: number) => {
     const r = give(getInv(), 'waymark', 1); if (r.left) { hudSay('Your bag is full. Make room for the waymark.', 'info'); return false }
-    setInv(r.inv); const g = { ...gardenRef.current, grey }; setGarden(g); saveGarden(g); hudSay(`Waymark · in your bag. ${grey} grey matter left.`, 'item'); return true
+    setInv(r.inv); const g = { ...gardenRef.current, grey }; setGarden(g); saveGarden(g); hudSay(FOLD_TEXT.buyBag(grey), 'item'); return true
   }
   const talkStep = panel?.kind === 'talk' ? panel.step : -1
   const talkNode = useMemo(() => {

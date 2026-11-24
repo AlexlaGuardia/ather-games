@@ -8,8 +8,7 @@
 // gate opens (the page takes the keeper home).
 // ★ MIGRATION (hub hard rule): a keeper who already has a garden keeps it, untouched. glade-tutorial.ts › parseTut reads a save
 //   without the field as folded, legacyTut is folded, only freshTut (a newborn from M71 on) starts unfolded.
-// ★ PURE. Lines: no signed Beat 3 lines exist yet (the tutorial quest file's Gaps #6 lists Beat 3 as its own dispatch), so Greg's
-//   lines here are short neutral PLACEHOLDERS for @lark (FOLD_TEXT); the keeper's "Not yet." is the signed greg.b2.choice.wait.
+// ★ PURE. Lines: FOLD_TEXT is SIGNED (batch 11-24b › B3 + C); the keeper's "Not yet." is the signed greg.b2.choice.wait.
 import type { TalkNode } from '../shared/npc-talk'
 import { ANSWERS } from './greg-talk'
 import { line } from './glade-tutorial-lines'
@@ -44,17 +43,20 @@ export function tryFold(t: Tut, grey: number): FoldResult {
   return { ok: true, t: { ...t, folded: true }, grey: have - FOLD_COST }
 }
 
-/** @lark PLACEHOLDERS (unsigned, neutral). Swap when Beat 3 is scripted and signed. */
+/** ★ SIGNED by Alex 2026-11-24 (athernyx c1d5903): shimmer-lines-batch-2026-11-24b.md › B3 + C, MAIN word for word
+ *  (lines-batch-24b.test.ts reads the file; the prices are interpolated). Fix canon first, never here. */
 export const FOLD_TEXT = {
-  offer: `I can fold you a garden of your own, Keeper. It takes ${FOLD_COST} grey matter.`,
+  offer: `A garden of your own wants folding, Keeper, and that is my work. It takes ${FOLD_COST} grey matter.`,
   ask: `Fold my garden (${FOLD_COST} grey matter)`,
-  short: (have: number) => `That is not enough yet. You have ${have} grey matter, and it takes ${FOLD_COST}.`,
-  done: 'There. Your garden is folded, and its gate is open.',
+  short: (have: number) => `Not yet, Keeper. You have ${have} grey matter, and the fold takes ${FOLD_COST}.`,
+  done: 'There. Your garden is folded. Go on in, Keeper.',
   go: 'To my garden',
-  // M71 s2 waymarks (@lark placeholders)
-  buyAsk: `Buy a waymark (${WAYMARK_PRICE} grey matter)`,
-  buyShort: (have: number) => `Not yet. You have ${have} grey matter, and a waymark takes ${WAYMARK_PRICE}.`,
-  buyDone: 'Here. Bind it where the ground is yours, and it will lead you home.',
+  // M71 s2: Greg sells the reach
+  buyAsk: `Buy more reach (${WAYMARK_PRICE} grey matter)`,
+  buyShort: (have: number) => `Not yet. You have ${have} grey matter, and more reach takes ${WAYMARK_PRICE}.`,
+  buyDone: 'There, a waymark stone. Plant it on ground you cleared or in a kept settlement, and the reach is made.',
+  /** the HUD's bag line after a buy */
+  buyBag: (left: number) => `Waymark Stone · in your bag. ${left} grey matter left.`,
 } as const
 
 export type FoldStep = 'offer' | 'short' | 'done' | 'buyShort' | 'buyDone'
@@ -87,7 +89,7 @@ export function foldNode(t: Tut, step: FoldStep, act: FoldActs): TalkNode {
   return { line: FOLD_TEXT.offer, options: [ask, notYet] }
 }
 
-/** M71 s2: the 'Buy a waymark' answer (Greg's ordinary talk offers it to a folded keeper; foldNode repeats it). */
+/** M71 s2: the 'Buy more reach' answer (Greg's ordinary talk offers it to a folded keeper; foldNode repeats it). */
 export function buyPick(t: Tut, act: FoldActs): void {
   const r = tryBuyWaymark(t, act.grey())
   if (r.ok && act.buy?.(r.grey)) act.go('buyDone'); else if (!r.ok && r.why === 'grey') act.go('buyShort'); else act.go(null)

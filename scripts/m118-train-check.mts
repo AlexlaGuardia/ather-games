@@ -14,6 +14,7 @@ import { existsSync, readFileSync } from 'fs'
 import { BLOOM_MS } from '../src/app/shimmer/open/ather/spirit-seeds'
 import { SPECIES_BASE } from '../src/app/shimmer/open/ather/spirit-growth'
 import { TRAIN } from '../src/app/shimmer/open/ather/spirit-stats'
+import { TRAIN_UI } from '../src/app/shimmer/open/ather/training-lines'
 import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games')
@@ -92,7 +93,7 @@ try {
   ok(p1?.pool === TRAIN.pool - 3, `1 the old save loads: training points ${p1?.pool} of ${TRAIN.pool} (3 spent), no NaN: ${JSON.stringify(p1?.axes)}`)
   ok(!!pv && pv['data-train-on'] === '0' && pv['data-preview-stat'] === 'agi' && pv['data-preview-spend'] === '1' && Number(pv['data-preview-from']) === from && Number(pv['data-preview-to']) === from + 1 && Number(pv['data-preview-left']) === TRAIN.pool - 4,
     `1 the hurdle row: not allowed, previews one play ${JSON.stringify(pv)}`)
-  ok(!!p1 && /Training points/.test(p1.text) && new RegExp(`AGI ${from} → ${from + 1}`).test(p1.text), `1 the preview is in the panel's text ('AGI ${from} → ${from + 1}')`)
+  ok(!!p1 && [TRAIN_UI.header, TRAIN_UI.play(1, 'AGI', from, from + 1), TRAIN_UI.allow, TRAIN_UI.footer].every(w => p1.text.toLowerCase().includes(w.toLowerCase())), `1 the panel says the signed words: '${TRAIN_UI.header}', '${TRAIN_UI.play(1, 'AGI', from, from + 1)}', '${TRAIN_UI.allow}', '${TRAIN_UI.footer}'`)
   ok(allowedAfter === '1', `1 Allow tapped: the row reads allowed (${allowedAfter})`)
   ok(JSON.stringify(await p.evaluate(() => JSON.parse(localStorage.getItem('ather.trainAssign.v1') ?? '{}'))) === '{"hd-check":["vx-check"]}', '1 the assignment is saved (the Vulnyx only)')
   ok(!!p1 && !p1.overflow && p1.w <= 390, `1 the panel fits 390 wide (${p1?.w.toFixed(0)} px)`)

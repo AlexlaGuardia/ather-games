@@ -82,7 +82,7 @@ try {
     g = await greg()
     ok(g.line === FOLD_TEXT.offer && g.opts[0] === FOLD_TEXT.ask, `A. at the fold beat Greg offers the fold ('${g.line}' / ${g.opts.join(' / ')})`)
     await pick(FOLD_TEXT.ask); await sleep(800)
-    g = { line: (await (async () => { await poll(async () => (await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')).includes('not enough'), 6000); return p.evaluate(() => { const b = document.querySelector('[data-talk-bubble]'); const sc = b?.querySelector('[data-talk-scene]')?.textContent ?? ''; return (b?.firstElementChild?.textContent ?? '').slice(sc.length) }) })()) ?? '', opts: [] }
+    g = { line: (await (async () => { await poll(async () => (await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')).includes(FOLD_TEXT.short(60)), 6000); return p.evaluate(() => { const b = document.querySelector('[data-talk-bubble]'); const sc = b?.querySelector('[data-talk-scene]')?.textContent ?? ''; return (b?.firstElementChild?.textContent ?? '').slice(sc.length) }) })()) ?? '', opts: [] }
     ok(g.line === FOLD_TEXT.short(60), `A. at 60 grey matter Greg refuses with the reason ('${g.line}')`)
     t = await store('open.tutorial.v1'); let gd = await store('ather.garden.v1')
     ok(t?.folded === false && gd?.grey === 60, `A. refused: nothing spent (grey ${gd?.grey}), still unfolded`)
@@ -91,7 +91,7 @@ try {
     await A('grant', 70); await sleep(500)
     gd = await store('ather.garden.v1'); const before = gd?.grey
     g = await greg(); await pick(FOLD_TEXT.ask)
-    ok(await poll(async () => (await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')).includes(FOLD_TEXT.done.slice(0, 12)), 8000), 'A. at 130 the fold goes through')
+    ok(await poll(async () => (await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')).includes(FOLD_TEXT.done), 8000), 'A. at 130 the fold goes through')
     t = await store('open.tutorial.v1'); gd = await store('ather.garden.v1')
     ok(before === 130 && gd?.grey === before - FOLD_COST, `A. grey matter ${before} -> ${gd?.grey}: exactly ${FOLD_COST} spent`)
     ok(t?.folded === true, 'A. the folded flag is saved')

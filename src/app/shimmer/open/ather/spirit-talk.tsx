@@ -13,6 +13,7 @@ import { StatRadar } from './moglin-card-view'
 import { SpiritAvatar } from './spirit-model'
 import { spiritModelFor } from './spirit-models'
 import { spiritSheet } from './spirit-sheet'
+import { TRAIN_UI } from './training-lines'   // M129: the SIGNED words (batch 11-24b)
 import { GROWTH_LABEL } from './spirit-growth'   // M118 s1: the growth bar's label
 import { loadStats, subscribeStats, previewPlay, poolLeft, TRAIN } from './spirit-stats'   // M110 s1: her trained stats; M118 s2: the pool + preview
 import { loadAssign, mayUse, setAssign, subscribeAssign } from './train-assign'   // M118 s2: the keeper assigns pieces
@@ -104,9 +105,8 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
         </div>
         {train && (
           <div data-spirit-training data-pool-left={train.left} data-pool={TRAIN.pool} className="mt-3">
-            {/* M118 s2: words are PLACEHOLDERS for @lark */}
             <div className="mb-1.5 text-[13px] font-bold flex" style={{ color: H.inkSoft }}>
-              <span>Training points</span><span className="ml-auto tabular-nums">{train.left} / {TRAIN.pool}</span></div>
+              <span>{TRAIN_UI.header}</span><span className="ml-auto tabular-nums">{train.left} / {TRAIN.pool}</span></div>
             {train.pieces.length ? (
               <div style={{ display: 'grid', gap: 4 }}>
                 {train.pieces.map(t => (
@@ -115,15 +115,15 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
                     className="rounded-[8px] px-2.5 py-1.5 flex items-center gap-2 text-[13px]" style={{ background: 'rgba(255,250,240,.6)', boxShadow: 'inset 0 0 0 1px rgba(58,39,22,.14)' }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 700, color: H.ink }}>{t.name}</div>
-                      <div style={{ color: H.inkFaint, fontSize: 12 }}>{t.pv.why === 'ok' ? `One play: ${t.pv.spend} point, ${SHEET_LABEL[t.pv.stat]} ${t.pv.from} → ${t.pv.to}` : t.pv.why === 'cap' ? `${SHEET_LABEL[t.pv.stat]} at its limit` : 'No points left'}</div>
+                      <div style={{ color: H.inkFaint, fontSize: 12 }}>{t.pv.why === 'ok' ? TRAIN_UI.play(t.pv.spend, SHEET_LABEL[t.pv.stat], t.pv.from, t.pv.to) : t.pv.why === 'cap' ? TRAIN_UI.cap(SHEET_LABEL[t.pv.stat]) : TRAIN_UI.empty}</div>
                     </div>
                     <button data-train-toggle={t.id} onClick={() => setAssign(t.id, id!, !t.on)} className="ml-auto rounded-[6px] px-2.5 py-1 text-[12px] font-bold"
-                      style={{ minHeight: 32, whiteSpace: 'nowrap', background: t.on ? H.ember : 'rgba(58,39,22,.08)', color: t.on ? '#fff' : H.ink }}>{t.on ? 'Allowed' : 'Allow'}</button>
+                      style={{ minHeight: 32, whiteSpace: 'nowrap', background: t.on ? H.ember : 'rgba(58,39,22,.08)', color: t.on ? '#fff' : H.ink }}>{t.on ? TRAIN_UI.allowed : TRAIN_UI.allow}</button>
                   </div>
                 ))}
-                <div className="text-[12px] italic" style={{ color: H.inkFaint }}>Points spent stay spent.</div>
+                <div className="text-[12px] italic" style={{ color: H.inkFaint }}>{TRAIN_UI.footer}</div>
               </div>
-            ) : <div data-spirit-training-empty className="text-[13px] italic" style={{ color: H.inkFaint }}>no training pieces on the plot</div>}
+            ) : <div data-spirit-training-empty className="text-[13px] italic" style={{ color: H.inkFaint }}>{TRAIN_UI.none}</div>}
           </div>
         )}
         <div className="mt-3 mb-1.5 text-[13px] font-bold" style={{ color: H.inkSoft }}>Moves</div>

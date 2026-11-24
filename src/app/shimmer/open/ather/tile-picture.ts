@@ -8,9 +8,10 @@ import { ATHER_CLOUD, drawCloud } from '../../ui/map-kit'
 import { FOG_CELL, cellOrigin, type Fog } from './explored'
 import { GREG_WAYMARK, type Waymark } from './waymarks'
 import type { Wilds } from './wilds'
+import { STATE_LOOK, type AreaState } from './spread-map'
 
-/** M70 s2: `infected` = reads Hollow ground on the spread map; `seen` false = Unseen (not drawn); absent = seen */
-export type Region = { id: string; poly: { x: number; z: number }[]; infected: boolean; seen?: boolean }
+/** `state` = what it reads on the spread map (M121 s2: four states; Unseen is not drawn) */
+export type Region = { id: string; poly: { x: number; z: number }[]; state: AreaState }
 
 // ── SETTLEMENTS on the maps (BETA M19): the scene hands the network's settlements over once it has them (network-scene.tsx);
 // both maps compose through here, so the minimap and the fold map show them alike. World coords; a tile draws its own.
@@ -30,11 +31,11 @@ export function composeTilePicture(c: HTMLCanvasElement, W: Wilds, o: {
   if (plate) ctx.drawImage(plate, 0, 0, N, N); else { ctx.fillStyle = '#c3d8a0'; ctx.fillRect(0, 0, N, N) }   // a plain meadow until the plate lands
   const P = (x: number, z: number): [number, number] => [(x + sx / 2) * k, (z + sz / 2) * (N / sz)]
   if (o.regions.length > 1) for (const r of o.regions) {
-    if (r.seen === false) continue   // M70 s2: Unseen = the plain map
+    if (r.state === 'unseen') continue   // M70 s2: Unseen = the plain map
     ctx.beginPath(); r.poly.forEach((p, i) => { const [x, y] = P(p.x, p.z); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y) }); ctx.closePath()
-    ctx.fillStyle = r.infected ? 'rgba(70,72,78,0.32)' : 'rgba(159,210,122,0.12)'; ctx.fill()
-    ctx.setLineDash(r.infected ? [10 * k, 7 * k] : []); ctx.lineWidth = Math.max(1.2, 3 * k)
-    ctx.strokeStyle = r.infected ? 'rgba(235,238,242,0.9)' : 'rgba(159,210,122,0.85)'; ctx.stroke()
+    const look = STATE_LOOK[r.state]; ctx.fillStyle = look.fill; ctx.fill()
+    ctx.setLineDash(look.dash ? look.dash.map(d => d * Math.max(k, 0.4)) : []); ctx.lineWidth = Math.max(1.2, 3 * k)
+    ctx.strokeStyle = look.line; ctx.stroke()
   }
   ctx.setLineDash([])
   if (o.fog) {

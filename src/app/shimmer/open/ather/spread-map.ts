@@ -1,10 +1,12 @@
 // ── THE SPREAD MAP (BETA M70 s2; plan docs/tutorial-cluster.md › The first settlement) ──────────────────────────────────────
 // Canon: CANON/game/shimmer-quest-glade-tutorial.md › "the spread, as the player sees it" (SIGNED, Alex 11-22): three states on
-// the map, legend "Unseen · Clear · Hollow ground"; toasts spread.hud.grow / spread.hud.clear; spread.map.first = Chamomile's
+// the map (M121 s2: FOUR, "Unseen · Charted · Clear · Hollow ground", batch 11-24d SIGNED by Alex, athernyx addf90b); toasts spread.hud.grow / spread.hud.clear; spread.map.first = Chamomile's
 // line the first time the spread map is uncovered.
 // Build (Jin's): a SECTION is a node's region (nodes.ts nodeRegions). It reads
 //   · UNSEEN until the keeper stands in it (uncover),
-//   · CLEAR from then on, until the grey takes it,
+//   · CHARTED from then on while it has never been cleared (M121 s2: neither Clear nor infected, the map's word only: the fights
+//     there and the roll below are what they were),
+//   · CLEAR once its champion went down (the ledger's `clean`), until the grey takes it,
 //   · HOLLOW GROUND once the grey took it (`grey`), until its champion goes down (`tend`).
 // M121 (Alex 11-24): how the grey takes a section is CHANCE. Every game day each discovered section rolls
 // SECTION_RULE.chancePerDay on a hash of (save seed, day, section). This REPLACES two rules: M70 s2's neglect timer (an
@@ -30,7 +32,17 @@ export const SECTION_RULE = {
 }
 /** M70 s2's neglect age: only read to migrate a pre-M121 save to the states it showed */
 export const PRE_M121_GROW_MS = 2 * GAME_DAY_MS
-export type AreaState = 'unseen' | 'clear' | 'hollow'
+/** M121 s2: the four states in the legend's order, their SIGNED words (batch 11-24d, word for word: lines-batch-24b.test.ts), and
+ *  the one look both maps and the legend draw them with (Unseen = the plain map, not drawn). */
+export const AREA_STATES = ['unseen', 'charted', 'clear', 'hollow'] as const
+export type AreaState = (typeof AREA_STATES)[number]
+export const STATE_WORD: Record<AreaState, string> = { unseen: 'Unseen', charted: 'Charted', clear: 'Clear', hollow: 'Hollow ground' }
+export const STATE_LOOK: Record<AreaState, { fill: string; line: string; dash: readonly [number, number] | null }> = {
+  unseen: { fill: 'rgba(195,216,160,0.6)', line: 'rgba(120,120,120,0.5)', dash: null },   // the legend's swatch only
+  charted: { fill: 'rgba(226,186,104,0.20)', line: 'rgba(240,205,130,0.9)', dash: [3, 5] },
+  clear: { fill: 'rgba(159,210,122,0.12)', line: 'rgba(159,210,122,0.85)', dash: null },
+  hollow: { fill: 'rgba(70,72,78,0.36)', line: 'rgba(235,238,242,0.9)', dash: [10, 7] },
+}
 /** `rule` is absent on a pre-M121 save until startRule() ran. `day` = the last game day rolled; `since` = when the rule began here
  *  (the grace clock of a section cleared before it was on the map). */
 export interface SpreadMap { v: 1; seen: Record<string, number>; first: boolean; grey: Record<string, number>; rule?: { seed: number; day: number; since: number } }
@@ -39,7 +51,8 @@ export const dayOf = (t: number) => Math.floor(t / GAME_DAY_MS)
 
 export function areaState(m: SpreadMap, id: string, infected: boolean): AreaState {
   if (m.seen[id] === undefined) return 'unseen'
-  return infected && m.grey[id] !== undefined ? 'hollow' : 'clear'
+  if (!infected) return 'clear'
+  return m.grey[id] !== undefined ? 'hollow' : 'charted'
 }
 /** the keeper stood in it: uncovered (never re-stamps: walking through does not tend ground) */
 export const uncover = (m: SpreadMap, id: string, now: number): SpreadMap => (id in m.seen ? m : { ...m, seen: { ...m.seen, [id]: now } })
@@ -94,13 +107,13 @@ export function changes(prev: Readonly<Record<string, AreaState>>, next: Readonl
   const grew: string[] = [], cleared: string[] = []
   for (const [id, s] of Object.entries(next)) {
     const p = prev[id]
-    if (p === 'clear' && s === 'hollow') grew.push(id)
-    if (p === 'hollow' && s === 'clear') cleared.push(id)
+    if ((p === 'clear' || p === 'charted') && s === 'hollow') grew.push(id)
+    if ((p === 'hollow' || p === 'charted') && s === 'clear') cleared.push(id)
   }
   return { grew, cleared }
 }
 /** the signed lines */
-export const LEGEND = (): string[] => line('spread.map.legend').split(' · ')
+export const LEGEND = (): string[] => AREA_STATES.map(s => STATE_WORD[s])
 export const growLine = (place: string) => line('spread.hud.grow').replace('{PLACE}', place)
 export const clearLine = () => line('spread.hud.clear')
 export const firstLine = () => line('spread.map.first')

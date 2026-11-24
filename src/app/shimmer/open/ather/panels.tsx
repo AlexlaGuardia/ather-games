@@ -8,9 +8,9 @@ import { useEffect, useRef } from 'react'
 import { tileCentreWorld, type Wilds } from './wilds'
 import { atherPlate } from './plate'
 import { composeTilePicture, type Region } from './tile-picture'
-import { LEGEND } from './spread-map'   // M70 s2
+import { AREA_STATES, STATE_LOOK, STATE_WORD } from './spread-map'   // M70 s2, M121 s2
 import { TILE_M, type WildsWorld } from './wilds-world'
-import { GREG_WAYMARK, MAX_WAYMARKS, isLit, UNLIT_LABEL, type Waymark } from './waymarks'
+import { GREG_WAYMARK, MAX_WAYMARKS, isLit, UNLIT_LABEL, PLANT_HINT, type Waymark } from './waymarks'
 import { BIOME_NAME } from './wilds'
 import { cellOrigin, FOG_CELL, walkedShare, isRevealed, type Fog } from './explored'
 import { drawCloud, ATHER_CLOUD } from '../../ui/map-kit'
@@ -98,7 +98,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWild
   /** Infected nodes still welling on this tile: grey blots, not stops (you walk to a fight). */
   nodes?: { id: string; x: number; z: number }[]
   /** Each node's country (tile metres) and whether it is still infected: the borders Alex asked for (11-15). */
-  regions?: { id: string; poly: { x: number; z: number }[]; infected: boolean; seen?: boolean }[]
+  regions?: Region[]
   /** THE STREAMED WILDS (Alex 11-15): show your tile and its neighbours (3 km round the centre of your tile) instead
    *  of the one tile. Positions in WORLD coords; the single-tile props above are then unused for the picture. */
   area?: { world: WildsWorld; regionsByTile: Map<string, Region[]>; cx: number; cz: number; tileOff: { x: number; z: number }
@@ -157,10 +157,10 @@ export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWild
               ))}
               {regions.length > 1 && (
                 <svg viewBox={`${-sx / 2} ${-sz / 2} ${sx} ${sz}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-                  {regions.filter(r => r.seen !== false).map(r => (   // M70 s2: Unseen areas stay the plain map
+                  {regions.filter(r => r.state !== 'unseen').map(r => (   // M70 s2: Unseen areas stay the plain map
                     <polygon key={r.id} points={r.poly.map(p => `${p.x},${p.z}`).join(' ')} vectorEffect="non-scaling-stroke"
-                      fill={r.infected ? 'rgba(70,72,78,0.42)' : 'rgba(159,210,122,0.10)'}
-                      stroke={r.infected ? 'rgba(225,228,232,0.85)' : 'rgba(159,210,122,0.75)'} strokeWidth={2} strokeDasharray={r.infected ? '7 5' : undefined} strokeLinejoin="round" />
+                      data-area-state={r.state} fill={STATE_LOOK[r.state].fill}
+                      stroke={STATE_LOOK[r.state].line} strokeWidth={2} strokeDasharray={STATE_LOOK[r.state].dash?.join(' ')} strokeLinejoin="round" />
                   ))}
                 </svg>
               )}
@@ -174,12 +174,12 @@ export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWild
               {stop("Gregory's waymark", 'the Wilds · meadow', { kind: 'waymark', w: GREG_WAYMARK }, '#e7c766')}
               {regions.length > 1 && (
                 <div data-spread-legend style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 11, opacity: 0.8, margin: '2px 0 4px' }}>
-                  {/* M70 s2: the signed legend, word for word (spread.map.legend), one swatch per word */}
-                  {LEGEND().map((w, k) => <span key={w}>{k > 0 ? ' · ' : ''}<span style={{ display: 'inline-block', width: 10, height: 10, marginRight: 4, verticalAlign: -1, background: k === 0 ? 'rgba(195,216,160,0.6)' : k === 1 ? 'rgba(159,210,122,0.2)' : 'rgba(70,72,78,0.8)', outline: k === 0 ? '1px solid rgba(120,120,120,0.5)' : k === 1 ? '1px solid rgba(159,210,122,0.75)' : '1px dashed rgba(225,228,232,0.85)' }} />{w}</span>)}
+                  {/* M70 s2, M121 s2: the signed legend, word for word (batch 11-24d), one swatch per state in that state's own map look */}
+                  {AREA_STATES.map((s, k) => { const L = STATE_LOOK[s]; return <span key={s} data-legend-state={s}>{k > 0 ? ' · ' : ''}<span style={{ display: 'inline-block', width: 11, height: 11, marginRight: 4, verticalAlign: -1, background: `linear-gradient(${L.fill}, ${L.fill}), #c3d8a0`, border: `1.5px ${L.dash ? (L.dash[0] < 5 ? 'dotted' : 'dashed') : 'solid'} ${L.line}` }} />{STATE_WORD[s]}</span> })}
                 </div>
               )}
               {waymarks.map((w, k) => { const on = lit(w); return stop(`Waymark ${k + 1}`, `the Wilds · ${BIOME_NAME[w.biome]}${on ? '' : ` · ${UNLIT_LABEL}`}`, { kind: 'waymark', w }, on ? '#6fd3c4' : '#5c6066', { 'data-waymark-stop': w.id, 'data-lit': on ? '1' : '0' }) })}
-              <div style={{ opacity: 0.6, fontSize: 11, marginTop: 6 }}>{waymarks.length} / {MAX_WAYMARKS} waymarks. Plant one on ground you cleared, or inside a settlement.</div>
+              <div style={{ opacity: 0.6, fontSize: 11, marginTop: 6 }}>{waymarks.length} / {MAX_WAYMARKS} waymarks. {PLANT_HINT}</div>
               {fog && W && (() => { const c = tileCentreWorld(W.meta); return <div style={{ opacity: 0.6, fontSize: 11 }}>Walked: {Math.round(walkedShare(fog, c.x - sx / 2, c.z - sz / 2, c.x + sx / 2, c.z + sz / 2) * 100)}% of this country</div> })()}
             </div>
           </div>
