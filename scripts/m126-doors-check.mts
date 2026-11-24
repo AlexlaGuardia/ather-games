@@ -4,7 +4,7 @@
 //  1 boot: all four beside the keeper (they follow since before they were drawn).  2 in through the door: all four inside, the spirits
 //  on the raised floor.  3 out again: all four beside the keeper, on the ground.  4 nobody in a wall on any frame's step.
 //  5 out of the plot by the path to the Green's gate: all four there.  6 back on the plot: all four there.
-//  7 no jump: no frame's step faster than 13 m/s (the walk's cap is 9; a slow frame's clock is coarse).  8 0 page errors.
+//  7 no jump: no 3 frames faster than 13 m/s (the walk's cap is 9) and no one frame past 2.4 m (9 m/s x the 0.25 s a frame may cover).  8 0 page errors.
 //   npx tsx scripts/m126-doors-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
@@ -43,10 +43,12 @@ try {
   // settle: up to `s` seconds for everyone to come (a slow phone), then the read
   const settle = async (good: (r: Awaited<ReturnType<typeof read>>) => boolean, s = 25) => { let r = await read(); for (let i = 0; i < s * 2 && !good(r); i++) { await sleep(500); r = await read() } return r }
   { const r = await read(); ok(near(r), `1. boot: beside the keeper (${say(r)})`) }
-  await p.evaluate((walls: any) => { const w = window as any, D = w.__m126d = { wall: [] as string[], maxV: 0, at: '' }; let prev: any = null, t0 = performance.now()
-    const tick = (now: number) => { const dt = (now - t0) / 1000; t0 = now; const f = w.__formation
+  await p.evaluate((walls: any) => { const w = window as any, D = w.__m126d = { wall: [] as string[], maxV: 0, maxM: 0, at: '' }; let prev: any = null, t0 = performance.now()
+    let hist: any[] = []   // speed over 3 frames on the page's own clock: the game's frame time and one frame's stamp differ by up to a frame on a software GPU
+    const tick = () => { const now = performance.now(); t0 = now; const f = w.__formation; if (w.__m126skip) hist = []
+      const h0 = hist.length >= 3 ? hist[hist.length - 3] : null, dt = h0 ? (now - h0.t) / 1000 : 9; if (f) hist.push({ t: now, pos: JSON.parse(JSON.stringify(f.pos)) }); if (hist.length > 4) hist.shift()
       if (f && prev && !w.__m126skip) for (const id of Object.keys(f.pos)) { const a = prev[id], b = f.pos[id]; if (!a) continue
-        const m = Math.hypot(b.x - a.x, b.z - a.z), v = m / Math.max(dt, 0.016); if (m > 0.3 && v > D.maxV) { D.maxV = v; D.at = `${id} ${m.toFixed(1)} m in ${dt.toFixed(2)} s at ${b.x.toFixed(1)},${b.z.toFixed(1)}` }
+        const m3 = h0?.pos[id] ? Math.hypot(b.x - h0.pos[id].x, b.z - h0.pos[id].z) : 0, m = Math.hypot(b.x - a.x, b.z - a.z), v = m3 / Math.max(dt, 0.016); if (m > D.maxM) D.maxM = m; if (m3 > 0.3 && v > D.maxV) { D.maxV = v; D.at = `${id} ${m.toFixed(1)} m in ${dt.toFixed(2)} s at ${b.x.toFixed(1)},${b.z.toFixed(1)}` }
         for (let s = 1; s <= 12; s++) { const x = a.x + (b.x - a.x) * s / 12, z = a.z + (b.z - a.z) * s / 12; if (walls.some((q: any) => x > q.x0 && x < q.x1 && z > q.z0 && z < q.z1)) { D.wall.push(`${id} ${x.toFixed(2)},${z.toFixed(2)}`); break } } }
       prev = f ? JSON.parse(JSON.stringify(f.pos)) : null; requestAnimationFrame(tick) }
     requestAnimationFrame(tick) }, SOLID)
@@ -72,6 +74,6 @@ try {
   { const r = await settle(r => near(r)); ok(near(r) && r.k.x < -160, `5. out of the plot at the gate, all four (keeper ${r.k.x.toFixed(0)},${r.k.z.toFixed(0)}; ${say(r)}; ${r.layout})`); await p.screenshot({ path: `${out}/gate.png` }).catch(() => {}) }
   for (const [x, z] of [...way].reverse()) await go(x, z); await go(THRESHOLD.x, THRESHOLD.z)
   { const r = await settle(r => near(r)); ok(near(r) && r.k.x > -145, `6. back on the plot, all four (keeper ${r.k.x.toFixed(0)},${r.k.z.toFixed(0)}; ${say(r)})`) }
-  const D = await p.evaluate(() => (window as any).__m126d); ok(D.maxV < 13, `7. no jump (fastest ${D.maxV.toFixed(1)} m/s: ${D.at})`); ok(errs.length === 0, `8. 0 page errors ${errs.slice(0, 3).join(' | ')}`)
+  const D = await p.evaluate(() => (window as any).__m126d); ok(D.maxV < 13 && D.maxM < 2.4, `7. no jump (longest frame ${D.maxM.toFixed(2)} m, the walk's cap is 2.25; fastest ${D.maxV.toFixed(1)} m/s: ${D.at})`); ok(errs.length === 0, `8. 0 page errors ${errs.slice(0, 3).join(' | ')}`)
 } catch (e) { ok(false, `crashed: ${String(e).slice(0, 300)}`) }
 await br.close(); console.log(fails ? `${fails} FAIL` : 'ALL PASS'); process.exit(fails ? 1 : 0)
