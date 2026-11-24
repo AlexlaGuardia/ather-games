@@ -4,7 +4,7 @@
 //   2. hit sphere unchanged: a round 0.42 m off its middle hits, 0.62 m off misses
 //   3. fighting for real: the wings move in a zip, and hold still between zips
 //   4. before EACH of two bursts the tell pose is fully drawn (wings up, the tail curled under) at the first shot
-//   5. stills: zip, hold, tell (the sim pinned in that state 7 m ahead of the camera, so the shot is of that state)
+//   5. stills: zip, hold, tell (the sim pinned in that state 6 m (and 14 m) ahead of the camera, so the shot is of that state)
 //   6. 390x844, 0 page errors
 //   npx tsx scripts/m120-flit-look-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
@@ -81,16 +81,17 @@ try {
     ok(R.hold.length >= 4 && r(R.hold) < 0.2, `   and are held still in the hold (${r(R.hold).toFixed(2)} m, ${R.hold.length} frames)`)
     ok(R.bursts.length >= 2 && R.bursts.every((b: any) => b.tell > 0.95 && b.lift > 1), `4. the tell pose is fully drawn at the first shot of each burst (${R.bursts.map((b: any) => b.tell.toFixed(2)).join(', ')})`)
     ok(R.bursts.length >= 2 && R.bursts.every((b: any) => b.tailZ > R.holdTail + 0.25), `   the tail curled under toward the keeper (z ${R.bursts.map((b: any) => b.tailZ.toFixed(2)).join(', ')}; hold ${R.holdTail?.toFixed(2)})`) }
-  // ── 5. stills ──
-  for (const st of ['zip', 'hold', 'tell'] as const) {
-    const [hx, hz] = ahead(5), [tx, tz] = ahead(5, 8)
+  // ── 5. stills ──  (the creator opens over the Wilds on a fresh profile: close it, or the still shows the panel, not the Flit)
+  ok(await poll(async () => p.evaluate(() => { const b = document.querySelector<HTMLElement>('[data-creator-done]') ?? [...document.querySelectorAll('button')].find(q => /^looks good$/i.test(q.innerText.trim())); b?.click(); return !b }), 15000), '   nothing covers the view'); await sleep(2000)
+  for (const [st, dist, tag] of [['zip', 6, ''], ['hold', 6, ''], ['tell', 6, ''], ['hold', 14, '-14m'], ['tell', 14, '-14m']] as const) {
+    const [hx, hz] = ahead(dist), [tx, tz] = ahead(dist, 8)
     await C(`C.hollows.length = 0; C.spits.length = 0; const h = ${body(hx, hz, s.y + 2.1)}; C.hollows.push(h); window.__pin = h; const k = () => { if (window.__pin !== h) return; h.x = ${hx}; h.z = ${hz}; h.y = ${s.y + 2.1}
       ${st === 'zip' ? `h.state = 'chase'; h.zips = 2; h.t = 0.9; h.zx = ${tx}; h.zz = ${tz}` : st === 'hold' ? `h.state = 'chase'; h.zips = 2; h.t = 0.9; h.zx = h.zz = undefined` : `h.state = 'charge'; h.shots = 3; h.t = 0.25`}
       requestAnimationFrame(k) }; k()`)
     await frames(25); const P = await C('return A.flit?.(window.__pin.id) ?? null')
     console.log(`   still ${st}: zip ${P?.zip?.toFixed(2)} tell ${P?.tell?.toFixed(2)} wing lift ${P?.lift?.toFixed(2)} drawn ${P?.drawn}`)
-    ok(!!P && (st === 'zip' ? P.zip > 0.8 : st === 'hold' ? P.zip < 0.1 && P.tell < 0.1 : P.tell > 0.95), `5. ${st} still is of the ${st} pose`)
-    await p.screenshot({ path: `${out}/flit-${st}.png` })
+    ok(!!P && (st === 'zip' ? P.zip > 0.8 : st === 'hold' ? P.zip < 0.1 && P.tell < 0.1 : P.tell > 0.95), `5. ${st}${tag} still is of the ${st} pose`)
+    await p.screenshot({ path: `${out}/flit-${st}${tag}.png` })
   }
   await C('window.__pin = null; C.hollows.length = 0')
   ok(errs.length === 0, `6. 390x844, 0 page errors${errs.length ? `: ${errs.join(' | ')}` : ''}`)
