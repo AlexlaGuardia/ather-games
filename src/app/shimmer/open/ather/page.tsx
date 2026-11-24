@@ -126,6 +126,7 @@ import { CombatLayer, type CombatHud, type SightLink } from './combat-layer'
 import type { CombatEvent, Terrain } from './combat'
 import { ownerOf, nodeRegions, GAME_DAY_MS, SUB, type WildsNode } from './nodes'
 import { advance, clearAt, loadSpread, saveSpread, loadSkew, saveSkew, type SpreadState, type SpreadEvent } from './spread'
+import { loadMap, saveMap, areaState, uncover, tend, firstLook, changes, growLine, clearLine, firstLine, type SpreadMap, type AreaState } from './spread-map'   // M70 s2
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey, touch } from '../shared/touch'
 import { useMenuLock } from '../shared/menu-lock'
@@ -532,19 +533,48 @@ function AtherSliceGame() {
   const nearNodes = useMemo(() => { const p = pos.current; return nodes.filter(n => Math.abs(n.x - p.x) < 450 && Math.abs(n.z - p.z) < 450) }, [nodes, nearKey]) // eslint-disable-line react-hooks/exhaustive-deps
   // the countries on the fold map, and which one the keeper stands in (HUD), off the same nearest-node rule
   const infectedSet = useMemo(() => new Set(nodes.map(n => n.id)), [nodes])
+  // M70 s2: THE SPREAD MAP (spread-map.ts): uncovered areas + their neglect clock; ticks every 4 s (uncover where you stand,
+  // grow toasts for watched areas that turned Hollow ground). The first read after a load only records (no toast on reload).
+  const [smap, setSmapState] = useState<SpreadMap>(() => (typeof window === 'undefined' ? { v: 1, seen: {}, first: false } : loadMap()))
+  const smapRef = useRef(smap); smapRef.current = smap
+  const setSmap = (m: SpreadMap) => { if (m === smapRef.current) return; smapRef.current = m; saveMap(m); setSmapState(m) }
+  const [smapTick, setSmapTick] = useState(0)
+  const smapPrev = useRef<Record<string, AreaState> | null>(null)
   const nodesRef0 = useRef<WildsNode[]>([]); nodesRef0.current = nodes   // M70 s1: Chamomile's ask aims at the nearest
   // each loaded tile's borders in its LOCAL coords (the minimap composes per tile; the fold map shows the tile you are in)
   const regionsByTile = useMemo(() => {
-    const m = new Map<string, { id: string; poly: { x: number; z: number }[]; infected: boolean }[]>()
+    const m = new Map<string, { id: string; poly: { x: number; z: number }[]; infected: boolean; seen: boolean }[]>()
     if (!ww) return m
+    const now = clock()
     for (const name of ww.loaded.keys()) {
       const t = ww.byName.get(name)!, ox = t.tx * TILE_M, oz = t.ty * TILE_M
       const local = (nodesByTile.get(name) ?? []).map(n => ({ ...n, x: n.x - ox, z: n.z - oz }))
-      m.set(name, nodeRegions(local, TILE_M, TILE_M).map(r => ({ ...r, infected: infectedSet.has(r.id) })))
+      m.set(name, nodeRegions(local, TILE_M, TILE_M).map(r => { const s = areaState(smap, r.id, infectedSet.has(r.id), now); return { ...r, infected: s === 'hollow', seen: s !== 'unseen' } }))   // M70 s2: the spread map's three states
     }
     return m
-  }, [ww, wrev, nodesByTile, infectedSet]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ww, wrev, nodesByTile, infectedSet, smap, smapTick]) // eslint-disable-line react-hooks/exhaustive-deps
   const regions = regionsByTile.get(hereTile) ?? []
+  useEffect(() => {   // M70 s2: the spread map's tick
+    if (zone.kind !== 'wilds' || !ww || !nodeOwner) return
+    const placeOf = (id: string) => { const n = allNodes.find(x => x.id === id); return n ? ZONE_NAME[zonesOf(ww, n.tile)(n.i, n.j)] : 'the Wilds' }
+    const tick = () => {
+      const p = pos.current, here = nodeOwner(p.x, p.z), now = clock()
+      if (here) setSmap(uncover(smapRef.current, here, now))
+      const m = smapRef.current, next: Record<string, AreaState> = {}
+      for (const id of Object.keys(m.seen)) next[id] = areaState(m, id, infectedSet.has(id), now)
+      if (smapPrev.current) { const c = changes(smapPrev.current, next); if (c.grew.length) hudSay(growLine(placeOf(c.grew[0])), 'info', 6); else if (c.cleared.length) hudSay(clearLine(), 'info', 4) }
+      const moved = !smapPrev.current || Object.keys(next).some(k => smapPrev.current![k] !== next[k])
+      smapPrev.current = next
+      if (moved) setSmapTick(k => k + 1)   // the regions re-tint only when a state moved
+    }
+    ;(window as unknown as { __spreadMap?: unknown }).__spreadMap = () => ({ first: smapRef.current.first, seen: Object.keys(smapRef.current.seen), here: nodeOwner(pos.current.x, pos.current.z) ?? null,
+      state: (id: string) => areaState(smapRef.current, id, infectedSet.has(id), clock()), place: placeOf })   // checks read it (m70-spread-check)
+    tick(); const id = setInterval(tick, 4000); return () => clearInterval(id)
+  }, [zone.kind, ww, nodeOwner, infectedSet, allNodes]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {   // M70 s2: spread.map.first, Chamomile's line the first time the spread map is opened with ground uncovered (once)
+    if (panel?.kind !== 'map') return
+    const f = firstLook(smapRef.current); if (f.fire) { setSmap(f.m); hudSay(`Chamomile: ${firstLine()}`, 'info', 7) }
+  }, [panel?.kind]) // eslint-disable-line react-hooks/exhaustive-deps
   const hereOff = useMemo(() => { const t = ww?.byName.get(hereTile); return t ? { x: t.tx * TILE_M, z: t.ty * TILE_M } : { x: 0, z: 0 } }, [ww, hereTile])
   const groundRef = useRef<(x: number, z: number) => string | null>(() => null)
   groundRef.current = (x, z) => { const id = nodeOwner?.(x, z); return id ? (nodes.some(n => n.id === id) ? 'infected ground' : 'cleared ground') : null }
@@ -559,6 +589,7 @@ function AtherSliceGame() {
       if (e.kind === 'champ-down') {
         setToast('The grey thins here. For now.')
         { const t0 = loadTut(), t1 = m70Down(t0, e.nodeId); if (t1 !== t0) saveTut(t1) }   // M70 s1: Lamps Out's big one
+        { const m = tend(smapRef.current, e.nodeId, clock()); setSmap(m); smapPrev.current = smapPrev.current && { ...smapPrev.current, [e.nodeId]: 'clear' }; hudSay(clearLine(), 'info', 4) }   // M70 s2: its area reads Clear
         const cur = spreadRef.current
         if (cur) { const r = clearAt(cur, allNodes, e.nodeId, clock()); saveSpread(r.s); setSpread(r.s) }
       }

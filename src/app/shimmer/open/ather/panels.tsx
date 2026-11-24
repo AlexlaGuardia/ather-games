@@ -8,6 +8,7 @@ import { useEffect, useRef } from 'react'
 import { tileCentreWorld, type Wilds } from './wilds'
 import { atherPlate } from './plate'
 import { composeTilePicture, type Region } from './tile-picture'
+import { LEGEND } from './spread-map'   // M70 s2
 import { TILE_M, type WildsWorld } from './wilds-world'
 import { GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
 import { BIOME_NAME } from './wilds'
@@ -95,7 +96,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
   /** Infected nodes still welling on this tile: grey blots, not stops (you walk to a fight). */
   nodes?: { id: string; x: number; z: number }[]
   /** Each node's country (tile metres) and whether it is still infected: the borders Alex asked for (11-15). */
-  regions?: { id: string; poly: { x: number; z: number }[]; infected: boolean }[]
+  regions?: { id: string; poly: { x: number; z: number }[]; infected: boolean; seen?: boolean }[]
   /** THE STREAMED WILDS (Alex 11-15): show your tile and its neighbours (3 km round the centre of your tile) instead
    *  of the one tile. Positions in WORLD coords; the single-tile props above are then unused for the picture. */
   area?: { world: WildsWorld; regionsByTile: Map<string, Region[]>; cx: number; cz: number; tileOff: { x: number; z: number }
@@ -153,7 +154,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
               ))}
               {regions.length > 1 && (
                 <svg viewBox={`${-sx / 2} ${-sz / 2} ${sx} ${sz}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-                  {regions.map(r => (
+                  {regions.filter(r => r.seen !== false).map(r => (   // M70 s2: Unseen areas stay the plain map
                     <polygon key={r.id} points={r.poly.map(p => `${p.x},${p.z}`).join(' ')} vectorEffect="non-scaling-stroke"
                       fill={r.infected ? 'rgba(70,72,78,0.42)' : 'rgba(159,210,122,0.10)'}
                       stroke={r.infected ? 'rgba(225,228,232,0.85)' : 'rgba(159,210,122,0.75)'} strokeWidth={2} strokeDasharray={r.infected ? '7 5' : undefined} strokeLinejoin="round" />
@@ -169,9 +170,9 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
               {stop('Moonwell Glade', "Gregory's garden", { kind: 'glade' }, '#9fd27a')}
               {stop("Gregory's waymark", 'the Wilds · meadow', { kind: 'waymark', w: GREG_WAYMARK }, '#e7c766')}
               {regions.length > 1 && (
-                <div style={{ display: 'flex', gap: 10, fontSize: 11, opacity: 0.8, margin: '2px 0 4px' }}>
-                  <span><span style={{ display: 'inline-block', width: 10, height: 10, marginRight: 4, verticalAlign: -1, background: 'rgba(70,72,78,0.8)', outline: '1px dashed rgba(225,228,232,0.85)' }} />Infected</span>
-                  <span><span style={{ display: 'inline-block', width: 10, height: 10, marginRight: 4, verticalAlign: -1, background: 'rgba(159,210,122,0.2)', outline: '1px solid rgba(159,210,122,0.75)' }} />Cleared</span>
+                <div data-spread-legend style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 11, opacity: 0.8, margin: '2px 0 4px' }}>
+                  {/* M70 s2: the signed legend, word for word (spread.map.legend), one swatch per word */}
+                  {LEGEND().map((w, k) => <span key={w}>{k > 0 ? ' · ' : ''}<span style={{ display: 'inline-block', width: 10, height: 10, marginRight: 4, verticalAlign: -1, background: k === 0 ? 'rgba(195,216,160,0.6)' : k === 1 ? 'rgba(159,210,122,0.2)' : 'rgba(70,72,78,0.8)', outline: k === 0 ? '1px solid rgba(120,120,120,0.5)' : k === 1 ? '1px solid rgba(159,210,122,0.75)' : '1px dashed rgba(225,228,232,0.85)' }} />{w}</span>)}
                 </div>
               )}
               {waymarks.map((w, k) => stop(`Waymark ${k + 1}`, `the Wilds · ${BIOME_NAME[w.biome]}`, { kind: 'waymark', w }, '#6fd3c4'))}

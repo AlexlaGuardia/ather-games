@@ -52,7 +52,7 @@ export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waym
   fog: Fog | null; tileOff: { x: number; z: number }
   pose: React.RefObject<CompassPose | null>; waymarks: Waymark[]
   /** each loaded tile's node borders, in that tile's LOCAL coords */
-  regionsByTile: Map<string, { id: string; poly: { x: number; z: number }[]; infected: boolean }[]>
+  regionsByTile: Map<string, { id: string; poly: { x: number; z: number }[]; infected: boolean; seen?: boolean }[]>
   owned: ReadonlySet<string>; onExpand: () => void
   /** linked plots (cluster.ts): sketched round the island, the shared ground and the bridges */
   cluster?: Frame
@@ -75,7 +75,7 @@ export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waym
       keep.add(name)
       // the fog moves only where you walk: only YOUR tile recomposes on a fog change; the rest when their borders,
       // pins or the loaded set change (a full redraw of nine tiles every quarter-second would stutter)
-      const sig = `${plateReady(name) ? 'P' : 'p'}|${wrev}|${regionsByTile.get(name)?.map(r => r.infected ? 1 : 0).join('') ?? ''}|${waymarks.length}|${mapSettlementsRev()}${name === here ? `|${fog?.rev ?? 0}` : ''}`
+      const sig = `${plateReady(name) ? 'P' : 'p'}|${wrev}|${regionsByTile.get(name)?.map(r => r.seen === false ? 2 : r.infected ? 1 : 0).join('') ?? ''}|${waymarks.length}|${mapSettlementsRev()}${name === here ? `|${fog?.rev ?? 0}` : ''}`
       if (sigs.current.get(name) === sig && comps.current.has(name)) continue
       sigs.current.set(name, sig)
       const c = comps.current.get(name) ?? document.createElement('canvas'); comps.current.set(name, c)
