@@ -101,10 +101,24 @@ try {
   ok(moved < 0.3 && kAt(r.f) < 3, `3. the keeper never moved, so the distances are the followers' own (${moved.toFixed(2)})`)
   const away = r.f ? Object.values(off(r.f)).filter(v => v > 1).length : 0
   ok(away > 0, `4. followers are away as the input comes (${away})`)
+  // read-only trace, every drawn frame: each follower's own return time (within 0.65 m for good), frame rate, the facing's lag
+  await p.evaluate((b: Record<string, V>) => {
+    const w = window as any, tr: any = w.__ret = { t0: 0, n: 0, maxGap: 0, since: {} as Record<string, number>, tl: [] as string[] }; let lastT = 0
+    window.addEventListener('keydown', () => { if (!tr.t0) tr.t0 = performance.now() }, { capture: true })
+    const tick = () => { requestAnimationFrame(tick); if (!tr.t0) return
+      const now = performance.now(), t = (now - tr.t0) / 1000, f = w.__formation; if (t > 6 || !f) return
+      tr.n++; if (lastT) tr.maxGap = Math.max(tr.maxGap, now - lastT); lastT = now; tr.fps = tr.n / Math.max(t, 0.01)
+      for (const id in f.pos) { const d = b[id] ? Math.hypot(f.pos[id].x - b[id].x, f.pos[id].z - b[id].z) : 99; if (d < 0.65) tr.since[id] ??= +t.toFixed(2); else delete tr.since[id]
+        if (id === 'manamal' && (tr.n % 4 === 1)) tr.tl.push(`${t.toFixed(2)}s ${d.toFixed(1)}/${Math.hypot(f.pos[id].x - f.slots[id].x, f.pos[id].z - f.slots[id].z).toFixed(1)}/${Math.atan2(Math.sin(f.keeper.yaw - f.lagYaw), Math.cos(f.keeper.yaw - f.lagYaw)).toFixed(1)}`) } }
+    requestAnimationFrame(tick)
+  }, base)
   await p.keyboard.press('ShiftLeft')
   const tIn = Date.now(); let back = -1, last: Record<string, number> = {}
   for (let t = 0; t < 40 && back < 0; t++) { await sleep(100); r = await read(); if (!r.f) continue; last = off(r.f); if (!r.s?.on && Object.values(last).every(v => v < 0.65)) back = (Date.now() - tIn) / 1000 }
   ok(away > 0 && back >= 0 && back <= 2.5, `4. on input all back in their slots in ${back.toFixed(1)} s (${JSON.stringify(Object.fromEntries(Object.entries(last).map(([k, v]) => [k, +v.toFixed(2)])))})`)
+  const tr = await p.evaluate(() => (window as any).__ret)
+  console.log(`RETURN per follower, s: ${JSON.stringify(tr.since)} (${tr.fps?.toFixed(0)} fps, longest frame ${tr.maxGap.toFixed(0)} ms)`)
+  console.log(`RETURN manamal, t off-base/off-slot/lag rad: ${tr.tl.slice(0, 16).join(' ')}`)
   await shot('m126s2-back')
   ok(errs.length === 0, `5. 0 page errors (${errs.slice(0, 3).join(' | ')})`)
 } catch (e) { ok(false, `crashed: ${String(e).slice(0, 300)}`) }
