@@ -1,7 +1,8 @@
 // ── BETA M120 slice 2: THE MERGING HOLLOW, ON THE LIVE PAGE ────────────────────────────────────────────────────────────
 // A fresh profile (born in the Glade, out by the gate's E, as m120-wilds-teeth-check), then in the Wilds:
 //   1. two crawlers (build word for the merging Hollow) touching on DRAINED ground pool into ONE: mass 2, hp + maxHp summed
-//      (35+35), the merge counted, and the body DRAWN bigger (__ather.drawnScale > 1.2)
+//      (35+35), the merge counted, and the body DRAWN bigger (__ather.drawnScale > 0.6; M122: was > 1.2, the base halved 1 -> 0.5,
+//      mass 2 draws 0.69)
 //   2. a third pools on: mass 3, hp 105 (endless adding)
 //   3. OFF drained ground (a node cleared for this visit only, __ather.spend) two touching crawlers stay two
 //   4. the keeper's rounds DISPERSE the pooled one: it ends, nothing splits off
@@ -53,11 +54,11 @@ try {
   const m0 = await C('return C.merges ?? 0') as number
   const ids = await put([[px, pz], [px + 0.8, pz]])
   let got: Awaited<ReturnType<typeof mine>> = []
-  await poll(async () => { got = await mine(ids); return got.length === 1 && got[0].drawn !== null && got[0].drawn > 1.2 }, 15000)
+  await poll(async () => { got = await mine(ids); return got.length === 1 && got[0].drawn !== null && got[0].drawn > 0.6 }, 15000)
   const m1 = await C('return C.merges ?? 0') as number
   ok(got.length === 1 && got[0].mass === 2 && got[0].hp === 70 && got[0].maxHp === 70, `1. two touching crawlers pooled: ${JSON.stringify(got)}`)
   ok(m1 > m0, `   merge counted (${m0} -> ${m1})`)
-  ok(!!got[0] && (got[0].drawn ?? 0) > 1.2, `   drawn bigger: scale ${got[0]?.drawn?.toFixed(2)}`)
+  ok(!!got[0] && (got[0].drawn ?? 0) > 0.6, `   drawn bigger: scale ${got[0]?.drawn?.toFixed(2)} (M122: a lone one draws 0.5)`)
   await p.screenshot({ path: `${out}/m120-merged.png` }).catch(() => {})
   // ── 2. a third pools on ──
   const third = await put([[got[0].x + 1.1, got[0].z]])
@@ -113,6 +114,7 @@ try {
       }
       const got2 = await mine(ids2), m3 = await C('return C.merges ?? 0') as number
       ok(dr === false && !everDrained && got2.length === 2 && got2.every(h => h.mass === 1) && m3 === m2, `3. off drained ground (drained ${dr}, ever drained in the window: ${everDrained}) two touching crawlers stayed two: ${JSON.stringify(got2.map(h => ({ id: h.id, mass: h.mass })))}`)
+      ok(got2.length === 2 && got2.every(h => h.drawn !== null && Math.abs(h.drawn - 0.5) < 0.01), `   M122: a lone (mass-1) crawler draws at HALF the M120 size: ${JSON.stringify(got2.map(h => h.drawn))}`)
     }
   }
   await clear()

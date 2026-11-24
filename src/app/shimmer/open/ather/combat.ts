@@ -113,9 +113,16 @@ export const CRAWLER = {
   lungeRange: 1.9, windup: 0.5, lungeSpeed: 6, lungeTime: 0.3, recover: 1.2, hitReach: 1.0, stagger: 0.24,
   radius: 0.5, bodyY: 0.35, bodyR: 0.5, height: 0.7,
   seekR: 14, touch: 0.25, speedExp: 0.3, scaleK: 0.55, scaleMax: 4, share: 0.22, brood: [2, 3] as [number, number],
+  /** M122 (Alex 11-24 night play): a lone crawler STARTS at half its M120 size; the merge curve multiplies from this base */
+  scaleBase: 0.5,
 }
-/** the drawn (and hit) size of a crawler of `mass`: 1 at mass 1, then a log taper (2 -> 1.38, 4 -> 1.76, 8 -> 2.14, capped) */
-export const crawlerScale = (mass = 1) => Math.min(CRAWLER.scaleMax, 1 + CRAWLER.scaleK * Math.log(Math.max(1, mass)))
+/** the drawn (and hit) size of a crawler of `mass`: scaleBase (0.5) at mass 1, then the same log taper times the base
+ *  (2 -> 0.69, 4 -> 0.88, 8 -> 1.07, capped at scaleMax x the base = 2.0). M122: was 1 / 1.38 / 1.76 / 2.14 (cap 4). */
+export const crawlerScale = (mass = 1) => CRAWLER.scaleBase * crawlerGrowth(mass)
+/** the merge curve alone (1 at mass 1): M122 keeps the SHOT sphere's radius and the pooling TOUCH on this, the M120 numbers. The
+ *  keeper rule sim (wilds-merge.test (9)) took champion+brood deaths 7 -> 20 / 200 when they halved too (a newcomer's hip-fire
+ *  on a 0.25 m sphere; fewer pools = more fast lone bodies). The look, the aim centre, footprint, reach and lunge are half. */
+export const crawlerGrowth = (mass = 1) => Math.min(CRAWLER.scaleMax, 1 + CRAWLER.scaleK * Math.log(Math.max(1, mass)))
 /** a walker's live tuning: the shambler's dials, or a crawler's scaled by its mass */
 export function walkerOf(h: Hollow) {
   if (h.kind !== 'crawler') return SHAMBLER
@@ -308,7 +315,7 @@ export function applyNetHit(c: Combat, id: number, dmg: number) {
   if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = h.kind === 'floater' ? SHAMBLER.stagger : walkerOf(h).stagger }
 }
 
-const bodyR = (h: Hollow) => h.kind === 'crawler' ? CRAWLER.radius * crawlerScale(h.mass) : SHAMBLER.radius
+const bodyR = (h: Hollow) => h.kind === 'crawler' ? CRAWLER.radius * crawlerGrowth(h.mass) : SHAMBLER.radius   // M122: pooling touch keeps M120's size
 /** M120 s2: pool every touching pair of crawlers standing on drained ground. One pass, so a chain of three pools over two steps. */
 export function mergeCrawlers(c: Combat, T: Terrain) {
   if (!c.drained) return
@@ -495,7 +502,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
         continue
       }
       if (h.kind === 'crawler') {   // M120 s2: low and plated, no head to aim for; the body grows with its mass
-        const sc = crawlerScale(h.mass), br = CRAWLER.bodyR * sc
+        const sc = crawlerScale(h.mass), br = CRAWLER.bodyR * crawlerGrowth(h.mass)   // M122: aimed at the drawn body's middle; the sphere keeps M120's size
         if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + CRAWLER.bodyY * sc, h.z) < br * br * 1.3) { best = { h, head: false }; break }
         continue
       }

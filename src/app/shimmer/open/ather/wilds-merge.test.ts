@@ -1,7 +1,7 @@
 // npx tsx src/app/shimmer/open/ather/wilds-merge.test.ts
 // BETA M120 s2: THE MERGING HOLLOW (canon c01931e: grey that meets grey pools; mass + strength add, endlessly; drained ground
 // only; a round still disperses it). The crawler kind, its pooling, its scaling, and the keeper rule in the offline sim.
-import { newCombat, spawnHollow, stepCombat, populate, walkerOf, crawlerScale, weightOf, CRAWLER, type Combat, type Hollow } from './combat'
+import { newCombat, spawnHollow, stepCombat, populate, walkerOf, crawlerScale, crawlerGrowth, weightOf, CRAWLER, type Combat, type Hollow } from './combat'
 import { encodeSnap, applySnap } from '../shared/fight-share'
 import { FLAT, championFight, packFight, summarise } from './wilds-sim'
 let pass = 0, fail = 0
@@ -24,7 +24,7 @@ const pair = (drained: ((x: number, z: number) => boolean) | undefined, kinds: [
   ok(c.hollows.length === 1, `two touching crawlers became one (${c.hollows.length} bodies)`)
   ok(m?.mass === 2 && m.hp === hp && m.maxHp === 2 * CRAWLER.hp, `mass ${m?.mass}, hp ${m?.hp}/${m?.maxHp} (want 2, ${hp}/${2 * CRAWLER.hp})`)
   ok(m && walkerOf(m).damage === 2 * CRAWLER.damage, `strength added: hits for ${m && walkerOf(m).damage} (one alone: ${CRAWLER.damage})`)
-  ok(m && crawlerScale(m.mass) > 1.2 && walkerOf(m).radius > CRAWLER.radius, `body grew x${m && crawlerScale(m.mass).toFixed(2)}`)
+  ok(m && crawlerScale(m.mass) > 1.2 * crawlerScale(1) && walkerOf(m).radius > CRAWLER.radius * crawlerScale(1), `body grew x${m && (crawlerScale(m.mass) / crawlerScale(1)).toFixed(2)} over a lone one`)
   ok(c.merges === 1, `merge counted (${c.merges})`)
 }
 
@@ -70,7 +70,19 @@ const pair = (drained: ((x: number, z: number) => boolean) | undefined, kinds: [
 // (5) the tapered scale: readable at any size (monotone, log, capped)
 {
   const s = [1, 2, 4, 8, 32, 1000].map(crawlerScale)
-  ok(s.every((v, i) => i === 0 || v >= s[i - 1]) && s[0] === 1 && s[2] < 2 && s[5] <= CRAWLER.scaleMax, `scale ${s.map(v => v.toFixed(2)).join(' / ')}`)
+  ok(s.every((v, i) => i === 0 || v > s[i - 1] || v === CRAWLER.scaleBase * CRAWLER.scaleMax) && s[2] < 2 * s[0] && s[5] <= CRAWLER.scaleBase * CRAWLER.scaleMax, `scale ${s.map(v => v.toFixed(2)).join(' / ')}`)
+}
+
+// (5b) M122 (Alex 11-24): a lone crawler STARTS at HALF the M120 size (1 -> 0.5); the merge curve multiplies from that base,
+// so mass 2/3 still read bigger than mass 1, and the hit radius + reach follow the body
+{
+  const old = (m: number) => Math.min(4, 1 + 0.55 * Math.log(Math.max(1, m)))   // the M120 s2 curve, frozen here
+  ok(crawlerScale(1) === 0.5 && crawlerScale(1) === old(1) / 2, `mass-1 crawler is half the old size (${crawlerScale(1)} vs ${old(1)})`)
+  ok([2, 3, 8].every(m => Math.abs(crawlerScale(m) - old(m) / 2) < 1e-12), `every mass is half its old size (2: ${crawlerScale(2).toFixed(3)}, 3: ${crawlerScale(3).toFixed(3)})`)
+  ok(crawlerScale(2) > crawlerScale(1) && crawlerScale(3) > crawlerScale(2), 'mass 2 and 3 still read bigger than mass 1')
+  const lone = { kind: 'crawler', mass: 1 } as Hollow
+  ok(Math.abs(walkerOf(lone).radius - CRAWLER.radius / 2) < 1e-12 && Math.abs(walkerOf(lone).hitReach - CRAWLER.hitReach / 2) < 1e-12 && Math.abs(walkerOf(lone).lungeRange - CRAWLER.lungeRange / 2) < 1e-12, `footprint ${walkerOf(lone).radius} + reach ${walkerOf(lone).hitReach} + lunge follow the body`)
+  ok(crawlerGrowth(1) === 1 && [2, 3, 8].every(m => crawlerGrowth(m) === old(m)), 'shot sphere + pooling touch keep the M120 curve (keeper rule, see combat.ts)')
 }
 
 // (6) a round DISPERSES it however big: a mass-6 crawler is shot until it ends; nothing splits off
