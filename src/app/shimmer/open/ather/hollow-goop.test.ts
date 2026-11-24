@@ -20,9 +20,12 @@ ok(m.color.r < 0.02 && m.color.g < 0.02 && m.color.b < 0.02, 'diffuse dead dark'
 const a = groundEnv('#9cc46a'), b = groundEnv('#9cc46a'), c = groundEnv(DRAIN)
 ok(a === b && a !== c, 'envs are cached per ground colour')
 { const d = a.image.data as Uint8Array, row = (y: number) => [d[(y * 64) * 4], d[(y * 64) * 4 + 1], d[(y * 64) * 4 + 2]]
-  const low = row(31), dl = (c.image.data as Uint8Array)
+  // M130: rows run from straight down (row 0, v = 0 in three's equirectUv) to straight up; scripts/m130-reflection-check.mts renders it
+  const low = row(0), top = row(31), dl = (c.image.data as Uint8Array)
+  ok(a.flipY === false, 'no flipY on top of the row order')
   ok(low[1] > low[0] && low[1] > low[2], `the good-ground env's lower half is that ground's green (${low})`)
-  ok(Math.abs(dl[31 * 64 * 4] - dl[31 * 64 * 4 + 1]) < 8, 'the drained env\'s lower half is grey') }
+  ok(top[2] > top[1] && top[1] > top[0], `its upper half is the sky's blue (${top})`)
+  ok(Math.abs(dl[0] - dl[1]) < 8, 'the drained env\'s lower half is grey') }
 
 // M34 heap: leaving the Wilds frees every cached env (texture + its PMREM copy via the dispose event) and empties the cache
 { let disposed = 0; a.addEventListener('dispose', () => disposed++); c.addEventListener('dispose', () => disposed++)

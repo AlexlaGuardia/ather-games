@@ -53,7 +53,7 @@ export function groundEnv(groundHex: string): THREE.DataTexture {
   const zen = new THREE.Color(SKY.day.zenith), hor = new THREE.Color(SKY.day.horizon), gnd = new THREE.Color(groundHex), c = new THREE.Color()
   const data = new Uint8Array(ENV_W * ENV_H * 4)
   for (let y = 0; y < ENV_H; y++) {
-    const up = Math.cos(((y + 0.5) / ENV_H) * Math.PI)
+    const up = -Math.cos(((y + 0.5) / ENV_H) * Math.PI)   // row 0 is v = 0, which three's equirect lookup reads as straight DOWN (M130: it was built the other way up)
     if (up >= 0) c.copy(hor).lerp(zen, Math.pow(up, 0.6)); else c.copy(hor).lerp(gnd, Math.min(1, -up * 2.2))   // linear-space lerp (THREE.Color is linear)
     c.convertLinearToSRGB()
     for (let x = 0; x < ENV_W; x++) { const i = (y * ENV_W + x) * 4; data[i] = Math.round(c.r * 255); data[i + 1] = Math.round(c.g * 255); data[i + 2] = Math.round(c.b * 255); data[i + 3] = 255 }
