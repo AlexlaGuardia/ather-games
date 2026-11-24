@@ -104,7 +104,7 @@ function gait(rows: Row[], clip: 'walk' | 'run', sp: Sp = 'axolotl', mode = 'tro
   flush(); all.sort((a, b) => a - b)
   return { drift, med: all[all.length >> 1] ?? NaN, p95: all[Math.floor(all.length * 0.95)] ?? NaN, n: all.length, spans, frames, swing, tail: tail * 57.3, v: frames ? v / frames : 0 }
 }
-const f3 = (g: ReturnType<typeof gait>) => `${g.spans} planted frames of ${g.frames}, drift median ${(g.med * 1000).toFixed(1)} p95 ${(g.p95 * 1000).toFixed(1)} mm, tail <= ${g.tail.toFixed(0)} deg`
+const f3 = (g: ReturnType<typeof gait>) => `${g.spans} planted paws over ${g.frames} frames, drift median ${(g.med * 1000).toFixed(1)} p95 ${(g.p95 * 1000).toFixed(1)} mm, tail <= ${g.tail.toFixed(0)} deg`
 const rowsOf = (p: Page) => p.evaluate(() => { const D = (window as any).__m132; return JSON.parse(JSON.stringify({ b: Object.fromEntries(Object.entries(D.bodies).map(([k, v]: any) => [k, v.rows])), sp: Object.fromEntries(Object.entries(D.bodies).map(([k, v]: any) => [k, v.sp])), n: D.n, sums: D.sums })) }) as Promise<{ b: Record<string, Row[]>; sp: Record<string, Sp>; n: number; sums: number }>
 const hideCard = (p: Page) => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(d => !h.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 /** a chase cam: every frame the keeper is set beside her (three quarters on) and turned to her, so any frame is framed; the still is taken the moment `clip` is fully on */
@@ -133,15 +133,15 @@ try {
     const one = await p.evaluate(() => [...(window as any).__spiritModel.rigs.values()].map((r: any) => ({ sk: new Set(Object.values(r.body.meshes).map((m: any) => m.skeleton.uuid)).size, sp: r.sp, uuid: r.body.skeleton.uuid, bones: r.body.bones.length })))
     ok(one.every((x: any) => x.sk === 1 && x.bones === (x.sp === 'fox' ? 24 : 27)) && new Set(one.map((x: any) => x.uuid)).size === 3, `1. one skeleton each, not shared (${JSON.stringify(one.map((x: any) => [x.sk, x.bones]))})`)
     const c1 = await p.evaluate(() => ({ ...(window as any).__spiritModel.rigCount })); ok(c1.live === 3, `1. three live bodies ${JSON.stringify(c1)}`)
-    await sampler(p)
+    await sampler(p); await p.evaluate(() => (window as any).__ather.look(0, 1.45))   // look at the sky while sampling: few pixels to draw = more frames a second
     let G: any = null; const t0 = Date.now()
-    while (Date.now() - t0 < 240000) { await sleep(10000)
+    while (Date.now() - t0 < 420000) { await sleep(10000)
       // the unused key keeps idle mode off
       await p.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F13', code: 'F13' })))
       const R = await rowsOf(p); const rows = Object.keys(R.b).filter(k => R.sp[k] === 'axolotl').map(k => R.b[k]), fox = Object.keys(R.b).filter(k => R.sp[k] === 'fox').flatMap(k => R.b[k]); const merge = (c: 'walk' | 'run') => { const g = rows.map(r => gait(r, c)); return { drift: Math.max(...g.map(x => x.drift)), p95: Math.max(...g.map(x => x.p95 || 0)), med: Math.max(...g.map(x => x.med || 0)), n: g.reduce((a, x) => a + x.n, 0), spans: g.reduce((a, x) => a + x.spans, 0), swing: Math.max(...g.map(x => x.swing)), tail: Math.max(...g.map(x => x.tail)), v: Math.max(...g.map(x => x.v)) } }
       const lay = rows.flat().filter(r => r.w.sit > 0.95).length; G = { walk: merge('walk'), run: merge('run'), lay, ground: rows.flat().filter(r => r.w.sit > 0.95 && r.mode === 'sit').length, sums: R.sums, n: R.n, modes: [...new Set(rows.flat().map(r => r.mode))], fox, foxRun: gallop(fox, 'trot'), foxSit: fox.filter(r => r.w.sit > 0.95).length, fps: rows[0].length / ((rows[0].at(-1)!.t - rows[0][0].t) / 1000) }
       if (G.walk.n > 40 && G.run.n > 40 && G.ground > 5 && G.foxRun.n > 15 && G.foxSit > 5 && Date.now() - t0 > 60000) break }
-    const f = (g: any) => `${g.spans} straight stretches, ${g.n} planted samples, ${g.v.toFixed(2)} m/s, drift median ${(g.med * 1000).toFixed(1)} p95 ${(g.p95 * 1000).toFixed(1)} max ${(g.drift * 1000).toFixed(1)} mm, leg swing ${(g.swing * 1000).toFixed(0)} mm, tail <= ${g.tail.toFixed(0)} deg off behind`
+    const f = (g: any) => `${g.spans} straight stretches / planted frames, ${g.n} planted samples, ${g.v.toFixed(2)} m/s, drift median ${(g.med * 1000).toFixed(1)} p95 ${(g.p95 * 1000).toFixed(1)} max ${(g.drift * 1000).toFixed(1)} mm, leg swing ${(g.swing * 1000).toFixed(0)} mm, tail <= ${g.tail.toFixed(0)} deg off behind`
     console.log(`   ${G.fps.toFixed(1)} fps, modes ${G.modes}`)
     for (const c of ['walk', 'run'] as const) { const g = G[c]
       ok(g.n > 0 && g.swing > 0.05, `2. she ${c}s with her legs moving: ${f(g)}`); ok(g.n > 0 && g.drift < 0.01, `2. ${c}: planted feet stay put (max ${(g.drift * 1000).toFixed(1)} mm, bar 10)`); ok(g.n > 0 && g.tail < 25, `2. ${c}: the tail trails behind (${g.tail.toFixed(0)} deg)`) }
@@ -160,17 +160,17 @@ try {
     // 3 + 4: following, then the Wilds and home
     const w = await open(br, true, { pieces, pots, follow: ['p0', 'p1', 'p2'], party: ['p0', 'p1', 'p2'] }); const q = w.p
     await q.evaluate(() => (window as any).__ather.tp(-131, 110, 0)); await q.waitForFunction(() => (window as any).__spiritModel?.rigs?.size === 3, { timeout: 60000 }); await sleep(8000); await sampler(q)
-    await q.evaluate(`new Promise(res => { let t0 = performance.now(), last = t0, a = 0; const A = window.__ather; (function f() { const n = performance.now(), dt = Math.min(0.25, (n - last) / 1000); last = n; a += 4.2 * dt / 5; A.tp(-131 + Math.sin(a) * 5, 110 + 5 - Math.cos(a) * 5, 0); if (n - t0 < 12000) requestAnimationFrame(f); else res(0) })() })`); await sleep(9000)
+    await q.evaluate(`new Promise(res => { let t0 = performance.now(), last = t0, a = 0; const A = window.__ather; (function f() { const n = performance.now(), dt = Math.min(0.25, (n - last) / 1000); last = n; a += 4.2 * dt / 5; A.tp(-131 + Math.sin(a) * 5, 110 + 5 - Math.cos(a) * 5, 0); A.look(0, 1.45); if (n - t0 < 12000) requestAnimationFrame(f); else res(0) })() })`); await sleep(14000)
     const FB = await rowsOf(q), F = FB.b, fr = Object.values(F).flat().filter(r => r.mode === 'follow'), mv = fr.filter(r => r.v > 0.1), capped = mv.filter(r => r.capped).length, rest = Object.values(F).flatMap(b => b.filter(r => r.mode === 'follow' && r.t > b.at(-1)!.t - 3000))
     ok(mv.length > 10 && mv.every(r => r.clip === 'walk' || r.clip === 'run' || r.v < 0.2), `3. following she walks / runs (${mv.length} moving frames, top ${Math.max(0, ...mv.map(r => r.v)).toFixed(1)} m/s)`)
-    console.log(`   3. the cadence cap bit on ${capped} of ${mv.length} moving frames (feet slide then)`); ok(rest.every(r => r.clip === 'idle' || r.clip === 'sit'), `3. stood by she is still (${[...new Set(rest.map(r => r.clip))]})`)
+    console.log(`   3. the cadence cap bit on ${capped} of ${mv.length} moving frames (feet slide then)`); ok(rest.every(r => r.clip === 'idle' || r.clip === 'sit'), `3. stood by she is still (${[...new Set(rest.map(r => `${r.clip} ${r.v > 0.1 ? r.v.toFixed(1) : ''}`))]})`)
     { const fx = F.p1.filter(r => r.mode === 'follow' && r.v > 0.1); console.log(`   3. Vulnyx: cap bit on ${fx.filter(r => r.capped).length} of ${fx.length} moving frames, top ${Math.max(0, ...fx.map(r => r.v)).toFixed(1)} m/s`) }
     // 3b: straight legs at a keeper's walk and sprint
     for (const mps of [4.2, 6.5]) {
       await q.evaluate(() => { for (const b of Object.values((window as any).__m132.bodies) as any[]) b.rows.length = 0 })
-      await q.evaluate(`new Promise(res => { let t0 = performance.now(), last = t0, s = 0; const A = window.__ather, L = 24; (function f() { const n = performance.now(), dt = Math.min(0.25, (n - last) / 1000); last = n; s += ${mps} * dt; const k = s % (2 * L), out = k < L; A.tp(-144 + (out ? k : 2 * L - k), 113, out ? -Math.PI / 2 : Math.PI / 2); if (n - t0 < 30000) requestAnimationFrame(f); else res(0) })() })`)
+      await q.evaluate(`new Promise(res => { let t0 = performance.now(), last = t0, s = 0; const A = window.__ather, L = 24; (function f() { const n = performance.now(), dt = Math.min(0.25, (n - last) / 1000); last = n; s += ${mps} * dt; const k = s % (2 * L), out = k < L; const y = out ? -Math.PI / 2 : Math.PI / 2; A.tp(-144 + (out ? k : 2 * L - k), 113, y); A.look(y, 1.45); if (n - t0 < 30000) requestAnimationFrame(f); else res(0) })() })`)
       const X = (await rowsOf(q)).b.p1, m = X.filter(r => r.mode === 'follow' && r.v > 0.3), g = gallop(X, 'follow', mps * 0.5), all = m.map(r => r.v).sort((a, b) => a - b)
-      console.log(`   3b. behind ${mps} m/s: ${m.length} moving frames, median ${(all[all.length >> 1] ?? 0).toFixed(1)} m/s, cap bit on ${m.filter(r => r.capped).length}; ${f3(g)}`)
+      console.log(`   3b. behind ${mps} m/s: ${(X.length / ((X.at(-1)!.t - X[0].t) / 1000)).toFixed(1)} fps, ${m.length} moving frames, median ${(all[all.length >> 1] ?? 0).toFixed(1)} m/s, cap bit on ${m.filter(r => r.capped).length}; ${f3(g)}`)
       ok(g.n > 3 && g.drift < 0.02, `3b. Vulnyx behind a keeper at ${mps} m/s: planted feet stay put (${g.n} planted samples at ${g.v.toFixed(1)} m/s, max ${(g.drift * 1000).toFixed(1)} mm, bar 20)`)
     }
     await q.evaluate(() => (window as any).__ather.tp(-131, 110, 0)); await sleep(3000)
