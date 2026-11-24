@@ -7,8 +7,11 @@
 //  2. Home: hold the pedestal from the hotbar, E sets it (works has it, bag has none).
 //  3. E at the pedestal: the grimoire opens with the ROSTER: all 9 bloomed spirits listed (incl. 'pa#2'), party 8 / 8.
 //     Ask 'pa#2' along while full -> refused (still 8). Let 'pb' roam, ask 'pa#2' along -> party has pa#2, not pb, 8 / 8.
-//  4. Reload, E at the pedestal: the swap persists (roster + the saved party). 0 page errors.
-//   npx tsx scripts/m123-roster-check.mts [--url https://ather.games] [--out dir]      (OWNER_KEY from env or .env; run on the box)
+//  4. Reload, E at the pedestal: the swap persists (roster + the saved party).
+//  5. (s2) E at the Vulnyx (pa): her spirit talk (Feed / Follow / Open); Open: the training row for the placed Goldwood Hurdle
+//     shows its Allow toggle. 0 page errors.
+//  --player (M123 s2): a NON-owner, no ?spirits param (run on edesk). Default = owner + ?spirits=3d (OWNER_KEY; the box).
+//   npx tsx scripts/m123-roster-check.mts [--url https://ather.games] [--out dir] [--player]
 import puppeteer from 'puppeteer-core'
 import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { aimAt } from './lib/aim.mts'
@@ -16,11 +19,13 @@ import { ANSWERS } from '../src/app/shimmer/open/ather/greg-talk'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games').replace(/\/$/, ''), out = flag('--out', '/tmp/m123-roster')
 mkdirSync(out, { recursive: true })
-const KEY = process.env.OWNER_KEY || (existsSync('.env') ? /OWNER_KEY=(.+)/.exec(readFileSync('.env', 'utf8'))?.[1]?.trim() : undefined)
+const player = process.argv.includes('--player')
+const KEY = player ? 'x' : process.env.OWNER_KEY || (existsSync('.env') ? /OWNER_KEY=(.+)/.exec(readFileSync('.env', 'utf8'))?.[1]?.trim() : undefined)
 if (!KEY) { console.error('no OWNER_KEY (env or .env)'); process.exit(2) }
 const SPIRITS_LINE = 'Spirits?', GRIM_LINE = 'This is a grimoire. I keep trying to grow what we know of them with it.'
 const PL = [{ id: 'pa', x: -134, z: 98.5 }, { id: 'pb', x: -136.6, z: 98.5 }, { id: 'pc', x: -139.2, z: 98.5 }]
-const PIECES = PL.map(q => ({ id: q.id, item: 'spirit_planter', x: q.x, z: q.z, q: 0, placedAt: 1 }))
+const HD = { id: 'hd-m123', item: 'goldwood_hurdle', x: -136.6, z: 95.5, q: 0, placedAt: 1 }
+const PIECES = [...PL.map(q => ({ id: q.id, item: 'spirit_planter', x: q.x, z: q.z, q: 0, placedAt: 1 })), HD]
 const SP = ['fox', 'axolotl', 'owl', 'bat', 'frog', 'rabbit', 'turtle', 'firefly', 'hummingbird']
 const KEYS = PL.flatMap(q => [q.id, `${q.id}#2`, `${q.id}#3`])
 const at0 = Date.now() - 20 * 86400000
@@ -36,9 +41,14 @@ try {
   const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true })
   const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
-  await p.goto(`${url}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
-  await p.goto(`${url}/api/owner`, { waitUntil: 'load', timeout: 60000 })
-  if (!await p.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner))) { ok(false, 'owner cookie took'); process.exit(1) }
+  if (!player) {
+    await p.goto(`${url}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
+    await p.goto(`${url}/api/owner`, { waitUntil: 'load', timeout: 60000 })
+    if (!await p.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner))) { ok(false, 'owner cookie took'); process.exit(1) }
+  } else {
+    await p.goto(`${url}/api/owner`, { waitUntil: 'load', timeout: 60000 })
+    ok(!await p.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner)), '0. a NON-owner keeper, no ?spirits param')
+  }
   await p.evaluateOnNewDocument((s: { pieces: unknown[]; pots: unknown; party: string[]; tut: unknown }) => {
     if (sessionStorage.getItem('m123')) return; sessionStorage.setItem('m123', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star')
@@ -61,7 +71,7 @@ try {
   const pick = (label: string) => p.evaluate((l: string) => { const b = [...document.querySelectorAll<HTMLButtonElement>('[data-talk-option]')].find(e => (e.textContent ?? '').replace(/^›/, '').trim().startsWith(l)); b?.click(); return !!b }, label)
   const greg = async () => { await A('open', 'greg'); await poll(async () => !!(await bubble()), 10000); await sleep(500); return { line: (await bubble()) ?? '', opts: await opts() } }
   const closeTalk = async () => { await p.keyboard.press('Escape'); await sleep(500); if ((await opts()).length) { await pick(ANSWERS.bye); await sleep(500) } }
-  const boot = async () => { await p.goto(`${url}/shimmer/open/ather?hour=14&spirits=3d`, { waitUntil: 'load', timeout: 240000 }); await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(4000) }
+  const boot = async () => { await p.goto(`${url}/shimmer/open/ather?hour=14${player ? '' : '&spirits=3d'}`, { waitUntil: 'load', timeout: 240000 }); await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(4000) }
   const count = (inv: any, id: string) => ((inv?.slots ?? []) as ({ id: string; n: number } | null)[]).filter(s => s?.id === id).reduce((a, s) => a + s!.n, 0)
   const roster = () => p.evaluate(() => ({
     open: !!document.querySelector('[data-panel="grimoire"]'), roster: !!document.querySelector('[data-roster]'),
@@ -115,6 +125,21 @@ try {
   r = await roster(); await shot('m123-5-reload')
   ok(r.ids.length === 9 && r.n === 8 && r.inP.includes('pa#2') && !r.inP.includes('pb'), `4. the swap persists (${r.inP.join()})`)
   ok(((await read('open.works.v1'))?.pieces ?? []).some((q: any) => q.item === 'grimoire_pedestal'), '4. the pedestal is still placed')
+  // 5. talk to a bloomed spirit; the training Allow toggle
+  await p.keyboard.press('Escape'); await sleep(500)
+  let talk: string[] = [], allow: string | null = null
+  for (let k = 0; k < 8 && !allow; k++) {
+    const t = await p.evaluate(() => { const q = (window as any).__spiritModel?.trots?.fox; return q ? { x: q.x, z: q.z, y: q.y, h: q.h } : null }) as { x: number; z: number; y: number; h: number } | null
+    if (!t) { await sleep(1000); continue }
+    await A('tp', t.x, t.z + 1.5, 0); await sleep(600)
+    await aimAt(p, t.x, t.z, t.y - (await A('ground', t.x, t.z) as number) + t.h * 0.5, 4)
+    await p.keyboard.press('e'); await sleep(1000)
+    const o = await opts(); if (o.length) talk = o
+    if (o.length && await pick('Open')) { await sleep(2000); allow = await p.evaluate(() => { const b = document.querySelector('[data-train-toggle="hd-m123"]'); return b ? (b.textContent ?? '').trim() || 'shown' : null }) }
+    await shot('m123-6-spirit'); await p.keyboard.press('Escape'); await sleep(500)
+  }
+  ok(talk.some(x => /^(Feed|Follow|Open)/.test(x)), `5. E at the Vulnyx: her spirit talk (${talk.join(' / ')})`)
+  ok(!!allow, `5. her panel shows the training Allow toggle for the hurdle ('${allow}')`)
   ok(errs.length === 0, `0 page errors (${errs.join(' | ')})`)
 } catch (e) { ok(false, `threw: ${String(e).slice(0, 300)}`) }
 await br.close()

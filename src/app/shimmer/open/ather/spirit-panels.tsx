@@ -195,7 +195,7 @@ export function GrimoirePanel({ onClose, footer }: { onClose: () => void; footer
             {card && page.stage === 'bonded' && card.entry && <div style={{ fontSize: 13 }}>{card.entry}</div>}
           </div>
         )}
-        <SpiritRoster onClose={onClose} />{/* M109 s3: the roster face (owner + ?spirits=3d) */}
+        <SpiritRoster onClose={onClose} />{/* M109 s3: the roster face (every keeper since M123 s2) */}
         {footer}
       </div>
     </HearthFrame>

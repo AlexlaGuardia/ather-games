@@ -4,7 +4,7 @@
 // 2.6 m west), seeded the way vulnyx-ingame-check.mts seeds them. 390x844 (SwiftShader).
 //  P. player: both models drawn; over ~60 s (sampled every 250 ms) she roams past 3 m from her planter, and OFF the perch the
 //     two of them stand still (check/look/sniff/sit/tilt) 40..75% of the samples (before the ship ~31%: trot ~70% of ground
-//     time); E aimed at her gives NO spirit talk (Feed/Follow/Open stay owner + flag); she never follows; 0 page errors.
+//     time); E aimed at her GIVES her spirit talk (M123 s2: Feed/Follow/Open ship to every keeper); she never follows unasked; 0 page errors.
 //  O. owner + ?spirits=3d (this box only): E at the Vulnyx still gives Feed / Follow / Open (the dev gate still opens).
 //   OWNER_KEY=... npx tsx scripts/m107-ship-check.mts [--url https://ather.games] [--no-owner]
 import puppeteer, { type Page } from 'puppeteer-core'
@@ -67,12 +67,12 @@ if (a) {
     const far = Math.max(0, ...ss.map(s => Math.hypot(s.x - s.home.x, s.z - s.home.z)))
     const modes = [...new Set(ss.map(s => s.mode))]
     ok(ss.length > 150 && far > (sp === 'fox' ? 3 : 1.6), `P ${sp}: roams the plot (${ss.length} samples over 60 s, reached ${far.toFixed(2)} m from her planter; modes ${modes.join(',')})`)
-    ok(!modes.includes('follow') && !ss.some(s => s.near), `P ${sp}: never follows / keeps with a party (player: no talk, no party)`)
+    ok(!modes.includes('follow') && !ss.some(s => s.near), `P ${sp}: never follows / keeps with a party unasked (empty party)`)
     console.log(`   ${sp}: still ${st}/${g.length} = ${(st / Math.max(1, g.length) * 100).toFixed(0)}% of her ground samples`)
   }
   const share = still / Math.max(1, grnd)
   ok(share >= 0.4 && share <= 0.75, `P calm: off the perch the two stand still ${(share * 100).toFixed(0)}% of ~60 s (want 40..75%; before the ship ~31%)`)
-  // E aimed at the Vulnyx: no spirit talk for a player
+  // E aimed at the Vulnyx: her spirit talk, for a player too (M123 s2; was: none before the ship)
   let got: string[] = []
   for (let k = 0; k < 4 && !got.length; k++) {
     const t = await trotOf(p, 'fox'); if (!t) break
@@ -80,8 +80,7 @@ if (a) {
     await aimAt(p, t.x, t.z, t.y - (await p.evaluate((x, z) => (window as any).__ather.ground(x, z), t.x, t.z) as number) + t.h * 0.5, 4)
     await p.keyboard.press('e'); await sleep(900); got = await opts(p); await p.keyboard.press('Escape'); await sleep(300)
   }
-  ok(!got.some(x => /Follow|Stay|Feed|Open/.test(x)), `P E at her gives no spirit talk (options: ${JSON.stringify(got)})`)
-  ok(!(await p.evaluate(() => !!document.querySelector('[data-roster]'))), 'P no grimoire roster face on screen')
+  ok(got.some(x => /Follow|Feed|Open/.test(x)), `P (M123 s2) E at her gives her spirit talk to a player (options: ${JSON.stringify(got)})`)
   ok(a.errs.length === 0, `P 0 page errors ${a.errs.join(' | ')}`)
   await p.close()
 }

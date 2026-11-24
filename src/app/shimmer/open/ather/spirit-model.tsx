@@ -10,7 +10,7 @@
 // floor so she never goes dark at night, a gold fresnel rim, a pale-gold translucent hull where other figures carry an ink
 // hull, and the glb's own eye mesh (iris, pupil, outline, catchlight are in it as vertex colours) drawn unlit. Idle: a gentle bob + breath + slow head-turn yaw of the whole body, and a soft tail sway done in the
 // vertex shader (weight = how far along the tail axis a vertex sits). No rig: the glb has no skin or vertex groups.
-import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
@@ -28,16 +28,13 @@ export const VULNYX_URL = SPIRIT_MODELS.fox!.url
 /** World height of the model (the glb is 1 unit tall). Small and lithe: ~0.55 m, about a third of a keeper. */
 export const VULNYX_H = SPIRIT_MODELS.fox!.h
 
-// ── the gate. M107 ship (Alex 11-23): the MODELS and their roam/trot are for EVERY keeper now (no gate). What stays
-// owner + ?spirits=3d is the rest that grew on top: E-talk (Feed / Follow / Open panel), the party + the grimoire roster
-// face, the training pieces and their plays. useSpiritsDev() is that gate (cached once per page). ───────────────────────
-let ownerP: Promise<boolean> | null = null
-const ownerCheck = () => (ownerP ??= fetch('/api/owner', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { owner: false })).then(d => !!d.owner).catch(() => false))
-const flagOn = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('spirits') === '3d'
+// ── the (former) gate. M107 ship (Alex 11-23): the MODELS and their roam/trot went to every keeper. M123 s2 (Alex 11-24, "yea
+// lets fold that in"): the rest that grew on top ships to EVERY keeper too: E-talk (Feed / Follow / Open panel), the party of 8
+// + who comes along, the grimoire roster face, the training pieces + Allow and their plays, Greg's grimoire hand-over. The hook
+// stays as the one switch (true for all) so a future gate is one line. Owner-only DEBUG stays owner-only elsewhere
+// (spirit-panels.tsx Bloom now / +1 day, workshop.tsx Blueprints). ───────────────────────────────────────────────────────
 export function useSpiritsDev(): boolean {
-  const [on, setOn] = useState(false)
-  useEffect(() => { if (!flagOn()) return; let alive = true; ownerCheck().then(v => { if (alive) setOn(v) }); return () => { alive = false } }, [])
-  return on
+  return true
 }
 
 // read-only probe for the check: how many spirit models are mounted right now (all, and by species). `trot` = the Vulnyx's
@@ -50,7 +47,7 @@ let grad: THREE.DataTexture | null = null
 const gradTex = () => { if (grad) return grad; grad = new THREE.DataTexture(new Uint8Array([110, 110, 110, 255, 185, 185, 185, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat); grad.minFilter = grad.magFilter = THREE.NearestFilter; grad.needsUpdate = true; return grad }
 
 function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: SpiritLook; nav?: SpiritNav
-  /** M107 ship: owner + ?spirits=3d: she can be talked to, follow, keep with the party, play at training pieces */ dev?: boolean
+  /** M107 ship / M123 s2 (every keeper): she can be talked to, follow, keep with the party, play at training pieces */ dev?: boolean
   /** M109: the planter's id (her follow state + the E pick are keyed on it) */ id?: string
   /** M109: the spirit panel's turntable copy: not counted by the probe, not pickable */ avatar?: boolean }) {
   const { scene } = useGLTF(look.url)

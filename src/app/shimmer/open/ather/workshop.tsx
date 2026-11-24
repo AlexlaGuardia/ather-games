@@ -1290,7 +1290,7 @@ function SpiritPlanterBody({ id }: { id?: string }) {
 }
 /** M122: one spirit at home on her planter (was inline in SpiritPlanterBody): her species' model and roam, or the gold orb. */
 function PlanterSpirit({ id }: { id: string }) {
-  const f = FURNITURE.spirit_planter, b = useBook(), p = b.pots[id], dev = useSpiritsDev()   // M107 ship: owner + ?spirits=3d = talk/party/training only
+  const f = FURNITURE.spirit_planter, b = useBook(), p = b.pots[id], dev = useSpiritsDev()   // M123 s2: talk/party/training for every keeper (true)
   const orb = useRef<THREE.Mesh>(null)
   // M102 Manalotl wire-in: the bloomed pot's OWN species' model (spirit-models.ts), or the gold orb when it has none yet.
   // M107 ship (Alex 11-23): the model + her roam are for every keeper now.
@@ -1705,7 +1705,7 @@ function TabRail({ tabs, on, go }: { tabs: BenchTab[]; on: BenchTab; go: (t: Ben
 
 function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
   const inv = useInv(), w = useWorks(), def = ROOMS[room.kind], bankNow = useBank(), narrow = useNarrow()
-  const spirits3d = useSpiritsDev()   // M110 s1: training pieces are owner + ?spirits=3d only for now
+  const spirits3d = useSpiritsDev()   // M110 s1 / M123 s2: training pieces for every keeper (true)
   const r = w.rooms.find(x => x.id === room.id) ?? room   // the live room (its store moves under the panel)
   const [pick, setPick] = useState<Pick>({ job: null, qty: 10 })
   const tabs = benchTabs(r.kind)

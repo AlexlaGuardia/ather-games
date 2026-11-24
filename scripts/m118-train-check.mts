@@ -17,7 +17,8 @@ import { TRAIN } from '../src/app/shimmer/open/ather/spirit-stats'
 import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games')
-const KEY = process.env.OWNER_KEY || (existsSync('.env') ? /OWNER_KEY=(.+)/.exec(readFileSync('.env', 'utf8'))?.[1]?.trim() : undefined)
+const player = process.argv.includes('--player')   // M123 s2: a NON-owner, no ?spirits param (edesk)
+const KEY = player ? 'x' : process.env.OWNER_KEY || (existsSync('.env') ? /OWNER_KEY=(.+)/.exec(readFileSync('.env', 'utf8'))?.[1]?.trim() : undefined)
 if (!KEY) { console.error('no OWNER_KEY (env or .env)'); process.exit(2) }
 const P = { x: -130, z: 102.5 }, HD = { id: 'hd-check', x: P.x - 3, z: P.z + 4 }, KEEP = { x: P.x - 1.5, z: P.z + 2.5 }
 const PIECES = [{ id: 'vx-check', item: 'spirit_planter', x: P.x, z: P.z, q: 0, placedAt: 1 }, { id: 'mx-check', item: 'spirit_planter', x: P.x - 2.6, z: P.z + 1.0, q: 0, placedAt: 1 },
@@ -31,9 +32,9 @@ try {
   const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 390, height: 844 })
   const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
-  await p.goto(`${new URL(url).origin}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
+  if (!player) await p.goto(`${new URL(url).origin}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
   await p.goto(`${new URL(url).origin}/api/owner`, { waitUntil: 'load', timeout: 60000 })
-  if (!await p.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner))) { ok(false, 'owner cookie took'); process.exit(1) }
+  if (!player && !await p.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner))) { ok(false, 'owner cookie took'); process.exit(1) }
   await p.evaluateOnNewDocument((pieces: unknown[], pots: unknown) => {
     if (sessionStorage.getItem('m118t')) return; sessionStorage.setItem('m118t', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star')
@@ -47,7 +48,7 @@ try {
   }, PIECES, POTS(Date.now() - BLOOM_MS - 60000))
   type Rec = { g: Record<string, number>; plays: number }
   const book = () => p.evaluate(() => JSON.parse(localStorage.getItem('ather.spiritStats.v1') ?? '{}')) as Promise<Record<string, Rec>>
-  await p.goto(`${url}/shimmer/open/ather?hour=14&spirits=3d`, { waitUntil: 'load', timeout: 180000 })
+  await p.goto(`${url}/shimmer/open/ather?hour=14${player ? '' : '&spirits=3d'}`, { waitUntil: 'load', timeout: 180000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 })
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), KEEP.x, KEEP.z)
   for (let i = 0; i < 60; i++) { await sleep(500); if (await p.evaluate(() => { const t = (window as any).__spiritModel?.trots; return !!(t?.fox && t?.axolotl) })) break }

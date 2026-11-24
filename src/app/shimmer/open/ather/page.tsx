@@ -72,7 +72,7 @@ import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
 import { tutStart, tutNode, grimoireGift, pedestalOwed, type TutCursor } from './glade-greg-talk'   // M68 s2 (+ M123 s1 pedestalOwed)
-import { useSpiritsDev } from './spirit-model'   // M123 s1: Greg's grimoire hand-over for a legacy keeper (owner + ?spirits=3d until s2)
+import { useSpiritsDev } from './spirit-model'   // M123: Greg's grimoire hand-over for a legacy keeper (every keeper since s2)
 import { loadTut, saveTut, gift as tutGift, allHeard, tessPacket, type Tut, type Gift as TutGift } from './glade-tutorial'
 import { gardenOpen, foldOffered, foldNode, buyPick, FOLD_TEXT, type FoldStep } from './garden-fold'   // M71 s1: Greg folds the first garden
 import { friendStart, friendNode, FRIEND_NAME, GARDEN_FRIENDS, type FriendCursor, type GardenFriend } from './glade-friend-talk'   // M68 s3a

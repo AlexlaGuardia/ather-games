@@ -36,5 +36,10 @@ const canon = (() => { try { return readFileSync('/root/athernyx/CANON/game/shim
 ok(n1.line === 'This is a grimoire. I keep trying to grow what we know of them with it.', 'his bubble after the hand-over is greg.b1.spirits.3')
 if (canon !== null) ok(canon.includes(n1.line), 'the line is in the signed canon file')
 else console.log('(canon file not readable here: canon assert skipped)')
+// M123 s2: the spirits gate is open for every keeper (no owner cookie, no ?spirits=3d) — read from the source
+const sm = readFileSync(new URL('./spirit-model.tsx', import.meta.url), 'utf8')
+const hook = sm.slice(sm.indexOf('export function useSpiritsDev'), sm.indexOf('export function useSpiritsDev') + 200)
+ok(/\{\s*return true\s*\}/.test(hook), 's2: useSpiritsDev() is true for every keeper')
+ok(!/api\/owner/.test(hook) && !/spirits/.test(hook.replace('useSpiritsDev', '')), 's2: no owner check, no ?spirits flag in the hook')
 console.log(`grimoire-handover: ${pass} pass, ${fail} fail`)
 if (fail) process.exit(1)
