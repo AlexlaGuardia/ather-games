@@ -3,7 +3,8 @@
 // kept ground"): a planted waymark whose ground goes grey again goes DARK (no travel to it) and RELIGHTS when the ground is
 // cleared again. It stays planted, no re-buy, no refund; the fold map shows it unlit, not removed. Settlement = kept by definition.
 import { isLit, canTravel, lastLit, plant, parseWaymarks, canPlant, groundOf, DARK_WHY, GREG_WAYMARK, type Waymark } from './waymarks'
-import { advance, clearAt, freshSpread, infectedIds } from './spread'
+import { clearAt, freshSpread, infectedIds } from './spread'
+import { freshMap, startRule, tend, rollSections } from './spread-map'
 import { GAME_DAY_MS, type WildsNode } from './nodes'
 import { BIOME } from './wilds'
 let pass = 0, fail = 0
@@ -53,16 +54,20 @@ ok(lastLit([settW, nodeW], new Set(['n1']))?.id === settW.id, 'a dark newest is 
 const nodes: WildsNode[] = []
 for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) nodes.push({ id: `g${i}-${j}`, tile: 'first-wilds', biome: BIOME.woods, x: i * 100, z: j * 100, i, j })
 let s = freshSpread(0)
-for (const n of nodes) s = clearAt(s, nodes, n.id, 0).s
+for (const n of nodes) s = clearAt(s, n.id, 0)
 ok(infectedIds(s, nodes).length === 0, 'spread: every node cleared')
 const w0 = plant([], onNode('g0-0'), 1)[0]
 ok(isLit(w0, new Set(infectedIds(s, nodes))), 'planted on cleared ground: lit')
-// find a tick where g0-0 has gone grey again (it wells or the grey spreads back)
+// roll days (M121's rule) until g0-0 has gone grey again
 let t = 0, grey = false
-while (t < 3000 * GAME_DAY_MS && !grey) { t += 5 * GAME_DAY_MS; s = advance(s, nodes, t).s; grey = infectedIds(s, nodes).includes('g0-0') }
+let m = startRule(freshMap(), { fresh: true, firstId: null, infected: () => false, now: 0, seed: 7 }); for (const n of nodes) m = tend(m, n.id, 0)
+while (t < 3000 * GAME_DAY_MS && !grey) {
+  t += GAME_DAY_MS; const r = rollSections(m, s.clean, new Set(), t); m = r.m; s = { ...s, clean: r.clean }; grey = r.turned.includes('g0-0')
+  for (const id of r.turned) if (id !== 'g0-0') { m = tend(m, id, t); s = clearAt(s, id, t) }   // the others are cleared as they turn
+}
 ok(grey, 'spread: the node went grey again in time')
 ok(!isLit(w0, new Set(infectedIds(s, nodes))) && !canTravel(w0, new Set(infectedIds(s, nodes))).ok, 'the ground went grey: dark, no travel')
-s = clearAt(s, nodes, 'g0-0', t + 1).s
+s = clearAt(s, 'g0-0', t + 1)
 ok(isLit(w0, new Set(infectedIds(s, nodes))) && canTravel(w0, new Set(infectedIds(s, nodes))).ok, 'cleared again: relit, travels')
 
 console.log(`waymarks-dark: ${pass} pass, ${fail} fail`)

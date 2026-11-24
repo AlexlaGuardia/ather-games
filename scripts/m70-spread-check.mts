@@ -3,8 +3,9 @@
 // file's own text, read here. The opening (born -> the gate) is the s1 check's.
 //   1 the fold map's legend reads 'Unseen · Clear · Hollow ground'; spread.map.first (Chamomile) on the first open, never again
 //   2 a far area is Unseen before the keeper goes there, Clear once they stand in it
+//   (M121: the FIRST section, the settlement's, reads Hollow ground on arrival: the story's)
 //   3 the settlement's big one down -> its area Clear + 'This ground is clear.'
-//   4 a forced 3-day skip (__ather.skipDays) -> the neglected far area reads Hollow ground + the grow toast with its place name
+//   4 skipped game days (__ather.skipDays) -> the far area turns by M121's daily roll: Hollow ground + the grow toast with its place name
 //   5 reload keeps every state; 0 page errors
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync, readFileSync } from 'node:fs'
@@ -92,7 +93,7 @@ try {
   const SM = (fn: string, ...a: unknown[]) => p.evaluate((f: string, args: unknown[]) => { const s = (window as any).__spreadMap?.(); return s ? (typeof s[f] === 'function' ? s[f](...args) : s[f]) : null }, fn, a)
   ok(await poll(async () => ((await SM('seen')) as string[] | null)?.length! > 0, 30000), `0. the arrival's area is uncovered (${JSON.stringify(await SM('seen'))})`)
   const homeId = await SM('here') as string
-  ok((await SM('state', homeId)) === 'clear', `0. the settlement's area reads Clear on arrival (${homeId}: ${await SM('state', homeId)})`)
+  ok((await SM('state', homeId)) === 'hollow', `0. the settlement's area reads Hollow ground on arrival (M121) (${homeId}: ${await SM('state', homeId)})`)
   // ── 1 · the legend + the first look ──
   await A('open', 'gate'); await sleep(1500)
   const legend = await p.evaluate(() => (document.querySelector('[data-spread-legend]') as HTMLElement | null)?.innerText.replace(/\s+/g, ' ').trim() ?? null)
@@ -134,11 +135,11 @@ try {
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), SETTLEMENT.x + 3, SETTLEMENT.z + 3); await sleep(9000)
   const place = await SM('place', FAR.id) as string
   ok(Object.values(ZONE_NAME).includes(place), `4. the far area's place name is a real zone (${place})`)
-  await A('skipDays', 3)
-  const grow = L('spread.hud.grow').replace('{PLACE}', place)
-  ok(await poll(async () => (await SM('state', FAR.id)) === 'hollow', 15000), `4. neglected 3 days: ${FAR.id} reads Hollow ground (${await SM('state', FAR.id)})`)
-  ok(await poll(async () => (await p.evaluate(() => document.body.innerText)).includes('Hollow ground is spreading near '), 10000), `4. grow toast ("${grow}")`)
-  const toast = await p.evaluate(() => (document.body.innerText.match(/Hollow ground is spreading near [^\n]*\./) ?? [''])[0])
+  const toastNow = () => p.evaluate(() => (document.body.innerText.match(/Hollow ground is spreading near [^\n]*\./) ?? [''])[0])
+  let days = 0, toast = ''
+  for (; days < 120 && (await SM('state', FAR.id)) !== 'hollow'; days++) { await A('skipDays', 1); await sleep(350); toast ||= await toastNow() }
+  ok((await SM('state', FAR.id)) === 'hollow' && days > 2, `4. the far area turned by the daily roll, not in its grace days: ${FAR.id} reads Hollow ground after ${days} days`)
+  ok(!!toast || await poll(async () => !!(toast = await toastNow()), 10000), `4. grow toast ("${toast}")`)
   ok(Object.values(ZONE_NAME).some(z => toast === L('spread.hud.grow').replace('{PLACE}', z)), `4. the toast names a real place: "${toast}"`)
   await A('open', 'gate'); await sleep(1500); await p.screenshot({ path: `${out}/s2-4-map-hollow-390.png` }); await p.keyboard.press('Escape')
   const before = { far: await SM('state', FAR.id), big: await SM('state', BIG.id), home: await SM('state', homeId), seen: ((await SM('seen')) as string[]).sort().join() }

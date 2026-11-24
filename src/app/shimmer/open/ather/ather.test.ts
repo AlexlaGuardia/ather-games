@@ -12,7 +12,7 @@ import {
 import { newCombat, stepCombat, spawnHollow, fire, populate, KEEPER_HP, SHAMBLER, BODY_Y } from './combat'
 import { wakeChampion, champVulnerable, planCombo, windupOf, tellOf, CHAMP, WAVES, PANIC_MIN_WINDUP } from './champion'
 import { placeNodes, nodeAdjacency, ownerOf, nodeRegions, polyArea, NODE_CLEAR_OF, GAME_DAY_MS, SUB } from './nodes'
-import { advance, clearAt, freshSpread, infectedIds, SPREAD } from './spread'
+import { clearAt, freshSpread, infectedIds } from './spread'
 import { readGarden, gardenText } from './garden-snapshot'
 import { treeFor, prune, forestryLevel, _resetForestry, SAPLING_CHANCE, MAST_CHANCE, PRUNE_RANGE, MANA_COST, type Zone } from './forestry'
 import { clusterFrame, clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow, D, MIDDLE_HALF, type Quarter } from './cluster'
@@ -309,32 +309,12 @@ for (const [n, p] of [['greg', GREG], ['threshold', THRESHOLD]] as const) {
   ok(nodes.every(n => W.biomeAt(n.x, n.z) === n.biome && walkableIn(W, n.x, n.z, 1.2)), 'nodes: a node off its biome or on unwalkable ground')
   ok(nodes.every(n => Math.hypot(n.x - g.x, n.z - g.z) >= NODE_CLEAR_OF), 'nodes: a node inside the safe distance of Greg\'s waymark')
   ok(JSON.stringify(placeNodes(W, 'first-wilds', g)) === JSON.stringify(nodes), 'nodes: placement is not deterministic')
-  // THE SPREAD (Alex's raw numbers, no brakes)
+  // THE SPREAD'S LEDGER (M121: which sections turn again = spread-map.test.ts)
   {
-    const t0 = 1_000_000_000_000, D = GAME_DAY_MS
-    const s0 = freshSpread(t0)
+    const s0 = freshSpread(1000)
     ok(infectedIds(s0, nodes).length === nodes.length, 'spread: the Wilds do not start fully infested')
-    // clear everything, wait: nothing spreads from nothing; wells come back at ~3% per 5 days
-    let all = s0; for (const n of nodes) all = clearAt(all, nodes, n.id, t0 + 1).s
+    let all = s0; for (const n of nodes) all = clearAt(all, n.id, 1001)
     ok(infectedIds(all, nodes).length === 0, 'spread: clearing every node left one infected')
-    const year = advance(all, nodes, t0 + 365 * D)
-    const wells = year.events.filter(e => e.kind === 'well').length
-    ok(wells > 0, 'spread: a clean world never welled up in a year')
-    // clear one node in the middle of its biome: within a week (2 spread ticks) it is at risk only from its neighbours
-    const mid = nodes.find(n => (adj.get(n.id) ?? []).length >= 2)!
-    const one = clearAt(s0, nodes, mid.id, t0 + 1).s
-    ok(advance(one, nodes, t0 + SPREAD.everyDays * D - 1).s.clean.includes(mid.id), 'spread: it spread before the first tick')
-    // over many seeds of time, a cleared node gets re-infected only by a neighbour in its biome
-    const ev = advance(one, nodes, t0 + 120 * D).events.filter(e => e.kind === 'spread')
-    ok(ev.every(e => (adj.get(e.from!) ?? []).includes(e.id)), 'spread: grey jumped to a non-neighbour')
-    ok(ev.some(e => e.id === mid.id), 'spread: in 120 game days the grey never crept back into the cleared node')
-    // replay is exact: one long advance == many short ones
-    let step = one; for (let d = 1; d <= 60; d++) step = advance(step, nodes, t0 + d * D).s
-    ok(JSON.stringify(step.clean) === JSON.stringify(advance(one, nodes, t0 + 60 * D).s.clean), 'spread: stepping day by day differs from one jump (the offline replay would disagree)')
-    // the dial: chance 0 means it never spreads
-    const keep = SPREAD.chance; SPREAD.chance = 0
-    ok(advance(one, nodes, t0 + 120 * D).events.every(e => e.kind !== 'spread'), 'spread: spread with the chance dial at 0')
-    SPREAD.chance = keep
   }
 
   // ★ Alex 11-15: "the hollows still kept spawning after I defeated the meadow champion". Cleared ground stays quiet.
@@ -637,7 +617,7 @@ const worldDone = (async () => {
   await stream(w, cx + 5 * TILE_M, cz, loadFs)
   ok(w.loaded.size <= 9 && ![...w.loaded.keys()].includes(pair.name), 'world: far tiles were not dropped')
   ok(tileOf(499, -499).tx === 0 && tileOf(501, 0).tx === 1, 'world: tileOf misplaces a tile edge')
-  // the spread over the whole continent's nodes stays quick (it replays on every load)
+  // every node on the continent, in world coords
   const all = index.tiles.flatMap(t => t.nodes.map(n => ({ ...n, tile: t.name, x: n.x + t.tx * TILE_M, z: n.z + t.ty * TILE_M, gi: t.tx * SUB + n.i, gj: t.ty * SUB + n.j })))
   // the grey crosses tile seams: some neighbours sit in another tile, and every neighbour is one subsection away
   const gadj = nodeAdjacency(all), byId = new Map(all.map(n => [n.id, n]))
@@ -645,8 +625,6 @@ const worldDone = (async () => {
   ok(across.length > 50, `world: only ${across.length} neighbour links cross a tile seam`)
   ok([...gadj.entries()].every(([id, ns]) => ns.every(m => { const a = byId.get(id)!, b = byId.get(m)!; return a.biome === b.biome && Math.abs(a.gi! - b.gi!) + Math.abs(a.gj! - b.gj!) === 1 })), 'world: a continent neighbour is across a biome or more than one subsection away')
   ok(across.every(([a, b]) => Math.hypot(a.x - b.x, a.z - b.z) < 450), 'world: a seam neighbour is not actually next door')
-  const t0 = Date.now(); advance(freshSpread(0), all, 60 * GAME_DAY_MS); const ms = Date.now() - t0
-  ok(ms < 1500, `world: 60 game days over ${all.length} nodes took ${ms} ms`)
 })()
 
 // ── forestry: the zones, the four trees, pruning (Alex 11-15: "tree nodes ... match them per biome", his zones) ────────
