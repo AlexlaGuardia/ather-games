@@ -17,6 +17,7 @@ import { canFire, spreadDeg, bloomAfterShot, bloomAfterRest, weaponDef, type Wea
 import { stepChampion, hitChampion, CHAMP, type Champion } from './champion'
 import { easeRemote } from '../shared/fight-share'   // M28: a non-host's Hollows ease to the host's snapshot
 import { ECON, payReload } from '../shared/vitals-economy'
+import { stepFlit, flitHit, type FlitStep } from './flit-pose'
 import { bodyBlocked, segmentHit, lineOfSight, steer, type Structures, type SteerMem } from './obstacles'
 
 export interface Terrain {
@@ -49,6 +50,8 @@ export interface Hollow {
   zips?: number; zx?: number; zz?: number; shots?: number
   /** M120 s2 crawler: how many bodies have pooled into this one (1 = never merged); its strength and hp are the sum */
   mass?: number
+  /** M120 s3c floater: its pose, stepped here (flit-pose.ts); what a round can hit follows it and FlitBody draws it */
+  flit?: FlitStep
 }
 /** M120: a pack's shared heading (where its members drift while nobody has noticed the keeper) */
 export interface Pack { wx: number; wz: number; t: number }
@@ -356,6 +359,11 @@ export function groupPack(c: Combat, ids: number[]): number {
 export const holdsBorder = (c: Combat, h: Hollow, x: number, z: number) =>
   h.state === 'wander' && !!c.drained && c.drained(h.x, h.z) && !c.drained(x, z)
 
+/** How long after an arrival the keeper's spot is trusted (s): in the first frames the camera still holds the OLD zone's spot. */
+export const SETTLE = 1.5
+/** Is the strays' top-up due? Never before the keeper has SETTLED (M120 s3c: the first ring could sit round the spot they left). */
+export const topUpDue = (popT: number, settled: number) => popT <= 0 && settled > SETTLE
+
 /** Keep the Wilds peopled round the keeper: top up in a ring out of sight, in PACKS (M120), cull the far ones. */
 export function populate(c: Combat, T: Terrain, kx: number, kz: number, target: number, safe?: { x: number; z: number; r: number }, infested?: (x: number, z: number) => boolean) {
   c.hollows = c.hollows.filter(h => Math.hypot(h.x - kx, h.z - kz) < 130)
@@ -498,7 +506,8 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     for (const h of c.hollows) {
       if (h.hp <= 0 || Math.hypot(h.x - r.x, h.z - r.z) > 6) continue
       if (h.kind === 'floater') {
-        if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y, h.z) < 0.5 * 0.5) { best = { h, head: false }; break }
+        if (flitHit(h, ox, oy, oz, r.x, r.y, r.z)) {   // M120 s3c: core, wings, tail, legs (Alex 11-24)
+          best = { h, head: false }; break }
         continue
       }
       if (h.kind === 'crawler') {   // M120 s2: low and plated, no head to aim for; the body grows with its mass
@@ -650,6 +659,8 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
       if (!holdsBorder(c, B, bx, bz)) { B.x = bx; B.z = bz }
     }
   }
+
+  for (const h of c.hollows) if (h.kind === 'floater') stepFlit(h, dt, c.clock ?? 0, FLOATER.charge)
 
   stepChampion(c, T, feet, dt)
 

@@ -13,7 +13,7 @@ import { armedGun, sigilKey } from '../shared/gun-sigil'   // M93 s4: the fitted
 import { useLoadout } from '../shared/loadout'
 import { useBirth } from '../birth-gate'
 import { weaponDef } from '../../engine/weapons'
-import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, HEAD_Y, fxOn, SHAMBLER, FLOATER, CRAWLER, crawlerScale, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
+import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, SETTLE, topUpDue, HEAD_Y, fxOn, SHAMBLER, FLOATER, CRAWLER, crawlerScale, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
 import { live as liveSolids } from './dynamic-solids'
 import { noteCombat } from '../shared/idle-mode'
 import { noteHollowNear, SKIT } from '../shared/idle-skits'   // M126 s2
@@ -31,7 +31,7 @@ import { openNet, openPeers } from '../shared/open-mp'
 import { sharing, hostOf, encodeSnap, applySnap, SNAP_KIND, SNAP_HZ, HIT_KIND, KILL_KIND, encodeHits, decodeHits, newDrops, decodeKills, layDrop, HURT_KIND, encodeHurt, decodeHurt, type Snap, type HitRow, type KillRow } from '../shared/fight-share'   // BETA M28 shared fights   // M33: Morel's bubble reads the gun straight from here
 import { goopMaterial, sharedGoop, groundEnv, releaseGroundEnvs, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'
 import { sprout, poseSprout, lumpyGeometry, type SproutKind } from './hollow-body'   // M34: Alex's pick A, the rooted sprout   // M34: no light of its own; borrows the ground
-import { poseFlit, flitMats, flitGeometry, geoTris, wingLift, FLIT, FLIT_HIT_R, TELL_FULL, type FlitPose } from './flit-body'   // M120 s3: the floater's own body
+import { poseFlit, flitMats, flitGeometry, geoTris, wingLift, FLIT, FLIT_HIT_R, type FlitPose } from './flit-body'   // M120 s3: the floater's own body
 import { borrowedSky } from '../../voxel3d/sky-env'
 import { dayProgress, daylight } from '../../engine/day-cycle'
 
@@ -45,8 +45,6 @@ export interface CombatHud {
   skin?: number; skinMax?: number; skinPopAt?: number
 }
 
-/** Seconds after the layer goes active before a champion may wake (the camera catches up to the walker). */
-const SETTLE = 1.5
 const EYE = 1.62   // locomotion eye height over the feet (approx; damage only needs the feet)
 
 /** The light a cast leaves under a Hollow it holds (the Hollow itself stays colourless goop): one colour per effect,
@@ -166,32 +164,22 @@ export function flitProbe(id: number) {
     wingTipY: e(FLIT.wings, 13) + e(FLIT.wings, 1), tailZ: e(FLIT.abd + FLIT.abdN - 1, 14), tailY: e(FLIT.abd + FLIT.abdN - 1, 13) }   // local, off the matrices on the GPU buffer
 }
 /** One Flit (the floater): flit-body.ts's lumps as ONE instanced mesh, one geometry for all of them and one material per ground
- *  colour. Look only: the zip is read from the sim's zip spot (a party guest has none: from how fast the body moves). */
+ *  colour. Look only: the pose is the sim's (Hollow.flit, flit-pose.ts), the one a round is tested against. */
 function FlitBody({ c, id, world }: { c: React.MutableRefObject<Combat>; id: number; world: React.MutableRefObject<GoopWorld> }) {
   const g = useRef<THREE.Group>(null), im = useRef<THREE.InstancedMesh>(null)
   const ground = () => { const h = c.current.hollows.find(k => k.id === id), W = world.current; return h ? borrowedGround(W.groundAt(h.x, h.z), greyStep(greyAt(h.x, h.z, W.nodes))) : null }
   const [hex, setHex] = useState(() => ground() ?? GRASS)
   const mat = sharedGoop(hex, !(window as unknown as { __noBorrow?: boolean }).__noBorrow)
   const mats = useMemo(flitMats, [])
-  const st = useRef({ next: 0, x: NaN, z: NaN, kick: 0, shots: 0, drawn: 0, pose: { t: 0, zip: 0, tell: 0, bank: 0, kick: 0, knock: 0 } as FlitPose })
+  const st = useRef({ next: 0, drawn: 0, pose: { t: 0, zip: 0, tell: 0, bank: 0, kick: 0, knock: 0 } as FlitPose })
   useEffect(() => () => { FLIT_SEEN.delete(id) }, [id])
-  useFrame(({ clock }, dt) => {
+  useFrame(({ clock }) => {
     const h = c.current.hollows.find(k => k.id === id), M = im.current; if (!h || !g.current || !M) return
-    const s = st.current, P = s.pose, e = 1 - Math.exp(-dt * 14)
+    const s = st.current, P = s.pose
     if (clock.elapsedTime >= s.next) { s.next = clock.elapsedTime + 0.5; const k = ground(); if (k && k !== hex) setHex(k) }
     mat.envMapIntensity = BORROW * borrowedSky(daylight(dayProgress()))
     g.current.position.set(h.x, h.y, h.z); g.current.rotation.y = h.yaw
-    const vx = Number.isNaN(s.x) || dt <= 0 ? 0 : (h.x - s.x) / dt, vz = Number.isNaN(s.z) || dt <= 0 ? 0 : (h.z - s.z) / dt, v = Math.hypot(vx, vz)
-    s.x = h.x; s.z = h.z
-    const zipTo = h.state !== 'chase' ? 0 : h.zx !== undefined ? 1 : Math.max(0, Math.min(1, (v - 3.5) / 3))
-    P.zip += (zipTo - P.zip) * e
-    const side = v > 0.2 ? (vx * Math.cos(h.yaw) - vz * Math.sin(h.yaw)) / v : 0   // the move along the body's own +x
-    P.bank += (side - P.bank) * e
-    const raw = h.state === 'charge' ? Math.max(0, Math.min(1, (1 - h.t / FLOATER.charge) / TELL_FULL)) : 0, tellTo = raw * raw * (3 - 2 * raw)
-    P.tell += (tellTo - P.tell) * (tellTo > P.tell ? 1 : e)   // read straight off the sim and held through the burst; the let-go eases
-    if ((h.shots ?? 0) < s.shots) s.kick = 1
-    s.shots = h.shots ?? 0; s.kick *= Math.exp(-dt * 12); P.kick = s.kick
-    P.knock = Math.min(1, h.hitFlash * 8); P.t = clock.elapsedTime + id * 1.3
+    if (h.flit) Object.assign(P, h.flit)   // M120 s3c: the sim's own pose, so a round meets the wing where it is drawn
     poseFlit(P, mats)
     for (let i = 0; i < mats.length; i++) M.setMatrixAt(i, mats[i])
     M.instanceMatrix.needsUpdate = true
@@ -678,7 +666,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       }
       C.netHits = []
     }
-    if (!C.remote && popT.current <= 0) {
+    if (!C.remote && topUpDue(popT.current, settled.current)) {
       popT.current = 1.5
       // strays thicken round an infected node; during a champion fight the waves are the only adds
       const near = nodesRef.current.some(n => !spent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < STRAY_R)
