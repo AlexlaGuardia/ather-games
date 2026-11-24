@@ -15,7 +15,7 @@ const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); retu
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m126-doors'); mkdirSync(out, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
-const X0 = -144, X1 = -136, Z0 = 98, Z1 = 104, RAISE = 1.2, W: Walls = {}
+const X0 = -144, X1 = -136, Z0 = 98, Z1 = 104, RAISE = 1.2, W: Record<string, Walls[string]> = {}
 for (let i = X0; i < X1; i++) { W[`h,${i},${Z0}`] = i === -141 || i === -140 ? { mat: 'goldwood', kind: 'door' } : { mat: 'goldwood' }; W[`h,${i},${Z1}`] = { mat: 'goldwood' } }
 for (let j = Z0; j < Z1; j++) { W[`v,${X0},${j}`] = { mat: 'goldwood' }; W[`v,${X1},${j}`] = { mat: 'goldwood' } }
 const SOLID = Object.entries(W).filter(([, w]) => !w.kind).map(([k]) => { const [o, a, b] = k.split(','), i = +a, j = +b; return o === 'h' ? { x0: i, x1: i + 1, z0: j - 0.1, z1: j + 0.1 } : { x0: i - 0.1, x1: i + 0.1, z0: j, z1: j + 1 } })

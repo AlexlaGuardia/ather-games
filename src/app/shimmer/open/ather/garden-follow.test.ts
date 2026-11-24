@@ -16,7 +16,7 @@ let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
 // ── a house 8 x 6 m, x -144..-136, z 98..104, raised 1.2 m, a 2 m door in its north wall (z 98, x -141..-139) ─────────────────
-const X0 = -144, X1 = -136, Z0 = 98, Z1 = 104, W: Walls = {}
+const X0 = -144, X1 = -136, Z0 = 98, Z1 = 104, W: Record<string, Walls[string]> = {}
 for (let i = X0; i < X1; i++) { W[`h,${i},${Z0}`] = i === -141 || i === -140 ? { mat: 'goldwood', kind: 'door' } : { mat: 'goldwood' }; W[`h,${i},${Z1}`] = { mat: 'goldwood' } }
 for (let j = Z0; j < Z1; j++) { W[`v,${X0},${j}`] = { mat: 'goldwood' }; W[`v,${X1},${j}`] = { mat: 'goldwood' } }
 const key = findRooms(W)[0].key
