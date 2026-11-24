@@ -36,7 +36,7 @@ async function page() {
   const opts = () => p.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-talk-option]')].map(e => (e.textContent ?? '').replace(/^›/, '').replace(/short$/i, '').trim())) as Promise<string[]>
   const pick = (label: string) => p.evaluate((l: string) => { const b = [...document.querySelectorAll<HTMLButtonElement>('[data-talk-option]')].find(e => (e.textContent ?? '').includes(l)); b?.click(); return !!b }, label)
   const store = (suffix: string) => p.evaluate((s: string) => { const k = Object.keys(localStorage).find(x => x.endsWith(s)); return k ? JSON.parse(localStorage.getItem(k) ?? 'null') : null }, suffix) as Promise<any>
-  const greg = async () => { await A('open', 'greg'); await poll(async () => !!(await bubble()), 8000); await sleep(400); return { line: (await bubble()) ?? '', opts: await opts() } }
+  const greg = async () => { await A('open', 'greg'); await poll(async () => !!(await bubble()) || !!(await opts()).length, 8000); await poll(async () => !!(await bubble()), 6000); await sleep(400); return { line: (await bubble()) ?? '', opts: await opts() } }
   const closeTalk = async () => { await p.keyboard.press('Escape'); await sleep(500); if (await p.$('[data-talk-choices]')) { await pick(ANSWERS.bye); await sleep(500) } }
   const zoneIs = (z: string, ms = 30000) => poll(async () => (await A('zone')) === z, ms)
   return { p, A, bubble, opts, pick, store, greg, closeTalk, zoneIs }
@@ -128,7 +128,7 @@ try {
     await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
     await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(5000)
     ok((await A('zone')) === 'plot', `B. an existing garden loads on its plot (zone ${await A('zone')})`)
-    await A('travel', { kind: 'glade' }); await zoneIs('glade', 30000)
+    await A('travel', { kind: 'glade' }); await zoneIs('glade', 30000); await sleep(4000)   // the veil lifts before a second arrival
     await A('travel', { kind: 'home' })
     ok(await zoneIs('plot', 30000), `B. home = the plot (zone ${await A('zone')})`)
     await sleep(3000)
