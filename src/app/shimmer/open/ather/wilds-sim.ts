@@ -3,6 +3,7 @@
 // shambler that gets close, strafes otherwise, and steps out of a champion's tell. No React, no three: it drives
 // combat.ts / champion.ts exactly as the scene does. Numbers, not a pass/fail: wilds-teeth.test.ts asserts on them.
 import { newCombat, spawnHollow, stepCombat, fire, BODY_Y, CRAWLER, crawlerScale, type Combat, type Terrain, type HollowKind } from './combat'
+import { newSpiritFight, stepSpirits, noteKeeper, healthOf, type SpiritFight } from '../shared/spirit-fight'
 import { wakeChampion, champVulnerable, tellOf, CHAMP } from './champion'
 
 export const FLAT: Terrain = { heightAt: () => 0, walkable: () => true }
@@ -42,14 +43,37 @@ function botStep(c: Combat, feet: { x: number; y: number; z: number }, t: number
   if (ml > 0 && sp > 0) { feet.x += (mx / ml) * sp * DT; feet.z += (mz / ml) * sp * DT }
 }
 
+/** M127: walk each sim fight with a trio of following spirits (the fight brain as the scene drives it); off = the newcomer alone.
+ *  `ran` = the trio's totals of every fight walked since it was last cleared. */
+export const SIM: { trio: boolean; ran: { keeper: number; spirits: number; fights: number; worst: number; hit: number; mend: number; slow: number; nothing: number } } =
+  { trio: false, ran: { keeper: 0, spirits: 0, fights: 0, worst: 0, hit: 0, mend: 0, slow: 0, nothing: 0 } }
+function makeTrio(seed: number) {
+  const F = newSpiritFight(seed), at = ['a', 'b', 'c'].map(id => ({ id, x: 0, z: 2 })); let keeper = 0, spirits = 0, lastN = 0, lk = 0, ls = 0
+  const tick = (c: Combat, feet: { x: number; y: number; z: number }, step: () => void) => {
+    const before = healthOf(c), eye = { x: feet.x, y: feet.y + 1.62, z: feet.z }
+    at.forEach((s, i) => { const t = F.slots.get(s.id) ?? { x: feet.x + (i - 1) * 1.6, z: feet.z + 2.3 }, d = Math.hypot(t.x - s.x, t.z - s.z), m = Math.min(d, 6 * DT); if (d > 0) { s.x += (t.x - s.x) / d * m; s.z += (t.z - s.z) / d * m } })
+    stepSpirits(F, c, feet, eye, { x: 0, y: 0, z: -1 }, at, DT); step(); noteKeeper(F, c, before)
+    if (F.n !== lastN) { lastN = F.n; keeper += lk; spirits += ls }
+    lk = F.keeperDealt; ls = F.spiritDealt
+  }
+  const end = () => { const R = SIM.ran, k = keeper + lk, s = spirits + ls; R.keeper += k; R.spirits += s; R.fights++; R.worst = Math.max(R.worst, k > 0 ? s / k : 0)
+    R.hit += F.seen.hit; R.mend += F.seen.mend; R.slow += F.seen.slow; R.nothing += F.seen.nothing }
+  return { tick, end, F: F as SpiritFight }
+}
+
 function run(c: Combat, feet: { x: number; y: number; z: number }, done: () => boolean, seed: number): FightResult {
+  const trio = SIM.trio ? makeTrio(seed) : null
+  const r = runFight(c, feet, done, seed, trio?.tick); trio?.end(); return r
+}
+function runFight(c: Combat, feet: { x: number; y: number; z: number }, done: () => boolean, seed: number, around?: (c: Combat, feet: { x: number; y: number; z: number }, step: () => void) => void): FightResult {
   let s = seed * 2654435761 >>> 0
   const jit = () => { s = (s * 1664525 + 1013904223) >>> 0; return (s / 4294967296) * 2 - 1 }
   let t = 0, taken = 0, shots = 0
   while (t < BOT.timeout) {
     const hp0 = c.keeper.hp
     botStep(c, feet, t, jit)
-    stepCombat(c, FLAT, feet, DT); t += DT
+    if (around) around(c, feet, () => stepCombat(c, FLAT, feet, DT)); else stepCombat(c, FLAT, feet, DT)
+    t += DT
     for (const e of c.events) if (e.kind === 'fired') shots++
     taken += Math.max(0, hp0 - c.keeper.hp)
     if (c.keeper.hp <= 0) return { cleared: false, died: true, secs: t, taken, shots }

@@ -17,6 +17,8 @@ import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload,
 import { live as liveSolids } from './dynamic-solids'
 import { noteCombat } from '../shared/idle-mode'
 import { noteHollowNear, SKIT } from '../shared/idle-skits'   // M126 s2
+import { newSpiritFight, setLiveFight, stepSpirits, healthOf, noteKeeper, FIGHT, type SpiritFight } from '../shared/spirit-fight'   // M127 s1
+import { liveSpirits, followIds } from './spirit-follow'
 import { runCast, stepFields, stepPieces, channelAim, type ChannelRun, type CastHit } from './combat-casts'
 import type { CastSpec } from '../../play3d/cast'
 import { touch } from '../shared/touch'
@@ -428,7 +430,9 @@ function CastFlash({ fx }: { fx: React.MutableRefObject<LiveFx[]> }) {
  *  flare) and how far a charge has built (0..1, the Charred Rifle). */
 export interface SightLink { aiming: boolean; ads: boolean; firedAt: number; charge: number }
 
-export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats, sight, channel, groundAt, mana, skin }: {
+export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats, sight, channel, groundAt, mana, skin, spirits = false }: {
+  /** M127 s1: the keeper's following spirits may help in a fight (the one switch: useSpiritFight, owner-only for now) */
+  spirits?: boolean
   T: Terrain
   /** M34: the biome colour under a point (sRGB hex): what a Hollow's sheen borrows, and the colour its dispersal blooms */
   groundAt?: (x: number, z: number) => string
@@ -465,6 +469,18 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   sight?: React.MutableRefObject<SightLink>
 }) {
   const fx = useRef<LiveFx[]>([])
+  // M127 s1: the fight brain (shared/spirit-fight.ts). Off = this layer is exactly what it was.
+  const sf = useRef<SpiritFight | null>(null)
+  useEffect(() => {
+    if (!spirits) return
+    const f = sf.current = newSpiritFight(Date.now() >>> 0); setLiveFight(f)
+    const g = window as unknown as { __spiritFight?: unknown }
+    g.__spiritFight = () => ({ on: f.on, n: f.n, helps: f.helps, keeperDealt: f.keeperDealt, spiritDealt: f.spiritDealt, target: f.target, seen: { ...f.seen }, dials: { ...FIGHT },
+      minds: [...f.minds].map(([id, m]) => ({ id, joined: m.joined, want: m.want, goal: m.goal, coming: m.coming })), slots: Object.fromEntries(f.slots),
+      spirits: liveSpirits().map(s => ({ id: s.id, x: s.x, y: s.y, z: s.z })), log: [...sfLog.current] })   // checks' hook: READ only
+    return () => { sf.current = null; setLiveFight(null); delete g.__spiritFight }
+  }, [spirits])
+  const sfLog = useRef<{ id: string; kind: string; target?: number; amount: number; keeper: number | null }[]>([])
   const { camera, gl } = useThree()
   const c = useRef<Combat>(newCombat(Date.now() >>> 0))
   useEffect(() => { liveSolids.combat = c.current; return () => { if (liveSolids.combat === c.current) liveSolids.combat = null } }, [])
@@ -645,6 +661,9 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     if (!armedRef.current || frozen.current) { mouseAim.current = false; touch.aim = false }
     if (sight) sight.current.aiming = mouseAim.current || touch.aim
     if (sight) sight.current.charge = charging.current >= 0 && charge > 0 ? Math.max(0, Math.min(1, 1 - charging.current / charge)) : 0
+    const SF = sf.current && !net.current.share ? sf.current : null   // M127: alone only (a shared fight's Hollows are the host's, and the host may not have this on)
+    if (sf.current && !SF) { sf.current.on = false; sf.current.slots.clear(); sf.current.minds.clear() }
+    const hp0 = SF ? healthOf(C) : null
     if (casts?.current.length) {
       camera.getWorldDirection(aim)
       for (const spec of casts.current) {
@@ -660,7 +679,19 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       for (const h of eats.current) if (k.hp > 0) k.hp = Math.min(k.maxHp, k.hp + h)
       eats.current = []
     }
+    if (SF) {
+      const ids = followIds(), who = liveSpirits().filter(s => ids.includes(s.id)).sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id))
+      camera.getWorldDirection(aim)
+      for (const d of stepSpirits(SF, C, feet, camera.position, aim, who, dt)) {
+        const s = who.find(w => w.id === d.id)!, at = performance.now() / 1000, from = { x: s.x, y: s.y + s.h * 0.7, z: s.z }
+        if (d.kind === 'hit') fx.current.push({ kind: 'bolt', x: d.x, y: d.y, z: d.z, r: 0.4, hit: 1, at, from, colour: CAST_COLOUR.projectile })
+        else fx.current.push({ kind: 'area', x: d.x, y: d.y, z: d.z, r: d.kind === 'mend' ? 1.2 : FIGHT.slowR, hit: d.amount, at, from, colour: d.kind === 'mend' ? CAST_COLOUR.restore : CAST_COLOUR.status })
+        if (d.kind === 'hit') sfx('hollow-hit', { at: { x: d.x, y: d.y, z: d.z } })
+        sfLog.current.push({ id: d.id, kind: d.kind, target: d.target, amount: d.amount, keeper: SF.target }); if (sfLog.current.length > 60) sfLog.current.shift()
+      }
+    }
     stepCombat(C, T, feet, dt)
+    if (SF && hp0) noteKeeper(SF, C, hp0)
     if (C.hollows.some(h => Math.hypot(h.x - feet.x, h.z - feet.z) < SKIT.hollowR)) noteHollowNear()   // M126 s2: Hollows about = no idle skits
     // slice 3: the host tells the party about every new drop (its kills and guests' kills alike); each keeper lays its own.
     // Becoming host (or starting to share) marks what already lies there, so old drops are never re-sent.

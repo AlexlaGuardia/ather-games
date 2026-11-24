@@ -131,6 +131,7 @@ import { aimPick, lookDir, type Pickable } from '../shared/aim-pick'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, groundOf, canTravel, isLit, lastLit, GREG_WAYMARK, MAX_WAYMARKS, type Waymark, type PlantVerdict } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
+import { WildsSpirits, useSpiritFight } from './wilds-spirits'   // M127 s1
 import { CombatLayer, type CombatHud, type SightLink } from './combat-layer'
 import type { CombatEvent, Terrain } from './combat'
 import { ownerOf, nodeRegions, GAME_DAY_MS, SUB, type WildsNode } from './nodes'
@@ -261,6 +262,7 @@ function AtherSliceGame() {
   const [fog, setFog] = useState<Fog | null>(null)
   const [waymarks, setWaymarks] = useState<Waymark[]>([])
   const [garden, setGarden] = useState<Garden>(freshGarden)
+  const spiritFight = useSpiritFight()   // M127 s1: owner-only for now
   const book = useBook(), pagesNow = garden.pages + seenCount(book)   // M76: bloomed spirits fill the grimoire; garden.pages = older grants
   const [panel, setPanel] = useState<Panel>(null)
   // M36 (Alex 11-19 'yes wire the page.tsx sfx hooks'): a panel opening / closing swishes; any button tap ticks. Only yay sounds play.
@@ -1662,7 +1664,7 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && ww && <FirstSettlement loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}   {/* M70 s1 */}
         {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
         {terrain && (
-          <CombatLayer T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
+          <CombatLayer spirits={spiritFight} T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
             groundAt={ww ? (x: number, z: number) => biomeGround(ww.biomeAt(x, z)) : undefined}
             safe={WILDS_SAFE} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} mana={manaRef.current} skin={skinRef.current} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
         )}
@@ -1679,6 +1681,7 @@ function AtherSliceGame() {
         {gFennel.node && gFennel.head && zone.kind === 'glade' && <TalkBubble at={[gFennel.head.x, gFennel.head.y + 0.5, gFennel.head.z]} name="Fennel" line={gFennel.node.line} />}   {/* M68 s3b */}
         {fennelNode && fennelHead && zone.kind === 'plot' && <TalkBubble at={[fennelHead.x, fennelHead.y + 0.5, fennelHead.z]} name={FENNEL_NAME} line={fennelNode.line} />}
         <QuestGuide zone={zone.kind === 'plot' ? 'ather' : zone.kind} ground={ground} water={zone.kind === 'wilds' ? rinWaterAt : undefined} />   {/* M67 s1b-2: the Glade's quest steps (the Moonwell wait, Greg) point here too */}
+        {spiritFight && terrain && zone.kind === 'wilds' && fade === 0 && !visitNow && <WildsSpirits T={terrain} keeper={poseRef} />}   {/* M127 s1 */}
         {world && fade === 0 && <CompanionFollower pose={poseRef} ground={ground} />}
         <GateRings gate={castGate} />
         {world && (
