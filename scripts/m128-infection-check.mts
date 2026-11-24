@@ -62,7 +62,7 @@ async function open(owner: boolean, seed: { save?: unknown; waymark?: unknown })
   const stallTalk = async (s: Settlement) => {   // m112-burrfolk-check's walk-up: 2.2 m before the plank, E
     await poll(async () => !!(await place(s)).stall, 30000); await p.mouse.click(200, 420); await sleep(800)
     const sp = stallSpot(s), fx = Math.sin(sp.yaw), fz = Math.cos(sp.yaw); let o: string[] = []
-    for (let k = 0; k < 4 && !o.length; k++) {
+    for (let k = 0; k < 8 && !o.length; k++) {
       await p.evaluate((x, z, y) => { const g = (window as any).__ather; const c = g.combat?.(); if (c) { c.hollows.length = 0; c.keeper.hp = c.keeper.maxHp } g.tp(x, z, y); g.look(y, -Math.atan2(1.1, 2.2)) }, sp.x + fx * 2.2, sp.z + fz * 2.2, Math.atan2(fx, fz)); await sleep(1500)
       await p.keyboard.press('KeyE'); await p.mouse.move(5, 5); await poll(async () => (await opts()).length > 0, 6000); o = await opts()
     }
@@ -124,7 +124,7 @@ try {
   await sleep(2500); ok((await o.lit(w.id)) === true, '5. its waymark relit')
   ok((await o.ground()).settlement === A.id && (await I('state')).active === null, `5. kept ground again (${JSON.stringify(await o.ground())})`)
   const t2 = await o.stallTalk(A); ok(t2.includes(BURR_LABEL.look), `5. trade back (${JSON.stringify(t2)})`)
-  await o.home(); await G('travel', { kind: 'waymark', w }); ok(await poll(async () => (await G('zone')) === 'wilds', 60000), '5. the waymark travels')
+  await o.home(); await sleep(4000); await G('travel', { kind: 'waymark', w }); ok(await poll(async () => (await G('zone')) === 'wilds', 60000), '5. the waymark travels')
   // ── 6 · a second one, lost ──
   ok(await o.goto(B.x, B.z), `6. at ${B.name}`); await o.alive(); ok(await poll(async () => (await I('known')).includes(B.id), 20000), '6. discovered')
   let wb: any = null; for (const [dx, dz] of [[2, 16], [14, 8], [-12, 12], [10, -22], [-20, 4]]) { await o.tp(B.x + dx, B.z + dz); if ((await G('wmPlant'))?.ok) { wb = ((await G('wm')) as any[]).find(x => x.settlement === B.id); break } }
@@ -138,7 +138,7 @@ try {
   ok((await p.evaluate(() => (window as any).__pings.filter((e: any) => e.kind === 'lost').length)) === 1, '6. the lost event, once')
   ok((await I('state')).told === 1 && (await I('state')).assigned === 2, '6. its clue is carried')
   const lostIs = async (n: string) => {
-    await sleep(1500); ok((await o.lit(wb.id)) === false && ((await G('wm')) as any[]).length === 2, `${n} its waymark is dark, the keeper's ledger untouched`)
+    await sleep(1500); ok((await o.lit(wb.id)) === false && ((await G('wm')) as any[]).length === 2, `${n} its waymark is dark, the keeper's ledger untouched (${JSON.stringify(await G('wmLit'))} ${JSON.stringify(wb)} of ${((await G('wm')) as any[]).length})`)
     ok(await o.goto(B.x + 3, B.z + 16, 100), `${n} walked there`); await o.alive(); await o.tp(B.x + 3, B.z + 16); await sleep(9000)
     const g = await o.ground(), pl = await o.place(B); ok(g.ground === 'infected' && g.settlement === null, `${n} no settlement, Hollow ground (${JSON.stringify(g)})`)
     ok(!pl.folk && !pl.stall && pl.homes === 'null', `${n} its folk, stall and homes are gone`)
