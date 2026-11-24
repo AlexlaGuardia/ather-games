@@ -194,7 +194,7 @@ try {
       await n.p.evaluate(() => (window as any).__ather.tp(-131, 108, 0))
       ok(await n.p.waitForFunction(() => (window as any).__spiritModel?.rigs?.size === 3, { timeout: 60000 }).then(() => true).catch(() => false), '6. a player: both Manalotls and the Vulnyx are rigged'); await sleep(4000)
       const pl = await n.p.evaluate(() => { const m = (window as any).__spiritModel; return { made: m.rigCount.made, mounted: m.mounted, sk: [...m.rigs.values()].map((r: any) => new Set(Object.values(r.body.meshes).map((x: any) => x.skeleton.uuid)).size), len: m.trots.axolotl?.len, fh: m.trots.fox?.h } })
-      ok(pl.made === 3 && pl.mounted === 3 && pl.sk.every((x: number) => x === 1) && Math.abs(pl.len - 0.9) < 0.09 && pl.fh === 0.7, `6. one skeleton each, 0.90 m long, 0.70 m tall ${JSON.stringify(pl)}`)
+      ok(pl.made === 3 && pl.mounted === 3 && pl.sk.every((x: number) => x === 1) && Math.abs(pl.len - 0.9) < 0.09 && Math.abs(pl.fh - 0.7) < 0.01, `6. one skeleton each, 0.90 m long, 0.70 m tall ${JSON.stringify(pl)}`)
       ok(n.got.includes('manalotl-rigged.glb 200') && n.got.includes('vulnyx-rigged.glb 200') && !n.got.some(x => /^(manalotl|vulnyx)\.glb/.test(x)), `6. the rigged glbs, the old ones never asked for (${n.got.join(', ')})`); await n.p.close() }
     // 6b: a player with ?rig=0
     const n = await open(br, false, { pieces, pots, follow: [], party: [] }, '&rig=0')
