@@ -38,10 +38,10 @@ export const AREA_STATES = ['unseen', 'charted', 'clear', 'hollow'] as const
 export type AreaState = (typeof AREA_STATES)[number]
 export const STATE_WORD: Record<AreaState, string> = { unseen: 'Unseen', charted: 'Charted', clear: 'Clear', hollow: 'Hollow ground' }
 export const STATE_LOOK: Record<AreaState, { fill: string; line: string; dash: readonly [number, number] | null }> = {
-  unseen: { fill: 'rgba(195,216,160,0.6)', line: 'rgba(120,120,120,0.5)', dash: null },   // the legend's swatch only
-  charted: { fill: 'rgba(226,186,104,0.20)', line: 'rgba(240,205,130,0.9)', dash: [3, 5] },
-  clear: { fill: 'rgba(159,210,122,0.12)', line: 'rgba(159,210,122,0.85)', dash: null },
-  hollow: { fill: 'rgba(70,72,78,0.36)', line: 'rgba(235,238,242,0.9)', dash: [10, 7] },
+  unseen: { fill: 'rgba(12,9,24,0.92)', line: 'rgba(12,9,24,0.92)', dash: null },   // the legend's swatch only: ground never stood in lies under the fold-mist
+  charted: { fill: 'rgba(222,150,50,0.36)', line: 'rgba(246,200,110,0.95)', dash: [3, 5] },
+  clear: { fill: 'rgba(96,190,70,0.22)', line: 'rgba(150,220,110,0.9)', dash: null },
+  hollow: { fill: 'rgba(62,64,72,0.48)', line: 'rgba(235,238,242,0.9)', dash: [10, 7] },
 }
 /** `rule` is absent on a pre-M121 save until startRule() ran. `day` = the last game day rolled; `since` = when the rule began here
  *  (the grace clock of a section cleared before it was on the map). */

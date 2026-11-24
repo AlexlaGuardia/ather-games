@@ -173,9 +173,9 @@ export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWild
               {stop('Moonwell Glade', "Gregory's garden", { kind: 'glade' }, '#9fd27a')}
               {stop("Gregory's waymark", 'the Wilds · meadow', { kind: 'waymark', w: GREG_WAYMARK }, '#e7c766')}
               {regions.length > 1 && (
-                <div data-spread-legend style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 11, opacity: 0.8, margin: '2px 0 4px' }}>
+                <div data-spread-legend style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 11, margin: '2px 0 4px' }}>
                   {/* M70 s2, M121 s2: the signed legend, word for word (batch 11-24d), one swatch per state in that state's own map look */}
-                  {AREA_STATES.map((s, k) => { const L = STATE_LOOK[s]; return <span key={s} data-legend-state={s}>{k > 0 ? ' · ' : ''}<span style={{ display: 'inline-block', width: 11, height: 11, marginRight: 4, verticalAlign: -1, background: `linear-gradient(${L.fill}, ${L.fill}), #c3d8a0`, border: `1.5px ${L.dash ? (L.dash[0] < 5 ? 'dotted' : 'dashed') : 'solid'} ${L.line}` }} />{STATE_WORD[s]}</span> })}
+                  {AREA_STATES.map((s, k) => { const L = STATE_LOOK[s]; return <span key={s} data-legend-state={s}>{k > 0 ? ' · ' : ''}<span style={{ display: 'inline-block', width: 14, height: 14, marginRight: 4, verticalAlign: -2, borderRadius: 2, boxShadow: '0 0 0 1px rgba(58,39,22,.45)', background: `linear-gradient(${L.fill}, ${L.fill}), #c3d8a0`, border: `1.5px ${L.dash ? (L.dash[0] < 5 ? 'dotted' : 'dashed') : 'solid'} ${L.line}` }} />{STATE_WORD[s]}</span> })}
                 </div>
               )}
               {waymarks.map((w, k) => { const on = lit(w); return stop(`Waymark ${k + 1}`, `the Wilds · ${BIOME_NAME[w.biome]}${on ? '' : ` · ${UNLIT_LABEL}`}`, { kind: 'waymark', w }, on ? '#6fd3c4' : '#5c6066', { 'data-waymark-stop': w.id, 'data-lit': on ? '1' : '0' }) })}
