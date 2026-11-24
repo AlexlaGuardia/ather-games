@@ -1,0 +1,166 @@
+// BETA M132 s2: THE RIGGED MANALOTL on prod, 390x844 (SwiftShader). Fresh contexts, every non-GET stubbed, storage seeded.
+//  OWNER  1 both Manalotls are rigged, one skeleton each, 0.90 m nose to tail, the Vulnyx still 0.70.  2 in the garden, up to 4 min:
+//         she walks AND runs with her legs moving (joint swing), planted feet stay put in WORLD space, the tail trails behind,
+//         she lies down; a clip always plays (weights sum 1).  3 following a walking keeper: gait, how often the cadence cap bit (noted).
+//         4 the Wilds: she is rigged there too; home again = the Wilds body is thrown away (live count).  5 the panel's copy opens and goes.
+//  PLAYER 6 not the owner: the OLD glb, 0 rigs, the rigged glb never asked for, she draws at 0.698 m.   7 0 page errors.
+//  --perf: 20 Manalotls, owner, `?rig=0` against rigged, same page + camera, A B A B (SwiftShader, not a phone).
+//   OWNER_KEY=... npx tsx scripts/m132-rig-check.mts [--shots dir] [--perf]
+import puppeteer, { type Page } from 'puppeteer-core'
+import { mkdirSync } from 'fs'
+import { aimAt } from './lib/aim.mts'
+const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
+const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), KEY = process.env.OWNER_KEY, perf = process.argv.includes('--perf')
+if (shots) mkdirSync(shots, { recursive: true })
+if (!KEY) { console.error('no OWNER_KEY'); process.exit(2) }
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
+const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
+const at0 = Date.now() - 20 * 86400000, pot = (sp: string, k: number) => ({ seed: `mana_seed_${sp}`, at: at0 + k, v: 2, tends: [], bloomed: true })
+const BEDS = (n: number) => Array.from({ length: n }, (_, k) => ({ id: `p${k}`, item: 'spirit_planter', x: -134 + (k % 4) * 2.6, z: 100 + Math.floor(k / 4) * 2.6, q: 0, placedAt: 1 }))
+const TUT = { v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }
+const errs: string[] = []
+const launch = () => puppeteer.launch({ protocolTimeout: 600000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
+async function open(br: any, owner: boolean, s: { pieces: unknown; pots: unknown; follow: string[]; party: string[] }, q = '') {
+  const p: Page = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true })
+  const got: string[] = []; p.on('pageerror', e => errs.push(`${owner ? 'owner' : 'player'}: ${String(e).slice(0, 200)}`)); p.on('response', r => { if (/open\/spirits\//.test(r.url())) got.push(`${r.url().split('/').pop()} ${r.status()}`) })
+  await p.evaluateOnNewDocument('window.__name = (f) => f')
+  if (owner) await p.goto(`${url}/owner?key=${encodeURIComponent(KEY!)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
+  await p.goto(`${url}/api/owner`, { waitUntil: 'load', timeout: 60000 })
+  ok(await p.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner)) === owner, owner ? '0. the OWNER' : '0. NOT the owner')
+  await p.evaluateOnNewDocument((s: any) => {
+    const f = window.fetch.bind(window); window.fetch = (u, i) => ((i?.method ?? 'GET').toUpperCase() !== 'GET') ? Promise.resolve(new Response('{}', { status: 200 })) : f(u, i); navigator.sendBeacon = () => true
+    if (sessionStorage.getItem('m132')) return; sessionStorage.setItem('m132', '1')
+    localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots: Array(32).fill(null), gifts: ['bait1'] }))
+    localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [], chests: [], pieces: s.pieces })); localStorage.setItem('open.tutorial.v1', JSON.stringify(s.tut))
+    localStorage.setItem('ather.grimoire.v1', JSON.stringify({ v: 1, pages: [{ species: 'fox', stage: 'seen', at: 1 }], pots: s.pots, met: [] }))
+    localStorage.setItem('ather.spiritFollow.v1', JSON.stringify(s.follow)); localStorage.setItem('ather.spiritParty.v1', JSON.stringify(s.party))
+  }, { ...s, tut: TUT })
+  await p.goto(`${url}/shimmer/open/ather?hour=14${q}`, { waitUntil: 'load', timeout: 240000 })
+  await p.waitForFunction(() => !!(window as any).__ather?.state && !!(window as any).__ather?.travel, { timeout: 240000 }); await sleep(4000)
+  await p.touchscreen.tap(195, 644); await sleep(500)
+  return { p, got }
+}
+/** in page: sample every rig every frame: where its feet are in the world, its leg and tail bones, its clip */
+const sampler = (p: Page) => p.evaluate(() => {
+  const W = window as any, D: any = W.__m132 = { bodies: {}, sums: 0, n: 0 }, A = W.__ather
+  const PAWS = ['fl', 'fr', 'hl', 'hr']
+  const tick = () => {
+    for (const r of W.__spiritModel.rigs.values()) {
+      const b = r.body, st = b.state(), geo = b.meshes.body.geometry
+      const B = D.bodies[r.id] ??= { soles: null, rows: [] }
+      if (!B.soles) { const si = geo.getAttribute('skinIndex'), sw = geo.getAttribute('skinWeight'), ps = geo.getAttribute('position'); B.soles = PAWS.map(f => { const bi = b.bones.findIndex((x: any) => x.name === `b_${f}_paw`), all: number[] = []
+        for (let i = 0; i < ps.count; i++) { let w = 0; for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === bi) w += sw.getComponent(i, k); if (w > 0.99) all.push(i) }
+        const lo = Math.min(...all.map(i => ps.getY(i))); return all.filter(i => ps.getY(i) < lo + 0.03).slice(0, 10) }) }
+      const V = b.bones[0].position.clone(), bone = (n: string) => b.bones.find((x: any) => x.name === n).getWorldPosition(V.clone())
+      const feet = B.soles.map((s: number[]) => { let x = 0, y = 0, z = 0; for (const i of s) { b.at('body', i, V); x += V.x; y += V.y; z += V.z } return [x / s.length, y / s.length, z / s.length] })
+      const t1 = bone('b_tail1'), t7 = bone('b_tail7'), ta = Math.atan2(t7.x - t1.x, t7.z - t1.z) - (r.yaw + Math.PI)
+      const e = b.root.matrixWorld.elements
+      B.rows.push({ t: performance.now(), x: e[12], y: e[13], z: e[14], yaw: Math.atan2(e[8], e[10]), v: r.v, mode: r.mode, clip: st.clip, w: st.w, capped: st.capped, rate: st.rate, feet, tail: Math.abs(Math.atan2(Math.sin(ta), Math.cos(ta))) })
+      const sum = st.w.idle + st.w.walk + st.w.run + st.w.sit; D.n++; if (Math.abs(sum - 1) > 1e-6) D.sums++
+    }
+    requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick); void A
+})
+type Row = { t: number; x: number; y: number; z: number; yaw: number; v: number; mode: string; clip: string; w: Record<string, number>; capped: boolean; rate: number; feet: number[][]; tail: number }
+/** planted-foot drift: over frames of one steady gait on a straight line (weight > 0.99, no cap, heading held), a foot is planted
+ *  while it is within 2 mm of the lowest it gets in that stretch; the drift is the furthest it strays from where it came down */
+function gait(rows: Row[], clip: 'walk' | 'run') {
+  let drift = 0, spans = 0, frames = 0, swing = 0, tail = 0, v = 0, all: number[] = [], cur: Row[] = []
+  const flush = () => { if (cur.length >= 6) { spans++; frames += cur.length
+    for (let f = 0; f < 4; f++) { const lo = Math.min(...cur.map(r => r.feet[f][1])), ahead = cur.map(r => (r.feet[f][0] - r.x) * Math.sin(r.yaw) + (r.feet[f][2] - r.z) * Math.cos(r.yaw)); swing = Math.max(swing, Math.max(...ahead) - Math.min(...ahead))
+      let from: number[] | null = null; for (const r of cur) { const q = r.feet[f]; if (q[1] < lo + 0.002) { if (from) { const d = Math.hypot(q[0] - from[0], q[2] - from[2]); all.push(d); drift = Math.max(drift, d) } else from = q } else from = null } }
+    for (const r of cur) { tail = Math.max(tail, r.tail); v += r.v } } cur = [] }
+  for (const r of rows) { const last = cur.at(-1), turn = last ? Math.abs(Math.atan2(Math.sin(r.yaw - last.yaw), Math.cos(r.yaw - last.yaw))) : 0
+    if (r.clip === clip && r.w[clip] > 0.99 && !r.capped && turn < 0.004 && r.mode === 'trot') cur.push(r); else flush() }
+  flush(); all.sort((a, b) => a - b)
+  return { drift, med: all[all.length >> 1] ?? NaN, p95: all[Math.floor(all.length * 0.95)] ?? NaN, n: all.length, spans, frames, swing, tail: tail * 57.3, v: frames ? v / frames : 0 }
+}
+const rowsOf = (p: Page) => p.evaluate(() => { const D = (window as any).__m132; return JSON.parse(JSON.stringify({ b: Object.fromEntries(Object.entries(D.bodies).map(([k, v]: any) => [k, v.rows])), n: D.n, sums: D.sums })) }) as Promise<{ b: Record<string, Row[]>; n: number; sums: number }>
+const hideCard = (p: Page) => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(d => !h.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
+/** stand beside her (her side on, close) and take it the moment `clip` is fully on */
+async function still(p: Page, id: string, clip: string, name: string) {
+  if (!shots) return
+  for (let i = 0; i < 400; i++) {
+    const r = await p.evaluate((id: string) => { const r = (window as any).__spiritModel.rigs.get(id); if (!r) return null; const s = r.body.state(); return { x: r.x, z: r.z, yaw: r.yaw, w: s.w, mode: r.mode } }, id) as any
+    if (r && r.w[clip] > 0.95 && !/perch|hop/.test(r.mode)) {
+      await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), r.x + Math.cos(r.yaw) * 1.5 + Math.sin(r.yaw) * 0.4, r.z - Math.sin(r.yaw) * 1.5 + Math.cos(r.yaw) * 0.4)
+      await sleep(250); const n = await p.evaluate((id: string) => { const r = (window as any).__spiritModel.rigs.get(id); return { x: r.x, z: r.z } }, id) as any
+      await aimAt(p, n.x, n.z, 0.15, 3); await hideCard(p); try { await p.screenshot({ path: `${shots}/${name}-390.png` }); console.log(`   still ${name}`) } catch { /* slow frame */ }
+      if (await p.evaluate((a: [string, string]) => (window as any).__spiritModel.rigs.get(a[0])?.body.state().w[a[1]] > 0.8, [id, clip])) return
+    }
+    await sleep(250)
+  }
+  console.log(`   (no still of ${name})`)
+}
+const pieces = BEDS(3), pots = { p0: pot('axolotl', 0), p1: pot('fox', 1), p2: pot('axolotl', 2) }
+const br = await launch()
+try {
+  if (!perf) {
+    const { p, got } = await open(br, true, { pieces, pots, follow: [], party: [] })
+    await p.evaluate(() => (window as any).__ather.tp(-131, 108, 0))
+    ok(await p.waitForFunction(() => (window as any).__spiritModel?.rigs?.size === 2, { timeout: 60000 }).then(() => true).catch(() => false), '1. owner: both Manalotls are rigged')
+    ok(got.includes('manalotl-rigged.glb 200'), `1. the rigged glb answered (${got.join(', ')})`)
+    const one = await p.evaluate(() => [...(window as any).__spiritModel.rigs.values()].map((r: any) => ({ sk: new Set(Object.values(r.body.meshes).map((m: any) => m.skeleton.uuid)).size, uuid: r.body.skeleton.uuid, bones: r.body.bones.length })))
+    ok(one.every((x: any) => x.sk === 1 && x.bones === 27) && new Set(one.map((x: any) => x.uuid)).size === 2, `1. one skeleton each, not shared (${JSON.stringify(one.map((x: any) => [x.sk, x.bones]))})`)
+    const c1 = await p.evaluate(() => ({ ...(window as any).__spiritModel.rigCount })); ok(c1.live === 2, `1. two live bodies ${JSON.stringify(c1)}`)
+    await sampler(p)
+    let G: any = null; const t0 = Date.now()
+    while (Date.now() - t0 < 240000) { await sleep(10000)
+      // the unused key keeps idle mode off
+      await p.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F13', code: 'F13' })))
+      const R = await rowsOf(p); const rows = Object.values(R.b); const merge = (c: 'walk' | 'run') => { const g = rows.map(r => gait(r, c)); return { drift: Math.max(...g.map(x => x.drift)), p95: Math.max(...g.map(x => x.p95 || 0)), med: Math.max(...g.map(x => x.med || 0)), n: g.reduce((a, x) => a + x.n, 0), spans: g.reduce((a, x) => a + x.spans, 0), swing: Math.max(...g.map(x => x.swing)), tail: Math.max(...g.map(x => x.tail)), v: Math.max(...g.map(x => x.v)) } }
+      const lay = rows.flat().filter(r => r.w.sit > 0.95).length; G = { walk: merge('walk'), run: merge('run'), lay, ground: rows.flat().filter(r => r.w.sit > 0.95 && r.mode === 'sit').length, sums: R.sums, n: R.n, modes: [...new Set(rows.flat().map(r => r.mode))], fps: rows[0].length / ((rows[0].at(-1)!.t - rows[0][0].t) / 1000) }
+      if (G.walk.n > 40 && G.run.n > 40 && G.ground > 5 && Date.now() - t0 > 60000) break }
+    const f = (g: any) => `${g.spans} straight stretches, ${g.n} planted samples, ${g.v.toFixed(2)} m/s, drift median ${(g.med * 1000).toFixed(1)} p95 ${(g.p95 * 1000).toFixed(1)} max ${(g.drift * 1000).toFixed(1)} mm, leg swing ${(g.swing * 1000).toFixed(0)} mm, tail <= ${g.tail.toFixed(0)} deg off behind`
+    console.log(`   ${G.fps.toFixed(1)} fps, modes ${G.modes}`)
+    for (const c of ['walk', 'run'] as const) { const g = G[c]
+      ok(g.n > 0 && g.swing > 0.05, `2. she ${c}s with her legs moving: ${f(g)}`); ok(g.n > 0 && g.drift < 0.01, `2. ${c}: planted feet stay put (max ${(g.drift * 1000).toFixed(1)} mm, bar 10)`); ok(g.n > 0 && g.tail < 25, `2. ${c}: the tail trails behind (${g.tail.toFixed(0)} deg)`) }
+    ok(G.lay > 5, `2. she lies down (${G.lay} frames, ${G.ground} on the ground)`); ok(G.sums === 0 && G.n > 100, `2. a clip always plays (${G.n} samples, ${G.sums} off)`)
+    const sz = await p.evaluate(() => { const t = (window as any).__spiritModel.trots; return { l: t.axolotl.len, h: t.axolotl.hWorld, v: t.fox.hWorld } })
+    ok(Math.abs(sz.l - 0.9) < 0.06 && sz.h > 0.35 && sz.h < 0.47, `1. hull included she is ${sz.l.toFixed(3)} m nose to tail, ${sz.h.toFixed(3)} m tall`); ok(Math.abs(sz.v - 0.7) < 0.07, `1. the Vulnyx is still ${sz.v.toFixed(3)} m`)
+    await still(p, 'p0', 'walk', 'walk'); await still(p, 'p0', 'sit', 'lie'); await still(p, 'p0', 'idle', 'stand')
+    await p.close()
+    // 3 + 4: following, then the Wilds and home
+    const w = await open(br, true, { pieces, pots, follow: ['p0', 'p2'], party: ['p0', 'p2'] }); const q = w.p
+    await q.evaluate(() => (window as any).__ather.tp(-131, 110, 0)); await q.waitForFunction(() => (window as any).__spiritModel?.rigs?.size === 2, { timeout: 60000 }); await sleep(8000); await sampler(q)
+    await q.evaluate(`new Promise(res => { let t0 = performance.now(), last = t0, a = 0; const A = window.__ather; (function f() { const n = performance.now(), dt = Math.min(0.25, (n - last) / 1000); last = n; a += 4.2 * dt / 5; A.tp(-131 + Math.sin(a) * 5, 110 + 5 - Math.cos(a) * 5, 0); if (n - t0 < 12000) requestAnimationFrame(f); else res(0) })() })`); await sleep(9000)
+    const F = (await rowsOf(q)).b, fr = Object.values(F).flat().filter(r => r.mode === 'follow'), mv = fr.filter(r => r.v > 0.1), capped = mv.filter(r => r.capped).length, rest = fr.slice(-20)
+    ok(mv.length > 10 && mv.every(r => r.clip === 'walk' || r.clip === 'run' || r.v < 0.2), `3. following she walks / runs (${mv.length} moving frames, top ${Math.max(0, ...mv.map(r => r.v)).toFixed(1)} m/s)`)
+    console.log(`   3. the cadence cap bit on ${capped} of ${mv.length} moving frames (feet slide then)`); ok(rest.every(r => r.clip === 'idle' || r.clip === 'sit'), `3. stood by she is still (${[...new Set(rest.map(r => r.clip))]})`)
+    const c3 = await q.evaluate(() => ({ ...(window as any).__spiritModel.rigCount }))
+    await q.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))
+    await q.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 120000 })
+    ok(await q.waitForFunction(() => (window as any).__spiritModel.mounted === 2 && (window as any).__spiritModel.rigs.size === 2, { timeout: 60000 }).then(() => true).catch(() => false), '4. in the Wilds both followers are rigged')
+    const c4 = await q.evaluate(() => ({ ...(window as any).__spiritModel.rigCount })); ok(c4.live === 2 && c4.disposed >= c3.disposed + 2, `4. the garden bodies are gone: ${JSON.stringify(c3)} -> ${JSON.stringify(c4)}`)
+    await q.evaluate(() => { localStorage.setItem('ather.spiritFollow.v1', '[]') }); await q.close()
+    // 4b: a Wilds visit with nobody following leaves nothing
+    const z = await open(br, true, { pieces, pots, follow: [], party: [] })
+    await z.p.evaluate(() => (window as any).__ather.tp(-131, 110, 0)); await z.p.waitForFunction(() => (window as any).__spiritModel?.rigs?.size === 2, { timeout: 60000 })
+    await z.p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } })); await z.p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 120000 }); await sleep(5000)
+    const c5 = await z.p.evaluate(() => ({ ...(window as any).__spiritModel.rigCount, rigs: (window as any).__spiritModel.rigs.size, mounted: (window as any).__spiritModel.mounted }))
+    ok(c5.live === 0 && c5.rigs === 0 && c5.mounted === 0 && c5.made === c5.disposed, `4. nobody follows: nothing left after despawn ${JSON.stringify(c5)}`); await z.p.close()
+    // 6: a player
+    const n = await open(br, false, { pieces, pots, follow: [], party: [] })
+    await n.p.evaluate(() => (window as any).__ather.tp(-131, 108, 0)); await sleep(12000)
+    const pl = await n.p.evaluate(() => { const m = (window as any).__spiritModel; return { rigs: m.rigs.size, made: m.rigCount.made, mounted: m.mounted, h: m.trots.axolotl?.h, len: m.trots.axolotl?.len, tall: m.trots.axolotl?.hWorld } })
+    ok(pl.rigs === 0 && pl.made === 0 && pl.mounted === 3 && Math.abs(pl.h - 0.9 / 1.29) < 1e-6 && Math.abs(pl.len - 0.9) < 0.09, `6. a player's Manalotl is the old one ${JSON.stringify(pl)}`)
+    ok(n.got.some(x => x === 'manalotl.glb 200') && !n.got.some(x => x.startsWith('manalotl-rigged')), `6. and the rigged glb is never asked for (${n.got.join(', ')})`)
+    if (shots) { const m = await n.p.evaluate(() => (window as any).__spiritModel.trots.axolotl); await n.p.evaluate((x: number, z: number) => (window as any).__ather.tp(x + 1.5, z + 0.8, 0), m.x, m.z); await sleep(800); await aimAt(n.p, m.x, m.z, 0.3); await hideCard(n.p); await n.p.screenshot({ path: `${shots}/player-old-390.png` }).catch(() => {}) }
+    await n.p.close()
+  } else {
+    const many = Object.fromEntries(Array.from({ length: 20 }, (_, k) => [k < 10 ? `p${k}` : `p${k - 10}#2`, pot('axolotl', k)]))
+    for (const r of [1, 2, 3]) for (const q of ['&rig=0', '']) {
+      const { p } = await open(br, true, { pieces: BEDS(10), pots: many, follow: [], party: [] }, q)
+      await p.evaluate(() => (window as any).__ather.tp(-130, 114, 0)); await sleep(15000)
+      const m = await p.evaluate((ms: number) => new Promise<any>(res => { const d: number[] = [], M = (window as any).__spiritModel; let last = performance.now(); const end = last + ms, iv = setInterval(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F13', code: 'F13' })); (window as any).__ather.tp(-130, 114, 0) }, 3000)
+        const f = () => { const n = performance.now(); d.push(n - last); last = n; if (n < end) requestAnimationFrame(f); else { clearInterval(iv); d.sort((a, b) => a - b); res({ n: d.length, mean: d.reduce((a, b) => a + b) / d.length, p50: d[d.length >> 1], p95: d[Math.floor(d.length * 0.95)], mounted: M.mounted, rigs: M.rigs.size }) } }; requestAnimationFrame(f) }), 30000)
+      console.log(`   20 bodies run ${r} ${q ? 'OLD   ' : 'RIGGED'}: mean ${m.mean.toFixed(1)} ms, p50 ${m.p50.toFixed(1)}, p95 ${m.p95.toFixed(1)} (${m.n} frames, ${m.mounted} drawn, ${m.rigs} rigged)`)
+      ok(m.mounted === 20 && m.rigs === (q ? 0 : 20), `perf: ${m.mounted} bodies`); if (shots && r === 1) await p.screenshot({ path: `${shots}/perf-${q ? 'old' : 'rigged'}.png` }).catch(() => {})
+      await p.close()
+    }
+  }
+} catch (e) { ok(false, `threw ${String(e).slice(0, 300)}`) }
+await br.close()
+ok(errs.length === 0, `7. 0 page errors ${errs.join(' | ')}`)
+console.log(fails ? `${fails} FAIL` : 'ALL PASS'); process.exit(fails ? 1 : 0)
