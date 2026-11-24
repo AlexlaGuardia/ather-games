@@ -48,6 +48,12 @@ export type TrotPose = {
   lift: number              // vertical velocity-ish, -1..1 (the tail lags it)
   mode: TrotMode
   tilt: number              // -1..1 head tilt (M102 Manalotl): spirit-model bends the head by it, or tips the body
+  // M132 s2: the same pose in a rig's words (a rigged spirit turns her neck / lies down with these, not her whole body)
+  look: number              // rad, the look-round part of yaw
+  sniff: number             // 0/1 nose down
+  sit: number               // 0..1 how sat / lain down
+  brace: number             // 0..1 the shove's lean / the guard's crouch
+  wig: number               // the happy wiggle part of roll
 }
 
 // ── the dials (tuned for a 0.55 m fox spirit; quick and light) ─────────────────────────────────────────────────────
@@ -85,6 +91,7 @@ export const TROT = {
   // M110 s1: how much each training stat's pieces draw her (x PLAY.chance when she picks a run). The garden spirit carries no
   // temperament yet (spirit-sheet.ts), so the lean is the species' MANNER: 1 = no lean. Jin's.
   toyLean: { pwr: 1, grd: 1, agi: 1, vig: 1 } as Record<string, number>,
+  planted: 0,       // M132 s2 (a rigged spirit, 1): a run waits until she is up off the ground and faces the way she goes (no moonwalk)
   playV: 1.3, playH: 0.2,   // M110 s1: m/s across a training piece, and the bound's height over it
 }
 export type TrotDials = typeof TROT
@@ -423,7 +430,8 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
       if (k >= 1) { y = y1; sinceLand = 0; lift = 0; if (mode === 'hopDown') { if (!move()) go('look', 1.5) } else go('perch', rand(2.5, 4.5)) }
     } else if (mode === 'trot') {
       // ease in over the first 0.12 s, slow over the last 0.22 m: a quick start, a light stop
-      const v = vRun * clamp(Math.min(t / 0.12, (len - s) / 0.22 + 0.25), 0.15, 1)
+      let v = vRun * clamp(Math.min(t / 0.12, (len - s) / 0.22 + 0.25), 0.15, 1)
+      if (D.planted) { const dir = a1 < a0 ? -1 : 1, n = kind === 'arc' ? Math.atan2(-Math.sin(ang) * dir, Math.cos(ang) * dir) : Math.atan2(p1.x - p0.x, p1.z - p0.z); heading = n; v *= (1 - sitK) ** 2 * clamp(Math.cos(wrap(n - yaw)), 0.04, 1) ** 2 }
       s = Math.min(len, s + v * dt); const k = s / len
       let np: { x: number; z: number }
       if (kind === 'arc') { ang = lerp(a0, a1, k); rad = lerp(r0, r1, k); np = at(ang, rad) } else np = { x: lerp(p0.x, p1.x, k), z: lerp(p0.z, p1.z, k) }
@@ -469,7 +477,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
         if (goal && gd < F.settle) fGo = false
         else {
           const behind = sl ? gd : Math.max(0, d - F.slot)
-          const v = clamp(D.speed * 0.8 + kV + behind * F.catchK, D.speed * 0.5, F.vMax), stp = Math.min(gd - (goal ? 0 : F.slot), v * dt)
+          const v = clamp(D.speed * 0.8 + kV + behind * F.catchK, D.speed * 0.5, F.vMax) * (D.planted ? (1 - sitK) * clamp(Math.cos(wrap(Math.atan2(tg.x - pos.x, tg.z - pos.z) - yaw)), 0.3, 1) : 1), stp = Math.min(gd - (goal ? 0 : F.slot), v * dt)
           const h0 = Math.atan2(tg.x - pos.x, tg.z - pos.z)
           let moved = false
           if (stp > 1e-4) for (let i = 0; i < 9 && !moved; i++) {
@@ -568,6 +576,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     if (mode !== 'play') brace = Math.max(0, brace - dt * 4)
     const sy = (1 + D.stretch * air - D.squash * sq) * lerp(1, D.sitY, sitK) * lerp(1, PLAY.crouch, brace)   // M110 s2: braced = low
     cur = {
+      look: lookYaw + sniff * Math.sin(t * 5) * 0.12, sniff, sit: sitK, brace, wig: mode === 'happy' ? Math.sin(t * Math.PI * 2 / D.happyHop / 2) * D.happyWig : 0,
       x: pos.x, z: pos.z, y, yaw: yaw + lookYaw + sniff * Math.sin(t * 5) * 0.12,
       roll: clamp(-yawRate * D.lean, -D.leanMax, D.leanMax) * (speed > 0 ? 1 : 0.3) + (mode === 'happy' ? Math.sin(t * Math.PI * 2 / D.happyHop / 2) * D.happyWig : 0),
       pitch: (speed > 0 ? 0.05 + 0.06 * sq : 0) + D.sitPitch * sitK + (mode === 'play' && toy?.kind === 'shove' ? 0.18 * brace : 0) + sniff * (D.sniffPitch + Math.sin(t * 13) * 0.04),
@@ -575,7 +584,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     }
     return cur
   }
-  let cur: TrotPose = { x: pos.x, z: pos.z, y, yaw, roll: 0, pitch: 0, sx: 1, sy: 1, swing: 0, lift: 0, mode, tilt: 0 }
+  let cur: TrotPose = { x: pos.x, z: pos.z, y, yaw, roll: 0, pitch: 0, sx: 1, sy: 1, swing: 0, lift: 0, mode, tilt: 0, look: 0, sniff: 0, sit: 0, brace: 0, wig: 0 }
   function follow(to: FollowTarget | null) {
     if (to) toy = null
     calling = false; callPrev = null

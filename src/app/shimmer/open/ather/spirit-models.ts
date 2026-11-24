@@ -13,6 +13,7 @@
 import type { Species } from '../../spirits/spirit'
 import { TROT, type TrotDials } from './spirit-trot'
 import { GROWN } from '../../sprites/creature-size'
+import type { RigLook } from './spirit-rig'
 
 // ── SPIRITS DRAW FULL-GROWN (Alex 2026-11-24 "the manalotl is way too small"; Magii RULED-AFK athernyx 2a8b028) ─────────
 // The heights come from creature-size.ts GROWN (canon-diffed by `npm run canon`, gate grown-sizes). The model is scaled
@@ -60,6 +61,22 @@ export type SpiritLook = {
   ears?: boolean
   tilt?: SpiritTilt
   trot: Partial<TrotDials>
+  /** M132 s2: the glb carries bones + clips (spirit-rig.ts); without it the model is the unrigged one */
+  rig?: RigLook
+}
+
+const MANALOTL_TROT: Partial<TrotDials> = {
+  speed: 0.42, dash: 0.62,            // a slow amble (the Vulnyx runs 1.15 / darts 1.7)
+  stride: 0.12, hopH: 0.012, stretch: 0.025, squash: 0.05, squashK: 10,   // she flows, barely a hop
+  lean: 0.04, leanMax: 0.12, turnK: 3.5,
+  hopArc: 0.62, hopArcH: 0.16, sitY: 0.93, sitPitch: -0.08, sniffPitch: 0.14,   // "sit" = lies along the ground
+  chain: 0.97, checkS: [1.0, 2.0], legMax: 2,   // M107 ship: calmer (Alex 11-23 "more pauses"), short slow legs
+  playV: 0.5, playH: 0.06,           // M110 s1: she flows across a training piece, a low bound
+  toyLean: { grd: 1.4, vig: 1, agi: 1, pwr: 0.8 },   // M110 s2 her manner: a steady, patient wall, she likes to hold the gap
+  beat: { look: 0.36, sniff: 0.14, sit: 0.14, tilt: 0.36 },
+  lookS: [4.0, 6.5], sniffS: [2.4, 3.8], sitS: [5.5, 8.5], tiltS: [3.2, 5.2],
+  glance: 0.6, glanceHold: [0.9, 1.6], glanceMax: 0.6, tiltK: 3, lookTilt: 0.55,
+  happyHops: 3, happyHop: 0.45, happyH: 0.035, happyWig: 0.1,   // M109 s2 fed: three soft bobs, not bounces (she flows)
 }
 
 export const SPIRIT_MODELS: Partial<Record<Species, SpiritLook>> = {
@@ -84,21 +101,29 @@ export const SPIRIT_MODELS: Partial<Record<Species, SpiritLook>> = {
     sway: { along: 'z', sign: -1, from: 0.15, to: 0.64, dir: 'x', amp: 0.08, ampRun: 0.06, hz: 0.9, hzRun: 2.6, lag: 0.03 },
     // the head (z > ~0.1, frills and eyes with it) rolls round the neck at x 0.1 (the head's own centre), y 0.35
     tilt: { from: -0.05, to: 0.2, px: 0.1, py: 0.35, max: 0.38 },
-    trot: grownTrot({
-      speed: 0.42, dash: 0.62,            // a slow amble (the Vulnyx runs 1.15 / darts 1.7)
-      stride: 0.12, hopH: 0.012, stretch: 0.025, squash: 0.05, squashK: 10,   // she flows, barely a hop
-      lean: 0.04, leanMax: 0.12, turnK: 3.5,
-      hopArc: 0.62, hopArcH: 0.16, sitY: 0.93, sitPitch: -0.08, sniffPitch: 0.14,   // "sit" = lies along the ground
-      chain: 0.97, checkS: [1.0, 2.0], legMax: 2,   // M107 ship: calmer (Alex 11-23 "more pauses"), short slow legs
-      playV: 0.5, playH: 0.06,           // M110 s1: she flows across a training piece, a low bound
-      toyLean: { grd: 1.4, vig: 1, agi: 1, pwr: 0.8 },   // M110 s2 her manner: a steady, patient wall, she likes to hold the gap
-      beat: { look: 0.36, sniff: 0.14, sit: 0.14, tilt: 0.36 },
-      lookS: [4.0, 6.5], sniffS: [2.4, 3.8], sitS: [5.5, 8.5], tiltS: [3.2, 5.2],
-      glance: 0.6, glanceHold: [0.9, 1.6], glanceMax: 0.6, tiltK: 3, lookTilt: 0.55,
-      happyHops: 3, happyHop: 0.45, happyH: 0.035, happyWig: 0.1,   // M109 s2 fed: three soft bobs, not bounces (she flows)
-    }, TUNED_H.axolotl, AXOLOTL_H, true),   // tuned at 0.15; her slow amble speeds are her manner and stay
+    trot: grownTrot(MANALOTL_TROT, TUNED_H.axolotl, AXOLOTL_H, true),   // tuned at 0.15; her slow amble speeds are her manner and stay
   },
 }
+
+// ── M132 s2 THE RIGGED MANALOTL (OWNER-ONLY, spirit-model.tsx useSpiritRig; Alex 11-24 OK'd the v2 look and the size: 0.90 m
+// nose to tail, canon's own figure). Her tail is out behind now (it was curled round her side), so 0.90 m long makes her ~0.39 m
+// tall standing (0.42 to the frill tops), near canon's 0.35; the unrigged model at 0.90 was 0.70. Same manner, look and tints.
+export const MANALOTL_RIG: RigLook = {
+  glbLen: 2.145, pivot: { x: 0.07, z: 0 },
+  clipV: { walk: 0.42 / (0.9 / MANALOTL_GLB_LEN), run: 0.62 / (0.9 / MANALOTL_GLB_LEN) },   // built at the unrigged height: 0.42 / 0.62 m/s there
+  runAt: [0.5, 0.44], hull: 0.026, neck: 'b_neck', head: 'b_head',
+}
+const RIG_H = GROWN.axolotl.length! / MANALOTL_RIG.glbLen
+export const SPIRIT_RIGS: Partial<Record<Species, SpiritLook>> = {
+  axolotl: {
+    ...SPIRIT_MODELS.axolotl!, url: '/open/spirits/manalotl-rigged.glb', h: RIG_H, rig: MANALOTL_RIG, tilt: undefined,
+    // her manner unchanged; she ambles on her legs, so the hop, the squash and the turn-lean are 0. The bound over a training
+    // piece is the piece's height, not hers, so it stays what it was.
+    trot: { ...grownTrot(MANALOTL_TROT, TUNED_H.axolotl, RIG_H, true), playH: SPIRIT_MODELS.axolotl!.trot.playH, hopH: 0, stretch: 0, squash: 0, lean: 0, planted: 1 },
+  },
+}
+/** the look to draw: the rigged one where there is one and `on` */
+export const rigLook = (sp: Species, look: SpiritLook, on: boolean): SpiritLook => (on ? SPIRIT_RIGS[sp] ?? look : look)
 
 /** The species' model, or null = the gold orb. */
 export const spiritModelFor = (s: Species | null | undefined): SpiritLook | null => (s ? SPIRIT_MODELS[s] ?? null : null)
