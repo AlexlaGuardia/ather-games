@@ -49,7 +49,7 @@ import { loadAssign, mayUse } from './train-assign'   // M118 s2: the keeper's a
 import { PlanterPanel, GrimoirePanel, getPots, setPots, settlePlanter, useBook, type BankStore } from './spirit-panels'
 import { liftPiece } from './piece-lift'
 import { getBoxes, setBoxes, settleSaplingBox, PottedSapling, SaplingBoxSection } from './planter-box-view'   // M113 s1
-import { BLOOM_MS, speciesOf } from './spirit-seeds'
+import { BLOOM_MS, speciesOf, homeOf, growingIn, spiritsAt } from './spirit-seeds'
 import { BLOOMED_SPIRIT_LINE, planterBoxHint } from './planter-lines'
 import { SpiritOnPlanter, useSpiritsDev } from './spirit-model'
 import { spiritModelFor } from './spirit-models'
@@ -1247,7 +1247,7 @@ const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, numb
 const navBoxes = new Map<number, { w: Works; b: Foot[]; feet: PieceFoot[] }>()
 export const spiritBodyR = (sp: Species) => bodyRadius(GROWN[sp] ?? { height: 0.5 })
 function planterNav(id: string, dev = false, r = 0.3): SpiritNav | null {
-  const pc = getW().pieces.find(x => x.id === id); if (!pc) return null
+  const pc = getW().pieces.find(x => x.id === homeOf(id)); if (!pc) return null   // M122: `id` = the spirit's pots key; her planter = homeOf(id)
   const home = { x: pc.x, z: pc.z }, owned = new Set(loadGarden().owned), floor0 = pieceFloor(getW(), pc)
   const nav = () => {
     const w = getW(), c = navBoxes.get(r)
@@ -1272,24 +1272,34 @@ function planterNav(id: string, dev = false, r = 0.3): SpiritNav | null {
 }
 /** M76: the spirit planter: woven starwillow round soft soil; a sprout that grows with the seed; a gold glow once it bloomed. */
 function SpiritPlanterBody({ id }: { id?: string }) {
-  const f = FURNITURE.spirit_planter, c = WOODS.starwillow, b = useBook(), pot = id ? b.pots[id] : undefined
-  const orb = useRef<THREE.Mesh>(null), sprout = useRef<THREE.Group>(null), dev = useSpiritsDev()   // M107 ship: owner + ?spirits=3d = talk/party/training only
-  // M102 Manalotl wire-in: the bloomed pot's OWN species' model (spirit-models.ts), or the gold orb when it has none yet.
-  // M107 ship (Alex 11-23): the model + her roam are for every keeper now.
-  const sp = pot?.bloomed ? speciesOf(pot.seed) : null, look = spiritModelFor(sp)
-  const nav = useMemo(() => (look && id && sp ? planterNav(id, dev, spiritBodyR(sp)) : null), [look, id, dev, sp])   // M107: she roams the garden
-  useFrame(({ clock }) => {
-    if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06
-    if (sprout.current && pot && !pot.bloomed) { const g = Math.max(0.15, Math.min(1, (Date.now() - pot.at) / BLOOM_MS)); sprout.current.scale.setScalar(g) }
+  const f = FURNITURE.spirit_planter, c = WOODS.starwillow, b = useBook()
+  // M122 (RULED 756fdbb): the seed growing here (any slot) and every spirit whose home this planter is
+  const pot = id ? growingIn(b.pots, id) : undefined, home = useMemo(() => (id ? spiritsAt(b.pots, id) : []), [b.pots, id])
+  const sprout = useRef<THREE.Group>(null)
+  useFrame(() => {
+    if (sprout.current && pot) { const g = Math.max(0.15, Math.min(1, (Date.now() - pot.at) / BLOOM_MS)); sprout.current.scale.setScalar(g) }
   })
-  const orbMesh = <mesh ref={orb} position-y={1.0}><sphereGeometry args={[0.16, 14, 10]} /><meshBasicMaterial color={f.glow} transparent opacity={0.85} /></mesh>
   return <>
     {[0, 1, 2, 3].map(k => <Bx key={k} p={[0, 0.1 + k * 0.13, 0]} s={[f.w - (k % 2) * 0.04, 0.09, f.d - (k % 2) * 0.04]} c={k % 2 ? '#aab6d0' : c} />)}
     <Bx p={[0, 0.5, 0]} s={[f.w - 0.12, 0.05, f.d - 0.12]} c="#4a3524" />
     {[-1, 1].flatMap(a => [-1, 1].map(z => <mesh key={`${a}${z}`} position={[a * (f.w / 2 - 0.04), 0.62, z * (f.d / 2 - 0.04)]}><sphereGeometry args={[0.035, 6, 5]} /><meshBasicMaterial color="#eaf2ff" /></mesh>))}
-    {pot && !pot.bloomed && <group ref={sprout} position={[0, 0.52, 0]}><mesh position-y={0.12}><cylinderGeometry args={[0.015, 0.02, 0.24, 5]} /><meshLambertMaterial color="#9ad06a" /></mesh><mesh position={[0.05, 0.22, 0]} rotation-z={-0.8}><sphereGeometry args={[0.05, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh><mesh position={[-0.05, 0.18, 0]} rotation-z={0.8}><sphereGeometry args={[0.045, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh></group>}
-    {pot?.bloomed && <>{look && sp ? <SpiritOnPlanter sp={sp} look={look} y={0.53} fallback={orbMesh} nav={nav ?? undefined} id={id} dev={dev} /> : orbMesh}<pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} /></>}
+    {pot && <group ref={sprout} position={[0, 0.52, 0]}><mesh position-y={0.12}><cylinderGeometry args={[0.015, 0.02, 0.24, 5]} /><meshLambertMaterial color="#9ad06a" /></mesh><mesh position={[0.05, 0.22, 0]} rotation-z={-0.8}><sphereGeometry args={[0.05, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh><mesh position={[-0.05, 0.18, 0]} rotation-z={0.8}><sphereGeometry args={[0.045, 6, 4]} /><meshLambertMaterial color="#b6e27e" /></mesh></group>}
+    {home.map(k => <PlanterSpirit key={k} id={k} />)}
+    {home.length > 0 && <pointLight position-y={1.0} color={f.glow} intensity={0.6} distance={3} />}
   </>
+}
+/** M122: one spirit at home on her planter (was inline in SpiritPlanterBody): her species' model and roam, or the gold orb. */
+function PlanterSpirit({ id }: { id: string }) {
+  const f = FURNITURE.spirit_planter, b = useBook(), p = b.pots[id], dev = useSpiritsDev()   // M107 ship: owner + ?spirits=3d = talk/party/training only
+  const orb = useRef<THREE.Mesh>(null)
+  // M102 Manalotl wire-in: the bloomed pot's OWN species' model (spirit-models.ts), or the gold orb when it has none yet.
+  // M107 ship (Alex 11-23): the model + her roam are for every keeper now.
+  const sp = p?.bloomed ? speciesOf(p.seed) : null, look = spiritModelFor(sp)
+  const nav = useMemo(() => (look && sp ? planterNav(id, dev, spiritBodyR(sp)) : null), [look, id, dev, sp])   // M107: she roams the garden
+  useFrame(({ clock }) => { if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06 })
+  const orbMesh = <mesh ref={orb} position-y={1.0}><sphereGeometry args={[0.16, 14, 10]} /><meshBasicMaterial color={f.glow} transparent opacity={0.85} /></mesh>
+  if (!sp) return null
+  return look ? <SpiritOnPlanter sp={sp} look={look} y={0.53} fallback={orbMesh} nav={nav ?? undefined} id={id} dev={dev} /> : orbMesh
 }
 /** One piece, built from boxes in its wood's colour. Blockout look like the rooms. */
 export function PieceBody({ item, id }: { item: string; id?: string }) {

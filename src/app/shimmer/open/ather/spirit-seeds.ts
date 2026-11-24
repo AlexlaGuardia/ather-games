@@ -39,9 +39,30 @@ export type Pots = Readonly<Record<string, Pot>>
 /** The game-day calendar (anemonyx-view.tsx counts the same days). */
 export const gameDay = (t: number) => Math.floor(t / GAME_DAY_MS)
 
+// M122 (Magii RULED athernyx 756fdbb; Alex couldn't reuse the Manalotl's planter): a planter only HELPS a seed bloom. Once
+// its spirit blooms the planter is FREE for the next Mana Seed. A spirit's identity is its pots key (party, follow, the fed
+// record and the training assignments key on it), so a bloomed pot never moves: the next seed in the same planter takes the
+// key `<pieceId>#2` (then #3 ...), and the planter it lives in is `homeOf(key)`. Old saves need no rewrite: a bloomed pot at
+// `<pieceId>` reads as a spirit at home there and the planter takes a seed beside it. Lifting a planter a spirit calls home
+// stays refused (BLOOMED_SPIRIT_LINE): her home is where she was planted.
+/** The planter a pot lives in: its key less a carried prefix and any `#n` slot. */
+export const homeOf = (key: string) => { const k = isCarried(key) ? key.slice(CARRIED.length) : key, i = k.indexOf('#'); return i < 0 ? k : k.slice(0, i) }
+/** Which slot of its planter a pot took (0 = the planter's first, `#n` = n). Seeds a spirit's own trot. */
+export const slotOf = (key: string) => { const i = key.indexOf('#'); return i < 0 ? 0 : Number(key.slice(i + 1)) || 0 }
+/** Every bloomed spirit whose home is planter `pieceId` (planting order). */
+export const spiritsAt = (pots: Pots, pieceId: string): string[] =>
+  Object.entries(pots).filter(([k, p]) => p.bloomed && !isCarried(k) && homeOf(k) === pieceId).sort((a, b) => a[1].at - b[1].at || (a[0] < b[0] ? -1 : 1)).map(([k]) => k)
+/** The key of the seed GROWING in planter `pieceId`, or null (empty or only spirits). */
+export const growingKey = (pots: Pots, pieceId: string): string | null =>
+  Object.keys(pots).find(k => !isCarried(k) && homeOf(k) === pieceId && !pots[k].bloomed) ?? null
+/** The seed growing in planter `pieceId`, if any. */
+export const growingIn = (pots: Pots, pieceId: string): Pot | undefined => { const k = growingKey(pots, pieceId); return k ? pots[k] : undefined }
+/** Plant a seed: refused (null) only while a seed is already GROWING here. A bloomed planter takes the next free slot key. */
 export function plant(pots: Pots, pieceId: string, seed: SeedId, now: number): Pots | null {
-  if (pots[pieceId]) return null
-  return { ...pots, [pieceId]: { seed, at: now, v: 2, tends: [] } }
+  if (growingKey(pots, pieceId)) return null
+  let key = pieceId
+  for (let n = 2; pots[key]; n++) key = `${pieceId}#${n}`
+  return { ...pots, [key]: { seed, at: now, v: 2, tends: [] } }
 }
 /** When this pot blooms (its planting time + the wait, less what the tends took off). */
 export const bloomAt = (p: Pot) => p.v === 2 ? p.at + BLOOM_MS - (p.tends?.length ?? 0) * TEND_MS : p.at + LEGACY_BLOOM_MS
@@ -53,17 +74,18 @@ export const tendedToday = (p: Pot, now: number) => !!p.tends?.includes(gameDay(
 export const canTend = (p: Pot | undefined, now: number): p is Pot => !!p && !p.bloomed && p.v === 2 && bloomAt(p) > now && !tendedToday(p, now)
 /** Tend a planter: once per game day. Null = refused (empty, bloomed, an old pot, or tended today already). */
 export function tend(pots: Pots, pieceId: string, now: number): Pots | null {
-  const p = pots[pieceId]
-  if (!canTend(p, now)) return null
-  return { ...pots, [pieceId]: { ...p, tends: [...(p.tends ?? []), gameDay(now)] } }
+  const k = growingKey(pots, pieceId), p = k ? pots[k] : undefined   // M122: the seed growing in this planter, whatever its slot
+  if (!k || !canTend(p, now)) return null
+  return { ...pots, [k]: { ...p, tends: [...(p.tends ?? []), gameDay(now)] } }
 }
 /** OWNER DEV ONLY (the planter panel shows it behind /api/owner): pull a growing pot's planting time back so it is
  *  `ms` closer to its bloom ('now' = due this instant). Nothing else changes; ripen then blooms it the normal way. Null = refused. */
 export function hasten(pots: Pots, pieceId: string, now: number, ms: number | 'now'): Pots | null {
-  const p = pots[pieceId]
-  if (!p || p.bloomed || isCarried(pieceId)) return null
+  if (isCarried(pieceId)) return null
+  const k = growingKey(pots, pieceId), p = k ? pots[k] : undefined   // M122: the seed growing in this planter
+  if (!k || !p) return null
   const by = ms === 'now' ? Math.max(0, bloomAt(p) - now) : Math.max(0, Math.min(ms, bloomAt(p) - now))
-  return { ...pots, [pieceId]: { ...p, at: p.at - by } }
+  return { ...pots, [k]: { ...p, at: p.at - by } }
 }
 /** Which day of its growing the pot is on (1-based, from its planting). */
 export const growDay = (p: Pot, now: number) => Math.max(1, Math.floor((now - p.at) / GAME_DAY_MS) + 1)
@@ -99,15 +121,15 @@ export const isCarried = (key: string) => key.startsWith(CARRIED)
 /** Picking a planter up: an empty one comes up freely (pots unchanged); a growing pot is carried with it; a spirit lives
  *  there = no (null). */
 export function carryPot(pots: Pots, pieceId: string): Pots | null {
-  const p = pots[pieceId]
-  if (!p) return pots
-  if (p.bloomed) return null
-  const { [pieceId]: _gone, ...rest } = pots
+  if (spiritsAt(pots, pieceId).length) return null   // M122: a spirit's home planter stays put, even with a new seed in it
+  const k = growingKey(pots, pieceId)
+  if (!k) return pots
+  const { [k]: p, ...rest } = pots
   return { ...rest, [CARRIED + pieceId]: p }
 }
 /** A Spirit Planter just set down at `pieceId`: it takes the oldest carried pot (unchanged). None carried = pots unchanged. */
 export function settlePot(pots: Pots, pieceId: string): Pots {
-  if (pots[pieceId]) return pots
+  if (Object.keys(pots).some(k => !isCarried(k) && homeOf(k) === pieceId)) return pots
   const c = Object.entries(pots).filter(([k]) => isCarried(k)).sort((a, b) => a[1].at - b[1].at || (a[0] < b[0] ? -1 : 1))[0]
   if (!c) return pots
   const { [c[0]]: _gone, ...rest } = pots

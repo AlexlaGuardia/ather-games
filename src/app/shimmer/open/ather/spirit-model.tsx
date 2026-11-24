@@ -22,6 +22,7 @@ import { isTrainStat, trainPlay } from './spirit-stats'   // M110 s1: a finished
 
 import { SPIRIT_MODELS, groundLift, lowPoints, type SpiritLook } from './spirit-models'
 import type { Species } from '../../spirits/spirit'
+import { slotOf } from './spirit-seeds'   // M122: a spirit's slot in her planter
 
 export const VULNYX_URL = SPIRIT_MODELS.fox!.url
 /** World height of the model (the glb is 1 unit tall). Small and lithe: ~0.55 m, about a third of a keeper. */
@@ -57,7 +58,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
   const time = useMemo(() => ({ value: 0 }), []), sw = useMemo(() => ({ value: 0 }), []), lift = useMemo(() => ({ value: 0 }), []), tiltU = useMemo(() => ({ value: 0 }), [])
   // M107: the procedural trot (spirit-trot.ts) when a nav is given, with this species' dials; seeded by home so two
   // planters never move in step
-  const trot = useMemo<Trot | null>(() => nav ? makeTrot(nav, Math.round(nav.home.x * 31 + nav.home.z * 17), look.trot) : null, [nav, look])
+  const trot = useMemo<Trot | null>(() => nav ? makeTrot(nav, Math.round(nav.home.x * 31 + nav.home.z * 17) + (id ? slotOf(id) : 0) * 101, look.trot) : null, [nav, look, id])   // M122: a second spirit on one planter trots her own way
   const tmp = useMemo(() => ({ v: new THREE.Vector3(), q: new THREE.Quaternion(), e: new THREE.Euler(0, 0, 0, 'YXZ'), bb: new THREE.Box3(), hAt: -1, hWorld: 0, lWorld: 0, keepMax: 0 }), [])
   const parts = useMemo(() => {
     const body = scene.getObjectByName('body') as THREE.Mesh | undefined, eyes = scene.getObjectByName('eyes') as THREE.Mesh | undefined

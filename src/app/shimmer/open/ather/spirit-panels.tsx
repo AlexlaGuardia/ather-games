@@ -10,7 +10,7 @@ import { getInv, setInv, useInv } from '../shared/bag'
 import type { Bank } from './garden-bank'
 import { hudSay } from '../shared/hud-say'
 import { SPECIES_NAMES, type Species } from '../../spirits/spirit'
-import { SEED_NAME, seedIcon, speciesOf, plant, ripen, growth, settlePot, tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, hasten, type SeedId } from './spirit-seeds'
+import { SEED_NAME, seedIcon, speciesOf, plant, ripen, growth, settlePot, tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, hasten, growingIn, spiritsAt, type SeedId } from './spirit-seeds'
 import { GAME_DAY_MS } from './nodes'
 import { loadBook, saveBook, see, seenCount, freshBook, type Book } from './grimoire-book'
 import { GRIMOIRE_SIZE } from './plot'
@@ -53,7 +53,7 @@ export function settlePlanter(pieceId: string): boolean {
   setBook({ ...b, pots: next })
   return true
 }
-export const potOf = (pieceId: string) => current().pots[pieceId]
+export const potOf = (pieceId: string) => growingIn(current().pots, pieceId) ?? current().pots[spiritsAt(current().pots, pieceId)[0] ?? '']   // M122
 
 // ── the manifest (img, type, description, entry) ─────────────────────────────────────────────────────────────────
 type Man = { name: string; analog: string; quirk: string; img: string; entry: string }
@@ -87,7 +87,9 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
   const b = useBook(), inv = useInv(), bk = bank.use(), m = useManifest(), owner = useOwner()
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const t = setInterval(() => { setNow(Date.now()); const s = ripenBook(); if (s.length) hudSay(`A ${nameOf(s[0])} bloomed.`, 'item', 4) }, 1000); ripenBook(); return () => clearInterval(t) }, [])
-  const pot = b.pots[pieceId]
+  // M122 (RULED 756fdbb): a bloomed planter is free for the next seed. `growing` = the seed in it now; `home` = the spirits
+  // who bloomed here (they stay theirs: party, follow and the garden roam are untouched)
+  const growing = growingIn(b.pots, pieceId), home = spiritsAt(b.pots, pieceId)
   const seeds = seedsOnPlot(inv, bk)
   const doPlant = (id: SeedId) => {
     const next = plant(current().pots, pieceId, id, Date.now()), t = takeSeed(getInv(), bank.get(), id)
@@ -110,8 +112,6 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
     const s = ripenBook(t)
     if (s.length) hudSay(`A ${nameOf(s[0])} bloomed.`, 'item', 3)
   }
-  const sp = pot ? speciesOf(pot.seed) : null, card = sp && m ? m[nameOf(sp)] : null
-  const growing = pot && !pot.bloomed ? pot : null
   const due = growing ? bloomAt(growing) : 0
   // the bloom as a day of its growing (1-based from planting) and the real wait; the next tend opens with the next game day
   // untended = 'at the end of day 3'; tended d1 + d2 = 'at the start of day 3' (Alex's words); one tend = 'midway through day 3'
@@ -121,7 +121,7 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
   return (
     <HearthFrame title="Spirit Planter" maxWidth={420} onClose={onClose} fixed dataPanel="planter">
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
-        {!pot && (seeds.length
+        {!growing && (seeds.length
           ? <><div style={lab}>Plant a seed</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {seeds.map(s => <button key={s.id} data-act="plant-seed" data-seed={s.id} data-bag={s.bag} data-bank={s.bank} onClick={() => doPlant(s.id)} title={SEED_NAME} style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', position: 'relative' }}>
@@ -144,12 +144,11 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
             {growing.v === 2 && tendedToday(growing, now) && <div style={{ fontSize: 12, color: H.inkSoft }}>Next tend in about {realIn(nextTend)}</div>}
           </div>
         )}
-        {pot?.bloomed && sp && (
-          <div data-planter="bloomed" data-species={sp} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        {home.map(k => { const sp = speciesOf(b.pots[k].seed), card = m ? m[nameOf(sp)] : null
+          return <div key={k} data-planter="bloomed" data-spirit={k} data-species={sp} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <Well size={72}>{card ? <img src={card.img} alt="" width={60} height={60} style={{ objectFit: 'contain' }} /> : null}</Well>
             <div><div style={{ fontWeight: 700 }}>{nameOf(sp)}</div><div style={{ fontSize: 12.5, color: H.inkSoft }}>It bloomed here, and here it stays.</div></div>
-          </div>
-        )}
+          </div> })}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
           {growing && growing.v === 2 && (canTend(growing, now)
             ? <span data-act="tend-planter"><HearthButton small onClick={doTend}>Tend</HearthButton></span>
