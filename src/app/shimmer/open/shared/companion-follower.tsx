@@ -17,13 +17,15 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { FOLLOW } from './idle-mode'
 import { skitSlot, reportLying } from './idle-skits'   // M126 s2
+import { keeperTrail, makeGuide } from './keeper-trail'
 import { activeCompanion, subscribeCompanion, companionRev, type CompanionId } from './companion'
-import { FORM, joinFormation, leaveFormation, tickFormation, formationSlot, reportFormationPos, sharedBlocked, slotStep, homeStep, BACK } from './follow-formation'   // M126 s1
+import { FORM, joinFormation, leaveFormation, tickFormation, formationSlot, reportFormationPos, sharedBlocked, sharedY, slotStep, homeStep, BACK } from './follow-formation'   // M126 s1
 
 /** M126 s1: the Mana'mal's body in the formation (Gemdigger ~0.5 m nose to tail; the Glowmite / wisps a little less) */
 export const MANAMAL_R = 0.3
 const FORM_ID = 'manamal'
 
+const open = () => false
 export interface FollowPose { x: number; z: number; yaw: number }
 
 const WISP_TINT: Partial<Record<CompanionId, string>> = {
@@ -40,7 +42,8 @@ export function CompanionFollower({ pose, ground }: { pose: React.MutableRefObje
 
 export function Follower({ id, pose, ground }: { id: CompanionId; pose: React.MutableRefObject<FollowPose>; ground: (x: number, z: number) => number }) {
   const g = useRef<THREE.Group>(null)
-  const s = useRef<{ x: number; z: number; yaw: number; speed: number; moving: boolean; still: number; t: number; nap: number; kx: number; kz: number; kv: number; at: number; back: number }>({ x: NaN, z: NaN, yaw: 0, speed: 0, moving: false, still: 0, t: 0, nap: 0, kx: NaN, kz: NaN, kv: 0, at: 0, back: 0 })
+  const s = useRef<{ x: number; z: number; yaw: number; speed: number; moving: boolean; still: number; t: number; nap: number; kx: number; kz: number; kv: number; at: number; back: number; gy: number; fy: number }>({ x: NaN, z: NaN, yaw: 0, speed: 0, moving: false, still: 0, t: 0, nap: 0, kx: NaN, kz: NaN, kv: 0, at: 0, back: 0, gy: NaN, fy: 0 })
+  const blk = useRef<(x: number, z: number) => boolean>(open), guide = useMemo(() => makeGuide(keeperTrail, (x, z) => blk.current(x, z)), [])   // M126: its way round a wall
   // M126 s1/s3: it walks in the one formation (shared/follow-formation.ts): 3.5 m out, behind and off to one side. Its slot,
   // this far out, is held to the same ground as its steps (a refused one = the other side, or single file)
   useEffect(() => { joinFormation({ id: FORM_ID, kind: 'manamal', r: MANAMAL_R, blocked: (x, z) => !!sharedBlocked(pose.current)?.(x, z) }); return () => leaveFormation(FORM_ID) }, [pose])
@@ -58,12 +61,17 @@ export function Follower({ id, pose, ground }: { id: CompanionId; pose: React.Mu
     const px0 = m.x, pz0 = m.z
     // M91 + M126 s2 IDLE (shared/idle-skits.ts): the keeper idles = it wanders a 3-6 m ring round them, sits, naps (lying down);
     // any input = the skit is gone and it walks back to its place
-    const sk = skitSlot(FORM_ID, p), to = sk ?? slot
+    const sk = skitSlot(FORM_ID, p), place = sk ?? slot
+    // M126: beside following spirits it knows the same ground (shared Y: the garden's floors, steps and the keeper's trail), and
+    // goes round a wall by the trail too
+    const gy0 = Number.isFinite(m.gy) ? m.gy : undefined, knows = sharedY(p.x, p.z) !== null, bl = knows ? (x: number, z: number) => sharedY(x, z, gy0) === null : sharedBlocked(p)
+    blk.current = bl ?? open
+    const via = knows && !sk?.roam ? guide.toward({ x: m.x, z: m.z }, place, dt) : null, to = via ? { ...via, face: place.face } : place
     if (sk?.roam) { m.x = sk.x; m.z = sk.z; m.speed += (sk.roam.speed - m.speed) * Math.min(1, dt * 6); m.moving = false; m.at = 0; m.back = BACK.hold }
     else {
       // off a skit (up to 6 m out) it HURRIES home, in real seconds (homeStep), then its usual gait
       const w = { x: m.x, z: m.z, speed: m.speed, moving: m.moving, at: m.at, back: m.back }, kb = { x: p.x, z: p.z, r: FORM.keeperR + MANAMAL_R }
-      const n = m.back > 0 ? homeStep(w, to, m.kv, dtRaw, sharedBlocked(p), kb) : { ...slotStep(w, to, m.kv, dt, sharedBlocked(p), FORM.heelOff, kb), back: 0 }
+      const n = m.back > 0 ? homeStep(w, to, m.kv, dtRaw, bl, kb) : { ...slotStep(w, to, m.kv, dt, bl, via && Math.hypot(via.x - place.x, via.z - place.z) > 0.01 && Math.hypot(place.x - m.x, place.z - m.z) > FORM.heelOff ? 0.05 : FORM.heelOff, kb), back: 0 }
       m.back = n.back
       m.x = n.x; m.z = n.z; m.speed = n.speed; m.moving = n.moving; m.at = n.at ?? 0
     }
@@ -76,7 +84,8 @@ export function Follower({ id, pose, ground }: { id: CompanionId; pose: React.Mu
     m.nap += ((sk?.act === 'lie' ? 1 : 0) - m.nap) * Math.min(1, dt * 1.5)
     reportLying(FORM_ID, m.nap)
     const gy = ground(m.x, m.z)
-    const y = Number.isFinite(gy) ? gy : 0
+    const own = sharedY(m.x, m.z, gy0); m.gy = own ?? (knows ? m.gy : NaN)
+    const y = own !== null ? (m.fy += (own - m.fy) * Math.min(1, dt * 14)) : (m.fy = Number.isFinite(gy) ? gy : 0)
     grp.position.set(m.x, y, m.z)
     grp.rotation.y = m.yaw
     grp.userData.speed = m.speed; grp.userData.still = m.still; grp.userData.nap = m.nap; grp.userData.t = m.t

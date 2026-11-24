@@ -28,7 +28,8 @@ export type Vec = { x: number; z: number }
 export type Keeper = { x: number; z: number; yaw: number }
 export type Blocked = (x: number, z: number) => boolean
 export type MemberKind = 'manamal' | 'spirit'
-export type Member = { id: string; kind: MemberKind; r: number; blocked?: Blocked }
+/** `y` (M126) = the height of its ground there, when the member knows better than the page (a house floor, the stairs) */
+export type Member = { id: string; kind: MemberKind; r: number; blocked?: Blocked; y?: (x: number, z: number, near?: number) => number | null }
 export type Slot = { x: number; z: number; face: number }
 export type Layout = 'arc' | 'file'
 /** `side` = which side of the keeper the Mana'mal's arc slot is on (1 right, -1 left) */
@@ -118,15 +119,15 @@ export function arcSlots(k: Keeper, yaw: number, members: readonly Member[], sto
 }
 
 /** Single file along the trail (newest crumb first; the keeper's own spot leads), each a body plus a gap behind the last. */
-export function fileSlots(k: Keeper, yaw: number, members: readonly Member[], trail: readonly Vec[], lead?: readonly string[]): Record<string, Slot> {
+export function fileSlots(k: Keeper, yaw: number, members: readonly Member[], trail: readonly Vec[], lead?: readonly string[], walked?: Set<string>): Record<string, Slot> {
   const pts: Vec[] = [{ x: k.x, z: k.z }, ...trail.filter((c, i) => i > 0 || Math.hypot(c.x - k.x, c.z - k.z) > 1e-6)]
-  const b = forwardOf(yaw)
+  const b = forwardOf(yaw); let on = false   // the point asked for is ON the trail (not past its end)
   /** the point s metres back along the trail; past its end, straight on behind */
   const along = (s: number): { p: Vec; face: number } => {
-    let left = s
+    let left = s; on = false
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1], c = pts[i], d = Math.hypot(c.x - a.x, c.z - a.z)
-      if (d >= left && d > 1e-6) { const t = left / d, p = { x: a.x + (c.x - a.x) * t, z: a.z + (c.z - a.z) * t }; return { p, face: headingTo(c, a) } }
+      if (d >= left && d > 1e-6) { const t = left / d; on = true; const p = { x: a.x + (c.x - a.x) * t, z: a.z + (c.z - a.z) * t }; return { p, face: headingTo(c, a) } }
       left -= d
     }
     const e = pts[pts.length - 1], pr = pts.length > 1 ? pts[pts.length - 2] : null
@@ -139,7 +140,7 @@ export function fileSlots(k: Keeper, yaw: number, members: readonly Member[], tr
   fileOrder(members, lead).forEach((m, i) => {
     s += i === 0 ? FORM.fileFirst + m.r : prevR + m.r + FORM.gap
     prevR = m.r
-    const { p, face } = along(s); out[m.id] = { ...p, face }
+    const { p, face } = along(s); out[m.id] = { ...p, face }; if (on) walked?.add(m.id)
   })
   return out
 }
@@ -157,10 +158,11 @@ export function assignSlots(k: Keeper, yaw: number, members: readonly Member[], 
       if (!tight) return { layout: 'arc', slots: arc, side: sd }
     }
   }
-  const file = fileSlots(k, yaw, ms, o.trail ?? [], o.lead)
+  const walked = new Set<string>(), file = fileSlots(k, yaw, ms, o.trail ?? [], o.lead, walked)
   let prev: Vec = { x: k.x, z: k.z }
   for (const m of fileOrder(ms, o.lead)) {
-    const s = file[m.id], p = nearestFree(s, prev, m.blocked) ?? prev
+    // M126: a point the keeper walked, free for her, is reached along the trail itself: round a corner no straight line gets there
+    const s = file[m.id], p = walked.has(m.id) && m.blocked && !m.blocked(s.x, s.z) ? s : nearestFree(s, prev, m.blocked) ?? prev
     file[m.id] = { x: p.x, z: p.z, face: s.face }; prev = p
   }
   return { layout: 'file', slots: file }
@@ -239,6 +241,11 @@ export function tickFormation(k: Keeper, now = typeof performance !== 'undefined
 export const formationSlot = (id: string): Slot | null => live.last().slots[id] ?? null
 /** where a member really stands this frame (the probe reads it; M127 can too) */
 export function reportFormationPos(id: string, x: number, z: number) { if (roster.has(id)) pos.set(id, { x, z }) }
+/** M126: the ground's height as the first spirit knows it (a house floor, the stairs), or null = the page's own */
+export function sharedY(x: number, z: number, near?: number): number | null {
+  for (const m of roster.values()) if (m.kind === 'spirit' && m.y) return m.y(x, z, near)
+  return null
+}
 /** a blocked test any member can lean on: the first spirit's (the garden's), but only where the keeper stands on ground it
  *  allows (off the plot a spirit's nav refuses everything, and that must not freeze the Mana'mal) */
 export function sharedBlocked(k: Vec): Blocked | undefined {

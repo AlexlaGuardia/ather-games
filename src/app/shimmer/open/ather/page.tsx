@@ -113,6 +113,7 @@ import { startFall, stepFall, type FallState } from './void-fall'
 import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
 import { useFolkTalk } from './use-folk-talk'
 import { useSpiritTalk, type SpiritTalkState } from './spirit-talk'   // M109 s1: E at a garden spirit (owner + ?spirits=3d)
+import { setGardenGround } from './garden-follow'   // M126: what a following spirit may walk in the garden
 import { liveSpirits, setKeeperAt, followIds, spiritPickR } from './spirit-follow'
 import { inParty } from './spirit-party'   // M118 s1: party spirits walking with the keeper grow from her fights
 import { fightExp } from './spirit-stats'
@@ -423,6 +424,7 @@ function AtherSliceGame() {
   const plotWorld = useMemo(() => terrainWorld(withLifts(cl.frame.linked
     ? plotShape(owned, [...mistWalls(owned), ...mateWalls(cl.frame), ...workWalls(works)], (x, z) => clusterGround(cl.frame, x, z))
     : plotShape(owned, [...mistWalls(owned), ...workWalls(works)]))), [owned, cl.frame, works])
+  useEffect(() => { setGardenGround(zone.kind === 'plot' ? { owned, works, walls: workWalls(works), frame: cl.frame } : null); return () => setGardenGround(null) }, [zone.kind, owned, works, cl.frame])   // M126
   const gladeLayer = useGladeLayer(zone.kind === 'glade')   // M83 s2b: refetched on each Glade entry, so a publish shows next visit
   const gladeZoneGround = useMemo(() => gladeLayerGround(gladeLayer.edits), [gladeLayer])
   const gladeMeshLift = useMemo(() => gladeLift(gladeLayer.edits), [gladeLayer])
@@ -848,7 +850,7 @@ function AtherSliceGame() {
     }
     gateStepRef.current(lc, yaw, dt, heightRef.current)   // a standing Gate (shared/use-casts.ts): bills, and carries the keeper through an end
     poseRef.current = { x: lc.px, z: lc.pz, yaw }
-    setKeeperAt(lc.px, lc.pz, yaw)   // M109: a following spirit trails this
+    setKeeperAt(lc.px, lc.pz, yaw, lc.py, !lc.airborne)   // M109: a following spirit trails this (M126: feet + standing, for their trail)
     let n: Near = null
     // BETA M60 (Alex 11-21): E acts only on what the CROSSHAIR is on, within 3 m of the keeper (shared/aim-pick.ts); each kind keeps
     // its own E action. Every interactable is a capsule here; the camera's centre ray picks (the same on a phone).

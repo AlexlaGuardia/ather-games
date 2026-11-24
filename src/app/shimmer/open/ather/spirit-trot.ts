@@ -12,6 +12,8 @@
 // s1 (owner-only ?spirits=3d) = home is her own planter, ring 0.9..1.5 m. s2 (Magii RULED 11-23: a bloomed spirit walks the
 // whole garden) = the same planner with a bigger ring / a nav area; nothing here knows it is a planter.
 
+import { lineClear } from '../shared/follow-formation'
+
 export type SpiritNav = {
   /** world xz of home (the planter's centre) */
   home: { x: number; z: number }
@@ -26,6 +28,9 @@ export type SpiritNav = {
    *  anywhere `blocked` allows, each leg up to maxLeg metres; `away` = how far from home the first spot out must be. The ring
    *  stays as the home beat. Without `roam` she only circles home (s1). */
   roam?: { maxLeg: number; away: number }
+  /** M126: the ground and the way while she FOLLOWS (ather/garden-follow.ts); without it, `blocked` and a straight line */
+  follow?: { blocked: (x: number, z: number) => boolean; toward: (pos: { x: number; z: number }, goal: { x: number; z: number }, dt: number) => { x: number; z: number } | null
+    lost: (pos: { x: number; z: number }, k: { x: number; z: number; yaw: number }, slot: { x: number; z: number }, dt: number) => { x: number; z: number } | null } | null
   /** M110 s1: the training pieces on the plot (re-read at each pick). A PARTY spirit may choose one as a beat on her own. */
   toys?: () => Toy[]
 }
@@ -194,6 +199,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   let kind: 'arc' | 'line' = 'arc', a0 = 0, a1 = 0, r0 = 0, r1 = 0, p0 = { x: 0, z: 0 }, p1 = { x: 0, z: 0 }, len = 1, s = 0, vRun = D.speed
   let pos = nav.perch ? { x: home.x, z: home.z } : at(ang, rad), y = nav.perch?.y ?? 0, lift = 0
   // M109 follow: the target, the keeper's smoothed speed, whether she is on her way to the slot, how long she has stood by
+  let fresh = true, lived = 0   // M126: not stepped as a follower yet; s she has lived
   let followTo: FollowTarget | null = null, kPrev: { x: number; z: number } | null = null, kV = 0, fGo = false, fIdle = 0
   // M109 s2 the happy beat: who she faces, where she hops from (the perch or the ground), which hop she is on, a cheer that
   // came mid perch-hop (starts when she lands), how many cheers so far (the probe)
@@ -410,7 +416,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   function step(dt: number): TrotPose {
     // M117 s1: the piece she last played at stays 'hers' (parts only) until she has stepped clear of its padded footprint
     if (toy) toyLeft = toy.id; else if (toyLeft && !nav.blocked(pos.x, pos.z)) toyLeft = undefined
-    dt = Math.min(dt, 0.25); t += dt; sinceLand += dt; toyRest += dt   // a slow frame still covers real time (a phone at 4 fps trots at speed)
+    dt = Math.min(dt, 0.25); t += dt; lived += dt; sinceLand += dt; toyRest += dt   // a slow frame still covers real time (a phone at 4 fps trots at speed)
     let speed = 0, heading = yaw, wantSit = 0, sniff = 0, happyAir = 0
     if (cheerPending && mode !== 'hopDown' && mode !== 'hopUp') { const c = cheerPending; cheerPending = null; startHappy(c.to) }
     // M109 s4: in the party and the keeper has walked off: a beat (or her perch) is cut short and she sets off back
@@ -458,32 +464,40 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
       // M109: trail the keeper. The slot = FOLLOW.slot from the keeper on the side she is already on (so she trails behind
       // a walking keeper and stands beside a still one), turned round the keeper to the first free spot. Off she goes past
       // `far` (or nearer than `keep`), with a catch-up gait that adds the keeper's own speed; every step must land free.
-      const k = followTo(), F = FOLLOW
+      const k = followTo(), F = FOLLOW, fn = nav.follow, ffree = fn ? (x: number, z: number) => !fn.blocked(x, z) : free
       if (kPrev) { const kv = Math.hypot(k.x - kPrev.x, k.z - kPrev.z) / Math.max(dt, 1e-3); if (kv < 30) kV = lerp(kV, kv, 1 - Math.exp(-dt * 5)) }
       kPrev = { x: k.x, z: k.z }
       const d = Math.hypot(pos.x - k.x, pos.z - k.z)
       // M126 s1: a formation slot = her own place (she sets off once it is F.slotOff away); else the old shared ring
       const sl = k.slot
+      // M126: following since before she was drawn (the keeper came back to the garden) = beside them, not out at her planter; and the
+      // last resort when nothing leads to them (a wall built between): set down behind them, out of their sight
+      if (fn && sl) {
+        const at = fresh && Math.hypot(pos.x - k.x, pos.z - k.z) > 8 ? (fn.blocked(sl.x, sl.z) ? null : sl) : fn.lost(pos, k, sl, dt)
+        if (at) { pos = { x: at.x, z: at.z }; yaw = yawPrev = k.yaw + Math.PI; fGo = false }
+        if (at || lived > 2) fresh = false
+      }
       if (!fGo && (sl ? Math.hypot(sl.x - pos.x, sl.z - pos.z) > F.slotOff : d > F.far || d < F.keep)) fGo = true
       if (fGo) {
         let goal: { x: number; z: number } | null = null
         if (sl) {
           // her slot, or the nearest free spot round it (the assigner already kept it clear of walls; her own nav is the say)
-          for (let i = 0; i < 17 && !goal; i++) { const r = i ? 0.15 * Math.ceil(i / 8) + 0.15 : 0, a = (i % 8) * Math.PI / 4, g = { x: sl.x + Math.cos(a) * r, z: sl.z + Math.sin(a) * r }; if (free(g.x, g.z)) goal = g }
+          for (let i = 0; i < 17 && !goal; i++) { const r = i ? 0.15 * Math.ceil(i / 8) + 0.15 : 0, a = (i % 8) * Math.PI / 4, g = { x: sl.x + Math.cos(a) * r, z: sl.z + Math.sin(a) * r }; if (fn || free(g.x, g.z)) goal = g }   // M126: the assigner asked her own ground at the keeper's floor
         } else {
           const b = d > 0.05 ? Math.atan2(pos.z - k.z, pos.x - k.x) : Math.atan2(Math.cos(k.yaw), Math.sin(k.yaw))
           for (let i = 0; i < 13 && !goal; i++) { const a = b + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.45, g = { x: k.x + Math.cos(a) * F.slot, z: k.z + Math.sin(a) * F.slot }; if (free(g.x, g.z)) goal = g }
         }
-        const tg = goal ?? { x: k.x, z: k.z }, gd = Math.hypot(tg.x - pos.x, tg.z - pos.z)
-        if (goal && gd < F.settle) fGo = false
+        const end = goal ?? { x: k.x, z: k.z }, way = fn && goal ? fn.toward(pos, goal, dt) : end, tg = way ?? end, gd = Math.hypot(tg.x - pos.x, tg.z - pos.z)
+        if (goal && Math.hypot(end.x - pos.x, end.z - pos.z) < F.settle) fGo = false
         else {
-          const behind = sl ? gd : Math.max(0, d - F.slot)
+          const behind = sl ? Math.hypot(end.x - pos.x, end.z - pos.z) : Math.max(0, d - F.slot)
           const v = clamp(D.speed * 0.8 + kV + behind * F.catchK, D.speed * 0.5, F.vMax) * (D.planted && d >= F.keep + 0.2 ? (1 - sitK) * clamp(Math.cos(wrap(Math.atan2(tg.x - pos.x, tg.z - pos.z) - yaw)), 0.3, 1) : 1), stp = Math.min(gd - (goal ? 0 : F.slot), v * dt)
           const h0 = Math.atan2(tg.x - pos.x, tg.z - pos.z)
           let moved = false
           if (stp > 1e-4) for (let i = 0; i < 9 && !moved; i++) {
             const h = h0 + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.4, nx = pos.x + Math.sin(h) * stp, nz = pos.z + Math.cos(h) * stp
-            if (free(nx, nz) && (i === 0 || Math.hypot(nx - k.x, nz - k.z) >= Math.min(d, F.keep))) { pos = { x: nx, z: nz }; heading = h; speed = v; vRun = v; moved = true }
+            // M126: a slow frame's long step is asked all along it, so it never lands on the far side of a wall
+            if (ffree(nx, nz) && (stp < 0.3 || lineClear(pos, { x: nx, z: nz }, (x, z) => !ffree(x, z))) && (i === 0 || Math.hypot(nx - k.x, nz - k.z) >= Math.min(d, F.keep))) { pos = { x: nx, z: nz }; heading = h; speed = v; vRun = v; moved = true }
           }
           if (!moved && !goal) fGo = false
         }
@@ -588,6 +602,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   }
   let cur: TrotPose = { x: pos.x, z: pos.z, y, yaw, roll: 0, pitch: 0, sx: 1, sy: 1, swing: 0, lift: 0, mode, tilt: 0, look: 0, sniff: 0, sit: 0, lie: false, brace: 0, wig: 0 }
   function follow(to: FollowTarget | null) {
+    if (!to || lived > 1) fresh = false
     if (to) toy = null
     calling = false; callPrev = null
     followTo = to; kPrev = null; kV = 0; outFirst = false

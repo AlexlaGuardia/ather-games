@@ -10,6 +10,7 @@ import { gardenKey } from '@/lib/keeper-local'   // M109 s4: a garden key (the p
 import type { Species } from '../../spirits/spirit'
 import { GROWN } from '../../sprites/creature-size'
 import { bodyRadius } from './obstacles'
+import { keeperTrail } from '../shared/keeper-trail'
 
 const KEY = 'ather.spiritFollow.v1'
 let ids: string[] | null = null
@@ -36,7 +37,11 @@ export function setFollowing(id: string, on: boolean): boolean {
 export const subscribeFollow = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 
 export const keeperAt = { x: 0, z: 0, yaw: 0, at: 0 }
-export function setKeeperAt(x: number, z: number, yaw: number) { keeperAt.x = x; keeperAt.z = z; keeperAt.yaw = yaw; keeperAt.at = Date.now() }
+/** `feet` (M126): the keeper's feet and whether they stand, noted on their trail (shared/keeper-trail.ts) */
+export function setKeeperAt(x: number, z: number, yaw: number, feet?: number, grounded = true) {
+  keeperAt.x = x; keeperAt.z = z; keeperAt.yaw = yaw; keeperAt.at = Date.now()
+  if (feet !== undefined) keeperTrail.note(x, feet, z, grounded)
+}
 
 export type LiveSpirit = { id: string; sp: Species; x: number; y: number; z: number; h: number; at: number }
 export const spiritLive = new Map<string, LiveSpirit>()

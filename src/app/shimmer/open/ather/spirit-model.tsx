@@ -29,6 +29,8 @@ import { fightSlot } from '../shared/spirit-fight'   // M127 s1
 import { joinFormation, leaveFormation, tickFormation, formationSlot, reportFormationPos, inFormation } from '../shared/follow-formation'   // M126 s1
 import { skitSlot } from '../shared/idle-skits'   // M126 s2
 import { bodyRadius } from './obstacles'
+import { gardenFollow, gardenGround } from './garden-follow'   // M126
+import { GROUND_Y } from './plot'
 import { GROWN } from '../../sprites/creature-size'
 
 export const VULNYX_URL = SPIRIT_MODELS.fox!.url
@@ -70,8 +72,10 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
   const time = useMemo(() => ({ value: 0 }), []), sw = useMemo(() => ({ value: 0 }), []), lift = useMemo(() => ({ value: 0 }), []), tiltU = useMemo(() => ({ value: 0 }), [])
   // M107: the procedural trot (spirit-trot.ts) when a nav is given, with this species' dials; seeded by home so two
   // planters never move in step
-  const trot = useMemo<Trot | null>(() => nav ? makeTrot(nav, Math.round(nav.home.x * 31 + nav.home.z * 17) + (id ? slotOf(id) : 0) * 101, look.trot) : null, [nav, look, id])   // M122: a second spirit on one planter trots her own way
-  const tmp = useMemo(() => ({ v: new THREE.Vector3(), q: new THREE.Quaternion(), e: new THREE.Euler(0, 0, 0, 'YXZ'), bb: new THREE.Box3(), hAt: -1, hWorld: 0, lWorld: 0, keepMax: 0 }), [])
+  // M126: in the garden a follower walks the keeper's ground (doors, steps, floors, the way to the gate), not just her own roam
+  const fnav = useMemo(() => (nav?.roam && id ? gardenFollow(bodyRadius(GROWN[sp] ?? { height: 0.5 }), GROUND_Y) : null), [nav, id, sp])
+  const trot = useMemo<Trot | null>(() => nav ? makeTrot(fnav ? { ...nav, get follow() { return gardenGround() ? fnav : null } } : nav, Math.round(nav.home.x * 31 + nav.home.z * 17) + (id ? slotOf(id) : 0) * 101, look.trot) : null, [nav, look, id, fnav])   // M122: a second spirit on one planter trots her own way
+  const tmp = useMemo(() => ({ v: new THREE.Vector3(), q: new THREE.Quaternion(), e: new THREE.Euler(0, 0, 0, 'YXZ'), bb: new THREE.Box3(), hAt: -1, fy: NaN, hWorld: 0, lWorld: 0, keepMax: 0 }), [])
   const parts = useMemo(() => {
     const body = scene.getObjectByName('body') as THREE.Mesh | undefined, eyes = scene.getObjectByName('eyes') as THREE.Mesh | undefined
     const glowM = look.glow ? scene.getObjectByName(look.glow.part) as THREE.Mesh | undefined : undefined
@@ -141,13 +145,13 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
     const target = () => { tickFormation(keeperAt); return { x: keeperAt.x, z: keeperAt.z, yaw: keeperAt.yaw, slot: fightSlot(id) ?? skitSlot(id, keeperAt) ?? formationSlot(id) } }   // M127: a fight's spot first;   // M126 s2: idle = her skit's spot
     const sync = () => {
       const on = isFollowing(id)
-      if (on && nav) joinFormation({ id, kind: 'spirit', r: bodyRadius(GROWN[sp] ?? { height: 0.5 }), blocked: (x, z) => nav.blocked(x, z) })
+      if (on && nav) joinFormation({ id, kind: 'spirit', r: bodyRadius(GROWN[sp] ?? { height: 0.5 }), blocked: (x, z) => (fnav && gardenGround() ? fnav.slotBlocked(x, z) : nav.blocked(x, z)), y: fnav ? (x, z, near) => (gardenGround() ? fnav.height(x, z, near) : null) : undefined })
       else leaveFormation(id)
       trot.follow(on ? target : null)
     }
     sync(); const off = subscribeFollow(sync)
     return () => { off(); spiritLive.delete(id); leaveFormation(id) }
-  }, [trot, id, dev, nav, sp])
+  }, [trot, id, dev, nav, sp, fnav])
   // M109 s4 THE PARTY KEEPS NEAR: while her planter id is in the party she picks her runs round the keeper (loose company)
   useEffect(() => {
     if (!trot || !id || !dev) return
@@ -181,7 +185,14 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
       const pitch = rig ? 0 : ps.pitch, bodyYaw = rig ? ps.yaw - ps.look : ps.yaw, sy = rig ? 1 - 0.14 * ps.brace : ps.sy, sx = rig ? 1 : ps.sx
       // grown-size slice: raise her by however far the tip would sink her lowest paw / tail / chin (0 standing level)
       const keep = parts ? groundLift(parts.low, look.h, pitch, roll, sx, sy + breath) : 0
-      v.set(ps.x, baseY + ps.y + keep, ps.z); par.worldToLocal(v); g.current.position.copy(v)
+      // M126: her floor while she follows (kept if she is told to stay up there); her own ground otherwise
+      if (fnav && gardenGround()) {
+        if (id && isFollowing(id)) fnav.stand(ps.x, ps.z); else if (!nav!.blocked(ps.x, ps.z)) fnav.put(baseY)
+        if (Number.isNaN(tmp.fy)) tmp.fy = fnav.y() - baseY
+        tmp.fy += (fnav.y() - baseY - tmp.fy) * (1 - Math.exp(-dt * 14)); if (Math.abs(tmp.fy) < 1e-3) tmp.fy = 0
+      }
+      const floor = Number.isNaN(tmp.fy) ? 0 : tmp.fy
+      v.set(ps.x, baseY + floor + ps.y + keep, ps.z); par.worldToLocal(v); g.current.position.copy(v)
       par.getWorldQuaternion(q); e.setFromQuaternion(q)
       // a species with no head bend (none yet; the Vulnyx carries no tilt beat) would tip the whole body instead
       g.current.rotation.set(pitch, bodyYaw - e.y, roll, 'YXZ')
@@ -197,7 +208,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
         step.clip = rigClip(ps, step.v, step.turn, step.clip, rig.runAt, rig.lie)
         bd.step(dt, step.clip, m, look.h, { look: ps.look, sniff: ps.sniff, tilt: ps.tilt })
         if (t - step.sizeAt > 0.5 && step.clip !== 'sit' && step.clip !== 'lie' && bd.state().w.sit + bd.state().w.lie < 0.01) { step.sizeAt = t; const s = bd.size(look.h); step.hWorld = s.height; step.len = s.len }
-        if (id) probe().rigs.set(id, { id, sp, h: look.h, yaw: bodyYaw, x: ps.x, y: baseY + ps.y, z: ps.z, mode: ps.mode, v: step.v, body: bd })
+        if (id) probe().rigs.set(id, { id, sp, h: look.h, yaw: bodyYaw, x: ps.x, y: baseY + floor + ps.y, z: ps.z, mode: ps.mode, v: step.v, body: bd })
       }
       sw.value += (ps.swing - sw.value) * Math.min(1, dt * 6); lift.value = ps.lift
       // the measured world height (the drawn meshes' box, hull included) for the check, twice a second
@@ -207,12 +218,12 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
         const r0 = g.current.rotation.clone(); g.current.rotation.set(0, -e.y, 0, 'YXZ'); g.current.updateMatrixWorld(true)
         const sq = tmp.bb.setFromObject(g.current); tmp.lWorld = look.sway.along === 'z' ? sq.max.z - sq.min.z : sq.max.x - sq.min.x
         g.current.rotation.copy(r0); g.current.updateMatrixWorld(true) }
-      const pr = probe(), tp: TrotProbe = { x: ps.x, y: baseY + ps.y, z: ps.z, mode: ps.mode, home: nav!.home, rMin: nav!.rMin, rMax: nav!.rMax, beats: trot.beats(), homes: trot.homes(), tilt: ps.tilt, h: look.h, hWorld: rig ? step.hWorld : tmp.hWorld, len: rig ? step.len : tmp.lWorld, keepMax: tmp.keepMax, cheers: trot.cheers(), calling: trot.calling(), near: trot.nearing(), plays: trot.plays(), playing: trot.playing(),
+      const pr = probe(), tp: TrotProbe = { x: ps.x, y: baseY + floor + ps.y, z: ps.z, mode: ps.mode, home: nav!.home, rMin: nav!.rMin, rMax: nav!.rMax, beats: trot.beats(), homes: trot.homes(), tilt: ps.tilt, h: look.h, hWorld: rig ? step.hWorld : tmp.hWorld, len: rig ? step.len : tmp.lWorld, keepMax: tmp.keepMax, cheers: trot.cheers(), calling: trot.calling(), near: trot.nearing(), plays: trot.plays(), playing: trot.playing(),
         playYMax: ps.mode === 'play' ? Math.max(pr.trots[sp]?.playYMax ?? 0, ps.y) : (pr.trots[sp]?.playYMax ?? 0),   // M110 s1: the bound's peak
         braceMax: Math.max(pr.trots[sp]?.braceMax ?? 0, trot.braced()),   // M110 s2: the shove's lean / the guard's crouch, at its deepest
         yMax: ps.mode === 'happy' ? Math.max(pr.trots[sp]?.mode === 'happy' ? pr.trots[sp].yMax : 0, ps.y) : (pr.trots[sp]?.yMax ?? 0) }   // M109 s2: the happy beat's peak hop
       pr.trots[sp] = tp; if (sp === 'fox') pr.trot = tp
-      if (dev && id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + ps.y, z: ps.z, h: look.h, at: Date.now() })   // M109: the E pick reads it
+      if (dev && id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + floor + ps.y, z: ps.z, h: look.h, at: Date.now() })   // M109: the E pick reads it
       if (id && inFormation(id)) reportFormationPos(id, ps.x, ps.z)   // M126 s1: the probe's real spacing
       return
     }
