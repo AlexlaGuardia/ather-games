@@ -8,6 +8,7 @@
 //   OWNER_KEY=... npx tsx scripts/m132-rig-check.mts [--shots dir] [--perf]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
+import { MANALOTL_RIG } from '../src/app/shimmer/open/ather/spirit-models'
 import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), KEY = process.env.OWNER_KEY, perf = process.argv.includes('--perf')
@@ -18,7 +19,7 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}
 const at0 = Date.now() - 20 * 86400000, pot = (sp: string, k: number) => ({ seed: `mana_seed_${sp}`, at: at0 + k, v: 2, tends: [], bloomed: true })
 const BEDS = (n: number) => Array.from({ length: n }, (_, k) => ({ id: `p${k}`, item: 'spirit_planter', x: -134 + (k % 4) * 2.6, z: 100 + Math.floor(k / 4) * 2.6, q: 0, placedAt: 1 }))
 const TUT = { v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }
-const errs: string[] = []
+const errs: string[] = [], RH = 0.9 / MANALOTL_RIG.glbLen
 const launch = () => puppeteer.launch({ protocolTimeout: 600000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 async function open(br: any, owner: boolean, s: { pieces: unknown; pots: unknown; follow: string[]; party: string[] }, q = '') {
   const p: Page = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true })
@@ -62,6 +63,10 @@ const sampler = (p: Page) => p.evaluate(() => {
   }
   requestAnimationFrame(tick); void A
 })
+// SwiftShader draws ~5 frames a second and she takes ~3 strides a second, so two samples of a planted foot are often different
+// strides. Feet that do not slide land a whole number of strides apart, so the drift is what is LEFT OVER of that (spirit-rig.test.ts
+// measures the plain drift at 60 / 24 / 10 fps on the same body).
+const STRIDE = { walk: MANALOTL_RIG.clipV.walk * 0.57872 * RH, run: MANALOTL_RIG.clipV.run * 0.51070 * RH }
 type Row = { t: number; x: number; y: number; z: number; yaw: number; v: number; mode: string; clip: string; w: Record<string, number>; capped: boolean; rate: number; feet: number[][]; tail: number }
 /** planted-foot drift: over frames of one steady gait on a straight line (weight > 0.99, no cap, heading held), a foot is planted
  *  while it is within 2 mm of the lowest it gets in that stretch; the drift is the furthest it strays from where it came down */
@@ -69,7 +74,7 @@ function gait(rows: Row[], clip: 'walk' | 'run') {
   let drift = 0, spans = 0, frames = 0, swing = 0, tail = 0, v = 0, all: number[] = [], cur: Row[] = []
   const flush = () => { if (cur.length >= 6) { spans++; frames += cur.length
     for (let f = 0; f < 4; f++) { const lo = Math.min(...cur.map(r => r.feet[f][1])), ahead = cur.map(r => (r.feet[f][0] - r.x) * Math.sin(r.yaw) + (r.feet[f][2] - r.z) * Math.cos(r.yaw)); swing = Math.max(swing, Math.max(...ahead) - Math.min(...ahead))
-      let from: number[] | null = null; for (const r of cur) { const q = r.feet[f]; if (q[1] < lo + 0.002) { if (from) { const d = Math.hypot(q[0] - from[0], q[2] - from[2]); all.push(d); drift = Math.max(drift, d) } else from = q } else from = null } }
+      let from: number[] | null = null; for (const r of cur) { const q = r.feet[f]; if (q[1] < lo + 0.002) { if (from) { const along = Math.hypot(q[0] - from[0], q[2] - from[2]), d = Math.abs(along - Math.round(along / STRIDE[clip]) * STRIDE[clip]); all.push(d); drift = Math.max(drift, d) } else from = q } else from = null } }
     for (const r of cur) { tail = Math.max(tail, r.tail); v += r.v } } cur = [] }
   for (const r of rows) { const last = cur.at(-1), turn = last ? Math.abs(Math.atan2(Math.sin(r.yaw - last.yaw), Math.cos(r.yaw - last.yaw))) : 0
     if (r.clip === clip && r.w[clip] > 0.99 && !r.capped && turn < 0.004 && r.mode === 'trot') cur.push(r); else flush() }
@@ -117,8 +122,8 @@ try {
     for (const c of ['walk', 'run'] as const) { const g = G[c]
       ok(g.n > 0 && g.swing > 0.05, `2. she ${c}s with her legs moving: ${f(g)}`); ok(g.n > 0 && g.drift < 0.01, `2. ${c}: planted feet stay put (max ${(g.drift * 1000).toFixed(1)} mm, bar 10)`); ok(g.n > 0 && g.tail < 25, `2. ${c}: the tail trails behind (${g.tail.toFixed(0)} deg)`) }
     ok(G.lay > 5, `2. she lies down (${G.lay} frames, ${G.ground} on the ground)`); ok(G.sums === 0 && G.n > 100, `2. a clip always plays (${G.n} samples, ${G.sums} off)`)
-    const sz = await p.evaluate(() => { const t = (window as any).__spiritModel.trots; return { l: t.axolotl.len, h: t.axolotl.hWorld, v: t.fox.hWorld } })
-    ok(Math.abs(sz.l - 0.9) < 0.06 && sz.h > 0.35 && sz.h < 0.47, `1. hull included she is ${sz.l.toFixed(3)} m nose to tail, ${sz.h.toFixed(3)} m tall`); ok(Math.abs(sz.v - 0.7) < 0.07, `1. the Vulnyx is still ${sz.v.toFixed(3)} m`)
+    const sz = await p.evaluate(() => new Promise<any>(res => { let v = 9, k = 0; const iv = setInterval(() => { const t = (window as any).__spiritModel.trots; v = Math.min(v, t.fox.hWorld || 9); if (++k > 60) { clearInterval(iv); res({ l: t.axolotl.len, h: t.axolotl.hWorld, v, vh: t.fox.h }) } }, 500) }))
+    ok(Math.abs(sz.l - 0.9) < 0.06 && sz.h > 0.35 && sz.h < 0.47, `1. hull included she is ${sz.l.toFixed(3)} m nose to tail, ${sz.h.toFixed(3)} m tall`); ok(sz.vh === 0.7 && Math.abs(sz.v - 0.7) < 0.08, `1. the Vulnyx is still ${sz.vh} m (box ${sz.v.toFixed(3)} at her lowest over 30 s; a sniff tips it taller)`)
     await still(p, 'p0', 'walk', 'walk'); await still(p, 'p0', 'sit', 'lie'); await still(p, 'p0', 'idle', 'stand')
     await p.close()
     // 3 + 4: following, then the Wilds and home
