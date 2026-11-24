@@ -82,7 +82,11 @@ try {
     ok(R.bursts.length >= 2 && R.bursts.every((b: any) => b.tell > 0.95 && b.lift > 1), `4. the tell pose is fully drawn at the first shot of each burst (${R.bursts.map((b: any) => b.tell.toFixed(2)).join(', ')})`)
     ok(R.bursts.length >= 2 && R.bursts.every((b: any) => b.tailZ > R.holdTail + 0.25), `   the tail curled under toward the keeper (z ${R.bursts.map((b: any) => b.tailZ.toFixed(2)).join(', ')}; hold ${R.holdTail?.toFixed(2)})`) }
   // ── 5. stills ──  (the creator opens over the Wilds on a fresh profile: close it, or the still shows the panel, not the Flit)
-  ok(await poll(async () => p.evaluate(() => { const b = document.querySelector<HTMLElement>('[data-creator-done]') ?? [...document.querySelectorAll('button')].find(q => /^looks good$/i.test(q.innerText.trim())); b?.click(); return !b }), 15000), '   nothing covers the view'); await sleep(2000)
+  ok(await poll(async () => p.evaluate(() => { const b = document.querySelector<HTMLElement>('[data-creator-done]') ?? [...document.querySelectorAll('button')].find(q => /^looks good$/i.test(q.innerText.trim())); b?.click(); return !b }), 15000), '   the creator is closed')
+  await C('C.hollows.length = 0'); await p.evaluate((x, z) => (window as any).__ather.tp(x, z), s.x + fx * 6 + 26 * fz, s.z + fz * 6 - 26 * fx); await sleep(3000)   // clear of the gate
+  await p.mouse.click(195, 600); await sleep(2500)
+  ok(await p.evaluate(() => !/Click to play/i.test(document.body.innerText)), '   nothing covers the view')
+  Object.assign(s, await stt()); Object.assign(aim, await p.evaluate(() => (window as any).__ather.camAim()))
   for (const [st, dist, tag] of [['zip', 6, ''], ['hold', 6, ''], ['tell', 6, ''], ['hold', 14, '-14m'], ['tell', 14, '-14m']] as const) {
     const [hx, hz] = ahead(dist), [tx, tz] = ahead(dist, 8)
     await C(`C.hollows.length = 0; C.spits.length = 0; const h = ${body(hx, hz, s.y + 2.1)}; C.hollows.push(h); window.__pin = h; const k = () => { if (window.__pin !== h) return; h.x = ${hx}; h.z = ${hz}; h.y = ${s.y + 2.1}
