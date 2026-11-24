@@ -12,7 +12,8 @@ const out = flag('--out', '/tmp')
 const shot = async (path: string) => { await p.evaluate(() => { for (const d of document.querySelectorAll('div')) if (d.textContent === 'Ather · your plot and the Wilds') (d.parentElement!.parentElement as HTMLElement).style.display = 'none' }); try { await p.screenshot({ path }) } catch (e) { console.log('shot skipped', path, String(e).slice(0, 60)) } }
 const b = await puppeteer.launch({ protocolTimeout: 90000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const p = await b.newPage()
-await p.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))   // a fresh profile is born first (birth-gate.tsx); seed a rune so the ritual does not take the screen
+// ★ no rune seed any more: a seeded rune skips the birth and lands a tutorial-live keeper on the PLOT, whose fold-map stop no longer
+//   reaches the Wilds (M67: the way out is the Glade's gate). A truly fresh profile is born into the Glade, as a player is.
 await p.setViewport({ width: 1100, height: 680 })
 await p.goto(`${flag('--url', 'https://ather.games')}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 120000 })
 await p.evaluate(() => { localStorage.removeItem('ather.nodes.v2'); localStorage.removeItem('ather.nodes.skew') })
