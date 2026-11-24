@@ -137,7 +137,10 @@ try {
   ok(Object.values(ZONE_NAME).includes(place), `4. the far area's place name is a real zone (${place})`)
   const toastNow = () => p.evaluate(() => (document.body.innerText.match(/Hollow ground is spreading near [^\n]*\./) ?? [''])[0])
   let days = 0, toast = ''
-  for (; days < 120 && (await SM('state', FAR.id)) !== 'hollow'; days++) { await A('skipDays', 1); await sleep(350); toast ||= await toastNow() }
+  for (; days < 120 && (await SM('state', FAR.id)) !== 'hollow'; days++) {   // M121 stops the spread while half the discovered ground is grey, so any other section that turns is cleared
+    await A('skipDays', 1); await sleep(350); toast ||= await toastNow()
+    for (const id of (await SM('grey') ?? []) as string[]) if (id !== FAR.id) await A('wmClear', id)
+  }
   ok((await SM('state', FAR.id)) === 'hollow' && days > 2, `4. the far area turned by the daily roll, not in its grace days: ${FAR.id} reads Hollow ground after ${days} days`)
   ok(!!toast || await poll(async () => !!(toast = await toastNow()), 10000), `4. grow toast ("${toast}")`)
   ok(Object.values(ZONE_NAME).some(z => toast === L('spread.hud.grow').replace('{PLACE}', z)), `4. the toast names a real place: "${toast}"`)
