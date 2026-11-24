@@ -24,14 +24,20 @@ try {
   for (let t = 0; t < 60; t++) { const f = await at(K.x, K.z); if (f?.pos.manamal) break; await sleep(500) }
   const walk = async (z: number) => { const n = Math.ceil(Math.abs(z - K.z) / 0.25); for (let j = 1; j <= n; j++) { await at(K.x, K.z + (z - K.z) * j / n); await sleep(90) } K = { x: K.x, z } }
   const rest = async (s: number) => { const u = Date.now() + s * 1000; let f: F | null = null; while (Date.now() < u) { f = await p.evaluate(() => JSON.parse(JSON.stringify((window as any).__formation ?? null))) as F | null; await sleep(250) } return f }
-  await walk(25); const f = await rest(8)
+  await walk(25)
+  // swiftshader draws this page at 1-2 fps and the game caps a frame at 0.05 s: 8 s is under half a second of game time, so
+  // wait in FRAMES (60 = 3 s of game time), not seconds
+  await p.evaluate(() => { const w = window as any; w.__fr = 0; const t = () => { w.__fr++; requestAnimationFrame(t) }; requestAnimationFrame(t) })
+  let f = await rest(8); console.log(`frames drawn in the first 8 s of rest: ${await p.evaluate(() => (window as any).__fr)}`)
+  for (let t = 0; t < 300 && await p.evaluate(() => (window as any).__fr) < 60; t++) await sleep(250)
+  f = await rest(1)
   ok(!!f?.pos.manamal, `1. on foot with a Mana'mal (${JSON.stringify(f?.keeper)})`)
   if (f?.pos.manamal) {
     const k = f.keeper, q = f.pos.manamal, fw = { x: -Math.sin(k.yaw), z: -Math.cos(k.yaw) }
     const d = Math.hypot(q.x - k.x, q.z - k.z), back = -((q.x - k.x) * fw.x + (q.z - k.z) * fw.z), side = (q.x - k.x) * -fw.z + (q.z - k.z) * fw.x
     ok(d >= 3 && d <= 4.5, `2. the Mana'mal rests 3-4.5 m out (${d.toFixed(2)})`)
     ok(back > 1 && Math.abs(side) > 1, `2. behind and off to one side (back ${back.toFixed(2)}, side ${side.toFixed(2)})`)
-    await walk(24); const g = (await rest(2))!
+    await walk(24); const g = (await rest(8))!
     const kd = Math.hypot(g.keeper.x - k.x, g.keeper.z - k.z), mv = Math.hypot(g.pos.manamal.x - q.x, g.pos.manamal.z - q.z)
     ok(kd > 0.8 && mv < 0.05, `3. the keeper steps ${kd.toFixed(2)} m: the Mana'mal stays (moved ${mv.toFixed(2)})`)
   }
