@@ -3,7 +3,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { INFECT_CARRY, INFECT_CLUE, INFECT_OPEN, INFECT_SAVED, MOREL_INFECT } from './infect-lines'
 import { carried, due, freshTell, heardSay, loadTell, note, parseTell, refugees, refugeeSpots, saveTell, settlerSay, told, type Due, type Tell } from './infect-tell'
-import { begin, fell, freshInfection, purge, step, CLUES, INFECT_WEEK_MS as W, type Infection } from './infection'
+import { GLEANER_POST, isGleaner } from './gleaner'
+import { pickable, begin, fell, freshInfection, purge, step, CLUES, INFECT_WEEK_MS as W, type Infection } from './infection'
 import { folkTalk, ASK, type FolkTalkActs } from './folk-talk'
 import { folkOf, freshTrust } from './settlement-folk'
 import { LISTEN } from './yarrow-teach'
@@ -78,6 +79,7 @@ t2 = heardSay(t2, say, 1); same([t2.heard, t2.met], [[1], [A, B]], 'the thanks s
   const one = folkTalk({ ...c, infect: { lines: ['X'] } }, st, act([])); ok(one.line === 'X' && one.options.some(o => o.label === ASK.inspect), 'one line: in the hello\'s place, its answers kept')
   const two = folkTalk({ ...c, infect: { lines: ['X', 'Y'] } }, st, act(seen)); same([two.line, two.options.map(o => o.label)], ['X', [LISTEN, ASK.bye]], 'two lines: one a screen'); two.options[0].pick(); ok(folkTalk({ ...c, infect: { lines: ['X', 'Y'] } }, seen[0], act([])).line === 'Y', 'then the next')
   { const b = burrfolkOf(P(A), 1, folk)!, at = { fid: b.id, screen: 'hello' as const }; same([folkTalk({ ...c, burr: b, stopped: true }, at, act([])).line, folkTalk({ ...c, burr: b }, at, act([])).line], [STALL_STOPPED, BURRFOLK_BARKS.greet], 'the stall, stopped and open') }
+  ok(net.settlements.filter(pickable).every(p => !isGleaner(burrfolkOf(p, 1)?.id)) && !pickable(GLEANER_POST), 'Gleaner keeps no stall an infection can stop (his own talk never reads `stopped`)')
   const ref = folkTalk({ ...c, infect: { lines: ['X', 'Y'] }, refugee: true }, { fid: 'gone', screen: 'hello', beat: 1 }, act([])); same([ref.line, ref.options.map(o => o.label)], ['Y', [ASK.bye]], 'a refugee: the lines and goodbye') }
 // ── the save ──
 { const mem = new Map<string, string>(); (globalThis as any).localStorage = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => mem.set(k, v), removeItem: (k: string) => mem.delete(k), key: () => null, length: 0 }
