@@ -72,7 +72,7 @@ const load = async () => {
   await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 180000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state && !!(window as any).__ather?.gather, { timeout: 180000, polling: 1000 }); await sleep(2500)
 }
-const aimed = async (t: Pick) => { for (let i = 0; i < 40; i++) { await aimAt(p, t.wx, t.wz, 1.0); await frame(); if (await A('aim()') === t.id) return true; await sleep(500) } return false }
+const aimed = async (t: Pick) => { for (let i = 0; i < 16; i++) { await aimAt(p, t.wx, t.wz, 1.0); await frame(); if (await A('aim()') === t.id) return true; await sleep(500) } return false }
 const stand = async (t: Pick, d = 1) => { await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), t.wx + (t.sx - t.lx) * d, t.wz + (t.sz - t.lz) * d); await sleep(1500); await frame() }
 const go = async (t: Pick) => {
   for (let k = 0; k < 5; k++) {
@@ -118,16 +118,16 @@ try {
   const bar = await barAt(); ok(!!bar && Math.abs(bar.p - dry!.p) < 0.001 && bar.x >= 0 && bar.r <= 390 && bar.b <= 844, `the bar is on screen at 390 (${JSON.stringify(bar)})`); await shot('2-dry-bar')
   // 3. walk off and back
   await setMana(50); await aimed(will); await A('prune()'); await frame(); await frame(); const before = (await gather())!
-  await stand(will, 3.4); await frame(); await frame()
-  if (await chan()) { for (let i = 0; i < 10 && await chan(); i++) { await frame(); await sleep(300) }; const z = await A<{ px: number; pz: number; py: number }>('state()'); console.log('   dbg off', JSON.stringify([await A('hp()'), await A('panel()'), await A('falling()'), z.px, z.py, z.pz, will.wx, will.wz, await A('zone()')]), (await text()).slice(-500).replace(/\n/g, ' | ')); await shot('dbg-off') }
+  await stand(will, 2.5); await frame(); await frame()
+  if (await chan()) { for (let i = 0; i < 10 && await chan(); i++) { await frame(); await sleep(300) } }
   ok(await chan() === null, 'out of reach lets go')
-  const off = await rec(will.id); await stand(will); ok(await aimed(will), 'back at it')
+  const off = await rec(will.id); ok(await go(will), 'back at it')
   const back = await gather()
   ok(!!back && before.p >= dry!.p && back.p >= before.p - 1e-9 && Math.abs(back.p - off!.p) < 1e-6 && off!.until === r1!.until, `walking off kept it (${dry?.p.toFixed(3)} -> ${back?.p.toFixed(3)}), same reset`)
   // 4. reload
   await load(); ok(await go(will), 'reloaded, back at the Starwillow')
   const re = await gather(), r2 = await rec(will.id)
-  ok(!!re && Math.abs(re.p - back!.p) < 0.005 && r2?.until === r1?.until && JSON.stringify(r2?.drops) === JSON.stringify(r1?.drops), `a reload kept progress (${re?.p.toFixed(3)}), timer and roll`)
+  ok(!!re && Math.abs(re.p - (back?.p ?? -1)) < 0.005 && r2?.until === r1?.until && JSON.stringify(r2?.drops) === JSON.stringify(r1?.drops), `a reload kept progress (${re?.p.toFixed(3)}), timer and roll`)
   ok(!!(await saw(new RegExp(`keep working the Starwillow \\(${re?.left} mana left\\)`))), `the prompt: ${re?.left} mana left`); await shot('3-reloaded')
   // 5. refilled, it finishes: ~300 in all
   let spent = 0
