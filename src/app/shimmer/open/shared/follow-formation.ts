@@ -20,6 +20,8 @@
 //
 // Headings use the trot's convention: atan2(dx, dz). The keeper's yaw is the camera's: forward = (-sin yaw, -cos yaw).
 
+import { isIdle } from './idle-mode'
+
 export type Vec = { x: number; z: number }
 export type Keeper = { x: number; z: number; yaw: number }
 export type Blocked = (x: number, z: number) => boolean
@@ -162,7 +164,8 @@ export function assignSlots(k: Keeper, yaw: number, members: readonly Member[], 
 
 // ── the live formation: the lagged facing, walking/stopped, the trail, single file's hold ────────────────────────────
 export type Formation = {
-  tick: (k: Keeper, dt: number) => Assigned
+  /** `hold` = the keeper idles: the yaw is the idle camera looking about, so the facing stays as they left it */
+  tick: (k: Keeper, dt: number, hold?: boolean) => Assigned
   state: () => { layout: Layout; lagYaw: number; speed: number; stopped: boolean; trail: number }
   last: () => Assigned
 }
@@ -170,14 +173,14 @@ export function makeFormation(members: () => readonly Member[], where?: (id: str
   let lead: string[] = [], side: Side = 1   // the side it last had is kept until that one is refused (no flicker between two)
   let lagYaw = NaN, prev: Vec | null = null, speed = 0, still = 0, trail: Vec[] = [], fileLeft = 0, last: Assigned = { layout: 'arc', slots: {} }
   return {
-    tick(k, dt) {
+    tick(k, dt, hold = false) {
       dt = Math.max(0, Math.min(0.1, dt))
       const jump = !prev || Math.hypot(k.x - prev.x, k.z - prev.z) > FORM.teleport
       if (jump || !Number.isFinite(lagYaw)) { lagYaw = k.yaw; trail = []; speed = 0; still = 0; fileLeft = 0 }
       else {
         const v = dt > 1e-4 ? Math.hypot(k.x - prev!.x, k.z - prev!.z) / dt : speed
         speed += (v - speed) * (1 - Math.exp(-dt * 6))
-        lagYaw = wrap(lagYaw + wrap(k.yaw - lagYaw) * (1 - Math.exp(-dt * FORM.lagK)))
+        if (!hold) lagYaw = wrap(lagYaw + wrap(k.yaw - lagYaw) * (1 - Math.exp(-dt * FORM.lagK)))
       }
       prev = { x: k.x, z: k.z }
       still = speed < FORM.moveOn ? still + dt : 0
@@ -216,7 +219,7 @@ export function tickFormation(k: Keeper, now = typeof performance !== 'undefined
   if (tickedAt >= 0 && now - tickedAt < 4) return live.last()
   const dt = tickedAt < 0 ? 0 : (now - tickedAt) / 1000
   tickedAt = now
-  const a = live.tick(k, dt)
+  const a = live.tick(k, dt, isIdle())
   if (typeof window !== 'undefined') {   // read-only probe for scripts/m126-formation-check.mts
     const st = live.state(); (window as unknown as { __formation?: unknown }).__formation = {
       ...st, keeper: { x: k.x, z: k.z, yaw: k.yaw }, slots: a.slots, members: [...roster.values()].map(m => ({ id: m.id, kind: m.kind, r: m.r })),
@@ -255,4 +258,19 @@ export function slotStep(s: SlotWalker, slot: Vec, keeperSpeed: number, dt: numb
     if (!onKeeper(nx, nz) && (!blocked || !blocked(nx, nz))) return { x: nx, z: nz, speed, moving, at }
   }
   return { x: s.x, z: s.z, speed: 0, moving, at }
+}
+
+/** M126 s3b: HOME OFF AN IDLE SKIT (up to 6 m out): it hurries until it has been BACK.hold s in its place (`back` counts that
+ *  down), and in REAL time: a frame longer than BACK.step is walked in several steps (each held to free ground), so a slow
+ *  phone's return takes the same seconds as a fast one's. Its usual gait (slotStep) is not touched. */
+export const BACK = { hold: 1.5, hurry: 4, near: 0.6, off: 0.3, step: 0.05, max: 0.3 } as const
+export function homeStep(w: SlotWalker & { back: number }, slot: Vec, keeperSpeed: number, dtReal: number, blocked?: Blocked, keeper?: Vec & { r: number }): SlotWalker & { back: number } {
+  let s: SlotWalker = w, back = w.back, left = Math.min(BACK.max, dtReal)
+  while (left > 1e-6) {
+    const dt = Math.min(BACK.step, left); left -= dt
+    const near = Math.hypot(slot.x - s.x, slot.z - s.z) < BACK.near
+    if (near) back -= dt
+    s = slotStep(s, slot, keeperSpeed + (near ? 0 : BACK.hurry), dt, blocked, BACK.off, keeper)
+  }
+  return { ...s, back }
 }

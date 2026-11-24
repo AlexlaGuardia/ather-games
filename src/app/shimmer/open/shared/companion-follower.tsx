@@ -18,13 +18,11 @@ import * as THREE from 'three'
 import { FOLLOW } from './idle-mode'
 import { skitSlot, reportLying } from './idle-skits'   // M126 s2
 import { activeCompanion, subscribeCompanion, companionRev, type CompanionId } from './companion'
-import { FORM, joinFormation, leaveFormation, tickFormation, formationSlot, reportFormationPos, sharedBlocked, slotStep } from './follow-formation'   // M126 s1
+import { FORM, joinFormation, leaveFormation, tickFormation, formationSlot, reportFormationPos, sharedBlocked, slotStep, homeStep, BACK } from './follow-formation'   // M126 s1
 
 /** M126 s1: the Mana'mal's body in the formation (Gemdigger ~0.5 m nose to tail; the Glowmite / wisps a little less) */
 export const MANAMAL_R = 0.3
 const FORM_ID = 'manamal'
-const BACK = 1.5  // s in its place after a skit before it goes back to its loose trail
-const HURRY = 4   // m/s on top of its gait, walking back off an idle skit
 
 export interface FollowPose { x: number; z: number; yaw: number }
 
@@ -61,13 +59,12 @@ export function Follower({ id, pose, ground }: { id: CompanionId; pose: React.Mu
     // M91 + M126 s2 IDLE (shared/idle-skits.ts): the keeper idles = it wanders a 3-6 m ring round them, sits, naps (lying down);
     // any input = the skit is gone and it walks back to its place
     const sk = skitSlot(FORM_ID, p), to = sk ?? slot
-    if (sk?.roam) { m.x = sk.x; m.z = sk.z; m.speed += (sk.roam.speed - m.speed) * Math.min(1, dt * 6); m.moving = false; m.at = 0; m.back = BACK }
+    if (sk?.roam) { m.x = sk.x; m.z = sk.z; m.speed += (sk.roam.speed - m.speed) * Math.min(1, dt * 6); m.moving = false; m.at = 0; m.back = BACK.hold }
     else {
-      // off a skit (up to 6 m out) it HURRIES home: back in place within ~2 s of the input, then its usual gait
-      const d = Math.hypot(to.x - m.x, to.z - m.z), near = d < 0.6
-      if (m.back > 0 && near) m.back -= dt
-      const n = slotStep({ x: m.x, z: m.z, speed: m.speed, moving: m.moving, at: m.at }, to, m.kv + (m.back > 0 && !near ? HURRY : 0), dt, sharedBlocked(p),
-        m.back > 0 ? 0.3 : FORM.heelOff, { x: p.x, z: p.z, r: FORM.keeperR + MANAMAL_R })
+      // off a skit (up to 6 m out) it HURRIES home, in real seconds (homeStep), then its usual gait
+      const w = { x: m.x, z: m.z, speed: m.speed, moving: m.moving, at: m.at, back: m.back }, kb = { x: p.x, z: p.z, r: FORM.keeperR + MANAMAL_R }
+      const n = m.back > 0 ? homeStep(w, to, m.kv, dtRaw, sharedBlocked(p), kb) : { ...slotStep(w, to, m.kv, dt, sharedBlocked(p), FORM.heelOff, kb), back: 0 }
+      m.back = n.back
       m.x = n.x; m.z = n.z; m.speed = n.speed; m.moving = n.moving; m.at = n.at ?? 0
     }
     reportFormationPos(FORM_ID, m.x, m.z)

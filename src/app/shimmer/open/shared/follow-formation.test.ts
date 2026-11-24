@@ -2,7 +2,7 @@
 // Pure geometry (no page): the arc's spacing by body size, behind the keeper's facing, its lag, the stopped fan + outward
 // faces, single file through a doorway in a wall, the fallback that never reaches through a wall; then the real spirit trot
 // (ather/spirit-trot.ts) walking three spirits to their slots through that doorway, checked against the wall every step.
-import { arcSlots, assignSlots, fileSlots, forwardOf, makeFormation, nearestFree, lineClear, slotStep, FORM, type SlotWalker, type Member, type Keeper, type Vec } from './follow-formation'
+import { arcSlots, assignSlots, fileSlots, forwardOf, makeFormation, nearestFree, lineClear, slotStep, homeStep, BACK, FORM, type SlotWalker, type Member, type Keeper, type Vec } from './follow-formation'
 import { makeTrot, type SpiritNav } from '../ather/spirit-trot'
 import { SPIRIT_MODELS } from '../ather/spirit-models'
 import { bodyRadius } from '../ather/obstacles'
@@ -148,6 +148,28 @@ const doorTeam = (): Member[] => [
   let w: SlotWalker = { x: 0, z: 3, speed: 0, moving: false }, mn = 9
   for (let i = 0; i < 400; i++) { w = slotStep(w, { x: 0, z: -3 }, 0, 1 / 60, undefined, 0.3, { x: 0, z: 0, r: 0.65 }); mn = Math.min(mn, Math.hypot(w.x, w.z)) }
   ok(mn >= 0.64 && dist(w, { x: 0, z: -3 }) < 0.13, `a slot straight across the keeper: round them (${mn.toFixed(2)})`) }
+
+// 4c. s3b: home off a skit from 6 m out, at any side and frame rate (the live page ran at 8 fps): in its place (0.65 m) inside
+//     1.8 REAL seconds; the usual gait stepped with its 0.05 s frame cap is what was too slow
+{ const slot = { x: 2.8, z: 2.1 }, kb = { x: 0, z: 0, r: 0.65 }
+  for (const fps of [60, 30, 8, 4]) for (let a = 0; a < 8; a++) {
+    let w = { x: Math.cos(a * Math.PI / 4) * 6, z: Math.sin(a * Math.PI / 4) * 6, speed: 0, moving: false, back: BACK.hold as number }, t = 0, mn = 9
+    while (t < 5 && dist(w, slot) >= 0.65) { w = homeStep(w, slot, 0, 1 / fps, undefined, kb); t += 1 / fps; mn = Math.min(mn, Math.hypot(w.x, w.z)) }
+    ok(t <= 1.8 && mn >= 0.64, `home from 6 m at ${a * 45} deg, ${fps} fps: ${t.toFixed(2)} s (nearest the keeper ${mn.toFixed(2)})`) }
+  let w = { x: 2, z: -0.8, speed: 0, moving: false, back: 1.5 }, inWall = 0
+  for (let i = 0; i < 30; i++) { w = homeStep(w, { x: 2, z: 1.5 }, 0, 0.25, wallFor(0.3)); if (WALL(w.x, w.z, 0.3)) inWall++ }
+  ok(inWall === 0 && w.z < 0, `home at 4 fps: never through a wall (z ${w.z.toFixed(2)})`)
+  const secs = (hurry: boolean) => { let v = { x: -6, z: 0, speed: 0, moving: false, back: BACK.hold as number }, t = 0; while (t < 5 && dist(v, slot) >= 0.65) { v = hurry ? homeStep(v, slot, 0, 1 / 60, undefined, kb) : { ...slotStep(v, slot, 0, 1 / 60, undefined, 0.3, kb), back: 1 }; t += 1 / 60 } return t }
+  ok(secs(true) < secs(false), `home: quicker than its usual gait (${secs(true).toFixed(2)} s, usual ${secs(false).toFixed(2)})`)
+  w = { x: 2.8, z: 2.1, speed: 0, moving: false, back: BACK.hold }; for (let i = 0; i < 100; i++) w = homeStep(w, slot, 0, 1 / 60)
+  ok(w.back <= 0, 'home: after its hold in place, back to the usual gait') }
+// 4d. s3b: the idle camera turning the keeper's yaw does not swing the formation; input off idle = the slots are where they were
+{ const k: Keeper = { x: 0, z: 0, yaw: 0 }, f = makeFormation(() => [{ id: 'mm', kind: 'manamal', r: 0.3 }])
+  f.tick(k, 1 / 60); const s0 = f.last().slots.mm; k.yaw = 2.5
+  for (let i = 0; i < 120; i++) f.tick(k, 1 / 60, true)
+  ok(dist(f.last().slots.mm, s0) < 1e-6, `idle: the slots hold still (${dist(f.last().slots.mm, s0).toFixed(2)})`)
+  for (let i = 0; i < 120; i++) f.tick(k, 1 / 60)
+  ok(dist(f.last().slots.mm, s0) > 2, 'not idle: the slots turn with the keeper') }
 
 // 5. THE REAL TROT: three spirits follow a keeper who walks up to the door, turns 180, walks back, stops, then walks
 //    through the doorway. Each spirit's own nav = the wall padded by her radius. At rest: no two closer than their radii;

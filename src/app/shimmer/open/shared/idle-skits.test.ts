@@ -123,10 +123,13 @@ const WALL = (x: number, _z: number) => Math.abs(x - 1) < 0.2
     trots.forEach((t, j) => { const p = t.step(1 / 60); reportFormationPos(ms[j].id, p.x, p.z); const sl = formationSlot(ms[j].id); if (sl) maxOff[ms[j].id] = Math.max(maxOff[ms[j].id] ?? 0, dist(p, sl)) }) } }
   step(8)   // into their places
   ok(skitSlot('s0', k, now) === null, 'store: not idle = no skit')
+  const slot0 = Object.fromEntries(['mm', 's0', 's1', 's2'].map(id => [id, { ...formationSlot(id)! }])); let swung = 0
   maxOff = {}
-  step(IDLE_AFTER - 8 + 20)
+  for (let i = 0; i < (IDLE_AFTER - 8 + 20) * 4; i++) { step(1 / 4); swung = Math.max(swung, Math.abs(k.yaw)) }
   ok(Object.values(maxOff).filter(v => v > 1.5).length >= 2, `trot: idle = spirits leave their slots (${Object.entries(maxOff).map(([a, v]) => a + ' ' + v.toFixed(1)).join(', ')})`)
   ok(framed >= 1, `camera: framed a follower while idle (${framed})`)
+  ok(Math.max(...Object.keys(slot0).map(id => dist(slot0[id], formationSlot(id)!))) < 0.4, `store: the slots hold while the idle camera turns (${Object.keys(slot0).map(id => dist(slot0[id], formationSlot(id)!).toFixed(2)).join(', ')}; yaw swung ${swung.toFixed(2)})`)
+  ok(swung > 0.5, 'store: (the idle camera really turned)')
   const mm = skitSlot('mm', k, now)
   ok(!!mm?.roam, 'store: the Mana\'mal\'s skit is to roam')
   noteInput()
