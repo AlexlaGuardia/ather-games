@@ -119,6 +119,7 @@ try {
   // 3. walk off and back
   await setMana(50); await aimed(will); await A('prune()'); await frame(); await frame(); const before = (await gather())!
   await stand(will, 3.4); await frame(); await frame()
+  if (await chan()) { for (let i = 0; i < 10 && await chan(); i++) { await frame(); await sleep(300) }; const z = await A<{ px: number; pz: number; py: number }>('state()'); console.log('   dbg off', JSON.stringify([await A('hp()'), await A('panel()'), await A('falling()'), z.px, z.py, z.pz, will.wx, will.wz, await A('zone()')]), (await text()).slice(-500).replace(/\n/g, ' | ')); await shot('dbg-off') }
   ok(await chan() === null, 'out of reach lets go')
   const off = await rec(will.id); await stand(will); ok(await aimed(will), 'back at it')
   const back = await gather()
