@@ -63,6 +63,7 @@ export const GARDEN_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'ather.nodes.v2',           worldTied: false },  // node spread state
   { base: 'ather.nodes.skew',         worldTied: false },
   { base: 'ather.spreadmap.v1',       worldTied: false },  // M70 s2: the spread map: which node areas the keeper has uncovered + when each was last tended (ather/spread-map.ts)
+  { base: 'ather.infection.v1',       worldTied: false },  // M128 s1: the weekly settlement infections: held / saved / lost + clues told (ather/infection.ts)
   { base: 'open.tycoon.v1',           worldTied: false },  // businesses
   { base: 'open.errand.v1',           worldTied: false },
   { base: 'open.blueprints.v1',       worldTied: false },

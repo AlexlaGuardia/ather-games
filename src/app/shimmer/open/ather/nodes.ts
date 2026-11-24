@@ -15,6 +15,8 @@ export interface WildsNode {
   /** continent-wide subsection coords (tile·SUB + i/j). Set = neighbours ACROSS a tile seam count (the streamed Wilds);
    *  unset = within the tile only. */
   gi?: number; gj?: number
+  /** M128: infected ground with no champion of its own (a lost settlement): nothing wakes here */
+  quiet?: boolean
 }
 
 /** One game day = 64 real minutes (GBOARD › THE ATHER SIDE). The clock runs while you are away. */

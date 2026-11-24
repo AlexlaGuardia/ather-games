@@ -18,6 +18,7 @@
 
 import { BIOME, BIOME_NAME, type BiomeId } from './wilds'
 import { gardenKey } from '@/lib/keeper-local'
+import { infectId } from './infect-id'
 
 /** `settlement`: the free-Moglin settlement it is bound in (Alex 11-18: waymarks only bind where folk live). Older waymarks
  *  planted before that rule have none and keep working until lifted. */
@@ -93,10 +94,11 @@ export function groundOf(owner: string | null | undefined, infected: ReadonlySet
  *  kept ground"): a waymark bound on a cleared node is LIT while that node stays clean and DARK while the grey holds it again.
  *  Read at call time from the spread's own infected set (the same one canPlant's `ground` comes from), never a stored flag:
  *  a dark waymark stays planted (no refund, no re-buy) and relights the moment its node is cleared again. A settlement is kept
- *  ground by definition (no settlement falls in the build), so a settlement waymark is always lit; so are Greg's and older
+ *  ground, so its waymark is lit unless a weekly infection holds it (M128, infection.ts); always lit: Greg's and older
  *  waymarks bound to no node. */
 export function isLit(w: Waymark, infected: ReadonlySet<string>): boolean {
-  if (w.settlement || !w.node) return true
+  if (w.settlement) return !infected.has(infectId(w.settlement))   // M128: dark while its settlement is infected, or lost
+  if (!w.node) return true
   return !infected.has(w.node)
 }
 /** ★ SIGNED by Alex 2026-11-24 (athernyx c1d5903): shimmer-lines-batch-2026-11-24b.md › B2: the refusal when a keeper steps toward a dark waymark, and the fold map's word for one. */

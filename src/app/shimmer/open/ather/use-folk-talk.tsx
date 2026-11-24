@@ -22,7 +22,7 @@ import { diggerTrade, DIGGER_LABEL } from './digger-trade'
 import { burrfolkOf, stallSpot, barter, isBurr, BURR_LABEL, BURRFOLK_BARKS } from './burrfolk'
 import { isGleaner, gleanerMem, afterSwap, gleanerLeave } from './gleaner'
 
-export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number) => number, onClose: () => void) {
+export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number) => number, onClose: () => void, /** M128: its settlement is infected, trade stopped */ stopped = false) {
   const phone = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches   // M46 card sizing; page.tsx untouched
   const inv = useInv()
   const quest = useQuest()
@@ -50,13 +50,13 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
   const node: TalkNode | null = useMemo(() => {
     if (!s || !st) return null
     const home = stillHome(folk, village), room = villageCap(currentWorks()) - village.moglins.length   // P1 11-23: cap by plot stage (raised rooms)
-    const n = folkTalk({ folk, home, trust, have: id => countOf(invRef.current, id), room, homeName: s.name, yarrow: { canTeach, hasCatch }, burr }, st, {
+    const n = folkTalk({ folk, home, trust, have: id => countOf(invRef.current, id), room, homeName: s.name, yarrow: { canTeach, hasCatch }, burr, stopped }, st, {
       go: setSt,
       bye: () => {   // M112: signed leave bark (Gleaner: the camp bark, once the camp is told)
         if (burr && st.fid === burr.id) { const l = isGleaner(burr.id) ? gleanerLeave(gleanerMem) : BURRFOLK_BARKS.leave; if (l) hudSay(`${burr.name}: ${l}`, 'info', 4) }
         onClose()
       },
-      barter: k => {   // M112: one swap at the Burrfolk's stall (refused = nothing changes, a line says why). No coin moves.
+      barter: k => { if (stopped) return   // M112: one swap at the Burrfolk's stall (refused = nothing changes, a line says why). No coin moves.
         const r = barter(getInv(), k)
         if (!r.ok) { hudSay(r.why === 'short' ? BURR_LABEL.short(k) : BURR_LABEL.full(k), 'info', 4); return }
         setInv(r.inv); hudSay(BURR_LABEL.done(k), 'item', 4)
@@ -68,12 +68,13 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
         setInv(next); hudSay(`Mast, Bait ×${YARROW_GIFT_BAIT}, Bait Page`, 'item'); return true
       },
       give: (f, id, n) => {
+        if (stopped) return
         const left = wantsLeft(f, trust).find(w => w.id === id)?.n ?? 0, k = Math.min(left, n, countOf(getInv(), id)); if (k <= 0) return
         const next = take(getInv(), id, k); if (!next) return
         const r = bring(trust, f, id, k); setInv(next); saveTrust(r.trust); setTrust(r.trust)
         setSt({ fid: f.id, screen: 'needs' })
       },
-      trade: () => {   // M108 s3: the Digger's barter (refused = nothing changes, a line says why)
+      trade: () => { if (stopped) return   // M108 s3: the Digger's barter (refused = nothing changes, a line says why)
         const r = diggerTrade(getInv())
         if (!r.ok) { hudSay(r.why === 'short' ? DIGGER_LABEL.short : DIGGER_LABEL.full, 'info', 4); return }
         setInv(r.inv); hudSay(DIGGER_LABEL.done, 'item', 4)
@@ -87,7 +88,7 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
     // M46: the card rides on the node as a HUD panel above the answers (TalkChoices draws it; page.tsx needs no change)
     return n.card ? { ...n, panel: <MoglinCard card={n.card} id={st.fid} phone={phone} /> } : n
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, st, folk, burr, village, trust, haveKey, canTeach, hasCatch])
+  }, [s, st, folk, burr, village, trust, haveKey, canTeach, hasCatch, stopped])
   const f = st ? folk.find(x => x.id === st.fid) : undefined
   // the bubble + the talk camera sit on THAT Moglin (its spot, the ground asked now); a Moglin no longer home (just recruited)
   // or none at all: the settlement's own anchor

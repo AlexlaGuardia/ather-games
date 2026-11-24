@@ -636,7 +636,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     // 22 m from the Wilds' centre node, and every arrival woke it from 600 m away)
     settled.current += dt
     if (!C.champ && C.keeper.hp > 0 && settled.current > SETTLE) for (const n of nodesRef.current) {
-      if (!spent.current.has(n.id) && !probeSpent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < WAKE_R) { wakeChampion(C, T, n); break }
+      if (!n.quiet && !spent.current.has(n.id) && !probeSpent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < WAKE_R) { wakeChampion(C, T, n); break }
     }
     // M28: host or guest, decided from the live roster every frame (a leaver hands the Hollows to the next lowest id)
     {

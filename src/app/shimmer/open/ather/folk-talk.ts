@@ -36,7 +36,9 @@ export interface FolkTalkCtx { folk: Folk[]; home: Folk[]; trust: Trust; have: (
   /** Yarrow (the Glade bait-maker): the teach beat is due (a rinstick held, the page not yet handed), the keeper carries a catch */
   yarrow?: { canTeach: boolean; hasCatch: boolean }
   /** M112: the settlement's Burrfolk (its stall), never one of `folk` */
-  burr?: Burrfolk | null }
+  burr?: Burrfolk | null
+  /** M128: an infection holds this settlement: no trade (the folk still talk) */
+  stopped?: boolean }
 /** M46: a talk node may carry the Moglin's card (the HUD draws it above the answers); `scene` = a stage direction over the line */
 export type FolkTalkNode = TalkNode & { card?: CardView; scene?: string }
 export const isGladeYarrow = (fid: string) => isGlade(fid) && fid.split(':').pop() === 'yarrow'
@@ -61,7 +63,8 @@ export interface FolkTalkActs {
 export const folkStart = (home: Folk[]): FolkTalkState => (home[0] ? helloFor(home[0].id) : { fid: '', screen: 'hello' })
 
 /** The node for `st`. A Moglin that has just been recruited is no longer in `home`, so it is looked up in the full season list. */
-export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): FolkTalkNode {
+export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act0: FolkTalkActs): FolkTalkNode {
+  const act = c.stopped ? { ...act0, trade: undefined } : act0
   const bye = { label: ASK.bye, pick: act.bye }
   if (isBurr(st.fid) && c.burr && st.fid === c.burr.id) return burrTalk(c, c.burr, st, act)
   const f = c.folk.find(x => x.id === st.fid)
@@ -87,7 +90,7 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): 
     return {
       line: talkLine('trustFirst', f.id, goodsText(left)),
       options: [
-        ...left.filter(w => c.have(w.id) > 0).map(w => ({ label: giveLabel(Math.min(w.n, c.have(w.id)), w.id), pick: () => act.give(f, w.id, Math.min(w.n, c.have(w.id))) })),
+        ...(c.stopped ? [] : left).filter(w => c.have(w.id) > 0).map(w => ({ label: giveLabel(Math.min(w.n, c.have(w.id)), w.id), pick: () => act.give(f, w.id, Math.min(w.n, c.have(w.id))) })),
         { label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello' }) },
       ],
     }
@@ -112,7 +115,7 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act: FolkTalkActs): 
   const inspect = { label: ASK.inspect, pick: () => act.go({ fid: f.id, screen: 'card', alt: st.alt }) }
   if (st.screen === 'card') return { line: hello, card: cardOf(f, c.trust, c.homeName ?? f.home), options: [{ label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello', alt: st.alt }) }, bye] }
   const trade = f.profession === 'digger' && act.trade ? [{ label: DIGGER_LABEL.trade, pick: () => act.trade!(f) }] : []   // M108 s3
-  return { line: hello, options: [...trade, ...(f.employed && !ok ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, inspect, ...(next ? [next] : []), bye] }
+  return { line: hello, options: [...trade, ...(f.employed && !ok && !c.stopped ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, inspect, ...(next ? [next] : []), bye] }
 }
 
 /** M112: the Burrfolk's stall. Greet (signed bark), "Have a look" opens the stall (signed stall bark + one swap per stock row).
@@ -124,9 +127,9 @@ export function burrTalk(c: FolkTalkCtx, b: Burrfolk, st: FolkTalkState, act: Fo
   }, { swap: BURR_LABEL.swap, back: ASK.back, bye: ASK.bye, room: ASK.room })
   const bye = { label: ASK.bye, pick: act.bye }
   const first = c.home[0], others = first ? [{ label: ASK.others, pick: () => act.go(helloFor(first.id)) }] : []
-  if (st.screen === 'stall') return {
+  if (st.screen === 'stall' && !c.stopped) return {
     line: BURRFOLK_BARKS.stall,
     options: [...b.stock.map(k => ({ label: BURR_LABEL.swap(k), pick: () => act.barter?.(k) })), { label: ASK.back, pick: () => act.go({ fid: b.id, screen: 'hello' }) }, bye],
   }
-  return { line: BURRFOLK_BARKS.greet, options: [{ label: BURR_LABEL.look, pick: () => act.go({ fid: b.id, screen: 'stall' }) }, ...others, bye] }
+  return { line: BURRFOLK_BARKS.greet, options: [...(c.stopped ? [] : [{ label: BURR_LABEL.look, pick: () => act.go({ fid: b.id, screen: 'stall' as const }) }]), ...others, bye] }
 }

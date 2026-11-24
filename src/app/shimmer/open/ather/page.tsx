@@ -130,6 +130,11 @@ import { AngelicaDeskPanel, sideItemName, haveOf } from './m70-desk-panel'   // 
 import { GLEANER_POST, GLEANER_POST_R, BURR_CAMP, CAMP_LABEL } from './gleaner'   // M112 s2
 import { aimPick, lookDir, type Pickable } from '../shared/aim-pick'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
+import { useInfections } from './use-infection'   // M128 s1
+import { infectNodes, NO_NODES, infectedGround, championSpot } from './infection'
+import { infectId, INFECT_R } from './infect-id'
+import { builtFolkSpots } from './settlement-lots'
+import { live as liveSolids } from './dynamic-solids'
 import { canPlant, plant, lift, loadWaymarks, saveWaymarks, groundOf, canTravel, isLit, lastLit, WAY_TEXT, GREG_WAYMARK, MAX_WAYMARKS, type Waymark, type PlantVerdict } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { WildsSpirits, useSpiritFight } from './wilds-spirits'   // M127 s1
@@ -563,7 +568,18 @@ function AtherSliceGame() {
   const [nearKey, setNearKey] = useState('')
   const nearNodes = useMemo(() => { const p = pos.current; return nodes.filter(n => Math.abs(n.x - p.x) < 450 && Math.abs(n.z - p.z) < 450) }, [nodes, nearKey]) // eslint-disable-line react-hooks/exhaustive-deps
   // the countries on the fold map, and which one the keeper stands in (HUD), off the same nearest-node rule
-  const infectedSet = useMemo(() => new Set(nodes.map(n => n.id)), [nodes])
+  // M128 s1: THE WEEKLY INFECTIONS (infection.ts; owner-only: use-infection.tsx). A held settlement = a champion + Hollow ground round
+  // its homes; a lost one = the ground alone. With none, every value below IS the old one (same object).
+  const infection = useInfections({ net, fog, tileOff, clock, pos, inWilds: zone.kind === 'wilds', fighting: () => liveSolids.combat?.champ?.nodeId ?? null })
+  const infectionRef = useRef(infection); infectionRef.current = infection
+  const infKey = `${infection.held ?? ''}|${infection.lost.join()}`
+  const infNodes = useMemo(() => net && ww ? infectNodes(infectionRef.current.state, net.settlements, p => championSpot(p, builtFolkSpots(p, folkOf(p, net.season), net.season), (x, z) => ww.walkable(x, z)), (x, z) => { const { tx, ty } = tileOf(x, z); return ww.at(tx, ty)?.name ?? '' }, BIOME.meadow) : NO_NODES, [net, ww, wrev, infKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  /** the settlements that stand (a lost one is gone until the season purge) */
+  const standing = useMemo(() => net && infection.lost.length ? { ...net, settlements: net.settlements.filter(p => !infection.lost.includes(p.id)) } : net, [net, infKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const standingRef = useRef(standing); standingRef.current = standing
+  const fightNodes = useMemo(() => { if (!infNodes.length) return nearNodes; const p = pos.current; return [...nearNodes, ...infNodes.filter(n => Math.abs(n.x - p.x) < 450 && Math.abs(n.z - p.z) < 450)] }, [nearNodes, infNodes])
+  const groundOwner = useMemo(() => !nodeOwner || !infNodes.length || !net ? nodeOwner : (x: number, z: number) => infectedGround(infectionRef.current.state, net.settlements, x, z) ?? nodeOwner(x, z), [nodeOwner, infNodes, net])
+  const infectedSet = useMemo(() => new Set([...nodes, ...infNodes].map(n => n.id)), [nodes, infNodes])
   infRef.current = infectedSet
   // M70 s2: the spread map's tick, every 4 s: uncover where you stand, grow toasts for watched sections that turned Hollow ground.
   // The first read after a load only records (no toast on reload).
@@ -578,9 +594,10 @@ function AtherSliceGame() {
       const t = ww.byName.get(name)!, ox = t.tx * TILE_M, oz = t.ty * TILE_M
       const local = (nodesByTile.get(name) ?? []).map(n => ({ ...n, x: n.x - ox, z: n.z - oz }))
       m.set(name, nodeRegions(local, TILE_M, TILE_M).map(r => ({ ...r, state: areaState(smap, r.id, infectedSet.has(r.id)) })))   // M70 s2, M121 s2: the spread map's four states
+      for (const n of infNodes) { const st = n.tile === name && net?.settlements.find(p => infectId(p.id) === n.id); if (st) m.get(name)!.push({ id: n.id, state: 'hollow', poly: Array.from({ length: 24 }, (_, k) => ({ x: st.x - ox + Math.cos(k * Math.PI / 12) * INFECT_R, z: st.z - oz + Math.sin(k * Math.PI / 12) * INFECT_R })) }) }   // M128
     }
     return m
-  }, [ww, wrev, nodesByTile, infectedSet, smap, smapTick]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ww, wrev, nodesByTile, infectedSet, smap, smapTick, infNodes, net]) // eslint-disable-line react-hooks/exhaustive-deps
   const regions = regionsByTile.get(hereTile) ?? []
   useEffect(() => {   // M70 s2: the spread map's tick
     if (zone.kind !== 'wilds' || !ww || !nodeOwner) return
@@ -606,7 +623,7 @@ function AtherSliceGame() {
   }, [panel?.kind]) // eslint-disable-line react-hooks/exhaustive-deps
   const hereOff = useMemo(() => { const t = ww?.byName.get(hereTile); return t ? { x: t.tx * TILE_M, z: t.ty * TILE_M } : { x: 0, z: 0 } }, [ww, hereTile])
   const groundRef = useRef<(x: number, z: number) => string | null>(() => null)
-  groundRef.current = (x, z) => { const id = nodeOwner?.(x, z); return id ? (nodes.some(n => n.id === id) ? 'infected ground' : 'cleared ground') : null }
+  groundRef.current = (x, z) => { const id = groundOwner?.(x, z); return id ? (infectedSet.has(id) ? 'infected ground' : 'cleared ground') : null }
   const gardenRef = useRef(garden); gardenRef.current = garden
   const onCombat = useCallback((evs: CombatEvent[]) => {
     let got = 0
@@ -621,6 +638,7 @@ function AtherSliceGame() {
       if (e.kind === 'reload-dry') { const t = performance.now() / 1000; if (t - dryAt.current > 2) { dryAt.current = t; hudSay(RELOAD_DRY_LINE, 'info') } }   // M78
       if (e.kind === 'champ-wake') setToast('Something heaves up out of the grey.')
       if (e.kind === 'champ-break') setToast(e.bar === 0 ? 'It sinks into the ooze, and more come crawling out.' : 'It sinks again. When it rises it moves wrong, wild.')
+      if (e.kind === 'champ-down' && infectionRef.current.down(e.nodeId)) { hudSay(clearLine(), 'info', 4); continue }   // M128: a settlement's infection, never the spread's ledger
       if (e.kind === 'champ-down') {
         setToast('The grey thins here. For now.')
         { const t0 = loadTut(), t1 = m70Down(t0, e.nodeId); if (t1 !== t0) saveTut(t1) }   // M70 s1: Lamps Out's big one
@@ -861,7 +879,7 @@ function AtherSliceGame() {
       // a settlement's folk: each Moglin standing in it (nobody home = the settlement's own anchor, where the talk camera falls back)
       // ...but a node under the crosshair with hands stowed keeps E for the work (Alex 11-19: at Moonwell Glade the folk ate E, no mining)
       const workAim = (aimRef.current.tree || cAimRef.current.crystal) && stanceRef.current.kind === 'stowed'
-      if (!workAim && netRef.current) { const st = settlementAt(netRef.current, lc.px, lc.pz); if (st) { const figs = folkDrawn.get(st.id)
+      if (!workAim && standingRef.current) { const st = settlementAt(standingRef.current, lc.px, lc.pz); if (st) { const figs = folkDrawn.get(st.id)
         if (figs?.length) for (const f of figs) cands.push(cap(f.x, f.z, 0.4, MOGLIN_HEIGHT.chibi + 0.1, { kind: 'folk', s: st }))
         else cands.push(cap(st.x, st.z, 0.8, 2, { kind: 'folk', s: st }))
         const stall = stallDrawn.get(st.id); if (stall) cands.push(cap(stall.x, stall.z, 0.6, MOGLIN_HEIGHT.chibi + 0.4, { kind: 'folk', s: st })) } }   // M112: the Burrfolk's stall (the talk opens on the nearest)
@@ -908,7 +926,7 @@ function AtherSliceGame() {
         if (tt) { const o = ww.offsetOf(tt.name); zn = ZONE_NAME[zonesOf(ww, tt.name)(Math.min(4, Math.floor((lc.px - o.x + 500) / 200)), Math.min(4, Math.floor((lc.pz - o.z + 500) / 200)))] }
         where = zn + (g ? ` · ${g}` : '')
         // the path network: a settlement or the fair names itself on the message line as you walk in
-        const nw = netRef.current
+        const nw = standingRef.current
         if (nw) {
           const st = settlementAt(nw, lc.px, lc.pz), fr = nearFair(nw, lc.px, lc.pz)
           const camp = !st && !fr && Math.hypot(lc.px - BURR_CAMP.x, lc.pz - BURR_CAMP.z) < BURR_CAMP.r * 2   // M112 s2: the Burrfolk camp
@@ -972,9 +990,9 @@ function AtherSliceGame() {
     const p = pos.current, biome = ww.biomeAt(p.x, p.z), t = ww.at(tileOf(p.x, p.z).tx, tileOf(p.x, p.z).ty)
     if (!t) return { ok: false, why: 'no tile' }
     const lx = p.x - t.tx * TILE_M, lz = p.z - t.ty * TILE_M
-    const st = netRef.current ? settlementAt(netRef.current, p.x, p.z) : null   // a settlement is kept ground (Alex 11-18)
+    const st0 = standingRef.current ? settlementAt(standingRef.current, p.x, p.z) : null, st = st0 && infectionRef.current.held === st0.id ? null : st0   // a settlement is kept ground (Alex 11-18), but not while an infection holds it (M128)
     // M75: so is ground the keeper cleared (canon: a waymark exists only once the place is kept); it links home, so not pre-fold
-    const owner = nodeOwner?.(p.x, p.z) ?? null, ground = groundOf(owner, infectedSet)
+    const owner = groundOwner?.(p.x, p.z) ?? null, ground = groundOf(owner, infectedSet)
     const v = canPlant(waymarks, { tile: t.name, x: lx, z: lz, biome, grounded: p.grounded, swimming: p.swimming, settlement: st?.id ?? null, ground, folded: gardenOpen(loadTut()) })
     if (!v.ok) { setToast(v.why); return v }
     const spent = take(getInv(), 'waymark', 1)          // a waymark is a thing in the bag now: planting spends one
@@ -984,7 +1002,7 @@ function AtherSliceGame() {
     setWaymarks(next); saveWaymarks(next)
     setToast(WAY_TEXT.planted(st?.name ?? 'the Wilds'))
     return v
-  }, [zone, ww, waymarks, nodeOwner, infectedSet])
+  }, [zone, ww, waymarks, groundOwner, infectedSet])
   const liftWaymark = useCallback((id: string) => {
     const next = lift(wayRef.current, id); setWaymarks(next); saveWaymarks(next)
     const back = give(getInv(), 'waymark', 1); setInv(back.inv)
@@ -997,7 +1015,7 @@ function AtherSliceGame() {
     g.__ather = {
       ...(g.__ather ?? {}),
       wm: () => wayRef.current, wmBag: () => countOf(getInv(), 'waymark'), wmPlant: () => plantHere(), wmLift: (id: string) => liftWaymark(id),
-      wmGround: () => { const p = pos.current; return { ground: groundOf(nodeOwner?.(p.x, p.z) ?? null, infectedSet), settlement: netRef.current ? settlementAt(netRef.current, p.x, p.z)?.id ?? null : null, x: p.x, z: p.z, grounded: p.grounded } },
+      wmGround: () => { const p = pos.current; return { ground: groundOf(groundOwner?.(p.x, p.z) ?? null, infectedSet), settlement: standingRef.current ? settlementAt(standingRef.current, p.x, p.z)?.id ?? null : null, x: p.x, z: p.z, grounded: p.grounded } },
       wmNodes: () => { const p = pos.current; return allNodes.filter(n => n.tile === GREG_WAYMARK.tile).map(n => ({ id: n.id, x: n.x, z: n.z, infected: infectedSet.has(n.id), d: Math.hypot(n.x - p.x, n.z - p.z) })).sort((a, b) => a.d - b.d).slice(0, 40) },
       wmGoto: (x: number, z: number) => { if (!ww) return false; const { tx, ty } = tileOf(x, z), t = ww.at(tx, ty); if (!t) return false; const o = ww.offsetOf(t.name); travel({ kind: 'waymark', w: { id: 'probe', tile: t.name, x: x - o.x - 2.2, y: 0, z: z - o.z - 2.2, biome: BIOME.meadow, made: 0 } }); return true },
       wmLit: () => wayRef.current.map(w => ({ id: w.id, node: w.node ?? null, lit: isLit(w, infectedSet) })),
@@ -1005,7 +1023,7 @@ function AtherSliceGame() {
       wmClear: (id: string) => { const cur = spreadRef.current; if (!cur || !allNodes.some(n => n.id === id)) return false; const s = clearAt(cur, id, clock()); saveSpread(s); setSpread(s); setSmap(tend(smapRef.current, id, clock())); return true },
       wmClearHere: () => { const p = pos.current, id = nodeOwner?.(p.x, p.z), cur = spreadRef.current; if (!id || !cur) return null; const s = clearAt(cur, id, clock()); saveSpread(s); setSpread(s); setSmap(tend(smapRef.current, id, clock())); return id },
     }
-  }, [plantHere, liftWaymark, nodeOwner, infectedSet, allNodes, ww, travel])
+  }, [plantHere, liftWaymark, nodeOwner, groundOwner, infectedSet, allNodes, ww, travel])
   // what you hold is what the stance says (a drawn gun, a picked hotbar item, or nothing): a waymark plants on click,
   // the Repeater fires (combat-layer only fires while armed), stowed hands work a node
   const inv = useInv()
@@ -1287,13 +1305,13 @@ function AtherSliceGame() {
           // ★ NO NODE MARKS (Alex 11-18: "the nodes really dont even need to be on the map.. as long as the section gets an
           // infected theme its up to the player to track the champion"). Greg's waymark, settlements, the fair, your waymarks:
           { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, color: '#e7c766', title: "Gregory's waymark" },
-          ...(net ? [...net.settlements].sort((a, b) => Math.hypot(a.x - pos.current.x, a.z - pos.current.z) - Math.hypot(b.x - pos.current.x, b.z - pos.current.z)).slice(0, 4)
+          ...(standing ? [...standing.settlements].sort((a, b) => Math.hypot(a.x - pos.current.x, a.z - pos.current.z) - Math.hypot(b.x - pos.current.x, b.z - pos.current.z)).slice(0, 4)
             .map(st => ({ x: st.x, z: st.z, color: '#d9c39a', title: st.name })) : []),
           ...(net?.fair ? [{ x: net.fair.x, z: net.fair.z, color: '#b37fd6', title: FAIR_NAME }] : []),
           ...waymarks.filter(w => ww?.byName.has(w.tile)).map(w => { const o = ww!.offsetOf(w.tile); return { x: w.x + o.x, z: w.z + o.z, color: '#6fd3c4', title: 'your waymark' } }),
         ]
     marksRef.current = [...marksRef.current, ...questMarks(zone.kind === 'plot' ? 'ather' : zone.kind)]   // the journal's waymarks (pack.tsx); M67 s1b-2: the Glade has its own (the pool, Greg)
-  }, [zone, nearNodes, waymarks, journal, ww, net])
+  }, [zone, nearNodes, waymarks, journal, ww, net, standing])
   // THE FIRST ERRAND (business/errand.ts, Magii + Alex 11-16): Greg hands the birth letter's gems; the journal points to
   // the school's runesmith, then the Enchant Temple in the Citadel (those waymarks light on the continent page)
   const birth = useBirth(), loadoutNow = useLoadout()
@@ -1510,7 +1528,7 @@ function AtherSliceGame() {
   useEffect(() => { if (tourRef.current && zone.kind === 'plot' && tourRef.current.i !== tableIdx) setTour(null) }, [zone.kind, tableIdx])
   useEffect(() => { if (!tour && panel?.kind !== 'talk' && panel?.kind !== 'greg') setTableVisit(false) }, [tour, panel])
   // BETA M13: E in a settlement talks to ONE Moglin (folk-talk.ts); the settlement's heart is its anchor (no Moglin models are drawn yet)
-  const folkTalk = useFolkTalk(panel?.kind === 'folk' ? panel.s : null, useCallback((x: number, z: number) => zone.kind === 'glade' ? gladeZoneGround(x, z) : ww && ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : 0, [ww, zone.kind, gladeZoneGround]), () => setPanel(null))
+  const folkTalk = useFolkTalk(panel?.kind === 'folk' ? panel.s : null, useCallback((x: number, z: number) => zone.kind === 'glade' ? gladeZoneGround(x, z) : ww && ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : 0, [ww, zone.kind, gladeZoneGround]), () => setPanel(null), panel?.kind === 'folk' && panel.s.id === infection.held)
   // BETA M22: Fennel at the Rinnshop while the first-rinstick quest is open (fennel.tsx, use-rinquest.ts › fennelTalk)
   const fennelAt = useMemo(() => (!visitNow && fennelHere(rinQuest) ? fennelSpot(works) : null), [rinQuest, works, visitNow])   // M61: your Fennel stays on YOUR plot
   const fennelRef = useRef(fennelAt); fennelRef.current = fennelAt
@@ -1616,7 +1634,7 @@ function AtherSliceGame() {
           const u = n.u, line = zoneSay(u); if (line) hudSay(line, 'info', 4)
           if (u.kind === 'shop') setPanel({ kind: 'shop', id: u.id })
           else if (u.kind === 'home' && zone.kind === 'wilds') {   // M84 s3b: a Wilds resident = a settlement's Moglin: that settlement's talk
-            const net = netRef.current, st = net && u.ref ? net.settlements.find(s => folkOf(s, net.season).some(f => f.id === u.ref)) : undefined
+            const net = standingRef.current, st = net && u.ref ? net.settlements.find(s => folkOf(s, net.season).some(f => f.id === u.ref)) : undefined
             if (st) setPanel({ kind: 'folk', s: st })
           }
           else if (u.kind === 'home') {
@@ -1692,13 +1710,13 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && ww && <><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
         {zone.kind === 'glade' && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><GladeLots /></>}   {/* M67 s1b-2: the Glade's backdrop in Greg's garden */}
         {zone.kind === 'glade' && <GladeGreg loaded={(x, z) => { const y = gladeZoneGround(x, z); return Number.isFinite(y) ? y : null }} tour={tour} hold={panel?.kind === 'talk' || panel?.kind === 'greg'} keeper={poseRef} onArrive={onTourArrive} live={gregLive} />}
-        {zone.kind === 'wilds' && ww && net && <Settlements net={net} loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
+        {zone.kind === 'wilds' && ww && standing && <Settlements net={standing} loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
         {zone.kind === 'wilds' && ww && <FirstSettlement loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}   {/* M70 s1 */}
         {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
         {terrain && (
           <CombatLayer spirits={spiritFight} T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
             groundAt={ww ? (x: number, z: number) => biomeGround(ww.biomeAt(x, z)) : undefined}
-            safe={WILDS_SAFE} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} mana={manaRef.current} skin={skinRef.current} nodes={nearNodes} ownerOf={nodeOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
+            safe={WILDS_SAFE} onEvents={onCombat} onHud={onCombatHud} reviveKey={reviveKey} armed={stance.kind === 'weapon' && !!held} gunId={stance.kind === 'weapon' ? held : null} reloadTick={reloadTick} mana={manaRef.current} skin={skinRef.current} nodes={fightNodes} ownerOf={groundOwner} casts={castQueue} onCast={onCast} eats={eatQueue} sight={sightRef} channel={castChannel} />
         )}
         {folkTalk.node && folkTalk.bubbleAt && zone.kind !== 'plot' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} scene={(folkTalk.node as { scene?: string }).scene} />}
         {zone.kind === 'plot' && tableVisit && !visitNow && (() => {   /* M61: your Greg never stands at a mate's table */ const g = TABLE_STOP.at, p = poseRef.current; return (
