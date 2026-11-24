@@ -58,6 +58,12 @@ try {
   await p.evaluate(() => {
     const W = window as any, A = W.__ather, D = W.__m127 = { mode: 'quiet', maxD: 0, maxStep: 0, farAt: '', over: 0, off: 0, hits: 0, windups: 0, badWind: 0, kills: 0, samples: 0, fights: 0, log0: 0, worst: 0, nothing: 0, shots: 0, deadSeen: new Set<number>(), mine: new Set<number>() }
     const prev: Record<string, any> = {}, st: Record<number, string> = {}; let shotAt = 0, tgt = -1
+    // hand-over jumps: her SPEED frame by frame (m moved / that frame's own time), so a slow frame is not read as a jump and a
+    // real teleport is (the walk is capped at 9 m/s, spirit-trot FOLLOW.vMax)
+    let t0 = 0; const tick = (now: number) => { const dt = (now - t0) / 1000; t0 = now
+      for (const s of W.__spiritFight?.().spirits ?? []) { const q = prev[s.id]; if (q && dt < 2) { const m = Math.hypot(s.x - q.x, s.z - q.z), v = m / Math.max(dt, 0.016); if (m > 0.3 && v > D.maxStep) D.maxStep = v }; prev[s.id] = s }
+      requestAnimationFrame(tick) }
+    requestAnimationFrame(tick)
     setInterval(() => {
       const C = A.combat(), F = W.__spiritFight(), eye = A.camAim(), k = { x: eye.cx, z: eye.cz }; D.samples++
       if (D.mode === 'quiet') { D.mine.clear(); C.hollows.length = 0; C.spits.length = 0; C.packs = {} }
@@ -72,7 +78,6 @@ try {
       const b = F.spirits
       for (const s of b) {
         const d = Math.hypot(s.x - k.x, s.z - k.z); if (F.on && d > D.maxD) { D.maxD = d; D.farAt = s.id }
-        const q = prev[s.id]; if (q) D.maxStep = Math.max(D.maxStep, Math.hypot(s.x - q.x, s.z - q.z)); prev[s.id] = s
       }
       if (F.spiritDealt > F.dials.share * F.keeperDealt + 1e-6) D.over++
       if (F.keeperDealt > 0) D.worst = Math.max(D.worst, F.spiritDealt / F.keeperDealt)
@@ -139,7 +144,7 @@ try {
   let gap: number[] = []
   for (let i = 0; i < 30; i++) { await sleep(500); gap = await p.evaluate(() => { const w = window as any, fm = w.__formation; return w.__spiritFight().spirits.map((s: any) => Math.hypot(s.x - fm.slots[s.id].x, s.z - fm.slots[s.id].z)) }) as number[]; if (gap.length === 3 && gap.every(g => g < 0.8)) break }
   const e = await F(); ok(Object.keys(e.slots).length === 0 && gap.length === 3 && gap.every(g => g < 0.8), `4. each back at her formation slot (${gap.map(g => g.toFixed(2)).join(', ')} m off)`)
-  const z = await D(); ok(Math.max(step1, z.maxStep) < 2.5, `3. no jump on a hand-over (largest move between two samples ${step1.toFixed(2)} m into / in the fights, ${z.maxStep.toFixed(2)} m back to formation)`)
+  const z = await D(); ok(Math.max(step1, z.maxStep) < 13, `3. no jump on a hand-over (fastest frame ${step1.toFixed(1)} m/s into / in the fights, ${z.maxStep.toFixed(1)} m/s back to formation; a walk is capped at 9)`)
   try { await p.screenshot({ path: `${out}/after.png` }) } catch { /* slow */ }
   // 5. one more kill, beside a seeded spirit HIT's path: exactly one xp per kill
   const xp = () => p.evaluate(() => { const s = JSON.parse(localStorage.getItem('ather.spiritStats.v1') ?? '{}'); return ['pa', 'pb', 'pc'].map(i => [s[i]?.xp ?? 0, s[i]?.grown ?? 0]) }) as Promise<number[][]>
