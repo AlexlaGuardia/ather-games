@@ -211,6 +211,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 17:0x Alex (playing): "i noticed the grid fro the plot is always on can we hid that one and for plan mode use a grid with smaller squares..?" -> M142
 - 11-24 17:0x Alex (hub's fetch list): "yea that list works lets go with it" -> M141 s2
 - 11-24 16:5x Alex (M141 s2): "yea thats actually a good point some spirits can actually do it for fun and be better for gathering materials with them" -> M141 s2: each species has its own fetch eagerness
 - 11-24 16:5x Alex: "yea sounds good to mego ahead" (ground loot for all + spirits fetch) -> M141
