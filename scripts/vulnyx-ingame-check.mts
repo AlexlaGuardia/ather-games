@@ -122,6 +122,7 @@ if (a) {
       // her LENGTH, 0.90 m nose to tail (canon's number; at this model's proportions she then stands ~0.70 tall). +-10%,
       // the hull's 6% inside that.
       const hv = samples.at(-1)!.hWorld ?? 0, hm = msamp.at(-1)!.hWorld ?? 0, lm = msamp.at(-1)!.len ?? 0, gv = GROWN.fox.height, gl = GROWN.axolotl.length!
+      { const by: Record<string, number[]> = {}; for (const s of samples) if (s.hWorld) (by[s.mode] ??= []).push(s.hWorld); console.log(`   Vulnyx measured height by mode: ${Object.entries(by).map(([m, v]) => `${m} ${Math.min(...v).toFixed(3)}-${Math.max(...v).toFixed(3)}`).join(', ')}`) }
       ok(hv > gv * 0.9 && hv < gv * 1.1, `A Vulnyx measured height ${hv.toFixed(3)} m (grown ${gv}, +-10%)`)
       ok(lm > gl * 0.9 && lm < gl * 1.1, `A Manalotl measured length ${lm.toFixed(3)} m nose to tail (grown ${gl}, +-10%); height ${hm.toFixed(3)} m`)
       // ground keep: the trot tips her round her feet; the lift that keeps her lowest point on the ground was applied (> 0)
@@ -168,7 +169,7 @@ async function walk(p: Page, secs: number, sps: string[]) {
     let i = 1, x = path[0][0], z = path[0][1], last = performance.now(); const t0 = last
     function f() { const now = performance.now(), dt = Math.min(0.25, (now - last) / 1000); last = now
       let step = 4.2 * dt; while (step > 0) { const [tx, tz] = path[i % path.length], dx = tx - x, dz = tz - z, d = Math.hypot(dx, dz); if (d <= step) { x = tx; z = tz; step -= d; i++ } else { x += dx / d * step; z += dz / d * step; step = 0; window.__ather.tp(x, z, Math.atan2(-dx, -dz)) } }
-      const g = window.__ather.state(), kx = g.px ?? g.x, kz = g.pz ?? g.z
+      const g = window.__ather.state(), fk = window.__formation?.keeper, kx = fk?.x ?? g.px ?? g.x, kz = fk?.z ?? g.pz ?? g.z   // M126 s4: the keeper she was given THIS frame (her own pose is last frame's against state(): at 7 fps that is up to 1 m of the keeper's step)
       for (const s of sps) { const t = window.__spiritModel?.trots?.[s]; if (t) out[s].push({ d: Math.hypot(t.x - kx, t.z - kz), x: t.x, z: t.z, mode: t.mode, t: now - t0 }) }
       if (now - t0 < ${secs * 1000}) requestAnimationFrame(f); else res(out) }
     requestAnimationFrame(f) })`) as Promise<Record<string, { d: number; x: number; z: number; mode: string; t: number }[]>>
