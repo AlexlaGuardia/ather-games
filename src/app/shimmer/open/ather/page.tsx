@@ -43,6 +43,7 @@ import { Vector3, type Camera, type Scene, type WebGLRenderer } from 'three'
 import { VoxelDayNight } from '../shared/day-night'
 import { terrainWorld } from '../terrain-world'
 import { withPieces } from './dynamic-solids'
+import { wildsStructures, setWildsPartBoxes } from './obstacles'   // M117 s3: Hollows steer round buildings, shots stop on walls
 import { GateRings } from '../shared/gate-rings'
 import { Walker, verbOf, type Loco } from './walker'
 import {
@@ -496,7 +497,7 @@ function AtherSliceGame() {
   }, [arrive])
 
   // ── combat in the Wilds ──
-  const terrain = useMemo<Terrain | null>(() => ww ? { heightAt: ww.heightAt, walkable: (x, z) => ww.walkable(x, z) } : null, [ww])
+  const terrain = useMemo<Terrain | null>(() => ww ? { heightAt: ww.heightAt, walkable: (x, z) => ww.walkable(x, z), structures: wildsStructures } : null, [ww])
   // THE NODE MAP (nodes.ts: one node per land subsection) and THE SPREAD (spread.ts: Alex's raw numbers, no brakes).
   // The world catches up on load (the clock ran while you were away), then ticks live every 20 s.
   // every node on the continent, from the tile index (placed at export by the same placeNodes), in world coords: the
@@ -708,6 +709,7 @@ function AtherSliceGame() {
   const wildsPartsNow = useMemo(() => ww && wildsZones.length ? zoneParts(wildsZones, ww.heightAt) : [], [ww, wrev, wildsZones])   // eslint-disable-line react-hooks/exhaustive-deps
   const wildsPartsSig = wildsPartsNow.map(p => `${p.key}@${p.y.toFixed(2)}`).join()
   const wildsParts = useMemo(() => wildsPartsNow, [wildsPartsSig])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setWildsPartBoxes(zonePartBoxes(wildsParts)); return () => setWildsPartBoxes([]) }, [wildsParts])   // M117 s3
   const wildsDoors = useMemo(() => wildsZones.flatMap(z => { const u = zoneUse(z); return u ? [{ id: z.id, ...zoneDoor(z), u }] : [] }), [wildsZones])
   const wildsDoorsRef = useRef(wildsDoors); wildsDoorsRef.current = wildsDoors
   const world = useMemo(() => zone.kind === 'plot' ? plotWorld : zone.kind === 'glade' ? gladeWorld : ww ? terrainWorld(withZoneParts(withPieces(ww.shape), zonePartBoxes(wildsParts))) : null, [zone, ww, plotWorld, gladeWorld, wildsParts])   // ww.shape reads the live tiles

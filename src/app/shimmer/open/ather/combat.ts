@@ -17,11 +17,14 @@ import { canFire, spreadDeg, bloomAfterShot, bloomAfterRest, weaponDef, type Wea
 import { stepChampion, hitChampion, CHAMP, type Champion } from './champion'
 import { easeRemote } from '../shared/fight-share'   // M28: a non-host's Hollows ease to the host's snapshot
 import { ECON, payReload } from '../shared/vitals-economy'
+import { bodyBlocked, segmentHit, lineOfSight, steer, type Structures, type SteerMem } from './obstacles'
 
 export interface Terrain {
   heightAt: (x: number, z: number) => number
   /** May a Hollow stand here (dry land, no trunk)? */
   walkable: (x: number, z: number) => boolean
+  /** M117 s3: the structures (buildings, solid placed pieces) a Hollow steers round and a shot stops on (obstacles.ts). Unset = none. */
+  structures?: Structures
 }
 
 export type HollowKind = 'shambler' | 'floater'
@@ -37,6 +40,8 @@ export interface Hollow {
   hitThisLunge: boolean
   /** cast statuses on this body, seconds left each (combat-casts.ts lays them; stepCombat honours and counts them down) */
   fx?: Partial<Record<HollowFx, number>>
+  /** M117 s3: which way round a structure it committed to (obstacles.ts steer) */
+  sm?: SteerMem
 }
 /** The engine's statuses that mean something to a Hollow (engine/statuses.ts; `revealed`, `silenced`, `sealed`,
  *  `shieldBroken` do not: a Hollow neither hides, casts, nor carries a shield). */
@@ -135,6 +140,8 @@ export interface Combat {
   dormant?: Record<string, number>
   /** Events this step, for the scene (sounds, flashes) and the page (grey matter, death). */
   events: CombatEvent[]
+  /** M117 s3: shots (rounds + spits) stopped by a structure so far (checks read it; events clear every step) */
+  wallHits?: number
 }
 export type CombatEvent =
   | { kind: 'hit'; id: number; head: boolean; killed: boolean }
@@ -150,6 +157,8 @@ export type CombatEvent =
   | { kind: 'champ-wake'; nodeId: string }
   | { kind: 'champ-break'; nodeId: string; bar: number }
   | { kind: 'champ-down'; nodeId: string }
+  /** M117 s3: a round or a spit hit a structure here (it stops; nobody behind it is hurt) */
+  | { kind: 'impact'; x: number; y: number; z: number; by: 'round' | 'spit' }
 
 export function newCombat(seed = 1, gunId = 'repeater'): Combat {
   const gun = weaponDef(gunId)!
@@ -323,6 +332,9 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     const ox = r.x, oy = r.y, oz = r.z
     r.x += r.vx * dt; r.y += r.vy * dt; r.z += r.vz * dt; r.life -= dt
     if (throughGround(T, ox, oy, oz, r.x, r.y, r.z)) { r.life = 0; continue }
+    // M117 s3: a wall stops it. Clip the step at the wall first, so a body in front of the wall is still hit, one behind it never
+    const wall = T.structures ? segmentHit(T.structures, ox, oy, oz, r.x, r.y, r.z) : null
+    if (wall) { r.x = wall.x; r.y = wall.y; r.z = wall.z }
     const ch = c.champ
     if (ch && Math.hypot(ch.x - r.x, ch.z - r.z) < 4) {
       const head = segDist2(ox, oy, oz, r.x, r.y, r.z, ch.x, ch.y + CHAMP.headY, ch.z) < CHAMP.headR * CHAMP.headR
@@ -356,6 +368,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
       c.events.push({ kind: 'hit', id: h.id, head: best.head, killed })
       if (killed) c.drops.push({ id: c.nextId++, x: h.x, y: T.heightAt(h.x, h.z), z: h.z, amount: (h.kind === 'floater' ? 2 : 1) + Math.floor(rnd(c) * 3), age: 0 })
     }
+    if (wall && r.life > 0) { r.life = 0; impact(c, wall, 'round') }
   }
   c.rounds = c.rounds.filter(r => r.life > 0)
   // a Hollow taken to 0 OUTSIDE this step (a cast lands between steps) dies like any other: event + drop. A round's kill
@@ -412,7 +425,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
         break
       case 'lunge':
         mx = h.lx; mz = h.lz; speed = SHAMBLER.lungeSpeed
-        if (!h.hitThisLunge && !unarmed && Math.hypot(feet.x - h.x, feet.z - h.z) < SHAMBLER.hitReach * (k.hit ?? 1) && Math.abs(feet.y - h.y) < 1.6 && k.hp > 0) {
+        if (!h.hitThisLunge && !unarmed && Math.hypot(feet.x - h.x, feet.z - h.z) < SHAMBLER.hitReach * (k.hit ?? 1) && Math.abs(feet.y - h.y) < 1.6 && k.hp > 0 && sees(T, h.x, h.y + BODY_Y, h.z, feet.x, feet.y + 0.9, feet.z)) {
           h.hitThisLunge = true
           hurtKeeper(c, SHAMBLER.damage)
         }
@@ -428,10 +441,13 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     if (held) speed = 0
     else if (fxOn(h, 'slowed')) speed *= FX.slowMult
     if (speed > 0) {
+      // M117 s3: round a structure, not through it (a lunge is committed: it stops at the wall instead)
+      const sfree = structFree(T, h, SHAMBLER.radius)
+      if (sfree && h.state !== 'lunge') { const v = steer(sfree, h.x, h.z, mx, mz, STEER_LOOK, (h.sm ??= {}), dt); if (v) { mx = v.x; mz = v.z } }
       const l = Math.hypot(mx, mz) || 1
       const nx = h.x + (mx / l) * speed * dt, nz = h.z + (mz / l) * speed * dt
       // a raised piece is a wall: a Hollow already standing in one (it rose on them) may walk out, never in
-      const out = solidTop(c, h.x, h.z) !== null, free = (x: number, z: number) => T.walkable(x, z) && (out || solidTop(c, x, z) === null)
+      const out = solidTop(c, h.x, h.z) !== null, free = (x: number, z: number) => T.walkable(x, z) && (out || solidTop(c, x, z) === null) && (!sfree || sfree(x, z))
       if (free(nx, nz)) { h.x = nx; h.z = nz }
       else if (free(nx, h.z)) h.x = nx
       else if (free(h.x, nz)) h.z = nz
@@ -459,6 +475,8 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     const px0 = p.x, py0 = p.y, pz0 = p.z
     p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= 2.5 * dt; p.life -= dt
     if (throughGround(T, px0, py0, pz0, p.x, p.y, p.z)) { p.life = 0; continue }
+    const wall = T.structures ? segmentHit(T.structures, px0, py0, pz0, p.x, p.y, p.z) : null
+    if (wall) { p.life = 0; impact(c, wall, 'spit'); continue }   // M117 s3: it splashes on the wall; the keeper behind is untouched
     const top = solidTop(c, p.x, p.z)
     if (top !== null && p.y < top) { p.life = 0; continue }   // stopped by a raised piece
     const bx = p.x - feet.x, bz = p.z - feet.z, by = p.y - (feet.y + 0.9)
@@ -482,6 +500,24 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   c.drops = c.drops.filter(p => p.amount > 0 && p.age < 300)
 }
 
+/** M117 s3: how far ahead a Hollow looks for a wall (m) */
+export const STEER_LOOK = 1.2
+/** Where a body of radius r may stand, structures-wise, at the ground under it. One already standing in a structure (spawned
+ *  into it, or a building went up round it) is let walk out: null = no structure rule here. */
+export function structFree(T: Terrain, h: { x: number; z: number }, r: number, tall: number = SHAMBLER.height): ((x: number, z: number) => boolean) | null {
+  const q = T.structures
+  if (!q) return null
+  const at = (x: number, z: number) => bodyBlocked(q, x, T.heightAt(x, z), z, r, tall)
+  if (at(h.x, h.z)) return null
+  return (x, z) => !at(x, z)
+}
+/** No structure between a and b (no structures = it always sees). */
+export const sees = (T: Terrain, ax: number, ay: number, az: number, bx: number, by: number, bz: number) => !T.structures || lineOfSight(T.structures, ax, ay, az, bx, by, bz)
+function impact(c: Combat, at: { x: number; y: number; z: number }, by: 'round' | 'spit') {
+  c.wallHits = (c.wallHits ?? 0) + 1
+  c.events.push({ kind: 'impact', x: at.x, y: at.y, z: at.z, by })
+}
+
 function stepFloater(c: Combat, T: Terrain, h: Hollow, feet: { x: number; y: number; z: number }, d: number, dx: number, dz: number, dt: number, alive = c.keeper.hp > 0) {
   let mx = 0, mz = 0, speed = 0
   switch (h.state) {
@@ -490,13 +526,16 @@ function stepFloater(c: Combat, T: Terrain, h: Hollow, feet: { x: number; y: num
       if (h.t <= 0) { h.wx = h.x + (rnd(c) - 0.5) * 20; h.wz = h.z + (rnd(c) - 0.5) * 20; h.t = 4 + rnd(c) * 4 }
       mx = h.wx - h.x; mz = h.wz - h.z; speed = FLOATER.speed * 0.4
       break
-    case 'chase':   // hold a band of distance, circling a little; spit when the timer runs out
+    case 'chase': {   // hold a band of distance, circling a little; spit when the timer runs out
       if (d > FLOATER.forget || !alive) { h.state = 'wander'; h.t = 0; break }
-      if (d > FLOATER.keepFar) { mx = dx; mz = dz } else if (d < FLOATER.keepNear) { mx = -dx; mz = -dz } else { mx = -dz; mz = dx }
+      // M117 s3: a wall between: no spit wasted on it; it comes round (and in) until it sees the keeper again
+      const see = sees(T, h.x, h.y, h.z, feet.x, feet.y + 0.9, feet.z)
+      if (!see) { mx = dx; mz = dz } else if (d > FLOATER.keepFar) { mx = dx; mz = dz } else if (d < FLOATER.keepNear) { mx = -dx; mz = -dz } else { mx = -dz; mz = dx }
       speed = FLOATER.speed
       h.yaw = Math.atan2(dx, dz)
-      if (h.t <= 0 && d < FLOATER.keepFar + 4) { h.state = 'charge'; h.t = FLOATER.charge }
+      if (h.t <= 0 && see && d < FLOATER.keepFar + 4) { h.state = 'charge'; h.t = FLOATER.charge }
       break
+    }
     case 'charge':
       h.yaw = Math.atan2(dx, dz)
       if (h.t <= 0) {
@@ -512,9 +551,15 @@ function stepFloater(c: Combat, T: Terrain, h: Hollow, feet: { x: number; y: num
       break
   }
   if (speed > 0) {
+    // M117 s3: it floats at body height, so a building is in its way like any wall: round it
+    const sfree = structFree(T, h, 0.5, FLOATER.hover + 0.5)
+    if (sfree) { const v = steer(sfree, h.x, h.z, mx, mz, STEER_LOOK, (h.sm ??= {}), dt); if (v) { mx = v.x; mz = v.z } }
     const l = Math.hypot(mx, mz) || 1
     const nx = h.x + (mx / l) * speed * dt, nz = h.z + (mz / l) * speed * dt
-    if (Number.isFinite(T.heightAt(nx, nz)) && (solidTop(c, h.x, h.z) !== null || solidTop(c, nx, nz) === null)) { h.x = nx; h.z = nz }
+    const free = (x: number, z: number) => Number.isFinite(T.heightAt(x, z)) && (solidTop(c, h.x, h.z) !== null || solidTop(c, x, z) === null) && (!sfree || sfree(x, z))
+    if (free(nx, nz)) { h.x = nx; h.z = nz }
+    else if (sfree && free(nx, h.z)) h.x = nx   // slide along a wall's face
+    else if (sfree && free(h.x, nz)) h.z = nz
   }
   const want = T.heightAt(h.x, h.z) + FLOATER.hover + Math.sin(h.id + performanceSafeNow(c) * 1.3) * 0.25
   h.y += (want - h.y) * Math.min(1, dt * 3)

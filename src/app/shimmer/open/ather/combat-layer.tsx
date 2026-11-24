@@ -557,7 +557,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       spawn: (dx = 0, dz = -10, kind: 'shambler' | 'floater' = 'shambler') => {
       const f = camera.getWorldDirection(new THREE.Vector3()); const x = camera.position.x + f.x * -dz + dx, z = camera.position.z + f.z * -dz
       spawnHollow(c.current, T, x, z, kind)
-    }, camAim: () => { const f = camera.getWorldDirection(new THREE.Vector3()); return { x: f.x, y: f.y, z: f.z, cx: camera.position.x, cy: camera.position.y, cz: camera.position.z } }, nodes: () => nodesRef.current, fall: () => { c.current.keeper.hp = 0; onEventsRef.current([{ kind: 'down' }]) }, wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
+    }, camAim: () => { const f = camera.getWorldDirection(new THREE.Vector3()); return { x: f.x, y: f.y, z: f.z, cx: camera.position.x, cy: camera.position.y, cz: camera.position.z } }, nodes: () => nodesRef.current, walls: (x0: number, z0: number, x1: number, z1: number) => T.structures ? [...T.structures(x0, z0, x1, z1)] : [], fall: () => { c.current.keeper.hp = 0; onEventsRef.current([{ kind: 'down' }]) }, wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('contextmenu', menu) }
   }, [locked, frozen, camera, T, gl])
 
@@ -662,6 +662,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       for (const e of C.events) {
         if (e.kind === 'hurt' || e.kind === 'hit') noteCombat()   // M91: no idle camera / napping follower mid-fight
         if (e.kind === 'hurt') hud.current.hurtAt = now; if (e.kind === 'hit') hud.current.hitAt = now
+        if (e.kind === 'impact' && e.by === 'spit') fx.current.push({ kind: 'area', x: e.x, y: e.y - 0.08, z: e.z, r: 0.45, hit: 0, at: now, from: { x: e.x, y: e.y, z: e.z }, colour: '#9a9aa2' })   // M117 s3: a spit splashes on the wall (placeholder look)
         if (e.kind === 'skin') sfx('mana-skin-tick')   // M59: a soft glassy tick per absorbed blow (proposed = silent until Alex's yay)
         if (e.kind === 'skin-pop') { hud.current.skinPopAt = now; sfx('mana-skin-pop') }   // the whip-crack; the bar shatters off popAt
         if (e.kind === 'hurt-other') openNet()?.relay(HURT_KIND, encodeHurt(e.dmg), e.id)   // #1651: addressed to the guest it reached

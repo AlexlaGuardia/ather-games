@@ -14,7 +14,8 @@
 //
 // ★ PURE, like combat.ts (which steps it and routes rounds into it).
 
-import { spawnHollow, hurtKeeper, type Combat, type Terrain } from './combat'
+import { spawnHollow, hurtKeeper, structFree, sees, STEER_LOOK, type Combat, type Terrain } from './combat'
+import { steer, type SteerMem } from './obstacles'
 import type { WildsNode } from './nodes'
 
 export type Attack = 'slam' | 'lunge' | 'volley'
@@ -28,6 +29,7 @@ export interface Champion {
   ax: number; az: number                          // locked aim (unit) for lunge/volley
   hitDone: boolean; hitFlash: number
   sink: number                                     // 0 = standing, 1 = under the ooze (draw only)
+  sm?: SteerMem                                    // M117 s3: which way round a structure it committed to
 }
 
 export const CHAMP = {
@@ -149,8 +151,13 @@ export function stepChampion(c: Combat, T: Terrain, feet: { x: number; y: number
     case 'idle': {
       ch.yaw = Math.atan2(dx, dz)
       if (d > CHAMP.keepNear) {
-        const nx = ch.x + (dx / d) * CHAMP.walk * dt, nz = ch.z + (dz / d) * CHAMP.walk * dt
-        if (T.walkable(nx, nz)) { ch.x = nx; ch.z = nz }
+        // M117 s3: round a building, never through it
+        const sfree = structFree(T, ch, CHAMP.radius, CHAMP.height)
+        const v = sfree ? steer(sfree, ch.x, ch.z, dx, dz, STEER_LOOK + CHAMP.radius, (ch.sm ??= {}), dt) : { x: dx / d, z: dz / d }
+        if (v) {
+          const nx = ch.x + v.x * CHAMP.walk * dt, nz = ch.z + v.z * CHAMP.walk * dt
+          if (T.walkable(nx, nz) && (!sfree || sfree(nx, nz))) { ch.x = nx; ch.z = nz }
+        }
       }
       if (ch.t <= 0) { ch.queue = planCombo(c, ch, d); startAttack(c, ch, ch.queue.shift()!, feet.x, feet.z) }
       break
@@ -158,13 +165,14 @@ export function stepChampion(c: Combat, T: Terrain, feet: { x: number; y: number
     case 'windup':
       // a volley keeps tracking during the tell; a lunge and a slam are committed
       if (ch.attack === 'volley') { const l = d || 1; ch.ax = dx / l; ch.az = dz / l; ch.yaw = Math.atan2(ch.ax, ch.az) }
-      if (ch.t <= 0) { ch.state = 'act'; ch.t = CHAMP[ch.attack!].act; actStart(c, ch, feet) }
+      if (ch.t <= 0) { ch.state = 'act'; ch.t = CHAMP[ch.attack!].act; actStart(c, T, ch, feet) }
       break
     case 'act':
       if (ch.attack === 'lunge') {
         const sp = CHAMP.lunge.len / CHAMP.lunge.act, nx = ch.x + ch.ax * sp * dt, nz = ch.z + ch.az * sp * dt
-        if (T.walkable(nx, nz)) { ch.x = nx; ch.z = nz }
-        if (!ch.hitDone && d < CHAMP.radius + 0.6 * (c.keeper.hit ?? 1) && Math.abs(feet.y - ch.y) < 2.5) { ch.hitDone = true; hurt(c, CHAMP.lunge.damage) }
+        const sfree = structFree(T, ch, CHAMP.radius, CHAMP.height)   // M117 s3: a lunge stops at a wall
+        if (T.walkable(nx, nz) && (!sfree || sfree(nx, nz))) { ch.x = nx; ch.z = nz }
+        if (!ch.hitDone && d < CHAMP.radius + 0.6 * (c.keeper.hit ?? 1) && Math.abs(feet.y - ch.y) < 2.5 && sees(T, ch.x, ch.y + CHAMP.bodyY, ch.z, feet.x, feet.y + 0.9, feet.z)) { ch.hitDone = true; hurt(c, CHAMP.lunge.damage) }
       }
       if (ch.t <= 0) {
         const next = ch.queue.shift()
@@ -179,10 +187,11 @@ export function stepChampion(c: Combat, T: Terrain, feet: { x: number; y: number
   ch.y = T.heightAt(ch.x, ch.z)
 }
 
-function actStart(c: Combat, ch: Champion, feet: { x: number; y: number; z: number }) {
+function actStart(c: Combat, T: Terrain, ch: Champion, feet: { x: number; y: number; z: number }) {
   if (ch.attack === 'slam') {
     const d = Math.hypot(feet.x - ch.x, feet.z - ch.z)
-    if (d < CHAMP.slam.r && Math.abs(feet.y - ch.y) < 2.5) hurt(c, CHAMP.slam.damage)
+    // M117 s3: a wall between takes the slam (cover is real)
+    if (d < CHAMP.slam.r && Math.abs(feet.y - ch.y) < 2.5 && sees(T, ch.x, ch.y + CHAMP.bodyY, ch.z, feet.x, feet.y + 0.9, feet.z)) hurt(c, CHAMP.slam.damage)
   } else if (ch.attack === 'volley') {
     const V = CHAMP.volley, y0 = ch.y + CHAMP.headY
     for (let k = 0; k < V.n; k++) {
