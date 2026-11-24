@@ -117,6 +117,8 @@ import { reportAway } from './away-report'
 import { folkOf } from './settlement-folk'   // M84 s3b: a Wilds Home zone's resident -> their settlement's talk
 import { TilePaths, Settlements, BigTop, folkDrawn, stallDrawn, gleanerPost, FirstSettlement } from './network-scene'
 import { SETTLERS, settlerAt, speakerOf, inSettlement, settlerStart, settlerNode, pickTarget, m70Down, m70Quest, M70_GIFT, SETTLEMENT, type SettlerId, type SettlerCursor } from './first-settlement'   // M70 s1
+import { angelicaTalks, deskOpen, angelicaStart, angelicaNode, bottleToHand, brewed, sideQuest, M70SIDE_TEXT, ALC_SET_ITEMS, ANGELICA_DESK, type AngelicaCursor } from './m70-alchemist'   // M70 s3
+import { AngelicaDeskPanel, sideItemName, haveOf } from './m70-desk-panel'   // M70 s3
 import { GLEANER_POST, GLEANER_POST_R, BURR_CAMP, CAMP_LABEL } from './gleaner'   // M112 s2
 import { aimPick, lookDir, type Pickable } from '../shared/aim-pick'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
@@ -192,13 +194,15 @@ type Spawn = { x: number; z: number; yaw: number }
 /** the Wilds' safe ground round the arrival: where the Glade's green stood until M67 s1b-2 (30.75 m north of Greg's waymark) */
 const WILDS_SAFE = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z - 30.75, r: 50 }
 const gregAt = gregSpot()   // BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
-type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState } | { kind: 'shop'; id: string } | { kind: 'settler'; c: SettlerCursor }
-type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement } | { kind: 'spirit'; id: string; name: string } | { kind: 'zone'; u: ZoneUse } | { kind: 'settler'; id: SettlerId; name: string }
+type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState } | { kind: 'shop'; id: string } | { kind: 'settler'; c: SettlerCursor | AngelicaCursor } | { kind: 'adesk' }
+type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement } | { kind: 'spirit'; id: string; name: string } | { kind: 'zone'; u: ZoneUse } | { kind: 'settler'; id: SettlerId; name: string } | { kind: 'adesk' }
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
 /** M61: a mate's island alone on the Green (the frame nobody is linked into) */
 const SOLO_FRAME = clusterFrame(null, [])
 const GLADE_FRIENDS_AT = gladeKeepers().filter((k): k is typeof k & { id: GardenFriend } => (GARDEN_FRIENDS as readonly string[]).includes(k.id))   // M68 s3a: Otto, Tess, Bonn
+/** M70 s3: may Angelica talk / does her Desk work now (re-read with the journal, every 3 s and after a talk) */
+const m70sideNow = { angelica: false, desk: false }
 const VISIT_WAIT_MS = 45_000   // M61 s3: a backstop for a socket that never relays; the real give-up counts asks (plot-visit GIVE_UP_ASKS)
 /** M61: who you are visiting, and the way home (game-UI rule: text on a plate, never raw on the scene) */
 function VisitPill({ name, ready, onHome }: { name: string; ready: boolean; onHome: () => void }) {
@@ -826,7 +830,8 @@ function AtherSliceGame() {
         else cands.push(cap(st.x, st.z, 0.8, 2, { kind: 'folk', s: st }))
         const stall = stallDrawn.get(st.id); if (stall) cands.push(cap(stall.x, stall.z, 0.6, MOGLIN_HEIGHT.chibi + 0.4, { kind: 'folk', s: st })) } }   // M112: the Burrfolk's stall (the talk opens on the nearest)
       if (!workAim && gleanerPost.on && Math.hypot(lc.px - GLEANER_POST.x, lc.pz - GLEANER_POST.z) < GLEANER_POST_R) { const g = stallDrawn.get(GLEANER_POST.id); if (g) cands.push(cap(g.x, g.z, 0.6, MOGLIN_HEIGHT.chibi + 0.4, { kind: 'folk', s: GLEANER_POST })) }   // M112 s2: Gleaner (owner-only post)
-      if (!workAim && inSettlement(lc.px, lc.pz)) for (const st of SETTLERS) if (st.talks) cands.push(cap(st.x, st.z, 0.45, MOGLIN_HEIGHT.chibi + 0.1, { kind: 'settler', id: st.id, name: st.name }))   // M70 s1
+      if (!workAim && inSettlement(lc.px, lc.pz)) for (const st of SETTLERS) if (st.talks || (st.id === 'angelica' && m70sideNow.angelica)) cands.push(cap(st.x, st.z, 0.45, MOGLIN_HEIGHT.chibi + 0.1, { kind: 'settler', id: st.id, name: st.name }))   // M70 s1 (+ s3 Angelica)
+      if (!workAim && m70sideNow.desk && Math.hypot(lc.px - ANGELICA_DESK.x, lc.pz - ANGELICA_DESK.z) < 12) cands.push(cap(ANGELICA_DESK.x, ANGELICA_DESK.z, 0.7, 1.2, { kind: 'adesk' }))   // M70 s3: Angelica's Desk
       for (const d of wildsDoorsRef.current) { const y = g(d.x, d.z); if (Number.isFinite(y)) cands.push(cap(d.x, d.z, 0.6, 2.4, { kind: 'zone', u: d.u })) }   // M84 s3b: a tagged zone's E point (only where its tile is loaded)
       n = aimPick(cands, eye, dir, from)
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
@@ -851,6 +856,7 @@ function AtherSliceGame() {
         : n?.kind === 'idlemog' || n?.kind === 'spirit' || n?.kind === 'settler' ? `E · ${n.name}`
         : n?.kind === 'friend' ? `E · ${FRIEND_NAME[n.f]}`
         : n?.kind === 'anemonyx' ? 'E · the Anemonyx'
+        : n?.kind === 'adesk' ? `E · ${M70SIDE_TEXT.deskTitle}`
         : n?.kind === 'work' ? workPrompt(n.near)
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
         : n?.kind === 'folk' ? `E · talk to the folk of ${n.s.name}`
@@ -1328,16 +1334,27 @@ function AtherSliceGame() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [friendC, tut])
   // M70 s1: the first settlement's folk (first-settlement.ts). The tutorial is re-read at every E.
-  const openSettler = (id: SettlerId) => { const t = loadTut(); setTutState(t); const c = settlerStart(t, id); if (c) setPanel({ kind: 'settler', c }) }
+  const openSettler = (id: SettlerId) => { const t = loadTut(); setTutState(t); const c = id === 'angelica' ? angelicaStart(t, !!bottleToHand(haveOf(getInv()))) : settlerStart(t, id); if (c) setPanel({ kind: 'settler', c }) }
   const settlerC = panel?.kind === 'settler' ? panel.c : null
   const settlerGive = (): boolean => {
     let inv = getInv()
     for (const st of M70_GIFT) { const r = give(inv, st.id, st.n); if (r.left) { hudSay('Your bag is full. Make room for the bundle.', 'info'); return false } inv = r.inv }
     setInv(inv); hudSay('Health Draught ×3 · a bundle of bits and pieces · in your bag', 'item'); return true
   }
-  const settlerTalkNode = useMemo(() => !settlerC || !tut ? null : settlerNode(tut, settlerC, {
+  // M70 s3: the bottle goes to Angelica and the alchemy set comes back, together or not at all
+  const angelicaHand = (withSet: boolean): boolean => {
+    const b = bottleToHand(haveOf(getInv())); if (!b) return false
+    let inv = take(getInv(), b, 1); if (!inv) return false
+    if (withSet) for (const id of ALC_SET_ITEMS) { const r = give(inv, id, 1); if (r.left) { hudSay(M70SIDE_TEXT.bagFull, 'info'); return false } inv = r.inv }
+    setInv(inv); if (withSet) hudSay(`${ALC_SET_ITEMS.map(id => itemDef(id).name).join(' · ')} · in your bag`, 'item'); return true
+  }
+  const settlerTalkNode = useMemo(() => !settlerC || !tut ? null : settlerC.who === 'angelica' ? angelicaNode(tut, settlerC as AngelicaCursor, {
+    set: t => { setTut(t); m70sideNow.angelica = angelicaTalks(t); m70sideNow.desk = deskOpen(t) },
+    go: i => setPanel(i === null ? null : { kind: 'settler', c: { ...(settlerC as AngelicaCursor), i } }),
+    hand: angelicaHand,
+  }) : settlerNode(tut, settlerC as SettlerCursor, {
     set: setTut,
-    go: i => setPanel(i === null ? null : { kind: 'settler', c: { ...settlerC, i } }),
+    go: i => setPanel(i === null ? null : { kind: 'settler', c: { ...(settlerC as SettlerCursor), i } }),
     target: () => pickTarget(nodesRef0.current)?.id ?? null,
     give: settlerGive,
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1425,6 +1442,18 @@ function AtherSliceGame() {
     }
     post(); const id = setInterval(post, 3000); return () => clearInterval(id)
   }, [allNodes])
+  // M70 s3: A Proper Batch in the journal (signed title + done line; the step text is a placeholder for @lark)
+  useEffect(() => {
+    const post = () => {
+      const t = loadTut(), have = haveOf(getInv()), q = sideQuest(t, have, sideItemName)
+      m70sideNow.angelica = angelicaTalks(t); m70sideNow.desk = deskOpen(t)
+      ;(window as unknown as { __m70side?: unknown }).__m70side = () => ({ side: loadTut().m70side, step: sideQuest(loadTut(), haveOf(getInv()), sideItemName)?.step ?? null, desk: ANGELICA_DESK })   // read-only probe (m70-alchemist-check)
+      if (!q) { postEntries('m70side', []); return }
+      const where = q.step === 'done' ? null : { zone: 'wilds' as const, x: q.step === 'brew' ? ANGELICA_DESK.x : settlerAt('angelica').x, z: q.step === 'brew' ? ANGELICA_DESK.z : settlerAt('angelica').z }
+      postEntries('m70side', [{ id: 'm70side', hand: 'keeper', title: q.title, note: q.note, where }])
+    }
+    post(); const id = setInterval(post, 3000); return () => clearInterval(id)
+  }, [])
   // entering somewhere says so on the message line: the zone, and crossing a node border
   const zoneName0 = zone.kind === 'plot' ? 'Your plot' : zone.kind === 'glade' ? GLADE_ZONE_NAME : 'The Wilds'
   useEffect(() => { hudSay(zoneName0, 'zone') }, [zoneName0])
@@ -1470,6 +1499,7 @@ function AtherSliceGame() {
         else if (n.kind === 'fennel') setPanel({ kind: 'fennel', page: 0 })
         else if (n.kind === 'gfennel') gFennel.open()   // M68 s3b
         else if (n.kind === 'settler') openSettler(n.id)   // M70 s1
+        else if (n.kind === 'adesk') setPanel({ kind: 'adesk' })   // M70 s3
         else if (n.kind === 'idlemog') setPanel({ kind: 'idlemog', c: { id: n.id, screen: 'hello' } })   // P1: the go-home talk
         else if (n.kind === 'spirit') setPanel({ kind: 'spirit', c: { id: n.id, screen: 'talk' } })   // M109 s1
         else if (n.kind === 'anemonyx') meetToday(clock())   // M76 s2
@@ -1654,6 +1684,7 @@ function AtherSliceGame() {
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       {panel?.kind === 'shop' && <ShopPanel id={panel.id} ledger={ledger} setLedger={setLedger} onClose={() => setPanel(null)} isTouch={isTouch} />}   {/* M114 s2: a Shop zone */}
       {panel?.kind === 'brew' && <BrewingPanel station={panel.station} onClose={() => setPanel(null)} />}
+      {panel?.kind === 'adesk' && <AngelicaDeskPanel onClose={() => setPanel(null)} say={s => hudSay(s, 'item')} onBrewed={() => { const t = loadTut(), t1 = brewed(t); if (t1 !== t) setTut(t1) }} />}   {/* M70 s3 */}
       {panel?.kind === 'work' && !visitNow && <WorkshopPanel near={panel.near} owned={owned} onClose={() => setPanel(null)} />}
       {zone.kind === 'plot' && <PlacingBar owned={owned} />}
       {zone.kind === 'plot' && !visitNow && <BuildBar owned={owned} />}

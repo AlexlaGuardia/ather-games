@@ -19,10 +19,19 @@ await p.evaluate(() => { localStorage.removeItem('ather.nodes.v2'); localStorage
 await p.reload({ waitUntil: 'load', timeout: 120000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 120000 })
 await new Promise(r => setTimeout(r, 2000))
-await p.evaluate(() => (window as any).__ather.open('gate'))
-await new Promise(r => setTimeout(r, 1000))
-const stop = await p.evaluateHandle(() => [...document.querySelectorAll('button')].find(b => b.textContent?.startsWith("Gregory's waymark"))!)
-await (stop as any).click()
+// ★ M67 (11-23): a fresh profile is born in the closed Glade (no fold-map stops there); the way out is the real E at the Glade's
+//   gate, the same route m70-settlement-check walks. Born -> creator -> stand at the gate -> E -> the Wilds.
+const sleep0 = (ms: number) => new Promise(r => setTimeout(r, ms))
+for (let t = 0; t < 90000 && !(await p.evaluate(() => (window as any).__ather.zone() === 'glade' || !!document.querySelector('[data-panel="birth"]') || !!document.querySelector('[data-creator-done]'))); t += 500) await sleep0(500)
+if (await p.evaluate(() => !!document.querySelector('[data-panel="birth"]'))) {
+  await p.evaluate(() => { const b = [...document.querySelectorAll<HTMLElement>('button, [role="button"], div, span')].filter(e => /^BE BORN/i.test((e.innerText ?? '').trim()) && (e.innerText ?? '').trim().length < 40).sort((x, y) => x.getBoundingClientRect().width * x.getBoundingClientRect().height - y.getBoundingClientRect().width * y.getBoundingClientRect().height)[0]; b?.click() })
+}
+for (let t = 0; t < 45000 && !(await p.evaluate(() => (window as any).__ather.zone() === 'glade')); t += 500) { await p.evaluate(() => document.querySelector<HTMLElement>('[data-creator-done]')?.click()); await sleep0(500) }
+await p.waitForFunction(() => (window as any).__ather.zone() === 'glade', { timeout: 60000 })
+{ const gate = { x: -212, z: 212 }, sx = gate.x + 2.4, sz = gate.z - 0.4
+  await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), sx, sz, Math.atan2(-(gate.x - sx), -(gate.z - sz)))
+  await p.waitForFunction(() => /the gate \(the Wilds\)/.test(document.body.innerText), { timeout: 15000 }).catch(() => {})
+  await p.keyboard.press('KeyE') }
 await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds' && (window as any).__ather.nodes?.().length > 0, { timeout: 90000 })
 const nodes = await p.evaluate(() => (window as any).__ather.nodes())
 console.log('nodes', JSON.stringify(nodes))

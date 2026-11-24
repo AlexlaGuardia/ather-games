@@ -16,6 +16,8 @@ import { builtFolkSpots } from './settlement-lots'
 import { burrfolkOf, stallSpot } from './burrfolk'
 import { GLEANER_POST, BURR_CAMP, CAMP_LABEL, campStalls } from './gleaner'
 import { SETTLERS, LAMPS, lampsLit } from './first-settlement'
+import { ANGELICA_DESK } from './m70-alchemist'   // M70 s3
+import { PieceBody } from './workshop'
 import { loadTut } from './glade-tutorial'
 import { SettlementBuildings } from './settlement-buildings'
 import { GLADE_ID } from './moonwell-glade'
@@ -309,6 +311,8 @@ export function FirstSettlement({ loaded }: { loaded: (x: number, z: number) => 
       <group key={p.id} position={[p.x, y, p.z]} rotation-y={p.yaw}>
         <MoglinModel build="chibi" action="idle" tone={furOf(`m70:${p.id}`)} seed={k * 2.3} />
       </group>) })}
+    {(() => { const y = loaded(ANGELICA_DESK.x, ANGELICA_DESK.z); return y === null ? null : (   // M70 s3: Angelica's Desk (the game's Alchemy Desk)
+      <group position={[ANGELICA_DESK.x, y, ANGELICA_DESK.z]} rotation-y={ANGELICA_DESK.yaw}><PieceBody item="alc_desk" /></group>) })()}
     {LAMPS.map((l, k) => { const y = loaded(l.x, l.z); return y === null ? null : (
       <group key={k} position={[l.x, y, l.z]}>
         <mesh position={[0, 0.9, 0]}><cylinderGeometry args={[0.06, 0.08, 1.8, 6]} /><meshLambertMaterial color="#5b4630" /></mesh>
