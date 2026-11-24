@@ -197,6 +197,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 08:4x Alex: "retire the bond signatures or what if in the spirit panel the player is able to select the bonded move.. and even have it grow with them somehow" -> UNDECIDED (hub take given; relayed to Magii), M127 s3
 - 11-24 08:3x Alex: "on the spirit moves let's make them canon so the books don't veer too far from the game" -> relayed to Magii (flip is theirs); M127 s3 unlocks when 6f401fc reads RULED
 - 11-24 05:5x Alex: "can we give the spirits and the manamal specific positions around the player so they arent stacked ontop of each other" (today: every follower settles at one 1.7 m slot, spirit-trot.ts:95)
 - 11-24 05:5x Alex: followers "should join in on the idle skits where the player has been idle and the camera starts moving on its own" (shared/idle-mode.ts)
