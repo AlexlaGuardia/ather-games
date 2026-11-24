@@ -73,6 +73,24 @@ type Sp = 'axolotl' | 'fox'
 const DUR = { axolotl: { walk: 0.57872, run: 0.51070 }, fox: { walk: 0.57018, run: 0.4325 } }
 const STRIDE = (sp: Sp, c: 'walk' | 'run') => SPIRIT_RIGS[sp]!.rig!.clipV[c] * DUR[sp][c] * SPIRIT_RIGS[sp]!.h
 type Row = { t: number; x: number; y: number; z: number; yaw: number; v: number; mode: string; clip: string; w: Record<string, number>; capped: boolean; rate: number; lift: number; low: number; feet: number[][]; tail: number }
+/** the Vulnyx gallops with her feet down a fifth of the time and this box draws 3-7 frames a second, so a short stretch may hold no
+ *  planted frame at all and its own lowest is a swing: here a foot is planted when it is within 1.5 mm of the lowest it EVER gets in a
+ *  pure run, and two planted frames up to 4 frames apart are compared (whole strides taken off, as below) */
+function gallop(rows: Row[], mode: string, minV = 0) {
+  const pure = (r: Row) => r.clip === 'run' && r.w.run > 0.99 && !r.capped && r.mode === mode, run = rows.filter(pure), all: number[] = [], S = STRIDE('fox', 'run')
+  const base = [0, 1, 2, 3].map(f => Math.min(9, ...run.map(r => r.feet[f][1] - r.y)))
+  let swing = 0, tail = 0, v = 0, stuck = 0
+  for (let f = 0; f < 4; f++) { const ah = run.map(r => (r.feet[f][0] - r.x) * Math.sin(r.yaw) + (r.feet[f][2] - r.z) * Math.cos(r.yaw)); swing = Math.max(swing, Math.max(...ah) - Math.min(...ah))
+    let from = -1; for (let i = 0; i < rows.length; i++) { const r = rows[i], last = rows[i - 1]
+      if (!pure(r) || r.v < minV || (last && pure(last) && (Math.abs(Math.atan2(Math.sin(r.yaw - last.yaw), Math.cos(r.yaw - last.yaw))) > 0.006 || Math.hypot(r.x - last.x, r.z - last.z) > 1.4))) { from = -1; continue }
+      if (last && !pure(last)) from = -1
+      if (r.feet[f][1] - r.y > base[f] + 0.0015) continue
+      stuck++
+      if (from >= 0 && i - from <= 4) { const q = rows[from].feet[f], along = Math.hypot(r.feet[f][0] - q[0], r.feet[f][2] - q[2]); all.push(Math.abs(along - Math.round(along / S) * S)) } from = i } }
+  for (const r of run) { tail = Math.max(tail, r.tail); v += r.v }
+  all.sort((a, b) => a - b)
+  return { drift: all.at(-1) ?? 0, med: all[all.length >> 1] ?? NaN, p95: all[Math.floor(all.length * 0.95)] ?? NaN, n: all.length, spans: stuck, frames: run.length, swing, tail: tail * 57.3, v: run.length ? v / run.length : 0 }
+}
 /** planted-foot drift: over frames of one steady gait on a straight line (weight > 0.99, no cap, heading held), a foot is planted
  *  while it is within 2 mm of the lowest it gets in that stretch; the drift is the furthest it strays from where it came down */
 function gait(rows: Row[], clip: 'walk' | 'run', sp: Sp = 'axolotl', mode = 'trot', turnMax = 0.004, minV = 0, min = 6) {
@@ -86,7 +104,7 @@ function gait(rows: Row[], clip: 'walk' | 'run', sp: Sp = 'axolotl', mode = 'tro
   flush(); all.sort((a, b) => a - b)
   return { drift, med: all[all.length >> 1] ?? NaN, p95: all[Math.floor(all.length * 0.95)] ?? NaN, n: all.length, spans, frames, swing, tail: tail * 57.3, v: frames ? v / frames : 0 }
 }
-const f3 = (g: ReturnType<typeof gait>) => `${g.spans} straight stretches, drift median ${(g.med * 1000).toFixed(1)} p95 ${(g.p95 * 1000).toFixed(1)} mm, tail <= ${g.tail.toFixed(0)} deg`
+const f3 = (g: ReturnType<typeof gait>) => `${g.spans} planted frames of ${g.frames}, drift median ${(g.med * 1000).toFixed(1)} p95 ${(g.p95 * 1000).toFixed(1)} mm, tail <= ${g.tail.toFixed(0)} deg`
 const rowsOf = (p: Page) => p.evaluate(() => { const D = (window as any).__m132; return JSON.parse(JSON.stringify({ b: Object.fromEntries(Object.entries(D.bodies).map(([k, v]: any) => [k, v.rows])), sp: Object.fromEntries(Object.entries(D.bodies).map(([k, v]: any) => [k, v.sp])), n: D.n, sums: D.sums })) }) as Promise<{ b: Record<string, Row[]>; sp: Record<string, Sp>; n: number; sums: number }>
 const hideCard = (p: Page) => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(d => !h.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 /** stand beside her (her side on, close) and take it the moment `clip` is fully on */
@@ -122,15 +140,15 @@ try {
       // the unused key keeps idle mode off
       await p.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F13', code: 'F13' })))
       const R = await rowsOf(p); const rows = Object.keys(R.b).filter(k => R.sp[k] === 'axolotl').map(k => R.b[k]), fox = Object.keys(R.b).filter(k => R.sp[k] === 'fox').flatMap(k => R.b[k]); const merge = (c: 'walk' | 'run') => { const g = rows.map(r => gait(r, c)); return { drift: Math.max(...g.map(x => x.drift)), p95: Math.max(...g.map(x => x.p95 || 0)), med: Math.max(...g.map(x => x.med || 0)), n: g.reduce((a, x) => a + x.n, 0), spans: g.reduce((a, x) => a + x.spans, 0), swing: Math.max(...g.map(x => x.swing)), tail: Math.max(...g.map(x => x.tail)), v: Math.max(...g.map(x => x.v)) } }
-      const lay = rows.flat().filter(r => r.w.sit > 0.95).length; G = { walk: merge('walk'), run: merge('run'), lay, ground: rows.flat().filter(r => r.w.sit > 0.95 && r.mode === 'sit').length, sums: R.sums, n: R.n, modes: [...new Set(rows.flat().map(r => r.mode))], fox, foxRun: gait(fox, 'run', 'fox', 'trot', 0.01, 0, 4), foxSit: fox.filter(r => r.w.sit > 0.95).length, fps: rows[0].length / ((rows[0].at(-1)!.t - rows[0][0].t) / 1000) }
-      if (G.walk.n > 40 && G.run.n > 40 && G.ground > 5 && G.foxRun.n > 20 && G.foxSit > 5 && Date.now() - t0 > 60000) break }
+      const lay = rows.flat().filter(r => r.w.sit > 0.95).length; G = { walk: merge('walk'), run: merge('run'), lay, ground: rows.flat().filter(r => r.w.sit > 0.95 && r.mode === 'sit').length, sums: R.sums, n: R.n, modes: [...new Set(rows.flat().map(r => r.mode))], fox, foxRun: gallop(fox, 'trot'), foxSit: fox.filter(r => r.w.sit > 0.95).length, fps: rows[0].length / ((rows[0].at(-1)!.t - rows[0][0].t) / 1000) }
+      if (G.walk.n > 40 && G.run.n > 40 && G.ground > 5 && G.foxRun.n > 15 && G.foxSit > 5 && Date.now() - t0 > 60000) break }
     const f = (g: any) => `${g.spans} straight stretches, ${g.n} planted samples, ${g.v.toFixed(2)} m/s, drift median ${(g.med * 1000).toFixed(1)} p95 ${(g.p95 * 1000).toFixed(1)} max ${(g.drift * 1000).toFixed(1)} mm, leg swing ${(g.swing * 1000).toFixed(0)} mm, tail <= ${g.tail.toFixed(0)} deg off behind`
     console.log(`   ${G.fps.toFixed(1)} fps, modes ${G.modes}`)
     for (const c of ['walk', 'run'] as const) { const g = G[c]
       ok(g.n > 0 && g.swing > 0.05, `2. she ${c}s with her legs moving: ${f(g)}`); ok(g.n > 0 && g.drift < 0.01, `2. ${c}: planted feet stay put (max ${(g.drift * 1000).toFixed(1)} mm, bar 10)`); ok(g.n > 0 && g.tail < 25, `2. ${c}: the tail trails behind (${g.tail.toFixed(0)} deg)`) }
     ok(G.lay > 5, `2. she lies down (${G.lay} frames, ${G.ground} on the ground)`); ok(G.sums === 0 && G.n > 100, `2. a clip always plays (${G.n} samples, ${G.sums} off)`)
     // M102 the Vulnyx
-    { const X: Row[] = G.fox, g = G.foxRun, gr = X.filter(r => !/hop/.test(r.mode)), bl = gr.filter(r => Object.values(r.w).filter(x => x > 0).length > 1), low = Math.min(...gr.map(r => r.low)), lift = Math.max(...gr.map(r => r.lift))
+    { const X: Row[] = G.fox, g = G.foxRun; console.log(`   Vulnyx gallop: ${f3(g)}`); const gr = X.filter(r => !/hop/.test(r.mode)), bl = gr.filter(r => Object.values(r.w).filter(x => x > 0).length > 1), low = Math.min(...gr.map(r => r.low)), lift = Math.max(...gr.map(r => r.lift))
       const count = (c: string) => X.filter(r => r.w[c] > 0.5).length
       console.log(`   Vulnyx: ${X.length} frames, modes ${[...new Set(X.map(r => r.mode))]}, frames idle ${count('idle')} walk ${count('walk')} run ${count('run')} sit ${count('sit')}`)
       ok(g.n > 0 && g.swing > 0.1, `2. Vulnyx runs with her legs moving: ${f(g)}`); ok(g.n > 0 && g.drift < 0.01, `2. Vulnyx run: planted feet stay put (max ${(g.drift * 1000).toFixed(1)} mm, bar 10)`); ok(g.n > 0 && g.tail < 25, `2. Vulnyx run: the tail trails behind (${g.tail.toFixed(0)} deg)`)
@@ -153,7 +171,7 @@ try {
     for (const mps of [4.2, 6.5]) {
       await q.evaluate(() => { for (const b of Object.values((window as any).__m132.bodies) as any[]) b.rows.length = 0 })
       await q.evaluate(`new Promise(res => { let t0 = performance.now(), last = t0, s = 0; const A = window.__ather, L = 24; (function f() { const n = performance.now(), dt = Math.min(0.25, (n - last) / 1000); last = n; s += ${mps} * dt; const k = s % (2 * L), out = k < L; A.tp(-144 + (out ? k : 2 * L - k), 113, out ? -Math.PI / 2 : Math.PI / 2); if (n - t0 < 30000) requestAnimationFrame(f); else res(0) })() })`)
-      const X = (await rowsOf(q)).b.p1, m = X.filter(r => r.mode === 'follow' && r.v > 0.3), g = gait(X, 'run', 'fox', 'follow', 0.01, mps * 0.8, 3), all = m.map(r => r.v).sort((a, b) => a - b)
+      const X = (await rowsOf(q)).b.p1, m = X.filter(r => r.mode === 'follow' && r.v > 0.3), g = gallop(X, 'follow', mps * 0.5), all = m.map(r => r.v).sort((a, b) => a - b)
       console.log(`   3b. behind ${mps} m/s: ${m.length} moving frames, median ${(all[all.length >> 1] ?? 0).toFixed(1)} m/s, cap bit on ${m.filter(r => r.capped).length}; ${f3(g)}`)
       ok(g.n > 3 && g.drift < 0.02, `3b. Vulnyx behind a keeper at ${mps} m/s: planted feet stay put (${g.n} planted samples at ${g.v.toFixed(1)} m/s, max ${(g.drift * 1000).toFixed(1)} mm, bar 20)`)
     }
