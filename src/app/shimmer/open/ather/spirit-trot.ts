@@ -17,8 +17,9 @@ export type SpiritNav = {
   home: { x: number; z: number }
   /** runs stay on the ring rMin..rMax metres from home */
   rMin: number; rMax: number
-  /** true = the spirit may not stand here (a box, a wall, off the plot) */
-  blocked: (x: number, z: number) => boolean
+  /** true = the spirit may not stand here (a box, a wall, off the plot). M117 s1: `toy` = the training piece she is heading
+   *  to / playing at / just leaving: that one piece keeps only its parts (obstacles.ts footBlocked) */
+  blocked: (x: number, z: number, toy?: string) => boolean
   /** a perch at home she can sit on and hop down from / up onto (the planter's soil), y above the ground */
   perch?: { y: number }
   /** M107 s2 (Magii RULED 11-23, athernyx 8b45c92: a bloomed spirit walks the whole garden): straight darting runs to spots
@@ -168,7 +169,9 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   const at = (a: number, r: number) => ({ x: home.x + Math.cos(a) * r, z: home.z + Math.sin(a) * r })
   const dHome = (p: { x: number; z: number }) => Math.hypot(p.x - home.x, p.z - home.z)
   // free ground: not blocked, and clear of home itself (the planter; the nav's blocked leaves her own planter out)
-  const free = (x: number, z: number) => Math.hypot(x - home.x, z - home.z) >= nav.rMin - 0.02 && !nav.blocked(x, z)
+  // M117 s1: the piece she is heading to / playing at (or picking, or just stepping off) keeps only its parts
+  let toyIgn: string | undefined, toyLeft: string | undefined
+  const free = (x: number, z: number) => Math.hypot(x - home.x, z - home.z) >= nav.rMin - 0.02 && !nav.blocked(x, z, toy?.id ?? toyIgn ?? toyLeft)
   // polar position round home (the ring runs' param space), kept in step with pos after every run
   let ang = R() * TAU, rad = nav.rMin + 0.1
   let mode: TrotMode = nav.perch ? 'perch' : 'look', t = 0, dur = nav.perch ? rand(1.0, 1.6) : 1
@@ -195,6 +198,8 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   // M110 s2: the play's facing (shove / guard), the brace (0..1, shove lean + guard crouch), the lap (centre angle, swept, way round)
   let toyFace = 0, brace = 0, lapA = 0, lapSwept = 0, lapDir = 1
   const dK = (k: { x: number; z: number }) => Math.hypot(pos.x - k.x, pos.z - k.z)
+  // M117 s1: off the perch she starts on a FREE spot of her ring (a piece set beside the planter must not hold her in it)
+  if (!nav.perch && !free(pos.x, pos.z)) for (let i = 1; i < 24; i++) { const a = ang + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * TAU / 24; for (const r of [nav.rMin + 0.1, nav.rMax]) { const p = at(a, r); if (free(p.x, p.z)) { pos = p; ang = a; rad = r; i = 24; break } } }
 
   const arcLen = (A0: number, A1: number, R0: number, R1: number) => { let L = 0, p = at(A0, R0); for (let i = 1; i <= 12; i++) { const q = at(lerp(A0, A1, i / 12), lerp(R0, R1, i / 12)); L += Math.hypot(q.x - p.x, q.z - p.z); p = q } return L }
   const arcFree = (A0: number, A1: number, R0: number, R1: number) => { const L = arcLen(A0, A1, R0, R1), n = Math.max(2, Math.ceil(L / 0.1)); for (let i = 1; i <= n; i++) { const q = at(lerp(A0, A1, i / n), lerp(R0, R1, i / n)); if (!free(q.x, q.z)) return false } return true }
@@ -279,11 +284,14 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     let c = R() * sum, i = 0; while (i < list.length - 1 && c > w[i]) { c -= w[i]; i++ }
     const t = list[i]
     if (R() >= Math.min(0.9, PLAY.chance * w[i])) return false
-    const ends = toyEnds(t); if (!ends) return false
-    const [A, B] = ends
-    if (Math.hypot(A.x - pos.x, A.z - pos.z) < 0.05) { toy = t; toyA = A; toyB = B; return startPlay() }
-    if (!planLine(A, D.dash)) return false
-    toy = t; toyA = A; toyB = B; return true
+    toyIgn = t.id
+    try {
+      const ends = toyEnds(t); if (!ends) return false
+      const [A, B] = ends
+      if (Math.hypot(A.x - pos.x, A.z - pos.z) < 0.05) { toy = t; toyA = A; toyB = B; return startPlay() }
+      if (!planLine(A, D.dash)) return false
+      toy = t; toyA = A; toyB = B; return true
+    } finally { toyIgn = undefined }
   }
   /** M110 s2: where a play at `t` starts (A, the nearer) and its other end (B), or null when the ground it needs is not free */
   function toyEnds(t: Toy): [{ x: number; z: number }, { x: number; z: number }] | null {
@@ -389,6 +397,8 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   const idleThen = () => { if (!move()) t = 0 }
 
   function step(dt: number): TrotPose {
+    // M117 s1: the piece she last played at stays 'hers' (parts only) until she has stepped clear of its padded footprint
+    if (toy) toyLeft = toy.id; else if (toyLeft && !nav.blocked(pos.x, pos.z)) toyLeft = undefined
     dt = Math.min(dt, 0.25); t += dt; sinceLand += dt; toyRest += dt   // a slow frame still covers real time (a phone at 4 fps trots at speed)
     let speed = 0, heading = yaw, wantSit = 0, sniff = 0, happyAir = 0
     if (cheerPending && mode !== 'hopDown' && mode !== 'hopUp') { const c = cheerPending; cheerPending = null; startHappy(c.to) }

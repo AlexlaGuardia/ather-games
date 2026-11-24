@@ -1,6 +1,9 @@
 // npx tsx src/app/shimmer/open/ather/obstacles.test.ts
 // M117 s3: the shared obstacle query + Hollows respecting buildings (steer round, shots stop on walls, cover can't be cheesed).
-import { bodyBlocked, segmentHit, lineOfSight, steer, type Structures } from './obstacles'
+import { bodyBlocked, segmentHit, lineOfSight, steer, bodyRadius, plotFootprints, footBlocked, footDist, centreIn, centreClear, type Structures } from './obstacles'
+import { makeTrot, type Toy } from './spirit-trot'
+import { FURNITURE } from './furniture'
+import { GROWN } from '../../sprites/creature-size'
 import { newCombat, spawnHollow, stepCombat, FLOATER, SHAMBLER, type Terrain } from './combat'
 import { wakeChampion, CHAMP } from './champion'
 import type { Box } from '../terrain-world'
@@ -106,6 +109,72 @@ ok(!lineOfSight(Q, 0, 1, -10, 0, 1, 0) && lineOfSight(Q, -8, 1, -10, -8, 1, 0), 
   const hp0 = c2.keeper.hp
   stepCombat(c2, T, { x: 0, y: 0, z: -2.5 }, 0.05)
   ok(c2.keeper.hp === hp0, `the slam does not reach through the wall (${hp0} -> ${c2.keeper.hp}; ring ${CHAMP.slam.r} m, ${(7.2 - 2.5).toFixed(1)} m away)`)
+}
+
+// ── M117 s1: the plot's footprints, by body size; spirits steer round planters + pieces ────────────────────────────────────
+{
+  const rA = bodyRadius(GROWN.axolotl), rF = bodyRadius(GROWN.fox)
+  ok(Math.abs(rA - 0.45) < 1e-9, `the grown Manalotl (0.90 m long) has a 0.45 m body radius (${rA})`)
+  ok(rF > 0.3 && rF < rA, `the Vulnyx (no canon length, 0.70 tall) is a smaller body (${rF})`)
+  ok(bodyRadius({ height: 0.1 }) === 0.15, 'a tiny body keeps a 0.15 m floor')
+  const F = plotFootprints([
+    { id: 'pl', item: 'spirit_planter', x: 0, z: 0 }, { id: 'sl', item: 'goldwood_slab', x: 5, z: 5 },
+    { id: 'hu', item: 'goldwood_hurdle', x: 3, z: 0, q: 1 }, { id: 'rr', item: 'running_ring', x: -4, z: 0 }, { id: 'gp', item: 'guard_posts', x: 0, z: 4 },
+    { id: 'bx', item: 'planter_box', x: 0, z: -3, q: 1 }, { id: 'st', item: 'goldwood_stool', x: 3, z: -3 }])
+  ok(!F.some(f => f.id === 'sl'), 'a floor slab is ground, not a footprint')
+  ok(F.some(f => f.id === 'st'), 'a non-solid piece (a stool) is in her way too: she cannot step onto it')
+  const fp = (id: string) => F.find(f => f.id === id)!
+  ok(Math.abs(fp('pl').rect.x1 - 0.45) < 1e-9 && fp('pl').parts.length === 1, 'a planter: its 0.9 m rect, parts = the rect')
+  ok(Math.abs((fp('bx').rect.x1 - fp('bx').rect.x0) - FURNITURE.planter_box.d) < 1e-9, 'a quarter-turned planter box swaps its width and depth')
+  ok(fp('hu').parts.length === 2 && fp('rr').parts.length === 16 && fp('gp').parts.length === 2, 'training pieces: hurdle 2 end posts, ring 16 posts, guard 2 posts')
+  // by body size: the Manalotl clears the planter's face by her radius; the corner is round (distance, not a padded square)
+  ok(footBlocked(F, 0.45 + 0.4, 0, rA) && !footBlocked(F, 0.45 + 0.5, 0, rA), 'the Manalotl stands clear of a planter face by 0.45 m, not 0.22')
+  ok(!footBlocked(F, 0.45 + 0.4, 0, 0.3), 'a smaller body may stand nearer')
+  ok(!footBlocked(F, 0.45 + 0.33, 0.45 + 0.33, rA), 'a planter corner is rounded by her radius')
+  // the piece she plays at keeps only its parts: the guard gap and the ring's inside are hers, a post never
+  ok(footBlocked(F, 0.4, 4, rA) && !footBlocked(F, 0.4, 4, rA, 'gp') && footBlocked(F, 0.6, 4, rA, 'gp'), 'guard posts: the gap is open while she plays them, a post is not')
+  ok(!footBlocked(F, -4 + 1.15, 0, rF, 'rr') && footBlocked(F, -4 + 1.15, 0, rF), 'the ring: its lap line is open only while she plays it')
+  ok(centreIn(F, 0.1, 0.1) === 'pl' && centreIn(F, 0.4, 4) === null && centreIn(F, 0.6, 4) === 'gp', 'centreIn: a planter counts whole, a training piece its parts')
+}
+{ // steer never ends inside a footprint: a body walks to 40 random goals through a garden of pieces, every step checked
+  const r = bodyRadius(GROWN.axolotl), R0 = (() => { let s = 7; return () => ((s = (s * 16807) % 2147483647) / 2147483647) })()
+  const F = plotFootprints([{ id: 'a', item: 'spirit_planter', x: 0, z: 0 }, { id: 'b', item: 'spirit_planter', x: 2.2, z: 0.5 }, { id: 'c', item: 'planter_box', x: -1, z: 2.5 },
+    { id: 'd', item: 'goldwood_bench', x: 1, z: -2.5 }, { id: 'e', item: 'push_stone', x: -2.5, z: -1 }, { id: 'f', item: 'goldwood_hurdle', x: 3.5, z: 3 }])
+  const free = (x: number, z: number) => Math.abs(x) < 7 && Math.abs(z) < 7 && !footBlocked(F, x, z, r)
+  let x = -5, z = -5, worst = Infinity, inside = 0, reached = 0, steps = 0
+  for (let g = 0; g < 40; g++) {
+    let gx = 0, gz = 0; do { gx = R0() * 12 - 6; gz = R0() * 12 - 6 } while (!free(gx, gz))
+    const m = {}
+    for (let i = 0; i < 400; i++) {
+      if (Math.hypot(gx - x, gz - z) < 0.2) { reached++; break }
+      const v = steer(free, x, z, gx - x, gz - z, 0.8, m, 0.05); if (!v) break
+      const nx = x + v.x * 0.05, nz = z + v.z * 0.05
+      if (free(nx, nz)) { x = nx; z = nz }   // the mover only takes a free step (as every caller does)
+      steps++; if (centreIn(F, x, z)) inside++; worst = Math.min(worst, centreClear(F, x, z))
+    }
+  }
+  ok(inside === 0 && worst >= r - 1e-9, `steer: ${steps} steps, body centre never inside a footprint (closest ${worst.toFixed(3)} m >= radius ${r})`)
+  ok(reached >= 25, `steer: she reaches most goals round the pieces (${reached}/40)`)
+}
+{ // the trot: 2 min of roam + party play in a garden of planters + training pieces; her centre is never in a footprint, and
+  // she still reaches and plays an allowed training piece (its approach point outside its parts)
+  const pcs = [{ id: 'home', item: 'spirit_planter', x: 0, z: 0 }, { id: 'p2', item: 'spirit_planter', x: 2.4, z: 0.6 }, { id: 'bx', item: 'planter_box', x: -1.5, z: 2.6 },
+    { id: 'hu', item: 'goldwood_hurdle', x: -2.2, z: -1.6 }, { id: 'ps', item: 'push_stone', x: 1.6, z: -2.4 }, { id: 'rr', item: 'running_ring', x: 4.5, z: 4.5 }, { id: 'gp', item: 'guard_posts', x: -4, z: 2 }]
+  const allPlayed = new Set<string>()
+  for (const [sp, seed] of [['axolotl', 3], ['fox', 9], ['axolotl', 17], ['fox', 23]] as const) {
+    const r = bodyRadius(GROWN[sp]), F = plotFootprints(pcs), rMin = Math.max(0.9, 0.45 + r + 0.08)
+    const toys: Toy[] = pcs.filter(p => FURNITURE[p.item].train).map(p => { const f = FURNITURE[p.item], kind = f.play ?? 'leap'
+      return { id: p.id, x: p.x, z: p.z, ax: 0, az: 1, stat: f.train!, kind, size: kind === 'shove' ? f.d / 2 : kind === 'guard' ? f.w / 2 - 0.3 : kind === 'laps' ? f.w / 2 - 0.15 : undefined } })
+    const tr = makeTrot({ home: { x: 0, z: 0 }, rMin, rMax: rMin + 0.6, roam: { maxLeg: 4.5, away: 3 }, toys: () => toys,
+      blocked: (x, z, toy) => Math.abs(x) > 8 || Math.abs(z) > 8 || footBlocked(F, x, z, r, toy) }, seed)
+    const k = { x: 0.5, z: 3.5, yaw: 0 }; tr.near(() => k)
+    let inside = '', worst = Infinity, played = new Set<string>()
+    tr.onPlayed(id => played.add(id))
+    for (let i = 0; i < 120 * 30; i++) { const p = tr.step(1 / 30), c = centreIn(F, p.x, p.z); if (c && !inside) inside = `${c} at ${p.x.toFixed(2)},${p.z.toFixed(2)} (${p.mode})`; worst = Math.min(worst, centreClear(F, p.x, p.z)) }
+    ok(!inside, `trot ${sp} seed ${seed}: 2 min, centre never inside a planter / piece (closest ${worst.toFixed(3)} m) ${inside}`)
+    for (const x of played) allPlayed.add(x); ok(played.size > 0, `trot ${sp} seed ${seed}: she still reaches and plays a training piece (${[...played].join(',')})`)
+  }
+  ok(allPlayed.has('rr') && allPlayed.has('ps') && allPlayed.has('hu'), `the ring (inside its posts), the stone and the hurdle are all still played (${[...allPlayed].join(',')})`)
 }
 
 console.log(`${pass} pass, ${fail} fail`)

@@ -53,6 +53,9 @@ import { BLOOM_MS, speciesOf } from './spirit-seeds'
 import { BLOOMED_SPIRIT_LINE, planterBoxHint } from './planter-lines'
 import { SpiritOnPlanter, useSpiritsDev } from './spirit-model'
 import { spiritModelFor } from './spirit-models'
+import { plotFootprints, footDist, footBlocked, bodyRadius, type Foot, type PieceFoot } from './obstacles'   // M117 s1
+import { GROWN } from '../../sprites/creature-size'
+import type { Species } from '../../spirits/spirit'
 import type { SpiritNav } from './spirit-trot'
 import { BrewingPanel } from './brewing-panel'
 import { useBrewing, openPartyBrew } from './party-brew-net'
@@ -1236,25 +1239,35 @@ const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, numb
  *  straight darting legs anywhere on YOUR plot at her planter's own level. Blocked = any wall/chest/piece/house box (bar the
  *  planter's own) and every room's footprint, padded by her half-width; Greg; ground that is not yours, not island, or not
  *  the planter's floor (a deck, a raised house, the shore). Boxes are re-read when the works change. */
-const SPIRIT_PAD = 0.22
-let navBoxes: { w: Works; b: { x0: number; x1: number; z0: number; z1: number }[] } | null = null
-function planterNav(id: string, dev = false): SpiritNav | null {
+// M117 s1 (entities stop passing through things): her body keeps clear of every wall / chest / house / room by her body
+// RADIUS (obstacles.ts bodyRadius: the grown Manalotl is 0.90 m long, so 0.45), and of every placed piece (planters, training
+// pieces, decor; solid or not) by the shared plot footprints (obstacles.ts plotFootprints / footBlocked). A bloomed spirit
+// has left her planter behind: her own planter is in her way too, and there is no perch on it any more. Her home ring
+// starts a body clear of it.
+const navBoxes = new Map<number, { w: Works; b: Foot[]; feet: PieceFoot[] }>()
+export const spiritBodyR = (sp: Species) => bodyRadius(GROWN[sp] ?? { height: 0.5 })
+function planterNav(id: string, dev = false, r = 0.3): SpiritNav | null {
   const pc = getW().pieces.find(x => x.id === id); if (!pc) return null
   const home = { x: pc.x, z: pc.z }, owned = new Set(loadGarden().owned), floor0 = pieceFloor(getW(), pc)
-  const boxes = () => {
-    const w = getW()
-    if (navBoxes?.w !== w) navBoxes = { w, b: [...workWalls(w).filter(b => !(home.x > b.x0 && home.x < b.x1 && home.z > b.z0 && home.z < b.z1)), ...w.rooms.map(r => footprint(r.kind, r.x, r.z, r.q)), { x0: GREG.x - 0.5, x1: GREG.x + 0.5, z0: GREG.z - 0.5, z1: GREG.z + 0.5 }] }
-    return navBoxes.b
+  const nav = () => {
+    const w = getW(), c = navBoxes.get(r)
+    if (c?.w === w) return c
+    const solidPieces = new Set(pieceBoxes(w).map(b => `${b.x0},${b.z0},${b.x1},${b.z1}`))   // pieces are in the footprints, not here
+    const n = { w, b: [...workWalls(w).filter(b => !solidPieces.has(`${b.x0},${b.z0},${b.x1},${b.z1}`)), ...w.rooms.map(m => footprint(m.kind, m.x, m.z, m.q)), { x0: GREG.x - 0.5, x1: GREG.x + 0.5, z0: GREG.z - 0.5, z1: GREG.z + 0.5 }],
+      feet: plotFootprints(w.pieces) }
+    navBoxes.set(r, n); return n
   }
+  const rMin = Math.max(0.9, FURNITURE.spirit_planter.w / 2 + r + 0.08)
   // M110 s1: the training pieces on her floor; she plays ACROSS a piece's depth (its local z, turned with the piece)
   const toys = () => getW().pieces.filter(t => FURNITURE[t.item]?.train && Math.abs(pieceFloor(getW(), t) - floor0) < 0.02)
     .map(t => { const a = -t.q * Math.PI / 2, f = FURNITURE[t.item], kind = f.play ?? 'leap'   // M110 s2: how she plays at it, and its measure
       return { id: t.id, x: t.x, z: t.z, ax: Math.sin(a), az: Math.cos(a), stat: f.train!, kind, size: kind === 'shove' ? f.d / 2 : kind === 'guard' ? f.w / 2 - 0.3 : kind === 'laps' ? f.w / 2 - 0.15 : undefined } })
-  return { home, rMin: 0.9, rMax: 1.5, perch: { y: 0.53 }, roam: { maxLeg: 4.5, away: 3 }, toys: dev ? () => { const a = loadAssign(); return toys().filter(t => mayUse(a, t.id, id)) } : undefined,   // M118 s2: only the pieces the keeper assigned her
-     blocked: (x, z) => {
+  return { home, rMin, rMax: rMin + 0.6, roam: { maxLeg: 4.5, away: 3 }, toys: dev ? () => { const a = loadAssign(); return toys().filter(t => mayUse(a, t.id, id)) } : undefined,   // M118 s2: only the pieces the keeper assigned her
+     blocked: (x, z, toy) => {
     const sq = squareAt(x, z); if (!sq || !owned.has(sqId(sq.i, sq.j))) return true
     if (!(Math.abs(plotHeightAt(x, z) - GROUND_Y) < 0.05) || Math.abs(pieceFloor(getW(), { item: pc.item, x, z }) - floor0) > 0.02) return true
-    return boxes().some(b => x > b.x0 - SPIRIT_PAD && x < b.x1 + SPIRIT_PAD && z > b.z0 - SPIRIT_PAD && z < b.z1 + SPIRIT_PAD)
+    const n = nav()
+    return n.b.some(b => footDist(b, x, z) < r) || footBlocked(n.feet, x, z, r, toy)
   } }
 }
 /** M76: the spirit planter: woven starwillow round soft soil; a sprout that grows with the seed; a gold glow once it bloomed. */
@@ -1264,7 +1277,7 @@ function SpiritPlanterBody({ id }: { id?: string }) {
   // M102 Manalotl wire-in: the bloomed pot's OWN species' model (spirit-models.ts), or the gold orb when it has none yet.
   // M107 ship (Alex 11-23): the model + her roam are for every keeper now.
   const sp = pot?.bloomed ? speciesOf(pot.seed) : null, look = spiritModelFor(sp)
-  const nav = useMemo(() => (look && id ? planterNav(id, dev) : null), [look, id, dev])   // M107: she roams the garden
+  const nav = useMemo(() => (look && id && sp ? planterNav(id, dev, spiritBodyR(sp)) : null), [look, id, dev, sp])   // M107: she roams the garden
   useFrame(({ clock }) => {
     if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06
     if (sprout.current && pot && !pot.bloomed) { const g = Math.max(0.15, Math.min(1, (Date.now() - pot.at) / BLOOM_MS)); sprout.current.scale.setScalar(g) }
