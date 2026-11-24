@@ -4,20 +4,11 @@
 // From 14 m nothing is aimed. A shimmeroak takes a Forestry 1 keeper (M136: no level gate). Screenshots to --out.   npx tsx scripts/forestry-check.mts [--out dir]
 import puppeteer from 'puppeteer-core'
 import { aimAt } from './lib/aim.mts'
-import { readFileSync } from 'fs'
-import { parseWilds, type WildsMeta } from '../src/app/shimmer/open/ather/wilds'
-import { TRUNK, type Zone } from '../src/app/shimmer/open/ather/forestry'
+import { loneTree } from './lib/lone-tree.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const out = flag('--out', '/tmp'), url = flag('--url', 'https://ather.games')
-const D = 'public/open/wilds/', idx = JSON.parse(readFileSync(D + 'tiles.json', 'utf8'))
-const zm = new Map<string, Zone>(idx.tiles.find((t: { name: string }) => t.name === 'first-wilds').nodes.map((n: { i: number; j: number; zone: Zone }) => [`${n.i},${n.j}`, n.zone]))
-const b = readFileSync(D + 'first-wilds.bin'), bio = readFileSync(D + 'first-wilds.biome')
-const W = parseWilds(JSON.parse(readFileSync(D + 'first-wilds.json', 'utf8')) as WildsMeta, new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)), new Uint8Array(bio), (i, j) => zm.get(`${i},${j}`) ?? 'meadows')
-// a tree with a CLEAR LINE on its east side (no trunk within 15 m east and 3 m either side, none within 3 m), so the
-// walker can stand 6 or 14 m east of it and the crosshair meets it first. ⚠ The first cut only checked 3 m round the
-// tree and stood the camera inside a neighbouring shimmeroak's trunk (11-15).
-const lone = (k: string) => W.trees.find(t => t.kind === k && !W.trees.some(o => o !== t && (Math.hypot(o.x - t.x, o.z - t.z) < 3 || (o.x > t.x && o.x < t.x + 15 && Math.abs(o.z - t.z) < 3))) && Math.abs(t.x) < 400 && Math.abs(t.z) < 400)!
-const gold = lone('goldwood'), oak = lone('shimmeroak')
+// M133: the pick reads the GAME'S ground (lib/lone-tree.mts): the old one stood the keeper in a cloud void pit
+const gold = loneTree('goldwood'), oak = loneTree('shimmeroak')
 const res: Record<string, unknown> = { gold: gold?.id, oak: oak?.id }
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
