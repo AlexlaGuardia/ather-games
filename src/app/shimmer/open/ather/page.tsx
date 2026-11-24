@@ -664,7 +664,7 @@ function AtherSliceGame() {
     if (d.kind === 'waymark') {
       if (!ww) { setToast('The Wilds are still loading.'); return }
       // M75 s2 (Magii d3bf5e9): a waymark whose ground went grey again is DARK: no travel until the ground is cleared again
-      const v = canTravel(d.w, infectedSet); if (!v.ok) { setToast(v.why); return }
+      const v = canTravel(d.w, infectedSet, infectionRef.current.lost); if (!v.ok) { setToast(v.why); return }
       // a waymark is saved in its tile's own coords; the world is one space, so place it, load round it, then arrive
       const o = ww.offsetOf(d.w.tile), x = d.w.x + o.x + 2.2, z = d.w.z + o.z + 2.2
       stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(d.w.tile); arrive({ kind: 'wilds', tile: d.w.tile }, { x, z, yaw: Math.PI * 0.75 }) })

@@ -103,10 +103,12 @@ export function isLit(w: Waymark, infected: ReadonlySet<string>): boolean {
 }
 /** ★ SIGNED by Alex 2026-11-24 (athernyx c1d5903): shimmer-lines-batch-2026-11-24b.md › B2: the refusal when a keeper steps toward a dark waymark, and the fold map's word for one. */
 export const DARK_WHY = 'The grey took that ground back. Its waymark is dark until you clear it again.'
+/** ★ SIGNED (Alex 11-24, batch 11-24h A): the waymark of a settlement an infection took (M128): it never relights */
+export const LOST_WHY = 'That place is gone for the season, and its waymark stays dark. Lift the stone to plant it somewhere new.'
 export const UNLIT_LABEL = 'unlit'
 /** Whether the fold may carry the keeper to this waymark now. */
-export function canTravel(w: Waymark, infected: ReadonlySet<string>): PlantVerdict {
-  return isLit(w, infected) ? { ok: true } : { ok: false, why: DARK_WHY }
+export function canTravel(w: Waymark, infected: ReadonlySet<string>, /** M128: settlements lost this season */ lost: readonly string[] = []): PlantVerdict {
+  return isLit(w, infected) ? { ok: true } : { ok: false, why: w.settlement && lost.includes(w.settlement) ? LOST_WHY : DARK_WHY }
 }
 /** The waymark a fall sets the keeper down at: the last LIT one (Greg's stone when none is lit). */
 export function lastLit(list: readonly Waymark[], infected: ReadonlySet<string>): Waymark | undefined {

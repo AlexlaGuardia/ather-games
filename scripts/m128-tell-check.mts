@@ -8,10 +8,10 @@ import { existsSync, readFileSync, mkdirSync } from 'node:fs'
 import { folkOf } from '../src/app/shimmer/open/ather/settlement-folk'
 import { burrfolkOf, stallSpot, BURR_LABEL } from '../src/app/shimmer/open/ather/burrfolk'
 import { INFECT_WEEK_MS as W } from '../src/app/shimmer/open/ather/infection'
-import { INFECT_CARRY, INFECT_CLUE, INFECT_SAVED, MOREL_INFECT } from '../src/app/shimmer/open/ather/infect-lines'
+import { STALL_STOPPED, INFECT_CARRY, INFECT_CLUE, INFECT_SAVED, MOREL_INFECT } from '../src/app/shimmer/open/ather/infect-lines'
 import { LISTEN } from '../src/app/shimmer/open/ather/yarrow-teach'
 import { infectId } from '../src/app/shimmer/open/ather/infect-id'
-import { DARK_WHY } from '../src/app/shimmer/open/ather/waymarks'
+import { LOST_WHY } from '../src/app/shimmer/open/ather/waymarks'
 import { STARTING_SQUARES } from '../src/app/shimmer/open/ather/plot'
 import { LAYOUT } from '../src/app/shimmer/open/ather/garden-snapshot'
 import type { Network, Settlement } from '../src/app/shimmer/open/ather/network'
@@ -76,15 +76,16 @@ async function open(owner: boolean, seed: { save?: unknown; waymark?: unknown; f
   const ground = async () => (await G('wmGround')) as { ground: string; settlement: string | null }
   return { ride, p, G, I, raw, boot, reload, goto, tp, home, place, stallTalk, lit, alive, ground }
 }
+const WM = { id: 'wm-t', tile: 'first-wilds', x: A.x, y: 0, z: A.z + 16, biome: 2, made: 1, settlement: A.id }
 const said = (p: Page) => p.evaluate(() => (window as any).__lines) as Promise<Record<string, number>>
 const heard = async (p: Page, l: string, ms = 40000) => poll(async () => (await said(p))[l] === 1, ms)
 /** stand before one Moglin and talk; the bubble's words, then what each (listen) shows */
 async function talkTo(o: Awaited<ReturnType<typeof open>>, s: Settlement, fid: string): Promise<string[]> {
   const { p } = o, words = () => p.evaluate(() => document.body.innerText.replace(/\s+/g, ' ')), opts = () => p.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-talk-option]')].map(e => (e.textContent ?? '').replace(/^›/, '').trim())) as Promise<string[]>
-  const CAND = [INFECT_CARRY, INFECT_SAVED, ...INFECT_CLUE.map(c => c.folk)], seen: string[] = []
-  await poll(async () => p.evaluate((id: string, f: string) => !!((window as any).__folk?.drawn?.()[id] ?? []).some((x: any) => x.id === f), s.id, fid), 40000)
+  const CAND = [STALL_STOPPED, INFECT_CARRY, INFECT_SAVED, ...INFECT_CLUE.map(c => c.folk)], seen: string[] = []
+  await poll(async () => p.evaluate((id: string, f: string) => [...((window as any).__folk?.drawn?.()[id] ?? []), (window as any).__folk?.stalls?.()[id]].some((x: any) => x?.id === f), s.id, fid), 40000)
   for (let k = 0; k < 10 && !seen.length; k++) {
-    const f = await p.evaluate((id: string, fid: string) => (window as any).__folk.drawn()[id].find((x: any) => x.id === fid), s.id, fid) as any, a = f.yaw + [0, 0.5, -0.5, 1, -1, 2, -2, 3, 1.5, -1.5][k], d = 1.7
+    const f = await p.evaluate((id: string, fid: string) => [...(window as any).__folk.drawn()[id], (window as any).__folk.stalls()[id]].find((x: any) => x?.id === fid), s.id, fid) as any, a = f.yaw + [0, 0.5, -0.5, 1, -1, 2, -2, 3, 1.5, -1.5][k], d = fid === burrfolkOf(s, 1, folkOf(s, 1))?.id ? 2.2 : 1.7
     await p.evaluate((x: number, z: number, y: number) => { const g = (window as any).__ather, c = g.combat?.(); if (c) { c.hollows.length = 0; c.keeper.hp = c.keeper.maxHp } g.tp(x, z, y); g.look(y, -Math.atan2(1.1, 1.7)) }, f.x + Math.sin(a) * d, f.z + Math.cos(a) * d, a)
     await sleep(1800); await p.keyboard.press('KeyE'); await p.mouse.move(5, 5); await poll(async () => (await opts()).length > 0, 6000)
     if (!(await opts()).length) continue
@@ -109,9 +110,11 @@ try {
   await sleep(12000); await o.reload(); await sleep(15000); ok(Object.keys(await said(p)).length === 0, `2. a reload says nothing again (${JSON.stringify(await said(p))})`)
   ok(await o.goto(A.x, A.z), '3. at the held place'); await o.alive(); const fa = folkOf(A, 1)
   const t1 = await talkTo(o, A, fa[0].id); ok(t1.join('|') === INFECT_CLUE[0].folk, `3. its folk: clue 1 (${JSON.stringify(t1)})`)
+  { const b = burrfolkOf(A, 1, fa)!, ts = await talkTo(o, A, b.id); ok(ts.join('|') === STALL_STOPPED, `3. the stall: "${STALL_STOPPED}" (${JSON.stringify(ts)})`) }
   ok(await o.home(), '3. home'); await I('pass', W); ok(await heard(p, L('second', A)), '4. the second week, once'); await sleep(10000)
   await I('play', W); ok(await heard(p, L('lost', A)), '5. lost, once'); await p.screenshot({ path: `${out}/2-lost.png` })
   const now = await said(p); ok(now[L('start', A)] === undefined && now[L('second', A)] === 1 && now[L('lost', A)] === 1, `5. each once (${JSON.stringify(now)})`)
+  await o.p.evaluate((w: any) => (window as any).__ather.travel({ kind: 'waymark', w }), WM); ok(await poll(async () => (await p.evaluate(() => document.body.innerText)).includes(LOST_WHY), 4000), `5. its waymark: "${LOST_WHY}"`)
   await o.reload(); await sleep(15000); ok(Object.keys(await said(p)).length === 0, '5. reload: nothing again')
   // ── the next place ──
   ok(await o.goto(B.x, B.z), `6. at ${B.name}`); await o.alive(); ok(await poll(async () => (await I('known')).includes(B.id), 20000), '6. discovered')

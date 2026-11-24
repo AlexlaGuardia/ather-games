@@ -17,5 +17,7 @@ export const INFECT_CLUE: readonly { folk: string; obj?: string }[] = [
   { folk: 'There used to be a hum under the floor. We hear nothing down there now.' },
 ]
 export const INFECT_CARRY = 'We lost our homes, but we all got out. Here is what we know.'
+/** ★ SIGNED (Alex 11-24, batch 11-24h B): a stall's greeting while its settlement is held */
+export const STALL_STOPPED = 'No trading just now.'
 export const INFECT_SAVED = 'The waymark is lit and the ground is ours again. Thank you, Keeper.'
 export const INFECT_OPEN = 'Where it fell, the ground has opened. It goes down.'

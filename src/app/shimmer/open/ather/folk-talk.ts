@@ -6,6 +6,7 @@
 // All game logic stays in settlement-folk.ts (wantsLeft / trusted / bring / recruit); this file only arranges lines.
 // ★ @lark draft 11-18, awaiting Alex sign-off: the answer labels (ASK), the bring verb and the two stock lines below. The dream
 // stays the hello (lark: the only place a keeper ever hears a Moglin's dream). Checks import these, never retype them.
+import { STALL_STOPPED } from './infect-lines'
 import { DIGGER_LABEL } from './digger-trade'
 import { isBurr, BURRFOLK_BARKS, BURR_LABEL, type Burrfolk, type BarterKey } from './burrfolk'
 import { isGleaner, gleanerTalk, gleanerMem } from './gleaner'
@@ -140,5 +141,5 @@ export function burrTalk(c: FolkTalkCtx, b: Burrfolk, st: FolkTalkState, act: Fo
     line: BURRFOLK_BARKS.stall,
     options: [...b.stock.map(k => ({ label: BURR_LABEL.swap(k), pick: () => act.barter?.(k) })), { label: ASK.back, pick: () => act.go({ fid: b.id, screen: 'hello' }) }, bye],
   }
-  return { line: BURRFOLK_BARKS.greet, options: [...(c.stopped ? [] : [{ label: BURR_LABEL.look, pick: () => act.go({ fid: b.id, screen: 'stall' as const }) }]), ...others, bye] }
+  return { line: c.stopped ? STALL_STOPPED : BURRFOLK_BARKS.greet, options: [...(c.stopped ? [] : [{ label: BURR_LABEL.look, pick: () => act.go({ fid: b.id, screen: 'stall' as const }) }]), ...others, bye] }
 }

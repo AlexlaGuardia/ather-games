@@ -7,6 +7,10 @@ import { begin, fell, freshInfection, purge, step, CLUES, INFECT_WEEK_MS as W, t
 import { folkTalk, ASK, type FolkTalkActs } from './folk-talk'
 import { folkOf, freshTrust } from './settlement-folk'
 import { LISTEN } from './yarrow-teach'
+import { STALL_STOPPED } from './infect-lines'
+import { canTravel, DARK_WHY, LOST_WHY, type Waymark } from './waymarks'
+import { infectId } from './infect-id'
+import { burrfolkOf, BURRFOLK_BARKS } from './burrfolk'
 import type { Network } from './network'
 import { GARDEN_KEY_SPECS } from '@/lib/keeper-key-specs'
 let pass = 0, fail = 0
@@ -26,6 +30,10 @@ if (existsSync(F)) {
   same(INFECT_CARRY, row('INFECT_CARRY.open'), 'canon carry'); same(INFECT_SAVED, row('INFECT_SAVED.thanks'), 'canon thanks'); same(INFECT_OPEN, row('INFECT_OPEN.narrator'), 'canon opening')
   ok(!all.includes(row('INFECT_OPEN.morel')), 'E2 is cut')
 } else console.log('SKIP canon: not on this machine')
+const H = '/root/athernyx/CANON/game/shimmer-lines-batch-2026-11-24h.md'
+if (existsSync(H)) { const md = readFileSync(H, 'utf8'), mains = md.split('\n').filter(l => l.startsWith('| ') && l.includes('**')).map(l => /\*\*(.+?)\*\*/.exec(l)![1]); ok(/✅ SIGNED 2026-11-24 by Alex/.test(md), '24h signed'); same([LOST_WHY, STALL_STOPPED], mains, 'canon 24h') }
+{ const w = (settlement?: string) => ({ id: 'w', tile: 't', x: 0, y: 0, z: 0, biome: 2, made: 0, settlement, node: settlement ? undefined : 'n1' }) as unknown as Waymark, dark = new Set([infectId(A), infectId(B), 'n1']), why = (x: Waymark) => { const v = canTravel(x, dark, [A]); return v.ok ? '' : v.why }
+  same([why(w(A)), why(w(B)), why(w())], [LOST_WHY, DARK_WHY, DARK_WHY], 'lost, held, plain grey ground') }
 // ── pings ──
 const drain = (t: Tell, s: Infection): [Tell, Due[]] => { const out: Due[] = []; for (let d = due(t, s, name); d && out.length < 50; d = due(t, s, name)) { out.push(d); t = told(t, d) } return [t, out] }
 const go = (s: Infection, now: number, played = 0) => step(s, { season: 1, now, played, known: [A, B, C], rng: () => 0 }).s
@@ -69,6 +77,7 @@ t2 = heardSay(t2, say, 1); same([t2.heard, t2.met], [[1], [A, B]], 'the thanks s
   const plain = folkTalk(c, st, act([])); ok(plain.line === folk[0].dream, 'off: the dream'); same(folkTalk({ ...c, infect: null }, st, act([])), plain, 'null = the old talk')
   const one = folkTalk({ ...c, infect: { lines: ['X'] } }, st, act([])); ok(one.line === 'X' && one.options.some(o => o.label === ASK.inspect), 'one line: in the hello\'s place, its answers kept')
   const two = folkTalk({ ...c, infect: { lines: ['X', 'Y'] } }, st, act(seen)); same([two.line, two.options.map(o => o.label)], ['X', [LISTEN, ASK.bye]], 'two lines: one a screen'); two.options[0].pick(); ok(folkTalk({ ...c, infect: { lines: ['X', 'Y'] } }, seen[0], act([])).line === 'Y', 'then the next')
+  { const b = burrfolkOf(P(A), 1, folk)!, at = { fid: b.id, screen: 'hello' as const }; same([folkTalk({ ...c, burr: b, stopped: true }, at, act([])).line, folkTalk({ ...c, burr: b }, at, act([])).line], [STALL_STOPPED, BURRFOLK_BARKS.greet], 'the stall, stopped and open') }
   const ref = folkTalk({ ...c, infect: { lines: ['X', 'Y'] }, refugee: true }, { fid: 'gone', screen: 'hello', beat: 1 }, act([])); same([ref.line, ref.options.map(o => o.label)], ['Y', [ASK.bye]], 'a refugee: the lines and goodbye') }
 // ── the save ──
 { const mem = new Map<string, string>(); (globalThis as any).localStorage = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => mem.set(k, v), removeItem: (k: string) => mem.delete(k), key: () => null, length: 0 }
