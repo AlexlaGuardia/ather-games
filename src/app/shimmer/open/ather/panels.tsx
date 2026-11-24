@@ -176,7 +176,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
                 </div>
               )}
               {waymarks.map((w, k) => stop(`Waymark ${k + 1}`, `the Wilds · ${BIOME_NAME[w.biome]}`, { kind: 'waymark', w }, '#6fd3c4'))}
-              <div style={{ opacity: 0.6, fontSize: 11, marginTop: 6 }}>{waymarks.length} / {MAX_WAYMARKS} waymarks. Plant one with F inside a settlement.</div>
+              <div style={{ opacity: 0.6, fontSize: 11, marginTop: 6 }}>{waymarks.length} / {MAX_WAYMARKS} waymarks. Plant one on ground you cleared, or inside a settlement.</div>
               {fog && W && (() => { const c = tileCentreWorld(W.meta); return <div style={{ opacity: 0.6, fontSize: 11 }}>Walked: {Math.round(walkedShare(fog, c.x - sx / 2, c.z - sz / 2, c.x + sx / 2, c.z + sz / 2) * 100)}% of this country</div> })()}
             </div>
           </div>

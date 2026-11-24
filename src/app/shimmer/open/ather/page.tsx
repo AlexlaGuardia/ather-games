@@ -128,7 +128,7 @@ import { AngelicaDeskPanel, sideItemName, haveOf } from './m70-desk-panel'   // 
 import { GLEANER_POST, GLEANER_POST_R, BURR_CAMP, CAMP_LABEL } from './gleaner'   // M112 s2
 import { aimPick, lookDir, type Pickable } from '../shared/aim-pick'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
-import { canPlant, plant, lift, loadWaymarks, saveWaymarks, GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
+import { canPlant, plant, lift, loadWaymarks, saveWaymarks, groundOf, GREG_WAYMARK, MAX_WAYMARKS, type Waymark, type PlantVerdict } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud, type SightLink } from './combat-layer'
 import type { CombatEvent, Terrain } from './combat'
@@ -946,22 +946,43 @@ function AtherSliceGame() {
     }
   }, [zone, travel, garden, updateGarden, skipDays, nodeOwner, arrive])
 
-  const plantHere = useCallback(() => {
-    if (zone.kind !== 'wilds' || !ww) return
+  const plantHere = useCallback((): PlantVerdict => {
+    if (zone.kind !== 'wilds' || !ww) return { ok: false, why: 'not in the Wilds' }
     // a waymark belongs to the tile it stands in, in that tile's own coords (the fold map, the spacing rules, saves)
     const p = pos.current, biome = ww.biomeAt(p.x, p.z), t = ww.at(tileOf(p.x, p.z).tx, tileOf(p.x, p.z).ty)
-    if (!t) return
+    if (!t) return { ok: false, why: 'no tile' }
     const lx = p.x - t.tx * TILE_M, lz = p.z - t.ty * TILE_M
-    const st = netRef.current ? settlementAt(netRef.current, p.x, p.z) : null   // waymarks bind only where folk live (Alex 11-18)
-    const v = canPlant(waymarks, { tile: t.name, x: lx, z: lz, biome, grounded: p.grounded, swimming: p.swimming, settlement: st?.id ?? null })
-    if (!v.ok) { setToast(v.why); return }
+    const st = netRef.current ? settlementAt(netRef.current, p.x, p.z) : null   // a settlement is kept ground (Alex 11-18)
+    // M75: so is ground the keeper cleared (canon: a waymark exists only once the place is kept); it links home, so not pre-fold
+    const owner = nodeOwner?.(p.x, p.z) ?? null, ground = groundOf(owner, infectedSet)
+    const v = canPlant(waymarks, { tile: t.name, x: lx, z: lz, biome, grounded: p.grounded, swimming: p.swimming, settlement: st?.id ?? null, ground, folded: gardenOpen(loadTut()) })
+    if (!v.ok) { setToast(v.why); return v }
     const spent = take(getInv(), 'waymark', 1)          // a waymark is a thing in the bag now: planting spends one
-    if (!spent) { setToast('No waymarks in your bag. Lift one you planted to carry it again.'); return }
+    if (!spent) { const why = 'No waymarks in your bag. Lift one you planted to carry it again.'; setToast(why); return { ok: false, why } }
     setInv(spent)
-    const next = plant(waymarks, { tile: t.name, x: lx, y: ww.heightAt(p.x, p.z), z: lz, biome, settlement: st?.id })
+    const next = plant(waymarks, { tile: t.name, x: lx, y: ww.heightAt(p.x, p.z), z: lz, biome, ...(st ? { settlement: st.id } : owner ? { node: owner } : {}) })
     setWaymarks(next); saveWaymarks(next)
     setToast(`Waymark bound in ${st?.name ?? 'the Wilds'}. It is a stop on the fold map now.`)
-  }, [zone, ww, waymarks])
+    return v
+  }, [zone, ww, waymarks, nodeOwner, infectedSet])
+  const liftWaymark = useCallback((id: string) => {
+    const next = lift(wayRef.current, id); setWaymarks(next); saveWaymarks(next)
+    const back = give(getInv(), 'waymark', 1); setInv(back.inv)
+    setToast(back.left ? 'Waymark lifted, but your bag is full: it went back to the fold.' : 'Waymark lifted. It is back in your bag.')
+  }, [])
+  // M75 probes (m75-waymark-check): the ledger, plant/lift through the same paths as click/L, the ground word where the keeper
+  // stands, kept/infected ground nearby. wmGoto + wmClearHere are CHECK-ONLY (like grant): set down at a Wilds point, clear its node.
+  useEffect(() => {
+    const g = window as unknown as { __ather?: Record<string, unknown> }
+    g.__ather = {
+      ...(g.__ather ?? {}),
+      wm: () => wayRef.current, wmBag: () => countOf(getInv(), 'waymark'), wmPlant: () => plantHere(), wmLift: (id: string) => liftWaymark(id),
+      wmGround: () => { const p = pos.current; return { ground: groundOf(nodeOwner?.(p.x, p.z) ?? null, infectedSet), settlement: netRef.current ? settlementAt(netRef.current, p.x, p.z)?.id ?? null : null, x: p.x, z: p.z, grounded: p.grounded } },
+      wmNodes: () => { const p = pos.current; return allNodes.filter(n => n.tile === GREG_WAYMARK.tile).map(n => ({ id: n.id, x: n.x, z: n.z, infected: infectedSet.has(n.id), d: Math.hypot(n.x - p.x, n.z - p.z) })).sort((a, b) => a.d - b.d).slice(0, 40) },
+      wmGoto: (x: number, z: number) => { if (!ww) return false; const { tx, ty } = tileOf(x, z), t = ww.at(tx, ty); if (!t) return false; const o = ww.offsetOf(t.name); travel({ kind: 'waymark', w: { id: 'probe', tile: t.name, x: x - o.x - 2.2, y: 0, z: z - o.z - 2.2, biome: BIOME.meadow, made: 0 } }); return true },
+      wmClearHere: () => { const p = pos.current, id = nodeOwner?.(p.x, p.z), cur = spreadRef.current; if (!id || !cur) return null; const r = clearAt(cur, allNodes, id, clock()); saveSpread(r.s); setSpread(r.s); return id },
+    }
+  }, [plantHere, liftWaymark, nodeOwner, infectedSet, allNodes, ww, travel])
   // what you hold is what the stance says (a drawn gun, a picked hotbar item, or nothing): a waymark plants on click,
   // the Repeater fires (combat-layer only fires while armed), stowed hands work a node
   const inv = useInv()
@@ -1551,17 +1572,13 @@ function AtherSliceGame() {
       if (!e.repeat && e.code === CAST_KEY.tactical) castSlot('tactical')
       if (!e.repeat && e.code === CAST_KEY.signature) castSlot('signature')
 
-      if (e.code === 'KeyL' && n?.kind === 'waymark' && n.own) {
-        const next = lift(waymarks, n.w.id); setWaymarks(next); saveWaymarks(next)
-        const back = give(getInv(), 'waymark', 1); setInv(back.inv)
-        setToast(back.left ? 'Waymark lifted, but your bag is full: it went back to the fold.' : 'Waymark lifted. It is back in your bag.')
-      }
+      if (e.code === 'KeyL' && n?.kind === 'waymark' && n.own) liftWaymark(n.w.id)
       if (e.code === 'KeyH' && zone.kind === 'wilds') goHome()
       else if (e.code === 'KeyH' && currentVisit()) endVisit()   // M61: H on a mate's plot = home
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [panel, fade, zone, waymarks, ww, goHome, leaveGlade, tune, skipDays, allNodes, plantHere, castSlot, errandToHold, eatHeld, drinkHeld])
+  }, [panel, fade, zone, waymarks, ww, goHome, leaveGlade, tune, skipDays, allNodes, plantHere, liftWaymark, castSlot, errandToHold, eatHeld, drinkHeld])
 
   const zoneName = zone.kind === 'plot' ? 'Your plot' : zone.kind === 'glade' ? GLADE_ZONE_NAME : 'The Wilds'
   // Phone taps: only what applies here and now, each the key this page already handles.

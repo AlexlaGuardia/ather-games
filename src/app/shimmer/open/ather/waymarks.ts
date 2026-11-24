@@ -21,7 +21,9 @@ import { gardenKey } from '@/lib/keeper-local'
 
 /** `settlement`: the free-Moglin settlement it is bound in (Alex 11-18: waymarks only bind where folk live). Older waymarks
  *  planted before that rule have none and keep working until lifted. */
-export interface Waymark { id: string; tile: string; x: number; y: number; z: number; biome: BiomeId; made: number; settlement?: string }
+export interface Waymark { id: string; tile: string; x: number; y: number; z: number; biome: BiomeId; made: number; settlement?: string
+  /** M75: the cleared Wilds node it is bound on (a waymark planted on kept ground outside a settlement). Older saves have none. */
+  node?: string }
 
 export const PER_BIOME = 4
 export const MIN_SPACING = 60          // metres between two waymarks on one tile
@@ -32,19 +34,37 @@ export const MAX_WAYMARKS = 12
 
 export type PlantVerdict = { ok: true } | { ok: false; why: string }
 
-export function canPlant(list: readonly Waymark[], at: { tile: string; x: number; z: number; biome: BiomeId; grounded: boolean; swimming: boolean; settlement: string | null }): PlantVerdict {
+/** M75: what the ground under the keeper is to the spread (combat's nearest-node ownership): a node's ground whose grey was
+ *  answered = 'cleared', still grey = 'infected', no node owns it (or the spread is not loaded yet) = null. */
+export type WildsGround = 'cleared' | 'infected' | null
+
+/** M75 (Alex 11-22, "keepers place waymarks anywhere in the Wilds"), reconciled with canon, not overriding it:
+ *  a waymark exists only once the place is KEPT (shimmer-folds-settlements.md:32; gates.md: "a door onto a place that is not
+ *  bound (not walked to, not kept, not owned)" is refused). In the Wilds that is ground the keeper has kept: a settlement
+ *  (folk keep it) or ground whose grey they answered (a CLEARED node). Anywhere on that ground, not only inside a settlement.
+ *  Each waymark links back to the garden (the fold map's home stop), so a keeper Greg has not folded a garden for yet holds
+ *  no waymark to plant (M71 s1: pre-fold "home" is the Glade). `folded` / `ground` are optional so an older caller reads as
+ *  folded with no cleared ground (the 11-18 settlement-only rule). */
+export function canPlant(list: readonly Waymark[], at: { tile: string; x: number; z: number; biome: BiomeId; grounded: boolean; swimming: boolean; settlement: string | null; ground?: WildsGround; folded?: boolean }): PlantVerdict {
+  if (at.folded === false) return { ok: false, why: 'A waymark leads home to your garden, and Gregory has not folded you one yet.' }
   if (!at.grounded || at.swimming) return { ok: false, why: 'A waymark binds ground. Stand on it.' }
   if (at.biome === BIOME.water) return { ok: false, why: 'Water will not hold a binding.' }
-  // ★ ONLY WHERE FOLK LIVE (Alex 11-18: anywhere-waymarks 'would add too many gates and make travel way too easy'). Canon
-  // already makes the kept settlements the fast-travel anchors (ather-rework › the net's inhabited nodes); one per settlement.
-  if (!at.settlement) return { ok: false, why: 'A waymark only binds where folk keep a home. Plant it inside a settlement.' }
-  if (list.some(w => w.settlement === at.settlement)) return { ok: false, why: 'You already hold a waymark in this settlement.' }
+  // ★ ONLY ON KEPT GROUND: a settlement, or ground you cleared (M75). Infected ground still refuses (the place is not kept).
+  if (!at.settlement && at.ground !== 'cleared') return { ok: false, why: at.ground === 'infected'
+    ? 'The grey still holds this ground. Clear it, then bind it.'
+    : 'A waymark only binds kept ground: ground you cleared, or a settlement.' }
+  if (at.settlement && list.some(w => w.settlement === at.settlement)) return { ok: false, why: 'You already hold a waymark in this settlement.' }
   if (list.length >= MAX_WAYMARKS) return { ok: false, why: `You hold ${MAX_WAYMARKS} waymarks, as many as the fold will carry. Lift one first.` }
   const same = list.filter(w => w.biome === at.biome)
   if (same.length >= PER_BIOME) return { ok: false, why: `You already hold ${PER_BIOME} waymarks in the ${BIOME_NAME[at.biome]}. Find other country.` }
   const near = [GREG_WAYMARK, ...list].find(w => w.tile === at.tile && Math.hypot(w.x - at.x, w.z - at.z) < MIN_SPACING)
   if (near) return { ok: false, why: `Too close to your other waymark (${Math.round(Math.hypot(near.x - at.x, near.z - at.z))} m). Walk on.` }
   return { ok: true }
+}
+
+/** M75: the spread's word for the ground at a point, from the node that owns it and the set still infected. */
+export function groundOf(owner: string | null | undefined, infected: ReadonlySet<string>): WildsGround {
+  return owner ? (infected.has(owner) ? 'infected' : 'cleared') : null
 }
 
 export function plant(list: readonly Waymark[], w: Omit<Waymark, 'id' | 'made'>, now = Date.now()): Waymark[] {
@@ -63,12 +83,16 @@ export function reachedBiomes(list: readonly Waymark[]): BiomeId[] {
 
 // ── the trial ledger (per browser; NOT the account save) ──────────────────────────────────────────────────────
 const KEY = 'ather.waymarks.v1'
-export function loadWaymarks(): Waymark[] {
+/** Pure read of the ledger: anything that is not a list of well-formed waymarks reads as none, and a malformed row is
+ *  dropped alone. Rows from before M75 (no `node`) and before 11-18 (no `settlement`) load as they were. */
+export function parseWaymarks(raw: string | null): Waymark[] {
   try {
-    const raw = localStorage.getItem(gardenKey(KEY))
     const v = raw ? JSON.parse(raw) : []
-    return Array.isArray(v) ? v.filter(w => w && typeof w.x === 'number' && typeof w.z === 'number') : []
+    return Array.isArray(v) ? v.filter(w => w && typeof w.id === 'string' && typeof w.tile === 'string' && typeof w.x === 'number' && typeof w.z === 'number') : []
   } catch { return [] }
+}
+export function loadWaymarks(): Waymark[] {
+  try { return parseWaymarks(localStorage.getItem(gardenKey(KEY))) } catch { return [] }
 }
 export function saveWaymarks(list: readonly Waymark[]): void {
   try { localStorage.setItem(gardenKey(KEY), JSON.stringify(list)) } catch { /* private window: the session keeps them */ }
