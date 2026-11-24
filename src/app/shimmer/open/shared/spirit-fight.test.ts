@@ -38,7 +38,7 @@ function fight(o: Opt = {}) {
     for (const h of [A, B]) { h.x = h === A ? 0 : 6; h.z = -8; h.state = 'stagger'; h.t = 9 }
     if (o.hp !== undefined) C.keeper.hp = o.hp; else C.keeper.hp = 100
     const before = healthOf(C)
-    const who: Helper[] = Array.from({ length: o.n ?? 3 }, (_, i) => { const p = o.pos?.(i, F, t) ?? { x: i - 1, z: -3 }; return { id: 'p' + i, ...p } })
+    const who: Helper[] = Array.from({ length: o.n ?? 3 }, (_, i) => { const p = o.pos?.(i, F, t) ?? { x: i - 1, z: -4 }; return { id: 'p' + i, ...p } })
     const done = stepSpirits(F, C, feet, eye, { x: 0, y: -1, z: 0 }, who, DT)
     o.each?.(F, C, who, t, done)
     if (o.keeperHits !== false && t >= hitNext) { hitNext += 0.4; C.rounds.push({ x: A.x, y: 0.85, z: A.z + 1, vx: 0, vy: 0, vz: -40, life: 1, dmg: 10, crit: 10 }) }

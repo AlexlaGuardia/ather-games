@@ -21,8 +21,8 @@ export type V = { x: number; z: number }
 /** THE DIALS (Jin's, start low) */
 export const FIGHT = {
   tether: 10, back: 6,          // m: Alex's 10; past it she comes back to within `back` first
-  stand: 8,                     // m: the furthest from the keeper she ever picks to stand
-  reach: 4, off: 2.2,           // m: how far her HIT carries (short, so she steps up to it); how far off the Hollow she stops
+  stand: 9,                     // m: the furthest from the keeper she ever picks to stand
+  reach: 6, off: 2.2,           // m: how far her HIT carries (short, so she steps up to it); how far off the Hollow she stops
   engageR: 25, quiet: 5,        // a Hollow on the keeper inside engageR = a fight; this many s of none = over
   targetHold: 4, aimR: 40, aimCos: 0.995,   // s a hit keeps the target; the aim ray's length and cone (~5.7 deg)
   think: 0.35, rest: 1.6,       // s between thoughts; s she lets pass after choosing nothing
@@ -30,7 +30,7 @@ export const FIGHT = {
   gap: 1.2,                     // s between any two helps of the trio
   helps: 10, share: 0.12,       // the trio's budget a fight: helps in all, and their damage as a part of the keeper's
   join: 0.7,                    // odds one spirit joins one fight
-  hit: 5, hitRange: 16,         // damage a HIT does; a target further from the keeper than this is left alone
+  hit: 5, hitRange: 14,         // damage a HIT does; a target further from the keeper than this is left alone
   mend: 6, mendUnder: 0.5,      // health a MEND gives; only under this part of full health
   slowN: 3, slowR: 6, slowSecs: 2.5,   // Hollows this close to the keeper, this many at least, slowed this long
   idle: 0.5, jitter: 0.25, crowd: 0.45, crowdFade: 3,   // 'nothing': its base score, its swing, and how much a fresh help (anyone's) adds to it
@@ -73,7 +73,7 @@ export const tethered = (d: number, coming: boolean) => d > FIGHT.tether || (com
 /** where she stands to work on `t`: `off` short of it on the keeper's side, fanned by `lane`, never past `stand` m from the keeper */
 export function workSpot(k: V, t: V, lane: number): V & { face: number } {
   const d = Math.hypot(t.x - k.x, t.z - k.z) || 1, r = Math.max(1.6, Math.min(FIGHT.stand, d - FIGHT.off))
-  const a = Math.atan2(t.x - k.x, t.z - k.z) + lane * 0.45
+  const a = Math.atan2(t.x - k.x, t.z - k.z) + lane * 0.3
   const p = { x: k.x + Math.sin(a) * r, z: k.z + Math.cos(a) * r }
   return { ...p, face: Math.atan2(t.x - p.x, t.z - p.z) }
 }
