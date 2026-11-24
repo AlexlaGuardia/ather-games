@@ -22,7 +22,7 @@ export type V = { x: number; z: number }
 export const FIGHT = {
   tether: 10, back: 6,          // m: Alex's 10; past it she comes back to within `back` first
   stand: 8,                     // m: the furthest from the keeper she ever picks to stand
-  reach: 7, off: 2.2,           // m: how far her HIT carries; how far off the Hollow she stops
+  reach: 4, off: 2.2,           // m: how far her HIT carries (short, so she steps up to it); how far off the Hollow she stops
   engageR: 25, quiet: 5,        // a Hollow on the keeper inside engageR = a fight; this many s of none = over
   targetHold: 4, aimR: 40, aimCos: 0.995,   // s a hit keeps the target; the aim ray's length and cone (~5.7 deg)
   think: 0.35, rest: 1.6,       // s between thoughts; s she lets pass after choosing nothing

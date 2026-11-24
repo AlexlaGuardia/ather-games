@@ -62,7 +62,7 @@ try {
       const C = A.combat(), F = W.__spiritFight(), eye = A.camAim(), k = { x: eye.cx, z: eye.cz }; D.samples++
       if (D.mode === 'quiet') { D.mine.clear(); C.hollows.length = 0; C.spits.length = 0; C.packs = {} }
       else {
-        C.keeper.hp = C.keeper.maxHp
+        C.keeper.hp = D.low ? 35 : C.keeper.maxHp
         for (const id of D.mine) if (!C.hollows.some((h: any) => h.id === id)) { D.mine.delete(id); D.kills++ }
         C.hollows = C.hollows.filter((h: any) => D.mine.has(h.id))   // strays off: only the spawned three
         if (D.mine.size < 3) { const n = C.hollows.length; A.spawn(D.mine.size * 2 - 2, -9, 'shambler'); if (C.hollows.length > n) { const h = C.hollows[C.hollows.length - 1]; h.state = 'chase'; D.mine.add(h.id) } }
@@ -101,6 +101,14 @@ try {
   ok(d.nothing > 0, `2. 'nothing' was an answer (${d.nothing} times; helps ${f.seen.hit + f.seen.mend + f.seen.slow})`)
   ok(d.over === 0, `2. spirits' damage never past ${f.dials.share} of the keeper's (worst ${d.worst.toFixed(3)})`)
   ok(d.windups > 0 && d.badWind === 0, `2. every Hollow wind-up faced the keeper (${d.windups} seen, ${d.badWind} not)`)
+  // 2c. the keeper low (held at 35): a MEND comes (up to 3 fights: each is her choice)
+  for (let n = 0; n < 3; n++) { await p.evaluate(() => { const w = (window as any).__m127; w.mode = 'fight'; w.low = true })
+    for (let i = 0; i < 25; i++) { await sleep(1000); if ((await F()).seen.mend > 0) break }
+    if ((await F()).seen.mend > 0) break
+    await p.evaluate(() => { (window as any).__m127.mode = 'quiet' }); await p.waitForFunction(() => !(window as any).__spiritFight().on, { timeout: 60000 }) }
+  { const g = await F(); ok(g.seen.mend > 0, `2c. the keeper low: mended ${g.seen.mend} (slowed the crowd ${g.seen.slow})`) }
+  await p.evaluate(() => { (window as any).__m127.low = false })
+  const step1 = (await D()).maxStep
   // 2b. the tether: mid-fight the keeper is set down 14 m off: nobody acts until she is back
   const tb = await p.evaluate(async () => { const w = window as any, A = w.__ather; w.__m127.mode = 'fight'
     for (let i = 0; i < 100 && !w.__spiritFight().on; i++) await new Promise(r => setTimeout(r, 100))
@@ -110,6 +118,7 @@ try {
       if (back < 0 && i > 5 && f.spirits.every((s: any) => Math.hypot(s.x - k.cx, s.z - k.cz) < 6)) back = i }
     return { returns: w.__spiritFight().seen.returns - r0, bad, back, far } })
   ok(tb.far > 10 && tb.returns >= 1 && tb.bad === 0 && tb.back > 0, `2b. past the tether they only come back (furthest ${tb.far.toFixed(1)} m, ${tb.returns} came back, ${tb.bad} fight spots out there, all within 6 m after ~${(tb.back * 0.06).toFixed(1)} s)`)
+  await p.evaluate(() => { (window as any).__m127.maxStep = 0 })   // the set-down's own catch-up run is not a hand-over
   // 4. the fight over: formation
   await p.evaluate(() => { (window as any).__m127.mode = 'quiet' })
   const over = await p.waitForFunction(() => !(window as any).__spiritFight().on, { timeout: 60000 }).then(() => true).catch(() => false)
@@ -117,7 +126,7 @@ try {
   let gap: number[] = []
   for (let i = 0; i < 30; i++) { await sleep(500); gap = await p.evaluate(() => { const w = window as any, fm = w.__formation; return w.__spiritFight().spirits.map((s: any) => Math.hypot(s.x - fm.slots[s.id].x, s.z - fm.slots[s.id].z)) }) as number[]; if (gap.length === 3 && gap.every(g => g < 0.8)) break }
   const e = await F(); ok(Object.keys(e.slots).length === 0 && gap.length === 3 && gap.every(g => g < 0.8), `4. each back at her formation slot (${gap.map(g => g.toFixed(2)).join(', ')} m off)`)
-  const z = await D(); ok(z.maxStep < 2.5, `3. no jump on a hand-over (largest move between two samples ${z.maxStep.toFixed(2)} m)`)
+  const z = await D(); ok(Math.max(step1, z.maxStep) < 2.5, `3. no jump on a hand-over (largest move between two samples ${step1.toFixed(2)} m into / in the fights, ${z.maxStep.toFixed(2)} m back to formation)`)
   try { await p.screenshot({ path: `${out}/after.png` }) } catch { /* slow */ }
   // 5. one more kill, beside a seeded spirit HIT's path: exactly one xp per kill
   const xp = () => p.evaluate(() => { const s = JSON.parse(localStorage.getItem('ather.spiritStats.v1') ?? '{}'); return ['pa', 'pb', 'pc'].map(i => [s[i]?.xp ?? 0, s[i]?.grown ?? 0]) }) as Promise<number[][]>
