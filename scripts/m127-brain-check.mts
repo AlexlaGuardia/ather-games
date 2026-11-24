@@ -10,6 +10,7 @@
 //  PLAYER 6 not the owner: no brain, no spirit in the Wilds, a Hollow nobody shoots loses nothing.   7 0 page errors.
 //   npx tsx scripts/m127-brain-check.mts [--url https://ather.games] [--out dir]        (OWNER_KEY from env or .env)
 import puppeteer from 'puppeteer-core'
+import { expNeed } from '../src/app/shimmer/open/ather/spirit-growth'
 import { existsSync, readFileSync, mkdirSync } from 'fs'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games').replace(/\/$/, ''), out = flag('--out', '/tmp/m127-brain'); mkdirSync(out, { recursive: true })
@@ -59,11 +60,12 @@ try {
     const prev: Record<string, any> = {}, st: Record<number, string> = {}; let shotAt = 0, tgt = -1
     setInterval(() => {
       const C = A.combat(), F = W.__spiritFight(), eye = A.camAim(), k = { x: eye.cx, z: eye.cz }; D.samples++
-      if (D.mode === 'quiet') { C.hollows.length = 0; C.spits.length = 0; C.packs = {} }
+      if (D.mode === 'quiet') { D.mine.clear(); C.hollows.length = 0; C.spits.length = 0; C.packs = {} }
       else {
         C.keeper.hp = C.keeper.maxHp
-        for (const id of D.mine) if (!C.hollows.some((h: any) => h.id === id)) D.mine.delete(id)
-        if (C.hollows.length < 3 && D.mine.size < 3) { const n = C.hollows.length; A.spawn(D.mine.size * 2 - 2, -9, 'shambler'); if (C.hollows.length > n) { const h = C.hollows[C.hollows.length - 1]; h.state = 'chase'; D.mine.add(h.id) } }
+        for (const id of D.mine) if (!C.hollows.some((h: any) => h.id === id)) { D.mine.delete(id); D.kills++ }
+        C.hollows = C.hollows.filter((h: any) => D.mine.has(h.id))   // strays off: only the spawned three
+        if (D.mine.size < 3) { const n = C.hollows.length; A.spawn(D.mine.size * 2 - 2, -9, 'shambler'); if (C.hollows.length > n) { const h = C.hollows[C.hollows.length - 1]; h.state = 'chase'; D.mine.add(h.id) } }
         let t = C.hollows.find((h: any) => h.id === tgt && h.hp > 0); if (!t) { t = C.hollows.filter((h: any) => D.mine.has(h.id)).sort((a: any, b: any) => Math.hypot(a.x - k.x, a.z - k.z) - Math.hypot(b.x - k.x, b.z - k.z))[0]; tgt = t ? t.id : -1 }
         if (t && performance.now() - shotAt > 900) { shotAt = performance.now(); D.shots++; const dx = t.x - k.x, dz = t.z - k.z, d = Math.hypot(dx, dz) || 1; C.rounds.push({ x: t.x - dx / d * 0.5, y: t.y + 0.9, z: t.z - dz / d * 0.5, vx: dx / d * 12, vy: 0, vz: dz / d * 12, life: 0.4, dmg: 5, crit: 5 }) }
       }
@@ -99,6 +101,15 @@ try {
   ok(d.nothing > 0, `2. 'nothing' was an answer (${d.nothing} times; helps ${f.seen.hit + f.seen.mend + f.seen.slow})`)
   ok(d.over === 0, `2. spirits' damage never past ${f.dials.share} of the keeper's (worst ${d.worst.toFixed(3)})`)
   ok(d.windups > 0 && d.badWind === 0, `2. every Hollow wind-up faced the keeper (${d.windups} seen, ${d.badWind} not)`)
+  // 2b. the tether: mid-fight the keeper is set down 14 m off: nobody acts until she is back
+  const tb = await p.evaluate(async () => { const w = window as any, A = w.__ather; w.__m127.mode = 'fight'
+    for (let i = 0; i < 100 && !w.__spiritFight().on; i++) await new Promise(r => setTimeout(r, 100))
+    const e = A.camAim(), r0 = w.__spiritFight().seen.returns; A.tp(e.cx + 14, e.cz, 0); let bad = 0, back = -1, far = 0
+    for (let i = 0; i < 200; i++) { await new Promise(r => setTimeout(r, 60)); const f = w.__spiritFight(), k = A.camAim()
+      for (const s of f.spirits) { const d = Math.hypot(s.x - k.cx, s.z - k.cz); far = Math.max(far, d); if (d > 10.5 && f.slots[s.id]) bad++ }
+      if (back < 0 && i > 5 && f.spirits.every((s: any) => Math.hypot(s.x - k.cx, s.z - k.cz) < 6)) back = i }
+    return { returns: w.__spiritFight().seen.returns - r0, bad, back, far } })
+  ok(tb.far > 10 && tb.returns >= 1 && tb.bad === 0 && tb.back > 0, `2b. past the tether they only come back (furthest ${tb.far.toFixed(1)} m, ${tb.returns} came back, ${tb.bad} fight spots out there, all within 6 m after ~${(tb.back * 0.06).toFixed(1)} s)`)
   // 4. the fight over: formation
   await p.evaluate(() => { (window as any).__m127.mode = 'quiet' })
   const over = await p.waitForFunction(() => !(window as any).__spiritFight().on, { timeout: 60000 }).then(() => true).catch(() => false)
@@ -111,12 +122,14 @@ try {
   // 5. one more kill, beside a seeded spirit HIT's path: exactly one xp per kill
   const xp = () => p.evaluate(() => { const s = JSON.parse(localStorage.getItem('ather.spiritStats.v1') ?? '{}'); return ['pa', 'pb', 'pc'].map(i => [s[i]?.xp ?? 0, s[i]?.grown ?? 0]) }) as Promise<number[][]>
   const a = await xp(), same = a.every(v => v[0] === a[0][0] && v[1] === a[0][1])
-  ok(a[0][0] + a[0][1] > 0 && same, `5. kills in the fights grew all three alike (xp, grown ${JSON.stringify(a)})`)
+  const total = (v: number[]) => { let t = v[0]; for (let n = 0; n < v[1]; n++) t += expNeed(n); return t }, kills = (await D()).kills
+  ok(kills > 0 && same && total(a[0]) === kills, `5. each kill paid each of the three once (${kills} kills, total ${total(a[0])}; xp, grown ${JSON.stringify(a)})`)
   await p.close()
   // 6. NOT the owner
   const q = await open(false); await sleep(3000)
   ok(await q.evaluate(() => !(window as any).__spiritFight), '6. not the owner: no brain')
-  ok(await q.evaluate(() => !((window as any).__formation?.members ?? []).some((m: any) => m.kind === 'spirit') && ((window as any).__spiritModel?.mounted ?? 0) === 0), '6. no spirit in the Wilds')
+  // (the __formation probe is not read here: with no follower to tick it, it keeps the plot's last frame)
+  const m6 = await q.evaluate(() => (window as any).__spiritModel?.mounted ?? 0); ok(m6 === 0, `6. no spirit drawn in the Wilds (${m6} mounted)`)
   const hp = await q.evaluate(async () => { const A = (window as any).__ather, C = A.combat(); C.hollows.length = 0; A.spawn(0, -8, 'shambler'); const h = C.hollows[0], id = h.id, h0 = h.hp; let lost = 0
     for (let i = 0; i < 100; i++) { C.keeper.hp = C.keeper.maxHp; await new Promise(r => setTimeout(r, 100)); const g = C.hollows.find((x: any) => x.id === id); if (!g || g.hp < h0 || g.fx?.slowed) lost++ } return { h0, lost } })
   ok(hp.lost === 0, `6. 10 s with a Hollow nobody shoots: it loses nothing, is never slowed (${JSON.stringify(hp)})`)
