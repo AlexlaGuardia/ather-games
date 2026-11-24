@@ -61,7 +61,7 @@ try {
     ok(!!a && a.emissive === 0 && !a.emissiveMap, '   no emissive')
     ok(!!a && !!b && a.geo === b.geo, '   two floaters share one geometry'); console.log(`   same material too: ${a?.mat === b?.mat}`)
     ok(!!a && Math.max(...[1, 3, 5].map(k => parseInt(a.colour.slice(k, k + 2), 16))) - Math.min(...[1, 3, 5].map(k => parseInt(a.colour.slice(k, k + 2), 16))) <= 4, `   the goop grey, no hue (${a?.colour})`) }
-  // ── 2 ── each round crosses the point in one step (fired along the body's own side / front, or straight down), so its drift cannot move it off
+  // ── 2 ── each round crosses the point in one step (fired along the body's own side / front, or straight UP: a round that ends its step underground is stopped before it is tested), so its drift cannot move it off
   const pose = (tell: number) => { const m = flitMats(); poseFlit({ t: 0.4, zip: 0, tell, bank: 0, kick: 0, knock: 0 }, m); return m }
   const on = (m: THREE.Matrix4, k = 0) => { const v = new THREE.Vector3().setFromMatrixPosition(m).addScaledVector(new THREE.Vector3().setFromMatrixColumn(m, 0), k); return [v.x, v.y, v.z] as [number, number, number] }
   // q = the point, body local (+z = its facing); d = the round's direction, body local
@@ -70,11 +70,11 @@ try {
     await C(`C.hollows.length = 0; C.rounds.length = 0; C.spits.length = 0; const h = ${body(hx, hz, s.y + 2.2, tell ? 'charge' : 'recover', tell ? 0.2 : 99)}; h.shots = 3; C.hollows.push(h); window.__fl = h
       const k = () => { if (window.__fl !== h) return; ${tell ? "h.state = 'charge'; h.t = 0.2" : "h.state = 'recover'; h.t = 99"}; requestAnimationFrame(k) }; k()`); await frames(8)
     await C(`const h = window.__fl, c = Math.cos(h.yaw), n = Math.sin(h.yaw), W = v => [v[0] * c + v[2] * n, v[1], -v[0] * n + v[2] * c], q = W(${JSON.stringify(q)}), d = W(${JSON.stringify(d)})
-      C.rounds.push({ x: h.x + q[0] - d[0] * 1.2, y: h.y + q[1] - d[1] * 1.2, z: h.z + q[2] - d[2] * 1.2, vx: d[0] * 150, vy: d[1] * 150, vz: d[2] * 150, life: 0.03, dmg: 5, crit: 5 })`)
+      C.rounds.push({ x: h.x + q[0] - d[0] * 1.2, y: h.y + q[1] - d[1] * 1.2, z: h.z + q[2] - d[2] * 1.2, vx: d[0] * 120, vy: d[1] * 120, vz: d[2] * 120, life: 0.06, dmg: 5, crit: 5 })`)
     await frames(6); const r = await C('const r = window.__fl.hp < 9999; window.__fl = null; return r') as boolean
     await C('C.hollows.length = 0'); return r
   }
-  { const H = pose(0), T = pose(1), X: [number, number, number] = [1, 0, 0], D: [number, number, number] = [0, -1, 0], tail = on(H[FLIT.abd + FLIT.abdN - 1])
+  { const H = pose(0), T = pose(1), X: [number, number, number] = [1, 0, 0], D: [number, number, number] = [0, 1, 0], tail = on(H[FLIT.abd + FLIT.abdN - 1])
     const wing = on(H[FLIT.wings + 1], 0.8), wingL = on(H[FLIT.wings], 0.8), up = on(T[FLIT.wings + 1], 0.8), f = (a: number[]) => a.map(v => v.toFixed(2)).join(' ')
     ok((await shot([0, 0.42, 0], X)) && (await shot([0, -0.42, 0], X)), '2. the core: 0.42 m off its middle hits')
     ok(await shot(wing, D), `   a wing tip hits (${f(wing)})`); ok(await shot(wingL, D), `   the other wing tip hits (${f(wingL)})`)
