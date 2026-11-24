@@ -94,7 +94,7 @@ try {
   const before9 = await beds(); await placeAt(-146, 106)
   const refusal = await poll(async () => p.evaluate(() => document.body.innerText.includes('8 spirit beds already stand in this garden.')), 4000)
   ok((await beds()) === before9 && (await bagN('spirit_planter')) === 1, `2. the 9th bed is refused (${await beds()} stand, bag ${await bagN('spirit_planter')})`)
-  ok(refusal, '2. the refusal line shows: '8 spirit beds already stand in this garden.'')
+  ok(refusal, "2. the refusal line shows: '8 spirit beds already stand in this garden.'")
   await shot('m124-2-ninth')
   // put the held bed away (from the hand there is no Cancel): tap its slot again, else another slot
   for (const s of [1, 1, 3, 4]) { if (!(await centre('[data-placing]'))) break; await tap(`[data-hud="hotbar"] button[aria-label="slot ${s}"]`); await sleep(500) }
