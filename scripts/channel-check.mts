@@ -33,7 +33,7 @@ await sleep(9000)
 // ⚠ headless renders a frame only when asked (a screenshot forces one): the aim is computed IN the frame loop, so read it
 // after a forced frame or it is the PREVIOUS spot's answer (the first runs read every aim one view late, 11-15)
 const frame = async () => { try { await p.screenshot({ path: `${out}/_frame.png` }) } catch { /* slow frame */ } }
-const aimFrom = async (t: { x: number; z: number }, d: number) => { await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), t.x + d, t.z); await sleep(3000); await aimAt(p, t.x, t.z, 1.0); await frame(); await frame() }
+const aimFrom = async (t: { x: number; z: number }, d: number) => { await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), t.x + d, t.z); await sleep(3000); for (let i = 0; i < (d < 10 ? 25 : 2); i++) { await aimAt(p, t.x, t.z, 1.0); await frame(); if (await p.evaluate(() => (window as any).__ather.aim())) break; await sleep(500) } }
 await p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
 // FROM A DISTANCE (Alex 11-15: "click a tree from about 10 blocks out"): 6 m off, aim, prune (the click's own path)
 const chan = () => p.evaluate(() => (window as any).__ather.chan?.() ?? null) as Promise<{ id: string; done: number; of: number } | null>
