@@ -23,10 +23,16 @@ await new Promise(r => setTimeout(r, 2000))
 //   gate, the same route m70-settlement-check walks. Born -> creator -> stand at the gate -> E -> the Wilds.
 const sleep0 = (ms: number) => new Promise(r => setTimeout(r, ms))
 for (let t = 0; t < 90000 && !(await p.evaluate(() => (window as any).__ather.zone() === 'glade' || !!document.querySelector('[data-panel="birth"]') || !!document.querySelector('[data-creator-done]'))); t += 500) await sleep0(500)
-if (await p.evaluate(() => !!document.querySelector('[data-panel="birth"]'))) {
-  await p.evaluate(() => { const b = [...document.querySelectorAll<HTMLElement>('button, [role="button"], div, span')].filter(e => /^BE BORN/i.test((e.innerText ?? '').trim()) && (e.innerText ?? '').trim().length < 40).sort((x, y) => x.getBoundingClientRect().width * x.getBoundingClientRect().height - y.getBoundingClientRect().width * y.getBoundingClientRect().height)[0]; b?.click() })
+console.log('open: zone', await p.evaluate(() => (window as any).__ather.zone()), 'birth', await p.evaluate(() => !!document.querySelector('[data-panel="birth"]')))
+if (await p.evaluate(() => !!document.querySelector('[data-panel="birth"]'))) {   // the real tap on BE BORN (m70-settlement-check's tapText)
+  const box = await p.evaluate(() => { let best: DOMRect | null = null, area = Infinity
+    for (const e of document.querySelectorAll<HTMLElement>('button, a, [role="button"], div, span')) { const t = (e.innerText ?? '').trim(); if (!t || !/^BE BORN/i.test(t) || t.length > 40) continue
+      const r = e.getBoundingClientRect(); if (r.width < 4 || r.height < 4) continue; if (r.width * r.height < area) { area = r.width * r.height; best = r } }
+    return best && { x: best.x + best.width / 2, y: best.y + best.height / 2 } })
+  if (box) await p.mouse.click(box.x, box.y)
 }
 for (let t = 0; t < 45000 && !(await p.evaluate(() => (window as any).__ather.zone() === 'glade')); t += 500) { await p.evaluate(() => document.querySelector<HTMLElement>('[data-creator-done]')?.click()); await sleep0(500) }
+console.log('born: zone', await p.evaluate(() => (window as any).__ather.zone()))
 await p.waitForFunction(() => (window as any).__ather.zone() === 'glade', { timeout: 60000 })
 { const gate = { x: -212, z: 212 }, sx = gate.x + 2.4, sz = gate.z - 0.4
   await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), sx, sz, Math.atan2(-(gate.x - sx), -(gate.z - sz)))
