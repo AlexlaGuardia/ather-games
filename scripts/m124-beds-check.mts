@@ -9,11 +9,19 @@
 //  4. Feature 'pa#2': saved; the Manalotl is drawn near her bed and the Vulnyx is not.
 //  5. The grimoire roster lists all 4 spirits grouped by bed (pa: pa, pa#2, pa#3; pb: pb), featured marked.
 //  6. Ask along 'pa' (the unfeatured Vulnyx): she joins the party and is drawn again.
+//  s2: the words on screen are the SIGNED ones (lark batch 11-24c, canon-tested in lines-batch-24c.test.ts), old placeholders gone.
+//  8. OWNER, desktop 1280x900 (Creative mode is a desktop editor): a building zone (the SITE path, canPlacePiece with `site`) takes 8
+//     Spirit Beds by real clicks; the 9th is refused with the same signed line; a bench still sets; a standing bed still turns.
+//     The editor's POSTs never leave the page (fetch stub), so the Glade draft is not written; read back equal at the end.
 //  7. Reload: 'pa#2' is still in the save (same pot), still featured, still listed. 0 page errors.
 //   npx tsx scripts/m124-beds-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
-import { mkdirSync } from 'fs'
+import { mkdirSync, readFileSync, existsSync } from 'fs'
 import { aimAt } from './lib/aim.mts'
+import { GLADE_SIZE } from '../src/app/shimmer/world/glade-builder'
+const KEY = process.env.OWNER_KEY || (existsSync('.env') ? /^OWNER_KEY=(.+)$/m.exec(readFileSync('.env', 'utf8'))?.[1]?.trim() : undefined)
+/** the signed MAIN lines, spelled out (not read from the build, so a drift in the build fails here) */
+const CAPPED = '8 spirit beds already stand in this garden.', NEAR = 'Chose to stay near this bed.', ROAM = 'Roaming the garden.', ASK = 'Ask to stay'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games').replace(/\/$/, ''), out = flag('--out', '/tmp/m124-beds')
 mkdirSync(out, { recursive: true })
@@ -84,9 +92,9 @@ try {
   ok(await placeAt(-141, 110), '2. an 8th bed placed by touch')
   ok((await beds()) === 8 && (await bagN('spirit_planter')) === 1, `2. 8 beds stand, 1 left in the bag (${await beds()})`)
   const before9 = await beds(); await placeAt(-146, 106)
-  const refusal = await poll(async () => p.evaluate(() => document.body.innerText.includes('8 spirit beds already stand')), 4000)
+  const refusal = await poll(async () => p.evaluate(() => document.body.innerText.includes('8 spirit beds already stand in this garden.')), 4000)
   ok((await beds()) === before9 && (await bagN('spirit_planter')) === 1, `2. the 9th bed is refused (${await beds()} stand, bag ${await bagN('spirit_planter')})`)
-  ok(refusal, '2. the refusal line shows (8 spirit beds already stand...)')
+  ok(refusal, '2. the refusal line shows: '8 spirit beds already stand in this garden.'')
   await shot('m124-2-ninth')
   // put the held bed away (from the hand there is no Cancel): tap its slot again, else another slot
   for (const s of [1, 1, 3, 4]) { if (!(await centre('[data-placing]'))) break; await tap(`[data-hud="hotbar"] button[aria-label="slot ${s}"]`); await sleep(500) }
@@ -98,11 +106,19 @@ try {
   ok(title.includes('Spirit Bed'), '3. the panel is titled Spirit Bed')
   ok(await poll(async () => p.evaluate(() => document.querySelector('[data-bed-record]')?.getAttribute('data-bed-record') === '3'), 8000), '3. the overdue Owl bloomed in bed pa: its record holds 3 (pa, pa#2, pa#3)')
   ok((await book())?.pots?.['pa#3']?.bloomed === true, '3. pa#3 saved bloomed')
+  const words = () => p.evaluate(() => [...document.querySelectorAll('[data-planter="bloomed"]')].map(e => ({ id: e.getAttribute('data-spirit'), t: (e as HTMLElement).textContent ?? '', b: e.querySelector('[data-act="feature-spirit"] button')?.textContent ?? null })))
+  const heading = await p.evaluate(() => document.querySelector('[data-bed-record] span')?.textContent)
+  let ws = await words(); const wOf = (id: string) => ws.find(x => x.id === id)
+  ok(heading === 'Bloomed here', `3. the record's heading is 'Bloomed here' (${heading})`)
+  ok(!!wOf('pa')?.t.includes(NEAR) && wOf('pa')?.b === null, `3. the featured one reads '${NEAR}' (${wOf('pa')?.t})`)
+  ok(!!wOf('pa#2')?.t.includes(ROAM) && wOf('pa#2')?.b === ASK, `3. an unfeatured one reads '${ROAM}' with the button '${ASK}' (${wOf('pa#2')?.t} / ${wOf('pa#2')?.b})`)
+  ok(!/Featured\.|Out in the garden|>Feature</.test(ws.map(x => `${x.t}>${x.b}<`).join()), '3. no placeholder words left on the panel')
   await tap('[data-act="plant-seed"][data-seed="mana_seed_fox"]')
   ok(await poll(async () => (await book())?.pots?.['pa#4']?.seed === 'mana_seed_fox', 5000) && (await bagN('mana_seed_fox')) === 0, '3. the bed took the Mana Seed (saved at pa#4, bag -1)')
   // 4. feature pa#2
-  ok(await tap('[data-planter="bloomed"][data-spirit="pa#2"] [data-act="feature-spirit"] button'), '4. tapped Feature on the Manalotl (pa#2)')
+  ok(await tap('[data-planter="bloomed"][data-spirit="pa#2"] [data-act="feature-spirit"] button'), '4. tapped Ask to stay on the Manalotl (pa#2)')
   ok(await poll(async () => (await book())?.featured?.pa === 'pa#2', 5000), `4. saved: bed pa features pa#2 (${JSON.stringify((await book())?.featured)})`)
+  ws = await words(); ok(!!wOf('pa#2')?.t.includes(NEAR) && !!wOf('pa')?.t.includes(ROAM) && wOf('pa')?.b === ASK, `4. the lines flip: pa#2 '${NEAR}', pa '${ROAM}' (${wOf('pa#2')?.t} / ${wOf('pa')?.t})`)
   await shot('m124-4-featured'); await p.keyboard.press('Escape'); await sleep(500)
   ok(await poll(async () => { const d = await drawn(); return d.axolotl === 1 && !d.fox }, 20000), `4. the Manalotl is drawn, the Vulnyx is not (${JSON.stringify(await drawn())})`)
   const ax = await p.evaluate(() => (window as any).__spiritModel?.trots?.axolotl ?? null) as { x: number; z: number; home: { x: number; z: number } } | null
@@ -117,6 +133,8 @@ try {
   let r = await roster(); await shot('m124-5-roster')
   ok(r.beds.join() === 'pa,pb', `5. grouped by bed (${r.beds.join()})`)
   ok(r.rows.join() === 'pa:pa,pa:pa#2*,pa:pa#3,pb:pb*', `5. all 4 spirits listed by bed, featured marked (${r.rows.join()})`)
+  const heads = await p.evaluate(() => [...document.querySelectorAll('[data-roster-bed]')].map(e => e.textContent))
+  ok(heads.join() === 'Bed 1,Bed 2', `5. the headers read Bed 1, Bed 2 (${heads.join()})`)
   // 6. ask along the unfeatured Vulnyx
   await click('[data-roster-spirit="pa"] [data-act="ask"] button')
   r = await roster(); ok(r.inP.includes('pa'), `6. ask along: pa is in the party (${r.inP.join()})`)
@@ -129,8 +147,46 @@ try {
   ok(await poll(async () => { const d = await drawn(); return d.axolotl === 1 && d.fox === 1 }, 30000), `7. reload: Manalotl (featured) + Vulnyx (party) drawn (${JSON.stringify(await drawn())})`)
   ok(await openPanel('[data-roster]', PED.x, PED.z, 0.95) && (await roster()).rows.includes('pa:pa#2*'), '7. reload: the roster still lists pa#2 at bed pa')
   await shot('m124-7-reload')
+  // 8. the site path (owner, Creative mode, desktop)
+  ok(!!KEY, '8. an OWNER_KEY for the owner step')
+  if (KEY) {
+    const o = await (await br.createBrowserContext()).newPage(); await o.setViewport({ width: 1280, height: 900 }); o.on('pageerror', e => errs.push('site: ' + String(e).slice(0, 200))); o.on('dialog', d => d.accept())
+    await o.evaluateOnNewDocument('window.__name = (f) => f')
+    await o.goto(`${url}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 120000 }).catch(() => {})
+    await o.goto(`${url}/api/owner`, { waitUntil: 'load', timeout: 60000 })
+    const snap = () => o.evaluate(async () => { const r = await fetch('/shimmer/save-builder?map=glade', { cache: 'no-store' }); return r.ok ? r.text() : '' })
+    const before = await snap(); ok(!!before, '8. owner: the Glade builder answers')
+    await o.evaluateOnNewDocument((body: string) => { const f = window.fetch.bind(window); window.fetch = (u, i) => (String(u).includes('save-builder') && (i?.method ?? 'GET').toUpperCase() === 'POST') ? Promise.resolve(new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } })) : f(u, i) }, before)
+    await o.goto(`${url}/shimmer/dev?mode=creative&map=glade`, { waitUntil: 'load', timeout: 240000 })
+    await o.waitForFunction('window.__terrain?.ready === true && window.__terrain?.map === "glade"', { timeout: 240000, polling: 500 })
+    const zones = () => o.evaluate('window.__terrain.zones()') as Promise<{ id: string; x0: number; x1: number; build: { id: string; item: string; q: number }[] }[]>
+    const had = new Set((await zones()).map(z => z.id))
+    await o.keyboard.press('9')
+    const px = async (x: number, z: number) => { const c = await o.$eval('[data-testid="terrain-canvas"]', el => { const b = el.getBoundingClientRect(); return { l: b.left, t: b.top, w: b.width, h: b.height } }); return { x: c.l + (x + GLADE_SIZE / 2) / GLADE_SIZE * c.w, y: c.t + (z + GLADE_SIZE / 2) / GLADE_SIZE * c.h } }
+    const a1 = await px(100, -114), a2 = await px(124, -90)
+    await o.mouse.move(a1.x, a1.y); await o.mouse.down(); for (let i = 1; i <= 8; i++) { await o.mouse.move(a1.x + (a2.x - a1.x) * i / 8, a1.y + (a2.y - a1.y) * i / 8); await sleep(40) } await o.mouse.up(); await sleep(500)
+    const mine = async () => (await zones()).find(z => !had.has(z.id))
+    ok(!!(await mine()), '8. a real drag made a building zone')
+    await o.click('[data-testid="zone-kind-other"]'); await sleep(200); await o.click('[data-testid="zone-build-open"]'); await sleep(400)
+    const W = 24, at = async (lx: number, lz: number) => { const b = await o.$eval('[data-testid="zb-plan"]', el => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height } }); const x = b.l + (lx + 1) / (W + 2) * b.w, y = b.t + (lz + 1) / (W + 2) * b.h; await o.mouse.move(x - 3, y - 3); await o.mouse.move(x, y); await sleep(80); await o.mouse.click(x, y); await sleep(250) }
+    const n = async () => (await mine())?.build.filter(b => b.item === 'spirit_planter').length ?? -1
+    const why = () => o.$eval('[data-testid="zb-why"]', e => e.textContent ?? '')
+    await o.click('[data-testid="zb-part-spirit_planter"]')
+    for (let i = 0; i < 8; i++) await at(3 + (i % 4) * 5, 4 + Math.floor(i / 4) * 5)
+    ok(await n() === 8, `8. 8 Spirit Beds set on the site (${await n()})`)
+    await at(12, 18)
+    ok(await n() === 8 && (await why()) === CAPPED, `8. the 9th on the site is refused, same line (${await n()} stand: ${await why()})`)
+    try { await o.screenshot({ path: `${out}/m124-8-site.png` }) } catch { /* slow frame */ }
+    await o.click('[data-testid="zb-part-goldwood_bench"]'); await at(12, 18)
+    ok(!!(await mine())?.build.some(b => b.item === 'goldwood_bench'), '8. a bench still sets on that site')
+    await o.keyboard.press('Escape'); await sleep(200); await at(3, 4); const q0 = (await mine())!.build[0].q
+    await o.click('[data-testid="zb-turn"]'); await sleep(250)
+    ok((await mine())!.build[0].q !== q0 && await n() === 8, '8. a standing bed still turns with 8 standing')
+    await o.goto(`${url}/api/owner`, { waitUntil: 'load', timeout: 60000 })
+    ok(await snap() === before, '8. the Glade draft was never written')
+  }
   ok(errs.length === 0, `0 page errors (${errs.join(' | ')})`)
 } catch (e) { ok(false, `threw: ${String(e).slice(0, 300)}`) }
 await br.close()
-console.log(fails ? `FAIL (${fails})` : 'PASS: M124 s1 spirit beds at 390x844 (non-owner): 8 beds, a 9th refused; a bed past its old lock blooms + takes a seed; feature draws one, the unfeatured is out of sight; roster by bed; ask along draws an unfeatured one; an M122 #2 spirit kept over reload')
+console.log(fails ? `FAIL (${fails})` : 'PASS: M124 s1+s2 spirit beds at 390x844 (non-owner): 8 beds, a 9th refused; a bed past its old lock blooms + takes a seed; feature draws one, the unfeatured is out of sight; roster by bed; ask along draws an unfeatured one; an M122 #2 spirit kept over reload')
 process.exit(fails ? 1 : 0)

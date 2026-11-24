@@ -17,6 +17,7 @@ import { squareAt, sqId, GATE, GREG_PLOT_ANCHOR as GREG, THRESHOLD, PATH_START, 
 import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, baitYield, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
+import { BED_UI } from './planter-lines'
 import { FURNITURE, BEDS_MAX, PIECE_JOBS, MAX_PIECES, KEEPSTONES, keepstoneFor, ALC_LIVE, type Job } from './furniture'
 import { adoptWork, adoptOut, stockJobs, type Work, type Station } from './station-queue'
 import { adoptUpper, levelBase, type Level } from './plot-floors'
@@ -476,13 +477,14 @@ export const pieceBoxes = (w: Works): Box[] => w.pieces.filter(p => FURNITURE[p.
 /** M84 s2: a SITE other than the home plot (a Creative-mode building zone): `inside` replaces the held-ground check, and the
  *  plot's own fixtures (gate, Gregory, the table's keep-clear ring, the starter Keepstone) are not there. Every other rule holds. */
 export interface PieceSite { inside: (x: number, z: number) => boolean }
-export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: string, x: number, z: number, q: number, inv?: Inv, site?: PieceSite): PlaceVerdict {
+export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: string, x: number, z: number, q: number, inv?: Inv, site?: PieceSite, /** the piece already stands (a move or a turn): a garden over the bed cap may still rearrange its beds */ standing = false): PlaceVerdict {
   const f = FURNITURE[item]
   if (!f) return { ok: false, why: 'That is not furniture.' }
   if (!site && item === TABLE_ITEM && tableAt(works)) return { ok: false, why: 'Your planning table already stands.' }   // M96: one per keeper
   if (f.shaft) { x = cellMid(x); z = cellMid(z); q = Math.round(q); if (shaftBlocked(works, x, z)) return { ok: false, why: 'A wall stands in that cell on one of the floors.' } }   // M48: a shaft takes the whole cell, every level
-  // M124 s1 (RULED ce34508): at most BEDS_MAX spirit beds stand in a garden; a 9th is refused (TODO @lark: placeholder line)
-  if (!site && f.spirit === 'planter' && works.pieces.filter(p => FURNITURE[p.item]?.spirit === 'planter').length >= BEDS_MAX) return { ok: false, why: `${BEDS_MAX} spirit beds already stand in this garden.` }
+  // M124 (RULED ce34508): at most BEDS_MAX spirit beds stand in a garden, set by hand or on a SITE (s2); a 9th NEW one is
+  // refused (signed line). Only placing asks: an old save over the cap loads whole.
+  if (!standing && f.spirit === 'planter' && works.pieces.filter(p => FURNITURE[p.item]?.spirit === 'planter').length >= BEDS_MAX) return { ok: false, why: BED_UI.capped }
   if (works.pieces.length >= MAX_PIECES) return { ok: false, why: `${MAX_PIECES} pieces already stand. Pick one up to make room.` }
   const k = pieceRect(item, x, z, q)
   for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
@@ -539,7 +541,7 @@ export function turnPiece(works: Works, owned: ReadonlySet<string>, id: string):
   const p = works.pieces.find(x => x.id === id)
   if (!p) return null
   const rest = { ...works, pieces: works.pieces.filter(x => x.id !== id) }, q = normQ(p.q + 1)
-  if (!canPlacePiece(rest, owned, p.item, p.x, p.z, q).ok) return null
+  if (!canPlacePiece(rest, owned, p.item, p.x, p.z, q, undefined, undefined, true).ok) return null
   return { ...works, pieces: works.pieces.map(x => (x.id === id ? { ...x, q } : x)) }
 }
 

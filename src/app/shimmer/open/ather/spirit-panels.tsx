@@ -15,6 +15,7 @@ import { GAME_DAY_MS } from './nodes'
 import { loadBook, saveBook, see, seenCount, freshBook, type Book } from './grimoire-book'
 import { GRIMOIRE_SIZE } from './plot'
 import { SpiritRoster } from './spirit-roster'
+import { BED_UI } from './planter-lines'
 
 // ── the book store (one per keeper; ripens every pot whose time has come on every read) ───────────────────────────
 let book: Book | null = null
@@ -122,9 +123,9 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
   const when = span === whole ? (whole >= BLOOM_DAYS ? `at the end of day ${whole}` : `at the start of day ${whole + 1}`) : `midway through day ${whole + 1}`
   const nextTend = (gameDay(now) + 1) * GAME_DAY_MS - now
   return (
-    <HearthFrame title="Spirit Bed" maxWidth={420} onClose={onClose} fixed dataPanel="planter">
+    <HearthFrame title={BED_UI.title} maxWidth={420} onClose={onClose} fixed dataPanel="planter">
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
-        {!growing && full && <div data-planter="full" style={{ fontSize: 13, color: H.inkSoft }}>This bed's record is full.</div>}{/* TODO @lark: M124 placeholder */}
+        {!growing && full && <div data-planter="full" style={{ fontSize: 13, color: H.inkSoft }}>{BED_UI.full}</div>}
         {!growing && !full && (seeds.length
           ? <><div style={lab}>Plant a seed</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -148,14 +149,14 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
             {growing.v === 2 && tendedToday(growing, now) && <div style={{ fontSize: 12, color: H.inkSoft }}>Next tend in about {realIn(nextTend)}</div>}
           </div>
         )}
-        {home.length > 0 && <div data-bed-record={home.length} style={{ ...lab, display: 'flex', justifyContent: 'space-between' }}><span>Bloomed here</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{home.length} / {BED_RECORD_MAX}</span></div>}
+        {home.length > 0 && <div data-bed-record={home.length} style={{ ...lab, display: 'flex', justifyContent: 'space-between' }}><span>{BED_UI.record}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{home.length} / {BED_RECORD_MAX}</span></div>}
         {home.length > 0 && <div style={{ display: 'grid', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
           {home.map(k => { const sp = speciesOf(b.pots[k].seed), card = m ? m[nameOf(sp)] : null, on = k === feat, w = on ? 72 : 44
-            // TODO @lark (M124 placeholders): the featured / unfeatured lines and the 'Feature' verb (care-not-leash: an ask)
+            // the words are signed (batch 11-24c A): asking one to stay is an ask, never a set
             return <div key={k} data-planter="bloomed" data-spirit={k} data-species={sp} data-featured={on ? '1' : '0'} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               <Well size={w}>{card ? <img src={card.img} alt="" width={w - 12} height={w - 12} style={{ objectFit: 'contain' }} /> : null}</Well>
-              <div style={{ flex: 1 }}><div style={{ fontWeight: 700 }}>{nameOf(sp)}</div><div style={{ fontSize: 12.5, color: H.inkSoft }}>{on ? 'Featured. It stays near this bed.' : 'Out in the garden.'}</div></div>
-              {!on && <span data-act="feature-spirit"><HearthButton small onClick={() => doFeature(k)}>Feature</HearthButton></span>}
+              <div style={{ flex: 1 }}><div style={{ fontWeight: 700 }}>{nameOf(sp)}</div><div style={{ fontSize: 12.5, color: H.inkSoft }}>{on ? BED_UI.featured : BED_UI.roaming}</div></div>
+              {!on && <span data-act="feature-spirit"><HearthButton small onClick={() => doFeature(k)}>{BED_UI.ask}</HearthButton></span>}
             </div> })}
         </div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>

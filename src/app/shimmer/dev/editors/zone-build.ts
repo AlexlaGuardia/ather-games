@@ -28,7 +28,7 @@ export function canSet(z: Zone, item: string, x: number, y: number, q: number, s
   if (!ZONE_PARTS.includes(item)) return { ok: false, why: 'Not a building part.' }
   const rest = (z.build ?? []).filter(p => p.id !== skip)
   if (!skip && rest.length >= ZONE_PIECES_MAX) return { ok: false, why: `${ZONE_PIECES_MAX} parts already stand in this zone.` }
-  const v = canPlacePiece(worksOf(rest), NOBODY, item, x, y, q, undefined, zoneSite(z))
+  const v = canPlacePiece(worksOf(rest), NOBODY, item, x, y, q, undefined, zoneSite(z), !!skip)
   return v.ok ? { ok: true } : { ok: false, why: v.why }
 }
 const newId = (z: Zone, now: number) => { let id = `p${now.toString(36)}`; for (let n = 1; (z.build ?? []).some(p => p.id === id); n++) id = `p${now.toString(36)}-${n}`; return id }

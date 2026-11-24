@@ -151,7 +151,8 @@ export const ALC_LIVE = true   // FLIPPED 2026-11-21 (Alex via Magii: "turn alch
 export const PIECE_JOBS: readonly Job[] = FURNITURE_ORDER.filter(id => FURNITURE[id].recipe.length > 0 && (ALC_LIVE || !FURNITURE[id].alc)).map(id => ({ id, label: FURNITURE[id].name, in: FURNITURE[id].recipe, out: { id, n: 1 } }))
 /** How many pieces a plot holds (a keeper furnishes, not fills). */
 export const MAX_PIECES = 60
-/** M124 s1 (RULED athernyx ce34508): at most this many spirit beds (the spirit_planter item) stand in one garden */
+/** M124: at most this many spirit beds (the spirit_planter item) stand in one garden. ★ CANON, NOT A DIAL (Alex 11-24,
+ *  CANON_GAPS 'Spirit beds' point 5): 8 beds x 28 blooms = room for one of every form. Changing it needs Alex. */
 export const BEDS_MAX = 8
 
 // ── THE KEEPSTONE FAMILY (canon 5a20b8f, ather-rework WORKSHOP ROOMS (6)): the basic one sets a raw mana shard and is made

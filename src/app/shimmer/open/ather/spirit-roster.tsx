@@ -12,6 +12,7 @@ import { useBook } from './spirit-panels'
 import { useSpiritsDev } from './spirit-model'
 import { PARTY_MAX, askAlong, letRoam, partyIds, spiritCall, callHome, subscribeParty } from './spirit-party'
 import { followIds, liveSpirits, subscribeFollow } from './spirit-follow'
+import { BED_UI } from './planter-lines'
 import { PARTY_UI, PARTY_FULL_LINE, calledLine } from './party-spirit-lines'
 
 /** the signed words (batch 11-23b §A) live in party-spirit-lines.ts; re-exported for spirit-talk's E-on-her ask */
@@ -26,7 +27,7 @@ export function SpiritRoster({ onClose }: { onClose: () => void }) {
   const follow = useSyncExternalStore(subscribeFollow, followIds, () => EMPTY)
   if (!on) return null
   const all = Object.entries(book.pots).filter(([k, p]) => p.bloomed && !k.startsWith('carried:')).sort((a, b) => a[1].at - b[1].at || (a[0] < b[0] ? -1 : 1))
-  // M124 s1 (RULED ce34508): grouped by spirit bed (beds numbered by their first bloom; the 'Bed n' label is a placeholder, lark's to word)
+  // M124 s1 (RULED ce34508): grouped by spirit bed (beds numbered by their first bloom; the 'Bed n' label is signed, batch 11-24c A)
   const beds: string[] = []
   for (const [k] of all) { const h = homeOf(k); if (!beds.includes(h)) beds.push(h) }
   const rows = beds.flatMap(bed => [bed, ...all.filter(([k]) => homeOf(k) === bed)] as const)
@@ -41,7 +42,7 @@ export function SpiritRoster({ onClose }: { onClose: () => void }) {
       <div style={{ display: 'grid', gap: 4, maxHeight: 260, overflowY: 'auto' }}>
         {rows.map(r => {
           if (typeof r === 'string') { const n = beds.indexOf(r) + 1
-            return <div key={`bed:${r}`} data-roster-bed={r} style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: H.inkSoft, marginTop: n > 1 ? 4 : 0 }}>Bed {n}</div> }
+            return <div key={`bed:${r}`} data-roster-bed={r} style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: H.inkSoft, marginTop: n > 1 ? 4 : 0 }}>{BED_UI.group(n)}</div> }
           const [id, pot] = r, featured = featuredAt(book.pots, book.featured, homeOf(id)) === id
           const sp = speciesOf(pot.seed), name = sp ? SPECIES_NAMES[sp] : '?', inP = party.includes(id), withYou = follow.includes(id)
           return (

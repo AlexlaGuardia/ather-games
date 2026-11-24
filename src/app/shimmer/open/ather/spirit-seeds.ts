@@ -61,6 +61,7 @@ export const growingIn = (pots: Pots, pieceId: string): Pot | undefined => { con
 // bloomed + the RECORD of every spirit that bloomed there (`spiritsAt`, the same M122 keys: nobody is moved or renamed, so
 // old saves need no rewrite), capped at BED_RECORD_MAX. ONE featured spirit per bed stays near it, drawn; the rest live free
 // in the garden out of sight (the render cap is a camera fact). A garden holds furniture.ts BEDS_MAX beds.
+// ★ 28 IS CANON, NOT A DIAL (Alex 11-24, CANON_GAPS 'Spirit beds' point 5: 8 beds x 28 = one of every form). Changing it needs Alex.
 export const BED_RECORD_MAX = 28
 /** The featured spirit of bed `pieceId`: the keeper's pick while she still calls it home, else the first bloomed there. */
 export const featuredAt = (pots: Pots, featured: Readonly<Record<string, string>> | undefined, pieceId: string): string | null => {

@@ -4,7 +4,10 @@
 // MIGRATION: M122 saves keep their `<planter>#n` keys as they are (party / follow / fed / training key on them).
 import { plant, ripen, spiritsAt, featuredAt, withFeatured, shownAt, growingKey, homeOf, BED_RECORD_MAX, BLOOM_MS, type Pots } from './spirit-seeds'
 import { parseBook } from './grimoire-book'
-import { canPlacePiece, freshWorks } from './rooms'
+import { canPlacePiece, turnPiece, loadWorks, WORKS_KEY, freshWorks } from './rooms'
+import { BED_UI } from './planter-lines'
+import { setPart, movePart } from '../../dev/editors/zone-build'
+import { cleanZones, type Zone } from '../../world/builder-zones'
 import { FURNITURE, BEDS_MAX } from './furniture'
 import { STARTING_SQUARES } from './plot'
 import { newInv, give } from '../shared/inventory'
@@ -68,6 +71,27 @@ const NONE = new Set<string>()
   const v = canPlacePiece(w8, owned, 'spirit_planter', -100, 100, 0, inv)
   ok(!v.ok && /8 spirit beds/.test((v as { why?: string }).why ?? ''), `the 9th bed is refused (${(v as { why?: string }).why})`)
   ok(canPlacePiece(w8, owned, 'goldwood_stool', -100, 100, 0, give(newInv(12), 'goldwood_stool', 1).inv).ok, 'other furniture still sets beside 8 beds')
+}
+
+// (4) s2: a SITE (a Creative building zone) is bed-capped too, with the same line; a garden already over the cap loads whole
+{
+  const bed = (i: number) => ({ id: `b${i}`, item: 'spirit_planter', x: 2 + (i % 5) * 3, z: 2 + Math.floor(i / 5) * 3, q: 0 })
+  const Z = (n: number): Zone => ({ id: 'z1', x0: 0, z0: 0, x1: 24, z1: 24, h: 0, tag: null, prev: {}, build: Array.from({ length: n }, (_, i) => bed(i)) })
+  ok(setPart(Z(7), 'spirit_planter', 20, 20, 0).ok, 'site: the 8th bed sets')
+  const v = setPart(Z(8), 'spirit_planter', 20, 20, 0)
+  ok(!v.ok && v.why === BED_UI.capped, `site: the 9th bed is refused with the signed line (${v.ok ? 'set' : v.why})`)
+  ok(setPart(Z(8), 'goldwood_bench', 20, 20, 0).ok, 'site: other furniture still sets beside 8 beds')
+  ok(movePart(Z(10), 'b9', 20, 20, 0).ok, 'site: a build over the cap may still move a bed it has')
+  ok(cleanZones({ zones: [Z(10)] })[0]?.build?.length === 10, 'site: a saved build with 10 beds loads all 10')
+  const store: Record<string, string> = {}, pieces = Array.from({ length: 11 }, (_, i) => ({ id: `piece-o-${i}`, item: 'spirit_planter', x: -146 + i * 2.5, z: 106, q: 0, placedAt: i }))
+  const g = globalThis as unknown as { localStorage?: unknown; window?: unknown }, had = g.localStorage
+  g.localStorage = { getItem: (k: string) => store[k] ?? null, setItem: (k: string, x: string) => { store[k] = x }, removeItem: (k: string) => { delete store[k] } }
+  store[WORKS_KEY] = JSON.stringify({ v: 1, rooms: [], chests: [], pieces })
+  const w = loadWorks(); g.localStorage = had
+  ok(w.pieces.length === 11 && JSON.stringify(w.pieces.map(p => p.id)) === JSON.stringify(pieces.map(p => p.id)), `an old save with 11 beds loads all 11 (${w.pieces.length})`)
+  const owned = new Set<string>(STARTING_SQUARES), over = { ...freshWorks(), pieces: pieces.map((p, i) => ({ ...p, x: -140 + (i % 6) * 2.5, z: 106 + Math.floor(i / 6) * 3 })) }
+  ok(!canPlacePiece(over, owned, 'spirit_planter', -138, 116, 0).ok, 'over the cap: no new bed')
+  ok(!!turnPiece(over, owned, 'piece-o-0'), 'over the cap: a standing bed still turns')
 }
 
 console.log(`spirit-beds: ${pass}/${fail}`)

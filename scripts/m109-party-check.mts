@@ -1,11 +1,12 @@
-// ── M109 s3 THE PARTY OF 8 IN THE GRIMOIRE, OWNER-ONLY (2026-11-23, sprites-M109s3) ──────────────────────────────────────
+// ── M109 s3 THE PARTY OF 8 IN THE GRIMOIRE (2026-11-23, sprites-M109s3) ──────────────────────────────────────
 // SETUP (stated): ten bloomed spirits in the book (one per species; the Vulnyx and the Manalotl on placed planters, so they
 // are drawn and walk), a grimoire pedestal 6 m east of the Vulnyx, owner cookie + ?spirits=3d, 390x844 (SwiftShader).
 //  1. E at the pedestal: the grimoire's roster lists all ten bloomed spirits (every species once); party 0 / 8.
 //  2. Ask along, row by row: 8 join (party 8 / 8); the 9th is refused (the plain line on the HUD, party stays 8, she stays out).
 //  3. Let roam on one: party 7 / 8, she is out.  4. Reload: the same 7 are in the party (roster + localStorage).
 //  5. Call on the Vulnyx (keeper at the pedestal, she is > 3 m off): the panel closes, she walks to the keeper (within 2.2 m
-//     inside 25 s, the probe reads calling while she goes).  0 page errors.  Without the flag: no roster on the grimoire.
+//     inside 25 s, the probe reads calling while she goes).  0 page errors.
+//  B. A NON-owner with no flag gets the roster too (M123 s2, 5dea5625, every player): all ten, party 0, Ask along works.
 //   npx tsx scripts/m109-party-check.mts [--url http://localhost:3202]      (OWNER_KEY from env or .env)
 import puppeteer, { type Page } from 'puppeteer-core'
 import { existsSync, readFileSync } from 'fs'
@@ -27,12 +28,13 @@ const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: pro
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 
-async function run(withFlag: boolean) {
+async function run(withFlag: boolean, owner = true) {
   const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 390, height: 844 })
   const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
-  await p.goto(`${new URL(url).origin}/owner?key=${encodeURIComponent(KEY!)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
+  if (owner) await p.goto(`${new URL(url).origin}/owner?key=${encodeURIComponent(KEY!)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
   await p.goto(`${new URL(url).origin}/api/owner`, { waitUntil: 'load', timeout: 60000 })
-  if (!await p.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner))) { ok(false, 'owner cookie took'); await p.close(); return null }
+  const isOwner = await p.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner))
+  if (isOwner !== owner) { ok(false, owner ? 'owner cookie took' : 'B is a NON-owner keeper'); await p.close(); return null }
   await p.evaluateOnNewDocument((pieces: unknown[], pots: unknown) => {
     if (sessionStorage.getItem('m109p')) return; sessionStorage.setItem('m109p', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star')
@@ -108,11 +110,15 @@ if (a) {
   ok(a.errs.length === 0, `A 0 page errors ${a.errs.join(' | ')}`)
   await a.p.close()
 }
-const b = await run(false)
+// B: M123 s2 (5dea5625): the roster is EVERY player's. A keeper with no owner cookie and no flag gets the same full roster.
+const b = await run(false, false)
 if (b) {
-  ok(await openBook(b.p), 'B no flag: the grimoire opens')
+  ok(await openBook(b.p), 'B non-owner, no flag: the grimoire opens')
   const r = await roster(b.p)
-  ok(r.count === null && r.rows.length === 0, `B no flag: no roster face (rows ${r.rows.length})`)
+  ok(r.count === 0 && r.rows.length === 10 && new Set(r.rows.map(x => x.sp)).size === 10, `B non-owner, no flag: the roster face lists all 10 bloomed spirits, party 0 (rows ${r.rows.length}, party ${r.count})`)
+  const id = r.rows[0]?.id ?? ''
+  await act(b.p, id, 'ask'); await sleep(400); const r2 = await roster(b.p)
+  ok(r2.count === 1 && !!r2.rows.find(x => x.id === id)?.inP, `B non-owner, no flag: Ask along works (party ${r2.count})`)
   ok(b.errs.length === 0, `B 0 page errors ${b.errs.join(' | ')}`)
   await b.p.close()
 }
