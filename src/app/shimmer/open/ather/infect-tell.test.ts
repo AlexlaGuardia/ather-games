@@ -60,7 +60,7 @@ const r = refugees(t, s2, id => folkOf(P(id), 1)); same([r.length, r[0].from, r[
 let t2 = heardSay(t, { lines: r[0].lines, clues: [1], met: A }, 1); same([t2.heard, t2.met], [[], [A]], 'opener heard, not yet the clue'); t2 = heardSay(t2, { lines: r[0].lines, clues: [1], met: A }, 2); same(t2.heard, [1], 'clue heard')
 same(refugees(t2, s2, id => folkOf(P(id), 1))[0].lines, [INFECT_CLUE[0].folk], 'met: the clue alone')
 same(settlerSay(t, s2, B, true, r)!.lines, [INFECT_CLUE[1].folk], 'B\'s own folk: clue 2 only'); ok(settlerSay(t, s2, C, true, r) === null, 'another place: nothing')
-same(settlerSay(t, s2, B, true, [])!.lines, [INFECT_CARRY, INFECT_CLUE[0].folk], 'none of A\'s folk can come: B\'s spokesman carries it'); same(settlerSay(t, s2, B, false, [])!.lines, [INFECT_CLUE[1].folk], '...only he')
+same(settlerSay(t, s2, B, true, [])!.lines, [INFECT_CLUE[0].folk], 'a resident never says the opener: none of A\'s folk can come: B\'s spokesman carries it'); same(settlerSay(t, s2, B, false, [])!.lines, [INFECT_CLUE[1].folk], '...only he')
 const sp = refugeeSpots(P(B), r, [{ x: P(B).x, z: P(B).z + 9 }], null); ok(sp.length === 1 && Math.hypot(sp[0].x - P(B).x, sp[0].z - P(B).z) < 14 && Math.hypot(sp[0].x - P(B).x, sp[0].z - P(B).z - 9) >= 2.4, 'a spot on the green, clear of the folk')
 // ── saved with clues unheard ──
 s2 = fell(s2, B, t0 + 3 * W + 1).s; same(s2.told, 2, 'both told'); const say = settlerSay(t2, s2, B, false, [])!; same(say.lines, [INFECT_SAVED, INFECT_CLUE[1].folk], 'thanks, then the clue nobody asked for')
@@ -72,7 +72,7 @@ t2 = heardSay(t2, say, 1); same([t2.heard, t2.met], [[1], [A, B]], 'the thanks s
   ok(due(parseTell(JSON.parse(JSON.stringify(tt)), 2), purge(x, 2), name) === null, 'not again next season') }
 { const lostOne = { ...freshInfection(1), lost: [A], told: 0, assigned: 1 }, n = begin(purge(lostOne, 2), 's2-1', t0), nt = parseTell({ ...freshTell(1), said: ['lost:x'], heard: [3], clueOf: { [A]: 1 }, met: [A] }, 2)
   same([nt.said, nt.clueOf, nt.met, nt.heard], [[], {}, [], [3]], 'the purge: places go, heard clues stay'); same([n.active!.clue, carried(n), refugees(nt, n, () => folkOf(P(A), 1)).length], [2, [1], 0], 'carried across the season, its folk\'s place gone')
-  same(settlerSay(nt, n, 's2-1', true, [])!.lines, [INFECT_CARRY, INFECT_CLUE[0].folk], 'told by the place\'s spokesman') }
+  same(heardSay(t, settlerSay(t, s2, B, true, [])!, 1).heard, [1], 'a resident\'s clue counts as heard'); same(settlerSay(nt, n, 's2-1', true, [])!.lines, [INFECT_CLUE[0].folk], 'a resident never says the opener: told by the place\'s spokesman') }
 // ── the talk ──
 { const folk = folkOf(P(A), 1), act = (seen: unknown[]): FolkTalkActs => ({ go: x => { seen.push(x) }, give: () => {}, recruit: () => {}, bye: () => {} }), c = { folk, home: folk, trust: freshTrust(), have: () => 0, room: 1 }, st = { fid: folk[0].id, screen: 'hello' as const }, seen: any[] = []
   const plain = folkTalk(c, st, act([])); ok(plain.line === folk[0].dream, 'off: the dream'); same(folkTalk({ ...c, infect: null }, st, act([])), plain, 'null = the old talk')

@@ -53,8 +53,8 @@ export interface Say { lines: string[]; clues: number[]; met?: string }
 export function settlerSay(t: Tell, s: Infection, place: string, last: boolean, here: readonly Refugee[]): Say | null {
   if (s.active?.id === place) {
     const orphan = last ? carried(s).filter(c => !here.some(r => r.clue === c)) : []
-    const key = `carry:${place}`
-    if (orphan.length) return { lines: [...(t.met.includes(key) ? [] : [INFECT_CARRY]), ...orphan.map(c => INFECT_CLUE[c - 1].folk)], clues: orphan, met: key }
+    // RULED-AFK athernyx 41e8efa: a resident tells the clue, never the opener (their own homes stand)
+    if (orphan.length) return { lines: orphan.map(c => INFECT_CLUE[c - 1].folk), clues: orphan }
     return s.active.clue ? { lines: [INFECT_CLUE[s.active.clue - 1].folk], clues: [s.active.clue] } : null
   }
   if (!s.saved.includes(place)) return null
