@@ -5,7 +5,9 @@
 // shared/follow-formation.ts: members, slots, where each really stands, layout).
 //  1. Boot: the formation holds 4 (the Mana'mal + 3 spirits).
 //  2. Walk away from the wall (-z), turn 180, walk back, stop: at rest no two followers (or the keeper) closer than the sum
-//     of their body radii; every one behind the keeper's facing; the Mana'mal nearer than the spirits (heel); layout arc.
+//     of their body radii; every one behind the keeper's facing; the Mana'mal 3-4.5 m out, behind and off to one side, outside the spirits' arc (s3; was: nearer than
+//     the spirits, at heel); layout arc.
+//  2b. (s3) Small steps of the keeper (1 m ahead, 1 m back) do not move the Mana'mal at all.
 //  3. Walk on through the door: single file is taken while crossing; every follower crosses the wall line INSIDE the door;
 //     never two abreast at the door (within 1 m of the wall line, 0.6 m apart in depth at least); past it and stopped: spaced again, behind.
 //  4. 0 page errors.
@@ -83,7 +85,10 @@ try {
     const fw = fwd(k.yaw), back = (q: V) => -((q.x - k.x) * fw.x + (q.z - k.z) * fw.z)
     ok(f.members.every(m => f.pos[m.id] && back(f.pos[m.id]) > 0.3), `${tag}: every follower is behind the keeper's facing (${f.members.map(m => back(f.pos[m.id] ?? k).toFixed(2)).join(', ')})`)
     const mm = f.members.find(m => m.kind === 'manamal')!, near = (id: string) => Math.hypot(f.pos[id].x - k.x, f.pos[id].z - k.z)
-    ok(f.members.filter(m => m.kind === 'spirit').every(m => near(m.id) > near(mm.id)), `${tag}: the Mana'mal at heel, the spirits' arc beyond it`)
+    const q = f.pos[mm.id], sd = (q.x - k.x) * -fw.z + (q.z - k.z) * fw.x
+    ok(near(mm.id) >= 3 && near(mm.id) <= 4.5, `${tag}: the Mana'mal gives room, 3-4.5 m out (${near(mm.id).toFixed(2)})`)
+    ok(back(q) > 1 && Math.abs(sd) > 1, `${tag}: the Mana'mal behind and off to one side (back ${back(q).toFixed(2)}, side ${sd.toFixed(2)})`)
+    ok(f.members.filter(m => m.kind === 'spirit').every(m => near(m.id) < near(mm.id)), `${tag}: the Mana'mal outside the spirits' arc`)
     ok(f.layout === 'arc', `${tag}: in the open, the arc (${f.layout})`)
   }
   // 2. walk away from the wall, turn 180, walk back, stop
@@ -91,6 +96,11 @@ try {
   await walk({ x: -139, z: 94 }, Math.PI)
   await rest(7)
   atRest('2. walk / turn 180 / stop', await form()); await shot('m126-2-rest')
+  // 2b. small steps
+  { const mm0 = (await form())!.pos.manamal, from = samples.length
+    await walk({ x: -139, z: 95 }, Math.PI); await rest(1.5); await walk({ x: -139, z: 94 }, Math.PI); await rest(1.5)
+    const mv = Math.max(...samples.slice(from).map(f => Math.hypot(f.pos.manamal.x - mm0.x, f.pos.manamal.z - mm0.z)))
+    ok(mv < 0.05, `2b. 1 m ahead and back: the Mana'mal stays where it is (moved ${mv.toFixed(2)})`) }
   // 3. through the door
   samples.length = 0
   await walk({ x: -139, z: 105 }, Math.PI, 2)
