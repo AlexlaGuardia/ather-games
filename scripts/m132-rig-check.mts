@@ -4,7 +4,7 @@
 //         she lies / sits down; a clip always plays (weights sum 1); no paw under the ground in any blend.  3 following a walking keeper: gait, how often the cadence cap bit (noted); 3b the Vulnyx behind a keeper at 4.2 and 6.5 m/s: drift.
 //         4 the Wilds: she is rigged there too; home again = the Wilds body is thrown away (live count).  5 the panel's copy opens and goes.
 //  PLAYER 6 not the owner: the OLD glb, 0 rigs, the rigged glb never asked for, she draws at 0.698 m.   7 0 page errors.
-//  --perf: 20 Manalotls (--perf --fox: 20 Vulnyxes), owner, `?rig=0` against rigged, same page + camera, A B A B (SwiftShader, not a phone).
+//  --stills: only the Vulnyx stills. --perf: 20 Manalotls (--perf --fox: 20 Vulnyxes), owner, `?rig=0` against rigged, same page + camera, A B A B (SwiftShader, not a phone).
 //   OWNER_KEY=... npx tsx scripts/m132-rig-check.mts [--shots dir] [--perf]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
@@ -107,26 +107,25 @@ function gait(rows: Row[], clip: 'walk' | 'run', sp: Sp = 'axolotl', mode = 'tro
 const f3 = (g: ReturnType<typeof gait>) => `${g.spans} planted frames of ${g.frames}, drift median ${(g.med * 1000).toFixed(1)} p95 ${(g.p95 * 1000).toFixed(1)} mm, tail <= ${g.tail.toFixed(0)} deg`
 const rowsOf = (p: Page) => p.evaluate(() => { const D = (window as any).__m132; return JSON.parse(JSON.stringify({ b: Object.fromEntries(Object.entries(D.bodies).map(([k, v]: any) => [k, v.rows])), sp: Object.fromEntries(Object.entries(D.bodies).map(([k, v]: any) => [k, v.sp])), n: D.n, sums: D.sums })) }) as Promise<{ b: Record<string, Row[]>; sp: Record<string, Sp>; n: number; sums: number }>
 const hideCard = (p: Page) => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(d => !h.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
-/** stand beside her (her side on, close) and take it the moment `clip` is fully on */
-async function still(p: Page, id: string, clip: string, name: string) {
+/** a chase cam: every frame the keeper is set beside her (three quarters on) and turned to her, so any frame is framed; the still is taken the moment `clip` is fully on */
+async function still(p: Page, id: string, clip: string, name: string, away = 1.9) {
   if (!shots) return
-  let took = 0
-  for (let i = 0; i < 240 && took < 4; i++) {
-    const r = await p.evaluate((id: string) => { const r = (window as any).__spiritModel.rigs.get(id); if (!r) return null; const s = r.body.state(); return { x: r.x, z: r.z, yaw: r.yaw, w: s.w, mode: r.mode } }, id) as any
-    if (r && r.w[clip] > 0.95 && !/perch|hop/.test(r.mode)) {
-      await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), r.x + Math.cos(r.yaw) * 1.5 + Math.sin(r.yaw) * 0.4, r.z - Math.sin(r.yaw) * 1.5 + Math.cos(r.yaw) * 0.4)
-      await sleep(250); const n = await p.evaluate((id: string) => { const r = (window as any).__spiritModel.rigs.get(id); return { x: r.x, z: r.z } }, id) as any
-      await aimAt(p, n.x, n.z, 0.15, 3); await hideCard(p); try { await p.screenshot({ path: `${shots}/${name}-390.png` }); took++ } catch { /* slow frame */ }
-      if (await p.evaluate((a: [string, string]) => (window as any).__spiritModel.rigs.get(a[0])?.body.state().w[a[1]] > 0.8, [id, clip])) return
-    }
-    await sleep(250)
-  }
-  if (!took) console.log(`   (no still of ${name})`)
+  await hideCard(p); const hs = await p.evaluate((id: string) => ({ h: (window as any).__spiritModel.rigs.get(id)?.sp === 'fox' ? 0.35 : 0.2 }), id)
+  await p.evaluate(`(() => { const W = window; W.__cam = true; const A = W.__ather; (function f() { if (!W.__cam) return; const r = W.__spiritModel.rigs.get('${id}'); if (r) { const a = r.yaw + 1.1, x = r.x + Math.sin(a) * ${away} + Math.sin(r.yaw) * r.v * 0.15, z = r.z + Math.cos(a) * ${away} + Math.cos(r.yaw) * r.v * 0.15; A.tp(x, z, 0); A.look(Math.atan2(x - r.x, z - r.z), Math.atan2(${hs.h} - 1.6, ${away})) } requestAnimationFrame(f) })() })()`)
+  const w = () => p.evaluate((a: [string, string]) => { const r = (window as any).__spiritModel.rigs.get(a[0]); return r && !/perch|hop/.test(r.mode) ? r.body.state().w[a[1]] as number : 0 }, [id, clip] as [string, string])
+  let took = false
+  for (let i = 0; i < 300 && !took; i++) { if (await w() > 0.95) { await sleep(clip === 'run' ? 0 : 500); try { await p.screenshot({ path: `${shots}/${name}-390.png` }) } catch { continue } if (await w() > 0.8) took = true } else await sleep(150) }
+  await p.evaluate(() => { (window as any).__cam = false }); await sleep(600)
+  console.log(`   still ${name}: ${took ? 'taken' : 'NOT taken'}`)
 }
 const pieces = BEDS(3), pots = { p0: pot('axolotl', 0), p1: pot('fox', 1), p2: pot('axolotl', 2) }
 const br = await launch()
 try {
-  if (!perf) {
+  if (process.argv.includes('--stills')) {
+    const { p } = await open(br, true, { pieces: BEDS(1), pots: { p0: pot('fox', 0) }, follow: [], party: [] })
+    await p.evaluate(() => (window as any).__ather.tp(-131, 108, 0)); await p.waitForFunction(() => (window as any).__spiritModel?.rigs?.size === 1, { timeout: 60000 }); await sleep(4000)
+    await still(p, 'p0', 'run', 'fox-run'); await still(p, 'p0', 'sit', 'fox-sit'); await still(p, 'p0', 'idle', 'fox-stand'); await still(p, 'p0', 'run', 'fox-run2', 2.4)
+  } else if (!perf) {
     const { p, got } = await open(br, true, { pieces, pots, follow: [], party: [] })
     await p.evaluate(() => (window as any).__ather.tp(-131, 108, 0))
     ok(await p.waitForFunction(() => (window as any).__spiritModel?.rigs?.size === 3, { timeout: 60000 }).then(() => true).catch(() => false), '1. owner: both Manalotls and the Vulnyx are rigged')
@@ -157,7 +156,6 @@ try {
     const sz = await p.evaluate(() => new Promise<any>(res => { let v = 0, k = 0; const iv = setInterval(() => { const t = (window as any).__spiritModel.trots; v = Math.max(v, t.fox.hWorld || 0); if (++k > 60) { clearInterval(iv); res({ l: t.axolotl.len, h: t.axolotl.hWorld, v, vh: t.fox.h }) } }, 500) }))
     ok(Math.abs(sz.l - 0.9) < 0.06 && sz.h > 0.35 && sz.h < 0.47, `1. hull included she is ${sz.l.toFixed(3)} m nose to tail, ${sz.h.toFixed(3)} m tall`); ok(Math.abs(sz.vh * 1.003 - 0.7) < 1e-6 && Math.abs(sz.v - 0.717) < 0.03, `1. the Vulnyx stands ${sz.v.toFixed(3)} m, hull included (grown 0.70 + hull 0.017; tallest over 30 s)`)
     await still(p, 'p0', 'walk', 'walk'); await still(p, 'p0', 'sit', 'lie'); await still(p, 'p0', 'idle', 'stand')
-    await still(p, 'p1', 'run', 'fox-run'); await still(p, 'p1', 'sit', 'fox-sit'); await still(p, 'p1', 'idle', 'fox-stand')
     await p.close()
     // 3 + 4: following, then the Wilds and home
     const w = await open(br, true, { pieces, pots, follow: ['p0', 'p1', 'p2'], party: ['p0', 'p1', 'p2'] }); const q = w.p
