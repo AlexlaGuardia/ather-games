@@ -23,7 +23,7 @@ for (const [n, ms] of [['hold', hold], ['zip', zip], ['tell', tell]] as const) {
 // the three poses read apart
 ok(tail(hold).y < -0.2 && tail(hold).z < -0.4, `hold: the tail hangs behind (${tail(hold).y.toFixed(2)}, ${tail(hold).z.toFixed(2)})`)
 ok(tail(zip).y > tail(hold).y + 0.15, 'zip: the tail streams out level')
-ok(tail(tell).z > tail(hold).z + 0.4 && tail(tell).y < -0.3, `tell: the tail curls UNDER, toward the keeper (z ${tail(tell).z.toFixed(2)})`)
+ok(tail(tell).z > 0.05 && tail(tell).y < -0.3, `tell: the tail curls UNDER, toward the keeper (z ${tail(tell).z.toFixed(2)})`)
 ok(wingLift(P({ tell: 1 }), 0) > 1 && Math.abs(wingLift(P(), 0)) < 0.4, 'tell: the wings snap up; hold: they lie out flat')
 { const lifts = (p: Partial<FlitPose>) => Array.from({ length: 60 }, (_, i) => wingLift(P({ ...p, t: i / 60 }), 0)), r = (a: number[]) => Math.max(...a) - Math.min(...a)
   ok(r(lifts({ zip: 1 })) > 1.2, `zip: the wings beat (${r(lifts({ zip: 1 })).toFixed(2)} rad)`); ok(r(lifts({})) < 0.12, `hold: the wings are held still (${r(lifts({})).toFixed(3)} rad)`) }

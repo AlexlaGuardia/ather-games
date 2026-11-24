@@ -39,7 +39,6 @@ try {
     await p.keyboard.press('KeyE') }
   await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 90000 })
   console.log('in the Wilds')
-  const C = (f: string) => p.evaluate(`(() => { const C = window.__ather.combat(); ${f} })()`) as Promise<any>
   const C = (f: string) => p.evaluate(`(() => { const A = window.__ather, C = A.combat(); ${f} })()`) as Promise<any>
   const frames = (n: number) => p.evaluate((k: number) => new Promise<void>(r => { let i = 0; const f = () => { if (++i >= k) r(); else requestAnimationFrame(f) }; requestAnimationFrame(f) }), n)
   const body = (x: number, z: number, y: number, st = 'chase', t = 0) => `{ id: C.nextId++, kind: 'floater', x: ${x}, y: ${y}, z: ${z}, yaw: 0, hp: 9999, maxHp: 9999, state: '${st}', t: ${t}, wx: ${x}, wz: ${z}, lx: 0, lz: 0, hitFlash: 0, hitThisLunge: false }`
