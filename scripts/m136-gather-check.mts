@@ -17,7 +17,8 @@ const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m136
 const D = 'public/open/wilds/', index = JSON.parse(readFileSync(D + 'tiles.json', 'utf8')) as { tiles: { name: string; tx: number; ty: number; nodes: { i: number; j: number; zone?: Zone }[] }[] }
 interface Pick { tile: string; id: string; wx: number; wz: number; lx: number; lz: number; sx: number; sz: number }
 // a tree with clear, dry, level ground 6 m off one side and nothing but air between
-const find = (kind: TreeKind): Pick | null => {
+const find = (kind: TreeKind): Pick[] => {
+  const got: Pick[] = []
   for (const t of index.tiles) {
     if (!existsSync(D + t.name + '.bin') || (kind === 'goldwood' && t.name !== 'first-wilds')) continue
     const meta = JSON.parse(readFileSync(D + t.name + '.json', 'utf8')) as WildsMeta, b = readFileSync(D + t.name + '.bin'), bio = readFileSync(D + t.name + '.biome')
@@ -30,14 +31,17 @@ const find = (kind: TreeKind): Pick | null => {
         if (W.biomeAt(sx, sz) === BIOME.water || sy < meta.waterY + 0.6 || Math.abs(sy - c.y) > 1) continue
         if (W.trees.some(o => { if (o === c) return false; const rx = o.x - c.x, rz = o.z - c.z, al = rx * ux + rz * uz; return Math.hypot(rx, rz) < 4 || (al > 0 && al < 11 && Math.abs(rx * uz - rz * ux) < 4) })) continue
         if (W.crystals.some(o => Math.hypot(o.x - c.x, o.z - c.z) < 11)) continue
-        return { tile: t.name, id: c.id, lx: c.x, lz: c.z, sx, sz, wx: c.x + t.tx * 1000, wz: c.z + t.ty * 1000 }
+        if (got.some(o => Math.hypot(o.wx - c.x - t.tx * 1000, o.wz - c.z - t.ty * 1000) < 120)) break
+        got.push({ tile: t.name, id: c.id, lx: c.x, lz: c.z, sx, sz, wx: c.x + t.tx * 1000, wz: c.z + t.ty * 1000 }); break
       }
+      if (got.length >= 8) return got
     }
   }
-  return null
+  return got
 }
-const gold = find('goldwood'), will = find('starwillow')
-if (!gold || !will) { console.log('no clear tree', gold, will); console.log('FAIL'); process.exit(1) }
+const golds = find('goldwood'), wills = find('starwillow')
+let gold = golds[0], will = wills[0]
+if (!gold || !will) { console.log('no clear tree', golds, wills); console.log('FAIL'); process.exit(1) }
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(c ? '  ok  ' : '  FAIL', m); if (!c) fails++ }
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -71,18 +75,24 @@ const load = async () => {
 const aimed = async (t: Pick) => { for (let i = 0; i < 40; i++) { await aimAt(p, t.wx, t.wz, 1.0); await frame(); if (await A('aim()') === t.id) return true; await sleep(500) } return false }
 const stand = async (t: Pick, d = 1) => { await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), t.wx + (t.sx - t.lx) * d, t.wz + (t.sz - t.lz) * d); await sleep(1500); await frame() }
 const go = async (t: Pick) => {
-  for (let i = 0; i < 30; i++) {
-    await p.evaluate(a => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'check', tile: a.tile, x: a.sx, y: 0, z: a.sz, biome: 2, made: 0 } }), t); await sleep(4000)
-    if (await A('zone()') === 'wilds') break
+  for (let k = 0; k < 5; k++) {
+    await p.evaluate(a => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'check', tile: a.tile, x: a.sx, y: 0, z: a.sz, biome: 2, made: 0 } }), t); await sleep(5000)
+    if (await A('zone()') !== 'wilds') continue
+    await sleep(4000); await stand(t)
+    const s = await A<{ px: number; pz: number }>('state()')
+    if (Math.hypot(s.px - t.wx, s.pz - t.wz) < 9) return aimed(t)
+    console.log(`   ${t.id}: hp ${await A('hp()')} stood at ${s.px.toFixed(0)},${s.pz.toFixed(0)}, want near ${t.wx.toFixed(0)},${t.wz.toFixed(0)}`)
   }
-  await sleep(6000); await stand(t); return aimed(t)
+  return false
 }
+/** the first of the candidates the keeper can stand by and aim at (a void, a thicket or a Hollow nest can refuse one) */
+const goAny = async (ts: Pick[]): Promise<Pick | null> => { for (const t of ts) { if (await go(t)) return t; console.log(`   ${t.id}: no aim, next`) } return null }
 const setMana = (n: number) => p.evaluate(v => (window as any).__ather.setMana(v), n)
 const workOut = async (max = 400) => { let seen = 0; for (let i = 0; i < max && await chan(); i++) { await frame(); seen++ } await frame(); return seen }
 try {
   await load()
   // 1. Goldwood, worn: 5 mana, all at the end
-  ok(await go(gold), 'a Goldwood under the crosshair'); await setMana(100)
+  { const t = await goAny(golds); ok(!!t, `a Goldwood under the crosshair (${t?.id})`); if (!t) throw new Error('no goldwood'); gold = t }; await setMana(100)
   ok(/\(5 mana\)/.test(await saw(/prune the Goldwood \(\d+ mana\)/)), 'the prompt: 5 mana')
   ok(await A('gather()') === null, 'no bar before the first touch')
   const m0 = await A<number>('mana()'), t0 = await p.evaluate(() => Date.now())
@@ -96,7 +106,7 @@ try {
   ok(m0 - m1 > 3.5 && m0 - m1 <= 5.01, `about 5 mana spent (${(m0 - m1).toFixed(2)}, some refilled since)`)
   ok((await ls('open.pruned.v1'))?.[gold.id] === r0?.until && !(await rec(gold.id)), 'spent till the reset counted from the first touch')
   // 2. Starwillow, worn (one tool low): runs dry, lets go, the bar holds
-  ok(await go(will), 'a Starwillow under the crosshair (level 1: no gate)')
+  { const t = await goAny(wills); ok(!!t, `a Starwillow under the crosshair (${t?.id}; level 1: no gate)`); if (!t) throw new Error('no starwillow'); will = t }
   ok(/\(300 mana\)/.test(await saw(/prune the Starwillow \(\d+ mana\)/)), 'the prompt: 300 mana with the worn pruner')
   await setMana(20); await A('prune()'); await frame(); await workOut(60)
   ok(/Out of mana\. The Starwillow keeps what is done\./.test(await saw(/Out of mana\. The Starwillow[^\n]*/)), 'running dry lets go')
