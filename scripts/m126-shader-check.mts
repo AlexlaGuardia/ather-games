@@ -1,7 +1,7 @@
 // ── BETA M126 s4: TWO SPECIES, TWO COMPILED PROGRAMS (unrigged spirit models), NON-OWNER 390x844 ─────────────────────────
 // SETUP: a Vulnyx and a Manalotl bloomed on two planters, a non-owner (so both are the unrigged models). The page's GL is
 // hooked (read only): every LINKED program whose vertex source carries the spirit bend (uTilt), and the one used per draw.
-//  1. both models mounted  2. the Manalotl's bend and the Vulnyx's bend are both compiled  3. both are DRAWN with
+//  1. both models mounted  2. each species has her own skin, hull and eye program  3. draws per bend = her own meshes (3 : 5)
 //  4. 0 page errors. Without a per-species customProgramCacheKey three shares one program: only one bend exists.
 //   npx tsx scripts/m126-shader-check.mts [--url https://ather.games]
 import puppeteer from 'puppeteer-core'
@@ -39,9 +39,13 @@ try {
   const sp = await p.evaluate(() => (window as any).__spiritModel?.species); ok(sp?.fox === 1 && sp?.axolotl === 1, `1. both unrigged models mounted (${JSON.stringify(sp)})`)
   const S = await p.evaluate(() => (window as any).__spiritGL) as { linked: string[]; drawn: Record<string, number> }
   for (const s of ['fox', 'axolotl'] as const) {
-    ok(S.linked.some(t => t.includes(sig(s))), `2. ${s}: a program with its own bend is compiled (${S.linked.length} spirit programs)`)
+    const own = S.linked.filter(t => t.includes(sig(s))).length   // skin, hull and eyes are three different programs
+    ok(own >= 3, `2. ${s}: skin, hull and eyes each have a program with her own bend (${own} of ${S.linked.length} spirit programs)`)
     ok((S.drawn[sig(s)] ?? 0) > 0, `3. ${s}: drawn with its own bend (${JSON.stringify(S.drawn)})`)
   }
+  // the Vulnyx draws 3 meshes a frame (body, hull, eyes), the Manalotl 5 (+ the glowing frills and their hull)
+  const r = (S.drawn[sig('axolotl')] ?? 0) / (S.drawn[sig('fox')] || 1)
+  ok(Math.abs(r - 5 / 3) < 0.35, `3. Manalotl : Vulnyx draws with their own bends = 5 : 3 (${r.toFixed(2)}, want 1.67)`)
   ok(errs.length === 0, `4. 0 page errors ${errs.join(' | ')}`)
 } catch (e) { ok(false, `crashed: ${String(e).slice(0, 300)}`) }
 await br.close()
