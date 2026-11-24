@@ -19,6 +19,9 @@ try {
   await p.goto(`${url}/shimmer/open/continent?hour=14`, { waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction(() => !!(window as any).__drive?.foot, { timeout: 240000 }); await sleep(4000)
   await p.mouse.click(195, 420).catch(() => {}); await sleep(500); await p.keyboard.press('KeyE'); await sleep(3000)
+  // footTp is no input: past 25 s the keeper IDLES (the camera drifts, the Mana'mal roams off), which is not what this measures.
+  // A ShiftLeft tap every 5 s keeps them awake
+  const awake = setInterval(() => { p.keyboard.press('ShiftLeft').catch(() => {}) }, 5000)
   let K = { x: 244, z: 31 }
   const at = (x: number, z: number) => p.evaluate((a: number, b: number) => { (window as any).__drive.footTp(a, b, 0); return JSON.parse(JSON.stringify((window as any).__formation ?? null)) }, x, z) as Promise<F | null>
   for (let t = 0; t < 60; t++) { const f = await at(K.x, K.z); if (f?.pos.manamal) break; await sleep(500) }
@@ -42,6 +45,8 @@ try {
     ok(kd > 0.8 && mv < 0.05, `3. the keeper steps ${kd.toFixed(2)} m: the Mana'mal stays (moved ${mv.toFixed(2)})`)
     console.log(`idle skits on during the step: ${await p.evaluate(() => JSON.stringify({ on: (window as any).__skits?.on, idle: (window as any).__skits?.idle }))}; keeper yaw ${k.yaw.toFixed(2)} -> ${g.keeper.yaw.toFixed(2)}`)
   }
+  clearInterval(awake)
+  ok(!await p.evaluate(() => (window as any).__skits?.on), '3. the keeper never idled (no skits)')
   ok(errs.length === 0, `4. 0 page errors (${errs.slice(0, 3).join(' | ')})`)
 } catch (e) { ok(false, `crashed: ${String(e).slice(0, 300)}`) }
 await br.close()
