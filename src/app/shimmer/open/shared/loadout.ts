@@ -32,6 +32,8 @@ export interface Loadout {
   /** Kael's chest at the shipyard has been opened (the Charred Rifle + the Repeater handed over). Absent on saves from
    *  before 11-18, whose 'owned' guns were the test stand-in: those are taken back on load (see load). */
   kael?: boolean
+  /** M140 (owner dev button, shared/owner-grants.ts): gun ids ADDED by 'All guns', not really owned; 'Take back' removes exactly these. */
+  lent?: string[]
   /** M81 s2: what each gun is fitted with, by gun id (shared/gun-fit.ts). Absent = the gun's default fitting. Sigils join here (M93). */
   fit?: Record<string, { sight?: string; owned?: string[]; sigil?: string[] }>   // owned = sights BOUGHT for this gun (M81 s3); sigil = rune ids cut by Idris, in order (M93 s3, business/idris.ts)
 }
@@ -76,7 +78,9 @@ export const KAEL_PRIMARY = 'charred-rifle', KAEL_SECONDARY = STARTER_GUN
 export function claimKaelsArms(l: Loadout): { ok: boolean; loadout: Loadout } {
   if (l.kael) return { ok: false, loadout: l }
   const guns = [...new Set([...l.guns, KAEL_PRIMARY, KAEL_SECONDARY])]
-  return { ok: true, loadout: { ...l, guns, primary: l.primary ?? KAEL_PRIMARY, secondary: l.secondary ?? KAEL_SECONDARY, kael: true } }
+  const out: Loadout = { ...l, guns, primary: l.primary ?? KAEL_PRIMARY, secondary: l.secondary ?? KAEL_SECONDARY, kael: true }
+  if (l.lent) out.lent = l.lent.filter(g => g !== KAEL_PRIMARY && g !== KAEL_SECONDARY)   // M140: really his now, so 'Take back' leaves it
+  return { ok: true, loadout: out }
 }
 
 /** Add a bought vessel. Refuses past the carry cap; the new one is not worn until the keeper wears it. */

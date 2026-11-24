@@ -1,5 +1,5 @@
-// ── BETA M126 s4: TWO SPECIES, TWO COMPILED PROGRAMS (unrigged spirit models), NON-OWNER 390x844 ─────────────────────────
-// SETUP: a Vulnyx and a Manalotl bloomed on two planters, a non-owner (so both are the unrigged models). The page's GL is
+// ── BETA M126 s4: TWO SPECIES, TWO COMPILED PROGRAMS (unrigged spirit models, ?rig=0 since the 11-24 flip), NON-OWNER 390x844 ─────────────────────────
+// SETUP: a Vulnyx and a Manalotl bloomed on two planters, a non-owner with ?rig=0 (so both are the unrigged models; everyone is rigged without it since 11-24). The page's GL is
 // hooked (read only): every LINKED program whose vertex source carries the spirit bend (uTilt), and the one used per draw.
 //  1. both models mounted  2. each species has her own skin, hull and eye program  3. draws per bend = her own meshes (3 : 5)
 //  4. 0 page errors. Without a per-species customProgramCacheKey three shares one program: only one bend exists.
@@ -31,7 +31,7 @@ try {
     localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [], chests: [], pieces }))
     localStorage.setItem('ather.grimoire.v1', JSON.stringify({ v: 1, pages: [{ species: 'fox', stage: 'seen', at }], pots: { a: { seed: 'mana_seed_fox', at, bloomed: true }, b: { seed: 'mana_seed_axolotl', at, bloomed: true } }, met: [] }))
   }, [{ id: 'a', item: 'spirit_planter', x: P.x, z: P.z, q: 0, placedAt: 1 }, { id: 'b', item: 'spirit_planter', x: P.x - 2.6, z: P.z, q: 0, placedAt: 1 }], at)
-  await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 240000 })
+  await p.goto(`${url}/shimmer/open/ather?hour=14&rig=0`, { waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 })
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 7, 0), P.x - 1.3, P.z)
   for (let i = 0; i < 60; i++) { await sleep(500); if (await p.evaluate(() => (window as any).__spiritModel?.mounted === 2)) break }

@@ -105,7 +105,7 @@ export const SPIRIT_MODELS: Partial<Record<Species, SpiritLook>> = {
   },
 }
 
-// ── M132 s2 THE RIGGED MANALOTL (OWNER-ONLY, spirit-model.tsx useSpiritRig; Alex 11-24 OK'd the v2 look and the size: 0.90 m
+// ── M132 s2 THE RIGGED MANALOTL (every keeper's since 11-24, spirit-model.tsx useSpiritRig; Alex 11-24 OK'd the v2 look and the size: 0.90 m
 // nose to tail, canon's own figure). Her tail is out behind now (it was curled round her side), so 0.90 m long makes her ~0.39 m
 // tall standing (0.42 to the frill tops), near canon's 0.35; the unrigged model at 0.90 was 0.70. Same manner, look and tints.
 export const MANALOTL_RIG: RigLook = {
@@ -114,7 +114,7 @@ export const MANALOTL_RIG: RigLook = {
   runAt: [0.5, 0.44], hull: 0.026, neck: 'b_neck', head: 'b_head', avatar: { z: -0.42, far: 1.9 },
 }
 const RIG_H = GROWN.axolotl.length! / MANALOTL_RIG.glbLen
-// ── M102 THE NEW VULNYX, RIGGED (OWNER-ONLY, the same switch; Alex 11-24 approved the look, docs/looks/vulnyx-2026-11-24 b-v2).
+// ── M102 THE NEW VULNYX, RIGGED (the same switch; Alex 11-24 approved the look, docs/looks/vulnyx-2026-11-24 b-v2).
 // Grown 0.70 m tall standing (GROWN, ear tips, body without the hull). Same tints as the model she replaces. Manner: darting legs (she runs whenever she goes
 // anywhere, a walk is her first and last step), snappy glances, mostly alert; no hop, the gallop carries its own air.
 export const VULNYX_RIG: RigLook = {

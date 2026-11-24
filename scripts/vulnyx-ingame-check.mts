@@ -42,7 +42,7 @@ const hideCard = (p: Page) => p.evaluate(() => { const hits = [...document.query
 async function run(owner: boolean, withFlag: boolean, w = 390, h = 844, hour = 14) {
   const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: w, height: h })
   const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
-  let glb = 0, mglb = 0, rglb = 0; p.on('response', r => { if (r.url().includes('/open/spirits/vulnyx-rigged.glb')) rglb = r.status(); if (r.url().includes('/open/spirits/vulnyx.glb')) glb = r.status(); if (r.url().includes('/open/spirits/manalotl.glb')) mglb = r.status() })
+  let glb = 0, mglb = 0, rglb = 0, mrglb = 0; p.on('response', r => { if (r.url().includes('/open/spirits/vulnyx-rigged.glb')) rglb = r.status(); if (r.url().includes('/open/spirits/manalotl-rigged.glb')) mrglb = r.status(); if (r.url().includes('/open/spirits/vulnyx.glb')) glb = r.status(); if (r.url().includes('/open/spirits/manalotl.glb')) mglb = r.status() })
   if (owner) {
     // /owner redirects to siteOrigin (prod) even on a devwin, so hit it without following, then read /api/owner ON this origin
     await p.goto(`${new URL(url).origin}/owner?key=${encodeURIComponent(OWNER_KEY!)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
@@ -63,7 +63,7 @@ async function run(owner: boolean, withFlag: boolean, w = 390, h = 844, hour = 1
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 5, 0), P.x, P.z)
   await sleep(owner && withFlag ? 9000 : 6000)
   const mounted = await p.evaluate(() => (window as any).__spiritModel?.mounted ?? 0) as number
-  return { p, errs, glb: () => glb, mglb: () => mglb, rglb: () => rglb, mounted }
+  return { p, errs, glb: () => glb, mglb: () => mglb, rglb: () => rglb, mrglb: () => mrglb, mounted }
 }
 // M102: frame both spirits: wait (max 40 s) until they are within 2.6 m, then stand off their midpoint and look at it
 const frameBoth = async (p: Page, dist: number) => {
@@ -79,12 +79,13 @@ const look = async (p: Page, dz: number, dx = 0) => { await p.evaluate((x, z) =>
 const a = await run(true, true)
 if (a) {
   ok(a.mounted >= 1, `A owner + ?spirits=3d: Vulnyx mounted on the bloomed planter (mounted=${a.mounted})`)
-  ok(a.glb() === 200, `A glb /open/spirits/vulnyx.glb answered ${a.glb()}`)
+  // ★ MOVED (11-24 flip): the rigged bodies are everyone's from the first frame, so the old glbs are not fetched at all any more
+  ok(!a.glb() && !a.mglb(), `A the old glbs are never asked for (${a.glb()}, ${a.mglb()})`)
   ok(a.rglb() === 200, `A owner: the rigged Vulnyx glb answered ${a.rglb()}`)   // M102: the owner's Vulnyx is the rigged one
   // M102 Manalotl wire-in: per species
   const sm = await a.p.evaluate(() => ({ ...((window as any).__spiritModel?.species ?? {}) })) as Record<string, number>
   ok(a.mounted === 2 && sm.fox === 1 && sm.axolotl === 1 && !sm.owl, `A per species: Vulnyx + Manalotl mounted, the owl planter keeps the gold orb (mounted=${a.mounted} ${JSON.stringify(sm)})`)
-  ok(a.mglb() === 200, `A glb /open/spirits/manalotl.glb answered ${a.mglb()}`)
+  ok(a.mrglb() === 200, `A the rigged Manalotl glb answered ${a.mrglb()}`)
   await look(a.p, 4.5)
   // M107 s1+s2: THE TROT, THEN THE ROAM. Sample her (window.__spiritModel.trot, world xz/y + mode) every 100 ms for 15 s:
   // she moves, leaves her 1.5 m ring and reaches a spot > 3 m from the planter, is never inside the planter or a piece
@@ -236,9 +237,10 @@ const b = await run(true, false)
 if (b) { ok(b.mounted === 2, `B owner, no flag: the models are drawn for everyone since the M107 ship (mounted=${b.mounted})`); ok(await talks(b.p), 'B owner, no flag: E at her = Feed / Follow / Open (every keeper, M123 s2)'); ok(b.errs.length === 0, `B 0 page errors ${b.errs.join(' | ')}`); await b.p.close() }
 // C. not owner + flag
 const c = await run(false, true)
-if (c) { ok(!c.rglb(), `C not owner: the rigged glb is never asked for (${c.rglb()})`)
+// ★ MOVED (11-24 flip, Alex: "rigs too"): a player has the rigged bodies (it was: the rigged glb never asked for, the old one bobs)
+if (c) { ok(c.rglb() === 200 && c.mrglb() === 200 && !c.glb() && !c.mglb(), `C not owner: both rigged glbs, the old ones never asked for (${c.rglb()}, ${c.mrglb()} / ${c.glb()}, ${c.mglb()})`)
   const ys = await c.p.evaluate(`new Promise(res => { const o = [], t0 = performance.now(), id = setInterval(() => { const t = window.__spiritModel?.trot; if (t?.mode === 'trot') o.push(t.y); if (performance.now() - t0 > 15000) { clearInterval(id); res(o) } }, 100) })`) as number[]
-  ok(ys.length > 3 && Math.max(...ys) - Math.min(...ys) > 0.02, `C not owner: the old Vulnyx's y bobs while she trots: ${ys.length ? (Math.max(...ys) - Math.min(...ys)).toFixed(3) : '-'} m over ${ys.length} samples`)
+  ok(ys.length > 3 && Math.max(...ys) - Math.min(...ys) < 0.001, `C not owner: rigged, no hop fights the gait, y range ${ys.length ? (Math.max(...ys) - Math.min(...ys)).toFixed(3) : '-'} m over ${ys.length} samples`)
   ok(c.mounted === 2, `C not owner + ?spirits=3d: the models are drawn (M107 ship) (mounted=${c.mounted})`); ok(await talks(c.p), 'C not owner: E at her = Feed / Follow / Open (every keeper, M123 s2)'); ok(c.errs.length === 0, `C 0 page errors ${c.errs.join(' | ')}`); await c.p.close() }
 if (shots) {
   const d = await run(true, true, 1280, 800)

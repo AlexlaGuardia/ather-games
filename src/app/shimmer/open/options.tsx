@@ -17,7 +17,8 @@ import { keeperKey } from '@/lib/keeper-local'
 import { BIRTH_KEY } from '../play3d/rune-inventory'
 import { refreshBirth } from './birth-gate'
 import { getInv, setInv } from './shared/bag'
-import { oneOfEachSeed } from './shared/owner-grants'
+import { oneOfEachSeed, lendAllGuns, takeBackGuns } from './shared/owner-grants'
+import { getLoadout, setLoadout, useLoadout } from './shared/loadout'
 import { setPlayTogether } from './shared/play-together'
 import { ACTIONS, RESERVED, useKeymap, keyFor, keyName, setBinding, resetKeymap, setCapturing, installKeymap } from './shared/keymap'
 
@@ -96,6 +97,15 @@ function SeedGrant() {
   )
 }
 
+/** Owner test lever (M140, Alex 11-24): every gun into the owned set, and a second row that takes back only those. */
+function GunGrant() {
+  const l = useLoadout(), [said, setSaid] = useState('')
+  return (<>
+    <OptionRow onClick={() => { const r = lendAllGuns(getLoadout()); if (r.added) setLoadout(r.loadout); setSaid(r.added ? `+${r.added} owned` : 'you own them all') }} label="➶ All guns" tail={said || 'owned, not worn'} />
+    {!!l.lent?.length && <OptionRow onClick={() => { const r = takeBackGuns(getLoadout()); setLoadout(r.loadout); setSaid(`${r.taken} taken back`) }} label="↺ Take back the added guns" tail={`${l.lent.length}`} />}
+  </>)
+}
+
 /** The keys this page answers, for the Controls tab. Each page passes its own. */
 export type KeyRow = [keys: string, what: string]
 /** What stays fixed (the rebindable keys are listed by Bindings). */
@@ -155,6 +165,7 @@ export function OpenOptions({ onClose, keys = WALK_KEYS, extraGame, inGarden = f
           <OptionRow href="/shimmer/play3d/birth" label="✺ Choose a birth rune" tail="voxel" />
           <ForgetBirth onDone={onClose} />
           <SeedGrant />
+          <GunGrant />
         </>}
       />
     </div>

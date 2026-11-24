@@ -3,13 +3,13 @@
 // every non-GET fetch + beacon is stubbed, so nothing is written to any real save. Hollows are spawned by __ather.spawn and the
 // keeper's shots are rounds laid in the sim in front of the target (the same code path a gun's round takes); the keeper's
 // health is kept up so the run lasts. Read: __spiritFight (read-only), __formation, __ather.state / combat.
-//  OWNER  1 the three are drawn in the Wilds and in the formation. 2 a fight with 2-3 Hollows until a HIT and a 'nothing' were
+//  PLAYER (★ MOVED 11-24, Alex's flip: 1-5 ran as the owner, and 6 asserted a player has no brain)  1 the three are drawn in the Wilds and in the formation. 2 a fight with 2-3 Hollows until a HIT and a 'nothing' were
 //         seen (up to 8 fights): every sample <= 10 m of the keeper; HITs on the keeper's target; spirits' damage <= the dial's share of the
 //         keeper's; a wind-up always faces the keeper, never a spirit. 3 no teleport on either hand-over. 4 the Hollows gone: no
 //         fight, no fight slots, each back at her formation slot. 5 the party's kills still counted once (xp = kills seen).
 //  CHASE (s1b, canon 8921742)  2e a Hollow chased a spirit (it moved while she led it) and never came within 1 m of her
 //         (bodies 0.42 + ~0.3); the chase ended; its wind-ups were still the keeper's (assert 2).
-//  PLAYER 6 not the owner: no brain, no spirit in the Wilds, a Hollow nobody shoots loses nothing.   7 0 page errors.
+//  6 nobody follows: no body in the Wilds, a Hollow nobody shoots loses nothing; 6b (OWNER_KEY) the owner has the same three.   7 0 page errors.
 //   npx tsx scripts/m127-brain-check.mts [--url https://ather.games] [--out dir]        (OWNER_KEY from env or .env)
 import puppeteer from 'puppeteer-core'
 import { expNeed } from '../src/app/shimmer/open/ather/spirit-growth'
@@ -17,7 +17,7 @@ import { existsSync, readFileSync, mkdirSync } from 'fs'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games').replace(/\/$/, ''), out = flag('--out', '/tmp/m127-brain'); mkdirSync(out, { recursive: true })
 const KEY = process.env.OWNER_KEY || (existsSync('.env') ? /^OWNER_KEY=(.+)$/m.exec(readFileSync('.env', 'utf8'))?.[1]?.trim() : undefined)
-if (!KEY) { console.error('no OWNER_KEY'); process.exit(2) }
+if (!KEY) console.log('SKIP 6b: no OWNER_KEY')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 const BEDS = ['pa', 'pb', 'pc'].map((id, k) => ({ id, item: 'spirit_planter', x: -146, z: 90 + k * 3, q: 0, placedAt: 1 })), at0 = Date.now() - 20 * 86400000
@@ -25,14 +25,14 @@ const POTS = { pa: { seed: 'mana_seed_fox', at: at0, v: 2, tends: [], bloomed: t
 const TUT = { v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }
 const br = await puppeteer.launch({ protocolTimeout: 600000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const errs: string[] = []
-async function open(owner: boolean) {
+async function open(owner: boolean, ids: string[] = ['pa', 'pb', 'pc']) {
   const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true })
   p.on('pageerror', e => errs.push(`${owner ? 'owner' : 'player'}: ${String(e).slice(0, 200)}`))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
   if (owner) await p.goto(`${url}/owner?key=${encodeURIComponent(KEY!)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
   await p.goto(`${url}/api/owner`, { waitUntil: 'load', timeout: 60000 })
   ok(await p.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner)) === owner, owner ? '0. the OWNER' : '0. NOT the owner')
-  await p.evaluateOnNewDocument((s: { pieces: unknown; pots: unknown; tut: unknown }) => {
+  await p.evaluateOnNewDocument((s: { pieces: unknown; pots: unknown; tut: unknown; ids: string[] }) => {
     const f = window.fetch.bind(window); window.fetch = (u, i) => ((i?.method ?? 'GET').toUpperCase() !== 'GET') ? Promise.resolve(new Response('{}', { status: 200 })) : f(u, i); navigator.sendBeacon = () => true
     if (sessionStorage.getItem('m127')) return; sessionStorage.setItem('m127', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star')
@@ -40,9 +40,9 @@ async function open(owner: boolean) {
     localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [], chests: [], pieces: s.pieces }))
     localStorage.setItem('open.tutorial.v1', JSON.stringify(s.tut))
     localStorage.setItem('ather.grimoire.v1', JSON.stringify({ v: 1, pages: [{ species: 'fox', stage: 'seen', at: 1 }], pots: s.pots, met: [] }))
-    for (const k of ['ather.spiritFollow.v1', 'ather.spiritParty.v1']) localStorage.setItem(k, JSON.stringify(['pa', 'pb', 'pc']))
+    for (const k of ['ather.spiritFollow.v1', 'ather.spiritParty.v1']) localStorage.setItem(k, JSON.stringify(s.ids))
     localStorage.removeItem('ather.spiritStats.v1')
-  }, { pieces: BEDS, pots: POTS, tut: TUT })
+  }, { pieces: BEDS, pots: POTS, tut: TUT, ids })
   await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state && !!(window as any).__ather?.travel, { timeout: 240000 }); await sleep(4000)
   await p.touchscreen.tap(195, 644); await sleep(500)
@@ -51,9 +51,9 @@ async function open(owner: boolean) {
   return p
 }
 try {
-  const p = await open(true)
+  const p = await open(false)
   const three = await p.waitForFunction(() => { const s = (window as any).__spiritFight?.(); return s && s.spirits.length === 3 }, { timeout: 60000 }).then(() => true).catch(() => false)
-  ok(three, '1. owner: three spirits drawn in the Wilds'); if (!three) throw new Error('no brain / no spirits on this build')
+  ok(three, '1. player: three spirits drawn in the Wilds'); if (!three) throw new Error('no brain / no spirits on this build')
   await sleep(4000)
   ok(await p.evaluate(() => ['pa', 'pb', 'pc'].every(i => (window as any).__formation?.members.some((m: any) => m.id === i))), '1. and in the formation')
   // the in-page driver: mode 'fight' = keep 3 Hollows up and shoot the first; 'quiet' = none. Samples every 60 ms.
@@ -161,14 +161,17 @@ try {
   const total = (v: number[]) => { let t = v[0]; for (let n = 0; n < v[1]; n++) t += expNeed(n); return t }, kills = (await D()).kills
   ok(kills > 0 && same && total(a[0]) === kills, `5. each kill paid each of the three once (${kills} kills, total ${total(a[0])}; xp, grown ${JSON.stringify(a)})`)
   await p.close()
-  // 6. NOT the owner
-  const q = await open(false); await sleep(3000)
-  ok(await q.evaluate(() => !(window as any).__spiritFight), '6. not the owner: no brain')
+  // 6. nobody follows
+  const q = await open(false, []); await sleep(3000)
+  ok(await q.evaluate(() => !((window as any).__spiritFight?.().spirits.length)), '6. nobody follows: nobody to help')
   // (the __formation probe is not read here: with no follower to tick it, it keeps the plot's last frame)
   const m6 = await q.evaluate(() => (window as any).__spiritModel?.mounted ?? 0); ok(m6 === 0, `6. no spirit drawn in the Wilds (${m6} mounted)`)
   const hp = await q.evaluate(async () => { const A = (window as any).__ather, C = A.combat(); C.hollows.length = 0; A.spawn(0, -8, 'shambler'); const h = C.hollows[0], id = h.id, h0 = h.hp; let lost = 0
     for (let i = 0; i < 100; i++) { C.keeper.hp = C.keeper.maxHp; await new Promise(r => setTimeout(r, 100)); const g = C.hollows.find((x: any) => x.id === id); if (!g || g.hp < h0 || g.fx?.slowed) lost++ } return { h0, lost } })
   ok(hp.lost === 0, `6. 10 s with a Hollow nobody shoots: it loses nothing, is never slowed (${JSON.stringify(hp)})`)
+  await q.close()
+  if (KEY) { const o = await open(true)
+    ok(await o.waitForFunction(() => (window as any).__spiritFight?.().spirits.length === 3, { timeout: 60000 }).then(() => true).catch(() => false), '6b. owner: the same three in the Wilds'); await o.close() }
   ok(errs.length === 0, `7. 0 page errors (${errs.slice(0, 3).join(' | ')})`)
 } catch (e) { ok(false, `crashed: ${String(e).slice(0, 300)}`) }
 await br.close(); console.log(fails ? `${fails} FAIL` : 'ALL PASS'); process.exit(fails ? 1 : 0)

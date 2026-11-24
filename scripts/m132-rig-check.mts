@@ -3,7 +3,8 @@
 //         she walks AND runs with her legs moving (joint swing), planted feet stay put in WORLD space, the tail trails behind,
 //         she lies / sits down; a clip always plays (weights sum 1); no paw under the ground in any blend.  3 following a walking keeper: gait, how often the cadence cap bit (noted); 3b the Vulnyx behind a keeper at 4.2 and 6.5 m/s: drift.
 //         4 the Wilds: she is rigged there too; home again = the Wilds body is thrown away (live count).  5 the panel's copy opens and goes.
-//  PLAYER 6 not the owner: the OLD glb, 0 rigs, the rigged glb never asked for, she draws at 0.698 m.   7 0 page errors.
+//  PLAYER 6 not the owner (★ MOVED 11-24, Alex's flip: it was the old glb): the same rigged bodies, sizes, one skeleton each, the old glbs never
+//         asked for. 6b ?rig=0: the OLD glb, 0 rigs, she draws at 0.698 m (the frame measure's other half).   7 0 page errors.
 //  --follow: from 3 on. --stills: only the Vulnyx stills. --perf: 20 Manalotls (--perf --fox: 20 Vulnyxes), owner, `?rig=0` against rigged, same page + camera, A B A B (SwiftShader, not a phone).
 //   OWNER_KEY=... npx tsx scripts/m132-rig-check.mts [--shots dir] [--perf]
 import puppeteer, { type Page } from 'puppeteer-core'
@@ -188,12 +189,19 @@ try {
     await z.p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } })); await z.p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 120000 }); await sleep(5000)
     const c5 = await z.p.evaluate(() => ({ ...(window as any).__spiritModel.rigCount, rigs: (window as any).__spiritModel.rigs.size, mounted: (window as any).__spiritModel.mounted }))
     ok(c5.live === 0 && c5.rigs === 0 && c5.mounted === 0 && c5.made === c5.disposed, `4. nobody follows: nothing left after despawn ${JSON.stringify(c5)}`); await z.p.close()
-    // 6: a player
-    const n = await open(br, false, { pieces, pots, follow: [], party: [] })
+    // 6: a player: rigged (the flip)
+    { const n = await open(br, false, { pieces, pots, follow: [], party: [] })
+      await n.p.evaluate(() => (window as any).__ather.tp(-131, 108, 0))
+      ok(await n.p.waitForFunction(() => (window as any).__spiritModel?.rigs?.size === 3, { timeout: 60000 }).then(() => true).catch(() => false), '6. a player: both Manalotls and the Vulnyx are rigged'); await sleep(4000)
+      const pl = await n.p.evaluate(() => { const m = (window as any).__spiritModel; return { made: m.rigCount.made, mounted: m.mounted, sk: [...m.rigs.values()].map((r: any) => new Set(Object.values(r.body.meshes).map((x: any) => x.skeleton.uuid)).size), len: m.trots.axolotl?.len, fh: m.trots.fox?.h } })
+      ok(pl.made === 3 && pl.mounted === 3 && pl.sk.every((x: number) => x === 1) && Math.abs(pl.len - 0.9) < 0.09 && pl.fh === 0.7, `6. one skeleton each, 0.90 m long, 0.70 m tall ${JSON.stringify(pl)}`)
+      ok(n.got.includes('manalotl-rigged.glb 200') && n.got.includes('vulnyx-rigged.glb 200') && !n.got.some(x => /^(manalotl|vulnyx)\.glb/.test(x)), `6. the rigged glbs, the old ones never asked for (${n.got.join(', ')})`); await n.p.close() }
+    // 6b: a player with ?rig=0
+    const n = await open(br, false, { pieces, pots, follow: [], party: [] }, '&rig=0')
     await n.p.evaluate(() => (window as any).__ather.tp(-131, 108, 0)); await sleep(12000)
     const pl = await n.p.evaluate(() => { const m = (window as any).__spiritModel; return { rigs: m.rigs.size, made: m.rigCount.made, mounted: m.mounted, h: m.trots.axolotl?.h, len: m.trots.axolotl?.len, fh: m.trots.fox?.h, tall: m.trots.axolotl?.hWorld } })
-    ok(pl.rigs === 0 && pl.made === 0 && pl.mounted === 3 && Math.abs(pl.h - 0.9 / 1.29) < 1e-6 && Math.abs(pl.len - 0.9) < 0.09 && pl.fh === 0.7, `6. a player's Manalotl and Vulnyx are the old ones ${JSON.stringify(pl)}`)
-    ok(n.got.includes('manalotl.glb 200') && n.got.includes('vulnyx.glb 200') && !n.got.some(x => x.includes('rigged')), `6. and the rigged glb is never asked for (${n.got.join(', ')})`)
+    ok(pl.rigs === 0 && pl.made === 0 && pl.mounted === 3 && Math.abs(pl.h - 0.9 / 1.29) < 1e-6 && Math.abs(pl.len - 0.9) < 0.09 && pl.fh === 0.7, `6b. ?rig=0: the Manalotl and Vulnyx are the old ones ${JSON.stringify(pl)}`)
+    ok(n.got.includes('manalotl.glb 200') && n.got.includes('vulnyx.glb 200') && !n.got.some(x => x.includes('rigged')), `6b. and the rigged glb is never asked for (${n.got.join(', ')})`)
     if (shots) { const m = await n.p.evaluate(() => (window as any).__spiritModel.trots.axolotl); await n.p.evaluate((x: number, z: number) => (window as any).__ather.tp(x + 1.5, z + 0.8, 0), m.x, m.z); await sleep(800); await aimAt(n.p, m.x, m.z, 0.3); await hideCard(n.p); await n.p.screenshot({ path: `${shots}/player-old-390.png` }).catch(() => {}) }
     await n.p.close()
   } else {

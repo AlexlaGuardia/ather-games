@@ -53,7 +53,7 @@ for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) if (ringOf(i, j) =
 /** Grimoire pages filled before Greg will sell a ring (Alex 11-14). */
 export const RING_PAGES = [0, 10, 15, 25] as const
 /** Grey matter per square, by ring. Build pacing (Jin); tune with play. */
-export const RING_COST = [0, 12, 20, 30] as const   // 216 squares to buy (was 72): 480 + 1440 + 3120 grey for all
+export const RING_COST = [0, 60, 120, 200] as const   // M139 (Alex 11-24; was 12 / 20 / 30). 216 squares to buy: 2400 + 8640 + 20800 = 31840 grey for all
 /** The grimoire's capacity at each stage: 10 empty pages from Greg, then 15, then 25. */
 export const GRIMOIRE_SIZE = (pages: number) => pages < 10 ? 10 : pages < 15 ? 15 : 25
 

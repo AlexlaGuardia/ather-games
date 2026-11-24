@@ -44,15 +44,11 @@ export function useSpiritsDev(): boolean {
   return true
 }
 
-/** M132 s2 THE ONE SWITCH: the rigged bodies are OWNER-ONLY until Alex has felt them (`return true` ships them to everyone). One
- *  /api/owner read for the whole page. `?rig=0` = the owner sees the old models (the before / after frame measure). */
-let rigP: Promise<boolean> | null = null, rigOn = false
+/** M132 s2 THE ONE SWITCH: the rigged bodies, EVERY keeper's since 11-24 (Alex: "rigs too"; it was the owner check). `?rig=0` = the
+ *  old models, for the before / after frame measure. Read once per page. Canvas only, so no hydration to match. */
+let rigOn: boolean | null = null
 export function useSpiritRig(): boolean {
-  const [on, set] = useState(rigOn)
-  useEffect(() => { let alive = true
-    rigP ??= new URLSearchParams(window.location.search).get('rig') === '0' ? Promise.resolve(false) : fetch('/api/owner', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then(j => !!j?.owner).catch(() => false)
-    rigP.then(v => { rigOn = v; if (alive) set(v) }); return () => { alive = false } }, [])
-  return on
+  return rigOn ??= typeof window === 'undefined' || new URLSearchParams(window.location.search).get('rig') !== '0'
 }
 
 // read-only probe for the check: how many spirit models are mounted right now (all, and by species). `trot` = the Vulnyx's

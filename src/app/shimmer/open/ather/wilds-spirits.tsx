@@ -5,7 +5,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type * as THREE from 'three'
-import { useIsOwner } from '@/app/_components/useIsOwner'
 import { GROWN } from '../../sprites/creature-size'
 import type { Species } from '../../spirits/spirit'
 import { bodyRadius } from './obstacles'
@@ -18,9 +17,9 @@ import { useBook } from './spirit-panels'
 import { formationSlot } from '../shared/follow-formation'
 import type { SpiritNav } from './spirit-trot'
 
-/** THE ONE SWITCH (M127): spirits come along into the Wilds and may help in a fight. Owner-only until Alex has felt it;
- *  `return true` here ships it to every keeper. */
-export function useSpiritFight(): boolean { return useIsOwner() }
+/** THE ONE SWITCH (M127): spirits come along into the Wilds and may help in a fight. EVERY keeper's since 11-24 (Alex: "flip it
+ *  for everyone"; it was the owner check). */
+export function useSpiritFight(): boolean { return true }
 
 const EMPTY: readonly string[] = []
 const LOST = 30   // m: left this far behind (a waymark, a fall) she is set down beside the keeper again

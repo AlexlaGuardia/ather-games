@@ -469,7 +469,7 @@ function CastFlash({ fx }: { fx: React.MutableRefObject<LiveFx[]> }) {
 export interface SightLink { aiming: boolean; ads: boolean; firedAt: number; charge: number }
 
 export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, reviveKey, nodes = [], ownerOf, armed = true, gunId, reloadTick = 0, casts, onCast, eats, sight, channel, groundAt, mana, skin, spirits = false }: {
-  /** M127 s1: the keeper's following spirits may help in a fight (the one switch: useSpiritFight, owner-only for now) */
+  /** M127 s1: the keeper's following spirits may help in a fight (the one switch: useSpiritFight, every keeper since 11-24) */
   spirits?: boolean
   T: Terrain
   /** M34: the biome colour under a point (sRGB hex): what a Hollow's sheen borrows, and the colour its dispersal blooms */

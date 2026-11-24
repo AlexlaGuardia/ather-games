@@ -142,6 +142,8 @@ for (const [n, p] of [['greg', GREG], ['threshold', THRESHOLD]] as const) {
   const v = canBuy(START, 3, B, 10, 999)
   ok(v.ok && v.cost === RING_COST[1], 'buy: ring 1 refused at 10 pages')
   ok(!canBuy(START, 3, B, 10, RING_COST[1] - 1).ok, 'buy: sold without enough grey matter')
+  ok(RING_COST.join() === '0,60,120,200', 'M139 (Alex 11-24): the ring prices moved')
+  { const short = canBuy(START, 3, B, 10, 59), exact = canBuy(START, 3, B, 10, 60); ok(!short.ok && short.cost === 60 && exact.ok && exact.cost === 60, 'M139: 59 refused, 60 buys a ring 1 square') }
   ok(!canBuy(START, 4, B, 99, 999).ok, 'buy: sold a square touching nothing you hold')
   const more = new Set([...START, sqId(3, B), sqId(4, B), sqId(5, B), sqId(6, B)])
   ok(!canBuy(more, 7, B, 14, 999).ok, 'buy: ring 2 sold before 15 pages')

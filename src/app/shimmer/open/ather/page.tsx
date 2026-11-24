@@ -271,7 +271,7 @@ function AtherSliceGame() {
   const [fog, setFog] = useState<Fog | null>(null)
   const [waymarks, setWaymarks] = useState<Waymark[]>([])
   const [garden, setGarden] = useState<Garden>(freshGarden)
-  const spiritFight = useSpiritFight()   // M127 s1: owner-only for now
+  const spiritFight = useSpiritFight()   // M127: every keeper since 11-24
   const book = useBook(), pagesNow = garden.pages + seenCount(book)   // M76: bloomed spirits fill the grimoire; garden.pages = older grants
   const [panel, setPanel] = useState<Panel>(null)
   // M36 (Alex 11-19 'yes wire the page.tsx sfx hooks'): a panel opening / closing swishes; any button tap ticks. Only yay sounds play.

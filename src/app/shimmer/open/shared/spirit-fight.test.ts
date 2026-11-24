@@ -119,10 +119,10 @@ function fight(o: Opt = {}) {
   ok(JSON.stringify(walk(true)) === JSON.stringify(walk(false)), 'a Hollow with three spirits in its face walks exactly as if alone')
   ok(SHAMBLER.hp === 45, 'sized against the 45 hp shambler')
 }
-// (9) the gate: one switch, owner-only, and off = no brain (non-owner play unchanged)
+// (9) the switch: one, ON FOR EVERY KEEPER (★ MOVED 11-24, Alex's flip: it was the owner check), and off = no brain
 {
   const w = readFileSync(new URL('../ather/wilds-spirits.tsx', import.meta.url), 'utf8'), l = readFileSync(new URL('../ather/combat-layer.tsx', import.meta.url), 'utf8'), p = readFileSync(new URL('../ather/page.tsx', import.meta.url), 'utf8')
-  ok(/export function useSpiritFight\(\): boolean \{ return useIsOwner\(\) \}/.test(w), 'the switch is the owner check')
+  ok(/export function useSpiritFight\(\): boolean \{ return true \}/.test(w) && !/useIsOwner/.test(w), 'the switch is on for every keeper, no owner check')
   ok(/spirits = false/.test(l) && /if \(!spirits\) return/.test(l) && /spirits=\{spiritFight\}/.test(p) && /\{spiritFight && terrain/.test(p), 'brain and bodies both hang on it')
 }
 // (10) the newcomer sim: off = today's numbers; with a trio the 6% rule still holds and their part is small
