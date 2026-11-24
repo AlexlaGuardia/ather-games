@@ -87,7 +87,8 @@ export const M70SIDE_TEXT = {
 } as const
 /** The journal entry: title + note (already words). null = nothing to show. */
 export function sideQuest(t: Tut, have: Have, name: (id: string) => string): { title: string; note: string; step: SideStep | 'done' } | null {
-  if (t.m70side === 'done') return { title: line('quest.m70side.title'), note: line('quest.m70side.done'), step: 'done' }
+  // done: the canon done line stands as the entry's title (a note is hidden until the entry is opened; m70Quest's 'thanked' does the same)
+  if (t.m70side === 'done') return { title: line('quest.m70side.done'), note: line('quest.m70side.done'), step: 'done' }
   const s = sideStep(t, have)
   if (!s) return null
   return { title: line('quest.m70side.title'), note: s === 'gather' ? M70SIDE_TEXT.gather(name) : M70SIDE_TEXT[s], step: s }

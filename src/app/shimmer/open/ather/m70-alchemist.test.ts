@@ -78,7 +78,7 @@ const h = walk(t, true)
 ok(h.shown.join('|') === txt(HAND_SCRIPT).join('|'), `hand-over: bark.open, then reward.1-3 in order (${h.shown.join(' | ')})`)
 ok(h.labels[0][0] === M70SIDE_TEXT.handLabel, 'the hand label first')
 ok(h.sets === 1 && h.t.m70side === 'done' && h.t.gifts.includes('m70set'), 'the set handed once, quest done')
-ok(sideQuest(h.t, {}, name)?.note === GLADE_LINES['quest.m70side.done'].text, 'journal: the canon done line')
+ok(sideQuest(h.t, {}, name)?.title === GLADE_LINES['quest.m70side.done'].text, 'journal: the canon done line')
 ok(!angelicaTalks(h.t) && angelicaStart(rt(h.t), true) === null && !deskOpen(h.t), 'after: Angelica silent, Desk shut (reload = parse: nothing re-offered)')
 // a full bag: nothing handed, nothing moved
 const full = walk(t, true, () => 0, () => false)
