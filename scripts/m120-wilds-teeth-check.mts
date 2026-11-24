@@ -18,6 +18,8 @@ try {
   const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 390, height: 844 })
   const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
+  // the first top-up of strays, read the frame it happens: where the CAMERA (the sim's keeper) and the WALKER were, and how far each stray is
+  await p.evaluateOnNewDocument(() => { const W = window as any, f = () => { try { const A = W.__ather, C = A?.combat?.(); if (C?.hollows.length && A.zone() === 'wilds' && !W.__firstUp) { const a = A.state(), c = A.camAim(); W.__firstUp = { keeper: [a.px | 0, a.pz | 0], cam: [c.cx | 0, c.cz | 0], strays: C.hollows.map((h: any) => Math.hypot(h.x - a.px, h.z - a.pz) | 0) } } } catch {} requestAnimationFrame(f) }; requestAnimationFrame(f) })
   const poll = async (fn: () => Promise<boolean>, ms = 10000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(300) } return false }
   const stt = () => p.evaluate(() => { const a = (window as any).__ather.state(); return { x: a.px, y: a.py, z: a.pz } }) as Promise<{ x: number; y: number; z: number }>
   // ── fresh profile: born in the Glade, out by the gate (node-check's route) ──
@@ -38,7 +40,7 @@ try {
     // ask until the keeper really stands at the gate with its prompt showing. E itself is pressed once.
     const yaw = Math.atan2(-(gate.x - sx), -(gate.z - sz))
     const atGate = () => p.evaluate((x, z) => { const a = (window as any).__ather.state(); return Math.hypot(a.px - x, a.pz - z) < 1 && /the gate \(the Wilds\)/.test(document.body.innerText) }, sx, sz)
-    for (let k = 0; k < 8 && !(await atGate()); k++) { await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), sx, sz, yaw); await poll(atGate, 8000) }
+    for (let k = 0; k < 8 && !(await atGate()); k++) { if (k) console.log(`   gate ask ${k + 1}: the last arrival was dropped or is still veiled`); await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), sx, sz, yaw); await poll(atGate, 8000) }
     ok(await atGate(), '0. at the Glade gate, its prompt showing')
     await p.keyboard.press('KeyE') }
   await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 90000 })
@@ -50,6 +52,7 @@ try {
   const clock0 = await C('return C.clock ?? 0') as number
   await poll(async () => await C(`return (C.clock ?? 0) - ${clock0} > 3.5 && C.hollows.length >= 6 && C.hollows.every(h => Math.hypot(h.x - window.__ather.state().px, h.z - window.__ather.state().pz) < 130)`), 60000)
   const hs = await C('return C.hollows.map(h => ({ id: h.id, kind: h.kind, pack: h.pack, maxHp: h.maxHp, x: h.x, z: h.z, st: h.state }))') as { id: number; kind: string; pack?: number; maxHp: number; x: number; z: number; st: string }[]
+  console.log(`   first top-up: ${JSON.stringify(await p.evaluate(() => (window as any).__firstUp))}`)
   const packs = new Map<number, typeof hs>(); for (const h of hs) if (h.pack) packs.set(h.pack, [...(packs.get(h.pack) ?? []), h])
   // M120 s2: a crawler brood is loose strays by design (they pool instead): only shamblers/floaters must be in packs
   ok(hs.length >= 6 && hs.filter(h => h.kind !== 'crawler').every(h => !!h.pack), `1. ${hs.length} strays, shamblers/floaters all in packs (${hs.filter(h => h.kind !== 'crawler' && !h.pack).length} loose; ${hs.filter(h => h.kind === 'crawler').length} crawlers)`)
@@ -69,10 +72,12 @@ try {
   {
     await clear()
     const s = await stt()
+    // the chase STAGGERS by id and x (speed * (0.8 + 0.35 sin)), 0.45x to 1.15x: the luck of the id decided this. Pick the id whose
+    // stagger on this path is mid (sin 0.4-0.6 = 0.94-1.01x): 2.1 m/s reads ~2.05, the old 1.7 would read ~1.66
     let best = 0
     for (const a of [0, 1.57, 3.14, 4.71]) {
       if (best > 1.85) break
-      await C(`C.hollows.length = 0; C.keeper.hp = C.keeper.maxHp; const x = ${s.x} + Math.cos(${a}) * 18, z = ${s.z} + Math.sin(${a}) * 18; C.hollows.push({ id: C.nextId++, kind: 'shambler', x, y: ${s.y}, z, yaw: 0, hp: 9999, maxHp: 9999, state: 'chase', t: 0, wx: x, wz: z, lx: 0, lz: 0, hitFlash: 0, hitThisLunge: false })`)
+      await C(`C.hollows.length = 0; C.keeper.hp = C.keeper.maxHp; const x = ${s.x} + Math.cos(${a}) * 18, z = ${s.z} + Math.sin(${a}) * 18; let id = C.nextId; while (Math.abs(Math.sin(id * 1.7 + (x - Math.cos(${a}) * 1.2) * 0.3) - 0.5) > 0.1) id++; C.nextId = id + 1; C.hollows.push({ id, kind: 'shambler', x, y: ${s.y}, z, yaw: 0, hp: 9999, maxHp: 9999, state: 'chase', t: 0, wx: x, wz: z, lx: 0, lz: 0, hitFlash: 0, hitThisLunge: false })`)
       const at = () => C(`const h = C.hollows.find(q => q.hp > 999); C.keeper.hp = C.keeper.maxHp; return h ? { d: Math.hypot(h.x - ${s.x}, h.z - ${s.z}), clock: C.clock, st: h.state } : null`) as Promise<{ d: number; clock: number; st: string } | null>
       await sleep(400); const a0 = await at(); await sleep(3500); const a1 = await at()
       if (a0 && a1 && a1.clock > a0.clock && a1.d > 3) best = Math.max(best, (a0.d - a1.d) / (a1.clock - a0.clock))
