@@ -2,6 +2,7 @@
 // Picks a real goldwood + shimmeroak off the start tile (the same parser the page runs). From 6 m it aims at the goldwood
 // and prunes through the click's own path (__ather.prune): logs land in the bag, a timer in open.pruned.v1, mana is spent.
 // From 14 m nothing is aimed. A shimmeroak takes a Forestry 1 keeper (M136: no level gate). Screenshots to --out.   npx tsx scripts/forestry-check.mts [--out dir]
+import { collect } from './lib/loot.mts'
 import puppeteer from 'puppeteer-core'
 import { aimAt } from './lib/aim.mts'
 import { loneTree } from './lib/lone-tree.mts'
@@ -34,7 +35,7 @@ try { await p.screenshot({ path: `${out}/forestry-2-channel.png` }) } catch { /*
 res.chanStarted = await p.evaluate(() => (window as any).__ather.chan?.())
 for (let i = 0; i < 80 && await p.evaluate(() => !!(window as any).__ather.chan?.()); i++) { try { await p.screenshot({ path: `${out}/_frame.png` }) } catch { /* slow frame */ } }   // gathering is a CHANNEL now (channel.ts): wait for the last chip
 try { await p.screenshot({ path: `${out}/forestry-3-drops.png` }) } catch { /* slow frame */ }
-await sleep(1500)
+await sleep(1500); await collect(p, async () => { try { await p.screenshot({ path: `${out}/_frame.png` }) } catch { /* slow */ } })   // M141: the yield lies on the ground
 res.manaSpent = +(mana0 - (await p.evaluate(() => (window as any).__ather.mana()))).toFixed(1)
 res.afterGold = await p.evaluate(() => ({ pruned: Object.keys(JSON.parse(localStorage.getItem('open.pruned.v1') ?? '{}')), inv: (JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots as ({ id: string; n: number } | null)[]).filter(Boolean).map(s => `${s!.id}x${s!.n}`) }))
 // out of reach: 14 m off, nothing is aimed

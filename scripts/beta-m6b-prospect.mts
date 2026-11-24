@@ -5,6 +5,7 @@
 // Records what a stranger SEES that points at prospecting (welcome card, journal, bag, the HUD prompt at a node).
 //   npx tsx scripts/beta-m6b-prospect.mts [--url https://ather.games] [--out /tmp/m6b]
 //   PASS = blankstone + raw_mana_shard in the bag, the node recorded mined, zero page errors.
+import { collect } from './lib/loot.mts'
 import puppeteer from 'puppeteer-core'
 import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { GATE } from '../src/app/shimmer/open/ather/plot'
@@ -111,7 +112,7 @@ for (let c = 0; c < 4 && !(await mined()); c++) {
   for (let k = 0; k < 14; k++) { await tick(1, 250); if (k === 3 && c === 0) await shot('6-burst') }
   seen.toastAfter = await text(); await sleep(1500)
 }
-await tick(4); await shot('7-after')
+await tick(4); await shot('7-after'); await collect(p, () => tick(1))   // M141: walk over what fell
 res.attempts = attempts; res.bag = await readBag(); res.mined = await mined(); res.pageErrors = errs.slice(0, 3)
 console.log(JSON.stringify({ res, seen }, null, 1))
 const bag = res.bag as string[]

@@ -4,6 +4,7 @@
 // NOT spent, the logs stay), comes back and E resumes the SAME work (done count carries on), and it runs to the last chip
 // (the tree is pruned, every chip's logs are in the bag). Hooks: movement, reading, __ather.prune (the click's own path),
 // __ather.chan.   npx tsx scripts/channel-check.mts [--url http://localhost:3203] [--out dir]
+import { collect } from './lib/loot.mts'
 import puppeteer from 'puppeteer-core'
 import { aimAt } from './lib/aim.mts'
 import { loneTree } from './lib/lone-tree.mts'
@@ -47,7 +48,7 @@ await aimFrom(gold, 6)
 await p.evaluate(() => (window as any).__ather.prune())
 res.resumed = await chan()
 for (let i = 0; i < 120 && await chan(); i++) await frame()
-await sleep(1500); await frame(); await frame()
+await sleep(1500); await frame(); await frame(); await collect(p, frame)   // M141: the yield lies on the ground
 res.finished = { chan: await chan(), logs: await logs(), pruned: await pruned() }
 try { await p.screenshot({ path: `${out}/ch-2-done.png` }) } catch { /* slow frame */ }
 console.log(JSON.stringify(res))

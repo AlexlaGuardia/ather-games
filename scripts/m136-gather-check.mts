@@ -12,6 +12,7 @@ import { parseWilds, BIOME, type WildsMeta } from '../src/app/shimmer/open/ather
 import type { Zone, TreeKind } from '../src/app/shimmer/open/ather/forestry'
 import { TREE_DIAL } from '../src/app/shimmer/open/ather/gather-dials'
 import { aimAt } from './lib/aim.mts'
+import { collect, lootOf } from './lib/loot.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m136'); mkdirSync(out, { recursive: true })
 const D = 'public/open/wilds/', index = JSON.parse(readFileSync(D + 'tiles.json', 'utf8')) as { tiles: { name: string; tx: number; ty: number; nodes: { i: number; j: number; zone?: Zone }[] }[] }
@@ -53,7 +54,7 @@ await p.evaluateOnNewDocument(() => {
     sessionStorage.setItem('m136', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star')
     localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }))
-    for (const k of ['open.pruned.v1', 'open.mined.v1', 'open.gather.v1', 'open.skills.v1', 'open.inv.v1', 'open.tools.v1']) localStorage.removeItem(k)
+    for (const k of ['open.pruned.v1', 'open.mined.v1', 'open.gather.v1', 'open.loot.v1', 'open.skills.v1', 'open.inv.v1', 'open.tools.v1']) localStorage.removeItem(k)
   }
   const real = Date.now.bind(Date); (window as any).__skip = 0; Date.now = () => real() + (window as any).__skip
 })
@@ -102,6 +103,7 @@ try {
   const mid = await chan(); if (mid) { ok((await count('goldwood_log')) === 0, `nothing has dropped part way (${(mid.done * 100).toFixed(0)}%)`); await shot('1-goldwood-bar') }
   await workOut(); const m1 = await A<number>('mana()')
   ok(/\+20 Forestry/.test(await saw(/\+\d+ Forestry/)), '+20 Forestry at the end')
+  ok((await count('goldwood_log')) === 0 && (await lootOf(p)).some(d => d.item === 'goldwood_log'), 'the yield lies on the ground first (M141)'); await collect(p, frame)
   const logs = await count('goldwood_log'); ok(logs >= 2 && logs <= 4, `the whole roll at the end (${logs} logs)`)
   ok(m0 - m1 > 3.5 && m0 - m1 <= 5.01, `about 5 mana spent (${(m0 - m1).toFixed(2)}, some refilled since)`)
   ok((await ls('open.pruned.v1'))?.[gold.id] === r0?.until && !(await rec(gold.id)), 'spent till the reset counted from the first touch')
@@ -135,12 +137,13 @@ try {
     await setMana(100); await aimed(will); const a = await A<number>('mana()'), g0 = (await gather())?.p ?? 1; await A('prune()'); await frame(); await workOut()
     const g1 = (await gather())?.p ?? 1; spent += (g1 - g0) * 300; console.log(`   refill ${k + 1}: ${(g0 * 100).toFixed(1)}% -> ${(g1 * 100).toFixed(1)}%, bar ${a.toFixed(0)} -> ${(await A<number>('mana()')).toFixed(0)}`)
   }
+  await collect(p, frame)
   const pr = (await ls('open.pruned.v1'))?.[will.id], got = await count('starwillow_log')
   ok(pr === r1!.until, 'finished: spent till the SAME reset, from the first touch')
   ok(got === r1!.drops.find(d => d.id === 'starwillow_log')!.n, `the roll of the first touch paid whole (${got})`)
   // 6. the reset, on a faked clock
   const skipTo = (t: number) => p.evaluate(v => { (window as any).__skip += v - Date.now() }, t)
-  await aimed(will); await skipTo(pr - 40000)
+  await stand(will); await aimed(will); await skipTo(pr - 40000)
   ok(!!(await saw(/Starwillow, regrowing/)), '40 s before its reset: still spent'); await A('prune()'); ok(await chan() === null, '...and cannot be worked again')
   await skipTo(pr + 100)
   ok(!!(await saw(/prune the Starwillow \(300 mana\)/)), 'at its reset: fresh again, 300 mana')

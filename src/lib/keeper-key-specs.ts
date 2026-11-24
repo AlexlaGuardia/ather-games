@@ -60,6 +60,7 @@ export const GARDEN_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'open.pruned.v1',           worldTied: false },  // forestry world state
   { base: 'open.mined.v1',            worldTied: false },  // prospecting world state
   { base: 'open.gather.v1',           worldTied: false },  // M136: nodes part-worked (progress, roll, reset time), beside the two above
+  { base: 'open.loot.v1',             worldTied: false },  // M141: what finished nodes dropped, still on the ground (ather/ground-loot.ts)
   { base: 'ather.nodes.v2',           worldTied: false },  // node spread state
   { base: 'ather.nodes.skew',         worldTied: false },
   { base: 'ather.spreadmap.v1',       worldTied: false },  // M70 s2: the spread map: which node areas the keeper has uncovered + when each was last tended (ather/spread-map.ts)

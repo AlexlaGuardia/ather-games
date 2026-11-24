@@ -4,7 +4,7 @@
 //
 // ★ ONE CYCLE, ONE ROLL, ONE YIELD. The first touch rolls the node's whole yield (prunePlan / minePlan, unchanged odds) and
 //   starts its RESET timer. Letting go (out of reach, a weapon drawn, dry) keeps the progress; a reload keeps it; everything
-//   drops at the end, and the finished node stays spent for what is LEFT of that same timer (pruneCommit / mineCommit take
+//   drops at the end (on the ground: ground-loot.ts, M141), and the finished node stays spent for what is LEFT of that same timer (pruneCommit / mineCommit take
 //   `until`). At zero the record is gone: unfinished progress and its roll with it.
 // ★ PROGRESS IS A FRACTION, not mana: a better focus picked up half way makes the rest cheaper.
 // Saved per garden (GARDEN_KEY_SPECS), beside open.pruned.v1 / open.mined.v1: a node is the plot's, every keeper of an account

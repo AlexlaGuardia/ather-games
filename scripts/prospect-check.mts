@@ -4,6 +4,7 @@
 // the node now reads as growing back. Also shoots the node close, before and after. ⚠ Headless draws a frame only when
 // asked: the script forces frames with screenshots (the channel and the arrival ride frames).
 //   npx tsx scripts/prospect-check.mts [--url http://localhost:3202] [--out dir]
+import { collect } from './lib/loot.mts'
 import puppeteer from 'puppeteer-core'
 import { readFileSync, existsSync } from 'fs'
 import { parseWilds, BIOME, type WildsMeta } from '../src/app/shimmer/open/ather/wilds'
@@ -59,7 +60,7 @@ await p.evaluate(() => (window as any).__ather.mine())
 for (let i = 0; i < 6; i++) await frame(i === 2 ? 'prospect-2-burst' : '_frame')
 for (let i = 0; i < 80 && await p.evaluate(() => !!(window as any).__ather.chan?.()); i++) { try { await p.screenshot({ path: `${out}/_frame.png` }) } catch { /* slow frame */ } }   // gathering is a CHANNEL now (channel.ts): wait for the last chip
 await sleep(1500); for (let i = 0; i < 4; i++) await frame()
-await frame('prospect-3-after')
+await frame('prospect-3-after'); await collect(p, () => frame())   // M141: the yield lies on the ground
 res.bag = await p.evaluate(() => (JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots as ({ id: string; n: number } | null)[]).filter(Boolean).map(s => `${s!.id}x${s!.n}`))
 res.mined = await p.evaluate((id) => Object.keys(JSON.parse(localStorage.getItem('open.mined.v1') ?? '{}')).includes(id), P.id)
 res.errors = errs.slice(0, 3)

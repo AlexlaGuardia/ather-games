@@ -43,7 +43,7 @@ import { Vector3, type Camera, type Scene, type WebGLRenderer } from 'three'
 import { VoxelDayNight } from '../shared/day-night'
 import { terrainWorld } from '../terrain-world'
 import { withPieces } from './dynamic-solids'
-import { wildsStructures, setWildsPartBoxes } from './obstacles'   // M117 s3: Hollows steer round buildings, shots stop on walls
+import { wildsStructures, setWildsPartBoxes, bodyBlocked } from './obstacles'   // M117 s3: Hollows steer round buildings, shots stop on walls
 import { GateRings } from '../shared/gate-rings'
 import { Walker, verbOf, type Loco } from './walker'
 import {
@@ -154,6 +154,8 @@ import { useMorelHints } from '../shared/morel-hints'   // BETA M33 S2: stuck hi
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
 import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
 import { DeathPack, fallAndDrop, packLying } from './death-pack'
+import { dropLoot, lootSpots, pilesOf } from './ground-loot'   // BETA M141
+import { GroundLoot } from './ground-loot-view'
 import { useOpeningChain, useChain, chainDeath, chainGateOpen, chainFlip } from '../shared/opening-chain-store'   // BETA M73: Ather to Nyx
 import { flipPulse, runeHoldPulse } from '../shared/opening-chain'
 import { CloudReefs, CloudDeck, HorizonRing } from '../shared/cloud-edge'
@@ -1120,25 +1122,25 @@ function AtherSliceGame() {
       if (now - ch.savedAt > 1000) { ch.savedAt = now; saveWork() }
       return
     }
-    // done: the whole roll into the bag at once. A bag that cannot hold it all keeps the node finished-but-unpaid (till its reset).
-    let inv = getInv(), full = false
-    for (const d of ch.w.drops) { const g = give(inv, d.id, d.n); inv = g.inv; if (g.left) full = true }
-    if (full) { stopChannel(`Your bag is full. The ${chanName(ch)} keeps what is done.`); return }
+    // done: the whole roll on the ground beside the node (M141, ground-loot.ts); XP and the level land now, the goods on pick-up
     const fin = finishWork(ch.w); if (!fin) { stopChannel(); return }
-    setInv(inv); sfx('pickup-item'); knock(ch, true)
+    const V = voidsRef.current, dry = (x: number, z: number) => { const y = ww?.heightAt(x, z) ?? -Infinity; return Number.isFinite(y) && !ww!.shape.water(x, y, z, x, y, z).some(b => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1 && y < b.y1) }
+    const free = (x: number, z: number) => !!ww && ww.walkable(x, z, 0.35) && (V?.weight(x, z) ?? 0) < FALL_LIP / 2 && dry(x, z) && !bodyBlocked(wildsStructures, x, ww.heightAt(x, z), z, 0.35)
+    const feet = { x: px, y: dollDrive.current.y, z: pz }, yieldNow = ch.w.drops.filter(d => d.n > 0)
+    dropLoot(ch.node, ch.w.id, fin.until, yieldNow, lootSpots(at, feet, pilesOf(yieldNow).length, free, (x, z) => ww?.heightAt(x, z) ?? -Infinity))
+    knock(ch, true)
     const x = ch.node === 'tree' ? pruneCommit(ch.t.kind, ch.t.id, Date.now(), fin.until) : mineCommit(ch.c.kind, ch.c.id, Date.now(), fin.until)
     const skill = ch.node === 'tree' ? 'Forestry' : 'Prospecting', sk = ch.node === 'tree' ? 'forestry' : 'prospecting'
     // M17: the focus's xpBonus on top of the node's XP (M133: tools are permanent, nothing wears)
     const extraXp = bonusXp(toolsRef.current[sk], x.xp); if (extraXp > 0) { const up2 = addOpenXp(sk, extraXp); if (up2 && !x.levelUp) x.levelUp = up2 }
     x.xp += extraXp
-    const names = ch.w.drops.filter(d => d.n > 0).map(d => `${d.n > 1 ? d.n + ' × ' : ''}${itemDef(d.id).name}`)
     const ex = ch.w.extra as { found?: string; perk?: string } | string | undefined
     const perk = typeof ex === 'string' ? ex : ex?.perk
     const egg = ch.node === 'crystal' && ch.c.kind === 'egg' && typeof ex === 'object' && ex?.found ? `It was ${CRYSTAL_NAME[ex.found as keyof typeof CRYSTAL_NAME].toLowerCase().replace(' crystal', '')}! ` : ''
-    if (ch.node === 'tree') fxRef.current?.drop(ch.t, ch.w.drops)   // off the node now: no pulse is started (or waited for) at the end
-    else { const found = (ch.w.extra as { found: Exclude<CrystalKind, 'egg'> }).found; cFxRef.current?.burst(ch.c, { found, n: Math.max(1, ch.w.drops.find(x => x.id === CRYSTAL_ITEM[found])?.n ?? 1) }) }
-    stopChannel(`${egg}${perk ? `${perk}! ` : ''}${names.join(' · ')} · +${x.xp} ${skill}${x.levelUp ? `. ${skill} ${x.levelUp}!` : ''}`)
-  }, [stopChannel])
+    if (ch.node === 'crystal') { const found = (ch.w.extra as { found: Exclude<CrystalKind, 'egg'> }).found; cFxRef.current?.burst(ch.c, { found }) }
+    stopChannel(`${egg}${perk ? `${perk}! ` : ''}+${x.xp} ${skill}${x.levelUp ? `. ${skill} ${x.levelUp}!` : ''}`)
+  }, [stopChannel, ww])
+  const lootKeeper = useCallback(() => dollDrive.current, []), lootCan = useCallback(() => fadeRef.current === 0 && !sinkRef.current && !(vitalsRef.current.hp <= 0), [])   // M141
   /** what the bar shows: the node being worked, else the aimed node if it is part done (null = no bar) */
   const gatherView = (): GatherView | null => {
     if (zone.kind !== 'wilds') return null
@@ -1715,6 +1717,7 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && ww && <RinningFX ease={easeOf(toolsRef.current.rinning)} waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT && !!toolsRef.current.rinning} onCatch={onCatch} onGone={onGone} />}
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} infected={infectedSet} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />{net && <TilePaths net={net} W={T} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />}</group> })}
         {ww && <DeathPack active={zone.kind === 'wilds'} />}
+        {zone.kind === 'wilds' && ww && <GroundLoot keeper={lootKeeper} ground={ground} can={lootCan} />}
         {zone.kind === 'wilds' && ww && <><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
         {zone.kind === 'glade' && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><GladeLots /></>}   {/* M67 s1b-2: the Glade's backdrop in Greg's garden */}
         {zone.kind === 'glade' && <GladeGreg loaded={(x, z) => { const y = gladeZoneGround(x, z); return Number.isFinite(y) ? y : null }} tour={tour} hold={panel?.kind === 'talk' || panel?.kind === 'greg'} keeper={poseRef} onArrive={onTourArrive} live={gregLive} />}

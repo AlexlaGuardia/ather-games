@@ -5,7 +5,7 @@
 //              cluster); the hit one wears a ring in its own light.
 //   CHANNEL  — a pulse of the work (the stream of motes, hand to focus, is gather-tether.tsx).
 //   FRACTURE — when the light lands it bursts: shards in the colour of what it gave (the Trails' hidden crystal shows its
-//              element only now), and what you took flies home to you.
+//              element only now). What it gave lies on the ground (ground-loot-view.tsx, M141).
 // Everything here is look. The rules are prospecting.ts; the page wires the click.
 
 import { useRef, type MutableRefObject } from 'react'
@@ -22,12 +22,12 @@ export interface ProspectFx {
   start(c: Crystal, ended: () => void): boolean
   /** The work is over, this frame: no pulse outlives it. */
   stop(): void
-  /** It bursts now: what it gave, and which kind showed. */
-  burst(c: Crystal, got: { found: Exclude<CrystalKind, 'egg'>; n: number }): void
+  /** It bursts now: which kind showed. */
+  burst(c: Crystal, got: { found: Exclude<CrystalKind, 'egg'> }): void
   busy(): boolean
 }
 export const CHANNEL_MS = 1000
-const SHARDS = 22, HOME = 6
+const SHARDS = 22
 
 /** ray (o, unit d) against a sphere: near distance or Infinity */
 function raySphere(o: THREE.Vector3, d: THREE.Vector3, cx: number, cy: number, cz: number, r: number): number {
@@ -39,7 +39,7 @@ function raySphere(o: THREE.Vector3, d: THREE.Vector3, cx: number, cy: number, c
 }
 export const crystalCentre = (c: Crystal) => c.y + 0.55 * c.s
 
-interface Bit { p: THREE.Vector3; v: THREE.Vector3; rot: THREE.Euler; spin: THREE.Vector3; t: number; home: boolean; from?: THREE.Vector3 }
+interface Bit { p: THREE.Vector3; v: THREE.Vector3; rot: THREE.Euler; spin: THREE.Vector3; t: number }
 
 export function ProspectingFX({ ww, aim, fx, ground, mineable }: {
   ww: WildsWorld
@@ -51,10 +51,10 @@ export function ProspectingFX({ ww, aim, fx, ground, mineable }: {
 }) {
   const { camera } = useThree()
   const ring = useRef<THREE.Mesh>(null), ringMat = useRef<THREE.MeshBasicMaterial>(null)
-  const shards = useRef<THREE.InstancedMesh>(null), homeM = useRef<THREE.InstancedMesh>(null)
-  const shardMat = useRef<THREE.MeshBasicMaterial>(null), homeMat = useRef<THREE.MeshLambertMaterial>(null)
+  const shards = useRef<THREE.InstancedMesh>(null)
+  const shardMat = useRef<THREE.MeshBasicMaterial>(null)
   const ch = useRef<{ c: Crystal; t0: number; ended: () => void; done: boolean } | null>(null)
-  const bits = useRef<Bit[]>([]), homing = useRef<Bit[]>([])
+  const bits = useRef<Bit[]>([])
   const tmp = useRef({ o: new THREE.Vector3(), d: new THREE.Vector3(), m: new THREE.Matrix4(), q: new THREE.Quaternion(), s: new THREE.Vector3(), p: new THREE.Vector3(), e: new THREE.Euler() })
 
   fx.current = {
@@ -68,12 +68,10 @@ export function ProspectingFX({ ww, aim, fx, ground, mineable }: {
     burst(c, got) {
       const look = CRYSTAL_LOOK[got.found], at = new THREE.Vector3(c.x, crystalCentre(c), c.z)
       shardMat.current?.color.set(look.glow).lerp(new THREE.Color('#ffffff'), 0.35)
-      homeMat.current?.color.set(look.color); homeMat.current?.emissive.set(look.glow)
       bits.current = Array.from({ length: SHARDS }, () => {
         const a = Math.random() * Math.PI * 2, out = 1.5 + Math.random() * 3
-        return { p: at.clone(), v: new THREE.Vector3(Math.cos(a) * out, 2 + Math.random() * 3, Math.sin(a) * out), rot: new THREE.Euler(Math.random() * 3, Math.random() * 3, 0), spin: new THREE.Vector3(Math.random() * 9 - 4.5, Math.random() * 9 - 4.5, 0), t: 0, home: false }
+        return { p: at.clone(), v: new THREE.Vector3(Math.cos(a) * out, 2 + Math.random() * 3, Math.sin(a) * out), rot: new THREE.Euler(Math.random() * 3, Math.random() * 3, 0), spin: new THREE.Vector3(Math.random() * 9 - 4.5, Math.random() * 9 - 4.5, 0), t: 0 }
       })
-      homing.current = Array.from({ length: Math.min(HOME, got.n + 1) }, (_, i) => ({ p: at.clone(), v: new THREE.Vector3(Math.cos(i * 1.4) * 1.4, 2.6, Math.sin(i * 1.4) * 1.4), rot: new THREE.Euler(), spin: new THREE.Vector3(3, 4, 0), t: 0, home: false }))
     },
   }
 
@@ -114,26 +112,6 @@ export function ProspectingFX({ ww, aim, fx, ground, mineable }: {
       })
       sm.count = bits.current.length; sm.instanceMatrix.needsUpdate = true
     }
-    // ── what you took: pops out, lands, flies home
-    const hm = homeM.current
-    if (hm) {
-      const keeper = T.o.clone().add(new THREE.Vector3(0, -0.7, 0))
-      for (const b of homing.current) {
-        b.t += dt
-        if (!b.home) {
-          b.v.y -= 9.8 * dt; b.p.addScaledVector(b.v, dt); b.rot.x += b.spin.x * dt; b.rot.y += b.spin.y * dt
-          const g = ground(b.p.x, b.p.z)
-          if (Number.isFinite(g) && b.p.y <= g + 0.12 && b.v.y < 0) { b.p.y = g + 0.12; b.v.set(0, 0, 0) }
-          if (b.t > 0.95) { b.home = true; b.t = 0; b.from = b.p.clone() }
-        } else if (b.from) {
-          const u = Math.min(1, b.t / 0.45), e = u * u * (3 - 2 * u)
-          b.p.lerpVectors(b.from, keeper, e).y += Math.sin(u * Math.PI) * 0.8
-        }
-      }
-      homing.current = homing.current.filter(b => !(b.home && b.t >= 0.45))
-      homing.current.forEach((b, i) => hm.setMatrixAt(i, T.m.compose(b.p, T.q.setFromEuler(b.rot), T.s.set(0.16, 0.26, 0.16))))
-      hm.count = homing.current.length; hm.instanceMatrix.needsUpdate = true
-    }
   })
 
   return (
@@ -143,9 +121,6 @@ export function ProspectingFX({ ww, aim, fx, ground, mineable }: {
       </mesh>
       <instancedMesh ref={shards} args={[undefined, undefined, SHARDS]} frustumCulled={false}>
         <octahedronGeometry args={[1, 0]} /><meshBasicMaterial ref={shardMat} color="#ffffff" toneMapped={false} />
-      </instancedMesh>
-      <instancedMesh ref={homeM} args={[undefined, undefined, HOME]} frustumCulled={false}>
-        <octahedronGeometry args={[1, 0]} /><meshLambertMaterial ref={homeMat} emissiveIntensity={0.6} flatShading />
       </instancedMesh>
     </>
   )

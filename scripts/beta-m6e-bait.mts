@@ -5,6 +5,7 @@
 // forestry-check does); NEVER to grant an item. The bag opens on the real I key; the mast slot and "Make bait" are real
 // mouse clicks. PASS = bait is back in the bag, made from mast a pruned tree dropped.
 //   npx tsx scripts/beta-m6e-bait.mts [--url https://ather.games] [--out /tmp/m6e]
+import { collect } from './lib/loot.mts'
 import puppeteer from 'puppeteer-core'
 import { readFileSync, mkdirSync } from 'fs'
 import { parseWilds, type WildsMeta } from '../src/app/shimmer/open/ather/wilds'
@@ -44,7 +45,7 @@ for (const t of golds) {
   if ((await p.evaluate(() => (window as any).__ather.aim())) !== t.id) continue
   await p.evaluate(() => (window as any).__ather.prune()); await sleep(500)
   for (let i = 0; i < 80 && await p.evaluate(() => !!(window as any).__ather.chan?.()); i++) { try { await p.screenshot({ path: `${out}/_frame.png` }) } catch { /* slow frame */ } }   // gathering is a CHANNEL now (channel.ts): wait for the last chip
-  await sleep(1500); prunes++
+  await sleep(1500); await collect(p, frame); prunes++   // M141: walk over what fell
 }
 res.prunes = prunes; res.afterPrunes = await bag()
 // the bag: real I key, real click on the mast slot, real click on Make bait
