@@ -1,22 +1,21 @@
 // ── M110 s2 THE PWR / GRD / VIG TRAINING PIECES, OWNER-ONLY (2026-11-23, sprites-M110s2) ──────────────────────────────────────
-// SETUP (stated): the Vulnyx and the Manalotl bloomed on two placed planters, BOTH in the party, no stat record (species bases:
-// Vulnyx PWR 54 / GRD 40 / VIG 44, Manalotl PWR 30 / GRD 46 / VIG 54; Base cap 50). Pieces placed through the save, as set
+// SETUP (stated): the Vulnyx and the Manalotl bloomed on two placed planters, BOTH in the party, no stat record (M118: the
+// rebased species base, no form cap). Pieces placed through the save, as set
 // pieces (the bench recipes are unit-tested, the craft UI is not driven here). Owner cookie + ?spirits=3d, 390x844
 // (SwiftShader). The keeper stands by; nothing is clicked. Two phases, each a fresh browser context (its own save):
-//   A. the Push Stone (PWR) alone: the Manalotl (PWR 30) shoves at it on her own and her PWR rises; the Vulnyx (PWR 54, past
-//      the cap) may play it too and stays 54.
-//   B. the Guard Posts (GRD) and the Running Ring (VIG): the Vulnyx plays each on her own; GRD and VIG each rise.
+//   A. the Push Stone (PWR) alone, ASSIGNED to the Manalotl only (M118 s2 gate, ather.trainAssign.v1): she shoves at it on
+//      her own and her PWR rises; the Vulnyx (not assigned) never trains there.
+//   B. the Guard Posts (GRD) and the Running Ring (VIG), both assigned to the Vulnyx: she plays each on her own; GRD and VIG rise.
 // Every finished play is attributed: the piece she was playing just before her play count rose, and the record's change for
-// that one play = +1 to THAT piece's stat and nothing else (or nothing, when that stat is at / past the cap).
+// that one play = +1 to THAT piece's stat and nothing else (fresh records: far under the per-stat cap and the pool).
 // Motion per play (probe): shove = at the stone, braced (lean); guard = braced (crouch), at the gap; laps = at the ring's radius.
 //   C. reload keeps the record.   D. 0 page errors.
 //   npx tsx scripts/m110-pieces-check.mts [--url http://localhost:3202]      (OWNER_KEY from env or .env; run on the box)
 import puppeteer, { type Browser, type Page } from 'puppeteer-core'
 import { existsSync, readFileSync } from 'fs'
 import { BLOOM_MS } from '../src/app/shimmer/open/ather/spirit-seeds'
-import { FORM_CAP } from '../src/app/shimmer/open/ather/spirit-stats'
 import { FURNITURE } from '../src/app/shimmer/open/ather/furniture'
-import { SPECIES_STATS_V2 } from '../src/app/shimmer/engine/party-stats'
+import { SPECIES_BASE as SPECIES_STATS_V2 } from '../src/app/shimmer/open/ather/spirit-growth'   // M118: the rebased base
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games')
 const KEY = process.env.OWNER_KEY || (existsSync('.env') ? /OWNER_KEY=(.+)/.exec(readFileSync('.env', 'utf8'))?.[1]?.trim() : undefined)
@@ -37,14 +36,14 @@ type Rec = { form: string; g: Record<string, number>; plays: number }
 const SP = { 'vx-check': 'fox', 'mx-check': 'axolotl' } as const
 const ID_OF = { fox: 'vx-check', axolotl: 'mx-check' } as const
 
-async function phase(tag: string, pieces: Piece[], want: { sp: 'fox' | 'axolotl'; piece: Piece }[], maxS: number) {
+async function phase(tag: string, pieces: Piece[], want: { sp: 'fox' | 'axolotl'; piece: Piece }[], maxS: number, assign: Record<string, string[]>) {
   const p: Page = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 390, height: 844 })
   p.on('pageerror', e => errs.push(`${tag}: ${String(e).slice(0, 200)}`))
   await p.goto(`${new URL(url).origin}/owner?key=${encodeURIComponent(KEY!)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
   await p.goto(`${new URL(url).origin}/api/owner`, { waitUntil: 'load', timeout: 60000 })
   if (!await p.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner))) { ok(false, `${tag} owner cookie took`); return null }
   const all = [...PLANTERS, ...pieces.map(x => ({ ...x, q: 0, placedAt: 1 }))]
-  await p.evaluateOnNewDocument((pcs: unknown[], pots: unknown) => {
+  await p.evaluateOnNewDocument((pcs: unknown[], pots: unknown, asg: unknown) => {
     if (sessionStorage.getItem('m110p')) return; sessionStorage.setItem('m110p', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star')
     const slots: unknown[] = Array(32).fill(null); slots[0] = { id: 'waymark', n: 12 }
@@ -53,7 +52,8 @@ async function phase(tag: string, pieces: Piece[], want: { sp: 'fox' | 'axolotl'
     localStorage.setItem('ather.grimoire.v1', JSON.stringify({ v: 1, pages: [{ species: 'fox', stage: 'seen', at: 1 }], pots, met: [] }))
     for (const k of ['ather.spiritFollow.v1', 'ather.spiritFed.v1', 'ather.spiritStats.v1']) localStorage.removeItem(k)
     localStorage.setItem('ather.spiritParty.v1', JSON.stringify(['vx-check', 'mx-check']))
-  }, all, POTS(Date.now() - BLOOM_MS - 60000))
+    localStorage.setItem('ather.trainAssign.v1', JSON.stringify(asg))   // M118 s2: who may train where
+  }, all, POTS(Date.now() - BLOOM_MS - 60000), assign)
   const open = async () => {
     await p.goto(`${url}/shimmer/open/ather?hour=14&spirits=3d`, { waitUntil: 'load', timeout: 180000 })
     await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 })
@@ -90,7 +90,7 @@ async function phase(tag: string, pieces: Piece[], want: { sp: 'fox' | 'axolotl'
   // attribution: every finished play changed only its piece's stat, by +1, or nothing (at / past the cap)
   for (const x of plays) {
     const pc = pieces.find(y => y.id === x.piece), stat = pc ? FURNITURE[pc.item].train! : '?', base = SPECIES_STATS_V2[x.sp as 'fox'][stat as 'pwr']
-    const keys = Object.keys(x.delta), right = keys.length === 0 ? base >= FORM_CAP.base : keys.length === 1 && keys[0] === stat && x.delta[stat] === 1
+    const keys = Object.keys(x.delta), right = keys.length === 1 && keys[0] === stat && x.delta[stat] === 1
     ok(!!pc && right, `${tag} ${x.sp} played ${pc?.item ?? x.piece}: record change ${JSON.stringify(x.delta)} (only ${stat.toUpperCase()}, base ${base})`)
   }
   for (const w of want) {
@@ -107,13 +107,14 @@ async function phase(tag: string, pieces: Piece[], want: { sp: 'fox' | 'axolotl'
   return { p, open, book }
 }
 
-const A = await phase('A', [PS], [{ sp: 'axolotl', piece: PS }], 300)
-const B = await phase('B', [GP, RR], [{ sp: 'fox', piece: GP }, { sp: 'fox', piece: RR }], 240)
+const A = await phase('A', [PS], [{ sp: 'axolotl', piece: PS }], 300, { [PS.id]: ['mx-check'] })
+const B = await phase('B', [GP, RR], [{ sp: 'fox', piece: GP }, { sp: 'fox', piece: RR }], 240, { [GP.id]: ['vx-check'], [RR.id]: ['vx-check'] })
 if (B) {   // C. reload keeps it
   const b1 = await B.book(); await B.open(); const b2 = await B.book()
   ok(JSON.stringify(b2['vx-check']?.g) === JSON.stringify(b1['vx-check']?.g) && !!b1['vx-check']?.g.grd && !!b1['vx-check']?.g.vig, `C reload keeps the record ${JSON.stringify(b2['vx-check'])}`)
 }
-if (A) { const b = (await A.book())['mx-check']; ok(!!b?.g.pwr && Object.keys(b.g).length === 1, `A the Manalotl's record holds PWR only ${JSON.stringify(b)}`) }
+if (A) { const bk = await A.book(), b = bk['mx-check']; ok(!!b?.g.pwr && Object.keys(b.g).length === 1, `A the Manalotl's record holds PWR only ${JSON.stringify(b)}`)
+  ok(!bk['vx-check'], `A the Vulnyx (not assigned to the stone) trained nothing there ${JSON.stringify(bk['vx-check'] ?? null)}`) }
 ok(errs.length === 0, `D 0 page errors ${errs.join(' | ')}`)
 await br.close()
 console.log(fails ? `${fails} FAIL` : 'ALL PASS')

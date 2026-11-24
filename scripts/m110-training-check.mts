@@ -1,27 +1,30 @@
 // ── M110 s1 TRAINING FURNITURE: STATS GROW BY PLAY, OWNER-ONLY (2026-11-23, sprites-M110s1) ─────────────────────────────────
 // SETUP (stated): the Vulnyx and the Manalotl bloomed on two placed planters, BOTH in the party; one Goldwood Hurdle (the AGI
 // piece) placed on the plot (through the save, as a set piece: the bench recipe is unit-tested, its UI is not driven here).
-// The Manalotl's stat record starts at AGI +15 (34 -> 49, one under the Base cap); the Vulnyx has none (AGI 52, a species base
-// already past the Base cap 50). Owner cookie + ?spirits=3d, 390x844 (SwiftShader). The keeper stands by; nothing is clicked.
-//  1. Unprompted: each spirit goes to the hurdle ON HER OWN and plays (probe mode 'play' at the hurdle, a bound over it).
-//  2. Her stat rises: the Manalotl's AGI 49 -> 50 after a play (the record, ather.spiritStats.v1).
-//  3. At the cap it does not rise: a second Manalotl play leaves 50; the Vulnyx plays and her AGI stays 52 (no gain recorded).
+// M118 s2 REWRITE (form caps retired; the cap is now on what PLAY adds, TRAIN.cap, and only an ASSIGNED spirit trains at a
+// piece): the Manalotl is assigned to the hurdle (ather.trainAssign.v1) and her record starts at AGI +(TRAIN.cap - 1), one
+// under the per-stat cap; the Vulnyx is NOT assigned and has no record. Owner cookie + ?spirits=3d, 390x844 (SwiftShader).
+// The keeper stands by; nothing is clicked.
+//  1. Unprompted: the Manalotl goes to the hurdle ON HER OWN and plays (probe mode 'play' at the hurdle, a bound over it).
+//  2. Her stat rises: AGI base+cap-1 -> base+cap after a play (the record, ather.spiritStats.v1).
+//  3. At the cap it does not rise: a second Manalotl play leaves it; the Vulnyx (unassigned) never plays it, no gain recorded.
 //  4. Reload keeps the record.
-//  5. The panel radar (E at her -> Open) shows AGI 50 for the Manalotl, 52 for the Vulnyx.
+//  5. The panel radar (E at her -> Open) shows the Manalotl's capped AGI, the Vulnyx's rebased base AGI.
 //  6. 0 page errors.
 //   npx tsx scripts/m110-training-check.mts [--url http://localhost:3202]      (OWNER_KEY from env or .env; run on the box)
 import puppeteer, { type Page } from 'puppeteer-core'
 import { existsSync, readFileSync } from 'fs'
 import { BLOOM_MS } from '../src/app/shimmer/open/ather/spirit-seeds'
-import { FORM_CAP } from '../src/app/shimmer/open/ather/spirit-stats'
-import { SPECIES_STATS_V2 } from '../src/app/shimmer/engine/party-stats'
+import { TRAIN } from '../src/app/shimmer/open/ather/spirit-stats'
+import { SPECIES_BASE as SPECIES_STATS_V2 } from '../src/app/shimmer/open/ather/spirit-growth'   // M118: the rebased base
 import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games')
 const KEY = process.env.OWNER_KEY || (existsSync('.env') ? /OWNER_KEY=(.+)/.exec(readFileSync('.env', 'utf8'))?.[1]?.trim() : undefined)
 if (!KEY) { console.error('no OWNER_KEY (env or .env)'); process.exit(2) }
 const P = { x: -130, z: 102.5 }, HD = { id: 'hd-check', x: P.x - 3, z: P.z + 4 }, KEEP = { x: P.x - 1.5, z: P.z + 2.5 }
-const MX0 = FORM_CAP.base - 1 - SPECIES_STATS_V2.axolotl.agi   // the Manalotl's AGI gains at the start: one under the cap
+const MX0 = TRAIN.cap - 1   // the Manalotl's AGI gains at the start: one under the per-stat cap
+const CAPPED = SPECIES_STATS_V2.axolotl.agi + TRAIN.cap
 const PIECES = [{ id: 'vx-check', item: 'spirit_planter', x: P.x, z: P.z, q: 0, placedAt: 1 }, { id: 'mx-check', item: 'spirit_planter', x: P.x - 2.6, z: P.z + 1.0, q: 0, placedAt: 1 },
   { id: HD.id, item: 'goldwood_hurdle', x: HD.x, z: HD.z, q: 0, placedAt: 1 }]
 const POTS = (at: number) => ({ 'vx-check': { seed: 'mana_seed_fox', at, bloomed: true }, 'mx-check': { seed: 'mana_seed_axolotl', at: at + 1, bloomed: true } })
@@ -44,6 +47,7 @@ await p.evaluateOnNewDocument((pieces: unknown[], pots: unknown, mx0: number) =>
   for (const k of ['ather.spiritFollow.v1', 'ather.spiritFed.v1']) localStorage.removeItem(k)
   localStorage.setItem('ather.spiritParty.v1', JSON.stringify(['vx-check', 'mx-check']))
   localStorage.setItem('ather.spiritStats.v1', JSON.stringify({ 'mx-check': { form: 'base', g: { agi: mx0 }, plays: 0 } }))
+  localStorage.setItem('ather.trainAssign.v1', JSON.stringify({ 'hd-check': ['mx-check'] }))   // M118 s2: only the Manalotl
 }, PIECES, POTS(Date.now() - BLOOM_MS - 60000), MX0)
 const open = async () => {
   await p.goto(`${url}/shimmer/open/ather?hour=14&spirits=3d`, { waitUntil: 'load', timeout: 180000 })
@@ -68,19 +72,18 @@ while (Date.now() - t0 < 300000) {
     r.yMax = Math.max(r.yMax, q.y)
     if (sp === 'axolotl' && q.plays >= 1 && r.plays < 1) r.agiAfter1 = SPECIES_STATS_V2.axolotl.agi + ((await book())['mx-check']?.g.agi ?? 0)
     r.plays = Math.max(r.plays, q.plays) }
-  if (seen.fox.plays >= 1 && seen.axolotl.plays >= 2) break
+  if (seen.axolotl.plays >= 2 && Date.now() - t0 > 60000) break   // the Vulnyx is watched for a minute at least
   await sleep(200)
 }
-for (const [sp, name] of [['fox', 'Vulnyx'], ['axolotl', 'Manalotl']] as const) {
-  const r = seen[sp]
-  ok(r.plays >= 1 && r.atHurdle > 3 && r.far === 0, `1 ${name} goes to the hurdle unprompted and plays: first play at ${r.firstAt.toFixed(1)} s, ${r.plays} finished, ${r.atHurdle} samples at it (${r.far} away)`)
-  ok(r.yMax > 0.03, `1 ${name} bounds over it (peak ${r.yMax.toFixed(3)} m)`)
-}
+{ const r = seen.axolotl
+  ok(r.plays >= 1 && r.atHurdle > 3 && r.far === 0, `1 Manalotl goes to the hurdle unprompted and plays: first play at ${r.firstAt.toFixed(1)} s, ${r.plays} finished, ${r.atHurdle} samples at it (${r.far} away)`)
+  ok(r.yMax > 0.03, `1 Manalotl bounds over it (peak ${r.yMax.toFixed(3)} m)`) }
+ok(seen.fox.plays === 0 && seen.fox.atHurdle === 0, `1 the Vulnyx (not assigned) never plays the hurdle (${seen.fox.plays} plays, ${seen.fox.atHurdle} samples at it in ${((Date.now() - t0) / 1000).toFixed(0)} s)`)
 const b1 = await book()
 const mxAgi = SPECIES_STATS_V2.axolotl.agi + (b1['mx-check']?.g.agi ?? 0), vxAgi = SPECIES_STATS_V2.fox.agi + (b1['vx-check']?.g.agi ?? 0)
-ok(seen.axolotl.agiAfter1 === FORM_CAP.base, `2 the Manalotl's AGI rose ${FORM_CAP.base - 1} -> ${seen.axolotl.agiAfter1} after her first play`)
-ok(seen.axolotl.plays >= 2 && mxAgi === FORM_CAP.base && (b1['mx-check']?.plays ?? 0) >= 2, `3 at the cap it does not rise: after ${b1['mx-check']?.plays} plays AGI ${mxAgi} (cap ${FORM_CAP.base})`)
-ok((b1['vx-check']?.plays ?? 0) >= 1 && vxAgi === SPECIES_STATS_V2.fox.agi && !b1['vx-check']?.g.agi, `3 the Vulnyx (AGI ${SPECIES_STATS_V2.fox.agi}, past the Base cap) played ${b1['vx-check']?.plays}x and stays ${vxAgi}`)
+ok(seen.axolotl.agiAfter1 === CAPPED, `2 the Manalotl's AGI rose ${CAPPED - 1} -> ${seen.axolotl.agiAfter1} after her first play`)
+ok(seen.axolotl.plays >= 2 && mxAgi === CAPPED && (b1['mx-check']?.plays ?? 0) >= 2, `3 at the per-stat cap it does not rise: after ${b1['mx-check']?.plays} plays AGI ${mxAgi} (cap +${TRAIN.cap})`)
+ok(!b1['vx-check'] && vxAgi === SPECIES_STATS_V2.fox.agi, `3 the Vulnyx (unassigned): no record, AGI stays ${vxAgi}`)
 
 // 4. reload keeps it
 await open()
@@ -109,7 +112,7 @@ async function panelAgi(sp: string): Promise<number | null> {
   return null
 }
 const pm = await panelAgi('axolotl'), pv = await panelAgi('fox')
-ok(pm === FORM_CAP.base, `5 the Manalotl's panel radar reads AGI ${pm} (record ${mxAgi})`)
+ok(pm === CAPPED, `5 the Manalotl's panel radar reads AGI ${pm} (record ${mxAgi})`)
 ok(pv === SPECIES_STATS_V2.fox.agi, `5 the Vulnyx's panel radar reads AGI ${pv}`)
 ok(errs.length === 0, `6 0 page errors ${errs.join(' | ')}`)
 await br.close()

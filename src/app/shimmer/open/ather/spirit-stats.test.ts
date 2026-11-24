@@ -1,5 +1,6 @@
 // M110 s1 the per-spirit stat record (spirit-stats.ts): the cap and gain math. Run: npx tsx src/app/shimmer/open/ather/spirit-stats.test.ts
-import { TRAIN, TRAIN_STATS, gainFor, isTrainStat, parseRec, statValue, withFight, withPlay, type StatBook } from './spirit-stats'
+import { TRAIN, TRAIN_STATS, gainFor, isTrainStat, parseRec, statValue, withFight, withPlay, previewPlay, poolLeft, poolSpent, type StatBook, type StatRec } from './spirit-stats'
+import { mayUse, withAssign, parseAssign } from './train-assign'
 import { SPECIES_BASE, expNeed } from './spirit-growth'
 import { FURNITURE, PIECE_JOBS, REFINE, STONE_REFINE } from './furniture'
 import { spiritSheet, SHEET_STATS } from './spirit-sheet'
@@ -10,7 +11,7 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
 ok(TRAIN_STATS.join() === 'pwr,grd,agi,vig', 'canon training stats: PWR / GRD / AGI / VIG only')
 ok(TRAIN.gain > 0 && TRAIN.gain <= 2, `a play is a SMALL gain (${TRAIN.gain})`)
-ok(TRAIN.cap > 0 && TRAIN.cap <= 30, `play adds a bounded amount per stat (${TRAIN.cap}; M118 s2's pool replaces it)`)
+ok(TRAIN.cap > 0 && TRAIN.pool > TRAIN.cap && TRAIN.pool < TRAIN.cap * TRAIN_STATS.length, `M118 s2 dials: pool ${TRAIN.pool}, per-stat cap ${TRAIN.cap} (more than one stat, never all four maxed: a choice)`)
 // gainFor: the per-stat play cap from both sides (M118 s1: on what PLAY added, never the form; form caps retired)
 ok(gainFor(4, 20, 1) === 1, 'under the play cap: the full gain')
 ok(gainFor(19.5, 20, 1) === 0.5, 'near the play cap: only up to it')
@@ -82,6 +83,39 @@ ok(GARDEN_KEY_SPECS.some(k => k.base === 'ather.spiritStats.v1'), 'the stat reco
       `${id}: one play raises ${sp} ${stat.toUpperCase()} by 1 and nothing else (${JSON.stringify(r.book.s.g)})`)
   }
   ok(withPlay({}, 's', 'axolotl', 'vig').rose === 1 && withPlay({}, 's', 'fox', 'pwr').rose === 1, 'full power: the old past-the-cap stats (Manalotl VIG, Vulnyx PWR) train now')
+}
+
+
+// ── M118 s2: THE TRAINING POOL (fixed, per-stat cap, irreversible) + the preview + the assign gate
+{
+  // spend the whole pool: AGI to its cap, then PWR until the pool is empty
+  let b: StatBook = {}, spentAll = 0, previewsMatch = true, monotone = true, prevLeft = TRAIN.pool
+  for (const stat of ['agi', 'pwr', 'grd'] as const) for (let i = 0; i < TRAIN.cap + 5; i++) {
+    const before = b.s, pv = previewPlay(before, 'fox', stat), r = withPlay(b, 's', 'fox', stat), after = r.book.s
+    if (r.rose !== pv.spend || poolLeft(after) !== pv.left || Math.round(statValue('fox', after, stat)) !== pv.to || Math.round(statValue('fox', before, stat)) !== pv.from) previewsMatch = false
+    if (poolLeft(after) > prevLeft || TRAIN_STATS.some(k => (after.g[k] ?? 0) < (before?.g[k] ?? 0))) monotone = false
+    prevLeft = poolLeft(after); spentAll += r.rose; b = r.book
+  }
+  ok(previewsMatch, 'the preview = the actual spend, every play (points, stat before/after, pool after)')
+  ok(monotone, 'irreversible: the pool never refills and no stat ever drops')
+  ok(spentAll === TRAIN.pool && poolLeft(b.s) === 0 && poolSpent(b.s) === TRAIN.pool, `the pool is fixed: ${spentAll} spent in all, 0 left`)
+  ok(b.s.g.agi === TRAIN.cap && b.s.g.pwr === TRAIN.pool - TRAIN.cap && !b.s.g.grd, `per-stat cap then the pool: ${JSON.stringify(b.s.g)}`)
+  ok(previewPlay(b.s, 'fox', 'agi').why === 'cap' && previewPlay(b.s, 'fox', 'grd').why === 'pool' && previewPlay(b.s, 'fox', 'vig').spend === 0, 'the preview says why nothing will spend (cap / pool)')
+  const fresh = previewPlay(undefined, 'axolotl', 'vig')
+  ok(fresh.spend === 1 && fresh.left === TRAIN.pool - 1 && fresh.to === fresh.from + 1 && fresh.why === 'ok', `a fresh spirit: one play = 1 point, +1 (${JSON.stringify(fresh)})`)
+  // the gate
+  let a = withAssign({}, 'hd', 'vx', true)
+  ok(mayUse(a, 'hd', 'vx') && !mayUse(a, 'hd', 'mx') && !mayUse(a, 'ps', 'vx') && !mayUse({}, 'hd', 'vx'), 'only an assigned spirit may use a piece (default: none)')
+  a = withAssign(a, 'hd', 'mx', true)
+  ok(mayUse(a, 'hd', 'mx') && mayUse(a, 'hd', 'vx'), 'two spirits on one piece')
+  const a2 = withAssign(a, 'hd', 'vx', false)
+  ok(!mayUse(a2, 'hd', 'vx') && mayUse(a2, 'hd', 'mx') && mayUse(a, 'hd', 'vx'), 'unassign one; the input is not mutated')
+  ok(Object.keys(withAssign(withAssign({}, 'hd', 'vx', true), 'hd', 'vx', false)).length === 0, 'an emptied piece drops out')
+  ok(JSON.stringify(parseAssign({ hd: ['vx', 'vx', 3, null], ps: 'x', q: [] })) === '{"hd":["vx"]}' && JSON.stringify(parseAssign([1])) === '{}' && JSON.stringify(parseAssign(null)) === '{}', 'junk assign map cleaned')
+  ok(GARDEN_KEY_SPECS.some(k => k.base === 'ather.trainAssign.v1'), 'the assign map is a registered garden key')
+  // old saves: an M110 record whose g is past the pool (e.g. 20+20+5) loads, nothing lowered, nothing left, no NaN
+  const big = parseRec({ form: 'base', g: { agi: 20, pwr: 20, grd: 5 }, plays: 50 }) as StatRec
+  ok(big.g.agi === 20 && big.g.grd === 5 && poolLeft(big) === 0 && previewPlay(big, 'fox', 'vig').spend === 0 && Number.isFinite(previewPlay(big, 'fox', 'vig').from), 'an over-pool old save: kept as is, 0 left, no NaN')
 }
 
 if (fails.length) { console.error(`spirit-stats: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

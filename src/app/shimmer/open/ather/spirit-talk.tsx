@@ -14,7 +14,11 @@ import { SpiritAvatar } from './spirit-model'
 import { spiritModelFor } from './spirit-models'
 import { spiritSheet } from './spirit-sheet'
 import { GROWTH_LABEL } from './spirit-growth'   // M118 s1: the growth bar's label
-import { loadStats, subscribeStats } from './spirit-stats'   // M110 s1: her trained stats
+import { loadStats, subscribeStats, previewPlay, poolLeft, TRAIN } from './spirit-stats'   // M110 s1: her trained stats; M118 s2: the pool + preview
+import { loadAssign, mayUse, setAssign, subscribeAssign } from './train-assign'   // M118 s2: the keeper assigns pieces
+import { loadWorks } from './rooms'
+import { FURNITURE } from './furniture'
+import { SHEET_LABEL } from './spirit-sheet'
 import { isFollowing, setFollowing, spiritHeld, spiritLive, subscribeFollow } from './spirit-follow'
 import { SPECIES_NAMES } from '../../spirits/spirit'
 import { hudSay } from '../shared/hud-say'
@@ -73,6 +77,15 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
   const [statsV, setStatsV] = useState(0)
   useEffect(() => subscribeStats(() => setStatsV(v => v + 1)), [])   // M110 s1: a play while the panel is open shows at once
   const sheet = useMemo(() => spiritSheet(sp, id ? loadStats()[id] : undefined), [sp, id, statsV]), look = spiritModelFor(sp)
+  // M118 s2: her training pool, the plot's training pieces, which the keeper lets her use, and what one play there WILL spend
+  const [asgV, setAsgV] = useState(0)
+  useEffect(() => subscribeAssign(() => setAsgV(v => v + 1)), [])
+  const train = useMemo(() => {
+    if (!id) return null
+    const rec = loadStats()[id], asg = loadAssign()
+    const pieces = loadWorks().pieces.flatMap(pc => { const f = FURNITURE[pc.item]; return f?.train ? [{ id: pc.id, name: f.name, on: mayUse(asg, pc.id, id), pv: previewPlay(rec, sp, f.train) }] : [] })
+    return { left: poolLeft(rec), pieces }
+  }, [sp, id, statsV, asgV])
   const ink = { label: H.inkSoft, ring: 'rgba(58,39,22,.2)', spoke: 'rgba(58,39,22,.16)' }
   return (
     <HearthFrame title={sheet.name} maxWidth={420} onClose={onClose} fixed dataPanel="spirit">
@@ -89,6 +102,30 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
             <div style={{ width: `${Math.round(sheet.growth * 100)}%`, height: '100%', background: H.ember, transition: 'width .4s' }} />
           </div>
         </div>
+        {train && (
+          <div data-spirit-training data-pool-left={train.left} data-pool={TRAIN.pool} className="mt-3">
+            {/* M118 s2: words are PLACEHOLDERS for @lark */}
+            <div className="mb-1.5 text-[13px] font-bold flex" style={{ color: H.inkSoft }}>
+              <span>Training points</span><span className="ml-auto tabular-nums">{train.left} / {TRAIN.pool}</span></div>
+            {train.pieces.length ? (
+              <div style={{ display: 'grid', gap: 4 }}>
+                {train.pieces.map(t => (
+                  <div key={t.id} data-train-piece={t.id} data-train-on={t.on ? '1' : '0'} data-preview-stat={t.pv.stat} data-preview-spend={t.pv.spend}
+                    data-preview-from={t.pv.from} data-preview-to={t.pv.to} data-preview-left={t.pv.left}
+                    className="rounded-[8px] px-2.5 py-1.5 flex items-center gap-2 text-[13px]" style={{ background: 'rgba(255,250,240,.6)', boxShadow: 'inset 0 0 0 1px rgba(58,39,22,.14)' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, color: H.ink }}>{t.name}</div>
+                      <div style={{ color: H.inkFaint, fontSize: 12 }}>{t.pv.why === 'ok' ? `One play: ${t.pv.spend} point, ${SHEET_LABEL[t.pv.stat]} ${t.pv.from} → ${t.pv.to}` : t.pv.why === 'cap' ? `${SHEET_LABEL[t.pv.stat]} at its limit` : 'No points left'}</div>
+                    </div>
+                    <button data-train-toggle={t.id} onClick={() => setAssign(t.id, id!, !t.on)} className="ml-auto rounded-[6px] px-2.5 py-1 text-[12px] font-bold"
+                      style={{ minHeight: 32, whiteSpace: 'nowrap', background: t.on ? H.ember : 'rgba(58,39,22,.08)', color: t.on ? '#fff' : H.ink }}>{t.on ? 'Allowed' : 'Allow'}</button>
+                  </div>
+                ))}
+                <div className="text-[12px] italic" style={{ color: H.inkFaint }}>Points spent stay spent.</div>
+              </div>
+            ) : <div data-spirit-training-empty className="text-[13px] italic" style={{ color: H.inkFaint }}>no training pieces on the plot</div>}
+          </div>
+        )}
         <div className="mt-3 mb-1.5 text-[13px] font-bold" style={{ color: H.inkSoft }}>Moves</div>
         {sheet.moves.length ? (
           <div data-spirit-moves style={{ display: 'grid', gap: 4 }}>

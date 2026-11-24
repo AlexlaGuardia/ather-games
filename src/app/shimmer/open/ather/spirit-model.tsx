@@ -118,7 +118,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
   // M110 s1 TRAINING: a play she chose and finished at a training piece adds its small gain to HER stat record (planter id)
   useEffect(() => {
     if (!trot || !id || !dev) return
-    trot.onPlayed((_toy, stat) => { if (isTrainStat(stat)) trainPlay(id, sp, stat) })
+    trot.onPlayed((toy, stat) => { if (isTrainStat(stat)) trainPlay(id, sp, stat, toy) })   // M118 s2: only where she is assigned
     return () => trot.onPlayed(null)
   }, [trot, id, sp, dev])
   useEffect(() => { if (avatar) return; const p = probe(); p.mounted++; p.species[sp] = (p.species[sp] ?? 0) + 1

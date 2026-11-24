@@ -3,13 +3,17 @@
 // to ONE stat (PWR / GRD / AGI / VIG). The record holds what PLAY added (`g`, per stat) and, since M118 s1, her GROWTH
 // (`xp` into the bar, `grown` = growths so far; spirit-growth.ts). Value = species base x growth + trained points.
 // M118 s1 (play, 2026-11-24, canon RULED c01931e/05f3d0d): the form caps 50/75/100 are RETIRED for spirits; the base is the
-// rebased low table (spirit-growth.ts SPECIES_BASE). Training stays bounded by a per-stat cap on what PLAY adds (TRAIN.cap,
-// a placeholder until M118 s2's fixed, irreversible point pool). `form` stays in the record for old saves; nothing reads it.
+// rebased low table (spirit-growth.ts SPECIES_BASE). `form` stays in the record for old saves; nothing reads it.
+// M118 s2 (play, 2026-11-24, canon c01931e/05f3d0d item 3): THE TRAINING POOL. Each spirit has a FIXED pool of training points
+// (TRAIN.pool) and a per-stat cap (TRAIN.cap); a play at a piece spends from it, IRREVERSIBLY (nothing here ever lowers `g`
+// or refunds a point). Only a spirit the keeper has ASSIGNED to a piece trains there (train-assign.ts); within that she still
+// plays as she pleases. previewPlay() is what a play WILL spend, and withPlay() spends exactly that (the panel shows it first).
 //  - nothing drains, nothing decays, no timers: the record only ever counts up.
 //  - old (M110) saves load as they are: g kept (clamped to the cap), xp 0, grown 0. No NaN reaches a value.
 import { gardenKey } from '@/lib/keeper-local'
 import type { Species } from '../../spirits/spirit'
 import { grownStat, withExp, type BaseStat } from './spirit-growth'
+import { loadAssign, mayUse } from './train-assign'   // M118 s2: the keeper's assign-a-piece gate
 
 /** the four stats a training piece can lean to (canon: PWR / GRD / AGI / VIG) */
 export const TRAIN_STATS = ['pwr', 'grd', 'agi', 'vig'] as const
@@ -17,8 +21,8 @@ export type TrainStat = typeof TRAIN_STATS[number]
 export const isTrainStat = (s: unknown): s is TrainStat => typeof s === 'string' && (TRAIN_STATS as readonly string[]).includes(s)
 export type Form = 'base' | 'second' | 'awakened'
 const FORMS: readonly Form[] = ['base', 'second', 'awakened']
-/** DIALS (Jin's): stat points one play adds; the most PLAY may add to one stat (placeholder until M118 s2's pool) */
-export const TRAIN = { gain: 1, cap: 20 }
+/** DIALS (Jin's): stat points one play adds (= points it spends); a spirit's whole training pool; the most one stat may take */
+export const TRAIN = { gain: 1, pool: 40, cap: 20 }
 
 export type StatRec = { form: Form; g: Partial<Record<TrainStat, number>>; plays: number; xp?: number; grown?: number }
 export type StatBook = Record<string, StatRec>
@@ -32,10 +36,22 @@ export function gainFor(trained: number, cap: number, gain: number): number {
   return Math.min(gain, cap - trained)
 }
 const blank = (): StatRec => ({ form: 'base', g: {}, plays: 0, xp: 0, grown: 0 })
-/** pure: the book after spirit `id` played at a piece leaning to `stat`. `rose` = what the stat gained (0 at the play cap). */
-export function withPlay(b: StatBook, id: string, _sp: Species, stat: TrainStat, gain = TRAIN.gain): { book: StatBook; rose: number } {
+/** points already spent (= everything play has added) */
+export const poolSpent = (rec: StatRec | undefined) => TRAIN_STATS.reduce((n, k) => n + (rec?.g[k] ?? 0), 0)
+/** points left in her pool (never below 0) */
+export const poolLeft = (rec: StatRec | undefined) => Math.max(0, TRAIN.pool - poolSpent(rec))
+export type PlayPreview = { stat: TrainStat; spend: number; from: number; to: number; left: number; why: 'ok' | 'cap' | 'pool' }
+/** pure: what ONE play at a piece leaning to `stat` will spend, BEFORE it is spent: the points, the stat before/after (as the
+ *  panel shows it, rounded), the pool after. why = 'cap' (this stat is at its limit) / 'pool' (no points left) when spend is 0. */
+export function previewPlay(rec: StatRec | undefined, sp: Species, stat: TrainStat, gain = TRAIN.gain): PlayPreview {
+  const left0 = poolLeft(rec), byCap = gainFor(rec?.g[stat] ?? 0, TRAIN.cap, gain), spend = Math.min(byCap, left0)
+  const v = statValue(sp, rec, stat)
+  return { stat, spend, from: Math.round(v), to: Math.round(v + spend), left: left0 - spend, why: spend > 0 ? 'ok' : byCap <= 0 ? 'cap' : 'pool' }
+}
+/** pure: the book after spirit `id` played at a piece leaning to `stat`. `rose` = what the stat gained = previewPlay().spend. */
+export function withPlay(b: StatBook, id: string, sp: Species, stat: TrainStat, gain = TRAIN.gain): { book: StatBook; rose: number } {
   const rec: StatRec = b[id] ?? blank()
-  const rose = gainFor(rec.g[stat] ?? 0, TRAIN.cap, gain)
+  const rose = previewPlay(rec, sp, stat, gain).spend
   const next: StatRec = { ...rec, g: { ...rec.g, ...(rose > 0 ? { [stat]: (rec.g[stat] ?? 0) + rose } : {}) }, plays: rec.plays + 1 }
   return { book: { ...b, [id]: next }, rose }
 }
@@ -76,8 +92,10 @@ export function saveStats(b: StatBook) {
   for (const f of subs) f()
 }
 export const subscribeStats = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
-/** a play finished: add its gain to the record and tell the panel. Returns what the stat rose by. */
-export function trainPlay(id: string, sp: Species, stat: TrainStat): number {
+/** a play finished at piece `pieceId`: if the keeper assigned her there, spend from her pool and tell the panel. Returns
+ *  what the stat rose by (0 = not assigned / nothing left to spend). */
+export function trainPlay(id: string, sp: Species, stat: TrainStat, pieceId: string): number {
+  if (!mayUse(loadAssign(), pieceId, id)) return 0
   const r = withPlay(loadStats(), id, sp, stat); saveStats(r.book); return r.rose
 }
 /** M118 s1: a Hollow went down with spirits `ids` beside the keeper: their bars fill. Returns the ids that grew stronger. */
