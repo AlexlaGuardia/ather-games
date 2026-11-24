@@ -79,7 +79,7 @@ export const M70SIDE_TEXT = {
   gather: (name: (id: string) => string) => `Gather ${BATCH_NEEDS.map(x => `${x.n} ${name(x.id)}`).join(', ').replace(/, ([^,]*)$/, ' and $1')}.`,
   brew: `Brew a ${ALC_POTIONS[M70_BATCH].name} at Angelica's Desk.`,
   hand: `Give Angelica a ${ALC_POTIONS[M70_BATCH].name}.`,
-  handLabel: `Give her the ${ALC_POTIONS[M70_BATCH].name}.`,
+  handLabel: 'Here. I made it.',   // ★ SIGNED athernyx 1be3a9f: shimmer-lines-batch-2026-11-24a.md › C (lines-batch-24a.test.ts)
   deskTitle: "Angelica's Desk",
   deskBrew: `Brew a ${ALC_POTIONS[M70_BATCH].name}`,
   deskNeed: 'You need:',

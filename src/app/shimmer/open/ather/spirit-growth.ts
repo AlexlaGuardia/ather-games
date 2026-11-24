@@ -9,7 +9,7 @@
 //  - growthMult(n) = 1 + (MULT-1) * ln(1 + n/K) / ln(1 + MAX_GROWN/K): 1 at bloom, MULT at the ceiling, strictly rising and
 //    concave (each growth adds less than the one before). Values are real; the panel rounds.
 //  - expNeed(n) = what bar n asks: strictly rising (n + n^1.5/4 on top of a first bar of 4), so 9999 is nearly impossible.
-// Words (UNSIGNED placeholders, lark draft athernyx aa22eef): the bar label 'Growth', the moment '{name} has grown stronger.'
+// Words (★ SIGNED athernyx 1be3a9f, shimmer-lines-batch-2026-11-24a.md › D; lines-batch-24a.test.ts): the bar label 'Growth', the moment '{name} has grown stronger.'
 import { SPECIES_STATS_V2 } from '../../engine/party-stats'
 import type { Species } from '../../spirits/spirit'
 

@@ -88,7 +88,7 @@ export function settlerStart(t: Tut, who: SettlerId): SettlerCursor | null {
 export const ARRIVE_CHOICE_AT = 3
 /** the thanks' gift is handed on the way from .2 to .3 (the bottles and the bundle) */
 export const THANKS_GIFT_AT = 2
-export const SETTLER_BYE = 'Bye.'   // @lark: plain label, unsigned
+export const SETTLER_BYE = 'See you.'   // ★ SIGNED athernyx 1be3a9f: shimmer-lines-batch-2026-11-24a.md › B (lines-batch-24a.test.ts)
 
 export interface SettlerActs {
   set: (t: Tut) => void
