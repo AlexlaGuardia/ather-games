@@ -55,6 +55,7 @@ async function open(owner: boolean, seed: { save?: unknown; waymark?: unknown })
   const boot = async () => { await p.goto(`${url}/shimmer/open/ather?hour=13&infect=1`, { waitUntil: 'load', timeout: 240000 }); await load() }
   const reload = async () => { await p.reload({ waitUntil: 'load', timeout: 240000 }); await load() }
   const goto = async (x: number, z: number, near = 120) => poll(async () => { const s = await G('state'); if ((await G('zone')) === 'wilds' && s && Math.hypot((s.x ?? s.px) - x, (s.z ?? s.pz) - z) < near) return true; await G('wmGoto', x, z); await sleep(5000); return false }, 120000)
+  const ride = async (w: unknown) => { for (let k = 0; k < 12; k++) { await G('travel', { kind: 'waymark', w }); if (await poll(async () => (await G('zone')) === 'wilds', 6000)) return true }; return false }   // re-sent while the Wilds index loads (m75 checks' way)
   const tp = async (x: number, z: number) => { await p.evaluate((x, z) => (window as any).__ather.tp(x, z), x, z); await sleep(1500) }
   const home = async () => { await sleep(1500); await G('travel', { kind: 'home' }); return poll(async () => (await G('zone')) === 'plot', 40000) }
   const place = (s: Settlement) => p.evaluate((id: string) => ({ folk: ((window as any).__folk?.drawn?.()[id] ?? []).map((f: any) => f.id).join(), stall: (window as any).__folk?.stalls?.()[id]?.id ?? null, homes: JSON.stringify(((window as any).__settlements?.built?.() ?? []).find((b: any) => b.id === id) ?? null), map: (window as any).__folk?.mapSettlements?.() ?? null }), s.id)
@@ -71,7 +72,7 @@ async function open(owner: boolean, seed: { save?: unknown; waymark?: unknown })
   const lit = async (id: string) => ((await G('wmLit')) as { id: string; lit: boolean }[]).find(w => w.id === id)?.lit
   const alive = () => p.evaluate(() => { if ((window as any).__m128hp) return; (window as any).__m128hp = setInterval(() => { const c = (window as any).__ather?.combat?.(); if (c) c.keeper.hp = c.keeper.maxHp }, 200) })
   const ground = async () => (await G('wmGround')) as { ground: string; settlement: string | null }
-  return { p, G, I, raw, boot, reload, goto, tp, home, place, stallTalk, lit, alive, ground }
+  return { ride, p, G, I, raw, boot, reload, goto, tp, home, place, stallTalk, lit, alive, ground }
 }
 try {
   const o = await open(true, {}), { p, G, I } = o
@@ -124,7 +125,7 @@ try {
   await sleep(2500); ok((await o.lit(w.id)) === true, '5. its waymark relit')
   ok((await o.ground()).settlement === A.id && (await I('state')).active === null, `5. kept ground again (${JSON.stringify(await o.ground())})`)
   const t2 = await o.stallTalk(A); ok(t2.includes(BURR_LABEL.look), `5. trade back (${JSON.stringify(t2)})`)
-  await o.home(); await sleep(4000); await G('travel', { kind: 'waymark', w }); ok(await poll(async () => (await G('zone')) === 'wilds', 60000), '5. the waymark travels')
+  await o.home(); await sleep(4000); ok(await o.ride(w), '5. the waymark travels')
   // ── 6 · a second one, lost ──
   ok(await o.goto(B.x, B.z), `6. at ${B.name}`); await o.alive(); ok(await poll(async () => (await I('known')).includes(B.id), 20000), '6. discovered')
   let wb: any = null; for (const [dx, dz] of [[2, 16], [14, 8], [-12, 12], [10, -22], [-20, 4]]) { await o.tp(B.x + dx, B.z + dz); if ((await G('wmPlant'))?.ok) { wb = ((await G('wm')) as any[]).find(x => x.settlement === B.id); break } }
@@ -152,7 +153,7 @@ try {
   const save = { v: 1, season: 1, next: 1, active: { id: A.id, at: 1, online: W * 3, clue: 1, sent: ['start'] }, saved: [], lost: [B.id], told: 0, assigned: 1 }
   const q = await open(false, { save, waymark: w }), r0 = JSON.stringify(save)
   await q.boot(); ok((await q.p.evaluate(() => typeof (window as any).__infect)) === 'undefined', '8. not the owner: no hook')
-  ok((await q.lit(w.id)) === true, '8. the waymark is lit'); await q.G('travel', { kind: 'waymark', w }); ok(await poll(async () => (await q.G('zone')) === 'wilds', 90000), '8. and travels')
+  ok((await q.lit(w.id)) === true, '8. the waymark is lit'); ok(await q.ride(w), '8. and travels')
   await q.alive(); await q.tp(A.x + 2, A.z + 16); await poll(async () => !!(await q.place(A)).folk, 30000); await sleep(12000)
   const qa = await q.place(A); ok(qa.folk === before.folk && qa.homes === before.homes && (await q.ground()).settlement === A.id, '8. the same place')
   const t3 = await q.stallTalk(A); ok(t3.join('|') === t0.join('|'), `8. the same trade (${JSON.stringify(t3)})`)
