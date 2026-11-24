@@ -530,6 +530,9 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const spent = useRef(new Set<string>())   // cleared this visit: never re-woken before the page drops it
   // once the page's list has caught up (the cleared node dropped out, or the spread brought one back), forget the bridge
   useEffect(() => { spent.current.clear() }, [nodes])
+  /** M120 s2 checks only (__ather.spend): nodes treated as cleared for this page's life, NOT dropped when the node list reloads
+   *  (the list reloads as tiles stream in, and a probe clear that vanishes mid-check proves nothing). Nothing is saved. */
+  const probeSpent = useRef(new Set<string>())
   // ★ tell the page at once (M20, Alex 11-18 'spawned in the home plot with 2 hp'): revive() always set full health, but the
   // HUD only hears from the frame loop below, which stops off the Wilds, so the plot kept showing the last hp of the fight
   const onHudRef = useRef(onHud); onHudRef.current = onHud
@@ -561,7 +564,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       const f = camera.getWorldDirection(new THREE.Vector3()); const x = camera.position.x + f.x * -dz + dx, z = camera.position.z + f.z * -dz
       spawnHollow(c.current, T, x, z, kind)
     }, camAim: () => { const f = camera.getWorldDirection(new THREE.Vector3()); return { x: f.x, y: f.y, z: f.z, cx: camera.position.x, cy: camera.position.y, cz: camera.position.z } }, nodes: () => nodesRef.current, walls: (x0: number, z0: number, x1: number, z1: number) => T.structures ? [...T.structures(x0, z0, x1, z1)] : [], fall: () => { c.current.keeper.hp = 0; onEventsRef.current([{ kind: 'down' }]) }, drained: (x: number, z: number) => c.current.drained?.(x, z) ?? null, owner: (x: number, z: number) => ownerRef.current?.(x, z) ?? null,
-      spend: (id: string) => { spent.current.add(id) }, drawnScale: (id: number) => DRAWN_SCALE.get(id) ?? null,   // M120 s2 checks: clear a node for THIS visit only (nothing saved)
+      spend: (id: string) => { probeSpent.current.add(id) }, drawnScale: (id: number) => DRAWN_SCALE.get(id) ?? null,   // M120 s2 checks: clear a node for THIS visit only (nothing saved)
       wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('contextmenu', menu) }
   }, [locked, frozen, camera, T, gl])
@@ -578,7 +581,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     // 22 m from the Wilds' centre node, and every arrival woke it from 600 m away)
     settled.current += dt
     if (!C.champ && C.keeper.hp > 0 && settled.current > SETTLE) for (const n of nodesRef.current) {
-      if (!spent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < WAKE_R) { wakeChampion(C, T, n); break }
+      if (!spent.current.has(n.id) && !probeSpent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < WAKE_R) { wakeChampion(C, T, n); break }
     }
     // M28: host or guest, decided from the live roster every frame (a leaver hands the Hollows to the next lowest id)
     {
@@ -613,7 +616,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       // strays thicken round an infected node; during a champion fight the waves are the only adds
       const near = nodesRef.current.some(n => !spent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < STRAY_R)
       const own = ownerRef.current
-      const infested = own ? (x: number, z: number) => { const id = own(x, z); return !id || (!spent.current.has(id) && nodesRef.current.some(n => n.id === id)) } : undefined
+      const infested = own ? (x: number, z: number) => { const id = own(x, z); return !id || (!spent.current.has(id) && !probeSpent.current.has(id) && nodesRef.current.some(n => n.id === id)) } : undefined
       C.drained = infested ?? (() => true)   // M120 s2: crawlers pool only on drained ground (cleared country stays apart)
       populate(C, T, feet.x, feet.z, C.champ ? 0 : near ? 11 : 7, safe, infested)
     }
