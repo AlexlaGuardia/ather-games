@@ -47,10 +47,9 @@ try {
   console.log('in the Wilds')
   const C = (f: string) => p.evaluate(`(() => { const C = window.__ather.combat(); ${f} })()`) as Promise<any>
   // ── 1. packs, with the raised HP ──
-  // the first top-up after the veil can ring the OLD zone's spot (the camera has not moved yet); the next one (1.5 s of sim on)
-  // culls what is out of reach. Measure the field that stays: two top-ups on, with every stray within the cull ring (130 m)
-  const clock0 = await C('return C.clock ?? 0') as number
-  await poll(async () => await C(`return (C.clock ?? 0) - ${clock0} > 3.5 && C.hollows.length >= 6 && C.hollows.every(h => Math.hypot(h.x - window.__ather.state().px, h.z - window.__ather.state().pz) < 130)`), 60000)
+  // the first field whose strays are ALL inside the cull ring (130 m) of the walker: a top-up that ringed another spot loses the
+  // far ones 1.5 s of sim later, and a pack picked out of those is gone mid-measure. Taken at once: a crawler brood pools with time
+  await poll(async () => await C(`return C.hollows.length >= 6 && C.hollows.every(h => Math.hypot(h.x - window.__ather.state().px, h.z - window.__ather.state().pz) < 130)`), 60000)
   const hs = await C('return C.hollows.map(h => ({ id: h.id, kind: h.kind, pack: h.pack, maxHp: h.maxHp, x: h.x, z: h.z, st: h.state }))') as { id: number; kind: string; pack?: number; maxHp: number; x: number; z: number; st: string }[]
   console.log(`   first top-up: ${JSON.stringify(await p.evaluate(() => (window as any).__firstUp))}`)
   const packs = new Map<number, typeof hs>(); for (const h of hs) if (h.pack) packs.set(h.pack, [...(packs.get(h.pack) ?? []), h])
