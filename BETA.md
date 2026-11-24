@@ -265,6 +265,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - 11-23 08:4x Alex on Nyx + ships: agreed Nyx is thin; M73 opening chain next. On a flyable skyship: "I'm not on board for 3, I'm thinking it's just a gate to space maps" → DECIDED: NO flight system. A repaired ship = a GATE to space maps (board it, pick a destination, load the map; the Hask wreck is the first, its SOS = the destination-list question). Ship repair loop = canon ask to Magii.
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+- **M102 Athowl look (11-24):** docs/looks/athowl-2026-11-24/sheet-with-ref.jpg (local only) + clips.webm: OK / change? Forehead mark = the ref's eye (canon says dot)? Push of 877a0b25 refused by the permission gate: OK to push? Vulnyx sheets with its locked ref already on the public repo: keep or remove?
 - 11-24 M127 s1 (owner-only): take a fox/Manalotl trio into the Wilds and fight. Too rare / too much? Newcomer sim with a trio 2/200 vs 9/200 without: too kind? Then flip on for all.
 - 11-24 M122 LIVE: try planting in the Manalotl's planter on your save. Crawlers draw half size, but their hit sphere + merge distance kept the old size (halving them = 20-27/200 newcomer deaths vs 6% cap). OK, or shrink + rebalance?
 - **Cleared ground = hard safe zone? (11-24 night):** wandering Hollows now never step onto cleared ground, but a pack CHASING you still follows you in (out to 40 m). Keep, or make cleared ground stop chasers too?
