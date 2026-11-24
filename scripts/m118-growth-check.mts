@@ -61,7 +61,10 @@ try {
     for (let k = 0; k < 10; k++) {
       const t = await p.evaluate(() => { const q = (window as any).__spiritModel?.trots?.fox; return q ? { x: q.x, z: q.z, y: q.y, h: q.h } : null }) as { x: number; z: number; y: number; h: number } | null
       if (!t) { await sleep(500); continue }
-      await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 1.5, 0), t.x, t.z)
+      // she FOLLOWS (M126's formation): a tp to her sends her off to her new slot, so stay put, let her settle, aim where she is now
+      if (k === 0) { await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 1.5, 0), t.x, t.z) }
+      await sleep(1500)
+      const n = await p.evaluate(() => { const q = (window as any).__spiritModel?.trots?.fox; return q ? { x: q.x, z: q.z, y: q.y } : null }); if (n) Object.assign(t, n)
       await aimAt(p, t.x, t.z, t.y - (await p.evaluate((x, z) => (window as any).__ather.ground(x, z), t.x, t.z) as number) + t.h * 0.5, 4)
       await p.keyboard.press('e'); await sleep(900)
       if ((await opts()).length) {
@@ -126,6 +129,7 @@ try {
   ok(!!p4 && STATS.every(k => p4.axes[k] === want4[k]), `4 = the species curve at one growth: want ${JSON.stringify(want4)}`)
   ok(!!p4 && Math.abs((p4.growth ?? -1) - 1 / expNeed(1)) < 0.002, `4 the bar part-filled ${p4?.growth} (= 1/${expNeed(1)})`)
   ok(!!p4 && noLevel(p4.text), '4 still no level number in the panel')
+  ok(!!p4 && p4.text.includes(TRAIN_UI.none) && !p4.overflow, `4 no training piece placed: '${TRAIN_UI.none}', fits 390`)
   ok(errs.length === 0, `5 0 page errors ${errs.join(' | ')}`)
 } finally { await br.close() }
 console.log(fails ? `${fails} FAIL` : 'ALL PASS')
