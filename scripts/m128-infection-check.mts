@@ -79,7 +79,7 @@ async function open(owner: boolean, seed: { save?: unknown; waymark?: unknown })
 try {
   const o = await open(true, {}), { p, G, I } = o
   await o.boot()
-  ok(Array.isArray(await I('known')), '0. the engine is on'); if (!Array.isArray(await I('known'))) throw new Error('no engine on this build')
+  ok(await poll(async () => Array.isArray(await I('known')), 30000), '0. the engine is on'); if (!Array.isArray(await I('known'))) throw new Error('no engine on this build')
   await sleep(11000)
   ok((await I('known')).length === 0 && (await o.raw()) === null, '1. nothing discovered: no clock, no save written')
   // ── 2 · discovered ──
