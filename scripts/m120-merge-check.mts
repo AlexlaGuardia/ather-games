@@ -99,6 +99,7 @@ try {
       // the keeper stands near (tp may land a little off on rough ground); the crawlers go on the checked spot itself
       await p.evaluate((x, z) => (window as any).__ather.tp(x, z), spot.x - 7, spot.z); await sleep(3000); await clear()
       const ox = spot.x, oz = spot.z
+      await C(`A.spend(${JSON.stringify(n.id)})`)   // the page drops its this-visit clears when the node list reloads (a tp can do that)
       const dr = await C(`return A.drained(${ox}, ${oz})`)
       const m2 = await C('return C.merges ?? 0') as number
       const ids2 = await put([[ox, oz], [ox + 0.8, oz]])
