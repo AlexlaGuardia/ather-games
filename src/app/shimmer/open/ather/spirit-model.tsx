@@ -20,7 +20,7 @@ import { spiritCheer } from './spirit-feed'   // M109 s2: fed = her happy beat
 import { inParty, spiritCall, subscribeParty } from './spirit-party'   // M109 s3: called home from the grimoire; s4: the party keeps near
 import { isTrainStat, trainPlay } from './spirit-stats'   // M110 s1: a finished play at a training piece = a small gain
 
-import { SPIRIT_MODELS, type SpiritLook } from './spirit-models'
+import { SPIRIT_MODELS, groundLift, lowPoints, type SpiritLook } from './spirit-models'
 import type { Species } from '../../spirits/spirit'
 
 export const VULNYX_URL = SPIRIT_MODELS.fox!.url
@@ -41,7 +41,7 @@ export function useSpiritsDev(): boolean {
 
 // read-only probe for the check: how many spirit models are mounted right now (all, and by species). `trot` = the Vulnyx's
 // pose (the M107 asserts read it), `trots[species]` = each species' latest pose.
-type TrotProbe = { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; beats: number; homes: number; tilt: number; h: number; hWorld?: number; cheers: number; yMax: number; calling: boolean; near: boolean; plays: number; playing: string | null; playYMax: number; braceMax: number }
+type TrotProbe = { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; beats: number; homes: number; tilt: number; h: number; hWorld?: number; len?: number; keepMax?: number; cheers: number; yMax: number; calling: boolean; near: boolean; plays: number; playing: string | null; playYMax: number; braceMax: number }
 type Probe = { mounted: number; url: string; h: number; species: Record<string, number>; trot?: TrotProbe; trots: Record<string, TrotProbe> }
 const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Probe }; return (w.__spiritModel ??= { mounted: 0, url: VULNYX_URL, h: VULNYX_H, species: {}, trots: {} }) }
 
@@ -58,7 +58,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
   // M107: the procedural trot (spirit-trot.ts) when a nav is given, with this species' dials; seeded by home so two
   // planters never move in step
   const trot = useMemo<Trot | null>(() => nav ? makeTrot(nav, Math.round(nav.home.x * 31 + nav.home.z * 17), look.trot) : null, [nav, look])
-  const tmp = useMemo(() => ({ v: new THREE.Vector3(), q: new THREE.Quaternion(), e: new THREE.Euler(0, 0, 0, 'YXZ'), bb: new THREE.Box3(), hAt: -1, hWorld: 0 }), [])
+  const tmp = useMemo(() => ({ v: new THREE.Vector3(), q: new THREE.Quaternion(), e: new THREE.Euler(0, 0, 0, 'YXZ'), bb: new THREE.Box3(), hAt: -1, hWorld: 0, lWorld: 0, keepMax: 0 }), [])
   const parts = useMemo(() => {
     const body = scene.getObjectByName('body') as THREE.Mesh | undefined, eyes = scene.getObjectByName('eyes') as THREE.Mesh | undefined
     const glowM = look.glow ? scene.getObjectByName(look.glow.part) as THREE.Mesh | undefined : undefined
@@ -97,8 +97,10 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
       if (m === skin || m === glow) sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
         gl_FragColor.rgb += vec3(1.0, 0.86, 0.32) * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 3.0) * 0.45;`)
     }
+    // grown-size slice: the low vertices (ground keep)
+    const low = lowPoints([body, eyes, ...(glowM ? [glowM] : [])].flatMap(m => Array.from(m.geometry.getAttribute('position').array as ArrayLike<number>)), cx, cz)
     return { body: lin(body.geometry), eyes: eyes.geometry,   // eyes stay raw: their colours read brighter, as in the picked renders
-      glowGeo: glowM ? lin(glowM.geometry) : null, skin, glow, halo, eye, cx, cz }
+      glowGeo: glowM ? lin(glowM.geometry) : null, skin, glow, halo, eye, cx, cz, low }
   }, [scene, time, look])
   // M109 s1 FOLLOW: she walks with the keeper while her planter id is in the follow list (kept across reloads)
   useEffect(() => {
@@ -131,17 +133,25 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
       if (dev && id && spiritCall.delete(id)) trot.call(() => keeperAt)   // M109 s3: called home
       const ps = id && spiritHeld.id === id ? trot.pose() : trot.step(dt), par = g.current.parent, { v, q, e } = tmp   // M109: held while talked to
       par.updateWorldMatrix(true, false); par.getWorldPosition(v); const baseY = v.y
-      v.set(ps.x, baseY + ps.y, ps.z); par.worldToLocal(v); g.current.position.copy(v)
+      const breath = ps.swing > 0 ? 0 : Math.sin(t * 2.2) * 0.015
+      const roll = ps.roll + (look.tilt ? 0 : ps.tilt * 0.12)
+      // grown-size slice: raise her by however far the tip would sink her lowest paw / tail / chin (0 standing level)
+      const keep = parts ? groundLift(parts.low, look.h, ps.pitch, roll, ps.sx, ps.sy + breath) : 0
+      v.set(ps.x, baseY + ps.y + keep, ps.z); par.worldToLocal(v); g.current.position.copy(v)
       par.getWorldQuaternion(q); e.setFromQuaternion(q)
       // a species with no head bend (none yet; the Vulnyx carries no tilt beat) would tip the whole body instead
-      g.current.rotation.set(ps.pitch, ps.yaw - e.y, ps.roll + (look.tilt ? 0 : ps.tilt * 0.12), 'YXZ')
+      g.current.rotation.set(ps.pitch, ps.yaw - e.y, roll, 'YXZ')
       tiltU.value = ps.tilt
-      const breath = ps.swing > 0 ? 0 : Math.sin(t * 2.2) * 0.015
       g.current.scale.set(ps.sx, ps.sy + breath, ps.sx)
       sw.value += (ps.swing - sw.value) * Math.min(1, dt * 6); lift.value = ps.lift
       // the measured world height (the drawn meshes' box, hull included) for the check, twice a second
-      if (t - tmp.hAt > 0.5) { tmp.hAt = t; const s = tmp.bb.setFromObject(g.current); tmp.hWorld = s.max.y - s.min.y }
-      const pr = probe(), tp: TrotProbe = { x: ps.x, y: baseY + ps.y, z: ps.z, mode: ps.mode, home: nav!.home, rMin: nav!.rMin, rMax: nav!.rMax, beats: trot.beats(), homes: trot.homes(), tilt: ps.tilt, h: look.h, hWorld: tmp.hWorld, cheers: trot.cheers(), calling: trot.calling(), near: trot.nearing(), plays: trot.plays(), playing: trot.playing(),
+      if (t - tmp.hAt > 0.5) { tmp.hAt = t; const s = tmp.bb.setFromObject(g.current); tmp.hWorld = s.max.y - s.min.y; tmp.keepMax = Math.max(tmp.keepMax, keep)
+        // grown-size slice: her nose-to-tail length off the scene box too, measured with her squared to the world axes (yaw
+        // undone against the planter's turn, pitch / roll zeroed) and put straight back the same frame
+        const r0 = g.current.rotation.clone(); g.current.rotation.set(0, -e.y, 0, 'YXZ'); g.current.updateMatrixWorld(true)
+        const sq = tmp.bb.setFromObject(g.current); tmp.lWorld = look.sway.along === 'z' ? sq.max.z - sq.min.z : sq.max.x - sq.min.x
+        g.current.rotation.copy(r0); g.current.updateMatrixWorld(true) }
+      const pr = probe(), tp: TrotProbe = { x: ps.x, y: baseY + ps.y, z: ps.z, mode: ps.mode, home: nav!.home, rMin: nav!.rMin, rMax: nav!.rMax, beats: trot.beats(), homes: trot.homes(), tilt: ps.tilt, h: look.h, hWorld: tmp.hWorld, len: tmp.lWorld, keepMax: tmp.keepMax, cheers: trot.cheers(), calling: trot.calling(), near: trot.nearing(), plays: trot.plays(), playing: trot.playing(),
         playYMax: ps.mode === 'play' ? Math.max(pr.trots[sp]?.playYMax ?? 0, ps.y) : (pr.trots[sp]?.playYMax ?? 0),   // M110 s1: the bound's peak
         braceMax: Math.max(pr.trots[sp]?.braceMax ?? 0, trot.braced()),   // M110 s2: the shove's lean / the guard's crouch, at its deepest
         yMax: ps.mode === 'happy' ? Math.max(pr.trots[sp]?.mode === 'happy' ? pr.trots[sp].yMax : 0, ps.y) : (pr.trots[sp]?.yMax ?? 0) }   // M109 s2: the happy beat's peak hop

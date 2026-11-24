@@ -6,7 +6,7 @@
 //  --shots <dir>: phone far / phone near / desktop / night (hour 21) from the owner + flag run.
 // M102 Manalotl wire-in (sprites-manalotl): PER SPECIES. Two more bloomed planters: a Manalotl (axolotl seed) and an Athowl
 //  (owl seed, no model yet). A also asserts: 2 models mounted (fox 1 + axolotl 1, the owl planter keeps the orb), the
-//  manalotl glb 200, each model's measured world height near its registry height (0.55 / 0.15 m), the Manalotl moves and
+//  manalotl glb 200, each model's measured size near its GROWN size (Vulnyx 0.70 tall, Manalotl 0.90 long; was 0.55 / 0.15 young), the Manalotl moves and
 //  is slower than the Vulnyx, never inside a planter or piece. --shots also writes both-in-frame spirits-phone / spirits-desk.
 // M109 s1 (sprites-M109): TALK + FOLLOW + THE SPIRIT PANEL (run F, owner + flag, 390x844). For the Vulnyx and the Manalotl:
 //  E at her = three answers Feed (greyed, 'soon') / Follow / Open; Follow + ~10 s of the keeper walking a loop on the plot
@@ -21,6 +21,7 @@ import { BLOOM_MS } from '../src/app/shimmer/open/ather/spirit-seeds'
 import { aimAt } from './lib/aim.mts'
 import { FURNITURE } from '../src/app/shimmer/open/ather/furniture'
 import { spiritSheet } from '../src/app/shimmer/open/ather/spirit-sheet'
+import { GROWN } from '../src/app/shimmer/sprites/creature-size'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), panelShot = flag('--panel-shot', 'docs/looks/spirit-panel-2026-11-23.png')
 if (shots) mkdirSync(shots, { recursive: true })
@@ -88,7 +89,7 @@ if (a) {
   // she moves, leaves her 1.5 m ring and reaches a spot > 3 m from the planter, is never inside the planter or a piece
   // (rectangles from FURNITURE here, not from the nav under test), her y bobs while trotting, and she pauses at least once.
   // Coming home + hopping up over a longer run is unit-tested (src/app/shimmer/open/ather/spirit-trot.test.ts).
-  const both = await a.p.evaluate(`new Promise(res => { const out = [], mx = []; const t0 = performance.now(); const id = setInterval(() => { const tr = window.__spiritModel?.trot, m = window.__spiritModel?.trots?.axolotl; if (tr) out.push({ ...tr, t: performance.now() - t0 }); if (m) mx.push({ ...m, t: performance.now() - t0 }); if (performance.now() - t0 > 15000) { clearInterval(id); res([out, mx]) } }, 100) })`) as { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; homes: number; t: number; tilt: number; h: number; hWorld?: number }[][]
+  const both = await a.p.evaluate(`new Promise(res => { const out = [], mx = []; const t0 = performance.now(); const id = setInterval(() => { const tr = window.__spiritModel?.trot, m = window.__spiritModel?.trots?.axolotl; if (tr) out.push({ ...tr, t: performance.now() - t0 }); if (m) mx.push({ ...m, t: performance.now() - t0 }); if (performance.now() - t0 > 15000) { clearInterval(id); res([out, mx]) } }, 100) })`) as { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; homes: number; t: number; tilt: number; h: number; hWorld?: number; len?: number; keepMax?: number }[][]
   const samples = both[0], msamp = both[1]
   ok(samples.length > 40, `A trot probe sampled (${samples.length} samples over 15 s)`)
   if (samples.length) {
@@ -115,10 +116,18 @@ if (a) {
       const mg = msamp.filter(s => !['perch', 'hopDown', 'hopUp'].includes(s.mode)), mrs = [rect(PLANTER, 0.15), ...NEAR.map(n => rect(n, n.item === 'spirit_planter' && n.id === 'mx-check' ? 0.15 : 0.05))]
       const min = mg.filter(s => mrs.some(b => s.x > b.x0 && s.x < b.x1 && s.z > b.z0 && s.z < b.z1))
       ok(!min.length, `A Manalotl never inside a planter or a piece (${mg.length} ground samples)${min.length ? ` ${min[0].mode} at ${min[0].x.toFixed(2)},${min[0].z.toFixed(2)}` : ''}`)
-      // sizes: measured world bbox height of each model group (Box3 of the drawn meshes, hull included, so ~1.0..1.25 x h)
-      const hv = samples.at(-1)!.hWorld ?? 0, hm = msamp.at(-1)!.hWorld ?? 0
-      ok(hv > 0.55 * 0.85 && hv < 0.55 * 1.3, `A Vulnyx measured height ${hv.toFixed(3)} m (registry 0.55)`)
-      ok(hm > 0.15 * 0.85 && hm < 0.15 * 1.3, `A Manalotl measured height ${hm.toFixed(3)} m (registry 0.15, heel-high)`)
+      // sizes: measured world bbox of each model group (Box3 of the drawn meshes, hull included = ~1.06 x the body).
+      // ★ MOVED 2026-11-24 (grown-size slice): the asserts were the young registry heights (0.55 / 0.15); canon now rules the
+      // GROWN size (creature-size.ts GROWN, athernyx 2a8b028) and the game draws it. Vulnyx 0.70 tall; the Manalotl is sized by
+      // her LENGTH, 0.90 m nose to tail (canon's number; at this model's proportions she then stands ~0.70 tall). +-10%,
+      // the hull's 6% inside that.
+      const hv = samples.at(-1)!.hWorld ?? 0, hm = msamp.at(-1)!.hWorld ?? 0, lm = msamp.at(-1)!.len ?? 0, gv = GROWN.fox.height, gl = GROWN.axolotl.length!
+      ok(hv > gv * 0.9 && hv < gv * 1.1, `A Vulnyx measured height ${hv.toFixed(3)} m (grown ${gv}, +-10%)`)
+      ok(lm > gl * 0.9 && lm < gl * 1.1, `A Manalotl measured length ${lm.toFixed(3)} m nose to tail (grown ${gl}, +-10%); height ${hm.toFixed(3)} m`)
+      // ground keep: the trot tips her round her feet; the lift that keeps her lowest point on the ground was applied (> 0)
+      // and stays a few cm (a big number would be her floating)
+      const kv = samples.at(-1)!.keepMax ?? -1, km = msamp.at(-1)!.keepMax ?? -1
+      ok(kv >= 0 && kv < 0.1 && km >= 0 && km < 0.12, `A ground keep: lift max Vulnyx ${kv.toFixed(3)} m, Manalotl ${km.toFixed(3)} m (no tip sinks her; never floats > 0.1)`)
     }
   }
   const fps = await a.p.evaluate(`new Promise(res => { let n = 0; const t0 = performance.now(); function f() { n++; if (performance.now() - t0 < 5000) requestAnimationFrame(f); else res(n / 5) } requestAnimationFrame(f) })`) as number

@@ -155,3 +155,41 @@ export function creatureHeight(species: string | null | undefined): number {
 export const PENDING_SIZES: readonly string[] = Object.freeze(
   SPECIES_IDS.filter(id => SIZES[id]?.pending === true),
 )
+
+// ── ★★ THE GROWN ROW (Alex 2026-11-24, "the manalotl is way too small"; Magii RULED-AFK athernyx 2a8b028) ──────────────
+// `SIZES` above is the YOUNG kit at bloom, read off the books, and stays as it is. Canon now adds what a base form GROWS
+// to, and rules that the game shows grown spirits:
+//     CANON/world/spirits-species.md › the `FULL-GROWN BASE SIZES` note above the young table
+// `npm run canon` (gate 13b, `grown-sizes`) reads that note and diffs it against `GROWN` below, the same way gate 13 diffs
+// the young row. ⚠ Every figure canon states is diffed (height, and length where canon gives one). The two fliers' body
+// heights (Hovari 0.12, Luminara 0.10) are NOT in the note: canon gives only their ~0.30 length, so the gate cannot see
+// those two heights and they are the build's reading of "long fliers", from the hub's ruling brief.
+// Height = ear / top to foot; length = nose to tail. Metres, 1 block = 1 metre.
+// ⚠ A fresh bloom that is still kit-sized and grows up is a LATER row. Today every 3D spirit draws grown.
+
+/** One species' full-grown base-form size. */
+export interface GrownSize {
+  readonly height: number
+  /** nose to tail, where canon gives one (the Manalotl and the two fliers) */
+  readonly length?: number
+}
+
+export const GROWN: Readonly<Record<string, GrownSize>> = Object.freeze(
+  Object.assign(Object.create(null) as Record<string, GrownSize>, {
+    fox: { height: 0.70 },
+    axolotl: { height: 0.35, length: 0.90 },
+    'water-bear': { height: 0.50 },
+    owl: { height: 0.50 },
+    rabbit: { height: 0.48 },
+    turtle: { height: 0.45 },
+    bat: { height: 0.45 },
+    frog: { height: 0.40 },
+    hummingbird: { height: 0.12, length: 0.30 },
+    firefly: { height: 0.10, length: 0.30 },
+  }),
+)
+
+/** The full-grown base size of a species, or null when it has none (saved data naming a retired species). */
+export function grownSize(species: string | null | undefined): GrownSize | null {
+  return (species != null ? GROWN[species] : undefined) ?? null
+}

@@ -1097,6 +1097,67 @@ function gameCreatureSizes() {
   }
 }
 
+// ── GATE 13b: GROWN SIZES (Alex 2026-11-24; Magii RULED-AFK athernyx 2a8b028) ──────────────────
+// The young row above stays; canon added what a base form GROWS to, as one note in spirits-species.md
+// ("FULL-GROWN BASE SIZES ... A base form grows to: Vulnyx 0.70 (medium dog) · Manalotl 0.35 high, 0.90
+// long · ... · Hovari + Luminara ~0.30 long fliers"). The build copy is `GROWN` in creature-size.ts.
+// Every figure canon states is diffed: a bare number or "N high" = height, "N long" = length. Canon
+// names are mapped to build ids through base-forms.md's own headings ("## 4. Manalotl (axolotl)"), so
+// no second name table is kept here. Exact match (2%), not the young gate's 20%: these are numbers
+// canon stated as numbers, ruled the same day they were copied.
+function canonGrownSizes() {
+  const ids = new Map()
+  for (const line of read(join(CANON, 'design-briefs', 'base-forms.md')).split('\n')) {
+    const h = line.match(/^##\s*\d+\.\s*(\w+)\s*\(([^)]+)\)/)
+    if (h) ids.set(h[1], h[2].split('/')[0].trim())
+  }
+  const out = new Map()
+  const note = read(join(CANON, 'world', 'spirits-species.md')).split('\n').find((l) => /FULL-GROWN BASE SIZES/.test(l)) ?? ''
+  const list = note.split(/grows\*\*\s*to:/)[1]?.split(/\.\s/)[0] ?? ''
+  for (const seg of list.split('·')) {
+    const names = (seg.match(/^[\s\w+]+?(?=\s*~?\d)/)?.[0] ?? '').split('+').map((s) => s.trim()).filter(Boolean)
+    const fig = {}
+    for (const m of seg.matchAll(/~?([\d.]+)\s*(high|long)?/g)) fig[m[2] === 'long' ? 'length' : 'height'] = Number(m[1])
+    for (const n of names) out.set(ids.get(n) ?? `?${n}`, fig)
+  }
+  return out
+}
+function gameGrownSizes() {
+  const txt = read('/root/ather-games/src/app/shimmer/sprites/creature-size.ts')
+  const body = txt.split('export const GROWN')[1]?.split('export function grownSize')[0] ?? ''
+  const out = new Map()
+  for (const m of body.matchAll(/^\s*'?([a-z-]+)'?:\s*\{([^}]*)\}/gm)) {
+    const fig = {}
+    for (const f of m[2].matchAll(/(height|length):\s*([\d.]+)/g)) fig[f[1]] = Number(f[2])
+    out.set(m[1], fig)
+  }
+  return out
+}
+{
+  const canonG = canonGrownSizes()
+  const buildG = gameGrownSizes()
+  if (!canonG.size || !buildG.size) {
+    add('BLIND', 'grown-sizes', `could not read one side (canon ${canonG.size}, build ${buildG.size}) — THE CHECK DID NOT RUN`,
+      'Find the FULL-GROWN BASE SIZES note in spirits-species.md or the GROWN literal in sprites/creature-size.ts and point this reader at it.')
+  } else {
+    let gDrift = 0
+    for (const [code, want] of canonG) {
+      if (code.startsWith('?')) { gDrift++; add('BLIND', 'grown-sizes', `canon's grown note names '${code.slice(1)}', which no base-forms.md heading maps to a build id`, 'Fix the reader or the name; a name the gate cannot map is a size it cannot check.'); continue }
+      const got = buildG.get(code)
+      if (!got) { gDrift++; add('GAP', 'grown-sizes', `canon rules a grown size for '${code}' that the build does not carry`, 'Add it to GROWN in sprites/creature-size.ts.'); continue }
+      for (const k of Object.keys(want)) {
+        if (got[k] == null || Math.abs(got[k] - want[k]) / want[k] > 0.02) {
+          gDrift++
+          add('CONFLICT', 'grown-sizes', `'${code}' grown ${k} is ${got[k]}m in the build and ${want[k]}m in canon`,
+            'Canon owns it (spirits-species.md › FULL-GROWN BASE SIZES). Re-transcribe GROWN, or get it re-ruled first.')
+        }
+      }
+    }
+    for (const code of buildG.keys()) if (!canonG.has(code)) { gDrift++; add('COLLISION', 'grown-sizes', `the build has a grown size for '${code}', which canon's note does not rule`, 'Rule it in spirits-species.md, or drop the row.') }
+    if (!gDrift) add('CLEAN', 'grown-sizes', `all ${canonG.size} ruled grown sizes match the build (every height/length figure canon states)`)
+  }
+}
+
 // ── REGISTRY SYNC (best-effort) ────────────────────────
 // Keep canon_registry mirrored to CANON/ on every gate run, so the index
 // never silently drifts (it once fell to 63/131). Best-effort: a sync
@@ -1165,7 +1226,7 @@ console.log('canon-drift: ' + ORDER.filter((s) => counts[s]).map((s) => `${count
 // matching line UP out of the "does not check" list. Never delete a line to quiet the output.
 const LIVE_AREAS = [...new Set(findings.map((f) => f.area))].sort()
 const PINNED_AREAS = [
-  'base-species', 'birth-affinity', 'canon-holds', 'canon-vs-canon', 'creature-sizes', 'element-herbs',
+  'base-species', 'birth-affinity', 'canon-holds', 'canon-vs-canon', 'creature-sizes', 'element-herbs', 'grown-sizes',
   'infusions', 'keeper-moves', 'mist-rosters', 'npcs', 'retired-vocab', 'second-forms', 'zones',
 ].sort()
 
