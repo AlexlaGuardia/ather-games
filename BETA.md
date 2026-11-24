@@ -215,6 +215,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 18:2x Alex (tutorial, incognito): "and the "dig" takes over right after talking to greg.. so if the player talks to greg a second time itll trigger the glove quest and for some reason the dig as well.. but can we just have it hold off on all that and just show the three markers on the map and lets call the whold quest "first steps" or something.. from talking to greg and friends to clearing the first moglin settlement and returning to greg" -> M146
 - 11-24 18:1x Alex (first tutorial run, incognito): "first thing i think we should look into adding is arrows that point at things that the game hasnt explained to the player yet.. like when greg gives the grimiore an arrow that points at the slot it pops into to get the players attention.." -> M145
 - 11-24 18:0x Alex (dialog): a lost place's missed object = left by the next champion felled, beside its own -> M128 s3 (with objects as things to look at)
 - 11-24 17:2x Alex: Dewbear v2 APPROVED (45977071) -> wire owner-only after Athowl; Noctyx proof in flight
