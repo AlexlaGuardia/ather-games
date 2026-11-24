@@ -3,17 +3,19 @@
 // Alex 11-24: "everything from damage to a passive effect.. staying within a certain range of the player.. focus on enemies the
 // player is targeting.. not do too much but instead they pace themselves and judge how to best help"; "raise the range to 10 meters".
 // CANON (RULED athernyx 4b74557): every spirit CHOOSES, every fight, whether she joins (she may just keep near); a Hollow can
-// not touch, wound, drain, grey or TARGET a spirit (combat.ts never sees one: nothing here hands it a spirit's position); her
-// help is her OWN act (no command, no button). s2 = per-species moves + temperament, s3 = learnset, s4 = tuning.
+// not touch, wound, drain or grey a spirit; since 8921742 (s1b) it MAY chase one and be drawn off by her; her help is her OWN act (no command, no button). s2 = per-species moves + temperament, s3 = learnset, s4 = tuning.
 //
 //  · TETHER: past FIGHT.tether m from the keeper she only comes back (to FIGHT.back m) before she does anything else.
 //  · SHARED TARGET: the Hollow the keeper last hit (FIGHT.targetHold s), else the one they aim at. No target = no HIT.
 //  · BRAIN: every FIGHT.think s she scores HIT / MEND / SLOW / nothing and does the best. Nothing wins often.
 //  · PACING: her own cooldown, a rest after choosing nothing, and ONE help budget for the trio per fight. Their damage never
 //    passes FIGHT.share of what the KEEPER has dealt in the same fight, so a keeper who does nothing gets nothing done.
+//  · THE CHASE (s1b): when she HITs, a walker near her may turn on her for FIGHT.chase s (one at a time for the trio): she leads it round the
+//    keeper, always `away` m off it, and does nothing else meanwhile. combat.ts only gets a LURE spot: it stops short, never
+//    winds up at it, and a keeper in its reach is still lunged at. Floaters and champions are never drawn (nothing is shot at her).
 //  · Off duty (no fight, not joining, nothing to walk to) fightSlot is null and M126's formation owns her place: a fight only
 //    MOVES THE SLOT the same walk is already on, so neither hand-over jumps.
-import { fxOn, type Combat, type Hollow } from '../ather/combat'
+import { fxOn, LURE_STOP, type Combat, type Hollow } from '../ather/combat'
 
 export type Act = 'hit' | 'mend' | 'slow'
 export type V = { x: number; z: number }
@@ -33,6 +35,7 @@ export const FIGHT = {
   hit: 5, hitRange: 14,         // damage a HIT does; a target further from the keeper than this is left alone
   mend: 6, mendUnder: 0.5,      // health a MEND gives; only under this part of full health
   slowN: 3, slowR: 6, slowSecs: 2.5,   // Hollows this close to the keeper, this many at least, slowed this long
+  draw: 0.5, chase: 3, lead: 7.5, leadA: 0.9, away: 3.2, drawR: 14, drawSee: 9,   // s1b: odds a HIT turns it on her; s it chases; m from the keeper and radians round them she leads it; the closest she lets it come; past drawR m of the keeper it ends; how near her a walker turns
   idle: 0.5, jitter: 0.25, crowd: 0.45, crowdFade: 3,   // 'nothing': its base score, its swing, and how much a fresh help (anyone's) adds to it
 } as const
 
@@ -78,19 +81,42 @@ export function workSpot(k: V, t: V, lane: number): V & { face: number } {
   return { ...p, face: Math.atan2(t.x - p.x, t.z - p.z) }
 }
 
+/** s1b: where she leads a Hollow chasing her: round the keeper on her own `side` of it (never across it); too near it = straight off it.
+ *  Never past `stand` m from the keeper. At `lead` m and `leadA` rad round she is at least lead*sin(leadA) = 5.9 m from it. */
+export function leadSpot(k: V, h: V, s: V, side: number): V & { face: number } {
+  const F = FIGHT, gap = Math.hypot(s.x - h.x, s.z - h.z)
+  let p: V
+  if (gap < F.away && gap > 1e-6) {
+    p = { x: s.x + (s.x - h.x) / gap * 3, z: s.z + (s.z - h.z) / gap * 3 }
+    const r = Math.hypot(p.x - k.x, p.z - k.z); if (r > F.stand) p = { x: k.x + (p.x - k.x) / r * F.stand, z: k.z + (p.z - k.z) / r * F.stand }
+  } else { const a = Math.atan2(h.x - k.x, h.z - k.z) + side * F.leadA; p = { x: k.x + Math.sin(a) * F.lead, z: k.z + Math.cos(a) * F.lead } }
+  return { ...p, face: Math.atan2(h.x - p.x, h.z - p.z) }
+}
+/** which side of the Hollow (seen from the keeper) she is on */
+export const sideOf = (k: V, h: V, s: V) => Math.sin(Math.atan2(s.x - k.x, s.z - k.z) - Math.atan2(h.x - k.x, h.z - k.z)) < 0 ? -1 : 1
+/** may this Hollow be (or stay) drawn off? a walker, not committed to the keeper, that still knows where things are */
+export const drawable = (h: Hollow | undefined): h is Hollow => !!h && h.hp > 0 && h.kind !== 'floater' && (h.state === 'chase' || h.state === 'stagger' || h.state === 'recover') && !fxOn(h, 'blinded')
+
+/** who turns on her as she HITs: the drawable walker nearest her (drawSee m) that the keeper is NOT shooting, else the one she hit */
+export function whoTurns(C: Combat, k: V, s: V, hit: Hollow): Hollow | null {
+  let best: Hollow | null = null, bd: number = FIGHT.drawSee
+  for (const h of C.hollows) if (h !== hit && drawable(h) && dist(h, k) <= FIGHT.drawR) { const d = dist(h, s); if (d > LURE_STOP && d < bd) { best = h; bd = d } }
+  return best ?? (drawable(hit) && dist(hit, s) > LURE_STOP && dist(hit, k) <= FIGHT.drawR ? hit : null)
+}
+
 export type Helper = { id: string; x: number; z: number }
 export type Done = { id: string; kind: Act; x: number; y: number; z: number; amount: number; target?: number }
-type Mind = { joined: boolean; cool: number; think: number; want: Act | 'nothing'; coming: boolean; goal: 'hit' | null; goalT: number }
+type Mind = { joined: boolean; cool: number; think: number; want: Act | 'nothing'; coming: boolean; goal: 'hit' | null; goalT: number; chase: { id: number; t: number; side: number } | null }
 export type SpiritFight = {
   seed: number; n: number; on: boolean; quiet: number; t: number; lastHelp: number; helps: number
   keeperDealt: number; spiritDealt: number; frameDealt: number; hp: number
   target: number | null; targetT: number; minds: Map<string, Mind>; slots: Map<string, V & { face: number }>
   /** totals since the page opened (checks read them): what was chosen, how far from the keeper anyone got after settling */
-  seen: { hit: number; mend: number; slow: number; nothing: number; onTarget: number; fights: number; joined: number; stayed: number; dealt: number; returns: number }
+  seen: { hit: number; mend: number; slow: number; nothing: number; onTarget: number; fights: number; joined: number; stayed: number; dealt: number; returns: number; chases: number; chaseSecs: number; chaseMin: number }
 }
 export const newSpiritFight = (seed: number): SpiritFight => ({ seed, n: 0, on: false, quiet: 0, t: 0, lastHelp: -99, helps: 0, keeperDealt: 0, spiritDealt: 0, frameDealt: 0, hp: -1,
   target: null, targetT: -99, minds: new Map(), slots: new Map(),
-  seen: { hit: 0, mend: 0, slow: 0, nothing: 0, onTarget: 0, fights: 0, joined: 0, stayed: 0, dealt: 0, returns: 0 } })
+  seen: { hit: 0, mend: 0, slow: 0, nothing: 0, onTarget: 0, fights: 0, joined: 0, stayed: 0, dealt: 0, returns: 0, chases: 0, chaseSecs: 0, chaseMin: Infinity } })
 
 const dist = (a: V, b: V) => Math.hypot(a.x - b.x, a.z - b.z)
 const ENGAGED = (h: Hollow) => h.state !== 'wander'
@@ -129,7 +155,8 @@ export function sharedTarget(F: SpiritFight, C: Combat, eye: { x: number; y: num
  *  lands: a Hollow taken to 0 is swept by the next stepCombat with ONE kill event + ONE drop, like any other. */
 export function stepSpirits(F: SpiritFight, C: Combat, feet: { x: number; y: number; z: number }, eye: { x: number; y: number; z: number }, aim: { x: number; y: number; z: number }, spirits: readonly Helper[], dt: number): Done[] {
   const D = FIGHT, out: Done[] = [], k = C.keeper
-  F.t += dt; F.slots.clear()
+  F.t += dt; F.slots.clear(); C.lures = undefined
+  const lures = new Map<number, V>()
   const hurt = F.hp >= 0 && k.hp < F.hp - 1e-6; F.hp = k.hp
   const engaged = C.hollows.filter(h => h.hp > 0 && ENGAGED(h) && dist(h, feet) < D.engageR)
   if (k.hp > 0 && (engaged.length || (hurt && C.hollows.length))) F.quiet = 0; else F.quiet += dt
@@ -143,12 +170,20 @@ export function stepSpirits(F: SpiritFight, C: Combat, feet: { x: number; y: num
   const help = (m: Mind, d: Done) => { m.cool = D.cooldown; m.goal = null; m.think = D.rest; F.helps++; F.lastHelp = F.t; F.seen[d.kind]++; out.push(d) }
   spirits.forEach((s, i) => {
     let m = F.minds.get(s.id)
-    if (!m) { const j = joins(s.id, F.n, F.seed); m = { joined: j, cool: roll01(s.id, F.n, F.seed + 7) * 2, think: 0, want: 'nothing', coming: false, goal: null, goalT: 0 }; F.minds.set(s.id, m); if (j) F.seen.joined++; else F.seen.stayed++ }
+    if (!m) { const j = joins(s.id, F.n, F.seed); m = { joined: j, cool: roll01(s.id, F.n, F.seed + 7) * 2, think: 0, want: 'nothing', coming: false, goal: null, goalT: 0, chase: null }; F.minds.set(s.id, m); if (j) F.seen.joined++; else F.seen.stayed++ }
     m.cool -= dt; m.think -= dt
     const was = m.coming
     m.coming = tethered(dist(s, feet), m.coming)
-    if (m.coming) { if (!was) F.seen.returns++; m.goal = null; return }   // the formation slot beside the keeper IS the way back
+    if (m.coming) { if (!was) F.seen.returns++; m.goal = null; m.chase = null; return }   // the formation slot beside the keeper IS the way back
     if (!m.joined) return                                                 // her choice: she keeps near
+    if (m.chase) {
+      const q = m.chase, h = C.hollows.find(x => x.id === q.id); q.t -= dt
+      if (q.t <= 0 || !drawable(h) || dist(h, feet) > D.drawR) { m.chase = null; m.think = D.rest }   // back to the keeper
+      else {
+        lures.set(h.id, { x: s.x, z: s.z }); F.slots.set(s.id, leadSpot(feet, h, s, q.side))
+        F.seen.chaseSecs += dt; F.seen.chaseMin = Math.min(F.seen.chaseMin, dist(s, h)); return
+      }
+    }
     const budget = F.helps < D.helps, free = F.t - F.lastHelp >= D.gap
     if (m.goal === 'hit') {
       m.goalT -= dt
@@ -159,6 +194,10 @@ export function stepSpirits(F: SpiritFight, C: Combat, feet: { x: number; y: num
         if (dist(s, target) <= D.reach && free) {
           target.hp -= dmg; target.hitFlash = 0.12; F.spiritDealt += dmg; F.frameDealt += dmg; F.seen.dealt += dmg; F.seen.onTarget++
           help(m, { id: s.id, kind: 'hit', x: target.x, y: target.y + (target.kind === 'floater' ? 0 : 0.8), z: target.z, amount: dmg, target: target.id })
+          const q = whoTurns(C, feet, s, target)
+          if (q && ![...F.minds.values()].some(x => x.chase) && roll01(s.id, Math.round(F.t * 60), F.seed + 29) < D.draw) {
+            m.chase = { id: q.id, t: D.chase, side: sideOf(feet, q, s) }; F.seen.chases++
+          }
         }
         return
       }
@@ -173,6 +212,7 @@ export function stepSpirits(F: SpiritFight, C: Combat, feet: { x: number; y: num
     else if (m.want === 'mend') { const amount = Math.min(D.mend, k.maxHp - k.hp); k.hp += amount; F.hp = k.hp; help(m, { id: s.id, kind: 'mend', x: feet.x, y: feet.y, z: feet.z, amount }) }
     else { for (const h of nearBy) h.fx = { ...h.fx, slowed: Math.max(h.fx?.slowed ?? 0, D.slowSecs) }; help(m, { id: s.id, kind: 'slow', x: feet.x, y: feet.y, z: feet.z, amount: nearBy.length }) }
   })
+  if (lures.size) C.lures = lures
   return out
 }
 

@@ -187,6 +187,10 @@ export interface Combat {
   pieces?: CombatPiece[]
   /** The veil's decoy (combat-casts.ts › runCast 'veil'): Hollows target it instead of the keeper while it lasts. */
   decoy?: CombatDecoy | null
+  /** M127 s1b: a walker (by id) drawn off the keeper this frame by something it can chase but never reach: it walks at this
+   *  spot while chasing and stops LURE_STOP m short. It never winds up, lunges or spits at it; the keeper in reach is still
+   *  lunged at. Set by the caller every frame; unset = nobody is drawn off. */
+  lures?: ReadonlyMap<number, { x: number; z: number }>
   /** The node's champion, when one is up (champion.ts). */
   champ?: Champion
   /** Champions that went back under, by node: the bar each had reached. */
@@ -602,6 +606,14 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
         if (d > W.forget || !alive) { h.state = 'wander'; h.t = 0; break }
         if (d < W.lungeRange && !unarmed) { h.state = 'windup'; h.t = W.windup; h.lx = dx / d; h.lz = dz / d; break }
         mx = dx; mz = dz; speed = W.chaseSpeed * (0.8 + 0.35 * Math.sin(h.id * 1.7 + h.x * 0.3))   // the stagger
+        {   // M127 s1b: drawn off: at the lure, stopping short of it
+          const lure = c.lures?.get(h.id)
+          if (lure) {
+            mx = lure.x - h.x; mz = lure.z - h.z; h.yaw = Math.atan2(mx, mz)
+            if (Math.hypot(mx, mz) <= LURE_STOP) speed = 0
+            break
+          }
+        }
         // M120: a pack comes in as a loose ARC, not single file: each member leans to its own side until it is close
         if (h.pack && d > 5) { const side = Math.sign(h.px ?? 0) * Math.min(1, Math.hypot(h.px ?? 0, h.pz ?? 0) / PACK.spread) * Math.min(0.6, (d - 5) / 10); mx += -dz * side; mz += dx * side }
         break
@@ -694,6 +706,8 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   c.drops = c.drops.filter(p => p.amount > 0 && p.age < 300)
 }
 
+/** M127 s1b: how far short of a lure a Hollow stops (m) */
+export const LURE_STOP = 2.4
 /** M117 s3: how far ahead a Hollow looks for a wall (m) */
 export const STEER_LOOK = 1.2
 /** Where a body of radius r may stand, structures-wise, at the ground under it. One already standing in a structure (spawned

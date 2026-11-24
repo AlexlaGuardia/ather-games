@@ -45,8 +45,8 @@ function botStep(c: Combat, feet: { x: number; y: number; z: number }, t: number
 
 /** M127: walk each sim fight with a trio of following spirits (the fight brain as the scene drives it); off = the newcomer alone.
  *  `ran` = the trio's totals of every fight walked since it was last cleared. */
-export const SIM: { trio: boolean; ran: { keeper: number; spirits: number; fights: number; worst: number; hit: number; mend: number; slow: number; nothing: number } } =
-  { trio: false, ran: { keeper: 0, spirits: 0, fights: 0, worst: 0, hit: 0, mend: 0, slow: 0, nothing: 0 } }
+export const SIM: { trio: boolean; ran: { keeper: number; spirits: number; fights: number; worst: number; hit: number; mend: number; slow: number; nothing: number; chases: number; chaseSecs: number; chaseMin: number } } =
+  { trio: false, ran: { keeper: 0, spirits: 0, fights: 0, worst: 0, hit: 0, mend: 0, slow: 0, nothing: 0, chases: 0, chaseSecs: 0, chaseMin: Infinity } }
 function makeTrio(seed: number) {
   const F = newSpiritFight(seed), at = ['a', 'b', 'c'].map(id => ({ id, x: 0, z: 2 })); let keeper = 0, spirits = 0, lastN = 0, lk = 0, ls = 0
   const tick = (c: Combat, feet: { x: number; y: number; z: number }, step: () => void) => {
@@ -57,7 +57,7 @@ function makeTrio(seed: number) {
     lk = F.keeperDealt; ls = F.spiritDealt
   }
   const end = () => { const R = SIM.ran, k = keeper + lk, s = spirits + ls; R.keeper += k; R.spirits += s; R.fights++; R.worst = Math.max(R.worst, k > 0 ? s / k : 0)
-    R.hit += F.seen.hit; R.mend += F.seen.mend; R.slow += F.seen.slow; R.nothing += F.seen.nothing }
+    R.hit += F.seen.hit; R.chases += F.seen.chases; R.chaseSecs += F.seen.chaseSecs; R.chaseMin = Math.min(R.chaseMin, F.seen.chaseMin); R.mend += F.seen.mend; R.slow += F.seen.slow; R.nothing += F.seen.nothing }
   return { tick, end, F: F as SpiritFight }
 }
 

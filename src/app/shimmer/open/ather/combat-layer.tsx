@@ -514,9 +514,9 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     const f = sf.current = newSpiritFight(Date.now() >>> 0); setLiveFight(f)
     const g = window as unknown as { __spiritFight?: unknown }
     g.__spiritFight = () => ({ on: f.on, n: f.n, helps: f.helps, keeperDealt: f.keeperDealt, spiritDealt: f.spiritDealt, target: f.target, seen: { ...f.seen }, dials: { ...FIGHT },
-      minds: [...f.minds].map(([id, m]) => ({ id, joined: m.joined, want: m.want, goal: m.goal, coming: m.coming })), slots: Object.fromEntries(f.slots),
+      minds: [...f.minds].map(([id, m]) => ({ id, joined: m.joined, want: m.want, goal: m.goal, coming: m.coming, chase: m.chase ? m.chase.id : null })), slots: Object.fromEntries(f.slots),
       spirits: liveSpirits().map(s => ({ id: s.id, x: s.x, y: s.y, z: s.z })), log: [...sfLog.current] })   // checks' hook: READ only
-    return () => { sf.current = null; setLiveFight(null); delete g.__spiritFight }
+    return () => { sf.current = null; c.current.lures = undefined; setLiveFight(null); delete g.__spiritFight }
   }, [spirits])
   const sfLog = useRef<{ id: string; kind: string; target?: number; amount: number; keeper: number | null }[]>([])
   const { camera, gl } = useThree()
@@ -699,7 +699,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     if (sight) sight.current.aiming = mouseAim.current || touch.aim
     if (sight) sight.current.charge = charging.current >= 0 && charge > 0 ? Math.max(0, Math.min(1, 1 - charging.current / charge)) : 0
     const SF = sf.current && !net.current.share ? sf.current : null   // M127: alone only (a shared fight's Hollows are the host's, and the host may not have this on)
-    if (sf.current && !SF) { sf.current.on = false; sf.current.slots.clear(); sf.current.minds.clear() }
+    if (sf.current && !SF) { sf.current.on = false; sf.current.slots.clear(); sf.current.minds.clear(); c.current.lures = undefined }
     const hp0 = SF ? healthOf(C) : null
     if (casts?.current.length) {
       camera.getWorldDirection(aim)

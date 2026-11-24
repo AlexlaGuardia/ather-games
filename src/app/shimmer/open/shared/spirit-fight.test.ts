@@ -1,8 +1,8 @@
 // npx tsx src/app/shimmer/open/shared/spirit-fight.test.ts   (BETA M127 s1: the fight brain of following spirits)
 import { readFileSync } from 'fs'
-import { newCombat, spawnHollow, stepCombat, SHAMBLER, type Combat } from '../ather/combat'
+import { newCombat, spawnHollow, stepCombat, SHAMBLER, LURE_STOP, type Combat, type HollowKind } from '../ather/combat'
 import { FLAT, SIM, championFight, packFight, summarise } from '../ather/wilds-sim'
-import { FIGHT, score, pick, joins, mayDeal, tethered, workSpot, newSpiritFight, stepSpirits, noteKeeper, healthOf, sharedTarget, fightSlot, setLiveFight, type Situation, type Helper } from './spirit-fight'
+import { FIGHT, score, pick, joins, mayDeal, tethered, workSpot, newSpiritFight, stepSpirits, noteKeeper, healthOf, sharedTarget, fightSlot, setLiveFight, leadSpot, sideOf, drawable, whoTurns, type Situation, type Helper } from './spirit-fight'
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  x', m) } }
 const DT = 1 / 60, feet = { x: 0, y: 0, z: 0 }, eye = { x: 0, y: 1.62, z: 0 }, aim = { x: 0, y: 0, z: -1 }
@@ -111,7 +111,7 @@ function fight(o: Opt = {}) {
   ok(sharedTarget(F, C, eye, { x: 0, y: 1, z: 0 }) === null, 'a stale hit and no aim: no target')
   C.events = [{ kind: 'merge', id: b.id, gone: a.id, mass: 2, x: 0, z: 0 }]; noteKeeper(F, C, healthOf(C)); ok(F.target === b.id, 'the target pooled into another: that one is the target')
 }
-// (8) CANON: a Hollow can not touch or target a spirit: combat.ts / champion.ts know nothing of one; a Hollow walks the same beside three
+// (8) CANON: a Hollow can not touch a spirit: combat.ts / champion.ts know nothing of one (s1b: only a lure spot); unless she joins in, a Hollow walks the same beside three
 {
   for (const f of ['combat.ts', 'champion.ts']) ok(!/spirit-f(ight|ollow)|spiritLive|liveSpirits/.test(readFileSync(new URL(`../ather/${f}`, import.meta.url), 'utf8')), `${f} never sees a spirit`)
   const walk = (near: boolean) => { const C = newCombat(6), F = newSpiritFight(1), h = spawnHollow(C, FLAT, 3, -14); h.state = 'chase'
@@ -131,12 +131,79 @@ function fight(o: Opt = {}) {
   const off = summarise(seeds.map(s => championFight(s, 3))); ok(off.died === 9, `trio off: champion + brood deaths ${off.died}/200 (was 9)`)
   SIM.trio = true
   const on = summarise(seeds.map(s => championFight(s, 3))); const R = SIM.ran, champ = { ...R }
-  for (const k of Object.keys(R) as (keyof typeof R)[]) R[k] = 0
+  for (const k of Object.keys(R) as (keyof typeof R)[]) R[k] = k === 'chaseMin' ? Infinity : 0
   const pk = summarise(seeds.map(s => packFight(s, ['shambler', 'shambler', 'shambler', 'floater']))), pack = { ...R }
   SIM.trio = false
   console.log(`  trio on: champion+brood died ${on.died}/200 (off ${off.died}), ${on.secs}s vs ${off.secs}s; pack of 4 died ${pk.died}/200, ${pk.secs}s`)
-  for (const [n, r] of [['champion+brood', champ], ['pack of 4', pack]] as const) console.log(`  ${n}: spirits' damage ${(100 * r.spirits / r.keeper).toFixed(1)}% of the keeper's (worst fight ${(100 * r.worst).toFixed(1)}%), a fight: hit ${(r.hit / r.fights).toFixed(1)} mend ${(r.mend / r.fights).toFixed(1)} slow ${(r.slow / r.fights).toFixed(1)} nothing ${(r.nothing / r.fights).toFixed(1)}`)
+  for (const [n, r] of [['champion+brood', champ], ['pack of 4', pack]] as const) console.log(`  ${n}: spirits' damage ${(100 * r.spirits / r.keeper).toFixed(1)}% of the keeper's (worst fight ${(100 * r.worst).toFixed(1)}%), a fight: hit ${(r.hit / r.fights).toFixed(1)} mend ${(r.mend / r.fights).toFixed(1)} slow ${(r.slow / r.fights).toFixed(1)} nothing ${(r.nothing / r.fights).toFixed(1)} chases ${(r.chases / r.fights).toFixed(2)} (${(r.chaseSecs / Math.max(1, r.chases)).toFixed(1)} s each, closest ${r.chaseMin.toFixed(2)} m)`)
+  ok(champ.chases > 20 && Math.min(champ.chaseMin, pack.chaseMin) > 2, `sim chases ${champ.chases}, closest ${Math.min(champ.chaseMin, pack.chaseMin).toFixed(2)} m: nobody was reached`)
+  ok(on.died > 0 && on.died < off.died, `s1b: the trio helps and the danger stays (${on.died} / ${off.died})`)
   ok(on.died <= 12, `trio on: ${on.died}/200 within the 6% rule`); ok(champ.worst <= 0.15 && pack.worst <= 0.15, 'never past 15% of the keeper in any one fight')
+}
+// (11) s1b THE CHASE: a Hollow may chase a spirit and be drawn off by her; it never reaches her, then it is the keeper's again
+{
+  const K = { x: 0, z: 0 }
+  // geometry: far from it, her spot is well off it and inside the tether, on her own side; too near, straight off it
+  for (let a = 0; a < 6.28; a += 0.3) for (const r of [0.5, 3, 7, 12]) for (const side of [-1, 1]) {
+    const h = { x: Math.sin(a) * r, z: Math.cos(a) * r }, p = leadSpot(K, h, { x: h.x + 5, z: h.z }, side)
+    if (!(Math.hypot(p.x, p.z) <= FIGHT.stand + 1e-9 && Math.hypot(p.x - h.x, p.z - h.z) > 5)) ok(false, `leadSpot ${a}/${r}/${side}`)
+    const q = leadSpot(K, h, { x: h.x + 0.6, z: h.z }, side); if (Math.hypot(q.x, q.z) > FIGHT.stand + 1e-9 || Math.hypot(q.x - h.x, q.z - h.z) < Math.min(0.6, r)) ok(false, `leadSpot near ${a}/${r}`)
+  }
+  ok(sideOf(K, { x: 0, z: -5 }, { x: 2, z: -4 }) !== sideOf(K, { x: 0, z: -5 }, { x: -2, z: -4 }), 'she keeps to her own side of it')
+  { const C = newCombat(3), h = spawnHollow(C, FLAT, 0, -6), f = spawnHollow(C, FLAT, 2, -6, 'floater'), o = spawnHollow(C, FLAT, 5, -5); h.state = f.state = o.state = 'chase'
+    ok(drawable(h) && !drawable(f) && !drawable(undefined), 'a walker may be drawn; a floater (it shoots) never')
+    for (const st of ['wander', 'windup', 'lunge'] as const) { h.state = st; ok(!drawable(h), `not one in ${st}`) } h.state = 'chase'
+    h.fx = { blinded: 1 }; ok(!drawable(h), 'not a blinded one'); h.fx = {}
+    ok(whoTurns(C, K, { x: 1, z: -2 }, h) === o, 'the one the keeper is not shooting turns first'); o.state = 'wander'; ok(whoTurns(C, K, { x: 1, z: -2 }, h) === h, 'else the one she hit')
+    h.z = -FIGHT.drawR - 1; ok(whoTurns(C, K, { x: 1, z: -9 }, h) === null, 'never one far from the keeper') }
+  // combat.ts alone: a lure pulls a walker, which stops short, never winds up at it, and forgets the keeper no longer than the lure
+  for (const kind of ['shambler', 'crawler'] as HollowKind[]) {
+    const C = newCombat(6), h = spawnHollow(C, FLAT, 9, -9, kind), spot = { x: 14, z: -9 }; h.state = 'chase'; let min = 99, wound = 0
+    for (let t = 0; t < 8; t += DT) { C.lures = new Map([[h.id, spot]]); stepCombat(C, FLAT, feet, DT); min = Math.min(min, Math.hypot(h.x - spot.x, h.z - spot.z)); if (h.state !== 'chase') wound++ }
+    ok(min <= LURE_STOP && min > LURE_STOP - 0.1 && wound === 0 && C.keeper.hp === 100, `${kind}: comes to the lure, stops ${min.toFixed(2)} m short, never winds up`)
+    C.lures = undefined; for (let t = 0; t < 12 && C.keeper.hp === 100; t += DT) stepCombat(C, FLAT, feet, DT); ok(C.keeper.hp < 100, `${kind}: the lure gone, it comes back and reaches the keeper`)
+    const D = newCombat(6), g = spawnHollow(D, FLAT, 0.8, 0, kind); g.state = 'chase'; for (let t = 0; t < 3; t += DT) { D.lures = new Map([[g.id, { x: 14, z: 0 }]]); stepCombat(D, FLAT, feet, DT) }
+    ok(D.keeper.hp < 100, `${kind}: a keeper in its way is still lunged at`)
+  }
+  { const run = (f: (C: Combat) => void) => { const C = newCombat(8); for (let i = 0; i < 5; i++) spawnHollow(C, FLAT, i * 2 - 4, -12, i === 4 ? 'floater' : i === 3 ? 'crawler' : 'shambler').state = 'chase'
+      for (let t = 0; t < 12; t += DT) { f(C); stepCombat(C, FLAT, feet, DT) } return JSON.stringify([C.hollows, C.spits, C.keeper.hp]) }
+    ok(run(() => {}) === run(C => { C.lures = new Map([[999, { x: 0, z: 0 }]]) }) && run(() => {}) !== run(C => { C.lures = new Map([[1, { x: 9, z: -9 }]]) }), 'no lure of its own: a Hollow moves byte for byte as before') }
+  // the whole brain, live Hollows: she leads it, one at a time, inside the tether, for FIGHT.chase s; never reached; then back
+  let chases = 0, min = 99, far = 0, two = 0, longest = 0, acted = 0, floats = 0, stale = 0, moved = 0, toKeeper = 0, hurtAt = 0, leftover = 0
+  for (let seed = 1; seed <= 40; seed++) {
+    const C = newCombat(seed), F = newSpiritFight(seed), at = [0, 1, 2].map(i => ({ id: 'p' + i, x: i - 1, z: 2 })), T: Record<string, number> = {}
+    const hs = (['shambler', 'shambler', 'crawler', 'floater'] as HollowKind[]).map((k, i) => { const h = spawnHollow(C, FLAT, i * 3 - 4, -11, k); h.state = 'chase'; h.hp = h.maxHp = 1e4; return h })
+    let next = 0.3, wasLured = new Map<number, number>()
+    for (let t = 0; t < 40; t += DT) {
+      C.keeper.hp = 100; const before = healthOf(C)
+      for (const s of at) { const g = F.slots.get(s.id) ?? { x: +s.id[1] - 1, z: 2 }, d = Math.hypot(g.x - s.x, g.z - s.z), m = Math.min(d, 6 * DT); if (d > 0) { s.x += (g.x - s.x) / d * m; s.z += (g.z - s.z) / d * m } }
+      const pos = new Map(hs.map(h => [h.id, [h.x, h.z]])), done = stepSpirits(F, C, feet, eye, aim, at, DT)
+      const on = [...F.minds].filter(([, m]) => m.chase); if (on.length > 1) two++
+      for (const [id, m] of on) { T[id] = (T[id] ?? 0) + DT; longest = Math.max(longest, T[id]); if (done.some(d => d.id === id) && T[id] > 2 * DT) acted++ } for (const s of at) if (!F.minds.get(s.id)?.chase) T[s.id] = 0
+      for (const id of C.lures?.keys() ?? []) { const h = C.hollows.find(q => q.id === id)!; if (h.kind === 'floater') floats++; if (!on.some(([, m]) => m.chase!.id === id)) { stale++; continue }
+        const s = at.find(q => F.minds.get(q.id)?.chase?.id === id)!; min = Math.min(min, Math.hypot(s.x - h.x, s.z - h.z)); wasLured.set(id, t) }
+      if (t >= next) { next += 0.5; const A = hs[0]; C.rounds.push({ x: A.x, y: 0.85, z: A.z + 0.8, vx: 0, vy: 0, vz: -40, life: 1, dmg: 10, crit: 10 }) }
+      stepCombat(C, FLAT, feet, DT); noteKeeper(F, C, before)
+      if (C.keeper.hp < 100) hurtAt++
+      for (const h of hs) { const p = pos.get(h.id)!, l = wasLured.get(h.id), d1 = Math.hypot(h.x, h.z), d0 = Math.hypot(p[0], p[1]); if (C.lures?.has(h.id) && h.state === 'chase' && Math.hypot(h.x - p[0], h.z - p[1]) > 1e-6) moved++
+        if (l !== undefined && t - l > 0.1 && t - l < 2 && h.state === 'chase' && d1 < d0) toKeeper++ }
+      far = Math.max(far, ...at.map(s => Math.hypot(s.x, s.z)))
+    }
+    chases += F.seen.chases
+    C.hollows = []; stepSpirits(F, C, feet, eye, aim, at, DT); if (C.lures) leftover++
+  }
+  ok(chases > 10 && moved > 100, `chases happen (${chases}; ${moved} frames on the move)`)
+  ok(min > 1.6, `the Hollow chasing her never gets nearer than ${min.toFixed(2)} m`)
+  ok(longest <= FIGHT.chase + 2 * DT, `a chase ends (longest ${longest.toFixed(2)} s, dial ${FIGHT.chase})`); ok(toKeeper > 20, `and it goes back to the keeper (${toKeeper} frames)`)
+  ok(two === 0 && acted === 0 && floats === 0 && stale === 0 && leftover === 0, `one at a time, no helping meanwhile, no floater, no stale lure (${two} ${acted} ${floats} ${stale} ${leftover})`)
+  ok(far <= FIGHT.tether, `inside the 10 m tether (${far.toFixed(1)})`); ok(hurtAt > 20, `the keeper is still in danger (${hurtAt} blows)`)
+  // past the tether the chase is dropped; a party fight (no brain) drops it too
+  { let sy = 1; while (!joins('p0', 1, sy)) sy++; const C = newCombat(2), F = newSpiritFight(sy), h = spawnHollow(C, FLAT, 0, -6); h.state = 'chase'
+    stepSpirits(F, C, feet, eye, aim, [{ id: 'p0', x: 0, z: -2 }], DT); F.minds.get('p0')!.chase = { id: h.id, t: 3, side: 1 }
+    stepSpirits(F, C, feet, eye, aim, [{ id: 'p0', x: 0, z: -2 }], DT); ok(!!C.lures?.has(h.id), 'the lure is laid')
+    stepSpirits(F, C, feet, eye, aim, [{ id: 'p0', x: 0, z: 10.5 }], DT); ok(!C.lures && F.minds.get('p0')!.chase === null, 'past the tether: no chase') }
+  const l = readFileSync(new URL('../ather/combat-layer.tsx', import.meta.url), 'utf8')
+  ok((l.match(/c\.current\.lures = undefined/g) ?? []).length === 2, 'the brain off or unmounted: no lure is left behind')
 }
 console.log(`spirit-fight: ${pass} pass, ${fail} fail`)
 process.exit(fail ? 1 : 0)

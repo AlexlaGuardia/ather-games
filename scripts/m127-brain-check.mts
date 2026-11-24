@@ -7,6 +7,8 @@
 //         seen (up to 8 fights): every sample <= 10 m of the keeper; HITs on the keeper's target; spirits' damage <= the dial's share of the
 //         keeper's; a wind-up always faces the keeper, never a spirit. 3 no teleport on either hand-over. 4 the Hollows gone: no
 //         fight, no fight slots, each back at her formation slot. 5 the party's kills still counted once (xp = kills seen).
+//  CHASE (s1b, canon 8921742)  2e a Hollow chased a spirit (it moved while she led it) and never came within 1 m of her
+//         (bodies 0.42 + ~0.3); the chase ended; its wind-ups were still the keeper's (assert 2).
 //  PLAYER 6 not the owner: no brain, no spirit in the Wilds, a Hollow nobody shoots loses nothing.   7 0 page errors.
 //   npx tsx scripts/m127-brain-check.mts [--url https://ather.games] [--out dir]        (OWNER_KEY from env or .env)
 import puppeteer from 'puppeteer-core'
@@ -56,8 +58,8 @@ try {
   ok(await p.evaluate(() => ['pa', 'pb', 'pc'].every(i => (window as any).__formation?.members.some((m: any) => m.id === i))), '1. and in the formation')
   // the in-page driver: mode 'fight' = keep 3 Hollows up and shoot the first; 'quiet' = none. Samples every 60 ms.
   await p.evaluate(() => {
-    const W = window as any, A = W.__ather, D = W.__m127 = { mode: 'quiet', maxD: 0, maxStep: 0, farAt: '', over: 0, off: 0, hits: 0, windups: 0, badWind: 0, kills: 0, samples: 0, fights: 0, log0: 0, worst: 0, nothing: 0, shots: 0, deadSeen: new Set<number>(), mine: new Set<number>() }
-    const prev: Record<string, any> = {}, st: Record<number, string> = {}; let shotAt = 0, tgt = -1
+    const W = window as any, A = W.__ather, D = W.__m127 = { mode: 'quiet', maxD: 0, maxStep: 0, farAt: '', over: 0, off: 0, hits: 0, windups: 0, badWind: 0, kills: 0, samples: 0, fights: 0, log0: 0, worst: 0, nothing: 0, shots: 0, chaseS: 0, chaseMove: 0, chaseMin: 99, chaseMax: 0, deadSeen: new Set<number>(), mine: new Set<number>() }
+    const prev: Record<string, any> = {}, st: Record<number, string> = {}; const chased: Record<string, any> = {}; let shotAt = 0, tgt = -1
     // hand-over jumps: her SPEED frame by frame (m moved / that frame's own time), so a slow frame is not read as a jump and a
     // real teleport is (the walk is capped at 9 m/s, spirit-trot FOLLOW.vMax)
     let t0 = 0; const tick = (now: number) => { const dt = (now - t0) / 1000; t0 = now
@@ -82,6 +84,10 @@ try {
       if (F.spiritDealt > F.dials.share * F.keeperDealt + 1e-6) D.over++
       if (F.keeperDealt > 0) D.worst = Math.max(D.worst, F.spiritDealt / F.keeperDealt)
       for (const h of C.hollows) { if (h.state === 'windup' && st[h.id] !== 'windup') { D.windups++; const dx = k.x - h.x, dz = k.z - h.z, d = Math.hypot(dx, dz) || 1; if ((h.lx * dx + h.lz * dz) / d < 0.7) D.badWind++ } st[h.id] = h.state }
+      for (const m of F.minds) { const q = chased[m.id]; if (m.chase == null) { delete chased[m.id]; continue }
+        const h = C.hollows.find((x: any) => x.id === m.chase), s = b.find((x: any) => x.id === m.id); if (!h || !s) continue
+        const now = performance.now(); if (!q || q.id !== m.chase) { chased[m.id] = { id: m.chase, t0: now, x: h.x, z: h.z }; D.chaseS++; continue }
+        D.chaseMin = Math.min(D.chaseMin, Math.hypot(s.x - h.x, s.z - h.z)); D.chaseMax = Math.max(D.chaseMax, (now - q.t0) / 1000); D.chaseMove = Math.max(D.chaseMove, Math.hypot(h.x - q.x, h.z - q.z)) }
       const L = F.log; D.hits = F.seen.hit; D.off = L.filter((e: any) => e.kind === 'hit' && e.keeper !== null && e.target !== e.keeper).length; D.nothing = F.seen.nothing; D.fights = F.seen.fights
     }, 60)
   })
@@ -93,10 +99,10 @@ try {
       await sleep(1000); if (i === 8) try { await p.screenshot({ path: `${out}/fight-${n}.png` }) } catch { /* slow */ }
       // the keeper walks: 1.5 s on foot now and then, and turns
       if (i % 5 === 2) { await p.keyboard.down('w'); await sleep(1500); await p.keyboard.up('w') }
-      const d = await D(); if (d.hits > 0 && d.nothing > 2 && i > 12) break
+      const d = await D(); if (d.hits > 0 && d.nothing > 2 && d.chaseMove > 0.3 && i > 12) break
     }
     const d = await D(); console.log(`  fight ${n + 1}: ${JSON.stringify(d)}`)
-    if (d.hits > 0 && d.nothing > 0 && n >= 1) break
+    if (d.hits > 0 && d.nothing > 0 && d.chaseMove > 0.3 && n >= 1) break
     await p.evaluate(() => { (window as any).__m127.mode = 'quiet' }); await p.waitForFunction(() => !(window as any).__spiritFight().on, { timeout: 60000 }); await sleep(500)
   }
   const d = await D(), f = await F()
@@ -106,6 +112,9 @@ try {
   ok(d.nothing > 0, `2. 'nothing' was an answer (${d.nothing} times; helps ${f.seen.hit + f.seen.mend + f.seen.slow})`)
   ok(d.over === 0, `2. spirits' damage never past ${f.dials.share} of the keeper's (worst ${d.worst.toFixed(3)})`)
   ok(d.windups > 0 && d.badWind === 0, `2. every Hollow wind-up faced the keeper (${d.windups} seen, ${d.badWind} not)`)
+  ok(f.seen.chases > 0 && d.chaseMove > 0.3, `2e. a Hollow chased a spirit (${f.seen.chases} chases, ${f.seen.chaseSecs?.toFixed(1)} s in all, furthest walked after her ${d.chaseMove.toFixed(1)} m)`)
+  ok(f.seen.chases > 0 && f.seen.chaseMin > 1 && d.chaseMin > 1, `2e. no contact: the closest one got to her ${Number(f.seen.chaseMin).toFixed(2)} m (sampled ${d.chaseMin.toFixed(2)})`)
+  { const end = await p.waitForFunction(() => (window as any).__spiritFight().minds.every((m: any) => m.chase === null), { timeout: 30000, polling: 100 }).then(() => true).catch(() => false); ok(f.seen.chases > 0 && end, `2e. the chase ends (longest seen ${d.chaseMax.toFixed(1)} s on the wall clock, dial ${f.dials.chase} s of game time)`) }
   // 2c. the keeper low (held at 35): a MEND comes (up to 3 fights: each is her choice)
   for (let n = 0; n < 3; n++) { await p.evaluate(() => { const w = (window as any).__m127; w.mode = 'fight'; w.low = true })
     for (let i = 0; i < 25; i++) { await sleep(1000); if ((await F()).seen.mend > 0) break }
