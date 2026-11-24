@@ -69,7 +69,7 @@ export function groundEnv(groundHex: string): THREE.DataTexture {
 /** Leaving the Wilds (combat-layer.tsx, once the layer has been inactive a moment): every Hollow has unmounted, so no
  *  material still holds these. dispose() frees the GPU texture AND three's PMREM copy (WebGLCubeUVMaps listens for it);
  *  clearing the map lets the JS side go. Returns how many were freed. M34 heap, 11-19: ~0.7 MB back at home. */
-export function releaseGroundEnvs(): number { const n = envs.size; for (const t of envs.values()) t.dispose(); envs.clear(); return n }
+export function releaseGroundEnvs(): number { const n = envs.size; for (const t of envs.values()) t.dispose(); envs.clear(); for (const m of shared.values()) m.dispose(); shared.clear(); return n }
 /** probe for checks: how many ground envs are cached right now (0 at home) */
 export const groundEnvCount = () => envs.size
 if (typeof window !== 'undefined') (window as unknown as { __goop?: object }).__goop = { envs: groundEnvCount }
@@ -77,6 +77,15 @@ if (typeof window !== 'undefined') (window as unknown as { __goop?: object }).__
 /** one Hollow's goop: dark, wet, borrowing. No emissive, ever (the hit flash is an overlay elsewhere). */
 export function goopMaterial(): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color: GOOP, roughness: 0.18, metalness: 0, envMapIntensity: BORROW, flatShading: false })
+}
+
+/** M120 s3: ONE goop material per ground colour, shared by every Flit over that ground (`borrow` false = no env map, the heap
+ *  check's A/B leg). Freed with the envs. */
+const shared = new Map<string, THREE.MeshStandardMaterial>()
+export function sharedGoop(groundHex: string, borrow = true): THREE.MeshStandardMaterial {
+  const k = groundHex + (borrow ? '' : '-'); let m = shared.get(k)
+  if (!m) { m = goopMaterial(); if (borrow) m.envMap = groundEnv(groundHex); shared.set(k, m) }
+  return m
 }
 
 /** the colour of a Wilds biome's ground (the same palette wilds-scene.tsx paints it with), sRGB hex */

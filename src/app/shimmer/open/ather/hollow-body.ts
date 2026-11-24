@@ -5,38 +5,40 @@
 // toward you like a sprout toward light. The TELL (Alex's pick): the whole body draws IN toward its core and rises tall, then
 // falls forward onto you.
 // Built as LUMPS: every lump is one instance of one lumpy sphere, posed per frame here, drawn as ONE InstancedMesh per Hollow
-// (combat-layer.tsx). Game kinds: 'shambler' = the stalker's amount, 'floater' = the caster's (the warden is not in the field yet).
+// (combat-layer.tsx). Game kinds: 'shambler' = the stalker's amount; the 'floater' (the caster's) has its own body since M120 s3:
+// flit-body.ts (the warden is not in the field yet).
 // The sim's hit points are fixed (combat.ts HEAD_Y 1.55 / BODY_Y 0.85), so the walker is scaled to put its head-lump there.
 import * as THREE from 'three'
 import type { HollowKind } from './combat'
 
 export type Bone = 'root' | 'legL' | 'legR' | 'armL' | 'armR' | 'head'
 export interface Lump { bone: Bone; x: number; y: number; z: number; sx: number; sy: number; sz: number; seed: number }
-export interface Sprout { lumps: Lump[]; pivots: Record<Exclude<Bone, 'root'>, THREE.Vector3>; core: number; head: number; floats: boolean }
+export type SproutKind = Exclude<HollowKind, 'floater'>
+export interface Sprout { lumps: Lump[]; pivots: Record<Exclude<Bone, 'root'>, THREE.Vector3>; core: number; head: number }
 
 /** the board's option A numbers (docs/looks/hollows.html) */
 const A = { h: 1.0, w: 1.0, leg: 0.42, arm: 0.55, armDrop: 0.95, coreY: 0.85, hunch: 0.15 }
-export const DENSITY: Record<HollowKind, number> = { shambler: 0.6, floater: 0.3, crawler: 0.8 }
+export const DENSITY: Record<SproutKind, number> = { shambler: 0.6, crawler: 0.8 }
 /** the walker's head-lump sits on the sim's HEAD_Y (1.55) */
 export const WALKER_HEAD = 1.55
 
-/** the lumps of one Hollow of `kind`, in its LOCAL space (feet on y=0 for walkers; a floater is centred on its body, y=0) */
-export function sprout(kind: HollowKind): Sprout {
+/** the lumps of one Hollow of `kind`, in its LOCAL space (feet on y=0) */
+export function sprout(kind: SproutKind): Sprout {
   if (kind === 'crawler') return crawlerSprout()
-  const density = DENSITY[kind], floats = kind === 'floater'
+  const density = DENSITY[kind]
   const H0 = A.h * (0.82 + density * 0.18), W = A.w * (0.55 + density * 0.55)
-  const legH0 = floats ? 0 : A.leg * H0, core0 = floats ? 0.1 : A.coreY * H0, head0 = core0 + 0.52 * H0
-  const k = floats ? 1 : WALKER_HEAD / head0                       // the scale that puts the head where the sim aims
+  const legH0 = A.leg * H0, core0 = A.coreY * H0, head0 = core0 + 0.52 * H0
+  const k = WALKER_HEAD / head0                       // the scale that puts the head where the sim aims
   const H = H0 * k, legH = legH0 * k, coreY = core0 * k, headY = head0 * k, Wk = W * k
   const lumps: Lump[] = []
   let seed = 0
   const add = (bone: Bone, x: number, y: number, z: number, sx: number, sy: number, sz: number) => lumps.push({ bone, x, y, z, sx, sy, sz, seed: seed++ })
   // the seed: the densest point, deep in the chest
   add('root', 0, coreY, 0, 0.2 * Wk, 0.22 * Wk, 0.2 * Wk)
-  // the torso: lumps thinning upward from the hips to the shoulders (a caster barely has one)
-  const n = floats ? 2 : 4, y0 = floats ? coreY - 0.1 : legH + 0.12 * k, y1 = coreY + 0.32 * H
+  // the torso: lumps thinning upward from the hips to the shoulders
+  const n = 4, y0 = legH + 0.12 * k, y1 = coreY + 0.32 * H
   for (let i = 0; i < n; i++) {
-    const f = i / Math.max(1, n - 1), y = y0 + f * (y1 - y0), r = (floats ? 0.16 : 0.27) * Wk * (1 - f * 0.25) * (i === 1 ? 1.08 : 1)
+    const f = i / Math.max(1, n - 1), y = y0 + f * (y1 - y0), r = 0.27 * Wk * (1 - f * 0.25) * (i === 1 ? 1.08 : 1)
     add('root', i % 2 ? 0.03 * k : -0.03 * k, y, A.hunch * f * 0.25 * k, r, r * 1.15, r * 0.9)
   }
   // the head: a lump that only tilts (no face, ever)
@@ -47,16 +49,16 @@ export function sprout(kind: HollowKind): Sprout {
     legL: new THREE.Vector3(-0.13 * Wk, legH, 0), legR: new THREE.Vector3(0.13 * Wk, legH, 0),
     armL: new THREE.Vector3(-0.27 * Wk, coreY + 0.28 * H, 0.02), armR: new THREE.Vector3(0.27 * Wk, coreY + 0.28 * H, 0.02),
   }
-  if (!floats) for (const b of ['legL', 'legR'] as const) {   // plantigrade, heavy in the heel
+  for (const b of ['legL', 'legR'] as const) {   // plantigrade, heavy in the heel
     add(b, 0, -legH * 0.45, 0, 0.1 * Wk, legH * 0.55, 0.11 * Wk)
     add(b, 0, -legH + 0.05 * k, 0.05 * k, 0.13 * Wk, 0.07 * k, 0.19 * Wk)
   }
-  for (const b of ['armL', 'armR'] as const) {               // hanging forward; a caster's reaching (right) arm is its only solid part
-    const L = A.arm * H * (floats && b === 'armR' ? 1.15 : 1), th = floats ? (b === 'armR' ? 0.08 : 0.035) : 0.07 * Math.max(0.8, W) * k
+  for (const b of ['armL', 'armR'] as const) {               // hanging forward
+    const L = A.arm * H, th = 0.07 * Math.max(0.8, W) * k
     add(b, 0, -L * 0.45 * A.armDrop, 0.05 * k, th, L * 0.5, th)
     add(b, 0, -L * 0.92 * A.armDrop, 0.08 * k, th * 1.35, th * 1.5, th * 1.35)
   }
-  return { lumps, pivots, core: coreY, head: headY, floats }
+  return { lumps, pivots, core: coreY, head: headY }
 }
 
 /** M120 s2 the MERGING Hollow at mass 1 (canon c01931e: low, plated, many-legged; the drawn size grows with its mass on the
@@ -77,7 +79,7 @@ function crawlerSprout(): Sprout {
     legL: new THREE.Vector3(-0.34, 0.24, 0), legR: new THREE.Vector3(0.34, 0.24, 0),
     armL: new THREE.Vector3(-0.3, 0.3, 0.4), armR: new THREE.Vector3(0.3, 0.3, 0.4),
   }
-  return { lumps, pivots, core: 0.36, head: 0.34, floats: false }
+  return { lumps, pivots, core: 0.36, head: 0.34 }
 }
 
 /** what the body is doing this frame. `tell` 0..1 = through the wind-up (gathers in, rises); `fall` 0..1 = the lunge falling
@@ -113,14 +115,15 @@ export function poseSprout(S: Sprout, P: SproutPose, out: THREE.Matrix4[]): void
 
 /** the one shared lump: a lumpy sphere (goop is never a clean ball), its underside drawn down a little like a drip. Cached. */
 let LUMPY: THREE.BufferGeometry | null = null
-export function lumpyGeometry(): THREE.BufferGeometry {
-  if (LUMPY) return LUMPY
-  const g = new THREE.SphereGeometry(1, 16, 12), v = new THREE.Vector3(), a = g.attributes.position
+export const lumpyGeometry = (): THREE.BufferGeometry => (LUMPY ??= lumpyShape(16, 12))
+/** the lumpy sphere at a given fineness (flit-body.ts draws its many thin parts with a coarser one) */
+export function lumpyShape(w: number, h: number): THREE.BufferGeometry {
+  const g = new THREE.SphereGeometry(1, w, h), v = new THREE.Vector3(), a = g.attributes.position
   for (let i = 0; i < a.count; i++) {
     v.fromBufferAttribute(a, i)
     const n = 1 + 0.09 * Math.sin(v.x * 5.1 + v.y * 2.3) * Math.cos(v.z * 4.7 - v.y * 3.1) + 0.05 * Math.sin(v.y * 9 + v.x * 3)
     v.multiplyScalar(n); if (v.y < -0.4) v.y -= (-v.y - 0.4) * 0.35
     a.setXYZ(i, v.x, v.y, v.z)
   }
-  g.computeVertexNormals(); LUMPY = g; return g
+  g.computeVertexNormals(); return g
 }

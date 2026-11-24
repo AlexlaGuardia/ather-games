@@ -29,8 +29,9 @@ import { play as sfx } from '../shared/sfx'   // M36 batch 2: Hollow sounds (pro
 import { setAmmoFeed } from '../shared/morel'
 import { openNet, openPeers } from '../shared/open-mp'
 import { sharing, hostOf, encodeSnap, applySnap, SNAP_KIND, SNAP_HZ, HIT_KIND, KILL_KIND, encodeHits, decodeHits, newDrops, decodeKills, layDrop, HURT_KIND, encodeHurt, decodeHurt, type Snap, type HitRow, type KillRow } from '../shared/fight-share'   // BETA M28 shared fights   // M33: Morel's bubble reads the gun straight from here
-import { goopMaterial, groundEnv, releaseGroundEnvs, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'
-import { sprout, poseSprout, lumpyGeometry } from './hollow-body'   // M34: Alex's pick A, the rooted sprout   // M34: no light of its own; borrows the ground
+import { goopMaterial, sharedGoop, groundEnv, releaseGroundEnvs, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'
+import { sprout, poseSprout, lumpyGeometry, type SproutKind } from './hollow-body'   // M34: Alex's pick A, the rooted sprout   // M34: no light of its own; borrows the ground
+import { poseFlit, flitMats, flitGeometry, geoTris, wingLift, FLIT, FLIT_HIT_R, TELL_FULL, type FlitPose } from './flit-body'   // M120 s3: the floater's own body
 import { borrowedSky } from '../../voxel3d/sky-env'
 import { dayProgress, daylight } from '../../engine/day-cycle'
 
@@ -90,7 +91,7 @@ function useGoop(c: React.MutableRefObject<Combat>, id: number, world: React.Mut
  *  visibly losing itself"); the last instance is the LUMP a hit flings off backwards, which lands and crawls home. One
  *  instanced draw for all of it. Positions are the Hollow's LOCAL space (the parent group carries x/z/yaw). */
 const DRIP_N = 5
-function Sheds({ c, id, mat, top }: { c: React.MutableRefObject<Combat>; id: number; mat: THREE.Material; top: number }) {
+function Sheds({ c, id, mat, top, floor = 0 }: { c: React.MutableRefObject<Combat>; id: number; mat: THREE.Material; top: number; floor?: number }) {
   const im = useRef<THREE.InstancedMesh>(null)
   const st = useMemo(() => ({ m: new THREE.Matrix4(), p: new THREE.Vector3(), q: new THREE.Quaternion(), s: new THREE.Vector3(), lastFlash: 0, lumpT: -1, seed: Array.from({ length: DRIP_N }, (_, k) => ({ a: k * 1.256 + id, ph: (k * 0.37 + id * 0.11) % 1 })) }), [id])
   useFrame(({ clock }, dt) => {
@@ -98,9 +99,9 @@ function Sheds({ c, id, mat, top }: { c: React.MutableRefObject<Combat>; id: num
     const t = clock.elapsedTime, { m, p, q, s } = st
     st.seed.forEach((d, k) => {
       const u = (t * 0.32 + d.ph) % 1, r0 = 0.3, gx = Math.cos(d.a) * 0.55, gz = Math.sin(d.a) * 0.55
-      if (u < 0.45) { const f = u / 0.45; p.set(Math.cos(d.a) * r0, top - f * f * (top - 0.04), Math.sin(d.a) * r0); s.set(0.07, 0.09 + f * 0.04, 0.07) }
-      else if (u < 0.6) { p.set(gx, 0.03, gz); s.set(0.1, 0.035, 0.1) }
-      else { const f = (u - 0.6) / 0.4; p.set(gx * (1 - f), 0.03 + f * (top * 0.6), gz * (1 - f)); s.setScalar(0.07 * (1 - f * 0.5)) }
+      if (u < 0.45) { const f = u / 0.45; p.set(Math.cos(d.a) * r0, top - f * f * (top - floor - 0.04), Math.sin(d.a) * r0); s.set(0.07, 0.09 + f * 0.04, 0.07) }
+      else if (u < 0.6) { p.set(gx, floor + 0.03, gz); s.set(0.1, 0.035, 0.1) }
+      else { const f = (u - 0.6) / 0.4; p.set(gx * (1 - f), floor + 0.03 + f * ((top - floor) * 0.6), gz * (1 - f)); s.setScalar(0.07 * (1 - f * 0.5)) }
       M.setMatrixAt(k, m.compose(p, q.identity(), s))
     })
     // the lump: a fresh hit (the flash rising) throws one off backwards; it lands, then crawls back
@@ -121,11 +122,11 @@ function Sheds({ c, id, mat, top }: { c: React.MutableRefObject<Combat>; id: num
 
 /** One Hollow, ROOTED SPROUT (Alex's M34 pick, ather/hollow-body.ts): lumps of goop gathered on a seed, drawn as ONE instanced
  *  mesh, posed every frame from the sim's state. The TELL: through the wind-up it gathers in toward its core and rises, then
- *  the lunge falls forward onto you. A hit knocks it back and flings a lump (no flash: Alex dropped it, 11-19). The floater is
- *  the same substance in the caster's amount: no legs, dense only at the reach, and its spit charge is the same gather-and-rise. */
+ *  the lunge falls forward onto you. A hit knocks it back and flings a lump (no flash: Alex dropped it, 11-19). The floater
+ *  has its own body below (FlitBody). */
 /** M120 s2: the scale each crawler's body was last DRAWN at, by id (checks read it: __ather.drawnScale) */
 const DRAWN_SCALE = new Map<number, number>()
-function SproutBody({ c, id, kind, world }: { c: React.MutableRefObject<Combat>; id: number; kind: HollowKind; world: React.MutableRefObject<GoopWorld> }) {
+function SproutBody({ c, id, kind, world }: { c: React.MutableRefObject<Combat>; id: number; kind: SproutKind; world: React.MutableRefObject<GoopWorld> }) {
   const g = useRef<THREE.Group>(null), im = useRef<THREE.InstancedMesh>(null), puddle = useRef<THREE.MeshBasicMaterial>(null)
   const mat = useGoop(c, id, world)
   const S = useMemo(() => sprout(kind), [kind])
@@ -136,7 +137,7 @@ function SproutBody({ c, id, kind, world }: { c: React.MutableRefObject<Combat>;
     g.current.position.set(h.x, h.y, h.z); g.current.rotation.y = h.yaw
     if (h.kind === 'crawler') { g.current.scale.setScalar(crawlerScale(h.mass)); DRAWN_SCALE.set(id, g.current.scale.x) }   // M120 s2: a pooled one is bigger (log taper)
     const e = 1 - Math.exp(-dt * 14), s = st.current
-    const tellTo = h.state === 'windup' ? 1 - h.t / (h.kind === 'crawler' ? CRAWLER.windup : SHAMBLER.windup) : h.state === 'charge' ? 1 - h.t / FLOATER.charge : 0
+    const tellTo = h.state === 'windup' ? 1 - h.t / (h.kind === 'crawler' ? CRAWLER.windup : SHAMBLER.windup) : 0
     s.tell += (Math.max(0, Math.min(1, tellTo)) - s.tell) * (tellTo > s.tell ? 1 : e)   // the gather is read straight off the sim; the let-go eases
     s.fall += ((h.state === 'lunge' ? 1 : 0) - s.fall) * e
     s.walk += ((h.state === 'chase' ? 1 : h.state === 'wander' ? 0.45 : 0) - s.walk) * e
@@ -148,9 +149,58 @@ function SproutBody({ c, id, kind, world }: { c: React.MutableRefObject<Combat>;
   return (
     <group ref={g}>
       <instancedMesh ref={im} args={[lumpyGeometry(), mat, S.lumps.length]} frustumCulled={false} />
-      <Sheds c={c} id={id} mat={mat} top={S.floats ? -0.2 : S.core} />
+      <Sheds c={c} id={id} mat={mat} top={S.core} />
       {/* the drip: a puddle that follows a walker (a cast's tint shows under it) */}
-      {!S.floats && <mesh position-y={0.03} rotation-x={-Math.PI / 2}><circleGeometry args={[0.55, 9]} /><meshBasicMaterial ref={puddle} color={PUDDLE} transparent opacity={0.55} /></mesh>}
+      <mesh position-y={0.03} rotation-x={-Math.PI / 2}><circleGeometry args={[0.55, 9]} /><meshBasicMaterial ref={puddle} color={PUDDLE} transparent opacity={0.55} /></mesh>
+    </group>
+  )
+}
+
+/** M120 s3: each Flit as it was last DRAWN (checks read it off the real mesh: __ather.flit) */
+const FLIT_SEEN = new Map<number, { im: THREE.InstancedMesh; pose: FlitPose; state: string; drawn: number }>()
+export function flitProbe(id: number) {
+  const f = FLIT_SEEN.get(id); if (!f) return null
+  const m = f.im.material as THREE.MeshStandardMaterial, e = (k: number, r: number) => f.im.instanceMatrix.array[k * 16 + r]
+  return { lumps: f.im.count, tris: f.im.count * geoTris(f.im.geometry), geo: f.im.geometry.uuid, mat: m.uuid, emissive: m.emissive.getHex(), emissiveMap: !!m.emissiveMap, colour: '#' + m.color.getHexString(), hitR: FLIT_HIT_R,
+    state: f.state, drawn: f.drawn, zip: f.pose.zip, tell: f.pose.tell, lift: wingLift(f.pose, 0),
+    wingTipY: e(FLIT.wings, 13) + e(FLIT.wings, 1), tailZ: e(FLIT.abd + FLIT.abdN - 1, 14), tailY: e(FLIT.abd + FLIT.abdN - 1, 13) }   // local, off the matrices on the GPU buffer
+}
+/** One Flit (the floater): flit-body.ts's lumps as ONE instanced mesh, one geometry for all of them and one material per ground
+ *  colour. Look only: the zip is read from the sim's zip spot (a party guest has none: from how fast the body moves). */
+function FlitBody({ c, id, world }: { c: React.MutableRefObject<Combat>; id: number; world: React.MutableRefObject<GoopWorld> }) {
+  const g = useRef<THREE.Group>(null), im = useRef<THREE.InstancedMesh>(null)
+  const ground = () => { const h = c.current.hollows.find(k => k.id === id), W = world.current; return h ? borrowedGround(W.groundAt(h.x, h.z), greyStep(greyAt(h.x, h.z, W.nodes))) : null }
+  const [hex, setHex] = useState(() => ground() ?? GRASS)
+  const mat = sharedGoop(hex, !(window as unknown as { __noBorrow?: boolean }).__noBorrow)
+  const mats = useMemo(flitMats, [])
+  const st = useRef({ next: 0, x: NaN, z: NaN, kick: 0, shots: 0, drawn: 0, pose: { t: 0, zip: 0, tell: 0, bank: 0, kick: 0, knock: 0 } as FlitPose })
+  useEffect(() => () => { FLIT_SEEN.delete(id) }, [id])
+  useFrame(({ clock }, dt) => {
+    const h = c.current.hollows.find(k => k.id === id), M = im.current; if (!h || !g.current || !M) return
+    const s = st.current, P = s.pose, e = 1 - Math.exp(-dt * 14)
+    if (clock.elapsedTime >= s.next) { s.next = clock.elapsedTime + 0.5; const k = ground(); if (k && k !== hex) setHex(k) }
+    mat.envMapIntensity = BORROW * borrowedSky(daylight(dayProgress()))
+    g.current.position.set(h.x, h.y, h.z); g.current.rotation.y = h.yaw
+    const vx = Number.isNaN(s.x) || dt <= 0 ? 0 : (h.x - s.x) / dt, vz = Number.isNaN(s.z) || dt <= 0 ? 0 : (h.z - s.z) / dt, v = Math.hypot(vx, vz)
+    s.x = h.x; s.z = h.z
+    const zipTo = h.state !== 'chase' ? 0 : h.zx !== undefined ? 1 : Math.max(0, Math.min(1, (v - 3.5) / 3))
+    P.zip += (zipTo - P.zip) * e
+    const side = v > 0.2 ? (vx * Math.cos(h.yaw) - vz * Math.sin(h.yaw)) / v : 0   // the move along the body's own +x
+    P.bank += (side - P.bank) * e
+    const raw = h.state === 'charge' ? Math.max(0, Math.min(1, (1 - h.t / FLOATER.charge) / TELL_FULL)) : 0, tellTo = raw * raw * (3 - 2 * raw)
+    P.tell += (tellTo - P.tell) * (tellTo > P.tell ? 1 : e)   // read straight off the sim and held through the burst; the let-go eases
+    if ((h.shots ?? 0) < s.shots) s.kick = 1
+    s.shots = h.shots ?? 0; s.kick *= Math.exp(-dt * 12); P.kick = s.kick
+    P.knock = Math.min(1, h.hitFlash * 8); P.t = clock.elapsedTime + id * 1.3
+    poseFlit(P, mats)
+    for (let i = 0; i < mats.length; i++) M.setMatrixAt(i, mats[i])
+    M.instanceMatrix.needsUpdate = true
+    FLIT_SEEN.set(id, { im: M, pose: P, state: h.state, drawn: ++s.drawn })
+  })
+  return (
+    <group ref={g}>
+      <instancedMesh ref={im} args={[flitGeometry(), undefined, FLIT.count]} material={mat} frustumCulled={false} />
+      <Sheds c={c} id={id} mat={mat} top={-0.2} floor={-1.1} />
     </group>
   )
 }
@@ -581,7 +631,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       const f = camera.getWorldDirection(new THREE.Vector3()); const x = camera.position.x + f.x * -dz + dx, z = camera.position.z + f.z * -dz
       spawnHollow(c.current, T, x, z, kind)
     }, camAim: () => { const f = camera.getWorldDirection(new THREE.Vector3()); return { x: f.x, y: f.y, z: f.z, cx: camera.position.x, cy: camera.position.y, cz: camera.position.z } }, nodes: () => nodesRef.current, walls: (x0: number, z0: number, x1: number, z1: number) => T.structures ? [...T.structures(x0, z0, x1, z1)] : [], fall: () => { c.current.keeper.hp = 0; onEventsRef.current([{ kind: 'down' }]) }, drained: (x: number, z: number) => c.current.drained?.(x, z) ?? null, owner: (x: number, z: number) => ownerRef.current?.(x, z) ?? null,
-      spend: (id: string) => { probeSpent.current.add(id) }, drawnScale: (id: number) => DRAWN_SCALE.get(id) ?? null,   // M120 s2 checks: clear a node for THIS visit only (nothing saved)
+      spend: (id: string) => { probeSpent.current.add(id) }, flit: flitProbe, drawnScale: (id: number) => DRAWN_SCALE.get(id) ?? null,   // M120 s2 checks: clear a node for THIS visit only (nothing saved)
       wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('contextmenu', menu) }
   }, [locked, frozen, camera, T, gl])
@@ -778,7 +828,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       {channel && <ChannelBeam channel={channel} T={T} />}
       <PieceBlocks c={c} />
       <Tells c={c} heightAt={T.heightAt} />
-      {ids.map(h => <SproutBody key={h.id} c={c} id={h.id} kind={h.kind as HollowKind} world={goopWorld} />)}
+      {ids.map(h => h.kind === 'floater' ? <FlitBody key={h.id} c={c} id={h.id} world={goopWorld} /> : <SproutBody key={h.id} c={c} id={h.id} kind={h.kind as SproutKind} world={goopWorld} />)}
       <Dispersals list={dispersals} />
       <instancedMesh ref={spitsMesh} args={[undefined, undefined, 32]} frustumCulled={false}>
         <icosahedronGeometry args={[0.3, 0]} /><meshPhongMaterial color="#3a3c40" emissive="#8a8d92" specular="#ffffff" shininess={90} flatShading />
