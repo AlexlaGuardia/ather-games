@@ -7,6 +7,7 @@ import { CADENCE_MAX, FADE, RIG_CLIPS, STAND, fadeWeights, gaitCycles, groundMov
 import { makeRigBody, rigCount, type RigBody, type RigGltf } from './spirit-rig-body'
 import { MANALOTL_RIG, SPIRIT_MODELS, SPIRIT_RIGS, rigLook } from './spirit-models'
 import { makeTrot, type SpiritNav, type TrotPose } from './spirit-trot'
+import { makeFormation } from '../shared/follow-formation'
 import { GROWN } from '../../sprites/creature-size'
 ;(globalThis as unknown as { self: unknown }).self = globalThis
 let pass = 0; const fails: string[] = []
@@ -144,7 +145,7 @@ function vulnyx(gltf: RigGltf) {
     for (let i = 0; i < ps.count; i++) { let w = 0; for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === bi) w += sw.getComponent(i, k); if (w > 0.99) all.push(i) }
     const lo = Math.min(...all.map(i => ps.getY(i))); return all.filter(i => ps.getY(i) < lo + 0.03) }
   const soles = Object.fromEntries(['fl', 'fr', 'hl', 'hr'].map(f => [f, sole(f)]))
-  for (const [clip, speed] of [['walk', 0.55], ['run', 1.3], ['run', 1.92], ['run', 2.8], ['run', 4.2], ['run', 6.5]] as const) for (const fps of [120, 60]) {
+  for (const [clip, speed] of [['walk', 0.55], ['run', 1.3], ['run', 1.92], ['run', 2.8], ['run', 4.2], ['run', 6.5], ['run', 9]] as const) for (const fps of [120, 60]) {
     for (let k = 0; k < 40; k++) b.step(1 / 60, clip, speed / 60, FX.h, NO)
     let z = 0, drift = 0, capped = 0, swing = 0, held = 0, tail = 0; const tr: Record<string, { p: THREE.Vector3; rel: number }[]> = { fl: [], fr: [], hl: [], hr: [] }
     for (let k = 0; k < fps * 2; k++) { z += speed / fps; b.step(1 / fps, clip, speed / fps, FX.h, NO); if (b.state().capped) capped++; at0(0, 0, z, 0)
@@ -155,6 +156,11 @@ function vulnyx(gltf: RigGltf) {
     console.log(`   Vulnyx ${clip} ${speed} m/s ${fps} fps: drift ${(drift * 1000).toFixed(1)} mm over ${held} held, swing ${(swing * 1000).toFixed(0)} mm, ${(speed / strideLen(FR.clipV[clip], gltf.animations.find(a => a.name === clip)!.duration, FX.h)).toFixed(2)} strides/s, cap ${capped}`)
     ok(capped === 0, `Vulnyx ${speed} m/s: the cap never bites`); ok(drift < 0.006 && (held > 0 || fps < 120), `Vulnyx ${clip} ${speed} m/s at ${fps} fps: planted foot drift ${(drift * 1000).toFixed(1)} mm (${held})`); ok(swing > 0.15, `Vulnyx ${clip}: legs swing ${(swing * 1000).toFixed(0)} mm`); ok(tail < 0.35, `Vulnyx ${clip}: tail ${(tail * 57.3).toFixed(0)} deg off behind`)
   }
+  // behind a keeper walking and sprinting straight: the cap never bites on her own follow (it bit on 416 of 539 sprint frames at 5.5)
+  for (const kv of [4.2, 6.5]) { const k = { x: 0, z: 0, yaw: 0 }, fm = makeFormation(() => [{ id: 's', kind: 'spirit', r: 0.3 }]), t = makeTrot({ home: { x: 0, z: 0 }, rMin: 0.9, rMax: 1.5, blocked: () => false, roam: { maxLeg: 4, away: 2 }, perch: { y: 0.5 } }, 5, FX.trot)
+    t.follow(() => ({ ...k, slot: fm.last().slots.s })); let p = t.pose(), prev = { x: p.x, z: p.z }, cap = 0, moved = 0
+    for (let i = 0; i < 60 * 12; i++) { if (i > 180) k.z -= kv / 60; fm.tick(k, 1 / 60); p = t.step(1 / 60); const d = Math.hypot(p.x - prev.x, p.z - prev.z); prev = { x: p.x, z: p.z }; if (i > 180 && d > 1e-4) { moved++; if (gaitCycles(d, 1 / 60, strideLen(FR.clipV.run, 0.4325, FX.h), FR.cadence).capped) cap++ } }
+    ok(cap === 0 && moved > 200, `Vulnyx behind a ${kv} m/s keeper: the cap bites on ${cap} of ${moved} frames`) }
   // the ground: every clip, then every blend (her lowest vertex, all of them, on a turned body standing on a hill)
   at0(40, 12, -30, 1)
   const mv: Record<RigClip, number> = { idle: 0, walk: 0.55, run: 2.8, sit: 0, lie: 0 }

@@ -4,7 +4,7 @@
 //         she lies / sits down; a clip always plays (weights sum 1); no paw under the ground in any blend.  3 following a walking keeper: gait, how often the cadence cap bit (noted); 3b the Vulnyx behind a keeper at 4.2 and 6.5 m/s: drift.
 //         4 the Wilds: she is rigged there too; home again = the Wilds body is thrown away (live count).  5 the panel's copy opens and goes.
 //  PLAYER 6 not the owner: the OLD glb, 0 rigs, the rigged glb never asked for, she draws at 0.698 m.   7 0 page errors.
-//  --stills: only the Vulnyx stills. --perf: 20 Manalotls (--perf --fox: 20 Vulnyxes), owner, `?rig=0` against rigged, same page + camera, A B A B (SwiftShader, not a phone).
+//  --follow: from 3 on. --stills: only the Vulnyx stills. --perf: 20 Manalotls (--perf --fox: 20 Vulnyxes), owner, `?rig=0` against rigged, same page + camera, A B A B (SwiftShader, not a phone).
 //   OWNER_KEY=... npx tsx scripts/m132-rig-check.mts [--shots dir] [--perf]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
@@ -75,7 +75,7 @@ const STRIDE = (sp: Sp, c: 'walk' | 'run') => SPIRIT_RIGS[sp]!.rig!.clipV[c] * D
 type Row = { t: number; x: number; y: number; z: number; yaw: number; v: number; mode: string; clip: string; w: Record<string, number>; capped: boolean; rate: number; lift: number; low: number; feet: number[][]; tail: number }
 /** the Vulnyx gallops with her feet down a fifth of the time and this box draws 3-7 frames a second, so a short stretch may hold no
  *  planted frame at all and its own lowest is a swing: here a foot is planted when it is within 1.5 mm of the lowest it EVER gets in a
- *  pure run, and two planted frames up to 4 frames apart are compared (whole strides taken off, as below) */
+ *  pure run, and two planted frames up to 6 frames apart are compared (whole strides taken off, as below) */
 function gallop(rows: Row[], mode: string, minV = 0) {
   const pure = (r: Row) => r.clip === 'run' && r.w.run > 0.99 && !r.capped && r.mode === mode, run = rows.filter(pure), all: number[] = [], S = STRIDE('fox', 'run')
   const base = [0, 1, 2, 3].map(f => Math.min(9, ...run.map(r => r.feet[f][1] - r.y)))
@@ -86,7 +86,7 @@ function gallop(rows: Row[], mode: string, minV = 0) {
       if (last && !pure(last)) from = -1
       if (r.feet[f][1] - r.y > base[f] + 0.0015) continue
       stuck++
-      if (from >= 0 && i - from <= 4) { const q = rows[from].feet[f], along = Math.hypot(r.feet[f][0] - q[0], r.feet[f][2] - q[2]); all.push(Math.abs(along - Math.round(along / S) * S)) } from = i } }
+      if (from >= 0 && i - from <= 6) { const q = rows[from].feet[f], along = Math.hypot(r.feet[f][0] - q[0], r.feet[f][2] - q[2]); all.push(Math.abs(along - Math.round(along / S) * S)) } from = i } }
   for (const r of run) { tail = Math.max(tail, r.tail); v += r.v }
   all.sort((a, b) => a - b)
   return { drift: all.at(-1) ?? 0, med: all[all.length >> 1] ?? NaN, p95: all[Math.floor(all.length * 0.95)] ?? NaN, n: all.length, spans: stuck, frames: run.length, swing, tail: tail * 57.3, v: run.length ? v / run.length : 0 }
@@ -126,6 +126,7 @@ try {
     await p.evaluate(() => (window as any).__ather.tp(-131, 108, 0)); await p.waitForFunction(() => (window as any).__spiritModel?.rigs?.size === 1, { timeout: 60000 }); await sleep(4000)
     await still(p, 'p0', 'run', 'fox-run'); await still(p, 'p0', 'sit', 'fox-sit'); await still(p, 'p0', 'idle', 'fox-stand'); await still(p, 'p0', 'run', 'fox-run2', 2.4)
   } else if (!perf) {
+    if (!process.argv.includes('--follow')) {
     const { p, got } = await open(br, true, { pieces, pots, follow: [], party: [] })
     await p.evaluate(() => (window as any).__ather.tp(-131, 108, 0))
     ok(await p.waitForFunction(() => (window as any).__spiritModel?.rigs?.size === 3, { timeout: 60000 }).then(() => true).catch(() => false), '1. owner: both Manalotls and the Vulnyx are rigged')
@@ -156,7 +157,7 @@ try {
     const sz = await p.evaluate(() => new Promise<any>(res => { let v = 0, k = 0; const iv = setInterval(() => { const t = (window as any).__spiritModel.trots; v = Math.max(v, t.fox.hWorld || 0); if (++k > 60) { clearInterval(iv); res({ l: t.axolotl.len, h: t.axolotl.hWorld, v, vh: t.fox.h }) } }, 500) }))
     ok(Math.abs(sz.l - 0.9) < 0.06 && sz.h > 0.35 && sz.h < 0.47, `1. hull included she is ${sz.l.toFixed(3)} m nose to tail, ${sz.h.toFixed(3)} m tall`); ok(Math.abs(sz.vh * 1.003 - 0.7) < 1e-6 && Math.abs(sz.v - 0.717) < 0.03, `1. the Vulnyx stands ${sz.v.toFixed(3)} m, hull included (grown 0.70 + hull 0.017; tallest over 30 s)`)
     await still(p, 'p0', 'walk', 'walk'); await still(p, 'p0', 'sit', 'lie'); await still(p, 'p0', 'idle', 'stand')
-    await p.close()
+    await p.close() }
     // 3 + 4: following, then the Wilds and home
     const w = await open(br, true, { pieces, pots, follow: ['p0', 'p1', 'p2'], party: ['p0', 'p1', 'p2'] }); const q = w.p
     await q.evaluate(() => (window as any).__ather.tp(-131, 110, 0)); await q.waitForFunction(() => (window as any).__spiritModel?.rigs?.size === 3, { timeout: 60000 }); await sleep(8000); await sampler(q)
@@ -168,9 +169,10 @@ try {
     // 3b: straight legs at a keeper's walk and sprint
     for (const mps of [4.2, 6.5]) {
       await q.evaluate(() => { for (const b of Object.values((window as any).__m132.bodies) as any[]) b.rows.length = 0 })
-      await q.evaluate(`new Promise(res => { let t0 = performance.now(), last = t0, s = 0; const A = window.__ather, L = 24; (function f() { const n = performance.now(), dt = Math.min(0.25, (n - last) / 1000); last = n; s += ${mps} * dt; const k = s % (2 * L), out = k < L; const y = out ? -Math.PI / 2 : Math.PI / 2; A.tp(-144 + (out ? k : 2 * L - k), 113, y); A.look(y, 1.45); if (n - t0 < 30000) requestAnimationFrame(f); else res(0) })() })`)
+      await q.evaluate(`new Promise(res => { let t0 = performance.now(), last = t0, s = 0; const A = window.__ather, L = 24; (function f() { const n = performance.now(), dt = Math.min(0.2, (n - last) / 1000); last = n; s += ${mps} * dt; const k = s % (2 * L), out = k < L; const y = out ? -Math.PI / 2 : Math.PI / 2; A.tp(-144 + (out ? k : 2 * L - k), 113, y); A.look(y, 1.45); if (n - t0 < ${mps > 5 ? 150000 : 60000}) requestAnimationFrame(f); else res(0) })() })`)
       const X = (await rowsOf(q)).b.p1, m = X.filter(r => r.mode === 'follow' && r.v > 0.3), g = gallop(X, 'follow', mps * 0.5), all = m.map(r => r.v).sort((a, b) => a - b)
       console.log(`   3b. behind ${mps} m/s: ${(X.length / ((X.at(-1)!.t - X[0].t) / 1000)).toFixed(1)} fps, ${m.length} moving frames, median ${(all[all.length >> 1] ?? 0).toFixed(1)} m/s, cap bit on ${m.filter(r => r.capped).length}; ${f3(g)}`)
+      ok(m.filter(r => r.capped).length <= m.length * 0.02, `3b. the cadence cap does not bite behind ${mps} m/s (${m.filter(r => r.capped).length} of ${m.length})`)
       ok(g.n > 3 && g.drift < 0.02, `3b. Vulnyx behind a keeper at ${mps} m/s: planted feet stay put (${g.n} planted samples at ${g.v.toFixed(1)} m/s, max ${(g.drift * 1000).toFixed(1)} mm, bar 20)`)
     }
     await q.evaluate(() => (window as any).__ather.tp(-131, 110, 0)); await sleep(3000)

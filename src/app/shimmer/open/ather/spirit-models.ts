@@ -120,7 +120,10 @@ const RIG_H = GROWN.axolotl.length! / MANALOTL_RIG.glbLen
 export const VULNYX_RIG: RigLook = {
   glbLen: 1.466, pivot: { x: 0, z: -0.015 },
   clipV: { walk: 0.55 / 0.7, run: 2.8 / 0.7 },
-  runAt: [0.9, 0.75], hull: 0.024, neck: 'b_neck', head: 'b_head', lie: true, avatar: { z: -0.22, far: 1.35 },
+  runAt: [0.9, 0.75], hull: 0.024, neck: 'b_neck', head: 'b_head', lie: true,
+  // behind a keeper sprinting at 6.5 m/s she closes the gap in bursts of up to 9 m/s (FOLLOW.vMax) = 7.4 strides/s: at the shared 5.5
+  // her feet slid on 416 of 539 of those frames, so her legs may go as fast as she ever does
+  cadence: 7.5, avatar: { z: -0.22, far: 1.35 },
 }
 /** her glb's height standing (the idle clip's mean), glb units */
 export const VULNYX_GLB_TALL = 1.003

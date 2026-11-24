@@ -23,6 +23,8 @@ export type RigLook = {
   hull: number
   /** bone names the trot's look / tilt / sniff turn */
   neck: string; head: string
+  /** strides a second her legs never pass (default CADENCE_MAX) */
+  cadence?: number
   /** the glb has its own lie clip */
   lie?: boolean
   /** the panel's turntable: the z she turns round (her middle, tail and all, glb units) and how far the camera stands back */
@@ -47,8 +49,8 @@ export function rigClip(p: Pick<TrotPose, 'mode' | 'sit'> & { lie?: boolean }, v
 export const strideLen = (clipV: number, dur: number, h: number) => clipV * dur * h
 /** how many cycles the gait moves on for `moved` metres in dt seconds (signed: backing off plays it backwards), and whether the
  *  cadence cap bit (= her feet slide this frame) */
-export function gaitCycles(moved: number, dt: number, stride: number): { cycles: number; capped: boolean } {
-  const c = moved / Math.max(stride, 1e-6), max = CADENCE_MAX * dt
+export function gaitCycles(moved: number, dt: number, stride: number, cad = CADENCE_MAX): { cycles: number; capped: boolean } {
+  const c = moved / Math.max(stride, 1e-6), max = cad * dt
   return Math.abs(c) > max ? { cycles: Math.sign(c) * max, capped: true } : { cycles: c, capped: false }
 }
 /** metres her feet cover this frame: what she moved along (or across) her facing, backwards when she backs off; turning on the
