@@ -212,6 +212,8 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 17:0x Alex: "next item is in the carpentry room crafting menu we have been slowly adding building pieces.. can we go ahead and move those floor labs and walls to the planning catalog" -> M143
+- 11-24 17:0x Alex on the Dewbear proof: "polish first and show me a preview so i can check it out and approve"; no mouth; gold glow thinner -> sprites-M102b
 - 11-24 17:0x Alex (playing): "i noticed the grid fro the plot is always on can we hid that one and for plan mode use a grid with smaller squares..?" -> M142 rowed
 - 11-24 17:0x Alex (hub's fetch list): "yea that list works lets go with it" -> M141 s2
 - 11-24 16:5x Alex (M141 s2): "yea thats actually a good point some spirits can actually do it for fun and be better for gathering materials with them" -> M141 s2: each species has its own fetch eagerness
