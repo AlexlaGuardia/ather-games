@@ -34,14 +34,21 @@ try {
   for (let t = 0; t < 45000 && !(await p.evaluate(() => (window as any).__ather.zone() === 'glade')); t += 500) { await p.evaluate(() => document.querySelector<HTMLElement>('[data-creator-done]')?.click()); await sleep(500) }
   await p.waitForFunction(() => (window as any).__ather.zone() === 'glade', { timeout: 60000 })
   { const gate = { x: -212, z: 212 }, sx = gate.x + 2.4, sz = gate.z - 0.4
-    await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), sx, sz, Math.atan2(-(gate.x - sx), -(gate.z - sz)))
-    await p.waitForFunction(() => /the gate \(the Wilds\)/.test(document.body.innerText), { timeout: 15000 }).catch(() => {})
+    // gladeAt is an ARRIVAL, and the game drops one sent while another's veil is still up (zone() already says 'glade' behind it):
+    // ask until the keeper really stands at the gate with its prompt showing. E itself is pressed once.
+    const yaw = Math.atan2(-(gate.x - sx), -(gate.z - sz))
+    const atGate = () => p.evaluate((x, z) => { const a = (window as any).__ather.state(); return Math.hypot(a.px - x, a.pz - z) < 1 && /the gate \(the Wilds\)/.test(document.body.innerText) }, sx, sz)
+    for (let k = 0; k < 8 && !(await atGate()); k++) { await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), sx, sz, yaw); await poll(atGate, 8000) }
+    ok(await atGate(), '0. at the Glade gate, its prompt showing')
     await p.keyboard.press('KeyE') }
   await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 90000 })
   console.log('in the Wilds')
   const C = (f: string) => p.evaluate(`(() => { const C = window.__ather.combat(); ${f} })()`) as Promise<any>
   // ── 1. packs, with the raised HP ──
-  await poll(async () => (await C('return C.hollows.length')) >= 6, 30000)
+  // the first top-up after the veil can ring the OLD zone's spot (the camera has not moved yet); the next one (1.5 s of sim on)
+  // culls what is out of reach. Measure the field that stays: two top-ups on, with every stray within the cull ring (130 m)
+  const clock0 = await C('return C.clock ?? 0') as number
+  await poll(async () => await C(`return (C.clock ?? 0) - ${clock0} > 3.5 && C.hollows.length >= 6 && C.hollows.every(h => Math.hypot(h.x - window.__ather.state().px, h.z - window.__ather.state().pz) < 130)`), 60000)
   const hs = await C('return C.hollows.map(h => ({ id: h.id, kind: h.kind, pack: h.pack, maxHp: h.maxHp, x: h.x, z: h.z, st: h.state }))') as { id: number; kind: string; pack?: number; maxHp: number; x: number; z: number; st: string }[]
   const packs = new Map<number, typeof hs>(); for (const h of hs) if (h.pack) packs.set(h.pack, [...(packs.get(h.pack) ?? []), h])
   // M120 s2: a crawler brood is loose strays by design (they pool instead): only shamblers/floaters must be in packs
@@ -87,8 +94,10 @@ try {
         const tick = () => { if (R.done) return; const f = C.hollows.find(q => q.hp > 999); C.keeper.hp = C.keeper.maxHp
           if (f) { const z = f.zx !== undefined; if (R.wasZip && !z && R.spits === 0) R.zips++; R.wasZip = z }
           for (const q of C.spits) if (!seen.has(q)) { seen.add(q); if (q.splash) { R.spits++; R.shotClocks.push(C.clock); if (R.zipsAtFirst < 0) R.zipsAtFirst = R.zips } }
-          // the keeper side-steps 1.3 m once the burst starts: the first shot lands BESIDE them and splashes
-          if (R.spits >= 1 && !R.moved) { R.moved = true; window.__ather.tp(s.x + 1.3 * Math.cos(${a} + 1.57), s.z + 1.3 * Math.sin(${a} + 1.57)) }
+          // the keeper side-steps 1.3 m ACROSS the line of fire once the burst starts (off where the floater is NOW, its zips took
+          // it round the keeper): the first shot passes them and splashes. Off its spawn bearing the step could run along the line
+          // (wide by < 0.7 m, the hit radius) and all 3 shots hit the body: 142 of 400 sims
+          if (f && R.spits >= 1 && !R.moved) { const b = Math.atan2(f.z - s.z, f.x - s.x); R.moved = true; window.__ather.tp(s.x - 1.3 * Math.sin(b), s.z + 1.3 * Math.cos(b)) }
           R.splashes = (C.splashes ?? 0) - R.splash0
           requestAnimationFrame(tick) }
         requestAnimationFrame(tick) })()`)
