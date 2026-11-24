@@ -108,6 +108,19 @@ try {
     await p.evaluate(() => { (window as any).__m127.mode = 'quiet' }); await p.waitForFunction(() => !(window as any).__spiritFight().on, { timeout: 60000 }) }
   { const g = await F(); ok(g.seen.mend > 0, `2c. the keeper low: mended ${g.seen.mend} (slowed the crowd ${g.seen.slow})`) }
   await p.evaluate(() => { (window as any).__m127.low = false })
+  // 2d. the Hollow on the keeper held 10 m off and the keeper walking round (small tp steps, ~2.5 m/s): she leaves the formation
+  //     for a fight spot, HITs, and nobody passes 10 m (up to 4 fights: each is her choice)
+  let off = { slots: 0, out: 0, max: 0, hits: 0 }
+  for (let n = 0; n < 4 && !(off.slots > 0 && off.hits > 0); n++) {
+    await p.evaluate(() => { const w = (window as any).__m127; w.mode = 'quiet'; w.low = false }); await p.waitForFunction(() => !(window as any).__spiritFight().on, { timeout: 60000 })
+    off = await p.evaluate(async o => { const w = window as any, A = w.__ather; w.__m127.mode = 'fight'; const e = A.camAim(), h0 = w.__spiritFight().seen.hit
+      for (let i = 0; i < 450; i++) { await new Promise(r => setTimeout(r, 60)); const a = i * 0.05, kx = e.cx + Math.sin(a) * 3, kz = e.cz + (Math.cos(a) - 1) * 3; A.tp(kx, kz, 0)
+        const C = A.combat(); for (const h of C.hollows) { h.x = kx; h.z = kz - 10; h.y = A.ground(kx, kz - 10); h.state = 'stagger'; h.t = 1 }
+        const f = w.__spiritFight(), k = A.camAim(); if (!f.on) continue
+        o.slots += Object.keys(f.slots).length; for (const s of f.spirits) { const d = Math.hypot(s.x - k.cx, s.z - k.cz); o.max = Math.max(o.max, d); if (d > 10) o.out++ } }
+      o.hits = w.__spiritFight().seen.hit - h0; return o }, off)
+  }
+  ok(off.slots > 0 && off.hits > 0 && off.out === 0, `2d. a walking keeper, a Hollow 10 m off: they go to it and HIT (${off.slots} slot samples, ${off.hits} HITs in the last), furthest ${off.max.toFixed(1)} m, ${off.out} past 10`)
   const step1 = (await D()).maxStep
   // 2b. the tether: mid-fight the keeper is set down 14 m off: nobody acts until she is back
   const tb = await p.evaluate(async () => { const w = window as any, A = w.__ather; w.__m127.mode = 'fight'
