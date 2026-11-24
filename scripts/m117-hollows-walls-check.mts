@@ -97,12 +97,13 @@ try {
   // ── 3. a shambler chasing from the far side goes round ──
   await p.evaluate((x, z, y) => { const C = (window as any).__ather.combat()
     C.hollows.push({ id: C.nextId++, kind: 'shambler', x, y, z, yaw: 0, hp: 9999, maxHp: 9999, state: 'chase', t: 0, wx: x, wz: z, lx: 0, lz: 0, hitFlash: 0, hitThisLunge: false }) }, hx, hz, gy)
-  let inside = 0, samples = 0, closest = 99, worst = ''
-  const t0 = Date.now()
-  while (Date.now() - t0 < 150000) {
-    const h = await p.evaluate(() => { const C = (window as any).__ather.combat(), h = C.hollows.find((q: any) => q.kind === 'shambler'); C.keeper.hp = C.keeper.maxHp; return h ? { x: h.x, y: h.y, z: h.z } : null }) as { x: number; y: number; z: number } | null
+  let inside = 0, samples = 0, closest = 99, worst = '', lastLog = 0
+  const t0 = Date.now(), clock0 = await p.evaluate(() => (window as any).__ather.combat().clock ?? 0) as number
+  while (Date.now() - t0 < 240000) {
+    const h = await p.evaluate(() => { const C = (window as any).__ather.combat(), h = C.hollows.find((q: any) => q.kind === 'shambler'); C.keeper.hp = C.keeper.maxHp; return h ? { x: h.x, y: h.y, z: h.z, st: h.state, sm: h.sm, clock: C.clock } : null }) as { x: number; y: number; z: number; st: string; sm: unknown; clock: number } | null
     if (!h) break
     samples++
+    if (Date.now() - lastLog > 10000) { lastLog = Date.now(); console.log(`   t ${((Date.now() - t0) / 1000).toFixed(0)} s (sim ${(h.clock - clock0).toFixed(1)} s): ${h.st} at ${h.x.toFixed(2)},${h.y.toFixed(2)},${h.z.toFixed(2)} sm ${JSON.stringify(h.sm)} ${Math.hypot(h.x - kx, h.z - kz).toFixed(1)} m`) }
     const inBox = walls.find(b => h.x > b.x0 && h.x < b.x1 && h.z > b.z0 && h.z < b.z1 && b.y1 > h.y + 0.6 && b.y0 < h.y + 1.75)
     if (inBox) { inside++; worst = `${h.x.toFixed(2)},${h.z.toFixed(2)} in ${JSON.stringify(inBox)}` }
     closest = Math.min(closest, Math.hypot(h.x - kx, h.z - kz))
