@@ -89,11 +89,11 @@ export function payLoot(id: string, who: string, give: (item: string, n: number)
 export const inPull = (d: Loot, f: Spot3, now: number) => now - d.at >= LOOT_REST_MS && Math.hypot(d.x - f.x, d.z - f.z) <= LOOT_PULL_M && Math.abs(d.y - f.y) <= LOOT_PULL_UP
 
 // ── where it lands ──────────────────────────────────────────────────────────────────────────────────────────────
-export const CELL = 0.5, REACH_M = 16, STEP_UP = 0.5
+export const CELL = 0.5, REACH_M = 16, STEP_UP = 0.5, LEVEL_M = 0.8
 /** Spots for `n` piles beside (node), each one a place the keeper can WALK to from where they stand: a flood over `free` ground
- *  (dry, solid, no pit, no trunk), never a step higher than STEP_UP. Nearest the node first choice 0.9 to 2.6 m; nothing there
+ *  (dry, solid, no pit, no trunk), never a step higher than STEP_UP. First choice 0.9 to 2.6 m from the node and level with it (a node on a slope); nothing there
  *  (it stands over a gap) = the nearest ground they can reach; none at all = their own feet. */
-export function lootSpots(node: { x: number; z: number }, feet: Spot3, n: number, free: (x: number, z: number) => boolean, height: (x: number, z: number) => number, rand: () => number = Math.random): Spot3[] {
+export function lootSpots(node: { x: number; z: number; y?: number }, feet: Spot3, n: number, free: (x: number, z: number) => boolean, height: (x: number, z: number) => number, rand: () => number = Math.random): Spot3[] {
   const key = (i: number, j: number) => i * 1000 + j, R = Math.ceil(REACH_M / CELL), at = (i: number, j: number): Spot3 | null => {
     const x = feet.x + i * CELL, z = feet.z + j * CELL
     if (!free(x, z)) return null
@@ -108,7 +108,7 @@ export function lootSpots(node: { x: number; z: number }, feet: Spot3, n: number
   for (let r = 0; r <= 2 && !q.length; r++) for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) add(i, j, null)   // the keeper may stand half over an edge
   for (let k = 0; k < q.length; k++) { const c = q[k]; add(c.i + 1, c.j, c.s); add(c.i - 1, c.j, c.s); add(c.i, c.j + 1, c.s); add(c.i, c.j - 1, c.s) }
   const all = q.map(c => ({ s: c.s, d: Math.hypot(c.s.x - node.x, c.s.z - node.z) })).sort((a, b) => a.d - b.d)
-  const by = all.filter(c => c.d >= 0.9 && c.d <= 2.6), from = by.length ? by : all.slice(0, Math.max(1, n))
+  const by = all.filter(c => c.d >= 0.9 && c.d <= 2.6), level = by.filter(c => Math.abs(c.s.y - (node.y ?? c.s.y)) <= LEVEL_M), from = level.length >= Math.min(3, n) ? level : by.length ? by : all.slice(0, Math.max(1, n))
   if (!from.length) return [{ ...feet }]
   const out: Spot3[] = []
   for (let k = 0; k < n; k++) {

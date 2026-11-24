@@ -56,12 +56,12 @@ try {
   const want: Record<string, number> = {}
   for (const s of spots) {
     ok(await travel(s.sx, s.sz), `${s.node}: at it`); await tp(s.sx, s.sz)
-    const xp0 = JSON.stringify((await ls('open.skills.v1'))?.[s.node === 'tree' ? 'forestry' : 'prospecting']), before = await bag(), had = (await lootOf(p)).length, rec = await finish(s)
+    const xp0 = JSON.stringify(((await ls('open.skills.v1')) as { id: string }[] | null)?.find(k => k.id === (s.node === 'tree' ? 'forestry' : 'prospecting'))), before = await bag(), had = (await lootOf(p)).length, rec = await finish(s)
     ok(!!rec, `${s.node}: worked`); if (!rec) throw new Error('never worked')
     const roll = sumOf(rec.drops.filter(d => d.n > 0).map(d => ({ item: d.id, n: d.n }))), mine = (await lootOf(p)).filter(d => d.id.startsWith(`${s.node}:${s.id}:`))
     ok(had === (await lootOf(p)).length - mine.length && same(sumOf(mine), roll), `${s.node}: the whole roll on the ground ${JSON.stringify(roll)}`)
     ok(same(await bag(), before), `${s.node}: none of it in the bag yet`)
-    ok(JSON.stringify((await ls('open.skills.v1'))?.[s.node === 'tree' ? 'forestry' : 'prospecting']) !== xp0, `${s.node}: the XP lands at the finish`)
+    ok(JSON.stringify(((await ls('open.skills.v1')) as { id: string }[] | null)?.find(k => k.id === (s.node === 'tree' ? 'forestry' : 'prospecting'))) !== xp0, `${s.node}: the XP lands at the finish`)
     ok(!!(await ls(s.node === 'tree' ? 'open.pruned.v1' : 'open.mined.v1'))?.[s.id], `${s.node}: spent`)
     // the ground is the LIVE one (the owner publishes maps): the page's own ground, the parse only for trunks and pits
     const gy = (x: number, z: number) => p.evaluate((x, z) => (window as any).__ather.ground(x, z) as number, x, z), base = await gy(s.x, s.z)

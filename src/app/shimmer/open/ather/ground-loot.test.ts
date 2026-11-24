@@ -93,6 +93,8 @@ async function main() {
     ok(s.every(p => Math.hypot(p.x, p.z) > 4), 'dropped where the keeper cannot walk') }
   { // a shelf 3 m up
     const h = (x: number) => (x < 3 ? 3 : 0); const s = L.lootSpots({ x: 0, z: 0 }, feet, 4, trunk, h, rnd); ok(s.every(p => p.x >= 3 && p.y === 0), 'dropped up a cliff') }
+  { // a 40 degree slope: level with the node, not up and down it
+    const s = L.lootSpots({ x: 0, z: 0, y: 0 }, feet, 5, trunk, x => x * 0.84, rnd); ok(s.every(p => Math.abs(p.y) <= 0.8 && Math.hypot(p.x, p.z) <= 2.6), 'slope: scattered up and down it') }
   { const s = L.lootSpots({ x: 0, z: 0 }, feet, 4, () => false, flat, rnd); ok(s.length === 1 && s[0].x === feet.x, 'nowhere: not at the keeper\'s feet') }
   { const s = L.lootSpots({ x: 0, z: 0 }, { x: 4.4, y: 0, z: 0 }, 3, (x, z) => trunk(x, z) && Math.hypot(x - 4.4, z) > 0.4, flat, rnd); ok(s.every(p => Math.hypot(p.x, p.z) <= 2.6), 'standing half over an edge: gave up') }
 
