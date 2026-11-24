@@ -7,7 +7,8 @@
 // formation's own state), no three, no React. M127 (spirits in fights, the 10 m tether) builds on `assignSlots` /
 // `formationSlot`; nothing here knows about fights.
 //
-//  · The Mana'mal sits at HEEL: behind and to the right.
+//  · The Mana'mal GIVES ROOM (s3, Alex 11-24 "about 3-4 m, behind and off to one side"; M91's 3-6 m gap): outside the arc,
+//    behind and off to one side (right, or left while the right is refused), and it does not stir for a small step.
 //  · Up to FOLLOW_MAX spirits form a loose ARC behind (left / back / right), spaced by their body radius (obstacles.ts
 //    bodyRadius of the grown row, the same size the spirit models draw at) so no two bodies overlap.
 //  · The arc turns with the keeper through a LAGGED facing (FORM.lagK), so it swings round like company, not a grid.
@@ -26,12 +27,16 @@ export type MemberKind = 'manamal' | 'spirit'
 export type Member = { id: string; kind: MemberKind; r: number; blocked?: Blocked }
 export type Slot = { x: number; z: number; face: number }
 export type Layout = 'arc' | 'file'
-export type Assigned = { layout: Layout; slots: Record<string, Slot> }
+/** `side` = which side of the keeper the Mana'mal's arc slot is on (1 right, -1 left) */
+export type Side = 1 | -1
+export type Assigned = { layout: Layout; slots: Record<string, Slot>; side?: Side }
 
 export const FORM = {
   keeperR: 0.35,    // m: the keeper's own body (nobody's slot comes nearer than this + their radius)
-  heelBack: 1.0,    // m behind the keeper: the Mana'mal's heel slot
-  heelSide: 0.75,   // m to the keeper's right
+  heelBack: 2.1,    // m behind the keeper: the Mana'mal's slot (3.5 m out with heelSide; it does not fan)
+  heelSide: 2.8,    // m to one side
+  heelOff: 1.6,     // m its slot drifts before it sets off (a small step of the keeper leaves it where it is)
+  heelSettle: 0.4,  // s on its slot, the keeper still, before it counts as arrived
   arcR: 2.3,        // m from the keeper: the spirits' arc
   gap: 0.3,         // m kept clear between two bodies on top of their radii
   arcMinStep: 0.7,  // rad between two arc neighbours at least (a loose arc, ~40 degrees)
@@ -84,19 +89,22 @@ const fileOrder = (ms: readonly Member[], lead?: readonly string[]) => {
   return [...o].sort((a, b) => at(a) - at(b))
 }
 
-/** The arc: Mana'mal(s) at heel, spirits on an arc behind spaced by body size. Pure geometry, no blocking. */
-export function arcSlots(k: Keeper, yaw: number, members: readonly Member[], stopped: boolean): Record<string, Slot> {
+/** The arc: spirits on an arc behind spaced by body size, the Mana'mal(s) outside it to one side. Pure geometry, no blocking. */
+export function arcSlots(k: Keeper, yaw: number, members: readonly Member[], stopped: boolean, side: Side = 1): Record<string, Slot> {
   const f = forwardOf(yaw), rt = rightOf(yaw), fan = stopped ? FORM.fan : 1, out: Record<string, Slot> = {}
   const walkFace = Math.atan2(f.x, f.z)
   const at = (back: number, side: number) => ({ x: k.x - f.x * back + rt.x * side, z: k.z - f.z * back + rt.z * side })
   const face = (p: Vec) => (stopped ? headingTo(k, p) : walkFace)
+  const sp = members.filter(m => m.kind === 'spirit'), spR = Math.max(0, ...sp.map(m => m.r)), arcR = Math.max(FORM.arcR, FORM.keeperR + spR + 1)
   let h = 0
   for (const m of members) if (m.kind === 'manamal') {
-    // a second Mana'mal (none today: one walks at a time) takes the other heel
-    const p = at(Math.max(FORM.heelBack, FORM.keeperR + m.r + 0.3) * fan, (h++ % 2 ? -1 : 1) * FORM.heelSide * fan); out[m.id] = { ...p, face: face(p) }
+    // a second Mana'mal (none today: one walks at a time) takes the other side. It stays outside the FANNED arc whether or
+    // not the keeper has stopped, so its slot does not shift on a stop
+    const out0 = Math.hypot(FORM.heelBack, FORM.heelSide), d = sp.length ? Math.max(out0, arcR * FORM.fan + spR + m.r + FORM.gap) : out0, sc = d / out0
+    const p = at(FORM.heelBack * sc, (h++ % 2 ? -side : side) * FORM.heelSide * sc); out[m.id] = { ...p, face: face(p) }
   }
-  const sp = members.filter(m => m.kind === 'spirit'); if (!sp.length) return out
-  const R = Math.max(FORM.arcR, FORM.keeperR + Math.max(...sp.map(m => m.r)) + 1) * fan
+  if (!sp.length) return out
+  const R = arcR * fan
   const steps = sp.slice(1).map((m, i) => Math.max(FORM.arcMinStep, 2 * Math.asin(Math.min(1, (sp[i].r + m.r + FORM.gap) / (2 * R)))) * fan)
   let a = -steps.reduce((s, x) => s + x, 0) / 2   // negative = the keeper's left; one spirit sits straight behind
   sp.forEach((m, i) => { if (i) a += steps[i - 1]; const p = at(R * Math.cos(a), R * Math.sin(a)); out[m.id] = { ...p, face: face(p) } })
@@ -130,15 +138,18 @@ export function fileSlots(k: Keeper, yaw: number, members: readonly Member[], tr
   return out
 }
 
-/** THE ASSIGNER (pure). The arc, unless a member's blocked test refuses its slot or the slot is behind a wall from the
+/** THE ASSIGNER (pure). The arc (the Mana'mal on `side`, or the other side if that one is refused), unless a member's blocked test refuses its slot or the slot is behind a wall from the
  *  keeper (or `forceFile`): then single file, each file slot moved to the nearest free point it can reach. */
-export function assignSlots(k: Keeper, yaw: number, members: readonly Member[], o: { stopped?: boolean; trail?: readonly Vec[]; forceFile?: boolean; lead?: readonly string[] } = {}): Assigned {
+export function assignSlots(k: Keeper, yaw: number, members: readonly Member[], o: { stopped?: boolean; trail?: readonly Vec[]; forceFile?: boolean; lead?: readonly string[]; side?: Side } = {}): Assigned {
   if (!members.length) return { layout: 'arc', slots: {} }
   const ms = order(members)
   if (!o.forceFile) {
-    const arc = arcSlots(k, yaw, ms, !!o.stopped)
-    const tight = ms.some(m => m.blocked && (m.blocked(arc[m.id].x, arc[m.id].z) || !lineClear(k, arc[m.id], m.blocked)))
-    if (!tight) return { layout: 'arc', slots: arc }
+    const side = o.side ?? 1
+    for (const sd of (ms[0].kind === 'manamal' ? [side, -side as Side] : [side]) as Side[]) {
+      const arc = arcSlots(k, yaw, ms, !!o.stopped, sd)
+      const tight = ms.some(m => m.blocked && (m.blocked(arc[m.id].x, arc[m.id].z) || !lineClear(k, arc[m.id], m.blocked)))
+      if (!tight) return { layout: 'arc', slots: arc, side: sd }
+    }
   }
   const file = fileSlots(k, yaw, ms, o.trail ?? [], o.lead)
   let prev: Vec = { x: k.x, z: k.z }
@@ -156,7 +167,7 @@ export type Formation = {
   last: () => Assigned
 }
 export function makeFormation(members: () => readonly Member[], where?: (id: string) => Vec | undefined): Formation {
-  let lead: string[] = []
+  let lead: string[] = [], side: Side = 1   // the side it last had is kept until that one is refused (no flicker between two)
   let lagYaw = NaN, prev: Vec | null = null, speed = 0, still = 0, trail: Vec[] = [], fileLeft = 0, last: Assigned = { layout: 'arc', slots: {} }
   return {
     tick(k, dt) {
@@ -175,10 +186,11 @@ export function makeFormation(members: () => readonly Member[], where?: (id: str
       // entering single file: the order is who stands nearest the keeper NOW (kept until the arc is back), so no one overtakes
       const formLead = () => { if (fileLeft > 0 && lead.length) return; const d = (m: Member) => { const p = where?.(m.id); return p ? Math.hypot(p.x - k.x, p.z - k.z) : Infinity }
         lead = [...ms].sort((a, b) => d(a) - d(b)).filter(m => Number.isFinite(d(m))).map(m => m.id) }
-      let a = assignSlots(k, lagYaw, ms, { stopped, trail })
+      let a = assignSlots(k, lagYaw, ms, { stopped, trail, side })
       if (a.layout === 'file') { formLead(); a = assignSlots(k, lagYaw, ms, { stopped, trail, forceFile: true, lead }); fileLeft = FORM.fileHold }
       else if (fileLeft > 0) { fileLeft -= dt; a = assignSlots(k, lagYaw, ms, { stopped, trail, forceFile: true, lead }) }
       else lead = []
+      if (a.side) side = a.side
       last = a
       return a
     },
@@ -219,25 +231,28 @@ export function reportFormationPos(id: string, x: number, z: number) { if (roste
 /** a blocked test any member can lean on: the first spirit's (the garden's), but only where the keeper stands on ground it
  *  allows (off the plot a spirit's nav refuses everything, and that must not freeze the Mana'mal) */
 export function sharedBlocked(k: Vec): Blocked | undefined {
-  for (const m of roster.values()) if (m.blocked && !m.blocked(k.x, k.z)) return m.blocked
+  for (const m of roster.values()) if (m.kind === 'spirit' && m.blocked && !m.blocked(k.x, k.z)) return m.blocked
   return undefined
 }
 
-/** The Mana'mal's walk to its slot: sets off past `off` m, settles within 0.12, a catch-up gait over the keeper's own pace;
- *  every step lands free (tries headings either side), so it never walks through a wall. */
-export type SlotWalker = { x: number; z: number; speed: number; moving: boolean }
-export function slotStep(s: SlotWalker, slot: Vec, keeperSpeed: number, dt: number, blocked?: Blocked, off = 0.6): SlotWalker {
+/** The Mana'mal's walk to its slot: sets off past `off` m and then keeps pace as long as the keeper walks (no stop-start);
+ *  it has arrived after FORM.heelSettle s within 0.12 m with the keeper still. A catch-up gait over the keeper's own pace;
+ *  every step lands free (tries headings either side), so it never walks through a wall, and it goes round the keeper. */
+export type SlotWalker = { x: number; z: number; speed: number; moving: boolean; at?: number }
+export function slotStep(s: SlotWalker, slot: Vec, keeperSpeed: number, dt: number, blocked?: Blocked, off: number = FORM.heelOff, keeper?: Vec & { r: number }): SlotWalker {
   const dx = slot.x - s.x, dz = slot.z - s.z, d = Math.hypot(dx, dz)
-  let moving = s.moving
+  let moving = s.moving, at = moving && d < 0.12 && keeperSpeed < FORM.moveOn ? (s.at ?? 0) + dt : 0
   if (!moving && d > off) moving = true
-  if (moving && d < 0.12) moving = false
-  const want = moving ? Math.min(9, 1.2 + keeperSpeed + d * 2.4) : 0
+  if (at > FORM.heelSettle) { moving = false; at = 0 }
+  const want = !moving ? 0 : d < 0.12 ? Math.min(9, keeperSpeed) : Math.min(9, 1.2 + keeperSpeed + d * 2.4)
   const speed = s.speed + (want - s.speed) * Math.min(1, dt * 6)
-  if (speed < 1e-3 || d < 1e-4) return { x: s.x, z: s.z, speed, moving }
+  if (speed < 1e-3 || d < 1e-4) return { x: s.x, z: s.z, speed, moving, at }
   const stp = Math.min(d, speed * dt), h0 = Math.atan2(dx, dz)
+  // into the keeper's body = refused (a step that only takes it further out of them is fine)
+  const onKeeper = (x: number, z: number) => { if (!keeper) return false; const n = Math.hypot(x - keeper.x, z - keeper.z); return n < keeper.r && n < Math.hypot(s.x - keeper.x, s.z - keeper.z) }
   for (let i = 0; i < 9; i++) {
     const h = h0 + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.4, nx = s.x + Math.sin(h) * stp, nz = s.z + Math.cos(h) * stp
-    if (!blocked || !blocked(nx, nz)) return { x: nx, z: nz, speed, moving }
+    if (!onKeeper(nx, nz) && (!blocked || !blocked(nx, nz))) return { x: nx, z: nz, speed, moving, at }
   }
-  return { x: s.x, z: s.z, speed: 0, moving }
+  return { x: s.x, z: s.z, speed: 0, moving, at }
 }

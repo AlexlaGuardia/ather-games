@@ -2,7 +2,7 @@
 // Pure geometry (no page): the arc's spacing by body size, behind the keeper's facing, its lag, the stopped fan + outward
 // faces, single file through a doorway in a wall, the fallback that never reaches through a wall; then the real spirit trot
 // (ather/spirit-trot.ts) walking three spirits to their slots through that doorway, checked against the wall every step.
-import { arcSlots, assignSlots, fileSlots, forwardOf, makeFormation, nearestFree, lineClear, slotStep, FORM, type Member, type Keeper, type Vec } from './follow-formation'
+import { arcSlots, assignSlots, fileSlots, forwardOf, makeFormation, nearestFree, lineClear, slotStep, FORM, type SlotWalker, type Member, type Keeper, type Vec } from './follow-formation'
 import { makeTrot, type SpiritNav } from '../ather/spirit-trot'
 import { SPIRIT_MODELS } from '../ather/spirit-models'
 import { bodyRadius } from '../ather/obstacles'
@@ -32,7 +32,9 @@ for (const yaw of [0, 0.7, Math.PI / 2, 2.4, Math.PI, -1.2]) for (const stopped 
   const k = { x: 3, z: -2, yaw }, ms = team(), s = arcSlots(k, yaw, ms, stopped), tag = `arc yaw ${yaw.toFixed(2)} ${stopped ? 'stopped' : 'walking'}`
   const bad = spaced(s, ms, k, FORM.gap - 0.01); ok(!bad, `${tag}: bodies apart by their radii + gap (${bad})`)
   ok(['s1', 's2', 's3', 'mm'].every(id => behind(k, yaw, s[id]) > 0.5), `${tag}: every slot behind the keeper's facing`)
-  ok(side(k, yaw, s.mm) > 0.3 && behind(k, yaw, s.mm) < behind(k, yaw, s.s2), `${tag}: the Mana'mal at heel, to the right, nearer than the arc`)
+  // M126 s3 (moved from "at heel, nearer than the arc"): 3-4 m out, behind and to one side, outside the arc
+  ok(dist(s.mm, k) >= 3 && dist(s.mm, k) <= 4 && side(k, yaw, s.mm) > 1.5 && behind(k, yaw, s.mm) > 1.5 && ['s1', 's2', 's3'].every(id => dist(s.mm, k) > dist(s[id], k)), `${tag}: the Mana'mal 3-4 m out, behind and off to one side, outside the arc (${dist(s.mm, k).toFixed(2)})`)
+  const L = arcSlots(k, yaw, ms, stopped, -1); ok(side(k, yaw, L.mm) < -1.5 && !spaced(L, ms, k, FORM.gap - 0.01), `${tag}: the other side mirrors, spaced`)
   ok(side(k, yaw, s.s1) < -0.5 && Math.abs(side(k, yaw, s.s2)) < 0.3 && side(k, yaw, s.s3) > 0.5, `${tag}: spirits left / back / right`)
   const outward = ['s1', 's2', 's3'].every(id => Math.abs(Math.atan2(Math.sin(s[id].face - Math.atan2(s[id].x - k.x, s[id].z - k.z)), Math.cos(s[id].face - Math.atan2(s[id].x - k.x, s[id].z - k.z)))) < 1e-6)
   ok(stopped ? outward : ['s1', 's2', 's3', 'mm'].every(id => Math.abs(s[id].face - Math.atan2(forwardOf(yaw).x, forwardOf(yaw).z)) < 1e-6), `${tag}: ${stopped ? 'face outward' : 'face the way the keeper walks'}`)
@@ -42,6 +44,15 @@ for (const yaw of [0, 0.7, Math.PI / 2, 2.4, Math.PI, -1.2]) for (const stopped 
 // bigger bodies spread wider: three spirits twice the size stay apart
 { const big: Member[] = [1, 2, 3].map(i => ({ id: `b${i}`, kind: 'spirit', r: 0.9 })), k = { x: 0, z: 0, yaw: 1 }, s = arcSlots(k, 1, big, false)
   ok(!spaced(s, big, k, FORM.gap - 0.01), `arc: three 0.9 m bodies are spread by size (${spaced(s, big, k, FORM.gap - 0.01)})`) }
+{ const big: Member[] = [{ id: 'mm', kind: 'manamal', r: 0.3 }, ...[1, 2, 3].map(i => ({ id: `b${i}`, kind: 'spirit' as const, r: 1.3 }))], k = { x: 0, z: 0, yaw: 1 }
+  for (const st of [false, true]) { const s = arcSlots(k, 1, big, st); ok(!spaced(s, big, k, FORM.gap - 0.01), `big spirits push the Mana'mal out, not under them (${spaced(s, big, k, FORM.gap - 0.01)})`) } }
+// s3: a refused side = the other side (kept while it is free), both refused = single file
+{ const k = { x: 0, z: 0, yaw: 0 }, east = (x: number, _z: number) => x > 2.2, both = (x: number, _z: number) => Math.abs(x) > 2.2
+  const ms = (b: (x: number, z: number) => boolean): Member[] => [{ id: 'mm', kind: 'manamal', r: 0.3, blocked: b }, { id: 'a', kind: 'spirit', r: 0.4, blocked: b }]
+  const a = assignSlots(k, 0, ms(east)); ok(a.layout === 'arc' && a.slots.mm.x < -2, `right refused: the left (${a.layout} ${a.slots.mm.x.toFixed(2)})`)
+  ok(assignSlots(k, 0, ms(both)).layout === 'file', 'both sides refused: single file')
+  let b = east; const f = makeFormation(() => ms((x, z) => b(x, z))); f.tick(k, 1 / 60); b = () => false; f.tick(k, 1 / 60)
+  ok(f.last().slots.mm.x < -2, 'the side it took is kept when the other opens') }
 // one spirit = straight behind
 { const k = { x: 0, z: 0, yaw: 0 }, s = arcSlots(k, 0, [{ id: 'a', kind: 'spirit', r: rFox }], false); ok(Math.abs(side(k, 0, s.a)) < 1e-6 && behind(k, 0, s.a) > 2, 'one spirit: straight behind') }
 
@@ -117,6 +128,26 @@ const doorTeam = (): Member[] => [
 { let s = { x: 2, z: -0.8, speed: 0, moving: false }, inWall = 0
   for (let i = 0; i < 300; i++) { s = slotStep(s, { x: 2, z: 1.5 }, 0, 1 / 60, wallFor(0.3)); if (WALL(s.x, s.z, 0.3)) inWall++ }
   ok(inWall === 0 && s.z < 0, `slotStep: a slot on the far side of a wall is not walked through (z ${s.z.toFixed(2)}, ${inWall} in the wall)`) }
+
+// 4b. s3: small steps leave it where it is; a walk brings it along without stop-start; a stop settles it on its slot; it
+//     goes round the keeper
+{ const k: Keeper = { x: 0, z: 0, yaw: 0 }, ms: Member[] = [{ id: 'mm', kind: 'manamal', r: 0.3 }], f = makeFormation(() => ms)
+  let s: SlotWalker = { x: 0, z: 0, speed: 0, moving: false }, kv = 0, nearK = 9
+  f.tick(k, 1 / 60); s = { ...s, x: f.last().slots.mm.x, z: f.last().slots.mm.z }
+  const run = (sec: number, v: number, each?: () => void) => { for (let i = 0; i < sec * 60; i++) { k.z -= v / 60; f.tick(k, 1 / 60); kv += (Math.abs(v) - kv) / 12; s = slotStep(s, f.last().slots.mm, kv, 1 / 60, undefined, FORM.heelOff, { x: k.x, z: k.z, r: 0.65 }); nearK = Math.min(nearK, dist(s, k)); each?.() } }
+  const at0 = { ...s }
+  let mv = 0; const see = () => { mv = Math.max(mv, dist(s, at0)) }
+  for (const [t, v] of [[0.5, 2], [1, 0], [0.5, -2], [1, 0], [0.6, -2], [1, 0], [0.6, 2], [1, 0]]) run(t, v, see)
+  ok(mv < 1e-6, `small steps (1-1.2 m either way) do not move it (${mv.toFixed(3)} m)`)
+  let halts = 0; run(1.5, 3); run(6, 3, () => { if (s.speed < 1.5) halts++ })
+  ok(halts === 0 && dist(s, k) < 5, `a long walk: no stop-start (${halts} halted frames; ${dist(s, k).toFixed(2)} m)`)
+  run(4, 0); ok(!s.moving && dist(s, f.last().slots.mm) < 0.13 && dist(s, k) > 3 && dist(s, k) < 4, `a stop: settled on its slot (${dist(s, k).toFixed(2)} m out)`)
+  nearK = 9; k.yaw = Math.PI; run(6, 0)
+  ok(nearK > 0.64 && !s.moving && dist(s, f.last().slots.mm) < 0.13 && behind(k, Math.PI, s) > 1.5, `a 180 on the spot: it comes round, never through the keeper (${nearK.toFixed(2)}; behind ${behind(k, Math.PI, s).toFixed(2)})`)
+  // straight across the keeper: round them
+  let w: SlotWalker = { x: 0, z: 3, speed: 0, moving: false }, mn = 9
+  for (let i = 0; i < 400; i++) { w = slotStep(w, { x: 0, z: -3 }, 0, 1 / 60, undefined, 0.3, { x: 0, z: 0, r: 0.65 }); mn = Math.min(mn, Math.hypot(w.x, w.z)) }
+  ok(mn >= 0.64 && dist(w, { x: 0, z: -3 }) < 0.13, `a slot straight across the keeper: round them (${mn.toFixed(2)})`) }
 
 // 5. THE REAL TROT: three spirits follow a keeper who walks up to the door, turns 180, walks back, stops, then walks
 //    through the doorway. Each spirit's own nav = the wall padded by her radius. At rest: no two closer than their radii;

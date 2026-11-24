@@ -18,11 +18,12 @@ import * as THREE from 'three'
 import { FOLLOW } from './idle-mode'
 import { skitSlot, reportLying } from './idle-skits'   // M126 s2
 import { activeCompanion, subscribeCompanion, companionRev, type CompanionId } from './companion'
-import { joinFormation, leaveFormation, tickFormation, formationSlot, reportFormationPos, sharedBlocked, slotStep } from './follow-formation'   // M126 s1
+import { FORM, joinFormation, leaveFormation, tickFormation, formationSlot, reportFormationPos, sharedBlocked, slotStep } from './follow-formation'   // M126 s1
 
 /** M126 s1: the Mana'mal's body in the formation (Gemdigger ~0.5 m nose to tail; the Glowmite / wisps a little less) */
 export const MANAMAL_R = 0.3
 const FORM_ID = 'manamal'
+const BACK = 1.5  // s in its place after a skit before it goes back to its loose trail
 const HURRY = 4   // m/s on top of its gait, walking back off an idle skit
 
 export interface FollowPose { x: number; z: number; yaw: number }
@@ -41,14 +42,15 @@ export function CompanionFollower({ pose, ground }: { pose: React.MutableRefObje
 
 export function Follower({ id, pose, ground }: { id: CompanionId; pose: React.MutableRefObject<FollowPose>; ground: (x: number, z: number) => number }) {
   const g = useRef<THREE.Group>(null)
-  const s = useRef<{ x: number; z: number; yaw: number; speed: number; moving: boolean; still: number; t: number; nap: number; kx: number; kz: number; kv: number; back: boolean }>({ x: NaN, z: NaN, yaw: 0, speed: 0, moving: false, still: 0, t: 0, nap: 0, kx: NaN, kz: NaN, kv: 0, back: false })
-  // M126 s1: it walks in the one formation (shared/follow-formation.ts): at heel, behind and to the right
-  useEffect(() => { joinFormation({ id: FORM_ID, kind: 'manamal', r: MANAMAL_R }); return () => leaveFormation(FORM_ID) }, [])
+  const s = useRef<{ x: number; z: number; yaw: number; speed: number; moving: boolean; still: number; t: number; nap: number; kx: number; kz: number; kv: number; at: number; back: number }>({ x: NaN, z: NaN, yaw: 0, speed: 0, moving: false, still: 0, t: 0, nap: 0, kx: NaN, kz: NaN, kv: 0, at: 0, back: 0 })
+  // M126 s1/s3: it walks in the one formation (shared/follow-formation.ts): 3.5 m out, behind and off to one side. Its slot,
+  // this far out, is held to the same ground as its steps (a refused one = the other side, or single file)
+  useEffect(() => { joinFormation({ id: FORM_ID, kind: 'manamal', r: MANAMAL_R, blocked: (x, z) => !!sharedBlocked(pose.current)?.(x, z) }); return () => leaveFormation(FORM_ID) }, [pose])
   useFrame((_, dtRaw) => {
     const dt = Math.min(0.05, dtRaw), p = pose.current, m = s.current, grp = g.current
     if (!grp) return
     m.t += dt
-    // M126 s1: its place is the formation's HEEL slot (was M91's own 4.2 m trail behind-right); it arrives there (and jumps
+    // M126 s1: its place is the formation's slot (s3: 3.5 m out, M91's 3-6 m gap); it arrives there (and jumps
     // there after a teleport), and walks to it with every step on free ground (the garden's blocked, where there is one)
     tickFormation(p)
     const slot = formationSlot(FORM_ID) ?? { x: p.x, z: p.z, face: p.yaw - Math.PI }
@@ -57,14 +59,16 @@ export function Follower({ id, pose, ground }: { id: CompanionId; pose: React.Mu
     if (!Number.isFinite(m.x) || Math.hypot(p.x - m.x, p.z - m.z) > FOLLOW.TELEPORT) { m.x = slot.x; m.z = slot.z; m.yaw = p.yaw; m.speed = 0; m.moving = false }
     const px0 = m.x, pz0 = m.z
     // M91 + M126 s2 IDLE (shared/idle-skits.ts): the keeper idles = it wanders a 3-6 m ring round them, sits, naps (lying down);
-    // any input = the skit is gone and it walks back to heel
+    // any input = the skit is gone and it walks back to its place
     const sk = skitSlot(FORM_ID, p), to = sk ?? slot
-    if (sk?.roam) { m.x = sk.x; m.z = sk.z; m.speed += (sk.roam.speed - m.speed) * Math.min(1, dt * 6); m.moving = false; m.back = true }
+    if (sk?.roam) { m.x = sk.x; m.z = sk.z; m.speed += (sk.roam.speed - m.speed) * Math.min(1, dt * 6); m.moving = false; m.at = 0; m.back = BACK }
     else {
-      // off a skit (up to 6 m out) it HURRIES home: back at heel within ~2 s of the input, then its usual gait
-      if (m.back && Math.hypot(to.x - m.x, to.z - m.z) < 0.6) m.back = false
-      const n = slotStep({ x: m.x, z: m.z, speed: m.speed, moving: m.moving }, to, m.kv + (m.back ? HURRY : 0), dt, sharedBlocked(p))
-      m.x = n.x; m.z = n.z; m.speed = n.speed; m.moving = n.moving
+      // off a skit (up to 6 m out) it HURRIES home: back in place within ~2 s of the input, then its usual gait
+      const d = Math.hypot(to.x - m.x, to.z - m.z), near = d < 0.6
+      if (m.back > 0 && near) m.back -= dt
+      const n = slotStep({ x: m.x, z: m.z, speed: m.speed, moving: m.moving, at: m.at }, to, m.kv + (m.back > 0 && !near ? HURRY : 0), dt, sharedBlocked(p),
+        m.back > 0 ? 0.3 : FORM.heelOff, { x: p.x, z: p.z, r: FORM.keeperR + MANAMAL_R })
+      m.x = n.x; m.z = n.z; m.speed = n.speed; m.moving = n.moving; m.at = n.at ?? 0
     }
     reportFormationPos(FORM_ID, m.x, m.z)
     const dx = m.x - px0, dz = m.z - pz0
