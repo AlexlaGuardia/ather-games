@@ -26,8 +26,8 @@ async function page(owned: string[], grey: number) {
     await p.evaluate(() => (window as any).__ather.travel({ kind: 'glade' })); await poll(() => p.evaluate(() => (window as any).__ather.zone() === 'glade'), 60000); await sleep(4000)
     await p.evaluate(() => (window as any).__ather.open('greg'))
     return poll(async () => { await p.evaluate((l: string) => { const b = [...document.querySelectorAll<HTMLButtonElement>('[data-talk-option]')].find(e => (e.textContent ?? '').includes(l)); b?.click() }, ANSWERS.ground); await sleep(300); return !!(await p.$('[data-panel="greg"]')) }, 20000) }
-  const cells = () => p.evaluate((n: number) => [...document.querySelectorAll<HTMLElement>('[data-panel="greg"] button[title]')].filter(b => b.title !== 'Close').slice(0, n).map(b => ({ t: b.textContent ?? '', title: b.title })), GRID * GRID)
-  const press = (k: number) => p.evaluate((k: number) => { const b = [...document.querySelectorAll<HTMLElement>('[data-panel="greg"] button[title]')].filter(b => b.title !== 'Close')[k]; b?.click() }, k)
+  const cells = () => p.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-panel="greg"] button[title]')].filter(b => /^(Yours|Buy for|Fill |It has to touch|It costs)/.test(b.title)).map(b => ({ t: b.textContent ?? '', title: b.title })))
+  const press = (k: number) => p.evaluate((k: number) => { const b = [...document.querySelectorAll<HTMLElement>('[data-panel="greg"] button[title]')].filter(b => /^(Yours|Buy for|Fill |It has to touch|It costs)/.test(b.title))[k]; b?.click() }, k)
   return { p, go, g, board, cells, press }
 }
 try {
