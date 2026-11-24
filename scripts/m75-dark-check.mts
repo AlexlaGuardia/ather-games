@@ -34,7 +34,7 @@ async function page(seed: (layout: number, squares: string[]) => void) {
   const bagWaymarks = () => A('wmBag') as Promise<number>
   const zoneIs = (z: string, ms = 30000) => poll(async () => (await A('zone')) === z, ms)
   const load = async () => { await p.waitForFunction(() => !!(window as any).__ather?.wm, { timeout: 240000 }); await sleep(4000) }
-  const toWilds = async () => { await A('travel', { kind: 'waymark', w: GREG_WAYMARK }); const z = await zoneIs('wilds', 60000); await poll(async () => ((await A('wmNodes')) ?? []).length > 0, 60000); await sleep(4000); return z }
+  const toWilds = async () => { let z = false; for (let i = 0; i < 12 && !z; i++) { await A('travel', { kind: 'waymark', w: GREG_WAYMARK }); z = await zoneIs('wilds', 5000) };   /* M133: the travel is refused while the index loads ('The Wilds are still loading.'): re-send, same 60 s */ await poll(async () => ((await A('wmNodes')) ?? []).length > 0, 60000); await sleep(4000); return z }
   return { p, A, store, bagWaymarks, zoneIs, load, toWilds }
 }
 
