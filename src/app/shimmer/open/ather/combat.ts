@@ -343,6 +343,12 @@ export function groupPack(c: Combat, ids: number[]): number {
   return id
 }
 
+/** Alex 11-15 (cleared ground stays quiet), held for M120's packs: a Hollow that is only WANDERING never steps from drained
+ *  ground onto cleared ground (a pack's heading, its own wander, a floater's drift, a crawler seeking its kind). A chaser
+ *  still follows the keeper in, and one already standing on cleared ground may walk off it. No drained map = no border. */
+export const holdsBorder = (c: Combat, h: Hollow, x: number, z: number) =>
+  h.state === 'wander' && !!c.drained && c.drained(h.x, h.z) && !c.drained(x, z)
+
 /** Keep the Wilds peopled round the keeper: top up in a ring out of sight, in PACKS (M120), cull the far ones. */
 export function populate(c: Combat, T: Terrain, kx: number, kz: number, target: number, safe?: { x: number; z: number; r: number }, infested?: (x: number, z: number) => boolean) {
   c.hollows = c.hollows.filter(h => Math.hypot(h.x - kx, h.z - kz) < 130)
@@ -389,7 +395,7 @@ function stepPacks(c: Combat, T: Terrain, dt: number) {
     if (P.t <= 0 || Math.hypot(P.wx - cx, P.wz - cz) < 1.5) {
       for (let k = 0; k < 6; k++) {
         const wx = cx + (rnd(c) - 0.5) * 2 * PACK.roam, wz = cz + (rnd(c) - 0.5) * 2 * PACK.roam
-        if (T.walkable(wx, wz)) { P.wx = wx; P.wz = wz; break }
+        if (T.walkable(wx, wz) && (!c.drained || c.drained(wx, wz))) { P.wx = wx; P.wz = wz; break }   // never a heading on cleared ground
       }
       P.t = 5 + rnd(c) * 4
     }
@@ -611,7 +617,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
       const l = Math.hypot(mx, mz) || 1
       const nx = h.x + (mx / l) * speed * dt, nz = h.z + (mz / l) * speed * dt
       // a raised piece is a wall: a Hollow already standing in one (it rose on them) may walk out, never in
-      const out = solidTop(c, h.x, h.z) !== null, free = (x: number, z: number) => T.walkable(x, z) && (out || solidTop(c, x, z) === null) && (!sfree || sfree(x, z))
+      const out = solidTop(c, h.x, h.z) !== null, free = (x: number, z: number) => T.walkable(x, z) && (out || solidTop(c, x, z) === null) && (!sfree || sfree(x, z)) && !holdsBorder(c, h, x, z)
       if (free(nx, nz)) { h.x = nx; h.z = nz }
       else if (free(nx, h.z)) h.x = nx
       else if (free(h.x, nz)) h.z = nz
@@ -631,7 +637,11 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   // keep a crowd from stacking into one body
   for (let a = 0; a < c.hollows.length; a++) for (let b = a + 1; b < c.hollows.length; b++) {
     const A = c.hollows[a], B = c.hollows[b], dx = B.x - A.x, dz = B.z - A.z, d = Math.hypot(dx, dz), min = bodyR(A) + bodyR(B)
-    if (d > 0.001 && d < min) { const p = (min - d) / 2 / d; A.x -= dx * p; A.z -= dz * p; B.x += dx * p; B.z += dz * p }
+    if (d > 0.001 && d < min) {
+      const p = (min - d) / 2 / d, ax = A.x - dx * p, az = A.z - dz * p, bx = B.x + dx * p, bz = B.z + dz * p
+      if (!holdsBorder(c, A, ax, az)) { A.x = ax; A.z = az }   // a crowd held at the border is not shoved over it
+      if (!holdsBorder(c, B, bx, bz)) { B.x = bx; B.z = bz }
+    }
   }
 
   stepChampion(c, T, feet, dt)
@@ -751,10 +761,11 @@ function stepFloater(c: Combat, T: Terrain, h: Hollow, feet: { x: number; y: num
     if (sfree) { const v = steer(sfree, h.x, h.z, mx, mz, STEER_LOOK, (h.sm ??= {}), dt); if (v) { mx = v.x; mz = v.z } }
     const l = Math.hypot(mx, mz) || 1, step = Math.min(speed * dt, l)
     const nx = h.x + (mx / l) * step, nz = h.z + (mz / l) * step
-    const free = (x: number, z: number) => Number.isFinite(T.heightAt(x, z)) && (solidTop(c, h.x, h.z) !== null || solidTop(c, x, z) === null) && (!sfree || sfree(x, z))
+    const free = (x: number, z: number) => Number.isFinite(T.heightAt(x, z)) && (solidTop(c, h.x, h.z) !== null || solidTop(c, x, z) === null) && (!sfree || sfree(x, z)) && !holdsBorder(c, h, x, z)
     if (free(nx, nz)) { h.x = nx; h.z = nz }
     else if (sfree && free(nx, h.z)) h.x = nx   // slide along a wall's face
     else if (sfree && free(h.x, nz)) h.z = nz
+    else if (h.state === 'wander' && !h.pack) h.t = 0   // held at the border: pick another drift
   }
   const want = T.heightAt(h.x, h.z) + FLOATER.hover + Math.sin(h.id + performanceSafeNow(c) * 1.3) * 0.25
   h.y += (want - h.y) * Math.min(1, dt * 3)
