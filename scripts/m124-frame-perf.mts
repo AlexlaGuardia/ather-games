@@ -8,12 +8,13 @@ import { mkdirSync } from 'fs'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games').replace(/\/$/, ''), out = flag('--out', '/tmp/m124-perf'), gl = flag('--gl', 'swiftshader'), secs = Number(flag('--secs', '20'))
 mkdirSync(out, { recursive: true })
+// Only the Vulnyx (fox) and the Manalotl (axolotl) have 3D models; every other species draws a cheap orb, so this uses those two.
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const BEDS = Array.from({ length: 8 }, (_, k) => ({ id: `p${k}`, item: 'spirit_planter', x: -142 + (k % 4) * 3, z: 100 + Math.floor(k / 4) * 3, q: 0, placedAt: 1 }))
-const SP = ['fox', 'axolotl', 'owl', 'bat', 'frog', 'turtle', 'rabbit', 'firefly'], at0 = Date.now() - 20 * 86400000
+const SP = ['fox', 'axolotl', 'fox', 'axolotl', 'fox', 'axolotl', 'fox', 'axolotl'], at0 = Date.now() - 20 * 86400000
 const pot = (sp: string, k: number) => ({ seed: `mana_seed_${sp}`, at: at0 + k, v: 2, tends: [], bloomed: true })
 const ONE = { p0: pot('fox', 0) }
-const MANY = { ...Object.fromEntries(SP.map((s, k) => [`p${k}`, pot(s, k)])), 'p0#2': pot('axolotl', 20), 'p1#2': pot('fox', 21), 'p2#2': pot('rabbit', 22) }
+const MANY = { ...Object.fromEntries(SP.map((s, k) => [`p${k}`, pot(s, k)])), 'p0#2': pot('axolotl', 20), 'p1#2': pot('fox', 21), 'p2#2': pot('axolotl', 22) }
 const TUT = { v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null, m70: 'none', m70node: null, m70side: 'none', folded: true }
 const glArgs = gl === 'd3d12' ? ['--use-gl=angle', '--use-angle=gl-egl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'] : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
 const errs: string[] = []
