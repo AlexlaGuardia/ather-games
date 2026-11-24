@@ -59,9 +59,11 @@ try {
   type Pan = { axes: Record<string, number>; growth: number | null; text: string; w: number; overflow: boolean }
   async function panel(): Promise<Pan | null> {
     for (let k = 0; k < 10; k++) {
+      // M126 s4: a FOLLOWING spirit's place comes along with the keeper, so a tp beside her sends her off again; stand still, let her
+      // settle, then turn and aim from there (a player's case)
+      await sleep(3000)
       const t = await p.evaluate(() => { const q = (window as any).__spiritModel?.trots?.fox; return q ? { x: q.x, z: q.z, y: q.y, h: q.h } : null }) as { x: number; z: number; y: number; h: number } | null
       if (!t) { await sleep(500); continue }
-      await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 1.5, 0), t.x, t.z)
       await aimAt(p, t.x, t.z, t.y - (await p.evaluate((x, z) => (window as any).__ather.ground(x, z), t.x, t.z) as number) + t.h * 0.5, 4)
       await p.keyboard.press('e'); await sleep(900)
       if ((await opts()).length) {
