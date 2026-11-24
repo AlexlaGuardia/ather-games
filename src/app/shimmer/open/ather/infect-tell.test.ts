@@ -72,7 +72,7 @@ t2 = heardSay(t2, say, 1); same([t2.heard, t2.met], [[1], [A, B]], 'the thanks s
   ok(due(parseTell(JSON.parse(JSON.stringify(tt)), 2), purge(x, 2), name) === null, 'not again next season') }
 { const lostOne = { ...freshInfection(1), lost: [A], told: 0, assigned: 1 }, n = begin(purge(lostOne, 2), 's2-1', t0), nt = parseTell({ ...freshTell(1), said: ['lost:x'], heard: [3], clueOf: { [A]: 1 }, met: [A] }, 2)
   same([nt.said, nt.clueOf, nt.met, nt.heard], [[], {}, [], [3]], 'the purge: places go, heard clues stay'); same([n.active!.clue, carried(n), refugees(nt, n, () => folkOf(P(A), 1)).length], [2, [1], 0], 'carried across the season, its folk\'s place gone')
-  same(heardSay(t, settlerSay(t, s2, B, true, [])!, 1).heard, [1], 'a resident\'s clue counts as heard'); same(settlerSay(nt, n, 's2-1', true, [])!.lines, [INFECT_CLUE[0].folk], 'a resident never says the opener: told by the place\'s spokesman') }
+  same(heardSay(nt, settlerSay(nt, n, 's2-1', true, [])!, 1).heard, [3, 1], 'a resident\'s clue counts as heard'); same(settlerSay(nt, n, 's2-1', true, [])!.lines, [INFECT_CLUE[0].folk], 'a resident never says the opener: told by the place\'s spokesman') }
 // ── the talk ──
 { const folk = folkOf(P(A), 1), act = (seen: unknown[]): FolkTalkActs => ({ go: x => { seen.push(x) }, give: () => {}, recruit: () => {}, bye: () => {} }), c = { folk, home: folk, trust: freshTrust(), have: () => 0, room: 1 }, st = { fid: folk[0].id, screen: 'hello' as const }, seen: any[] = []
   const plain = folkTalk(c, st, act([])); ok(plain.line === folk[0].dream, 'off: the dream'); same(folkTalk({ ...c, infect: null }, st, act([])), plain, 'null = the old talk')
