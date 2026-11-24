@@ -206,6 +206,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 13:2x Alex (TALK): "Yelp agreed on your tensacia, and what if we add a new biome the sadlands a dry area with whitesand and blue clay and settlement here the tensacia groves are like an oasis in the desert with a water source, finding a stream and following it might be a guide maybe even some unique rinn to catch here"
 - 11-24 13:1x Alex (dull edge): "Yea once the durability runs out the edge breaks away and will have to be replaced" -> M134
 - 11-24 13:0x Alex on the new Vulnyx sheet (B recommended): "Actually that's soooo much better nice work vulnyx approved" -> M102 (B)
 - 11-24 12:4x Alex (M136): "if the player clicks or interacts with a node it should latch on and as long as the player stays in range the pruner/pick does the work but if the player leaves the range, swaps to weapons or just runs out of mana the visible progress bar should keep track of it but the time it takes the tree to reset should kick on as soon as the player picked that node"
