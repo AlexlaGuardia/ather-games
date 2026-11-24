@@ -8,8 +8,8 @@ import { loneTree, loneRaw } from './lib/lone-tree.mts'
 import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m136t'); mkdirSync(out, { recursive: true })
-// the long one (30 mana and up, worn) for every way of letting go; the Goldwood (5) for the yield
-const tree = loneTree('shimmeroak', 7), gold = loneTree('goldwood', 12), crystal = loneRaw()
+// the long one (Starwillow: 300 mana, worn) for every way of letting go; the Goldwood (5) for the yield
+const tree = loneTree('starwillow', 7), gold = loneTree('goldwood', 12), crystal = loneRaw()
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(c ? '  ok  ' : '  FAIL', m); if (!c) fails++ }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -17,6 +17,7 @@ const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: pro
 const p = await br.newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true })
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 await p.evaluateOnNewDocument(() => {
+  const real = Date.now.bind(Date); (window as any).__skip = 0; Date.now = () => real() + (window as any).__skip
   const mm = window.matchMedia.bind(window); window.matchMedia = q => (/coarse/.test(q) ? { ...mm('all'), matches: true, addEventListener() {}, removeEventListener() {} } as any : /any-pointer: fine/.test(q) ? { ...mm('all'), matches: false, addEventListener() {}, removeEventListener() {} } as any : mm(q))   // a phone
   localStorage.setItem('ather:shimmer:birthRune', 'star')
   localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }))
@@ -45,6 +46,7 @@ const go = async (s: Spot) => {
 const begin = async (s: Spot) => { for (let i = 0; i < 12; i++) { await look(s); await frame(); await frame(); if ((s.node === 'tree' ? await A('aim()') : (await A<{ id: string } | null>('crystal()'))?.id) !== s.id) continue; await A(s.node === 'tree' ? 'prune()' : 'mine()'); return } }
 /** run it and end it `how`; every frame on record */
 const ran = async (s: Spot, how: string, end: (() => Promise<unknown>) | null, name: string) => {
+  if (s.node === 'crystal') await p.evaluate(() => { (window as any).__skip += 20 * 60000 })   // a fresh crystal each time (7 mana: one run can finish it)
   await rec(); await begin(s)
   for (let i = 0; i < 12; i++) { await frame(); if (await A('tether()')) break }
   if (name) await shot(name)
