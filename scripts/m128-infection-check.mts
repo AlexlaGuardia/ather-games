@@ -64,8 +64,9 @@ async function open(owner: boolean, seed: { save?: unknown; waymark?: unknown })
     await poll(async () => !!(await place(s)).stall, 30000); await p.mouse.click(200, 420); await sleep(800)
     const sp = stallSpot(s), fx = Math.sin(sp.yaw), fz = Math.cos(sp.yaw); let o: string[] = []
     for (let k = 0; k < 8 && !o.length; k++) {
-      await p.evaluate((x, z, y) => { const g = (window as any).__ather; const c = g.combat?.(); if (c) { c.hollows.length = 0; c.keeper.hp = c.keeper.maxHp } g.tp(x, z, y); g.look(y, -Math.atan2(1.1, 2.2)) }, sp.x + fx * 2.2, sp.z + fz * 2.2, Math.atan2(fx, fz)); await sleep(1500)
+      await p.evaluate((x, z, y) => { const g = (window as any).__ather; const c = g.combat?.(); if (c) { c.hollows.length = 0; c.keeper.hp = c.keeper.maxHp } g.tp(x, z, y); g.look(y, -Math.atan2(1.1, 2.2)) }, sp.x + fx * (2.2 - (k % 3) * 0.3), sp.z + fz * (2.2 - (k % 3) * 0.3), Math.atan2(fx, fz)); await sleep(2500)
       await p.keyboard.press('KeyE'); await p.mouse.move(5, 5); await poll(async () => (await opts()).length > 0, 6000); o = await opts()
+      if (o.length && (await p.evaluate(() => (window as any).__folkTalk?.on)) !== burrfolkOf(s, net.season, folkOf(s, net.season))!.id) { await p.keyboard.press('Escape'); await sleep(1500); o = [] }   // E took a Moglin beside it: stand again
       if (!o.length) { await p.screenshot({ path: `${out}/stall-miss-${k}.png` }); console.log(`  stall miss ${k}: ${JSON.stringify(await p.evaluate(() => document.body.innerText.slice(-300).replace(/\s+/g, ' ')))}`) }
     }
     await p.keyboard.press('Escape'); await sleep(1200); return o
