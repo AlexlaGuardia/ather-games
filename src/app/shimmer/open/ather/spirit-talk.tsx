@@ -13,6 +13,7 @@ import { StatRadar } from './moglin-card-view'
 import { SpiritAvatar } from './spirit-model'
 import { spiritModelFor } from './spirit-models'
 import { spiritSheet } from './spirit-sheet'
+import { GROWTH_LABEL } from './spirit-growth'   // M118 s1: the growth bar's label
 import { loadStats, subscribeStats } from './spirit-stats'   // M110 s1: her trained stats
 import { isFollowing, setFollowing, spiritHeld, spiritLive, subscribeFollow } from './spirit-follow'
 import { SPECIES_NAMES } from '../../spirits/spirit'
@@ -81,6 +82,13 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
           <StatRadar phone={phone} attr="spirit" ink={ink}
             axes={sheet.axes.map(a => ({ key: a.stat, label: a.label, reach: a.reach, mark: String(a.value), tint: H.ink }))} />
         </div>
+        {/* M118 s1: her growth bar (levels hidden: a fill, never a number). Label = lark's UNSIGNED draft (aa22eef). */}
+        <div data-spirit-growth={sheet.growth.toFixed(3)} className="mt-3" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="text-[13px] font-bold" style={{ color: H.inkSoft }}>{GROWTH_LABEL}</span>
+          <div style={{ flex: 1, height: 8, borderRadius: 4, background: 'rgba(58,39,22,.12)', overflow: 'hidden' }}>
+            <div style={{ width: `${Math.round(sheet.growth * 100)}%`, height: '100%', background: H.ember, transition: 'width .4s' }} />
+          </div>
+        </div>
         <div className="mt-3 mb-1.5 text-[13px] font-bold" style={{ color: H.inkSoft }}>Moves</div>
         {sheet.moves.length ? (
           <div data-spirit-moves style={{ display: 'grid', gap: 4 }}>
@@ -89,7 +97,7 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
                 style={{ background: 'rgba(255,250,240,.6)', boxShadow: 'inset 0 0 0 1px rgba(58,39,22,.14)' }}>
                 <span style={{ fontWeight: 700, color: H.ink }}>{m.name}</span>
                 <span style={{ marginLeft: 'auto', color: H.inkFaint, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                  {m.power ? `${m.power}` : '·'} · Lv {m.level}</span>
+                  {m.power ? `${m.power}` : '·'}</span>
               </div>
             ))}
           </div>

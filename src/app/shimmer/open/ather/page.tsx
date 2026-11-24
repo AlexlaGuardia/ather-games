@@ -23,7 +23,7 @@ import { usePartyBrew } from './party-brew-net'   // M57 s3b
 import { BrewingPanel } from './brewing-panel'
 import { FURNITURE } from './furniture'
 import { AnemonyxIfHere, anemonyxPick, anemonyxHere, meetToday } from './anemonyx-view'   // M76 s2
-import { useBook } from './spirit-panels'
+import { useBook, getPots } from './spirit-panels'
 import { seenCount } from './grimoire-book'
 import type { AlcStation } from './alchemy-set'
 import { useParty, storedParty } from '@/lib/party'
@@ -111,7 +111,11 @@ import { startFall, stepFall, type FallState } from './void-fall'
 import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
 import { useFolkTalk } from './use-folk-talk'
 import { useSpiritTalk, type SpiritTalkState } from './spirit-talk'   // M109 s1: E at a garden spirit (owner + ?spirits=3d)
-import { liveSpirits, setKeeperAt } from './spirit-follow'
+import { liveSpirits, setKeeperAt, followIds } from './spirit-follow'
+import { inParty } from './spirit-party'   // M118 s1: party spirits walking with the keeper grow from her fights
+import { fightExp } from './spirit-stats'
+import { GROWTH, grownLine } from './spirit-growth'
+import { speciesOf } from './seed-items'
 import { SPECIES_NAMES } from '../../spirits/spirit'
 import { useMeleeReady, lastSwingAt, lastSwingAction } from './melee-view'
 import { reportAway } from './away-report'
@@ -586,6 +590,12 @@ function AtherSliceGame() {
   const gardenRef = useRef(garden); gardenRef.current = garden
   const onCombat = useCallback((evs: CombatEvent[]) => {
     let got = 0
+    // M118 s1: Hollows dispersed with party spirits walking beside the keeper fill their growth bars (canon c01931e/05f3d0d)
+    const exp = evs.reduce((n, e) => n + (e.kind === 'hit' && e.killed ? GROWTH.KILL_EXP : e.kind === 'champ-down' ? GROWTH.CHAMP_EXP : 0), 0)
+    if (exp > 0) {
+      const beside = followIds().filter(inParty), grew = fightExp(beside, exp)
+      if (grew.length) { const pots = getPots(); setToast(grew.map(id => { const p = pots[id]; return grownLine(p ? SPECIES_NAMES[speciesOf(p.seed)] : 'Your spirit') }).join(' ')) }
+    }
     for (const e of evs) {
       if (e.kind === 'pickup') { got += e.amount; sfx('pickup-grey-matter') }
       if (e.kind === 'reload-dry') { const t = performance.now() / 1000; if (t - dryAt.current > 2) { dryAt.current = t; hudSay(RELOAD_DRY_LINE, 'info') } }   // M78
