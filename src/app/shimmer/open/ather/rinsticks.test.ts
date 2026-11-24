@@ -1,7 +1,7 @@
 // Run: npx tsx src/app/shimmer/open/ather/rinsticks.test.ts
-// Rinsticks at the Rinnshop (ather/rinsticks.ts). Canon pins: built from rinn (every recipe's first inputs are catches), the
-// default never wears, upgrades do; the reel's zone widens with the tier and never past a felt step.
-import { RINSTICKS, EASE_BY_TIER, easeOf, xpOf, makeRinstick, wearRinstick, rinstickName } from './rinsticks'
+// Rinsticks at the Rinnshop (ather/rinsticks.ts). Canon pins: built from rinn (every recipe's first inputs are catches), no
+// rinstick wears (M133); the reel's zone widens with the tier and never past a felt step.
+import { RINSTICKS, EASE_BY_TIER, easeOf, xpOf, makeRinstick, rinstickName } from './rinsticks'
 import { TOOL_DEFS, ensureBasicTools, makeBasicTool } from '../../engine/tools'
 import { freshWorks, type Works, type Room } from './rooms'
 import { newInv, give, countOf, ITEM_GROUP, OPEN_ITEMS, type Inv } from '../shared/inventory'
@@ -28,17 +28,11 @@ ok(!makeRinstick(W, room.id, newInv(12), T0, 'basic_rinstick').ok, 'make: built 
 ok(!makeRinstick(W, room.id, bag(['clickclaw', 4], ['shimmerscale', 4]), T0, 'worn_rinstick').ok, 'make: made the free starter')
 const best = { ...T0, rinning: { toolId: 'moonkoi_rinstick', usesRemaining: 50 } }
 const down = makeRinstick(W, room.id, bag(['clickclaw', 4]), best, 'basic_rinstick')
-ok(!down.ok && /better/.test(down.why), 'make: threw away a better rinstick for a worse one')
+ok(!down.ok && down.why === 'Your Moonkoi Rinstick is better.', 'M133: a lower tier not plainly refused: ' + JSON.stringify(!down.ok && down.why))
+const again = makeRinstick(W, room.id, bag(['clickclaw', 9]), { ...T0, rinning: { toolId: 'basic_rinstick', usesRemaining: 3 } }, 'basic_rinstick')
+ok(!again.ok && again.why === 'You already have the Basic Rinstick.', 'M133: the same rinstick again is not refused as owned')
 const carp: Room = { ...room, id: 'carp', kind: 'carpentry' }
 ok(!makeRinstick({ ...W, rooms: [carp] }, 'carp', bag(['clickclaw', 4], ['shimmerscale', 4]), T0, 'basic_rinstick').ok, 'make: a rinstick made outside the Rinnshop')
-// wear
-const two = { ...T0, rinning: { toolId: 'basic_rinstick', usesRemaining: 2 } }
-const w1 = wearRinstick(two)
-ok(w1.tools.rinning?.usesRemaining === 1 && w1.broke === null, 'wear: one landed rinn did not cost one use')
-const w2 = wearRinstick(w1.tools)
-ok(w2.broke === 'Basic Rinstick' && w2.tools.rinning?.toolId === 'worn_rinstick', 'wear: a spent rinstick did not hand back the worn one')
-const wb = wearRinstick(T0)
-ok(wb.broke === null && wb.tools.rinning?.usesRemaining === T0.rinning!.usesRemaining, 'wear: the worn rinstick wore')
 ok(rinstickName(T0.rinning) === 'Worn Rinstick', 'name: the starter is not the Worn Rinstick')
 if (fails.length) { console.error(`rinsticks: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`rinsticks: ${pass}/0`)

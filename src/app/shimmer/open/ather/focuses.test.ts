@@ -1,7 +1,7 @@
 // Run: npx tsx src/app/shimmer/open/ather/focuses.test.ts
 // Blades + spikes (ather/focuses.ts, BETA M17): the engine's ladder at its bench, the rungs (M136; costs per node are channel.test's),
-// the xpBonus, wear per node, and the worn starter back when a focus wears out.
-import { FOCUSES, BENCH, rungOf, reachOf, bonusXp, makeFocus, wearFocus, focusName } from './focuses'
+// the xpBonus, the bench's refusals at or below the tier in hand, and that nothing wears (M133).
+import { FOCUSES, BENCH, rungOf, reachOf, bonusXp, makeFocus, ownedWhy, focusName } from './focuses'
 import { TOOL_DEFS, ensureBasicTools, makeBasicTool } from '../../engine/tools'
 import { freshWorks, type Works, type Room } from './rooms'
 import { newInv, give, countOf, OPEN_ITEMS, type Inv } from '../shared/inventory'
@@ -31,15 +31,16 @@ ok(!makeFocus(W, mason.id, bag(['goldwood_plank', 9], ['goldwood_bark', 9]), T0,
 ok(!makeFocus(W, carp.id, bag(['goldwood_plank', 1]), T0, 'goldwood_blade').ok, 'make: short inputs not refused')
 const s = makeFocus(W, mason.id, bag(['raw_mana_shard', 8]), T0, 'mana_spike')
 ok(s.ok && s.tools.prospecting?.toolId === 'mana_spike' && countOf(s.inv, 'raw_mana_shard') === 0, 'make: the Mana Spike at the Stonery')
+// M133: tools are permanent, so the bench refuses (spending nothing) a lower tier and the same one again; a higher one is made
+const full = bag(['goldwood_plank', 9], ['goldwood_bark', 9])
 const better = { ...T0, forestry: { toolId: 'shimmeroak_blade', usesRemaining: 4, xpBonus: 1.2 } }
-const down = makeFocus(W, carp.id, bag(['goldwood_plank', 9], ['goldwood_bark', 9]), better, 'goldwood_blade')
-ok(!down.ok && /better/.test(down.why), 'make: a downgrade over a better focus with uses left is not refused')
-
-ok(wearFocus(T0, 'forestry').tools === T0 && wearFocus(T0, 'forestry').broke === null, 'wear: the worn starter wore')
-const one = { ...T0, forestry: { ...gold, usesRemaining: 2 } }
-const w1 = wearFocus(one, 'forestry'), w2 = wearFocus(w1.tools, 'forestry')
-ok(w1.tools.forestry?.usesRemaining === 1 && w1.broke === null, 'wear: one node, one use')
-ok(w2.broke === 'Goldwood Pruner' && w2.tools.forestry?.toolId === worn.toolId, 'wear: worn out did not hand the worn starter back')
+const down = makeFocus(W, carp.id, full, better, 'goldwood_blade')
+ok(!down.ok && down.why === 'Your Shimmeroak Pruner is better.', 'M133: a lower tier is not plainly refused: ' + JSON.stringify(!down.ok && down.why))
+const same = makeFocus(W, carp.id, full, { ...T0, forestry: gold }, 'goldwood_blade')
+ok(!same.ok && same.why === 'You already have the Goldwood Pruner.', 'M133: the same tier again is not refused as owned')
+ok(ownedWhy(gold, 'shimmeroak_blade') === null && ownedWhy(worn, 'goldwood_blade') === null && ownedWhy(undefined, 'goldwood_blade') === null, 'M133: an upgrade refused')
+const upIn = TOOL_DEFS.shimmeroak_blade.recipe.reduce<Inv>((a, c) => give(a, c.itemId, c.count).inv, newInv(16))
+ok(makeFocus(W, carp.id, upIn, { ...T0, forestry: gold }, 'shimmeroak_blade').ok, 'M133: the next tier up is not made over the one in hand')
 
 // BETA M69 (Magii 43fef80 #5): the forestry tool is a PRUNER. Ids stay *_blade so saves keep their tool (no migration);
 // every name a player reads says pruner, never blade.

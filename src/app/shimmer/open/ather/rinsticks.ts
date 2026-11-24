@@ -1,19 +1,19 @@
 // RINSTICKS AT THE RINNSHOP (2026-11-17, play / Jin 30bbef32). Canon (game/shimmer-skilling.md › Rinsticks + Skill 4, the
-// 11-16 re-amendment): a rinstick is BUILT FROM RINN (kin calls to kin); the default never breaks, upgrades carry durability;
+// 11-16 re-amendment): a rinstick is BUILT FROM RINN (kin calls to kin); no tool breaks (M133, Alex 11-24);
 // the rinn can get away and the reel is a skill; Jin's: "what the rinstick tier eases". The ladder, names, recipes,
 // durability and XP bonus are the engine's (engine/tools.ts › TOOL_DEFS, the table play3d + voxel craft from).
 //
 // ★ WHAT A BETTER RINSTICK DOES HERE: it WIDENS THE REEL'S ZONE (shared/reel.ts › newReel's `ease`), so a rinn's pattern is
 //   easier to follow, and it lifts Rinning XP by its own xpBonus. It never makes a rinn bite more or land itself: the keeper
-//   still listens to the pattern (canon: asking, not tricking). Each LANDED rinn wears it one use; a rinn that gets away
-//   costs the stick nothing (the line never parts). Worn out → the worn starter is back in hand, never empty-handed.
+//   still listens to the pattern (canon: asking, not tricking). PERMANENT (M133): no rinn, landed or gone, wears the stick.
 // ★ A rinstick is EQUIPPED, not a bag item: the keeper holds bait and the rinstick comes out (rinning.ts). Saved per keeper
 //   (open.tools.v1, keeper-key-specs), with the forestry/prospecting focuses riding the same record for when they upgrade.
 import { loadTut, socketLit } from './glade-tutorial'
-import { TOOL_DEFS, ensureBasicTools, makeBasicTool, type EquippedTool, type EquippedTools } from '../../engine/tools'
+import { TOOL_DEFS, ensureBasicTools, type EquippedTool, type EquippedTools } from '../../engine/tools'
 import { keeperKey } from '@/lib/keeper-local'
 import { countOf, take, type Inv } from '../shared/inventory'
 import { roomStore, type Works } from './rooms'
+import { ownedWhy } from './focuses'
 import { migrate, fresh, hasStick, RINQUEST_KEY, type RinQuest } from './rinquest'
 
 export const RINSTICKS = ['basic_rinstick', 'glowfin_rinstick', 'moonkoi_rinstick'] as const
@@ -26,13 +26,13 @@ export const xpOf = (t: EquippedTool | undefined, xp: number) => Math.round(xp *
 export const rinstickName = (t: EquippedTool | undefined) => (t ? TOOL_DEFS[t.toolId]?.name ?? 'rinstick' : 'rinstick')
 
 export type Make = { ok: true; works: Works; inv: Inv; tools: EquippedTools } | { ok: false; why: string }
-/** Make + equip a rinstick at the Rinnshop bench: the rinn come from the room's store first, then the bag. Refused while a
- *  BETTER rinstick still has uses (a downgrade would throw it away); the same tier again is a fresh one (a re-make). */
+/** Make + equip a rinstick at the Rinnshop bench: the rinn come from the room's store first, then the bag. Refused,
+ *  spending nothing, at or below the tier in hand (focuses.ts › ownedWhy). */
 export function makeRinstick(w: Works, roomId: string, inv: Inv, tools: EquippedTools, id: string): Make {
   const def = TOOL_DEFS[id], r = w.rooms.find(x => x.id === roomId)
   if (!def || def.skillId !== 'rinning' || def.basic || !r || r.kind !== 'rinnshop') return { ok: false, why: '' }
-  const cur = tools.rinning
-  if (tierOf(cur) > def.tier) return { ok: false, why: `Your ${rinstickName(cur)} is better. Use it up first.` }
+  const owned = ownedWhy(tools.rinning, id)
+  if (owned) return { ok: false, why: owned }
   let stacks = roomStore(r).stacks.map(s => ({ ...s })), bag: Inv | null = inv
   for (const c of def.recipe) {
     const inStore = stacks.reduce((a, s) => a + (s.id === c.itemId ? s.n : 0), 0)
@@ -46,16 +46,6 @@ export function makeRinstick(w: Works, roomId: string, inv: Inv, tools: Equipped
   return { ok: true, works: { ...w, rooms: w.rooms.map(x => (x.id === roomId ? { ...x, store: stacks } : x)) }, inv: bag!, tools: { ...tools, rinning: fresh } }
 }
 
-/** A landed rinn wears the rinstick one use. Returns the new tools and, when it wore out, its name (the worn one is back). */
-export function wearRinstick(tools: EquippedTools): { tools: EquippedTools; broke: string | null } {
-  const t = tools.rinning
-  if (!t || TOOL_DEFS[t.toolId]?.basic) return { tools, broke: null }
-  const left = t.usesRemaining - 1
-  if (left > 0) return { tools: { ...tools, rinning: { ...t, usesRemaining: left } }, broke: null }
-  // the worn starter comes back only to a keeper who earned it (M22); an unearned keeper is empty-handed again
-  return { tools: { ...tools, rinning: hasStick(loadQuest()) ? makeBasicTool('rinning') ?? undefined : undefined }, broke: rinstickName(t) }
-}
-
 export const TOOLS_KEY = 'open.tools.v1'
 /** fired after the Rinnshop bench equips a rinstick, so the page (which holds the live tools) reloads them */
 export const TOOLS_EVENT = 'open:tools'
@@ -64,7 +54,7 @@ export function loadTools(): EquippedTools {
   try {
     const v = JSON.parse(localStorage.getItem(keeperKey(TOOLS_KEY)) ?? 'null')
     if (v && typeof v === 'object') for (const [k, t] of Object.entries(v) as [keyof EquippedTools, EquippedTool][])
-      if (t && TOOL_DEFS[t.toolId]?.skillId === k && Number.isFinite(t.usesRemaining) && t.usesRemaining > 0) out[k] = t
+      if (t && TOOL_DEFS[t.toolId]?.skillId === k) out[k] = { ...t, usesRemaining: TOOL_DEFS[t.toolId].durability }   // M133: permanent; a part-used tool from an older save is whole
   } catch { /* fresh */ }
   ensureBasicTools(out)
   // M68 s3a: a live tutorial keeper's spike + pruner sockets start EMPTY (Otto / Bonn light them, glade-friend-talk.ts);

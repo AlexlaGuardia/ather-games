@@ -130,7 +130,7 @@ import { AngelicaDeskPanel, sideItemName, haveOf } from './m70-desk-panel'   // 
 import { GLEANER_POST, GLEANER_POST_R, BURR_CAMP, CAMP_LABEL } from './gleaner'   // M112 s2
 import { aimPick, lookDir, type Pickable } from '../shared/aim-pick'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
-import { canPlant, plant, lift, loadWaymarks, saveWaymarks, groundOf, canTravel, isLit, lastLit, GREG_WAYMARK, MAX_WAYMARKS, type Waymark, type PlantVerdict } from './waymarks'
+import { canPlant, plant, lift, loadWaymarks, saveWaymarks, groundOf, canTravel, isLit, lastLit, WAY_TEXT, GREG_WAYMARK, MAX_WAYMARKS, type Waymark, type PlantVerdict } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { WildsSpirits, useSpiritFight } from './wilds-spirits'   // M127 s1
 import { CombatLayer, type CombatHud, type SightLink } from './combat-layer'
@@ -160,7 +160,7 @@ import { QuestGuide } from '../quest-guide'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take, itemDef, countOf, NO_BAIT_LINE } from '../shared/inventory'
 import { isDish, healOf } from './cooking'
-import { loadTools, saveTools, easeOf, xpOf, wearRinstick, TOOLS_EVENT } from './rinsticks'
+import { loadTools, easeOf, xpOf, TOOLS_EVENT } from './rinsticks'
 import { useRinQuest, fennelTalk, FENNEL_NAME } from './use-rinquest'
 import { noStickLine, hasStick, fennelHere } from './rinquest'
 import { Fennel, fennelSpot, FENNEL_HEAD } from './fennel'
@@ -171,7 +171,7 @@ import type { FennelCursor } from './glade-fennel-talk'
 import { MoonwellPool } from './moonwell-quest'
 import { frameStats } from '../shared/keeper-look'
 import { getLook } from '../shared/look-store'
-import { rungOf, bonusXp, wearFocus } from './focuses'
+import { rungOf, bonusXp } from './focuses'
 import { isPotion, drink, buffOn, loadBuffs, saveBuffs, BUFF_NAME, STARLIGHT_XP, WISDOM_XP, OPEN_FLOW_MULT, type Buffs, type BuffId } from './alchemy'
 import { BAIT, rollRinn, type Rinn } from './rinning'
 import { RinningFX, type RinningApi } from '../shared/rinning-fx'
@@ -978,17 +978,17 @@ function AtherSliceGame() {
     const v = canPlant(waymarks, { tile: t.name, x: lx, z: lz, biome, grounded: p.grounded, swimming: p.swimming, settlement: st?.id ?? null, ground, folded: gardenOpen(loadTut()) })
     if (!v.ok) { setToast(v.why); return v }
     const spent = take(getInv(), 'waymark', 1)          // a waymark is a thing in the bag now: planting spends one
-    if (!spent) { const why = 'No waymarks in your bag. Lift one you planted to carry it again.'; setToast(why); return { ok: false, why } }
+    if (!spent) { const why = WAY_TEXT.none; setToast(why); return { ok: false, why } }
     setInv(spent)
     const next = plant(waymarks, { tile: t.name, x: lx, y: ww.heightAt(p.x, p.z), z: lz, biome, ...(st ? { settlement: st.id } : owner ? { node: owner } : {}) })
     setWaymarks(next); saveWaymarks(next)
-    setToast(`Waymark bound in ${st?.name ?? 'the Wilds'}. It is a stop on the fold map now.`)
+    setToast(WAY_TEXT.planted(st?.name ?? 'the Wilds'))
     return v
   }, [zone, ww, waymarks, nodeOwner, infectedSet])
   const liftWaymark = useCallback((id: string) => {
     const next = lift(wayRef.current, id); setWaymarks(next); saveWaymarks(next)
     const back = give(getInv(), 'waymark', 1); setInv(back.inv)
-    setToast(back.left ? 'Waymark lifted, but your bag is full: it went back to the fold.' : 'Waymark lifted. It is back in your bag.')
+    setToast(back.left ? WAY_TEXT.liftedFull : WAY_TEXT.lifted)
   }, [])
   // M75 probes (m75-waymark-check): the ledger, plant/lift through the same paths as click/L, the ground word where the keeper
   // stands, kept/infected ground nearby. wmGoto + wmClearHere + wmGrey/wmClear (M75 s2) are CHECK-ONLY (like grant): set down at a Wilds point, clear its node.
@@ -1103,11 +1103,9 @@ function AtherSliceGame() {
     setInv(inv); sfx('pickup-item'); knock(ch, true)
     const x = ch.node === 'tree' ? pruneCommit(ch.t.kind, ch.t.id, Date.now(), fin.until) : mineCommit(ch.c.kind, ch.c.id, Date.now(), fin.until)
     const skill = ch.node === 'tree' ? 'Forestry' : 'Prospecting', sk = ch.node === 'tree' ? 'forestry' : 'prospecting'
-    // M17: the focus's xpBonus on top of the node's XP, and the node wears it one use (worn out = the worn starter back)
+    // M17: the focus's xpBonus on top of the node's XP (M133: tools are permanent, nothing wears)
     const extraXp = bonusXp(toolsRef.current[sk], x.xp); if (extraXp > 0) { const up2 = addOpenXp(sk, extraXp); if (up2 && !x.levelUp) x.levelUp = up2 }
     x.xp += extraXp
-    const wore = wearFocus(toolsRef.current, sk); toolsRef.current = wore.tools; saveTools(wore.tools)
-    if (wore.broke) hudSay(`Your ${wore.broke} wore out. The worn one is back in hand.`, 'item', 6)
     const names = ch.w.drops.filter(d => d.n > 0).map(d => `${d.n > 1 ? d.n + ' × ' : ''}${itemDef(d.id).name}`)
     const ex = ch.w.extra as { found?: string; perk?: string } | string | undefined
     const perk = typeof ex === 'string' ? ex : ex?.perk
@@ -1197,8 +1195,7 @@ function AtherSliceGame() {
     const perk = perkBonus('rinning')   // Truesight (Embermole / Prismstrike): a second of the same rinn
     const g = give(getInv(), rn.id, perk ? 2 : 1); setInv(g.inv)
     const xp = xpOf(toolsRef.current.rinning, rn.xp), up = addOpenXp('rinning', xp)
-    const worn = wearRinstick(toolsRef.current); toolsRef.current = worn.tools; saveTools(worn.tools)   // a landed rinn wears the rinstick
-    setToast(`${perk ? `${perk}! 2 × ` : ''}${rn.name}${g.left ? ' (bag full)' : ''} · +${xp} Rinning${up ? `. Rinning ${up}!` : ''}${worn.broke ? `. Your ${worn.broke} wore out. The worn one is back in hand.` : ''}`)
+    setToast(`${perk ? `${perk}! 2 × ` : ''}${rn.name}${g.left ? ' (bag full)' : ''} · +${xp} Rinning${up ? `. Rinning ${up}!` : ''}`)
   }, [])
   // 11-16: the rinn can get away. The bait is spent; nothing else is lost.
   const onGone = useCallback((rn: Rinn) => setToast(`It got away. A ${rn.name.toLowerCase()}, by the way it moved.`), [])
@@ -1396,7 +1393,7 @@ function AtherSliceGame() {
     })
     if (tut && foldC) return foldNode(tut, foldC, {
       grey: () => gardenRef.current.grey,
-      pay: (t, grey) => { const g = { ...gardenRef.current, grey }; setGarden(g); saveGarden(g); setTut(t); hudSay(`Garden folded. ${grey} grey matter left.`, 'item') },   // garden first, then the flag
+      pay: (t, grey) => { const g = { ...gardenRef.current, grey }; setGarden(g); saveGarden(g); setTut(t); hudSay(FOLD_TEXT.folded(grey), 'item') },   // garden first, then the flag
       go: s => { setFoldC(s); if (!s) setPanel(null) },
       home: () => goHome(),
       buy: grey => buyWaymark(grey),

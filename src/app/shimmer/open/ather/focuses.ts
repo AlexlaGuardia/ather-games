@@ -5,10 +5,11 @@
 // ★ WHAT A TIER DOES (M136, Alex 11-24; it replaced the double-mana penalty): a RUNG. The worn starter and the first crafted tier
 //   are rung 1 (the first crafted tier only adds its xpBonus), the second rung 2, the third rung 3. gather-dials.ts says what a
 //   node takes at each rung: a struggle one rung low, out of reach on regen alone two low. Plus the focus's xpBonus.
-//   Each node finished wears it one use; worn out = the worn starter back in hand, never empty-handed.
+// ★ PERMANENT (M133, Alex 11-24): a focus is made once and never wears or breaks. `usesRemaining` stays in the save record
+//   (the old voxel engine shares the type) but nothing in the open world counts it down or reads it.
 // ★ WHICH BENCH: RULED-AFK 11-18 (Magii, athernyx 5626aaf, "a focus binds where its material is worked"): blades at the
 //   CARPENTRY bench, spikes at the STONEMASON bench (the Stonery). One constant, BENCH.
-import { TOOL_DEFS, makeBasicTool, type EquippedTool, type EquippedTools } from '../../engine/tools'
+import { TOOL_DEFS, type EquippedTool, type EquippedTools } from '../../engine/tools'
 import { countOf, take, type Inv } from '../shared/inventory'
 import { roomStore, type Works, type RoomKind } from './rooms'
 
@@ -31,15 +32,25 @@ export const reachOf = (t: EquippedTool | undefined) => rungOf(t) + 1
 export const bonusXp = (t: EquippedTool | undefined, xp: number) => Math.round(xp * (t?.xpBonus ?? 1)) - xp
 export const focusName = (t: EquippedTool | undefined, skill: FocusSkill) => (t ? TOOL_DEFS[t.toolId]?.name ?? '' : skill === 'forestry' ? 'Worn Pruner' : 'Worn Spike')
 
+/** M133: why the bench will not make tool `id` while `cur` is in hand (tools are permanent, so a lower tier or the same one again
+ *  buys nothing); null = make it. Shared by the Rinnshop (rinsticks.ts). Words: placeholder, for @lark. */
+export function ownedWhy(cur: EquippedTool | undefined, id: string): string | null {
+  if (!crafted(cur)) return null
+  const have = TOOL_DEFS[cur!.toolId], want = TOOL_DEFS[id]
+  if (!have || !want || want.tier > have.tier) return null
+  return want.tier === have.tier ? `You already have the ${have.name}.` : `Your ${have.name} is better.`
+}
+
 export type Make = { ok: true; works: Works; inv: Inv; tools: EquippedTools } | { ok: false; why: string }
-/** Make + equip a focus at its bench: inputs from the room's store first, then the bag (like makeRinstick). Refused while a
- *  BETTER focus of the family still has uses (a downgrade would throw it away); the same tier again is a fresh one. */
+/** Make + equip a focus at its bench: inputs from the room's store first, then the bag (like makeRinstick). Refused,
+ *  spending nothing, at or below the tier in hand (ownedWhy). */
 export function makeFocus(w: Works, roomId: string, inv: Inv, tools: EquippedTools, id: string): Make {
   const def = TOOL_DEFS[id], r = w.rooms.find(x => x.id === roomId)
   const skill = def?.skillId as FocusSkill
   if (!def || def.basic || !(skill in FOCUSES) || !FOCUSES[skill].includes(id) || !r || r.kind !== BENCH[skill]) return { ok: false, why: '' }
   const cur = tools[skill]
-  if (crafted(cur) && (TOOL_DEFS[cur!.toolId]?.tier ?? 0) > def.tier) return { ok: false, why: `Your ${focusName(cur, skill)} is better. Use it up first.` }
+  const owned = ownedWhy(cur, id)
+  if (owned) return { ok: false, why: owned }
   let stacks = roomStore(r).stacks.map(s => ({ ...s })), bag: Inv | null = inv
   for (const c of def.recipe) {
     const inStore = stacks.reduce((a, s) => a + (s.id === c.itemId ? s.n : 0), 0)
@@ -51,13 +62,4 @@ export function makeFocus(w: Works, roomId: string, inv: Inv, tools: EquippedToo
   }
   const fresh: EquippedTool = { toolId: id, usesRemaining: def.durability, speedBonus: def.speedBonus, xpBonus: def.xpBonus }
   return { ok: true, works: { ...w, rooms: w.rooms.map(x => (x.id === roomId ? { ...x, store: stacks } : x)) }, inv: bag!, tools: { ...tools, [skill]: fresh } }
-}
-
-/** A finished node wears the focus one use. Worn out: the worn starter is back, and its name comes out for the HUD line. */
-export function wearFocus(tools: EquippedTools, skill: FocusSkill): { tools: EquippedTools; broke: string | null } {
-  const t = tools[skill]
-  if (!crafted(t)) return { tools, broke: null }
-  const left = t!.usesRemaining - 1
-  if (left > 0) return { tools: { ...tools, [skill]: { ...t!, usesRemaining: left } }, broke: null }
-  return { tools: { ...tools, [skill]: makeBasicTool(skill) ?? undefined }, broke: focusName(t, skill) }
 }

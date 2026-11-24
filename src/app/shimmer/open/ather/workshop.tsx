@@ -1931,10 +1931,10 @@ function WorkView({ r }: { r: Room }) {
 }
 
 /** The Rinnshop's rinsticks (ather/rinsticks.ts): canon's three, built from rinn. Making one equips it (it comes out when you
- *  hold bait); the one in hand and its uses left are shown first. */
+ *  hold bait); the one in hand is shown first. */
 function RinstickList({ r, inv }: { r: Room; inv: ReturnType<typeof useInv> }) {
   const [tools, setTools] = useState(() => loadTools())
-  const cur = tools.rinning, curDef = cur ? TOOL_DEFS[cur.toolId] : undefined
+  const cur = tools.rinning
   const quest = useQuest(), step = currentStep(quest)   // M22: the first rinstick is earned here
   return (
     <div data-rinsticks>
@@ -1949,7 +1949,7 @@ function RinstickList({ r, inv }: { r: Room; inv: ReturnType<typeof useInv> }) {
         )
       })()}
       <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }} data-rinstick-held={cur?.toolId ?? ''}>
-        In hand: {cur ? rinstickName(cur) : 'none yet'}{!cur ? '' : curDef && !curDef.basic ? ` · ${cur!.usesRemaining} catches left` : ' · never wears out'}. Built from rinn, since kin calls to kin. A better one gives the reel more room.
+        In hand: {cur ? rinstickName(cur) : 'none yet'}. Built from rinn, since kin calls to kin. A better one gives the reel more room.
       </div>
       <div style={{ display: 'grid', gap: 6 }}>
         {RINSTICKS.map(id => {
@@ -1957,7 +1957,7 @@ function RinstickList({ r, inv }: { r: Room; inv: ReturnType<typeof useInv> }) {
           return (
             <div key={id} data-rinstick={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: H.ink }}>
-                {d.name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· {d.recipe.map(c => `${c.count} ${itemDef(c.itemId).name} (${benchCount(r, inv, c.itemId)})`).join(' + ')} · {d.durability} catches · reel ×{easeOf({ toolId: id, usesRemaining: 1 }).toFixed(2)}</span>
+                {d.name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· {d.recipe.map(c => `${c.count} ${itemDef(c.itemId).name} (${benchCount(r, inv, c.itemId)})`).join(' + ')} · reel ×{easeOf({ toolId: id, usesRemaining: 1 }).toFixed(2)}</span>
               </span>
               <HearthButton small disabled={!have} onClick={() => {
                 const m = makeRinstick(getW(), r.id, getInv(), loadTools(), id)
@@ -1977,13 +1977,13 @@ function RinstickList({ r, inv }: { r: Room; inv: ReturnType<typeof useInv> }) {
  *  focus works its reach at a node's own mana, double above it. */
 function FocusList({ r, inv, skill }: { r: Room; inv: ReturnType<typeof useInv>; skill: FocusSkill }) {
   const [tools, setTools] = useState(() => loadTools())
-  const cur = tools[skill], curDef = cur ? TOOL_DEFS[cur.toolId] : undefined
+  const cur = tools[skill]
   const fam = skill === 'forestry' ? 'Pruners' : 'Spikes', node = skill === 'forestry' ? 'tree' : 'crystal'
   return (
     <div data-focuses={skill}>
       <div style={lab}>{fam}</div>
       <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }} data-focus-held={cur?.toolId ?? ''}>
-        In hand: {focusName(cur, skill)}{curDef && !curDef.basic ? ` · ${cur!.usesRemaining} uses left` : ' · never wears out'}. Works a tier {reachOf(cur)} {node} or lower at its own mana; anything higher costs far more.
+        In hand: {focusName(cur, skill)}. Works a tier {reachOf(cur)} {node} or lower at its own mana; anything higher costs far more.
       </div>
       <div style={{ display: 'grid', gap: 6 }}>
         {FOCUSES[skill].map(id => {
@@ -1991,7 +1991,7 @@ function FocusList({ r, inv, skill }: { r: Room; inv: ReturnType<typeof useInv>;
           return (
             <div key={id} data-focus={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: H.ink }}>
-                {d.name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· {d.recipe.map(c => `${c.count} ${itemDef(c.itemId).name} (${benchCount(r, inv, c.itemId)})`).join(' + ')} · {d.durability} uses · reaches tier {d.tier + 1} · XP ×{d.xpBonus}</span>
+                {d.name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· {d.recipe.map(c => `${c.count} ${itemDef(c.itemId).name} (${benchCount(r, inv, c.itemId)})`).join(' + ')} · reaches tier {d.tier + 1} · XP ×{d.xpBonus}</span>
               </span>
               <HearthButton small disabled={!have} onClick={() => {
                 const m = makeFocus(getW(), r.id, getInv(), loadTools(), id)

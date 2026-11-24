@@ -38,6 +38,20 @@ export const PLANT_WHY = {
   grey: 'The grey still holds this ground. Clear it, then plant here.',
   notKept: "Plant a waymark on ground you cleared, or in a settlement that's kept.",
   unfolded: 'A waymark leads home, and you have no garden yet. Greg can fold you one.',
+  // ★ SIGNED by Alex 2026-11-24 (athernyx 98e7f1c): shimmer-lines-batch-2026-11-24f.md › A, MAIN (lines-batch-24f.test.ts)
+  ground: 'Stand on solid ground to plant a waymark.',
+  water: 'Water will not hold a waymark.',
+  settlement: 'Your waymark already stands in this settlement. One is enough.',
+  cap: (max: number) => `You hold ${max} waymarks, the most the fold will carry. Lift one to plant here.`,
+  biome: (n: number, biome: string) => `You already hold ${n} waymarks in the ${biome}. Plant the next in other country.`,
+  near: (m: number) => `Too close to your other waymark (${m} m). Walk a little further.`,
+} as const
+/** SIGNED 11-24f › A: what the keeper reads planting or lifting one */
+export const WAY_TEXT = {
+  planted: (place: string) => `Waymark planted in ${place}. It is a stop on the fold map now.`,
+  lifted: 'Waymark lifted. It is back in your bag.',
+  liftedFull: 'Waymark lifted. Your bag is full, so it went back to the fold.',
+  none: 'No Waymark Stone in your bag. Lift one you planted, or buy more reach from Greg.',
 } as const
 export const PLANT_HINT = 'Plant one on ground you cleared, or inside a settlement.'
 export type PlantVerdict = { ok: true } | { ok: false; why: string }
@@ -55,18 +69,18 @@ export type WildsGround = 'cleared' | 'infected' | null
  *  folded with no cleared ground (the 11-18 settlement-only rule). */
 export function canPlant(list: readonly Waymark[], at: { tile: string; x: number; z: number; biome: BiomeId; grounded: boolean; swimming: boolean; settlement: string | null; ground?: WildsGround; folded?: boolean }): PlantVerdict {
   if (at.folded === false) return { ok: false, why: PLANT_WHY.unfolded }
-  if (!at.grounded || at.swimming) return { ok: false, why: 'A waymark binds ground. Stand on it.' }
-  if (at.biome === BIOME.water) return { ok: false, why: 'Water will not hold a binding.' }
+  if (!at.grounded || at.swimming) return { ok: false, why: PLANT_WHY.ground }
+  if (at.biome === BIOME.water) return { ok: false, why: PLANT_WHY.water }
   // ★ ONLY ON KEPT GROUND: a settlement, or ground you cleared (M75). Infected ground still refuses (the place is not kept).
   if (!at.settlement && at.ground !== 'cleared') return { ok: false, why: at.ground === 'infected'
     ? PLANT_WHY.grey
     : PLANT_WHY.notKept }
-  if (at.settlement && list.some(w => w.settlement === at.settlement)) return { ok: false, why: 'You already hold a waymark in this settlement.' }
-  if (list.length >= MAX_WAYMARKS) return { ok: false, why: `You hold ${MAX_WAYMARKS} waymarks, as many as the fold will carry. Lift one first.` }
+  if (at.settlement && list.some(w => w.settlement === at.settlement)) return { ok: false, why: PLANT_WHY.settlement }
+  if (list.length >= MAX_WAYMARKS) return { ok: false, why: PLANT_WHY.cap(MAX_WAYMARKS) }
   const same = list.filter(w => w.biome === at.biome)
-  if (same.length >= PER_BIOME) return { ok: false, why: `You already hold ${PER_BIOME} waymarks in the ${BIOME_NAME[at.biome]}. Find other country.` }
+  if (same.length >= PER_BIOME) return { ok: false, why: PLANT_WHY.biome(PER_BIOME, BIOME_NAME[at.biome]) }
   const near = [GREG_WAYMARK, ...list].find(w => w.tile === at.tile && Math.hypot(w.x - at.x, w.z - at.z) < MIN_SPACING)
-  if (near) return { ok: false, why: `Too close to your other waymark (${Math.round(Math.hypot(near.x - at.x, near.z - at.z))} m). Walk on.` }
+  if (near) return { ok: false, why: PLANT_WHY.near(Math.round(Math.hypot(near.x - at.x, near.z - at.z))) }
   return { ok: true }
 }
 

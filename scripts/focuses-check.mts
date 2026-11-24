@@ -1,7 +1,8 @@
 // BETA M17: BLADES + SPIKES. On the live Ather page with real E: the Carpentry bench makes a Goldwood Blade, the Stonery's bench a
 // Mana Spike (both equipped, open.tools.v1). In the Wilds, a Shimmeroak's prompt says its own mana with the Worn
-// Pruner AND with the Goldwood Pruner (M136: both rung 1), less with a Shimmeroak Pruner (better than needed); pruning it pays the blade's xpBonus on top of the tree's XP and wears the blade one
-// use; a blade on its last use wears out and the Worn Blade is back. SETUP (stated, not played): the two rooms stand raised, the
+// Pruner AND with the Goldwood Pruner (M136: both rung 1), less with a Shimmeroak Pruner (better than needed); pruning it pays the blade's xpBonus on top of the tree's XP and wears
+// nothing (M133: tools are permanent): a save with the blade on its last use keeps it, whole; the bench refuses a second one and
+// spends nothing; no panel or HUD line counts uses. SETUP (stated, not played): the two rooms stand raised, the
 // bag holds the recipes, Forestry is level 4 (no gate since M136).
 //   npx tsx scripts/focuses-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
@@ -27,13 +28,13 @@ const mason: Room = { id: 'stonemason-fc', kind: 'stonemason', x: -112, z: 100, 
 const res: Record<string, unknown> = { url, oak: oak?.id, oak2: oak2?.id }
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-const p = await br.newPage(); await p.setViewport({ width: 1100, height: 680 })
+const p = await br.newPage(); await p.setViewport({ width: 390, height: 844 })
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 await p.evaluateOnNewDocument((rooms: Room[]) => {
   if (sessionStorage.getItem('fc')) return; sessionStorage.setItem('fc', '1')
   localStorage.setItem('ather:shimmer:birthRune', 'star')
   const slots: unknown[] = Array(32).fill(null)
-  slots[8] = { id: 'goldwood_plank', n: 5 }; slots[9] = { id: 'goldwood_bark', n: 3 }; slots[10] = { id: 'raw_mana_shard', n: 8 }
+  slots[8] = { id: 'goldwood_plank', n: 10 }; slots[9] = { id: 'goldwood_bark', n: 6 }; slots[10] = { id: 'raw_mana_shard', n: 8 }
   localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
   localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms, chests: [], pieces: [] }))
   localStorage.setItem('open.skills.v1', JSON.stringify([{ id: 'forestry', level: 4, xp: 0 }, { id: 'prospecting', level: 4, xp: 0 }]))
@@ -55,8 +56,14 @@ const bench = async (r: Room, focus: string) => {
   const panel = await p.evaluate(() => !!document.querySelector('[data-panel="bench"]'))
   await click('[data-bench-tab="blades"],[data-bench-tab="spikes"]'); await sleep(300)   // bench tabs (11-20): tool focuses on their own tab
   const made = await click(`[data-focus="${focus}"] button`); await sleep(800)
+  const txt = await bodyText(), usesText = /uses left|catches left|\d+ uses|never wears/.test(txt)
+  if (focus === 'goldwood_blade') {   // M133: the same tier again is refused, nothing spent
+    await click(`[data-focus="${focus}"] button`); await sleep(400)
+    const left = (((await read('open.inv.v1'))?.slots ?? []) as ({ id: string; n: number } | null)[]).find(x => x?.id === 'goldwood_plank')?.n
+    res.refusedLine = /You already have the Goldwood Pruner\./.test(await bodyText()); res.planksLeft = left; res.refused = res.refusedLine === true && left === 5
+  }
   await p.keyboard.press('Escape'); await sleep(500)
-  return { panel, made }
+  return { panel, made, usesText }
 }
 res.carpentry = await bench(carp, 'goldwood_blade')
 res.stonery = await bench(mason, 'mana_spike')
@@ -77,7 +84,7 @@ res.manaWorn = await promptMana(oak)
 const hand = async (bl: unknown) => { await p.evaluate((x: unknown) => { const t = JSON.parse(localStorage.getItem('open.tools.v1') ?? '{}'); localStorage.setItem('open.tools.v1', JSON.stringify({ ...t, forestry: x })); window.dispatchEvent(new Event('open:tools')) }, bl); await sleep(800) }
 await hand({ ...blade, toolId: 'shimmeroak_blade' }); res.manaBetter = await promptMana(oak)
 await hand(blade)
-// 3. prune it with the blade: XP = the tree's + the blade's bonus, and one use worn
+// 3. prune it with the blade: XP = the tree's + the blade's bonus, and NOTHING worn (M133)
 const chan = () => p.evaluate(() => (window as any).__ather.chan?.() ?? null)
 const pruneOut = async (t: { x: number; z: number }) => {
   await tp(t.x + 6, t.z, Math.PI / 2); await p.evaluate(() => (window as any).__ather.setMana(100))
@@ -89,11 +96,12 @@ await pruneOut(oak)
 const base = NODE_DEFS.shimmeroak.xp, want = Math.round(base * 1.1)
 res.xpLine = ((await bodyText()).match(/\+(\d+) Forestry/) ?? [])[0] ?? ''
 res.usesAfter = (await tools()).forestry
-// 4. the last use: set the blade to 1 use left, prune another Shimmeroak, the Worn Blade is back
+// 4. M133: a save whose blade stood on its last use: prune another Shimmeroak, the blade is still in hand, whole, nothing said
 await p.evaluate((bl: { toolId: string }) => { const t = JSON.parse(localStorage.getItem('open.tools.v1') ?? '{}'); localStorage.setItem('open.tools.v1', JSON.stringify({ ...t, forestry: { ...bl, usesRemaining: 1 } })); window.dispatchEvent(new Event('open:tools')) }, blade); await sleep(800)
 await pruneOut(oak2)
 res.afterBreak = (await tools()).forestry
-res.woreLine = /Goldwood Pruner wore out/.test(await bodyText())
+res.woreLine = /wore out|uses left/.test(await bodyText())
+res.oak2Pruned = await p.evaluate(id => Object.keys(JSON.parse(localStorage.getItem('open.pruned.v1') ?? '{}')).includes(id), oak2.id)
 await p.screenshot({ path: `${out}/focuses-end.png` }).catch(() => {})
 // (a leveled keeper's hydration mismatch, React #418, counted apart here at first, is FIXED: GameHud mounted-guard 11-18, hydration-check)
 const other = errs
@@ -102,7 +110,8 @@ console.log(JSON.stringify(res, null, 1))
 const c = res.carpentry as { panel: boolean; made: boolean }, s = res.stonery as typeof c, u = res.usesAfter as { toolId: string; usesRemaining: number }
 const pass = c.panel && c.made && s.panel && s.made && t1.forestry?.toolId === 'goldwood_blade' && t1.prospecting?.toolId === 'mana_spike'
   && res.manaWorn === TREE_DIAL.shimmeroak.mana && res.manaBlade === TREE_DIAL.shimmeroak.mana && res.manaBetter === Math.round(TREE_DIAL.shimmeroak.mana * BETTER)
-  && res.xpLine === `+${want} Forestry` && u?.toolId === 'goldwood_blade' && u.usesRemaining === t1.forestry.usesRemaining - 1
-  && (res.afterBreak as { toolId: string })?.toolId === 'worn_blade' && res.woreLine === true && other.length === 0
-console.log(pass ? `PASS: pruner + spike made at their benches → Shimmeroak ${res.manaWorn} mana worn, ${res.manaBlade} Goldwood, ${res.manaBetter} Shimmeroak pruner → +${want} XP (×1.1) → one use worn → worn out, the Worn Pruner back` : 'FAIL')
+  && res.xpLine === `+${want} Forestry` && u?.toolId === 'goldwood_blade' && u.usesRemaining === t1.forestry.usesRemaining
+  && res.oak2Pruned === true && (res.afterBreak as typeof u)?.toolId === 'goldwood_blade' && (res.afterBreak as typeof u).usesRemaining === t1.forestry.usesRemaining && res.woreLine === false
+  && res.refused === true && c.usesText === false && s.usesText === false && other.length === 0
+console.log(pass ? `PASS: pruner + spike made at their benches → Shimmeroak ${res.manaWorn} mana worn, ${res.manaBlade} Goldwood, ${res.manaBetter} Shimmeroak pruner → +${want} XP (×1.1) → nothing worn → a last-use save keeps it whole; the bench refuses a second` : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)

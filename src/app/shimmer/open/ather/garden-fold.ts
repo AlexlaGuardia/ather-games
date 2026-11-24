@@ -51,6 +51,8 @@ export const FOLD_TEXT = {
   short: (have: number) => `Not yet, Keeper. You have ${have} grey matter, and the fold takes ${FOLD_COST}.`,
   done: 'There. Your garden is folded. Go on in, Keeper.',
   go: 'To my garden',
+  /** the HUD line once the garden's grey is paid (SIGNED 11-24f A, lines-batch-24f.test.ts) */
+  folded: (grey: number) => `Your garden is folded. ${grey} grey matter left.`,
   // M71 s2: Greg sells the reach
   buyAsk: `Buy more reach (${WAYMARK_PRICE} grey matter)`,
   buyShort: (have: number) => `Not yet. You have ${have} grey matter, and more reach takes ${WAYMARK_PRICE}.`,

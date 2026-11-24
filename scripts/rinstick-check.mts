@@ -14,7 +14,7 @@ mkdirSync(out, { recursive: true })
 const ROOM: Room = { id: 'rinnshop-check', kind: 'rinnshop', x: -100, z: 100, q: 0, placedAt: 1, doneAt: 2, store: [{ id: 'shimmerscale', n: 4 }] }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
-const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 1100, height: 760 })
+const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 390, height: 844 })
 const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
 await p.evaluateOnNewDocument('window.__name = (f) => f')
 await p.evaluateOnNewDocument((room: Room) => {
@@ -43,7 +43,10 @@ res.list = await p.evaluate(() => [...document.querySelectorAll('[data-rinstick]
 res.made = await click('[data-rinstick="basic_rinstick"] button'); await sleep(700)
 res.panelHeld = await p.evaluate(() => document.querySelector('[data-rinstick-held]')?.getAttribute('data-rinstick-held'))
 res.after = await held(); res.bag = await bag(); res.store = ((await read('open.works.v1'))?.rooms?.[0]?.store ?? []).length
+res.usesText = await p.evaluate(() => /catches left|\d+ catches|never wears/.test(document.body.innerText))
 await shot('rc-1-made')
+// M133: a save from before, the stick on its last use: whole again after the reload below
+await p.evaluate(() => { const k = Object.keys(localStorage).find(x => x.includes('open.tools.v1'))!, t = JSON.parse(localStorage.getItem(k)!); t.rinning.usesRemaining = 1; localStorage.setItem(k, JSON.stringify(t)) })
 await p.reload({ waitUntil: 'load', timeout: 180000 }); await p.waitForFunction(() => !!(window as any).__ather?.tools && typeof (window as any).__ather?.tp === 'function', { timeout: 180000 }); await sleep(2500)
 res.reloaded = await held()
 res.errs = errs
@@ -51,6 +54,6 @@ console.log(JSON.stringify(res))
 const a = res.after as { toolId: string; usesRemaining: number } | null, rl = res.reloaded as typeof a
 const pass = (res.before as { toolId: string })?.toolId === 'worn_rinstick' && JSON.stringify(res.list) === '["basic_rinstick","glowfin_rinstick","moonkoi_rinstick"]'
   && res.made === true && res.panelHeld === 'basic_rinstick' && a?.toolId === 'basic_rinstick' && a.usesRemaining === 50
-  && !(res.bag as Record<string, number>).clickclaw && res.store === 0 && rl?.toolId === 'basic_rinstick' && errs.length === 0
+  && !(res.bag as Record<string, number>).clickclaw && res.store === 0 && rl?.toolId === 'basic_rinstick' && rl.usesRemaining === 50 && res.usesText === false && errs.length === 0
 console.log(pass ? 'PASS: Basic Rinstick made at the Rinnshop (scale from the store, claw from the bag) → in hand at once → still in hand after a reload' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)
