@@ -111,15 +111,30 @@ export const SPIRIT_MODELS: Partial<Record<Species, SpiritLook>> = {
 export const MANALOTL_RIG: RigLook = {
   glbLen: 2.145, pivot: { x: 0.07, z: 0 },
   clipV: { walk: 0.42 / (0.9 / MANALOTL_GLB_LEN), run: 0.62 / (0.9 / MANALOTL_GLB_LEN) },   // built at the unrigged height: 0.42 / 0.62 m/s there
-  runAt: [0.5, 0.44], hull: 0.026, neck: 'b_neck', head: 'b_head',
+  runAt: [0.5, 0.44], hull: 0.026, neck: 'b_neck', head: 'b_head', avatar: { z: -0.42, far: 1.9 },
 }
 const RIG_H = GROWN.axolotl.length! / MANALOTL_RIG.glbLen
+// ── M102 THE NEW VULNYX, RIGGED (OWNER-ONLY, the same switch; Alex 11-24 approved the look, docs/looks/vulnyx-2026-11-24 b-v2).
+// Grown 0.70 m tall standing (GROWN, ear tips, body without the hull). Same tints as the model she replaces. Manner: darting legs (she runs whenever she goes
+// anywhere, a walk is her first and last step), snappy glances, mostly alert; no hop, the gallop carries its own air.
+export const VULNYX_RIG: RigLook = {
+  glbLen: 1.466, pivot: { x: 0, z: -0.015 },
+  clipV: { walk: 0.55 / 0.7, run: 2.8 / 0.7 },
+  runAt: [0.9, 0.75], hull: 0.024, neck: 'b_neck', head: 'b_head', lie: true, avatar: { z: -0.22, far: 1.35 },
+}
+/** her glb's height standing (the idle clip's mean), glb units */
+export const VULNYX_GLB_TALL = 1.003
+const VRIG_H = GROWN.fox.height / VULNYX_GLB_TALL
 export const SPIRIT_RIGS: Partial<Record<Species, SpiritLook>> = {
   axolotl: {
     ...SPIRIT_MODELS.axolotl!, url: '/open/spirits/manalotl-rigged.glb', h: RIG_H, rig: MANALOTL_RIG, tilt: undefined,
     // her manner unchanged; she ambles on her legs, so the hop, the squash and the turn-lean are 0. The bound over a training
     // piece is the piece's height, not hers, so it stays what it was.
     trot: { ...grownTrot(MANALOTL_TROT, TUNED_H.axolotl, RIG_H, true), playH: SPIRIT_MODELS.axolotl!.trot.playH, hopH: 0, stretch: 0, squash: 0, lean: 0, planted: 1 },
+  },
+  fox: {
+    ...SPIRIT_MODELS.fox!, url: '/open/spirits/vulnyx-rigged.glb', h: VRIG_H, rig: VULNYX_RIG, ears: undefined,
+    trot: { ...SPIRIT_MODELS.fox!.trot, hopH: 0, stretch: 0, squash: 0, lean: 0, planted: 1 },
   },
 }
 /** the look to draw: the rigged one where there is one and `on` */

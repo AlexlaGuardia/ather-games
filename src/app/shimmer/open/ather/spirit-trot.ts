@@ -52,6 +52,7 @@ export type TrotPose = {
   look: number              // rad, the look-round part of yaw
   sniff: number             // 0/1 nose down
   sit: number               // 0..1 how sat / lain down
+  lie: boolean              // M102: an idle skit's nap (lie down, not sit), read with sit
   brace: number             // 0..1 the shove's lean / the guard's crouch
   wig: number               // the happy wiggle part of roll
 }
@@ -187,7 +188,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   let mode: TrotMode = nav.perch ? 'perch' : 'look', t = 0, dur = nav.perch ? rand(1.0, 1.6) : 1
   let yaw = R() * TAU, yawPrev = yaw, lookYaw = 0, lookAt = 0, lookFrom = 0, lookT = 0, lookHold = 0.6
   let tilt = 0, tiltAt = 0, tiltSwap = 0
-  let hopPh = 0, sinceLand = 9, runs = 0, beats = 0, homes = 0, sitK = 0, homing = false, outFirst = !!roam
+  let hopPh = 0, sinceLand = 9, runs = 0, beats = 0, homes = 0, sitK = 0, napping = false, homing = false, outFirst = !!roam
   let homeLeg = false, homeAgain = 0   // M107 ship: the run just planned was a cut leg home; carry on home after the beat (2 = to hop up)
   // the current run: an ARC round home (polar a0,r0 -> a1,r1) or a straight LINE (p0 -> p1); length len, speed vRun
   let kind: 'arc' | 'line' = 'arc', a0 = 0, a1 = 0, r0 = 0, r1 = 0, p0 = { x: 0, z: 0 }, p1 = { x: 0, z: 0 }, len = 1, s = 0, vRun = D.speed
@@ -493,7 +494,8 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
         if (fIdle > F.sitAfter) wantSit = 1
         // M126 s2: an idle skit's spot (shared/idle-skits.ts): nose down a while, look up, nose down again; or lie = sit at once
         if (k.slot?.act === 'sniff' && fIdle % 3 < 1.9) sniff = 1
-        if (k.slot?.act === 'lie') wantSit = 1
+        napping = k.slot?.act === 'lie'
+        if (napping) wantSit = 1
         // M109 s3: called home and arrived: a moment sat by the keeper, then she is free again
         if (calling && fIdle > 0.8) { calling = false; followTo = callPrev; callPrev = null; if (!followTo) { syncPolar(); go('sit', rand(...D.sitS)) } }
       }
@@ -576,7 +578,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     if (mode !== 'play') brace = Math.max(0, brace - dt * 4)
     const sy = (1 + D.stretch * air - D.squash * sq) * lerp(1, D.sitY, sitK) * lerp(1, PLAY.crouch, brace)   // M110 s2: braced = low
     cur = {
-      look: lookYaw + sniff * Math.sin(t * 5) * 0.12, sniff, sit: sitK, brace, wig: mode === 'happy' ? Math.sin(t * Math.PI * 2 / D.happyHop / 2) * D.happyWig : 0,
+      look: lookYaw + sniff * Math.sin(t * 5) * 0.12, sniff, sit: sitK, lie: mode === 'follow' && napping, brace, wig: mode === 'happy' ? Math.sin(t * Math.PI * 2 / D.happyHop / 2) * D.happyWig : 0,
       x: pos.x, z: pos.z, y, yaw: yaw + lookYaw + sniff * Math.sin(t * 5) * 0.12,
       roll: clamp(-yawRate * D.lean, -D.leanMax, D.leanMax) * (speed > 0 ? 1 : 0.3) + (mode === 'happy' ? Math.sin(t * Math.PI * 2 / D.happyHop / 2) * D.happyWig : 0),
       pitch: (speed > 0 ? 0.05 + 0.06 * sq : 0) + D.sitPitch * sitK + (mode === 'play' && toy?.kind === 'shove' ? 0.18 * brace : 0) + sniff * (D.sniffPitch + Math.sin(t * 13) * 0.04),
@@ -584,7 +586,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
     }
     return cur
   }
-  let cur: TrotPose = { x: pos.x, z: pos.z, y, yaw, roll: 0, pitch: 0, sx: 1, sy: 1, swing: 0, lift: 0, mode, tilt: 0, look: 0, sniff: 0, sit: 0, brace: 0, wig: 0 }
+  let cur: TrotPose = { x: pos.x, z: pos.z, y, yaw, roll: 0, pitch: 0, sx: 1, sy: 1, swing: 0, lift: 0, mode, tilt: 0, look: 0, sniff: 0, sit: 0, lie: false, brace: 0, wig: 0 }
   function follow(to: FollowTarget | null) {
     if (to) toy = null
     calling = false; callPrev = null

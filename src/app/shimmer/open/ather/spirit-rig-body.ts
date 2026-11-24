@@ -2,7 +2,7 @@
 // her own mixer, the glb's geometry shared by all her kind. No trot here: step() is told what to play.
 import * as THREE from 'three'
 import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js'
-import { RIG_CLIPS, fadeWeights, gaitCycles, strideLen, type RigClip, type RigLook } from './spirit-rig'
+import { RIG_CLIPS, STAND, fadeWeights, gaitCycles, strideLen, type RigClip, type RigLook } from './spirit-rig'
 
 export type RigMats = { skin: THREE.Material; glow: THREE.Material | null; halo: THREE.Material; eye: THREE.Material }
 export type RigGltf = { scene: THREE.Object3D; animations: THREE.AnimationClip[] }
@@ -12,7 +12,7 @@ export const rigCount = { live: 0, made: 0, disposed: 0 }
 // the geometry once per glb: colours read as sRGB (as the unrigged model's `lin`), and a welded normal for the hull, so the
 // hull does not crack where the sculpt splits a vertex
 type Geos = Record<string, THREE.BufferGeometry>
-const cache = new WeakMap<THREE.Object3D, { geos: Geos; ext: { part: string; i: number }[] }>()
+const cache = new WeakMap<THREE.Object3D, { geos: Geos; ext: { part: string; i: number }[]; low: number[] }>()
 function prepare(scene: THREE.Object3D, glowPart?: string) {
   const had = cache.get(scene); if (had) return had
   const geos: Geos = {}, ext: { part: string; i: number; p: number[] }[] = []
@@ -38,7 +38,15 @@ function prepare(scene: THREE.Object3D, glowPart?: string) {
   // the few dozen vertices her measured box hangs on (nose, frill tops, tail tip, soles), so the probe need not skin 4k points
   const pick = new Map<string, { part: string; i: number }>()
   for (const k of [0, 1, 2]) for (const s of [1, -1]) [...ext].sort((a, b) => s * (b.p[k] - a.p[k])).slice(0, 30).forEach(e => pick.set(`${e.part}${e.i}`, { part: e.part, i: e.i }))
-  const out = { geos, ext: [...pick.values()] }
+  // what can reach the ground while two clips are blended: each bone's own outermost body vertices (not the head or the ears)
+  const bm = scene.getObjectByName('body') as THREE.SkinnedMesh, bg = geos.body, si = bg.getAttribute('skinIndex'), sw = bg.getAttribute('skinWeight'), bp = bg.getAttribute('position')
+  const own: number[][] = bm.skeleton.bones.map(() => [])
+  for (let i = 0; i < bp.count; i++) { let k = 0; for (let j = 1; j < 4; j++) if (sw.getComponent(i, j) > sw.getComponent(i, k)) k = j; own[si.getComponent(i, k)].push(i) }
+  const low = new Set<number>()
+  own.forEach((vs, b) => { if (!vs.length || /head|ear/.test(bm.skeleton.bones[b].name)) return
+    for (const x of [-1, 0, 1]) for (const y of [-1, 0, 1]) for (const z of [-1, 0, 1]) { let best = vs[0], bd = -Infinity
+      for (const i of vs) { const d = x * bp.getX(i) + y * bp.getY(i) + z * bp.getZ(i); if (d > bd) { bd = d; best = i } } low.add(best) } })
+  const out = { geos, ext: [...pick.values()], low: [...low] }
   cache.set(scene, out); return out
 }
 
@@ -50,7 +58,7 @@ export function hullPush(m: THREE.Material, width: number) {
 
 export type RigBody = ReturnType<typeof makeRigBody>
 export function makeRigBody(gltf: RigGltf, rig: RigLook, mats: RigMats, glowPart?: string) {
-  const { geos, ext } = prepare(gltf.scene, glowPart)
+  const { geos, ext, low } = prepare(gltf.scene, glowPart)
   const src = clone(gltf.scene), b0 = src.getObjectByName('body') as THREE.SkinnedMesh
   const bones = b0.skeleton.bones, skeleton = new THREE.Skeleton(bones, b0.skeleton.boneInverses.map(m => m.clone()))
   const root = new THREE.Group(), boneRoot = bones.find(b => !bones.includes(b.parent as THREE.Bone))!
@@ -66,11 +74,13 @@ export function makeRigBody(gltf: RigGltf, rig: RigLook, mats: RigMats, glowPart
   if (glowPart) { add(glowPart, glowPart, mats.glow); add(`${glowPart}Hull`, glowPart, mats.halo) }
   add('eyes', 'eyes', mats.eye)
   const mixer = new THREE.AnimationMixer(root), act = {} as Record<RigClip, THREE.AnimationAction>
-  for (const c of RIG_CLIPS) { const a = mixer.clipAction(gltf.animations.find(x => x.name === c)!); a.play(); a.setEffectiveWeight(c === 'idle' ? 1 : 0); act[c] = a }
+  const has = RIG_CLIPS.filter(c => gltf.animations.some(x => x.name === c))
+  for (const c of has) { const a = mixer.clipAction(gltf.animations.find(x => x.name === c)!); a.play(); a.setEffectiveWeight(c === 'idle' ? 1 : 0); act[c] = a }
   act.walk.timeScale = act.run.timeScale = 0   // their time is set by the ground she covers
   const neck = bones.find(b => b.name === rig.neck)!, head = bones.find(b => b.name === rig.head)!, nq = neck.quaternion.clone(), hq = head.quaternion.clone()
   const q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ'), v = new THREE.Vector3()
-  let w: Record<RigClip, number> = { idle: 1, walk: 0, run: 0, sit: 0 }, phase = 0, want: RigClip = 'idle', rate = 0, capped = false, dead = false
+  let w: Record<RigClip, number> = { ...STAND }, phase = 0, want: RigClip = 'idle', rate = 0, capped = false, dead = false, lift = 0
+  const inv = new THREE.Matrix4()
   rigCount.live++; rigCount.made++
   return {
     root, skeleton, mixer, meshes, bones,
@@ -81,7 +91,7 @@ export function makeRigBody(gltf: RigGltf, rig: RigLook, mats: RigMats, glowPart
       const air = clip === 'run' && Math.abs(moved) < 1e-6 ? dt / act.run.getClip().duration : null
       const g = air !== null ? { cycles: air, capped: false } : gaitCycles(moved, dt, strideLen(rig.clipV[gait], act[gait].getClip().duration, h))
       phase = ((phase + g.cycles) % 1 + 1) % 1; capped = g.capped; rate = dt > 0 ? g.cycles * act[gait].getClip().duration / dt : 0
-      for (const c of RIG_CLIPS) { const on = w[c] > 0; act[c].enabled = on; act[c].setEffectiveWeight(w[c]) }
+      for (const c of has) { const on = w[c] > 0; act[c].enabled = on; act[c].setEffectiveWeight(w[c]) }
       act.walk.time = phase * act.walk.getClip().duration; act.run.time = phase * act.run.getClip().duration
       neck.quaternion.copy(nq); head.quaternion.copy(hq)   // the mixer writes a bone only when its track changed: take last frame's turn off first
       mixer.update(dt)
@@ -90,8 +100,17 @@ export function makeRigBody(gltf: RigGltf, rig: RigLook, mats: RigMats, glowPart
         neck.quaternion.multiply(q.setFromEuler(e.set(0.3 * o.sniff, 0.45 * o.look, 0)))
         head.quaternion.multiply(q.setFromEuler(e.set(0.3 * o.sniff, 0.4 * o.look, 0.38 * o.tilt)))
       }
+      // GROUND KEEP: every clip stands on the ground, the in-betweens of two do not (bones turned half way sink a paw up to 5 cm):
+      // while two are mixed her lowest point is put back on it. Not measured (0) while one clip plays alone.
+      lift = 0
+      if (has.filter(c => w[c] > 0).length > 1) {
+        root.position.y = 0; root.updateWorldMatrix(true, false); root.updateMatrixWorld(true); inv.copy(root.matrixWorld).invert(); let y = 0
+        for (const i of low) y = Math.min(y, this.at('body', i, v).applyMatrix4(inv).y)
+        lift = -y
+      }
+      root.position.y = lift
     },
-    state: () => ({ clip: want, w: { ...w }, phase, rate, capped }),
+    state: () => ({ clip: want, w: { ...w }, phase, rate, capped, lift }),
     /** her drawn box in root space x h (hull included), squared to her own axes: what the checks measure */
     size(h: number) {
       root.updateMatrixWorld(true); const inv = root.matrixWorld.clone().invert(), lo = new THREE.Vector3(9, 9, 9), hi = new THREE.Vector3(-9, -9, -9)

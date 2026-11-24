@@ -3,11 +3,13 @@
 // (where she goes, when she stops, sits, sniffs, plays); the rig only gives it legs.
 //  - her gait clip is advanced by the METRES she really moved (not by time), so a planted foot stays where it is at any frame
 //    rate; past CADENCE_MAX strides a second (a catch-up behind a running keeper) the legs stop speeding up and she slides.
-//  - sit = lying along the ground (the sit beat, the perch, a long stand-by, an idle skit's lie); idle = everything else still.
+//  - sit = the sit beat, the perch, a long stand-by (the Manalotl's sit clip IS her lying along the ground); lie = an idle skit's
+//    nap, for a glb that has the clip (the Vulnyx), else sit; idle = everything else still.
 import type { TrotPose } from './spirit-trot'
 
-export type RigClip = 'idle' | 'walk' | 'run' | 'sit'
-export const RIG_CLIPS: readonly RigClip[] = ['idle', 'walk', 'run', 'sit']
+export type RigClip = 'idle' | 'walk' | 'run' | 'sit' | 'lie'
+export const RIG_CLIPS: readonly RigClip[] = ['idle', 'walk', 'run', 'sit', 'lie']
+export const STAND: Record<RigClip, number> = { idle: 1, walk: 0, run: 0, sit: 0, lie: 0 }
 export type RigLook = {
   /** nose to tail in glb units, standing (the idle clip's mean); spirit-rig.test.ts measures the glb and pins it */
   glbLen: number
@@ -21,6 +23,10 @@ export type RigLook = {
   hull: number
   /** bone names the trot's look / tilt / sniff turn */
   neck: string; head: string
+  /** the glb has its own lie clip */
+  lie?: boolean
+  /** the panel's turntable: the z she turns round (her middle, tail and all, glb units) and how far the camera stands back */
+  avatar: { z: number; far: number }
 }
 /** strides a second the legs never pass */
 export const CADENCE_MAX = 5.5
@@ -28,12 +34,12 @@ export const CADENCE_MAX = 5.5
 export const TURN_R = 0.16
 export const STILL = 0.03   // m/s under this she stands
 /** s to fade INTO each clip (lying down and getting up are slow; her first step is not) */
-export const FADE: Record<RigClip, number> = { idle: 0.25, walk: 0.14, run: 0.16, sit: 0.6 }
+export const FADE: Record<RigClip, number> = { idle: 0.25, walk: 0.14, run: 0.16, sit: 0.6, lie: 0.6 }
 
 /** the clip for this pose; v = her real ground speed (smoothed), turn = |yaw rate| rad/s */
-export function rigClip(p: Pick<TrotPose, 'mode' | 'sit'>, v: number, turn: number, prev: RigClip, runAt: [number, number]): RigClip {
+export function rigClip(p: Pick<TrotPose, 'mode' | 'sit'> & { lie?: boolean }, v: number, turn: number, prev: RigClip, runAt: [number, number], hasLie = false): RigClip {
   if (p.mode === 'hopDown' || p.mode === 'hopUp') return 'run'   // legs reaching through the air on and off the perch
-  if (p.sit > 0.4) return 'sit'
+  if (p.sit > 0.4) return p.lie && hasLie ? 'lie' : 'sit'
   if (v > STILL) return v >= (prev === 'run' ? runAt[1] : runAt[0]) ? 'run' : 'walk'
   return turn > 0.5 ? 'walk' : 'idle'
 }
@@ -54,8 +60,8 @@ export function groundMoved(dx: number, dz: number, yaw: number, dyaw: number): 
   return (dx * Math.sin(yaw) + dz * Math.cos(yaw)) / d < -0.3 ? -d : d
 }
 /** weights one step nearer `want`, always summing to 1 (a clip is always playing: the bind pose has the tail straight out) */
-export function fadeWeights(w: Record<RigClip, number>, want: RigClip, dt: number, fromSit = w.sit > 0.5): Record<RigClip, number> {
-  const k = Math.min(1, dt / (want !== 'sit' && fromSit ? Math.max(FADE[want], 0.35) : FADE[want]))
+export function fadeWeights(w: Record<RigClip, number>, want: RigClip, dt: number, fromSit = w.sit + w.lie > 0.5): Record<RigClip, number> {
+  const k = Math.min(1, dt / (want !== 'sit' && want !== 'lie' && fromSit ? Math.max(FADE[want], 0.35) : FADE[want]))
   const out = { ...w }
   let rest = 0
   for (const c of RIG_CLIPS) if (c !== want) rest += w[c]

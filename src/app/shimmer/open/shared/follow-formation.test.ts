@@ -4,7 +4,7 @@
 // (ather/spirit-trot.ts) walking three spirits to their slots through that doorway, checked against the wall every step.
 import { arcSlots, assignSlots, fileSlots, forwardOf, makeFormation, nearestFree, lineClear, slotStep, homeStep, BACK, FORM, type SlotWalker, type Member, type Keeper, type Vec } from './follow-formation'
 import { makeTrot, type SpiritNav } from '../ather/spirit-trot'
-import { SPIRIT_MODELS } from '../ather/spirit-models'
+import { SPIRIT_MODELS, SPIRIT_RIGS } from '../ather/spirit-models'
 import { bodyRadius } from '../ather/obstacles'
 import { GROWN } from '../../sprites/creature-size'
 let pass = 0
@@ -225,6 +225,21 @@ for (const fps of [60, 8]) for (const wait of [2, 0]) for (const spin of [0.4, 3
   ok(inWall === 0, `trot: no spirit ever stood in the wall (${inWall})`)
   ok(trots.every(t => t.pose().z > 0.3), `trot: all three came through the doorway (z ${trots.map(t => t.pose().z.toFixed(2)).join(', ')})`)
   ok(maxInDoor <= 2, `trot: at most two in the doorway at once (single file; max ${maxInDoor})`) }
+
+// 6. M102: WITHIN 3 M of a keeper walking a 9 x 3 m loop at 4.2 m/s (vulnyx-ingame run F), her real trot, the real formation,
+//    60 fps: the old and the rigged Vulnyx and Manalotl. First 3 s = her catch-up.
+for (const [tag, L] of [['Vulnyx', SPIRIT_MODELS.fox!], ['rigged Vulnyx', SPIRIT_RIGS.fox!], ['Manalotl', SPIRIT_MODELS.axolotl!], ['rigged Manalotl', SPIRIT_RIGS.axolotl!]] as const) {
+  const r = bodyRadius(tag.includes('Vulnyx') ? GROWN.fox : GROWN.axolotl), f = makeFormation(() => [{ id: 's', kind: 'spirit', r }]), path = [[-4, 4.5], [5, 4.5], [5, 7.5], [-4, 7.5]], k: Keeper = { x: -4, z: 4.5, yaw: 0 }
+  const nav: SpiritNav = { home: { x: 0, z: 0 }, rMin: 0.9, rMax: 1.5, blocked: () => false, roam: { maxLeg: 4, away: 2 }, perch: { y: 0.5 } }
+  const t = makeTrot(nav, 5, L.trot); t.follow(() => ({ ...k, slot: f.last().slots.s }))
+  let i = 1, worst = 0
+  for (let n = 0; n < 60 * 16; n++) {
+    if (n >= 150) { let st = 4.2 / 60; while (st > 0) { const [tx, tz] = path[i % 4], dx = tx - k.x, dz = tz - k.z, d = Math.hypot(dx, dz); if (d <= st) { k.x = tx; k.z = tz; st -= d; i++ } else { k.x += dx / d * st; k.z += dz / d * st; k.yaw = Math.atan2(-dx, -dz); st = 0 } } }
+    f.tick(k, 1 / 60); const p = t.step(1 / 60), d = dist(p, k); if (n > 150 + 180) worst = Math.max(worst, d)
+  }
+  console.log(`   ${tag}: max ${worst.toFixed(2)} m behind a keeper walking the loop at 60 fps`)
+  ok(worst < 3 && worst > 0.5, `${tag}: within 3 m of a keeper walking the loop (${worst.toFixed(2)} m)`)
+}
 
 console.log(`follow-formation: ${pass} pass, ${fails.length} fail`)
 for (const m of fails) console.log('  FAIL ' + m)

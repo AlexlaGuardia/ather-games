@@ -198,9 +198,9 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
         const m = fresh ? 0 : groundMoved(ps.x - step.x, ps.z - step.z, bodyYaw, dyaw), travel = fresh ? 0 : Math.min(1.5, Math.hypot(ps.x - step.x, ps.z - step.z))
         step.v += (travel / Math.max(dt, 1e-3) - step.v) * k; step.turn += ((fresh ? 0 : Math.abs(dyaw)) / Math.max(dt, 1e-3) - step.turn) * k
         step.x = ps.x; step.z = ps.z; step.yaw = bodyYaw
-        step.clip = rigClip(ps, step.v, step.turn, step.clip, rig.runAt)
+        step.clip = rigClip(ps, step.v, step.turn, step.clip, rig.runAt, rig.lie)
         bd.step(dt, step.clip, m, look.h, { look: ps.look, sniff: ps.sniff, tilt: ps.tilt })
-        if (t - step.sizeAt > 0.5 && step.clip !== 'sit' && bd.state().w.sit < 0.01) { step.sizeAt = t; const s = bd.size(look.h); step.hWorld = s.height; step.len = s.len }
+        if (t - step.sizeAt > 0.5 && step.clip !== 'sit' && step.clip !== 'lie' && bd.state().w.sit + bd.state().w.lie < 0.01) { step.sizeAt = t; const s = bd.size(look.h); step.hWorld = s.height; step.len = s.len }
         if (id) probe().rigs.set(id, { id, sp, h: look.h, yaw: bodyYaw, x: ps.x, y: baseY + ps.y, z: ps.z, mode: ps.mode, v: step.v, body: bd })
       }
       sw.value += (ps.swing - sw.value) * Math.min(1, dt * 6); lift.value = ps.lift
@@ -227,7 +227,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
   const H = look.h
   if (rig) {
     // the panel's copy turns round her middle (the tail is half of her), the garden's round her feet
-    const pz = avatar ? -0.42 : rig.pivot.z
+    const pz = avatar ? rig.avatar.z : rig.pivot.z
     return <group ref={g} name={`spirit-model-${look.name}`} userData={{ spiritModel: look.name, rigged: true }}>
       {body && <group scale={H} position={[-rig.pivot.x * H, 0, -pz * H]}><primitive object={body.root} /></group>}
     </group>
@@ -264,7 +264,7 @@ function Turntable({ children }: { children: ReactNode }) {
   return <group ref={g}>{children}</group>
 }
 export function SpiritAvatar({ sp, look, size }: { sp: Species; look: SpiritLook; size: number }) {
-  const L = rigLook(sp, look, useSpiritRig()), h = L.h, far = L.rig ? 1.9 : 1   // M132 s2: rigged she is long (tail behind), so the camera stands back
+  const L = rigLook(sp, look, useSpiritRig()), h = L.h, far = L.rig?.avatar.far ?? 1   // M132 s2: rigged she is long (tail behind), so the camera stands back
   return (
     <div data-spirit-avatar={sp} style={{ width: size, height: size, borderRadius: 12, overflow: 'hidden', flex: 'none',
       background: 'radial-gradient(circle at 50% 42%, rgba(255,236,190,.55), rgba(58,39,22,.18) 72%)' }}>
