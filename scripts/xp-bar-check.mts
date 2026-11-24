@@ -37,7 +37,8 @@ const open = async (vw: number, vh: number, touch: boolean, seed: number): Promi
   const p = await br.newPage(); await p.setViewport({ width: vw, height: vh, isMobile: touch, hasTouch: touch, deviceScaleFactor: touch ? 2 : 1 })
   p.on('pageerror', e => errors.push(`${vw}: ${String(e).slice(0, 160)}`))
   await p.evaluateOnNewDocument((s: number) => {
-    localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.removeItem('open.pruned.v1'); localStorage.removeItem('open.inv.v1')
+    localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.removeItem('open.pruned.v1'); localStorage.removeItem('open.inv.v1'); localStorage.removeItem('open.gather.v1')
+    localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }))   // past the tutorial (M68 s3a): the worn pruner is lit
     localStorage.setItem('open.skills.v1', JSON.stringify([{ id: 'forestry', level: 1, xp: s }]))
   }, seed)
   await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 120000 })
