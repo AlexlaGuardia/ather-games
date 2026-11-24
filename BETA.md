@@ -219,6 +219,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 18:5x Alex (TALK): "hmm so i wonder if its worth generating our own concept images of each gun and sight with the caveat that the gun has to have a sigil slot ..would that be worth the effort?" -> hub: yes, small batch (asked go)
 - 11-24 18:4x Alex (guns): "lets get rid of that ugly sniper scope on all guns if we can and give the back bone a redgot elo sight and the sniper if we can try for a cleaner 3xcog sight.. your call" -> M149
 - 11-24 18:4x Alex (Backbone): "yea lets set up a bit of a delay in between each burst that the player can learn to time ..once thats set up i head over to the gun tuner to make sure its still looks good" -> M148
 - 11-24 18:3x Alex (playing, Backbone): "first id like to be able to hold the trigger to continuously fire and give it a 3 round burst to see how that feels" -> M148
