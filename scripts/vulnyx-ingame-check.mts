@@ -2,7 +2,7 @@
 // SETUP (stated): a Spirit Planter at (-130, 102.5) whose pot already BLOOMED (seeded in open.works.v1 + the book's pots).
 //  A. owner cookie + ?spirits=3d: window.__spiritModel.mounted >= 1 (the group named 'spirit-model-vulnyx' is in the scene),
 //     the glb answers 200, 0 page errors, frame time at 390x844 noted (SwiftShader, not a phone).
-//  B. owner, NO flag / C. NOT owner + ?spirits=3d: since the M107 ship the models are drawn (2), but no spirit talk.
+//  B. owner, NO flag / C. NOT owner + ?spirits=3d: the models are drawn (2) since the M107 ship and E at her talks (M123 s2).
 //  --shots <dir>: phone far / phone near / desktop / night (hour 21) from the owner + flag run.
 // M102 Manalotl wire-in (sprites-manalotl): PER SPECIES. Two more bloomed planters: a Manalotl (axolotl seed) and an Athowl
 //  (owl seed, no model yet). A also asserts: 2 models mounted (fox 1 + axolotl 1, the owl planter keeps the orb), the
@@ -121,8 +121,9 @@ if (a) {
       // GROWN size (creature-size.ts GROWN, athernyx 2a8b028) and the game draws it. Vulnyx 0.70 tall; the Manalotl is sized by
       // her LENGTH, 0.90 m nose to tail (canon's number; at this model's proportions she then stands ~0.70 tall). +-10%,
       // the hull's 6% inside that.
-      const hv = samples.at(-1)!.hWorld ?? 0, hm = msamp.at(-1)!.hWorld ?? 0, lm = msamp.at(-1)!.len ?? 0, gv = GROWN.fox.height, gl = GROWN.axolotl.length!
+      const hv = Math.min(...samples.map(s => s.hWorld ?? 0).filter(h => h > 0)), hm = msamp.at(-1)!.hWorld ?? 0, lm = msamp.at(-1)!.len ?? 0, gv = GROWN.fox.height, gl = GROWN.axolotl.length!
       { const by: Record<string, number[]> = {}; for (const s of samples) if (s.hWorld) (by[s.mode] ??= []).push(s.hWorld); console.log(`   Vulnyx measured height by mode: ${Object.entries(by).map(([m, v]) => `${m} ${Math.min(...v).toFixed(3)}-${Math.max(...v).toFixed(3)}`).join(', ')}`) }
+      // M126 s4: her LEVEL height = the smallest box over the run (a tipped trot / look pose only makes the box taller: 0.700-0.875)
       ok(hv > gv * 0.9 && hv < gv * 1.1, `A Vulnyx measured height ${hv.toFixed(3)} m (grown ${gv}, +-10%)`)
       ok(lm > gl * 0.9 && lm < gl * 1.1, `A Manalotl measured length ${lm.toFixed(3)} m nose to tail (grown ${gl}, +-10%); height ${hm.toFixed(3)} m`)
       // ground keep: the trot tips her round her feet; the lift that keeps her lowest point on the ground was applied (> 0)
@@ -219,16 +220,15 @@ if (f) {
   ok(f.errs.length === 0, `F 0 page errors ${f.errs.join(' | ')}`)
   await f.p.close()
 }
-// no talk without the flag / the owner: E aimed at the planter never shows the spirit answers
-const noTalk = async (p: Page) => { await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), P.x, P.z + 1.6); await aimAt(p, P.x, P.z, 0.7); await p.keyboard.press('e'); await sleep(900)
-  const o = await opts(p); await p.keyboard.press('Escape'); return !o.some(x => x.t === 'Follow' || x.t === 'Stay') }
+// ★ MOVED (M126 s4): 'no spirit talk' without the owner + flag. M123 s2 shipped the talk to every keeper, so E at her = the answers
+const talks = async (p: Page) => (await talkTo(p, 'fox')).map(x => x.t).join('/') === 'Feed/Follow/Open'
 // B. owner, no flag
 const b = await run(true, false)
 // M107 ship (Alex 11-23): the models + roam are for every keeper now; only talk/party/training stay owner + flag
-if (b) { ok(b.mounted === 2, `B owner, no flag: the models are drawn for everyone since the M107 ship (mounted=${b.mounted})`); ok(await noTalk(b.p), 'B owner, no flag: no spirit talk'); ok(b.errs.length === 0, `B 0 page errors ${b.errs.join(' | ')}`); await b.p.close() }
+if (b) { ok(b.mounted === 2, `B owner, no flag: the models are drawn for everyone since the M107 ship (mounted=${b.mounted})`); ok(await talks(b.p), 'B owner, no flag: E at her = Feed / Follow / Open (every keeper, M123 s2)'); ok(b.errs.length === 0, `B 0 page errors ${b.errs.join(' | ')}`); await b.p.close() }
 // C. not owner + flag
 const c = await run(false, true)
-if (c) { ok(c.mounted === 2, `C not owner + ?spirits=3d: the models are drawn (M107 ship) (mounted=${c.mounted})`); ok(await noTalk(c.p), 'C not owner + ?spirits=3d: no spirit talk'); ok(c.errs.length === 0, `C 0 page errors ${c.errs.join(' | ')}`); await c.p.close() }
+if (c) { ok(c.mounted === 2, `C not owner + ?spirits=3d: the models are drawn (M107 ship) (mounted=${c.mounted})`); ok(await talks(c.p), 'C not owner: E at her = Feed / Follow / Open (every keeper, M123 s2)'); ok(c.errs.length === 0, `C 0 page errors ${c.errs.join(' | ')}`); await c.p.close() }
 if (shots) {
   const d = await run(true, true, 1280, 800)
   if (d) { await look(d.p, 3.2, 0.8); await shot(d.p, 'desk'); await frameBoth(d.p, 2.4); await shot(d.p, 'spirits-desk'); await d.p.close() }
