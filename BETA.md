@@ -207,6 +207,9 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 15:3x Alex (playing): "the trio or duo in my case cant leave the plot although i did see they joined me in the wilds" -> bug, M126 (play, after M102w; cause not found yet)
+- 11-24 15:3x Alex (playing): "the tree node connection thing is a little off only because the tether between the player and the node persists for a half a sec after the node is done besides the tether should be to the tool not the node i think" -> M136 (world, after M128 s1)
+- 11-24 15:3x Alex: "i love how the spirits are coming along!" -> spirits feel noted
 - 11-24 13:3x Alex on the Sadlands take: "Yea I like your take on it" -> M137, canon asked
 - 11-24 13:2x Alex (TALK): "Yelp agreed on your tensacia, and what if we add a new biome the sadlands a dry area with whitesand and blue clay and settlement here the tensacia groves are like an oasis in the desert with a water source, finding a stream and following it might be a guide maybe even some unique rinn to catch here"
 - 11-24 13:1x Alex (dull edge): "Yea once the durability runs out the edge breaks away and will have to be replaced" -> M134
