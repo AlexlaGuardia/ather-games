@@ -40,7 +40,8 @@ ok(game.length >= 2, `wiring: found ${game.length} open-world pages (want the At
 for (const p of game) {
   const src = readFileSync(p, 'utf8'), rel = p.slice(p.indexOf('open/'))
   ok(/<GameHud\b/.test(src) && /from ['"]\.\.\/shared\/game-hud['"]|from ['"]\.\/shared\/game-hud['"]/.test(src), `wiring: ${rel} does not mount the GameHud template`)
-  for (const re of FORBIDDEN) ok(!re.test(src.replace(/^\s*\/\/.*$/gm, '')), `wiring: ${rel} places a HUD piece itself (${re}) — put it in game-hud.tsx`)
+  for (const re of FORBIDDEN) ok(!re.test(src.replace(/^\s*\/\/.*$/gm, '').replace(/^import type \{[^}]*\} from ['"][^'"]+['"];?[ \t]*$/gm, '')),   // a type-only import draws nothing
+    `wiring: ${rel} places a HUD piece itself (${re}) — put it in game-hud.tsx`)
 }
 // the exemptions must still exist (an exemption for a deleted file is a dead rule that reads as a live one)
 for (const k of Object.keys(EXEMPT)) ok(pages.some(p => p.endsWith(k)), `wiring: exemption ${k} names a page that no longer exists — drop it`)
