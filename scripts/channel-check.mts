@@ -5,6 +5,7 @@
 // (the tree is pruned, every chip's logs are in the bag). Hooks: movement, reading, __ather.prune (the click's own path),
 // __ather.chan.   npx tsx scripts/channel-check.mts [--url http://localhost:3203] [--out dir]
 import puppeteer from 'puppeteer-core'
+import { aimAt } from './lib/aim.mts'
 import { readFileSync } from 'fs'
 import { parseWilds, type WildsMeta } from '../src/app/shimmer/open/ather/wilds'
 import { TRUNK, type Zone } from '../src/app/shimmer/open/ather/forestry'
@@ -26,13 +27,13 @@ const p = await br.newPage(); await p.setViewport({ width: 1100, height: 680 })
 await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }));   /* M68 s3a: past the tutorial, so the worn pruner + spike are lit */  localStorage.removeItem('open.pruned.v1'); localStorage.removeItem('open.gather.v1'); localStorage.removeItem('open.skills.v1'); localStorage.removeItem('open.inv.v1') })
 await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 120000 })
 await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 120000 }); await sleep(2000)
-await p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))
+for (let i = 0; i < 20 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds'; i++) { await p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } })); await sleep(4000) }   // the index can still be loading: re-send
 await sleep(9000)
 // stand `d` metres east of a tree, facing it (yaw π/2 looks west), so the crosshair sits on the trunk
 // ⚠ headless renders a frame only when asked (a screenshot forces one): the aim is computed IN the frame loop, so read it
 // after a forced frame or it is the PREVIOUS spot's answer (the first runs read every aim one view late, 11-15)
 const frame = async () => { try { await p.screenshot({ path: `${out}/_frame.png` }) } catch { /* slow frame */ } }
-const aimFrom = async (t: { x: number; z: number }, d: number) => { await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), t.x + d, t.z); await sleep(3000); await frame(); await frame() }
+const aimFrom = async (t: { x: number; z: number }, d: number) => { await p.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI / 2), t.x + d, t.z); await sleep(3000); await aimAt(p, t.x, t.z, 1.0); await frame(); await frame() }
 await p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
 // FROM A DISTANCE (Alex 11-15: "click a tree from about 10 blocks out"): 6 m off, aim, prune (the click's own path)
 const chan = () => p.evaluate(() => (window as any).__ather.chan?.() ?? null) as Promise<{ id: string; done: number; of: number } | null>
