@@ -56,14 +56,17 @@ try {
   const want: Record<string, number> = {}
   for (const s of spots) {
     ok(await travel(s.sx, s.sz), `${s.node}: at it`); await tp(s.sx, s.sz)
-    const before = await bag(), had = (await lootOf(p)).length, rec = await finish(s)
+    const xp0 = JSON.stringify((await ls('open.skills.v1'))?.[s.node === 'tree' ? 'forestry' : 'prospecting']), before = await bag(), had = (await lootOf(p)).length, rec = await finish(s)
     ok(!!rec, `${s.node}: worked`); if (!rec) throw new Error('never worked')
     const roll = sumOf(rec.drops.filter(d => d.n > 0).map(d => ({ item: d.id, n: d.n }))), mine = (await lootOf(p)).filter(d => d.id.startsWith(`${s.node}:${s.id}:`))
     ok(had === (await lootOf(p)).length - mine.length && same(sumOf(mine), roll), `${s.node}: the whole roll on the ground ${JSON.stringify(roll)}`)
     ok(same(await bag(), before), `${s.node}: none of it in the bag yet`)
-    ok(new RegExp(s.node === 'tree' ? '\\+\\d+ Forestry' : '\\+\\d+ Prospecting').test(await text()), `${s.node}: the XP lands at the finish`)
+    ok(JSON.stringify((await ls('open.skills.v1'))?.[s.node === 'tree' ? 'forestry' : 'prospecting']) !== xp0, `${s.node}: the XP lands at the finish`)
     ok(!!(await ls(s.node === 'tree' ? 'open.pruned.v1' : 'open.mined.v1'))?.[s.id], `${s.node}: spent`)
-    ok(mine.every(d => { const r = Math.hypot(d.x - s.x, d.z - s.z); return r > 0.5 && r < 3 && walkableIn(W, d.x, d.z, 0.3) && V.weight(d.x, d.z) < 0.06 && Math.abs(d.y - s.y) < 1.5 }), `${s.node}: beside it, on ground to walk (${mine.map(d => Math.hypot(d.x - s.x, d.z - s.z).toFixed(1))})`)
+    // the ground is the LIVE one (the owner publishes maps): the page's own ground, the parse only for trunks and pits
+    const gy = (x: number, z: number) => p.evaluate((x, z) => (window as any).__ather.ground(x, z) as number, x, z), base = await gy(s.x, s.z)
+    const at = await Promise.all(mine.map(async d => ({ r: +Math.hypot(d.x - s.x, d.z - s.z).toFixed(2), walk: walkableIn(W, d.x, d.z, 0.3), pit: +V.weight(d.x, d.z).toFixed(2), off: +(d.y - await gy(d.x, d.z)).toFixed(2), up: +(d.y - base).toFixed(2) })))
+    ok(at.every(d => d.r > 0.5 && d.r < 3 && d.walk && d.pit < 0.06 && Math.abs(d.off) < 0.05 && Math.abs(d.up) < 2), `${s.node}: beside it, on the ground, on foot ${JSON.stringify(at)}`)
     await shot(`1-${s.node}`)
     for (const [k, n] of Object.entries(roll)) want[k] = (want[k] ?? 0) + n
     const far = { x: s.x + (s.sx - s.x) * 0.95, z: s.z + (s.sz - s.z) * 0.95 }; await tp(far.x, far.z); for (let i = 0; i < 6; i++) await frame()
