@@ -6,6 +6,14 @@ import { infectedPlace } from './infect-id'
 import { begin, blank, fell, loadInfection, pickable, saveInfection, step, type InfectEvent, type Infection } from './infection'
 import { isRevealed, type Fog } from './explored'
 import type { Network, Settlement } from './network'
+import { due, heardSay, loadTell, note, refugees, refugeeSpots, saveTell, settlerSay, told, type Refugee, type Say } from './infect-tell'
+import { championSpot } from './infection'
+import { folkOf, stillHome } from './settlement-folk'
+import { builtFolkSpots } from './settlement-lots'
+import { loadVillage } from './moglins'
+import { refugeeDrawn } from './network-scene'
+import { hudSay } from '../shared/hud-say'
+import type { Spot } from './folk-spots'
 
 /** THE ONE SWITCH (M128): `return true` here ships the infections to every keeper. */
 export function useInfectionsOn(): boolean { return useIsOwner() }
@@ -13,24 +21,30 @@ export function useInfectionsOn(): boolean { return useIsOwner() }
 const TICK_MS = 10_000
 /** the keeper stands in or by a settlement: no infection starts under their feet */
 const NEAR_R = 130
-/** the ping TRIGGER: no words here (M128 s2 speaks the signed script) */
+/** M128 s2: how often a due line is looked for (one line a look, so two never share the screen's first seconds) */
+const TELL_MS = 5000, TELL_TTL = 9
+/** the ping TRIGGER (checks + anything else that reacts). The WORDS come from the save, never from this event (infect-tell.ts). */
 export const INFECT_EVENT = 'ather-infection'
 function tell(events: readonly InfectEvent[], net: Network) {
   for (const e of events) window.dispatchEvent(new CustomEvent(INFECT_EVENT, { detail: { ...e, name: net.settlements.find(p => p.id === e.id)?.name ?? '' } }))
 }
 
-export interface InfectionView { state: Infection | null; held: string | null; lost: readonly string[]; down: (nodeId: string) => boolean }
+export interface InfectionView { state: Infection | null; held: string | null; lost: readonly string[]; down: (nodeId: string) => boolean; talk: InfectTalk | null }
+/** what the infections have a settlement's folk say (use-folk-talk.tsx) */
+export interface InfectTalk { spots: (s: Settlement) => readonly Spot[]; nameOf: (id: string) => string; say: (s: Settlement, fid: string, last: boolean) => Say | null; heard: (say: Say, upTo: number) => void }
 const NONE: readonly string[] = []
 
-export function useInfections(o: { net: Network | null; fog: Fog | null; tileOff: { x: number; z: number }; clock: () => number; pos: React.MutableRefObject<{ x: number; z: number }>; inWilds: boolean; fighting: () => string | null }): InfectionView {
+export function useInfections(o: { net: Network | null; fog: Fog | null; tileOff: { x: number; z: number }; clock: () => number; pos: React.MutableRefObject<{ x: number; z: number }>; inWilds: boolean; fighting: () => string | null; walkable: (x: number, z: number) => boolean; /** the keeper can read a line now (no panel, no arrival veil) */ canRead: () => boolean }): InfectionView {
   const on = useInfectionsOn()
   const [state, setState] = useState<Infection | null>(null)
   const live = useRef(o); live.current = o
   const log = useRef<InfectEvent[]>([])
   const ready = on && !!o.net && !!o.fog
+  const jot = (s: Infection) => { const t = loadTell(s.season), n = note(t, s); if (n !== t) saveTell(n) }   // which clue a place holds, before the engine forgets it
   const commit = useCallback((s: Infection, events: InfectEvent[]) => {
     const net = live.current.net; if (!net) return
     if (!blank(s)) saveInfection(s)
+    jot(s)
     setState(cur => (cur && JSON.stringify(cur) === JSON.stringify(s) ? cur : s))
     if (events.length) { log.current.push(...events); tell(events, net) }
   }, [])
@@ -45,6 +59,7 @@ export function useInfections(o: { net: Network | null; fog: Fog | null; tileOff
       const { net, pos, inWilds, clock, fighting } = live.current; if (!net) return
       const t = performance.now(), played = document.visibilityState === 'visible' ? t - last : 0; last = t
       const s = loadInfection(net.season)   // re-read: another tab (or a cloud pull) may have moved it
+      if (s.active) jot(s)
       const near = inWilds && net.settlements.some(p => Math.hypot(p.x - pos.current.x, p.z - pos.current.z) < NEAR_R)
       const r = step(s, { season: net.season, now: clock(), played, known: known(), rng: Math.random, mayStart: !near, mayLose: !s.active || fighting() !== `infect:${s.active.id}` })
       if (r.s === s) setState(cur => (cur && JSON.stringify(cur) === JSON.stringify(s) ? cur : s))   // nothing moved: nothing written
@@ -70,6 +85,37 @@ export function useInfections(o: { net: Network | null; fog: Fog | null; tileOff
     }
     return () => { delete g.__infect }
   }, [ready, commit, known])
+  // ── told (M128 s2) ──
+  useEffect(() => {
+    if (!ready) return
+    const id = setInterval(() => {
+      const { net, canRead } = live.current; if (!net || document.visibilityState !== 'visible' || !canRead()) return
+      const st = loadInfection(net.season), t = loadTell(net.season)   // re-read: another tab may have told it
+      const d = due(t, st, p => net.settlements.find(x => x.id === p)?.name ?? ''); if (!d) return
+      saveTell(told(t, d)); hudSay(d.text, d.morel ? 'morel' : 'info', TELL_TTL)
+    }, TELL_MS)
+    return () => clearInterval(id)
+  }, [ready])
+  const talk = useMemo<InfectTalk | null>(() => {
+    if (!ready || !state) return null
+    const at = () => ({ st: loadInfection(live.current.net!.season), t: loadTell(live.current.net!.season) })
+    const here = (s: Settlement): Refugee[] => { const { st, t } = at(); if (st.active?.id !== s.id) return []
+      const places = live.current.net!.settlements, v = loadVillage()
+      return refugees(t, st, id => { const p = places.find(x => x.id === id); return p ? stillHome(folkOf(p, st.season), v) : [] }) }
+    let memo = { key: '', spots: [] as readonly Spot[] }
+    return {
+      spots: s => {
+        const r = here(s), key = `${s.id}|${r.map(x => x.id).join()}`
+        if (key !== memo.key) { const folk = r.length ? builtFolkSpots(s, folkOf(s, live.current.net!.season), live.current.net!.season) : []; memo = { key, spots: r.length ? refugeeSpots(s, r, folk, championSpot(s, folk, live.current.walkable)) : [] } }
+        return memo.spots
+      },
+      nameOf: id => { const held = live.current.net!.settlements.find(p => p.id === at().st.active?.id); return (held && here(held).find(r => r.id === id)?.name) || '' },
+      say: (s, fid, last) => { const { st, t } = at(), h = here(s), r = h.find(x => x.id === fid)
+        return r ? { lines: r.lines, clues: [r.clue], met: r.from } : settlerSay(t, st, s.id, last, h) },
+      heard: (say, upTo) => { const { t } = at(), n = heardSay(t, say, upTo); if (n !== t) saveTell(n) },
+    }
+  }, [ready, state])
+  useEffect(() => { refugeeDrawn.at = talk?.spots ?? (() => []); return () => { refugeeDrawn.at = () => [] } }, [talk])
   const s = ready ? state : null
-  return useMemo(() => ({ state: s, held: s?.active?.id ?? null, lost: s?.lost ?? NONE, down }), [s, down])
+  return useMemo(() => ({ state: s, held: s?.active?.id ?? null, lost: s?.lost ?? NONE, down, talk }), [s, down, talk])
 }

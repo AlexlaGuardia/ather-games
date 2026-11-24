@@ -143,6 +143,9 @@ export const stallDrawn = new Map<string, Spot & { name: string }>()
 export const gleanerPost = { on: true }
 const useGleanerPost = () => gleanerPost.on
 
+/** M128 s2: folk of a lost settlement standing at another (the page sets it; empty = nobody): host settlement id -> spots */
+export const refugeeDrawn: { at: (s: Settlement) => readonly Spot[] } = { at: () => [] }
+
 function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: number) => number | null }) {
   const postOn = useGleanerPost()
   const places = useMemo(() => (postOn ? [...net.settlements, GLEANER_POST] : net.settlements), [net, postOn])
@@ -167,7 +170,7 @@ function SettlementFolk({ net, loaded }: { net: Network; loaded: (x: number, z: 
       const s = places.find(x => x.id === id); if (!s) continue
       const all = folkOf(s, SEASON), home = new Set(stillHome(all, village).map(f => f.id))
       const b = burrfolkOf(s, SEASON, all)
-      out.push({ s, spots: builtFolkSpots(s, all, SEASON).filter(p => home.has(p.id)), stall: b ? { id: b.id, name: b.name, ...stallSpot(s) } : null })   // laid out over ALL, so a recruit never shuffles the rest
+      out.push({ s, spots: [...builtFolkSpots(s, all, SEASON).filter(p => home.has(p.id)), ...refugeeDrawn.at(s)], stall: b ? { id: b.id, name: b.name, ...stallSpot(s) } : null })   // laid out over ALL, so a recruit never shuffles the rest
     }
     return out
   }, [near, places, village])

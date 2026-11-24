@@ -26,6 +26,7 @@ export const goodsText = (ws: { id: string; n: number }[]) => ws.map(w => `${w.n
 /** Where the talk is: whose bubble, which screen, and (after an answer) the line it said. */
 export interface FolkTalkState { fid: string; screen: 'hello' | 'needs' | 'said' | 'card' | 'teach' | 'stall'; line?: string; /** M40: this hello is a repeat (a Glade Moglin says its alternate) */ alt?: boolean
   /** how many times this Moglin was heard before this hello (Yarrow's third repeat line) */ rep?: number
+  /** M128 s2: which of ctx.infect's lines is up */ beat?: number
   /** Yarrow's teach beat: which page of it, and the answer given */ step?: number; answer?: 'pointed' | 'silent' }
 // M40: Glade Moglins heard this visit (a repeat talk gets the alternate line). Per page, not saved: a new visit starts fresh.
 const heard = new Map<string, number>()
@@ -38,7 +39,11 @@ export interface FolkTalkCtx { folk: Folk[]; home: Folk[]; trust: Trust; have: (
   /** M112: the settlement's Burrfolk (its stall), never one of `folk` */
   burr?: Burrfolk | null
   /** M128: an infection holds this settlement: no trade (the folk still talk) */
-  stopped?: boolean }
+  stopped?: boolean
+  /** M128 s2: what this settler says in place of the hello (infect-tell.ts: a clue, the thanks), one line a screen */
+  infect?: { lines: readonly string[] } | null
+  /** M128 s2: the one talked to is a refugee standing here: the lines above, and goodbye */
+  refugee?: boolean }
 /** M46: a talk node may carry the Moglin's card (the HUD draws it above the answers); `scene` = a stage direction over the line */
 export type FolkTalkNode = TalkNode & { card?: CardView; scene?: string }
 export const isGladeYarrow = (fid: string) => isGlade(fid) && fid.split(':').pop() === 'yarrow'
@@ -67,6 +72,9 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act0: FolkTalkActs):
   const act = c.stopped ? { ...act0, trade: undefined } : act0
   const bye = { label: ASK.bye, pick: act.bye }
   if (isBurr(st.fid) && c.burr && st.fid === c.burr.id) return burrTalk(c, c.burr, st, act)
+  const said = st.screen === 'hello' && c.infect?.lines.length ? c.infect.lines : null, beat = said ? Math.min(st.beat ?? 0, said.length - 1) : 0
+  const more = said && beat < said.length - 1 ? { line: said[beat], options: [{ label: LISTEN, pick: () => act.go({ ...st, beat: beat + 1 }) }, bye] } : null
+  if (c.refugee) return more ?? { line: said?.[beat] ?? '', options: [bye] }
   const f = c.folk.find(x => x.id === st.fid)
   if (!f) return { line: FOLK_EMPTY, options: [bye] }
   const others = c.home.filter(x => x.id !== f.id)
@@ -107,6 +115,7 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act0: FolkTalkActs):
     if (step === 3) return { scene: T.page.scene, line: T.page.lines[0], options: [{ label: LISTEN, pick: () => to(4) }] }
     return { line: T.page.lines[1], options: [{ label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello', alt: true, rep: 1 }) }, bye] }
   }
+  if (more) return more   // M128 s2: the infection's lines before the hello's answers
   if (st.screen === 'said') return { line: st.line ?? f.dream, options: [{ label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello' }) }, ...(next ? [next] : []), bye] }
   // ★ Yarrow's teach beat replaces the hello on the first talk after a rinstick (closing the box leaves it armed)
   if (st.screen === 'hello' && isGladeYarrow(f.id) && c.yarrow?.canTeach) return folkTalk(c, { fid: f.id, screen: 'teach', step: 0 }, act)
@@ -115,7 +124,7 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act0: FolkTalkActs):
   const inspect = { label: ASK.inspect, pick: () => act.go({ fid: f.id, screen: 'card', alt: st.alt }) }
   if (st.screen === 'card') return { line: hello, card: cardOf(f, c.trust, c.homeName ?? f.home), options: [{ label: ASK.back, pick: () => act.go({ fid: f.id, screen: 'hello', alt: st.alt }) }, bye] }
   const trade = f.profession === 'digger' && act.trade ? [{ label: DIGGER_LABEL.trade, pick: () => act.trade!(f) }] : []   // M108 s3
-  return { line: hello, options: [...trade, ...(f.employed && !ok && !c.stopped ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, inspect, ...(next ? [next] : []), bye] }
+  return { line: said ? said[beat] : hello, options: [...trade, ...(f.employed && !ok && !c.stopped ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, inspect, ...(next ? [next] : []), bye] }
 }
 
 /** M112: the Burrfolk's stall. Greet (signed bark), "Have a look" opens the stall (signed stall bark + one swap per stock row).

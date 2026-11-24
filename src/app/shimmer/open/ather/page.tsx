@@ -571,7 +571,7 @@ function AtherSliceGame() {
   // the countries on the fold map, and which one the keeper stands in (HUD), off the same nearest-node rule
   // M128 s1: THE WEEKLY INFECTIONS (infection.ts; owner-only: use-infection.tsx). A held settlement = a champion + Hollow ground round
   // its homes; a lost one = the ground alone. With none, every value below IS the old one (same object).
-  const infection = useInfections({ net, fog, tileOff, clock, pos, inWilds: zone.kind === 'wilds', fighting: () => liveSolids.combat?.champ?.nodeId ?? null })
+  const infection = useInfections({ net, fog, tileOff, clock, pos, inWilds: zone.kind === 'wilds', fighting: () => liveSolids.combat?.champ?.nodeId ?? null, walkable: (x, z) => !!ww && ww.walkable(x, z), canRead: () => !frozen.current && !fading.current })
   const infectionRef = useRef(infection); infectionRef.current = infection
   const infKey = `${infection.held ?? ''}|${infection.lost.join()}`
   const infNodes = useMemo(() => net && ww ? infectNodes(infectionRef.current.state, net.settlements, p => championSpot(p, builtFolkSpots(p, folkOf(p, net.season), net.season), (x, z) => ww.walkable(x, z)), (x, z) => { const { tx, ty } = tileOf(x, z); return ww.at(tx, ty)?.name ?? '' }, BIOME.meadow) : NO_NODES, [net, ww, wrev, infKey]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1534,7 +1534,7 @@ function AtherSliceGame() {
   useEffect(() => { if (tourRef.current && zone.kind === 'plot' && tourRef.current.i !== tableIdx) setTour(null) }, [zone.kind, tableIdx])
   useEffect(() => { if (!tour && panel?.kind !== 'talk' && panel?.kind !== 'greg') setTableVisit(false) }, [tour, panel])
   // BETA M13: E in a settlement talks to ONE Moglin (folk-talk.ts); the settlement's heart is its anchor (no Moglin models are drawn yet)
-  const folkTalk = useFolkTalk(panel?.kind === 'folk' ? panel.s : null, useCallback((x: number, z: number) => zone.kind === 'glade' ? gladeZoneGround(x, z) : ww && ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : 0, [ww, zone.kind, gladeZoneGround]), () => setPanel(null), panel?.kind === 'folk' && panel.s.id === infection.held)
+  const folkTalk = useFolkTalk(panel?.kind === 'folk' ? panel.s : null, useCallback((x: number, z: number) => zone.kind === 'glade' ? gladeZoneGround(x, z) : ww && ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : 0, [ww, zone.kind, gladeZoneGround]), () => setPanel(null), panel?.kind === 'folk' && panel.s.id === infection.held, infection.talk)
   // BETA M22: Fennel at the Rinnshop while the first-rinstick quest is open (fennel.tsx, use-rinquest.ts › fennelTalk)
   const fennelAt = useMemo(() => (!visitNow && fennelHere(rinQuest) ? fennelSpot(works) : null), [rinQuest, works, visitNow])   // M61: your Fennel stays on YOUR plot
   const fennelRef = useRef(fennelAt); fennelRef.current = fennelAt
