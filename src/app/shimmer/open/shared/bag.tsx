@@ -10,17 +10,28 @@ import React, { useState, useSyncExternalStore } from 'react'
 import { HearthFrame, HearthLabel, Well, H, hearthDisplay } from '../../ui/hearth'
 import type { HotbarEntry } from '../../hud/hotbar'
 import { loadWaymarks } from '../ather/waymarks'
-import { HOTBAR, BAG, SLOTS, itemDef, loadInv, saveInv, move, split, quickMove, makeBait, BAIT_FROM, baitYield, readBaitPage, hasGift, BAIT_PAGE, GIFT_BAIT_READ, type Inv } from './inventory'
+import { HOTBAR, BAG, SLOTS, itemDef, loadInv, saveInv, hasSavedInv, startingWaymarks, move, split, quickMove, makeBait, BAIT_FROM, baitYield, readBaitPage, hasGift, BAIT_PAGE, GIFT_BAIT_READ, type Inv } from './inventory'
 import { KAEL_INVITE, KAEL_PAGE } from './opening-chain'
 import { KAEL_INVITE_TEXT } from './kael-invite-lines'
 import { KAEL_PAGE_TEXT } from './kael-page-lines'
 import { chainRead, chainReadPage } from './opening-chain-store'
+import { gardenKey } from '@/lib/keeper-local'
 
 // ── the store ────────────────────────────────────────────────────────────────────────────────────────────────
 let inv: Inv | null = null
 const subs = new Set<() => void>()
 const get = (): Inv => {
-  if (!inv) inv = typeof window === 'undefined' ? loadInvServer() : loadInv(Math.max(0, 12 - loadWaymarks().length))
+  if (!inv) {
+    if (typeof window === 'undefined') inv = loadInvServer()
+    else if (hasSavedInv()) inv = loadInv()   // ★ M71 s2: a saved bag keeps every waymark it holds
+    else {
+      // a bag made now: 3 free (M71 s2), or the old 12 for a keeper who already has a garden save; saved at once so the count
+      // is fixed here and never re-decided on a later load
+      let legacy = false
+      try { legacy = localStorage.getItem(gardenKey('ather.garden.v1')) !== null } catch { /* private window */ }
+      inv = loadInv(startingWaymarks(loadWaymarks().length, legacy)); saveInv(inv)
+    }
+  }
   return inv
 }
 // ★ ONE object, not a builder: useSyncExternalStore requires getServerSnapshot to return the SAME value every call,

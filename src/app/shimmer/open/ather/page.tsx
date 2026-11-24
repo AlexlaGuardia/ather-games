@@ -73,7 +73,7 @@ import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
 import { tutStart, tutNode, grimoireGift, type TutCursor } from './glade-greg-talk'   // M68 s2
 import { loadTut, saveTut, gift as tutGift, allHeard, tessPacket, type Tut, type Gift as TutGift } from './glade-tutorial'
-import { gardenOpen, foldOffered, foldNode, type FoldStep } from './garden-fold'   // M71 s1: Greg folds the first garden
+import { gardenOpen, foldOffered, foldNode, buyPick, FOLD_TEXT, type FoldStep } from './garden-fold'   // M71 s1: Greg folds the first garden
 import { friendStart, friendNode, FRIEND_NAME, GARDEN_FRIENDS, type FriendCursor, type GardenFriend } from './glade-friend-talk'   // M68 s3a
 import { line as gladeLine } from './glade-tutorial-lines'
 import { gregSpot, GLADE } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
@@ -1325,6 +1325,11 @@ function AtherSliceGame() {
   const openGreg = () => { const t = loadTut(); setTutState(t); const c = tutStart(t); setTutC(c); setFoldC(!c && foldOffered(t) ? 'offer' : null); setPanel({ kind: 'talk', step: 0 }) }
   /** Hub call (M68): ONE Grimoire Pedestal per keeper. One already crafted (the old recipe) or placed or banked counts. */
   const ownsPedestal = () => countOf(getInv(), 'grimoire_pedestal') > 0 || currentWorks().pieces.some(p => p.item === 'grimoire_pedestal') || bankCount(currentBank(), 'grimoire_pedestal') > 0
+  /** M71 s2: a bought waymark: into the bag first (a full bag refuses, nothing spent), then the garden's grey */
+  const buyWaymark = (grey: number) => {
+    const r = give(getInv(), 'waymark', 1); if (r.left) { hudSay('Your bag is full. Make room for the waymark.', 'info'); return false }
+    setInv(r.inv); const g = { ...gardenRef.current, grey }; setGarden(g); saveGarden(g); hudSay(`Waymark · in your bag. ${grey} grey matter left.`, 'item'); return true
+  }
   const talkStep = panel?.kind === 'talk' ? panel.step : -1
   const talkNode = useMemo(() => {
     if (talkStep < 0) return null
@@ -1347,6 +1352,7 @@ function AtherSliceGame() {
       pay: (t, grey) => { const g = { ...gardenRef.current, grey }; setGarden(g); saveGarden(g); setTut(t); hudSay(`Garden folded. ${grey} grey matter left.`, 'item') },   // garden first, then the flag
       go: s => { setFoldC(s); if (!s) setPanel(null) },
       home: () => goHome(),
+      buy: grey => buyWaymark(grey),
     })
     const pending = !!tut && tut.live && tut.greg.wilds && !allHeard(tut)
     const open = !tut || gardenOpen(tut)   // M71 s1: no ground screen and no tour (it ends at your table) before the fold
@@ -1354,6 +1360,7 @@ function AtherSliceGame() {
       ground: open ? () => setPanel({ kind: 'greg' }) : undefined, bye: () => setPanel(null), goto: step => setPanel({ kind: 'talk', step }),
       tour: open ? () => { setPanel(null); setStops(tourStops()); setTour({ i: 0, talk: false }) } : undefined,
       hello: pending ? gladeLine('greg.b1.bark.pending') : undefined,
+      buy: tut && open ? { label: FOLD_TEXT.buyAsk, pick: () => buyPick(tut, { grey: () => gardenRef.current.grey, pay: () => {}, go: s => { setFoldC(s); if (!s) setPanel(null) }, home: () => goHome(), buy: grey => buyWaymark(grey) }) } : undefined,
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [talkStep, errandStage, birth, given, tut, tutC, foldC])

@@ -224,7 +224,14 @@ export const HOTBAR = 8, BAG = 24, SLOTS = HOTBAR + BAG
 export type Stack = { id: string; n: number }
 export interface Inv { v: 1; slots: (Stack | null)[]; /** one-off gifts already handed over (an older bag gets each once) */ gifts?: string[] }
 
-export function newInv(waymarks = 12): Inv {
+/** M71 s2 (Magii 43fef80 #6): a NEW bag starts with 3 free waymarks; Greg sells more (garden-fold.ts WAYMARK_PRICE). A keeper
+ *  from before this (LEGACY_WAYMARKS, the old 12) keeps every waymark: a saved bag is never touched, and a bag first made
+ *  for a keeper who already has a garden save is made at the old count. */
+export const FREE_WAYMARKS = 3, LEGACY_WAYMARKS = 12
+/** How many waymarks a bag made NOW starts with: the free count (or the old 12 for an existing keeper) less those planted. */
+export const startingWaymarks = (planted: number, legacy: boolean) => Math.max(0, (legacy ? LEGACY_WAYMARKS : FREE_WAYMARKS) - Math.max(0, planted))
+
+export function newInv(waymarks = FREE_WAYMARKS): Inv {
   const slots: (Stack | null)[] = Array(SLOTS).fill(null)
   // ★ no gun (Alex 11-18): weapons are equipment (the Character tab's primary / secondary), never bag items
   if (waymarks > 0) slots[0] = { id: 'waymark', n: waymarks }
@@ -300,7 +307,7 @@ export const INV_KEY = 'open.inv.v1'
 /** Guns left the bag (11-18): an older bag's gun stacks are taken out (weapons are equipment, loadout.ts). Pure. */
 export const dropGuns = (i: Inv): Inv => (i.slots.some(x => x && OPEN_ITEMS[x.id]?.kind === 'gun') ? { ...i, slots: i.slots.map(x => (x && OPEN_ITEMS[x.id]?.kind === 'gun' ? null : x)) } : i)
 
-export function loadInv(waymarksLeft = 12): Inv {
+export function loadInv(waymarksLeft = FREE_WAYMARKS): Inv {
   try {
     const v = JSON.parse(localStorage.getItem(keeperKey(INV_KEY)) ?? 'null')
     if (v?.v === 1 && Array.isArray(v.slots) && v.slots.length === SLOTS) {
@@ -320,4 +327,6 @@ export function loadInv(waymarksLeft = 12): Inv {
   } catch { /* private window */ }
   return newInv(waymarksLeft)
 }
+/** Is there a bag saved for this keeper (so loadInv reads it rather than making one)? */
+export function hasSavedInv(): boolean { try { return localStorage.getItem(keeperKey(INV_KEY)) !== null } catch { return false } }
 export function saveInv(inv: Inv) { try { localStorage.setItem(keeperKey(INV_KEY), JSON.stringify(inv)) } catch { /* private window */ } }

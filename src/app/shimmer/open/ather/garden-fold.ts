@@ -23,6 +23,17 @@ export const gardenOpen = (t: Tut) => t.folded
 /** Greg offers the fold: unfolded, and back from the first settlement (its thanks heard). */
 export const foldOffered = (t: Tut) => !t.folded && t.m70 === 'thanked'
 
+/** M71 s2 (Magii 43fef80 #6): after the 3 free (inventory.ts FREE_WAYMARKS) Greg sells waymarks at ~500 grey matter each. */
+export const WAYMARK_PRICE = 500
+export type BuyResult = { ok: true; grey: number } | { ok: false; why: 'unfolded' | 'grey'; need: number }
+/** Buy one waymark: only a keeper with a folded garden (a waymark leads home to it), never under the price, spends exactly it. */
+export function tryBuyWaymark(t: Tut, grey: number): BuyResult {
+  if (!gardenOpen(t)) return { ok: false, why: 'unfolded', need: 0 }
+  const have = Math.max(0, Math.floor(grey))
+  if (have < WAYMARK_PRICE) return { ok: false, why: 'grey', need: WAYMARK_PRICE - have }
+  return { ok: true, grey: have - WAYMARK_PRICE }
+}
+
 export type FoldResult = { ok: true; t: Tut; grey: number } | { ok: false; why: 'folded' | 'offer' | 'grey'; need: number }
 /** The fold itself: spends exactly FOLD_COST, never under it, never twice. */
 export function tryFold(t: Tut, grey: number): FoldResult {
@@ -40,10 +51,16 @@ export const FOLD_TEXT = {
   short: (have: number) => `That is not enough yet. You have ${have} grey matter, and it takes ${FOLD_COST}.`,
   done: 'There. Your garden is folded, and its gate is open.',
   go: 'To my garden',
+  // M71 s2 waymarks (@lark placeholders)
+  buyAsk: `Buy a waymark (${WAYMARK_PRICE} grey matter)`,
+  buyShort: (have: number) => `Not yet. You have ${have} grey matter, and a waymark takes ${WAYMARK_PRICE}.`,
+  buyDone: 'Here. Bind it where the ground is yours, and it will lead you home.',
 } as const
 
-export type FoldStep = 'offer' | 'short' | 'done'
+export type FoldStep = 'offer' | 'short' | 'done' | 'buyShort' | 'buyDone'
 export interface FoldActs {
+  /** M71 s2: commit a waymark buy (garden grey + one waymark into the bag); false = it did not fit, nothing spent */
+  buy?: (grey: number) => boolean
   /** the keeper's grey matter now */
   grey: () => number
   /** commit the fold: save the garden's grey and the tutorial (garden first) */
@@ -55,6 +72,10 @@ export interface FoldActs {
 /** Greg's fold talk at `step`. */
 export function foldNode(t: Tut, step: FoldStep, act: FoldActs): TalkNode {
   const notYet = { label: line('greg.b2.choice.wait'), pick: () => act.go(null) }
+  if (step === 'buyShort' || step === 'buyDone') {
+    const again = { label: FOLD_TEXT.buyAsk, pick: () => buyPick(t, act) }
+    return { line: step === 'buyDone' ? FOLD_TEXT.buyDone : FOLD_TEXT.buyShort(Math.max(0, Math.floor(act.grey()))), options: [again, { label: ANSWERS.bye, pick: () => act.go(null) }] }
+  }
   if (step === 'done') return { line: FOLD_TEXT.done, options: [{ label: FOLD_TEXT.go, pick: () => { act.go(null); act.home() } }] }
   const ask = {
     label: FOLD_TEXT.ask, pick: () => {
@@ -64,4 +85,10 @@ export function foldNode(t: Tut, step: FoldStep, act: FoldActs): TalkNode {
   }
   if (step === 'short') return { line: FOLD_TEXT.short(Math.max(0, Math.floor(act.grey()))), options: [ask, { label: ANSWERS.bye, pick: () => act.go(null) }] }
   return { line: FOLD_TEXT.offer, options: [ask, notYet] }
+}
+
+/** M71 s2: the 'Buy a waymark' answer (Greg's ordinary talk offers it to a folded keeper; foldNode repeats it). */
+export function buyPick(t: Tut, act: FoldActs): void {
+  const r = tryBuyWaymark(t, act.grey())
+  if (r.ok && act.buy?.(r.grey)) act.go('buyDone'); else if (!r.ok && r.why === 'grey') act.go('buyShort'); else act.go(null)
 }
