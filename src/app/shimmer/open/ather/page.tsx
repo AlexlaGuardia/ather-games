@@ -71,7 +71,8 @@ import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './
 import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
-import { tutStart, tutNode, grimoireGift, type TutCursor } from './glade-greg-talk'   // M68 s2
+import { tutStart, tutNode, grimoireGift, pedestalOwed, type TutCursor } from './glade-greg-talk'   // M68 s2 (+ M123 s1 pedestalOwed)
+import { useSpiritsDev } from './spirit-model'   // M123 s1: Greg's grimoire hand-over for a legacy keeper (owner + ?spirits=3d until s2)
 import { loadTut, saveTut, gift as tutGift, allHeard, tessPacket, type Tut, type Gift as TutGift } from './glade-tutorial'
 import { gardenOpen, foldOffered, foldNode, buyPick, FOLD_TEXT, type FoldStep } from './garden-fold'   // M71 s1: Greg folds the first garden
 import { friendStart, friendNode, FRIEND_NAME, GARDEN_FRIENDS, type FriendCursor, type GardenFriend } from './glade-friend-talk'   // M68 s3a
@@ -1329,7 +1330,9 @@ function AtherSliceGame() {
   const [tutC, setTutC] = useState<TutCursor | null>(null)
   const [foldC, setFoldC] = useState<FoldStep | null>(null)   // M71 s1: Greg's fold offer (garden-fold.ts), in front of his usual talk
   const setTut = (t: Tut) => { saveTut(t); setTutState(t) }
-  const openGreg = () => { const t = loadTut(); setTutState(t); const c = tutStart(t); setTutC(c); setFoldC(!c && foldOffered(t) ? 'offer' : null); setPanel({ kind: 'talk', step: 0 }) }
+  const [gregSaid, setGregSaid] = useState<string | null>(null)   // M123 s1: his line after handing the grimoire over
+  const spiritsDev = useSpiritsDev()
+  const openGreg = () => { setGregSaid(null); const t = loadTut(); setTutState(t); const c = tutStart(t); setTutC(c); setFoldC(!c && foldOffered(t) ? 'offer' : null); setPanel({ kind: 'talk', step: 0 }) }
   /** Hub call (M68): ONE Grimoire Pedestal per keeper. One already crafted (the old recipe) or placed or banked counts. */
   const ownsPedestal = () => countOf(getInv(), 'grimoire_pedestal') > 0 || currentWorks().pieces.some(p => p.item === 'grimoire_pedestal') || bankCount(currentBank(), 'grimoire_pedestal') > 0
   /** M71 s2: a bought waymark: into the bag first (a full bag refuses, nothing spent), then the garden's grey */
@@ -1367,10 +1370,17 @@ function AtherSliceGame() {
       ground: open ? () => setPanel({ kind: 'greg' }) : undefined, bye: () => setPanel(null), goto: step => setPanel({ kind: 'talk', step }),
       tour: open ? () => { setPanel(null); setStops(tourStops()); setTour({ i: 0, talk: false }) } : undefined,
       hello: pending ? gladeLine('greg.b1.bark.pending') : undefined,
+      // M123 s1: a keeper with no grimoire pedestal (a legacy keeper never heard Beat 1) asks 'Spirits?' and Greg hands it over
+      grimoire: spiritsDev && pedestalOwed(tut, ownsPedestal()) ? { label: gladeLine('greg.b1.choice.b'), pick: () => {
+        const r = give(getInv(), 'grimoire_pedestal', 1)
+        if (r.left) { hudSay('Your bag is full. Make room for the grimoire.', 'info'); return }
+        setInv(r.inv); hudSay(`${FURNITURE.grimoire_pedestal.name} · in your bag`, 'item'); setGregSaid(gladeLine('greg.b1.spirits.3'))
+      } } : undefined,
+      said: gregSaid ?? undefined,
       buy: tut && open ? { label: FOLD_TEXT.buyAsk, pick: () => buyPick(tut, { grey: () => gardenRef.current.grey, pay: () => {}, go: s => { setFoldC(s); if (!s) setPanel(null) }, home: () => goHome(), buy: grey => buyWaymark(grey) }) } : undefined,
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [talkStep, errandStage, birth, given, tut, tutC, foldC])
+  }, [talkStep, errandStage, birth, given, tut, tutC, foldC, spiritsDev, gregSaid])
   // M68 s3a: Otto, Tess, Bonn (glade-friend-talk.ts). Greet + gift once Greg has sent you; their bark otherwise.
   const openFriend = (f: GardenFriend) => { const t = loadTut(); setTutState(t); setPanel({ kind: 'friend', c: friendStart(t, f) }) }
   /** Hand a friend's gift once (the tutorial's gift guard). Tools: recording the gift lights the socket (rinsticks.ts › loadTools). */

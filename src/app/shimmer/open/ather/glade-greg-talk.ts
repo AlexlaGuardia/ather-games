@@ -81,3 +81,12 @@ export function grimoireGift(alreadyGiven: boolean, ownsPedestal: boolean): { re
   if (alreadyGiven) return { record: false, give: false }
   return { record: true, give: !ownsPedestal }
 }
+
+/** M123 s1: Greg hands the grimoire (its pedestal) to a keeper who has none, outside Beat 1. Canon (CANON_GAPS 2026-11-22 Q1,
+ *  RULED): the TABLET is the grimoire, Greg hands it over; the PEDESTAL is where it rests in the garden. A legacy keeper (no
+ *  live tutorial: every gift already marked given) never heard Beat 1, so never got one: his ordinary talk offers it until
+ *  the keeper owns one (bag, placed, or banked). A live keeper who has not reached Spirits? yet gets it in Beat 1 instead. */
+export function pedestalOwed(t: Tut | null, owns: boolean): boolean {
+  if (owns) return false
+  return !(t && t.live && !t.greg.spirits)
+}

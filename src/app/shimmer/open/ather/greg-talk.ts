@@ -20,25 +20,29 @@ export interface GregTalkActs {
   /** M68 s2: his hello while the tutorial wants something (the pending bark); absent = GREG_HELLO */
   hello?: string
   /** M71 s2: 'Buy a waymark' (a folded keeper only); absent = no buy answer */
-  buy?: { label: string; pick: () => void } }
+  buy?: { label: string; pick: () => void }
+  /** M123 s1: 'Spirits?' hands a pedestal-less keeper the grimoire (glade-greg-talk.ts pedestalOwed); absent = no answer */
+  grimoire?: { label: string; pick: () => void }
+  /** M123 s1: what he just said (replaces the hello once), e.g. the signed grimoire line after the hand-over */
+  said?: string }
 
 /** The node at `step` of Greg's talk. Step 0 is where every conversation starts; steps 1+ walk the send-off lines. */
 export function gregTalk(errand: GregErrand, step: number, act: GregTalkActs): TalkNode {
   const ground = act.ground ? [{ label: ANSWERS.ground, pick: act.ground }] : [], bye = { label: ANSWERS.bye, pick: act.bye }
   // M32: the tour answer sits after the ground one (the checks pick 'ground' as the first answer; keep it there)
-  const tour = act.tour ? [{ label: TOUR_ASK, pick: act.tour }] : [], buy = act.buy ? [act.buy] : []
+  const tour = act.tour ? [{ label: TOUR_ASK, pick: act.tour }] : [], buy = act.buy ? [act.buy] : [], grim = act.grimoire ? [act.grimoire] : []
   if (errand.stage === 'greg') {   // the first errand's hand-over: his signed send-off, one line a bubble, then the gems
     const lines = gregSendOff(errand.seatName, errand.where, errand.citadel), i = Math.min(step, lines.length - 1)
     const last = i === lines.length - 1
     return {
-      line: lines[i],
+      line: i === 0 && act.said ? act.said : lines[i],
       options: last
         ? [{ label: ANSWERS.take, pick: () => { errand.onTake(); act.bye() } }]
         // M32 (hub 11-19): for a newborn (stage greg) the tour is Greg's FIRST offer; it ends in these same gems
-        : [...(i === 0 ? tour : []), { label: ANSWERS.more, pick: () => act.goto(i + 1) }, ...(i === 0 ? [...ground, ...buy, bye] : [])],
+        : [...(i === 0 ? tour : []), { label: ANSWERS.more, pick: () => act.goto(i + 1) }, ...(i === 0 ? [...ground, ...buy, ...grim, bye] : [])],
     }
   }
   // before the bracelet is lit his signed bark points the way (trigger greg:bark:errand); otherwise a plain hello
-  const line = (errand.stage === 'smith' || errand.stage === 'temple') && errand.where ? gregRepeat(errand.where) : (act.hello ?? GREG_HELLO)
-  return { line, options: [...ground, ...tour, ...buy, bye] }
+  const line = act.said ?? ((errand.stage === 'smith' || errand.stage === 'temple') && errand.where ? gregRepeat(errand.where) : (act.hello ?? GREG_HELLO))
+  return { line, options: [...ground, ...tour, ...buy, ...grim, bye] }
 }
