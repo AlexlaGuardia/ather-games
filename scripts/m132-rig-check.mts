@@ -155,9 +155,9 @@ try {
     if (shots) { const m = await n.p.evaluate(() => (window as any).__spiritModel.trots.axolotl); await n.p.evaluate((x: number, z: number) => (window as any).__ather.tp(x + 1.5, z + 0.8, 0), m.x, m.z); await sleep(800); await aimAt(n.p, m.x, m.z, 0.3); await hideCard(n.p); await n.p.screenshot({ path: `${shots}/player-old-390.png` }).catch(() => {}) }
     await n.p.close()
   } else {
-    const many = Object.fromEntries(Array.from({ length: 20 }, (_, k) => [k < 10 ? `p${k}` : `p${k - 10}#2`, pot('axolotl', k)]))
+    const many = Object.fromEntries(Array.from({ length: 20 }, (_, k) => [`p${k}`, pot('axolotl', k)]))
     for (const r of [1, 2, 3]) for (const q of ['&rig=0', '']) {
-      const { p } = await open(br, true, { pieces: BEDS(10), pots: many, follow: [], party: [] }, q)
+      const { p } = await open(br, true, { pieces: BEDS(20), pots: many, follow: [], party: [] }, q)
       await p.evaluate(() => (window as any).__ather.tp(-130, 114, 0)); await sleep(15000)
       const m = await p.evaluate((ms: number) => new Promise<any>(res => { const d: number[] = [], M = (window as any).__spiritModel; let last = performance.now(); const end = last + ms, iv = setInterval(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F13', code: 'F13' })); (window as any).__ather.tp(-130, 114, 0) }, 3000)
         const f = () => { const n = performance.now(); d.push(n - last); last = n; if (n < end) requestAnimationFrame(f); else { clearInterval(iv); d.sort((a, b) => a - b); res({ n: d.length, mean: d.reduce((a, b) => a + b) / d.length, p50: d[d.length >> 1], p95: d[Math.floor(d.length * 0.95)], mounted: M.mounted, rigs: M.rigs.size }) } }; requestAnimationFrame(f) }), 30000)
