@@ -1,0 +1,30 @@
+{
+ "bones": 24,
+ "glb_bytes": 245384,
+ "weights_bad": 0,
+ "walk": {
+  "dur_s": 0.493,
+  "lowest_m": -0.0052,
+  "rest_lowest_m": 0.0,
+  "edge_stretch_p99": 1.21,
+  "edge_stretch_max": 2.7,
+  "leg_reach_ratio_max": 0.99,
+  "planted_foot_drift_max_m": 0.0005
+ },
+ "run": {
+  "dur_s": 0.342,
+  "lowest_m": -0.0115,
+  "rest_lowest_m": 0.0,
+  "edge_stretch_p99": 1.44,
+  "edge_stretch_max": 2.85,
+  "leg_reach_ratio_max": 1.09,
+  "planted_foot_drift_max_m": 0.0022
+ },
+ "idle": {
+  "dur_s": 4.8,
+  "lowest_m": -0.0,
+  "rest_lowest_m": 0.0,
+  "edge_stretch_p99": 1.3,
+  "edge_stretch_max": 3.01
+ }
+}

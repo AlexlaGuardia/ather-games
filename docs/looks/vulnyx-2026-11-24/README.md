@@ -1,0 +1,5 @@
+# M102 new Vulnyx, look proof (2026-11-24). Nothing in game.
+- `sheet.jpg`: locked ref beside B, A and today's live model (front, 3/4, side, rear 3/4, face, phone distance). `b-walk-run.webm`: B idle, walk 0.55 m/s, run 1.92 m/s; `b-motion-frames.jpg` = stills.
+- `b.glb` CANDIDATE B (the pick): sculpted in code, no outside service. `a.glb` CANDIDATE A: Hunyuan3D-2.1 free Space (anonymous), one image sent: `public/spirits/grimoire/fox-mana-beta.webp` (already public); its head was fused with that picture's swirls and its tail was a torn shell, so the head is B's and the tail is filled. `b-rigged.glb` + `b-metrics.json`: quick fit on the s1 quadruped plan.
+- Topology (tools/facts.py, colour-split vertices welded): B 5,938 body tris + 748 eye tris, A 6,036 + 748; both 0 open edges, 0 non-manifold, 1 island, 0 handles; legs: B 4 separate outlines at 8-20% height; A 4 at 8-12% (6 at 16-20%: the low tail adds outlines). Live: 136 open edges.
+- Rebuild: `python tools/sculpt.py b.glb`, `python tools/hybrid.py <raw.glb> a.glb`, `blender -b -P tools/rig_b.py`, `tools/look.py`, `tools/reel.py` (python = any venv with numpy, scipy, trimesh, fast_simplification).
