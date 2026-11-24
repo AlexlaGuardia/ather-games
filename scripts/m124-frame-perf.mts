@@ -34,12 +34,12 @@ async function run(name: string, many: boolean, party = false) {
     await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 240000 })
     await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(6000)
     await p.touchscreen.tap(195, 644); await sleep(600)
-    const tp = () => p.evaluate(() => (window as any).__ather.tp(-137.5, 115, 0))
+    const tp = () => p.evaluate(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F13', code: 'F13' })); (window as any).__ather.tp(-137.5, 115, 0) })
     for (let k = 0; k < 24; k++) { await tp(); await sleep(500) }
     const r = await p.evaluate((ms: number) => new Promise<any>(res => {
       const c = document.createElement('canvas').getContext('webgl2')!, e = c.getExtension('WEBGL_debug_renderer_info')
       const d: number[] = []; let last = performance.now(); const end = last + ms
-      const iv = setInterval(() => (window as any).__ather.tp(-137.5, 115, 0), 3000)   // same spot: keeps idle mode off
+      const iv = setInterval(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F13', code: 'F13' })); (window as any).__ather.tp(-137.5, 115, 0) }, 3000)   // same spot; the unused key keeps idle mode (it turns the camera) off
       const f = (t: number) => { const n = performance.now(); d.push(n - last); last = n; void t; if (n < end) requestAnimationFrame(f); else { clearInterval(iv); d.sort((a, b) => a - b); res({ renderer: e ? c.getParameter(e.UNMASKED_RENDERER_WEBGL) : '?', n: d.length, mean: d.reduce((a, b) => a + b, 0) / d.length, p50: d[d.length >> 1], p95: d[Math.floor(d.length * 0.95)], vis: document.visibilityState, species: (window as any).__spiritModel?.species ?? {}, form: ((window as any).__formation?.members ?? []).map((m: any) => m.kind) }) } }
       requestAnimationFrame(f)
     }), secs * 1000)
