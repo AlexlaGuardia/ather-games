@@ -186,6 +186,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 alex: "i finally saw the manalotl and the size is way too small". Built = canon 0.15 m heel-high (spirits-species.md:270, bk11:121). Size is canon -> Magii; triage pending Alex's target.
 - 11-23 17:1x Alex (multiple choice): M107 ship spirit trot to players + more pauses · M58 ribbons DEFAULT · M104 erased void grows trees + nodes like normal · M65 defaults = TALK TONIGHT (with spirit stats). Faces: 'not picking one, OPTIONS for character creation; like the new eyes + brows; need mouth options; female torso needs work' → M116 creator Face row LIVE 815dae8f; mouths/torso sheet sent.
 
 - 11-23 16:4x Alex: "I meant close in Size but can I see some previews of the new faces" → M116: sizes only unified (small), NEW adult faces wanted; first sheet to Alex asap.
