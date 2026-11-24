@@ -40,10 +40,13 @@ export interface Tut {
   m70node: string | null
   /** M70 s3: Angelica's side quest */
   m70side: M70Side
+  /** M71 s1 (garden-fold.ts): Greg has folded this keeper's first garden. false only for a keeper born after M71 who has not
+   *  paid him yet; every save from before M71 (no field) and every legacy keeper reads true: an existing garden is never taken. */
+  folded: boolean
 }
-export const freshTut = (): Tut => ({ v: 1, live: true, greg: { welcome: false, moglins: false, spirits: false, wilds: false }, heard: [], gifts: [], b2: 'none', baitDay: null, m70: 'none', m70node: null, m70side: 'none' })
+export const freshTut = (): Tut => ({ v: 1, live: true, greg: { welcome: false, moglins: false, spirits: false, wilds: false }, heard: [], gifts: [], b2: 'none', baitDay: null, m70: 'none', m70node: null, m70side: 'none', folded: false })
 /** What an older save becomes: the whole tutorial done, every gift counted as given (they already hold their tools). */
-export const legacyTut = (): Tut => ({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: [...FRIENDS], gifts: [...GIFTS], b2: 'accepted', baitDay: null, m70: 'none', m70node: null, m70side: 'none' })
+export const legacyTut = (): Tut => ({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: [...FRIENDS], gifts: [...GIFTS], b2: 'accepted', baitDay: null, m70: 'none', m70node: null, m70side: 'none', folded: true })
 
 // ── Greg ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 /** Which screen Greg opens on. `hub` lists the open choices (The Wilds? only once Moglins? and Spirits? are both heard). */
@@ -152,6 +155,7 @@ export function parseTut(v: unknown): Tut | null {
     m70: M70S.includes(o.m70 as M70) ? o.m70! : 'none',
     m70node: typeof o.m70node === 'string' ? o.m70node : null,
     m70side: M70SIDES.includes(o.m70side as M70Side) ? o.m70side! : 'none',
+    folded: o.folded !== false,   // M71: only an explicit false (a post-M71 newborn) is unfolded; a save without the field had its garden
   }
 }
 /** No save yet: a keeper who has already played (any garden/works save) is a LEGACY keeper; a brand-new one starts fresh. */

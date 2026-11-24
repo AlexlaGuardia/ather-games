@@ -12,7 +12,9 @@ import { TOUR_ASK } from './greg-tour'
 export const GREG_HELLO = 'Now then, Keeper. Blue says hello.'   // @lark draft 11-18, awaiting Alex sign-off: Greg's idle greeting
 export const ANSWERS = { more: 'And then?', take: 'Take the gems', ground: 'My ground', bye: 'Back soon, Greg.' }   // @lark draft 11-18; bye = bye.greg SIGNED by Alex (athernyx 7a25a8e) (checks import these, never retype them)
 
-export interface GregTalkActs { ground: () => void; bye: () => void; goto: (step: number) => void
+export interface GregTalkActs {
+  /** 'My ground' (the ground screen). Absent = no ground answer (M71: a keeper Greg has not folded a garden for owns none). */
+  ground?: () => void; bye: () => void; goto: (step: number) => void
   /** BETA M32: 'Tell me about the Ather' starts his walking tour (greg-tour.ts). Absent = no tour answer. */
   tour?: () => void
   /** M68 s2: his hello while the tutorial wants something (the pending bark); absent = GREG_HELLO */
@@ -20,7 +22,7 @@ export interface GregTalkActs { ground: () => void; bye: () => void; goto: (step
 
 /** The node at `step` of Greg's talk. Step 0 is where every conversation starts; steps 1+ walk the send-off lines. */
 export function gregTalk(errand: GregErrand, step: number, act: GregTalkActs): TalkNode {
-  const ground = { label: ANSWERS.ground, pick: act.ground }, bye = { label: ANSWERS.bye, pick: act.bye }
+  const ground = act.ground ? [{ label: ANSWERS.ground, pick: act.ground }] : [], bye = { label: ANSWERS.bye, pick: act.bye }
   // M32: the tour answer sits after the ground one (the checks pick 'ground' as the first answer; keep it there)
   const tour = act.tour ? [{ label: TOUR_ASK, pick: act.tour }] : []
   if (errand.stage === 'greg') {   // the first errand's hand-over: his signed send-off, one line a bubble, then the gems
@@ -31,10 +33,10 @@ export function gregTalk(errand: GregErrand, step: number, act: GregTalkActs): T
       options: last
         ? [{ label: ANSWERS.take, pick: () => { errand.onTake(); act.bye() } }]
         // M32 (hub 11-19): for a newborn (stage greg) the tour is Greg's FIRST offer; it ends in these same gems
-        : [...(i === 0 ? tour : []), { label: ANSWERS.more, pick: () => act.goto(i + 1) }, ...(i === 0 ? [ground, bye] : [])],
+        : [...(i === 0 ? tour : []), { label: ANSWERS.more, pick: () => act.goto(i + 1) }, ...(i === 0 ? [...ground, bye] : [])],
     }
   }
   // before the bracelet is lit his signed bark points the way (trigger greg:bark:errand); otherwise a plain hello
   const line = (errand.stage === 'smith' || errand.stage === 'temple') && errand.where ? gregRepeat(errand.where) : (act.hello ?? GREG_HELLO)
-  return { line, options: [ground, ...tour, bye] }
+  return { line, options: [...ground, ...tour, bye] }
 }

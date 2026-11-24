@@ -73,6 +73,7 @@ import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
 import { tutStart, tutNode, grimoireGift, type TutCursor } from './glade-greg-talk'   // M68 s2
 import { loadTut, saveTut, gift as tutGift, allHeard, tessPacket, type Tut, type Gift as TutGift } from './glade-tutorial'
+import { gardenOpen, foldOffered, foldNode, type FoldStep } from './garden-fold'   // M71 s1: Greg folds the first garden
 import { friendStart, friendNode, FRIEND_NAME, GARDEN_FRIENDS, type FriendCursor, type GardenFriend } from './glade-friend-talk'   // M68 s3a
 import { line as gladeLine } from './glade-tutorial-lines'
 import { gregSpot, GLADE } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
@@ -446,15 +447,16 @@ function AtherSliceGame() {
     }, 380)
   }, [])
   const arriveRef = useRef(arrive); arriveRef.current = arrive
-  const goHome = useCallback(() => arrive({ kind: 'plot' }, THRESHOLD), [arrive])
+  // M71 s1: a keeper Greg has not folded a garden for has no home yet: 'home' (H, the map, a fall, the Hollows) is the Glade
+  const goHome = useCallback(() => { if (gardenOpen(loadTut())) arrive({ kind: 'plot' }, THRESHOLD); else arrive({ kind: 'glade' }, gladeNewbornSpot()) }, [arrive])
   // M61: going visiting (or coming home) = a walk through the veil to the plot's threshold. Play together's Visit button calls the
   // handler; ?visit=<host>&vn=<name> is how the continent page hands a visit over.
   const visitHost = visitNow?.host ?? null, lastHost = useRef<string | null>(null)
   useEffect(() => {
     if (visitHost === lastHost.current) return
     lastHost.current = visitHost
-    arrive({ kind: 'plot' }, THRESHOLD)
-  }, [visitHost, arrive])
+    if (visitHost) arrive({ kind: 'plot' }, THRESHOLD); else goHome()   // M71 s1: home from a visit = the Glade until the fold
+  }, [visitHost, arrive, goHome])
   useEffect(() => {
     // only a party mate visits (the party instance is the only door); a visit link without one says so and goes nowhere
     const go = (host: string, name: string) => {
@@ -613,11 +615,11 @@ function AtherSliceGame() {
         chainDeath()   // M73: the first death arms Morel's ping (it waits for the pack; opening-chain.ts)
         setToast('The Hollows dragged you under. The fold caught you and set you down at home.')
         setTimeout(() => setReviveKey(k => k + 1), 400)
-        arrive({ kind: 'plot' }, THRESHOLD)
+        goHome()   // M71 s1: the plot, or the Glade before Greg folds one
       }
     }
     if (got) { const g = { ...gardenRef.current, grey: gardenRef.current.grey + got }; setGarden(g); saveGarden(g) }
-  }, [arrive, allNodes])
+  }, [arrive, allNodes, goHome])
 
   const travel = useCallback((d: Dest) => {
     if (d.kind === 'home') { goHome(); return }
@@ -675,6 +677,8 @@ function AtherSliceGame() {
   }, [ww, arrive])
   const hereTileRef = useRef(hereTile); hereTileRef.current = hereTile
   const fadeRef = useRef(fade); fadeRef.current = fade
+  // M71 s1 backstop: any other way onto your own plot before Greg folds it (the routes above already go to the Glade) lands in the Glade
+  useEffect(() => { if (zone.kind === 'plot' && epoch > 0 && !visitNow && !gardenOpen(loadTut())) arrive({ kind: 'glade' }, gladeNewbornSpot()) }, [zone, epoch])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (zone.kind === 'plot') { if (epoch > 0) clearSpot(); return }
     const glade = zone.kind === 'glade'   // M67 s1a: the closed Glade keeps a spot too, so a reload wakes you in it
@@ -1295,8 +1299,9 @@ function AtherSliceGame() {
   //   as its hello until the four are heard. The tutorial is re-read at every E (a sign-in switches keeper).
   const [tut, setTutState] = useState<Tut | null>(null)
   const [tutC, setTutC] = useState<TutCursor | null>(null)
+  const [foldC, setFoldC] = useState<FoldStep | null>(null)   // M71 s1: Greg's fold offer (garden-fold.ts), in front of his usual talk
   const setTut = (t: Tut) => { saveTut(t); setTutState(t) }
-  const openGreg = () => { const t = loadTut(); setTutState(t); setTutC(tutStart(t)); setPanel({ kind: 'talk', step: 0 }) }
+  const openGreg = () => { const t = loadTut(); setTutState(t); const c = tutStart(t); setTutC(c); setFoldC(!c && foldOffered(t) ? 'offer' : null); setPanel({ kind: 'talk', step: 0 }) }
   /** Hub call (M68): ONE Grimoire Pedestal per keeper. One already crafted (the old recipe) or placed or banked counts. */
   const ownsPedestal = () => countOf(getInv(), 'grimoire_pedestal') > 0 || currentWorks().pieces.some(p => p.item === 'grimoire_pedestal') || bankCount(currentBank(), 'grimoire_pedestal') > 0
   const talkStep = panel?.kind === 'talk' ? panel.step : -1
@@ -1316,14 +1321,21 @@ function AtherSliceGame() {
         setTut(tutGift(tut, 'grimoire').t); return true
       },
     })
+    if (tut && foldC) return foldNode(tut, foldC, {
+      grey: () => gardenRef.current.grey,
+      pay: (t, grey) => { const g = { ...gardenRef.current, grey }; setGarden(g); saveGarden(g); setTut(t); hudSay(`Garden folded. ${grey} grey matter left.`, 'item') },   // garden first, then the flag
+      go: s => { setFoldC(s); if (!s) setPanel(null) },
+      home: () => goHome(),
+    })
     const pending = !!tut && tut.live && tut.greg.wilds && !allHeard(tut)
+    const open = !tut || gardenOpen(tut)   // M71 s1: no ground screen and no tour (it ends at your table) before the fold
     return gregTalk(gregErrand, talkStep, {
-      ground: () => setPanel({ kind: 'greg' }), bye: () => setPanel(null), goto: step => setPanel({ kind: 'talk', step }),
-      tour: () => { setPanel(null); setStops(tourStops()); setTour({ i: 0, talk: false }) },
+      ground: open ? () => setPanel({ kind: 'greg' }) : undefined, bye: () => setPanel(null), goto: step => setPanel({ kind: 'talk', step }),
+      tour: open ? () => { setPanel(null); setStops(tourStops()); setTour({ i: 0, talk: false }) } : undefined,
       hello: pending ? gladeLine('greg.b1.bark.pending') : undefined,
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [talkStep, errandStage, birth, given, tut, tutC])
+  }, [talkStep, errandStage, birth, given, tut, tutC, foldC])
   // M68 s3a: Otto, Tess, Bonn (glade-friend-talk.ts). Greet + gift once Greg has sent you; their bark otherwise.
   const openFriend = (f: GardenFriend) => { const t = loadTut(); setTutState(t); setPanel({ kind: 'friend', c: friendStart(t, f) }) }
   /** Hand a friend's gift once (the tutorial's gift guard). Tools: recording the gift lights the socket (rinsticks.ts › loadTools). */
