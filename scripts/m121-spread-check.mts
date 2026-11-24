@@ -69,6 +69,7 @@ try {
     ok(await poll(async () => (await A('zone')) === 'wilds', 120000), 'A. through the gate')
     await poll(async () => !!(await SM('seen'))?.length, 60000)
     ok((await SM('here')) === FIRST.id && (await SM('state', FIRST.id)) === 'hollow', `A. the first section ${FIRST.id} reads Hollow ground (${await SM('state', FIRST.id)})`)
+    ok(((await SM('seen')) as string[]).join() === FIRST.id, `A. only the section stood in is uncovered (${await SM('seen')})`)
     ok((await SM('infected', FIRST.id)) === true, 'A. ...and is infected (its champion is there to fight)')
     for (const n of OTHERS) {
       ok((await SM('state', n.id)) === 'unseen', `A. ${n.id} Unseen before`)

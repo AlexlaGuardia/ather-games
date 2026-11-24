@@ -497,6 +497,9 @@ function AtherSliceGame() {
   /** the arrival's veil is up (arrive() set it this frame): hand the body back, lift the black under the veil */
   const endSink = () => { sinkRef.current = null; fallSt.current = null; setTimeout(() => setDark(0), 450) }
   useEffect(() => { sinkRef.current = null; fallSt.current = null; setDark(0) }, [epoch])   // any arrival: the new body is the walker's
+  // an arrival places the keeper NOW: the walker's first frame is later, and the spread's tick (M121) would uncover the section
+  // under the OLD zone's coordinates, ground the keeper never stood in
+  useEffect(() => { pos.current = { ...pos.current, x: spawn.x, z: spawn.z } }, [epoch]) // eslint-disable-line react-hooks/exhaustive-deps
   const voidFall = useCallback(() => {
     const w = wwRef.current; if (!w || fading.current) return
     const way = lastLit(wayRef.current, infRef.current), o = way ? w.offsetOf(way.tile) : { x: 0, z: 0 }
