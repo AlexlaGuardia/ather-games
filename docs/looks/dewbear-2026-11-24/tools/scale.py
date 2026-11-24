@@ -1,5 +1,5 @@
 """blender -b -P scale.py -- <out prefix> : the Dewbear (0.50 m) beside the Vulnyx v2 (0.70 m) and the Athowl (0.50 m), front + the phone screen"""
-import sys, os; HERE = os.path.dirname(os.path.abspath(__file__)); out_ = sys.argv[-1]; sys.argv = ['x', '--', os.path.join(HERE, '../dewbear.glb'), out_, '420']
+import sys, os; HERE = os.path.dirname(os.path.abspath(__file__)); out_ = sys.argv[-1]; sys.argv = ['x', '--', os.path.join(HERE, '../dewbear-v2.glb'), out_, '420']
 src = open(os.path.join(HERE, 'look.py')).read(); exec(src[:src.index('R = 1.12')]); hol.location.x += .36
 bpy.ops.import_scene.gltf(filepath=os.path.join(HERE, '../../vulnyx-2026-11-24/b-v2.glb')); V = list(bpy.context.selected_objects); h2 = bpy.data.objects.new('h2', None); sc.collection.objects.link(h2); h2.scale = (.7,) * 3; h2.location = (-.36, -.05, 0)
 def fox(m, hull=False):

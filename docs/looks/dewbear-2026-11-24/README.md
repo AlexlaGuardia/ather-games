@@ -1,4 +1,9 @@
 # M102 Dewbear base form, look + rig proof (2026-11-24). Nothing in game.
+## v2 (Alex: polish first): `sheet-v2.jpg`, `clips-v2.webm`, `dewbear-v2.glb`, `dewbear-v2-rigged.glb`, `dewbear-v2-metrics.json` (`sheet-v2-with-ref.jpg` = v1, v2 and the ref side by side: LOCAL ONLY). The tools here build v2; the v1 tools are in git b76a692e.
+- Changed: legs short and tucked under the hem (front pair no longer arms), low round dome, ball head with full cheeks and a soft muzzle, darker ref-like eyes, no mouth, seams = one thin soft line (ink running into warm gold), sleep down on the belly, ball closed with nothing poking out.
+- 5,632 body + 2,220 unlit tris; 33 bones (over 30: one belly bone + five hem bones draw the belly and the plates' lower edges into the ball and flatten her in sleep), 401 KB. 14/14 three-check PASS. glbLen 1.58, other wiring numbers as v1 below.
+- Still off the ref: flat toon instead of painted gloss, no mouth, four leg pairs (ref draws more), no ink line along the hem, belly greys in toon shade, legs a little taller under the chin; the sleeping hem is about 5 cm off the ground with the belly on it.
+## v1
 - `sheet.jpg`: front, three-quarter, side, rear, face, beside the Vulnyx v2 (0.70 m) and the Athowl (0.50 m), the phone screen; second row = clips. `sheet-with-ref.jpg` = the same with the locked ref beside it: LOCAL ONLY (gitignored; this repo is public and the ref is not uploaded). `clips.webm`: idle, walk, run, sit, sleep, tun-ball (three-quarter + side).
 - `dewbear.glb` (unrigged, 1 unit tall = 0.50 m, 0.80 m nose to tail), `dewbear-rigged.glb` (27 bones; nodes `body` + `eyes`), `dewbear-metrics.json`.
 - Sculpted in code (tools/sculpt.py on the Vulnyx v2 helpers), no outside service, the ref never uploaded. Closed, one island, 0 handles: 5,732 body + 1,980 unlit tris (eyes, lids, dew beads, and the ink + warm light lying in the seams between the plates).

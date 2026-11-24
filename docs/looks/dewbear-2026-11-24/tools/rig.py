@@ -1,4 +1,4 @@
-"""Dewbear rig + clips on rigcore (M132 s1).   blender -b -P rig.py  (or any python with numpy + scipy)  -> ../dewbear-rigged.glb + ../dewbear-metrics.json
+"""Dewbear rig + clips on rigcore (M132 s1).   blender -b -P rig.py  (or any python with numpy + scipy)  -> ../dewbear-v2-rigged.glb + ../dewbear-v2-metrics.json
 Clips: idle, walk (a waddle, the eight legs in a wave from back to front), run (a hurried rocking waddle: one side's four feet, then the other's),
 sit (up on the rear plates), lie (SLEEP, lids down), tun (curls into the tun-ball, rocks, uncurls)."""
 import sys, os, json
@@ -6,13 +6,13 @@ HERE = os.path.dirname(os.path.abspath(__file__)); sys.dont_write_bytecode = Tru
 import numpy as np, rigcore as K, sculpt as S
 from rigcore import Pose, rx, ry, rz
 H = .50; TAU = 2 * np.pi; sm = K.smooth
-SK = {'root': (None, (0, 0, 0)), 's2': ('root', (0, .64, -.07)), 's1': ('s2', (0, .68, .015)), 's0': ('s1', (0, .68, .185)), 'neck': ('s0', (0, .62, .37)), 'head': ('neck', (0, .61, .43)), 'lids': ('head', (0, .65, .60)),
-      's3': ('s2', (0, .66, -.155)), 's4': ('s3', (0, .58, -.320)), 's5': ('s4', (0, .46, -.468)), 'tail': ('s5', (0, .25, -.58))}
+SK = {'root': (None, (0, 0, 0)), 's2': ('root', (0, .64, -.07)), 's1': ('s2', (0, .68, .015)), 's0': ('s1', (0, .68, .185)), 'neck': ('s0', (0, .62, .37)), 'head': ('neck', (0, .60, .43)), 'lids': ('head', (0, .62, .60)),
+      's3': ('s2', (0, .66, -.155)), 's4': ('s3', (0, .58, -.320)), 's5': ('s4', (0, .46, -.468)), 'tail': ('s5', (0, .25, -.58)), 'belly': ('s2', (0, .15, -.06))} | {'hem%d' % i: ('s%d' % i, (0, .25, S.PL[i][0])) for i in range(5)}
 HOST = ('s0', 's1', 's2', 's4')
 for s, x in (('l', 1), ('r', -1)):
     for i in range(4): a, b, c = S.LEG[i][:3]; SK['leg%d_%s' % (i, s)] = (HOST[i], (x * a[0], a[1], a[2])); SK['foot%d_%s' % (i, s)] = ('leg%d_%s' % (i, s), (x * c[0], c[1] + .012, c[2]))
 J = lambda b: np.array(SK[b][1]); nb = list(SK); ix = nb.index
-live = K.Glb(os.path.join(HERE, '../dewbear.glb')).meshes(); m = live['body']; V0 = m['POSITION'].astype(float); A0 = np.c_[np.abs(V0[:, 0]), V0[:, 1:]]
+live = K.Glb(os.path.join(HERE, '../dewbear-v2.glb')).meshes(); m = live['body']; V0 = m['POSITION'].astype(float); A0 = np.c_[np.abs(V0[:, 0]), V0[:, 1:]]
 PD = np.stack(S.plates(A0), 1); HD = S.head(A0); LD = np.stack([S.leg(A0, i) for i in range(4)], 1); BD = S.belly(A0); TD = S.tail(V0)
 sh, hd = PD.min(1), HD; other = np.minimum(np.minimum(sh, hd), BD); legv = (LD.min(1) < other - .0005) & (V0[:, 1] < .40); tl = (TD < np.minimum(sh, BD)) & ~legv & (V0[:, 2] < -.58); head = (hd < np.minimum(sh, BD)) & ~legv
 pl = PD.argmin(1); zc = np.array([p[0] for p in S.PL]); bz = np.abs(V0[:, 2:3] - zc[None]).argmin(1); seg = np.where(sh < BD, pl, bz); idg = lambda mask: (lambda V: mask); body = ~legv & ~tl & ~head
@@ -26,16 +26,19 @@ for i, n in enumerate(nm): W[:, ix(n)] += w[:, i]
 def along(P, tau=.026):
     """how much of each plate (and the head) a point of the shell rides on: a smooth function of place, so a seam opens evenly all along"""
     A = np.c_[np.abs(P[:, 0]), P[:, 1:]]; D = np.c_[np.stack(S.plates(A), 1), S.head(A)]; D -= D.min(1, keepdims=True); w_ = np.exp(-D / tau); w_ /= w_.sum(1, keepdims=True); X = np.zeros((len(P), len(nb)))
-    for k_, b_ in enumerate(['s%d' % k for k in range(6)] + ['head']): X[:, ix(b_)] = w_[:, k_]
+    h_ = np.where(P[:, 1] < .5, 1 - sm(.23, .47, P[:, 1]), 0)
+    for k_, b_ in enumerate(['s%d' % k for k in range(6)] + ['head']):
+        if k_ < 5: X[:, ix(b_)] = w_[:, k_] * (1 - h_); X[:, ix('hem%d' % k_)] = w_[:, k_] * h_          # the flank's lower edge has its own bone: it is drawn up to the ball's middle in the curl
+        else: X[:, ix(b_)] = w_[:, k_]
     return X
 def bel(P):
     w_ = np.exp(-((P[:, 2:3] - zc[None]) / .10) ** 2); w_ /= w_.sum(1, keepdims=True); X = np.zeros((len(P), len(nb)))
     for k_ in range(6): X[:, ix('s%d' % k_)] = w_[:, k_]
     return X
 trunk = np.clip(1 - W[:, [ix(n) for n in nb if n[:3] in ('leg', 'foo', 'tai')]].sum(1), 0, 1)[:, None]; q = sm(-.015, .015, np.minimum(sh, hd) - BD)[:, None]
-smooth = along(V0) * (1 - q) + bel(V0) * q; limb = W.copy(); limb[:, [ix('s%d' % k) for k in range(6)] + [ix('head')]] = 0; W = K.four(limb + smooth * trunk); parts = {'body': dict(m, W=W)}
+smooth = along(V0) * (1 - q) + bel(V0) * q; limb = W.copy(); limb[:, [ix('s%d' % k) for k in range(6)] + [ix('head')]] = 0; bw = q * (1 - sm(.14, .32, V0[:, 1]))[:, None] * .9; smooth = smooth * (1 - bw); smooth[:, ix('belly')] = bw[:, 0]; W = K.four(limb + smooth * trunk); parts = {'body': dict(m, W=W)}
 eP = live['eyes']['POSITION'].astype(float); eC = live['eyes']['COLOR_0'][:, :3].astype(int); isc = lambda *cs: np.min([np.abs(eC - np.round(255 * (np.array(c) / 255.) ** 2.2)).max(1) for c in cs], 0) <= 1
-lid = isc(tuple(S.HEADC), (58, 96, 112)); onb = isc(tuple(S.SEAM), tuple(S.GLOW), tuple(S.BEAD), (244, 252, 252)); e = np.zeros((len(eP), len(nb))); e[~onb & ~lid, ix('head')] = 1; e[lid, ix('lids')] = 1
+lid = isc(tuple(S.HEADC), (58, 96, 112)); onb = (eP[:, 2] < .50) & ~lid; e = np.zeros((len(eP), len(nb))); e[~onb & ~lid, ix('head')] = 1; e[lid, ix('lids')] = 1
 e[onb] = along(eP[onb]); bead = isc(tuple(S.BEAD), (244, 252, 252)); e[bead] = np.eye(len(nb))[along(eP[bead]).argmax(1)]; e = K.four(e); parts['eyes'] = dict(live['eyes'], W=e); print('lid verts', lid.sum(), 'seam + dew verts', onb.sum())
 VE = eP; FT = [(i, s) for i in range(4) for s in 'lr']; SOLE = {k: V0[W[:, ix('foot%d_%s' % k)] > .5] - J('foot%d_%s' % k) for k in FT}; ST = []
 NL = ~legv & (W[:, [ix(n) for n in nb if n[:3] in ('leg', 'foo')]].sum(1) < .02)
@@ -66,7 +69,7 @@ def gait(u, G, lag, hgt, roll, lean, drop, bounce, yaw):
         else: q = (k - d) / (1 - d); foot(p, i, s, -r + 2 * r * sm(.04, .96, q), hgt * max(0, np.sin(np.pi * q)) ** .9, .030 * np.sin(np.pi * q), rx((.45 if G is WALK else .20) * np.sin(np.pi * min(1, q * 1.5)) * (1 - q)))
     return p
 walk = lambda u: gait(u, WALK, 1 / 7, .085, .105, .0, .012, .010, .07)
-run = lambda u: gait(u, RUN, .05, .11, .15, .05, .022, .040, .10)
+run = lambda u: gait(u, RUN, .05, .10, .13, .04, .005, .035, .10)
 def ground(p, aim=0, trunk=False):
     l = low(p, trunk); p.T['root'] = p.T['root'] + np.array([0, aim - l, 0]); return p
 def sit(u):
@@ -81,19 +84,22 @@ def sit(u):
         A = p.glob('leg3_' + s)[1]; L_ = np.linalg.norm(J('foot3_' + s) - J('leg3_' + s)) * 1.12; z = np.sqrt(max(.02, L_ ** 2 - (A[1] - .067) ** 2 - .05 ** 2)); foot(p, 3, s, A[2] + z - J('foot3_' + s)[2], 0, .06)
     return p
 def lie(u):
-    p = Pose(SK); br = np.sin(TAU * u); 
-    for b, k in (('s1', .10), ('s0', .17), ('neck', .17), ('head', .06)): p.rot(b, rx(k - .012 * br))
-    p.rot('head', rz(.10)); p.rot('tail', rx(.25), ry(.25)); lids(p, 1)
-    ground(p, 0, True); p.T['s2'] = np.array([0, .010 * (br + 1), 0])
-    for i, s in FT: foot(p, i, s, (.09, .03, -.01, -.05)[i], 0, .10)
+    """down on her belly: the belly gives, the hem rests near the ground, chin on the ground between the forefeet, lids shut"""
+    p = Pose(SK); br = np.sin(TAU * u); p.T['belly'] = np.array([0, .16, 0])
+    for b, k in (('s1', .03), ('s0', .05), ('neck', .05), ('head', .10)): p.rot(b, rx(k))
+    p.rot('s4', rx(.04)); p.rot('s5', rx(.12)); [p.T.__setitem__('hem%d' % i, np.array([0, .035, 0])) for i in range(5)]
+    p.T['head'] = np.array([0, -.030, 0]); p.T['neck'] = np.array([0, -.020, 0]); p.rot('head', rz(.07)); p.rot('tail', rx(.55), ry(.25)); p.T['tail'] = np.array([0, .05, 0]); lids(p, 1)
+    ground(p, 0, True); p.T['s2'] = np.array([0, .006 * (br + 1), 0])
+    for i, s in FT: foot(p, i, s, (.04, .02, -.01, -.04)[i], 0, (.12, .12, .12, .12)[i])
     return p
 CURL = dict(s1=.78, s0=.82, neck=.42, head=.34, s3=-.78, s4=-.86, s5=-.66)
 def ball(k, rock=0):
     p = Pose(SK)
     for b, a in CURL.items(): p.rot(b, rx(a * k))
-    p.T['head'] = np.array([0, .0, -.19]) * k; p.rot('tail', rx(.9 * k)); p.T['tail'] = np.array([0, .10, .12]) * k; lids(p, sm(.25, .5, k))
+    p.T['head'] = np.array([0, .0, -.19]) * k; p.rot('tail', rx(.9 * k)); p.T['tail'] = np.array([0, .10, .12]) * k; lids(p, sm(.25, .5, k)); p.T['belly'] = np.array([0, .24, 0]) * sm(.1, .7, k)
+    for i in range(5): p.T['hem%d' % i] = np.array([0, (.14, .19, .22, .21, .16)[i], 0]) * sm(.15, 1, k)
     for i, s in FT:
-        x = 1 if s == 'l' else -1; t = sm(.05, .75, k); p.R['leg%d_%s' % (i, s)] = rz(-x * 1.15 * t); p.T['foot%d_%s' % (i, s)] = (J('leg%d_%s' % (i, s)) - J('foot%d_%s' % (i, s))) * .55 * t; p.T['leg%d_%s' % (i, s)] = np.array([-x * .10, .08, 0]) * t
+        x = 1 if s == 'l' else -1; t = sm(.05, .75, k); p.R['leg%d_%s' % (i, s)] = rz(-x * .55 * t); p.T['foot%d_%s' % (i, s)] = (J('leg%d_%s' % (i, s)) - J('foot%d_%s' % (i, s))) * .72 * t; p.T['leg%d_%s' % (i, s)] = np.array([-x * .17, .20, (0, 0, .03, .10)[i]]) * t
     p.R['root'] = rx(.20 * k + rock); return ground(p, .009 * k)
 def tun(u):
     k = sm(.10, .30, u) * (1 - sm(.74, .92, u)); sh = pulse(u, .03, .06, .09, .12) * np.sin(TAU * u * 40) * .02
@@ -102,7 +108,7 @@ def tun(u):
 clips, T, R = {}, {}, {}
 for n, fn, k, t in (('idle', idle, 42, 7.), ('walk', walk, WALK['n'], 2 * WALK['reach'] * H / WALK['duty'] / WALK['v']), ('run', run, RUN['n'], 2 * RUN['reach'] * H / RUN['duty'] / RUN['v']), ('sit', sit, 40, 6.), ('lie', lie, 20, 4.2), ('tun', tun, 60, 5.)):
     ST.clear(); clips[n] = wrap(fn, k); T[n] = t; R[n] = max(ST); print(n, 'leg reach', min(ST), max(ST))
-path = os.path.join(HERE, '../dewbear-rigged.glb'); K.write(path, parts, SK, clips, {c: (len(v) - 1) / T[c] for c, v in clips.items()})
+path = os.path.join(HERE, '../dewbear-v2-rigged.glb'); K.write(path, parts, SK, clips, {c: (len(v) - 1) / T[c] for c, v in clips.items()})
 P = K.Player(path); pos = P.m['body']['POSITION']; F = P.m['body']['F']; ww, JJ = P.m['body']['WEIGHTS_0'] / 255., P.m['body']['JOINTS_0']; M = dict(bones=len(nb), glb_bytes=os.path.getsize(path), tris=dict(body=len(F), eyes=len(P.m['eyes']['F'])), height_m=H)
 E = K.edges(F); l0 = np.linalg.norm(pos[E[:, 0]] - pos[E[:, 1]], axis=1); ok = l0 > .006
 for c in clips:
@@ -120,4 +126,4 @@ for c in clips:
         d['planted_foot_drift_max_m'] = round(dr, 4)
     if c in ('walk', 'run'): v = dict(walk=WALK, run=RUN)[c]['v']; d['stride_m'] = round(v * T[c], 3); d['plays_1to1_at_mps'] = v; d['cadence_at_mps'] = {str(q): round(q / (v * T[c]), 2) for q in (.55, 1.15, 1.92, 2.8, 4.2, 6.5)}
     d['span_m'], d['length_m'], d['top_m'] = [round(float(max(f(x) for x in fr)) * H, 3) for f in (lambda x: np.ptp(x[:, 0]), lambda x: np.ptp(x[:, 2]), lambda x: x[:, 1].max())]; M[c] = d
-json.dump(M, open(os.path.join(HERE, '../dewbear-metrics.json'), 'w'), indent=1); [print(k, v) for k, v in M.items()]
+json.dump(M, open(os.path.join(HERE, '../dewbear-v2-metrics.json'), 'w'), indent=1); [print(k, v) for k, v in M.items()]

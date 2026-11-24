@@ -9,33 +9,33 @@ from marching import surface
 from sculpt_v2 import cone, ell, su, ss, cut, glb, normals, V3
 TRIS = 4600; LID = .085
 # ── back plates, front to back: z, top, half width, half length, hem height ──
-PL = [(.270, .965, .415, .210, .350), (.100, 1.0, .455, .200, .330), (-.070, .990, .465, .195, .320), (-.240, .915, .440, .195, .310), (-.400, .780, .380, .185, .300), (-.535, .605, .290, .160, .285)]
+PL = [(.265, .930, .425, .205, .250), (.100, .995, .480, .200, .225), (-.075, 1.0, .500, .200, .205), (-.250, .935, .480, .195, .195), (-.415, .805, .420, .185, .190), (-.555, .620, .325, .165, .185)]
 NP = len(PL)
-def sup(P, c, r, e=(2.6, 2.6, 2.0)):
+def sup(P, c, r, e=(2.3, 2.3, 2.0)):
     """a rounded square: super-ellipsoid, distance to first order"""
     q = np.abs(P - V3(*c)) / V3(*r); t = np.sum(q ** np.array(e), -1); f = np.sqrt(np.maximum(t, 1e-9))
     g = np.array(e) * np.maximum(q, 1e-6) ** (np.array(e) - 1) / V3(*r) / (2 * f[..., None]); return (f - 1) / np.maximum(np.linalg.norm(g, axis=-1), 1.4)
 def plates(M):
     out = []
     for z, top, w, c, hem in PL:
-        yc = .50 if top > .7 else .42; out.append(-su(-sup(M, (0, yc, z), (w, top - yc, c)), M[..., 1] - hem + .12 * (M[..., 2] - z), .05))
+        yc = .40 if top > .7 else .34; out.append(-su(-sup(M, (0, yc, z), (w, top - yc, c)), M[..., 1] - hem + .12 * (M[..., 2] - z), .05))
     return out
-HC = V3(0, .622, .510)
+HC = V3(0, .592, .515)
 def head(M):
-    d = ell(M, HC, (.310, .268, .265)); d = su(d, ell(M, HC + V3(.10, -.085, .09), (.195, .155, .155)), .10)        # wide soft cheeks
-    d = su(d, ell(M, HC + V3(0, .02, -.14), (.26, .24, .20)), .10)
-    return su(d, ell(M, (0, .600, .772), (.062, .042, .036)), .05)                                              # the little snout bump
+    d = ell(M, HC, (.310, .290, .262)); d = su(d, ell(M, HC + V3(.150, -.085, .080), (.168, .150, .160)), .11)      # full round cheeks, widest below the eyes
+    d = su(d, ell(M, HC + V3(0, .0, -.16), (.23, .21, .20)), .10)
+    return su(d, ell(M, (0, .545, .748), (.078, .054, .040)), .06)                                             # a broad soft muzzle
 # legs: hip (hidden in the flank), knee, sole centre; radii
-LEG = [((.27, .400, .385), (.335, .255, .455), (.335, .060, .475), .105, .096, .068), ((.25, .33, .170), (.322, .195, .165), (.345, .055, .175), .105, .108, .074), ((.25, .33, -.095), (.330, .195, -.095), (.352, .055, -.085), .108, .110, .074), ((.22, .31, -.360), (.285, .185, -.360), (.305, .055, -.350), .100, .104, .072)]
+LEG = [((.215, .300, .375), (.262, .170, .410), (.270, .055, .420), .100, .100, .078), ((.24, .28, .175), (.300, .160, .170), (.312, .055, .180), .105, .110, .080), ((.24, .28, -.085), (.312, .160, -.085), (.324, .055, -.075), .108, .112, .080), ((.21, .26, -.345), (.275, .155, -.345), (.288, .055, -.335), .100, .105, .077)]
 def leg(M, i):
     a, b, c, ra, rb, rc = LEG[i]; b, c = V3(*b), V3(*c); d = su(cone(M, a, b, ra, rb), cone(M, b, c, rb, rc), .05)
-    d = su(d, ell(M, c + V3(.004, -.010, .022), (.078, .046, .078)), .03)
+    d = su(d, ell(M, c + V3(.004, -.010, .022), (.082, .048, .082)), .03)
     for dx, dz in ((-.058, .078), (0, .100), (.058, .078)): t = c + V3(dx, -.028, dz); d = su(d, cone(M, c + V3(dx * .6, -.014, dz * .4), t, .034, .028), .006)
     return d
 def belly(M):
-    d = sup(M, (0, .345, -.06), (.360, .250, .50), (2.6, 2.4, 2.6)); d = su(d, ell(M, (0, .40, .30), (.27, .26, .19)), .06)
+    d = sup(M, (0, .335, -.06), (.370, .275, .50), (2.6, 2.4, 2.6)); d = su(d, ell(M, (0, .40, .30), (.27, .26, .19)), .06)
     return d + .010 * np.cos((M[..., 2] - .025) * 2 * np.pi / .18) * np.clip((.36 - M[..., 1]) / .1, 0, 1)           # soft belly folds
-def tail(P): return cone(P, (0, .265, -.56), (0, .150, -.735), .120, .050)
+def tail(P): return cone(P, (0, .235, -.57), (0, .135, -.735), .115, .052)
 def shell(M):
     d = None
     for q in plates(M): d = q if d is None else su(d, q, .034)
@@ -51,19 +51,21 @@ def ray(p, u, hi):
     p, u = np.broadcast_arrays(np.atleast_2d(p), np.atleast_2d(u)); lo, hi = np.zeros(len(p)), np.full(len(p), hi)
     for _ in range(22): m = (lo + hi) / 2; f = field(p + u * m[:, None]) < 0; lo, hi = np.where(f, m, lo), np.where(f, hi, m)
     return p + u * lo[:, None]
-def strip(parts, L, Rr, dz, col):
-    n = len(L); P = np.vstack([L, (L + Rr) / 2, Rr]); P = P + grad(P, .012) * (dz - np.clip(field(P), -.02, .02))[:, None]; F = np.array([x for c in (0, n) for k in range(c, c + n - 1) for x in ((k, k + 1, n + k + 1), (k, n + k + 1, n + k))]) if dz < .008 else np.array([x for k in range(n - 1) for x in ((k, k + 1, 2 * n + k + 1), (k, 2 * n + k + 1, 2 * n + k))])
+def strip(parts, rows, dz, cols):
+    """a soft line laid on the skin: ink at its edges running into warm light in the middle (vertex colours, unlit)"""
+    n = len(rows[0]); P = np.vstack(rows); P = P + grad(P, .012) * (dz - np.clip(field(P), -.02, .02))[:, None]; C = np.repeat(np.array(cols, float), n, 0); F = np.array([x for c in range(0, n * (len(rows) - 1), n) for k in range(c, c + n - 1) for x in ((k, k + 1, n + k + 1), (k, n + k + 1, n + k))])
     if (np.cross(P[F[:, 1]] - P[F[:, 0]], P[F[:, 2]] - P[F[:, 0]]) * grad(P[F].mean(1))).sum() < 0: F = F[:, ::-1]
-    u, iv = np.unique(F, return_inverse=True); parts.append((P[u], iv.reshape(-1, 3), col))
+    parts.append((P, F, C))
 def extras():
     """unlit: the light in the seams (a ribbon along each crease) and the dew beads on the plates"""
     parts = []
     for i in range(NP):                                                                  # seam between plate i - 1 and i (0 = the head's own rim)
-        f = (lambda M: head(M)) if i == 0 else (lambda M, k=i - 1: plates(M)[k]); n = 25; L, Rr = [], []
+        f = (lambda M: head(M)) if i == 0 else (lambda M, k=i - 1: plates(M)[k]); n = 23; L, Rr = [], []
         t = np.linspace(-1, 1, n); th = t * (2.0 if i else 1.75); u = np.c_[np.sin(th), np.cos(th), 0 * th]; z = (PL[i - 1][0] + PL[i][0]) / 2 if i else .40; yc = .52 if i < 5 else .42; at = lambda z: ray(np.c_[0 * z, 0 * z + yc, z], u, .75)
         a, b = np.full(n, z - (.10 if i else .02)), np.full(n, z + (.10 if i else .16))
         for _ in range(14): m = (a + b) / 2; p = at(m); M = np.c_[np.abs(p[:, 0]), p[:, 1:]]; k = f(M) < plates(M)[i]; a, b = np.where(k, a, m), np.where(k, m, b)
-        m = (a + b) / 2; p = at(m); ok = p[:, 1] > PL[i][4] + .03; sp = np.arange(n)[ok]; e = np.minimum(np.arange(n) - sp[0], sp[-1] - np.arange(n)); nn = grad(p, .03); w = .010 * np.sqrt(np.clip(1 - nn[:, 2] ** 2, .12, 1)) * np.clip((e + .15) / 3, .02, 1); strip(parts, at(m + w * 2.5)[ok], at(m - w * 2.5)[ok], .0062, tuple(SEAM)); strip(parts, at(m + w)[ok], at(m - w)[ok], .0100, tuple(GLOW))
+        m = (a + b) / 2; p = at(m); ok = p[:, 1] > PL[i][4] + .03; sp = np.arange(n)[ok]; e = np.minimum(np.arange(n) - sp[0], sp[-1] - np.arange(n)); nn = grad(p, .03); w = .0078 * np.sqrt(np.clip(1 - nn[:, 2] ** 2, .12, 1)) * np.clip((e + .15) / 3, .02, 1);
+        strip(parts, [at(m + w * k)[ok] for k in (2.5, 1.1, 0, -1.1, -2.5)], .0085, [SEAM, .62 * SEAM + .38 * GLOW, GLOW, .62 * SEAM + .38 * GLOW, SEAM])
     for i, th, dz, r in DEW:
         for s in (1, -1):
             p = ray(V3(0, .52 if i < 4 else .42, PL[i][0] + dz), V3(np.sin(th) * s, np.cos(th), 0), .75)[0]; n = grad(p[None], .01)[0]; e1 = np.cross(n, V3(0, 0, 1)); e1 /= np.linalg.norm(e1); e2 = np.cross(n, e1); a = np.arange(9) / 9 * 2 * np.pi
@@ -72,21 +74,21 @@ def extras():
             q = p + n * .0125 + r * (.30 * e2 * np.sign(e2[1] + 1e-9) - .25 * e1); P = np.vstack([[q], q + r * .30 * (np.cos(a[::2] * 9 / 10)[:, None] * e1 + np.sin(a[::2] * 9 / 10)[:, None] * e2)]); F = np.array([(0, 1 + k, 1 + (k + 1) % 5) for k in range(5)]); F = F if np.cross(P[1] - P[0], P[2] - P[0]) @ n > 0 else F[:, ::-1]; parts.append((P, F, (244, 252, 252)))
     return parts
 C8 = lambda s: np.array([int(s[i:i + 2], 16) for i in (1, 3, 5)])
-BLUE, HEADC, PALE, SEAM, GLOW, BEAD, BLUSH, SNOUT = map(C8, ('#8fc6d2', '#9dd2da', '#fffdf4', '#4f93a8', '#ffe7a6', '#c3ebee', '#bcc0cb', '#a4d8df'))
+BLUE, HEADC, PALE, SEAM, GLOW, BEAD, BLUSH, SNOUT = map(C8, ('#8fc6d2', '#9dd2da', '#fffdf4', '#5f9fb4', '#ffeab0', '#c3ebee', '#bcc0cb', '#a4d8df'))
 def classes(V):
     x, y, z = V.T; A = np.abs(x); M = np.c_[A, y, z]; P_ = np.min(plates(M), 0); h = head(M); bl = belly(M); lg = np.min([leg(M, i) for i in range(4)], 0); tl = tail(V); out = []
     up = np.minimum(np.minimum(P_, h), np.minimum(lg, tl)) - bl
     out.append(np.where(y < .6, np.clip(up, -.05, .05), -.05))                                                  # pale belly
-    out.append(np.where((z > .6) & (h < .01), .058 - np.linalg.norm((M - V3(.215, .535, .70)) * V3(1, 1.3, .7), axis=1), -.05))                        # a faint blush
-    out.append(np.where((z > .7), .050 - np.linalg.norm((M - V3(0, .605, .79)) * V3(.9, 1.5, .5), axis=1), -.05))
+    out.append(np.where((z > .6) & (h < .01), .058 - np.linalg.norm((M - V3(.240, .488, .69)) * V3(1, 1.3, .7), axis=1), -.05))                        # a faint blush
+    out.append(np.where((z > .7), .046 - np.linalg.norm((M - V3(0, .562, .785)) * V3(.75, 1.5, .5), axis=1), -.05))
     return out
 PAL = [PALE, BLUSH, SNOUT]
 
-ED = V3(.196, .030, 0); RE = .064
+ED = V3(.196, .030, 0); RE = .066
 def eyes():
     parts = []
     c = HC + V3(.205, .032, .30); e = 2e-3
-    n = V3(.50, .05, .86); n /= np.linalg.norm(n); lo, hi = 0, .5; o = HC + V3(.205, .032, 0) - 0 * n; b = V3(.06, .63, .40); o = V3(.135, .648, .45); n = V3(.22, .02, 1.); n /= np.linalg.norm(n)
+    n = V3(.50, .05, .86); n /= np.linalg.norm(n); lo, hi = 0, .5; o = HC + V3(.205, .032, 0) - 0 * n; b = V3(.06, .63, .40); o = V3(.140, .612, .42); n = V3(.22, .02, 1.); n /= np.linalg.norm(n)
     for _ in range(40): m = (lo + hi) / 2; lo, hi = (m, hi) if field((o + n * m)[None])[0] < 0 else (lo, m)
     EC = o + n * lo; g = np.array([field((EC + np.eye(3)[i] * e)[None])[0] - field((EC - np.eye(3)[i] * e)[None])[0] for i in range(3)]); n = g / np.linalg.norm(g); ux = np.cross(V3(0, 1, 0), n); ux /= np.linalg.norm(ux); uy = np.cross(n, ux); print('eye at', EC.round(3), 'n', n.round(2))
     a = np.arange(24) / 24 * 2 * np.pi; rim = EC + RE * (np.cos(a)[:, None] * ux + np.sin(a)[:, None] * uy); hh = np.full(24, .05)
@@ -101,14 +103,14 @@ def eyes():
         if rad > .06: P = np.vstack([P, P[-n_:] - .030 * n]); m = 1 + (rings - 1) * n_; F = np.vstack([F, [f for i in range(n_) for f in ((m + i, m + n_ + i, m + n_ + (i + 1) % n_), (m + i, m + n_ + (i + 1) % n_, m + (i + 1) % n_))]])
         P = P * V3(s, 1, 1); parts.append((P, F if s > 0 else F[:, ::-1], col))
     for s in (1, -1):
-        cap(s, 0, 0, RE, (92, 54, 22), 0, 2); cap(s, 0, -.003, .056, (214, 138, 46), .0018, 2); cap(s, 0, .003, .0475, (46, 25, 14), .0036, 2); cap(s, -s * .016, .021, .0175, (255, 253, 246), .0056, 1, 12); cap(s, s * .016, -.022, .0075, (238, 176, 92), .0054, 1, 8)
+        cap(s, 0, 0, RE, (84, 52, 30), 0, 2); cap(s, 0, -.003, .0575, (196, 122, 44), .0018, 2); cap(s, 0, .004, .0505, (48, 27, 17), .0036, 2); cap(s, -s * .014, .022, .0195, (255, 253, 246), .0056, 1, 12); cap(s, s * .016, -.022, .0075, (238, 176, 92), .0054, 1, 8)
         k0 = len(parts); cap(s, 0, 0, RE + .003, tuple(HEADC), .0085, 3); q = np.linspace(-1, 1, 11); up = np.c_[q * .050, -.012 - .020 * (1 - q * q)]; dn = up + np.c_[0 * q, -.004 - .007 * (1 - q * q)]; X = np.vstack([up, dn])
         F = np.array([f for i in range(10) for f in ((i, 11 + i, 12 + i), (i, 12 + i, i + 1))]); P = (EC + X[:, :1] * ux + X[:, 1:] * uy + (dome(np.hypot(X[:, 0], X[:, 1])) + .0115)[:, None] * n) * V3(s, 1, 1); parts.append((P, F if s > 0 else F[:, ::-1], (58, 96, 112)))
         for k in range(k0, len(parts)): parts[k] = (parts[k][0] - V3(0, 0, LID), *parts[k][1:])
     return parts
 def join(parts):
     V, F, C, o = [], [], [], 0
-    for P, f, col in parts: V.append(P); F.append(f + o); C.append(np.tile((*np.round(255 * (np.array(col) / 255.) ** 2.2), 255), (len(P), 1))); o += len(P)
+    for P, f, col in parts: V.append(P); F.append(f + o); C.append(np.c_[np.broadcast_to(np.round(255 * (np.array(col, float) / 255.) ** 2.2), (len(P), 3)), np.full(len(P), 255)]); o += len(P)
     return np.vstack(V), np.vstack(F), np.vstack(C)
 def refine(V, F, want, mx):
     """split every edge longer than mx whose two ends are wanted (closed stays closed), new points put back on the field"""

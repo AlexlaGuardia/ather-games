@@ -1,5 +1,5 @@
-"""blender -b -P reel.py -- <outdir> [stills]: every clip of ../dewbear-rigged.glb through Blender's own glTF importer; front three-quarter + side. stills = 6 frames a clip"""
-import sys, os, math; HERE = os.path.dirname(os.path.abspath(__file__)); a_ = sys.argv[sys.argv.index('--') + 1:]; out = a_[0]; ST = len(a_) > 1; sys.argv = ['x', '--', os.path.join(HERE, '../dewbear-rigged.glb'), out + '/x', '10']
+"""blender -b -P reel.py -- <outdir> [stills]: every clip of ../dewbear-v2-rigged.glb through Blender's own glTF importer; front three-quarter + side. stills = 6 frames a clip"""
+import sys, os, math; HERE = os.path.dirname(os.path.abspath(__file__)); a_ = sys.argv[sys.argv.index('--') + 1:]; out = a_[0]; ST = len(a_) > 1; sys.argv = ['x', '--', os.path.join(HERE, '../dewbear-v2-rigged.glb'), out + '/x', '10']
 src = open(os.path.join(HERE, 'look.py')).read(); src = src[:src.index('R = 1.12')]; exec(src)
 [bpy.data.objects.remove(o) for o in list(sc.objects) if o.name.startswith('Icosphere')]; hol.scale = (H,) * 3; hol.location = (0, 0, 0)      # the importer's bone shape had set the scale
 arm = next(o for o in sc.objects if o.type == 'ARMATURE'); arm.parent = hol
