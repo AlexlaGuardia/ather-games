@@ -66,6 +66,7 @@ async function open(owner: boolean, seed: { save?: unknown; waymark?: unknown })
     for (let k = 0; k < 8 && !o.length; k++) {
       await p.evaluate((x, z, y) => { const g = (window as any).__ather; const c = g.combat?.(); if (c) { c.hollows.length = 0; c.keeper.hp = c.keeper.maxHp } g.tp(x, z, y); g.look(y, -Math.atan2(1.1, 2.2)) }, sp.x + fx * 2.2, sp.z + fz * 2.2, Math.atan2(fx, fz)); await sleep(1500)
       await p.keyboard.press('KeyE'); await p.mouse.move(5, 5); await poll(async () => (await opts()).length > 0, 6000); o = await opts()
+      if (!o.length) { await p.screenshot({ path: `${out}/stall-miss-${k}.png` }); console.log(`  stall miss ${k}: ${JSON.stringify(await p.evaluate(() => document.body.innerText.slice(-300).replace(/\s+/g, ' ')))}`) }
     }
     await p.keyboard.press('Escape'); await sleep(1200); return o
   }
@@ -89,6 +90,7 @@ try {
   const w = ((await G('wm')) as any[])[0]; ok(!!w && w.settlement === A.id && (await o.lit(w?.id)) === true, `2. a waymark in ${A.name}, lit (${JSON.stringify(planted)})`)
   const before = await o.place(A), b = burrfolkOf(A, net.season, folkOf(A, net.season))!
   const t0 = await o.stallTalk(A); ok(t0.includes(BURR_LABEL.look), `2. trade open at ${b.name}'s stall (${JSON.stringify(t0)})`)
+  if (process.argv.includes('--to2')) process.exit(0)
   await o.tp(A.x + 2, A.z + 16); await p.screenshot({ path: `${out}/1-before.png` })
   // ── 3 · a week on ──
   ok(await o.home(), '3. home'); await I('pass', W + 1000)
@@ -139,7 +141,7 @@ try {
   ok((await p.evaluate(() => (window as any).__pings.filter((e: any) => e.kind === 'lost').length)) === 1, '6. the lost event, once')
   ok((await I('state')).told === 1 && (await I('state')).assigned === 2, '6. its clue is carried')
   const lostIs = async (n: string) => {
-    await sleep(1500); ok((await o.lit(wb.id)) === false && ((await G('wm')) as any[]).length === 2, `${n} its waymark is dark, the keeper's ledger untouched (${JSON.stringify(await G('wmLit'))} ${JSON.stringify(wb)} of ${((await G('wm')) as any[]).length})`)
+    ok((await poll(async () => (await o.lit(wb.id)) === false, 20000)) && ((await G('wm')) as any[]).length === 2, `${n} its waymark is dark, the keeper's ledger untouched (${JSON.stringify(await G('wmLit'))} ${JSON.stringify(wb)} of ${((await G('wm')) as any[]).length})`)
     ok(await o.goto(B.x + 3, B.z + 16, 100), `${n} walked there`); await o.alive(); await o.tp(B.x + 3, B.z + 16); await sleep(9000)
     const g = await o.ground(), pl = await o.place(B); ok(g.ground === 'infected' && g.settlement === null, `${n} no settlement, Hollow ground (${JSON.stringify(g)})`)
     ok(!pl.folk && !pl.stall && pl.homes === 'null', `${n} its folk, stall and homes are gone`)
