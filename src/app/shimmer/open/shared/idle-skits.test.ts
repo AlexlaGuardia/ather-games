@@ -3,7 +3,7 @@
 // live store (on with idle, off on input, off with Hollows near), and the REAL trot: two playing spirits and a sniffer leave
 // their formation slots while idle and are back inside ~2 s of input.
 import { pickSkits, pickSniffSpot, pickPlayCentre, playPoint, startSkits, skitSlot, noteHollowNear, skitAim, _resetSkits, SKIT, type SkitInput } from './idle-skits'
-import { idleCamStep, idleCamFresh, IDLE_AFTER, FRAME, framesFollower, tickIdleCam, noteInput, _resetIdle, type View } from './idle-mode'
+import { idleCamStep, idleCamFresh, IDLE_AFTER, IDLE_FOLLOW, FRAME, framesFollower, tickIdleCam, noteInput, _resetIdle, type View } from './idle-mode'
 import { makeFormation, joinFormation, leaveFormation, tickFormation, formationSlot, reportFormationPos, lineClear, type Member, type Keeper, type Vec } from './follow-formation'
 import { makeTrot, type SpiritNav } from '../ather/spirit-trot'
 import { SPIRIT_MODELS } from '../ather/spirit-models'
@@ -19,7 +19,7 @@ const dist = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.z - b.z)
 { const four = [{ id: 'mm', kind: 'manamal' as const }, { id: 'a', kind: 'spirit' as const }, { id: 'b', kind: 'spirit' as const }, { id: 'c', kind: 'spirit' as const }]
   for (let i = 0; i < 40; i++) {
     const p = pickSkits(four, rand), kinds = Object.values(p).map(s => s.kind)
-    ok(p.mm?.kind === 'lie', 'picker: the Mana\'mal lies down')
+    ok(p.mm?.kind === 'roam', 'picker: the Mana\'mal roams')
     ok(kinds.filter(k => k === 'play').length === 2 && kinds.filter(k => k === 'sniff').length === 1, `picker: 3 spirits = one pair plays, one sniffs (${kinds})`)
     const pl = Object.entries(p).filter(([, s]) => s.kind === 'play')
     ok(pl.length === 2 && pl[0][1].mate === pl[1][0] && pl[1][1].mate === pl[0][0], 'picker: the pair are each other\'s mate')
@@ -29,7 +29,7 @@ const dist = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.z - b.z)
   const two = pickSkits([{ id: 'a', kind: 'spirit' }, { id: 'b', kind: 'spirit' }], rand)
   ok(two.a.kind === 'play' && two.b.kind === 'play', 'picker: two spirits out = they play')
   const one = pickSkits([{ id: 'mm', kind: 'manamal' }, { id: 'a', kind: 'spirit' }], rand)
-  ok(one.a.kind === 'sniff' && one.mm.kind === 'lie', 'picker: one spirit sniffs')
+  ok(one.a.kind === 'sniff' && one.mm.kind === 'roam', 'picker: one spirit sniffs')
   ok(Object.keys(pickSkits([], rand)).length === 0, 'picker: nobody out = no skits') }
 
 // a wall along x = 1 (thick 0.4), no door
@@ -54,17 +54,36 @@ const WALL = (x: number, _z: number) => Math.abs(x - 1) < 0.2
   for (let t = 0; t < 10; t += 0.1) minGap = Math.min(minGap, dist(playPoint(c0, 0, t, 1), playPoint(c0, Math.PI, t, 1)))
   ok(Math.abs(minGap - 2 * SKIT.playR) < 1e-6, `play: the pair stay half a turn apart on the ring (${minGap.toFixed(2)})`) }
 
-// 3. ONE IDLE'S SKITS: a pair with no room to play sniff instead; the lie spot is near the keeper on its side
+// 3. ONE IDLE'S SKITS: a pair with no room to play sniff instead
 { const k = { x: 0, z: 0 }
   const ms: SkitInput[] = [{ id: 'mm', kind: 'manamal', slot: { x: 0.75, z: 1 } }, { id: 'a', kind: 'spirit', slot: { x: -1, z: 2 } }, { id: 'b', kind: 'spirit', slot: { x: 1, z: 2 } }]
   const r = startSkits(ms, k, rand); r.step({ ...k, yaw: 0 }, 0.016)
-  const lie = r.slot('mm')!
-  ok(lie.act === 'lie' && Math.abs(dist(lie, k) - SKIT.lieR) < 1e-6, `lie: ${SKIT.lieR} m from the keeper (${dist(lie, k).toFixed(2)})`)
+  ok(dist(r.slot('mm')!, { x: 0.75, z: 1 }) < 1e-6, 'roam: starts where it stands, no jump')
   ok(r.plan().a.kind === 'play' && r.plan().b.kind === 'play', 'skits: room = the pair plays')
   const sa = r.slot('a')!, sb = r.slot('b')!
   ok(dist(sa, sb) > 2 * SKIT.playR - 0.05, 'skits: the playing pair run opposite each other')
   const walled = startSkits(ms.map(m => ({ ...m, blocked: (x: number, z: number) => Math.hypot(x, z) > 2.4 })), k, rand)
   ok(walled.plan().a.kind === 'sniff' && walled.plan().b.kind === 'sniff', `skits: no room for a ring = they sniff instead (${walled.plan().a.kind})`) }
+
+// 3b. THE MANA'MAL'S ROAM (M91): wander / sit / nap over and over, resting on the 3-6 m ring, at M91's walk, never a jump,
+//     never in a wall, never through the keeper; napping = the lie-down act
+{ const k = { x: 0, z: 0, yaw: 0 }, mm = { x: 0.75, z: 1 }
+  const r = startSkits([{ id: 'mm', kind: 'manamal', slot: mm, blocked: WALL }], k, rand)
+  const phases = new Set<string>(), rests: Vec[] = []
+  let last: Vec = mm, vMax = 0, inWall = 0, near = 9, left = false, prevPhase = 'sit', badAct = 0, dIn = false
+  for (let i = 0; i < 60 * 300; i++) { r.step(k, 1 / 60); const s = r.slot('mm')!, d = dist(s, k)
+    phases.add(s.roam!.phase); vMax = Math.max(vMax, dist(s, last) * 60); if (WALL(s.x, s.z)) inWall++; if ((s.act === 'lie') !== (s.roam!.phase === 'nap')) badAct++
+    if (d >= 3) left = true; if (left) near = Math.min(near, d)
+    if (prevPhase === 'wander' && s.roam!.phase === 'sit') rests.push({ x: s.x, z: s.z }); prevPhase = s.roam!.phase; last = { x: s.x, z: s.z }; dIn = true }
+  ok(dIn && phases.size === 3, `roam: wander, sit and nap all happen (${[...phases]})`)
+  ok(rests.length >= 5 && rests.every(p => dist(p, k) >= 2.8 && dist(p, k) <= 6.2), `roam: rests on the 3-6 m ring (${rests.map(p => dist(p, k).toFixed(1))})`)
+  ok(vMax <= IDLE_FOLLOW.WALK + 0.01, `roam: M91's walk, no jumps (${vMax.toFixed(2)} m/s)`)
+  ok(inWall === 0, `roam: never in the wall (${inWall})`)
+  ok(near >= SKIT.roamPass - 0.05, `roam: never through the keeper (${near.toFixed(2)})`)
+  { const o = startSkits([{ id: 'mm', kind: 'manamal', slot: { x: 0, z: 4 } }], k, rand); let n = 9   // open ground: chords could cross anywhere
+    for (let i = 0; i < 60 * 900; i++) { o.step(k, 1 / 60); n = Math.min(n, dist(o.slot('mm')!, k)) }
+    ok(n >= SKIT.roamPass - 0.05, `roam: open ground, never through the keeper (${n.toFixed(2)})`) }
+  ok(badAct === 0, 'roam: lying exactly while it naps') }
 
 // 4. THE IDLE CAMERA frames a follower on the 2nd, 5th ... glance, turning the short way, and gives the view back exactly
 { ok(!framesFollower(0) && framesFollower(1) && !framesFollower(2) && framesFollower(4), 'camera: frames on glance 2, 5, ...')
@@ -109,7 +128,7 @@ const WALL = (x: number, _z: number) => Math.abs(x - 1) < 0.2
   ok(Object.values(maxOff).filter(v => v > 1.5).length >= 2, `trot: idle = spirits leave their slots (${Object.entries(maxOff).map(([a, v]) => a + ' ' + v.toFixed(1)).join(', ')})`)
   ok(framed >= 1, `camera: framed a follower while idle (${framed})`)
   const mm = skitSlot('mm', k, now)
-  ok(mm?.act === 'lie', 'store: the Mana\'mal\'s skit is to lie down')
+  ok(!!mm?.roam, 'store: the Mana\'mal\'s skit is to roam')
   noteInput()
   step(1 / 60)
   ok(skitSlot('s0', k, now) === null && skitSlot('mm', k, now) === null, 'store: input = skits off at once')

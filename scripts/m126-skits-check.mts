@@ -3,8 +3,8 @@
 // out (Gemdigger). Open ground, no walls. Hooks: __ather.tp (place the keeper once), __formation (the slots, where each
 // really stands), __skits (read-only probe, shared/idle-skits.ts: on, plan, lying, framed).
 //  1. The formation holds 4 and they come to their slots.
-//  2. No input past the idle threshold (25 s): skits start; distinct moments (the Mana'mal lies, the spirits play / sniff).
-//  3. While idle: the Mana'mal is LYING (nap > 0.8); a spirit is more than 1.5 m from its slot; the camera framed a follower.
+//  2. No input past the idle threshold (25 s): skits start; distinct moments (the Mana'mal roams, the spirits play / sniff).
+//  3. While idle: the Mana'mal walks between points 3-6 m from the keeper AND naps (nap > 0.8; M91); a spirit is more than 1.5 m from its slot; the camera framed a follower.
 //  4. One key press: skits off, every follower back within 0.65 m of its slot inside ~2 s (2.5 s allowed).
 //  5. 0 page errors.
 //   npx tsx scripts/m126-skits-check.mts [--url https://ather.games] [--out dir]
@@ -26,7 +26,7 @@ let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 type V = { x: number; z: number }
 type F = { stopped: boolean; keeper: V; members: { id: string; kind: string }[]; pos: Record<string, V>; slots: Record<string, V> }
-type S = { on: boolean; idle: boolean; hollowHeld: boolean; framed: number; plan: Record<string, { kind: string }>; lying: Record<string, number> }
+type S = { on: boolean; idle: boolean; hollowHeld: boolean; framed: number; plan: Record<string, { kind: string }>; slots: Record<string, { roam?: { phase: string } }>; lying: Record<string, number> }
 const br = await puppeteer.launch({ protocolTimeout: 600000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--mute-audio'] })
 try {
   const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true })
@@ -71,19 +71,27 @@ try {
   ok(!!r.s?.on, `2. skits started after ${((Date.now() - t0) / 1000).toFixed(0)} s of no input (idle ${r.s?.idle}, hollows held ${r.s?.hollowHeld})`)
   const kinds = Object.entries(r.s?.plan ?? {}).map(([id, s]) => `${id}:${s.kind}`)
   const mmId = r.f?.members.find(m => m.kind === 'manamal')?.id ?? 'manamal'
-  ok(r.s?.plan?.[mmId]?.kind === 'lie' && new Set(Object.values(r.s?.plan ?? {}).map(s => s.kind)).size >= 2, `2. distinct moments (${kinds.join(', ')})`)
+  ok(r.s?.plan?.[mmId]?.kind === 'roam' && new Set(Object.values(r.s?.plan ?? {}).map(s => s.kind)).size >= 2, `2. distinct moments (${kinds.join(', ')})`)
   // 3. watch the skits for 22 s
-  let maxOff: Record<string, number> = {}, lieMax = 0, best = 9, bestId = ''
-  for (let t = 0; t < 240 && !(t > 44 && best < 0.2 && lieMax > 0.8); t++) {
+  let maxOff: Record<string, number> = {}, lieMax = 0, walked = 0, shotDone = false, best = 9, bestId = ''
+  const rests: V[] = []; let mmPrev: V | null = null
+  for (let t = 0; t < 600 && !(t > 44 && best < 0.2 && lieMax > 0.8 && rests.length >= 2 && shotDone); t++) {
     await sleep(500); r = await read(); if (!r.f || !r.s) continue
     for (const [id, v] of Object.entries(off(r.f))) maxOff[id] = Math.max(maxOff[id] ?? 0, v)
     lieMax = Math.max(lieMax, r.s.lying[mmId] ?? 0); 
     // the RENDERED camera against where each follower stands (a follower counts once the idle camera asked for one)
     const c = await p.evaluate(() => (window as any).__ather.camAim()) as { x: number; z: number; cx: number; cz: number }
-    if (r.s.framed > 0) for (const m of r.f.members) { const q = r.f.pos[m.id]; if (!q) continue; const e = Math.atan2(q.x - c.cx, q.z - c.cz) - Math.atan2(c.x, c.z), a = Math.abs(Math.atan2(Math.sin(e), Math.cos(e))); if (a < best) { best = a; bestId = m.id } }
-    if (t === 20) await shot('m126s2-skits')
+    if (r.s.framed > 0) for (const m of r.f.members) { const q = r.f.pos[m.id]; if (!q) continue; const e = Math.atan2(q.x - c.cx, q.z - c.cz) - Math.atan2(c.x, c.z), a = Math.abs(Math.atan2(Math.sin(e), Math.cos(e))); if (a < best) { best = a; bestId = m.id }
+      if (!shotDone && a < 0.12 && Math.hypot(q.x - c.cx, q.z - c.cz) > 2) { shotDone = true; console.log(`SHOT faces ${m.id}`); await shot('m126s2-skits') } }
+    // the Mana'mal: metres walked while it wanders, and the distinct points it comes to rest at (its real position)
+    const q = r.f.pos[mmId], ph = r.s.slots[mmId]?.roam?.phase
+    if (q) { if (mmPrev) walked += Math.hypot(q.x - mmPrev.x, q.z - mmPrev.z)
+      const dk = Math.hypot(q.x - r.f.keeper.x, q.z - r.f.keeper.z)
+      if ((ph === 'sit' || ph === 'nap') && dk > 2.8 && dk < 6.2 && mmPrev && Math.hypot(q.x - mmPrev.x, q.z - mmPrev.z) < 0.02 && rests.every(v => Math.hypot(v.x - q.x, v.z - q.z) > 0.5)) rests.push(q)
+      mmPrev = q }
   }
-  ok(lieMax > 0.8, `3. the Mana'mal lay down (nap ${lieMax.toFixed(2)})`)
+  ok(rests.length >= 2 && walked > 3, `3. the Mana'mal walked between points 3-6 m from the keeper (${walked.toFixed(1)} m; rests ${rests.map(v => Math.hypot(v.x - kb.x, v.z - kb.z).toFixed(1)).join(', ')})`)
+  ok(lieMax > 0.8, `3. the Mana'mal napped, lying (nap ${lieMax.toFixed(2)})`)
   const spiritOff = Object.entries(maxOff).filter(([id]) => id !== mmId)
   ok(spiritOff.some(([, v]) => v > 1.5), `3. a spirit went more than 1.5 m from its slot (${spiritOff.map(([id, v]) => `${id} ${v.toFixed(1)}`).join(', ')})`)
   ok(best < 0.2, `3. the rendered camera came to face a follower (${bestId} off by ${best.toFixed(2)} rad)`)

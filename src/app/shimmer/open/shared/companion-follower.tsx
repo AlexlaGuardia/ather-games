@@ -40,7 +40,7 @@ export function CompanionFollower({ pose, ground }: { pose: React.MutableRefObje
 
 export function Follower({ id, pose, ground }: { id: CompanionId; pose: React.MutableRefObject<FollowPose>; ground: (x: number, z: number) => number }) {
   const g = useRef<THREE.Group>(null)
-  const s = useRef<{ x: number; z: number; yaw: number; speed: number; moving: boolean; still: number; t: number; nap: number; kx: number; kz: number; kv: number; lie: number }>({ x: NaN, z: NaN, yaw: 0, speed: 0, moving: false, still: 0, t: 0, nap: 0, kx: NaN, kz: NaN, kv: 0, lie: 0 })
+  const s = useRef<{ x: number; z: number; yaw: number; speed: number; moving: boolean; still: number; t: number; nap: number; kx: number; kz: number; kv: number  }>({ x: NaN, z: NaN, yaw: 0, speed: 0, moving: false, still: 0, t: 0, nap: 0, kx: NaN, kz: NaN, kv: 0 })
   // M126 s1: it walks in the one formation (shared/follow-formation.ts): at heel, behind and to the right
   useEffect(() => { joinFormation({ id: FORM_ID, kind: 'manamal', r: MANAMAL_R }); return () => leaveFormation(FORM_ID) }, [])
   useFrame((_, dtRaw) => {
@@ -55,19 +55,21 @@ export function Follower({ id, pose, ground }: { id: CompanionId; pose: React.Mu
     m.kx = p.x; m.kz = p.z
     if (!Number.isFinite(m.x) || Math.hypot(p.x - m.x, p.z - m.z) > FOLLOW.TELEPORT) { m.x = slot.x; m.z = slot.z; m.yaw = p.yaw; m.speed = 0; m.moving = false }
     const px0 = m.x, pz0 = m.z
-    // M126 s2 IDLE SKIT (shared/idle-skits.ts; was M91's wander/sit/nap): the keeper idles = it walks to a spot near them and
-    // lies down; any input = the skit is gone and it walks back to heel
+    // M91 + M126 s2 IDLE (shared/idle-skits.ts): the keeper idles = it wanders a 3-6 m ring round them, sits, naps (lying down);
+    // any input = the skit is gone and it walks back to heel
     const sk = skitSlot(FORM_ID, p), to = sk ?? slot
-    const n = slotStep({ x: m.x, z: m.z, speed: m.speed, moving: m.moving }, to, m.kv, dt, sharedBlocked(p), sk ? 0.3 : 0.6)
-    m.x = n.x; m.z = n.z; m.speed = n.speed; m.moving = n.moving
-    m.lie = sk?.act === 'lie' && !n.moving && Math.hypot(to.x - m.x, to.z - m.z) < 0.35 ? m.lie + dt : 0
+    if (sk?.roam) { m.x = sk.x; m.z = sk.z; m.speed += (sk.roam.speed - m.speed) * Math.min(1, dt * 6); m.moving = false }
+    else {
+      const n = slotStep({ x: m.x, z: m.z, speed: m.speed, moving: m.moving }, to, m.kv, dt, sharedBlocked(p))
+      m.x = n.x; m.z = n.z; m.speed = n.speed; m.moving = n.moving
+    }
     reportFormationPos(FORM_ID, m.x, m.z)
     const dx = m.x - px0, dz = m.z - pz0
     // face where it goes; at rest, face the way the keeper looks
     const faceTo = m.speed > 0.3 && (dx || dz) ? Math.atan2(-dx, -dz) : to.face + Math.PI   // M126: at rest, its slot's way (out, when the keeper stops); the nose is -z
     let dy = faceTo - m.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); m.yaw += dy * Math.min(1, dt * 5)
     m.still = m.speed < 0.15 ? m.still + dt : 0
-    m.nap += ((m.lie > 0.6 ? 1 : 0) - m.nap) * Math.min(1, dt * 1.5)   // M126 s2: a moment after it gets there, it lies down
+    m.nap += ((sk?.act === 'lie' ? 1 : 0) - m.nap) * Math.min(1, dt * 1.5)
     reportLying(FORM_ID, m.nap)
     const gy = ground(m.x, m.z)
     const y = Number.isFinite(gy) ? gy : 0
