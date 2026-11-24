@@ -7,7 +7,7 @@ import * as THREE from 'three'
 import { BIOME, type Wilds, type BiomeId, type Tree } from './wilds'
 import { TREE_KINDS, isPruned, subscribeForestry, forestryRev, crownOf, shakeOf, type TreeKind } from './forestry'
 import { useFrame } from '@react-three/fiber'
-import { GREG_WAYMARK, type Waymark } from './waymarks'
+import { GREG_WAYMARK, isLit, type Waymark } from './waymarks'
 import { Crystals } from './crystal-nodes'
 import { P } from './palette'
 import { GROUND, useGroundMaterial } from './ground-look'
@@ -228,13 +228,14 @@ function Trees({ W, focus, off }: { W: Wilds; focus: Focus; off: { x: number; z:
 }
 
 /** A waymark in the world: a standing stone with Enchant's binding ring hovering over it. */
-export function WaymarkStone({ w, greg }: { w: Waymark; greg?: boolean }) {
-  const glow = greg ? '#e7c766' : '#6fd3c4'
+/** M75 s2: `dark` = its ground went grey again (waymarks.ts isLit): the ring and socket dim, the stone stays. */
+export function WaymarkStone({ w, greg, dark }: { w: Waymark; greg?: boolean; dark?: boolean }) {
+  const glow = dark ? '#5c6066' : greg ? '#e7c766' : '#6fd3c4'
   return (
     <group position={[w.x, w.y, w.z]}>
       <mesh position-y={0.8}><boxGeometry args={[0.55, 1.6, 0.45]} /><meshLambertMaterial color="#b8ae9c" flatShading /></mesh>
-      <mesh position-y={2.15} rotation-x={Math.PI / 2}><torusGeometry args={[0.55, 0.06, 5, 16]} /><meshLambertMaterial color={glow} emissive={glow} emissiveIntensity={0.9} /></mesh>
-      <mesh position-y={0.02} rotation-x={-Math.PI / 2}><ringGeometry args={[1.2, 1.5, 16]} /><meshBasicMaterial color={glow} transparent opacity={0.55} /></mesh>
+      <mesh position-y={2.15} rotation-x={Math.PI / 2}><torusGeometry args={[0.55, 0.06, 5, 16]} /><meshLambertMaterial color={glow} emissive={glow} emissiveIntensity={dark ? 0.05 : 0.9} /></mesh>
+      <mesh position-y={0.02} rotation-x={-Math.PI / 2}><ringGeometry args={[1.2, 1.5, 16]} /><meshBasicMaterial color={glow} transparent opacity={dark ? 0.25 : 0.55} /></mesh>
     </group>
   )
 }
@@ -372,7 +373,7 @@ function WaterPlane({ W }: { W: Wilds }) {
 }
 
 /** `off` = this tile's world offset (the group it sits in); `focus` = the keeper, in world coords. */
-export function WildsScene({ W, waymarks, focus, off }: { W: Wilds; waymarks: Waymark[]; focus: Focus; off: { x: number; z: number } }) {
+export function WildsScene({ W, waymarks, focus, off, infected }: { W: Wilds; waymarks: Waymark[]; focus: Focus; off: { x: number; z: number }; infected?: ReadonlySet<string> }) {
   const greg = { ...GREG_WAYMARK, y: W.heightAt(GREG_WAYMARK.x, GREG_WAYMARK.z) }
   return (
     <>
@@ -384,7 +385,7 @@ export function WildsScene({ W, waymarks, focus, off }: { W: Wilds; waymarks: Wa
       <Trees W={W} focus={focus} off={off} />
       <Crystals W={W} />
       {W.meta.name === GREG_WAYMARK.tile && <WaymarkStone w={greg} greg />}
-      {waymarks.filter(w => w.tile === W.meta.name).map(w => <WaymarkStone key={w.id} w={w} />)}
+      {waymarks.filter(w => w.tile === W.meta.name).map(w => <WaymarkStone key={w.id} w={w} dark={!!infected && !isLit(w, infected)} />)}
     </>
   )
 }

@@ -128,7 +128,7 @@ import { AngelicaDeskPanel, sideItemName, haveOf } from './m70-desk-panel'   // 
 import { GLEANER_POST, GLEANER_POST_R, BURR_CAMP, CAMP_LABEL } from './gleaner'   // M112 s2
 import { aimPick, lookDir, type Pickable } from '../shared/aim-pick'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
-import { canPlant, plant, lift, loadWaymarks, saveWaymarks, groundOf, GREG_WAYMARK, MAX_WAYMARKS, type Waymark, type PlantVerdict } from './waymarks'
+import { canPlant, plant, lift, loadWaymarks, saveWaymarks, groundOf, canTravel, isLit, lastLit, GREG_WAYMARK, MAX_WAYMARKS, type Waymark, type PlantVerdict } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { CombatLayer, type CombatHud, type SightLink } from './combat-layer'
 import type { CombatEvent, Terrain } from './combat'
@@ -485,6 +485,7 @@ function AtherSliceGame() {
   const lastCross = useRef<{ x: number; z: number } | null>(null)
   const wwRef = useRef<WildsWorld | null>(null); wwRef.current = ww
   const wayRef = useRef<Waymark[]>([]); wayRef.current = waymarks
+  const infRef = useRef<ReadonlySet<string>>(new Set())   // M75 s2: the spread's infected nodes (set below), for the fall's lit waymark
   // void v2: the FALL before the cost (void-fall.ts). Over the lip, the page takes the body from the walker (sinkRef), it drops
   // into the fog column under gravity while a black veil closes (voidDark), and only once the view is black does voidFall run.
   const sinkRef = useRef<((lc: Loco, dt: number) => void) | null>(null)
@@ -495,7 +496,7 @@ function AtherSliceGame() {
   useEffect(() => { sinkRef.current = null; fallSt.current = null; setDark(0) }, [epoch])   // any arrival: the new body is the walker's
   const voidFall = useCallback(() => {
     const w = wwRef.current; if (!w || fading.current) return
-    const way = wayRef.current[wayRef.current.length - 1], o = way ? w.offsetOf(way.tile) : { x: 0, z: 0 }
+    const way = lastLit(wayRef.current, infRef.current), o = way ? w.offsetOf(way.tile) : { x: 0, z: 0 }
     const at = lastCross.current ?? (way ? { x: way.x + o.x + 2.2, z: way.z + o.z + 2.2 } : { x: GREG_WAYMARK.x + 2.2, z: GREG_WAYMARK.z + 2.2 })
     const { tx, ty } = tileOf(at.x, at.z), t = w.at(tx, ty); if (!t) return
     fading.current = true   // arrive() below takes it over once the tile is in
@@ -544,6 +545,7 @@ function AtherSliceGame() {
   const nearNodes = useMemo(() => { const p = pos.current; return nodes.filter(n => Math.abs(n.x - p.x) < 450 && Math.abs(n.z - p.z) < 450) }, [nodes, nearKey]) // eslint-disable-line react-hooks/exhaustive-deps
   // the countries on the fold map, and which one the keeper stands in (HUD), off the same nearest-node rule
   const infectedSet = useMemo(() => new Set(nodes.map(n => n.id)), [nodes])
+  infRef.current = infectedSet
   // M70 s2: THE SPREAD MAP (spread-map.ts): uncovered areas + their neglect clock; ticks every 4 s (uncover where you stand,
   // grow toasts for watched areas that turned Hollow ground). The first read after a load only records (no toast on reload).
   const [smap, setSmapState] = useState<SpreadMap>(() => (typeof window === 'undefined' ? { v: 1, seen: {}, first: false } : loadMap()))
@@ -626,6 +628,8 @@ function AtherSliceGame() {
     if (d.kind === 'glade') { arrive({ kind: 'glade' }, gladeNewbornSpot()); return }   // M67 s1b: a visit lands where a newborn wakes, facing Greg
     if (d.kind === 'waymark') {
       if (!ww) { setToast('The Wilds are still loading.'); return }
+      // M75 s2 (Magii d3bf5e9): a waymark whose ground went grey again is DARK: no travel until the ground is cleared again
+      const v = canTravel(d.w, infectedSet); if (!v.ok) { setToast(v.why); return }
       // a waymark is saved in its tile's own coords; the world is one space, so place it, load round it, then arrive
       const o = ww.offsetOf(d.w.tile), x = d.w.x + o.x + 2.2, z = d.w.z + o.z + 2.2
       stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(d.w.tile); arrive({ kind: 'wilds', tile: d.w.tile }, { x, z, yaw: Math.PI * 0.75 }) })
@@ -634,7 +638,7 @@ function AtherSliceGame() {
     // Athernyx: out through a city's door off the hall (hub's ?at= sets you down at that pitstop).
     setPanel(null); setFade(1)
     setTimeout(() => { window.location.href = `/shimmer/open/continent?at=${encodeURIComponent(d.id)}` }, 380)
-  }, [ww, arrive, goHome])
+  }, [ww, arrive, goHome, infectedSet])
 
   // THE HALLWAY (gates.md, ruled 11-14): any door to any door. Arriving from the continent map with ?waymark=<id>
   // sets the keeper down at that bound waymark. An id the keeper has not bound is refused (the threshold instead).
@@ -971,7 +975,7 @@ function AtherSliceGame() {
     setToast(back.left ? 'Waymark lifted, but your bag is full: it went back to the fold.' : 'Waymark lifted. It is back in your bag.')
   }, [])
   // M75 probes (m75-waymark-check): the ledger, plant/lift through the same paths as click/L, the ground word where the keeper
-  // stands, kept/infected ground nearby. wmGoto + wmClearHere are CHECK-ONLY (like grant): set down at a Wilds point, clear its node.
+  // stands, kept/infected ground nearby. wmGoto + wmClearHere + wmGrey/wmClear (M75 s2) are CHECK-ONLY (like grant): set down at a Wilds point, clear its node.
   useEffect(() => {
     const g = window as unknown as { __ather?: Record<string, unknown> }
     g.__ather = {
@@ -980,6 +984,9 @@ function AtherSliceGame() {
       wmGround: () => { const p = pos.current; return { ground: groundOf(nodeOwner?.(p.x, p.z) ?? null, infectedSet), settlement: netRef.current ? settlementAt(netRef.current, p.x, p.z)?.id ?? null : null, x: p.x, z: p.z, grounded: p.grounded } },
       wmNodes: () => { const p = pos.current; return allNodes.filter(n => n.tile === GREG_WAYMARK.tile).map(n => ({ id: n.id, x: n.x, z: n.z, infected: infectedSet.has(n.id), d: Math.hypot(n.x - p.x, n.z - p.z) })).sort((a, b) => a.d - b.d).slice(0, 40) },
       wmGoto: (x: number, z: number) => { if (!ww) return false; const { tx, ty } = tileOf(x, z), t = ww.at(tx, ty); if (!t) return false; const o = ww.offsetOf(t.name); travel({ kind: 'waymark', w: { id: 'probe', tile: t.name, x: x - o.x - 2.2, y: 0, z: z - o.z - 2.2, biome: BIOME.meadow, made: 0 } }); return true },
+      wmLit: () => wayRef.current.map(w => ({ id: w.id, node: w.node ?? null, lit: isLit(w, infectedSet) })),
+      wmGrey: (id: string) => { const cur = spreadRef.current; if (!cur || !cur.clean.includes(id)) return false; const s = { ...cur, clean: cur.clean.filter(c => c !== id) }; saveSpread(s); setSpread(s); return true },
+      wmClear: (id: string) => { const cur = spreadRef.current; if (!cur || !allNodes.some(n => n.id === id)) return false; const r = clearAt(cur, allNodes, id, clock()); saveSpread(r.s); setSpread(r.s); return true },
       wmClearHere: () => { const p = pos.current, id = nodeOwner?.(p.x, p.z), cur = spreadRef.current; if (!id || !cur) return null; const r = clearAt(cur, allNodes, id, clock()); saveSpread(r.s); setSpread(r.s); return id },
     }
   }, [plantHere, liftWaymark, nodeOwner, infectedSet, allNodes, ww, travel])
@@ -1636,7 +1643,7 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && <ChannelFocus focus={focusRef} />}
         {zone.kind === 'wilds' && ww && <ProspectingFX ww={ww} aim={cAimRef} fx={cFxRef} ground={ground} mineable={c => mineCheck(c.kind, c.id).ok} />}
         {zone.kind === 'wilds' && ww && <RinningFX ease={easeOf(toolsRef.current.rinning)} waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT && !!toolsRef.current.rinning} onCatch={onCatch} onGone={onGone} />}
-        {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />{net && <TilePaths net={net} W={T} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />}</group> })}
+        {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} infected={infectedSet} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />{net && <TilePaths net={net} W={T} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />}</group> })}
         {ww && <DeathPack active={zone.kind === 'wilds'} />}
         {zone.kind === 'wilds' && ww && <><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
         {zone.kind === 'glade' && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><GladeLots /></>}   {/* M67 s1b-2: the Glade's backdrop in Greg's garden */}
@@ -1718,7 +1725,7 @@ function AtherSliceGame() {
         <div style={{ position: 'absolute', left: '50%', top: '58%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none' }}>{prompt}</div>
       )}
       {panel?.kind === 'map' && (
-        <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} here={{ x: pos.current.x - hereOff.x, z: pos.current.z - hereOff.z }}
+        <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} infected={infectedSet} here={{ x: pos.current.x - hereOff.x, z: pos.current.z - hereOff.z }}
           inWilds={zone.kind === 'wilds'} onTravel={travel} tile={hereTile} pitstops={pitstops}
           nodes={(nodesByTile.get(hereTile) ?? []).filter(n => infectedSet.has(n.id)).map(n => ({ ...n, x: n.x - hereOff.x, z: n.z - hereOff.z }))} regions={regions}
           area={ww ? { world: ww, regionsByTile, cx: hereOff.x, cz: hereOff.z, tileOff, nodes: nodes.filter(n => Math.abs(n.x - hereOff.x) < 1600 && Math.abs(n.z - hereOff.z) < 1600), here: { x: pos.current.x, z: pos.current.z } } : undefined}

@@ -67,6 +67,29 @@ export function groundOf(owner: string | null | undefined, infected: ReadonlySet
   return owner ? (infected.has(owner) ? 'infected' : 'cleared') : null
 }
 
+/** M75 s2 DARK / RELIGHT (Magii RULED-AFK athernyx d3bf5e9; basis shimmer-folds-settlements.md:32, "a waymark exists only on
+ *  kept ground"): a waymark bound on a cleared node is LIT while that node stays clean and DARK while the grey holds it again.
+ *  Read at call time from the spread's own infected set (the same one canPlant's `ground` comes from), never a stored flag:
+ *  a dark waymark stays planted (no refund, no re-buy) and relights the moment its node is cleared again. A settlement is kept
+ *  ground by definition (no settlement falls in the build), so a settlement waymark is always lit; so are Greg's and older
+ *  waymarks bound to no node. */
+export function isLit(w: Waymark, infected: ReadonlySet<string>): boolean {
+  if (w.settlement || !w.node) return true
+  return !infected.has(w.node)
+}
+/** Placeholder lines (@lark): the refusal when a keeper steps toward a dark waymark, and the fold map's word for one. */
+export const DARK_WHY = 'The grey took that ground back. Its waymark is dark until you clear it again.'
+export const UNLIT_LABEL = 'unlit'
+/** Whether the fold may carry the keeper to this waymark now. */
+export function canTravel(w: Waymark, infected: ReadonlySet<string>): PlantVerdict {
+  return isLit(w, infected) ? { ok: true } : { ok: false, why: DARK_WHY }
+}
+/** The waymark a fall sets the keeper down at: the last LIT one (Greg's stone when none is lit). */
+export function lastLit(list: readonly Waymark[], infected: ReadonlySet<string>): Waymark | undefined {
+  for (let k = list.length - 1; k >= 0; k--) if (isLit(list[k], infected)) return list[k]
+  return undefined
+}
+
 export function plant(list: readonly Waymark[], w: Omit<Waymark, 'id' | 'made'>, now = Date.now()): Waymark[] {
   return [...list, { ...w, id: `wm-${now.toString(36)}-${list.length}`, made: now }]
 }

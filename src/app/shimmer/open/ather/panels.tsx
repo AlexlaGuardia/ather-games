@@ -10,7 +10,7 @@ import { atherPlate } from './plate'
 import { composeTilePicture, type Region } from './tile-picture'
 import { LEGEND } from './spread-map'   // M70 s2
 import { TILE_M, type WildsWorld } from './wilds-world'
-import { GREG_WAYMARK, MAX_WAYMARKS, type Waymark } from './waymarks'
+import { GREG_WAYMARK, MAX_WAYMARKS, isLit, UNLIT_LABEL, type Waymark } from './waymarks'
 import { BIOME_NAME } from './wilds'
 import { cellOrigin, FOG_CELL, walkedShare, isRevealed, type Fog } from './explored'
 import { drawCloud, ATHER_CLOUD } from '../../ui/map-kit'
@@ -83,7 +83,7 @@ function FogLayer({ fog, W }: { fog: Fog; W: Wilds }) {
 // BETA M73: The Dig's pulse (the flip button, then Rune Hold's door): an ember ring that breathes
 const DIG_PULSE_CSS = '@keyframes dig-pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,154,74,0)}50%{box-shadow:0 0 0 4px rgba(255,154,74,.55),0 0 14px rgba(255,154,74,.7)}}'
 
-export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [], onClose, onFlip, area, goal, flipPulse, digGoal }: {
+export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [], onClose, onFlip, area, goal, flipPulse, digGoal }: {
   /** BETA M73 The Dig: the Flip map button pulses until the keeper turns the map over (opening-chain.ts › flipPulse) */
   flipPulse?: boolean
   /** BETA M73 The Dig: `goal` (Rune Hold) is The Dig's, not the errand's: its pin + door pulse, the door keeps its own sub */
@@ -91,6 +91,8 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
   /** BETA M32 trail: the pitstop the keeper's errand runs through (Rune Hold for the runesmith): its pin glows, its door says so */
   goal?: string
   view: 'ather' | 'athernyx'; travel: boolean; W: Wilds | null; fog: Fog | null; waymarks: Waymark[]
+  /** M75 s2: the spread's infected nodes: a waymark on one is DARK (listed unlit, never removed; travel refuses on the page) */
+  infected?: ReadonlySet<string>
   onClose: () => void; onFlip: () => void
   here: { x: number; z: number }; inWilds: boolean; onTravel: (d: Dest) => void; tile: string; pitstops: Pitstop[]
   /** Infected nodes still welling on this tile: grey blots, not stops (you walk to a fight). */
@@ -106,8 +108,9 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
   const pct = (x: number, z: number) => ({ left: `${((x + sx / 2) / sx) * 100}%`, top: `${((z + sz / 2) / sz) * 100}%` })
   const src = W?.meta.source ?? { x0: 770, y0: 420, x1: 870, y1: 520 }
   const go = (d: Dest) => travel && onTravel(d)
-  const stop = (name: string, sub: string, d: Dest, colour: string) => (
-    <button key={name} disabled={!travel} onClick={() => go(d)} style={{
+  const lit = (w: Waymark) => !infected || isLit(w, infected)
+  const stop = (name: string, sub: string, d: Dest, colour: string, data?: Record<string, string>) => (
+    <button key={name} disabled={!travel} onClick={() => go(d)} {...data} style={{
       display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 6,
       border: `1px solid ${H.rule}`, background: 'rgba(255,250,235,0.55)', color: H.ink, font: 'inherit', fontWeight: 600, cursor: travel ? 'pointer' : 'default',
     }}>
@@ -137,7 +140,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
                 return (
                   <>
                     <AreaView world={area.world} regionsByTile={area.regionsByTile} cx={area.cx} cz={area.cz} fog={fog} tileOff={area.tileOff} waymarks={waymarks} />
-                    {[{ w: GREG_WAYMARK, col: '#e7c766', t: "Gregory's waymark" }, ...waymarks.map(w => ({ w, col: '#6fd3c4', t: `Your waymark · ${BIOME_NAME[w.biome]}` }))].map(({ w, col, t }) => {
+                    {[{ w: GREG_WAYMARK, col: '#e7c766', t: "Gregory's waymark" }, ...waymarks.map(w => ({ w, col: lit(w) ? '#6fd3c4' : '#5c6066', t: `Your waymark · ${BIOME_NAME[w.biome]}${lit(w) ? '' : ` · ${UNLIT_LABEL}`}` }))].map(({ w, col, t }) => {
                       const o = offOf(w.tile); if (!o || !inA(w.x + o.x, w.z + o.z)) return null
                       return <button key={w.id} title={t} onClick={() => go({ kind: 'waymark', w })} style={{ ...pin(col, 12), ...ap(w.x + o.x, w.z + o.z) }} />
                     })}
@@ -150,7 +153,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
               {fog && W && <FogLayer fog={fog} W={W} />}
               <button title="Gregory's waymark" onClick={() => go({ kind: 'waymark', w: GREG_WAYMARK })} style={{ ...pin('#e7c766', 13), ...pct(GREG_WAYMARK.x, GREG_WAYMARK.z) }} />
               {waymarks.filter(w => w.tile === tile).map(w => (
-                <button key={w.id} title={`Your waymark · ${BIOME_NAME[w.biome]}`} onClick={() => go({ kind: 'waymark', w })} style={{ ...pin('#6fd3c4', 13), ...pct(w.x, w.z) }} />
+                <button key={w.id} title={`Your waymark · ${BIOME_NAME[w.biome]}${lit(w) ? '' : ` · ${UNLIT_LABEL}`}`} onClick={() => go({ kind: 'waymark', w })} style={{ ...pin(lit(w) ? '#6fd3c4' : '#5c6066', 13), ...pct(w.x, w.z) }} />
               ))}
               {regions.length > 1 && (
                 <svg viewBox={`${-sx / 2} ${-sz / 2} ${sx} ${sz}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
@@ -175,7 +178,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, here, inWilds, onTrave
                   {LEGEND().map((w, k) => <span key={w}>{k > 0 ? ' · ' : ''}<span style={{ display: 'inline-block', width: 10, height: 10, marginRight: 4, verticalAlign: -1, background: k === 0 ? 'rgba(195,216,160,0.6)' : k === 1 ? 'rgba(159,210,122,0.2)' : 'rgba(70,72,78,0.8)', outline: k === 0 ? '1px solid rgba(120,120,120,0.5)' : k === 1 ? '1px solid rgba(159,210,122,0.75)' : '1px dashed rgba(225,228,232,0.85)' }} />{w}</span>)}
                 </div>
               )}
-              {waymarks.map((w, k) => stop(`Waymark ${k + 1}`, `the Wilds · ${BIOME_NAME[w.biome]}`, { kind: 'waymark', w }, '#6fd3c4'))}
+              {waymarks.map((w, k) => { const on = lit(w); return stop(`Waymark ${k + 1}`, `the Wilds · ${BIOME_NAME[w.biome]}${on ? '' : ` · ${UNLIT_LABEL}`}`, { kind: 'waymark', w }, on ? '#6fd3c4' : '#5c6066', { 'data-waymark-stop': w.id, 'data-lit': on ? '1' : '0' }) })}
               <div style={{ opacity: 0.6, fontSize: 11, marginTop: 6 }}>{waymarks.length} / {MAX_WAYMARKS} waymarks. Plant one on ground you cleared, or inside a settlement.</div>
               {fog && W && (() => { const c = tileCentreWorld(W.meta); return <div style={{ opacity: 0.6, fontSize: 11 }}>Walked: {Math.round(walkedShare(fog, c.x - sx / 2, c.z - sz / 2, c.x + sx / 2, c.z + sz / 2) * 100)}% of this country</div> })()}
             </div>
