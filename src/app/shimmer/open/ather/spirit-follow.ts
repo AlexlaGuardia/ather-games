@@ -8,6 +8,8 @@
 //    Empty unless the owner + ?spirits=3d models are mounted, so nobody else ever gets a spirit talk.
 import { gardenKey } from '@/lib/keeper-local'   // M109 s4: a garden key (the planters are the plot's), per account
 import type { Species } from '../../spirits/spirit'
+import { GROWN } from '../../sprites/creature-size'
+import { bodyRadius } from './obstacles'
 
 const KEY = 'ather.spiritFollow.v1'
 let ids: string[] | null = null
@@ -40,6 +42,9 @@ export type LiveSpirit = { id: string; sp: Species; x: number; y: number; z: num
 export const spiritLive = new Map<string, LiveSpirit>()
 /** the spirits drawn in the last half second (an unmounted one drops out on its own) */
 export const liveSpirits = (now = Date.now()) => [...spiritLive.values()].filter(s => now - s.at < 500)
+
+/** M126 s4: the E pick's radius = her body's (long as well as tall), so a low long body is as easy to press E on as a tall one */
+export const spiritPickR = (sp: Species, h: number) => Math.max(0.25, h * 0.6, bodyRadius(GROWN[sp] ?? { height: h }))
 
 /** M109: the spirit a talk is on stands still (she listens) until the talk or her panel closes */
 export const spiritHeld: { id: string | null } = { id: null }

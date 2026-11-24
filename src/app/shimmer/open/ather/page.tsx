@@ -113,7 +113,7 @@ import { startFall, stepFall, type FallState } from './void-fall'
 import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
 import { useFolkTalk } from './use-folk-talk'
 import { useSpiritTalk, type SpiritTalkState } from './spirit-talk'   // M109 s1: E at a garden spirit (owner + ?spirits=3d)
-import { liveSpirits, setKeeperAt, followIds } from './spirit-follow'
+import { liveSpirits, setKeeperAt, followIds, spiritPickR } from './spirit-follow'
 import { inParty } from './spirit-party'   // M118 s1: party spirits walking with the keeper grow from her fights
 import { fightExp } from './spirit-stats'
 import { GROWTH, grownLine } from './spirit-growth'
@@ -850,7 +850,7 @@ function AtherSliceGame() {
       if (fennelRef.current) cands.push(cap(fennelRef.current.x, fennelRef.current.z, 0.45, 1.1, { kind: 'fennel' }))   // M22
       if (!visitNow) for (const m of idleDrawn) cands.push(cap(m.x, m.z, 0.4, MOGLIN_HEIGHT.chibi + 0.1, { kind: 'idlemog', id: m.id, name: m.name }))   // P1: E on a recruit waiting for a room
       // M109 s1: a drawn 3D garden spirit (owner + ?spirits=3d only: nothing is live otherwise), a capsule round her as she stands
-      if (!visitNow) for (const s of liveSpirits()) cands.push({ x: s.x, z: s.z, y0: s.y - 0.1, y1: s.y + s.h + 0.15, r: Math.max(0.25, s.h * 0.6), item: { kind: 'spirit', id: s.id, name: SPECIES_NAMES[s.sp] } })
+      if (!visitNow) for (const s of liveSpirits()) cands.push({ x: s.x, z: s.z, y0: s.y - 0.1, y1: s.y + s.h + 0.15, r: spiritPickR(s.sp, s.h), soft: true, item: { kind: 'spirit', id: s.id, name: SPECIES_NAMES[s.sp] } })
       if (anemonyxHere(clock())) cands.push(anemonyxPick<Near>({ kind: 'anemonyx' }))   // M76 s2: her day at the Green's edge
       for (const w of workPickables(worksRef.current, g)) cands.push({ ...w, item: { kind: 'work', near: w.item } })
       n = aimPick(cands, eye, dir, from)

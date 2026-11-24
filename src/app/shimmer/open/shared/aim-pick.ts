@@ -12,7 +12,9 @@ export const PICK_REACH = 3
 /** Slack round each capsule, as an angle off the crosshair (radians, ~6°). */
 export const PICK_CONE = (6 * Math.PI) / 180
 
-export interface Pickable<T> { x: number; z: number; y0: number; y1: number; r: number; item: T }
+export interface Pickable<T> { x: number; z: number; y0: number; y1: number; r: number; item: T
+  /** M126 s4: `soft` (a follower, who wanders into things) yields to anything else the crosshair is ON (not just near) that stands nearer along the ray */
+  soft?: boolean }
 type V3 = { readonly x: number; readonly y: number; readonly z: number }
 
 /** How far off the crosshair a capsule is, as an angle (0 = the ray touches it), and how far along the ray; null = behind. */
@@ -30,13 +32,15 @@ export function aimMiss(c: { x: number; z: number; y0: number; y1: number; r: nu
 /** The interactable under the crosshair within reach, or null. `dir` = the camera's forward, unit length. */
 /** `from` = where reach is measured from: the keeper's feet (in third person the camera stands metres behind them). */
 export function aimPick<T>(cands: readonly Pickable<T>[], eye: V3, dir: V3, from: { x: number; z: number } = eye, reach = PICK_REACH, cone = PICK_CONE): T | null {
-  let best: T | null = null, bestMiss = Infinity
+  let best: T | null = null, bestMiss = Infinity, softT = -1, front: T | null = null, frontT = Infinity, frontMiss = Infinity
   for (const c of cands) {
     if (Math.hypot(c.x - from.x, c.z - from.z) - c.r > reach) continue
     const a = aimMiss(c, eye, dir)
-    if (a && a.miss <= cone && a.miss < bestMiss) { best = c.item; bestMiss = a.miss }
+    if (!a || a.miss > cone) continue
+    if (a.miss < bestMiss) { best = c.item; bestMiss = a.miss; softT = c.soft ? a.t : -1 }
+    if (!c.soft && a.miss < frontMiss) { front = c.item; frontMiss = a.miss; frontT = a.t }   // the best of the rest
   }
-  return best
+  return softT >= 0 && frontMiss < 1e-3 && frontT < softT ? front : best
 }
 
 /** The walker's look as a unit forward vector (yaw 0 looks down -z; pitch up is positive). */

@@ -1,5 +1,11 @@
 // aim-pick.ts (BETA M60). Run: npx tsx src/app/shimmer/open/shared/aim-pick.test.ts
 import { aimPick, lookDir, PICK_REACH, type Pickable } from './aim-pick'
+import { spiritPickR } from '../ather/spirit-follow'
+import { FOLLOW } from '../ather/spirit-trot'
+import { bodyRadius } from '../ather/obstacles'
+import { GROWN } from '../../sprites/creature-size'
+import type { Species } from '../../spirits/spirit'
+import { FORM } from './follow-formation'
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -42,6 +48,22 @@ ok(PICK_REACH === 3, 'reach is 3 m (Alex)')
   const cam = { x: 0, y: 2.6, z: 4 }, m = mog(0, -2)
   ok(aimPick([m], cam, at(0, 0.45, -2, cam), { x: 0, z: 0 }) === 'm', 'third person: 6 m from the camera but 2 m from the keeper: pick')
   ok(aimPick([m], cam, at(0, 0.45, -2, cam)) === null, 'the same shot measured from the camera: out of reach')
+}
+// M126 s4: a follower (`soft`) never takes E from a thing the crosshair is on in front of it, whichever order they are listed
+{
+  const fol = (x: number, z: number): Pickable<string> => ({ x, z, y0: -0.1, y1: 0.6, r: 0.45, item: 'follower', soft: true }), npc = mog(0, -1.5, 'npc')
+  const shot = at(0, 0.3, -2.6), both = [fol(0, -2.6), npc]
+  ok(aimPick(both, eye(), shot) === 'npc' && aimPick([...both].reverse(), eye(), shot) === 'npc', 'a follower behind an NPC, crosshair on both: the NPC')
+  ok(aimPick([fol(0, -1.5), mog(0, -2.6, 'npc')], eye(), at(0, 0.3, -2.0)) === 'follower', 'a follower in front: the follower')
+  ok(aimPick([fol(0, -2.6), mog(0.46, -1.5, 'npc')], eye(), at(0, 0.2, -2.6)) === 'follower', 'the crosshair on her, an NPC only near it: the follower')
+  ok(aimPick([fol(0, -2.6)], eye(), at(0, 0.3, -2.6)) === 'follower', 'a follower alone: picked')
+}
+// M126 s4: from where a stopped keeper stands, every following spirit's slot (fanned arc + the slack she may stand off it) is in E's reach
+for (const sp of Object.keys(GROWN) as Species[]) {
+  const r = bodyRadius(GROWN[sp]), far = Math.max(FORM.arcR, FORM.keeperR + Math.max(r, 0.45) + 1) * FORM.fan + FOLLOW.slotOff, pr = spiritPickR(sp, GROWN[sp].height)
+  ok(far - pr <= PICK_REACH, `${sp}: stood ${far.toFixed(2)} m off, pick radius ${pr.toFixed(2)}: in reach`)
+  ok(aimPick([{ x: 0, z: -far, y0: -0.1, y1: GROWN[sp].height + 0.15, r: pr, item: 's' }], eye(), at(0, GROWN[sp].height * 0.5, -far)) === 's', `${sp}: aimed at, E reaches her`)
+  ok(pr >= r, `${sp}: the pick covers her body (${pr.toFixed(2)} >= ${r.toFixed(2)})`)
 }
 // lookDir: yaw 0 / pitch 0 = -z
 { const d = lookDir(0, 0); ok(Math.abs(d.z + 1) < 1e-9 && Math.abs(d.x) < 1e-9, 'lookDir(0,0) = -z') }

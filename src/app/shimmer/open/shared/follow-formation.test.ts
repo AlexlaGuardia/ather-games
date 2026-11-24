@@ -56,12 +56,15 @@ for (const yaw of [0, 0.7, Math.PI / 2, 2.4, Math.PI, -1.2]) for (const stopped 
 // one spirit = straight behind
 { const k = { x: 0, z: 0, yaw: 0 }, s = arcSlots(k, 0, [{ id: 'a', kind: 'spirit', r: rFox }], false); ok(Math.abs(side(k, 0, s.a)) < 1e-6 && behind(k, 0, s.a) > 2, 'one spirit: straight behind') }
 
-// 2. the lag: a 180 degree turn swings the slots round over time, not at once
+// 2. the lag (s4: the keeper WALKS on after the turn; a turn stood still is 2b): a 180 degree turn swings the slots round over time, not at once
 { const ms = team(), f = makeFormation(() => ms), k: Keeper = { x: 0, z: 0, yaw: 0 }
   for (let i = 0; i < 60; i++) f.tick(k, 1 / 60)
-  const before = f.last().slots.s2; k.yaw = Math.PI; f.tick(k, 1 / 60); const just = f.last().slots.s2
-  ok(dist(before, just) < 0.1 * 2 * dist(before, k), `lag: one frame after a 180 the back slot has moved under a tenth of its swing (${dist(before, just).toFixed(2)} m)`)
-  for (let i = 0; i < 180; i++) f.tick(k, 1 / 60)
+  const before = f.last().slots.s2; k.yaw = Math.PI
+  const off = (p: Vec) => ({ x: p.x - k.x, z: p.z - k.z }), b0 = off(before)
+  let t0 = b0; for (let i = 0; i < 60 && f.state().lagYaw === 0; i++) { t0 = off(f.last().slots.s2); k.z += 3 / 60; f.tick(k, 1 / 60) }
+  const just = off(f.last().slots.s2)
+  ok(f.state().lagYaw !== 0 && dist(t0, just) < 0.1 * 2 * Math.hypot(b0.x, b0.z), `lag: one frame into the swing the back slot has moved under a tenth of it (${dist(t0, just).toFixed(2)} m)`)
+  for (let i = 0; i < 180; i++) { k.z += 3 / 60; f.tick(k, 1 / 60) }
   ok(behind(k, Math.PI, f.last().slots.s2) > 2, `lag: 3 s on, the arc is behind the new facing (${behind(k, Math.PI, f.last().slots.s2).toFixed(2)})`)
   // walking vs stopped from the keeper's speed
   for (let i = 0; i < 30; i++) { k.z += 3 / 60; f.tick(k, 1 / 60) }
@@ -124,6 +127,32 @@ const doorTeam = (): Member[] => [
   ok(first > 0 && back > first, `walking through the door: arc -> file -> arc (file at ${first}, arc back at ${back})`)
   ok(back - layouts.lastIndexOf('file', back) === 1 && layouts.slice(first, back).every(l => l === 'file'), 'the file holds without flicker') }
 
+// 2b. s4 TURN IN PLACE: stopped, the keeper turns right round (slow, quick, right after the stop, at 60 and 8 fps): no slot
+//     moves. A step under FORM.turnStep while turned: the slots only come along. Walk on: they swing, no snap, and settle.
+for (const fps of [60, 8]) for (const wait of [2, 0]) for (const spin of [0.4, 3]) {
+  const ms = team(), f = makeFormation(() => ms), k: Keeper = { x: 0, z: 0, yaw: 0 }, n = (s: number) => Math.round(s * fps), tag = `turn in place ${fps} fps, ${wait} s after the stop, ${spin} s spin`
+  const walk = (s: number) => { for (let i = 0; i < n(s); i++) { const d = forwardOf(k.yaw); k.x += d.x * 4.2 / fps; k.z += d.z * 4.2 / fps; f.tick(k, 1 / fps) } }
+  walk(2); for (let i = 0; i < n(wait); i++) f.tick(k, 1 / fps)
+  const y0 = f.state().lagYaw
+  for (let i = 1; i <= n(spin); i++) { k.yaw = Math.PI * i / n(spin); f.tick(k, 1 / fps) }
+  for (let i = 0; i < n(3); i++) f.tick(k, 1 / fps)
+  ok(Math.abs(f.state().lagYaw - y0) < 1e-6 && y0 === 0, `${tag}: the facing holds (${f.state().lagYaw.toFixed(3)})`)
+  const s = { ...f.last().slots }; k.yaw = -2.2; for (let i = 0; i < n(3); i++) f.tick(k, 1 / fps)
+  ok(Object.keys(s).length === 4 && ms.every(m => dist(s[m.id], f.last().slots[m.id]) < 1e-6), `${tag}: no slot moves`)
+  for (let i = 0; i < n(0.12); i++) { const d = forwardOf(k.yaw); k.x += d.x * 4.2 / fps; k.z += d.z * 4.2 / fps; f.tick(k, 1 / fps) }
+  for (let i = 0; i < n(2); i++) f.tick(k, 1 / fps)
+  ok(f.state().lagYaw === 0, `${tag}: a small step does not swing it`)
+  let snap = 0, last = f.state().lagYaw; const D = 1 / fps
+  for (let i = 0; i < n(2.5); i++) { const d = forwardOf(k.yaw); k.x += d.x * 4.2 / fps; k.z += d.z * 4.2 / fps; f.tick(k, D); const L = f.state().lagYaw; snap = Math.max(snap, Math.abs(Math.atan2(Math.sin(L - last), Math.cos(L - last)))); last = L }
+  ok(Math.abs(last - -2.2) < (fps === 60 ? 0.01 : 0.02) + 0.02 && snap <= 2.2 * (1 - Math.exp(-Math.min(0.1, D) * FORM.lagK)) + 1e-6, `${tag}: walks on = it swings round, no snap (${last.toFixed(2)}, largest step ${snap.toFixed(2)})`)
+}
+// s4: a walk cut short right after the turn still finishes its swing (the arc is behind the way they last walked)
+{ const ms = team(), f = makeFormation(() => ms), k: Keeper = { x: 0, z: 0, yaw: 0 }
+  for (let i = 0; i < 60; i++) { k.z -= 3 / 60; f.tick(k, 1 / 60) }
+  k.yaw = Math.PI; for (let i = 0; i < 18; i++) { k.z += 3 / 60; f.tick(k, 1 / 60) }
+  for (let i = 0; i < 180; i++) f.tick(k, 1 / 60)
+  ok(behind(k, Math.PI, f.last().slots.s2) > 2, `a short walk the other way: the arc ends behind it (${behind(k, Math.PI, f.last().slots.s2).toFixed(2)})`) }
+
 // 4. the Mana'mal's slot walk never steps into a wall
 { let s = { x: 2, z: -0.8, speed: 0, moving: false }, inWall = 0
   for (let i = 0; i < 300; i++) { s = slotStep(s, { x: 2, z: 1.5 }, 0, 1 / 60, wallFor(0.3)); if (WALL(s.x, s.z, 0.3)) inWall++ }
@@ -142,8 +171,9 @@ const doorTeam = (): Member[] => [
   let halts = 0; run(1.5, 3); run(6, 3, () => { if (s.speed < 1.5) halts++ })
   ok(halts === 0 && dist(s, k) < 5, `a long walk: no stop-start (${halts} halted frames; ${dist(s, k).toFixed(2)} m)`)
   run(4, 0); ok(!s.moving && dist(s, f.last().slots.mm) < 0.13 && dist(s, k) > 3 && dist(s, k) < 4, `a stop: settled on its slot (${dist(s, k).toFixed(2)} m out)`)
-  nearK = 9; k.yaw = Math.PI; run(6, 0)
-  ok(nearK > 0.64 && !s.moving && dist(s, f.last().slots.mm) < 0.13 && behind(k, Math.PI, s) > 1.5, `a 180 on the spot: it comes round, never through the keeper (${nearK.toFixed(2)}; behind ${behind(k, Math.PI, s).toFixed(2)})`)
+  { const p0 = { ...s }; k.yaw = Math.PI; run(3, 0); ok(dist(s, p0) < 1e-6, `s4: a 180 on the spot leaves it where it is (${dist(s, p0).toFixed(3)})`) }
+  nearK = 9; run(1.2, -2); run(6, 0)   // s4: it comes round once the keeper walks on the new way
+  ok(nearK > 0.64 && !s.moving && dist(s, f.last().slots.mm) < 0.13 && behind(k, Math.PI, s) > 1.5, `a 180 and a walk: it comes round, never through the keeper (${nearK.toFixed(2)}; behind ${behind(k, Math.PI, s).toFixed(2)})`)
   // straight across the keeper: round them
   let w: SlotWalker = { x: 0, z: 3, speed: 0, moving: false }, mn = 9
   for (let i = 0; i < 400; i++) { w = slotStep(w, { x: 0, z: -3 }, 0, 1 / 60, undefined, 0.3, { x: 0, z: 0, r: 0.65 }); mn = Math.min(mn, Math.hypot(w.x, w.z)) }
@@ -168,8 +198,9 @@ const doorTeam = (): Member[] => [
   f.tick(k, 1 / 60); const s0 = f.last().slots.mm; k.yaw = 2.5
   for (let i = 0; i < 120; i++) f.tick(k, 1 / 60, true)
   ok(dist(f.last().slots.mm, s0) < 1e-6, `idle: the slots hold still (${dist(f.last().slots.mm, s0).toFixed(2)})`)
-  for (let i = 0; i < 120; i++) f.tick(k, 1 / 60)
-  ok(dist(f.last().slots.mm, s0) > 2, 'not idle: the slots turn with the keeper') }
+  const rel = (p: Vec) => ({ x: p.x - k.x, z: p.z - k.z }), r0 = rel(s0)
+  for (let i = 0; i < 120; i++) { const d = forwardOf(k.yaw); k.x += d.x * 3 / 60; k.z += d.z * 3 / 60; f.tick(k, 1 / 60) }
+  ok(dist(rel(f.last().slots.mm), r0) > 2, 'not idle, walking: the slots turn with the keeper') }
 
 // 5. THE REAL TROT: three spirits follow a keeper who walks up to the door, turns 180, walks back, stops, then walks
 //    through the doorway. Each spirit's own nav = the wall padded by her radius. At rest: no two closer than their radii;

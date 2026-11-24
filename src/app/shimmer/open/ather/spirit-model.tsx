@@ -104,7 +104,9 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
         transformed.x += sin(uT * (2.3 + uSw * 7.0) + position.x * 9.0) * (0.012 + 0.014 * uSw) * ew;` : ''
     const head = T ? `float ha = smoothstep(${f(T.from)}, ${f(T.to)}, position.z) * uTilt * ${f(T.max)}; vec2 hd = transformed.xy - vec2(${f(T.px)}, ${f(T.py)});
         transformed.xy = vec2(${f(T.px)}, ${f(T.py)}) + vec2(cos(ha) * hd.x - sin(ha) * hd.y, sin(ha) * hd.x + cos(ha) * hd.y);` : ''
-    for (const m of [skin, halo, eye, ...(glow ? [glow] : [])]) m.onBeforeCompile = sh => {
+    // M126 s4: three keys a program by the TEXT of onBeforeCompile, the same for every species: without this key the second
+    // species drawn is given the first one's compiled bends (scripts/m126-shader-check.mts saw it)
+    for (const m of [skin, halo, eye, ...(glow ? [glow] : [])]) { m.customProgramCacheKey = () => `spiritBend|${m === skin || m === glow}|${tail}|${ears}|${head}`; m.onBeforeCompile = sh => {
       sh.uniforms.uT = time; sh.uniforms.uSw = sw; sh.uniforms.uLift = lift; sh.uniforms.uTilt = tiltU
       sh.vertexShader = 'uniform float uT; uniform float uSw; uniform float uLift; uniform float uTilt;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         ${tail}
@@ -113,7 +115,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
       // the warm rim light of the picked render: a bright gold fresnel line on the toon parts (not on the hull or eyes)
       if (m === skin || m === glow) sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
         gl_FragColor.rgb += vec3(1.0, 0.86, 0.32) * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 3.0) * 0.45;`)
-    }
+    } }
     // grown-size slice: the low vertices (ground keep)
     const low = lowPoints([body, eyes, ...(glowM ? [glowM] : [])].flatMap(m => Array.from(m.geometry.getAttribute('position').array as ArrayLike<number>)), cx, cz)
     return { body: lin(body.geometry), eyes: eyes.geometry,   // eyes stay raw: their colours read brighter, as in the picked renders

@@ -58,7 +58,7 @@ try {
   const opts = () => p.evaluate(() => [...document.querySelectorAll('[data-talk-option]')].map(b => (b.textContent ?? '').replace('›', '').trim())) as Promise<string[]>
   type Pan = { axes: Record<string, number>; growth: number | null; text: string; w: number; overflow: boolean }
   async function panel(): Promise<Pan | null> {
-    for (let k = 0; k < 25; k++) {
+    for (let k = 0; k < 10; k++) {
       const t = await p.evaluate(() => { const q = (window as any).__spiritModel?.trots?.fox; return q ? { x: q.x, z: q.z, y: q.y, h: q.h } : null }) as { x: number; z: number; y: number; h: number } | null
       if (!t) { await sleep(500); continue }
       await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 1.5, 0), t.x, t.z)

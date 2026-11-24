@@ -12,6 +12,8 @@
 //  · Up to FOLLOW_MAX spirits form a loose ARC behind (left / back / right), spaced by their body radius (obstacles.ts
 //    bodyRadius of the grown row, the same size the spirit models draw at) so no two bodies overlap.
 //  · The arc turns with the keeper through a LAGGED facing (FORM.lagK), so it swings round like company, not a grid.
+//  · It turns only while the keeper WALKS (s4): stood still (or a step under FORM.turnStep) they can turn round to look at
+//    the company and press E on it; it catches up, through the same lag, once they walk on.
 //  · Stopped (FORM.stopAfter s still): the arc fans out a touch (FORM.fan) and each faces outward.
 //  · Tight space: any slot its member's `blocked` refuses, or a slot behind a wall from the keeper = SINGLE FILE along the
 //    keeper's own trail (where the keeper walked is where they can walk), held FORM.fileHold s after the space opens.
@@ -45,6 +47,8 @@ export const FORM = {
   fan: 1.18,        // stopped: the arc's radius and spread x this
   lagK: 3,          // 1/s: how fast the formation's facing catches the keeper's (the lag that reads as walking)
   moveOn: 0.5,      // m/s: the keeper is walking past this
+  turnStep: 0.8,    // m walked without a stand before the formation takes the keeper's facing (s4)
+  turnStand: 0.25,  // s without a step that ends a walk for turnStep
   stopAfter: 0.5,   // s under moveOn before the stopped fan
   fileFirst: 0.9,   // m along the trail before the first in single file (plus their radius)
   fileHold: 1.0,    // s single file is kept after the space opens again
@@ -171,16 +175,20 @@ export type Formation = {
 }
 export function makeFormation(members: () => readonly Member[], where?: (id: string) => Vec | undefined): Formation {
   let lead: string[] = [], side: Side = 1   // the side it last had is kept until that one is refused (no flicker between two)
+  let wantYaw = NaN, gone = 0, stood = 0   // s4: the facing they last WALKED with, metres of this walk, s since their last step
   let lagYaw = NaN, prev: Vec | null = null, speed = 0, still = 0, trail: Vec[] = [], fileLeft = 0, last: Assigned = { layout: 'arc', slots: {} }
   return {
     tick(k, dt, hold = false) {
       dt = Math.max(0, Math.min(0.1, dt))
       const jump = !prev || Math.hypot(k.x - prev.x, k.z - prev.z) > FORM.teleport
-      if (jump || !Number.isFinite(lagYaw)) { lagYaw = k.yaw; trail = []; speed = 0; still = 0; fileLeft = 0 }
+      if (jump || !Number.isFinite(lagYaw)) { lagYaw = wantYaw = k.yaw; gone = 0; stood = 0; trail = []; speed = 0; still = 0; fileLeft = 0 }
       else {
         const v = dt > 1e-4 ? Math.hypot(k.x - prev!.x, k.z - prev!.z) / dt : speed
         speed += (v - speed) * (1 - Math.exp(-dt * 6))
-        if (!hold) lagYaw = wrap(lagYaw + wrap(k.yaw - lagYaw) * (1 - Math.exp(-dt * FORM.lagK)))
+        // s4: this frame's own step, not the smoothed speed, so a turn made right after the stop is already a turn in place
+        if (v > FORM.moveOn) { stood = 0; gone += v * dt; if (gone >= FORM.turnStep) wantYaw = k.yaw }
+        else { stood += dt; if (stood > FORM.turnStand) gone = 0 }
+        if (!hold) lagYaw = wrap(lagYaw + wrap(wantYaw - lagYaw) * (1 - Math.exp(-dt * FORM.lagK)))
       }
       prev = { x: k.x, z: k.z }
       still = speed < FORM.moveOn ? still + dt : 0
