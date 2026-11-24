@@ -94,7 +94,12 @@ await p.waitForFunction(() => !(window as any).__ather.combat().champ, { timeout
 await new Promise(r => setTimeout(r, 2000))
 // ★ Alex 11-15: cleared ground must stay quiet. Give the stray top-up (every 1.5 s) a good while, standing on the node.
 await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 5, 0), n.x, n.z)
-await new Promise(r => setTimeout(r, 20000))
+const idAtClear = await p.evaluate(() => (window as any).__ather.combat().nextId)
+for (let s = 0; s < 20; s += 5) {   // diagnostics only (play-quiet 11-24): who stands on the cleared ground, and since when
+  await new Promise(r => setTimeout(r, 5000))
+  console.log('quiet@' + (s + 5) + 's', JSON.stringify(await p.evaluate((id: string, n0: number, kx: number, kz: number) => { const A = (window as any).__ather, C = A.combat(), k = { x: kx, z: kz }
+    return C.hollows.filter((h: any) => A.ownerAt(h.x, h.z) === id).map((h: any) => ({ id: h.id, born: h.id >= n0 ? 'after' : 'before', kind: h.kind, st: h.state, pack: h.pack ?? null, d: Math.round(Math.hypot(h.x - k.x, h.z - k.z)) })) }, n.id, idAtClear, n.x, n.z + 5)))
+}
 const quiet = await p.evaluate((id: string) => { const A = (window as any).__ather; return A.combat().hollows.filter((h: any) => A.ownerAt(h.x, h.z) === id).length }, n.id)   // strays on ITS ground (neighbours stay infested)
 const ledger = await p.evaluate(() => JSON.parse(localStorage.getItem('ather.nodes.v2') ?? '{}'))
 // ★ nodes() is every STREAMED tile's infected nodes, so its length grows as tiles load (16 -> 23 on 11-18): ask whether
