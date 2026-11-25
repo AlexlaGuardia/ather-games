@@ -1,13 +1,13 @@
 """blender -b -P look.py -- <glb> <out prefix> [size]: the Vulnyx look.py recipe (3-step toon, emissive floor, pale hull, unlit eyes) with the Hovari tints (emissive teal, hull pale aqua);
-1 unit = H = 0.230 m, so beak tip to tail tip is 0.30 m; `shimmer` (the blur petals) is drawn toon like the game's glow part. A glb without vertex colours renders grey clay."""
+1 unit = H = 0.219 m, so beak tip to tail tip is 0.30 m; `shimmer` (the blur petals) is drawn toon like the game's glow part. A glb without vertex colours renders grey clay."""
 import bpy, sys, math, numpy as np
 from mathutils import Vector
 glb, out, size = (sys.argv[sys.argv.index('--') + 1:] + ['420'])[:3]; size = int(size)
-bpy.ops.wm.read_factory_settings(use_empty=True); bpy.ops.import_scene.gltf(filepath=glb); sc = bpy.context.scene; H = .230
+bpy.ops.wm.read_factory_settings(use_empty=True); bpy.ops.import_scene.gltf(filepath=glb); sc = bpy.context.scene; H = .219
 def mat(vc, unlit=False, hull=False):
     m = bpy.data.materials.new('m'); m.use_nodes = True; t = m.node_tree; t.nodes.clear(); L = t.links.new; N = t.nodes.new; o = N('ShaderNodeOutputMaterial'); e = N('ShaderNodeEmission'); g = N('ShaderNodeNewGeometry')
     if hull:
-        tr = N('ShaderNodeBsdfTransparent'); e.inputs[0].default_value = (.68, 1, .94, 1); x = N('ShaderNodeMixShader'); k = N('ShaderNodeMath'); k.operation = 'MULTIPLY'; k.inputs[1].default_value = .38
+        tr = N('ShaderNodeBsdfTransparent'); e.inputs[0].default_value = (.68, 1, .94, 1); x = N('ShaderNodeMixShader'); k = N('ShaderNodeMath'); k.operation = 'MULTIPLY'; k.inputs[1].default_value = .50
         L(g.outputs['Backfacing'], k.inputs[0]); L(k.outputs[0], x.inputs[0]); L(tr.outputs[0], x.inputs[1]); L(e.outputs[0], x.inputs[2]); L(x.outputs[0], o.inputs[0]); return m
     if vc: c = N('ShaderNodeVertexColor'); c.layer_name = vc
     else: c = N('ShaderNodeRGB'); c.outputs[0].default_value = (.8, .8, .78, 1)
@@ -16,7 +16,7 @@ def mat(vc, unlit=False, hull=False):
     d = N('ShaderNodeVectorMath'); d.operation = 'DOT_PRODUCT'; d.inputs[1].default_value = Vector((-.45, -.35, .82)).normalized(); L(g.outputs['Normal'], d.inputs[0])
     r = N('ShaderNodeValToRGB'); r.color_ramp.interpolation = 'CONSTANT'; r.color_ramp.elements[0].color = (.5, .5, .5, 1); r.color_ramp.elements[1].position = .33; r.color_ramp.elements[1].color = (.78, .78, .78, 1)
     q = r.color_ramp.elements.new(.66); q.color = (1, 1, 1, 1); L(d.outputs['Value'], r.inputs[0]); mx = N('ShaderNodeMixRGB'); mx.blend_type = 'MULTIPLY'; mx.inputs[0].default_value = 1; L(gm.outputs[0], mx.inputs[1]); L(r.outputs[0], mx.inputs[2])
-    ad = N('ShaderNodeMixRGB'); ad.blend_type = 'ADD'; ad.inputs[0].default_value = .10; ad.inputs[2].default_value = (.42, .95, .86, 1); L(mx.outputs[0], ad.inputs[1]); L(ad.outputs[0], e.inputs[0]); L(e.outputs[0], o.inputs[0]); return m
+    ad = N('ShaderNodeMixRGB'); ad.blend_type = 'ADD'; ad.inputs[0].default_value = .14; ad.inputs[2].default_value = (.42, .95, .86, 1); L(mx.outputs[0], ad.inputs[1]); L(ad.outputs[0], e.inputs[0]); L(e.outputs[0], o.inputs[0]); return m
 ms = [o for o in sc.objects if o.type == 'MESH']; P = np.vstack([[tuple(o.matrix_world @ v.co) for v in o.data.vertices] for o in ms]); lo, hi = P.min(0), P.max(0); s = H
 hol = bpy.data.objects.new('h', None); sc.collection.objects.link(hol); hol.scale = (s,) * 3; hol.location = (0, 0, 0)
 for o in ms:

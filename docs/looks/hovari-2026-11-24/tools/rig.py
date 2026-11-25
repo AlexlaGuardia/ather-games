@@ -1,4 +1,4 @@
-"""Hovari rig + clips on rigcore (M132 s1).   python rig.py  -> ../hovari-rigged.glb + ../hovari-metrics.json
+"""Hovari rig + clips on rigcore (M132 s1).   python rig.py  -> ../hovari-v2-rigged.glb + ../hovari-v2-metrics.json
 It never lands: the bind pose itself hangs at HV over the ground (`b_hover`, which no clip keys, so the game may move it), and every clip stays up there.
 Wings: 4 bones a side beat at 8 to 9 Hz; the `shimmer` petals (2 a side, one bone each) run the same stroke late, so stroke + petals draw a broad fan.
 Clips: idle (hover), walk (drift), run (dart), sit (settled in the air), lie (sleep, tucked), glance."""
@@ -6,20 +6,20 @@ import sys, os, json
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.dont_write_bytecode = True; [sys.path.insert(0, p) for p in (os.path.join(HERE, '../../vulnyx-2026-11-24/tools'), os.path.join(HERE, '../../rig-2026-11-24/tools'), HERE)]
 import numpy as np, rigcore as K, sculpt as S
 from rigcore import Pose, rx, ry, rz
-H = .230; HOVER = .55; HV = HOVER / H; TAU = 2 * np.pi; sm = K.smooth; mir = np.diag([-1., 1, 1]); UP = np.array([0, HV, 0]); V3 = lambda *a: np.array(a, float)
-SK = {'root': (None, (0, 0, 0)), 'hover': ('root', (0, 0, 0)), 'pelvis': ('hover', (0, .42, -.02)), 'chest': ('pelvis', (0, .56, -.01)), 'neck': ('chest', (0, .68, 0)), 'head': ('neck', (0, .755, 0)), 'lids': ('head', (0, .80, .1)), 'tail': ('pelvis', (0, .31, -.10))}
+H = .219; HOVER = .90; HV = HOVER / H; TAU = 2 * np.pi; sm = K.smooth; mir = np.diag([-1., 1, 1]); UP = np.array([0, HV, 0]); V3 = lambda *a: np.array(a, float)
+SK = {'root': (None, (0, 0, 0)), 'hover': ('root', (0, 0, 0)), 'pelvis': ('hover', (0, .42, -.02)), 'chest': ('pelvis', (0, .56, -.01)), 'neck': ('chest', (0, .68, 0)), 'head': ('neck', (0, .755, 0)), 'lids': ('head', (0, .80, .1)), 'tail': ('pelvis', (0, .335, -.105))}
 TIP = V3(*S.FE[0][1], S.ZW)
 for s, x in (('l', 1), ('r', -1)):
     m_ = lambda v: tuple(np.array(v, float) * (x, 1, 1))
-    SK |= {'fan_' + s: ('tail', m_((.06, .24, -.13))), 'foot_' + s: ('pelvis', m_((.074, .275, .065))), 'arm_' + s: ('chest', m_((*S.SH, S.ZW))), 'hand_' + s: ('arm_' + s, m_((*S.WR, S.ZW))), 'tip_' + s: ('hand_' + s, m_((.50, .868, S.ZW))), 'inner_' + s: ('arm_' + s, m_((.235, .665, S.ZW))), 'pa_' + s: ('chest', m_((*S.SH, S.ZW))), 'pb_' + s: ('chest', m_((*S.SH, S.ZW)))}
+    SK |= {'fan_' + s: ('tail', m_((.07, .25, -.15))), 'foot_' + s: ('pelvis', m_((.080, .272, .078))), 'arm_' + s: ('chest', m_((*S.SH, S.ZW))), 'hand_' + s: ('arm_' + s, m_((*S.WR, S.ZW))), 'tip_' + s: ('hand_' + s, m_((.53, .868, S.ZW))), 'inner_' + s: ('arm_' + s, m_((.255, .665, S.ZW))), 'pa_' + s: ('chest', m_((*S.SH, S.ZW))), 'pb_' + s: ('chest', m_((*S.SH, S.ZW)))}
 SK = {b: (p, tuple(np.array(j) + (UP if p else 0))) for b, (p, j) in SK.items()}
-nb = list(SK); ix = nb.index; J = lambda b: np.array(SK[b][1]); live = K.Glb(os.path.join(HERE, '../hovari.glb')).meshes(); m = live['body']; V = m['POSITION'].astype(float); A = np.c_[np.abs(V[:, 0]), V[:, 1:]]; V0 = V + UP
-inw = (S.wing(A) < .010) & (A[:, 0] > .165) & (np.abs(A[:, 2] - S.ZW) < .06); tl = (S.tail(A) < .010) & (V[:, 1] < .30) & (S.trunk(A) > .004); hd = (V[:, 1] > .70) & ~inw; ft = (S.thigh(A) < .004) & (S.trunk(A) > .012) & (V[:, 1] < .28) & (V[:, 2] > .03); bd = ~inw & ~tl & ~ft
+nb = list(SK); ix = nb.index; J = lambda b: np.array(SK[b][1]); live = K.Glb(os.path.join(HERE, '../hovari-v2.glb')).meshes(); m = live['body']; V = m['POSITION'].astype(float); A = np.c_[np.abs(V[:, 0]), V[:, 1:]]; V0 = V + UP
+inw = (S.wing(A) < .010) & (A[:, 0] > .200) & (np.abs(A[:, 2] - S.ZW) < .06); tl = (S.tail(A) < .010) & (V[:, 1] < .30) & (S.trunk(A) > .004); hd = (V[:, 1] > .70) & ~inw; ft = (S.thigh(A) < .004) & (S.trunk(A) > .012) & (V[:, 1] < .28) & (V[:, 2] > .03); bd = ~inw & ~tl & ~ft
 g_ = lambda k: (lambda v: k); U = lambda *v: np.array(v, float) + UP
 B = [('pelvis', U(0, .32, -.02), U(0, .46, 0), .2, g_(bd & ~hd)), ('chest', U(0, .56, 0), U(0, .64, 0), .2, g_(bd & ~hd)), ('neck', U(0, .695, 0), U(0, .715, 0), .12, g_(bd)), ('head', U(0, .80, 0), U(0, .84, 0), .2, g_(bd & hd)), ('tail', U(0, .28, -.11), U(0, -.02, -.28), .06, g_(tl))]
 for s, x in (('l', 1), ('r', -1)):
     sd = V[:, 0] * x > .004; w_ = lambda *v: np.array(v, float) * (x, 1, 1) + UP; Z = S.ZW
-    B += [('fan_' + s, w_(.10, .18, -.17), w_(.19, .07, -.22), .05, g_(tl & sd & (A[:, 0] > .06))), ('foot_' + s, w_(.075, .25, .07), w_(.078, .22, .085), .05, g_(ft & sd)), ('arm_' + s, w_(*S.SH, Z), w_(.35, .775, Z), .08, g_(inw & sd)), ('hand_' + s, w_(*S.WR, Z), w_(.49, .80, Z), .08, g_(inw & sd)), ('tip_' + s, w_(.53, .885, Z), w_(*S.FE[0][1], Z), .06, g_(inw & sd)), ('inner_' + s, w_(.27, .62, Z), w_(.34, .47, Z), .10, g_(inw & sd))]
+    B += [('fan_' + s, w_(.12, .20, -.19), w_(.24, .10, -.25), .05, g_(tl & sd & (A[:, 0] > .075))), ('foot_' + s, w_(.075, .25, .07), w_(.078, .22, .085), .05, g_(ft & sd)), ('arm_' + s, w_(*S.SH, Z), w_(.35, .775, Z), .08, g_(inw & sd)), ('hand_' + s, w_(*S.WR, Z), w_(.49, .80, Z), .08, g_(inw & sd)), ('tip_' + s, w_(.53, .885, Z), w_(*S.FE[0][1], Z), .06, g_(inw & sd)), ('inner_' + s, w_(.27, .62, Z), w_(.34, .47, Z), .10, g_(inw & sd))]
 w = K.skin_weights(V0, m['F'], B, 7); W = np.zeros((len(V0), len(nb)))
 for i, b in enumerate(B): W[:, ix(b[0])] += w[:, i]
 parts = {'body': dict(m, POSITION=V0.astype(np.float32), W=W)}
@@ -40,7 +40,7 @@ def wings(p, a, base=-.22, amp=.50, back=.10, sweep=.30, pitch=-.12, tip=.22, la
         for b, r in L.items(): p.R[b + '_' + s] = r if s == 'l' else mir @ r @ mir
         # still petals stand inside the trunk
         if not petals:
-            for b in ('pa', 'pb'): r, t = rz(-0.758) @ ry(0.32) @ rx(-2.863), V3(-0.284, 0.137, 0.177); p.R[b + '_' + s], p.T[b + '_' + s] = (r, t) if s == 'l' else (mir @ r @ mir, mir @ t)
+            for b in ('pa', 'pb'): r, t = rz(0.882) @ ry(-0.644) @ rx(-0.234), V3(-0.27, -0.297, -0.039); p.R[b + '_' + s], p.T[b + '_' + s] = (r, t) if s == 'l' else (mir @ r @ mir, mir @ t)
 def tail(p, a, fan=0., sway=0.):
     p.R['tail'] = rx(a) @ ry(sway); p.R['fan_l'] = rz(fan); p.R['fan_r'] = rz(-fan)
 def feet(p, k): [p.rot('foot_' + s, rx(k)) for s in 'lr']
@@ -62,7 +62,7 @@ def glance(u):
     p = hov(u, beats=16); y = .95 * pulse(u, .16, .20, .48, .52) - .60 * pulse(u, .50, .54, .82, .87); ld = .30 * pulse(u, .13, .16, .46, .50) - .2 * pulse(u, .47, .51, .79, .84); p.R['hover'] = np.eye(3); p.R['pelvis'] = ry(y) @ p.R['pelvis']; p.rot('neck', ry(ld)); p.rot('head', ry(ld), rz(.16 * pulse(u, .24, .27, .42, .46))); lids(p, pulse(u, .49, .505, .515, .54)); return p
 clips, T = {}, {}
 for c, fn, k, t in (('idle', idle, 120, 2.4), ('walk', drift, 36, D['T']), ('run', dart, 30, RUN['T']), ('sit', sit, 60, 3.0), ('lie', sleep, 36, 4.4), ('glance', glance, 96, 1.92)): clips[c] = wrap(fn, k); T[c] = t
-path = os.path.join(HERE, '../hovari-rigged.glb'); K.write(path, parts, SK, clips, {c: (len(v) - 1) / T[c] for c, v in clips.items()})
+path = os.path.join(HERE, '../hovari-v2-rigged.glb'); K.write(path, parts, SK, clips, {c: (len(v) - 1) / T[c] for c, v in clips.items()})
 def prune(path):
     """a track that every third / second key (or two keys) draws as well keeps only those: the slow bones need not carry the wings' keys"""
     import struct
@@ -103,4 +103,4 @@ for c in clips:
     d['span_m'], d['length_m'] = [round(float(max(np.ptp(x[:, a]) for x in al)) * H, 3) for a in (0, 2)]
     if c in ('walk', 'run'): g = dict(walk=D, run=RUN)[c]; d['stride_m'] = round(g['v'] * g['T'], 3); d['plays_1to1_at_mps'] = g['v']; d['beats_per_cycle'] = g['beats']; d['wing_hz_at_1to1'] = round(g['beats'] / g['T'], 1); d['cadence_at_mps'] = {str(x): round(x / (g['v'] * g['T']), 2) for x in (.55, 1.15, 1.92, 2.8, 4.2, 6.5)}
     M[c] = d
-json.dump(M, open(os.path.join(HERE, '../hovari-metrics.json'), 'w'), indent=1); [print(k, v) for k, v in M.items()]
+json.dump(M, open(os.path.join(HERE, '../hovari-v2-metrics.json'), 'w'), indent=1); [print(k, v) for k, v in M.items()]

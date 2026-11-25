@@ -1,5 +1,5 @@
-"""blender -b -P reel.py -- <outdir> [stills]: every clip of ../hovari-rigged.glb through Blender's own glTF importer; front three-quarter + side. stills = 6 frames a clip"""
-import sys, os, math; HERE = os.path.dirname(os.path.abspath(__file__)); a_ = sys.argv[sys.argv.index('--') + 1:]; out = a_[0]; ST = len(a_) > 1; sys.argv = ['x', '--', os.path.join(HERE, '../hovari-rigged.glb'), out + '/x', '10']
+"""blender -b -P reel.py -- <outdir> [stills]: every clip of ../hovari-v2-rigged.glb through Blender's own glTF importer; front three-quarter + side. stills = 6 frames a clip"""
+import sys, os, math; HERE = os.path.dirname(os.path.abspath(__file__)); a_ = sys.argv[sys.argv.index('--') + 1:]; out = a_[0]; ST = len(a_) > 1; sys.argv = ['x', '--', os.path.join(HERE, '../hovari-v2-rigged.glb'), out + '/x', '10']
 src = open(os.path.join(HERE, 'look.py')).read(); src = src[:src.index('R = .62')]; exec(src)
 [bpy.data.objects.remove(o) for o in list(sc.objects) if o.name.startswith('Icosphere')]; hol.scale = (H,) * 3; hol.location = (0, 0, 0)      # the importer's bone shape had set the scale
 arm = next(o for o in sc.objects if o.type == 'ARMATURE'); arm.parent = hol
@@ -16,5 +16,5 @@ for clip, dur, v in (('idle', 4.8, 0), ('walk', 2.2, .8), ('run', 1.5, 4.), ('si
     for i in range(n):
         if not ST: y += v / FPS
         if not ST and os.path.exists(f'{out}_s{fr + 1:04d}.png'): fr += 1; continue      # already rendered: a cut-short run goes on
-        u = (i + (.13 if clip in ('walk', 'run') else .37 / 6)) / 6 if ST else (i / FPS / T) % 1; f = a.frame_range[0] + L * u; sc.frame_set(int(f), subframe=f - int(f)); hol.location = base; hol.location.y = base.y - y; c = (0, -y, .62); D = 1.5
+        u = (i + (.13 if clip in ('walk', 'run') else .37 / 6)) / 6 if ST else (i / FPS / T) % 1; f = a.frame_range[0] + L * u; sc.frame_set(int(f), subframe=f - int(f)); hol.location = base; hol.location.y = base.y - y; c = (0, -y, .97); D = 1.5
         shot(f's{fr:04d}', -math.pi / 2, .08, D, c, 22, 380, 320); shot(f'q{fr:04d}', -.6, .14, D, c, 22, 380, 320); fr += 1
