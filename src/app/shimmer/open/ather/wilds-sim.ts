@@ -2,8 +2,9 @@
 // "newcomer" keeper on flat open ground: hip-fires the Repeater at a human tap rate with a little aim error, backs off a
 // shambler that gets close, strafes otherwise, and steps out of a champion's tell. No React, no three: it drives
 // combat.ts / champion.ts exactly as the scene does. Numbers, not a pass/fail: wilds-teeth.test.ts asserts on them.
-import { newCombat, spawnHollow, stepCombat, fire, BODY_Y, CRAWLER, crawlerScale, type Combat, type Terrain, type HollowKind } from './combat'
+import { newCombat, spawnHollow, stepCombat, fire, stepTrigger, heldGun, M151, BODY_Y, CRAWLER, crawlerScale, type Combat, type Terrain, type HollowKind } from './combat'
 import { newSpiritFight, stepSpirits, noteKeeper, healthOf, type SpiritFight } from '../shared/spirit-fight'
+import { RANGE_GUNS } from '../shared/gunplay'
 import { wakeChampion, champVulnerable, tellOf, CHAMP } from './champion'
 
 export const FLAT: Terrain = { heightAt: () => 0, walkable: () => true }
@@ -23,12 +24,16 @@ function botStep(c: Combat, feet: { x: number; y: number; z: number }, t: number
   // what to shoot: adds that are close first, else the champion when it can be hurt, else the nearest Hollow
   let aimAt: { x: number; y: number; z: number } | null = near
   if (ch && champVulnerable(ch) && (!near || near.d > 9)) aimAt = { x: ch.x, y: ch.y + CHAMP.bodyY, z: ch.z }
-  if (aimAt && c.keeper.sinceShot >= BOT.tap) {
+  const held = heldGun(c.gun), charge = (c.gun as { charge?: number }).charge ?? 0
+  // M151: a held gun is asked every frame (its trigger released when there is nothing to shoot); the rest, a tap when the finger is ready
+  if (held ? aimAt || (c.keeper.burstLeft ?? 0) > 0 : aimAt && c.keeper.sinceShot >= Math.max(M151.hold.includes(c.gun.id) ? 0 : BOT.tap, charge ? c.gun.fireCd + charge : 0)) {
+    const at = aimAt ?? { x: feet.x, y: 1.62, z: feet.z - 1 }
     const eye = { x: feet.x, y: feet.y + 1.62, z: feet.z }
-    let ax = aimAt.x - eye.x, ay = aimAt.y - eye.y, az = aimAt.z - eye.z
+    let ax = at.x - eye.x, ay = at.y - eye.y, az = at.z - eye.z
     const l = Math.hypot(ax, ay, az) || 1; ax = ax / l + jit() * BOT.aimErr; ay = ay / l + jit() * BOT.aimErr; az = az / l + jit() * BOT.aimErr
-    const l2 = Math.hypot(ax, ay, az); fire(c, eye, { x: ax / l2, y: ay / l2, z: az / l2 })
-  }
+    const l2 = Math.hypot(ax, ay, az), dir = { x: ax / l2, y: ay / l2, z: az / l2 }
+    if (held) stepTrigger(c, eye, dir, false, !!aimAt, DT); else fire(c, eye, dir)
+  } else if (held) stepTrigger(c, feet, { x: 0, y: 0, z: -1 }, false, false, DT)
   // where to go
   let mx = 0, mz = 0, sp = 0
   const tell = tellOf(ch)
@@ -45,8 +50,9 @@ function botStep(c: Combat, feet: { x: number; y: number; z: number }, t: number
 
 /** M127: walk each sim fight with a trio of following spirits (the fight brain as the scene drives it); off = the newcomer alone.
  *  `ran` = the trio's totals of every fight walked since it was last cleared. */
-export const SIM: { trio: boolean; ran: { keeper: number; spirits: number; fights: number; worst: number; hit: number; mend: number; slow: number; nothing: number; chases: number; chaseSecs: number; chaseMin: number } } =
+export const SIM: { trio: boolean; gun?: string; ran: { keeper: number; spirits: number; fights: number; worst: number; hit: number; mend: number; slow: number; nothing: number; chases: number; chaseSecs: number; chaseMin: number } } =
   { trio: false, ran: { keeper: 0, spirits: 0, fights: 0, worst: 0, hit: 0, mend: 0, slow: 0, nothing: 0, chases: 0, chaseSecs: 0, chaseMin: Infinity } }
+const simCombat = (seed: number) => { const c = newCombat(seed); if (SIM.gun) { const g = RANGE_GUNS.find(r => r.id === SIM.gun)!; c.gun = g; c.keeper.ammo = g.clip } return c }
 function makeTrio(seed: number) {
   const F = newSpiritFight(seed), at = ['a', 'b', 'c'].map(id => ({ id, x: 0, z: 2 })); let keeper = 0, spirits = 0, lastN = 0, lk = 0, ls = 0
   const tick = (c: Combat, feet: { x: number; y: number; z: number }, step: () => void) => {
@@ -85,7 +91,7 @@ function runFight(c: Combat, feet: { x: number; y: number; z: number }, done: ()
 /** A pack fight: `kinds` spawned in a loose clump ~22 m out, all already on the keeper. `group` (M120) ties them into
  *  one pack when the build has packs; null = the old loose strays. */
 export function packFight(seed: number, kinds: HollowKind[], group?: (c: Combat, ids: number[]) => void, drained = false): FightResult {
-  const c = newCombat(seed), feet = { x: 0, y: 0, z: 0 }
+  const c = simCombat(seed), feet = { x: 0, y: 0, z: 0 }
   if (drained) c.drained = () => true   // M120 s2: all of it drained ground, so crawlers pool (the worst case)
   const ids: number[] = []
   kinds.forEach((k, i) => {
@@ -98,7 +104,7 @@ export function packFight(seed: number, kinds: HollowKind[], group?: (c: Combat,
 
 /** The first-settlement champion (Lamps Out's node fight): three bars, two waves, the adds included. */
 export function championFight(seed: number, crawlers = 0): FightResult {
-  const c = newCombat(seed), feet = { x: 0, y: 0, z: 16 }
+  const c = simCombat(seed), feet = { x: 0, y: 0, z: 16 }
   wakeChampion(c, FLAT, { id: 'sim:0', tile: 't', biome: 0, x: 0, z: 0, i: 0, j: 0 } as Parameters<typeof wakeChampion>[2])
   // M120 s2: a brood of crawlers already on the node's drained ground when it wakes: they pool and join the fight
   if (crawlers) { c.drained = () => true; for (let i = 0; i < crawlers; i++) { const h = spawnHollow(c, FLAT, -10 + i * 1.2, -6, 'crawler'); h.state = 'chase' } }

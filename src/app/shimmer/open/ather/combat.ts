@@ -65,7 +65,9 @@ export const FX = { slowMult: 0.45, vulnerableMult: 1.3, burnDps: 5 } as const
 export interface Spit { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg?: number
   /** M120: a floater's shot SPLASHES where it lands: this much to a keeper inside FLOATER.splashR of the landing (a direct hit pays `dmg` instead) */
   splash?: number }
-export interface Round { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg: number; crit: number }
+export interface Round { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg: number; crit: number
+  /** M151: metres a hit shoves the body (a breacher's pellet, behind M151.shell) */
+  shove?: number }
 export interface Drop { id: number; x: number; y: number; z: number; amount: number; age: number }
 
 export interface Keeper {
@@ -179,6 +181,8 @@ export interface Combat {
   /** #1651 (Alex 11-19: Hollows hunt guests too): the HOST's party mates here, by their synced spot. Each Hollow chases the
    *  NEAREST keeper (me or one of these); what reaches one of them is an event ('hurt-other'), never my hp. Unset = solo. */
   others?: { id: string; x: number; y: number; z: number }[]
+  /** M151: metres each body has been shoved by the shell in flight */
+  shoved?: Map<number, number>
   netHits?: { id: number; dmg: number; head: boolean }[]
   keeper: Keeper; gun: WeaponDef
   nextId: number; seed: number
@@ -430,6 +434,22 @@ function packSlot(c: Combat, h: Hollow): { x: number; z: number; far: number } |
   return { x, z, far: Math.hypot(x - h.x, z - h.z) }
 }
 
+/** BETA M151, OFF until Alex has seen the newcomer sim: `hold` = the single-round guns that keep firing while held (their own
+ *  fireCd, as the Backbone does since M148), `shell` = a breacher's pellets + shove. Build-time; only tests and the sim turn it on. */
+export const M151: { hold: readonly string[]; shell: boolean } = { hold: [], shell: false }
+/** guns driven by stepTrigger every frame (hold = keeps firing); the rest fire once a pull (auto guns: every frame held) */
+export const heldGun = (g: { id: string; burst?: number; charge?: number }) => (g.burst ?? 1) > 1 || (!g.charge && M151.hold.includes(g.id))
+/** M151: a pellet's hit shoves a body along its flight, never into anything solid, over the border, or in a committed lunge; a pooled crawler gives less. */
+export const SHOVE_MAX = 1.2
+function shoveBody(c: Combat, T: Terrain, h: Hollow, r: Round) {
+  if (!r.shove || h.hp <= 0 || h.state === 'lunge') return
+  const l = Math.hypot(r.vx, r.vz); if (l < 1e-6) return
+  const left = SHOVE_MAX - (c.shoved?.get(h.id) ?? 0), m = Math.min(r.shove / weightOf(h), left); if (m <= 0) return
+  const nx = h.x + r.vx / l * m, nz = h.z + r.vz / l * m, sfree = structFree(T, h, h.kind === 'crawler' ? CRAWLER.radius : SHAMBLER.radius)
+  if (!T.walkable(nx, nz) || solidTop(c, nx, nz) !== null || (sfree && !sfree(nx, nz)) || holdsBorder(c, h, nx, nz)) return
+  h.x = nx; h.z = nz; (c.shoved ??= new Map()).set(h.id, SHOVE_MAX - left + m)
+}
+
 /** Pull the trigger along an aim (unit vector). Returns false when the gun cannot fire. */
 /** `ads` = aiming down the sights (Alex 11-18): the tighter cone (gunplay's adsSpread), the same rule the range uses. */
 export function fire(c: Combat, eye: { x: number; y: number; z: number }, aim: { x: number; y: number; z: number }, ads = false): boolean {
@@ -439,18 +459,22 @@ export function fire(c: Combat, eye: { x: number; y: number; z: number }, aim: {
     return false
   }
   // a cone around the aim: pick a random direction inside spreadDeg
-  const cone = (spreadDeg(w, k.bloom, ads) * Math.PI) / 180
-  const r = Math.sqrt(rnd(c)) * Math.tan(cone), th = rnd(c) * Math.PI * 2
-  // two perpendiculars to aim
-  const ux = Math.abs(aim.y) < 0.95 ? 0 : 1, uy = Math.abs(aim.y) < 0.95 ? 1 : 0
-  let px = aim.y * 0 - aim.z * uy, py = aim.z * ux - aim.x * 0, pz = aim.x * uy - aim.y * ux
-  const pl = Math.hypot(px, py, pz) || 1; px /= pl; py /= pl; pz /= pl
-  const qx = aim.y * pz - aim.z * py, qy = aim.z * px - aim.x * pz, qz = aim.x * py - aim.y * px
-  let dx = aim.x + (px * Math.cos(th) + qx * Math.sin(th)) * r
-  let dy = aim.y + (py * Math.cos(th) + qy * Math.sin(th)) * r
-  let dz = aim.z + (pz * Math.cos(th) + qz * Math.sin(th)) * r
-  const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl
-  c.rounds.push({ x: eye.x + dx * 0.4, y: eye.y - 0.08 + dy * 0.4, z: eye.z + dz * 0.4, vx: dx * w.projSpeed, vy: dy * w.projSpeed, vz: dz * w.projSpeed, life: w.projLife, dmg: w.damage, crit: w.crit })
+  const shell = M151.shell ? w as typeof w & { pellets?: number; shove?: number } : undefined, pellets = shell?.pellets ?? 1
+  if (pellets > 1) c.shoved = undefined   // each shell shoves afresh
+  for (let pel = 0; pel < pellets; pel++) {
+    const cone = (spreadDeg(w, k.bloom, ads) * Math.PI) / 180
+    const r = Math.sqrt(rnd(c)) * Math.tan(cone), th = rnd(c) * Math.PI * 2
+    // two perpendiculars to aim
+    const ux = Math.abs(aim.y) < 0.95 ? 0 : 1, uy = Math.abs(aim.y) < 0.95 ? 1 : 0
+    let px = aim.y * 0 - aim.z * uy, py = aim.z * ux - aim.x * 0, pz = aim.x * uy - aim.y * ux
+    const pl = Math.hypot(px, py, pz) || 1; px /= pl; py /= pl; pz /= pl
+    const qx = aim.y * pz - aim.z * py, qy = aim.z * px - aim.x * pz, qz = aim.x * py - aim.y * px
+    let dx = aim.x + (px * Math.cos(th) + qx * Math.sin(th)) * r
+    let dy = aim.y + (py * Math.cos(th) + qy * Math.sin(th)) * r
+    let dz = aim.z + (pz * Math.cos(th) + qz * Math.sin(th)) * r
+    const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl
+    c.rounds.push({ x: eye.x + dx * 0.4, y: eye.y - 0.08 + dy * 0.4, z: eye.z + dz * 0.4, vx: dx * w.projSpeed, vy: dy * w.projSpeed, vz: dz * w.projSpeed, life: w.projLife, dmg: w.damage, crit: w.crit, ...(pellets > 1 ? { shove: shell!.shove } : {}) })
+  }
   k.ammo--; k.sinceShot = 0; k.bloom = bloomAfterShot(w, k.bloom)
   c.events.push({ kind: 'fired' })
   if (k.ammo <= 0) reload(c)
@@ -561,6 +585,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
       const mult = (fxOn(h, 'vulnerable') ? FX.vulnerableMult : 1) * ((k.ampUntil ?? 0) > (c.clock ?? 0) ? AMP_MULT : 1)
       h.hp -= (best.head ? r.crit : r.dmg) * mult; h.hitFlash = 0.12; r.life = 0
       if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = h.kind === 'floater' ? SHAMBLER.stagger : walkerOf(h).stagger }
+      shoveBody(c, T, h, r)
       const killed = h.hp <= 0
       c.events.push({ kind: 'hit', id: h.id, head: best.head, killed })
       if (killed) c.drops.push({ id: c.nextId++, x: h.x, y: T.heightAt(h.x, h.z), z: h.z, amount: dropOf(c, h), age: 0 })

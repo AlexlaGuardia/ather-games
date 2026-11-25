@@ -14,7 +14,7 @@ import { armedGun, sigilKey } from '../shared/gun-sigil'   // M93 s4: the fitted
 import { useLoadout } from '../shared/loadout'
 import { useBirth } from '../birth-gate'
 import { weaponDef } from '../../engine/weapons'
-import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, SETTLE, topUpDue, HEAD_Y, fxOn, SHAMBLER, FLOATER, CRAWLER, crawlerScale, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind, stepTrigger, dropBurst } from './combat'
+import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, SETTLE, topUpDue, HEAD_Y, fxOn, SHAMBLER, FLOATER, CRAWLER, crawlerScale, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind, stepTrigger, dropBurst, heldGun, M151 } from './combat'
 import { live as liveSolids } from './dynamic-solids'
 import { noteCombat } from '../shared/idle-mode'
 import { noteHollowNear, SKIT } from '../shared/idle-skits'   // M126 s2
@@ -687,8 +687,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       if (!wasReloading && C.keeper.reloading > 0) playReload()   // the shot that emptied the clip (or the empty pull) started a reload
       sayDry(C, n0)
     }
-    const burst = (C.gun as { burst?: number }).burst ?? 1
-    if (burst > 1) {
+    if (heldGun(C.gun)) {
       // M148: a burst gun (the Backbone): hold = burst after burst, each round its own sound, kick and streak
       if (!armedRef.current || frozen.current || C.keeper.hp <= 0) { dropBurst(C); pulled.current = false }
       else {
@@ -698,7 +697,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
         camera.getWorldDirection(aim)
         const n = stepTrigger(C, camera.position, aim, !!sight?.current.ads, down, dt)
         for (let i = 0; i < n; i++) playShot(C.gun.id, i * ((C.gun as { burstGap?: number }).burstGap ?? 0))   // a slow frame's rounds still sound apart
-        if (n && sight) { sight.current.firedAt = performance.now(); noteCycle(C.gun.fireCd) }
+        if (n && sight) { sight.current.firedAt = performance.now(); if (((C.gun as { burst?: number }).burst ?? 1) > 1) noteCycle(C.gun.fireCd) }
         if (dryPull) playEmpty()
         if (!wasReloading && C.keeper.reloading > 0) playReload()
         sayDry(C, n0)
@@ -710,7 +709,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     } else if ((trigger.current || touch.fire) && !frozen.current && armedRef.current) {
       if (charge > 0) { if (C.keeper.ammo > 0 && C.keeper.reloading <= 0 && C.keeper.sinceShot >= C.gun.fireCd) charging.current = charge; else { camera.getWorldDirection(aim); shoot() } }
       else { camera.getWorldDirection(aim); shoot() }
-      if (!C.gun.auto) { trigger.current = false; touch.fire = false }
+      if (!C.gun.auto && !(charge > 0 && M151.hold.includes(C.gun.id))) { trigger.current = false; touch.fire = false }
     }
     // the sights: the mouse HOLDS them, the phone TOGGLES them (touch.aim); putting the gun away drops both
     if (!armedRef.current || frozen.current) { mouseAim.current = false; touch.aim = false }
