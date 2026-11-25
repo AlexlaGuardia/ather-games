@@ -24,6 +24,9 @@ export const isGuideId = (f: string): f is Guide => (GUIDES as readonly string[]
 export const FRIEND_NAME: Readonly<Record<Talker, string>> = { otto: 'Otto', tess: 'Tess', bonn: 'Bonn', hazel: 'Hazel', sax: 'Sax', yarrow: 'Yarrow', mallow: 'Mallow' }
 /** lark, SIGNED by Alex, athernyx 7a25a8e (CANON/game/shimmer-lines-idris-and-goodbyes.md bye.otto/.tess/.bonn) */
 export const FRIEND_BYE: Readonly<Record<GardenFriend, string>> = { otto: 'Later, Otto.', tess: 'Bye for now, Tess.', bonn: 'See you around, Bonn.' }
+/** M168: a Glade Moglin's E prompt (signed by Alex, canon batch 11-25a, athernyx 7999693: 'E · talk to {NAME}'). A phone's button keeps 'use'. */
+const TALK_NAME: Readonly<Record<string, string>> = { hazel: FRIEND_NAME.hazel, sax: FRIEND_NAME.sax, yarrow: FRIEND_NAME.yarrow, mallow: FRIEND_NAME.mallow, fennel: 'Fennel' }
+export const moglinPrompt = (id: string): string | null => { const n = TALK_NAME[id.split(':').pop()!]; return n ? `E · talk to ${n}` : null }
 export const friendBye = (f: Talker) => (isGuideId(f) ? ASK.bye : FRIEND_BYE[f])
 export const guideTalks = guideDue
 

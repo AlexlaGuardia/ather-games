@@ -86,7 +86,7 @@ try {
   ok(await poll(() => p.evaluate(() => /E · Gregory/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]')), 15000), "3b. Greg talks in the Glade: 'E · Gregory'")
   await shot(p, 'glade-greg')
   await faceAt(folk.fennel, 1.6)
-  ok(await poll(() => p.evaluate(() => /talk to the folk of Moonwell Glade/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]')), 15000), "3b. Fennel talks in the Glade: 'talk to the folk of Moonwell Glade'")
+  ok(await poll(() => p.evaluate(() => /E · talk to Fennel/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]')), 15000), "3b. Fennel talks in the Glade: 'E · talk to Fennel'")
   await shot(p, 'glade-fennel')
   // 3c · the backdrop: the Moonwell is drawn (its probe) and its water stands in Greg's garden
   ok(await poll(() => p.evaluate(() => !!(window as any).__moonwell), 10000), '3c. the Moonwell is drawn in the Glade')

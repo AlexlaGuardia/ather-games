@@ -2,7 +2,7 @@
 // A live tutorial keeper Greg has sent out, who has heard Otto, Bonn and Tess but not Fennel, with NO Rinnshop and the
 // first-rinstick quest not started (open.rinquest.v1 none), in the real page:
 //   1. Fennel stands in the Glade (__glade.folk has moonwell:fennel)
-//   2. set down in front of her (check-only warp): the real prompt 'E · Fennel', the real E, every "And then?" clicked:
+//   2. set down in front of her (check-only warp): the real prompt 'E · talk to Fennel', the real E, every "And then?" clicked:
 //      the bubbles are greet .1-.2 + gift .1-.5 (no stick, so not done .1); the talk ends on lark's goodbye
 //   3. the quest is ACTIVE at step 2 (the Moonwell wait: 'meet' done) with no Rinnshop; the bag gained JAR_BAIT bait;
 //      the tutorial counts Fennel heard (all four) with gifts rinquest + bait and today's baitDay
@@ -79,7 +79,7 @@ try {
     let f = await fennel(); for (let k = 0; k < 20; k++) { await sleep(500); const g = await fennel(); if (g && f && g.x === f.x && g.z === f.z && k >= 6) break; f = g }
     if (!f) return
     await faceAt(f, 1.8); await sleep(2500); await aimAt(p, f.x, f.z, 0.6)
-    ok(await poll(() => p.evaluate(() => /E · Fennel/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]')), 15000), `${tag} the prompt 'E · Fennel'`)
+    ok(await poll(() => p.evaluate(() => /E · talk to Fennel/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]')), 15000), `${tag} the prompt 'E · talk to Fennel'`)
     await pressE(p)
   }
   // a fresh bag lives in memory (STARTING_BAIT) and is first saved when something changes it: no saved bag = the starting bait

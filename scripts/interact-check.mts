@@ -84,7 +84,7 @@ async function atherLegs(p: any, name: string, prompt: string, tx: number, tz: n
   if (F.length) {
     const m = F.find(f => f.id.endsWith(':fennel')) ?? F[0]   // Fennel stands at her lot in Greg's garden; any drawn Moglin would do
     const fx = Math.sin(m.yaw), fz = Math.cos(m.yaw)   // figure yaw: forward = (sin, cos); stand where it is looking
-    await atherLegs(p, `Glade Moglin ${m.id}`, 'talk to the folk', m.x, m.z, 0.4, 0.5, fx, fz)
+    await atherLegs(p, `Glade Moglin ${m.id}`, 'E · talk to ', m.x, m.z, 0.4, 0.5, fx, fz)
     await atherLook(p, m.x + fx * 2, m.z + fz * 2, m.x, m.z, 0.5)
     await p.keyboard.press('KeyE'); await sleep(2500)
     const talk = await p.evaluate(() => (window as any).__folkTalk ?? null) as { on: string | null } | null

@@ -2,7 +2,7 @@
 // M68 s3a: Otto, Tess, Bonn walked like a keeper would. Before Greg sends you: their bark, no gift, not heard. After: greet
 // .1-.2, gift .1 hands the gift (once: a replay, a reload, a second talk = none), the last line counts them heard; then the
 // bark forever. A full bag refuses gift .1 and records nothing. Every bubble is a SIGNED line. Sockets start empty.
-import { friendStart, friendNode, friendScript, friendBye, GARDEN_FRIENDS, giftAt, nodeBeside, SCENE_OF, isGuideId, BESIDE, type Talker, type FriendCursor, type GardenFriend } from './glade-friend-talk'
+import { friendStart, friendNode, friendScript, friendBye, GARDEN_FRIENDS, giftAt, nodeBeside, SCENE_OF, isGuideId, moglinPrompt, BESIDE, type Talker, type FriendCursor, type GardenFriend } from './glade-friend-talk'
 import { readFileSync } from 'fs'
 import { ASK } from './folk-talk'
 import { fennelStart, fennelScript } from './glade-fennel-talk'
@@ -108,5 +108,9 @@ ok(socketLit(gift(freshTut(), 'pruner').t, 'forestry') && !socketLit(gift(freshT
 ok(socketLit(gift(freshTut(), 'spike').t, 'prospecting') && !socketLit(gift(freshTut(), 'spike').t, 'forestry'), 'Otto lights the spike socket only')
 ok(socketLit(legacyTut(), 'forestry') && socketLit(legacyTut(), 'prospecting'), 'a legacy keeper keeps both')
 
+// M168: the Moglins' E prompt, signed (canon batch 11-25a, athernyx 7999693)
+{ const c = readFileSync('/root/athernyx/CANON/game/shimmer-lines-batch-2026-11-25a.md', 'utf8'), m = /Tour Moglins' prompt: \*\*(E · talk to \{NAME\})\*\* \(([^)]*)\)/.exec(c)
+  ok(!!m && m[2].split(', ').length === 5 && m[2].split(', ').every(n => moglinPrompt(`moonwell:${n.toLowerCase()}`) === m[1].replace('{NAME}', n)), `the five prompts are the signed line (${m?.[2]})`)
+  ok(moglinPrompt('moonwell:otto') === null && moglinPrompt('briar:3') === null, 'nobody else has one') }
 console.log(`glade-friend-talk: ${pass} pass, ${fail} fail`)
 if (fail) process.exit(1)

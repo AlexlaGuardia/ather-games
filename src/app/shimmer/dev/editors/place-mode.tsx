@@ -12,9 +12,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { PLACE_PREFIX, isRoom, isStanding, placeOf, putPlace, WHO_PREFIX, isWho, pieceCount, putWho, qOfYaw, whoOf, yawOfQ, NODE_WAITS, PROP_SNAPS, PROP_TURNS, PROPS_MAX, addProp, isNode, nodeWaitH, removeProp, changeProp, nextOf, scaleBy, snapXZ, turnBy, type Prop } from '../../world/builder-props'
-import { SCENERY, SCENERY_BY, SCENERY_GROUPS, endSnap, isSolid, sceneryPlaced, type PlacedProp } from '../../open/ather/scenery'
+import { PLACE_PREFIX, isRoom, isStanding, placeOf, putPlace, WHO_PREFIX, isWho, whoId, pieceCount, putWho, qOfYaw, whoOf, yawOfQ, NODE_WAITS, PROP_SNAPS, PROP_TURNS, PROPS_MAX, addProp, isNode, nodeWaitH, removeProp, changeProp, nextOf, scaleBy, snapXZ, turnBy, type Prop } from '../../world/builder-props'
+import { SCENERY, SCENERY_BY, SCENERY_GROUPS, endSnap, fenceTilt, isSolid, sceneryBoxes, sceneryPlaced, type PlacedProp } from '../../open/ather/scenery'
 import { SceneryView } from '../../open/ather/scenery-view'
+import { tiltMatrix } from '../../open/ather/scenery-filler'
 import { GladeLots, useGladeStanding } from '../../open/ather/glade-lots-view'
 import { GladeHome } from '../../open/ather/glade-home-view'
 import { gladeHomeY } from '../../open/ather/glade-home'
@@ -23,6 +24,11 @@ import { padGround, padLevel, roomPad } from '../../open/ather/glade-pads'
 import { GLADE as GROUND } from '../../open/ather/relief'
 import type { Tree } from '../../open/ather/meadow'
 import { GLADE_FRAME, GLADE_GATE, gladePeople } from '../../open/ather/glade-cluster'
+import { gladeShapeOver } from '../../open/ather/glade-people-check'
+import { bodyBlocked } from '../../open/ather/obstacles'
+import { momoSpot } from '../../open/ather/glade-momo'
+import { MomoModel } from '../../open/shared/momo-model'
+import type { Box } from '../../open/terrain-world'
 
 /** where a piece in hand, aimed at (x, z), goes: onto a fence's end when one is near, else the grid. Snap free = exactly there. */
 const spotFor = (props: readonly Prop[], h: Hand, moving: string | null, snap: number, x: number, z: number) => (snap > 0 ? endSnap(moving ? props.filter(p => p.id !== moving) : props, h, x, z) : null) ?? { x: snapXZ(x, snap), z: snapXZ(z, snap) }
@@ -133,8 +139,8 @@ export function useCentre() {
   }, [camera, scene, raycaster])
 }
 /** the placed pieces of the draft, the piece in hand (a ghost on the crosshair) and the frame round the piece under it */
-export function PlaceLayer({ api, active, heightAt, rev, label }: { api: PlaceApi | null; active: boolean; heightAt: Ground; rev: number; label: (text: string, color: string) => { tex: THREE.CanvasTexture; aspect: number } }) {
-  const centre = useCentre(), ghost = useRef<THREE.Group>(null), frame = useRef<THREE.LineSegments>(null), last = useRef<string | null>(null)
+export function PlaceLayer({ api, active, heightAt, rev, label, solids }: { solids?: readonly Box[]; api: PlaceApi | null; active: boolean; heightAt: Ground; rev: number; label: (text: string, color: string) => { tex: THREE.CanvasTexture; aspect: number } }) {
+  const centre = useCentre(), ghost = useRef<THREE.Group>(null), lean = useRef<THREE.Group>(null), frame = useRef<THREE.LineSegments>(null), last = useRef<string | null>(null)
   const items = useMemo(() => (api ? sceneryPlaced(api.props.filter(p => p.id !== api.moving), padGround(api.props, heightAt), heightAt) : []), [api, heightAt, rev])   // eslint-disable-line react-hooks/exhaustive-deps
   const gk = active ? api?.hand?.k : undefined
   const ghostItems = useMemo<PlacedProp[]>(() => (gk ? [{ id: 'ghost', k: gk, x: 0, y: 0, z: 0, q: 0, s: 1 }] : []), [gk])
@@ -146,12 +152,12 @@ export function PlaceLayer({ api, active, heightAt, rev, label }: { api: PlaceAp
     if (api && (c?.id ?? null) !== last.current) { last.current = c?.id ?? null; api.setTarget(last.current) }
     const g = ghost.current
     if (g) {
-      const h = api?.hand, at = c?.ground && h ? spotFor(api!.props, h, api!.moving, api!.snap, c.ground.x, c.ground.z) : null, x = at?.x ?? 0, z = at?.z ?? 0, r = at && h && isRoom(h) ? roomPad({ id: 'ghost', k: h.k, x, z, q: h.q, s: 1 }) : null, y = r ? roomTop(r) : at ? heightAt(x, z) : NaN
+      const h = api?.hand, at = c?.ground && h ? spotFor(api!.props, h, api!.moving, api!.snap, c.ground.x, c.ground.z) : null, x = at?.x ?? 0, z = at?.z ?? 0, r = at && h && isRoom(h) ? roomPad({ id: 'ghost', k: h.k, x, z, q: h.q, s: 1 }) : null, tl = at && h ? fenceTilt({ k: h.k, x, z, q: h.q, s: h.s }, heightAt) : null, y = r ? roomTop(r) : tl ? tl.y : at ? heightAt(x, z) : NaN
       g.visible = Number.isFinite(y)
-      if (g.visible && h) { g.position.set(x, y, z); g.rotation.y = -h.q * Math.PI / 2; g.scale.setScalar(h.s) }
+      if (g.visible && h) { g.position.set(x, y, z); g.rotation.y = -h.q * Math.PI / 2; g.scale.setScalar(h.s); if (lean.current) { tiltMatrix(tl?.tilt, lean.current.matrix); lean.current.matrixWorldNeedsUpdate = true } }
     }
     const f = frame.current, pp = f && last.current ? personPiece(last.current) : null, pl = pp && placeOf(pp.k) ? placeBox(pp.id, heightAt) : null, py = pp ? (pl ? pl.y : heightAt(pp.x, pp.z)) : 0, t = f && last.current ? (pp ? { ...pp, y: py } : items.find(p => p.id === last.current)) : null, K = t ? (pl ?? (pp ? { w: 0.8, d: 0.8, h: personH(pp.k) } : SCENERY_BY.get(t.k))) : null
-    if (f) { f.visible = !!t && !!K; if (t && K) { f.position.set(t.x, t.y + K.h * t.s / 2, t.z); f.rotation.y = -t.q * Math.PI / 2; f.scale.set(K.w * t.s * 1.08, K.h * t.s * 1.04, K.d * t.s * 1.08) } }
+    if (f) { f.visible = !!t && !!K; if (t && K) { f.position.set(t.x, t.y + K.h * t.s / 2, t.z); f.rotation.y = -t.q * Math.PI / 2; const tt = (t as PlacedProp).tilt ?? [0, 0]; f.scale.set(K.w * t.s * 1.08, K.h * t.s * 1.04 + (Math.abs(tt[0]) * K.w + Math.abs(tt[1]) * K.d) * t.s, K.d * t.s * 1.08) } }
   })
   const edges = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), [])
   useEffect(() => () => edges.dispose(), [edges])
@@ -161,8 +167,9 @@ export function PlaceLayer({ api, active, heightAt, rev, label }: { api: PlaceAp
   useEffect(() => () => tags.forEach(t => t.tex.dispose()), [tags])
   return <group name="place-layer">
     <SceneryView items={items} />
-    <group ref={ghost} visible={false}><SceneryView items={ghostItems} ghost />{gk && isWho({ k: gk }) && <PersonBody h={personH(gk)} color={gk === 'who:newborn' ? '#8ef0c0' : '#9fc4ff'} />}{gk && isRoom({ k: gk }) && <RoomFront k={gk} />}{gk && placeOf(gk) && <PlaceGhost place={gladePlaces().find(p => p.place === placeOf(gk))} />}</group>
+    <group ref={ghost} visible={false}><group ref={lean} matrixAutoUpdate={false}><SceneryView items={ghostItems} ghost /></group>{gk && isWho({ k: gk }) && <PersonBody h={personH(gk)} color={gk === 'who:newborn' ? '#8ef0c0' : '#9fc4ff'} />}{gk && isRoom({ k: gk }) && <RoomFront k={gk} />}{gk && placeOf(gk) && <PlaceGhost place={gladePlaces().find(p => p.place === placeOf(gk))} />}</group>
     {api && <GladePeople heightAt={heightAt} props={api.props} moving={api.moving} label={label} />}
+    {api && api.moving !== whoId('bonn') && <FlyMomo heightAt={heightAt} rev={rev} items={items} props={api.props} solids={solids} />}
     {nodes.map((p, i) => { const K = SCENERY_BY.get(p.k)!; return tags[i] && <group key={p.id} position={[p.x, p.y, p.z]} userData={{ nodeTag: p.id }}>
       <sprite position-y={K.h + 0.6} scale={[0.55 * tags[i].aspect, 0.55, 1]} renderOrder={4} raycast={() => {}}><spriteMaterial map={tags[i].tex} depthTest={false} /></sprite>
       <mesh rotation-x={-Math.PI / 2} position-y={0.12} raycast={() => {}}><ringGeometry args={[1.25, 1.5, 32]} /><meshBasicMaterial color="#8ef0c0" transparent opacity={0.85} depthWrite={false} /></mesh>
@@ -195,6 +202,18 @@ function GladePeople({ heightAt, props, moving, label }: { heightAt: Ground; pro
       <sprite position-y={h + 0.5} scale={[0.35 * tags[i].aspect, 0.35, 1]} raycast={() => {}}><spriteMaterial map={tags[i].tex} /></sprite>
     </group>
   })}</group>
+}
+/** M168: Momo where the game stands him (glade-momo.ts over the draft's ground and solid pieces), beside Bonn wherever the draft has her.
+ *  Looked at only: no piece, no target, in nobody's way. While Bonn is in hand he goes with her. */
+const NO_BOXES: readonly Box[] = []
+function FlyMomo({ heightAt, rev, items, props, solids = NO_BOXES }: { heightAt: Ground; rev: number; items: readonly PlacedProp[]; props: readonly Prop[]; solids?: readonly Box[] }) {
+  const ver = useGladeStanding(), ref = useRef<THREE.Group>(null)
+  const at = useMemo(() => {
+    const shape = gladeShapeOver(heightAt, [...solids, ...sceneryBoxes(items)]), stand = padGround(props, heightAt)
+    return momoSpot(stand, (x, z) => bodyBlocked((x0, z0, x1, z1) => shape.solids(x0, -50, z0, x1, 90, z1), x, shape.ground(x, z), z, 0.2))
+  }, [heightAt, rev, items, props, solids, ver])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { ref.current?.traverse(o => { o.raycast = () => {} }) }, [at])
+  return at && Number.isFinite(at.y) ? <group ref={ref} name="fly-momo" position={[at.x, at.y, at.z]} rotation-y={at.yaw}><MomoModel /></group> : null
 }
 /** a house in hand: its footprint as a slab, its size, and a white nose out of its front (a lot's front is -z, Greg's home's and the crate's +z) */
 const front = (k: string) => (k === 'home' || k === 'jars' ? 1 : -1)

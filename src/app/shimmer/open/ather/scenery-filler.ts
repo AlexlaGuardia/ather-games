@@ -137,3 +137,5 @@ export const FILLER_IDS = Object.keys(MAKE)
 export function fillerGeometry(id: string): G { const f = MAKE[id]; if (!f) throw new Error(`no filler piece ${id}`); return f() }
 let mat: THREE.MeshLambertMaterial | null = null
 export const fillerMaterial = () => (mat ??= new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }))
+/** M168: a tilted fence's own shear: y climbs along its x and z */
+export const tiltMatrix = (t: readonly [number, number] | undefined, m = new THREE.Matrix4()) => m.set(1, 0, 0, 0, t?.[0] ?? 0, 1, t?.[1] ?? 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)

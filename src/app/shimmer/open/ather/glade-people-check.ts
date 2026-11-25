@@ -20,10 +20,10 @@ import type { Box } from '../terrain-world'
 export interface Standing { who: string; name: string; x: number; z: number }
 /** the Glade as the walker has it under this layer (page.tsx gladeShape, the same pieces) */
 export function gladeShapeOf(layer: GladeLayer): Shape {
-  const ground = gladeLayerGround(layer.edits)
-  return withZoneParts(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground }, () => null, true),
-    solidPieces(layer))
+  return gladeShapeOver(gladeLayerGround(layer.edits), solidPieces(layer))
 }
+/** the same over any ground (M168: the builder's draft) */
+export const gladeShapeOver = (ground: Ground, solids: readonly Box[]): Shape => withZoneParts(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground }, () => null, true), [...solids])
 /** the owner's solid pieces: the building zones' parts and the scenery that blocks */
 const solidPieces = (layer: GladeLayer, rooms = true): Box[] => { const ground = gladeLayerGround(layer.edits); return [...zonePartBoxes(zoneParts(layer.zones ?? [], ground)), ...sceneryBoxes(sceneryPlaced(layer.props ?? [], padGround(layer.props, ground), ground).filter(p => rooms || !isRoom(p)))] }
 

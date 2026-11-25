@@ -26,7 +26,7 @@ import { GLADE_LAYER_TILE } from '../../world/glade-builder'
 import { WATER_PREFIX } from '../../open/ather/wilds-edits'
 import { isPlace } from '../../world/builder-props'
 import { PlaceLayer, GladeFixed, useCentre, type PlaceApi } from './place-mode'   // M153 s1a
-import type { ZonePart } from '../../open/ather/zone-parts'
+import { zonePartBoxes, type ZonePart } from '../../open/ather/zone-parts'
 
 export interface FlyTile { name: string; ox: number; oz: number; nx: number; nz: number; cell: number; sizeX: number; sizeZ: number; h: Float32Array; waterY: number
   /** M83 s2a (the Glade): vertices that are not ground; a quad touching one is not drawn, so the islands float in the void */
@@ -308,7 +308,7 @@ export default function BuilderFly(p: Props) {
         return h ? h.point.y : null
       },
       /** M153: the fixed ghosts drawn (folk ids, house + station meshes) */
-      fixed: () => { let meshes = 0; const folk: string[] = []; sceneRef.current?.getObjectByName('glade-fixed')?.traverse(o => { if ((o as THREE.Mesh).isMesh) meshes++ }); sceneRef.current?.getObjectByName('glade-people')?.traverse(o => { if (o.userData?.fixedFolk) folk.push(o.userData.fixedFolk as string) }); return { folk, meshes } },
+      fixed: () => { let meshes = 0; const folk: string[] = []; sceneRef.current?.getObjectByName('glade-fixed')?.traverse(o => { if ((o as THREE.Mesh).isMesh) meshes++ }); sceneRef.current?.getObjectByName('glade-people')?.traverse(o => { if (o.userData?.fixedFolk) folk.push(o.userData.fixedFolk as string) }); const mo = sceneRef.current?.getObjectByName('fly-momo'), v = mo && new THREE.Vector3(); let mm = 0; mo?.traverse(o => { if ((o as THREE.Mesh).isMesh) mm++ }); return { folk, meshes, momo: mo && v ? { x: mo.getWorldPosition(v).x, y: v.y, z: v.z, yaw: mo.rotation.y, meshes: mm } : null } },
       /** M160: the draft's painted water cells and the valley's trees as drawn */
       draft: () => { let water = 0, trees = 0; sceneRef.current?.traverse(o => { if (o.userData?.gladeWater) water = ((o as THREE.Mesh).geometry.index?.count ?? 0) / 6; if (o.userData?.meadowGhosts) trees = (o as THREE.InstancedMesh).count }); return { water, trees } },
       pool: () => { let n = 0; sceneRef.current?.traverse(o => { if (o.userData?.pool) n++ }); return n },
@@ -334,7 +334,7 @@ export default function BuilderFly(p: Props) {
     pr.current.onHover?.(e.point.x, e.point.z)
     if (painting.current) pr.current.onMove(e.point.x, e.point.z)
   }
-  const waterY = p.tiles[0]?.waterY ?? 0
+  const waterY = p.tiles[0]?.waterY ?? 0, solids = useMemo(() => zonePartBoxes(p.parts ?? []), [p.parts])
   return (<>
     <Canvas camera={{ fov: 60, near: 0.5, far: 6000 }} gl={{ antialias: true }} onPointerLeave={() => { hover.current = null }} data-testid="builder-fly"
       onCreated={({ scene }) => { sceneRef.current = scene; scene.background = new THREE.Color('#9fc4dd'); scene.fog = new THREE.Fog('#9fc4dd', 1500, 5000) }}>
@@ -347,7 +347,7 @@ export default function BuilderFly(p: Props) {
       {p.tiles.length > 0 && !p.tiles.some(t => t.noSea) && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[p.focus.x, waterY, p.focus.z]}><planeGeometry args={[3200, 3200]} /><meshLambertMaterial color="#3d6f99" transparent opacity={0.75} /></mesh>}
       {p.pool && <PoolWater heightAt={p.heightAt} rev={p.rev} />}
       {!p.placing && <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />}
-      {p.place && <PlaceLayer api={p.place} active={!!p.placing} heightAt={p.heightAt} rev={p.rev} label={labelTex} />}
+      {p.place && <PlaceLayer api={p.place} active={!!p.placing} heightAt={p.heightAt} rev={p.rev} label={labelTex} solids={solids} />}
       {p.fixed && <GladeDraft place={p.place} deltas={p.deltas} rev={p.rev} heightAt={p.heightAt} />}
       {p.overlay && <OverlayLayer overlay={p.overlay} heightAt={p.heightAt} rev={p.rev} />}
       {p.parts && <ZonePartsView parts={p.parts} />}

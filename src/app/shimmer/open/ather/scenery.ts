@@ -107,16 +107,36 @@ export function endSnap(props: readonly Prop[], hand: Pick<Prop, 'k' | 'q' | 's'
   return best
 }
 
-/** a piece standing on the ground; `low` = a room's: how deep its plinth goes */
-export interface PlacedProp extends Prop { y: number; low?: number }
+/** M168: the steepest a fence leans (m per m); on a cliff its end hangs rather than standing on its post */
+export const TILT_MAX = 1
+const LEVEL = 1e-4   // m: the land's own rounding is not a slope
+/** M168: a piece with ends (a fence, a fence corner) follows the ground: its height, and how much it climbs per metre along its own x and
+ *  z. A SHEAR, not a turn: posts stay upright and each end sits on the ground under it, where the neighbour's end post sits too. null = all
+ *  its ends are level with its middle, or an end is off the land: it stands as any piece does. A straight fence stands on its two ends. */
+export function fenceTilt(p: Pick<Prop, 'k' | 'x' | 'z' | 'q' | 's'>, ground: (x: number, z: number) => number): { y: number; tilt: readonly [number, number] } | null {
+  const ends = SCENERY_BY.get(p.k)?.ends, y0 = ground(p.x, p.z); if (!ends || !Number.isFinite(y0)) return null
+  const ys = ends.map(([x, z]) => { const [a, b] = turned(x * p.s, z * p.s, p.q); return ground(p.x + a, p.z + b) })
+  if (!ys.every(Number.isFinite) || ys.every(y => Math.abs(y - y0) < LEVEL)) return null
+  const clamp = (v: number) => Math.max(-TILT_MAX, Math.min(TILT_MAX, v)), [a, b] = ends
+  if (a[0] === -b[0] && a[1] === -b[1]) return { y: (ys[0] + ys[1]) / 2, tilt: [clamp((ys[1] - ys[0]) / (2 * p.s)), 0] }
+  return { y: y0, tilt: [clamp((ys[0] - y0) / p.s), clamp((ys[1] - y0) / p.s)] }
+}
+/** the climb of a tilted piece along world x and z (m per m) */
+export const tiltGrad = (p: Pick<PlacedProp, 'q' | 'tilt'>): [number, number] => (p.tilt ? turned(p.tilt[0], p.tilt[1], p.q) : [0, 0])
+
+/** a piece standing on the ground; `low` = a room's: how deep its plinth goes; `tilt` = a fence on a slope (fenceTilt), absent on the level */
+export interface PlacedProp extends Prop { y: number; low?: number; tilt?: readonly [number, number] }
 /** `ground` = what pieces stand on (glade-pads padGround), `land` = the bare land: a room stands level on the highest of it */
 export function sceneryPlaced(props: readonly Prop[], ground: (x: number, z: number) => number, land = ground): PlacedProp[] {
   const out: PlacedProp[] = []
   for (const p of props) { if (!SCENERY_BY.has(p.k)) continue
     const r = isRoom(p) ? roomPad(p) : null; if (r) { const v = padLevel(r, land); if (Number.isFinite(v.top)) out.push({ ...p, y: v.top, low: v.low }); continue }
+    const t = fenceTilt(p, ground); if (t) { out.push({ ...p, ...t }); continue }
     const y = ground(p.x, p.z); if (Number.isFinite(y)) out.push({ ...p, y }) }
   return out
 }
+/** M168: how long a slice of a sloping fence's wall is (m): stairs of boxes, so the low end is no higher than it looks */
+const SLICE = 0.5
 /** the walker's boxes. A wall panel off the axes is a chain of thin boxes (rooms.ts), the rest the turned footprint's bounds. */
 export function sceneryBoxes(items: readonly PlacedProp[]): Box[] {
   return items.flatMap(p => {
@@ -125,6 +145,14 @@ export function sceneryBoxes(items: readonly PlacedProp[]): Box[] {
     const pad = isRoom(p) && p.low !== undefined ? roomPad(p) : null, plinth = pad ? plinthBoxes(pad, p.y, p.low!) : []
     if (K.arms) return plinth.concat(K.arms.flatMap(a => {
       const [ox, oz] = turned(a.x * p.s, a.z * p.s, p.q), x = p.x + ox, z = p.z + oz, w = a.w * p.s, d = a.d * p.s
+      if (p.tilt) {   // cut along the arm, each slice as high as the fence is there
+        const [gx, gz] = tiltGrad(p), along = w >= d, L = along ? w : d, n = Math.ceil(L / SLICE - 1e-9), whole = isWholeQ(p.q)
+        const rs = !whole ? (along ? panelChain(x, z, w, d, p.q) : panelChain(x, z, d, w, p.q + 1)) : Array.from({ length: n }, (_, i) => {
+          const o = ((i + 0.5) / n - 0.5) * L, [sx, sz] = turned(along ? o : 0, along ? 0 : o, p.q)
+          return quadBounds(x + sx, z + sz, along ? L / n : w, along ? d : L / n, p.q) })
+        return rs.map(r => { const mid = p.y + gx * ((r.x0 + r.x1) / 2 - p.x) + gz * ((r.z0 + r.z1) / 2 - p.z), e = (Math.abs(gx) * (r.x1 - r.x0) + Math.abs(gz) * (r.z1 - r.z0)) / 2
+          return { x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, y0: mid - e - 0.5, y1: mid + e + a.h * p.s } })
+      }
       const rs = isWholeQ(p.q) ? [quadBounds(x, z, w, d, p.q)] : w >= d ? panelChain(x, z, w, d, p.q) : panelChain(x, z, d, w, p.q + 1)
       return rs.map(r => ({ x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, y0: p.y - 0.5, y1: p.y + a.h * p.s }))
     }))

@@ -18,7 +18,7 @@ import { LOOK as TREE_LOOK } from './wilds-scene'
 import { crownOf } from './forestry'
 import { NODE_CRYSTAL_S, isTreeKind, nodeTree } from './glade-nodes'
 import { SCENERY_BY, type PlacedProp, type SceneryKind } from './scenery'
-import { fillerGeometry, fillerMaterial } from './scenery-filler'
+import { fillerGeometry, fillerMaterial, tiltMatrix } from './scenery-filler'
 import type { CrystalKind } from './prospecting'
 
 interface Part { geometry: THREE.BufferGeometry; material: THREE.Material }
@@ -101,7 +101,8 @@ function useBaked(K: SceneryKind): { parts: Part[] | null; need: { item: string 
     let live = true
     if ('crystal' in K.model) { baked.set(K.k, bakeCrystal(K.model.crystal as CrystalKind)); bump(n => n + 1); return }
     if ('node' in K.model) { baked.set(K.k, bakeNode(K.model.node)); bump(n => n + 1); return }
-    if ('filler' in K.model) { baked.set(K.k, [{ geometry: fillerGeometry(K.model.filler), material: fillerMaterial() }]); bump(n => n + 1); return }
+    if ('filler' in K.model) { const g = fillerGeometry(K.model.filler); if (K.ends) { g.computeBoundingSphere(); g.boundingSphere!.radius *= 1.2 }   // M168: a shear reaches past three's scaled sphere (culling, the crosshair)
+      baked.set(K.k, [{ geometry: g, material: fillerMaterial() }]); bump(n => n + 1); return }
     let w = waiting.get(K.k)
     if (!w) { w = bakeGlb(K).catch(e => { console.error('[scenery] model did not load, drawing a block:', K.k, e); return block(K) }); waiting.set(K.k, w) }
     w.then(p => { baked.set(K.k, p); if (live) bump(n => n + 1) })
@@ -125,12 +126,12 @@ function KindInstances({ K, items, ghost }: { K: SceneryKind; items: readonly Pl
   const { parts, need, onBaked } = useBaked(K)
   const meshes = useMemo(() => {
     if (!parts || !items.length) return []
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion()
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sh = new THREE.Matrix4()
     return parts.map(p => {
       const mat = ghost ? p.material.clone() : p.material
       if (ghost) { mat.transparent = true; mat.opacity = 0.55; mat.depthWrite = false }
       const im = new THREE.InstancedMesh(p.geometry, mat, items.length)
-      items.forEach((it, k) => im.setMatrixAt(k, m.compose(new THREE.Vector3(it.x, it.y, it.z), q.setFromAxisAngle(UP, -it.q * Math.PI / 2), new THREE.Vector3(it.s, it.s, it.s))))
+      items.forEach((it, k) => { m.compose(new THREE.Vector3(it.x, it.y, it.z), q.setFromAxisAngle(UP, -it.q * Math.PI / 2), new THREE.Vector3(it.s, it.s, it.s)); if (it.tilt) m.multiply(tiltMatrix(it.tilt, sh)); im.setMatrixAt(k, m) })
       im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere()
       im.userData = ghost ? { ghost: true } : { scenery: items.map(i => i.id) }
       if (ghost) im.raycast = () => {}
