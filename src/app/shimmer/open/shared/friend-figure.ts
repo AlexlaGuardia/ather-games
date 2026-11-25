@@ -27,7 +27,7 @@ const INK_T = 0.011   // the outline's thickness (m), the same on every part (th
 export const FRIEND_COLOR = {
   bonn: { skin: '#a9653c', hair: '#3b2a20', eye: '#3f9a4c', tunic: '#dba11c', cuff: '#b9ad93', trouser: '#6b4630', boot: '#cf8f1c', leather: '#70401f' },
   otto: { skin: '#ffd2b0', hair: '#c8824a', eye: '#7a4f2c', shirt: '#5f8048', apron: '#a8682c', kerchief: '#c4592c', trouser: '#4b4d5a', boot: '#75432c', leather: '#54321f', glove: '#5d4230' },
-  tess: { skin: '#ffdcc2', hair: '#221d1f', eye: '#665631', coat: '#e2c68e', coatIn: '#b09058', scarf: '#a587c2', trouser: '#484c52', boot: '#a8642b', leather: '#8a4726' },
+  tess: { skin: '#ffdcc2', hair: '#221d1f', eye: '#5f5730', coat: '#e2c68e', coatIn: '#b09058', scarf: '#a587c2', trouser: '#484c52', boot: '#a8642b', leather: '#8a4726' },
 } as const
 export const TESS_BLUSH = '#d2917f'   // drawn unlit, so deeper here than it reads
 const SOLE = '#3a2a20', METAL = '#b9a888', DARK = '#1c1712'
