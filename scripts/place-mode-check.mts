@@ -72,6 +72,23 @@ try {
   await key(o, 'KeyE'); ok(!!(await o.$('[data-testid="place-inv"]')), '2. E opens the inventory')
   const n = await o.$$eval('[data-testid^="place-item-"]', a => a.length); ok(n === SCENERY_BY.size, `2. it lists the whole palette (${n})`)
   await o.screenshot({ path: `${out}/fly-palette.png` }).catch(() => {})
+  // M169 s1: the building catalog is its own group, by sub-category, every piece with its icon; Furniture holds none of them
+  const pal = async () => o.evaluate(() => { const g = (n: string) => document.querySelector(`[data-testid="place-group-${n}"]`)
+    const subs = [...g('Build')?.querySelectorAll<HTMLElement>('[data-testid^="place-sub-"]') ?? []].map(e => [e.dataset.testid!.slice(10), [...e.querySelectorAll<HTMLElement>('[data-testid^="place-item-"]')].map(b => [b.dataset.testid!.slice(11), !!b.querySelector('[data-build-icon] path')])])
+    const furn = [...g('Furniture')?.querySelectorAll<HTMLElement>('[data-testid^="place-item-"]') ?? []].map(b => b.dataset.testid!.slice(11))
+    const r = g('Build')?.getBoundingClientRect(); return { subs, furn, fits: !!r && r.left >= 0 && r.right <= innerWidth } }) as Promise<{ subs: [string, [string, boolean][]][]; furn: string[]; fits: boolean }>
+  const BUILD = SCENERY.filter(s => s.group === 'Build')
+  const checkPal = async (tag: string) => { const b = await pal(), ks = b.subs.flatMap(s => s[1].map(x => x[0]))
+    ok(JSON.stringify(b.subs.map(s => s[0])) === JSON.stringify(['Floors', 'Walls']) && ks.length === BUILD.length && ks.every((k, i) => k === BUILD[i].k), `2. ${tag}: Build by sub-category (${b.subs.map(s => `${s[0]} ${s[1].length}`).join(', ')})`)
+    ok(b.subs.every(s => s[1].every(x => x[1])), `2. ${tag}: every building piece shows its icon`)
+    ok(b.furn.length > 10 && !b.furn.some(k => /_slab|_panel/.test(k)), `2. ${tag}: Furniture holds no slab or panel (${b.furn.length} pieces)`)
+    ok(b.fits, `2. ${tag}: the Build group fits the screen`) }
+  await o.evaluate(() => document.querySelector('[data-testid="place-group-Build"]')?.scrollIntoView({ block: 'start' })); await sleep(300)
+  await checkPal('desktop'); await o.screenshot({ path: `${out}/fly-palette-build.png` }).catch(() => {})
+  await o.setViewport({ width: 390, height: 844 }); await sleep(800)
+  await o.evaluate(() => document.querySelector('[data-testid="place-group-Build"]')?.scrollIntoView({ block: 'start' })); await sleep(300)
+  await checkPal('390'); await o.screenshot({ path: `${out}/fly-palette-build-390.png` }).catch(() => {})
+  await o.setViewport({ width: 1280, height: 900 }); await sleep(1200)
   await key(o, 'KeyE'); await sleep(1500); await lock(o)
   ok(await o.evaluate(() => (window as W).__builderFly.locked()), '3. a click locks the mouse in Place mode')
   ok((await props(o)).length === base.length, '3. that click placed nothing')
