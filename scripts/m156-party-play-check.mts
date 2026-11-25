@@ -31,7 +31,7 @@ const ev = (p: Page, obj: string, f: string) => p.evaluate((o: string, k: string
 const myId = (p: Page) => p.evaluate(() => localStorage.getItem('ather:mp:id')) as Promise<string>
 async function open(tag: string, seed: Record<string, unknown>, w: number, h: number): Promise<Page> {
   const p = await (await br.createBrowserContext()).newPage()
-  await p.setViewport({ width: w, height: h })
+  await p.setViewport({ width: w, height: h, deviceScaleFactor: 0.4 })   // software GL: fewer pixels, so a body really walks at its speed
   p.on('pageerror', e => errs.push(`${tag}: ${String(e).slice(0, 180)}`))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.evaluateOnNewDocument((c: string, s: string) => {
@@ -144,6 +144,7 @@ try {
       ok(await poll(async () => !!(await figure(to, id)), 30000), `${who}: drawn as a keeper figure`)
       const still = await watch(to, id, 3000)
       ok(still.foot < 0.02, `W4 ${who} standing: feet at rest (${mm(still.foot)}, ${still.n} samples)`)
+      await from.evaluate(() => { const g = (window as any).__ather; g.look?.(g.yaw() + Math.PI * 0.75, 0) }); await sleep(2500)   // off the waymark stone, which an arrival faces
       await from.keyboard.down('KeyW'); await sleep(700)
       const walk = await watch(to, id, 7000); await from.keyboard.up('KeyW')
       ok(walk.went > 1, `${who} walk: the figure travels (${walk.went.toFixed(1)} m)`)
