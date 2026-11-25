@@ -27,9 +27,9 @@ const run = (id: string, frames: number, down: (i: number) => boolean) => {
 // ★ holding the trigger fires on every gun (Alex 11-15): a semi-auto held re-fires at its fireCd
 const rp = run('repeater', 60, () => true)
 ok(rp.shots >= 5 && rp.shots <= 7, `the Repeater held for 1 s fires ${rp.shots} (expected ~6 at fireCd 0.16)`)
-// and a burst gun held fires burst after burst: 2 s of Backbone = bursts of 3, fireCd apart
-const bh = run('backbone', 120, () => true)
-ok(bh.shots % 3 === 0 && bh.shots >= 9, `the Backbone held for 2 s fires ${bh.shots} (whole bursts, several of them)`)
+// and a burst gun held fires burst after burst: 2.5 s of Backbone = 4 bursts of 3, fireCd apart
+const bh = run('backbone', 150, () => true)
+ok(bh.shots === 12, `the Backbone held for 2.5 s fires ${bh.shots} (whole bursts, several of them)`)
 // aiming down the sights tightens the cone: the same 200 rounds land closer to the aim line
 {
   const spreadOf = (ads: boolean) => {

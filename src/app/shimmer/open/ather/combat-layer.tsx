@@ -8,12 +8,13 @@ import { getLook } from '../shared/look-store'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { RANGE_GUNS } from '../shared/gunplay'
+import { RANGE_GUNS, type RangeGun } from '../shared/gunplay'
+import { dialedGun, noteCycle } from '../shared/fp-gun'
 import { armedGun, sigilKey } from '../shared/gun-sigil'   // M93 s4: the fitted sigil tunes the drawn gun
 import { useLoadout } from '../shared/loadout'
 import { useBirth } from '../birth-gate'
 import { weaponDef } from '../../engine/weapons'
-import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, SETTLE, topUpDue, HEAD_Y, fxOn, SHAMBLER, FLOATER, CRAWLER, crawlerScale, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind } from './combat'
+import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, SETTLE, topUpDue, HEAD_Y, fxOn, SHAMBLER, FLOATER, CRAWLER, crawlerScale, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind, stepTrigger, dropBurst } from './combat'
 import { live as liveSolids } from './dynamic-solids'
 import { noteCombat } from '../shared/idle-mode'
 import { noteHollowNear, SKIT } from '../shared/idle-skits'   // M126 s2
@@ -553,6 +554,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const lastState = useRef(new Map<number, string>())   // M36: the windup's EDGE (a tell sounds once, as the gather starts)
   const dispersals = useRef<Dispersal[]>([])
   const held = useRef(false)   // M33: the left button really down (trigger is cleared per shot on a semi-auto)
+  const pulled = useRef(false)   // M148: pressed since the last frame, so a tap shorter than a slow frame is still one burst
   const trigger = useRef(false), mouseAim = useRef(false), popT = useRef(0), hudT = useRef(0)
   const hud = useRef<CombatHud>({ hp: 100, maxHp: 100, ammo: 12, clip: 12, reloading: false, hurtAt: -9, hitAt: -9, gun: c.current.gun.name, champ: null })
   const roundsMesh = useRef<THREE.InstancedMesh>(null), dropsMesh = useRef<THREE.InstancedMesh>(null), spitsMesh = useRef<THREE.InstancedMesh>(null)
@@ -577,9 +579,9 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     if (!gunId) return
     const row = RANGE_GUNS.find(x => x.id === gunId) ?? weaponDef(gunId)
     if (!row) return
-    const g = armedGun(row, loadout, birth)
+    const g = armedGun('burst' in row ? dialedGun(row as RangeGun) : row, loadout, birth)   // M148: the gun tuner's burst rhythm, this browser's
     if (c.current.gun.id === g.id) { c.current.gun = g; return }
-    c.current.gun = g; c.current.keeper.ammo = g.clip; c.current.keeper.reloading = 0; c.current.keeper.bloom = 0; charging.current = -1
+    c.current.gun = g; c.current.keeper.ammo = g.clip; c.current.keeper.reloading = 0; c.current.keeper.bloom = 0; charging.current = -1; dropBurst(c.current)
   }, [gunId, tuneKey])   // eslint-disable-line react-hooks/exhaustive-deps
   const ownerRef = useRef(ownerOf); ownerRef.current = ownerOf
   const spent = useRef(new Set<string>())   // cleared this visit: never re-woken before the page drops it
@@ -603,7 +605,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   useEffect(() => { if (reloadTick) { const C = c.current; C.mana = mana; const n0 = C.events.length; reload(C); sayDry(C, n0) } }, [reloadTick])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const down = (e: MouseEvent) => {
-      if (e.button === 0 && locked.current && !frozen.current) { trigger.current = true; held.current = true }
+      if (e.button === 0 && locked.current && !frozen.current) { trigger.current = true; held.current = true; pulled.current = true }
       if (e.button === 2 && locked.current && !frozen.current) mouseAim.current = true   // hold right-click: the sights
     }
     const up = (e: MouseEvent) => { if (e.button === 0) { trigger.current = false; held.current = false } if (e.button === 2) mouseAim.current = false }
@@ -685,7 +687,23 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       if (!wasReloading && C.keeper.reloading > 0) playReload()   // the shot that emptied the clip (or the empty pull) started a reload
       sayDry(C, n0)
     }
-    if (charging.current >= 0) {
+    const burst = (C.gun as { burst?: number }).burst ?? 1
+    if (burst > 1) {
+      // M148: a burst gun (the Backbone): hold = burst after burst, each round its own sound, kick and streak
+      if (!armedRef.current || frozen.current || C.keeper.hp <= 0) { dropBurst(C); pulled.current = false }
+      else {
+        const down = trigger.current || touch.fire || pulled.current, wasReloading = C.keeper.reloading > 0, n0 = C.events.length
+        const dryPull = down && !C.keeper.wasDown && C.keeper.ammo <= 0
+        pulled.current = false
+        camera.getWorldDirection(aim)
+        const n = stepTrigger(C, camera.position, aim, !!sight?.current.ads, down, dt)
+        for (let i = 0; i < n; i++) playShot(C.gun.id, i * ((C.gun as { burstGap?: number }).burstGap ?? 0))   // a slow frame's rounds still sound apart
+        if (n && sight) { sight.current.firedAt = performance.now(); noteCycle(C.gun.fireCd) }
+        if (dryPull) playEmpty()
+        if (!wasReloading && C.keeper.reloading > 0) playReload()
+        sayDry(C, n0)
+      }
+    } else if (charging.current >= 0) {
       charging.current -= dt
       if (charging.current < 0) { camera.getWorldDirection(aim); shoot() }
       if (!armedRef.current || frozen.current) charging.current = -1

@@ -63,9 +63,9 @@ function env(g: GainNode, t: number, peak: number, attack: number, decay: number
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay)
 }
 /** One voice at time t (pitch = a per-shot wobble). */
-export function voice(v: GunVoice, pitch = 1) {
+export function voice(v: GunVoice, pitch = 1, after = 0) {
   const c = audio(); if (!c || !master) return
-  const t = c.currentTime + 0.005, out = master
+  const t = c.currentTime + 0.005 + after, out = master
   const b = v.breath, z = v.sizzle, r = v.ring, h = v.thump
   if (b?.gain > 0) { const s = c.createBufferSource(); s.buffer = noise(c); s.playbackRate.value = pitch
     const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = b.freq * pitch; f.Q.value = b.q
@@ -82,7 +82,8 @@ export function voice(v: GunVoice, pitch = 1) {
     const g = c.createGain(); env(g, t, h.gain, 0.002, h.decay); o.connect(g).connect(out); o.start(t); o.stop(t + h.decay + 0.05) }
 }
 
-export function playShot(gunId: string) { const v = voices()[gunId] ?? GUN_VOICES.repeater; voice(v, 1 + (Math.random() - 0.5) * 0.06) }
+/** `after` (M148): seconds from now, for a burst's rounds that left in one slow frame */
+export function playShot(gunId: string, after = 0) { const v = voices()[gunId] ?? GUN_VOICES.repeater; voice(v, 1 + (Math.random() - 0.5) * 0.06, after) }
 const Z = { gain: 0 }
 let lastEmpty = 0
 /** a dry sputter, like a match that won't strike (throttled: a held trigger on an empty gun sputters, it doesn't buzz) */

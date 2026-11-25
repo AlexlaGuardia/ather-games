@@ -16,6 +16,7 @@ import * as THREE from 'three'
 import type { Cavern } from './cavern'
 import { caveRoomAt } from './cavern'
 import { gunForSlate, holdGun, stepGun, reloadGun, hitscan, stepPlates, PLATE, type GunState, type Round, type Target, type RangeGun } from './shared/gunplay'
+import { dialedGun } from './shared/fp-gun'
 import { Tracers, type TracerShot } from './shared/tracers'
 import { hudSay } from './shared/game-hud'
 import { RELOAD_DRY_LINE } from './shared/vitals-economy'
@@ -133,7 +134,8 @@ export function GunRange({ cave, mana }: { cave: Cavern; mana?: { cur: number } 
   const inShopNow = useRef(false)
 
   const take = (slate: string) => {
-    const g = gunForSlate(slate); if (!g) return
+    const row = gunForSlate(slate); if (!row) return
+    const g = dialedGun(row)   // M148: this browser's burst rhythm
     gun.current = { ...holdGun(g), mana }; tally.current = { shots: 0, hits: 0, heads: 0, best: 0, quiet: 0 }
     setHud({ gun: g, ammo: g.clip, reloading: false })
     hudSay(`${cap(g.name)} · ${g.slot.toLowerCase()} · ${g.burst > 1 ? `${g.burst}-round burst` : g.pellets > 1 ? `${g.pellets} pellets` : g.auto ? 'full auto' : 'semi-auto'} · hold to fire, right-click aims, R reloads`, 'item')

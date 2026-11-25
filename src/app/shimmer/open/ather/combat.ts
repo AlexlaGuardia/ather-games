@@ -71,6 +71,8 @@ export interface Drop { id: number; x: number; y: number; z: number; amount: num
 export interface Keeper {
   hp: number; maxHp: number; sinceHurt: number
   ammo: number; reloading: number; sinceShot: number; bloom: number
+  /** M148: a burst in flight (rounds still to leave, seconds to the next) and last frame's trigger */
+  burstLeft?: number; burstT?: number; wasDown?: boolean
   /** an infusion cast on the gun: rounds hit harder until the combat clock passes this */
   ampUntil?: number
   /** M29 FRAME (keeper-look.ts › FRAME_STATS): `hit` scales how close a blow or a spit must come (Small 0.88, Large 1.16),
@@ -454,6 +456,31 @@ export function fire(c: Combat, eye: { x: number; y: number; z: number }, aim: {
   if (k.ammo <= 0) reload(c)
   return true
 }
+
+/** M148: a BURST gun's trigger for one frame (call it every frame, before stepCombat). Holding fires burst after burst, the gun's
+ *  fireCd from a burst's last round to the next one's first; a burst in flight finishes trigger or not; a tap = one burst. Frame
+ *  overshoot is carried, so the rhythm is the same at 20 fps and at 60. Returns the rounds that left. */
+export function stepTrigger(c: Combat, eye: { x: number; y: number; z: number }, aim: { x: number; y: number; z: number }, ads: boolean, down: boolean, dt: number): number {
+  const k = c.keeper, w = c.gun as typeof c.gun & { burst?: number; burstGap?: number }, gap = w.burstGap ?? 0
+  const pressed = down && !k.wasDown; k.wasDown = down
+  let n = 0
+  const out = (over: number) => { k.sinceShot = 99; if (!fire(c, eye, aim, ads)) return false; k.sinceShot = over; n++; return true }
+  if ((k.burstLeft ?? 0) > 0) {
+    k.burstT = (k.burstT ?? 0) - dt
+    while (k.burstLeft! > 0 && k.burstT! <= 1e-6 && k.ammo > 0 && k.reloading <= 0) { if (!out(Math.max(0, -k.burstT!))) break; k.burstLeft!--; k.burstT! += gap }
+    if (k.ammo <= 0 || k.reloading > 0) k.burstLeft = 0
+    return n
+  }
+  if (!down || k.reloading > 0) return 0
+  if (k.ammo <= 0) { if (pressed) reload(c); return 0 }   // dry: a fresh pull asks for the reload, a held trigger does not nag
+  const late = k.sinceShot - w.fireCd
+  if (late < -1e-6) return 0
+  const over = late < dt ? Math.max(0, late) : 0
+  if (out(over)) { k.burstLeft = k.ammo > 0 ? (w.burst ?? 1) - 1 : 0; k.burstT = gap - over }
+  return n
+}
+/** the burst in flight is dropped (gun put away, swapped, a panel open, the keeper down) */
+export function dropBurst(c: Combat) { c.keeper.burstLeft = 0; c.keeper.wasDown = false }
 
 export function reload(c: Combat) {
   const k = c.keeper

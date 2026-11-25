@@ -26,18 +26,22 @@ export interface RangeGun extends WeaponDef {
   noSigil?: boolean
 }
 
+/** M148: the Backbone's damage a round. 10.4 = 49.5 a second held, 41.9 with reloads: never past the Repeater's 62.5 / 42.0. */
+export const BACKBONE_DAMAGE = 10.4
 const base = (id: string) => WEAPONS.find(w => w.id === id)!
 export const RANGE_GUNS: RangeGun[] = [
   { ...base('repeater'), burst: 1, burstGap: 0, pellets: 1, shove: 0.05, color: '#e0a640' },
   { ...base('spitter'), burst: 1, burstGap: 0, pellets: 1, shove: 0.03, color: '#3fb8a8' },
   // BACKBONE (longbarrel) — the workhorse: canon "balanced 3-round burst, mid-range, medium heat".
   { id: 'backbone', name: 'BACKBONE', slot: 'LONGBARREL', auto: false,
-    fireCd: 0.42, projSpeed: 46, projLife: 2.0,
-    damage: 12, crit: 19, clip: 30, reloadTime: 1.6, reloadMana: 11,
+    // M148 (Alex 11-24): gap 0.09, 0.45 s between bursts, one 0.63 s cycle you can learn to time. Damage a round is the ONE
+    // power dial (BACKBONE_DAMAGE below). Before, the Ather gave one 12 per 0.42 s tap = 28.6 a second (its fire() ignored `burst`).
+    fireCd: 0.45, projSpeed: 46, projLife: 2.0,
+    damage: BACKBONE_DAMAGE, crit: Math.round(BACKBONE_DAMAGE * 19 / 12 * 10) / 10, clip: 30, reloadTime: 1.6, reloadMana: 11,
     hipSpread: 1.6, adsSpread: 0.18, bloomPerShot: 0.4, bloomMax: 2.4,
     bloomDecay: 6, adsBloomScale: 0.35, kickPitch: 0.012, kickYaw: 0.004,
     converge: 40, headR: 0.08, trailR: 0.06, hipMove: 0.8, adsMove: 0.5,
-    burst: 3, burstGap: 0.075, pellets: 1, shove: 0.06, color: '#5a86d8' },
+    burst: 3, burstGap: 0.09, pellets: 1, shove: 0.06, color: '#5a86d8' },
   // ROAR (breacher) — canon "devastation, extreme heat, heavy knockback", wide spread, close.
   { id: 'roar', name: 'ROAR', slot: 'BREACHER', auto: false,
     fireCd: 0.8, projSpeed: 38, projLife: 0.55,
@@ -58,6 +62,19 @@ export const RANGE_GUNS: RangeGun[] = [
     converge: 60, headR: 0.09, trailR: 0.07, hipMove: 0.85, adsMove: 0.55,
     burst: 1, burstGap: 0, pellets: 1, shove: 0.2, color: '#6b4a2f', charge: 0.35, noSigil: true },
 ]
+/** a burst gun's full cycle, first round to first round (its trigger held) */
+export const burstCycle = (g: { burst: number; burstGap: number; fireCd: number }) => (g.burst - 1) * g.burstGap + g.fireCd
+export const RHYTHM_DIALS = { gap: { min: 0.04, max: 0.16, step: 0.005 }, delay: { min: 0.3, max: 0.9, step: 0.01 } } as const
+const clampTo = (v: number, d: { min: number; max: number }) => Math.max(d.min, Math.min(d.max, v))
+/** M148: a burst gun on another rhythm (the gun tuner's dials). Damage per round follows the cycle, so a rhythm never changes the
+ *  gun's damage per second. Same object back when nothing moves, and for every gun that fires single rounds. */
+export function withRhythm<G extends RangeGun>(g: G, gap?: number, delay?: number): G {
+  if (g.burst <= 1) return g
+  const burstGap = Number.isFinite(gap) ? clampTo(gap!, RHYTHM_DIALS.gap) : g.burstGap, fireCd = Number.isFinite(delay) ? clampTo(delay!, RHYTHM_DIALS.delay) : g.fireCd
+  if (burstGap === g.burstGap && fireCd === g.fireCd) return g
+  const k = burstCycle({ burst: g.burst, burstGap, fireCd }) / burstCycle(g)
+  return { ...g, burstGap, fireCd, damage: g.damage * k, crit: g.crit * k }
+}
 export const gunForSlate = (slate: string) => RANGE_GUNS.find(g => g.slot === slate) ?? null
 
 export interface Round {

@@ -29,7 +29,7 @@ import { OPTICS, opticOf, throughScope, type Optic } from './optics'
 import { box, type Part, type Model } from './gun-kit'
 import { MARKS, TINTS, drawMark, markGlow, defaultLook, type SightLook } from './sight-marks'
 import { getSightLooks, lookFor } from './sight-looks'
-import type { RangeGun } from './gunplay'
+import { withRhythm, type RangeGun } from './gunplay'
 import { fittedModel, fittedSight } from './gun-fit'
 import { getLoadout } from './loadout'
 
@@ -76,9 +76,12 @@ export const GUN_BAKED: Readonly<Record<string, Partial<GunTune>>> = {
 }
 /** LIVE numbers for the gun in hand: defaults, then the gun's baked tune, then this browser's tune for that gun. */
 export const VM: GunTune = { ...GUN_DEFAULTS }
+/** M148: a burst gun's rhythm on this browser (seconds between its rounds, and from its last round to the next burst), kept beside
+ *  that gun's hand tune in GUN_TUNE_KEY. Absent = the gun's row. */
+export interface Rhythm { BURST_GAP?: number; BURST_DELAY?: number }
 export const GUN_TUNE_KEY = 'open:gun-tune.v2'
 export const GUN_TUNE_KEYS = Object.keys(GUN_DEFAULTS) as (keyof GunTune)[]
-let tuned: Record<string, Partial<GunTune>> = {}, curGun = ''
+let tuned: Record<string, Partial<GunTune> & Rhythm> = {}, curGun = ''
 /** what a gun is WITHOUT this browser's moves (the tuner greys a value that matches it) */
 export const defaultsFor = (id: string): GunTune => ({ ...GUN_DEFAULTS, ...(GUN_BAKED[id] ?? {}) })
 function apply() {
@@ -93,11 +96,29 @@ export function loadGunTune(): void {
 }
 export function setGunTune(patch: Partial<GunTune>): void {
   for (const k of GUN_TUNE_KEYS) if (typeof patch[k] === 'number') VM[k] = patch[k]!
-  tuned[curGun] = Object.fromEntries(GUN_TUNE_KEYS.map(k => [k, VM[k]]))
+  const { BURST_GAP, BURST_DELAY } = tuned[curGun] ?? {}   // the rhythm stays with the hands
+  tuned[curGun] = { ...Object.fromEntries(GUN_TUNE_KEYS.map(k => [k, VM[k]])), ...(BURST_GAP != null ? { BURST_GAP } : {}), ...(BURST_DELAY != null ? { BURST_DELAY } : {}) }
   try { localStorage.setItem(GUN_TUNE_KEY, JSON.stringify(tuned)) } catch { /* private window */ }
 }
 /** this gun back to everyone's numbers (its baked tune, else the defaults) */
 export function resetGunTune(): void { delete tuned[curGun]; try { localStorage.setItem(GUN_TUNE_KEY, JSON.stringify(tuned)) } catch { /* */ } apply() }
+let loaded = false
+/** the gun as this browser fires it: its row, on the tuner's rhythm if one was dialled (gunplay withRhythm) */
+export function dialedGun<G extends RangeGun>(g: G): G {
+  if (g.burst <= 1) return g
+  if (!loaded && typeof localStorage !== 'undefined') { loaded = true; loadGunTune() }
+  const t = tuned[g.id]; return t ? withRhythm(g, t.BURST_GAP, t.BURST_DELAY) : g
+}
+export function setRhythm(id: string, patch: Rhythm): void {
+  tuned[id] = { ...(tuned[id] ?? {}), ...patch }
+  try { localStorage.setItem(GUN_TUNE_KEY, JSON.stringify(tuned)) } catch { /* private window */ }
+}
+// the settle cue's clock: the cycle of the gun really firing (its sigil can change it); the combat layer says it per round
+let cycle = 0
+export const noteCycle = (fireCd: number): void => { cycle = fireCd }
+/** M148: a burst gun's settle, 0..1: over the last SETTLE_S before it is ready again the gun comes home, with a small dip */
+export const SETTLE_S = 0.14
+export const settleAt = (sinceShot: number, fireCd: number): number => Math.max(0, Math.min(1, (sinceShot - (fireCd - SETTLE_S)) / SETTLE_S))
 export const ADS_TIGHT = 0.6     // past this the cone is the sights' (gunplay ads)
 
 // ── the models ──
@@ -213,7 +234,7 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
   }, [])
   const keeperLook = useLook()
   useEffect(() => { const c = OPT.accent[keeperLook.accent]; tintMittens(rig.R, c); tintMittens(rig.L, c) }, [keeperLook.accent, rig])   // M29: the keeper's mittens hold the gun
-  const st = useRef({ phase: 0, kick: 0, lastFired: -Infinity })
+  const st = useRef({ phase: 0, kick: 0, punch: 0, lastFired: -Infinity })
   const markTex = useRef<{ key: string; tex: THREE.CanvasTexture | null }>({ key: '', tex: null })
   const setMark = (lk: SightLook) => {
     const key = `${lk.mark}:${lk.tint}`; if (markTex.current.key === key || typeof document === 'undefined') return
@@ -250,8 +271,16 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
       glow = markGlow(true, i.now, i.firedAt, i.charging ?? 0); (mats.dot as THREE.MeshBasicMaterial).opacity = glow
       optic = o; publish()
       // recoil: a fresh round kicks, then it springs home
-      if (i.firedAt > s.lastFired) { s.lastFired = i.firedAt; s.kick = Math.min(1.5, s.kick + 1) }
+      if (i.firedAt > s.lastFired) { s.lastFired = i.firedAt; s.kick = Math.min(1.5, s.kick + 1); if (i.gun.burst > 1) s.punch = 1 }
       s.kick *= Math.exp(-VM.KICK_DECAY * d)
+      // M148: a burst gun's rounds 0.09 s apart read as one shove on a slow spring, so each round also snaps (gone before the next),
+      // and just before it is ready the gun comes home with a small dip: the beat a player times the next burst on
+      s.punch *= Math.exp(-30 * d)
+      let dip = 0
+      if (i.gun.burst > 1) {
+        const set = settleAt((i.now - i.firedAt) / 1000, cycle || i.gun.fireCd)
+        if (set > 0) { s.kick *= 1 - set; dip = set < 1 ? Math.sin(set * Math.PI) : 0 }
+      }
       // the run's bob, damped in the sights
       s.phase += d * (4 + i.speed * 1.4)
       const bob = VM.BOB * Math.min(1, i.speed / 4) * (1 - adsT * (1 - VM.BOB_ADS))
@@ -259,16 +288,16 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
       const a = adsPos(m, o)
       rig.held.position.set(
         VM.HIP_X + (a[0] - VM.HIP_X) * e + Math.cos(s.phase) * bob,
-        VM.HIP_Y + (a[1] - VM.HIP_Y) * e + Math.abs(Math.sin(s.phase)) * bob,
-        VM.HIP_Z + (a[2] - VM.HIP_Z) * e + s.kick * VM.KICK_Z * (1 - 0.6 * e))
-      rig.held.rotation.set(s.kick * VM.KICK_PITCH * (1 - 0.5 * e), 0, 0)
+        VM.HIP_Y + (a[1] - VM.HIP_Y) * e + Math.abs(Math.sin(s.phase)) * bob - dip * 0.012 * (1 - 0.6 * e),
+        VM.HIP_Z + (a[2] - VM.HIP_Z) * e + (s.kick * VM.KICK_Z + s.punch * 0.03) * (1 - 0.6 * e))
+      rig.held.rotation.set((s.kick * VM.KICK_PITCH + s.punch * 0.05) * (1 - 0.5 * e), 0, 0)
       rig.root.position.copy(camera.position); rig.root.quaternion.copy(camera.quaternion)   // this frame's camera
       rig.root.visible = !throughScope(o, adsT)   // the scope ring takes the screen; the model gives way
     },
   }), [camera, rig, mats])
   useEffect(() => { loadGunTune() }, [])   // this browser's tune from /shimmer/dev/guns
   useEffect(() => {
-    ;(window as unknown as { __fpGun?: unknown }).__fpGun = { ads: () => adsT, optic: () => optic?.id ?? null, shown: () => rig.root.visible, key: () => rig.key, mark: () => (look ? `${look.mark}:${look.tint}` : null), glow: () => glow }
+    ;(window as unknown as { __fpGun?: unknown }).__fpGun = { ads: () => adsT, optic: () => optic?.id ?? null, shown: () => rig.root.visible, key: () => rig.key, mark: () => (look ? `${look.mark}:${look.tint}` : null), glow: () => glow, kick: () => st.current.punch, pos: () => rig.held.position.toArray() }
     return () => {
       adsT = 0; optic = null; publish()
       rig.root.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose() })
