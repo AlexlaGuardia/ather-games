@@ -447,7 +447,7 @@ function AtherSliceGame() {
   const gladeLand = useMemo(() => gladeLayerGround(gladeLayer.edits), [gladeLayer]), gladeZoneGround = useMemo(() => padGround(gladeLayer.props, gladeLand), [gladeLayer, gladeLand])   // M153 s1c-2: the land; what stands also stands on a moved house's pad
   const gladeMeshLift = useMemo(() => gladeLift(gladeLayer.edits), [gladeLayer])
   const gladeParts = useMemo(() => zoneParts(gladeLayer.zones ?? [], gladeLand), [gladeLayer, gladeLand])   // M84 s3
-  const gladeScenery = useMemo(() => sceneryPlaced(gladeLayer.props ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround])   // M153 s1a
+  const gladeScenery = useMemo(() => sceneryPlaced(gladeLayer.props ?? [], gladeZoneGround, gladeLand), [gladeLayer, gladeZoneGround, gladeLand])   // M153 s1a
   const gladeOwnNodes = useMemo(() => gladeNodes(gladeLayer.props ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround]), gladeDecor = useMemo(() => gladeScenery.filter(p => !isNode(p)), [gladeScenery])   // M153 s1b
   // M114 s2: each tagged zone's ONE E point (zone-tags.ts: front edge; locked / shop panel / home label + talk / supplier line)
   const gladeDoors = useMemo(() => (gladeLayer.zones ?? []).flatMap(z => { const u = zoneUse(z); return u ? [{ id: z.id, ...zoneDoor(z), u }] : [] }), [gladeLayer])
