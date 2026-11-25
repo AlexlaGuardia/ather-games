@@ -100,7 +100,9 @@ function doorway(w: ReturnType<typeof terrainWorld>, d: P, f: number): P[] {
 export function placeProblems(layer: GladeLayer, places: readonly GladePlace[] = gladePlaces(), newborn: P | null = null): string[] {
   const shape = gladeShapeOf(layer), land = shape.ground, stand = padGround(layer.props, land), w = terrainWorld(shape), wet = gladeWet(layer), out: string[] = [], pieces = solidPieces(layer)
   const j = gladeJetty(), jetty = { x: (j.x0 + j.x1) / 2, z: (j.z0 + j.z1) / 2, yaw: Math.atan2(j.x1 - j.x0, j.z1 - j.z0), w: j.w, d: Math.hypot(j.x1 - j.x0, j.z1 - j.z0) }
-  const reach = newborn && walkReach(shape, stand), said = new Set<string>()
+  // a newborn spot that is itself wrong is peopleProblems' one line, not six doors
+  const nf = newborn && Number.isFinite(land(newborn.x, newborn.z)) ? w.floorAt(newborn.x, newborn.z, stand(newborn.x, newborn.z), STEP) : null
+  const reach = newborn && nf !== null && w.bodyFree(newborn.x, newborn.z, nf) && !wet(newborn.x, newborn.z) ? walkReach(shape, stand) : null, said = new Set<string>()
   for (const p of places) {
     const pts = p.moved ? rectPoints(p) : [], own = p.moved ? placeSolids(p.place, land) : [], crate = p.place === 'jars'
     const no = (why: string) => { out.push(`${p.name} ${why}`) }

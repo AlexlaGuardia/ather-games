@@ -119,5 +119,6 @@ function placeProblemsAt(x: number, z: number) { const m = move('sax', x, z); re
   ok(!!wetAt, 'painted water is refused'); if (wetAt) one(move('sax', wetAt.x, wetAt.z), /^Sax's house is in the water$/) }
 { const m = putWho(move('sax', FREE.x, FREE.z), 'bonn', { x: 0, z: 0, q: 0 }), bx = set(m, () => placeSolids('sax', gladeZoneGround))[2]; const r = say(putWho(m, 'bonn', { x: (bx.x0 + bx.x1) / 2, z: (bx.z0 + bx.z1) / 2, q: 0 })); ok(r.p.some(s => s === 'Bonn is inside something solid'), `a person in a moved wall: ${r.p}`) }
 { const me = set([], () => gladePeople().find(p => p.who === 'greg')!); const r = say(move('home', me.x, me.z)); ok(r.p.some(s => s === 'Gregory is inside something solid'), `a home put on Greg: ${r.p}`) }
+{ const r = say(putWho([], 'newborn', { x: 350, z: 350, q: 0 })); ok(r.h.length === 0 && J(r.p) === J(['Newborn spot is in the void']), `a wrong newborn spot is one line, not six doors: ${[...r.h, ...r.p]}`) }
 ok(placeId('home') === 'hhome' && ang(yawOfQ(qOfYaw(1.1)), 1.1), 'turns')
 console.log(`${n - bad}/${n} glade-places`); if (bad) process.exit(1)
