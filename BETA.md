@@ -224,6 +224,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 20:1x Alex (dialog, sim shown): hold fires on every gun + Roar pellets + shove, Repeater 0.22 s (45/s held) -> M151 GO
 - 11-24 20:0x Alex: "tess has hazel eyes" -> M154 + Magii
 - 11-24 20:0x Alex: "yea i hate to get in our own way but we need a way to edit settlement zones and gardens" -> M153 goes FIRST, scope = settlement zones + gardens
 - 11-24 19:5x Alex: "i dont think it matters until i have an editor that i can go into creative and buildand place stuff like nodes and decor in the glade the tutorial wont make sense plus the avatars for tess bonn and otto look nothing like the three tbh tess and bonn are female and otto a male.. we should have the images of them as kids that we could use later to make the adult versions likeness" -> M153 (Glade place editor) + M154 (Tess, Bonn, Otto likeness)
