@@ -5,6 +5,7 @@
 //   npx tsx scripts/node-check.mts [--url https://ather.games] [--out dir]
 // ⚠ swiftshader runs the sim slowly: poll state, never trust a fixed sleep.
 import puppeteer from 'puppeteer-core'
+import { pickWilds } from './lib/glade-gate.mts'   // M172: E at the Glade's gate opens the fold map; the Wilds is a stop on it
 
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const out = flag('--out', '/tmp')
@@ -37,8 +38,8 @@ console.log('born: zone', await p.evaluate(() => (window as any).__ather.zone())
 await p.waitForFunction(() => (window as any).__ather.zone() === 'glade', { timeout: 60000 })
 { const gate = { x: -212, z: 212 }, sx = gate.x + 2.4, sz = gate.z - 0.4
   await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), sx, sz, Math.atan2(-(gate.x - sx), -(gate.z - sz)))
-  await p.waitForFunction(() => /the gate \(the Wilds\)/.test(document.body.innerText), { timeout: 15000 }).catch(() => {})
-  await p.keyboard.press('KeyE') }
+  await p.waitForFunction(() => /the gate \(fold map\)/.test(document.body.innerText), { timeout: 15000 }).catch(() => {})
+  await p.keyboard.press('KeyE'); await pickWilds(p) }
 await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds' && (window as any).__ather.nodes?.().length > 0, { timeout: 90000 })
 const nodes = await p.evaluate(() => (window as any).__ather.nodes())
 console.log('nodes', JSON.stringify(nodes))

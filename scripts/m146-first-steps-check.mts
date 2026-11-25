@@ -8,6 +8,7 @@
 // C a MID-TUTORIAL save (the old any-order flow, Otto + Tess heard) continues: Bonn, Hazel, Fennel, Greg. C2 the old flow, all four heard: Greg.   D an OLD save: byte-identical, errand as before, no First Steps.
 // Hooks: __ather (tp, gladeAt, travel, open, fall, combat), __journal / __chain / __glade (READ).
 import puppeteer, { type Page } from 'puppeteer-core'
+import { pickWilds } from './lib/glade-gate.mts'   // M172: E at the Glade's gate opens the fold map; the Wilds is a stop on it
 import { mkdirSync } from 'node:fs'
 import { GLADE_LINES } from '../src/app/shimmer/open/ather/glade-tutorial-lines'
 import { SETTLERS, SETTLEMENT, pickTarget } from '../src/app/shimmer/open/ather/first-settlement'
@@ -72,7 +73,7 @@ async function open(seed?: Record<string, unknown>, born = false) {
     ok(j?.active === 'first-steps' && s.filter((w: any) => w?.zone === 'glade').length === glade && s.filter((w: any) => w?.zone === 'wilds').length === wilds, `${tag}: marks Glade ${glade} / Wilds ${wilds} (${JSON.stringify(s)})`)
     ok(!j?.ids.includes('errand') && !j?.ids.includes('m70'), `${tag}: no errand line, no second quest (${j?.ids})`)
   }
-  const gate = async () => { const g = { x: -212, z: 212 }, sx = g.x + 2.4, sz = g.z - 0.4; await A('gladeAt', sx, sz, Math.atan2(-(g.x - sx), -(g.z - sz))); await poll(() => p.evaluate(() => /the gate \(the Wilds\)/.test(document.body.innerText)), 15000); await p.keyboard.press('KeyE'); ok(await zone('wilds'), 'through the gate: the Wilds'); await poll(() => p.evaluate(() => (window as any).__settlement?.()?.y != null), 60000); await sleep(2500) }
+  const gate = async () => { const g = { x: -212, z: 212 }, sx = g.x + 2.4, sz = g.z - 0.4; await A('gladeAt', sx, sz, Math.atan2(-(g.x - sx), -(g.z - sz))); await poll(() => p.evaluate(() => /the gate \(fold map\)/.test(document.body.innerText)), 15000); await p.keyboard.press('KeyE'); await pickWilds(p); ok(await zone('wilds'), 'through the gate: the Wilds'); await poll(() => p.evaluate(() => (window as any).__settlement?.()?.y != null), 60000); await sleep(2500) }
   const settler = async (id: string) => { const s = SETTLERS.find(x => x.id === id)!, px = s.x + Math.sin(s.yaw) * 2.2, pz = s.z + Math.cos(s.yaw) * 2.2
     for (let k = 0; k < 4; k++) { await p.evaluate((x, z, y) => { const g = (window as any).__ather; g.tp(x, z, y); g.look?.(y, -Math.atan2(0.8, 2.2)) }, px, pz, Math.atan2(px - s.x, pz - s.z)); await sleep(1800); await p.keyboard.press('KeyE'); if (await poll(async () => (await opts()).length > 0, 6000)) return read() }
     return { ls: [] as string[], all: [] as string[] } }

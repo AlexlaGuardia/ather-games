@@ -8,6 +8,7 @@
 // Hooks: __ather.state / zone / gladeAt / combat / spawn, __fight.hp. Positions are set in the sim.
 //   npx tsx scripts/m120-wilds-teeth-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
+import { pickWilds } from './lib/glade-gate.mts'   // M172: E at the Glade's gate opens the fold map; the Wilds is a stop on it
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -39,10 +40,10 @@ try {
     // gladeAt is an ARRIVAL, and the game drops one sent while another's veil is still up (zone() already says 'glade' behind it):
     // ask until the keeper really stands at the gate with its prompt showing. E itself is pressed once.
     const yaw = Math.atan2(-(gate.x - sx), -(gate.z - sz))
-    const atGate = () => p.evaluate((x, z) => { const a = (window as any).__ather.state(); return Math.hypot(a.px - x, a.pz - z) < 1 && /the gate \(the Wilds\)/.test(document.body.innerText) }, sx, sz)
+    const atGate = () => p.evaluate((x, z) => { const a = (window as any).__ather.state(); return Math.hypot(a.px - x, a.pz - z) < 1 && /the gate \(fold map\)/.test(document.body.innerText) }, sx, sz)
     for (let k = 0; k < 8 && !(await atGate()); k++) { if (k) console.log(`   gate ask ${k + 1}: the last arrival was dropped or is still veiled`); await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), sx, sz, yaw); await poll(atGate, 8000) }
     ok(await atGate(), '0. at the Glade gate, its prompt showing')
-    await p.keyboard.press('KeyE') }
+    await p.keyboard.press('KeyE'); await pickWilds(p) }
   await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 90000 })
   console.log('in the Wilds')
   const C = (f: string) => p.evaluate(`(() => { const C = window.__ather.combat(); ${f} })()`) as Promise<any>

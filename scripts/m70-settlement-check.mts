@@ -7,6 +7,7 @@
 //   4 Chamomile's thanks in order -> 3 Health Draughts + the pack, once; quest.m70.after in the journal
 //   5 reload: no second gift, the keeper still in the Wilds; 0 page errors
 import puppeteer, { type Page } from 'puppeteer-core'
+import { pickWilds } from './lib/glade-gate.mts'   // M172: E at the Glade's gate opens the fold map; the Wilds is a stop on it
 import { mkdirSync } from 'node:fs'
 import { GLADE_LINES } from '../src/app/shimmer/open/ather/glade-tutorial-lines'
 import { SETTLERS, M70_GIFT, SETTLEMENT } from '../src/app/shimmer/open/ather/first-settlement'
@@ -80,8 +81,8 @@ try {
   ok(await poll(async () => (await A('zone')) === 'glade', 60000), `1. born in the Glade (zone ${await A('zone')})`)
   const gate = { x: -212, z: 212 }, sx = gate.x + 2.4, sz = gate.z - 0.4
   await A('gladeAt', sx, sz, Math.atan2(-(gate.x - sx), -(gate.z - sz)))
-  await poll(() => p.evaluate(() => /the gate \(the Wilds\)/.test(document.body.innerText)), 15000)
-  await p.keyboard.press('KeyE')
+  await poll(() => p.evaluate(() => /the gate \(fold map\)/.test(document.body.innerText)), 15000)
+  await p.keyboard.press('KeyE'); await pickWilds(p)
   ok(await poll(async () => (await A('zone')) === 'wilds', 120000), `1. through the gate: the Wilds (zone ${await A('zone')})`)
   const pos0 = await p.evaluate(() => (window as any).__folk?.keeper?.() ?? null) as { x: number; z: number } | null
   ok(await poll(async () => (await settlement())?.y != null, 60000), `1. the settlement is drawn round the arrival (${JSON.stringify(await settlement())}; keeper ${JSON.stringify(pos0)})`)

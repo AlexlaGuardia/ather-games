@@ -8,6 +8,7 @@
 // Hooks: __ather.travel / tp / state / zone / combat / walls, __settlements.built, __fight.hp. Positions are set in the sim.
 //   npx tsx scripts/m117-hollows-walls-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
+import { pickWilds } from './lib/glade-gate.mts'   // M172: E at the Glade's gate opens the fold map; the Wilds is a stop on it
 import { readFileSync } from 'node:fs'
 import { withGlade, type Network } from '../src/app/shimmer/open/ather/network'
 import { settlementLots } from '../src/app/shimmer/open/ather/settlement-lots'
@@ -46,8 +47,8 @@ try {
   await p.waitForFunction(() => (window as any).__ather.zone() === 'glade', { timeout: 60000 })
   { const gate = { x: -212, z: 212 }, sx = gate.x + 2.4, sz = gate.z - 0.4
     await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), sx, sz, Math.atan2(-(gate.x - sx), -(gate.z - sz)))
-    await p.waitForFunction(() => /the gate \(the Wilds\)/.test(document.body.innerText), { timeout: 15000 }).catch(() => {})
-    await p.keyboard.press('KeyE') }
+    await p.waitForFunction(() => /the gate \(fold map\)/.test(document.body.innerText), { timeout: 15000 }).catch(() => {})
+    await p.keyboard.press('KeyE'); await pickWilds(p) }
   await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 90000 })
   console.log('in the Wilds')
   // ── to the settlement ──

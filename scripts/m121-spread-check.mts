@@ -8,6 +8,7 @@
 //   D a waymark on cleared ground: the roll turns it -> Hollow ground + DARK + travel refused; cleared again -> Clear + lit + travels
 //   0 page errors
 import puppeteer, { type Page } from 'puppeteer-core'
+import { pickWilds } from './lib/glade-gate.mts'   // M172: E at the Glade's gate opens the fold map; the Wilds is a stop on it
 import { mkdirSync, readFileSync } from 'node:fs'
 import { SETTLEMENT } from '../src/app/shimmer/open/ather/first-settlement'
 import { SECTION_RULE, PRE_M121_GROW_MS, LEGEND, AREA_STATES } from '../src/app/shimmer/open/ather/spread-map'
@@ -64,8 +65,8 @@ try {
     ok(await poll(async () => (await A('zone')) === 'glade', 60000), `A. fresh: born in the Glade (${await A('zone')})`)
     const gate = { x: -212, z: 212 }, sx = gate.x + 2.4, sz = gate.z - 0.4
     await A('gladeAt', sx, sz, Math.atan2(-(gate.x - sx), -(gate.z - sz)))
-    await poll(() => p.evaluate(() => /the gate \(the Wilds\)/.test(document.body.innerText)), 15000)
-    await p.keyboard.press('KeyE')
+    await poll(() => p.evaluate(() => /the gate \(fold map\)/.test(document.body.innerText)), 15000)
+    await p.keyboard.press('KeyE'); await pickWilds(p)
     ok(await poll(async () => (await A('zone')) === 'wilds', 120000), 'A. through the gate')
     await poll(async () => !!(await SM('seen'))?.length, 60000)
     ok((await SM('here')) === FIRST.id && (await SM('state', FIRST.id)) === 'hollow', `A. the first section ${FIRST.id} reads Hollow ground (${await SM('state', FIRST.id)})`)

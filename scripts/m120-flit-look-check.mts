@@ -10,6 +10,7 @@
 //   6. 390x844, 0 page errors
 //   npx tsx scripts/m120-flit-look-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
+import { pickWilds } from './lib/glade-gate.mts'   // M172: E at the Glade's gate opens the fold map; the Wilds is a stop on it
 import * as THREE from 'three'
 import { FLIT, flitMats, poseFlit } from '../src/app/shimmer/open/ather/flit-body'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -39,8 +40,8 @@ try {
   await p.waitForFunction(() => (window as any).__ather.zone() === 'glade', { timeout: 60000 })
   { const gate = { x: -212, z: 212 }, sx = gate.x + 2.4, sz = gate.z - 0.4
     await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), sx, sz, Math.atan2(-(gate.x - sx), -(gate.z - sz)))
-    await p.waitForFunction(() => /the gate \(the Wilds\)/.test(document.body.innerText), { timeout: 15000 }).catch(() => {})
-    await p.keyboard.press('KeyE') }
+    await p.waitForFunction(() => /the gate \(fold map\)/.test(document.body.innerText), { timeout: 15000 }).catch(() => {})
+    await p.keyboard.press('KeyE'); await pickWilds(p) }
   await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 90000 })
   console.log('in the Wilds')
   const C = (f: string) => p.evaluate(`(() => { const A = window.__ather, C = A.combat(); ${f} })()`) as Promise<any>

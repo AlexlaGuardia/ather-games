@@ -8,6 +8,7 @@
 //   4 skipped game days (__ather.skipDays) -> the far area turns by M121's daily roll: Hollow ground + the grow toast with its place name
 //   5 reload keeps every state; 0 page errors
 import puppeteer, { type Page } from 'puppeteer-core'
+import { pickWilds } from './lib/glade-gate.mts'   // M172: E at the Glade's gate opens the fold map; the Wilds is a stop on it
 import { mkdirSync, readFileSync } from 'node:fs'
 import { SETTLEMENT } from '../src/app/shimmer/open/ather/first-settlement'
 import { ZONE_NAME } from '../src/app/shimmer/open/ather/forestry'
@@ -86,8 +87,8 @@ try {
   ok(await poll(async () => (await A('zone')) === 'glade', 60000), `1. born in the Glade (zone ${await A('zone')})`)
   const gate = { x: -212, z: 212 }, sx = gate.x + 2.4, sz = gate.z - 0.4
   await A('gladeAt', sx, sz, Math.atan2(-(gate.x - sx), -(gate.z - sz)))
-  await poll(() => p.evaluate(() => /the gate \(the Wilds\)/.test(document.body.innerText)), 15000)
-  await p.keyboard.press('KeyE')
+  await poll(() => p.evaluate(() => /the gate \(fold map\)/.test(document.body.innerText)), 15000)
+  await p.keyboard.press('KeyE'); await pickWilds(p)
   ok(await poll(async () => (await A('zone')) === 'wilds', 120000), `1. through the gate: the Wilds (zone ${await A('zone')})`)
   await sleep(6000)
   const SM = (fn: string, ...a: unknown[]) => p.evaluate((f: string, args: unknown[]) => { const s = (window as any).__spreadMap?.(); return s ? (typeof s[f] === 'function' ? s[f](...args) : s[f]) : null }, fn, a)

@@ -8,7 +8,8 @@
 //      Yarrow + Mallow/Tess, Hazel/Bonn)
 //   4. a reload keeps the keeper in the Glade, where they stood (no birth gate again)
 //   5. no exit but the gate: set down beside the gate (check-only warp, the walk there is the unit test's), the real E (a tap
-//      on the phone's Use button) takes them to the Wilds
+//      on the phone's Use button) opens the fold map (M172: it used to go straight to the Wilds);
+//      closed = still in the Glade; its Gregory's waymark stop takes them to the Wilds
 //   6. an existing save stays where it was: a reload now resumes in the Wilds, not the Glade
 //   7. 0 page errors
 //   8. (s1b-1) the fold map's 'Moonwell Glade' stop, right under 'Your plot', sets an existing keeper down facing Greg
@@ -18,6 +19,7 @@
 //   npx tsx scripts/glade-cluster-check.mts [--url https://ather.games] [--phone] [--out dir]
 import { mkdirSync } from 'node:fs'
 import puppeteer, { type Page } from 'puppeteer-core'
+import { pickWilds, stopsOf } from './lib/glade-gate.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), phone = process.argv.includes('--phone'), out = flag('--out', '')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -105,10 +107,22 @@ try {
   // 5 · the gate: set down 2.4 m short of it, facing it, then the real E / Use tap
   const gate = { x: -212, z: 212 }, sx = gate.x + 2.4, sz = gate.z - 0.4
   await A(p, 'gladeAt', sx, sz, Math.atan2(-(gate.x - sx), -(gate.z - sz)))
-  ok(await poll(() => p.evaluate(() => /the gate \(the Wilds\)/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]')), 15000), "5. at the gate: 'E · the gate (the Wilds)'")
+  ok(await poll(() => p.evaluate(() => /the gate \(fold map\)/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]')), 15000), "5. at the gate: 'E · the gate (fold map)'")
   await shot(p, 'glade-gate')
-  if (phone) { const b = await p.$('[data-touch="use"][data-touch-near]'); if (b) await b.tap(); else ok(false, '5. the Use button is there to tap') }
-  else await p.keyboard.press('KeyE')
+  const press5 = async () => {
+    if (!phone) { await p.keyboard.press('KeyE'); return }
+    await p.waitForSelector('[data-touch="use"][data-touch-near]', { timeout: 15000 }).catch(() => null)
+    const b = await p.$('[data-touch="use"][data-touch-near]'); if (b) await b.tap(); else ok(false, '5. the Use button is there to tap')
+  }
+  await press5()
+  // M172 (Alex 11-25): one press used to BE the way to the Wilds; the gate opens the fold map now, like every other Ather gate
+  ok(await poll(() => p.evaluate(() => !!document.querySelector('[data-panel="fold-map"]')), 15000), '5. the press opens the fold map')
+  { const st = await stopsOf(p); ok(st.includes('Moonwell Glade') && st.includes("Gregory's waymark") && !st.includes('Your plot'), `5. an unfolded keeper's stops (${st.join(' | ')})`) }
+  await shot(p, 'glade-gate-map')
+  await p.keyboard.press('Escape'); await sleep(2500)
+  ok(!(await p.$('[data-panel="fold-map"]')) && (await A(p, 'zone')) === 'glade', '5. closed: still in the Glade')
+  await press5()
+  ok(await pickWilds(p, phone), "5. the Wilds' stop is picked")
   // the zone is polled every frame, and the reload below fires on the SAME frame it flips, while the veil is still up
   const through = await p.waitForFunction(() => (window as any).__ather?.zone?.() === 'wilds', { polling: 'raf', timeout: 90000 }).then(() => true, () => false)
   ok(through, `5. through the gate: the Wilds (zone ${await A(p, 'zone')})`)

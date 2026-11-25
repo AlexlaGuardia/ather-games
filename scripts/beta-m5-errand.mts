@@ -15,6 +15,7 @@
 //   PASS = bracelet carries a word, journal errand line struck, stage done, 0 page errors. A FAIL names the step (a finding).
 import { DOOR_ASK } from '../src/app/shimmer/open/continent/door-talk'   // M13 part 3: counters talk first
 import puppeteer from 'puppeteer-core'
+import { pickWilds } from './lib/glade-gate.mts'   // M172: E at the Glade's gate opens the fold map; the Wilds is a stop on it
 import { readFileSync, mkdirSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
 import { makeRegion, type RegionMeta } from '../src/app/shimmer/open/region'
@@ -155,7 +156,7 @@ await journal('1-after-greg')
 // does; the E at the gate stays real
 { const sx = GLADE_GATE.x + 2.4, sz = GLADE_GATE.z - 0.4; await A('gladeAt', sx, sz, Math.atan2(-(GLADE_GATE.x - sx), -(GLADE_GATE.z - sz))); await sleep(2500); legs.push('Greg -> the Glade gate: gladeAt warp (movement only; the walk is the unit test\'s)') }
 await aimAt(p, GLADE_GATE.x, GLADE_GATE.z, 1.0)
-await p.keyboard.press('KeyE'); await sleep(1500); await tick(3)
+await p.keyboard.press('KeyE'); await sleep(1500); await tick(3); await pickWilds(p); await tick(3)
 if (!(await poll(async () => { await tick(2, 0); return (await A('zone')) === 'wilds' }, 120000))) await fail('Glade: the gate out', `zone ${await A('zone')} after E at the Glade gate`)
 legs.push("Glade -> Wilds: the Glade's gate (real E), set down on the waymark stone")
 await sleep(3000); await p.mouse.click(500, 350); await sleep(500)

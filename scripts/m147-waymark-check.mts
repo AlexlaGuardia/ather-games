@@ -4,6 +4,7 @@
 // it, to Greg's stone, and to an OLD stone (the save's shape, planted at the feet) = beside it, facing it, and the keeper walks
 // off; ?waymark=<id> the same. The Glade's gate lands beside Greg's stone. Off the hand = no ghost. 0 page errors.
 import puppeteer, { type Page } from 'puppeteer-core'
+import { pickWilds } from './lib/glade-gate.mts'   // M172: E at the Glade's gate opens the fold map; the Wilds is a stop on it
 import { mkdirSync } from 'node:fs'
 import { GREG_WAYMARK, PLANT_AHEAD, PLANT_WHY, besideStone } from '../src/app/shimmer/open/ather/waymarks'
 import { STARTING_SQUARES } from '../src/app/shimmer/open/ather/plot'
@@ -87,7 +88,7 @@ try {
   // the Glade's gate
   await A('travel', { kind: 'glade' }); await zone('glade'); await sleep(3000)
   const gt = { x: -212, z: 212 }, sx = gt.x + 2.4, sz = gt.z - 0.4
-  await A('gladeAt', sx, sz, Math.atan2(-(gt.x - sx), -(gt.z - sz))); await poll(() => p.evaluate(() => /the gate \(the Wilds\)/.test(document.body.innerText)), 15000); await p.keyboard.press('KeyE')
+  await A('gladeAt', sx, sz, Math.atan2(-(gt.x - sx), -(gt.z - sz))); await poll(() => p.evaluate(() => /the gate \(fold map\)/.test(document.body.innerText)), 15000); await p.keyboard.press('KeyE'); await pickWilds(p)
   ok(await zone('wilds', 90000), "the Glade's gate"); await sleep(6000); await beside("the Glade's gate", GREG_WAYMARK)
   ok(errs.length === 0, `page errors: ${errs.length} ${errs.slice(0, 3).join(' | ')}`)
 } catch (e) { ok(false, `threw ${String(e).slice(0, 300)}`) } finally { await br.close() }

@@ -805,15 +805,27 @@ function AtherSliceGame() {
     // him (glade-cluster.ts gladeNewbornSpot), no longer at Moonwell in the open Wilds. The Glade needs no streaming.
     arriveGlade()
   }, [bornPending, arrive])
-  // M67 s1a: the Glade's gate (open from the start) is its one way out: straight through to the Wilds at Greg's waymark
-  // M67 s1b fix: pressed before the Wilds have loaded, the gate WAITS for them (one pending exit) instead of asking for a retry
+  // M67 s1a: out of the Glade by its gate to the Wilds at Greg's waymark. M172 (Alex 11-25): the gate opens the fold map like every
+  // other Ather gate, and THIS is what its Gregory's waymark stop does from the Glade (travel, below in gladeTravel).
+  // M67 s1b fix: picked before the Wilds have loaded, the exit WAITS for them (one pending exit) instead of asking for a retry
   const [gatePending, setGatePending] = useState(false)
   const leaveGlade = useCallback(() => {
-    if (!ww) { setGatePending(true); hudSay('The gate opens onto the Wilds...', 'info', 3); return }
+    if (!ww) { setPanel(null); setGatePending(true); hudSay('The gate opens onto the Wilds...', 'info', 3); return }
     const o = ww.offsetOf(GREG_WAYMARK.tile), x = GREG_WAYMARK.x + o.x, z = GREG_WAYMARK.z + o.z
     stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(GREG_WAYMARK.tile); arrive({ kind: 'wilds', tile: GREG_WAYMARK.tile }, besideStone({ x, z }, openAtRef.current, ww.heightAt), true); hudSay('The Wilds', 'zone') })
   }, [ww, arrive])
   useEffect(() => { if (gatePending && ww) { setGatePending(false); if (zone.kind === 'glade') leaveGlade() } }, [gatePending, ww, zone, leaveGlade])
+  const gladeTravel = useCallback((d: Dest) => {
+    setGatePending(false)   // the latest pick wins over an exit still waiting for the Wilds
+    if (zone.kind === 'glade' && d.kind === 'waymark' && d.w.id === GREG_WAYMARK.id && canTravel(d.w, infectedSet, infectionRef.current.lost).ok) leaveGlade(); else travel(d)
+  }, [zone, infectedSet, leaveGlade, travel])
+  // M172: E at the Glade's gate under an arrival veil opens the map once the veil is down, if the keeper still stands at the gate
+  const gateQueued = useRef(false)
+  useEffect(() => {
+    if (fade || !gateQueued.current) return
+    gateQueued.current = false
+    if (zone.kind === 'glade' && near.current?.kind === 'gate') setPanel(p => p ?? { kind: 'map', view: 'ather', travel: true })
+  }, [fade, zone])
   const gladeFall = arriveGlade
 
   // M84 s3b: the Wilds read published zone builds + tags the way the Glade does (zone-parts.ts / zone-tags.ts). The layer came with
@@ -969,7 +981,7 @@ function AtherSliceGame() {
       // veil after an arrival lasts seconds; the gate's E pressed in that window was the edesk's 'through the gate' red.
       const p = fadeRef.current ? null
         : tourRef.current?.talk ? null   // M32: Greg is talking at a stop; E answers him, nothing else
-        : n?.kind === 'gate' ? (zone.kind === 'glade' ? 'E · the gate (the Wilds)' : 'E · the gate (fold map)')
+        : n?.kind === 'gate' ? 'E · the gate (fold map)'
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
         : n?.kind === 'gfennel' ? moglinPrompt('fennel') : n?.kind === 'fennel' ? 'E · Fennel'
         : n?.kind === 'idlemog' || n?.kind === 'spirit' || n?.kind === 'settler' ? `E · ${n.name}`
@@ -1700,8 +1712,10 @@ function AtherSliceGame() {
       }
       const packTab = PACK_KEYS[e.code]   // I bag · J journal · P character: same key again closes; another switches tab
       if (packTab) { setPanel(p => p?.kind === 'pack' ? (p.tab === packTab ? null : { kind: 'pack', tab: packTab }) : p ? p : { kind: 'pack', tab: packTab }); return }
-      if (panel || fade) return
+      if (panel) return
       const n = near.current
+      if ((fade || fading.current) && e.code === 'KeyE' && !e.repeat && zone.kind === 'glade' && n?.kind === 'gate') { gateQueued.current = true; return }   // M172
+      if (fade) return
       // M45: E uses what is in hand first (a placing from the hand is caught earlier, by workshop's usePlacingKeys)
       if (e.code === 'KeyE' && !e.repeat) {
         const u = zone.kind === 'glade' ? null : heldUse(heldRef.current, zone.kind === 'plot' ? 'plot' : 'wilds')
@@ -1728,7 +1742,6 @@ function AtherSliceGame() {
         else if (n.kind === 'work' && guestRefuses(m => hudSay(m, 'info', 4))) return   // M61: a guest opens no station, store or piece
         else if (n.kind === 'work') { if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
         else if (n.kind === 'folk') { if (n.id) openGladeFolk(n.id); else setPanel({ kind: 'folk', s: n.s }) }
-        else if (n.kind === 'gate' && zone.kind === 'glade') leaveGlade()
         else if (n.kind === 'zone') {   // M114 s2: a tagged zone's E point
           const u = n.u, line = zoneSay(u); if (line) hudSay(line, 'info', 4)
           if (u.kind === 'shop') setPanel({ kind: 'shop', id: u.id })
@@ -1753,7 +1766,7 @@ function AtherSliceGame() {
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [panel, fade, zone, waymarks, ww, goHome, leaveGlade, tune, skipDays, allNodes, plantHere, liftWaymark, castSlot, errandToHold, eatHeld, drinkHeld])
+  }, [panel, fade, zone, waymarks, ww, goHome, tune, skipDays, allNodes, plantHere, liftWaymark, castSlot, errandToHold, eatHeld, drinkHeld])
 
   const zoneName = zone.kind === 'plot' ? 'Your plot' : zone.kind === 'glade' ? GLADE_ZONE_NAME : 'The Wilds'
   // Phone taps: only what applies here and now, each the key this page already handles.
@@ -1894,7 +1907,7 @@ function AtherSliceGame() {
       )}
       {panel?.kind === 'map' && (
         <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} infected={infectedSet} here={{ x: pos.current.x - hereOff.x, z: pos.current.z - hereOff.z }}
-          inWilds={zone.kind === 'wilds'} onTravel={travel} hasPlot={gardenOpen(loadTut())} tile={hereTile} pitstops={pitstops}
+          inWilds={zone.kind === 'wilds'} onTravel={gladeTravel} hasPlot={gardenOpen(loadTut())} tile={hereTile} pitstops={pitstops}
           nodes={(nodesByTile.get(hereTile) ?? []).filter(n => infectedSet.has(n.id)).map(n => ({ ...n, x: n.x - hereOff.x, z: n.z - hereOff.z }))} regions={regions}
           area={ww ? { world: ww, regionsByTile, cx: hereOff.x, cz: hereOff.z, tileOff, nodes: nodes.filter(n => Math.abs(n.x - hereOff.x) < 1600 && Math.abs(n.z - hereOff.z) < 1600), here: { x: pos.current.x, z: pos.current.z } } : undefined}
           onClose={() => setPanel(null)} quest={fsOn ? mapSpots(loadTut(), fsWorld.current()) : undefined}
