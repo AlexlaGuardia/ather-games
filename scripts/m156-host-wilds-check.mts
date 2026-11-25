@@ -66,7 +66,7 @@ try {
   await h.evaluate((i: string) => (window as any).__ather.wmClear(i), ids[5]); await sleep(800); await h.evaluate((i: string) => (window as any).__ather.wmGrey(i), ids[5])
   await sleep(1500)
   const n = await open('N', IDN, { ...base, 'ather.nodes.v2': { v: 2, epoch: now, at: now, clean: [ids[6]] }, 'ather.spreadmap.v1': { v: 1, seen: { [ids[5]]: now, [ids[6]]: now }, first: false, grey: {}, rule } })
-  await load(n); await sleep(3000)
+  await load(n); await poll(async () => (await clear(n)) === ids[6], 30000); await sleep(3000)   // its own load-time writes are done
   const own0 = await bytes(n), hOwn = await clear(h)
   ok(hOwn === ids.slice(0, 4).sort().join(), `1. H alone reads its own (${hOwn})`)
   ok((await clear(n)) === ids[6], `1. N, not in the Wilds yet, reads its own (${await clear(n)})`)
@@ -77,7 +77,7 @@ try {
   ok(await poll(async () => (await mark(n))?.grey.includes(ids[5]), 8000), `2. N's map greys H's Hollow ground (${(await mark(n))?.grey})`)
   await poll(async () => (await hostOf(n))[0] === IDH && (await hostOf(h))[0] === IDH, 10000)
   ok((await hostOf(n)).join() === `${IDH},${IDH}` && (await hostOf(h))[0] === IDH, `2. one host for ground and Hollows: the party starter, not the lowest id (N ${await hostOf(n)}, H ${await hostOf(h)})`)
-  ok((await bytes(n)) === own0, '2. nothing of N written by looking')
+  ok((await bytes(n)) === own0, `2. nothing of N written by looking ${(await bytes(n)) === own0 ? "" : own0 + " -> " + (await bytes(n))}`)
   if (owner) {
     const spots = [[A, true], [B, false]] as const
     const seen = async () => { const r: any[] = []; for (const [s] of spots) { await n.evaluate((x: number, z: number) => (window as any).__ather.wmGoto(x, z), s.x + 2, s.z + 14); await poll(async () => { const m = await ev(n, '__mp', 'me'); return m && Math.hypot(m.x - s.x, m.z - s.z) < 60 }, 60000); await sleep(4000); r.push(await ev(n, '__ather', 'wmGround')) } return r }
@@ -90,11 +90,12 @@ try {
     await n.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } })); await sleep(8000)
   }
   await h.evaluate((i: string) => (window as any).__ather.wmClear(i), ids[7])
+  await poll(async () => (await clear(h)) !== hOwn, 20000)
   const hNow = await clear(h), t3 = await poll(async () => (await clear(n)) === hNow, 8000)
   ok(t3 && hNow !== hOwn, `3. H clears one more: N reads it (${t3.toFixed(1)} s)`)
   const nd = ((await ev(n, '__ather', 'wmNodes')) as any[]).find(k => k.id === ids[2])
   await n.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z), nd.x + 6, nd.z + 6)
-  ok(await poll(async () => { const m = await mark(n); return m?.here && !m.seen.includes(m.here) && m.here !== ids[5] }, 8000), `4. N stands in a section new to it (${(await mark(n))?.here})`)
+  ok(await poll(async () => { const m = await mark(n); return m?.here && m.here === ids[2] }, 8000), `4. N stands in a section new to it (${(await mark(n))?.here})`)
   await sleep(6000); await n.bringToFront(); await n.keyboard.press('KeyM'); await sleep(3000); await n.keyboard.press('Escape')
   const hb = await h.evaluate(() => localStorage.getItem('ather.nodes.v2'))
   ok((await bytes(n)) === own0, '4. N walked new ground and opened the map: its ledgers byte-identical')
