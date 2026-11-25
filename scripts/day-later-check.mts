@@ -9,7 +9,7 @@ import { fakeClock } from './lib/clock.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), only = flag('--only', '').split(',').filter(Boolean).map(Number), KEY = process.env.OWNER_KEY ?? ''
 const H = 3_600_000, sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
+const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-blink-features=AutomationControlled',   /* PostHog drops a robot's events; a player's are what is asked about */  '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 type Clock = 'real' | 'all' | 'now-only' | 'jump'
 type Row = { n: number; name: string; age: number; clock: Clock; skip: number; recorder: boolean; owner: boolean; agree: boolean }
 const ROWS: Row[] = [
@@ -33,8 +33,7 @@ const older = (s: string, ms: number) => s.replace(/(?<!\d)\d{13}(?!\d)/g, d => 
 async function page(o: { recorder: boolean; owner: boolean; seed?: Seed; clock: Clock; skip: number }) {
   const ctx = await br.createBrowserContext(), p = await ctx.newPage(), c = { rec: 0, replay: 0 }
   await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true })
-  await p.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36', { brands: [{ brand: 'Chromium', version: '138' }], platform: 'Android', platformVersion: '14', architecture: '', model: 'Pixel 8', mobile: true } as any)
-  await p.evaluateOnNewDocument(() => Object.defineProperty(Object.getPrototypeOf(navigator), 'webdriver', { get: () => false }))   // PostHog drops a robot's events; a player's are what is asked about
+  await p.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36')
   await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.setRequestInterception(true)
   p.on('request', r => {
@@ -89,9 +88,10 @@ try {
     const ms = r.age * H, aged: Seed = { ls: Object.fromEntries(Object.entries(seed.ls).map(([k, v]) => [k, older(v, ms)])), ck: seed.ck.map(({ name, value, domain, path, secure, sameSite, expires }) => ({ name, value: older(value, ms), domain, path, secure, sameSite, ...(expires > 0 ? { expires } : {}) })) }
     const t = await page({ ...r, seed: aged }); let v = await visit(t.p)
     if (v === 'ok' && r.clock === 'jump') { await t.p.evaluate((x: number) => (window as any).__clock(x), r.skip * H); v = await play(t.p, 60) }
+    const ck = v === 'ok' ? await t.p.evaluate((n: number) => [Date.now(), new Date().getTime(), performance.timeOrigin + performance.now()].map(x => ((x - n) / 3_600_000).toFixed(1)).join(' / '), Date.now()) : '?'
     const st = v.startsWith('HANG') ? await stack(t.p) : ''
     const good = v === 'ok' && (!r.agree || !r.recorder || t.c.replay > 0); if (r.agree && !good) bad++
-    console.log(`${good ? '✓' : r.agree ? '✗' : '·'} ${r.n}. ${r.agree ? 'agree' : 'split'} | ${r.owner ? 'owner' : 'player'} | recorder ${r.recorder ? 'on' : 'blocked'} (asked ${t.c.rec}, replay posts ${t.c.replay}) | ${r.name}: ${v}${v === 'ok' && !good ? ' BUT the recorder sent nothing' : ''}${st ? `\n      ${st}` : ''}`)
+    console.log(`${good ? '✓' : r.agree ? '✗' : '·'} ${r.n}. ${r.agree ? 'agree' : 'split'} | ${r.owner ? 'owner' : 'player'} | recorder ${r.recorder ? 'on' : 'blocked'} (asked ${t.c.rec}, replay posts ${t.c.replay}) | clocks h ahead (Date.now / new Date / performance) ${ck} | ${r.name}: ${v}${v === 'ok' && !good ? ' BUT the recorder sent nothing' : ''}${st ? `\n      ${st}` : ''}`)
     // a hung tab would not close: its context is dropped without waiting
     await Promise.race([t.ctx.close().catch(() => {}), sleep(10000)])
   }
