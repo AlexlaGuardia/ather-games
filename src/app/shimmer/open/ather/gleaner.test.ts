@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { folkOf, seasonNames, seasonRoster, folkCount, RESERVED_NAMES, FOLK_MAX, SEASON_SETTLEMENTS } from './settlement-folk'
 import { burrfolkOf, freeNames, stallSpot, BURR_LABEL, BURR_KIND } from './burrfolk'
-import { GLEANER_LINES, GLEANER_ASK, GLEANER_POST, GLEANER_NAME, BURR_CAMP, CAMP_LABEL, campStalls, gleanerMem, _resetGleaner, afterSwap, gleanerLeave, isGleaner } from './gleaner'
+import { GLEANER_LINES, GLEANER_ASK, GLEANER_POST, GLEANER_NAME, BURR_CAMP, CAMP_LABEL, campStalls, gleanerMem, _resetGleaner, afterBuy, gleanerLeave, isGleaner } from './gleaner'
 import { folkTalk, helloFor, _resetHeard, ASK, type FolkTalkState, type FolkTalkActs } from './folk-talk'
 import { freshTrust } from './settlement-folk'
 import { makeVoids, type IndexLike } from './wilds-voids'
@@ -51,7 +51,9 @@ ok(/✅ SIGNED 2026-11-23/.test(batch), 'the batch is signed')
 const d = batch.slice(batch.indexOf('### D1.'), batch.indexOf('### D5.'))
 const said = (trigger: string) => new RegExp(`\\[trigger: gleaner:${trigger.replace('.', '\\.')} \\|[^\\]]*\\]\\n(?:\\[SCENE:[^\\n]*\\]\\n)?GLEANER: (.+)`).exec(d)?.[1]
 const want: [keyof typeof GLEANER_LINES, string][] = [['stall', 'stall'], ['stallEmpty', 'stall.empty'], ['camp', 'camp'], ['campRepeat', 'camp.repeat'], ['ask', 'ask']]
-for (const [k, t] of want) ok(said(t) === GLEANER_LINES[k], `${k} = signed ${t} (${said(t)})`)
+const b25 = readFileSync('/root/athernyx/CANON/game/shimmer-lines-batch-2026-11-25b.md', 'utf8'), new25 = (t: string) => new RegExp(`\\| \`gleaner:${t}\`[^|]*\\|[^|]*\\| \\*\\*(.+?)\\*\\* \\|`).exec(b25)?.[1]
+ok(/^\*\*✅ SIGNED 2026-11-25/.test(b25) && new25('stall') === GLEANER_LINES.stall && new25('camp') === GLEANER_LINES.camp, `stall + camp = signed 25b A (${new25('stall')} | ${new25('camp')})`)
+for (const [k, t] of want) if (k !== 'stall' && k !== 'camp') ok(said(t) === GLEANER_LINES[k], `${k} = signed ${t} (${said(t)})`)
 ok(d.includes(`GLEANER: ${GLEANER_LINES.greet}\n`) && d.includes(`GLEANER: ${GLEANER_LINES.greetRepeat}\n`), 'D1 greet + repeat are the signed text')
 ok(d.includes(`> ${GLEANER_ASK.have}\n`) && d.includes(`> ${GLEANER_ASK.look}\n`), 'D1 answers are the signed text')
 ok(Object.values(GLEANER_LINES).every(l => !l.includes('—')), 'no em dashes (Ather side)')
@@ -64,7 +66,7 @@ ok(folkOf(GLEANER_POST, 1).length === 0, 'the post is no settlement: no folk')
 ok(Math.hypot(stallSpot(GLEANER_POST).x - GLEANER_POST.x, stallSpot(GLEANER_POST).z - GLEANER_POST.z) < 0.01, 'the stall stands on the post')
 _resetHeard(); _resetGleaner()
 let st: FolkTalkState = helloFor(post.id), closed = 0, swaps: string[] = []
-const act: FolkTalkActs = { go: s => { st = s }, give: () => {}, recruit: () => { throw new Error('Gleaner never follows') }, bye: () => { closed++ }, barter: k => { swaps.push(k) } }
+const act: FolkTalkActs = { go: s => { st = s }, give: () => {}, recruit: () => { throw new Error('Gleaner never follows') }, bye: () => { closed++ }, buy: k => { swaps.push(k) } }
 const talk = () => folkTalk({ folk: [], home: [], trust: freshTrust(), have: () => 0, room: 9, burr: post }, st, act)
 let node = talk()
 ok(node.line === GLEANER_LINES.greet, `first hello = D1 greet (${node.line})`)
@@ -76,7 +78,7 @@ ok(st.screen === 'hello' && node.line === GLEANER_LINES.greet, 'Back within the 
 node.options[0].pick(); node = talk()
 ok(node.line === GLEANER_LINES.stall && node.options.some(o => o.label === BURR_LABEL.swap(post.stock[0])), 'stall = D2 + a swap per row')
 node.options[0].pick(); ok(swaps[0] === post.stock[0], 'a swap answer asks for that row')
-ok(afterSwap(gleanerMem) === GLEANER_LINES.camp && afterSwap(gleanerMem) === null, 'the first swap tells the camp, once')
+ok(afterBuy(gleanerMem) === GLEANER_LINES.camp && afterBuy(gleanerMem) === null, 'the first swap tells the camp, once')
 ok(gleanerLeave(gleanerMem) === GLEANER_LINES.campRepeat, 'then the leave bark is camp.repeat')
 st = helloFor(post.id); node = talk()
 ok(node.line === GLEANER_LINES.greetRepeat, `second visit after the camp was told = D1 repeat (${node.line})`)
@@ -85,7 +87,7 @@ _resetHeard(); _resetGleaner(); st = helloFor(post.id); talk().options[2].pick()
 ok(closed === 1 && gleanerLeave(gleanerMem) === null, '"Just looking." leaves, no camp bark yet')
 st = helloFor(post.id); node = talk(); const again = talk()
 ok(node.line === GLEANER_LINES.camp && again.line === GLEANER_LINES.camp, 'second visit, no swap yet = D3 camp (a rebuilt node says the same)')
-node.options[0].pick(); ok(gleanerMem.campTold && afterSwap(gleanerMem) === null, 'told on the answer; a later swap does not repeat it')
+node.options[0].pick(); ok(gleanerMem.campTold && afterBuy(gleanerMem) === null, 'told on the answer; a later swap does not repeat it')
 st = helloFor(post.id); ok(talk().line === GLEANER_LINES.greetRepeat, 'third visit = D1 repeat')
 
 // ── 4. the camp: out in the Wilds on the Glade side, reachable from the arrival, on land, off every settlement ──

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Dewl: a blue faceted teardrop, tiny bubbles inside. Code-drawn. -->
+  <ellipse cx="16" cy="28.6" rx="7.5" ry="1.8" fill="#000" opacity=".25"/>
+  <path d="M16 2.6 L21.6 10.8 L24.6 17.6 L23.4 23.6 L19.4 27.4 L14.2 27.8 L9.4 25 L7.4 19.4 L8.8 13.2 Z" fill="#3fb0e2" stroke="#071226" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M16 2.6 L21.6 10.8 L24.6 17.6 L20 15.2 L17.4 9 Z" fill="#1d5fae"/><path d="M24.6 17.6 L23.4 23.6 L19.6 21.4 L20 15.2 Z" fill="#2f8fd0"/>
+  <path d="M23.4 23.6 L19.4 27.4 L17.4 23.8 L19.6 21.4 Z" fill="#153f8c"/><path d="M19.4 27.4 L14.2 27.8 L13 24 L17.4 23.8 Z" fill="#8fe6f4"/>
+  <path d="M14.2 27.8 L9.4 25 L13 24 Z" fill="#153f8c"/><path d="M9.4 25 L7.4 19.4 L10.8 19.6 L13 24 Z" fill="#59c8ec"/>
+  <path d="M7.4 19.4 L8.8 13.2 L11.6 14.4 L10.8 19.6 Z" fill="#1d6fb8"/><path d="M8.8 13.2 L16 2.6 L14.4 9 L11.6 14.4 Z" fill="#8ff0fa"/>
+  <path d="M16 2.6 L17.4 9 L20 15.2 L19.6 21.4 L17.4 23.8 L13 24 L10.8 19.6 L11.6 14.4 L14.4 9 Z" fill="#62cdee"/><path d="M15.4 5 L14.6 9.4 L11.9 17.2 L11.4 14.6 L13.6 9 Z" fill="#fff" opacity=".95"/>
+  <g fill="#eafcff"><circle cx="15" cy="21" r=".9"/><circle cx="17.6" cy="20" r=".6"/><circle cx="16.4" cy="15.6" r=".5"/><circle cx="18.2" cy="17" r=".4"/><circle cx="13.8" cy="18" r=".35"/></g>
+</svg>

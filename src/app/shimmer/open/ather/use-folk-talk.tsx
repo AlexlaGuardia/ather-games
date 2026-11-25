@@ -19,10 +19,10 @@ import { builtFolkSpots } from './settlement-lots'   // M39 s3: where a Moglin i
 import { keeperNow } from './network-scene'
 import { MOGLIN_HEIGHT } from '../shared/moglin-model'
 import { diggerTrade, DIGGER_LABEL } from './digger-trade'
-import { burrfolkOf, stallSpot, barter, isBurr, BURR_LABEL, BURRFOLK_BARKS } from './burrfolk'
+import { burrfolkOf, stallSpot, buyWare, isBurr, BURR_LABEL, BURRFOLK_BARKS } from './burrfolk'
 import type { InfectTalk } from './use-infection'
 import type { Say } from './infect-tell'
-import { isGleaner, gleanerMem, afterSwap, gleanerLeave } from './gleaner'
+import { isGleaner, gleanerMem, afterBuy, gleanerLeave } from './gleaner'
 
 export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number) => number, onClose: () => void, /** M128: its settlement is infected, trade stopped */ stopped = false, /** M128 s2: what the infections have folk say, and who got away to here (null = off) */ infect: InfectTalk | null = null) {
   const phone = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches   // M46 card sizing; page.tsx untouched
@@ -65,11 +65,11 @@ export function useFolkTalk(s: Settlement | null, ground: (x: number, z: number)
         if (burr && st.fid === burr.id) { const l = isGleaner(burr.id) ? gleanerLeave(gleanerMem) : BURRFOLK_BARKS.leave; if (l) hudSay(`${burr.name}: ${l}`, 'info', 4) }
         onClose()
       },
-      barter: k => { if (stopped) return   // M112: one swap at the Burrfolk's stall (refused = nothing changes, a line says why). No coin moves.
-        const r = barter(getInv(), k)
+      buy: k => { if (stopped) return   // M159: one sale at the Burrfolk's stall (refused = nothing changes, a line says why). No coin moves.
+        const r = buyWare(getInv(), k)
         if (!r.ok) { hudSay(r.why === 'short' ? BURR_LABEL.short(k) : BURR_LABEL.full(k), 'info', 4); return }
         setInv(r.inv); hudSay(BURR_LABEL.done(k), 'item', 4)
-        if (burr && isGleaner(burr.id)) { const l = afterSwap(gleanerMem); if (l) setSt({ fid: burr.id, screen: 'said', line: l, rep: st.rep, alt: st.alt }) }   // D3: the first swap tells of the camp
+        if (burr && isGleaner(burr.id)) { const l = afterBuy(gleanerMem); if (l) setSt({ fid: burr.id, screen: 'said', line: l, rep: st.rep, alt: st.alt }) }   // D3: the first purchase tells of the camp
       },
       teach: () => {
         const next = yarrowTeach(getInv())

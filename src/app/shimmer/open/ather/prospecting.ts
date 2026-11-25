@@ -29,6 +29,7 @@ import { perkFires, activeCompanion, perkLabel, GEM_DROP_CHANCE, GEM_ITEM } from
 import { gardenKey } from '@/lib/keeper-local'
 import { ownerSlot } from '../shared/owner-store'
 import { isKeeperNode, onKeeperNodes, setSpent, spentUntil, waitClock } from './keeper-nodes'   // M153 s1b
+import { withDewls } from './dewl'
 import { KEEPSTONE_FIND, keepstoneFor } from './furniture'
 
 /** what stands on the rock. `egg` = a Wooded Trails element node: which element is only known when it shatters. */
@@ -135,7 +136,7 @@ export function minePlan(kind: CrystalKind, rand: () => number = Math.random): {
   }
   // now and then a crystal node gives up an old UNIQUE Keepstone with its crystal still set (canon 5a20b8f; furniture.ts)
   if (rand() < (KEEPSTONE_FIND[CRYSTAL_ITEM[found]] ?? 0)) drops.push({ id: keepstoneFor(CRYSTAL_ITEM[found]), n: 1 })
-  return { drops, found, perk }
+  return { drops: withDewls(drops, tier), found, perk }   // M159: always, beside the usual drop
 }
 /** The node is done: XP lands on Prospecting and it stays spent till `until` (M136: this cycle's reset, counted from the first touch). */
 export function mineCommit(kind: CrystalKind, id: string, now = Date.now(), until = now + RESPAWN_MS[TIER[kind]]): { xp: number; levelUp: number | null } {

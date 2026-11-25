@@ -111,7 +111,7 @@ ok(!isLit(w, gone), 'lost: dark'); ok(isLit(w, none) && isLit(w, new Set()), 'sa
 ok(isLit({ ...w, settlement: 's1-3' }, dark) && isLit({ ...w, settlement: undefined }, dark), 'no other waymark')
 ok(!canPlant([], { tile: 't', x: 0, z: 0, biome: BIOME.shore, grounded: true, swimming: false, settlement: null, ground: groundOf(infectId('s1-2'), dark) }).ok, 'no planting on held ground')
 // ── trade stopped, folk still talk ──
-{ const tr = net.settlements.map(p => ({ p, f: folkOf(p, 1) })), acts: FolkTalkActs = { go: () => {}, give: () => {}, recruit: () => {}, bye: () => {}, trade: () => {}, barter: () => {} }
+{ const tr = net.settlements.map(p => ({ p, f: folkOf(p, 1) })), acts: FolkTalkActs = { go: () => {}, give: () => {}, recruit: () => {}, bye: () => {}, trade: () => {}, buy: () => {} }
   const D = tr.find(q => q.f.some(f => f.profession === 'digger'))!, d = D.f.find(f => f.profession === 'digger')!, E = tr.find(q => q.f.some(f => f.employed))!, e = E.f.find(f => f.employed)!, b = burrfolkOf(E.p, 1, E.f)!
   const ls = (q: typeof E, fid: string, screen: 'hello' | 'needs' | 'stall', stopped?: boolean) => folkTalk({ folk: q.f, home: q.f, trust: freshTrust(), have: () => 99, room: 3, burr: b, ...(stopped === undefined ? {} : { stopped }) }, { fid, screen }, acts).options.map(o => o.label)
   ok(ls(D, d.id, 'hello').includes(DIGGER_LABEL.trade) && !ls(D, d.id, 'hello', true).includes(DIGGER_LABEL.trade), 'the Digger\'s barter stops')

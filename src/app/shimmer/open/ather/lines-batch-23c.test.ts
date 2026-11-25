@@ -4,7 +4,7 @@
 // Needs /root/athernyx; elsewhere it says SKIP.   npx tsx src/app/shimmer/open/ather/lines-batch-23c.test.ts
 import { existsSync, readFileSync } from 'node:fs'
 import { BLOOMED_SPIRIT_LINE, planterBoxHint } from './planter-lines'
-import { BARTER, BURR_LABEL, type BarterKey } from './burrfolk'
+import { WARES, BURR_LABEL, type WareKey } from './burrfolk'
 import { itemDef } from '../shared/inventory'
 
 const BATCH = '/root/athernyx/CANON/game/shimmer-lines-batch-2026-11-23c.md'
@@ -41,14 +41,11 @@ ok(/planterBoxHint\(FURNITURE\.spirit_planter\.name/.test(src), 'the planter_box
 // B kept: the lift / set-down lines
 for (const k of ['lift, seed in the soil', 'set back down']) ok(src.includes(B.get(k)!.main), `B kept "${k}": "${B.get(k)!.main}" in the build`)
 
-// ── C: the barter labels, X / Y = the row's own items ──
-const k0 = Object.keys(BARTER)[0] as BarterKey, w = BARTER[k0].want, p = BARTER[k0].product
+// ── C: the stall's labels (swap + short = batch 11-25b now: burrfolk.test.ts) ──
+const k0 = Object.keys(WARES)[0] as WareKey, p = WARES[k0].product
 const nm = (id: string) => itemDef(id).name
-const fill = (t: string) => t.replace(/\b2 X\b/, `${w.n} ${nm(w.id)}`).replace(/\b1 Y\b/, `${p.n} ${nm(p.id)}`).replace(/\bX\b/, nm(p.id))
 ok(BURR_LABEL.look === C.get('panel open / title')!.main, `title: "${BURR_LABEL.look}"`)
-ok(BURR_LABEL.swap(k0) === fill(C.get('trade row')!.main), `trade row: "${BURR_LABEL.swap(k0)}" vs "${fill(C.get('trade row')!.main)}"`)
 ok(BURR_LABEL.done(k0) === C.get('bag count tag')!.main.replace('X', nm(p.id)), `bag tag: "${BURR_LABEL.done(k0)}"`)
-ok(BURR_LABEL.short(k0) === C.get('short on X')!.main.replace('2 X', `${w.n} ${nm(w.id)}`), `short: "${BURR_LABEL.short(k0)}"`)
 ok(BURR_LABEL.full(k0) === C.get('bag full')!.main.replace('X', nm(p.id)), `bag full: "${BURR_LABEL.full(k0)}" vs canon "${C.get('bag full')!.main}"`)
 
 // ── A: all kept; each MAIN is in the build ──

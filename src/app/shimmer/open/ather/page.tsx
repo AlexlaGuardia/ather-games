@@ -168,6 +168,7 @@ import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../
 import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
 import { DeathPack, fallAndDrop, packLying } from './death-pack'
 import { dropLoot, lootSpots, pilesOf } from './ground-loot'   // BETA M141
+import { withDewls } from './dewl'   // M159
 import { GroundLoot } from './ground-loot-view'
 import { WaymarkGhost } from './waymark-ghost'   // M147
 import { useOpeningChain, useChain, chainDeath, chainGateOpen, chainFlip } from '../shared/opening-chain-store'   // BETA M73: Ather to Nyx
@@ -1188,7 +1189,7 @@ function AtherSliceGame() {
     const own = isKeeperNode(ch.w.id), hAt = own ? gladeShape.ground : (x: number, z: number) => ww?.heightAt(x, z) ?? -Infinity
     const V = voidsRef.current, dry = (x: number, z: number) => { const y = ww?.heightAt(x, z) ?? -Infinity; return Number.isFinite(y) && !ww!.shape.water(x, y, z, x, y, z).some(b => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1 && y < b.y1) }
     const free = (x: number, z: number) => own ? hAt(x, z) > 0.1 && !bodyBlocked((x0, z0, x1, z1) => gladeShape.solids(x0, -50, z0, x1, 90, z1), x, hAt(x, z), z, 0.35) : !!ww && ww.walkable(x, z, 0.35) && (V?.weight(x, z) ?? 0) < FALL_LIP / 2 && dry(x, z) && !bodyBlocked(wildsStructures, x, ww.heightAt(x, z), z, 0.35)
-    const feet = { x: px, y: dollDrive.current.y, z: pz }, yieldNow = ch.w.drops.filter(d => d.n > 0)
+    const feet = { x: px, y: dollDrive.current.y, z: pz }, yieldNow = (ch.node === 'crystal' ? withDewls(ch.w.drops, CRYSTAL_TIER[ch.c.kind]) : ch.w.drops).filter(d => d.n > 0)
     dropLoot(ch.node, ch.w.id, fin.until, yieldNow, lootSpots(at, feet, pilesOf(yieldNow).length, free, hAt))
     knock(ch, true)
     const x = ch.node === 'tree' ? pruneCommit(ch.t.kind, ch.t.id, Date.now(), fin.until) : mineCommit(ch.c.kind, ch.c.id, Date.now(), fin.until)

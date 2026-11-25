@@ -8,7 +8,7 @@
 // stays the hello (lark: the only place a keeper ever hears a Moglin's dream). Checks import these, never retype them.
 import { STALL_STOPPED } from './infect-lines'
 import { DIGGER_LABEL } from './digger-trade'
-import { isBurr, BURRFOLK_BARKS, BURR_LABEL, type Burrfolk, type BarterKey } from './burrfolk'
+import { isBurr, BURRFOLK_BARKS, BURR_LABEL, type Burrfolk, type WareKey } from './burrfolk'
 import { isGleaner, gleanerTalk, gleanerMem } from './gleaner'
 import { isGlade, GLADE_STAYS, gladeHello } from './moonwell-glade'
 import type { TalkNode } from '../shared/npc-talk'
@@ -62,8 +62,8 @@ export interface FolkTalkActs {
   teach?: (answer: 'pointed' | 'silent') => boolean
   /** M108 s3: barter with a Digger (digger-trade.ts): planks for a shard. The hook applies it (or says why not). */
   trade?: (f: Folk) => void
-  /** M112: one swap at the Burrfolk's stall (burrfolk.ts › barter). The hook applies it (or says why not). */
-  barter?: (k: BarterKey) => void
+  /** M159: one sale at the Burrfolk's stall (burrfolk.ts › buyWare). The hook applies it (or says why not). */
+  buy?: (k: WareKey) => void
 }
 
 export const folkStart = (home: Folk[]): FolkTalkState => (home[0] ? helloFor(home[0].id) : { fid: '', screen: 'hello' })
@@ -128,18 +128,18 @@ export function folkTalk(c: FolkTalkCtx, st: FolkTalkState, act0: FolkTalkActs):
   return { line: said ? said[beat] : hello, options: [...trade, ...(f.employed && !ok && !c.stopped ? [{ label: ASK.needs, pick: () => act.go({ fid: f.id, screen: 'needs' }) }] : []), askRoom, inspect, ...(next ? [next] : []), bye] }
 }
 
-/** M112: the Burrfolk's stall. Greet (signed bark), "Have a look" opens the stall (signed stall bark + one swap per stock row).
+/** M112: the Burrfolk's stall. Greet (signed bark), "Have a look" opens the stall (signed stall bark + one sale per stock row).
  *  ★ No room ask, no needs, no card: a Burrfolk never follows (canon), so no answer here can reach recruit(). */
 export function burrTalk(c: FolkTalkCtx, b: Burrfolk, st: FolkTalkState, act: FolkTalkActs): FolkTalkNode {
   if (isGleaner(b.id)) return gleanerTalk(b, st.screen === 'stall' || st.screen === 'said' ? st.screen : 'hello', st.line, st.rep ?? 0, gleanerMem, {   // M112 s2: Gleaner's own signed lines (D1-D4)
     go: (screen, line) => act.go({ fid: b.id, screen, line, rep: st.rep, alt: st.alt }),   // same visit: Back is not a second visit
-    barter: k => act.barter?.(k), bye: act.bye,
+    buy: k => act.buy?.(k), bye: act.bye,
   }, { swap: BURR_LABEL.swap, back: ASK.back, bye: ASK.bye, room: ASK.room })
   const bye = { label: ASK.bye, pick: act.bye }
   const first = c.home[0], others = first ? [{ label: ASK.others, pick: () => act.go(helloFor(first.id)) }] : []
   if (st.screen === 'stall' && !c.stopped) return {
     line: BURRFOLK_BARKS.stall,
-    options: [...b.stock.map(k => ({ label: BURR_LABEL.swap(k), pick: () => act.barter?.(k) })), { label: ASK.back, pick: () => act.go({ fid: b.id, screen: 'hello' }) }, bye],
+    options: [...b.stock.map(k => ({ label: BURR_LABEL.swap(k), pick: () => act.buy?.(k) })), { label: ASK.back, pick: () => act.go({ fid: b.id, screen: 'hello' }) }, bye],
   }
   return { line: c.stopped ? STALL_STOPPED : BURRFOLK_BARKS.greet, options: [...(c.stopped ? [] : [{ label: BURR_LABEL.look, pick: () => act.go({ fid: b.id, screen: 'stall' as const }) }]), ...others, bye] }
 }

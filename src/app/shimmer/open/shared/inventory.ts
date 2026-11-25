@@ -16,6 +16,7 @@ import { FURNITURE, KEEPSTONES } from '../ather/furniture'
 import { SEED_IDS, SEED_NAME, SEED_BLURB, seedIcon } from '../ather/seed-items'
 import { MEATS, DISHES } from '../ather/cooking'
 import { POTIONS } from '../ather/alchemy'
+import { DEWL, DEWL_FIRST } from '../ather/dewl'
 import { CROPS, GRADES, seedId, cropId, parseGraded } from '../ather/farming'
 import { alcName, isAlcPotion, effectOf, INTERMEDIATES, ALC_POTIONS, alcId, potionId } from '../ather/alchemy-set'
 
@@ -101,6 +102,8 @@ const PROSPECTING: Record<string, ItemDef> = {
 for (const [id, def] of Object.entries(PROSPECTING)) def.icon = `/open/icons/${id.replace(/_/g, '-')}.svg`
 for (const id of Object.keys(PROSPECTING)) ITEM_GROUP[id] = 'prospecting'
 Object.assign(OPEN_ITEMS, PROSPECTING)
+// DEWLS (M159, ather/dewl.ts): what Burrfolk stalls take. NO ITEM_GROUP on purpose: no room keeps it, no bench takes it, no grade.
+OPEN_ITEMS[DEWL] = { name: 'Dewl', blurb: DEWL_FIRST, icon: '/open/icons/dewl.svg', stack: 99, kind: 'material' }
 // BUILDING PARTS (M37 slice 4, Alex 11-20: "planks and bricks that can be processed at a room"): refined at the Stonery from
 //    blankstone and a raw mana shard (ather/furniture.ts STONE_REFINE), spent by a house plan (ather/plot-bom.ts). Plain words.
 OPEN_ITEMS.stone_brick = { name: 'Stone Brick', blurb: 'A blankstone, cut square. Houses are laid from them.', icon: '', stack: 99, kind: 'material' }
