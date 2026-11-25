@@ -39,7 +39,13 @@ try {
   { const gate = { x: -212, z: 212 }, sx = gate.x + 2.4, sz = gate.z - 0.4
     await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), sx, sz, Math.atan2(-(gate.x - sx), -(gate.z - sz)))
     await p.waitForFunction(() => /the gate \(fold map\)/.test(document.body.innerText), { timeout: 15000 }).catch(() => {})
-    await p.keyboard.press('KeyE'); await pickWilds(p) }
+    // 11-25 (play-M177): the creator ('Who are you?') can come up late, over the gate or the travel: close it, try the gate again
+    for (let t = 0; t < 8 && !(await p.evaluate(() => (window as any).__ather.zone() === 'wilds')); t++) {
+      await p.evaluate(() => document.querySelector<HTMLElement>('[data-creator-done]')?.click()); await sleep(800)
+      if (await p.$('[data-panel="fold-map"]')) await pickWilds(p).catch(() => false)
+      else { await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), sx, sz, Math.atan2(-(gate.x - sx), -(gate.z - sz))); await sleep(1500); await p.keyboard.press('KeyE') }
+      await sleep(3000)
+    } }
   await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds', { timeout: 90000 })
   console.log('in the Wilds')
   const C = (f: string) => p.evaluate(`(() => { const A = window.__ather, C = A.combat(); ${f} })()`) as Promise<any>

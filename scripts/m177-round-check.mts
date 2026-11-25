@@ -80,22 +80,20 @@ try {
   }
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
   await clear()
-  // 3. per-gun shots (look only): each gun's rounds as that gun fires them, a fan off the eye, mid-flight
+  // 3. per-gun shots (look only): each gun's needles laid along the view at 1.2-14 m, held near still, each grown as far as a round fired from
+  //    the eye has flown to that spot (the streak's size reads how far it has flown, not how fast), so one frame shows what the gun draws up close and far off. The play overlay is hidden for it.
   if (shots) {
-    const BEFORE: Record<string, number> = { repeater: 40, spitter: 34, backbone: 46, roar: 38, lance: 54, 'charred-rifle': 70 }
-    const AFTER: Record<string, number> = { repeater: 72, spitter: 62, backbone: 82, roar: 68, lance: 100, 'charred-rifle': 125 }
-    const V = shots === 'before' ? BEFORE : AFTER
-    for (const gun of Object.keys(V)) {
+    await p.evaluate(() => { for (const e of document.querySelectorAll<HTMLElement>('div')) if (/^ATHER · YOUR PLOT/.test((e.innerText ?? '').trim()) && e.getBoundingClientRect().height < 500) e.style.display = 'none' })
+    for (const gun of ['repeater', 'spitter', 'backbone', 'roar', 'lance', 'charred-rifle']) {
       await clear()
-      for (let k = 0; k < 6; k++) {
-        await C(`const s = A.state(), yaw = A.yaw(), ex = s.px, ey = s.py + 1.5, ez = s.pz, pel = '${gun}' === 'roar' ? 9 : 1
-          for (let j = 0; j < pel; j++) { const a = yaw + (j - (pel - 1) / 2) * 0.03 + 0.04, dx = -Math.sin(a), dz = -Math.cos(a), dy = -0.03
-            const x0 = ex + dx * 0.4, y0 = ey - 0.08, z0 = ez + dz * 0.4
-            C.rounds.push({ x: x0, y: y0, z: z0, vx: dx * ${V[gun]}, vy: dy * ${V[gun]}, vz: dz * ${V[gun]}, life: 1, dmg: 0, crit: 0, from: { x: x0, y: y0, z: z0 }, gun: '${gun}' }) }`)
-        await sleep(90)
-      }
+      await C(`const s = A.state(), yaw = A.yaw(), ex = s.px, ey = s.py + 1.5, ez = s.pz, pel = '${gun}' === 'roar' ? 5 : 1
+        for (const d of [1.2, 2, 3.5, 6, 10, 14]) for (let j = 0; j < pel; j++) { const a = yaw + 0.05 + (j - (pel - 1) / 2) * 0.025, dx = -Math.sin(a), dz = -Math.cos(a)
+          const x = ex + dx * d, y = ey - 0.12 - d * 0.01 + (j % 2) * 0.03, z = ez + dz * d
+          C.rounds.push({ x, y, z, vx: dx * 0.01, vy: 0, vz: dz * 0.01, life: 60, dmg: 0, crit: 0, from: { x: ex + dx * 0.4, y: ey - 0.08, z: ez + dz * 0.4 }, gun: '${gun}' }) }`)
+      await sleep(1200)
       await p.screenshot({ path: `${out}/${shots}-${tag}-${gun}.png` }).catch(() => {})
     }
+    await clear()
     console.log(`   shots: ${out}/${shots}-${tag}-*.png`)
   }
   ok(errs.length === 0, `3. ${tag}, 0 page errors${errs.length ? `: ${errs.join(' | ')}` : ''}`)
