@@ -18,6 +18,7 @@ import { gladeBlueprintVersion } from './glade-lots'
 import { keeperNow } from './network-scene'
 import { gladePeopleVersion } from './glade-people'
 import { MomoModel } from '../shared/momo-model'
+import { GladeGate } from './glade-gate'   // M165
 import { MOMO_SEES, momoSpot } from './glade-momo'   // M155 s2
 
 /** the five as drawn right now (Fennel is away while the first-rinstick quest has her at the keeper's Rinnshop) */
@@ -83,6 +84,7 @@ export function GladeCluster({ ground, blocked, marker = true }: { ground: (x: n
           <NamedMoglin id={f.id} seed={i * 1.7} />
         </group>
       ))}
+      <GladeGate />
       <Momo ground={ground} blocked={blocked} ver={ppVer} />
       {marker && <GregMarker ground={ground} />}
     </>

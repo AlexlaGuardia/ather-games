@@ -4,7 +4,8 @@ import { parseGladeLayer, gladeLayerGround, gladeLift, liftGeometry, gladePonds,
 import { gladeZoneGround, GLADE_FRAME } from './glade-cluster'
 import { PLOT_CELL, PLOT_HALF, plotVertexHeight } from './plot'
 import { MOONWELL, shoreRadius } from './moonwell'
-import { POOL_Y, poolEdge, poolRim, poolSheet } from './moonwell-water'
+import { POOL_Y, poolEdge, poolSheet } from './moonwell-water'
+import { poolRim, RIM_TOP } from './moonwell-rim'
 import { GLADE_N, GLADE_CELL, GLADE_SIZE, GLADE_TILE_CENTER, sampleGladeBase } from '../../world/glade-builder'
 let fails = 0, passes = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (c) passes++; else fails++ }
@@ -88,9 +89,10 @@ ok(gladePonds(NO_GLADE_LAYER).length === 0, 'no layer = no water')
   const e0 = poolEdge(base); let lip = 0
   for (const p of e0) lip = Math.max(lip, POOL_Y - base(p.x, p.z))
   ok(lip < 0.18 && e0.every(p => p.r < shoreRadius(p.x, p.z) + 4.1), `M157: the sheet's edge meets the bank (worst gap ${lip.toFixed(3)} m)`)
-  const rim = poolRim(gladeLayerGround(rough)), gr = gladeLayerGround(rough); let off = 0
-  for (let k = 0; k < rim.pos.length; k += 3) off = Math.max(off, Math.abs(rim.pos[k + 1] - 0.04 - gr(rim.pos[k], rim.pos[k + 2])))
-  ok(off < 0.01, 'M157: the rim lies on the sculpted ground')
+  // M165: the rim is stones now; the assert's meaning is the same (nothing floats or is buried): every stone's top edge is 14 cm .. RIM_TOP over ITS ground
+  const gr = gladeLayerGround(rough), rim = poolRim(gr)
+  const hs = rim.tops.map(q => q.h - gr(q.x, q.z))
+  ok(hs.length > 300 && hs.every(h => h > 0.14 && h < RIM_TOP), `M157: the rim lies on the sculpted ground (${Math.min(...hs).toFixed(3)}..${Math.max(...hs).toFixed(3)})`)
   const S = poolSheet(base).pos; ok(S.every((v, k) => k % 3 !== 1 || Math.abs(v - POOL_Y) < 1e-5), 'M157: the sheet is level at POOL_Y')
   // a mate's island turned a quarter splits its cells the other way: the walker reads that island's triangles too
   const mt = GLADE_FRAME.mates.find(m => Math.abs(Math.sin(m.rot)) > 0.5)!, hump = { [vk(mt.x, mt.z)]: 40 }

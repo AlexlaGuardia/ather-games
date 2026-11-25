@@ -22,24 +22,17 @@ export function poolEdge(ground: Ground): { x: number; z: number; r: number }[] 
     return { x: MOONWELL.x + cx * r, z: MOONWELL.z + cz * r, r }
   })
 }
-/** the water sheet: a fan (position + index), world coords, facing up */
+/** the sheet's rings, as shares of the edge (more toward the shore: moonwell-rim.ts colours them) */
+export const SHEET_RINGS = [0.35, 0.7, 0.9, 0.965, 1] as const
+/** the water sheet: rings out from the middle (position + index), world coords, facing up */
 export function poolSheet(ground: Ground): { pos: Float32Array; idx: number[] } {
-  const e = poolEdge(ground), pos = new Float32Array((e.length + 1) * 3), idx: number[] = []
-  pos.set([MOONWELL.x, POOL_Y, MOONWELL.z])
-  e.forEach((p, k) => { pos.set([p.x, POOL_Y, p.z], (k + 1) * 3); idx.push(0, 1 + (k + 1) % e.length, 1 + k) })
-  return { pos, idx }
-}
-/** the stone rim: a 1 m band outside the sheet's edge, laid ON the ground (4 cm over it, a few rings so it follows a slope) */
-export function poolRim(ground: Ground): { pos: Float32Array; idx: number[] } {
-  const e = poolEdge(ground), W = 1.1, R = 4, pos = new Float32Array(e.length * (R + 1) * 3), idx: number[] = []
-  e.forEach((p, k) => {
-    for (let n = 0; n <= R; n++) {
-      const f = (p.r + (n / R) * W) / p.r, x = MOONWELL.x + (p.x - MOONWELL.x) * f, z = MOONWELL.z + (p.z - MOONWELL.z) * f, g = ground(x, z)
-      pos.set([x, (Number.isFinite(g) ? g : GLADE.y) + 0.04, z], (k * (R + 1) + n) * 3)
-      if (n < R) { const a = k * (R + 1) + n, b = ((k + 1) % e.length) * (R + 1) + n; idx.push(a, b, a + 1, a + 1, b, b + 1) }
-    }
-  })
-  return { pos, idx }
+  const e = poolEdge(ground), n = e.length, pos: number[] = [MOONWELL.x, POOL_Y, MOONWELL.z], idx: number[] = []
+  SHEET_RINGS.forEach((f, r) => e.forEach((p, k) => {
+    pos.push(MOONWELL.x + (p.x - MOONWELL.x) * f, POOL_Y, MOONWELL.z + (p.z - MOONWELL.z) * f)
+    const a = 1 + r * n + k, b = 1 + r * n + (k + 1) % n
+    if (!r) idx.push(0, b, a); else idx.push(a - n, b - n, a, a, b - n, b)
+  }))
+  return { pos: new Float32Array(pos), idx }
 }
 /** is the Moonwell's water over this spot (the builder's tile view) */
 export const poolOver = (x: number, z: number, g: number) => g < POOL_Y && Math.hypot(x - MOONWELL.x, z - MOONWELL.z) <= shoreRadius(x, z)

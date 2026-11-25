@@ -12,14 +12,16 @@ import { hudSay } from '../shared/hud-say'
 import { getInv, setInv } from '../shared/bag'
 import { give } from '../shared/inventory'
 import { MOONWELL, SCALE_AT, SCALE_REACH, GLADE_GREEN, atWater, shoreToward } from './moonwell'
-import { POOL_Y, poolRim, poolSheet } from './moonwell-water'
+import { POOL_Y, poolSheet } from './moonwell-water'
+import { poolGlow, poolRim, RIM_TOP, sheetColors } from './moonwell-rim'   // M165
+import { figureMats } from '../shared/friend-model'
+import { folkInk } from '../shared/folk-model'
 // M40: the Moonwell is Greg's POND (an ellipse, relief.ts carves its bowl); the rinn rises just off the bank on the green's side
 const RISE = shoreToward(GLADE_GREEN.x, GLADE_GREEN.z, -2.5)
 import { waitingAt, scaleOnBank, waitTick, RINQUEST_LINES, SHED_SCALE } from './rinquest'
 import { useQuest, questEvent, currentQuest } from './use-rinquest'
-import { groundMat, groundOrder } from '../shared/ground-layers'
 
-const POOL = '#bfe4ff', RIM = '#8d9aa6'
+const POOL = '#bfe4ff'
 
 export function MoonwellPool({ ground, stowed }: { ground: (x: number, z: number) => number; stowed: () => boolean }) {
   const quest = useQuest()
@@ -27,13 +29,19 @@ export function MoonwellPool({ ground, stowed }: { ground: (x: number, z: number
   const y = POOL_Y   // the water's surface (the ground there is the carved bowl, under it, unless the owner sculpted it up)
   const scene = useThree(s => s.scene)
   // M157: the sheet and its rim read the ground the keeper stands on (moonwell-water.ts)
-  const { sheet, rim } = useMemo(() => {
+  const { sheet, rim, ink, light, stones } = useMemo(() => {
     const make = ({ pos, idx }: { pos: Float32Array; idx: number[] }) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g }
-    return { sheet: make(poolSheet(ground)), rim: make(poolRim(ground)) }
+    const sheet = make(poolSheet(ground)); sheet.setAttribute('color', new THREE.BufferAttribute(sheetColors(), 3))
+    const R = poolRim(ground), rim = new THREE.BufferGeometry(), ink = new THREE.BufferGeometry()
+    rim.setAttribute('position', new THREE.BufferAttribute(R.pos, 3)); rim.setAttribute('color', new THREE.BufferAttribute(R.col, 3)); rim.computeVertexNormals()
+    ink.setAttribute('position', new THREE.BufferAttribute(R.ink, 3))
+    const G = poolGlow(ground), light = new THREE.BufferGeometry()
+    light.setAttribute('position', new THREE.BufferAttribute(G.pos, 3)); light.setAttribute('color', new THREE.BufferAttribute(G.col, 4)); light.setIndex(G.idx)
+    return { sheet, rim, ink, light, stones: R }
   }, [ground])
-  useEffect(() => () => { sheet.dispose(); rim.dispose() }, [sheet, rim])
+  useEffect(() => () => { sheet.dispose(); rim.dispose(); ink.dispose(); light.dispose() }, [sheet, rim, ink, light])
   const sy = useMemo(() => { const h = ground(SCALE_AT.x, SCALE_AT.z); return Number.isFinite(h) ? h : y }, [ground, y])
-  const glow = useRef<THREE.MeshBasicMaterial>(null)
+  const glow = useRef<THREE.MeshBasicMaterial>(null), veil = useRef<THREE.MeshBasicMaterial>(null)
   const rinn = useRef<THREE.Group>(null)
   const scale = useRef<THREE.Mesh>(null)
   const w = useRef({ t: 0, last: { x: 0, z: 0 }, said: '' as string, rise: -1 })
@@ -41,6 +49,7 @@ export function MoonwellPool({ ground, stowed }: { ground: (x: number, z: number
   useFrame((st, dt) => {
     const t = st.clock.elapsedTime
     if (glow.current) glow.current.opacity = 0.78 + Math.sin(t * 0.8) * 0.06
+    if (veil.current) veil.current.opacity = 0.85 + Math.sin(t * 0.8 + 0.6) * 0.15
     if (scale.current) { scale.current.rotation.y = t * 0.9; scale.current.position.y = sy + 0.12 + Math.sin(t * 2) * 0.02 }
     // the rinn that came up: an arc out of the water and back, ~2 s, then gone
     const W = w.current
@@ -86,21 +95,24 @@ export function MoonwellPool({ ground, stowed }: { ground: (x: number, z: number
   useEffect(() => { const g = window as unknown as { __moonwell?: unknown }; g.__moonwell = { wait: () => w.current.t, rising: () => w.current.rise >= 0,
     // M157 (moonwell-pond-check): the walker's ground, the DRAWN ground (a ray down on the meshes as the GPU has them) and the sheet
     walkAt: ground, poolY: y, sheet: () => Array.from(sheet.getAttribute('position').array),
+    // M165 (m165-glade-look): the stones, and how far off the ground they stand on (walked = drawn, M157) the worst sits
+    rim: () => ({ stones: stones.stones, worst: Math.max(...stones.tops.map(q => { const h = q.h - ground(q.x, q.z); return Math.max(0, h - RIM_TOP, 0.14 - h) })) }),
     // M160 (glade-wet-trees-check): the valley's trees as drawn, off the crowns' own matrices
     trees: () => { const at: number[][] = []; scene.traverse(o => { if (!o.userData?.meadowCrowns) return; const im = o as THREE.InstancedMesh, m = new THREE.Matrix4(); for (let k = 0; k < im.count; k++) { im.getMatrixAt(k, m); at.push([m.elements[12], m.elements[14]]) } }); return at },
     drawnAt: (x: number, z: number) => {
       const ms: THREE.Object3D[] = []; scene.traverse(o => { if (o.userData?.gladeGround) ms.push(o) })
       const h = new THREE.Raycaster(new THREE.Vector3(x, 200, z), new THREE.Vector3(0, -1, 0)).intersectObjects(ms, false)[0]
       return h ? h.point.y : null
-    } }; return () => { delete g.__moonwell } }, [ground, sheet, scene, y])
+    } }; return () => { delete g.__moonwell } }, [ground, sheet, scene, y, stones])
   return (
     <group>
-      {/* the pond (M40): a soft glowing ellipse at the water line, in Sax's rim of pale stone on the bank */}
+      {/* the pond (M40): a softly glowing ellipse at the water line, in Sax's rim of dressed stones on the bank (M165) */}
       <mesh geometry={sheet}>
-        <meshBasicMaterial ref={glow} color={POOL} transparent opacity={0.8} />
+        <meshBasicMaterial ref={glow} vertexColors transparent opacity={0.8} />
       </mesh>
-      <mesh geometry={rim} renderOrder={groundOrder('mark')}>
-        <meshLambertMaterial color={RIM} {...groundMat('mark')} />
+      <mesh geometry={rim} material={figureMats().toon} /><mesh geometry={ink} material={folkInk()} />
+      <mesh geometry={light} renderOrder={1}>
+        <meshBasicMaterial ref={veil} vertexColors transparent depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
       </mesh>
       <pointLight position={[RISE.x, y + 1.5, RISE.z]} color={POOL} intensity={1.2} distance={30} />
       {/* the rinn that rises (placeholder shape: a small silver body + tail) */}

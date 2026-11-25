@@ -1797,7 +1797,7 @@ function AtherSliceGame() {
         {zone.kind === 'plot' && <AnemonyxIfHere clock={clock} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
-        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={gladeFrame(gladeLayer)} lift={gladeMeshLift} /><GladeCluster ground={ground} blocked={momoBlocked} marker={gregMark} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /><SceneryView items={gladeDecor} /></>}   {/* M67 s1a */}
+        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} gate={false} /><ClusterScene frame={gladeFrame(gladeLayer)} lift={gladeMeshLift} gate={false} /><GladeCluster ground={ground} blocked={momoBlocked} marker={gregMark} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /><SceneryView items={gladeDecor} /></>}   {/* M67 s1a */}
         {zone.kind === 'glade' && <><GladeNodesView nodes={gladeOwnNodes} focus={poseRef} /><ForestryFX ww={gladeOwnNodes} aim={aimRef} fx={fxRef} ground={ground} /><ChannelFocus focus={focusRef} /><GatherTether ref={tetherRef} /><ProspectingFX ww={gladeOwnNodes} aim={cAimRef} fx={cFxRef} ground={ground} mineable={c => mineCheck(c.kind, c.id).ok} /><GroundLoot place="glade" keeper={lootKeeper} ground={ground} can={lootCan} /></>}   {/* M153 s1b */}
         {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}

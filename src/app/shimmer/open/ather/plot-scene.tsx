@@ -54,10 +54,11 @@ function plotGeometry(): THREE.BufferGeometry {
 
 // BETA M142: the grid is not drawn here any more; plan mode draws its own (plan-grid-view.tsx)
 
-function Gate() {
+/** every keeper's gate (the Glade draws its own: glade-gate.tsx, BETA M165) */
+export function FoldGate() {
   const y = GROUND_Y - 0.4   // M52: it stands in the Green's centre, on the square (MIDDLE_Y = GROUND_Y)
   return (
-    <group position={[GATE.x, y, GATE.z]} rotation-y={GATE_FACE}>
+    <group position={[GATE.x, y, GATE.z]} rotation-y={GATE_FACE} userData={{ foldGate: true }}>
       <mesh position-y={0.375}><cylinderGeometry args={[1.6, 1.8, 0.75, 12]} /><meshLambertMaterial color="#b9ab90" flatShading /></mesh>
       <mesh position-y={3.4}><torusGeometry args={[2.3, 0.22, 6, 24]} /><meshLambertMaterial color="#e7c766" emissive="#c79a2e" emissiveIntensity={0.6} flatShading /></mesh>
       <mesh position-y={3.4}><circleGeometry args={[2.1, 24]} /><meshBasicMaterial color="#f4e3b0" transparent opacity={0.35} side={THREE.DoubleSide} /></mesh>
@@ -101,7 +102,7 @@ function MistGroup({ pts, sale, ring }: { pts: { x: number; y: number; z: number
 
 /** The island alone (ground, grid, underside, threshold, gate, Gregory, mist): your plot, or a cluster-mate's set at
  *  their place (ather/cluster-scene.tsx). The sky round it is PlotScene's, drawn once. */
-export function PlotIsland({ owned, pages, lift, place }: { owned: ReadonlySet<string>; pages: number; lift?: Lift | null; place?: Place }) {
+export function PlotIsland({ owned, pages, lift, place, gate = true }: { owned: ReadonlySet<string>; pages: number; lift?: Lift | null; place?: Place; gate?: boolean }) {
   // M83 s2b: in the Glade the builder layer's delta displaces the baked island (glade-layer.ts); place = where a mate's island sits
   const geo = useMemo(() => (lift ? liftGeometry(plotGeometry(), lift, place) : plotGeometry()), [lift, place])
   // M9 (11-22): it goes to <mesh geometry={...}> as a prop, which R3F never disposes. PlotIsland remounts on every return home,
@@ -115,20 +116,20 @@ export function PlotIsland({ owned, pages, lift, place }: { owned: ReadonlySet<s
       <mesh position={[THRESHOLD.x, plotHeightAt(THRESHOLD.x, THRESHOLD.z) + 0.03, THRESHOLD.z]} rotation-x={-Math.PI / 2} renderOrder={groundOrder('mark')}>
         <ringGeometry args={[1.1, 1.45, 18]} /><meshBasicMaterial color="#efe0a8" {...groundMat('mark')} />
       </mesh>
-      <Gate />
+      {gate && <FoldGate />}
       <Mist owned={owned} pages={pages} />
     </>
   )
 }
 
-export function PlotScene({ owned, pages, linked = false, lift }: { owned: ReadonlySet<string>; pages: number; linked?: boolean; lift?: Lift | null }) {
+export function PlotScene({ owned, pages, linked = false, lift, gate = true }: { owned: ReadonlySet<string>; pages: number; linked?: boolean; lift?: Lift | null; gate?: boolean }) {
   // BETA M24: the island hangs IN the cloud-ocean (edge-clouds.ts): pillows banked round the rim and under it, loose puffs
   // out in the void, the sea below and the horizon ring. One instanced draw for every puff (was 34 separate meshes).
   // linked into a cluster the meadow meets the rim, so only the far puffs (cluster-scene's skirt is that edge)
   const puffs = useMemo(() => [...(linked ? [] : plotEdgePuffs()), ...plotFarPuffs()], [linked])
   return (
     <>
-      <PlotIsland owned={owned} pages={pages} lift={lift} />
+      <PlotIsland owned={owned} pages={pages} lift={lift} gate={gate} />
       <CloudSea y={PLOT_SEA_Y} r={1400} />
       <CloudPillows puffs={puffs} />
       <HorizonRing y={PLOT_SEA_Y + 20} />
