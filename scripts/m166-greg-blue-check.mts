@@ -1,10 +1,16 @@
 // BETA M166: Greg and Blue IN THE GLADE, real page: Greg sits at his bench in the locked look's figure, Blue lies at the bench's
 // end (the page publishes his spot only since M166: red on the build before), the talk opens on E / tap. Shots front / side /
 // back of the bench + the talk, and the frame's draw calls. 390x844 (--phone) or desktop.
-//   npx tsx scripts/m166-greg-blue-check.mts <outdir> [--url https://ather.games] [--phone]
+//   npx tsx scripts/m166-greg-blue-check.mts <outdir> [--url https://ather.games] [--phone] [--save sent|newborn|finished] [--no-press]
+// --save (M166b): whose talk it is. 'newborn' = nothing heard: E / tap opens Greg's FIRST bubble (greg.b1.welcome.1, word for
+// word). --no-press (the check's own red): everything but the press, so 'the talk opens' has to fail.
 import puppeteer from 'puppeteer-core'
+import { freshTut, legacyTut, parseTut, type Tut } from '../src/app/shimmer/open/ather/glade-tutorial'
+import { line } from '../src/app/shimmer/open/ather/glade-tutorial-lines'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
-const out = process.argv[2], url = flag('--url', 'https://ather.games'), phone = process.argv.includes('--phone'), tag = phone ? 'phone' : 'desktop'
+const out = process.argv[2], url = flag('--url', 'https://ather.games'), phone = process.argv.includes('--phone'), save = flag('--save', 'sent'), tag = (phone ? 'phone' : 'desktop') + (save === 'sent' ? '' : `-${save}`)
+const SAVES: Record<string, Tut> = { newborn: freshTut(), finished: legacyTut(), sent: parseTut({ v: 1, live: true, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: [], gifts: ['grimoire'], b2: 'none', baitDay: null })! }
+if (!SAVES[save]) { console.error(`no save '${save}'`); process.exit(2) }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
@@ -15,7 +21,7 @@ try {
   const glbs: number[] = []; p.on('response', r => { if (r.url().includes('/open/spirits/dewbear-rigged.glb')) glbs.push(r.status()) })
   if (phone) await p.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true }); else await p.setViewport({ width: 1100, height: 760 })
   await p.evaluateOnNewDocument('window.__name = (f) => f')
-  await p.evaluateOnNewDocument(() => { localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: true, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: [], gifts: ['grimoire'], b2: 'none', baitDay: null })) })
+  await p.evaluateOnNewDocument((t: string) => { localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem('open.tutorial.v1', t) }, JSON.stringify(SAVES[save]))
   await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(2000)
   if (await p.evaluate(() => (window as any).__ather.zone()) !== 'glade') await p.evaluate(() => (window as any).__ather.travel({ kind: 'glade' }))
@@ -43,10 +49,20 @@ try {
   ok(glbs.length > 0 && glbs.every(s => s === 200 || s === 304), `Blue's Dewbear glb was served (${glbs.join(', ') || 'never asked for'})`)
   await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), g.x + Math.sin(yaw) * 2, g.z + Math.cos(yaw) * 2, yaw)
   for (let t = 0, calm = 0; t < 60 && calm < 4; t++) { await sleep(500); calm = await p.evaluate(() => document.querySelector<HTMLElement>('[data-veil]')?.style.opacity === '0') ? calm + 1 : 0 }
-  const up = await p.waitForFunction(() => /E · (Greg|Gregory)/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]'), { timeout: 30000 }).then(() => true, () => false)
+  // Greg's near button carries HIS name (page.tsx: prompt 'E · Gregory' -> label 'Gregory', every other E prompt -> 'use'). Asking for
+  // 'use' here found no button, so the phone run never tapped at all (M166b): no button, or a layer over it, is a red of its own now.
+  const up = await p.waitForFunction(() => /E · (Greg|Gregory)/.test(document.body.innerText), { timeout: 30000 }).then(() => true, () => false)
   ok(up, 'Greg in reach at 2 m, the prompt up')
-  if (phone) { const u = await p.$('[data-touch="use"]'), q = await u?.boundingBox(); if (q) await p.touchscreen.tap(q.x + q.width / 2, q.y + q.height / 2) } else await p.keyboard.press('KeyE')
+  if (phone) {
+    const q = await p.evaluate(() => { const e = document.querySelector<HTMLElement>('[data-touch="Gregory"][data-touch-near]'); if (!e) return null; const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2, t = document.elementFromPoint(x, y); return { x, y, top: !!t && e.contains(t) } })
+    ok(!!q, `the phone's 'Gregory' button is up (near buttons: ${await p.evaluate(() => [...document.querySelectorAll('[data-touch-near]')].map(e => e.getAttribute('data-touch')).join(', '))})`)
+    ok(!!q?.top, 'nothing lies over it')
+    ok(!await p.$('[data-talk-bubble]'), 'no talk before the press')
+    if (q && !process.argv.includes('--no-press')) await p.touchscreen.tap(q.x, q.y)
+  } else if (!process.argv.includes('--no-press')) await p.keyboard.press('KeyE')
   ok(await p.waitForFunction(() => !!document.querySelector('[data-talk-option]') || !!document.querySelector('[data-talk-bubble]'), { timeout: 30000 }).then(() => true, () => false), 'the talk opens')
+  console.log(`bubble: ${await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '(none)')}`)
+  if (save === 'newborn') ok((await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')).includes(line('greg.b1.welcome.1')), "a newborn's first talk starts on Greg's signed welcome")
   await sleep(3000); await hide(); await p.screenshot({ path: `${out}/glade-greg-talk-${tag}.png` as `${string}.png` })
 } catch (e) { ok(false, `crashed: ${String(e).slice(0, 300)}`) }
 ok(errs.length === 0, `0 page errors ${errs.slice(0, 3).join(' | ')}`)
