@@ -33,7 +33,8 @@ const older = (s: string, ms: number) => s.replace(/(?<!\d)\d{13}(?!\d)/g, d => 
 async function page(o: { recorder: boolean; owner: boolean; seed?: Seed; clock: Clock; skip: number }) {
   const ctx = await br.createBrowserContext(), p = await ctx.newPage(), c = { rec: 0, replay: 0 }
   await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true })
-  await p.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36')
+  await p.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36', { brands: [{ brand: 'Chromium', version: '138' }], platform: 'Android', platformVersion: '14', architecture: '', model: 'Pixel 8', mobile: true } as any)
+  await p.evaluateOnNewDocument(() => Object.defineProperty(Object.getPrototypeOf(navigator), 'webdriver', { get: () => false }))   // PostHog drops a robot's events; a player's are what is asked about
   await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.setRequestInterception(true)
   p.on('request', r => {
@@ -89,8 +90,8 @@ try {
     const t = await page({ ...r, seed: aged }); let v = await visit(t.p)
     if (v === 'ok' && r.clock === 'jump') { await t.p.evaluate((x: number) => (window as any).__clock(x), r.skip * H); v = await play(t.p, 60) }
     const st = v.startsWith('HANG') ? await stack(t.p) : ''
-    const good = v === 'ok'; if (r.agree && !good) bad++
-    console.log(`${good ? '✓' : r.agree ? '✗' : '·'} ${r.n}. ${r.agree ? 'agree' : 'split'} | ${r.owner ? 'owner' : 'player'} | recorder ${r.recorder ? 'on' : 'blocked'} (asked ${t.c.rec}, replay posts ${t.c.replay}) | ${r.name}: ${v}${st ? `\n      ${st}` : ''}`)
+    const good = v === 'ok' && (!r.agree || !r.recorder || t.c.replay > 0); if (r.agree && !good) bad++
+    console.log(`${good ? '✓' : r.agree ? '✗' : '·'} ${r.n}. ${r.agree ? 'agree' : 'split'} | ${r.owner ? 'owner' : 'player'} | recorder ${r.recorder ? 'on' : 'blocked'} (asked ${t.c.rec}, replay posts ${t.c.replay}) | ${r.name}: ${v}${v === 'ok' && !good ? ' BUT the recorder sent nothing' : ''}${st ? `\n      ${st}` : ''}`)
     // a hung tab would not close: its context is dropped without waiting
     await Promise.race([t.ctx.close().catch(() => {}), sleep(10000)])
   }

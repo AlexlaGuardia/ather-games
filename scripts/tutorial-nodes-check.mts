@@ -9,6 +9,7 @@ import { createHash } from 'crypto'
 import { mkdirSync } from 'fs'
 import { SCENERY } from '../src/app/shimmer/open/ather/scenery'
 import { aimAt } from './lib/aim.mts'
+import { fakeClock } from './lib/clock.mts'
 import { collect, lootOf, sumOf } from './lib/loot.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/tutorial-nodes-check'), LOOP = process.argv.includes('--loop')
@@ -57,7 +58,7 @@ const key = async (o: Page, c: string) => { await o.keyboard.press(c as any); aw
 const choose = async (o: Page, k: string) => { await key(o, 'KeyE'); await o.click(`[data-testid="place-item-${k}"]`); await sleep(400); await key(o, 'KeyE'); await sleep(1600); await lock(o) }
 
 // ── a keeper ──
-let nodes: any[] = []
+let nodes: any[] = [], skip = 0   // hours the keeper's clock is ahead
 async function keeper(name: string): Promise<{ g: Page; load: () => Promise<Page> }> {
   const ctx = await br.createBrowserContext(); let g: Page | null = null
   // a NEW tab per load (same save): a tab is a clean start
@@ -68,10 +69,8 @@ async function keeper(name: string): Promise<{ g: Page; load: () => Promise<Page
   await p.evaluateOnNewDocument(() => {
     if (!localStorage.getItem('chk')) { localStorage.setItem('chk', '1'); localStorage.setItem('ather:shimmer:birthRune', 'star')
       localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'rinstick'] })) }
-    // OPEN (11-25): on prod the 24.5 h load hangs the tab (a paused stack shows the session recorder's emit > start > error); dropping ph_* did NOT cure it
-    if (localStorage.getItem('chk.skip')) for (const k of Object.keys(localStorage)) if (k.startsWith('ph_')) localStorage.removeItem(k)
-    const real = Date.now.bind(Date); Date.now = () => real() + Number(localStorage.getItem('chk.skip') ?? 0)
   })
+  await p.evaluateOnNewDocument(fakeClock, skip * H)   // M164: every clock in the page moves, not Date.now alone
   if (!LOOP) {
     await p.setRequestInterception(true)
     p.on('request', async r => {
@@ -169,8 +168,8 @@ try {
     await E(b); await workOut(b); ok(!!(await ls(b, 'open.gladespent.v1'))?.[CID] && (await lootOf(b)).length > 0, '12. they gather it'); await b.close() }
 
   // ── the clock ──
-  g = await k1.load(); await g.evaluate(h => localStorage.setItem('chk.skip', String(23.5 * h)), H); g = await k1.load(); await treeAim(g); ok(!!(await saw(g, /Goldwood, regrowing \(\d+:\d\d\)\./)), '13. 23.5 hours on: still spent')
-  await g.evaluate(h => localStorage.setItem('chk.skip', String(24.5 * h)), H); g = await k1.load(); await treeAim(g); ok(!!(await saw(g, /prune the Goldwood \(5 mana\)/)), '13. 24.5 hours on: whole again'); await shot(g, 'k1-regrown')
+  skip = 23.5; g = await k1.load(); await treeAim(g); ok(!!(await saw(g, /Goldwood, regrowing \(\d+:\d\d\)\./)), '13. 23.5 hours on: still spent')
+  skip = 24.5; g = await k1.load(); await treeAim(g); ok(!!(await saw(g, /prune the Goldwood \(5 mana\)/)), '13. 24.5 hours on: whole again'); await shot(g, 'k1-regrown')
   await setMana(g, 3); await E(g); await shot(g, 'k1-working'); await workOut(g); ok(!!(await ls(g, 'open.gladework.v1'))?.[`tree:${TID}`], '13. worked again, left halfway')
 
   // ── rolled back ──
