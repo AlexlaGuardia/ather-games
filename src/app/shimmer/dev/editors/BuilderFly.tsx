@@ -287,7 +287,7 @@ export default function BuilderFly(p: Props) {
       /** every mesh in the scene by geometry kind: terrain tiles, the sea plane, the brush ring, and anything else (want none) */
       scene: () => {
         const n = { tiles: 0, sea: 0, ring: 0, other: [] as string[], parts: 0, partMeshes: 0 }, sceneryGroups: (THREE.Object3D | undefined)[] = [], skip = new Set<THREE.Object3D>()
-        for (const g of ['place-layer', 'glade-fixed']) sceneryGroups.push(sceneRef.current?.getObjectByName(g))   // M153: pieces + fixed ghosts are not terrain
+        for (const g of ['place-layer', 'glade-fixed', 'glade-places']) sceneryGroups.push(sceneRef.current?.getObjectByName(g))   // M153: pieces + fixed ghosts are not terrain
         const inParts = new Set<THREE.Object3D>()   // M84 s3: the zone builds are the owner's own parts, not nodes: counted apart
         for (const g of sceneryGroups) g?.traverse(o => skip.add(o))
         sceneRef.current?.getObjectByName('zone-parts')?.traverse(o => { inParts.add(o); if (o.userData?.zonePart) n.parts++ })

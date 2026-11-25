@@ -75,6 +75,7 @@ try {
     const g = await game(phone)
     const folk = async () => (await g.evaluate(() => (window as W).__glade?.folk ?? [])) as { id: string; x: number; z: number; yaw: number }[]
     await until(async () => (await folk()).length >= 5); await sleep(10000)
+    if (phone) { await g.touchscreen.tap(195, 500); await sleep(2000) }   // the start card lies over the buttons until the first tap
     for (const n of ['Hazel', 'Sax', 'Yarrow', 'Mallow', 'Fennel']) {
       const id = `moonwell:${n.toLowerCase()}`, f = (await folk()).find(q => q.id === id); if (!f) { ok(false, `${n} is drawn`); continue }
       await g.evaluate((x, z, y) => (window as W).__ather.gladeAt(x, z, y), f.x + Math.sin(f.yaw) * 1.8, f.z + Math.cos(f.yaw) * 1.8, Math.atan2(Math.sin(f.yaw), Math.cos(f.yaw))); await sleep(2500); await aimAt(g, f.x, f.z, 0.6)
