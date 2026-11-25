@@ -222,6 +222,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 19:5x Alex: "i dont think it matters until i have an editor that i can go into creative and buildand place stuff like nodes and decor in the glade the tutorial wont make sense plus the avatars for tess bonn and otto look nothing like the three tbh tess and bonn are female and otto a male.. we should have the images of them as kids that we could use later to make the adult versions likeness" -> M153 (Glade place editor) + M154 (Tess, Bonn, Otto likeness)
 - 11-24 19:4x Alex (Twins): "i do want to add that with the double barrel we will need to do a new ads pose i think maybe" -> M152
 - 11-24 19:4x Alex (dialog): gun family sheet LOCKED (m150/family.jpg); Twins = two barrels, TWO shots each (four before the reload); all three sights OK -> M149, M152
 - 11-24 19:5x Alex: Hovari v2 APPROVED (2c2f5e2b) -> wire with Athowl, Dewbear, Noctyx; gun pictures in flight
