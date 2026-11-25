@@ -19,13 +19,16 @@ import { stepCam, lookCam, zoomCam, toggleTop, camOver, NO_KEYS, type Cam, type 
 import { ramp } from './terrain-ramp'
 import { resample, POI_COLOR, ROAD_COLOR, type Overlay } from './builder-pois'
 import { ZonePartsView } from '../../open/ather/zone-parts-view'   // M84 s3: each zone's build, the game's own PieceBody
+import { poolSheet } from '../../open/ather/moonwell-water'
 import type { ZonePart } from '../../open/ather/zone-parts'
 
 export interface FlyTile { name: string; ox: number; oz: number; nx: number; nz: number; cell: number; sizeX: number; sizeZ: number; h: Float32Array; waterY: number
   /** M83 s2a (the Glade): vertices that are not ground; a quad touching one is not drawn, so the islands float in the void */
   voidV?: Uint8Array
   /** the Glade: no sea plane (the Nyx continent's edge tiles have void past the region but keep their sea) */
-  noSea?: boolean }
+  noSea?: boolean
+  /** M157 (the Glade, one tile): every 4 m vertex on the game's own triangles, so Fly draws exactly the ground the keeper walks */
+  full?: boolean }
 interface Props {
   tiles: FlyTile[]
   /** the draft's height deltas per tile (dm), read live each rev */
@@ -45,6 +48,8 @@ interface Props {
   overlay?: Overlay
   /** M84 s3: the zones' builds in world coords (zone-parts.ts over the draft), drawn read-only */
   parts?: readonly ZonePart[]
+  /** M157 (the Glade): draw the Moonwell's water */
+  pool?: boolean
 }
 // sRGB -> linear (three's own SRGBToLinear is not exported from the package root at runtime, though the types say it is)
 const lin = (c: number) => { c = Math.min(1, c); return c < 0.04045 ? c * 0.0773993808 : Math.pow(c * 0.9478672986 + 0.0521327014, 2.4) }
@@ -54,30 +59,32 @@ const KEYMAP: Record<string, keyof Keys> = { KeyW: 'f', KeyS: 'b', KeyA: 'l', Ke
 const typing = (e: Event) => { const el = e.target as HTMLElement | null; return !!el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') }
 
 function TileMesh({ t, deltas, rev, onDown, onMoveP }: { t: FlyTile; deltas: Props['deltas']; rev: number; onDown: (e: ThreeEvent<PointerEvent>) => void; onMoveP: (e: ThreeEvent<PointerEvent>) => void }) {
-  const cols = Math.floor((t.nx - 1) / FLY_STRIDE) + 1, rows = Math.floor((t.nz - 1) / FLY_STRIDE) + 1
+  const stride = t.full ? 1 : FLY_STRIDE
+  const cols = Math.floor((t.nx - 1) / stride) + 1, rows = Math.floor((t.nz - 1) / stride) + 1
   const geo = useMemo(() => {
     const g = new THREE.BufferGeometry()
     const pos = new Float32Array(cols * rows * 3), col = new Float32Array(cols * rows * 3), idx: number[] = []
     for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
       const v = j * cols + i
-      pos[v * 3] = t.ox - t.sizeX / 2 + Math.min(t.nx - 1, i * FLY_STRIDE) * t.cell
-      pos[v * 3 + 2] = t.oz - t.sizeZ / 2 + Math.min(t.nz - 1, j * FLY_STRIDE) * t.cell
+      pos[v * 3] = t.ox - t.sizeX / 2 + Math.min(t.nx - 1, i * stride) * t.cell
+      pos[v * 3 + 2] = t.oz - t.sizeZ / 2 + Math.min(t.nz - 1, j * stride) * t.cell
       if (i < cols - 1 && j < rows - 1) {
-        const V = t.voidV, kk = (ii: number, jj: number) => Math.min(t.nz - 1, jj * FLY_STRIDE) * t.nx + Math.min(t.nx - 1, ii * FLY_STRIDE)
+        const V = t.voidV, kk = (ii: number, jj: number) => Math.min(t.nz - 1, jj * stride) * t.nx + Math.min(t.nx - 1, ii * stride)
         if (V && (V[kk(i, j)] || V[kk(i + 1, j)] || V[kk(i, j + 1)] || V[kk(i + 1, j + 1)])) continue
-        idx.push(v, v + cols, v + 1, v + 1, v + cols, v + cols + 1)
+        if (t.full) idx.push(v, v + cols + 1, v + 1, v, v + cols, v + cols + 1)   // the game's own diagonal
+        else idx.push(v, v + cols, v + 1, v + 1, v + cols, v + cols + 1)
       }
     }
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setIndex(idx)
     return g
-  }, [t, cols, rows])
+  }, [t, cols, rows, stride])
   useEffect(() => () => geo.dispose(), [geo])
   // heights + colours from the base + the draft's deltas, every rev (a brush tick)
   useEffect(() => {
     const pos = geo.getAttribute('position') as THREE.BufferAttribute, col = geo.getAttribute('color') as THREE.BufferAttribute
     const P = pos.array as Float32Array, C = col.array as Float32Array, E = deltas(t.name)
     for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
-      const v = j * cols + i, k = Math.min(t.nz - 1, j * FLY_STRIDE) * t.nx + Math.min(t.nx - 1, i * FLY_STRIDE)
+      const v = j * cols + i, k = Math.min(t.nz - 1, j * stride) * t.nx + Math.min(t.nx - 1, i * stride)
       const y = t.h[k] + (E?.[k] ?? 0) / 10
       P[v * 3 + 1] = y
       const [r, g, b] = y < t.waterY ? [0.30, 0.48, 0.66] : ramp(y - t.waterY)
@@ -88,8 +95,18 @@ function TileMesh({ t, deltas, rev, onDown, onMoveP }: { t: FlyTile; deltas: Pro
     }
     pos.needsUpdate = true; col.needsUpdate = true
     geo.computeVertexNormals(); geo.computeBoundingSphere(); geo.computeBoundingBox()
-  }, [geo, rev, t, deltas, cols, rows])
+  }, [geo, rev, t, deltas, cols, rows, stride])
   return <mesh geometry={geo} onPointerDown={onDown} onPointerMove={onMoveP} userData={{ terrain: true }}><meshLambertMaterial vertexColors /></mesh>
+}
+
+/** M157: the Moonwell's own water (the game's sheet over the draft's ground), so the pond reads as the game shows it */
+function PoolWater({ heightAt, rev }: { heightAt: Props['heightAt']; rev: number }) {
+  const geo = useMemo(() => {
+    const { pos, idx } = poolSheet(heightAt), g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx); return g
+  }, [heightAt, rev])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => geo.dispose(), [geo])
+  return <mesh geometry={geo} userData={{ pool: true }}><meshBasicMaterial color="#bfe4ff" transparent opacity={0.8} /></mesh>
 }
 
 function Rig({ heightAt, focus, camRef }: { heightAt: Props['heightAt']; focus: Props['focus']; camRef: React.MutableRefObject<Cam | null> }) {
@@ -252,11 +269,19 @@ export default function BuilderFly(p: Props) {
         sceneRef.current?.traverse(o => {
           if (!(o as THREE.Mesh).isMesh) return
           if (inParts.has(o)) { n.partMeshes++; return }
+          if (o.userData?.pool) return   // M157: the Moonwell's water is not terrain
           const t = (o as THREE.Mesh).geometry?.type
           if (t === 'BufferGeometry') n.tiles++; else if (t === 'PlaneGeometry') n.sea++; else if (t === 'RingGeometry') n.ring++; else n.other.push(t ?? o.type)
         })
         return n
       },
+      /** M157: the drawn terrain under a world point (a ray down), and whether the Moonwell's water is drawn */
+      drawnAt: (x: number, z: number) => {
+        const ms: THREE.Object3D[] = []; sceneRef.current?.traverse(o => { if (o.userData?.terrain) ms.push(o) })
+        const h = new THREE.Raycaster(new THREE.Vector3(x, 400, z), new THREE.Vector3(0, -1, 0)).intersectObjects(ms, false)[0]
+        return h ? h.point.y : null
+      },
+      pool: () => { let n = 0; sceneRef.current?.traverse(o => { if (o.userData?.pool) n++ }); return n },
       /** M105: the overlay drawn in the scene: road lines, POI pins, labels (each label's POI + the ground height it sits on) */
       overlay: () => {
         const n = { roads: 0, pins: 0, labels: [] as { kind: string; name: string; x: number; z: number; y: number }[] }
@@ -290,6 +315,7 @@ export default function BuilderFly(p: Props) {
       {p.tiles.map(t => <TileMesh key={t.name} t={t} deltas={p.deltas} rev={p.rev} onDown={onDown} onMoveP={onMoveP} />)}
       {/* the Glade (tiles with void) has no sea: its islands float in the cloud */}
       {p.tiles.length > 0 && !p.tiles.some(t => t.noSea) && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[p.focus.x, waterY, p.focus.z]}><planeGeometry args={[3200, 3200]} /><meshLambertMaterial color="#3d6f99" transparent opacity={0.75} /></mesh>}
+      {p.pool && <PoolWater heightAt={p.heightAt} rev={p.rev} />}
       <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />
       {p.overlay && <OverlayLayer overlay={p.overlay} heightAt={p.heightAt} rev={p.rev} />}
       {p.parts && <ZonePartsView parts={p.parts} />}

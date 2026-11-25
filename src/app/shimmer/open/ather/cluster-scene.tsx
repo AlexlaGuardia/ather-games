@@ -102,7 +102,7 @@ export function ClusterScene({ frame, lift }: { frame: Frame; lift?: Lift | null
   const mid = frame.middle, span = (m.n - 1) * MEADOW_CELL
   return (
     <>
-      <mesh geometry={geo} material={ground} />
+      <mesh geometry={geo} material={ground} userData={{ gladeGround: true }} />
       <MeadowTrees m={m} lift={lift} />
       {/* where the paths meet: a pale ring in the middle of the square */}
       <mesh position={[mid.x, MIDDLE_Y + 0.04, mid.z]} rotation-x={-Math.PI / 2} renderOrder={groundOrder('mark')}><ringGeometry args={[5, 6.2, 28]} /><meshBasicMaterial color="#efe0a8" {...groundMat('mark')} /></mesh>

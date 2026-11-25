@@ -12,7 +12,7 @@ import { hudSay } from '../shared/hud-say'
 import { getInv, setInv } from '../shared/bag'
 import { give } from '../shared/inventory'
 import { MOONWELL, SCALE_AT, SCALE_REACH, GLADE_GREEN, atWater, shoreToward } from './moonwell'
-import { GLADE as GLADE_GROUND, WATER_DROP } from './relief'
+import { POOL_Y, poolRim, poolSheet } from './moonwell-water'
 // M40: the Moonwell is Greg's POND (an ellipse, relief.ts carves its bowl); the rinn rises just off the bank on the green's side
 const RISE = shoreToward(GLADE_GREEN.x, GLADE_GREEN.z, -2.5)
 import { waitingAt, scaleOnBank, waitTick, RINQUEST_LINES, SHED_SCALE } from './rinquest'
@@ -24,7 +24,14 @@ const POOL = '#bfe4ff', RIM = '#8d9aa6'
 export function MoonwellPool({ ground, stowed }: { ground: (x: number, z: number) => number; stowed: () => boolean }) {
   const quest = useQuest()
   const camera = useThree(s => s.camera)
-  const y = GLADE_GROUND.y - WATER_DROP   // the water's surface (the ground there is the carved bowl, under it)
+  const y = POOL_Y   // the water's surface (the ground there is the carved bowl, under it, unless the owner sculpted it up)
+  const scene = useThree(s => s.scene)
+  // M157: the sheet and its rim read the ground the keeper stands on (moonwell-water.ts)
+  const { sheet, rim } = useMemo(() => {
+    const make = ({ pos, idx }: { pos: Float32Array; idx: number[] }) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g }
+    return { sheet: make(poolSheet(ground)), rim: make(poolRim(ground)) }
+  }, [ground])
+  useEffect(() => () => { sheet.dispose(); rim.dispose() }, [sheet, rim])
   const sy = useMemo(() => { const h = ground(SCALE_AT.x, SCALE_AT.z); return Number.isFinite(h) ? h : y }, [ground, y])
   const glow = useRef<THREE.MeshBasicMaterial>(null)
   const rinn = useRef<THREE.Group>(null)
@@ -76,16 +83,21 @@ export function MoonwellPool({ ground, stowed }: { ground: (x: number, z: number
   // probe for rinquest-check (reading only)
   // cleared on unmount (M9 11-22): the pool is Wilds-only, and a probe left on window kept the unmounted pool's whole closure
   // scope alive at home (0.9 MB in the heap diff)
-  useEffect(() => { const g = window as unknown as { __moonwell?: unknown }; g.__moonwell = { wait: () => w.current.t, rising: () => w.current.rise >= 0 }; return () => { delete g.__moonwell } }, [])
+  useEffect(() => { const g = window as unknown as { __moonwell?: unknown }; g.__moonwell = { wait: () => w.current.t, rising: () => w.current.rise >= 0,
+    // M157 (moonwell-pond-check): the walker's ground, the DRAWN ground (a ray down on the meshes as the GPU has them) and the sheet
+    walkAt: ground, poolY: y, sheet: () => Array.from(sheet.getAttribute('position').array),
+    drawnAt: (x: number, z: number) => {
+      const ms: THREE.Object3D[] = []; scene.traverse(o => { if (o.userData?.gladeGround) ms.push(o) })
+      const h = new THREE.Raycaster(new THREE.Vector3(x, 200, z), new THREE.Vector3(0, -1, 0)).intersectObjects(ms, false)[0]
+      return h ? h.point.y : null
+    } }; return () => { delete g.__moonwell } }, [ground, sheet, scene, y])
   return (
     <group>
       {/* the pond (M40): a soft glowing ellipse at the water line, in Sax's rim of pale stone on the bank */}
-      <mesh position={[MOONWELL.x, y, MOONWELL.z]} rotation-x={-Math.PI / 2} scale={[MOONWELL.rx, MOONWELL.rz, 1]}>
-        <circleGeometry args={[1, 64]} />
+      <mesh geometry={sheet}>
         <meshBasicMaterial ref={glow} color={POOL} transparent opacity={0.8} />
       </mesh>
-      <mesh position={[MOONWELL.x, GLADE_GROUND.y + 0.04, MOONWELL.z]} rotation-x={-Math.PI / 2} scale={[MOONWELL.rx, MOONWELL.rz, 1]} renderOrder={groundOrder('mark')}>
-        <ringGeometry args={[1, 1.05, 64]} />
+      <mesh geometry={rim} renderOrder={groundOrder('mark')}>
         <meshLambertMaterial color={RIM} {...groundMat('mark')} />
       </mesh>
       <pointLight position={[RISE.x, y + 1.5, RISE.z]} color={POOL} intensity={1.2} distance={30} />

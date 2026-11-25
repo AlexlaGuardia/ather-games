@@ -25,8 +25,9 @@ import type { FlyTile } from './BuilderFly'
 import { STRENGTH_MIN, STRENGTH_MAX, stepStrength } from './fly-cam'
 const BuilderFly = dynamic(() => import('./BuilderFly'), { ssr: false })   // M83 s1b: three only loads when Fly is opened
 import { AUTOSAVE_MS, savedAgo, type Layer, type Index, type BuilderMap } from '../../world/builder'
-import { GLADE_BRUSH_TILE, GLADE_LAYER_TILE, GLADE_WATER_Y, sampleGladeBase } from '../../world/glade-builder'
+import { GLADE_BRUSH_TILE, GLADE_LAYER_TILE, GLADE_WATER_Y, sampleGladeBase, triLerp } from '../../world/glade-builder'
 import { gladeZoneGround } from '../../open/ather/glade-cluster'
+import { poolOver, POOL_Y } from '../../open/ather/moonwell-water'
 import { NYX_REGION, NYX_WATER_Y, nyxBrushTile, nyxTiles, sampleNyxTile, nyxN, nyxOrigin } from '../../world/nyx-builder'
 import BuilderOverview from './BuilderOverview'
 import type { OvTile, OvSource } from './builder-overview'
@@ -312,6 +313,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     const fx = Math.min(nx - 1 - 1e-6, Math.max(0, rx)), fz = Math.min(nz - 1 - 1e-6, Math.max(0, rz))
     const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j
     const at = (ii: number, jj: number) => { const k = jj * nx + ii; return B.h[k] + (E?.[k] ?? 0) / 10 }
+    if (glade) return triLerp(at(i, j), at(i + 1, j), at(i, j + 1), at(i + 1, j + 1), u, v)   // M157: the ground the game draws and walks
     return (at(i, j) * (1 - u) + at(i + 1, j) * u) * (1 - v) + (at(i, j + 1) * (1 - u) + at(i + 1, j + 1) * u) * v
   }, [glade])   // nyx reads gridRef (set before ready)
   // M84 s3: the zones' builds in Fly (world coords, on the draft's ground), read-only; rebuilt when the zones or the ground change
@@ -336,6 +338,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       const vi = Math.min(j, nz - 2) * (nx - 1) + Math.min(i, nx - 2)
       const wl = Wm?.[vi] !== undefined ? Wm[vi] / 10 : null, lo = Math.min(H[Math.min(j, nz - 2) * nx + Math.min(i, nx - 2)], H[Math.min(j, nz - 2) * nx + Math.min(i, nx - 2) + 1], H[(Math.min(j, nz - 2) + 1) * nx + Math.min(i, nx - 2)], H[(Math.min(j, nz - 2) + 1) * nx + Math.min(i, nx - 2) + 1])
       if (wl !== null && wl > lo) { const d = Math.min(1, (wl - h) / 6); r = 0.26 - 0.14 * Math.max(0, d); g = 0.55 - 0.2 * Math.max(0, d); b = 0.86 - 0.16 * Math.max(0, d) }
+      else if (glade && poolOver(B.ox - B.meta.sizeX / 2 + i * cell, B.oz - B.meta.sizeZ / 2 + j * cell, h)) { const d = Math.min(1, (POOL_Y - h) / 2); r = 0.66 - 0.3 * d; g = 0.84 - 0.22 * d; b = 0.95 - 0.08 * d }   // M157: the Moonwell's own water
       else if (B.voided?.[vi]) { r = 0.10; g = 0.11; b = 0.15 }
       else if (h < waterY) { const d = Math.min(1, (waterY - h) / 12); r = 0.30 - 0.18 * d; g = 0.52 - 0.22 * d; b = 0.72 - 0.20 * d }
       else {
@@ -367,7 +370,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     for (const q of sheets) { ctx.strokeStyle = q.auto ? 'rgba(255,255,255,0.95)' : 'rgba(255,250,210,0.95)'; ctx.lineWidth = q.auto ? 1 : 1.5; ctx.beginPath(); ctx.moveTo(...P(q.ax, q.az)); ctx.lineTo(...P(q.bx, q.bz)); ctx.stroke() }
     for (const L of lines) { ctx.fillStyle = 'rgba(255,240,170,0.9)'; for (const p of L.pts) { const [a, b] = P(p[0], p[1]); ctx.fillRect(a - 0.5, b - 0.5, 1, 1) } }
     const cur = line.current; if (cur && cur.length > 1) { ctx.strokeStyle = 'rgba(255,220,120,1)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(...P(cur[0][0], cur[0][1])); for (const p of cur.slice(1)) ctx.lineTo(...P(p[0], p[1])); ctx.stroke() }
-  }, [showEdits])
+  }, [showEdits, glade])
   useEffect(() => { if (ready) draw() }, [ready, rev, draw])
   const raf = useRef(0)
   const redraw = useCallback(() => { if (!raf.current) raf.current = requestAnimationFrame(() => { raf.current = 0; draw() }) }, [draw])
@@ -682,9 +685,9 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
             </div>
           )}
           {/* the 3x3 ring only: bases caches every tile opened this session (builder-fly-check saw 18 meshes after two tiles) */}
-          <BuilderFly tiles={[...bases.current.entries()].filter(([, b]) => Math.abs(b.tx - B.tx) <= 1 && Math.abs(b.ty - B.ty) <= 1).map(([name, b]): FlyTile => ({ name, ox: b.ox, oz: b.oz, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY, voidV: b.voidV, noSea: glade }))}
+          <BuilderFly tiles={[...bases.current.entries()].filter(([, b]) => Math.abs(b.tx - B.tx) <= 1 && Math.abs(b.ty - B.ty) <= 1).map(([name, b]): FlyTile => ({ name, ox: b.ox, oz: b.oz, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY, voidV: b.voidV, noSea: glade, full: glade }))}
             deltas={n => edits.current[n]} rev={rev} heightAt={heightAt} radius={radius} focus={glade ? GLADE_FOCUS : { x: B.ox, z: B.oz }}
-            onBegin={beginAt} onMove={moveAt} onEnd={endStroke} lockLook={lockLook} onLock={setLocked} overlay={flyOv} parts={flyParts} />
+            onBegin={beginAt} onMove={moveAt} onEnd={endStroke} lockLook={lockLook} onLock={setLocked} overlay={flyOv} parts={flyParts} pool={glade} />
           {!full && <div className="absolute left-2 bottom-2 rounded bg-black/60 px-2 py-1 text-[11px] font-mono text-white/75 tabular-nums pointer-events-none" data-testid="fly-hud">
             {TOOL_KEY[brush]} · strength {strength.toFixed(2)} m/tick (- =) · radius {radius} m ([ ]){lockLook ? (locked ? ' · Esc frees the mouse' : ' · click to lock the mouse') : ''}
           </div>}

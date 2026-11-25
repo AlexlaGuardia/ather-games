@@ -6,7 +6,8 @@
 //      the other four in the FRIENDS' gardens, 220-316 m away; their lots stay in Greg's garden as backdrop). Probe: __glade.folk
 //   2. every lot's pad, the green and the Glade's ANCHOR (the open south end of the green, where the Wilds waymark stood) are
 //      LEVEL: the keeper stood on each reads the same feet height (±0.1 m)
-//   3. the pond is a bowl under the water (feet at its middle sit > 1 m under the Glade floor) and the deployed MOONWELL is the
+//   3. (M157) over the pond + shore the DRAWN ground is the walked ground (a ray down on the live meshes, 3 cm), the keeper's feet are
+//      on it, the UNSCULPTED base is a bowl > 1 m under the floor (pure: the live layer may be sculpted), and the deployed MOONWELL is the
 //      41 x 49 m pond (__rinquest.moonwell()); the rinn scale's bank spot is 'at the water'
 //   4. every Moglin is reachable ON FOOT: the ground runs unbroken from the green to each of the five (pure BFS), and a real
 //      held W walks the keeper up to them (Fennel: from the green's centre; the four friends' folk: from 12 m out in their own
@@ -109,7 +110,18 @@ try {
   ok(hi - lo < 0.1, `2. the green, the anchor and all ten pad corners are level (spread ${(hi - lo).toFixed(3)} m: ${ys.map(v => `${v.at} ${v.y.toFixed(2)}`).join(', ')})`)
   // 3. the pond
   await tp(MOONWELL.x, MOONWELL.z, 0); const deep = (await st()).y
-  ok(deep < lo - 1, `3. the pond is a bowl under the water (feet ${deep.toFixed(2)} at its middle, floor ${lo.toFixed(2)})`)
+  // M157: the owner may sculpt the pond (v16 levels it to ~1.9), so 'a bowl on the live page' is only true of the BASE: what must hold
+  // on any layer is that the drawn ground IS the walked ground (grid below), and the base under it is still a bowl (pure)
+  const grid = await p.evaluate(() => {
+    const M = (window as any).__moonwell; let worst = 0, n = 0, at = ''
+    for (let x = -146; x <= -96; x += 1.7) for (let z = 80; z <= 141; z += 1.7) { const d = M.drawnAt(x, z), w = M.walkAt(x, z); if (d === null) return { worst: 99, n, at: `no ground drawn at ${x},${z}`, poolY: 0 }; n++; if (Math.abs(d - w) > worst) { worst = Math.abs(d - w); at = `${x.toFixed(1)},${z.toFixed(1)} drawn ${d.toFixed(2)} walked ${w.toFixed(2)}` } }
+    return { worst, n, at, poolY: M.poolY }
+  }).catch(e => ({ worst: 99, n: 0, at: String(e).slice(0, 80), poolY: 0 }))
+  ok(grid.worst < 0.03 && grid.n > 900, `3. the pond: drawn = walked over ${grid.n} points (worst ${grid.worst.toFixed(3)} m ${grid.at})`)
+  const walked = await p.evaluate((x: number, z: number) => (window as any).__moonwell?.walkAt?.(x, z) ?? 99, MOONWELL.x, MOONWELL.z)
+  ok(Math.abs(deep - walked) < 0.05, `   the keeper's feet are on it at the middle (feet ${deep.toFixed(2)}, ground ${walked.toFixed(2)}, water ${grid.poolY})`)
+  const baseDeep = gladeZoneGround(MOONWELL.x, MOONWELL.z), baseFloor = gladeZoneGround(GLADE_GREEN.x, GLADE_GREEN.z)
+  ok(baseDeep < baseFloor - 1, `   unsculpted, the pond is a bowl under the water (${baseDeep.toFixed(2)}, floor ${baseFloor.toFixed(2)})`)
   const mw = await p.evaluate(() => (window as any).__rinquest?.moonwell?.()) as { rx?: number; rz?: number } | null
   ok(!!mw && mw.rx === MOONWELL.rx && mw.rz === MOONWELL.rz && atWater(SCALE_AT.x, SCALE_AT.z), `   the deployed pond is ${MOONWELL.rx * 2} x ${MOONWELL.rz * 2} m and the scale's bank is at the water (${JSON.stringify(mw)})`)
   // 4. on foot: from the green's centre to each Moglin by a route round the walls (a door lot may open into a courtyard);

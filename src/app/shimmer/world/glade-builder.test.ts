@@ -56,7 +56,7 @@ const v0 = gladeVertex(k0 % GLADE_N, Math.floor(k0 / GLADE_N))
 ok(Math.abs(gladeDeltaAt(E.glade, v0.x, v0.z) - E.glade[String(k0)] / 10) < 1e-9, 'gladeDeltaAt is exact at a vertex')
 const mid = gladeDeltaAt(E.glade, v0.x + GLADE_CELL / 2, v0.z)
 const a = (E.glade[String(k0)] ?? 0) / 10, b = (E.glade[String(k0 + 1)] ?? 0) / 10
-ok(Math.abs(mid - (a + b) / 2) < 1e-9, 'gladeDeltaAt is bilinear between vertices')
+ok(Math.abs(mid - (a + b) / 2) < 1e-9, 'gladeDeltaAt is linear along an edge between vertices')
 ok(gladeDeltaAt(E.glade, 5000, 5000) === 0 && gladeDeltaAt(null, greg.x, greg.z) === 0, 'off the tile or no layer = no delta')
 
 console.log(fails ? `\n${fails} FAILED` : '\nall pass'); process.exit(fails ? 1 : 0)

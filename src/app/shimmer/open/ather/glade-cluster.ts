@@ -15,8 +15,9 @@
 //   · talk: the five and Greg talk here exactly as they did in the Wilds (page.tsx picks them in the glade zone).
 // Pure; glade-cluster.test.ts.
 import { clusterFrame, clusterGround, mateAt, inMiddle, onPath, onMeadow, type Frame, type Quarter } from './cluster'
-import { gladeGround, pondDepthIn } from './relief'
-import { STARTING_SQUARES, GATE, plotHeightAt, sqId } from './plot'
+import { gladeGround, pondDepthIn, GLADE as POND } from './relief'
+import { STARTING_SQUARES, GATE, plotHeightAt, sqId, PLOT_CELL } from './plot'
+import { onTriangles } from '../../world/glade-builder'
 import { toWorld } from './meadow'
 import { GLADE_ID, gregSpot, newbornSpot } from './moonwell-glade'
 
@@ -109,9 +110,14 @@ export function gladeWhere(x: number, z: number): string {
 /** The gate out (the Green's centre, the same spot every cluster's gate stands). */
 export const GLADE_GATE = GATE
 
-/** The Glade zone's ground: Greg's island + the cluster's (as s1a), with the Moonwell's bowl sunk under its water plane inside
- *  the pond (s1b-2: the island mesh is flat and baked, so the bowl is the walker's ground only; the water hides it). */
+/** The Moonwell's bowl at a VERTEX of Greg's island (the 4 m grid the island, the builder's tile and the sculpting share): metres
+ *  the ground is sunk, <= 0, 0 outside the pond. The island's mesh is lowered by this (glade-layer.ts gladeLift). */
+export const bowlAtVertex = (x: number, z: number): number => (pondDepthIn(x, z) > 0 ? gladeGround(x, z, POND.y) - POND.y : 0)
+/** The bowl anywhere: its vertices on the island's own triangles, so the keeper stands on exactly what is drawn (M157). */
+export const bowlAt = (x: number, z: number): number => (pondDepthIn(x, z) > -2 * PLOT_CELL ? onTriangles(bowlAtVertex, x, z) : 0)
+/** The Glade zone's ground: Greg's island + the cluster's (as s1a), with the Moonwell's bowl. Until M157 the bowl was the walker's
+ *  alone over a flat drawn island (the water hid it), so an owner's sculpting there was a hill you walked into. */
 export function gladeZoneGround(x: number, z: number): number {
   const g = Math.max(plotHeightAt(x, z), clusterGround(GLADE_FRAME, x, z))
-  return Number.isFinite(g) && pondDepthIn(x, z) > 0 ? gladeGround(x, z, g) : g
+  return Number.isFinite(g) ? g + bowlAt(x, z) : g
 }

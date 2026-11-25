@@ -16,6 +16,7 @@ import { GROUND, pushLayer, useGroundMaterial } from './ground-look'
 import { groundMat, groundOrder } from '../shared/ground-layers'
 import { liftGeometry, type Place } from './glade-layer'
 type Lift = (x: number, z: number) => number
+const GROUND_TAG = { gladeGround: true }   // M157: the Glade's drawn-ground probe (moonwell-quest.tsx) reads the meshes tagged so
 
 function plotGeometry(): THREE.BufferGeometry {
   const pos: number[] = [], col: number[] = [], lay: number[] = []
@@ -109,7 +110,7 @@ export function PlotIsland({ owned, pages, lift, place }: { owned: ReadonlySet<s
   const ground = useGroundMaterial()
   return (
     <>
-      <mesh geometry={geo} material={ground} />
+      <mesh geometry={geo} material={ground} userData={GROUND_TAG} />
       <mesh position-y={-20} rotation-x={Math.PI}><coneGeometry args={[PLOT_R * 1.05, 34, 12, 2]} /><meshLambertMaterial color={P.under} flatShading /></mesh>
       <mesh position={[THRESHOLD.x, plotHeightAt(THRESHOLD.x, THRESHOLD.z) + 0.03, THRESHOLD.z]} rotation-x={-Math.PI / 2} renderOrder={groundOrder('mark')}>
         <ringGeometry args={[1.1, 1.45, 18]} /><meshBasicMaterial color="#efe0a8" {...groundMat('mark')} />

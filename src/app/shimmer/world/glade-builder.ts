@@ -42,13 +42,25 @@ export function sampleGladeBase(ground: (x: number, z: number) => number): { h: 
   return { h, voidV, voided }
 }
 
-/** The layer's height delta at a world point, in metres: bilinear over the tile's dm deltas, 0 off the tile or where no vertex is
- *  edited. This is what the game adds to gladeZoneGround (s2b), and it is exact at a vertex. */
-export function gladeDeltaAt(edits: Record<string, number> | null | undefined, x: number, z: number): number {
+/** A per-vertex value (asked at WORLD vertices of the 4 m grid) read anywhere on the triangles the Glade's meshes draw: each cell is
+ *  split by its (0,0)-(1,1) diagonal (plot-scene.tsx, cluster-scene.tsx); `flip` = the other diagonal, as a mate's island turned a
+ *  quarter is split. Bilinear here put the keeper up to a quarter of a cell's twist off the drawn ground (M157). */
+export function triLerp(h00: number, h10: number, h01: number, h11: number, u: number, v: number, flip = false): number {
+  if (flip) return u + v <= 1 ? h00 + (h10 - h00) * u + (h01 - h00) * v : h11 + (h01 - h11) * (1 - u) + (h10 - h11) * (1 - v)
+  return u >= v ? h00 + (h10 - h00) * u + (h11 - h10) * v : h00 + (h11 - h01) * u + (h01 - h00) * v
+}
+export function onTriangles(at: (x: number, z: number) => number, x: number, z: number): number {
+  const C = GLADE_CELL, x0 = Math.floor(x / C) * C, z0 = Math.floor(z / C) * C   // every Glade grid's origin is a multiple of the cell
+  return triLerp(at(x0, z0), at(x0 + C, z0), at(x0, z0 + C), at(x0 + C, z0 + C), (x - x0) / C, (z - z0) / C)
+}
+
+/** The layer's height delta at a world point, in metres: the tile's dm deltas on the drawn triangles (triLerp), 0 off the tile or
+ *  where no vertex is edited. This is what the game adds to gladeZoneGround (s2b), and it is exact at a vertex. */
+export function gladeDeltaAt(edits: Record<string, number> | null | undefined, x: number, z: number, flip = false): number {
   if (!edits) return 0
   const fx = (x - GLADE_TILE_CENTER.x + GLADE_SIZE / 2) / GLADE_CELL, fz = (z - GLADE_TILE_CENTER.z + GLADE_SIZE / 2) / GLADE_CELL
   if (!(fx >= 0 && fz >= 0 && fx <= GLADE_N - 1 && fz <= GLADE_N - 1)) return 0
   const i = Math.min(GLADE_N - 2, Math.floor(fx)), j = Math.min(GLADE_N - 2, Math.floor(fz)), u = fx - i, v = fz - j
   const d = (ii: number, jj: number) => (edits[String(jj * GLADE_N + ii)] ?? 0) / 10
-  return (d(i, j) * (1 - u) + d(i + 1, j) * u) * (1 - v) + (d(i, j + 1) * (1 - u) + d(i + 1, j + 1) * u) * v
+  return triLerp(d(i, j), d(i + 1, j), d(i, j + 1), d(i + 1, j + 1), u, v, flip)
 }

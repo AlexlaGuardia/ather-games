@@ -1,7 +1,7 @@
 // ── THE GLADE'S BUILDER LAYER, IN THE GAME (BETA M83 s2b) ──
 // s2a made the closed Glade a World Builder map: one virtual 1 km tile over gladeZoneGround (world/glade-builder.ts), published to
 // world/glade-edits.json and served at GET /shimmer/open/glade-edits. This file is what the GAME does with it:
-//   · gladeLayerGround: the walker's ground = gladeZoneGround + the layer's delta (bilinear, 0 where nothing is edited). Off the land
+//   · gladeLayerGround: the walker's ground = gladeZoneGround + the layer's delta (on the drawn triangles, 0 where nothing is edited). Off the land
 //     it stays NaN: the layer sculpts the ground the Glade has, it never adds land (the builder's void rule).
 //   · liftGeometry: the Glade's meshes are BAKED from the base ground (Greg's island, the mates' islands, the meadow), so each one is
 //     displaced by the same delta at its vertices' WORLD xz (a mate's island is placed + turned, so its local xz is mapped first).
@@ -9,7 +9,8 @@
 //   · gladePonds: the owner's painted water, the Wilds' ponds() over the tile's base + edits (sampled only when there is water).
 // Pure apart from fetchGladeLayer; glade-layer.test.ts.
 import * as THREE from 'three'
-import { gladeZoneGround } from './glade-cluster'
+import { gladeZoneGround, bowlAtVertex, GLADE_FRAME } from './glade-cluster'
+import { mateAt } from './cluster'
 import { cleanEdits, cleanWaters, ponds, type PondCell, type TileEdits, type WaterMap } from './wilds-edits'
 import { publishedZones } from './zone-parts'
 import type { Zone } from '../../world/builder-zones'
@@ -33,14 +34,17 @@ export async function fetchGladeLayer(): Promise<GladeLayer> {
   } catch { return NO_GLADE_LAYER }   // no layer = the Glade as built, exactly
 }
 
+/** On a mate's island turned a quarter, whose mesh splits its cells the other way (so the walker reads the same triangles). */
+const turned = (x: number, z: number): boolean => { const m = mateAt(GLADE_FRAME, x, z); return !!m && Math.abs(Math.sin(m.rot)) > 0.5 }
 /** The walker's ground with the layer applied. No edits = gladeZoneGround itself (the same function, so nothing re-derives). */
 export function gladeLayerGround(edits: TileEdits | null, base: (x: number, z: number) => number = gladeZoneGround): (x: number, z: number) => number {
   if (!edits) return base
-  return (x, z) => { const g = base(x, z); return Number.isFinite(g) ? g + gladeDeltaAt(edits, x, z) : g }
+  return (x, z) => { const g = base(x, z); return Number.isFinite(g) ? g + gladeDeltaAt(edits, x, z, turned(x, z)) : g }
 }
 
-/** A delta function for meshes (metres at a world point), or null when there is nothing to lift. */
-export const gladeLift = (edits: TileEdits | null): ((x: number, z: number) => number) | null => (edits ? (x, z) => gladeDeltaAt(edits, x, z) : null)
+/** What the baked meshes' VERTICES move by (metres at a world vertex): the Moonwell's bowl (M157: drawn, not only walked) + the edits.
+ *  Never null: the bowl is there with no edits at all. */
+export const gladeLift = (edits: TileEdits | null): ((x: number, z: number) => number) => (x, z) => bowlAtVertex(x, z) + gladeDeltaAt(edits, x, z)
 
 /** Where a mesh's local frame sits in the world: three's rotation-y, then the offset (cluster-scene's mate islands). */
 export interface Place { x: number; z: number; rot: number }
