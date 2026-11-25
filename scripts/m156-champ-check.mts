@@ -124,6 +124,7 @@ try {
     const [ch, cn] = await Promise.all([champ(h), champ(n)])
     ok(ch && cn && ch.bar === cn.bar && Math.hypot(ch.x - cn.x, ch.z - cn.z) < 3, `1. the same bar and place (${ch && cn ? Math.hypot(ch.x - cn.x, ch.z - cn.z).toFixed(1) : '?'} m apart)`)
     ok(!(await champ(x)), '1. X, elsewhere, has none')
+    for (const p of [h, n]) await p.evaluate((t: string) => { let was = ''; setInterval(() => { const c = (window as any).__ather?.combat?.(), h = c?.champ, k = h ? h.nodeId + h.bar + h.state : '-', d = c?.drops?.filter((q: any) => q.amount > 9).length; if (k + d !== was) { was = k + d; console.log('CHLOG', t, k, h ? Math.round(h.hp) : '', 'chunks', d) } }, 50) }, p === h ? 'H' : 'N'); for (const p of [h, n]) p.on('console', m => { if (m.text().startsWith('CHLOG')) console.log('   ' + m.text()) })
     // 2
     await n.bringToFront(); await n.mouse.click(195, 420); await sleep(800); await n.keyboard.down('KeyR'); await sleep(150); await n.keyboard.up('KeyR')
     ok(await poll(async () => (await n.evaluate(() => (window as any).__ather.stance()?.kind)) === 'weapon', 15000), '2. N drew (real R)')
@@ -136,8 +137,8 @@ try {
     // 3
     const g0 = [await grey(h), await grey(n)]
     await onHost(h, 2, 6); ok(await poll(async () => (await champ(n))?.bar === 2, 20000), '3. N is shown its last bar')
-    for (let i = 0; i < 60 && (await champ(h)); i++) { await shot(); if ((await champ(h))?.hp! > 6) await onHost(h, 2, 6) }
-    ok(!(await champ(h)), "3. N's real shots felled it")
+    for (let i = 0; i < 60 && (await champ(h))?.node === K.id; i++) { await shot(); if ((await champ(h))?.hp! > 6) await onHost(h, 2, 6) }
+    { const c = await champ(h); ok(c?.node !== K.id, `3. N's real shots felled it (${JSON.stringify(c)})`) }
     ok(await poll(async () => (await count(h, K.id)) === 1 && (await count(n, K.id)) === 1, 15000), `3. K in both saves, once (H ${await count(h, K.id)}, N ${await count(n, K.id)})`)
     ok((await ledger(n)).filter(k => k !== K.id).join() === n0.join(), '3. nothing else of N\'s save moved')
     ok(await poll(async () => !(await champ(n)), 5000), '3. N\'s screen: gone')
@@ -145,7 +146,7 @@ try {
     ok((await bytes(x)) === x0, '3. X, elsewhere: save byte-identical')
     const took = (p: Page, k: number) => poll(async () => { const d = await p.evaluate(() => { const c = (window as any).__ather.combat(), e = c.drops.find((q: any) => q.amount === 30); return e ? { x: e.x, z: e.z } : null }); if (d) await p.evaluate((d: any) => (window as any).__ather.tp(d.x, d.z), d); return (await grey(p)) - g0[k] >= 30 }, 45000)
     const th = await took(h, 0), tn = await took(n, 1); ok(th && tn, `3. the chunk, one each (H +${(await grey(h)) - g0[0]}, N +${(await grey(n)) - g0[1]})`)
-    await sleep(4000); ok((await grey(n)) - g0[1] < 60 && (await grey(h)) - g0[0] < 60, '3. never two')
+    await sleep(4000); ok((await grey(n)) - g0[1] < 60 && (await grey(h)) - g0[0] < 60, `3. never two (H +${(await grey(h)) - g0[0]}, N +${(await grey(n)) - g0[1]})`)
     // 4
     await near(h, K2.x + 8, K2.z + 3); await near(n, K2.x - 8, K2.z + 3)
     ok(await poll(async () => (await champ(h))?.node === K2.id && (await champ(n))?.node === K2.id, 90000), '4. at K2: up, N shown it')
