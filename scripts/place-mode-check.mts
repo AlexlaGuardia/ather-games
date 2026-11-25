@@ -152,7 +152,7 @@ try {
     const w1 = await bump(g), K = SCENERY_BY.get('tree:grove')!, half = K.box!.w * m.s / 2
     ok(w1.z > m.z + half - 0.05 && w1.z < m.z + half + 0.8 && Math.abs(w1.x - m.x) < 1, `9. ...and bumps the trunk (stops at z ${w1.z.toFixed(2)}, its face is ${(m.z + half).toFixed(2)})`)
     await g.evaluate((a: any) => (window as W).__ather.tp(a.x, a.z + 15, 0), AT); await sleep(4000); await g.evaluate(() => { const e = [...document.querySelectorAll('div')].filter(d => /Click to play|Tap to play/.test(d.textContent ?? '') && d.clientHeight < 400).at(0); if (e) e.style.display = 'none' }); await g.screenshot({ path: `${out}/game-phone.png` }).catch(() => {})
-    await g.setViewport({ width: 1280, height: 800 }); await sleep(5000); await g.evaluate(() => { for (const e of document.querySelectorAll('div')) if (/Click to play/.test(e.textContent ?? '') && e.clientHeight < 400) (e as HTMLElement).style.display = 'none' }); await g.screenshot({ path: `${out}/game-desktop.png` }).catch(() => {}); await g.close()
+    await g.close()
     const back = s2.v - 1, rolled = await o.evaluate((v: number) => (window as W).__terrain.rollback(v), back); const s3 = await store(o)
     ok(rolled && !s3.live.props && !s3.draft.props && hash(s3.live) === hash(before.live), `10. roll back to v${back}: live is byte-identical to before, the draft too has none`)
     g = await game(); ok((await drawnIn(g)).items.length === 0, '10. the keeper sees none'); const w2 = await bump(g); ok(w2.z < m.z - 0.5, '10. ...and walks through again'); await g.close()
