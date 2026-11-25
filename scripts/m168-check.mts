@@ -100,10 +100,10 @@ try {
     const B0 = gladeKeepers().find(k => k.id === 'bonn')!, m0 = await flyMomo(o), w0 = momoSpot(stand0)
     ok(m0?.meshes === 3 && near(m0, w0, 0.06), `M. Momo is drawn in Fly by Bonn (${m0 && [m0.x, m0.y, m0.z].map(v => v.toFixed(2))})`)
     if (!m0) throw new Error('no Momo')
-    await aim(o, m0.x, m0.z, 3, -0.6); await o.screenshot({ path: `${out}/fly-momo.png` })
     const targets: (string | null)[] = []
     const ahead = async (x: number, y: number, z: number) => { await o.evaluate((a: number, b: number, c: number) => (window as W).__builderFly.setCam({ x: a, y: b + 2, z: c + 2, yaw: 0, pitch: -Math.PI / 4, top: false }), x, y, z); await sleep(1500); targets.push((await P(o)).target) }
     for (const h of [0.08, 0.16, 0.24]) await ahead(m0.x, m0.y + h, m0.z)
+    await o.screenshot({ path: `${out}/fly-momo.png` })
     ok(targets.every(t => t === null || t === 'wbonn'), `M. the crosshair on him takes nothing of his (${targets})`)
     // move Bonn by the tool
     await o.evaluate((x: number, z: number) => { const T = (window as W).__terrain, c = T.origin(); (window as W).__builderFly.setCam({ x, z: z + 6, y: T.heightAt(x - c.x, z - c.z) + 6, yaw: 0, pitch: -Math.atan2(5.35, 6), top: false }) }, B0.x, B0.z); await sleep(1800); await key(o, 'KeyM')
@@ -133,14 +133,15 @@ try {
       await o.evaluate(() => (window as W).__terrain.publish('m168')); const s2 = await store(o); ok(s2.v === before.v + 1, `L. Publish: v${s2.v} (${await o.evaluate(() => (window as W).__terrain.status())})`)
       ok(!/tilt|momo/.test(JSON.stringify(s2.live)), 'L. neither Momo nor a tilt is in the layer')
       for (const ph of [true, false]) {
-        const g = await game(ph), gi = (await scen(g)).filter(i => ids.includes(i.id)), tag = ph ? 'phone' : 'desk'
+        const g = await game(ph); await until(async () => (await scen(g)).length > 0)
+        const gi = (await scen(g)).filter(i => ids.includes(i.id)), tag = ph ? 'phone' : 'desk'
         ok(gi.length === ids.length && gi.every(a => { const b = it.find(q => q.id === a.id); return Math.abs(a.y - b.y) < 0.02 && Math.abs((a.tilt?.[0] ?? 0) - (b.tilt?.[0] ?? 0)) < 0.02 && Math.abs((a.tilt?.[1] ?? 0) - (b.tilt?.[1] ?? 0)) < 0.02 }), `L. ${tag}: every fence stands and leans as in Fly (${gi.length})`)
         const gm = await g.evaluate(() => (window as W).__glade.momo); ok(near(gm, m1, 0.06), `L. ${tag}: Momo is where Fly had him (${gm && [gm.x, gm.z].map((v: number) => v.toFixed(2))})`)
         await g.evaluate((x: number, z: number) => { const a = (window as W).__ather; a.gladeAt(x, z, 0); a.look?.(0, -0.1) }, HILL.x, HILL.z + 18); await sleep(7000); await g.screenshot({ path: `${out}/game-fences-${tag}.png` as `${string}.png` })
         if (!ph) {   // walk into a leaning one from +z: it stops you
-          const T = st; await g.evaluate((x: number, z: number) => { const a = (window as W).__ather; a.gladeAt(x, z, 0); a.look?.(0, -0.2) }, T.x, T.z + 1.6); await sleep(5000); await g.mouse.click(640, 400); await sleep(800)
+          const T = lean.filter(i => i.k === 'filler:fence' && Math.abs(i.tilt[0]) < 0.45).sort((a, b) => Math.abs(b.tilt[0]) - Math.abs(a.tilt[0]))[0]; await g.evaluate((x: number, z: number) => { const a = (window as W).__ather; a.gladeAt(x, z, 0); a.look?.(0, -0.2) }, T.x, T.z + 1.6); await sleep(5000); await g.mouse.click(640, 400); await sleep(800)
           await g.keyboard.down('KeyW'); let z = 99; for (let k = 0; k < 40; k++) { await sleep(1000); const q = await g.evaluate(() => (window as W).__ather.state().pz); if (Math.abs(q - z) < 0.005 && k > 12) break; z = q } await g.keyboard.up('KeyW')
-          const pz = await g.evaluate(() => (window as W).__ather.state().pz); ok(pz > T.z && pz < T.z + 1, `L. a leaning fence stops the keeper (${(pz - T.z).toFixed(2)} m from it)`)
+          const pz = await g.evaluate(() => (window as W).__ather.state().pz); ok(pz > T.z && pz < T.z + 1, `L. a leaning fence stops the keeper (tilt ${T.tilt[0].toFixed(2)}, ${(pz - T.z).toFixed(2)} m from it)`)
         }
         await g.close()
       }
