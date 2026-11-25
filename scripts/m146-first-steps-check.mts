@@ -1,10 +1,11 @@
 // BETA M146: FIRST STEPS, played on prod (390 phone; --desktop = 1280x800).  npx tsx scripts/m146-first-steps-check.mts [--url] [--out] [--only ABCD] [--desktop]
 // A FRESH keeper: the note read early; Greg talked to over and over = no gems, no glove, no errand line, no Dig, no pulse; the one
-//   journal line and its marks at every step (friends not yet heard -> Greg -> the gate + settlement -> the big one -> the settlers
+//   journal line and its marks at every step (M155: the guided tour, one stop and ONE mark at a time, Bonn first, each stop's signed
+//   lines, a reload halfway -> Greg -> the gate + settlement -> the big one -> the settlers
 //   -> Greg); Greg's favour word for word; the big one down; the thanks; back at Greg: done: the errand line, The Dig on, the fold.
 // B FRESH, the SKIP PATH + an EARLY DEATH: through the gate, fall, pack back = no ping; the settlement's big one first (nobody
 //   asked): Chamomile thanks, Greg ends it: Morel's ping then, once (died, unread).
-// C a MID-TUTORIAL save (pre-M146 shape, two friends heard) continues.   D an OLD save: byte-identical, errand as before, no First Steps.
+// C a MID-TUTORIAL save (the old any-order flow, Otto + Tess heard) continues: Bonn, Hazel, Fennel, Greg. C2 the old flow, all four heard: Greg.   D an OLD save: byte-identical, errand as before, no First Steps.
 // Hooks: __ather (tp, gladeAt, travel, open, fall, combat), __journal / __chain / __glade (READ).
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'node:fs'
@@ -15,12 +16,16 @@ import { FOLD_TEXT } from '../src/app/shimmer/open/ather/garden-fold'
 import { KAEL_INVITE } from '../src/app/shimmer/open/shared/opening-chain'
 import { gladeKeepers, gladeNewbornSpot, gregInGlade } from '../src/app/shimmer/open/ather/glade-cluster'
 import { setGladePeople } from '../src/app/shimmer/open/ather/glade-people'   // M153 s1c-1: people stand where the site's layer puts them
+import { parseTut, TOUR, GUIDES, type Stop } from '../src/app/shimmer/open/ather/glade-tutorial'
+import { friendStart, nodeBeside, type Talker } from '../src/app/shimmer/open/ather/glade-friend-talk'
+import { fennelStart, fennelScript } from '../src/app/shimmer/open/ather/glade-fennel-talk'
+import { gladeNodes } from '../src/app/shimmer/open/ather/glade-nodes'
 import { parseGladeLayer } from '../src/app/shimmer/open/ather/glade-layer'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games').replace(/\/$/, ''), out = flag('--out', '/tmp/m146'), only = flag('--only', 'ABCD'), desk = process.argv.includes('--desktop')
 mkdirSync(out, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)), L = (id: string) => GLADE_LINES[id].text
-let fails = 0
+let fails = 0, nodes = gladeNodes([], () => 0)
 const ok = (c: unknown, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--mute-audio'] })
 const errs: string[] = []
@@ -91,17 +96,19 @@ async function open(seed?: Record<string, unknown>, born = false) {
     await breakIt()
     ok(await poll(() => p.evaluate(() => !(window as any).__ather.combat().champ), 60000), 'the big one is down')
   }
+  const at = async (id: string) => gladeKeepers().find(x => x.id === id) ?? ((await p.evaluate(() => (window as any).__glade?.folk ?? [])) as any[]).find(x => x.id.endsWith(`:${id}`))
   const friend = async (id: string) => {
     for (let k = 0; k < 4; k++) {
-      const f = id === 'fennel' ? (await p.evaluate(() => (window as any).__glade?.folk ?? [])as any[]).find(x => x.id.endsWith(':fennel')) : gladeKeepers().find(x => x.id === id)
+      const f = await at(id), t0 = parseTut(await tut())!
       if (!f) { await sleep(1500); continue }
       const x = f.x + Math.sin(f.yaw) * 1.8, z = f.z + Math.cos(f.yaw) * 1.8, yaw = Math.atan2(-(f.x - x), -(f.z - z))
-      await A('gladeAt', x, z, yaw); await sleep(1500); await A('look', yaw, id === 'fennel' ? -0.55 : -0.15); await sleep(1200)
-      await p.keyboard.press('KeyE'); if (await poll(async () => (await opts()).length > 0, 5000)) { const r = await read(); await p.keyboard.press('Escape'); await sleep(300); if ((await tut())?.heard.includes(id)) return true; void r }
+      await A('gladeAt', x, z, yaw); await sleep(1500); await A('look', yaw, gladeKeepers().some(x => x.id === id) ? -0.15 : -0.55); await sleep(1200)
+      await p.keyboard.press('KeyE'); if (await poll(async () => (await opts()).length > 0, 5000)) { const r = await read(); await p.keyboard.press('Escape'); await sleep(300); const t = await tut(), want = id === 'fennel' ? fennelScript(fennelStart(t0, false, 0)) : friendStart(t0, id as Talker, nodeBeside(id as Talker, f, nodes)).script
+        if (t?.heard.includes(id) || t?.met?.includes(id)) { ok(r.ls.join('|') === want.map(L).join('|'), `${id}: the signed lines in order (${r.ls.length}/${want.length})${r.ls.join('|') === want.map(L).join('|') ? '' : ' ' + r.ls.join(' | ')}`); return true } }
     }
     return false
   }
-  return { p, A, store, tut, chain, said, line, opts, read, greg, journal, invHas, zone, load, map, step, gate, settler, kill, friend }
+  return { p, A, store, tut, chain, said, line, opts, read, greg, journal, invHas, zone, load, map, step, gate, settler, kill, friend, at }
 }
 type K = Awaited<ReturnType<typeof open>>
 const quiet = async (k: K, tag: string) => {
@@ -114,10 +121,10 @@ const ended = async (k: K, tag: string) => {
   const j = await k.journal(); ok(!j?.fs && !j?.ids.includes('m70') && j?.active === 'errand', `${tag}: First Steps is off the page, the errand leads`)
 }
 try {
-  setGladePeople(parseGladeLayer(await (await fetch(`${url}/shimmer/open/glade-edits`, { cache: 'no-store' })).json()).props)
+  { const layer = parseGladeLayer(await (await fetch(`${url}/shimmer/open/glade-edits`, { cache: 'no-store' })).json()); setGladePeople(layer.props); nodes = gladeNodes(layer.props ?? [], () => 0) }
   if (only.includes('A')) {
     const k = await open(undefined, true), { p } = k
-    await k.step('A newborn', '', 1, 1)
+    await k.step('A newborn', L('quest.b1.step.greg'), 1, 1)
     ok(await poll(() => k.invHas(KAEL_INVITE), 10000), 'A: the note is in the pack')
     const at = ((JSON.parse(await k.store('open.inv.v1') ?? 'null')?.slots ?? []) as any[]).findIndex(s => s?.id === KAEL_INVITE)
     await p.keyboard.press('KeyI'); await sleep(1200); if (await p.$('[data-pack-go="bag"]')) { await p.click('[data-pack-go="bag"]'); await sleep(700) }
@@ -129,11 +136,19 @@ try {
     ok(t.greg.wilds && t.gifts.includes('grimoire'), `A: Greg's Beat 1 heard (${JSON.stringify(t.greg)})`)
     const again: string[] = []; for (let n = 0; n < 3; n++) again.push(...(await k.greg()).ls)
     ok(again.length === 3 && again.every(x => x === L('greg.b1.bark.pending')), `A: Greg thrice more: the pending bark only (${again.join(' | ')})`)
-    await quiet(k, 'A after Greg x5'); await k.step('A friends', L('quest.b1.step').replace('{N}', '0'), 4, 1)
-    { const fs = (await k.journal())?.fs, ms = [fs?.where, ...(fs?.also ?? [])].filter((m: any) => m?.zone === 'glade'), fen = (await p.evaluate(() => (window as any).__glade?.folk ?? []) as any[]).find(x => x.id.endsWith(':fennel'))
-      const want = [...gladeKeepers(), fen]; ok(want.length === 4 && want.every(w => ms.some((m: any) => Math.hypot(m.x - w.x, m.z - w.z) < 0.5)), `A: a mark on each friend where they stand (${ms.map((m: any) => `${m.x.toFixed(0)},${m.z.toFixed(0)}`).join(' ')}; Greg ${gregInGlade().x.toFixed(0)},${gregInGlade().z.toFixed(0)})`) }
-    await p.screenshot({ path: `${out}/a-friends.png` })
-    let n = 0; for (const f of ['otto', 'tess', 'bonn', 'fennel']) { ok(await k.friend(f), `A: ${f} heard`); n++; if (n < 4) await k.step(`A ${n}/4`, L('quest.b1.step').replace('{N}', String(n)), 4 - n, 1) }
+    await quiet(k, 'A after Greg x5')
+    for (const s of TOUR) {
+      await k.step(`A ${s}`, L(`quest.b1.step.${s}`), 1, 1)
+      const m = (await k.journal())?.fs?.where, f = await k.at(s), g = gregInGlade()
+      ok(!!m && !!f && Math.hypot(m.x - f.x, m.z - f.z) < 0.5, `A: the ONE mark is on ${s} where they stand (${m?.x.toFixed(0)},${m?.z.toFixed(0)}; Greg ${g.x.toFixed(0)},${g.z.toFixed(0)})`)
+      ok(await p.evaluate(() => (window as any).__glade?.marker === false), `A ${s}: no diamond over Greg`)
+      if (s === 'bonn') await p.screenshot({ path: `${out}/a-friends.png` })
+      ok(await k.friend(s), `A: ${s} heard`)
+      if (s === 'bonn') { const t2 = await k.tut(); ok(t2.gifts.includes('pruner') && !t2.gifts.includes('spike'), 'A: Bonn handed the pruner, only') }
+      if (s === 'hazel') { const before = JSON.stringify(await k.tut()); await k.load(); ok(JSON.stringify(await k.tut()) === before, 'A: a reload halfway keeps the save'); if ((await k.A('zone')) !== 'glade') { await k.A('travel', { kind: 'glade' }); await k.zone('glade') } await sleep(2500) }
+    }
+    ok((GUIDES as readonly Stop[]).every(g => TOUR.includes(g)), 'A: the Moglins are stops of it')
+    ok(await poll(() => p.evaluate(() => (window as any).__glade?.marker === true), 8000), 'A: the diamond is over Greg again')
     await k.step('A back', L('quest.b1.done'), 1, 1)
     const no = await k.greg([L('greg.b2.choice.wait')])
     ok(no.ls.join('|') === [1, 2, 3, 4, 5, 6].map(i => L(`greg.b2.ask.${i}`)).join('|') + '|' + L('greg.b2.wait'), `A: the favour, word for word, "Not yet" (${no.ls.length} lines)`)
@@ -183,8 +198,15 @@ try {
     const mid = { v: 1, live: true, greg: all, heard: ['otto', 'tess'], gifts: ['grimoire', 'spike', 'seeds'], b2: 'none', baitDay: null, m70: 'none', m70node: null, m70side: 'none', folded: false }
     const k = await open({ 'open.tutorial.v1': mid }); await k.load()
     if ((await k.A('zone')) !== 'glade') { await k.A('travel', { kind: 'glade' }); await k.zone('glade') }
-    await k.step('C mid-tutorial', L('quest.b1.step').replace('{N}', '2'), 2, 1); await k.greg(); await k.greg(); await quiet(k, 'C')
+    await k.step('C mid-tutorial', L('quest.b1.step.bonn'), 1, 1); await k.greg(); await k.greg(); await quiet(k, 'C')
     ok(JSON.stringify(await k.tut()) === JSON.stringify(mid), 'C: the save is untouched by the talks')
+    for (const s of ['bonn', 'hazel', 'fennel'] as const) { await k.step(`C ${s}`, L(`quest.b1.step.${s}`), 1, 1); ok(await k.friend(s), `C: ${s} heard`) }
+    await k.step('C back', L('quest.b1.done'), 1, 1); const t = await k.tut()
+    ok(['spike', 'seeds'].every(g => t.gifts.filter((x: string) => x === g).length === 1) && t.gifts.includes('pruner'), `C: nothing lost, nothing twice (${t.gifts})`)
+    const go = await k.greg([L('greg.b2.choice.go')]); ok(go.ls[0] === L('greg.b2.ask.1') && go.ls.at(-1) === L('greg.b2.go'), 'C: the favour'); await k.step('C gate', L('quest.b2.step'), 1, 1)
+    const all4 = { ...mid, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'seeds', 'pruner', 'rinquest', 'bait'] }
+    const k2 = await open({ 'open.tutorial.v1': all4 }); await k2.load(); if ((await k2.A('zone')) !== 'glade') { await k2.A('travel', { kind: 'glade' }); await k2.zone('glade') }
+    await k2.step('C2 old flow, all four heard', L('quest.b1.done'), 1, 1); ok((await k2.greg([L('greg.b2.choice.go')])).ls.at(-1) === L('greg.b2.go'), 'C2: Greg asks, nobody to visit again')
   }
   if (only.includes('D')) {
     const old = { v: 1, live: false, greg: all, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null, m70: 'thanked', m70node: null, m70side: 'none', folded: true }

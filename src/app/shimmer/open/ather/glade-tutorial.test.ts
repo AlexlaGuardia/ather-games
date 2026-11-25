@@ -2,7 +2,7 @@
 // M68 s1: Greg's chain in order (The Wilds? only after Moglins? + Spirits?; the gate ask only after all four), each gift once
 // (a reload = parse(save) cannot re-gift), Tess's packet holds exactly one grade-A seed, Fennel's jar once per in-game day,
 // older saves migrate as DONE, and every line id the build reads exists in the signed lines.
-import { freshTut, legacyTut, gregScreen, heardWelcome, heardMoglins, heardSpirits, heardWilds, answerGate, hearFriend, friendScreen, gift, GIFT_OF, allHeard, firstStepsOn, endFirstSteps, tessPacket, TESS_SEEDS, claimJar, jarFull, JAR_BAIT, parseTut, adoptTut, FRIENDS } from './glade-tutorial'
+import { freshTut, legacyTut, gregScreen, heardWelcome, heardMoglins, heardSpirits, heardWilds, answerGate, hearFriend, friendScreen, meetGuide, GUIDES, gift, GIFT_OF, allHeard, firstStepsOn, endFirstSteps, tessPacket, TESS_SEEDS, claimJar, jarFull, JAR_BAIT, parseTut, adoptTut, FRIENDS } from './glade-tutorial'
 import { GLADE_LINES, line } from './glade-tutorial-lines'
 let pass = 0, fail = 0
 const ok = (c: unknown, m: string) => { if (c) pass++; else { fail++; console.log('FAIL', m) } }
@@ -32,7 +32,9 @@ for (const f of FRIENDS) {
   ok(hearFriend(t, f) === t, `${f}: heard once`)
 }
 ok(GIFT_OF.otto === 'spike' && GIFT_OF.bonn === 'pruner' && GIFT_OF.tess === 'seeds' && GIFT_OF.fennel === 'rinquest', 'gardens table: Otto spike, Bonn pruner, Tess seeds, Fennel the quest')
-ok(allHeard(t), 'all four heard')   // the quest's steps: first-steps.test.ts (M146)
+ok(allHeard(t) && gregScreen(t).kind === 'pending' && answerGate(t, true) === t, 'all four heard, the Moglins not: Greg still waits')
+for (const m of GUIDES) t = meetGuide(t, m)
+ok(rt(t).met!.length === 4, 'the guides are saved')   // the quest's steps: first-steps.test.ts (M146)
 ok(gregScreen(t).kind === 'ask', 'all four heard: the gate ask')
 t = answerGate(t, false); ok(t.b2 === 'asked' && gregScreen(t).kind === 'ask', 'Not yet: asked again next talk')
 t = answerGate(t, true); ok(gregScreen(t).kind === 'open', "I'll go: bark.open")
@@ -59,11 +61,11 @@ ok(adoptTut(null, true).live === false && adoptTut(null, false).live === true, '
 ok(adoptTut({ v: 1, live: true, greg: { welcome: true }, heard: ['otto', 'zed'], gifts: ['spike', 'gun'], b2: 'x', baitDay: 'q' }, true).heard.join() === 'otto', 'garbage cleaned, a real save wins over the played-before guess')
 
 // every id the build reads is in the signed lines
-const ids = ['greg.b1.welcome.1', 'greg.b1.welcome.4', 'greg.b1.choice.a', 'greg.b1.choice.b', 'greg.b1.choice.c', 'greg.b1.hub.back', 'greg.b1.moglins.3', 'greg.b1.spirits.6', 'greg.b1.wilds.5', 'greg.b1.bark.pending', 'greg.b1.bark.blue',
-  'quest.b1.title', 'quest.b1.step', 'quest.b1.done', 'quest.b2.title', 'quest.b2.step', 'greg.b2.ask.1', 'greg.b2.ask.6', 'greg.b2.choice.go', 'greg.b2.choice.wait', 'greg.b2.go', 'greg.b2.wait', 'greg.b2.bark.open',
+const ids = ['greg.b1.welcome.1', 'greg.b1.welcome.4', 'greg.b1.choice.a', 'greg.b1.choice.b', 'greg.b1.choice.c', 'greg.b1.hub.back', 'greg.b1.moglins.3', 'greg.b1.spirits.6', 'greg.b1.wilds.4', 'greg.b1.bark.pending', 'greg.b1.bark.blue',
+  'quest.b1.title', 'quest.b1.done', 'quest.b2.title', 'quest.b2.step', 'greg.b2.ask.1', 'greg.b2.ask.6', 'greg.b2.choice.go', 'greg.b2.choice.wait', 'greg.b2.go', 'greg.b2.wait', 'greg.b2.bark.open',
   ...FRIENDS.flatMap(f => [`${f}.b1.greet.1`, `${f}.b1.gift.1`]), 'otto.b1.bark', 'tess.b1.bark', 'bonn.b1.bark', 'fennel.b1.done.1', 'fennel.b1.gift.5', 'fennel.bait.ready', 'fennel.bait.empty', 'overlay.greg', 'overlay.f']
 for (const id of ids) ok(!!GLADE_LINES[id]?.text, `line ${id}`)
-ok(line('quest.b1.step').includes('{N}'), 'the step line carries its {N}')
+for (const id of ['greg.b1.wilds.5', 'bonn.b1.gift.3', 'quest.b1.step']) ok(!GLADE_LINES[id], `${id} is retired`)
 let threw = false; try { line('greg.nope') } catch { threw = true }
 ok(threw, 'a missing id throws')
 

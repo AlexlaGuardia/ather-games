@@ -11,7 +11,7 @@ import { markMet } from './met'   // BETA M33: a first talk = met (Morel may car
 export interface TalkOption { label: string; pick: () => void
   /** M109: shown greyed and not pickable (a coming answer), with an optional small tag ('soon') */
   disabled?: boolean; tag?: string }
-export interface TalkNode { line: string; options: TalkOption[]; /** optional HUD panel drawn above the answers (M46: a Moglin's card) */ panel?: ReactNode }
+export interface TalkNode { line: string; options: TalkOption[]; /** a stage direction above the line (a signed [SCENE] box) */ scene?: string; /** optional HUD panel drawn above the answers (M46: a Moglin's card) */ panel?: ReactNode }
 
 /** In the scene (inside the Canvas): the NPC's name plate with the bubble above it. `at` = the point just over their head. */
 export function TalkBubble({ at, name, line, scene }: { at: [number, number, number]; name: string; line: string

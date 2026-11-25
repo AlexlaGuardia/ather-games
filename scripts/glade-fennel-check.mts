@@ -85,13 +85,13 @@ try {
   // a fresh bag lives in memory (STARTING_BAIT) and is first saved when something changes it: no saved bag = the starting bait
   const b0 = (await p.evaluate(() => localStorage.getItem('open.inv.v1') !== null)) ? await bait() : STARTING_BAIT
   await openFennel('2.')
-  const ids = ['fennel.b1.greet.1', 'fennel.b1.greet.2', 'fennel.b1.gift.1', 'fennel.b1.gift.2', 'fennel.b1.gift.3', 'fennel.b1.gift.4', 'fennel.b1.gift.5']
+  const ids = ['fennel.b1.greet.1', 'fennel.b1.greet.2', 'fennel.b1.room.1', 'fennel.b1.gift.1', 'fennel.b1.gift.2', 'fennel.b1.gift.3', 'fennel.b1.gift.4', 'fennel.b1.gift.5']
   const seen: string[] = []
   for (const lid of ids) {
     if (await poll(async () => (await bubble()).includes(L(lid)), 10000)) seen.push(lid)
     await tapText(p, lid === ids[ids.length - 1] ? fennelBye : ANSWERS.more); await sleep(700)
   }
-  ok(seen.length === 7, `2. all seven signed bubbles in order (${seen.length}/7: ${seen.join(' ')})`)
+  ok(seen.length === 8, `2. all eight signed bubbles in order (${seen.length}/8: ${seen.join(' ')})`)
   ok(!(await bubble()).includes(L('fennel.b1.done.1')), '2. no stick: done .1 not said')
   ok(await poll(async () => !(await bubble()).includes(L('fennel.b1.gift.5')), 5000), "2. lark's goodbye closes the talk")
   const q1 = await quest()

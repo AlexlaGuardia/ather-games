@@ -75,17 +75,18 @@ import { tutStart, tutNode, grimoireGift, pedestalOwed, type TutCursor } from '.
 import { useSpiritsDev } from './spirit-model'   // M123: Greg's grimoire hand-over for a legacy keeper (every keeper since s2)
 import { loadTut, saveTut, gift as tutGift, allHeard, tessPacket, type Tut, type Gift as TutGift } from './glade-tutorial'
 import { gardenOpen, foldOffered, foldNode, buyPick, FOLD_TEXT, type FoldStep } from './garden-fold'   // M71 s1: Greg folds the first garden
-import { friendStart, friendNode, FRIEND_NAME, GARDEN_FRIENDS, type FriendCursor, type GardenFriend } from './glade-friend-talk'   // M68 s3a
+import { friendStart, friendNode, nodeBeside, guideTalks, isGuideId, FRIEND_NAME, GARDEN_FRIENDS, type FriendCursor, type GardenFriend, type Talker } from './glade-friend-talk'   // M68 s3a
 import { line as gladeLine } from './glade-tutorial-lines'
 import { endFirstSteps } from './glade-tutorial'
 import { firstStepsHello } from './glade-greg-talk'
+import { walkedTour, type Stop } from './glade-tutorial'   // M155: the guided tour
 import { FIRST_STEPS_ID, firstStepsEntries, mapSpots, type FirstStepsWorld } from './first-steps'   // M146: the one opening quest
-import { useFirstSteps } from './use-first-steps'
+import { useFirstSteps, useGregMark } from './use-first-steps'
 import { gregSpot, gladeSpots, GLADE } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
 import { GladeLots } from './glade-lots-view'
 import { padGround } from './glade-pads'   // M153 s1c-2
 import { GladeCluster, gladeFolkDrawn } from './glade-cluster-view'   // M67 s1a: the closed Glade's keepers, Moglins, Greg's marker
-import { GLADE_FRAME, GLADE_OWNED, GLADE_TILE, GLADE_ZONE_NAME, GLADE_GATE, gladeNewbornSpot, gladeWhere, gregInGlade, gladeKeepers } from './glade-cluster'   // M40: the green, the five's lots + stations, Greg's jetty
+import { GLADE_FRAME, GLADE_OWNED, GLADE_TILE, GLADE_ZONE_NAME, GLADE_GATE, gladeNewbornSpot, gladeWhere, gregInGlade, gladeKeepers, gladeClusterSpot } from './glade-cluster'   // M40: the green, the five's lots + stations, Greg's jetty
 import { whenGladePeopleKnown } from './glade-people'
 import { gladeLayerGround, gladeLift, gladeFrame } from './glade-layer'
 import { useGladeLayer, GladeWater } from './glade-layer-view'   // M83 s2b: the Glade's published builder layer
@@ -168,8 +169,8 @@ import { useMorelHints } from '../shared/morel-hints'   // BETA M33 S2: stuck hi
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
 import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
 import { DeathPack, fallAndDrop, packLying } from './death-pack'
-import { dropLoot, lootSpots, pilesOf } from './ground-loot'   // BETA M141
 import { withDewls } from './dewl'   // M159
+import { dropLoot, lootSpots, pilesOf } from './ground-loot'   // BETA M141
 import { GroundLoot } from './ground-loot-view'
 import { WaymarkGhost } from './waymark-ghost'   // M147
 import { useOpeningChain, useChain, chainDeath, chainGateOpen, chainFlip } from '../shared/opening-chain-store'   // BETA M73: Ather to Nyx
@@ -231,12 +232,14 @@ type Spawn = { x: number; z: number; yaw: number }
 const WILDS_SAFE = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z - 30.75, r: 50 }
 const gregAt = gregSpot()   // at load only (gregLive's first frame); M153 s1c-1: anything later asks gregSpot(). BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
 type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState } | { kind: 'shop'; id: string } | { kind: 'settler'; c: SettlerCursor | AngelicaCursor } | { kind: 'adesk' }
-type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement } | { kind: 'spirit'; id: string; name: string } | { kind: 'zone'; u: ZoneUse } | { kind: 'settler'; id: SettlerId; name: string } | { kind: 'adesk' }
+type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement; id?: string } | { kind: 'spirit'; id: string; name: string } | { kind: 'zone'; u: ZoneUse } | { kind: 'settler'; id: SettlerId; name: string } | { kind: 'adesk' }
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
 /** M61: a mate's island alone on the Green (the frame nobody is linked into) */
 const SOLO_FRAME = clusterFrame(null, [])
 const gladeFriendsAt = () => gladeKeepers().filter((k): k is typeof k & { id: GardenFriend } => (GARDEN_FRIENDS as readonly string[]).includes(k.id))   // M68 s3a: Otto, Tess, Bonn
+/** M155: where someone of the tour stands now, as drawn (a Moglin: their placed spot until the Glade is drawn) */
+const gladeTalkerAt = (f: Talker): { x: number; z: number } | null => isGuideId(f) ? gladeFolkDrawn.find(k => k.id === `${GLADE.id}:${f}`) ?? gladeClusterSpot(`${GLADE.id}:${f}`) : gladeFriendsAt().find(k => k.id === f) ?? null
 /** M70 s3: may Angelica talk / does her Desk work now (re-read with the journal, every 3 s and after a talk) */
 const m70sideNow = { angelica: false, desk: false }
 const VISIT_WAIT_MS = 45_000   // M61 s3: a backstop for a socket that never relays; the real give-up counts asks (plot-visit GIVE_UP_ASKS)
@@ -920,7 +923,7 @@ function AtherSliceGame() {
       if (!tourRef.current) cands.push(cap(gl.x, gl.z, 0.45, 1.8, { kind: 'greg' }))
       for (const k of gladeFriendsAt()) cands.push(cap(k.x, k.z, 0.45, 1.8, { kind: 'friend', f: k.id }))   // M68 s3a
       if (tourRef.current && !tourRef.current.talk && Math.hypot(gl.x - lc.px, gl.z - lc.pz) > 30) setTour(null)   // M32: walked off = the tour is skipped
-      for (const f of gladeFolkDrawn) cands.push(cap(f.x, f.z, 0.4, MOGLIN_HEIGHT.chibi + 0.1, f.id === FENNEL_FOLK_ID ? { kind: 'gfennel' } : { kind: 'folk', s: GLADE }))   // M68 s3b
+      for (const f of gladeFolkDrawn) cands.push(cap(f.x, f.z, 0.4, MOGLIN_HEIGHT.chibi + 0.1, f.id === FENNEL_FOLK_ID ? { kind: 'gfennel' } : { kind: 'folk', s: GLADE, id: f.id }))   // M68 s3b
       for (const d of gladeDoorsRef.current) { const y = g(d.x, d.z); if (Number.isFinite(y)) cands.push(cap(d.x, d.z, 0.6, 2.4, { kind: 'zone', u: d.u })) }   // M114 s2
       n = aimPick(cands, eye, dir, from)
     }
@@ -1370,6 +1373,7 @@ function AtherSliceGame() {
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); if (t) clearTimeout(t) }
   }, [])
   // compass marks: what the keeper might be heading for, by zone
+  const gregMark = useGregMark()   // M155: one marker at a time
   const fsOn = useFirstSteps()   // M146: First Steps is on: the current step's marks and nothing else
   useEffect(() => {
     marksRef.current = fsOn ? [] : zone.kind === 'glade'
@@ -1494,7 +1498,7 @@ function AtherSliceGame() {
     const open = !tut || gardenOpen(tut)   // M71 s1: no ground screen and no tour (it ends at your table) before the fold
     return gregTalk(gregErrand, talkStep, {
       ground: open ? () => setPanel({ kind: 'greg' }) : undefined, bye: () => setPanel(null), goto: step => setPanel({ kind: 'talk', step }),
-      tour: open ? () => { setPanel(null); setStops(tourStops()); setTour({ i: 0, talk: false }) } : undefined,
+      tour: open ? () => { setPanel(null); const s = tourStops(); setStops(s); setTour({ i: tut && walkedTour(tut) ? s.findIndex(x => x.zone === 'plot') : 0, talk: false }) } : undefined,
       hello: tut ? firstStepsHello(tut) : undefined,
       // M123 s1: a keeper with no grimoire pedestal (a legacy keeper never heard Beat 1) asks 'Spirits?' and Greg hands it over
       grimoire: spiritsDev && pedestalOwed(tut, ownsPedestal()) ? { label: gladeLine('greg.b1.choice.b'), pick: () => {
@@ -1508,7 +1512,10 @@ function AtherSliceGame() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [talkStep, errandStage, birth, given, tut, tutC, foldC, spiritsDev, gregSaid])
   // M68 s3a: Otto, Tess, Bonn (glade-friend-talk.ts). Greet + gift once Greg has sent you; their bark otherwise.
-  const openFriend = (f: GardenFriend) => { const t = loadTut(); setTutState(t); setPanel({ kind: 'friend', c: friendStart(t, f) }) }
+  // M155: and the tour's Moglins. A friend names the tutorial node beside them only where one stands (Place mode, the owner's).
+  const openFriend = (f: Talker) => { const t = loadTut(), at = gladeTalkerAt(f); setTutState(t); setPanel({ kind: 'friend', c: friendStart(t, f, !!at && nodeBeside(f, at, gladeOwnNodes)) }) }
+  /** E at a Glade Moglin: their tour talk while it is due, else their own talk */
+  const openGladeFolk = (id: string) => { const g = id.split(':').pop()!; if (isGuideId(g) && guideTalks(loadTut(), g)) openFriend(g); else setPanel({ kind: 'folk', s: GLADE }) }
   /** Hand a friend's gift once (the tutorial's gift guard). Tools: recording the gift lights the socket (rinsticks.ts › loadTools). */
   const friendGive = (t: Tut, g: TutGift): boolean => {
     if (t.gifts.includes(g)) return true
@@ -1560,8 +1567,8 @@ function AtherSliceGame() {
   const gFennel = useGladeFennel(panel?.kind === 'gfennel' ? panel.c : null, c => setPanel(c ? { kind: 'gfennel', c } : null), () => setPanel({ kind: 'folk', s: GLADE }), gladeZoneGround)   // M68 s3b
   const spiritTalk = useSpiritTalk(panel?.kind === 'spirit' ? panel.c : null, useCallback((c: SpiritTalkState | null) => setPanel(c ? { kind: 'spirit', c } : null), []), hudSize === 'phone')   // M109 s1
   const idleTalk = useIdleTalk(panel?.kind === 'idlemog' ? panel.c : null, c => setPanel(c ? { kind: 'idlemog', c } : null))   // P1
-  const friendAt = friendC ? gladeFriendsAt().find(k => k.id === friendC.f) ?? null : null
-  const friendHead = friendAt && zone.kind === 'glade' ? { x: friendAt.x, y: gladeZoneGround(friendAt.x, friendAt.z) + 1.75, z: friendAt.z } : null
+  const friendAt = friendC ? gladeTalkerAt(friendC.f) : null
+  const friendHead = friendAt && zone.kind === 'glade' ? { x: friendAt.x, y: gladeZoneGround(friendAt.x, friendAt.z) + (friendC && isGuideId(friendC.f) ? MOGLIN_HEIGHT.chibi : 1.75), z: friendAt.z } : null
   const talkFocus = useRef<{ x: number; y: number; z: number } | null>(null)
   // M32 (Magii 944ad1d): Greg lights the starter glove with the birth's ruled word, only while its seat is empty
   function lightGlove() {
@@ -1628,8 +1635,8 @@ function AtherSliceGame() {
   // M146: First Steps in the journal, its marks and its pins (re-read every second and at every move of the tutorial's save)
   const fsWorld = useRef<() => FirstStepsWorld>(() => { throw new Error('first steps') })
   fsWorld.current = () => {
-    const t = loadTut(), fr = (f: GardenFriend) => gladeFriendsAt().find(k => k.id === f) ?? gregInGlade(), fen = gladeFolkDrawn.find(f => f.id === FENNEL_FOLK_ID) ?? gladeSpots([FENNEL_FOLK_ID])[0] ?? gregInGlade()
-    return { greg: gregInGlade(), gate: GLADE_GATE, stone: GREG_WAYMARK, friends: { otto: fr('otto'), tess: fr('tess'), bonn: fr('bonn'), fennel: fen },
+    const t = loadTut(), at = (s: Stop) => (s === 'fennel' ? gladeFolkDrawn.find(f => f.id === FENNEL_FOLK_ID) ?? gladeSpots([FENNEL_FOLK_ID])[0] : gladeTalkerAt(s)) ?? gregInGlade()
+    return { greg: gregInGlade(), gate: GLADE_GATE, stone: GREG_WAYMARK, stops: { bonn: at('bonn'), hazel: at('hazel'), otto: at('otto'), sax: at('sax'), tess: at('tess'), yarrow: at('yarrow'), mallow: at('mallow'), fennel: at('fennel') },
       bigone: t.m70node ? allNodes.find(n => n.id === t.m70node) ?? null : null }
   }
   useEffect(() => {
@@ -1714,7 +1721,7 @@ function AtherSliceGame() {
         else if (n.kind === 'work' && n.near.kind === 'piece' && isVisiting() && (() => { const pc = currentWorks().pieces.find(x => x.id === (n.near as { id: string }).id), st = pc && FURNITURE[pc.item]?.alc; if (st) setPanel({ kind: 'brew', station: st }); return !!st })()) return   // M57 s3b: a guest takes brewing steps at a mate's alchemy set
         else if (n.kind === 'work' && guestRefuses(m => hudSay(m, 'info', 4))) return   // M61: a guest opens no station, store or piece
         else if (n.kind === 'work') { if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
-        else if (n.kind === 'folk') setPanel({ kind: 'folk', s: n.s })
+        else if (n.kind === 'folk') { if (n.id) openGladeFolk(n.id); else setPanel({ kind: 'folk', s: n.s }) }
         else if (n.kind === 'gate' && zone.kind === 'glade') leaveGlade()
         else if (n.kind === 'zone') {   // M114 s2: a tagged zone's E point
           const u = n.u, line = zoneSay(u); if (line) hudSay(line, 'info', 4)
@@ -1725,7 +1732,7 @@ function AtherSliceGame() {
           }
           else if (u.kind === 'home') {
             const t = homeTalk(u.ref, { greg: !tourRef.current, friends: gladeFriendsAt().map(k => k.id), fennel: FENNEL_FOLK_ID, folk: gladeFolkDrawn.map(f => f.id) })
-            if (t?.kind === 'greg') openGreg(); else if (t?.kind === 'friend') openFriend(t.f as GardenFriend); else if (t?.kind === 'fennel') gFennel.open(); else if (t?.kind === 'folk') setPanel({ kind: 'folk', s: GLADE })
+            if (t?.kind === 'greg') openGreg(); else if (t?.kind === 'friend') openFriend(t.f as GardenFriend); else if (t?.kind === 'fennel') gFennel.open(); else if (t?.kind === 'folk') openGladeFolk(u.ref!)
           }
         }
         else setPanel({ kind: 'map', view: 'ather', travel: true })   // Alex 11-20: the map opens on the side you stand on (the Ather here); an errand keeper's Rune Hold goal waits one Tab away
@@ -1784,7 +1791,7 @@ function AtherSliceGame() {
         {zone.kind === 'plot' && <AnemonyxIfHere clock={clock} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
-        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={gladeFrame(gladeLayer)} lift={gladeMeshLift} /><GladeCluster ground={ground} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /><SceneryView items={gladeDecor} /></>}   {/* M67 s1a */}
+        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={gladeFrame(gladeLayer)} lift={gladeMeshLift} /><GladeCluster ground={ground} marker={gregMark} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /><SceneryView items={gladeDecor} /></>}   {/* M67 s1a */}
         {zone.kind === 'glade' && <><GladeNodesView nodes={gladeOwnNodes} focus={poseRef} /><ForestryFX ww={gladeOwnNodes} aim={aimRef} fx={fxRef} ground={ground} /><ChannelFocus focus={focusRef} /><GatherTether ref={tetherRef} /><ProspectingFX ww={gladeOwnNodes} aim={cAimRef} fx={cFxRef} ground={ground} mineable={c => mineCheck(c.kind, c.id).ok} /><GroundLoot place="glade" keeper={lootKeeper} ground={ground} can={lootCan} /></>}   {/* M153 s1b */}
         {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
@@ -1810,12 +1817,12 @@ function AtherSliceGame() {
         {folkTalk.node && folkTalk.bubbleAt && zone.kind !== 'plot' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} scene={(folkTalk.node as { scene?: string }).scene} />}
         {zone.kind === 'plot' && tableVisit && !visitNow && (() => {   /* M61: your Greg never stands at a mate's table */ const g = TABLE_STOP.at, p = poseRef.current; return (
           <group position={[g.x, plotHeightAt(g.x, g.z), g.z]} rotation-y={Math.atan2(p.x - g.x, p.z - g.z)}><FolkModel look={folkLook('gregory')} action={tourNode || talkNode ? 'talk' : 'idle'} /></group>) })()}
-        {(talkNode ?? tourNode) && (zone.kind === 'glade' || (tableVisit && !visitNow)) && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} />}
+        {(talkNode ?? tourNode) && (zone.kind === 'glade' || (tableVisit && !visitNow)) && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} scene={(talkNode ?? tourNode)!.scene} />}
         {zone.kind === 'plot' && fennelAt && <Fennel spot={fennelAt} y={plotHeightAt(fennelAt.x, fennelAt.z)} talking={!!fennelNode} />}
         {zone.kind === 'plot' && !visitNow && <IdleMoglins w={works} />}   {/* P1 11-23: recruits with no room wait by the planning table */}
         {spiritTalk.node && spiritTalk.head && zone.kind === 'plot' && <TalkBubble at={[spiritTalk.head.x, spiritTalk.head.y + 0.5, spiritTalk.head.z]} name={spiritTalk.name} line={spiritTalk.node.line} />}   {/* M109 s1 */}
         {idleTalk.node && idleTalk.head && zone.kind === 'plot' && <TalkBubble at={[idleTalk.head.x, idleTalk.head.y + 0.5, idleTalk.head.z]} name={idleTalk.name} line={idleTalk.node.line} />}
-        {friendTalkNode && friendHead && friendC && <TalkBubble at={[friendHead.x, friendHead.y + 0.5, friendHead.z]} name={FRIEND_NAME[friendC.f]} line={friendTalkNode.line} />}   {/* M68 s3a */}
+        {friendTalkNode && friendHead && friendC && <TalkBubble at={[friendHead.x, friendHead.y + 0.5, friendHead.z]} name={FRIEND_NAME[friendC.f]} line={friendTalkNode.line} scene={friendTalkNode.scene} />}   {/* M68 s3a */}
         {settlerTalkNode && settlerHead && settlerSpeaker && <TalkBubble at={[settlerHead.x, settlerHead.y + 0.5, settlerHead.z]} name={settlerSpeaker.name} line={settlerTalkNode.line} />}   {/* M70 s1 */}
         {gFennel.node && gFennel.head && zone.kind === 'glade' && <TalkBubble at={[gFennel.head.x, gFennel.head.y + 0.5, gFennel.head.z]} name="Fennel" line={gFennel.node.line} />}   {/* M68 s3b */}
         {fennelNode && fennelHead && zone.kind === 'plot' && <TalkBubble at={[fennelHead.x, fennelHead.y + 0.5, fennelHead.z]} name={FENNEL_NAME} line={fennelNode.line} />}

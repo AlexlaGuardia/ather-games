@@ -12,6 +12,14 @@ import { seedId, type CropId } from './farming'
 
 export type Friend = 'otto' | 'tess' | 'bonn' | 'fennel'
 export const FRIENDS: readonly Friend[] = ['otto', 'tess', 'bonn', 'fennel']
+/** M155: the four Moglins of the guided tour who are not friends (Fennel is both) */
+export type Guide = 'hazel' | 'sax' | 'yarrow' | 'mallow'
+export const GUIDES: readonly Guide[] = ['hazel', 'sax', 'yarrow', 'mallow']
+/** whose garden a guide lives in: that friend sends you, so a guide's tour talk waits for them */
+export const GUIDE_OF: Readonly<Record<Guide, Friend>> = { hazel: 'bonn', sax: 'otto', yarrow: 'tess', mallow: 'tess' }
+export type Stop = Friend | Guide
+/** Alex's order (11-25): Greg, then these, then Greg again */
+export const TOUR: readonly Stop[] = ['bonn', 'hazel', 'otto', 'sax', 'tess', 'yarrow', 'mallow', 'fennel']
 export type Gift = 'grimoire' | 'spike' | 'pruner' | 'seeds' | 'bait' | 'rinquest' | 'm70pack' | 'm70set'
 /** the Glade's gifts (a legacy keeper counts these as given); M70's pack is the settlement's, every keeper earns it */
 export const GIFTS: readonly Gift[] = ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest']
@@ -31,6 +39,8 @@ export interface Tut {
   live: boolean
   greg: { welcome: boolean; moglins: boolean; spirits: boolean; wilds: boolean }
   heard: Friend[]
+  /** M155: the tour's Moglins met. ABSENT = a save from the old any-order flow (or before Greg sends you): metOf() reads it */
+  met?: Guide[]
   gifts: Gift[]
   b2: Beat2
   /** the in-game day Fennel's jar was last emptied by this keeper (null = never) */
@@ -55,8 +65,8 @@ export const legacyTut = (): Tut => ({ v: 1, live: false, greg: { welcome: true,
 export type GregScreen =
   | { kind: 'welcome' }
   | { kind: 'hub'; choices: ('a' | 'b' | 'c')[]; back: boolean }
-  | { kind: 'pending' }          // greg.b1.bark.pending: the four are not all heard
-  | { kind: 'ask' }              // greg.b2.ask: all four heard, the gate favour
+  | { kind: 'pending' }          // greg.b1.bark.pending: a stop of the tour is left
+  | { kind: 'ask' }              // greg.b2.ask: the tour is walked, the gate favour
   | { kind: 'open' }             // greg.b2.bark.open: the favour accepted, not yet done
 export function gregScreen(t: Tut): GregScreen {
   const g = t.greg
@@ -68,7 +78,7 @@ export function gregScreen(t: Tut): GregScreen {
     if (g.moglins && g.spirits) choices.push('c')
     return { kind: 'hub', choices, back: true }
   }
-  if (!allHeard(t)) return { kind: 'pending' }
+  if (!tourDone(t)) return { kind: 'pending' }
   return t.b2 === 'accepted' ? { kind: 'open' } : { kind: 'ask' }
 }
 export const heardWelcome = (t: Tut): Tut => (t.greg.welcome ? t : { ...t, greg: { ...t.greg, welcome: true } })
@@ -77,22 +87,38 @@ export const heardMoglins = (t: Tut): Tut => (t.greg.moglins ? t : { ...t, greg:
 export const heardSpirits = (t: Tut): Tut => (t.greg.spirits ? t : { ...t, greg: { ...t.greg, spirits: true } })
 export function heardWilds(t: Tut): Tut {
   if (t.greg.wilds || !(t.greg.moglins && t.greg.spirits)) return t
-  return { ...t, greg: { ...t.greg, wilds: true } }
+  return { ...t, greg: { ...t.greg, wilds: true }, met: metOf(t) }
 }
 /** M146: FIRST STEPS is still on: nothing else opens until it is done. A legacy keeper, and any keeper with a garden (folded:
  *  Greg folds only after the settlement, and every save from before M71 reads folded), is past it, so old saves never change. */
 export const firstStepsOn = (t: Tut) => t.live && !t.folded && t.fs !== 'done'
 /** E at Greg after the settlement's thanks ends it. */
 export const endFirstSteps = (t: Tut): Tut => (firstStepsOn(t) && t.m70 === 'thanked' ? { ...t, fs: 'done' } : t)
-export const answerGate = (t: Tut, go: boolean): Tut => (!allHeard(t) || t.b2 === 'accepted' ? t : { ...t, b2: go ? 'accepted' : 'asked' })
+export const answerGate = (t: Tut, go: boolean): Tut => (!tourDone(t) || t.b2 === 'accepted' ? t : { ...t, b2: go ? 'accepted' : 'asked' })
 
 // ── the four ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 export const allHeard = (t: Tut) => FRIENDS.every(f => t.heard.includes(f))
 /** A friend's talk counts once Greg has sent you (`.wilds`); before that they still talk, but the quest does not tick. */
 export function hearFriend(t: Tut, f: Friend): Tut {
   if (!t.greg.wilds || t.heard.includes(f)) return t
-  return { ...t, heard: [...t.heard, f] }
+  return { ...t, heard: [...t.heard, f], met: metOf(t) }   // M155: an old save's Moglins are settled BEFORE this friend joins
 }
+// ── M155: THE GUIDED TOUR (Alex 11-25) ───────────────────────────────────────────────────────────────────────────
+// One stop at a time in TOUR's order, but a keeper who walks up to someone early is heard all the same and the marker passes over
+// them: nothing is lost and nobody is stuck. Only First Steps asks for the guides; after it (the skip path) the four friends are all
+// Greg ever waits for, as before.
+/** The guides met. A save with no record is from the old flow: the Moglins of a friend already heard there are behind them. */
+export const metOf = (t: Tut): Guide[] => t.met ?? GUIDES.filter(g => t.greg.wilds && t.heard.includes(GUIDE_OF[g]))
+const isGuide = (s: Stop): s is Guide => (GUIDES as readonly string[]).includes(s)
+export const stopDone = (t: Tut, s: Stop) => isGuide(s) ? metOf(t).includes(s) : t.heard.includes(s)
+/** Where the marker is: the first stop not done, or null (back to Greg). */
+export const tourStop = (t: Tut): Stop | null => TOUR.find(s => !stopDone(t, s)) ?? null
+export const tourDone = (t: Tut) => (firstStepsOn(t) ? tourStop(t) === null : allHeard(t))
+/** A guide's tour talk is due: their friend has sent you, First Steps is on, and they have not had it. */
+export const guideDue = (t: Tut, g: Guide) => firstStepsOn(t) && t.greg.wilds && t.heard.includes(GUIDE_OF[g]) && !metOf(t).includes(g)
+export const meetGuide = (t: Tut, g: Guide): Tut => (guideDue(t, g) ? { ...t, met: [...metOf(t), g] } : t)
+/** The old Greg tour (M32) is this one now: a keeper who has walked it is taken straight to the planning table (its end). */
+export const walkedTour = (t: Tut) => t.live && t.fs === 'done' && tourStop(t) === null
 /** A friend's first talk after Greg sent you = greet + gift; any later talk = their bark. */
 export const friendScreen = (t: Tut, f: Friend): 'greet' | 'bark' => (t.heard.includes(f) ? 'bark' : 'greet')
 /** M68 s3b: a tutorial keeper who has not yet had Fennel's first talk: the first-rinstick quest waits for HER (the Rinnshop
@@ -157,6 +183,7 @@ export function parseTut(v: unknown): Tut | null {
     m70side: M70SIDES.includes(o.m70side as M70Side) ? o.m70side! : 'none',
     ...(o.fs === 'done' ? { fs: 'done' as const } : {}),
     folded: o.folded !== false,   // M71: only an explicit false (a post-M71 newborn) is unfolded; a save without the field had its garden
+    ...(Array.isArray(o.met) ? { met: [...new Set(o.met.filter((g): g is Guide => GUIDES.includes(g)))] } : {}),
   }
 }
 /** No save yet: a keeper who has already played (any garden/works save) is a LEGACY keeper; a brand-new one starts fresh. */

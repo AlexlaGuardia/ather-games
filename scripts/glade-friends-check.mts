@@ -3,7 +3,7 @@
 // real page:
 //   1. the spike + pruner sockets start EMPTY (__ather.tools(): no forestry, no prospecting)
 //   2. Otto, Tess, Bonn: set down in front of each (check-only warp), the real prompt 'E · <name>', the real E, every
-//      "And then?" clicked: the bubbles are greet .1-.2 + gift .1-.3; the talk ends on the goodbye
+//      "And then?" clicked: the bubbles are their script (M155: friendStart, the node's line only where one is placed); the talk ends on the goodbye
 //   3. Otto lights the Worn Spike, Bonn the Worn Pruner (__ather.tools()), Tess puts 8 starter seeds in the bag, exactly ONE grade-A
 //   4. the tutorial save counts all three heard + their gifts; Fennel is still owed
 //   5. a reload keeps both sockets lit and the seeds; Otto again = his bark only, no second gift
@@ -13,7 +13,10 @@
 import puppeteer, { type Page } from 'puppeteer-core'
 import { ANSWERS } from '../src/app/shimmer/open/ather/greg-talk'   // the labels lark writes; a reword never stales the check
 import { line } from '../src/app/shimmer/open/ather/glade-tutorial-lines'
-import { friendBye } from '../src/app/shimmer/open/ather/glade-friend-talk'
+import { friendBye, friendStart, friendScript, nodeBeside } from '../src/app/shimmer/open/ather/glade-friend-talk'
+import { parseTut } from '../src/app/shimmer/open/ather/glade-tutorial'
+import { gladeNodes } from '../src/app/shimmer/open/ather/glade-nodes'
+import { parseGladeLayer } from '../src/app/shimmer/open/ather/glade-layer'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), phone = process.argv.includes('--phone')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -87,10 +90,11 @@ try {
     }
     return seen
   }
-  const script = (f: string) => [`${f}.b1.greet.1`, `${f}.b1.greet.2`, `${f}.b1.gift.1`, `${f}.b1.gift.2`, `${f}.b1.gift.3`]
+  const nodes = gladeNodes(parseGladeLayer(await (await fetch(`${url}/shimmer/open/glade-edits`, { cache: 'no-store' })).json()).props ?? [], () => 0)
+  const script = (f: 'otto') => [...friendScript(friendStart(parseTut(SENT)!, f, nodeBeside(f, keepers[f], nodes)))]
   for (const [id, name] of [['otto', 'Otto'], ['bonn', 'Bonn'], ['tess', 'Tess']]) {
-    const seen = await talk(id, name, script(id))
-    ok(seen.length === 5, `2. ${name}: all five signed bubbles in order (${seen.length}/5)`)
+    const want = script(id as 'otto'), seen = await talk(id, name, want)
+    ok(seen.length === want.length && want.length >= 5, `2. ${name}: all signed bubbles in order (${seen.length}/${want.length})`)
   }
   const t1 = await tools()
   ok(t1.prospecting?.toolId === 'worn_spike', `3. Otto lit the Worn Spike (${t1.prospecting?.toolId ?? '-'})`)

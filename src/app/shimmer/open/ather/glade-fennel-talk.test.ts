@@ -40,7 +40,7 @@ function talk(t0: Tut, opts: { stick?: boolean; bagFull?: boolean; day?: number;
   const { k, walk } = talk(sent())
   ok(k.c!.mode === 'first', 'after Greg sent you: the first talk')
   walk()
-  ok(k.bubbles.length === 7 && k.bubbles[0] === line('fennel.b1.greet.1') && k.bubbles[4] === line('fennel.b1.gift.3') && k.bubbles[6] === line('fennel.b1.gift.5'), 'greet .1-.2, gift .1-.5 in order')
+  ok(k.bubbles.length === 8 && k.bubbles[0] === line('fennel.b1.greet.1') && k.bubbles[5] === line('fennel.b1.gift.3') && k.bubbles[7] === line('fennel.b1.gift.5'), 'greet .1-.2, room .1, gift .1-.5 in order')
   ok(k.bubbles.every(b => signed.has(b)), 'every bubble is a SIGNED line')
   ok(!k.bubbles.includes(line('fennel.b1.done.1')), 'no stick: done .1 is not said')
   ok(k.q.state === 'active' && k.q.step === 1 && currentStep(k.q)?.id === 'dusk', 'gift .3 starts the quest at the Moonwell wait (meet done)')
@@ -69,14 +69,14 @@ function talk(t0: Tut, opts: { stick?: boolean; bagFull?: boolean; day?: number;
   const q0: RinQuest = { v: 1, state: 'done', step: 5 }
   const { k, walk } = talk(sent(), { stick: true, q: q0 })
   walk()
-  ok(k.bubbles.length === 5 && k.bubbles[2] === line('fennel.b1.done.1') && !k.bubbles.includes(line('fennel.b1.gift.1')), 'a stick: greet .1-.2, done .1, gift .4-.5')
+  ok(k.bubbles.length === 6 && k.bubbles[3] === line('fennel.b1.done.1') && !k.bubbles.includes(line('fennel.b1.gift.1')), 'a stick: greet .1-.2, done .1, gift .4-.5')
   ok(k.q === q0, 'a stick: the quest is untouched')
   ok(k.bait === JAR_BAIT && k.t.heard.includes('fennel') && k.t.gifts.includes('rinquest'), 'a stick: the jar + heard')
 }
 // ── leave mid-script and replay: nothing twice
 {
   const a = talk(sent())
-  for (let n = 0; n < 5; n++) a.node().options[0].pick()   // to gift .4 (bait handed), leave
+  for (let n = 0; n < 6; n++) a.node().options[0].pick()   // to gift .4 (bait handed), leave
   ok(a.k.bait === JAR_BAIT && !a.k.t.heard.includes('fennel'), 'left after gift .4: bait given, not heard yet')
   const qMid = a.k.q
   const b = talk(rt(a.k.t), { q: qMid }); b.walk()
@@ -90,7 +90,7 @@ function talk(t0: Tut, opts: { stick?: boolean; bagFull?: boolean; day?: number;
 // ── a full bag at gift .4
 {
   const a = talk(sent(), { bagFull: true })
-  for (let n = 0; n < 6; n++) a.node().options[0].pick()
+  for (let n = 0; n < 7; n++) a.node().options[0].pick()
   ok(a.k.c!.i === baitAt(a.k.c!) - 1 && a.k.bait === 0, 'a full bag: stays on gift .3')
   ok(!a.k.t.gifts.includes('bait') && a.k.t.baitDay === null && !a.k.t.heard.includes('fennel'), 'a full bag records no jar, not heard')
   ok(a.k.t.gifts.includes('rinquest') && a.k.q.step === 1, 'the quest it started stays started')
@@ -113,7 +113,7 @@ function talk(t0: Tut, opts: { stick?: boolean; bagFull?: boolean; day?: number;
   const q2: RinQuest = { v: 1, state: 'active', step: 2 }; ok(startAtGlade(q2) === q2, 'startAtGlade leaves a later step')
   ok(onShop(startAtGlade(fresh()), true).step === 1, 'a Rinnshop raised later does not reset a Glade-started quest')
   ok(migrate(JSON.parse(JSON.stringify(startAtGlade(fresh())))).step === 1, 'round-trips the save')
-  ok(questAt(fennelStart(sent(), false, DAY)) === 4 && questAt(fennelStart(sent(), true, DAY)) === 2, 'quest line = gift .3 / done .1')
+  ok(questAt(fennelStart(sent(), false, DAY)) === 5 && questAt(fennelStart(sent(), true, DAY)) === 3, 'quest line = gift .3 / done .1')
   ok(fennelInGlade(sent()) && fennelInGlade(freshTut()), 'a live keeper before Fennel: the quest waits for her')
   ok(!allHeard(hearFriend(sent(), 'fennel')), 'Fennel alone is not all four')
 }

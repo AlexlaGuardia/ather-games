@@ -14,7 +14,7 @@
 import type { TalkNode } from '../shared/npc-talk'
 import { ANSWERS } from './greg-talk'
 import { line } from './glade-tutorial-lines'
-import { gift, hearFriend, claimJar, jarFull, type Tut } from './glade-tutorial'
+import { firstStepsOn, gift, hearFriend, claimJar, jarFull, stopDone, TOUR, type Tut } from './glade-tutorial'
 
 export const FENNEL_THANKS = "Thanks. I'll bring something good back."   // SIGNED (Alex, athernyx ef704e7) batch item 3
 export const FENNEL_MORE = 'How are you, Fennel?'   // SIGNED (Alex, athernyx ef704e7) batch item 3
@@ -22,17 +22,19 @@ export const fennelBye = 'Save me a seat, Fennel.'  // lark bye.fennel, SIGNED b
 
 export type FennelMode = 'folk' | 'first' | 'jar'
 /** `stick` and `full` are read at open, with the mode: what the talk walks never changes under the bubble. */
-export interface FennelCursor { mode: FennelMode; stick: boolean; full: boolean; day: number; i: number }
+export interface FennelCursor { mode: FennelMode; stick: boolean; full: boolean; day: number; i: number
+  /** M155: she is the tour's last stop (decided at open): she sends the keeper back to Greg */
+  home: boolean }
 
 export function fennelStart(t: Tut, stick: boolean, day: number): FennelCursor {
   const mode: FennelMode = t.live && !t.greg.wilds ? 'folk' : t.live && !t.heard.includes('fennel') ? 'first' : 'jar'
-  return { mode, stick, full: jarFull(t, day), day, i: 0 }
+  return { mode, stick, full: jarFull(t, day), day, i: 0, home: firstStepsOn(t) && TOUR.every(s => s === 'fennel' || stopDone(t, s)) }
 }
 /** The line ids the talk walks ('folk' walks none: the caller opens her Moglin talk). */
 export function fennelScript(c: FennelCursor): string[] {
-  if (c.mode === 'first') return ['fennel.b1.greet.1', 'fennel.b1.greet.2',
+  if (c.mode === 'first') return ['fennel.b1.greet.1', 'fennel.b1.greet.2', 'fennel.b1.room.1',
     ...(c.stick ? ['fennel.b1.done.1'] : ['fennel.b1.gift.1', 'fennel.b1.gift.2', 'fennel.b1.gift.3']),
-    'fennel.b1.gift.4', 'fennel.b1.gift.5']
+    'fennel.b1.gift.4', 'fennel.b1.gift.5', ...(c.home ? ['fennel.b1.point.1'] : [])]
   if (c.mode === 'jar') return [c.full ? 'fennel.bait.ready' : 'fennel.bait.empty']
   return []
 }

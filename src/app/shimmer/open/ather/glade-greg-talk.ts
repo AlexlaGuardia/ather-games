@@ -1,6 +1,6 @@
 // M68 s2: GREG'S TUTORIAL TALK (plan Beat 1). The signed lines (glade-tutorial-lines.ts, by id) walked one bubble at a time,
 // in FRONT of his ordinary talk (greg-talk.ts): welcome -> "Moglins?" / "Spirits?" -> both heard -> "The Wilds?". Once the
-// Wilds are heard he is back to his usual talk, with the pending bark as its hello until the four are heard (Beat 2 = s4).
+// Wilds are heard he is back to his usual talk, with the pending bark as its hello until the tour is walked (M155; Beat 2 = s4).
 //
 // ★ PURE. Every commit happens in a PICK, never on render: reaching a branch's LAST line marks it heard (leave there and it
 //   still counts); Spirits? hands the grimoire on reaching `.3` (the caller gives it once, glade-tutorial.ts › gift).
@@ -17,21 +17,23 @@ type Beat1 = 'welcome' | 'moglins' | 'spirits' | 'wilds'
 export const ASK_LINES = 6
 export interface TutCursor { b: TutBranch; i: number }
 /** How many signed lines each branch has (greg.b1.<branch>.1..N). */
-export const BRANCH_LINES: Readonly<Record<Beat1, number>> = { welcome: 4, moglins: 3, spirits: 6, wilds: 5 }
+export const BRANCH_LINES: Readonly<Record<Beat1, number>> = { welcome: 4, moglins: 3, spirits: 6, wilds: 4 }
 /** The Spirits? line that hands the grimoire over ("This is a grimoire."), 0-based. */
 export const GRIMOIRE_AT = 2
+/** M155: the Wilds? line whose scene lights Bonn's marker, 0-based: reaching it sends the keeper (Greg's bark covers the last line) */
+export const SENT_AT = 2
 const CHOICE: Readonly<Record<'a' | 'b' | 'c', 'moglins' | 'spirits' | 'wilds'>> = { a: 'moglins', b: 'spirits', c: 'wilds' }
 
 /** Where E at Greg starts, or null = his tutorial is done (or a legacy keeper): use his ordinary talk. */
 export function tutStart(t: Tut): TutCursor | null {
   if (!t.live) return null
   const s = gregScreen(t)
-  // M146: the gate favour, once all four are heard (never to a keeper past First Steps, nor one already at the settlement's work)
+  // M146: the gate favour, once the tour is walked (never to a keeper past First Steps, nor one already at the settlement's work)
   if (s.kind === 'ask') return firstStepsOn(t) && t.m70 === 'none' ? { b: 'ask', i: 0 } : null
   return s.kind === 'welcome' ? { b: 'welcome', i: 0 } : s.kind === 'hub' ? { b: 'hub', i: 0 } : null
 }
 
-/** M146: his hello while First Steps is on: the pending bark until the four are heard, then the gate bark. undefined = his own. */
+/** M146: his hello while First Steps is on: the pending bark until the tour is walked, then the gate bark. undefined = his own. */
 export function firstStepsHello(t: Tut): string | undefined {
   if (!t.live) return undefined
   if (t.greg.wilds && gregScreen(t).kind === 'pending') return line('greg.b1.bark.pending')
@@ -71,13 +73,13 @@ export function tutNode(t: Tut, c: TutCursor, act: TutActs): TalkNode {
   const n = BRANCH_LINES[c.b], i = Math.max(0, Math.min(c.i, n - 1)), last = i === n - 1
   if (c.b === 'welcome' && last) return { line: line(id('welcome', i)), options: hubOptions(t, act) }   // .4 offers Moglins? / Spirits?
   if (last) {
-    // the branch is over: back to the hub, or (after the Wilds) goodbye: he has sent you to the four
+    // the branch is over: back to the hub, or (after the Wilds) goodbye: he has sent you to Bonn (M155)
     const opts = c.b === 'wilds'
       ? [{ label: ANSWERS.bye, pick: () => act.go(null) }]
       : [{ label: ANSWERS.more, pick: () => act.go({ b: 'hub', i: 0 }) }]
     return { line: line(id(c.b, i)), options: opts }
   }
-  return { line: line(id(c.b, i)), options: [{ label: ANSWERS.more, pick: () => advance(t, { b: c.b, i }, act) }] }
+  return { line: line(id(c.b, i)), scene: c.b === 'wilds' && i === SENT_AT ? line('greg.b1.wilds.scene') : undefined, options: [{ label: ANSWERS.more, pick: () => advance(t, { b: c.b, i }, act) }] }
 }
 
 /** "And then?" on line `c.i`: commit whatever the NEXT line means, then move to it. */
@@ -86,7 +88,7 @@ export function advance(t: Tut, c: TutCursor, act: TutActs): void {
   const n = BRANCH_LINES[c.b], next = c.i + 1
   if (next >= n) return
   if (c.b === 'spirits' && next === GRIMOIRE_AT && !act.grimoire()) return   // bag full: stay on the line before (the caller says why)
-  if (next === n - 1) {
+  if (next === (c.b === 'wilds' ? SENT_AT : n - 1)) {
     const done = c.b === 'welcome' ? heardWelcome(t) : c.b === 'moglins' ? heardMoglins(t) : c.b === 'spirits' ? heardSpirits(t) : heardWilds(t)
     if (done !== t) act.set(done)
   }

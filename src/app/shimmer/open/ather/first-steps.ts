@@ -3,9 +3,10 @@
 // From Greg and his friends, through the gate, to the first settlement's big one, and back to Greg: one journal line, one
 // title, the SIGNED step lines word for word. Until it is done (glade-tutorial.ts › firstStepsOn) nothing else opens: no first
 // errand, no gems, no glove, no Dig (opening-chain.ts `held`). Its marks are the CURRENT STEP's only.
+// ★ M155 (Alex 11-25): the friends' step is a GUIDED TOUR, one stop and one marker at a time (glade-tutorial.ts › TOUR).
 // ★ PURE. The skip path (the gate is open from the start) runs through the same steps: the settlement's state leads, so a
 //   keeper who never talked to anyone still ends at Greg.
-import { allHeard, firstStepsOn, FRIENDS, type Friend, type Tut } from './glade-tutorial'
+import { firstStepsOn, tourStop, type Stop, type Tut } from './glade-tutorial'
 import { line } from './glade-tutorial-lines'
 import { SETTLEMENT } from './first-settlement'
 import type { JournalEntry, Zone } from '../shared/journal'
@@ -14,20 +15,21 @@ import type { JournalEntry, Zone } from '../shared/journal'
 export const FIRST_STEPS_TITLE = 'First Steps'
 export const FIRST_STEPS_ID = 'first-steps'
 
-export type FirstStep = 'greg' | 'friends' | 'back' | 'gate' | 'bigone' | 'settlers' | 'home'
+export type FirstStep = 'greg' | 'tour' | 'back' | 'gate' | 'bigone' | 'settlers' | 'home'
 export function firstStep(t: Tut): FirstStep | null {
   if (!firstStepsOn(t)) return null
   if (t.m70 === 'open') return 'bigone'
   if (t.m70 === 'down') return 'settlers'
   if (t.m70 === 'thanked') return 'home'
   if (!t.greg.wilds) return 'greg'
-  if (!allHeard(t)) return 'friends'
+  if (tourStop(t)) return 'tour'
   return t.b2 === 'accepted' ? 'gate' : 'back'
 }
-/** The step's signed line. '' = none is signed for it (the first talk: Greg stands in front of a newborn). */
+/** The step's signed line. */
 export function stepLine(t: Tut): string {
   switch (firstStep(t)) {
-    case 'friends': return line('quest.b1.step').replace('{N}', String(t.heard.length))
+    case 'greg': return line('quest.b1.step.greg')
+    case 'tour': return line(`quest.b1.step.${tourStop(t)}`)
     case 'back': return line('quest.b1.done')
     case 'gate': return line('quest.b2.step')
     case 'bigone': return line('quest.m70.step')
@@ -38,7 +40,9 @@ export function stepLine(t: Tut): string {
 }
 type At = { x: number; z: number }
 export interface FirstStepsWorld {
-  greg: At; gate: At; friends: Readonly<Record<Friend, At>>
+  greg: At; gate: At; 
+  /** where each stop of the tour stands NOW (Place mode moves them: the page asks at the call) */
+  stops: Readonly<Record<Stop, At>>
   /** the Wilds' way back to the Glade (Greg's waymark stone) */
   stone: At
   /** the big one's node, where the save names one */
@@ -49,7 +53,7 @@ export function stepSpots(t: Tut, w: FirstStepsWorld): { zone: Zone; x: number; 
   const g = (p: At) => ({ zone: 'glade' as const, x: p.x, z: p.z }), o = (p: At) => ({ zone: 'wilds' as const, x: p.x, z: p.z })
   switch (firstStep(t)) {
     case 'greg': case 'back': case 'home': return [g(w.greg), o(w.stone)]
-    case 'friends': return [...FRIENDS.filter(f => !t.heard.includes(f)).map(f => g(w.friends[f])), o(w.stone)]
+    case 'tour': return [g(w.stops[tourStop(t)!]), o(w.stone)]
     case 'gate': case 'settlers': return [g(w.gate), o(SETTLEMENT)]
     case 'bigone': return [g(w.gate), ...(w.bigone ? [o(w.bigone)] : [])]
     default: return []

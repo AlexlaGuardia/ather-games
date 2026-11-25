@@ -60,7 +60,7 @@ K.read(); ok(K.k.t.greg.wilds, 'reaching wilds .5 marks the Wilds heard')
 ok(K.labels().join() === ANSWERS.bye, 'wilds .5 offers goodbye only')
 K.pick(ANSWERS.bye); ok(K.k.c === null, 'goodbye closes the tutorial talk')
 ok(K.k.bubbles.every(b => signed.has(b)), 'every bubble is a signed line')
-ok(K.k.bubbles.length === 4 + 3 + 1 + 6 + 5, `the walk shows each line once (${K.k.bubbles.length})`)
+ok(K.k.bubbles.length === 4 + 3 + 1 + 6 + 4, `the walk shows each line once (${K.k.bubbles.length})`)
 ok(tutStart(K.k.t) === null && gregScreen(K.k.t).kind === 'pending', 'after the Wilds Greg is back to his ordinary talk (pending bark)')
 ok(K.k.pedestals === 1, 'the whole walk handed exactly one pedestal')
 
