@@ -38,8 +38,8 @@ function bake(root: THREE.Object3D, place = new THREE.Matrix4()): Part[] {
     g.setAttribute('position', g0.getAttribute('position').clone()); g.setAttribute('normal', g0.getAttribute('normal').clone())
     if (map && g0.getAttribute('uv')) g.setAttribute('uv', g0.getAttribute('uv').clone())
     g.applyMatrix4(place.clone().multiply(inv).multiply(m.matrixWorld))
-    const n = g.getAttribute('position').count, c = src.color ?? new THREE.Color('#fff'), col = new Float32Array(n * 3)
-    for (let k = 0; k < n; k++) { col[k * 3] = c.r; col[k * 3 + 1] = c.g; col[k * 3 + 2] = c.b }
+    const n = g.getAttribute('position').count, c = src.color ?? new THREE.Color('#fff'), col = new Float32Array(n * 3), vc = src.vertexColors ? g0.getAttribute('color') : null   // M169 s2: a cut piece carries its colours in its vertices
+    for (let k = 0; k < n; k++) { col[k * 3] = c.r * (vc ? vc.getX(k) : 1); col[k * 3 + 1] = c.g * (vc ? vc.getY(k) : 1); col[k * 3 + 2] = c.b * (vc ? vc.getZ(k) : 1) }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3))
     const basic = src.type === 'MeshBasicMaterial', em = !basic && src.emissive ? src.emissive.getHexString() : '000000', ei = src.emissiveIntensity ?? 0
     const key = [basic, map?.uuid ?? '', src.transparent ? src.opacity : 1, em === '000000' ? '' : `${em}/${ei}`, src.side, src.flatShading].join('|')

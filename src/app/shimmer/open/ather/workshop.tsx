@@ -44,7 +44,8 @@ import { stairBoxes, landingRails, stairCellSet, toggleStair, dirOfYaw, type Sta
 import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported, builtDeckCells, DECK_T, type Decks } from './plot-decks'
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, BENCH_JOBS, KEEPSTONES, isPiece, ALC_LIVE, WOOD_COLOR, type Job } from './furniture'
-import { buildCatalog, buildBoxes, opens } from './build-catalog'   // M169
+import { buildCatalog, buildBoxes, opens, type PieceBox } from './build-catalog'   // M169
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'   // M169 s2: CutBody
 import { BuildIcon } from './build-icon'
 import { AlchemyPanel } from './alchemy-panel'
 import { loadAssign, mayUse } from './train-assign'   // M118 s2: the keeper's assign-a-piece gate
@@ -1282,6 +1283,20 @@ function ChestGhost({ pose, owned, q, item }: { pose: React.MutableRefObject<Pos
 
 const WOODS = WOOD_COLOR   // M169: furniture.ts (the build catalog's icons draw with it too)
 const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, number]; c: string }) => <mesh position={p}><boxGeometry args={s} /><meshLambertMaterial color={c} /></mesh>
+/** M169 s2: a cut building piece (a door, a window, an opening: 9 to 21 boxes) drawn as ONE mesh, its boxes merged with their colours
+ *  in the vertices: one draw call a piece, not one a box. The geometry is shared per piece and state (never disposed: a dozen kinds). */
+const cutGeo = new Map<string, THREE.BufferGeometry>(), CUT_MAT = new THREE.MeshLambertMaterial({ vertexColors: true })
+function CutBody({ item, open, boxes }: { item: string; open: boolean; boxes: readonly PieceBox[] }) {
+  const k = `${item}:${open ? 1 : 0}`
+  let g = cutGeo.get(k)
+  if (!g) {
+    g = mergeGeometries(boxes.map(b => { const x = new THREE.BoxGeometry(b.s[0], b.s[1], b.s[2]).toNonIndexed(); x.deleteAttribute('uv'); x.translate(b.p[0], b.p[1], b.p[2])
+      const c = new THREE.Color(b.c), n = x.getAttribute('position').count, col = new Float32Array(n * 3); for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b }
+      x.setAttribute('color', new THREE.BufferAttribute(col, 3)); return x }))!
+    cutGeo.set(k, g)
+  }
+  return <mesh geometry={g} material={CUT_MAT} name="cut-piece" />
+}
 /** M107 (every keeper since the M107 ship; training toys owner + ?spirits=3d): where the planter's spirit may go. Home = the planter, its ring 0.9..1.5 m (the planter's
  *  corners sit at 0.64 m) = the home beat. s2 (Magii RULED 11-23, athernyx 8b45c92: a bloomed spirit walks the whole garden):
  *  straight darting legs anywhere on YOUR plot at her planter's own level. Blocked = any wall/chest/piece/house box (bar the
@@ -1389,7 +1404,8 @@ export function PieceBody({ item, id, open }: { item: string; id?: string; /** M
     case 'alc_mixer': return <><Bx p={[0, 0.76, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.72, 0.09)}<mesh position={[0.4, 0.88, 0]}><cylinderGeometry args={[0.3, 0.24, 0.36, 14]} /><meshLambertMaterial color="#4e4a47" /></mesh><mesh position={[0.4, 1.065, 0]} rotation-x={-Math.PI / 2}><circleGeometry args={[0.27, 14]} /><meshBasicMaterial color={f.glow} /></mesh><mesh position={[0.4, 0.5, 0]}><cylinderGeometry args={[0.12, 0.12, 0.1, 10]} /><meshBasicMaterial color="#8fe3ff" /></mesh>{[-0.55, -0.35, -0.15].map(x => <Bx key={x} p={[x, 0.85, 0.1]} s={[0.12, 0.1, 0.22]} c="#6f9a4a" />)}</>
     case 'alc_desk': return <><Bx p={[0, 0.72, 0]} s={[f.w, 0.07, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.68, 0.08)}<Bx p={[0, 0.96, -f.d / 2 + 0.04]} s={[f.w, 0.48, 0.05]} c={c} /><Bx p={[0, 1.0, -f.d / 2 + 0.14]} s={[f.w - 0.1, 0.03, 0.18]} c={c} />{[-0.5, -0.3, -0.1, 0.1].map((x, k) => <mesh key={x} position={[x, 1.08, -f.d / 2 + 0.14]}><cylinderGeometry args={[0.04, 0.04, 0.13, 8]} /><meshBasicMaterial color={['#c9a8ff', '#8fe3ff', '#ff9a4a', '#9ae06a'][k]} /></mesh>)}<Bx p={[0.42, 0.88, 0.1]} s={[0.03, 0.26, 0.03]} c="#a4793e" /><mesh position={[0.42, 1.04, 0.1]}><torusGeometry args={[0.09, 0.015, 6, 16]} /><meshLambertMaterial color="#a4793e" /></mesh><mesh position={[0.42, 1.04, 0.1]}><circleGeometry args={[0.08, 14]} /><meshBasicMaterial color={f.glow} transparent opacity={0.45} side={THREE.DoubleSide} /></mesh></>
     default:
-      { const bx = buildBoxes(f, !!open)   // M98b slabs + panels: their boxes live in build-catalog.ts, which draws their icons from the same boxes
+      { const bx = buildBoxes(f, !!open)   // M98b
+        if (bx && f.shape) return <CutBody item={item} open={!!open} boxes={bx} />   // M169 s2: one draw call slabs + panels: their boxes live in build-catalog.ts, which draws their icons from the same boxes
         if (bx) return <>{bx.map((b, k) => <Bx key={k} p={[...b.p]} s={[...b.s]} c={b.c} />)}</> }
       return <Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={c} />
   }

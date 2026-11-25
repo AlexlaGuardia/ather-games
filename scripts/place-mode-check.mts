@@ -9,6 +9,7 @@ import { createHash } from 'crypto'
 import { mkdirSync } from 'fs'
 import { MOONWELL } from '../src/app/shimmer/open/ather/moonwell'
 import { SCENERY, SCENERY_BY } from '../src/app/shimmer/open/ather/scenery'
+import { buildCatalog } from '../src/app/shimmer/open/ather/build-catalog'   // M169 s2
 import { parseGladeLayer, gladeLayerGround } from '../src/app/shimmer/open/ather/glade-layer'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/place-mode-check'), LOOP = process.argv.includes('--loop')
@@ -79,7 +80,7 @@ try {
     const r = g('Build')?.getBoundingClientRect(); return { subs, furn, fits: !!r && r.left >= 0 && r.right <= innerWidth } }) as Promise<{ subs: [string, [string, boolean][]][]; furn: string[]; fits: boolean }>
   const BUILD = SCENERY.filter(s => s.group === 'Build')
   const checkPal = async (tag: string) => { const b = await pal(), ks = b.subs.flatMap(s => s[1].map(x => x[0]))
-    ok(JSON.stringify(b.subs.map(s => s[0])) === JSON.stringify(['Floors', 'Walls']) && ks.length === BUILD.length && ks.every((k, i) => k === BUILD[i].k), `2. ${tag}: Build by sub-category (${b.subs.map(s => `${s[0]} ${s[1].length}`).join(', ')})`)
+    ok(JSON.stringify(b.subs.map(s => s[0])) === JSON.stringify(buildCatalog().map(g => g.sub)) /* M169 s2: was Floors + Walls */ && ks.length === BUILD.length && ks.every((k, i) => k === BUILD[i].k), `2. ${tag}: Build by sub-category (${b.subs.map(s => `${s[0]} ${s[1].length}`).join(', ')})`)
     ok(b.subs.every(s => s[1].every(x => x[1])), `2. ${tag}: every building piece shows its icon`)
     ok(b.furn.length > 10 && !b.furn.some(k => /_slab|_panel/.test(k)), `2. ${tag}: Furniture holds no slab or panel (${b.furn.length} pieces)`)
     ok(b.fits, `2. ${tag}: the Build group fits the screen`) }

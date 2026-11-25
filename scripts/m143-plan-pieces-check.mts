@@ -10,6 +10,7 @@ import { mkdirSync } from 'fs'
 import * as THREE from 'three'
 import { TABLE, KEEP_CLEAR, benchOf } from '../src/app/shimmer/open/ather/rooms'
 import { SCENERY } from '../src/app/shimmer/open/ather/scenery'
+import { buildCatalog, BUILD_PIECES } from '../src/app/shimmer/open/ather/build-catalog'
 import { STARTING_SQUARES, squareAt, sqId, GROUND_Y } from '../src/app/shimmer/open/ather/plot'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m143')
@@ -119,12 +120,13 @@ async function run(PHONE: boolean) {
   ok(await fly(), `   ${N}: plan mode`); await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), X0 + 2.5, RZ); await sleep(400)
   await tapEl('[data-act="wall-catalog"]'); await sleep(800)
   const cards = await p.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-cat-group="pieces"] [data-cat]')].map(e => [e.dataset.cat!, e.innerText.replace(/\n/g, ' | ')]))
-  ok(cards.length === 8 && cards.every(c => /\d+ \/ \d+ /.test(c[1])), `2. ${N}: 8 cards, have / need (${cards[0]?.[1]})`)
+  ok(cards.length === BUILD_PIECES.length && cards.every(c => /\d+ \/ \d+ /.test(c[1])), `2. ${N}: a card a building piece (${cards.length} of ${BUILD_PIECES.length}), have / need (${cards[0]?.[1]})`)   // M169 s2: was 8 (s1: slabs + panels); now every piece of the catalog
   await p.evaluate(() => document.querySelector('[data-cat-group="pieces"]')?.scrollIntoView({ block: 'center' })); await shot(`m143-${N}-2-catalog`)
   // M169 s1: the same catalog as Creative's Build, by sub-category, every card with its icon
   const subs = await p.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-cat-group="pieces"] [data-build-sub]')].map(e => [e.dataset.buildSub!, [...e.querySelectorAll<HTMLElement>('[data-cat]')].map(c => [c.dataset.cat!, c.querySelector('[data-build-icon]')?.getAttribute('data-build-icon') ?? '', c.querySelectorAll('[data-build-icon] path').length])]))
   const want = SCENERY.filter(s => s.group === 'Build')
-  ok(JSON.stringify(subs.map(s => s[0])) === JSON.stringify(['Floors', 'Walls']) && JSON.stringify(subs.flatMap(s => (s[1] as any[]).map(c => c[0]))) === JSON.stringify(want.map(s => s.k)), `2. ${N}: Floors + Walls, the same pieces as Creative's Build (${subs.map(s => `${s[0]} ${(s[1] as any[]).length}`)})`)
+  ok(JSON.stringify(subs.map(s => s[0])) === JSON.stringify(buildCatalog().map(g => g.sub)) &&   // M169 s2: the catalog's sub-categories (was Floors + Walls)
+     JSON.stringify(subs.flatMap(s => (s[1] as any[]).map(c => c[0]))) === JSON.stringify(want.map(s => s.k)), `2. ${N}: by sub-category, the same pieces as Creative's Build (${subs.map(s => `${s[0]} ${(s[1] as any[]).length}`)})`)
   ok(subs.every(s => (s[1] as any[]).every(c => c[1] === c[0].slice(6) && c[2] > 0)), `2. ${N}: every card shows its piece's icon`)
   ok(await p.evaluate(() => { const c = document.querySelector('[data-catalog]')!.getBoundingClientRect(); return c.left >= 0 && c.right <= innerWidth }), `2. ${N}: the catalog fits`)
   // 3
