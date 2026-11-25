@@ -118,7 +118,7 @@ async function run(PHONE: boolean) {
   const bag0 = await bagOf('goldwood_plank')
   const put = async (id: string, x: number, z: number) => { await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), x, z); await sleep(500); await pickCard(id); const r = await setAt(x, z); await stop(); ok(r, `2. ${N}: ${id} planned`) }
   await put('goldwood_panel_wide', SX, SZ - 3.2); await put('stair_railed', SX, SZ); await put('ramp', RX, RZ2)
-  await put('fence', CX - 1.6, GZ); await put('fence_gate', CX, GZ); await put('fence', CX + 1.6, GZ)
+  await put('fence', CX - 1.5, GZ); await put('fence_gate', CX, GZ); await put('fence', CX + 1.5, GZ)
   const pl = await planned(); console.log('  planned', JSON.stringify(pl.map((q: any) => [q.item, +(q.x - CX).toFixed(2), +(q.z - CZ).toFixed(2), q.q])))
   ok(pl.every((q: any) => q.q === 0), `2. ${N}: all planned square (q 0), the stair climbing north to the panel`)
   await tapEl('[data-act="build-plan"] button'); await sleep(1500)

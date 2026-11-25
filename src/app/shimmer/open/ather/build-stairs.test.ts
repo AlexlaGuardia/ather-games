@@ -74,16 +74,16 @@ ok(w.planned!.length === 3, 'a stair stands flush against a wall')
   ok(lc.py > 0.4 && lc.py < 1.25, `half way up the ramp (feet ${lc.py.toFixed(2)})`)
   const t = walk(s, X, Z + 3, [0, -1], 1.6); ok(t.py > 1.0 || t.pz < Z - 2, `up the ramp (feet ${t.py.toFixed(2)} at z ${(t.pz - Z).toFixed(2)})`) }
 // a railing and a fence are in the way; a gate: shut blocks, E opens, open lets her through
-{ let f = plan(base(), 'fence', -1.6, 0); f = plan(f, 'fence_gate', 0, 0); f = plan(f, 'fence', 1.6, 0); f = plan(f, 'railing_wide', 0, 4)
+{ let f = plan(base(), 'fence', -1.5, 0); f = plan(f, 'fence_gate', 0, 0); f = plan(f, 'fence', 1.5, 0); f = plan(f, 'railing_wide', 0, 4)
   const s = stand(f), g = s.pieces.find(p => p.item === 'fence_gate')!
-  ok(walk(s, X - 1.6, Z + 2, [0, -1], 2).pz > Z, 'the fence stops the keeper')
+  ok(walk(s, X - 1.5, Z + 2, [0, -1], 2).pz > Z, 'the fence stops the keeper')
   ok(walk(s, X, Z + 2, [0, -1], 2).pz > Z, 'the shut gate stops the keeper')
   ok(walk(s, X, Z + 2, [0, 1], 1.5).pz < Z + 4, 'the railing stops the keeper')
   ok(nearWork(s, g.x, g.z + 1.2)?.kind === 'piece', 'E reaches the gate')
   const o = toggleOpen(s, g.id, { x: g.x, z: g.z + 1.5 }); ok(!!o && 'works' in o && o.works.pieces.find(p => p.id === g.id)!.open === true, 'E opens the gate')
   const so = (o as { works: Works }).works
   ok(walk(so, X, Z + 2, [0, -1], 2).pz < Z - 0.6, 'open, she walks through the gateway')
-  ok(walk(so, X - 1.6, Z + 2, [0, -1], 2).pz > Z, 'the fence beside it still stops her')
+  ok(walk(so, X - 1.5, Z + 2, [0, -1], 2).pz > Z, 'the fence beside it still stops her')
   ok('why' in (toggleOpen(so, g.id, { x: g.x, z: g.z })!), 'shutting refuses while she stands in the gateway')
   const sh = toggleOpen(so, g.id, { x: g.x, z: g.z + 2 }); ok(!!sh && 'works' in sh && walk(sh.works, X, Z + 2, [0, -1], 2).pz > Z, 'E again shuts it: blocks again')
   // a spirit (obstacles): round the shut gate, through the open one, never through a stair
