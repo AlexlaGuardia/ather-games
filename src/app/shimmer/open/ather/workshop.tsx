@@ -76,7 +76,9 @@ import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
 import { TOOL_DEFS } from '../../engine/tools'
-import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw, buildYaw, buildFocus, setPlanLift, setPlanInsets } from './build-mode'
+import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw, buildYaw, buildFocus, setPlanLift, setPlanInsets, viewTo } from './build-mode'
+import { cancelPlan, hasDraft, planSpot, draftKeys } from './plan-draft'   // M138
+import { PlanGrid } from './plan-grid-view'   // M142
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
 import { advance, setFocus, cancelFocus, runProgress, touch, maxAffordable, runsFor, statusOf, takeOut, putOut, jobById, itemMs, runMs, moglinSpeed, stockJobs, stockLine, OUT_CAP, RESERVE } from './station-queue'
@@ -173,9 +175,14 @@ function layOn(w: Works, lv: number, keys: string[], owned: ReadonlySet<string>)
   if (!v.ok) return v
   const s = canStack(levelOf(w, lv - 1).walls, v.add, new Set(builtDeckCells(levelOf(w, lv).decks).map(([i, j]) => `${i},${j}`))); return s.ok ? v : { ok: false as const, why: s.why }   // M56 (a): a railing on a balcony's edge stands on the balcony
 }
+// M138: EDIT PLAN. While it is on the drawing tools touch the plan only: nothing that stands comes down, nothing is spent or given back.
+let planEdit = false
+const setPlanEdit = (v: boolean) => { if (v !== planEdit) { planEdit = v; wdEmit() } }
+const usePlanEdit = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => planEdit, () => false)
+const EDIT_ONLY = 'Editing the plan: that one is built.'
 function wallVerdict(owned: ReadonlySet<string>, a: Corner, b: Corner, erase: boolean) {
   const w = currentWorks(), keys = runKeys(a, b), lv = getPlanLevel(), cur = levelOf(w, lv).walls
-  if (erase) return { keys, ok: keys.some(k => !!cur[k]), why: 'No wall there to take down.' }
+  if (erase) return { keys, ok: planEdit ? draftKeys(cur, keys).length > 0 : keys.some(k => !!cur[k]), why: 'No wall there to take down.' }
   const v = layOn(w, lv, keys, owned)   // a plan is drawn free: the list is paid at Build
   return { keys, ok: v.ok, why: v.ok ? '' : v.why }
 }
@@ -241,6 +248,7 @@ function tapToolHandler(kind: 'door' | 'window' | 'paint' | 'blueprint') {
         setWorks(withLevel(w, lv, { ...L, floors: fr.floors })); setInv(fr.inv); return
       }
       if (!k) { hudSay(kind === 'door' ? 'Tap a wall to put a door in it.' : 'Tap a wall to put a window in it.', 'info'); return }
+      if (planEdit && !walls[k].draft) { hudSay(EDIT_ONLY, 'info'); return }
       const c = kind === 'door' ? toggleDoor(walls, k) : toggleWindow(walls, k)
       if (!c.ok) { hudSay(c.why, 'info'); return }
       if (kind === 'window') {   // a pane for a window cut into a BUILT wall (a plan's pane is on the list instead)
@@ -278,6 +286,7 @@ function columnHandler(owned: () => ReadonlySet<string>) {
       at = null
       const i = Math.round(x), j = Math.round(z), w = currentWorks(), lv = getPlanLevel(), L = levelOf(w, lv), key = `${i},${j}`
       const isNew = !L.cols?.[key]
+      if (planEdit && !isNew && !L.cols![key].draft) { hudSay(EDIT_ONLY, 'info'); return }
       if (isNew && lv > 0 && !colStandsOn(levelOf(w, lv - 1), key)) { hudSay('A column up here must stand on a column, a wall end or a room of the floor below.', 'info'); return }
       const r = toggleCol(L.cols, i, j, wallMat, lv > 0 || heldCorner(owned())(i, j), PER_COL)
       if (!r.ok) { hudSay(r.why, 'info'); return }
@@ -328,10 +337,12 @@ function deckHandler(owned: () => ReadonlySet<string>) {
       const cells = deckRect(a, cell(x, z)), w = currentWorks(), lv = getPlanLevel(), L = levelOf(w, lv), erase = !!L.decks?.[`${a[0]},${a[1]}`]
       a = null; deckDrag = null; wdEmit()
       if (erase) {
-        const r = eraseDecks(L.decks, cells, getInv()); if (!r.up) return
+        const hit = planEdit ? cells.filter(([i, j]) => L.decks?.[`${i},${j}`]?.draft) : cells
+        if (planEdit && !hit.length) { hudSay(EDIT_ONLY, 'info'); return }
+        const r = eraseDecks(L.decks, hit, getInv()); if (!r.up) return
         const next = withLevel(w, lv, { ...L, decks: r.decks })
         if (floating(next).length) { hudSay('Take down what stands on that floor first.', 'info'); return }
-        setWorks(next); setInv(r.inv); hudSay(`${r.up} m² of floor up.${r.full ? ' Your bag is full: the rest stays down.' : ''}`, 'item'); return
+        setWorks(next); setInv(r.inv); hudSay(planEdit ? `${r.up} m² taken off the plan.` : `${r.up} m² of floor up.${r.full ? ' Your bag is full: the rest stays down.' : ''}`, 'item'); return
       }
       if (lv + 1 > MAX_LEVELS) return
       const r = planDecks(L.decks, cells, paintPat, paintCol, deckWhy(w, lv, owned()))
@@ -401,6 +412,7 @@ function stairsHandler(owned: () => ReadonlySet<string>) {
       if (lv + 1 >= MAX_LEVELS && !Object.values(L.stairs ?? {}).length) { hudSay('This is the top floor: nowhere for stairs to go.', 'info'); return }
       const r = toggleStair(L.stairs, L.walls, i, j, dirOfYaw(buildYaw()), wallMat, cellOk, stairTurn)
       if (!r.ok) { hudSay(r.why, 'info'); return }
+      if (planEdit && r.refund) { hudSay(EDIT_ONLY, 'info'); return }
       if (r.refund) { const g = give(getInv(), r.refund.id, r.refund.n); if (g.left) { hudSay('Your bag is full: no room for what the stairs give back.', 'info'); return } setInv(g.inv) }
       setWorks(withLevel(w, lv, { ...L, stairs: r.stairs })); hudSay(r.said, 'info')
     },
@@ -420,11 +432,13 @@ function wallDrawHandler(owned: () => ReadonlySet<string>, erase: boolean) {
       const w = currentWorks(), keys = runKeys(a, b); if (!keys.length) return
       const lv = getPlanLevel(), L = levelOf(w, lv)
       if (erase) {
-        const r = raze(L.walls, getInv(), keys, w.wallCarry); if (!r.down) return
+        const hit = planEdit ? draftKeys(L.walls, keys) : keys   // M138: an edit takes out the plan's own only
+        if (planEdit && !hit.length && keys.some(k => L.walls[k])) { hudSay(EDIT_ONLY, 'info'); return }
+        const r = raze(L.walls, getInv(), hit, w.wallCarry); if (!r.down) return
         if (floating(withLevel(w, lv, { ...L, walls: r.walls })).length) { hudSay('Take the floor above down first: it stands on that wall.', 'info'); return }   // M47: nothing floats
         const rc = reconcile(r.walls, L.paid, r.inv, L.floors, lv === 0)   // a built room that no longer closes gives its floor (and roof) back too
         setWorks({ ...withLevel(w, lv, { ...L, walls: r.walls, paid: rc.paid }), wallCarry: r.carry }); setInv(rc.inv)   // 11-22: the leftover fraction rides to the next take-down
-        hudSay(`${r.down} m of wall down, what was built comes back to your bag.${r.full ? ' Your bag is full: the rest stays up.' : ''}`, 'item')
+        hudSay(planEdit ? `${r.down} m taken off the plan.` : `${r.down} m of wall down, what was built comes back to your bag.${r.full ? ' Your bag is full: the rest stays up.' : ''}`, 'item')
         return
       }
       const v = layOn(w, lv, keys, owned())
@@ -993,6 +1007,7 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
       <MoglinsAtWork w={w} />
       <BlueprintPicked />
       <HouseLevels w={w} />
+      <PlanGrid owned={owned} works={w} />
       <WallGhost />
       <DeckGhost />
       {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} item={p.item} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
@@ -1556,7 +1571,27 @@ function PlanBom({ slim = false }: { slim?: boolean }) {
   const [lift, setLift] = useState(92)
   useEffect(() => { if (slim) return; const f = () => setLift(healthClear()); f(); const t = setInterval(f, 500); return () => clearInterval(t) }, [slim])
   const bom = useMemo(() => billOfAll(w, inv, bank), [w, inv, bank])
+  // M138: Cancel plan / Edit, on both cards. Only for a plan's own pieces (a bill with none left is a room that stands unpaid)
+  const planned = useMemo(() => hasDraft(w), [w]), edit = usePlanEdit(), [ask, setAsk] = useState(false)
+  useEffect(() => { if (!planned) { setAsk(false); setPlanEdit(false) } }, [planned])
+  useEffect(() => () => setPlanEdit(false), [])   // leaving plan mode (or Build emptying the card) ends the edit
   if (bom.empty) return null
+  const cancel = () => { setAsk(false); setPlanEdit(false); setPlacing(null); setWorks(cancelPlan(currentWorks())); hudSay('Plan thrown away. What stands is as it was.', 'info') }
+  const editPlan = () => {
+    if (edit) { setPlanEdit(false); setBuildTool('look'); return }
+    const s = planSpot(currentWorks(), getPlanLevel()); if (!s) return
+    setAsk(false); setPlacing(null); setPlanLevel(s.level); viewTo(s.x, s.z); setPlanEdit(true); setBuildTool('erase')
+    hudSay('Editing the plan · Erase takes planned pieces out, the other tools add to it · nothing is spent', 'info', 6)
+  }
+  const planActs = !planned ? null : <>
+    <span data-act="edit-plan" data-on={edit}><HearthButton small onClick={editPlan}>{edit ? 'Done' : 'Edit'}</HearthButton></span>
+    <span data-act="cancel-plan"><HearthButton small onClick={() => setAsk(true)}>Cancel plan</HearthButton></span>
+  </>
+  const askRow = <>
+    <span style={{ flex: 1, fontSize: 12, fontWeight: 700 }}>Throw the plan away?</span>
+    <span data-act="keep-plan"><HearthButton small onClick={() => setAsk(false)}>Keep it</HearthButton></span>
+    <span data-act="cancel-plan-yes"><HearthButton small primary onClick={cancel}>Throw it away</HearthButton></span>
+  </>
   const build = () => {
     const c = currentWorks(), r = buildAll(c, getInv(), getB())   // M47: every level's draft
     if (!r.ok) { hudSay(r.why, 'info'); return }
@@ -1569,12 +1604,15 @@ function PlanBom({ slim = false }: { slim?: boolean }) {
     const short = bom.lines.find(l => l.short)
     return (
       <div data-plan-bom data-ready={bom.ok} data-slim style={{ position: 'fixed', bottom: 'calc(108px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)', width: 'calc(100vw - 24px)', zIndex: 41, pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 10px', borderRadius: 12, background: 'rgba(255,250,235,.94)', boxShadow: '0 2px 8px rgba(0,0,0,.25)', color: H.ink }}>
+        {ask && planned ? askRow : <>
         <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 1 }}>
           <span style={{ font: '700 10px system-ui', letterSpacing: '.1em', textTransform: 'uppercase', opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Plan · {bom.pieces} m{bom.rooms ? ` · ${bom.rooms} room${bom.rooms > 1 ? 's' : ''}` : ''}</span>
           <span style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: short ? '#b5452c' : H.ink }}>{short ? `${Math.min(short.have, short.n)} / ${short.n} ${short.name}` : `Everything is here (${bom.lines.map(l => `${l.n} ${l.name}`).join(', ')})`}</span>
           {bom.lines.map(l => <span key={l.id} data-bom-line={l.id} data-need={l.n} data-have={l.have} data-short={l.short} hidden />)}
         </div>
-        <span data-act="build-plan" style={{ flex: '0 0 auto' }}><HearthButton primary disabled={!bom.ok} onClick={build}>Build</HearthButton></span>
+        <span style={{ flex: '0 0 auto', display: 'inline-flex', gap: 4 }}>{planActs}</span>
+        <span data-act="build-plan" style={{ flex: '0 0 auto' }}><HearthButton small primary disabled={!bom.ok} onClick={build}>Build</HearthButton></span>
+        </>}
       </div>
     )
   }
@@ -1588,9 +1626,10 @@ function PlanBom({ slim = false }: { slim?: boolean }) {
           <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, minWidth: 54 }}>{Math.min(l.have, l.n)} / {l.n}</span><span>{l.name}</span>
         </div>
       ))}
+      <div style={{ fontSize: 11.5, color: H.inkSoft }}>{edit ? 'Editing: Erase takes planned pieces out, the other tools add.' : bom.ok ? 'Everything is here.' : 'Planks: Carpentry. Bricks and panes: Stonery.'}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ flex: 1, fontSize: 11.5, color: H.inkSoft }}>{bom.ok ? 'Everything is here.' : 'Planks: Carpentry. Bricks and panes: Stonery.'}</span>
-        <span data-act="build-plan"><HearthButton primary disabled={!bom.ok} onClick={build}>Build</HearthButton></span>
+        {ask && planned ? askRow : <>{planActs}<span style={{ flex: 1 }} />
+        <span data-act="build-plan"><HearthButton primary disabled={!bom.ok} onClick={build}>Build</HearthButton></span></>}
       </div>
     </div>
   )

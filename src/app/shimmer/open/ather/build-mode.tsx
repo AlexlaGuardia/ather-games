@@ -107,6 +107,8 @@ export function useBuildKeys(placing: () => boolean) {
   }, [b, placing])
 }
 
+/** M138: fly the view over a ground point (Edit plan) */
+export const viewTo = (x: number, z: number) => { const c = clampView(x, z, home.x, home.z); want.x = c.x; want.z = c.z }
 /** Pure: the lens for a view. Looks down at (x, z) from height h, `pitch` below the horizon, facing `yaw` (yaw 0 = -z). */
 export function lensFor(v: { x: number; z: number; h: number; yaw: number }, pitch: number = BUILD_CAM.PITCH) {
   const back = v.h / Math.tan(pitch)

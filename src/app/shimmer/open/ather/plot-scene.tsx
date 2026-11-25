@@ -51,21 +51,7 @@ function plotGeometry(): THREE.BufferGeometry {
   return g
 }
 
-/** Faint lines along the grid, laid on the ground, so the squares read as squares. */
-function gridLines(): THREE.BufferGeometry {
-  const pts: number[] = []
-  const step = 2
-  for (let k = 0; k <= GRID; k++) {
-    const a = k * SQ - GRID_HALF
-    for (let t = -GRID_HALF; t < GRID_HALF; t += step) {
-      pts.push(a, plotHeightAt(a, t) + 0.06, t, a, plotHeightAt(a, t + step) + 0.06, t + step)
-      pts.push(t, plotHeightAt(t, a) + 0.06, a, t + step, plotHeightAt(t + step, a) + 0.06, a)
-    }
-  }
-  const g = new THREE.BufferGeometry()
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pts.map(p => (Number.isFinite(p) ? p : 0)), 3))
-  return g
-}
+// BETA M142: the grid is not drawn here any more; plan mode draws its own (plan-grid-view.tsx)
 
 function Gate() {
   const y = GROUND_Y - 0.4   // M52: it stands in the Green's centre, on the square (MIDDLE_Y = GROUND_Y)
@@ -117,15 +103,13 @@ function MistGroup({ pts, sale, ring }: { pts: { x: number; y: number; z: number
 export function PlotIsland({ owned, pages, lift, place }: { owned: ReadonlySet<string>; pages: number; lift?: Lift | null; place?: Place }) {
   // M83 s2b: in the Glade the builder layer's delta displaces the baked island (glade-layer.ts); place = where a mate's island sits
   const geo = useMemo(() => (lift ? liftGeometry(plotGeometry(), lift, place) : plotGeometry()), [lift, place])
-  const lines = useMemo(() => (lift ? liftGeometry(gridLines(), lift, place) : gridLines()), [lift, place])
-  // M9 (11-22): both go to <mesh geometry={...}> as props, which R3F never disposes. PlotIsland remounts on every return home,
+  // M9 (11-22): it goes to <mesh geometry={...}> as a prop, which R3F never disposes. PlotIsland remounts on every return home,
   // so each trip left the old island (~40k verts) and grid in the renderer's binding cache: ~2 MB a trip, 63 MB after 34
-  useEffect(() => () => { geo.dispose(); lines.dispose() }, [geo, lines])
+  useEffect(() => () => geo.dispose(), [geo])
   const ground = useGroundMaterial()
   return (
     <>
       <mesh geometry={geo} material={ground} />
-      <lineSegments geometry={lines}><lineBasicMaterial color="#7f9a55" transparent opacity={0.45} /></lineSegments>
       <mesh position-y={-20} rotation-x={Math.PI}><coneGeometry args={[PLOT_R * 1.05, 34, 12, 2]} /><meshLambertMaterial color={P.under} flatShading /></mesh>
       <mesh position={[THRESHOLD.x, plotHeightAt(THRESHOLD.x, THRESHOLD.z) + 0.03, THRESHOLD.z]} rotation-x={-Math.PI / 2} renderOrder={groundOrder('mark')}>
         <ringGeometry args={[1.1, 1.45, 18]} /><meshBasicMaterial color="#efe0a8" {...groundMat('mark')} />
