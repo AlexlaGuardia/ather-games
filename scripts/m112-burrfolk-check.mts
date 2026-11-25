@@ -1,18 +1,18 @@
 // BETA M112 s1: the Burrfolk (trader Moglins) on prod at 390x844. npx tsx scripts/m112-burrfolk-check.mts [--url ...] [--out ...]
 // Canon: CANON/game/shimmer-folds-settlements.md › THE BURRFOLK (RULED 11-23): a stall in every settlement, never follows,
-// barter only (no Marks), wares by the settlement's trade. Barks: batch 11-23b › D5 (SIGNED), pinned below AS TEXT.
+// dewls only (M159; no Marks, no swaps), wares by the settlement's trade. Barks: batch 11-23b › D5 + 11-25b (SIGNED), pinned below AS TEXT.
 //   S · a Burrfolk stall is drawn in 2+ settlements (window.__folk.stalls()), keeper = the generated name
 //   G · E at the stall: the talk is on the Burrfolk (name), greet = signed bark 1; NO "keep a room" answer (never follows)
-//   B · "Have a look": signed bark 2 + one swap per stock row; with no input the swap is REFUSED (bag byte-identical, the
-//       "need" line); with the input, one swap moves exactly want -> product; Marks unchanged; the garden village unchanged
+//   B · "Have a look": signed bark 2 + one ware per stock row; goods and too few dewls are REFUSED (bag byte-identical, the signed
+//       short line); no room = refused; the exact balance buys one; Marks unchanged; the garden village unchanged
 //   L · leaving: the signed leave bark on the HUD
 import puppeteer, { type Page } from 'puppeteer-core'
 import { readFileSync, mkdirSync, existsSync } from 'node:fs'
 import { folkOf } from '../src/app/shimmer/open/ather/settlement-folk'
-import { burrfolkOf, stallSpot, BARTER, BURR_LABEL } from '../src/app/shimmer/open/ather/burrfolk'
+import { burrfolkOf, stallSpot, WARES, BURR_LABEL } from '../src/app/shimmer/open/ather/burrfolk'
 import { ASK } from '../src/app/shimmer/open/ather/folk-talk'
 import type { Network, Settlement } from '../src/app/shimmer/open/ather/network'
-import { INV_KEY } from '../src/app/shimmer/open/shared/inventory'
+import { INV_KEY, itemDef } from '../src/app/shimmer/open/shared/inventory'
 import { NEW_LEDGER } from '../src/app/shimmer/open/trade'
 
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -24,14 +24,14 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 // ★ SIGNED (athernyx shimmer-lines-batch-2026-11-23b.md › D5, Alex 11-23), as text: prod is checked against the signing
-const SIGNED = { greet: 'Wares from all over. Have a look.', stall: "No coin, only swaps. Bring me something I haven't got.", leave: "Mind the road. I'll be here." }
+const SIGNED = { greet: 'Wares from all over. Have a look.', stall: 'No coin, only dewls. Take your time.', leave: "Mind the road. I'll be here." }
 const LEDGER_KEY = 'ather:trade:trial-ledger'
 const net = JSON.parse(readFileSync('public/open/wilds/network-s1.json', 'utf8')) as Network
 const tiles = (JSON.parse(readFileSync('public/open/wilds/tiles.json', 'utf8')) as { tiles: { name: string; tx: number; ty: number }[] }).tiles
 const A = net.settlements.find(x => x.id === 's1-10')!, B2 = net.settlements.find(x => x.id === 's1-9')!
 const bA = burrfolkOf(A, net.season, folkOf(A, net.season))!, bB = burrfolkOf(B2, net.season, folkOf(B2, net.season))!
-const key = bA.stock[0], row = BARTER[key]
-console.log(`  stalls: ${bA.name} at ${A.name} (${bA.stock.join('+')}), ${bB.name} at ${B2.name} (${bB.stock.join('+')}); swapping ${key}`)
+const key = bA.stock[0], row = WARES[key], NAME = itemDef(row.product.id).name
+console.log(`  stalls: ${bA.name} at ${A.name} (${bA.stock.join('+')}), ${bB.name} at ${B2.name} (${bB.stock.join('+')}); buying ${key} at ${row.price}`)
 
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--mute-audio'] })
 const errs: string[] = []
@@ -98,26 +98,29 @@ try {
   ok(await pick(BURR_LABEL.look), 'B1. picked "Have a look"'); await sleep(900)
   const b1 = await bubble(), o1 = await opts()
   ok(b1?.line === SIGNED.stall, `B2. stall = the signed bark (${b1?.line})`)
-  ok(bA.stock.every(k => o1.includes(BURR_LABEL.swap(k))) && !o1.includes(ASK.room), `B3. one swap per stock row, no room ask (${JSON.stringify(o1)})`)
-  const m0 = await marks(), v0 = await village(), raw0 = await bagRaw(), in0 = await countIn(row.want.id), pr0 = await countIn(row.product.id)
-  ok(in0 < row.want.n, `B4. the keeper is short of ${row.want.id} (${in0})`)
-  ok(await pick(BURR_LABEL.swap(key)), `B5. picked "${BURR_LABEL.swap(key)}" without the goods`); await sleep(1200)
-  ok(await hudHas(BURR_LABEL.short(key)) && (await bagRaw()) === raw0 && (await countIn(row.product.id)) === pr0, `B6. REFUSED: "${BURR_LABEL.short(key)}", the bag byte-identical`)
+  ok(bA.stock.every(k => o1.includes(BURR_LABEL.swap(k))) && !o1.includes(ASK.room), `B3. one ware per stock row, no room ask (${JSON.stringify(o1)})`)
+  const setBag = (slots: { id: string; n: number }[], fill: boolean) => p.evaluate((k, sl, fl) => { const inv = JSON.parse(localStorage.getItem(k) ?? 'null') ?? { v: 1 }; inv.slots = Array.from({ length: 32 }, (_, i) => sl[i] ?? (fl ? { id: 'junk' + i, n: 1 } : null)); localStorage.setItem(k, JSON.stringify(inv)) }, INV_KEY, slots, fill)
+  const signedRow = `${NAME} · ${row.price} dewls`, signedShort = `You need ${row.price} dewls for the ${NAME}.`
+  ok(o1.includes(signedRow), `B3b. the signed row, as text: "${signedRow}" (${JSON.stringify(o1)})`)
+  const again = async (slots: { id: string; n: number }[], fill: boolean) => { await p.keyboard.press('Escape'); await sleep(600); await setBag(slots, fill); await enterWilds(A); const t = await toStall(A); await pick(BURR_LABEL.look); await sleep(900); return t }
+  // goods and one dewl too few: refused
+  ok(await again([{ id: 'dewl', n: row.price - 1 }, { id: 'goldwood_log', n: 20 }, { id: 'raw_mana_shard', n: 20 }, { id: 'starwillow_branch', n: 20 }, { id: 'goldwood_plank', n: 20 }], false), 'B4. back with goods and one dewl too few')
+  const m0 = await marks(), v0 = await village(), raw0 = await bagRaw()
+  ok(await pick(signedRow), 'B5. picked it'); await sleep(1200)
+  ok(await hudHas(signedShort) && (await bagRaw()) === raw0, `B6. REFUSED: "${signedShort}", the bag byte-identical`)
   await p.screenshot({ path: `${out}/stall-refused-390.png` })
-  await p.keyboard.press('Escape'); await sleep(600)
-  await p.evaluate((k, id, n) => { const inv = JSON.parse(localStorage.getItem(k) ?? 'null') ?? { v: 1, slots: Array(32).fill(null) }; const i = inv.slots.findIndex((x: unknown) => !x); inv.slots[i] = { id, n }; localStorage.setItem(k, JSON.stringify(inv)) }, INV_KEY, row.want.id, row.want.n + 1)
-  await enterWilds(A)
-  ok(await toStall(A), 'B7. back at the stall with the goods')
-  await pick(BURR_LABEL.look); await sleep(900)
-  const w1 = await countIn(row.want.id), p1 = await countIn(row.product.id)
-  ok(w1 === row.want.n + 1 + in0, `B8. bag before: ${w1} ${row.want.id}, ${p1} ${row.product.id}`)
-  ok(await pick(BURR_LABEL.swap(key)), 'B9. picked the swap'); await sleep(1200)
-  ok(await poll(async () => (await countIn(row.want.id)) === w1 - row.want.n && (await countIn(row.product.id)) === p1 + row.product.n, 8000),
-    `B10. exactly ${row.want.n} ${row.want.id} -> ${row.product.n} ${row.product.id} (${await countIn(row.want.id)}, ${await countIn(row.product.id)})`)
+  // no room: refused
+  ok(await again([{ id: 'dewl', n: row.price + 1 }], true), 'B7. back with a full bag')
+  const rawF = await bagRaw(); await pick(signedRow); await sleep(1200)
+  ok(await hudHas(BURR_LABEL.full(key)) && (await bagRaw()) === rawF, `B8. REFUSED: "${BURR_LABEL.full(key)}", the bag byte-identical`)
+  // the exact balance
+  ok(await again([{ id: 'dewl', n: row.price }], false), 'B9. back with the exact balance')
+  const p1 = await countIn(row.product.id); await pick(signedRow); await sleep(1200)
+  ok(await poll(async () => (await countIn('dewl')) === 0 && (await countIn(row.product.id)) === p1 + row.product.n, 8000), `B10. exactly ${row.price} dewls -> ${row.product.n} ${row.product.id} (${await countIn('dewl')}, ${await countIn(row.product.id)})`)
   ok(await hudHas(BURR_LABEL.done(key)), `B11. HUD "${BURR_LABEL.done(key)}"`)
   ok((await marks()) === m0 && m0 === 500, `B12. no Marks change (${m0} -> ${await marks()})`)
   ok((await village()) === v0, 'B13. no Moglin moved (the garden village unchanged)')
-  await p.screenshot({ path: `${out}/stall-swapped-390.png` })
+  await p.screenshot({ path: `${out}/stall-bought-390.png` })
 
   // ── L · leaving ──
   ok(await pick(ASK.bye), 'L1. picked goodbye')

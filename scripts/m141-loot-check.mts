@@ -33,7 +33,7 @@ const frame = async () => { try { await p.screenshot({ path: `${out}/_f.png`, cl
 const shot = async (n: string) => { try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow */ } }
 const ls = (k: string) => p.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), k)
 const text = () => p.evaluate(() => document.body.innerText)
-const IDS = new Set(['goldwood_log', 'goldwood_sapling', 'mast', 'blankstone', 'raw_mana_shard'])
+const IDS = new Set(['goldwood_log', 'goldwood_sapling', 'mast', 'blankstone', 'raw_mana_shard', 'dewl'])
 const bag = async () => sumOf((((await ls('open.inv.v1'))?.slots ?? []) as ({ id: string; n: number } | null)[]).filter(s => s && IDS.has(s.id)).map(s => ({ item: s!.id, n: s!.n })))
 const same = (a: object, b: object) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort())
 const load = async () => {

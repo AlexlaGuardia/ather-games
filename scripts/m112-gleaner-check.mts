@@ -2,11 +2,11 @@
 // Canon: shimmer-folds-settlements.md › THE BURRFOLK; lines batch 11-23b › D1-D4 (SIGNED), pinned below AS TEXT.
 // Magii #16993: players meet Gleaner only when M70 ships; until then the post is OWNER-ONLY. Two contexts:
 //   P (player) · C the camp is drawn + named · PP1 Gleaner at the post (M70 s1 moved it from owner-only to the first settlement)
-//   O (owner)  · C the camp · OP1 Gleaner at the post · OG greet/answers/never follows (D1, D4) · OB barter (D2, one swap,
-//                no Marks) · OD1 the camp POINTER (D3) after the first swap · OL leave = camp.repeat
+//   O (owner)  · C the camp · OP1 Gleaner at the post · OG greet/answers/never follows (D1, D4) · OB a sale (D2, dewls,
+//                no Marks) · OD1 the camp POINTER (D3) after the first purchase · OL leave = camp.repeat
 import puppeteer, { type Page } from 'puppeteer-core'
 import { readFileSync, mkdirSync, existsSync } from 'node:fs'
-import { burrfolkOf, stallSpot, BARTER, BURR_LABEL } from '../src/app/shimmer/open/ather/burrfolk'
+import { burrfolkOf, stallSpot, WARES, BURR_LABEL } from '../src/app/shimmer/open/ather/burrfolk'
 import { GLEANER_POST, BURR_CAMP } from '../src/app/shimmer/open/ather/gleaner'
 import { ASK } from '../src/app/shimmer/open/ather/folk-talk'
 import type { Network, Settlement } from '../src/app/shimmer/open/ather/network'
@@ -22,15 +22,15 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 // ★ SIGNED (athernyx shimmer-lines-batch-2026-11-23b.md › D5, Alex 11-23), as text: prod is checked against the signing
-const SIGNED = {   // ★ batch 11-23b › D1-D4 (MAIN), SIGNED by Alex 11-23, as text
+const SIGNED = {   // ★ batch 11-23b › D1-D4, stall + camp 11-25b › A (MAIN), SIGNED, as text
   greet: 'Mind the pack. Everything in it has been somewhere.', have: 'What have you got?', look: 'Just looking.',
-  stall: "Odds and ends. No coin here, I swap. Show me what you've got and we'll see.",
-  camp: "If you want the odd finds, our camp's out in the Wilds. All of us gather there and swap.",
+  stall: 'Odds and ends. No coin here, only dewls.',
+  camp: "If you want the odd finds, our camp's out in the Wilds. All of us gather there, so bring dewls.",
   campRepeat: 'Our camp, out in the Wilds. Go and see.', ask: 'My stall stays and so do I. Feet were never my trade.',
 }
 const LEDGER_KEY = 'ather:trade:trial-ledger'
 const tiles = (JSON.parse(readFileSync('public/open/wilds/tiles.json', 'utf8')) as { tiles: { name: string; tx: number; ty: number }[] }).tiles
-const POST = GLEANER_POST, b = burrfolkOf(POST, 1)!, key = b.stock[0], row = BARTER[key]
+const POST = GLEANER_POST, b = burrfolkOf(POST, 1)!, key = b.stock[0], row = WARES[key]
 const CAMP: Settlement = { id: 'camp', name: 'camp', x: BURR_CAMP.x, z: BURR_CAMP.z }
 console.log(`  Gleaner post at ${POST.x},${POST.z} (${b.stock.join('+')}); camp at ${BURR_CAMP.x},${BURR_CAMP.z}`)
 
@@ -90,7 +90,7 @@ try {
   if (!owner) { ok(postOn && st[POST.id]?.name === 'Gleaner', `PP1. M70 s1: a player sees Gleaner at the first settlement (post ${postOn}, stall ${JSON.stringify(st[POST.id] ?? null)})`) }
   else {
     ok(postOn && st[POST.id]?.name === 'Gleaner', `OP1. the owner sees Gleaner at the post (${JSON.stringify(st[POST.id] ?? null)})`)
-    await p.evaluate((k, id, n) => { const inv = JSON.parse(localStorage.getItem(k) ?? 'null') ?? { v: 1, slots: Array(32).fill(null) }; const i = inv.slots.findIndex((x: unknown) => !x); inv.slots[i] = { id, n }; localStorage.setItem(k, JSON.stringify(inv)) }, INV_KEY, row.want.id, row.want.n + 1)
+    await p.evaluate((k, id, n) => { const inv = JSON.parse(localStorage.getItem(k) ?? 'null') ?? { v: 1, slots: Array(32).fill(null) }; const i = inv.slots.findIndex((x: unknown) => !x); inv.slots[i] = { id, n }; localStorage.setItem(k, JSON.stringify(inv)) }, INV_KEY, 'dewl', row.price + 1)
     await enterWilds(POST)
     ok(await toStall(POST), 'OG1. E at Gleaner opens a talk')
     const g = await bubble(), o0 = await opts()
@@ -101,12 +101,12 @@ try {
     await pick(ASK.back); await sleep(800)
     ok(await pick(SIGNED.have), 'OB1. "What have you got?"'); await sleep(900)
     const s1 = await bubble(), o1 = await opts()
-    ok(s1?.line === SIGNED.stall && b.stock.every(k => o1.includes(BURR_LABEL.swap(k))), `OB2. signed D2 + a swap per row (${JSON.stringify(o1)})`)
-    const m0 = await marks(), w1 = await countIn(row.want.id), p1 = await countIn(row.product.id)
-    ok(await pick(BURR_LABEL.swap(key)), 'OB3. picked the swap'); await sleep(1500)
-    ok(await poll(async () => (await countIn(row.want.id)) === w1 - row.want.n && (await countIn(row.product.id)) === p1 + row.product.n, 8000), `OB4. exactly ${row.want.n} ${row.want.id} -> ${row.product.n} ${row.product.id}`)
+    ok(s1?.line === SIGNED.stall && b.stock.every(k => o1.includes(BURR_LABEL.swap(k))), `OB2. signed D2 + a ware per row (${JSON.stringify(o1)})`)
+    const m0 = await marks(), w1 = await countIn('dewl'), p1 = await countIn(row.product.id)
+    ok(await pick(BURR_LABEL.swap(key)), 'OB3. picked the ware'); await sleep(1500)
+    ok(await poll(async () => (await countIn('dewl')) === w1 - row.price && (await countIn(row.product.id)) === p1 + row.product.n, 8000), `OB4. exactly ${row.price} dewls -> ${row.product.n} ${row.product.id}`)
     ok((await marks()) === m0, 'OB5. no Marks change')
-    ok(await poll(async () => (await bubble())?.line === SIGNED.camp, 6000), `OD1. the POINTER plays after the first swap: signed D3 (${(await bubble())?.line})`)
+    ok(await poll(async () => (await bubble())?.line === SIGNED.camp, 6000), `OD1. the POINTER plays after the first purchase: signed D3 (${(await bubble())?.line})`)
     await p.screenshot({ path: `${out}/gleaner-camp-390.png` })
     ok(await pick(ASK.bye), 'OL1. goodbye')
     ok(await hudHas(SIGNED.campRepeat), `OL2. leave bark = signed camp.repeat`)
