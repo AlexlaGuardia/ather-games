@@ -30,6 +30,7 @@ async function open(tag: string, id: string, seed: Record<string, unknown>): Pro
   p.on('pageerror', e => errs.push(`${tag}: ${String(e).slice(0, 180)}`))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.evaluateOnNewDocument((c: string, id: string, s: string) => {
+    if (location.protocol !== 'https:') return   // about:blank
     if (sessionStorage.getItem('m156h')) return; sessionStorage.setItem('m156h', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star'); if (c) localStorage.setItem('ather:mp:party', c); localStorage.setItem('ather:mp:id', id)
     for (const [k, v] of Object.entries(JSON.parse(s))) localStorage.setItem(k, JSON.stringify(v))

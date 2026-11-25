@@ -16,6 +16,7 @@ import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { useMenuLock } from './menu-lock'
 import { hudSay } from './hud-say'
 import { openPeers } from './open-mp'
+import { setPartyOrder } from './party-host'
 import { usePartyLobby, type LobbyMember } from '@/lib/party-lobby'
 import { selfPlayerId, storedName } from '../../play3d/multiplayer'
 import { hostOfZone, plotZone, GLADE_LOBBY } from '../ather/plot-visit'
@@ -182,6 +183,7 @@ export function OpenSocial() {
   const lobby = usePartyLobby({ code: party, userId: account.session?.user_id ?? me, name: account.session?.username ?? (me ? storedName() : ''), zone: zoneNow, look: me ?? '' })
   const mates = lobby.state?.members ?? []
   lobbyBox = { members: mates, me: me ?? '' }
+  setPartyOrder(mates.map(m => m.look).filter(Boolean))   // M156 s2: who hosts the party's Wilds
   if (typeof window !== 'undefined') (window as unknown as { __lobby?: unknown }).__lobby = { members: () => lobbyBox.members, zone: () => lobbyZone }
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.code === 'Escape' && open) setPlayTogether(false) }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
   return (

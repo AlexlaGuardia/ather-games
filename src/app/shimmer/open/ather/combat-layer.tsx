@@ -29,7 +29,8 @@ import { playShot, playEmpty, playReload } from '../shared/gun-sound'
 import { play as sfx } from '../shared/sfx'   // M36 batch 2: Hollow sounds (proposed = silent until Alex's yay)
 import { setAmmoFeed } from '../shared/morel'
 import { openNet, openPeers } from '../shared/open-mp'
-import { sharing, hostOf, encodeSnap, applySnap, SNAP_KIND, SNAP_HZ, HIT_KIND, KILL_KIND, encodeHits, decodeHits, newDrops, decodeKills, layDrop, HURT_KIND, encodeHurt, decodeHurt, type Snap, type HitRow, type KillRow } from '../shared/fight-share'   // BETA M28 shared fights   // M33: Morel's bubble reads the gun straight from here
+import { partyHost } from '../shared/party-host'
+import { sharing, encodeSnap, applySnap, SNAP_KIND, SNAP_HZ, HIT_KIND, KILL_KIND, encodeHits, decodeHits, newDrops, decodeKills, layDrop, HURT_KIND, encodeHurt, decodeHurt, type Snap, type HitRow, type KillRow } from '../shared/fight-share'   // BETA M28 shared fights   // M33: Morel's bubble reads the gun straight from here
 import { goopMaterial, sharedGoop, groundEnv, releaseGroundEnvs, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'
 import { sprout, poseSprout, lumpyGeometry, type SproutKind } from './hollow-body'   // M34: Alex's pick A, the rooted sprout   // M34: no light of its own; borrows the ground
 import { poseFlit, flitMats, flitGeometry, geoTris, wingLift, FLIT, FLIT_HIT_R, type FlitPose } from './flit-body'   // M120 s3: the floater's own body
@@ -524,7 +525,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const c = useRef<Combat>(newCombat(Date.now() >>> 0))
   useEffect(() => { liveSolids.combat = c.current; return () => { if (liveSolids.combat === c.current) liveSolids.combat = null } }, [])
   useEffect(() => () => setAmmoFeed(null), [])
-  // ── M28 SHARED FIGHTS (shared/fight-share.ts): in a party with someone here, the lowest id hosts the Hollows and relays a
+  // ── M28 SHARED FIGHTS (shared/fight-share.ts): in a party with someone here, one keeper (M156 s2: the party starter, party-host.ts) hosts the Hollows and relays a
   // snapshot; the others draw it (C.remote). Solo = today's game exactly. The latest snapshot waits here for the frame loop.
   const net = useRef({ snap: null as Snap | null, fresh: false, snapT: 0, host: true, share: false, hostId: '',
     // slice 3: hits a guest owes the host, hits the host owes its sim, kills a guest owes its drops; the host's drop-watch
@@ -640,12 +641,12 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     if (!C.champ && C.keeper.hp > 0 && settled.current > SETTLE) for (const n of nodesRef.current) {
       if (!n.quiet && !spent.current.has(n.id) && !probeSpent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < WAKE_R) { wakeChampion(C, T, n); break }
     }
-    // M28: host or guest, decided from the live roster every frame (a leaver hands the Hollows to the next lowest id)
+    // M28: host or guest, decided from the live roster every frame (a leaver hands the Hollows to the next in line)
     {
       const n = openNet(), live = n && n.zone === 'open:wilds' ? n.live() : []
       const N = net.current
       N.share = !!n && sharing(n.party, live)
-      N.hostId = N.share ? hostOf(n!.self, live) : ''
+      N.hostId = N.share ? partyHost(n!.self, live) : ''
       N.host = !N.share || N.hostId === n!.self
       C.remote = !N.host
       if (C.remote) {
