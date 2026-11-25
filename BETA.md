@@ -222,6 +222,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 19:5x Alex: Hovari v2 APPROVED (2c2f5e2b) -> wire with Athowl, Dewbear, Noctyx; gun pictures in flight
 - 11-24 19:4x Alex (Twins): "yea left gun first works, go with it" -> M152
 - 11-24 19:4x Alex (Twins): "oh can we make them side arms?" -> M152 (canon class asked)
 - 11-24 19:4x Alex (TALK, Roar): "got an idea for the roars.. we make them dual sawn off shotguns.. single shot each and reload.. what do you think..?" -> hub: yes; asked go
