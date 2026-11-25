@@ -64,9 +64,9 @@ async function run(phone: boolean, g: (typeof RANGE_GUNS)[number]) {
   // 2 released: no round after the last the trigger asked for (a burst / a charge in flight may finish)
   await rest(cyc * 2); const n2 = await count(); ok(n2 === n1, `2. ${L}: released, it stops (${n1} -> ${n2})`)
   if (g.id === 'roar') { const r = await tr(); ok(r.length > 0 && r.every(x => x.st === 9 * x.n), `6. ${L}: ${r.map(x => x.st).join(' ')} pellets a round`) } else ok((await tr()).reduce((s, r) => s + r.st, 0) <= n2, `6. ${L}: one streak a round`)
-  // 3 a tap: down until the pull is seen, at most
-  await fill(); await rest(cyc + 0.3); await clear(); await press(); if (g.auto || g.charge) await sleep(60); else await poll(async () => (await count()) > 0, 5000); await lift(); await rest(cyc * 2 + 0.3)
-  const n3 = await count(), tapMax = g.auto ? 3 : burst; ok(n3 >= 1 ? n3 <= tapMax && (g.auto || n3 === burst) : !!(g.auto || g.charge), `3. ${L}: a tap = ${n3} round${n3 === 1 ? '' : 's'}${n3 ? '' : ' (a 60 ms tap between two slow frames)'}`)
+  // 3 a tap: down until the pull is seen (the Rifle: a tenth of a second, well inside its cycle)
+  await fill(); await rest(cyc + 0.3); await clear(); await press(); if (g.charge) await rest(0.12); else await poll(async () => (await count()) > 0, 5000); await lift(); await rest(cyc * 2 + 0.3)
+  const n3 = await count(), tapMax = g.auto ? 3 : burst; ok(g.auto ? n3 >= 1 && n3 <= tapMax : n3 === burst, `3. ${L}: a tap = ${n3} round${n3 === 1 ? '' : 's'}`)
   // 4 the clip ends mid-hold
   const left = burst; await fill(left); await rest(cyc + 0.2); await fill(left); await clear(); await press()
   const on = await poll(async () => (await count()) >= left + 1, 60000), R4 = await tr(); await lift()
