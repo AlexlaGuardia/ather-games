@@ -2,7 +2,7 @@
 // PHONE 390x844 (the fire button) and DESKTOP 1280x760 (the mouse): draw the Backbone (R), then
 //   1 hold 3 s of sim time = 15 rounds, bursts 0.63 s apart, rounds 0.09  2 release: the burst in flight finishes, then nothing
 //   3 a tap = 3 rounds  4 every round its own sound (3 oscillators a shot) and its own streak, the gun's snap on it
-//   5 emptied: one reload, the clip back  6 the Repeater still fires one round a pull
+//   5 emptied: one reload, the clip back  6 the Repeater held keeps firing (M151; one a pull before)
 // TUNER (owner): the two burst dials are there for the Backbone only, save, survive a reload, reach the gun in the Ather, reset.
 // Times are read off the combat clock (a slow software GPU runs the sim slower than the wall).
 //   OWNER_KEY=... npx tsx scripts/m148-backbone-check.mts [--url ...] [--out dir]
@@ -72,7 +72,7 @@ async function run(phone: boolean) {
   const n5 = (await tr()).reduce((s, r) => s + r.n, 0); ok(n5 === 5, `5. ${L}: 5 rounds left = ${n5} fired`)
   // 6. the Repeater: one a pull, as before
   await tapKey(p, 'KeyR'); ok(await poll(async () => (await gun(p)).id === 'repeater'), `6. ${L}: the Repeater in hand`); await sleep(1500); await clear()
-  await press(); await sleep(2500); await lift(); await sleep(800); const n6 = (await tr()).reduce((s, r) => s + r.n, 0); ok(n6 === 1, `6. ${L}: the Repeater held = ${n6} round, as before`)
+  await press(); await poll(async () => (await tr()).reduce((s, r) => s + r.n, 0) >= 2, 30000); await lift(); await sleep(800); const n6 = (await tr()).reduce((s, r) => s + r.n, 0); ok(n6 >= 2, `6. ${L}: the Repeater held = ${n6} rounds (M151: it keeps firing)`)
   await p.close()
 }
 try {

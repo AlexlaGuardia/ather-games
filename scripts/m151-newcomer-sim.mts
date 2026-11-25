@@ -2,6 +2,7 @@ const A=process.cwd() + '/src/app/shimmer/open/ather/'
 const C=await import(A+'combat.ts'), W=await import(A+'wilds-sim.ts'), CH=await import(A+'champion.ts'), G=await import(process.cwd() + '/src/app/shimmer/open/shared/gunplay.ts')
 const ALL=['repeater','roar','lance','charred-rifle'], seeds=Array.from({length:200},(_,i)=>1001+i*13)
 const orig=new Map(G.RANGE_GUNS.map((g:any)=>[g.id,{...g}]))
+const OLD={gun:{fireCd:.16}} // the Repeater before M151
 const H={...C.SHAMBLER},F={...C.FLOATER},K={...C.CRAWLER},CP={...CH.CHAMP},WH={...CH.WAVE_HP}
 function row(label:string,gun:string,hold:string[],shell:boolean,o:any={}){
   C.M151.hold=hold;C.M151.shell=shell;W.SIM.gun=gun
@@ -15,7 +16,7 @@ function row(label:string,gun:string,hold:string[],shell:boolean,o:any={}){
   console.log(label.padEnd(34),'ALONE',out[0],' TRIO',out[1]);W.SIM.trio=false}
 const step=process.argv[2]
 if(step==='a'){
-row('repeater today','repeater',[],false);row('repeater hold','repeater',['repeater'],false);
+row('repeater today','repeater',[],false,OLD);row('repeater hold 0.16','repeater',['repeater'],false,OLD);row('repeater SHIPPED','repeater',ALL,true);
 for(const g of ['spitter','backbone'])row(g+' (unchanged)',g,[],false)
 for(const g of ['lance','charred-rifle','roar']){row(g+' today',g,[],false);row(g+' hold',g,ALL,false)}
 row('roar today+pellets/shove (tap)','roar',[],true);row('roar hold+pellets','roar',ALL,true,{gun:{shove:0}});row('roar hold+pellets+shove','roar',ALL,true)}

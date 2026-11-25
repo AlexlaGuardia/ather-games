@@ -707,10 +707,10 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       if (charging.current < 0) { camera.getWorldDirection(aim); shoot() }
       if (!armedRef.current || frozen.current) charging.current = -1
     } else if ((trigger.current || touch.fire) && !frozen.current && armedRef.current) {
-      if (charge > 0) { if (C.keeper.ammo > 0 && C.keeper.reloading <= 0 && C.keeper.sinceShot >= C.gun.fireCd) charging.current = charge; else { camera.getWorldDirection(aim); shoot() } }
+      if (charge > 0) { if (C.keeper.ammo > 0 && C.keeper.reloading <= 0 && C.keeper.sinceShot >= C.gun.fireCd) charging.current = charge; else if (!C.keeper.wasDown) { camera.getWorldDirection(aim); shoot() } C.keeper.wasDown = true }   // M151: held through a reload, it asks (and sputters) once a pull
       else { camera.getWorldDirection(aim); shoot() }
       if (!C.gun.auto && !(charge > 0 && M151.hold.includes(C.gun.id))) { trigger.current = false; touch.fire = false }
-    }
+    } else if (charge > 0) C.keeper.wasDown = false
     // the sights: the mouse HOLDS them, the phone TOGGLES them (touch.aim); putting the gun away drops both
     if (!armedRef.current || frozen.current) { mouseAim.current = false; touch.aim = false }
     if (sight) sight.current.aiming = mouseAim.current || touch.aim

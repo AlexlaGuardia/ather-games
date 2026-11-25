@@ -3,7 +3,7 @@
 // Repeater (sidearm), Spitter (shortbarrel), Backbone (longbarrel), Roar (breacher), Lance (reacher). Names and slates
 // are canon; every number here is build (Jin), tuned by Alex at the lane.
 //
-// Repeater / Spitter / Lance are engine/weapons.ts's defs, read as they are. Backbone (3-round burst) and Roar (pellets
+// Spitter / Lance are engine/weapons.ts's defs, read as they are; the Repeater's fireCd is this file's (M151). Backbone (3-round burst) and Roar (pellets
 // + knockback) need two fields that file does not have yet, so they live here as RangeGun extensions until the hub
 // folds them into engine/weapons.ts. ⚠ Nothing in this file edits a weapons.ts value.
 
@@ -26,11 +26,13 @@ export interface RangeGun extends WeaponDef {
   noSigil?: boolean
 }
 
-/** M148: the Backbone's damage a round. 10.4 = 49.5 a second held, 41.9 with reloads: never past the Repeater's 62.5 / 42.0. */
+/** M148: the Backbone's damage a round. 10.4 = 49.5 a second held, 41.9 with reloads: never past the engine Repeater's (0.16 s) 62.5 / 42.0. */
 export const BACKBONE_DAMAGE = 10.4
 const base = (id: string) => WEAPONS.find(w => w.id === id)!
+/** M151 (Alex 11-25): every gun fires while held, so the Repeater's cadence is the open world's own: 0.22 s = 45 a second held. */
+export const REPEATER_CD = 0.22
 export const RANGE_GUNS: RangeGun[] = [
-  { ...base('repeater'), burst: 1, burstGap: 0, pellets: 1, shove: 0.05, color: '#e0a640' },
+  { ...base('repeater'), fireCd: REPEATER_CD, burst: 1, burstGap: 0, pellets: 1, shove: 0.05, color: '#e0a640' },
   { ...base('spitter'), burst: 1, burstGap: 0, pellets: 1, shove: 0.03, color: '#3fb8a8' },
   // BACKBONE (longbarrel) — the workhorse: canon "balanced 3-round burst, mid-range, medium heat".
   { id: 'backbone', name: 'BACKBONE', slot: 'LONGBARREL', auto: false,

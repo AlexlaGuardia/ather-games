@@ -1,4 +1,6 @@
 // npx tsx src/app/shimmer/open/shared/spirit-fight.test.ts   (BETA M127 s1: the fight brain of following spirits)
+import { RANGE_GUNS } from './gunplay'
+import { M151 } from '../ather/combat'
 import { readFileSync } from 'fs'
 import { newCombat, spawnHollow, stepCombat, SHAMBLER, LURE_STOP, type Combat, type HollowKind } from '../ather/combat'
 import { FLAT, SIM, championFight, packFight, summarise } from '../ather/wilds-sim'
@@ -128,12 +130,18 @@ function fight(o: Opt = {}) {
 // (10) the newcomer sim: off = today's numbers; with a trio the 6% rule still holds and their part is small
 {
   const seeds = Array.from({ length: 200 }, (_, i) => 1001 + i * 13)
+  // M151 (Alex 11-25): the shipped newcomer (held Repeater at 0.22) dies 1 in 200, alone and with a trio: too few to weigh the trio by.
+  const now = summarise(seeds.map(s => championFight(s, 3))); SIM.trio = true; const nowT = summarise(seeds.map(s => championFight(s, 3))); SIM.trio = false
+  console.log(`  M151 as shipped: champion + brood died ${now.died}/200 ${now.secs}s, with a trio ${nowT.died}/200`); ok(now.died === 1 && nowT.died <= now.died, `M151: ${now.died} / ${nowT.died} (the numbers Alex picked: 1 / 1)`)
+  for (const k of Object.keys(SIM.ran) as (keyof typeof SIM.ran)[]) SIM.ran[k] = k === 'chaseMin' ? Infinity : 0
+  // the trio's weight is measured on the harder fight, the gun before M151 (tapped, 0.16 s)
+  const rep = RANGE_GUNS.find(g => g.id === 'repeater')!, cd = rep.fireCd, hold = M151.hold; rep.fireCd = 0.16; M151.hold = []
   const off = summarise(seeds.map(s => championFight(s, 3))); ok(off.died === 9, `trio off: champion + brood deaths ${off.died}/200 (was 9)`)
   SIM.trio = true
   const on = summarise(seeds.map(s => championFight(s, 3))); const R = SIM.ran, champ = { ...R }
   for (const k of Object.keys(R) as (keyof typeof R)[]) R[k] = k === 'chaseMin' ? Infinity : 0
   const pk = summarise(seeds.map(s => packFight(s, ['shambler', 'shambler', 'shambler', 'floater']))), pack = { ...R }
-  SIM.trio = false
+  SIM.trio = false; rep.fireCd = cd; M151.hold = hold
   console.log(`  trio on: champion+brood died ${on.died}/200 (off ${off.died}), ${on.secs}s vs ${off.secs}s; pack of 4 died ${pk.died}/200, ${pk.secs}s`)
   for (const [n, r] of [['champion+brood', champ], ['pack of 4', pack]] as const) console.log(`  ${n}: spirits' damage ${(100 * r.spirits / r.keeper).toFixed(1)}% of the keeper's (worst fight ${(100 * r.worst).toFixed(1)}%), a fight: hit ${(r.hit / r.fights).toFixed(1)} mend ${(r.mend / r.fights).toFixed(1)} slow ${(r.slow / r.fights).toFixed(1)} nothing ${(r.nothing / r.fights).toFixed(1)} chases ${(r.chases / r.fights).toFixed(2)} (${(r.chaseSecs / Math.max(1, r.chases)).toFixed(1)} s each, closest ${r.chaseMin.toFixed(2)} m)`)
   ok(champ.chases > 20 && Math.min(champ.chaseMin, pack.chaseMin) > 2, `sim chases ${champ.chases}, closest ${Math.min(champ.chaseMin, pack.chaseMin).toFixed(2)} m: nobody was reached`)

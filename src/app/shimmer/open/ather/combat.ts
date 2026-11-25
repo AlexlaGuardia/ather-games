@@ -14,6 +14,7 @@
 // ★ PURE. No react, no three. The scene layer feeds it the keeper's eye and aim, and draws what it returns.
 
 import { canFire, spreadDeg, bloomAfterShot, bloomAfterRest, weaponDef, type WeaponDef } from '../../engine/weapons'
+import { RANGE_GUNS } from '../shared/gunplay'
 import { stepChampion, hitChampion, CHAMP, type Champion } from './champion'
 import { easeRemote } from '../shared/fight-share'   // M28: a non-host's Hollows ease to the host's snapshot
 import { ECON, payReload } from '../shared/vitals-economy'
@@ -236,7 +237,7 @@ export type CombatEvent =
   | { kind: 'merge'; id: number; gone: number; mass: number; x: number; z: number }
 
 export function newCombat(seed = 1, gunId = 'repeater'): Combat {
-  const gun = weaponDef(gunId)!
+  const gun: WeaponDef = RANGE_GUNS.find(g => g.id === gunId) ?? weaponDef(gunId)!
   return {
     hollows: [], rounds: [], drops: [], spits: [], gun, nextId: 1, seed, events: [],
     keeper: { hp: KEEPER_HP, maxHp: KEEPER_HP, sinceHurt: 99, ammo: gun.clip, reloading: 0, sinceShot: 99, bloom: 0 },
@@ -434,9 +435,9 @@ function packSlot(c: Combat, h: Hollow): { x: number; z: number; far: number } |
   return { x, z, far: Math.hypot(x - h.x, z - h.z) }
 }
 
-/** BETA M151, OFF until Alex has seen the newcomer sim: `hold` = the single-round guns that keep firing while held (their own
+/** BETA M151 (Alex 11-25): `hold` = the single-round guns that keep firing while held (their own
  *  fireCd, as the Backbone does since M148), `shell` = a breacher's pellets + shove. Build-time; only tests and the sim turn it on. */
-export const M151: { hold: readonly string[]; shell: boolean } = { hold: [], shell: false }
+export const M151: { hold: readonly string[]; shell: boolean } = { hold: ['repeater', 'roar', 'lance', 'charred-rifle'], shell: true }
 /** guns driven by stepTrigger every frame (hold = keeps firing); the rest fire once a pull (auto guns: every frame held) */
 export const heldGun = (g: { id: string; burst?: number; charge?: number }) => (g.burst ?? 1) > 1 || (!g.charge && M151.hold.includes(g.id))
 /** M151: a pellet's hit shoves a body along its flight, never into anything solid, over the border, or in a committed lunge; a pooled crawler gives less. */
