@@ -38,6 +38,8 @@ import { NYX_TILE_M } from '../../world/nyx-builder'
 import { zoneParts } from '../../open/ather/zone-parts'   // M84 s3: Fly shows each zone's build
 import { flattenZone, normRect, bigEnough, overlapping, zoneAt, newZoneId, zoneOverlay, zoneLabel, ZONE_KINDS, KIND_LABEL, ZONE_FRONTS, FRONT_LABEL, ZONE_BLEND_M, type Zone, type ZoneKind, type ZoneTag, type ZoneFront } from '../../world/builder-zones'
 import { choicesFor, type Choice } from './zone-choices'
+import { PROPS_KEY, propsToStore, propsOfStore, type Prop } from '../../world/builder-props'   // M153 s1a: Place mode
+import { usePlace, PlaceHud } from './place-mode'
 import { ZoneBuilder } from './ZoneBuilder'   // M84 s2: build on a zone
 import { FURNITURE } from '../../open/ather/furniture'
 import { quad } from '../../open/ather/build-prefs'
@@ -70,9 +72,9 @@ const isCheck = (n: string) => n.startsWith('check:')
 /** ox, oz = the tile's centre in world coords (a Wilds tile: tx/ty * TILE_M; the Glade's tile: its own centre). `voidV` (Glade):
  *  vertices that are NOT ground: heightAt answers NaN there, so the brush skips them, and Fly drops their triangles. */
 interface Base { meta: WildsMeta; tx: number; ty: number; ox: number; oz: number; h: Float32Array; voided?: Uint8Array; voidV?: Uint8Array }
-type Tool = Brush | 'water' | 'dry' | 'falls' | 'void' | 'zone'
+type Tool = Brush | 'water' | 'dry' | 'falls' | 'void' | 'zone' | 'place'
 const TOOLS: Tool[] = [...BRUSHES, 'water', 'dry', 'falls', 'void', 'zone']
-const TOOL_KEY: Record<Tool, string> = { raise: 'Raise', lower: 'Lower', flatten: 'Flatten', smooth: 'Smooth', water: 'Water', dry: 'Dry', falls: 'Falls', void: 'Void', zone: 'Zone' }
+const TOOL_KEY: Record<Tool, string> = { raise: 'Raise', lower: 'Lower', flatten: 'Flatten', smooth: 'Smooth', water: 'Water', dry: 'Dry', falls: 'Falls', void: 'Void', zone: 'Zone', place: 'Place' }
 // M84 s1: the building zones live beside the edits; a change marks this key dirty so autosave / Save send them
 const ZONES_KEY = 'zones/'
 // M104: the void brush's cells live in the same store under one key (not a tile name: '/' never passes TILE_NAME), so one undo
@@ -175,6 +177,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         setSnapB(b); setSavedAt(b.draftAt)
         const store: Edits = { ...b.draft.tiles }; for (const [t, m] of Object.entries(b.draft.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(b.draft.falls)) store[fkey(t)] = { ...m }
         if (b.draft.voids) store[VOIDS_KEY] = { ...b.draft.voids }
+        if (b.draft.props) store[PROPS_KEY] = propsToStore(b.draft.props)
         edits.current = store; setZones(b.draft.zones ?? [])
         setTiles([{ name: T.name, tx: 0, ty: 0, land: 1 }])
         setStatus(''); setReady(true); setRev(r => r + 1)
@@ -193,6 +196,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         setSnapB(b); setSavedAt(b.draftAt)
         const store: Edits = { ...b.draft.tiles }; for (const [t, m] of Object.entries(b.draft.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(b.draft.falls)) store[fkey(t)] = { ...m }
         if (b.draft.voids) store[VOIDS_KEY] = { ...b.draft.voids }
+        if (b.draft.props) store[PROPS_KEY] = propsToStore(b.draft.props)
         edits.current = store; setZones(b.draft.zones ?? [])
         const first = [...list].sort((a, c) => Math.hypot(a.tx, a.ty) - Math.hypot(c.tx, c.ty) || c.land - a.land)[0]
         setTiles(list)
@@ -213,6 +217,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       worldRef.current = w; gridRef.current = w
       const store: Edits = { ...layer.edits }; for (const [t, m] of Object.entries(layer.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(layer.falls)) store[fkey(t)] = { ...m }
       if (b.draft.voids) store[VOIDS_KEY] = { ...b.draft.voids }
+        if (b.draft.props) store[PROPS_KEY] = propsToStore(b.draft.props)
       edits.current = store; setZones(b.draft.zones ?? []); setZoneNet(nw ?? null)
       setTiles(idx.tiles.filter(t => t.land > 0.02).map(t => ({ name: t.name, tx: t.tx, ty: t.ty, land: t.land })).sort((a, b) => a.ty - b.ty || a.tx - b.tx))
       setStatus('')
@@ -394,7 +399,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     } else if (o.brush === 'void') {
       if (glade || nyx) return   // no voids on this map
       markDirty(mergeEdits(edits.current, { [VOIDS_KEY]: paintVoids(edits.current[VOIDS_KEY], x, z, o.radius, o.voidMode) }))
-    } else if (o.brush !== 'falls' && o.brush !== 'zone') {
+    } else if (o.brush !== 'falls' && o.brush !== 'zone' && o.brush !== 'place') {
       const d = applyBrush(heightAt, brushTiles(), edits.current, { kind: o.brush, x, z, r: o.radius, s: o.strength, target })
       markDirty(mergeEdits(edits.current, d))
     }
@@ -428,6 +433,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const beginAt = (px: number, pz: number) => {
     const p = { x: px, z: pz }
     if (!ready) return
+    if (opts.current.brush === 'place') return   // M153: Place mode's clicks are its own (place-mode.tsx)
     if (opts.current.picking) { setLevel(Math.round(heightAt(p.x, p.z) * 10) / 10); setPicking(false); return }
     if (opts.current.brush === 'falls') { const b = bases.current.get(tileRef.current)!; line.current = [[p.x - b.ox, p.z - b.oz]]; return }
     if (opts.current.brush === 'zone') { zoneDrag.current = { ax: p.x, az: p.z, bx: p.x, bz: p.z }; setZoneBox(null); return }   // M84 s1: drag a rectangle
@@ -505,7 +511,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     const L: Layer = { v: 1, tiles: {}, water: {}, falls: {} }
     for (const [k, m] of Object.entries(edits.current)) {
       if (!Object.keys(m).length) continue
-      if (k === VOIDS_KEY) L.voids = m; else if (k.startsWith(WATER_PREFIX)) L.water[tileOfKey(k)] = m; else if (k.startsWith(FALLS_PREFIX)) L.falls[tileOfKey(k)] = m; else L.tiles[k] = m
+      if (k === VOIDS_KEY) L.voids = m; else if (k === PROPS_KEY) L.props = propsOfStore(m); else if (k.startsWith(WATER_PREFIX)) L.water[tileOfKey(k)] = m; else if (k.startsWith(FALLS_PREFIX)) L.falls[tileOfKey(k)] = m; else L.tiles[k] = m
     }
     if (zonesRef.current.length) L.zones = zonesRef.current
     return L
@@ -513,6 +519,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const loadLayer = (L: Layer) => {
     const store: Edits = { ...L.tiles }; for (const [t, m] of Object.entries(L.water)) store[wkey(t)] = { ...m }; for (const [t, m] of Object.entries(L.falls)) store[fkey(t)] = { ...m }
     if (L.voids) store[VOIDS_KEY] = { ...L.voids }
+    if (L.props) store[PROPS_KEY] = propsToStore(L.props)
     edits.current = store; setZones(L.zones ?? []); setSelZone(null); hist.current = new EditHistory(); dirtyRef.current.clear(); setDirty([]); setRev(r => r + 1)
   }
   const save = useCallback(async (auto = false): Promise<boolean> => {
@@ -549,6 +556,16 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   }, [save])
 
   const viewRef = useRef(view); viewRef.current = view
+  // ── M153 s1a: PLACE MODE (the Glade, Fly). The pieces are one more map in the store, so undo, the dirty set, autosave and Publish are
+  // the brushes' own. ──
+  const propList = useMemo(() => propsOfStore(edits.current[PROPS_KEY]), [rev])   // eslint-disable-line react-hooks/exhaustive-deps
+  const setPropList = useCallback((ps: Prop[]) => {
+    hist.current.begin(edits.current, [PROPS_KEY]); edits.current[PROPS_KEY] = propsToStore(ps); hist.current.commit()
+    markDirty([PROPS_KEY]); setRev(r => r + 1)
+  }, [])   // eslint-disable-line react-hooks/exhaustive-deps
+  const placing = glade && view === 'fly' && brush === 'place'
+  const place = usePlace(placing, propList, setPropList, setStatus)
+  useEffect(() => { if (view !== 'fly' && brush === 'place') setBrush('raise') }, [view, brush])
   useEffect(() => { if (view !== 'fly') setFull(false) }, [view])
   // keys: 1-8 brush, V void erase/paint, [ ] radius, F fullscreen fly, Esc leave it, ctrl+z / ctrl+shift+z / ctrl+y, ctrl+s
   useEffect(() => {
@@ -558,6 +575,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo() }
       else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo() }
       else if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); save() }
+      else if (!mod && e.code === 'KeyP' && !e.repeat && glade && viewRef.current === 'fly') setBrush(b => (b === 'place' ? 'raise' : 'place'))   // M153
+      else if (!mod && e.key >= '1' && e.key <= '9' && opts.current.brush === 'place') { /* the hotbar's */ }
       else if (!mod && e.key >= '1' && e.key <= '9') setBrush(TOOLS[+e.key - 1])
       else if (!mod && e.code === 'KeyV' && !e.repeat) setVoidMode(m => (m === -1 ? 1 : -1))   // M104: void brush erase / paint
       else if (!mod && (e.code === 'Minus' || e.code === 'NumpadSubtract')) setStrength(s => stepStrength(s, -1))   // M83: strength - / =
@@ -570,7 +589,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [undo, redo, save])
+  }, [undo, redo, save, glade])
   // switching maps unmounts this editor: send its unsaved strokes as the draft on the way out (keepalive survives the unmount)
   const layerRef = useRef(() => layerOf()); layerRef.current = () => layerOf()
   useEffect(() => () => {
@@ -633,8 +652,10 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       /** M84 s1: the zones (tile-local helpers for the check), the open popup, and the actions the popup drives */
       zones: () => zonesRef.current.map(z => ({ id: z.id, x0: z.x0, z0: z.z0, x1: z.x1, z1: z.z1, h: z.h, tag: z.tag, n: Object.values(z.prev).reduce((a, m) => a + Object.keys(m).length, 0), build: z.build ?? [] })),
       selZone, deleteZone, tagZone, setBrush,
+      /** M153 s1a: the placed pieces in the draft, what the hand holds, and the layer a save would send */
+      props: () => propsOfStore(edits.current[PROPS_KEY]), place: { on: placing, slot: place.slot, slots: place.slots, snap: place.snap, turn: place.turn, hand: place.hand, target: place.target, moving: place.api.moving, inv: place.inv, put: place.api.put }, layer: () => layerRef.current(),
     }
-  }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt, strength, radius, brush, lockLook, showOv, ovAll, ovDoors, voidRev, status, glade, nyx, selZone])
+  }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt, strength, radius, brush, lockLook, showOv, ovAll, ovDoors, voidRev, status, glade, nyx, selZone, placing, place])
 
   // M105: the overlay cut to the open tile (tile view) and to its 3x3 ring (Fly); off = undefined, nothing drawn
   const Bt = bases.current.get(tile)
@@ -663,9 +684,10 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         <span className="w-3" />
         {(['2d', 'fly'] as const).map(v => <button key={v} className={`${btn} ${view === v ? on : off}`} onClick={() => setView(v)} data-testid={`view-${v}`}>{v === '2d' ? 'Map (top-down)' : 'Fly (3D)'}</button>)}
         <button className={`${btn} ${showOv ? on : off}`} onClick={() => setShowOv(v => !v)} data-testid="overlay-toggle" title="POIs + roads, where the game puts them (read-only)">POIs + roads (O)</button>
+        {view === 'fly' && glade && <button className={`${btn} ${placing ? on : off}`} onClick={() => setBrush(b => (b === 'place' ? 'raise' : 'place'))} data-testid="place-toggle">Place (P)</button>}
         {view === 'fly' && <button className={`${btn} ${off}`} onClick={() => setFull(true)} data-testid="fly-full">Fullscreen (F)</button>}
         {view === 'fly' && <button className={`${btn} ${lockLook ? on : off}`} onClick={() => setLockLook(v => !v)} data-testid="fly-lock" title="on: click the view to lock the mouse (look + crosshair brush, Esc frees it). off: left-drag sculpts at the pointer, right-drag looks">Mouse-look {lockLook ? 'on' : 'off'}</button>}
-        {view === 'fly' && <span className="basis-full text-[11px] font-mono text-white/40">{lockLook ? 'click the view: mouse looks, crosshair = brush, left = sculpt, Esc frees' : 'right-drag look · left-drag sculpt'} · WASD move · Space/C up/down · Shift fast · wheel zoom · T top-down · - = strength · [ ] radius</span>}
+        {view === 'fly' && <span className="basis-full text-[11px] font-mono text-white/40">{placing ? 'Place: click the view, right places, left picks up · E inventory · 1-9 hotbar · wheel size · R turn · T turn step · G snap · M move · X delete · B blocks or not · Ctrl+Z undo · P back to the brushes · WASD move' : <>{lockLook ? 'click the view: mouse looks, crosshair = brush, left = sculpt, Esc frees' : 'right-drag look · left-drag sculpt'} · WASD move · Space/C up/down · Shift fast · wheel zoom · T top-down · - = strength · [ ] radius</>}</span>}
       </div>
       {view === 'fly' && B && (
         <div className={full ? 'fixed inset-0 z-[60] bg-black select-none touch-none' : 'relative w-full aspect-[4/3] bg-black/40 rounded overflow-hidden select-none touch-none'} data-testid="fly-frame" data-full={full ? '1' : '0'}>
@@ -674,6 +696,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
               <div className="flex gap-1 items-center rounded bg-black/70 border border-white/10 px-2 py-1.5">
                 {TOOLS.map((t, i) => <button key={t} className={`${btn} ${brush === t ? on : off}`} disabled={t === 'void' && (glade || nyx)} onClick={() => setBrush(t)}>{i + 1} {t[0].toUpperCase() + t.slice(1)}</button>)}
                 {brush === 'void' && <button className={`${btn} ${on}`} onClick={() => setVoidMode(m => (m === -1 ? 1 : -1))}>{voidMode === -1 ? 'Erase' : 'Paint'} (V)</button>}
+                {glade && <button className={`${btn} ${placing ? on : off}`} onClick={() => setBrush(b => (b === 'place' ? 'raise' : 'place'))}>Place (P)</button>}
                 <span className="text-[11px] font-mono text-white/70 tabular-nums pl-2">radius {radius} m [ ] · strength {strength.toFixed(2)} - =</span>
                 <button className={`${btn} ${off}`} onClick={undo}>Undo</button>
                 <button className={`${btn} ${showOv ? on : off}`} onClick={() => setShowOv(v => !v)}>POIs (O)</button>
@@ -687,8 +710,10 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
           {/* the 3x3 ring only: bases caches every tile opened this session (builder-fly-check saw 18 meshes after two tiles) */}
           <BuilderFly tiles={[...bases.current.entries()].filter(([, b]) => Math.abs(b.tx - B.tx) <= 1 && Math.abs(b.ty - B.ty) <= 1).map(([name, b]): FlyTile => ({ name, ox: b.ox, oz: b.oz, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY, voidV: b.voidV, noSea: glade, full: glade }))}
             deltas={n => edits.current[n]} rev={rev} heightAt={heightAt} radius={radius} focus={glade ? GLADE_FOCUS : { x: B.ox, z: B.oz }}
-            onBegin={beginAt} onMove={moveAt} onEnd={endStroke} lockLook={lockLook} onLock={setLocked} overlay={flyOv} parts={flyParts} pool={glade} />
-          {!full && <div className="absolute left-2 bottom-2 rounded bg-black/60 px-2 py-1 text-[11px] font-mono text-white/75 tabular-nums pointer-events-none" data-testid="fly-hud">
+            onBegin={beginAt} onMove={moveAt} onEnd={endStroke} lockLook={lockLook} onLock={setLocked} overlay={flyOv} parts={flyParts} pool={glade}
+            place={glade ? place.api : undefined} placing={placing} fixed={glade} />
+          {placing && <PlaceHud place={place} locked={locked} count={propList.length} status={status} />}
+          {!full && !placing && <div className="absolute left-2 bottom-2 rounded bg-black/60 px-2 py-1 text-[11px] font-mono text-white/75 tabular-nums pointer-events-none" data-testid="fly-hud">
             {TOOL_KEY[brush]} · strength {strength.toFixed(2)} m/tick (- =) · radius {radius} m ([ ]){lockLook ? (locked ? ' · Esc frees the mouse' : ' · click to lock the mouse') : ''}
           </div>}
         </div>

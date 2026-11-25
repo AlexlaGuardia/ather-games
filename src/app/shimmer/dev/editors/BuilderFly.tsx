@@ -20,6 +20,7 @@ import { ramp } from './terrain-ramp'
 import { resample, POI_COLOR, ROAD_COLOR, type Overlay } from './builder-pois'
 import { ZonePartsView } from '../../open/ather/zone-parts-view'   // M84 s3: each zone's build, the game's own PieceBody
 import { poolSheet } from '../../open/ather/moonwell-water'
+import { PlaceLayer, GladeFixed, useCentre, type PlaceApi } from './place-mode'   // M153 s1a
 import type { ZonePart } from '../../open/ather/zone-parts'
 
 export interface FlyTile { name: string; ox: number; oz: number; nx: number; nz: number; cell: number; sizeX: number; sizeZ: number; h: Float32Array; waterY: number
@@ -50,6 +51,11 @@ interface Props {
   parts?: readonly ZonePart[]
   /** M157 (the Glade): draw the Moonwell's water */
   pool?: boolean
+  /** M153 s1a (the Glade): the placed pieces + the hand; `placing` = Place mode has the mouse, the wheel and T */
+  place?: PlaceApi
+  placing?: boolean
+  /** M153 s1a: today's houses, stations, gate and people, see-through */
+  fixed?: boolean
 }
 // sRGB -> linear (three's own SRGBToLinear is not exported from the package root at runtime, though the types say it is)
 const lin = (c: number) => { c = Math.min(1, c); return c < 0.04045 ? c * 0.0773993808 : Math.pow(c * 0.9478672986 + 0.0521327014, 2.4) }
@@ -109,7 +115,7 @@ function PoolWater({ heightAt, rev }: { heightAt: Props['heightAt']; rev: number
   return <mesh geometry={geo} userData={{ pool: true }}><meshBasicMaterial color="#bfe4ff" transparent opacity={0.8} /></mesh>
 }
 
-function Rig({ heightAt, focus, camRef }: { heightAt: Props['heightAt']; focus: Props['focus']; camRef: React.MutableRefObject<Cam | null> }) {
+function Rig({ heightAt, focus, camRef, pr }: { pr: React.MutableRefObject<Props>; heightAt: Props['heightAt']; focus: Props['focus']; camRef: React.MutableRefObject<Cam | null> }) {
   const { camera, gl } = useThree()
   const keys = useRef<Keys>({ ...NO_KEYS })
   if (!camRef.current) camRef.current = camOver(focus.x, focus.z, heightAt)
@@ -117,25 +123,25 @@ function Rig({ heightAt, focus, camRef }: { heightAt: Props['heightAt']; focus: 
     const down = (e: KeyboardEvent) => {
       if (typing(e) || e.ctrlKey || e.metaKey) return
       const k = KEYMAP[e.code]; if (k) { keys.current[k] = true; if (e.code === 'Space') e.preventDefault() }
-      if (e.code === 'KeyT' && !e.repeat && camRef.current) camRef.current = toggleTop(camRef.current, heightAt)
+      if (e.code === 'KeyT' && !e.repeat && !pr.current.placing && camRef.current) camRef.current = toggleTop(camRef.current, heightAt)
     }
     const up = (e: KeyboardEvent) => { const k = KEYMAP[e.code]; if (k) keys.current[k] = false }
     const blur = () => { keys.current = { ...NO_KEYS } }
     // right-drag looks; the context menu never opens on the canvas
     let looking = false
     const el = gl.domElement
-    const pd = (e: PointerEvent) => { if (e.button === 2) { looking = true; el.setPointerCapture(e.pointerId) } }
+    const pd = (e: PointerEvent) => { if (e.button === 2 && !pr.current.placing) { looking = true; el.setPointerCapture(e.pointerId) } }
     const pm = (e: PointerEvent) => { if (looking && camRef.current) camRef.current = lookCam(camRef.current, e.movementX, e.movementY) }
     const pu = (e: PointerEvent) => { if (e.button === 2) looking = false }
     const cm = (e: Event) => e.preventDefault()
-    const wh = (e: WheelEvent) => { e.preventDefault(); if (camRef.current) camRef.current = zoomCam(camRef.current, e.deltaY, heightAt) }
+    const wh = (e: WheelEvent) => { e.preventDefault(); if (pr.current.placing && document.pointerLockElement === el) { pr.current.place?.wheel(e.deltaY); return } if (camRef.current) camRef.current = zoomCam(camRef.current, e.deltaY, heightAt) }
     window.addEventListener('keydown', down); window.addEventListener('keyup', up); window.addEventListener('blur', blur)
     el.addEventListener('pointerdown', pd); el.addEventListener('pointermove', pm); el.addEventListener('pointerup', pu); el.addEventListener('contextmenu', cm); el.addEventListener('wheel', wh, { passive: false })
     return () => {
       window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur)
       el.removeEventListener('pointerdown', pd); el.removeEventListener('pointermove', pm); el.removeEventListener('pointerup', pu); el.removeEventListener('contextmenu', cm); el.removeEventListener('wheel', wh)
     }
-  }, [gl, heightAt, camRef])
+  }, [gl, heightAt, camRef, pr])
   useFrame((_, dt) => {
     const c = camRef.current; if (!c) return
     const n = stepCam(c, keys.current, Math.min(dt, 0.1), heightAt); camRef.current = n
@@ -149,6 +155,7 @@ function Rig({ heightAt, focus, camRef }: { heightAt: Props['heightAt']; focus: 
 const CENTRE = new THREE.Vector2(0, 0)
 function Lock({ camRef, hover, painting, pr, setLocked }: { camRef: React.MutableRefObject<Cam | null>; hover: React.MutableRefObject<{ x: number; z: number } | null>; painting: React.MutableRefObject<boolean>; pr: React.MutableRefObject<Props>; setLocked: (v: boolean) => void }) {
   const { gl, camera, scene, raycaster } = useThree()
+  const look = useCentre()
   const centreHit = useRef<() => { x: number; z: number } | null>(() => null)
   centreHit.current = () => {
     camera.updateMatrixWorld(); raycaster.setFromCamera(CENTRE, camera)
@@ -161,7 +168,9 @@ function Lock({ camRef, hover, painting, pr, setLocked }: { camRef: React.Mutabl
     const isLocked = () => document.pointerLockElement === el
     const change = () => { const l = isLocked(); setLocked(l); pr.current.onLock?.(l); if (!l) { hover.current = null; if (painting.current) { painting.current = false; pr.current.onEnd() } } }
     const down = (e: PointerEvent) => {
-      if (e.button !== 0 || !pr.current.lockLook) return
+      const P = pr.current.placing ? pr.current.place : undefined   // M153: Place mode always locks (the crosshair is the hand)
+      if (P && isLocked()) { const c = look(); if (e.button === 2 && c.ground) P.put(c.ground.x, c.ground.z); else if (e.button === 0 && c.id) P.pick(c.id); return }
+      if (e.button !== 0 || (!pr.current.lockLook && !P)) return
       if (!isLocked()) { try { const r = el.requestPointerLock() as unknown; if (r && typeof (r as Promise<void>).catch === 'function') (r as Promise<void>).catch(() => {}) } catch { /* cooldown after an Esc */ } return }
       const p = centreHit.current(); if (!p) return
       painting.current = true; hover.current = p; pr.current.onBegin(p.x, p.z)
@@ -174,9 +183,9 @@ function Lock({ camRef, hover, painting, pr, setLocked }: { camRef: React.Mutabl
       el.removeEventListener('pointerdown', down); document.removeEventListener('mousemove', move); document.removeEventListener('pointerlockchange', change); window.removeEventListener('keydown', esc)
       if (isLocked()) document.exitPointerLock()
     }
-  }, [gl, camRef, hover, painting, pr, setLocked])
+  }, [gl, camRef, hover, painting, pr, setLocked, look])
   // lock turned off while locked: let go
-  const lockLook = pr.current.lockLook
+  const lockLook = pr.current.lockLook || pr.current.placing
   useEffect(() => { if (!lockLook && document.pointerLockElement === gl.domElement) document.exitPointerLock() }, [lockLook, gl])
   useFrame(() => {
     if (document.pointerLockElement !== gl.domElement) return
@@ -263,11 +272,14 @@ export default function BuilderFly(p: Props) {
       centre: () => ((window as unknown as { __flyCentre?: () => unknown }).__flyCentre?.() ?? null),
       /** every mesh in the scene by geometry kind: terrain tiles, the sea plane, the brush ring, and anything else (want none) */
       scene: () => {
-        const n = { tiles: 0, sea: 0, ring: 0, other: [] as string[], parts: 0, partMeshes: 0 }
+        const n = { tiles: 0, sea: 0, ring: 0, other: [] as string[], parts: 0, partMeshes: 0 }, sceneryGroups: (THREE.Object3D | undefined)[] = [], skip = new Set<THREE.Object3D>()
+        for (const g of ['place-layer', 'glade-fixed']) sceneryGroups.push(sceneRef.current?.getObjectByName(g))   // M153: pieces + fixed ghosts are not terrain
         const inParts = new Set<THREE.Object3D>()   // M84 s3: the zone builds are the owner's own parts, not nodes: counted apart
+        for (const g of sceneryGroups) g?.traverse(o => skip.add(o))
         sceneRef.current?.getObjectByName('zone-parts')?.traverse(o => { inParts.add(o); if (o.userData?.zonePart) n.parts++ })
         sceneRef.current?.traverse(o => {
           if (!(o as THREE.Mesh).isMesh) return
+          if (skip.has(o)) return
           if (inParts.has(o)) { n.partMeshes++; return }
           if (o.userData?.pool) return   // M157: the Moonwell's water is not terrain
           const t = (o as THREE.Mesh).geometry?.type
@@ -281,6 +293,8 @@ export default function BuilderFly(p: Props) {
         const h = new THREE.Raycaster(new THREE.Vector3(x, 400, z), new THREE.Vector3(0, -1, 0)).intersectObjects(ms, false)[0]
         return h ? h.point.y : null
       },
+      /** M153: the fixed ghosts drawn (folk ids, house + station meshes) */
+      fixed: () => { let meshes = 0; const folk: string[] = []; sceneRef.current?.getObjectByName('glade-fixed')?.traverse(o => { if (o.userData?.fixedFolk) folk.push(o.userData.fixedFolk as string); if ((o as THREE.Mesh).isMesh) meshes++ }); return { folk, meshes } },
       pool: () => { let n = 0; sceneRef.current?.traverse(o => { if (o.userData?.pool) n++ }); return n },
       /** M105: the overlay drawn in the scene: road lines, POI pins, labels (each label's POI + the ground height it sits on) */
       overlay: () => {
@@ -294,7 +308,7 @@ export default function BuilderFly(p: Props) {
     return () => { delete (window as unknown as { __builderFly?: unknown }).__builderFly }
   }, [])
   const onDown = (e: ThreeEvent<PointerEvent>) => {
-    if (e.button !== 0 || pr.current.lockLook) return   // lock mode: the click locks (or, locked, the centre ray sculpts: Lock)
+    if (e.button !== 0 || pr.current.lockLook || pr.current.placing) return   // lock mode: the click locks (or, locked, the centre ray sculpts: Lock)
     e.stopPropagation(); painting.current = true; hover.current = { x: e.point.x, z: e.point.z }
     pr.current.onBegin(e.point.x, e.point.z)
   }
@@ -310,13 +324,15 @@ export default function BuilderFly(p: Props) {
       onCreated={({ scene }) => { sceneRef.current = scene; scene.background = new THREE.Color('#9fc4dd'); scene.fog = new THREE.Fog('#9fc4dd', 1500, 5000) }}>
       <hemisphereLight args={['#ffffff', '#5a6b4a', 0.9]} />
       <directionalLight position={[-300, 600, -200]} intensity={1.1} />
-      <Rig heightAt={p.heightAt} focus={p.focus} camRef={camRef} />
+      <Rig heightAt={p.heightAt} focus={p.focus} camRef={camRef} pr={pr} />
       <Lock camRef={camRef} hover={hover} painting={painting} pr={pr} setLocked={setLocked} />
       {p.tiles.map(t => <TileMesh key={t.name} t={t} deltas={p.deltas} rev={p.rev} onDown={onDown} onMoveP={onMoveP} />)}
       {/* the Glade (tiles with void) has no sea: its islands float in the cloud */}
       {p.tiles.length > 0 && !p.tiles.some(t => t.noSea) && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[p.focus.x, waterY, p.focus.z]}><planeGeometry args={[3200, 3200]} /><meshLambertMaterial color="#3d6f99" transparent opacity={0.75} /></mesh>}
       {p.pool && <PoolWater heightAt={p.heightAt} rev={p.rev} />}
-      <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />
+      {!p.placing && <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />}
+      {p.place && <PlaceLayer api={p.place} active={!!p.placing} heightAt={p.heightAt} rev={p.rev} />}
+      {p.fixed && <GladeFixed heightAt={p.heightAt} label={labelTex} />}
       {p.overlay && <OverlayLayer overlay={p.overlay} heightAt={p.heightAt} rev={p.rev} />}
       {p.parts && <ZonePartsView parts={p.parts} />}
     </Canvas>

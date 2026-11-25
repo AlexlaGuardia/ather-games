@@ -131,6 +131,7 @@ const DEVICE_KEYS = [
   'shimmer-clipboard-',           // the sprite editors' copy buffer. Dev tool, owner-gated.
   'shimmer-inspector-collapsed',  // a dev panel remembering it was collapsed
   'worktable.hotbar',             // the structure worktable's nine slots (creative mode, 09-16).
+  'builder.placeSlots',           // the World Builder's Place mode hotbar (M153 s1a, owner tool, this device).
                                   // A builder's tool layout, owner-gated dev page, one author per
                                   // box — a device convenience, not progress anyone earned.
   'ather:device',                 // M12.5: this browser's id for the cloud-save write lease (open/cloud-sync.tsx)
