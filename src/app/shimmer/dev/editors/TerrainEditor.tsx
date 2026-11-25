@@ -38,8 +38,12 @@ import { NYX_TILE_M } from '../../world/nyx-builder'
 import { zoneParts } from '../../open/ather/zone-parts'   // M84 s3: Fly shows each zone's build
 import { flattenZone, normRect, bigEnough, overlapping, zoneAt, newZoneId, zoneOverlay, zoneLabel, ZONE_KINDS, KIND_LABEL, ZONE_FRONTS, FRONT_LABEL, ZONE_BLEND_M, type Zone, type ZoneKind, type ZoneTag, type ZoneFront } from '../../world/builder-zones'
 import { choicesFor, type Choice } from './zone-choices'
-import { PROPS_KEY, propsToStore, propsOfStore, type Prop } from '../../world/builder-props'   // M153 s1a: Place mode
+import { PROPS_KEY, pieceCount, propsToStore, propsOfStore, type Prop } from '../../world/builder-props'   // M153 s1a: Place mode
 import { usePlace, PlaceHud } from './place-mode'
+import { setGladePeople } from '../../open/ather/glade-people'   // M153 s1c-1
+import { gladePeople } from '../../open/ather/glade-cluster'
+import { peopleProblems } from '../../open/ather/glade-people-check'
+import { loadGladeBlueprints } from '../../open/ather/glade-lots-view'
 import { ZoneBuilder } from './ZoneBuilder'   // M84 s2: build on a zone
 import { FURNITURE } from '../../open/ather/furniture'
 import { quad } from '../../open/ather/build-prefs'
@@ -534,6 +538,10 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const publish = useCallback(async (msg?: string): Promise<boolean> => {
     if (!(await save())) return false
     setBusy(true); setStatus('publishing…')
+    if (glade) {   // M153 s1c-1: nobody is published into the void, the water, a wall, or out of a newborn's reach
+      await loadGladeBlueprints(); const L = layerOf(), bad = peopleProblems({ edits: L.tiles.glade ?? null, water: L.water.glade ?? null, zones: L.zones, props: L.props }, gladePeople())
+      if (bad.length) { setBusy(false); setStatus(`not published: ${bad.join(' · ')} (live unchanged)`); return false }
+    }
     const b = await builderCall(map, { action: 'publish', note: msg ?? note })
     setBusy(false)
     if (b) { setSnapB(b); setNote('') }
@@ -559,6 +567,10 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   // ── M153 s1a: PLACE MODE (the Glade, Fly). The pieces are one more map in the store, so undo, the dirty set, autosave and Publish are
   // the brushes' own. ──
   const propList = useMemo(() => propsOfStore(edits.current[PROPS_KEY]), [rev])   // eslint-disable-line react-hooks/exhaustive-deps
+  // s1c-1: the draft's people, for every reader in this editor (ghosts, the POI overlay, the publish check)
+  useMemo(() => setGladePeople(glade ? propList : []), [glade, propList])
+  useEffect(() => { if (glade && ready) setOvData(gladeOverlay()) }, [glade, ready, propList])
+  useEffect(() => () => setGladePeople([]), [])
   const setPropList = useCallback((ps: Prop[]) => {
     hist.current.begin(edits.current, [PROPS_KEY]); edits.current[PROPS_KEY] = propsToStore(ps); hist.current.commit()
     markDirty([PROPS_KEY]); setRev(r => r + 1)
@@ -712,7 +724,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
             deltas={n => edits.current[n]} rev={rev} heightAt={heightAt} radius={radius} focus={glade ? GLADE_FOCUS : { x: B.ox, z: B.oz }}
             onBegin={beginAt} onMove={moveAt} onEnd={endStroke} lockLook={lockLook} onLock={setLocked} overlay={flyOv} parts={flyParts} pool={glade}
             place={glade ? place.api : undefined} placing={placing} fixed={glade} />
-          {placing && <PlaceHud place={place} locked={locked} count={propList.length} status={status} />}
+          {placing && <PlaceHud place={place} locked={locked} count={pieceCount(propList)} status={status} />}
           {!full && !placing && <div className="absolute left-2 bottom-2 rounded bg-black/60 px-2 py-1 text-[11px] font-mono text-white/75 tabular-nums pointer-events-none" data-testid="fly-hud">
             {TOOL_KEY[brush]} · strength {strength.toFixed(2)} m/tick (- =) · radius {radius} m ([ ]){lockLook ? (locked ? ' · Esc frees the mouse' : ' · click to lock the mouse') : ''}
           </div>}

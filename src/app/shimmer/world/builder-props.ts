@@ -7,7 +7,7 @@
 
 /** x, z = world metres; q = turn in quarter turns (the rest of the builder's unit); s = scale; solid = the owner's toggle (absent =
  *  the kind's own answer) */
-export interface Prop { id: string; k: string; x: number; z: number; q: number; s: number; solid?: boolean; /** s1b, a node only: hours till it grows back; absent = NODE_WAIT_H */ w?: number }
+export interface Prop { id: string; k: string; x: number; z: number; q: number; s: number; solid?: boolean; /** s1b, a node only: hours till it grows back; absent = NODE_WAIT_H */ w?: number; /** s1c-1, the newborn spot only: the owner turned it (absent = facing Greg) */ turned?: boolean }
 
 // ── s1b: TUTORIAL NODES are pieces too (`node:<tree or crystal kind>`; the game's half is open/ather/glade-nodes.ts): always true size,
 //    no toggle. Ids are `n` + the time it was placed, never used again (a keeper's timer hangs on it); pieces count up from `p1`.
@@ -17,6 +17,26 @@ export const NODE_WAIT_H = 24, WAIT_MIN_H = 1, WAIT_MAX_H = 168
 /** N walks these (hours, real) */
 export const NODE_WAITS = [1, 2, 4, 8, 12, 24, 48, 72, 168] as const
 export const nodeWaitH = (p: Pick<Prop, 'w'>) => p.w ?? NODE_WAIT_H
+
+// ── s1c-1: PEOPLE AND THE NEWBORN SPOT are pieces too (`who:<id>`): one each, with a fixed id (`w<id>`), so a list never holds two and
+//    none is ever deleted: without its piece a person simply stands where the code puts them (open/ather/glade-people.ts). x, z, q only;
+//    the newborn spot also has `turned`, the owner's own turn (absent = it faces Greg).
+export const WHO_PREFIX = 'who:'
+export const WHO = ['greg', 'otto', 'tess', 'bonn', 'fennel', 'sax', 'yarrow', 'mallow', 'hazel', 'newborn'] as const
+export type Who = (typeof WHO)[number]
+export const isWho = (p: Pick<Prop, 'k'>) => p.k.startsWith(WHO_PREFIX)
+export const whoOf = (k: string): Who | null => { const w = k.slice(WHO_PREFIX.length) as Who; return k.startsWith(WHO_PREFIX) && WHO.includes(w) ? w : null }
+export const whoId = (w: Who) => `w${w}`
+/** a figure's yaw (radians, the model faces +z) and the builder's quarter turns */
+export const yawOfQ = (q: number) => -q * Math.PI / 2
+export const qOfYaw = (yaw: number) => wrapQ(-yaw * 2 / Math.PI)
+/** the list with this person standing there (the one piece they have, added or replaced) */
+export function putWho(ps: readonly Prop[], w: Who, at: { x: number; z: number; q: number; turned?: boolean }): Prop[] {
+  const c = cleanProp({ id: whoId(w), k: WHO_PREFIX + w, ...at, s: 1 })
+  return c ? [...ps.filter(p => p.id !== c.id), c] : [...ps]
+}
+/** the pieces the cap counts: people are extra */
+export const pieceCount = (ps: readonly Prop[]) => ps.reduce((n, p) => n + (isWho(p) ? 0 : 1), 0)
 
 export const PROPS_MAX = 600, SCALE_MIN = 0.5, SCALE_MAX = 2, SCALE_STEP = 0.05
 /** G walks these (m; 0 = free); T walks these (degrees) */
@@ -31,6 +51,10 @@ export const clampScale = (s: number) => round(Math.min(SCALE_MAX, Math.max(SCAL
 
 export function cleanProp(v: unknown): Prop | null {
   const o = v as Partial<Prop> | null
+  if (o && typeof o === 'object' && typeof o.k === 'string' && isWho({ k: o.k })) {
+    const w = whoOf(o.k); if (!w || !num(o.x) || !num(o.z) || Math.abs(o.x) > XZ_MAX || Math.abs(o.z) > XZ_MAX) return null
+    return { id: whoId(w), k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: 1, ...(w === 'newborn' && o.turned === true ? { turned: true } : {}) }
+  }
   if (!o || typeof o !== 'object' || typeof o.id !== 'string' || !ID.test(o.id) || typeof o.k !== 'string' || !KIND.test(o.k)) return null
   if (!num(o.x) || !num(o.z) || Math.abs(o.x) > XZ_MAX || Math.abs(o.z) > XZ_MAX) return null
   if (isNode({ k: o.k })) {
@@ -44,15 +68,15 @@ export function cleanProps(j: unknown): Prop[] {
   const a = (j as { props?: unknown } | null)?.props
   if (!Array.isArray(a)) return []
   const out: Prop[] = [], seen = new Set<string>()
+  let n = 0
   for (const v of a) {
-    if (out.length >= PROPS_MAX) break
-    const p = cleanProp(v); if (!p || seen.has(p.id)) continue
-    seen.add(p.id); out.push(p)
+    const p = cleanProp(v); if (!p || seen.has(p.id) || (!isWho(p) && n >= PROPS_MAX)) continue
+    seen.add(p.id); out.push(p); if (!isWho(p)) n++
   }
   return out
 }
 /** order-independent content, for sameLayer */
-export const propsCanon = (ps: readonly Prop[] | undefined) => [...(ps ?? [])].sort((a, b) => (a.id < b.id ? -1 : 1)).map(p => [p.id, p.k, p.x, p.z, p.q, p.s, p.solid ?? null, p.w ?? null])
+export const propsCanon = (ps: readonly Prop[] | undefined) => [...(ps ?? [])].sort((a, b) => (a.id < b.id ? -1 : 1)).map(p => [p.id, p.k, p.x, p.z, p.q, p.s, p.solid ?? null, p.w ?? null, ...(p.turned ? [1] : [])])
 
 export function newPropId(ps: readonly Pick<Prop, 'id'>[]): string {
   let n = 0
@@ -71,7 +95,7 @@ export const nextOf = <T,>(list: readonly T[], cur: T): T => list[(list.indexOf(
 
 /** the list with one more piece, or null when full / not a prop. A node picked up and put down keeps its id (`p.id`). */
 export function addProp(ps: readonly Prop[], p: Omit<Prop, 'id'> & { id?: string }, now = Date.now()): Prop[] | null {
-  if (ps.length >= PROPS_MAX) return null
+  if (isWho(p) || pieceCount(ps) >= PROPS_MAX) return null
   const c = cleanProp({ ...p, id: !isNode(p) ? newPropId(ps) : p.id && !ps.some(o => o.id === p.id) ? p.id : newNodeId(ps, now) })
   return c ? [...ps, c] : null
 }

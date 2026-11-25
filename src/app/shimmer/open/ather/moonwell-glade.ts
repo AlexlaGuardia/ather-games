@@ -14,6 +14,7 @@ import type { Folk } from './settlement-folk'
 import { DREAMS } from './folk-lines'
 import { loadQuest } from './rinsticks'
 import { loadWorks, raised } from './rooms'
+import { gladePerson } from './glade-people'   // M153 s1c-1: the published spot wins
 
 export const GLADE_ID = 'moonwell'
 export const GLADE_NAME = 'Moonwell Glade'
@@ -89,6 +90,10 @@ export function onLot(id: string, ahead: number, side = 0): { x: number; z: numb
 const spotOverride = new Map<string, { x: number; z: number }>()
 export function setLotSpot(lot: string, p: { x: number; z: number } | null) { if (p) spotOverride.set(lot, p); else spotOverride.delete(lot) }
 export function gladeSpots(ids: readonly string[]): { id: string; x: number; z: number; yaw: number }[] {
+  return lotSpots(ids).map(s => { const w = gladePerson(s.id); return w ? { id: s.id, x: w.x, z: w.z, yaw: w.yaw } : s })
+}
+/** the LOT's own spot (what belongs to the house: Yarrow's teaching jars), whoever moved */
+export function lotSpots(ids: readonly string[]): { id: string; x: number; z: number; yaw: number }[] {
   return ids.map(id => {
     const k = id.split(':').pop() ?? id, p = spotOverride.get(k) ?? (lotAt(k) ? onLot(k, LOT_D / 2 - 1.2) : { x: GLADE_GREEN.x, z: GLADE_GREEN.z })
     return { id, x: p.x, z: p.z, yaw: Math.atan2(GLADE_GREEN.x - p.x, GLADE_GREEN.z - p.z) }
@@ -134,6 +139,7 @@ export function gladeJetty(): { x0: number; z0: number; x1: number; z1: number; 
 }
 /** Where Greg sits (M30 part 2: he left the keeper's plot; plot ground is bought at his door here), turned to face the pool. */
 export function gregSpot(): { x: number; z: number; yaw: number } {
+  const w = gladePerson('greg'); if (w) return { x: w.x, z: w.z, yaw: w.yaw }   // M153 s1c-1 (his bench comes with him)
   const p = gladeAt(GLADE_LAYOUT.greg)
   return { ...p, yaw: Math.atan2(GLADE_GREEN.x - p.x, GLADE_GREEN.z - p.z) }   // M40: he faces the green
 }
@@ -144,6 +150,8 @@ export const NEWBORN_GAP = 5
  *  to FACE him. Read off gregSpot(), never a fixed waymark: M40 moved his pond and left the old waymark spawn 57.7 m away
  *  (11-22 sweep), so a layout move must carry the newborn with him. yaw is the WALKER's: forward = (-sin yaw, -cos yaw). */
 export function newbornSpot(): { x: number; z: number; yaw: number } {
-  const g = gregSpot(), x = g.x + Math.sin(g.yaw) * NEWBORN_GAP, z = g.z + Math.cos(g.yaw) * NEWBORN_GAP
+  // M153 s1c-1: the published spot, still facing Greg unless the owner turned it (a figure's yaw + half a turn = the walker's)
+  const g = gregSpot(), w = gladePerson('newborn'), x = w ? w.x : g.x + Math.sin(g.yaw) * NEWBORN_GAP, z = w ? w.z : g.z + Math.cos(g.yaw) * NEWBORN_GAP
+  if (w?.turned) return { x, z, yaw: w.yaw + Math.PI }
   return { x, z, yaw: Math.atan2(-(g.x - x), -(g.z - z)) }
 }

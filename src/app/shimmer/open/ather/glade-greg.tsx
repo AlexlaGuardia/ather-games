@@ -41,6 +41,8 @@ export function GladeGreg({ loaded, tour = null, hold = false, keeper, onArrive,
   const arrived = useRef(-1), lastY = useRef(y ?? 0)
   const [mode, setMode] = useState<Mode>('sit')
   const modeRef = useRef<Mode>('sit')
+  // M153 s1c-1: the layer landed (or a roll back) and his bench moved: seated, he goes with it; walking, he walks home to it
+  useEffect(() => { if (modeRef.current === 'sit') { walk.current = startWalk(s, s.yaw); path.current = null } }, [s.x, s.z, s.yaw])   // eslint-disable-line react-hooks/exhaustive-deps
   const setM = (m: Mode) => { if (modeRef.current !== m) { modeRef.current = m; setMode(m) } }
   useEffect(() => { if (!tour) arrived.current = -1 }, [tour])
 

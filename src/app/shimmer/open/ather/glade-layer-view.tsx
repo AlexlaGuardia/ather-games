@@ -9,6 +9,7 @@ import { P } from './palette'
 
 export function useGladeLayer(inGlade: boolean): GladeLayer {
   const [layer, setLayer] = useState<GladeLayer>(NO_GLADE_LAYER)
+  useEffect(() => { if (!inGlade) void fetchGladeLayer() }, [])   // eslint-disable-line react-hooks/exhaustive-deps -- M153 s1c-1: where people (and the newborn spot) are is known before the first arrival
   useEffect(() => {
     if (!inGlade) return
     let live = true

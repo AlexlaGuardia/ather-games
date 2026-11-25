@@ -120,11 +120,11 @@ function PoolWater({ heightAt, rev }: { heightAt: Props['heightAt']; rev: number
 }
 
 /** M160 (the Glade): the draft's painted water, and the valley's trees that stand clear of it (the game's own two readers) */
-function GladeDraft({ deltas, rev, heightAt, label }: { deltas: Props['deltas']; rev: number; heightAt: Props['heightAt']; label: typeof labelTex }) {
+function GladeDraft({ deltas, rev, heightAt }: { deltas: Props['deltas']; rev: number; heightAt: Props['heightAt'] }) {
   const layer = useMemo(() => ({ edits: deltas(GLADE_LAYER_TILE) ?? null, water: deltas(WATER_PREFIX + GLADE_LAYER_TILE) ?? null }), [rev])   // eslint-disable-line react-hooks/exhaustive-deps
   const kept = useRef<NonNullable<ReturnType<typeof gladeFrame>['meadow']>['trees']>([]), now = gladeFrame(layer).meadow?.trees ?? []
   if (now.length !== kept.current.length || now.some((t, k) => t !== kept.current[k])) kept.current = now   // a brush tick that changes no tree rebuilds none
-  return <><GladeWater layer={layer} /><GladeFixed heightAt={heightAt} label={label} trees={kept.current} /></>
+  return <><GladeWater layer={layer} /><GladeFixed heightAt={heightAt} trees={kept.current} /></>
 }
 
 function Rig({ heightAt, focus, camRef, pr }: { pr: React.MutableRefObject<Props>; heightAt: Props['heightAt']; focus: Props['focus']; camRef: React.MutableRefObject<Cam | null> }) {
@@ -306,7 +306,7 @@ export default function BuilderFly(p: Props) {
         return h ? h.point.y : null
       },
       /** M153: the fixed ghosts drawn (folk ids, house + station meshes) */
-      fixed: () => { let meshes = 0; const folk: string[] = []; sceneRef.current?.getObjectByName('glade-fixed')?.traverse(o => { if (o.userData?.fixedFolk) folk.push(o.userData.fixedFolk as string); if ((o as THREE.Mesh).isMesh) meshes++ }); return { folk, meshes } },
+      fixed: () => { let meshes = 0; const folk: string[] = []; sceneRef.current?.getObjectByName('glade-fixed')?.traverse(o => { if ((o as THREE.Mesh).isMesh) meshes++ }); sceneRef.current?.getObjectByName('glade-people')?.traverse(o => { if (o.userData?.fixedFolk) folk.push(o.userData.fixedFolk as string) }); return { folk, meshes } },
       /** M160: the draft's painted water cells and the valley's trees as drawn */
       draft: () => { let water = 0, trees = 0; sceneRef.current?.traverse(o => { if (o.userData?.gladeWater) water = ((o as THREE.Mesh).geometry.index?.count ?? 0) / 6; if (o.userData?.meadowGhosts) trees = (o as THREE.InstancedMesh).count }); return { water, trees } },
       pool: () => { let n = 0; sceneRef.current?.traverse(o => { if (o.userData?.pool) n++ }); return n },
@@ -346,7 +346,7 @@ export default function BuilderFly(p: Props) {
       {p.pool && <PoolWater heightAt={p.heightAt} rev={p.rev} />}
       {!p.placing && <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />}
       {p.place && <PlaceLayer api={p.place} active={!!p.placing} heightAt={p.heightAt} rev={p.rev} label={labelTex} />}
-      {p.fixed && <GladeDraft deltas={p.deltas} rev={p.rev} heightAt={p.heightAt} label={labelTex} />}
+      {p.fixed && <GladeDraft deltas={p.deltas} rev={p.rev} heightAt={p.heightAt} />}
       {p.overlay && <OverlayLayer overlay={p.overlay} heightAt={p.heightAt} rev={p.rev} />}
       {p.parts && <ZonePartsView parts={p.parts} />}
     </Canvas>

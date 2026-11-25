@@ -16,15 +16,15 @@ import { GLADE, gladeFolk } from './moonwell-glade'
 import { folkSpots, type Spot } from './folk-spots'
 import { gladeBlueprintVersion } from './glade-lots'
 import { keeperNow } from './network-scene'
+import { gladePeopleVersion } from './glade-people'
 
-const KEEPERS = gladeKeepers(), GREG = gregInGlade()
 /** the five as drawn right now (Fennel is away while the first-rinstick quest has her at the keeper's Rinnshop) */
 export let gladeFolkDrawn: Spot[] = []
 
 /** a slow-turning gold diamond over Greg's head, bobbing: the "go talk to him" marker */
 function GregMarker({ ground }: { ground: (x: number, z: number) => number }) {
   const ref = useRef<THREE.Group>(null)
-  const y0 = ground(GREG.x, GREG.z) + FOLK_HEIGHT * 0.9 + 0.75
+  const GREG = gregInGlade(), y0 = ground(GREG.x, GREG.z) + FOLK_HEIGHT * 0.9 + 0.75
   useFrame(({ clock }) => { const g = ref.current; if (!g) return; const t = clock.elapsedTime; g.rotation.y = t * 1.6; g.position.y = y0 + Math.sin(t * 2.2) * 0.08 })
   return (
     <group ref={ref} position={[GREG.x, y0, GREG.z]} userData={{ gladeMarker: 'greg' }}>
@@ -43,14 +43,18 @@ export function GladeCluster({ ground, marker = true }: { ground: (x: number, z:
     keeperNow.x = camera.position.x; keeperNow.z = camera.position.z
     const v = gladeBlueprintVersion(); if (v !== bpVer) setBpVer(v)
   })
-  const FOLK = useMemo(() => folkSpots(GLADE, gladeFolk().map(f => f.id)), [bpVer])   // eslint-disable-line react-hooks/exhaustive-deps
+  // M153 s1c-1: never read at module load: a published move (or a roll back) is followed as soon as the layer lands
+  const [ppVer, setPpVer] = useState(gladePeopleVersion())
+  useFrame(() => { const v = gladePeopleVersion(); if (v !== ppVer) setPpVer(v) })
+  const KEEPERS = useMemo(() => gladeKeepers(), [ppVer]), GREG = useMemo(() => gregInGlade(), [ppVer])   // eslint-disable-line react-hooks/exhaustive-deps
+  const FOLK = useMemo(() => folkSpots(GLADE, gladeFolk().map(f => f.id)), [bpVer, ppVer])   // eslint-disable-line react-hooks/exhaustive-deps
   gladeFolkDrawn = FOLK
   // read-only probe (scripts/glade-cluster-check.mts): who the Glade draws and where
   useEffect(() => {
     const w = window as unknown as { __glade?: Record<string, unknown> }   // shared with glade-lots-view's blueprint hook: merge
     w.__glade = { ...(w.__glade ?? {}), keepers: KEEPERS, folk: FOLK, greg: GREG, marker }
     return () => { if (w.__glade) { const { keepers: _k, folk: _f, greg: _g, marker: _m, ...rest } = w.__glade; void _k; void _f; void _g; void _m; if (Object.keys(rest).length) w.__glade = rest; else delete w.__glade }; gladeFolkDrawn = [] }
-  }, [marker, FOLK])
+  }, [marker, FOLK, KEEPERS, GREG])
   return (
     <>
       {KEEPERS.map(k => (

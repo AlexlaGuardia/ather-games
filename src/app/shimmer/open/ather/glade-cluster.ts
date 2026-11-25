@@ -19,7 +19,9 @@ import { gladeGround, pondDepthIn, GLADE as POND } from './relief'
 import { STARTING_SQUARES, GATE, plotHeightAt, sqId, PLOT_CELL } from './plot'
 import { onTriangles } from '../../world/glade-builder'
 import { toWorld } from './meadow'
-import { GLADE_ID, gregSpot, newbornSpot } from './moonwell-glade'
+import { GLADE_ID, gladeSpots, gregSpot, newbornSpot } from './moonwell-glade'
+import { gladePerson } from './glade-people'   // M153 s1c-1: the published spot, else the code's
+import { whoId, WHO, type Who } from '../../world/builder-props'
 
 /** The spot-save's tile name for "standing in the closed Glade" (location.ts spots carry a tile; this one is no Wilds tile). */
 export const GLADE_TILE = 'glade'
@@ -64,6 +66,8 @@ const place = (garden: GladeGarden['id'], lx: number, lz: number, yawLocal: numb
   const g = gardenAt(garden), p = toWorld(g.x, g.z, g.rot, lx, lz)
   return { x: p.x, z: p.z, yaw: yawLocal + g.rot }
 }
+/** M153 s1c-1: who was moved in Place mode stands there instead */
+const moved = <T extends Placed>(p: T): T => { const w = gladePerson(p.id); return w ? { ...p, x: w.x, z: w.z, yaw: w.yaw } : p }
 /** a point `ahead` m in front of a garden's keeper (toward the corner) and `side` m to their right, in that garden's frame */
 function keeperRel(ahead: number, side: number) {
   const fx = Math.sin(KEEPER_YAW_LOCAL), fz = Math.cos(KEEPER_YAW_LOCAL)   // forward (figure convention)
@@ -73,7 +77,7 @@ function keeperRel(ahead: number, side: number) {
 /** The three friends (Otto, Tess, Bonn), each in their own start ground facing their corner. Greg is drawn by glade-greg.tsx
  *  on his bench (s1b-2), so he is not in this list. */
 export function gladeKeepers(): Placed[] {
-  return GLADE_GARDENS.filter(g => g.id !== 'greg').map(g => ({ id: g.id, name: g.keeper, ...place(g.id, KEEPER_LOCAL.x, KEEPER_LOCAL.z, KEEPER_YAW_LOCAL) }))
+  return GLADE_GARDENS.filter(g => g.id !== 'greg').map(g => moved({ id: g.id, name: g.keeper, ...place(g.id, KEEPER_LOCAL.x, KEEPER_LOCAL.z, KEEPER_YAW_LOCAL) }))
 }
 /** The Moglins who live in the FRIENDS' gardens, by their settlement ids (`moonwell:<name>`, so fur and names match the Glade's
  *  own folk). Fennel (Greg's) stands at her lot in his garden instead (folk-spots.ts asks gladeSpots for her). */
@@ -81,7 +85,7 @@ export function gladeClusterFolk(): Placed[] {
   return GLADE_GARDENS.filter(g => g.id !== 'greg').flatMap(g => g.folk.map((f, k) => {
     const side = g.folk.length === 1 ? FOLK_SIDE : (k === 0 ? FOLK_SIDE : -FOLK_SIDE)
     const p = keeperRel(-FOLK_BACK, side)
-    return { id: `${GLADE_ID}:${f}`, name: f[0].toUpperCase() + f.slice(1), ...place(g.id, p.x, p.z, KEEPER_YAW_LOCAL) }
+    return moved({ id: `${GLADE_ID}:${f}`, name: f[0].toUpperCase() + f.slice(1), ...place(g.id, p.x, p.z, KEEPER_YAW_LOCAL) })
   }))
 }
 /** a Glade Moglin's spot when they live in a friend's garden, or null (Fennel: her lot, gladeSpots) */
@@ -95,6 +99,15 @@ export const GLADE_NEWBORN_GAP = 5
  *  him (moonwell-glade newbornSpot, now in the Glade's coords). yaw is the WALKER's: forward = (-sin yaw, -cos yaw). */
 export const gladeNewbornSpot = (): { x: number; z: number; yaw: number } => newbornSpot()
 
+/** Everyone Place mode can move, where they stand now (yaw = a figure's; the newborn spot's = the way the keeper looks). */
+export function gladePeople(): { who: Who; id: string; name: string; x: number; z: number; yaw: number; moved: boolean }[] {
+  const named = [...gladeKeepers(), gregInGlade(), ...gladeClusterFolk(), ...gladeSpots([`${GLADE_ID}:fennel`]).map(s => ({ ...s, name: 'Fennel' }))]
+  return WHO.map(w => {
+    const nb = w === 'newborn' ? gladeNewbornSpot() : null
+    const p = nb ? { name: 'Newborn spot', ...nb, yaw: nb.yaw + Math.PI } : named.find(n => (n.id.split(':').pop()) === w)!
+    return { who: w, id: whoId(w), name: p.name, x: p.x, z: p.z, yaw: p.yaw, moved: !!gladePerson(w) }
+  })
+}
 /** The Glade's ground: Greg's island (plot.ts) or what the cluster adds (the friends' islands, the meadow, the Green). */
 export const gladeGarden = (x: number, z: number): GladeGarden | null => {
   if (Number.isFinite(plotHeightAt(x, z))) return GLADE_GARDENS[0]

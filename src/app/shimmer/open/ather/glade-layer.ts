@@ -16,6 +16,7 @@ import { poolEdge, POOL_SEGS, POOL_Y } from './moonwell-water'
 import { cleanEdits, cleanWaters, ponds, type PondCell, type TileEdits, type WaterMap } from './wilds-edits'
 import { publishedZones } from './zone-parts'
 import { cleanProps, type Prop } from '../../world/builder-props'
+import { gladePeopleAnswered, setGladePeople } from './glade-people'
 import type { Zone } from '../../world/builder-zones'
 import { gladeDeltaAt, sampleGladeBase, GLADE_BRUSH_TILE, GLADE_LAYER_TILE, GLADE_N, GLADE_CELL, GLADE_SIZE, GLADE_TILE_CENTER } from '../../world/glade-builder'
 
@@ -33,8 +34,10 @@ export function parseGladeLayer(j: unknown): GladeLayer {
 export async function fetchGladeLayer(): Promise<GladeLayer> {
   try {
     const r = await fetch('/shimmer/open/glade-edits', { cache: 'no-store' })
-    return r.ok ? parseGladeLayer(await r.json()) : NO_GLADE_LAYER
-  } catch { return NO_GLADE_LAYER }   // no layer = the Glade as built, exactly
+    if (!r.ok) return NO_GLADE_LAYER
+    const l = parseGladeLayer(await r.json()); setGladePeople(l.props); return l   // M153 s1c-1: who was moved; a failed read keeps what is known
+  } catch { return NO_GLADE_LAYER   // no layer = the Glade as built, exactly
+  } finally { gladePeopleAnswered() }
 }
 
 /** On a mate's island turned a quarter, whose mesh splits its cells the other way (so the walker reads the same triangles). */

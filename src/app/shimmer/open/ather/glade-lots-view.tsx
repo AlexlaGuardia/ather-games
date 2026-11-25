@@ -3,7 +3,7 @@
 // and Greg's jetty. Shapes from glade-lots.ts (the walker bumps the same parts). Flat colours, Lambert, like the rooms.
 import { useEffect, useMemo, useState } from 'react'
 import { GLADE_GREEN, GLADE_ANCHOR } from './moonwell'
-import { GLADE_LOTS, lotAt, gladeJetty, gladeSpots } from './moonwell-glade'
+import { GLADE_LOTS, lotAt, gladeJetty, lotSpots } from './moonwell-glade'
 import { teachJars } from './yarrow-teach'
 import { STATIONS, partAt, setGladeBlueprint, gladeBlueprint, lotPad } from './glade-lots'
 import { parseHouse, placeBlueprint } from './plot-blueprint'
@@ -20,14 +20,16 @@ const LAYERS = RIBBONS || undefined
 
 const GREEN = '#a9cf7d', PATH = '#d9c9a2', PAD = '#cdb88e', DECK = '#a77b4f'
 
+/** every lot's blueprint, fetched and stood (M153 s1c-1: the builder's publish asks too, so houses are solid in its check) */
+export const loadGladeBlueprints = (live: () => boolean = () => true, done: () => void = () => {}) => Promise.all(GLADE_LOTS.map(l => fetch(`/shimmer/open/house-blueprints?id=glade-${l.id}`, { cache: 'no-store' })
+  .then(r => (r.ok ? r.json() : null)).then(j => { const bp = j ? parseHouse(j) : null; if (bp && live()) { setGladeBlueprint(l.id, bp); done() } }).catch(() => {})))
 export function GladeLots() {
   const y = GROUND.y
   // M39: each lot fetches its blueprint (glade-<lot>) once; one that exists and fits stands instead of the blockout
   const [, setBpRev] = useState(0)
   useEffect(() => {
     let alive = true
-    for (const l of GLADE_LOTS) fetch(`/shimmer/open/house-blueprints?id=glade-${l.id}`, { cache: 'no-store' })
-      .then(r => (r.ok ? r.json() : null)).then(j => { const bp = j ? parseHouse(j) : null; if (alive && bp) { setGladeBlueprint(l.id, bp); setBpRev(n => n + 1) } }).catch(() => {})
+    void loadGladeBlueprints(() => alive, () => setBpRev(n => n + 1))
     // M67 s1b-2: the closed Glade's own probe (glade-cluster-view.tsx) shares this name now: MERGE, never replace
     const gw = window as unknown as { __glade?: object }
     gw.__glade = { ...(gw.__glade ?? {}), /* dev/check hook: stand a blueprint on a lot (visual + solids only, nothing saved) */ setBlueprint: (lot: string, j: unknown) => { const bp = j ? parseHouse(j) : null; setGladeBlueprint(lot, bp); setBpRev(n => n + 1); return !!bp }, blueprints: () => GLADE_LOTS.filter(l => !!gladeBlueprint(l.id)).map(l => l.id) }
@@ -68,7 +70,7 @@ export function GladeLots() {
             </mesh>
           ) })}
           {/* Yarrow's teach-beat jars ride beside Yarrow when the blueprint replaced the blockout counter (yarrow-teach.ts) */}
-          {l.id === 'yarrow' && gladeBlueprint(l.id) && (() => { const t = teachJars(gladeSpots(['moonwell:yarrow'])[0]); return (
+          {l.id === 'yarrow' && gladeBlueprint(l.id) && (() => { const t = teachJars(lotSpots(['moonwell:yarrow'])[0]); return (
             <group data-yarrow-jars>
               <mesh position={[t.crate.x, y + t.crate.h / 2, t.crate.z]} rotation-y={t.crate.yaw} castShadow receiveShadow><boxGeometry args={[t.crate.w, t.crate.h, t.crate.d]} /><meshLambertMaterial color="#6d5038" /></mesh>
               {t.jars.map((j, k) => <mesh key={k} position={[j.x, y + t.crate.h + j.h / 2, j.z]} rotation-y={t.crate.yaw} castShadow><boxGeometry args={[j.w, j.h, j.w]} /><meshLambertMaterial color="#b7d8e6" /></mesh>)}
