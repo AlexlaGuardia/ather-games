@@ -2,7 +2,7 @@
 // Two keepers in one party (lib/party's stored code, as party-zones-check) in the Wilds. PROD ONLY (the game socket lives
 // behind the public tunnel; run via tools/edesk-check.sh). PASS =
 //   1. both live in the Wilds, each sees the other
-//   2. exactly ONE host, and both agree who (the lowest id)
+//   2. exactly ONE host, and both agree who (the party starter; M156 s2, was the lowest id)
 //   3. the guest draws the host's Hollows: every guest Hollow id is one the host has, within 1.5 m of it (sampled together)
 //      and the guest has spawned none of its own
 //   3b (slice 3) the GUEST draws (real R) and shoots (real clicks) a shared Hollow: its hp drops ON THE HOST; shot down, BOTH
@@ -46,9 +46,9 @@ try {
   // 2 · one host, agreed
   ok(await poll(async () => (await F(a, 'sharing')) && (await F(b, 'sharing')), 30000), '2. both are sharing the fight')
   const ha = await F(a, 'host'), hb = await F(b, 'host'), hidA = await F(a, 'hostId'), hidB = await F(b, 'hostId')
-  const want = [ida!, idb!].sort()[0]
+  const want = ida!   // M156 s2 (was the lowest id): the party starter = the first to open (the lobby's longest-standing member)
   ok(ha !== hb, `2. exactly one host (A ${ha}, B ${hb})`)
-  ok(hidA === hidB && hidA === want, `2. both agree it is the lowest id (${hidA} / ${hidB}, expect ${want})`)
+  ok(hidA === hidB && hidA === want, `2. both agree it is the party starter (A) (${hidA} / ${hidB}, expect ${want})`)
   const host = ha ? a : b, guest = ha ? b : a, ht = ha ? 'A' : 'B', gt = ha ? 'B' : 'A'
   // 3 · the guest draws the host's Hollows
   ok(await poll(async () => ((await F(host, 'ids')) as H[]).length > 0 && ((await F(guest, 'ids')) as H[]).length > 0, 120000), `3. Hollows on both (${ht} hosts)`)
