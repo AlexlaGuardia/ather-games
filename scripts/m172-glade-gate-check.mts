@@ -79,7 +79,8 @@ try {
       if (await openMap(p, `${tag} (Glade stop)`)) {
         await pickStop(p, 'Moonwell Glade', phone)
         ok(await poll(async () => { const s = await A(p, 'state'); return Math.hypot(s.px - sx, s.pz - sz) > 20 }, 30000) && (await A(p, 'zone')) === 'glade', `${tag}: Moonwell Glade = away from the gate, in the Glade`)
-        await sleep(4000); await A(p, 'gladeAt', sx, sz, yaw); await sleep(5000)
+        await sleep(4000)
+        for (let i = 0; i < 6 && (await A(p, 'near'))?.kind !== 'gate'; i++) { await A(p, 'gladeAt', sx, sz, yaw); await sleep(6000) }   // a warp asked under a veil is dropped: ask again
       }
       if (await openMap(p, `${tag} (plot stop)`)) {
         ok(await pickStop(p, 'Your plot', phone) && await flipped(p, 'plot'), `${tag}: Your plot = the plot`)
