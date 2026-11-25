@@ -359,6 +359,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - 11-23 08:4x Alex on Nyx + ships: agreed Nyx is thin; M73 opening chain next. On a flyable skyship: "I'm not on board for 3, I'm thinking it's just a gate to space maps" → DECIDED: NO flight system. A repaired ship = a GATE to space maps (board it, pick a destination, load the map; the Hask wreck is the first, its SOS = the destination-list question). Ship repair loop = canon ask to Magii.
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+- **M162 Hazel, Sax, Yarrow (11-25, LIVE):** docs/looks/m162-2026-11-25/line-up.png, or /shimmer/dev/moglin-looks. Likeness OK? Heads bigger and legs shorter than the pictures (today's chibi body kept). Fennel + Mallow follow.
 - **M153 s1c-3 garden rooms (11-25, LIVE in Place mode, none placed):** Rooms group in the palette; plinth colour OK? Should the bench block (it does in the Glade, not in the keeper's plot)?
 - **M159 dewls (11-25, LIVE for all):** prices plank 15, shard 20, glowfin 30, amber sap 40, ather crystal 100; the ground gem on a real phone. Camp: stock it (answered).
 - **M153 s1c-2 houses (11-25, LIVE in Place mode):** a moved house stands level on a plinth (refused past 1.5 m of fall); Yarrow's crate is now solid: fine?
