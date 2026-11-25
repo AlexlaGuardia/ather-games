@@ -32,7 +32,8 @@ import { castForMove, NO_CAST } from '../play3d/cast'
 
 type SlotId = 'primary' | 'secondary' | 'tactical' | 'signature'
 const SLOT_LABEL: Record<SlotId, string> = { primary: 'Primary', secondary: 'Secondary', tactical: 'Tactical', signature: 'Signature' }
-const SLOT_HINT: Record<SlotId, string> = { primary: 'a long gun', secondary: 'a sidearm', tactical: 'worn on the bracelet', signature: 'worn on the glove' }
+// M179: either gun slot takes any gun, so its empty hint names no class (plain label, @lark)
+const SLOT_HINT: Record<SlotId, string> = { primary: 'any gun you own', secondary: 'any gun you own', tactical: 'worn on the bracelet', signature: 'worn on the glove' }
 
 const gunIcon = (id: string) => `/open/icons/gun-${id}.svg`
 function VesselGlyph({ kind, size = 30 }: { kind: OwnedVessel['kind']; size?: number }) {
@@ -82,6 +83,8 @@ function Slot({ id, open, onOpen }: { id: SlotId; open: boolean; onOpen: () => v
                 <span className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{g ? cap(g.name) : v!.label}</span>
                 <span className="text-[12px]" style={{ color: H.inkSoft }}>{g ? g.slot.toLowerCase() : v!.word ?? 'no word'}</span>
                 {on && <span className="ml-auto text-[12px] font-bold" style={{ color: H.ember }}>worn</span>}
+                {isGun && !on && l[id === 'primary' ? 'secondary' : 'primary'] === o.id && (   // M179: picking it swaps the two slots
+                  <span data-other-slot className="ml-auto text-[12px]" style={{ color: H.inkFaint }}>{SLOT_LABEL[id === 'primary' ? 'secondary' : 'primary']}</span>)}
               </button>
             )
           })}

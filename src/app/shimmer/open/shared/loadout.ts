@@ -5,8 +5,8 @@
 // CANON (read-only here): a vessel is a worn thing with a word infused into it; the 1672 keeper standard is the
 // BRACELET for the tacticals and the GLOVE for the signature, and a keeper starts with one of each
 // (world/mana-tech.md › AMENDED 11-15; game/moves.md; play3d/gems.ts › VESSEL_NOUN). Guns are the five Slates
-// (game/weapons.md). BUILD (Jin): "primary / secondary" is UI vocabulary, and so is the rule that the secondary is
-// the sidearm slot (canon's sidearm is "backup, finisher": the second gun), the primary any long gun.
+// (game/weapons.md). BUILD (Jin): "primary / secondary" is UI vocabulary. M179 (Alex 11-25): either slot takes any gun; a gun's
+// class only picks the slot it LANDS in (slotOfGun: the sidearm the secondary, a long gun the primary).
 //
 // ⚠ OWNERSHIP IS A TEST STAND-IN. Guns are not sold yet, so every range gun counts as owned (OWN_ALL_RANGE_GUNS)
 // so Alex can try loadouts; flip it off when the gun shop sells. Vessels: the starter pair only, no word written
@@ -38,8 +38,12 @@ export interface Loadout {
   fit?: Record<string, { sight?: string; owned?: string[]; sigil?: string[] }>   // owned = sights BOUGHT for this gun (M81 s3); sigil = rune ids cut by Idris, in order (M93 s3, business/idris.ts)
 }
 
-/** Which slot a Slate goes in: the sidearm is the secondary, every long gun a primary. */
+/** A Slate's HOME slot: where a gun lands by itself when it is bought or handed over into an empty slot (the sidearm the
+ *  secondary, a long gun the primary). M179 (Alex 11-25: "primary and seconday to be free to all class and the player mix and
+ *  match combos of all kinds"): the keeper may then wear ANY owned gun in EITHER slot (equip); only the landing reads this. */
 export const slotOfGun = (g: RangeGun): 'primary' | 'secondary' => (g.slot === 'SIDEARM' ? 'secondary' : 'primary')
+export type GunSlot = 'primary' | 'secondary'
+export const otherGunSlot = (s: GunSlot): GunSlot => (s === 'primary' ? 'secondary' : 'primary')
 export const SLOT_OF_VESSEL: Record<VesselKind, 'tactical' | 'signature'> = { bracelet: 'tactical', glove: 'signature' }
 
 export function newLoadout(): Loadout {
@@ -51,17 +55,21 @@ export function newLoadout(): Loadout {
   }
 }
 
-export const gunsFor = (l: Loadout, slot: 'primary' | 'secondary') =>
-  RANGE_GUNS.filter(g => l.guns.includes(g.id) && slotOfGun(g) === slot)
+/** M179: every owned gun fits either slot (the one worn in the other slot is offered too: picking it swaps the two). */
+export const gunsFor = (l: Loadout, _slot: GunSlot) => RANGE_GUNS.filter(g => l.guns.includes(g.id))
 export const vesselsFor = (l: Loadout, slot: 'tactical' | 'signature') =>
   l.vessels.filter(v => SLOT_OF_VESSEL[v.kind] === slot)
 
-/** Equip a gun or vessel (or null to empty the slot). Refuses what you do not own or what does not fit the slot. */
+/** Equip a gun or vessel (or null to empty the slot). Refuses what you do not own or what does not fit the slot.
+ *  M179: any owned gun fits either gun slot, but ONE gun is never worn twice (each gun keeps its own clip, keyed by gun id:
+ *  combat.ts rack): equipping the gun the OTHER slot wears SWAPS the two (the other slot takes this slot's gun, or empties). */
 export function equip(l: Loadout, slot: 'primary' | 'secondary' | 'tactical' | 'signature', id: string | null): Loadout {
   if (id === null) return { ...l, [slot]: null }
   if (slot === 'primary' || slot === 'secondary') {
     const g = RANGE_GUNS.find(x => x.id === id)
-    if (!g || !l.guns.includes(id) || slotOfGun(g) !== slot) return l
+    if (!g || !l.guns.includes(id)) return l
+    const other = otherGunSlot(slot)
+    if (l[other] === id) return { ...l, [slot]: id, [other]: l[slot] === id ? null : l[slot] }
     return { ...l, [slot]: id }
   }
   const v = l.vessels.find(x => x.id === id)
@@ -78,7 +86,10 @@ export const KAEL_PRIMARY = 'charred-rifle', KAEL_SECONDARY = STARTER_GUN
 export function claimKaelsArms(l: Loadout): { ok: boolean; loadout: Loadout } {
   if (l.kael) return { ok: false, loadout: l }
   const guns = [...new Set([...l.guns, KAEL_PRIMARY, KAEL_SECONDARY])]
-  const out: Loadout = { ...l, guns, primary: l.primary ?? KAEL_PRIMARY, secondary: l.secondary ?? KAEL_SECONDARY, kael: true }
+  // each lands in its home slot if that slot is empty and the gun is not already worn (M179: a keeper may wear the Repeater as the primary)
+  const worn = (id: string) => l.primary === id || l.secondary === id
+  const out: Loadout = { ...l, guns, kael: true,
+    primary: l.primary ?? (worn(KAEL_PRIMARY) ? null : KAEL_PRIMARY), secondary: l.secondary ?? (worn(KAEL_SECONDARY) ? null : KAEL_SECONDARY) }
   if (l.lent) out.lent = l.lent.filter(g => g !== KAEL_PRIMARY && g !== KAEL_SECONDARY)   // M140: really his now, so 'Take back' leaves it
   return { ok: true, loadout: out }
 }

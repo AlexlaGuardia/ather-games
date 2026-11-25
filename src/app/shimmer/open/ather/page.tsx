@@ -1948,8 +1948,10 @@ function AtherSliceGame() {
       {isTouch && !panel && !building && (
         <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} holds={SKIN_HOLDS} />
       )}
+      {/* M179: the card closes on the CLICK, not on pointerdown: closing on pointerdown let the tap's click land on the pill
+          under it (E · use at the waymark opened the fold map, gun-fit-check phone leg, 11-25) */}
       {isTouch && !introSeen && !panel && !building && (
-        <div onPointerDown={() => setIntroSeen(true)} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: 16, zIndex: 30, background: 'rgba(5,6,14,0.35)' }}>
+        <div onClick={() => setIntroSeen(true)} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: 16, zIndex: 30, background: 'rgba(5,6,14,0.35)' }}>
           <div style={{ padding: '18px 20px', borderRadius: 10, background: 'rgba(12,16,20,0.82)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.6, textAlign: 'center', maxWidth: 420 }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Ather · your plot and the Wilds</div>
             Left thumb moves. Drag on the right to look.<br />Buttons for jump, slide, and whatever is in reach.

@@ -26,8 +26,10 @@ ok(d.added === 0 && d.missed === SEED_IDS.length, 'full bag: nothing added, all 
   ok(JSON.stringify(L0) === j0, 'pure')
   ok(lendAllGuns(r.loadout).added === 0 && lendAllGuns(r.loadout).loadout === r.loadout, 'a second press adds none and forgets none')
   ok(JSON.stringify(takeBackGuns(r.loadout).loadout) === j0, 'taken back = exactly the old set')
-  const worn = equip(equip(r.loadout, 'primary', 'lance'), 'secondary', 'spitter'), t = takeBackGuns(worn)
+  const worn = equip(r.loadout, 'primary', 'lance'), t = takeBackGuns(worn)   // M179: the secondary keeps the real Repeater (before M179 a Spitter there was refused, so the old line meant the same)
   ok(t.taken === ALL.length - 2 && t.loadout.guns.join() === 'backbone,repeater' && t.loadout.primary === null && t.loadout.secondary === 'repeater' && !t.loadout.lent, 'a worn lent gun leaves the slot, a real one stays worn')
+  { const both = takeBackGuns(equip(equip(r.loadout, 'primary', 'lance'), 'secondary', 'spitter')).loadout   // M179: a lent gun worn as the secondary leaves too
+    ok(both.primary === null && both.secondary === null && both.guns.join() === 'backbone,repeater', 'M179: two lent guns worn, both slots empty after take back') }
   ok(takeBackGuns(L0).taken === 0 && takeBackGuns(L0).loadout === L0, 'nothing lent: nothing taken')
   const k = claimKaelsArms({ ...lendAllGuns({ ...newLoadout() }).loadout })   // the Charred Rifle lent, then really won from Kael's chest
   ok(k.ok && takeBackGuns(k.loadout).loadout.guns.slice().sort().join() === 'charred-rifle,repeater', "a lent gun won for real (Kael's chest) stays")

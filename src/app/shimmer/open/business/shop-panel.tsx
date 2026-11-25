@@ -25,7 +25,7 @@ import { buyDecor } from './decor-shop'
 import { buyBundle } from './smokehouse'
 import { bottlesIn, sellBottles } from './corkhouse'
 import { SMOKEHOUSE_STOCK } from '../ather/cooking'
-import { useLoadout, setLoadout, getLoadout, claimKaelsArms, slotOfGun } from '../shared/loadout'
+import { useLoadout, setLoadout, getLoadout, claimKaelsArms } from '../shared/loadout'   // M179: the rack names the gun's class (either slot takes any gun)
 import { buyGun, buySigil, GUN_PRICES, SIGIL_PRICE, SIGIL_ITEM, buySight, stockOf as gunStockOf, shopGunsOf, SIGHT_PRICES } from './gun-shop'   // furniture has its own stockOf
 import { ownedSights, sightName } from '../shared/gun-fit'   // M81 s3a
 import { RANGE_GUNS } from '../shared/gunplay'
@@ -317,7 +317,7 @@ function GunShopPanel({ town, ledger, setLedger, onClose }: { town: string; ledg
                 <img src={`/open/icons/gun-${g.id}.svg`} alt="" width={36} height={36} />
                 <div className="min-w-0 flex-1">
                   <div className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: H.ink }}>{g.name[0] + g.name.slice(1).toLowerCase()}</div>
-                  <div className="text-[12.5px]" style={{ color: H.inkSoft }}>{slotOfGun(g) === 'secondary' ? 'Secondary' : 'Primary'} · {price.toLocaleString()} Marks</div>
+                  <div className="text-[12.5px]" style={{ color: H.inkSoft }}>{g.slot[0] + g.slot.slice(1).toLowerCase()} · {price.toLocaleString()} Marks</div>
                 </div>
                 <span data-buy={g.id} style={{ display: 'contents' }}><HearthButton small primary disabled={owned || short} onClick={() => {
                   const r = buyGun(getLoadout(), ledger, g.id)
