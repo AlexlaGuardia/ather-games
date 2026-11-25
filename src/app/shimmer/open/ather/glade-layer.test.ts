@@ -1,6 +1,6 @@
 // BETA M83 s2b: the Glade builder layer in the game (pure). Run: npx tsx src/app/shimmer/open/ather/glade-layer.test.ts
 import * as THREE from 'three'
-import { parseGladeLayer, gladeLayerGround, gladeLift, liftGeometry, gladePonds, NO_GLADE_LAYER } from './glade-layer'
+import { parseGladeLayer, gladeLayerGround, gladeLift, liftGeometry, gladePonds, gladeFrame, gladeWet, NO_GLADE_LAYER, type GladeLayer } from './glade-layer'
 import { gladeZoneGround, GLADE_FRAME } from './glade-cluster'
 import { PLOT_CELL, PLOT_HALF, plotVertexHeight } from './plot'
 import { MOONWELL, shoreRadius } from './moonwell'
@@ -96,6 +96,32 @@ ok(gladePonds(NO_GLADE_LAYER).length === 0, 'no layer = no water')
   const mt = GLADE_FRAME.mates.find(m => Math.abs(Math.sin(m.rot)) > 0.5)!, hump = { [vk(mt.x, mt.z)]: 40 }
   const at = gladeLayerGround(hump), up = (dx: number, dz: number) => at(mt.x + dx, mt.z + dz) - gladeZoneGround(mt.x + dx, mt.z + dz)
   ok(near(up(1, 1), 2, 1e-3) && near(up(-1, 1), 3, 1e-3), `M157: a quarter-turned island is walked on its own triangles (${up(1, 1).toFixed(2)}, ${up(-1, 1).toFixed(2)})`)
+}
+
+// M160: no generated tree stands in the layer's water
+{
+  const all = GLADE_FRAME.meadow!.trees, list = (l: GladeLayer) => gladeFrame(l).meadow!.trees
+  ok(gladeFrame(NO_GLADE_LAYER) === GLADE_FRAME && gladeFrame({ edits: { [K0]: 50 }, water: null }) === GLADE_FRAME, 'M160: no painted water = the very same frame, the same trees')
+  const k = all.findIndex(t => t.x > -120 && t.x < -90 && t.z > 190 && t.z < 215), T = all[k], g = gladeZoneGround(T.x, T.z)
+  const cell = (x: number, z: number) => Math.floor((z - GLADE_TILE_CENTER.z + GLADE_SIZE / 2) / GLADE_CELL) * (GLADE_N - 1) + Math.floor((x - GLADE_TILE_CENTER.x + GLADE_SIZE / 2) / GLADE_CELL)
+  const paint = (level: number) => { const water: Record<string, number> = {}; for (const dx of [-4, 0, 4]) for (const dz of [-4, 0, 4]) water[cell(T.x + dx, T.z + dz)] = Math.round(level * 10); return { edits: null, water } }
+  const wet = paint(g + 1), L1 = list(wet)
+  ok(!L1.includes(T) && L1.length < all.length, `M160: a tree under 1 m of painted water is out of the list (${all.length - L1.length})`)
+  ok(gladeFrame(wet) === gladeFrame(wet), 'M160: one frame per layer (no rebuild each render)')
+  ok(L1.every((t, n) => t === all[gladeFrame(wet).meadow!.treeNo![n]]), 'M160: the rest are the same trees, in order, each with its own number (its tint)')
+  ok(all.every(t => L1.includes(t) || gladeWet(wet)(t.x, t.z) || Math.hypot(t.x - T.x, t.z - T.z) < 9), 'M160: only trees by that water are gone')
+  ok(GLADE_FRAME.meadow!.trees === all && all.length > 300 && all.includes(T), 'M160: the full list is not touched')
+  ok(list(paint(g - 1)).includes(T), 'M160: the water lowered under its ground: the tree is back')
+  const lift: Record<string, number> = {}; for (let dx = -12; dx <= 12; dx += 4) for (let dz = -12; dz <= 12; dz += 4) lift[vk(Math.round(T.x / 4) * 4 + dx, Math.round(T.z / 4) * 4 + dz)] = 30
+  ok(list({ ...wet, edits: lift }).includes(T), 'M160: the ground raised out of the water: the tree is back')
+  const x0 = Math.floor((T.x - GLADE_TILE_CENTER.x + GLADE_SIZE / 2) / GLADE_CELL) * GLADE_CELL + GLADE_TILE_CENTER.x - GLADE_SIZE / 2, z0 = Math.floor((T.z - GLADE_TILE_CENTER.z + GLADE_SIZE / 2) / GLADE_CELL) * GLADE_CELL + GLADE_TILE_CENTER.z - GLADE_SIZE / 2
+  const bank: GladeLayer = { ...wet, edits: { [vk(x0 + 4, z0)]: 30, [vk(x0, z0 + 4)]: 30, [vk(x0 + 4, z0 + 4)]: 30 } }   // the cell keeps one low, wet corner
+  ok(gladePonds(bank).some(c => c.j * (GLADE_N - 1) + c.i === cell(T.x, T.z)) && list(bank).includes(T), 'M160: a wet cell whose ground at the tree is over the water keeps the tree')
+  // the pool's plane: the sheet's inside and outside, and ground over it
+  const w0 = gladeWet(NO_GLADE_LAYER), r = shoreRadius(MOONWELL.x + 1, MOONWELL.z)
+  ok(w0(MOONWELL.x, MOONWELL.z) && !w0(MOONWELL.x + r + 6, MOONWELL.z), 'M160: wet in the Moonwell, dry past its shore')
+  const dry: Record<string, number> = {}; for (let dx = -8; dx <= 8; dx += 4) for (let dz = -8; dz <= 8; dz += 4) dry[vk(Math.round(MOONWELL.x / 4) * 4 + dx, Math.round(MOONWELL.z / 4) * 4 + dz)] = 60
+  ok(!gladeWet({ edits: dry, water: null })(MOONWELL.x, MOONWELL.z), 'M160: an islet raised out of the pool is dry')
 }
 
 console.log(`\n${passes} passed, ${fails} failed`)

@@ -85,7 +85,7 @@ import { gregSpot, gladeSpots, GLADE } from './moonwell-glade'   // M30 part 2: 
 import { GladeLots } from './glade-lots-view'
 import { GladeCluster, gladeFolkDrawn } from './glade-cluster-view'   // M67 s1a: the closed Glade's keepers, Moglins, Greg's marker
 import { GLADE_FRAME, GLADE_OWNED, GLADE_TILE, GLADE_ZONE_NAME, GLADE_GATE, gladeNewbornSpot, gladeWhere, gregInGlade, gladeKeepers } from './glade-cluster'   // M40: the green, the five's lots + stations, Greg's jetty
-import { gladeLayerGround, gladeLift } from './glade-layer'
+import { gladeLayerGround, gladeLift, gladeFrame } from './glade-layer'
 import { useGladeLayer, GladeWater } from './glade-layer-view'   // M83 s2b: the Glade's published builder layer
 import { zoneParts, zonePartBoxes, withZoneParts, publishedZones } from './zone-parts'   // M84 s3: published zone builds (drawn + solid)
 import { ZonePartsView } from './zone-parts-view'
@@ -1780,7 +1780,7 @@ function AtherSliceGame() {
         {zone.kind === 'plot' && <AnemonyxIfHere clock={clock} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
-        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={GLADE_FRAME} lift={gladeMeshLift} /><GladeCluster ground={ground} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /><SceneryView items={gladeDecor} /></>}   {/* M67 s1a */}
+        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={gladeFrame(gladeLayer)} lift={gladeMeshLift} /><GladeCluster ground={ground} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /><SceneryView items={gladeDecor} /></>}   {/* M67 s1a */}
         {zone.kind === 'glade' && <><GladeNodesView nodes={gladeOwnNodes} focus={poseRef} /><ForestryFX ww={gladeOwnNodes} aim={aimRef} fx={fxRef} ground={ground} /><ChannelFocus focus={focusRef} /><GatherTether ref={tetherRef} /><ProspectingFX ww={gladeOwnNodes} aim={cAimRef} fx={cFxRef} ground={ground} mineable={c => mineCheck(c.kind, c.id).ok} /><GroundLoot place="glade" keeper={lootKeeper} ground={ground} can={lootCan} /></>}   {/* M153 s1b */}
         {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}

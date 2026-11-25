@@ -14,6 +14,7 @@ import { SceneryView } from '../../open/ather/scenery-view'
 import { GladeLots } from '../../open/ather/glade-lots-view'
 import { GladeHome } from '../../open/ather/glade-home-view'
 import { gladeHome } from '../../open/ather/glade-home'
+import type { Tree } from '../../open/ather/meadow'
 import { GLADE_FRAME, GLADE_GATE, gladeKeepers, gregInGlade } from '../../open/ather/glade-cluster'
 import { GLADE, gladeFolk } from '../../open/ather/moonwell-glade'
 import { folkSpots } from '../../open/ather/folk-spots'
@@ -151,16 +152,15 @@ export function PlaceLayer({ api, active, heightAt, rev, label }: { api: PlaceAp
 
 /** What stands in the Glade today and cannot be moved yet (s1c): the lots' houses and stations, Greg's home, the jetty, the gate, the
  *  people, the valley's trees. Drawn see-through, never a target. The pool's water is BuilderFly's own. */
-export function GladeFixed({ heightAt, label }: { heightAt: Ground; label: (text: string, color: string) => { tex: THREE.CanvasTexture; aspect: number } }) {
+export function GladeFixed({ heightAt, label, trees = GLADE_FRAME.meadow?.trees ?? [] }: { trees?: readonly Tree[]; heightAt: Ground; label: (text: string, color: string) => { tex: THREE.CanvasTexture; aspect: number } }) {
   const ref = useRef<THREE.Group>(null), n = useRef(0)
   const folk = useMemo(() => [...gladeKeepers().map(k => ({ ...k, h: 1.75 })), { ...gregInGlade(), h: 1.75 }, ...folkSpots(GLADE, gladeFolk().map(f => f.id)).map(f => ({ ...f, name: f.id.split(':').pop()!.replace(/^./, c => c.toUpperCase()), h: 1.1 }))], [])
   const tags = useMemo(() => folk.map(f => label(f.name, '#fde68a')), [folk, label])
   useEffect(() => () => tags.forEach(t => t.tex.dispose()), [tags])
-  const trees = GLADE_FRAME.meadow?.trees ?? []
   const inst = useMemo(() => {
     const mat = new THREE.MeshLambertMaterial({ color: '#79ad5a', transparent: true, opacity: 0.35, depthWrite: false }), im = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 7), mat, Math.max(1, trees.length)), m = new THREE.Matrix4(), q = new THREE.Quaternion()
     trees.forEach((t, k) => { const g = heightAt(t.x, t.z), y = Number.isFinite(g) ? g : t.y; im.setMatrixAt(k, m.compose(new THREE.Vector3(t.x, y + 1.2 + t.tall / 2, t.z), q, new THREE.Vector3(t.r, t.tall + 2.4, t.r))) })
-    im.count = trees.length; im.raycast = () => {}; im.computeBoundingSphere(); return im
+    im.count = trees.length; im.userData.meadowGhosts = true; im.raycast = () => {}; im.computeBoundingSphere(); return im
   }, [trees, heightAt])
   useEffect(() => () => { inst.geometry.dispose(); (inst.material as THREE.Material).dispose(); inst.dispose() }, [inst])
   // see-through, and never in a ray's way (the house parts arrive late: their blueprints are fetched)

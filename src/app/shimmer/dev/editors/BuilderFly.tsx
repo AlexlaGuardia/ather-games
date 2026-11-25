@@ -20,6 +20,10 @@ import { ramp } from './terrain-ramp'
 import { resample, POI_COLOR, ROAD_COLOR, type Overlay } from './builder-pois'
 import { ZonePartsView } from '../../open/ather/zone-parts-view'   // M84 s3: each zone's build, the game's own PieceBody
 import { poolSheet } from '../../open/ather/moonwell-water'
+import { gladeFrame } from '../../open/ather/glade-layer'
+import { GladeWater } from '../../open/ather/glade-layer-view'
+import { GLADE_LAYER_TILE } from '../../world/glade-builder'
+import { WATER_PREFIX } from '../../open/ather/wilds-edits'
 import { PlaceLayer, GladeFixed, useCentre, type PlaceApi } from './place-mode'   // M153 s1a
 import type { ZonePart } from '../../open/ather/zone-parts'
 
@@ -113,6 +117,14 @@ function PoolWater({ heightAt, rev }: { heightAt: Props['heightAt']; rev: number
   }, [heightAt, rev])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => geo.dispose(), [geo])
   return <mesh geometry={geo} userData={{ pool: true }}><meshBasicMaterial color="#bfe4ff" transparent opacity={0.8} /></mesh>
+}
+
+/** M160 (the Glade): the draft's painted water, and the valley's trees that stand clear of it (the game's own two readers) */
+function GladeDraft({ deltas, rev, heightAt, label }: { deltas: Props['deltas']; rev: number; heightAt: Props['heightAt']; label: typeof labelTex }) {
+  const layer = useMemo(() => ({ edits: deltas(GLADE_LAYER_TILE) ?? null, water: deltas(WATER_PREFIX + GLADE_LAYER_TILE) ?? null }), [rev])   // eslint-disable-line react-hooks/exhaustive-deps
+  const kept = useRef<NonNullable<ReturnType<typeof gladeFrame>['meadow']>['trees']>([]), now = gladeFrame(layer).meadow?.trees ?? []
+  if (now.length !== kept.current.length || now.some((t, k) => t !== kept.current[k])) kept.current = now   // a brush tick that changes no tree rebuilds none
+  return <><GladeWater layer={layer} /><GladeFixed heightAt={heightAt} label={label} trees={kept.current} /></>
 }
 
 function Rig({ heightAt, focus, camRef, pr }: { pr: React.MutableRefObject<Props>; heightAt: Props['heightAt']; focus: Props['focus']; camRef: React.MutableRefObject<Cam | null> }) {
@@ -281,7 +293,7 @@ export default function BuilderFly(p: Props) {
           if (!(o as THREE.Mesh).isMesh) return
           if (skip.has(o)) return
           if (inParts.has(o)) { n.partMeshes++; return }
-          if (o.userData?.pool) return   // M157: the Moonwell's water is not terrain
+          if (o.userData?.pool || o.userData?.gladeWater) return   // M157: the Moonwell's water is not terrain
           const t = (o as THREE.Mesh).geometry?.type
           if (t === 'BufferGeometry') n.tiles++; else if (t === 'PlaneGeometry') n.sea++; else if (t === 'RingGeometry') n.ring++; else n.other.push(t ?? o.type)
         })
@@ -295,6 +307,8 @@ export default function BuilderFly(p: Props) {
       },
       /** M153: the fixed ghosts drawn (folk ids, house + station meshes) */
       fixed: () => { let meshes = 0; const folk: string[] = []; sceneRef.current?.getObjectByName('glade-fixed')?.traverse(o => { if (o.userData?.fixedFolk) folk.push(o.userData.fixedFolk as string); if ((o as THREE.Mesh).isMesh) meshes++ }); return { folk, meshes } },
+      /** M160: the draft's painted water cells and the valley's trees as drawn */
+      draft: () => { let water = 0, trees = 0; sceneRef.current?.traverse(o => { if (o.userData?.gladeWater) water = ((o as THREE.Mesh).geometry.index?.count ?? 0) / 6; if (o.userData?.meadowGhosts) trees = (o as THREE.InstancedMesh).count }); return { water, trees } },
       pool: () => { let n = 0; sceneRef.current?.traverse(o => { if (o.userData?.pool) n++ }); return n },
       /** M105: the overlay drawn in the scene: road lines, POI pins, labels (each label's POI + the ground height it sits on) */
       overlay: () => {
@@ -332,7 +346,7 @@ export default function BuilderFly(p: Props) {
       {p.pool && <PoolWater heightAt={p.heightAt} rev={p.rev} />}
       {!p.placing && <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />}
       {p.place && <PlaceLayer api={p.place} active={!!p.placing} heightAt={p.heightAt} rev={p.rev} label={labelTex} />}
-      {p.fixed && <GladeFixed heightAt={p.heightAt} label={labelTex} />}
+      {p.fixed && <GladeDraft deltas={p.deltas} rev={p.rev} heightAt={p.heightAt} label={labelTex} />}
       {p.overlay && <OverlayLayer overlay={p.overlay} heightAt={p.heightAt} rev={p.rev} />}
       {p.parts && <ZonePartsView parts={p.parts} />}
     </Canvas>

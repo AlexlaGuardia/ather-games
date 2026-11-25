@@ -86,6 +86,8 @@ export function MoonwellPool({ ground, stowed }: { ground: (x: number, z: number
   useEffect(() => { const g = window as unknown as { __moonwell?: unknown }; g.__moonwell = { wait: () => w.current.t, rising: () => w.current.rise >= 0,
     // M157 (moonwell-pond-check): the walker's ground, the DRAWN ground (a ray down on the meshes as the GPU has them) and the sheet
     walkAt: ground, poolY: y, sheet: () => Array.from(sheet.getAttribute('position').array),
+    // M160 (glade-wet-trees-check): the valley's trees as drawn, off the crowns' own matrices
+    trees: () => { const at: number[][] = []; scene.traverse(o => { if (!o.userData?.meadowCrowns) return; const im = o as THREE.InstancedMesh, m = new THREE.Matrix4(); for (let k = 0; k < im.count; k++) { im.getMatrixAt(k, m); at.push([m.elements[12], m.elements[14]]) } }); return at },
     drawnAt: (x: number, z: number) => {
       const ms: THREE.Object3D[] = []; scene.traverse(o => { if (o.userData?.gladeGround) ms.push(o) })
       const h = new THREE.Raycaster(new THREE.Vector3(x, 200, z), new THREE.Vector3(0, -1, 0)).intersectObjects(ms, false)[0]

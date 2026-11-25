@@ -10,12 +10,14 @@
 // Pure apart from fetchGladeLayer; glade-layer.test.ts.
 import * as THREE from 'three'
 import { gladeZoneGround, bowlAtVertex, GLADE_FRAME } from './glade-cluster'
-import { mateAt } from './cluster'
+import { mateAt, type Frame } from './cluster'
+import { MOONWELL } from './moonwell'
+import { poolEdge, POOL_SEGS, POOL_Y } from './moonwell-water'
 import { cleanEdits, cleanWaters, ponds, type PondCell, type TileEdits, type WaterMap } from './wilds-edits'
 import { publishedZones } from './zone-parts'
 import { cleanProps, type Prop } from '../../world/builder-props'
 import type { Zone } from '../../world/builder-zones'
-import { gladeDeltaAt, sampleGladeBase, GLADE_BRUSH_TILE, GLADE_LAYER_TILE, GLADE_N } from '../../world/glade-builder'
+import { gladeDeltaAt, sampleGladeBase, GLADE_BRUSH_TILE, GLADE_LAYER_TILE, GLADE_N, GLADE_CELL, GLADE_SIZE, GLADE_TILE_CENTER } from '../../world/glade-builder'
 
 /** M84 s3: `zones` = the published building zones that have a build (zone-parts.ts draws them, with collision); absent = none */
 export interface GladeLayer { edits: TileEdits | null; water: WaterMap | null; zones?: Zone[]; /** M153 s1a: the published scenery (scenery.ts), absent = none */ props?: Prop[] }
@@ -65,11 +67,48 @@ export function liftGeometry(g: THREE.BufferGeometry, lift: (x: number, z: numbe
   return g
 }
 
+const PONDS = new WeakMap<GladeLayer, PondCell[]>()
+let baseSample: ReturnType<typeof sampleGladeBase> | null = null   // the Glade as built, sampled once (Fly asks every brush tick)
 /** The painted water's wet cells (tile-local i, j and the level), over the base + edits. Empty when nothing is painted. */
 export function gladePonds(layer: GladeLayer, base: (x: number, z: number) => number = gladeZoneGround): PondCell[] {
   if (!layer.water) return []
-  const { h, voidV, voided } = sampleGladeBase(base)
+  const own = base === gladeZoneGround, hit = own && PONDS.get(layer); if (hit) return hit
+  const s = own ? (baseSample ??= sampleGladeBase(base)) : sampleGladeBase(base), { voidV, voided } = s, h = Float32Array.from(s.h)
   if (layer.edits) for (const k in layer.edits) { const n = +k; if (n >= 0 && n < GLADE_N * GLADE_N && !voidV[n]) h[n] += layer.edits[k] / 10 }
   // a cell with a void corner is not the Glade's land: no water hangs over the cloud
-  return ponds(GLADE_BRUSH_TILE, h, layer.water).cells.filter(c => !voided[c.j * (GLADE_N - 1) + c.i])
+  const cells = ponds(GLADE_BRUSH_TILE, h, layer.water).cells.filter(c => !voided[c.j * (GLADE_N - 1) + c.i])
+  if (own) PONDS.set(layer, cells)   // the water and the trees read one answer
+  return cells
+}
+
+/** GladeWater draws a painted cell this far under its level */
+export const GLADE_WATER_DROP = 0.05
+const TRUNK = 0.32
+/** Is this spot's ground under the layer's water, as drawn: a painted cell's sheet, or the Moonwell's (moonwell-water.ts). */
+export function gladeWet(layer: GladeLayer): (x: number, z: number) => boolean {
+  const ground = gladeLayerGround(layer.edits), cx = GLADE_N - 1, h = GLADE_SIZE / 2
+  const top = new Map(gladePonds(layer).map(c => [c.j * cx + c.i, c.y - GLADE_WATER_DROP]))
+  let edge: ReturnType<typeof poolEdge> | null = null
+  const inPool = (x: number, z: number) => {
+    const dx = x - MOONWELL.x, dz = z - MOONWELL.z, d = Math.hypot(dx, dz); if (d > 60) return false
+    edge ??= poolEdge(ground)
+    const a = ((Math.atan2(dz, dx) / (Math.PI * 2)) * POOL_SEGS + POOL_SEGS) % POOL_SEGS, k = Math.floor(a), f = a - k
+    return d <= edge[k % POOL_SEGS].r * (1 - f) + edge[(k + 1) % POOL_SEGS].r * f
+  }
+  return (x, z) => {
+    const t = top.get(Math.floor((z - GLADE_TILE_CENTER.z + h) / GLADE_CELL) * cx + Math.floor((x - GLADE_TILE_CENTER.x + h) / GLADE_CELL))
+    const pool = inPool(x, z); if (t === undefined && !pool) return false
+    const g = ground(x, z)
+    return (t !== undefined && g < t) || (pool && g < POOL_Y)
+  }
+}
+const FRAMES = new WeakMap<GladeLayer, Frame>()
+/** BETA M160: the Glade as a cluster frame under this layer: a generated tree whose foot is in the water is not in its list, so nothing
+ *  that reads the frame's trees has it. Nothing wet = GLADE_FRAME itself. Per layer, so water lowered or dried brings the tree back. */
+export function gladeFrame(layer: GladeLayer): Frame {
+  const hit = FRAMES.get(layer); if (hit) return hit
+  const m = GLADE_FRAME.meadow, wet = gladeWet(layer), treeNo: number[] = []
+  m?.trees.forEach((t, k) => { if (![[0, 0], [TRUNK, 0], [-TRUNK, 0], [0, TRUNK], [0, -TRUNK]].some(([dx, dz]) => wet(t.x + dx, t.z + dz))) treeNo.push(k) })
+  const f = !m || treeNo.length === m.trees.length ? GLADE_FRAME : { ...GLADE_FRAME, meadow: { ...m, trees: treeNo.map(k => m.trees[k]), treeNo } }
+  FRAMES.set(layer, f); return f
 }

@@ -31,6 +31,7 @@ export interface Meadow {
   kind: Uint8Array                           // per cell: 0 grass, 1 path, 2 the square
   island: Uint8Array                         // per cell: 1 = a garden island's own ground (drawn by its island)
   trees: Tree[]
+  treeNo?: number[]                          // M160: each tree's number in the full list, when some are left out (its tint goes by it)
 }
 
 // three.js rotation.y: world = centre + (c·x + s·z, −s·x + c·z)

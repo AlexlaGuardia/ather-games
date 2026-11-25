@@ -62,6 +62,7 @@ function meadowGeometry(m: Meadow): THREE.BufferGeometry {
   return g
 }
 
+const CROWNS = { meadowCrowns: true }   // M160: the drawn-tree probe (moonwell-quest.tsx)
 function MeadowTrees({ m, lift }: { m: Meadow; lift?: Lift | null }) {
   const trunk = useRef<THREE.InstancedMesh>(null), crown = useRef<THREE.InstancedMesh>(null)
   useEffect(() => {
@@ -71,7 +72,8 @@ function MeadowTrees({ m, lift }: { m: Meadow; lift?: Lift | null }) {
       const ty = t.y + (lift ? lift(t.x, t.z) : 0)
       p.set(t.x, ty + 1.4, t.z); s.set(1, 2.8, 1); trunk.current!.setMatrixAt(k, mtx.compose(p, q, s))
       p.set(t.x, ty + 2.4 + t.tall / 2, t.z); s.set(t.r, t.tall, t.r); crown.current!.setMatrixAt(k, mtx.compose(p, q, s))
-      c.set('#79ad5a').offsetHSL(((k * 0.07) % 0.05) - 0.025, 0, ((k * 0.11) % 0.1) - 0.05)
+      const no = m.treeNo?.[k] ?? k   // M160: a tree left out never retints the rest
+      c.set('#79ad5a').offsetHSL(((no * 0.07) % 0.05) - 0.025, 0, ((no * 0.11) % 0.1) - 0.05)
       crown.current!.setColorAt(k, c)
     })
     trunk.current!.instanceMatrix.needsUpdate = true; crown.current!.instanceMatrix.needsUpdate = true
@@ -84,7 +86,7 @@ function MeadowTrees({ m, lift }: { m: Meadow; lift?: Lift | null }) {
       <instancedMesh key={`t${m.trees.length}`} frustumCulled={false} ref={trunk} args={[undefined, undefined, m.trees.length]}>
         <cylinderGeometry args={[0.24, 0.32, 1, 6]} /><meshLambertMaterial color="#7a5c40" flatShading />
       </instancedMesh>
-      <instancedMesh key={`c${m.trees.length}`} frustumCulled={false} ref={crown} args={[undefined, undefined, m.trees.length]}>
+      <instancedMesh key={`c${m.trees.length}`} frustumCulled={false} ref={crown} userData={CROWNS} args={[undefined, undefined, m.trees.length]}>
         <coneGeometry args={[1, 1, 7]} /><meshLambertMaterial flatShading />
       </instancedMesh>
     </>
