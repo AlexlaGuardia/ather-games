@@ -19,6 +19,7 @@ import { setGladePeople } from '../src/app/shimmer/open/ather/glade-people'   //
 import { parseTut, TOUR, GUIDES, type Stop } from '../src/app/shimmer/open/ather/glade-tutorial'
 import { friendStart, nodeBeside, type Talker } from '../src/app/shimmer/open/ather/glade-friend-talk'
 import { fennelStart, fennelScript } from '../src/app/shimmer/open/ather/glade-fennel-talk'
+import { hasStick } from '../src/app/shimmer/open/ather/rinquest'
 import { gladeNodes } from '../src/app/shimmer/open/ather/glade-nodes'
 import { parseGladeLayer } from '../src/app/shimmer/open/ather/glade-layer'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -99,11 +100,11 @@ async function open(seed?: Record<string, unknown>, born = false) {
   const at = async (id: string) => gladeKeepers().find(x => x.id === id) ?? ((await p.evaluate(() => (window as any).__glade?.folk ?? [])) as any[]).find(x => x.id.endsWith(`:${id}`))
   const friend = async (id: string) => {
     for (let k = 0; k < 4; k++) {
-      const f = await at(id), t0 = parseTut(await tut())!
+      const f = await at(id), t0 = parseTut(await tut())!, q0 = await p.evaluate(() => (window as any).__rinquest?.quest?.() ?? null) as any
       if (!f) { await sleep(1500); continue }
       const x = f.x + Math.sin(f.yaw) * 1.8, z = f.z + Math.cos(f.yaw) * 1.8, yaw = Math.atan2(-(f.x - x), -(f.z - z))
       await A('gladeAt', x, z, yaw); await sleep(1500); await A('look', yaw, gladeKeepers().some(x => x.id === id) ? -0.15 : -0.55); await sleep(1200)
-      await p.keyboard.press('KeyE'); if (await poll(async () => (await opts()).length > 0, 5000)) { const r = await read(); await p.keyboard.press('Escape'); await sleep(300); const t = await tut(), want = id === 'fennel' ? fennelScript(fennelStart(t0, false, 0)) : friendStart(t0, id as Talker, nodeBeside(id as Talker, f, nodes)).script
+      await p.keyboard.press('KeyE'); if (await poll(async () => (await opts()).length > 0, 5000)) { const r = await read(); await p.keyboard.press('Escape'); await sleep(300); const t = await tut(), want = id === 'fennel' ? fennelScript(fennelStart(t0, !!q0 && hasStick(q0), 0)) : friendStart(t0, id as Talker, nodeBeside(id as Talker, f, nodes)).script
         if (t?.heard.includes(id) || t?.met?.includes(id)) { ok(r.ls.join('|') === want.map(L).join('|'), `${id}: the signed lines in order (${r.ls.length}/${want.length})${r.ls.join('|') === want.map(L).join('|') ? '' : ' ' + r.ls.join(' | ')}`); return true } }
     }
     return false
