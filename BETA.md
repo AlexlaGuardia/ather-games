@@ -227,6 +227,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-25 06:5x Alex: "yea looks good" (to the hub: walk v16 / ground flicker; read as the v16 water, the flicker test was NOT answered) · heading to work, push at 09 / 11 / 13
 - 11-25 Alex ("yea sounds good to me", to the hub's rooms + tour order + lane order): rooms confirmed (Bonn Carpentry, Otto Stonery, Tess Rinnshop, Greg Cooking); tour order Bonn > Otto > Tess > Fennel > Greg, each friend's Moglin right after -> M155
 - 11-25 06:1x Alex published Glade v15 (committed; live == draft == file); the Glade sweep runs on v15, pool by Greg still M157 (its edit has filled the bowl: walker 1.9 m where the bowl is 0.2)
 - 11-25 Alex: "thats it for now, lets fix the party stuff first.. other than that its moonwell stuff that i need to fix like i had tried to sculpt water but forgot to use the water tool so now the place looks wierd plus there is a "pond" i think that is near greg thats not solid and when i edited the map it mad it worse lol like a hill i can walk right into" -> M156 (next free lane, before M151), M157
