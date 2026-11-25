@@ -1,7 +1,12 @@
 // BETA M153 s1a+: the filler shapes. Run: npx tsx src/app/shimmer/open/ather/scenery-filler.test.ts
-import { FILLER, SCENERY_BY, TILT_MAX, endSnap, fenceTilt, isSolid, sceneryBoxes, sceneryPlaced, turned } from './scenery'
+import { floats, floatSpot, FILLER, SCENERY_BY, TILT_MAX, endSnap, fenceTilt, isSolid, sceneryBoxes, sceneryPlaced, turned } from './scenery'
 import * as THREE from 'three'
 import { FILLER_IDS, fillerGeometry, tiltMatrix } from './scenery-filler'
+import { gladeLayerGround, gladeWaterAt, gladeWet, GLADE_WATER_DROP } from './glade-layer'
+import { paintWater } from './wilds-edits'
+import { MOONWELL } from './moonwell'
+import { POOL_Y } from './moonwell-water'
+import { GLADE_BRUSH_TILE } from '../../world/glade-builder'
 import type { Prop } from '../../world/builder-props'
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
@@ -64,4 +69,29 @@ for (const k of ['fence', 'fence-corner']) for (const q of [0, 1, 2, 3, 0.5, 1.7
 ok(put(P('fence'), x => (x > 10.5 ? NaN : 0)).tilt === undefined && sceneryPlaced([P('fence')], () => NaN).length === 0, 'an end off the land: level; off the land: not drawn')
 for (const k of ['rock-large', 'sign', 'log-fallen', 'reeds']) ok(put(P(k), hill).tilt === undefined && put(P(k), hill).y === hill(10, 20), `${k} never leans`)
 { const p = put(P('fence', { solid: false }), hill); ok(!!p.tilt && sceneryBoxes([p]).length === 0, 'a walk-through fence leans and does not block') }
+// ── M168 s2: water lilies lie on water, only there ──
+{ const W = (x: number): number | null => (x < 12 ? 1.5 : x < 20 ? 2.5 : null), L = P('lily-pads', { solid: true })
+  ok(sceneryPlaced([L], () => -3, undefined, W)[0].y === 1.5 && sceneryPlaced([L], () => -3, undefined, () => 4)[0].y === 4, 'a lily lies on the surface, not the ground, and follows the level')
+  ok(sceneryPlaced([L], () => 3).length === 0 && sceneryPlaced([L, P('reeds', { id: 'p2' })], () => 3, undefined, () => null).map(p => p.k).join() === 'filler:reeds', 'no water: not drawn; the rest is')
+  ok(!isSolid(L) && sceneryBoxes([{ ...L, y: 1 }]).length === 0, 'never solid, whatever the piece says')
+  ok(put(P('reeds'), () => 3).y === 3 && sceneryPlaced([P('reeds')], () => 3, undefined, () => 9)[0].y === 3, 'nothing else floats')
+  const sp = (x: number, s = 1, k = 'lily-pads') => floatSpot({ k: `filler:${k}`, x, z: 0, s }, W)
+  ok(sp(5) === 1.5 && sp(16) === 2.5 && sp(25) === null, 'it goes on water, not on land')
+  ok(sp(11.5) === null && sp(19.5) === null && sp(11.5, 1, 'water-lily') === 1.5, 'not over a step in the water or the shore; a small one fits nearer')
+  ok(sp(10, 1) === 1.5 && sp(10, 3) === null, 'size counts')
+  ok(FILLER_IDS.filter(i => floats({ k: `filler:${i}` })).sort().join() === 'lily-pads,water-lily', 'the two lilies float')
+  for (const id of ['lily-pads', 'water-lily']) { const b = fillerGeometry(id).boundingBox!; ok(b.min.y >= -0.04 && b.max.y > 0.02, `${id}: lies at the surface (${b.min.y.toFixed(2)} to ${b.max.y.toFixed(2)})`) }
+  { const g = fillerGeometry('lily-pads'), p = g.getAttribute('position'), n = g.getAttribute('normal'); let down = 0; let up = 0; for (let k = 0; k < p.count; k += 3) if (p.getY(k) > 0.01 && p.getY(k + 1) > 0.01 && p.getY(k + 2) > 0.01) { if (n.getY(k) < 0.5) down++; else up++ }; ok(down === 0 && up > 50, 'the pads face up') }
+}
+// the layer's own water: the Moonwell, the draft's painted cells, none on the bank
+{ const L = { edits: null, water: null }, w = gladeWaterAt(L), wet = gladeWet(L)
+  ok(w(MOONWELL.x, MOONWELL.z) === POOL_Y && wet(MOONWELL.x, MOONWELL.z) && w(MOONWELL.x + 40, MOONWELL.z) === null && floatSpot({ k: 'filler:water-lily', x: MOONWELL.x, z: MOONWELL.z, s: 1 }, w) === POOL_Y, 'the Moonwell: its sheet')
+  const cx = -100, cz = 130, d = paintWater([GLADE_BRUSH_TILE], cx, cz, 16, 3), cells = Object.values(d)[0] ?? {}
+  const at = (dm: number) => gladeWaterAt({ edits: null, water: Object.fromEntries(Object.keys(cells).map(k => [k, dm])) })
+  const g = gladeLayerGround(null)(cx, cz), lv = (m: number) => Math.round((g + m) * 10)
+  ok(Object.keys(cells).length > 3 && near(at(lv(1))(cx, cz)!, lv(1) / 10 - GLADE_WATER_DROP, 1e-6) && near(at(lv(2))(cx, cz)!, lv(2) / 10 - GLADE_WATER_DROP, 1e-6), 'painted water: its drawn surface, at any level')
+  ok(at(lv(-1))(cx, cz) === null && gladeWaterAt({ edits: null, water: {} })(cx, cz) === null, 'under the ground, or erased: none')
+  const pool = Object.values(paintWater([GLADE_BRUSH_TILE], MOONWELL.x, MOONWELL.z, 8, 0))[0] ?? {}, hi = gladeWaterAt({ edits: null, water: Object.fromEntries(Object.keys(pool).map(k => [k, Math.round((POOL_Y + 0.5) * 10)])) })
+  ok(hi(MOONWELL.x, MOONWELL.z)! > POOL_Y + 0.3, 'two sheets: the higher one is the surface')
+}
 console.log(fails ? `\n${fails} FAILED` : '\nall pass'); process.exit(fails ? 1 : 0)

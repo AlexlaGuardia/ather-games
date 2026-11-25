@@ -21,10 +21,11 @@ export type SceneryGroup = 'Nodes' | 'Rooms' | 'Trees' | 'Bushes' | 'Plants' | '
 export const SCENERY_GROUPS: readonly SceneryGroup[] = ['Nodes', 'Rooms', 'Trees', 'Bushes', 'Plants', 'Rocks and logs', 'Fences and signs', 'Crystals', 'Props', 'Furniture']
 /** w, d, h = its size at scale 1 (m); `box` = the part that blocks (a tree's trunk), absent = the whole size; `fit` = model height.
  *  `panel` = long and thin: off the axes it blocks as a chain. `arms` = it blocks as these (local centres, each a panel) instead.
+ *  `floats` = it lies on water, only there, and never blocks (floatSpot).
  *  `ends` = local points where a piece of the same family joins on (endSnap) */
 export interface SceneryKind {
   k: string; group: SceneryGroup; label: string
-  w: number; d: number; h: number; solid: boolean
+  w: number; d: number; h: number; solid: boolean; floats?: true
   box?: { w: number; d: number; h: number }; panel?: boolean
   arms?: readonly { x: number; z: number; w: number; d: number; h: number }[]; ends?: readonly (readonly [number, number])[]
   model: { glb: string; fit: number; look?: string; yaw?: number; glow?: number } | { crystal: string } | { piece: string } | { filler: string } | { node: string } | { room: GladeRoom }
@@ -52,6 +53,8 @@ export const FILLER: Readonly<Record<string, Omit<SceneryKind, 'k' | 'model'>>> 
   'flowers-white': { group: 'Plants', label: 'White flowers', w: 0.75, d: 0.75, h: 0.46, solid: false },
   'flowers-yellow': { group: 'Plants', label: 'Yellow flowers', w: 0.75, d: 0.75, h: 0.46, solid: false },
   'flowers-violet': { group: 'Plants', label: 'Violet flowers', w: 0.75, d: 0.75, h: 0.46, solid: false },
+  'lily-pads': { group: 'Plants', label: 'Lily pads', w: 1.9, d: 1.6, h: 0.04, solid: false, floats: true },
+  'water-lily': { group: 'Plants', label: 'Water lily', w: 0.9, d: 0.9, h: 0.26, solid: false, floats: true },
   reeds: { group: 'Plants', label: 'Reeds', w: 1.3, d: 1.35, h: 1.72, solid: false },
   'rock-small': { group: 'Rocks and logs', label: 'Small rock', w: 0.5, d: 0.42, h: 0.3, solid: false },
   'rock-medium': { group: 'Rocks and logs', label: 'Rock', w: 1.4, d: 1.1, h: 0.8, solid: true, box: { w: 1, d: 0.85, h: 0.75 } },
@@ -86,7 +89,20 @@ export const SCENERY: readonly SceneryKind[] = [
     return { k: `piece:${id}`, group: 'Furniture', label: f.name, w: f.w, d: f.d, h: f.h, solid: f.solid, panel: f.panel, model: { piece: id } } }),
 ]
 export const SCENERY_BY: ReadonlyMap<string, SceneryKind> = new Map(SCENERY.map(s => [s.k, s]))
-export const isSolid = (p: Pick<Prop, 'k' | 'solid'>) => p.solid ?? SCENERY_BY.get(p.k)?.solid ?? false
+export const isSolid = (p: Pick<Prop, 'k' | 'solid'>) => { const K = SCENERY_BY.get(p.k); return K?.floats ? false : p.solid ?? K?.solid ?? false }
+
+/** M168 s2: the water over a spot (its surface's y), null = none (glade-layer gladeWaterAt) */
+export type Water = (x: number, z: number) => number | null
+export const floats = (p: Pick<Prop, 'k'>) => !!SCENERY_BY.get(p.k)?.floats
+/** how far out from its middle a floating piece asks for water, as a share of its size, and how level that water must be (m) */
+const FLOAT_RIM = 0.4, FLOAT_LEVEL = 0.03
+/** may a floating piece be put here: water under its middle and round its rim, all one level (null = no, else that level) */
+export function floatSpot(p: Pick<Prop, 'k' | 'x' | 'z' | 's'>, water: Water): number | null {
+  const K = SCENERY_BY.get(p.k), y = water(p.x, p.z); if (!K || y === null) return null
+  const r = Math.max(K.w, K.d) * p.s * FLOAT_RIM
+  for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4, v = water(p.x + Math.cos(a) * r, p.z + Math.sin(a) * r); if (v === null || Math.abs(v - y) > FLOAT_LEVEL) return null }
+  return y
+}
 
 /** a local offset turned by q quarter turns (the drawn piece's own turn: rotation-y = -q * 90 degrees) */
 export function turned(x: number, z: number, q: number): [number, number] { const a = q * Math.PI / 2, c = Math.cos(a), s = Math.sin(a); return [x * c - z * s, x * s + z * c] }
@@ -126,10 +142,12 @@ export const tiltGrad = (p: Pick<PlacedProp, 'q' | 'tilt'>): [number, number] =>
 
 /** a piece standing on the ground; `low` = a room's: how deep its plinth goes; `tilt` = a fence on a slope (fenceTilt), absent on the level */
 export interface PlacedProp extends Prop { y: number; low?: number; tilt?: readonly [number, number] }
-/** `ground` = what pieces stand on (glade-pads padGround), `land` = the bare land: a room stands level on the highest of it */
-export function sceneryPlaced(props: readonly Prop[], ground: (x: number, z: number) => number, land = ground): PlacedProp[] {
+/** `ground` = what pieces stand on (glade-pads padGround), `land` = the bare land: a room stands level on the highest of it. A floating
+ *  piece lies on `water` at its level; where the water is gone it is not drawn, and stays in the list until the water is back */
+export function sceneryPlaced(props: readonly Prop[], ground: (x: number, z: number) => number, land = ground, water: Water = () => null): PlacedProp[] {
   const out: PlacedProp[] = []
   for (const p of props) { if (!SCENERY_BY.has(p.k)) continue
+    if (floats(p)) { const y = water(p.x, p.z); if (y !== null) out.push({ ...p, y }); continue }
     const r = isRoom(p) ? roomPad(p) : null; if (r) { const v = padLevel(r, land); if (Number.isFinite(v.top)) out.push({ ...p, y: v.top, low: v.low }); continue }
     const t = fenceTilt(p, ground); if (t) { out.push({ ...p, ...t }); continue }
     const y = ground(p.x, p.z); if (Number.isFinite(y)) out.push({ ...p, y }) }

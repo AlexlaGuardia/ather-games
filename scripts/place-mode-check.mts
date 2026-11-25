@@ -7,6 +7,7 @@
 import puppeteer, { type Page } from 'puppeteer-core'
 import { createHash } from 'crypto'
 import { mkdirSync } from 'fs'
+import { MOONWELL } from '../src/app/shimmer/open/ather/moonwell'
 import { SCENERY, SCENERY_BY } from '../src/app/shimmer/open/ather/scenery'
 import { parseGladeLayer, gladeLayerGround } from '../src/app/shimmer/open/ather/glade-layer'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -129,7 +130,8 @@ try {
     for (const [k, dx, y, dz] of [['reeds', -7, 0, 0], ['reeds', -5.4, -0.1, 0.4], ['reeds', -1, -0.05, 0], ['reeds', 4.6, -0.15, 0], ['reeds', 6, 0, 0], ['rock-large', -10, 0.1, 0], ['rock-medium', 2, 0.1, 0], ['rock-small', 3.4, 0.1, -0.6], ['rock-small', -3, 0.1, -0.4], ['log-fallen', -3, 0.2, -2.4], ['stump', 1.2, 0.2, -3], ['grass-tall', -6, 0.2, -1.2], ['grass-tall', 0.4, 0.2, -1], ['grass-tall', 5, 0.2, -1.8], ['flowers-white', -1, 0.2, -3.8], ['flowers-yellow', 3, 0.2, -2.6], ['flowers-violet', -5, 0.2, -3.4], ['flowers-white', 6, 0.2, -3], ['sign', 7.5, 0.2, -3.4]] as [string, number, number, number][])
       { const z = at(SH.x + dx, y); if (Number.isFinite(z)) await put(`filler:${k}`, SH.x + dx, z + dz) }
     await put('tree:grove', SH.x - 12, SH.z - 6); await put('tree:pale', SH.x + 11, SH.z - 5); await put('bush:sunfruit-bush', SH.x + 8.5, at(SH.x + 8, 0.2) - 1)
-    let n1 = 0; for (const s of SCENERY) if (!all.has(s.k)) { let x = 0, z = 0; do { x = AT.x - 12 + (n1 % 9) * 4; z = AT.z + 18 + Math.floor(n1 / 9) * 4; n1++ } while (!Number.isFinite(G0(x, z))); await put(s.k, x, z) }
+    let n1 = 0, nf = 0; for (const s of SCENERY) if (!all.has(s.k)) { if (s.floats) { await put(s.k, MOONWELL.x + 4 * nf++, MOONWELL.z); continue }   // M168 s2: a lily goes on water only
+      let x = 0, z = 0; do { x = AT.x - 12 + (n1 % 9) * 4; z = AT.z + 18 + Math.floor(n1 / 9) * 4; n1++ } while (!Number.isFinite(G0(x, z))); await put(s.k, x, z) }
     const pa = await props(o), kinds = new Set(pa.map(p => p.k))
     ok(SCENERY.every(s => kinds.has(s.k)), `6b. every kind in the palette placed (${kinds.size} of ${SCENERY.length}; ${pa.length - n0} more pieces)`)
     await sleep(5000); const sd = await o.evaluate(() => (window as W).__scenery()) as any

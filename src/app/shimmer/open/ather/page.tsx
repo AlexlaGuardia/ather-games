@@ -88,7 +88,7 @@ import { padGround } from './glade-pads'   // M153 s1c-2
 import { GladeCluster, gladeFolkDrawn } from './glade-cluster-view'   // M67 s1a: the closed Glade's keepers, Moglins, Greg's marker
 import { GLADE_FRAME, GLADE_OWNED, GLADE_TILE, GLADE_ZONE_NAME, GLADE_GATE, gladeNewbornSpot, gladeWhere, gregInGlade, gladeKeepers, gladeClusterSpot } from './glade-cluster'   // M40: the green, the five's lots + stations, Greg's jetty
 import { whenGladePeopleKnown } from './glade-people'
-import { gladeLayerGround, gladeLift, gladeFrame } from './glade-layer'
+import { gladeLayerGround, gladeLift, gladeFrame, gladeWaterAt } from './glade-layer'
 import { useGladeLayer, GladeWater } from './glade-layer-view'   // M83 s2b: the Glade's published builder layer
 import { zoneParts, zonePartBoxes, withZoneParts, publishedZones } from './zone-parts'   // M84 s3: published zone builds (drawn + solid)
 import { ZonePartsView } from './zone-parts-view'
@@ -450,7 +450,7 @@ function AtherSliceGame() {
   const gladeLand = useMemo(() => gladeLayerGround(gladeLayer.edits), [gladeLayer]), gladeZoneGround = useMemo(() => padGround(gladeLayer.props, gladeLand), [gladeLayer, gladeLand])   // M153 s1c-2: the land; what stands also stands on a moved house's pad
   const gladeMeshLift = useMemo(() => gladeLift(gladeLayer.edits), [gladeLayer])
   const gladeParts = useMemo(() => zoneParts(gladeLayer.zones ?? [], gladeLand), [gladeLayer, gladeLand])   // M84 s3
-  const gladeScenery = useMemo(() => sceneryPlaced(gladeLayer.props ?? [], gladeZoneGround, gladeLand), [gladeLayer, gladeZoneGround, gladeLand])   // M153 s1a
+  const gladeScenery = useMemo(() => sceneryPlaced(gladeLayer.props ?? [], gladeZoneGround, gladeLand, gladeWaterAt(gladeLayer)), [gladeLayer, gladeZoneGround, gladeLand])   // M153 s1a
   const gladeOwnNodes = useMemo(() => gladeNodes(gladeLayer.props ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround]), gladeDecor = useMemo(() => gladeScenery.filter(p => !isNode(p)), [gladeScenery])   // M153 s1b
   // M114 s2: each tagged zone's ONE E point (zone-tags.ts: front edge; locked / shop panel / home label + talk / supplier line)
   const gladeDoors = useMemo(() => (gladeLayer.zones ?? []).flatMap(z => { const u = zoneUse(z); return u ? [{ id: z.id, ...zoneDoor(z), u }] : [] }), [gladeLayer])

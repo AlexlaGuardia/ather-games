@@ -88,10 +88,10 @@ export function gladePonds(layer: GladeLayer, base: (x: number, z: number) => nu
 /** GladeWater draws a painted cell this far under its level */
 export const GLADE_WATER_DROP = 0.05
 const TRUNK = 0.32
-/** Is this spot's ground under the layer's water, as drawn: a painted cell's sheet, or the Moonwell's (moonwell-water.ts). */
-export function gladeWet(layer: GladeLayer): (x: number, z: number) => boolean {
+/** The layer's water over this spot, as drawn (its surface's y; null = none): a painted cell's sheet, or the Moonwell's (moonwell-water.ts). */
+export function gladeWaterAt(layer: GladeLayer): (x: number, z: number) => number | null {
   const ground = gladeLayerGround(layer.edits), cx = GLADE_N - 1, h = GLADE_SIZE / 2
-  const top = new Map(gladePonds(layer).map(c => [c.j * cx + c.i, c.y - GLADE_WATER_DROP]))
+  let top: Map<number, number> | null = null
   let edge: ReturnType<typeof poolEdge> | null = null
   const inPool = (x: number, z: number) => {
     const dx = x - MOONWELL.x, dz = z - MOONWELL.z, d = Math.hypot(dx, dz); if (d > 60) return false
@@ -100,12 +100,16 @@ export function gladeWet(layer: GladeLayer): (x: number, z: number) => boolean {
     return d <= edge[k % POOL_SEGS].r * (1 - f) + edge[(k + 1) % POOL_SEGS].r * f
   }
   return (x, z) => {
+    top ??= new Map(gladePonds(layer).map(c => [c.j * cx + c.i, c.y - GLADE_WATER_DROP]))
     const t = top.get(Math.floor((z - GLADE_TILE_CENTER.z + h) / GLADE_CELL) * cx + Math.floor((x - GLADE_TILE_CENTER.x + h) / GLADE_CELL))
-    const pool = inPool(x, z); if (t === undefined && !pool) return false
+    const pool = inPool(x, z); if (t === undefined && !pool) return null
     const g = ground(x, z)
-    return (t !== undefined && g < t) || (pool && g < POOL_Y)
+    const y = Math.max(t !== undefined && g < t ? t : -Infinity, pool && g < POOL_Y ? POOL_Y : -Infinity)
+    return y > -Infinity ? y : null
   }
 }
+/** Is this spot's ground under the layer's water, as drawn. */
+export function gladeWet(layer: GladeLayer): (x: number, z: number) => boolean { const w = gladeWaterAt(layer); return (x, z) => w(x, z) !== null }
 /** how clear of a moved house a trunk must be (m) */
 const TREE_CLEAR = 1
 const FRAMES = new WeakMap<GladeLayer, Frame>()

@@ -25,6 +25,7 @@ import type { FlyTile } from './BuilderFly'
 import { STRENGTH_MIN, STRENGTH_MAX, stepStrength } from './fly-cam'
 const BuilderFly = dynamic(() => import('./BuilderFly'), { ssr: false })   // M83 s1b: three only loads when Fly is opened
 import { AUTOSAVE_MS, savedAgo, type Layer, type Index, type BuilderMap } from '../../world/builder'
+import { gladeWaterAt } from '../../open/ather/glade-layer'
 import { GLADE_BRUSH_TILE, GLADE_LAYER_TILE, GLADE_WATER_Y, sampleGladeBase, triLerp } from '../../world/glade-builder'
 import { gladeZoneGround } from '../../open/ather/glade-cluster'
 import { poolOver, POOL_Y } from '../../open/ather/moonwell-water'
@@ -577,7 +578,9 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     markDirty([PROPS_KEY]); setRev(r => r + 1)
   }, [])   // eslint-disable-line react-hooks/exhaustive-deps
   const placing = glade && view === 'fly' && brush === 'place'
-  const place = usePlace(placing, propList, setPropList, setStatus)
+  // M168 s2: the draft's water as drawn (a lily's level); worked out only when asked
+  const water = useMemo(() => gladeWaterAt({ edits: edits.current[GLADE_LAYER_TILE] ?? null, water: edits.current[WATER_PREFIX + GLADE_LAYER_TILE] ?? null }), [rev])   // eslint-disable-line react-hooks/exhaustive-deps
+  const place = usePlace(placing, propList, setPropList, setStatus, water)
   useEffect(() => { if (view !== 'fly' && brush === 'place') setBrush('raise') }, [view, brush])
   useEffect(() => { if (view !== 'fly') setFull(false) }, [view])
   // keys: 1-8 brush, V void erase/paint, [ ] radius, F fullscreen fly, Esc leave it, ctrl+z / ctrl+shift+z / ctrl+y, ctrl+s

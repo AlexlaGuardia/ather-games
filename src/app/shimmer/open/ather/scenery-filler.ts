@@ -128,9 +128,25 @@ function flowers(petal: string, heart: string, seed: number): G {
   return join([...heads, ...leaves])
 }
 
+// ── M168 s2: water lilies (y 0 = the water's surface): round notched pads with a pale rim and a low skirt; a cup of pointed petals
+function pad(r: () => number, rad: number, x: number, z: number, yaw: number): G[] {
+  const notch = 0.5, n = 13, top = new THREE.CircleGeometry(rad, n, notch / 2, Math.PI * 2 - notch).rotateX(-Math.PI / 2), p = top.getAttribute('position')
+  for (let k = 1; k < p.count; k++) { const m = 0.96 + r() * 0.06; p.setXYZ(k, p.getX(k) * m, 0.026 + r() * 0.008, p.getZ(k) * m) }
+  p.setY(0, 0.016)
+  const rim: number[] = []
+  for (let k = 1; k < p.count - 1; k++) { const a = [p.getX(k), p.getY(k), p.getZ(k)], b = [p.getX(k + 1), p.getY(k + 1), p.getZ(k + 1)], s = 0.93; rim.push(...a, a[0] * s, -0.03, a[2] * s, ...b, ...b, a[0] * s, -0.03, a[2] * s, b[0] * s, -0.03, b[2] * s) }
+  const skirt = new THREE.BufferGeometry(); skirt.setAttribute('position', new THREE.Float32BufferAttribute(rim, 3)); skirt.setAttribute('normal', new THREE.Float32BufferAttribute(rim.length, 3)); skirt.setAttribute('uv', new THREE.Float32BufferAttribute(rim.length / 3 * 2, 2))
+  return [tone(top, '#5f9a56', r, 0.2), tone(skirt, '#9cc46c', r, 0.08)].map(g => g.rotateY(yaw).translate(x, 0, z))
+}
+function lilyPads(): G { const r = rng(53); return join([[0.5, -0.4, 0.12], [0.4, 0.5, -0.3], [0.33, 0.42, 0.46], [0.24, -0.1, -0.5], [0.17, -0.02, 0.66]].flatMap(([q, x, z], k) => pad(r, q, x, z, k * 2.1 + r()))) }
+function waterLily(): G {
+  const r = rng(59), petals = (n: number, len: number, up: number, hex: string, off: number) => Array.from({ length: n }, (_, k) => tone(new THREE.OctahedronGeometry(len / 2, 0).scale(1, 0.22, 0.5).translate(len / 2, 0, 0).rotateZ(up).translate(0.02, 0.05, 0).rotateY((k + off) / n * Math.PI * 2), hex, r, 0.08))
+  return join([...pad(r, 0.45, 0, 0, 0.6), ...petals(9, 0.26, 0.42, '#e9b9cf', 0), ...petals(7, 0.24, 0.95, '#f7e6ee', 0.5), tone(new THREE.OctahedronGeometry(0.055, 0).translate(0.02, 0.1, 0), '#e6c877', r, 0.1)])
+}
+
 const MAKE: Readonly<Record<string, () => G>> = {
   'rock-small': () => rock('s'), 'rock-medium': () => rock('m'), 'rock-large': () => rock('l'),
-  'log-fallen': logFallen, stump, fence, 'fence-corner': fenceCorner, sign, reeds, 'grass-tall': grass,
+  'lily-pads': lilyPads, 'water-lily': waterLily, 'log-fallen': logFallen, stump, fence, 'fence-corner': fenceCorner, sign, reeds, 'grass-tall': grass,
   'flowers-white': () => flowers('#f4f1e6', '#e8b93c', 31), 'flowers-yellow': () => flowers('#f2c63d', '#9a5f22', 37), 'flowers-violet': () => flowers('#9a78d6', '#f0d27a', 41),
 }
 export const FILLER_IDS = Object.keys(MAKE)

@@ -25,7 +25,7 @@ import { GladeWater } from '../../open/ather/glade-layer-view'
 import { GLADE_LAYER_TILE } from '../../world/glade-builder'
 import { WATER_PREFIX } from '../../open/ather/wilds-edits'
 import { isPlace } from '../../world/builder-props'
-import { PlaceLayer, GladeFixed, useCentre, type PlaceApi } from './place-mode'   // M153 s1a
+import { PlaceLayer, GladeFixed, useCentre, aimed, type PlaceApi } from './place-mode'   // M153 s1a
 import { zonePartBoxes, type ZonePart } from '../../open/ather/zone-parts'
 
 export interface FlyTile { name: string; ox: number; oz: number; nx: number; nz: number; cell: number; sizeX: number; sizeZ: number; h: Float32Array; waterY: number
@@ -183,7 +183,7 @@ function Lock({ camRef, hover, painting, pr, setLocked }: { camRef: React.Mutabl
     const change = () => { const l = isLocked(); setLocked(l); pr.current.onLock?.(l); if (!l) { hover.current = null; if (painting.current) { painting.current = false; pr.current.onEnd() } } }
     const down = (e: PointerEvent) => {
       const P = pr.current.placing ? pr.current.place : undefined   // M153: Place mode always locks (the crosshair is the hand)
-      if (P && isLocked()) { const c = look(); if (e.button === 2 && c.ground) P.put(c.ground.x, c.ground.z); else if (e.button === 0 && c.id) P.pick(c.id); return }
+      if (P && isLocked()) { const c = look(); const to = aimed(c, P.hand); if (e.button === 2 && to) P.put(to.x, to.z); else if (e.button === 0 && c.id) P.pick(c.id); return }
       if (e.button !== 0 || (!pr.current.lockLook && !P)) return
       if (!isLocked()) { try { const r = el.requestPointerLock() as unknown; if (r && typeof (r as Promise<void>).catch === 'function') (r as Promise<void>).catch(() => {}) } catch { /* cooldown after an Esc */ } return }
       const p = centreHit.current(); if (!p) return
