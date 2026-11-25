@@ -69,6 +69,8 @@ try {
   const talk = async (id: string, name: string, ids: string[]) => {
     await faceAt(keepers[id], 2)
     ok(await poll(() => p.evaluate((n: string) => new RegExp(`E · ${n}`).test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]'), name), 15000), `2. ${name}: the prompt 'E · ${name}'`)
+    // the phone's 'use' button carries no name: the last friend's button can still be up through the warp, so wait for THIS friend to be the one in reach
+    ok(await poll(async () => { const n = await A(p, 'near') as { kind?: string; f?: string } | null; return n?.kind === 'friend' && n.f === id }, 15000), `2. ${name}: in reach`)
     await pressE(p)
     const seen: string[] = []
     for (const lid of ids) {
