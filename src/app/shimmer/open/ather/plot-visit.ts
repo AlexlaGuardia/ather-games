@@ -22,6 +22,16 @@ import type { Works } from './rooms'
 
 export const PLOT_ZONE = 'open:plot:'
 export const plotZone = (hostId: string) => PLOT_ZONE + hostId
+/** M156: where the party's roster says a keeper in the closed Glade is. A plot zone means STANDING ON a plot: it used to be said from
+ *  the Glade too, so a newborn with no garden was offered as a visit and the guest landed on a plot nobody hosts. */
+export const GLADE_LOBBY = 'open:glade'
+export const lobbyZoneOf = (o: { kind: 'plot' | 'wilds' | 'glade'; folded: boolean; arriving: boolean; visiting: string | null; self: string }): string =>
+  o.kind === 'wilds' ? 'open:wilds' : o.visiting ? plotZone(o.visiting) : o.kind === 'glade' ? GLADE_LOBBY : o.folded && !o.arriving ? plotZone(o.self) : ''
+/** M156: a visit is taken only to a host the roster has on their own plot. `home` null = not in the roster (yet): the roster lands a
+ *  moment after a page load and a host may be reloading, so it waits before it says no. */
+export const VISIT_GRACE_MS = 4_000, VISIT_ROSTER_MS = 12_000
+export const visitVerdict = (home: boolean | null, waitedMs: number): 'go' | 'wait' | 'no' =>
+  home ? 'go' : waitedMs < (home === false ? VISIT_GRACE_MS : VISIT_ROSTER_MS) ? 'wait' : 'no'
 /** the host's socket id from a plot zone, or null for any other zone */
 export function hostOfZone(zone: string | null | undefined): string | null {
   if (!zone || !zone.startsWith(PLOT_ZONE)) return null

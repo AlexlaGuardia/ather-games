@@ -25,6 +25,8 @@ import { useAccount } from '@/lib/accounts/use-account'
 import { FolkModel, folkLook, FOLK_HEIGHT } from './folk-model'
 import { HELD_KIND, heldDue, newHeldSend, decodeHeld } from './held-gun'   // BETA M27 slice 4
 import { gunProp } from './held-gun-prop'
+import { gaitOf, smoothSpeed, GAIT_WALK, type Gait } from './mate-gait'   // BETA M156: mates walk
+import { THIRD } from './third-person'
 
 export const OPEN_WILDS = 'open:wilds', OPEN_CONTINENT = 'open:continent'
 /** Peers drawn on the full rig; the rest are a capsule. */
@@ -125,6 +127,7 @@ function Peer({ peer, rig, seed }: { peer: RemotePlayer; rig: boolean; seed: num
   const g = useRef<THREE.Group>(null)
   // M27 slice 4: the gun they say they hold (none while stale); rarely changes, so a state is fine
   const [gun, setGun] = useState<string | null>(null), gunNow = useRef<string | null>(null)
+  const walk = useRef(0), speed = useRef(0), gaitNow = useRef<Gait>('idle'), [gait, setGait] = useState<Gait>('idle')   // M156 (state changes on a start / stop only: the folk rig reads it)
   useEffect(() => { if (gun) GUN_SHOWN.set(peer.id, gun); else GUN_SHOWN.delete(peer.id); return () => { GUN_SHOWN.delete(peer.id) } }, [gun, peer.id])
   const look = useMemo(() => folkLook(`keeper:${peer.id}`), [peer.id])
   // M29: a peer who sent a packed look draws as their own keeper (LOOK_SYNC; anything else keeps the folk rig)
@@ -137,16 +140,19 @@ function Peer({ peer, rig, seed }: { peer: RemotePlayer; rig: boolean; seed: num
     const want = stale ? null : (peerGuns.get(peer.id) ?? null)
     if (want !== gunNow.current) { gunNow.current = want; setGun(want) }
     if (stale) return
-    const k = 1 - Math.exp(-LERP * dt)
+    const k = 1 - Math.exp(-LERP * dt), wasX = peer.x, wasZ = peer.z
     peer.x += (peer.tx - peer.x) * k; peer.y += (peer.ty - peer.y) * k; peer.z += (peer.tz - peer.z) * k
+    speed.current = smoothSpeed(speed.current, Math.hypot(peer.x - wasX, peer.z - wasZ), dt)
+    const gt = gaitOf(gaitNow.current, speed.current, THIRD.RUN_AT)
+    if (gt !== gaitNow.current) { gaitNow.current = gt; walk.current = GAIT_WALK[gt]; setGait(gt) }
     let d = peer.tyaw - peer.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); peer.yaw += d * k
     o.position.set(peer.x, peer.y, peer.z)
     o.rotation.y = peer.yaw + Math.PI   // the sender's yaw 0 LOOKS down -Z; the body's front is +Z (play3d's flip)
   })
   return (
     <group ref={g}>
-      {rig && theirs ? <KeeperFigure look={theirs} gun={gun} />
-        : rig ? <FolkModel look={look} action={peer.moving ? 'talk' : 'idle'} seed={seed} speed={peer.moving ? 1.6 : 1} />
+      {rig && theirs ? <KeeperFigure look={theirs} gun={gun} walk={walk} />
+        : rig ? <FolkModel look={look} action={gait === 'idle' ? 'idle' : 'walk'} seed={seed} speed={gait === 'run' ? 1.6 : 1} />
         : <mesh position={[0, 0.85, 0]}><capsuleGeometry args={[0.3, 0.9, 4, 8]} /><meshLambertMaterial color={look.shirt} /></mesh>}
       {gun && !(rig && theirs) && <GunAt id={gun} />}
       <Html position={[0, FOLK_HEIGHT + 0.25, 0]} center distanceFactor={12} zIndexRange={[10, 0]}><Plate name={peer.name} /></Html>

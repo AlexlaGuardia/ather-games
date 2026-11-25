@@ -10,7 +10,7 @@
 //   4. upstairs: B set down on the upper floor STAYS one storey up (the upper level is ground in B's walk world)
 //   5. read-only: B's E at A's table is refused (one line, no panel); A's save still holds the table; B's own save is untouched
 //   5b. live: A picks its table up (real E + click): B's view loses it within seconds (slice 2)
-//   6. a stranger: no party = the visit link is refused; another party = no plot reaches them, home in ~15 s, A never sees them
+//   6. a stranger: no party = the visit link is refused; another party = refused, they never leave (M156), A never sees them
 //   7. B goes home (H, or the pill's Home button with --phone): B's own works again (the stool), socket back to open:plot:<B>
 //   8. 0 page errors
 // Hooks: __mp / __visit / __lobby / __ather.works|state READ; __ather.tp to set B down (as lift-check); real clicks + keys.
@@ -146,8 +146,8 @@ try {
   ok(log1.includes('refused:no-party') && !log1.some(e => e.startsWith('start:')) && (await ev(c, '__visit', 'visiting')) === false, `6. no party: the visit link is refused (${log1})`)
   await c.evaluate((o: string) => localStorage.setItem('ather:mp:party', o), OTHER)
   await load(c, `&visit=${idA}&vn=Host`)
-  ok(((await ev(c, '__visit', 'log')) as string[]).includes(`start:${idA}`), '6. another party: the visit starts…')
-  ok(await poll(async () => ((await ev(c, '__visit', 'log')) as string[]).includes('end:timeout'), 25000), `6. …no plot reaches them, home on the timeout (${await ev(c, '__visit', 'log')})`)
+  // M156: a host the guest's own party roster does not hold is refused before anyone leaves (it used to start, then time out on an empty plot)
+  ok(await poll(async () => ((await ev(c, '__visit', 'log')) as string[]).includes('refused:not-home'), 40000) && !((await ev(c, '__visit', 'log')) as string[]).some(e => e.startsWith('start:')), `6. another party: refused, they never leave their plot (${await ev(c, '__visit', 'log')})`)
   ok(((await ev(c, '__visit', 'net')) as any).got === 0 && (await ev(c, '__visit', 'visiting')) === false, '6. never got a snapshot, not visiting')
   const idC = await c.evaluate(() => localStorage.getItem('ather:mp:id'))
   ok(!((await ev(a, '__mp', 'peers')) as { id: string }[] ?? []).some(q => q.id === idC), '6. A never saw the stranger')

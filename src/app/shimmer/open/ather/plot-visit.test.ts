@@ -1,7 +1,7 @@
 // plot-visit.ts: zone naming, the chunked snapshot round trip (incl. upper levels), reassembly rules, the guest's read-only store.
 // Run: npx tsx src/app/shimmer/open/ather/plot-visit.test.ts
 import { plotZone, hostOfZone, packSnap, unpackSnap, chunk, Reassembly, isSnapPart, validSnap, CHUNK, MAX_PARTS, startVisit, endVisit,
-  setVisitSnap, currentVisit, isVisiting, guestRefuses, refusalCount, shownWorks, worksWritable, shownOwned, SendQueue, rideAsGuest, guestLifts, isHomeMsg, homeLine, HostWatch, HOST_GONE_MS, visitLog, cleanMoglins, snapMoglins, shownMoglins, visitFarm, visitWater, type PlotSnap } from './plot-visit'
+  setVisitSnap, currentVisit, isVisiting, guestRefuses, refusalCount, shownWorks, worksWritable, shownOwned, SendQueue, rideAsGuest, guestLifts, isHomeMsg, homeLine, HostWatch, HOST_GONE_MS, visitLog, cleanMoglins, snapMoglins, shownMoglins, visitFarm, visitWater, type PlotSnap, lobbyZoneOf, visitVerdict } from './plot-visit'
 import type { Works } from './rooms'
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  FAIL', m) } }
@@ -156,6 +156,17 @@ const snap: PlotSnap = { works, owned: ['0,0', '0,1', '1,0'] }
     ok(shownMoglins()!.length === 0 && visitFarm() === undefined, "an older host's snapshot without them = none (never the guest's own)")
     endVisit()
     ok(shownMoglins() === null, 'home again: your own')
+  }
+
+  {   // M156: who the roster offers as a visit, and who a visit is taken to
+    const z = (o: Partial<Parameters<typeof lobbyZoneOf>[0]>) => lobbyZoneOf({ kind: 'plot', folded: true, arriving: false, visiting: null, self: 'p_me', ...o })
+    ok(z({}) === 'open:plot:p_me', 'on your own folded plot: a plot zone')
+    ok(hostOfZone(z({ kind: 'glade' })) === null && hostOfZone(z({ kind: 'glade', folded: false })) === null, 'in the Glade: never a plot zone, folded or not')
+    ok(hostOfZone(z({ folded: false })) === null && hostOfZone(z({ arriving: true })) === null, 'no garden, or a page still setting you down elsewhere: not on a plot')
+    ok(z({ visiting: 'p_host', folded: false }) === 'open:plot:p_host' && z({ kind: 'wilds' }) === 'open:wilds', "a guest is on the host's plot; the Wilds are the Wilds")
+    ok(visitVerdict(true, 0) === 'go', 'a host at home: go at once')
+    ok(visitVerdict(false, 0) === 'wait' && visitVerdict(false, 5000) === 'no', 'a host elsewhere: a short grace, then no')
+    ok(visitVerdict(null, 5000) === 'wait' && visitVerdict(null, 13000) === 'no', 'a roster not in yet waits longer, then no')
   }
 
   console.log(`plot-visit: ${pass}/${pass + fail}`)

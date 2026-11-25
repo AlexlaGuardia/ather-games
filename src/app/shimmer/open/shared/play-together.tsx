@@ -18,7 +18,7 @@ import { hudSay } from './hud-say'
 import { openPeers } from './open-mp'
 import { usePartyLobby, type LobbyMember } from '@/lib/party-lobby'
 import { selfPlayerId, storedName } from '../../play3d/multiplayer'
-import { hostOfZone } from '../ather/plot-visit'
+import { hostOfZone, plotZone, GLADE_LOBBY } from '../ather/plot-visit'
 
 // ── BETA M61 PLOT VISITS: the party lobby (lib/party-lobby, a roster that holds across zones) says where each mate is; a mate
 // on a plot can be visited. The page says which zone this keeper is in (setLobbyZone); the Ather page registers how a visit
@@ -27,6 +27,11 @@ let lobbyZone = '', visitHandler: ((host: string, name: string) => void) | null 
 const zsubs = new Set<() => void>()
 export function setLobbyZone(z: string) { if (z === lobbyZone) return; lobbyZone = z; zsubs.forEach(f => f()) }
 const useLobbyZone = () => useSyncExternalStore(f => { zsubs.add(f); return () => { zsubs.delete(f) } }, () => lobbyZone, () => '')
+/** M156: is this keeper standing on their own plot right now, by the party's roster? null = the roster does not hold them (yet) */
+export function hostHome(host: string): boolean | null {
+  const m = lobbyBox.members.find(x => x.look === host)
+  return m ? m.zone === plotZone(host) : null
+}
 export function setVisitHandler(f: typeof visitHandler) { visitHandler = f }
 function requestVisit(host: string, name: string) {
   if (visitHandler) { visitHandler(host, name); return }
@@ -40,7 +45,7 @@ export function whereOf(m: LobbyMember, all: LobbyMember[]): { text: string; plo
     const name = owner?.name ?? m.name
     return { text: owner && owner.id !== m.id ? `visiting ${name}'s plot` : 'on their plot', plotHost: host, plotName: name }
   }
-  return { text: m.zone === 'open:wilds' ? 'in the Wilds' : m.zone === 'open:continent' ? 'on the continent' : 'about', plotHost: null, plotName: null }
+  return { text: m.zone === 'open:wilds' ? 'in the Wilds' : m.zone === 'open:continent' ? 'on the continent' : m.zone === GLADE_LOBBY ? 'in Moonwell Glade' : 'about', plotHost: null, plotName: null }
 }
 let lobbyBox: { members: LobbyMember[]; me: string } = { members: [], me: '' }
 

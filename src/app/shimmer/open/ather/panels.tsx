@@ -83,7 +83,9 @@ function FogLayer({ fog, W }: { fog: Fog; W: Wilds }) {
 // BETA M73: The Dig's pulse (the flip button, then Rune Hold's door): an ember ring that breathes
 const DIG_PULSE_CSS = '@keyframes dig-pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,154,74,0)}50%{box-shadow:0 0 0 4px rgba(255,154,74,.55),0 0 14px rgba(255,154,74,.7)}}'
 
-export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [], onClose, onFlip, area, goal, flipPulse, digGoal, quest }: {
+export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [], onClose, onFlip, area, goal, flipPulse, digGoal, quest, hasPlot = true }: {
+  /** M156: false = Greg has not folded this keeper's garden yet, so there is no plot to stop at */
+  hasPlot?: boolean
   /** M146: First Steps' current step: its Wilds spots are pinned, and a step in the Glade lights the Glade's stop */
   quest?: readonly { zone: string; x: number; z: number }[]
   /** BETA M73 The Dig: the Flip map button pulses until the keeper turns the map over (opening-chain.ts › flipPulse) */
@@ -172,7 +174,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWild
             </PanZoomBox>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={label}>Stops</div>
-              {stop('Your plot', 'home', { kind: 'home' }, '#f2d88a')}
+              {hasPlot && stop('Your plot', 'home', { kind: 'home' }, '#f2d88a')}
               {quest?.some(q => q.zone === 'glade')
                 ? <div data-quest-stop style={{ borderRadius: 6, boxShadow: '0 0 0 2px #ff9a4a' }}>{stop('Moonwell Glade', "Gregory's garden", { kind: 'glade' }, '#ff9a4a')}</div>
                 : stop('Moonwell Glade', "Gregory's garden", { kind: 'glade' }, '#9fd27a')}

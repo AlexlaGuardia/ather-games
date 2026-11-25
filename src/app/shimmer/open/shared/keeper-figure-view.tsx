@@ -11,11 +11,13 @@ import type { Look } from './keeper-look'
 import type { Proportions } from './keeper-proportions'
 import type { DollDrive } from './keeper-doll'
 
-export function KeeperFigure({ look, drive, spin = 0, yaw = 0, gun = null, shape }: { look: Look; drive?: React.MutableRefObject<DollDrive>; spin?: number; yaw?: number
+export function KeeperFigure({ look, drive, spin = 0, yaw = 0, gun = null, shape, walk }: { look: Look; drive?: React.MutableRefObject<DollDrive>; spin?: number; yaw?: number
   /** BETA M103: proportions to build with instead of the shipped ones (the body bench's live sliders) */
   shape?: Proportions
   /** BETA M27 slice 4: a gun id held in the right hand (a remote keeper's), null = hands empty */
-  gun?: string | null }) {
+  gun?: string | null
+  /** BETA M156: a remote keeper's walk amount, read each frame (0 stands, 0.6 walks, 1 runs) */
+  walk?: React.RefObject<number> }) {
   const body = useMemo(() => shape ? buildKeeper(look, shape) : buildKeeper(look), [look, shape])
   // the gun rides the BODY, following 'hand-r' each frame (the hand mesh is scaled to a mitten: a child would shrink with it)
   const prop = useRef<THREE.Group | null>(null)
@@ -39,7 +41,7 @@ export function KeeperFigure({ look, drive, spin = 0, yaw = 0, gun = null, shape
       d.handR = body.group.getObjectByName('hand-r')?.getWorldPosition(d.handR ?? new THREE.Vector3())   // M136: the gather tether starts here
     } else {
       if (spin) h.rotation.y += dt * spin
-      poseKeeper(body, t.current, 0)
+      poseKeeper(body, t.current, walk?.current ?? 0)
     }
     const hand = prop.current && body.group.getObjectByName('hand-r')
     if (prop.current && hand) prop.current.position.set(hand.position.x, hand.position.y + 0.02, hand.position.z + 0.06)

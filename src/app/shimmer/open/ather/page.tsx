@@ -17,7 +17,7 @@
 import { OwnerReady } from '../shared/owner-ready'
 import { LoadScreen } from '../shared/load-screen'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { subscribeVisit, currentVisit, isVisiting, startVisit, endVisit, noteVisit, shownOwned, plotZone, guestRefuses, snapMoglins, type PlotSnap } from './plot-visit'   // BETA M61
+import { subscribeVisit, currentVisit, isVisiting, startVisit, endVisit, noteVisit, shownOwned, plotZone, lobbyZoneOf, visitVerdict, guestRefuses, snapMoglins, type PlotSnap } from './plot-visit'   // BETA M61
 import { usePlotVisitNet } from './plot-visit-net'
 import { usePartyBrew } from './party-brew-net'   // M57 s3b
 import { BrewingPanel } from './brewing-panel'
@@ -29,7 +29,7 @@ import type { AlcStation } from './alchemy-set'
 import { useParty, storedParty } from '@/lib/party'
 import { selfPlayerId } from '../../play3d/multiplayer'
 import { clusterFrame } from './cluster'
-import { setLobbyZone, setVisitHandler } from '../shared/play-together'
+import { setLobbyZone, setVisitHandler, hostHome } from '../shared/play-together'
 import { Canvas } from '@react-three/fiber'
 import { ProgramKeeper } from './program-keeper-view'
 import { WarmProxies } from './warm-proxies'
@@ -480,10 +480,21 @@ function AtherSliceGame() {
   }, [visitHost, arrive, goHome])
   useEffect(() => {
     // only a party mate visits (the party instance is the only door); a visit link without one says so and goes nowhere
+    let asking: ReturnType<typeof setInterval> | undefined
     const go = (host: string, name: string) => {
       if (host === selfPlayerId()) return
       if (!storedParty()) { noteVisit('refused:no-party'); hudSay('Join their party first: only party mates can visit a plot.', 'info', 5); return }
-      startVisit(host, name)
+      // M156: nobody leaves for a plot its keeper is not standing on (no garden folded, in the Glade or the Wilds, offline)
+      clearInterval(asking)
+      const t0 = performance.now()
+      const ask = () => {
+        const v = visitVerdict(hostHome(host), performance.now() - t0)
+        if (v === 'wait') return
+        clearInterval(asking)
+        if (v === 'go') { startVisit(host, name); return }
+        noteVisit('refused:not-home'); hudSay(`Could not reach ${name || 'a friend'}'s plot. They may have left it.`, 'info', 5)
+      }
+      asking = setInterval(ask, 300); ask()
     }
     setVisitHandler(go)
     const q = new URLSearchParams(window.location.search), h = q.get('visit')
@@ -491,7 +502,7 @@ function AtherSliceGame() {
       go(h, q.get('vn') ?? '')
       const url = new URL(window.location.href); url.searchParams.delete('visit'); url.searchParams.delete('vn'); window.history.replaceState(null, '', url)
     }
-    return () => { setVisitHandler(null); endVisit() }
+    return () => { clearInterval(asking); setVisitHandler(null); endVisit() }
   }, [])
   // no plot from the host in VISIT_WAIT_MS (they left their plot, went offline, or this is not their party) = home, with one line
   const visitReady = !!visitNow?.snap
@@ -737,7 +748,8 @@ function AtherSliceGame() {
   // M71 s1 backstop: any other way onto your own plot before Greg folds it (the routes above already go to the Glade) lands in the Glade
   useEffect(() => { if (zone.kind === 'plot' && epoch > 0 && !visitNow && !gardenOpen(loadTut())) arrive({ kind: 'glade' }, gladeNewbornSpot()) }, [zone, epoch])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (zone.kind === 'plot') { if (epoch > 0) clearSpot(); return }
+    // M156: not for a guest with no garden of their own: a reload on a mate's plot must wake them where they came from, not on ground Greg has not folded
+    if (zone.kind === 'plot') { if (epoch > 0 && gardenOpen(loadTut())) clearSpot(); return }
     const glade = zone.kind === 'glade'   // M67 s1a: the closed Glade keeps a spot too, so a reload wakes you in it
     // M67 s1b fix: write the arrival point NOW. The tick below only saves once the veil is down (up to ~2.5 s) and then every
     // 3 s, so a reload in the first seconds after the Glade's gate read the OLD spot and woke the keeper back in the Glade.
@@ -758,6 +770,7 @@ function AtherSliceGame() {
   useEffect(() => {
     if (!bornPending) return
     setBornPending(false)
+    { const s = gladeNewbornSpot(); saveSpot(makeSpot(GLADE_TILE, s.x, s.z, s.yaw)) }   // M156: a reload before the veil lifts still wakes in the Glade
     // ★ M67 s1a (Alex 11-22, docs/tutorial-cluster.md): a newborn opens their eyes in the CLOSED Glade, in Greg's garden, facing
     // him (glade-cluster.ts gladeNewbornSpot), no longer at Moonwell in the open Wilds. The Glade needs no streaming.
     arrive({ kind: 'glade' }, gladeNewbornSpot())
@@ -805,7 +818,7 @@ function AtherSliceGame() {
     say: m => hudSay(m, 'info', 5) })   // s3: sent home / the host left
   usePartyBrew({ relay: mp.relay, onRelay: mp.onRelay, hosting: !!plotMp && !visitNow, visit: visitNow, guests: plotNet.guests, works: currentWorks })
   const guestsHere = plotNet.guests.map(id => ({ id, name: mp.peers.current.get(id)?.name || 'A friend' }))
-  useEffect(() => { setLobbyZone(zone.kind === 'wilds' ? OPEN_WILDS : plotZone(visitNow ? visitNow.host : selfPlayerId())) }, [zone.kind, visitNow])
+  useEffect(() => { setLobbyZone(lobbyZoneOf({ kind: zone.kind, folded: gardenOpen(loadTut()), arriving: resuming, visiting: visitNow?.host ?? null, self: selfPlayerId() })) }, [zone.kind, visitNow, resuming, epoch])   // M156
   // third person (V): your own keeper, the segmented doll (open/shared/third-person.tsx), driven from the tick below
   const thirdRef = useRef(false), dollDrive = useRef(newDrive()), camRef = useRef<Camera | null>(null), tetherHand = useRef(new Vector3()), tetherTo = useRef(new Vector3())
 
@@ -1838,7 +1851,7 @@ function AtherSliceGame() {
       )}
       {panel?.kind === 'map' && (
         <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} infected={infectedSet} here={{ x: pos.current.x - hereOff.x, z: pos.current.z - hereOff.z }}
-          inWilds={zone.kind === 'wilds'} onTravel={travel} tile={hereTile} pitstops={pitstops}
+          inWilds={zone.kind === 'wilds'} onTravel={travel} hasPlot={gardenOpen(loadTut())} tile={hereTile} pitstops={pitstops}
           nodes={(nodesByTile.get(hereTile) ?? []).filter(n => infectedSet.has(n.id)).map(n => ({ ...n, x: n.x - hereOff.x, z: n.z - hereOff.z }))} regions={regions}
           area={ww ? { world: ww, regionsByTile, cx: hereOff.x, cz: hereOff.z, tileOff, nodes: nodes.filter(n => Math.abs(n.x - hereOff.x) < 1600 && Math.abs(n.z - hereOff.z) < 1600), here: { x: pos.current.x, z: pos.current.z } } : undefined}
           onClose={() => setPanel(null)} quest={fsOn ? mapSpots(loadTut(), fsWorld.current()) : undefined}
