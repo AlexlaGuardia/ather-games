@@ -18,11 +18,15 @@ try {
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(2000)
   if (await p.evaluate(() => (window as any).__ather.zone()) !== 'glade') await p.evaluate(() => (window as any).__ather.travel({ kind: 'glade' }))
   await p.waitForFunction(() => (window as any).__ather.zone() === 'glade' && !!(window as any).__glade?.folk, { timeout: 120000 }); await sleep(3000)
-  const ks = (await p.evaluate(() => (window as any).__glade.folk)) as { id: string; x: number; z: number; yaw: number }[]
+  // Fennel's spot moves 5.6 m once her lot's ground is in (cold load: -75.00, 87.05 yaw 0 first, then -70.30, 84.00): a robot that read
+  // the early one stood at an empty place and E found nobody (2 of 3 desktop runs, 11-25). So read till two reads 2 s apart agree.
+  const read = () => p.evaluate(() => (window as any).__glade.folk) as Promise<{ id: string; x: number; z: number; yaw: number }[]>
+  let ks = await read()
+  for (let t = 0; t < 20; t++) { await sleep(2000); const n = await read(); const same = JSON.stringify(n) === JSON.stringify(ks); ks = n; if (same) break }
   const hide = () => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(x => !h.some(o => o !== x && x.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
   for (const k of ks.filter(k => !only || k.id.endsWith(only))) {
     const at = (d: number) => p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), k.x + Math.sin(k.yaw) * d, k.z + Math.cos(k.yaw) * d, Math.atan2(Math.sin(k.yaw), Math.cos(k.yaw)))
-    await at(2.2); await sleep(5000); await hide(); console.log(`${k.id}: ${await p.evaluate(() => (window as any).__ather.calls())} draw calls at 2.2 m (she stands ${k.x.toFixed(2)}, ${k.z.toFixed(2)} yaw ${k.yaw.toFixed(2)}; keeper ${JSON.stringify(await p.evaluate(() => { const s = (window as any).__ather.state; return s?.pos ? [+s.pos.x.toFixed(2), +s.pos.z.toFixed(2), +(s.yaw ?? 0).toFixed(2)] : null }))})`); await p.screenshot({ path: `${out}/glade-${k.id.split(':').pop()}-${tag}.png` as `${string}.png` })
+    await at(2.2); await sleep(5000); await hide(); console.log(`${k.id}: ${await p.evaluate(() => (window as any).__ather.calls())} draw calls at 2.2 m (she stands ${k.x.toFixed(2)}, ${k.z.toFixed(2)} yaw ${k.yaw.toFixed(2)})`); await p.screenshot({ path: `${out}/glade-${k.id.split(':').pop()}-${tag}.png` as `${string}.png` })
     await at(1.8)
     const near = await p.waitForFunction(id => { const n = (window as any).__ather.near(); return n?.kind === 'folk' || n?.kind === 'gfennel' }, { timeout: 30000 }, k.id).then(() => true, () => false)
     // gladeAt is an ARRIVAL: the veil comes up and a press under it is ignored, so wait for it to have lifted
