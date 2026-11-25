@@ -66,6 +66,28 @@ export function groundEnv(groundHex: string): THREE.DataTexture {
   return t
 }
 
+/** M163: the WET surface's surroundings (Alex 11-25: near-black, no hue of its own, the GROUND's colour in its highlights). Dark
+ *  all round, so the body reads black and not the sky's blue; the ground's colour along the horizon (the rim); and a few soft bright
+ *  spots of it overhead, the wet highlights. The spots fade with the ground's own life: drained grey ground gives almost none
+ *  (the brief's tell). Half floats: a highlight must be brighter than 1. Cached + freed with the other envs. */
+export const wetLife = (groundHex: string): number => { const c = new THREE.Color(groundHex).convertLinearToSRGB(), hi = Math.max(c.r, c.g, c.b); return Math.min(1, hi ? (hi - Math.min(c.r, c.g, c.b)) / hi / 0.3 : 0) }
+const SPOTS = [0.35, 2.3, 4.4].map((a, i) => { const el = 0.62 + 0.14 * i; return [Math.cos(a) * Math.cos(el), Math.sin(el), Math.sin(a) * Math.cos(el)] })
+export function wetEnv(groundHex: string): THREE.DataTexture {
+  const key = 'wet' + groundHex, hit = envs.get(key); if (hit) return hit
+  const g = new THREE.Color(groundHex), hor = new THREE.Color(SKY.day.horizon).lerp(g, 0.75), life = wetLife(groundHex), c = new THREE.Color()
+  const data = new Uint16Array(ENV_W * ENV_H * 4), H = THREE.DataUtils.toHalfFloat
+  for (let y = 0; y < ENV_H; y++) for (let x = 0; x < ENV_W; x++) {
+    const th = ((y + 0.5) / ENV_H) * Math.PI, up = -Math.cos(th), az = ((x + 0.5) / ENV_W - 0.5) * Math.PI * 2, dx = Math.cos(az) * Math.sin(th), dz = Math.sin(az) * Math.sin(th)
+    c.copy(hor).multiplyScalar(0.1 + 0.8 * Math.exp(-Math.pow(up / 0.28, 2)))   // a band at the horizon, dark above and below
+    for (const s of SPOTS) c.add(hor.clone().multiplyScalar((0.6 + 8 * life) * Math.exp(-(1 - (dx * s[0] + up * s[1] + dz * s[2])) / 0.022)))
+    const i = (y * ENV_W + x) * 4; data[i] = H(c.r); data[i + 1] = H(c.g); data[i + 2] = H(c.b); data[i + 3] = H(1)
+  }
+  const t = new THREE.DataTexture(data, ENV_W, ENV_H, THREE.RGBAFormat, THREE.HalfFloatType)
+  t.mapping = THREE.EquirectangularReflectionMapping; t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true
+  envs.set(key, t)
+  return t
+}
+
 /** Leaving the Wilds (combat-layer.tsx, once the layer has been inactive a moment): every Hollow has unmounted, so no
  *  material still holds these. dispose() frees the GPU texture AND three's PMREM copy (WebGLCubeUVMaps listens for it);
  *  clearing the map lets the JS side go. Returns how many were freed. M34 heap, 11-19: ~0.7 MB back at home. */
@@ -80,11 +102,12 @@ export function goopMaterial(): THREE.MeshStandardMaterial {
 }
 
 /** M120 s3: ONE goop material per ground colour, shared by every Flit over that ground (`borrow` false = no env map, the heap
- *  check's A/B leg). Freed with the envs. */
+ *  check's A/B leg). `use` keeps a SKINNED body's apart from the instanced ones' (M163: one material under both kinds of mesh
+ *  re-picks its program on every draw) and gives it wetEnv. Freed with the envs. */
 const shared = new Map<string, THREE.MeshStandardMaterial>()
-export function sharedGoop(groundHex: string, borrow = true): THREE.MeshStandardMaterial {
-  const k = groundHex + (borrow ? '' : '-'); let m = shared.get(k)
-  if (!m) { m = goopMaterial(); if (borrow) m.envMap = groundEnv(groundHex); shared.set(k, m) }
+export function sharedGoop(groundHex: string, borrow = true, use = ''): THREE.MeshStandardMaterial {
+  const k = groundHex + (borrow ? '' : '-') + use; let m = shared.get(k)
+  if (!m) { m = goopMaterial(); if (borrow) m.envMap = use === 'skin' ? wetEnv(groundHex) : groundEnv(groundHex); shared.set(k, m) }
   return m
 }
 

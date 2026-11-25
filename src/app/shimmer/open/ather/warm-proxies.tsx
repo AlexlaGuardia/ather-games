@@ -8,7 +8,8 @@
 // instancing, envMap, map...) and the scene's lights/fog, never on colours, so plain look-alikes match the real ones.
 import { useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
-import { goopMaterial, groundEnv, borrowedGround } from './hollow-goop'
+import { makeWalker } from './walker-body'
+import { goopMaterial, groundEnv, wetEnv, borrowedGround } from './hollow-goop'
 
 const UNDER = -400
 const one = (mat: THREE.Material, geo: THREE.BufferGeometry) => {
@@ -20,6 +21,7 @@ export function WarmProxies({ ms = 4000 }: { ms?: number }) {
   useEffect(() => { const t = setTimeout(() => setOn(false), ms); return () => clearTimeout(t) }, [ms])
   const objs = useMemo(() => {
     const geo = new THREE.OctahedronGeometry(0.1, 0)
+    const goopSkin = goopMaterial(); goopSkin.envMap = wetEnv(borrowedGround('#9cc46a', 0))   // M163: a Walker is SKINNED, its env set before its first draw
     const tex = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); tex.needsUpdate = true
     const goopEnv = goopMaterial(); goopEnv.envMap = groundEnv(borrowedGround('#9cc46a', 0))   // the env a Hollow borrows on grass
     return [
@@ -28,11 +30,12 @@ export function WarmProxies({ ms = 4000 }: { ms?: number }) {
       one(new THREE.MeshPhongMaterial(), geo),
       one(goopMaterial(), geo),                                               // a Hollow's goop before its env lands
       one(goopEnv, geo),                                                      // ... and with it (+ the PMREM programs)
+      makeWalker(goopSkin).mesh,
       one(new THREE.MeshLambertMaterial({ map: tex }), geo),                  // instanced textured parts (settlement houses, 128 px maps) streaming in with tiles
     ]
   }, [])
   // material.dispose() never frees its textures, so the borrowed env stays in groundEnv's cache; the programs stay pinned (ProgramKeeper)
-  useEffect(() => () => { for (const o of objs) { const m = (o as THREE.Mesh).material as THREE.MeshLambertMaterial; if (m.type === 'MeshLambertMaterial') m.map?.dispose(); m.dispose() } (objs[0] as THREE.Mesh).geometry.dispose() }, [objs])
+  useEffect(() => () => { for (const o of objs) { const m = (o as THREE.Mesh).material as THREE.MeshLambertMaterial; if (m.type === 'MeshLambertMaterial') m.map?.dispose(); m.dispose(); if (o instanceof THREE.SkinnedMesh) o.skeleton.dispose() } (objs[0] as THREE.Mesh).geometry.dispose() }, [objs])
   // __noWarm: the A/B leg (scripts/arrival-programs-check.mts --nowarm) that leaves the proxies out, so the check proves they matter
   if (!on || (typeof window !== 'undefined' && (window as unknown as { __noWarm?: boolean }).__noWarm)) return null
   return <group position-y={UNDER}>{objs.map((o, k) => <primitive key={k} object={o} />)}</group>

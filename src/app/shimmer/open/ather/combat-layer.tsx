@@ -33,7 +33,8 @@ import { partyHost } from '../shared/party-host'
 import { CHAMP_ID, DOWN_AGAIN, DOWN_KIND, HAND_KIND, HAND_MS, SNAP_R, applyChamp, believeDown, champNetHit, encodeHand, shownOf, takeHand, type HitBudget, type Shown } from '../shared/fight-share'   // BETA M156 s3
 import { sharing, encodeSnap, applySnap, SNAP_KIND, SNAP_HZ, HIT_KIND, KILL_KIND, encodeHits, decodeHits, newDrops, decodeKills, layDrop, HURT_KIND, encodeHurt, decodeHurt, type Snap, type HitRow, type KillRow } from '../shared/fight-share'   // BETA M28 shared fights   // M33: Morel's bubble reads the gun straight from here
 import { goopMaterial, sharedGoop, groundEnv, releaseGroundEnvs, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'
-import { sprout, poseSprout, lumpyGeometry, type SproutKind } from './hollow-body'   // M34: Alex's pick A, the rooted sprout   // M34: no light of its own; borrows the ground
+import { sprout, poseSprout, lumpyGeometry, type SproutKind } from './hollow-body'   // M34: Alex's pick A, the rooted sprout (the Pooler)
+import { makeWalker, poseWalker, spillGeometry, walkerGeometry, WALKER_CORE } from './walker-body'   // M163 s1   // M34: no light of its own; borrows the ground
 import { poseFlit, flitMats, flitGeometry, geoTris, wingLift, FLIT, FLIT_HIT_R, type FlitPose } from './flit-body'   // M120 s3: the floater's own body
 import { borrowedSky } from '../../voxel3d/sky-env'
 import { dayProgress, daylight } from '../../engine/day-cycle'
@@ -62,7 +63,7 @@ function fxTint(h: Hollow | undefined): string | null {
   if (fxOn(h, 'staggered') || fxOn(h, 'vulnerable')) return '#e7e2d4'
   return null
 }
-const PUDDLE = '#55585b'
+const PUDDLE = '#55585b', SPILL_TONE = '#17181b'   // M163: a Walker's own puddle is its own near-black
 
 /** BETA M34 (shared by every look option, docs/looks/hollows.html): what a Hollow's surface borrows. `groundAt` = the biome
  *  colour under a point (the page's Wilds); `nodes` = the infected nodes (the drain). Read through a ref so bodies never re-render. */
@@ -153,6 +154,48 @@ function SproutBody({ c, id, kind, world }: { c: React.MutableRefObject<Combat>;
       <Sheds c={c} id={id} mat={mat} top={S.core} />
       {/* the drip: a puddle that follows a walker (a cast's tint shows under it) */}
       <mesh position-y={0.03} rotation-x={-Math.PI / 2}><circleGeometry args={[0.55, 9]} /><meshBasicMaterial ref={puddle} color={PUDDLE} transparent opacity={0.55} /></mesh>
+    </group>
+  )
+}
+
+/** M163 s1: each Walker as it was last DRAWN (checks read it off the real mesh: __ather.walker) */
+const WALKER_SEEN = new Map<number, { mesh: THREE.SkinnedMesh; tell: number; fall: number; drawn: number }>()
+export function walkerProbe(id: number) {
+  const w = WALKER_SEEN.get(id); if (!w) return null
+  const m = w.mesh.material as THREE.MeshStandardMaterial
+  return { tris: geoTris(w.mesh.geometry), bones: w.mesh.skeleton.bones.length, shared: w.mesh.geometry === walkerGeometry(), colour: '#' + m.color.getHexString(), emissive: m.emissive.getHex(), env: !!m.envMap, rough: m.roughness, tell: w.tell, fall: w.fall, drawn: w.drawn, sy: w.mesh.skeleton.bones[0].scale.y }
+}
+/** One Walker (the shambler): walker-body.ts's skin, posed from the sim's state exactly as the sprout was. Look only. */
+function WalkerBody({ c, id, world }: { c: React.MutableRefObject<Combat>; id: number; world: React.MutableRefObject<GoopWorld> }) {
+  const g = useRef<THREE.Group>(null), puddle = useRef<THREE.MeshBasicMaterial>(null)
+  const ground = () => { const h = c.current.hollows.find(k => k.id === id), W = world.current; return h ? borrowedGround(W.groundAt(h.x, h.z), greyStep(greyAt(h.x, h.z, W.nodes))) : null }
+  const [hex, setHex] = useState(() => ground() ?? GRASS)
+  const borrow = !(window as unknown as { __noBorrow?: boolean }).__noBorrow
+  const mat = sharedGoop(hex, borrow, 'skin'), drops = sharedGoop(hex, borrow)
+  const W = useMemo(() => makeWalker(mat), [])   // eslint-disable-line react-hooks/exhaustive-deps -- the material follows the ground below
+  const st = useRef({ tell: 0, fall: 0, walk: 0, next: 0, drawn: 0 })
+  useEffect(() => { W.mesh.material = mat }, [W, mat])
+  useEffect(() => () => { W.dispose(); WALKER_SEEN.delete(id) }, [W, id])
+  useFrame(({ clock }, dt) => {
+    const h = c.current.hollows.find(k => k.id === id); if (!h || !g.current) return
+    const s = st.current, e = 1 - Math.exp(-dt * 14)
+    if (clock.elapsedTime >= s.next) { s.next = clock.elapsedTime + 0.5; const k = ground(); if (k && k !== hex) setHex(k) }
+    mat.envMapIntensity = drops.envMapIntensity = BORROW * borrowedSky(daylight(dayProgress()))
+    g.current.position.set(h.x, h.y, h.z); g.current.rotation.y = h.yaw
+    const tellTo = h.state === 'windup' ? 1 - h.t / SHAMBLER.windup : 0
+    s.tell += (Math.max(0, Math.min(1, tellTo)) - s.tell) * (tellTo > s.tell ? 1 : e)   // the gather is read straight off the sim; the let-go eases
+    s.fall += ((h.state === 'lunge' ? 1 : 0) - s.fall) * e
+    s.walk += ((h.state === 'chase' ? 1 : h.state === 'wander' ? 0.45 : 0) - s.walk) * e
+    poseWalker(W.bones, { t: clock.elapsedTime + id * 1.3, tell: s.tell, fall: s.fall, walk: s.walk, knock: Math.min(1, h.hitFlash * 8) })
+    WALKER_SEEN.set(id, { mesh: W.mesh, tell: s.tell, fall: s.fall, drawn: ++s.drawn })
+    if (puddle.current) { const tint = fxTint(h); puddle.current.color.set(tint ?? SPILL_TONE); puddle.current.opacity = 0.85 }
+  })
+  return (
+    <group ref={g}>
+      <primitive object={W.mesh} dispose={null} />
+      <Sheds c={c} id={id} mat={drops} top={WALKER_CORE} />
+      {/* the spill it stands in (a cast's tint shows in it) */}
+      <mesh position-y={0.03} rotation-x={-Math.PI / 2} geometry={spillGeometry()} dispose={null}><meshBasicMaterial ref={puddle} color={SPILL_TONE} transparent opacity={0.85} /></mesh>
     </group>
   )
 }
@@ -628,7 +671,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       const f = camera.getWorldDirection(new THREE.Vector3()); const x = camera.position.x + f.x * -dz + dx, z = camera.position.z + f.z * -dz
       spawnHollow(c.current, T, x, z, kind)
     }, camAim: () => { const f = camera.getWorldDirection(new THREE.Vector3()); return { x: f.x, y: f.y, z: f.z, cx: camera.position.x, cy: camera.position.y, cz: camera.position.z } }, nodes: () => nodesRef.current, walls: (x0: number, z0: number, x1: number, z1: number) => T.structures ? [...T.structures(x0, z0, x1, z1)] : [], fall: () => { c.current.keeper.hp = 0; onEventsRef.current([{ kind: 'down' }]) }, drained: (x: number, z: number) => c.current.drained?.(x, z) ?? null, owner: (x: number, z: number) => ownerRef.current?.(x, z) ?? null,
-      spend: (id: string) => { probeSpent.current.add(id) }, flit: flitProbe, drawnScale: (id: number) => DRAWN_SCALE.get(id) ?? null,   // M120 s2 checks: clear a node for THIS visit only (nothing saved)
+      spend: (id: string) => { probeSpent.current.add(id) }, flit: flitProbe, walker: walkerProbe, drawnScale: (id: number) => DRAWN_SCALE.get(id) ?? null,   // M120 s2 checks: clear a node for THIS visit only (nothing saved)
       wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ && !c.current.remote) wakeChampion(c.current, T, n) } }
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('contextmenu', menu) }
   }, [locked, frozen, camera, T, gl])
@@ -866,7 +909,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       {channel && <ChannelBeam channel={channel} T={T} />}
       <PieceBlocks c={c} />
       <Tells c={c} heightAt={T.heightAt} />
-      {ids.map(h => h.kind === 'floater' ? <FlitBody key={h.id} c={c} id={h.id} world={goopWorld} /> : <SproutBody key={h.id} c={c} id={h.id} kind={h.kind as SproutKind} world={goopWorld} />)}
+      {ids.map(h => h.kind === 'floater' ? <FlitBody key={h.id} c={c} id={h.id} world={goopWorld} /> : h.kind === 'shambler' ? <WalkerBody key={h.id} c={c} id={h.id} world={goopWorld} /> : <SproutBody key={h.id} c={c} id={h.id} kind={h.kind as SproutKind} world={goopWorld} />)}
       <Dispersals list={dispersals} />
       <instancedMesh ref={spitsMesh} args={[undefined, undefined, 32]} frustumCulled={false}>
         <icosahedronGeometry args={[0.3, 0]} /><meshPhongMaterial color="#3a3c40" emissive="#8a8d92" specular="#ffffff" shininess={90} flatShading />

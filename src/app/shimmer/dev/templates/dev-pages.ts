@@ -317,6 +317,14 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['greybox', 'town', 'scale', 'proportion', 'keeper height'],
   },
   {
+    path: '/shimmer/dev/walker',
+    title: 'The Walker Bench',
+    blurb: 'The Walker Hollow in its locked look, front, side and back, at rest, in its wind-up, its lunge and its step.',
+    group: 'glass',
+    era: 'live',
+    keywords: ['walker', 'hollow', 'shambler', 'look', 'goop'],
+  },
+  {
     path: '/shimmer/dev/worktable',
     title: 'Structure worktable',
     blurb: 'Build a building on a bare pad, save it, load it back.',

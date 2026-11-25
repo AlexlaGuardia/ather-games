@@ -145,6 +145,9 @@ export const weightOf = (h: Hollow) => h.kind === 'crawler' ? Math.max(1, h.mass
 /** grey matter a dispersed Hollow leaves */
 const dropOf = (c: Combat, h: Hollow) => (h.kind === 'floater' ? 2 : h.kind === 'crawler' ? Math.min(8, Math.max(1, h.mass ?? 1)) : 1) + Math.floor(rnd(c) * 3)
 export const HEAD_Y = 1.55, HEAD_R = 0.26, BODY_Y = 0.85, BODY_R = 0.44
+/** M163: the Walker's heavy legs and the ends of its hanging arms count (they were drawn under the body sphere's 0.29 m and a round went through them),
+ *  and the body ball is drawn in to the slimmer skin (1.6 -> 1.4). Newcomer Roar vs the champion, 600 fights: 80 -> 66 lost (noise). */
+export const LEG_Y = 0.3, LEG_R = 0.36, BODY_FIT = 1.4
 export const PICKUP_R = 1.4, MAGNET_R = 4.5
 
 /** A placed field: a ground area at (x,z), `r` m radius, until `until` (c.clock seconds). The numbers are castForMove's. */
@@ -577,7 +580,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
         continue
       }
       if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + HEAD_Y, h.z) < HEAD_R * HEAD_R) { best = { h, head: true }; break }
-      if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + BODY_Y, h.z) < BODY_R * BODY_R * 1.6) best = { h, head: false }
+      if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + BODY_Y, h.z) < BODY_R * BODY_R * BODY_FIT || segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + LEG_Y, h.z) < LEG_R * LEG_R) best = { h, head: false }
     }
     if (best && c.remote) {   // M28: a non-host's round: feedback now, the host decides the damage (slice 3)
       const h = best.h, dmg = (best.head ? r.crit : r.dmg) * ((k.ampUntil ?? 0) > (c.clock ?? 0) ? AMP_MULT : 1)
