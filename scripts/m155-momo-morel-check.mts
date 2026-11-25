@@ -64,6 +64,7 @@ const bubble = (g: Page) => g.evaluate(() => { const b = document.querySelector(
 const pick = (g: Page) => g.evaluate(() => { const b = document.querySelector<HTMLButtonElement>('[data-talk-option]'); const t = (b?.textContent ?? '').replace(/^\s*›\s*/, '').trim(); b?.click(); return t }) as Promise<string>
 const talk = async (g: Page, n: string) => {
   const B = await g.evaluate(() => (window as W).__glade.keepers.find((k: any) => k.id === 'bonn')) as { x: number; z: number; yaw: number }
+  await g.evaluate((x, z, y) => { const a = (window as W).__ather; a.gladeAt(x, z, y); a.look?.(y, -0.3) }, B.x + Math.sin(B.yaw) * 4.5, B.z + Math.cos(B.yaw) * 4.5, Math.atan2(Math.sin(B.yaw), Math.cos(B.yaw))); await sleep(4000); await shot(g, `${n}-far`)
   const px = B.x + Math.sin(B.yaw) * 2.3, pz = B.z + Math.cos(B.yaw) * 2.3
   await g.evaluate((x, z, y) => { const a = (window as W).__ather; a.gladeAt(x, z, y); a.look?.(y, -0.42) }, px, pz, Math.atan2(px - B.x, pz - B.z)); await sleep(5000); await shot(g, n)
   for (let k = 0; k < 4 && !(await bubble(g)); k++) { await g.keyboard.press('KeyE'); await until(async () => !!(await bubble(g)), 4000) }

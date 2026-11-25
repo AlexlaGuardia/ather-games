@@ -7,7 +7,9 @@ import { Mould, buf, type V3 } from './friend-figure'
 /** metres a drawing pixel: the orb is 0.36 m wide */
 export const PX = 0.18 / 250
 export const MOMO_CALLS = 3
+/** the drawing's colours; the toon ramp + the scene's light take about 2.8x off, so what is LIT is painted up by that (LIT, DARK, EAR; RIM too, over it) */
 export const MOMO_COLOR = { ink: '#080710', lit: '#211e3a', dark: '#16142a', rim: '#302c52', ear: '#282444', eye: '#f5b840', iris: '#cc761c', glint: '#fffaec' }
+const LIT = '#38344e', DARK = '#282538', EAR = '#48425e', RIM = '#4a4470'
 const C = MOMO_COLOR, BODY = { y: 274, rx: 250, ry: 235, rz: 250 }
 export const MOMO_HEIGHT = (482 + 48) * PX
 const v = (x: number, y: number, z: number): V3 => [x * PX, y * PX, z * PX]
@@ -26,7 +28,7 @@ function ring(m: Paint, color: string, a: number, h: number, rx: number, ry: num
 }
 interface Paint { p: number[]; c: number[]; i: number[] }
 /** the eye's bands never overlap, so nothing fights for depth: ink, gold, amber, pupil; the glint is a little further out */
-export const EYE = { a: 0.43, h: 5, rx: 60, ry: 68 }
+export const EYE = { a: 0.43, h: 5, rx: 68, ry: 68 }
 function eye(m: Paint, s: number) {
   const a = s * EYE.a, o = (r: number) => r / EYE.rx
   ring(m, C.ink, a, EYE.h, EYE.rx, EYE.ry, 1, o(EYE.rx + 8), 4)
@@ -38,7 +40,7 @@ function eye(m: Paint, s: number) {
 }
 /** the drawing's rim: a thin arc high on the viewer's left, from the front and from the back */
 function rim(m: Paint, back: boolean) {
-  const b = m.p.length / 3, col = new THREE.Color(C.rim), n = 14
+  const b = m.p.length / 3, col = new THREE.Color(RIM), n = 14
   for (let k = 0; k <= n; k++) {
     const t = (205 + (262 - 205) * k / n) * Math.PI / 180, taper = Math.sin(Math.PI * k / n)
     for (const w of [-4.5 * taper, 4.5 * taper]) {
@@ -54,12 +56,12 @@ let made: MomoFigure | null = null
 export function momoFigure(): MomoFigure {
   if (made) return made
   const m = new Mould(8 * PX)
-  m.add(ORB, C.lit, v(0, BODY.y, 0), v(BODY.rx, BODY.ry, BODY.rz))
+  m.add(ORB, LIT, v(0, BODY.y, 0), v(BODY.rx, BODY.ry, BODY.rz))
   for (const s of [-1, 1]) {
-    m.add(SMALL, C.dark, v(s * 165, 482, -20), v(50, 48, 40))
-    m.add(SMALL, C.ear, v(s * 166, 478, 8), v(30, 28, 16), [0, 0, 0], false)
-    m.add(SMALL, C.dark, v(s * 82, 36, 30), v(62, 28, 80))
-    m.add(SMALL, C.lit, v(s * 82, 44, 44), v(38, 22, 50), [0, 0, 0], false)
+    m.add(SMALL, DARK, v(s * 165, 482, -20), v(50, 48, 40))
+    m.add(SMALL, EAR, v(s * 166, 478, 8), v(30, 28, 16), [0, 0, 0], false)
+    m.add(SMALL, DARK, v(s * 82, 36, 30), v(62, 28, 80))
+    m.add(SMALL, LIT, v(s * 82, 44, 44), v(38, 22, 50), [0, 0, 0], false)
   }
   const p: Paint = { p: [], c: [], i: [] }
   eye(p, -1); eye(p, 1); rim(p, false); rim(p, true)

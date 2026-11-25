@@ -18,8 +18,8 @@ ok(Math.abs(b.max.x + b.min.x) < 1e-6, 'the same both sides')
 ok(EYE.a > 0.3 && EYE.a < 0.6, 'the eyes face forward')
 const flat = () => 1, at = (g = flat as (x: number, z: number) => number, bl?: (x: number, z: number) => boolean, bonn?: { x: number; z: number; yaw: number }) => momoSpot(g, bl, bonn)!
 const B = { x: 10, z: 20, yaw: 0 }, p = at(flat, undefined, B)
-ok(Math.abs(p.x - 10.46) < 1e-9 && Math.abs(p.z - 20.14) < 1e-9 && p.y === 1 && p.yaw === 0, 'her left boot, a touch ahead')
-{ const q = at(flat, undefined, { ...B, yaw: Math.PI / 2 }); ok(Math.abs(q.x - 10.14) < 1e-9 && Math.abs(q.z - 19.54) < 1e-9, 'it turns with her') }
+ok(Math.abs(p.x - 10.48) < 1e-9 && Math.abs(p.z - 19.84) < 1e-9 && p.y === 1 && p.yaw === 0, 'her left boot, a touch behind')
+{ const q = at(flat, undefined, { ...B, yaw: Math.PI / 2 }); ok(Math.abs(q.x - 9.84) < 1e-9 && Math.abs(q.z - 19.52) < 1e-9, 'it turns with her') }
 ok(at(flat, x => x > 10.4, B).x < 10, 'a wall on her left: her right'); ok(at(x => x > 10.4 ? 1 + MOMO_STEP + 0.01 : 1, undefined, B).x < 10, 'a step on her left: her right')
 ok(at(x => x > 10.2 ? -Infinity : 1, undefined, B).x < 10, 'the void on her left: her right'); ok(at(x => x === 10 ? 1 : -Infinity, undefined, B).y === 1, 'nowhere at all: at her height, never in the void')
 const bonn = () => gladeKeepers().find(k => k.id === 'bonn')!
