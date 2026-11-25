@@ -23,4 +23,4 @@ let known = false, waiting: (() => void)[] = []
 export const gladePeopleKnown = () => known
 /** the layer came (or could not be read): whoever waits for it goes on */
 export function gladePeopleAnswered() { known = true; const w = waiting; waiting = []; w.forEach(f => f()) }
-export function whenGladePeopleKnown(f: () => void) { if (known) f(); else waiting.push(f) }
+export function whenGladePeopleKnown(f: () => void) { if (known) { f(); return } waiting.push(f); setTimeout(() => { if (!known) gladePeopleAnswered() }, 4000) }

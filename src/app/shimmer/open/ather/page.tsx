@@ -479,8 +479,10 @@ function AtherSliceGame() {
     }, 380)
   }, [])
   const arriveRef = useRef(arrive); arriveRef.current = arrive
+  // M153 s1c-1: every arrival on the newborn spot waits for the published one (asked at page load, 4 s at most)
+  const arriveGlade = useCallback(() => whenGladePeopleKnown(() => arrive({ kind: 'glade' }, gladeNewbornSpot())), [arrive])
   // M71 s1: a keeper Greg has not folded a garden for has no home yet: 'home' (H, the map, a fall, the Hollows) is the Glade
-  const goHome = useCallback(() => { if (gardenOpen(loadTut())) arrive({ kind: 'plot' }, THRESHOLD); else arrive({ kind: 'glade' }, gladeNewbornSpot()) }, [arrive])
+  const goHome = useCallback(() => { if (gardenOpen(loadTut())) arrive({ kind: 'plot' }, THRESHOLD); else arriveGlade() }, [arrive])
   // M61: going visiting (or coming home) = a walk through the veil to the plot's threshold. Play together's Visit button calls the
   // handler; ?visit=<host>&vn=<name> is how the continent page hands a visit over.
   const visitHost = visitNow?.host ?? null, lastHost = useRef<string | null>(null)
@@ -711,7 +713,7 @@ function AtherSliceGame() {
 
   const travel = useCallback((d: Dest) => {
     if (d.kind === 'home') { goHome(); return }
-    if (d.kind === 'glade') { arrive({ kind: 'glade' }, gladeNewbornSpot()); return }   // M67 s1b: a visit lands where a newborn wakes, facing Greg
+    if (d.kind === 'glade') { arriveGlade(); return }   // M67 s1b: a visit lands where a newborn wakes, facing Greg
     if (d.kind === 'waymark') {
       if (!ww) { setToast('The Wilds are still loading.'); return }
       // M75 s2 (Magii d3bf5e9): a waymark whose ground went grey again is DARK: no travel until the ground is cleared again
@@ -769,7 +771,7 @@ function AtherSliceGame() {
   const hereTileRef = useRef(hereTile); hereTileRef.current = hereTile
   const fadeRef = useRef(fade); fadeRef.current = fade
   // M71 s1 backstop: any other way onto your own plot before Greg folds it (the routes above already go to the Glade) lands in the Glade
-  useEffect(() => { if (zone.kind === 'plot' && epoch > 0 && !visitNow && !gardenOpen(loadTut())) arrive({ kind: 'glade' }, gladeNewbornSpot()) }, [zone, epoch])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (zone.kind === 'plot' && epoch > 0 && !visitNow && !gardenOpen(loadTut())) arriveGlade() }, [zone, epoch])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // M156: not for a guest with no garden of their own: a reload on a mate's plot must wake them where they came from, not on ground Greg has not folded
     if (zone.kind === 'plot') { if (epoch > 0 && gardenOpen(loadTut())) clearSpot(); return }
@@ -796,7 +798,7 @@ function AtherSliceGame() {
     { const s = gladeNewbornSpot(); saveSpot(makeSpot(GLADE_TILE, s.x, s.z, s.yaw)) }   // M156: a reload before the veil lifts still wakes in the Glade
     // ★ M67 s1a (Alex 11-22, docs/tutorial-cluster.md): a newborn opens their eyes in the CLOSED Glade, in Greg's garden, facing
     // him (glade-cluster.ts gladeNewbornSpot), no longer at Moonwell in the open Wilds. The Glade needs no streaming.
-    whenGladePeopleKnown(() => arrive({ kind: 'glade' }, gladeNewbornSpot()))   // M153 s1c-1: on the published spot, not the code's
+    arriveGlade()
   }, [bornPending, arrive])
   // M67 s1a: the Glade's gate (open from the start) is its one way out: straight through to the Wilds at Greg's waymark
   // M67 s1b fix: pressed before the Wilds have loaded, the gate WAITS for them (one pending exit) instead of asking for a retry
@@ -807,7 +809,7 @@ function AtherSliceGame() {
     stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(GREG_WAYMARK.tile); arrive({ kind: 'wilds', tile: GREG_WAYMARK.tile }, besideStone({ x, z }, openAtRef.current, ww.heightAt), true); hudSay('The Wilds', 'zone') })
   }, [ww, arrive])
   useEffect(() => { if (gatePending && ww) { setGatePending(false); if (zone.kind === 'glade') leaveGlade() } }, [gatePending, ww, zone, leaveGlade])
-  const gladeFall = useCallback(() => arrive({ kind: 'glade' }, gladeNewbornSpot()), [arrive])
+  const gladeFall = arriveGlade
 
   // M84 s3b: the Wilds read published zone builds + tags the way the Glade does (zone-parts.ts / zone-tags.ts). The layer came with
   // ensureEdits (before ww exists); a part stands only once its tile is loaded (heightAt is -Infinity off the loaded land), so the

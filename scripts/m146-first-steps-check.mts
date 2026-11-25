@@ -13,7 +13,9 @@ import { SETTLERS, SETTLEMENT, pickTarget } from '../src/app/shimmer/open/ather/
 import { FIRST_STEPS_TITLE } from '../src/app/shimmer/open/ather/first-steps'
 import { FOLD_TEXT } from '../src/app/shimmer/open/ather/garden-fold'
 import { KAEL_INVITE } from '../src/app/shimmer/open/shared/opening-chain'
-import { gladeKeepers } from '../src/app/shimmer/open/ather/glade-cluster'
+import { gladeKeepers, gladeNewbornSpot, gregInGlade } from '../src/app/shimmer/open/ather/glade-cluster'
+import { setGladePeople } from '../src/app/shimmer/open/ather/glade-people'   // M153 s1c-1: people stand where the site's layer puts them
+import { parseGladeLayer } from '../src/app/shimmer/open/ather/glade-layer'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games').replace(/\/$/, ''), out = flag('--out', '/tmp/m146'), only = flag('--only', 'ABCD'), desk = process.argv.includes('--desktop')
 mkdirSync(out, { recursive: true })
@@ -52,6 +54,8 @@ async function open(seed?: Record<string, unknown>, born = false) {
     for (let k = 0; k < 3 && !(await p.$('[data-creator-done]')); k++) { await p.evaluate(() => { let b: HTMLElement | null = null; for (const e of document.querySelectorAll<HTMLElement>('button, a, [role="button"]')) if (/^BE BORN/i.test((e.innerText ?? '').trim())) b = e; b?.click() }); await poll(() => p.evaluate(() => !!document.querySelector('[data-creator-done]')), 30000) }
     await (await p.$('[data-creator-done]'))?.click()
     ok(await zone('glade', 60000), 'born in the Glade'); await sleep(2500)
+    const s = await p.evaluate(() => { const q = (window as any).__ather.state(); return { x: q.px, z: q.pz, yaw: q.yaw as number } }), nb = gladeNewbornSpot(), off = Math.hypot(s.x - nb.x, s.z - nb.z)
+    ok(off < 1, `born on the newborn spot (${off.toFixed(2)} m off; ${nb.x.toFixed(1)}, ${nb.z.toFixed(1)})`)
   }
   /** the gate: no flip pulse, no Rune Hold pulse, no errand goal */
   const map = async () => { await A('open', 'gate'); await sleep(1500); const ath = await p.evaluate(() => ({ flip: !!document.querySelector('[data-flip-pulse]'), stop: !!document.querySelector('[data-quest-stop]'), pin: !!document.querySelector('[data-quest-pin]') })); await p.evaluate(() => { [...document.querySelectorAll('[data-panel="fold-map"] button')].find(b => b.textContent === 'Flip map')?.dispatchEvent(new MouseEvent('click', { bubbles: true })) }); await sleep(900); const nyx = await p.evaluate(() => ({ dig: !!document.querySelector('[data-dig-door]'), goal: !!document.querySelector('[data-goal]') })); await p.keyboard.press('Escape'); await sleep(600); return { ...ath, ...nyx } }
@@ -110,6 +114,7 @@ const ended = async (k: K, tag: string) => {
   const j = await k.journal(); ok(!j?.fs && !j?.ids.includes('m70') && j?.active === 'errand', `${tag}: First Steps is off the page, the errand leads`)
 }
 try {
+  setGladePeople(parseGladeLayer(await (await fetch(`${url}/shimmer/open/glade-edits`, { cache: 'no-store' })).json()).props)
   if (only.includes('A')) {
     const k = await open(undefined, true), { p } = k
     await k.step('A newborn', '', 1, 1)
@@ -125,6 +130,8 @@ try {
     const again: string[] = []; for (let n = 0; n < 3; n++) again.push(...(await k.greg()).ls)
     ok(again.length === 3 && again.every(x => x === L('greg.b1.bark.pending')), `A: Greg thrice more: the pending bark only (${again.join(' | ')})`)
     await quiet(k, 'A after Greg x5'); await k.step('A friends', L('quest.b1.step').replace('{N}', '0'), 4, 1)
+    { const fs = (await k.journal())?.fs, ms = [fs?.where, ...(fs?.also ?? [])].filter((m: any) => m?.zone === 'glade'), fen = (await p.evaluate(() => (window as any).__glade?.folk ?? []) as any[]).find(x => x.id.endsWith(':fennel'))
+      const want = [...gladeKeepers(), fen]; ok(want.length === 4 && want.every(w => ms.some((m: any) => Math.hypot(m.x - w.x, m.z - w.z) < 0.5)), `A: a mark on each friend where they stand (${ms.map((m: any) => `${m.x.toFixed(0)},${m.z.toFixed(0)}`).join(' ')}; Greg ${gregInGlade().x.toFixed(0)},${gregInGlade().z.toFixed(0)})`) }
     await p.screenshot({ path: `${out}/a-friends.png` })
     let n = 0; for (const f of ['otto', 'tess', 'bonn', 'fennel']) { ok(await k.friend(f), `A: ${f} heard`); n++; if (n < 4) await k.step(`A ${n}/4`, L('quest.b1.step').replace('{N}', String(n)), 4 - n, 1) }
     await k.step('A back', L('quest.b1.done'), 1, 1)
