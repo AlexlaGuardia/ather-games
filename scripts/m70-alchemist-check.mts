@@ -57,6 +57,7 @@ try {
     const s = SETTLERS.find(x => x.id === id)!, fx = Math.sin(s.yaw), fz = Math.cos(s.yaw), px = s.x + fx * 2.2, pz = s.z + fz * 2.2
     for (let k = 0; k < 3; k++) {
       await p.evaluate((x, z, y) => { const g = (window as any).__ather; g.tp(x, z, y); g.look?.(y, -Math.atan2(0.8, 2.2)) }, px, pz, Math.atan2(px - s.x, pz - s.z)); await sleep(1500)
+      await poll(async () => (await A('near'))?.kind !== 'adesk', 8000)   // a slow frame still reads the Desk we just left: E would reopen it and hold the keeper
       await p.keyboard.press('KeyE'); await p.mouse.move(5, 5)
       if (await poll(async () => !!(await p.$('[data-talk-choices]')), 6000)) return true
     }
@@ -104,7 +105,8 @@ try {
   ok(arr.labels[3] === L('settler.choice.go'), `2. the choice "${L('settler.choice.go')}" (${arr.labels[3]})`)
   const t1 = await tut()
   ok(t1?.m70 === 'open' && !!t1.m70node, `2. Lamps Out open on node ${t1?.m70node}`)
-  ok(await poll(() => journalHas(L('quest.m70.title')), 12000), '2. "Lamps Out" in the journal')
+  // M146: a new keeper's one quest is First Steps; Lamps Out's step is its line (same move as m70-settlement-check)
+  ok(await poll(() => journalHas('First Steps'), 12000), '2. "First Steps" in the journal')
   ok(await talkTo('borage'), '2. E at Borage')
   const b1 = await bubble(); await readTalk()
   ok(b1?.name === 'Borage' && b1.line === L('settler.bark.open'), `2. Borage: bark.open (${JSON.stringify(b1)})`)
@@ -213,7 +215,7 @@ try {
   ok(left.every(n => n === 0), `9. the makings spent (${GOT.map((g, k) => g.id + ' ' + left[k])})`)
   ok(await poll(async () => (await side())?.side === 'brewed' && (await side())?.step === 'hand', 8000), `9. brewed, step hand (${JSON.stringify(await side())})`)
   await p.keyboard.press('Escape'); await sleep(500)
-  await p.evaluate(() => (document.querySelector('[data-panel="angelica-desk"] button[aria-label="Close"]') as HTMLElement | null)?.click())
+  await p.evaluate(() => (document.querySelector('[data-panel="angelica-desk"] button[aria-label="close"]') as HTMLElement | null)?.click())
 
   // ── 10 · hand -> reward + the set once ──
   const setBefore = await Promise.all(ALC_SET_ITEMS.map(id => countIn(id)))
