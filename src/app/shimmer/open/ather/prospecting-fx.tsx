@@ -42,7 +42,7 @@ export const crystalCentre = (c: Crystal) => c.y + 0.55 * c.s
 interface Bit { p: THREE.Vector3; v: THREE.Vector3; rot: THREE.Euler; spin: THREE.Vector3; t: number }
 
 export function ProspectingFX({ ww, aim, fx, ground, mineable }: {
-  ww: WildsWorld
+  ww: Pick<WildsWorld, 'crystalsNear'>
   aim: MutableRefObject<CrystalAim>
   fx: MutableRefObject<ProspectFx | null>
   ground: (x: number, z: number) => number

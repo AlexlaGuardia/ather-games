@@ -142,7 +142,7 @@ function Ground({ W, focus, off }: { W: Wilds; focus: Focus; off: { x: number; z
 
 // The Ather's four trees, each its own look (canon: game/shimmer-skilling.md › Tree Types). A pruned tree stands
 // thinned (a smaller, duller crown) until it regrows: forestry.ts keeps the timers, this only draws them.
-const LOOK: Record<TreeKind, { trunk: string; crown: string; emissive?: string; trunkW: number; shape: 'round' | 'dome' | 'weep' | 'giant' }> = {
+export const LOOK: Record<TreeKind, { trunk: string; crown: string; emissive?: string; trunkW: number; shape: 'round' | 'dome' | 'weep' | 'giant' }> = {
   goldwood:   { trunk: '#8a6a45', crown: '#c9c25e', trunkW: 1, shape: 'round' },     // warm golden bark, round canopy
   shimmeroak: { trunk: '#5f4430', crown: '#6f9b4f', trunkW: 1.35, shape: 'dome' },   // larger, harder bark, rich grain
   starwillow: { trunk: '#9a8160', crown: '#e7d78e', emissive: '#f2e3a0', trunkW: 0.8, shape: 'weep' },   // weeping, glowing tips
@@ -222,7 +222,7 @@ function TreeKindMesh({ trees, kind, focus, off }: { trees: Tree[]; kind: TreeKi
     </>
   )
 }
-function Trees({ W, focus, off }: { W: Wilds; focus: Focus; off: { x: number; z: number } }) {
+export function Trees({ W, focus, off }: { W: Pick<Wilds, 'trees'>; focus: Focus; off: { x: number; z: number } }) {
   const byKind = useMemo(() => TREE_KINDS.map(k => [k, W.trees.filter(t => t.kind === k)] as const), [W])
   return <>{byKind.map(([k, ts]) => <TreeKindMesh key={k} kind={k} trees={ts} focus={focus} off={off} />)}</>
 }

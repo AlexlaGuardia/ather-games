@@ -11,6 +11,9 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { FLORA_LOOKS } from '../../world/flora-placements'
 import { PieceBody } from './workshop'
 import { clusterGeometry, CRYSTAL_LOOK } from './crystal-nodes'
+import { LOOK as TREE_LOOK } from './wilds-scene'
+import { crownOf } from './forestry'
+import { NODE_CRYSTAL_S, isTreeKind, nodeTree } from './glade-nodes'
 import { SCENERY_BY, type PlacedProp, type SceneryKind } from './scenery'
 import { fillerGeometry, fillerMaterial } from './scenery-filler'
 import type { CrystalKind } from './prospecting'
@@ -72,6 +75,18 @@ function bakeCrystal(kind: CrystalKind): Part[] {
     { geometry: foot, material: new THREE.MeshLambertMaterial({ color: '#7a7068', flatShading: true }) },
   ]
 }
+/** s1b: a node's body in Fly, standing still: wilds-scene's trunk and crown, crystal-nodes' cluster and foot */
+function bakeNode(kind: string): Part[] {
+  if (!isTreeKind(kind)) { const ps = bakeCrystal(kind as CrystalKind); ps.forEach((p, i) => { p.geometry.translate(0, i ? -0.05 : -0.08, 0); p.geometry.scale(NODE_CRYSTAL_S, NODE_CRYSTAL_S * (!i && (kind === 'ather' || kind === 'pure') ? 1.15 : 1), NODE_CRYSTAL_S) }); return ps }
+  const L = TREE_LOOK[kind], c = crownOf({ ...nodeTree(kind), y: 0, kind }), trunk = new THREE.CylinderGeometry(0.24, 0.32, 1, 6)
+  trunk.scale(L.trunkW, c.trunkH, L.trunkW); trunk.translate(0, c.trunkH / 2, 0)
+  const crown = L.shape === 'weep' ? new THREE.ConeGeometry(1, 1, 9, 1, true) : L.shape === 'dome' ? new THREE.DodecahedronGeometry(1, 0) : new THREE.IcosahedronGeometry(1, 0)
+  crown.scale(c.r, L.shape === 'weep' ? c.hh * 2 : c.hh, c.r); crown.translate(0, c.cy, 0)
+  return [
+    { geometry: trunk, material: new THREE.MeshLambertMaterial({ color: L.trunk, flatShading: true }) },
+    { geometry: crown, material: new THREE.MeshLambertMaterial({ color: L.crown, flatShading: true, side: L.shape === 'weep' ? THREE.DoubleSide : THREE.FrontSide, emissive: L.emissive ?? '#000000', emissiveIntensity: L.emissive ? 0.22 : 0 }) },
+  ]
+}
 /** a plain block of the kind's size, for a model file that does not load (never a hole in the world) */
 const block = (K: SceneryKind): Part[] => { const g = new THREE.BoxGeometry(K.box?.w ?? K.w, K.h, K.box?.d ?? K.d); g.translate(0, K.h / 2, 0); return [{ geometry: g, material: new THREE.MeshLambertMaterial({ color: '#8a7a5c' }) }] }
 
@@ -82,6 +97,7 @@ function useBaked(K: SceneryKind): { parts: Part[] | null; need: string | null; 
     if (baked.has(K.k) || 'piece' in K.model) return
     let live = true
     if ('crystal' in K.model) { baked.set(K.k, bakeCrystal(K.model.crystal as CrystalKind)); bump(n => n + 1); return }
+    if ('node' in K.model) { baked.set(K.k, bakeNode(K.model.node)); bump(n => n + 1); return }
     if ('filler' in K.model) { baked.set(K.k, [{ geometry: fillerGeometry(K.model.filler), material: fillerMaterial() }]); bump(n => n + 1); return }
     let w = waiting.get(K.k)
     if (!w) { w = bakeGlb(K).catch(e => { console.error('[scenery] model did not load, drawing a block:', K.k, e); return block(K) }); waiting.set(K.k, w) }

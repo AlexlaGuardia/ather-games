@@ -331,7 +331,7 @@ export default function BuilderFly(p: Props) {
       {p.tiles.length > 0 && !p.tiles.some(t => t.noSea) && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[p.focus.x, waterY, p.focus.z]}><planeGeometry args={[3200, 3200]} /><meshLambertMaterial color="#3d6f99" transparent opacity={0.75} /></mesh>}
       {p.pool && <PoolWater heightAt={p.heightAt} rev={p.rev} />}
       {!p.placing && <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />}
-      {p.place && <PlaceLayer api={p.place} active={!!p.placing} heightAt={p.heightAt} rev={p.rev} />}
+      {p.place && <PlaceLayer api={p.place} active={!!p.placing} heightAt={p.heightAt} rev={p.rev} label={labelTex} />}
       {p.fixed && <GladeFixed heightAt={p.heightAt} label={labelTex} />}
       {p.overlay && <OverlayLayer overlay={p.overlay} heightAt={p.heightAt} rev={p.rev} />}
       {p.parts && <ZonePartsView parts={p.parts} />}

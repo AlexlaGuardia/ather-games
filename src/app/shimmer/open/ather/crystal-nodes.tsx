@@ -128,7 +128,7 @@ function Feet({ nodes }: { nodes: Crystal[] }) {
   )
 }
 
-export function Crystals({ W }: { W: Wilds }) {
+export function Crystals({ W }: { W: Pick<Wilds, 'crystals'> }) {
   const cluster = useMemo(clusterGeometry, []), chips = useMemo(chipsGeometry, [])
   useEffect(() => () => { cluster.dispose(); chips.dispose() }, [cluster, chips])
   const byKind = useMemo(() => CRYSTAL_KINDS.map(k => [k, W.crystals.filter(c => c.kind === k)] as const), [W])

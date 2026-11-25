@@ -29,10 +29,10 @@ export interface WildsMeta {
 
 /** A tree: trunk centre + crown size + which of the Ather's four it is (forestry.ts). Deterministic from the tile, so
  *  the page draws, the walker bumps and a prune finds the same one; `id` = tile:index is what a prune is saved under. */
-export interface Tree { x: number; z: number; y: number; tall: number; r: number; kind: TreeKind; id: string }
+export interface Tree { x: number; z: number; y: number; tall: number; r: number; kind: TreeKind; id: string; /** M153 s1b, a Glade node: its own reset (ms) instead of the dial's */ waitMs?: number }
 /** A crystal node on the rock (prospecting.ts): where, which, how big, its turn. `id` = tile:c<index> is what a fracture
  *  is saved under. Deterministic from the tile, like a tree. */
-export interface Crystal { x: number; z: number; y: number; kind: CrystalKind; s: number; rot: number; id: string }
+export interface Crystal { x: number; z: number; y: number; kind: CrystalKind; s: number; rot: number; id: string; waitMs?: number }
 
 export interface Wilds {
   meta: WildsMeta

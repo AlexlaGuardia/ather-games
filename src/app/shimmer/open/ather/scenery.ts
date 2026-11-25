@@ -11,11 +11,13 @@ import { CRYSTAL_KINDS, CRYSTAL_NAME } from './prospecting'
 import { FURNITURE, FURNITURE_ORDER } from './furniture'
 import { panelChain } from './rooms'
 import { isWholeQ, quadBounds } from './build-prefs'
-import type { Prop } from '../../world/builder-props'
+import { NODE_PREFIX, type Prop } from '../../world/builder-props'
+import { NODE_CRYSTALS, NODE_CRYSTAL_S, NODE_TREES, nodeName, nodeTree, nodeTrunk } from './glade-nodes'
+import { crownOf } from './forestry'
 import type { Box } from '../terrain-world'
 
-export type SceneryGroup = 'Trees' | 'Bushes' | 'Plants' | 'Rocks and logs' | 'Fences and signs' | 'Crystals' | 'Props' | 'Furniture'
-export const SCENERY_GROUPS: readonly SceneryGroup[] = ['Trees', 'Bushes', 'Plants', 'Rocks and logs', 'Fences and signs', 'Crystals', 'Props', 'Furniture']
+export type SceneryGroup = 'Nodes' | 'Trees' | 'Bushes' | 'Plants' | 'Rocks and logs' | 'Fences and signs' | 'Crystals' | 'Props' | 'Furniture'
+export const SCENERY_GROUPS: readonly SceneryGroup[] = ['Nodes', 'Trees', 'Bushes', 'Plants', 'Rocks and logs', 'Fences and signs', 'Crystals', 'Props', 'Furniture']
 /** w, d, h = its size at scale 1 (m); `box` = the part that blocks (a tree's trunk), absent = the whole size; `fit` = model height.
  *  `panel` = long and thin: off the axes it blocks as a chain. `arms` = it blocks as these (local centres, each a panel) instead.
  *  `ends` = local points where a piece of the same family joins on (endSnap) */
@@ -24,7 +26,7 @@ export interface SceneryKind {
   w: number; d: number; h: number; solid: boolean
   box?: { w: number; d: number; h: number }; panel?: boolean
   arms?: readonly { x: number; z: number; w: number; d: number; h: number }[]; ends?: readonly (readonly [number, number])[]
-  model: { glb: string; fit: number; look?: string; yaw?: number; glow?: number } | { crystal: string } | { piece: string } | { filler: string }
+  model: { glb: string; fit: number; look?: string; yaw?: number; glow?: number } | { crystal: string } | { piece: string } | { filler: string } | { node: string }
 }
 const words = (id: string) => { const s = id.replace(/[_-]+/g, ' '); return s[0].toUpperCase() + s.slice(1) }
 
@@ -62,6 +64,10 @@ export const FILLER: Readonly<Record<string, Omit<SceneryKind, 'k' | 'model'>>> 
 }
 
 export const SCENERY: readonly SceneryKind[] = [
+  // s1b: gatherable nodes (glade-nodes.ts). Fly draws the body off these rows; the game draws and works them as the Wilds' own.
+  ...NODE_TREES.map((kind): SceneryKind => { const t = { ...nodeTree(kind), y: 0, kind }, c = crownOf(t), h = c.cy + c.hh
+    return { k: `${NODE_PREFIX}${kind}`, group: 'Nodes', label: `${nodeName(kind)} node`, w: c.r * 2, d: c.r * 2, h, solid: true, box: nodeTrunk(kind), model: { node: kind } } }),
+  ...NODE_CRYSTALS.map((kind): SceneryKind => ({ k: `${NODE_PREFIX}${kind}`, group: 'Nodes', label: `${nodeName(kind)} node`, w: 1.2 * NODE_CRYSTAL_S, d: 1.2 * NODE_CRYSTAL_S, h: 1.35 * NODE_CRYSTAL_S, solid: false, model: { node: kind } })),
   ...Object.entries(FLORA_LOOKS).map(([id, l]): SceneryKind => { const h = TREE_H * l.scale
     return { k: `tree:${id}`, group: 'Trees', label: `${words(id)} tree`, w: h * 0.5, d: h * 0.5, h, solid: true, box: { w: h * 0.12, d: h * 0.12, h: h * 0.45 }, model: { glb: '/models/flora/tree.glb', fit: h, look: id } } }),
   ...Object.entries(BUSHES).map(([id, b]): SceneryKind => ({ k: `bush:${id}`, group: 'Bushes', label: words(id), ...b, solid: false, model: { glb: `/models/flora/${id}.glb`, fit: b.h } })),

@@ -50,7 +50,7 @@ function rayEll(o: THREE.Vector3, d: THREE.Vector3, cx: number, cy: number, cz: 
 
 
 export function ForestryFX({ ww, aim, fx, ground }: {
-  ww: WildsWorld
+  ww: Pick<WildsWorld, 'treesNear'>
   aim: MutableRefObject<Aim>
   fx: MutableRefObject<ForestryFx | null>
   ground: (x: number, z: number) => number

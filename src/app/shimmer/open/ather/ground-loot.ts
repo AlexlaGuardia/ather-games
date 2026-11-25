@@ -5,9 +5,10 @@
 //   s2, riding with a spirit) is a CLAIM: memory only, one holder at a time. A reload, a zone change or a travel mid-flight lets go
 //   of the claim and the drop is on the ground again. Every change reads the save first, so a second tab cannot pay one twice.
 // ★ Loot outlives its node's reset and the season: nothing but LOOT_LIFE_MS (real time) or a pick-up takes it.
-// Garden-tied like the node work (GARDEN_KEY_SPECS): never networked, a party mate has their own. Pure; the look = ground-loot-view.tsx.
-import { gardenKey } from '@/lib/keeper-local'
-import { ownerSlot } from '../shared/owner-store'
+// Garden-tied like the node work (GARDEN_KEY_SPECS; the Glade's: keeper-tied): never networked, a party mate has their own. Pure; the look = ground-loot-view.tsx.
+import { gardenKey, keeperKey } from '@/lib/keeper-local'
+import { ownerSlot, type OwnerSlot } from '../shared/owner-store'
+import { KEEPER_NODE, isKeeperNode } from './keeper-nodes'
 import type { NodeKind, Stack } from './channel'
 
 /** real time before a drop may vanish. Alex: at least 10 minutes. */
@@ -25,33 +26,45 @@ export interface Loot { id: string; item: string; n: number; x: number; y: numbe
 export interface Spot3 { x: number; y: number; z: number }
 
 const KEY = 'open.loot.v1'
-let loot: Loot[] = [], unsaved = false
+// M153 s1b: what a Glade node dropped is the KEEPER's, and lies in the Glade: a list of its own (the two grounds share coordinates).
+const KKEY = 'open.gladeloot.v1'
+export type LootPlace = 'wilds' | 'glade'
+interface Shelf { loot: Loot[]; unsaved: boolean; slot: OwnerSlot; get(): string | null; put(s: string): void; mine(id: string): boolean }
 const claims = new Map<string, string>()
-const slot = ownerSlot(() => gardenKey(KEY), () => { loot = []; unsaved = false; claims.clear() })
+const shelf = (keyOf: () => string, get: () => string | null, put: (s: string) => void, mine: (id: string) => boolean): Shelf => {
+  const h: Shelf = { loot: [], unsaved: false, get, put, mine, slot: ownerSlot(keyOf, () => { h.loot = []; h.unsaved = false; for (const id of claims.keys()) if (mine(id)) claims.delete(id) }) }
+  return h
+}
+/** a drop's id is <node>:<node id>:... */
+const keepers = (id: string) => id.startsWith(`tree:${KEEPER_NODE}`) || id.startsWith(`crystal:${KEEPER_NODE}`)
+const wildsLoot = shelf(() => gardenKey(KEY), () => localStorage.getItem(gardenKey(KEY)), s => localStorage.setItem(gardenKey(KEY), s), id => !keepers(id))
+const gladeLoot = shelf(() => keeperKey(KKEY), () => localStorage.getItem(keeperKey(KKEY)), s => localStorage.setItem(keeperKey(KKEY), s), keepers)
+const shelfOf = (id: string) => (keepers(id) ? gladeLoot : wildsLoot)
 const num = Number.isFinite
 const valid = (v: unknown): v is Loot => {
   const d = v as Loot
   return !!d && typeof d.id === 'string' && typeof d.item === 'string' && Number.isInteger(d.n) && d.n > 0 && num(d.x) && num(d.y) && num(d.z) && num(d.at)
 }
-function read(): void {
+function read(h: Shelf): void {
   try {
-    const s = JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? 'null'), seen = new Set<string>()
-    loot = (Array.isArray(s?.drops) ? s.drops as unknown[] : []).filter((d): d is Loot => valid(d) && !seen.has(d.id) && !!seen.add(d.id))
+    const s = JSON.parse(h.get() ?? 'null'), seen = new Set<string>()
+    h.loot = (Array.isArray(s?.drops) ? s.drops as unknown[] : []).filter((d): d is Loot => valid(d) && !seen.has(d.id) && !!seen.add(d.id))
   } catch { /* private window, or rubbish: what is in memory stands */ }
 }
-function load(): void { if (slot.due()) { loot = []; read() } }
+function load(h: Shelf): void { if (h.slot.due()) { h.loot = []; read(h) } }
 /** before a change: what the save says NOW (a second tab may have paid one); a save that could not be written is not read back */
-function fresh(): void { load(); if (slot.writable() && !unsaved) read() }
-function save(): void {
-  if (!slot.writable()) return
-  try { localStorage.setItem(gardenKey(KEY), JSON.stringify({ v: 1, drops: loot })); unsaved = false } catch { unsaved = true }
+function fresh(h: Shelf): void { load(h); if (h.slot.writable() && !h.unsaved) read(h) }
+function save(h: Shelf): void {
+  if (!h.slot.writable()) return
+  try { h.put(JSON.stringify({ v: 1, drops: h.loot })); h.unsaved = false } catch { h.unsaved = true }
 }
 const gone = (d: Loot, now: number) => now - d.at >= LOOT_LIFE_MS
-/** Everything lying about now. */
-export function lootNow(now = Date.now()): readonly Loot[] {
-  load()
-  if (loot.some(d => gone(d, now))) { fresh(); loot = loot.filter(d => !gone(d, now)); save(); for (const id of claims.keys()) if (!loot.some(d => d.id === id)) claims.delete(id) }
-  return loot
+/** Everything lying about now, in this place. */
+export function lootNow(now = Date.now(), place: LootPlace = 'wilds'): readonly Loot[] {
+  const h = place === 'glade' ? gladeLoot : wildsLoot
+  load(h)
+  if (h.loot.some(d => gone(d, now))) { fresh(h); h.loot = h.loot.filter(d => !gone(d, now)); save(h); for (const id of claims.keys()) if (h.mine(id) && !h.loot.some(d => d.id === id)) claims.delete(id) }
+  return h.loot
 }
 /** The piles of a yield: an item's n split over at most LOOT_PILES. */
 export function pilesOf(drops: readonly Stack[]): Stack[] {
@@ -59,15 +72,16 @@ export function pilesOf(drops: readonly Stack[]): Stack[] {
 }
 /** A node is finished: its yield lies on `spots` (one per pile, reused when there are fewer). `until` = the cycle (finishWork). */
 export function dropLoot(node: NodeKind, id: string, until: number, drops: readonly Stack[], spots: readonly Spot3[], now = Date.now()): Loot[] {
-  fresh()
-  const add = pilesOf(drops).map((s, k): Loot => ({ id: `${node}:${id}:${until}:${k}`, item: s.id, n: s.n, ...spots[k % spots.length], at: now })).filter(d => !loot.some(o => o.id === d.id))
-  loot = [...loot, ...add]; save()
+  const h = isKeeperNode(id) ? gladeLoot : wildsLoot
+  fresh(h)
+  const add = pilesOf(drops).map((s, k): Loot => ({ id: `${node}:${id}:${until}:${k}`, item: s.id, n: s.n, ...spots[k % spots.length], at: now })).filter(d => !h.loot.some(o => o.id === d.id))
+  h.loot = [...h.loot, ...add]; save(h)
   return add
 }
 /** Hold a drop (the keeper's pull; s2: a spirit). One holder; false = gone, or another has it. */
 export function claimLoot(id: string, who: string): boolean {
-  load()
-  if (!loot.some(d => d.id === id) || (claims.get(id) ?? who) !== who) return false
+  const h = shelfOf(id); load(h)
+  if (!h.loot.some(d => d.id === id) || (claims.get(id) ?? who) !== who) return false
   claims.set(id, who)
   return true
 }
@@ -76,13 +90,13 @@ export const holderOf = (id: string) => claims.get(id)
 /** The one way out of the record: `give` puts n in the bag and answers what did not fit (that stays on the ground). Null = not
  *  there any more, or another holds it. The claim is over either way. */
 export function payLoot(id: string, who: string, give: (item: string, n: number) => number, now = Date.now()): { item: string; got: number; left: number } | null {
-  fresh()
-  const d = loot.find(o => o.id === id), held = claims.get(id)
+  const h = shelfOf(id); fresh(h)
+  const d = h.loot.find(o => o.id === id), held = claims.get(id)
   if (!d || gone(d, now) || (held !== undefined && held !== who)) { if (held === who) claims.delete(id); return null }
   const left = Math.max(0, Math.min(d.n, give(d.item, d.n)))
-  loot = left ? loot.map(o => (o === d ? { ...d, n: left } : o)) : loot.filter(o => o !== d)
+  h.loot = left ? h.loot.map(o => (o === d ? { ...d, n: left } : o)) : h.loot.filter(o => o !== d)
   claims.delete(id)
-  if (left < d.n) save()
+  if (left < d.n) save(h)
   return { item: d.item, got: d.n - left, left }
 }
 /** Is the keeper close enough for this one to come? */
@@ -120,4 +134,4 @@ export function lootSpots(node: { x: number; z: number; y?: number }, feet: Spot
   return out
 }
 /** Test hook. */
-export const _resetLoot = () => { load(); loot = []; claims.clear(); save() }
+export const _resetLoot = () => { for (const h of [wildsLoot, gladeLoot]) { load(h); h.loot = []; if (h === wildsLoot || h.slot.writable()) save(h) } claims.clear() }

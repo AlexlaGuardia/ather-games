@@ -10,7 +10,7 @@ import { hudSay } from '../shared/hud-say'
 import { play as sfx } from '../shared/sfx'
 import { CRYSTAL_ITEM, type CrystalKind } from './prospecting'
 import { CRYSTAL_LOOK } from './crystal-nodes'
-import { claimLoot, inPull, lootNow, payLoot, releaseLoot, type Loot, type Spot3 } from './ground-loot'
+import { claimLoot, inPull, lootNow, payLoot, releaseLoot, type Loot, type LootPlace, type Spot3 } from './ground-loot'
 
 const ME = 'keeper', FLY_S = 0.4, FALL_MS = 450, SAY_S = 0.9, MAX = 48, SEE_M = 70
 export const LOOT_FULL = 'Your bag is full.'   // the wording the bag already uses (melee-view, shipyard-plot)
@@ -20,7 +20,9 @@ const SHARD: Record<string, string> = Object.fromEntries(Object.entries(CRYSTAL_
 const lookOf = (id: string): { m: 0 | 1 | 2; c: string } => LOGS[id] ? { m: 0, c: LOGS[id] } : SHARD[id] ? { m: 1, c: SHARD[id] } : { m: 2, c: id.endsWith('_sapling') ? '#7fbf5a' : id === 'mast' ? '#8a5a34' : id === 'blankstone' ? '#a7a39b' : '#d9b65c' }
 const fits = (d: Loot) => give(getInv(), d.item, 1).left === 0
 
-export function GroundLoot({ keeper, ground, can }: {
+export function GroundLoot({ keeper, ground, can, place = 'wilds' }: {
+  /** M153 s1b: which list lies here */
+  place?: LootPlace
   /** the keeper's feet */
   keeper: () => Spot3
   ground: (x: number, z: number) => number
@@ -34,12 +36,12 @@ export function GroundLoot({ keeper, ground, can }: {
   const drop = () => { for (const id of fly.current.keys()) releaseLoot(id, ME); fly.current.clear() }
   useEffect(() => {
     const g = window as unknown as { __ather?: Record<string, unknown> }
-    g.__ather = { ...(g.__ather ?? {}), loot: () => lootNow().map(d => ({ ...d })) }   // checks: READ only
+    g.__ather = { ...(g.__ather ?? {}), loot: () => lootNow(Date.now(), place).map(d => ({ ...d })) }   // checks: READ only
     const f = fly.current
     return () => { for (const id of f.keys()) releaseLoot(id, ME); f.clear() }   // left the Wilds mid-flight: it is on the ground
-  }, [])
+  }, [place])
   useFrame((_, dtRaw) => {
-    const dt = Math.min(0.1, dtRaw), now = Date.now(), all = lootNow(now), f = keeper(), tm = T.current
+    const dt = Math.min(0.1, dtRaw), now = Date.now(), all = lootNow(now, place), f = keeper(), tm = T.current
     if (!can()) drop()
     else {
       let blocked = false

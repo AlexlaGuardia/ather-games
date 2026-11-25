@@ -2,9 +2,10 @@
 // THE GATHER BAR (BETA M136, Alex 11-24: "the visible progress bar should keep track of it"). Up while a node is being worked
 // and while the keeper aims at one that is part done this cycle. Numbers and units only.
 import { useEffect, useRef, useState } from 'react'
+import { waitClock } from './keeper-nodes'
 
 export interface GatherView { id: string; p: number; left: number; need: number; resetMs: number; working: boolean }
-export const clock = (ms: number) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
+export const clock = (ms: number) => waitClock(Math.ceil(ms / 1000))
 
 export function GatherBar({ view }: { view: () => GatherView | null }) {
   const [v, setV] = useState<GatherView | null>(null)

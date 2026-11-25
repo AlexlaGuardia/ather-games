@@ -3,12 +3,12 @@
 // The worktable creative grammar: a click locks the pointer, the crosshair is the hand. RIGHT places what the hotbar slot holds, LEFT
 // picks up the piece under the crosshair (it leaves the map and is in hand, with its own turn and size), wheel = size, 1-9 = hotbar,
 // E = inventory, G = snap, T = turn step, R = turn, M = move (right puts it down, M again leaves it), X / Delete = delete, B = blocks
-// or not. Ctrl+Z is the brushes' own undo: the props sit in the same history (builder-props.ts).
+// or not. s1b: a NODE (Nodes group) is gathered in the game: true size, no toggle, a tag over it, N = its wait. Ctrl+Z is the brushes' own undo: the props sit in the same history (builder-props.ts).
 // This file never saves: TerrainEditor owns the list (draft, autosave, Publish), BuilderFly draws.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { PROP_SNAPS, PROP_TURNS, PROPS_MAX, addProp, removeProp, changeProp, nextOf, scaleBy, snapXZ, turnBy, type Prop } from '../../world/builder-props'
+import { NODE_WAITS, PROP_SNAPS, PROP_TURNS, PROPS_MAX, addProp, isNode, nodeWaitH, removeProp, changeProp, nextOf, scaleBy, snapXZ, turnBy, type Prop } from '../../world/builder-props'
 import { SCENERY, SCENERY_BY, SCENERY_GROUPS, endSnap, isSolid, sceneryPlaced, type PlacedProp } from '../../open/ather/scenery'
 import { SceneryView } from '../../open/ather/scenery-view'
 import { GladeLots } from '../../open/ather/glade-lots-view'
@@ -21,7 +21,9 @@ import { folkSpots } from '../../open/ather/folk-spots'
 /** where a piece in hand, aimed at (x, z), goes: onto a fence's end when one is near, else the grid. Snap free = exactly there. */
 const spotFor = (props: readonly Prop[], h: Hand, moving: string | null, snap: number, x: number, z: number) => (snap > 0 ? endSnap(moving ? props.filter(p => p.id !== moving) : props, h, x, z) : null) ?? { x: snapXZ(x, snap), z: snapXZ(z, snap) }
 type Ground = (x: number, z: number) => number
-export interface Hand { k: string; q: number; s: number; solid?: boolean }
+export interface Hand { k: string; q: number; s: number; solid?: boolean; /** s1b: a picked-up node keeps its id + wait */ id?: string; w?: number }
+/** the next wait up (round to the first), or down */
+const stepWait = (w: number, back: boolean) => { const a = NODE_WAITS as readonly number[]; return back ? [...a].reverse().find(v => v < w) ?? a[a.length - 1] : a.find(v => v > w) ?? a[0] }
 export interface PlaceApi {
   props: readonly Prop[]; hand: Hand | null; moving: string | null; snap: number
   put: (x: number, z: number) => void; pick: (id: string) => void; wheel: (dy: number) => void
@@ -43,20 +45,20 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
   const setSlots = useCallback((f: (s: (string | null)[]) => (string | null)[]) => setSlotsS(s => { const n = f(s); try { localStorage.setItem(SLOTS_KEY, JSON.stringify(n)) } catch { /* */ } return n }), [])
   const [slot, setSlot] = useState(0), [snap, setSnap] = useState<number>(0.5), [turn, setTurn] = useState<number>(45)
   const [inv, setInv] = useState(false), [moving, setMoving] = useState<string | null>(null), [target, setTarget] = useState<string | null>(null)
-  const [held, setHeld] = useState<{ q: number; s: number; solid?: boolean }>({ q: 0, s: 1 })
+  const [held, setHeld] = useState<Omit<Hand, 'k'>>({ q: 0, s: 1 })
   const mp = moving ? props.find(p => p.id === moving) ?? null : null
   const k = mp ? mp.k : slots[slot]
-  const hand = useMemo<Hand | null>(() => (k ? { k, ...held } : null), [k, held])
+  const hand = useMemo<Hand | null>(() => (k ? { k, ...held, ...(isNode({ k }) ? { s: 1, solid: undefined } : {}) } : null), [k, held])
   const S = useRef({ props, slots, slot, snap, turn, moving, target, held, hand, inv }); S.current = { props, slots, slot, snap, turn, moving, target, held, hand, inv }
   const go = useRef({ setProps, say }); go.current = { setProps, say }
   const put = useCallback((x: number, z: number) => {
     const c = S.current; if (!c.hand) { go.current.say('this slot is empty: E opens the inventory'); return }
-    const at = { ...spotFor(c.props, c.hand, c.moving, c.snap, x, z), q: c.hand.q, s: c.hand.s, ...(c.hand.solid === undefined ? {} : { solid: c.hand.solid }) }
+    const at = { ...spotFor(c.props, c.hand, c.moving, c.snap, x, z), q: c.hand.q, s: c.hand.s, ...(c.hand.solid === undefined ? {} : { solid: c.hand.solid }), ...(isNode(c.hand) ? { w: c.hand.w } : {}) }
     if (c.moving) { go.current.setProps(changeProp(c.props, c.moving, at)); setMoving(null); setHeld({ q: 0, s: 1 }); return }
-    const n = addProp(c.props, { k: c.hand.k, ...at })
-    if (n) go.current.setProps(n); else go.current.say(`the map holds ${PROPS_MAX} pieces at most`)
+    const n = addProp(c.props, { k: c.hand.k, ...at, ...(c.hand.id ? { id: c.hand.id } : {}) })
+    if (n) { go.current.setProps(n); if (c.hand.id) setHeld(({ id: _id, ...h }) => h) } else go.current.say(`the map holds ${PROPS_MAX} pieces at most`)
   }, [])
-  const handOf = (p: Prop) => ({ q: p.q, s: p.s, ...(p.solid === undefined ? {} : { solid: p.solid }) })
+  const handOf = (p: Prop) => ({ q: p.q, s: p.s, ...(isNode(p) ? { id: p.id, w: p.w } : {}), ...(p.solid === undefined ? {} : { solid: p.solid }) })
   const pick = useCallback((id: string) => {
     const c = S.current, p = c.props.find(q => q.id === id); if (!p || c.moving) return
     go.current.setProps(removeProp(c.props, id)); setSlots(s => s.map((v, i) => (i === c.slot ? p.k : v))); setHeld(handOf(p))
@@ -78,9 +80,15 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
       else if (e.code === 'KeyT') setTurn(v => nextOf(PROP_TURNS as readonly number[], v))
       else if (e.code === 'KeyR') setHeld(h => ({ ...h, q: turnBy(h.q, c.turn) }))
       else if (e.code === 'KeyM') { if (c.moving) { setMoving(null); setHeld({ q: 0, s: 1 }) } else { const p = c.props.find(q => q.id === c.target); if (p) { setMoving(p.id); setHeld(handOf(p)) } } }
+      else if (e.code === 'KeyN') {
+        const p = c.moving ? null : c.props.find(q => q.id === c.target)
+        if (p && isNode(p)) go.current.setProps(changeProp(c.props, p.id, { w: stepWait(nodeWaitH(p), e.shiftKey) }))
+        else if (c.hand && isNode(c.hand)) setHeld(h => ({ ...h, w: stepWait(nodeWaitH(h), e.shiftKey) }))
+      }
       else if (e.code === 'KeyX' || e.code === 'Delete') { const id = c.moving ?? c.target; if (id) { go.current.setProps(removeProp(c.props, id)); setMoving(null) } }
       else if (e.code === 'KeyB') {
         const p = c.moving ? null : c.props.find(q => q.id === c.target)
+        if (isNode(p ?? c.hand ?? { k: '' })) return
         if (p) go.current.setProps(changeProp(c.props, p.id, { solid: !isSolid(p) }))
         else if (c.hand) { const kk = c.hand.k; setHeld(h => ({ ...h, solid: !isSolid({ k: kk, solid: h.solid }) })) }
       }
@@ -106,7 +114,7 @@ export function useCentre() {
   }, [camera, scene, raycaster])
 }
 /** the placed pieces of the draft, the piece in hand (a ghost on the crosshair) and the frame round the piece under it */
-export function PlaceLayer({ api, active, heightAt, rev }: { api: PlaceApi | null; active: boolean; heightAt: Ground; rev: number }) {
+export function PlaceLayer({ api, active, heightAt, rev, label }: { api: PlaceApi | null; active: boolean; heightAt: Ground; rev: number; label: (text: string, color: string) => { tex: THREE.CanvasTexture; aspect: number } }) {
   const centre = useCentre(), ghost = useRef<THREE.Group>(null), frame = useRef<THREE.LineSegments>(null), last = useRef<string | null>(null)
   const items = useMemo(() => (api ? sceneryPlaced(api.props.filter(p => p.id !== api.moving), heightAt) : []), [api, heightAt, rev])   // eslint-disable-line react-hooks/exhaustive-deps
   const gk = active ? api?.hand?.k : undefined
@@ -126,9 +134,17 @@ export function PlaceLayer({ api, active, heightAt, rev }: { api: PlaceApi | nul
   })
   const edges = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), [])
   useEffect(() => () => edges.dispose(), [edges])
+  // s1b: a node wears a tag (its name and wait) and a ring, so it never reads as the scenery version beside it
+  const nodes = items.filter(isNode), texts = nodes.map(p => `${SCENERY_BY.get(p.k)!.label} · ${nodeWaitH(p)} h`).join('|')
+  const tags = useMemo(() => (texts ? texts.split('|').map(t => label(t, '#8ef0c0')) : []), [texts, label])
+  useEffect(() => () => tags.forEach(t => t.tex.dispose()), [tags])
   return <group name="place-layer">
     <SceneryView items={items} />
     <group ref={ghost} visible={false}><SceneryView items={ghostItems} ghost /></group>
+    {nodes.map((p, i) => { const K = SCENERY_BY.get(p.k)!; return tags[i] && <group key={p.id} position={[p.x, p.y, p.z]} userData={{ nodeTag: p.id }}>
+      <sprite position-y={K.h + 0.6} scale={[0.55 * tags[i].aspect, 0.55, 1]} renderOrder={4} raycast={() => {}}><spriteMaterial map={tags[i].tex} depthTest={false} /></sprite>
+      <mesh rotation-x={-Math.PI / 2} position-y={0.12} raycast={() => {}}><ringGeometry args={[1.25, 1.5, 32]} /><meshBasicMaterial color="#8ef0c0" transparent opacity={0.85} depthWrite={false} /></mesh>
+    </group> })}
     <lineSegments ref={frame} geometry={edges} visible={false} renderOrder={5}><lineBasicMaterial color="#fbbf24" depthTest={false} transparent /></lineSegments>
   </group>
 }
@@ -169,7 +185,7 @@ export function GladeFixed({ heightAt, label }: { heightAt: Ground; label: (text
 }
 
 // ── the screen: hotbar, status line, inventory ──
-const COLOR: Record<string, string> = { Trees: '#4f9a5f', Bushes: '#8fb35a', Plants: '#a9c763', 'Rocks and logs': '#8b857b', 'Fences and signs': '#a5834f', Crystals: '#9a8ae0', Props: '#b98a4e', Furniture: '#7fa6c4' }
+const COLOR: Record<string, string> = { Nodes: '#8ef0c0', Trees: '#4f9a5f', Bushes: '#8fb35a', Plants: '#a9c763', 'Rocks and logs': '#8b857b', 'Fences and signs': '#a5834f', Crystals: '#9a8ae0', Props: '#b98a4e', Furniture: '#7fa6c4' }
 export function PlaceHud({ place, locked, count, status }: { place: ReturnType<typeof usePlace>; locked: boolean; count: number; status?: string }) {
   const { slots, slot, setSlot, snap, turn, inv, setInv, choose, held, hand, api, target } = place
   const tp = target ? api.props.find(p => p.id === target) : null, name = (k: string | null | undefined) => (k ? SCENERY_BY.get(k)?.label ?? k : 'empty')
@@ -182,15 +198,15 @@ export function PlaceHud({ place, locked, count, status }: { place: ReturnType<t
           <div className="grid grid-cols-[repeat(auto-fill,minmax(118px,1fr))] gap-1">{SCENERY.filter(s => s.group === g).map(s =>
             <button key={s.k} onClick={() => choose(s.k)} data-testid={`place-item-${s.k}`} className={`text-left rounded border px-2 py-1.5 text-[11px] leading-tight ${slots[slot] === s.k ? 'border-amber-400 bg-amber-500/20' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
               <span className="inline-block w-2 h-2 rounded-sm mr-1.5" style={{ background: COLOR[g] }} />{s.label}
-              <span className="block text-[9px] font-mono text-white/40">{s.w.toFixed(1)} x {s.d.toFixed(1)} x {s.h.toFixed(1)} m{s.solid ? ' · blocks' : ''}</span>
+              <span className="block text-[9px] font-mono text-white/40">{s.w.toFixed(1)} x {s.d.toFixed(1)} x {s.h.toFixed(1)} m{s.solid ? ' · blocks' : ''}{isNode(s) ? ' · gathered' : ''}</span>
             </button>)}</div>
         </div>)}
       </div>
     </div>}
     <div className="absolute left-1/2 bottom-2 -translate-x-1/2 z-[9] flex flex-col items-center gap-1 pointer-events-none w-[96%]" data-testid="place-hud">
       <div className="rounded bg-black/70 px-2 py-1 text-[11px] font-mono text-white/80 tabular-nums text-center">
-        {api.moving ? 'moving ' : ''}{name(hand?.k)} · size {held.s.toFixed(2)} (wheel) · turn {Math.round(held.q * 90)}° (R, step {turn}° T) · snap {snap || 'free'} (G){hand ? ` · ${isSolid(hand) ? 'blocks' : 'walk through'} (B)` : ''} · {count}/{PROPS_MAX}
-        {tp && <span className="block text-amber-200">{name(tp.k)} · left pick up · M move · X delete · B {isSolid(tp) ? 'blocks' : 'walk through'}</span>}
+        {api.moving ? 'moving ' : ''}{name(hand?.k)} · {hand && isNode(hand) ? `true size · grows back in ${nodeWaitH(hand)} h (N)` : `size ${held.s.toFixed(2)} (wheel)`} · turn {Math.round(held.q * 90)}° (R, step {turn}° T) · snap {snap || 'free'} (G){hand && !isNode(hand) ? ` · ${isSolid(hand) ? 'blocks' : 'walk through'} (B)` : ''} · {count}/{PROPS_MAX}
+        {tp && <span className="block text-amber-200">{name(tp.k)} · left pick up · M move · X delete · {isNode(tp) ? `N grows back in ${nodeWaitH(tp)} h` : `B ${isSolid(tp) ? 'blocks' : 'walk through'}`}</span>}
         {status && <span className="block text-amber-200">{status}</span>}
         {!locked && <span className="block text-white/55">click the view: right places, left picks up · E inventory · Esc frees the mouse</span>}
       </div>

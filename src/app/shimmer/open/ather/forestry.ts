@@ -25,6 +25,7 @@ import { createSkillSet, addSkillXP, skillSetToSave, skillSetFromSave, type Skil
 import { keeperKey, gardenKey } from '@/lib/keeper-local'
 import { ownerSlot } from '../shared/owner-store'
 import { emitXp } from '../shared/xp-feed'
+import { isKeeperNode, onKeeperNodes, setSpent, spentUntil, waitClock } from './keeper-nodes'   // M153 s1b: a Glade node's record is the keeper's
 
 export type Zone = 'meadows' | 'thicket' | 'springs' | 'trails' | 'arid' | 'caverns'
 /** This season's zone names (RULED 2026-11-15, game/shimmer-geography.md › THE WILDS' ZONES, THIS SEASON): they may
@@ -82,6 +83,7 @@ function load(): void {
     try { const p = JSON.parse(localStorage.getItem(gardenKey(PRUNE_KEY)) ?? 'null'); if (p && typeof p === 'object' && !Array.isArray(p)) pruned = p } catch { /* fresh */ }
   }
 }
+onKeeperNodes(bump)
 if (typeof window !== 'undefined') {
   // a tree whose timer ran out redraws whole: every 10 s, if any prune has expired since the last look, tell the scene
   setInterval(() => { load(); const now = Date.now(); if (Object.values(pruned).some(t => t <= now)) { save(now); bump() } }, 10_000)
@@ -108,7 +110,7 @@ export function addOpenXp(id: SkillId, xp: number): number | null {
 /** The open world's skill set (the HUD's tool sockets read it; addSkillXP mutates it in place, so a ref to it stays live). */
 export const openSkills = () => { load(); return skills }
 /** ms until this tree has regrown, or 0. */
-export const regrowIn = (id: string, now = Date.now()) => { load(); return Math.max(0, (pruned[id] ?? 0) - now) }
+export const regrowIn = (id: string, now = Date.now()) => { load(); return Math.max(0, (isKeeperNode(id) ? spentUntil(id) : pruned[id] ?? 0) - now) }
 export const isPruned = (id: string, now = Date.now()) => regrowIn(id, now) > 0
 
 export const PRUNE_RANGE = 10
@@ -141,7 +143,7 @@ export const shakeOf = (id: string, now = Date.now()) => (shaking && shaking.id 
 /** What pruning would say, without doing it (the prompt reads this). */
 export function pruneCheck(kind: TreeKind, id: string, now = Date.now()): { ok: true } | { ok: false; why: string } {
   const left = regrowIn(id, now)
-  if (left > 0) return { ok: false, why: `${TREE_NAME[kind]}, regrowing (${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')}).` }
+  if (left > 0) return { ok: false, why: `${TREE_NAME[kind]}, regrowing (${waitClock(Math.floor(left / 1000))}).` }
   return { ok: true }
 }
 
@@ -164,7 +166,7 @@ export function pruneCommit(kind: TreeKind, id: string, now = Date.now(), until 
   const def = NODE_DEFS[kind]
   load()
   const n = scaled(def.xp), r = addSkillXP(skills.forestry, n)   // mutates the skill in place (engine/skills.ts)
-  pruned[id] = until
+  if (isKeeperNode(id)) setSpent(id, until, now); else pruned[id] = until
   save(now); bump()
   emitXp(skills.forestry, n, r.leveled)   // the HUD's XP bar (M21)
   return { xp: def.xp, levelUp: r.leveled ? r.newLevel : null }

@@ -91,6 +91,10 @@ import { zoneParts, zonePartBoxes, withZoneParts, publishedZones } from './zone-
 import { ZonePartsView } from './zone-parts-view'
 import { sceneryPlaced, sceneryBoxes } from './scenery'   // M153 s1a: the Glade's published scenery (drawn + solid)
 import { SceneryView } from './scenery-view'
+import { isNode } from '../../world/builder-props'
+import { gladeNodes } from './glade-nodes'   // M153 s1b: the Glade's tutorial nodes
+import { isKeeperNode } from './keeper-nodes'
+import { GladeNodesView } from './glade-nodes-view'
 import { zoneDoor, zoneUse, zonePrompt, zoneSay, homeTalk, type ZoneUse } from './zone-tags'   // M114 s2: a published zone's tag = one E point
 import { ShopPanel } from '../business/shop-panel'   // M114 s2: a Shop zone opens its storefront's own panel
 import { useLedger } from '../trade-ui'
@@ -441,10 +445,11 @@ function AtherSliceGame() {
   const gladeMeshLift = useMemo(() => gladeLift(gladeLayer.edits), [gladeLayer])
   const gladeParts = useMemo(() => zoneParts(gladeLayer.zones ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround])   // M84 s3
   const gladeScenery = useMemo(() => sceneryPlaced(gladeLayer.props ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround])   // M153 s1a
+  const gladeOwnNodes = useMemo(() => gladeNodes(gladeLayer.props ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround]), gladeDecor = useMemo(() => gladeScenery.filter(p => !isNode(p)), [gladeScenery])   // M153 s1b
   // M114 s2: each tagged zone's ONE E point (zone-tags.ts: front edge; locked / shop panel / home label + talk / supplier line)
   const gladeDoors = useMemo(() => (gladeLayer.zones ?? []).flatMap(z => { const u = zoneUse(z); return u ? [{ id: z.id, ...zoneDoor(z), u }] : [] }), [gladeLayer])
   const gladeDoorsRef = useRef(gladeDoors); gladeDoorsRef.current = gladeDoors
-  const gladeWorld = useMemo(() => terrainWorld(withZoneParts(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground: gladeZoneGround }, undefined, true), [...zonePartBoxes(gladeParts), ...sceneryBoxes(gladeScenery)])), [gladeZoneGround, gladeParts, gladeScenery])   // M67 s1a; s1b-2: the pond's bowl + Greg's home, lots, jetty
+  const gladeShape = useMemo(() => withZoneParts(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground: gladeZoneGround }, undefined, true), [...zonePartBoxes(gladeParts), ...sceneryBoxes(gladeScenery)]), [gladeZoneGround, gladeParts, gladeScenery]), gladeWorld = useMemo(() => terrainWorld(gladeShape), [gladeShape])   // M67 s1a; s1b-2: the pond's bowl + Greg's home, lots, jetty
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
   const fading = useRef(false)
@@ -1118,29 +1123,30 @@ function AtherSliceGame() {
   }, [])
   const chanName = (ch: Chan) => (ch.node === 'tree' ? TREE_NAME[ch.t.kind] : CRYSTAL_NAME[ch.c.kind])
   const treeDial = (t: Tree) => TREE_DIAL[t.kind], crystalDial = (c: Crystal) => CRYSTAL_DIAL[CRYSTAL_TIER[c.kind]]
+  const atNode = (id: string) => (isKeeperNode(id) ? zoneRef0.current === 'glade' : zoneRef0.current === 'wilds')   // M153 s1b: the Glade's own nodes there, the Wilds' there
   const rung = (node: 'tree' | 'crystal') => rungOf(toolsRef.current[node === 'tree' ? 'forestry' : 'prospecting'])
   const pruneAimed = useCallback(() => {
     const t = aimRef.current.tree
-    if (!t || zone.kind !== 'wilds') return
+    if (!t || !atNode(t.id)) return
     if (chanRef.current?.w.id === t.id) { stopChannel(`Let go. The ${TREE_NAME[t.kind]} keeps what is done.`); return }
     if (stanceRef.current.kind !== 'stowed') { setToast('Stow first (hold R): stowed hands use the right tool.'); return }
     if (!toolsRef.current.forestry) { setToast('You have no Forestry focus.'); return }
     const c = pruneCheck(t.kind, t.id); if (!c.ok) { setToast(c.why); return }
     if (manaRef.current.cur < Math.min(1, manaLeft(treeDial(t), rung('tree'), workOf('tree', t.id)))) { setToast('Out of mana.'); return }
     stopChannel()
-    const w = beginWork('tree', t.id, () => { const d = prunePlan(t.kind); const perk = perkBonus('forestry'); if (perk) d[0].n += 1; return { drops: d, extra: perk } }, treeDial(t).respawnMs)
+    const w = beginWork('tree', t.id, () => { const d = prunePlan(t.kind); const perk = perkBonus('forestry'); if (perk) d[0].n += 1; return { drops: d, extra: perk } }, t.waitMs ?? treeDial(t).respawnMs)
     chanRef.current = { w, node: 'tree', t, at: performance.now(), nextAt: 0, savedAt: performance.now() }
   }, [zone.kind, stopChannel])
   const mineAimed = useCallback(() => {
     const c = cAimRef.current.crystal
-    if (!c || zone.kind !== 'wilds') return
+    if (!c || !atNode(c.id)) return
     if (chanRef.current?.w.id === c.id) { stopChannel(`Let go. The ${CRYSTAL_NAME[c.kind]} keeps what is done.`); return }
     if (stanceRef.current.kind !== 'stowed') { setToast('Stow first (hold R): stowed hands use the right tool.'); return }
     if (!toolsRef.current.prospecting) { setToast('You have no Prospecting focus.'); return }
     const v = mineCheck(c.kind, c.id); if (!v.ok) { setToast(v.why); return }
     if (manaRef.current.cur < Math.min(1, manaLeft(crystalDial(c), rung('crystal'), workOf('crystal', c.id)))) { setToast('Out of mana.'); return }
     stopChannel()
-    const w = beginWork('crystal', c.id, () => { const p = minePlan(c.kind); return { drops: p.drops, extra: p } }, crystalDial(c).respawnMs)
+    const w = beginWork('crystal', c.id, () => { const p = minePlan(c.kind); return { drops: p.drops, extra: p } }, c.waitMs ?? crystalDial(c).respawnMs)
     chanRef.current = { w, node: 'crystal', c, at: performance.now(), nextAt: 0, savedAt: performance.now() }
   }, [zone.kind, stopChannel])
   /** the light at the node: one pulse of the fx */
@@ -1159,7 +1165,7 @@ function AtherSliceGame() {
     const ch = chanRef.current; if (!ch) return
     const at = ch.node === 'tree' ? ch.t : ch.c, now = performance.now(), dt = Math.min(0.25, (now - ch.at) / 1000)
     ch.at = now
-    if (zoneRef0.current !== 'wilds') { stopChannel(); return }
+    if (!atNode(ch.w.id)) { stopChannel(); return }
     if (stanceRef.current.kind !== 'stowed') { stopChannel(`Let go of the ${chanName(ch)}: your hands are full.`); return }
     if (Math.hypot(at.x - px, at.z - pz) > HOLD_RANGE) { stopChannel(`Too far. The ${chanName(ch)} keeps what is done.`); return }
     if (frozen.current) return
@@ -1177,10 +1183,11 @@ function AtherSliceGame() {
     }
     // done: the whole roll on the ground beside the node (M141, ground-loot.ts); XP and the level land now, the goods on pick-up
     const fin = finishWork(ch.w); if (!fin) { stopChannel(); return }
+    const own = isKeeperNode(ch.w.id), hAt = own ? gladeShape.ground : (x: number, z: number) => ww?.heightAt(x, z) ?? -Infinity
     const V = voidsRef.current, dry = (x: number, z: number) => { const y = ww?.heightAt(x, z) ?? -Infinity; return Number.isFinite(y) && !ww!.shape.water(x, y, z, x, y, z).some(b => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1 && y < b.y1) }
-    const free = (x: number, z: number) => !!ww && ww.walkable(x, z, 0.35) && (V?.weight(x, z) ?? 0) < FALL_LIP / 2 && dry(x, z) && !bodyBlocked(wildsStructures, x, ww.heightAt(x, z), z, 0.35)
+    const free = (x: number, z: number) => own ? hAt(x, z) > 0.1 && !bodyBlocked((x0, z0, x1, z1) => gladeShape.solids(x0, -50, z0, x1, 90, z1), x, hAt(x, z), z, 0.35) : !!ww && ww.walkable(x, z, 0.35) && (V?.weight(x, z) ?? 0) < FALL_LIP / 2 && dry(x, z) && !bodyBlocked(wildsStructures, x, ww.heightAt(x, z), z, 0.35)
     const feet = { x: px, y: dollDrive.current.y, z: pz }, yieldNow = ch.w.drops.filter(d => d.n > 0)
-    dropLoot(ch.node, ch.w.id, fin.until, yieldNow, lootSpots(at, feet, pilesOf(yieldNow).length, free, (x, z) => ww?.heightAt(x, z) ?? -Infinity))
+    dropLoot(ch.node, ch.w.id, fin.until, yieldNow, lootSpots(at, feet, pilesOf(yieldNow).length, free, hAt))
     knock(ch, true)
     const x = ch.node === 'tree' ? pruneCommit(ch.t.kind, ch.t.id, Date.now(), fin.until) : mineCommit(ch.c.kind, ch.c.id, Date.now(), fin.until)
     const skill = ch.node === 'tree' ? 'Forestry' : 'Prospecting', sk = ch.node === 'tree' ? 'forestry' : 'prospecting'
@@ -1192,15 +1199,15 @@ function AtherSliceGame() {
     const egg = ch.node === 'crystal' && ch.c.kind === 'egg' && typeof ex === 'object' && ex?.found ? `It was ${CRYSTAL_NAME[ex.found as keyof typeof CRYSTAL_NAME].toLowerCase().replace(' crystal', '')}! ` : ''
     if (ch.node === 'crystal') { const found = (ch.w.extra as { found: Exclude<CrystalKind, 'egg'> }).found; cFxRef.current?.burst(ch.c, { found }) }
     stopChannel(`${egg}${perk ? `${perk}! ` : ''}+${x.xp} ${skill}${x.levelUp ? `. ${skill} ${x.levelUp}!` : ''}`)
-  }, [stopChannel, ww])
+  }, [stopChannel, ww, gladeShape])
   const lootKeeper = useCallback(() => dollDrive.current, []), lootCan = useCallback(() => fadeRef.current === 0 && !sinkRef.current && !(vitalsRef.current.hp <= 0), [])   // M141
   /** what the bar shows: the node being worked, else the aimed node if it is part done (null = no bar) */
   const gatherView = (): GatherView | null => {
-    if (zone.kind !== 'wilds') return null
+    if (zone.kind === 'plot') return null
     const ch = chanRef.current, near = cAimRef.current.crystal && cAimRef.current.dist < aimRef.current.dist
     const c = ch ? (ch.node === 'crystal' ? ch.c : null) : near ? cAimRef.current.crystal : null, t = ch ? (ch.node === 'tree' ? ch.t : null) : near ? null : aimRef.current.tree
     const node = c ? 'crystal' : 'tree', id = (c ?? t)?.id, w = id ? workOf(node, id) : undefined
-    if (!w || !id) return null
+    if (!w || !id || !atNode(id)) return null
     const d = c ? crystalDial(c) : treeDial(t!)
     return { id, p: w.p, left: manaShown(d, rung(node), w), need: manaNeed(d, rung(node)), resetMs: Math.max(0, w.until - Date.now()), working: !!ch }
   }
@@ -1210,7 +1217,7 @@ function AtherSliceGame() {
   }, [mineAimed, pruneAimed])
   const crystalPrompt = () => {
     const c = cAimRef.current.crystal
-    if (!c || zone.kind !== 'wilds') return null
+    if (!c || !atNode(c.id)) return null
     if (stanceRef.current.kind !== 'stowed') return `${CRYSTAL_NAME[c.kind]} · hold R to stow, then click to prospect`
     const v = mineCheck(c.kind, c.id)
     const ch = chanRef.current, w = workOf('crystal', c.id), m = manaShown(crystalDial(c), rung('crystal'), w)
@@ -1295,7 +1302,7 @@ function AtherSliceGame() {
   }
   const treePrompt = () => {
     const t = aimRef.current.tree
-    if (!t || zone.kind !== 'wilds') return null
+    if (!t || !atNode(t.id)) return null
     if (stanceRef.current.kind !== 'stowed') return `${TREE_NAME[t.kind]} · hold R to stow, then click to prune`
     const c = pruneCheck(t.kind, t.id)
     const ch = chanRef.current, w = workOf('tree', t.id), m = manaShown(treeDial(t), rung('tree'), w)
@@ -1773,7 +1780,8 @@ function AtherSliceGame() {
         {zone.kind === 'plot' && <AnemonyxIfHere clock={clock} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
-        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={GLADE_FRAME} lift={gladeMeshLift} /><GladeCluster ground={ground} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /><SceneryView items={gladeScenery} /></>}   {/* M67 s1a */}
+        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={GLADE_FRAME} lift={gladeMeshLift} /><GladeCluster ground={ground} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /><SceneryView items={gladeDecor} /></>}   {/* M67 s1a */}
+        {zone.kind === 'glade' && <><GladeNodesView nodes={gladeOwnNodes} focus={poseRef} /><ForestryFX ww={gladeOwnNodes} aim={aimRef} fx={fxRef} ground={ground} /><ChannelFocus focus={focusRef} /><GatherTether ref={tetherRef} /><ProspectingFX ww={gladeOwnNodes} aim={cAimRef} fx={cFxRef} ground={ground} mineable={c => mineCheck(c.kind, c.id).ok} /><GroundLoot place="glade" keeper={lootKeeper} ground={ground} can={lootCan} /></>}   {/* M153 s1b */}
         {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
         {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
@@ -1890,7 +1898,7 @@ function AtherSliceGame() {
       {visitNow && <VisitPill name={visitNow.name} ready={!!visitNow.snap} onHome={() => endVisit()} />}
       {!visitNow && <GuestsPill guests={guestsHere} onSend={id => { if (plotNet.sendHome(id)) hudSay('Sent home.', 'info', 3) }} />}
       <LookChip />
-      {zone.kind === 'wilds' && <GatherBar view={gatherView} />}
+      {zone.kind !== 'plot' && <GatherBar view={gatherView} />}
       {zone.kind === 'wilds' && held === BAIT && <ReelBar api={rinApi} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} inGarden={zone.kind === 'plot'} />}
       <OpenSocial />   {/* M27: presence + invites + the Play together panel */}

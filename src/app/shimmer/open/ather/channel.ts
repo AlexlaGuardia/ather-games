@@ -9,8 +9,9 @@
 // ★ PROGRESS IS A FRACTION, not mana: a better focus picked up half way makes the rest cheaper.
 // Saved per garden (GARDEN_KEY_SPECS), beside open.pruned.v1 / open.mined.v1: a node is the plot's, every keeper of an account
 // sees the same trees, so a per-keeper record would let two keepers take two yields out of one cycle.
-import { gardenKey } from '@/lib/keeper-local'
-import { ownerSlot } from '../shared/owner-store'
+import { gardenKey, keeperKey } from '@/lib/keeper-local'
+import { ownerSlot, type OwnerSlot } from '../shared/owner-store'
+import { isKeeperNode } from './keeper-nodes'
 import { manaNeed, type GatherDial } from './gather-dials'
 
 export type NodeKind = 'tree' | 'crystal'
@@ -20,31 +21,40 @@ export interface Work { node: NodeKind; id: string; p: number; until: number; dr
 
 const KEY = 'open.gather.v1'
 const keyOf = (node: NodeKind, id: string) => `${node}:${id}`
-let works: Record<string, Work> = {}
-const slot = ownerSlot(() => gardenKey(KEY), () => { works = {} })
+// M153 s1b: a Glade node (keeper-nodes.ts) is the KEEPER's copy, so its record has a key of its own; the rest is the garden's.
+const KKEY = 'open.gladework.v1'
+interface Shelf { works: Record<string, Work>; slot: OwnerSlot; get(): string | null; put(s: string): void }
+const shelf = (keyOf: () => string, get: () => string | null, put: (s: string) => void): Shelf => { const h: Shelf = { works: {}, slot: ownerSlot(keyOf, () => { h.works = {} }), get, put }; return h }
+const garden = shelf(() => gardenKey(KEY), () => localStorage.getItem(gardenKey(KEY)), s => localStorage.setItem(gardenKey(KEY), s))
+const keeper = shelf(() => keeperKey(KKEY), () => localStorage.getItem(keeperKey(KKEY)), s => localStorage.setItem(keeperKey(KKEY), s))
+const of = (id: string) => (isKeeperNode(id) ? keeper : garden)
 const valid = (w: unknown): w is Work => {
   const x = w as Work
   return !!x && (x.node === 'tree' || x.node === 'crystal') && typeof x.id === 'string' && Number.isFinite(x.p) && x.p >= 0 && x.p <= 1
     && Number.isFinite(x.until) && Array.isArray(x.drops) && x.drops.every(d => !!d && typeof d.id === 'string' && Number.isFinite(d.n))
 }
-function load(): void {
-  if (!slot.due()) return
-  works = {}
+function load(h: Shelf): void {
+  if (!h.slot.due()) return
+  h.works = {}
   try {
-    const s = JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? 'null')
-    if (s && typeof s === 'object' && !Array.isArray(s)) for (const [k, w] of Object.entries(s)) if (valid(w)) works[k] = w
+    const s = JSON.parse(h.get() ?? 'null')
+    if (s && typeof s === 'object' && !Array.isArray(s)) for (const [k, w] of Object.entries(s)) if (valid(w)) h.works[k] = w
   } catch { /* fresh */ }
+}
+function saveShelf(h: Shelf, now: number): void {
+  load(h)
+  for (const k of Object.keys(h.works)) if (h.works[k].until <= now) delete h.works[k]
+  if (h.slot.writable()) try { h.put(JSON.stringify(h.works)) } catch { /* private window */ }
 }
 /** Write it down (the page calls this on let-go, once a second while working, and as the tab hides). */
 export function saveWork(now = Date.now()): void {
-  load()
-  for (const k of Object.keys(works)) if (works[k].until <= now) delete works[k]
-  if (slot.writable()) try { localStorage.setItem(gardenKey(KEY), JSON.stringify(works)) } catch { /* private window */ }
+  saveShelf(garden, now)
+  load(keeper); if (Object.keys(keeper.works).length) saveShelf(keeper, now)   // a keeper who never touched a Glade node writes nothing
 }
 /** This cycle's record of a node, or undefined (never touched, finished, or reset). */
 export function workOf(node: NodeKind, id: string, now = Date.now()): Work | undefined {
-  load()
-  const w = works[keyOf(node, id)]
+  const h = of(id); load(h)
+  const w = h.works[keyOf(node, id)]
   return w && w.until > now ? w : undefined
 }
 /** Touch a node: this cycle's record, or a fresh one (rolled now, its reset timer starting now). The caller has checked it
@@ -54,8 +64,8 @@ export function beginWork(node: NodeKind, id: string, plan: () => { drops: Stack
   if (had) return had
   const r = plan()
   const w: Work = { node, id, p: 0, until: now + respawnMs, drops: r.drops, extra: r.extra }
-  works[keyOf(node, id)] = w
-  saveWork(now)
+  of(id).works[keyOf(node, id)] = w
+  saveShelf(of(id), now)
   return w
 }
 /** The mana still to go with a focus of `rung`. */
@@ -77,9 +87,9 @@ export function stepWork(w: Work, d: GatherDial, rung: number, dt: number, mana:
 /** The yield is paid: forget the record. Its `until` is when the spent node resets. Null = there was nothing to pay. */
 export function finishWork(w: Work, now = Date.now()): { until: number } | null {
   if (w.p < 1 || workOf(w.node, w.id, now) !== w) return null
-  delete works[keyOf(w.node, w.id)]
-  saveWork(now)
+  delete of(w.id).works[keyOf(w.node, w.id)]
+  saveShelf(of(w.id), now)
   return { until: w.until }
 }
 /** Test hook. */
-export const _resetWork = () => { load(); works = {} }
+export const _resetWork = () => { for (const h of [garden, keeper]) { load(h); h.works = {} } }

@@ -28,6 +28,7 @@ import { addOpenXp, type Zone } from './forestry'
 import { perkFires, activeCompanion, perkLabel, GEM_DROP_CHANCE, GEM_ITEM } from '../shared/companion'
 import { gardenKey } from '@/lib/keeper-local'
 import { ownerSlot } from '../shared/owner-store'
+import { isKeeperNode, onKeeperNodes, setSpent, spentUntil, waitClock } from './keeper-nodes'   // M153 s1b
 import { KEEPSTONE_FIND, keepstoneFor } from './furniture'
 
 /** what stands on the rock. `egg` = a Wooded Trails element node: which element is only known when it shatters. */
@@ -93,16 +94,17 @@ const save = (now = Date.now()) => {
   for (const k of Object.keys(mined)) if (mined[k] <= now) delete mined[k]
   if (minedSlot.writable()) try { localStorage.setItem(gardenKey(MINED_KEY), JSON.stringify(mined)) } catch { /* private window */ }
 }
+onKeeperNodes(bump)
 if (typeof window !== 'undefined') {
   setInterval(() => { load(); const now = Date.now(); if (Object.values(mined).some(t => t <= now)) { save(now); bump() } }, 10_000)
 }
-export const regrowIn = (id: string, now = Date.now()) => { load(); return Math.max(0, (mined[id] ?? 0) - now) }
+export const regrowIn = (id: string, now = Date.now()) => { load(); return Math.max(0, (isKeeperNode(id) ? spentUntil(id) : mined[id] ?? 0) - now) }
 export const isMined = (id: string, now = Date.now()) => regrowIn(id, now) > 0
 
 /** What working this node would say, without doing it (the prompt reads this). */
 export function mineCheck(kind: CrystalKind, id: string, now = Date.now()): { ok: true } | { ok: false; why: string } {
   const left = regrowIn(id, now)
-  if (left > 0) return { ok: false, why: `${CRYSTAL_NAME[kind]}, growing back (${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')}).` }
+  if (left > 0) return { ok: false, why: `${CRYSTAL_NAME[kind]}, growing back (${waitClock(Math.floor(left / 1000))}).` }
   return { ok: true }
 }
 
@@ -140,7 +142,7 @@ export function mineCommit(kind: CrystalKind, id: string, now = Date.now(), unti
   const tier = TIER[kind]
   const levelUp = addOpenXp('prospecting', XP[tier])
   load()
-  mined[id] = until
+  if (isKeeperNode(id)) setSpent(id, until, now); else mined[id] = until
   save(now); bump()
   return { xp: XP[tier], levelUp }
 }
