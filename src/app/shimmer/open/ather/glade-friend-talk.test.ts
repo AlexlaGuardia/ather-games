@@ -39,7 +39,7 @@ for (const f of GARDEN_FRIENDS) {
   // the first talk after
   T = talk(sent(), f)
   const N = friendScript(T.k.c!).length, G = giftAt(T.k.c!)
-  ok(N === { bonn: 7, otto: 5, tess: 6 }[f as 'bonn'], `${f}: its script (${N})`)
+  ok(N === { bonn: 8, otto: 5, tess: 6 }[f as 'bonn'], `${f}: its script (${N})`)
   ok(T.node().options.map(o => o.label).join() === ANSWERS.more, `${f}: greet .1 offers "${ANSWERS.more}"`)
   T.walk()
   ok(T.k.handed.join() === GIFT_OF[f], `${f}: hands ${GIFT_OF[f]} exactly once`)
@@ -74,7 +74,7 @@ const old = readFileSync('/root/athernyx/CANON/game/shimmer-quest-glade-tutorial
 const isCanon = (id: string) => { const r = rows.get(id), t = GLADE_LINES[id]?.text; if (!r || !t) return false
   return r.main.startsWith('**(kept') ? (id.endsWith('.scene') ? r.today === `[SCENE: ${t}]` : old.includes(`: ${t}`)) : r.main.startsWith(id.endsWith('.scene') ? `**[SCENE: ${t}]**` : `**${t}**`) }
 const WANT: Record<string, string> = {
-  bonn: 'greet.1 greet.2 stay.1 gift.1 try.1 gift.2 rooms.1 rooms.2', hazel: 'greet.1 room.1 point.1', otto: 'greet.1 greet.2 gift.1 gift.2 gift.3 gift.4', sax: 'greet.1 room.1 point.1',
+  bonn: 'greet.1 greet.2 momo.1 stay.1 gift.1 try.1 gift.2 rooms.1 rooms.2', hazel: 'greet.1 room.1 point.1', otto: 'greet.1 greet.2 gift.1 gift.2 gift.3 gift.4', sax: 'greet.1 room.1 point.1',
   tess: 'greet.1 greet.2 gift.1 gift.2 gift.3 gift.4', yarrow: 'greet.1 room.1 point.1', mallow: 'greet.1 room.1 point.1' }
 let u = sent()
 for (const s of TOUR) {
@@ -88,7 +88,9 @@ for (const s of TOUR) {
   if (isGuideId(s)) { const b = talk(rt(u), s); ok(!b.k.c!.first, `${s}: once`); ok(T.k.handed.length === 0, `${s}: hands nothing`) }
 }
 for (const id of Object.values(SCENE_OF)) ok(isCanon(id), `${id} is the signed scene`)
-ok(talk(sent(), 'bonn').k.c!.script.every(x => !x.includes('momo')), 'no Momo yet (s2)')
+{ const s = friendScript(friendStart(sent(), 'bonn')); ok(s.indexOf('bonn.b1.momo.1') === s.indexOf('bonn.b1.greet.2') + 1 && s.indexOf('bonn.b1.stay.1') === s.indexOf('bonn.b1.momo.1') + 1 && SCENE_OF['bonn.b1.momo.1'] === 'bonn.b1.momo.scene', 'Momo: after the greet, before stay, his box above') }
+ok(friendScript(friendStart(hearFriend(sent(), 'bonn'), 'bonn')).every(x => !x.includes('momo')), 'Momo: nothing after the first talk')
+ok(Object.keys(GLADE_LINES).every(k => !/flint|pip/i.test(k)) && Object.values(GLADE_LINES).every(l => !/\b(Flint|Pip)\b/.test(l.text)), 'Flint and Pip: not yet')
 const fc = fennelStart(u, false, 1); ok(fc.home && fennelScript(fc).at(-1) === 'fennel.b1.point.1' && fennelScript(fc)[2] === 'fennel.b1.room.1' && isCanon('fennel.b1.point.1') && isCanon('fennel.b1.room.1'), 'Fennel last: the room, and on to Greg')
 ok(!fennelScript(fennelStart(sent(), false, 1)).includes('fennel.b1.point.1'), 'Fennel early: not sent to Greg yet')
 { const k = hearFriend(u, 'fennel'), d = endFirstSteps({ ...k, m70: 'thanked' }); ok(tourStop(k) === null && !walkedTour(k) && walkedTour(d) && !walkedTour(legacyTut()) && !walkedTour({ ...sent(), fs: 'done' }), 'the old tour is replaced only for who walked this one') }

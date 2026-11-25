@@ -413,6 +413,7 @@ const OWNERS: Record<string, string> = {
   'open.inv.v1': 'open/shared/inventory.ts', 'open.loadout.v1': 'open/shared/loadout.ts', 'open.fleet.v1': 'open/shared/fleet.ts', 'open.pack.v1': 'open/ather/backpack.ts', 'open.rinquest.v1': 'open/ather/rinquest.ts', 'open.look.v1': 'open/shared/keeper-look.ts', 'open.sights.v1': 'open/shared/sight-looks.ts', 'open.skills.v1': 'open/ather/forestry.ts',   // M12 step 1
   'open.gladespent.v1': 'open/ather/keeper-nodes.ts', 'open.gladework.v1': 'open/ather/channel.ts', 'open.gladeloot.v1': 'open/ather/ground-loot.ts',   // M153 s1b
   'open.chain.v1': 'open/shared/opening-chain.ts',   // BETA M73: the opening chain
+  'open.morelintro.v1': 'open/shared/morel-intro.ts',   // BETA M155 s2
   'open.repair.v1': 'open/shared/ship-repair.ts',   // BETA M108: Kael's ship repair, stage 1
   'open.keeper.name.v1': '../../lib/keeper-roster.ts',   // M66 s3: the name a player gives a keeper (KEEPER_NAME_KEY)
 }

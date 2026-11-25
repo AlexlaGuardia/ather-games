@@ -36,7 +36,7 @@ export const nodeBeside = (f: Talker, at: { x: number; z: number }, n: { trees: 
 
 /** The whole first talk, in the batch's order. */
 const SCRIPT: Readonly<Record<Talker, readonly string[]>> = {
-  bonn: ['bonn.b1.greet.1', 'bonn.b1.greet.2', 'bonn.b1.stay.1', 'bonn.b1.gift.1', 'bonn.b1.try.1', 'bonn.b1.gift.2', 'bonn.b1.rooms.1', 'bonn.b1.rooms.2'],
+  bonn: ['bonn.b1.greet.1', 'bonn.b1.greet.2', 'bonn.b1.momo.1', 'bonn.b1.stay.1', 'bonn.b1.gift.1', 'bonn.b1.try.1', 'bonn.b1.gift.2', 'bonn.b1.rooms.1', 'bonn.b1.rooms.2'],
   otto: ['otto.b1.greet.1', 'otto.b1.greet.2', 'otto.b1.gift.1', 'otto.b1.gift.2', 'otto.b1.gift.3', 'otto.b1.gift.4'],
   tess: ['tess.b1.greet.1', 'tess.b1.greet.2', 'tess.b1.gift.1', 'tess.b1.gift.2', 'tess.b1.gift.3', 'tess.b1.gift.4'],
   hazel: ['hazel.b1.greet.1', 'hazel.b1.room.1', 'hazel.b1.point.1'],
@@ -49,7 +49,7 @@ const NODE_LINES: readonly string[] = ['bonn.b1.try.1', 'otto.b1.gift.2']
 /** a pointer, and the stop it points at */
 const POINTS: Readonly<Record<string, Stop>> = { 'hazel.b1.point.1': 'otto', 'sax.b1.point.1': 'tess', 'yarrow.b1.point.1': 'mallow', 'mallow.b1.point.1': 'fennel' }
 /** the signed scene box above a line */
-export const SCENE_OF: Readonly<Record<string, string>> = { 'bonn.b1.gift.1': 'bonn.b1.gift.scene', 'bonn.b1.try.1': 'bonn.b1.try.scene', 'otto.b1.gift.1': 'otto.b1.gift.scene', 'otto.b1.gift.2': 'otto.b1.try.scene' }
+export const SCENE_OF: Readonly<Record<string, string>> = { 'bonn.b1.momo.1': 'bonn.b1.momo.scene', 'bonn.b1.gift.1': 'bonn.b1.gift.scene', 'bonn.b1.try.1': 'bonn.b1.try.scene', 'otto.b1.gift.1': 'otto.b1.gift.scene', 'otto.b1.gift.2': 'otto.b1.try.scene' }
 
 /** Decided ONCE when the talk opens (hearing them on the last line must not swap the script under the bubble): true = the first talk
  *  after Greg sent you, false = the bark (before Greg sends you, after, legacy). A guide is only opened when due (guideTalks). */

@@ -115,6 +115,7 @@ function Messages({ style, align }: { style: React.CSSProperties; align: 'left' 
           ...(l.kind === 'zone' ? { ...hearthDisplay, fontSize: 20, fontWeight: 700, letterSpacing: '0.04em' } : { ...hearthBody, fontSize: l.kind === 'item' ? 14 : 13, fontWeight: l.kind === 'item' ? 800 : 600 }),
           color: l.kind === 'chat' ? '#cfe8ff' : '#fff6e4', textShadow: '0 1px 3px rgba(0,0,0,.95), 0 0 10px rgba(0,0,0,.45)',
           textAlign: align, lineHeight: 1.3, animation: 'gamehud-in .18s ease-out',
+          ...(l.kind === 'caption' ? { color: '#3a2716', textShadow: 'none', background: 'linear-gradient(#f3e6c8, #e6d3ab)', border: '2px solid #6b4a2e', borderRadius: 8, padding: '4px 10px', marginBottom: 2, boxShadow: '0 1px 4px rgba(0,0,0,.45)' } : {}),   // M155: a word to the player, on a plate
         }} data-say={l.kind}>{l.kind === 'morel' ? <MorelText text={l.text} align={align} /> : l.text}</div>
       ))}
       <style>{'@keyframes gamehud-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}' + MOREL_PULSE_CSS}</style>

@@ -77,7 +77,7 @@ import { loadTut, saveTut, gift as tutGift, allHeard, tessPacket, type Tut, type
 import { gardenOpen, foldOffered, foldNode, buyPick, FOLD_TEXT, type FoldStep } from './garden-fold'   // M71 s1: Greg folds the first garden
 import { friendStart, friendNode, nodeBeside, guideTalks, isGuideId, FRIEND_NAME, GARDEN_FRIENDS, type FriendCursor, type GardenFriend, type Talker } from './glade-friend-talk'   // M68 s3a
 import { line as gladeLine } from './glade-tutorial-lines'
-import { endFirstSteps } from './glade-tutorial'
+import { endFirstSteps, peekFirstSteps } from './glade-tutorial'
 import { firstStepsHello } from './glade-greg-talk'
 import { walkedTour, type Stop } from './glade-tutorial'   // M155: the guided tour
 import { FIRST_STEPS_ID, firstStepsEntries, mapSpots, type FirstStepsWorld } from './first-steps'   // M146: the one opening quest
@@ -165,7 +165,7 @@ import { useMenuLock } from '../shared/menu-lock'
 import { BirthGate, useBirthGateUp, BORN_EVENT } from '../birth-gate'
 import { MorelBubble } from '../shared/morel-bubble'   // BETA M33: the glove's gem speaks (ammo)
 import { markMet } from '../shared/met'
-import { useMorelHints } from '../shared/morel-hints'   // BETA M33 S2: stuck hints on the errand
+import { morelAtNode, useMorelHints } from '../shared/morel-hints'   // BETA M33 S2: stuck hints on the errand
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
 import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
 import { DeathPack, fallAndDrop, packLying } from './death-pack'
@@ -205,12 +205,12 @@ import { ReelBar } from '../shared/reel-bar'
 import { play as sfx } from '../shared/sfx'
 /** the Wilds' water surface (the rinning float rides it) */
 const WILDS_WATER_Y = 0.02
-import { prunePlan, pruneCommit, pruneCheck, startShake, openSkills, openLevel, addOpenXp, setOpenXpMult, TREE_NAME, ZONE_NAME, type Zone as WildsZone } from './forestry'
+import { prunePlan, pruneCommit, pruneCheck, regrowIn as treeRegrow, startShake, openSkills, openLevel, addOpenXp, setOpenXpMult, TREE_NAME, ZONE_NAME, type Zone as WildsZone } from './forestry'
 import { ForestryFX, type Aim, type ForestryFx } from './forestry-fx'
 import { ProspectingFX, crystalCentre, type CrystalAim, type ProspectFx } from './prospecting-fx'
 import { CompanionFollower } from '../shared/companion-follower'
 import { subscribeCompanion, takeJoined, perkLabel, perkBonus } from '../shared/companion'
-import { minePlan, mineCommit, mineCheck, CRYSTAL_NAME, CRYSTAL_ITEM, TIER as CRYSTAL_TIER, type CrystalKind } from './prospecting'
+import { minePlan, mineCommit, mineCheck, regrowIn as crystalRegrow, CRYSTAL_NAME, CRYSTAL_ITEM, TIER as CRYSTAL_TIER, type CrystalKind } from './prospecting'
 import { beginWork, stepWork, finishWork, saveWork, workOf, manaLeft, manaShown, type Work } from './channel'
 import { TREE_DIAL, CRYSTAL_DIAL, HOLD_RANGE, PULSE_GAP_MS, manaNeed } from './gather-dials'
 import { GatherBar, type GatherView } from './gather-bar'
@@ -456,6 +456,7 @@ function AtherSliceGame() {
   const gladeDoors = useMemo(() => (gladeLayer.zones ?? []).flatMap(z => { const u = zoneUse(z); return u ? [{ id: z.id, ...zoneDoor(z), u }] : [] }), [gladeLayer])
   const gladeDoorsRef = useRef(gladeDoors); gladeDoorsRef.current = gladeDoors
   const gladeShape = useMemo(() => withZoneParts(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground: gladeLand }, undefined, true), [...zonePartBoxes(gladeParts), ...sceneryBoxes(gladeScenery)]), [gladeLand, gladeParts, gladeScenery]), gladeWorld = useMemo(() => terrainWorld(gladeShape), [gladeShape])   // M67 s1a; s1b-2: the pond's bowl + Greg's home, lots, jetty
+  const momoBlocked = useCallback((x: number, z: number) => bodyBlocked((x0, z0, x1, z1) => gladeShape.solids(x0, -50, z0, x1, 90, z1), x, gladeShape.ground(x, z), z, 0.2), [gladeShape])   // M155 s2
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
   const fading = useRef(false)
@@ -1132,13 +1133,16 @@ function AtherSliceGame() {
   const treeDial = (t: Tree) => TREE_DIAL[t.kind], crystalDial = (c: Crystal) => CRYSTAL_DIAL[CRYSTAL_TIER[c.kind]]
   const atNode = (id: string) => (isKeeperNode(id) ? zoneRef0.current === 'glade' : zoneRef0.current === 'wilds')   // M153 s1b: the Glade's own nodes there, the Wilds' there
   const rung = (node: 'tree' | 'crystal') => rungOf(toolsRef.current[node === 'tree' ? 'forestry' : 'prospecting'])
+  const nodeTry = (id: string, node: 'tree' | 'crystal', regrowMs: number, need: number) => ({ firstSteps: peekFirstSteps(), tutorial: isKeeperNode(id), tool: !!toolsRef.current[node === 'tree' ? 'forestry' : 'prospecting'], regrowMs, need, rung: rung(node) })   // M155 s2
   const pruneAimed = useCallback(() => {
     const t = aimRef.current.tree
     if (!t || !atNode(t.id)) return
     if (chanRef.current?.w.id === t.id) { stopChannel(`Let go. The ${TREE_NAME[t.kind]} keeps what is done.`); return }
     if (stanceRef.current.kind !== 'stowed') { setToast('Stow first (hold R): stowed hands use the right tool.'); return }
-    if (!toolsRef.current.forestry) { setToast('You have no Forestry focus.'); return }
-    const c = pruneCheck(t.kind, t.id); if (!c.ok) { setToast(c.why); return }
+    const nt = nodeTry(t.id, 'tree', treeRegrow(t.id), treeDial(t).need)   // M155: Morel's word to a newborn, in the toast's place
+    if (!toolsRef.current.forestry) { if (!morelAtNode(nt)) setToast('You have no Forestry focus.'); return }
+    const c = pruneCheck(t.kind, t.id); if (!c.ok) { if (!morelAtNode(nt)) setToast(c.why); return }
+    morelAtNode(nt)
     if (manaRef.current.cur < Math.min(1, manaLeft(treeDial(t), rung('tree'), workOf('tree', t.id)))) { setToast('Out of mana.'); return }
     stopChannel()
     const w = beginWork('tree', t.id, () => { const d = prunePlan(t.kind); const perk = perkBonus('forestry'); if (perk) d[0].n += 1; return { drops: d, extra: perk } }, t.waitMs ?? treeDial(t).respawnMs)
@@ -1149,8 +1153,10 @@ function AtherSliceGame() {
     if (!c || !atNode(c.id)) return
     if (chanRef.current?.w.id === c.id) { stopChannel(`Let go. The ${CRYSTAL_NAME[c.kind]} keeps what is done.`); return }
     if (stanceRef.current.kind !== 'stowed') { setToast('Stow first (hold R): stowed hands use the right tool.'); return }
-    if (!toolsRef.current.prospecting) { setToast('You have no Prospecting focus.'); return }
-    const v = mineCheck(c.kind, c.id); if (!v.ok) { setToast(v.why); return }
+    const nt = nodeTry(c.id, 'crystal', crystalRegrow(c.id), crystalDial(c).need)
+    if (!toolsRef.current.prospecting) { if (!morelAtNode(nt)) setToast('You have no Prospecting focus.'); return }
+    const v = mineCheck(c.kind, c.id); if (!v.ok) { if (!morelAtNode(nt)) setToast(v.why); return }
+    morelAtNode(nt)
     if (manaRef.current.cur < Math.min(1, manaLeft(crystalDial(c), rung('crystal'), workOf('crystal', c.id)))) { setToast('Out of mana.'); return }
     stopChannel()
     const w = beginWork('crystal', c.id, () => { const p = minePlan(c.kind); return { drops: p.drops, extra: p } }, c.waitMs ?? crystalDial(c).respawnMs)
@@ -1791,7 +1797,7 @@ function AtherSliceGame() {
         {zone.kind === 'plot' && <AnemonyxIfHere clock={clock} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
-        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={gladeFrame(gladeLayer)} lift={gladeMeshLift} /><GladeCluster ground={ground} marker={gregMark} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /><SceneryView items={gladeDecor} /></>}   {/* M67 s1a */}
+        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={gladeFrame(gladeLayer)} lift={gladeMeshLift} /><GladeCluster ground={ground} blocked={momoBlocked} marker={gregMark} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /><SceneryView items={gladeDecor} /></>}   {/* M67 s1a */}
         {zone.kind === 'glade' && <><GladeNodesView nodes={gladeOwnNodes} focus={poseRef} /><ForestryFX ww={gladeOwnNodes} aim={aimRef} fx={fxRef} ground={ground} /><ChannelFocus focus={focusRef} /><GatherTether ref={tetherRef} /><ProspectingFX ww={gladeOwnNodes} aim={cAimRef} fx={cFxRef} ground={ground} mineable={c => mineCheck(c.kind, c.id).ok} /><GroundLoot place="glade" keeper={lootKeeper} ground={ground} can={lootCan} /></>}   {/* M153 s1b */}
         {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}

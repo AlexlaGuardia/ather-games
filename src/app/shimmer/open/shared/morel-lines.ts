@@ -32,3 +32,12 @@ export const MOREL_NUDGE = {
 export const MOREL_DIG_HINT = {
   digFlip: 'Keepers who set out on a note turn the map over here. The button is in this panel.',
 } as const
+
+/** ★ SIGNED (Alex 11-25, c9b349a): shimmer-lines-batch-2026-11-25a.md §J, the Mains. BETA M155 (morel-nodes.ts says when). */
+export const MOREL_NODE_HINT = {
+  tool_missing: 'Keepers say that one wants its tool in your hand first.',
+  too_tough: 'Careful. Without the right tool, that one might drain all your mana.',
+  regrowing: 'That one has not grown back yet. It needs {REGROW} more.',
+} as const
+/** ★ SIGNED with them: not Morel speaking, a box for the player (morel-intro.ts). */
+export const MOREL_INTRO = { caption: 'That is Morel, the voice of your gem.' } as const

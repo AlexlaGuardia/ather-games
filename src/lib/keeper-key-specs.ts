@@ -48,6 +48,7 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'open.gladework.v1',       worldTied: false },  // ...the ones part-worked (ather/channel.ts)
   { base: 'open.gladeloot.v1',       worldTied: false },  // ...what they dropped, still on the ground (ather/ground-loot.ts)
   { base: 'open.chain.v1',           worldTied: false },  // the opening chain, Ather to Nyx (BETA M73, 11-23): the note read, the first death, Morel's ping once
+  { base: 'open.morelintro.v1',      worldTied: false },  // M155: the player was told who Morel is, once ever (shared/morel-intro.ts)
   { base: 'open.repair.v1',          worldTied: false },  // Kael's ship repair (BETA M108, 11-23): the cell housing quoted at Hollis, stage 1 paid + fitted
 ]
 

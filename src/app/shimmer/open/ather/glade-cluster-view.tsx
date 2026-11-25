@@ -17,6 +17,8 @@ import { folkSpots, type Spot } from './folk-spots'
 import { gladeBlueprintVersion } from './glade-lots'
 import { keeperNow } from './network-scene'
 import { gladePeopleVersion } from './glade-people'
+import { MomoModel } from '../shared/momo-model'
+import { MOMO_SEES, momoSpot } from './glade-momo'   // M155 s2
 
 /** the five as drawn right now (Fennel is away while the first-rinstick quest has her at the keeper's Rinnshop) */
 export let gladeFolkDrawn: Spot[] = []
@@ -33,7 +35,21 @@ function GregMarker({ ground }: { ground: (x: number, z: number) => number }) {
   )
 }
 
-export function GladeCluster({ ground, marker = true }: { ground: (x: number, z: number) => number; marker?: boolean }) {
+/** M155 s2: Momo by Bonn's boots; he turns to look a keeper over when they come near, else faces the way she does */
+function Momo({ ground, blocked, ver }: { ground: (x: number, z: number) => number; blocked?: (x: number, z: number) => boolean; ver: number }) {
+  const ref = useRef<THREE.Group>(null)
+  const at = useMemo(() => momoSpot(ground, blocked), [ground, blocked, ver])   // eslint-disable-line react-hooks/exhaustive-deps
+  useFrame((_, dt) => {
+    const g = ref.current; if (!g || !at) return
+    const dx = keeperNow.x - at.x, dz = keeperNow.z - at.z, d = Math.hypot(dx, dz)
+    const want = d < MOMO_SEES && d > 0.4 ? Math.atan2(dx, dz) : at.yaw, off = Math.atan2(Math.sin(want - g.rotation.y), Math.cos(want - g.rotation.y))
+    g.rotation.y += off * Math.min(1, dt * 3)
+  })
+  useEffect(() => { const w = window as unknown as { __glade?: Record<string, unknown> }; w.__glade = { ...(w.__glade ?? {}), momo: at }; return () => { if (w.__glade) delete w.__glade.momo } }, [at])   // READ only (m155 check)
+  return at && <group ref={ref} position={[at.x, at.y, at.z]} rotation-y={at.yaw}><MomoModel /></group>
+}
+
+export function GladeCluster({ ground, blocked, marker = true }: { ground: (x: number, z: number) => number; blocked?: (x: number, z: number) => boolean; marker?: boolean }) {
   // re-read when a lot's blueprint lands (glade-lots: a blueprint moves its Moglin to the door, setLotSpot): read only at mount,
   // Fennel stood 5.6 m from where the tour + the talk put her (tour-check 11-22). Who is home is read at mount (next visit).
   const [bpVer, setBpVer] = useState(gladeBlueprintVersion())
@@ -67,6 +83,7 @@ export function GladeCluster({ ground, marker = true }: { ground: (x: number, z:
           <NamedMoglin id={f.id} seed={i * 1.7} />
         </group>
       ))}
+      <Momo ground={ground} blocked={blocked} ver={ppVer} />
       {marker && <GregMarker ground={ground} />}
     </>
   )

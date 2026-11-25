@@ -7,15 +7,20 @@
 //   item — the slot you just selected: REPLACES the last item line (scrolling the bar must not stack names)
 //   info — a toast: something happened (ground bought, a waymark bound)
 //   chat — a line from a person (multiplayer, later)
+//   caption — a word to the PLAYER, on a plate (BETA M155: who Morel is, once)
 //   morel — the glove's gem speaking (BETA M33, shared/morel.ts decides WHEN): drawn 'Morel:' in the gem's colour
 //
 // ★ PURE (no React here): the hook lives in game-hud.tsx. Node tests drive this file directly.
 
-export type SayKind = 'zone' | 'item' | 'info' | 'chat' | 'morel'
+export type SayKind = 'zone' | 'item' | 'info' | 'chat' | 'morel' | 'caption'
 export interface Line { id: number; text: string; kind: SayKind; at: number; ttl: number }
 
-export const TTL: Record<SayKind, number> = { zone: 4.5, item: 1.8, info: 4, chat: 10, morel: 4 }
+export const TTL: Record<SayKind, number> = { zone: 4.5, item: 1.8, info: 4, chat: 10, morel: 4, caption: 8 }
 export const MAX_LINES = 5
+
+/** M155: run before a Morel line goes up (morel-intro.ts); true = it put a caption above it, so the line stays as long */
+let introFirst: (() => boolean) | null = null
+export const beforeMorel = (f: (() => boolean) | null) => { introFirst = f }
 
 let lines: Line[] = []
 let nextId = 1
@@ -24,6 +29,7 @@ const now = () => (typeof performance !== 'undefined' ? performance.now() : Date
 
 export function hudSay(text: string, kind: SayKind = 'info', ttl = TTL[kind], at = now()) {
   if (!text) return
+  if (kind === 'morel' && introFirst?.()) ttl = Math.max(ttl, TTL.caption)
   // an item line replaces the last one; the same text twice in a row refreshes instead of stacking
   let next = kind === 'item' ? lines.filter(l => l.kind !== 'item') : lines.filter(l => !(l.text === text && l.kind === kind))
   next = [...next, { id: nextId++, text, kind, at, ttl }]
