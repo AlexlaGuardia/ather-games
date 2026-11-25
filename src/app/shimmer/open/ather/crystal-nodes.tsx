@@ -39,7 +39,7 @@ export const CRYSTAL_LOOK: Record<CrystalKind, { color: string; glow: string; k:
 const EGG_HUES = ['#8a3ad0', '#6ab8f0', '#a0601a', '#2ab0a8'].map(c => new THREE.Color(c))
 
 /** a cluster of points: one tall, three leaning out, unit height ~1.2 m before a node's own scale */
-function clusterGeometry() {
+export function clusterGeometry() {
   const parts: THREE.BufferGeometry[] = []
   const add = (h: number, r: number, x: number, z: number, tx: number, tz: number) => {
     const g = new THREE.ConeGeometry(r, h, 6, 1)

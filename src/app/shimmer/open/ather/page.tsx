@@ -89,6 +89,8 @@ import { gladeLayerGround, gladeLift } from './glade-layer'
 import { useGladeLayer, GladeWater } from './glade-layer-view'   // M83 s2b: the Glade's published builder layer
 import { zoneParts, zonePartBoxes, withZoneParts, publishedZones } from './zone-parts'   // M84 s3: published zone builds (drawn + solid)
 import { ZonePartsView } from './zone-parts-view'
+import { sceneryPlaced, sceneryBoxes } from './scenery'   // M153 s1a: the Glade's published scenery (drawn + solid)
+import { SceneryView } from './scenery-view'
 import { zoneDoor, zoneUse, zonePrompt, zoneSay, homeTalk, type ZoneUse } from './zone-tags'   // M114 s2: a published zone's tag = one E point
 import { ShopPanel } from '../business/shop-panel'   // M114 s2: a Shop zone opens its storefront's own panel
 import { useLedger } from '../trade-ui'
@@ -436,10 +438,11 @@ function AtherSliceGame() {
   const gladeZoneGround = useMemo(() => gladeLayerGround(gladeLayer.edits), [gladeLayer])
   const gladeMeshLift = useMemo(() => gladeLift(gladeLayer.edits), [gladeLayer])
   const gladeParts = useMemo(() => zoneParts(gladeLayer.zones ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround])   // M84 s3
+  const gladeScenery = useMemo(() => sceneryPlaced(gladeLayer.props ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround])   // M153 s1a
   // M114 s2: each tagged zone's ONE E point (zone-tags.ts: front edge; locked / shop panel / home label + talk / supplier line)
   const gladeDoors = useMemo(() => (gladeLayer.zones ?? []).flatMap(z => { const u = zoneUse(z); return u ? [{ id: z.id, ...zoneDoor(z), u }] : [] }), [gladeLayer])
   const gladeDoorsRef = useRef(gladeDoors); gladeDoorsRef.current = gladeDoors
-  const gladeWorld = useMemo(() => terrainWorld(withZoneParts(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground: gladeZoneGround }, undefined, true), zonePartBoxes(gladeParts))), [gladeZoneGround, gladeParts])   // M67 s1a; s1b-2: the pond's bowl + Greg's home, lots, jetty
+  const gladeWorld = useMemo(() => terrainWorld(withZoneParts(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground: gladeZoneGround }, undefined, true), [...zonePartBoxes(gladeParts), ...sceneryBoxes(gladeScenery)])), [gladeZoneGround, gladeParts, gladeScenery])   // M67 s1a; s1b-2: the pond's bowl + Greg's home, lots, jetty
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
   const fading = useRef(false)
@@ -1755,7 +1758,7 @@ function AtherSliceGame() {
         {zone.kind === 'plot' && <AnemonyxIfHere clock={clock} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
-        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={GLADE_FRAME} lift={gladeMeshLift} /><GladeCluster ground={ground} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /></>}   {/* M67 s1a */}
+        {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} /><ClusterScene frame={GLADE_FRAME} lift={gladeMeshLift} /><GladeCluster ground={ground} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /><SceneryView items={gladeScenery} /></>}   {/* M67 s1a */}
         {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
         {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
