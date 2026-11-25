@@ -21,7 +21,7 @@ ok(['gloview:a', 'm70:b', 'moonwell:fennel', 'moonwell:mallow', 'x1'].map(i => f
 { const src = readFileSync('src/app/shimmer/open/shared/moglin-model.tsx', 'utf8'), i = src.indexOf('  const fur = <meshStandardMaterial'); ok(i > 0 && createHash('sha1').update(src.slice(i)).digest('hex') === 'd063cab986e8a44331b98fa345e14919cdb5d3ac', 'the plain Moglin is drawn as before (re-pin only when its look is MEANT to change)') }
 { const A = 'src/app/shimmer/open/ather', users = readdirSync(A).filter(f => f.endsWith('.tsx') && /NamedMoglin|MoglinLookModel/.test(readFileSync(`${A}/${f}`, 'utf8'))); ok(users.sort().join() === 'glade-cluster-view.tsx,moglin-card-view.tsx', `looks are asked for in the Glade + the card only (${users})`) }
 // ── the figures ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-ok(MOGLIN_LOOK_CALLS < 48, 'fewer draw calls than the plain chibi')
+ok(MOGLIN_LOOK_CALLS < 35, 'fewer draw calls than the plain chibi')
 const has = (g: THREE.BufferGeometry, hex: string) => { const c = new THREE.Color(hex), a = g.attributes.color; for (let k = 0; k < a.count; k++) if (Math.abs(a.getX(k) - c.r) + Math.abs(a.getY(k) - c.g) + Math.abs(a.getZ(k) - c.b) < 1e-3) return true; return false }
 for (const id of MOGLIN_LOOKS) {
   const f = moglinFigure(id)

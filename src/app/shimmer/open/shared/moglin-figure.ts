@@ -20,7 +20,7 @@ export interface MoglinFigure {
   /** 1 = the free leg swing; less under a skirt */
   stride: number
 }
-/** toon + ink for eight joints, the face lines, the eyes (the plain chibi: 48 meshes) */
+/** toon + ink for eight joints, the face lines, the eyes (the plain chibi: 35 drawn) */
 export const MOGLIN_LOOK_CALLS = 8 * 2 + 2
 
 type Pose = { roll: number; bob: number; headPitch: number; headRoll: number; earDroop: number; aL: [number, number]; aR: [number, number]; lL: number; lR: number }

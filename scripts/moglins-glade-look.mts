@@ -27,7 +27,7 @@ try {
     const near = await p.waitForFunction(id => { const n = (window as any).__ather.near(); return n?.kind === 'folk' || n?.kind === 'gfennel' }, { timeout: 30000 }, k.id).then(() => true, () => false)
     // gladeAt is an ARRIVAL: the veil comes up and a press under it is ignored, so wait for it to have lifted
     for (let t = 0, calm = 0; t < 60 && calm < 4; t++) { await sleep(500); calm = await p.evaluate(() => document.querySelector<HTMLElement>('[data-veil]')?.style.opacity === '0') ? calm + 1 : 0 }
-    const up = await p.waitForFunction(() => /E · (Hazel|Sax|Yarrow|Fennel|Mallow)/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]'), { timeout: 30000 }).then(() => true, () => false)
+    const up = await p.waitForFunction(() => /E · (talk to the folk of|Fennel)/.test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]'), { timeout: 30000 }).then(() => true, () => false)
     ok(near && up, `${k.id}: in reach at 2 m, the prompt up`)
     if (phone) { const u = await p.$('[data-touch="use"]'), q = await u?.boundingBox(); if (q) await p.touchscreen.tap(q.x + q.width / 2, q.y + q.height / 2) } else await p.keyboard.press('KeyE')
     ok(await p.waitForFunction(() => !!document.querySelector('[data-talk-option]'), { timeout: 30000 }).then(() => true, () => false), `${k.id}: the talk opens`)
