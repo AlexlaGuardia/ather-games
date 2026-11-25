@@ -16,7 +16,7 @@ import { FolkModel, folkLook, type FolkAction } from '../shared/folk-model'
 import { stepWalk, startWalk, faceYaw, turnToward, TURN_RATE, type Walk, type Pt } from '../shared/folk-path'
 import { gregSpot } from './moonwell-glade'
 import { GladeHome } from './glade-home-view'
-import { gladeHome } from './glade-home'
+import { gladeHomeY } from './glade-home'
 import { tourLeg, tourStops } from './greg-tour'
 
 export const BENCH_H = 0.48
@@ -27,8 +27,9 @@ export interface GregLive { x: number; z: number; seated: boolean }
 export interface GregTourState { i: number; talk: boolean }
 
 type Mode = 'sit' | FolkAction
-export function GladeGreg({ loaded, tour = null, hold = false, keeper, onArrive, live }: {
+export function GladeGreg({ loaded, land, tour = null, hold = false, keeper, onArrive, live }: {
   loaded: (x: number, z: number) => number | null
+  /** the land itself (no pads): what his home stands on */ land: (x: number, z: number) => number
   tour?: GregTourState | null; hold?: boolean
   keeper?: MutableRefObject<{ x: number; z: number }>
   onArrive?: (i: number) => void
@@ -84,7 +85,7 @@ export function GladeGreg({ loaded, tour = null, hold = false, keeper, onArrive,
     return () => { clearInterval(id); delete W.__greg }
   }, [y === null, tour])   // eslint-disable-line react-hooks/exhaustive-deps
   if (y === null) return null
-  const hm = gladeHome(), hy = loaded(hm.x, hm.z) ?? y
+  const hg = gladeHomeY(land), hy = Number.isFinite(hg) ? hg : y
   return (
     <>
     <GladeHome y={hy} />

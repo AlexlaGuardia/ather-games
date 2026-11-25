@@ -4,9 +4,12 @@
 // the trades: characters/moonwell-folk.md). PURE: the scene (glade-lots.tsx) draws these parts and the walker
 // (dynamic-solids.ts) stands against the same parts, so what you see is what you bump.
 // A part is in its LOT's frame: `ahead` m toward the green from the lot's centre, `side` m to its right; w across, d deep, h tall.
-import { onLot, lotAt, GLADE_LOTS, gladeJetty, setLotSpot } from './moonwell-glade'
+import { onLot, lotAt, GLADE_LOTS, gladeJetty, lotSpots, setLotSpot } from './moonwell-glade'
 import type { Box } from '../terrain-world'
 import { placeBlueprint, fitsPad, type HouseBlueprint } from './plot-blueprint'
+import { gladePlace } from './glade-people'
+import { inRect, padLevel, plinthBoxes, type Ground } from './glade-pads'
+import { teachJars } from './yarrow-teach'
 import { findRooms } from './plot-walls'
 
 export interface Part { ahead: number; side: number; w: number; d: number; h: number; y0?: number; color: string; solid?: boolean; turn?: number }
@@ -89,17 +92,48 @@ export const gladeBlueprint = (lot: string) => blueprints.get(lot) ?? null
 export function setGladeBlueprint(lot: string, bp: HouseBlueprint | null) {
   if (bp && !fitsPad(bp, (lotAt(lot)?.w ?? 0), (lotAt(lot)?.d ?? 0))) bp = null   // oversize: refused, the blockout stays (never over the green)
   if (bp) blueprints.set(lot, bp); else blueprints.delete(lot)
-  setLotSpot(lot, bp ? doorSpot(bp, lotPad(lot, 0)) : null)
+  setLotSpot(lot, bp ? () => doorSpot(bp, lotPad(lot, 0)) : null)
   bpVersion++
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('glade-blueprints'))   // the folk re-place
 }
 /** where a lot's blueprint stands (its pad's centre, facing the green, on the Glade floor) */
 export function lotPad(lot: string, y: number) { const l = lotAt(lot)!; return { x: l.x, z: l.z, yaw: l.yaw, y } }
-/** every lot's solids: its blueprint's walls if it has one, else its blockout's */
-export function gladeLotBoxes(groundY: number): Box[] {
-  const out: Box[] = []
-  for (const l of GLADE_LOTS) { const bp = blueprints.get(l.id); if (bp) out.push(...placeBlueprint(bp, lotPad(l.id, groundY)).boxes) }
-  return [...out, ...stationBoxes(groundY).filter(b => !b._lot || !blueprints.has(b._lot))]
+/** M153 s1c-2: the height a lot stands at (`top`), and the foot of its plinth. Not moved = the Glade's floor as built. */
+export function lotLevel(lot: string, ground: Ground, floor: number): { top: number; low: number } {
+  const l = lotAt(lot)
+  if (!l || !gladePlace(lot)) return { top: floor, low: floor }
+  const v = padLevel(l, ground); return Number.isFinite(v.top) ? v : { top: floor, low: floor }
+}
+/** every lot's solids: its blueprint's walls if it has one, else its blockout's. With the land's `ground`, a moved lot stands on it (its
+ *  plinth is solid too); without, everything stands at `groundY`. */
+export function gladeLotBoxes(groundY: number, ground?: Ground): Box[] {
+  return GLADE_LOTS.flatMap(l => [...(ground ? plinthOf(l.id, ground, groundY) : []), ...lotSolids(l.id, ground ? lotLevel(l.id, ground, groundY).top : groundY)])
+}
+/** one lot's house (or blockout) standing at y, without its plinth */
+export const lotSolids = (lot: string, y: number): Box[] => { const bp = blueprints.get(lot); return bp ? placeBlueprint(bp, lotPad(lot, y)).boxes : stationBoxes(y).filter(b => b._lot === lot) }
+/** a moved lot's plinth */
+export function plinthOf(lot: string, ground: Ground, floor: number): Box[] { if (!gladePlace(lot)) return []; const v = lotLevel(lot, ground, floor); return plinthBoxes(lotAt(lot)!, v.top, v.low) }
+
+/** the land, or the pad of a moved lot (glade-pads padGround, for who asks by the resolver and not by a layer) */
+export const standOn = (ground: Ground): Ground => (x, z) => { let g = ground(x, z); for (const l of GLADE_LOTS) if (gladePlace(l.id) && inRect(lotAt(l.id)!, x, z)) g = Math.max(g, lotLevel(l.id, ground, g).top); return g }
+/** Yarrow's teaching crate and its two jars: beside the door of Yarrow's lot, wherever that is; moved on its own, there (M153 s1c-2).
+ *  Only with Yarrow's house up (the blockout has its own counter). */
+export function yarrowCrate(): ReturnType<typeof teachJars> | null {
+  if (!blueprints.has('yarrow')) return null
+  const w = gladePlace('jars'); if (!w) return teachJars(lotSpots(['moonwell:yarrow'])[0])
+  return teachJars({ x: w.x - Math.cos(w.yaw) * 1.1, z: w.z + Math.sin(w.yaw) * 1.1, yaw: w.yaw })
+}
+/** the height the crate stands at */
+export function crateY(ground: Ground, floor: number): number {
+  const t = yarrowCrate()
+  if (!t || (!gladePlace('jars') && !gladePlace('yarrow'))) return floor
+  const g = ground(t.crate.x, t.crate.z); return Number.isFinite(g) ? g : floor
+}
+/** the crate blocks (it is knee high: a step does not clear it) */
+export function crateBoxes(ground: Ground, floor: number): Box[] {
+  const t = yarrowCrate(); if (!t) return []
+  const y = crateY(ground, floor), s = Math.abs(Math.sin(t.crate.yaw)), c = Math.abs(Math.cos(t.crate.yaw)), hx = (t.crate.w * c + t.crate.d * s) / 2, hz = (t.crate.w * s + t.crate.d * c) / 2
+  return [{ x0: t.crate.x - hx, x1: t.crate.x + hx, z0: t.crate.z - hz, z1: t.crate.z + hz, y0: y - 0.5, y1: y + t.crate.h + 0.36 }]
 }
 
 /** where a blueprint lot's Moglin stands: 1.2 m out from the building's FRONT-MOST outside door (the door with a room on one

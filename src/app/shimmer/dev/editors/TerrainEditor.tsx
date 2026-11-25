@@ -42,7 +42,8 @@ import { PROPS_KEY, pieceCount, propsToStore, propsOfStore, type Prop } from '..
 import { usePlace, PlaceHud } from './place-mode'
 import { setGladePeople } from '../../open/ather/glade-people'   // M153 s1c-1
 import { gladePeople } from '../../open/ather/glade-cluster'
-import { peopleProblems } from '../../open/ather/glade-people-check'
+import { peopleProblems, placeProblems } from '../../open/ather/glade-people-check'
+import { gladePlaces } from '../../open/ather/glade-places'
 import { loadGladeBlueprints } from '../../open/ather/glade-lots-view'
 import { ZoneBuilder } from './ZoneBuilder'   // M84 s2: build on a zone
 import { FURNITURE } from '../../open/ather/furniture'
@@ -539,7 +540,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     if (!(await save())) return false
     setBusy(true); setStatus('publishing…')
     if (glade) {   // M153 s1c-1: nobody is published into the void, the water, a wall, or out of a newborn's reach
-      await loadGladeBlueprints(); const L = layerOf(), bad = peopleProblems({ edits: L.tiles.glade ?? null, water: L.water.glade ?? null, zones: L.zones, props: L.props }, gladePeople())
+      await loadGladeBlueprints(); const L = layerOf(), G = { edits: L.tiles.glade ?? null, water: L.water.glade ?? null, zones: L.zones, props: L.props }, who = gladePeople(), bad = [...placeProblems(G, gladePlaces(), who.find(p => p.who === 'newborn') ?? null), ...peopleProblems(G, who)]   // s1c-2: the houses first
       if (bad.length) { setBusy(false); setStatus(`not published: ${bad.join(' · ')} (live unchanged)`); return false }
     }
     const b = await builderCall(map, { action: 'publish', note: msg ?? note })

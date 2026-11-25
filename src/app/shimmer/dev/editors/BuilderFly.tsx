@@ -24,6 +24,7 @@ import { gladeFrame } from '../../open/ather/glade-layer'
 import { GladeWater } from '../../open/ather/glade-layer-view'
 import { GLADE_LAYER_TILE } from '../../world/glade-builder'
 import { WATER_PREFIX } from '../../open/ather/wilds-edits'
+import { isPlace } from '../../world/builder-props'
 import { PlaceLayer, GladeFixed, useCentre, type PlaceApi } from './place-mode'   // M153 s1a
 import type { ZonePart } from '../../open/ather/zone-parts'
 
@@ -120,11 +121,12 @@ function PoolWater({ heightAt, rev }: { heightAt: Props['heightAt']; rev: number
 }
 
 /** M160 (the Glade): the draft's painted water, and the valley's trees that stand clear of it (the game's own two readers) */
-function GladeDraft({ deltas, rev, heightAt }: { deltas: Props['deltas']; rev: number; heightAt: Props['heightAt'] }) {
-  const layer = useMemo(() => ({ edits: deltas(GLADE_LAYER_TILE) ?? null, water: deltas(WATER_PREFIX + GLADE_LAYER_TILE) ?? null }), [rev])   // eslint-disable-line react-hooks/exhaustive-deps
+function GladeDraft({ deltas, rev, heightAt, place }: { place?: PlaceApi; deltas: Props['deltas']; rev: number; heightAt: Props['heightAt'] }) {
+  const standing = (place?.props ?? []).filter(isPlace), sk = JSON.stringify(standing)   // s1c-2: a moved house clears the trees under it
+  const layer = useMemo(() => ({ edits: deltas(GLADE_LAYER_TILE) ?? null, water: deltas(WATER_PREFIX + GLADE_LAYER_TILE) ?? null, props: standing }), [rev, sk])   // eslint-disable-line react-hooks/exhaustive-deps
   const kept = useRef<NonNullable<ReturnType<typeof gladeFrame>['meadow']>['trees']>([]), now = gladeFrame(layer).meadow?.trees ?? []
   if (now.length !== kept.current.length || now.some((t, k) => t !== kept.current[k])) kept.current = now   // a brush tick that changes no tree rebuilds none
-  return <><GladeWater layer={layer} /><GladeFixed heightAt={heightAt} trees={kept.current} /></>
+  return <><GladeWater layer={layer} /><GladeFixed heightAt={heightAt} rev={rev} place={place} trees={kept.current} /></>
 }
 
 function Rig({ heightAt, focus, camRef, pr }: { pr: React.MutableRefObject<Props>; heightAt: Props['heightAt']; focus: Props['focus']; camRef: React.MutableRefObject<Cam | null> }) {
@@ -346,7 +348,7 @@ export default function BuilderFly(p: Props) {
       {p.pool && <PoolWater heightAt={p.heightAt} rev={p.rev} />}
       {!p.placing && <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />}
       {p.place && <PlaceLayer api={p.place} active={!!p.placing} heightAt={p.heightAt} rev={p.rev} label={labelTex} />}
-      {p.fixed && <GladeDraft deltas={p.deltas} rev={p.rev} heightAt={p.heightAt} />}
+      {p.fixed && <GladeDraft place={p.place} deltas={p.deltas} rev={p.rev} heightAt={p.heightAt} />}
       {p.overlay && <OverlayLayer overlay={p.overlay} heightAt={p.heightAt} rev={p.rev} />}
       {p.parts && <ZonePartsView parts={p.parts} />}
     </Canvas>

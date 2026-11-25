@@ -4,6 +4,8 @@
 // need the rig's ramp, so plain Lambert + an ink hull). No names, no signage. Collision: glade-home.ts via dynamic-solids.
 import * as THREE from 'three'
 import { gladeHome, HOME_R, HOME_H } from './glade-home'
+import { PAD_FALL } from './glade-pads'
+import { gladePlace } from './glade-people'
 
 const CYL = new THREE.CylinderGeometry(1, 1, 1, 20), DOME = new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), DISC = new THREE.CircleGeometry(1, 20)
 const ink = new THREE.MeshBasicMaterial({ color: '#1b140e', side: THREE.BackSide })
@@ -13,6 +15,8 @@ export function GladeHome({ y }: { y: number }) {
     <group position={[h.x, y, h.z]} rotation-y={h.yaw}>
       <mesh geometry={CYL} position={[0, wall / 2, 0]} scale={[R * 1.03, wall, R * 1.03]}><meshLambertMaterial color="#a9a294" /></mesh>
       <mesh geometry={CYL} position={[0, wall / 2, 0]} scale={[R * 1.1, wall, R * 1.1]} material={ink} />
+      {/* moved onto a slope: the drum's foot reaches down to the low side */}
+      {gladePlace('home') && <mesh geometry={CYL} position={[0, -PAD_FALL / 2, 0]} scale={[R * 1.02, PAD_FALL, R * 1.02]}><meshLambertMaterial color="#a9a294" /></mesh>}
       <mesh geometry={CYL} position={[0, 0.55, 0]} scale={[R * 1.07, 0.18, R * 1.07]}><meshLambertMaterial color="#8a6a44" /></mesh>
       <mesh geometry={CYL} position={[0, wall - 0.1, 0]} scale={[R * 1.07, 0.18, R * 1.07]}><meshLambertMaterial color="#8a6a44" /></mesh>
       <mesh geometry={DOME} position={[0, wall, 0]} scale={[R * 1.3, 1.0, R * 1.3]}><meshLambertMaterial color="#7b8a52" /></mesh>

@@ -6,20 +6,22 @@
 // or not. s1b: a NODE (Nodes group) is gathered in the game: true size, no toggle, a tag over it, N = its wait. Ctrl+Z is the brushes' own undo: the props sit in the same history (builder-props.ts).
 // s1c-1: PEOPLE and the newborn spot are pieces that are always there: left or M selects one, R turns, right puts it down, X = back to
 // the code's own spot; never in the palette, never removed, no size, no toggle.
+// s1c-2: Greg's home, the five lots and Yarrow's crate are pieces the same way (`spot:`): aim at a wall or the pad. Still fixed: the pool, the gate.
 // This file never saves: TerrainEditor owns the list (draft, autosave, Publish), BuilderFly draws.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { WHO_PREFIX, isWho, pieceCount, putWho, qOfYaw, whoOf, yawOfQ, NODE_WAITS, PROP_SNAPS, PROP_TURNS, PROPS_MAX, addProp, isNode, nodeWaitH, removeProp, changeProp, nextOf, scaleBy, snapXZ, turnBy, type Prop } from '../../world/builder-props'
+import { PLACE_PREFIX, isStanding, placeOf, putPlace, WHO_PREFIX, isWho, pieceCount, putWho, qOfYaw, whoOf, yawOfQ, NODE_WAITS, PROP_SNAPS, PROP_TURNS, PROPS_MAX, addProp, isNode, nodeWaitH, removeProp, changeProp, nextOf, scaleBy, snapXZ, turnBy, type Prop } from '../../world/builder-props'
 import { SCENERY, SCENERY_BY, SCENERY_GROUPS, endSnap, isSolid, sceneryPlaced, type PlacedProp } from '../../open/ather/scenery'
 import { SceneryView } from '../../open/ather/scenery-view'
-import { GladeLots } from '../../open/ather/glade-lots-view'
+import { GladeLots, useGladeStanding } from '../../open/ather/glade-lots-view'
 import { GladeHome } from '../../open/ather/glade-home-view'
-import { gladeHome } from '../../open/ather/glade-home'
+import { gladeHomeY } from '../../open/ather/glade-home'
+import { gladePlaces, placeSolids, placeY, type GladePlace } from '../../open/ather/glade-places'
+import { padGround } from '../../open/ather/glade-pads'
+import { GLADE as GROUND } from '../../open/ather/relief'
 import type { Tree } from '../../open/ather/meadow'
 import { GLADE_FRAME, GLADE_GATE, gladePeople } from '../../open/ather/glade-cluster'
-import { gladePeopleVersion } from '../../open/ather/glade-people'
-import { gladeBlueprintVersion } from '../../open/ather/glade-lots'
 
 /** where a piece in hand, aimed at (x, z), goes: onto a fence's end when one is near, else the grid. Snap free = exactly there. */
 const spotFor = (props: readonly Prop[], h: Hand, moving: string | null, snap: number, x: number, z: number) => (snap > 0 ? endSnap(moving ? props.filter(p => p.id !== moving) : props, h, x, z) : null) ?? { x: snapXZ(x, snap), z: snapXZ(z, snap) }
@@ -41,9 +43,11 @@ const loadSlots = (): (string | null)[] => {
   return FIRST
 }
 
-const personName = (k: string) => gladePeople().find(p => p.who === whoOf(k))?.name ?? k
-/** s1c-1: a person as a piece (`w<id>`), where they stand now: the draft's spot, or the code's */
+const personName = (k: string) => gladePeople().find(p => p.who === whoOf(k))?.name ?? gladePlaces().find(p => p.place === placeOf(k))?.name ?? k
+/** s1c-1: a person as a piece (`w<id>`; s1c-2: a house, `h<place>`), where they stand now: the draft's spot, or the code's */
 const personPiece = (id: string, props: readonly Prop[] = []): Prop | null => {
+  const h = id[0] === 'h' ? gladePlaces().find(q => q.id === id) : null
+  if (h) return props.find(q => q.id === id) ?? { id, k: PLACE_PREFIX + h.place, x: h.x, z: h.z, q: qOfYaw(h.yaw), s: 1 }
   const p = id[0] === 'w' ? gladePeople().find(q => q.id === id) : null
   return p ? props.find(q => q.id === id) ?? { id, k: WHO_PREFIX + p.who, x: p.x, z: p.z, q: qOfYaw(p.yaw), s: 1 } : null
 }
@@ -57,13 +61,15 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
   const [held, setHeld] = useState<Omit<Hand, 'k'>>({ q: 0, s: 1 })
   const mp = moving ? props.find(p => p.id === moving) ?? personPiece(moving) : null
   const k = mp ? mp.k : slots[slot]
-  const hand = useMemo<Hand | null>(() => (k ? { k, ...held, ...(isNode({ k }) || isWho({ k }) ? { s: 1, solid: undefined } : {}) } : null), [k, held])
+  const hand = useMemo<Hand | null>(() => (k ? { k, ...held, ...(isNode({ k }) || isStanding({ k }) ? { s: 1, solid: undefined } : {}) } : null), [k, held])
   const S = useRef({ props, slots, slot, snap, turn, moving, target, held, hand, inv }); S.current = { props, slots, slot, snap, turn, moving, target, held, hand, inv }
   const go = useRef({ setProps, say }); go.current = { setProps, say }
   const put = useCallback((x: number, z: number) => {
     const c = S.current; if (!c.hand) { go.current.say('this slot is empty: E opens the inventory'); return }
     const w = c.moving ? whoOf(c.hand.k) : null
     if (w) { go.current.setProps(putWho(c.props, w, { ...spotFor(c.props, c.hand, c.moving, c.snap, x, z), q: c.hand.q, ...(c.hand.turned ? { turned: true } : {}) })); setMoving(null); setHeld({ q: 0, s: 1 }); return }
+    const pl = c.moving ? placeOf(c.hand.k) : null
+    if (pl) { go.current.setProps(putPlace(c.props, pl, { ...spotFor(c.props, c.hand, c.moving, c.snap, x, z), q: c.hand.q })); setMoving(null); setHeld({ q: 0, s: 1 }); return }
     const at = { ...spotFor(c.props, c.hand, c.moving, c.snap, x, z), q: c.hand.q, s: c.hand.s, ...(c.hand.solid === undefined ? {} : { solid: c.hand.solid }), ...(isNode(c.hand) ? { w: c.hand.w } : {}) }
     if (c.moving) { go.current.setProps(changeProp(c.props, c.moving, at)); setMoving(null); setHeld({ q: 0, s: 1 }); return }
     const n = addProp(c.props, { k: c.hand.k, ...at, ...(c.hand.id ? { id: c.hand.id } : {}) })
@@ -100,7 +106,7 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
       else if (e.code === 'KeyX' || e.code === 'Delete') { const id = c.moving ?? c.target; if (id && (!personPiece(id) || c.props.some(p => p.id === id))) go.current.setProps(removeProp(c.props, id)); if (id) { setMoving(null); if (c.moving) setHeld({ q: 0, s: 1 }) } }
       else if (e.code === 'KeyB') {
         const p = c.moving ? null : c.props.find(q => q.id === c.target)
-        if (isNode(p ?? c.hand ?? { k: '' }) || isWho(p ?? c.hand ?? { k: '' }) || personPiece(c.target ?? '')) return
+        if (isNode(p ?? c.hand ?? { k: '' }) || isStanding(p ?? c.hand ?? { k: '' }) || personPiece(c.target ?? '')) return
         if (p) go.current.setProps(changeProp(c.props, p.id, { solid: !isSolid(p) }))
         else if (c.hand) { const kk = c.hand.k; setHeld(h => ({ ...h, solid: !isSolid({ k: kk, solid: h.solid }) })) }
       }
@@ -128,7 +134,7 @@ export function useCentre() {
 /** the placed pieces of the draft, the piece in hand (a ghost on the crosshair) and the frame round the piece under it */
 export function PlaceLayer({ api, active, heightAt, rev, label }: { api: PlaceApi | null; active: boolean; heightAt: Ground; rev: number; label: (text: string, color: string) => { tex: THREE.CanvasTexture; aspect: number } }) {
   const centre = useCentre(), ghost = useRef<THREE.Group>(null), frame = useRef<THREE.LineSegments>(null), last = useRef<string | null>(null)
-  const items = useMemo(() => (api ? sceneryPlaced(api.props.filter(p => p.id !== api.moving), heightAt) : []), [api, heightAt, rev])   // eslint-disable-line react-hooks/exhaustive-deps
+  const items = useMemo(() => (api ? sceneryPlaced(api.props.filter(p => p.id !== api.moving), padGround(api.props, heightAt)) : []), [api, heightAt, rev])   // eslint-disable-line react-hooks/exhaustive-deps
   const gk = active ? api?.hand?.k : undefined
   const ghostItems = useMemo<PlacedProp[]>(() => (gk ? [{ id: 'ghost', k: gk, x: 0, y: 0, z: 0, q: 0, s: 1 }] : []), [gk])
   const { gl } = useThree()
@@ -141,7 +147,7 @@ export function PlaceLayer({ api, active, heightAt, rev, label }: { api: PlaceAp
       g.visible = Number.isFinite(y)
       if (g.visible && h) { g.position.set(x, y, z); g.rotation.y = -h.q * Math.PI / 2; g.scale.setScalar(h.s) }
     }
-    const f = frame.current, pp = f && last.current ? personPiece(last.current) : null, py = pp ? heightAt(pp.x, pp.z) : 0, t = f && last.current ? (pp ? { ...pp, y: py } : items.find(p => p.id === last.current)) : null, K = t ? (pp ? { w: 0.8, d: 0.8, h: personH(pp.k) } : SCENERY_BY.get(t.k)) : null
+    const f = frame.current, pp = f && last.current ? personPiece(last.current) : null, pl = pp && placeOf(pp.k) ? placeBox(pp.id, heightAt) : null, py = pp ? (pl ? pl.y : heightAt(pp.x, pp.z)) : 0, t = f && last.current ? (pp ? { ...pp, y: py } : items.find(p => p.id === last.current)) : null, K = t ? (pl ?? (pp ? { w: 0.8, d: 0.8, h: personH(pp.k) } : SCENERY_BY.get(t.k))) : null
     if (f) { f.visible = !!t && !!K; if (t && K) { f.position.set(t.x, t.y + K.h * t.s / 2, t.z); f.rotation.y = -t.q * Math.PI / 2; f.scale.set(K.w * t.s * 1.08, K.h * t.s * 1.04, K.d * t.s * 1.08) } }
   })
   const edges = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), [])
@@ -152,7 +158,7 @@ export function PlaceLayer({ api, active, heightAt, rev, label }: { api: PlaceAp
   useEffect(() => () => tags.forEach(t => t.tex.dispose()), [tags])
   return <group name="place-layer">
     <SceneryView items={items} />
-    <group ref={ghost} visible={false}><SceneryView items={ghostItems} ghost />{gk && isWho({ k: gk }) && <PersonBody h={personH(gk)} color={gk === 'who:newborn' ? '#8ef0c0' : '#9fc4ff'} />}</group>
+    <group ref={ghost} visible={false}><SceneryView items={ghostItems} ghost />{gk && isWho({ k: gk }) && <PersonBody h={personH(gk)} color={gk === 'who:newborn' ? '#8ef0c0' : '#9fc4ff'} />}{gk && placeOf(gk) && <PlaceGhost place={gladePlaces().find(p => p.place === placeOf(gk))} />}</group>
     {api && <GladePeople heightAt={heightAt} props={api.props} moving={api.moving} label={label} />}
     {nodes.map((p, i) => { const K = SCENERY_BY.get(p.k)!; return tags[i] && <group key={p.id} position={[p.x, p.y, p.z]} userData={{ nodeTag: p.id }}>
       <sprite position-y={K.h + 0.6} scale={[0.55 * tags[i].aspect, 0.55, 1]} renderOrder={4} raycast={() => {}}><spriteMaterial map={tags[i].tex} depthTest={false} /></sprite>
@@ -173,23 +179,49 @@ function PersonBody({ h, color, id }: { h: number; color: string; id?: string })
   </>
 }
 function GladePeople({ heightAt, props, moving, label }: { heightAt: Ground; props: readonly Prop[]; moving: string | null; label: (text: string, color: string) => { tex: THREE.CanvasTexture; aspect: number } }) {
-  const [ver, setVer] = useState('')
-  useFrame(() => { const v = `${gladePeopleVersion()}.${gladeBlueprintVersion()}`; if (v !== ver) setVer(v) })
+  const ver = useGladeStanding()
   const folk = useMemo(() => gladePeople(), [ver, props])   // eslint-disable-line react-hooks/exhaustive-deps
+  const stand = useMemo(() => padGround(props, heightAt), [props, heightAt, ver])   // eslint-disable-line react-hooks/exhaustive-deps
   const names = folk.map(f => f.name + (f.moved ? ' (moved)' : '')).join('|')
   const tags = useMemo(() => names.split('|').map(n => label(n, '#fde68a')), [names, label])
   useEffect(() => () => tags.forEach(t => t.tex.dispose()), [tags])
   return <group name="glade-people">{folk.map((f, i) => {
-    const y = heightAt(f.x, f.z), h = personH(WHO_PREFIX + f.who)
+    const y = stand(f.x, f.z), h = personH(WHO_PREFIX + f.who)
     return f.id === moving || !tags[i] ? null : <group key={f.id} position={[f.x, Number.isFinite(y) ? y : 0, f.z]} rotation-y={f.yaw} userData={{ fixedFolk: f.who }}>
       <PersonBody id={f.id} h={h} color={f.who === 'newborn' ? '#8ef0c0' : '#9fc4ff'} />
       <sprite position-y={h + 0.5} scale={[0.35 * tags[i].aspect, 0.35, 1]} raycast={() => {}}><spriteMaterial map={tags[i].tex} /></sprite>
     </group>
   })}</group>
 }
-/** What stands in the Glade today and cannot be moved yet (s1c-2): the lots' houses and stations, Greg's home, the jetty, the gate, the
- *  valley's trees. Drawn see-through, never a target. The pool's water is BuilderFly's own. */
-export function GladeFixed({ heightAt, trees = GLADE_FRAME.meadow?.trees ?? [] }: { trees?: readonly Tree[]; heightAt: Ground }) {
+/** a house in hand: its footprint as a slab, its size, and a white nose out of its front (a lot's front is -z, Greg's home's and the crate's +z) */
+const front = (k: string) => (k === 'home' || k === 'jars' ? 1 : -1)
+function PlaceGhost({ place: p }: { place?: GladePlace }) {
+  return p ? <>
+    <mesh position-y={0.05} raycast={() => {}}><boxGeometry args={[p.w, 0.1, p.d]} /><meshBasicMaterial color="#fbbf24" transparent opacity={0.6} depthWrite={false} /></mesh>
+    <mesh position-y={p.h / 2} raycast={() => {}}><boxGeometry args={[p.w, p.h, p.d]} /><meshBasicMaterial color="#9fc4ff" transparent opacity={0.22} depthWrite={false} /></mesh>
+    <mesh position={[0, Math.min(1.2, p.h / 2), front(p.place) * (p.d / 2 + 0.4)]} raycast={() => {}}><sphereGeometry args={[Math.min(0.3, p.h / 4), 8, 6]} /><meshBasicMaterial color="#ffffff" /></mesh>
+  </> : null
+}
+/** the frame round a house: its size and the height it stands at */
+const placeBox = (id: string, land: Ground) => { const p = gladePlaces().find(q => q.id === id); return p ? { w: p.w, d: p.d, h: p.h, y: placeY(p.place, land) } : null }
+/** s1c-2: what the crosshair hits of each house: its own solid boxes and its pad, never seen. A piece or a person in front of a wall, or on
+ *  the pad, is nearer and wins. */
+function PlaceTargets({ heightAt, rev, moving }: { heightAt: Ground; rev: number; moving: string | null }) {
+  const standing = useGladeStanding()
+  const ms = useMemo(() => gladePlaces().map(p => {
+    const y = placeY(p.place, heightAt), bs = placeSolids(p.place, heightAt), im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false }), bs.length + 1)
+    const m = new THREE.Matrix4(), q0 = new THREE.Quaternion(), q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.yaw)
+    bs.forEach((b, i) => im.setMatrixAt(i, m.compose(new THREE.Vector3((b.x0 + b.x1) / 2, (Math.max(b.y0, y) + b.y1) / 2, (b.z0 + b.z1) / 2), q0, new THREE.Vector3(b.x1 - b.x0, Math.max(0.01, b.y1 - Math.max(b.y0, y)), b.z1 - b.z0))))
+    im.setMatrixAt(bs.length, m.compose(new THREE.Vector3(p.x, y + 0.05, p.z), q, new THREE.Vector3(p.w, 0.1, p.d)))
+    im.computeBoundingSphere(); im.userData.scenery = Array(bs.length + 1).fill(p.id); im.userData.place = p.id
+    return im
+  }), [standing, heightAt, rev])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => ms.forEach(im => { im.geometry.dispose(); (im.material as THREE.Material).dispose(); im.dispose() }), [ms])
+  return <group name="glade-places">{ms.map(im => im.userData.place === moving ? null : <primitive key={im.userData.place} object={im} />)}</group>
+}
+/** The Glade's houses (s1c-2: pieces, PlaceTargets is their target), and what stays fixed: the jetty, the gate, the valley's trees.
+ *  Drawn see-through. The pool's water is BuilderFly's own. */
+export function GladeFixed({ heightAt, rev = 0, place, trees = GLADE_FRAME.meadow?.trees ?? [] }: { rev?: number; place?: PlaceApi; trees?: readonly Tree[]; heightAt: Ground }) {
   const ref = useRef<THREE.Group>(null), n = useRef(0)
   const inst = useMemo(() => {
     const mat = new THREE.MeshLambertMaterial({ color: '#79ad5a', transparent: true, opacity: 0.35, depthWrite: false }), im = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 7), mat, Math.max(1, trees.length)), m = new THREE.Matrix4(), q = new THREE.Quaternion()
@@ -204,20 +236,23 @@ export function GladeFixed({ heightAt, trees = GLADE_FRAME.meadow?.trees ?? [] }
       m.userData.ghosted = true; m.raycast = () => {}; if (m === (inst as unknown as THREE.Mesh)) return
       const c = m.material.clone(); c.transparent = true; c.opacity = 0.55; m.material = c })
   })
-  const h = gladeHome(), gy = heightAt(GLADE_GATE.x, GLADE_GATE.z)
-  return <group name="glade-fixed" ref={ref}>
-    <GladeLots />
-    <GladeHome y={heightAt(h.x, h.z)} />
+  useGladeStanding()
+  const hy = gladeHomeY(heightAt), gy = heightAt(GLADE_GATE.x, GLADE_GATE.z)
+  // the draft's ground is one function over a live store: a new one per stroke, so a moved house follows the land
+  const land = useMemo<Ground>(() => (x, z) => heightAt(x, z), [heightAt, rev])   // eslint-disable-line react-hooks/exhaustive-deps
+  return <><PlaceTargets heightAt={land} rev={rev} moving={place?.moving ?? null} /><group name="glade-fixed" ref={ref}>
+    <GladeLots ground={land} />
+    <GladeHome y={Number.isFinite(hy) ? hy : GROUND.y} />
     {Number.isFinite(gy) && <group position={[GLADE_GATE.x, gy, GLADE_GATE.z]}><mesh position-y={0.2}><cylinderGeometry args={[1.6, 1.6, 0.4, 24]} /><meshLambertMaterial color="#8fb7d8" /></mesh><mesh position-y={1.9}><torusGeometry args={[1.5, 0.12, 8, 32]} /><meshLambertMaterial color="#8fb7d8" /></mesh></group>}
     <primitive object={inst} />
-  </group>
+  </group></>
 }
 
 // ── the screen: hotbar, status line, inventory ──
 const COLOR: Record<string, string> = { Nodes: '#8ef0c0', Trees: '#4f9a5f', Bushes: '#8fb35a', Plants: '#a9c763', 'Rocks and logs': '#8b857b', 'Fences and signs': '#a5834f', Crystals: '#9a8ae0', Props: '#b98a4e', Furniture: '#7fa6c4' }
 export function PlaceHud({ place, locked, count, status }: { place: ReturnType<typeof usePlace>; locked: boolean; count: number; status?: string }) {
   const { slots, slot, setSlot, snap, turn, inv, setInv, choose, held, hand, api, target } = place
-  const tp = target ? api.props.find(p => p.id === target) ?? personPiece(target) : null, name = (k: string | null | undefined) => (k && whoOf(k) ? personName(k) : k ? SCENERY_BY.get(k)?.label ?? k : 'empty')
+  const tp = target ? api.props.find(p => p.id === target) ?? personPiece(target) : null, name = (k: string | null | undefined) => (k && isStanding({ k }) ? personName(k) : k ? SCENERY_BY.get(k)?.label ?? k : 'empty')
   return <>
     {inv && <div className="absolute inset-0 z-10 bg-black/60 flex items-center justify-center p-3" data-testid="place-inv" onPointerDown={e => { if (e.target === e.currentTarget) setInv(false) }}>
       <div className="max-h-full w-full max-w-[860px] overflow-y-auto rounded border border-white/15 bg-[#14181c]/95 p-3 select-none">
@@ -234,8 +269,8 @@ export function PlaceHud({ place, locked, count, status }: { place: ReturnType<t
     </div>}
     <div className="absolute left-1/2 bottom-2 -translate-x-1/2 z-[9] flex flex-col items-center gap-1 pointer-events-none w-[96%]" data-testid="place-hud">
       <div className="rounded bg-black/70 px-2 py-1 text-[11px] font-mono text-white/80 tabular-nums text-center">
-        {api.moving ? 'moving ' : ''}{name(hand?.k)} · {hand && isWho(hand) ? 'right puts down' : hand && isNode(hand) ? `true size · grows back in ${nodeWaitH(hand)} h (N)` : `size ${held.s.toFixed(2)} (wheel)`} · turn {Math.round(held.q * 90)}° (R, step {turn}° T) · snap {snap || 'free'} (G){hand && !isNode(hand) && !isWho(hand) ? ` · ${isSolid(hand) ? 'blocks' : 'walk through'} (B)` : ''} · {count}/{PROPS_MAX}
-        {tp && <span className="block text-amber-200">{name(tp.k)} · {isWho(tp) ? 'left or M moves · X back to the first spot' : 'left pick up · M move · X delete'} {isWho(tp) ? '' : '· '}{isWho(tp) ? '' : isNode(tp) ? `N grows back in ${nodeWaitH(tp)} h` : `B ${isSolid(tp) ? 'blocks' : 'walk through'}`}</span>}
+        {api.moving ? 'moving ' : ''}{name(hand?.k)} · {hand && isStanding(hand) ? 'right puts down' : hand && isNode(hand) ? `true size · grows back in ${nodeWaitH(hand)} h (N)` : `size ${held.s.toFixed(2)} (wheel)`} · turn {Math.round(held.q * 90)}° (R, step {turn}° T) · snap {snap || 'free'} (G){hand && !isNode(hand) && !isStanding(hand) ? ` · ${isSolid(hand) ? 'blocks' : 'walk through'} (B)` : ''} · {count}/{PROPS_MAX}
+        {tp && <span className="block text-amber-200">{name(tp.k)} · {isStanding(tp) ? 'left or M moves · X back to the first spot' : 'left pick up · M move · X delete'} {isStanding(tp) ? '' : '· '}{isStanding(tp) ? '' : isNode(tp) ? `N grows back in ${nodeWaitH(tp)} h` : `B ${isSolid(tp) ? 'blocks' : 'walk through'}`}</span>}
         {status && <span className="block text-amber-200">{status}</span>}
         {!locked && <span className="block text-white/55">click the view: right places, left picks up · E inventory · Esc frees the mouse</span>}
       </div>

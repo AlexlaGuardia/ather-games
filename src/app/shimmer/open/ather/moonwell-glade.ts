@@ -14,7 +14,7 @@ import type { Folk } from './settlement-folk'
 import { DREAMS } from './folk-lines'
 import { loadQuest } from './rinsticks'
 import { loadWorks, raised } from './rooms'
-import { gladePerson } from './glade-people'   // M153 s1c-1: the published spot wins
+import { gladePerson, gladePlace, gladePeopleVersion } from './glade-people'   // M153 s1c-1: the published spot wins
 
 export const GLADE_ID = 'moonwell'
 export const GLADE_NAME = 'Moonwell Glade'
@@ -76,6 +76,7 @@ export const GLADE_LOTS: readonly GladeLot[] = [
 /** a lot in world coords: its centre, and `yaw` turned so its FRONT (local -z) faces the green */
 export function lotAt(id: string): { id: string; x: number; z: number; yaw: number; w: number; d: number } | null {
   const l = GLADE_LOTS.find(q => q.id === id); if (!l) return null
+  const h = gladePlace(id); if (h) return { id, x: h.x, z: h.z, yaw: h.yaw, w: l.w, d: l.d }   // M153 s1c-2: moved in Place mode
   const x = GLADE_GREEN.x + l.dx, z = GLADE_GREEN.z + l.dz
   return { id, x, z, yaw: Math.atan2(x - GLADE_GREEN.x, z - GLADE_GREEN.z), w: l.w, d: l.d }
 }
@@ -87,16 +88,19 @@ export function onLot(id: string, ahead: number, side = 0): { x: number; z: numb
 /** Where the five stand: at the FRONT of their own lot, facing the green (a keeper on the green sees all five). */
 // M39: a lot that stands Alex's BLUEPRINT puts its Moglin at the building's own front door (glade-lots.ts registers the spot:
 // the blockout's front-of-lot spot sat inside every 13 x 8 blueprint or in one of its walls).
-const spotOverride = new Map<string, { x: number; z: number }>()
-export function setLotSpot(lot: string, p: { x: number; z: number } | null) { if (p) spotOverride.set(lot, p); else spotOverride.delete(lot) }
+// M153 s1c-2: the door is ASKED (the lot may be moved), kept until somebody or some house moves.
+const spotOverride = new Map<string, { at: () => { x: number; z: number }; ver: number; p: { x: number; z: number } | null }>()
+export function setLotSpot(lot: string, at: (() => { x: number; z: number }) | null) { if (at) spotOverride.set(lot, { at, ver: -1, p: null }); else spotOverride.delete(lot) }
+const doorOf = (lot: string) => { const o = spotOverride.get(lot); if (!o) return null; if (o.ver !== gladePeopleVersion()) { o.p = o.at(); o.ver = gladePeopleVersion() } return o.p }
 export function gladeSpots(ids: readonly string[]): { id: string; x: number; z: number; yaw: number }[] {
   return lotSpots(ids).map(s => { const w = gladePerson(s.id); return w ? { id: s.id, x: w.x, z: w.z, yaw: w.yaw } : s })
 }
 /** the LOT's own spot (what belongs to the house: Yarrow's teaching jars), whoever moved */
 export function lotSpots(ids: readonly string[]): { id: string; x: number; z: number; yaw: number }[] {
   return ids.map(id => {
-    const k = id.split(':').pop() ?? id, p = spotOverride.get(k) ?? (lotAt(k) ? onLot(k, LOT_D / 2 - 1.2) : { x: GLADE_GREEN.x, z: GLADE_GREEN.z })
-    return { id, x: p.x, z: p.z, yaw: Math.atan2(GLADE_GREEN.x - p.x, GLADE_GREEN.z - p.z) }
+    const k = id.split(':').pop() ?? id, p = doorOf(k) ?? (lotAt(k) ? onLot(k, LOT_D / 2 - 1.2) : { x: GLADE_GREEN.x, z: GLADE_GREEN.z })
+    const h = gladePlace(k)   // a moved house: whoever stands at its door looks out of its front, not at the green
+    return { id, x: p.x, z: p.z, yaw: h && lotAt(k) ? h.yaw + Math.PI : Math.atan2(GLADE_GREEN.x - p.x, GLADE_GREEN.z - p.z) }
   })
 }
 /** kept for older callers: the old ring radius (now unused by placement) */

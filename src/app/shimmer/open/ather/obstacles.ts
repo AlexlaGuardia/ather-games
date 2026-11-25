@@ -9,6 +9,7 @@ import type { Box } from '../terrain-world'
 import { settlementSolids } from './settlement-lots'
 import { FURNITURE } from './furniture'
 import { gladeHomeBoxes } from './glade-home'
+import { gladePeopleVersion } from './glade-people'
 import { gladeLotBoxes, jettyBoxes, gladeBlueprintVersion } from './glade-lots'
 import { GLADE, WATER_DROP } from './relief'
 
@@ -219,8 +220,9 @@ export function routeAround(free: (x: number, z: number) => boolean, a: { x: num
 
 /** the closed Glade's structures (its own zone coords; never ask them in the Wilds): Greg's home, the lots' stations and
  *  blueprint houses, the jetty (low: stepped onto). The same boxes the keeper's walker meets (dynamic-solids.ts). */
-let gladeBoxes: Box[] | null = null, gladeBoxVer = -1
+let gladeBoxes: Box[] | null = null, gladeBoxVer = ''
 export const gladeStructures: Structures = (x0, z0, x1, z1) => {
-  if (!gladeBoxes || gladeBoxVer !== gladeBlueprintVersion()) { gladeBoxes = [...gladeLotBoxes(GLADE.y), ...jettyBoxes(GLADE.y - WATER_DROP)]; gladeBoxVer = gladeBlueprintVersion() }
+  const v = `${gladeBlueprintVersion()}.${gladePeopleVersion()}`   // M153 s1c-2: a house may have moved
+  if (!gladeBoxes || gladeBoxVer !== v) { gladeBoxes = [...gladeLotBoxes(GLADE.y), ...jettyBoxes(GLADE.y - WATER_DROP)]; gladeBoxVer = v }
   return [...gladeHomeBoxes(() => GLADE.y, x0, z0, x1, z1), ...gladeBoxes.filter(b => b.x0 <= x1 && b.x1 >= x0 && b.z0 <= z1 && b.z1 >= z0)]
 }

@@ -5,26 +5,33 @@
 import { terrainWorld, type Shape } from '../terrain-world'
 import { plotShape, mistWalls } from './plot'
 import { mateWalls } from './cluster'
-import { GLADE_FRAME, GLADE_OWNED } from './glade-cluster'
+import { GLADE_FRAME, GLADE_GATE, GLADE_OWNED } from './glade-cluster'
 import { withPieces } from './dynamic-solids'
 import { withZoneParts, zoneParts, zonePartBoxes } from './zone-parts'
 import { sceneryBoxes, sceneryPlaced } from './scenery'
 import { gladeLayerGround, gladeWet, type GladeLayer } from './glade-layer'
+import { PAD_FALL, inRect, padGround, padLevel, rectPoints, rectsOverlap, type Ground } from './glade-pads'
+import { gladePlaces, placeDoor, placeSolids, type GladePlace } from './glade-places'
+import { pondDepthIn } from './relief'
+import { gladeJetty } from './moonwell-glade'
+import type { Box } from '../terrain-world'
 
 export interface Standing { who: string; name: string; x: number; z: number }
 /** the Glade as the walker has it under this layer (page.tsx gladeShape, the same pieces) */
 export function gladeShapeOf(layer: GladeLayer): Shape {
   const ground = gladeLayerGround(layer.edits)
   return withZoneParts(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground }, () => null, true),
-    [...zonePartBoxes(zoneParts(layer.zones ?? [], ground)), ...sceneryBoxes(sceneryPlaced(layer.props ?? [], ground))])
+    solidPieces(layer))
 }
+/** the owner's solid pieces: the building zones' parts and the scenery that blocks */
+const solidPieces = (layer: GladeLayer): Box[] => { const ground = gladeLayerGround(layer.edits); return [...zonePartBoxes(zoneParts(layer.zones ?? [], ground)), ...sceneryBoxes(sceneryPlaced(layer.props ?? [], padGround(layer.props, ground)))] }
 
 /** how near the walk must end (E reaches 3 m) */
 export const WALK_REACH = 2.2
 const CELL = 1, SUB = 0.5, STEP = 0.5, DROP = 1.4, CAP = 60000
 type P = { x: number; z: number }
-/** Can a body walk from a to within WALK_REACH of b? */
-export function walkReach(shape: Shape): (a: P, b: P) => boolean {
+/** Can a body walk from a to within WALK_REACH of b (or of any of b's, one search for them all)? */
+export function walkReach(shape: Shape, stand: Ground = shape.ground): (a: P, b: P | readonly P[]) => boolean {
   const w = terrainWorld(shape)
   // a metre's move in half-metre strides; the feet's new height, or null = stopped. `back` asks the same move made the other way round.
   const move = (x: number, z: number, y: number, dx: number, dz: number, back: boolean): number | null => {
@@ -36,18 +43,17 @@ export function walkReach(shape: Shape): (a: P, b: P) => boolean {
     return y
   }
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-  const search = (a: P, b: P, back: boolean, cap: number): 'met' | 'closed' | 'cap' => {
-    const y0 = w.floorAt(a.x, a.z, shape.ground(a.x, a.z), STEP); if (y0 === null) return 'closed'
-    const h = (i: number, j: number) => Math.abs(a.x + i - b.x) + Math.abs(a.z + j - b.z)
+  const search = (from: readonly P[], to: readonly P[], back: boolean, cap: number): 'met' | 'closed' | 'cap' => {
+    const a = from[0], b = to[0], h = (i: number, j: number) => Math.abs(a.x + i - b.x) + Math.abs(a.z + j - b.z)
     // a binary heap on distance to go (greedy): finds a way, not the shortest
-    const heap: { f: number; i: number; j: number; y: number }[] = [], seen = new Set(['0,0'])
+    const heap: { f: number; i: number; j: number; y: number }[] = [], seen = new Set<string>()
     const push = (n: { f: number; i: number; j: number; y: number }) => { let c = heap.push(n) - 1; while (c) { const p = (c - 1) >> 1; if (heap[p].f <= n.f) break; heap[c] = heap[p]; c = p } heap[c] = n }
     const pop = () => { const top = heap[0], n = heap.pop()!; if (heap.length) { let c = 0; for (;;) { let k = 2 * c + 1; if (k >= heap.length) break; if (k + 1 < heap.length && heap[k + 1].f < heap[k].f) k++; if (heap[k].f >= n.f) break; heap[c] = heap[k]; c = k } heap[c] = n } return top }
-    push({ f: h(0, 0), i: 0, j: 0, y: y0 })
+    for (const p of from) { const y = w.floorAt(p.x, p.z, stand(p.x, p.z), STEP), i = p.x - a.x, j = p.z - a.z; if (y !== null && !seen.has(`${i},${j}`)) { seen.add(`${i},${j}`); push({ f: h(i, j), i, j, y }) } }
     while (heap.length) {
       if (seen.size > cap) return 'cap'
       const n = pop(), x = a.x + n.i, z = a.z + n.j
-      if (Math.hypot(x - b.x, z - b.z) <= WALK_REACH && Math.abs(n.y - shape.ground(b.x, b.z)) < 2) return 'met'
+      if (to.some(q => Math.hypot(x - q.x, z - q.z) <= WALK_REACH && Math.abs(n.y - stand(q.x, q.z)) < 2)) return 'met'
       for (const [dx, dz] of DIRS) {
         const i = n.i + dx, j = n.j + dz, id = `${i},${j}`; if (seen.has(id)) continue
         const y = move(x, z, n.y, dx, dz, back); if (y === null) continue
@@ -57,20 +63,61 @@ export function walkReach(shape: Shape): (a: P, b: P) => boolean {
     return 'closed'
   }
   // from the person's side first: a pocket they are shut in fills at once (the long way round would walk the whole Glade to say no)
-  return (a, b) => search(b, a, true, 6000) !== 'closed' && search(a, b, false, CAP) === 'met'
+  return (a, b) => { const bs = 'x' in b ? [b] : b; return search(bs, [a], true, 6000) !== 'closed' && search([a], bs, false, CAP) === 'met' }
 }
 
 /** What is wrong, one line each, ready to read; [] = publish. `people` = glade-cluster gladePeople() (the newborn spot among them). */
 export function peopleProblems(layer: GladeLayer, people: readonly Standing[]): string[] {
-  const shape = gladeShapeOf(layer), w = terrainWorld(shape), wet = gladeWet(layer), out: string[] = [], good: Standing[] = []
+  const shape = gladeShapeOf(layer), stand = padGround(layer.props, shape.ground), w = terrainWorld(shape), wet = gladeWet(layer), out: string[] = [], good: Standing[] = []
   for (const p of people) {
     const g = shape.ground(p.x, p.z)
     if (!Number.isFinite(g) || [[0.4, 0], [-0.4, 0], [0, 0.4], [0, -0.4]].some(([dx, dz]) => !Number.isFinite(shape.ground(p.x + dx, p.z + dz)))) out.push(`${p.name} is in the void`)
     else if (wet(p.x, p.z)) out.push(`${p.name} is in the water`)
     // the body stands on what is under its feet (a slope, a doorstep); anything else in it is a solid piece
-    else { const f = w.floorAt(p.x, p.z, g, STEP); if (f === null || !w.bodyFree(p.x, p.z, f)) out.push(`${p.name} is inside something solid`); else good.push(p) }
+    else { const f = w.floorAt(p.x, p.z, stand(p.x, p.z), STEP); if (f === null || !w.bodyFree(p.x, p.z, f)) out.push(`${p.name} is inside something solid`); else good.push(p) }
   }
   const nb = good.find(p => p.who === 'newborn')
-  if (nb) { const reach = walkReach(shape); for (const p of good) if (p !== nb && !reach(nb, p)) out.push(`${p.name} cannot be reached on foot from the newborn spot`) }
+  if (nb) { const reach = walkReach(shape, stand); for (const p of good) if (p !== nb && !reach(nb, p)) out.push(`${p.name} cannot be reached on foot from the newborn spot`) }
+  return out
+}
+
+/** how clear of the gate a house must be (m) */
+export const GATE_CLEAR = 3
+const hits = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.z0 < b.z1 && b.z0 < a.z1 && a.y0 < b.y1 && b.y0 < a.y1
+/** a door and where a body can step from it in a straight line: the search walks whole metres, so a narrow porch (Hazel's) can fall between
+ *  them from the door's own spot */
+function doorway(w: ReturnType<typeof terrainWorld>, d: P, f: number): P[] {
+  const out = [d]
+  for (let k = 0; k < 8; k++) for (let m = 1; m <= 8; m++) {
+    const x = d.x + Math.cos(k * Math.PI / 4) * m * 0.25, z = d.z + Math.sin(k * Math.PI / 4) * m * 0.25
+    if (!w.bodyFree(x, z, f)) break
+    if (m === 2 || m === 5 || m === 8) out.push({ x, z })
+  }
+  return out
+}
+/** s1c-2: may the houses stand there? The same shape of answer as peopleProblems. A house nobody moved is only asked whether its door can
+ *  still be reached, and whether a moved one stands in it: the rest is the Glade as built. */
+export function placeProblems(layer: GladeLayer, places: readonly GladePlace[] = gladePlaces(), newborn: P | null = null): string[] {
+  const shape = gladeShapeOf(layer), land = shape.ground, stand = padGround(layer.props, land), w = terrainWorld(shape), wet = gladeWet(layer), out: string[] = [], pieces = solidPieces(layer)
+  const j = gladeJetty(), jetty = { x: (j.x0 + j.x1) / 2, z: (j.z0 + j.z1) / 2, yaw: Math.atan2(j.x1 - j.x0, j.z1 - j.z0), w: j.w, d: Math.hypot(j.x1 - j.x0, j.z1 - j.z0) }
+  const reach = newborn && walkReach(shape, stand), said = new Set<string>()
+  for (const p of places) {
+    const pts = p.moved ? rectPoints(p) : [], own = p.moved ? placeSolids(p.place, land) : [], crate = p.place === 'jars'
+    const no = (why: string) => { out.push(`${p.name} ${why}`) }
+    if (p.moved) {
+      if (pts.some(q => !Number.isFinite(land(q.x, q.z)))) { no('is in the void'); continue }
+      if (pts.some(q => pondDepthIn(q.x, q.z) > 0) || rectsOverlap(p, jetty)) { no('is in the Moonwell'); continue }
+      if (pts.some(q => wet(q.x, q.z))) { no('is in the water'); continue }
+      const v = padLevel(p, land); if (v.top - v.low > PAD_FALL) { no(`is on a slope (the ground falls ${(v.top - v.low).toFixed(1)} m under it, ${PAD_FALL} at most)`); continue }
+      if (inRect(p, GLADE_GATE.x, GLADE_GATE.z, GATE_CLEAR)) { no('is in the gate'); continue }
+      const other = places.find(o => o !== p && (crate || o.place === 'jars' ? placeSolids(o.place, land).some(a => own.some(b => hits(a, b))) : rectsOverlap(p, o)))
+      if (other) { const pair = [p.id, other.id].sort().join(); if (!said.has(pair)) { said.add(pair); no(`stands in ${other.name}`) } continue }
+      if (own.some(b => pieces.some(q => hits(b, q)))) { no('stands in a solid piece'); continue }
+    }
+    if (crate && !p.moved) continue   // beside Yarrow's door, which is asked
+    const d = placeDoor(p.place), f = Number.isFinite(land(d.x, d.z)) ? w.floorAt(d.x, d.z, stand(d.x, d.z), STEP) : null
+    if (f === null || !w.bodyFree(d.x, d.z, f) || wet(d.x, d.z)) no(crate ? 'has no room in front of it' : 'has a door nobody can stand at')
+    else if (reach && newborn && !reach(newborn, doorway(w, d, f))) no(crate ? 'cannot be reached on foot from the newborn spot' : 'has a door nobody can reach on foot')
+  }
   return out
 }

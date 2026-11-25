@@ -5,14 +5,21 @@
 import type { Combat } from './combat'
 import type { Shape, Box } from '../terrain-world'
 import { gladeHomeBoxes } from './glade-home'
-import { gladeLotBoxes, jettyBoxes, gladeBlueprintVersion } from './glade-lots'
+import { crateBoxes, gladeLotBoxes, standOn, jettyBoxes, gladeBlueprintVersion } from './glade-lots'
 import { GLADE, WATER_DROP } from './relief'
+import { gladePeopleVersion } from './glade-people'
 import { settlementSolids } from './settlement-lots'
 // M40: the Glade's station blockouts + Greg's jetty, built once (the Glade's floor is one level, GLADE.y)
-let gladeParts: Box[] | null = null, gladeVer = -1
-const gladeSolids = (x0: number, z0: number, x1: number, z1: number) => {
-  if (!gladeParts || gladeVer !== gladeBlueprintVersion()) { gladeParts = [...gladeLotBoxes(GLADE.y), ...jettyBoxes(GLADE.y - WATER_DROP)]; gladeVer = gladeBlueprintVersion() }   // a blueprint landing rebuilds them
-  if (x1 < GLADE.pondX - 40 || x0 > GLADE.gx + 45 || z1 < GLADE.gz - 45 || z0 > GLADE.gz + 45) return []
+// M153 s1c-2: a house moved in Place mode stands on the land under it, anywhere in the Glade: rebuilt when one moves or the land changes
+let gladeParts: Box[] | null = null, gladeVer = '', gladeOn: Shape['ground'] | null = null, around = { x0: 0, x1: 0, z0: 0, z1: 0 }
+const gladeSolids = (ground: Shape['ground'], x0: number, z0: number, x1: number, z1: number) => {
+  const v = `${gladeBlueprintVersion()}.${gladePeopleVersion()}`
+  if (!gladeParts || gladeVer !== v || gladeOn !== ground) {   // a blueprint landing rebuilds them
+    const lots = gladeLotBoxes(GLADE.y, ground)
+    gladeParts = [...lots, ...crateBoxes(standOn(ground), GLADE.y), ...jettyBoxes(GLADE.y - WATER_DROP)]; gladeVer = v; gladeOn = ground
+    around = gladeParts.reduce((a, b) => ({ x0: Math.min(a.x0, b.x0), x1: Math.max(a.x1, b.x1), z0: Math.min(a.z0, b.z0), z1: Math.max(a.z1, b.z1) }), { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity })
+  }
+  if (x1 < around.x0 || x0 > around.x1 || z1 < around.z0 || z0 > around.z1) return []
   return gladeParts.filter(b => b.x0 <= x1 && b.x1 >= x0 && b.z0 <= z1 && b.z1 >= z0)
 }
 
@@ -35,7 +42,7 @@ export function withPieces(shape: Shape, get: () => Combat | null = () => live.c
   return {
     ground: shape.ground, water: shape.water,
     solids(x0, y0, z0, x1, y1, z1) {
-      const base = shape.solids(x0, y0, z0, x1, y1, z1), extra = [...pieceBoxes(get(), x0, z0, x1, z1), ...(glade ? [...gladeHomeBoxes(shape.ground, x0, z0, x1, z1), ...gladeSolids(x0, z0, x1, z1)] : settlementSolids(x0, z0, x1, z1))]
+      const base = shape.solids(x0, y0, z0, x1, y1, z1), extra = [...pieceBoxes(get(), x0, z0, x1, z1), ...(glade ? [...gladeHomeBoxes(shape.ground, x0, z0, x1, z1), ...gladeSolids(shape.ground, x0, z0, x1, z1)] : settlementSolids(x0, z0, x1, z1))]
       return extra.length ? [...base, ...extra] : base
     },
   }

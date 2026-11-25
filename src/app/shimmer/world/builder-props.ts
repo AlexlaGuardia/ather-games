@@ -35,8 +35,22 @@ export function putWho(ps: readonly Prop[], w: Who, at: { x: number; z: number; 
   const c = cleanProp({ id: whoId(w), k: WHO_PREFIX + w, ...at, s: 1 })
   return c ? [...ps.filter(p => p.id !== c.id), c] : [...ps]
 }
-/** the pieces the cap counts: people are extra */
-export const pieceCount = (ps: readonly Prop[]) => ps.reduce((n, p) => n + (isWho(p) ? 0 : 1), 0)
+// ── s1c-2: THE GLADE'S HOUSES (Greg's home, the five lots with their pads) and Yarrow's teaching crate, the same way: `spot:<place>`, id
+//    `h<place>`, one each, never added or deleted, x, z, q only. Without its piece a house stands where the code puts it.
+export const PLACE_PREFIX = 'spot:'
+export const PLACES = ['home', 'fennel', 'hazel', 'sax', 'yarrow', 'mallow', 'jars'] as const
+export type Place = (typeof PLACES)[number]
+export const isPlace = (p: Pick<Prop, 'k'>) => p.k.startsWith(PLACE_PREFIX)
+export const placeOf = (k: string): Place | null => { const w = k.slice(PLACE_PREFIX.length) as Place; return k.startsWith(PLACE_PREFIX) && PLACES.includes(w) ? w : null }
+export const placeId = (w: Place) => `h${w}`
+export function putPlace(ps: readonly Prop[], w: Place, at: { x: number; z: number; q: number }): Prop[] {
+  const c = cleanProp({ id: placeId(w), k: PLACE_PREFIX + w, x: at.x, z: at.z, q: at.q, s: 1 })
+  return c ? [...ps.filter(p => p.id !== c.id), c] : [...ps]
+}
+/** a piece that is always there: people and houses */
+export const isStanding = (p: Pick<Prop, 'k'>) => isWho(p) || isPlace(p)
+/** the pieces the cap counts: people and houses are extra */
+export const pieceCount = (ps: readonly Prop[]) => ps.reduce((n, p) => n + (isStanding(p) ? 0 : 1), 0)
 
 export const PROPS_MAX = 600, SCALE_MIN = 0.5, SCALE_MAX = 2, SCALE_STEP = 0.05
 /** G walks these (m; 0 = free); T walks these (degrees) */
@@ -55,6 +69,10 @@ export function cleanProp(v: unknown): Prop | null {
     const w = whoOf(o.k); if (!w || !num(o.x) || !num(o.z) || Math.abs(o.x) > XZ_MAX || Math.abs(o.z) > XZ_MAX) return null
     return { id: whoId(w), k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: 1, ...(w === 'newborn' && o.turned === true ? { turned: true } : {}) }
   }
+  if (o && typeof o === 'object' && typeof o.k === 'string' && isPlace({ k: o.k })) {
+    const w = placeOf(o.k); if (!w || !num(o.x) || !num(o.z) || Math.abs(o.x) > XZ_MAX || Math.abs(o.z) > XZ_MAX) return null
+    return { id: placeId(w), k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: 1 }
+  }
   if (!o || typeof o !== 'object' || typeof o.id !== 'string' || !ID.test(o.id) || typeof o.k !== 'string' || !KIND.test(o.k)) return null
   if (!num(o.x) || !num(o.z) || Math.abs(o.x) > XZ_MAX || Math.abs(o.z) > XZ_MAX) return null
   if (isNode({ k: o.k })) {
@@ -70,8 +88,8 @@ export function cleanProps(j: unknown): Prop[] {
   const out: Prop[] = [], seen = new Set<string>()
   let n = 0
   for (const v of a) {
-    const p = cleanProp(v); if (!p || seen.has(p.id) || (!isWho(p) && n >= PROPS_MAX)) continue
-    seen.add(p.id); out.push(p); if (!isWho(p)) n++
+    const p = cleanProp(v); if (!p || seen.has(p.id) || (!isStanding(p) && n >= PROPS_MAX)) continue
+    seen.add(p.id); out.push(p); if (!isStanding(p)) n++
   }
   return out
 }
@@ -95,7 +113,7 @@ export const nextOf = <T,>(list: readonly T[], cur: T): T => list[(list.indexOf(
 
 /** the list with one more piece, or null when full / not a prop. A node picked up and put down keeps its id (`p.id`). */
 export function addProp(ps: readonly Prop[], p: Omit<Prop, 'id'> & { id?: string }, now = Date.now()): Prop[] | null {
-  if (isWho(p) || pieceCount(ps) >= PROPS_MAX) return null
+  if (isStanding(p) || pieceCount(ps) >= PROPS_MAX) return null
   const c = cleanProp({ ...p, id: !isNode(p) ? newPropId(ps) : p.id && !ps.some(o => o.id === p.id) ? p.id : newNodeId(ps, now) })
   return c ? [...ps, c] : null
 }
