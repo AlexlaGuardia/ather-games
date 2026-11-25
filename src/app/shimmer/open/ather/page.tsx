@@ -140,7 +140,7 @@ import { infectNodes, NO_NODES, infectedGround, championSpot } from './infection
 import { infectId, INFECT_R } from './infect-id'
 import { builtFolkSpots } from './settlement-lots'
 import { live as liveSolids } from './dynamic-solids'
-import { canPlant, plant, lift, loadWaymarks, saveWaymarks, groundOf, canTravel, isLit, lastLit, WAY_TEXT, GREG_WAYMARK, MAX_WAYMARKS, type Waymark, type PlantVerdict } from './waymarks'
+import { canPlant, plant, lift, loadWaymarks, saveWaymarks, groundOf, canTravel, isLit, lastLit, WAY_TEXT, besideStone, plantSpot, GREG_WAYMARK, MAX_WAYMARKS, type Waymark, type PlantVerdict } from './waymarks'
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { WildsSpirits, useSpiritFight } from './wilds-spirits'   // M127 s1
 import { CombatLayer, type CombatHud, type SightLink } from './combat-layer'
@@ -160,6 +160,7 @@ import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
 import { DeathPack, fallAndDrop, packLying } from './death-pack'
 import { dropLoot, lootSpots, pilesOf } from './ground-loot'   // BETA M141
 import { GroundLoot } from './ground-loot-view'
+import { WaymarkGhost } from './waymark-ghost'   // M147
 import { useOpeningChain, useChain, chainDeath, chainGateOpen, chainFlip } from '../shared/opening-chain-store'   // BETA M73: Ather to Nyx
 import { flipPulse, runeHoldPulse } from '../shared/opening-chain'
 import { CloudReefs, CloudDeck, HorizonRing } from '../shared/cloud-edge'
@@ -508,6 +509,14 @@ function AtherSliceGame() {
   const infRef = useRef<ReadonlySet<string>>(new Set())   // M75 s2: the spread's infected nodes (set below), for the fall's lit waymark
   // void v2: the FALL before the cost (void-fall.ts). Over the lip, the page takes the body from the walker (sinkRef), it drops
   // into the fog column under gravity while a black veil closes (voidDark), and only once the view is black does voidFall run.
+  /** M147: ground the keeper may be set down on / plant a stone on: walkable, dry, no cloud void, nothing standing in it */
+  const openAtRef = useRef<(x: number, z: number) => boolean>(() => false)
+  openAtRef.current = (x, z) => {
+    if (!ww || !ww.walkable(x, z, 0.35) || (voidsRef.current?.weight(x, z) ?? 0) >= FALL_LIP / 2) return false
+    const y = ww.heightAt(x, z)
+    if (!Number.isFinite(y) || ww.shape.water(x, y, z, x, y, z).some(b => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1 && y < b.y1)) return false
+    return !bodyBlocked(wildsStructures, x, y, z, 0.35)
+  }
   const sinkRef = useRef<((lc: Loco, dt: number) => void) | null>(null)
   const fallSt = useRef<FallState | null>(null), voidDark = useRef<HTMLDivElement | null>(null)
   const setDark = (d: number) => { const el = voidDark.current; if (el) el.style.opacity = String(d) }
@@ -674,8 +683,9 @@ function AtherSliceGame() {
       // M75 s2 (Magii d3bf5e9): a waymark whose ground went grey again is DARK: no travel until the ground is cleared again
       const v = canTravel(d.w, infectedSet, infectionRef.current.lost); if (!v.ok) { setToast(v.why); return }
       // a waymark is saved in its tile's own coords; the world is one space, so place it, load round it, then arrive
-      const o = ww.offsetOf(d.w.tile), x = d.w.x + o.x + 2.2, z = d.w.z + o.z + 2.2
-      stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(d.w.tile); arrive({ kind: 'wilds', tile: d.w.tile }, { x, z, yaw: Math.PI * 0.75 }) })
+      const o = ww.offsetOf(d.w.tile), x = d.w.x + o.x, z = d.w.z + o.z
+      // M147: beside the stone on clear ground, facing it, never in it
+      stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(d.w.tile); arrive({ kind: 'wilds', tile: d.w.tile }, besideStone({ x, z }, openAtRef.current, ww.heightAt)) })
       return
     }
     // Athernyx: out through a city's door off the hall (hub's ?at= sets you down at that pitstop).
@@ -758,7 +768,7 @@ function AtherSliceGame() {
   const leaveGlade = useCallback(() => {
     if (!ww) { setGatePending(true); hudSay('The gate opens onto the Wilds...', 'info', 3); return }
     const o = ww.offsetOf(GREG_WAYMARK.tile), x = GREG_WAYMARK.x + o.x, z = GREG_WAYMARK.z + o.z
-    stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(GREG_WAYMARK.tile); arrive({ kind: 'wilds', tile: GREG_WAYMARK.tile }, { x, z, yaw: Math.PI * 0.75 }, true); hudSay('The Wilds', 'zone') })
+    stream(ww, x, z).then(() => { setWrev(ww.rev); setHereTile(GREG_WAYMARK.tile); arrive({ kind: 'wilds', tile: GREG_WAYMARK.tile }, besideStone({ x, z }, openAtRef.current, ww.heightAt), true); hudSay('The Wilds', 'zone') })
   }, [ww, arrive])
   useEffect(() => { if (gatePending && ww) { setGatePending(false); if (zone.kind === 'glade') leaveGlade() } }, [gatePending, ww, zone, leaveGlade])
   const gladeFall = useCallback(() => arrive({ kind: 'glade' }, gladeNewbornSpot()), [arrive])
@@ -996,25 +1006,33 @@ function AtherSliceGame() {
     }
   }, [zone, travel, garden, updateGarden, skipDays, nodeOwner, arrive])
 
-  const plantHere = useCallback((): PlantVerdict => {
-    if (zone.kind !== 'wilds' || !ww) return { ok: false, why: 'not in the Wilds' }
+  // M147: the verdict at a spot (the ghost's, plantSpot: a few steps ahead), the plant's and the ghost's alike
+  const plantVerdict = useCallback((at: { x: number; z: number }) => {
+    if (zone.kind !== 'wilds' || !ww) return { ok: false as const, why: 'not in the Wilds' }
     // a waymark belongs to the tile it stands in, in that tile's own coords (the fold map, the spacing rules, saves)
-    const p = pos.current, biome = ww.biomeAt(p.x, p.z), t = ww.at(tileOf(p.x, p.z).tx, tileOf(p.x, p.z).ty)
-    if (!t) return { ok: false, why: 'no tile' }
+    const me = pos.current, p = at, biome = ww.biomeAt(p.x, p.z), t = ww.at(tileOf(p.x, p.z).tx, tileOf(p.x, p.z).ty)
+    if (!t) return { ok: false as const, why: 'no tile' }
     const lx = p.x - t.tx * TILE_M, lz = p.z - t.ty * TILE_M
     const st0 = standingRef.current ? settlementAt(standingRef.current, p.x, p.z) : null, st = st0 && infectionRef.current.held === st0.id ? null : st0   // a settlement is kept ground (Alex 11-18), but not while an infection holds it (M128)
     // M75: so is ground the keeper cleared (canon: a waymark exists only once the place is kept); it links home, so not pre-fold
     const owner = groundOwner?.(p.x, p.z) ?? null, ground = groundOf(owner, infectedSet)
-    const v = canPlant(waymarks, { tile: t.name, x: lx, z: lz, biome, grounded: p.grounded, swimming: p.swimming, settlement: st?.id ?? null, ground, folded: gardenOpen(loadTut()) })
+    const v = canPlant(waymarks, { tile: t.name, x: lx, z: lz, biome, grounded: me.grounded && openAtRef.current(p.x, p.z), swimming: me.swimming, settlement: st?.id ?? null, ground, folded: gardenOpen(loadTut()) })
+    return v.ok ? { ...v, t, lx, lz, biome, st, owner } : v
+  }, [zone, ww, waymarks, groundOwner, infectedSet])
+  const plantPose = () => ({ x: pos.current.x, z: pos.current.z, yaw: poseRef.current.yaw })
+  const plantHere = useCallback((): PlantVerdict => {
+    const p = plantSpot(plantPose()), v = plantVerdict(p)
     if (!v.ok) { setToast(v.why); return v }
+    const { t, lx, lz, biome, st, owner } = v
     const spent = take(getInv(), 'waymark', 1)          // a waymark is a thing in the bag now: planting spends one
     if (!spent) { const why = WAY_TEXT.none; setToast(why); return { ok: false, why } }
     setInv(spent)
-    const next = plant(waymarks, { tile: t.name, x: lx, y: ww.heightAt(p.x, p.z), z: lz, biome, ...(st ? { settlement: st.id } : owner ? { node: owner } : {}) })
+    const next = plant(waymarks, { tile: t.name, x: lx, y: ww!.heightAt(p.x, p.z), z: lz, biome, ...(st ? { settlement: st.id } : owner ? { node: owner } : {}) })
     setWaymarks(next); saveWaymarks(next)
     setToast(WAY_TEXT.planted(st?.name ?? 'the Wilds'))
-    return v
-  }, [zone, ww, waymarks, groundOwner, infectedSet])
+    return { ok: true }
+  }, [ww, waymarks, plantVerdict])   // eslint-disable-line react-hooks/exhaustive-deps
+  const [wmWhy, setWmWhy] = useState<string | null>(null)   // M147: why the ghost is red
   const liftWaymark = useCallback((id: string) => {
     const next = lift(wayRef.current, id); setWaymarks(next); saveWaymarks(next)
     const back = give(getInv(), 'waymark', 1); setInv(back.inv)
@@ -1026,6 +1044,7 @@ function AtherSliceGame() {
     const g = window as unknown as { __ather?: Record<string, unknown> }
     g.__ather = {
       ...(g.__ather ?? {}),
+      yaw: () => poseRef.current.yaw,   // READ (m147)
       wm: () => wayRef.current, wmBag: () => countOf(getInv(), 'waymark'), wmPlant: () => plantHere(), wmLift: (id: string) => liftWaymark(id),
       wmGround: () => { const p = pos.current; return { ground: groundOf(groundOwner?.(p.x, p.z) ?? null, infectedSet), settlement: standingRef.current ? settlementAt(standingRef.current, p.x, p.z)?.id ?? null : null, x: p.x, z: p.z, grounded: p.grounded } },
       wmNodes: () => { const p = pos.current; return allNodes.filter(n => n.tile === GREG_WAYMARK.tile).map(n => ({ id: n.id, x: n.x, z: n.z, infected: infectedSet.has(n.id), d: Math.hypot(n.x - p.x, n.z - p.z) })).sort((a, b) => a.d - b.d).slice(0, 40) },
@@ -1732,6 +1751,7 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && ww && <RinningFX ease={easeOf(toolsRef.current.rinning)} waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT && !!toolsRef.current.rinning} onCatch={onCatch} onGone={onGone} />}
         {zone.kind === 'wilds' && ww && [...ww.loaded].map(([name, T]) => { const t = ww.byName.get(name)!; return <group key={name} position={[t.tx * TILE_M, 0, t.ty * TILE_M]}><WildsScene W={T} waymarks={waymarks} infected={infectedSet} focus={poseRef} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />{net && <TilePaths net={net} W={T} off={{ x: t.tx * TILE_M, z: t.ty * TILE_M }} />}</group> })}
         {ww && <DeathPack active={zone.kind === 'wilds'} />}
+        {zone.kind === 'wilds' && ww && held === 'waymark' && !panel && <WaymarkGhost pose={plantPose} height={ww.heightAt} verdict={(x, z) => plantVerdict({ x, z })} onWhy={setWmWhy} />}
         {zone.kind === 'wilds' && ww && <GroundLoot keeper={lootKeeper} ground={ground} can={lootCan} />}
         {zone.kind === 'wilds' && ww && <><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
         {zone.kind === 'glade' && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><GladeLots /></>}   {/* M67 s1b-2: the Glade's backdrop in Greg's garden */}
@@ -1812,6 +1832,9 @@ function AtherSliceGame() {
       })()}
       {prompt && !panel && !building && (
         <div style={{ position: 'absolute', left: '50%', top: '58%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none' }}>{prompt}</div>
+      )}
+      {wmWhy && !panel && !fade && (
+        <div data-waymark-why style={{ position: 'absolute', left: '50%', top: '64%', transform: 'translateX(-50%)', maxWidth: 'min(86vw, 420px)', textAlign: 'center', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#ffb4a8', font: '13px system-ui', pointerEvents: 'none' }}>{wmWhy}</div>
       )}
       {panel?.kind === 'map' && (
         <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} infected={infectedSet} here={{ x: pos.current.x - hereOff.x, z: pos.current.z - hereOff.z }}

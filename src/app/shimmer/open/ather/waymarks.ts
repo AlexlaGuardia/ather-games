@@ -116,6 +116,27 @@ export function lastLit(list: readonly Waymark[], infected: ReadonlySet<string>)
   return undefined
 }
 
+// ── M147: WHERE IT STANDS, AND WHERE IT SETS YOU DOWN ─────────────────────────────────────────────────────────────────────
+/** A held stone goes this far in front of the keeper (never at their own feet). */
+export const PLANT_AHEAD = 3
+/** yaw is the WALKER's: forward = (-sin yaw, -cos yaw). */
+export const plantSpot = (p: { x: number; z: number; yaw: number }) => ({ x: p.x - Math.sin(p.yaw) * PLANT_AHEAD, z: p.z - Math.cos(p.yaw) * PLANT_AHEAD })
+/** How far beside a stone an arrival stands (2.2 m each way, as it always was); the stone's ring is 1.5 m. */
+export const BESIDE = Math.hypot(2.2, 2.2)
+/** The steepest an arrival may stand above or below its stone. */
+const BESIDE_STEP = 1.5
+/** Travel sets the keeper down BESIDE the stone at (x, z), on ground that is `free`, facing it: the first free of 16 ways round
+ *  (+x +z first), then a wider ring. Nothing free at all = the first way (never the stone itself). */
+export function besideStone(s: { x: number; z: number }, free: (x: number, z: number) => boolean, height: (x: number, z: number) => number): { x: number; z: number; yaw: number } {
+  const h0 = height(s.x, s.z)
+  for (const r of [BESIDE, 2.4, 4.2, 5.4, 7]) for (let k = 0; k < 16; k++) {
+    const turn = (k % 2 ? -1 : 1) * Math.ceil(k / 2) * (Math.PI / 8), a = Math.PI / 4 + turn
+    const x = s.x + Math.sin(a) * r, z = s.z + Math.cos(a) * r
+    if (free(x, z) && !(Math.abs(height(x, z) - h0) > BESIDE_STEP)) return { x, z, yaw: a }
+  }
+  return { x: s.x + 2.2, z: s.z + 2.2, yaw: Math.PI / 4 }
+}
+
 export function plant(list: readonly Waymark[], w: Omit<Waymark, 'id' | 'made'>, now = Date.now()): Waymark[] {
   return [...list, { ...w, id: `wm-${now.toString(36)}-${list.length}`, made: now }]
 }
