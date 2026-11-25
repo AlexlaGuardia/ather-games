@@ -355,6 +355,8 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - 11-23 08:4x Alex on Nyx + ships: agreed Nyx is thin; M73 opening chain next. On a flyable skyship: "I'm not on board for 3, I'm thinking it's just a gate to space maps" → DECIDED: NO flight system. A repaired ship = a GATE to space maps (board it, pick a destination, load the map; the Hask wreck is the first, its SOS = the destination-list question). Ship repair loop = canon ask to Magii.
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+- **M159 dewls (11-25, LIVE for all):** prices plank 15, shard 20, glowfin 30, amber sap 40, ather crystal 100; the ground gem on a real phone. Asked: stock the Burrfolk camp?
+- **M153 s1c-2 houses (11-25, LIVE in Place mode):** a moved house stands level on a plinth (refused past 1.5 m of fall); Yarrow's crate is now solid: fine?
 - **M153 s1c-1 people (11-25, LIVE in Place mode, Glade):** left or M selects a person, X = back; newborn faces Greg unless you press R on that spot; Greg's bench moves with Greg, the house does not.
 - **M154 Bonn, Otto, Tess (11-25, LIVE):** docs/looks/m154-2026-11-25/. Likeness OK? Tess's blush + eyes fixed.
 - **M160 lake (11-25, LIVE):** v16's water covers most of the valley: 538 of 625 trees were in it and are gone, 87 stand. The valley is much barer: raise ground / lower the water in spots, or place your own trees?
