@@ -101,6 +101,8 @@ try {
     ok(await poll(async () => n.evaluate(() => (window as any).__saw > 0), 60000), 'o4. N is shown its own clue\'s thing, word for word')
     const b = JSON.stringify(await I(n)); await load(n); await sleep(12000)
     ok(JSON.stringify(await I(n)) === b && (await n.evaluate(() => (window as any).__saw)) === 0, 'o5. N reloaded: the same, not told again')
+    await wilds(n); await n.evaluate(() => { localStorage.removeItem('ather:mp:party'); window.dispatchEvent(new Event('ather:party')) }); await sleep(3000); await near(n, B.x + 2, B.z + 14)
+    ok(await poll(async () => (await built(n)).includes(B.id), 120000), "o6. N out of the party, on the same spot: its homes are drawn (so o2's absence is H's loss)")
   } else {
     const h = await open('H', IDH, { ...base, 'ather.spreadmap.v1': map })
     await load(h); await wilds(h); await sleep(3000)
