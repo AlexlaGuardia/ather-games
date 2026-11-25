@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { PROP_SNAPS, PROP_TURNS, PROPS_MAX, addProp, removeProp, changeProp, nextOf, scaleBy, snapXZ, turnBy, type Prop } from '../../world/builder-props'
-import { SCENERY, SCENERY_BY, SCENERY_GROUPS, isSolid, sceneryPlaced, type PlacedProp } from '../../open/ather/scenery'
+import { SCENERY, SCENERY_BY, SCENERY_GROUPS, endSnap, isSolid, sceneryPlaced, type PlacedProp } from '../../open/ather/scenery'
 import { SceneryView } from '../../open/ather/scenery-view'
 import { GladeLots } from '../../open/ather/glade-lots-view'
 import { GladeHome } from '../../open/ather/glade-home-view'
@@ -18,6 +18,8 @@ import { GLADE_FRAME, GLADE_GATE, gladeKeepers, gregInGlade } from '../../open/a
 import { GLADE, gladeFolk } from '../../open/ather/moonwell-glade'
 import { folkSpots } from '../../open/ather/folk-spots'
 
+/** where a piece in hand, aimed at (x, z), goes: onto a fence's end when one is near, else the grid. Snap free = exactly there. */
+const spotFor = (props: readonly Prop[], h: Hand, moving: string | null, snap: number, x: number, z: number) => (snap > 0 ? endSnap(moving ? props.filter(p => p.id !== moving) : props, h, x, z) : null) ?? { x: snapXZ(x, snap), z: snapXZ(z, snap) }
 type Ground = (x: number, z: number) => number
 export interface Hand { k: string; q: number; s: number; solid?: boolean }
 export interface PlaceApi {
@@ -49,7 +51,7 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
   const go = useRef({ setProps, say }); go.current = { setProps, say }
   const put = useCallback((x: number, z: number) => {
     const c = S.current; if (!c.hand) { go.current.say('this slot is empty: E opens the inventory'); return }
-    const at = { x: snapXZ(x, c.snap), z: snapXZ(z, c.snap), q: c.hand.q, s: c.hand.s, ...(c.hand.solid === undefined ? {} : { solid: c.hand.solid }) }
+    const at = { ...spotFor(c.props, c.hand, c.moving, c.snap, x, z), q: c.hand.q, s: c.hand.s, ...(c.hand.solid === undefined ? {} : { solid: c.hand.solid }) }
     if (c.moving) { go.current.setProps(changeProp(c.props, c.moving, at)); setMoving(null); setHeld({ q: 0, s: 1 }); return }
     const n = addProp(c.props, { k: c.hand.k, ...at })
     if (n) go.current.setProps(n); else go.current.say(`the map holds ${PROPS_MAX} pieces at most`)
@@ -115,7 +117,7 @@ export function PlaceLayer({ api, active, heightAt, rev }: { api: PlaceApi | nul
     if (api && (c?.id ?? null) !== last.current) { last.current = c?.id ?? null; api.setTarget(last.current) }
     const g = ghost.current
     if (g) {
-      const h = api?.hand, x = c?.ground && h ? snapXZ(c.ground.x, api!.snap) : 0, z = c?.ground && h ? snapXZ(c.ground.z, api!.snap) : 0, y = c?.ground && h ? heightAt(x, z) : NaN
+      const h = api?.hand, at = c?.ground && h ? spotFor(api!.props, h, api!.moving, api!.snap, c.ground.x, c.ground.z) : null, x = at?.x ?? 0, z = at?.z ?? 0, y = at ? heightAt(x, z) : NaN
       g.visible = Number.isFinite(y)
       if (g.visible && h) { g.position.set(x, y, z); g.rotation.y = -h.q * Math.PI / 2; g.scale.setScalar(h.s) }
     }
@@ -167,7 +169,7 @@ export function GladeFixed({ heightAt, label }: { heightAt: Ground; label: (text
 }
 
 // ── the screen: hotbar, status line, inventory ──
-const COLOR: Record<string, string> = { Trees: '#4f9a5f', Bushes: '#8fb35a', Crystals: '#9a8ae0', Props: '#b98a4e', Furniture: '#7fa6c4' }
+const COLOR: Record<string, string> = { Trees: '#4f9a5f', Bushes: '#8fb35a', Plants: '#a9c763', 'Rocks and logs': '#8b857b', 'Fences and signs': '#a5834f', Crystals: '#9a8ae0', Props: '#b98a4e', Furniture: '#7fa6c4' }
 export function PlaceHud({ place, locked, count, status }: { place: ReturnType<typeof usePlace>; locked: boolean; count: number; status?: string }) {
   const { slots, slot, setSlot, snap, turn, inv, setInv, choose, held, hand, api, target } = place
   const tp = target ? api.props.find(p => p.id === target) : null, name = (k: string | null | undefined) => (k ? SCENERY_BY.get(k)?.label ?? k : 'empty')

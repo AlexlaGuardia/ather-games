@@ -12,6 +12,7 @@ import { FLORA_LOOKS } from '../../world/flora-placements'
 import { PieceBody } from './workshop'
 import { clusterGeometry, CRYSTAL_LOOK } from './crystal-nodes'
 import { SCENERY_BY, type PlacedProp, type SceneryKind } from './scenery'
+import { fillerGeometry, fillerMaterial } from './scenery-filler'
 import type { CrystalKind } from './prospecting'
 
 interface Part { geometry: THREE.BufferGeometry; material: THREE.Material }
@@ -81,6 +82,7 @@ function useBaked(K: SceneryKind): { parts: Part[] | null; need: string | null; 
     if (baked.has(K.k) || 'piece' in K.model) return
     let live = true
     if ('crystal' in K.model) { baked.set(K.k, bakeCrystal(K.model.crystal as CrystalKind)); bump(n => n + 1); return }
+    if ('filler' in K.model) { baked.set(K.k, [{ geometry: fillerGeometry(K.model.filler), material: fillerMaterial() }]); bump(n => n + 1); return }
     let w = waiting.get(K.k)
     if (!w) { w = bakeGlb(K).catch(e => { console.error('[scenery] model did not load, drawing a block:', K.k, e); return block(K) }); waiting.set(K.k, w) }
     w.then(p => { baked.set(K.k, p); if (live) bump(n => n + 1) })

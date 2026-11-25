@@ -7,7 +7,7 @@
 import puppeteer, { type Page } from 'puppeteer-core'
 import { createHash } from 'crypto'
 import { mkdirSync } from 'fs'
-import { SCENERY_BY } from '../src/app/shimmer/open/ather/scenery'
+import { SCENERY, SCENERY_BY } from '../src/app/shimmer/open/ather/scenery'
 import { parseGladeLayer, gladeLayerGround } from '../src/app/shimmer/open/ather/glade-layer'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/place-mode-check'), LOOP = process.argv.includes('--loop')
@@ -21,6 +21,7 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`)
 const errs: string[] = [], posts: string[] = [], sent: any[] = []
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 const AT = { x: -100, z: 120 }   // Greg's garden
+const F = { x: AT.x + 1, z: AT.z + 11 }, R = { x: AT.x - 5, z: AT.z + 11 }, SH = { x: -104, z: 174 }   // s1a+: a fence, a rock, the shore
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex').slice(0, 16)
 type W = any
 const props = (o: Page) => o.evaluate(() => (window as W).__terrain.props()) as Promise<any[]>
@@ -110,6 +111,31 @@ try {
     // a scene for Alex, through the tool
     const scene: [string, number, number][] = [['tree:pale', -8, -6], ['tree:shimmer', 10, -8], ['bush:sunfruit-bush', 2, -3], ['bush:moonberry-bush', 4, 0], ['bush:bloom-bush', -2, 3], ['crystal:violet', 7, 5], ['crystal:ather', -6, 6], ['prop:crafting_table', -10, 2], ['prop:exchange_booth', 12, 1], ['piece:goldwood_bench', 0, 6], ['piece:iron_lantern', 3, 6]]
     for (const [k, dx, dz] of scene) { await choose(o, k); await o.evaluate((x: number, z: number) => (window as W).__terrain.place.put(x, z), AT.x + dx, AT.z + dz); await sleep(700) }
+    // s1a+: every filler piece through the tool (fences end to end), the shore, and one of every other kind (the draw call count)
+    const n0 = (await props(o)).length, all = new Set<string>(), G0 = gladeLayerGround(parseGladeLayer(before.draft).edits)
+    let inHand = ''
+    const hold = async (k: string) => { if (inHand === k) return; await key(o, 'KeyE'); await o.click(`[data-testid="place-item-${k}"]`); await sleep(250); await key(o, 'KeyE'); await sleep(250); inHand = k; all.add(k) }
+    const put = async (k: string, x: number, z: number, turns = 0) => { await hold(k); for (let i = 0; i < turns; i++) await key(o, 'KeyR'); await o.evaluate((a: number, b: number) => (window as W).__terrain.place.put(a, b), x, z); await sleep(250); for (let i = 0; i < (4 - turns) % 4; i++) await key(o, 'KeyR'); return (await props(o)).at(-1) }
+    for (let i = 0; i < 8 && (await P(o)).turn !== 90; i++) await key(o, 'KeyT')
+    for (let i = 0; i < 5 && (await P(o)).snap !== 1; i++) await key(o, 'KeyG')
+    await hold('filler:fence'); for (let i = 0; i < 24 && (await P(o)).hand.q !== 0; i++) { if (i === 8) { for (let j = 0; j < 4 && (await P(o)).turn !== 15; j++) await key(o, 'KeyT') } await key(o, 'KeyR') }
+    for (let i = 0; i < 8 && (await P(o)).turn !== 90; i++) await key(o, 'KeyT')
+    ok((await P(o)).hand.q === 0 && (await P(o)).turn === 90, '6b. a fence in hand, turned square')
+        const f1 = await put('filler:fence', F.x, F.z), f2 = await put('filler:fence', F.x + 1.6, F.z + 0.45), f3 = await put('filler:fence-corner', F.x + 4.2, F.z - 0.4, 1)
+    ok(f1.x === F.x && f2.x === F.x + 2 && f2.z === F.z && f3.x === F.x + 4 && f3.z === F.z, `6b. a fence aimed loosely runs on end to end, and the corner on it (${f1.x}, ${f2.x}, ${f3.x})`)
+    await put('filler:rock-large', R.x, R.z); await put('filler:grass-tall', AT.x - 1, AT.z + 13)
+    // the shore nearest the gardens: the painted water stands at 0.1 off z 178; where the ground is at `y` on this line
+    const at = (x: number, y: number) => { for (let z = 160; z < 190; z += 0.1) if (G0(x, z) < y) return z; return NaN }
+    for (const [k, dx, y, dz] of [['reeds', -7, 0, 0], ['reeds', -5.4, -0.1, 0.4], ['reeds', -1, -0.05, 0], ['reeds', 4.6, -0.15, 0], ['reeds', 6, 0, 0], ['rock-large', -10, 0.1, 0], ['rock-medium', 2, 0.1, 0], ['rock-small', 3.4, 0.1, -0.6], ['rock-small', -3, 0.1, -0.4], ['log-fallen', -3, 0.2, -2.4], ['stump', 1.2, 0.2, -3], ['grass-tall', -6, 0.2, -1.2], ['grass-tall', 0.4, 0.2, -1], ['grass-tall', 5, 0.2, -1.8], ['flowers-white', -1, 0.2, -3.8], ['flowers-yellow', 3, 0.2, -2.6], ['flowers-violet', -5, 0.2, -3.4], ['flowers-white', 6, 0.2, -3], ['sign', 7.5, 0.2, -3.4]] as [string, number, number, number][])
+      { const z = at(SH.x + dx, y); if (Number.isFinite(z)) await put(`filler:${k}`, SH.x + dx, z + dz) }
+    await put('tree:grove', SH.x - 12, SH.z - 6); await put('tree:pale', SH.x + 11, SH.z - 5); await put('bush:sunfruit-bush', SH.x + 8.5, at(SH.x + 8, 0.2) - 1)
+    let n1 = 0; for (const s of SCENERY) if (!all.has(s.k)) { let x = 0, z = 0; do { x = AT.x - 12 + (n1 % 9) * 4; z = AT.z + 18 + Math.floor(n1 / 9) * 4; n1++ } while (!Number.isFinite(G0(x, z))); await put(s.k, x, z) }
+    const pa = await props(o), kinds = new Set(pa.map(p => p.k))
+    ok(SCENERY.every(s => kinds.has(s.k)), `6b. every kind in the palette placed (${kinds.size} of ${SCENERY.length}; ${pa.length - n0} more pieces)`)
+    await sleep(5000); const sd = await o.evaluate(() => (window as W).__scenery()) as any
+    ok(sd.items.length === pa.length && sd.drawn >= pa.length && SCENERY.filter(s => s.k.startsWith('filler:')).every(s => sd.items.some((i: any) => i.k === s.k)), `6b. all drawn in Fly (${sd.items.length} pieces, ${sd.meshes} draw calls)`)
+    await o.evaluate((s: any) => (window as W).__builderFly.setCam({ x: s.x, y: 6, z: s.z - 14, yaw: Math.PI, pitch: -0.3 }), SH); await sleep(2500); await o.screenshot({ path: `${out}/fly-shore.png` }).catch(() => {})
+    await o.evaluate((a: any) => (window as W).__builderFly.setCam({ x: a.x, y: 8, z: a.z + 19, yaw: 0, pitch: -0.4 }), AT); await sleep(2500); await o.screenshot({ path: `${out}/fly-fence.png` }).catch(() => {})
     await sleep(6000); await o.evaluate((a: any) => (window as W).__builderFly.setCam({ x: a.x, y: 13, z: a.z + 24, yaw: 0, pitch: -0.38 }), AT); await sleep(2500)
     await o.screenshot({ path: `${out}/fly-scene.png` }).catch(() => {})
     await o.evaluate(() => document.exitPointerLock()); await sleep(800); await o.click('[data-testid="fly-full"]'); await sleep(3000); await o.screenshot({ path: `${out}/fly-scene-full.png` }).catch(() => {}); await key(o, 'KeyE'); await o.screenshot({ path: `${out}/fly-palette-full.png` }).catch(() => {}); await key(o, 'KeyE'); await key(o, 'Escape')
@@ -132,6 +158,9 @@ try {
     const game = async () => {
       const g = await (await br.createBrowserContext()).newPage(); g.on('pageerror', e => errs.push('game: ' + String(e).slice(0, 200)))
       await g.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true }); await g.evaluateOnNewDocument('window.__name = (f) => f')
+      await g.evaluateOnNewDocument(() => { const w = window as W; w.__dc = 0; w.__tri = 0; w.__dcMax = { n: 0, tri: 0 }   // draw calls per frame
+        for (const f of ['drawElements', 'drawArrays', 'drawElementsInstanced', 'drawArraysInstanced']) { const P = WebGL2RenderingContext.prototype as any, q = P[f]; P[f] = function (...a: any[]) { w.__dc++; w.__tri += (f.startsWith('drawElements') ? a[1] : a[2]) / 3 * (f.endsWith('Instanced') ? a[a.length - 1] : 1); return q.apply(this, a) } }
+        const tick = () => { if (w.__dc > w.__dcMax.n) w.__dcMax = { n: w.__dc, tri: Math.round(w.__tri) }; w.__dc = 0; w.__tri = 0; requestAnimationFrame(tick) }; requestAnimationFrame(tick) })
       await g.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))
       await g.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
       await g.waitForFunction(() => typeof (window as W).__ather?.travel === 'function', { timeout: 240000 })
@@ -139,18 +168,25 @@ try {
       await sleep(8000); await g.touchscreen.tap(195, 500); await sleep(1000); return g
     }
     const drawnIn = (g: Page) => g.evaluate(() => (window as W).__scenery?.() ?? { items: [], meshes: 0, drawn: 0 }) as Promise<any>
+    const look = async (g: Page, x: number, z: number, yaw: number) => { await g.evaluate((a: number, b: number, c: number) => (window as W).__ather.tp(a, b, c), x, z, yaw); await sleep(5000); await g.evaluate(() => { (window as W).__dcMax = { n: 0, tri: 0 } }); await sleep(4000); return g.evaluate(() => (window as W).__dcMax) as Promise<{ n: number; tri: number }> }
+    const shot = async (g: Page, f: string) => { await g.evaluate(() => { const e = [...document.querySelectorAll('div')].filter(d => /Click to play|Tap to play/.test(d.textContent ?? '') && d.clientHeight < 400).at(0); if (e) e.style.display = 'none' }); await g.screenshot({ path: `${out}/${f}.png` }).catch(() => {}) }
     /** walk north (W) into the trunk from 2.5 m south; where the feet stop */
-    const bump = async (g: Page) => { await g.evaluate((x: number, z: number) => (window as W).__ather.tp(x, z, 0), m.x, m.z + 2.5); await sleep(2500); await g.keyboard.down('KeyW'); let lz = 1e9, same = 0
-      for (let i = 0; i < 40 && same < 6; i++) { await sleep(1500); const z = await g.evaluate(() => (window as W).__ather.state().pz) as number; same = Math.abs(z - lz) < 0.02 ? same + 1 : 0; lz = z; if (z < m.z - 1) break }
+    const bump = async (g: Page, tx = m.x, tz = m.z) => { await g.evaluate((x: number, z: number) => (window as W).__ather.tp(x, z, 0), tx, tz + 2.5); await sleep(2500); await g.keyboard.down('KeyW'); let lz = 1e9, same = 0
+      for (let i = 0; i < 40 && same < 6; i++) { await sleep(1500); const z = await g.evaluate(() => (window as W).__ather.state().pz) as number; same = Math.abs(z - lz) < 0.02 ? same + 1 : 0; lz = z; if (z < tz - 1) break }
       await g.keyboard.up('KeyW'); await sleep(500); return g.evaluate(() => { const s = (window as W).__ather.state(); return { x: s.px, z: s.pz, y: s.py } }) as Promise<{ x: number; z: number; y: number }> }
     let g = await game(); ok((await drawnIn(g)).items.length === 0, '8. a fresh keeper sees nothing of the draft')
-    const w0 = await bump(g); ok(w0.z < m.z - 0.5, `8. ...and walks through the spot (to z ${w0.z.toFixed(1)}, the tree is drafted at ${m.z})`); await g.close()
+    const w0 = await bump(g); ok(w0.z < m.z - 0.5, `8. ...and walks through the spot (to z ${w0.z.toFixed(1)}, the tree is drafted at ${m.z})`); const dc0 = await look(g, AT.x, AT.z + 46, 0); await g.close()
     await o.evaluate(() => (window as W).__terrain.publish('place-mode-check')); const s2 = await store(o)
     ok(s2.live.props?.length === want.length && s2.state === 'matches live' && s2.v > 0, `9. Publish: v${s2.v}, ${s2.live.props?.length} pieces live`)
     g = await game(); const gd = await drawnIn(g), G = gladeLayerGround(parseGladeLayer(s2.live).edits)
     const gt = gd.items.find((i: any) => i.id === m.id); ok(gd.drawn >= want.length && gd.items.length === want.length && Math.abs(gt.y - G(m.x, m.z)) < 1e-6, `9. a fresh keeper (390x844) sees them all, on the ground (${gd.items.length} pieces, ${gd.meshes} draw calls)`)
     const w1 = await bump(g), K = SCENERY_BY.get('tree:grove')!, half = K.box!.w * m.s / 2
     ok(w1.z > m.z + half - 0.05 && w1.z < m.z + half + 0.8 && Math.abs(w1.x - m.x) < 1, `9. ...and bumps the trunk (stops at z ${w1.z.toFixed(2)}, its face is ${(m.z + half).toFixed(2)})`)
+    const wf = await bump(g, F.x - 0.5, F.z), wr = await bump(g, R.x, R.z), wg = await bump(g, AT.x - 1, AT.z + 13)
+    ok(wf.z > F.z + 0.05 && wf.z < F.z + 1.2, `9b. the fence stops the keeper (z ${wf.z.toFixed(2)}, fence ${F.z})`); ok(wr.z > R.z + 0.7 && wr.z < R.z + 2, `9b. the large rock too (z ${wr.z.toFixed(2)}, rock ${R.z})`); ok(wg.z < AT.z + 12.6, `9b. the tall grass does not (z ${wg.z.toFixed(2)}, grass ${AT.z + 13})`)
+    const dc1 = await look(g, AT.x, AT.z + 46, 0); console.log(`  draw calls, 390x844, every kind placed, looking over them: ${dc1.n} (${dc1.tri} triangles); same spot with none: ${dc0.n} (${dc0.tri}); scenery meshes in all: ${gd.meshes}`)
+    ok(dc1.n > dc0.n, '9b. counted'); await shot(g, 'game-every-kind')
+    await look(g, SH.x, SH.z - 5.5, Math.PI); await shot(g, 'game-shore-phone'); await look(g, SH.x + 3, SH.z - 3.2, 2.4); await shot(g, 'game-shore-2'); await look(g, F.x + 1, F.z + 5, 0); await shot(g, 'game-fence-phone')
     await g.evaluate((a: any) => (window as W).__ather.tp(a.x, a.z + 15, 0), AT); await sleep(4000); await g.evaluate(() => { const e = [...document.querySelectorAll('div')].filter(d => /Click to play|Tap to play/.test(d.textContent ?? '') && d.clientHeight < 400).at(0); if (e) e.style.display = 'none' }); await g.screenshot({ path: `${out}/game-phone.png` }).catch(() => {})
     await g.close()
     const back = s2.v - 1, rolled = await o.evaluate((v: number) => (window as W).__terrain.rollback(v), back); const s3 = await store(o)
