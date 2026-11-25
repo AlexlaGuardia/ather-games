@@ -55,6 +55,11 @@ export function stepSpots(t: Tut, w: FirstStepsWorld): { zone: Zone; x: number; 
     default: return []
   }
 }
+/** The fold map's pins: the step's own side only (the Glade's stop, or its Wilds spot), never the way there. */
+export function mapSpots(t: Tut, w: FirstStepsWorld) {
+  const s = firstStep(t), side: Zone = s === 'gate' || s === 'bigone' || s === 'settlers' ? 'wilds' : 'glade'
+  return stepSpots(t, w).filter(x => x.zone === side)
+}
 export function firstStepsEntries(t: Tut, w: FirstStepsWorld): JournalEntry[] {
   if (!firstStepsOn(t)) return []
   const [where, ...also] = stepSpots(t, w)

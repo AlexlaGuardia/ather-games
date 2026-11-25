@@ -79,7 +79,7 @@ import { friendStart, friendNode, FRIEND_NAME, GARDEN_FRIENDS, type FriendCursor
 import { line as gladeLine } from './glade-tutorial-lines'
 import { endFirstSteps } from './glade-tutorial'
 import { firstStepsHello } from './glade-greg-talk'
-import { FIRST_STEPS_ID, firstStepsEntries, stepSpots, type FirstStepsWorld } from './first-steps'   // M146: the one opening quest
+import { FIRST_STEPS_ID, firstStepsEntries, mapSpots, type FirstStepsWorld } from './first-steps'   // M146: the one opening quest
 import { useFirstSteps } from './use-first-steps'
 import { gregSpot, gladeSpots, GLADE } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
 import { GladeLots } from './glade-lots-view'
@@ -1841,7 +1841,7 @@ function AtherSliceGame() {
           inWilds={zone.kind === 'wilds'} onTravel={travel} tile={hereTile} pitstops={pitstops}
           nodes={(nodesByTile.get(hereTile) ?? []).filter(n => infectedSet.has(n.id)).map(n => ({ ...n, x: n.x - hereOff.x, z: n.z - hereOff.z }))} regions={regions}
           area={ww ? { world: ww, regionsByTile, cx: hereOff.x, cz: hereOff.z, tileOff, nodes: nodes.filter(n => Math.abs(n.x - hereOff.x) < 1600 && Math.abs(n.z - hereOff.z) < 1600), here: { x: pos.current.x, z: pos.current.z } } : undefined}
-          onClose={() => setPanel(null)} quest={fsOn ? stepSpots(loadTut(), fsWorld.current()) : undefined}
+          onClose={() => setPanel(null)} quest={fsOn ? mapSpots(loadTut(), fsWorld.current()) : undefined}
           goal={errandToHold || runeHoldPulse(chain, fsOn) ? LANDING.id : undefined} flipPulse={flipPulse(chain, fsOn)} digGoal={runeHoldPulse(chain, fsOn) && !errandToHold} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
       {folkTalk.node && <TalkChoices node={folkTalk.node} phone={hudSize === 'phone'} />}

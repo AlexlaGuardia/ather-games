@@ -3,7 +3,7 @@
 // gate favour is asked once, in order; a hold ends only at Greg after the thanks; skip, mid-tutorial, legacy and old saves.
 import { readFileSync } from 'fs'
 import { adoptTut, endFirstSteps, firstStepsOn, freshTut, heardMoglins, heardSpirits, heardWelcome, heardWilds, hearFriend, legacyTut, parseTut, FRIENDS, type Tut } from './glade-tutorial'
-import { FIRST_STEPS_TITLE, firstStep, firstStepsEntries, stepLine, stepSpots, type FirstStepsWorld } from './first-steps'
+import { FIRST_STEPS_TITLE, firstStep, firstStepsEntries, mapSpots, stepSpots, type FirstStepsWorld } from './first-steps'
 import { acceptM70, m70Down, m70Quest, SETTLEMENT, settlerStart } from './first-settlement'
 import { firstStepsHello, tutNode, tutStart, type TutCursor } from './glade-greg-talk'
 import { foldOffered, tryFold } from './garden-fold'
@@ -20,6 +20,7 @@ const w: FirstStepsWorld = { greg: { x: 1, z: 1 }, gate: { x: 2, z: 2 }, stone: 
 const xs = (t: Tut, z: string) => stepSpots(t, w).filter(s => s.zone === z).map(s => s.x).join()
 const at = (t: Tut, step: string, glade: string, wilds: string, l: string) => {
   ok(firstStep(t) === step, `${step}: the step (${firstStep(t)})`); ok(xs(t, 'glade') === glade, `${step}: Glade marks ${xs(t, 'glade')}`); ok(xs(t, 'wilds') === wilds, `${step}: Wilds marks ${xs(t, 'wilds')}`)
+  ok(mapSpots(t, w).map(m => m.zone[0] + m.x).join() === (['gate', 'bigone', 'settlers'].includes(step) ? wilds.split(',').map(x => 'w' + x) : glade.split(',').map(x => 'g' + x)).join(), `${step}: the map's pins are the step's own side`)
   const e = firstStepsEntries(t, w); ok(e.length === 1 && e[0].title === 'First Steps' && e[0].note === l, `${step}: the one line (${e[0]?.note})`)
   ok(m70Quest(t) === null, `${step}: no second line`); const r = parseTut(JSON.parse(JSON.stringify(t)))!; ok(firstStep(r) === step, `${step}: survives a reload`)
 }
