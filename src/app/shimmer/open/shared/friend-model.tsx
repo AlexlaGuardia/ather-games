@@ -15,7 +15,10 @@ export function FriendModel({ who, action = 'idle', seed = 0, speed = 1 }: { who
   const root = useRef<THREE.Group>(null)
   const t = useRef(seed * 1.3)
   // the pose's bob goes to the whole figure, as on FolkModel
-  useFrame((_, dt) => poseFolk({ ...j.current, body: root.current }, action, t.current += Math.min(0.05, dt) * speed, seed))
+  useFrame((_, dt) => {
+    poseFolk({ ...j.current, body: root.current }, action, t.current += Math.min(0.05, dt) * speed, seed)   // seed >= 0: a negative one starts with the eyes shut
+    if (who !== 'bonn') for (const l of [j.current.legL, j.current.legR]) if (l) l.rotation.x *= 0.4   // a shorter step under the apron / the coat
+  })
   return (
     <group ref={root} userData={{ friend: who }}>
       {(Object.keys(f.joints) as JointName[]).map(n => {

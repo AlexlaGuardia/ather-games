@@ -55,7 +55,7 @@ export function GladeCluster({ ground, marker = true }: { ground: (x: number, z:
     <>
       {KEEPERS.map(k => (
         <group key={k.id} position={[k.x, ground(k.x, k.z), k.z]} rotation-y={k.yaw} userData={{ gladeKeeper: k.id }}>
-          {isFriend(k.id) && <FriendModel who={k.id} action="idle" seed={k.x * 0.01} />}
+          {isFriend(k.id) && <FriendModel who={k.id} action="idle" seed={Math.abs(k.x * 0.01)} />}
         </group>
       ))}
       {FOLK.map((f, i) => (
