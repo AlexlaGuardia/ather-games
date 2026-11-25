@@ -37,7 +37,7 @@ const tapText = async (p: Page, text: string) => {
   return true
 }
 const pressE = async (p: Page) => {
-  if (phone) { const u = await p.$('[data-touch="use"]'); if (u) { await u.tap(); return } }
+  if (phone) { const u = await p.$('[data-touch="use"]'); const b = await u?.boundingBox(); if (b) { await p.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2); return } }   // a real tap at the button's spot (u.tap() threw when a re-render swapped the node)
   await p.keyboard.press('KeyE')
 }
 type Pl = { id: string; name: string; x: number; z: number; yaw: number }

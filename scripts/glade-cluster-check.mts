@@ -125,11 +125,12 @@ try {
     ok(!w.pool && !w.glade && !w.folk.includes('moonwell'), `6b. the Wilds carry no Glade (pool ${w.pool}, glade ${w.glade}, folk ${w.folk.join(',') || '-'})`) }
   await shot(p, 'glade-out')
   // 8 · s1b-1: the Glade stays on the Ather map. The fold map (the gate's, opened by hook; the stop is a REAL tap) lists
-  //     'Moonwell Glade' right under 'Your plot', and it sets an existing keeper down in Greg's garden facing him
+  //     'Moonwell Glade' (no 'Your plot' before the fold, M71), and it sets an existing keeper down in Greg's garden facing him
   await A(p, 'open', 'gate')
   ok(await poll(() => p.evaluate(() => !!document.querySelector('[data-panel="fold-map"]')), 10000), '8. the fold map opens')
   const order = await p.evaluate(() => [...document.querySelectorAll('[data-panel="fold-map"] button')].map(b => (b as HTMLElement).innerText.split('\n')[0].trim()).filter(t => /^(Your plot|Moonwell Glade)$/.test(t)))
-  ok(order.join('|') === 'Your plot|Moonwell Glade', `8. 'Moonwell Glade' sits right under 'Your plot' (${order.join(' > ')})`)
+  // M71 (moved): this keeper is UNFOLDED, so there is no plot to travel to: 'Moonwell Glade' is the only one of the two (panels.tsx hasPlot)
+  ok(order.join('|') === 'Moonwell Glade', `8. unfolded: 'Moonwell Glade' is listed, 'Your plot' is not (${order.join(' > ')})`)
   await shot(p, 'glade-foldmap')
   { // scoped to the panel: the Wilds' own region label behind it also reads 'Moonwell Glade'
     let btn = null; for (const e of await p.$$('[data-panel="fold-map"] button')) if (/^Moonwell Glade/.test(await e.evaluate(n => (n as HTMLElement).innerText.trim()))) { btn = e; break }

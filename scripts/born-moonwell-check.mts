@@ -12,6 +12,7 @@
 // Hooks READ only (__ather.zone / state, __greg). Phone: --phone runs it at 390 x 844 with taps.
 //   npx tsx scripts/born-moonwell-check.mts [--url https://ather.games] [--phone]
 import { mkdirSync } from 'node:fs'
+import { FIRST_STEPS_TITLE } from '../src/app/shimmer/open/ather/first-steps'
 import puppeteer, { type Page } from 'puppeteer-core'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), phone = process.argv.includes('--phone'), out = flag('--out', '')
@@ -62,7 +63,7 @@ try {
   // 3 · the journal points at him (real J; the journal is a keyboard panel, so on phone read its entry text from the store page instead)
   await p.keyboard.press('KeyJ'); await sleep(1500)
   const jt = await p.evaluate(() => document.body.innerText)
-  ok(/bench by the pool at Moonwell Glade/i.test(jt), "3. journal: 'Gregory sits on the bench by the pool at Moonwell Glade.'")
+  ok(jt.includes(FIRST_STEPS_TITLE), `3. journal: '${FIRST_STEPS_TITLE}' (M146: the newborn's one line; was the bench line)`)
   ok(!/just through the gate/i.test(jt), "3. journal: no 'just through the gate'")
   await p.keyboard.press('KeyJ'); await sleep(600)
   // 4 · a returning keeper is not re-born, and a refresh in the Glade keeps them where they stood ('Where you were', Alex
