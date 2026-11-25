@@ -136,9 +136,9 @@ async function run(PHONE: boolean) {
   ok((await door()).open === true, `4. ${N}: E opens it (saved)`); await shot(`m169-${N}-4-open`)
   z = await walk('w', z => z < d0.z - 1.0); ok(z < d0.z - 0.4, `4. ${N}: open, the keeper walks through (z ${z.toFixed(2)})`)
   // 5: E from the far side shuts; walking back is stopped
-  await p.keyboard.press('e'); await sleep(1200)
+  await tpTo(d0.x + 0.3, Math.min(z, d0.z - 1.0), Math.PI); await p.keyboard.press('e'); await sleep(1200)   // turned round: E acts on what the keeper faces (M60 aim)
   ok(!(await door()).open, `5. ${N}: E from the far side shuts it`)
-  z = await walk('s', z => z > d0.z + 0.4); ok(z < d0.z - 0.1, `5. ${N}: shut again, it stops the keeper going back (z ${z.toFixed(2)})`)
+  z = await walk('w', z => z > d0.z + 0.4); ok(z < d0.z - 0.1, `5. ${N}: shut again, it stops the keeper going back (z ${z.toFixed(2)})`)
   // 6: reload keeps the state
   await load(); ok(!(await door()).open, `6. ${N}: reload: shut stays shut`)
   await tpTo(d0.x + 0.3, d0.z + 1.4); await p.keyboard.press('e'); await sleep(1200); const o1 = (await door()).open === true
