@@ -221,6 +221,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-24 19:4x Alex (TALK, Roar): "got an idea for the roars.. we make them dual sawn off shotguns.. single shot each and reload.. what do you think..?" -> hub: yes; asked go
 - 11-24 19:3x Alex (dialog): Backbone 50 held / 42 with reloads (10.4 a round, replaces 62); fix hold-to-fire on every gun + the Roar's pellets / knockback, newcomer sim numbers to him first -> M151
 - 11-24 19:3x (agent find): beta-m6b / m6e checks: m6e-bait FAILS at 0 prunes (never aims a tree; old spots likely, not proven) -> triage
 - 11-24 19:2x Alex (dialog): Backbone about 62 dps, level with the Repeater; gun family ref = J2 version 2 (slotted shroud, sigil core below)
